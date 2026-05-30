@@ -80,6 +80,15 @@
 | KX-DDC24-PM-STD-001 | Getting Started Dev | [GETTING_STARTED_DEV](../../design/GETTING_STARTED_DEV.md) | 1.0 | Active |
 | — | DDD Template | [_templates/TEMPLATE_DDD](../../design/_templates/TEMPLATE_DDD.md) | — | Active |
 
+## 4b. Developer Kit (05_implementation) — `docs/05_implementation/` + `shared/`
+| ID | Tài liệu | Ver | Trạng thái |
+|----|----------|:---:|:----------:|
+| KX-DDC24-PM-REPO-001 | [Repository, Build & CI](../05_implementation/KX-DDC24-PM-REPO-001_VI.md) | 1.0 | Approved |
+| KX-DDC24-FW-DEVGUIDE-001 | [FW Developer Guide & Backlog](../05_implementation/KX-DDC24-FW-DEVGUIDE-001_VI.md) | 1.0 | Approved |
+| KX-DDC24-BE-DEVGUIDE-001 | [BE Developer Guide & Backlog](../05_implementation/KX-DDC24-BE-DEVGUIDE-001_VI.md) | 1.0 | Approved |
+| KX-DDC24-FE-DEVGUIDE-001 | [FE Developer Guide & Backlog](../05_implementation/KX-DDC24-FE-DEVGUIDE-001_VI.md) | 1.0 | Approved |
+| (code contract) | [`shared/iop_protocol.h`](../../shared/iop_protocol.h) · [`shared/kinexus_shm.h`](../../shared/kinexus_shm.h) | 1.1 / 1.0 | Active |
+
 ## 5. UI/UX (04_uiux) — `docs/04_uiux/`
 | ID | Tài liệu | Ver | Trạng thái |
 |----|----------|:---:|:----------:|

@@ -31,7 +31,8 @@
 2. [PROJECT_OVERVIEW](00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) — tóm tắt nhanh 1 trang.
 3. [design/GETTING_STARTED_DEV](../design/GETTING_STARTED_DEV.md) — cài môi trường, build, "muốn sửa X vào đâu".
 4. [IMPLEMENTATION_PLAN](00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md) — **lộ trình code: phase → task → microtask → checklist**.
-5. [DOC_CONTROL_AND_NAMING](00_management/KX-DDC24-QA-DOCCTRL-001_VI.md) — quy tắc đặt tên/sắp xếp/version.
+5. ⭐ **Developer Kit** (gõ code từ đây): [Repo & Build](05_implementation/KX-DDC24-PM-REPO-001_VI.md) · [FW Dev Guide](05_implementation/KX-DDC24-FW-DEVGUIDE-001_VI.md) · [BE Dev Guide](05_implementation/KX-DDC24-BE-DEVGUIDE-001_VI.md) · [FE Dev Guide](05_implementation/KX-DDC24-FE-DEVGUIDE-001_VI.md) · hợp đồng code [`shared/`](../shared/).
+6. [DOC_CONTROL_AND_NAMING](00_management/KX-DDC24-QA-DOCCTRL-001_VI.md) — quy tắc đặt tên/sắp xếp/version.
 
 ## 3. Cây thư mục chuẩn (ISO-aligned)
 
@@ -65,6 +66,15 @@
 | KX-DDC24-UX-SYSTEM-001 | [Design System (tokens, components)](04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) |
 | KX-DDC24-UX-WEBIDE-001 | [Web IDE UI/UX (FE)](04_uiux/KX-DDC24-UX-WEBIDE-001_VI.md) |
 | KX-DDC24-UX-HMI-001 | [HMI TFT UI](04_uiux/KX-DDC24-UX-HMI-001_VI.md) |
+
+### 05_implementation — Developer Kit (gõ code từ đây)
+| ID | Tài liệu |
+|----|----------|
+| KX-DDC24-PM-REPO-001 | [Repository, Build & CI](05_implementation/KX-DDC24-PM-REPO-001_VI.md) |
+| KX-DDC24-FW-DEVGUIDE-001 | [FW Developer Guide & Backlog](05_implementation/KX-DDC24-FW-DEVGUIDE-001_VI.md) |
+| KX-DDC24-BE-DEVGUIDE-001 | [BE Developer Guide & Backlog](05_implementation/KX-DDC24-BE-DEVGUIDE-001_VI.md) |
+| KX-DDC24-FE-DEVGUIDE-001 | [FE Developer Guide & Backlog](05_implementation/KX-DDC24-FE-DEVGUIDE-001_VI.md) |
+| (code) | Hợp đồng dùng chung: [`shared/iop_protocol.h`](../shared/iop_protocol.h), [`shared/kinexus_shm.h`](../shared/kinexus_shm.h) |
 
 ### Yêu cầu / Kiến trúc / Thiết kế (giữ vị trí cũ)
 → Xem [Master Document Register](00_management/KX-DDC24-QA-REGISTER-001_VI.md) để có danh sách đầy đủ + Document ID + version + owner.
