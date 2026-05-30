@@ -1,0 +1,75 @@
+# MK-DDC-24 — Trung tâm Tài liệu Dự án (Document Hub)
+## ISO-aligned Documentation Index
+
+> **Phiên bản:** 1.0 | 2026-05-30
+> **Chuẩn áp dụng:** ISO/IEC/IEEE 12207:2017 (vòng đời phần mềm), ISO/IEC/IEEE 15288 (hệ thống), ISO/IEC/IEEE 29148 (yêu cầu), ISO/IEC/IEEE 1016 (thiết kế), ISO/IEC 25010 (chất lượng), ISO 9001:2015 §7.5 (kiểm soát tài liệu), IEC 62443-4-1 (bảo mật), IEC 61131-3, ASHRAE 135 (BACnet).
+> **Đối tượng:** PM, Tech Lead, FW/BE/FE Dev, UI/UX, QA, kỹ sư tích hợp. **Người mới đọc mục [§2 Bắt đầu](#2-người-mới-bắt-đầu-từ-đây).**
+
+---
+
+## 1. Bản đồ tài liệu theo vòng đời (V-Model / ISO 12207)
+
+```
+        YÊU CẦU ──────────────────────────────────► KIỂM THỬ
+   (01_requirements)                              (06_verification)
+          │                                              ▲
+          ▼                                              │
+     KIẾN TRÚC ───────────────────────────────► TÍCH HỢP & V&V
+   (02_architecture)                                     ▲
+          │                                              │
+          ▼                                              │
+   THIẾT KẾ CHI TIẾT ──────────────► HIỆN THỰC (CODE) ───┘
+   (03_design + 04_uiux)            (05_implementation)
+          ▲
+          │
+   QUẢN LÝ & KIỂM SOÁT (00_management) ── xuyên suốt
+```
+
+## 2. Người mới — Bắt đầu từ đây
+1. [00_management/PROJECT_OVERVIEW](00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) — sản phẩm là gì, kiến trúc 2 lớp (đang trỏ tới [../README.md](../README.md)).
+2. [design/GETTING_STARTED_DEV](../design/GETTING_STARTED_DEV.md) — cài môi trường, build, "muốn sửa X vào đâu".
+3. [00_management/IMPLEMENTATION_PLAN](00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md) — **lộ trình code: phase → task → microtask → checklist**.
+4. [00_management/DOC_CONTROL_AND_NAMING](00_management/KX-DDC24-QA-DOCCTRL-001_VI.md) — quy tắc đặt tên/sắp xếp/version.
+
+## 3. Cây thư mục chuẩn (ISO-aligned)
+
+| Thư mục | Giai đoạn vòng đời | Nội dung | Vị trí thực tế |
+|---------|--------------------|----------|----------------|
+| `00_management` | Quản lý (xuyên suốt) | Plan, doc-control, register, changelog, traceability | `docs/00_management/` |
+| `01_requirements` | Yêu cầu | PRD, SRS, FW/SW requirements | `../` + `../spec/` |
+| `02_architecture` | Kiến trúc | SW/FW arch, IOP interface | `../spec/` |
+| `03_design` | Thiết kế chi tiết | DDD, ICD, module/service design, coding std | `../design/` |
+| `04_uiux` | Thiết kế giao diện | Design system, Web IDE (FE), HMI | `docs/04_uiux/` |
+| `05_implementation` | Hiện thực | Coding standards, build/CI | `../design/*CODING*` |
+| `06_verification` | Kiểm thử | Test spec, traceability | `../spec/TEST_SPEC…` |
+| `07_hardware` | Phần cứng | Schematic, BOM, EMC | `../hardware-design/` |
+
+> Ghi chú: theo nguyên tắc **không phá vỡ tham chiếu đang có** (repo chưa dùng git), tài liệu yêu cầu/kiến trúc/thiết kế **giữ nguyên vị trí** ở `spec/` và `design/`; `docs/` bổ sung **lớp quản lý + UI/UX + register** và là **cổng điều hướng ISO**. Quy tắc đặt tên mới áp dụng cho tài liệu mới (xem DOC_CONTROL).
+
+## 4. Danh mục tài liệu chính
+
+### 00_management
+| ID | Tài liệu |
+|----|----------|
+| KX-DDC24-PM-OVERVIEW-001 | [Project Overview](00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) |
+| KX-DDC24-PM-IMPLPLAN-001 | [Implementation Plan (phase/task/microtask)](00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md) |
+| KX-DDC24-QA-DOCCTRL-001 | [Document Control & Naming Standard](00_management/KX-DDC24-QA-DOCCTRL-001_VI.md) |
+| KX-DDC24-QA-REGISTER-001 | [Master Document Register](00_management/KX-DDC24-QA-REGISTER-001_VI.md) |
+| KX-DDC24-QA-TRACE-001 | [Traceability Matrix](00_management/KX-DDC24-QA-TRACE-001_VI.md) |
+
+### 04_uiux
+| ID | Tài liệu |
+|----|----------|
+| KX-DDC24-UX-SYSTEM-001 | [Design System (tokens, components)](04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) |
+| KX-DDC24-UX-WEBIDE-001 | [Web IDE UI/UX (FE)](04_uiux/KX-DDC24-UX-WEBIDE-001_VI.md) |
+| KX-DDC24-UX-HMI-001 | [HMI TFT UI](04_uiux/KX-DDC24-UX-HMI-001_VI.md) |
+
+### Yêu cầu / Kiến trúc / Thiết kế (giữ vị trí cũ)
+→ Xem [Master Document Register](00_management/KX-DDC24-QA-REGISTER-001_VI.md) để có danh sách đầy đủ + Document ID + version + owner.
+→ Cổng kỹ thuật: [spec/README](../spec/README.md) · [design/README](../design/README.md).
+
+## 5. Thay đổi & lịch sử
+→ [CHANGELOG.md](../CHANGELOG.md) (toàn dự án). Mỗi tài liệu có bảng Revision History riêng ở cuối.
+
+---
+**Maintainer:** PMO / QA · **Rev** 1.0 | 2026-05-30
