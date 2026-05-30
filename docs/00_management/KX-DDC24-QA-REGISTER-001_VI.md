@@ -57,7 +57,8 @@
 | KX-DDC24-BE-DDD-001 | io-driver | [SW_IODRIVER_DESIGN](../../design/software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md) | 1.0 | Draft |
 | KX-DDC24-BE-DDD-002 | PLC Engine (D-6) | [SW_PLC_ENGINE_DESIGN](../../design/software/SW_PLC_ENGINE_DESIGN_MK-DDC-24_VI.md) | 1.0 | Draft |
 | KX-DDC24-BE-DDD-003 | BACnet | [SW_BACNET_DESIGN](../../design/software/SW_BACNET_DESIGN_MK-DDC-24_VI.md) | 1.0 | Draft |
-| KX-DDC24-BE-DDD-004 | Agent (MQTT/REST/Modbus) | [SW_AGENT_DESIGN](../../design/software/SW_AGENT_DESIGN_MK-DDC-24_VI.md) | 1.0 | Draft |
+| KX-DDC24-BE-DDD-004 | Agent (MQTT/REST) | [SW_AGENT_DESIGN](../../design/software/SW_AGENT_DESIGN_MK-DDC-24_VI.md) | 1.1 | Draft |
+| KX-DDC24-BE-DDD-006 | Field bus (Modbus RTU master) | [SW_FIELDBUS_DESIGN](../../design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) | 1.0 | Draft |
 | KX-DDC24-FE-DDD-001 | Web IDE (backend+SPA) | [SW_WEBIDE_DESIGN](../../design/software/SW_WEBIDE_DESIGN_MK-DDC-24_VI.md) | 1.0 | Draft |
 | KX-DDC24-BE-DDD-005 | HMI | [SW_HMI_DESIGN](../../design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md) | 1.0 | Draft |
 | KX-DDC24-OPS-DDD-002 | OTA (D-7 SOM) | [SW_OTA_DESIGN](../../design/software/SW_OTA_DESIGN_MK-DDC-24_VI.md) | 1.0 | Draft |
@@ -66,7 +67,7 @@
 ### Interfaces (ICD) — `design/interfaces/`
 | ID | Tài liệu | Legacy file | Ver | Trạng thái |
 |----|----------|-------------|:---:|:----------:|
-| KX-DDC24-IF-ICD-002 | Modbus Register Map (D-2) | [MODBUS_REGISTER_MAP](../../design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | 1.0 | Draft |
+| KX-DDC24-IF-ICD-002 | Modbus RTU Master / Expansion Bus (D-2) | [MODBUS_REGISTER_MAP](../../design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | 2.0 | Draft |
 | KX-DDC24-IF-ICD-003 | BACnet PICS/EPICS (D-3) | [BACNET_PICS_EPICS](../../design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) | 1.0 | Draft |
 | KX-DDC24-IF-ICD-004 | REST OpenAPI (D-4) | [REST_API_OPENAPI](../../design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) + [openapi.yaml](../../design/interfaces/openapi.yaml) | 1.0 | Draft |
 | KX-DDC24-IF-ICD-005 | Config JSON Schema (D-5) | [CONFIG_SCHEMA](../../design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) | 1.0 | Draft |

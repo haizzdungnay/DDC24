@@ -62,17 +62,20 @@ Thuật toán (PID rời rạc, anti-windup):
 - **Compile:** Web IDE compile FBD/ST → bytecode/IR nội bộ → engine nạp. Có compile-time check (IDE-007).
 - ≥ 16 program song song (PLC-006); enable/disable từng program qua BACnet (PLC-007).
 
-## 6. Ánh xạ I/O ↔ BACnet/Modbus (PLC-020)
-| PLC | Vật lý | BACnet | Modbus |
-|-----|--------|--------|--------|
-| %IW1..8 | UI1–8 | AI1–8 | 3x:0–7 |
-| %IX1..8 | DI1–8 | BI1–8 | 1x:0–7 |
-| %QW1..4 | AO1–4 | AO1–4 | 4x:0–3 |
-| %QX1..4 | DO1–4 | BO1–4 | 0x:0–3 |
-| AV/BV/MSV | biến nội | AV/BV/MSV | 4x:100+ |
+## 6. Ánh xạ I/O ↔ BACnet/IP (PLC-020)
+> Northbound chỉ BACnet/IP (+ MQTT/REST). Điểm mở rộng từ field bus (Modbus RTU master) cũng vào không gian biến PLC như I/O ảo (`%EXT.*`).
+
+| PLC | Vật lý | BACnet object |
+|-----|--------|---------------|
+| %IW1..8 | UI1–8 | AI1–8 |
+| %IX1..8 | DI1–8 | BI1–8 |
+| %QW1..4 | AO1–4 | AO1–4 |
+| %QX1..4 | DO1–4 | BO1–4 |
+| AV/BV/MSV | biến nội | AV/BV/MSV |
+| %EXT.* | điểm thiết bị phụ (RTU) | AV/BV/AI bổ sung (cấu hình) |
 
 ## 7. Write arbitration (ai được ghi output)
-Output có thể bị ghi từ: PLC program, BACnet Write-Property (priority array), Modbus, REST force.
+Output có thể bị ghi từ: PLC program, BACnet Write-Property (priority array), REST/MQTT, Force I/O.
 - Dùng **BACnet priority 16 mức**: PLC ghi mức 16 (default), BMS mức 8, Force I/O mức 1–2.
 - Giá trị cuối = mức ưu tiên cao nhất đang active; không có → `Relinquish_Default`.
 

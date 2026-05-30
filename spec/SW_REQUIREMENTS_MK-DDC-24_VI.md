@@ -116,7 +116,7 @@ typedef struct {
 | ID | Yêu cầu | Loại | Trace SRS | Test Ref |
 |----|---------|------|-----------|---------|
 | SW-BAC-001 | PHẢI implement BACnet/IP (Annex J) trên UDP/47808 | MUST | BAC-002 | T-SW-050 |
-| SW-BAC-002 | PHẢI implement BACnet MS/TP (Clause 9), baud 9.6k–115.2k, trên RS-485 | MUST | BAC-001 | T-SW-051 |
+| SW-BAC-002 | PHẢI hỗ trợ BBMD / Foreign-Device cho BACnet/IP qua router *(MS/TP đã loại bỏ — ARCH-R010)* | MUST | BAC-002 | T-SW-051 |
 | SW-BAC-003 | PHẢI support object types theo SRS §5.1 table | MUST | BAC-001..009 | T-SW-052 |
 | SW-BAC-004 | PHẢI implement COV (subscribe/unsubscribe) cho AI/AO/BI/BO/AV/BV/MSV | MUST | BAC-005 | T-SW-053 |
 | SW-BAC-005 | PHẢI respond Who-Is trong < 100ms | MUST | PRD UC-02 | T-SW-054 |
@@ -214,23 +214,24 @@ typedef struct {
 
 ---
 
-## 10. Modbus TCP/RTU Slave (`kinexus-bacnet` hoặc service riêng)
+## 10. Modbus RTU **Master** — Field Bus thiết bị phụ (`kinexus-fieldbus`)
 
-> **Tham chiếu:** PRD FR-024/FR-025, SRS §6.2.
-> **⚠ Register map chuẩn:** **INT16 scaled (×100), 1 register/điểm** — định nghĩa tại **DS §4.1** và **SRS §6.2** (đã chốt IOP-Q-R009). Mọi tài liệu/triển khai PHẢI theo map này, không dùng FLOAT32.
+> **Cập nhật 2026-05-30 (ARCH-R010):** **BỎ vai trò Modbus slave** (TCP & RTU). DDC nay là **Modbus RTU MASTER** trên RS-485, poll **thiết bị phụ** (module mở rộng I/O, remote HMI, thiết bị bên thứ 3). Thiết kế khung mở (device profile). Chi tiết: [D-2 RTU Master/Expansion ICD](../design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md), [SW_FIELDBUS_DESIGN](../design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md).
+> Northbound lên BMS dùng BACnet/IP + MQTT + REST (xem §9, §6).
 
 | ID | Yêu cầu | Loại | Trace SRS | Test Ref |
 |----|---------|------|-----------|----------|
-| SW-MOD-001 | PHẢI implement Modbus TCP Slave trên port 502 | MUST | MB-001 | T-SW-120 |
-| SW-MOD-002 | PHẢI implement Modbus RTU Slave trên RS-485 (baud 9.6k–115.2k, 8N1) | MUST | MB-002 | T-SW-121 |
-| SW-MOD-003 | PHẢI map **Input Registers (3x, FC04): AI1–AI8 → IR 0–7** (INT16 = giá trị × 100); DI counter → IR 100–107; system status → IR 200–209 | MUST | MB-004 | T-SW-122 |
-| SW-MOD-004 | PHẢI map **Discrete Inputs (1x, FC02): DI1–DI8 → DI 0–7**; **Coils (0x, FC01/05/15): DO1–DO4 → Coil 0–3** | MUST | MB-004 | T-SW-123 |
-| SW-MOD-005 | PHẢI map **Holding Registers (4x, FC03/06/16): AO1–AO4 → HR 0–3** (0–10V→0–10000, 0–20mA→0–20000); AV1–AV32 → HR 100–131 (INT16 ×100); BV1–BV16 → HR 200–215 | MUST | MB-003, MB-005 | T-SW-124 |
-| SW-MOD-006 | PHẢI hỗ trợ Function Codes: FC01, FC02, FC03, FC04, FC05, FC06, FC15, FC16 | MUST | MB-006 | T-SW-125 |
-| SW-MOD-007 | Max latency: response trong ≤ 100ms sau khi nhận request | MUST | MB-007 | T-SW-126 |
-| SW-MOD-008 | Exception Response theo Modbus spec: 0x01 Illegal Function, 0x02 Illegal Address, 0x03 Illegal Value | MUST | MB-008 | T-SW-127 |
-| SW-MOD-009 | Modbus TCP: hỗ trợ ≥ 5 client connections đồng thời | MUST | MB-009 | T-SW-128 |
-| SW-MOD-010 | Unit ID Modbus RTU cấu hình qua `/data/config/bacnet.conf` (field `modbus_unit_id`, range 1–247) | MUST | MB-010 | T-SW-129 |
+| SW-MOD-001 | PHẢI hoạt động như **Modbus RTU master** trên RS-485, poll nhiều slave theo lịch | MUST | RTU-001 | T-SW-120 |
+| SW-MOD-002 | PHẢI hỗ trợ **device profile** (template register-map) — thêm loại slave bằng cấu hình, không đổi code | MUST | RTU-002 | T-SW-121 |
+| SW-MOD-003 | PHẢI hỗ trợ FC03/FC04 (đọc Holding/Input Reg của slave) | MUST | RTU-004 | T-SW-122 |
+| SW-MOD-004 | PHẢI hỗ trợ FC06/FC16 (ghi xuống slave: vd lệnh relay module mở rộng) | MUST | RTU-004 | T-SW-123 |
+| SW-MOD-005 | PHẢI ánh xạ điểm đọc/ghi của slave vào **shared memory / biến PLC** (như I/O ảo) để PLC, BACnet, MQTT dùng được | MUST | RTU-004 | T-SW-124 |
+| SW-MOD-006 | PHẢI hỗ trợ baud 9.6k–115.2k, parity 8N1/8E1/8O1; địa chỉ slave 1–247 | MUST | RTU-003, RTU-006 | T-SW-125 |
+| SW-MOD-007 | Chu kỳ poll cấu hình/slave; tổng vòng poll ≤ thời gian cấu hình; không chặn hot-path | MUST | RTU-001 | T-SW-126 |
+| SW-MOD-008 | PHẢI phát hiện slave offline (timeout/CRC) → điểm "bad quality" + alarm E302/E303 | MUST | RTU-005 | T-SW-127 |
+| SW-MOD-009 | PHẢI hỗ trợ ≥ 16 slave/bus (mở rộng được) | MUST | RTU-006 | T-SW-128 |
+| SW-MOD-010 | Profile chuẩn sẵn cho module mở rộng I/O + remote HMI của Kinexus (plug-and-play) | MUST | RTU-007 | T-SW-129 |
+| SW-MOD-011 | KHÔNG hoạt động như Modbus slave (không phục vụ Modbus về phía BMS) | MUST | RTU-008 | T-SW-130 |
 
 ---
 

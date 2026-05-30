@@ -251,7 +251,8 @@ Tất cả scaling PHẢI thực hiện trong `kinexus-io-driver` (không trong 
 | `/data/config/network.conf` | Web IDE | JSON | IP/DHCP, DNS |
 | `/data/config/io_config.conf` | Web IDE | JSON | UI sensor type per kênh |
 | `/data/config/io_safe_state.conf` | Web IDE | JSON | Safe state values per kênh |
-| `/data/config/bacnet.conf` | Web IDE | JSON | MS/TP baud, BBMD, segmentation |
+| `/data/config/bacnet.conf` | Web IDE | JSON | BACnet/IP: UDP port, BBMD, segmentation (MS/TP đã bỏ — ARCH-R010) |
+| `/data/config/fieldbus.conf` | Web IDE | JSON | RS-485 Modbus RTU master: baud/parity, danh sách slave + device profile, poll |
 | `/data/config/mqtt.conf` | Web IDE | JSON | Broker URL, cert, topic prefix |
 | `/data/config/users.conf` | Web IDE | JSON | User accounts (password hashed bcrypt) |
 | `/data/plc/programs/` | Web IDE | `.kxp` (XML) | FBD/ST programs |
@@ -325,7 +326,7 @@ Tất cả scaling PHẢI thực hiện trong `kinexus-io-driver` (không trong 
 | IOP Driver | C11 (gcc 12) | — | Latency-sensitive, SCHED_FIFO |
 | PLC Runtime | C++17 | — | IEC 61131-3 engine |
 | BACnet | bacnet-stack (open source) | 1.3.x | Proven BTL candidate |
-| Modbus | libmodbus | 3.1.10 | RFC: không tự viết stack |
+| Modbus RTU master | libmodbus | 3.1.10 | `modbus_new_rtu()` master mode — poll thiết bị phụ (không tự viết stack) |
 | MQTT | Paho MQTT C + Python | 1.6.x | TLS 1.3 support |
 | REST API | FastAPI (Python 3.11) | 0.111+ | Async, auto OpenAPI docs |
 | Web IDE (backend) | FastAPI | — | Shared với agent |

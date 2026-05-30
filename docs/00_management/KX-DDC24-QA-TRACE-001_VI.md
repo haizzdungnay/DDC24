@@ -33,11 +33,10 @@
 | FW-DO-001..006 | FW_MOD_AO_DO | T-FW-06 | T-FW-040..045 |
 | Safe-state | FW_MOD_AO_DO, IF-ICD-001 §6 | T-FW-06, T-BE-03 | T-FW-033, T-SW-004 |
 
-## 4. Modbus
+## 4. Modbus RTU **master** / Field bus (thiết bị phụ — ARCH-R010)
 | REQ | Thiết kế | Task | Test |
 |-----|----------|------|------|
-| SW-MOD-001..010, MB-001..010 | IF-ICD-002 (D-2) | T-BE-05 | T-SW-120..129 |
-| RTU-001..006 | IF-ICD-002, IF-ICD-005 (rs485_mode) | T-BE-05 | T-SW-125 |
+| SW-MOD-001..011, RTU-001..008 | IF-ICD-002 (D-2 RTU Master), SW_FIELDBUS_DESIGN, IF-ICD-005 (fieldbus.conf) | T-BE-05 | T-SW-120..130 |
 
 ## 5. BACnet
 | REQ | Thiết kế | Task | Test |

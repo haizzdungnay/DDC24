@@ -16,8 +16,8 @@ Tài liệu này định nghĩa các yêu cầu phần mềm cho **hệ thống 
 
 - **OS Layer:** Debian 12 Linux trên SOM quad-core ARM Cortex-A55 (Radxa CM3 / RK3566)
 - **Soft PLC Runtime:** IEC 61131-3 engine (FBD, ST)
-- **BACnet Stack:** MS/TP và IP, PICS-compliant
-- **Communication Services:** MQTT, REST API, RS-485
+- **BACnet Stack:** BACnet/IP (Annex J), PICS-compliant *(MS/TP loại bỏ — ARCH-R010)*
+- **Communication Services:** Northbound (IP): BACnet/IP, MQTT, REST API · Southbound (RS-485): **Modbus RTU master** xuống thiết bị phụ
 - **I/O Driver Layer:** Giao tiếp SOM ↔ MCU qua Kinexus-IOP protocol
 - **Security Services:** TLS, secure boot, auth, audit logging
 - **OTA Update System:** A/B partition, signed packages
@@ -156,19 +156,21 @@ Power ON
 
 ### 5.2 Yêu cầu Protocol
 
+> ⚠ **Cập nhật 2026-05-30 (ARCH-R010):** BACnet **CHỈ qua BACnet/IP** (Ethernet/WiFi). **BỎ BACnet MS/TP** — cổng RS-485 dành 100% cho Modbus RTU master (§6.3). Northbound chỉ chạy trên IP.
+
 | ID | Yêu cầu |
 |----|---------|
-| BAC-001 | PHẢI hỗ trợ BACnet MS/TP (Clause 9) với baud rate 9.6k – 115.2k |
-| BAC-002 | PHẢI hỗ trợ BACnet/IP (Annex J) trên cổng Ethernet, UDP/47808 |
+| BAC-001 | PHẢI hỗ trợ **BACnet/IP (Annex J)** trên Ethernet/WiFi, UDP/47808 *(MS/TP đã loại bỏ — ARCH-R010)* |
+| BAC-002 | PHẢI hỗ trợ BBMD / Foreign-Device registration (cho BACnet/IP qua router) |
 | BAC-003 | PHẢI hỗ trợ Who-Is, I-Am, Read-Property, Write-Property |
 | BAC-004 | PHẢI hỗ trợ Read-Property-Multiple, Write-Property-Multiple |
 | BAC-005 | PHẢI hỗ trợ Subscribe-COV và Unsubscribe-COV |
 | BAC-006 | PHẢI hỗ trợ Confirmed-Event-Notification (Alarm) |
 | BAC-007 | PHẢI hỗ trợ Time-Synchronization (master và slave) |
-| BAC-008 | Max APDU: 1476 bytes (BACnet/IP); 480 bytes (MS/TP) |
-| BAC-009 | Segmentation: hỗ trợ trên BACnet/IP, không trên MS/TP |
+| BAC-008 | Max APDU: 1476 bytes (BACnet/IP) |
+| BAC-009 | Segmentation: hỗ trợ trên BACnet/IP (both) |
 | BAC-010 | Device ID PHẢI cấu hình 1 – 4.194.302 (không trùng trên mạng) |
-| BAC-011 | PHẢI pass BACnet BTL conformance test trước khi ship GA |
+| BAC-011 | PHẢI pass BACnet BTL conformance test (profile B-ASC, BACnet/IP) trước khi ship GA |
 
 ---
 
@@ -186,32 +188,24 @@ Power ON
 | MQ-006 | PHẢI hỗ trợ Last Will & Testament (LWT) cho trạng thái offline |
 | MQ-007 | Reconnect tự động với exponential backoff (max 5 phút) |
 
-### 6.2 Modbus TCP
+### 6.2 ~~Modbus TCP slave~~ — ĐÃ LOẠI BỎ (ARCH-R010)
+
+> ⚠ **Cập nhật 2026-05-30:** **BỎ Modbus TCP slave.** Northbound lên BMS/SCADA dùng **BACnet/IP + MQTT + REST** (đều trên IP). DDC **không** phục vụ Modbus về phía BMS. Vai trò Modbus duy nhất của DDC là **RTU master xuống thiết bị phụ** (§6.3). Các ID MB-001..009 cũ huỷ bỏ.
+
+### 6.3 Modbus RTU Master — Field Bus xuống thiết bị phụ (RS-485)
+
+> ✅ **Mô hình (ARCH-R010):** RS-485 dành **100%** cho **Modbus RTU MASTER**. DDC là **master**, chủ động poll các slave là **thiết bị phụ**: module mở rộng I/O, màn hình phụ (remote HMI), thiết bị Modbus bên thứ 3 (đồng hồ điện, biến tần, cảm biến). Thiết kế theo **khung mở (device profile)** — thêm loại slave mới chỉ bằng cấu hình. Chi tiết: [D-2 Modbus RTU Master/Expansion ICD](design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md), [SW_FIELDBUS_DESIGN](design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md).
 
 | ID | Yêu cầu |
 |----|----------|
-| MB-001 | PHẢI hỗ trợ Modbus TCP slave trên port 502 (Ethernet) |
-| MB-002 | PHẢI ánh xạ I/O vật lý → Modbus register map (document kèm theo) |
-| MB-003 | Holding Registers (4x): AO1-AO4 (0–10V → 0–10000), AV1-AV32 |
-| MB-004 | Input Registers (3x): AI1-AI8 (giá trị đã scale), trạng thái hệ thống |
-| MB-005 | Coils (0x): DO1-DO4 (read/write) |
-| MB-006 | Discrete Inputs (1x): DI1-DI8 (read only) |
-| MB-007 | Max connections: 5 TCP clients đồng thời |
-| MB-008 | Timeout connection: 30 giây không có request → đóng socket |
-| MB-009 | Dùng `libmodbus` (C, ưu tiên) hoặc `pymodbus` (Python) — không tự viết stack |
-
-### 6.3 Modbus RTU (RS-485)
-
-> ⚠ **Lưu ý:** RS-485 port được chia sẻ giữa BACnet MS/TP và Modbus RTU. Chỉ một protocol được kích hoạt tại một thời điểm. Cấu hình qua web UI, mặc định là BACnet MS/TP.
-
-| ID | Yêu cầu |
-|----|----------|
-| RTU-001 | NÊN (SHOULD) hỗ trợ Modbus RTU slave trên RS-485, khi RS-485 cấu hình mode Modbus |
-| RTU-002 | Cấu hình chọn mode RS-485 (BACnet MS/TP / Modbus RTU) qua web UI, cần reboot để apply |
-| RTU-003 | Baud rate: 9.600 / 19.200 / 38.400 / 115.200 bps (cấu hình) |
-| RTU-004 | Register map Modbus RTU IDENTICAL với Modbus TCP (cùng địa chỉ, cùng scale) |
-| RTU-005 | Slave ID cấu hình 1–247, mặc định = BACnet Device ID mod 247 |
-| RTU-006 | Không hỗ trợ Modbus RTU master |
+| RTU-001 | PHẢI hoạt động như **Modbus RTU master** trên RS-485, poll nhiều slave theo chu kỳ cấu hình |
+| RTU-002 | PHẢI hỗ trợ **device profile** (template register-map) để thêm loại thiết bị phụ mới bằng cấu hình, không cần đổi code |
+| RTU-003 | Baud rate: 9.600 / 19.200 / 38.400 / 57.600 / 115.200 bps; 8N1/8E1/8O1 (cấu hình) |
+| RTU-004 | PHẢI hỗ trợ FC03/04 (đọc), FC06/16 (ghi) tới slave; map điểm slave vào shared memory / biến PLC |
+| RTU-005 | PHẢI phát hiện slave mất kết nối (timeout/CRC) → đánh dấu điểm "bad quality" + sinh alarm |
+| RTU-006 | Hỗ trợ tối thiểu **16 slave** trên 1 bus (mở rộng được); địa chỉ slave 1–247 |
+| RTU-007 | Module mở rộng I/O và remote HMI của Kinexus có profile chuẩn sẵn (plug-and-play) |
+| RTU-008 | KHÔNG hoạt động như Modbus slave (DDC không phục vụ Modbus về phía BMS) |
 
 
 ### 6.4 REST API
@@ -370,8 +364,8 @@ KinexusET là web IDE browser-based chạy trên chính thiết bị.
 |----|---------|------|
 | IDE-020 | PHẢI cho phép đặt BACnet Device ID (1–4.194.302) và Device Name qua web UI | MUST |
 | IDE-021 | PHẢI cho phép đặt IP tĩnh / DHCP qua web UI | MUST |
-| IDE-022 | PHẢI cho phép cấu hình RS-485 mode (BACnet MS/TP / Modbus RTU), baud rate | MUST |
-| IDE-023 | PHẢI hiển thị BACnet network statistics: token pass, frame errors, bus load% | SHOULD |
+| IDE-022 | PHẢI cho phép cấu hình **RS-485 Modbus RTU master**: baud/parity, danh sách slave (địa chỉ + device profile), chu kỳ poll | MUST |
+| IDE-023 | PHẢI hiển thị thống kê field bus: trạng thái từng slave (online/offline), tỉ lệ lỗi CRC/timeout | SHOULD |
 | IDE-024 | PHẢI cho phép cấu hình Trend Log (interval, object list, buffer size) | MUST |
 | IDE-025 | PHẢI cho phép download Trend Log dạng CSV | MUST |
 
@@ -463,8 +457,8 @@ Ví dụ: 2026-05-28T14:23:01+07:00 ERROR E101 MCU_IOP MCU no response for 100ms
 | Code | Mức | Module | Mô tả | Hành động |
 |------|:---:|--------|-------|----------|
 | E301 | WARNING | BACNET | BACnet/IP: không nhận Who-Is response > 30s | Log, chuyển standalone mode |
-| E302 | WARNING | BACNET | BACnet MS/TP: token pass timeout | Log, tăng counter |
-| E303 | ERROR | BACNET | BACnet MS/TP: bus error rate > 10% | Log, gửi alarm notification |
+| E302 | WARNING | FIELDBUS | Modbus RTU master: slave không phản hồi (timeout) | Log, đánh dấu điểm slave "bad", tăng counter |
+| E303 | ERROR | FIELDBUS | Modbus RTU master: tỉ lệ lỗi CRC/timeout > 10% | Log, gửi alarm notification |
 | E310 | WARNING | MQTT | MQTT broker mất kết nối | Reconnect backoff, log |
 | E311 | INFO | MQTT | MQTT reconnect thành công | Log |
 | E320 | WARNING | ETH | Ethernet link down | Log, enable standalone mode |
@@ -499,7 +493,8 @@ Ví dụ: 2026-05-28T14:23:01+07:00 ERROR E101 MCU_IOP MCU no response for 100ms
 | I/O MCU firmware (FreeRTOS) | Firmware | C (STM32 HAL) |
 | Kinexus-IOP protocol driver | Embedded Linux | C |
 | Soft PLC runtime (IEC 61131-3) | PLC Engine | C++ |
-| BACnet stack (MS/TP + IP) | Protocol | C |
+| BACnet stack (BACnet/IP) | Protocol | C |
+| Modbus RTU master / field bus (`kinexus-fieldbus`) | Backend | C / Python |
 | MQTT / REST API service | Backend | Python / Go |
 | KinexusET Web IDE | Frontend | React / TypeScript |
 | HMI Display app (LVGL) | Embedded Linux | C |

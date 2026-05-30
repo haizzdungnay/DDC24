@@ -22,7 +22,7 @@ Hợp lệ: ✅ xong · 🔄 đang làm · ⬜ chưa bắt đầu
 |----|----------|:----------:|
 | — | [_templates/TEMPLATE_DDD](_templates/TEMPLATE_DDD.md) | ✅ |
 | D-1 | [firmware/FW_PINOUT_MASTER](firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) | ✅ |
-| D-2 | [interfaces/MODBUS_REGISTER_MAP](interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | ✅ |
+| D-2 | [interfaces/MODBUS_REGISTER_MAP](interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) — *RTU Master/Expansion (v2.0)* | ✅ |
 | — | [firmware/FW_CODING_STANDARD](firmware/FW_CODING_STANDARD_MK-DDC-24_VI.md) | ✅ |
 | — | [software/SW_CODING_STANDARD](software/SW_CODING_STANDARD_MK-DDC-24_VI.md) | ✅ |
 | — | [firmware/FW_DDD](firmware/FW_DDD_MK-DDC-24_VI.md) | ✅ |
@@ -42,7 +42,7 @@ Hợp lệ: ✅ xong · 🔄 đang làm · ⬜ chưa bắt đầu
 | D-6 | [software/SW_PLC_ENGINE_DESIGN](software/SW_PLC_ENGINE_DESIGN_MK-DDC-24_VI.md) | ✅ |
 | D-11 | [software/SW_SECURITY_KEYSTORE](software/SW_SECURITY_KEYSTORE_MK-DDC-24_VI.md) | ✅ |
 | FW | [FW_MOD_IOP_COMM](firmware/FW_MOD_IOP_COMM_MK-DDC-24_VI.md) · [FW_MOD_IO_SAMPLE](firmware/FW_MOD_IO_SAMPLE_MK-DDC-24_VI.md) · [FW_MOD_AO_DO](firmware/FW_MOD_AO_DO_MK-DDC-24_VI.md) · [FW_MOD_DIAG_WDG](firmware/FW_MOD_DIAG_WDG_MK-DDC-24_VI.md) | ✅ |
-| SW | [SW_IODRIVER](software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md) · [SW_BACNET](software/SW_BACNET_DESIGN_MK-DDC-24_VI.md) · [SW_AGENT](software/SW_AGENT_DESIGN_MK-DDC-24_VI.md) · [SW_WEBIDE](software/SW_WEBIDE_DESIGN_MK-DDC-24_VI.md) · [SW_HMI](software/SW_HMI_DESIGN_MK-DDC-24_VI.md) | ✅ |
+| SW | [SW_IODRIVER](software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md) · [SW_BACNET](software/SW_BACNET_DESIGN_MK-DDC-24_VI.md) · [SW_AGENT](software/SW_AGENT_DESIGN_MK-DDC-24_VI.md) · [SW_FIELDBUS](software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) · [SW_WEBIDE](software/SW_WEBIDE_DESIGN_MK-DDC-24_VI.md) · [SW_HMI](software/SW_HMI_DESIGN_MK-DDC-24_VI.md) | ✅ |
 
 > **Toàn bộ bộ thiết kế SW/FW đã hoàn tất** (DP-0→DP-2). Bước kế: review DR-3/DR-4, rồi vào code.
 > D-8/D-9/D-10 (cơ khí, schematic/PCB, thermal) thuộc track phần cứng → [`../hardware-design/`](../hardware-design/).
@@ -53,7 +53,8 @@ Hợp lệ: ✅ xong · 🔄 đang làm · ⬜ chưa bắt đầu
 
 - **Firmware:** `FW_PINOUT_MASTER` → `FW_CODING_STANDARD` → `FW_DDD` → (module designs).
 - **Software:** `SW_CODING_STANDARD` → `SW_DDD` → `interfaces/*` → (service designs).
-- **Tích hợp (BMS/SCADA):** `interfaces/MODBUS_REGISTER_MAP`, `BACNET_PICS_EPICS`, `REST_OPENAPI`.
+- **Tích hợp BMS (northbound):** `BACNET_PICS_EPICS`, `REST_OPENAPI` (+ MQTT).
+- **Thiết bị phụ (southbound RTU master):** `MODBUS_REGISTER_MAP` (D-2) + `SW_FIELDBUS_DESIGN`.
 
 ## 3. Nguyên tắc
 - Mỗi tài liệu theo **template IEEE 1016** (xem `_templates/`).

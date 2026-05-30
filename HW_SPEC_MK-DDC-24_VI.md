@@ -236,20 +236,21 @@ Mỗi kênh UI1-UI8 có mạch điều hòa tín hiệu hỗ trợ đa chế đ�
 
 ## 9. RS-485 Interface
 
-> ⚠ **Protocol sharing:** RS-485 port được dùng cho **BACnet MS/TP** (mặc định) hoặc **Modbus RTU** (cấu hình qua web UI). Không hỗ trợ cả hai cùng lúc. Modbus TCP trên Ethernet chạy độc lập, luôn sẵn sàng bất kể chế độ RS-485.
+> ⚠ **Vai trò RS-485 (cập nhật 2026-05-30, ARCH-R010):** RS-485 dành **100% cho Modbus RTU MASTER** — DDC chủ động poll thiết bị phụ (module mở rộng I/O, màn hình phụ, thiết bị bên thứ 3). **Không còn BACnet MS/TP, không còn Modbus slave.** BACnet/IP + MQTT + REST chạy qua **Ethernet/WiFi (IP)**.
 
 | Thông số | Giá trị |
 |----------|--------|
 | **IC** | MAX13487E (auto-direction control) |
 | **Baud rate** | 1.2k – 115.2k bps |
-| **Tải bus** | MAX13487E = 1/4 unit-load → hỗ trợ đến ~128 node về tải. Khuyến nghị ≤ 32 device/segment (đúng DS §5.2); tối đa 127 địa chỉ master MS/TP |
+| **Tải bus** | MAX13487E = 1/4 unit-load → hỗ trợ đến ~128 node về tải. Khuyến nghị ≤ 32 slave/segment; địa chỉ slave 1–247 (Modbus) |
+| **Vai trò** | **Modbus RTU master** (DDC poll slave) — xem [SW_FIELDBUS_DESIGN](design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) |
 | **Cáp tối đa** | 1.200m @ 9.600 baud |
 | **ESD bảo vệ** | ±15kV (IEC 61000-4-2, contact) |
 | **Isolation** | 1kV (ADUM1201 digital isolator) |
 | **Termination** | 120Ω jumper-selectable (disable khi không phải endpoint) |
 | **Bias resistor** | 560Ω pull-up/down (fail-safe idle state) |
 | **Connector** | Terminal block 3-pin (A, B, GND) 5.08mm |
-| **Protocol mode** | Cấu hình qua web UI: BACnet MS/TP (mặc định) hoặc Modbus RTU |
+| **Protocol** | Modbus RTU master (cố định) — cấu hình baud/parity + danh sách slave qua web UI |
 
 ---
 
@@ -263,7 +264,7 @@ Mỗi kênh UI1-UI8 có mạch điều hòa tín hiệu hỗ trợ đa chế đ�
 | **Connector** | RJ-45 với integrated magnetics + LED (Link/Activity) |
 | **ESD** | ±2kV (IEC 61000-4-2) |
 | **EMC** | Common mode choke integrated trong magnetics |
-| **Protocol sử dụng cùng lúc** | BACnet/IP (UDP/47808) + Modbus TCP (TCP/502) + MQTT over TLS (TCP/8883) + REST API (TCP/8443) + SSH (TCP/2222) |
+| **Protocol northbound (IP)** | BACnet/IP (UDP/47808) + MQTT over TLS (TCP/8883) + REST API (TCP/8443) + SSH (TCP/2222). *(Bỏ Modbus TCP — ARCH-R010)* |
 | **DHCP** | Có, mặc định; static IP cấu hình qua web UI |
 
 ---
@@ -495,7 +496,7 @@ Mặt sau thiết bị:
 | Switch | Chức năng | ON | OFF |
 |--------|----------|-----|-----|
 | SW1–SW7 | Bootstrap BACnet Device ID (bit 0–6, giá trị 1–127) | bit=1 | bit=0 |
-| SW8 | BACnet MS/TP termination 120Ω | Enable | Disable |
+| SW8 | RS-485 (Modbus RTU) termination 120Ω | Enable | Disable |
 
 **Quy tắc ưu tiên Device ID (rõ ràng):**
 

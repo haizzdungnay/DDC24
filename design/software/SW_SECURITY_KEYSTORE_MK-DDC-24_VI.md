@@ -53,8 +53,8 @@ nftables: chặn tất cả, chỉ mở:
   443,8443/tcp  HTTPS (REST + Web IDE redirect)
   8080/tcp  HTTP (CHỈ LAN commissioning VLAN; DMZ chặn)
   47808/udp BACnet/IP
-  502/tcp   Modbus TCP
   8883/tcp  MQTT over TLS   (1883 plaintext MẶC ĐỊNH CHẶN)
+  (KHÔNG mở 502 — DDC không là Modbus TCP slave; RS-485 là RTU master, không qua IP)
 ```
 - AppArmor profile enforce cho mọi service (SW-SEC-002).
 - Rootfs read-only; chỉ `/data`,`/var` ghi (SW-SEC-003).

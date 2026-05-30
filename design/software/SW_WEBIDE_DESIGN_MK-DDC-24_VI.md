@@ -25,7 +25,7 @@ Browser (Svelte SPA) ──HTTPS──► webide backend (FastAPI, chung với a
 |------|-----------|
 | Lập trình | FBD drag-drop, ST syntax-highlight, compile-check, upload/download, start/stop/reset PLC |
 | Giám sát | watch table realtime (WebSocket), I/O live dashboard (refresh ≤1s), live wire values |
-| Cấu hình | UI sensor type per kênh, AO mode, safe-state, BACnet Device ID/Name, IP/DHCP, RS-485 mode |
+| Cấu hình | UI sensor type per kênh, AO mode, safe-state, BACnet/IP Device ID/Name, IP/DHCP/WiFi, **field bus RTU master** (baud + danh sách slave + profile) |
 | Commissioning | Force I/O (auto-expire ≤10', admin), export point list CSV, checklist FAT/SAT |
 | User | tạo/xoá/đổi mật khẩu (admin), roles |
 

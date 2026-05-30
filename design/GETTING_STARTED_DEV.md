@@ -15,7 +15,8 @@ Thiết bị có **2 bộ não**:
 Hai bộ não nói chuyện qua **1 dây UART** bằng giao thức **IOP** (giống như 2 người nhắn tin theo mẫu cố định). MCU gửi "giá trị cảm biến đây", SOM gửi "bật relay 1, đặt van 50%".
 
 ```
-Cảm biến/van  ──►  MCU (1ms, C)  ──IOP/UART──►  SOM (Linux, app)  ──►  BACnet/MQTT/Web/Modbus  ──► BMS/Cloud
+Cảm biến/van ─► MCU (1ms, C) ─IOP/UART─► SOM (Linux) ─► BACnet/IP·MQTT·REST·Web ─► BMS/Cloud (Ethernet/WiFi)
+                                              └─► Modbus RTU master (RS-485) ─► thiết bị phụ
 ```
 
 > 👉 Nếu bạn làm **firmware** → đọc nhánh MCU. Nếu làm **software** → đọc nhánh SOM. Cả hai phải tôn trọng **hợp đồng IOP** ([SWFW_INTERFACE_SPEC](../spec/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md)) và **bảng chân** ([D-1](firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md)).
@@ -109,7 +110,7 @@ Mục tiêu đầu tiên: **đọc được giá trị I/O từ shared memory** 
 |-----------|--------------|------------|
 | Thêm/sửa lệnh giao tiếp MCU↔SOM | [SWFW_INTERFACE_SPEC](../spec/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) | iop_comm (FW) + kinexus-io-driver (SW) |
 | Đổi chân cảm biến/relay | [D-1 Pinout](firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) | CubeMX + gpio_drv |
-| Thêm điểm Modbus | [D-2 Modbus Map](interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | kinexus-agent |
+| Thêm thiết bị phụ Modbus RTU (mở rộng I/O) | [D-2 RTU Master/Expansion](interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | kinexus-fieldbus |
 | Thêm object BACnet | [D-3 PICS](interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) | kinexus-bacnet |
 | Thêm API REST | [D-4 OpenAPI](interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) | kinexus-agent |
 | Thêm tham số cấu hình | [D-5 Config Schema](interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) | webide + service đọc config |

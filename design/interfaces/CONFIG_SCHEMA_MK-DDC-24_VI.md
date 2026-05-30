@@ -29,13 +29,19 @@
 ```
 > Nếu file không tồn tại → dùng DIP SW1–SW7 (1–127) đọc qua CM3 GPIO (SW-BAC-006).
 
-## 2. `network.conf` — mạng
+## 2. `network.conf` — mạng (Ethernet + WiFi, northbound IP)
 ```json
-{ "mode": "dhcp",            // "dhcp" | "static"
-  "ip": "192.168.1.50", "netmask": "255.255.255.0",
-  "gateway": "192.168.1.1", "dns": ["8.8.8.8"],
+{ "eth": {
+    "mode": "dhcp",            // "dhcp" | "static"
+    "ip": "192.168.1.50", "netmask": "255.255.255.0",
+    "gateway": "192.168.1.1", "dns": ["8.8.8.8"] },
+  "wifi": {
+    "enabled": false,
+    "ssid": "", "psk": "",     // WPA2/WPA3
+    "mode": "dhcp" },
   "hostname": "mk-ddc-24-fcu3a" }
 ```
+> Lên BMS/cloud (BACnet/IP, MQTT, REST) đi qua Ethernet hoặc WiFi (đều là IP).
 
 ## 3. `io_config.conf` — loại sensor mỗi kênh UI + mode AO
 ```json
@@ -65,16 +71,27 @@
 ```
 > Không cấu hình → mặc định AO 0V/4mA, DO open (IOP-SPEC §6.3).
 
-## 5. `bacnet.conf` — BACnet + Modbus RS-485
+## 5. `bacnet.conf` — BACnet/IP (chỉ IP — ARCH-R010)
 ```json
 {
-  "bip": { "enabled": true, "udp_port": 47808, "bbmd": null },
-  "mstp": { "enabled": true, "mac": 12, "baud": 38400, "max_master": 127 },
-  "rs485_mode": "bacnet-mstp",     // "bacnet-mstp" | "modbus-rtu"
-  "modbus_unit_id": 12             // dùng khi rs485_mode = modbus-rtu (1..247)
+  "bip": { "enabled": true, "udp_port": 47808, "bbmd": null, "foreign_device": null }
 }
 ```
-> `rs485_mode` đổi cần reboot (RTU-002). MS/TP và Modbus RTU không chạy đồng thời.
+> ⚠ Đã **bỏ `mstp` và `rs485_mode`** (MS/TP loại bỏ). BACnet chỉ chạy BACnet/IP qua Ethernet/WiFi. RS-485 cấu hình ở `fieldbus.conf` (§5b).
+
+## 5b. `fieldbus.conf` — RS-485 Modbus RTU **master** (thiết bị phụ)
+```json
+{
+  "rs485": { "baud": 19200, "parity": "N", "stop": 1 },
+  "poll_default_ms": 1000,
+  "slaves": [
+    { "addr": 10, "profile": "kinexus-io-ext-8di8do", "poll_ms": 500,  "name": "EXT-1" },
+    { "addr": 11, "profile": "kinexus-remote-hmi",     "poll_ms": 1000, "name": "HMI-2" },
+    { "addr": 20, "profile": "generic-power-meter",    "poll_ms": 2000, "name": "Meter-A" }
+  ]
+}
+```
+> `profile` trỏ tới template register-map (xem [D-2 §3](MODBUS_REGISTER_MAP_MK-DDC-24_VI.md)). Thêm slave = thêm 1 phần tử; đổi baud cần reboot field-bus service.
 
 ## 6. `mqtt.conf`
 ```json

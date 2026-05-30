@@ -84,18 +84,17 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 3. Output giữ giá trị cuối (hold last value) hoặc về safe-state (cấu hình)
 4. Khi BACnet restore → resume bình thường, ghi event log
 
-### UC-06 — Modbus TCP / SCADA Integration
-**Actor:** SCADA system hoặc HMI panel  
-**Trigger:** SCADA poll định kỳ hoặc operator cài đặt setpoint  
+### UC-06 — Mở rộng I/O qua Modbus RTU master *(cập nhật ARCH-R010)*
+**Actor:** Kỹ thuật viên lắp đặt  
+**Trigger:** Dự án cần nhiều hơn 24 điểm, hoặc cần màn hình phụ / đọc đồng hồ điện  
 **Flow:**
-1. SCADA kết nối TCP đến DDC-24 (IP:502)
-2. Đọc Input Registers 3x:0–7 lấy giá trị AI1–AI8
-3. Đọc Discrete Inputs 1x:0–7 lấy trạng thái DI1–DI8
-4. Ghi Holding Register 4x:0–3 để đặt AO1–AO4
-5. Ghi Coil 0x:0–3 để đóng/mở DO relay
-6. DDC-24 thực hiện output trong < 200 ms sau khi nhận write command
+1. Đấu module mở rộng I/O (hoặc thiết bị Modbus bên thứ 3) vào bus RS-485 của DDC.
+2. Khai báo slave trong Web UI: địa chỉ + chọn **device profile** (template register-map).
+3. DDC (master) tự động poll slave theo chu kỳ, đọc giá trị → đưa vào shared memory / biến PLC.
+4. PLC/BACnet/MQTT dùng các điểm mở rộng như I/O nội bộ; ghi xuống slave khi cần (vd bật relay module).
+5. Nếu slave mất kết nối → đánh dấu "bad quality" + alarm.
 
-**Tiêu chí hoàn thành:** Đọc/ghi toàn bộ I/O qua Modbus TCP không ảnh hưởng đến BACnet và soft PLC (chạy độc lập, không block nhau).
+**Tiêu chí hoàn thành:** Thêm 1 module mở rộng I/O qua RTU không cần đổi code; điểm của nó dùng được trong PLC/BACnet; phát hiện được khi module rớt mạng.
 
 ---
 
@@ -129,12 +128,14 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 
 | ID | Yêu cầu | Mức độ |
 |----|---------|--------|
-| FR-020 | Phải hỗ trợ BACnet MS/TP và BACnet/IP đồng thời | MUST |
+> ⚠ **Cập nhật 2026-05-30 (ARCH-R010):** Northbound chỉ qua IP (Ethernet/WiFi). Bỏ BACnet MS/TP, bỏ Modbus slave. RS-485 = Modbus RTU master xuống thiết bị phụ.
+
+| FR-020 | Phải hỗ trợ **BACnet/IP** (qua Ethernet/WiFi), PICS B-ASC *(MS/TP đã bỏ — ARCH-R010)* | MUST |
 | FR-021 | BACnet Device ID phải cấu hình qua web UI và DIP switch | MUST |
 | FR-022 | Phải hỗ trợ MQTT v3.1.1 và v5.0 (TLS) | MUST |
 | FR-023 | Phải có REST API JSON cho đọc/ghi point và cấu hình | MUST |
-| FR-024 | Phải hỗ trợ Modbus TCP slave (port 502) qua Ethernet | MUST |
-| FR-025 | Nên hỗ trợ Modbus RTU slave trên RS-485 (không chạy đồng thời BACnet MS/TP) | SHOULD |
+| FR-024 | Phải hoạt động như **Modbus RTU master** trên RS-485, poll thiết bị phụ theo device profile *(thay cho Modbus TCP slave)* | MUST |
+| FR-025 | Phải hỗ trợ module mở rộng I/O + remote HMI qua RTU master (plug-and-play profile) | MUST |
 
 ### 4.4 Bảo mật
 

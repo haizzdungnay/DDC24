@@ -119,6 +119,7 @@
 | IOP-Q-R007 | ADC architecture: SOM hay MCU đọc ADS131M08 | Chốt: **MCU là master DUY NHẤT** của ADS131M08 (SPI3). Xóa mọi đấu nối CM3-SPI2→ADS131M08 trong hardware-design. SOM nhận UI_RAW qua IOP (đúng IOP-Q-R001) | 2026-05-30 |
 | IOP-Q-R008 | AO range select: jumper hay phần mềm | Chốt: **phần mềm per-kênh** (relay/analog-switch + lệnh SET_AO_CFG, IOP v1.1). Cập nhật HW_SPEC §6.1, IOP-SPEC §4.4 | 2026-05-30 |
 | IOP-Q-R009 | Modbus register format | Chốt: **INT16 scaled (×100)**, 1 register/điểm. Map chuẩn = DS §4.1 / SRS §6.2. Sửa SW-MOD-003/005 (đang ghi FLOAT32) | 2026-05-30 |
+| ARCH-R010 | **Kiến trúc kết nối: hướng Northbound vs Southbound** | Chốt (PO): **(1) Northbound lên BMS/cloud CHỈ qua Ethernet/WiFi (IP)** — giao thức: BACnet/IP + MQTT + REST (chốt loại sau, transport IP cố định). **BỎ Modbus TCP slave. BỎ BACnet MS/TP.** **(2) Southbound RS-485 = Modbus RTU MASTER** — DDC là master, poll thiết bị phụ (module mở rộng I/O, màn hình phụ, thiết bị bên thứ 3) theo **khung mở (device profile)**. Đảo ngược **RTU-006** ("không hỗ trợ master"). RS-485 dành 100% cho Modbus RTU master (không chia sẻ BACnet MS/TP nữa). **Ảnh hưởng:** SRS §5/§6.2/§6.3, SW-REQ §10, DS §3/§5, D-2 (viết lại thành RTU Master/Expansion), D-3 (BACnet IP-only), D-5 config, SW_DDD/agent/bacnet, thêm service `kinexus-fieldbus`. | 2026-05-30 |
 
 ---
 

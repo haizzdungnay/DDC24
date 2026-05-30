@@ -21,7 +21,8 @@ Không bao gồm: firmware MCU (xem FW_DDD), phần cứng.
 
 ## 3. Phân rã service (process model — SW_ARCH §1)
 ```
-io-driver → plc → { bacnet, agent(MQTT/REST/Modbus), hmi }
+io-driver → plc → { bacnet(IP), agent(MQTT/REST), hmi }
+fieldbus(Modbus RTU master) → shm  (mở rộng I/O từ thiết bị phụ)
                          agent → webide
 ota (root, on-failure)    sec (trong agent)
 ```
@@ -30,8 +31,9 @@ ota (root, on-failure)    sec (trong agent)
 |---------|----------|---------|-------|
 | `kinexus-io-driver` | C/Rust | IOP master, scale raw→eng, shm | SW-IOP-001..011 |
 | `kinexus-plc` | C++17 | runtime IEC 61131-3 (FBD/ST), scan, retain | SW-PLC-001..022 |
-| `kinexus-bacnet` | C | BACnet/IP+MS/TP, objects, COV | SW-BAC-001..008 |
-| `kinexus-agent` | Python | MQTT, REST, Modbus TCP/RTU slave | SW-MQ/API/MOD-* |
+| `kinexus-bacnet` | C | BACnet/IP, objects, COV *(MS/TP bỏ)* | SW-BAC-001..008 |
+| `kinexus-agent` | Python | MQTT, REST | SW-MQ/API-* |
+| `kinexus-fieldbus` | C/Py | **Modbus RTU master** (poll thiết bị phụ, device profile) | SW-MOD-001..011 |
 | `kinexus-webide` | Py+Svelte | IDE FBD/ST, config, monitor | SW-IDE-001..023 |
 | `kinexus-hmi` | C/LVGL | dashboard TFT từ shm | SW-HMI-001..008 |
 | `kinexus-ota` | Py/shell | A/B update, verify, rollback | SW-OTA-001..008 |
@@ -55,14 +57,14 @@ ota (root, on-failure)    sec (trong agent)
 
 ### 4.3 `kinexus-bacnet`
 - **Objects:** theo SRS §5.1 (Device, AI8/AO4/AV32/BI8/BO4/BV16/MSV8, Trend8, Schedule8, Calendar2, NC4, EE8). **PICS → [D-3]**.
-- **Transport:** BACnet/IP UDP 47808 + MS/TP RS-485; COV; Who-Is<100ms.
+- **Transport:** BACnet/IP UDP 47808 (Ethernet/WiFi); COV; Who-Is<100ms. *(MS/TP bỏ — ARCH-R010.)*
 - **Nguồn dữ liệu:** đọc `kinexus_plc_shm`; ghi Write-Property → shm (arbitration với PLC).
 - **Device ID:** `/data/config/device.conf`, fallback DIP qua CM3 GPIO (SW-BAC-006).
 
-### 4.4 `kinexus-agent` (MQTT / REST / Modbus)
+### 4.4 `kinexus-agent` (MQTT / REST) + `kinexus-fieldbus` (Modbus RTU master)
 - **MQTT:** v3.1.1/v5.0, TLS 1.3, topic `kinexus/{id}/io/{point}`, COV publish, LWT, backoff.
 - **REST:** FastAPI HTTPS 8443, JWT (exp 1h), endpoints theo SW_ARCH §6, rate-limit 100/s→429.
-- **Modbus:** TCP 502 (≥5 client) + RTU; **map = [D-2]** (INT16 ×100); FC01/02/03/04/05/06/15/16; exception codes.
+- **Fieldbus (Modbus RTU master):** poll thiết bị phụ theo **device profile**; **xem [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md)** + [SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md). Map điểm slave vào shm/PLC. *(Không còn Modbus slave phục vụ BMS.)*
 - Đọc/ghi qua `kinexus_plc_shm`.
 
 ### 4.5 `kinexus-webide`

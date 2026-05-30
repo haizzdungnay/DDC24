@@ -9,7 +9,7 @@
 ---
 
 ## 1. Product Description
-MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ BACnet/IP và MS/TP đồng thời, lập trình IEC 61131-3.
+MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/IP** (qua Ethernet/WiFi), lập trình IEC 61131-3. *(MS/TP đã bỏ — ARCH-R010.)*
 
 ## 2. BACnet Standardized Device Profile
 - **B-ASC** (BACnet Application Specific Controller) — mục tiêu Ver 1.0.
@@ -63,13 +63,15 @@ AI: `Object_Identifier, Object_Name, Object_Type, Present_Value, Status_Flags, E
 `<TYPE><n>` mặc định (vd `AI1`, `AO2`), đổi được qua Web UI. Instance number = chỉ số (AI1→instance 1).
 
 ## 5. Data Link / Transport
+> ⚠ **Chỉ BACnet/IP (ARCH-R010, 2026-05-30).** Đã **bỏ MS/TP** — RS-485 dành cho Modbus RTU master. BACnet chạy qua Ethernet/WiFi.
+
 | Lớp | Hỗ trợ |
 |-----|--------|
-| BACnet/IP (Annex J) | ✅ UDP 47808, có thể đổi port |
-| BBMD / Foreign Device | ✅ đăng ký FD; BBMD table cấu hình |
-| MS/TP (Clause 9) | ✅ master, baud 9.6k–115.2k, MAC 0–127 |
-| Max APDU | 1476 (IP) / 480 (MS/TP) |
-| Segmentation | ✅ IP (both) · ❌ MS/TP |
+| BACnet/IP (Annex J) | ✅ UDP 47808 (Ethernet/WiFi), có thể đổi port |
+| BBMD / Foreign Device | ✅ đăng ký FD; BBMD table cấu hình (cho liên mạng qua router) |
+| MS/TP (Clause 9) | ❌ KHÔNG hỗ trợ (RS-485 = Modbus RTU master) |
+| Max APDU | 1476 (BACnet/IP) |
+| Segmentation | ✅ segmented-both (IP) |
 
 ## 6. Character Sets
 UTF-8 (hỗ trợ tiếng Việt cho Object_Name/Description).

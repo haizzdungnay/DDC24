@@ -40,7 +40,7 @@
 
 ```
 P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Control+UI ─► P5 Sec+OTA ─► P6 Integration+Cert ─► P7 Release
-   (hạ tầng)   (khung chạy)   (đọc/ghi I/O)  (BACnet/Modbus)  (PLC + Web/HMI)  (bảo mật/cập nhật)  (FAT/SAT/BTL)     (GA)
+   (hạ tầng)   (khung chạy)   (đọc/ghi I/O)  (BACnet/IP+RTU)  (PLC + Web/HMI)  (bảo mật/cập nhật)  (FAT/SAT/BTL)     (GA)
 
 ĐƯỜNG GĂNG (chậm là chậm cả dự án):
   IOP (FW+BE) ─► I/O scaling ─► PLC engine ─► BACnet ─► BTL cert
@@ -51,7 +51,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 | **P0** | Setup & Hạ tầng | tài liệu design baseline | repo+CI chạy, board bring-up | S1 |
 | **P1** | Skeleton/Khung | P0 done, pinout D-1 | MCU↔SOM handshake IOP OK | S1–S2 |
 | **P2** | I/O Path | P1 done | đọc 8 UI + ghi AO/DO end-to-end | S2–S3 |
-| **P3** | Protocols | P2 done, D-2/D-3/D-4 | Modbus+BACnet+REST đọc/ghi được | S3–S5 |
+| **P3** | Protocols | P2 done, D-2/D-3/D-4 | BACnet/IP+REST+MQTT + Fieldbus RTU master | S3–S5 |
 | **P4** | Control + UI | P3 done, D-6, UX design | PLC chạy 16 chương trình + Web IDE + HMI | S5–S8 |
 | **P5** | Security + OTA | P4 done, D-7/D-11 | TLS+JWT+audit + OTA A/B rollback | S8–S9 |
 | **P6** | Integration + Cert | P5 done | FAT/SAT pass, **BTL pass**, soak 72h | S9–S12 |
@@ -205,24 +205,24 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 
 ---
 
-## 7. PHASE P3 — Protocols (Modbus / BACnet / REST)
+## 7. PHASE P3 — Protocols (BACnet/IP · REST/MQTT · Fieldbus RTU master)
 
-### T-BE-05 — Modbus TCP/RTU slave (BE)
-**INPUT:** [ ] [D-2 Modbus Map](../../design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md).
+### T-BE-05 — Modbus RTU **master** / field bus (BE)
+**INPUT:** [ ] [D-2 RTU Master/Expansion](../../design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) · [ ] [SW_FIELDBUS_DESIGN](../../design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) · [ ] slave giả lập (diagslave).
 **Microtasks:**
-- [ ] Datastore map shm ↔ INT16 ×100 (AI/AO/DI/DO/AV/BV).
-- [ ] FC01/02/03/04/05/06/15/16 + exception 0x01–0x04.
-- [ ] TCP 502 (≥5 client) + RTU (rs485_mode).
-**OUTPUT/DoD:** [ ] đọc AI bằng modpoll đúng giá trị · [ ] ghi AO qua FC06 đổi đầu ra · [ ] exception đúng.
-**Trace:** SW-MOD-001..010.
+- [ ] libmodbus master mở RS-485; poll scheduler theo `fieldbus.conf`.
+- [ ] Device-profile engine (decode type/scale/byte_order) → ghi shm vùng ext.
+- [ ] Ghi xuống slave (FC06/16); phát hiện offline → bad quality + E302/E303.
+**OUTPUT/DoD:** [ ] poll module mở rộng giả lập → điểm vào shm/PLC · [ ] rút slave → offline+alarm · [ ] ghi DO module đổi đầu ra. *(DDC KHÔNG là Modbus slave.)*
+**Trace:** SW-MOD-001..011, RTU-001..008.
 
-### T-BE-06 — BACnet objects + COV (BE) ⭐ đường găng (cert)
+### T-BE-06 — BACnet/IP objects + COV (BE) ⭐ đường găng (cert)
 **INPUT:** [ ] [D-3 PICS](../../design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) · [ ] bacnet-stack.
 **Microtasks:**
 - [ ] Đăng ký AI8/AO4/AV32/BI8/BO4/BV16/MSV8 + Device object.
 - [ ] Read/Write-Property(-Multiple) ↔ plc_shm (priority array).
 - [ ] COV subscribe/notify; Who-Is/I-Am <100ms.
-- [ ] BACnet/IP 47808 + MS/TP; Reliability map fault.
+- [ ] **BACnet/IP** 47808 (Ethernet/WiFi) + BBMD/FD; Reliability map fault. *(MS/TP bỏ.)*
 **OUTPUT/DoD:** [ ] YABE đọc/ghi object đúng · [ ] COV nhận ≤200ms · [ ] Who-Is trả I-Am.
 **Trace:** SW-BAC-001..008.
 
@@ -243,7 +243,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] broker thấy giá trị cập nhật theo COV · [ ] mất mạng → reconnect.
 **Trace:** SW-MQ-001..007.
 
-**🚪 P3 Gate:** **Modbus + BACnet + REST + MQTT đọc/ghi I/O được** (chưa logic điều khiển).
+**🚪 P3 Gate:** **BACnet/IP + REST + MQTT (northbound) + Fieldbus RTU master (mở rộng I/O) hoạt động** (chưa logic điều khiển).
 
 ---
 
@@ -346,7 +346,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 ### T-INT-01 — Integration test toàn hệ (INT)
 **INPUT:** [ ] [TEST_SPEC](../../spec/TEST_SPEC_MK-DDC-24_VI.md) L1–L6.
 **Microtasks:**
-- [ ] End-to-end: sensor→MCU→SOM→PLC→BACnet/Modbus/MQTT→BMS.
+- [ ] End-to-end: sensor→MCU→SOM→PLC→BACnet/IP/MQTT→BMS; + thiết bị phụ qua RTU master.
 - [ ] Fault injection: mất IOP, mất BMS, power-fail retain.
 - [ ] Performance: latency, jitter, 5 client Modbus, COV load.
 **OUTPUT/DoD:** [ ] tất cả test case L1–L4 pass · [ ] báo cáo kết quả.
@@ -391,7 +391,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 | S1 | bring-up, FreeRTOS | — | — | design system | repo, CI |
 | S2 | IOP slave, ADC | IOP master, shm | — | Web IDE wireframe | SOM RT |
 | S3 | AO/DO, safe-state | scaling, AO/DO | IDE khung+auth | I/O config UX | CI gates |
-| S4 | tinh chỉnh I/O | Modbus, REST | I/O config+watch | HMI wireframe | — |
+| S4 | tinh chỉnh I/O | Fieldbus RTU, REST | I/O config+watch | HMI wireframe | — |
 | S5 | hỗ trợ HMI | BACnet, MQTT | FBD/ST editor | review | — |
 | S6–7 | OTA bootloader | PLC engine | editor hoàn thiện | handoff | — |
 | S8 | — | security | HMI screens | — | integration |

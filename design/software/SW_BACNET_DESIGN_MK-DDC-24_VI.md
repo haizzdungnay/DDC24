@@ -1,5 +1,5 @@
 # Service Design — `kinexus-bacnet` (SW)
-## BACnet/IP + MS/TP stack — code-ready
+## BACnet/IP stack — code-ready (MS/TP bỏ — ARCH-R010)
 
 > **Document ID:** DDD-SWSVC-BAC-MK-DDC-24-VI · **Rev** 1.0 | 2026-05-30
 > 📘 [spec/README](../../spec/README.md) · **Trace:** `SW-BAC-001..008`, [D-3 PICS](../interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md)
@@ -15,9 +15,9 @@ Phục vụ BMS qua BACnet: trả/ghi object, COV, alarm, time-sync. Dữ liệu
 
 ## 3. Khởi tạo
 ```c
-// đọc bacnet.conf (D-5): bip enabled/port, mstp mac/baud
-bip_init(udp_port=47808);            // BACnet/IP Annex J
-dlmstp_init(mac, baud);             // MS/TP (nếu rs485_mode=bacnet-mstp)
+// đọc bacnet.conf (D-5): bip enabled/port/bbmd
+bip_init(udp_port=47808);            // BACnet/IP Annex J (Ethernet/WiFi)
+// MS/TP đã bỏ — RS-485 dùng cho Modbus RTU master (kinexus-fieldbus)
 Device_Set_Object_Instance_Number(device_id);   // từ device.conf, fallback DIP
 // đăng ký object: AI8, AO4, AV32, BI8, BO4, BV16, MSV8, TrendLog8, Schedule8...
 ```
@@ -57,8 +57,8 @@ void Analog_Output_Present_Value_Set(uint32_t inst, float v, uint8_t prio){
 ## 7. Failsafe (SW-BAC-008)
 Mất BMS > 30s → set alarm E301, PLC chuyển standalone (BACnet vẫn chạy local).
 
-## 8. RS-485 chia sẻ
-`rs485_mode` (D-5): `bacnet-mstp` (mặc định) HOẶC `modbus-rtu` — **không đồng thời**. Đổi cần reboot.
+## 8. RS-485 — KHÔNG dùng cho BACnet
+BACnet chỉ chạy BACnet/IP (Ethernet/WiFi). RS-485 dành 100% cho **Modbus RTU master** ([SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md)). Không còn `rs485_mode`/MS/TP.
 
 ## 9. Test (gate G4 — bắt buộc)
 - BTL conformance 100% (T-SW-056). Who-Is<100ms (T-SW-050). COV ≤200ms (T-SW-053).

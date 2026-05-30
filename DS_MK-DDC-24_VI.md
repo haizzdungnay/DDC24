@@ -4,11 +4,16 @@
 
 **Revision:** 2.1 | 2026-05-28 | Bổ sung HMI TFT display
 
+> ⚠ **CẬP NHẬT KIẾN TRÚC KẾT NỐI — 2026-05-30 (ARCH-R010):** Phần kết nối chuẩn đã đổi và **thay thế mọi đề cập cũ về "BACnet MS/TP" và "Modbus TCP/RTU slave" trong tài liệu này.**
+> - **Northbound (lên BMS/cloud): chỉ qua IP (Ethernet/WiFi)** — BACnet/IP + MQTT + REST. **Bỏ BACnet MS/TP. Bỏ Modbus slave.**
+> - **Southbound (RS-485): Modbus RTU MASTER** — DDC poll thiết bị phụ (module mở rộng I/O, màn hình phụ, thiết bị bên thứ 3).
+> Các mục marketing/topology phía dưới còn nhắc MS/TP sẽ được biên tập lại ở Rev 2.2. Nguồn-chuẩn: §3.3 + [OPEN_ISSUES ARCH-R010](spec/OPEN_ISSUES_MK-DDC-24_VI.md).
+
 ---
 
 ## 1. Tổng quan Sản phẩm
 
-MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế cho các ứng dụng HVAC phân tán như FCU, VAV box và AHU nhỏ. Thiết bị chạy trên kiến trúc **SOM Debian Linux quad-core** kết hợp MCU real-time STM32, tích hợp universal input tự nhận dạng loại cảm biến, điều khiển cục bộ theo **IEC 61131-3 (FBD + ST)** và kết nối BMS đa giao thức: **BACnet/IP, BACnet MS/TP, Modbus TCP, Modbus RTU, MQTT và REST API**. Phù hợp cho dự án retrofit hoặc tầng điều khiển phòng máy nhỏ, nơi chi phí đầu tư và không gian tủ điện cần được kiểm soát chặt.
+MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế cho các ứng dụng HVAC phân tán như FCU, VAV box và AHU nhỏ. Thiết bị chạy trên kiến trúc **SOM Debian Linux quad-core** kết hợp MCU real-time STM32, tích hợp universal input tự nhận dạng loại cảm biến, điều khiển cục bộ theo **IEC 61131-3 (FBD + ST)**. Kết nối BMS/cloud (northbound, qua Ethernet/WiFi): **BACnet/IP, MQTT, REST API**; mở rộng thiết bị phụ (southbound, RS-485): **Modbus RTU master**. Phù hợp cho dự án retrofit hoặc tầng điều khiển phòng máy nhỏ, nơi chi phí đầu tư và không gian tủ điện cần được kiểm soát chặt.
 
 ### Ứng dụng Chính
 
@@ -89,16 +94,29 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 
 ### 3.3 Giao thức & Kết nối
 
+> 🔼 **NORTHBOUND (lên BMS/cloud) — chỉ qua IP (Ethernet/WiFi):**
+
 | Thông số | Giá trị |
 |----------|---------|
-| **BACnet/IP** | ✅ Native (qua Ethernet, port 47808/UDP) — tích hợp BMS lớn |
-| **BACnet MS/TP** | ✅ Native (qua RS-485; tối đa 127 địa chỉ master, khuyến nghị ≤ 32 device/segment, dùng repeater nếu hơn) |
-| **Modbus TCP** | ✅ Slave mode (port 502), qua Ethernet — SCADA/HMI đơn giản |
-| **Modbus RTU** | ✅ Slave mode, 9600–115200 baud, qua RS-485 |
-| **MQTT** | ✅ v3.1.1 / v5.0 (IoT upstream, TLS hỗ trợ) |
+| **BACnet/IP** | ✅ Native (Ethernet/WiFi, port 47808/UDP) — tích hợp BMS lớn |
+| **MQTT** | ✅ v3.1.1 / v5.0 (IoT/cloud upstream, TLS) |
 | **REST API** | ✅ HTTPS JSON API, port 8443 (cấu hình và giám sát) |
-| **RS-485** | 1× port, terminal block, max 1200m @9600 baud |
-| **Ethernet** | 1× Gigabit (10/100/1000 Mbps) RJ-45 (BACnet/IP, Modbus TCP, MQTT, web UI) |
+
+> 🔽 **SOUTHBOUND (xuống thiết bị phụ) — DDC là MASTER:**
+
+| Thông số | Giá trị |
+|----------|---------|
+| **Modbus RTU Master** | ✅ DDC = master trên RS-485 (9600–115200 baud), poll **module mở rộng I/O, màn hình phụ, thiết bị bên thứ 3** (đồng hồ điện, biến tần…). Khung mở theo device profile. |
+
+> 🔌 **Cổng vật lý:**
+
+| Thông số | Giá trị |
+|----------|---------|
+| **Ethernet** | 1× Gigabit RJ-45 (BACnet/IP, MQTT, REST, Web UI) |
+| **WiFi** | ✅ 2.4/5 GHz (northbound IP, tuỳ chọn) |
+| **RS-485** | 1× port, terminal block, max 1200m @9600 baud — **dành cho Modbus RTU master** |
+
+> ⚠ *Cập nhật 2026-05-30 (ARCH-R010): Đã **bỏ BACnet MS/TP** và **Modbus TCP/RTU slave**. DDC không còn là Modbus slave; RS-485 chỉ làm Modbus RTU master xuống thiết bị phụ. Giao thức northbound cụ thể sẽ chốt sau, nhưng transport là IP.*
 | **USB** | 1× USB-A host (debug) + 1× USB-C (serial console, OTA) |
 | **Wi-Fi** | Không (dùng external USB Wi-Fi adapter nếu cần) |
 

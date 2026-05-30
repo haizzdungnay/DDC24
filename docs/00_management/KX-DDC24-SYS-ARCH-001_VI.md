@@ -65,21 +65,23 @@ Về mặt vật lý, nó là một **hộp nhỏ gắn trên thanh ray trong t�
 | **DO** (Digital Output) | 4 | cổng **ra** bật/tắt (relay) | bật/tắt bơm, đèn, máy nén |
 
 ```
-        ĐỌC VÀO (input)                 RA LỆNH (output)
-   ┌──────────────────────┐        ┌──────────────────────┐
-   │ 8× UI  (đo lường)     │        │ 4× AO  (điều chỉnh)   │
-   │ 8× DI  (bật/tắt)      │        │ 4× DO  (relay on/off) │
-   └──────────┬───────────┘        └───────────▲──────────┘
-              │      ┌──────────────────────┐  │
-              └─────►│     MK-DDC-24         ├──┘
-                     │  (xử lý + giao tiếp)  │
-                     └──────────┬───────────┘
-                                │ mạng (BACnet/Modbus/MQTT/Web)
-                                ▼
                        BMS / Cloud / Trình duyệt
+                                ▲
+                                │ LÊN TRÊN (northbound) — Ethernet/WiFi (IP)
+                                │ BACnet/IP · MQTT · REST
+                     ┌──────────┴───────────┐
+        ĐỌC VÀO ────►│     MK-DDC-24         ├────► RA LỆNH
+   8× UI, 8× DI      │  (xử lý + giao tiếp)  │      4× AO, 4× DO
+                     └──────────┬───────────┘
+                                │ XUỐNG DƯỚI (southbound) — RS-485
+                                │ Modbus RTU (DDC = MASTER)
+                                ▼
+              Thiết bị phụ: module mở rộng I/O · màn hình phụ · đồng hồ/biến tần
 ```
 
-> **Ví von:** Cổng **UI/DI là "tai và mắt"** (nhận thông tin), cổng **AO/DO là "tay chân"** (hành động).
+> **Ví von:** Cổng **UI/DI là "tai và mắt"**, cổng **AO/DO là "tay chân"**. Cổng **mạng phía trên** để báo cáo lên sếp (BMS/cloud); cổng **RS-485 phía dưới** để DDC **sai vặt đám lính phụ** (thiết bị phụ).
+>
+> ⚠ **Hai hướng đừng nhầm:** lên BMS/cloud **chỉ đi bằng Ethernet/WiFi** (giao thức IP: BACnet/IP, MQTT, REST). Cổng **RS-485/Modbus** là để DDC **làm chủ (master) đi sai khiến thiết bị phụ** — KHÔNG phải để BMS đọc DDC.
 
 ---
 
@@ -95,8 +97,9 @@ graph TB
     SOM["🧠 SOM — 'Bộ não THÔNG THÁI'<br/>máy tính Linux (Radxa CM3)<br/>Việc: suy nghĩ, giao tiếp mạng,<br/>web, màn hình"]
     MCU <-->|"nói chuyện qua 1 dây (IOP)"| SOM
   end
-  MCU <--> FIELD[🌡️🔧 Cảm biến / Van / Relay]
-  SOM <--> NET[🌐 BACnet / Modbus / MQTT / Web]
+  MCU <--> FIELD[🌡️🔧 Cảm biến / Van / Relay - 24 điểm]
+  SOM -->|"Ethernet/WiFi (IP)"| NET[🌐 BMS/Cloud: BACnet/IP · MQTT · REST]
+  SOM -->|"RS-485 (DDC = master)"| EXT[🧩 Thiết bị phụ: module mở rộng I/O · HMI phụ]
 ```
 
 **Vì sao phải tách làm hai?**
@@ -136,12 +139,14 @@ graph LR
   IOD -->|"ghi vào bộ nhớ chung"| SHM[("📋 Bảng tin chung<br/>shared memory")]
   SHM --> PLC["PLC engine<br/>(bộ suy nghĩ:<br/>chạy quy tắc điều khiển)"]
   PLC --> SHM
-  SHM --> BAC["BACnet<br/>(nói chuyện BMS)"]
-  SHM --> AGENT["Agent<br/>(Modbus + REST + MQTT)"]
+  SHM --> BAC["BACnet/IP<br/>(nói chuyện BMS)"]
+  SHM --> AGENT["Agent<br/>(REST + MQTT)"]
   SHM --> HMI["HMI<br/>(màn hình tại chỗ)"]
+  FB["fieldbus<br/>(Modbus RTU master)"] -->|"I/O ảo"| SHM
+  FB -->|"RS-485"| EXT[🧩 Thiết bị phụ]
   AGENT --> WEB["Web IDE<br/>(trang web cấu hình)"]
-  BAC --> BMS[🏢 BMS]
-  AGENT --> CLOUD[☁️ Cloud/SCADA]
+  BAC -->|"Ethernet/WiFi"| BMS[🏢 BMS]
+  AGENT -->|"Ethernet/WiFi"| CLOUD[☁️ Cloud]
 ```
 
 ### Mức 4 — Bên trong "bộ não nhanh tay" (MCU) có những việc gì
@@ -240,9 +245,9 @@ Bảng này giải thích **mọi thành phần**: nó là gì, vì sao tồn t�
 | **io-driver** | người phiên dịch với MCU | đổi số thô ↔ đơn vị thật, là cửa duy nhất tới MCU | không ai đọc được cảm biến |
 | **Shared memory** | "bảng tin chung" trong SOM | các service đọc/ghi dữ liệu chung cực nhanh | các service không chia sẻ được dữ liệu |
 | **PLC engine** | bộ chạy quy tắc điều khiển (như PLC) | nơi bạn lập trình "nếu nóng thì mở van" | hộp chỉ đọc/ghi, không tự điều khiển |
-| **BACnet** | "tiếng nói chung" của ngành toà nhà | để BMS bất kỳ hãng nào cũng hiểu | không tích hợp được với toà nhà |
-| **Modbus** | giao thức công nghiệp phổ biến | cho SCADA/PLC khác đọc dữ liệu | mất 1 kênh tích hợp |
-| **Agent (MQTT/REST)** | đẩy lên cloud + cổng API | giám sát từ xa, app, dashboard | không lên cloud, không có API |
+| **BACnet/IP** | "tiếng nói chung" ngành toà nhà (qua Ethernet/WiFi) | để BMS bất kỳ hãng nào cũng hiểu | không tích hợp được với toà nhà |
+| **Agent (MQTT/REST)** | đẩy lên cloud + cổng API (qua Ethernet/WiFi) | giám sát từ xa, app, dashboard | không lên cloud, không có API |
+| **fieldbus (Modbus RTU master)** | DDC làm chủ bus RS-485, **sai khiến thiết bị phụ** | mở rộng I/O, gắn màn hình phụ, đọc đồng hồ/biến tần | không mở rộng được quá 24 điểm |
 | **Web IDE** | trang web để cấu hình & lập trình | kỹ thuật viên dùng trình duyệt làm việc | phải cắm cáp + phần mềm riêng |
 | **HMI** | màn hình nhỏ trên hộp | xem nhanh tại tủ điện, không cần laptop | ra hiện trường phải mang máy tính |
 | **OTA** | cập nhật phần mềm từ xa, an toàn | vá lỗi/nâng cấp không cần tháo máy | phải đến tận nơi mỗi lần update |
@@ -352,8 +357,11 @@ Mỗi chặng có **"cổng"**: làm xong và đạt tiêu chí mới được q
 | **IEC 61131-3** | chuẩn ngôn ngữ lập trình PLC (FBD vẽ khối, ST viết lệnh) |
 | **FBD / ST** | 2 cách lập trình PLC: vẽ sơ đồ khối / viết câu lệnh |
 | **PID** | thuật toán điều chỉnh mượt (giữ nhiệt độ ổn định) |
-| **BACnet** | "tiếng nói chung" ngành toà nhà; BTL = chứng nhận đạt chuẩn |
-| **Modbus** | giao thức công nghiệp đơn giản, phổ biến |
+| **BACnet/IP** | "tiếng nói chung" ngành toà nhà, chạy trên mạng IP; BTL = chứng nhận đạt chuẩn |
+| **Modbus RTU master** | DDC làm chủ bus RS-485, đi hỏi/sai các thiết bị phụ (slave) |
+| **Northbound / Southbound** | hướng LÊN BMS/cloud (IP) / hướng XUỐNG thiết bị phụ (RS-485) |
+| **Thiết bị phụ (slave)** | module mở rộng I/O, màn hình phụ, đồng hồ điện, biến tần… DDC điều khiển qua RTU |
+| **Device profile** | "tờ khai" mô tả 1 loại thiết bị phụ đọc/ghi thanh ghi nào — thêm thiết bị mới chỉ bằng cấu hình |
 | **MQTT** | cách đẩy dữ liệu lên cloud nhẹ nhàng |
 | **REST API** | "cửa" để phần mềm khác hỏi/ra lệnh qua mạng |
 | **shared memory** | "bảng tin chung" để các service đọc/ghi nhanh |
@@ -378,7 +386,10 @@ Vì Linux đôi lúc "khựng" vài ms khi bận → không an toàn cho điều
 Số thô = con số ADC đọc được (vô nghĩa với người, vd 8.388.000). Đơn vị thật = sau khi đổi qua công thức (23.5°C). io-driver làm việc đổi này.
 
 **Hỏi: Dữ liệu có đi thẳng từ cảm biến lên cloud không?**
-Không. Luôn qua dây chuyền: cảm biến → MCU (số thô) → io-driver (đổi đơn vị) → bảng tin chung → BACnet/agent → BMS/cloud.
+Không. Luôn qua dây chuyền: cảm biến → MCU (số thô) → io-driver (đổi đơn vị) → bảng tin chung → BACnet/agent → BMS/cloud (qua Ethernet/WiFi).
+
+**Hỏi: Cổng Modbus dùng làm gì?**
+Để DDC **làm chủ (master)** đi nói chuyện **xuống thiết bị phụ** qua dây RS-485: thêm module mở rộng I/O, gắn màn hình phụ, đọc đồng hồ điện/biến tần. **Không phải** để BMS đọc DDC (BMS đọc DDC qua BACnet/IP trên mạng). Thêm 1 thiết bị phụ mới chỉ cần khai báo "device profile" trong Web UI, không cần lập trình lại.
 
 **Hỏi: Nếu mất điện đang chạy thì sao?**
 Có "retain" lưu lại biến quan trọng; có UPS tín hiệu báo trước; khi khởi động lại, máy nạp lại trạng thái. Nếu mất liên lạc, đầu ra về safe-state.

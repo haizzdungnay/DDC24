@@ -8,18 +8,19 @@
 ---
 
 ## 1. Sản phẩm là gì?
-**MK-DDC-24** là **bộ điều khiển kỹ thuật số trực tiếp (DDC) cho HVAC** — "bộ não" điều khiển điều hòa/thông gió trong toà nhà. 24 điểm I/O, lập trình được (như PLC), nói chuyện với hệ thống quản lý toà nhà (BMS) qua **BACnet** và **Modbus**, lên cloud qua **MQTT**.
+**MK-DDC-24** là **bộ điều khiển kỹ thuật số trực tiếp (DDC) cho HVAC** — "bộ não" điều khiển điều hòa/thông gió trong toà nhà. 24 điểm I/O, lập trình được (như PLC). **Lên BMS/cloud** (Ethernet/WiFi): **BACnet/IP + MQTT + REST**. **Xuống thiết bị phụ** (RS-485): **Modbus RTU master** (mở rộng I/O, màn hình phụ…).
 
 ## 2. Hai "bộ não" (kiến trúc 2 lớp)
 | Lớp | Phần cứng | Nhiệm vụ | Hệ điều hành | Ngôn ngữ |
 |-----|-----------|----------|--------------|----------|
 | **Real-time** | MCU STM32G0B1 | đọc cảm biến, xuất tín hiệu **mỗi 1ms** | FreeRTOS | C |
-| **Application** | SOM Radxa CM3 (RK3566) | logic điều khiển, BACnet/Modbus/MQTT, web, màn hình | Debian 12 | C/C++/Python/TS |
+| **Application** | SOM Radxa CM3 (RK3566) | logic điều khiển, BACnet/IP·MQTT·REST (northbound), Modbus RTU master (southbound), web, màn hình | Debian 12 | C/C++/Python/TS |
 
 Hai lớp nối nhau bằng **1 dây UART** chạy giao thức **IOP** (SOM = chủ, MCU = tớ).
 
 ```
-Cảm biến/Van/Relay ─► MCU (1ms) ─IOP─► SOM ─► BACnet / Modbus / MQTT / Web / HMI ─► BMS / Cloud / Người dùng
+Cảm biến/Van/Relay ─► MCU (1ms) ─IOP─► SOM ─► BACnet/IP · MQTT · REST · Web/HMI ─► BMS / Cloud / Người dùng
+                                         └─► (RS-485) Modbus RTU master ─► thiết bị phụ
 ```
 
 ## 3. I/O (24 điểm)
@@ -32,7 +33,7 @@ Cảm biến/Van/Relay ─► MCU (1ms) ─IOP─► SOM ─► BACnet / Modbus 
 | Nhóm | Viết tắt | Làm gì |
 |------|----------|--------|
 | **Firmware** | FW | code C trên MCU: đọc ADC, IOP, relay, watchdog |
-| **Backend** | BE | service trên SOM: io-driver, PLC, BACnet, agent (MQTT/REST/Modbus) |
+| **Backend** | BE | service trên SOM: io-driver, PLC, BACnet/IP, agent (MQTT/REST), fieldbus (Modbus RTU master) |
 | **Frontend** | FE | Web IDE trên trình duyệt: lập trình FBD/ST, cấu hình, giám sát |
 | **UI/UX** | UX | thiết kế giao diện Web IDE + màn hình TFT (HMI) |
 

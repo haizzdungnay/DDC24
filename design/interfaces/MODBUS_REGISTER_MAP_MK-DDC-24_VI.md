@@ -1,121 +1,130 @@
-# Modbus Register Map — MK-DDC-24
-## Interface Control Document — D-2
+# Modbus RTU Master / Expansion Bus — MK-DDC-24
+## Interface Control Document — D-2 (cập nhật ARCH-R010)
 
 > **Document ID:** ICD-MODBUS-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-05-30
+> **Phiên bản:** 2.0 | 2026-05-30
 > **Trạng thái:** Draft — chờ SW Lead ký (DR-2)
-> 📘 [spec/README](../../spec/README.md) · Nguồn gốc: `DS §4.1`, `SRS §6.2`, `SW-REQ §10`
+> 📘 [spec/README](../../spec/README.md) · Trace: `RTU-001..008`, `SW-MOD-001..011` · Triển khai: [SW_FIELDBUS_DESIGN](../software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md)
 
-> ⭐ **NGUỒN-CHUẨN cho Modbus.** Modbus **TCP (port 502)** và **RTU (RS-485)** dùng **chung** map này. Định dạng: **INT16 scaled (×100), 1 register/điểm** (chốt IOP-Q-R009). Big-endian (Modbus chuẩn).
-
----
-
-## 1. Tổng quan vùng địa chỉ
-
-| Vùng | Function Code | Quyền | Nội dung |
-|------|---------------|-------|----------|
-| **Coils (0x)** | FC01 đọc / FC05, FC15 ghi | R/W | DO1–DO4 |
-| **Discrete Inputs (1x)** | FC02 | R | DI1–DI8 |
-| **Input Registers (3x)** | FC04 | R | AI1–AI8, DI counter, system status |
-| **Holding Registers (4x)** | FC03 đọc / FC06, FC16 ghi | R/W | AO1–AO4, AV1–AV32, BV1–BV16 |
-
-> Địa chỉ trong bảng là **0-based** (protocol address). Một số HMI hiển thị 1-based (cộng 1) hoặc kèm prefix (4x → 40001).
+> ⚠ **THAY ĐỔI LỚN (2026-05-30, ARCH-R010):** Phiên bản 1.0 của tài liệu này mô tả DDC là **Modbus slave** phục vụ BMS — **đã huỷ**. Đúng mô hình: **DDC là Modbus RTU MASTER** trên RS-485, đi **poll thiết bị phụ** (downstream). Northbound lên BMS dùng BACnet/IP + MQTT + REST (xem [D-3](BACNET_PICS_EPICS_MK-DDC-24_VI.md), [D-4](REST_API_OPENAPI_MK-DDC-24_VI.md)).
 
 ---
 
-## 2. Coils (0x) — DO, read/write
+## 1. Vai trò & phạm vi
 
-| Addr | Tên | Mô tả | Ghi |
-|:----:|-----|-------|-----|
-| 0 | DO1 | Relay DO1 | 0=mở, 1=đóng |
-| 1 | DO2 | Relay DO2 | |
-| 2 | DO3 | Relay DO3 | |
-| 3 | DO4 | Relay DO4 | |
+```
+        BMS / Cloud  ◄── BACnet/IP · MQTT · REST (Ethernet/WiFi)
+              ▲
+        ┌─────┴─────┐
+        │ MK-DDC-24 │  ◄── MASTER
+        └─────┬─────┘
+   RS-485 │ Modbus RTU (DDC = master, poll)
+   ┌──────┼───────────────┬───────────────┐
+   ▼      ▼               ▼               ▼
+ [I/O ext]  [Remote HMI]  [Power meter]  [VFD/3rd-party]   ◄── SLAVE
+```
 
-## 3. Discrete Inputs (1x) — DI, read-only
+DDC làm **Modbus RTU master**: chủ động đọc/ghi các **thiết bị phụ (slave)** trên cùng 1 bus RS-485. Mục tiêu: **mở rộng số điểm I/O, gắn màn hình phụ, tích hợp thiết bị Modbus bên thứ 3** — theo **khung mở (device profile)** để thêm loại mới chỉ bằng cấu hình.
 
-| Addr | Tên | Mô tả |
-|:----:|-----|-------|
-| 0–7 | DI1…DI8 | 1=ON (contact đóng, đã debounce) |
+## 2. Thông số bus
+| Tham số | Giá trị |
+|---------|---------|
+| Vai trò DDC | **Master** (duy nhất trên bus) |
+| Vật lý | RS-485 2 dây + GND, MAX13487E (HW_SPEC §9) |
+| Baud | 9.6k / 19.2k / 38.4k / 57.6k / 115.2k |
+| Frame | 8N1 / 8E1 / 8O1 (cấu hình) |
+| Số slave | ≥ 16 (khuyến nghị ≤ 32/segment) |
+| Địa chỉ slave | 1–247 |
+| Function codes (master phát) | FC03, FC04 (đọc) · FC06, FC16 (ghi) · FC01/02/05/15 (tuỳ profile) |
+| Chu kỳ poll | cấu hình/slave (mặc định 1s); vòng poll tổng có ngân sách thời gian |
+| Timeout/slave | mặc định 300ms, retry 2 lần → đánh dấu offline |
 
-## 4. Input Registers (3x, FC04) — read-only
+## 3. Device Profile — khung mở (cốt lõi)
 
-| Addr | Tên | Kiểu | Scale | Đơn vị/ý nghĩa |
-|:----:|-----|------|-------|----------------|
-| 0–7 | AI1…AI8 | INT16 | **giá trị × 100** | vd 23.5°C → 2350; 7.80V → 780 |
-| 8 | AI_FAULT_MASK | UINT16 | bitmask | bit0=AI1 lỗi … bit7=AI8 lỗi |
-| 100–107 | DI1…DI8 counter | UINT16 | đếm cạnh (wrap 65535) | flow/pulse |
-| 200 | UPTIME_S_LO | UINT16 | giây (low word) | |
-| 201 | UPTIME_S_HI | UINT16 | giây (high word) | uptime 32-bit |
-| 202 | FAULT_CODE | UINT16 | mã | fault hiện hành (xem SRS §13) |
-| 203 | FW_VERSION | UINT16 | hi=major, lo=minor | firmware SOM |
-| 204 | MCU_TEMP | INT16 | ×10 °C | nhiệt độ MCU |
-| 205 | CPU_TEMP | INT16 | ×10 °C | nhiệt độ SOM |
-| 206 | IOP_STATUS | UINT16 | 0=normal,1=fault,2=safe | trạng thái IOP |
-| 207–209 | reserved | — | 0 | |
+Mỗi loại thiết bị phụ được mô tả bằng một **profile** (file JSON/template), KHÔNG hard-code. Thêm thiết bị mới = thêm 1 profile.
 
-## 5. Holding Registers (4x) — AO/AV/BV, read/write
+```jsonc
+// profile ví dụ: kinexus_io_ext_8di8do.json
+{
+  "profile_id": "kinexus-io-ext-8di8do",
+  "vendor": "Kinexus",
+  "description": "Module mở rộng 8 DI + 8 DO",
+  "default_baud": 19200,
+  "points": [
+    // đọc 8 DI từ Discrete Inputs (FC02) địa chỉ 0..7
+    {"name":"DI", "count":8, "fc":2, "addr":0, "type":"bool",
+     "map_to":"shm.ext.di"},
+    // ghi 8 DO ra Coils (FC15) địa chỉ 0..7
+    {"name":"DO", "count":8, "fc":15, "addr":0, "type":"bool",
+     "writable":true, "map_to":"shm.ext.do"},
+    // đọc trạng thái module (Input Reg FC04)
+    {"name":"STATUS", "count":1, "fc":4, "addr":100, "type":"uint16",
+     "map_to":"shm.ext.status"}
+  ]
+}
+```
 
-| Addr | Tên | Kiểu | Scale | Ghi chú |
-|:----:|-----|------|-------|---------|
-| 0–3 | AO1…AO4 | INT16 | **0–10V → 0–10000; 0–20mA → 0–20000** | commandable |
-| 100–131 | AV1…AV32 | INT16 | giá trị × 100 | biến nội bộ PLC (setpoint…) |
-| 200–215 | BV1…BV16 | UINT16 | 0=FALSE, 1=TRUE | biến boolean PLC |
+**Trường của một point trong profile:**
+| Trường | Ý nghĩa |
+|--------|---------|
+| `name` | tên điểm |
+| `count` | số điểm liên tiếp |
+| `fc` | function code đọc/ghi |
+| `addr` | địa chỉ thanh ghi gốc trong slave |
+| `type` | bool / int16 / uint16 / int32 / uint32 / float32 |
+| `scale`, `offset` | đổi giá trị: `eng = raw*scale + offset` |
+| `writable` | DDC có ghi xuống không |
+| `byte_order` | AB / BA / ABCD / CDAB (cho 32-bit) |
+| `map_to` | đích trong shared memory / biến PLC |
 
-> Ghi AO/AV/BV qua Modbus đi qua cùng "write arbitration" của PLC như BACnet Write-Property (xem `SW_ARCH §3.2`): giá trị vào shared memory, PLC scan kế tiếp áp dụng. AO mode (V/mA) cấu hình ngoài Modbus (Web UI / SET_AO_CFG).
+## 4. Cấu hình bus & slave (`fieldbus.conf` — xem [D-5](CONFIG_SCHEMA_MK-DDC-24_VI.md))
+```json
+{
+  "rs485": { "baud": 19200, "parity": "N", "stop": 1 },
+  "poll_default_ms": 1000,
+  "slaves": [
+    { "addr": 10, "profile": "kinexus-io-ext-8di8do", "poll_ms": 500, "name": "EXT-1" },
+    { "addr": 11, "profile": "kinexus-remote-hmi",     "poll_ms": 1000, "name": "HMI-2" },
+    { "addr": 20, "profile": "generic-power-meter",    "poll_ms": 2000, "name": "Meter-A" }
+  ]
+}
+```
+
+## 5. Profile chuẩn đi kèm (plug-and-play)
+| Profile | Thiết bị | Điểm chính |
+|---------|----------|-----------|
+| `kinexus-io-ext-8di8do` | module mở rộng 8DI/8DO | DI×8, DO×8, status |
+| `kinexus-io-ext-4ui4ao` | module mở rộng 4UI/4AO | UI×4 (int16 ×100), AO×4, status |
+| `kinexus-remote-hmi` | màn hình phụ | đọc các giá trị DDC publish ra HR; ghi nút bấm |
+| `generic-power-meter` | đồng hồ điện bên thứ 3 | V, I, P, kWh (float32, byte_order cấu hình) |
+| `generic-modbus` | thiết bị bất kỳ | người dùng tự khai báo point |
+
+## 6. Tích hợp vào hệ thống
+- Điểm đọc từ slave → ghi vào **shared memory vùng mở rộng** → PLC, BACnet, MQTT, HMI dùng như I/O ảo.
+- Map sang BACnet: điểm mở rộng có thể expose thành object AV/BV/AI bổ sung (cấu hình).
+- Ghi: PLC/BMS đặt giá trị → `kinexus-fieldbus` ghi xuống slave (FC06/16) ở vòng poll kế.
+
+## 7. Xử lý lỗi
+| Tình huống | Hành động |
+|-----------|-----------|
+| Slave timeout/CRC | retry 2 lần → đánh dấu **offline**, điểm = "bad quality" |
+| Slave offline | alarm **E302** (warning); tiếp tục poll để phát hiện online lại |
+| Tỉ lệ lỗi bus > 10% | alarm **E303** (error), gợi ý kiểm tra dây/termination |
+| Profile sai/không khớp | log + bỏ qua slave đó, không crash |
+
+## 8. Ví dụ giao dịch (master phát)
+**Đọc 8 DI của EXT-1 (addr 10, FC02, từ 0, qty 8):**
+`TX: 0A 02 0000 0008 <CRC>` → `RX: 0A 02 01 <byte DI> <CRC>`
+
+**Ghi DO1..8 của EXT-1 = pattern (addr 10, FC15, từ 0, qty 8):**
+`TX: 0A 0F 0000 0008 01 <byte> <CRC>` → `RX: 0A 0F 0000 0008 <CRC>`
+
+## 9. Trace REQ
+`RTU-001..008`, `SW-MOD-001..011`, `FR-024`, `FR-025`, `PRD UC-06`.
 
 ---
-
-## 6. Quy ước scale (chi tiết)
-
-| Loại điểm | Engineering | Register | Công thức |
-|-----------|-------------|----------|-----------|
-| AI nhiệt độ | °C | INT16 | `reg = round(°C × 100)` (vd −5.25°C → −525) |
-| AI điện áp | V | INT16 | `reg = round(V × 100)` |
-| AI dòng | mA | INT16 | `reg = round(mA × 100)` |
-| AO 0–10V | V | INT16 | `reg = round(V × 1000)` → 0..10000 |
-| AO 4–20mA | mA | INT16 | `reg = round((mA) × 1000)` → 4000..20000 |
-| AV | số thực | INT16 | `reg = round(val × 100)`, kẹp [−32768, 32767] |
-
-> ⚠ INT16 ×100 → dải ±327.67 và độ phân giải 0.01. Đủ cho HVAC (nhiệt độ/áp/%). Giá trị vượt dải → kẹp + set quality "uncertain".
-
----
-
-## 7. Exception Responses (Modbus chuẩn)
-
-| Code | Tên | Khi nào |
-|:----:|-----|---------|
-| 0x01 | Illegal Function | FC không hỗ trợ (chỉ FC01,02,03,04,05,06,15,16) |
-| 0x02 | Illegal Data Address | địa chỉ ngoài map |
-| 0x03 | Illegal Data Value | ghi giá trị ngoài dải hợp lệ |
-| 0x04 | Slave Device Failure | lỗi nội bộ (IOP fault…) |
-
-## 8. Tham số kết nối
-
-| Tham số | TCP | RTU |
-|---------|-----|-----|
-| Cổng/giao tiếp | TCP 502 | RS-485 (chung BACnet MS/TP, chọn mode qua Web UI) |
-| Đồng thời | ≥ 5 client | 1 master |
-| Unit ID | bất kỳ (TCP) | 1–247, mặc định = DeviceID mod 247 |
-| Khung | 8N1, 9.6k–115.2k (RTU) | |
-| Timeout | 30s idle → đóng socket (TCP) | |
-| Latency | response ≤ 100 ms |
-
-## 9. Ví dụ
-
-**Đọc AI1–AI8 (FC04, addr 0, qty 8):**
-`req:  <MBAP> 04 0000 0008` → `resp: 04 10 <16 byte: 8×INT16>`
-Nếu AI1=23.50°C → bytes `09 2E` (2350).
-
-**Ghi AO1 = 5.00V (FC06, addr 0):**
-`req: 06 0000 1388` (5000) → DDC xuất 5.00V (mode 0–10V).
-
-**Đóng DO1 (FC05, addr 0):** `req: 05 0000 FF00`.
-
----
-
-## 10. Trace REQ
-`MB-001..010`, `SW-MOD-001..010`, `RTU-001..006`, `FR-024`, `FR-025`, `PRD UC-06`.
-
----
-**Rev** 1.0 | 2026-05-30 · Ký: SW Lead ___
+## Revision History
+| Version | Ngày | Người | Thay đổi |
+|---------|------|-------|----------|
+| 2.0 | 2026-05-30 | SW Lead | **Viết lại theo ARCH-R010:** từ "DDC Modbus slave" → "DDC Modbus RTU **master** / expansion bus" với device profile. |
+| 1.0 | 2026-05-30 | SW | (huỷ) Modbus slave register map phục vụ BMS |

@@ -102,7 +102,7 @@ Trạng thái: ● Compiled OK · last upload 10:20 · PLC: RUNNING
 - Force mở modal: nhập giá trị + cảnh báo "tự hết hạn sau 10 phút". **Quyền:** admin/operator.
 
 ### 4.5 Network / BACnet
-Form: DHCP/Static IP, hostname; BACnet Device ID/Name, BIP port, MS/TP mac/baud, RS-485 mode (cảnh báo "đổi cần reboot"). **Quyền:** admin.
+Form: DHCP/Static IP + WiFi, hostname; BACnet/IP Device ID/Name + BIP port + BBMD; **Field bus (Modbus RTU master):** baud/parity + danh sách thiết bị phụ (địa chỉ + device profile + chu kỳ poll) + trạng thái online/offline từng slave. **Quyền:** admin. *(MS/TP đã bỏ — ARCH-R010.)*
 
 ### 4.6 Alarms
 Danh sách alarm (severity màu theo design system), filter, **Ack**. **Quyền:** operator+.
