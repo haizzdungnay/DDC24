@@ -37,9 +37,10 @@ Cảm biến/Van/Relay ─► MCU (1ms) ─IOP─► SOM ─► BACnet / Modbus 
 | **UI/UX** | UX | thiết kế giao diện Web IDE + màn hình TFT (HMI) |
 
 ## 5. Tôi nên đọc gì tiếp?
-1. [GETTING_STARTED_DEV](../../design/GETTING_STARTED_DEV.md) — cài môi trường + "muốn sửa X vào đâu".
-2. [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md) — lộ trình code chi tiết.
-3. Theo vai trò: [spec/README §1](../../spec/README.md) chỉ thứ tự đọc cho FW/SW/QA.
+1. ⭐ [System Handbook — Hiểu hệ thống từ số 0](KX-DDC24-SYS-ARCH-001_VI.md) — nếu chưa hình dung được sản phẩm, đọc cái này (kể chuyện + sơ đồ).
+2. [GETTING_STARTED_DEV](../../design/GETTING_STARTED_DEV.md) — cài môi trường + "muốn sửa X vào đâu".
+3. [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md) — lộ trình code chi tiết.
+4. Theo vai trò: [spec/README §1](../../spec/README.md) chỉ thứ tự đọc cho FW/SW/QA.
 
 ## 6. Tài liệu ở đâu?
 → [Master Document Register](KX-DDC24-QA-REGISTER-001_VI.md) liệt kê **toàn bộ** tài liệu kèm Document ID, version, owner.

@@ -26,10 +26,12 @@
 ```
 
 ## 2. Người mới — Bắt đầu từ đây
-1. [00_management/PROJECT_OVERVIEW](00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) — sản phẩm là gì, kiến trúc 2 lớp (đang trỏ tới [../README.md](../README.md)).
-2. [design/GETTING_STARTED_DEV](../design/GETTING_STARTED_DEV.md) — cài môi trường, build, "muốn sửa X vào đâu".
-3. [00_management/IMPLEMENTATION_PLAN](00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md) — **lộ trình code: phase → task → microtask → checklist**.
-4. [00_management/DOC_CONTROL_AND_NAMING](00_management/KX-DDC24-QA-DOCCTRL-001_VI.md) — quy tắc đặt tên/sắp xếp/version.
+> 🌟 **Chưa hiểu sản phẩm? Đọc cuốn số 1 trước — nó giải thích TOÀN BỘ hệ thống từ số 0, kể như kể chuyện, có hình vẽ, không cần biết code.**
+1. ⭐ [**System Handbook — Hiểu hệ thống từ số 0**](00_management/KX-DDC24-SYS-ARCH-001_VI.md) — cái hộp là gì, "2 bộ não", dữ liệu chạy thế nào, từng khối vì sao cần. **Đọc cái này đầu tiên.**
+2. [PROJECT_OVERVIEW](00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) — tóm tắt nhanh 1 trang.
+3. [design/GETTING_STARTED_DEV](../design/GETTING_STARTED_DEV.md) — cài môi trường, build, "muốn sửa X vào đâu".
+4. [IMPLEMENTATION_PLAN](00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md) — **lộ trình code: phase → task → microtask → checklist**.
+5. [DOC_CONTROL_AND_NAMING](00_management/KX-DDC24-QA-DOCCTRL-001_VI.md) — quy tắc đặt tên/sắp xếp/version.
 
 ## 3. Cây thư mục chuẩn (ISO-aligned)
 

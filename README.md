@@ -5,7 +5,8 @@
 > **Tổ chức:** KINEXUS Technologies JSC
 
 > 🧭 **Cổng vào theo chuẩn ISO:** [docs/README](docs/README.md) (Document Hub) — điều hướng theo vòng đời, kế hoạch implement, UI/UX, register.
-> 🚀 **Người mới:** [Project Overview](docs/00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) → [Getting Started](design/GETTING_STARTED_DEV.md) → [Implementation Plan](docs/00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md).
+> 🌟 **Chưa hiểu sản phẩm? Đọc trước:** [**System Handbook — Hiểu hệ thống từ số 0**](docs/00_management/KX-DDC24-SYS-ARCH-001_VI.md) (kể chuyện + sơ đồ, không cần biết code).
+> 🚀 **Người mới (dev):** [Project Overview](docs/00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) → [Getting Started](design/GETTING_STARTED_DEV.md) → [Implementation Plan](docs/00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md).
 > 📜 Lịch sử thay đổi: [CHANGELOG.md](CHANGELOG.md) · 🗂 Danh mục tài liệu: [Master Register](docs/00_management/KX-DDC24-QA-REGISTER-001_VI.md)
 
 ---

@@ -14,6 +14,7 @@
 ## 1. Quản lý (00_management)
 | ID | Tài liệu | Ver | Trạng thái | Owner |
 |----|----------|:---:|:----------:|-------|
+| KX-DDC24-SYS-ARCH-001 | [System Handbook (hiểu hệ thống từ số 0)](KX-DDC24-SYS-ARCH-001_VI.md) | 1.0 | Approved | System Architect |
 | KX-DDC24-PM-OVERVIEW-001 | [Project Overview](KX-DDC24-PM-OVERVIEW-001_VI.md) | 1.0 | Approved | PMO |
 | KX-DDC24-PM-IMPLPLAN-001 | [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md) | 1.0 | Approved | PM+Leads |
 | KX-DDC24-QA-DOCCTRL-001 | [Document Control & Naming](KX-DDC24-QA-DOCCTRL-001_VI.md) | 1.0 | Approved | QA |
