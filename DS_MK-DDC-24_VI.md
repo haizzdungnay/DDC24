@@ -27,7 +27,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 | Tính năng | Lợi thế | Lợi ích Khách hàng |
 |-----------|---------|-------------------|
 | Universal Input (UI) | 8 kênh tự nhận dạng DI/AI/RTD/NTC | Giảm inventory spare parts, commissioning nhanh hơn |
-| BACnet MS/TP native | Không cần gateway | Tiết kiệm 200-300 USD/node, sơ đồ tủ sạch hơn |
+| BACnet native | Không cần gateway | Tiết kiệm 200-300 USD/node, sơ đồ tủ sạch hơn |
 | IEC 61131-3 FBD | Lập trình khối chức năng chuẩn quốc tế | Integrator dễ maintain, giảm vendor lock-in |
 | DIN-rail compact | 150 × 90 × 55 mm | Phù hợp tủ điện chật, retrofit không phình tủ |
 
@@ -38,8 +38,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 - ✅ **24 điểm I/O tích hợp** — đáp ứng bài toán FCU, VAV và AHU nhỏ trong một bộ điều khiển
 - ✅ **8 kênh universal input tự nhận dạng** — NTC, PT100/1000, 0–10V, 4–20mA, dry contact — không cần cấu hình jumper
 - ✅ **4 AO + 4 DO Relay** — điều khiển van modulating, damper, quạt và bơm không cần module trung gian
-- ✅ **BACnet/IP + MS/TP song song** — tích hợp nhanh với BMS Siemens, Honeywell, Schneider — không cần gateway
-- ✅ **Modbus TCP (port 502)** — kết nối SCADA/HMI đơn giản qua Ethernet cùng lúc với BACnet
+- ✅ **BACnet/IP** — tích hợp nhanh với BMS Siemens, Honeywell, Schneider — không cần gateway
 - ✅ **MQTT v5.0 + REST API HTTPS** — đẩy dữ liệu IoT upstream, tích hợp dashboard và cloud
 - ✅ **Soft PLC IEC 61131-3 FBD + ST** — KinexusET Web IDE, không cài phần mềm desktop
 - ✅ **Debian Linux trên SOM quad-core** — OTA A/B partition, SSH, web UI, extensible
@@ -170,12 +169,11 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 | **Event Enrollment** | 8 | ✅ | ✅ | — | Định nghĩa điều kiện alarm |
 
 **BACnet/IP:** UDP port 47808, Max APDU 1476 bytes, Segmentation hỗ trợ  
-**BACnet MS/TP:** Max APDU 480 bytes, Segmentation không hỗ trợ  
 **Who-Is / I-Am / Time-Sync:** Hỗ trợ đầy đủ  
 
-### 4.1 Modbus TCP/RTU Register Map (BẢNG CHUẨN)
+### 4.1 Modbus RTU Register Map (BẢNG CHUẨN)
 
-> **Đây là register map chuẩn DUY NHẤT** (INT16 scaled ×100, 1 register/điểm — chốt IOP-Q-R009). Modbus TCP và RTU dùng **chung** map này. SRS §6.2 và SW-REQ §10 tham chiếu về đây.
+> **Đây là register map chuẩn DUY NHẤT** (INT16 scaled ×100, 1 register/điểm — chốt IOP-Q-R009). Modbus RTU dùng map này. SRS §6.2 và SW-REQ §10 tham chiếu về đây.
 
 | Vùng | Địa chỉ | Mô tả |
 |------|:-------:|-------|
@@ -208,27 +206,9 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 │Zone 1 │ │Zone 2 │ │Zone 3 │ │Zone N │
 └───────┘ └───────┘ └───────┘ └───────┘
   (không giới hạn số device trên IP network)
-  (cùng Ethernet: MQTT → cloud, Modbus TCP → SCADA)
+  (cùng Ethernet: MQTT → cloud)
 ```
 
-### 5.2 Topology BACnet MS/TP (retrofit, không có Ethernet)
-
-```
-┌──────────────────────────────────────┐
-│  BMS Server hoặc BACnet IP/MS-TP     │
-│  Router (Siemens PXG / Niagara AX)   │
-└──────────────┬───────────────────────┘
-               │ RS-485 (A/B/GND)
-    ┌──────────┼──────────┬──────────┐
-    │          │          │          │
-┌───▼───┐ ┌───▼───┐ ┌───▼───┐ ┌───▼───┐
-│DDC-24 │ │DDC-24 │ │DDC-24 │ │DDC-24 │
-│Zone 1 │ │Zone 2 │ │Zone 3 │ │Zone N │
-└───────┘ └───────┘ └───────┘ └───────┘
-  (max 32 device/segment, term 120Ω ở 2 đầu)
-  ⚠ Chế độ này: RS-485 dùng BACnet MS/TP,
-    Modbus RTU KHÔNG dùng đồng thời
-```
 
 ### 5.3 Wiring Example — FCU Điển hình
 
@@ -268,9 +248,9 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 │   DI3–8 ◄── (spare)                                 │
 │                                                      │
 │ COMMUNICATION:                                       │
-│   [RS-485 A/B/GND] ──► BACnet MS/TP bus (daisy)    │
-│   [RJ-45 Ethernet] ──► LAN switch (BACnet/IP +      │
-│                         Modbus TCP + MQTT)           │
+│   [RS-485 A/B/GND] ──► Modbus RTU bus (daisy)         │
+│   [RJ-45 Ethernet] ──► LAN switch (BACnet/IP +         │
+│                         MQTT)           │
 │   [USB-C]          ──► Laptop (commissioning,       │
 │                         serial console)              │
 └─────────────────────────────────────────────────────┘
@@ -336,7 +316,7 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 |----------|-----------|---------------|--------------|
 | **Giá** | 450–550 USD | ~600 USD | ~700 USD |
 | **I/O** | 24 (8UI+8DI+4AO+4DO) | 24 | 24 |
-| **BACnet** | MS/TP + IP native | MS/TP native | MS/TP + IP (gateway) |
+| **BACnet** | BACnet/IP native | BACnet native | BACnet (gateway) |
 | **UI channels** | 8 (tự nhận dạng) | 6 | 4 |
 | **Programming** | IEC 61131-3 FBD + ST | Proprietary | Proprietary |
 | **OS** | Debian 12 Linux | Bare-metal | Bare-metal |
@@ -351,11 +331,11 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 
 | Mã sản phẩm | Mô tả | Giá (USD) |
 |-------------|-------|:---------:|
-| **MK-DDC-24** | Bộ điều khiển DDC 24 điểm (BACnet MS/TP + IP, SOM Debian) | 450–550 |
+| **MK-DDC-24** | Bộ điều khiển DDC 24 điểm (BACnet/IP, SOM Debian) | 450–550 |
 | **MK-DDC-24-1G** | Variant RAM 2 GB LPDDR4 bản legacy (giữ tương thích mã đặt hàng cũ) | 500–600 |
 | **MK-PWR-24V-30W** | Nguồn DIN-rail 24 VDC/30 W (optional) | 45 |
 | **MK-RS485-RPTR** | RS-485 repeater (nếu > 32 devices/segment) | 80 |
-| **MK-CABLE-BACNET** | Cáp BACnet MS/TP shielded 2×1.5 mm² (cuộn 100 m) | 120 |
+| **MK-CABLE-BACNET** | Cáp RS-485 shielded 2×1.5 mm² (cuộn 100 m) | 120 |
 | **MK-SD-RECOVERY** | microSD 8 GB với recovery image pre-loaded | 15 |
 
 ### Phụ kiện Khuyên dùng
