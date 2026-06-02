@@ -128,4 +128,17 @@ This verification report is prepared with pre-update baseline evidence so that w
 
 ---
 
-**Rev** 1.1 | 2026-06-02 · QAReviewer (heartbeat 2)
+### 2026-06-02T11:14 UTC (Run 3 — liveness continuation)
+
+**Assessment:** Still BLOCKED. No upstream change. Server stack test revealed Bind interface issue (LAN `192.168.1.200` only, not loopback) — runtime YABE verification will require same-subnet client.
+
+**New artifact:**
+- `verify-vendor-id-runtime.sh` — runtime script: starts server, sends Who-Is, reads Vendor_Identifier via readprop, compares vs PICS + config.h. Run with `bash docs/00_management/evidence/certification/verify-vendor-id-runtime.sh [timeout_secs]`
+
+**Runtime check result:** Server binary (`build/server`) exits 144 when backgrounded via bash harness, binds to non-loopback interface only. BACnet `readprop` and `whois` tools cannot complete exchange in this environment. Source-level verification complete.
+
+**Block unchanged:** CEO → IOT-5622 → TechLead → IOT-5657 → DeveloperTeam → IOT-5658 → QAReviewer IOT-5659
+
+---
+
+**Rev** 1.2 | 2026-06-02 · QAReviewer (heartbeat 3)

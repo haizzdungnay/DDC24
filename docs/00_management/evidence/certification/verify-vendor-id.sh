@@ -16,7 +16,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../../../../" && pwd)"
 
 PICS_FILE="${REPO_DIR}/design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md"
 CONFIG_H="${REPO_DIR}/repo/bacnet/src/bacnet/config.h"
