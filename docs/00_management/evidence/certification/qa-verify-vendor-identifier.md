@@ -141,4 +141,19 @@ This verification report is prepared with pre-update baseline evidence so that w
 
 ---
 
-**Rev** 1.2 | 2026-06-02 · QAReviewer (heartbeat 3)
+### 2026-06-03T14:50 UTC (Run 4 — stall alert response)
+
+**Assessment:** ≥24h no activity confirmed. Still BLOCKED. No upstream change detected.
+- PICS §7: still TBD (line 102)
+- config.h: still `BACNET_VENDOR_ID 260` (placeholder)
+- No new commits or file changes touching Vendor_Identifier
+
+**Response to auto-stall alert:**
+Issue genuinely blocked — no QA action possible until IOT-5622 resolves.
+Suggest: close IOT-5659 as `blocked` or escalate IOT-5622 to CEO.
+
+**Block (day 3):** CEO → IOT-5622 → TechLead → IOT-5657 → DeveloperTeam → IOT-5658 → QAReviewer IOT-5659
+
+---
+
+**Rev** 1.3 | 2026-06-03 · QAReviewer (stall response)
