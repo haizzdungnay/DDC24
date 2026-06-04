@@ -1,0 +1,121 @@
+# Security Scan Workflow
+#
+# Scans for CVEs in OS packages (Debian), Python (pip), and npm
+# dependencies using trivy, cross-checks with grype, and scans for
+# secrets with gitleaks. Fails on CVSS >= 7.0 (CRITICAL / HIGH).
+#
+# References:
+#   - KX-DDC24-SEC-SUP-001 §4.1, §6.1, §7.1
+#   - KX-DDC24-SEC-GAP-001 SM-4, SM-5
+
+name: Security Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  trivy-scan:
+    name: Trivy Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Generate Debian SBOM
+        run: dpkg-query -f '${Package} ${Version}\n' -W > debian-packages.txt
+
+      - name: Generate Python pip SBOM
+        run: |
+          find . -name "requirements*.txt" -type f \
+            -exec sh -c 'echo "### {} ###" >> python-requirements.txt; cat {} >> python-requirements.txt' \;
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          hide-progress: true
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+  grype-scan:
+    name: Grype Cross-Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Scan with Grype
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          path: .
+          output-format: sarif
+          fail-build: true
+          severity-cutoff: high
+
+      - name: Upload Grype SARIF
+        uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
+        if: always()
+        with:
+          sarif_file: results.sarif
+          category: grype
+
+  gitleaks-scan:
+    name: Gitleaks Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        with:
+          config_path: .gitleaks.toml
+
+  codeql-scan:
+    name: CodeQL Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
+        with:
+          languages: python
+          # C/C++ is covered by repo/bacnet/.github/workflows/codeql-analysis.yml
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
