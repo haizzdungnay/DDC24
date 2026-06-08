@@ -5,10 +5,13 @@
 > **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Approved · **Owner:** PMO
 > 📘 [docs/README](../README.md)
 
+> ⚠️ **RECONCILE (2026-06-08).** Hướng sản phẩm đã chốt: **component-based DDC** (không PLC IDE/IEC 61131-3),
+> Linux **3 process `mkddc-*`**, UI Rev A **form/JSON**. Nguồn-chuẩn: [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md), [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md), [ADR-004..007](../adr/).
+
 ---
 
 ## 1. Sản phẩm là gì?
-**MK-DDC-24** là **bộ điều khiển kỹ thuật số trực tiếp (DDC) cho HVAC** — "bộ não" điều khiển điều hòa/thông gió trong toà nhà. 24 điểm I/O, lập trình được (như PLC). **Lên BMS/cloud** (Ethernet/WiFi): **BACnet/IP + MQTT + REST**. **Xuống thiết bị phụ** (RS-485): **Modbus RTU master** (mở rộng I/O, màn hình phụ…).
+**MK-DDC-24** là **bộ điều khiển kỹ thuật số trực tiếp (DDC) cho HVAC** — "bộ não" điều khiển điều hòa/thông gió trong toà nhà. 24 điểm I/O, lập trình bằng **component (graph)**. **Lên BMS/cloud** (Ethernet/WiFi): **BACnet/IP + MQTT + REST**. **Xuống thiết bị phụ** (RS-485): **Modbus RTU master** (mở rộng I/O, màn hình phụ…).
 
 ## 2. Hai "bộ não" (kiến trúc 2 lớp)
 | Lớp | Phần cứng | Nhiệm vụ | Hệ điều hành | Ngôn ngữ |
@@ -39,9 +42,9 @@ Cảm biến/Van/Relay ─► MCU (1ms) ─IOP─► SOM ─► BACnet/IP · MQT
 
 ## 5. Tôi nên đọc gì tiếp?
 1. ⭐ [System Handbook — Hiểu hệ thống từ số 0](KX-DDC24-SYS-ARCH-001_VI.md) — nếu chưa hình dung được sản phẩm, đọc cái này (kể chuyện + sơ đồ).
-2. [GETTING_STARTED_DEV](../../design/GETTING_STARTED_DEV.md) — cài môi trường + "muốn sửa X vào đâu".
+2. [GETTING_STARTED_DEV](../02_design/GETTING_STARTED_DEV.md) — cài môi trường + "muốn sửa X vào đâu".
 3. [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md) — lộ trình code chi tiết.
-4. Theo vai trò: [spec/README §1](../../spec/README.md) chỉ thứ tự đọc cho FW/SW/QA.
+4. Theo vai trò: [README §1](../01_specs/README.md) chỉ thứ tự đọc cho FW/SW/QA.
 
 ## 6. Tài liệu ở đâu?
 → [Master Document Register](KX-DDC24-QA-REGISTER-001_VI.md) liệt kê **toàn bộ** tài liệu kèm Document ID, version, owner.

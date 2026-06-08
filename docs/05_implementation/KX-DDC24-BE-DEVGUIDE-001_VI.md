@@ -3,9 +3,15 @@
 
 > **Document ID:** KX-DDC24-BE-DEVGUIDE-001
 > **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Approved · **Owner:** SW Lead
-> 📘 [docs/README](../README.md) · Code: [REPO](KX-DDC24-PM-REPO-001_VI.md) · Thiết kế: [SW_DDD](../../design/software/SW_DDD_MK-DDC-24_VI.md) · Chuẩn: [SW Coding Standard](../../design/software/SW_CODING_STANDARD_MK-DDC-24_VI.md)
+> 📘 [docs/README](../README.md) · Code: [REPO](KX-DDC24-PM-REPO-001_VI.md) · Thiết kế: [SW_DDD](../02_design/software/SW_DDD_MK-DDC-24_VI.md) · Chuẩn: [SW Coding Standard](../02_design/software/SW_CODING_STANDARD_MK-DDC-24_VI.md)
 
 > 🎯 Backend gồm nhiều **service độc lập** nối nhau qua **shared memory** ([`shared/kinexus_shm.h`](../../shared/kinexus_shm.h)). Dev mở file này là: cài môi trường → chạy được io-driver đọc MCU & in giá trị → rồi đắp PLC, BACnet, fieldbus, agent theo backlog.
+
+> ⚠️ **RECONCILE (2026-06-08).** Backend Rev A là **3 process `mkddc-*`** (ADR-005): `mkddc-core`
+> (C++, IO+**component graph engine**, không phải PLC 61131-3) + `mkddc-iobus` (C++, BACnet/Modbus) +
+> `mkddc-web` (**Go**, thay Python/FastAPI; validator là Go library, bỏ Rust service — [ADR-007](../adr/ADR-007-web-stack-go.md)).
+> Engine: [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md); component: [SW_COMPONENT_LIBRARY](../02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md).
+> Header `kinexus_shm.h` → `mkddc_shm.h` (rename là task riêng). Backlog cũ (PLC/agent Python) đọc như tham chiếu.
 
 ---
 
@@ -16,7 +22,7 @@
 | BACnet | `git clone https://github.com/bacnet-stack/bacnet-stack` (build static lib) |
 | Python | `pip install fastapi uvicorn paho-mqtt pymodbus pytest ruff mypy` |
 | Thiết bị | SSH `ssh -p 2222 kinexus@<ip>`; UART tới MCU `/dev/ttySx` |
-| Đọc trước | [SW_ARCH §2 (IPC)](../../spec/SW_ARCH_SPEC_MK-DDC-24_VI.md), [`kinexus_shm.h`](../../shared/kinexus_shm.h), [`iop_protocol.h`](../../shared/iop_protocol.h) |
+| Đọc trước | [SW_ARCH §2 (IPC)](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md), [`kinexus_shm.h`](../../shared/kinexus_shm.h), [`iop_protocol.h`](../../shared/iop_protocol.h) |
 
 ## 2. Bản đồ service (code ở đâu)
 ```
@@ -63,32 +69,32 @@ B5  thêm scaling raw→engineering (°C/V/mA)                                  
 - **File:** `io-driver/iop_master.c`, `scale.c`.
 - **Acceptance:** poll 100Hz, parse IO_RESP (offsets từ header), retry×3→fault FSM; scale raw→eng (0-10V, 4-20mA, PT100/1000 CVD, NTC β=3950, dry); ghi `io_shm`; metrics.
 - **Test:** so giá trị chuẩn (T-SW-006..009); cắt MCU → IOP_FAULT→SAFE (gửi RESET_IO).
-- **Trace:** SW-IOP-004..011, [SW_IODRIVER](../../design/software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md).
+- **Trace:** SW-IOP-004..011, [SW_IODRIVER](../02_design/software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md).
 
 ### BE-T04 — io-driver: ghi AO/DO từ shm ` (S3) `
 - **Acceptance:** đọc `ao_setpoint/do_cmd` từ shm (PLC ghi) → SET_AO/SET_DO khi đổi; SET_AO_CFG theo `io_config.conf`.
 - **Trace:** SW-IOP, FW-AO-007.
 
-### BE-T05 — plc: scan engine ⭐ ` (S5-6) `
-- **File:** `services/plc/` (`engine.cpp`, `fb_lib.cpp`, `pid.cpp`, `vars.cpp`).
-- **Acceptance:** read io_shm → run programs → write io_shm + plc_shm; SCHED_FIFO 80 jitter≤5ms; FB chuẩn (TON/TOF/CTU/PID anti-windup bumpless); retain.
-- **Test:** 16 program song song; PID step settle ±2% ≤30s; jitter 1h (T-SW-020..031).
-- **Trace:** SW-PLC-001..022, [D-6](../../design/software/SW_PLC_ENGINE_DESIGN_MK-DDC-24_VI.md). **Chốt DEC-001 trước.**
+### BE-T05 — core: component graph scan engine ⭐ ` (S5-6) `
+- **File:** `services/core/` (`engine.cpp`, `component_lib.cpp`, `pid.cpp`, `node_state.cpp`).
+- **Acceptance:** snapshot inputs → build/execute plan (topo-sort) → priority resolve → write io_shm + BACnet object table; SCHED_FIFO scan 1s; component chuẩn (OnDelay/OffDelay/PID anti-windup); snapshot/recovery.
+- **Test:** graph nhiều node; PID step settle ±2% ≤30s; power-loss recovery; scan budget (T-SW-020..031).
+- **Trace:** RUN-001..009, [D-6 Runtime Execution Model](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md). (DEC-001 đã chốt: [ADR-004](../adr/ADR-004-component-based-runtime.md).)
 
 ### BE-T06 — bacnet: BACnet/IP objects + COV ⭐ ` (S5) `
 - **File:** `services/bacnet/` (callbacks ↔ plc_shm).
 - **Acceptance:** AI8/AO4/AV32/BI8/BO4/BV16/MSV8 + Device; R/W-Property(-Multiple); COV; Who-Is<100ms; **BACnet/IP only** (BBMD/FD); Reliability map.
 - **Test:** YABE đọc/ghi; COV≤200ms (T-SW-050..058).
-- **Trace:** SW-BAC-001..008, [D-3](../../design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md).
+- **Trace:** SW-BAC-001..008, [D-3](../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md).
 
 ### BE-T07 — fieldbus: Modbus RTU master ` (S3-4) `
 - **File:** `services/fieldbus/` (`rtu_master.c`, `profile.c`), `profiles/*.json`.
 - **Acceptance:** poll slave theo `fieldbus.conf` + device profile; decode type/scale/byte_order → ghi `ext` shm; ghi xuống slave (FC06/16); offline→bad+E302.
 - **Test:** slave giả lập (diagslave); rút slave→offline (T-SW-120..128).
-- **Trace:** SW-MOD-001..011, [SW_FIELDBUS](../../design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md).
+- **Trace:** SW-MOD-001..011, [SW_FIELDBUS](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md).
 
 ### BE-T08 — agent: REST API ` (S3) `
-- **File:** `services/agent/api/` (FastAPI theo [openapi.yaml](../../design/interfaces/openapi.yaml)).
+- **File:** `services/agent/api/` (FastAPI theo [openapi.yaml](../02_design/interfaces/openapi.yaml)).
 - **Acceptance:** /auth, /points (GET/PUT), /system/status, /alarms; JWT; rate-limit 429; error `{error,code,request_id}`; Swagger khớp openapi.yaml.
 - **Test:** curl đọc/ghi; T-SW-070..079.
 - **Trace:** SW-API-001..010.
@@ -104,7 +110,7 @@ B5  thêm scaling raw→engineering (°C/V/mA)                                  
 
 ### BE-T11 — ota + security ` (S8-9) `
 - **Acceptance:** A/B + rollback; TLS1.3+JWT keystore; nftables (KHÔNG mở 502); audit log.
-- **Trace:** OTA-*, SEC-*, [D-7](../../design/software/SW_OTA_DESIGN_MK-DDC-24_VI.md), [D-11](../../design/software/SW_SECURITY_KEYSTORE_MK-DDC-24_VI.md).
+- **Trace:** OTA-*, SEC-*, [D-7](../02_design/software/SW_OTA_DESIGN_MK-DDC-24_VI.md), [D-11](../02_design/software/SW_SECURITY_KEYSTORE_MK-DDC-24_VI.md).
 
 ## 5. Definition of Done (mọi ticket BE)
 - [ ] C/C++: `-Werror` + clang-tidy; Python: ruff + `mypy --strict`; cov core ≥80%.

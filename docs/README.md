@@ -29,7 +29,7 @@
 > 🌟 **Chưa hiểu sản phẩm? Đọc cuốn số 1 trước — nó giải thích TOÀN BỘ hệ thống từ số 0, kể như kể chuyện, có hình vẽ, không cần biết code.**
 1. ⭐ [**System Handbook — Hiểu hệ thống từ số 0**](00_management/KX-DDC24-SYS-ARCH-001_VI.md) — cái hộp là gì, "2 bộ não", dữ liệu chạy thế nào, từng khối vì sao cần. **Đọc cái này đầu tiên.**
 2. [PROJECT_OVERVIEW](00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) — tóm tắt nhanh 1 trang.
-3. [design/GETTING_STARTED_DEV](../design/GETTING_STARTED_DEV.md) — cài môi trường, build, "muốn sửa X vào đâu".
+3. [GETTING_STARTED_DEV](02_design/GETTING_STARTED_DEV.md) — cài môi trường, build, "muốn sửa X vào đâu".
 4. [IMPLEMENTATION_PLAN](00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md) — **lộ trình code: phase → task → microtask → checklist**.
 5. ⭐ **Developer Kit** (gõ code từ đây): [Repo & Build](05_implementation/KX-DDC24-PM-REPO-001_VI.md) · [FW Dev Guide](05_implementation/KX-DDC24-FW-DEVGUIDE-001_VI.md) · [BE Dev Guide](05_implementation/KX-DDC24-BE-DEVGUIDE-001_VI.md) · [FE Dev Guide](05_implementation/KX-DDC24-FE-DEVGUIDE-001_VI.md) · hợp đồng code [`shared/`](../shared/).
 6. [DOC_CONTROL_AND_NAMING](00_management/KX-DDC24-QA-DOCCTRL-001_VI.md) — quy tắc đặt tên/sắp xếp/version.
@@ -64,7 +64,7 @@
 | ID | Tài liệu |
 |----|----------|
 | KX-DDC24-UX-SYSTEM-001 | [Design System (tokens, components)](04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) |
-| KX-DDC24-UX-WEBIDE-001 | [Web IDE UI/UX (FE)](04_uiux/KX-DDC24-UX-WEBIDE-001_VI.md) |
+| KX-DDC24-UX-WEBIDE-001 | *(đã gỡ 2026-06-08)* — UX web Rev A form/JSON: [ADR-006](adr/ADR-006-rev-a-ui-form-json.md) |
 | KX-DDC24-UX-HMI-001 | [HMI TFT UI](04_uiux/KX-DDC24-UX-HMI-001_VI.md) |
 
 ### 05_implementation — Developer Kit (gõ code từ đây)
@@ -78,7 +78,7 @@
 
 ### Yêu cầu / Kiến trúc / Thiết kế (giữ vị trí cũ)
 → Xem [Master Document Register](00_management/KX-DDC24-QA-REGISTER-001_VI.md) để có danh sách đầy đủ + Document ID + version + owner.
-→ Cổng kỹ thuật: [spec/README](../spec/README.md) · [design/README](../design/README.md).
+→ Cổng kỹ thuật: [README](01_specs/README.md) · [README](02_design/README.md).
 
 ## 5. Thay đổi & lịch sử
 → [CHANGELOG.md](../CHANGELOG.md) (toàn dự án). Mỗi tài liệu có bảng Revision History riêng ở cuối.

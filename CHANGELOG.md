@@ -7,6 +7,44 @@
 ---
 
 ## [Unreleased]
+### Changed — Doc restructure ISO (2026-06-08, branch `chore/doc-restructure`)
+- **Tái cấu trúc thư mục tài liệu về 1 cây** (đóng ISO 9001 §7.5 nonconformity G1/G3):
+  root `PRD/SRS/DS/HW_SPEC` + `spec/*` → `docs/01_specs/`; `design/*` → `docs/02_design/`
+  (software/firmware/interfaces/_templates). Root chỉ còn `README.md` + `CHANGELOG.md`.
+  Di chuyển 45 file bằng `git mv` (giữ history); **tính lại toàn bộ link** (79 file) — broken-link = 0.
+- **Master Register cover 100%** (đóng G2): thêm PRODUCT_DEFINITION, REVA_SCOPE, GRAPH_SCHEMA,
+  ISOGAP + section ADR-001..007.
+- Thêm [QA-ISOGAP-001](docs/00_management/KX-DDC24-QA-ISOGAP-001_VI.md) — gap assessment theo §7.5 + kế hoạch.
+### Changed — ⚠ BREAKING (PIVOT-2026-06-08): Component-based DDC + 3-process + Go web
+- **Mô hình điều khiển:** chuyển từ **IEC 61131-3 soft-PLC (FBD/ST)** sang **component-based
+  graph runtime**. Artifact deploy = `graph.json`. IEC 61131-3 → Rev C. ([ADR-004](docs/adr/ADR-004-component-based-runtime.md))
+- **Kiến trúc SOM:** 7 service `kinexus-*` → **3 process `mkddc-*`** (`mkddc-core` C++ real-time,
+  `mkddc-iobus` C++, `mkddc-web` Go), chia theo real-time boundary. HMI/agent/OTA/cloud → deferred
+  Rev B+. Watchdog = systemd + HW. ([ADR-005](docs/adr/ADR-005-three-process-architecture.md))
+- **Web/UI:** backend Python/FastAPI → **Go**; frontend Svelte → **React**; Rev A UI = **form +
+  import `graph.json`**, bỏ FBD drag-drop (canvas → Rev B); validator = **Go library** (bỏ Rust
+  service). ([ADR-006](docs/adr/ADR-006-rev-a-ui-form-json.md), [ADR-007](docs/adr/ADR-007-web-stack-go.md))
+- **Naming:** retire codename `kinexus-*` → brand `mkddc-*` (rename `kinexus_shm.h`→`mkddc_shm.h`
+  là task implementation riêng; hợp đồng shm/IOP với MCU giữ nguyên).
+### Added — PIVOT-2026-06-08
+- **Nguồn-chuẩn mới:** [PRODUCT_DEFINITION](docs/01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md),
+  [REVA_SCOPE_ROADMAP](docs/01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) (Rev A.0 + lịch 90 ngày).
+- **Thiết kế lõi:** [interfaces/GRAPH_SCHEMA](docs/02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md),
+  [software/SW_RUNTIME_EXECUTION_MODEL](docs/02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md),
+  [software/SW_COMPONENT_LIBRARY](docs/02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md).
+- **ADR-004..007** ghi 4 quyết định pivot.
+### Removed — PIVOT-2026-06-08
+- **Đã xóa** `design/software/SW_PLC_ENGINE_DESIGN_MK-DDC-24_VI.md`,
+  `design/software/SW_WEBIDE_DESIGN_MK-DDC-24_VI.md`,
+  `docs/04_uiux/KX-DDC24-UX-WEBIDE-001_VI.md` (nội dung cũ mâu thuẫn; còn trong git history).
+  Thay bằng: SW_RUNTIME_EXECUTION_MODEL + SW_COMPONENT_LIBRARY (engine); ADR-006/007 (web Rev A).
+  Mọi link trỏ tới 3 file (design/README, GETTING_STARTED, BE/FE-DEVGUIDE, PM-REPO, PM-IMPLPLAN,
+  QA-REGISTER, docs/README, UX-SYSTEM, SYS-ARCH, ADR-004/006/007) đã được redirect.
+### Changed — RECONCILE PIVOT-2026-06-08
+- PRD/SRS/DS/README/SW_ARCH/SW_REQ/SW_DDD/manuals/dev-guides/SYS-ARCH/PM-OVERVIEW/GETTING_STARTED/
+  CONFIG_SCHEMA: gắn banner **RECONCILE** + sửa thẳng các câu/bảng mâu thuẫn (61131-3/kinexus-*/FBD/
+  Python/Svelte) sang component-graph / `mkddc-*` / Go.
+
 ### Changed — ⚠ BREAKING (ARCH-R010, 2026-05-30): Kiến trúc kết nối
 - **Northbound (lên BMS/cloud) chỉ qua IP (Ethernet/WiFi):** BACnet/IP + MQTT + REST. **Bỏ BACnet MS/TP. Bỏ Modbus TCP/RTU slave.**
 - **Southbound (RS-485) = Modbus RTU MASTER:** DDC poll thiết bị phụ (module mở rộng I/O, màn hình phụ, thiết bị bên thứ 3) theo **device profile** (khung mở). Đảo ngược RTU-006 cũ.
@@ -17,7 +55,7 @@
   - FW / BE / FE Developer Guide & Backlog: walking skeleton + backlog cỡ ticket (mục tiêu/file/acceptance/test/trace).
   - **Hợp đồng code thật:** `shared/iop_protocol.h` (FW↔BE), `shared/kinexus_shm.h` (shared memory struct).
   - FE: hợp đồng WebSocket realtime (monitor/force).
-- **`kinexus-fieldbus`** service + [SW_FIELDBUS_DESIGN](design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) (Modbus RTU master, device profile engine).
+- **`kinexus-fieldbus`** service + [SW_FIELDBUS_DESIGN](docs/02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) (Modbus RTU master, device profile engine).
 - Decision record **ARCH-R010** trong OPEN_ISSUES.
 - **KX-DDC24-SYS-ARCH-001 — System Handbook** ("Hiểu hệ thống từ số 0"): tài liệu giải thích toàn bộ sản phẩm cho người **không chuyên** — kể chuyện, sơ đồ Mermaid, ví von, đi theo chân 1 con số/1 mệnh lệnh xuyên hệ thống, từ điển thuật ngữ, FAQ. Đặt làm điểm bắt đầu số 1 ở mọi cổng (root README, docs/README, Overview).
 - `git init` + `.gitignore` + baseline commit lịch sử dự án.

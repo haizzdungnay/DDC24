@@ -60,7 +60,7 @@ KX-DDC24-<DISC>-<TYPE>-<NNN>
 - `KX-DDC24-PM-IMPLPLAN-001` — Implementation Plan.
 - `KX-DDC24-FW-DDD-001` — Firmware Detailed Design.
 - `KX-DDC24-IF-ICD-002` — Modbus ICD.
-- `KX-DDC24-UX-WEBIDE-001` — Web IDE UI/UX.
+- `KX-DDC24-UX-WEBIDE-001` — *(đã gỡ 2026-06-08; UX web Rev A form/JSON → ADR-006)*.
 
 ## 3. Tên file
 ```
@@ -125,7 +125,7 @@ MAJOR.MINOR    (vd 1.0, 1.1, 2.0)
 ```
 
 ## 9. Quy tắc thay đổi (Change Control)
-1. Tài liệu **Approved** chỉ sửa qua **Change Request** (ghi ở [OPEN_ISSUES](../../spec/OPEN_ISSUES_MK-DDC-24_VI.md) hoặc issue tracker).
+1. Tài liệu **Approved** chỉ sửa qua **Change Request** (ghi ở [OPEN_ISSUES](../01_specs/OPEN_ISSUES_MK-DDC-24_VI.md) hoặc issue tracker).
 2. Mỗi thay đổi → cập nhật **Revision History** của tài liệu + **[CHANGELOG.md](../../CHANGELOG.md)** toàn dự án.
 3. Thay đổi **interface (ICD)** hoặc **baseline** cần qua **Design Review gate** + ký Lead.
 4. Cập nhật **[Master Register](KX-DDC24-QA-REGISTER-001_VI.md)** khi thêm/đổi trạng thái tài liệu.

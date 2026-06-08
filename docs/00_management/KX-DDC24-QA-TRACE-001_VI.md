@@ -7,7 +7,7 @@
 > 📘 [docs/README](../README.md)
 
 > 🎯 Mỗi yêu cầu phải truy được tới **thiết kế nào hiện thực nó, task nào code nó, test nào chứng minh nó chạy**. Đọc dọc một hàng = vòng đời 1 tính năng. Khi thêm REQ/design → thêm hàng.
-> Nguồn REQ ID: PRD/SRS (`../../`), [FW_REQ](../../spec/FW_REQUIREMENTS_MK-DDC-24_VI.md), [SW_REQ](../../spec/SW_REQUIREMENTS_MK-DDC-24_VI.md). Task ID: [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md).
+> Nguồn REQ ID: PRD/SRS (`../../`), [FW_REQ](../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md), [SW_REQ](../01_specs/SW_REQUIREMENTS_MK-DDC-24_VI.md). Task ID: [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md).
 
 ---
 
@@ -60,9 +60,9 @@
 ## 8. Web IDE (FE) + UI/UX
 | REQ | Thiết kế | Task | Test |
 |-----|----------|------|------|
-| SW-IDE-001..009 (program) | UX-WEBIDE-001 §4.2, FE-DDD-001 | T-UX-02, T-FE-01, T-FE-03 | T-SW-130..139 |
-| SW-IDE-010..015 (config/monitor/force) | UX-WEBIDE-001 §4.3-4.4, IF-ICD-005 | T-FE-02 | T-SW-140..149 |
-| SW-IDE-020..023 (auth/role) | SEC-DDD-001, UX-WEBIDE §1 | T-FE-01, T-BE-12 | T-SW-080..086 |
+| SW-IDE-001..009 (graph config) | ADR-006 (form/JSON), GRAPH_SCHEMA, FE-DDD-001 | T-UX-02, T-FE-01, T-FE-03 | T-SW-130..139 |
+| SW-IDE-010..015 (config/monitor/force) | ADR-006, GRAPH_SCHEMA §7 (REST), IF-ICD-005 | T-FE-02 | T-SW-140..149 |
+| SW-IDE-020..023 (auth/role) | SEC-DDD-001, ADR-006 | T-FE-01, T-BE-12 | T-SW-080..086 |
 
 ## 9. HMI
 | REQ | Thiết kế | Task | Test |

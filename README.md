@@ -4,9 +4,10 @@
 > **Phiên bản tài liệu:** Ver 2.1 | 2026-05-28  
 > **Tổ chức:** KINEXUS Technologies JSC
 
+> ⭐ **Nguồn-chuẩn định vị & phạm vi (đọc trước tiên, 2026-06-08):** [PRODUCT_DEFINITION](docs/01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) · [REVA_SCOPE_ROADMAP](docs/01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) · Quyết định: [ADR-004..007](docs/adr/). Sản phẩm là **component-based DDC** (không IEC 61131-3/PLC IDE), Linux 3-process `mkddc-*`.
 > 🧭 **Cổng vào theo chuẩn ISO:** [docs/README](docs/README.md) (Document Hub) — điều hướng theo vòng đời, kế hoạch implement, UI/UX, register.
 > 🌟 **Chưa hiểu sản phẩm? Đọc trước:** [**System Handbook — Hiểu hệ thống từ số 0**](docs/00_management/KX-DDC24-SYS-ARCH-001_VI.md) (kể chuyện + sơ đồ, không cần biết code).
-> 🚀 **Người mới (dev):** [Project Overview](docs/00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) → [Getting Started](design/GETTING_STARTED_DEV.md) → [Implementation Plan](docs/00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md).
+> 🚀 **Người mới (dev):** [Project Overview](docs/00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) → [Getting Started](docs/02_design/GETTING_STARTED_DEV.md) → [Implementation Plan](docs/00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md).
 > 📜 Lịch sử thay đổi: [CHANGELOG.md](CHANGELOG.md) · 🗂 Danh mục tài liệu: [Master Register](docs/00_management/KX-DDC24-QA-REGISTER-001_VI.md)
 
 ---
@@ -15,23 +16,23 @@
 
 | # | File | Loại | Mô tả | Trạng thái |
 |---|------|------|-------|-----------|
-| 1 | [DS_MK-DDC-24_VI.md](DS_MK-DDC-24_VI.md) | **Data Sheet** | Thông số kỹ thuật, tính năng, mã đặt hàng | Rev 2.1 |
-| 2 | [PRD_MK-DDC-24_VI.md](PRD_MK-DDC-24_VI.md) | **Product Requirements** | Mục tiêu, use cases, FR/NFR, acceptance criteria | Rev 1.1 |
-| 3 | [SRS_MK-DDC-24_VI.md](SRS_MK-DDC-24_VI.md) | **Software Requirements** | OS, soft PLC, BACnet, MQTT, security, OTA | Rev 1.1 |
-| 4 | [HW_SPEC_MK-DDC-24_VI.md](HW_SPEC_MK-DDC-24_VI.md) | **Hardware Specification** | SOM, MCU, I/O circuits, power, cơ khí, EMC | Rev 1.1 |
+| 1 | [DS_MK-DDC-24_VI.md](docs/01_specs/DS_MK-DDC-24_VI.md) | **Data Sheet** | Thông số kỹ thuật, tính năng, mã đặt hàng | Rev 2.1 |
+| 2 | [PRD_MK-DDC-24_VI.md](docs/01_specs/PRD_MK-DDC-24_VI.md) | **Product Requirements** | Mục tiêu, use cases, FR/NFR, acceptance criteria | Rev 1.1 |
+| 3 | [SRS_MK-DDC-24_VI.md](docs/01_specs/SRS_MK-DDC-24_VI.md) | **Software Requirements** | OS, soft PLC, BACnet, MQTT, security, OTA | Rev 1.1 |
+| 4 | [HW_SPEC_MK-DDC-24_VI.md](docs/01_specs/HW_SPEC_MK-DDC-24_VI.md) | **Hardware Specification** | SOM, MCU, I/O circuits, power, cơ khí, EMC | Rev 1.1 |
 
 ### Bộ tài liệu SW/FW Spec (`spec/`)
 
 | # | File | Loại | Mô tả | Trạng thái |
 |---|------|------|-------|-----------|
-| 5 | [spec/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md](spec/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) | **IOP Interface Spec** | Kinexus-IOP v1: frame format, CRC, commands, timing, fault FSM | Rev 1.0 |
-| 6 | [spec/FW_REQUIREMENTS_MK-DDC-24_VI.md](spec/FW_REQUIREMENTS_MK-DDC-24_VI.md) | **FW Requirements** | MCU I/O sampling, AO/DO, watchdog, IOP, boot, OTA requirements | Rev 1.0 |
-| 7 | [spec/FW_ARCH_SPEC_MK-DDC-24_VI.md](spec/FW_ARCH_SPEC_MK-DDC-24_VI.md) | **FW Architecture** | FreeRTOS tasks, interrupt, memory map, data structures, fault FSM | Rev 1.0 |
-| 8 | [spec/SW_REQUIREMENTS_MK-DDC-24_VI.md](spec/SW_REQUIREMENTS_MK-DDC-24_VI.md) | **SW Requirements** | 9 modules: IOP driver, PLC, BACnet, MQTT/REST, security, OTA, HMI, logging | Rev 1.0 |
-| 9 | [spec/SW_ARCH_SPEC_MK-DDC-24_VI.md](spec/SW_ARCH_SPEC_MK-DDC-24_VI.md) | **SW Architecture** | Process model, IPC (shm+seqlock), data flow, scaling, config, REST endpoints | Rev 1.0 |
-| 10 | [spec/TEST_SPEC_MK-DDC-24_VI.md](spec/TEST_SPEC_MK-DDC-24_VI.md) | **Test Specification** | L1-L6 test cases, FAT/SAT checklist, traceability matrix PRD→SRS→Spec→Test | Rev 1.0 |
-| 11 | [spec/OPEN_ISSUES_MK-DDC-24_VI.md](spec/OPEN_ISSUES_MK-DDC-24_VI.md) | **Open Issues** | P0/P1/P2 issues, assumptions, external dependencies, resolved issues | Rev 1.0 |
-| 12 | [spec/DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md](spec/DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md) | **Design-Readiness Review** | Audit chéo toàn bộ tài liệu: P0/P1/P2 findings, khoảng trống, thứ tự xử lý trước thiết kế | Rev 1.0 |
+| 5 | [SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md](docs/01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) | **IOP Interface Spec** | Kinexus-IOP v1: frame format, CRC, commands, timing, fault FSM | Rev 1.0 |
+| 6 | [FW_REQUIREMENTS_MK-DDC-24_VI.md](docs/01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md) | **FW Requirements** | MCU I/O sampling, AO/DO, watchdog, IOP, boot, OTA requirements | Rev 1.0 |
+| 7 | [FW_ARCH_SPEC_MK-DDC-24_VI.md](docs/01_specs/FW_ARCH_SPEC_MK-DDC-24_VI.md) | **FW Architecture** | FreeRTOS tasks, interrupt, memory map, data structures, fault FSM | Rev 1.0 |
+| 8 | [SW_REQUIREMENTS_MK-DDC-24_VI.md](docs/01_specs/SW_REQUIREMENTS_MK-DDC-24_VI.md) | **SW Requirements** | 9 modules: IOP driver, PLC, BACnet, MQTT/REST, security, OTA, HMI, logging | Rev 1.0 |
+| 9 | [SW_ARCH_SPEC_MK-DDC-24_VI.md](docs/01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) | **SW Architecture** | Process model, IPC (shm+seqlock), data flow, scaling, config, REST endpoints | Rev 1.0 |
+| 10 | [TEST_SPEC_MK-DDC-24_VI.md](docs/01_specs/TEST_SPEC_MK-DDC-24_VI.md) | **Test Specification** | L1-L6 test cases, FAT/SAT checklist, traceability matrix PRD→SRS→Spec→Test | Rev 1.0 |
+| 11 | [OPEN_ISSUES_MK-DDC-24_VI.md](docs/01_specs/OPEN_ISSUES_MK-DDC-24_VI.md) | **Open Issues** | P0/P1/P2 issues, assumptions, external dependencies, resolved issues | Rev 1.0 |
+| 12 | [DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md](docs/01_specs/DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md) | **Design-Readiness Review** | Audit chéo toàn bộ tài liệu: P0/P1/P2 findings, khoảng trống, thứ tự xử lý trước thiết kế | Rev 1.0 |
 
 ---
 

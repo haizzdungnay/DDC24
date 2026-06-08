@@ -11,7 +11,8 @@
 
 | Gate | Issue | Description | Status | ETA |
 |------|-------|-------------|--------|-----|
-| G1 | IOT-5622 | Register ASHRAE BACnet Vendor ID | ❌ BLOCKED — chờ CEO sign + gửi letter | Unknown |
+| G0 | IOT-6049 | CEO gửi thư đăng ký ASHRAE BACnet Vendor ID và cung cấp evidence | ❌ BLOCKED — CEO action required | Unknown |
+| G1 | IOT-5622 | Register ASHRAE BACnet Vendor ID | ❌ BLOCKED — depends on IOT-6049 | Unknown |
 | G2 | IOT-5657 | Cập nhật PICS §7 với Vendor_Identifier | ❌ BLOCKED — depends on IOT-5622 | Unknown |
 | G3 | IOT-5658 | Định nghĩa Vendor_ID trong firmware device.c | ❌ BLOCKED — depends on IOT-5622 | Unknown |
 | G4 | IOT-5659 | QA verify PICS + firmware build | ❌ BLOCKED — depends on IOT-5657 + IOT-5658 | Unknown |
@@ -20,7 +21,7 @@
 
 ### 2.1 PICS §7 — Device Object Values
 
-Source: `design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md` line 102
+Source: `design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md` line 83
 
 | Property | Current Value | Required |
 |----------|---------------|----------|
@@ -95,13 +96,14 @@ strings build/server | grep "KINEXUS"
 
 ## 5. Recommendation
 
-**QA Status:** ❌ CHANGES REQUESTED (not actionable — dependencies not met)
+**QA Status:** ❌ BLOCKED
 
 IOT-5659 is blocked upstream. Recommend:
-1. CEO complete IOT-5622: sign and send ASHRAE vendor ID request
-2. After IOT-5622 done → TechLead execute IOT-5657 (PICS update)
-3. After IOT-5657 done → DeveloperTeam execute IOT-5658 (firmware update)
-4. Before IOT-5658 done, reassign IOT-5659 back to QAReviewer for verification
+1. CEO complete IOT-6049: send ASHRAE BACnet Vendor ID registration request and attach assigned-ID evidence
+2. After IOT-6049 done → IOT-5622 can close with assigned Vendor ID evidence
+3. After IOT-5622 done → TechLead execute IOT-5657 (PICS update)
+4. After IOT-5622 done → DeveloperTeam execute IOT-5658 (firmware update)
+5. After IOT-5657 and IOT-5658 done → QAReviewer execute IOT-5659 verification
 
 This verification report is prepared with pre-update baseline evidence so that when the issue is unblocked, the delta is clear.
 
@@ -156,4 +158,52 @@ Suggest: close IOT-5659 as `blocked` or escalate IOT-5622 to CEO.
 
 ---
 
-**Rev** 1.3 | 2026-06-03 · QAReviewer (stall response)
+### 2026-06-05T17:45 UTC (Run 5 — auto-stall response)
+
+**Assessment:** Auto-stall acknowledged. QA deliverable remains BLOCKED; no release approval possible.
+
+**Current board evidence:**
+| Issue | Status | Evidence |
+|-------|--------|----------|
+| IOT-6049 | ❌ BLOCKED | Terminal blocker for ASHRAE Vendor ID evidence |
+| IOT-5622 | ❌ BLOCKED | Blocks IOT-5657 and IOT-5658; depends on IOT-6049 |
+| IOT-5657 | ❌ BLOCKED | PICS update still blocked by IOT-5622 |
+| IOT-5658 | ❌ BLOCKED | Firmware update still blocked by IOT-5622 |
+
+**Current repo evidence:**
+| Check | Result | Detail |
+|-------|--------|--------|
+| PICS §7 Vendor_Identifier | ❌ TBD | `design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md:83` = `<đăng ký ASHRAE — TBD>` |
+| Firmware compile definition | ❌ 0 placeholder | `fw/bacnet/CMakeLists.txt:63` and `fw/bacnet/CMakeLists.txt:96` set `BACNET_VENDOR_ID=0` |
+| Firmware runtime default | ❌ 0 placeholder | `fw/bacnet/include/kinexus/kx_device_config.h:26` sets `KX_VENDOR_ID_DEFAULT 0`; `fw/bacnet/src/kx_device_config.c:16` applies it |
+
+**Unblock owner/action:** CEO / IOT-6049 must provide assigned ASHRAE BACnet Vendor ID evidence. Then IOT-5622, IOT-5657, and IOT-5658 must complete before QA can run PICS-vs-firmware runtime verification.
+
+**QA result:** Blocked.
+
+---
+
+### 2026-06-05T18:36 UTC (Run 6 — timeout recovery)
+
+**Assessment:** Run trước timeout nhưng không có evidence mới bị mất. QA deliverable vẫn BLOCKED; issue state cần chuyển sang `blocked` và gắn `blockedByIssueIds` để Paperclip auto-wake khi upstream xong.
+
+**Dependency readback:**
+| Issue | Status | Evidence |
+|-------|--------|----------|
+| IOT-6049 | ❌ BLOCKED | CEO phải gửi ASHRAE BACnet Vendor ID registration request và cung cấp assigned-ID evidence |
+| IOT-5622 | ❌ BLOCKED | Parent gate của IOT-5659; chưa có ASHRAE Vendor ID để PICS/firmware dùng |
+
+**Repo evidence re-verified:**
+| Check | Result | Detail |
+|-------|--------|--------|
+| PICS §7 Vendor_Identifier | ❌ TBD | `design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md:83` = `<đăng ký ASHRAE — TBD>` |
+| Firmware compile definition | ❌ 0 placeholder | `fw/bacnet/CMakeLists.txt:63` and `fw/bacnet/CMakeLists.txt:96` set `BACNET_VENDOR_ID=0` |
+| Firmware runtime default | ❌ 0 placeholder | `fw/bacnet/include/kinexus/kx_device_config.h:26` sets `KX_VENDOR_ID_DEFAULT 0`; `fw/bacnet/src/kx_device_config.c:16` applies it |
+
+**QA result:** Blocked.
+
+**Unblock owner/action:** CEO completes IOT-6049 with assigned ASHRAE BACnet Vendor ID evidence; assignee for IOT-5622 then closes registration gate and downstream PICS/firmware updates before QA reruns PICS-vs-firmware/YABE verification.
+
+---
+
+**Rev** 1.5 | 2026-06-05 · QAReviewer (timeout recovery)

@@ -9,6 +9,7 @@ dist/
 __pycache__/
 *.pyc
 .venv/
+.venv-bacnet/
 venv/
 node_modules/
 .svelte-kit/
@@ -25,3 +26,6 @@ node_modules/
 # Logs / local data
 *.log
 /data/
+
+# Security scan artifacts
+gitleaks-report.json

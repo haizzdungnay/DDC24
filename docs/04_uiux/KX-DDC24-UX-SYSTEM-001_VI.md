@@ -4,9 +4,9 @@
 > **Document ID:** KX-DDC24-UX-SYSTEM-001
 > **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Draft · **Owner:** UX Lead
 > **Chuẩn:** WCAG 2.1 AA (tiếp cận), Material-ish / industrial HMI guideline
-> 📘 [docs/README](../README.md) · Dùng cho: [Web IDE](KX-DDC24-UX-WEBIDE-001_VI.md), [HMI](KX-DDC24-UX-HMI-001_VI.md)
+> 📘 [docs/README](../README.md) · Dùng cho: web Rev A (form/JSON — [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md)), [HMI](KX-DDC24-UX-HMI-001_VI.md) *(deferred Rev B)*
 
-> 🎯 Đây là "nguồn-chuẩn hình ảnh": màu, chữ, khoảng cách, component dùng chung cho **cả Web IDE (FE) và màn hình TFT (HMI)** để nhất quán. FE dev lấy token này set CSS/Svelte theme.
+> 🎯 Đây là "nguồn-chuẩn hình ảnh": màu, chữ, khoảng cách, component dùng chung cho **web engineering (FE, React)** để nhất quán. FE dev lấy token này set CSS/theme. *(2026-06-08: web Rev A là React + form/JSON, không Svelte/FBD.)*
 
 ---
 

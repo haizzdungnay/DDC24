@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-FW-DEVGUIDE-001
 > **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Approved · **Owner:** FW Lead
-> 📘 [docs/README](../README.md) · Code: [REPO](KX-DDC24-PM-REPO-001_VI.md) · Thiết kế: [FW_DDD](../../design/firmware/FW_DDD_MK-DDC-24_VI.md) · Chuẩn: [FW Coding Standard](../../design/firmware/FW_CODING_STANDARD_MK-DDC-24_VI.md)
+> 📘 [docs/README](../README.md) · Code: [REPO](KX-DDC24-PM-REPO-001_VI.md) · Thiết kế: [FW_DDD](../02_design/firmware/FW_DDD_MK-DDC-24_VI.md) · Chuẩn: [FW Coding Standard](../02_design/firmware/FW_CODING_STANDARD_MK-DDC-24_VI.md)
 
 > 🎯 Một dev FW mở file này là: cài được đồ nghề → tạo project → chạy được "đèn nháy" → trả lời được 1 frame IOP → rồi đắp dần đủ tính năng theo **backlog cỡ ticket**. Mỗi ticket nói rõ: làm gì, đụng file nào, xong là gì, test gì.
 
@@ -15,7 +15,7 @@
 | Cài toolchain | `sudo apt install gcc-arm-none-eabi cmake ninja-build` + STM32CubeIDE 1.15 |
 | Cài tester | Unity (vendored trong `fw/test/`), cppcheck (`sudo apt install cppcheck`) |
 | Phần cứng | board MCU + ST-Link V3; cáp USB-UART (xem log USART2) |
-| Đọc trước | [D-1 Pinout](../../design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) (chân), [FW_DDD §3](../../design/firmware/FW_DDD_MK-DDC-24_VI.md) (6 task) |
+| Đọc trước | [D-1 Pinout](../02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) (chân), [FW_DDD §3](../02_design/firmware/FW_DDD_MK-DDC-24_VI.md) (6 task) |
 
 ## 2. Bản đồ file (code ở đâu)
 ```
@@ -74,14 +74,14 @@ Sau đó mới đắp đọc ADC, AO/DO, diag...
 - **File:** `common/iop_protocol.h` (symlink), `drivers/iop_drv.c`, `app/iop_comm.c`, `test/test_crc.c`, `test/test_iop_parse.c`.
 - **Acceptance:** test_crc pass 2 vector trong header; RX IDLE+DMA nhận frame; verify CRC/SEQ; HANDSHAKE→RESP (version) qua TX DMA.
 - **Test:** Unity parse (frame đúng/sai LEN/sai CRC/unknown CMD); PC test handshake thật.
-- **Trace:** IOP-FW-001..010, [FW_MOD_IOP_COMM](../../design/firmware/FW_MOD_IOP_COMM_MK-DDC-24_VI.md).
+- **Trace:** IOP-FW-001..010, [FW_MOD_IOP_COMM](../02_design/firmware/FW_MOD_IOP_COMM_MK-DDC-24_VI.md).
 
 ### FW-T04 — Đọc ADS131M08 + DI ` (S2) `
 - **Mục tiêu:** io_sample 1ms.
 - **File:** `drivers/adc_drv.c`, `drivers/gpio_drv.c`, `app/io_sample.c`.
 - **Acceptance:** chu kỳ ≤1ms (đo CS bằng scope); moving-avg 8; debounce DI 20ms; đổi input → giá trị raw đổi; rút cáp ADC → set IOP_FAULT_ADC.
 - **Test:** scope CS toggle; inject tín hiệu.
-- **Trace:** FW-IO-001..024, [FW_MOD_IO_SAMPLE](../../design/firmware/FW_MOD_IO_SAMPLE_MK-DDC-24_VI.md).
+- **Trace:** FW-IO-001..024, [FW_MOD_IO_SAMPLE](../02_design/firmware/FW_MOD_IO_SAMPLE_MK-DDC-24_VI.md).
 
 ### FW-T05 — GET_IO → IO_RESP ` (S2) `
 - **Mục tiêu:** ghép T03+T04, trả dữ liệu cho SOM.
@@ -109,7 +109,7 @@ Sau đó mới đắp đọc ADC, AO/DO, diag...
 
 ### FW-T09 — Bootloader/OTA hook ` (S6) `
 - **File:** `app/iop_comm.c` (RESET_IO reason=OTA → safe-state).
-- **Acceptance:** nhận lệnh OTA → safe-state; cho SOM kéo BOOT0+reset nạp (xem [FW_BOOTLOADER_OTA](../../design/firmware/FW_BOOTLOADER_OTA_MK-DDC-24_VI.md)).
+- **Acceptance:** nhận lệnh OTA → safe-state; cho SOM kéo BOOT0+reset nạp (xem [FW_BOOTLOADER_OTA](../02_design/firmware/FW_BOOTLOADER_OTA_MK-DDC-24_VI.md)).
 - **Trace:** FW-OTA-001..005.
 
 ## 5. Definition of Done (mọi ticket FW)

@@ -9,6 +9,10 @@
 >
 > 💡 Các sơ đồ dạng ```mermaid``` sẽ hiện thành hình trong VSCode (bấm nút "Preview" ở góc phải, hoặc cài extension *Markdown Preview Mermaid Support*) và trên GitHub.
 
+> ⚠️ **RECONCILE (2026-06-08).** Bản này viết trước khi chốt hướng **component-based** + Linux
+> **3 process `mkddc-*`** + UI **form/JSON** (Rev A). Khi đọc, hiểu "lập trình PLC / Web IDE FBD" theo
+> nghĩa mới. Nguồn-chuẩn: [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) · [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) · [ADR-004..007](../adr/).
+
 ---
 
 ## Mục lục
@@ -309,7 +313,7 @@ graph TB
 |-----------|-----------------|
 | Hiểu hệ thống (đang đọc) | file này |
 | Biết làm gì trước/sau | [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md) |
-| Bắt đầu code | [Getting Started](../../design/GETTING_STARTED_DEV.md) |
+| Bắt đầu code | [Getting Started](../02_design/GETTING_STARTED_DEV.md) |
 | Xem yêu cầu | `../../` (PRD/SRS) + `../../spec/` |
 | Xem thiết kế chi tiết | `../../design/` |
 | Xem giao diện | [docs/04_uiux/](../04_uiux/) |
@@ -401,8 +405,8 @@ Có "retain" lưu lại biến quan trọng; có UPS tín hiệu báo trước; 
 
 ## Tôi nên đọc gì tiếp?
 - Muốn biết **đội sẽ code thế nào** → [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md).
-- Muốn **xem giao diện** → [Web IDE UI](../04_uiux/KX-DDC24-UX-WEBIDE-001_VI.md) · [HMI](../04_uiux/KX-DDC24-UX-HMI-001_VI.md).
-- Muốn **đi sâu kỹ thuật** → [spec/README](../../spec/README.md) (yêu cầu+kiến trúc), [design/README](../../design/README.md) (thiết kế).
+- Muốn **xem giao diện** → UX web Rev A form/JSON ([ADR-006](../adr/ADR-006-rev-a-ui-form-json.md)) · [HMI](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) *(deferred Rev B)*.
+- Muốn **đi sâu kỹ thuật** → [README](../01_specs/README.md) (yêu cầu+kiến trúc), [README](../02_design/README.md) (thiết kế).
 
 ---
 ## Revision History

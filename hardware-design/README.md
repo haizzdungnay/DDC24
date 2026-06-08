@@ -83,10 +83,10 @@ hardware-design/
 
 | File | Mô tả |
 |------|-------|
-| [../DS_MK-DDC-24_VI.md](../DS_MK-DDC-24_VI.md) | Data Sheet sản phẩm |
-| [../HW_SPEC_MK-DDC-24_VI.md](../HW_SPEC_MK-DDC-24_VI.md) | Hardware Specification (top-level) |
-| [../SRS_MK-DDC-24_VI.md](../SRS_MK-DDC-24_VI.md) | Software Requirements |
-| [../PRD_MK-DDC-24_VI.md](../PRD_MK-DDC-24_VI.md) | Product Requirements |
+| [../DS_MK-DDC-24_VI.md](../docs/01_specs/DS_MK-DDC-24_VI.md) | Data Sheet sản phẩm |
+| [../HW_SPEC_MK-DDC-24_VI.md](../docs/01_specs/HW_SPEC_MK-DDC-24_VI.md) | Hardware Specification (top-level) |
+| [../SRS_MK-DDC-24_VI.md](../docs/01_specs/SRS_MK-DDC-24_VI.md) | Software Requirements |
+| [../PRD_MK-DDC-24_VI.md](../docs/01_specs/PRD_MK-DDC-24_VI.md) | Product Requirements |
 
 ---
 

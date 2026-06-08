@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-UX-HMI-001
 > **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Draft · **Owner:** UX Lead
-> 📘 [docs/README](../README.md) · Theo [Design System](KX-DDC24-UX-SYSTEM-001_VI.md) · Triển khai [SW_HMI_DESIGN](../../design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md)
+> 📘 [docs/README](../README.md) · Theo [Design System](KX-DDC24-UX-SYSTEM-001_VI.md) · Triển khai [SW_HMI_DESIGN](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md)
 > **Trace:** `HMI-001..022`, `SW-HMI-001..008`
 
 > 🎯 Màn hình 320×240 (landscape), điều khiển bằng **6 nút cứng** (UP/DOWN/LEFT/RIGHT/ENTER/ESC), **không chạm**. Thiết kế cho kỹ thuật viên xem nhanh tại tủ điện, không cần laptop.

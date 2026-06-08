@@ -51,12 +51,12 @@ mk-ddc-24/                      # mono-repo
 ## 2. Map: tài liệu thiết kế → thư mục code
 | Thiết kế | Code |
 |----------|------|
-| [FW_MOD_IOP_COMM](../../design/firmware/FW_MOD_IOP_COMM_MK-DDC-24_VI.md) | `fw/app/iop_comm.c` |
-| [FW_MOD_IO_SAMPLE](../../design/firmware/FW_MOD_IO_SAMPLE_MK-DDC-24_VI.md) | `fw/app/io_sample.c` |
-| [SW_IODRIVER](../../design/software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md) | `services/io-driver/` |
-| [SW_PLC_ENGINE](../../design/software/SW_PLC_ENGINE_DESIGN_MK-DDC-24_VI.md) | `services/plc/` |
-| [SW_FIELDBUS](../../design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) | `services/fieldbus/` |
-| [SW_WEBIDE](../../design/software/SW_WEBIDE_DESIGN_MK-DDC-24_VI.md) | `webide/` + `services/agent/` |
+| [FW_MOD_IOP_COMM](../02_design/firmware/FW_MOD_IOP_COMM_MK-DDC-24_VI.md) | `fw/app/iop_comm.c` |
+| [FW_MOD_IO_SAMPLE](../02_design/firmware/FW_MOD_IO_SAMPLE_MK-DDC-24_VI.md) | `fw/app/io_sample.c` |
+| [SW_IODRIVER](../02_design/software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md) (gộp vào core) | `services/core/` |
+| [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) · [SW_COMPONENT_LIBRARY](../02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) | `services/core/` (mkddc-core) |
+| [SW_FIELDBUS](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) | `services/iobus/` (mkddc-iobus) |
+| web Rev A: [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md)/[ADR-007](../adr/ADR-007-web-stack-go.md) (thay SW_WEBIDE, đã gỡ) | `web/` (Go, mkddc-web) |
 
 ## 3. Build nhanh (mỗi nghề)
 ```bash
@@ -91,7 +91,7 @@ cd webide && npm run build && npm run test    # build + vitest
 - Mỗi PR đóng task → cập nhật [Traceability](../00_management/KX-DDC24-QA-TRACE-001_VI.md) (cột Test) + CHANGELOG nếu đổi behaviour.
 
 ## 6. Versioning & release
-- SemVer cho sản phẩm; `shared/version.h` = nguồn. OTA package `.kxpkg` theo [D-7](../../design/software/SW_OTA_DESIGN_MK-DDC-24_VI.md).
+- SemVer cho sản phẩm; `shared/version.h` = nguồn. OTA package `.kxpkg` theo [D-7](../02_design/software/SW_OTA_DESIGN_MK-DDC-24_VI.md).
 
 ---
 ## Revision History

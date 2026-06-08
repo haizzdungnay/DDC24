@@ -4,7 +4,7 @@
 > **Document ID:** KX-DDC24-PM-IMPLPLAN-001
 > **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Approved · **Owner:** PM + Tech Leads
 > **Chuẩn:** ISO/IEC/IEEE 12207 (vòng đời), V-Model, Scrum/Kanban
-> 📘 [docs/README](../README.md) · Thiết kế: [design/README](../../design/README.md)
+> 📘 [docs/README](../README.md) · Thiết kế: [README](../02_design/README.md)
 
 > 🎯 **Tài liệu này để làm gì:** một dev (FW/BE/FE/UX) mở ra là biết **làm gì trước, làm gì sau, mỗi việc bắt đầu cần gì (INPUT) và xong nghĩa là gì (OUTPUT/Definition of Done)**. Mỗi microtask là 1 checkbox tick được.
 
@@ -27,7 +27,7 @@
 - **Sprint 2 tuần**, Kanban cho bug. Mỗi sprint: planning → daily → review → retro.
 - **Definition of Ready (DoR)** cho task: có INPUT đủ + ước lượng + acceptance criteria.
 - **Definition of Done (DoD) chung** (mọi task):
-  - [ ] Code theo coding standard ([FW](../../design/firmware/FW_CODING_STANDARD_MK-DDC-24_VI.md) / [SW](../../design/software/SW_CODING_STANDARD_MK-DDC-24_VI.md)).
+  - [ ] Code theo coding standard ([FW](../02_design/firmware/FW_CODING_STANDARD_MK-DDC-24_VI.md) / [SW](../02_design/software/SW_CODING_STANDARD_MK-DDC-24_VI.md)).
   - [ ] Unit test viết + pass; coverage core ≥ 80%.
   - [ ] Static analysis (cppcheck/MISRA · ruff/mypy · eslint/tsc) 0 lỗi.
   - [ ] PR có **REQ ID** + **design unit**, ≥1 reviewer duyệt.
@@ -84,7 +84,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** SEC-001/002, TEST-001.
 
 ### T-FW-01 — Board bring-up MCU (FW)
-**INPUT:** [ ] board mẫu/EVB · [ ] [D-1 Pinout](../../design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) · [ ] ST-Link.
+**INPUT:** [ ] board mẫu/EVB · [ ] [D-1 Pinout](../02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) · [ ] ST-Link.
 **Microtasks:**
 - [ ] Tạo project CubeMX theo D-1 (clock 64MHz HSE, GPIO, USART1/SPI1/SPI3, DMA).
 - [ ] Blink MCU_LED (PD6) + log USART2 115200.
@@ -108,7 +108,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 ## 5. PHASE P1 — Skeleton / Khung chạy được
 
 ### T-FW-02 — Khung FreeRTOS + task rỗng (FW)
-**INPUT:** [ ] T-FW-01 · [ ] [FW_DDD §3](../../design/firmware/FW_DDD_MK-DDC-24_VI.md).
+**INPUT:** [ ] T-FW-01 · [ ] [FW_DDD §3](../02_design/firmware/FW_DDD_MK-DDC-24_VI.md).
 **Microtasks:**
 - [ ] Tạo 6 task rỗng (io_sample, iop_comm, ao_output, do_control, diagnostics, watchdog) đúng priority/period FW_ARCH §2.
 - [ ] Heartbeat flag mỗi task; IWDG kick ở watchdog_task.
@@ -117,7 +117,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** FW_ARCH §2, FW-WDG.
 
 ### T-FW-03 — IOP slave: handshake + CRC (FW) ⭐ đường găng
-**INPUT:** [ ] [SWFW_INTERFACE_SPEC](../../spec/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) · [ ] [FW_MOD_IOP_COMM](../../design/firmware/FW_MOD_IOP_COMM_MK-DDC-24_VI.md).
+**INPUT:** [ ] [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) · [ ] [FW_MOD_IOP_COMM](../02_design/firmware/FW_MOD_IOP_COMM_MK-DDC-24_VI.md).
 **Microtasks:**
 - [ ] `crc16_modbus()` + pass 10 test vector (khớp BE).
 - [ ] RX UART IDLE+DMA → parse frame → verify CRC/SEQ.
@@ -127,7 +127,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** IOP-FW-001..010.
 
 ### T-BE-01 — IOP master: handshake + CRC (BE) ⭐ đường găng
-**INPUT:** [ ] [SW_IODRIVER_DESIGN](../../design/software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md) · [ ] cùng CRC test vector.
+**INPUT:** [ ] [SW_IODRIVER_DESIGN](../02_design/software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md) · [ ] cùng CRC test vector.
 **Microtasks:**
 - [ ] Mở UART 921600, `crc16` khớp FW.
 - [ ] Gửi HANDSHAKE, nhận RESP, kiểm version.
@@ -136,7 +136,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** SW-IOP-001..003.
 
 ### T-BE-02 — Shared memory + systemd skeleton (BE)
-**INPUT:** [ ] [SW_ARCH §2](../../spec/SW_ARCH_SPEC_MK-DDC-24_VI.md).
+**INPUT:** [ ] [SW_ARCH §2](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md).
 **Microtasks:**
 - [ ] Định nghĩa `kinexus_io_shm_t`, `kinexus_plc_shm_t` (header chung).
 - [ ] Seqlock write/read helper + test reader đồng thời.
@@ -151,7 +151,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 ## 6. PHASE P2 — I/O Path (đọc cảm biến → ghi đầu ra)
 
 ### T-FW-04 — Đọc ADS131M08 + DI (FW)
-**INPUT:** [ ] [FW_MOD_IO_SAMPLE](../../design/firmware/FW_MOD_IO_SAMPLE_MK-DDC-24_VI.md) · [ ] D-1.
+**INPUT:** [ ] [FW_MOD_IO_SAMPLE](../02_design/firmware/FW_MOD_IO_SAMPLE_MK-DDC-24_VI.md) · [ ] D-1.
 **Microtasks:**
 - [ ] Init ADS131M08 (SPI3, config register qua MOSI), đọc 8 kênh DMA 1ms.
 - [ ] Moving-average 8 + spike reject; debounce DI 20ms + đếm cạnh.
@@ -168,7 +168,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** IOP-FW, FW-WDG-005.
 
 ### T-FW-06 — SET_AO / SET_DO + safe-state (FW)
-**INPUT:** [ ] [FW_MOD_AO_DO](../../design/firmware/FW_MOD_AO_DO_MK-DDC-24_VI.md).
+**INPUT:** [ ] [FW_MOD_AO_DO](../02_design/firmware/FW_MOD_AO_DO_MK-DDC-24_VI.md).
 **Microtasks:**
 - [ ] Ghi DAC8554 (SPI1) + LDAC; validate range.
 - [ ] Relay ULN2003 + feedback + stuck-detect + rate-limit.
@@ -208,7 +208,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 ## 7. PHASE P3 — Protocols (BACnet/IP · REST/MQTT · Fieldbus RTU master)
 
 ### T-BE-05 — Modbus RTU **master** / field bus (BE)
-**INPUT:** [ ] [D-2 RTU Master/Expansion](../../design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) · [ ] [SW_FIELDBUS_DESIGN](../../design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) · [ ] slave giả lập (diagslave).
+**INPUT:** [ ] [D-2 RTU Master/Expansion](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) · [ ] [SW_FIELDBUS_DESIGN](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) · [ ] slave giả lập (diagslave).
 **Microtasks:**
 - [ ] libmodbus master mở RS-485; poll scheduler theo `fieldbus.conf`.
 - [ ] Device-profile engine (decode type/scale/byte_order) → ghi shm vùng ext.
@@ -217,7 +217,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** SW-MOD-001..011, RTU-001..008.
 
 ### T-BE-06 — BACnet/IP objects + COV (BE) ⭐ đường găng (cert)
-**INPUT:** [ ] [D-3 PICS](../../design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) · [ ] bacnet-stack.
+**INPUT:** [ ] [D-3 PICS](../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) · [ ] bacnet-stack.
 **Microtasks:**
 - [ ] Đăng ký AI8/AO4/AV32/BI8/BO4/BV16/MSV8 + Device object.
 - [ ] Read/Write-Property(-Multiple) ↔ plc_shm (priority array).
@@ -227,7 +227,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** SW-BAC-001..008.
 
 ### T-BE-07 — REST API (BE)
-**INPUT:** [ ] [D-4 OpenAPI](../../design/interfaces/openapi.yaml).
+**INPUT:** [ ] [D-4 OpenAPI](../02_design/interfaces/openapi.yaml).
 **Microtasks:**
 - [ ] FastAPI theo openapi.yaml: /auth, /points, /system, /alarms.
 - [ ] Đọc/ghi point qua shm + validate range.
@@ -236,7 +236,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** SW-API-001..010.
 
 ### T-BE-08 — MQTT agent (BE)
-**INPUT:** [ ] [SW_AGENT_DESIGN](../../design/software/SW_AGENT_DESIGN_MK-DDC-24_VI.md), `mqtt.conf`.
+**INPUT:** [ ] [SW_AGENT_DESIGN](../02_design/software/SW_AGENT_DESIGN_MK-DDC-24_VI.md), `mqtt.conf`.
 **Microtasks:**
 - [ ] Kết nối TLS 8883, LWT, reconnect backoff.
 - [ ] Publish COV topic `kinexus/{id}/io/{point}`.
@@ -249,16 +249,16 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 
 ## 8. PHASE P4 — Control Engine + Giao diện
 
-### T-BE-09 — PLC scan engine (BE) ⭐ đường găng
-**INPUT:** [ ] [D-6 PLC Engine](../../design/software/SW_PLC_ENGINE_DESIGN_MK-DDC-24_VI.md) · [ ] **chốt DEC-001**.
+### T-BE-09 — Component graph scan engine (BE) ⭐ đường găng
+**INPUT:** [ ] [D-6 Runtime Execution Model](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) · [ ] [Component Library](../02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) (DEC-001 đã chốt: [ADR-004](../adr/ADR-004-component-based-runtime.md)).
 **Microtasks:**
-- [ ] Variable space + ảnh I/O (read inputs→run→write outputs).
-- [ ] Scan SCHED_FIFO 80, jitter ≤5ms, watchdog overrun.
-- [ ] FB chuẩn: TON/TOF/TP/CTU/CTD/RS/SR/F_TRIG/R_TRIG.
-- [ ] PID_COMPACT anti-windup + bumpless.
-- [ ] Retain `/data/plc/retain.dat` power-fail.
-**OUTPUT/DoD:** [ ] chạy 16 chương trình song song · [ ] PID step settle ±2% ≤30s · [ ] jitter 1h ≤5ms.
-**Trace:** SW-PLC-001..022.
+- [ ] Build execution plan (topo-sort) + ảnh I/O (snapshot→execute→write).
+- [ ] Scan SCHED_FIFO, scan 1s, đo budget + overrun count.
+- [ ] Component chuẩn: OnDelay/OffDelay/Compare/Scale/Limit/PID (~24 type, xem Component Library).
+- [ ] PID anti-windup; priority resolver + safe-state.
+- [ ] State snapshot `/data/mkddc/state.snap` (60s + shutdown) + power-loss recovery.
+**OUTPUT/DoD:** [ ] chạy graph nhiều node · [ ] PID step settle ±2% ≤30s · [ ] power-loss recovery OK.
+**Trace:** RUN-001..009.
 
 ### T-BE-10 — Write arbitration + alarm bus (BE)
 **INPUT:** [ ] D-6 §7, SRS §13 fault catalog.
@@ -287,7 +287,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** SW-IDE-001..005.
 
 ### T-FE-02 — I/O config + watch + force (FE)
-**INPUT:** [ ] [D-5 Config](../../design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md).
+**INPUT:** [ ] [D-5 Config](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md).
 **Microtasks:**
 - [ ] Form cấu hình UI sensor/AO mode (validate JSON schema D-5).
 - [ ] Watch table realtime (WebSocket), live I/O dashboard ≤1s.
@@ -304,7 +304,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** SW-IDE-006..009.
 
 ### T-FW/BE-11 — HMI TFT (BE/FW-display) — xem [UX_HMI]
-**INPUT:** [ ] [UX_HMI](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [ ] [SW_HMI_DESIGN](../../design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md).
+**INPUT:** [ ] [UX_HMI](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [ ] [SW_HMI_DESIGN](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md).
 **Microtasks:**
 - [ ] fbtft ILI9341 `/dev/fb0`; LVGL v9.
 - [ ] 5 màn: Dashboard, I/O, Alarm, Network, System; 6 nút GPIO.
@@ -319,7 +319,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 ## 9. PHASE P5 — Security + OTA
 
 ### T-BE-12 — Security hardening (BE/SEC)
-**INPUT:** [ ] [D-11 Security](../../design/software/SW_SECURITY_KEYSTORE_MK-DDC-24_VI.md) · [ ] **chốt SW-Q-004**.
+**INPUT:** [ ] [D-11 Security](../02_design/software/SW_SECURITY_KEYSTORE_MK-DDC-24_VI.md) · [ ] **chốt SW-Q-004**.
 **Microtasks:**
 - [ ] TLS 1.3 mọi mặt; JWT secret từ key store (OP-TEE/fallback).
 - [ ] nftables policy (1883 chặn), AppArmor, SSH 2222 key-only.
@@ -328,7 +328,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** SEC-020..025, SW-SEC.
 
 ### T-OPS-04 — OTA A/B + rollback (OPS/FW)
-**INPUT:** [ ] [D-7 OTA](../../design/software/SW_OTA_DESIGN_MK-DDC-24_VI.md) + [FW_BOOTLOADER_OTA] · [ ] **chốt SW-Q-005**.
+**INPUT:** [ ] [D-7 OTA](../02_design/software/SW_OTA_DESIGN_MK-DDC-24_VI.md) + [FW_BOOTLOADER_OTA] · [ ] **chốt SW-Q-005**.
 **Microtasks:**
 - [ ] Phân vùng A/B + U-Boot env + verified boot.
 - [ ] `.kxpkg` verify GPG+sha256, anti-downgrade.
@@ -344,7 +344,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 ## 10. PHASE P6 — Integration, V&V, Certification
 
 ### T-INT-01 — Integration test toàn hệ (INT)
-**INPUT:** [ ] [TEST_SPEC](../../spec/TEST_SPEC_MK-DDC-24_VI.md) L1–L6.
+**INPUT:** [ ] [TEST_SPEC](../01_specs/TEST_SPEC_MK-DDC-24_VI.md) L1–L6.
 **Microtasks:**
 - [ ] End-to-end: sensor→MCU→SOM→PLC→BACnet/IP/MQTT→BMS; + thiết bị phụ qua RTU master.
 - [ ] Fault injection: mất IOP, mất BMS, power-fail retain.
