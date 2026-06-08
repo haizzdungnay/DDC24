@@ -3,7 +3,7 @@
 
 > **Document ID:** DDD-PINOUT-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-05-30
-> **Trạng thái:** Draft — chờ FW Lead + HW Lead ký (DR-1)
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > 📘 [README](../../01_specs/README.md) · Đồng bộ: `hardware-design/05_mcu_io/MCU_STM32G0_SPEC.md §3`
 
 > ⭐ **NGUỒN-CHUẨN DUY NHẤT cho chân MCU.** Schematic (`CB_SCHEMATIC_NOTES`), block diagram, CubeMX `.ioc`, và firmware HAL init **PHẢI** khớp bảng này. Mọi thay đổi qua DR gate + bump version.

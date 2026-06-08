@@ -2,7 +2,7 @@
 
 > **Document ID:** KX-DDC24-HW-RPT-002  
 > **Phiên bản:** 1.0 | 2026-06-02  
-> **Trạng thái:** Draft — chờ measurement data từ physical testing  
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** DeveloperTeam (HW)  
 > **Ref:** IOT-5480 | IOT-5472 | hardware-design/07_emc_thermal/EMC_THERMAL_NOTES.md | HW-Q-003 | docs/adr/ADR-001-adc-avdd-noise-measurement-contract.md
 

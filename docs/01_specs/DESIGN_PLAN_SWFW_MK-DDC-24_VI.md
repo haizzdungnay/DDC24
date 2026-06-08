@@ -3,7 +3,7 @@
 
 > **Document ID:** SDP-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-05-30
-> **Trạng thái:** Draft — chờ SW Lead + FW Lead + System Architect duyệt
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > 📘 **Đọc cùng:** [README](README.md) · [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md)
 
 ---

@@ -2,7 +2,7 @@
 
 > **Document ID:** HSM-EVAL-MK-DDC-24-001
 > **Phiên bản:** 1.0 | 2026-06-02
-> **Trạng thái:** Draft — Chờ TechLead review
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Issue:** [IOT-5580](../../../../../../IOT/issues/IOT-5580)
 > **Parent:** [IOT-5576](../../../../../../IOT/issues/IOT-5576)
 > **Requirement trace:** SEC-013 (CR 4.2 — Key storage)

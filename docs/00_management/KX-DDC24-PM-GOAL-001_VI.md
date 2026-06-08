@@ -2,7 +2,7 @@
 ## Mục tiêu dự án
 
 > **Document ID:** KX-DDC24-PM-GOAL-001
-> **Phiên bản:** 1.2 | 2026-06-02 · **Trạng thái:** Draft · **Owner:** PMO
+> **Phiên bản:** 1.2 | 2026-06-02 · **Trạng thái:** Approved (Owner 2026-06-08) · **Owner:** PMO
 > *Cập nhật theo [PM-MARKET-001 v1.1](KX-DDC24-PM-MARKET-001_VI.md)*
 > 📘 [docs/README](../README.md) · Liên quan: [PM-OVERVIEW](KX-DDC24-PM-OVERVIEW-001_VI.md) · [PRD](../01_specs/PRD_MK-DDC-24_VI.md) · [IMPLPLAN](KX-DDC24-PM-IMPLPLAN-001_VI.md)
 

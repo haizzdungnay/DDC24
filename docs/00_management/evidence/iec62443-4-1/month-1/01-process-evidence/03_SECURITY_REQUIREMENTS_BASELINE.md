@@ -2,7 +2,7 @@
 
 > **Document ID:** IEC62443-M1-SRB-001
 > **Phiên bản:** 1.0 | 2026-06-02
-> **Trạng thái:** Draft — sẵn sàng cho review
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** Tech Lead + Solution Architect
 > **Chuẩn:** IEC 62443-4-1 SM-1 | IEC 62443-4-2 CR 1.1–4.3
 > **Template:** [KX-DDC24-SEC-SPEC-001](../../../../security_process_templates/KX-DDC24-SEC-SPEC-001_VI.md)

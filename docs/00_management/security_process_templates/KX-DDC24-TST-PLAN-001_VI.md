@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-TST-PLAN-001
 > **Phiên bản:** 0.1 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** QA + Tech Lead
 > **Chuẩn liên quan:** IEC 62443-4-1 SM-5, OWASP Testing Guide, NIST SP 800-115, ISO/IEC 29119
 > 📘 [docs/README](../../README.md)

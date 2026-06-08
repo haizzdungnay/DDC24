@@ -1,13 +1,16 @@
 # Component Library (Rev A) — MK-DDC-24
 
 > **Document ID:** DDD-COMPLIB-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-08
-> **Trạng thái:** Draft — Nguồn-chuẩn DUY NHẤT cho `type` component Rev A
+> **Phiên bản:** 1.1 | 2026-06-08
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > 📘 **Đọc cùng:** [GRAPH_SCHEMA](../interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) ·
-> [SW_RUNTIME_EXECUTION_MODEL](SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) · [REVA_SCOPE](../../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md)
+> [SW_RUNTIME_EXECUTION_MODEL](SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) · [REVA_SCOPE](../../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) ·
+> [ADR-008](../../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md)
 
-> ⚠️ Rev A là **bộ component CỐ ĐỊNH**. User composite component & component nâng cao
+> ⚠️ Rev A là **bộ component CỐ ĐỊNH (28 type)**. User composite component & component nâng cao
 > → Rev B (xem REVA_SCOPE §3). Mỗi `type` ở đây là một `node.type` hợp lệ trong graph.json.
+> 4 component BMS tổng quát (Interlock, AlarmDelay, RuntimeCounter, PulseCounter) được đưa
+> vào Rev A.0 theo [ADR-008](../../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md).
 
 ---
 
@@ -39,12 +42,17 @@ Kiểu: `f`=float, `b`=bool, `i`=int. `[S]` = stateful (giữ state qua scan).
 | `Compare_LT` | `a:f`,`b:f` | `out:b` | `hysteresis?` |
 | `ManualAuto` | `auto:f`,`manual:f`,`sel:b` | `out:f` | — (sel=true → manual) |
 
-## 4. Timer components `[S]`
+## 4. Timer / Counter components `[S]`
 
 | type | in | out | params | state |
 |------|----|----|--------|-------|
 | `OnDelay` | `in:b` | `out:b` | `delay_s` | accumulator |
 | `OffDelay` | `in:b` | `out:b` | `delay_s` | accumulator |
+| `RuntimeCounter` | `run:b`,`reset?:b` | `hours:f`,`alarm:b` | `maint_hours?` | giờ tích lũy (giây→giờ); `alarm=true` khi ≥ `maint_hours`; snapshot/persist |
+| `PulseCounter` | `pulse:b`,`reset?:b` | `count:f` | `scale?`,`rollover?` | đếm cạnh lên của `pulse` × `scale` (energy/water meter); snapshot/persist |
+
+> `RuntimeCounter`/`PulseCounter` giữ state qua mất điện (snapshot + shutdown, theo
+> SW_RUNTIME_EXECUTION_MODEL) để không mất giờ-chạy/số đếm. `reset` về 0 khi cạnh lên.
 
 ## 5. Math components
 
@@ -59,6 +67,7 @@ Kiểu: `f`=float, `b`=bool, `i`=int. `[S]` = stateful (giữ state qua scan).
 |------|----|----|--------|-------|
 | `PID` `[S]` | `pv:f`,`sp:f`,`enable?:b` | `out:f` | `kp`,`ki`,`kd`,`out_lo`,`out_hi`,`direction`(direct/reverse) | integrator, prev_error; anti-windup clamp tại out_lo/out_hi |
 | `SafeState` | `in:f`,`good:b` | `out:f` | `safe_value` | — (good=false → out=safe_value) |
+| `Interlock` | `request:b`,`permit:b` | `out:b`,`tripped:b` | `latch?` | out=request **chỉ khi** permit=true; permit=false → out=false (chặn) + tripped=true. `latch=true` → giữ trip tới khi `request` xuống (manual reset). State chỉ khi latch. |
 
 ## 7. Alarm components
 
@@ -66,6 +75,11 @@ Kiểu: `f`=float, `b`=bool, `i`=int. `[S]` = stateful (giữ state qua scan).
 |------|----|----|--------|
 | `AlarmHigh` | `in:f` | `out:b` | `limit`,`hysteresis?` |
 | `AlarmLow` | `in:f` | `out:b` | `limit`,`hysteresis?` |
+| `AlarmDelay` `[S]` | `in:b` | `out:b` | `on_delay_s`,`off_delay_s?` |
+
+> `AlarmDelay` debounce tín hiệu alarm: `out=true` chỉ khi `in` giữ true liên tục
+> ≥ `on_delay_s` (chống báo giả ngoài công trình); nhả sau `off_delay_s`. State (accumulator)
+> giữ qua scan, **không** persist qua mất điện (khác RuntimeCounter/PulseCounter).
 
 ## 8. Protocol components
 
@@ -83,13 +97,17 @@ Kiểu: `f`=float, `b`=bool, `i`=int. `[S]` = stateful (giữ state qua scan).
 
 ## 9. Đếm số component Rev A
 
-IO 5 + Logic 6 + Timer 2 + Math 2 + Control 2 + Alarm 2 + Protocol 5 = **24 type**
-(tập "~15 cốt lõi + protocol/mapping"). Khớp REVA_SCOPE §2.
+IO 5 + Logic 6 + Timer 3 + Counter 1 + Math 2 + Control 3 + Alarm 3 + Protocol 5 = **28 type**.
+(Timer 3 = OnDelay/OffDelay/RuntimeCounter; Counter 1 = PulseCounter; Control 3 =
+PID/SafeState/Interlock; Alarm 3 = AlarmHigh/AlarmLow/AlarmDelay — ADR-008.) Khớp REVA_SCOPE §2.
 
 ## 10. KHÔNG có trong Rev A (→ Rev B/C)
 
-`PulseCounter`,`VirtualPoint`,`Selector`,`PrioritySelect`,`PulseTimer`,`RuntimeCounter`,
-`IntervalTimer`,`Add/Subtract/Multiply/Divide/Average/Min/Max/LowPassFilter`,
-`TwoPositionControl`,`StageControl`,`LeadLag`,`SequenceStep`,`Interlock`,
-`WeeklySchedule`,`HolidaySchedule`,`AlarmStatusMismatch`,`AlarmDelay`,`AlarmLatch`,
+`VirtualPoint`,`Selector`,`PrioritySelect`,`PulseTimer`,`IntervalTimer`,
+`Add/Subtract/Multiply/Divide/Average/Min/Max/LowPassFilter`,
+`TwoPositionControl`,`StageControl`,`LeadLag`,`SequenceStep`,
+`WeeklySchedule`,`HolidaySchedule`,`AlarmStatusMismatch`,`AlarmLatch`,
 **user composite component**. (Danh sách đầy đủ tầm nhìn: product definition §8–9.)
+
+> Đã promote vào Rev A.0 (ADR-008, không còn deferred): `Interlock`, `AlarmDelay`,
+> `RuntimeCounter`, `PulseCounter`.

@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-SEC-RPT-003
 > **Phiên bản:** 0.1 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** Developer Team + Tech Lead
 > **Chuẩn liên quan:** IEC 62443-4-1 SM-4, CERT/CWE Top 25, OWASP ASVS, coding standards dự án
 > 📘 [docs/README](../../README.md)

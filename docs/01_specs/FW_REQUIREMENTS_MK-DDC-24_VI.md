@@ -3,7 +3,7 @@
 
 > **Document ID:** FW-REQ-MK-DDC-24-VI  
 > **Phiên bản:** 1.0 | 2026-05-28  
-> **Trạng thái:** Draft — Pending FW Lead review  
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
 > **Tác giả:** KINEXUS Technologies — Firmware Team  
 > **Nguồn gốc:** Trace từ SRS-MK-DDC-24-VI, HW-SPEC-MK-DDC-24-VI, IOP-SPEC-MK-DDC-24-VI

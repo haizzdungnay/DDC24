@@ -3,7 +3,7 @@
 
 > **Document ID:** DDD-MCU-SECBOOT-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Tác giả:** Tech Lead
 > **Trace:** `SEC-010..014`, `SEC-050`, `SEC-051`, `SW-OTA-004`, `FW-OTA-001..005`
 > **Liên quan:** [FW_BOOTLOADER_OTA](FW_BOOTLOADER_OTA_MK-DDC-24_VI.md) | [FW_DDD](FW_DDD_MK-DDC-24_VI.md) | [SW_OTA_DESIGN](../software/SW_OTA_DESIGN_MK-DDC-24_VI.md) | [SEC-SUP-001 §9.4](../../00_management/KX-DDC24-SEC-SUP-001_VI.md)

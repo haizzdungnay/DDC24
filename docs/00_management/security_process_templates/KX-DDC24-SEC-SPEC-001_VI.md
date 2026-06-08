@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-SEC-SPEC-001
 > **Phiên bản:** 0.1 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** Tech Lead + Solution Architect
 > **Chuẩn liên quan:** IEC 62443-4-1 SM-1, IEC 62443-4-2 CR 1.1–4.3, ISO/IEC/IEEE 12207:2017
 > 📘 [docs/README](../../README.md)

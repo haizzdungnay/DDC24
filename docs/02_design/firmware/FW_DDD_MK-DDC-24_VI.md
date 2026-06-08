@@ -3,7 +3,7 @@
 
 > **Document ID:** DDD-FW-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-05-30
-> **Trạng thái:** Draft (DP-0 skeleton có decomposition) — chi tiết module bổ sung ở DP-2
+> **Trạng thái:** Approved (Owner 2026-06-08) (DP-0 skeleton có decomposition) — chi tiết module bổ sung ở DP-2
 > **Owner:** Firmware Team
 > 📘 [README](../../01_specs/README.md) · Nâng từ `FW_ARCH_SPEC` · Trace `FW_REQUIREMENTS`, `SWFW_INTERFACE_SPEC`
 

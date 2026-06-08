@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-SEC-RPT-005
 > **Phiên bản:** 0.1 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** QA + Tech Lead
 > **Chuẩn liên quan:** IEC 62443-4-1 SM-10 (Security Review), ISO 19011 (Audit Management), IEC 62443-4-1 §9 (Security Review Process)
 > 📘 [docs/README](../../README.md)

@@ -2,7 +2,7 @@
 
 > **Document ID:** IF-GRAPH-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-06-08
-> **Trạng thái:** Draft — Nguồn-chuẩn DUY NHẤT cho định dạng graph deploy
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > 📘 **Đọc cùng:** [PRODUCT_DEFINITION](../../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) ·
 > [SW_RUNTIME_EXECUTION_MODEL](../software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) ·
 > [SW_COMPONENT_LIBRARY](../software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) · [ADR-004](../../adr/ADR-004-component-based-runtime.md)

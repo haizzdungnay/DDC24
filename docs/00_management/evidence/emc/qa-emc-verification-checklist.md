@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-QA-RPT-002  
 > **Phiên bản:** 1.0 | 2026-06-02  
-> **Trạng thái:** Draft — pre-populated checklist, awaiting test reports  
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** QAReviewer  
 > **Ref:** IOT-5474 | EMC_THERMAL_NOTES.md | HW-Q-003 | PM-MARKET-001 v1.1 §6.3
 

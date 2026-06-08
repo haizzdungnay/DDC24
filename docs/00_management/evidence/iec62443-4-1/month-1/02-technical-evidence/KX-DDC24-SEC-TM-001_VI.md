@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-SEC-TM-001
 > **Phiên bản:** 1.0 | 2026-06-02
-> **Trạng thái:** Draft — Chờ Solution Architect review
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Tác giả:** DeveloperTeam
 > **Issue:** IOT-5489
 > **Phương pháp:** STRIDE (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege)

@@ -2,12 +2,41 @@
 ## Ma trận truy vết: Yêu cầu → Thiết kế → Code → Test
 
 > **Document ID:** KX-DDC24-QA-TRACE-001
-> **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Draft (cập nhật theo sprint) · **Owner:** QA
+> **Phiên bản:** 1.1 | 2026-06-08 · **Trạng thái:** Approved (Owner 2026-06-08) (cập nhật theo sprint) · **Owner:** QA
 > **Chuẩn:** ISO/IEC/IEEE 29148 §5.2.8 (bidirectional traceability)
 > 📘 [docs/README](../README.md)
 
 > 🎯 Mỗi yêu cầu phải truy được tới **thiết kế nào hiện thực nó, task nào code nó, test nào chứng minh nó chạy**. Đọc dọc một hàng = vòng đời 1 tính năng. Khi thêm REQ/design → thêm hàng.
 > Nguồn REQ ID: PRD/SRS (`../../`), [FW_REQ](../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md), [SW_REQ](../01_specs/SW_REQUIREMENTS_MK-DDC-24_VI.md). Task ID: [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md).
+
+---
+
+## 0. Phân bổ theo Rev (canonical scope)
+
+> ⚠️ Các bảng truy vết §1+ liệt kê **mọi** REQ ngang hàng — KHÔNG có nghĩa tất cả thuộc Rev A.0.
+> Bảng dưới là nguồn-chuẩn phân Rev ([CANONICAL_DECISIONS](../CANONICAL_DECISIONS.md), [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md)).
+
+| Capability | Rev A.0 | Rev B | Rev C | Status |
+|------------|:------:|:-----:|:-----:|--------|
+| IOP / IO scan (DI/DO/UI/AO) | ✅ | — | — | Active |
+| Component graph engine (mkddc-core) | ✅ | — | — | Active |
+| Fixed component library 28 type (incl. Interlock/AlarmDelay/RuntimeCounter/PulseCounter) | ✅ | — | — | Active (ADR-008) |
+| graph.json + validator | ✅ | — | — | Active |
+| BACnet/IP demo (interop) | ✅ | — | — | Active |
+| Modbus RTU master x2 + TCP | ✅ | — | — | Active |
+| Web config form/JSON (mkddc-web) | ✅ | — | — | Active |
+| Commissioning + report | ✅ | — | — | Active |
+| 3-domain demo (HVAC mini · Pump/Water · Energy/Gateway) | ✅ | — | — | Active (REVA_SCOPE §6) |
+| Security baseline (TLS/JWT/audit) | ✅ | — | — | Active |
+| Composite component + wiresheet canvas | — | ✅ | — | Deferred |
+| MQTT / cloud agent | — | ✅ | — | Deferred |
+| HMI panel (LVGL) | — | ✅ | — | Deferred |
+| OTA A/B | — | ✅ | — | Deferred |
+| BTL certification | — | ⏳ | — | Deferred |
+| IEC 61131-3 runtime (FBD/ST) | ❌ | ❌ | ⏳ | Deferred |
+
+> Trong các bảng §1+ dưới đây, REQ thuộc nhóm **Deferred** (PLC/MQTT/HMI/OTA/BTL/IEC 61131-3)
+> KHÔNG nằm trong đường găng Rev A.0.
 
 ---
 
@@ -50,10 +79,12 @@
 | SW-API-001..010 | IF-ICD-004 (openapi.yaml), BE-DDD-004 | T-BE-07 | T-SW-070..079 |
 | SW-MQ-001..007 | BE-DDD-004 (agent) | T-BE-08 | T-SW-060..066 |
 
-## 7. PLC / Điều khiển
+## 7. Component runtime / Điều khiển
 | REQ | Thiết kế | Task | Test |
 |-----|----------|------|------|
-| SW-PLC-001..022, PLC-001..023 | BE-DDD-002 (D-6) | T-BE-09 | T-SW-020..035 |
+| SW-PLC-001..022, PLC-001..023 *(re-map → component graph)* | BE-DDD-002 (D-6) | T-BE-09 | T-SW-020..035 |
+| Component library Rev A (28 type) | SW_COMPONENT_LIBRARY, ADR-008 | T-BE-09 | T-SW-020..035 |
+| Interlock / AlarmDelay / RuntimeCounter / PulseCounter | SW_COMPONENT_LIBRARY §4/§6/§7, ADR-008 | T-BE-09 | T-SW-037..039 |
 | Write arbitration | BE-DDD-002 §7 | T-BE-10 | T-SW-036 |
 | Alarm bus | SRS §13, BE-DDD-002 | T-BE-10 | T-SW-040 |
 
@@ -87,6 +118,13 @@
 | OS-001..005 | SW_ARCH, IMPL P0 | T-OPS-03, T-BE-02 | T-SW-110..115 |
 | NFR reliability (soak 72h) | SW_ARCH §6, FW_ARCH §7 | T-INT-04 | soak report |
 
+## 12b. 3-domain demo (acceptance Rev A.0 — REVA_SCOPE §6)
+| Demo | Component / example | Task | Test (acceptance) |
+|------|---------------------|------|-------------------|
+| Demo 1 — HVAC mini | AI/Scale/PID/AO/AlarmHigh/BACnet_AV · `examples/hvac-mini` | T-INT-01 | acceptance §6 Demo 1 |
+| Demo 2 — Pump/Water | OnDelay/OffDelay/Interlock/AlarmDelay/RuntimeCounter · `examples/pump-water` | T-INT-01 | acceptance §6 Demo 2 |
+| Demo 3 — Energy/Gateway | Modbus_RTU_Read/Scale/PulseCounter/BACnet_AV · `examples/energy-gateway` | T-INT-01 | acceptance §6 Demo 3 |
+
 ---
 ## 13. Quy tắc duy trì
 - Thêm REQ mới → thêm hàng + trỏ thiết kế/task/test (kể cả còn trống, đánh "TBD").
@@ -98,3 +136,4 @@
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
 | 1.0 | 2026-05-30 | QA | Phát hành đầu — ma trận REQ→design→task→test theo 12 nhóm tính năng |
+| 1.1 | 2026-06-08 | QA | DOC-REBASE-BMS-EDGE: §0 +28-type lib & 3-domain demo; §7 +4 component (ADR-008); +§12b demo trace |

@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-SEC-STD-001
 > **Phiên bản:** 0.1 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** Docs & Release + Tech Lead
 > **Chuẩn liên quan:** IEC 62443-4-1 SM-8 (Security Guidelines), IEC 62443-4-2 (Technical Security for IACS Components), NIST SP 800-82 (ICS Security)
 > 📘 [docs/README](../../README.md)

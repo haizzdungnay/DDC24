@@ -3,7 +3,7 @@
 
 > **Document ID:** DDD-<COMP>-MK-DDC-24-VI
 > **Phiên bản:** 0.1 | YYYY-MM-DD
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** <team/người>
 > **Theo:** IEEE 1016 · 📘 [README](../../01_specs/README.md)
 

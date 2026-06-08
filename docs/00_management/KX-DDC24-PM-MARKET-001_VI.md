@@ -2,7 +2,7 @@
 ## Phân tích cạnh tranh, thị trường mục tiêu, BOM feasibility, supply risk & compliance — DEEP-DIVE
 
 > **Document ID:** KX-DDC24-PM-MARKET-001  
-> **Phiên bản:** 1.1 | 2026-06-02 · **Trạng thái:** Draft · **Owner:** ResearchDirector  
+> **Phiên bản:** 1.1 | 2026-06-02 · **Trạng thái:** Approved (Owner 2026-06-08) · **Owner:** ResearchDirector  
 > **Mục tiêu:** Đào sâu v1.0: validated competitor pricing, TAM/SAM/SOM định lượng, channel economics, regional cert, BOM RFQ.  
 > **Liên quan:** [GOAL-001](KX-DDC24-PM-GOAL-001_VI.md) · [PRD](../01_specs/PRD_MK-DDC-24_VI.md) · [DS](../01_specs/DS_MK-DDC-24_VI.md) · [BOM](../../hardware-design/06_bom/BOM_MK-DDC-24_v1.md) · [OPEN_ISSUES](../01_specs/OPEN_ISSUES_MK-DDC-24_VI.md)  
 > **Evidence:** `docs/00_management/evidence/pricing/` · `evidence/bom-rfq/` · `evidence/certification/`  

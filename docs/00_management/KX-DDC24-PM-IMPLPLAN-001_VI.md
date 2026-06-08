@@ -2,9 +2,10 @@
 ## Kế hoạch Hiện thực: Phase → Task → Microtask → Checklist I/O
 
 > **Document ID:** KX-DDC24-PM-IMPLPLAN-001
-> **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Approved · **Owner:** PM + Tech Leads
+> **Phiên bản:** 1.1 | 2026-06-08 · **Trạng thái:** Active · **Owner:** PM + Tech Leads
 > **Chuẩn:** ISO/IEC/IEEE 12207 (vòng đời), V-Model, Scrum/Kanban
-> 📘 [docs/README](../README.md) · Thiết kế: [README](../02_design/README.md)
+> 📘 [docs/README](../README.md) · Thiết kế: [README](../02_design/README.md) ·
+> Nguồn-chuẩn scope: [REVA_SCOPE_ROADMAP](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md), [ADR-008](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md)
 
 > 🎯 **Tài liệu này để làm gì:** một dev (FW/BE/FE/UX) mở ra là biết **làm gì trước, làm gì sau, mỗi việc bắt đầu cần gì (INPUT) và xong nghĩa là gì (OUTPUT/Definition of Done)**. Mỗi microtask là 1 checkbox tick được.
 
@@ -38,26 +39,51 @@
 
 ## 3. Bản đồ Phase & đường găng (critical path)
 
+> ℹ️ **Kế hoạch Rev A.0 chính thức là §3.0 ngay dưới** (canonical, khớp
+> [CANONICAL_DECISIONS](../CANONICAL_DECISIONS.md) + [REVA_SCOPE_ROADMAP](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) + [ADR-008](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md)).
+> §3.1 phía dưới là **plan cũ P0–P7 viết trước pivot** (đường găng PLC→Web IDE→HMI→OTA→BTL) —
+> giữ làm **tham chiếu lịch sử**, các phase PLC/FBD/HMI/OTA/MQTT/BTL = **Deferred Rev B+**.
+
+### 3.0 Rev A.0 Phase Plan (canonical — 90 ngày, demo/lab-grade)
+
+```
+Phase 0  Documentation reconciliation            (đã làm phần lớn)
+Phase 1  mkddc-core skeleton                      (scan loop, plan rỗng, IO simulator)
+Phase 2  Component model + graph.json             (engine + validator v1)
+Phase 3  mkddc-iobus protocol integration         (IOP/MCU + Modbus RTU/TCP + BACnet/IP)
+Phase 4  mkddc-web CRUD + import/export JSON       (REST + form config + deploy graph)
+Phase 5  Fixed component library (28 type)        (đủ bộ Rev A gồm Interlock/AlarmDelay/
+                                                    RuntimeCounter/PulseCounter + priority/
+                                                    safe-state + snapshot — ADR-008)
+Phase 6  3-domain demo + test report              (HVAC mini · Pump/Water · Energy/Gateway —
+                                                    REVA_SCOPE §6, examples/ + commissioning report)
+```
+
+ĐƯỜNG GĂNG Rev A.0: `graph.json spec → mkddc-core engine → mkddc-iobus (BACnet+Modbus) → 3-domain demo`.
+
+**KHÔNG thuộc Rev A.0:** IEC 61131-3 PLC runtime · Web IDE FBD/ST canvas · HMI · OTA ·
+MQTT/cloud · BTL certification. (Xem REVA_SCOPE §3.)
+
+---
+
+### 3.1 Plan cũ P0–P7 *(pre-pivot — tham chiếu / Deferred)*
+
 ```
 P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Control+UI ─► P5 Sec+OTA ─► P6 Integration+Cert ─► P7 Release
-   (hạ tầng)   (khung chạy)   (đọc/ghi I/O)  (BACnet/IP+RTU)  (PLC + Web/HMI)  (bảo mật/cập nhật)  (FAT/SAT/BTL)     (GA)
-
-ĐƯỜNG GĂNG (chậm là chậm cả dự án):
-  IOP (FW+BE) ─► I/O scaling ─► PLC engine ─► BACnet ─► BTL cert
 ```
 
-| Phase | Tên | Entry (cần có) | Exit Gate (đạt mới qua) | Sprint |
-|-------|-----|----------------|--------------------------|--------|
-| **P0** | Setup & Hạ tầng | tài liệu design baseline | repo+CI chạy, board bring-up | S1 |
-| **P1** | Skeleton/Khung | P0 done, pinout D-1 | MCU↔SOM handshake IOP OK | S1–S2 |
-| **P2** | I/O Path | P1 done | đọc 8 UI + ghi AO/DO end-to-end | S2–S3 |
-| **P3** | Protocols | P2 done, D-2/D-3/D-4 | BACnet/IP+REST+MQTT + Fieldbus RTU master | S3–S5 |
-| **P4** | Control + UI | P3 done, D-6, UX design | PLC chạy 16 chương trình + Web IDE + HMI | S5–S8 |
-| **P5** | Security + OTA | P4 done, D-7/D-11 | TLS+JWT+audit + OTA A/B rollback | S8–S9 |
-| **P6** | Integration + Cert | P5 done | FAT/SAT pass, **BTL pass**, soak 72h | S9–S12 |
-| **P7** | Release (GA) | P6 done | tài liệu release + SBOM + GA sign-off | S12 |
+| Phase | Tên | Exit Gate | Rev A.0? |
+|-------|-----|-----------|:--------:|
+| **P0** | Setup & Hạ tầng | repo+CI, board bring-up | ✅ (rút gọn) |
+| **P1** | Skeleton/Khung | MCU↔SOM handshake IOP | ✅ |
+| **P2** | I/O Path | đọc 8 UI + ghi AO/DO | ✅ |
+| **P3** | Protocols | BACnet/IP + RTU master *(MQTT → Rev B)* | ✅ một phần |
+| **P4** | ~~Control + UI (PLC + Web IDE FBD + HMI)~~ | thay bằng **component graph + web form/JSON**; HMI → Rev B | ⚠️ thay |
+| **P5** | ~~Security + OTA~~ | TLS/JWT/audit ✅; **OTA → Rev B** | ⚠️ một phần |
+| **P6** | ~~Integration + **BTL cert**~~ | FAT/SAT demo ✅; **BTL → không thuộc Rev A.0** | ⚠️ một phần |
+| **P7** | Release (GA) | → Rev A.1+ | ❌ |
 
-> Mốc tương đối (Sprint). Quy đổi ngày tuyệt đối khi chốt lịch khởi động dự án.
+> Mốc tương đối (Sprint). Bảng này là **legacy mapping**; nguồn-chuẩn là §3.0.
 
 ---
 
@@ -235,7 +261,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] Swagger `/docs` khớp openapi.yaml (CI diff) · [ ] curl đọc/ghi point OK.
 **Trace:** SW-API-001..010.
 
-### T-BE-08 — MQTT agent (BE)
+### T-BE-08 — MQTT agent (BE) ⛔ *Deferred Rev B — MQTT/cloud KHÔNG thuộc Rev A.0*
 **INPUT:** [ ] [SW_AGENT_DESIGN](../02_design/software/SW_AGENT_DESIGN_MK-DDC-24_VI.md), `mqtt.conf`.
 **Microtasks:**
 - [ ] Kết nối TLS 8883, LWT, reconnect backoff.
@@ -243,7 +269,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] broker thấy giá trị cập nhật theo COV · [ ] mất mạng → reconnect.
 **Trace:** SW-MQ-001..007.
 
-**🚪 P3 Gate:** **BACnet/IP + REST + MQTT (northbound) + Fieldbus RTU master (mở rộng I/O) hoạt động** (chưa logic điều khiển).
+**🚪 P3 Gate (Rev A.0):** **BACnet/IP + REST + Modbus RTU master/TCP hoạt động** (chưa logic điều khiển). *(MQTT → Rev B.)*
 
 ---
 
@@ -268,7 +294,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] force I/O override đúng ưu tiên · [ ] alarm hiện ở 3 kênh.
 **Trace:** SW-PLC-020, SEC.
 
-### T-UX-02 — Design System + Web IDE UX (UX) — xem [UX_WEBIDE]
+### T-UX-02 — Web config UX (UX) ⚠️ *Rev A: form/JSON. FBD/ST canvas → Deferred Rev B*
 **INPUT:** [ ] [Design System](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) · [ ] requirement IDE.
 **Microtasks:**
 - [ ] Wireframe + flow: login, FBD editor, ST editor, I/O config, watch table, force I/O, user mgmt.
@@ -295,15 +321,16 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] đổi sensor type lưu file đúng schema · [ ] watch cập nhật realtime · [ ] force expire.
 **Trace:** SW-IDE-010..015.
 
-### T-FE-03 — FBD/ST editor (FE)
-**INPUT:** [ ] T-UX-02 · [ ] D-6 (compile IR).
-**Microtasks:**
-- [ ] FBD drag-drop + nối khối; ST editor highlight.
-- [ ] Compile-check, upload/download program, start/stop/reset.
-**OUTPUT/DoD:** [ ] vẽ 1 FBD đơn giản → compile → nạp → chạy trên PLC.
-**Trace:** SW-IDE-006..009.
+### T-FE-03 — ~~FBD/ST editor~~ → **Rev A: import/export `graph.json`** ⚠️ *(FBD canvas Deferred Rev B)*
+**INPUT:** [ ] [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md).
+**Microtasks (Rev A.0):**
+- [ ] UI import/export `graph.json`; xem read-only danh sách node/link.
+- [ ] Gọi `/graph/validate` + `/graph/deploy` (REST).
+**OUTPUT/DoD:** [ ] import graph hợp lệ → validate → deploy → core chạy.
+**Trace:** SW-WEB-006..009.
+> *FBD drag-drop canvas (wiresheet) → Rev B.*
 
-### T-FW/BE-11 — HMI TFT (BE/FW-display) — xem [UX_HMI]
+### T-FW/BE-11 — HMI TFT (BE/FW-display) ⛔ *Deferred Rev B — không thuộc Rev A.0* — xem [UX_HMI]
 **INPUT:** [ ] [UX_HMI](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [ ] [SW_HMI_DESIGN](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md).
 **Microtasks:**
 - [ ] fbtft ILI9341 `/dev/fb0`; LVGL v9.
@@ -312,7 +339,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] 5 màn chạy ≥10 FPS · [ ] giá trị khớp BACnet · [ ] nút điều hướng OK.
 **Trace:** SW-HMI-001..008.
 
-**🚪 P4 Gate:** **PLC chạy + Web IDE lập trình/giám sát + HMI hiển thị** — sản phẩm "dùng được".
+**🚪 P4 Gate (Rev A.0):** **component graph chạy + web form/JSON cấu hình/giám sát + deploy graph.json** — sản phẩm demo "dùng được". *(PLC FBD + HMI → Rev B/C.)*
 
 ---
 
@@ -327,7 +354,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] nmap chỉ thấy port cho phép · [ ] brute-force bị khóa · [ ] audit ghi đủ.
 **Trace:** SEC-020..025, SW-SEC.
 
-### T-OPS-04 — OTA A/B + rollback (OPS/FW)
+### T-OPS-04 — OTA A/B + rollback (OPS/FW) ⛔ *Deferred Rev B — OTA không thuộc Rev A.0*
 **INPUT:** [ ] [D-7 OTA](../02_design/software/SW_OTA_DESIGN_MK-DDC-24_VI.md) + [FW_BOOTLOADER_OTA] · [ ] **chốt SW-Q-005**.
 **Microtasks:**
 - [ ] Phân vùng A/B + U-Boot env + verified boot.
@@ -337,7 +364,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] OTA thành công downtime ≤60s · [ ] gói hỏng → từ chối · [ ] fail → rollback tự động.
 **Trace:** OTA-001..008, FW-OTA-001..005.
 
-**🚪 P5 Gate:** **bảo mật đạt baseline + OTA an toàn có rollback**.
+**🚪 P5 Gate (Rev A.0):** **bảo mật đạt baseline (TLS/JWT/audit)**. *(OTA A/B → Rev B.)*
 
 ---
 
@@ -356,7 +383,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **INPUT:** [ ] checklist FAT/SAT.
 **OUTPUT/DoD:** [ ] FAT pass (xưởng) · [ ] SAT pass (hiện trường mẫu).
 
-### T-INT-03 — BTL Certification (INT) ⭐ đường găng (lead-time)
+### T-INT-03 — BTL Certification (INT) ⛔ *KHÔNG thuộc Rev A.0 — Rev A.0 chỉ cần BACnet interop demo*
 **INPUT:** [ ] BACnet pass nội bộ · [ ] đăng ký lab (EXT-002).
 **Microtasks:**
 - [ ] Chạy BTL Test Tool 100% B-ASC.
@@ -367,7 +394,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 ### T-INT-04 — Soak / Reliability (INT)
 **OUTPUT/DoD:** [ ] chạy liên tục **72h** không lỗi/leak/reset (NFR MTBF).
 
-**🚪 P6 Gate:** **FAT/SAT pass + BTL pass + soak 72h pass**.
+**🚪 P6 Gate (Rev A.0):** **demo §22 (12 điểm) pass + commissioning report + soak power-loss/mất-BMS**. *(BTL pass + soak 72h production → Rev A.1+.)*
 
 ---
 

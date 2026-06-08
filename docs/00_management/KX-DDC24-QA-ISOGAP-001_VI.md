@@ -1,7 +1,7 @@
 # ISO Document-Control Gap Assessment & Restructure Plan — MK-DDC-24
 
 > **Document ID:** KX-DDC24-QA-ISOGAP-001
-> **Phiên bản:** 1.0 | 2026-06-08 · **Trạng thái:** Draft (chờ duyệt approach) · **Owner:** QA / Doc Control
+> **Phiên bản:** 1.0 | 2026-06-08 · **Trạng thái:** Approved (Owner 2026-06-08) (chờ duyệt approach) · **Owner:** QA / Doc Control
 > 📘 [docs/README](../README.md) · Liên quan: [QA-DOCCTRL](KX-DDC24-QA-DOCCTRL-001_VI.md) · [QA-REGISTER](KX-DDC24-QA-REGISTER-001_VI.md) · [QA-TRACE](KX-DDC24-QA-TRACE-001_VI.md)
 
 > 🎯 Trả lời thẳng câu hỏi: *"Cấu trúc lộn xộn vậy mà đạt ISO?"* — **Chưa đạt.** Repo mới ở mức

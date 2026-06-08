@@ -2,7 +2,7 @@
 
 > **Document ID:** KX-DDC24-EXT-RFQ-001  
 > **Phiên bản:** 1.0 | 2026-06-02  
-> **Trạng thái:** Draft — shortlist, chờ gửi RFQ và nhận quote  
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** DeveloperTeam  
 > **Ref:** IOT-5507 | HW-Q-003 | IEC 61326-1 | KX-DDC24-PM-MARKET-001 §6.3  
 > **Input:** EMC_THERMAL_NOTES.md, pre-compliance-report.md, qa-emc-verification-checklist.md

@@ -2,7 +2,7 @@
 
 > **Package ID:** IEC62443-M1-EVIDENCE-001
 > **Phiên bản:** 1.0 | 2026-06-02
-> **Trạng thái:** Draft — sẵn sàng cho internal audit review
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** DeveloperTeam
 > **Issue:** IOT-5492
 > **Chuẩn:** IEC 62443-4-1 (SM-1..SM-13)

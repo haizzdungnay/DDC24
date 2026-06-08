@@ -2,7 +2,7 @@
 
 > **Document ID:** IEC62443-M1-PLAN-001
 > **Phiên bản:** 1.0 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** DeveloperTeam + Tech Lead
 
 ---

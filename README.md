@@ -1,14 +1,46 @@
 # MK-DDC-24 — Bộ Tài liệu Kỹ thuật
 
-> **Sản phẩm:** MK-DDC-24 — Bộ điều khiển DDC 24 điểm, SOM Debian Linux  
+> **Sản phẩm:** MK-DDC-24 — Component-Based BMS Edge Automation Controller (24 IO, SOM Debian Linux)  
 > **Phiên bản tài liệu:** Ver 2.1 | 2026-05-28  
 > **Tổ chức:** KINEXUS Technologies JSC
 
-> ⭐ **Nguồn-chuẩn định vị & phạm vi (đọc trước tiên, 2026-06-08):** [PRODUCT_DEFINITION](docs/01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) · [REVA_SCOPE_ROADMAP](docs/01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) · Quyết định: [ADR-004..007](docs/adr/). Sản phẩm là **component-based DDC** (không IEC 61131-3/PLC IDE), Linux 3-process `mkddc-*`.
+> ⭐ **Nguồn-chuẩn định vị & phạm vi (đọc trước tiên, 2026-06-08):** [PRODUCT_DEFINITION](docs/01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) · [BMS_EDGE_STRATEGY](docs/01_specs/BMS_EDGE_STRATEGY_MK-DDC-24_VI.md) · [REVA_SCOPE_ROADMAP](docs/01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) · Quyết định: [ADR-004..008](docs/adr/). Sản phẩm là **Component-Based BMS Edge Automation Controller** (HVAC là use-case đầu, không HVAC-only; không IEC 61131-3/PLC IDE), Linux 3-process `mkddc-*`.
 > 🧭 **Cổng vào theo chuẩn ISO:** [docs/README](docs/README.md) (Document Hub) — điều hướng theo vòng đời, kế hoạch implement, UI/UX, register.
 > 🌟 **Chưa hiểu sản phẩm? Đọc trước:** [**System Handbook — Hiểu hệ thống từ số 0**](docs/00_management/KX-DDC24-SYS-ARCH-001_VI.md) (kể chuyện + sơ đồ, không cần biết code).
 > 🚀 **Người mới (dev):** [Project Overview](docs/00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) → [Getting Started](docs/02_design/GETTING_STARTED_DEV.md) → [Implementation Plan](docs/00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md).
 > 📜 Lịch sử thay đổi: [CHANGELOG.md](CHANGELOG.md) · 🗂 Danh mục tài liệu: [Master Register](docs/00_management/KX-DDC24-QA-REGISTER-001_VI.md)
+
+---
+
+## Sản phẩm Rev A (chốt — xem [CANONICAL_DECISIONS](docs/CANONICAL_DECISIONS.md))
+
+**MK-DDC-24 is a Component-Based BMS Edge Automation Controller** (HVAC là use-case đầu tiên, không HVAC-only; không phải IEC 61131-3 PLC).
+
+Rev A runtime = **3 process**:
+- **`mkddc-core`** — graph execution, component scheduler, state machine, priority/safe-state
+- **`mkddc-iobus`** — STM32/IO (IOP) protocol, DI/DO/UI/AO scan, Modbus RTU/TCP, BACnet/IP
+- **`mkddc-web`** — REST API, configuration UI (form/JSON), import/export `graph.json`
+
+Rev A **explicitly does NOT implement**:
+- IEC 61131-3 PLC runtime
+- FBD/ST Web IDE (wiresheet canvas)
+- production BTL certification
+- HMI panel
+- OTA / cloud (MQTT) agent
+
+### Legacy / Superseded Architecture
+
+Các nội dung sau là **legacy** — đã bị thay thế hoặc đẩy sang Rev sau bởi [ADR-004..008](docs/adr/).
+Nếu gặp trong tài liệu cũ, đọc như tham chiếu lịch sử, **không phải** kiến trúc Rev A:
+
+| Legacy | Thay bằng / Trạng thái |
+|--------|------------------------|
+| IEC 61131-3 PLC runtime, FBD/ST | component graph runtime — Rev C (ADR-004) |
+| KinexusET / FBD-ST Web IDE (wiresheet) | `mkddc-web` form/JSON; canvas → Rev B (ADR-006) |
+| Service `kinexus-*` (plc/agent/webide/hmi/ota…) | 3-process `mkddc-core/iobus/web` (ADR-005) |
+| MQTT/cloud agent trong Rev A | Deferred Rev B+ |
+| OTA A/B partition trong Rev A | Deferred Rev B+ |
+| BACnet MS/TP, Modbus slave | bỏ theo ARCH-R010 |
 
 ---
 
@@ -18,17 +50,17 @@
 |---|------|------|-------|-----------|
 | 1 | [DS_MK-DDC-24_VI.md](docs/01_specs/DS_MK-DDC-24_VI.md) | **Data Sheet** | Thông số kỹ thuật, tính năng, mã đặt hàng | Rev 2.1 |
 | 2 | [PRD_MK-DDC-24_VI.md](docs/01_specs/PRD_MK-DDC-24_VI.md) | **Product Requirements** | Mục tiêu, use cases, FR/NFR, acceptance criteria | Rev 1.1 |
-| 3 | [SRS_MK-DDC-24_VI.md](docs/01_specs/SRS_MK-DDC-24_VI.md) | **Software Requirements** | OS, soft PLC, BACnet, MQTT, security, OTA | Rev 1.1 |
+| 3 | [SRS_MK-DDC-24_VI.md](docs/01_specs/SRS_MK-DDC-24_VI.md) | **Software Requirements** | OS, component graph runtime, BACnet, Modbus, security *(MQTT/OTA → Rev B+)* | Rev 1.1 |
 | 4 | [HW_SPEC_MK-DDC-24_VI.md](docs/01_specs/HW_SPEC_MK-DDC-24_VI.md) | **Hardware Specification** | SOM, MCU, I/O circuits, power, cơ khí, EMC | Rev 1.1 |
 
-### Bộ tài liệu SW/FW Spec (`spec/`)
+### Bộ tài liệu SW/FW Spec (`docs/01_specs/`)
 
 | # | File | Loại | Mô tả | Trạng thái |
 |---|------|------|-------|-----------|
 | 5 | [SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md](docs/01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) | **IOP Interface Spec** | Kinexus-IOP v1: frame format, CRC, commands, timing, fault FSM | Rev 1.0 |
 | 6 | [FW_REQUIREMENTS_MK-DDC-24_VI.md](docs/01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md) | **FW Requirements** | MCU I/O sampling, AO/DO, watchdog, IOP, boot, OTA requirements | Rev 1.0 |
 | 7 | [FW_ARCH_SPEC_MK-DDC-24_VI.md](docs/01_specs/FW_ARCH_SPEC_MK-DDC-24_VI.md) | **FW Architecture** | FreeRTOS tasks, interrupt, memory map, data structures, fault FSM | Rev 1.0 |
-| 8 | [SW_REQUIREMENTS_MK-DDC-24_VI.md](docs/01_specs/SW_REQUIREMENTS_MK-DDC-24_VI.md) | **SW Requirements** | 9 modules: IOP driver, PLC, BACnet, MQTT/REST, security, OTA, HMI, logging | Rev 1.0 |
+| 8 | [SW_REQUIREMENTS_MK-DDC-24_VI.md](docs/01_specs/SW_REQUIREMENTS_MK-DDC-24_VI.md) | **SW Requirements** | Rev A modules: IOP driver, component graph runtime, BACnet, Modbus RTU/TCP, REST/web, security, logging *(MQTT/OTA/HMI → Deferred Rev B+)* | Rev 1.0 |
 | 9 | [SW_ARCH_SPEC_MK-DDC-24_VI.md](docs/01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) | **SW Architecture** | Process model, IPC (shm+seqlock), data flow, scaling, config, REST endpoints | Rev 1.0 |
 | 10 | [TEST_SPEC_MK-DDC-24_VI.md](docs/01_specs/TEST_SPEC_MK-DDC-24_VI.md) | **Test Specification** | L1-L6 test cases, FAT/SAT checklist, traceability matrix PRD→SRS→Spec→Test | Rev 1.0 |
 | 11 | [OPEN_ISSUES_MK-DDC-24_VI.md](docs/01_specs/OPEN_ISSUES_MK-DDC-24_VI.md) | **Open Issues** | P0/P1/P2 issues, assumptions, external dependencies, resolved issues | Rev 1.0 |
@@ -45,11 +77,12 @@
 │  ┌──────────────────────────────────────┐    │
 │  │  SOM: Radxa CM3 — RK3566 A55, 2GB LPDDR4  │    │
 │  │  Debian 12, PREEMPT_RT              │    │
-│  │  ► Soft PLC (IEC 61131-3 FBD + ST)  │    │
-│  │  ► BACnet MS/TP + BACnet/IP         │    │
-│  │  ► MQTT v5.0 + REST API             │    │
-│  │  ► KinexusET Web IDE                │    │
-│  │  ► OTA A/B partition                │    │
+│  │  ► Component graph (mkddc-core)     │    │
+│  │  ► BACnet/IP server (bỏ MS/TP)      │    │
+│  │  ► Modbus RTU x2/TCP (mkddc-iobus)  │    │
+│  │  ► REST API + Web config form/JSON  │    │
+│  │    (mkddc-web)                      │    │
+│  │  ► MQTT v5.0 / OTA A/B → Rev B+     │    │
 │  └──────────────┬───────────────────────┘    │
 │  │  ► Kinexus-IOP (UART 921,600 baud, isolated)  │    │
 │  ┌──────────────▼───────────────────────┐    │
@@ -68,7 +101,7 @@
 
 | Chuẩn | Phạm vi |
 |-------|---------|
-| **IEC 61131-3** | Ngôn ngữ lập trình PLC (FBD, ST) |
+| **IEC 61131-3** | Lập trình PLC FBD/ST — *tầm nhìn Rev C* (Rev A dùng component graph) |
 | **IEC 62443-4-1** | Quy trình phát triển bảo mật |
 | **IEC 62443-4-2** | Yêu cầu bảo mật component (roadmap) |
 | **IEC 61709** | Ước tính MTBF |

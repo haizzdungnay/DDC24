@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-SEC-REQ-001
 > **Phiên bản:** 1.0 | 2026-06-02
-> **Trạng thái:** Draft — Chờ CTO / Solution Architect review
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Tác giả:** Tech Lead
 > **Issue:** IOT-5490
 > **Chuẩn tham chiếu:** IEC 62443-4-1 SM-1, IEC 62443-4-2 (CR 1–4)

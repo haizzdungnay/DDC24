@@ -3,7 +3,7 @@
 
 > **Document ID:** ICD-MODBUS-MK-DDC-24-VI
 > **Phiên bản:** 2.0 | 2026-05-30
-> **Trạng thái:** Draft — chờ SW Lead ký (DR-2)
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > 📘 [README](../../01_specs/README.md) · Trace: `RTU-001..008`, `SW-MOD-001..011` · Triển khai: [SW_FIELDBUS_DESIGN](../software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md)
 
 > ⚠ **THAY ĐỔI LỚN (2026-05-30, ARCH-R010):** Phiên bản 1.0 của tài liệu này mô tả DDC là **Modbus slave** phục vụ BMS — **đã huỷ**. Đúng mô hình: **DDC là Modbus RTU MASTER** trên RS-485, đi **poll thiết bị phụ** (downstream). Northbound lên BMS dùng BACnet/IP + MQTT + REST (xem [D-3](BACNET_PICS_EPICS_MK-DDC-24_VI.md), [D-4](REST_API_OPENAPI_MK-DDC-24_VI.md)).

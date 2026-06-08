@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-SEC-RDP-PROCEDURE-001
 > **Phiên bản:** 1.0 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Tác giả:** Tech Lead
 > **Trace:** `SEC-051`, `SEC-SUP-001 §9.4 §E`, `IOT-5578`
 > **Liên quan:** [MCU_SPEC](../../hardware-design/05_mcu_io/MCU_STM32G0_SPEC.md) | [MCU_SECURE_BOOT](../02_design/firmware/FW_MCU_SECURE_BOOT_MK-DDC-24_VI.md) | [SEC-REQ-001](KX-DDC24-SEC-REQ-001_VI.md)

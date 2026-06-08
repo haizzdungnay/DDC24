@@ -2,7 +2,7 @@
 
 > **Document ID:** DDD-RUNTIME-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-06-08
-> **Trạng thái:** Draft — tài liệu LÕI (mọi thứ phụ thuộc vào nó)
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > 📘 **Đọc cùng:** [GRAPH_SCHEMA](../interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) ·
 > [SW_COMPONENT_LIBRARY](SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) · [ADR-004](../../adr/ADR-004-component-based-runtime.md), [ADR-005](../../adr/ADR-005-three-process-architecture.md)
 > **Ngôn ngữ:** C++17 · **Trace:** `RUN-001..` (thay `PLC-001..023` cũ)

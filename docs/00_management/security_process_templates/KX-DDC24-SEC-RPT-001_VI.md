@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-SEC-RPT-001
 > **Phiên bản:** 0.1 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** Tech Lead + Solution Architect
 > **Chuẩn liên quan:** IEC 62443-4-1 SM-2, STRIDE (Microsoft), ISO/IEC 27005
 > 📘 [docs/README](../../README.md)

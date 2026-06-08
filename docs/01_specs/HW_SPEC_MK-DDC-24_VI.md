@@ -1,7 +1,7 @@
 # HW_SPEC — MK-DDC-24 Hardware Specification
 
 > **Phiên bản:** 1.1 | 2026-05-28  
-> **Trạng thái:** Draft — Ver 1  
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Tác giả:** KINEXUS Technologies — Hardware Team  
 > **Chuẩn tham chiếu:** IEC 61010-1, IEC 60068, IEC 61326-1, RoHS 3, REACH  
 > **Liên quan:** [DS](DS_MK-DDC-24_VI.md) | [PRD](PRD_MK-DDC-24_VI.md) | [SRS](SRS_MK-DDC-24_VI.md)

@@ -2,7 +2,7 @@
 ## ISO-aligned Documentation Index
 
 > **Phiên bản:** 1.0 | 2026-05-30
-> **Chuẩn áp dụng:** ISO/IEC/IEEE 12207:2017 (vòng đời phần mềm), ISO/IEC/IEEE 15288 (hệ thống), ISO/IEC/IEEE 29148 (yêu cầu), ISO/IEC/IEEE 1016 (thiết kế), ISO/IEC 25010 (chất lượng), ISO 9001:2015 §7.5 (kiểm soát tài liệu), IEC 62443-4-1 (bảo mật), IEC 61131-3, ASHRAE 135 (BACnet).
+> **Chuẩn áp dụng:** ISO/IEC/IEEE 12207:2017 (vòng đời phần mềm), ISO/IEC/IEEE 15288 (hệ thống), ISO/IEC/IEEE 29148 (yêu cầu), ISO/IEC/IEEE 1016 (thiết kế), ISO/IEC 25010 (chất lượng), ISO 9001:2015 §7.5 (kiểm soát tài liệu), IEC 62443-4-1 (bảo mật), ASHRAE 135 (BACnet). *(IEC 61131-3 = tầm nhìn Rev C, Rev A KHÔNG dùng — xem ADR-004.)*
 > **Đối tượng:** PM, Tech Lead, FW/BE/FE Dev, UI/UX, QA, kỹ sư tích hợp. **Người mới đọc mục [§2 Bắt đầu](#2-người-mới-bắt-đầu-từ-đây).**
 
 ---

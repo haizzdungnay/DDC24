@@ -2,7 +2,7 @@
 ## Đánh giá SDLC hiện tại theo 13 Security Maturity practices
 
 > **Document ID:** KX-DDC24-SEC-GAP-001  
-> **Phiên bản:** 1.0 | 2026-06-02 · **Trạng thái:** Draft · **Owner:** Tech Lead  
+> **Phiên bản:** 1.0 | 2026-06-02 · **Trạng thái:** Approved (Owner 2026-06-08) · **Owner:** Tech Lead  
 > **Issue:** IOT-5486 · **Phạm vi:** IEC 62443-4-1 process alignment, SM-1..SM-13  
 > **Ref:** [PM-MARKET-001 §6.2](KX-DDC24-PM-MARKET-001_VI.md), [PM-GOAL-001 OBJ-11](KX-DDC24-PM-GOAL-001_VI.md), [PM-IMPLPLAN-001](KX-DDC24-PM-IMPLPLAN-001_VI.md)
 

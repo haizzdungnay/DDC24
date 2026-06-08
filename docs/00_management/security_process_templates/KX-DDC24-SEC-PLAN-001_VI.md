@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-SEC-PLAN-001
 > **Phiên bản:** 0.1 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** DevOps + Tech Lead
 > **Chuẩn liên quan:** IEC 62443-4-1 SM-6 (Vulnerability Management), SM-7 (Patch Management), ISO/IEC 30111, NIST SP 800-40
 > 📘 [docs/README](../../README.md)

@@ -1,9 +1,9 @@
 # Product Definition — MK-DDC-24 (MEKONG DDC-24IO-LINUX)
 
 > **Document ID:** PRODUCT-DEF-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-08
+> **Phiên bản:** 1.1 | 2026-06-08
 > **Trạng thái:** Accepted — Nguồn-chuẩn DUY NHẤT về định vị & triết lý sản phẩm
-> 📘 **Đọc cùng:** [README](README.md) · Quyết định nền: [ADR-004](../adr/ADR-004-component-based-runtime.md), [ADR-005](../adr/ADR-005-three-process-architecture.md), [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md), [ADR-007](../adr/ADR-007-web-stack-go.md)
+> 📘 **Đọc cùng:** [README](README.md) · [BMS_EDGE_STRATEGY](BMS_EDGE_STRATEGY_MK-DDC-24_VI.md) · Quyết định nền: [ADR-004](../adr/ADR-004-component-based-runtime.md), [ADR-005](../adr/ADR-005-three-process-architecture.md), [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md), [ADR-007](../adr/ADR-007-web-stack-go.md), [ADR-008](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md)
 > **Phạm vi Rev A:** [REVA_SCOPE_ROADMAP](REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md)
 
 > ⚠️ **Đây là tài liệu canonical.** Khi bất kỳ doc nào (PRD/SRS/DS/design) mô tả sản phẩm khác với tài liệu này, theo tài liệu này. Tài liệu này thay thế cách framing cũ "IEC 61131-3 soft-PLC + Web IDE FBD/ST" (xem ADR-004/006).
@@ -14,9 +14,13 @@
 
 **MEKONG DDC-24IO-LINUX** (mã: **MK-DDC-24**).
 
-> MK-DDC-24 là **DDC controller Linux 24 IO**, cấu hình bằng **component**, chạy
-> **local độc lập**, kết nối BMS/Gateway qua **BACnet/IP**, mở rộng thiết bị qua
-> **Modbus RTU/TCP**.
+> MK-DDC-24 là **Component-Based BMS Edge Automation Controller** (Linux, 24 IO):
+> cấu hình bằng **component**, chạy **local độc lập** (local-first), kết nối BMS/Gateway
+> qua **BACnet/IP**, mở rộng & bridge thiết bị qua **Modbus RTU/TCP**.
+>
+> **HVAC là use-case đầu tiên, KHÔNG phải giới hạn sản phẩm.** Thiết bị dùng cho điều
+> khiển biên, giám sát, tích hợp giao thức và tự động hóa nhiều hệ trong công trình (xem §3
+> Application Domains, và [BMS_EDGE_STRATEGY](BMS_EDGE_STRATEGY_MK-DDC-24_VI.md)).
 
 Câu cho sales/kỹ sư:
 
@@ -27,15 +31,27 @@ Câu cho sales/kỹ sư:
 
 | LÀ | KHÔNG phải |
 |----|------------|
-| DDC controller có runtime điều khiển riêng | IO module thường |
-| Cấu hình bằng component mẫu + custom component | Gateway thường |
-| Chạy độc lập khi mất BMS | PLC IDE clone / Niagara clone |
-| BACnet/IP northbound, Modbus field/expansion | AI controller |
+| BMS Edge Automation Controller | HVAC-only controller |
+| Component-based local controller (runtime riêng) | IO module thường |
+| Protocol gateway Modbus↔BACnet (kiêm controller) | Gateway pass-through đơn giản |
+| Local-first automation node (chạy khi mất BMS) | Cloud-dependent IoT device |
+| Commissioning bằng web/form/JSON | PLC IDE clone / Niagara clone |
+| Nền mở rộng theo component/template | Sản phẩm đóng cứng một ngành |
 
-## 3. Đối tượng & ứng dụng
+## 3. Đối tượng & ứng dụng (Application Domains)
 
-BMS, HVAC, AHU, FCU, bơm, quạt, bồn nước, energy meter, sensor/actuator, tủ điều
-khiển tòa nhà / nhà máy nhẹ.
+HVAC chỉ là use-case đầu tiên. MK-DDC-24 phục vụ nhiều hệ trong công trình / nhà máy nhẹ:
+
+| Domain | Ví dụ ứng dụng |
+|--------|----------------|
+| **HVAC** | AHU, FCU, fan, pump, valve, damper |
+| **Pump / Water** | tank level, áp suất, duty/standby pump, dry-run protection |
+| **Lighting** | zone control, schedule, occupancy input |
+| **Energy** | đọc meter, threshold alarm, peak/load monitor, pulse counting |
+| **Environment** | nhiệt độ, độ ẩm, CO2, PM2.5, áp suất |
+| **Alarm / Interlock** | fire/door contact, equipment trip, shutdown/interlock logic |
+| **Gateway** | bridge thiết bị Modbus RTU/TCP → BACnet/IP cho BMS |
+| **Data acquisition** | local IO → BMS/API |
 
 Mục tiêu: dễ dùng cho kỹ sư Việt Nam, đấu nối nhanh, cấu hình bằng web, không viết
 firmware, không IDE phức tạp, chạy độc lập khi mất BMS, kết nối tốt với Gateway/BMS.
@@ -126,9 +142,11 @@ Validator → Deploy graph.json → Runtime
   [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md).
 - Bộ component: [SW_COMPONENT_LIBRARY](../02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md).
 
-Nhóm component (đầy đủ tầm nhìn — Rev A chỉ làm tập con, xem REVA_SCOPE):
-IO · Logic · Timer · Math · Control (PID/Stage/LeadLag/Interlock/SafeState) ·
-Alarm/Schedule · Protocol (BACnet_*/Modbus_*).
+Nhóm component (đầy đủ tầm nhìn — Rev A làm tập con cố định **28 type**, xem REVA_SCOPE
++ [SW_COMPONENT_LIBRARY](../02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md)):
+IO · Logic · Timer (gồm RuntimeCounter) · Counter (PulseCounter) · Math ·
+Control (PID/Interlock/SafeState; Stage/LeadLag → Rev B) ·
+Alarm (gồm AlarmDelay) / Schedule · Protocol (BACnet_*/Modbus_*).
 
 ## 10. Chu kỳ runtime
 

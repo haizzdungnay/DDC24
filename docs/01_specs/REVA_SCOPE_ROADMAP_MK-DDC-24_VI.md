@@ -1,12 +1,13 @@
 # Rev A Scope & 90-Day Roadmap — MK-DDC-24
 
 > **Document ID:** REVA-SCOPE-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-08
+> **Phiên bản:** 1.1 | 2026-06-08
 > **Trạng thái:** Accepted — Nguồn-chuẩn DUY NHẤT về phạm vi Rev A & lịch 90 ngày
-> 📘 **Đọc cùng:** [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md) · ADR-004..007
+> 📘 **Đọc cùng:** [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md) ·
+> [BMS_EDGE_STRATEGY](BMS_EDGE_STRATEGY_MK-DDC-24_VI.md) · ADR-004..008
 
 > ⚠️ Deadline **90 ngày là cố định**; **scope là biến số**. Tài liệu định nghĩa
-> **Rev A.0 = "demo-grade"** (đủ chứng minh §22 product definition, chưa production-grade).
+> **Rev A.0 = "demo-grade"** (đủ chứng minh 3-domain acceptance §6, chưa production-grade).
 
 ---
 
@@ -27,7 +28,8 @@
 ```
 ✓ Linux boot ổn định + 24 IO đọc/ghi (scan 1 s; KHÔNG fast-IO 100ms)
 ✓ Graph engine + execution plan (topo-sort lúc deploy) — SW_RUNTIME_EXECUTION_MODEL
-✓ ~15 core component CỐ ĐỊNH (KHÔNG composite) — SW_COMPONENT_LIBRARY
+✓ Bộ component cố định Rev A = 28 type (KHÔNG composite) — SW_COMPONENT_LIBRARY
+   (gồm Interlock, AlarmDelay, RuntimeCounter, PulseCounter cho BMS tổng quát — ADR-008)
 ✓ Priority resolver + safe-state + power-on-state
 ✓ State snapshot (60 s + shutdown) + power-loss recovery
 ✓ BACnet/IP server: AI/AO/BI/BO/AV/BV + ghi setpoint (interop demo, KHÔNG đặt mục tiêu BTL pass)
@@ -86,7 +88,7 @@ Tuần 10–11
   Cả nhóm: tích hợp end-to-end trên HW thật
 
 Tuần 12–13  HARDENING + DEMO                       ★ DEMO KHÁCH
-  • Full demo §22 trên HW · soak power-loss / mất BMS / mất Modbus
+  • Full 3-domain demo (§6) trên HW · soak power-loss / mất BMS / mất Modbus
   • Fix bug · đóng gói image · doc nghiệm thu
 ```
 
@@ -96,11 +98,32 @@ Tuần 12–13  HARDENING + DEMO                       ★ DEMO KHÁCH
 > 90 ngày → phải cắt scope như §3; nếu vẫn không đủ, cắt tiếp commissioning hoặc một
 > nhánh protocol.)
 
-## 6. Acceptance — demo-grade (= §22 product definition)
+## 6. Acceptance — 3-domain demo (demo-grade)
 
-Pass khi chạy ổn định 12 điểm: đọc AI→scale→PID→AO valve; DI fan status→DO fan;
-BACnet đọc AI/DI/AO/DO/AV/BV + ghi setpoint AV; Modbus RTU đọc VFD/meter; Modbus TCP
-đọc expansion; mất BMS vẫn chạy local; mất điện bật lại không mất config; backup/restore.
+Chứng minh sản phẩm **tổng quát** (không HVAC-only) bằng 3 demo vertical. Pass khi cả 3
+chạy ổn định; minh họa chạy được ở `examples/`.
+
+### Demo 1 — HVAC mini (`examples/hvac-mini`)
+- AI nhiệt độ → Scale → PID → AO valve
+- DI fan status → AlarmHigh/Compare → DO fan enable + alarm
+- BACnet expose AI/BI/AO/BO/AV/BV + ghi setpoint AV
+
+### Demo 2 — Pump/Water (`examples/pump-water`)
+- DI level switch + AI pressure → DO pump enable
+- OnDelay/OffDelay sequencing
+- **Interlock** (chặn pump khi điều kiện an toàn sai)
+- dry-run / pressure alarm với **AlarmDelay** (chống báo giả)
+- **RuntimeCounter** giờ chạy pump (maintenance)
+- logic local vẫn chạy khi **mất BMS**
+
+### Demo 3 — Energy/Gateway (`examples/energy-gateway`)
+- Modbus RTU đọc energy meter → Scale → BACnet AV expose
+- **PulseCounter** đếm xung meter (energy/water)
+- threshold alarm
+- stale/fallback khi **mất thiết bị Modbus**
+
+### Điểm chung (mọi demo)
+mất điện bật lại không mất config · backup/restore · BACnet interop (KHÔNG đặt mục tiêu BTL).
 
 Khác production: chưa soak 30 ngày, chưa BTL certified, chưa RBAC → đó là Rev A.1.
 

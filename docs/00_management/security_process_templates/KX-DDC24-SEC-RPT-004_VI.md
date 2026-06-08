@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-SEC-RPT-004
 > **Phiên bản:** 0.1 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** Tech Lead + Procurement
 > **Chuẩn liên quan:** IEC 62443-4-1 SM-9 (Supplier Management), ISO 28000, NIST SP 800-161 (Supply Chain Risk Management)
 > 📘 [docs/README](../../README.md)

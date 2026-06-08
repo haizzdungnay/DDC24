@@ -3,7 +3,7 @@
 
 > **Document ID:** KX-DDC24-SEC-PLAN-002
 > **Phiên bản:** 0.1 | 2026-06-02
-> **Trạng thái:** Draft
+> **Trạng thái:** Approved (Owner 2026-06-08)
 > **Owner:** Release + QA
 > **Chuẩn liên quan:** IEC 62443-4-1 SM-13 (Configuration Management), ISO 10007, NIST SP 800-128 (Security-Focused Configuration Management)
 > 📘 [docs/README](../../README.md)

@@ -2,7 +2,7 @@
 ## Thiết kế giao diện màn hình tại chỗ (2.4" TFT)
 
 > **Document ID:** KX-DDC24-UX-HMI-001
-> **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Draft · **Owner:** UX Lead
+> **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Approved (Owner 2026-06-08) · **Owner:** UX Lead
 > 📘 [docs/README](../README.md) · Theo [Design System](KX-DDC24-UX-SYSTEM-001_VI.md) · Triển khai [SW_HMI_DESIGN](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md)
 > **Trace:** `HMI-001..022`, `SW-HMI-001..008`
 

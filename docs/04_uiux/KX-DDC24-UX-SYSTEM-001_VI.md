@@ -2,7 +2,7 @@
 ## Hệ thống thiết kế giao diện (tokens + components)
 
 > **Document ID:** KX-DDC24-UX-SYSTEM-001
-> **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Draft · **Owner:** UX Lead
+> **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Approved (Owner 2026-06-08) · **Owner:** UX Lead
 > **Chuẩn:** WCAG 2.1 AA (tiếp cận), Material-ish / industrial HMI guideline
 > 📘 [docs/README](../README.md) · Dùng cho: web Rev A (form/JSON — [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md)), [HMI](KX-DDC24-UX-HMI-001_VI.md) *(deferred Rev B)*
 
