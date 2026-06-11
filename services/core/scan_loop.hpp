@@ -1,0 +1,59 @@
+/**
+ * @file  scan_loop.hpp
+ * @brief Vòng quét tuyệt-đối-thời-gian (07 §2): clock_nanosleep(ABSTIME), không drift.
+ *        Thứ tự bước cố định: read IO → quality → web cmd → graph → priority →
+ *        safe-state → write output → publish BACnet → metrics → sleep.
+ */
+#ifndef CORE_SCAN_LOOP_HPP
+#define CORE_SCAN_LOOP_HPP
+
+#include <atomic>
+#include <cstdint>
+
+#include "bacnet_objtable.hpp"
+#include "core_metrics.hpp"
+#include "graph_runtime.hpp"
+#include "iobus_reader.hpp"
+#include "output_writer.hpp"
+#include "point_quality.hpp"
+#include "point_table.hpp"
+#include "priority_resolver.hpp"
+#include "safe_state.hpp"
+#include "web_ipc.hpp"
+
+namespace core {
+
+struct ScanDeps {
+    IobusReader*      reader;
+    PointTable*       table;
+    PointQuality*     quality;
+    WebIpc*           web;
+    GraphRuntime*     graph;
+    PriorityResolver* resolver;
+    SafeState*        safe;
+    OutputWriter*     writer;
+    BacnetObjTable*   bacnet;
+    CoreMetrics*      metrics;
+};
+
+class ScanLoop {
+public:
+    explicit ScanLoop(ScanDeps deps) : d_(deps) {}
+
+    /* 1 chu kỳ scan (step 1-10 của 07 §2) — public để test không cần timer. */
+    void step();
+
+    /* Chạy tới khi *shutdown = true. period_ns mặc định 1s (Rev A).
+     * on_first_scan: callback sau scan đầu (sd_notify READY). */
+    void run(const std::atomic<bool>& shutdown, uint64_t period_ns,
+             void (*after_scan)(void*) = nullptr, void* ctx = nullptr);
+
+private:
+    ScanDeps d_;
+    IoSnapshot last_io_;   /* giữ snapshot cũ khi seqlock fail */
+    uint64_t budget_ns_ = 1000000000ull;   /* = period; overrun khi exec vượt */
+};
+
+} // namespace core
+
+#endif /* CORE_SCAN_LOOP_HPP */

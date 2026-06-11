@@ -1,0 +1,321 @@
+/**
+ * @file  main.cpp (mkddc-iobus)
+ * @brief Entry: init → config → shm → UART → handshake → poll 100Hz → signal → sd_notify.
+ *        Startup sequence đúng bảng 06 §13. State machine 05 §13.
+ */
+#include <atomic>
+#include <csignal>
+#include <cstdio>
+#include <cstring>
+#include <ctime>
+#include <string>
+
+#include <unistd.h>
+
+#include "bridge/core_bridge.hpp"
+#include "bridge/output_command.hpp"
+#include "config/iobus_config.hpp"
+#include "diagnostics/alarm_publisher.hpp"
+#include "diagnostics/iobus_metrics.hpp"
+#include "io/io_cache.hpp"
+#include "io/io_scaling.hpp"
+#include "io/io_types.hpp"
+#include "iop/iop_client.hpp"
+#include "platform/realtime.hpp"
+#include "platform/systemd_notify.hpp"
+
+namespace {
+
+std::atomic<bool> g_shutdown{false};
+
+void on_signal(int)
+{
+    g_shutdown.store(true);
+}
+
+uint64_t now_ns()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
+}
+
+void sleep_until(struct timespec* next, uint64_t period_ns)
+{
+    next->tv_nsec += static_cast<long>(period_ns);
+    while (next->tv_nsec >= 1000000000L) {
+        next->tv_nsec -= 1000000000L;
+        next->tv_sec += 1;
+    }
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, next, nullptr);
+}
+
+/* Adapter IopClient → CommandSink cho OutputCommand */
+class ClientSink : public iobus::CommandSink {
+public:
+    explicit ClientSink(iobus::IopClient& c) : c_(c) {}
+    iobus::IopResult send_set_do(uint8_t mask, uint8_t value) override { return c_.set_do(mask, value); }
+    iobus::IopResult send_set_ao(const uint16_t raw[KX_N_AO]) override { return c_.set_ao(raw); }
+private:
+    iobus::IopClient& c_;
+};
+
+} // namespace
+
+int main(int argc, char** argv)
+{
+    using namespace iobus;
+
+    std::string config_path = "/data/config/iobus.conf";
+    bool config_from_cli = false;
+    std::string uart_override;
+    std::string log_level_override;
+
+    for (int i = 1; i < argc; i++) {
+        const std::string a = argv[i];
+        if (a == "--config" && i + 1 < argc)         { config_path = argv[++i]; config_from_cli = true; }
+        else if (a == "--uart" && i + 1 < argc)      { uart_override = argv[++i]; }
+        else if (a == "--log-level" && i + 1 < argc) { log_level_override = argv[++i]; }
+        else if (a == "--help") {
+            std::printf("usage: mkddc-iobus [--config FILE] [--uart DEV] [--log-level LVL]\n");
+            return 0;
+        }
+    }
+
+    std::fprintf(stderr, "INFO  iobus.start version=1.1.0 pid=%d\n", getpid());
+
+    /* 1. Load config — JSON hỏng → fail-fast exit(1) */
+    IobusConfig cfg;
+    if (!load_config(config_path, config_from_cli, &cfg))
+        return 1;
+    if (!uart_override.empty()) cfg.uart_device = uart_override;
+    if (!log_level_override.empty()) cfg.log_level = log_level_override;
+
+    /* 2. Create/attach SHM — fail → exit(1) (không có SHM thì service vô nghĩa) */
+    IobusMetrics metrics;
+    IoCache cache;
+    if (!cache.attach())
+        return 1;
+    {
+        char units[KX_N_UI][8];
+        uint8_t modes[KX_N_AO];
+        for (int i = 0; i < KX_N_UI; i++) {
+            std::strncpy(units[i], sensor_unit(cfg.ui_sensor[i]), sizeof(units[i]) - 1);
+            units[i][sizeof(units[i]) - 1] = '\0';
+        }
+        for (int i = 0; i < KX_N_AO; i++)
+            modes[i] = 0;   /* default 0-10V (MCU boot); cập nhật sau ACK SET_AO_CFG */
+        cache.write_ui_units(units);
+        cache.write_ao_mode(modes);
+    }
+
+    /* 3. Alarm socket — fail → degraded, tiếp tục */
+    AlarmPublisher alarm;
+    alarm.open();
+
+    /* 4. RT + mlockall — thiếu cap → degraded, tiếp tục */
+    set_rt(cfg.rt_priority);
+    lock_mem();
+
+    /* 5. Signal handler */
+    struct sigaction sa {};
+    sa.sa_handler = on_signal;
+    sigaction(SIGTERM, &sa, nullptr);
+    sigaction(SIGINT, &sa, nullptr);
+
+    IopClientConfig ccfg;
+    ccfg.baud = cfg.baud;
+    ccfg.response_timeout_ms = cfg.response_timeout_ms;
+    ccfg.handshake_timeout_ms = cfg.handshake_timeout_ms;
+    ccfg.max_retry = cfg.max_retry;
+    IopClient client(&metrics, ccfg);
+    ClientSink sink(client);
+    OutputCommand output(sink);
+    CoreBridge bridge(cache.shm());
+    SystemdNotify sd;
+
+    const uint64_t poll_period_ns = static_cast<uint64_t>(cfg.poll_period_ms) * 1000000ull;
+    const uint64_t fault_timeout_ns = static_cast<uint64_t>(IOP_FAULT_TIMEOUT_MS) * 1000000ull;
+    const uint64_t reconnect_ns = static_cast<uint64_t>(cfg.reconnect_interval_ms) * 1000000ull;
+
+    bool ready_notified = false;
+    uint64_t last_wdg_kick = 0;
+    uint64_t last_reconnect_try = 0;
+    uint64_t last_safe_retry = 0;
+    uint16_t prev_fault_flags = 0;
+    uint32_t consecutive_poll_fail = 0;
+
+    /* startup() — bước 6..9 của 06 §13: UART → handshake → RESET_IO → SET_AO_CFG.
+     * Trả true nếu sẵn sàng NORMAL_POLL. */
+    auto startup = [&]() -> bool {
+        if (!client.open(cfg.uart_device))
+            return false;
+        IopResult hs = client.handshake();
+        if (!hs.ok()) {
+            alarm.publish({"IOP_INIT_FAIL", "critical", "MCU handshake failed",
+                           "{\"uart\":\"" + cfg.uart_device + "\"}"});
+            return false;
+        }
+        /* RESET_IO reason=NORMAL — khuyến nghị, fail chỉ WARN */
+        IopResult rst = client.reset_io(IOP_RESET_REASON_NORMAL);
+        if (!rst.ok())
+            std::fprintf(stderr, "WARN  iop.reset reason=normal fail code=%d (tiếp tục)\n", rst.code);
+        else
+            std::fprintf(stderr, "INFO  iop.reset reason=normal ack=ok\n");
+
+        /* SET_AO_CFG nếu config có AO 4-20mA */
+        uint8_t mode_mask = 0;
+        bool need_cfg = false;
+        for (int i = 0; i < KX_N_AO; i++) {
+            if (cfg.ao_mode[i] == AoMode::MA4_20) {
+                mode_mask |= static_cast<uint8_t>(1u << i);
+                need_cfg = true;
+            }
+        }
+        uint8_t applied_modes[KX_N_AO] = {0, 0, 0, 0};
+        AoMode applied_enum[KX_N_AO] = {AoMode::V0_10, AoMode::V0_10, AoMode::V0_10, AoMode::V0_10};
+        if (need_cfg) {
+            IopResult ac = client.set_ao_cfg(mode_mask);
+            if (ac.ok()) {
+                for (int i = 0; i < KX_N_AO; i++) {
+                    applied_modes[i] = (mode_mask >> i) & 1u;
+                    applied_enum[i] = static_cast<AoMode>(applied_modes[i]);
+                }
+                std::fprintf(stderr, "INFO  iop.ao_cfg mask=0x%02X ack=ok\n", mode_mask);
+            } else {
+                std::fprintf(stderr, "WARN  iop.ao_cfg fail code=%d nack=0x%02X (giữ 0-10V)\n",
+                             ac.code, ac.nack_err);
+            }
+        }
+        cache.write_ao_mode(applied_modes);
+        output.set_ao_modes(applied_enum);
+        output.reset_last_sent();
+        client.set_status(IopStatus::NORMAL_POLL);
+        cache.write_status(KX_IOP_NORMAL, metrics);
+        consecutive_poll_fail = 0;
+        return true;
+    };
+
+    if (!startup()) {
+        client.set_status(IopStatus::RECONNECT);
+        cache.write_status(KX_IOP_FAULT, metrics);
+        last_reconnect_try = now_ns();
+    } else {
+        sd.ready();
+        ready_notified = true;
+    }
+    if (!ready_notified) {
+        sd.ready();   /* degraded: vẫn READY khi vào RECONNECT (unit 06 §10) */
+        ready_notified = true;
+    }
+
+    struct timespec next;
+    clock_gettime(CLOCK_MONOTONIC, &next);
+
+    /* ---- Main loop: poll 10ms tuyệt-đối-thời-gian ---- */
+    while (!g_shutdown.load()) {
+        const uint64_t t = now_ns();
+
+        /* watchdog kick mỗi ≤2.5s (WatchdogSec=5) */
+        if (t - last_wdg_kick > 2000000000ull) {
+            sd.watchdog_kick();
+            last_wdg_kick = t;
+        }
+
+        const IopStatus st = client.status();
+
+        if (st == IopStatus::NORMAL_POLL || st == IopStatus::SAFE_STATE) {
+            IopIoResp resp;
+            const IopResult r = client.get_io(&resp);
+            if (r.ok()) {
+                if (st == IopStatus::SAFE_STATE) {
+                    /* nhận IO_RESP hợp lệ → RECONNECT (handshake lại) — 05 §13 */
+                    client.set_status(IopStatus::RECONNECT);
+                    last_reconnect_try = 0;   /* thử ngay */
+                } else {
+                    consecutive_poll_fail = 0;
+
+                    /* scale + build snapshot */
+                    IoSnapshot snap;
+                    snap.ts_ns = now_ns();
+                    for (int i = 0; i < KX_N_UI; i++) {
+                        kx_quality_t q;
+                        snap.ui_value[i] = ui_to_eng(resp.ui_raw[i], cfg.ui_sensor[i], &q);
+                        snap.ui_quality[i] = static_cast<uint8_t>(q);
+                    }
+                    for (int i = 0; i < KX_N_DI; i++)
+                        snap.di_state[i] = (resp.di_mask >> i) & 1u;
+                    for (int i = 0; i < KX_N_DO; i++)
+                        snap.do_feedback[i] = (resp.do_fb_mask >> i) & 1u;
+                    snap.fault_flags = resp.fault_flags;
+                    snap.iop_status = KX_IOP_NORMAL;
+                    snap.mcu_temp_x10 = resp.mcu_temp_x10;
+                    cache.write_io(snap, metrics);
+
+                    /* alarm khi FAULT_FLAGS đổi */
+                    if (resp.fault_flags != prev_fault_flags) {
+                        if (resp.fault_flags != 0) {
+                            char data[64];
+                            std::snprintf(data, sizeof(data), "{\"fault_flags\":%u}", resp.fault_flags);
+                            alarm.publish({"MCU_FAULT_FLAGS",
+                                           (resp.fault_flags & (IOP_FAULT_WDG_RESET | IOP_FAULT_RELAY_STUCK |
+                                                                IOP_FAULT_MCU_OVERTEMP)) ? "critical" : "warning",
+                                           "MCU fault flags changed", data});
+                            if (resp.fault_flags & IOP_FAULT_WDG_RESET) {
+                                IopDiagResp diag;
+                                client.get_diag(&diag);   /* MCU clear sticky bit khi nhận GET_DIAG */
+                            }
+                        }
+                        prev_fault_flags = resp.fault_flags;
+                    }
+
+                    /* output: đọc lệnh core từ shm → SET_* nếu CHANGED (cùng thread, 1 owner UART) */
+                    float ao_sp[KX_N_AO];
+                    uint8_t do_cmd[KX_N_DO];
+                    bridge.read_outputs(ao_sp, do_cmd);
+                    if (output.safe_state_blocked() && t - last_safe_retry > 1000000000ull) {
+                        output.clear_safe_blocked();   /* retry chậm 1s khi MCU safe */
+                        last_safe_retry = t;
+                    }
+                    output.process(ao_sp, do_cmd);
+                }
+            } else {
+                consecutive_poll_fail++;
+                const uint64_t last_resp = client.last_io_resp_ns();
+                const bool fault_window = (last_resp == 0) ||
+                                          (now_ns() - last_resp > fault_timeout_ns);
+                if (st == IopStatus::NORMAL_POLL && consecutive_poll_fail >= 1 && fault_window) {
+                    /* >100ms không IO_RESP hợp lệ → FAULT → RESET_IO(0x05) → SAFE_STATE */
+                    client.set_status(IopStatus::FAULT);
+                    std::fprintf(stderr, "ERROR iop.fault reason=MCU_TIMEOUT action=SAFE_STATE\n");
+                    alarm.publish({"IOP_TIMEOUT", "critical",
+                                   "MCU not responding after retries",
+                                   "{\"uart\":\"" + cfg.uart_device + "\"}"});
+                    client.reset_io(IOP_RESET_REASON_IOP_FAULT);   /* best-effort, 1 lần */
+                    client.set_status(IopStatus::SAFE_STATE);
+                    cache.write_status(KX_IOP_SAFE, metrics);
+                    output.reset_last_sent();
+                }
+            }
+        } else if (st == IopStatus::RECONNECT || st == IopStatus::FAULT) {
+            if (last_reconnect_try == 0 || t - last_reconnect_try >= reconnect_ns) {
+                last_reconnect_try = t;
+                std::fprintf(stderr, "INFO  iop.reconnect\n");
+                if (startup()) {
+                    /* recovered */
+                } else {
+                    client.set_status(IopStatus::RECONNECT);
+                    cache.write_status(KX_IOP_FAULT, metrics);
+                }
+            }
+        }
+
+        sleep_until(&next, poll_period_ns);
+    }
+
+    /* Shutdown: đóng UART, KHÔNG xóa shm (core còn đọc) */
+    std::fprintf(stderr, "INFO  iobus.shutdown\n");
+    client.close();
+    cache.detach();
+    return 0;
+}
