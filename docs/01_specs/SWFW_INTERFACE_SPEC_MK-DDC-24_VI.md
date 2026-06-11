@@ -2,11 +2,14 @@
 ## MK-DDC-24 | SOM ↔ MCU Communication Protocol
 
 > **Document ID:** IOP-SPEC-MK-DDC-24-VI  
-> **Phiên bản:** 1.0 | 2026-05-28  
-> **Trạng thái:** Approved (Owner 2026-06-08)
+> **Phiên bản:** 1.1 | 2026-06-11 (Contract Freeze: thêm FAULT bit6 `VDD_FAULT`, bảng RESET_IO reason đầy đủ, sửa CRC test vector sai 0x84C0/0x556B → 0x6C20/0xACE1)
+> **Trạng thái:** Approved (Owner 2026-06-08) · Frozen 2026-06-11
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
 > **Tác giả:** KINEXUS Technologies — System Architecture Team  
-> **Owner duy nhất:** Tài liệu này là nguồn spec DUY NHẤT cho interface SOM↔MCU. Mọi câu hỏi về giao thức đều refer về đây.
+> **Owner duy nhất:** Tài liệu này là nguồn spec DUY NHẤT (dạng diễn giải) cho interface SOM↔MCU.
+> ⚠️ **Precedence (Contract Freeze):** giá trị thực thi — opcode, payload layout, enum, FAULT bit,
+> RESET reason, CRC, hằng số timing — lấy theo [`shared/iop_protocol.h`](../../shared/iop_protocol.h).
+> Spec lệch header → **header thắng**, sửa spec theo. Xem [15_CONTRACT_FREEZE](../03_implementation/15_CONTRACT_FREEZE.md).
 
 **Tài liệu liên quan:**
 
@@ -184,17 +187,22 @@ Frame: AA 00 01 <SEQ> <CRC_HI> <CRC_LO>
 | 30–31 | SAMPLE_CNT | 2 | uint16 big-endian | ADC sample counter (wrap). Dùng để phát hiện MCU hang |
 | 32–33 | RESERVED | 2 | — | Gửi 0x0000. SOM bỏ qua. |
 
-#### 4.3.1 FAULT_FLAGS Bitmask
+#### 4.3.1 FAULT_FLAGS Bitmask (bảng chuẩn duy nhất — khớp `IOP_FAULT_*` trong `shared/iop_protocol.h`)
 
-| Bit | Tên | Mô tả |
-|-----|-----|-------|
-| 0 | `ADC_FAULT` | ADS131M08 không trả lời qua SPI trong 100ms |
-| 1 | `DAC_FAULT` | DAC8554 không trả lời qua SPI |
-| 2 | `UI_OV` | Bất kỳ kênh UI nào đo > 110% full scale |
-| 3 | `RELAY_STUCK` | DO feedback không khớp với lệnh sau 20ms |
-| 4 | `MCU_WATCHDOG_RESET` | MCU đã reset từ watchdog (bit sticky, clear khi SOM đọc) |
-| 5 | `MCU_OVERTEMP` | MCU_TEMP > 85°C |
-| 6–15 | Reserved | 0 |
+| Bit | Tên (macro header) | Set khi | Clear khi | Sticky |
+|-----|--------------------|---------|-----------|--------|
+| 0 | `ADC_FAULT` (`IOP_FAULT_ADC`) | ADS131M08 không có mẫu hợp lệ trong 100ms (DRDY/SPI timeout từng mẫu = 5ms) | Reinit ADC thành công + có mẫu hợp lệ | Không |
+| 1 | `DAC_FAULT` (`IOP_FAULT_DAC`) | DAC8554 không phản hồi SPI | Ghi DAC thành công trở lại | Không |
+| 2 | `UI_OV` (`IOP_FAULT_UI_OV`) | Bất kỳ kênh UI nào đo > 110% full scale | Mọi UI ≤ 110% FS | Không |
+| 3 | `RELAY_STUCK` (`IOP_FAULT_RELAY_STUCK`) | DO feedback không khớp với lệnh sau 20ms | Feedback khớp lệnh trở lại | Không |
+| 4 | `MCU_WATCHDOG_RESET` (`IOP_FAULT_WDG_RESET`) | Boot sau reset do IWDG/WWDG (đọc RCC_CSR) | MCU nhận **GET_DIAG đầu tiên sau boot** (SOM xác nhận đã đọc) | **Sticky** |
+| 5 | `MCU_OVERTEMP` (`IOP_FAULT_MCU_OVERTEMP`) | MCU_TEMP > 85.0°C | MCU_TEMP < 80.0°C (hysteresis 5°C) | Không |
+| 6 | `VDD_FAULT` (`IOP_FAULT_VDD`) | VDD ngoài [3.0, 3.6]V — MCU đồng thời ngừng cập nhật AO | VDD trong dải trở lại | Không |
+| 7–15 | Reserved | Luôn 0 | — | — |
+
+> Hành vi SOM (iobus): thấy bit4 → phát alarm `MCU_WATCHDOG_RESET` rồi gửi GET_DIAG (vòng diag 1s
+> sẵn có) để MCU clear bit. Các bit khác → mirror vào `fault_flags` trong SHM + alarm theo
+> [06_MKDDC_IOBUS §9](../03_implementation/06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md).
 
 ---
 
@@ -336,13 +344,25 @@ DO_VALUE = 0b00000001 (0x01)  ← DO1=đóng, DO2=mở
 
 | Offset | Field | Size | Encoding | Mô tả |
 |--------|-------|------|----------|-------|
-| 0 | REASON | 1 | uint8 | 0x01=PLC watchdog; 0x02=BMS timeout; 0x03=operator; 0x04=OTA reboot |
+| 0 | REASON | 1 | uint8 | Bảng reason chuẩn dưới đây (`IOP_RESET_REASON_*` trong header) |
 
-**MCU xử lý:**
+**Bảng REASON chuẩn duy nhất:**
+
+| Giá trị | Macro header | Ai gửi | Khi nào dùng | Log/Alarm phía SOM |
+|---------|--------------|--------|--------------|---------------------|
+| `0x00` | `IOP_RESET_REASON_NORMAL` | iobus | Sau handshake lúc startup — đưa IO về safe-state đã biết | INFO `iop.reset reason=normal` |
+| `0x01` | `IOP_RESET_REASON_CORE_WDG` | iobus | Phát hiện core/scan-loop chết (**Rev A: reserved, chưa dùng**) | ERROR + alarm `CORE_WDG` |
+| `0x02` | `IOP_RESET_REASON_BMS_TIMEOUT` | core→iobus | Policy BMS/BACnet timeout (**Rev A: reserved, chưa dùng**) | WARN + alarm |
+| `0x03` | `IOP_RESET_REASON_OPERATOR` | web→core→iobus | Lệnh commissioning của người vận hành | INFO + audit log |
+| `0x04` | `IOP_RESET_REASON_OTA` | iobus | SOM chuẩn bị nạp firmware MCU | INFO `iop.reset reason=ota` |
+| `0x05` | `IOP_RESET_REASON_IOP_FAULT` | iobus | Đường FAULT: >100ms không có IO_RESP hợp lệ (trước khi vào SAFE_STATE) | ERROR + alarm `IOP_TIMEOUT` |
+
+**MCU xử lý (GIỐNG NHAU cho mọi reason — reason chỉ để log/diag, MCU không phân nhánh hành vi):**
 1. Tất cả AO về `SAFE_AO_VALUE` (mặc định: 0V / 4mA tùy mode)
 2. Tất cả relay DO về `SAFE_DO_VALUE` (mặc định: open = 0)
-3. Ghi fault event vào MCU fault log
+3. Ghi fault event vào MCU fault log **kèm reason byte**
 4. Trả `ACK (0x12)` với ECHOED_CMD = 0x40
+5. REASON ngoài bảng (0x06–0xFF): vẫn safe-state + ACK, log reason lạ (forward-compatible)
 
 ---
 
@@ -539,15 +559,29 @@ MCU boot:
 
 ## 10. Test Vectors
 
-### 10.1 CRC16 Test Vectors
+### 10.1 CRC16 Test Vectors (bộ chuẩn 12 vector — Contract Freeze 2026-06-11)
 
-| Input (hex) | Expected CRC16/Modbus |
-|------------|----------------------|
-| `AA 00 01 00` | `0x84C0` |
-| `AA 00 01 01` | `0x556B` |
-| `AA 04 10 05 00 00 FF FF 00 00 00 00` | TBD (tính bằng reference impl) |
+Input = `SOF..PAYLOAD` (phần được tính CRC). Trong frame, CRC truyền **HI trước, LO sau**.
 
-> **Yêu cầu:** Cả SW và FW PHẢI produce kết quả CRC giống nhau cho cùng input. Chạy cross-check test khi tích hợp lần đầu.
+| # | Ý nghĩa | Input (hex) | CRC16 |
+|---|---------|-------------|-------|
+| V1 | GET_IO SEQ=0 | `AA 00 01 00` | `0x6C20` |
+| V2 | GET_IO SEQ=1 | `AA 00 01 01` | `0xACE1` |
+| V3 | GET_IO SEQ=255 (wrap) | `AA 00 01 FF` | `0x2C60` |
+| V4 | GET_DIAG SEQ=2 | `AA 00 20 02` | `0xFDB9` |
+| V5 | HANDSHAKE SEQ=0, ver=0x0101, cap=0x0003 | `AA 04 30 00 01 01 00 03` | `0x019A` |
+| V6 | SET_DO SEQ=3, mask=01, value=01 | `AA 02 11 03 01 01` | `0xBD54` |
+| V7 | SET_DO SEQ=4, mask=03, value=01 | `AA 02 11 04 03 01` | `0x1CE4` |
+| V8 | SET_AO SEQ=5, AO1=32768 | `AA 08 10 05 80 00 00 00 00 00 00 00` | `0x1EE3` |
+| V9 | SET_AO_CFG SEQ=6, mode=0x02 | `AA 01 13 06 02` | `0x404E` |
+| V10 | RESET_IO SEQ=7, reason=0x05 | `AA 01 40 07 05` | `0x03FE` |
+| V11 | ACK SEQ=3, echo SET_DO | `AA 01 12 03 11` | `0x1D5D` |
+| V12 | NACK SEQ=8, GET_IO + ERR_CRC_FAIL | `AA 02 FE 08 01 03` | `0x6A90` |
+
+> **Yêu cầu:** Cả SW và FW PHẢI produce kết quả CRC giống nhau cho cùng input (unit test ≥10 vector
+> mỗi phía — IOP-SW-010/IOP-FW-010, dùng đúng bảng này). Chạy cross-check test khi tích hợp lần đầu.
+> Vector cũ `0x84C0`/`0x556B` trong tài liệu trước 2026-06-11 là **SAI** (không khớp thuật toán
+> poly 0xA001/init 0xFFFF trong `iop_crc16()`) — đã thay bằng bảng trên.
 
 ### 10.2 Frame Encoding Examples
 

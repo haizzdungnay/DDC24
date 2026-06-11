@@ -12,10 +12,10 @@
 | Nhóm | Sở hữu code | Không được đụng | Hợp đồng giáp ranh |
 |------|-------------|------------------|---------------------|
 | Dev 1 — FW_MCU | `fw/` | `services/`, `web/` | `shared/iop_protocol.h` (chung với Dev 2) |
-| Dev 2 — SOM | `services/iobus/`, `services/core/`, `shared/` | `fw/`, `web/` | `iop_protocol.h` (với Dev 1), `kinexus_shm.h` (với Dev 3 đọc qua web→core) |
+| Dev 2 — SOM | `services/iobus/`, `services/core/`, `shared/` | `fw/`, `web/` | `iop_protocol.h` (với Dev 1), `mkddc_shm.h` (với Dev 3 đọc qua web→core) |
 | Dev 3 — Web/BE | `web/` | `fw/`, `services/` | REST + IPC command/setpoint tới core (với Dev 2) |
 
-> Quy tắc vàng: **`shared/iop_protocol.h` và `shared/kinexus_shm.h` là HỢP ĐỒNG**. Đổi 1
+> Quy tắc vàng: **`shared/iop_protocol.h` và `shared/mkddc_shm.h` là HỢP ĐỒNG + nguồn-chuẩn CUỐI (docs lệch → header thắng, xem [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md))**. Đổi 1
 > bên = đổi cả hai bên + bump version + chạy lại cross-test. KHÔNG fork.
 
 ---

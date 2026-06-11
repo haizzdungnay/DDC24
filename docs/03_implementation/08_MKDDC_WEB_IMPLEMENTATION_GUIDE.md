@@ -2,7 +2,7 @@
 ## MK-DDC-24 — REST API + Web UI + Config + Validator
 
 > **Document ID:** IMPL-WEB-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-10
+> **Phiên bản:** 1.1 | 2026-06-11 (Contract Freeze: RBAC 3 role, web luôn vào mức manual, IPC contract 07 §8, SystemStatus versions)
 > **Owner:** Dev 3 (Web/BE)
 > **Nguồn-chuẩn:** [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) ·
 > [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
@@ -19,15 +19,42 @@
 ```
 web/backend/
 ├── main.go            — HTTP/HTTPS server, router, TLS 1.3, middleware
-├── auth.go            — POST login (JWT), bcrypt, RBAC (admin/engineer/operator)
+├── auth.go            — POST login (JWT), bcrypt, RBAC (admin/operator/viewer — bảng §1.1)
 ├── points.go          — GET/PUT points → IPC tới core (đọc snapshot, gửi command)
 ├── system.go          — GET/PUT system status/config (IOP metrics, sensor type, network)
 ├── alarms.go          — GET alarms, POST ack (đọc alarm bus / eventlog)
-├── commissioning.go   — POST test point → command tới core (mức Local manual prio 2)
+├── commissioning.go   — POST test point → command tới core (nguồn manual — mức 2; role operator+)
 ├── graph.go           — POST validate (validator lib), POST deploy (ghi graph.json)
-├── core_client.go     — IPC client tới mkddc-core (/run/mkddc/core.sock) — KHÔNG mở UART
+├── core_client.go     — IPC client tới mkddc-core (/run/mkddc/core.sock — contract đầy đủ: 07 §8)
 ├── audit.go           — ghi audit log mọi command/deploy (user, ts, action, result)
 └── store.go           — SQLite (config.sqlite, eventlog.sqlite) WAL
+```
+
+### 1.1 RBAC matrix (CHỐT Rev A — 3 role, khớp openapi.yaml + users.conf)
+
+| Quyền | viewer | operator | admin |
+|-------|--------|----------|-------|
+| Login / xem points, status, alarms | ✅ | ✅ | ✅ |
+| PUT points (manual override) + release | — | ✅ | ✅ |
+| Commissioning test DO/AO | — | ✅ | ✅ |
+| Ack alarm | — | ✅ | ✅ |
+| Graph validate (read-only check) | — | ✅ | ✅ |
+| Graph **deploy** | — | — | ✅ |
+| Config (io/network/device/safe-state) | — | — | ✅ |
+| Users, OTA, download logs | — | — | ✅ |
+
+> Role cũ "engineer" trong bản trước = operator (commissioning) hoặc admin (deploy) theo bảng
+> trên — KHÔNG còn là role riêng. `users.conf` enum: `admin|operator|viewer`.
+
+### 1.2 Priority: web map vào đâu (CHỐT — khớp core 6 mức, PRODUCT_DEFINITION §13)
+
+```
+- Web/commissioning command  → nguồn "Local manual"  = mức 2. Client KHÔNG chọn priority.
+- BACnet write               → priority array BACnet 1..16 (kx_plc_shm), resolve riêng,
+                               kết quả vào core ở mức 3. REST không expose 1..16.
+- release=true               → nhả manual (relinquish mức 2); core rơi về nguồn kế.
+- Response của core {result, applied_value, active_source} → ghi audit + hiển thị
+  "Lệnh bị ghi đè bởi <nguồn>" nếu overridden.
 ```
 
 ```
@@ -50,18 +77,18 @@ web/storage/      — schema SQLite, migration
 
 | Method | Endpoint | Auth | Đi tới | Mô tả |
 |--------|----------|------|--------|-------|
-| POST | `/api/v1/auth/login` | none | — | Login, trả JWT |
+| POST | `/api/v1/auth/login` | none | — | Login, trả JWT + role (admin/operator/viewer) |
 | GET | `/api/v1/points` | Bearer | core (read) | Danh sách 24 IO |
 | GET | `/api/v1/points/{id}` | Bearer | core (read) | 1 point {value,quality,ts} |
-| PUT | `/api/v1/points/{id}` | Bearer | core (command) | Ghi giá trị → qua priority |
+| PUT | `/api/v1/points/{id}` | Bearer operator+ | core (command) | Ghi giá trị → nguồn manual mức 2 (§1.2); body {value} hoặc {release:true} |
 | GET | `/api/v1/system/status` | Bearer | core/iobus metrics | CPU/RAM/IOP |
 | GET | `/api/v1/system/config` | Bearer admin | store | Đọc config |
 | PUT | `/api/v1/system/config` | Bearer admin | store + core reload | Cập nhật config |
 | GET | `/api/v1/alarms` | Bearer | eventlog/alarm bus | Alarm active |
 | POST | `/api/v1/alarms/{id}/ack` | Bearer | eventlog | Ack alarm |
-| POST | `/api/v1/commissioning/points/{id}/test` | Bearer engineer | core (prio 2) | Test DO/AO thật |
-| POST | `/api/v1/graph/validate` | Bearer engineer | validator lib | Kiểm graph.json |
-| POST | `/api/v1/graph/deploy` | Bearer engineer | validator+core | Deploy nếu pass |
+| POST | `/api/v1/commissioning/points/{id}/test` | Bearer operator+ | core (manual mức 2) | Test DO/AO thật |
+| POST | `/api/v1/graph/validate` | Bearer operator+ | validator lib | Kiểm graph.json |
+| POST | `/api/v1/graph/deploy` | Bearer **admin** | validator+core | Deploy nếu pass |
 
 ---
 
@@ -74,11 +101,16 @@ web/storage/      — schema SQLite, migration
   "sensor_type": "NTC10k", "fault": false
 }
 ```
-System status:
+System status (versions tách từng thành phần — Contract Freeze; nguồn metrics ghi rõ):
 ```json
-{ "cpu_percent": 12.5, "ram_percent": 35.2, "uptime_s": 86400, "fw_version": "1.0.0",
-  "iop": { "status": "normal", "crc_errors": 0, "timeouts": 0, "seq_errors": 0 } }
+{ "cpu_percent": 12.5, "ram_percent": 35.2, "uptime_s": 86400,
+  "versions": { "mcu_fw": "1.0", "iobus": "1.2.0", "core": "1.1.0", "web": "1.0.0" },
+  "iop":  { "status": "normal", "crc_errors": 0, "timeouts": 0, "seq_errors": 0,
+            "last_io_resp_ms": 12 },
+  "scan": { "count": 86400, "overrun": 0 } }
 ```
+> Nguồn: `iop.*` + `versions.mcu_fw/iobus` từ `kx_io_shm` (iobus ghi); `scan.*` +
+> `versions.core` từ `kx_plc_shm` (core ghi); web đọc read-only, KHÔNG tự đo lại.
 
 ---
 

@@ -29,10 +29,13 @@ Mỗi phase chỉ "đóng" khi **Output** đạt + test group tương ứng tron
 
 **Việc:**
 - Dev 1: CubeMX `.ioc` đúng pinout → generate → firmware rỗng blink LED (PD6 1Hz).
-- Dev 2: `services/iobus` + `services/core` CMake build ra binary rỗng (main loop + log).
+- Dev 2: `services/iobus` + `services/core` CMake build ra binary rỗng (main loop + log) —
+  CMakeLists mẫu copy nguyên văn từ [06 §10](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) / [07 §9](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md).
 - Dev 3: `web/backend` Go build + `web/frontend` React build ra trang trống.
-- Chung: đưa `shared/iop_protocol.h` + `shared/mkddc_shm.h` vào build cả FW lẫn SOM.
-- Chung: viết `systemd` unit mẫu cho 3 service.
+- Chung: đưa `shared/iop_protocol.h` + `shared/mkddc_shm.h` vào build cả FW lẫn SOM
+  (rename `kinexus_shm.h → mkddc_shm.h` ĐÃ làm 2026-06-11 — chỉ include, không copy).
+- Chung: lấy `systemd` unit ĐẦY ĐỦ từ 06 §10 + 07 §9 (không tự viết stub khác).
+- Trước khi code: cả 3 dev đọc [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) (10 phút).
 
 **Output:**
 ```
@@ -77,21 +80,23 @@ Test bằng lệnh debug console (không cần IOP).
 
 **Owner:** Dev 1 (MCU slave) + Dev 2 (SOM master). **Cross-test bắt buộc trên board.**
 
-**Việc:** iop_comm (MCU) + iop_frame/iop_client (SOM). Trước tiên dùng PC test harness
-(Python/host) rồi tới SOM thật.
+**Việc:** iop_comm (MCU) + iop_frame/iop_client (SOM). Phía SOM làm trước với
+`tools/fake_mcu` qua PTY ([06 §11.1](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) — checklist 10 bước,
+hoàn thành được phần lớn phase này KHÔNG cần board), rồi cross-test trên board thật.
 
-**Output:**
+**Output (mỗi dòng đo được, pass/fail rõ):**
 ```
 1. HANDSHAKE pass (version negotiate, STATUS=0x00).
-2. GET_IO/IO_RESP pass (34 byte, CRC đúng, SEQ echo).
-3. SET_AO pass (ACK, AO thật đổi).
-4. SET_DO pass (ACK, relay thật đổi).
+2. GET_IO/IO_RESP pass (34 byte, CRC đúng, SEQ echo; 1000 poll liên tục 0 lỗi).
+3. SET_AO pass (ACK, AO thật đổi — đo đồng hồ).
+4. SET_DO pass (ACK, relay thật đổi — DO_FB khớp).
 5. GET_DIAG/DIAG_RESP pass (20 byte).
-6. RESET_IO pass (safe-state + ACK).
-7. CRC/SEQ/LEN error handling pass (NACK đúng code).
+6. RESET_IO pass (mọi reason 0x00-0x05: safe-state + ACK; xem 05 §6.9).
+7. CRC/SEQ/LEN error handling pass (NACK đúng code; negative table 05 §15 đủ 10 case).
 ```
 
-**Test:** Test group 2 (UART IOP) — bao gồm test vector CRC cross-check. **DoD:** §12.2.
+**Test:** Test group 2 (UART IOP) — CRC cross-check bằng **12 vector chuẩn** (SWFW §10.1;
+vector cũ 0x84C0/0x556B là sai, đã thay 2026-06-11). **DoD:** §12.2.
 
 ---
 
@@ -192,11 +197,14 @@ config, alarm, graph validate/deploy, audit log.
 |------|---------------|-------------|
 | P0→P1 | 4 build CI xanh | Lead |
 | P1→P2 | MCU IO thật chạy (group 1 pass) | FW Lead |
-| P2→P3 | IOP cross-test pass, CRC vector khớp 2 phía | FW + SW Lead |
+| P2→P3 | IOP cross-test pass, 12 CRC vector khớp 2 phía | FW + SW Lead |
 | P3→P4 | iobus service ổn định 1h, shm đúng | SW Lead |
 | P4→P5 | core priority/safe-state pass, output qua core | SW Lead |
 | P5→P6 | web command path qua core, không bypass | SW + Web Lead |
 | P6→Release | group 6/7/8 pass, [14_HANDOVER](14_RELEASE_HANDOVER_CHECKLIST.md) tick đủ | PM |
 
+> 📍 Tuần đầu trên SOM: làm theo 8 mốc [17_WEEK1_SOM_BRINGUP_CHECKLIST](17_WEEK1_SOM_BRINGUP_CHECKLIST.md)
+> (map P0→P4 round-trip). Dev mới: bắt đầu từ [16_QUICK_START_SOM_DEV](16_QUICK_START_SOM_DEV.md).
+
 ---
-**Rev** 1.0 | 2026-06-10
+**Rev** 1.1 | 2026-06-11

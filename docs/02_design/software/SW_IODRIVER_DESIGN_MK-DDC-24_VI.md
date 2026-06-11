@@ -6,6 +6,13 @@
 
 > Service nền tảng nhất của SOM: nó là **người duy nhất nói chuyện với MCU**. Mọi service khác đọc I/O qua shared memory nó ghi ra.
 
+> ⚠️ **LEGACY / REFERENCE-ONLY (2026-06-11).** Vai trò "io-driver" trong file này đã được
+> gộp vào **`mkddc-iobus`** (ADR-005 + Contract Freeze). Khi code Rev A: dùng
+> [06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE](../../03_implementation/06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md)
+> + [`shared/mkddc_shm.h`](../../../shared/mkddc_shm.h) + [`shared/iop_protocol.h`](../../../shared/iop_protocol.h).
+> File này lệch các nguồn đó → nguồn mới thắng (path SHM cũ `/dev/shm/kinexus_io_shm` đã đổi
+> thành `/dev/shm/mkddc_io_shm`; struct chuẩn là `kx_io_shm_t`, không phải `kinexus_io_shm_t`).
+
 ---
 
 ## 1. Nhiệm vụ
@@ -66,7 +73,7 @@ shm->seq++; __sync_synchronize();        // odd = đang ghi
 __sync_synchronize(); shm->seq++;        // even = xong
 // reader (PLC/HMI) đọc theo seqlock pattern, KHÔNG block writer
 ```
-Struct `kinexus_io_shm_t` định nghĩa ở SW_REQ §2.2 (nguồn-chuẩn).
+Struct chuẩn: `kx_io_shm_t` trong `shared/mkddc_shm.h` (SW_REQ §2.2 là bản phác cũ, đã legacy).
 
 ## 6. Output (SET_AO/SET_DO)
 - Đọc `ao_setpoint[]/do_mask` từ shm (PLC ghi) → nếu đổi → gửi frame. AO eng→raw (clamp).

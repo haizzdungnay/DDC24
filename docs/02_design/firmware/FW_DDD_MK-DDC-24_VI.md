@@ -60,7 +60,7 @@ Không bao gồm: app SOM, schematic.
 
 ### 4.3 `ao_output` (Pri 6, 10 ms)
 - nhận `ao_cmd_t` từ `xAoQueue`; validate [0,65535] (FW-AO-006); ghi 4 kênh DAC8554 (SPI1 DMA) rồi pulse LDAC (PB0) update đồng bộ.
-- safe-state: V-mode→0V; mA-mode→4mA (raw 13107) (FW-AO-009).
+- safe-state: V-mode→0V; mA-mode→4mA (protocol raw 0x0000 — SWFW §6.3; DAC count nội bộ ≈13107 nếu span 0–20mA) (FW-AO-009).
 - hold-last khi mất IOP (không tự về 0 trừ RESET_IO) (FW-AO-005).
 
 ### 4.4 `do_control` (Pri 6, 10 ms)

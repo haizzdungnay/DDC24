@@ -61,9 +61,19 @@ MQTT/REST Agent (`kinexus-agent`), Security Service, OTA (`kinexus-ota`), cloud.
 | SW-IOP-010 | PHẢI chạy với SCHED_FIFO priority 70 | MUST | — | T-SW-010 |
 | SW-IOP-011 | PHẢI expose metrics: iop_crc_err, iop_timeout, iop_seq_err qua REST `/api/v1/system/status` | MUST | IOP-006 | T-SW-011 |
 
-### 2.2 Shared Memory Layout (`kinexus_io_shm`)
+### 2.2 Shared Memory Layout — ⛔ LEGACY, ĐÃ BỊ THAY THẾ
+
+> ⚠️ **CONTRACT FREEZE (2026-06-11):** layout dưới đây là bản phác thảo cũ, **KHÔNG dùng
+> để code**. Struct chuẩn duy nhất là `kx_io_shm_t` trong
+> [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) (khác đáng kể: `ts_ns` thay
+> `timestamp_ms`, có `ui_quality[]/ui_unit[][]/di_state[]/di_counter[]/do_cmd[]/
+> do_feedback[]/metrics`, không có `ui_type[]/do_mask/safe_state_active`). Path runtime:
+> `/dev/shm/mkddc_io_shm`. Ownership/bảng field:
+> [06 §5](../03_implementation/06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md). Giữ block cũ chỉ
+> để trace lịch sử requirement.
 
 ```c
+// ===== LEGACY DRAFT (superseded by shared/mkddc_shm.h) =====
 // Shared memory structure — accessible by IOP driver (W) and PLC runtime (R)
 typedef struct {
     // Seqlock fields
@@ -112,7 +122,7 @@ typedef struct {
 
 | ID | Yêu cầu | Loại | Trace SRS | Test Ref |
 |----|---------|------|-----------|---------|
-| SW-PLC-010 | Chu kỳ scan mặc định 100ms, cấu hình 50ms–2000ms | MUST | PLC-010 | T-SW-030 |
+| SW-PLC-010 | ~~Chu kỳ scan mặc định 100ms, cấu hình 50ms–2000ms~~ **(LEGACY PLC timing — Rev A chốt: scan mặc định 1000ms theo graph runtime, xem SW_RUNTIME_EXECUTION_MODEL + 07 §2)** | MUST | PLC-010 | T-SW-030 |
 | SW-PLC-011 | Jitter scan PHẢI ≤ 5ms (đo trong 1 giờ liên tục) | MUST | PLC-011 | T-SW-031 |
 | SW-PLC-012 | Process PHẢI SCHED_FIFO priority ≥ 80 | MUST | OS-003 | T-SW-032 |
 | SW-PLC-013 | Watchdog: nếu scan overrun > 3× liên tiếp → output safe state, log event, restart service | MUST | PLC-012, PLC-013 | T-SW-033 |

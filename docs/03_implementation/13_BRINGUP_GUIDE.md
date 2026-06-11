@@ -104,7 +104,7 @@
 ```
 - Xem log iobus: HANDSHAKE gửi → HANDSHAKE_RESP STATUS=0x00.
 - Xem MCU console: nhận HANDSHAKE.
-- Đọc shm: cat /dev/shm/mkddc_io_shm | xxd | head  (hoặc tool đọc).
+- Đọc shm: ./shm_dump_io (tool chuẩn — 06 §11, decode field + fault bit; fallback thô: xxd /dev/shm/mkddc_io_shm | head, magic LE = 01 44 58 4b).
 ✅ Đạt khi: handshake OK, iop_status=NORMAL, GET_IO poll chạy, DI/UI lên shm.
 ```
 
@@ -166,7 +166,7 @@
 | DI không đổi | opto/pull-up; active-LOW | kiểm PC817, pull-up 10k, logic đảo |
 | AO sai V | ao_mode / LDAC | kiểm SET_AO_CFG, pulse LDAC PB0 |
 | Handshake fail | baud / TX-RX / CRC | 921600 2 phía, đấu chéo, CRC vector |
-| shm trống | iobus chưa ghi / sai path | journalctl iobus, kiểm /dev/shm/mkddc_io_shm |
+| shm trống | iobus chưa ghi / sai path | journalctl iobus; chạy shm_dump_io (exit 2 = chưa init, 1 = FAULT/SAFE) |
 | web bật DO không chạy | thiếu core / bypass | core running? web→core IPC? priority? |
 | web báo lỗi khi chưa rút | timeout ngưỡng / nhiễu | kiểm iop_timeout, CRC error rate |
 

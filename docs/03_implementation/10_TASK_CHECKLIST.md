@@ -48,8 +48,8 @@ Phụ thuộc: —
 Task ID: SKEL-004
 Tên: shared header + CI build matrix
 Owner: Dev SOM (lead) | Phase: 0 | Module: shared
-File: shared/iop_protocol.h, shared/mkddc_shm.h (rename), .github/workflows
-Input: iop_protocol.h, kinexus_shm.h
+File: shared/iop_protocol.h, shared/mkddc_shm.h (rename ĐÃ làm 2026-06-11), .github/workflows
+Input: iop_protocol.h, mkddc_shm.h
 Output: header compile chung FW+SOM; CI build 4 phần
 Test: CI xanh
 Done khi: 4 build job xanh
@@ -116,8 +116,8 @@ Owner: Dev FW_MCU + Dev SOM | Phase: 2 | Module: crc16/iop_crc
 File: fw/common/crc16.c, services/iobus/iop_crc.cpp
 Input: byte buffer
 Output: CRC-16/Modbus
-Test: 10 vector; {AA 00 01 00}→0x84C0, {AA 00 01 01}→0x556B
-Done khi: 2 phía cùng kết quả 10 vector
+Test: 12 vector chuẩn (SWFW §10.1); {AA 00 01 00}→0x6C20, {AA 00 01 01}→0xACE1
+Done khi: 2 phía cùng kết quả 12 vector chuẩn
 Phụ thuộc: SKEL-004
 ```
 ```

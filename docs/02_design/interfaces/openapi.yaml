@@ -66,7 +66,12 @@ paths:
               schema: { $ref: "#/components/schemas/Point" }
         "404": { $ref: "#/components/responses/Error" }
     put:
-      summary: Ghi giá trị point (cần quyền)
+      summary: Ghi giá trị point (role operator+; LUÔN vào mức Local manual — client KHÔNG chọn priority)
+      description: >
+        Contract Freeze 2026-06-11: REST không expose BACnet priority 1..16.
+        Mọi lệnh web đi vào nguồn "Local manual" (mức 2 trong 6 mức của core —
+        PRODUCT_DEFINITION §13). BACnet client dùng priority array riêng qua BACnet/IP
+        (kết quả vào mức 3). Gửi release=true để nhả manual (relinquish mức 2).
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       requestBody:
         required: true
@@ -74,12 +79,20 @@ paths:
           application/json:
             schema:
               type: object
-              required: [value]
               properties:
-                value: { type: number }
-                priority: { type: integer, minimum: 1, maximum: 16, default: 8 }
+                value: { type: number, description: "Bắt buộc trừ khi release=true" }
+                release: { type: boolean, default: false, description: "true = nhả manual override" }
       responses:
-        "200": { description: OK }
+        "200":
+          description: Kết quả áp lệnh từ core (ghi audit log)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: { type: string, enum: [accepted, overridden, rejected] }
+                  applied_value: { type: number }
+                  active_source: { type: string, example: "safety", description: "Nguồn priority đang thắng kênh này" }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
   /system/status:
@@ -184,11 +197,26 @@ components:
         cpu_percent: { type: number }
         ram_percent: { type: number }
         uptime_s: { type: integer }
-        fw_version: { type: string }
+        versions:
+          type: object
+          description: Tách version từng thành phần (Contract Freeze 2026-06-11)
+          properties:
+            mcu_fw: { type: string, example: "1.0", description: "Từ HANDSHAKE_RESP/DIAG (iobus đọc)" }
+            iobus: { type: string, example: "1.2.0" }
+            core: { type: string, example: "1.1.0" }
+            web: { type: string, example: "1.0.0" }
         iop:
           type: object
+          description: Nguồn = mkddc-iobus (đọc từ kx_io_shm metrics)
           properties:
             status: { type: string, enum: [normal, fault, safe] }
             crc_errors: { type: integer }
             timeouts: { type: integer }
             seq_errors: { type: integer }
+            last_io_resp_ms: { type: integer }
+        scan:
+          type: object
+          description: Nguồn = mkddc-core (đọc từ kx_plc_shm)
+          properties:
+            count: { type: integer }
+            overrun: { type: integer }

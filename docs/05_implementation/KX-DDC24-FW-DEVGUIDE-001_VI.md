@@ -124,7 +124,7 @@ Sau đó mới đắp đọc ADC, AO/DO, diag...
 - ISR gọi RTOS API phải dùng `*FromISR` + priority đúng (FW Coding §5).
 - CRC sai do quên **truyền HI trước LO** (big-endian) — so test vector.
 - LDAC: ghi 4 kênh DAC rồi mới pulse LDAC, đừng pulse từng kênh.
-- Safe-state 4-20mA = **4mA (raw 13107)**, KHÔNG phải 0.
+- Safe-state 4-20mA = **4mA**. Protocol raw IOP = 0 cho cả 2 mode (SWFW §6.3, IOP_AO_SAFE_*_RAW=0); 13107 chỉ là DAC count nội bộ nếu tầng vật lý span 0–20mA — đừng nhầm 2 tầng.
 
 ---
 ## Revision History

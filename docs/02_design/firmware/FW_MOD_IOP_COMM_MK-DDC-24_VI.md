@@ -46,7 +46,7 @@ uint16_t crc16_modbus(const uint8_t *data, uint16_t len) {
     return crc;   // truyền CRC_HI trước, CRC_LO sau (IOP-SPEC §3.2)
 }
 ```
-> Test vector bắt buộc: `AA 00 01 00`→`0x84C0`; `AA 00 01 01`→`0x556B` (IOP-SPEC §10). Phải khớp SOW + FW.
+> Test vector bắt buộc: `AA 00 01 00`→`0x6C20`; `AA 00 01 01`→`0xACE1` (IOP-SPEC §10). Phải khớp SOW + FW.
 
 ## 4. Nhận frame (RX) — dùng UART IDLE + DMA
 ```

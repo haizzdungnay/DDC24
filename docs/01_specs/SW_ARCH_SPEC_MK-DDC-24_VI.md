@@ -15,9 +15,16 @@
 >   `kinexus-hmi`/`kinexus-agent`/`kinexus-ota` → **deferred Rev B+** (REVA_SCOPE §3).
 > - Engine không còn là IEC 61131-3 PLC mà là **component graph** ([ADR-004](../adr/ADR-004-component-based-runtime.md));
 >   mô hình thực thi: [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md).
-> - **Hợp đồng IPC/shm/seqlock với MCU bên dưới giữ nguyên** (chỉ đổi tên header
->   `kinexus_shm.h` → `mkddc_shm.h`). Bảng §1.1 dưới đây là decomposition cũ, đọc như
->   tham chiếu; ánh xạ sang `mkddc-*` theo banner này.
+> - **Hợp đồng IPC/shm/seqlock với MCU bên dưới giữ nguyên** (rename header
+>   `kinexus_shm.h` → `mkddc_shm.h` ĐÃ thực hiện 2026-06-11). Bảng §1.1 dưới đây là
+>   decomposition cũ, đọc như tham chiếu; ánh xạ sang `mkddc-*` theo banner này.
+
+> ⚠️ **CONTRACT FREEZE (2026-06-11).** Giá trị thực thi (SHM layout/path/ownership,
+> IOP opcode/fault/reason/CRC, startup order) lấy theo `shared/iop_protocol.h` +
+> `shared/mkddc_shm.h` + [15_CONTRACT_FREEZE](../03_implementation/15_CONTRACT_FREEZE.md).
+> File này lệch các nguồn đó → nguồn freeze thắng. Đặc biệt: **boundary đã chốt là
+> `mkddc-iobus` sở hữu UART/IOP + ghi SHM IO** (không phải core) — xem
+> [00_IMPLEMENTATION_README §3](../03_implementation/00_IMPLEMENTATION_README.md).
 
 ---
 
@@ -25,26 +32,31 @@
 
 ### 1.1 Danh sách Process / Service (Rev A — ADR-005)
 
-| Process | Binary | User | Restart | Dep |
-|---------|--------|------|---------|-----|
-| `mkddc-core` | `/usr/sbin/mkddc-core` | `mkddc` | always | — |
-| `mkddc-iobus` | `/usr/sbin/mkddc-iobus` | `mkddc` | always | `mkddc-core` |
-| `mkddc-web` | `/usr/bin/mkddc-web` | `mkddcweb` | always | `mkddc-core` |
+| Process | Binary | User | Restart | Dep (systemd) |
+|---------|--------|------|---------|----------------|
+| `mkddc-iobus` | `/usr/sbin/mkddc-iobus` | `mkddc` | always | — (creator `/dev/shm/mkddc_io_shm`) |
+| `mkddc-core` | `/usr/sbin/mkddc-core` | `mkddc` | always | `After=mkddc-iobus` (Wants) |
+| `mkddc-web` | `/usr/bin/mkddc-web` | `mkddcweb` | always | `After=mkddc-core` (Wants) |
 
-`mkddc-core` gộp io-driver + component graph engine (real-time). `mkddc-iobus` gộp
-bacnet + fieldbus/modbus. `mkddc-web` gồm web config + validator (library).
+`mkddc-iobus` sở hữu UART/IOP tới MCU + scale + ghi SHM IO; gộp BACnet/IP datalink +
+fieldbus/modbus. `mkddc-core` chạy component graph engine + priority/safe-state (đọc SHM,
+ghi `ao_setpoint[]/do_cmd[]`). `mkddc-web` gồm web config + validator (library).
 **Deferred Rev B+:** `kinexus-agent` (MQTT), `kinexus-hmi`, `kinexus-ota`.
 
-### 1.2 Startup Order
+### 1.2 Startup Order (chốt theo Contract Freeze — iobus tạo SHM nên chạy TRƯỚC)
 
 ```
-mkddc-core (SCHED_FIFO, IO image + graph engine, scan 1s)
-    ├─► mkddc-iobus (BACnet/IP + Modbus RTU master x2/TCP)
-    └─► mkddc-web   (REST/config/validator/commissioning)
+mkddc-iobus (SCHED_FIFO 70, UART/IOP master, creator + writer mkddc_io_shm)
+    └─► mkddc-core (SCHED_FIFO 80, graph engine + priority/safe-state, scan 1s)
+            └─► mkddc-web (REST/config/validator/commissioning)
 ```
 
-Tất cả process dùng systemd `WatchdogSec=` + hardware watchdog. `mkddc-core` PHẢI báo
-`sd_notify("READY=1")` sau khi scan cycle đầu tiên hoàn thành.
+Dùng `Wants=` (không `Requires=`): service trước restart không kéo service sau chết;
+reader tự retry attach SHM tới khi magic hợp lệ. Tất cả process dùng systemd
+`WatchdogSec=` + hardware watchdog. `mkddc-core` PHẢI báo `sd_notify("READY=1")` sau khi
+scan cycle đầu tiên hoàn thành; `mkddc-iobus` READY sau handshake MCU (degraded: RECONNECT).
+Unit file đầy đủ: [06 §10](../03_implementation/06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) ·
+[07 §9](../03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md).
 
 <details><summary>§1.1-legacy — danh sách 7 service <code>kinexus-*</code> (tham chiếu)</summary>
 

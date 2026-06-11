@@ -30,10 +30,14 @@ curl -k https://<ip>:8443/api/v1/points/UI1 \
   -H 'Authorization: Bearer eyJ...'
 # → {"id":"UI1","type":"AI","value":23.5,"unit":"°C","quality":"good",...}
 
-# 3. Ghi AO (cần auth + range check)
+# 3. Ghi AO (cần auth + range check) — LUÔN vào mức Local manual, client KHÔNG chọn priority
+#    (Contract Freeze 2026-06-11 — xem openapi.yaml PUT /points/{id} + 08 §1.2)
 curl -k -X PUT https://<ip>:8443/api/v1/points/AO1 \
   -H 'Authorization: Bearer eyJ...' -H 'Content-Type: application/json' \
-  -d '{"value":5.0,"priority":8}'
+  -d '{"value":5.0}'
+# → {"result":"accepted","applied_value":5.0,"active_source":"manual"}
+# Nhả manual override:
+#  -d '{"release":true}'
 ```
 
 ## 3. Bảng endpoint (tóm tắt — chi tiết ở yaml)

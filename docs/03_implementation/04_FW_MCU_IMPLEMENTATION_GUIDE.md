@@ -78,15 +78,16 @@ File     : fw/app/io_sample.c, fw/drivers/adc_drv.c, fw/drivers/gpio_drv.c
 ```
 **Lỗi phải xử lý:**
 ```
-- ADS131M08 không phản hồi 5ms (DRDY PA8 không lên / SPI timeout) → FAULT_FLAGS.ADC_FAULT;
-  thử reinit ADC mỗi 1s.
-- UI > 110% full scale → FAULT_FLAGS bit UI_OV (bit2 theo IOP spec §4.3.1).
+- ADS131M08: DRDY PA8 không lên / SPI timeout 5ms = MẪU HỎNG (bỏ mẫu);
+  KHÔNG có mẫu hợp lệ liên tục 100ms → set IOP_FAULT_ADC (bit0); thử reinit ADC mỗi 1s;
+  reinit OK + mẫu hợp lệ → clear (theo bảng chốt SWFW §4.3.1).
+- UI > 110% full scale → IOP_FAULT_UI_OV (bit2).
 ```
 **Test (T-FW-001 / group 1):**
 ```
 - Cấp điện áp biết trước vào UI1 → raw đọc đúng tỉ lệ (sai số < 1%).
 - Đóng/mở contact DI1 → di_mask bit0 đổi sau debounce, không rung.
-- Rút SPI ADC → ADC_FAULT bật sau ≤5ms.
+- Rút SPI ADC → ADC_FAULT (bit0) bật sau ≤100ms (mẫu hỏng đầu tiên phát hiện ≤5ms).
 ```
 **Done khi:** 8 UI raw + 8 DI đọc đúng, sample_cnt tăng đều, budget < 200µs/chu kỳ, ADC_FAULT đúng.
 
@@ -117,7 +118,8 @@ File     : fw/app/iop_comm.c, fw/drivers/iop_drv.c, fw/common/crc16.c, fw/common
     - SET_DO     → parse mask+value → do_cmd_t → xDoQueue; trả ACK(0x11).
     - SET_AO_CFG → set AO mode pins PD1..PD4; trả ACK(0x13) (nếu chưa hỗ trợ: NACK UNKNOWN_CMD).
     - GET_DIAG   → build DIAG_RESP (20B), TX.
-    - RESET_IO   → set safe-state flag, AO/DO về safe; trả ACK(0x40).
+    - RESET_IO   → set safe-state flag, AO/DO về safe, log reason byte (bảng 05 §6.9;
+                   reason lạ vẫn safe+ACK); trả ACK(0x40).
     - HANDSHAKE  → version negotiate, build HANDSHAKE_RESP (STATUS), TX.
 11. Cập nhật iop_rx++; reset IOP-watchdog timer (đã nhận GET_IO).
 ```
@@ -132,7 +134,7 @@ File     : fw/app/iop_comm.c, fw/drivers/iop_drv.c, fw/common/crc16.c, fw/common
 ```
 **Test (T-FW-IOP-001 / group 2):**
 ```
-- Test vector CRC: {AA 00 01 00}→0x84C0; {AA 00 01 01}→0x556B (BẮT BUỘC khớp).
+- Test vector CRC: {AA 00 01 00}→0x6C20; {AA 00 01 01}→0xACE1 (BẮT BUỘC khớp).
 - GET_IO → IO_RESP đúng 34B, latency ≤ 5ms (đo bằng GPIO toggle + oscilloscope).
 - SET_DO bật relay; SET_AO ra V đúng.
 - Gửi frame CRC hỏng → nhận NACK ERR_CRC_FAIL.
@@ -161,7 +163,10 @@ File     : fw/app/ao_output.c, fw/drivers/dac_drv.c
 2. Validate mỗi kênh raw ∈ [0,65535] (FW-AO-006).
 3. Ghi 4 kênh DAC8554 qua SPI1 DMA (mode 1, 8MHz).
 4. Pulse LDAC (PB0 LOW→HIGH) update đồng bộ 4 kênh.
-5. Nếu safe-state flag: bỏ qua queue, ghi safe value: V-mode→0 (raw0), mA-mode→13107 (4mA).
+5. Nếu safe-state flag: bỏ qua queue, ghi safe value: V-mode→0V, mA-mode→4mA.
+   (Protocol raw IOP: cả 2 mode safe = raw 0 — IOP_AO_SAFE_*_RAW=0, SWFW §6.3. Nếu tầng DAC
+   vật lý span 0–20mA thì FW tự quy đổi nội bộ 4mA ≈ count 13107 — đó là DAC count, KHÔNG
+   phải raw trên wire.)
 6. Hold-last khi mất IOP (KHÔNG tự về 0 trừ khi RESET_IO) (FW-AO-005).
 ```
 **Lỗi phải xử lý:**
@@ -222,8 +227,9 @@ File     : fw/app/diagnostics.c
 **Luồng xử lý:**
 ```
 1. Đọc MCU temp (internal ADC) + VDD.
-2. Temp > 85°C → MCU_OVERTEMP + giảm sample rate xuống 100ms.
-3. VDD ngoài [3.0,3.6]V → FAULT_FLAGS.VDD + ngừng AO.
+2. Temp > 85.0°C → IOP_FAULT_MCU_OVERTEMP (bit5) + giảm sample rate xuống 100ms;
+   clear khi < 80.0°C (hysteresis 5°C).
+3. VDD ngoài [3.0,3.6]V → IOP_FAULT_VDD (bit6) + ngừng AO; clear khi VDD trong dải.
 4. Duy trì counters (rx, crc_err, seq_err, wdg_reset) trong SRAM backup.
 5. Khi GET_DIAG: build DIAG_RESP {fw_ver, uptime, rx_cnt, crc_err, seq_err, wdg_cnt,
    adc_rate, temp_max, vdd_mv, reserved}.
@@ -246,14 +252,16 @@ File     : fw/app/watchdog.c, fw/drivers/wdg_drv.c
 1. IWDG timeout 1s. Chỉ kick khi io_sample + iop_comm còn sống (health flag set mỗi chu kỳ).
 2. WWDG cho iop_comm (FW-WDG-004).
 3. Không nhận GET_IO 200ms (IOP_SAFE_TIMEOUT_MS) → set safe-state flag → AO/DO về safe.
-4. Sau reset: đọc RCC_CSR → nếu watchdog reset → set sticky MCU_WATCHDOG_RESET (clear khi SOM đọc).
+4. Sau reset: đọc RCC_CSR → nếu watchdog reset → set sticky IOP_FAULT_WDG_RESET (bit4);
+   clear khi nhận GET_DIAG đầu tiên sau boot (= SOM đã đọc).
 5. PERMANENT_FAULT (VDD/ADC init fail): KHÔNG kick IWDG → HW reset.
 ```
 **Test (T-FW-054 / group 1):**
 ```
 - Treo io_sample giả → IWDG reset trong ~1s.
 - Ngừng gửi GET_IO → MCU safe-state sau 200ms.
-- Sau watchdog reset → DIAG WDG_RESET_CNT tăng, IO_RESP FAULT bit5 set.
+- Sau watchdog reset → DIAG WDG_RESET_CNT tăng, IO_RESP FAULT bit4 (IOP_FAULT_WDG_RESET) set;
+  gửi GET_DIAG → bit4 clear ở IO_RESP sau đó.
 ```
 **Done khi:** IWDG reset đúng khi treo; safe-state khi mất GET_IO 200ms; counter reset đúng.
 

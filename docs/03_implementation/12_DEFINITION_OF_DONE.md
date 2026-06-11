@@ -24,7 +24,7 @@
 [ ] Safe-state pass (AO 0V/4mA, DO open).
 [ ] Không malloc sau RTOS start; mọi HAL call check lỗi.
 [ ] Chạy 24h không treo (group 8).
-[ ] CRC unit test ≥10 vector (IOP-FW-010).
+[ ] CRC unit test 12 vector chuẩn SWFW §10.1 (IOP-FW-010).
 ```
 Test: group 1 + group 2 + group 8.
 
@@ -33,7 +33,7 @@ Test: group 1 + group 2 + group 8.
 ## 2. IOP UART xong khi
 
 ```
-[ ] CRC khớp 2 phía 10 vector (TC-2-01).
+[ ] CRC khớp 2 phía 12 vector chuẩn (TC-2-01).
 [ ] HANDSHAKE/version pass cả OK lẫn incompat-abort.
 [ ] GET_IO/IO_RESP 1000 lần 0 lỗi, latency ≤5ms.
 [ ] SET_DO/SET_AO/SET_AO_CFG + ACK đúng.
@@ -70,7 +70,7 @@ Test: group 3.
 [ ] Point table đủ 24 IO (8UI+8DI+4AO+4DO) + virtual.
 [ ] Scan loop 1s tuyệt-đối-thời-gian, scan_overrun=0.
 [ ] sd_notify READY=1 sau scan đầu.
-[ ] Priority resolver 6 mức chạy (safety > BMS > schedule > logic > default).
+[ ] Priority resolver 6 mức chạy (safety > manual > BACnet > schedule > logic > default).
 [ ] Mọi DO/AO đi qua priority resolver — KHÔNG có đường ghi tắt.
 [ ] Safe-state resolver: IO fault → safe output ≤1 scan.
 [ ] Quality propagation: IO fault → point quality bad.

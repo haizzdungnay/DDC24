@@ -2,34 +2,80 @@
 ## MK-DDC-24 — Point table + scan loop + priority/safe-state
 
 > **Document ID:** IMPL-CORE-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-10
+> **Phiên bản:** 1.1 | 2026-06-11 (Contract Freeze: chốt MVP Rev A, module API, build/systemd đầy đủ, seqlock reader mẫu)
 > **Owner:** Dev 2 (SOM)
-> **Nguồn-chuẩn:** [ADR-005](../adr/ADR-005-three-process-architecture.md) ·
+> **Nguồn-chuẩn CUỐI CÙNG:** [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) (SHM) — docs lệch
+> header → **header thắng** ([15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md)). Diễn giải:
+> [ADR-005](../adr/ADR-005-three-process-architecture.md) ·
 > [PRODUCT_DEFINITION §10,§13](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) ·
 > [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) ·
-> [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) · [`shared/kinexus_shm.h`](../../shared/kinexus_shm.h)
+> [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md)
 
 > 🎯 Vai trò: **bộ não quyết định**. Core đọc IO (qua shm iobus ghi), chạy graph, **resolve
 > priority**, áp safe-state, và **quyết output cuối cùng**. Mọi DO/AO PHẢI đi qua đây.
 
 ---
 
-## 1. Cây module đề xuất
+## 0. Mục tiêu / Phạm vi / Không làm (MVP Rev A — chốt)
+
+**Mục tiêu bản đầu tiên (Phase 4):** core đọc được IO thật từ shm, quyết output qua priority +
+safe-state, ghi `ao_setpoint[]/do_cmd[]` ngược vào shm — đủ để round-trip
+`web → core → iobus → MCU → relay` chạy.
+
+**MVP PHẢI có (theo thứ tự implement):**
+
+| # | Module | Trạng thái Rev A đầu | Trách nhiệm 1 câu |
+|---|--------|----------------------|--------------------|
+| 1 | `scan_loop` | **đầy đủ** | Vòng quét 1s tuyệt-đối-thời-gian, gọi các bước §2 đúng thứ tự |
+| 2 | `iobus_reader` | **đầy đủ** | Seqlock-read `kx_io_shm_t` thành snapshot nhất quán |
+| 3 | `point_table` | **đầy đủ** | Giữ 24 IO + virtual point {value, quality, ts, source} |
+| 4 | `point_quality` | **đầy đủ** | Tính GOOD/UNCERTAIN/BAD từ fault/stale |
+| 5 | `priority_resolver` | **đầy đủ** | Gộp nhiều nguồn ghi → 1 output/kênh theo 6 mức |
+| 6 | `safe_state` | **đầy đủ** | Ghi đè output an toàn khi IO không tin cậy |
+| 7 | `output_writer` | **đầy đủ** | Ghi `ao_setpoint[]/do_cmd[]` vào shm (writer duy nhất 2 field này) |
+| 8 | `core_metrics` | **đầy đủ** | scan_count/scan_overrun/timing |
+| 9 | `web_ipc` | **stub được** | Nhận command từ web qua `/run/mkddc/core.sock`; stub = accept + log + đưa vào queue |
+| 10 | `graph_runtime` | **stub được** | Chạy graph.json; stub = không nạp graph, nguồn "logic" luôn inactive |
+| 11 | `bacnet_objtable` | **stub được** | Ghi `kx_plc_shm`; stub = ghi value/quality, bỏ priority array BACnet |
+
+**KHÔNG làm trong core (mọi Rev):**
+```
+- KHÔNG mở UART, KHÔNG nói chuyện MCU trực tiếp (việc của iobus).
+- KHÔNG scale raw→engineering (iobus đã scale; core chỉ thấy eng value).
+- KHÔNG serve HTTP/REST (việc của web; core chỉ có Unix socket IPC).
+- KHÔNG ghi field Writer=iobus trong kx_io_shm (chỉ ghi ao_setpoint/do_cmd).
+- KHÔNG tạo /dev/shm/mkddc_io_shm (iobus là creator; core attach + retry).
+```
+
+**Dependency:** `shared/mkddc_shm.h` · iobus chạy trước (systemd `After=mkddc-iobus`) ·
+config `/data/config/` (đọc qua web deploy).
+
+---
+
+## 1. Cây thư mục chuẩn
 
 ```
 services/core/
-├── main.cpp             — init, SCHED_FIFO, sd_notify, vòng đời, signal
-├── scan_loop.cpp        — vòng quét tuyệt-đối-thời-gian (clock_nanosleep ABSTIME), 1s
-├── point_table.cpp      — 24 IO + virtual point (AV/BV/MSV), value+quality+ts
-├── point_quality.cpp    — tính quality (good/uncertain/bad) từ fault/stale
-├── graph_runtime.cpp    — nạp graph.json, thực thi component theo thứ tự topo
-├── priority_resolver.cpp— 6 mức priority → 1 output cuối/kênh
-├── safe_state.cpp       — fallback khi IO fault / stale / chưa có graph hợp lệ
-├── iobus_reader.cpp     — đọc kx_io_shm (seqlock reader), ext cache
-├── output_writer.cpp    — ghi ao_setpoint[]/do_cmd[] vào kx_io_shm
-├── bacnet_objtable.cpp  — kx_plc_shm (object table cho iobus BACnet/IP)
-├── web_ipc.cpp          — nhận command/setpoint từ web; trả read snapshot
-└── core_metrics.cpp     — scan_count, scan_overrun, timing
+├── CMakeLists.txt
+├── README.md
+├── main.cpp             — init, SCHED_FIFO 80, attach shm (retry), sd_notify, signal
+├── scan_loop.{hpp,cpp}  — vòng quét clock_nanosleep(ABSTIME) 1s
+├── point_table.{hpp,cpp}— 24 IO + AV/BV/MSV, value+quality+ts+source
+├── point_quality.{hpp,cpp}— quality từ fault/stale
+├── graph_runtime.{hpp,cpp}— STUB Rev A đầu: load/execute graph.json (topo order)
+├── priority_resolver.{hpp,cpp}— 6 mức → 1 output cuối/kênh
+├── safe_state.{hpp,cpp} — fallback khi IO fault/stale/no-graph
+├── iobus_reader.{hpp,cpp}— seqlock reader kx_io_shm
+├── output_writer.{hpp,cpp}— ghi ao_setpoint[]/do_cmd[]
+├── bacnet_objtable.{hpp,cpp}— STUB: ghi kx_plc_shm (creator plc_shm = core)
+├── web_ipc.{hpp,cpp}    — STUB: Unix socket /run/mkddc/core.sock, JSON lines
+├── core_metrics.{hpp,cpp}— scan_count, overrun, exec time
+└── tests/
+    ├── test_iobus_reader.cpp      — seqlock đọc nhất quán (writer giả ghi đồng thời)
+    ├── test_point_quality.cpp     — bảng quality §6
+    ├── test_priority_resolver.cpp — bảng test §4
+    ├── test_safe_state.cpp        — bảng trigger §5
+    └── test_scan_loop.cpp         — không overrun với load giả
 ```
 
 ---
@@ -37,19 +83,42 @@ services/core/
 ## 2. Scan loop (chu kỳ runtime — PRODUCT_DEFINITION §10)
 
 ```
-1. Read IO state        : iobus_reader đọc kx_io_shm (seqlock) → point_table (UI/DI/DO_fb).
-2. Update point table   : cập nhật value + ts; point_quality tính quality.
-3. Read Modbus(cache)   : đọc ext cache {value,quality,ts} → virtual point.
-4. Read BACnet/web cmd  : web_ipc + BACnet command → command queue (KHÔNG ghi thẳng IO).
-5. Execute graph        : graph_runtime chạy component (PID/timer/alarm/schedule/logic).
-6. Resolve priority     : priority_resolver gộp các nguồn ghi → 1 output/kênh.
-7. Apply safe-state     : safe_state ghi đè nếu IO fault/stale/no-graph.
+1. Read IO state        : iobus_reader đọc kx_io_shm (seqlock) → IoSnapshot.
+2. Update point table   : value + ts; point_quality tính quality (kể cả stale check ts_ns).
+3. Read Modbus(cache)   : (Rev A.1 — bỏ qua khi chưa có fieldbus)
+4. Read web/BACnet cmd  : web_ipc.drain() → command queue (KHÔNG ghi thẳng IO).
+5. Execute graph        : graph_runtime.execute() (STUB: no-op).
+6. Resolve priority     : priority_resolver → 1 output/kênh DO/AO.
+7. Apply safe-state     : safe_state ghi đè nếu trigger (§5).
 8. Write output command : output_writer ghi ao_setpoint[]/do_cmd[] vào kx_io_shm.
-9. Update BACnet object : bacnet_objtable ghi kx_plc_shm.
-10. Update metrics       : scan_count++, đo thời gian, phát hiện overrun.
-11. Sleep tới scan kế    : clock_nanosleep(TIMER_ABSTIME) tới mốc tiếp theo (1s).
+9. Update BACnet object : bacnet_objtable ghi kx_plc_shm (STUB: value/quality).
+10. Update metrics      : scan_count++, đo exec time, phát hiện overrun.
+11. Sleep tới scan kế   : clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, next).
 ```
-> Scan mặc định **1s** (Rev A). sd_notify READY=1 sau scan đầu tiên hoàn tất.
+> Scan mặc định **1s** (Rev A). `next += 1s` từ mốc TUYỆT ĐỐI (không drift).
+> sd_notify READY=1 sau scan đầu tiên hoàn tất. watchdog_kick mỗi scan (WatchdogSec=3 → kick 1s OK).
+
+**Skeleton scan loop (copy được):**
+```cpp
+struct timespec next;
+clock_gettime(CLOCK_MONOTONIC, &next);
+while (!g_shutdown) {
+    const uint64_t t0 = now_ns();
+    IoSnapshot io;
+    if (iobus_reader.read(&io)) point_table.update_inputs(io);
+    point_quality.evaluate(point_table, io);
+    auto cmds = web_ipc.drain();                  // stub: queue rỗng
+    graph_runtime.execute(point_table);           // stub: no-op
+    auto out = priority_resolver.resolve(point_table, cmds);
+    safe_state.apply(io, point_table, &out);      // có thể ghi đè out
+    output_writer.write(out);                     // seqlock-an-toàn (xem §7.2)
+    bacnet_objtable.publish(point_table);
+    core_metrics.end_scan(now_ns() - t0);
+    sd_notify(0, "WATCHDOG=1");
+    next.tv_sec += 1;                              // scan 1s
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr);
+}
+```
 
 ---
 
@@ -59,13 +128,26 @@ services/core/
 |------|----|----|----|
 | AI (UI scaled) | 8 | kx_io_shm.ui_value/ui_quality | — (read-only IO) |
 | BI (DI) | 8 | kx_io_shm.di_state | — |
-| AO | 4 | (feedback) | kx_io_shm.ao_setpoint (qua priority) |
+| AO | 4 | (feedback qua ao_setpoint đã ghi) | kx_io_shm.ao_setpoint (qua priority) |
 | BO (DO) | 4 | kx_io_shm.do_feedback | kx_io_shm.do_cmd (qua priority) |
 | AV virtual | 32 | graph / web / BACnet | — |
 | BV virtual | 16 | graph / web / BACnet | — |
-| ext (Modbus) | 64 | ext cache | ext setpoint (dirty) |
+| ext (Modbus) | 64 | ext cache (Rev A.1) | ext setpoint (dirty) |
 
-Mỗi point: `{value, quality, timestamp, source}`. Quality: GOOD / UNCERTAIN / BAD.
+Mỗi point: `{float value; kx_quality_t quality; uint64_t ts_ns; PointSource source;}`.
+
+**Public API tối thiểu:**
+```cpp
+class PointTable {
+public:
+    void   update_inputs(const IoSnapshot& io);     // AI/BI/DO_fb từ shm
+    Point  get(PointId id) const;
+    bool   set_virtual(PointId id, float v, PointSource src);  // AV/BV (web/graph)
+    // KHÔNG có set() cho AO/BO — output chỉ đi qua priority_resolver
+};
+```
+**Done khi / Test:** 24 IO phản ánh đúng shm trong ≤1 scan; AV/BV set/get đúng;
+không có đường ghi AO/BO trực tiếp (compile-time: không tồn tại API).
 
 ---
 
@@ -81,32 +163,46 @@ Mỗi point: `{value, quality, timestamp, source}`. Quality: GOOD / UNCERTAIN / 
 | 5        | Local logic    |
 | 6        | Default        |  ← thấp nhất
 ```
+**Public API:**
+```cpp
+struct OutputCmd { float ao[4]; bool ao_valid[4]; uint8_t dout[4]; bool do_valid[4]; };
+class PriorityResolver {
+public:
+    // nguồn ghi: set(level, channel, value) / release(level, channel)
+    void set_ao(int level, int ch, float v);   void release_ao(int level, int ch);
+    void set_do(int level, int ch, bool on);   void release_do(int level, int ch);
+    OutputCmd resolve();                        // mức active cao nhất; không ai → default (mức 6)
+};
+```
 **Rule:**
 ```
 - Mọi DO/AO output đi qua priority_resolver, không ghi thẳng kx_io_shm.
-- BMS/BACnet/Modbus/Web KHÔNG ghi thẳng IO — chỉ ghi command/setpoint vào 1 mức priority.
-- Resolver chọn nguồn priority cao nhất đang active → giá trị output cuối.
-- Không nguồn nào active → relinquish default (mức 6).
+- Web/BACnet/schedule/logic mỗi nguồn gắn 1 mức cố định; KHÔNG nguồn nào ghi thẳng IO.
+- 2 nguồn cùng mức ghi 1 kênh → log WARN conflict, lấy nguồn ghi sau.
+- Không nguồn nào active → relinquish default (mức 6, đọc từ config io_safe_state.conf).
 ```
-**Module format:**
+**Test (test_priority_resolver.cpp):**
 ```
-Mục tiêu : gộp nhiều nguồn ghi → 1 output/kênh theo priority.
-Input    : command từ web/BACnet/schedule/logic/safety (mỗi nguồn gắn mức).
-Output   : 1 giá trị output cuối/kênh DO/AO.
-Lỗi      : 2 nguồn cùng mức ghi 1 kênh → log conflict, lấy nguồn ghi sau / theo policy.
-Test     : web (mức3) + safety (mức1) cùng ghi DO1 → safety thắng.
-Done khi : output cuối luôn theo nguồn priority cao nhất active; không bypass.
+- web (mức 3) set DO1=1; safety (mức 1) set DO1=0 → resolve = 0 (safety thắng).
+- safety release → resolve = 1 (rơi về mức 3).
+- tất cả release → resolve = default.
+- 2 nguồn mức 3 cùng ghi → nguồn sau thắng + log conflict.
 ```
+**Done khi:** output cuối luôn theo nguồn priority cao nhất active; không bypass.
 
 ---
 
 ## 5. Safe-state resolver
 
 ```
-Mục tiêu : đảm bảo output an toàn khi IO không tin cậy.
-Trigger  : iop_status=FAULT/SAFE; ui_quality=BAD; ext stale; chưa có graph hợp lệ.
-Hành vi  : AO → safe (0V/4mA theo mode); DO → open; quality điểm = BAD.
-Test     : rút UART → iobus FAULT → core ghi safe output → relay mở, AO 0V/4mA.
+Trigger  : iop_status=FAULT/SAFE · ui_quality=BAD trên kênh graph đang dùng ·
+           shm stale (ts_ns không tăng >3 scan) · chưa có graph hợp lệ VÀ không có
+           lệnh manual/BMS active.
+Hành vi  : AO → safe (0V/4mA theo ao_mode trong shm); DO → 0 (open);
+           point quality liên quan = BAD; log ERROR + 1 lần/transition.
+Public API: void apply(const IoSnapshot&, const PointTable&, OutputCmd* inout);
+Test     : test_safe_state.cpp — mô phỏng iop_status=FAULT → out.ao=safe, out.do=0;
+           ts_ns đứng yên 4 scan → như trên; hết fault → trả quyền cho resolver.
 Done khi : mọi điều kiện fault dẫn tới output an toàn trong ≤1 scan.
 ```
 
@@ -115,67 +211,195 @@ Done khi : mọi điều kiện fault dẫn tới output an toàn trong ≤1 sca
 ## 6. Quality propagation
 
 ```
-- iop_status=FAULT hoặc fault_flags.ADC_FAULT → UI quality = BAD.
-- ts_ns trong shm không tăng > 3 chu kỳ → stale → quality = UNCERTAIN→BAD.
-- ext (Modbus) online=0 → quality = BAD.
-- Graph component đọc point BAD → áp fallback (SW_RUNTIME_EXECUTION_MODEL).
-Done khi: IO fault làm point quality bad và graph/web thấy được.
+- iop_status=FAULT/SAFE                  → mọi UI/DI quality = BAD.
+- fault_flags & IOP_FAULT_ADC            → mọi UI quality = BAD.
+- fault_flags & IOP_FAULT_UI_OV          → kênh vượt dải = BAD (iobus đã set theo kênh).
+- kx_io_shm.ts_ns không tăng > 3 scan    → stale → UNCERTAIN (3-5 scan) → BAD (>5 scan).
+- ext (Modbus) online=0                  → quality = BAD (Rev A.1).
+- Graph component đọc point BAD          → fallback (SW_RUNTIME_EXECUTION_MODEL).
+Done khi: rút UART → ≤2 scan tất cả UI/DI BAD; web thấy quality bad; graph thấy stale.
 ```
 
 ---
 
-## 7. IPC với web (web_ipc)
+## 7. SHM: đọc và ghi đúng cách
 
+### 7.1 `iobus_reader` — seqlock reader (copy được)
+```cpp
+bool IobusReader::read(IoSnapshot* out) {
+    const kx_io_shm_t* s = shm_;                 // mmap sẵn từ attach()
+    if (s->magic != KX_SHM_MAGIC) return false;  // iobus chưa init
+    for (int i = 0; i < 5; i++) {                // tối đa 5 lần thử
+        uint32_t v1 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
+        if (v1 & 1u) continue;                   // đang ghi → thử lại
+        memcpy(out, /*copy các field cần*/ ..., ...);
+        uint32_t v2 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
+        if (v1 == v2) return true;               // snapshot nhất quán
+    }
+    return false;                                 // dùng snapshot cũ + đếm metric
+}
 ```
-- Web KHÔNG ghi thẳng kx_io_shm. Web gửi command/setpoint qua web_ipc (Unix socket
-  /run/mkddc/core.sock hoặc shared command ring), kèm {point_id, value, priority_source, user}.
-- Core đưa command vào command queue (bước 4 scan loop) → priority_resolver.
-- Web đọc snapshot point qua web_ipc (read) hoặc core publish read-cache.
-- Audit: core trả kết quả apply (accepted/overridden-by-priority) để web ghi audit log.
+`attach()`: mở `KX_SHM_IO_PATH` (KHÔNG O_CREAT — iobus là creator), magic sai → retry 1s,
+log WARN mỗi 10s; sau 30s → vẫn chạy scan với toàn bộ quality=BAD (safe-state áp).
+
+### 7.2 `output_writer` — ghi 2 field core sở hữu
+```
+- core là writer DUY NHẤT của ao_setpoint[] + do_cmd[] (ownership: 06 §5).
+- KHÔNG dùng KX_WRITE_BEGIN/END của io_shm (seq do iobus sở hữu).
+  Ghi từng field bằng atomic store / aligned write (float/uint8 ghi nguyên tử trên ARM64):
+  __atomic_store_n(&shm->do_cmd[ch], v, __ATOMIC_RELEASE);
+- ao_setpoint ghi giá trị ENGINEERING (V/mA theo ao_mode); iobus convert eng→raw.
+- Chỉ ghi khi giá trị đổi (đỡ cache-line bounce); iobus side cũng chỉ gửi khi CHANGED.
+Done khi: ghi do_cmd[0]=1 → iobus gửi SET_DO trong ≤1 chu kỳ poll (10ms).
 ```
 
 ---
 
-## 8. systemd
+## 8. IPC với web (`web_ipc`) — CONTRACT CHUẨN (core là server, web là client)
 
+**Transport:** Unix stream socket `/run/mkddc/core.sock` (mode 660, group mkddc — web user
+thuộc group). Mỗi message = **1 dòng JSON** (newline-delimited). Web đọc snapshot point qua
+`kx_io_shm`/`kx_plc_shm` trực tiếp (read-only) — socket CHỈ dùng cho command.
+
+**Request (web → core):**
+```json
+{"id": 421, "op": "write",   "point": "DO1", "value": 1, "source": "manual", "user": "admin"}
+{"id": 422, "op": "release", "point": "DO1",             "source": "manual", "user": "admin"}
 ```
+| Field | Kiểu | Bắt buộc | Ý nghĩa |
+|-------|------|----------|---------|
+| `id` | uint64 | ✅ | Correlation id, web tự tăng; core echo nguyên xi vào response |
+| `op` | `write`/`release` | ✅ | write = set giá trị; release = nhả nguồn (relinquish) |
+| `point` | string | ✅ | Point id (DO1/AO2/AV3...) |
+| `value` | number | khi op=write | Engineering value |
+| `source` | enum | ✅ | Rev A: chỉ `manual` (mức 2). Mức khác KHÔNG đi qua socket này |
+| `user` | string | ✅ | Cho audit log |
+
+**Response (core → web, cùng connection, đúng 1 dòng/request):**
+```json
+{"id": 421, "result": "accepted",   "applied_value": 1, "active_source": "manual"}
+{"id": 421, "result": "overridden", "applied_value": 0, "active_source": "safety"}
+{"id": 423, "result": "rejected",   "error": "unknown_point"}
+```
+| `result` | Nghĩa | Web hiển thị |
+|----------|-------|---------------|
+| `accepted` | nguồn manual đang thắng, giá trị được áp | OK |
+| `overridden` | nhận lệnh nhưng nguồn cao hơn đang thắng (`active_source`) | "Bị ghi đè bởi mức ưu tiên cao hơn" |
+| `rejected` | lỗi: `unknown_point` / `bad_value` / `readonly_point` / `bad_request` | thông báo lỗi |
+
+**Timing/lỗi:**
+```
+- Core trả lời trong ≤ 2 chu kỳ scan (≤2s Rev A); web timeout 3s → coi là lỗi, KHÔNG retry
+  tự động lệnh write (tránh double-actuate) — báo user thử lại.
+- Socket đóng/core restart: web reconnect với backoff 1s; lệnh đang treo = thất bại.
+- Core drain command queue ở bước 4 scan loop; queue đầy (>64 lệnh/scan) → rejected "busy".
+- Audit: web ghi {ts, user, point, op, value, result, active_source} vào eventlog.
+- STUB Rev A đầu: parse + queue + trả accepted/rejected (chưa có overridden) — đủ commissioning.
+```
+
+---
+
+## 9. Build / install / run
+
+**`services/core/CMakeLists.txt` mẫu:**
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(mkddc-core CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_compile_options(-Wall -Wextra -Werror)
+
+set(SHARED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../shared)
+
+add_library(core_lib STATIC
+    scan_loop.cpp point_table.cpp point_quality.cpp graph_runtime.cpp
+    priority_resolver.cpp safe_state.cpp iobus_reader.cpp output_writer.cpp
+    bacnet_objtable.cpp web_ipc.cpp core_metrics.cpp)
+target_include_directories(core_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${SHARED_DIR})
+target_link_libraries(core_lib PUBLIC pthread rt)
+
+add_executable(mkddc-core main.cpp)
+target_link_libraries(mkddc-core PRIVATE core_lib)
+
+include(FetchContent)
+FetchContent_Declare(googletest
+  URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip)
+FetchContent_MakeAvailable(googletest)
+enable_testing()
+add_executable(core_tests
+    tests/test_iobus_reader.cpp tests/test_point_quality.cpp
+    tests/test_priority_resolver.cpp tests/test_safe_state.cpp tests/test_scan_loop.cpp)
+target_link_libraries(core_tests PRIVATE core_lib gtest_main)
+include(GoogleTest)
+gtest_discover_tests(core_tests)
+```
+**Build + test local:**
+```bash
+cmake -S services/core -B build/core -DCMAKE_BUILD_TYPE=Release
+cmake --build build/core -j
+ctest --test-dir build/core --output-on-failure
+```
+**Chạy dev không cần board:** chạy `mkddc-iobus` + fake MCU trước (06 §11.1) →
+`./build/core/mkddc-core --log-level debug` → xem point table phản ánh UI ramp của fake MCU.
+
+**systemd unit ĐẦY ĐỦ:**
+```ini
 # /etc/systemd/system/mkddc-core.service
+[Unit]
+Description=MK-DDC-24 core service (point table, priority, safe-state)
+# iobus tạo SHM → core chạy sau. Wants (không Requires): iobus restart không kéo core chết.
+After=mkddc-iobus.service
+Wants=mkddc-iobus.service
+
 [Service]
+Type=notify                     # READY=1 sau scan đầu tiên
 ExecStart=/usr/sbin/mkddc-core
 User=mkddc
+Group=mkddc
+RuntimeDirectory=mkddc          # /run/mkddc (core.sock)
+RuntimeDirectoryPreserve=yes
 Restart=always
-WatchdogSec=3
+RestartSec=2
+WatchdogSec=3                   # core kick mỗi scan (1s)
 CPUSchedulingPolicy=fifo
-CPUSchedulingPriority=80
-LimitMEMLOCK=infinity
+CPUSchedulingPriority=80        # cao hơn iobus (70)
+LimitRTPRIO=85
+LimitMEMLOCK=infinity           # mlockall() tránh page fault trong scan
+AmbientCapabilities=CAP_SYS_NICE CAP_IPC_LOCK
+NoNewPrivileges=yes
+
 [Install]
 WantedBy=multi-user.target
 ```
-> mlockall() để tránh page fault trong scan; SCHED_FIFO 80 (cao hơn iobus 70).
 
 ---
 
-## 9. Quy tắc bắt buộc
+## 10. Quy tắc bắt buộc
 
 ```
 1. Mọi DO/AO qua priority_resolver. KHÔNG có đường ghi tắt.
 2. Core KHÔNG mở UART, KHÔNG nói chuyện MCU (đó là iobus).
-3. Scan loop tuyệt-đối-thời-gian; không sleep tương đối (tránh drift).
-4. Đọc shm bằng seqlock reader (retry khi seq lẻ); không block iobus.
+3. Scan loop tuyệt-đối-thời-gian (clock_nanosleep ABSTIME); không sleep tương đối.
+4. Đọc shm bằng seqlock reader (§7.1); không block iobus; chỉ ghi 2 field core sở hữu (§7.2).
 5. IO fault → quality bad → safe-state; không giả "good".
+6. Stub (web_ipc/graph_runtime/bacnet_objtable) phải có interface THẬT — thay implementation
+   sau, KHÔNG đổi API (tránh sửa dây chuyền).
 ```
 
 ---
 
-## 10. Trace
+## 11. Done criteria (Phase 4 đóng) + Trace
 
-| Chủ đề | Module | Test |
-|--------|--------|------|
-| Scan 1s | scan_loop | group 4 |
-| Point table 24 IO | point_table | group 4 |
-| Priority 6 mức | priority_resolver | group 4 + group 6 (E2E) |
-| Safe-state | safe_state | group 7 (fault inject) |
-| Quality bad | point_quality | group 7 |
+| Chủ đề | Module | Done khi | Test |
+|--------|--------|----------|------|
+| Scan 1s | scan_loop | 1000 scan không overrun, drift=0 | group 4 / test_scan_loop |
+| Point table 24 IO | point_table | phản ánh shm ≤1 scan | group 4 |
+| Priority 6 mức | priority_resolver | bảng test §4 pass | group 4 + group 6 (E2E) |
+| Safe-state | safe_state | fault → output an toàn ≤1 scan | group 7 (fault inject) |
+| Quality bad | point_quality | rút UART → BAD ≤2 scan | group 7 |
+| Output path | output_writer | do_cmd[0]=1 → relay ≤1 chu kỳ poll | group 6 (E2E) |
+| Web command | web_ipc (stub) | commissioning DO test qua core chạy | group 5/6 |
 
 ---
-**Rev** 1.0 | 2026-06-10 · DoD: [12_DEFINITION_OF_DONE §4](12_DEFINITION_OF_DONE.md)
+**Rev** 1.1 | 2026-06-11 · Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) ·
+DoD: [12_DEFINITION_OF_DONE §4](12_DEFINITION_OF_DONE.md)

@@ -83,7 +83,7 @@ Tài liệu này định nghĩa requirements cho **MCU firmware** chạy trên S
 | FW-AO-006 | PHẢI validate raw value: uint16 trong [0, 65535]. Nếu ngoài range → NACK + log | MUST | T-FW-035 |
 | FW-AO-007 | PHẢI nhận và lưu cấu hình AO mode per kênh qua IOP command `SET_AO_CFG` (v1.1): mode=0→0–10V, mode=1→4–20mA | MUST | T-FW-036 |
 | FW-AO-008 | Mặc định khi boot (trước khi nhận `SET_AO_CFG`): tất cả AO kênh ở mode 0–10V | MUST | T-FW-037 |
-| FW-AO-009 | Safe state khi mode 0–10V: AO = 0V (raw=0); khi mode 4–20mA: AO = 4mA (raw=13107) | MUST | T-FW-038 |
+| FW-AO-009 | Safe state khi mode 0–10V: AO = 0V (protocol raw=0); khi mode 4–20mA: AO = 4mA (protocol raw=0 theo SWFW §6.3 — nếu DAC vật lý span 0–20mA, FW quy đổi nội bộ ≈ count 13107) | MUST | T-FW-038 |
 
 > **Ghi chú:** `SET_AO_CFG` là IOP command mới, dự kiến IOP v1.1. Đến khi v1.1 có hiệu lực, SOM gửi mode config ngay sau HANDSHAKE. Xem OPEN-ISSUES IOP-Q-004.
 

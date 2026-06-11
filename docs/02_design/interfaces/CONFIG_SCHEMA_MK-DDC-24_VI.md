@@ -2,10 +2,24 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-05-30 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.1 | 2026-06-11 (Contract Freeze: policy lỗi config theo case, tên service `mkddc-*`, owner từng file) · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
-> Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do Web IDE ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
+> Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
+
+**Owner / reader / reload từng file (chuẩn duy nhất):**
+
+| File | Writer | Reader (service) | Reload khi đổi |
+|------|--------|------------------|-----------------|
+| `device.conf` | mkddc-web | mkddc-iobus (BACnet), mkddc-core | SIGHUP iobus |
+| `network.conf` | mkddc-web | mkddc-web (áp hệ thống) | apply ngay (netplan/networkd) |
+| `io_config.conf` | mkddc-web | **mkddc-iobus** (scale + SET_AO_CFG) | SIGHUP iobus (re-handshake AO cfg) |
+| `io_safe_state.conf` | mkddc-web | **mkddc-core** (relinquish default + safe-state) | SIGHUP core |
+| `bacnet.conf` | mkddc-web | mkddc-iobus | restart iobus |
+| `fieldbus.conf` | mkddc-web | mkddc-iobus | restart iobus |
+| `mqtt.conf` | mkddc-web | (Rev B+ agent) | — |
+| `users.conf` | mkddc-web | mkddc-web | apply ngay |
+| `iobus.conf` (xem [06 §4](../../03_implementation/06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md)) | dev/provisioning | mkddc-iobus | restart iobus |
 
 > ⚠️ **RECONCILE (2026-06-08).** Phần **logic điều khiển** (component nodes/links) nay nằm ở
 > [`graph.json`](GRAPH_SCHEMA_MK-DDC-24_VI.md) (nguồn-chuẩn) thay cho program FBD/ST. File config
@@ -65,7 +79,7 @@
 }
 ```
 - `type` ∈ `0-10V|4-20mA|PT100|PT1000|NTC10k|NTC20k|dry`.
-- `ao.mode` ∈ `0-10V|4-20mA` → io-driver gửi `SET_AO_CFG` xuống MCU.
+- `ao.mode` ∈ `0-10V|4-20mA` → **mkddc-iobus** gửi `SET_AO_CFG` xuống MCU (mode đã áp dụng ghi vào `kx_io_shm.ao_mode[]`).
 
 ## 4. `io_safe_state.conf` — giá trị an toàn khi lỗi
 ```json
@@ -96,7 +110,7 @@
   ]
 }
 ```
-> `profile` trỏ tới template register-map (xem [D-2 §3](MODBUS_REGISTER_MAP_MK-DDC-24_VI.md)). Thêm slave = thêm 1 phần tử; đổi baud cần reboot field-bus service.
+> `profile` trỏ tới template register-map (xem [D-2 §3](MODBUS_REGISTER_MAP_MK-DDC-24_VI.md)). Thêm slave = thêm 1 phần tử; đổi baud cần restart `mkddc-iobus`.
 
 ## 6. `mqtt.conf`
 ```json
@@ -116,17 +130,30 @@
 {
   "users": [
     {"username":"admin","role":"admin","pw_bcrypt":"$2b$12$...."},
-    {"username":"tech","role":"operator","pw_bcrypt":"$2b$12$...."}
+    {"username":"tech","role":"operator","pw_bcrypt":"$2b$12$...."},
+    {"username":"guest","role":"viewer","pw_bcrypt":"$2b$12$...."}
   ]
 }
 ```
-> **KHÔNG** lưu mật khẩu plaintext (SW-IDE-021). Hash bcrypt cost ≥ 12.
+> `role` ∈ `admin|operator|viewer` (CHỐT Rev A — ma trận quyền:
+> [08 §1.1](../../03_implementation/08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md); role "engineer"
+> cũ không còn). **KHÔNG** lưu mật khẩu plaintext (SW-IDE-021). Hash bcrypt cost ≥ 12.
 
 ## 8. Quy tắc chung
 - Mọi file UTF-8, có khoá `"_schema_version"` để migrate.
-- Service validate JSON Schema khi load; lỗi → dùng default + log + alarm, không crash.
-- Ghi atomic (ghi `*.tmp` rồi `rename`) tránh hỏng khi mất điện.
+- Ghi atomic (ghi `*.tmp` rồi `rename`) tránh hỏng khi mất điện — vì vậy file tồn tại
+  nhưng JSON hỏng = deploy/đĩa lỗi thật, KHÔNG phải trạng thái bình thường.
 - File nhạy cảm (`users.conf`, `certs/`) quyền 600, owner đúng service.
+
+**Policy lỗi config (chuẩn duy nhất — khớp [06 §4](../../03_implementation/06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md); thay câu cũ "lỗi → default, không crash"):**
+
+| Tình huống | Hành vi service đọc | Lý do |
+|------------|---------------------|-------|
+| Thiếu file | dùng default built-in toàn bộ; log WARN | thiết bị mới chưa provision là bình thường |
+| JSON sai cú pháp | **fail-fast** (exit ≠ 0, systemd restart) + log ERROR + alarm | file được ghi atomic nên hỏng = sự cố thật; không đoán mò config |
+| Thiếu field lẻ | default field đó; log WARN `field=..` | schema mở rộng dần |
+| Field sai kiểu / unknown enum (vd `sensor_type` lạ) | **disable đơn vị liên quan** (kênh đó quality=BAD / slave đó bỏ qua) + log ERROR + alarm; service VẪN chạy | lỗi cục bộ không được hạ cả service |
+| Giá trị ngoài range | clamp về biên + log WARN | vận hành tiếp an toàn |
 
 ## 9. Trace REQ
 `SW_ARCH §5`, `IDE-020..025`, `SW-IDE-010..015`, `RTU-002`, `MB-010`.

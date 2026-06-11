@@ -76,7 +76,7 @@ Test ID: TC-1-05  Watchdog + safe-state
 Các bước: treo io_sample (test hook); ngừng GET_IO
 Kết quả: IWDG reset ~1s; safe-state sau 200ms (AO 0V, DO open)
 Pass/Fail: cả 2 cơ chế chạy
-Log: RCC_CSR cause, FAULT bit5
+Log: RCC_CSR cause, FAULT bit4 (IOP_FAULT_WDG_RESET, sticky — clear khi GET_DIAG đầu sau boot)
 ```
 
 ---
@@ -86,8 +86,8 @@ Log: RCC_CSR cause, FAULT bit5
 ```
 Test ID: TC-2-01  CRC vector
 Thiết bị: PC harness
-Các bước: tính CRC 10 vector cả MCU lẫn SOM
-Kết quả: khớp; {AA 00 01 00}→0x84C0, {AA 00 01 01}→0x556B
+Các bước: tính CRC 12 vector chuẩn (SWFW §10.1) cả MCU lẫn SOM
+Kết quả: khớp; {AA 00 01 00}→0x6C20, {AA 00 01 01}→0xACE1
 Pass/Fail: 10/10 khớp 2 phía
 Log: unit test output
 

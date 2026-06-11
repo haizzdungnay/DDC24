@@ -11,7 +11,8 @@
 ### A.1 Luồng
 ```
 nhận ao_cmd_t từ xAoQueue (không chờ nếu rỗng):
-  if safe_state: ghi giá trị safe (mode 0-10V→0; 4-20mA→4mA raw 13107)
+  if safe_state: ghi giá trị safe (mode 0-10V→0V; 4-20mA→4mA. Protocol raw=0 cho cả 2 mode
+  — SWFW §6.3; 13107 chỉ là DAC count nội bộ nếu tầng vật lý 0–20mA)
   else:
     validate mỗi raw ∈ [0,65535]  (ngoài → NACK + log)  [FW-AO-006]
     ghi 4 kênh DAC8554 (SPI1 DMA), rồi pulse LDAC (PB0) update đồng bộ
@@ -50,7 +51,7 @@ safe_state → tất cả relay OPEN (de-energized)  [FW-DO-004]
 | Output | Safe value |
 |--------|-----------|
 | AO 0–10V | 0V (raw 0) |
-| AO 4–20mA | 4mA (raw 13107) |
+| AO 4–20mA | 4mA (protocol raw 0x0000 — SWFW §6.3; DAC count nội bộ ≈13107 nếu span 0–20mA) |
 | DO relay | OPEN |
 Kích hoạt khi: RESET_IO, IOP timeout 200ms, watchdog, VDD/ADC fault.
 

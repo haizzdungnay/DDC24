@@ -1,15 +1,46 @@
 # 05 — IOP / UART Implementation Guide (hợp đồng MCU ↔ SOM)
-## MK-DDC-24 — Kinexus-IOP v1.1
+## MK-DDC-24 — IOP v1.1 (tên cũ: Kinexus-IOP — rename policy: 15_CONTRACT_FREEZE §6)
 
 > **Document ID:** IMPL-IOP-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-10
+> **Phiên bản:** 1.2 | 2026-06-11 (Contract Freeze: FAULT bit6 VDD, bảng RESET reason, CRC vector đúng, header thắng)
 > **Owner:** Dev 1 (MCU slave) + Dev 2 (SOM master) — **CẢ HAI bắt buộc đọc**
-> **Nguồn-chuẩn DUY NHẤT:** [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) +
-> [`shared/iop_protocol.h`](../../shared/iop_protocol.h)
+> **Nguồn-chuẩn CUỐI CÙNG:** [`shared/iop_protocol.h`](../../shared/iop_protocol.h) —
+> mọi giá trị (opcode, payload, enum, FAULT bit, RESET reason, hằng số) lấy theo header.
+> [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) và file này là
+> **diễn giải**: lệch header → **header thắng**, sửa docs theo
+> ([15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md)).
 
 > ⚠️ File này là **HỢP ĐỒNG implement**. Nếu code MCU và code SOM bất đồng, sửa cho khớp
-> file này + `iop_protocol.h`. **KHÔNG fork/sửa 1 bên.** Đổi hợp đồng = bump `IOP_VER_*` +
-> sửa cả 2 phía + chạy lại cross-test.
+> `iop_protocol.h`. **KHÔNG fork/sửa 1 bên.** Đổi hợp đồng = bump `IOP_VER_*` +
+> sửa cả 2 phía + cập nhật 15_CONTRACT_FREEZE + chạy lại cross-test.
+
+---
+
+## 0. Scope của tài liệu
+
+```
+File này CHỈ định nghĩa hợp đồng giao tiếp UART/IOP giữa MCU ↔ SOM:
+- frame format
+- CRC
+- SEQ
+- command list
+- payload từng command
+- timeout / retry
+- startup sequence
+- error handling
+- state machine IOP
+- public API tối thiểu 2 phía
+- data structure dùng chung
+- cross-test / negative test
+
+File này KHÔNG mô tả toàn bộ mkddc-iobus (thread model, config service, shm với core,
+build/install, metrics/alarm service-level...). Phần đó ở:
+→ 06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md (SOM side, service)
+→ 04_FW_MCU_IMPLEMENTATION_GUIDE.md (MCU side, firmware)
+
+Ranh giới: 05 = "tầng protocol" (tái sử dụng được, test độc lập). 06/04 = "tầng service/app"
+bọc quanh protocol này.
+```
 
 ---
 
@@ -59,11 +90,14 @@ Hàm chung: iop_crc16() trong shared/iop_protocol.h — CẢ MCU lẫn SOM dùng
 ```
 **Test vector BẮT BUỘC khớp 2 phía:**
 ```
-{0xAA,0x00,0x01,0x00}  → 0x84C0
-{0xAA,0x00,0x01,0x01}  → 0x556B
+{0xAA,0x00,0x01,0x00}  → 0x6C20    (GET_IO SEQ=0)
+{0xAA,0x00,0x01,0x01}  → 0xACE1    (GET_IO SEQ=1; frame đầy đủ: AA 00 01 01 AC E1)
 ```
-> IOP-SW-010 + IOP-FW-010: mỗi phía PHẢI có unit test ≥10 vector. Vector thứ 3 (SET_AO)
-> tính bằng reference impl khi tích hợp, lưu vào test cả 2 phía.
+> IOP-SW-010 + IOP-FW-010: mỗi phía PHẢI có unit test ≥10 vector — dùng **bộ chuẩn 12 vector**
+> trong [SWFW spec §10.1](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) /
+> [15_CONTRACT_FREEZE §5](15_CONTRACT_FREEZE.md). KHÔNG tự bịa vector khác làm chuẩn.
+> ⚠️ Vector cũ `0x84C0`/`0x556B` (docs trước 2026-06-11) là SAI — nếu test của bạn pass với
+> giá trị đó nghĩa là CRC implement sai thuật toán.
 
 ---
 
@@ -104,7 +138,7 @@ Hàm chung: iop_crc16() trong shared/iop_protocol.h — CẢ MCU lẫn SOM dùng
 [24]     DI_MASK      : bit0=DI1..bit7=DI8 (1=ON sau debounce)
 [25]     DO_FB_MASK   : bit0=DO1..bit3=DO4 (1=relay đóng, feedback)
 [26..27] MCU_TEMP     : int16 BE, ×10 (°C). 250=25.0°C
-[28..29] FAULT_FLAGS  : uint16 BE (xem §6.6)
+[28..29] FAULT_FLAGS  : uint16 BE (xem §6.8)
 [30..31] SAMPLE_CNT   : uint16 BE (wrap) — phát hiện MCU hang
 [32..33] RESERVED     : 0x0000
 ```
@@ -140,11 +174,35 @@ HANDSHAKE_RESP: [0..1] MCU_IOP_VERSION, [2..3] MCU_FW_VERSION, [4] STATUS (0=OK,
 ACK : [0] ECHOED_CMD (CMD được ACK)
 NACK: [0] REJECTED_CMD, [1] ERROR_CODE
 ```
-### 6.8 FAULT_FLAGS bitmask
-```
-bit0 ADC_FAULT · bit1 DAC_FAULT · bit2 UI_OV(>110%FS) · bit3 RELAY_STUCK
-bit4 MCU_WATCHDOG_RESET(sticky) · bit5 MCU_OVERTEMP(>85°C) · bit6..15 reserved
-```
+### 6.8 FAULT_FLAGS bitmask (bảng chuẩn duy nhất — macro `IOP_FAULT_*` trong header)
+
+| Bit | Macro | Set khi | Clear khi | Sticky |
+|-----|-------|---------|-----------|--------|
+| 0 | `IOP_FAULT_ADC` | ADS131M08 không có mẫu hợp lệ trong 100ms | reinit OK + mẫu hợp lệ | Không |
+| 1 | `IOP_FAULT_DAC` | DAC8554 không phản hồi SPI | ghi DAC OK trở lại | Không |
+| 2 | `IOP_FAULT_UI_OV` | bất kỳ UI > 110% full scale | mọi UI ≤ 110% FS | Không |
+| 3 | `IOP_FAULT_RELAY_STUCK` | DO feedback ≠ lệnh sau 20ms | feedback khớp lại | Không |
+| 4 | `IOP_FAULT_WDG_RESET` | boot sau reset IWDG/WWDG (RCC_CSR) | MCU nhận GET_DIAG đầu tiên sau boot | **Sticky** |
+| 5 | `IOP_FAULT_MCU_OVERTEMP` | MCU_TEMP > 85.0°C | < 80.0°C (hysteresis 5°C) | Không |
+| 6 | `IOP_FAULT_VDD` | VDD ngoài [3.0, 3.6]V (MCU ngừng AO) | VDD trong dải | Không |
+| 7–15 | reserved | luôn 0 | — | — |
+
+> SOM: thấy bit4 → alarm `MCU_WATCHDOG_RESET` + gửi GET_DIAG để MCU clear. Mọi bit → mirror
+> nguyên xi vào `kx_io_shm.fault_flags`; mapping alarm: [06 §9](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md).
+
+### 6.9 RESET_IO (0x40) reason — bảng chuẩn duy nhất (`IOP_RESET_REASON_*`)
+
+| Giá trị | Macro | Ai gửi | Khi nào | MCU làm gì | SOM log/alarm |
+|---------|-------|--------|---------|------------|----------------|
+| `0x00` | `..._NORMAL` | iobus | startup sau handshake (đưa IO về safe đã biết) | safe-state + ACK + log | INFO `iop.reset reason=normal` |
+| `0x01` | `..._CORE_WDG` | iobus | core/scan-loop chết — **Rev A: reserved** | nt | ERROR + alarm |
+| `0x02` | `..._BMS_TIMEOUT` | core→iobus | policy BMS timeout — **Rev A: reserved** | nt | WARN + alarm |
+| `0x03` | `..._OPERATOR` | web→core→iobus | commissioning của operator | nt | INFO + audit log |
+| `0x04` | `..._OTA` | iobus | SOM sắp nạp firmware MCU | nt | INFO `reason=ota` |
+| `0x05` | `..._IOP_FAULT` | iobus | FAULT path: >100ms không IO_RESP hợp lệ | nt | ERROR + alarm `IOP_TIMEOUT` |
+
+> MCU hành vi GIỐNG NHAU mọi reason (AO safe theo mode, DO open, log reason, ACK 0x40);
+> reason lạ (0x06–0xFF) vẫn safe-state + ACK + log. Reason CHỈ phục vụ log/diag.
 
 ---
 
@@ -179,49 +237,187 @@ bit4 MCU_WATCHDOG_RESET(sticky) · bit5 MCU_OVERTEMP(>85°C) · bit6..15 reserve
 
 ```
 1. SOM mở /dev/ttyS2, 921600 8N1, flush RX/TX, SEQ=0.
-2. SOM gửi HANDSHAKE (0x30) với SOM_IOP_VERSION=0x0101, capabilities.
+2. SOM gửi HANDSHAKE (0x30) với SOM_IOP_VERSION=0x0101, capabilities (IOP_CAP_DIAG|IOP_CAP_RESET_IO).
 3. MCU trả HANDSHAKE_RESP (0x31) với version + STATUS.
 4. SOM kiểm version:
      STATUS=0x00 → tiếp tục
      STATUS=0x01 → log WARNING, tiếp tục
      STATUS=0x02 / timeout → log CRITICAL, retry 3 lần → fail thì raise IOP_INIT_FAIL + safe.
-5. SOM gửi SET_AO_CFG (0x13) nếu cần đổi mode (MCU chưa hỗ trợ → NACK UNKNOWN_CMD, giữ 0-10V).
-6. SOM bắt đầu GET_IO poll loop (10ms timer).
-7. MCU trả IO_RESP mỗi GET_IO.
-8. Timeout → retry (≤3).
-9. Retry fail → báo MCU fault (iop_status=FAULT, alarm bus).
+5. (tùy chọn, khuyến nghị) SOM gửi RESET_IO reason=IOP_RESET_REASON_NORMAL (0x00)
+   → đưa IO về safe-state đã biết trước khi bắt đầu vận hành (xem §6.9).
+6. SOM gửi SET_AO_CFG (0x13) nếu cần đổi mode (MCU chưa hỗ trợ → NACK UNKNOWN_CMD, giữ 0-10V).
+7. SOM bắt đầu GET_IO poll loop (10ms timer).
+8. MCU trả IO_RESP mỗi GET_IO.
+9. Timeout → retry (≤3).
+10. Retry fail → báo MCU fault (iop_status=FAULT, alarm bus).
 ```
 
 ---
 
-## 10. Error handling (state machine — đồng bộ 2 phía)
+## 10. Reference implementation layout (code 2 phía)
 
-| State | SOM | MCU |
-|-------|-----|-----|
-| NORMAL | poll 100Hz, apply IO | trả dữ liệu thật |
-| IOP_FAULT | ngừng SET_*; retry GET_IO; log | hold last output |
-| SAFE_STATE | gửi RESET_IO; alarm | AO=0V/4mA, DO=open |
-| RECONNECT | HANDSHAKE mỗi 5s | xử lý HANDSHAKE bình thường |
+Protocol này có code tương đương ở 2 phía; **CRC + frame encode/decode + test vector dùng
+chung logic** (không fork).
 
-Safe-state values: AO 0-10V→0V (raw0); AO 4-20mA→4mA (raw 13107); DO→open.
+```
+MCU (firmware):
+fw/common/iop_protocol.h     ← COPY/symlink từ shared/iop_protocol.h (hằng số, CRC, enum)
+fw/common/iop_crc.c          ← wrapper iop_crc16 + unit test host
+fw/app/iop_comm.c            ← task slave: parse/build/dispatch (xem 04_FW_MCU §3)
+fw/drivers/iop_drv.c         ← USART1 DMA RX(IDLE)+TX
+
+SOM (mkddc-iobus):
+services/iobus/iop/iop_protocol.hpp  ← include shared/iop_protocol.h + wrapper C++ (struct, enum)
+services/iobus/iop/iop_crc.cpp       ← iop_crc16 + unit test (gtest/catch2)
+services/iobus/iop/iop_frame.cpp     ← build/parse frame
+services/iobus/iop/iop_client.cpp    ← state machine master + timeout/retry + SEQ
+services/iobus/iop/iop_parser.cpp    ← IO_RESP/DIAG_RESP → struct
+```
+> `iop_protocol.h` là 1 nguồn duy nhất (hằng số, enum CMD/ERR, `iop_crc16`, helper BE). MCU
+> include thẳng; SOM include qua `iop_protocol.hpp` (chỉ thêm lớp C++ tiện dụng, KHÔNG đổi
+> giá trị).
 
 ---
 
-## 11. Test vector & cross-test (Phase 2 gate)
+## 11. Required public API (tối thiểu)
 
+### 11.1 SOM side (mkddc-iobus / `iop_client`)
+```cpp
+// Trả về IopResult cho mọi lệnh: { ok | timeout | crc_fail | seq_fail | nack(err) | not_open }
+bool      iop_open(const std::string& dev);     // mở+cấu hình UART; false nếu lỗi
+void      iop_close();
+
+IopResult iop_handshake();                       // §9 bước 2-4; set status NORMAL/abort
+IopResult iop_get_io(IopIoResp* out);            // GET_IO → parse IO_RESP vào *out
+IopResult iop_set_do(uint8_t mask, uint8_t value);
+IopResult iop_set_ao(const uint16_t ao_raw[4]);
+IopResult iop_set_ao_cfg(uint8_t ao_mode_mask);  // bit i: 0=0-10V,1=4-20mA
+IopResult iop_get_diag(IopDiagResp* out);
+IopResult iop_reset_io(uint8_t reason);          // IOP_RESET_REASON_*
+
+IopStatus iop_status();                          // INIT..RECONNECT (xem §13)
 ```
-Bước cross-test bắt buộc trước khi đóng Phase 2:
-1. CRC: cả 2 phía cho cùng output với 10 vector (gồm 2 vector trong §3).
-2. GET_IO/IO_RESP: SOM gửi 1000 lần → 0 CRC error, 0 SEQ error, latency ≤5ms.
-3. SET_DO/SET_AO: SOM gửi → relay/AO thật đổi → IO_RESP feedback khớp.
-4. Negative: SOM gửi frame CRC hỏng / CMD lạ / LEN sai → MCU trả NACK đúng code.
-5. Safe: SOM ngừng GET_IO 200ms → MCU IO về safe (đo relay/AO).
+> Mọi hàm gửi-lệnh tự lo SEQ++, timeout, retry≤3 (theo §8). Caller chỉ xử lý IopResult.
+
+### 11.2 MCU side (firmware / `iop_comm`)
+```c
+void     iop_comm_task(void *arg);                                  // FreeRTOS task Pri6
+bool     iop_parse_frame(const uint8_t *buf, uint16_t len, iop_frame_t *out); // verify SOF/LEN/CRC
+uint16_t iop_build_frame(uint8_t cmd, uint8_t seq,
+                         const uint8_t *payload, uint8_t len, uint8_t *out);  // trả số byte
+void     iop_handle_command(const iop_frame_t *frame);              // dispatch + build response
 ```
-Frame mẫu (GET_IO SEQ=1): `AA 00 01 01 <CRC_HI> <CRC_LO>` (CRC=0x556B → `55 6B`).
+> `iop_parse_frame` trả false nếu SOF sai / LEN sai / CRC sai (caller gửi NACK tương ứng).
+> `iop_handle_command` echo SEQ, gọi xAoQueue/xDoQueue/safe-state theo CMD.
 
 ---
 
-## 12. Phân nhiệm implement
+## 12. Data structures (bắt buộc — khớp byte layout §6)
+
+### 12.1 SOM side
+```cpp
+struct IopIoResp {              // parse từ IO_RESP 34B
+    uint32_t ui_raw[8];         // uint24 thực, lưu trong uint32 (0..0xFFFFFF)
+    uint8_t  di_mask;
+    uint8_t  do_fb_mask;
+    int16_t  mcu_temp_x10;      // 0.1°C
+    uint16_t fault_flags;       // IOP_FAULT_*
+    uint16_t sample_cnt;
+};
+
+struct IopDiagResp {            // parse từ DIAG_RESP 20B
+    uint16_t fw_version;
+    uint16_t uptime_s;
+    uint16_t rx_count;
+    uint16_t crc_error_count;
+    uint16_t seq_error_count;
+    uint16_t watchdog_reset_count;
+    uint16_t adc_sample_rate;
+    int16_t  mcu_temp_max_x10;
+    uint16_t vdd_mv;
+};
+
+struct IopResult {
+    enum Code { OK, TIMEOUT, CRC_FAIL, SEQ_FAIL, NACK, NOT_OPEN } code;
+    uint8_t nack_err;           // hợp lệ khi code==NACK (ERR_*)
+    uint8_t retries;            // số lần đã retry
+};
+
+enum class IopStatus { INIT, HANDSHAKE, NORMAL, FAULT, SAFE_STATE, RECONNECT };
+```
+### 12.2 MCU side
+```c
+typedef struct {
+    uint8_t  sof;               // luôn 0xAA
+    uint8_t  len;               // số byte payload
+    uint8_t  cmd;
+    uint8_t  seq;
+    uint8_t  payload[IOP_MAX_PAYLOAD];
+    uint16_t crc;               // CRC đã verify
+} iop_frame_t;
+```
+
+---
+
+## 13. State machine chi tiết (SOM master)
+
+```
+INIT → OPEN_UART → HANDSHAKE → CONFIG_AO → NORMAL_POLL
+                                              ├─(timeout x3)→ FAULT → SAFE_STATE → RECONNECT → HANDSHAKE
+                                              └─(STATUS=0x02)→ FAULT
+```
+
+| State | Entry action | Loop action | Exit condition | Timeout | Error transition | Log |
+|-------|--------------|-------------|----------------|---------|------------------|-----|
+| INIT | reset counters, SEQ=0 | — | config loaded | — | — | INFO iobus.start |
+| OPEN_UART | open/cfg /dev/ttyS2, flush | — | fd ok | — | open fail → FAULT | INFO iop.open / ERROR iop.open_fail |
+| HANDSHAKE | gửi HANDSHAKE | chờ HANDSHAKE_RESP | STATUS=0x00/0x01 | 1000ms | timeout x3 / STATUS=0x02 → FAULT | INFO iop.handshake |
+| CONFIG_AO | gửi SET_AO_CFG (nếu cần) | chờ ACK | ACK / NACK UNKNOWN | 10ms | timeout → NORMAL (giữ default) | INFO iop.ao_cfg |
+| NORMAL_POLL | start 10ms timer | GET_IO→parse→(output nếu có) | — | 10ms/lệnh, retry≤3 | 3 retry liên tiếp / >100ms no valid → FAULT | WARN rate-limited |
+| FAULT | iop_status=FAULT, alarm | gửi RESET_IO (reason=IOP_FAULT 0x05) 1 lần | — | — | → SAFE_STATE | ERROR iop.fault |
+| SAFE_STATE | ngừng SET_*; giữ retry GET_IO | thử GET_IO | nhận IO_RESP hợp lệ → RECONNECT | — | — | ERROR iop.safe_state |
+| RECONNECT | timer 5s | gửi HANDSHAKE | HANDSHAKE_RESP OK → NORMAL_POLL | 5s/lần | — | INFO iop.reconnect |
+
+Hằng số dùng: `IOP_RESP_TIMEOUT_MS=10`, fault 100ms, reconnect 5s, handshake 1000ms.
+
+---
+
+## 14. Timing budget
+
+| Mục | Giá trị |
+|-----|---------|
+| GET_IO period | 10 ms |
+| Response timeout | 10 ms |
+| Retry count | 3 |
+| MCU safe timeout | 200 ms |
+| Reconnect interval | 5 s |
+| HANDSHAKE timeout | 1000 ms |
+| Max IO_RESP parse time | < 1 ms (SOM) |
+| Max GET_IO → IO_RESP latency | ≤ 5 ms (MCU, FW-IOP-004) |
+| Tổng byte/chu kỳ 10ms | ~82 B → ~0.89ms @921600 (≈9% băng thông) |
+
+---
+
+## 15. Negative test (bắt buộc — cross-test Phase 2)
+
+| # | Inject | Phía test | Expected behavior |
+|---|--------|-----------|-------------------|
+| 1 | SOF sai (byte đầu ≠ 0xAA) | MCU & SOM | bỏ byte tới khi gặp 0xAA; không crash; không dispatch |
+| 2 | LEN quá lớn (> MAX_PAYLOAD) | MCU | NACK ERR_BAD_LEN; SOM: drop, seq_err/parse_err++ |
+| 3 | LEN sai theo CMD (vd GET_IO LEN≠0) | MCU | NACK ERR_BAD_LEN |
+| 4 | CRC sai | MCU | NACK ERR_CRC_FAIL; SOM: crc_err++, retry |
+| 5 | SEQ sai trong response | SOM | bỏ frame, seq_err++, retry/log |
+| 6 | Unknown CMD | MCU | NACK ERR_UNKNOWN_CMD |
+| 7 | ACK sai ECHOED_CMD | SOM | coi như fail lệnh, retry; log mismatch |
+| 8 | Không trả lời (timeout) | SOM | retry≤3 → FAULT; MCU mất GET_IO 200ms → safe-state |
+| 9 | NACK ERR_BUSY | SOM | retry sau backoff ngắn; không coi là fault ngay |
+| 10 | NACK ERR_SAFE_STATE | SOM | ngừng SET_*; chờ IO_RESP báo hết safe; log |
+
+Frame mẫu (GET_IO SEQ=1): `AA 00 01 01 AC E1` (CRC=0xACE1).
+
+---
+
+## 16. Phân nhiệm implement
 
 | Yêu cầu | MCU (Dev 1) | SOM (Dev 2) |
 |---------|-------------|-------------|
@@ -231,6 +427,9 @@ Frame mẫu (GET_IO SEQ=1): `AA 00 01 01 <CRC_HI> <CRC_LO>` (CRC=0x556B → `55 
 | HANDSHAKE | IOP-FW-009 | IOP-SW-007 |
 | Safe-state | IOP-FW-006 (200ms) | IOP-SW-005 (RESET_IO) |
 | Metrics | DIAG counters | IOP-SW-006 (/system/status) |
+| State machine | FSM firmware (04 §7) | §13 file này |
+| Negative test | §15 phía MCU | §15 phía SOM (fake MCU — 06 §11) |
 
 ---
-**Rev** 1.0 | 2026-06-10
+**Rev** 1.2 | 2026-06-11 · Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) ·
+Service-level (thread/config/shm/build): [06_MKDDC_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md)

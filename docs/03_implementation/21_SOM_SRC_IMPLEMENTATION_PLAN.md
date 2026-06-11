@@ -1,0 +1,797 @@
+# 21 — SOM Source Implementation Plan
+## MK-DDC-24 — Kế hoạch triển khai cấu trúc source thật chi tiết cho Dev 2
+
+> **Document ID:** IMPL-SOM-SRC-PLAN-MK-DDC-24-VI
+> **Phiên bản:** 1.0 | 2026-06-11
+> **Trạng thái:** Active — dùng để dựng `services/`, `tools/`, `shared/` phía SOM
+> **Đối tượng đọc:** Dev 2, Lead, Tester
+> **Phạm vi:** chỉ phía SOM: `services/iobus`, `services/core`, `tools/fake_mcu`, `tools/shm_dump_io`, `shared/`
+
+---
+
+## 1. Kết luận trước khi làm
+
+**Có rồi, nhưng chưa đủ gom vào 1 chỗ cho Dev 2 cầm làm.**
+
+Hiện repo đã có:
+- `phase plan`: [03_PHASE_PLAN.md](03_PHASE_PLAN.md)
+- `task checklist`: [10_TASK_CHECKLIST.md](10_TASK_CHECKLIST.md)
+- `definition of done`: [12_DEFINITION_OF_DONE.md](12_DEFINITION_OF_DONE.md)
+- `module contract iobus`: [06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md)
+- `module contract core`: [07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md)
+- `quick start no-board`: [16_QUICK_START_SOM_DEV.md](16_QUICK_START_SOM_DEV.md)
+
+Nhưng còn thiếu 3 thứ cho Dev 2:
+- 1 plan chỉ dành riêng cho **cấu trúc source SOM**
+- 1 breakdown tới mức **microtask theo file**
+- 1 thứ tự làm đủ rõ để tránh dựng nhầm cây thư mục, nhầm dependency, nhầm test gate
+
+File này lấp đúng 3 chỗ thiếu đó.
+
+---
+
+## 2. Mục tiêu của Dev 2
+
+Dev 2 phải tạo được toàn bộ khung source SOM để cuối cùng chạy đúng luồng này:
+
+```text
+fake_mcu / board thật
+        <-> UART/IOP
+mkddc-iobus
+        <-> /dev/shm/mkddc_io_shm
+mkddc-core
+        <-> /run/mkddc/core.sock
+mkddc-web
+```
+
+Trong scope file này, đích gần nhất là:
+- dựng cây `services/iobus` và `services/core` build được
+- có `tools/fake_mcu` và `tools/shm_dump_io`
+- pass no-board path: `fake_mcu -> iobus -> shm -> core`
+
+Không nằm trong scope file này:
+- code web chi tiết
+- board MCU firmware chi tiết
+- BACnet/Modbus Rev A.1+
+
+---
+
+## 3. Nguồn-chuẩn phải khóa trước khi code
+
+Dev 2 chỉ được code sau khi chốt 6 nguồn này:
+
+1. [shared/iop_protocol.h](../../shared/iop_protocol.h)
+2. [shared/mkddc_shm.h](../../shared/mkddc_shm.h)
+3. [15_CONTRACT_FREEZE.md](15_CONTRACT_FREEZE.md)
+4. [06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md)
+5. [07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md)
+6. [20_VIRTUAL_COM_DECISION.md](20_VIRTUAL_COM_DECISION.md)
+
+Rule:
+- header `shared/*` thắng mọi docs
+- docs này là execution plan, không được tự fork contract
+
+---
+
+## 4. Cấu trúc source cuối cùng phải có
+
+```text
+shared/
+├── iop_protocol.h
+└── mkddc_shm.h
+
+services/
+├── iobus/
+│   ├── CMakeLists.txt
+│   ├── README.md
+│   ├── main.cpp
+│   ├── config/
+│   │   ├── iobus_config.hpp
+│   │   └── iobus_config.cpp
+│   ├── iop/
+│   │   ├── iop_port.hpp
+│   │   ├── iop_port.cpp
+│   │   ├── iop_frame.hpp
+│   │   ├── iop_frame.cpp
+│   │   ├── iop_crc.hpp
+│   │   ├── iop_crc.cpp
+│   │   ├── iop_client.hpp
+│   │   ├── iop_client.cpp
+│   │   ├── iop_parser.hpp
+│   │   └── iop_parser.cpp
+│   ├── io/
+│   │   ├── io_types.hpp
+│   │   ├── io_scaling.hpp
+│   │   ├── io_scaling.cpp
+│   │   ├── io_cache.hpp
+│   │   └── io_cache.cpp
+│   ├── bridge/
+│   │   ├── core_bridge.hpp
+│   │   ├── core_bridge.cpp
+│   │   ├── output_command.hpp
+│   │   └── output_command.cpp
+│   ├── diagnostics/
+│   │   ├── iobus_metrics.hpp
+│   │   ├── iobus_metrics.cpp
+│   │   ├── alarm_publisher.hpp
+│   │   └── alarm_publisher.cpp
+│   ├── platform/
+│   │   ├── systemd_notify.hpp
+│   │   ├── systemd_notify.cpp
+│   │   ├── realtime.hpp
+│   │   └── realtime.cpp
+│   └── tests/
+│       ├── test_iop_crc.cpp
+│       ├── test_iop_frame.cpp
+│       ├── test_iop_parser.cpp
+│       ├── test_io_scaling.cpp
+│       ├── test_output_command.cpp
+│       └── test_iop_client_fake_mcu.cpp
+├── core/
+│   ├── CMakeLists.txt
+│   ├── README.md
+│   ├── main.cpp
+│   ├── scan_loop.hpp
+│   ├── scan_loop.cpp
+│   ├── point_table.hpp
+│   ├── point_table.cpp
+│   ├── point_quality.hpp
+│   ├── point_quality.cpp
+│   ├── graph_runtime.hpp
+│   ├── graph_runtime.cpp
+│   ├── priority_resolver.hpp
+│   ├── priority_resolver.cpp
+│   ├── safe_state.hpp
+│   ├── safe_state.cpp
+│   ├── iobus_reader.hpp
+│   ├── iobus_reader.cpp
+│   ├── output_writer.hpp
+│   ├── output_writer.cpp
+│   ├── bacnet_objtable.hpp
+│   ├── bacnet_objtable.cpp
+│   ├── web_ipc.hpp
+│   ├── web_ipc.cpp
+│   ├── core_metrics.hpp
+│   ├── core_metrics.cpp
+│   └── tests/
+│       ├── test_iobus_reader.cpp
+│       ├── test_point_quality.cpp
+│       ├── test_priority_resolver.cpp
+│       ├── test_safe_state.cpp
+│       └── test_scan_loop.cpp
+└── CMakeLists.txt
+
+tools/
+├── fake_mcu/
+│   ├── CMakeLists.txt
+│   ├── fake_mcu.cpp
+│   └── scenarios/
+└── shm_dump_io/
+    ├── CMakeLists.txt
+    └── shm_dump_io.c
+```
+
+Rule:
+- Phase đầu có thể dùng stub file rỗng + compile pass
+- nhưng **tên file và thư mục phải chốt đúng từ đầu**
+- không đổi tên tùy hứng sau khi task đã tách người làm
+
+---
+
+## 5. Trạng thái hiện tại của repo
+
+Tại thời điểm `2026-06-11`, repo docs đã có plan rất sâu nhưng **cây source thật chưa tồn tại**.
+
+Điều này kéo theo:
+- phải làm **P0 scaffold thật** trước
+- không được nhảy thẳng vào business logic
+- mọi plan dưới đây giả định Dev 2 đang bắt đầu từ cây thư mục gần như trống
+
+---
+
+## 6. Bản đồ phase riêng cho SOM
+
+```text
+S0 Contract Lock
+ -> S1 Skeleton Repo Layout
+ -> S2 iobus Protocol Layer
+ -> S3 iobus Service Layer
+ -> S4 core Runtime Layer
+ -> S5 Dev Tools Layer
+ -> S6 No-Board Round-Trip Gate
+```
+
+Map sang phase tổng:
+- `S0-S1` ~= `P0`
+- `S2` ~= phần SOM của `P2`
+- `S3` ~= `P3`
+- `S4` ~= `P4`
+- `S5-S6` ~= glue/no-board gate giữa `P2-P4`
+
+---
+
+## 7. Phase chi tiết
+
+## S0 — Contract Lock
+
+**Mục tiêu:** Dev 2 hiểu đúng ranh giới trước khi tạo file.
+
+### Input
+- `shared/iop_protocol.h`
+- `shared/mkddc_shm.h`
+- docs `05`, `06`, `07`, `15`, `16`, `20`
+
+### Output
+- checklist đọc xong 6 file nguồn-chuẩn
+- list module sẽ tạo
+- không còn tranh cãi về UART/SHM ownership
+
+### Microtask
+1. Đọc `iop_protocol.h`, ghi ra note local: frame, CRC, command, timeout, FAULT bit, reset reason.
+2. Đọc `mkddc_shm.h`, ghi ra ownership: iobus writer gì, core writer gì.
+3. Đọc `06`, chốt tree `services/iobus/`.
+4. Đọc `07`, chốt tree `services/core/`.
+5. Đọc `20`, chốt test no-board dùng `socat + PTY`.
+6. Đọc `16`, chốt thứ tự bring-up dev.
+
+### Gate qua phase
+- trả lời đúng 5 câu:
+  - ai mở UART?
+  - ai tạo `mkddc_io_shm`?
+  - ai ghi `ao_setpoint[]`?
+  - fake MCU đi qua gì?
+  - core có được mở serial không?
+
+---
+
+## S1 — Skeleton Repo Layout
+
+**Mục tiêu:** tạo toàn bộ cây source SOM và build rỗng được.
+
+### Input
+- tree mục tiêu ở §4
+- CMake mẫu từ `06 §10` và `07 §9`
+
+### Output
+- thư mục `services/` tồn tại
+- `services/iobus` build ra binary
+- `services/core` build ra binary
+- `tools/fake_mcu` và `tools/shm_dump_io` có target build
+
+### Task
+
+#### `SOM-SKEL-001` — Root layout
+File:
+- `services/CMakeLists.txt`
+- `services/iobus/...`
+- `services/core/...`
+- `tools/fake_mcu/...`
+- `tools/shm_dump_io/...`
+
+Microtask:
+1. Tạo thư mục đúng cây.
+2. Tạo `README.md` ngắn cho `iobus`, `core`.
+3. Tạo `main.cpp` stub cho `iobus` và `core`.
+4. Tạo tất cả header/source stub theo đúng tên file.
+5. Tạo test file stub.
+
+Done khi:
+- không thiếu file nào trong cây chuẩn
+- `rg --files services tools` ra đúng khung chính
+
+#### `SOM-SKEL-002` — Build system
+Input:
+- danh sách file từ `06`/`07`
+
+Output:
+- `cmake -S services -B build/services`
+- `cmake --build build/services -j`
+
+Microtask:
+1. Viết root `services/CMakeLists.txt`.
+2. Viết `services/iobus/CMakeLists.txt`.
+3. Viết `services/core/CMakeLists.txt`.
+4. Gắn include path `shared/`.
+5. Tạo test target stub.
+6. Tạo executable `fake_mcu`, `shm_dump_io`.
+
+Done khi:
+- build pass từ repo clone sạch
+
+#### `SOM-SKEL-003` — Runtime stub
+Output:
+- `mkddc-iobus` chạy log boot rồi exit 0 hoặc sleep loop
+- `mkddc-core` chạy log boot, `sd_notify` stub hoặc no-op
+
+Microtask:
+1. `iobus/main.cpp` parse CLI tối thiểu `--uart`, `--log-level`.
+2. `core/main.cpp` parse `--log-level`.
+3. Hook signal `SIGINT/SIGTERM`.
+4. Loop ngủ 1s + log heartbeat nhẹ.
+
+Done khi:
+- binary chạy được, không crash tức thì
+
+### Gate qua phase
+- build pass
+- chạy được 4 target: `mkddc-iobus`, `mkddc-core`, `fake_mcu`, `shm_dump_io`
+
+---
+
+## S2 — iobus Protocol Layer
+
+**Mục tiêu:** hoàn tất lớp thuần protocol của `mkddc-iobus`.
+
+### Input
+- `shared/iop_protocol.h`
+- `05_IOP_UART_IMPLEMENTATION_GUIDE.md`
+
+### Output
+- `iop_crc`, `iop_frame`, `iop_parser`, `iop_port`, `iop_client`
+- unit test protocol pass
+
+### Task
+
+#### `SOM-IOP-001` — `iop_crc`
+File:
+- `services/iobus/iop/iop_crc.hpp`
+- `services/iobus/iop/iop_crc.cpp`
+- `services/iobus/tests/test_iop_crc.cpp`
+
+Input:
+- `iop_crc16()` từ header shared
+
+Output:
+- wrapper `crc16()` dùng chung
+- test 12 vector chuẩn
+
+Microtask:
+1. Tạo API `uint16_t crc16(const uint8_t*, size_t)`.
+2. Gọi thẳng `iop_crc16`, không tự viết thuật toán khác.
+3. Thêm 12 vector test.
+4. Assert 2 vector đầu `0x6C20`, `0xACE1`.
+
+Done khi:
+- `ctest` pass phần CRC
+
+#### `SOM-IOP-002` — `iop_frame`
+Output:
+- build frame
+- parse stream nhiều chunk
+
+Microtask:
+1. Định nghĩa `ParsedFrame`, `ParseError`, `ParseResult`.
+2. Viết `build()` theo `SOF|LEN|CMD|SEQ|PAYLOAD|CRC`.
+3. Viết `feed()` kiểu stateful/ring buffer.
+4. Handle `SOF` sai, `LEN` quá max, `CRC` sai.
+5. Thêm round-trip test.
+
+Done khi:
+- frame `GET_IO SEQ=1` ra `AA 00 01 01 AC E1`
+
+#### `SOM-IOP-003` — `iop_parser`
+Output:
+- parse `IO_RESP`
+- parse `DIAG_RESP`
+
+Microtask:
+1. Tạo `IopIoResp`, `IopDiagResp` trong `io_types.hpp`.
+2. Parse BE field đúng offset.
+3. Dùng `iop_s24()` cho raw UI.
+4. Test đủ `ui_raw`, `di_mask`, `fault_flags`, `sample_cnt`.
+
+Done khi:
+- byte offset khớp đúng docs/header
+
+#### `SOM-IOP-004` — `iop_port`
+Output:
+- mở UART/PTTY raw 921600 8N1
+
+Microtask:
+1. `open()` với `O_RDWR|O_NOCTTY|O_NONBLOCK`.
+2. `cfmakeraw`, set baud, tắt flow control.
+3. `flush()`.
+4. retry `EINTR`, handle `EAGAIN`.
+5. test với PTY loopback.
+
+Done khi:
+- mở được `/dev/pts/*` và đọc/ghi ổn định
+
+#### `SOM-IOP-005` — `iop_client`
+Output:
+- handshake
+- request/response
+- timeout/retry/fault
+
+Microtask:
+1. Tạo state machine `INIT/HANDSHAKE/NORMAL/FAULT/RECONNECT`.
+2. Tạo counter `seq_`, `retry_`, `last_io_resp_ts`.
+3. Implement `handshake()`, `get_io()`, `set_do()`, `set_ao()`, `set_ao_cfg()`, `get_diag()`, `reset_io()`.
+4. Verify `SEQ echo`.
+5. Timeout `10ms`, retry `<=3`, reconnect `5s`.
+6. Test qua fake transport hoặc PTY harness.
+
+Done khi:
+- fake flow handshake + poll pass
+
+### Gate qua phase
+- unit test protocol xanh
+- chạy được với fake MCU mức `handshake + GET_IO`
+
+---
+
+## S3 — iobus Service Layer
+
+**Mục tiêu:** biến protocol lib thành service `mkddc-iobus` hoàn chỉnh.
+
+### Input
+- lớp protocol từ `S2`
+- `mkddc_shm.h`
+- `06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md`
+
+### Output
+- `mkddc-iobus` poll 100Hz
+- ghi `kx_io_shm`
+- đọc output từ shm và gửi ngược xuống MCU/fake MCU
+
+### Task
+
+#### `SOM-IOB-001` — config + types
+File:
+- `config/iobus_config.*`
+- `io/io_types.hpp`
+
+Output:
+- config struct default
+- type chung nội bộ
+
+Microtask:
+1. Chốt field config tối thiểu: uart path, baud, sensor_type[], ao_mode[], log-level.
+2. Parse JSON hoặc stub defaults.
+3. Validate giá trị bắt buộc.
+
+#### `SOM-IOB-002` — `io_scaling`
+Output:
+- raw UI -> engineering
+- eng AO -> raw
+
+Microtask:
+1. Implement `0-10V`, `4-20mA`, `dry-contact` trước.
+2. Add `PT100/PT1000/NTC` skeleton nếu chưa calib thật.
+3. Map `quality` theo overrange/open-loop.
+4. Thêm test clamp AO.
+
+Done khi:
+- test case trong `06 §3.6` pass
+
+#### `SOM-IOB-003` — `io_cache`
+Output:
+- create/attach `KX_SHM_IO_PATH`
+- seqlock write snapshot
+
+Microtask:
+1. `shm_open` + `ftruncate` + `mmap`.
+2. Init defaults toàn struct.
+3. Set `magic` cuối cùng.
+4. Implement `write_io()` với `KX_WRITE_BEGIN/END`.
+5. Fill `ts_ns`, `iop_status`, metrics.
+
+Done khi:
+- reader thấy snapshot nhất quán
+
+#### `SOM-IOB-004` — `core_bridge` + `output_command`
+Output:
+- đọc `ao_setpoint[]`, `do_cmd[]`
+- chỉ gửi `SET_*` khi giá trị đổi
+
+Microtask:
+1. Read-only access đúng ownership.
+2. So với `last_sent_*`.
+3. Pack `SET_DO` mask/value.
+4. Convert eng AO -> raw theo `ao_mode`.
+5. Handle `ACK/NACK`.
+
+Done khi:
+- ghi `do_cmd[0]=1` làm fake MCU phản hồi `DO_FB`
+
+#### `SOM-IOB-005` — metrics + alarm
+Output:
+- tăng counter `iop_rx`, `crc_err`, `timeout`, `seq_err`
+- publish alarm JSON lines
+
+Microtask:
+1. Struct metrics.
+2. Hook tăng counter ở nơi đúng.
+3. Unix socket `/run/mkddc/alarm.sock` non-blocking.
+4. Rate-limit log lỗi.
+
+#### `SOM-IOB-006` — runtime main loop
+Output:
+- service thực chạy 100Hz
+
+Microtask:
+1. init realtime + mlockall.
+2. load config.
+3. attach shm.
+4. open UART.
+5. handshake.
+6. poll loop: GET_IO -> parse -> scale -> write shm -> read outputs -> maybe send SET_*.
+7. watchdog notify.
+8. signal shutdown.
+
+Done khi:
+- `mkddc-iobus` chạy 10 phút với fake MCU không crash
+
+### Gate qua phase
+- `shm_dump_io` đọc được dữ liệu sống
+- round-trip `do_cmd -> SET_DO -> DO_FB` pass
+
+---
+
+## S4 — core Runtime Layer
+
+**Mục tiêu:** `mkddc-core` đọc SHM, resolve output, ghi ngược output fields.
+
+### Input
+- `mkddc_shm.h`
+- `07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md`
+
+### Output
+- point table
+- scan loop 1s
+- priority resolver
+- safe-state
+- output writer
+
+### Task
+
+#### `SOM-COR-001` — `iobus_reader`
+Output:
+- seqlock read snapshot nhất quán
+
+Microtask:
+1. attach `KX_SHM_IO_PATH` không `O_CREAT`.
+2. check `magic`.
+3. retry seqlock read tối đa 5 lần.
+4. fallback snapshot cũ + metric nếu fail.
+
+#### `SOM-COR-002` — `point_table`
+Output:
+- đủ 24 IO + virtual point
+
+Microtask:
+1. define `Point`, `PointId`, `PointSource`.
+2. map AI/BI/AO/BO.
+3. update inputs từ snapshot.
+4. set/get virtual point.
+
+#### `SOM-COR-003` — `point_quality`
+Output:
+- GOOD/UNCERTAIN/BAD đúng rule
+
+Microtask:
+1. map `iop_status`.
+2. map `fault_flags`.
+3. stale `ts_ns` theo số scan.
+4. test từng case.
+
+#### `SOM-COR-004` — `priority_resolver`
+Output:
+- 6 mức priority hoạt động
+
+Microtask:
+1. define storage per channel per level.
+2. implement `set`, `release`, `resolve` cho AO/DO.
+3. conflict cùng mức -> log warn.
+4. default fallback.
+
+#### `SOM-COR-005` — `safe_state`
+Output:
+- fault/stale -> output safe
+
+Microtask:
+1. trigger on FAULT/SAFE.
+2. trigger on stale > threshold.
+3. write safe AO/DO vào `OutputCmd`.
+4. clear override khi recover.
+
+#### `SOM-COR-006` — `output_writer`
+Output:
+- atomic write `ao_setpoint[]`, `do_cmd[]`
+
+Microtask:
+1. only core writes 2 field này.
+2. write only on change.
+3. use atomic store/aligned write.
+4. keep eng unit, không convert raw.
+
+#### `SOM-COR-007` — `scan_loop` + `core_metrics`
+Output:
+- loop 1s tuyệt đối thời gian
+
+Microtask:
+1. `clock_nanosleep(...ABSTIME...)`.
+2. call steps đúng thứ tự.
+3. count scan, overrun, exec time.
+4. `sd_notify READY=1` sau scan đầu.
+
+#### `SOM-COR-008` — `web_ipc`, `graph_runtime`, `bacnet_objtable` stub
+Output:
+- compile-ready boundary, chưa cần business logic đầy đủ
+
+Microtask:
+1. `web_ipc` mở `/run/mkddc/core.sock`, nhận queue stub.
+2. `graph_runtime` no-op stub.
+3. `bacnet_objtable` no-op hoặc minimal publish stub.
+
+### Gate qua phase
+- `mkddc-core` đọc snapshot từ iobus
+- `mkddc-core` ghi `do_cmd` làm iobus gửi `SET_DO`
+- no bypass serial trong core
+
+---
+
+## S5 — Dev Tools Layer
+
+**Mục tiêu:** có tool để dev/test không cần board.
+
+### Input
+- [20_VIRTUAL_COM_DECISION.md](20_VIRTUAL_COM_DECISION.md)
+- fake MCU contract trong `06 §11`
+
+### Output
+- `fake_mcu`
+- `shm_dump_io`
+
+### Task
+
+#### `SOM-TOOL-001` — `fake_mcu`
+Output:
+- nhận `HANDSHAKE`, `GET_IO`, `SET_DO`, `SET_AO`, `GET_DIAG`, `RESET_IO`
+
+Microtask:
+1. parse CLI `--pty` hoặc `--uart`.
+2. emulate slave IOP.
+3. maintain fake IO state.
+4. inject options: timeout, crc-error, seq-wrong, nack, stuck-relay.
+5. print useful logs.
+
+#### `SOM-TOOL-002` — `shm_dump_io`
+Output:
+- dump `kx_io_shm` text/json
+
+Microtask:
+1. attach read-only.
+2. read via seqlock.
+3. print magic/seq/age/ui/di/ao/do/fault/metrics.
+4. support `--watch`, `--json`.
+
+### Gate qua phase
+- dev có thể debug không cần `xxd`
+
+---
+
+## S6 — No-Board Round-Trip Gate
+
+**Mục tiêu:** xác nhận cây source SOM đủ sống trước khi đụng board thật.
+
+### Input
+- `socat + PTY`
+- `fake_mcu`
+- `mkddc-iobus`
+- `mkddc-core`
+
+### Output
+- pass flow `handshake -> poll -> shm write -> core read -> do_cmd write -> SET_DO -> DO_FB`
+
+### Checklist
+1. Build tất cả target.
+2. Chạy `socat` tạo 2 PTY cố định.
+3. Chạy `fake_mcu` ở đầu B.
+4. Chạy `mkddc-iobus` ở đầu A.
+5. Chạy `shm_dump_io --watch` thấy `seq` đổi.
+6. Chạy `mkddc-core`.
+7. Inject lệnh manual/stub để `do_cmd[0]=1`.
+8. Xác nhận fake MCU nhận `SET_DO` và phản hồi `DO_FB`.
+9. Inject timeout/CRC/SEQ lỗi.
+10. Xác nhận metrics + alarm + safe-state.
+
+### Gate cuối
+- pass 10 bước trong `06 §11.1`
+
+---
+
+## 8. Thứ tự làm thật ngoài đời
+
+Không được làm lung tung. Thứ tự đúng:
+
+1. `S0` khóa contract
+2. `S1` tạo cây source + build
+3. `S2` hoàn tất protocol layer
+4. `S5` dựng `fake_mcu` tối thiểu để test `S2`
+5. `S3` hoàn tất iobus service
+6. `S5` hoàn tất `shm_dump_io`
+7. `S4` hoàn tất core runtime tối thiểu
+8. `S6` chạy round-trip no-board
+9. mới được qua board thật / web thật
+
+Rule:
+- không viết core trước khi iobus có SHM sống
+- không viết web path trước khi core có IPC boundary
+- không test board thật khi no-board path còn đỏ
+
+---
+
+## 9. Bảng input / output / dependency theo module
+
+| Module | Input | Output | Phụ thuộc trực tiếp |
+|--------|-------|--------|---------------------|
+| `iop_crc` | byte buffer | `uint16_t crc` | `shared/iop_protocol.h` |
+| `iop_frame` | cmd/seq/payload, stream bytes | frame bytes, parsed frame | `iop_crc` |
+| `iop_parser` | payload `IO_RESP`/`DIAG_RESP` | struct response | `io_types`, `shared/iop_protocol.h` |
+| `iop_port` | UART/PTTY path | read/write bytes | POSIX termios |
+| `iop_client` | parsed frame + timer tick | handshake/poll/set/reset | `iop_frame`, `iop_port`, `iop_parser` |
+| `io_scaling` | raw UI / eng AO | eng UI / raw AO | `io_types` |
+| `io_cache` | `IoSnapshot` | `kx_io_shm` live data | `shared/mkddc_shm.h` |
+| `core_bridge` | SHM output fields | AO/DO command view | `mkddc_shm.h` |
+| `output_command` | AO/DO command view | `SET_DO`, `SET_AO` | `core_bridge`, `iop_client`, `io_scaling` |
+| `iobus_reader` | `kx_io_shm` | core snapshot | `mkddc_shm.h` |
+| `point_table` | IO snapshot | points state | `iobus_reader` |
+| `priority_resolver` | command sources | final output command | `point_table` |
+| `safe_state` | io status/fault/stale | overridden output command | `priority_resolver` |
+| `output_writer` | final output command | `ao_setpoint[]`, `do_cmd[]` | `mkddc_shm.h` |
+| `fake_mcu` | UART/PTTY bytes | fake slave behavior | `shared/iop_protocol.h` |
+| `shm_dump_io` | `kx_io_shm` | text/json dump | `mkddc_shm.h` |
+
+---
+
+## 10. Checklist review trước khi merge từng task
+
+Mỗi task SOM chỉ merge khi qua đủ checklist này:
+
+1. File đặt đúng thư mục chuẩn ở §4.
+2. Không tự ý đổi contract `shared/*`.
+3. Có test hoặc tool check đi kèm.
+4. Không bypass ownership của SHM.
+5. `iobus` mới là process duy nhất mở UART.
+6. `core` không mở serial.
+7. `web` path chỉ là boundary/stub nếu chưa làm tới phase đó.
+8. Log đủ để debug nhưng không spam 100Hz.
+9. Failure path có xử lý, không silent fail.
+10. Có command chứng minh output đo được hoặc assert được.
+
+---
+
+## 11. Câu trả lời trực tiếp cho câu hỏi của mày
+
+**Đã có chưa?**
+
+- `plan`: **có**
+- `phase`: **có**
+- `task`: **có**
+- `microtask`: **có rải rác trong 06/07 nhưng chưa gom riêng cho SOM src**
+- `checklist`: **có**
+- `input/output`: **có, nhưng nằm rải ở 06/07/10/11/12**
+
+**Thiếu gì?**
+
+- thiếu 1 execution plan cực chi tiết chỉ cho Dev 2 từ cây source trống tới round-trip no-board
+
+**File này chính là bản đó.**
+
+---
+
+## 12. Hành động ngay sau file này
+
+Ngay sau khi chốt plan này, Dev 2 nên làm đúng 3 việc đầu tiên:
+
+1. tạo `services/`, `tools/` theo đúng cây §4
+2. dựng `CMakeLists.txt` để build 4 target stub
+3. ưu tiên `iop_crc -> iop_frame -> iop_parser -> fake_mcu tối thiểu`
+
+Không làm bước 4 trước khi 3 bước này xanh.
+
+---
+
+**Rev** 1.0 | 2026-06-11
+

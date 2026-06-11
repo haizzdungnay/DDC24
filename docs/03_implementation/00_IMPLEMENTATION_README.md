@@ -62,11 +62,12 @@ Nguồn-chuẩn kiến trúc service: [ADR-005](../adr/ADR-005-three-process-arc
 
 > 📌 **Reconcile quan trọng (đọc kỹ).** ADR-005 mô tả "IO image trong core". Trong bộ
 > tài liệu implement này, **`mkddc-iobus` là tiến trình sở hữu cổng UART/IOP tới MCU** và
-> **ghi snapshot IO vào shared memory** (`kx_io_shm_t`, hợp đồng `shared/kinexus_shm.h`);
+> **ghi snapshot IO vào shared memory** (`kx_io_shm_t`, hợp đồng `shared/mkddc_shm.h`);
 > `mkddc-core` **đọc** snapshot đó. Đây chính là vai trò "io-driver" cũ được gộp vào
 > `mkddc-iobus` (ADR-005 ghi rõ "core gộp io-driver + engine" ở mức service, nhưng cổng
 > UART vật lý do iobus quản để cô lập I/O chậm/lỗi khỏi vòng real-time của core). Hợp đồng
-> seqlock/SHM **giữ nguyên**, chỉ rename header `kinexus_shm.h → mkddc_shm.h` (code follows docs).
+> seqlock/SHM **giữ nguyên**. Rename `kinexus_shm.h → mkddc_shm.h` **đã thực hiện 2026-06-11**
+> (struct/magic giữ nguyên — phạm vi rename chốt tại [15_CONTRACT_FREEZE §6](15_CONTRACT_FREEZE.md)).
 
 ---
 
@@ -162,20 +163,34 @@ Tester & PM: [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md), [11_INTEGRATION_TEST_PLA
 | 12 | [DEFINITION_OF_DONE](12_DEFINITION_OF_DONE.md) | tất cả | biết khi nào xong |
 | 13 | [BRINGUP_GUIDE](13_BRINGUP_GUIDE.md) | KS bring-up | dựng board lần đầu |
 | 14 | [RELEASE_HANDOVER_CHECKLIST](14_RELEASE_HANDOVER_CHECKLIST.md) | PM/Lead | trước bàn giao |
+| 15 | [CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) | tất cả | **trước khi code** — bản chốt hợp đồng, hết tranh cãi |
+| 16 | [QUICK_START_SOM_DEV](16_QUICK_START_SOM_DEV.md) | Dev 2 (mới) | ngày đầu tiên vào dự án |
+| 17 | [WEEK1_SOM_BRINGUP_CHECKLIST](17_WEEK1_SOM_BRINGUP_CHECKLIST.md) | Dev 2 | tuần đầu trên SOM |
+| 18 | [DOCS_AUDIT_SOM_IMPLEMENTATION](18_DOCS_AUDIT_SOM_IMPLEMENTATION.md) | Lead/PM | audit docs 2026-06-11 (meta) |
+| 19 | [DOCS_FIX_CHECKLIST](19_DOCS_FIX_CHECKLIST.md) | Lead/PM | tracker sửa docs theo audit (meta) |
+| 20 | [VIRTUAL_COM_DECISION](20_VIRTUAL_COM_DECISION.md) | Dev 2 + Tester | khi chưa có board, cần bridge serial ảo đúng chuẩn |
+| 21 | [SOM_SRC_IMPLEMENTATION_PLAN](21_SOM_SRC_IMPLEMENTATION_PLAN.md) | Dev 2 + Lead | khi cần plan cực chi tiết để dựng source SOM từ cây trống |
 
 ---
 
 ## 9. Nguồn-chuẩn (khi mâu thuẫn theo thứ tự này)
 
+> ⚠️ **Rule số 1 (Contract Freeze):** với mọi GIÁ TRỊ thực thi — opcode, payload, enum, FAULT
+> bit, RESET reason, CRC, hằng số, SHM layout/path/ownership — **header trong `shared/` là
+> chuẩn CUỐI CÙNG**. Docs (kể cả spec 01_specs) chỉ là diễn giải: docs lệch header → header
+> thắng → sửa docs. Chi tiết + quy trình đổi hợp đồng: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md).
+
 | Chủ đề | Nguồn-chuẩn |
 |--------|-------------|
-| Kiến trúc service / process | [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) + [ADR-005](../adr/ADR-005-three-process-architecture.md) |
-| Giao thức UART/IOP | [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) |
+| **Giá trị protocol UART/IOP** (opcode/payload/fault/reason/CRC/timing) | [`shared/iop_protocol.h`](../../shared/iop_protocol.h) — **cuối cùng** |
+| **SHM layout/magic/path/ownership** | [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) — **cuối cùng** |
+| Giao thức UART/IOP (diễn giải, hành vi, timing chart) | [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) + [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) |
+| Kiến trúc service / process | [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) + [ADR-005](../adr/ADR-005-three-process-architecture.md) + [CANONICAL_DECISIONS](../CANONICAL_DECISIONS.md) |
 | Firmware STM32 | [FW_DDD](../02_design/firmware/FW_DDD_MK-DDC-24_VI.md) |
-| Command/constant dùng chung | [`shared/iop_protocol.h`](../../shared/iop_protocol.h) |
 | Chân MCU | [FW_PINOUT_MASTER](../02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) |
-| SHM/IPC SOM | [SW_ARCH_SPEC §2](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) + [`shared/kinexus_shm.h`](../../shared/kinexus_shm.h) |
+| SHM/IPC SOM (diễn giải, ownership chi tiết) | [06_IOBUS §5](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) + [SW_ARCH_SPEC §2](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) |
 | Graph/Config/REST | [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) · [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) · [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) |
 
 ---
-**Rev** 1.0 | 2026-06-10 · Liên quan: [GETTING_STARTED_DEV](../02_design/GETTING_STARTED_DEV.md)
+**Rev** 1.1 | 2026-06-11 (Contract Freeze: rule header-thắng, thêm docs 15/16/17, mkddc_shm.h) ·
+Liên quan: [GETTING_STARTED_DEV](../02_design/GETTING_STARTED_DEV.md)
