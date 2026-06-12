@@ -93,6 +93,17 @@ bool PointTable::set_virtual(PointId id, float v, PointSource src)
     return true;
 }
 
+bool PointTable::release_virtual(PointId id)
+{
+    if (id.kind != PointKind::AV && id.kind != PointKind::BV && id.kind != PointKind::MSV)
+        return false;
+    Point* p = slot(id);
+    if (!p) return false;
+    p->source = PointSource::DEFAULT;   /* value giữ nguyên — không ghi đè */
+    p->ts_ns  = now_ns();
+    return true;
+}
+
 void PointTable::set_quality(PointId id, kx_quality_t q)
 {
     Point* p = slot(id);

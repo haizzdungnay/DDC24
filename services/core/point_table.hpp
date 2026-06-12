@@ -39,6 +39,10 @@ public:
     /* AV/BV/MSV (web/graph) — AO/BO bị từ chối (trả false). */
     bool set_virtual(PointId id, float v, PointSource src);
 
+    /* Release nguồn ghi virtual point: GIỮ value, trả source về DEFAULT.
+     * (Virtual point không có priority array — release ≠ ghi giá trị.) */
+    bool release_virtual(PointId id);
+
     /* point_quality ghi đè quality sau khi đánh giá fault/stale. */
     void set_quality(PointId id, kx_quality_t q);
 

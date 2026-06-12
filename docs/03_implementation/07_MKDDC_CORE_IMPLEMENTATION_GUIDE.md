@@ -2,7 +2,11 @@
 ## MK-DDC-24 — Point table + scan loop + priority/safe-state
 
 > **Document ID:** IMPL-CORE-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-11 (Contract Freeze: chốt MVP Rev A, module API, build/systemd đầy đủ, seqlock reader mẫu)
+> **Phiên bản:** 1.3 | 2026-06-12 (graph_runtime implemented Rev A subset; T6/T7 implemented;
+> io_safe_state.conf loader → default mức 6; quan hệ default/safe-override chốt §5.3) ·
+> 1.2 | 2026-06-12 (§5 viết lại thành SAFETY SPEC: lớp safety §5.1, trigger
+> matrix implemented/planned §5.2, action §5.3, recovery rule §5.4) · 1.1 | 2026-06-11
+> (Contract Freeze: chốt MVP Rev A, module API, build/systemd đầy đủ, seqlock reader mẫu)
 > **Owner:** Dev 2 (SOM)
 > **Nguồn-chuẩn CUỐI CÙNG:** [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) (SHM) — docs lệch
 > header → **header thắng** ([15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md)). Diễn giải:
@@ -35,7 +39,7 @@ safe-state, ghi `ao_setpoint[]/do_cmd[]` ngược vào shm — đủ để round
 | 7 | `output_writer` | **đầy đủ** | Ghi `ao_setpoint[]/do_cmd[]` vào shm (writer duy nhất 2 field này) |
 | 8 | `core_metrics` | **đầy đủ** | scan_count/scan_overrun/timing |
 | 9 | `web_ipc` | **stub được** | Nhận command từ web qua `/run/mkddc/core.sock`; stub = accept + log + đưa vào queue |
-| 10 | `graph_runtime` | **stub được** | Chạy graph.json; stub = không nạp graph, nguồn "logic" luôn inactive |
+| 10 | `graph_runtime` | **implemented (Rev A subset)** | Load/validate/topo/execute graph.json → resolver mức 5; component set: AI/DI/Setpoint/AND/OR/NOT/Compare/Scale/Limit/PID/AO/DO |
 | 11 | `bacnet_objtable` | **stub được** | Ghi `kx_plc_shm`; stub = ghi value/quality, bỏ priority array BACnet |
 
 **KHÔNG làm trong core (mọi Rev):**
@@ -62,9 +66,11 @@ services/core/
 ├── scan_loop.{hpp,cpp}  — vòng quét clock_nanosleep(ABSTIME) 1s
 ├── point_table.{hpp,cpp}— 24 IO + AV/BV/MSV, value+quality+ts+source
 ├── point_quality.{hpp,cpp}— quality từ fault/stale
-├── graph_runtime.{hpp,cpp}— STUB Rev A đầu: load/execute graph.json (topo order)
+├── graph_runtime.{hpp,cpp}— load/validate/topo/execute graph.json → resolver mức 5
+├── json_min.hpp         — parser JSON đệ quy tối thiểu (graph + safe config)
+├── safe_state_config.{hpp,cpp}— loader io_safe_state.conf → default mức 6
 ├── priority_resolver.{hpp,cpp}— 6 mức → 1 output cuối/kênh
-├── safe_state.{hpp,cpp} — fallback khi IO fault/stale/no-graph
+├── safe_state.{hpp,cpp} — fallback khi IO fault/stale/T6/T7 (trigger matrix §5.2)
 ├── iobus_reader.{hpp,cpp}— seqlock reader kx_io_shm
 ├── output_writer.{hpp,cpp}— ghi ao_setpoint[]/do_cmd[]
 ├── bacnet_objtable.{hpp,cpp}— STUB: ghi kx_plc_shm (creator plc_shm = core)
@@ -74,8 +80,11 @@ services/core/
     ├── test_iobus_reader.cpp      — seqlock đọc nhất quán (writer giả ghi đồng thời)
     ├── test_point_quality.cpp     — bảng quality §6
     ├── test_priority_resolver.cpp — bảng test §4
-    ├── test_safe_state.cpp        — bảng trigger §5
-    └── test_scan_loop.cpp         — không overrun với load giả
+    ├── test_safe_state.cpp        — trigger matrix §5.2 (T1/T2/T3/T6/T7)
+    ├── test_scan_loop.cpp         — không overrun với load giả; re-attach muộn
+    ├── test_web_ipc.cpp           — contract §8 qua socket thật
+    ├── test_graph_runtime.cpp     — load/validate/topo/PID/thermostat
+    └── test_safe_state_config.cpp — loader io_safe_state.conf
 ```
 
 ---
@@ -87,7 +96,7 @@ services/core/
 2. Update point table   : value + ts; point_quality tính quality (kể cả stale check ts_ns).
 3. Read Modbus(cache)   : (Rev A.1 — bỏ qua khi chưa có fieldbus)
 4. Read web/BACnet cmd  : web_ipc.drain() → command queue (KHÔNG ghi thẳng IO).
-5. Execute graph        : graph_runtime.execute() (STUB: no-op).
+5. Execute graph        : graph_runtime.execute() (Rev A subset — node topo order).
 6. Resolve priority     : priority_resolver → 1 output/kênh DO/AO.
 7. Apply safe-state     : safe_state ghi đè nếu trigger (§5).
 8. Write output command : output_writer ghi ao_setpoint[]/do_cmd[] vào kx_io_shm.
@@ -108,7 +117,7 @@ while (!g_shutdown) {
     if (iobus_reader.read(&io)) point_table.update_inputs(io);
     point_quality.evaluate(point_table, io);
     auto cmds = web_ipc.drain();                  // stub: queue rỗng
-    graph_runtime.execute(point_table);           // stub: no-op
+    graph_runtime.execute(point_table, resolver); // graph → resolver mức 5
     auto out = priority_resolver.resolve(point_table, cmds);
     safe_state.apply(io, point_table, &out);      // có thể ghi đè out
     output_writer.write(out);                     // seqlock-an-toàn (xem §7.2)
@@ -179,7 +188,11 @@ public:
 - Mọi DO/AO output đi qua priority_resolver, không ghi thẳng kx_io_shm.
 - Web/BACnet/schedule/logic mỗi nguồn gắn 1 mức cố định; KHÔNG nguồn nào ghi thẳng IO.
 - 2 nguồn cùng mức ghi 1 kênh → log WARN conflict, lấy nguồn ghi sau.
-- Không nguồn nào active → relinquish default (mức 6, đọc từ config io_safe_state.conf).
+- Không nguồn nào active → relinquish default (mức 6, đọc từ /data/config/io_safe_state.conf
+  qua safe_state_config — CONFIG_SCHEMA §4). QUAN HỆ CHỐT (quyết định product 2026-06-12):
+  io_safe_state.conf CHỈ cấu hình default mức 6; safety action của safe_state (§5.3) CỐ ĐỊNH
+  0V/4mA/open, LUÔN thắng default khi trigger. Default mức 6 chỉ có hiệu lực khi hệ có ít
+  nhất 1 nguồn điều khiển (graph loaded hoặc manual/BMS active) — không có → T7 ép safe.
 ```
 **Test (test_priority_resolver.cpp):**
 ```
@@ -192,18 +205,76 @@ public:
 
 ---
 
-## 5. Safe-state resolver
+## 5. Safe-state resolver — SAFETY SPEC
+
+> ⚠️ Safety trong hệ này là **nhiều lớp**, core KHÔNG phải lớp duy nhất. §5.1 chốt ai
+> phát hiện / ai quyết / ai thực thi. §5.2 chốt trigger nào **ĐÃ implement** vs
+> **PLANNED** — tester chỉ viết test case cho phần implemented.
+
+### 5.1 Các lớp safety (defense-in-depth)
+
+| Lớp | Phát hiện lỗi | Quyết định safe | Thực thi safe | Phản ứng |
+|-----|---------------|-----------------|---------------|----------|
+| **MCU FW** | mất `GET_IO` > `IOP_SAFE_TIMEOUT_MS` (200ms) | MCU tự vào safe-state | AO→raw safe, DO→open trực tiếp trên phần cứng; NACK `ERR_SAFE_STATE` cho mọi `SET_*` | ≤200ms |
+| **iobus** | >`IOP_FAULT_TIMEOUT_MS` (100ms) không `IO_RESP` hợp lệ (timeout/CRC/SEQ) | state machine `FAULT → RESET_IO(0x05) → SAFE_STATE` (05 §13) | ghi `iop_status=FAULT/SAFE` vào shm; `output_command` ngừng gửi `SET_*` khi bị NACK safe | ≤100ms + retry |
+| **core** (`safe_state`) | `iop_status=FAULT/SAFE` hoặc shm stale (ts_ns không tăng >3 scan) | ghi đè `OutputCmd` SAU `priority_resolver` | AO→safe (0V/4mA theo `ao_mode`), DO→0 vào `ao_setpoint[]/do_cmd[]` | ≤1 scan (1s) |
+
+**Thứ tự ưu tiên khi nhiều lớp cùng can thiệp: MCU thắng** (lớp cuối chạm phần cứng).
+Khi MCU đang safe, mọi `SET_*` từ SOM bị NACK `ERR_SAFE_STATE` — iobus giữ lệnh chờ hết
+safe, không spam retry. Core safe-state lúc đó cũng đang ghi giá trị safe nên 3 lớp
+hội tụ cùng một trạng thái output, không xung đột giá trị.
+
+### 5.2 Trigger matrix — implemented vs planned
+
+| # | Trigger | Lớp | Trạng thái | Code / Test |
+|---|---------|-----|------------|-------------|
+| T1 | `iop_status=FAULT` | core | ✅ **implemented** | `safe_state.cpp` · `IopFaultForcesSafeOutputs` |
+| T2 | `iop_status=SAFE` | core | ✅ **implemented** | `safe_state.cpp` · `SafeStatusAlsoTriggers` |
+| T3 | shm stale: ts_ns không tăng >3 scan (`PointQuality::is_stale()`) | core | ✅ **implemented** | `safe_state.cpp` · `StaleShm4ScansForcesSafe` |
+| T4 | MCU mất `GET_IO` 200ms | MCU FW | ✅ spec chốt (04 §FW — ngoài scope core) | FW + `fake_mcu` |
+| T5 | UART >100ms không `IO_RESP` hợp lệ | iobus | ✅ **implemented** | `iobus/main.cpp` · integration `fake_mcu --timeout` |
+| T6 | `ui_quality=BAD` trên kênh graph đang dùng | core | ✅ **implemented** | `safe_state.cpp` · `T6GraphInputBadForcesSafe` |
+| T7 | chưa có graph hợp lệ VÀ không có lệnh manual/BMS active | core | ✅ **implemented** | `safe_state.cpp` · `T7NoGraphNoManualForcesSafe` |
+
+> T6/T7 implemented 2026-06-12 cùng `graph_runtime` (Rev A subset). E2E đo cả 3 lớp
+> trong 1 run: `tools/test_safety_e2e.sh` (lớp 1 fake_mcu 200ms / lớp 2 iobus / lớp 3 core).
+
+### 5.3 Safety action (chốt chung mọi lớp)
 
 ```
-Trigger  : iop_status=FAULT/SAFE · ui_quality=BAD trên kênh graph đang dùng ·
-           shm stale (ts_ns không tăng >3 scan) · chưa có graph hợp lệ VÀ không có
-           lệnh manual/BMS active.
-Hành vi  : AO → safe (0V/4mA theo ao_mode trong shm); DO → 0 (open);
-           point quality liên quan = BAD; log ERROR + 1 lần/transition.
+AO mode 0-10V  → 0V    (MCU: IOP_AO_SAFE_VOLT_RAW = 0)
+AO mode 4-20mA → 4mA   (MCU: IOP_AO_SAFE_CURR_RAW = 0 — raw 0 = 4mA theo mapping SET_AO)
+DO             → 0     (open / relay nhả)
+Log            : ERROR 1 lần/transition (vào và ra), KHÔNG spam mỗi scan.
+Quality        : point_quality (§6) tự degrade BAD theo cùng điều kiện — safe_state
+                 KHÔNG set quality (tách trách nhiệm).
+```
+
+### 5.4 Recovery rule
+
+```
+Điều kiện thoát : TẤT CẢ trigger hết (iop_status=NORMAL VÀ ts_ns tăng trở lại).
+Hành vi thoát   : safe_state ngừng ghi đè NGAY scan kế tiếp → trả quyền cho
+                  priority_resolver (nguồn active mức cao nhất thắng lại).
+Hysteresis      : KHÔNG có ở lớp core (Rev A) — vào/ra theo trạng thái tức thời.
+                  Chấp nhận vì iobus đã "debounce" bằng state machine: SAFE_STATE →
+                  RECONNECT → handshake lại thành công mới trả iop_status=NORMAL.
+MCU recovery    : SOM handshake lại + RESET_IO; MCU thoát safe khi nhận GET_IO đều.
+Test            : RecoveryReturnsControlToResolver — hết fault → resolver giữ giá trị cũ.
+T6 exit         : kênh graph dùng hết BAD. T7 exit: graph load thành công HOẶC có
+                  manual/BMS active trở lại.
+MCU kẹt safe    : iobus bị NACK ERR_SAFE_STATE >3s → escalate RECONNECT (handshake +
+                  RESET_IO + resync output); DO_FB lệch last_sent ≥5 poll → resend SET_DO.
+```
+
+### 5.5 API / Test / Done
+
+```
 Public API: void apply(const IoSnapshot&, const PointTable&, OutputCmd* inout);
-Test     : test_safe_state.cpp — mô phỏng iop_status=FAULT → out.ao=safe, out.do=0;
-           ts_ns đứng yên 4 scan → như trên; hết fault → trả quyền cho resolver.
-Done khi : mọi điều kiện fault dẫn tới output an toàn trong ≤1 scan.
+           — gọi SAU priority_resolver.resolve() (scan step 7); bool active() để metrics/log.
+Test     : test_safe_state.cpp — T1/T2/T3/T6/T7 + recovery (xem §5.2); E2E 3 lớp: tools/test_safety_e2e.sh.
+Done khi : mọi trigger implemented dẫn tới output an toàn trong ≤1 scan;
+           thoát safe trả quyền resolver trong ≤1 scan.
 ```
 
 ---
@@ -313,7 +384,8 @@ set(SHARED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../shared)
 
 add_library(core_lib STATIC
     scan_loop.cpp point_table.cpp point_quality.cpp graph_runtime.cpp
-    priority_resolver.cpp safe_state.cpp iobus_reader.cpp output_writer.cpp
+    priority_resolver.cpp safe_state.cpp safe_state_config.cpp
+    iobus_reader.cpp output_writer.cpp
     bacnet_objtable.cpp web_ipc.cpp core_metrics.cpp)
 target_include_directories(core_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${SHARED_DIR})
 target_link_libraries(core_lib PUBLIC pthread rt)
@@ -382,7 +454,7 @@ WantedBy=multi-user.target
 3. Scan loop tuyệt-đối-thời-gian (clock_nanosleep ABSTIME); không sleep tương đối.
 4. Đọc shm bằng seqlock reader (§7.1); không block iobus; chỉ ghi 2 field core sở hữu (§7.2).
 5. IO fault → quality bad → safe-state; không giả "good".
-6. Stub (web_ipc/graph_runtime/bacnet_objtable) phải có interface THẬT — thay implementation
+6. Stub (web_ipc/bacnet_objtable) phải có interface THẬT — thay implementation
    sau, KHÔNG đổi API (tránh sửa dây chuyền).
 ```
 
@@ -401,5 +473,5 @@ WantedBy=multi-user.target
 | Web command | web_ipc (stub) | commissioning DO test qua core chạy | group 5/6 |
 
 ---
-**Rev** 1.1 | 2026-06-11 · Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) ·
+**Rev** 1.3 | 2026-06-12 · Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) ·
 DoD: [12_DEFINITION_OF_DONE §4](12_DEFINITION_OF_DONE.md)

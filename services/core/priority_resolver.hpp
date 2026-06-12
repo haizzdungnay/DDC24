@@ -44,6 +44,9 @@ public:
     /* Mức active cao nhất thắng; không ai active → default mức 6. */
     OutputCmd resolve() const;
 
+    /* Có nguồn nào (mức 1..5) đang active không — đầu vào safety trigger T7 (07 §5.2). */
+    bool any_active_above_default() const;
+
 private:
     struct Slot {
         bool  active = false;

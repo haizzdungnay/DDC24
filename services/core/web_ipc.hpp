@@ -39,6 +39,7 @@ public:
 
     /* Trả response cho lệnh đã xử lý (accepted + applied_value). */
     void respond_accepted(const WebCommand& cmd, float applied_value);
+    void respond_rejected(const WebCommand& cmd, const char* error);
 
 private:
     void respond(int fd, const std::string& json_line);

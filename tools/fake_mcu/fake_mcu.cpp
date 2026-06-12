@@ -38,6 +38,7 @@ struct McuState {
     bool     safe_state = false;
     uint16_t rx_cnt = 0, crc_err = 0, seq_err = 0;
     uint64_t boot_ns = 0;
+    uint64_t last_rx_ns = 0;          /* cho MCU safe timeout 200ms (lớp 1) */
 };
 
 struct Inject {
@@ -223,7 +224,22 @@ int main(int argc, char** argv)
 
     for (;;) {
         struct pollfd pfd { fd, POLLIN, 0 };
-        const int pr = poll(&pfd, 1, 1000);
+        const int pr = poll(&pfd, 1, 50);
+
+        /* Lớp safety 1 (MCU FW — 07 §5.1): mất frame > IOP_SAFE_TIMEOUT_MS (200ms)
+         * → tự vào safe-state: AO raw 0, DO open, NACK ERR_SAFE_STATE mọi SET_*.
+         * Thoát safe khi HANDSHAKE (SOM reconnect). */
+        if (!st.safe_state && st.last_rx_ns != 0) {
+            const uint64_t idle_ms = (now_ns() - st.last_rx_ns) / 1000000ull;
+            if (idle_ms > IOP_SAFE_TIMEOUT_MS) {
+                st.safe_state = true;
+                st.do_state = 0;
+                std::memset(st.ao_raw, 0, sizeof(st.ao_raw));
+                std::fprintf(stderr, "fake_mcu: MCU SAFE-STATE after %llu ms idle (layer1)\n",
+                             static_cast<unsigned long long>(idle_ms));
+            }
+        }
+
         if (pr <= 0) continue;
         if (pfd.revents & (POLLHUP | POLLERR)) {
             /* đầu kia đóng (socat/iobus restart) — chờ mở lại */
@@ -233,6 +249,7 @@ int main(int argc, char** argv)
         uint8_t tmp[512];
         const ssize_t r = ::read(fd, tmp, sizeof(tmp));
         if (r <= 0) continue;
+        st.last_rx_ns = now_ns();
         if (rxlen + static_cast<size_t>(r) > sizeof(rxbuf)) rxlen = 0;   /* desync, reset */
         std::memcpy(rxbuf + rxlen, tmp, static_cast<size_t>(r));
         rxlen += static_cast<size_t>(r);

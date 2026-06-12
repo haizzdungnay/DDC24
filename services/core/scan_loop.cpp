@@ -1,5 +1,6 @@
 #include "scan_loop.hpp"
 
+#include <cstdio>
 #include <ctime>
 
 namespace core {
@@ -14,6 +15,13 @@ static uint64_t now_ns()
 void ScanLoop::step()
 {
     const uint64_t t0 = now_ns();
+
+    /* 0. Re-attach: core lên trước iobus quá 30s → main đã thoát vòng retry,
+     * scan loop tự thử lại mỗi scan tới khi iobus tạo shm (gap #3 analysis report) */
+    if (!d_.reader->attached()) {
+        if (d_.reader->attach())
+            std::fprintf(stderr, "INFO  iobus_reader.reattached trong scan loop\n");
+    }
 
     /* 1. Read IO state (seqlock) — fail → dùng snapshot cũ + metric */
     IoSnapshot io;
@@ -30,6 +38,7 @@ void ScanLoop::step()
 
     /* 4. Read web command queue → priority mức 2 (manual) */
     for (const WebCommand& cmd : d_.web->drain()) {
+        bool ok = true;
         if (cmd.point.kind == PointKind::AO) {
             if (cmd.is_write) d_.resolver->set_ao(PRIO_LOCAL_MANUAL, cmd.point.idx, cmd.value);
             else              d_.resolver->release_ao(PRIO_LOCAL_MANUAL, cmd.point.idx);
@@ -37,10 +46,19 @@ void ScanLoop::step()
             if (cmd.is_write) d_.resolver->set_do(PRIO_LOCAL_MANUAL, cmd.point.idx, cmd.value != 0.0f);
             else              d_.resolver->release_do(PRIO_LOCAL_MANUAL, cmd.point.idx);
         } else {
-            /* AV/BV/MSV: ghi thẳng point table (không phải output vật lý) */
-            d_.table->set_virtual(cmd.point, cmd.value, PointSource::WEB);
+            /* AV/BV/MSV: ghi thẳng point table (không phải output vật lý);
+             * release GIỮ value, chỉ nhả source — KHÔNG ghi cmd.value */
+            if (cmd.is_write) ok = d_.table->set_virtual(cmd.point, cmd.value, PointSource::WEB);
+            else              ok = d_.table->release_virtual(cmd.point);
         }
-        d_.web->respond_accepted(cmd, cmd.value);
+        if (ok) {
+            /* applied_value = giá trị thực sau xử lý (release ≠ cmd.value) */
+            const float applied = cmd.is_write ? cmd.value
+                                               : d_.table->get(cmd.point).value;
+            d_.web->respond_accepted(cmd, applied);
+        } else {
+            d_.web->respond_rejected(cmd, "bad_request");
+        }
     }
 
     /* 5. Execute graph (STUB: no-op) */

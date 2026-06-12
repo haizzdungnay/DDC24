@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Chia phase làm thật
 
 > **Document ID:** IMPL-PHASEPLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-10
+> **Phiên bản:** 1.3 | 2026-06-12 (đồng bộ version header/footer; graph_runtime + T6/T7 implemented; E2E 3 lớp safety có script đo)
 > **Đọc trước:** [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md)
 > **Map sang task:** [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md) · **Map sang test:** [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)
 
@@ -129,7 +129,7 @@ shm gửi MCU, metrics, log, systemd integration.
 
 **Owner:** Dev 2.
 
-**Việc:** point table, scan loop 1s, graph runtime (Rev A subset), priority resolver,
+**Việc:** point table, scan loop 1s, graph runtime (Rev A subset — ĐÃ implement 2026-06-12), priority resolver,
 safe-state resolver, iobus_reader (đọc shm), output_writer (ghi shm).
 
 **Output:**
@@ -137,7 +137,8 @@ safe-state resolver, iobus_reader (đọc shm), output_writer (ghi shm).
 1. Point table đủ 24 IO (8UI+8DI+4AO+4DO) + virtual point.
 2. Scan loop chạy 1s, clock_nanosleep ABSTIME, không overrun.
 3. Priority resolver chạy (6 mức, fire/safety > BMS > schedule > logic > default).
-4. Safe-state resolver chạy (IO fault → fallback output).
+4. Safe-state resolver chạy (IO fault/stale → fallback output — SAFETY SPEC 07 §5;
+   trigger graph-based T6/T7 ĐÃ implement — trigger matrix 07 §5.2).
 5. Output command đi qua core (web/BACnet không ghi thẳng shm IO).
 6. IO fault → point quality = bad → graph thấy stale.
 ```
@@ -183,7 +184,8 @@ config, alarm, graph validate/deploy, audit log.
 2. Web tắt DO1 → relay THẬT tắt.
 3. DI đổi ngoài hardware → web cập nhật trong ≤ 2s.
 4. AO set value → analog output THẬT thay đổi (đo V/mA).
-5. Rút UART → web báo lỗi MCU timeout + safe-state.
+5. Rút UART → web báo lỗi MCU timeout + safe-state (kiểm đủ 3 lớp: MCU 200ms /
+   iobus 100ms / core ≤1 scan — 07 §5.1; no-board đo bằng `tools/test_safety_e2e.sh`).
 6. Reset MCU → hệ thống recover (handshake lại, IO trở lại normal).
 ```
 
@@ -207,4 +209,5 @@ config, alarm, graph validate/deploy, audit log.
 > (map P0→P4 round-trip). Dev mới: bắt đầu từ [16_QUICK_START_SOM_DEV](16_QUICK_START_SOM_DEV.md).
 
 ---
-**Rev** 1.1 | 2026-06-11
+**Rev** 1.3 | 2026-06-12 (graph_runtime + T6/T7 implemented; E2E script) · 1.2 | 2026-06-12 (P4/P6: tham chiếu SAFETY SPEC 07 §5 — trigger matrix
+implemented/planned, kiểm 3 lớp safety ở E2E) · 1.1 | 2026-06-11

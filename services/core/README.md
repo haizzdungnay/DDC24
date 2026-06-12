@@ -8,8 +8,14 @@ PHẢI đi qua priority resolver. **KHÔNG mở UART, KHÔNG scale raw, KHÔNG s
   [15_CONTRACT_FREEZE](../../docs/03_implementation/15_CONTRACT_FREEZE.md)
 - Guide: [07_MKDDC_CORE](../../docs/03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md)
 
-Rev A đầu: `web_ipc` / `graph_runtime` / `bacnet_objtable` là **stub có interface thật**
-(07 §0) — thay implementation sau, không đổi API.
+Rev A: `graph_runtime` đã implement (subset: AI/DI/Setpoint/AND/OR/NOT/Compare_GT/LT/
+Scale/Limit/PID/AO/DO — load/validate/topo/execute → resolver mức 5). `web_ipc` /
+`bacnet_objtable` còn là **stub có interface thật** (07 §0) — thay implementation sau,
+không đổi API.
+
+Safety: trigger matrix 07 §5.2 đủ T1/T2/T3/T6/T7. `io_safe_state.conf` cấu hình
+**default mức 6** (safe_state_config); safety action khi fault CỐ ĐỊNH 0V/4mA/open.
+E2E 3 lớp safety no-board: `./tools/test_safety_e2e.sh`.
 
 ## Build + test
 

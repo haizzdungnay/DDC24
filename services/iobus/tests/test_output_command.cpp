@@ -134,6 +134,42 @@ TEST(OutputCommand, NackSafeStateStopsSending)
     EXPECT_GT(sink.do_calls.size(), calls_after_first);
 }
 
+TEST(OutputCommand, FeedbackMismatchForcesResend)
+{
+    FakeSink sink;
+    OutputCommand oc(sink);
+    const float ao[4] = {0, 0, 0, 0};
+    const uint8_t dout[4] = {1, 0, 0, 0};
+    oc.process(ao, dout);   /* sync: SET_DO do_cmd=1 */
+    sink.do_calls.clear();
+
+    /* fb khớp → không resend */
+    const uint8_t fb_ok[4] = {1, 0, 0, 0};
+    for (int i = 0; i < 10; i++) {
+        oc.verify_feedback(fb_ok);
+        oc.process(ao, dout);
+    }
+    EXPECT_EQ(sink.do_calls.size(), 0u);
+
+    /* MCU mất state (tự safe/reset): fb=0 kéo dài → sau FB_MISMATCH_POLLS poll
+     * phải ép resend đúng 1 SET_DO */
+    const uint8_t fb_lost[4] = {0, 0, 0, 0};
+    for (int i = 0; i < OutputCommand::FB_MISMATCH_POLLS; i++) {
+        oc.verify_feedback(fb_lost);
+        oc.process(ao, dout);
+    }
+    ASSERT_EQ(sink.do_calls.size(), 1u);
+    EXPECT_EQ(sink.do_calls[0].value & 0x01, 0x01) << "resend lại trạng thái mong muốn";
+
+    /* fb khớp lại → ngừng */
+    sink.do_calls.clear();
+    for (int i = 0; i < 10; i++) {
+        oc.verify_feedback(fb_ok);
+        oc.process(ao, dout);
+    }
+    EXPECT_EQ(sink.do_calls.size(), 0u);
+}
+
 TEST(OutputCommand, FailedSendRetriesNextCycle)
 {
     FakeSink sink;

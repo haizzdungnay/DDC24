@@ -124,6 +124,14 @@ void WebIpc::respond_accepted(const WebCommand& cmd, float applied_value)
     respond(cmd.client_fd, buf);
 }
 
+void WebIpc::respond_rejected(const WebCommand& cmd, const char* error)
+{
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "{\"id\":%llu,\"result\":\"rejected\",\"error\":\"%s\"}",
+                  static_cast<unsigned long long>(cmd.id), error);
+    respond(cmd.client_fd, buf);
+}
+
 void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand>* out)
 {
     double idv = 0;

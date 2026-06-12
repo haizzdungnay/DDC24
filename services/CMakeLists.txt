@@ -6,5 +6,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(mkddc-services CXX C)
 
+enable_testing()   # cho phép `ctest --test-dir build/services` chạy test cả 2 service
 add_subdirectory(iobus)
 add_subdirectory(core)

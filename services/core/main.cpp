@@ -15,6 +15,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "safe_state_config.hpp"
 #include "scan_loop.hpp"
 
 namespace {
@@ -51,6 +52,9 @@ int main(int argc, char** argv)
     using namespace core;
 
     std::string sock_path = "/run/mkddc/core.sock";
+    std::string graph_path = "/data/config/graph.json";
+    std::string safe_cfg_path = "/data/config/io_safe_state.conf";
+    bool safe_cfg_from_cli = false;
     uint64_t period_ns = 1000000000ull;   /* scan 1s Rev A */
     int rt_prio = 80;
 
@@ -58,10 +62,13 @@ int main(int argc, char** argv)
         const std::string a = argv[i];
         if (a == "--log-level" && i + 1 < argc) { ++i; /* Rev A: log level cố định */ }
         else if (a == "--sock" && i + 1 < argc) sock_path = argv[++i];
+        else if (a == "--graph" && i + 1 < argc) graph_path = argv[++i];
+        else if (a == "--safe-state-conf" && i + 1 < argc) { safe_cfg_path = argv[++i]; safe_cfg_from_cli = true; }
         else if (a == "--scan-ms" && i + 1 < argc)
             period_ns = static_cast<uint64_t>(std::atoll(argv[++i])) * 1000000ull;
         else if (a == "--help") {
-            std::printf("usage: mkddc-core [--sock PATH] [--scan-ms N] [--log-level LVL]\n");
+            std::printf("usage: mkddc-core [--sock PATH] [--graph FILE] [--safe-state-conf FILE]"
+                        " [--scan-ms N] [--log-level LVL]\n");
             return 0;
         }
     }
@@ -85,7 +92,7 @@ int main(int argc, char** argv)
     sigaction(SIGINT, &sa, nullptr);
 
     /* Attach io_shm: retry 1s, WARN mỗi 10s; sau 30s vẫn chạy scan với quality=BAD
-     * (safe-state áp) — 07 §7.1 */
+     * (safe-state áp) — 07 §7.1. ScanLoop sẽ tự re-attach mỗi scan nếu iobus lên muộn. */
     IobusReader reader;
     {
         int waited_s = 0;
@@ -94,7 +101,8 @@ int main(int argc, char** argv)
                 std::fprintf(stderr, "WARN  iobus_reader.waiting shm=%s (%ds)\n",
                              KX_SHM_IO_PATH, waited_s);
             if (waited_s >= 30) {
-                std::fprintf(stderr, "WARN  iobus_reader.degraded chạy với quality=BAD\n");
+                std::fprintf(stderr, "WARN  iobus_reader.degraded chạy với quality=BAD"
+                                     " (scan loop sẽ tự re-attach)\n");
                 break;
             }
             sleep(1);
@@ -108,10 +116,18 @@ int main(int argc, char** argv)
     WebIpc web;
     web.open(sock_path);
     GraphRuntime graph;
-    graph.load("/data/config/graph.json");
+    graph.load(graph_path);
     PriorityResolver resolver;
-    SafeState safe(quality);
-    OutputWriter writer(reader.shm());
+
+    /* io_safe_state.conf → relinquish default MỨC 6 (quan hệ chốt: safe_state
+     * override luôn là 0V/4mA/open cố định — xem safe_state_config.hpp) */
+    SafeStateConfig safe_cfg;
+    if (!load_safe_state_config(safe_cfg_path, safe_cfg_from_cli, &safe_cfg))
+        return 1;   /* config an toàn hỏng → fail-fast */
+    apply_safe_state_config(safe_cfg, &resolver);
+
+    SafeState safe(quality, &graph, &resolver);
+    OutputWriter writer(reader);
     BacnetObjTable bacnet;
     if (!bacnet.attach())
         return 1;   /* core là creator plc_shm — không có thì web/BACnet mù */

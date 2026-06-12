@@ -272,10 +272,13 @@ Task ID: COR-004
 Tên: Safe-state resolver + quality
 Owner: Dev SOM | Phase: 4 | Module: safe_state, point_quality
 File: services/core/safe_state.cpp, point_quality.cpp
+Input: 07 §5 SAFETY SPEC (trigger matrix §5.2 — chỉ làm phần implemented T1/T2/T3)
 Output: IO fault → safe output + quality bad
 Test: iop_status=FAULT → DO open, AO 0V/4mA, quality bad
 Done khi: mọi fault → safe trong ≤1 scan
 Phụ thuộc: COR-003
+Trạng thái: ĐÃ làm 2026-06-11 (T1/T2/T3 + recovery, test_safe_state pass).
+            Trigger graph-based T6/T7 KHÔNG thuộc task này → COR-006 (Rev A.1).
 ```
 ```
 Task ID: COR-005
@@ -286,6 +289,22 @@ Output: ghi ao_setpoint/do_cmd shm; nhận command web; ghi kx_plc_shm
 Test: web command → core → shm → iobus → relay; audit result trả về web
 Done khi: web→core→shm path hoạt động, không ghi thẳng IO
 Phụ thuộc: COR-004
+```
+```
+Task ID: COR-006
+Tên: graph_runtime + safety trigger T6/T7 (Rev A.1)
+Owner: Dev SOM | Phase: 4 (Rev A.1) | Module: graph_runtime, safe_state
+File: services/core/graph_runtime.cpp, safe_state.cpp
+Input: 07 §5.2 trigger matrix (T6: ui_quality=BAD trên kênh graph đang dùng;
+       T7: chưa có graph hợp lệ VÀ không có lệnh manual/BMS active), GRAPH_SCHEMA
+Output: graph_runtime hết stub; safe_state thêm trigger T6/T7
+Test: test_safe_state.cpp thêm case T6/T7; graph đọc point BAD → fallback
+Done khi: T6/T7 chuyển ✅ trong 07 §5.2 + test pass; cập nhật trigger matrix
+Phụ thuộc: COR-005
+Trạng thái: ĐÃ làm 2026-06-12 — graph_runtime implemented (Rev A subset: 13 component,
+       load/validate/topo/execute → resolver mức 5); T6/T7 ✅ trong 07 §5.2;
+       test: test_graph_runtime.cpp + test_safe_state.cpp (T6GraphInputBadForcesSafe,
+       T7NoGraphNoManualForcesSafe); E2E 3 lớp: tools/test_safety_e2e.sh
 ```
 
 ---
@@ -360,10 +379,12 @@ Phụ thuộc: E2E-001
 ```
 ```
 Task ID: E2E-003
-Tên: Fault injection + recover
+Tên: Fault injection + recover (kiểm đủ 3 lớp safety — 07 §5.1)
 Owner: cả 3 + Tester | Phase: 6 | Module: all
-Test: rút UART → web báo lỗi + safe-state; cắm lại/reset MCU → recover
-Done khi: TC-E2E-05/06 + group 7 pass
+Test: rút UART → web báo lỗi + safe-state; cắm lại/reset MCU → recover.
+      Kiểm 3 lớp trong CÙNG kịch bản: MCU tự safe ≤200ms (đo relay/AO),
+      iobus iop_status=FAULT/SAFE ≤100ms+retry, core ghi đè output ≤1 scan.
+Done khi: TC-E2E-05/06 + group 7 pass; 3 lớp safety đều được quan sát/ghi nhận
 Phụ thuộc: E2E-002
 ```
 ```
@@ -376,4 +397,6 @@ Phụ thuộc: E2E-003
 ```
 
 ---
-**Rev** 1.0 | 2026-06-10 · Test chi tiết: [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)
+**Rev** 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006
+Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·
+Test chi tiết: [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)

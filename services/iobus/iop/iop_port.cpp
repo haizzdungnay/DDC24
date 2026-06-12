@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include <fcntl.h>
+#include <poll.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -95,11 +96,19 @@ ssize_t IopPort::write(const uint8_t* buf, size_t n)
 {
     if (fd_ < 0) return -1;
     size_t off = 0;
+    int eagain_waits = 0;
     while (off < n) {
         const ssize_t w = ::write(fd_, buf + off, n - off);
         if (w > 0) { off += static_cast<size_t>(w); continue; }
         if (w < 0 && errno == EINTR) continue;
-        if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) continue; /* TX buffer đầy: chờ ngắn */
+        if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            /* TX buffer đầy: chờ writable thay vì busy-spin; quá ~50ms (peer
+             * PTY chết / flow nghẽn) → lỗi, caller xử lý như timeout */
+            if (++eagain_waits > 5) return -1;
+            struct pollfd pfd { fd_, POLLOUT, 0 };
+            if (::poll(&pfd, 1, 10) < 0 && errno != EINTR) return -1;
+            continue;
+        }
         return -1;
     }
     return static_cast<ssize_t>(off);

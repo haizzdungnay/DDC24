@@ -11,7 +11,7 @@ Mục tiêu:
 - Chỉ ra luồng dữ liệu và luồng điều khiển chính
 - Tìm các gap kỹ thuật, gap chức năng, gap test, và rủi ro vận hành
 
-Ngày phân tích: `2026-06-11`
+Ngày cập nhật gần nhất: `2026-06-12`
 
 ## 2. Kết luận nhanh
 
@@ -29,10 +29,28 @@ Code `services/` đang chia khá sạch thành 2 service độc lập:
 
 Điểm cần chú ý:
 
-- Có một số bug hành vi thật ở nhánh `release` của virtual point
-- Có rủi ro recovery khi `core` khởi động trước `iobus` quá lâu
-- Một số module vẫn là stub, nên hệ thống chưa hoàn chỉnh về mặt chức năng cuối
-- Parser JSON đang là parser tự chế, dễ mỏng ở biên input
+- 3 finding lớn của bản rà soát trước đã được fix: `late-attach` của `core`, `release` cho virtual point, và degrade quality cho `AO`
+- Test coverage đã tăng rõ: thêm test cho `web_ipc`, `iobus_config`, `io_cache`
+- Vẫn còn module stub ở `graph_runtime` và `bacnet_objtable`
+- Parser JSON vẫn là parser tự chế, dễ mỏng ở biên input
+- Có residual risk mới quanh race khi `iobus` re-attach SHM trong lúc `core` vẫn đang ghi output
+
+## 2.1 Cập nhật sau thay đổi mới
+
+Sau khi rà lại code mới, các điểm sau đã được xử lý so với báo cáo trước:
+
+- `core` đã tự re-attach `kx_io_shm` trong `ScanLoop`, không còn chốt `nullptr` vĩnh viễn ở `OutputWriter`
+- `release` cho `AV/BV/MSV` đã có semantics riêng `release_virtual()`, không còn ghi đè `value`
+- `AO` quality giờ degrade theo `fault/stale`, không còn kẹt `GOOD`
+- `iobus` đã thêm test cho config parser và `IoCache`
+- `core` đã thêm test socket-level cho `web_ipc`
+- Tài liệu safety `07 §5` đã được viết lại thành safety spec đầy đủ (lớp safety, trigger matrix implemented/planned, recovery rule) — hết lẫn lộn giữa behavior đã implement và planned (xem mục 7.5)
+
+Kết luận cập nhật:
+
+- Báo cáo cũ không còn đúng ở 4 finding lớn trên
+- Các fix mới nhìn chung hợp lý và đã được khóa bằng test
+- Tuy nhiên vẫn còn 2 rủi ro kỹ thuật đáng theo dõi, nêu ở mục gap cập nhật bên dưới
 
 ## 3. Cấu trúc thư mục `services/`
 
@@ -203,17 +221,17 @@ Thiết kế này tốt vì giữ toàn bộ ownership UART trong một thread/s
 
 ### 6.4 Gap và rủi ro trong `iobus`
 
-#### Gap 1. Restart `iobus` có thể wipe field do `core` sở hữu trong SHM
+#### Gap 1. Preserve field của `core` khi `iobus` re-attach vẫn còn cửa race
 
-Trong `services/iobus/io/io_cache.cpp`, `IoCache::attach()` đang `memset()` toàn bộ `kx_io_shm_t` mỗi lần attach.
+Bug wipe thẳng `ao_setpoint[]/do_cmd[]` đã được fix: `IoCache::attach()` giờ đọc lại field của `core` trước khi init rồi restore sau đó.
 
-Hệ quả:
+Tuy nhiên vẫn còn residual risk:
 
-- Nếu `iobus` restart riêng, các field `ao_setpoint[]` / `do_cmd[]` có thể bị reset về 0
-- Trong khi đó đây là field do `core` sở hữu về mặt logic
-- Hệ thống có thể tự về 0 output trong một khoảng ngắn trước khi `core` scan và ghi lại
+- `services/iobus/io/io_cache.cpp` vẫn `memset()` toàn bộ shared memory trong lúc `core` có thể còn đang map và tiếp tục ghi `ao_setpoint[]/do_cmd[]`
+- `services/core/output_writer.cpp` không kiểm `magic`, chỉ cần còn con trỏ `shm` là vẫn ghi
+- Vì vậy một write mới của `core` xảy ra giữa pha `save` và pha `restore` của `iobus` có thể bị mất và bị ghi đè bởi snapshot cũ
 
-Mức độ: trung bình đến cao, tùy yêu cầu continuity output.
+Nói ngắn: fix mới giải quyết “wipe sạch”, nhưng chưa giải quyết triệt để race “lost update khi restart chồng nhau”.
 
 #### Gap 2. Config parser là parser JSON tối thiểu tự chế
 
@@ -227,17 +245,30 @@ Rủi ro:
 
 Điểm cộng là code có chủ đích fail-fast với JSON hỏng rõ ràng.
 
-#### Gap 3. Chưa có test riêng cho config parser
+#### Gap 3. Test parser/config đã được bổ sung
 
-Phần `iobus` test nhiều, nhưng không thấy test cho `load_config()`.
+Finding này đã được xử lý.
 
-Điểm thiếu:
+Hiện đã có test riêng cho `load_config()` bao phủ:
 
 - Parse config hợp lệ
-- Config thiếu field
+- File thiếu
+- Field thiếu
 - JSON malformed
 - Sensor type lạ
-- AO mode lạ
+- Override baud dev-mode
+
+#### Gap 4. `IopPort::write()` đang gộp nghẽn TX tạm thời thành lỗi `NOT_OPEN`
+
+Code mới tránh busy-spin khi `write()` gặp `EAGAIN` bằng cách `poll(POLLOUT)` tối đa khoảng 50ms rồi trả `-1`.
+
+Điểm còn hở:
+
+- `IopClient::transact()` hiện map mọi `port_.write() < 0` thành `IopResult::NOT_OPEN`
+- Nhưng `EAGAIN` kéo dài không nhất thiết có nghĩa là FD đã đóng
+- Điều này có thể làm state machine diễn giải “TX nghẽn tạm thời” thành “port hỏng/mất kết nối”
+
+Đây chưa chắc là bug đã lộ ngay, nhưng là semantics đáng review kỹ vì ảnh hưởng behavior recovery.
 
 ## 7. Phân tích `core`
 
@@ -305,6 +336,13 @@ Nếu IO fault/stale thì ép output về trạng thái an toàn:
 - AO về `0V` hoặc `4mA` theo mode
 - DO về `open`
 
+Trigger thực tế trong code hiện chỉ có 2 nhóm:
+
+- `iop_status = FAULT/SAFE`
+- shm stale: `ts_ns` không tăng quá 3 scan (`PointQuality::is_stale()`)
+
+Hai trigger graph-based (`ui_quality=BAD` trên kênh graph đang dùng, chưa có graph hợp lệ) là **planned Rev A.1**, chưa có trong code vì `graph_runtime` còn stub. Chi tiết đối chiếu xem mục 7.5.
+
 #### `web_ipc.*`
 
 Server Unix stream socket nhận JSON-line command cho manual commissioning.
@@ -327,56 +365,37 @@ Hiện publish dữ liệu point ra `kx_plc_shm`, nhưng mới ở mức stub m�
 
 ### 7.4 Gap và rủi ro trong `core`
 
-#### Gap 1. `core` không re-attach nếu `iobus` lên trễ quá lâu
+#### Gap 1. `late-attach` của `core` đã được xử lý
 
-`main.cpp` retry attach `kx_io_shm` trong 30 giây. Sau đó nó vẫn tiếp tục chạy degraded.
+Finding này đã được fix.
 
-Vấn đề là sau khi thoát khỏi đoạn retry đó:
+Hiện tại:
 
-- `reader` không có logic re-attach trong `ScanLoop`
-- `OutputWriter` được tạo từ `reader.shm()` tại thời điểm khởi tạo
-- Nếu lúc đó `reader.shm()` là `nullptr`, writer có thể bị vô hiệu vĩnh viễn
+- `ScanLoop` tự thử `reader.attach()` mỗi scan khi chưa attached
+- `OutputWriter` không còn giữ `shm*` cố định, mà lấy mapping động qua `IobusReader`
+- Đã có test `LateAttachRecoversOutputPath`
 
-Hệ quả:
+Gap này có thể xem là đã đóng.
 
-- Nếu `core` lên trước `iobus`, và `iobus` lên sau mốc 30 giây, hệ thống có thể không tự phục hồi đúng
+#### Gap 2. Semantics `release` cho `AV/BV/MSV` đã được xử lý
 
-Đây là gap vận hành đáng ưu tiên.
+Finding này đã được fix.
 
-#### Gap 2. Bug thật ở `release` cho `AV/BV/MSV`
+Hiện tại:
 
-`web_ipc` cho phép `op = "release"` với point không phải AI/BI.
+- `PointTable` có `release_virtual()` riêng
+- `release` không còn ghi đè `value`, chỉ nhả `source` về `DEFAULT`
+- `respond_accepted()` trả `applied_value` đúng nghĩa sau release
+- Đã có test socket-level cho `AV` và `DO`
 
-Nhưng trong `ScanLoop`:
+#### Gap 3. Quality cho `AO` đã được degrade đúng theo fault/stale
 
-- `AO` và `BO` có nhánh `release` riêng qua resolver
-- `AV/BV/MSV` lại luôn đi vào `set_virtual(cmd.point, cmd.value, ...)`
+Finding này đã được fix.
 
-Với lệnh `release`, `cmd.value` không mang ý nghĩa release thật.
+Hiện tại `point_quality.cpp` đã degrade cả `AO` như `BO`, và test mới đã khóa:
 
-Hệ quả:
-
-- `release AV/BV/MSV` không release trạng thái nào cả
-- Có thể vô tình ghi giá trị không mong muốn vào virtual point
-
-Đây là bug hành vi thật, không chỉ là thiếu tính năng.
-
-#### Gap 3. Quality cho `AO` không được degrade theo fault/stale
-
-`point_quality.cpp` hiện chỉ set quality cho:
-
-- AI
-- BI
-- BO
-
-Không có nhánh cho AO.
-
-Trong khi `point_table.cpp` đang set AO quality mặc định là `GOOD` mỗi scan.
-
-Hệ quả:
-
-- Khi `iobus` fault hoặc stale, `AO` vẫn có thể hiện `GOOD`
-- Lớp BACnet/web đọc `AO` có thể hiểu sai sức khỏe điểm
+- `IopFaultMakesAllBad`
+- `AoDegradesOnStale`
 
 #### Gap 4. `graph_runtime` đang là stub hoàn toàn
 
@@ -420,6 +439,28 @@ Hạn chế hiện tại:
 
 Cho commissioning là đủ, cho production-grade control plane thì chưa đủ.
 
+### 7.5 Chuỗi safety ba lớp — đối chiếu code và tài liệu
+
+Safety của hệ không nằm riêng ở `core::SafeState` mà trải trên 3 lớp. Đối chiếu code thực tế:
+
+| Lớp | Phát hiện | Quyết định + thực thi | Code |
+|-----|-----------|----------------------|------|
+| MCU FW | mất `GET_IO` > 200ms (`IOP_SAFE_TIMEOUT_MS`) | MCU tự về safe trên phần cứng, NACK `ERR_SAFE_STATE` cho mọi `SET_*` | spec `shared/iop_protocol.h` + FW |
+| `iobus` | >100ms (`IOP_FAULT_TIMEOUT_MS`) không `IO_RESP` hợp lệ | `FAULT → RESET_IO(0x05) → SAFE_STATE`, ghi `iop_status` vào shm; `output_command` ngừng gửi khi bị NACK safe | `iobus/main.cpp`, `bridge/output_command.cpp` |
+| `core` | `iop_status=FAULT/SAFE` hoặc stale >3 scan | ghi đè `OutputCmd` sau priority resolver: AO→0V/4mA, DO→open | `core/safe_state.cpp`, `core/point_quality.cpp` |
+
+Nhận xét theo góc QA/QC:
+
+- Ba lớp hội tụ cùng một safety action (AO 0V/4mA, DO open) nên không có xung đột giá trị khi nhiều lớp cùng can thiệp; lớp MCU là lớp thắng cuối cùng vì chạm phần cứng.
+- Recovery ở lớp `core` là tức thời, không hysteresis; chống chập chờn dựa vào state machine của `iobus` (`SAFE_STATE → RECONNECT → handshake` lại mới trả `NORMAL`). Đây là thiết kế chấp nhận được ở Rev A nhưng cần ghi nhận là quyết định có chủ đích.
+- Tài liệu `07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md` §5 trước đây trộn trigger đã implement với trigger planned (graph-based). Đã được viết lại ngày `2026-06-12` thành safety spec đầy đủ: bảng lớp safety, trigger matrix implemented/planned (T1–T7), safety action, recovery rule. Doc và code hiện khớp nhau.
+- Phần safety đã implement đều có test khóa: `IopFaultForcesSafeOutputs`, `SafeStatusAlsoTriggers`, `StaleShm4ScansForcesSafe`, `RecoveryReturnsControlToResolver` (core) và integration `fake_mcu --timeout`, NACK safe-state (iobus).
+
+Phần safety còn thiếu (gắn với roadmap, không phải bug):
+
+- Trigger T6/T7 (graph BAD, no-graph) chờ `graph_runtime` — khi implement phải cập nhật trigger matrix 07 §5.2 và thêm test vào `test_safe_state.cpp`
+- Chưa có test end-to-end 3 lớp cùng lúc (rút UART thật → đo cả MCU safe lẫn core safe trong cùng kịch bản)
+
 ## 8. Đối chiếu test coverage
 
 ### 8.1 `iobus`
@@ -449,10 +490,10 @@ Cho commissioning là đủ, cho production-grade control plane thì chưa đủ
 
 ### 8.3 Kết quả build/test hiện tại
 
-Trong lần phân tích này:
+Trong lần cập nhật này:
 
-- `iobus`: `33/33` test pass
-- `core`: `27/27` test pass
+- `iobus`: `42/42` test pass
+- `core`: `34/34` test pass
 
 Nghĩa là phần code đang ổn trong phạm vi test đã viết.
 
@@ -460,45 +501,45 @@ Nghĩa là phần code đang ổn trong phạm vi test đã viết.
 
 Chưa thấy test riêng cho:
 
-- `iobus_config.cpp`
-- `web_ipc.cpp`
-- behavior `core` khi `iobus` attach trễ sau 30 giây
-- restart `iobus` khi `core` đang chạy và SHM đang có lệnh output
-- semantics `release` cho virtual point
+- race thật khi `iobus` restart đồng thời `core` vẫn đang ghi output
+- `iop_port.cpp` cho case `EAGAIN/POLLOUT` kéo dài trên UART/PTY
 - publish detail trong `bacnet_objtable`
+- `graph_runtime` ngoài stub/no-op
+- kịch bản safety end-to-end 3 lớp (rút UART thật → kiểm cả MCU safe lẫn `core` safe trong một lần chạy)
 
 ## 9. Danh sách gap ưu tiên
 
 ### Ưu tiên cao
 
-1. Sửa bug `release` cho `AV/BV/MSV`
-2. Thêm cơ chế re-attach/recover cho `core` khi `iobus` lên muộn
-3. Chốt lại policy ownership khi `iobus` recreate/reset `kx_io_shm`
+1. Giải quyết race còn lại khi `iobus` re-attach SHM trong lúc `core` vẫn đang ghi output
+2. Rà lại semantics lỗi của `iop_port::write()` khi TX bị `EAGAIN` kéo dài
+3. Chốt cơ chế đồng bộ ownership khi restart service chồng nhau
 
 ### Ưu tiên trung bình
 
-4. Bổ sung quality handling cho `AO`
-5. Viết test cho `web_ipc` và `iobus_config`
-6. Thay parser JSON tự chế bằng parser chuẩn hoặc thu hẹp contract input chặt hơn
+4. Thay parser JSON tự chế bằng parser chuẩn hoặc thu hẹp contract input chặt hơn
+5. Bổ sung test concurrency/restart path thật, không chỉ test tuần tự
+6. Rà lại recovery/logging quanh `core <-> iobus` lifecycle
 
 ### Ưu tiên roadmap
 
-7. Implement `graph_runtime`
+7. Implement `graph_runtime` — kèm theo đó là 2 trigger safety planned T6/T7 (graph BAD, no-graph) trong 07 §5.2 và test tương ứng trong `test_safe_state.cpp`
 8. Hoàn thiện semantics publish của `bacnet_objtable`
 9. Nâng `web_ipc` từ stub commissioning lên interface điều khiển đầy đủ hơn
+10. Thêm kịch bản test safety end-to-end 3 lớp (MCU + `iobus` + `core`) trong integration test plan
 
 ## 10. Đề xuất hướng làm tiếp
 
-### Giai đoạn 1. Fix correctness
+### Giai đoạn 1. Fix correctness còn lại
 
-- Fix `release` virtual point
-- Fix late-attach / re-attach cho `core`
-- Thêm test tái hiện 2 case trên
+- Sửa race `IoCache::attach()` với `OutputWriter`
+- Quyết định rõ handshake/cờ phối hợp khi `iobus` restart trên SHM đang dùng
+- Sửa hoặc test hóa semantics `EAGAIN` trong `IopPort::write()`
 
 ### Giai đoạn 2. Fix robustness
 
-- Rà soát lại `IoCache::attach()` để tránh reset nhầm field do `core` sở hữu
-- Bổ sung test restart service
+- Bổ sung test restart service đồng thời thật hơn
+- Rà soát lại `IoCache::attach()` để tránh lost update khi preserve field của `core`
 - Bổ sung logging recovery path rõ hơn
 
 ### Giai đoạn 3. Mở rộng chức năng

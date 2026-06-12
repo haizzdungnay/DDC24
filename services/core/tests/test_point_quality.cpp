@@ -47,6 +47,33 @@ TEST(PointQuality, IopFaultMakesAllBad)
         EXPECT_EQ(t.get({PointKind::AI, i}).quality, KX_Q_BAD) << "AI" << i;
     for (int i = 0; i < KX_N_DI; i++)
         EXPECT_EQ(t.get({PointKind::BI, i}).quality, KX_Q_BAD) << "BI" << i;
+    /* Gap #2 analysis report: AO/BO cũng phải BAD, không được kẹt GOOD */
+    for (int i = 0; i < KX_N_AO; i++)
+        EXPECT_EQ(t.get({PointKind::AO, i}).quality, KX_Q_BAD) << "AO" << i;
+    for (int i = 0; i < KX_N_DO; i++)
+        EXPECT_EQ(t.get({PointKind::BO, i}).quality, KX_Q_BAD) << "BO" << i;
+}
+
+TEST(PointQuality, AoDegradesOnStale)
+{
+    PointTable t;
+    PointQuality q;
+    IoSnapshot io = good_io(1000);
+    t.update_inputs(io);
+    q.evaluate(t, io);
+    EXPECT_EQ(t.get({PointKind::AO, 0}).quality, KX_Q_GOOD);
+
+    for (int s = 0; s < 4; s++) {       /* ts đứng yên 4 scan → UNCERTAIN */
+        t.update_inputs(io);
+        q.evaluate(t, io);
+    }
+    EXPECT_EQ(t.get({PointKind::AO, 0}).quality, KX_Q_UNCERTAIN);
+
+    for (int s = 0; s < 2; s++) {       /* >5 scan → BAD */
+        t.update_inputs(io);
+        q.evaluate(t, io);
+    }
+    EXPECT_EQ(t.get({PointKind::AO, 0}).quality, KX_Q_BAD);
 }
 
 TEST(PointQuality, IopSafeMakesAllBad)
