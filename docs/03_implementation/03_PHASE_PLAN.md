@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Chia phase làm thật
 
 > **Document ID:** IMPL-PHASEPLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.3 | 2026-06-12 (đồng bộ version header/footer; graph_runtime + T6/T7 implemented; E2E 3 lớp safety có script đo)
+> **Phiên bản:** 1.4 | 2026-06-12 (P4: web_ipc overridden+audit, SIGHUP reload, systemd units — COR-007/008, SKEL-005) · 1.3 | 2026-06-12 (đồng bộ version header/footer; graph_runtime + T6/T7 implemented; E2E 3 lớp safety có script đo)
 > **Đọc trước:** [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md)
 > **Map sang task:** [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md) · **Map sang test:** [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)
 
@@ -141,6 +141,12 @@ safe-state resolver, iobus_reader (đọc shm), output_writer (ghi shm).
    trigger graph-based T6/T7 ĐÃ implement — trigger matrix 07 §5.2).
 5. Output command đi qua core (web/BACnet không ghi thẳng shm IO).
 6. IO fault → point quality = bad → graph thấy stale.
+7. web_ipc đủ contract 07 §8: accepted/rejected/OVERRIDDEN + audit log mỗi lệnh
+   (ĐÃ implement 2026-06-12 — COR-007, respond sau resolve+safe-state).
+8. SIGHUP reload io_config/io_safe_state/graph ở ranh giới scan, fail giữ config cũ,
+   manual đang giữ không mất (ĐÃ implement 2026-06-12 — COR-008, CONFIG_SCHEMA D-5).
+9. packaging/systemd unit files thật trong repo + install script
+   (ĐÃ tạo 2026-06-12 — SKEL-005, điều kiện board bring-up 17_WEEK1).
 ```
 
 **Test:** Test group 4 (core). **DoD:** §12.4.
@@ -209,5 +215,5 @@ config, alarm, graph validate/deploy, audit log.
 > (map P0→P4 round-trip). Dev mới: bắt đầu từ [16_QUICK_START_SOM_DEV](16_QUICK_START_SOM_DEV.md).
 
 ---
-**Rev** 1.3 | 2026-06-12 (graph_runtime + T6/T7 implemented; E2E script) · 1.2 | 2026-06-12 (P4/P6: tham chiếu SAFETY SPEC 07 §5 — trigger matrix
+**Rev** 1.4 | 2026-06-12 (P4: web_ipc overridden+audit COR-007, SIGHUP reload COR-008, systemd units SKEL-005) · 1.3 | 2026-06-12 (graph_runtime + T6/T7 implemented; E2E script) · 1.2 | 2026-06-12 (P4/P6: tham chiếu SAFETY SPEC 07 §5 — trigger matrix
 implemented/planned, kiểm 3 lớp safety ở E2E) · 1.1 | 2026-06-11

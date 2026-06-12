@@ -2,7 +2,9 @@
 ## MK-DDC-24 — Point table + scan loop + priority/safe-state
 
 > **Document ID:** IMPL-CORE-MK-DDC-24-VI
-> **Phiên bản:** 1.3 | 2026-06-12 (graph_runtime implemented Rev A subset; T6/T7 implemented;
+> **Phiên bản:** 1.4 | 2026-06-12 (§8: web_ipc đủ overridden + audit COR-007, SIGHUP reload
+> COR-008; §9: unit file thật packaging/systemd + ExecReload — SKEL-005) ·
+> 1.3 | 2026-06-12 (graph_runtime implemented Rev A subset; T6/T7 implemented;
 > io_safe_state.conf loader → default mức 6; quan hệ default/safe-override chốt §5.3) ·
 > 1.2 | 2026-06-12 (§5 viết lại thành SAFETY SPEC: lớp safety §5.1, trigger
 > matrix implemented/planned §5.2, action §5.3, recovery rule §5.4) · 1.1 | 2026-06-11
@@ -364,8 +366,26 @@ thuộc group). Mỗi message = **1 dòng JSON** (newline-delimited). Web đọc
   tự động lệnh write (tránh double-actuate) — báo user thử lại.
 - Socket đóng/core restart: web reconnect với backoff 1s; lệnh đang treo = thất bại.
 - Core drain command queue ở bước 4 scan loop; queue đầy (>64 lệnh/scan) → rejected "busy".
-- Audit: web ghi {ts, user, point, op, value, result, active_source} vào eventlog.
-- STUB Rev A đầu: parse + queue + trả accepted/rejected (chưa có overridden) — đủ commissioning.
+- Response trả SAU resolve + safe-state (step 7) trong CÙNG scan — applied_value/active_source
+  là giá trị THẬT sau khi mọi nguồn tranh chấp xong, không phải giá trị web vừa gửi.
+- Audit 2 phía: core in 1 dòng/lệnh ra stderr→journald, format chuẩn:
+    AUDIT web_cmd id=<id> user=<user> point=<point> op=<op> value=<v> result=<r> active_source=<src>
+  (user sanitize [A-Za-z0-9_.@-], max 32 ký tự — chống log injection);
+  web ghi {ts, user, point, op, value, result, active_source} vào eventlog.
+- ĐÃ implement đủ 3 result 2026-06-12 (COR-007). Lịch sử: stub Rev A đầu chỉ accepted/rejected.
+```
+
+**SIGHUP reload (CONFIG_SCHEMA D-5 — `io_safe_state.conf` → SIGHUP core, ĐÃ implement 2026-06-12, COR-008):**
+```
+- SIGHUP → reload io_config.conf + io_safe_state.conf + graph.json Ở RANH GIỚI scan
+  (trước step kế tiếp — không nuốt config giữa lúc đang resolve).
+- Fail bất kỳ phần nào → GIỮ config cũ + WARN (khác boot: boot fail-fast).
+- Manual/priority đang active GIỮ NGUYÊN (priority array không reset).
+- Graph: GraphRuntime::reload() swap-on-success; nội dung file không đổi → giữ
+  nguyên state node (PID integral không reset); đổi nội dung → reset state (chấp nhận Rev A).
+- declared scan_ms đổi qua reload KHÔNG đổi chu kỳ đang chạy (cần restart) — graph dt
+  được re-sync về chu kỳ thật, lệch → WARN.
+- systemd: systemctl reload mkddc-core (ExecReload=kill -HUP, §9).
 ```
 
 ---
@@ -414,7 +434,8 @@ ctest --test-dir build/core --output-on-failure
 **Chạy dev không cần board:** chạy `mkddc-iobus` + fake MCU trước (06 §11.1) →
 `./build/core/mkddc-core --log-level debug` → xem point table phản ánh UI ramp của fake MCU.
 
-**systemd unit ĐẦY ĐỦ:**
+**systemd unit ĐẦY ĐỦ (file thật: `packaging/systemd/mkddc-core.service` — SKEL-005,
+install bằng `packaging/install.sh`):**
 ```ini
 # /etc/systemd/system/mkddc-core.service
 [Unit]
@@ -426,6 +447,7 @@ Wants=mkddc-iobus.service
 [Service]
 Type=notify                     # READY=1 sau scan đầu tiên
 ExecStart=/usr/sbin/mkddc-core
+ExecReload=/bin/kill -HUP $MAINPID   # reload config ở ranh giới scan (§8, COR-008)
 User=mkddc
 Group=mkddc
 RuntimeDirectory=mkddc          # /run/mkddc (core.sock)
@@ -470,8 +492,10 @@ WantedBy=multi-user.target
 | Safe-state | safe_state | fault → output an toàn ≤1 scan | group 7 (fault inject) |
 | Quality bad | point_quality | rút UART → BAD ≤2 scan | group 7 |
 | Output path | output_writer | do_cmd[0]=1 → relay ≤1 chu kỳ poll | group 6 (E2E) |
-| Web command | web_ipc (stub) | commissioning DO test qua core chạy | group 5/6 |
+| Web command | web_ipc | đủ 3 result §8 (accepted/rejected/overridden) + audit | group 5/6 + test_web_ipc |
+| Config reload | config_reload | SIGHUP đổi default mức 6 không restart, manual giữ | test_config_reload |
 
 ---
-**Rev** 1.3 | 2026-06-12 · Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) ·
+**Rev** 1.4 | 2026-06-12 (web_ipc overridden+audit, SIGHUP reload, packaging/systemd) ·
+1.3 | 2026-06-12 · Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) ·
 DoD: [12_DEFINITION_OF_DONE §4](12_DEFINITION_OF_DONE.md)

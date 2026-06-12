@@ -15,16 +15,23 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "config_reload.hpp"
 #include "safe_state_config.hpp"
 #include "scan_loop.hpp"
 
 namespace {
 
 std::atomic<bool> g_shutdown{false};
+std::atomic<bool> g_reload{false};
 
 void on_signal(int)
 {
     g_shutdown.store(true);
+}
+
+void on_sighup(int)
+{
+    g_reload.store(true);   /* xử lý thật ở ranh giới scan (COR-008) */
 }
 
 } // namespace
@@ -101,6 +108,9 @@ int main(int argc, char** argv)
     sa.sa_handler = on_signal;
     sigaction(SIGTERM, &sa, nullptr);
     sigaction(SIGINT, &sa, nullptr);
+    struct sigaction sa_hup {};
+    sa_hup.sa_handler = on_sighup;
+    sigaction(SIGHUP, &sa_hup, nullptr);   /* reload config — CONFIG_SCHEMA D-5 */
 
     /* Attach io_shm: retry 1s, WARN mỗi 10s; sau 30s vẫn chạy scan với quality=BAD
      * (safe-state áp) — 07 §7.1. ScanLoop sẽ tự re-attach mỗi scan nếu iobus lên muộn. */
@@ -172,6 +182,22 @@ int main(int argc, char** argv)
 
     ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver,
                    &safe, &writer, &bacnet, &metrics});
+
+    /* SIGHUP → reload io_config + io_safe_state + graph ở ranh giới scan;
+     * fail → giữ config cũ (khác boot fail-fast); manual đang giữ không mất */
+    struct ReloadCtx {
+        ReloadSpec spec;
+        PriorityResolver* resolver;
+        GraphRuntime* graph;
+    } rctx{{graph_path, safe_cfg_path, io_cfg_path, safe_cfg_from_cli, io_cfg_from_cli},
+           &resolver, &graph};
+    auto on_reload = [](void* p) {
+        ReloadCtx* c = static_cast<ReloadCtx*>(p);
+        std::fprintf(stderr, "INFO  core.reload SIGHUP (ranh giới scan)\n");
+        if (!reload_configs(c->spec, c->resolver, c->graph))
+            std::fprintf(stderr, "WARN  core.reload có phần fail — phần đó giữ config cũ\n");
+    };
+    loop.set_reload_hook(&g_reload, on_reload, &rctx);
 
     /* sd_notify READY=1 sau scan đầu + WATCHDOG=1 mỗi scan (WatchdogSec=3) */
     struct NotifyCtx { bool ready_sent = false; } nctx;

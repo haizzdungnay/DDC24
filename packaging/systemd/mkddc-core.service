@@ -1,0 +1,27 @@
+# MK-DDC-24 — mkddc-core unit (nội dung chốt: docs/03_implementation/07 §9)
+# iobus tạo SHM → core chạy sau. Wants (không Requires): iobus restart không kéo core chết.
+[Unit]
+Description=MK-DDC-24 core service (point table, priority, safe-state)
+After=mkddc-iobus.service
+Wants=mkddc-iobus.service
+
+[Service]
+Type=notify
+ExecStart=/usr/sbin/mkddc-core
+ExecReload=/bin/kill -HUP $MAINPID
+User=mkddc
+Group=mkddc
+RuntimeDirectory=mkddc
+RuntimeDirectoryPreserve=yes
+Restart=always
+RestartSec=2
+WatchdogSec=3
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=80
+LimitRTPRIO=85
+LimitMEMLOCK=infinity
+AmbientCapabilities=CAP_SYS_NICE CAP_IPC_LOCK
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

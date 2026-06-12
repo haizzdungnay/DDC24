@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Master UART/IOP + Modbus/BACnet datalink
 
 > **Document ID:** IMPL-IOBUS-MK-DDC-24-VI
-> **Phiên bản:** 1.2 | 2026-06-11 (Contract Freeze: SHM path/ownership chốt, scaling table, startup table, build/systemd đầy đủ)
+> **Phiên bản:** 1.3 | 2026-06-12 (§10: unit file thật packaging/systemd/mkddc-iobus.service — SKEL-005; ghi chú iobus chưa handle SIGHUP) · 1.2 | 2026-06-11 (Contract Freeze: SHM path/ownership chốt, scaling table, startup table, build/systemd đầy đủ)
 > **Owner:** Dev 2 (SOM)
 > **Nguồn-chuẩn CUỐI CÙNG:** [`shared/iop_protocol.h`](../../shared/iop_protocol.h) (protocol) +
 > [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) (SHM layout/path/ownership) — docs lệch header
@@ -533,7 +533,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now mkddc-iobus
 journalctl -u mkddc-iobus -f
 ```
-**systemd unit ĐẦY ĐỦ (chốt thứ tự: iobus tạo SHM → chạy TRƯỚC; core After=iobus — xem 07 §8):**
+**systemd unit ĐẦY ĐỦ (chốt thứ tự: iobus tạo SHM → chạy TRƯỚC; core After=iobus — xem 07 §8).
+File thật: `packaging/systemd/mkddc-iobus.service` (SKEL-005, 2026-06-12) — install bằng
+`packaging/install.sh`. Lưu ý: iobus CHƯA handle SIGHUP (Rev A.1) → unit không có ExecReload;
+đổi io_config/device.conf tạm thời restart iobus:**
 ```ini
 # /etc/systemd/system/mkddc-iobus.service
 [Unit]
@@ -700,5 +703,5 @@ core ghi ao_setpoint/do_cmd → core_bridge.read_outputs → output_command (CHA
 | IOP-SW-008 | realtime | chrt prio check |
 
 ---
-**Rev** 1.2 | 2026-06-11 · Protocol: [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) ·
+**Rev** 1.3 | 2026-06-12 (packaging/systemd unit thật) · 1.2 | 2026-06-11 · Protocol: [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) ·
 Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) · DoD: [12_DEFINITION_OF_DONE §3](12_DEFINITION_OF_DONE.md)

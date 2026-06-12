@@ -169,6 +169,97 @@ TEST(WebIpc, ReleaseDoFallsToDefault)
     EXPECT_EQ(f.shm.do_cmd[0], 0) << "release manual → rơi về default (open)";
 }
 
+TEST(WebIpc, OverriddenWhenFireSafetyWins)
+{
+    /* COR-007: hệ đang cháy — mức 1 ép DO1=0, web bấm DO1=1 → KHÔNG được trả
+     * accepted (relay thực tế vẫn tắt). Contract 07 §8: overridden + applied_value
+     * thật + active_source của nguồn thắng. */
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    f.resolver.set_do(PRIO_FIRE_SAFETY, 0, false);   /* mức 1 ép DO1=0 */
+
+    c.send_line(R"({"id":1,"op":"write","point":"DO1","value":1,"source":"manual","user":"t"})");
+    usleep(50000);
+    f.scan();
+    const std::string resp = c.recv_line();
+    EXPECT_NE(resp.find("\"result\":\"overridden\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"applied_value\":0"), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"active_source\":\"safety\""), std::string::npos) << resp;
+    EXPECT_EQ(f.shm.do_cmd[0], 0) << "mức 1 thắng — relay phải tắt";
+
+    /* mức 1 nhả → manual (vẫn giữ trong priority array) thắng lại */
+    f.resolver.release_do(PRIO_FIRE_SAFETY, 0);
+    c.send_line(R"({"id":2,"op":"write","point":"DO1","value":1,"source":"manual","user":"t"})");
+    usleep(50000);
+    f.scan();
+    const std::string resp2 = c.recv_line();
+    EXPECT_NE(resp2.find("\"result\":\"accepted\""), std::string::npos) << resp2;
+    EXPECT_NE(resp2.find("\"active_source\":\"manual\""), std::string::npos) << resp2;
+    EXPECT_EQ(f.shm.do_cmd[0], 1);
+}
+
+TEST(WebIpc, OverriddenWhenSafeStateActive)
+{
+    /* safe-state (T1 iop FAULT) đè mọi nguồn → write trả overridden/safety,
+     * applied_value = giá trị safe (DO open = 0) */
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    f.shm.iop_status = KX_IOP_FAULT;
+    c.send_line(R"({"id":1,"op":"write","point":"DO1","value":1,"source":"manual","user":"t"})");
+    usleep(50000);
+    f.scan();
+    const std::string resp = c.recv_line();
+    EXPECT_NE(resp.find("\"result\":\"overridden\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"active_source\":\"safety\""), std::string::npos) << resp;
+    EXPECT_EQ(f.shm.do_cmd[0], 0) << "safe-state: DO phải open";
+}
+
+TEST(WebIpc, ReleaseReportsWinningSource)
+{
+    /* release accepted + active_source = nguồn thắng SAU release (default mức 6) */
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    c.send_line(R"({"id":1,"op":"write","point":"DO1","value":1,"source":"manual","user":"t"})");
+    usleep(50000);
+    f.scan();
+    c.recv_line();
+
+    c.send_line(R"({"id":2,"op":"release","point":"DO1","source":"manual","user":"t"})");
+    usleep(50000);
+    f.scan();
+    const std::string resp = c.recv_line();
+    EXPECT_NE(resp.find("\"result\":\"accepted\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"active_source\":\"default\""), std::string::npos) << resp;
+}
+
+TEST(WebIpc, AuditLinePerCommand)
+{
+    /* COR-007: field user không bị vứt — mỗi lệnh 1 dòng AUDIT chuẩn */
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    c.send_line(R"({"id":7,"op":"write","point":"DO2","value":1,"source":"manual","user":"admin"})");
+    usleep(50000);
+    testing::internal::CaptureStderr();
+    f.scan();
+    const std::string log = testing::internal::GetCapturedStderr();
+    c.recv_line();
+    EXPECT_NE(log.find("AUDIT web_cmd id=7 user=admin point=DO2 op=write"),
+              std::string::npos) << log;
+    EXPECT_NE(log.find("result=accepted"), std::string::npos) << log;
+}
+
 TEST(WebIpc, RejectsInvalidRequests)
 {
     Fixture f;

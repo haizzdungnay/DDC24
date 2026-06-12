@@ -29,6 +29,13 @@ public:
     bool load_string(const std::string& src, const std::string& name = "<inline>");
     bool loaded() const { return loaded_; }
 
+    /* Reload atomic cho SIGHUP (COR-008) — KHÁC load(): load/load_string clear
+     * member ngay đầu hàm (fail là mất graph cũ — chỉ dùng lúc boot).
+     * reload() nạp vào instance tạm, CHỈ swap khi validate pass:
+     *   - file thiếu / JSON hỏng → GIỮ graph cũ, return false
+     *   - nội dung không đổi     → giữ nguyên state node (PID integral), return true */
+    bool reload(const std::string& path);
+
     /* Chạy 1 scan theo topo order; sink ghi resolver mức PRIO_LOCAL_LOGIC. */
     void execute(const PointTable& table, PriorityResolver& resolver);
 
@@ -72,6 +79,7 @@ private:
     void  reset_runtime_state();
 
     bool loaded_ = false;
+    size_t src_hash_ = 0;                /* hash source đã load — reload() so sánh */
     uint32_t scan_ms_ = 1000;            /* hiệu lực (dt) — sync theo core */
     uint32_t declared_scan_ms_ = 1000;   /* khai báo trong graph.json */
     std::vector<Node> nodes_;

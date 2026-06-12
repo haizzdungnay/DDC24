@@ -55,6 +55,19 @@ Test: CI xanh
 Done khi: 4 build job xanh
 Phụ thuộc: SKEL-001..003
 ```
+```
+Task ID: SKEL-005
+Tên: packaging/systemd unit files + install script
+Owner: Dev SOM | Phase: 0 (hoàn tất Rev A) | Module: packaging
+File: packaging/systemd/mkddc-iobus.service, packaging/systemd/mkddc-core.service,
+      packaging/install.sh
+Input: 06 §10, 07 §9 (nội dung unit ĐẦY ĐỦ đã chốt trong docs)
+Output: 2 unit file THẬT trong repo + script install lên SOM (không chép tay từ docs)
+Test: systemd-analyze verify 2 unit; install.sh đưa binary + unit vào đúng chỗ
+Done khi: file trong repo khớp 06 §10 / 07 §9 — điều kiện board bring-up 17_WEEK1
+Phụ thuộc: SKEL-002
+Trạng thái: ĐÃ làm 2026-06-12 — core unit kèm ExecReload (SIGHUP, xem COR-008)
+```
 
 ---
 
@@ -306,6 +319,36 @@ Trạng thái: ĐÃ làm 2026-06-12 — graph_runtime implemented (Rev A subset:
        test: test_graph_runtime.cpp + test_safe_state.cpp (T6GraphInputBadForcesSafe,
        T7NoGraphNoManualForcesSafe); E2E 3 lớp: tools/test_safety_e2e.sh
 ```
+```
+Task ID: COR-007
+Tên: web_ipc production — overridden + audit log (07 §8 đủ contract)
+Owner: Dev SOM | Phase: 4 (Rev A.1) | Module: web_ipc, priority_resolver, scan_loop
+File: services/core/web_ipc.cpp, priority_resolver.cpp, scan_loop.cpp
+Input: 07 §8 (3 result: accepted/rejected/overridden), SEC-REQ audit (IEC 62443)
+Output: respond DỜI sau resolve+safe-state (scan step 7) — write bị nguồn cao hơn /
+        safe-state đè → {"result":"overridden","applied_value":..,"active_source":..};
+        mỗi lệnh 1 dòng AUDIT chuẩn {id,user,point,op,value,result,active_source}
+Test: test_web_ipc.cpp case overridden (safety đè manual, safe-state active), audit line
+Done khi: web phân biệt accepted vs overridden; user không còn bị vứt — có trong log
+Phụ thuộc: COR-005
+Trạng thái: ĐÃ làm 2026-06-12 — priority_resolver expose winning_ao/do_level(),
+       respond chuyển từ step 4 → sau step 7 (vẫn trong cùng 1 scan, ≤2 chu kỳ theo 07 §8)
+```
+```
+Task ID: COR-008
+Tên: SIGHUP reload config không restart (CONFIG_SCHEMA D-5)
+Owner: Dev SOM | Phase: 4 (Rev A.1) | Module: config_reload, scan_loop, graph_runtime, main
+File: services/core/config_reload.cpp, scan_loop.cpp, graph_runtime.cpp, main.cpp
+Input: CONFIG_SCHEMA §0 (io_safe_state.conf → SIGHUP core), GRAPH_SCHEMA §7 (deploy atomic)
+Output: SIGHUP → reload io_config + io_safe_state + graph Ở RANH GIỚI scan (không nuốt
+        config giữa lúc resolve); fail bất kỳ phần nào → GIỮ config cũ (khác boot fail-fast);
+        manual/priority đang active giữ nguyên; graph không đổi nội dung → giữ state PID
+Test: test_config_reload.cpp (bad config giữ cũ, graph swap atomic, unchanged → no reset)
+Done khi: sửa io_safe_state.conf + kill -HUP → default mức 6 đổi, không restart, manual giữ
+Phụ thuộc: COR-006
+Trạng thái: ĐÃ làm 2026-06-12 — GraphRuntime::reload() swap-on-success (load_string cũ
+       clear member ngay đầu hàm, fail là mất graph cũ — không dùng trực tiếp cho reload)
+```
 
 ---
 
@@ -397,6 +440,7 @@ Phụ thuộc: E2E-003
 ```
 
 ---
-**Rev** 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006
+**Rev** 1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit,
+COR-008 SIGHUP reload — cụm production-hardening 1+5+6 ĐÃ làm) · 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006
 Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·
 Test chi tiết: [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)

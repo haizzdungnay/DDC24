@@ -48,10 +48,18 @@ public:
     void run(const std::atomic<bool>& shutdown, uint64_t period_ns,
              void (*after_scan)(void*) = nullptr, void* ctx = nullptr);
 
+    /* SIGHUP reload hook (COR-008): flag do signal handler set; fn chạy Ở RANH GIỚI
+     * scan (trước step kế — không nuốt config giữa lúc đang resolve). Sau fn,
+     * dt của graph được re-sync về chu kỳ scan thật (reload reset về declared). */
+    void set_reload_hook(std::atomic<bool>* flag, void (*fn)(void*), void* ctx);
+
 private:
     ScanDeps d_;
     IoSnapshot last_io_;   /* giữ snapshot cũ khi seqlock fail */
     uint64_t budget_ns_ = 1000000000ull;   /* = period; overrun khi exec vượt */
+    std::atomic<bool>* reload_flag_ = nullptr;
+    void (*reload_fn_)(void*) = nullptr;
+    void* reload_ctx_ = nullptr;
 };
 
 } // namespace core

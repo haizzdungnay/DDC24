@@ -1,0 +1,26 @@
+# MK-DDC-24 — mkddc-iobus unit (nội dung chốt: docs/03_implementation/06 §10)
+# iobus là creator của /dev/shm/mkddc_io_shm → chạy TRƯỚC core (core After=iobus).
+# CHƯA có ExecReload: iobus chưa handle SIGHUP (Rev A.1) — đổi io_config/device.conf
+# tạm thời restart service.
+[Unit]
+Description=MK-DDC-24 IO bus service (UART/IOP master to MCU)
+After=local-fs.target
+
+[Service]
+Type=notify
+ExecStart=/usr/sbin/mkddc-iobus --config /data/config/iobus.conf
+User=mkddc
+Group=mkddc
+SupplementaryGroups=dialout
+RuntimeDirectory=mkddc
+RuntimeDirectoryPreserve=yes
+Restart=always
+RestartSec=2
+WatchdogSec=5
+LimitRTPRIO=80
+LimitMEMLOCK=infinity
+AmbientCapabilities=CAP_SYS_NICE CAP_IPC_LOCK
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

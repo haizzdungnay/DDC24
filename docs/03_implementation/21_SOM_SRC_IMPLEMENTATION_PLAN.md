@@ -2,10 +2,14 @@
 ## MK-DDC-24 — Kế hoạch triển khai cấu trúc source thật chi tiết cho Dev 2
 
 > **Document ID:** IMPL-SOM-SRC-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-12 (SOM-COR-005: chốt microtask 1–4 ĐÃ làm theo
+> **Phiên bản:** 1.3 | 2026-06-12 (S7 #4: audit thiết kế xong, tách plan riêng
+> [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) DRAFT chờ duyệt) ·
+> 1.2 | 2026-06-12 (thêm S7 Production Hardening — 6 việc còn lại sau S6;
+> #1 web_ipc overridden+audit, #2 SIGHUP reload, #3 packaging/systemd ĐÃ làm; cây §4 thêm
+> packaging/) · 1.1 | 2026-06-12 (SOM-COR-005: chốt microtask 1–4 ĐÃ làm theo
 > SAFETY SPEC 07 §5, thêm microtask 5 Rev A.1 cho trigger T6/T7) · 1.0 | 2026-06-11
 > **Trạng thái:** Active — S0–S6 ĐÃ thực thi xong 2026-06-11 (round-trip pass);
-> giữ làm reference + theo dõi phần Rev A.1 còn lại
+> S7 #1/#2/#3 xong 2026-06-12; theo dõi S7 #4/#5/#6 còn lại
 > **Đối tượng đọc:** Dev 2, Lead, Tester
 > **Phạm vi:** chỉ phía SOM: `services/iobus`, `services/core`, `tools/fake_mcu`, `tools/shm_dump_io`, `shared/`
 
@@ -171,6 +175,12 @@ tools/
 └── shm_dump_io/
     ├── CMakeLists.txt
     └── shm_dump_io.c
+
+packaging/                      # S7 (2026-06-12) — unit files THẬT, không chép tay từ docs
+├── install.sh
+└── systemd/
+    ├── mkddc-iobus.service     # nội dung chốt: 06 §10
+    └── mkddc-core.service      # nội dung chốt: 07 §9 (+ ExecReload SIGHUP)
 ```
 
 Rule:
@@ -706,6 +716,27 @@ Microtask:
 
 ---
 
+## S7 — Production Hardening sau round-trip (Rev A.x)
+
+**Mục tiêu:** đóng 6 khoảng trống còn lại sau S6 để SOM stack đủ production-grade.
+Thứ tự ưu tiên chốt 2026-06-12 (cụm 1+2+3 mở khóa Dev 3 web + board bring-up).
+
+| # | Việc | Task | Nặng | Trạng thái |
+|---|------|------|------|------------|
+| 1 | `web_ipc` overridden + audit log (07 §8 đủ contract) | COR-007 | nhỏ | ✅ ĐÃ làm 2026-06-12 |
+| 2 | SIGHUP reload config không restart (CONFIG_SCHEMA D-5) | COR-008 | nhỏ | ✅ ĐÃ làm 2026-06-12 |
+| 3 | `packaging/systemd/*.service` + install script | SKEL-005 | rất nhỏ | ✅ ĐÃ làm 2026-06-12 |
+| 4 | Graph component thiếu: 10 type còn lại (OnDelay/OffDelay, Interlock, ManualAuto, RuntimeCounter/PulseCounter, SafeState, AlarmHigh/Low/Delay) + persist state qua reboot | COR-009/010 đề xuất — [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | vừa | 🟡 DRAFT chờ Owner duyệt gap GAP-01..08 |
+| 5 | Modbus RTU master trong iobus (fieldbus.conf → ext cache) | (chưa tách task) | vừa-lớn | ⬜ sau #4 |
+| 6 | `bacnet_objtable` full (priority[16], relinquish_default, reliability) + BACnet/IP datalink — làm CÙNG NHAU sau khi chốt BACnet stack (license + BTL) | (chưa tách task) | lớn | ⬜ chờ quyết định stack (CTO/lead) |
+
+Ràng buộc giữ nguyên:
+- Modbus/BACnet nằm trong `iobus`, KHÔNG phá rule "core quyết output" —
+  BACnet write đi vòng qua priority resolver của core (mức 3), không ghi thẳng IO.
+- Mapping 6 mức priority nội bộ ↔ 16 mức BACnet phải chốt spec TRƯỚC khi code #6.
+
+---
+
 ## 8. Thứ tự làm thật ngoài đời
 
 Không được làm lung tung. Thứ tự đúng:
@@ -798,5 +829,5 @@ Không làm bước 4 trước khi 3 bước này xanh.
 
 ---
 
-**Rev** 1.0 | 2026-06-11
+**Rev** 1.3 | 2026-06-12 (S7 #4 → doc 22 DRAFT) · 1.2 | 2026-06-12 (S7 Production Hardening; #1/#2/#3 done) · 1.1 | 2026-06-12 · 1.0 | 2026-06-11
 

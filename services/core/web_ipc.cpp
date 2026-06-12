@@ -67,6 +67,19 @@ static bool jget_number(const std::string& s, const char* key, double* out)
     return true;
 }
 
+/* user vào audit log: chỉ giữ [A-Za-z0-9_.@-], max 32 — chống log injection */
+static std::string sanitize_user(const std::string& s)
+{
+    std::string out;
+    for (const char c : s) {
+        if (std::isalnum(static_cast<unsigned char>(c)) ||
+            c == '_' || c == '.' || c == '@' || c == '-')
+            out += c;
+        if (out.size() >= 32) break;
+    }
+    return out.empty() ? "-" : out;
+}
+
 WebIpc::~WebIpc()
 {
     close();
@@ -114,14 +127,44 @@ void WebIpc::respond(int fd, const std::string& json_line)
     (void)!::send(fd, line.c_str(), line.size(), MSG_NOSIGNAL | MSG_DONTWAIT);
 }
 
-void WebIpc::respond_accepted(const WebCommand& cmd, float applied_value)
+/* 1 dòng/lệnh, format chuẩn 07 §8 — stderr→journald giữ timestamp */
+void WebIpc::audit(const WebCommand& cmd, const char* result, const char* active_source,
+                   float applied_value)
+{
+    std::fprintf(stderr,
+                 "AUDIT web_cmd id=%llu user=%s point=%s op=%s value=%g result=%s"
+                 " active_source=%s\n",
+                 static_cast<unsigned long long>(cmd.id),
+                 cmd.user.empty() ? "-" : cmd.user.c_str(),
+                 cmd.point_name.empty() ? "-" : cmd.point_name.c_str(),
+                 cmd.is_write ? "write" : "release",
+                 static_cast<double>(applied_value), result, active_source);
+}
+
+void WebIpc::respond_accepted(const WebCommand& cmd, float applied_value,
+                              const char* active_source)
 {
     char buf[160];
     std::snprintf(buf, sizeof(buf),
                   "{\"id\":%llu,\"result\":\"accepted\",\"applied_value\":%g,"
-                  "\"active_source\":\"manual\"}",
-                  static_cast<unsigned long long>(cmd.id), static_cast<double>(applied_value));
+                  "\"active_source\":\"%s\"}",
+                  static_cast<unsigned long long>(cmd.id),
+                  static_cast<double>(applied_value), active_source);
     respond(cmd.client_fd, buf);
+    audit(cmd, "accepted", active_source, applied_value);
+}
+
+void WebIpc::respond_overridden(const WebCommand& cmd, float applied_value,
+                                const char* active_source)
+{
+    char buf[160];
+    std::snprintf(buf, sizeof(buf),
+                  "{\"id\":%llu,\"result\":\"overridden\",\"applied_value\":%g,"
+                  "\"active_source\":\"%s\"}",
+                  static_cast<unsigned long long>(cmd.id),
+                  static_cast<double>(applied_value), active_source);
+    respond(cmd.client_fd, buf);
+    audit(cmd, "overridden", active_source, applied_value);
 }
 
 void WebIpc::respond_rejected(const WebCommand& cmd, const char* error)
@@ -130,24 +173,29 @@ void WebIpc::respond_rejected(const WebCommand& cmd, const char* error)
     std::snprintf(buf, sizeof(buf), "{\"id\":%llu,\"result\":\"rejected\",\"error\":\"%s\"}",
                   static_cast<unsigned long long>(cmd.id), error);
     respond(cmd.client_fd, buf);
+    audit(cmd, "rejected", error, cmd.value);
 }
 
 void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand>* out)
 {
     double idv = 0;
-    std::string op, point, source, user;
+    std::string op, point, source, user_raw;
     const bool has_id = jget_number(line, "id", &idv);
-    const uint64_t id = has_id ? static_cast<uint64_t>(idv) : 0;
 
-    auto reject = [&](const char* err) {
-        char buf[128];
-        std::snprintf(buf, sizeof(buf), "{\"id\":%llu,\"result\":\"rejected\",\"error\":\"%s\"}",
-                      static_cast<unsigned long long>(id), err);
-        respond(fd, buf);
-    };
+    /* dựng cmd TRƯỚC validate — reject sớm vẫn có id/user/point cho audit */
+    WebCommand cmd;
+    cmd.id = has_id ? static_cast<uint64_t>(idv) : 0;
+    cmd.client_fd = fd;
+    jget_string(line, "user", &user_raw);
+    cmd.user = sanitize_user(user_raw);
+    if (jget_string(line, "point", &point))
+        cmd.point_name = point;
+    const bool has_op = jget_string(line, "op", &op);
+    cmd.is_write = has_op && op == "write";
 
-    if (!has_id || !jget_string(line, "op", &op) || !jget_string(line, "point", &point) ||
-        !jget_string(line, "source", &source)) {
+    auto reject = [&](const char* err) { respond_rejected(cmd, err); };
+
+    if (!has_id || !has_op || point.empty() || !jget_string(line, "source", &source)) {
         reject("bad_request");
         return;
     }
@@ -155,10 +203,6 @@ void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand
         reject("bad_request");
         return;
     }
-    WebCommand cmd;
-    cmd.id = id;
-    cmd.client_fd = fd;
-    jget_string(line, "user", &cmd.user);
     if (!parse_point_name(point, &cmd.point)) {
         reject("unknown_point");
         return;

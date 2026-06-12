@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <functional>
 #include <set>
 #include <sstream>
 
@@ -211,12 +212,42 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
     used_ai_.assign(ai_set.begin(), ai_set.end());
 
     /* mọi validate pass → giờ mới commit */
+    src_hash_ = std::hash<std::string>{}(src);
     declared_scan_ms_ = parsed_scan_ms;
     scan_ms_ = parsed_scan_ms;   /* tạm — ScanLoop sync_actual_scan_ms() chốt dt thật */
     reset_runtime_state();
     loaded_ = true;
     std::fprintf(stderr, "INFO  graph.loaded %s nodes=%zu links_ok scan_ms=%u ai_used=%zu\n",
                  name.c_str(), n_nodes, scan_ms_, used_ai_.size());
+    return true;
+}
+
+bool GraphRuntime::reload(const std::string& path)
+{
+    std::ifstream f(path);
+    if (!f.is_open()) {
+        if (loaded_) {
+            std::fprintf(stderr,
+                         "WARN  graph.reload_keep_old path=%s (không mở được file)\n",
+                         path.c_str());
+            return false;
+        }
+        std::fprintf(stderr, "INFO  graph.none path=%s (nguồn logic inactive)\n", path.c_str());
+        return true;   /* trước không có graph, giờ vẫn không — không đổi gì */
+    }
+    std::stringstream ss;
+    ss << f.rdbuf();
+    const std::string src = ss.str();
+    if (loaded_ && std::hash<std::string>{}(src) == src_hash_) {
+        std::fprintf(stderr, "INFO  graph.reload_unchanged %s (giữ state node)\n", path.c_str());
+        return true;
+    }
+    GraphRuntime fresh;
+    if (!fresh.load_string(src, path)) {
+        std::fprintf(stderr, "WARN  graph.reload_keep_old %s (validate fail)\n", path.c_str());
+        return false;
+    }
+    *this = std::move(fresh);   /* commit — state node reset (chấp nhận Rev A, 07 §8) */
     return true;
 }
 

@@ -8,7 +8,7 @@ set(SHARED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../shared)
 
 add_library(core_lib STATIC
     scan_loop.cpp point_table.cpp point_quality.cpp graph_runtime.cpp
-    priority_resolver.cpp safe_state.cpp safe_state_config.cpp
+    priority_resolver.cpp safe_state.cpp safe_state_config.cpp config_reload.cpp
     iobus_reader.cpp output_writer.cpp
     bacnet_objtable.cpp web_ipc.cpp core_metrics.cpp)
 target_include_directories(core_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${SHARED_DIR})
@@ -30,7 +30,8 @@ if(CORE_BUILD_TESTS)
   add_executable(core_tests
       tests/test_iobus_reader.cpp tests/test_point_quality.cpp
       tests/test_priority_resolver.cpp tests/test_safe_state.cpp tests/test_scan_loop.cpp
-      tests/test_web_ipc.cpp tests/test_graph_runtime.cpp tests/test_safe_state_config.cpp)
+      tests/test_web_ipc.cpp tests/test_graph_runtime.cpp tests/test_safe_state_config.cpp
+      tests/test_config_reload.cpp)
   target_link_libraries(core_tests PRIVATE core_lib)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
   if(TARGET GTest::gtest_main)

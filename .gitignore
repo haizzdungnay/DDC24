@@ -29,3 +29,7 @@ node_modules/
 
 # Security scan artifacts
 gitleaks-report.json
+
+# Runtime/test logs (local, không commit)
+logs/*
+!logs/README.md

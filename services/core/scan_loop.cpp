@@ -36,7 +36,11 @@ void ScanLoop::step()
 
     /* 3. Read Modbus cache — Rev A.1, bỏ qua */
 
-    /* 4. Read web command queue → priority mức 2 (manual) */
+    /* 4. Read web command queue → priority mức 2 (manual). Response trả SAU
+     * resolve + safe-state (bước 7b) — applied_value/active_source phải là giá trị
+     * THẬT sau khi mọi nguồn tranh chấp xong (07 §8, COR-007). */
+    struct PendingResp { WebCommand cmd; bool ok; };
+    std::vector<PendingResp> pending;
     for (const WebCommand& cmd : d_.web->drain()) {
         bool ok = true;
         if (cmd.point.kind == PointKind::AO) {
@@ -51,17 +55,10 @@ void ScanLoop::step()
             if (cmd.is_write) ok = d_.table->set_virtual(cmd.point, cmd.value, PointSource::WEB);
             else              ok = d_.table->release_virtual(cmd.point);
         }
-        if (ok) {
-            /* applied_value = giá trị thực sau xử lý (release ≠ cmd.value) */
-            const float applied = cmd.is_write ? cmd.value
-                                               : d_.table->get(cmd.point).value;
-            d_.web->respond_accepted(cmd, applied);
-        } else {
-            d_.web->respond_rejected(cmd, "bad_request");
-        }
+        pending.push_back({cmd, ok});
     }
 
-    /* 5. Execute graph (STUB: no-op) */
+    /* 5. Execute graph */
     d_.graph->execute(*d_.table, *d_.resolver);
 
     /* 6. Resolve priority */
@@ -69,6 +66,36 @@ void ScanLoop::step()
 
     /* 7. Safe-state có thể ghi đè */
     d_.safe->apply(last_io_, *d_.table, &out);
+
+    /* 7b. Respond web command theo output THẬT:
+     * - write AO/DO mà nguồn cao hơn (mức 1) hoặc safe-state đang thắng → overridden
+     * - release/virtual → accepted, active_source = nguồn đang thắng sau lệnh */
+    for (const PendingResp& p : pending) {
+        if (!p.ok) {
+            d_.web->respond_rejected(p.cmd, "bad_request");
+            continue;
+        }
+        const WebCommand& cmd = p.cmd;
+        if (cmd.point.kind == PointKind::AO || cmd.point.kind == PointKind::BO) {
+            const bool is_ao = cmd.point.kind == PointKind::AO;
+            const float applied = is_ao ? out.ao[cmd.point.idx]
+                                        : static_cast<float>(out.dout[cmd.point.idx]);
+            if (d_.safe->active()) {
+                d_.web->respond_overridden(cmd, applied, "safety");
+            } else {
+                const int lv = is_ao ? d_.resolver->winning_ao_level(cmd.point.idx)
+                                     : d_.resolver->winning_do_level(cmd.point.idx);
+                if (cmd.is_write && lv != PRIO_LOCAL_MANUAL)
+                    d_.web->respond_overridden(cmd, applied, prio_source_name(lv));
+                else
+                    d_.web->respond_accepted(cmd, applied, prio_source_name(lv));
+            }
+        } else {
+            /* virtual point: không có nguồn vật lý tranh chấp;
+             * applied_value = giá trị thực sau xử lý (release ≠ cmd.value) */
+            d_.web->respond_accepted(cmd, d_.table->get(cmd.point).value);
+        }
+    }
 
     /* 8. Write output command (atomic, 2 field core sở hữu) */
     d_.writer->write(out);
@@ -93,6 +120,12 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t period_ns,
     struct timespec next;
     clock_gettime(CLOCK_MONOTONIC, &next);
     while (!shutdown.load()) {
+        /* SIGHUP reload ở RANH GIỚI scan (COR-008) — config mới chỉ có hiệu lực
+         * trọn vẹn từ scan kế, không bao giờ giữa lúc resolve */
+        if (reload_flag_ && reload_flag_->exchange(false) && reload_fn_) {
+            reload_fn_(reload_ctx_);
+            d_.graph->sync_actual_scan_ms(actual_ms);   /* reload reset dt về declared */
+        }
         step();
         if (after_scan) after_scan(ctx);
 
@@ -105,6 +138,13 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t period_ns,
         }
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr);
     }
+}
+
+void ScanLoop::set_reload_hook(std::atomic<bool>* flag, void (*fn)(void*), void* ctx)
+{
+    reload_flag_ = flag;
+    reload_fn_ = fn;
+    reload_ctx_ = ctx;
 }
 
 } // namespace core

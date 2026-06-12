@@ -47,6 +47,11 @@ public:
     /* Có nguồn nào (mức 1..5) đang active không — đầu vào safety trigger T7 (07 §5.2). */
     bool any_active_above_default() const;
 
+    /* Mức đang thắng (1..6) của kênh — web_ipc dùng trả overridden/active_source
+     * (07 §8). Kênh sai → PRIO_DEFAULT. */
+    int winning_ao_level(int ch) const;
+    int winning_do_level(int ch) const;
+
 private:
     struct Slot {
         bool  active = false;
@@ -57,6 +62,10 @@ private:
 
     static bool valid_level(int level) { return level >= 1 && level <= PRIO_LEVELS; }
 };
+
+/* Tên nguồn theo mức cho response/audit (07 §8): 1=safety 2=manual 3=bacnet
+ * 4=schedule 5=logic 6=default. */
+const char* prio_source_name(int level);
 
 } // namespace core
 

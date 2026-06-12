@@ -74,6 +74,34 @@ bool PriorityResolver::any_active_above_default() const
     return false;
 }
 
+int PriorityResolver::winning_ao_level(int ch) const
+{
+    if (ch < 0 || ch >= KX_N_AO) return PRIO_DEFAULT;
+    for (int lv = 0; lv < PRIO_LEVELS; lv++)
+        if (ao_[lv][ch].active) return lv + 1;
+    return PRIO_DEFAULT;
+}
+
+int PriorityResolver::winning_do_level(int ch) const
+{
+    if (ch < 0 || ch >= KX_N_DO) return PRIO_DEFAULT;
+    for (int lv = 0; lv < PRIO_LEVELS; lv++)
+        if (do_[lv][ch].active) return lv + 1;
+    return PRIO_DEFAULT;
+}
+
+const char* prio_source_name(int level)
+{
+    switch (level) {
+    case PRIO_FIRE_SAFETY:  return "safety";
+    case PRIO_LOCAL_MANUAL: return "manual";
+    case PRIO_BACNET:       return "bacnet";
+    case PRIO_SCHEDULE:     return "schedule";
+    case PRIO_LOCAL_LOGIC:  return "logic";
+    default:                return "default";
+    }
+}
+
 OutputCmd PriorityResolver::resolve() const
 {
     OutputCmd out;

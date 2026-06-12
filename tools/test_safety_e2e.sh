@@ -12,7 +12,7 @@ set -u
 cd "$(dirname "$0")/.."
 
 BUILD=build/services
-LOGDIR=/tmp/mkddc-safety-e2e
+LOGDIR="$(pwd)/logs/safety-e2e"   # log trong codebase (logs/ gitignored)
 SOCK=/tmp/mkddc-e2e-core.sock
 PTY_A=/tmp/mkddc-e2e-a
 PTY_B=/tmp/mkddc-e2e-b
