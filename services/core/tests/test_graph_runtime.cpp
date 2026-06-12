@@ -49,7 +49,7 @@ TEST(GraphRuntime, LoadValidGraph)
     EXPECT_TRUE(g.loaded());
     ASSERT_EQ(g.used_ai_channels().size(), 1u);
     EXPECT_EQ(g.used_ai_channels()[0], 0);
-    EXPECT_EQ(g.scan_ms(), 1000u);
+    EXPECT_EQ(g.declared_scan_ms(), 1000u);
 }
 
 TEST(GraphRuntime, ThermostatControlsDoViaResolverLevel5)
@@ -147,6 +147,86 @@ TEST(GraphRuntime, PidConverges)
     g.execute(t, r);
     const float u4 = r.resolve().ao[0];
     EXPECT_NEAR(u3, u4, 0.01f) << "error=0 → output ổn định";
+}
+
+TEST(GraphRuntime, ScanMsSyncSingleSourceOfTruth)
+{
+    /* Yêu cầu fix timing: dt PHẢI theo chu kỳ scan thật của core, không theo
+     * device.scan_ms khai báo trong graph.json khi hai giá trị lệch nhau. */
+    GraphRuntime g;
+    ASSERT_TRUE(g.load_string(kThermostat));   /* khai báo scan_ms=1000 */
+    EXPECT_EQ(g.declared_scan_ms(), 1000u);
+    EXPECT_EQ(g.effective_scan_ms(), 1000u);
+
+    g.sync_actual_scan_ms(500);                /* core chạy thật 500ms */
+    EXPECT_EQ(g.effective_scan_ms(), 500u) << "dt phải theo chu kỳ thật";
+    EXPECT_EQ(g.declared_scan_ms(), 1000u) << "giá trị khai báo giữ nguyên để đối chiếu";
+}
+
+TEST(GraphRuntime, PidDtFollowsActualScanPeriod)
+{
+    /* PID thuần tích phân (kp=0, ki=1): sau 1 scan, out = ki·e·dt.
+     * e = sp - pv = 10. dt=1s → 10; dt=0.5s → 5. Lệch dt là thấy ngay. */
+    const char* pid_graph = R"({
+      "schema_version": "1.0",
+      "device": { "bacnet_device_id": 1, "name": "t", "scan_ms": 1000 },
+      "io_map": {},
+      "nodes": [
+        { "id": "ai1",  "type": "AI_Input", "params": { "channel": 0 } },
+        { "id": "sp1",  "type": "Setpoint", "params": { "default": 10.0 } },
+        { "id": "pid1", "type": "PID", "params": { "kp": 0.0, "ki": 1.0, "kd": 0, "out_lo": 0, "out_hi": 100 }, "power_on": { "out": 0 } },
+        { "id": "ao1",  "type": "AO_Output", "params": { "channel": 0, "limit_lo": 0, "limit_hi": 100 }, "power_on": { "in": 0 } }
+      ],
+      "links": [
+        { "from": "ai1.out",  "to": "pid1.pv" },
+        { "from": "sp1.out",  "to": "pid1.sp" },
+        { "from": "pid1.out", "to": "ao1.in" }
+      ]
+    })";
+
+    PointTable t;
+    t.update_inputs(io_with_ai(0, 0.0f));
+
+    /* dt = 1000ms (khai báo = thật) */
+    GraphRuntime g1;
+    ASSERT_TRUE(g1.load_string(pid_graph));
+    g1.sync_actual_scan_ms(1000);
+    PriorityResolver r1;
+    g1.execute(t, r1);
+    const float out_1s = r1.resolve().ao[0];   /* % = ki·e·dt = 10·1 = 10 */
+
+    /* core thật chạy 500ms → dt phải = 0.5 → tích phân một nửa */
+    GraphRuntime g2;
+    ASSERT_TRUE(g2.load_string(pid_graph));
+    g2.sync_actual_scan_ms(500);
+    PriorityResolver r2;
+    g2.execute(t, r2);
+    const float out_500ms = r2.resolve().ao[0];
+
+    EXPECT_NEAR(out_500ms * 2.0f, out_1s, 0.01f)
+        << "dt không theo chu kỳ thật: 1s=" << out_1s << " 0.5s=" << out_500ms;
+}
+
+TEST(GraphRuntime, RejectsScanMsOutOfBounds)
+{
+    /* review PR#12: scan_ms > 2000 → watchdog kick mỗi scan vượt WatchdogSec=3
+     * → systemd kill-loop; giá trị khổng lồ → cast uint32 UB. Phải reject. */
+    GraphRuntime g;
+    auto graph_with_scan = [](const char* ms) {
+        return std::string(R"({"schema_version":"1.0","device":{"bacnet_device_id":1,"name":"t","scan_ms":)")
+               + ms + R"(},"nodes":[{"id":"sp1","type":"Setpoint","params":{}}],"links":[]})";
+    };
+    EXPECT_FALSE(g.load_string(graph_with_scan("2500"))) << "scan_ms > 2000";
+    EXPECT_FALSE(g.load_string(graph_with_scan("5000000000"))) << "không được wrap uint32";
+    EXPECT_FALSE(g.load_string(graph_with_scan("400"))) << "min 500";
+    EXPECT_TRUE(g.load_string(graph_with_scan("2000")));
+    EXPECT_EQ(g.declared_scan_ms(), 2000u);
+
+    /* load FAIL không được làm bẩn scan_ms từ file bị reject */
+    GraphRuntime g2;
+    ASSERT_TRUE(g2.load_string(graph_with_scan("1500")));
+    EXPECT_FALSE(g2.load_string(graph_with_scan("2500")));
+    EXPECT_EQ(g2.declared_scan_ms(), 1500u) << "giá trị từ graph bị reject không được commit";
 }
 
 TEST(GraphRuntime, RejectsBadGraphs)

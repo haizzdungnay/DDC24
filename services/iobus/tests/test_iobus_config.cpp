@@ -121,6 +121,22 @@ TEST(IobusConfig, UnknownSensorTypeMarked)
     EXPECT_EQ(cfg.ui_sensor[0], SensorType::UNKNOWN) << "kênh đó quality=BAD khi scale";
 }
 
+TEST(IobusConfig, SparseIdEntriesMapToCorrectChannel)
+{
+    /* review PR#12: parser cũ positional mù → config sparse lệch kênh.
+     * Giờ phải theo "id":"AO<n>"/"UI<n>". */
+    TempConfig f(R"({
+      "ui": [ { "id": "UI3", "sensor_type": "4-20mA" } ],
+      "ao": [ { "id": "AO2", "mode": "4-20mA" } ]
+    })");
+    IobusConfig cfg;
+    ASSERT_TRUE(load_config(f.path(), true, &cfg));
+    EXPECT_EQ(cfg.ui_sensor[2], SensorType::MA4_20) << "UI3 → index 2";
+    EXPECT_EQ(cfg.ui_sensor[0], SensorType::V0_10) << "UI1 không khai → default";
+    EXPECT_EQ(cfg.ao_mode[1], AoMode::MA4_20) << "AO2 → index 1";
+    EXPECT_EQ(cfg.ao_mode[0], AoMode::V0_10) << "AO1 không khai → default";
+}
+
 TEST(IobusConfig, BaudOverrideAllowedWithWarn)
 {
     TempConfig f(R"({ "iop": { "baud": 115200 } })");

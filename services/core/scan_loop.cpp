@@ -84,6 +84,12 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t period_ns,
                    void (*after_scan)(void*), void* ctx)
 {
     budget_ns_ = period_ns;
+    /* 1 nguồn sự thật cho dt: graph PID/logic tính theo chu kỳ scan THẬT,
+     * không theo device.scan_ms khai báo (lệch → graph tự WARN).
+     * Làm tròn + sàn 1ms: period sub-ms không được truncate về 0 (0 = silent skip). */
+    uint32_t actual_ms = static_cast<uint32_t>((period_ns + 500000ull) / 1000000ull);
+    if (actual_ms == 0) actual_ms = 1;
+    d_.graph->sync_actual_scan_ms(actual_ms);
     struct timespec next;
     clock_gettime(CLOCK_MONOTONIC, &next);
     while (!shutdown.load()) {

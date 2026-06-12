@@ -54,7 +54,10 @@ int main(int argc, char** argv)
     std::string sock_path = "/run/mkddc/core.sock";
     std::string graph_path = "/data/config/graph.json";
     std::string safe_cfg_path = "/data/config/io_safe_state.conf";
+    std::string io_cfg_path = "/data/config/io_config.conf";
     bool safe_cfg_from_cli = false;
+    bool io_cfg_from_cli = false;
+    bool scan_ms_from_cli = false;
     uint64_t period_ns = 1000000000ull;   /* scan 1s Rev A */
     int rt_prio = 80;
 
@@ -64,17 +67,25 @@ int main(int argc, char** argv)
         else if (a == "--sock" && i + 1 < argc) sock_path = argv[++i];
         else if (a == "--graph" && i + 1 < argc) graph_path = argv[++i];
         else if (a == "--safe-state-conf" && i + 1 < argc) { safe_cfg_path = argv[++i]; safe_cfg_from_cli = true; }
-        else if (a == "--scan-ms" && i + 1 < argc)
-            period_ns = static_cast<uint64_t>(std::atoll(argv[++i])) * 1000000ull;
+        else if (a == "--io-conf" && i + 1 < argc) { io_cfg_path = argv[++i]; io_cfg_from_cli = true; }
+        else if (a == "--scan-ms" && i + 1 < argc) {
+            const long long ms = std::atoll(argv[++i]);
+            if (ms <= 0) {   /* 0/âm/không phải số → busy-spin SCHED_FIFO, fail-fast */
+                std::fprintf(stderr, "ERROR core.bad_scan_ms '%s' (cần số nguyên ≥1)\n", argv[i]);
+                return 1;
+            }
+            period_ns = static_cast<uint64_t>(ms) * 1000000ull;
+            scan_ms_from_cli = true;
+        }
         else if (a == "--help") {
             std::printf("usage: mkddc-core [--sock PATH] [--graph FILE] [--safe-state-conf FILE]"
-                        " [--scan-ms N] [--log-level LVL]\n");
+                        " [--io-conf FILE] [--scan-ms N] [--log-level LVL]\n");
             return 0;
         }
     }
 
-    std::fprintf(stderr, "INFO  core.start version=1.0.0 pid=%d scan_ms=%llu\n",
-                 getpid(), static_cast<unsigned long long>(period_ns / 1000000ull));
+    /* scan_ms log SAU khi chốt với graph.json (tránh log giá trị không dùng) */
+    std::fprintf(stderr, "INFO  core.start version=1.0.0 pid=%d\n", getpid());
 
     /* RT + mlockall — thiếu cap → degraded WARN */
     {
@@ -117,12 +128,38 @@ int main(int argc, char** argv)
     web.open(sock_path);
     GraphRuntime graph;
     graph.load(graph_path);
+
+    /* Đồng bộ scan period — 1 nguồn sự thật:
+     * - có graph + KHÔNG --scan-ms → chu kỳ scan core LẤY TỪ graph.json (ý đồ engineer)
+     * - có graph + --scan-ms khác  → WARN rõ + dùng --scan-ms (dev override);
+     *   ScanLoop sync dt của graph về đúng chu kỳ thật nên không bao giờ lệch */
+    if (graph.loaded()) {
+        const uint64_t graph_ns = static_cast<uint64_t>(graph.declared_scan_ms()) * 1000000ull;
+        if (!scan_ms_from_cli) {
+            period_ns = graph_ns;
+            std::fprintf(stderr, "INFO  core.scan_ms=%u (theo graph.json)\n",
+                         graph.declared_scan_ms());
+        } else if (period_ns != graph_ns) {
+            std::fprintf(stderr,
+                         "WARN  core.scan_ms_override cli=%llu ms != graph=%u ms"
+                         " -> dùng CLI, PID dt theo CLI\n",
+                         static_cast<unsigned long long>(period_ns / 1000000ull),
+                         graph.declared_scan_ms());
+        }
+    }
+    std::fprintf(stderr, "INFO  core.scan_ms=%llu (chốt)\n",
+                 static_cast<unsigned long long>(period_ns / 1000000ull));
+
     PriorityResolver resolver;
 
     /* io_safe_state.conf → relinquish default MỨC 6 (quan hệ chốt: safe_state
-     * override luôn là 0V/4mA/open cố định — xem safe_state_config.hpp) */
+     * override luôn là 0V/4mA/open cố định — xem safe_state_config.hpp).
+     * Validate AO theo MODE THẬT từ io_config.conf — sai mode/dải → fail-fast. */
+    AoModeConfig ao_modes;
+    if (!load_ao_modes(io_cfg_path, io_cfg_from_cli, &ao_modes))
+        return 1;
     SafeStateConfig safe_cfg;
-    if (!load_safe_state_config(safe_cfg_path, safe_cfg_from_cli, &safe_cfg))
+    if (!load_safe_state_config(safe_cfg_path, safe_cfg_from_cli, ao_modes, &safe_cfg))
         return 1;   /* config an toàn hỏng → fail-fast */
     apply_safe_state_config(safe_cfg, &resolver);
 

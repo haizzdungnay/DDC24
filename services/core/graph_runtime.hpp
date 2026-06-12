@@ -35,7 +35,16 @@ public:
     /* Kênh AI (0-based) graph đang dùng — đầu vào cho safety trigger T6 (07 §5.2). */
     const std::vector<int>& used_ai_channels() const { return used_ai_; }
 
-    uint32_t scan_ms() const { return scan_ms_; }
+    /* scan_ms KHAI BÁO trong graph.json (device.scan_ms) — ý đồ của engineer. */
+    uint32_t declared_scan_ms() const { return declared_scan_ms_; }
+
+    /* NGUỒN SỰ THẬT DUY NHẤT cho dt: chu kỳ scan THỰC của core scan loop.
+     * ScanLoop::run() gọi hàm này trước khi vào vòng lặp — PID/logic luôn tính
+     * theo chu kỳ thật, không bao giờ theo giá trị khai báo lệch. Lệch → WARN. */
+    void sync_actual_scan_ms(uint32_t actual_ms);
+
+    /* scan_ms hiệu lực mà dt đang dùng (= actual sau khi sync). */
+    uint32_t effective_scan_ms() const { return scan_ms_; }
 
 private:
     enum class NodeType {
@@ -63,7 +72,8 @@ private:
     void  reset_runtime_state();
 
     bool loaded_ = false;
-    uint32_t scan_ms_ = 1000;
+    uint32_t scan_ms_ = 1000;            /* hiệu lực (dt) — sync theo core */
+    uint32_t declared_scan_ms_ = 1000;   /* khai báo trong graph.json */
     std::vector<Node> nodes_;
     std::vector<int> order_;                      /* topo order (index vào nodes_) */
     std::vector<int> used_ai_;

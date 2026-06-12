@@ -122,6 +122,32 @@ TEST(ScanLoop, SeqlockFailKeepsOldSnapshot)
     KX_WRITE_END(&f.shm);
 }
 
+TEST(ScanLoop, RunSyncsGraphDtToActualPeriod)
+{
+    /* Yêu cầu fix timing: ScanLoop::run() phải sync dt của graph về chu kỳ thật */
+    Fixture f;
+    ASSERT_TRUE(f.graph.load_string(R"({
+      "schema_version": "1.0",
+      "device": { "bacnet_device_id": 1, "name": "t", "scan_ms": 1000 },
+      "io_map": {},
+      "nodes": [ { "id": "sp1", "type": "Setpoint", "params": { "default": 1.0 } },
+                 { "id": "do1", "type": "DO_Output", "params": { "channel": 0 } } ],
+      "links": [ { "from": "sp1.out", "to": "do1.in" } ]
+    })"));
+    EXPECT_EQ(f.graph.effective_scan_ms(), 1000u);
+
+    std::atomic<bool> shutdown{false};
+    std::thread stopper([&] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        shutdown.store(true);
+    });
+    f.loop.run(shutdown, 5000000ull /* core thật 5ms */);
+    stopper.join();
+
+    EXPECT_EQ(f.graph.effective_scan_ms(), 5u)
+        << "run() phải ép dt graph = chu kỳ scan thật (khai báo 1000 bị WARN + override)";
+}
+
 TEST(ScanLoop, LateAttachRecoversOutputPath)
 {
     /* Gap #3 analysis report: core lên trước iobus quá lâu → trước fix,

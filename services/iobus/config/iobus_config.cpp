@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 
@@ -122,15 +123,35 @@ bool load_config(const std::string& path, bool must_exist, IobusConfig* out)
     if (get_string(s, "log_level", &str))         out->log_level = str;
     if (get_uint(s, "rt_priority", &u))           out->rt_priority = static_cast<int>(u);
 
-    /* ui[]: lấy sensor_type theo thứ tự xuất hiện */
+    /* Lấy index kênh từ "id":"UI<n>"/"AO<n>" trong entry (schema 06 §4); entry
+     * thiếu id → positional. KHÔNG positional mù khi config sparse (kẻo lệch kênh
+     * với core/io_safe_state — analysis review PR#12). */
+    auto entry_index = [](const std::string& arr, size_t entry_from, size_t value_pos,
+                          const char* prefix, int positional) -> int {
+        const size_t idp = find_value(arr, "id", entry_from);
+        std::string id;
+        if (idp != std::string::npos && idp < value_pos &&
+            get_string(arr, "id", &id, entry_from) &&
+            id.size() > std::strlen(prefix) &&
+            id.compare(0, std::strlen(prefix), prefix) == 0) {
+            return std::atoi(id.c_str() + std::strlen(prefix)) - 1;
+        }
+        return positional;
+    };
+
+    /* ui[]: sensor_type theo id "UI<n>" (fallback thứ tự xuất hiện) */
     std::string arr;
     if (get_array(s, "ui", &arr)) {
         size_t from = 0;
-        for (int i = 0; i < KX_N_UI; i++) {
+        int positional = 0;
+        for (;;) {
             const size_t p = find_value(arr, "sensor_type", from);
             if (p == std::string::npos) break;
             std::string t;
-            if (get_string(arr, "sensor_type", &t, from)) {
+            if (!get_string(arr, "sensor_type", &t, from)) break;
+            const int i = entry_index(arr, from, p, "UI", positional);
+            positional = i + 1;
+            if (i >= 0 && i < KX_N_UI) {
                 out->ui_sensor[i] = sensor_type_from_string(t.c_str());
                 if (out->ui_sensor[i] == SensorType::UNKNOWN)
                     std::fprintf(stderr, "ERROR config.bad_sensor_type ui=%d type=%s (quality=BAD)\n",
@@ -139,15 +160,24 @@ bool load_config(const std::string& path, bool must_exist, IobusConfig* out)
             from = p;
         }
     }
-    /* ao[]: mode theo thứ tự */
+    /* ao[]: mode theo id "AO<n>" (fallback thứ tự) */
     if (get_array(s, "ao", &arr)) {
         size_t from = 0;
-        for (int i = 0; i < KX_N_AO; i++) {
+        int positional = 0;
+        for (;;) {
             const size_t p = find_value(arr, "mode", from);
             if (p == std::string::npos) break;
             std::string m;
-            if (get_string(arr, "mode", &m, from))
-                out->ao_mode[i] = (m == "4-20mA") ? AoMode::MA4_20 : AoMode::V0_10;
+            if (!get_string(arr, "mode", &m, from)) break;
+            const int i = entry_index(arr, from, p, "AO", positional);
+            positional = i + 1;
+            if (i >= 0 && i < KX_N_AO) {
+                if (m == "4-20mA")     out->ao_mode[i] = AoMode::MA4_20;
+                else if (m == "0-10V") out->ao_mode[i] = AoMode::V0_10;
+                else
+                    std::fprintf(stderr, "WARN  config.bad_ao_mode ao=%d mode=%s (giữ 0-10V)\n",
+                                 i + 1, m.c_str());
+            }
             from = p;
         }
     }

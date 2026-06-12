@@ -77,13 +77,19 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
         std::fprintf(stderr, "ERROR graph.schema_version %s (cần \"1.0\")\n", name.c_str());
         return false;
     }
+    /* parse vào local — chỉ commit vào member khi TOÀN BỘ validate pass */
+    uint32_t parsed_scan_ms = 1000;
     if (const json::Value* dev = root->get("device")) {
         const double ms = dev->get("scan_ms") ? dev->get("scan_ms")->num_or(1000) : 1000;
-        if (ms < 500) {
-            std::fprintf(stderr, "ERROR graph.scan_ms=%g (min 500)\n", ms);
+        /* Validate TRƯỚC khi cast (5e9 → cast uint32 là UB/wrap về 0 → busy-spin).
+         * Max 2000ms: core là Type=notify WatchdogSec=3, kick 1 lần/scan (07 §9) —
+         * scan dài hơn WatchdogSec → systemd kill-loop. */
+        if (ms < 500 || ms > 2000) {
+            std::fprintf(stderr, "ERROR graph.scan_ms=%g (hợp lệ 500..2000 —"
+                                 " watchdog budget WatchdogSec=3)\n", ms);
             return false;
         }
-        scan_ms_ = static_cast<uint32_t>(ms);
+        parsed_scan_ms = static_cast<uint32_t>(ms);
     }
 
     /* ---- nodes ---- */
@@ -204,11 +210,25 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
             ai_set.insert(static_cast<int>(n.num_params.at("channel")));
     used_ai_.assign(ai_set.begin(), ai_set.end());
 
+    /* mọi validate pass → giờ mới commit */
+    declared_scan_ms_ = parsed_scan_ms;
+    scan_ms_ = parsed_scan_ms;   /* tạm — ScanLoop sync_actual_scan_ms() chốt dt thật */
     reset_runtime_state();
     loaded_ = true;
     std::fprintf(stderr, "INFO  graph.loaded %s nodes=%zu links_ok scan_ms=%u ai_used=%zu\n",
                  name.c_str(), n_nodes, scan_ms_, used_ai_.size());
     return true;
+}
+
+void GraphRuntime::sync_actual_scan_ms(uint32_t actual_ms)
+{
+    if (actual_ms == 0) return;
+    if (loaded_ && actual_ms != declared_scan_ms_)
+        std::fprintf(stderr,
+                     "WARN  graph.scan_ms_mismatch declared=%u actual=%u -> dt dùng actual"
+                     " (1 nguồn sự thật = chu kỳ scan thật của core)\n",
+                     declared_scan_ms_, actual_ms);
+    scan_ms_ = actual_ms;
 }
 
 void GraphRuntime::reset_runtime_state()
