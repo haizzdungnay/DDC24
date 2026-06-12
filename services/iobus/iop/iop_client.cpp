@@ -77,8 +77,7 @@ IopResult IopClient::wait_response(uint8_t sent_seq, uint8_t sent_cmd,
             if (pr == ParseResult::ERROR) {
                 if (perr == ParseError::CRC_FAIL && metrics_)
                     metrics_->crc_error_count.fetch_add(1, std::memory_order_relaxed);
-                res.code = IopResult::CRC_FAIL;   /* ghi nhận, vẫn chờ tới timeout */
-                continue;
+                continue;   /* crc_err đã đếm; vẫn chờ frame tốt tới deadline */
             }
             /* FRAME */
             if (resp->seq != sent_seq) {
@@ -105,7 +104,9 @@ IopResult IopClient::wait_response(uint8_t sent_seq, uint8_t sent_cmd,
 
         const uint64_t t = now_ns();
         if (t >= deadline) {
-            res.code = (res.code == IopResult::CRC_FAIL) ? IopResult::CRC_FAIL : IopResult::TIMEOUT;
+            /* hết deadline = TIMEOUT thống nhất (CRC lỗi đã đếm riêng) —
+             * để transact tăng iop_timeout đúng (#11 analysis report) */
+            res.code = IopResult::TIMEOUT;
             return res;
         }
         struct pollfd pfd { port_.fd(), POLLIN, 0 };
@@ -131,7 +132,16 @@ IopResult IopClient::transact(uint8_t cmd, const uint8_t* payload, uint8_t len,
     for (uint32_t attempt = 0; attempt <= cfg_.max_retry; attempt++) {
         const uint8_t seq = seq_++;               /* SEQ +1 mỗi frame gửi, wrap 255→0 */
         const size_t n = build_frame(cmd, seq, payload, len, frame);
-        if (port_.write(frame, n) < 0) { res.code = IopResult::NOT_OPEN; return res; }
+        if (port_.write(frame, n) < 0) {
+            /* EAGAIN kéo dài (>~50ms trong iop_port) / lỗi ghi = link chết về mặt
+             * semantics → coi như TIMEOUT: đi qua retry → FAULT → RECONNECT
+             * (reconnect mở lại port). KHÔNG trả NOT_OPEN tức thì. */
+            res.code = IopResult::TIMEOUT;
+            res.retries = static_cast<uint8_t>(attempt);
+            if (attempt < cfg_.max_retry && metrics_)
+                metrics_->retry_count.fetch_add(1, std::memory_order_relaxed);
+            continue;
+        }
         if (metrics_) metrics_->tx_count.fetch_add(1, std::memory_order_relaxed);
 
         res = wait_response(seq, cmd, expect_cmd, expect_len, resp, timeout_ms);

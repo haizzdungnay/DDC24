@@ -24,7 +24,7 @@ struct Fixture {
     GraphRuntime graph;
     PriorityResolver resolver;
     SafeState safe{quality};
-    OutputWriter writer{&shm};
+    OutputWriter writer{reader};
     BacnetObjTable bacnet;  /* không attach → publish no-op */
     CoreMetrics metrics;
     ScanLoop loop;
@@ -120,4 +120,38 @@ TEST(ScanLoop, SeqlockFailKeepsOldSnapshot)
     f.loop.step();
     EXPECT_EQ(f.metrics.seqlock_fail(), 1u);
     KX_WRITE_END(&f.shm);
+}
+
+TEST(ScanLoop, LateAttachRecoversOutputPath)
+{
+    /* Gap #3 analysis report: core lên trước iobus quá lâu → trước fix,
+     * OutputWriter chốt nullptr vĩnh viễn. Sau fix: reader attach muộn →
+     * output path tự sống lại (writer lấy mapping động). */
+    kx_io_shm_t shm;
+    std::memset(&shm, 0, sizeof(shm));
+    shm.magic = KX_SHM_MAGIC;
+    shm.iop_status = KX_IOP_NORMAL;
+    shm.ts_ns = 1;
+
+    IobusReader reader;          /* CHƯA attach — như sau 30s degraded */
+    PointTable table;
+    PointQuality quality;
+    WebIpc web;
+    GraphRuntime graph;
+    PriorityResolver resolver;
+    SafeState safe{quality};
+    OutputWriter writer{reader};
+    BacnetObjTable bacnet;
+    CoreMetrics metrics;
+    ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver,
+                   &safe, &writer, &bacnet, &metrics});
+
+    resolver.set_do(PRIO_LOCAL_MANUAL, 0, true);
+    loop.step();                 /* degraded: không shm → không ghi, không crash */
+    EXPECT_EQ(shm.do_cmd[0], 0);
+
+    reader.attach_external(&shm);   /* iobus lên muộn (mô phỏng attach thành công) */
+    shm.ts_ns = 1000000;
+    loop.step();
+    EXPECT_EQ(shm.do_cmd[0], 1) << "output path phải sống lại sau khi attach muộn";
 }

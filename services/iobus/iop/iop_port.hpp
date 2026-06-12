@@ -25,6 +25,9 @@ public:
 
     /* Trả số byte; 0 nếu chưa có dữ liệu (EAGAIN); -1 lỗi thật. EINTR tự retry. */
     ssize_t read(uint8_t* buf, size_t n);
+
+    /* Ghi đủ n byte hoặc -1. EAGAIN → poll(POLLOUT) tối đa ~50ms rồi -1
+     * (TX nghẽn kéo dài = link chết; caller coi như TIMEOUT → FAULT → reconnect). */
     ssize_t write(const uint8_t* buf, size_t n);
 
     void flush();   /* xả RX/TX buffer */

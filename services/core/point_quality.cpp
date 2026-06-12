@@ -37,6 +37,14 @@ void PointQuality::evaluate(PointTable& table, const IoSnapshot& io)
         else if (stale_unc)          q = KX_Q_UNCERTAIN;
         table.set_quality({PointKind::BO, i}, q);
     }
+    /* AO: feedback qua ao_setpoint cũng vô nghĩa khi IOP fault/stale —
+     * degrade như BO (web/BACnet không được thấy GOOD khi rút UART) */
+    for (int i = 0; i < KX_N_AO; i++) {
+        kx_quality_t q = KX_Q_GOOD;
+        if (fault_all || stale_bad)  q = KX_Q_BAD;
+        else if (stale_unc)          q = KX_Q_UNCERTAIN;
+        table.set_quality({PointKind::AO, i}, q);
+    }
 }
 
 } // namespace core

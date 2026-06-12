@@ -17,6 +17,33 @@ void OutputCommand::reset_last_sent()
     has_sent_ao_ = false;
     has_sent_do_ = false;
     safe_blocked_ = false;
+    fb_mismatch_polls_ = 0;
+}
+
+void OutputCommand::verify_feedback(const uint8_t do_fb[KX_N_DO])
+{
+    if (!has_sent_do_) {
+        fb_mismatch_polls_ = 0;
+        return;
+    }
+    bool mismatch = false;
+    for (int i = 0; i < KX_N_DO; i++) {
+        if ((do_fb[i] ? 1 : 0) != last_sent_do_[i]) {
+            mismatch = true;
+            break;
+        }
+    }
+    if (!mismatch) {
+        fb_mismatch_polls_ = 0;
+        return;
+    }
+    if (++fb_mismatch_polls_ >= FB_MISMATCH_POLLS) {
+        /* MCU mất state (tự reset / vào-ra safe) → ép resend đồng bộ lại */
+        std::fprintf(stderr, "WARN  output.fb_mismatch %d polls -> resend SET_DO\n",
+                     fb_mismatch_polls_);
+        has_sent_do_ = false;
+        fb_mismatch_polls_ = 0;
+    }
 }
 
 bool OutputCommand::process(const float ao_setpoint[KX_N_AO], const uint8_t do_cmd[KX_N_DO])

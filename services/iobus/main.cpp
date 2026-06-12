@@ -142,6 +142,7 @@ int main(int argc, char** argv)
     uint64_t last_wdg_kick = 0;
     uint64_t last_reconnect_try = 0;
     uint64_t last_safe_retry = 0;
+    uint64_t safe_blocked_since = 0;
     uint16_t prev_fault_flags = 0;
     uint32_t consecutive_poll_fail = 0;
 
@@ -269,13 +270,32 @@ int main(int argc, char** argv)
                         prev_fault_flags = resp.fault_flags;
                     }
 
+                    /* đối chiếu DO_FB với last_sent — MCU mất state (tự safe/reset)
+                     * → ép resend (xem OutputCommand::verify_feedback) */
+                    output.verify_feedback(snap.do_feedback);
+
                     /* output: đọc lệnh core từ shm → SET_* nếu CHANGED (cùng thread, 1 owner UART) */
                     float ao_sp[KX_N_AO];
                     uint8_t do_cmd[KX_N_DO];
                     bridge.read_outputs(ao_sp, do_cmd);
-                    if (output.safe_state_blocked() && t - last_safe_retry > 1000000000ull) {
-                        output.clear_safe_blocked();   /* retry chậm 1s khi MCU safe */
-                        last_safe_retry = t;
+                    if (output.safe_state_blocked()) {
+                        if (safe_blocked_since == 0) safe_blocked_since = t;
+                        if (t - safe_blocked_since > 3000000000ull) {
+                            /* MCU kẹt safe >3s — chỉ thoát qua HANDSHAKE (07 §5.4)
+                             * → escalate RECONNECT để handshake + RESET_IO + resync */
+                            std::fprintf(stderr,
+                                         "WARN  iop.safe_blocked >3s -> reconnect (resync MCU)\n");
+                            client.set_status(IopStatus::RECONNECT);
+                            cache.write_status(KX_IOP_FAULT, metrics);
+                            output.reset_last_sent();
+                            last_reconnect_try = 0;   /* thử ngay */
+                            safe_blocked_since = 0;
+                        } else if (t - last_safe_retry > 1000000000ull) {
+                            output.clear_safe_blocked();   /* retry chậm 1s khi MCU safe */
+                            last_safe_retry = t;
+                        }
+                    } else {
+                        safe_blocked_since = 0;
                     }
                     output.process(ao_sp, do_cmd);
                 }

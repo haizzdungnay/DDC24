@@ -336,7 +336,9 @@ Không có alias `/dev/shm/kinexus_*`.
 ```
 - Seqlock: KX_WRITE_BEGIN(shm) → ghi field → KX_WRITE_END(shm). Reader retry khi seq lẻ/đổi.
 - iobus CHỈ ghi field "Writer=iobus". ao_setpoint/do_cmd là Writer=core → iobus READ-ONLY.
-  (Ngoại lệ init: iobus memset 0 toàn struct TRƯỚC khi set magic — lúc đó chưa ai đọc.)
+  (Ngoại lệ init: BOOT SẠCH (magic chưa hợp lệ) iobus memset 0 toàn struct trước khi set
+  magic. RESTART (magic đã hợp lệ = core có thể đang chạy): iobus PHẢI giữ nguyên
+  ao_setpoint[]/do_cmd[] qua re-init — không được wipe field của core.)
 - ts_ns cập nhật MỖI vòng poll (kể cả khi giá trị không đổi) → core phát hiện stale.
 - Stale detection (core side): ts_ns không tăng > 3 chu kỳ scan core → quality UNCERTAIN→BAD.
 - Quality rule: iop_status=FAULT/SAFE → toàn bộ ui_quality=BAD;
@@ -439,6 +441,11 @@ INFO  iop.reconnect attempt=2
 ---
 
 ## 9. Alarm events
+
+**Transport (chốt Rev A):** Unix **datagram** socket. **Subscriber (mkddc-web) là server**
+(bind `/run/mkddc/alarm.sock`); iobus là client `sendto()` non-blocking từng dòng JSON.
+Chưa có subscriber → iobus drop + đếm (không buffer, không block poll). Mọi alarm LUÔN
+được log song song ra journald nên không mất dữ liệu khi web chưa chạy.
 
 **Format** (JSON lines, `/run/mkddc/alarm.sock`):
 ```json

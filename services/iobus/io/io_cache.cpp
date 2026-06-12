@@ -45,12 +45,44 @@ bool IoCache::attach()
     }
     shm_ = static_cast<kx_io_shm_t*>(mem);
 
-    /* Init default TRƯỚC khi set magic — lúc này chưa ai đọc (06 §5) */
-    std::memset(shm_, 0, sizeof(kx_io_shm_t));
-    for (int i = 0; i < KX_N_UI; i++) shm_->ui_quality[i] = KX_Q_BAD;   /* chưa có mẫu */
-    for (int i = 0; i < KX_N_AO; i++) shm_->ao_setpoint[i] = 0.0f;      /* safe 0V/4mA */
-    shm_->iop_status = KX_IOP_FAULT;                                    /* chưa handshake */
-    __atomic_store_n(&shm_->magic, KX_SHM_MAGIC, __ATOMIC_RELEASE);     /* magic CUỐI CÙNG */
+    const bool reattach =
+        __atomic_load_n(&shm_->magic, __ATOMIC_ACQUIRE) == KX_SHM_MAGIC;
+
+    if (!reattach) {
+        /* Boot sạch: memset toàn struct TRƯỚC khi set magic — chưa ai đọc (06 §5) */
+        std::memset(shm_, 0, sizeof(kx_io_shm_t));
+        for (int i = 0; i < KX_N_UI; i++) shm_->ui_quality[i] = KX_Q_BAD;   /* chưa có mẫu */
+        for (int i = 0; i < KX_N_AO; i++) shm_->ao_setpoint[i] = 0.0f;      /* safe 0V/4mA */
+        shm_->iop_status = KX_IOP_FAULT;                                    /* chưa handshake */
+        __atomic_store_n(&shm_->magic, KX_SHM_MAGIC, __ATOMIC_RELEASE);     /* magic CUỐI CÙNG */
+    } else {
+        /* iobus RESTART, core có thể ĐANG ghi ao_setpoint/do_cmd đồng thời:
+         * KHÔNG memset (race save/restore — risk A analysis report). Chỉ re-init
+         * từng field Writer=iobus; field của core không bao giờ bị chạm. */
+        uint32_t seq = __atomic_load_n(&shm_->seq, __ATOMIC_ACQUIRE);
+        if (seq & 1u)   /* iobus cũ chết giữa KX_WRITE_BEGIN/END → trả seq về chẵn */
+            __atomic_add_fetch(&shm_->seq, 1, __ATOMIC_RELEASE);
+
+        KX_WRITE_BEGIN(shm_);
+        shm_->ts_ns = 0;
+        for (int i = 0; i < KX_N_UI; i++) {
+            shm_->ui_value[i] = 0.0f;
+            shm_->ui_quality[i] = KX_Q_BAD;
+            std::memset(shm_->ui_unit[i], 0, sizeof(shm_->ui_unit[i]));
+        }
+        for (int i = 0; i < KX_N_DI; i++) {
+            shm_->di_state[i] = 0;
+            shm_->di_counter[i] = 0;
+        }
+        for (int i = 0; i < KX_N_AO; i++) shm_->ao_mode[i] = 0;
+        for (int i = 0; i < KX_N_DO; i++) shm_->do_feedback[i] = 0;
+        shm_->fault_flags = 0;
+        shm_->iop_status = KX_IOP_FAULT;
+        shm_->mcu_temp_x10 = 0;
+        shm_->iop_rx = shm_->iop_crc_err = shm_->iop_timeout = shm_->iop_seq_err = 0;
+        KX_WRITE_END(shm_);
+        std::fprintf(stderr, "INFO  io_cache.reattach giữ ao_setpoint/do_cmd của core\n");
+    }
 
     std::fprintf(stderr, "INFO  io_cache.attached path=%s size=%zu\n",
                  KX_SHM_IO_PATH, sizeof(kx_io_shm_t));

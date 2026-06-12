@@ -63,6 +63,17 @@ void PriorityResolver::set_default_do(int ch, bool on)
     do_[PRIO_DEFAULT - 1][ch].value = on ? 1.0f : 0.0f;
 }
 
+bool PriorityResolver::any_active_above_default() const
+{
+    for (int lv = 0; lv < PRIO_DEFAULT - 1; lv++) {
+        for (int ch = 0; ch < KX_N_AO; ch++)
+            if (ao_[lv][ch].active) return true;
+        for (int ch = 0; ch < KX_N_DO; ch++)
+            if (do_[lv][ch].active) return true;
+    }
+    return false;
+}
+
 OutputCmd PriorityResolver::resolve() const
 {
     OutputCmd out;

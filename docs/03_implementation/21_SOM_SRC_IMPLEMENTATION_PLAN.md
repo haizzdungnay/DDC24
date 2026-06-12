@@ -2,8 +2,10 @@
 ## MK-DDC-24 — Kế hoạch triển khai cấu trúc source thật chi tiết cho Dev 2
 
 > **Document ID:** IMPL-SOM-SRC-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-11
-> **Trạng thái:** Active — dùng để dựng `services/`, `tools/`, `shared/` phía SOM
+> **Phiên bản:** 1.1 | 2026-06-12 (SOM-COR-005: chốt microtask 1–4 ĐÃ làm theo
+> SAFETY SPEC 07 §5, thêm microtask 5 Rev A.1 cho trigger T6/T7) · 1.0 | 2026-06-11
+> **Trạng thái:** Active — S0–S6 ĐÃ thực thi xong 2026-06-11 (round-trip pass);
+> giữ làm reference + theo dõi phần Rev A.1 còn lại
 > **Đối tượng đọc:** Dev 2, Lead, Tester
 > **Phạm vi:** chỉ phía SOM: `services/iobus`, `services/core`, `tools/fake_mcu`, `tools/shm_dump_io`, `shared/`
 
@@ -590,10 +592,13 @@ Output:
 - fault/stale -> output safe
 
 Microtask:
-1. trigger on FAULT/SAFE.
-2. trigger on stale > threshold.
-3. write safe AO/DO vào `OutputCmd`.
-4. clear override khi recover.
+1. trigger on FAULT/SAFE. — ĐÃ làm 2026-06-11 (T1/T2 theo 07 §5.2)
+2. trigger on stale > threshold. — ĐÃ làm 2026-06-11 (T3, >3 scan)
+3. write safe AO/DO vào `OutputCmd`. — ĐÃ làm 2026-06-11 (AO 0V/4mA theo ao_mode, DO open)
+4. clear override khi recover. — ĐÃ làm 2026-06-11 (trả quyền resolver ≤1 scan, không hysteresis)
+5. trigger T6/T7 graph-based theo 07 §5.2 — ĐÃ làm 2026-06-12 (graph_runtime
+   implemented + test trong `test_safe_state.cpp`; task COR-006 trong
+   [10_TASK_CHECKLIST.md](10_TASK_CHECKLIST.md)).
 
 #### `SOM-COR-006` — `output_writer`
 Output:

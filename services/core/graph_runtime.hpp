@@ -1,12 +1,20 @@
 /**
  * @file  graph_runtime.hpp
- * @brief STUB Rev A đầu (07 §0 #10): không nạp graph, nguồn "logic" luôn inactive.
- *        Interface THẬT — thay implementation sau, KHÔNG đổi API (07 §10.6).
+ * @brief Graph engine Rev A tối thiểu (GRAPH_SCHEMA IF-GRAPH-MK-DDC-24-VI):
+ *        load graph.json → validate (id duy nhất, type hợp lệ, 1 wire/input,
+ *        acyclic) → topo order → execute mỗi scan → ghi output qua
+ *        PriorityResolver MỨC 5 (local logic). KHÔNG ghi thẳng IO.
+ *
+ *        Component set Rev A core (SW_COMPONENT_LIBRARY): AI_Input, DI_Input,
+ *        Setpoint, AND, OR, NOT, Compare_GT, Compare_LT, Scale, Limit, PID,
+ *        AO_Output, DO_Output. Type ngoài danh sách → load fail (giữ no-graph).
  */
 #ifndef CORE_GRAPH_RUNTIME_HPP
 #define CORE_GRAPH_RUNTIME_HPP
 
+#include <map>
 #include <string>
+#include <vector>
 
 #include "point_table.hpp"
 #include "priority_resolver.hpp"
@@ -15,15 +23,50 @@ namespace core {
 
 class GraphRuntime {
 public:
-    /* Nạp graph.json — stub: luôn false (chưa có graph hợp lệ). */
+    /* Nạp + validate graph.json. Fail → loaded()=false (nguồn logic inactive). */
     bool load(const std::string& path);
+    /* Nạp từ chuỗi JSON (cho unit test). */
+    bool load_string(const std::string& src, const std::string& name = "<inline>");
     bool loaded() const { return loaded_; }
 
-    /* Chạy graph theo topo order, ghi output qua resolver mức 5 — stub: no-op. */
+    /* Chạy 1 scan theo topo order; sink ghi resolver mức PRIO_LOCAL_LOGIC. */
     void execute(const PointTable& table, PriorityResolver& resolver);
 
+    /* Kênh AI (0-based) graph đang dùng — đầu vào cho safety trigger T6 (07 §5.2). */
+    const std::vector<int>& used_ai_channels() const { return used_ai_; }
+
+    uint32_t scan_ms() const { return scan_ms_; }
+
 private:
+    enum class NodeType {
+        AI_INPUT, DI_INPUT, SETPOINT,
+        AND_, OR_, NOT_, CMP_GT, CMP_LT,
+        SCALE, LIMIT, PID,
+        AO_OUTPUT, DO_OUTPUT
+    };
+
+    struct Node {
+        std::string id;
+        NodeType type;
+        std::map<std::string, double> num_params;
+        std::string str_param;                    /* direction / mode */
+        std::map<std::string, int> inputs;        /* port → index node nguồn */
+        /* runtime state */
+        float out = 0.0f;
+        float pid_integral = 0.0f;
+        float pid_prev_pv = 0.0f;
+        bool  pid_first = true;
+        bool  cmp_state = false;                  /* hysteresis */
+    };
+
+    float compute(Node& n, const PointTable& table, PriorityResolver& resolver);
+    void  reset_runtime_state();
+
     bool loaded_ = false;
+    uint32_t scan_ms_ = 1000;
+    std::vector<Node> nodes_;
+    std::vector<int> order_;                      /* topo order (index vào nodes_) */
+    std::vector<int> used_ai_;
 };
 
 } // namespace core

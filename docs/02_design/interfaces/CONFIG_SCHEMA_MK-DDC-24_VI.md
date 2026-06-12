@@ -89,6 +89,10 @@
 }
 ```
 > Không cấu hình → mặc định AO 0V/4mA, DO open (IOP-SPEC §6.3).
+> **Quan hệ chốt (2026-06-12):** file này cấu hình **relinquish default mức 6** của
+> priority resolver (07 §4). Safety ACTION khi fault/stale (07 §5.3) CỐ ĐỊNH 0V/4mA/open
+> ở cả 3 lớp (MCU/iobus/core), KHÔNG đổi theo file này — config sai không thể làm
+> hệ mất đường về safe. Loader: `services/core/safe_state_config.*` (fail-fast khi JSON hỏng).
 
 ## 5. `bacnet.conf` — BACnet/IP (chỉ IP — ARCH-R010)
 ```json

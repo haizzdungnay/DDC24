@@ -45,7 +45,8 @@ if(IOBUS_BUILD_TESTS)
   add_executable(iobus_tests
       tests/test_iop_crc.cpp tests/test_iop_frame.cpp tests/test_iop_parser.cpp
       tests/test_io_scaling.cpp tests/test_output_command.cpp
-      tests/test_iop_client_fake_mcu.cpp)
+      tests/test_iop_client_fake_mcu.cpp
+      tests/test_iobus_config.cpp tests/test_io_cache.cpp)
   target_link_libraries(iobus_tests PRIVATE iobus_lib)
   # GCC13 -O3 false positive (PR109945) với vector<struct nhỏ> trong test fixture
   target_compile_options(iobus_tests PRIVATE -Wno-error=stringop-overflow)
