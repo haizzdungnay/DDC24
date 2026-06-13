@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Build/deploy lên board SOM khi chưa có MCU
 
 > **Document ID:** IMPL-SOM-DEPLOY-NOMCU-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-13
+> **Phiên bản:** 1.1 | 2026-06-13
 > **Trạng thái:** Active — SOP cho team build/deploy SOM-only
 > **Owner:** Dev 2 + DevOps/QA
 > **Scope:** board SOM truy cập qua SSH, chưa có MCU STM32; deploy/test `mkddc-iobus`, `mkddc-core`, `fake_mcu`, `shm_dump_io`.
@@ -10,54 +10,70 @@
 
 ---
 
+## 1. Thông tin board thực tế (đã verify 2026-06-13)
 
-## 1. Kết luận review nhanh
+| Hạng mục | Giá trị |
+|---|---|
+| Board | Orange Pi 5B |
+| CPU | Rockchip RK3588, aarch64 |
+| OS | Orange Pi 1.0.8 Bookworm (Debian 12) |
+| Kernel | 6.1.43-rockchip-rk3588 |
+| SSH | `orangepi@mekong-fac.ddns.net:2222` (alias `SOM-DDC-24`) |
+| RT scheduling | Kernel không hỗ trợ `SCHED_FIFO` priority cao → WARN + fallback `SCHED_OTHER` (bình thường cho lab) |
+| Fake MCU stack | 4 systemd service tự start sau reboot (xem §7b) |
 
-| Hạng mục | Nhận xét | Quyết định team |
-|---|---|---|
-| SSH qua DDNS + port 2222 | Dùng được cho lab, nhưng host key đang bị tắt nếu dùng config hiện tại. | Dùng tạm cho lab; không dùng config này cho production. |
-| Password shared | Không đưa password vào repo/docs/command. | Lưu trong password manager; rotate sau khi tạo SSH key cho team. |
-| Chưa có MCU | Không enable service `mkddc-iobus` trỏ `/dev/ttyS2`. | Dùng `fake_mcu` + `socat` manual no-board mode. |
-| `packaging/install.sh` | Chỉ install `mkddc-iobus` + `mkddc-core`; chưa install web. | Chạy `--no-enable` trong giai đoạn no-MCU. |
-| `mkddc-iobus.service` | ExecStart dùng `--config /data/config/iobus.conf`; thiếu file sẽ fail-fast. | Chỉ enable khi đã tạo config thật và có MCU hoặc fake-systemd profile riêng. |
-| Test evidence | Có unit tests + `tools/run_noboard_demo.sh`. | Mỗi deploy phải nộp log build, ctest, demo, git hash. |
+**Quyết định đã chốt:**
+
+| Hạng mục | Quyết định |
+|---|---|
+| SSH auth | Key-based (`~/.ssh/mkddc24_som`); password không commit vào repo/log |
+| Fake MCU | Chạy dưới systemd (4 service), tự start sau reboot — không dùng manual `run_noboard_demo.sh` cho lab thường xuyên |
+| Install | `packaging/install.sh --no-enable` + thêm drop-in override cho fake MCU stack |
+| RT scheduling | Drop-in `nofifo.conf` tắt `SCHED_FIFO` trên Orange Pi kernel |
 
 ---
 
-## 2. SSH policy bắt buộc
+## 2. SSH setup (một lần mỗi thành viên)
 
-Không commit mật khẩu, private key, host token, file `~/.ssh/config`, `known_hosts`, hoặc log chứa secret.
-
-Config lab khuyến nghị trên máy dev:
+**Config trên máy dev** (`~/.ssh/config`):
 
 ```sshconfig
 Host SOM-DDC-24
   HostName mekong-fac.ddns.net
   User orangepi
   Port 2222
+  IdentityFile ~/.ssh/mkddc24_som
+  StrictHostKeyChecking accept-new
   ServerAliveInterval 30
   ServerAliveCountMax 3
-  StrictHostKeyChecking accept-new
 ```
 
-Nếu đang dùng `StrictHostKeyChecking no` và `UserKnownHostsFile /dev/null`, chỉ dùng tạm khi lab chưa ổn định host key. Rủi ro: client không phát hiện MITM/host giả.
-
-Tạo key cho từng thành viên:
+**Tạo key + copy lên board** (cần nhập password board khi hỏi):
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/mkddc24_som -C "mkddc24-som-<ten>"
+ssh-keygen -t ed25519 -f ~/.ssh/mkddc24_som -C "mkddc24-som-<ten>" -N ""
 ssh-copy-id -p 2222 -i ~/.ssh/mkddc24_som.pub orangepi@mekong-fac.ddns.net
 ```
 
-Windows PowerShell nếu không có `ssh-copy-id`:
+> **Lưu ý:** `ssh-copy-id` sẽ hỏi password board — nhập tay, không gõ password vào command line hay script.
 
-```powershell
-type $env:USERPROFILE\.ssh\mkddc24_som.pub | ssh SOM-DDC-24 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys"
-```
-
-Board hardening tối thiểu sau khi key hoạt động:
+**Verify:**
 
 ```bash
+ssh SOM-DDC-24 "echo OK && uname -a"
+# → OK + thông tin kernel, không hỏi password
+```
+
+**Windows PowerShell** (thay `ssh-copy-id`):
+
+```powershell
+type $env:USERPROFILE\.ssh\mkddc24_som.pub | ssh -p 2222 orangepi@mekong-fac.ddns.net "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys"
+```
+
+**Board hardening** sau khi key hoạt động:
+
+```bash
+ssh SOM-DDC-24
 sudo passwd -l root || true
 sudo sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
 sudo systemctl reload ssh || sudo systemctl reload sshd
@@ -65,258 +81,323 @@ sudo systemctl reload ssh || sudo systemctl reload sshd
 
 ---
 
-## 3. Board bootstrap một lần
-
-Đăng nhập:
-
-```bash
-ssh SOM-DDC-24
-```
+## 3. Board bootstrap (một lần)
 
 Ghi nhận môi trường:
 
 ```bash
-hostnamectl
-uname -a
-cat /etc/os-release
-dpkg --print-architecture
-date -Is
-timedatectl status | sed -n '1,8p'
+ssh SOM-DDC-24 "hostnamectl && uname -a && cat /etc/os-release | head -5 && date -Is"
 ```
 
-Cài toolchain:
+Cài toolchain (từ máy dev qua SSH):
 
 ```bash
-sudo apt update
-sudo apt install -y \
+ssh SOM-DDC-24 "sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends \
   git cmake build-essential g++ pkg-config ninja-build \
-  socat python3 python3-venv \
-  gdb strace lsof psmisc procps \
-  libgtest-dev
+  socat python3 \
+  libgtest-dev"
 ```
 
-Nếu `apt` không có `libgtest-dev`, CMake sẽ tự tải GoogleTest qua `FetchContent` khi network cho phép.
+> Nếu `apt` không có `libgtest-dev`, CMake tự tải GoogleTest qua `FetchContent` khi có network.
+
+Verify:
+
+```bash
+ssh SOM-DDC-24 "cmake --version | head -1 && g++ --version | head -1 && socat -V 2>&1 | head -1"
+# cmake version 3.25.1 / g++ 12.2.0 / socat ...
+```
 
 ---
 
-## 4. Lấy source lên SOM
+## 4. Đồng bộ source lên SOM
 
-Ưu tiên clone/pull trực tiếp trên SOM:
-
-```bash
-mkdir -p ~/work
-cd ~/work
-git clone <REPO_URL> DDC-PROJECT
-cd DDC-PROJECT
-git checkout <BRANCH_OR_COMMIT>
-git rev-parse --short HEAD
-```
-
-Nếu chưa có remote cho SOM, đồng bộ từ máy dev qua `rsync` (WSL/Linux/macOS):
+Dùng `rsync` từ **máy dev** (SSH alias đã setup ở §2):
 
 ```bash
+cd ~/Desktop/DDC-PROJECT   # hoặc root repo trên máy dev
 rsync -az --delete \
   --exclude build --exclude logs --exclude .git \
   ./ SOM-DDC-24:~/work/DDC-PROJECT/
 ```
 
-Không dùng `scp -r` cho deploy lặp lại vì dễ để sót file cũ trên board.
+> **Tại sao rsync?** Không dùng `scp -r` (dễ sót file cũ) và không git clone trên board (key chưa setup cho SOM→GitHub). Rsync incremental — lần sau chỉ gửi diff.
+
+Verify trên board:
+
+```bash
+ssh SOM-DDC-24 "ls ~/work/DDC-PROJECT/services/"
+# CMakeLists.txt  core  iobus
+```
 
 ---
 
 ## 5. Build + unit test trên SOM
 
-Chạy từ root repo trên SOM:
-
 ```bash
-cmake -S services -B build/services -DCMAKE_BUILD_TYPE=Release \
-  -DIOBUS_BUILD_TESTS=ON -DCORE_BUILD_TESTS=ON
-cmake --build build/services -j"$(nproc)"
-ctest --test-dir build/services --output-on-failure
+ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && \
+  cmake -S services -B build/services -DCMAKE_BUILD_TYPE=Release \
+    -DIOBUS_BUILD_TESTS=ON -DCORE_BUILD_TESTS=ON && \
+  cmake --build build/services -j\$(nproc) && \
+  ctest --test-dir build/services --output-on-failure"
 ```
 
-Pass criteria:
+**Pass criteria (đã verify 2026-06-13):**
 
 ```text
-- build/services/iobus/mkddc-iobus tồn tại
-- build/services/core/mkddc-core tồn tại
-- build/services/iobus/fake_mcu tồn tại
-- build/services/iobus/shm_dump_io tồn tại
-- ctest PASS 100%
+- build/services/iobus/mkddc-iobus   ← executable aarch64
+- build/services/core/mkddc-core     ← executable aarch64
+- build/services/iobus/fake_mcu      ← executable aarch64
+- build/services/iobus/shm_dump_io   ← executable aarch64
+- ctest: 141/141 tests PASS (2.67s trên Orange Pi 5B)
 ```
 
-Emergency build không chạy test chỉ dùng để debug compile, không được tính deploy gate:
+Emergency build (không test, chỉ để debug compile):
 
 ```bash
-cmake -S services -B build/services -DCMAKE_BUILD_TYPE=Release \
-  -DIOBUS_BUILD_TESTS=OFF -DCORE_BUILD_TESTS=OFF
-cmake --build build/services -j"$(nproc)"
+ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && \
+  cmake -S services -B build/services -DCMAKE_BUILD_TYPE=Release \
+    -DIOBUS_BUILD_TESTS=OFF -DCORE_BUILD_TESTS=OFF && \
+  cmake --build build/services -j\$(nproc)"
 ```
 
 ---
 
-## 6. Install lên board nhưng chưa enable
+## 6. Install lên board (--no-enable)
 
-Vì chưa có MCU, không auto-start `mkddc-iobus` production service.
-
-```bash
-sudo packaging/install.sh --no-enable
-systemctl cat mkddc-iobus mkddc-core
-systemd-analyze verify packaging/systemd/mkddc-iobus.service packaging/systemd/mkddc-core.service
-```
-
-Pass criteria:
-
-```text
-- /usr/sbin/mkddc-iobus tồn tại và executable
-- /usr/sbin/mkddc-core tồn tại và executable
-- /etc/systemd/system/mkddc-iobus.service tồn tại
-- /etc/systemd/system/mkddc-core.service tồn tại
-- user/group mkddc tồn tại; mkddc thuộc dialout
-- /data/config và /data/mkddc tồn tại
-```
-
-Không chạy lệnh này trong giai đoạn no-MCU:
+Chạy từ máy dev:
 
 ```bash
-sudo systemctl enable --now mkddc-iobus mkddc-core
+ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && sudo packaging/install.sh --no-enable"
+```
+
+**Pass criteria:**
+
+```bash
+ssh SOM-DDC-24 "
+ls -la /usr/sbin/mkddc-iobus /usr/sbin/mkddc-core &&
+ls /etc/systemd/system/mkddc-{iobus,core}.service &&
+id mkddc &&
+ls -d /data/config /data/mkddc"
+# mkddc: uid=999 gid=995 groups=995(mkddc),20(dialout)
+# /data/config /data/mkddc tồn tại
 ```
 
 ---
 
-## 7. No-MCU smoke test chuẩn
+## 7. No-MCU smoke test thủ công (một lần để verify)
 
-Dùng fake MCU + PTY, chạy manual dưới user `orangepi`:
-
-```bash
-./tools/run_noboard_demo.sh
-```
-
-Terminal khác:
+> Dùng để verify lần đầu sau install. Cho lab chạy liên tục → dùng systemd stack ở §7b.
 
 ```bash
-./tools/run_noboard_demo.sh do1 1
-./tools/run_noboard_demo.sh do1 0
-./tools/run_noboard_demo.sh kill-mcu
+ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && bash tools/run_noboard_demo.sh &"
+sleep 6
+# Terminal khác:
+ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && bash tools/run_noboard_demo.sh do1 1"
+# → core trả lời: {"result":"accepted","applied_value":1,"active_source":"manual"}
+ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && bash tools/run_noboard_demo.sh kill-mcu"
+sleep 10
+ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && bash tools/run_noboard_demo.sh revive"
 sleep 8
-./tools/run_noboard_demo.sh revive
-sleep 8
-./tools/run_noboard_demo.sh stop
+ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && bash tools/run_noboard_demo.sh stop"
 ```
 
-Pass criteria:
+**Pass criteria:**
 
 ```text
-- `shm_dump_io --watch` thấy seq/ts đổi liên tục.
-- `do1 1` trả `accepted` hoặc response hợp lệ từ core IPC.
-- `kill-mcu` làm iobus/core chuyển fault/safe-state, không crash.
-- `revive` recover sau reconnect window.
-- logs/demo/iobus.log và logs/demo/core.log không có crash/backtrace.
+- shm_dump_io: iop_status=NORMAL, seq tăng liên tục
+- do1 1: response "accepted"
+- kill-mcu: iop_status đổi FAULT→SAFE, DO về 0
+- revive: ~5s sau reconnect, NORMAL trở lại
+- logs/demo/*.log không có crash/backtrace
 ```
 
-Log cần nộp:
+**Thu thập evidence:**
 
 ```bash
-E=~/mkddc-evidence/$(date +%Y%m%d_%H%M)_som_nomcu
-mkdir -p "$E"
-git rev-parse HEAD > "$E/git_rev.txt"
-uname -a > "$E/uname.txt"
-ctest --test-dir build/services --output-on-failure | tee "$E/ctest.log"
-cp -a logs/demo "$E/"
-systemctl --no-pager status mkddc-iobus mkddc-core > "$E/systemd_status.txt" 2>&1 || true
-tar -C ~/mkddc-evidence -czf "$E.tar.gz" "$(basename "$E")"
-echo "$E.tar.gz"
+ssh SOM-DDC-24 "
+cd ~/work/DDC-PROJECT
+E=~/mkddc-evidence/\$(date +%Y%m%d_%H%M)_som_nomcu
+mkdir -p \$E
+uname -a > \$E/uname.txt
+ctest --test-dir build/services --output-on-failure | tee \$E/ctest.log
+cp -a logs/demo \$E/ 2>/dev/null || true
+systemctl --no-pager status mkddc-iobus mkddc-core > \$E/systemd_status.txt 2>&1 || true
+tar -C ~/mkddc-evidence -czf \$E.tar.gz \$(basename \$E)
+echo \$E.tar.gz"
 ```
 
 ---
 
-## 8. Config production khi MCU có mặt
+## 7b. Systemd fake MCU stack (tự start sau reboot)
 
-Chỉ làm sau khi MCU/IOP UART có thật và Dev1 xác nhận firmware đã qua P1/P2.
+> **Đây là cách dùng cho lab thường xuyên.** Sau khi setup một lần, board tự khởi động đầy đủ sau mỗi lần bật nguồn.
 
-Tạo `/data/config/iobus.conf`:
+### Kiến trúc 4 service
+
+```
+mkddc-pty      socat tạo PTY pair /tmp/mkddc-iop-a ↔ /tmp/mkddc-iop-b
+     ↓
+mkddc-fakemcu  fake_mcu bám PTY B (/tmp/mkddc-iop-b)
+     ↓
+mkddc-iobus    dùng PTY A (--uart /tmp/mkddc-iop-a) thay /dev/ttyS2
+     ↓
+mkddc-core     scan 1s, IPC tại /run/mkddc/core.sock
+```
+
+### Setup (từ máy dev, sau khi đã rsync §4 + install §6)
 
 ```bash
-sudo tee /data/config/iobus.conf >/dev/null <<'JSON'
+ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && \
+
+  # 1. Install fake_mcu binary
+  sudo install -m 0755 build/services/iobus/fake_mcu /usr/local/bin/mkddc-fakemcu && \
+
+  # 2. Install 2 service file mới
+  sudo install -m 0644 packaging/systemd/mkddc-pty.service /etc/systemd/system/ && \
+  sudo install -m 0644 packaging/systemd/mkddc-fakemcu.service /etc/systemd/system/ && \
+
+  # 3. Drop-in override: iobus dùng PTY thay UART thật
+  sudo mkdir -p /etc/systemd/system/mkddc-iobus.service.d && \
+  sudo install -m 0644 packaging/systemd/mkddc-iobus-nomcu.conf \
+    /etc/systemd/system/mkddc-iobus.service.d/nomcu.conf && \
+
+  # 4. Drop-in override: tắt SCHED_FIFO (Orange Pi kernel không hỗ trợ)
+  sudo mkdir -p /etc/systemd/system/mkddc-core.service.d && \
+  sudo install -m 0644 packaging/systemd/mkddc-core-nofifo.conf \
+    /etc/systemd/system/mkddc-core.service.d/nofifo.conf && \
+
+  # 5. Reload + enable tất cả
+  sudo systemctl daemon-reload && \
+  sudo systemctl enable --now mkddc-pty mkddc-fakemcu mkddc-iobus mkddc-core"
+```
+
+### Verify sau setup (hoặc sau reboot)
+
+```bash
+ssh SOM-DDC-24 "systemctl is-active mkddc-pty mkddc-fakemcu mkddc-iobus mkddc-core"
+# active active active active
+
+ssh SOM-DDC-24 "~/work/DDC-PROJECT/build/services/iobus/shm_dump_io | head -3"
+# magic=0x4B584401 seq=XXXX ... iop_status=NORMAL
+```
+
+### Xem log real-time
+
+```bash
+# Tất cả 4 service cùng lúc
+ssh SOM-DDC-24 "journalctl -u mkddc-pty -u mkddc-fakemcu -u mkddc-iobus -u mkddc-core -f"
+
+# Một service cụ thể
+ssh SOM-DDC-24 "journalctl -u mkddc-core -f"
+
+# 50 dòng gần nhất
+ssh SOM-DDC-24 "journalctl -u mkddc-iobus -n 50 --no-pager"
+
+# Từ lần boot hiện tại
+ssh SOM-DDC-24 "journalctl -u mkddc-core -b --no-pager"
+```
+
+### Những WARN bình thường (không phải lỗi)
+
+```text
+WARN rt.sched_fifo_fail prio=70 errno=1 (degraded SCHED_OTHER)
+  → Orange Pi kernel không hỗ trợ RT scheduling; fallback SCHED_OTHER là OK cho lab
+
+WARN config.missing path=/data/config/iobus.conf (dùng default built-in)
+  → Không cần iobus.conf khi dùng --uart PTY; iobus dùng default built-in
+
+ERROR safe_state.enter ... no_ctrl=1
+  → core vào safe-state vì chưa có graph.json; AO=0V, DO=open — đúng behavior
+```
+
+---
+
+## 8. Chuyển sang production khi MCU có mặt
+
+> Chỉ làm sau khi MCU/IOP UART có thật và Dev1 xác nhận firmware đã qua P1/P2.
+
+**Bước 1 — Tắt fake MCU stack:**
+
+```bash
+ssh SOM-DDC-24 "sudo systemctl disable --now mkddc-pty mkddc-fakemcu"
+```
+
+**Bước 2 — Xóa drop-in iobus override:**
+
+```bash
+ssh SOM-DDC-24 "sudo rm /etc/systemd/system/mkddc-iobus.service.d/nomcu.conf && \
+  sudo systemctl daemon-reload"
+```
+
+> Drop-in `nofifo.conf` (tắt RT) có thể giữ lại trừ khi dùng kernel RT thật.
+
+**Bước 3 — Tạo `/data/config/iobus.conf`:**
+
+```bash
+ssh SOM-DDC-24 "sudo tee /data/config/iobus.conf >/dev/null <<'JSON'
 {
-  "uart_device": "/dev/ttyS2",
-  "baud": 921600,
-  "poll_period_ms": 10,
-  "response_timeout_ms": 10,
-  "max_retry": 3,
-  "reconnect_interval_ms": 5000,
-  "handshake_timeout_ms": 1000,
-  "log_level": "info",
-  "rt_priority": 70,
-  "ui": [
-    {"id":"UI1","sensor_type":"0-10V"}, {"id":"UI2","sensor_type":"0-10V"},
-    {"id":"UI3","sensor_type":"0-10V"}, {"id":"UI4","sensor_type":"0-10V"},
-    {"id":"UI5","sensor_type":"0-10V"}, {"id":"UI6","sensor_type":"0-10V"},
-    {"id":"UI7","sensor_type":"0-10V"}, {"id":"UI8","sensor_type":"0-10V"}
+  \"uart_device\": \"/dev/ttyS2\",
+  \"baud\": 921600,
+  \"poll_period_ms\": 10,
+  \"response_timeout_ms\": 10,
+  \"max_retry\": 3,
+  \"reconnect_interval_ms\": 5000,
+  \"handshake_timeout_ms\": 1000,
+  \"log_level\": \"info\",
+  \"rt_priority\": 70,
+  \"ui\": [
+    {\"id\":\"UI1\",\"sensor_type\":\"0-10V\"}, {\"id\":\"UI2\",\"sensor_type\":\"0-10V\"},
+    {\"id\":\"UI3\",\"sensor_type\":\"0-10V\"}, {\"id\":\"UI4\",\"sensor_type\":\"0-10V\"},
+    {\"id\":\"UI5\",\"sensor_type\":\"0-10V\"}, {\"id\":\"UI6\",\"sensor_type\":\"0-10V\"},
+    {\"id\":\"UI7\",\"sensor_type\":\"0-10V\"}, {\"id\":\"UI8\",\"sensor_type\":\"0-10V\"}
   ],
-  "ao": [
-    {"id":"AO1","mode":"0-10V"}, {"id":"AO2","mode":"0-10V"},
-    {"id":"AO3","mode":"0-10V"}, {"id":"AO4","mode":"0-10V"}
+  \"ao\": [
+    {\"id\":\"AO1\",\"mode\":\"0-10V\"}, {\"id\":\"AO2\",\"mode\":\"0-10V\"},
+    {\"id\":\"AO3\",\"mode\":\"0-10V\"}, {\"id\":\"AO4\",\"mode\":\"0-10V\"}
   ]
 }
 JSON
-sudo chown mkddc:mkddc /data/config/iobus.conf
-sudo chmod 0644 /data/config/iobus.conf
+sudo chown mkddc:mkddc /data/config/iobus.conf && sudo chmod 0644 /data/config/iobus.conf"
 ```
 
-Optional safe/default config:
+**Bước 4 — Enable production:**
 
 ```bash
-sudo tee /data/config/io_safe_state.conf >/dev/null <<'JSON'
-{
-  "ao": [
-    {"ch":1,"safe":0}, {"ch":2,"safe":0},
-    {"ch":3,"safe":0}, {"ch":4,"safe":0}
-  ],
-  "do": [
-    {"ch":1,"safe":"open"}, {"ch":2,"safe":"open"},
-    {"ch":3,"safe":"open"}, {"ch":4,"safe":"open"}
-  ]
-}
-JSON
-sudo chown mkddc:mkddc /data/config/io_safe_state.conf
-sudo chmod 0644 /data/config/io_safe_state.conf
-```
-
-Enable production services:
-
-```bash
-sudo systemctl enable --now mkddc-iobus mkddc-core
-journalctl -u mkddc-iobus -f
+ssh SOM-DDC-24 "sudo systemctl enable --now mkddc-iobus && \
+  journalctl -u mkddc-iobus -f"
 ```
 
 ---
 
 ## 9. Rollback / cleanup
 
-No-board demo cleanup:
+**Fake MCU systemd stack:**
 
 ```bash
-./tools/run_noboard_demo.sh stop || true
-pkill -x mkddc-core 2>/dev/null || true
-pkill -x mkddc-iobus 2>/dev/null || true
-pkill -x fake_mcu 2>/dev/null || true
-rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm /tmp/mkddc-core.sock
+ssh SOM-DDC-24 "sudo systemctl disable --now mkddc-pty mkddc-fakemcu mkddc-iobus mkddc-core || true"
+ssh SOM-DDC-24 "sudo rm -f \
+  /etc/systemd/system/mkddc-iobus.service.d/nomcu.conf \
+  /etc/systemd/system/mkddc-core.service.d/nofifo.conf \
+  /usr/local/bin/mkddc-fakemcu && \
+  sudo systemctl daemon-reload"
 ```
 
-Disable installed services:
+**Xóa binaries + unit (chỉ khi lead approve):**
 
 ```bash
-sudo systemctl disable --now mkddc-core mkddc-iobus || true
-sudo systemctl reset-failed mkddc-core mkddc-iobus || true
+ssh SOM-DDC-24 "sudo rm -f \
+  /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus \
+  /etc/systemd/system/mkddc-core.service \
+  /etc/systemd/system/mkddc-iobus.service \
+  /etc/systemd/system/mkddc-pty.service \
+  /etc/systemd/system/mkddc-fakemcu.service && \
+  sudo systemctl daemon-reload"
 ```
 
-Remove installed binaries/units only when lead approves:
+**Dọn SHM và socket:**
 
 ```bash
-sudo rm -f /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus
-sudo rm -f /etc/systemd/system/mkddc-core.service /etc/systemd/system/mkddc-iobus.service
-sudo systemctl daemon-reload
+ssh SOM-DDC-24 "rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm /tmp/mkddc-iop-a /tmp/mkddc-iop-b"
 ```
 
 ---
@@ -325,16 +406,17 @@ sudo systemctl daemon-reload
 
 | Step | Owner | Evidence |
 |---|---|---|
-| SSH key hoạt động; password không nằm trong repo/log | DevOps | screenshot/notes, không chứa secret |
+| SSH key hoạt động; password không nằm trong repo/log | DevOps | `ssh SOM-DDC-24 echo OK` không hỏi password |
 | Board env recorded | Board operator | `uname.txt`, `os-release` |
-| Build Release PASS | Dev 2 | build log |
-| Unit tests PASS | Dev 2/QA | `ctest.log` |
-| Install `--no-enable` PASS | Board operator | `systemd_status.txt` |
-| No-MCU demo PASS | Dev 2/QA | `logs/demo/*` |
-| Fault/recover fake MCU PASS | QA | iobus/core logs |
+| Build Release PASS (141/141 test) | Dev 2 | `ctest.log` |
+| Install `--no-enable` PASS | Board operator | binaries + units + `/data/{config,mkddc}` |
+| Fake MCU systemd stack PASS | Dev 2/QA | `systemctl is-active` 4 service = active |
+| `iop_status=NORMAL` sau reboot | QA | `shm_dump_io` output |
+| Fault/recover fake MCU PASS | QA | journalctl log (FAULT→NORMAL) |
 | Evidence tarball uploaded | QA | tarball path/checksum |
 
 Không qua checklist này thì không báo "SOM deploy ready".
 
 ---
-**Rev** 1.0 | 2026-06-13 — tạo SOP deploy SOM no-MCU
+
+**Rev** 1.1 | 2026-06-13 — cập nhật theo thực tế: thông tin board Orange Pi 5B, SSH config với IdentityFile, rsync từ máy dev, 141/141 test, systemd fake MCU stack 4 service (§7b), drop-in nofifo, lệnh log journalctl · 1.0 | 2026-06-13 — tạo SOP deploy SOM no-MCU
