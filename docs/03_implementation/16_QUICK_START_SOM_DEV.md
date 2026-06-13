@@ -81,6 +81,9 @@ Theo đúng thứ tự [17_WEEK1_SOM_BRINGUP_CHECKLIST](17_WEEK1_SOM_BRINGUP_CHE
 (8 mốc, mỗi mốc có command + log mong đợi + chỗ debug). Board-level (nguồn, flash MCU):
 [13_BRINGUP_GUIDE](13_BRINGUP_GUIDE.md).
 
+Nếu board SOM đã có nhưng MCU chưa có: dùng [26_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK](26_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md)
+để build/deploy `--no-enable` và chạy `fake_mcu` no-board trên chính SOM.
+
 ## 7. Định nghĩa "xong"
 
 Mỗi module: unit test pass + done-criteria trong contract (06 §3 / 07 §11) + không vi phạm
@@ -88,4 +91,4 @@ checklist review (06 §12). Mỗi phase: output đo được trong [03_PHASE_PLA
 test group tương ứng [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md).
 
 ---
-**Rev** 1.0 | 2026-06-11 · Hỏi gì cũng tra được theo thứ tự: header `shared/` → 15 → 05/06/07 → spec.
+**Rev** 1.1 | 2026-06-13 (thêm link deploy SOM no-MCU doc 26) · 1.0 | 2026-06-11 · Hỏi gì cũng tra được theo thứ tự: header `shared/` → 15 → 05/06/07 → spec.

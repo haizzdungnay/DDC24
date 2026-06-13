@@ -1,0 +1,64 @@
+# Build & Test Workflow — MK-DDC-24 SOM Services (C++)
+#
+# Compile mkddc-iobus + mkddc-core với -Wall -Wextra -Werror,
+# rồi chạy toàn bộ unit test (GoogleTest).
+#
+# References:
+#   - services/CMakeLists.txt — build root
+#   - services/core/CMakeLists.txt — core_tests (97 tests)
+#   - services/iobus/CMakeLists.txt — iobus_tests (44 tests)
+
+name: Build & Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: CMake build + CTest (ubuntu-22.04)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            g++ \
+            libgtest-dev \
+            libgmock-dev \
+            ninja-build
+
+      - name: Configure (CMake)
+        run: |
+          cmake -S services -B build/services \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror" \
+            -G Ninja
+
+      - name: Build
+        run: cmake --build build/services --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build/services --output-on-failure --parallel 4
+
+      - name: Upload test results (on failure)
+        if: failure()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4
+        with:
+          name: test-results
+          path: build/services/Testing/
+          retention-days: 7
