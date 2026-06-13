@@ -13,6 +13,7 @@ User=mkddc
 Group=mkddc
 RuntimeDirectory=mkddc
 RuntimeDirectoryPreserve=yes
+StateDirectory=mkddc
 Restart=always
 RestartSec=2
 WatchdogSec=3

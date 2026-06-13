@@ -2,7 +2,7 @@
 ## SOM Application Layer / Debian 12 (IEEE 1016)
 
 > **Document ID:** DDD-SW-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-05-30
+> **Phiên bản:** 1.1 | 2026-06-13 (reconcile 3-process mkddc, Modbus RTU master, BACnet/Modbus implementation docs) · 1.0 | 2026-05-30
 > **Trạng thái:** Draft (DP-0 skeleton có decomposition) — chi tiết service ở DP-2
 > **Owner:** Software Team
 > 📘 [README](../../01_specs/README.md) · Nâng từ `SW_ARCH_SPEC` · Trace `SW_REQUIREMENTS`, `SRS`
@@ -27,7 +27,7 @@ Không bao gồm: firmware MCU (xem FW_DDD), phần cứng.
 
 Rev A: **3 process `mkddc-*`** (chia theo real-time boundary).
 ```
-mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master x2/TCP)
+mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master)
                 ──► mkddc-web   (REST/config/validator/commissioning)
    (HMI / agent MQTT / OTA / cloud: deferred Rev B+)
 ```
@@ -35,7 +35,7 @@ mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master x2/TCP)
 | Process | Ngôn ngữ | Vai trò | Trace |
 |---------|----------|---------|-------|
 | `mkddc-core` | C++17 | IO image (gộp io-driver) + **component graph engine** (scan 1s) + priority/safe-state + BACnet object table | RUN-001..009, SW-IOP-* |
-| `mkddc-iobus` | C/C++17 | BACnet/IP (bacnet-stack), COV *(MS/TP bỏ)* + **Modbus RTU master x2/TCP** (async cache, device profile) | SW-BAC-*, SW-MOD-* |
+| `mkddc-iobus` | C/C++17 | BACnet/IP (bacnet-stack), COV *(MS/TP bỏ)* + **Modbus RTU master** (async ext cache, device profile) | SW-BAC-*, SW-MOD-* |
 | `mkddc-web` | Go | web config (**form/JSON**) + **validator (library)** + monitor + commissioning + SQLite | SW-WEB-* (thay SW-IDE-*) |
 
 **Deferred Rev B+** (thiết kế cũ giữ tham chiếu, không mất): `kinexus-agent` (MQTT/REST),
@@ -59,8 +59,8 @@ mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master x2/TCP)
 
 ## 4. Thiết kế chi tiết service
 
-### 4.1 `kinexus-io-driver`
-- **Interface:** IOP master theo [SWFW_INTERFACE_SPEC]; ghi `/dev/shm/kinexus_io_shm` (seqlock, SW-IOP-006).
+### 4.1 `mkddc-iobus` IOP layer
+- **Interface:** IOP master theo [SWFW_INTERFACE_SPEC]; ghi `/dev/shm/mkddc_io_shm` (seqlock, SW-IOP-006).
 - **Luồng:** poll GET_IO 100Hz → parse/CRC → **scale raw→engineering** (SW_ARCH §4: CVD, Steinhart-Hart β=3950) → write shm. Đọc AO/DO setpoint từ shm, đổi → SET_AO/SET_DO.
 - **FSM:** NORMAL→IOP_FAULT→SAFE_STATE (gửi RESET_IO, alarm bus) (SW-IOP-008/009).
 - **Lỗi:** timeout 10ms ×3 → fault; metrics qua REST (SW-IOP-011).
@@ -71,25 +71,22 @@ mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master x2/TCP)
 - **Engine:** thực thi **component graph** (execution plan topo-sort); component chuẩn OnDelay/OffDelay/Compare/Scale/Limit/PID (anti-windup). **Chi tiết → [D-6 SW_RUNTIME_EXECUTION_MODEL](SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) · [SW_COMPONENT_LIBRARY](SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md)**.
 - **Scan:** mặc định **1s** (min 500ms), SCHED_FIFO; đo budget + đếm overrun.
 - **Priority/Safe-state:** mọi AO/DO qua priority resolver; sensor/Modbus BAD → safe-state (RUN-006/007).
-- **State:** snapshot node-state `/data/mkddc/state.snap` (60s + shutdown) + power-loss recovery (RUN-004).
+- **State:** snapshot chỉ node persist (`RuntimeCounter`, `PulseCounter`) ra `/data/mkddc/state.snap` (60s dirty + shutdown + graph swap) + recovery theo node id+type (RUN-004; xem RUNTIME_MODEL Rev 1.1).
 
-### 4.3 `kinexus-bacnet`
+### 4.3 BACnet module trong `mkddc-iobus`
 - **Objects:** theo SRS §5.1 (Device, AI8/AO4/AV32/BI8/BO4/BV16/MSV8, Trend8, Schedule8, Calendar2, NC4, EE8). **PICS → [D-3]**.
 - **Transport:** BACnet/IP UDP 47808 (Ethernet/WiFi); COV; Who-Is<100ms. *(MS/TP bỏ — ARCH-R010.)*
-- **Nguồn dữ liệu:** đọc `kinexus_plc_shm`; ghi Write-Property → shm (arbitration với PLC).
+- **Nguồn dữ liệu:** đọc `/dev/shm/mkddc_plc_shm`; Write-Property cập nhật BACnet Priority_Array[16], winner đi vào core mức 3 qua IPC; không ghi IO trực tiếp. Chi tiết triển khai → [Implementation 24](../../03_implementation/24_BACNET_IMPLEMENTATION_PLAN.md).
 - **Device ID:** `/data/config/device.conf`, fallback DIP qua CM3 GPIO (SW-BAC-006).
 
-### 4.4 `kinexus-agent` (MQTT / REST) + `kinexus-fieldbus` (Modbus RTU master)
-- **MQTT:** v3.1.1/v5.0, TLS 1.3, topic `kinexus/{id}/io/{point}`, COV publish, LWT, backoff.
-- **REST:** FastAPI HTTPS 8443, JWT (exp 1h), endpoints theo SW_ARCH §6, rate-limit 100/s→429.
-- **Fieldbus (Modbus RTU master):** poll thiết bị phụ theo **device profile**; **xem [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md)** + [SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md). Map điểm slave vào shm/PLC. *(Không còn Modbus slave phục vụ BMS.)*
-- Đọc/ghi qua `kinexus_plc_shm`.
+### 4.4 Fieldbus module trong `mkddc-iobus` (Modbus RTU master)
+- **Fieldbus:** poll thiết bị phụ theo **device profile**; xem [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md), [SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md), [Implementation 25](../../03_implementation/25_MODBUS_IMPLEMENTATION_PLAN.md). Map điểm slave vào ext cache/core point. *(Không còn Modbus slave phục vụ BMS; MQTT/agent deferred Rev B+.)*
 
 ### 4.5 `mkddc-web` (Go) *(thay kinexus-webide)*
 - **Form/JSON** config (KHÔNG FBD/ST): IO/BACnet/Modbus mapping + import/export `graph.json`; watch table/monitor (WebSocket), force I/O (auth admin); validator (library) chạy lúc deploy; commissioning + backup/restore. HTTP 8080 (LAN) → HTTPS 8443 (prod). **Graph/REST → [GRAPH_SCHEMA §7](../interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md)**, config schema → [D-5]. Xem [ADR-006](../../adr/ADR-006-rev-a-ui-form-json.md)/[ADR-007](../../adr/ADR-007-web-stack-go.md).
 
 ### 4.6 `kinexus-hmi`
-- LVGL v9 → `/dev/fb0` (fbtft ILI9341, SPI0); data từ `kinexus_io_shm` (không network); 6-nút GPIO; màn Dashboard/IO/Alarm/Network/System; ≥10 FPS; refresh ≤1s.
+- LVGL v9 → `/dev/fb0` (fbtft ILI9341, SPI0); data từ `mkddc_io_shm` nếu HMI bật lại Rev B+; 6-nút GPIO; màn Dashboard/IO/Alarm/Network/System; ≥10 FPS; refresh ≤1s.
 
 ### 4.7 `kinexus-ota`
 - A/B partition; download HTTPS TLS1.3 + cert validation; verify SHA-256 + GPG; **update MCU đồng thời** (FW-OTA path); rollback 2 lần fail; downtime ≤60s; log. **Sequence (SOM+MCU) → [D-7]**.
@@ -98,8 +95,8 @@ mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master x2/TCP)
 - TLS 1.3, JWT HS256 secret từ **key store [D-11]**; AppArmor; nftables (SEC-020, port policy đã sửa — 1883 chặn mặc định); brute-force lockout; audit log.
 
 ## 5. IPC & dữ liệu (SW_ARCH §2 — nguồn-chuẩn)
-- `kinexus_io_shm` (io-driver→PLC/HMI/agent, seqlock).
-- `kinexus_plc_shm` (PLC→bacnet/agent, rwlock).
+- `mkddc_io_shm` (iobus→core/web, seqlock).
+- `mkddc_plc_shm` (core→BACnet/web, rwlock/seqlock theo shared header).
 - `alarm.sock` (Unix socket, JSON lines).
 - Config `/data/config/*.conf` (JSON, **schema D-5**).
 
@@ -127,4 +124,4 @@ mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master x2/TCP)
 | — | Service designs riêng ở DP-2 | SW | DP-2 |
 
 ---
-**Rev** 1.0 | 2026-05-30
+**Rev** 1.1 | 2026-06-13 (reconcile mkddc naming + S7 #4/#5/#6 docs) · 1.0 | 2026-05-30

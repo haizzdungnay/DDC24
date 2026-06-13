@@ -1,7 +1,7 @@
 # Getting Started — Hướng dẫn cho Developer mới
 ## MK-DDC-24 — "đọc là làm được"
 
-> **Phiên bản:** 1.1 | 2026-06-08 · 📘 [README](../01_specs/README.md) · [README](README.md)
+> **Phiên bản:** 1.2 | 2026-06-13 (chuẩn hóa Modbus RTU master + link implementation docs 24/25) · 1.1 | 2026-06-08 · 📘 [README](../01_specs/README.md) · [README](README.md)
 > **Mục tiêu:** một người mới (kể cả chưa quen dự án) đọc xong là cài được môi trường, build, chạy, và biết bắt đầu sửa code ở đâu.
 
 > ℹ️ **Kiến trúc Rev A (canonical).** Lớp SOM Rev A là **3 process `mkddc-*`** (core C++ **component-graph**,
@@ -88,7 +88,7 @@ http://<ip-thiet-bi>:8080      # production sẽ redirect sang https://<ip>:8443
 | Service | Code dir | Vai trò |
 |---------|----------|---------|
 | `mkddc-core` | `services/core/` | graph engine + IO image + priority/safe-state + BACnet object table (C++17) |
-| `mkddc-iobus` | `services/iobus/` | IOP/MCU scan + Modbus RTU/TCP + BACnet/IP datalink (C/C++17) |
+| `mkddc-iobus` | `services/iobus/` | IOP/MCU scan + Modbus RTU master + BACnet/IP datalink (C/C++17) |
 | `mkddc-web` | `web/` | REST + config form/JSON + import/export `graph.json` + validator (Go) |
 
 ```bash
@@ -101,7 +101,7 @@ cat /dev/shm/mkddc_io_shm | xxd | head # dữ liệu I/O (shared memory)
 > Các tên này superseded ([CANONICAL_DECISIONS](../CANONICAL_DECISIONS.md)). HMI/agent/OTA → Rev B+.
 
 ### 2.4 "Hello world" của software
-Mục tiêu đầu tiên: **đọc được giá trị I/O từ shared memory** mà `mkddc-iobus` ghi ra, in lên màn hình. Hiểu được `mkddc_io_shm` (hợp đồng IOP ở [SW_ARCH §2](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md)) là nắm được mạch máu dữ liệu. → xem [SW_IODRIVER_DESIGN](software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md) (gộp vào `mkddc-core`).
+Mục tiêu đầu tiên: **đọc được giá trị I/O từ shared memory** mà `mkddc-iobus` ghi ra, in lên màn hình. Hiểu được `mkddc_io_shm` (hợp đồng IOP ở [SW_ARCH §2](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md)) là nắm được mạch máu dữ liệu. → xem [06_IOBUS](../03_implementation/06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) và [07_CORE](../03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md).
 
 ### 2.5 Luật bất di bất dịch
 - Theo **[SW Coding Standard](software/SW_CODING_STANDARD_MK-DDC-24_VI.md)**: validate mọi input mạng, TLS 1.3, không hardcode secret, audit log.
@@ -115,8 +115,8 @@ Mục tiêu đầu tiên: **đọc được giá trị I/O từ shared memory** 
 |-----------|--------------|------------|
 | Thêm/sửa lệnh giao tiếp MCU↔SOM | [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) | iop_comm (FW) + `mkddc-iobus` (SW) |
 | Đổi chân cảm biến/relay | [D-1 Pinout](firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) | CubeMX + gpio_drv |
-| Thêm thiết bị phụ Modbus RTU (mở rộng I/O) | [D-2 RTU Master/Expansion](interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | `mkddc-iobus` |
-| Thêm object BACnet | [D-3 PICS](interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) | `mkddc-iobus` + object table trong `mkddc-core` |
+| Thêm thiết bị phụ Modbus RTU (mở rộng I/O) | [D-2 RTU Master/Expansion](interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) + [Implementation 25](../03_implementation/25_MODBUS_IMPLEMENTATION_PLAN.md) | `mkddc-iobus` |
+| Thêm object BACnet | [D-3 PICS](interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) + [Implementation 24](../03_implementation/24_BACNET_IMPLEMENTATION_PLAN.md) | `mkddc-iobus` + object table trong `mkddc-core` |
 | Thêm API REST | [D-4 OpenAPI](interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) | `mkddc-web` (Go) |
 | Thêm tham số cấu hình | [D-5 Config Schema](interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) | `mkddc-web` (form/JSON) + service đọc config |
 | Logic điều khiển (PID, component graph) | [D-6 Runtime Execution Model](software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) · [Component Library](software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) | `mkddc-core` |

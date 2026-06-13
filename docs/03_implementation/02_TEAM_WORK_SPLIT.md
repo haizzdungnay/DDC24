@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Chia việc 3 nhóm dev
 
 > **Document ID:** IMPL-WORKSPLIT-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-10
+> **Phiên bản:** 1.1 | 2026-06-13 (làm rõ owner BACnet/Modbus S7 #5/#6 thuộc Dev2; Web giữ REST/UI) · 1.0 | 2026-06-10
 > **Đọc trước:** [00_README](00_IMPLEMENTATION_README.md), [01_OVERVIEW](01_SYSTEM_IMPLEMENTATION_OVERVIEW.md)
 
 ---
@@ -100,6 +100,11 @@ mkddc-core:
 10. Priority resolver (6 mức, BMS không ghi thẳng IO).
 11. Safe-state resolver (IO fault / iobus stale → fallback).
 12. Quality propagation (fault → quality bad).
+
+S7 production:
+13. Stateful graph + persist counter (COR-009/010, doc 22).
+14. BACnet/IP object/callback/priority bridge (BAC-001..011, doc 24).
+15. Modbus RTU master + ext cache (MOD-001..011, doc 25).
 ```
 
 ### 2.2 Module / thư mục dự kiến
@@ -126,7 +131,10 @@ shared/           — iop_protocol.h, mkddc_shm.h (rename từ kinexus_shm.h)
 ### 2.4 Tài liệu phải đọc trước
 [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) · [07_CORE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) ·
 [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) · [SW_ARCH_SPEC](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) ·
-[SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md)
+[SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) ·
+[22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) ·
+[24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) ·
+[25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md)
 
 ---
 
@@ -183,7 +191,8 @@ web/storage/    — SQLite: config.sqlite, eventlog.sqlite, audit
 | FW ↔ iobus | `shared/iop_protocol.h` | Dev 1 + Dev 2 cùng đồng ý | bump `IOP_VER_*`, cross-test CRC/parse |
 | iobus ↔ core | `shared/mkddc_shm.h` (`kx_io_shm_t`) | Dev 2 | bump magic nếu đổi layout |
 | core ↔ web | IPC command/setpoint + REST read | Dev 2 (server) + Dev 3 (client) | đổi cùng nhau, version REST |
-| web ↔ BMS | BACnet/IP, REST OpenAPI | Dev 3 | theo PICS/OpenAPI |
+| BMS ↔ iobus/core | BACnet/IP + `mkddc_plc_shm` + core IPC | Dev 2 | theo PICS + [24_BACNET](24_BACNET_IMPLEMENTATION_PLAN.md) |
+| Web/API ↔ client | REST OpenAPI + React UI | Dev 3 | theo OpenAPI + [08_WEB](08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) |
 
 ---
 
@@ -203,4 +212,4 @@ SONG SONG ngay từ Phase 0:
 ```
 
 ---
-**Rev** 1.0 | 2026-06-10
+**Rev** 1.1 | 2026-06-13 (owner BACnet/Modbus về Dev2, thêm docs 22/24/25) · 1.0 | 2026-06-10

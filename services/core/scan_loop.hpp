@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <vector>
 
 #include "bacnet_objtable.hpp"
 #include "core_metrics.hpp"
@@ -54,12 +55,16 @@ public:
     void set_reload_hook(std::atomic<bool>* flag, void (*fn)(void*), void* ctx);
 
 private:
+    struct PendingResp { WebCommand cmd; bool ok; };
+
     ScanDeps d_;
     IoSnapshot last_io_;   /* giữ snapshot cũ khi seqlock fail */
     uint64_t budget_ns_ = 1000000000ull;   /* = period; overrun khi exec vượt */
     std::atomic<bool>* reload_flag_ = nullptr;
     void (*reload_fn_)(void*) = nullptr;
     void* reload_ctx_ = nullptr;
+    /* pre-allocated: tránh heap alloc mỗi scan trong SCHED_FIFO (CR-007) */
+    std::vector<PendingResp> pending_;
 };
 
 } // namespace core

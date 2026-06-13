@@ -59,6 +59,7 @@ void PointTable::update_inputs(const IoSnapshot& io)
         bi_[i].quality = KX_Q_GOOD;   /* point_quality ghi đè theo iop_status/stale */
         bi_[i].ts_ns   = t;
         bi_[i].source  = PointSource::IO;
+        di_counters_[i] = io.di_counter[i];
     }
     for (int i = 0; i < KX_N_AO; i++) {
         ao_[i].value   = io.ao_setpoint[i];   /* feedback qua setpoint đã ghi (07 §3) */

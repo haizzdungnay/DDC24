@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Bộ tài liệu triển khai lập trình thật
 
 > **Document ID:** IMPL-README-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-10
+> **Phiên bản:** 1.2 | 2026-06-13 (thêm docs 22-25 cho S7 #4/#5/#6) · 1.1 | 2026-06-11
 > **Trạng thái:** Active — tài liệu khởi động giai đoạn implement
 > **Đối tượng đọc:** Dev FW_MCU · Dev SOM (iobus/core) · Dev Web/BE · Tester · PM/Lead
 
@@ -170,6 +170,10 @@ Tester & PM: [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md), [11_INTEGRATION_TEST_PLA
 | 19 | [DOCS_FIX_CHECKLIST](19_DOCS_FIX_CHECKLIST.md) | Lead/PM | tracker sửa docs theo audit (meta) |
 | 20 | [VIRTUAL_COM_DECISION](20_VIRTUAL_COM_DECISION.md) | Dev 2 + Tester | khi chưa có board, cần bridge serial ảo đúng chuẩn |
 | 21 | [SOM_SRC_IMPLEMENTATION_PLAN](21_SOM_SRC_IMPLEMENTATION_PLAN.md) | Dev 2 + Lead | khi cần plan cực chi tiết để dựng source SOM từ cây trống |
+| 22 | [GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | Dev 2 + Lead | S7 #4: stateful graph + persist counter |
+| 23 | [CODE_REVIEW_S7_HARDENING_CLUSTER123](23_CODE_REVIEW_S7_HARDENING_CLUSTER123.md) | Lead/Reviewer | review cụm S7 #1/#2/#3 đã code |
+| 24 | [BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) | Dev 2 + Protocol Lead | S7 #5: BACnet/IP full path + BTL pretest |
+| 25 | [MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md) | Dev 2 + Protocol Lead | S7 #6: Modbus RTU master + ext cache |
 
 ---
 
@@ -190,7 +194,11 @@ Tester & PM: [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md), [11_INTEGRATION_TEST_PLA
 | Chân MCU | [FW_PINOUT_MASTER](../02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) |
 | SHM/IPC SOM (diễn giải, ownership chi tiết) | [06_IOBUS §5](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) + [SW_ARCH_SPEC §2](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) |
 | Graph/Config/REST | [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) · [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) · [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) |
+| Stateful graph Rev A.1 | [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) + [SW_RUNTIME_EXECUTION_MODEL §6](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) |
+| BACnet/IP implementation | [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) + [BACNET_PICS_EPICS](../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) |
+| Modbus RTU master implementation | [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md) + [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) |
 
 ---
-**Rev** 1.1 | 2026-06-11 (Contract Freeze: rule header-thắng, thêm docs 15/16/17, mkddc_shm.h) ·
+**Rev** 1.2 | 2026-06-13 (thêm docs 22/24/25 vào read order + source chuẩn) ·
+1.1 | 2026-06-11 (Contract Freeze: rule header-thắng, thêm docs 15/16/17, mkddc_shm.h) ·
 Liên quan: [GETTING_STARTED_DEV](../02_design/GETTING_STARTED_DEV.md)

@@ -18,6 +18,7 @@
 #include "config_reload.hpp"
 #include "safe_state_config.hpp"
 #include "scan_loop.hpp"
+#include "state_snapshot.hpp"
 
 namespace {
 
@@ -137,7 +138,10 @@ int main(int argc, char** argv)
     WebIpc web;
     web.open(sock_path);
     GraphRuntime graph;
+    StateSnapshot snap;
     graph.load(graph_path);
+    /* COR-010: restore persist state ngay sau load boot */
+    graph.restore_persist_state(snap.load());
 
     /* Đồng bộ scan period — 1 nguồn sự thật:
      * - có graph + KHÔNG --scan-ms → chu kỳ scan core LẤY TỪ graph.json (ý đồ engineer)
@@ -189,18 +193,29 @@ int main(int argc, char** argv)
         ReloadSpec spec;
         PriorityResolver* resolver;
         GraphRuntime* graph;
+        StateSnapshot* snap;
     } rctx{{graph_path, safe_cfg_path, io_cfg_path, safe_cfg_from_cli, io_cfg_from_cli},
-           &resolver, &graph};
+           &resolver, &graph, &snap};
     auto on_reload = [](void* p) {
         ReloadCtx* c = static_cast<ReloadCtx*>(p);
         std::fprintf(stderr, "INFO  core.reload SIGHUP (ranh giới scan)\n");
+        /* GAP-07: lưu persist state trước swap, restore sau */
+        if (c->graph->dirty() || c->graph->loaded())
+            c->snap->save(c->graph->get_persist_state());
         if (!reload_configs(c->spec, c->resolver, c->graph))
-            std::fprintf(stderr, "WARN  core.reload có phần fail — phần đó giữ config cũ\n");
+            std::fprintf(stderr, "WARN  core.reload co phan fail — phan do giu config cu\n");
+        c->graph->restore_persist_state(c->snap->load());
+        c->graph->clear_dirty();
     };
     loop.set_reload_hook(&g_reload, on_reload, &rctx);
 
-    /* sd_notify READY=1 sau scan đầu + WATCHDOG=1 mỗi scan (WatchdogSec=3) */
-    struct NotifyCtx { bool ready_sent = false; } nctx;
+    /* sd_notify READY=1 sau scan đầu + WATCHDOG=1 mỗi scan; snapshot 60s dirty (COR-010) */
+    struct NotifyCtx {
+        bool ready_sent = false;
+        int snap_ticks  = 0;
+        GraphRuntime*  graph;
+        StateSnapshot* snap;
+    } nctx{false, 0, &graph, &snap};
     auto after_scan = [](void* p) {
         NotifyCtx* c = static_cast<NotifyCtx*>(p);
         if (!c->ready_sent) {
@@ -209,9 +224,21 @@ int main(int argc, char** argv)
             std::fprintf(stderr, "INFO  core.ready first scan done\n");
         }
         notify_systemd("WATCHDOG=1");
+        /* GAP-08: ghi snapshot mỗi 60 scan NẾU dirty */
+        if (++c->snap_ticks >= 60) {
+            c->snap_ticks = 0;
+            if (c->graph->dirty()) {
+                c->snap->save(c->graph->get_persist_state());
+                c->graph->clear_dirty();
+            }
+        }
     };
 
     loop.run(g_shutdown, period_ns, after_scan, &nctx);
+
+    /* COR-010: ghi snapshot khi shutdown sạch (SIGTERM) */
+    if (graph.loaded())
+        snap.save(graph.get_persist_state());
 
     std::fprintf(stderr, "INFO  core.shutdown scans=%u overrun=%u\n",
                  metrics.scan_count(), metrics.scan_overrun());

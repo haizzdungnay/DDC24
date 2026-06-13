@@ -23,6 +23,8 @@ getent passwd mkddc >/dev/null || \
 
 # /data/config: web ghi, service đọc (CONFIG_SCHEMA D-5)
 install -d -m 0775 -o mkddc -g mkddc /data/config
+# /data/mkddc: persist state.snap cho RuntimeCounter/PulseCounter (COR-010, GAP-08)
+install -d -m 0755 -o mkddc -g mkddc /data/mkddc
 
 install -m 0755 "$BUILD/iobus/mkddc-iobus" /usr/sbin/mkddc-iobus
 install -m 0755 "$BUILD/core/mkddc-core"   /usr/sbin/mkddc-core

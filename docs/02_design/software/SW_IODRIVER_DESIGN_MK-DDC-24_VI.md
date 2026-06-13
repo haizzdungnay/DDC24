@@ -18,7 +18,7 @@
 ## 1. Nhiệm vụ
 - Mở `/dev/ttySx` (UART2 → MCU), chạy **IOP Master**: poll `GET_IO` 100Hz, gửi `SET_AO/SET_DO`.
 - **Scale** raw → engineering (CVD, Steinhart-Hart…).
-- Ghi `/dev/shm/kinexus_io_shm` (seqlock) cho PLC/HMI/agent đọc.
+- Ghi `/dev/shm/mkddc_io_shm` (seqlock) cho core/web/HMI đọc theo `shared/mkddc_shm.h`.
 - Chạy **SCHED_FIFO 70** (SW-IOP-010).
 
 ## 2. Vòng lặp chính (100Hz)

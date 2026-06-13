@@ -102,7 +102,7 @@ Mỗi loại thiết bị phụ được mô tả bằng một **profile** (file
 ## 6. Tích hợp vào hệ thống
 - Điểm đọc từ slave → ghi vào **shared memory vùng mở rộng** → PLC, BACnet, MQTT, HMI dùng như I/O ảo.
 - Map sang BACnet: điểm mở rộng có thể expose thành object AV/BV/AI bổ sung (cấu hình).
-- Ghi: PLC/BMS đặt giá trị → `kinexus-fieldbus` ghi xuống slave (FC06/16) ở vòng poll kế.
+- Ghi: core/BACnet/Web đặt giá trị qua command path → fieldbus module trong `mkddc-iobus` ghi xuống slave (FC06/16) ở vòng poll kế.
 
 ## 7. Xử lý lỗi
 | Tình huống | Hành động |

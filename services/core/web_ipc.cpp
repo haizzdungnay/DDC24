@@ -80,6 +80,19 @@ static std::string sanitize_user(const std::string& s)
     return out.empty() ? "-" : out;
 }
 
+/* point name vào audit log: chỉ giữ [A-Za-z0-9], max 8 — chống log injection */
+static std::string sanitize_point_name(const std::string& s)
+{
+    std::string out;
+    out.reserve(8);
+    for (const char c : s) {
+        if (std::isalnum(static_cast<unsigned char>(c)))
+            out += c;
+        if (out.size() >= 8) break;
+    }
+    return out.empty() ? "-" : out;
+}
+
 WebIpc::~WebIpc()
 {
     close();
@@ -173,7 +186,7 @@ void WebIpc::respond_rejected(const WebCommand& cmd, const char* error)
     std::snprintf(buf, sizeof(buf), "{\"id\":%llu,\"result\":\"rejected\",\"error\":\"%s\"}",
                   static_cast<unsigned long long>(cmd.id), error);
     respond(cmd.client_fd, buf);
-    audit(cmd, "rejected", error, cmd.value);
+    audit(cmd, "rejected", "-", cmd.value);
 }
 
 void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand>* out)
@@ -189,7 +202,7 @@ void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand
     jget_string(line, "user", &user_raw);
     cmd.user = sanitize_user(user_raw);
     if (jget_string(line, "point", &point))
-        cmd.point_name = point;
+        cmd.point_name = sanitize_point_name(point);
     const bool has_op = jget_string(line, "op", &op);
     cmd.is_write = has_op && op == "write";
 

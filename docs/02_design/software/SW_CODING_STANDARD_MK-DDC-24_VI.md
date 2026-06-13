@@ -2,7 +2,7 @@
 ## SOM / Debian 12 userspace
 
 > **Document ID:** STD-SW-CODE-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-05-30
+> **Phiên bản:** 1.1 | 2026-06-13 (reconcile module names theo ADR-005 mkddc-*) · 1.0 | 2026-05-30
 > **Áp dụng:** mọi service trên SOM (C/C++/Python/TypeScript). Rule "MUST" = block merge.
 > 📘 [README](../../01_specs/README.md) · Cơ sở: `SW_ARCH §7`, IEC 62443-4-1
 
@@ -11,13 +11,11 @@
 ## 1. Ngôn ngữ theo module (xem SW-REQ §1)
 | Module | Ngôn ngữ | Lý do |
 |--------|----------|-------|
-| `kinexus-io-driver` | C11 (hoặc Rust) | latency, SCHED_FIFO |
-| `kinexus-plc` | C++17 | engine IEC 61131-3 |
-| `kinexus-bacnet` | C (bacnet-stack) | proven BTL |
-| `kinexus-agent` (MQTT/REST/Modbus) | Python 3.11 | FastAPI, paho, pymodbus/libmodbus |
-| `kinexus-webide` (frontend) | TypeScript + Svelte | |
-| `kinexus-hmi` | C (LVGL v9) | |
-| `kinexus-ota`, security | Python/shell | |
+| `mkddc-iobus` | C/C++17 | IOP hot path, libmodbus, bacnet-stack |
+| `mkddc-core` | C++17 | component graph, priority/safe-state, SCHED_FIFO |
+| `mkddc-web` backend | Go | REST/config/validator/audit (ADR-007) |
+| `mkddc-web` frontend | TypeScript + React | Rev A form/JSON UI |
+| Agent/MQTT/HMI/OTA | Python/C/shell | Deferred Rev B+; legacy `kinexus-*` docs are reference-only |
 
 ## 2. Chuẩn từng ngôn ngữ
 ### 2.1 C11 / C++17 (driver, PLC, HMI)

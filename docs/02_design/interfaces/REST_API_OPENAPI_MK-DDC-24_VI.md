@@ -69,7 +69,7 @@ async def get_point(point_id: str, user=Depends(auth_bearer)):
     return p.to_json()
 ```
 - FastAPI tự sinh `/docs` (Swagger) từ code; **giữ đồng bộ với `openapi.yaml`** (CI so khớp).
-- Đọc/ghi point đi qua `kinexus_plc_shm` (không truy cập trực tiếp BACnet/MCU).
+- Đọc/ghi point đi qua `mkddc-core`/`mkddc_plc_shm` contract (không truy cập trực tiếp BACnet/MCU).
 
 ## 5. Bảo mật bắt buộc
 - Validate `value` theo range/quality trước khi ghi (SW-API-005).
@@ -80,4 +80,4 @@ async def get_point(point_id: str, user=Depends(auth_bearer)):
 `SW-API-001..010`, `API-001..009`, `FR-023`, `T-SW-070..079`.
 
 ---
-**Rev** 1.0 | 2026-05-30
+**Rev** 1.1 | 2026-06-13 (mkddc naming + core-mediated point access) · 1.0 | 2026-05-30

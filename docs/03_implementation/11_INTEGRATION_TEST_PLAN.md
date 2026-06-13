@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Test plan thật trên board
 
 > **Document ID:** IMPL-TESTPLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-10
+> **Phiên bản:** 1.1 | 2026-06-13 (thêm group 9 BACnet, group 10 Modbus) · 1.0 | 2026-06-10
 > **Owner:** Tester (+ dev hỗ trợ)
 > **Nguồn-chuẩn:** [TEST_SPEC](../01_specs/TEST_SPEC_MK-DDC-24_VI.md) · [SWFW_INTERFACE_SPEC §10](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md)
 
@@ -298,6 +298,82 @@ Log: journalctl toàn kỳ + metrics snapshot mỗi giờ.
 
 ---
 
+## Test group 9 — BACnet/IP
+
+> Chi tiết task: [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md).
+
+```
+TC-9-01  Who-Is/I-Am
+Kết quả: I-Am phản hồi <=100ms, Device Instance đúng device.conf/DIP fallback.
+
+TC-9-02  ReadProperty AI/BI/AO/BO
+Kết quả: Present_Value, Units, Status_Flags, Reliability khớp core snapshot.
+
+TC-9-03  ReadPropertyMultiple
+Kết quả: nhiều object trả đúng, không timeout, Max APDU không vượt cấu hình.
+
+TC-9-04  WriteProperty AO/BO priority
+Kết quả: BACnet write -> Priority_Array[16] -> core mức 3 -> output resolved.
+
+TC-9-05  Priority release
+Kết quả: write NULL -> priority thấp hơn/default active đúng; release hết -> core release mức 3.
+
+TC-9-06  Manual/safety override
+Kết quả: manual/safety cao hơn đè BACnet; audit/core response ghi overridden.
+
+TC-9-07  Reliability map
+Kết quả: UI open/short/stale/IOP fault -> Reliability + Status_Flags đúng.
+
+TC-9-08  COV
+Kết quả: đổi value vượt increment -> notify; dưới increment không spam.
+
+TC-9-09  Alarm event
+Kết quả: alarm bus event -> Notification Class event; ack path hoạt động.
+
+TC-9-10  BTL pretest
+Kết quả: B-ASC smoke pass; log lưu evidence.
+```
+
+---
+
+## Test group 10 — Modbus RTU Master
+
+> Chi tiết task: [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md).
+
+```
+TC-10-01  Profile parser
+Kết quả: valid profile load; invalid fc/type/count reject rõ lỗi.
+
+TC-10-02  Register codec
+Kết quả: endian/scale vectors đúng cho bool/int16/uint16/int32/uint32/float32.
+
+TC-10-03  RTU read FC01/02/03/04
+Kết quả: fake slave data -> ext cache value/quality/timestamp đúng.
+
+TC-10-04  RTU write FC05/06/15/16
+Kết quả: pending write -> slave value đổi + result OK.
+
+TC-10-05  Timeout/retry/offline
+Kết quả: retry 2, offline, quality BAD, alarm E302.
+
+TC-10-06  Bus error rate
+Kết quả: lỗi >10% -> E303, service không crash, IOP 100Hz không bị kéo trễ.
+
+TC-10-07  16 slave poll
+Kết quả: poll đúng lịch, không starve slave chậm.
+
+TC-10-08  Core graph đọc ext
+Kết quả: ext GOOD vào graph; ext BAD -> graph fallback/safe.
+
+TC-10-09  Config reload
+Kết quả: SIGHUP không đổi baud reload hot; đổi baud yêu cầu restart rõ log.
+
+TC-10-10  Board RS-485 smoke
+Kết quả: thiết bị thật đọc/ghi ổn định 1h.
+```
+
+---
+
 ## Ma trận test ↔ phase
 
 | Group | Phase đóng | Gate |
@@ -309,6 +385,8 @@ Log: journalctl toàn kỳ + metrics snapshot mỗi giờ.
 | 4 | P4 | P4→P5 |
 | 5 | P5 | P5→P6 |
 | 6,7,8 | P6 | Release |
+| 9 | P4/P6 | BACnet production gate / BTL pretest |
+| 10 | P3/P6 | Modbus production gate / fieldbus smoke |
 
 ---
-**Rev** 1.0 | 2026-06-10
+**Rev** 1.1 | 2026-06-13 (thêm group 9/10 cho BACnet/Modbus) · 1.0 | 2026-06-10

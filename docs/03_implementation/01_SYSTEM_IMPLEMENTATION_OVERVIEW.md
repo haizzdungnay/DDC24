@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Hệ thống ở mức implement
 
 > **Document ID:** IMPL-OVERVIEW-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-10
+> **Phiên bản:** 1.1 | 2026-06-13 (chuẩn hóa BACnet/Modbus theo docs 24/25) · 1.0 | 2026-06-10
 > **Đọc trước:** [00_README](00_IMPLEMENTATION_README.md)
 
 ---
@@ -11,7 +11,7 @@
 
 ```
               [User / BMS / Commissioning engineer]
-                          │  HTTPS / BACnet/IP / Modbus
+                          │  HTTPS / BACnet/IP
                           ▼
               ┌────────────────────────┐
               │       mkddc-web         │  Go + React
@@ -31,7 +31,7 @@
               ┌────────────────────────┐
               │      mkddc-iobus        │  C/C++17
               │  MASTER UART/IOP ·      │  (services/iobus/)
-              │  Modbus RTU/TCP ·       │
+              │  Modbus RTU master ·    │
               │  BACnet/IP datalink     │
               └───────────┬────────────┘
                           │  UART2 /dev/ttyS2 · 921600 8N1 · IOP frame + CRC16
@@ -75,9 +75,9 @@
 | **Nhiệm vụ** | **Master UART/IOP**: poll `GET_IO` 100Hz, parse `IO_RESP`, gửi `SET_DO`/`SET_AO`, handshake, báo lỗi timeout/CRC/SEQ |
 | **Scale** | raw ADC/DAC ↔ engineering value (theo SW_ARCH §4) thực hiện ở đây, không ở core |
 | **Ghi** | snapshot IO vào `kx_io_shm` (seqlock); đọc `ao_setpoint[]`/`do_cmd[]` từ shm để gửi MCU |
-| **Cũng làm** | Modbus RTU x2 + Modbus TCP client (poll async → ext cache); BACnet/IP network datalink |
+| **Cũng làm** | Modbus RTU master (poll async → ext cache; doc 25); BACnet/IP network datalink/callbacks (doc 24) |
 | **KHÔNG làm** | Không quyết định output theo logic (đó là việc core); chỉ thực thi lệnh đã được core quyết |
-| Trace | [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md), [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) |
+| Trace | [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md), [24_BACNET](24_BACNET_IMPLEMENTATION_PLAN.md), [25_MODBUS](25_MODBUS_IMPLEMENTATION_PLAN.md), [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) |
 
 ### 2.3 mkddc-core (SOM, SCHED_FIFO)
 
@@ -151,4 +151,4 @@ Lý do (ADR-005): vòng điều khiển (core) **không** băng qua ranh giới 
 mạng chậm (Modbus/BACnet) bị cô lập trong iobus để không kéo trễ vòng core.
 
 ---
-**Rev** 1.0 | 2026-06-10
+**Rev** 1.1 | 2026-06-13 (BACnet/Modbus owner/path chuẩn hóa) · 1.0 | 2026-06-10

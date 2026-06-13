@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Master UART/IOP + Modbus/BACnet datalink
 
 > **Document ID:** IMPL-IOBUS-MK-DDC-24-VI
-> **Phiên bản:** 1.3 | 2026-06-12 (§10: unit file thật packaging/systemd/mkddc-iobus.service — SKEL-005; ghi chú iobus chưa handle SIGHUP) · 1.2 | 2026-06-11 (Contract Freeze: SHM path/ownership chốt, scaling table, startup table, build/systemd đầy đủ)
+> **Phiên bản:** 1.4 | 2026-06-13 (liên kết S7 #5/#6: BACnet plan 24, Modbus plan 25) · 1.3 | 2026-06-12 (§10: unit file thật packaging/systemd/mkddc-iobus.service — SKEL-005; ghi chú iobus chưa handle SIGHUP) · 1.2 | 2026-06-11 (Contract Freeze: SHM path/ownership chốt, scaling table, startup table, build/systemd đầy đủ)
 > **Owner:** Dev 2 (SOM)
 > **Nguồn-chuẩn CUỐI CÙNG:** [`shared/iop_protocol.h`](../../shared/iop_protocol.h) (protocol) +
 > [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) (SHM layout/path/ownership) — docs lệch header
@@ -27,7 +27,8 @@ mkddc-iobus CHỈ làm:
 - scale raw IO → engineering value
 - ghi IO state cho core (kx_io_shm, seqlock writer)
 - đọc output command từ core (ao_setpoint/do_cmd) và gửi SET_DO/SET_AO xuống MCU
-- (Phase 3+) Modbus RTU x2/TCP poll → ext cache; BACnet/IP datalink
+- (S7 #6) Modbus RTU master poll → ext cache; xem [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md)
+- (S7 #5) BACnet/IP datalink/object callbacks; xem [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md)
 - expose metrics + publish alarm
 
 mkddc-iobus KHÔNG làm:
@@ -69,6 +70,20 @@ services/iobus/
 ├── platform/
 │   ├── systemd_notify.hpp/.cpp — sd_notify READY/WATCHDOG
 │   └── realtime.hpp/.cpp       — SCHED_FIFO, mlockall, CPU affinity
+├── fieldbus/                   — S7 #6: Modbus RTU master, xem doc 25
+│   ├── modbus_master.hpp/.cpp
+│   ├── fieldbus_config.hpp/.cpp
+│   ├── device_profile.hpp/.cpp
+│   ├── poll_scheduler.hpp/.cpp
+│   ├── register_codec.hpp/.cpp
+│   └── ext_cache.hpp/.cpp
+├── bacnet/                     — S7 #5: BACnet/IP server/callbacks, xem doc 24
+│   ├── bacnet_server.hpp/.cpp
+│   ├── bacnet_config.hpp/.cpp
+│   ├── bacnet_objects.hpp/.cpp
+│   ├── bacnet_priority.hpp/.cpp
+│   ├── bacnet_cov.hpp/.cpp
+│   └── bacnet_reliability.hpp/.cpp
 └── tests/
     ├── test_iop_crc.cpp
     ├── test_iop_frame.cpp
@@ -78,7 +93,7 @@ services/iobus/
     └── test_iop_client_fake_mcu.cpp   — integration với tools/fake_mcu
 ```
 > Rev A Phase 3 bắt buộc: config + iop/* + io/* + bridge/* + diagnostics/* + platform/* + tests/*.
-> Modbus/BACnet (modbus_master.cpp, bacnet_datalink.cpp) thêm sau khi IOP ổn định (Phase 3 cuối / Rev A.1).
+> S7 #5/#6 mở rộng thêm `bacnet/*` và `fieldbus/*` theo docs 24/25; vẫn giữ rule iobus không quyết output.
 
 ---
 
@@ -703,5 +718,5 @@ core ghi ao_setpoint/do_cmd → core_bridge.read_outputs → output_command (CHA
 | IOP-SW-008 | realtime | chrt prio check |
 
 ---
-**Rev** 1.3 | 2026-06-12 (packaging/systemd unit thật) · 1.2 | 2026-06-11 · Protocol: [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) ·
+**Rev** 1.4 | 2026-06-13 (thêm link/cây S7 #5/#6 BACnet/Modbus) · 1.3 | 2026-06-12 (packaging/systemd unit thật) · 1.2 | 2026-06-11 · Protocol: [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) ·
 Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) · DoD: [12_DEFINITION_OF_DONE §3](12_DEFINITION_OF_DONE.md)
