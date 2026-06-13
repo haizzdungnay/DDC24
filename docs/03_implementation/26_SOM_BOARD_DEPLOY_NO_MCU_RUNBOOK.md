@@ -10,6 +10,7 @@
 
 ---
 
+
 ## 1. Kết luận review nhanh
 
 | Hạng mục | Nhận xét | Quyết định team |

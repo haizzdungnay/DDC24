@@ -3,7 +3,9 @@
 
 > **Document ID:** IMPL-WEEK1-MK-DDC-24-VI · **Phiên bản:** 1.0 | 2026-06-11
 > **Đối tượng:** Dev 2 (SOM). Tiền đề: MCU đã qua Phase 1 ([13_BRINGUP §1–7](13_BRINGUP_GUIDE.md))
-> hoặc dùng fake MCU cho mốc 1–2. Mỗi mốc: command → log mong đợi → quan sát gì → fail debug ở đâu.
+> hoặc dùng fake MCU cho mốc 1–2. Nếu chưa có MCU nhưng đã có SOM board, làm theo
+> [26_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK](26_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) trước.
+> Mỗi mốc: command → log mong đợi → quan sát gì → fail debug ở đâu.
 > Quy tắc: **mốc nào fail thì DỪNG**, không nhảy mốc sau.
 
 ---
@@ -112,5 +114,5 @@ printf '{"point":"DO1","value":1,"priority_source":"operator","user":"dev"}\n' |
 [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md).
 
 ---
-**Rev** 1.0 | 2026-06-11 · Board-level: [13_BRINGUP_GUIDE](13_BRINGUP_GUIDE.md) ·
+**Rev** 1.1 | 2026-06-13 (link no-MCU SOM deploy doc 26) · 1.0 | 2026-06-11 · Board-level: [13_BRINGUP_GUIDE](13_BRINGUP_GUIDE.md) ·
 Không board: [06 §11.1](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) · Freeze: [15](15_CONTRACT_FREEZE.md)
