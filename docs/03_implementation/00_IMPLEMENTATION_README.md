@@ -174,6 +174,7 @@ Tester & PM: [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md), [11_INTEGRATION_TEST_PLA
 | 23 | [CODE_REVIEW_S7_HARDENING_CLUSTER123](23_CODE_REVIEW_S7_HARDENING_CLUSTER123.md) | Lead/Reviewer | review cụm S7 #1/#2/#3 đã code |
 | 24 | [BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) | Dev 2 + Protocol Lead | S7 #5: BACnet/IP full path + BTL pretest |
 | 25 | [MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md) | Dev 2 + Protocol Lead | S7 #6: Modbus RTU master + ext cache |
+| 26 | [SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK](26_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) | Dev 2 + DevOps + QA | build/deploy lên SOM khi chưa có MCU |
 
 ---
 
@@ -199,6 +200,7 @@ Tester & PM: [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md), [11_INTEGRATION_TEST_PLA
 | Modbus RTU master implementation | [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md) + [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) |
 
 ---
-**Rev** 1.2 | 2026-06-13 (thêm docs 22/24/25 vào read order + source chuẩn) ·
+**Rev** 1.3 | 2026-06-13 (thêm doc 26 SOM no-MCU deploy runbook) ·
+1.2 | 2026-06-13 (thêm docs 22/24/25 vào read order + source chuẩn) ·
 1.1 | 2026-06-11 (Contract Freeze: rule header-thắng, thêm docs 15/16/17, mkddc_shm.h) ·
 Liên quan: [GETTING_STARTED_DEV](../02_design/GETTING_STARTED_DEV.md)
