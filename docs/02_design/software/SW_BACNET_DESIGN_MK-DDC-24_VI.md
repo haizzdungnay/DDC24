@@ -1,13 +1,13 @@
-# Service Design — `kinexus-bacnet` (SW)
+# Service Design — BACnet module in `mkddc-iobus` (SW)
 ## BACnet/IP stack — code-ready (MS/TP bỏ — ARCH-R010)
 
-> **Document ID:** DDD-SWSVC-BAC-MK-DDC-24-VI · **Rev** 1.0 | 2026-05-30
+> **Document ID:** DDD-SWSVC-BAC-MK-DDC-24-VI · **Rev** 1.1 | 2026-06-13 (mkddc-iobus module; implementation plan 24) · 1.0 | 2026-05-30
 > 📘 [README](../../01_specs/README.md) · **Trace:** `SW-BAC-001..008`, [D-3 PICS](../interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md)
 
 ---
 
 ## 1. Nhiệm vụ
-Phục vụ BMS qua BACnet: trả/ghi object, COV, alarm, time-sync. Dữ liệu lấy từ `kinexus_plc_shm`.
+Phục vụ BMS qua BACnet: trả/ghi object, COV, alarm, time-sync. Dữ liệu publish từ `mkddc-core` qua `mkddc_plc_shm`; WriteProperty đi vào core mức `PRIO_BACNET`, không ghi IO trực tiếp. Chi tiết task/code path xem [Implementation 24](../../03_implementation/24_BACNET_IMPLEMENTATION_PLAN.md).
 
 ## 2. Nền tảng: bacnet-stack 1.3.x
 - Dùng thư viện **bacnet-stack** (open source, ứng viên BTL) — **không tự viết stack** (SW_ARCH §7).
@@ -17,7 +17,7 @@ Phục vụ BMS qua BACnet: trả/ghi object, COV, alarm, time-sync. Dữ liệu
 ```c
 // đọc bacnet.conf (D-5): bip enabled/port/bbmd
 bip_init(udp_port=47808);            // BACnet/IP Annex J (Ethernet/WiFi)
-// MS/TP đã bỏ — RS-485 dùng cho Modbus RTU master (kinexus-fieldbus)
+// MS/TP đã bỏ — RS-485 dùng cho Modbus RTU master trong mkddc-iobus
 Device_Set_Object_Instance_Number(device_id);   // từ device.conf, fallback DIP
 // đăng ký object: AI8, AO4, AV32, BI8, BO4, BV16, MSV8, TrendLog8, Schedule8...
 ```
@@ -67,4 +67,4 @@ BACnet chỉ chạy BACnet/IP (Ethernet/WiFi). RS-485 dành 100% cho **Modbus RT
 `SW-BAC-001..008`, `BAC-001..011`, `FR-020/021`, `NFR-009`.
 
 ---
-**Rev** 1.0 | 2026-05-30
+**Rev** 1.1 | 2026-06-13 (active name mkddc-iobus/BACnet module; link implementation 24) · 1.0 | 2026-05-30

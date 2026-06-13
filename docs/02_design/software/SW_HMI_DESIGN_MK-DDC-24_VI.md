@@ -7,7 +7,7 @@
 ---
 
 ## 1. Nhiệm vụ
-Dashboard local trên TFT 2.4" (ILI9341, 240×320, SPI0), điều hướng bằng 6 nút, **không phụ thuộc mạng**. Dữ liệu lấy từ `kinexus_io_shm` (shared memory).
+Dashboard local trên TFT 2.4" (ILI9341, 240×320, SPI0), điều hướng bằng 6 nút, **không phụ thuộc mạng**. Dữ liệu lấy từ `mkddc_io_shm` (shared memory; Rev B+ nếu HMI bật lại).
 
 ## 2. Stack & init
 ```bash
@@ -19,7 +19,7 @@ ls /dev/fb0
 // LVGL v9 userspace render vào /dev/fb0
 lv_init();
 fbdev_init("/dev/fb0");           // lv_drivers fbdev
-// data feed: đọc kinexus_io_shm (seqlock) mỗi ≤1s
+// data feed: đọc mkddc_io_shm (seqlock) mỗi ≤1s
 ```
 
 ## 3. Màn hình (HMI-011)

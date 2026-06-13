@@ -2,14 +2,15 @@
 ## MK-DDC-24 — Kế hoạch triển khai cấu trúc source thật chi tiết cho Dev 2
 
 > **Document ID:** IMPL-SOM-SRC-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.3 | 2026-06-12 (S7 #4: audit thiết kế xong, tách plan riêng
-> [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) DRAFT chờ duyệt) ·
+> **Phiên bản:** 1.4 | 2026-06-13 (S7 #4 Active; thêm plan S7 #5 BACnet và S7 #6 Modbus) ·
+> 1.3 | 2026-06-12 (S7 #4: audit thiết kế xong, tách plan riêng
+> [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md), lúc đó còn Draft) ·
 > 1.2 | 2026-06-12 (thêm S7 Production Hardening — 6 việc còn lại sau S6;
 > #1 web_ipc overridden+audit, #2 SIGHUP reload, #3 packaging/systemd ĐÃ làm; cây §4 thêm
 > packaging/) · 1.1 | 2026-06-12 (SOM-COR-005: chốt microtask 1–4 ĐÃ làm theo
 > SAFETY SPEC 07 §5, thêm microtask 5 Rev A.1 cho trigger T6/T7) · 1.0 | 2026-06-11
 > **Trạng thái:** Active — S0–S6 ĐÃ thực thi xong 2026-06-11 (round-trip pass);
-> S7 #1/#2/#3 xong 2026-06-12; theo dõi S7 #4/#5/#6 còn lại
+> S7 #1/#2/#3 xong 2026-06-12; S7 #4/#5/#6 đã có task/code-ready docs 2026-06-13
 > **Đối tượng đọc:** Dev 2, Lead, Tester
 > **Phạm vi:** chỉ phía SOM: `services/iobus`, `services/core`, `tools/fake_mcu`, `tools/shm_dump_io`, `shared/`
 
@@ -726,14 +727,15 @@ Thứ tự ưu tiên chốt 2026-06-12 (cụm 1+2+3 mở khóa Dev 3 web + board
 | 1 | `web_ipc` overridden + audit log (07 §8 đủ contract) | COR-007 | nhỏ | ✅ ĐÃ làm 2026-06-12 |
 | 2 | SIGHUP reload config không restart (CONFIG_SCHEMA D-5) | COR-008 | nhỏ | ✅ ĐÃ làm 2026-06-12 |
 | 3 | `packaging/systemd/*.service` + install script | SKEL-005 | rất nhỏ | ✅ ĐÃ làm 2026-06-12 |
-| 4 | Graph component thiếu: 10 type còn lại (OnDelay/OffDelay, Interlock, ManualAuto, RuntimeCounter/PulseCounter, SafeState, AlarmHigh/Low/Delay) + persist state qua reboot | COR-009/010 đề xuất — [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | vừa | 🟡 DRAFT chờ Owner duyệt gap GAP-01..08 |
-| 5 | Modbus RTU master trong iobus (fieldbus.conf → ext cache) | (chưa tách task) | vừa-lớn | ⬜ sau #4 |
-| 6 | `bacnet_objtable` full (priority[16], relinquish_default, reliability) + BACnet/IP datalink — làm CÙNG NHAU sau khi chốt BACnet stack (license + BTL) | (chưa tách task) | lớn | ⬜ chờ quyết định stack (CTO/lead) |
+| 4 | Graph component thiếu: 10 type còn lại (OnDelay/OffDelay, Interlock, ManualAuto, RuntimeCounter/PulseCounter, SafeState, AlarmHigh/Low/Delay) + persist state qua reboot | COR-009/010 — [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | vừa | ✅ ĐÃ làm 2026-06-13 — 97/97 test pass |
+| 5 | BACnet/IP full: object registry, priority[16], relinquish_default, reliability, COV/alarm, BTL pretest | BAC-001..011 — [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) | lớn | ✅ PLAN ACTIVE 2026-06-13; chờ code/stack build |
+| 6 | Modbus RTU master trong iobus: fieldbus.conf, profile parser, poll scheduler, ext cache, write queue | MOD-001..011 — [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md) | vừa-lớn | ✅ PLAN ACTIVE 2026-06-13; chờ code |
 
 Ràng buộc giữ nguyên:
 - Modbus/BACnet nằm trong `iobus`, KHÔNG phá rule "core quyết output" —
   BACnet write đi vòng qua priority resolver của core (mức 3), không ghi thẳng IO.
-- Mapping 6 mức priority nội bộ ↔ 16 mức BACnet phải chốt spec TRƯỚC khi code #6.
+- Mapping 6 mức priority nội bộ ↔ 16 mức BACnet đã chốt trong [24 §4](24_BACNET_IMPLEMENTATION_PLAN.md):
+  BACnet priority array resolve riêng, winner đi vào core mức 3.
 
 ---
 
@@ -829,5 +831,4 @@ Không làm bước 4 trước khi 3 bước này xanh.
 
 ---
 
-**Rev** 1.3 | 2026-06-12 (S7 #4 → doc 22 DRAFT) · 1.2 | 2026-06-12 (S7 Production Hardening; #1/#2/#3 done) · 1.1 | 2026-06-12 · 1.0 | 2026-06-11
-
+**Rev** 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) · 1.4 | 2026-06-13 (S7 #4/#5/#6 docs Active) · 1.3 | 2026-06-12 (S7 #4 → doc 22 DRAFT) · 1.2 | 2026-06-12 · 1.1 | 2026-06-12 · 1.0 | 2026-06-11

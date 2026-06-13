@@ -1,9 +1,9 @@
 # 22 — Graph Stateful Components Plan (S7 #4)
-## MK-DDC-24 — Component có-state + persist qua reboot: audit thiết kế + quyết định cần chốt
+## MK-DDC-24 — Component có-state + persist qua reboot: quyết định triển khai Rev A.1
 
 > **Document ID:** IMPL-GRAPH-STATEFUL-MK-DDC-24-VI
-> **Phiên bản:** 0.1 | 2026-06-12 — **DRAFT, CHỜ OWNER DUYỆT** (chưa được code theo file này)
-> **Đối tượng đọc:** Owner (duyệt §3), Dev 2 (sau khi duyệt)
+> **Phiên bản:** 1.1 | 2026-06-13 — Active; đủ để code COR-009/COR-010 (code pending)
+> **Đối tượng đọc:** Owner, Dev 2, Tester
 > **Đọc cùng:** [SW_COMPONENT_LIBRARY](../02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) ·
 > [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) ·
 > [21 §S7](21_SOM_SRC_IMPLEMENTATION_PLAN.md) · [ADR-008](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md)
@@ -22,8 +22,7 @@
 | ADR-008 | Accepted | Lý do promote Interlock/AlarmDelay/RuntimeCounter/PulseCounter vào Rev A.0 |
 | `shared/mkddc_shm.h` | Frozen | `di_counter[8]` iobus đếm cạnh lên ở 10ms — **đã có sẵn**, PulseCounter không cần đổi contract |
 
-**Thiếu / mâu thuẫn (PHẢI chốt trước khi code) → §2.** Spec đề xuất chi tiết → §3.
-Microtask + effort → §5.
+**Thiếu / mâu thuẫn đã chốt ở §2.** Spec triển khai chi tiết → §3. Microtask chính thức → §5.
 
 > Lưu ý scope: thư viện Rev A = 28 type; engine hiện có 13. 10 type ở trên là toàn bộ
 > phần graph-executable còn lại (5 type Protocol `Modbus_*`/`BACnet_*` thuộc S7 #5/#6,
@@ -31,25 +30,25 @@ Microtask + effort → §5.
 
 ---
 
-## 2. Gap / mâu thuẫn cần Owner chốt
+## 2. Gap / mâu thuẫn đã chốt
 
-| ID | Vấn đề | Mâu thuẫn / lỗ hổng | Đề xuất (chốt ✅/❌ khi review) |
+| ID | Vấn đề | Mâu thuẫn / lỗ hổng | Quyết định Rev A.1 |
 |----|--------|---------------------|-------------------------------|
-| GAP-01 | **Persist scope** | COMPLIB §7: chỉ RuntimeCounter/PulseCounter persist ("AlarmDelay... KHÔNG persist, khác RuntimeCounter/PulseCounter"). RUNTIME_MODEL §6: "Snapshot TOÀN BỘ stateful node... nạp lại integrator/timer/counter" → cả PID/OnDelay cũng persist. **Hai doc Approved đang nói ngược nhau.** | Theo COMPLIB: **chỉ 2 counter persist**. PID integral/timer accumulator sau khi mất điện vài phút là dữ liệu sai (dt gap) — restore còn nguy hiểm hơn init lại. Counter là dữ liệu tiền (giờ bảo trì, đồng hồ điện/nước) → bắt buộc giữ. Sửa RUNTIME_MODEL §6 thành "stateful node có cờ persist" sau khi duyệt. |
-| GAP-02 | **Format `state.snap` chưa định nghĩa** | RUNTIME_MODEL §6 chỉ nói path + chu kỳ + atomic rename. Không có format, version, match rule. | JSON 1 file, schema ở §4. Parse fail / version lạ → bỏ snapshot, init default + WARN (không fail-fast — mất counter vẫn chạy được máy). |
-| GAP-03 | **"Graph rev khớp" chưa định nghĩa** | RUNTIME_MODEL §6 nói restore khi "graph rev khớp" nhưng graph.json không có field rev. Nếu hiểu là hash toàn graph → sửa 1 setpoint là MẤT giờ chạy quạt (sai nghiệp vụ). | Match theo **node id + type** (đúng tinh thần RUNTIME_MODEL §10 atomic deploy "state mapping giữ node id trùng tên/kiểu"). Node trùng id+type → restore; khác → init default. KHÔNG dùng graph hash. |
-| GAP-04 | **Engine chỉ có 1 output port `out`** | `graph_runtime.cpp` reject mọi from-port ≠ `out`. RuntimeCounter có `hours`+`alarm`, Interlock có `out`+`tripped` — 2 output/node. GRAPH_SCHEMA đã cho phép port đặt tên, chỉ engine giới hạn. | Engine thêm multi-output (map port→value). Đây là thay đổi nội bộ engine, KHÔNG đổi schema/contract. Bắt buộc làm — không né được nếu muốn Interlock/RuntimeCounter đúng COMPLIB. |
-| GAP-05 | **Cycle qua stateful node** | RUN-002: cycle hợp lệ nếu qua stateful node (delay-1, đọc ảnh scan trước). Engine hiện fail MỌI cycle. | **Giữ acyclic ở Rev A.1** (đỡ ~2 ngày + bớt rủi ro). Interlock latch tự giữ trip trong state nội bộ — use case khóa liên động KHÔNG cần wire ngược. Delay-1 lùi Rev B; ghi rõ giới hạn vào 07 §graph. |
-| GAP-06 | **PulseCounter tần số xung** | Đếm cạnh `pulse:b` ở scan 1s → max ~0.5Hz, gần như vô dụng với đồng hồ điện (xung 1-100Hz). | 2 mode: (a) param `channel` (1-8) → đọc **delta `di_counter[]`** từ shm (iobus đếm ở 10ms → max ~50Hz, xử lý wrap uint32 + reset-khi-iobus-restart bằng quy tắc delta âm → bỏ qua mẫu đó); (b) không có `channel` → đếm cạnh port `pulse` ở scan rate (cho tín hiệu logic chậm). KHÔNG đổi contract shm — `di_counter` có sẵn. |
-| GAP-07 | **Tương tác snapshot ↔ SIGHUP reload / deploy** | COR-008 vừa chốt: graph đổi nội dung → reset toàn bộ state node. Nếu áp luôn cho counter thì sửa 1 setpoint qua web-deploy là mất giờ chạy. | Khi graph swap (SIGHUP/deploy): ghi snapshot TRƯỚC khi swap, nạp lại counter theo match id+type (GAP-03) NGAY sau swap. Node persist sống qua reload; node không-persist (PID/timer) reset như đã chốt COR-008. |
-| GAP-08 | **Thư mục `/data/mkddc` + flash wear** | Path trong RUNTIME_MODEL nhưng install.sh/systemd chưa tạo; ghi 60s ≈ 1.4k lần/ngày lên eMMC. | `StateDirectory=mkddc` vào `mkddc-core.service` + install.sh tạo `/data/mkddc` (owner mkddc). Ghi 60s **chỉ khi state đổi** (dirty flag) + shutdown sạch + trước graph swap. File <4KB → wear không đáng kể. |
+| GAP-01 | **Persist scope** | COMPLIB §7: chỉ RuntimeCounter/PulseCounter persist. RUNTIME_MODEL §6 cũ nói snapshot toàn bộ stateful node. | Theo COMPLIB: **chỉ 2 counter persist**. PID/timer/interlock không persist qua mất điện. RUNTIME_MODEL §6 đã chỉnh thành "node có cờ persist". |
+| GAP-02 | **Format `state.snap` chưa định nghĩa** | RUNTIME_MODEL §6 chỉ nói path + chu kỳ + atomic rename. | JSON 1 file, schema ở §4. Parse fail/version lạ → bỏ snapshot, init default + WARN, không fail-fast. |
+| GAP-03 | **"Graph rev khớp" chưa định nghĩa** | graph.json không có field rev; hash toàn graph sẽ làm mất counter khi sửa setpoint. | Restore theo **node id + type**. Node trùng id+type → restore; khác → init default. KHÔNG dùng graph hash. |
+| GAP-04 | **Engine chỉ có 1 output port `out`** | RuntimeCounter có `hours`+`alarm`, Interlock có `out`+`tripped`. | Engine thêm multi-output `map port -> value`. Không đổi GRAPH_SCHEMA. |
+| GAP-05 | **Cycle qua stateful node** | RUN-002 cũ cho phép cycle delay-1; engine hiện reject mọi cycle. | **Giữ acyclic ở Rev A.1**. Delay-1 cycle lùi Rev B. Interlock latch tự giữ state nội bộ, không cần wire ngược. |
+| GAP-06 | **PulseCounter tần số xung** | Đếm cạnh `pulse:b` ở scan 1s chỉ phù hợp logic chậm. | 2 mode: `channel` 1-8 đọc delta `di_counter[]`; không có `channel` đếm cạnh port `pulse` ở scan rate. Không đổi SHM. |
+| GAP-07 | **Snapshot ↔ SIGHUP reload/deploy** | Reset toàn bộ state khi graph đổi sẽ mất counter. | Trước swap ghi snapshot; sau swap restore counter theo id+type. Node không-persist reset như COR-008. |
+| GAP-08 | **Thư mục `/data/mkddc` + flash wear** | Path chưa tạo; ghi 60s liên tục tốn flash. | `StateDirectory=mkddc` + install tạo `/data/mkddc`; ghi 60s chỉ khi dirty + shutdown + trước graph swap. |
 
 **Không gap (spec đủ, code thẳng):** `ManualAuto` (stateless, COMPLIB §3),
 `AlarmHigh`/`AlarmLow` (= Compare + hysteresis, COMPLIB §7), `SafeState` (stateless, §6).
 
 ---
 
-## 3. Spec bổ sung đề xuất (phần COMPLIB chưa nói rõ)
+## 3. Spec bổ sung chốt (phần COMPLIB chưa nói rõ)
 
 > Chỉ liệt kê phần **bổ sung/chi tiết hóa** — port/param gốc theo COMPLIB §3-§7, không đổi.
 
@@ -97,7 +96,7 @@ Microtask + effort → §5.
 
 ---
 
-## 4. Format `state.snap` đề xuất (GAP-02)
+## 4. Format `state.snap` chốt (GAP-02)
 
 ```json
 {
@@ -116,17 +115,15 @@ Microtask + effort → §5.
 
 ---
 
-## 5. Task đề xuất (đưa vào 10_TASK_CHECKLIST SAU khi duyệt)
+## 5. Task chính thức
 
 | Task | Nội dung | Phụ thuộc | Effort |
 |------|----------|-----------|--------|
 | COR-009 | Engine: multi-output port (GAP-04) + 10 component §3 + test từng type (bảng chân lý/timing giả lập dt) | COR-006 | ~2-3 ngày |
 | COR-010 | `state_snapshot` module: format §4, ghi 60s dirty + shutdown + trước swap, restore match id+type; wiring COR-008; `StateDirectory` + install.sh (GAP-08); test power-loss (kill -9 → restore) | COR-009 | ~1-1.5 ngày |
 
-Tổng ~3-4.5 ngày, khớp ước lượng "vừa" trong 21 §S7. Sau khi Owner duyệt §2/§3/§4:
-1. Sửa RUNTIME_MODEL §6 (GAP-01 reconcile) + bump Rev; COMPLIB giữ nguyên (đã đúng).
-2. Annotate 03/10/21 + 07 §graph theo rule, chuyển file này → Active.
-3. Mới bắt đầu code COR-009.
+Tổng ~3-4.5 ngày, khớp ước lượng "vừa" trong 21 §S7. COR-009 làm trước COR-010.
+Không bắt đầu COR-010 khi multi-output và 10 component chưa pass unit test.
 
 ---
-**Rev** 0.1 | 2026-06-12 — DRAFT chờ Owner duyệt
+**Rev** 1.2 | 2026-06-13 — DONE: COR-009/010 implemented, 97/97 test pass · 1.1 | 2026-06-13 — APPROVED · 1.0 | 2026-06-13 — Active · 0.1 | 2026-06-12 — Draft

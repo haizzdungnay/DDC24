@@ -1,11 +1,11 @@
-# Service Design — `kinexus-agent` (SW)
+# Service Design — Agent/MQTT (Deferred Rev B+) (SW)
 ## MQTT + REST API — code-ready
 
-> **Document ID:** DDD-SWSVC-AGENT-MK-DDC-24-VI · **Rev** 1.0 | 2026-05-30
+> **Document ID:** DDD-SWSVC-AGENT-MK-DDC-24-VI · **Rev** 1.1 | 2026-06-13 (mark deferred; mkddc naming) · 1.0 | 2026-05-30
 > 📘 [README](../../01_specs/README.md) · **Trace:** `SW-MQ/API/MOD-*` · Python 3.11
 
-> Service northbound: đẩy MQTT lên cloud + REST cho app. Đọc/ghi qua `kinexus_plc_shm`.
-> ⚠ **ARCH-R010:** Modbus **không** thuộc agent nữa. DDC không là Modbus slave. Vai trò Modbus = **RTU master xuống thiết bị phụ**, nằm ở service riêng [`kinexus-fieldbus`](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md).
+> Service northbound deferred Rev B+: đẩy MQTT lên cloud + REST cho app. Nếu bật lại, đọc/ghi qua `mkddc-core`/`mkddc_plc_shm`, không bypass core.
+> ⚠ **ARCH-R010:** Modbus **không** thuộc agent nữa. DDC không là Modbus slave. Vai trò Modbus = **RTU master xuống thiết bị phụ**, nằm trong fieldbus module của `mkddc-iobus` ([SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md), [Implementation 25](../../03_implementation/25_MODBUS_IMPLEMENTATION_PLAN.md)).
 
 ---
 
@@ -14,7 +14,7 @@
 kinexus-agent (asyncio)
 ├── rest_api      (FastAPI, HTTPS 8443)   → D-4 openapi.yaml
 ├── mqtt_client   (paho, TLS 8883)
-│   (Modbus đã tách sang kinexus-fieldbus — RTU master, không phải slave)
+│   (Modbus đã tách sang mkddc-iobus/fieldbus — RTU master, không phải slave)
 └── shm_bridge    (đọc/ghi plc_shm cho cả 3)
 ```
 
@@ -34,8 +34,8 @@ Topic: `kinexus/{device_id}/io/{point_name}` (MQ-003).
 - Đọc point từ `plc_shm`; ghi point → `plc_shm` (validate range trước).
 - `/system/status` lấy IOP metrics từ io-driver (đọc shm/metrics).
 
-## 4. ~~Modbus slave~~ → chuyển sang `kinexus-fieldbus` (RTU master)
-> DDC **không** phục vụ Modbus về phía BMS. Modbus RTU **master** poll thiết bị phụ → xem [SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) + [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md). Phần này gỡ khỏi agent.
+## 4. ~~Modbus slave~~ → chuyển sang `mkddc-iobus/fieldbus` (RTU master)
+> DDC **không** phục vụ Modbus về phía BMS. Modbus RTU **master** poll thiết bị phụ → xem [SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md), [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md), [Implementation 25](../../03_implementation/25_MODBUS_IMPLEMENTATION_PLAN.md). Phần này gỡ khỏi agent.
 - INT16 ×100 (KHÔNG float). Response ≤100ms.
 
 ## 5. Write arbitration
@@ -52,4 +52,4 @@ REST/MQTT ghi point → đi qua cùng cơ chế priority như BACnet (D-6 §7). 
 `SW-MQ-001..007`, `SW-API-001..010`, `SW-MOD-001..010`, `FR-022/023/024/025`.
 
 ---
-**Rev** 1.0 | 2026-05-30
+**Rev** 1.1 | 2026-06-13 (deferred Rev B+, fieldbus owner clarified) · 1.0 | 2026-05-30

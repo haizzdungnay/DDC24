@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Chia phase làm thật
 
 > **Document ID:** IMPL-PHASEPLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.4 | 2026-06-12 (P4: web_ipc overridden+audit, SIGHUP reload, systemd units — COR-007/008, SKEL-005) · 1.3 | 2026-06-12 (đồng bộ version header/footer; graph_runtime + T6/T7 implemented; E2E 3 lớp safety có script đo)
+> **Phiên bản:** 1.5 | 2026-06-13 (bổ sung S7 #4/#5/#6: stateful graph Active, BACnet/Modbus implementation plan) · 1.4 | 2026-06-12 (P4: web_ipc overridden+audit, SIGHUP reload, systemd units — COR-007/008, SKEL-005)
 > **Đọc trước:** [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md)
 > **Map sang task:** [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md) · **Map sang test:** [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)
 
@@ -130,7 +130,8 @@ shm gửi MCU, metrics, log, systemd integration.
 **Owner:** Dev 2.
 
 **Việc:** point table, scan loop 1s, graph runtime (Rev A subset — ĐÃ implement 2026-06-12), priority resolver,
-safe-state resolver, iobus_reader (đọc shm), output_writer (ghi shm).
+safe-state resolver, iobus_reader (đọc shm), output_writer (ghi shm), stateful graph Rev A.1,
+BACnet object/priority bridge, Modbus ext cache integration.
 
 **Output:**
 ```
@@ -147,6 +148,13 @@ safe-state resolver, iobus_reader (đọc shm), output_writer (ghi shm).
    manual đang giữ không mất (ĐÃ implement 2026-06-12 — COR-008, CONFIG_SCHEMA D-5).
 9. packaging/systemd unit files thật trong repo + install script
    (ĐÃ tạo 2026-06-12 — SKEL-005, điều kiện board bring-up 17_WEEK1).
+10. Stateful graph components còn thiếu + persist counter: COR-009/COR-010 theo
+    [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) — Active 2026-06-13.
+11. BACnet/IP full path: object registry, Read/WriteProperty, Priority_Array[16] -> core mức 3,
+    Reliability/Status_Flags, COV/alarm/pretest theo
+    [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md).
+12. Modbus RTU master: `fieldbus.conf`, device profile, poll scheduler, ext cache,
+    write queue, E302/E303 alarm theo [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md).
 ```
 
 **Test:** Test group 4 (core). **DoD:** §12.4.
@@ -207,7 +215,7 @@ config, alarm, graph validate/deploy, audit log.
 | P1→P2 | MCU IO thật chạy (group 1 pass) | FW Lead |
 | P2→P3 | IOP cross-test pass, 12 CRC vector khớp 2 phía | FW + SW Lead |
 | P3→P4 | iobus service ổn định 1h, shm đúng | SW Lead |
-| P4→P5 | core priority/safe-state pass, output qua core | SW Lead |
+| P4→P5 | core priority/safe-state pass, output qua core; nếu scope Rev A production bật BACnet/Modbus thì BAC-001..011 + MOD-001..011 pass group 9/10 | SW Lead |
 | P5→P6 | web command path qua core, không bypass | SW + Web Lead |
 | P6→Release | group 6/7/8 pass, [14_HANDOVER](14_RELEASE_HANDOVER_CHECKLIST.md) tick đủ | PM |
 
@@ -215,5 +223,6 @@ config, alarm, graph validate/deploy, audit log.
 > (map P0→P4 round-trip). Dev mới: bắt đầu từ [16_QUICK_START_SOM_DEV](16_QUICK_START_SOM_DEV.md).
 
 ---
-**Rev** 1.4 | 2026-06-12 (P4: web_ipc overridden+audit COR-007, SIGHUP reload COR-008, systemd units SKEL-005) · 1.3 | 2026-06-12 (graph_runtime + T6/T7 implemented; E2E script) · 1.2 | 2026-06-12 (P4/P6: tham chiếu SAFETY SPEC 07 §5 — trigger matrix
+**Rev** 1.5 | 2026-06-13 (S7 #4/#5/#6 docs code-ready: 22 Active, 24 BACnet, 25 Modbus) ·
+1.4 | 2026-06-12 (P4: web_ipc overridden+audit COR-007, SIGHUP reload COR-008, systemd units SKEL-005) · 1.3 | 2026-06-12 (graph_runtime + T6/T7 implemented; E2E script) · 1.2 | 2026-06-12 (P4/P6: tham chiếu SAFETY SPEC 07 §5 — trigger matrix
 implemented/planned, kiểm 3 lớp safety ở E2E) · 1.1 | 2026-06-11

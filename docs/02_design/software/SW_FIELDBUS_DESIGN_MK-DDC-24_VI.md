@@ -1,10 +1,10 @@
-# Service Design — `kinexus-fieldbus` (SW)
+# Service Design — Fieldbus module in `mkddc-iobus` (SW)
 ## Modbus RTU Master / Expansion Field Bus — code-ready
 
-> **Document ID:** DDD-SWSVC-FIELDBUS-MK-DDC-24-VI · **Rev** 1.0 | 2026-05-30
+> **Document ID:** DDD-SWSVC-FIELDBUS-MK-DDC-24-VI · **Rev** 1.1 | 2026-06-13 (mkddc-iobus module; implementation plan 25) · 1.0 | 2026-05-30
 > 📘 [README](../../01_specs/README.md) · **Trace:** `SW-MOD-001..011`, `RTU-001..008` · ICD: [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) · Config: [D-5 §5b](../interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md)
 
-> Service này biến DDC thành **Modbus RTU master**: poll các **thiết bị phụ** (module mở rộng I/O, màn hình phụ, thiết bị bên thứ 3) trên RS-485, đưa dữ liệu vào hệ thống như **I/O ảo**. Khung mở: thêm loại thiết bị = thêm **device profile**, không đổi code.
+> Module này trong `mkddc-iobus` biến DDC thành **Modbus RTU master**: poll các **thiết bị phụ** (module mở rộng I/O, màn hình phụ, thiết bị bên thứ 3) trên RS-485, đưa dữ liệu vào hệ thống như **I/O ảo**. Khung mở: thêm loại thiết bị = thêm **device profile**, không đổi code. Chi tiết task/code path xem [Implementation 25](../../03_implementation/25_MODBUS_IMPLEMENTATION_PLAN.md).
 
 ---
 
@@ -19,7 +19,7 @@
 ```mermaid
 graph LR
   subgraph SOM
-    FB[kinexus-fieldbus<br/>RTU master] -->|ghi I/O ảo| SHM[(shared memory<br/>vùng ext)]
+    FB[mkddc-iobus fieldbus<br/>RTU master] -->|ghi I/O ảo| SHM[(ext cache / shared memory)]
     SHM --> PLC[PLC]
     PLC --> SHM
     SHM --> BAC[BACnet] & AG[agent]
@@ -97,4 +97,5 @@ for (;;) {
 ## Revision History
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
+| 1.1 | 2026-06-13 | Codex | Active name = module trong `mkddc-iobus`; link implementation plan 25 |
 | 1.0 | 2026-05-30 | SW Lead | Phát hành đầu — service Modbus RTU master / expansion (theo ARCH-R010) |

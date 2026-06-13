@@ -2,7 +2,8 @@
 ## MK-DDC-24 — Point table + scan loop + priority/safe-state
 
 > **Document ID:** IMPL-CORE-MK-DDC-24-VI
-> **Phiên bản:** 1.4 | 2026-06-12 (§8: web_ipc đủ overridden + audit COR-007, SIGHUP reload
+> **Phiên bản:** 1.5 | 2026-06-13 (S7 #4/#5/#6 docs: stateful graph, BACnet, Modbus; fix priority test web=mức 2) ·
+> 1.4 | 2026-06-12 (§8: web_ipc đủ overridden + audit COR-007, SIGHUP reload
 > COR-008; §9: unit file thật packaging/systemd + ExecReload — SKEL-005) ·
 > 1.3 | 2026-06-12 (graph_runtime implemented Rev A subset; T6/T7 implemented;
 > io_safe_state.conf loader → default mức 6; quan hệ default/safe-override chốt §5.3) ·
@@ -41,8 +42,8 @@ safe-state, ghi `ao_setpoint[]/do_cmd[]` ngược vào shm — đủ để round
 | 7 | `output_writer` | **đầy đủ** | Ghi `ao_setpoint[]/do_cmd[]` vào shm (writer duy nhất 2 field này) |
 | 8 | `core_metrics` | **đầy đủ** | scan_count/scan_overrun/timing |
 | 9 | `web_ipc` | **stub được** | Nhận command từ web qua `/run/mkddc/core.sock`; stub = accept + log + đưa vào queue |
-| 10 | `graph_runtime` | **implemented (Rev A subset)** | Load/validate/topo/execute graph.json → resolver mức 5; component set: AI/DI/Setpoint/AND/OR/NOT/Compare/Scale/Limit/PID/AO/DO |
-| 11 | `bacnet_objtable` | **stub được** | Ghi `kx_plc_shm`; stub = ghi value/quality, bỏ priority array BACnet |
+| 10 | `graph_runtime` | **implemented (Rev A subset); S7 #4 planned** | Base 13 component đã có; COR-009/010 thêm 10 component stateful + persist theo [22](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) |
+| 11 | `bacnet_objtable` | **stub được; S7 #5 planned** | Stub ghi value/quality; full Priority_Array[16]/Reliability/COV theo [24](24_BACNET_IMPLEMENTATION_PLAN.md) |
 
 **KHÔNG làm trong core (mọi Rev):**
 ```
@@ -96,13 +97,13 @@ services/core/
 ```
 1. Read IO state        : iobus_reader đọc kx_io_shm (seqlock) → IoSnapshot.
 2. Update point table   : value + ts; point_quality tính quality (kể cả stale check ts_ns).
-3. Read Modbus(cache)   : (Rev A.1 — bỏ qua khi chưa có fieldbus)
+3. Read Modbus(cache)   : ext cache khi MOD-009 có; trước đó bỏ qua
 4. Read web/BACnet cmd  : web_ipc.drain() → command queue (KHÔNG ghi thẳng IO).
-5. Execute graph        : graph_runtime.execute() (Rev A subset — node topo order).
+5. Execute graph        : graph_runtime.execute() (Rev A.1 graph acyclic — node topo order).
 6. Resolve priority     : priority_resolver → 1 output/kênh DO/AO.
 7. Apply safe-state     : safe_state ghi đè nếu trigger (§5).
 8. Write output command : output_writer ghi ao_setpoint[]/do_cmd[] vào kx_io_shm.
-9. Update BACnet object : bacnet_objtable ghi kx_plc_shm (STUB: value/quality).
+9. Update BACnet object : bacnet_objtable ghi kx_plc_shm (base: value/quality; S7 #5: reliability/priority view).
 10. Update metrics      : scan_count++, đo exec time, phát hiện overrun.
 11. Sleep tới scan kế   : clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, next).
 ```
@@ -198,7 +199,7 @@ public:
 ```
 **Test (test_priority_resolver.cpp):**
 ```
-- web (mức 3) set DO1=1; safety (mức 1) set DO1=0 → resolve = 0 (safety thắng).
+- web/manual (mức 2) set DO1=1; safety (mức 1) set DO1=0 → resolve = 0 (safety thắng).
 - safety release → resolve = 1 (rơi về mức 3).
 - tất cả release → resolve = default.
 - 2 nguồn mức 3 cùng ghi → nguồn sau thắng + log conflict.
@@ -494,8 +495,11 @@ WantedBy=multi-user.target
 | Output path | output_writer | do_cmd[0]=1 → relay ≤1 chu kỳ poll | group 6 (E2E) |
 | Web command | web_ipc | đủ 3 result §8 (accepted/rejected/overridden) + audit | group 5/6 + test_web_ipc |
 | Config reload | config_reload | SIGHUP đổi default mức 6 không restart, manual giữ | test_config_reload |
+| Stateful graph | graph_runtime/state_snapshot | COR-009/010 pass theo doc 22 | unit + group 4 |
+| BACnet object | bacnet_objtable/BACnet bridge | BAC-001..011 pass theo doc 24 nếu thuộc scope | group 9 |
 
 ---
-**Rev** 1.4 | 2026-06-12 (web_ipc overridden+audit, SIGHUP reload, packaging/systemd) ·
+**Rev** 1.5 | 2026-06-13 (S7 #4/#5/#6 docs linked; priority test fixed web/manual=mức 2) ·
+1.4 | 2026-06-12 (web_ipc overridden+audit, SIGHUP reload, packaging/systemd) ·
 1.3 | 2026-06-12 · Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) ·
 DoD: [12_DEFINITION_OF_DONE §4](12_DEFINITION_OF_DONE.md)

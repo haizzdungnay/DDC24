@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-10
+> **Phiên bản:** 1.3 | 2026-06-13 (bổ sung S7 #4/#5/#6: COR-009/010, BAC-001..011, MOD-001..011) · 1.2 | 2026-06-12
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -349,6 +349,79 @@ Phụ thuộc: COR-006
 Trạng thái: ĐÃ làm 2026-06-12 — GraphRuntime::reload() swap-on-success (load_string cũ
        clear member ngay đầu hàm, fail là mất graph cũ — không dùng trực tiếp cho reload)
 ```
+```
+Task ID: COR-009
+Tên: Graph runtime multi-output + 10 component stateful/utility còn thiếu
+Owner: Dev SOM | Phase: 4 (S7 #4) | Module: graph_runtime
+File: services/core/graph_runtime.cpp, graph_runtime.hpp, tests/test_graph_runtime.cpp
+Input: 22_GRAPH_STATEFUL_COMPONENTS_PLAN §2-§3, SW_COMPONENT_LIBRARY
+Output: engine hỗ trợ named output port; thêm ManualAuto, OnDelay, OffDelay, Interlock,
+        RuntimeCounter, PulseCounter, SafeState, AlarmHigh, AlarmLow, AlarmDelay
+Test: unit từng component; RuntimeCounter hours/alarm; Interlock truth table; timer dt giả lập;
+      PulseCounter mode channel dùng di_counter delta; invalid graph reject rõ lỗi
+Done khi: 10 component pass test, multi-output không phá 13 component cũ
+Phụ thuộc: COR-006, COR-008
+Trạng thái: ĐÃ làm 2026-06-13 — 10 component + multi-output engine; 97/97 test pass
+```
+```
+Task ID: COR-010
+Tên: Persist state snapshot cho RuntimeCounter/PulseCounter
+Owner: Dev SOM | Phase: 4 (S7 #4) | Module: state_snapshot, graph_runtime, packaging
+File: services/core/state_snapshot.cpp, state_snapshot.hpp, graph_runtime.cpp,
+      packaging/systemd/mkddc-core.service, packaging/install.sh
+Input: 22_GRAPH_STATEFUL_COMPONENTS_PLAN §4, SW_RUNTIME_EXECUTION_MODEL §6 Rev 1.1
+Output: `/data/mkddc/state.snap` JSON version=1; ghi 60s khi dirty + shutdown + trước graph swap;
+        restore theo node id+type; StateDirectory/install tạo thư mục
+Test: restore counter sau restart; bad snapshot bỏ qua + WARN; graph deploy giữ counter cùng id+type;
+      PID/timer/interlock không persist
+Done khi: power-loss/reload/deploy semantics đúng §22, không ghi flash mỗi scan
+Phụ thuộc: COR-009
+Trạng thái: ĐÃ làm 2026-06-13 — state_snapshot module; boot/shutdown/reload/60s persist; 97/97 test pass
+```
+
+---
+
+## Phase 4/5 — BACnet/IP (S7 #5)
+
+> Chi tiết triển khai: [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md).
+
+| Task ID | Tên | Owner | Output | Test |
+|---------|-----|-------|--------|------|
+| BAC-001 | Link `bacnet-stack` + CMake option | Dev SOM | `MKDDC_ENABLE_BACNET` build sạch | build smoke |
+| BAC-002 | Loader `device.conf` + `bacnet.conf` | Dev SOM | device id/name/port/interface | bad config reject |
+| BAC-003 | Object registry AI/BI/AO/BO/AV/BV/MSV | Dev SOM | count/name/instance đúng D-3 | object map unit |
+| BAC-004 | `bacnet_objtable` publish từ core | Dev SOM | value/quality/reliability vào `mkddc_plc_shm` | shm unit |
+| BAC-005 | ReadProperty/ReadPropertyMultiple | Dev SOM | BMS đọc object | `bacrp`/BTL smoke |
+| BAC-006 | WriteProperty + Priority_Array[16] | Dev SOM | BACnet write -> core mức 3 | priority/core IPC fake |
+| BAC-007 | COV subscribe/change detect | Dev SOM | notify theo threshold | COV unit |
+| BAC-008 | Reliability/Status_Flags map | Dev SOM | fault -> BACnet flags | table unit |
+| BAC-009 | Alarm/Notification Class bridge | Dev SOM | alarm bus -> event | fake alarm smoke |
+| BAC-010 | TimeSync/ReinitializeDevice policy | Dev SOM | guarded restart/time sync | integration smoke |
+| BAC-011 | BTL pretest script/checklist | Tester + Dev SOM | repeatable B-ASC pretest | group 9 PASS |
+
+Done khi: DoD §8 pass; BACnet write không bypass core; safety/manual cao hơn vẫn thắng.
+
+---
+
+## Phase 3/4 — Modbus RTU Master (S7 #6)
+
+> Chi tiết triển khai: [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md).
+
+| Task ID | Tên | Owner | Output | Test |
+|---------|-----|-------|--------|------|
+| MOD-001 | Link `libmodbus` + CMake option | Dev SOM | `MKDDC_ENABLE_MODBUS` build sạch | build smoke |
+| MOD-002 | `fieldbus.conf` loader/reload | Dev SOM | rs485/slaves/poll config | config unit |
+| MOD-003 | Device profile parser/validator | Dev SOM | profile JSON strict | parser unit |
+| MOD-004 | Register codec | Dev SOM | bool/int/float scale/endian | codec vectors |
+| MOD-005 | Poll scheduler | Dev SOM | due-time/retry/offline | scheduler unit |
+| MOD-006 | RTU read FC01/02/03/04 | Dev SOM | ext cache update | fake slave integration |
+| MOD-007 | RTU write FC05/06/15/16 | Dev SOM | pending write result | fake slave write |
+| MOD-008 | Metrics/alarm E302/E303 | Dev SOM | status + alarm | fault injection |
+| MOD-009 | Core ext point read path | Dev SOM | graph đọc ext values | core integration |
+| MOD-010 | BACnet expose config for ext points | Dev SOM | ext -> AV/BV/AI optional | object map test |
+| MOD-011 | 16-slave timing smoke | Tester + Dev SOM | stable poll budget | group 10 PASS |
+
+Done khi: DoD §9 pass; Modbus không làm slave northbound; không có output bypass core.
 
 ---
 
@@ -440,7 +513,8 @@ Phụ thuộc: E2E-003
 ```
 
 ---
-**Rev** 1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit,
+**Rev** 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
+1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit,
 COR-008 SIGHUP reload — cụm production-hardening 1+5+6 ĐÃ làm) · 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006
 Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·
 Test chi tiết: [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)

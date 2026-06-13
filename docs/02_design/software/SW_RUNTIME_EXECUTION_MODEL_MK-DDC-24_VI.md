@@ -1,7 +1,7 @@
 # Runtime Execution Model — MK-DDC-24 (`mkddc-core`)
 
 > **Document ID:** DDD-RUNTIME-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-08
+> **Phiên bản:** 1.1 | 2026-06-13 (reconcile S7 #4: chỉ node persist lưu state, cycle delay-1 lùi Rev B) · 1.0 | 2026-06-08
 > **Trạng thái:** Approved (Owner 2026-06-08)
 > 📘 **Đọc cùng:** [GRAPH_SCHEMA](../interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) ·
 > [SW_COMPONENT_LIBRARY](SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) · [ADR-004](../../adr/ADR-004-component-based-runtime.md), [ADR-005](../../adr/ADR-005-three-process-architecture.md)
@@ -28,9 +28,10 @@ BUILD PLAN (topo-sort) ─► INIT STATE (snapshot/power_on) ─► RUN (scan lo
 ## 3. Build plan — topological sort (1 lần lúc deploy)
 
 - Dựng đồ thị có hướng từ `links`. Sắp thứ tự topo → mảng node thực thi.
-- **Cycle (vòng phản hồi)** chỉ hợp lệ nếu đi qua ít nhất một **stateful node**
-  (PID/timer/…); cạnh "phản hồi" đó được đánh dấu `delayed` (đọc giá trị scan trước).
-  Cycle thuần combinational (không qua stateful) → **build fail**.
+- **Rev A.1:** execution graph phải **acyclic**; mọi cycle đều build fail. Stateful node
+  (PID/timer/counter/interlock) giữ state nội bộ, nhưng không tạo cạnh delayed trong graph.
+- **Rev B:** cycle đi qua stateful node có thể được mở lại bằng cạnh `delayed` (đọc giá trị
+  scan trước). Cycle thuần combinational luôn build fail.
 - Plan bất biến trong khi chạy; runtime **không** sort lại mỗi scan.
 
 ## 4. Chu kỳ scan (mô hình ảnh I/O)
@@ -39,7 +40,7 @@ BUILD PLAN (topo-sort) ─► INIT STATE (snapshot/power_on) ─► RUN (scan lo
 mỗi scan (device.scan_ms, mặc định 1000ms):
   1. SNAPSHOT INPUTS  : copy IO image (từ IOP/MCU shm) + Modbus cache + BACnet cmd
                         → vùng "current". Đọc 1 lần, không đọc giữa chừng.
-  2. EXECUTE PLAN     : chạy node theo thứ tự; cạnh delayed đọc từ "previous"
+  2. EXECUTE PLAN     : chạy node theo thứ tự topo; Rev A.1 không có cạnh delayed
   3. RESOLVE PRIORITY : mọi output AO/DO qua priority resolver (§7)
   4. WRITE OUTPUTS    : ghi AO/DO → IOP shm; ghi Modbus write-queue; update BACnet object
   5. HOUSEKEEPING     : cập nhật stateful node, COV, trend; đo scan time; swap prev=current
@@ -48,23 +49,36 @@ mỗi scan (device.scan_ms, mặc định 1000ms):
 - `mkddc-core` chạy **SCHED_FIFO**; scan định thời bằng `clock_nanosleep(TIMER_ABSTIME)`.
 - Mục tiêu Rev A: jitter chấp nhận được ở 1 s; **không** cam kết sub-100ms (Rev B).
 
-## 5. Stateful node & quy ước delay-1-cycle
+## 5. Stateful node & giới hạn cycle Rev A.1
 
 - Node có nội trạng (PID integrator, OnDelay/OffDelay accumulator, RuntimeCounter,
   Latch) giữ state trong struct riêng của instance.
-- Trong vòng phản hồi, đầu vào "ngược" được đọc từ ảnh **scan trước** (`previous`),
-  cho phép vòng kín mà không cần giải đồng thời. Validator/Build cảnh báo nếu vòng
-  không qua node stateful.
+- Rev A.1 không cho phép wire vòng kín trong graph; mọi feedback cần được biểu diễn bằng
+  state nội bộ của component (ví dụ Interlock latch, PID integral, OnDelay accumulator).
+- Delay-1-cycle edge là tính năng Rev B; validator/build hiện reject mọi cycle.
 - Đơn vị thời gian cho timer = bội số `scan_ms`; node lưu thời điểm bằng monotonic clock.
 
 ## 6. Quản lý state & power-loss recovery
 
 | Cơ chế | Quy tắc |
 |--------|---------|
-| Lưu state | Snapshot toàn bộ stateful node ra `/data/mkddc/state.snap` **mỗi 60 s** + khi shutdown sạch. **KHÔNG ghi mỗi scan** (bảo vệ flash). |
-| Khôi phục | Boot: nếu snapshot hợp lệ & graph rev khớp → nạp lại integrator/timer/counter. Nếu graph đổi hoặc snapshot hỏng → init mặc định. |
+| Lưu state | Chỉ snapshot node có cờ persist ra `/data/mkddc/state.snap`: Rev A.1 chỉ `RuntimeCounter` và `PulseCounter`. Ghi **mỗi 60 s khi dirty** + shutdown sạch + trước graph swap. **KHÔNG ghi mỗi scan**. |
+| Khôi phục | Boot/deploy: nếu snapshot hợp lệ và node `id + type` khớp → restore counter. Node thiếu/lệch type hoặc snapshot hỏng → init mặc định + WARN. Không restore PID/timer/interlock. |
 | Output an toàn | Trước khi plan chạy lần đầu sau boot/deploy, mọi output AO/DO = `power_on` (graph.json) — không bao giờ giữ giá trị rác. |
 | Atomic | Snapshot ghi ra file tạm rồi `rename()` (atomic), tránh file nửa vời. |
+
+Format snapshot Rev A.1:
+
+```json
+{
+  "version": 1,
+  "saved_at_ms": 1780000000000,
+  "nodes": {
+    "fan1_rt":  { "type": "RuntimeCounter", "run_seconds": 123456.7 },
+    "kwh_main": { "type": "PulseCounter",   "count_raw": 884213 }
+  }
+}
+```
 
 ## 7. Priority resolver & safe-state
 
@@ -92,9 +106,9 @@ Mọi giá trị mang `{value, quality, ts}`:
 ## 10. Atomic deploy
 
 - Nhận graph mới qua `/graph/deploy`. Core build plan **song song** plan đang chạy.
-- Build OK → tại ranh giới scan, swap con trỏ plan (prev/current reset theo state mapping
-  giữ được node id trùng tên/kiểu). Build fail → giữ plan cũ, trả lỗi. Không có khoảng
-  "không có plan".
+- Build OK → tại ranh giới scan, ghi snapshot persist node trước khi swap, swap con trỏ
+  plan, restore persist node theo `id + type`; node không-persist reset state. Build fail
+  → giữ plan cũ, trả lỗi. Không có khoảng "không có plan".
 
 ## 11. Quan hệ shared-memory (IOP)
 
@@ -108,11 +122,14 @@ hình biến cũ `PlcVarSpace`/retain trong `SW_PLC_ENGINE_DESIGN` được thay
 | ID | Yêu cầu |
 |----|---------|
 | RUN-001 | Build execution plan bằng topo-sort lúc deploy |
-| RUN-002 | Cycle chỉ hợp lệ khi qua stateful node (delay-1) |
+| RUN-002 | Rev A.1 graph acyclic; delay-1 cycle qua stateful node deferred Rev B |
 | RUN-003 | Mô hình ảnh I/O: snapshot→execute→write |
-| RUN-004 | Snapshot state 60s + shutdown; recovery khi boot |
+| RUN-004 | Snapshot persist node 60s dirty + shutdown + graph swap; recovery theo id+type |
 | RUN-005 | Output = power_on trước scan đầu sau boot/deploy |
 | RUN-006 | Priority resolver cho mọi AO/DO; BMS vào priority 3 |
 | RUN-007 | Quality propagation + fallback + safe-state |
 | RUN-008 | Atomic deploy, không có khoảng mất plan |
 | RUN-009 | Đo scan budget, đếm overrun, expose qua REST |
+
+---
+**Rev** 1.1 | 2026-06-13 — reconcile S7 #4 persist/cycle · 1.0 | 2026-06-08
