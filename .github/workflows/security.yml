@@ -56,6 +56,7 @@ jobs:
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
         if: always()
+        continue-on-error: true  # Code Scanning requires GitHub Advanced Security
         with:
           sarif_file: trivy-results.sarif
           category: trivy
@@ -71,6 +72,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Scan with Grype
+        id: grype
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         with:
           path: .
@@ -81,21 +83,27 @@ jobs:
       - name: Upload Grype SARIF
         uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
         if: always()
+        continue-on-error: true  # Code Scanning requires GitHub Advanced Security
         with:
-          sarif_file: results.sarif
+          sarif_file: ${{ steps.grype.outputs.sarif }}
           category: grype
 
   gitleaks-scan:
     name: Gitleaks Secret Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read  # gitleaks-action v3 cần để đọc commits của PR
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
 
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        with:
-          config_path: .gitleaks.toml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   codeql-scan:
     name: CodeQL Analyze
@@ -119,3 +127,4 @@ jobs:
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
+        continue-on-error: true  # Code Scanning requires GitHub Advanced Security
