@@ -79,7 +79,7 @@ private:
     void  reset_runtime_state();
 
     bool loaded_ = false;
-    size_t src_hash_ = 0;                /* hash source đã load — reload() so sánh */
+    std::string src_cached_;             /* source đã load — reload() so sánh (exact equality, no hash collision) */
     uint32_t scan_ms_ = 1000;            /* hiệu lực (dt) — sync theo core */
     uint32_t declared_scan_ms_ = 1000;   /* khai báo trong graph.json */
     std::vector<Node> nodes_;

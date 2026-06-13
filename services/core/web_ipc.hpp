@@ -20,7 +20,7 @@ struct WebCommand {
     uint64_t    id = 0;
     bool        is_write = false;   /* write | release */
     PointId     point{PointKind::AV, -1};
-    std::string point_name;         /* tên gốc trong request — cho audit log */
+    std::string point_name;         /* đã sanitize [A-Za-z0-9] ≤8 — cho audit log */
     float       value = 0.0f;
     std::string user;               /* đã sanitize [A-Za-z0-9_.@-] ≤32 — cho audit */
     int         client_fd = -1;     /* để trả response đúng connection */

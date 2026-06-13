@@ -81,7 +81,10 @@ void ScanLoop::step()
             const float applied = is_ao ? out.ao[cmd.point.idx]
                                         : static_cast<float>(out.dout[cmd.point.idx]);
             if (d_.safe->active()) {
-                d_.web->respond_overridden(cmd, applied, "safety");
+                if (cmd.is_write)
+                    d_.web->respond_overridden(cmd, applied, "safety");
+                else
+                    d_.web->respond_accepted(cmd, applied, "safety");
             } else {
                 const int lv = is_ao ? d_.resolver->winning_ao_level(cmd.point.idx)
                                      : d_.resolver->winning_do_level(cmd.point.idx);
@@ -93,7 +96,8 @@ void ScanLoop::step()
         } else {
             /* virtual point: không có nguồn vật lý tranh chấp;
              * applied_value = giá trị thực sau xử lý (release ≠ cmd.value) */
-            d_.web->respond_accepted(cmd, d_.table->get(cmd.point).value);
+            const char* vsrc = cmd.is_write ? "manual" : "default";
+            d_.web->respond_accepted(cmd, d_.table->get(cmd.point).value, vsrc);
         }
     }
 

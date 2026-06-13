@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cstdio>
 #include <fstream>
-#include <functional>
 #include <set>
 #include <sstream>
 
@@ -212,7 +211,7 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
     used_ai_.assign(ai_set.begin(), ai_set.end());
 
     /* mọi validate pass → giờ mới commit */
-    src_hash_ = std::hash<std::string>{}(src);
+    src_cached_ = src;
     declared_scan_ms_ = parsed_scan_ms;
     scan_ms_ = parsed_scan_ms;   /* tạm — ScanLoop sync_actual_scan_ms() chốt dt thật */
     reset_runtime_state();
@@ -238,7 +237,7 @@ bool GraphRuntime::reload(const std::string& path)
     std::stringstream ss;
     ss << f.rdbuf();
     const std::string src = ss.str();
-    if (loaded_ && std::hash<std::string>{}(src) == src_hash_) {
+    if (loaded_ && src == src_cached_) {
         std::fprintf(stderr, "INFO  graph.reload_unchanged %s (giữ state node)\n", path.c_str());
         return true;
     }
