@@ -42,19 +42,28 @@ bool valid_input_port(int type, const std::string& port)
     }
 }
 
+/* đọc toàn bộ file vào string; trả false nếu không mở được (CR-008) */
+static bool read_file_content(const std::string& path, std::string* out)
+{
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+    std::stringstream ss;
+    ss << f.rdbuf();
+    *out = ss.str();
+    return true;
+}
+
 } // namespace
 
 bool GraphRuntime::load(const std::string& path)
 {
-    std::ifstream f(path);
-    if (!f.is_open()) {
+    std::string src;
+    if (!read_file_content(path, &src)) {
         std::fprintf(stderr, "INFO  graph.none path=%s (nguồn logic inactive)\n", path.c_str());
         loaded_ = false;
         return false;
     }
-    std::stringstream ss;
-    ss << f.rdbuf();
-    return load_string(ss.str(), path);
+    return load_string(src, path);
 }
 
 bool GraphRuntime::load_string(const std::string& src, const std::string& name)
@@ -223,8 +232,8 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
 
 bool GraphRuntime::reload(const std::string& path)
 {
-    std::ifstream f(path);
-    if (!f.is_open()) {
+    std::string src;
+    if (!read_file_content(path, &src)) {
         if (loaded_) {
             std::fprintf(stderr,
                          "WARN  graph.reload_keep_old path=%s (không mở được file)\n",
@@ -234,9 +243,6 @@ bool GraphRuntime::reload(const std::string& path)
         std::fprintf(stderr, "INFO  graph.none path=%s (nguồn logic inactive)\n", path.c_str());
         return true;   /* trước không có graph, giờ vẫn không — không đổi gì */
     }
-    std::stringstream ss;
-    ss << f.rdbuf();
-    const std::string src = ss.str();
     if (loaded_ && src == src_cached_) {
         std::fprintf(stderr, "INFO  graph.reload_unchanged %s (giữ state node)\n", path.c_str());
         return true;

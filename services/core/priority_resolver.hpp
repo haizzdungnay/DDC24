@@ -31,11 +31,11 @@ class PriorityResolver {
 public:
     PriorityResolver();
 
-    /* nguồn ghi: level 1..6 */
-    void set_ao(int level, int ch, float v);
-    void release_ao(int level, int ch);
-    void set_do(int level, int ch, bool on);
-    void release_do(int level, int ch);
+    /* nguồn ghi: level 1..6; trả false nếu level/ch ngoài range (CR-010) */
+    bool set_ao(int level, int ch, float v);
+    bool release_ao(int level, int ch);
+    bool set_do(int level, int ch, bool on);
+    bool release_do(int level, int ch);
 
     /* default (mức 6) từ config io_safe_state — luôn active */
     void set_default_ao(int ch, float v);

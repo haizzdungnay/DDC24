@@ -39,23 +39,22 @@ void ScanLoop::step()
     /* 4. Read web command queue → priority mức 2 (manual). Response trả SAU
      * resolve + safe-state (bước 7b) — applied_value/active_source phải là giá trị
      * THẬT sau khi mọi nguồn tranh chấp xong (07 §8, COR-007). */
-    struct PendingResp { WebCommand cmd; bool ok; };
-    std::vector<PendingResp> pending;
+    pending_.clear();
     for (const WebCommand& cmd : d_.web->drain()) {
         bool ok = true;
         if (cmd.point.kind == PointKind::AO) {
-            if (cmd.is_write) d_.resolver->set_ao(PRIO_LOCAL_MANUAL, cmd.point.idx, cmd.value);
-            else              d_.resolver->release_ao(PRIO_LOCAL_MANUAL, cmd.point.idx);
+            if (cmd.is_write) ok = d_.resolver->set_ao(PRIO_LOCAL_MANUAL, cmd.point.idx, cmd.value);
+            else              ok = d_.resolver->release_ao(PRIO_LOCAL_MANUAL, cmd.point.idx);
         } else if (cmd.point.kind == PointKind::BO) {
-            if (cmd.is_write) d_.resolver->set_do(PRIO_LOCAL_MANUAL, cmd.point.idx, cmd.value != 0.0f);
-            else              d_.resolver->release_do(PRIO_LOCAL_MANUAL, cmd.point.idx);
+            if (cmd.is_write) ok = d_.resolver->set_do(PRIO_LOCAL_MANUAL, cmd.point.idx, cmd.value != 0.0f);
+            else              ok = d_.resolver->release_do(PRIO_LOCAL_MANUAL, cmd.point.idx);
         } else {
             /* AV/BV/MSV: ghi thẳng point table (không phải output vật lý);
              * release GIỮ value, chỉ nhả source — KHÔNG ghi cmd.value */
             if (cmd.is_write) ok = d_.table->set_virtual(cmd.point, cmd.value, PointSource::WEB);
             else              ok = d_.table->release_virtual(cmd.point);
         }
-        pending.push_back({cmd, ok});
+        pending_.push_back({cmd, ok});
     }
 
     /* 5. Execute graph */
@@ -70,7 +69,7 @@ void ScanLoop::step()
     /* 7b. Respond web command theo output THẬT:
      * - write AO/DO mà nguồn cao hơn (mức 1) hoặc safe-state đang thắng → overridden
      * - release/virtual → accepted, active_source = nguồn đang thắng sau lệnh */
-    for (const PendingResp& p : pending) {
+    for (const PendingResp& p : pending_) {
         if (!p.ok) {
             d_.web->respond_rejected(p.cmd, "bad_request");
             continue;
@@ -128,7 +127,10 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t period_ns,
          * trọn vẹn từ scan kế, không bao giờ giữa lúc resolve */
         if (reload_flag_ && reload_flag_->exchange(false) && reload_fn_) {
             reload_fn_(reload_ctx_);
-            d_.graph->sync_actual_scan_ms(actual_ms);   /* reload reset dt về declared */
+            /* BẮT BUỘC gọi ngay sau reload_fn_: GraphRuntime::reload() reset scan_ms_
+             * về declared_scan_ms_; nếu thiếu dòng này PID tính dt sai cho 1 scan.
+             * Thứ tự: reload_fn_ → sync_actual (CR-006). */
+            d_.graph->sync_actual_scan_ms(actual_ms);
         }
         step();
         if (after_scan) after_scan(ctx);

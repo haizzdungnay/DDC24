@@ -16,7 +16,7 @@
 |----------|----------|------------|
 | HIGH (fix ngay trước merge tiếp theo) | 2 | ✅ ✅ |
 | MEDIUM (fix trong sprint này) | 3 | ✅ ✅ ✅ |
-| LOW / Cleanup | 5 | ☐ ☐ ☐ ☐ ☐ |
+| LOW / Cleanup | 5 | ✅ ✅ ✅ ✅ ✅ |
 | **Tổng** | **10** | |
 
 ---
@@ -255,7 +255,7 @@ Nhưng nếu ai đó bỏ hoặc reorder dòng đó, graph chạy với dt sai s
 **Fix đề xuất:** Hoặc thêm comment `/* BẮT BUỘC: gọi ngay sau reload để đồng bộ dt */`,
 hoặc để `reload()` nhận `actual_ms` làm parameter và tự sync bên trong.
 
-- [ ] Thêm comment hoặc refactor nếu có sprint time
+- [x] Thêm comment 3 dòng giải thích ràng buộc thứ tự trong `scan_loop.cpp::run()` 2026-06-13
 
 ---
 
@@ -277,7 +277,7 @@ std::vector<ScanLoop::PendingResp> pending_;   // member, không phải local
 pending_.clear();   // thay vì khai báo local
 ```
 
-- [ ] Refactor khi làm COR-009 (sẽ touch scan_loop anyway)
+- [x] Chuyển `struct PendingResp` + `pending_` thành member của `ScanLoop` trong `scan_loop.hpp`; `step()` gọi `pending_.clear()` 2026-06-13
 
 ---
 
@@ -305,7 +305,7 @@ static std::string read_file(const std::string& path) {
 }
 ```
 
-- [ ] Refactor khi làm COR-010 (sẽ touch graph_runtime)
+- [x] Extract `read_file_content(path, &out) → bool` vào anonymous namespace của `graph_runtime.cpp`; `load()` và `reload()` dùng chung 2026-06-13
 
 ---
 
@@ -332,7 +332,7 @@ Nếu thêm level mới (vd `PRIO_REMOTE=7`) mà quên update hàm này → audi
 **Fix đề xuất:** Xóa `default:`, để compiler warn `-Wswitch` khi có unhandled case.
 Hoặc thêm `static_assert(PRIO_LEVELS == 6, "update prio_source_name");`.
 
-- [ ] Fix khi nào thêm priority level mới
+- [x] Xóa `default:`, thêm `case PRIO_DEFAULT: return "default"` + `static_assert(PRIO_LEVELS == 6)` trong `priority_resolver.cpp` 2026-06-13
 
 ---
 
@@ -355,7 +355,7 @@ Nhưng nếu `KX_N_AO` trong point_table và resolver lệch nhau → silent dro
 
 **Fix đề xuất:** `set_ao`/`set_do`/`release_ao`/`release_do` trả `bool`, set `ok` ở scan_loop.
 
-- [ ] Xem xét khi refactor priority_resolver
+- [x] `set_ao/set_do/release_ao/release_do` đổi `void → bool` trong `priority_resolver.hpp` + `.cpp`; `scan_loop.cpp` dùng return value cho `ok` 2026-06-13
 
 ---
 
@@ -368,11 +368,11 @@ Nhưng nếu `KX_N_AO` trong point_table và resolver lệch nhau → silent dro
 | CR-003 | MEDIUM | Dev SOM | ✅ Fixed 2026-06-13 | pending commit |
 | CR-004 | MEDIUM | Dev SOM | ✅ Fixed 2026-06-13 | pending commit |
 | CR-005 | MEDIUM | Dev SOM | ✅ Fixed 2026-06-13 | pending commit |
-| CR-006 | LOW | Dev SOM | ☐ Backlog | — |
-| CR-007 | LOW | Dev SOM | ☐ Backlog (gộp COR-009) | — |
-| CR-008 | LOW | Dev SOM | ☐ Backlog (gộp COR-010) | — |
-| CR-009 | LOW | Dev SOM | ☐ Backlog | — |
-| CR-010 | LOW | Dev SOM | ☐ Backlog | — |
+| CR-006 | LOW | Dev SOM | ✅ Fixed 2026-06-13 | pending commit |
+| CR-007 | LOW | Dev SOM | ✅ Fixed 2026-06-13 | pending commit |
+| CR-008 | LOW | Dev SOM | ✅ Fixed 2026-06-13 | pending commit |
+| CR-009 | LOW | Dev SOM | ✅ Fixed 2026-06-13 | pending commit |
+| CR-010 | LOW | Dev SOM | ✅ Fixed 2026-06-13 | pending commit |
 
 **Annotation format khi fix:** `Trạng thái: ĐÃ fix YYYY-MM-DD — [commit hash]` trong bảng trên.
 
@@ -388,4 +388,4 @@ PR #13 review chỉ cover **code correctness + design**. Những thứ KHÔNG n�
 
 ---
 
-**Rev** 1.1 | 2026-06-13 — CR-001/002 (HIGH) + CR-003/004/005 (MEDIUM) fixed; 115/115 test pass · 1.0 | 2026-06-13 — khởi tạo từ code review PR #13 (adedeeb), 10 findings
+**Rev** 1.2 | 2026-06-13 — CR-006..010 (LOW) fixed; 10/10 findings closed; 115/115 test pass · 1.1 | 2026-06-13 — CR-001/002 (HIGH) + CR-003/004/005 (MEDIUM) fixed · 1.0 | 2026-06-13 — khởi tạo từ code review PR #13 (adedeeb), 10 findings
