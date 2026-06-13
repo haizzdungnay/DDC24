@@ -48,7 +48,11 @@ public:
 
     static bool valid(PointId id);
 
+    /* Raw edge counter từ iobus (10ms) — PulseCounter channel mode đọc delta. */
+    uint32_t di_counter(int ch) const { return di_counters_[ch]; }
+
 private:
+    uint32_t di_counters_[KX_N_DI] = {};
     Point ai_[KX_N_UI];
     Point bi_[KX_N_DI];
     Point ao_[KX_N_AO];   /* feedback view (ao_setpoint đã ghi) */

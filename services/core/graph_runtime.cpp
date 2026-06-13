@@ -1,6 +1,7 @@
 #include "graph_runtime.hpp"
 
 #include <algorithm>
+#include <cinttypes>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -13,36 +14,82 @@ namespace core {
 
 namespace {
 
+/* Integer constants matching NodeType enum order — used in standalone helpers
+ * that cannot access the private NodeType enum. */
+static const int
+    NT_AI=0, NT_DI=1, NT_SP=2,
+    NT_AND=3, NT_OR=4, NT_NOT=5, NT_CGT=6, NT_CLT=7,
+    NT_SCALE=8, NT_LIMIT=9, NT_PID=10,
+    NT_AO=11, NT_DO=12,
+    NT_MA=13, NT_ON=14, NT_OFF=15,
+    NT_IL=16, NT_RC=17, NT_PC=18,
+    NT_SS=19, NT_AH=20, NT_AL=21, NT_AD=22;
+
 bool type_from_string(const std::string& s, int* out)
 {
     static const std::map<std::string, int> kTypes = {
-        {"AI_Input", 0}, {"DI_Input", 1}, {"Setpoint", 2},
-        {"AND", 3}, {"OR", 4}, {"NOT", 5},
-        {"Compare_GT", 6}, {"Compare_LT", 7},
-        {"Scale", 8}, {"Limit", 9}, {"PID", 10},
-        {"AO_Output", 11}, {"DO_Output", 12},
+        {"AI_Input",       NT_AI},  {"DI_Input",     NT_DI},  {"Setpoint",     NT_SP},
+        {"AND",            NT_AND}, {"OR",           NT_OR},  {"NOT",          NT_NOT},
+        {"Compare_GT",     NT_CGT}, {"Compare_LT",   NT_CLT},
+        {"Scale",          NT_SCALE},{"Limit",       NT_LIMIT},{"PID",         NT_PID},
+        {"AO_Output",      NT_AO},  {"DO_Output",    NT_DO},
+        {"ManualAuto",     NT_MA},
+        {"OnDelay",        NT_ON},  {"OffDelay",     NT_OFF},
+        {"Interlock",      NT_IL},
+        {"RuntimeCounter", NT_RC},  {"PulseCounter", NT_PC},
+        {"SafeState",      NT_SS},
+        {"AlarmHigh",      NT_AH},  {"AlarmLow",     NT_AL},  {"AlarmDelay",   NT_AD},
     };
-    auto it = kTypes.find(s);
+    const auto it = kTypes.find(s);
     if (it == kTypes.end()) return false;
     *out = it->second;
     return true;
 }
 
-/* port input hợp lệ theo type (validate wire `to`) */
+static const char* type_name(int t)
+{
+    static const char* kNames[] = {
+        "AI_Input","DI_Input","Setpoint",
+        "AND","OR","NOT","Compare_GT","Compare_LT",
+        "Scale","Limit","PID","AO_Output","DO_Output",
+        "ManualAuto","OnDelay","OffDelay",
+        "Interlock","RuntimeCounter","PulseCounter",
+        "SafeState","AlarmHigh","AlarmLow","AlarmDelay",
+    };
+    if (t < 0 || t > NT_AD) return "?";
+    return kNames[static_cast<size_t>(t)];
+}
+
 bool valid_input_port(int type, const std::string& port)
 {
     switch (type) {
-    case 3: case 4:            return port == "a" || port == "b";          /* AND/OR */
-    case 5:                    return port == "in";                        /* NOT */
-    case 6: case 7:            return port == "a" || port == "b";          /* CMP */
-    case 8: case 9:            return port == "in";                        /* Scale/Limit */
-    case 10:                   return port == "pv" || port == "sp";        /* PID */
-    case 11: case 12:          return port == "in";                        /* AO/DO_Output */
-    default:                   return false;                               /* source node không có input */
+    case NT_AND: case NT_OR:     return port == "a" || port == "b";
+    case NT_NOT:                 return port == "in";
+    case NT_CGT: case NT_CLT:   return port == "a" || port == "b";
+    case NT_SCALE: case NT_LIMIT: return port == "in";
+    case NT_PID:                 return port == "pv" || port == "sp";
+    case NT_AO: case NT_DO:      return port == "in";
+    case NT_MA:                  return port == "sel" || port == "manual" || port == "auto";
+    case NT_ON: case NT_OFF:     return port == "in";
+    case NT_IL:                  return port == "permit" || port == "request";
+    case NT_RC:                  return port == "run" || port == "reset";
+    case NT_PC:                  return port == "pulse" || port == "reset";
+    case NT_SS:                  return port == "in" || port == "good";
+    case NT_AH: case NT_AL:      return port == "pv";
+    case NT_AD:                  return port == "in";
+    default:                     return false;
     }
 }
 
-/* đọc toàn bộ file vào string; trả false nếu không mở được (CR-008) */
+bool valid_from_port(int type, const std::string& port)
+{
+    switch (type) {
+    case NT_RC: return port == "hours" || port == "alarm";
+    case NT_IL: return port == "out"   || port == "tripped";
+    default:    return port == "out";
+    }
+}
+
 static bool read_file_content(const std::string& path, std::string* out)
 {
     std::ifstream f(path);
@@ -55,11 +102,13 @@ static bool read_file_content(const std::string& path, std::string* out)
 
 } // namespace
 
+/* ---- load / reload ---- */
+
 bool GraphRuntime::load(const std::string& path)
 {
     std::string src;
     if (!read_file_content(path, &src)) {
-        std::fprintf(stderr, "INFO  graph.none path=%s (nguồn logic inactive)\n", path.c_str());
+        std::fprintf(stderr, "INFO  graph.none path=%s (nguon logic inactive)\n", path.c_str());
         loaded_ = false;
         return false;
     }
@@ -69,6 +118,7 @@ bool GraphRuntime::load(const std::string& path)
 bool GraphRuntime::load_string(const std::string& src, const std::string& name)
 {
     loaded_ = false;
+    dirty_  = false;
     nodes_.clear();
     order_.clear();
     used_ai_.clear();
@@ -80,22 +130,17 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
         return false;
     }
 
-    /* schema_version phải khớp engine (GRAPH_SCHEMA §2) */
     const json::Value* ver = root->get("schema_version");
     if (!ver || ver->str_or("") != "1.0") {
-        std::fprintf(stderr, "ERROR graph.schema_version %s (cần \"1.0\")\n", name.c_str());
+        std::fprintf(stderr, "ERROR graph.schema_version %s\n", name.c_str());
         return false;
     }
-    /* parse vào local — chỉ commit vào member khi TOÀN BỘ validate pass */
+
     uint32_t parsed_scan_ms = 1000;
     if (const json::Value* dev = root->get("device")) {
         const double ms = dev->get("scan_ms") ? dev->get("scan_ms")->num_or(1000) : 1000;
-        /* Validate TRƯỚC khi cast (5e9 → cast uint32 là UB/wrap về 0 → busy-spin).
-         * Max 2000ms: core là Type=notify WatchdogSec=3, kick 1 lần/scan (07 §9) —
-         * scan dài hơn WatchdogSec → systemd kill-loop. */
         if (ms < 500 || ms > 2000) {
-            std::fprintf(stderr, "ERROR graph.scan_ms=%g (hợp lệ 500..2000 —"
-                                 " watchdog budget WatchdogSec=3)\n", ms);
+            std::fprintf(stderr, "ERROR graph.scan_ms=%g (hop le 500..2000)\n", ms);
             return false;
         }
         parsed_scan_ms = static_cast<uint32_t>(ms);
@@ -114,7 +159,8 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
         const std::string type_s = jn->get("type") ? jn->get("type")->str_or("") : "";
         int ti;
         if (n.id.empty() || !type_from_string(type_s, &ti)) {
-            std::fprintf(stderr, "ERROR graph.bad_node id=%s type=%s\n", n.id.c_str(), type_s.c_str());
+            std::fprintf(stderr, "ERROR graph.bad_node id=%s type=%s\n",
+                         n.id.c_str(), type_s.c_str());
             return false;
         }
         n.type = static_cast<NodeType>(ti);
@@ -128,18 +174,42 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
                 else if (kv.second->is_str()) n.str_param = kv.second->str;
             }
         }
-        /* IO node bắt buộc có channel hợp lệ */
-        if (n.type == NodeType::AI_INPUT || n.type == NodeType::DI_INPUT ||
-            n.type == NodeType::AO_OUTPUT || n.type == NodeType::DO_OUTPUT) {
-            const auto it = n.num_params.find("channel");
-            const int max_ch = (n.type == NodeType::AI_INPUT) ? KX_N_UI
-                             : (n.type == NodeType::DI_INPUT) ? KX_N_DI
-                             : (n.type == NodeType::AO_OUTPUT) ? KX_N_AO : KX_N_DO;
-            if (it == n.num_params.end() || it->second < 0 || it->second >= max_ch) {
+
+        /* IO channel validation */
+        if (ti == NT_AI || ti == NT_DI || ti == NT_AO || ti == NT_DO) {
+            const int max_ch = (ti == NT_AI) ? KX_N_UI
+                             : (ti == NT_DI) ? KX_N_DI
+                             : (ti == NT_AO) ? KX_N_AO : KX_N_DO;
+            const auto cit = n.num_params.find("channel");
+            if (cit == n.num_params.end() || cit->second < 0 || cit->second >= max_ch) {
                 std::fprintf(stderr, "ERROR graph.bad_channel node=%s\n", n.id.c_str());
                 return false;
             }
         }
+        /* PulseCounter channel mode: validate DI channel (optional param) */
+        if (ti == NT_PC) {
+            const auto cit = n.num_params.find("channel");
+            if (cit != n.num_params.end() &&
+                (cit->second < 0 || cit->second >= KX_N_DI)) {
+                std::fprintf(stderr, "ERROR graph.bad_channel node=%s (PulseCounter ch)\n",
+                             n.id.c_str());
+                return false;
+            }
+        }
+        /* delay_s range validation for timer types (§3.1) */
+        if (ti == NT_ON || ti == NT_OFF || ti == NT_AD) {
+            const char* fields[] = {"delay_s", "on_delay_s", "off_delay_s", nullptr};
+            for (int fi = 0; fields[fi]; ++fi) {
+                const auto dit = n.num_params.find(fields[fi]);
+                if (dit != n.num_params.end() &&
+                    (dit->second < 0.0 || dit->second > 86400.0)) {
+                    std::fprintf(stderr, "ERROR graph.bad_param node=%s %s=%g (0..86400)\n",
+                                 n.id.c_str(), fields[fi], dit->second);
+                    return false;
+                }
+            }
+        }
+
         id_to_idx[n.id] = static_cast<int>(nodes_.size());
         nodes_.push_back(n);
     }
@@ -150,48 +220,54 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
         std::fprintf(stderr, "ERROR graph.no_links %s\n", name.c_str());
         return false;
     }
-    auto split_port = [](const std::string& s, std::string* node, std::string* port) {
+    auto split_port = [](const std::string& s, std::string* node_id, std::string* port) -> bool {
         const size_t dot = s.find('.');
         if (dot == std::string::npos || dot == 0 || dot + 1 >= s.size()) return false;
-        *node = s.substr(0, dot);
-        *port = s.substr(dot + 1);
+        *node_id = s.substr(0, dot);
+        *port    = s.substr(dot + 1);
         return true;
     };
     for (const auto& jl : jlinks->arr) {
         const std::string from_s = jl->get("from") ? jl->get("from")->str_or("") : "";
-        const std::string to_s = jl->get("to") ? jl->get("to")->str_or("") : "";
+        const std::string to_s   = jl->get("to")   ? jl->get("to")->str_or("")   : "";
         std::string fn, fp, tn, tp;
         if (!split_port(from_s, &fn, &fp) || !split_port(to_s, &tn, &tp)) {
-            std::fprintf(stderr, "ERROR graph.bad_link %s -> %s\n", from_s.c_str(), to_s.c_str());
+            std::fprintf(stderr, "ERROR graph.bad_link %s -> %s\n",
+                         from_s.c_str(), to_s.c_str());
             return false;
         }
         if (!id_to_idx.count(fn) || !id_to_idx.count(tn)) {
-            std::fprintf(stderr, "ERROR graph.link_unknown_node %s -> %s\n", fn.c_str(), tn.c_str());
+            std::fprintf(stderr, "ERROR graph.link_unknown_node %s -> %s\n",
+                         fn.c_str(), tn.c_str());
             return false;
         }
-        if (fp != "out") {   /* component set Rev A: mọi node nguồn có đúng 1 output "out" */
-            std::fprintf(stderr, "ERROR graph.bad_from_port %s\n", from_s.c_str());
+        const int src_ti = static_cast<int>(nodes_[static_cast<size_t>(id_to_idx[fn])].type);
+        if (!valid_from_port(src_ti, fp)) {
+            std::fprintf(stderr, "ERROR graph.bad_from_port %s (type %s no port '%s')\n",
+                         from_s.c_str(), type_name(src_ti), fp.c_str());
             return false;
         }
         Node& to_node = nodes_[static_cast<size_t>(id_to_idx[tn])];
-        if (!valid_input_port(static_cast<int>(to_node.type), tp)) {
-            std::fprintf(stderr, "ERROR graph.bad_to_port %s (type không có port này)\n", to_s.c_str());
+        const int dst_ti = static_cast<int>(to_node.type);
+        if (!valid_input_port(dst_ti, tp)) {
+            std::fprintf(stderr, "ERROR graph.bad_to_port %s (type %s no port '%s')\n",
+                         to_s.c_str(), type_name(dst_ti), tp.c_str());
             return false;
         }
-        if (to_node.inputs.count(tp)) {   /* 1 input nhận đúng 1 wire (validator #1/#2) */
+        if (to_node.inputs.count(tp)) {
             std::fprintf(stderr, "ERROR graph.multi_wire %s\n", to_s.c_str());
             return false;
         }
-        to_node.inputs[tp] = id_to_idx[fn];
+        to_node.inputs[tp] = {id_to_idx[fn], fp};
     }
 
-    /* ---- topo sort (Kahn) — cycle → fail ---- */
+    /* ---- topo sort (Kahn) ---- */
     const size_t n_nodes = nodes_.size();
     std::vector<int> indegree(n_nodes, 0);
     std::vector<std::vector<int>> adj(n_nodes);
     for (size_t i = 0; i < n_nodes; i++) {
-        for (const auto& in : nodes_[i].inputs) {
-            adj[static_cast<size_t>(in.second)].push_back(static_cast<int>(i));
+        for (const auto& inp : nodes_[i].inputs) {
+            adj[static_cast<size_t>(inp.second.node_idx)].push_back(static_cast<int>(i));
             indegree[i]++;
         }
     }
@@ -206,26 +282,24 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
             if (--indegree[static_cast<size_t>(v)] == 0) queue.push_back(v);
     }
     if (order_.size() != n_nodes) {
-        std::fprintf(stderr, "ERROR graph.cycle %s (topo sort fail)\n", name.c_str());
+        std::fprintf(stderr, "ERROR graph.cycle %s\n", name.c_str());
         order_.clear();
         nodes_.clear();
         return false;
     }
 
-    /* kênh AI graph dùng — cho T6 */
     std::set<int> ai_set;
-    for (const Node& n : nodes_)
-        if (n.type == NodeType::AI_INPUT)
-            ai_set.insert(static_cast<int>(n.num_params.at("channel")));
+    for (const Node& nd : nodes_)
+        if (nd.type == NodeType::AI_INPUT)
+            ai_set.insert(static_cast<int>(nd.num_params.at("channel")));
     used_ai_.assign(ai_set.begin(), ai_set.end());
 
-    /* mọi validate pass → giờ mới commit */
-    src_cached_ = src;
-    declared_scan_ms_ = parsed_scan_ms;
-    scan_ms_ = parsed_scan_ms;   /* tạm — ScanLoop sync_actual_scan_ms() chốt dt thật */
+    src_cached_        = src;
+    declared_scan_ms_  = parsed_scan_ms;
+    scan_ms_           = parsed_scan_ms;
     reset_runtime_state();
     loaded_ = true;
-    std::fprintf(stderr, "INFO  graph.loaded %s nodes=%zu links_ok scan_ms=%u ai_used=%zu\n",
+    std::fprintf(stderr, "INFO  graph.loaded %s nodes=%zu scan_ms=%u ai=%zu\n",
                  name.c_str(), n_nodes, scan_ms_, used_ai_.size());
     return true;
 }
@@ -234,17 +308,14 @@ bool GraphRuntime::reload(const std::string& path)
 {
     std::string src;
     if (!read_file_content(path, &src)) {
-        if (loaded_) {
-            std::fprintf(stderr,
-                         "WARN  graph.reload_keep_old path=%s (không mở được file)\n",
-                         path.c_str());
-            return false;
-        }
-        std::fprintf(stderr, "INFO  graph.none path=%s (nguồn logic inactive)\n", path.c_str());
-        return true;   /* trước không có graph, giờ vẫn không — không đổi gì */
+        if (loaded_)
+            std::fprintf(stderr, "WARN  graph.reload_keep_old %s\n", path.c_str());
+        else
+            std::fprintf(stderr, "INFO  graph.none %s\n", path.c_str());
+        return loaded_ ? false : true;
     }
     if (loaded_ && src == src_cached_) {
-        std::fprintf(stderr, "INFO  graph.reload_unchanged %s (giữ state node)\n", path.c_str());
+        std::fprintf(stderr, "INFO  graph.reload_unchanged %s\n", path.c_str());
         return true;
     }
     GraphRuntime fresh;
@@ -252,7 +323,7 @@ bool GraphRuntime::reload(const std::string& path)
         std::fprintf(stderr, "WARN  graph.reload_keep_old %s (validate fail)\n", path.c_str());
         return false;
     }
-    *this = std::move(fresh);   /* commit — state node reset (chấp nhận Rev A, 07 §8) */
+    *this = std::move(fresh);
     return true;
 }
 
@@ -261,8 +332,7 @@ void GraphRuntime::sync_actual_scan_ms(uint32_t actual_ms)
     if (actual_ms == 0) return;
     if (loaded_ && actual_ms != declared_scan_ms_)
         std::fprintf(stderr,
-                     "WARN  graph.scan_ms_mismatch declared=%u actual=%u -> dt dùng actual"
-                     " (1 nguồn sự thật = chu kỳ scan thật của core)\n",
+                     "WARN  graph.scan_ms_mismatch declared=%u actual=%u -> dt=actual\n",
                      declared_scan_ms_, actual_ms);
     scan_ms_ = actual_ms;
 }
@@ -270,112 +340,350 @@ void GraphRuntime::sync_actual_scan_ms(uint32_t actual_ms)
 void GraphRuntime::reset_runtime_state()
 {
     for (Node& n : nodes_) {
-        n.out = 0.0f;
-        n.pid_integral = 0.0f;
-        n.pid_prev_pv = 0.0f;
-        n.pid_first = true;
-        n.cmp_state = false;
+        n.outputs.clear();
+        n.pid_integral  = 0.0f;
+        n.pid_prev_pv   = 0.0f;
+        n.pid_first     = true;
+        n.cmp_state     = false;
+        n.acc_s         = 0.0f;
+        n.il_tripped    = false;
+        n.rt_seconds    = 0.0;
+        n.rt_prev_reset = false;
+        n.pc_count_raw  = 0;
+        n.pc_prev_pulse = false;
+        n.pc_prev_reset = false;
+        n.pc_last_di    = 0;
+        n.pc_di_init    = false;
+    }
+    dirty_ = false;
+}
+
+/* ---- execute ---- */
+
+void GraphRuntime::execute(const PointTable& table, PriorityResolver& resolver)
+{
+    if (!loaded_) return;
+    for (const int idx : order_) {
+        Node& n = nodes_[static_cast<size_t>(idx)];
+        compute(n, table, resolver);
     }
 }
 
-float GraphRuntime::compute(Node& n, const PointTable& table, PriorityResolver& resolver)
+/* ---- compute: writes to n.outputs ---- */
+
+void GraphRuntime::compute(Node& n, const PointTable& table, PriorityResolver& resolver)
 {
     auto in = [&](const char* port) -> float {
         const auto it = n.inputs.find(port);
-        return it == n.inputs.end() ? 0.0f : nodes_[static_cast<size_t>(it->second)].out;
+        if (it == n.inputs.end()) return 0.0f;
+        const Node& src = nodes_[static_cast<size_t>(it->second.node_idx)];
+        const auto oit = src.outputs.find(it->second.src_port);
+        return (oit == src.outputs.end()) ? 0.0f : oit->second;
     };
     auto p = [&](const char* key, double dflt) -> double {
         const auto it = n.num_params.find(key);
-        return it == n.num_params.end() ? dflt : it->second;
+        return (it == n.num_params.end()) ? dflt : it->second;
     };
 
+    const float dt = static_cast<float>(scan_ms_) / 1000.0f;
+
     switch (n.type) {
+
     case NodeType::AI_INPUT:
-        return table.get({PointKind::AI, static_cast<int>(p("channel", 0))}).value;
+        n.outputs["out"] = table.get({PointKind::AI, static_cast<int>(p("channel",0))}).value;
+        return;
+
     case NodeType::DI_INPUT: {
-        const float v = table.get({PointKind::BI, static_cast<int>(p("channel", 0))}).value;
-        const bool b = (v != 0.0f) != (p("invert", 0) != 0);
-        return b ? 1.0f : 0.0f;
+        const float v = table.get({PointKind::BI, static_cast<int>(p("channel",0))}).value;
+        const bool  b = (v != 0.0f) != (p("invert",0) != 0.0);
+        n.outputs["out"] = b ? 1.0f : 0.0f;
+        return;
     }
+
     case NodeType::SETPOINT:
-        return static_cast<float>(p("default", 0.0));
+        n.outputs["out"] = static_cast<float>(p("default", 0.0));
+        return;
+
     case NodeType::AND_:
-        return (in("a") != 0.0f && in("b") != 0.0f) ? 1.0f : 0.0f;
+        n.outputs["out"] = (in("a") != 0.0f && in("b") != 0.0f) ? 1.0f : 0.0f;
+        return;
+
     case NodeType::OR_:
-        return (in("a") != 0.0f || in("b") != 0.0f) ? 1.0f : 0.0f;
+        n.outputs["out"] = (in("a") != 0.0f || in("b") != 0.0f) ? 1.0f : 0.0f;
+        return;
+
     case NodeType::NOT_:
-        return (in("in") != 0.0f) ? 0.0f : 1.0f;
+        n.outputs["out"] = (in("in") != 0.0f) ? 0.0f : 1.0f;
+        return;
+
     case NodeType::CMP_GT: {
         const float a = in("a"), b = in("b");
         const float h = static_cast<float>(p("hysteresis", 0.0));
-        if (n.cmp_state) n.cmp_state = (a > b - h);
-        else             n.cmp_state = (a > b);
-        return n.cmp_state ? 1.0f : 0.0f;
+        n.cmp_state = n.cmp_state ? (a > b - h) : (a > b);
+        n.outputs["out"] = n.cmp_state ? 1.0f : 0.0f;
+        return;
     }
+
     case NodeType::CMP_LT: {
         const float a = in("a"), b = in("b");
         const float h = static_cast<float>(p("hysteresis", 0.0));
-        if (n.cmp_state) n.cmp_state = (a < b + h);
-        else             n.cmp_state = (a < b);
-        return n.cmp_state ? 1.0f : 0.0f;
+        n.cmp_state = n.cmp_state ? (a < b + h) : (a < b);
+        n.outputs["out"] = n.cmp_state ? 1.0f : 0.0f;
+        return;
     }
+
     case NodeType::SCALE: {
-        const float in_lo = static_cast<float>(p("in_lo", 0)), in_hi = static_cast<float>(p("in_hi", 100));
-        const float out_lo = static_cast<float>(p("out_lo", 0)), out_hi = static_cast<float>(p("out_hi", 100));
-        if (in_hi == in_lo) return out_lo;
+        const float in_lo  = static_cast<float>(p("in_lo", 0));
+        const float in_hi  = static_cast<float>(p("in_hi", 100));
+        const float out_lo = static_cast<float>(p("out_lo", 0));
+        const float out_hi = static_cast<float>(p("out_hi", 100));
+        if (in_hi == in_lo) { n.outputs["out"] = out_lo; return; }
         const float t = (in("in") - in_lo) / (in_hi - in_lo);
-        return out_lo + t * (out_hi - out_lo);
+        n.outputs["out"] = out_lo + t * (out_hi - out_lo);
+        return;
     }
+
     case NodeType::LIMIT: {
-        const float lo = static_cast<float>(p("lo", 0)), hi = static_cast<float>(p("hi", 100));
-        return std::min(std::max(in("in"), lo), hi);
+        const float lo = static_cast<float>(p("lo", 0));
+        const float hi = static_cast<float>(p("hi", 100));
+        n.outputs["out"] = std::min(std::max(in("in"), lo), hi);
+        return;
     }
+
     case NodeType::PID: {
-        /* PI(D) rời rạc, anti-windup bằng conditional integration */
         const float kp = static_cast<float>(p("kp", 1.0));
         const float ki = static_cast<float>(p("ki", 0.0));
         const float kd = static_cast<float>(p("kd", 0.0));
         const float lo = static_cast<float>(p("out_lo", 0.0));
         const float hi = static_cast<float>(p("out_hi", 100.0));
         const bool reverse = (n.str_param == "reverse");
-        const float dt = static_cast<float>(scan_ms_) / 1000.0f;
         const float pv = in("pv"), sp = in("sp");
-        const float e = reverse ? (pv - sp) : (sp - pv);
-
-        const float d = (n.pid_first || dt <= 0.0f) ? 0.0f : -kd * (pv - n.pid_prev_pv) / dt;
+        const float e  = reverse ? (pv - sp) : (sp - pv);
+        const float d  = (n.pid_first || dt <= 0.0f) ? 0.0f
+                       : -kd * (pv - n.pid_prev_pv) / dt;
         n.pid_prev_pv = pv;
-        n.pid_first = false;
-
+        n.pid_first   = false;
         float u = kp * e + n.pid_integral + d;
         const bool sat_hi = u > hi, sat_lo = u < lo;
         if (!(sat_hi && e > 0.0f) && !(sat_lo && e < 0.0f))
             n.pid_integral += ki * e * dt;
         u = kp * e + n.pid_integral + d;
-        return std::min(std::max(u, lo), hi);
+        n.outputs["out"] = std::min(std::max(u, lo), hi);
+        return;
     }
+
     case NodeType::AO_OUTPUT: {
-        /* in = % (PID out_lo/out_hi 0..100); clamp limit rồi convert % → eng theo mode */
-        const float lo = static_cast<float>(p("limit_lo", 0.0));
-        const float hi = static_cast<float>(p("limit_hi", 100.0));
+        const float lo  = static_cast<float>(p("limit_lo", 0.0));
+        const float hi  = static_cast<float>(p("limit_hi", 100.0));
         const float pct = std::min(std::max(in("in"), lo), hi);
         const float eng = (n.str_param == "4-20mA") ? 4.0f + pct / 100.0f * 16.0f
                                                     : pct / 100.0f * 10.0f;
-        resolver.set_ao(PRIO_LOCAL_LOGIC, static_cast<int>(p("channel", 0)), eng);
-        return pct;
+        resolver.set_ao(PRIO_LOCAL_LOGIC, static_cast<int>(p("channel",0)), eng);
+        n.outputs["out"] = pct;
+        return;
     }
+
     case NodeType::DO_OUTPUT:
-        resolver.set_do(PRIO_LOCAL_LOGIC, static_cast<int>(p("channel", 0)), in("in") != 0.0f);
-        return in("in");
+        resolver.set_do(PRIO_LOCAL_LOGIC, static_cast<int>(p("channel",0)), in("in") != 0.0f);
+        n.outputs["out"] = in("in");
+        return;
+
+    /* ---- 10 new types (COR-009) ---- */
+
+    case NodeType::MANUAL_AUTO:
+        n.outputs["out"] = (in("sel") != 0.0f) ? in("manual") : in("auto");
+        return;
+
+    case NodeType::ON_DELAY: {
+        const float delay = static_cast<float>(p("delay_s", 0.0));
+        if (in("in") != 0.0f) {
+            n.acc_s += dt;
+            n.outputs["out"] = (n.acc_s >= delay) ? 1.0f : 0.0f;
+        } else {
+            n.acc_s = 0.0f;
+            n.outputs["out"] = 0.0f;
+        }
+        return;
     }
-    return 0.0f;
+
+    case NodeType::OFF_DELAY: {
+        const float delay = static_cast<float>(p("delay_s", 0.0));
+        if (in("in") != 0.0f) {
+            n.acc_s = 0.0f;
+            n.outputs["out"] = 1.0f;
+        } else {
+            n.acc_s += dt;
+            n.outputs["out"] = (n.acc_s < delay) ? 1.0f : 0.0f;
+        }
+        return;
+    }
+
+    case NodeType::INTERLOCK: {
+        const bool permit  = in("permit")  != 0.0f;
+        const bool request = in("request") != 0.0f;
+        const bool latch_p = p("latch", 0) != 0.0;
+        if (!permit) {
+            n.il_tripped = true;
+        } else if (n.il_tripped && latch_p) {
+            if (!request) n.il_tripped = false;   /* manual reset: rút request -> clear */
+        } else {
+            n.il_tripped = false;
+        }
+        n.outputs["out"]     = (permit && !n.il_tripped && request) ? 1.0f : 0.0f;
+        n.outputs["tripped"] = n.il_tripped ? 1.0f : 0.0f;
+        return;
+    }
+
+    case NodeType::RUNTIME_COUNTER: {
+        const bool run_in   = in("run")   != 0.0f;
+        const bool reset_in = in("reset") != 0.0f;
+        if (reset_in && !n.rt_prev_reset) {
+            if (n.rt_seconds != 0.0) dirty_ = true;
+            n.rt_seconds = 0.0;
+        }
+        n.rt_prev_reset = reset_in;
+        if (run_in && !reset_in) {
+            n.rt_seconds += static_cast<double>(dt);
+            dirty_ = true;
+        }
+        const double hours = n.rt_seconds / 3600.0;
+        const double maint = p("maint_hours", 0.0);
+        n.outputs["hours"] = static_cast<float>(hours);
+        n.outputs["alarm"] = (maint > 0.0 && hours >= maint) ? 1.0f : 0.0f;
+        return;
+    }
+
+    case NodeType::PULSE_COUNTER: {
+        const bool has_ch   = n.num_params.count("channel") > 0;
+        const bool reset_in = in("reset") != 0.0f;
+        if (reset_in && !n.pc_prev_reset) {
+            if (n.pc_count_raw != 0) dirty_ = true;
+            n.pc_count_raw = 0;
+            n.pc_di_init   = false;
+        }
+        n.pc_prev_reset = reset_in;
+
+        if (!reset_in) {
+            if (has_ch) {
+                const int ch = static_cast<int>(p("channel", 0));
+                const uint32_t cur = table.di_counter(ch);
+                if (!n.pc_di_init) {
+                    n.pc_last_di = cur;
+                    n.pc_di_init = true;
+                } else {
+                    if (cur >= n.pc_last_di) {
+                        const uint32_t delta = cur - n.pc_last_di;
+                        if (delta > 0) { n.pc_count_raw += delta; dirty_ = true; }
+                    } else {
+                        std::fprintf(stderr, "WARN  graph.pulse_counter.wrap node=%s ch=%d\n",
+                                     n.id.c_str(), ch);
+                    }
+                    n.pc_last_di = cur;
+                }
+            } else {
+                const bool pulse = in("pulse") != 0.0f;
+                if (pulse && !n.pc_prev_pulse) { n.pc_count_raw++; dirty_ = true; }
+                n.pc_prev_pulse = pulse;
+            }
+        }
+
+        const double scale    = p("scale", 1.0);
+        const double rollover = p("rollover", 0.0);
+        double count = static_cast<double>(n.pc_count_raw) * scale;
+        if (rollover > 0.0 && count >= rollover) {
+            n.pc_count_raw = 0;
+            count = 0.0;
+            dirty_ = true;
+        }
+        n.outputs["out"] = static_cast<float>(count);
+        return;
+    }
+
+    case NodeType::SAFE_STATE: {
+        const float safe_v = static_cast<float>(p("safe_value", 0.0));
+        n.outputs["out"] = (in("good") != 0.0f) ? in("in") : safe_v;
+        return;
+    }
+
+    case NodeType::ALARM_HIGH: {
+        const float pv    = in("pv");
+        const float limit = static_cast<float>(p("limit", 100.0));
+        const float hyst  = static_cast<float>(p("hysteresis", 0.0));
+        n.cmp_state = n.cmp_state ? (pv > limit - hyst) : (pv > limit);
+        n.outputs["out"] = n.cmp_state ? 1.0f : 0.0f;
+        return;
+    }
+
+    case NodeType::ALARM_LOW: {
+        const float pv    = in("pv");
+        const float limit = static_cast<float>(p("limit", 0.0));
+        const float hyst  = static_cast<float>(p("hysteresis", 0.0));
+        n.cmp_state = n.cmp_state ? (pv < limit + hyst) : (pv < limit);
+        n.outputs["out"] = n.cmp_state ? 1.0f : 0.0f;
+        return;
+    }
+
+    case NodeType::ALARM_DELAY: {
+        /* cmp_state = current output; acc_s shared cho ca on/off accumulator */
+        const float on_d  = static_cast<float>(p("on_delay_s",  0.0));
+        const float off_d = static_cast<float>(p("off_delay_s", 0.0));
+        if (in("in") != 0.0f) {
+            if (!n.cmp_state) {
+                n.acc_s += dt;
+                if (n.acc_s >= on_d) { n.cmp_state = true; n.acc_s = 0.0f; }
+            } else {
+                n.acc_s = 0.0f;
+            }
+        } else {
+            if (n.cmp_state) {
+                n.acc_s += dt;
+                if (n.acc_s >= off_d) { n.cmp_state = false; n.acc_s = 0.0f; }
+            } else {
+                n.acc_s = 0.0f;
+            }
+        }
+        n.outputs["out"] = n.cmp_state ? 1.0f : 0.0f;
+        return;
+    }
+
+    } /* switch */
 }
 
-void GraphRuntime::execute(const PointTable& table, PriorityResolver& resolver)
+/* ---- persist state (COR-010) ---- */
+
+std::vector<PersistEntry> GraphRuntime::get_persist_state() const
 {
-    if (!loaded_) return;   /* không có graph → nguồn logic inactive */
-    for (const int idx : order_) {
-        Node& n = nodes_[static_cast<size_t>(idx)];
-        n.out = compute(n, table, resolver);
+    std::vector<PersistEntry> result;
+    for (const Node& n : nodes_) {
+        if (n.type == NodeType::RUNTIME_COUNTER)
+            result.push_back({n.id, "RuntimeCounter", n.rt_seconds, 0});
+        else if (n.type == NodeType::PULSE_COUNTER)
+            result.push_back({n.id, "PulseCounter", 0.0, n.pc_count_raw});
+    }
+    return result;
+}
+
+void GraphRuntime::restore_persist_state(const std::vector<PersistEntry>& entries)
+{
+    for (const PersistEntry& e : entries) {
+        for (Node& n : nodes_) {
+            if (n.id != e.id) continue;
+            if (n.type == NodeType::RUNTIME_COUNTER && e.type == "RuntimeCounter") {
+                n.rt_seconds = e.run_seconds;
+                std::fprintf(stderr, "INFO  graph.restore node=%s hours=%.2f\n",
+                             n.id.c_str(), e.run_seconds / 3600.0);
+            } else if (n.type == NodeType::PULSE_COUNTER && e.type == "PulseCounter") {
+                n.pc_count_raw = e.count_raw;
+                std::fprintf(stderr, "INFO  graph.restore node=%s count_raw=%" PRIu64 "\n",
+                             n.id.c_str(), e.count_raw);
+            } else {
+                std::fprintf(stderr,
+                             "WARN  graph.restore_skip node=%s: snap=%s node=%s (id+type mismatch)\n",
+                             n.id.c_str(), e.type.c_str(),
+                             type_name(static_cast<int>(n.type)));
+            }
+            break;
+        }
     }
 }
 
