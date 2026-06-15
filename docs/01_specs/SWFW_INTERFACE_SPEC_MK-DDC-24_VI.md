@@ -1,9 +1,9 @@
-# SWFW Interface Specification — Kinexus-IOP v1
+﻿# SWFW Interface Specification — Kinexus-IOP v1
 ## MK-DDC-24 | SOM ↔ MCU Communication Protocol
 
 > **Document ID:** IOP-SPEC-MK-DDC-24-VI  
-> **Phiên bản:** 1.1 | 2026-06-11 (Contract Freeze: thêm FAULT bit6 `VDD_FAULT`, bảng RESET_IO reason đầy đủ, sửa CRC test vector sai 0x84C0/0x556B → 0x6C20/0xACE1)
-> **Trạng thái:** Approved (Owner 2026-06-08) · Frozen 2026-06-11
+> **Phiên bản:** 1.2 | 2026-06-15 (Sửa tên service + SHM path theo ADR-005 + Contract Freeze: `kinexus-io-driver` → `mkddc-iobus`, `/kinexus/io_data` → `/dev/shm/mkddc_io_shm`)
+> **Trạng thái:** Approved (Owner 2026-06-08) · Frozen 2026-06-11 · §8/§9.1 reconciled 2026-06-15
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
 > **Tác giả:** KINEXUS Technologies — System Architecture Team  
 > **Owner duy nhất:** Tài liệu này là nguồn spec DUY NHẤT (dạng diễn giải) cho interface SOM↔MCU.
@@ -501,7 +501,7 @@ IOP Driver (SOM):
 
 ```
 SOM boot:
-  1. kinexus-io-driver.service start
+  1. mkddc-iobus.service start
   2. Open /dev/ttyS2, configure 921600/8N1
   3. Flush RX/TX buffers
   4. SEQ = 0
@@ -529,10 +529,10 @@ MCU boot:
 
 | ID | Yêu cầu | Priority |
 |----|---------|---------|
-| IOP-SW-001 | PHẢI implement IOP driver trong `kinexus-io-driver` service (C hoặc Rust) | MUST |
+| IOP-SW-001 | PHẢI implement IOP driver trong `mkddc-iobus` service (C++17) | MUST |
 | IOP-SW-002 | PHẢI dùng CRC-16/Modbus theo Mục 3.2 | MUST |
 | IOP-SW-003 | PHẢI implement timeout/retry theo Mục 5.2 | MUST |
-| IOP-SW-004 | PHẢI expose I/O values qua POSIX shared memory `/kinexus/io_data` (format định nghĩa trong SW Arch Spec) | MUST |
+| IOP-SW-004 | PHẢI expose I/O values qua POSIX shared memory `/dev/shm/mkddc_io_shm` (format `kx_io_shm_t` định nghĩa trong `shared/mkddc_shm.h`) | MUST |
 | IOP-SW-005 | PHẢI implement fault state machine theo Mục 6.2 | MUST |
 | IOP-SW-006 | PHẢI ghi metrics (iop_crc_err, iop_seq_err, iop_timeout) qua `/api/v1/system/status` | MUST |
 | IOP-SW-007 | PHẢI implement HANDSHAKE và version check theo Mục 8 | MUST |
@@ -613,5 +613,12 @@ FF 00 00 FA 00 00 00 64 00 00
 ---
 
 **Document ID:** IOP-SPEC-MK-DDC-24-VI  
-**Revision:** 1.0 | 2026-05-28  
+**Revision:** 1.2 | 2026-06-15 (footer reconcile for §8/§9.1)  
 **Approved by:** System Architect, SW Lead, FW Lead — KINEXUS Technologies
+
+## Revision History
+| Rev | Date | Changes |
+|-----|------|---------|
+| 1.2 | 2026-06-15 | §8/§9.1 reconcile: kinexus-io-driver → mkddc-iobus, /kinexus/io_data → /dev/shm/mkddc_io_shm (audit 2026-06-15) |
+| 1.1 | 2026-06-11 | Contract Freeze: FAULT bit6 VDD_FAULT, RESET_IO reason table, sửa CRC vector |
+| 1.0 | 2026-05-28 | Initial approved |

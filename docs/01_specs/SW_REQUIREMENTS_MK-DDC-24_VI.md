@@ -2,7 +2,7 @@
 ## SOM Application Layer / Debian 12
 
 > **Document ID:** SW-REQ-MK-DDC-24-VI  
-> **Phiên bản:** 1.0 | 2026-05-28  
+> **Phiên bản:** 1.1-DRAFT (2026-06-15: §2.2 wrap legacy inline struct in <details>; actual contract = shared/mkddc_shm.h) | 2026-05-28  
 > **Trạng thái:** Draft — Pending SW Lead review  
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
 > **Tác giả:** KINEXUS Technologies — Software Team  
@@ -73,6 +73,9 @@ MQTT/REST Agent (`kinexus-agent`), Security Service, OTA (`kinexus-ota`), cloud.
 > để trace lịch sử requirement.
 
 ```c
+<details>
+<summary>legacy inline struct (CHỈ để trace lịch sử; KHÔNG dùng để code)</summary>
+
 // ===== LEGACY DRAFT (superseded by shared/mkddc_shm.h) =====
 // Shared memory structure — accessible by IOP driver (W) and PLC runtime (R)
 typedef struct {
@@ -102,6 +105,7 @@ typedef struct {
 
     uint8_t  _pad[2];                // Alignment
 } kinexus_io_shm_t;
+</details>
 ```
 
 ---

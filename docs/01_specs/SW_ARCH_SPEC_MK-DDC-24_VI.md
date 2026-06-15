@@ -74,6 +74,9 @@ Unit file đầy đủ: [06 §10](../03_implementation/06_MKDDC_IOBUS_IMPLEMENTA
 
 ---
 
+<details>
+<summary>§2-legacy — IPC Architecture (7 service <code>kinexus-*</code>, SHM <code>/dev/shm/kinexus_*_shm</code>) — superseded by 3-process <code>mkddc-*</code> + <code>/dev/shm/mkddc_*_shm</code> (xem <a href="../../shared/mkddc_shm.h">shared/mkddc_shm.h</a>, ADR-005)</summary>
+
 ## 2. IPC Architecture
 
 ### 2.1 Tổng quan IPC
@@ -194,6 +197,9 @@ do {
 ```
 
 ---
+
+
+</details>
 
 ## 3. Data Flow
 
