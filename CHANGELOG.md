@@ -7,6 +7,28 @@
 ---
 
 ## [Unreleased]
+### Fixed — Audit code↔docs (2026-06-15): reconcile 3 frozen specs theo kinexus→mkddc rename
+- **`SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md` (HIGH):**
+  - §8 Startup Sequence bước 1: `kinexus-io-driver.service start` → `mkddc-iobus.service start`
+  - §9.1 IOP-SW-001: `kinexus-io-driver` → `mkddc-iobus` (C++17)
+  - §9.1 IOP-SW-004: `/kinexus/io_data` → `/dev/shm/mkddc_io_shm`
+    (format `kx_io_shm_t` trong `shared/mkddc_shm.h`)
+  - Bump rev 1.1 → 1.2 · thêm Revision History
+  - Lưu ý: tên giao thức "Kinexus-IOP v1.1" được canonical chấp nhận (xref ADR-0008)
+    — chỉ đổi tên service + SHM path. Header files trong `shared/` vẫn là nguồn-chuẩn.
+- **`SW_REQUIREMENTS_MK-DDC-24_VI.md` (HIGH):**
+  - §2.2 wrap inline struct cũ `kinexus_io_shm_t` trong `<details>` để tránh nhầm với
+    struct thật `kx_io_shm_t` trong `shared/mkddc_shm.h`. Bump rev 1.0 → 1.1-DRAFT
+    (note cho SW Lead review).
+- **`SW_ARCH_SPEC_MK-DDC-24_VI.md` (HIGH):**
+  - Wrap cả §2 (IPC Architecture 7 service `kinexus-*` + path cũ
+    `/dev/shm/kinexus_*_shm`) trong `<details>`. Giờ chỉ Rev A 3-process `mkddc-*`
+    visible. Kèm link trỏ tới `shared/mkddc_shm.h` + ADR-005.
+
+Không có thay đổi về giá trị thực thi (opcode, payload, CRC, FAULT bit, RESET reason).
+Spec chỉ được điều chỉnh để khớp code đã triển khai. Audit report đầy đủ: xem chat
+audit 2026-06-15.
+
 ### Changed — Doc restructure ISO (2026-06-08, branch `chore/doc-restructure`)
 - **Tái cấu trúc thư mục tài liệu về 1 cây** (đóng ISO 9001 §7.5 nonconformity G1/G3):
   root `PRD/SRS/DS/HW_SPEC` + `spec/*` → `docs/01_specs/`; `design/*` → `docs/02_design/`
