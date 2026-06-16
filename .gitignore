@@ -33,3 +33,8 @@ gitleaks-report.json
 # Runtime/test logs (local, không commit)
 logs/*
 !logs/README.md
+
+
+# Local backup of stale untracked files (manual cleanup)
+/.untracked_backup_2026-06-15/
+
