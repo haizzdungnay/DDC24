@@ -2,18 +2,21 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './auth/AuthProvider'
 import { AppShell } from './components/AppShell'
 import { RealtimeProvider } from './realtime'
+import { AlarmSettingsPage } from './pages/AlarmSettingsPage'
 import { AlarmsPage } from './pages/AlarmsPage'
 import { CommissioningPage } from './pages/CommissioningPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { DisplaySettingsPage } from './pages/DisplaySettingsPage'
 import { LoginPage } from './pages/LoginPage'
 import { MonitorPage } from './pages/MonitorPage'
 import { NetworkPage } from './pages/NetworkPage'
+import { ProgrammingPage } from './pages/ProgrammingPage'
 import { SchedulerPage } from './pages/SchedulerPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { SystemHealthPage } from './pages/SystemHealthPage'
+import { TimeSettingsPage } from './pages/TimeSettingsPage'
 import { TrendsPage } from './pages/TrendsPage'
+import { UserInfoPage } from './pages/UserInfoPage'
 import { UsersPage } from './pages/UsersPage'
-import { ValidatorPage } from './pages/ValidatorPage'
 
 function ProtectedShell() {
   const { isAuthenticated } = useAuth()
@@ -36,13 +39,25 @@ export function App() {
         <Route path="monitor" element={<MonitorPage />} />
         <Route path="alarms" element={<AlarmsPage />} />
         <Route path="trends" element={<TrendsPage />} />
-        <Route path="scheduler" element={<SchedulerPage />} />
-        <Route path="network" element={<NetworkPage />} />
-        <Route path="users" element={<UsersPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="health" element={<SystemHealthPage />} />
-        <Route path="commissioning" element={<CommissioningPage />} />
-        <Route path="validator" element={<ValidatorPage />} />
+        <Route path="me" element={<UserInfoPage />} />
+
+        <Route path="settings" element={<Navigate to="/settings/device" replace />} />
+        <Route path="settings/display" element={<DisplaySettingsPage />} />
+        <Route path="settings/users" element={<UsersPage />} />
+        <Route path="settings/network" element={<NetworkPage />} />
+        <Route path="settings/time" element={<TimeSettingsPage />} />
+        <Route path="settings/device" element={<SettingsPage />} />
+
+        <Route path="eng/scheduler" element={<SchedulerPage />} />
+        <Route path="eng/commissioning" element={<CommissioningPage />} />
+        <Route path="eng/programming" element={<ProgrammingPage />} />
+        <Route path="eng/alarm-settings" element={<AlarmSettingsPage />} />
+
+        <Route path="users" element={<Navigate to="/settings/users" replace />} />
+        <Route path="network" element={<Navigate to="/settings/network" replace />} />
+        <Route path="scheduler" element={<Navigate to="/eng/scheduler" replace />} />
+        <Route path="commissioning" element={<Navigate to="/eng/commissioning" replace />} />
+        <Route path="validator" element={<Navigate to="/eng/programming" replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

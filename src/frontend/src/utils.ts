@@ -64,14 +64,68 @@ export function formatUptime(seconds = 0): string {
   return `${day}d ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
 }
 
-export function statusColor(status: HealthStatus | PointQuality | 'online' | 'offline' | 'force'): string {
-  if (status === 'ok' || status === 'good' || status === 'online') return 'var(--c-good)'
-  if (status === 'degraded' || status === 'uncertain' || status === 'stale') return 'var(--c-warn)'
-  if (status === 'force') return 'var(--c-force)'
-  if (status === 'fault' || status === 'bad' || status === 'offline') return 'var(--c-fault)'
-  return 'var(--c-info)'
+type StatusColorInput = HealthStatus | PointQuality | 'normal' | 'online' | 'offline' | 'live' | 'connected' | 'disconnected' | 'force' | 'forced' | 'critical' | 'safety' | 'warn' | 'warning' | 'alarm' | 'unknown' | 'n/a' | 'on' | 'off' | 'stopped' | 'inactive'
+
+function statusBucket(status: StatusColorInput): 'good' | 'off' | 'warn' | 'fault' | 'force' | 'critical' | 'unknown' {
+  const raw = String(status).toLowerCase()
+  if (raw === 'normal' || raw === 'good' || raw === 'ok' || raw === 'online' || raw === 'on' || raw === 'live' || raw === 'connected') return 'good'
+  if (raw === 'off' || raw === 'stopped' || raw === 'inactive') return 'off'
+  if (raw === 'warn' || raw === 'warning' || raw === 'uncertain' || raw === 'stale' || raw === 'degraded') return 'warn'
+  if (raw === 'fault' || raw === 'bad' || raw === 'offline' || raw === 'disconnected' || raw === 'alarm') return 'fault'
+  if (raw === 'force' || raw === 'forced') return 'force'
+  if (raw === 'critical' || raw === 'safety') return 'critical'
+  return 'unknown'
 }
 
+export function statusColor(status: StatusColorInput): string {
+  const bucket = statusBucket(status)
+  if (bucket === 'good') return 'var(--c-good-fg)'
+  if (bucket === 'off') return 'var(--c-off)'
+  if (bucket === 'warn') return 'var(--c-warn-fg)'
+  if (bucket === 'fault') return 'var(--c-fault-fg)'
+  if (bucket === 'force') return 'var(--c-force)'
+  if (bucket === 'critical') return 'var(--c-critical)'
+  return 'var(--c-text-dim)'
+}
+
+export function statusFill(status: StatusColorInput): string {
+  const bucket = statusBucket(status)
+  if (bucket === 'good') return 'var(--c-good)'
+  if (bucket === 'off') return 'var(--c-off)'
+  if (bucket === 'warn') return 'var(--c-warn)'
+  if (bucket === 'fault') return 'var(--c-fault)'
+  if (bucket === 'force') return 'var(--c-force)'
+  if (bucket === 'critical') return 'var(--c-critical)'
+  return 'var(--c-text-dim)'
+}
+
+export function statusIndicatorColor(status: StatusColorInput): string {
+  return statusFill(status)
+}
+
+export function metricStatusColor(value: number, warnAt: number, faultAt: number, direction: 'high' | 'low' = 'high'): string {
+  if (!Number.isFinite(value)) return 'var(--c-off)'
+  if (direction === 'low') {
+    if (value <= faultAt) return 'var(--c-fault-fg)'
+    if (value <= warnAt) return 'var(--c-warn-fg)'
+    return 'var(--c-good-fg)'
+  }
+  if (value >= faultAt) return 'var(--c-fault-fg)'
+  if (value >= warnAt) return 'var(--c-warn-fg)'
+  return 'var(--c-good-fg)'
+}
+
+export function metricStatusFill(value: number, warnAt: number, faultAt: number, direction: 'high' | 'low' = 'high'): string {
+  if (!Number.isFinite(value)) return 'var(--c-off)'
+  if (direction === 'low') {
+    if (value <= faultAt) return 'var(--c-fault)'
+    if (value <= warnAt) return 'var(--c-warn)'
+    return 'var(--c-good)'
+  }
+  if (value >= faultAt) return 'var(--c-fault)'
+  if (value >= warnAt) return 'var(--c-warn)'
+  return 'var(--c-good)'
+}
 export function nowIso(): string {
   return new Date().toISOString()
 }

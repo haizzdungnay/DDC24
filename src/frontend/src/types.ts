@@ -74,6 +74,20 @@ export interface Alarm {
   detail: string
 }
 
+export type AlarmPriority = 'low' | 'medium' | 'high' | 'critical'
+
+export interface AlarmSetting {
+  pointId: string
+  label: string
+  enabled: boolean
+  hh: number
+  h: number
+  l: number
+  ll: number
+  delayS: number
+  priority: AlarmPriority
+}
+
 export interface CommissioningTestResult {
   result: 'passed' | 'failed' | 'running'
   pointId: string
@@ -85,6 +99,86 @@ export interface CommissioningTestResult {
 export interface GraphValidationResult {
   pass: boolean
   errors: Array<{ path: string; message: string; severity: 'error' | 'warn' }>
+}
+
+export interface GraphPort {
+  name: string
+  type?: 'float' | 'bool' | 'int' | 'string'
+}
+
+export interface GraphNode {
+  id: string
+  type: string
+  ports?: {
+    inputs?: Array<string | GraphPort>
+    outputs?: Array<string | GraphPort>
+  }
+  inputs?: Array<string | GraphPort>
+  outputs?: Array<string | GraphPort>
+  params?: Record<string, unknown>
+  config?: Record<string, unknown>
+  limit?: { min?: number; max?: number; limit_lo?: number; limit_hi?: number }
+  fallback?: unknown
+  safeState?: unknown
+  safe_state?: unknown
+  power_on?: Record<string, unknown>
+}
+
+export interface GraphLink {
+  from: string
+  to: string
+}
+
+export interface GraphIoPoint {
+  node: string
+  channel?: number
+  sensor?: string
+  unit?: string
+  mode?: string
+  limit_lo?: number
+  limit_hi?: number
+  fallback?: unknown
+  safeState?: unknown
+  safe_state?: unknown
+}
+
+export interface GraphModbusPoint {
+  node: string
+  fc?: number
+  addr?: number
+  type?: string
+  scale?: number
+  fallback?: unknown
+  safeState?: unknown
+  safe_state?: unknown
+}
+
+export interface GraphModbusDevice {
+  bus?: number
+  baud?: number
+  slave?: number
+  host?: string
+  unit?: number
+  poll_ms?: number
+  points?: GraphModbusPoint[]
+}
+
+export interface Graph {
+  schema_version: string
+  device: { bacnet_device_id: number | string; name: string; scan_ms: number }
+  io_map: {
+    ai?: GraphIoPoint[]
+    ao?: GraphIoPoint[]
+    di?: GraphIoPoint[]
+    do?: GraphIoPoint[]
+  }
+  modbus?: {
+    rtu?: GraphModbusDevice[]
+    tcp?: GraphModbusDevice[]
+  }
+  nodes: GraphNode[]
+  links: GraphLink[]
+  meta?: Record<string, unknown>
 }
 
 export interface TrendSample {
@@ -105,12 +199,36 @@ export interface ScheduleRow {
   cells: ScheduleCell[]
 }
 
-export interface NetworkNode {
-  id: string
-  label: string
+export type LinkState = 'online' | 'offline'
+export type ModbusProfile = 'EXT I/O' | 'Remote HMI' | 'Meter' | 'VFD'
+export type PollState = 'online' | 'offline' | 'degraded'
+
+export interface NetworkConfig {
+  deviceName: string
   ip: string
-  status: HealthStatus
-  children?: NetworkNode[]
+  dhcp: boolean
+  wifiEnabled: boolean
+  subnet: string
+  gateway: string
+  bacnetDeviceId: string
+  bacnetDeviceName: string
+  bacnetPort: number
+  bmsLink: LinkState
+}
+
+export interface ModbusSlave {
+  address: number
+  name: string
+  profile: ModbusProfile
+  baudRate: number
+  pollState: PollState
+  errorRate: number
+  lastPollMs: number
+}
+
+export interface NetworkData {
+  northbound: NetworkConfig
+  southbound: ModbusSlave[]
 }
 
 export interface UserRow {

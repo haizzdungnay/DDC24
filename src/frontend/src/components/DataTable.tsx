@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useI18n } from '../i18n'
 import { cn } from '../utils'
 import { StateBlock } from './StateBlock'
 
@@ -19,9 +20,10 @@ export function DataTable<T>({ rows, columns, getRowKey, loading, error, emptyTe
   className?: string
   onRowClick?: (row: T) => void
 }) {
-  if (loading) return <StateBlock state="loading" title="Đang tải dữ liệu" />
-  if (error) return <StateBlock state="error" title="Không tải được dữ liệu" detail={error.message} />
-  if (!rows.length) return <StateBlock state="empty" title={emptyText ?? 'Chưa có dữ liệu'} />
+  const { pick } = useI18n()
+  if (loading) return <StateBlock state="loading" title={pick('Đang tải dữ liệu', 'Loading data')} />
+  if (error) return <StateBlock state="error" title={pick('Không tải được dữ liệu', 'Could not load data')} detail={error.message} />
+  if (!rows.length) return <StateBlock state="empty" title={emptyText ?? pick('Chưa có dữ liệu', 'No data')} />
 
   return (
     <div className={cn('overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)]', className)}>
@@ -37,7 +39,7 @@ export function DataTable<T>({ rows, columns, getRowKey, loading, error, emptyTe
               <tr
                 key={getRowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={cn('border-b border-[rgba(36,48,73,0.62)] transition last:border-0', onRowClick && 'cursor-pointer hover:bg-[rgba(34,211,238,0.07)]')}
+                className={cn('border-b border-[var(--c-border)] transition last:border-0', onRowClick && 'cursor-pointer hover:bg-[rgba(42,92,138,0.08)]')}
               >
                 {columns.map((column) => <td key={column.key} className={cn('px-3 py-2 align-middle', column.className)}>{column.render(row)}</td>)}
               </tr>

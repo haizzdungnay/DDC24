@@ -7,7 +7,7 @@ import { StatusBadge } from './StatusBadge'
 export function AlarmRow({ alarm, onAck }: { alarm: Alarm; onAck?: (alarm: Alarm) => void }) {
   const state = alarm.severity === 'critical' || alarm.severity === 'high' ? 'fault' : alarm.severity === 'medium' ? 'uncertain' : 'ok'
   return (
-    <div className="grid grid-cols-[140px_96px_1fr_92px] items-center gap-3 border-b border-[rgba(36,48,73,0.62)] px-3 py-3 text-xs last:border-0 max-lg:grid-cols-1">
+    <div className="grid grid-cols-[140px_96px_1fr_92px] items-center gap-3 border-b border-[var(--c-border)] px-3 py-3 text-xs last:border-0 max-lg:grid-cols-1">
       <span className="mono text-[var(--c-text-dim)]">{formatDateTime(alarm.time)}</span>
       <StatusBadge state={state} label={alarm.severity.toUpperCase()} />
       <div className="min-w-0">

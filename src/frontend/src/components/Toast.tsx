@@ -8,7 +8,7 @@ interface ToastItem { id: number; kind: ToastKind; message: string }
 interface ToastContextValue { push: (kind: ToastKind, message: string) => void }
 const ToastContext = createContext<ToastContextValue | null>(null)
 
-const color = { success: 'text-[var(--c-good)]', error: 'text-[var(--c-fault)]', warn: 'text-[var(--c-warn)]', info: 'text-[var(--c-info)]' }
+const color = { success: 'text-[var(--c-good-fg)]', error: 'text-[var(--c-fault-fg)]', warn: 'text-[var(--c-warn-fg)]', info: 'text-[var(--c-info)]' }
 const icon = { success: CheckCircle2, error: XCircle, warn: AlertTriangle, info: Info }
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {

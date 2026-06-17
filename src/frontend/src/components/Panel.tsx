@@ -3,7 +3,7 @@ import { cn } from '../utils'
 
 export function Panel({ title, subtitle, action, children, className }: { title?: string; subtitle?: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cn('panel-shadow rounded-[var(--radius)] border border-[var(--c-border)] bg-[rgba(17,26,43,0.86)] p-4', className)}>
+    <section className={cn('panel-shadow rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4', className)}>
       {(title || subtitle || action) && (
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>

@@ -1,15 +1,19 @@
 import type {
   Alarm,
+  AlarmSetting,
   CommissioningTestResult,
+  Graph,
+  GraphLink,
   GraphValidationResult,
   HealthResponse,
   IoChannel,
-  NetworkNode,
+  NetworkData,
   Point,
   ScheduleRow,
   TrendSample,
   UserRow
 } from '../types'
+import { DEVICE_DEFAULTS } from '../config'
 import { clamp, nowIso, pointNumber } from '../utils'
 
 const startedAt = Date.now() - 12 * 86400_000 - 4 * 3600_000 - 32 * 60_000
@@ -83,7 +87,7 @@ function jitter(point: Point): Point {
     return { ...point, value: Number(next.toFixed(1)), trend, updatedAt }
   }
   if (Math.random() < 0.025 && point.id !== 'DI-01') {
-    return { ...point, value: !Boolean(point.value), updatedAt }
+    return { ...point, value: !point.value, updatedAt }
   }
   return { ...point, updatedAt }
 }
@@ -134,6 +138,16 @@ export function getDemoAlarms(): Alarm[] {
   return alarms.map((alarm) => ({ ...alarm }))
 }
 
+export function getAlarmSettings(): AlarmSetting[] {
+  return [
+    { pointId: 'AI-01', label: 'Supply Air Temp', enabled: true, hh: 32, h: 28, l: 16, ll: 12, delayS: 10, priority: 'high' },
+    { pointId: 'AI-02', label: 'Duct Pressure', enabled: true, hh: 9.5, h: 8, l: 2, ll: 1, delayS: 5, priority: 'critical' },
+    { pointId: 'AI-03', label: 'Room Humidity', enabled: true, hh: 75, h: 65, l: 35, ll: 25, delayS: 30, priority: 'medium' },
+    { pointId: 'AI-04', label: 'Outdoor Temp', enabled: false, hh: 42, h: 38, l: 5, ll: 0, delayS: 60, priority: 'low' },
+    { pointId: 'AO-01', label: 'VFD Speed', enabled: true, hh: 100, h: 92, l: 10, ll: 0, delayS: 15, priority: 'medium' }
+  ]
+}
+
 export function ackDemoAlarm(id: string): Alarm[] {
   const target = alarms.find((alarm) => alarm.id === id)
   if (target) target.status = 'acked'
@@ -150,21 +164,30 @@ export function runDemoCommissioning(pointId: string, value: number | boolean): 
   return { result: 'passed', pointId, appliedValue: value, message: 'Command accepted by demo core', scanMs: 12 }
 }
 
-export function getTrendSamples(): TrendSample[] {
-  const tracked = ['AI-01', 'AI-02', 'AI-03', 'AI-04']
+export function getTrendSamples(pointIds: string[] = ['AI-01', 'AI-02', 'AI-03', 'AI-04'], rangeMinutes = 30): TrendSample[] {
+  const tracked = pointIds.filter((id) => points.some((point) => point.id === id && (point.kind === 'AI' || point.kind === 'AO')))
+  const sampleCount = rangeMinutes <= 30 ? 18 : rangeMinutes <= 60 ? 24 : rangeMinutes <= 360 ? 36 : 48
+  const stepMs = (rangeMinutes * 60_000) / Math.max(1, sampleCount - 1)
   const now = Date.now()
-  return Array.from({ length: 18 }, (_, i) => {
-    const sample: TrendSample = { time: new Date(now - (17 - i) * 5 * 60_000).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }
+  return Array.from({ length: sampleCount }, (_, i) => {
+    const offset = sampleCount - 1 - i
+    const timestamp = new Date(now - offset * stepMs)
+    const sample: TrendSample = { time: timestamp.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }
     for (const id of tracked) {
       const point = points.find((item) => item.id === id)
-      sample[id] = point?.trend?.[i] ?? pointNumber(point ?? points[0])
+      const base = pointNumber(point ?? points[0])
+      const amplitude = point?.kind === 'AO' ? 8 : point?.unit === 'bar' ? 0.8 : 5
+      const wave = Math.sin((i / Math.max(1, sampleCount - 1)) * Math.PI * 4 + id.length) * amplitude
+      const slowDrift = Math.cos((offset / sampleCount) * Math.PI * 2 + id.charCodeAt(id.length - 1)) * amplitude * 0.35
+      const historical = point?.trend?.[i % (point.trend.length || 1)] ?? base
+      sample[id] = Number((historical * 0.35 + (base + wave + slowDrift) * 0.65).toFixed(1))
     }
     return sample
   })
 }
 
 export function getDemoSchedule(): ScheduleRow[] {
-  const days = ['CN 18/05', 'T2 19/05', 'T3 20/05', 'T4 21/05', 'T5 22/05', 'T6 23/05', 'T7 24/05']
+  const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
   return ['AHU-01', 'PUMP-01', 'LIGHT-01', 'FAN-01', 'VLV-01'].map((id, rowIndex) => ({
     id,
     label: ['Air Handling Unit', 'Chilled Water Pump', 'Lobby Light', 'Exhaust Fan', 'Water Valve'][rowIndex],
@@ -172,12 +195,26 @@ export function getDemoSchedule(): ScheduleRow[] {
   }))
 }
 
-export function getDemoNetwork(): NetworkNode {
+export function getDemoNetwork(): NetworkData {
   return {
-    id: 'DDC24', label: 'DDC 24 Main Controller', ip: '192.168.1.100', status: 'ok', children: [
-      { id: 'DDC-01', label: 'DDC-01', ip: '192.168.1.101', status: 'ok', children: [{ id: 'AI-DI', label: 'AI DI', ip: '8 / 8', status: 'ok' }, { id: 'UIO', label: 'UIO', ip: '0 / 16', status: 'unknown' }] },
-      { id: 'DDC-02', label: 'DDC-02', ip: '192.168.1.102', status: 'ok', children: [{ id: 'AO', label: 'AO', ip: '0 / 4', status: 'ok' }, { id: 'DO', label: 'DO', ip: '0 / 8', status: 'unknown' }] },
-      { id: 'DDC-03', label: 'DDC-03', ip: '192.168.1.103', status: 'degraded', children: [{ id: 'DI', label: 'DI', ip: '0 / 16', status: 'ok' }, { id: 'DO2', label: 'DO', ip: '0 / 16', status: 'unknown' }] }
+    northbound: {
+      deviceName: DEVICE_DEFAULTS.name,
+      ip: DEVICE_DEFAULTS.ip,
+      dhcp: false,
+      wifiEnabled: true,
+      subnet: '255.255.255.0',
+      gateway: '192.168.1.1',
+      bacnetDeviceId: DEVICE_DEFAULTS.bacnetDeviceId,
+      bacnetDeviceName: DEVICE_DEFAULTS.name,
+      bacnetPort: 47808,
+      bmsLink: 'online'
+    },
+    southbound: [
+      { address: 1, name: 'KINEXUS-EXT-IO-01', profile: 'EXT I/O', baudRate: 38400, pollState: 'online', errorRate: 0.2, lastPollMs: 18 },
+      { address: 5, name: 'REMOTE-HMI-Lobby', profile: 'Remote HMI', baudRate: 38400, pollState: 'online', errorRate: 0.5, lastPollMs: 24 },
+      { address: 12, name: 'PM-212 Energy Meter', profile: 'Meter', baudRate: 9600, pollState: 'degraded', errorRate: 3.8, lastPollMs: 75 },
+      { address: 21, name: 'VFD-SupplyFan-01', profile: 'VFD', baudRate: 19200, pollState: 'online', errorRate: 0.9, lastPollMs: 31 },
+      { address: 34, name: 'VFD-Exhaust-Standby', profile: 'VFD', baudRate: 19200, pollState: 'offline', errorRate: 100, lastPollMs: 0 }
     ]
   }
 }
@@ -192,10 +229,197 @@ export function getDemoUsers(): UserRow[] {
   ]
 }
 
-export function validateGraphLocal(graph: unknown): GraphValidationResult {
-  const text = JSON.stringify(graph)
-  const errors: GraphValidationResult['errors'] = []
-  if (!text.includes('safe') && !text.includes('safeState')) errors.push({ path: '$.safe_state', message: 'Thiếu safe-state fallback cho IO lỗi', severity: 'error' })
-  if (!text.includes('limit') && !text.includes('max')) errors.push({ path: '$.outputs.AO', message: 'AO chưa có limit min/max', severity: 'error' })
+type GraphError = GraphValidationResult['errors'][number]
+type JsonRecord = Record<string, unknown>
+
+const inferredInputs: Record<string, string[]> = {
+  AO_Output: ['in'],
+  DO_Output: ['in'],
+  Scale: ['in'],
+  Limit: ['in'],
+  PID: ['pv', 'sp'],
+  Compare: ['a', 'b'],
+  Hysteresis: ['in']
+}
+
+export function validateGraphLocal(input: unknown): GraphValidationResult {
+  const parsed = parseGraphInput(input)
+  if (!parsed.ok) return { pass: false, errors: [{ path: '$', message: parsed.message, severity: 'error' }] }
+
+  const graph = parsed.graph
+  const errors: GraphError[] = []
+  const nodes = readRecordArray(graph.nodes)
+  const links = readRecordArray(graph.links)
+
+  if (!Array.isArray(graph.nodes)) errors.push({ path: '$.nodes', message: 'Thiếu nodes[] trong graph.json', severity: 'error' })
+  if (!Array.isArray(graph.links)) errors.push({ path: '$.links', message: 'Thiếu links[] trong graph.json', severity: 'error' })
+
+  nodes.forEach((node, index) => {
+    const id = stringField(node, 'id')
+    const type = stringField(node, 'type')
+    if (!id) errors.push({ path: `$.nodes[${index}].id`, message: 'Node thiếu id', severity: 'error' })
+    if (!type) errors.push({ path: `$.nodes[${index}].type`, message: 'Node thiếu type', severity: 'error' })
+  })
+
+  const incoming = new Map<string, GraphLink[]>()
+  links.forEach((link, index) => {
+    const from = stringField(link, 'from')
+    const to = stringField(link, 'to')
+    if (!from || !to) {
+      errors.push({ path: `$.links[${index}]`, message: 'Link phải có from/to dạng node.port', severity: 'error' })
+      return
+    }
+    incoming.set(to, [...(incoming.get(to) ?? []), { from, to }])
+  })
+
+  nodes.forEach((node, index) => {
+    const id = stringField(node, 'id')
+    if (!id) return
+    inputPorts(node).forEach((port) => {
+      const target = `${id}.${port}`
+      const writers = incoming.get(target) ?? []
+      if (writers.length === 0) {
+        errors.push({ path: `$.nodes[${index}].inputs.${port}`, message: `Input ${target} chưa nối`, severity: 'error' })
+      }
+      if (writers.length > 1) {
+        errors.push({ path: `$.links.to:${target}`, message: `Port ${target} bị nhiều nguồn ghi (${writers.length} writers)`, severity: 'error' })
+      }
+    })
+  })
+
+  for (const [target, writers] of incoming.entries()) {
+    if (writers.length > 1 && !errors.some((error) => error.path === `$.links.to:${target}`)) {
+      errors.push({ path: `$.links.to:${target}`, message: `Port ${target} nhận nhiều nguồn ghi (${writers.length} writers)`, severity: 'error' })
+    }
+  }
+
+  const ioMap = isRecord(graph.io_map) ? graph.io_map : {}
+  const aiNodes = mapIoNodes(readRecordArray(ioMap.ai))
+  const aoNodes = mapIoNodes(readRecordArray(ioMap.ao))
+  const doNodes = mapIoNodes(readRecordArray(ioMap.do))
+
+  nodes.forEach((node, index) => {
+    const id = stringField(node, 'id')
+    if (!id) return
+    const ioAo = aoNodes.get(id)
+    if (isAoNode(node) || ioAo) {
+      if (!hasLimitPair(node) && !hasLimitPair(getRecord(node, 'params')) && !hasLimitPair(getRecord(node, 'config')) && (!ioAo || !hasLimitPair(ioAo))) {
+        errors.push({ path: `$.nodes[${index}].params`, message: `AO ${id} thiếu limit min/max`, severity: 'error' })
+      }
+    }
+    if ((isSensorNode(node) || aiNodes.has(id)) && !hasFallbackOrSafe(node) && !hasFallbackOrSafe(aiNodes.get(id))) {
+      errors.push({ path: `$.nodes[${index}].fallback`, message: `Sensor ${id} thiếu fallback/safe-state`, severity: 'error' })
+    }
+    if ((isOutputNode(node) || aoNodes.has(id) || doNodes.has(id)) && !hasFallbackOrSafe(node) && !hasPowerOn(node) && !hasFallbackOrSafe(aoNodes.get(id)) && !hasFallbackOrSafe(doNodes.get(id))) {
+      errors.push({ path: `$.nodes[${index}].power_on`, message: `Output ${id} thiếu safe-state/power_on`, severity: 'error' })
+    }
+  })
+
+  for (const section of ['rtu', 'tcp'] as const) {
+    const devices = readRecordArray(getRecord(graph.modbus, section))
+    devices.forEach((device, deviceIndex) => {
+      readRecordArray(device.points).forEach((point, pointIndex) => {
+        if (!hasFallbackOrSafe(point)) {
+          errors.push({ path: `$.modbus.${section}[${deviceIndex}].points[${pointIndex}].fallback`, message: `Modbus point ${stringField(point, 'node') || pointIndex} thiếu fallback`, severity: 'error' })
+        }
+      })
+    })
+  }
+
   return { pass: errors.length === 0, errors }
+}
+
+function parseGraphInput(input: unknown): { ok: true; graph: Partial<Graph> & JsonRecord } | { ok: false; message: string } {
+  try {
+    const value = typeof input === 'string' ? JSON.parse(input) : input
+    if (!isRecord(value)) return { ok: false, message: 'graph.json phải là object JSON' }
+    return { ok: true, graph: value as Partial<Graph> & JsonRecord }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : 'JSON parse failed' }
+  }
+}
+
+function inputPorts(node: JsonRecord): string[] {
+  const ports = getRecord(node, 'ports')
+  const explicit = [...portNames(ports.inputs), ...portNames(node.inputs)]
+  if (explicit.length > 0) return [...new Set(explicit)]
+  const type = stringField(node, 'type')
+  if (inferredInputs[type]) return inferredInputs[type]
+  const lower = type.toLowerCase()
+  if (lower.includes('pid')) return ['pv', 'sp']
+  if ((lower.includes('ao') || lower.includes('do')) && lower.includes('output')) return ['in']
+  if (lower.includes('scale') || lower.includes('limit') || lower.includes('filter')) return ['in']
+  return []
+}
+
+function portNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => typeof item === 'string' ? item : isRecord(item) ? stringField(item, 'name') : '').filter(Boolean)
+}
+
+function mapIoNodes(items: JsonRecord[]): Map<string, JsonRecord> {
+  const entries: Array<[string, JsonRecord]> = []
+  items.forEach((item) => {
+    const id = stringField(item, 'node')
+    if (id) entries.push([id, item])
+  })
+  return new Map(entries)
+}
+
+function isAoNode(node: JsonRecord): boolean {
+  const type = stringField(node, 'type').toLowerCase()
+  return type.includes('ao') && type.includes('output')
+}
+
+function isOutputNode(node: JsonRecord): boolean {
+  const type = stringField(node, 'type').toLowerCase()
+  return (type.includes('ao') || type.includes('do')) && type.includes('output')
+}
+
+function isSensorNode(node: JsonRecord): boolean {
+  const type = stringField(node, 'type').toLowerCase()
+  return type.includes('sensor') || (type.includes('ai') && type.includes('input'))
+}
+
+function hasLimitPair(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  const limit = getRecord(value, 'limit')
+  return (hasNumber(value, 'limit_lo') && hasNumber(value, 'limit_hi')) || (hasNumber(value, 'min') && hasNumber(value, 'max')) || (hasNumber(limit, 'limit_lo') && hasNumber(limit, 'limit_hi')) || (hasNumber(limit, 'min') && hasNumber(limit, 'max'))
+}
+
+function hasFallbackOrSafe(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  return hasValue(value, 'fallback') || hasValue(value, 'safeState') || hasValue(value, 'safe_state') || hasFallbackOrSafe(value.params) || hasFallbackOrSafe(value.config)
+}
+
+function hasPowerOn(value: unknown): boolean {
+  const powerOn = getRecord(value, 'power_on')
+  return Object.keys(powerOn).length > 0
+}
+
+function readRecordArray(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+function getRecord(value: unknown, key: string): JsonRecord {
+  if (!isRecord(value)) return {}
+  const child = value[key]
+  return isRecord(child) ? child : {}
+}
+
+function stringField(value: JsonRecord, key: string): string {
+  const item = value[key]
+  return typeof item === 'string' ? item : ''
+}
+
+function hasNumber(value: JsonRecord, key: string): boolean {
+  return typeof value[key] === 'number' && Number.isFinite(value[key])
+}
+
+function hasValue(value: JsonRecord, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key) && value[key] !== null && value[key] !== undefined
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

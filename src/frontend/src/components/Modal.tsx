@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
+import { useI18n } from '../i18n'
 import { Button } from './Button'
 
-export function Modal({ open, title, children, confirmLabel = 'Xác nhận', cancelLabel = 'Hủy', danger, onConfirm, onClose }: {
+export function Modal({ open, title, children, confirmLabel, cancelLabel, danger, onConfirm, onClose }: {
   open: boolean
   title: string
   children: ReactNode
@@ -12,6 +13,9 @@ export function Modal({ open, title, children, confirmLabel = 'Xác nhận', can
   onConfirm?: () => void
   onClose: () => void
 }) {
+  const { t, pick } = useI18n()
+  const confirmText = confirmLabel ?? t('confirm')
+  const cancelText = cancelLabel ?? t('cancel')
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-[rgba(0,0,0,0.62)] p-4" role="presentation" onMouseDown={onClose}>
@@ -24,14 +28,14 @@ export function Modal({ open, title, children, confirmLabel = 'Xác nhận', can
       >
         <div className="flex items-start justify-between gap-4">
           <h2 id="modal-title" className="text-lg font-semibold">{title}</h2>
-          <button className="rounded-[var(--radius)] p-1 text-[var(--c-text-dim)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--c-text)]" onClick={onClose} aria-label="Close">
+          <button className="rounded-[var(--radius)] p-1 text-[var(--c-text-dim)] hover:bg-[rgba(42,92,138,0.08)] hover:text-[var(--c-text)]" onClick={onClose} aria-label={pick('Đóng', 'Close')}>
             <X className="h-5 w-5" />
           </button>
         </div>
         <div className="mt-4 text-sm text-[var(--c-text-dim)]">{children}</div>
         <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>{cancelLabel}</Button>
-          {onConfirm && <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm}>{confirmLabel}</Button>}
+          <Button variant="secondary" onClick={onClose}>{cancelText}</Button>
+          {onConfirm && <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm}>{confirmText}</Button>}
         </div>
       </section>
     </div>

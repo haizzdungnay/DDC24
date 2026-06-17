@@ -1,4 +1,4 @@
-import { cn, statusColor } from '../utils'
+import { cn, statusFill } from '../utils'
 
 interface GaugeProps {
   label: string
@@ -11,7 +11,7 @@ interface GaugeProps {
 
 export function Gauge({ label, value, unit = '%', max = 100, state = 'good', className }: GaugeProps) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100))
-  const color = statusColor(state)
+  const color = statusFill(state)
   return (
     <div className={cn('flex items-center gap-3', className)} aria-label={`${label} ${value}${unit}`}>
       <div

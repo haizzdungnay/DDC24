@@ -2,7 +2,7 @@
 ## Frontend (Web IDE — Svelte + TypeScript) — từ số 0 đến chạy được
 
 > **Document ID:** KX-DDC24-FE-DEVGUIDE-001
-> **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Approved · **Owner:** FE Lead
+> **Phiên bản:** 1.1 | 2026-06-16 · **Trạng thái:** Approved · **Owner:** FE Lead
 > 📘 [docs/README](../README.md) · Code: [REPO](KX-DDC24-PM-REPO-001_VI.md) · UX: form/JSON ([ADR-006](../adr/ADR-006-rev-a-ui-form-json.md)), [Design System](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) · API: [openapi.yaml](../02_design/interfaces/openapi.yaml)
 
 > 🎯 FE = trang web KinexusET chạy trong trình duyệt: đăng nhập, cấu hình I/O, lập trình FBD/ST, giám sát realtime. Dev mở file này là: chạy được dev server → gọi được API thật/mock → dựng từng màn theo backlog. **Hợp đồng với BE = `openapi.yaml` (REST) + §3 (WebSocket).**
@@ -11,6 +11,16 @@
 > import/export `graph.json`**, **KHÔNG** lập trình FBD/ST trên canvas (wiresheet → Rev B —
 > [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md)/[ADR-007](../adr/ADR-007-web-stack-go.md)). Hợp đồng REST: [GRAPH_SCHEMA §7](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) + `openapi.yaml`.
 > Backlog FBD-editor đọc như tham chiếu Rev B.
+
+> 📌 **Trạng thái triển khai (ĐÃ làm 2026-06-16, demo UI client-side).** App thực tế nằm tại
+> `src/frontend/` (React 18 + Vite + Tailwind v4), 12 trang: Login, Dashboard, Monitor, Alarms,
+> Trends, Scheduler, Network, Users, Settings, SystemHealth, Commissioning, Validator. 4 trang
+> vừa chỉnh khớp spec ở mức **demo (qua simulator, chưa nối backend, contract không đổi):**
+> **Trends** — filter object-list + time-range (bám BACnet Trend Log, SRS IDE-024/025);
+> **Scheduler** — BACnet Weekly_Schedule tuần-lặp, bỏ "Tháng" (PRD FR-004);
+> **Network** — Northbound BACnet/IP + Southbound Modbus RTU master, bỏ cây controller (ARCH-R010);
+> **Validator** — kiểm `graph.json` 4 check Rev A (GRAPH_SCHEMA), không FBD/ST (ADR-004 → Rev C).
+> Chi tiết: [08_MKDDC_WEB §1](../03_implementation/08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) + CHANGELOG `[Unreleased]`.
 
 ---
 
@@ -132,3 +142,4 @@ B4  Màn Dashboard: gọi /points, render PointCard                           (F
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
 | 1.0 | 2026-05-30 | FE Lead | Phát hành đầu — guide + WS contract + walking skeleton + 8 ticket |
+| 1.1 | 2026-06-16 | FE | Ghi trạng thái triển khai Rev A (12 trang) + demo 4 trang Trends/Scheduler/Network/Validator khớp spec (contract không đổi) |

@@ -1,52 +1,106 @@
-import { Bell, CalendarDays, Gauge, HeartPulse, Home, LineChart, Network, Settings, ShieldCheck, SlidersHorizontal, TestTube2, Users } from 'lucide-react'
+import { Bell, CalendarDays, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, Settings, ShieldCheck, SlidersHorizontal, TestTube2, UserRound, Users } from 'lucide-react'
+import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { DEVICE_DEFAULTS } from '../config'
 import { useI18n } from '../i18n'
 import { cn } from '../utils'
 
-const items = [
-  { to: '/', key: 'dashboard', icon: Home },
-  { to: '/monitor', key: 'monitor', icon: SlidersHorizontal },
-  { to: '/alarms', key: 'alarms', icon: Bell, badge: '5' },
-  { to: '/trends', key: 'trends', icon: LineChart },
-  { to: '/scheduler', key: 'scheduler', icon: CalendarDays },
-  { to: '/network', key: 'network', icon: Network },
-  { to: '/users', key: 'users', icon: Users },
-  { to: '/settings', key: 'settings', icon: Settings },
-  { to: '/health', key: 'health', icon: HeartPulse },
-  { to: '/commissioning', key: 'commissioning', icon: TestTube2 },
-  { to: '/validator', key: 'validator', icon: ShieldCheck }
+const groups = [
+  {
+    id: 'overview',
+    titleKey: 'overview',
+    items: [
+      { to: '/', key: 'dashboard', icon: Home, end: true },
+      { to: '/monitor', key: 'monitor', icon: SlidersHorizontal },
+      { to: '/alarms', key: 'alarm-log', icon: Bell, badge: '5' },
+      { to: '/trends', key: 'trends', icon: LineChart },
+      { to: '/me', key: 'me', icon: UserRound }
+    ]
+  },
+  {
+    id: 'settings',
+    titleKey: 'settings',
+    items: [
+      { to: '/settings/display', key: 'display', icon: Gauge },
+      { to: '/settings/users', key: 'users', icon: Users },
+      { to: '/settings/network', key: 'network', icon: Network },
+      { to: '/settings/time', key: 'time', icon: Clock3 },
+      { to: '/settings/device', key: 'device', icon: Settings }
+    ]
+  },
+  {
+    id: 'engineering',
+    titleKey: 'engineering',
+    items: [
+      { to: '/eng/scheduler', key: 'scheduler', icon: CalendarDays },
+      { to: '/eng/commissioning', key: 'commissioning', icon: TestTube2 },
+      { to: '/eng/programming', key: 'programming', icon: ShieldCheck },
+      { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell }
+    ]
+  }
 ] as const
+
+type GroupId = typeof groups[number]['id']
 
 export function NavRail() {
   const { t } = useI18n()
+  const [openGroups, setOpenGroups] = useState<Record<GroupId, boolean>>({ overview: true, settings: true, engineering: true })
+
+  function toggleGroup(id: GroupId) {
+    setOpenGroups((current) => ({ ...current, [id]: !current[id] }))
+  }
+
   return (
-    <aside className="hidden w-[196px] shrink-0 border-r border-[var(--c-border)] bg-[rgba(7,14,27,0.72)] lg:flex lg:flex-col">
+    <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 border-r border-[var(--c-border)] bg-[var(--c-surface)] lg:flex lg:flex-col">
       <div className="border-b border-[var(--c-border)] p-5">
-        <div className="text-3xl font-black leading-none"><span className="text-[var(--c-accent-2)]">DDC</span> 24</div>
-        <div className="mt-1 text-sm text-[var(--c-accent)]">Controller</div>
+        <div className="text-3xl font-black leading-none"><span className="text-[var(--c-text)]">DDC</span> 24</div>
+        <div className="mt-1 text-sm text-[var(--c-text-dim)]">Controller</div>
       </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="Main navigation">
-        {items.map((item) => {
-          const Icon = item.icon
+      <nav className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3" aria-label="Main navigation">
+        {groups.map((group) => {
+          const isOpen = openGroups[group.id]
+          const Chevron = isOpen ? ChevronDown : ChevronRight
           return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) => cn('flex h-10 items-center gap-3 rounded-[var(--radius)] px-3 text-sm text-[var(--c-text-dim)] transition hover:bg-[rgba(45,127,249,0.14)] hover:text-[var(--c-text)]', isActive && 'border border-[rgba(34,211,238,0.34)] bg-[rgba(45,127,249,0.24)] text-white')}
-            >
-              <Icon className="h-5 w-5" aria-hidden="true" />
-              <span className="flex-1">{t(item.key)}</span>
-              {'badge' in item && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[var(--c-fault)] px-1 text-[10px] font-bold text-white">{item.badge}</span>}
-            </NavLink>
+            <section key={group.id}>
+              <button
+                type="button"
+                className="flex h-8 w-full items-center justify-between rounded-[var(--radius)] px-2 text-[10px] font-bold uppercase tracking-wide text-[var(--c-text-dim)] transition hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]"
+                aria-expanded={isOpen}
+                onClick={() => toggleGroup(group.id)}
+              >
+                <span>{t(group.titleKey)}</span>
+                <Chevron className="h-4 w-4" aria-hidden="true" />
+              </button>
+              {isOpen && (
+                <div className="mt-1 space-y-1">
+                  {group.items.map((item) => {
+                    const Icon = item.icon
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={'end' in item ? item.end : false}
+                        className={({ isActive }) => cn(
+                          'flex h-10 items-center gap-3 rounded-[var(--radius)] border border-transparent border-l-4 border-l-transparent px-3 text-sm text-[var(--c-text-dim)] transition hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]',
+                          isActive && 'border-[var(--c-border)] border-l-[var(--c-line-strong)] bg-[var(--c-surface-2)] font-semibold text-[var(--c-text)]'
+                        )}
+                      >
+                        <Icon className="h-5 w-5" aria-hidden="true" />
+                        <span className="flex-1">{t(item.key)}</span>
+                        {'badge' in item && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[var(--c-fault)] px-1 text-[10px] font-bold text-white">{item.badge}</span>}
+                      </NavLink>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
           )
         })}
       </nav>
-      <div className="p-4">
-        <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[rgba(17,26,43,0.82)] p-3">
-          <div className="mb-3 grid h-24 place-items-center rounded-[var(--radius)] border border-[rgba(34,211,238,0.18)] bg-[rgba(34,211,238,0.05)]">
-            <Gauge className="h-10 w-10 text-[var(--c-accent)]" aria-hidden="true" />
+      <div className="shrink-0 p-4">
+        <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3">
+          <div className="mb-3 grid h-20 place-items-center rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]">
+            <Gauge className="h-9 w-9 text-[var(--c-text-dim)]" aria-hidden="true" />
           </div>
           <div className="text-[10px] uppercase text-[var(--c-text-dim)]">Model</div>
           <div className="text-xs font-semibold">DDC24-AC</div>

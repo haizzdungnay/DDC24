@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.3 | 2026-06-13 (bổ sung S7 #4/#5/#6: COR-009/010, BAC-001..011, MOD-001..011) · 1.2 | 2026-06-12
+> **Phiên bản:** 1.11 | 2026-06-17 (WEB-013 chuẩn hóa i18n VI/EN frontend)
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -472,7 +472,104 @@ Test: graph thiếu limit AO → validate FAIL → deploy chặn; pass → deplo
 Done khi: 4 check Rev A chạy; deploy chỉ khi pass
 Phụ thuộc: WEB-004
 ```
+```
+Task ID: WEB-006
+Tên: Frontend theme/status ISA-101 Level A (P1/3)
+Owner: Dev Web | Phase: 5 | Module: frontend theme/status
+File: src/frontend/src/styles.css, src/frontend/src/utils.ts, src/frontend/src/components/StatusBadge.tsx, src/frontend/src/components/TrendChart.tsx
+Input: ADR-009 Accepted; UX-SYSTEM §1/§2/§6/§7/§8
+Output: web Rev A nền xám sáng Level A; normal/online/OK trung tính; warn/fault/force/critical dùng màu đúng chuẩn; badge luôn có icon+chữ
+Test: npm run typecheck; npm run build; kiểm UI nền sáng và không đổi REST/WebSocket contract
+Done khi: build sạch, trạng thái bình thường không còn xanh lá rực, màu không là nghĩa duy nhất
+Phụ thuộc: WEB-004; ADR-009 Accepted
+Trạng thái: ĐÃ làm 2026-06-16 — áp design tokens ISA-101 Level A P1/3 cho frontend theme/status; không đổi REST/WS contract
+```
 
+```
+Task ID: WEB-007
+Tên: Frontend navigation/routing ISA-101 3 nhóm (P2/3)
+Owner: Dev Web | Phase: 5 | Module: frontend routing/nav
+File: src/frontend/src/components/NavRail.tsx, src/frontend/src/App.tsx, src/frontend/src/i18n.tsx, src/frontend/src/pages/_Stub.tsx
+Input: ADR-009 Accepted; UX-SYSTEM §6; WEB-006
+Output: NavRail 3 nhóm thu gọn được; route mới Overview/Settings/Engineering; stub cho trang P3; redirect path cũ
+Test: npm run typecheck; mở từng route mới/cũ; không đổi REST/WebSocket contract
+Done khi: typecheck sạch, không 404, active item dùng dấu hiệu trung tính, path cũ redirect đúng
+Phụ thuộc: WEB-006
+Trạng thái: ĐÃ làm 2026-06-16 — điều hướng 3 nhóm + routing mới P2/3; không đổi REST/WS contract
+```
+
+```
+Task ID: WEB-008
+Tên: Frontend hoàn tất tái cấu trúc ISA-101 (P3/3)
+Owner: Dev Web | Phase: 5 | Module: frontend pages/programming/health
+File: src/frontend/src/App.tsx, src/frontend/src/pages/*, src/frontend/src/demo/simulator.ts, src/frontend/src/types.ts
+Input: ADR-009 Accepted; UX-SYSTEM; WEB-006; WEB-007; SW_COMPONENT_LIBRARY
+Output: 12 trang theo cây ADR-009 không còn stub; `/health` gộp vào Dashboard; `/eng/programming` thay Validator với thư viện component + graph validate/deploy demo; alarm settings demo
+Test: npm run typecheck; mở từng route mới/cũ; không còn nền navy tối; không đổi REST/WebSocket contract
+Done khi: typecheck sạch, route ADR-009 đầy đủ, Dashboard có health services + IOP/scan metrics, Programming deploy chỉ bật khi validate pass
+Phụ thuộc: WEB-007
+Trạng thái: ĐÃ làm 2026-06-16 — hoàn tất FE ISA-101 P3/3; không đổi REST/WS contract
+```
+```
+Task ID: WEB-009
+Tên: Frontend Level B hybrid status colors (green normal, gray off, warn-fg)
+Owner: Dev Web | Phase: 5 | Module: frontend status colors/accessibility
+File: src/frontend/src/styles.css, src/frontend/src/utils.ts, src/frontend/src/components/StatusBadge.tsx, src/frontend/src/components/Gauge.tsx, src/frontend/src/components/TrendChart.tsx, src/frontend/src/pages/DashboardPage.tsx, src/frontend/src/pages/TrendsPage.tsx
+Input: ADR-009 amended Level B hybrid; UX-SYSTEM §2/§8
+Output: `statusColor()` dùng màu fg đọc trên nền sáng; `statusFill()` dùng màu nền/dot/arc; normal/online/ON xanh lá, off/stopped xám, warn dùng amber sẫm cho chữ/đường hoặc chip nền vàng, fault dùng đỏ; trend amber đủ dày; không đổi REST/WebSocket contract
+Test: npm run typecheck; kiểm Dashboard/Trends không còn chữ/đường vàng mảnh khó đọc và mọi trạng thái có chữ/icon phi-màu
+Done khi: typecheck sạch, màu Level B hybrid đúng semantic và warn/fault/normal/off đọc tốt trên nền sáng
+Phụ thuộc: WEB-008; ADR-009 amendment 2026-06-16
+Trạng thái: ĐÃ làm 2026-06-16 — áp Level B hybrid: green normal, gray off, warn-fg/fault-fg cho chữ/đường; typecheck pass
+```
+```
+Task ID: WEB-010
+Tên: Dashboard dynamic metrics theo owner adjustment ISA-101
+Owner: Dev Web | Phase: 5 | Module: frontend dashboard/status metrics
+File: src/frontend/src/styles.css, src/frontend/src/utils.ts, src/frontend/src/components/StatusBadge.tsx, src/frontend/src/pages/DashboardPage.tsx
+Input: Owner feedback 2026-06-16; ADR-009 adjustment; UX-SYSTEM 1.3
+Output: OK/ONLINE/uptime/value trong ngưỡng bình thường xanh lá; CPU/RAM/nhiệt/scan vượt ngưỡng warn cam, fault đỏ; surface/card vẫn nền xám Level A; không đổi REST/WebSocket contract
+Test: npm run typecheck; kiểm Dashboard top cards + Services + IOP/scan metrics đổi màu đúng ngưỡng
+Done khi: typecheck sạch, normal xanh và bất thường cam/đỏ cho các giá trị biến thiên Dashboard
+Phụ thuộc: WEB-009
+Trạng thái: ĐÃ làm 2026-06-16 — cập nhật dashboard dynamic metrics theo ngưỡng; không đổi REST/WS contract
+```
+```
+Task ID: WEB-011
+Tên: Frontend sticky top status bar/NavRail
+Owner: Dev Web | Phase: 5 | Module: frontend app shell/layout
+File: src/frontend/src/components/TopBar.tsx, src/frontend/src/components/AppShell.tsx, src/frontend/src/components/NavRail.tsx
+Input: Owner feedback 2026-06-16; 08_WEB §1.8; ADR-009/UX-SYSTEM Level A
+Output: TopBar luôn cố định khi cuộn; reconnect banner bám dưới TopBar; NavRail cố định bên trái; không dùng glow/dark overlay; không đổi REST/WebSocket contract
+Test: npm run typecheck; cuộn trang dài vẫn thấy top status bar/NavRail
+Done khi: typecheck sạch, thanh điều khiển không biến mất khi cuộn
+Phụ thuộc: WEB-010
+Trạng thái: ĐÃ làm 2026-06-16 — cố định shell chrome khi cuộn; không đổi REST/WS contract
+```
+```
+Task ID: WEB-012
+Tên: Monitor binary ON/OFF color semantics
+Owner: Dev Web | Phase: 5 | Module: frontend monitor/status colors
+File: src/frontend/src/pages/MonitorPage.tsx
+Input: Owner feedback 2026-06-17; ADR-009 Level B hybrid; UX-SYSTEM §2 ngữ nghĩa màu trạng thái
+Output: Monitor I/O hiển thị ON/active bằng green, OFF/inactive bằng gray; DI-01 ON không tự chuyển đỏ trong bảng/trang chi tiết/lịch sử nhị phân; không đổi REST/WebSocket contract
+Test: npm run typecheck; kiểm Monitor DI/DO row, detail panel, history table theo ON xanh/OFF xám
+Done khi: typecheck sạch, các bề mặt nhị phân Monitor theo đúng quy ước owner
+Phụ thuộc: WEB-009
+Trạng thái: ĐÃ làm 2026-06-17 — sửa Monitor binary ON/OFF: ON xanh, OFF xám; không đổi REST/WS contract
+```
+```
+Task ID: WEB-013
+Tên: Frontend i18n VI dấu + English mode thật
+Owner: Dev Web | Phase: 5 | Module: frontend i18n/pages
+File: src/frontend/src/i18n.tsx, src/frontend/src/components/*, src/frontend/src/pages/*
+Input: Owner feedback 2026-06-17; 08_WEB §1.9; Display `/settings/display` language vi/en
+Output: tiếng Việt hiển thị có dấu trên shell và 12 trang ADR-009; English mode đổi nhãn/nút/toast chính theo tiếng Anh; không đổi REST/WebSocket contract
+Test: npm run typecheck; bật VI/EN ở Display/TopBar và kiểm tra Dashboard, Monitor, Settings, Engineering không còn chuỗi VI không dấu ở UI chính
+Done khi: typecheck sạch, UI chính đọc tốt ở VI và EN
+Phụ thuộc: WEB-012
+Trạng thái: ĐÃ làm 2026-06-17 — chuẩn hóa i18n VI có dấu + English mode cho frontend demo; không đổi REST/WS contract
+```
 ---
 
 ## Phase 6 — End-to-end
@@ -513,7 +610,7 @@ Phụ thuộc: E2E-003
 ```
 
 ---
-**Rev** 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
+**Rev** 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
 1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit,
 COR-008 SIGHUP reload — cụm production-hardening 1+5+6 ĐÃ làm) · 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006
 Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·

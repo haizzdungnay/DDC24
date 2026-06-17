@@ -9,7 +9,7 @@ export function PointCard({ point, stale = false, compact = false, onClick }: { 
     <button
       type="button"
       onClick={onClick}
-      className={cn('w-full rounded-[var(--radius)] border bg-[rgba(22,34,58,0.72)] p-3 text-left transition hover:-translate-y-0.5 hover:bg-[rgba(22,34,58,0.94)]', stale && 'stale', compact ? 'min-h-[104px]' : 'min-h-[136px]')}
+      className={cn('w-full rounded-[var(--radius)] border bg-[var(--c-surface)] p-3 text-left transition hover:-translate-y-0.5 hover:bg-[var(--c-surface-2)]', stale && 'stale', compact ? 'min-h-[104px]' : 'min-h-[136px]')}
       style={{ borderColor }}
     >
       <div className="flex items-start justify-between gap-2">

@@ -10,10 +10,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClass = {
-  primary: 'bg-[var(--c-accent-2)] text-white border-[var(--c-accent-2)] hover:brightness-110',
+  primary: 'bg-[var(--c-accent)] text-white border-[var(--c-accent)] hover:brightness-105',
   secondary: 'bg-[var(--c-surface-2)] text-[var(--c-text)] border-[var(--c-border)] hover:border-[var(--c-accent)]',
-  danger: 'bg-[rgba(229,72,77,0.16)] text-[var(--c-fault)] border-[rgba(229,72,77,0.42)] hover:bg-[rgba(229,72,77,0.24)]',
-  ghost: 'bg-transparent text-[var(--c-text-dim)] border-transparent hover:text-[var(--c-text)] hover:bg-[rgba(255,255,255,0.04)]'
+  danger: 'bg-[rgba(229,72,77,0.16)] text-[var(--c-fault-fg)] border-[rgba(229,72,77,0.42)] hover:bg-[rgba(229,72,77,0.24)]',
+  ghost: 'bg-transparent text-[var(--c-text-dim)] border-transparent hover:text-[var(--c-text)] hover:bg-[rgba(42,92,138,0.08)]'
 }
 
 const sizeClass = {
