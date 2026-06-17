@@ -3,7 +3,7 @@
 [Unit]
 Description=MK-DDC-24 fake MCU — lab/no-MCU only
 After=mkddc-pty.service
-Requires=mkddc-pty.service
+BindsTo=mkddc-pty.service
 Before=mkddc-iobus.service
 
 [Service]

@@ -1,3 +1,4 @@
+
 /**
  * @file  scan_loop.hpp
  * @brief Vòng quét tuyệt-đối-thời-gian (07 §2): clock_nanosleep(ABSTIME), không drift.
