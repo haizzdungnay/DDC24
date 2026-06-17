@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Build/deploy lên board SOM khi chưa có MCU
 
 > **Document ID:** IMPL-SOM-DEPLOY-NOMCU-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-13
+> **Phiên bản:** 1.2 | 2026-06-16
 > **Trạng thái:** Active — SOP cho team build/deploy SOM-only
 > **Owner:** Dev 2 + DevOps/QA
 > **Scope:** board SOM truy cập qua SSH, chưa có MCU STM32; deploy/test `mkddc-iobus`, `mkddc-core`, `fake_mcu`, `shm_dump_io`.
@@ -118,6 +118,7 @@ cd ~/Desktop/DDC-PROJECT   # hoặc root repo trên máy dev
 rsync -az --delete \
   --exclude build --exclude logs --exclude .git \
   ./ SOM-DDC-24:~/work/DDC-PROJECT/
+git rev-parse HEAD | ssh SOM-DDC-24 "cat > ~/work/DDC-PROJECT/DEPLOYED_COMMIT"
 ```
 
 > **Tại sao rsync?** Không dùng `scp -r` (dễ sót file cũ) và không git clone trên board (key chưa setup cho SOM→GitHub). Rsync incremental — lần sau chỉ gửi diff.
@@ -182,6 +183,14 @@ ls -d /data/config /data/mkddc"
 # /data/config /data/mkddc tồn tại
 ```
 
+Validate unit file (không có output = OK):
+
+```bash
+ssh SOM-DDC-24 "systemd-analyze verify \
+  /etc/systemd/system/mkddc-iobus.service \
+  /etc/systemd/system/mkddc-core.service"
+```
+
 ---
 
 ## 7. No-MCU smoke test thủ công (một lần để verify)
@@ -189,7 +198,7 @@ ls -d /data/config /data/mkddc"
 > Dùng để verify lần đầu sau install. Cho lab chạy liên tục → dùng systemd stack ở §7b.
 
 ```bash
-ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && bash tools/run_noboard_demo.sh &"
+ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && nohup bash tools/run_noboard_demo.sh </dev/null &>/dev/null &"
 sleep 6
 # Terminal khác:
 ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && bash tools/run_noboard_demo.sh do1 1"
@@ -219,6 +228,7 @@ cd ~/work/DDC-PROJECT
 E=~/mkddc-evidence/\$(date +%Y%m%d_%H%M)_som_nomcu
 mkdir -p \$E
 uname -a > \$E/uname.txt
+cat ~/work/DDC-PROJECT/DEPLOYED_COMMIT > \$E/git_rev.txt 2>/dev/null || echo "unknown" > \$E/git_rev.txt
 ctest --test-dir build/services --output-on-failure | tee \$E/ctest.log
 cp -a logs/demo \$E/ 2>/dev/null || true
 systemctl --no-pager status mkddc-iobus mkddc-core > \$E/systemd_status.txt 2>&1 || true
@@ -272,6 +282,16 @@ ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && \
 ```
 
 ### Verify sau setup (hoặc sau reboot)
+
+Validate tất cả unit file (không có output = OK):
+
+```bash
+ssh SOM-DDC-24 "systemd-analyze verify \
+  /etc/systemd/system/mkddc-pty.service \
+  /etc/systemd/system/mkddc-fakemcu.service \
+  /etc/systemd/system/mkddc-iobus.service \
+  /etc/systemd/system/mkddc-core.service"
+```
 
 ```bash
 ssh SOM-DDC-24 "systemctl is-active mkddc-pty mkddc-fakemcu mkddc-iobus mkddc-core"
@@ -397,7 +417,7 @@ ssh SOM-DDC-24 "sudo rm -f \
 **Dọn SHM và socket:**
 
 ```bash
-ssh SOM-DDC-24 "rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm /tmp/mkddc-iop-a /tmp/mkddc-iop-b"
+ssh SOM-DDC-24 "rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm /tmp/mkddc-iop-a /tmp/mkddc-iop-b /run/mkddc/core.sock"
 ```
 
 ---
@@ -419,4 +439,7 @@ Không qua checklist này thì không báo "SOM deploy ready".
 
 ---
 
-**Rev** 1.1 | 2026-06-13 — cập nhật theo thực tế: thông tin board Orange Pi 5B, SSH config với IdentityFile, rsync từ máy dev, 141/141 test, systemd fake MCU stack 4 service (§7b), drop-in nofifo, lệnh log journalctl · 1.0 | 2026-06-13 — tạo SOP deploy SOM no-MCU
+**Rev**
+1.2 | 2026-06-16 — code review fixes: nohup smoke test §7, ExecStartPre PTY cleanup, Type=exec, check iop-a+b, BindsTo thay Requires, CAP_SYS_NICE revoke, git_rev.txt evidence, core.sock rollback §9, systemd-analyze verify §6+§7b
+1.1 | 2026-06-13 — cập nhật theo thực tế: thông tin board Orange Pi 5B, SSH config với IdentityFile, rsync từ máy dev, 141/141 test, systemd fake MCU stack 4 service (§7b), drop-in nofifo, lệnh log journalctl
+1.0 | 2026-06-13 — tạo SOP deploy SOM no-MCU

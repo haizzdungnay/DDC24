@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Modbus RTU master + device profile + ext cache
 
 > **Document ID:** IMPL-MODBUS-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-13
+> **Phiên bản:** 1.1 | 2026-06-16
 > **Trạng thái:** Active — lấp gap S7 #6, đủ để tách issue/code task
 > **Owner:** Dev 2 (iobus) + Protocol Lead
 > **Đọc cùng:** [SW_FIELDBUS_DESIGN](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) ·
@@ -135,8 +135,8 @@ services/iobus/fieldbus/
 | MOD-006 | RTU master read blocks FC01/02/03/04 | ext cache update | fake slave integration |
 | MOD-007 | Write FC05/06/15/16 | pending write result | fake slave write tests |
 | MOD-008 | Metrics/alarm E302/E303 | REST/status source + alarm | fault injection |
-| MOD-009 | Core ext point read path | graph can read ext values | core integration |
-| MOD-010 | BACnet expose config for ext points | ext -> AV/BV/AI optional | object map test |
+| MOD-009 | Core ext point read path qua `fieldbus.sock` (UNIX datagram) | core nhận snapshot → `plc_shm.ext[]`; graph đọc ext BAD → fallback | core integration; TC-10-08 |
+| MOD-010 | BACnet expose ext points theo `expose_bacnet/bacnet_object_type/bacnet_instance` trong profile | AV/BV/AI tạo đúng instance; conflict log ERROR+skip | object map test; D-2 §3 |
 | MOD-011 | 16-slave timing smoke | stable poll budget | group 10 PASS |
 
 ---
@@ -185,4 +185,6 @@ services/iobus/fieldbus/
 | Ext contract đổi SHM | Trung bình | Rev A cache nội bộ; chỉ bump `mkddc_shm.h` khi cần shared ext stable |
 
 ---
-**Rev** 1.0 | 2026-06-13 — tạo plan S7 #6 code-ready
+**Rev**
+1.1 | 2026-06-16 — close FB-Q-001 (libmodbus confirmed) + FB-Q-002 (expose_bacnet per-profile); cập nhật MOD-009 (fieldbus.sock → plc_shm ext IPC API) + MOD-010 (3 field profile BACnet) theo SW_FIELDBUS_DESIGN Rev 1.2 + D-2 Rev 2.1
+1.0 | 2026-06-13 — tạo plan S7 #6 code-ready

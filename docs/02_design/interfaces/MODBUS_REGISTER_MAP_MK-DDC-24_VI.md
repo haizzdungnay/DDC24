@@ -76,6 +76,11 @@ Mỗi loại thiết bị phụ được mô tả bằng một **profile** (file
 | `writable` | DDC có ghi xuống không |
 | `byte_order` | AB / BA / ABCD / CDAB (cho 32-bit) |
 | `map_to` | đích trong shared memory / biến PLC |
+| `expose_bacnet` | `true` = expose điểm này lên BACnet object tree (mặc định: `false`) |
+| `bacnet_object_type` | `"AV"` (float commandable), `"BV"` (bool commandable), `"AI"` (float read-only) — bắt buộc khi `expose_bacnet: true` |
+| `bacnet_instance` | instance number trong BACnet; phải unique trong cùng `bacnet_object_type`; conflict → log ERROR + skip |
+
+> **Quyết định FB-Q-002 (2026-06-16):** Expose ext points lên BACnet là cấu hình per-point, không tự động. Xem chi tiết: [SW_FIELDBUS_DESIGN §9](../software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md).
 
 ## 4. Cấu hình bus & slave (`fieldbus.conf` — xem [D-5](CONFIG_SCHEMA_MK-DDC-24_VI.md))
 ```json
@@ -100,9 +105,10 @@ Mỗi loại thiết bị phụ được mô tả bằng một **profile** (file
 | `generic-modbus` | thiết bị bất kỳ | người dùng tự khai báo point |
 
 ## 6. Tích hợp vào hệ thống
-- Điểm đọc từ slave → ghi vào **shared memory vùng mở rộng** → PLC, BACnet, MQTT, HMI dùng như I/O ảo.
-- Map sang BACnet: điểm mở rộng có thể expose thành object AV/BV/AI bổ sung (cấu hình).
-- Ghi: core/BACnet/Web đặt giá trị qua command path → fieldbus module trong `mkddc-iobus` ghi xuống slave (FC06/16) ở vòng poll kế.
+- Điểm đọc từ slave → iobus fieldbus push snapshot qua `/run/mkddc/fieldbus.sock` → core nhận tại ranh giới scan → ghi vào `plc_shm.ext[]` (seqlock, core là writer duy nhất).
+- BACnet, Web đọc `plc_shm.ext[]` như I/O ảo.
+- Map sang BACnet: chỉ những điểm có `expose_bacnet: true` trong profile mới xuất hiện thành BACnet object (xem §3).
+- Ghi: core/BACnet/Web đặt giá trị qua priority resolver → core ghi `plc_shm.ext[i].setpoint + dirty` → iobus fieldbus đọc plc_shm mỗi vòng poll, ghi xuống slave (FC05/06/15/16).
 
 ## 7. Xử lý lỗi
 | Tình huống | Hành động |
@@ -126,5 +132,6 @@ Mỗi loại thiết bị phụ được mô tả bằng một **profile** (file
 ## Revision History
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
+| 2.1 | 2026-06-16 | Dev SOM | Thêm 3 field profile BACnet expose (`expose_bacnet`, `bacnet_object_type`, `bacnet_instance`) — close FB-Q-002; cập nhật §6 tích hợp theo ext IPC API (fieldbus.sock → plc_shm). |
 | 2.0 | 2026-05-30 | SW Lead | **Viết lại theo ARCH-R010:** từ "DDC Modbus slave" → "DDC Modbus RTU **master** / expansion bus" với device profile. |
 | 1.0 | 2026-05-30 | SW | (huỷ) Modbus slave register map phục vụ BMS |
