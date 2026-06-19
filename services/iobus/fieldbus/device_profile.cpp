@@ -68,7 +68,7 @@ static bool is_write_fc(uint8_t fc)
 
 static bool parse_point(const std::string& obj, ProfilePoint* pt)
 {
-    double v;
+    double v = 0.0;
     std::string s;
 
     if (!jget_str(obj, "name", &pt->name)) pt->name = "?";
@@ -198,7 +198,7 @@ bool load_device_profile(const std::string& path, DeviceProfile* out)
     jget_str(json, "profile_id",   &out->profile_id);
     jget_str(json, "vendor",       &out->vendor);
     jget_str(json, "description",  &out->description);
-    double v;
+    double v = 0.0;
     if (jget_num(json, "default_baud", &v) && v > 0)
         out->default_baud = static_cast<uint32_t>(v);
 

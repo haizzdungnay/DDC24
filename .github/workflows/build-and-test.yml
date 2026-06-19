@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: |
@@ -60,7 +60,7 @@ jobs:
 
       - name: Upload test results (on failure)
         if: failure()
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4
+        uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: build/services/Testing/
@@ -72,10 +72,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@41b11e18582b41353f240987f1a8986b50ea6019 # v4
+        uses: actions/setup-go@v5
         with:
           go-version: '1.20'
 
@@ -90,10 +90,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@e37f8a4af658b0cfd2b8c919958e792c2221370b # v4
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -115,12 +115,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@v4
 
-      - name: Install arm-none-eabi-gcc
+      - name: Install arm-none-eabi-gcc & newlib
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi
+          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi
 
       - name: Build Firmware
         run: |

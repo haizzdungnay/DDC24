@@ -94,8 +94,8 @@ bool load_bacnet_config(const std::string& device_conf_path,
             return false;
         }
         /* bip object */
-        bool b;
-        long v;
+        bool b = false;
+        long v = 0;
         jget_bool(bac_json, "enabled", &b);       out->bip.enabled = b;
         if (jget_int(bac_json, "udp_port", &v) && v > 0)
             out->bip.udp_port = static_cast<uint16_t>(v);

@@ -74,7 +74,7 @@ static bool jget_obj(const std::string& s, const char* key, std::string* out)
 /* Parse slave JSON object từ một phần tử mảng slaves[] */
 static bool parse_slave(const std::string& obj, uint32_t default_poll_ms, SlaveConfig* sl)
 {
-    long v;
+    long v = 0;
     if (jget_int(obj, "addr", &v) && v >= 1 && v <= 247)
         sl->addr = static_cast<uint8_t>(v);
     else
@@ -117,7 +117,7 @@ bool load_fieldbus_config(const std::string& path, bool path_from_cli,
     std::string rs485_obj;
     if (jget_obj(json, "rs485", &rs485_obj)) {
         jget_str(rs485_obj, "device", &out->rs485.device);
-        long v;
+        long v = 0;
         if (jget_int(rs485_obj, "baud", &v) && v > 0)
             out->rs485.baud = static_cast<uint32_t>(v);
         std::string parity;
@@ -134,7 +134,7 @@ bool load_fieldbus_config(const std::string& path, bool path_from_cli,
         return false;
     }
 
-    long v;
+    long v = 0;
     if (jget_int(json, "poll_default_ms", &v) && v > 0)
         out->poll_default_ms = static_cast<uint32_t>(v);
 
