@@ -35,12 +35,13 @@ go run .
 
 Mo terminal khac chay frontend live mode:
 
+> **Quan trong:** Vite proxy mac dinh tro ve `http://127.0.0.1:8080`. Neu backend chay `PORT=8081` thi **phai** dat `VITE_PROXY_TARGET=http://127.0.0.1:8081`, neu khong browser se "Failed to fetch". Phai restart Vite sau khi doi bien.
+
 ```powershell
 cd E:\TuanDuong\INTERN\MK-DDC-24\src\frontend
 $env:VITE_DDC_MODE='live'
-$env:VITE_API_ORIGIN='http://localhost:8081'
-$env:VITE_AUTH_MODE='jwt'
-npm run dev -- --port 5173
+$env:VITE_PROXY_TARGET='http://127.0.0.1:8081'
+npm run dev
 ```
 
 Mo UI:
@@ -144,4 +145,4 @@ docker rm -f mkddc-web-dev
 - `go : The term 'go' is not recognized`: cai Go for Windows hoac build exe bang Docker nhu huong dan tren.
 - UI van goi sai backend: reload cung browser bang `Ctrl+F5`, kiem tra `VITE_API_ORIGIN=http://localhost:8081`.
 - `core socket unavailable`: binh thuong khi chi chay `mkddc-web` ma chua chay `mkddc-core/iobus`; OS metrics van hoat dong.
-- Port `8080` bi chiem: dung `8081` cho `mkddc-web`.
+- Port `8080` bi chiem: dung `8081` cho `mkddc-web` va dat `$env:VITE_PROXY_TARGET='http://127.0.0.1:8081'` roi restart Vite.
