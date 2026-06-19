@@ -29,6 +29,15 @@ node_modules/
 *.log
 /data/
 
+# Dev/runtime SQLite của mkddc-web (không commit)
+services/web/.dev-config/
+web/backend/.dev-config/
+web/backend/mkddc-web
+web/backend/mkddc-web.exe
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
 # Security scan artifacts
 gitleaks-report.json
 
