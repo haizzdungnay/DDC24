@@ -14,7 +14,7 @@ Neu port `8080` dang bi ung dung khac chiem, giu nguyen ung dung do va chay `mkd
 
 ## Tai khoan dev
 
-File user dev: `services/web/config/users.conf`
+File user dev: `web/backend/config/users.conf`
 
 - username: `admin`
 - password: `admin123`
@@ -25,7 +25,7 @@ File user dev: `services/web/config/users.conf`
 Chay backend native Windows de metric CPU/RAM/uptime doc tu may that bang WinAPI.
 
 ```powershell
-cd E:\TuanDuong\INTERN\MK-DDC-24\services\web
+cd E:\TuanDuong\INTERN\MK-DDC-24\web\backend
 $env:JWT_SECRET='dev-secret-change-me-at-least-32-chars'
 $env:USERS_CONF='config/users.conf'
 $env:CORE_SOCK='/run/mkddc/core.sock'
@@ -58,12 +58,12 @@ $logDir = Join-Path $env:TEMP 'mkddc-24-dev'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 docker run --rm `
-  -v 'E:\TuanDuong\INTERN\MK-DDC-24\services\web:/app' `
+  -v 'E:\TuanDuong\INTERN\MK-DDC-24\web\backend:/app' `
   -v "${logDir}:/out" `
   -w /app `
   golang:1.22-bookworm sh -lc '/usr/local/go/bin/go mod download && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 /usr/local/go/bin/go build -o /out/mkddc-web.exe .'
 
-cd E:\TuanDuong\INTERN\MK-DDC-24\services\web
+cd E:\TuanDuong\INTERN\MK-DDC-24\web\backend
 $env:JWT_SECRET='dev-secret-change-me-at-least-32-chars'
 $env:USERS_CONF='config/users.conf'
 $env:CORE_SOCK='/run/mkddc/core.sock'
@@ -84,7 +84,7 @@ docker run --rm --name mkddc-web-dev `
   -e JWT_SECRET='dev-secret-change-me-at-least-32-chars' `
   -e USERS_CONF='config/users.conf' `
   -e CORE_SOCK='/run/mkddc/core.sock' `
-  -v 'E:\TuanDuong\INTERN\MK-DDC-24\services\web:/app' `
+  -v 'E:\TuanDuong\INTERN\MK-DDC-24\web\backend:/app' `
   -w /app `
   golang:1.22-bookworm sh -lc '/usr/local/go/bin/go run .'
 ```

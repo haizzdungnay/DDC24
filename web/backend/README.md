@@ -42,7 +42,7 @@ go vet ./...
 ## Run backend
 
 ```powershell
-cd services/web
+cd web/backend
 $env:JWT_SECRET='dev-secret-change-me-at-least-32-chars'
 $env:USERS_CONF='config/users.conf'
 $env:CORE_SOCK='/run/mkddc/core.sock'
