@@ -1,12 +1,13 @@
-# Build & Test Workflow — MK-DDC-24 SOM Services (C++)
+# Build & Test Workflow — MK-DDC-24
 #
-# Compile mkddc-iobus + mkddc-core với -Wall -Wextra -Werror,
-# rồi chạy toàn bộ unit test (GoogleTest).
+# Compiles and tests the 4 main components of the DDC-24 controller:
+#   1. C++ SOM Services (mkddc-core, mkddc-iobus) and runs GoogleTest
+#   2. Go Web Backend (web/backend)
+#   3. React Web Frontend (src/frontend)
+#   4. STM32 MCU Firmware (fw)
 #
 # References:
-#   - services/CMakeLists.txt — build root
-#   - services/core/CMakeLists.txt — core_tests (97 tests)
-#   - services/iobus/CMakeLists.txt — iobus_tests (44 tests)
+#   - docs/03_implementation/10_TASK_CHECKLIST.md (SKEL-004, ACT-022)
 
 name: Build & Test
 
@@ -24,8 +25,8 @@ permissions:
   contents: read
 
 jobs:
-  build-and-test:
-    name: CMake build + CTest (ubuntu-22.04)
+  som-services:
+    name: C++ SOM Services
     runs-on: ubuntu-22.04
 
     steps:
@@ -47,6 +48,8 @@ jobs:
           cmake -S services -B build/services \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror" \
+            -DMKDDC_ENABLE_BACNET=OFF \
+            -DMKDDC_ENABLE_MODBUS=OFF \
             -G Ninja
 
       - name: Build
@@ -62,3 +65,64 @@ jobs:
           name: test-results
           path: build/services/Testing/
           retention-days: 7
+
+  web-backend:
+    name: Go Web Backend
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@41b11e18582b41353f240987f1a8986b50ea6019 # v4
+        with:
+          go-version: '1.20'
+
+      - name: Build Go backend
+        run: |
+          cd web/backend
+          go build -v ./...
+
+  web-frontend:
+    name: React Web Frontend
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@e37f8a4af658b0cfd2b8c919958e792c2221370b # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd src/frontend
+          npm ci
+
+      - name: Build React frontend
+        run: |
+          cd src/frontend
+          npm run build
+
+  mcu-firmware:
+    name: MCU Firmware
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install arm-none-eabi-gcc
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi
+
+      - name: Build Firmware
+        run: |
+          cd fw
+          make

@@ -1,0 +1,4 @@
+# STM32 CubeMX Configuration Placeholder for MK-DDC-24
+# Target Chip: STM32G0B1RBT6
+# HSE Clock: 8MHz, Core Clock: 64MHz
+# Pinout Configuration per docs/02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md
