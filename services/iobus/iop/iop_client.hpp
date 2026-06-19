@@ -28,6 +28,8 @@ class IopClient {
 public:
     explicit IopClient(IobusMetrics* metrics = nullptr, IopClientConfig cfg = {});
 
+    void update_config(const IopClientConfig& cfg) { cfg_ = cfg; }
+
     bool open(const std::string& dev);
     void close();
     bool is_open() const { return port_.is_open(); }

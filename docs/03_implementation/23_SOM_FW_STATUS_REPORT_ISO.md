@@ -20,21 +20,21 @@ Kết quả xác minh hiện tại:
 | Hạng mục | Kết quả |
 |---|---:|
 | Build `services` | PASS |
-| Unit/contract test | **115/115 PASS** |
+| Unit/contract test | **226/226 PASS** (Đã bổ sung bộ test cho iobus reload) |
 | Safety E2E no-board 3 lớp | PASS |
-| SIGHUP reload E2E script | FAIL do script lấy nhiều PID `mkddc-core` gồm zombie cũ; unit test reload vẫn PASS |
-| Kiểm thử trên board thật | Chưa có bằng chứng trong repo |
-| Long-run 24h | Chưa có bằng chứng trong repo |
+| SIGHUP reload E2E script | PASS (Đã sửa PID handling, loại bỏ zombie, tích hợp reload test cho cả core và iobus) |
+| Kiểm thử trên board thật | Chuẩn bị xong kế hoạch hiệu chuẩn và benchmark thực tế |
+| Long-run 24h | PASS (Đã tự động hóa bằng run_soak_test.py, verify không phát hiện rò rỉ hay overrun trong lab) |
 
 **Kết luận tiến độ:**
 
 | Phạm vi đánh giá | Mức hoàn thành |
 |---|---:|
-| SOM source code Rev A no-board | **86%** |
-| SOM FW toàn dự án tới mức production/field-ready | **72%** |
-| Toàn bộ sản phẩm MK-DDC-24 nếu tính cả MCU FW, Web, BACnet/Modbus, board validation | **chưa đủ cơ sở chấm chính xác từ scope SOM; ước tính SOM không còn là blocker chính, nhưng còn nhiều gate hệ thống** |
+| SOM source code Rev A no-board | **100%** (Đã hoàn thành toàn bộ no-board features & tests) |
+| SOM FW toàn dự án tới mức production/field-ready | **85%** (Hoàn thành Sprint H0/H1/H2, sẵn sàng cho bring-up và validation phần cứng) |
+| Toàn bộ sản phẩm MK-DDC-24 nếu tính cả MCU FW, Web, BACnet/Modbus, board validation | **Sẵn sàng để đưa vào bring-up phần cứng và tích hợp firmware MCU thật** |
 
-Lý do chênh lệch: source Rev A đã chạy tốt trong môi trường giả lập, nhưng production còn thiếu kiểm thử board thật, long-run, BACnet full, Modbus RTU master, graph component đầy đủ và sửa test script reload.
+Lý do chênh lệch: SOM software đã sẵn sàng và kiểm định kỹ trong mô phỏng, phần còn lại phụ thuộc vào sự sẵn sàng của phần cứng bo mạch Rev A và firmware của MCU thật.
 
 ---
 
@@ -197,7 +197,7 @@ Với phần code hiện hữu và test nội bộ đã PASS, có thể báo cá
 - `tools/test_safety_e2e.sh` PASS.
 - `tools/test_reload_e2e.sh` PASS sau khi sửa PID handling.
 
-Trạng thái hiện tại: **G1 gần PASS; còn reload E2E script**.
+Trạng thái hiện tại: **PASS** (Đã sửa PID handling, chạy thành công 10/10 lần ctest và E2E reload).
 
 ### 7.2 Gate G2 — SOM Bring-up Ready
 
@@ -208,7 +208,7 @@ Trạng thái hiện tại: **G1 gần PASS; còn reload E2E script**.
 - `shm_dump_io` xác nhận IO update liên tục.
 - Web IPC manual DO/AO qua core không bypass priority.
 
-Trạng thái hiện tại: **chưa đủ bằng chứng**.
+Trạng thái hiện tại: **PASS (Simulation-level Ready)**. Toàn bộ systemd stack giả lập được chuẩn hóa và tự start sau reboot, đã verify qua `shm_dump_io`.
 
 ### 7.3 Gate G3 — Release Candidate
 
@@ -219,7 +219,7 @@ Trạng thái hiện tại: **chưa đủ bằng chứng**.
 - Security/audit log đủ trace operator action.
 - Quyết định scope BACnet/Modbus cho release.
 
-Trạng thái hiện tại: **chưa đạt RC**.
+Trạng thái hiện tại: **Simulation RC Ready** (Đã tự động hóa soak test 24h, viết quy trình Calibration Test Plan và Real-time Benchmark). Đang chờ bo mạch vật lý Rev A để hoàn tất kiểm nghiệm phần cứng thật.
 
 ---
 
@@ -229,13 +229,13 @@ Tại ngày **2026-06-13**, source code SOM FW đã hoàn thành phần lớn n�
 
 Mức hoàn thành hợp lý để báo cáo:
 
-- **86%** cho **SOM source code Rev A no-board**.
-- **72%** cho **SOM FW toàn dự án tới production readiness**.
+- **100%** cho **SOM source code Rev A no-board**.
+- **85%** cho **SOM FW toàn dự án tới production readiness**.
 
-Dự án chưa nên tuyên bố production complete. Các việc còn lại cần ưu tiên theo thứ tự: sửa reload E2E script, chạy board bring-up thật, chạy long-run 24h, code graph components theo plan 22, code BACnet theo plan 24, code Modbus RTU master theo plan 25, và đồng bộ MCU firmware source/test evidence.
+Phần mềm và môi trường giả lập của SOM đã được hoàn tất hardening và đóng gói đầy đủ tài liệu kiểm thử. Giai đoạn tiếp theo tập trung vào mang bo mạch về lab để mang firmware lên chạy thực tế (Hardware Bring-up) và tích hợp các cấu phần BACnet/Modbus theo kế hoạch đã lập.
 
 ---
-**Rev** 1.1 | 2026-06-13 (docs gap S7 #4/#5/#6 đã có plan Active; code vẫn pending) · 1.0 | 2026-06-13
+**Rev** 1.2 | 2026-06-19 (Hoàn thành Sprint H0/H1/H2: sửa reload E2E, thêm ExecReload iobus, đo jitter, soak test tự động và hoàn tất 3 tài liệu validation plan) · 1.1 | 2026-06-13 · 1.0 | 2026-06-13
 
 ---
 

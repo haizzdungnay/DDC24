@@ -144,3 +144,61 @@ TEST(IobusConfig, BaudOverrideAllowedWithWarn)
     ASSERT_TRUE(load_config(f.path(), true, &cfg));
     EXPECT_EQ(cfg.baud, 115200) << "dev mode cho phép override (06 §4)";
 }
+
+TEST(IobusConfig, ReloadConfigSafeUpdatesSafeFields)
+{
+    IobusConfig cfg;
+    cfg.poll_period_ms = 10;
+    cfg.log_level = "info";
+
+    TempConfig f(R"({
+      "iop": {
+        "poll_period_ms": 50,
+        "max_retry": 4
+      },
+      "log_level": "debug"
+    })");
+
+    ASSERT_TRUE(reload_config_safe(f.path(), true, cfg, "", ""));
+    EXPECT_EQ(cfg.poll_period_ms, 50u);
+    EXPECT_EQ(cfg.max_retry, 4u);
+    EXPECT_EQ(cfg.log_level, "debug");
+}
+
+TEST(IobusConfig, ReloadConfigSafeWarnsOnDangerousFieldsAndKeepsOld)
+{
+    IobusConfig cfg;
+    cfg.uart_device = "/dev/ttyS2";
+    cfg.baud = 921600;
+    cfg.poll_period_ms = 10;
+
+    TempConfig f(R"({
+      "iop": {
+        "uart_device": "/dev/ttyS9",
+        "baud": 115200,
+        "poll_period_ms": 30
+      }
+    })");
+
+    ASSERT_TRUE(reload_config_safe(f.path(), true, cfg, "", ""));
+    EXPECT_EQ(cfg.uart_device, "/dev/ttyS2"); // Kept old dangerous field
+    EXPECT_EQ(cfg.baud, 921600);              // Kept old dangerous field
+    EXPECT_EQ(cfg.poll_period_ms, 30u);         // Updated safe field
+}
+
+TEST(IobusConfig, ReloadConfigSafeFailsOnBadJsonAndKeepsOld)
+{
+    IobusConfig cfg;
+    cfg.poll_period_ms = 10;
+    cfg.log_level = "info";
+
+    TempConfig f(R"({
+      "iop": {
+        "poll_period_ms": 50,
+    )"); // Malformed JSON
+
+    ASSERT_FALSE(reload_config_safe(f.path(), true, cfg, "", ""));
+    EXPECT_EQ(cfg.poll_period_ms, 10u); // Unchanged
+    EXPECT_EQ(cfg.log_level, "info");   // Unchanged
+}
+

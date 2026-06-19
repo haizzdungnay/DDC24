@@ -27,10 +27,16 @@
 namespace {
 
 std::atomic<bool> g_shutdown{false};
+std::atomic<bool> g_reload{false};
 
 void on_signal(int)
 {
     g_shutdown.store(true);
+}
+
+void on_sighup(int)
+{
+    g_reload.store(true);
 }
 
 uint64_t now_ns()
@@ -122,6 +128,9 @@ int main(int argc, char** argv)
     sa.sa_handler = on_signal;
     sigaction(SIGTERM, &sa, nullptr);
     sigaction(SIGINT, &sa, nullptr);
+    struct sigaction sa_hup {};
+    sa_hup.sa_handler = on_sighup;
+    sigaction(SIGHUP, &sa_hup, nullptr);
 
     IopClientConfig ccfg;
     ccfg.baud = cfg.baud;
@@ -134,9 +143,9 @@ int main(int argc, char** argv)
     CoreBridge bridge(cache.shm());
     SystemdNotify sd;
 
-    const uint64_t poll_period_ns = static_cast<uint64_t>(cfg.poll_period_ms) * 1000000ull;
+    uint64_t poll_period_ns = static_cast<uint64_t>(cfg.poll_period_ms) * 1000000ull;
     const uint64_t fault_timeout_ns = static_cast<uint64_t>(IOP_FAULT_TIMEOUT_MS) * 1000000ull;
-    const uint64_t reconnect_ns = static_cast<uint64_t>(cfg.reconnect_interval_ms) * 1000000ull;
+    uint64_t reconnect_ns = static_cast<uint64_t>(cfg.reconnect_interval_ms) * 1000000ull;
 
     bool ready_notified = false;
     uint64_t last_wdg_kick = 0;
@@ -212,9 +221,111 @@ int main(int argc, char** argv)
 
     struct timespec next;
     clock_gettime(CLOCK_MONOTONIC, &next);
+    uint64_t expected_ns = static_cast<uint64_t>(next.tv_sec) * 1000000000ull + next.tv_nsec;
+
+    uint64_t jitter_count = 0;
+    int64_t max_jitter_ns = 0;
+    int64_t min_jitter_ns = -1;
+    int64_t sum_jitter_ns = 0;
+    uint32_t overrun_count = 0;
+    uint64_t last_stats_print = expected_ns;
 
     /* ---- Main loop: poll 10ms tuyệt-đối-thời-gian ---- */
     while (!g_shutdown.load()) {
+        uint64_t actual_ns = now_ns();
+        int64_t jitter_ns = static_cast<int64_t>(actual_ns) - static_cast<int64_t>(expected_ns);
+        int64_t abs_jitter_ns = jitter_ns < 0 ? -jitter_ns : jitter_ns;
+        
+        if (abs_jitter_ns > max_jitter_ns) max_jitter_ns = abs_jitter_ns;
+        if (min_jitter_ns < 0 || abs_jitter_ns < min_jitter_ns) min_jitter_ns = abs_jitter_ns;
+        sum_jitter_ns += abs_jitter_ns;
+        jitter_count++;
+
+        if (jitter_ns > static_cast<int64_t>(poll_period_ns)) {
+            overrun_count++;
+        }
+
+        if (actual_ns - last_stats_print > 60000000000ull) {
+            std::fprintf(stderr, "INFO  iobus.jitter min_us=%.2f max_us=%.2f avg_us=%.2f overruns=%u count=%lu\n",
+                         min_jitter_ns / 1000.0, max_jitter_ns / 1000.0,
+                         (sum_jitter_ns / (double)jitter_count) / 1000.0,
+                         overrun_count, jitter_count);
+            last_stats_print = actual_ns;
+            max_jitter_ns = 0;
+            min_jitter_ns = -1;
+            sum_jitter_ns = 0;
+            jitter_count = 0;
+        }
+        if (g_reload.load()) {
+            g_reload.store(false);
+            std::fprintf(stderr, "INFO  iobus.reload SIGHUP (ranh giới scan)\n");
+            IobusConfig old_cfg = cfg;
+            if (reload_config_safe(config_path, config_from_cli, cfg, uart_override, log_level_override)) {
+                std::fprintf(stderr, "INFO  iobus.reload ok\n");
+                poll_period_ns = static_cast<uint64_t>(cfg.poll_period_ms) * 1000000ull;
+                reconnect_ns = static_cast<uint64_t>(cfg.reconnect_interval_ms) * 1000000ull;
+
+                IopClientConfig new_ccfg;
+                new_ccfg.baud = cfg.baud;
+                new_ccfg.response_timeout_ms = cfg.response_timeout_ms;
+                new_ccfg.handshake_timeout_ms = cfg.handshake_timeout_ms;
+                new_ccfg.max_retry = cfg.max_retry;
+                client.update_config(new_ccfg);
+
+                bool ui_changed = false;
+                for (int i = 0; i < KX_N_UI; i++) {
+                    if (cfg.ui_sensor[i] != old_cfg.ui_sensor[i]) {
+                        ui_changed = true;
+                        break;
+                    }
+                }
+                if (ui_changed) {
+                    char units[KX_N_UI][8];
+                    for (int i = 0; i < KX_N_UI; i++) {
+                        std::strncpy(units[i], sensor_unit(cfg.ui_sensor[i]), sizeof(units[i]) - 1);
+                        units[i][sizeof(units[i]) - 1] = '\0';
+                    }
+                    cache.write_ui_units(units);
+                }
+
+                bool ao_changed = false;
+                for (int i = 0; i < KX_N_AO; i++) {
+                    if (cfg.ao_mode[i] != old_cfg.ao_mode[i]) {
+                        ao_changed = true;
+                        break;
+                    }
+                }
+                if (ao_changed) {
+                    uint8_t mode_mask = 0;
+                    for (int i = 0; i < KX_N_AO; i++) {
+                        if (cfg.ao_mode[i] == AoMode::MA4_20) {
+                            mode_mask |= static_cast<uint8_t>(1u << i);
+                        }
+                    }
+                    uint8_t applied_modes[KX_N_AO] = {0, 0, 0, 0};
+                    AoMode applied_enum[KX_N_AO] = {AoMode::V0_10, AoMode::V0_10, AoMode::V0_10, AoMode::V0_10};
+                    const IopStatus st = client.status();
+                    if (st == IopStatus::NORMAL_POLL || st == IopStatus::SAFE_STATE) {
+                        IopResult ac = client.set_ao_cfg(mode_mask);
+                        if (ac.ok()) {
+                            for (int i = 0; i < KX_N_AO; i++) {
+                                applied_modes[i] = (mode_mask >> i) & 1u;
+                                applied_enum[i] = static_cast<AoMode>(applied_modes[i]);
+                            }
+                            std::fprintf(stderr, "INFO  iop.ao_cfg mask=0x%02X ack=ok\n", mode_mask);
+                        } else {
+                            std::fprintf(stderr, "WARN  iop.ao_cfg fail code=%d nack=0x%02X (giữ 0-10V)\n",
+                                         ac.code, ac.nack_err);
+                        }
+                    }
+                    cache.write_ao_mode(applied_modes);
+                    output.set_ao_modes(applied_enum);
+                }
+            } else {
+                std::fprintf(stderr, "WARN  iobus.reload co phan fail — phan do giu config cu\n");
+            }
+        }
+
         const uint64_t t = now_ns();
 
         /* watchdog kick mỗi ≤2.5s (WatchdogSec=5) */
@@ -331,6 +442,7 @@ int main(int argc, char** argv)
         }
 
         sleep_until(&next, poll_period_ns);
+        expected_ns = static_cast<uint64_t>(next.tv_sec) * 1000000000ull + next.tv_nsec;
     }
 
     /* Shutdown: đóng UART, KHÔNG xóa shm (core còn đọc) */
