@@ -26,19 +26,37 @@ Device_Set_Object_Instance_Number(device_id);   // từ device.conf, fallback DI
 | Object | Đọc từ | Ghi vào |
 |--------|--------|---------|
 | AI1–8 / BI1–8 | `plc_shm.ai/bi` | (read-only) |
-| AO1–4 / BO1–4 | `plc_shm.ao/bo` | Write-Property → `plc_shm` (priority array) |
-| AV/BV/MSV | `plc_shm.av/bv/msv` | Write-Property → `plc_shm` |
+| AO1–4 / BO1–4 | `plc_shm.ao/bo` | WriteProperty → Priority_Array[16] trong BACnet side → winning value → `core.sock` |
+| AV/BV/MSV | `plc_shm.av/bv/msv` | WriteProperty → `core.sock` source=bacnet mức 3 |
 
 ```c
-// Read_Property callback (AI)
-float Analog_Input_Present_Value(uint32_t inst){
+// Read_Property callback (AI) — đọc từ plc_shm do core publish
+float Analog_Input_Present_Value(uint32_t inst) {
     return plc_shm_read_ai(inst);    // seqlock read
 }
-// Write_Property callback (AO) → ghi shm, PLC scan sau áp dụng
-void Analog_Output_Present_Value_Set(uint32_t inst, float v, uint8_t prio){
-    plc_shm_write_ao(inst, v, prio); // priority array 16 mức
+
+// Write_Property callback (AO) — KHÔNG ghi plc_shm trực tiếp
+// Cập nhật Priority_Array[16] trong BACnet side, resolve winning, gửi vào core.sock
+void Analog_Output_Present_Value_Set(uint32_t inst, float v, uint8_t prio) {
+    bacnet_priority_set(AO, inst, prio, v);          // cập nhật slot prio
+    float winner = bacnet_priority_resolve(AO, inst); // pick lowest non-NULL slot
+    core_sock_send_write("AO", inst+1, winner, "bacnet"); // source=bacnet → core mức 3
+}
+
+// Write_Property NULL (relinquish)
+void Analog_Output_Relinquish(uint32_t inst, uint8_t prio) {
+    bacnet_priority_clear(AO, inst, prio);
+    if (bacnet_priority_array_empty(AO, inst))
+        core_sock_send_release("AO", inst+1, "bacnet");
+    else {
+        float winner = bacnet_priority_resolve(AO, inst);
+        core_sock_send_write("AO", inst+1, winner, "bacnet");
+    }
 }
 ```
+
+> **BAC-CONFLICT-001 CLOSED 2026-06-17:** WriteProperty đi vào `core.sock` với `source=bacnet` (mức 3),
+> không ghi `plc_shm` trực tiếp. Core là writer duy nhất của plc_shm. Xem [07 §8](../../03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) và [24 §4b](../../03_implementation/24_BACNET_IMPLEMENTATION_PLAN.md).
 
 ## 5. Dịch vụ BACnet (BIBBs — D-3)
 - Who-Is/I-Am (≤100ms — SW-BAC-005), Read/Write-Property(-Multiple), Subscribe-COV.
@@ -67,4 +85,5 @@ BACnet chỉ chạy BACnet/IP (Ethernet/WiFi). RS-485 dành 100% cho **Modbus RT
 `SW-BAC-001..008`, `BAC-001..011`, `FR-020/021`, `NFR-009`.
 
 ---
-**Rev** 1.1 | 2026-06-13 (active name mkddc-iobus/BACnet module; link implementation 24) · 1.0 | 2026-05-30
+**Rev** 1.2 | 2026-06-17 (§4: WriteProperty path qua core.sock source=bacnet — BAC-CONFLICT-001 CLOSED) ·
+1.1 | 2026-06-13 · 1.0 | 2026-05-30

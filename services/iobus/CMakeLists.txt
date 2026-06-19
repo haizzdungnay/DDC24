@@ -8,6 +8,48 @@ add_compile_options(-Wall -Wextra -Werror)
 set(SHARED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../shared)
 set(TOOLS_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/../../tools)
 
+# ---- BAC-001: BACnet/IP stack option (bacnet-stack 1.3.x) ----
+option(MKDDC_ENABLE_BACNET "Enable BACnet/IP stack (bacnet-stack >= 1.3.x required)" OFF)
+if(MKDDC_ENABLE_BACNET)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(BACNET_STACK bacnet-stack REQUIRED)
+  if(NOT BACNET_STACK_FOUND)
+    message(FATAL_ERROR "MKDDC_ENABLE_BACNET=ON but bacnet-stack not found via pkg-config."
+            " Install bacnet-stack >= 1.3.x or set PKG_CONFIG_PATH.")
+  endif()
+endif()
+
+# ---- MOD-001: Modbus RTU master (libmodbus >= 3.1.6) ----
+option(MKDDC_ENABLE_MODBUS "Enable Modbus RTU master (libmodbus >= 3.1.6 required)" OFF)
+if(MKDDC_ENABLE_MODBUS)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(LIBMODBUS libmodbus>=3.1.6 REQUIRED)
+  if(NOT LIBMODBUS_FOUND)
+    message(FATAL_ERROR "MKDDC_ENABLE_MODBUS=ON but libmodbus >= 3.1.6 not found."
+            " Install libmodbus-dev or set PKG_CONFIG_PATH.")
+  endif()
+endif()
+
+# ---- BACnet sources (logic compile unconditionally; bacnet-stack API guarded) ----
+set(BACNET_SOURCES
+    bacnet/bacnet_config.cpp
+    bacnet/bacnet_priority.cpp
+    bacnet/bacnet_cov.cpp
+    bacnet/bacnet_reliability.cpp
+    bacnet/bacnet_alarm.cpp
+    bacnet/bacnet_objects.cpp
+    bacnet/bacnet_server.cpp)
+
+# ---- Modbus sources (logic compile unconditionally; libmodbus API guarded) ----
+set(MODBUS_SOURCES
+    fieldbus/fieldbus_config.cpp
+    fieldbus/device_profile.cpp
+    fieldbus/register_codec.cpp
+    fieldbus/poll_scheduler.cpp
+    fieldbus/ext_cache.cpp
+    fieldbus/fieldbus_metrics.cpp
+    fieldbus/modbus_master.cpp)
+
 add_library(iobus_lib STATIC
     config/iobus_config.cpp
     iop/iop_port.cpp  iop/iop_frame.cpp  iop/iop_crc.cpp
@@ -15,9 +57,27 @@ add_library(iobus_lib STATIC
     io/io_scaling.cpp io/io_cache.cpp
     bridge/core_bridge.cpp bridge/output_command.cpp
     diagnostics/iobus_metrics.cpp diagnostics/alarm_publisher.cpp
-    platform/systemd_notify.cpp platform/realtime.cpp)
-target_include_directories(iobus_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${SHARED_DIR})
+    platform/systemd_notify.cpp platform/realtime.cpp
+    ${BACNET_SOURCES}
+    ${MODBUS_SOURCES})
+target_include_directories(iobus_lib PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/bacnet
+    ${CMAKE_CURRENT_SOURCE_DIR}/fieldbus
+    ${SHARED_DIR})
 target_link_libraries(iobus_lib PUBLIC pthread rt)   # rt: shm/clock
+
+if(MKDDC_ENABLE_BACNET)
+  target_compile_definitions(iobus_lib PUBLIC MKDDC_ENABLE_BACNET)
+  target_include_directories(iobus_lib PUBLIC ${BACNET_STACK_INCLUDE_DIRS})
+  target_link_libraries(iobus_lib PUBLIC ${BACNET_STACK_LIBRARIES})
+endif()
+
+if(MKDDC_ENABLE_MODBUS)
+  target_compile_definitions(iobus_lib PUBLIC MKDDC_ENABLE_MODBUS)
+  target_include_directories(iobus_lib PUBLIC ${LIBMODBUS_INCLUDE_DIRS})
+  target_link_libraries(iobus_lib PUBLIC ${LIBMODBUS_LIBRARIES})
+endif()
 
 add_executable(mkddc-iobus main.cpp)
 target_link_libraries(mkddc-iobus PRIVATE iobus_lib)
@@ -46,7 +106,16 @@ if(IOBUS_BUILD_TESTS)
       tests/test_iop_crc.cpp tests/test_iop_frame.cpp tests/test_iop_parser.cpp
       tests/test_io_scaling.cpp tests/test_output_command.cpp
       tests/test_iop_client_fake_mcu.cpp
-      tests/test_iobus_config.cpp tests/test_io_cache.cpp)
+      tests/test_iobus_config.cpp tests/test_io_cache.cpp
+      bacnet/tests/test_bacnet_priority.cpp
+      bacnet/tests/test_bacnet_reliability.cpp
+      bacnet/tests/test_bacnet_object_map.cpp
+      bacnet/tests/test_bacnet_cov.cpp
+      fieldbus/tests/test_device_profile.cpp
+      fieldbus/tests/test_register_codec.cpp
+      fieldbus/tests/test_poll_scheduler.cpp
+      fieldbus/tests/test_ext_cache.cpp
+      fieldbus/tests/test_modbus_master_fake.cpp)
   target_link_libraries(iobus_tests PRIVATE iobus_lib)
   # GCC13 -O3 false positive (PR109945) với vector<struct nhỏ> trong test fixture
   target_compile_options(iobus_tests PRIVATE -Wno-error=stringop-overflow)

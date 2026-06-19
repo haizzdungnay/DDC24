@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-11 (Contract Freeze: policy lỗi config theo case, tên service `mkddc-*`, owner từng file) · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -97,15 +97,30 @@
 ## 5. `bacnet.conf` — BACnet/IP (chỉ IP — ARCH-R010)
 ```json
 {
-  "bip": { "enabled": true, "udp_port": 47808, "bbmd": null, "foreign_device": null }
+  "bip": {
+    "enabled": true,
+    "udp_port": 47808,
+    "bind_interface": "eth0",
+    "bbmd": null,
+    "foreign_device": null
+  }
 }
 ```
+| Field | Bắt buộc | Mặc định | Ý nghĩa |
+|-------|----------|----------|---------|
+| `bip.enabled` | ✅ | — | `true`/`false` — bật/tắt BACnet/IP stack |
+| `bip.udp_port` | không | 47808 | UDP port; thường giữ nguyên 47808 |
+| `bip.bind_interface` | không | `""` (all) | Tên NIC cụ thể để bind (vd `"eth0"`, `"wlan0"`). Chuỗi rỗng = bind all interfaces. **Khuyến nghị đặt tường minh** để tránh listen WAN. |
+| `bip.bbmd` | không | null | BBMD address table (khi DDC trong mạng khác BMS); `null` = không dùng BBMD |
+| `bip.foreign_device` | không | null | FD registration BBMD IP+TTL; `null` = không đăng ký |
+
 > ⚠ Đã **bỏ `mstp` và `rs485_mode`** (MS/TP loại bỏ). BACnet chỉ chạy BACnet/IP qua Ethernet/WiFi. RS-485 cấu hình ở `fieldbus.conf` (§5b).
+> Thêm `bind_interface` 2026-06-17: bắt buộc chỉ rõ interface theo yêu cầu security (plan 24 §1).
 
 ## 5b. `fieldbus.conf` — RS-485 Modbus RTU **master** (thiết bị phụ)
 ```json
 {
-  "rs485": { "baud": 19200, "parity": "N", "stop": 1 },
+  "rs485": { "device": "/dev/ttyS3", "baud": 19200, "parity": "N", "stop": 1 },
   "poll_default_ms": 1000,
   "slaves": [
     { "addr": 10, "profile": "kinexus-io-ext-8di8do", "poll_ms": 500,  "name": "EXT-1" },
@@ -114,7 +129,20 @@
   ]
 }
 ```
-> `profile` trỏ tới template register-map (xem [D-2 §3](MODBUS_REGISTER_MAP_MK-DDC-24_VI.md)). Thêm slave = thêm 1 phần tử; đổi baud cần restart `mkddc-iobus`.
+| Field | Bắt buộc | Mặc định | Ý nghĩa |
+|-------|----------|----------|---------|
+| `rs485.device` | ✅ | — | Đường dẫn serial port RS-485 (vd `/dev/ttyS3`, `/dev/ttyUSB0`). **Bắt buộc** — không hardcode trong code. |
+| `rs485.baud` | ✅ | — | Baud rate: 9600/19200/38400/57600/115200 |
+| `rs485.parity` | không | `"N"` | `"N"` / `"E"` / `"O"` |
+| `rs485.stop` | không | 1 | 1 hoặc 2 stop bits |
+| `poll_default_ms` | không | 1000 | Poll interval mặc định cho slave không khai báo `poll_ms` |
+| `slaves[].addr` | ✅ | — | Địa chỉ Modbus slave (1–247) |
+| `slaves[].profile` | ✅ | — | Profile ID (tìm trong `/usr/share/kinexus/profiles/` hoặc `/data/config/profiles/`) |
+| `slaves[].poll_ms` | không | `poll_default_ms` | Poll interval riêng cho slave này |
+| `slaves[].name` | ✅ | — | Tên slave; dùng làm prefix trong ext point name (`EXT-<name>.<point>`) |
+
+> `profile` trỏ tới template register-map (xem [D-2 §3](MODBUS_REGISTER_MAP_MK-DDC-24_VI.md)). Thêm slave = thêm 1 phần tử; đổi baud hoặc device cần restart `mkddc-iobus`.
+> Field `device` thêm 2026-06-17: bắt buộc chỉ rõ serial port để không hardcode trong code (plan 25 §4 gap closed).
 
 ## 6. `mqtt.conf`
 ```json

@@ -34,20 +34,24 @@ void ScanLoop::step()
     d_.table->update_inputs(last_io_);
     d_.quality->evaluate(*d_.table, last_io_);
 
-    /* 3. Read Modbus cache — Rev A.1, bỏ qua */
+    /* 3. Read Modbus ext snapshot từ fieldbus.sock (MOD-009).
+     * SOCK_DGRAM MSG_DONTWAIT — nếu không có datagram: dùng ext[] cũ (stale theo ts_ns). */
+    d_.bacnet->read_ext(d_.fieldbus_sockfd);
 
-    /* 4. Read web command queue → priority mức 2 (manual). Response trả SAU
-     * resolve + safe-state (bước 7b) — applied_value/active_source phải là giá trị
-     * THẬT sau khi mọi nguồn tranh chấp xong (07 §8, COR-007). */
+    /* 4. Read web/BACnet command queue.
+     * source=manual → PRIO_LOCAL_MANUAL (mức 2); source=bacnet → PRIO_BACNET (mức 3).
+     * Response trả SAU resolve + safe-state (bước 7b): applied_value/active_source
+     * là giá trị THẬT sau khi mọi nguồn tranh chấp xong (07 §8, BAC-CONFLICT-001). */
     pending_.clear();
     for (const WebCommand& cmd : d_.web->drain()) {
+        const int prio = cmd.prio;   /* 2=manual, 3=bacnet */
         bool ok = true;
         if (cmd.point.kind == PointKind::AO) {
-            if (cmd.is_write) ok = d_.resolver->set_ao(PRIO_LOCAL_MANUAL, cmd.point.idx, cmd.value);
-            else              ok = d_.resolver->release_ao(PRIO_LOCAL_MANUAL, cmd.point.idx);
+            if (cmd.is_write) ok = d_.resolver->set_ao(prio, cmd.point.idx, cmd.value);
+            else              ok = d_.resolver->release_ao(prio, cmd.point.idx);
         } else if (cmd.point.kind == PointKind::BO) {
-            if (cmd.is_write) ok = d_.resolver->set_do(PRIO_LOCAL_MANUAL, cmd.point.idx, cmd.value != 0.0f);
-            else              ok = d_.resolver->release_do(PRIO_LOCAL_MANUAL, cmd.point.idx);
+            if (cmd.is_write) ok = d_.resolver->set_do(prio, cmd.point.idx, cmd.value != 0.0f);
+            else              ok = d_.resolver->release_do(prio, cmd.point.idx);
         } else {
             /* AV/BV/MSV: ghi thẳng point table (không phải output vật lý);
              * release GIỮ value, chỉ nhả source — KHÔNG ghi cmd.value */
@@ -66,9 +70,8 @@ void ScanLoop::step()
     /* 7. Safe-state có thể ghi đè */
     d_.safe->apply(last_io_, *d_.table, &out);
 
-    /* 7b. Respond web command theo output THẬT:
-     * - write AO/DO mà nguồn cao hơn (mức 1) hoặc safe-state đang thắng → overridden
-     * - release/virtual → accepted, active_source = nguồn đang thắng sau lệnh */
+    /* 7b. Respond web/BACnet command theo output THẬT.
+     * Overridden khi: safe-state active OR nguồn cao hơn cmd.prio đang thắng (07 §8). */
     for (const PendingResp& p : pending_) {
         if (!p.ok) {
             d_.web->respond_rejected(p.cmd, "bad_request");
@@ -87,15 +90,14 @@ void ScanLoop::step()
             } else {
                 const int lv = is_ao ? d_.resolver->winning_ao_level(cmd.point.idx)
                                      : d_.resolver->winning_do_level(cmd.point.idx);
-                if (cmd.is_write && lv != PRIO_LOCAL_MANUAL)
+                if (cmd.is_write && lv != cmd.prio)
                     d_.web->respond_overridden(cmd, applied, prio_source_name(lv));
                 else
                     d_.web->respond_accepted(cmd, applied, prio_source_name(lv));
             }
         } else {
-            /* virtual point: không có nguồn vật lý tranh chấp;
-             * applied_value = giá trị thực sau xử lý (release ≠ cmd.value) */
-            const char* vsrc = cmd.is_write ? "manual" : "default";
+            /* virtual point: không có nguồn vật lý tranh chấp */
+            const char* vsrc = prio_source_name(cmd.prio);
             d_.web->respond_accepted(cmd, d_.table->get(cmd.point).value, vsrc);
         }
     }
@@ -103,8 +105,9 @@ void ScanLoop::step()
     /* 8. Write output command (atomic, 2 field core sở hữu) */
     d_.writer->write(out);
 
-    /* 9. Publish BACnet object table (STUB: value/quality) */
-    d_.bacnet->publish(*d_.table, d_.metrics->scan_count(), d_.metrics->scan_overrun());
+    /* 9. Publish BACnet object table — value/quality/reliability (BAC-004) */
+    d_.bacnet->publish(*d_.table, d_.metrics->scan_count(), d_.metrics->scan_overrun(),
+                       last_io_.fault_flags, last_io_.iop_status);
 
     /* 10. Metrics */
     d_.metrics->end_scan(now_ns() - t0, budget_ns_);

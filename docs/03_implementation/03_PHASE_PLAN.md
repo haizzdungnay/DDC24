@@ -150,11 +150,14 @@ BACnet object/priority bridge, Modbus ext cache integration.
    (ĐÃ tạo 2026-06-12 — SKEL-005, điều kiện board bring-up 17_WEEK1).
 10. Stateful graph components còn thiếu + persist counter: COR-009/COR-010 theo
     [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) — Active 2026-06-13.
-11. BACnet/IP full path: object registry, Read/WriteProperty, Priority_Array[16] -> core mức 3,
-    Reliability/Status_Flags, COV/alarm/pretest theo
-    [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md).
-12. Modbus RTU master: `fieldbus.conf`, device profile, poll scheduler, ext cache,
-    write queue, E302/E303 alarm theo [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md).
+11. BACnet/IP full path: object registry, Read/WriteProperty, Priority_Array[16] → core.sock
+    source=bacnet mức 3 (BAC-CONFLICT-001 CLOSED 2026-06-17 — 07 §8 Rev 1.6), Reliability/
+    Status_Flags, COV/alarm/pretest theo [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md).
+    **ĐÃ implement 2026-06-17 — BAC-001..011 DONE (114 test pass).**
+12. Modbus RTU master: `fieldbus.conf` (incl. `rs485.device`), device profile, poll scheduler,
+    ext cache (kx_ext_snapshot_msg_t vào mkddc_shm.h), write queue, E302/E303 alarm theo
+    [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md).
+    **ĐÃ implement 2026-06-17 — MOD-001..011 DONE (114 test pass).**
 ```
 
 **Test:** Test group 4 (core). **DoD:** §12.4.
@@ -223,6 +226,8 @@ config, alarm, graph validate/deploy, audit log.
 > (map P0→P4 round-trip). Dev mới: bắt đầu từ [16_QUICK_START_SOM_DEV](16_QUICK_START_SOM_DEV.md).
 
 ---
-**Rev** 1.5 | 2026-06-13 (S7 #4/#5/#6 docs code-ready: 22 Active, 24 BACnet, 25 Modbus) ·
+**Rev** 1.7 | 2026-06-17 (P4 output 11/12 DONE: BAC-001..011 + MOD-001..011 implemented, 114 test pass, bypass check sạch) ·
+1.6 | 2026-06-17 (P4 output 11/12: BAC+MOD doc gap CLOSED — BAC-CONFLICT-001, bind_interface, kx_ext_snapshot, rs485.device; sẵn sàng implement) ·
+1.5 | 2026-06-13 (S7 #4/#5/#6 docs code-ready: 22 Active, 24 BACnet, 25 Modbus) ·
 1.4 | 2026-06-12 (P4: web_ipc overridden+audit COR-007, SIGHUP reload COR-008, systemd units SKEL-005) · 1.3 | 2026-06-12 (graph_runtime + T6/T7 implemented; E2E script) · 1.2 | 2026-06-12 (P4/P6: tham chiếu SAFETY SPEC 07 §5 — trigger matrix
 implemented/planned, kiểm 3 lớp safety ở E2E) · 1.1 | 2026-06-11

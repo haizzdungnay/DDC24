@@ -80,7 +80,7 @@ UTF-8 (hỗ trợ tiếng Việt cho Object_Name/Description).
 | Property | Giá trị |
 |----------|---------|
 | Vendor_Name | KINEXUS Technologies |
-| Vendor_Identifier | <đăng ký ASHRAE — TBD> |
+| Vendor_Identifier | **9999** *(placeholder — chờ đăng ký ASHRAE; thay bằng số thật trước GA)* |
 | Model_Name | MK-DDC-24 |
 | Protocol_Version | 1 |
 | Protocol_Revision | ≥ 19 |
@@ -89,6 +89,11 @@ UTF-8 (hỗ trợ tiếng Việt cho Object_Name/Description).
 | Device_Instance | 1–4194302 (config; DIP bootstrap 1–127) |
 | APDU_Timeout | 3000 ms |
 | Number_Of_APDU_Retries | 3 |
+
+> **Vendor_Identifier placeholder (2026-06-17):** ASHRAE chưa cấp số chính thức. Dùng `9999`
+> (chưa được cấp cho tổ chức nào → an toàn dùng nội bộ / BTL pre-test). Việc cần làm trước
+> GA: submit đơn đăng ký tại ashrae.org/standards-research--technology/standards-committee, update
+> giá trị trong code và doc, bump Rev PICS_EPICS.
 
 ## 8. Hành vi đặc thù triển khai
 - COV: AI/AO/AV theo `COV_Increment`; BI/BO/BV/MSV theo thay đổi trạng thái.
@@ -105,4 +110,5 @@ UTF-8 (hỗ trợ tiếng Việt cho Object_Name/Description).
 `BAC-001..011`, `SW-BAC-001..008`, `FR-020/021`, `NFR-009`, `UC-02`.
 
 ---
-**Rev** 1.0 | 2026-05-30 · Ký: SW Lead (Protocol) ___
+**Rev** 1.1 | 2026-06-17 (§7: Vendor_Identifier placeholder = 9999, ghi chú cần đăng ký ASHRAE trước GA) ·
+1.0 | 2026-05-30 · Ký: SW Lead (Protocol) ___

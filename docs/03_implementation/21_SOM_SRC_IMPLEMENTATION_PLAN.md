@@ -728,14 +728,14 @@ Thứ tự ưu tiên chốt 2026-06-12 (cụm 1+2+3 mở khóa Dev 3 web + board
 | 2 | SIGHUP reload config không restart (CONFIG_SCHEMA D-5) | COR-008 | nhỏ | ✅ ĐÃ làm 2026-06-12 |
 | 3 | `packaging/systemd/*.service` + install script | SKEL-005 | rất nhỏ | ✅ ĐÃ làm 2026-06-12 |
 | 4 | Graph component thiếu: 10 type còn lại (OnDelay/OffDelay, Interlock, ManualAuto, RuntimeCounter/PulseCounter, SafeState, AlarmHigh/Low/Delay) + persist state qua reboot | COR-009/010 — [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | vừa | ✅ ĐÃ làm 2026-06-13 — 97/97 test pass |
-| 5 | BACnet/IP full: object registry, priority[16], relinquish_default, reliability, COV/alarm, BTL pretest | BAC-001..011 — [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) | lớn | ✅ PLAN ACTIVE 2026-06-13; chờ code/stack build |
-| 6 | Modbus RTU master trong iobus: fieldbus.conf, profile parser, poll scheduler, ext cache, write queue | MOD-001..011 — [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md) | vừa-lớn | ✅ PLAN ACTIVE 2026-06-13; chờ code |
+| 5 | BACnet/IP full: object registry, priority[16], relinquish_default, reliability, COV/alarm, BTL pretest | BAC-001..011 — [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) | lớn | ✅ **DOC GAP CLOSED 2026-06-17** — sẵn sàng implement (BAC-CONFLICT-001 resolved, bind_interface added, Vendor_Identifier=9999) |
+| 6 | Modbus RTU master trong iobus: fieldbus.conf (rs485.device bắt buộc), profile parser, poll scheduler, ext cache (kx_ext_snapshot_msg_t → mkddc_shm.h), write queue | MOD-001..011 — [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md) | vừa-lớn | ✅ **DOC GAP CLOSED 2026-06-17** — sẵn sàng implement (kx_ext_snapshot struct resolved, device path resolved) |
 
 Ràng buộc giữ nguyên:
 - Modbus/BACnet nằm trong `iobus`, KHÔNG phá rule "core quyết output" —
-  BACnet write đi vòng qua priority resolver của core (mức 3), không ghi thẳng IO.
-- Mapping 6 mức priority nội bộ ↔ 16 mức BACnet đã chốt trong [24 §4](24_BACNET_IMPLEMENTATION_PLAN.md):
-  BACnet priority array resolve riêng, winner đi vào core mức 3.
+  BACnet write đi qua `core.sock` source=bacnet (mức 3, 07 §8 Rev 1.6), không ghi thẳng IO.
+- Mapping 6 mức priority nội bộ ↔ 16 mức BACnet đã chốt trong [24 §4b](24_BACNET_IMPLEMENTATION_PLAN.md):
+  BACnet priority array resolve riêng trong iobus, winner gửi vào core.sock source=bacnet mức 3.
 
 ---
 
@@ -831,4 +831,5 @@ Không làm bước 4 trước khi 3 bước này xanh.
 
 ---
 
-**Rev** 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) · 1.4 | 2026-06-13 (S7 #4/#5/#6 docs Active) · 1.3 | 2026-06-12 (S7 #4 → doc 22 DRAFT) · 1.2 | 2026-06-12 · 1.1 | 2026-06-12 · 1.0 | 2026-06-11
+**Rev** 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device; cập nhật ràng buộc BACnet IPC path) ·
+1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) · 1.4 | 2026-06-13 · 1.3 | 2026-06-12 · 1.2 | 2026-06-12 · 1.1 | 2026-06-12 · 1.0 | 2026-06-11

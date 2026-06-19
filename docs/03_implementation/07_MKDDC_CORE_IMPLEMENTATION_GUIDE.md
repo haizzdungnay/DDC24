@@ -329,51 +329,71 @@ Done khi: ghi do_cmd[0]=1 → iobus gửi SET_DO trong ≤1 chu kỳ poll (10ms)
 
 ---
 
-## 8. IPC với web (`web_ipc`) — CONTRACT CHUẨN (core là server, web là client)
+## 8. IPC với web và BACnet (`web_ipc`) — CONTRACT CHUẨN (core là server)
+
+> **BAC-CONFLICT-001 CLOSED 2026-06-17 — Resolution Option A:**
+> Phiên bản cũ ghi hạn chế "chỉ `manual` (mức 2), mức khác KHÔNG đi qua socket này".
+> Hạn chế đó mâu thuẫn với plan 24 (BAC-006: WriteProperty → core mức 3).
+> **Resolution:** mở rộng socket này để nhận thêm `source=bacnet` (mức 3). Không tạo socket mới
+> vì reuse đơn giản hơn, audit format giống nhau, và plc_shm single-writer vẫn là core.
 
 **Transport:** Unix stream socket `/run/mkddc/core.sock` (mode 660, group mkddc — web user
-thuộc group). Mỗi message = **1 dòng JSON** (newline-delimited). Web đọc snapshot point qua
-`kx_io_shm`/`kx_plc_shm` trực tiếp (read-only) — socket CHỈ dùng cho command.
+và BACnet server (iobus) đều thuộc group). Mỗi message = **1 dòng JSON** (newline-delimited).
+Web/BACnet đọc snapshot point qua `kx_io_shm`/`kx_plc_shm` trực tiếp (read-only) —
+socket CHỈ dùng cho command write/release.
 
-**Request (web → core):**
+**Request (client → core):**
 ```json
-{"id": 421, "op": "write",   "point": "DO1", "value": 1, "source": "manual", "user": "admin"}
-{"id": 422, "op": "release", "point": "DO1",             "source": "manual", "user": "admin"}
+{"id": 421, "op": "write",   "point": "DO1", "value": 1,   "source": "manual", "user": "admin"}
+{"id": 422, "op": "release", "point": "DO1",               "source": "manual", "user": "admin"}
+{"id": 501, "op": "write",   "point": "AO1", "value": 5.0, "source": "bacnet", "user": "bacnet:192.168.1.10"}
+{"id": 502, "op": "release", "point": "AO1",               "source": "bacnet", "user": "bacnet"}
 ```
 | Field | Kiểu | Bắt buộc | Ý nghĩa |
 |-------|------|----------|---------|
-| `id` | uint64 | ✅ | Correlation id, web tự tăng; core echo nguyên xi vào response |
+| `id` | uint64 | ✅ | Correlation id, client tự tăng; core echo nguyên xi vào response |
 | `op` | `write`/`release` | ✅ | write = set giá trị; release = nhả nguồn (relinquish) |
 | `point` | string | ✅ | Point id (DO1/AO2/AV3...) |
 | `value` | number | khi op=write | Engineering value |
-| `source` | enum | ✅ | Rev A: chỉ `manual` (mức 2). Mức khác KHÔNG đi qua socket này |
-| `user` | string | ✅ | Cho audit log |
+| `source` | enum | ✅ | `manual` (mức 2, web/HMI operator) · `bacnet` (mức 3, BACnet BMS — BAC-006) |
+| `user` | string | ✅ | Cho audit log; BACnet dùng `"bacnet"` hoặc `"bacnet:<client_ip>"` |
 
-**Response (core → web, cùng connection, đúng 1 dòng/request):**
+**Quy tắc BACnet client (source=bacnet):**
+- BACnet server trong `mkddc-iobus` tự resolve `Priority_Array[16]` trước (pick winning slot).
+- Gửi winning value đến core.sock với `source="bacnet"`, `op="write"`.
+- Khi array trở thành rỗng (tất cả NULL) → gửi `op="release"`, `source="bacnet"`.
+- BACnet server mở **1 persistent connection** đến core.sock (tương tự web backend); reconnect với backoff 1s khi core restart.
+- Core map `source=bacnet` → `PRIO_BACNET` (mức 3); nếu safety/manual (mức 1/2) đang active → result=`overridden`.
+
+**Response (core → client, cùng connection, đúng 1 dòng/request):**
 ```json
-{"id": 421, "result": "accepted",   "applied_value": 1, "active_source": "manual"}
-{"id": 421, "result": "overridden", "applied_value": 0, "active_source": "safety"}
+{"id": 421, "result": "accepted",   "applied_value": 1,   "active_source": "manual"}
+{"id": 421, "result": "overridden", "applied_value": 0,   "active_source": "safety"}
+{"id": 501, "result": "accepted",   "applied_value": 5.0, "active_source": "bacnet"}
+{"id": 501, "result": "overridden", "applied_value": 0,   "active_source": "manual"}
 {"id": 423, "result": "rejected",   "error": "unknown_point"}
 ```
-| `result` | Nghĩa | Web hiển thị |
-|----------|-------|---------------|
-| `accepted` | nguồn manual đang thắng, giá trị được áp | OK |
+| `result` | Nghĩa | Client hiển thị / log |
+|----------|-------|----------------------|
+| `accepted` | nguồn đang thắng, giá trị được áp | OK |
 | `overridden` | nhận lệnh nhưng nguồn cao hơn đang thắng (`active_source`) | "Bị ghi đè bởi mức ưu tiên cao hơn" |
-| `rejected` | lỗi: `unknown_point` / `bad_value` / `readonly_point` / `bad_request` | thông báo lỗi |
+| `rejected` | lỗi: `unknown_point` / `bad_value` / `readonly_point` / `bad_request` / `unknown_source` | thông báo lỗi |
 
 **Timing/lỗi:**
 ```
-- Core trả lời trong ≤ 2 chu kỳ scan (≤2s Rev A); web timeout 3s → coi là lỗi, KHÔNG retry
-  tự động lệnh write (tránh double-actuate) — báo user thử lại.
-- Socket đóng/core restart: web reconnect với backoff 1s; lệnh đang treo = thất bại.
+- Core trả lời trong ≤ 2 chu kỳ scan (≤2s Rev A); client timeout 3s → coi là lỗi, KHÔNG retry
+  tự động lệnh write (tránh double-actuate) — báo user/BMS thử lại.
+- Socket đóng/core restart: client reconnect với backoff 1s; lệnh đang treo = thất bại.
 - Core drain command queue ở bước 4 scan loop; queue đầy (>64 lệnh/scan) → rejected "busy".
 - Response trả SAU resolve + safe-state (step 7) trong CÙNG scan — applied_value/active_source
-  là giá trị THẬT sau khi mọi nguồn tranh chấp xong, không phải giá trị web vừa gửi.
-- Audit 2 phía: core in 1 dòng/lệnh ra stderr→journald, format chuẩn:
-    AUDIT web_cmd id=<id> user=<user> point=<point> op=<op> value=<v> result=<r> active_source=<src>
-  (user sanitize [A-Za-z0-9_.@-], max 32 ký tự — chống log injection);
+  là giá trị THẬT sau khi mọi nguồn tranh chấp xong, không phải giá trị client vừa gửi.
+- source không trong enum (manual/bacnet) → rejected "unknown_source" — không mở rộng thêm
+  source mới mà không cập nhật doc này + 07 §4 bảng priority.
+- Audit core in 1 dòng/lệnh ra stderr→journald, format chuẩn:
+    AUDIT cmd id=<id> user=<user> point=<point> op=<op> value=<v> result=<r> active_source=<src>
+  (user sanitize [A-Za-z0-9_.@:-], max 48 ký tự — chống log injection; bacnet IP dùng dấu :);
   web ghi {ts, user, point, op, value, result, active_source} vào eventlog.
-- ĐÃ implement đủ 3 result 2026-06-12 (COR-007). Lịch sử: stub Rev A đầu chỉ accepted/rejected.
+- ĐÃ implement đủ 3 result 2026-06-12 (COR-007). source=bacnet: thêm vào web_ipc cùng BAC-006.
 ```
 
 **SIGHUP reload (CONFIG_SCHEMA D-5 — `io_safe_state.conf` → SIGHUP core, ĐÃ implement 2026-06-12, COR-008):**
@@ -498,8 +518,13 @@ WantedBy=multi-user.target
 | Stateful graph | graph_runtime/state_snapshot | COR-009/010 pass theo doc 22 | unit + group 4 |
 | BACnet object | bacnet_objtable/BACnet bridge | BAC-001..011 pass theo doc 24 nếu thuộc scope | group 9 |
 
+Trạng thái: ĐÃ làm 2026-06-17 — BAC-004 (bacnet_objtable publish+read_ext), web_ipc source=bacnet mức 3, fieldbus.sock SOCK_DGRAM mở trong main.cpp, scan_loop step 3 ext socket + step 4 cmd.prio routing; 106 core test pass.
+
 ---
-**Rev** 1.5 | 2026-06-13 (S7 #4/#5/#6 docs linked; priority test fixed web/manual=mức 2) ·
+**Rev** 1.7 | 2026-06-17 (BAC-004+MOD-009 core: bacnet_objtable.cpp dùng iop_protocol.h, fieldbus.sock mở trong main.cpp, web_ipc source=bacnet mức 3, scan_loop routing — 106 test pass) ·
+1.6 | 2026-06-17 (§8: BAC-CONFLICT-001 CLOSED — mở rộng core.sock nhận source=bacnet mức 3,
+BACnet client persistent connection, audit format cập nhật, rejected "unknown_source" added) ·
+1.5 | 2026-06-13 (S7 #4/#5/#6 docs linked; priority test fixed web/manual=mức 2) ·
 1.4 | 2026-06-12 (web_ipc overridden+audit, SIGHUP reload, packaging/systemd) ·
 1.3 | 2026-06-12 · Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) ·
 DoD: [12_DEFINITION_OF_DONE §4](12_DEFINITION_OF_DONE.md)

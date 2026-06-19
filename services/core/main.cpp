@@ -13,6 +13,7 @@
 
 #include <pthread.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "config_reload.hpp"
@@ -60,6 +61,7 @@ int main(int argc, char** argv)
     using namespace core;
 
     std::string sock_path = "/run/mkddc/core.sock";
+    std::string fieldbus_sock_path = "/run/mkddc/fieldbus.sock";
     std::string graph_path = "/data/config/graph.json";
     std::string safe_cfg_path = "/data/config/io_safe_state.conf";
     std::string io_cfg_path = "/data/config/io_config.conf";
@@ -73,6 +75,7 @@ int main(int argc, char** argv)
         const std::string a = argv[i];
         if (a == "--log-level" && i + 1 < argc) { ++i; /* Rev A: log level cố định */ }
         else if (a == "--sock" && i + 1 < argc) sock_path = argv[++i];
+        else if (a == "--fieldbus-sock" && i + 1 < argc) fieldbus_sock_path = argv[++i];
         else if (a == "--graph" && i + 1 < argc) graph_path = argv[++i];
         else if (a == "--safe-state-conf" && i + 1 < argc) { safe_cfg_path = argv[++i]; safe_cfg_from_cli = true; }
         else if (a == "--io-conf" && i + 1 < argc) { io_cfg_path = argv[++i]; io_cfg_from_cli = true; }
@@ -86,8 +89,9 @@ int main(int argc, char** argv)
             scan_ms_from_cli = true;
         }
         else if (a == "--help") {
-            std::printf("usage: mkddc-core [--sock PATH] [--graph FILE] [--safe-state-conf FILE]"
-                        " [--io-conf FILE] [--scan-ms N] [--log-level LVL]\n");
+            std::printf("usage: mkddc-core [--sock PATH] [--fieldbus-sock PATH] [--graph FILE]"
+                        " [--safe-state-conf FILE] [--io-conf FILE] [--scan-ms N]"
+                        " [--log-level LVL]\n");
             return 0;
         }
     }
@@ -184,8 +188,36 @@ int main(int argc, char** argv)
         return 1;   /* core là creator plc_shm — không có thì web/BACnet mù */
     CoreMetrics metrics;
 
+    /* MOD-009: mở fieldbus.sock SOCK_DGRAM — core là server (bind+recv).
+     * iobus fieldbus gửi kx_ext_snapshot_msg_t datagram vào đây mỗi vòng poll.
+     * Fail → degraded (core chạy không có ext data, ext quality=BAD). */
+    int fieldbus_sockfd = -1;
+    {
+        fieldbus_sockfd = ::socket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+        if (fieldbus_sockfd < 0) {
+            std::fprintf(stderr, "WARN  fieldbus_sock.open_fail errno=%d (ext data disabled)\n",
+                         errno);
+        } else {
+            ::unlink(fieldbus_sock_path.c_str());
+            struct sockaddr_un fba {};
+            fba.sun_family = AF_UNIX;
+            std::strncpy(fba.sun_path, fieldbus_sock_path.c_str(), sizeof(fba.sun_path) - 1);
+            if (::bind(fieldbus_sockfd, reinterpret_cast<struct sockaddr*>(&fba),
+                       sizeof(fba)) != 0) {
+                std::fprintf(stderr, "WARN  fieldbus_sock.bind_fail path=%s errno=%d"
+                             " (ext data disabled)\n", fieldbus_sock_path.c_str(), errno);
+                ::close(fieldbus_sockfd);
+                fieldbus_sockfd = -1;
+            } else {
+                ::chmod(fieldbus_sock_path.c_str(), 0660);
+                std::fprintf(stderr, "INFO  fieldbus_sock.bound path=%s\n",
+                             fieldbus_sock_path.c_str());
+            }
+        }
+    }
+
     ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver,
-                   &safe, &writer, &bacnet, &metrics});
+                   &safe, &writer, &bacnet, &metrics, fieldbus_sockfd});
 
     /* SIGHUP → reload io_config + io_safe_state + graph ở ranh giới scan;
      * fail → giữ config cũ (khác boot fail-fast); manual đang giữ không mất */
@@ -239,6 +271,11 @@ int main(int argc, char** argv)
     /* COR-010: ghi snapshot khi shutdown sạch (SIGTERM) */
     if (graph.loaded())
         snap.save(graph.get_persist_state());
+
+    if (fieldbus_sockfd >= 0) {
+        ::close(fieldbus_sockfd);
+        ::unlink(fieldbus_sock_path.c_str());
+    }
 
     std::fprintf(stderr, "INFO  core.shutdown scans=%u overrun=%u\n",
                  metrics.scan_count(), metrics.scan_overrun());

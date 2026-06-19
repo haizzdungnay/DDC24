@@ -85,7 +85,7 @@ Mỗi loại thiết bị phụ được mô tả bằng một **profile** (file
 ## 4. Cấu hình bus & slave (`fieldbus.conf` — xem [D-5](CONFIG_SCHEMA_MK-DDC-24_VI.md))
 ```json
 {
-  "rs485": { "baud": 19200, "parity": "N", "stop": 1 },
+  "rs485": { "device": "/dev/ttyS3", "baud": 19200, "parity": "N", "stop": 1 },
   "poll_default_ms": 1000,
   "slaves": [
     { "addr": 10, "profile": "kinexus-io-ext-8di8do", "poll_ms": 500, "name": "EXT-1" },
@@ -94,6 +94,8 @@ Mỗi loại thiết bị phụ được mô tả bằng một **profile** (file
   ]
 }
 ```
+> `rs485.device` (**bắt buộc** — thêm 2026-06-17): đường dẫn serial port RS-485 cụ thể;
+> không hardcode trong code. Xem D-5 §5b (CONFIG_SCHEMA) cho full field table.
 
 ## 5. Profile chuẩn đi kèm (plug-and-play)
 | Profile | Thiết bị | Điểm chính |
@@ -132,6 +134,7 @@ Mỗi loại thiết bị phụ được mô tả bằng một **profile** (file
 ## Revision History
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
-| 2.1 | 2026-06-16 | Dev SOM | Thêm 3 field profile BACnet expose (`expose_bacnet`, `bacnet_object_type`, `bacnet_instance`) — close FB-Q-002; cập nhật §6 tích hợp theo ext IPC API (fieldbus.sock → plc_shm). |
-| 2.0 | 2026-05-30 | SW Lead | **Viết lại theo ARCH-R010:** từ "DDC Modbus slave" → "DDC Modbus RTU **master** / expansion bus" với device profile. |
+| 2.2 | 2026-06-17 | Dev SOM | §4: thêm `rs485.device` bắt buộc vào fieldbus.conf — gap serial port path closed. |
+| 2.1 | 2026-06-16 | Dev SOM | Thêm 3 field profile BACnet expose; cập nhật §6 ext IPC API. |
+| 2.0 | 2026-05-30 | SW Lead | **Viết lại theo ARCH-R010:** DDC Modbus RTU master / expansion bus với device profile. |
 | 1.0 | 2026-05-30 | SW | (huỷ) Modbus slave register map phục vụ BMS |
