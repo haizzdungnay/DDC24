@@ -187,4 +187,31 @@ bool load_config(const std::string& path, bool must_exist, IobusConfig* out)
     return true;
 }
 
+bool reload_config_safe(const std::string& path, bool must_exist, IobusConfig& current_cfg, const std::string& uart_override, const std::string& log_level_override)
+{
+    IobusConfig new_cfg = current_cfg;
+    if (!load_config(path, must_exist, &new_cfg)) {
+        return false;
+    }
+
+    if (!uart_override.empty()) {
+        new_cfg.uart_device = uart_override;
+    }
+    if (!log_level_override.empty()) {
+        new_cfg.log_level = log_level_override;
+    }
+
+    if (new_cfg.uart_device != current_cfg.uart_device) {
+        std::fprintf(stderr, "WARN  reload.requires_restart field=uart_device\n");
+        new_cfg.uart_device = current_cfg.uart_device;
+    }
+    if (new_cfg.baud != current_cfg.baud) {
+        std::fprintf(stderr, "WARN  reload.requires_restart field=baud\n");
+        new_cfg.baud = current_cfg.baud;
+    }
+
+    current_cfg = new_cfg;
+    return true;
+}
+
 } // namespace iobus

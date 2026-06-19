@@ -133,6 +133,14 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t period_ns,
     d_.graph->sync_actual_scan_ms(actual_ms);
     struct timespec next;
     clock_gettime(CLOCK_MONOTONIC, &next);
+
+    uint64_t expected_ns = static_cast<uint64_t>(next.tv_sec) * 1000000000ull + next.tv_nsec;
+    uint64_t jitter_count = 0;
+    int64_t max_jitter_ns = 0;
+    int64_t min_jitter_ns = -1;
+    int64_t sum_jitter_ns = 0;
+    uint64_t last_stats_print = expected_ns;
+
     while (!shutdown.load()) {
         /* SIGHUP reload ở RANH GIỚI scan (COR-008) — config mới chỉ có hiệu lực
          * trọn vẹn từ scan kế, không bao giờ giữa lúc resolve */
@@ -143,6 +151,28 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t period_ns,
              * Thứ tự: reload_fn_ → sync_actual (CR-006). */
             d_.graph->sync_actual_scan_ms(actual_ms);
         }
+
+        uint64_t actual_ns = now_ns();
+        int64_t jitter_ns = static_cast<int64_t>(actual_ns) - static_cast<int64_t>(expected_ns);
+        int64_t abs_jitter_ns = jitter_ns < 0 ? -jitter_ns : jitter_ns;
+        
+        if (abs_jitter_ns > max_jitter_ns) max_jitter_ns = abs_jitter_ns;
+        if (min_jitter_ns < 0 || abs_jitter_ns < min_jitter_ns) min_jitter_ns = abs_jitter_ns;
+        sum_jitter_ns += abs_jitter_ns;
+        jitter_count++;
+
+        if (actual_ns - last_stats_print > 60000000000ull) {
+            std::fprintf(stderr, "INFO  core.jitter min_us=%.2f max_us=%.2f avg_us=%.2f overruns=%u count=%lu\n",
+                         min_jitter_ns / 1000.0, max_jitter_ns / 1000.0,
+                         (sum_jitter_ns / (double)jitter_count) / 1000.0,
+                         d_.metrics->scan_overrun(), jitter_count);
+            last_stats_print = actual_ns;
+            max_jitter_ns = 0;
+            min_jitter_ns = -1;
+            sum_jitter_ns = 0;
+            jitter_count = 0;
+        }
+
         step();
         if (after_scan) after_scan(ctx);
 
@@ -153,6 +183,7 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t period_ns,
             next.tv_nsec -= 1000000000L;
             next.tv_sec += 1;
         }
+        expected_ns = static_cast<uint64_t>(next.tv_sec) * 1000000000ull + next.tv_nsec;
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr);
     }
 }

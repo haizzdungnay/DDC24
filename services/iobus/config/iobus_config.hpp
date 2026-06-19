@@ -39,6 +39,8 @@ struct IobusConfig {
  */
 bool load_config(const std::string& path, bool must_exist, IobusConfig* out);
 
+bool reload_config_safe(const std::string& path, bool must_exist, IobusConfig& current_cfg, const std::string& uart_override, const std::string& log_level_override);
+
 } // namespace iobus
 
 #endif /* IOBUS_IOBUS_CONFIG_HPP */
