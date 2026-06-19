@@ -22,7 +22,8 @@ struct WebCommand {
     PointId     point{PointKind::AV, -1};
     std::string point_name;         /* đã sanitize [A-Za-z0-9] ≤8 — cho audit log */
     float       value = 0.0f;
-    std::string user;               /* đã sanitize [A-Za-z0-9_.@-] ≤32 — cho audit */
+    std::string user;               /* đã sanitize [A-Za-z0-9_.@:-] ≤48 — cho audit */
+    int         prio = 2;           /* PRIO_LOCAL_MANUAL=2 / PRIO_BACNET=3 (07 §8, BAC-CONFLICT-001) */
     int         client_fd = -1;     /* để trả response đúng connection */
 };
 

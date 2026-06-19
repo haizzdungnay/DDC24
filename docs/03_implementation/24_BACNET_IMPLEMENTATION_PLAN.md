@@ -3,7 +3,7 @@
 
 > **Document ID:** IMPL-BACNET-PLAN-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-06-13
-> **Trạng thái:** Active — lấp gap S7 #5, đủ để tách issue/code task
+> **Trạng thái:** DONE 2026-06-17 — BAC-001..011 implemented; 114 unit test pass; bypass check sạch
 > **Owner:** Dev 2 (core/iobus) + Protocol Lead
 > **Đọc cùng:** [SW_BACNET_DESIGN](../02_design/software/SW_BACNET_DESIGN_MK-DDC-24_VI.md) ·
 > [BACNET_PICS_EPICS](../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) ·
@@ -18,12 +18,21 @@
 |--------|------------|
 | Stack | Dùng `bacnet-stack` C làm BACnet/IP server; không tự viết protocol stack. |
 | Process boundary | BACnet datalink/callback chạy trong `mkddc-iobus`; core publish `mkddc_plc_shm`. |
-| Command path | BACnet WriteProperty không ghi IO trực tiếp; ghi command request vào core ở mức `PRIO_BACNET` (mức 3). |
-| Priority bridge | BACnet `Priority_Array[1..16]` giữ đầy đủ ở BACnet side; giá trị thắng theo BACnet được đưa vào core mức 3. |
-| Release | BACnet NULL ở priority N = release priority N; khi array rỗng dùng `Relinquish_Default`, rồi core resolve 6 mức. |
+| Command path | BACnet WriteProperty không ghi IO trực tiếp; gửi command vào `core.sock` với `source=bacnet` (mức 3) — xem §4b. |
+| Priority bridge | BACnet `Priority_Array[1..16]` giữ đầy đủ ở BACnet side; giá trị thắng được đưa vào core mức 3. |
+| Release | BACnet NULL ở priority N = release priority N; khi array rỗng → `op=release` vào core; core resolve 6 mức. |
 | Object source | AI/BI/AO/BO vật lý auto từ 24 IO; AV/BV/MSV từ virtual point/config; ext Modbus expose qua cấu hình. |
-| Security | BACnet/IP plaintext theo ASHRAE 135; chỉ bind trusted interface/VLAN, firewall allow UDP 47808 nội bộ. |
+| Security | BACnet/IP plaintext theo ASHRAE 135; bind interface chỉ định qua `bacnet.conf` (field `bind_interface`). |
 | BTL scope | Target B-ASC Rev A; B-BC/schedule/trend nâng cao chỉ khi object/service đầy đủ. |
+
+### Open points đã đóng
+
+**BAC-CONFLICT-001** ✅ CLOSED 2026-06-17
+
+- **Mâu thuẫn:** 07 guide §8 (cũ) giới hạn `source` chỉ `manual` (mức 2); plan này yêu cầu BACnet gửi vào core mức 3.
+- **Resolution Option A:** Mở rộng `core.sock` (web_ipc) nhận thêm `source=bacnet` (mức 3). Không tạo socket mới.
+- **Lý do chọn A:** Tái dùng transport + audit đã có; plc_shm single-writer vẫn là core; không phức tạp thêm.
+- **Doc đã cập nhật:** 07 guide §8 Rev 1.6 — xem chi tiết IPC protocol BACnet tại đó.
 
 ---
 
@@ -87,6 +96,25 @@ Mapping audit:
 | Write NULL làm array rỗng | release level 3 | accepted/released |
 | Out_Of_Service true | object local override; không bypass safety | audit config/object |
 | ReinitializeDevice | restart service/reboot theo quyền | audit admin action |
+
+---
+
+## 4b. BACnet → core IPC protocol (BAC-CONFLICT-001 resolution detail)
+
+BACnet server trong `mkddc-iobus` kết nối `core.sock` với `source=bacnet`, `op=write/release`.
+Chi tiết đầy đủ tại [07 §8](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) — đây chỉ ghi điểm BACnet-specific:
+
+| Tình huống | Hành động BACnet server | Gửi vào core.sock |
+|-----------|------------------------|-------------------|
+| WriteProperty AO/BO/AV/BV/MSV tại priority N | Cập nhật slot N trong Priority_Array; pick winning slot (thấp nhất non-NULL) | `{"op":"write","source":"bacnet","point":"AO1","value":<winning>,"user":"bacnet:<ip>"}` |
+| WriteProperty NULL tại priority N, còn slot khác | Xóa slot N; pick winning slot mới | `{"op":"write","source":"bacnet","point":"AO1","value":<new_winner>,...}` |
+| WriteProperty NULL làm array rỗng | Dùng `Relinquish_Default`; release core mức 3 | `{"op":"release","source":"bacnet","point":"AO1","user":"bacnet"}` |
+| Core trả `overridden` | BACnet vẫn giữ Priority_Array nguyên; log + COV notify với giá trị thực tế từ `applied_value` | — |
+
+**Connection lifecycle:**
+- BACnet server mở 1 persistent UNIX stream connection đến `/run/mkddc/core.sock` khi khởi động.
+- Reconnect với backoff 1s khi core restart.
+- `id` field: BACnet server tự tăng uint64 monotonic; không liên quan đến BACnet invoke ID.
 
 ---
 
@@ -176,4 +204,6 @@ services/core/
 | BTL scope quá rộng | Cao | Rev A target B-ASC; trend/schedule nâng cao chỉ khi code đủ |
 
 ---
-**Rev** 1.0 | 2026-06-13 — tạo plan S7 #5 code-ready
+**Rev** 1.2 | 2026-06-17 (DONE: BAC-001..011 implemented — bacnet_config/objects/priority/cov/reliability/alarm/server + test suite + BTL pretest script; 114 test pass) ·
+1.1 | 2026-06-17 (BAC-CONFLICT-001 CLOSED: §1 open-points, §4b IPC protocol BACnet→core.sock) ·
+1.0 | 2026-06-13 — tạo plan S7 #5 code-ready

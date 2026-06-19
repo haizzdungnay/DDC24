@@ -6,6 +6,8 @@ add_compile_options(-Wall -Wextra -Werror)
 
 set(SHARED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../shared)
 
+# BAC-004: full Priority_Array + Reliability + ext socket (MOD-009) always compiled;
+# MKDDC_ENABLE_BACNET flag chỉ dùng cho iobus bacnet-stack link, core không cần flag này.
 add_library(core_lib STATIC
     scan_loop.cpp point_table.cpp point_quality.cpp graph_runtime.cpp
     priority_resolver.cpp safe_state.cpp safe_state_config.cpp config_reload.cpp
@@ -31,7 +33,8 @@ if(CORE_BUILD_TESTS)
       tests/test_iobus_reader.cpp tests/test_point_quality.cpp
       tests/test_priority_resolver.cpp tests/test_safe_state.cpp tests/test_scan_loop.cpp
       tests/test_web_ipc.cpp tests/test_graph_runtime.cpp tests/test_safe_state_config.cpp
-      tests/test_config_reload.cpp tests/test_state_snapshot.cpp)
+      tests/test_config_reload.cpp tests/test_state_snapshot.cpp
+      tests/test_bacnet_objtable.cpp)
   target_link_libraries(core_tests PRIVATE core_lib)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
   if(TARGET GTest::gtest_main)

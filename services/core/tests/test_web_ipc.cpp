@@ -277,11 +277,12 @@ TEST(WebIpc, RejectsInvalidRequests)
     f.scan();
     EXPECT_NE(c.recv_line().find("readonly_point"), std::string::npos);
 
+    /* BAC-CONFLICT-001 CLOSED 2026-06-17: source=bacnet accepted at prio 3 */
     c.send_line(R"({"id":3,"op":"write","point":"DO1","value":1,"source":"bacnet","user":"t"})");
     usleep(50000);
     f.scan();
-    EXPECT_NE(c.recv_line().find("bad_request"), std::string::npos)
-        << "Rev A: chỉ source=manual qua socket";
+    EXPECT_NE(c.recv_line().find("accepted"), std::string::npos)
+        << "source=bacnet must be accepted (prio 3);";
 
     c.send_line(R"({"id":4,"op":"write","point":"DO1","source":"manual","user":"t"})");
     usleep(50000);

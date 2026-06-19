@@ -36,6 +36,8 @@ struct ScanDeps {
     OutputWriter*     writer;
     BacnetObjTable*   bacnet;
     CoreMetrics*      metrics;
+    /* MOD-009: fd của fieldbus.sock SOCK_DGRAM (bind bởi core); -1 = chưa open */
+    int               fieldbus_sockfd = -1;
 };
 
 class ScanLoop {

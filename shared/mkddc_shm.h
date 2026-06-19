@@ -123,4 +123,21 @@ typedef struct {
 #define KX_WRITE_END(s)    do { __atomic_add_fetch(&(s)->seq, 1, __ATOMIC_RELEASE); } while (0)
 /* reader: lặp { v=seq; nếu lẻ tiếp tục; đọc data; } đến khi seq==v và chẵn */
 
+/* ============ fieldbus IPC: iobus fieldbus → core (UNIX datagram /run/mkddc/fieldbus.sock) ======
+ * Struct này dùng làm payload datagram gửi từ mkddc-iobus (fieldbus thread) sang mkddc-core.
+ * Core nhận tại ranh giới scan (scan_step_read_ext), ghi vào plc_shm.ext[] (seqlock write).
+ * Fieldbus KHÔNG ghi plc_shm trực tiếp — core là writer duy nhất.
+ * Magic: "EXT\1" = 0x45585401 — reject datagram nếu magic sai hoặc n < sizeof header.
+ * Thêm vào mkddc_shm.h (Rev 2026-06-17) vì cả iobus lẫn core đều phải dùng struct này.
+ * Xem: SW_FIELDBUS_DESIGN §10, plan 25 §3.
+ */
+#define KX_EXT_SNAP_MAGIC  0x45585401u   /* "EXT\1" */
+
+typedef struct {
+    uint32_t magic;                      /* = KX_EXT_SNAP_MAGIC khi hợp lệ     */
+    uint16_t count;                      /* số điểm hợp lệ trong points[]       */
+    uint16_t _pad;
+    kx_ext_point_t points[KX_N_EXT];    /* snapshot tại thời điểm poll xong    */
+} kx_ext_snapshot_msg_t;
+
 #endif /* MKDDC_SHM_H */

@@ -3,7 +3,7 @@
 
 > **Document ID:** IMPL-MODBUS-PLAN-MK-DDC-24-VI
 > **Phiên bản:** 1.1 | 2026-06-16
-> **Trạng thái:** Active — lấp gap S7 #6, đủ để tách issue/code task
+> **Trạng thái:** DONE 2026-06-17 — MOD-001..011 implemented; 114 unit test pass; bypass check sạch
 > **Owner:** Dev 2 (iobus) + Protocol Lead
 > **Đọc cùng:** [SW_FIELDBUS_DESIGN](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) ·
 > [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) ·
@@ -50,30 +50,35 @@ Rule:
 
 ## 3. Ext cache contract Rev A
 
-Nếu `shared/mkddc_shm.h` chưa có vùng ext chính thức, triển khai Rev A dùng cache nội bộ iobus + IPC/read API cho core. Chỉ thêm shared contract khi cần expose đa process bền vững.
+> **Gap CLOSED 2026-06-17:** `kx_ext_snapshot_msg_t` và `KX_EXT_SNAP_MAGIC` đã được thêm vào
+> `shared/mkddc_shm.h`. Fieldbus dùng `#include "mkddc_shm.h"` — không định nghĩa lại struct riêng.
+> `kx_ext_point_t` (name/value/quality/slave_addr/online/writable/setpoint/dirty) cũng trong header đó.
 
+**IPC message (fieldbus → core qua `/run/mkddc/fieldbus.sock` SOCK_DGRAM):**
 ```cpp
-struct ExtPointValue {
-    char id[32];
-    float value;
-    uint8_t type;      // bool/int/float enum
-    uint8_t quality;   // GOOD/STALE/BAD
-    uint16_t slave_addr;
-    uint64_t ts_ns;
-};
-
-struct ExtWriteRequest {
-    char id[32];
-    float value;
-    uint8_t pending;
-    uint8_t result;    // OK/TIMEOUT/EXCEPTION/REJECTED
-};
+// Dùng struct từ shared/mkddc_shm.h:
+//   kx_ext_snapshot_msg_t  — datagram payload
+//   KX_EXT_SNAP_MAGIC      — magic = 0x45585401
+//   kx_ext_point_t         — mỗi điểm ext
+//   KX_N_EXT               — 64 điểm tối đa
 ```
 
+**Ext point fields:**
+| Field | Writer | Ý nghĩa |
+|-------|--------|---------|
+| `name[24]` | iobus fieldbus | `"EXT-<slave-name>.<point-name>[idx]"` |
+| `value` | iobus fieldbus | giá trị đã decode + scale |
+| `quality` | iobus fieldbus | GOOD/UNCERTAIN/BAD |
+| `slave_addr` | iobus fieldbus | địa chỉ Modbus slave |
+| `online` | iobus fieldbus | slave online? |
+| `writable` | iobus fieldbus | có thể ghi xuống slave |
+| `setpoint` | **core** | giá trị core muốn ghi xuống slave |
+| `dirty` | **core** | `1` = setpoint cần ghi |
+
 Contract rule:
-- `id` format: `EXT-<slave-name>.<point-name>[index]`, ví dụ `EXT-1.DI[0]`.
-- Cache update atomic theo slave poll result; không nửa block.
+- `name` format: `EXT-<slave-name>.<point-name>[index]`, ví dụ `EXT-1.DI[0]`.
 - Core thấy stale nếu `now - ts_ns > max(3*poll_ms, 5s)` hoặc quality BAD.
+- Datagram drop (core bận 1 scan): core dùng snapshot cũ — acceptable, ext data stale theo ts_ns.
 
 ---
 
@@ -186,5 +191,7 @@ services/iobus/fieldbus/
 
 ---
 **Rev**
-1.1 | 2026-06-16 — close FB-Q-001 (libmodbus confirmed) + FB-Q-002 (expose_bacnet per-profile); cập nhật MOD-009 (fieldbus.sock → plc_shm ext IPC API) + MOD-010 (3 field profile BACnet) theo SW_FIELDBUS_DESIGN Rev 1.2 + D-2 Rev 2.1
+1.3 | 2026-06-17 — DONE: MOD-001..011 implemented — fieldbus_config/device_profile/register_codec/poll_scheduler/ext_cache/fieldbus_metrics/modbus_master + test suite; 114 test pass
+1.2 | 2026-06-17 — §3: kx_ext_snapshot_msg_t gap CLOSED (struct + magic vào mkddc_shm.h); ext point fields table cụ thể hơn
+1.1 | 2026-06-16 — close FB-Q-001 (libmodbus confirmed) + FB-Q-002 (expose_bacnet per-profile); cập nhật MOD-009 + MOD-010
 1.0 | 2026-06-13 — tạo plan S7 #6 code-ready

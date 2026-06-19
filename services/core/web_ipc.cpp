@@ -67,15 +67,16 @@ static bool jget_number(const std::string& s, const char* key, double* out)
     return true;
 }
 
-/* user vào audit log: chỉ giữ [A-Za-z0-9_.@-], max 32 — chống log injection */
+/* user vào audit log: [A-Za-z0-9_.@:-], max 48 (07 §8 — bacnet dùng ':' cho IP) */
 static std::string sanitize_user(const std::string& s)
 {
     std::string out;
+    out.reserve(48);
     for (const char c : s) {
         if (std::isalnum(static_cast<unsigned char>(c)) ||
-            c == '_' || c == '.' || c == '@' || c == '-')
+            c == '_' || c == '.' || c == '@' || c == '-' || c == ':')
             out += c;
-        if (out.size() >= 32) break;
+        if (out.size() >= 48) break;
     }
     return out.empty() ? "-" : out;
 }
@@ -212,8 +213,13 @@ void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand
         reject("bad_request");
         return;
     }
-    if (source != "manual") {       /* Rev A: chỉ manual (mức 2) qua socket này */
-        reject("bad_request");
+    /* 07 §8 BAC-CONFLICT-001: source enum mức 2 manual + mức 3 bacnet */
+    if (source == "manual") {
+        cmd.prio = 2;   /* PRIO_LOCAL_MANUAL */
+    } else if (source == "bacnet") {
+        cmd.prio = 3;   /* PRIO_BACNET */
+    } else {
+        reject("unknown_source");
         return;
     }
     if (!parse_point_name(point, &cmd.point)) {

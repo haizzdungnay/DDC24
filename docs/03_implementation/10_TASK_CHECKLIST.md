@@ -384,20 +384,28 @@ Trạng thái: ĐÃ làm 2026-06-13 — state_snapshot module; boot/shutdown/rel
 ## Phase 4/5 — BACnet/IP (S7 #5)
 
 > Chi tiết triển khai: [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md).
+> **Doc gap audit 2026-06-17 — tất cả gap BACnet ĐÃ CLOSED. Sẵn sàng implement toàn bộ BAC-001..011.**
+
+Doc gap đã resolve (2026-06-17):
+- BAC-CONFLICT-001 CLOSED: core.sock mở rộng nhận source=bacnet mức 3 → 07 guide §8 Rev 1.6, plan 24 §4b
+- bacnet.conf `bind_interface` CLOSED → CONFIG_SCHEMA §5 Rev 1.2
+- Vendor_Identifier placeholder CLOSED → BACNET_PICS_EPICS §7 Rev 1.1 (giá trị 9999)
 
 | Task ID | Tên | Owner | Output | Test |
 |---------|-----|-------|--------|------|
 | BAC-001 | Link `bacnet-stack` + CMake option | Dev SOM | `MKDDC_ENABLE_BACNET` build sạch | build smoke |
-| BAC-002 | Loader `device.conf` + `bacnet.conf` | Dev SOM | device id/name/port/interface | bad config reject |
+| BAC-002 | Loader `device.conf` + `bacnet.conf` (incl. `bind_interface`) | Dev SOM | device id/name/port/interface | bad config reject |
 | BAC-003 | Object registry AI/BI/AO/BO/AV/BV/MSV | Dev SOM | count/name/instance đúng D-3 | object map unit |
 | BAC-004 | `bacnet_objtable` publish từ core | Dev SOM | value/quality/reliability vào `mkddc_plc_shm` | shm unit |
 | BAC-005 | ReadProperty/ReadPropertyMultiple | Dev SOM | BMS đọc object | `bacrp`/BTL smoke |
-| BAC-006 | WriteProperty + Priority_Array[16] | Dev SOM | BACnet write -> core mức 3 | priority/core IPC fake |
+| BAC-006 | WriteProperty + Priority_Array[16] → core.sock source=bacnet | Dev SOM | BACnet write -> core mức 3; audit log | priority/core IPC fake |
 | BAC-007 | COV subscribe/change detect | Dev SOM | notify theo threshold | COV unit |
 | BAC-008 | Reliability/Status_Flags map | Dev SOM | fault -> BACnet flags | table unit |
 | BAC-009 | Alarm/Notification Class bridge | Dev SOM | alarm bus -> event | fake alarm smoke |
 | BAC-010 | TimeSync/ReinitializeDevice policy | Dev SOM | guarded restart/time sync | integration smoke |
 | BAC-011 | BTL pretest script/checklist | Tester + Dev SOM | repeatable B-ASC pretest | group 9 PASS |
+
+Trạng thái: ĐÃ làm 2026-06-17 — BAC-001..011 implementation hoàn tất; 114 unit test pass; bypass core check sạch.
 
 Done khi: DoD §8 pass; BACnet write không bypass core; safety/manual cao hơn vẫn thắng.
 
@@ -406,20 +414,27 @@ Done khi: DoD §8 pass; BACnet write không bypass core; safety/manual cao hơn 
 ## Phase 3/4 — Modbus RTU Master (S7 #6)
 
 > Chi tiết triển khai: [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md).
+> **Doc gap audit 2026-06-17 — tất cả gap Modbus ĐÃ CLOSED. Sẵn sàng implement toàn bộ MOD-001..011.**
+
+Doc gap đã resolve (2026-06-17):
+- kx_ext_snapshot_msg_t CLOSED: struct + KX_EXT_SNAP_MAGIC thêm vào mkddc_shm.h
+- RS-485 device path CLOSED: fieldbus.conf thêm `rs485.device` bắt buộc → CONFIG_SCHEMA §5b Rev 1.2, D-2 §4 Rev 2.2
 
 | Task ID | Tên | Owner | Output | Test |
 |---------|-----|-------|--------|------|
 | MOD-001 | Link `libmodbus` + CMake option | Dev SOM | `MKDDC_ENABLE_MODBUS` build sạch | build smoke |
-| MOD-002 | `fieldbus.conf` loader/reload | Dev SOM | rs485/slaves/poll config | config unit |
+| MOD-002 | `fieldbus.conf` loader/reload (incl. `rs485.device`) | Dev SOM | rs485/slaves/poll config | config unit |
 | MOD-003 | Device profile parser/validator | Dev SOM | profile JSON strict | parser unit |
 | MOD-004 | Register codec | Dev SOM | bool/int/float scale/endian | codec vectors |
 | MOD-005 | Poll scheduler | Dev SOM | due-time/retry/offline | scheduler unit |
 | MOD-006 | RTU read FC01/02/03/04 | Dev SOM | ext cache update | fake slave integration |
 | MOD-007 | RTU write FC05/06/15/16 | Dev SOM | pending write result | fake slave write |
 | MOD-008 | Metrics/alarm E302/E303 | Dev SOM | status + alarm | fault injection |
-| MOD-009 | Core ext point read path | Dev SOM | graph đọc ext values | core integration |
-| MOD-010 | BACnet expose config for ext points | Dev SOM | ext -> AV/BV/AI optional | object map test |
+| MOD-009 | Core ext point read path qua fieldbus.sock (dùng kx_ext_snapshot_msg_t từ mkddc_shm.h) | Dev SOM | graph đọc ext values | core integration |
+| MOD-010 | BACnet expose ext points theo profile | Dev SOM | ext -> AV/BV/AI optional | object map test |
 | MOD-011 | 16-slave timing smoke | Tester + Dev SOM | stable poll budget | group 10 PASS |
+
+Trạng thái: ĐÃ làm 2026-06-17 — MOD-001..011 implementation hoàn tất; 114 unit test pass; bypass core check sạch.
 
 Done khi: DoD §9 pass; Modbus không làm slave northbound; không có output bypass core.
 
@@ -610,8 +625,15 @@ Phụ thuộc: E2E-003
 ```
 
 ---
+<<<<<<< Updated upstream
 **Rev** 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
 1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit,
 COR-008 SIGHUP reload — cụm production-hardening 1+5+6 ĐÃ làm) · 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006
 Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·
+=======
+**Rev** 1.6 | 2026-06-17 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) ·
+1.5 | 2026-06-17 (BAC+MOD doc gap audit CLOSED: BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device — tất cả BAC-001..011 và MOD-001..011 sẵn sàng implement) ·
+1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
+1.2 | 2026-06-12 (thêm SKEL-005, COR-007/008 production-hardening) · 1.1 | 2026-06-12 · 1.0 | 2026-06-10 ·
+>>>>>>> Stashed changes
 Test chi tiết: [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)

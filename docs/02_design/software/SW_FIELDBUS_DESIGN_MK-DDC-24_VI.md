@@ -30,8 +30,8 @@ graph LR
 
 ## 3. Vòng lặp master (poll scheduler)
 ```c
-open_rtu("/dev/ttyS3", baud, parity);   // libmodbus master
-load_profiles();                        // đọc profiles/*.json
+open_rtu(cfg.rs485.device, baud, parity);  // libmodbus master; device từ fieldbus.conf rs485.device
+load_profiles();                            // đọc profiles/*.json
 load_slaves("fieldbus.conf");
 for (;;) {
   now = monotonic_ms();
@@ -168,14 +168,13 @@ KHÔNG ghi trực tiếp vào `plc_shm`. Tất cả dữ liệu ext đi qua `fie
 
 ### 10.3 Message format
 
+> **Gap CLOSED 2026-06-17:** `kx_ext_snapshot_msg_t` đã được thêm vào `shared/mkddc_shm.h`
+> (cùng file với `kx_ext_point_t`). Cả iobus lẫn core chỉ cần `#include "mkddc_shm.h"`.
+> Magic constant `KX_EXT_SNAP_MAGIC = 0x45585401` ("EXT\1") cũng trong header đó.
+
 ```c
-/* Gửi từ iobus → core qua fieldbus.sock */
-typedef struct {
-    uint32_t magic;          /* = 0x45585401  "EXT\1" */
-    uint16_t count;          /* số điểm hợp lệ trong points[] */
-    uint16_t _pad;
-    kx_ext_point_t points[KX_N_EXT];   /* từ shared/mkddc_shm.h */
-} kx_ext_snapshot_msg_t;
+/* Định nghĩa CHÍNH THỨC trong shared/mkddc_shm.h — KHÔNG định nghĩa lại ở đây */
+/* #include "mkddc_shm.h" để dùng kx_ext_snapshot_msg_t, KX_EXT_SNAP_MAGIC */
 ```
 
 Field `kx_ext_point_t` (đã có trong `shared/mkddc_shm.h`):
@@ -243,6 +242,7 @@ Web/BACnet → core priority_resolver
 ## Revision History
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
-| 1.2 | 2026-06-16 | Dev SOM | Close FB-Q-001 (libmodbus), FB-Q-002 (expose_bacnet per-profile); thêm §9 ext IPC API: fieldbus.sock UNIX datagram, message format, core integration, write path |
+| 1.3 | 2026-06-17 | Dev SOM | §10.3: kx_ext_snapshot_msg_t chuyển vào mkddc_shm.h (gap closed); cập nhật rs485 device config path |
+| 1.2 | 2026-06-16 | Dev SOM | Close FB-Q-001 (libmodbus), FB-Q-002 (expose_bacnet per-profile); thêm §9 ext IPC API |
 | 1.1 | 2026-06-13 | Codex | Active name = module trong `mkddc-iobus`; link implementation plan 25 |
 | 1.0 | 2026-05-30 | SW Lead | Phát hành đầu — service Modbus RTU master / expansion (theo ARCH-R010) |
