@@ -208,3 +208,18 @@ TEST(SafeStateConfig, AppliesToResolverLevel6)
     r.set_do(PRIO_FIRE_SAFETY, 1, false);
     EXPECT_EQ(r.resolve().dout[1], 0);
 }
+
+TEST(JsonParserUpgrade, HandlesEscapesAndDuplicateKeys)
+{
+    TempConf f(R"({
+      "ao": [ {"ch":1,"safe":2.5}, {"ch":1,"safe":3.5} ]
+    })");
+    SafeStateConfig cfg;
+    ASSERT_TRUE(load_safe_state_config(f.path(), true, all_volt(), &cfg));
+
+    TempConf f2(R"({
+      "do": [ {"ch":1,"safe":"cl\u006fsed"} ]
+    })");
+    ASSERT_TRUE(load_safe_state_config(f2.path(), true, all_volt(), &cfg));
+    EXPECT_TRUE(cfg.do_default[0]) << "should parse 'closed' from escape sequence";
+}

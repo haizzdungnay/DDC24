@@ -50,6 +50,7 @@ bool IoCache::attach()
 
     if (!reattach) {
         /* Boot sạch: memset toàn struct TRƯỚC khi set magic — chưa ai đọc (06 §5) */
+        __atomic_store_n(&shm_->magic, 0, __ATOMIC_RELEASE);
         std::memset(shm_, 0, sizeof(kx_io_shm_t));
         for (int i = 0; i < KX_N_UI; i++) shm_->ui_quality[i] = KX_Q_BAD;   /* chưa có mẫu */
         for (int i = 0; i < KX_N_AO; i++) shm_->ao_setpoint[i] = 0.0f;      /* safe 0V/4mA */

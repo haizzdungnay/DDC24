@@ -133,14 +133,20 @@ IopResult IopClient::transact(uint8_t cmd, const uint8_t* payload, uint8_t len,
         const uint8_t seq = seq_++;               /* SEQ +1 mỗi frame gửi, wrap 255→0 */
         const size_t n = build_frame(cmd, seq, payload, len, frame);
         if (port_.write(frame, n) < 0) {
-            /* EAGAIN kéo dài (>~50ms trong iop_port) / lỗi ghi = link chết về mặt
-             * semantics → coi như TIMEOUT: đi qua retry → FAULT → RECONNECT
-             * (reconnect mở lại port). KHÔNG trả NOT_OPEN tức thì. */
-            res.code = IopResult::TIMEOUT;
-            res.retries = static_cast<uint8_t>(attempt);
-            if (attempt < cfg_.max_retry && metrics_)
-                metrics_->retry_count.fetch_add(1, std::memory_order_relaxed);
-            continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                /* EAGAIN kéo dài (>~50ms trong iop_port) / lỗi ghi = link chết về mặt
+                 * semantics → coi như TIMEOUT: đi qua retry → FAULT → RECONNECT
+                 * (reconnect mở lại port). KHÔNG trả NOT_OPEN tức thì. */
+                res.code = IopResult::TIMEOUT;
+                res.retries = static_cast<uint8_t>(attempt);
+                if (attempt < cfg_.max_retry && metrics_)
+                    metrics_->retry_count.fetch_add(1, std::memory_order_relaxed);
+                continue;
+            } else {
+                /* Lỗi ghi thực sự (EBADF, EPIPE, etc.) -> trả NOT_OPEN ngay để reconnect lập tức */
+                res.code = IopResult::NOT_OPEN;
+                return res;
+            }
         }
         if (metrics_) metrics_->tx_count.fetch_add(1, std::memory_order_relaxed);
 

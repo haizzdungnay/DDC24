@@ -2,7 +2,10 @@
 ## MK-DDC-24 — Kế hoạch triển khai cấu trúc source thật chi tiết cho Dev 2
 
 > **Document ID:** IMPL-SOM-SRC-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.4 | 2026-06-13 (S7 #4 Active; thêm plan S7 #5 BACnet và S7 #6 Modbus) ·
+> **Phiên bản:** 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
+> 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device) ·
+> 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) ·
+> 1.4 | 2026-06-13 (S7 #4 Active; thêm plan S7 #5 BACnet và S7 #6 Modbus) ·
 > 1.3 | 2026-06-12 (S7 #4: audit thiết kế xong, tách plan riêng
 > [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md), lúc đó còn Draft) ·
 > 1.2 | 2026-06-12 (thêm S7 Production Hardening — 6 việc còn lại sau S6;
@@ -10,7 +13,8 @@
 > packaging/) · 1.1 | 2026-06-12 (SOM-COR-005: chốt microtask 1–4 ĐÃ làm theo
 > SAFETY SPEC 07 §5, thêm microtask 5 Rev A.1 cho trigger T6/T7) · 1.0 | 2026-06-11
 > **Trạng thái:** Active — S0–S6 ĐÃ thực thi xong 2026-06-11 (round-trip pass);
-> S7 #1/#2/#3 xong 2026-06-12; S7 #4/#5/#6 đã có task/code-ready docs 2026-06-13
+> S7 #1/#2/#3 xong 2026-06-12; S7 #4/#5/#6 đã có task/code-ready docs 2026-06-13;
+> TD-001/002/003 xong 2026-06-19
 > **Đối tượng đọc:** Dev 2, Lead, Tester
 > **Phạm vi:** chỉ phía SOM: `services/iobus`, `services/core`, `tools/fake_mcu`, `tools/shm_dump_io`, `shared/`
 
@@ -831,5 +835,6 @@ Không làm bước 4 trước khi 3 bước này xanh.
 
 ---
 
-**Rev** 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device; cập nhật ràng buộc BACnet IPC path) ·
+**Rev** 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
+1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device; cập nhật ràng buộc BACnet IPC path) ·
 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) · 1.4 | 2026-06-13 · 1.3 | 2026-06-12 · 1.2 | 2026-06-12 · 1.1 | 2026-06-12 · 1.0 | 2026-06-11

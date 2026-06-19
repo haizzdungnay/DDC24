@@ -181,3 +181,28 @@ TEST(ScanLoop, LateAttachRecoversOutputPath)
     loop.step();
     EXPECT_EQ(shm.do_cmd[0], 1) << "output path phải sống lại sau khi attach muộn";
 }
+
+TEST(ScanLoop, DetachesOnBadMagicAndRestoresOnReattach)
+{
+    Fixture f;
+    f.resolver.set_do(PRIO_LOCAL_MANUAL, 0, true);
+    f.tick_iobus();
+    f.loop.step();
+    EXPECT_EQ(f.shm.do_cmd[0], 1);
+
+    // Corrupt magic
+    f.shm.magic = 0;
+    f.tick_iobus();
+    f.loop.step(); // should fail read and detach
+
+    EXPECT_FALSE(f.reader.attached());
+
+    // Fix magic
+    f.shm.magic = KX_SHM_MAGIC;
+    f.tick_iobus();
+    f.reader.attach_external(&f.shm);
+    // next step should write outputs
+    f.loop.step();
+    EXPECT_TRUE(f.reader.attached());
+    EXPECT_EQ(f.shm.do_cmd[0], 1);
+}

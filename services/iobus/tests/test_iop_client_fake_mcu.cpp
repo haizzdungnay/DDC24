@@ -251,3 +251,18 @@ TEST(IopClientFakeMcu, NackSafeStateIsReported)
     EXPECT_EQ(r.nack_err, ERR_SAFE_STATE);
     EXPECT_GE(metrics.nack_count.load(), 1u);
 }
+
+TEST(IopClientFakeMcu, WriteFailsOnClosedPortReturnsNotOpen)
+{
+    IobusMetrics metrics;
+    IopClient client(&metrics, test_cfg());
+    IopResult r = client.set_do(0x01, 0x01);
+    EXPECT_EQ(r.code, IopResult::NOT_OPEN);
+
+    FakeMcuThread mcu;
+    ASSERT_TRUE(mcu.start());
+    ASSERT_TRUE(client.open(mcu.slave_path()));
+    client.close();
+    r = client.set_do(0x01, 0x01);
+    EXPECT_EQ(r.code, IopResult::NOT_OPEN);
+}

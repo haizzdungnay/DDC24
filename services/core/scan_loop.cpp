@@ -25,10 +25,18 @@ void ScanLoop::step()
 
     /* 1. Read IO state (seqlock) — fail → dùng snapshot cũ + metric */
     IoSnapshot io;
-    if (d_.reader->read(&io))
+    if (d_.reader->read(&io)) {
         last_io_ = io;
-    else
+    } else {
         d_.metrics->inc_seqlock_fail();
+        if (d_.reader->attached()) {
+            kx_io_shm_t* shm = d_.reader->shm();
+            if (shm && __atomic_load_n(&shm->magic, __ATOMIC_ACQUIRE) != KX_SHM_MAGIC) {
+                std::fprintf(stderr, "WARN  iobus_reader.magic_invalid -> detaching (will retry attach)\n");
+                d_.reader->detach();
+            }
+        }
+    }
 
     /* 2. Update point table + quality (kể cả stale check ts_ns) */
     d_.table->update_inputs(last_io_);
