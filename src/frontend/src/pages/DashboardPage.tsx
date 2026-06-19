@@ -11,6 +11,7 @@ import {
   Router,
   Thermometer,
 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { Link } from 'react-router-dom'
 import { apiClient } from '../api/client'
@@ -20,38 +21,71 @@ import { StateBlock } from '../components/StateBlock'
 import { StatusBadge } from '../components/StatusBadge'
 import { TrendChart, type TrendSeries } from '../components/TrendChart'
 import { DEVICE_DEFAULTS } from '../config'
-import { getTrendSamples } from '../demo/simulator'
 import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
-import type { Alarm, HealthResponse, Point } from '../types'
+import type { Alarm, HealthResponse, HealthStatus, Point, TrendSample } from '../types'
 import { formatDateTime, formatUptime, metricStatusColor, metricStatusFill, statusColor } from '../utils'
 
-const dashboardTrendSeries: TrendSeries[] = [
-  { key: 'AI-01', label: 'AI-01 - Supply Air Temp', color: 'var(--c-fault-fg)', unit: 'C' },
-  { key: 'AI-02', label: 'AI-02 - Duct Pressure', color: 'var(--c-accent-2)', unit: 'bar' },
-  { key: 'AI-03', label: 'AI-03 - Room Humidity', color: '#6E5A2E', unit: '%RH' },
-  { key: 'AI-04', label: 'AI-04 - Outdoor Temp', color: 'var(--c-warn-fg)', unit: 'C' }
-]
+const dashboardTrendColors = ['var(--c-fault-fg)', 'var(--c-accent-2)', '#6E5A2E', 'var(--c-warn-fg)']
+const dashboardTrendSampleLimit = 60
 
 export function DashboardPage() {
-  const health = useApi(apiClient.getHealth, [])
-  const pointsState = useApi(apiClient.getPoints, [])
-  const alarms = useApi(apiClient.getAlarms, [])
+  const health = useApi(apiClient.getHealth, [], { refreshMs: 1000 })
+  const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
+  const alarms = useApi(apiClient.getAlarms, [], { refreshMs: 1000 })
   const realtime = useRealtime()
   const { pick } = useI18n()
   const points: Point[] = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? []
+  const trendPoints = useMemo(() => points
+    .filter((point) => point.kind === 'AI' && pointNumber(point.value) !== null)
+    .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
+    .slice(0, 4), [points])
+  const trendSeries = useMemo<TrendSeries[]>(() => trendPoints.map((point, index) => ({
+    key: point.id,
+    label: `${point.id} - ${point.name}`,
+    color: dashboardTrendColors[index % dashboardTrendColors.length],
+    unit: point.unit
+  })), [trendPoints])
+  const trendPointsRef = useRef<Point[]>([])
+  const [trendSamples, setTrendSamples] = useState<TrendSample[]>([])
+
+  useEffect(() => {
+    trendPointsRef.current = trendPoints
+    if (!trendPoints.length) setTrendSamples([])
+  }, [trendPoints])
+
+  useEffect(() => {
+    const appendSample = () => {
+      const sample = makeTrendSample(trendPointsRef.current)
+      if (!sample) return
+      setTrendSamples((current) => [...current, sample].slice(-dashboardTrendSampleLimit))
+    }
+
+    appendSample()
+    const timerId = window.setInterval(appendSample, 1000)
+    return () => window.clearInterval(timerId)
+  }, [])
 
   if (pointsState.loading && !points.length) return <StateBlock state="loading" title={pick('Đang tải dashboard', 'Loading dashboard')} />
   if (pointsState.error && !points.length) return <StateBlock state="error" title={pick('Không tải được điểm I/O', 'Could not load I/O points')} detail={pointsState.error.message} onRetry={pointsState.refetch} />
 
   const h = health.data
   const alarmRows = alarms.data ?? []
-  const critical = Math.max(2, alarmRows.filter((alarm) => alarm.severity === 'critical' || alarm.severity === 'high').length)
-  const warning = Math.max(3, alarmRows.filter((alarm) => alarm.severity === 'medium').length)
-  const alarmCount = Math.max(5, alarmRows.length)
+  const critical = alarmRows.filter((alarm) => alarm.severity === 'critical').length
+  const warning = alarmRows.filter((alarm) => alarm.severity === 'high' || alarm.severity === 'medium' || alarm.severity === 'low').length
+  const alarmCount = alarmRows.length
   const count = (kind: string) => points.filter((point) => point.kind === kind).length
   const onCount = (kind: string) => points.filter((point) => point.kind === kind && Boolean(point.value)).length
+
+  const ramDetail = (() => {
+    if (typeof h?.ramUsedMb === 'number' && typeof h?.ramTotalMb === 'number' && h.ramTotalMb > 0) {
+      return `${Math.round(h.ramUsedMb)} MB / ${Math.round(h.ramTotalMb)} MB`
+    }
+    if (typeof h?.ramUsedMb === 'number') return `${Math.round(h.ramUsedMb)} MB`
+    if (typeof h?.ramTotalMb === 'number') return `/ ${Math.round(h.ramTotalMb)} MB`
+    return ''
+  })()
 
   return (
     <div className="space-y-4">
@@ -64,19 +98,19 @@ export function DashboardPage() {
         <DeviceStatusCard />
         <AlarmStatusCard count={alarmCount} critical={critical} warning={warning} />
         <DialStatusCard icon={Cpu} label="CPU LOAD" value={h?.cpuPercent ?? 23} detail="" />
-        <DialStatusCard icon={MemoryStick} label={pick('BỘ NHỚ', 'MEMORY')} value={h?.ramPercent ?? 48} detail="247 MB / 512 MB" />
-        <TempStatusCard value={h?.tempC ?? 38.6} />
+        <DialStatusCard icon={MemoryStick} label={pick('BỘ NHỚ', 'MEMORY')} value={h?.ramPercent ?? 48} detail={ramDetail} />
+        <TempStatusCard value={h?.tempC} />
         <UptimeStatusCard value={h?.uptimeS ?? 12 * 86400 + 4 * 3600 + 32 * 60 + 18} />
       </div>
 
       <Panel title={pick('TRẠNG THÁI TRUYỀN THÔNG', 'COMMUNICATION STATUS')} className="p-3">
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">
-          <CommTile icon={Network} title="Ethernet" value={h?.deviceIp ?? DEVICE_DEFAULTS.ip} />
-          <CommTile icon={Router} title="RS485-1" value="9600 bps" />
-          <CommTile icon={Router} title="RS485-2" value="9600 bps" />
-          <CommTile icon={Network} title="Modbus TCP" value="502" />
-          <CommTile icon={Network} title="Modbus RTU" value="1" />
-          <CommTile icon={Database} title="BACnet/IP" value={h?.bacnetDeviceId ?? DEVICE_DEFAULTS.bacnetDeviceId} />
+          <CommTile icon={Network} title="Ethernet" value={h?.deviceIp} status={h?.deviceIp ? 'ok' : 'unknown'} />
+          <CommTile icon={Router} title="RS485-1" value={scanValue(h?.services.iobus)} status={h?.services.iobus?.status ?? 'unknown'} />
+          <CommTile icon={Router} title="RS485-2" status="unknown" />
+          <CommTile icon={Network} title="Modbus TCP" status="unknown" />
+          <CommTile icon={Network} title="Modbus RTU" value={scanValue(h?.services.iobus)} status={h?.services.iobus?.status ?? 'unknown'} />
+          <CommTile icon={Database} title="BACnet/IP" value={h?.bacnetDeviceId} status={h?.bacnetDeviceId ? 'ok' : 'unknown'} />
         </div>
       </Panel>
 
@@ -90,8 +124,10 @@ export function DashboardPage() {
             <IoSummary kind="AI" count={count('AI')} lines={[`${points.filter((p) => p.kind === 'AI' && p.quality === 'good').length} ${pick('Bình thường', 'Normal')}`]} color="var(--c-good-fg)" />
           </div>
         </Panel>
-        <Panel title={pick('XU HƯỚNG AI (GIÁ TRỊ TRUNG BÌNH)', 'AI TREND (AVERAGE VALUE)')} action={<div className="flex gap-2"><Button size="sm" variant="secondary">{pick('30 phút', '30 min')}</Button><Button size="sm" variant="ghost" icon={<Maximize2 className="h-4 w-4" />} /></div>}>
-          <TrendChart data={getTrendSamples(['AI-01', 'AI-02', 'AI-03', 'AI-04'], 30)} series={dashboardTrendSeries} height={250} />
+        <Panel title={pick('XU HƯỚNG AI (GIÁ TRỊ TRUNG BÌNH)', 'AI TREND (AVERAGE VALUE)')} action={<div className="flex gap-2"><Button size="sm" variant="secondary">{pick('Live', 'Live')}</Button><Button size="sm" variant="ghost" icon={<Maximize2 className="h-4 w-4" />} /></div>}>
+          {trendSamples.length > 1 && trendSeries.length
+            ? <TrendChart data={trendSamples} series={trendSeries} height={250} />
+            : <StateBlock state="empty" title={pick('Chưa có dữ liệu trend AI live', 'No live AI trend data')} detail={pick('Biểu đồ sẽ tự chạy khi /points hoặc WebSocket có giá trị AI.', 'Chart starts when /points or WebSocket provides AI values.')} />}
         </Panel>
       </div>
 
@@ -122,6 +158,22 @@ export function DashboardPage() {
 
 function StatusCard({ children }: { children: React.ReactNode }) {
   return <div className="min-h-[142px] rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">{children}</div>
+}
+
+function pointNumber(value: Point['value']) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function makeTrendSample(points: Point[]) {
+  if (!points.length) return null
+  const sample: TrendSample = { time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }
+
+  for (const point of points) {
+    const value = pointNumber(point.value)
+    if (value !== null) sample[point.id] = Number(value.toFixed(2))
+  }
+
+  return Object.keys(sample).length > 1 ? sample : null
 }
 
 function DeviceStatusCard() {
@@ -164,14 +216,17 @@ function DialStatusCard({ icon: Icon, label, value, detail }: { icon: React.Comp
   )
 }
 
-function TempStatusCard({ value }: { value: number }) {
+function TempStatusCard({ value }: { value?: number }) {
   const { pick } = useI18n()
-  const color = metricStatusColor(value, 50, 65)
-  const stateLabel = value >= 65 ? pick('Cao', 'High') : value >= 50 ? pick('Cảnh báo', 'Warning') : pick('Bình thường', 'Normal')
+  const numericValue = typeof value === 'number' ? value : null
+  const color = numericValue === null ? 'var(--c-text-dim)' : metricStatusColor(numericValue, 50, 65)
+  const stateLabel = numericValue === null
+    ? pick('Không có dữ liệu', 'No data')
+    : numericValue >= 65 ? pick('Cao', 'High') : numericValue >= 50 ? pick('Cảnh báo', 'Warning') : pick('Bình thường', 'Normal')
   return (
     <StatusCard>
       <div className="flex items-center justify-between text-[11px] font-semibold uppercase text-[var(--c-text-dim)]"><span>{pick('NHIỆT ĐỘ', 'TEMPERATURE')}</span><Thermometer className="h-4 w-4" style={{ color }} /></div>
-      <div className="mt-6 flex items-center gap-3"><Thermometer className="h-9 w-9" style={{ color }} /><div className="mono text-3xl font-bold" style={{ color }}>{value.toFixed(1)}&deg;C</div></div>
+      <div className="mt-6 flex items-center gap-3"><Thermometer className="h-9 w-9" style={{ color }} /><div className="mono text-3xl font-bold" style={{ color }}>{numericValue === null ? 'N/A' : <>{numericValue.toFixed(1)}&deg;C</>}</div></div>
       <div className="mt-4 text-xs font-semibold" style={{ color }}>{stateLabel}</div>
     </StatusCard>
   )
@@ -194,13 +249,38 @@ function MiniDial({ value, fillColor, textColor }: { value: number; fillColor: s
   return <div className="grid h-20 w-20 place-items-center rounded-full" style={{ background: `conic-gradient(${fillColor} ${pct * 3.6}deg, rgba(74,79,85,0.16) 0deg)` }}><div className="grid h-14 w-14 place-items-center rounded-full bg-[var(--c-surface)]"><span className="mono text-xl font-bold" style={{ color: textColor }}>{Math.round(value)}%</span></div></div>
 }
 
-function CommTile({ icon: Icon, title, value }: { icon: React.ComponentType<{ className?: string }>; title: string; value: string }) {
+function CommTile({ icon: Icon, title, value, status = 'unknown' }: { icon: React.ComponentType<{ className?: string }>; title: string; value?: string; status?: HealthStatus }) {
+  const normalized = normalizeCommStatus(status)
+  const statusText = normalized === 'ok' ? 'ONLINE' : normalized === 'degraded' ? 'DEGRADED' : normalized === 'fault' ? 'FAULT' : 'N/A'
+  const statusClass = normalized === 'ok'
+    ? 'text-[var(--c-good-fg)]'
+    : normalized === 'degraded'
+      ? 'text-[var(--c-warn-fg)]'
+      : normalized === 'fault'
+        ? 'text-[var(--c-fault-fg)]'
+        : 'text-[var(--c-text-dim)]'
+  const dotClass = normalized === 'ok'
+    ? 'bg-[var(--c-indicator-ok)]'
+    : normalized === 'degraded'
+      ? 'bg-[var(--c-warn-fg)]'
+      : normalized === 'fault'
+        ? 'bg-[var(--c-fault-fg)]'
+        : 'bg-[var(--c-indicator-off)]'
   return (
     <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">
-      <div className="flex items-center gap-3"><Icon className="h-6 w-6 text-[var(--c-accent-2)]" /><div><div className="text-sm font-semibold">{title}</div><div className="mono mt-1 text-xs text-[var(--c-text-dim)]">{value}</div></div></div>
-      <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-[var(--c-good-fg)]"><span className="h-2 w-2 rounded-full bg-[var(--c-indicator-ok)]" />ONLINE</div>
+      <div className="flex items-center gap-3"><Icon className="h-6 w-6 text-[var(--c-accent-2)]" /><div><div className="text-sm font-semibold">{title}</div><div className="mono mt-1 text-xs text-[var(--c-text-dim)]">{value || 'N/A'}</div></div></div>
+      <div className={`mt-3 flex items-center gap-2 text-xs font-semibold ${statusClass}`}><span className={`h-2 w-2 rounded-full ${dotClass}`} />{statusText}</div>
     </div>
   )
+}
+
+function normalizeCommStatus(status?: HealthStatus): HealthStatus {
+  if (status === 'ok' || status === 'degraded' || status === 'fault') return status
+  return 'unknown'
+}
+
+function scanValue(service?: { last_scan_ms?: number }) {
+  return typeof service?.last_scan_ms === 'number' ? `${service.last_scan_ms} ms` : undefined
 }
 
 function IoSummary({ kind, count, lines, color }: { kind: string; count: number; lines: string[]; color: string }) {
@@ -256,7 +336,7 @@ function SystemHealthSummary({ health }: { health?: HealthResponse }) {
           <MetricTile label="Overall" value={health?.overall ?? 'unknown'} color={statusColor(health?.overall ?? 'unknown')} />
           <MetricTile label="IOP scan" value={`${iop?.last_scan_ms ?? 0} ms`} color={metricStatusColor(iop?.last_scan_ms ?? 0, 50, 100)} />
           <MetricTile label="CPU" value={`${health?.cpuPercent ?? 0}%`} color={metricStatusColor(health?.cpuPercent ?? 0, 70, 90)} />
-          <MetricTile label="RAM" value={`${health?.ramPercent ?? 0}%`} color={metricStatusColor(health?.ramPercent ?? 0, 70, 90)} />
+          <MetricTile label="RAM" value={typeof health?.ramUsedMb === 'number' ? `${Math.round(health.ramUsedMb)} MB` : `${health?.ramPercent ?? 0}%`} color={metricStatusColor(health?.ramPercent ?? 0, 70, 90)} />
         </div>
       </Panel>
       <span className="sr-only">{pick('Thông tin sức khỏe hệ thống', 'System health information')}</span>

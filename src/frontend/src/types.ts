@@ -43,12 +43,19 @@ export interface HealthResponse {
   services: Record<string, ServiceHealth>
   cpuPercent?: number
   ramPercent?: number
+  ramUsedMb?: number
+  ramTotalMb?: number
   tempC?: number
   uptimeS?: number
   firmware?: string
   deviceName?: string
   deviceIp?: string
   bacnetDeviceId?: string
+}
+
+export interface CurrentUser {
+  username: string
+  role: UserRole
 }
 
 export interface Envelope<TPayload = unknown> {

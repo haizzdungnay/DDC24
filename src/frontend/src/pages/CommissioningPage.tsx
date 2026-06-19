@@ -22,7 +22,7 @@ export function CommissioningPage() {
     setRunning(point.id)
     try {
       const result = await apiClient.runCommissioningTest(point.id, value)
-      toast.push(result.result === 'passed' ? 'success' : 'warn', `${point.id}: ${result.message}`)
+      toast.push(result.result === 'passed' ? 'success' : 'warn', `${result.pointId}: ${result.message}`)
       await state.refetch()
     } catch (err) {
       toast.push('error', err instanceof Error ? err.message : 'Commissioning failed')

@@ -1,54 +1,50 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { normalizePoint } from '../api/client'
+import { useAuth } from '../auth/AuthProvider'
 import { API_ORIGIN, IS_DEMO, WS_ORIGIN } from '../config'
 import { tickDemoPoints } from '../demo/simulator'
-import type { ConnectionState, Envelope, IoUpdatePayload, Point } from '../types'
-import { normalizeKind, normalizeQuality, nowIso } from '../utils'
+import type { ConnectionState, Point } from '../types'
+import { nowIso } from '../utils'
 
-function wsEndpoint(): string {
-  const sameOrigin = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
-  const origin = WS_ORIGIN || (API_ORIGIN ? API_ORIGIN.replace(/^http/, 'ws') : sameOrigin)
-  return `${origin.replace(/\/$/, '')}/ws/v1/events`
+type MonitorEnvelope = Record<string, unknown> & { op: string }
+
+function toWsOrigin(origin: string): string {
+  return origin.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
 }
 
-function coercePoint(raw: Point | Record<string, unknown>): Point {
-  const item = raw as Record<string, unknown>
-  const id = String(item.id ?? 'UNKNOWN')
-  return {
-    id,
-    name: String(item.name ?? item.label ?? id),
-    kind: normalizeKind(item.kind ?? item.type),
-    value: item.value as Point['value'] ?? 0,
-    unit: item.unit ? String(item.unit) : undefined,
-    quality: normalizeQuality(item.quality),
-    source: String(item.source ?? 'WS'),
-    priority: item.priority ? String(item.priority) : undefined,
-    updatedAt: String(item.updatedAt ?? item.timestamp ?? nowIso()),
-    fault: Boolean(item.fault ?? false),
-    forced: Boolean(item.forced ?? false),
-    sensorType: item.sensorType ? String(item.sensorType) : undefined,
-    trend: Array.isArray(item.trend) ? item.trend.filter((value): value is number => typeof value === 'number') : undefined
-  }
+function wsEndpoint(token?: string): string {
+  const sameOrigin = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
+  const configuredOrigin = WS_ORIGIN || API_ORIGIN
+  const origin = configuredOrigin ? toWsOrigin(configuredOrigin) : sameOrigin
+  const endpoint = `${origin.replace(/\/$/, '')}/api/v1/ws/monitor`
+  return token ? `${endpoint}?token=${encodeURIComponent(token)}` : endpoint
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 export function useWebSocket() {
+  const { session } = useAuth()
   const [connectionState, setConnectionState] = useState<ConnectionState>(IS_DEMO ? 'connected' : 'connecting')
   const [allPoints, setAllPoints] = useState<Point[]>([])
-  const [lastEnvelope, setLastEnvelope] = useState<Envelope<IoUpdatePayload> | null>(null)
+  const [lastEnvelope, setLastEnvelope] = useState<MonitorEnvelope | null>(null)
   const [lastEventAt, setLastEventAt] = useState<string | null>(null)
   const retryMs = useRef(1000)
   const timeoutRef = useRef<number | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
-  const url = useMemo(wsEndpoint, [])
+  const url = useMemo(() => wsEndpoint(session?.token), [session?.token])
 
   useEffect(() => {
     if (IS_DEMO) {
       setAllPoints(tickDemoPoints())
       const id = window.setInterval(() => {
         const points = tickDemoPoints()
-        const envelope: Envelope<IoUpdatePayload> = { v: 1, type: 'event', topic: 'io_update', payload: { scan_ms: 12, points } }
+        const ts = nowIso()
+        const envelope: MonitorEnvelope = { op: 'update', ts, points }
         setAllPoints(points)
         setLastEnvelope(envelope)
-        setLastEventAt(nowIso())
+        setLastEventAt(ts)
       }, 200)
       return () => window.clearInterval(id)
     }
@@ -63,16 +59,28 @@ export function useWebSocket() {
       socket.onopen = () => {
         retryMs.current = 1000
         setConnectionState('connected')
-        socket.send(JSON.stringify({ v: 1, type: 'subscribe', topic: 'io_update' }))
+        socket.send(JSON.stringify({ op: 'subscribe', points: '*' }))
       }
 
       socket.onmessage = (event) => {
-        const envelope = JSON.parse(String(event.data)) as Envelope<IoUpdatePayload>
-        setLastEnvelope(envelope)
-        setLastEventAt(nowIso())
-        if (envelope.type === 'event' && envelope.topic === 'io_update' && Array.isArray(envelope.payload?.points)) {
-          setAllPoints(envelope.payload.points.map(coercePoint))
+        const message = JSON.parse(String(event.data)) as Record<string, unknown>
+        const op = typeof message.op === 'string' ? message.op : ''
+        if (!op) return
+
+        if (op === 'update' && Array.isArray(message.points)) {
+          const ts = typeof message.ts === 'string' ? message.ts : nowIso()
+          const points = message.points
+            .filter(isRecord)
+            .map((point) => normalizePoint({ ts, ...point }))
+
+          setAllPoints(points)
+          setLastEnvelope({ op, ts, points })
+          setLastEventAt(ts)
+          return
         }
+
+        setLastEnvelope({ ...message, op })
+        setLastEventAt(nowIso())
       }
 
       socket.onerror = () => socket.close()

@@ -1,11 +1,13 @@
 import { Check, Clock3, Plus, RotateCcw } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
 import { DataTable, Column } from '../components/DataTable'
 import { Panel } from '../components/Panel'
+import { StateBlock } from '../components/StateBlock'
 import { StatusBadge } from '../components/StatusBadge'
 import { TrendChart, type TrendSeries } from '../components/TrendChart'
-import { getDemoPoints, getTrendSamples } from '../demo/simulator'
+import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Point, TrendSample } from '../types'
@@ -30,20 +32,49 @@ const rangeOptions = [
 ] as const
 
 const colors = ['#2A5C8A', 'var(--c-warn-fg)', '#6E5A2E', '#8A4FBF', '#5B6066', 'var(--c-fault-fg)', '#B0179C', 'var(--c-off)']
+const liveSampleLimit = 3600
+
+function historyRangeFromMinutes(minutes: number) {
+  if (minutes <= 30) return '30m'
+  if (minutes <= 60) return '1h'
+  if (minutes <= 360) return '6h'
+  return '24h'
+}
+
+function pointNumber(value: Point['value']) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function makeTrendSample(points: Point[]) {
+  if (!points.length) return null
+  const sample: TrendSample = { time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }
+  for (const point of points) {
+    const value = pointNumber(point.value)
+    if (value !== null) sample[point.id] = Number(value.toFixed(2))
+  }
+  return Object.keys(sample).length > 1 ? sample : null
+}
 
 export function TrendsPage() {
   const realtime = useRealtime()
   const { pick } = useI18n()
+  const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const analogPoints = useMemo(() => {
-    const source = realtime.allPoints.length ? realtime.allPoints : getDemoPoints()
-    return source.filter((point) => point.kind === 'AI' || point.kind === 'AO').sort((a, b) => a.id.localeCompare(b.id))
-  }, [realtime.allPoints])
-  const [selectedIds, setSelectedIds] = useState<string[]>(['AI-01', 'AI-02', 'AI-03', 'AI-04'])
+    const source = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? []
+    return source.filter((point) => point.kind === 'AI' || point.kind === 'AO').sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
+  }, [pointsState.data, realtime.allPoints])
+  const autoSelectedRef = useRef(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [rangeMinutes, setRangeMinutes] = useState<number>(30)
   const [pickerOpen, setPickerOpen] = useState(false)
 
   const selectedPoints = useMemo(() => analogPoints.filter((point) => selectedIds.includes(point.id)), [analogPoints, selectedIds])
-  const samples = useMemo(() => getTrendSamples(selectedIds, rangeMinutes), [rangeMinutes, selectedIds, realtime.lastEventAt])
+  const selectedSignature = selectedIds.join(',')
+  const historyRange = useMemo(() => historyRangeFromMinutes(rangeMinutes), [rangeMinutes])
+  const historyState = useApi(() => apiClient.getHistory(selectedIds, historyRange), [historyRange, selectedSignature], { refreshMs: 10_000 })
+  const selectedPointsRef = useRef<Point[]>([])
+  const [liveSamples, setLiveSamples] = useState<TrendSample[]>([])
+  const samples = historyState.data?.length ? historyState.data : liveSamples
   const series = useMemo<TrendSeries[]>(() => selectedPoints.map((point, index) => ({
     key: point.id,
     label: `${point.id} - ${point.name}`,
@@ -54,12 +85,42 @@ export function TrendsPage() {
   const currentRange = rangeOptions.find((item) => item.minutes === rangeMinutes)
   const rangeLabel = currentRange ? pick(currentRange.labelVi, currentRange.labelEn) : pick(`${rangeMinutes} phút`, `${rangeMinutes} min`)
 
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const existing = current.filter((id) => analogPoints.some((point) => point.id === id))
+      if (existing.length || autoSelectedRef.current) return existing
+      if (!analogPoints.length) return existing
+      autoSelectedRef.current = true
+      return analogPoints.slice(0, 4).map((point) => point.id)
+    })
+  }, [analogPoints])
+
+  useEffect(() => {
+    selectedPointsRef.current = selectedPoints
+  }, [selectedPoints])
+
+  useEffect(() => {
+    setLiveSamples([])
+  }, [historyRange, selectedSignature])
+
+  useEffect(() => {
+    const appendSample = () => {
+      const sample = makeTrendSample(selectedPointsRef.current)
+      if (!sample) return
+      setLiveSamples((current) => [...current, sample].slice(-liveSampleLimit))
+    }
+
+    appendSample()
+    const timerId = window.setInterval(appendSample, 1000)
+    return () => window.clearInterval(timerId)
+  }, [])
+
   function togglePoint(id: string) {
     setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   }
 
   function resetAuto() {
-    setSelectedIds(['AI-01', 'AI-02', 'AI-03', 'AI-04'].filter((id) => analogPoints.some((point) => point.id === id)))
+    setSelectedIds(analogPoints.slice(0, 4).map((point) => point.id))
     setRangeMinutes(30)
   }
 
@@ -78,7 +139,7 @@ export function TrendsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold">{pick('Xu hướng', 'Trends')}</h1>
-        <p className="text-sm text-[var(--c-text-dim)]">{pick('Trend Log demo: object list, interval và buffer hiển thị client-side', 'Trend Log demo: object list, interval, and client-side display buffer')}</p>
+        <p className="text-sm text-[var(--c-text-dim)]">{pick('Trend Log live: object list, historian và buffer hiển thị 1s', 'Live Trend Log: object list, historian, and 1s display buffer')}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[300px_1fr]">
@@ -113,7 +174,13 @@ export function TrendsPage() {
               </div>
             </div>
           )}
-          {series.length ? <TrendChart data={samples} series={series} height={360} /> : <div className="grid h-[360px] place-items-center rounded-[var(--radius)] border border-dashed border-[var(--c-border)] text-sm text-[var(--c-text-dim)]">{pick('Chọn ít nhất một điểm analog để hiển thị trend.', 'Select at least one analog point to show a trend.')}</div>}
+          {pointsState.loading && !analogPoints.length
+            ? <StateBlock state="loading" title={pick('Đang tải điểm analog', 'Loading analog points')} />
+            : pointsState.error && !analogPoints.length
+              ? <StateBlock state="error" title={pick('Không tải được điểm analog', 'Could not load analog points')} detail={pointsState.error.message} />
+              : series.length && samples.length > 1
+                ? <TrendChart data={samples} series={series} height={360} />
+                : <StateBlock state="empty" title={series.length ? pick('Chưa có dữ liệu xu hướng live', 'No live trend data yet') : pick('Chọn ít nhất một điểm analog', 'Select at least one analog point')} detail={series.length ? pick('Trang này đọc /history nếu có và tự ghi buffer 1s từ /points hoặc WebSocket khi historian chưa có mẫu.', 'This page reads /history when available and records a 1s local buffer from /points or WebSocket until historian has samples.') : undefined} />}
         </Panel>
       </div>
 
@@ -145,7 +212,7 @@ function buildTrendRows(points: Point[], samples: TrendSample[]): TrendRow[] {
   return points.map((point) => {
     const values = samples.map((sample) => Number(sample[point.id])).filter(Number.isFinite)
     const sum = values.reduce((total, value) => total + value, 0)
-    const fallback = Number(point.value) || 0
+    const fallback = pointNumber(point.value) ?? 0
     const current = values.length ? values[values.length - 1] : fallback
     return {
       id: point.id,

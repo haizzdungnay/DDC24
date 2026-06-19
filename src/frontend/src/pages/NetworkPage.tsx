@@ -1,11 +1,12 @@
 import { Database, Network, Save, Server, Wifi } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
 import { Panel } from '../components/Panel'
+import { StateBlock } from '../components/StateBlock'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
-import { DEVICE_DEFAULTS } from '../config'
-import { getDemoNetwork } from '../demo/simulator'
+import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import type { ModbusSlave, NetworkConfig, PollState } from '../types'
 
@@ -20,19 +21,35 @@ const pollStateClass: Record<PollState, string> = {
 export function NetworkPage() {
   const toast = useToast()
   const { locale, pick } = useI18n()
-  const [networkData] = useState(() => getDemoNetwork())
-  const [config, setConfig] = useState<NetworkConfig>(() => networkData.northbound)
-  const slaves = networkData.southbound
+  const networkState = useApi(apiClient.getNetwork, [], { refreshMs: 1000 })
+  const [config, setConfig] = useState<NetworkConfig | null>(null)
+  const networkData = networkState.data
+  const slaves = networkData?.southbound ?? []
   const onlineSlaves = slaves.filter((slave) => slave.pollState === 'online').length
-  const healthyPolls = Math.round(((slaves.length - slaves.filter((slave) => slave.pollState === 'offline').length) / slaves.length) * 100)
+  const healthyPolls = slaves.length ? Math.round(((slaves.length - slaves.filter((slave) => slave.pollState === 'offline').length) / slaves.length) * 100) : 0
+
+  useEffect(() => {
+    if (networkData) setConfig(networkData.northbound)
+  }, [networkData])
 
   function setConfigField<K extends keyof NetworkConfig>(field: K, value: NetworkConfig[K]) {
-    setConfig((current) => ({ ...current, [field]: value }))
+    setConfig((current) => current ? { ...current, [field]: value } : current)
   }
 
-  function saveConfig() {
-    toast.push('success', pick('Đã lưu cấu hình mạng (demo)', 'Network settings saved (demo)'))
+  async function saveConfig() {
+    if (!config) return
+    try {
+      await apiClient.saveNetwork({ northbound: config, southbound: slaves })
+      toast.push('success', pick('Đã lưu cấu hình mạng', 'Network settings saved'))
+      await networkState.refetch()
+    } catch (err) {
+      toast.push('error', err instanceof Error ? err.message : 'Save failed')
+    }
   }
+
+  if (networkState.loading && !config) return <StateBlock state="loading" title={pick('Đang tải cấu hình mạng', 'Loading network settings')} />
+  if (networkState.error && !config) return <StateBlock state="error" title={pick('Không tải được cấu hình mạng', 'Could not load network settings')} detail={networkState.error.message} onRetry={networkState.refetch} />
+  if (!config) return <StateBlock state="empty" title={pick('Chưa có cấu hình mạng', 'No network settings')} />
 
   return (
     <div className="space-y-5">
@@ -45,13 +62,13 @@ export function NetworkPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <Stat icon={<Server className="h-5 w-5" />} label="Device" value={DEVICE_DEFAULTS.model} />
-        <Stat icon={<Network className="h-5 w-5" />} label="BACnet/IP UDP" value={String(config.bacnetPort)} />
+        <Stat icon={<Server className="h-5 w-5" />} label="Device" value={config.deviceName || config.bacnetDeviceName || 'N/A'} />
+        <Stat icon={<Network className="h-5 w-5" />} label="BACnet/IP UDP" value={config.bacnetPort ? String(config.bacnetPort) : 'N/A'} />
         <Stat icon={<Database className="h-5 w-5" />} label="Modbus slaves" value={`${onlineSlaves}/${slaves.length} online`} />
         <Stat icon={<Wifi className="h-5 w-5" />} label="Poll health" value={`${healthyPolls}%`} warn={healthyPolls < 100} />
       </div>
 
-      <Panel title="NORTHBOUND — BACnet/IP lên BMS" subtitle={pick('DDC-24 là BACnet/IP server độc lập trên Ethernet/WiFi, báo dữ liệu lên BMS qua UDP/47808.', 'DDC-24 is an independent BACnet/IP server on Ethernet/WiFi, reporting data to BMS over UDP/47808.')} action={<Button variant="primary" icon={<Save className="h-4 w-4" />} onClick={saveConfig}>{pick('Lưu cấu hình', 'Save settings')}</Button>} className="border-[var(--c-border)]">
+      <Panel title="NORTHBOUND - BACnet/IP lên BMS" subtitle={pick('BACnet/IP server trên Ethernet/WiFi, báo dữ liệu lên BMS qua UDP port cấu hình bên dưới.', 'BACnet/IP server on Ethernet/WiFi, reporting data to BMS over the UDP port configured below.')} action={<Button variant="primary" icon={<Save className="h-4 w-4" />} onClick={saveConfig}>{pick('Lưu cấu hình', 'Save settings')}</Button>} className="border-[var(--c-border)]">
         <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="IP Address" value={config.ip} onChange={(value) => setConfigField('ip', value)} mono />
@@ -84,15 +101,15 @@ export function NetworkPage() {
             <Toggle label="WiFi" checked={config.wifiEnabled} onChange={(value) => setConfigField('wifiEnabled', value)} />
             <div className="grid grid-cols-2 gap-3 border-t border-[var(--c-border)] pt-4 text-xs">
               <Info label="Device Name" value={config.deviceName} />
-              <Info label="Serial" value={DEVICE_DEFAULTS.serial} mono />
-              <Info label="Firmware" value={DEVICE_DEFAULTS.firmware} mono />
+              <Info label="Serial" value="N/A" mono />
+              <Info label="Firmware" value="N/A" mono />
               <Info label="Role" value="BACnet/IP server" />
             </div>
           </div>
         </div>
       </Panel>
 
-      <Panel title="SOUTHBOUND — RS-485 Modbus RTU Master" subtitle={pick('DDC-24 chủ động poll slave thiết bị phụ: module mở rộng I/O, remote HMI, meter, VFD.', 'DDC-24 actively polls field-device slaves: I/O expansion modules, remote HMI, meters, VFDs.')} className="border-[var(--c-border)]">
+      <Panel title="SOUTHBOUND - RS-485 Modbus RTU Master" subtitle={pick('DDC-24 chủ động poll slave thiết bị phụ: module mở rộng I/O, remote HMI, meter, VFD.', 'DDC-24 actively polls field-device slaves: I/O expansion modules, remote HMI, meters, VFDs.')} className="border-[var(--c-border)]">
         <div className="overflow-auto rounded-[var(--radius)] border border-[var(--c-border)]">
           <table className="w-full min-w-[860px] border-collapse text-sm">
             <thead className="bg-[var(--c-surface-2)] text-xs text-[var(--c-text-dim)]">
