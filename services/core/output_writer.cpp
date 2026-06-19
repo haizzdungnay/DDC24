@@ -5,7 +5,7 @@ namespace core {
 void OutputWriter::write(const OutputCmd& out)
 {
     kx_io_shm_t* shm = reader_.shm();
-    if (!shm) return;
+    if (!shm || __atomic_load_n(&shm->magic, __ATOMIC_ACQUIRE) != KX_SHM_MAGIC) return;
     for (int ch = 0; ch < KX_N_AO; ch++) {
         if (!out.ao_valid[ch]) continue;
         float cur;

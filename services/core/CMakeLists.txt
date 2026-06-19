@@ -6,6 +6,11 @@ add_compile_options(-Wall -Wextra -Werror)
 
 set(SHARED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../shared)
 
+include(FetchContent)
+FetchContent_Declare(nlohmann_json
+  URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
+FetchContent_MakeAvailable(nlohmann_json)
+
 # BAC-004: full Priority_Array + Reliability + ext socket (MOD-009) always compiled;
 # MKDDC_ENABLE_BACNET flag chỉ dùng cho iobus bacnet-stack link, core không cần flag này.
 add_library(core_lib STATIC
@@ -14,7 +19,7 @@ add_library(core_lib STATIC
     iobus_reader.cpp output_writer.cpp state_snapshot.cpp
     bacnet_objtable.cpp web_ipc.cpp core_metrics.cpp)
 target_include_directories(core_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${SHARED_DIR})
-target_link_libraries(core_lib PUBLIC pthread rt)
+target_link_libraries(core_lib PUBLIC pthread rt nlohmann_json::nlohmann_json)
 
 add_executable(mkddc-core main.cpp)
 target_link_libraries(mkddc-core PRIVATE core_lib)

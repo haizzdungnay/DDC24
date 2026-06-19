@@ -104,7 +104,10 @@ ssize_t IopPort::write(const uint8_t* buf, size_t n)
         if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             /* TX buffer đầy: chờ writable thay vì busy-spin; quá ~50ms (peer
              * PTY chết / flow nghẽn) → lỗi, caller xử lý như timeout */
-            if (++eagain_waits > 5) return -1;
+            if (++eagain_waits > 5) {
+                errno = EAGAIN;
+                return -1;
+            }
             struct pollfd pfd { fd_, POLLOUT, 0 };
             if (::poll(&pfd, 1, 10) < 0 && errno != EINTR) return -1;
             continue;

@@ -1,20 +1,11 @@
-/**
- * @file  json_min.hpp
- * @brief Parser JSON đệ quy tối thiểu, header-only, không dependency — dùng cho
- *        graph.json + io_safe_state.conf (cấu trúc lồng nhau, parse substring không đủ).
- *        Hỗ trợ: object/array/string/number/bool/null, escape cơ bản, bỏ qua whitespace.
- *        KHÔNG hỗ trợ: \uXXXX (giữ nguyên chuỗi), comment, trailing comma.
- */
 #ifndef CORE_JSON_MIN_HPP
 #define CORE_JSON_MIN_HPP
 
-#include <cctype>
-#include <cstdlib>
-#include <cstring>
-#include <map>
+#include <nlohmann/json.hpp>
 #include <memory>
 #include <string>
 #include <vector>
+#include <map>
 
 namespace core {
 namespace json {
@@ -56,134 +47,41 @@ public:
     /* Trả nullptr nếu JSON sai cú pháp; err mô tả vị trí lỗi. */
     static ValuePtr parse(const std::string& src, std::string* err = nullptr)
     {
-        Parser p(src);
-        ValuePtr v = p.parse_value();
-        if (v) {
-            p.skip_ws();
-            if (p.pos_ != src.size()) v = nullptr;   /* rác sau JSON */
+        try {
+            nlohmann::json j = nlohmann::json::parse(src);
+            return convert(j);
+        } catch (const std::exception& e) {
+            if (err) *err = e.what();
+            return nullptr;
         }
-        if (!v && err)
-            *err = "json parse error at offset " + std::to_string(p.pos_);
-        return v;
     }
 
 private:
-    explicit Parser(const std::string& s) : s_(s) {}
-
-    const std::string& s_;
-    size_t pos_ = 0;
-
-    void skip_ws()
+    static ValuePtr convert(const nlohmann::json& j)
     {
-        while (pos_ < s_.size() && std::isspace(static_cast<unsigned char>(s_[pos_]))) pos_++;
-    }
-    bool consume(char c)
-    {
-        skip_ws();
-        if (pos_ < s_.size() && s_[pos_] == c) { pos_++; return true; }
-        return false;
-    }
-    bool literal(const char* lit)
-    {
-        const size_t n = std::strlen(lit);
-        if (s_.compare(pos_, n, lit) == 0) { pos_ += n; return true; }
-        return false;
-    }
-
-    ValuePtr parse_value()
-    {
-        skip_ws();
-        if (pos_ >= s_.size()) return nullptr;
-        const char c = s_[pos_];
-        if (c == '{') return parse_obj();
-        if (c == '[') return parse_arr();
-        if (c == '"') return parse_str();
-        if (c == 't') { if (!literal("true")) return nullptr;  auto v = std::make_shared<Value>(); v->type = Value::BOOL; v->b = true;  return v; }
-        if (c == 'f') { if (!literal("false")) return nullptr; auto v = std::make_shared<Value>(); v->type = Value::BOOL; v->b = false; return v; }
-        if (c == 'n') { if (!literal("null")) return nullptr;  auto v = std::make_shared<Value>(); v->type = Value::NUL;  return v; }
-        return parse_num();
-    }
-
-    ValuePtr parse_obj()
-    {
-        if (!consume('{')) return nullptr;
         auto v = std::make_shared<Value>();
-        v->type = Value::OBJ;
-        skip_ws();
-        if (consume('}')) return v;
-        for (;;) {
-            skip_ws();
-            ValuePtr key = parse_str();
-            if (!key) return nullptr;
-            if (!consume(':')) return nullptr;
-            ValuePtr val = parse_value();
-            if (!val) return nullptr;
-            v->obj[key->str] = val;
-            if (consume(',')) continue;
-            if (consume('}')) return v;
-            return nullptr;
-        }
-    }
-
-    ValuePtr parse_arr()
-    {
-        if (!consume('[')) return nullptr;
-        auto v = std::make_shared<Value>();
-        v->type = Value::ARR;
-        skip_ws();
-        if (consume(']')) return v;
-        for (;;) {
-            ValuePtr e = parse_value();
-            if (!e) return nullptr;
-            v->arr.push_back(e);
-            if (consume(',')) continue;
-            if (consume(']')) return v;
-            return nullptr;
-        }
-    }
-
-    ValuePtr parse_str()
-    {
-        skip_ws();
-        if (pos_ >= s_.size() || s_[pos_] != '"') return nullptr;
-        pos_++;
-        auto v = std::make_shared<Value>();
-        v->type = Value::STR;
-        while (pos_ < s_.size()) {
-            const char c = s_[pos_++];
-            if (c == '"') return v;
-            if (c == '\\') {
-                if (pos_ >= s_.size()) return nullptr;
-                const char e = s_[pos_++];
-                switch (e) {
-                case '"':  v->str += '"';  break;
-                case '\\': v->str += '\\'; break;
-                case '/':  v->str += '/';  break;
-                case 'n':  v->str += '\n'; break;
-                case 't':  v->str += '\t'; break;
-                case 'r':  v->str += '\r'; break;
-                case 'b':  v->str += '\b'; break;
-                case 'f':  v->str += '\f'; break;
-                default:   v->str += e;    break;   /* \uXXXX: giữ thô */
-                }
-            } else {
-                v->str += c;
+        if (j.is_null()) {
+            v->type = Value::NUL;
+        } else if (j.is_boolean()) {
+            v->type = Value::BOOL;
+            v->b = j.get<bool>();
+        } else if (j.is_number()) {
+            v->type = Value::NUM;
+            v->num = j.get<double>();
+        } else if (j.is_string()) {
+            v->type = Value::STR;
+            v->str = j.get<std::string>();
+        } else if (j.is_array()) {
+            v->type = Value::ARR;
+            for (const auto& elem : j) {
+                v->arr.push_back(convert(elem));
+            }
+        } else if (j.is_object()) {
+            v->type = Value::OBJ;
+            for (auto it = j.begin(); it != j.end(); ++it) {
+                v->obj[it.key()] = convert(it.value());
             }
         }
-        return nullptr;   /* thiếu dấu đóng */
-    }
-
-    ValuePtr parse_num()
-    {
-        skip_ws();
-        const char* start = s_.c_str() + pos_;
-        char* end = nullptr;
-        const double d = std::strtod(start, &end);
-        if (end == start) return nullptr;
-        pos_ += static_cast<size_t>(end - start);
-        auto v = std::make_shared<Value>();
-        v->type = Value::NUM;
-        v->num = d;
         return v;
     }
 };
