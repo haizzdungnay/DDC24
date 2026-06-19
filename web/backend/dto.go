@@ -1,0 +1,217 @@
+package main
+
+import "encoding/json"
+
+type ConfigDevice struct {
+	DeviceID    int    `json:"device_id"`
+	DeviceName  string `json:"device_name"`
+	Description string `json:"description"`
+	Location    string `json:"location"`
+}
+
+type ConfigNetwork struct {
+	Eth      map[string]any `json:"eth"`
+	Wifi     map[string]any `json:"wifi"`
+	Hostname string         `json:"hostname"`
+}
+
+type ConfigIO struct {
+	UI []map[string]any `json:"ui"`
+	AO []map[string]any `json:"ao"`
+}
+
+type ConfigSafeState struct {
+	AO []map[string]any `json:"ao"`
+	DO []map[string]any `json:"do"`
+}
+
+type ConfigBacnet struct {
+	BIP map[string]any `json:"bip"`
+}
+
+type ConfigFieldbus struct {
+	RS485         map[string]any   `json:"rs485"`
+	PollDefaultMs int              `json:"poll_default_ms"`
+	Slaves        []map[string]any `json:"slaves"`
+}
+
+type ConfigTime struct {
+	Timezone   string   `json:"timezone"`
+	NTPEnabled bool     `json:"ntp_enabled"`
+	NTPServers []string `json:"ntp_servers"`
+	SystemTime string   `json:"system_time"`
+}
+
+type SystemConfig struct {
+	Device    ConfigDevice    `json:"device"`
+	Network   ConfigNetwork   `json:"network"`
+	IO        ConfigIO        `json:"io"`
+	SafeState ConfigSafeState `json:"safe_state"`
+	Bacnet    ConfigBacnet    `json:"bacnet"`
+	Fieldbus  ConfigFieldbus  `json:"fieldbus"`
+	Time      ConfigTime      `json:"time"`
+}
+
+type ConfigPutResult struct {
+	Result   string   `json:"result"`
+	Applied  bool     `json:"applied"`
+	Reload   string   `json:"reload"`
+	Warnings []string `json:"warnings"`
+}
+type TrendSample map[string]any
+
+type TrendConfig struct {
+	Enabled          bool     `json:"enabled"`
+	PointIDs         []string `json:"pointIds"`
+	IntervalS        int      `json:"intervalS"`
+	RetentionRecords int      `json:"retentionRecords"`
+}
+
+type ScheduleRow struct {
+	ID    string         `json:"id"`
+	Label string         `json:"label"`
+	Cells []ScheduleCell `json:"cells"`
+}
+
+type ScheduleCell struct {
+	Day   string `json:"day"`
+	Value string `json:"value"`
+	Start string `json:"start"`
+	End   string `json:"end"`
+}
+
+type AlarmSetting struct {
+	PointID  string  `json:"pointId"`
+	Label    string  `json:"label"`
+	Enabled  bool    `json:"enabled"`
+	HH       float64 `json:"hh"`
+	H        float64 `json:"h"`
+	L        float64 `json:"l"`
+	LL       float64 `json:"ll"`
+	DelayS   float64 `json:"delayS"`
+	Priority string  `json:"priority"`
+}
+
+// AlarmSetting mirrors FE AlarmSetting (types.ts) and openapi.yaml AlarmSetting schema.
+
+type UserDTO struct {
+	Username string `json:"username"`
+	Role     Role   `json:"role"`
+}
+
+type CreateUserRequest struct {
+	Username string `json:"username"`
+	Role     Role   `json:"role"`
+	Password string `json:"password"`
+}
+
+type ResetPasswordRequest struct {
+	NewPassword string `json:"new_password"`
+}
+
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+
+type PointDTO struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	Value     any    `json:"value"`
+	Unit      string `json:"unit,omitempty"`
+	Quality   string `json:"quality"`
+	Source    string `json:"source"`
+	Priority  string `json:"priority,omitempty"`
+	UpdatedAt string `json:"updatedAt"`
+	Fault     bool   `json:"fault,omitempty"`
+	Forced    bool   `json:"forced,omitempty"`
+}
+
+// AlarmDTO mirrors FE Alarm (types.ts).
+type AlarmDTO struct {
+	ID       string `json:"id"`
+	Time     string `json:"time"`
+	Severity string `json:"severity"` // critical | high | medium | low | info
+	Status   string `json:"status"`   // active | unack | acked | shelved
+	Message  string `json:"message"`
+	Source   string `json:"source"`
+	Value    string `json:"value"`
+	Detail   string `json:"detail"`
+}
+
+// CommissioningTestResult mirrors FE CommissioningTestResult (types.ts) and openapi.yaml.
+type CommissioningTestResult struct {
+	Result       string `json:"result"` // passed | failed | running
+	PointID      string `json:"pointId"`
+	AppliedValue any    `json:"appliedValue,omitempty"` // number | bool
+	Message      string `json:"message"`
+	ScanMs       *int   `json:"scanMs,omitempty"`
+}
+
+type WSOp string
+
+const (
+	WSOpSubscribe    WSOp = "subscribe"
+	WSOpUpdate       WSOp = "update"
+	WSOpForce        WSOp = "force"
+	WSOpError        WSOp = "error"
+	WSOpForceExpired WSOp = "force_expired"
+)
+
+type WSSubscribeRequest struct {
+	Op     WSOp            `json:"op"`
+	Points SubscribePoints `json:"points"`
+}
+
+type SubscribePoints struct {
+	All bool
+	IDs []string
+}
+
+func (p *SubscribePoints) UnmarshalJSON(data []byte) error {
+	var all string
+	if err := json.Unmarshal(data, &all); err == nil {
+		p.All = all == "*"
+		p.IDs = nil
+		return nil
+	}
+	var ids []string
+	if err := json.Unmarshal(data, &ids); err != nil {
+		return err
+	}
+	p.All = false
+	p.IDs = ids
+	return nil
+}
+
+func (p SubscribePoints) MarshalJSON() ([]byte, error) {
+	if p.All {
+		return json.Marshal("*")
+	}
+	return json.Marshal(p.IDs)
+}
+
+type WSUpdateMessage struct {
+	Op     WSOp       `json:"op"`
+	TS     string     `json:"ts"`
+	Points []PointDTO `json:"points"`
+}
+
+type WSForceRequest struct {
+	Op      WSOp            `json:"op"`
+	ID      string          `json:"id"`
+	Value   json.RawMessage `json:"value,omitempty"`
+	ExpireS *int            `json:"expire_s,omitempty"`
+}
+
+type WSErrorMessage struct {
+	Op   WSOp   `json:"op"`
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+}
+
+type WSForceExpiredMessage struct {
+	Op WSOp   `json:"op"`
+	ID string `json:"id"`
+}

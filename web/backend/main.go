@@ -1,29 +1,111 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"errors"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
-func healthzHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	
-	if r.Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK)
-		return
+type App struct {
+	cfg     Config
+	logger  *log.Logger
+	audit   *AuditLogger
+	auth    *AuthService
+	core    CoreStatusClient
+	os      OSReader
+	trends  *TrendStore
+	sampler *Sampler
+}
+
+func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
+	if logger == nil {
+		logger = log.Default()
 	}
-	
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, "OK")
+	audit := NewAuditLogger(logger)
+	auth, err := NewAuthService(cfg, audit)
+	if err != nil {
+		return nil, err
+	}
+	if core == nil {
+		core = NewCoreClient(cfg)
+	}
+	if osReader == nil {
+		osReader = NewDefaultOSReader()
+	}
+	app := &App{cfg: cfg, logger: logger, audit: audit, auth: auth, core: core, os: osReader}
+	if cfg.TrendDBPath == "" {
+		return app, nil
+	}
+	store, err := OpenTrendStore(cfg.TrendDBPath)
+	if err != nil {
+		logger.Printf("WARN trend_store disabled err=%v", err)
+		return app, nil
+	}
+	app.trends = store
+	if reader, ok := core.(pointReader); ok {
+		trendCfg, err := store.GetConfig(context.Background())
+		if err != nil {
+			logger.Printf("WARN trend_config defaulted err=%v", err)
+			trendCfg = defaultTrendConfig()
+		}
+		app.sampler = NewSampler(store, reader, trendCfg, logger)
+	}
+	return app, nil
 }
 
 func main() {
-	http.HandleFunc("/healthz", healthzHandler)
-	log.Println("Starting mkddc-web server on :8080...")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+	logger := log.New(os.Stdout, "mkddc-web ", log.LstdFlags|log.LUTC)
+	cfg, err := LoadConfig()
+	if err != nil {
+		logger.Fatalf("config: %v", err)
 	}
+	app, err := NewApp(cfg, logger, nil, nil)
+	if err != nil {
+		logger.Fatalf("init: %v", err)
+	}
+	server := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           app.Router(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		logger.Printf("INFO listen addr=%s core_sock=%s users_conf=%s trend_db=%s", cfg.Addr, cfg.CoreSock, cfg.UsersConf, cfg.TrendDBPath)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Fatalf("serve: %v", err)
+		}
+	}()
+	app.StartSampler(ctx)
+
+	<-ctx.Done()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Printf("ERROR shutdown err=%v", err)
+	}
+	if err := app.Close(); err != nil {
+		logger.Printf("ERROR close err=%v", err)
+	}
+}
+
+func (a *App) StartSampler(ctx context.Context) {
+	if a != nil && a.sampler != nil {
+		a.sampler.Start(ctx)
+	}
+}
+
+func (a *App) Close() error {
+	if a == nil || a.trends == nil {
+		return nil
+	}
+	return a.trends.Close()
 }

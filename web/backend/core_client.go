@@ -1,0 +1,507 @@
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"math"
+	"net"
+	"os"
+	"strings"
+	"sync/atomic"
+	"time"
+)
+
+const (
+	kxShmMagic    = 0x4B584401
+	defaultIOShm  = "/dev/shm/mkddc_io_shm"
+	defaultPLCShm = "/dev/shm/mkddc_plc_shm"
+)
+
+var webCommandID uint64
+
+type CoreStatusClient interface {
+	ReadStatus(ctx context.Context) (CoreStatus, error)
+}
+
+type CoreClient struct {
+	SockPath string
+	IOShm    string
+	PLCShm   string
+}
+
+type CoreStatus struct {
+	CoreAvailable bool
+	IobusPresent  bool
+	Versions      VersionStatus
+	IOP           IOPStatus
+	Scan          ScanStatus
+}
+
+type VersionStatus struct {
+	MCUFW string `json:"mcu_fw,omitempty"`
+	Iobus string `json:"iobus,omitempty"`
+	Core  string `json:"core,omitempty"`
+	Web   string `json:"web"`
+}
+
+type IOPStatus struct {
+	Status       string  `json:"status"`
+	CRCErrors    uint32  `json:"crc_errors"`
+	Timeouts     uint32  `json:"timeouts"`
+	SeqErrors    uint32  `json:"seq_errors"`
+	LastIORespMS *uint32 `json:"last_io_resp_ms,omitempty"`
+}
+
+type ScanStatus struct {
+	Count   uint32 `json:"count"`
+	Overrun uint32 `json:"overrun"`
+}
+
+type webIPCResponse struct {
+	ID           uint64 `json:"id"`
+	Result       string `json:"result"`
+	AppliedValue any    `json:"applied_value,omitempty"`
+	ActiveSource string `json:"active_source,omitempty"`
+	Error        string `json:"error,omitempty"`
+}
+
+func NewCoreClient(cfg Config) *CoreClient {
+	return &CoreClient{SockPath: cfg.CoreSock, IOShm: defaultIOShm, PLCShm: defaultPLCShm}
+}
+
+func (c *CoreClient) ReadStatus(ctx context.Context) (CoreStatus, error) {
+	status := CoreStatus{
+		Versions: VersionStatus{},
+		IOP:      IOPStatus{Status: "fault"},
+		Scan:     ScanStatus{},
+	}
+	var firstErr error
+	if c.coreSocketReady(ctx) {
+		status.CoreAvailable = true
+	} else {
+		firstErr = fmt.Errorf("core socket unavailable")
+	}
+	if iop, err := c.readIOStatus(); err == nil {
+		status.IOP = iop
+		status.IobusPresent = true
+	} else if firstErr == nil {
+		firstErr = err
+	}
+	if scan, err := c.readPLCStatus(); err == nil {
+		status.Scan = scan
+		status.CoreAvailable = true
+	} else if firstErr == nil {
+		firstErr = err
+	}
+	return status, firstErr
+}
+
+func (c *CoreClient) ReadPoints(ctx context.Context) ([]PointDTO, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	plcData, err := os.ReadFile(c.PLCShm)
+	if err != nil {
+		return []PointDTO{}, nil
+	}
+	if len(plcData) < kxPlcShmMinLen || binary.LittleEndian.Uint32(plcData[0:4]) != kxShmMagic {
+		return []PointDTO{}, nil
+	}
+	// Read io_shm for AI unit strings (best-effort; nil on failure = empty units)
+	var ioData []byte
+	if raw, err2 := os.ReadFile(c.IOShm); err2 == nil &&
+		len(raw) >= kxIOShmMinLen && binary.LittleEndian.Uint32(raw[0:4]) == kxShmMagic {
+		ioData = raw
+	}
+	return decodePoints(plcData, ioData), nil
+}
+
+func (c *CoreClient) ForcePoint(ctx context.Context, id string, value any, release bool) (PointDTO, error) {
+	conn, err := c.dialCore(ctx)
+	if err != nil {
+		return degradedPoint(id, value, "core_unavailable"), nil
+	}
+	defer conn.Close()
+	deadline := time.Now().Add(3 * time.Second)
+	_ = conn.SetDeadline(deadline)
+
+	op := "write"
+	if release {
+		op = "release"
+	}
+	cmd := map[string]any{
+		"id":     atomic.AddUint64(&webCommandID, 1),
+		"op":     op,
+		"point":  id,
+		"source": "manual",
+		"user":   "web",
+	}
+	if !release {
+		if b, ok := value.(bool); ok {
+			if b {
+				cmd["value"] = 1
+			} else {
+				cmd["value"] = 0
+			}
+		} else {
+			cmd["value"] = value
+		}
+	}
+	line, err := json.Marshal(cmd)
+	if err != nil {
+		return PointDTO{}, fmt.Errorf("marshal web ipc command: %w", err)
+	}
+	if _, err := conn.Write(append(line, '\n')); err != nil {
+		return degradedPoint(id, value, "core_unavailable"), nil
+	}
+	respLine, err := bufio.NewReader(conn).ReadBytes('\n')
+	if err != nil {
+		return degradedPoint(id, value, "core_unavailable"), nil
+	}
+	var resp webIPCResponse
+	if err := json.Unmarshal(respLine, &resp); err != nil {
+		return PointDTO{}, fmt.Errorf("parse web ipc response: %w", err)
+	}
+	if resp.Result == "rejected" {
+		return degradedPoint(id, value, "rejected:"+resp.Error), fmt.Errorf("core rejected %s: %s", id, resp.Error)
+	}
+	point := PointDTO{
+		ID:        id,
+		Name:      id,
+		Kind:      pointKindFromID(id),
+		Value:     resp.AppliedValue,
+		Quality:   "good",
+		Source:    "core",
+		Priority:  resp.ActiveSource,
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Forced:    !release,
+	}
+	return point, nil
+}
+
+func (c *CoreClient) coreSocketReady(ctx context.Context) bool {
+	conn, err := c.dialCore(ctx)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+func (c *CoreClient) dialCore(ctx context.Context) (net.Conn, error) {
+	if c.SockPath == "" {
+		return nil, fmt.Errorf("core socket path empty")
+	}
+	dialer := net.Dialer{Timeout: 100 * time.Millisecond}
+	return dialer.DialContext(ctx, "unix", c.SockPath)
+}
+
+func (c *CoreClient) readIOStatus() (IOPStatus, error) {
+	data, err := os.ReadFile(c.IOShm)
+	if err != nil {
+		return IOPStatus{Status: "fault"}, err
+	}
+	if len(data) < 216 || binary.LittleEndian.Uint32(data[0:4]) != kxShmMagic {
+		return IOPStatus{Status: "fault"}, fmt.Errorf("invalid io shm")
+	}
+	return IOPStatus{
+		Status:    mapIOPStatus(data[190]),
+		CRCErrors: binary.LittleEndian.Uint32(data[200:204]),
+		Timeouts:  binary.LittleEndian.Uint32(data[204:208]),
+		SeqErrors: binary.LittleEndian.Uint32(data[208:212]),
+	}, nil
+}
+
+func (c *CoreClient) readPLCStatus() (ScanStatus, error) {
+	data, err := os.ReadFile(c.PLCShm)
+	if err != nil {
+		return ScanStatus{}, err
+	}
+	const scanCountOffset = 8660
+	const scanOverrunOffset = 8664
+	if len(data) < scanOverrunOffset+4 || binary.LittleEndian.Uint32(data[0:4]) != kxShmMagic {
+		return ScanStatus{}, fmt.Errorf("invalid plc shm")
+	}
+	return ScanStatus{
+		Count:   binary.LittleEndian.Uint32(data[scanCountOffset : scanCountOffset+4]),
+		Overrun: binary.LittleEndian.Uint32(data[scanOverrunOffset : scanOverrunOffset+4]),
+	}, nil
+}
+
+func degradedPoint(id string, value any, source string) PointDTO {
+	return PointDTO{
+		ID:        id,
+		Name:      id,
+		Kind:      pointKindFromID(id),
+		Value:     value,
+		Quality:   "bad",
+		Source:    source,
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Fault:     true,
+	}
+}
+
+func pointKindFromID(id string) string {
+	upper := strings.ToUpper(id)
+	switch {
+	case strings.HasPrefix(upper, "AI"):
+		return "AI"
+	case strings.HasPrefix(upper, "AO"):
+		return "AO"
+	case strings.HasPrefix(upper, "DI"), strings.HasPrefix(upper, "BI"):
+		return "DI"
+	case strings.HasPrefix(upper, "DO"), strings.HasPrefix(upper, "BO"):
+		return "DO"
+	default:
+		return "virtual"
+	}
+}
+
+func mapIOPStatus(raw byte) string {
+	switch raw {
+	case 0:
+		return "normal"
+	case 2:
+		return "safe"
+	default:
+		return "fault"
+	}
+}
+
+// ---- kx_plc_shm point table offsets ----
+
+const (
+	kxNUI  = 8
+	kxNDI  = 8
+	kxNAO  = 4
+	kxNDO  = 4
+	kxNAV  = 32
+	kxNBV  = 16
+	kxNMSV = 8
+
+	// kx_point_t layout (24 bytes, no padding between fields):
+	//   float value(4) + float[16] priority(64) + float relinquish_default(4)
+	//   + uint8 quality(1) + uint8 reliability(1) + padding(2) = 76
+	kxPointSize = 76
+
+	// kx_plc_shm_t header + point arrays:
+	//   header: magic(4)+seq(4)+ts_ns(8) = 16
+	//   ai[8]   at offset 16
+	//   bi[8]   at offset 16 + 8*76 = 624
+	//   ao[4]   at offset 624 + 8*76 = 1232
+	//   bo[4]   at offset 1232 + 4*76 = 1536
+	//   av[32]  at offset 1536 + 4*76 = 1840
+	//   bv[16]  at offset 1840 + 32*76 = 4272
+	//   msv[8]  at offset 4272 + 16*76 = 5488
+	//   ext[64] at offset 6096 (kx_ext_point_t=40b): 64*40=2560
+	//   ext_count(2)+plc_running(1)+pad(1)+scan_count(4)+scan_overrun(4)=12 -> total 8668+4pad=8672
+	offAI  = 16
+	offBI  = 16 + kxNUI*kxPointSize                                                                                                     // 624
+	offAO  = 16 + kxNUI*kxPointSize + kxNDI*kxPointSize                                                                                 // 1232
+	offBO  = 16 + kxNUI*kxPointSize + kxNDI*kxPointSize + kxNAO*kxPointSize                                                             // 1536
+	offAV  = 16 + kxNUI*kxPointSize + kxNDI*kxPointSize + kxNAO*kxPointSize + kxNDO*kxPointSize                                         // 1840
+	offBV  = 16 + kxNUI*kxPointSize + kxNDI*kxPointSize + kxNAO*kxPointSize + kxNDO*kxPointSize + kxNAV*kxPointSize                     // 4272
+	offMSV = 16 + kxNUI*kxPointSize + kxNDI*kxPointSize + kxNAO*kxPointSize + kxNDO*kxPointSize + kxNAV*kxPointSize + kxNBV*kxPointSize // 5488
+
+	// kx_point_t field offsets within a point (76 bytes):
+	offValue      = 0  // float32
+	offPriority   = 4  // float32[16] ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â not read for now
+	offRelinquish = 68 // float32
+	offQuality    = 72 // uint8
+	offReliab     = 73 // uint8
+
+	kxPlcShmMinLen = 8672
+
+	// kx_io_shm_t offsets cÃ¡ÂºÂ§n cho ReadPoints() lÃ¡ÂºÂ¥y ui_unit[8][8]:
+	//   ui_unit at offset 56 (header16 + ui_value8*4=32 + ui_quality8=8 = 56)
+	//   ui_unit[i] = data[offIOUnit + i*8 : offIOUnit+i*8+8] (NUL-term string, max 8B)
+	offIOUnit     = 56
+	kxIOUnitSize  = 8
+	kxIOShmMinLen = 216
+)
+
+// kx_quality_t ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ DTO quality string
+func mapQuality(raw uint8) string {
+	switch raw {
+	case 0:
+		return "good"
+	case 1:
+		return "uncertain"
+	default:
+		return "bad"
+	}
+}
+
+func decodePoint(data []byte, offset int, id, name string) PointDTO {
+	if offset < 0 || offset+kxPointSize > len(data) {
+		return PointDTO{ID: id, Name: name, Quality: "bad", Source: "core", Fault: true}
+	}
+	v := math.Float32frombits(binary.LittleEndian.Uint32(data[offset+offValue:]))
+	q := mapQuality(data[offset+offQuality])
+	return PointDTO{
+		ID:        id,
+		Name:      name,
+		Kind:      pointKindFromID(id),
+		Value:     v,
+		Quality:   q,
+		Source:    "core",
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Fault:     q == "bad",
+	}
+}
+
+func ioUnit(ioData []byte, ch int) string {
+	if ioData == nil || ch < 0 || ch >= kxNUI {
+		return ""
+	}
+	start := offIOUnit + ch*kxIOUnitSize
+	if start+kxIOUnitSize > len(ioData) {
+		return ""
+	}
+	b := ioData[start : start+kxIOUnitSize]
+	n := 0
+	for n < len(b) && b[n] != 0 {
+		n++
+	}
+	return string(b[:n])
+}
+
+func decodePoints(data []byte, ioData []byte) []PointDTO {
+	if len(data) < kxPlcShmMinLen {
+		return nil
+	}
+	pts := make([]PointDTO, 0, kxNUI+kxNDI+kxNAO+kxNDO+kxNAV+kxNBV+kxNMSV)
+
+	// AI[0..7]
+	for i := 0; i < kxNUI; i++ {
+		id := fmt.Sprintf("AI%d", i+1)
+		dto := decodePoint(data, offAI+i*kxPointSize, id, id)
+		dto.Unit = ioUnit(ioData, i)
+		pts = append(pts, dto)
+	}
+	// BI[0..7] ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â binary, bool as float
+	for i := 0; i < kxNDI; i++ {
+		id := fmt.Sprintf("DI%d", i+1)
+		dto := decodePoint(data, offBI+i*kxPointSize, id, id)
+		if v, ok := dto.Value.(float32); ok {
+			dto.Value = v > 0.5
+		}
+		pts = append(pts, dto)
+	}
+	// AO[0..3] ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â analog output (commandable)
+	for i := 0; i < kxNAO; i++ {
+		id := fmt.Sprintf("AO%d", i+1)
+		pts = append(pts, decodePoint(data, offAO+i*kxPointSize, id, id))
+	}
+	// DO[0..3] ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â digital output feedback (bo[] array)
+	for i := 0; i < kxNDO; i++ {
+		id := fmt.Sprintf("DO%d", i+1)
+		dto := decodePoint(data, offBO+i*kxPointSize, id, id)
+		if v, ok := dto.Value.(float32); ok {
+			dto.Value = v > 0.5
+		}
+		pts = append(pts, dto)
+	}
+	// AV[0..31]
+	for i := 0; i < kxNAV; i++ {
+		id := fmt.Sprintf("AV%d", i+1)
+		pts = append(pts, decodePoint(data, offAV+i*kxPointSize, id, id))
+	}
+	// BV[0..15]
+	for i := 0; i < kxNBV; i++ {
+		id := fmt.Sprintf("BV%d", i+1)
+		dto := decodePoint(data, offBV+i*kxPointSize, id, id)
+		if v, ok := dto.Value.(float32); ok {
+			dto.Value = v > 0.5
+		}
+		pts = append(pts, dto)
+	}
+	// MSV[0..7]
+	for i := 0; i < kxNMSV; i++ {
+		id := fmt.Sprintf("MSV%d", i+1)
+		pts = append(pts, decodePoint(data, offMSV+i*kxPointSize, id, id))
+	}
+	return pts
+}
+
+// ---- B3 seam: alarms + commissioning (impl by agent B) ----
+
+type alarmReader interface {
+	ReadAlarms(ctx context.Context) ([]AlarmDTO, error)
+}
+
+type alarmAcker interface {
+	AckAlarm(ctx context.Context, id string) error
+}
+
+type commissionTester interface {
+	CommissionTest(ctx context.Context, id string, value any) (CommissioningTestResult, error)
+}
+
+// ReadAlarms returns the current active/unacked alarm list from core (best-effort).
+// Core unavailable or SHM absent â†’ returns empty slice, no hard error.
+func (c *CoreClient) ReadAlarms(ctx context.Context) ([]AlarmDTO, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	// TODO(agent-B): read from core eventlog / alarm_publisher SHM or Unix socket.
+	return []AlarmDTO{}, nil
+}
+
+// AckAlarm sends an acknowledge command for alarm id to core.
+// Core unavailable â†’ returns nil (degraded, no hard error).
+func (c *CoreClient) AckAlarm(ctx context.Context, id string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	// TODO(agent-B): send ack command via core Unix socket (07 Â§8 web_ipc).
+	return nil
+}
+
+// CommissionTest sends a commissioning test command for point id with the given value
+// via core web_ipc (Local manual level 2, per 07 §8 + openapi.yaml).
+// Implemented as ForcePoint(write) mapped to CommissioningTestResult.
+// Core unavailable -> degraded result, no hard error.
+func (c *CoreClient) CommissionTest(ctx context.Context, id string, value any) (CommissioningTestResult, error) {
+	select {
+	case <-ctx.Done():
+		return CommissioningTestResult{}, ctx.Err()
+	default:
+	}
+	start := time.Now()
+	pt, err := c.ForcePoint(ctx, id, value, false)
+	if err != nil {
+		return CommissioningTestResult{
+			Result:  "failed",
+			PointID: id,
+			Message: "core rejected: " + err.Error(),
+		}, nil
+	}
+	elapsed := int(time.Since(start).Milliseconds())
+	result := "passed"
+	msg := "accepted"
+	switch {
+	case pt.Source == "core_unavailable":
+		result = "failed"
+		msg = "core unavailable"
+	case pt.Fault || pt.Quality == "bad":
+		result = "failed"
+		msg = "point fault or bad quality"
+	}
+	return CommissioningTestResult{
+		Result:       result,
+		PointID:      id,
+		AppliedValue: pt.Value,
+		Message:      msg,
+		ScanMs:       &elapsed,
+	}, nil
+}

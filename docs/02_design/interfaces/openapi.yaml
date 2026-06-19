@@ -1,10 +1,17 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.0.0"
+  version: "1.4.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cổng 8443. Auth Bearer JWT (exp 1h).
     Nguồn-chuẩn cho endpoint (D-4). Trace: SW-API-001..010, SRS §6.4.
+    BE-B0 2026-06-17: bổ sung commissioning test, graph validate/deploy; WebSocket
+    monitor chuẩn ở /api/v1/ws/monitor được tham chiếu bằng x-websocket.
+    BE-B5 2026-06-18: Mở contract chi tiết cho cấu hình (/system/config/*) và users CRUD, password self-service.
+    2026-06-18: thêm aggregate /network cho trang Network.
+x-revision:
+  date: "2026-06-18"
+  note: "v1.4.0 thêm /network aggregate cho trang Network, map config thật."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -104,13 +111,490 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SystemStatus" }
+  /network:
+    get:
+      summary: Dữ liệu trang Network (viewer+)
+      description: Gộp network/device/bacnet/fieldbus config và trạng thái poll tổng từ core/iobus; không sinh slave demo.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkPageData" }
+        "403": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Cập nhật cấu hình northbound trang Network (admin)
+      description: Ghi atomic `network.conf`, `device.conf`, `bacnet.conf`; preserve field không expose bởi form; fieldbus/slave chỉ đọc.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NetworkPageData" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /commissioning/points/{id}/test:
+    post:
+      summary: Test commissioning một point (role operator+)
+      description: >
+        Gửi lệnh test DO/AO qua mkddc-core, vào nguồn Local manual mức 2 như PUT /points/{id}.
+        Dùng cho màn Commissioning; mọi lệnh phải audit log.
+      x-rbac: [operator, admin]
+      parameters: [ { $ref: "#/components/parameters/PointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CommissioningTestRequest" }
+      responses:
+        "200":
+          description: Kết quả test từ core, schema khớp CommissioningTestResult của FE
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommissioningTestResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /system/config:
     get:
-      summary: Đọc cấu hình hiện tại (admin)
-      responses: { "200": { description: OK } }
+      summary: Đọc toàn bộ cấu hình hiện tại (gộp) (admin)
+      description: Trả về object gộp các nhóm (device, network, io, safe_state, bacnet, fieldbus, time).
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemConfig" }
+  /system/config/device:
+    get:
+      summary: Đọc cấu hình device (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigDevice" }
     put:
-      summary: Cập nhật cấu hình (admin)
-      responses: { "200": { description: OK } }
+      summary: Cập nhật cấu hình device (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigDevice" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/network:
+    get:
+      summary: Đọc cấu hình network (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigNetwork" }
+    put:
+      summary: Cập nhật cấu hình network (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigNetwork" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/io:
+    get:
+      summary: Đọc cấu hình IO (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigIO" }
+    put:
+      summary: Cập nhật cấu hình IO (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigIO" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/safe-state:
+    get:
+      summary: Đọc cấu hình IO safe-state (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigSafeState" }
+    put:
+      summary: Cập nhật cấu hình IO safe-state (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigSafeState" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/bacnet:
+    get:
+      summary: Đọc cấu hình BACnet/IP (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigBacnet" }
+    put:
+      summary: Cập nhật cấu hình BACnet/IP (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigBacnet" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/fieldbus:
+    get:
+      summary: Đọc cấu hình Fieldbus (Modbus RTU master) (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigFieldbus" }
+    put:
+      summary: Cập nhật cấu hình Fieldbus (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigFieldbus" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/time:
+    get:
+      summary: Đọc cấu hình Time (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigTime" }
+    put:
+      summary: Cập nhật cấu hình Time (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigTime" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /users:
+    get:
+      summary: Danh sách user (admin)
+      description: Không trả về mật khẩu (pw_bcrypt)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+    post:
+      summary: Tạo user (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, role, password]
+              properties:
+                username: { type: string, minLength: 3 }
+                role: { type: string, enum: [admin, operator, viewer] }
+                password: { type: string, format: password, minLength: 6 }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /users/{username}:
+    put:
+      summary: Đổi role user (admin)
+      x-rbac: [admin]
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string, enum: [admin, operator, viewer] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Xóa user (admin)
+      x-rbac: [admin]
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: No Content }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { description: "Lỗi nếu là admin cuối cùng hoặc là chính mình" }
+  /users/{username}/reset-password:
+    post:
+      summary: Reset mật khẩu user (admin)
+      x-rbac: [admin]
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                new_password: { type: string, format: password, minLength: 6 }
+      responses:
+        "200": { description: OK }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /me:
+    get:
+      summary: Lấy thông tin user đang đăng nhập (role viewer+)
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+  /me/change-password:
+    post:
+      summary: Đổi mật khẩu cá nhân (role viewer+)
+      x-rbac: [viewer, operator, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_password, new_password]
+              properties:
+                old_password: { type: string, format: password }
+                new_password: { type: string, format: password, minLength: 6 }
+      responses:
+        "200": { description: OK }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { description: "Mật khẩu cũ không đúng" }
+  /history:
+    get:
+      summary: Historian/trend samples by point and range (viewer+)
+      description: >
+        Returns wide TrendSample rows matching FE shape: `{time, <pointId>: value}`.
+        Query `point` accepts one id or comma-separated ids.
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - name: point
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "AI-01,AI-02"
+        - name: range
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [30m, 1h, 6h, 24h]
+            example: 30m
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TrendSample" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /trends/config:
+    get:
+      summary: Read historian/trend sampler config (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrendConfig" }
+        "403": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Update historian/trend sampler config (admin)
+      description: Persist trend config for mkddc-web sampler; apply mechanism is `none`.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TrendConfig" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /schedules:
+    get:
+      summary: Read weekly/exception schedules (viewer+)
+      description: Rev A has weekly repeating schedules and exception rows; no monthly mode.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ScheduleRow" }
+        "403": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Update schedules (admin)
+      description: Persist `schedule.conf`, then apply by `sighup-core`; core executes schedule priority level 4.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: "#/components/schemas/ScheduleRow" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /alarm-settings:
+    get:
+      summary: Read alarm threshold settings (viewer+)
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmSetting" }
+        "403": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Update alarm threshold settings (admin)
+      description: Persist `alarm_settings.conf`, then apply by `sighup-core`; core evaluates thresholds.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: "#/components/schemas/AlarmSetting" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
   /ota/upload:
     post:
       summary: Upload gói firmware (admin)
@@ -158,6 +642,44 @@ paths:
       summary: Acknowledge alarm
       parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
       responses: { "200": { description: OK } }
+  /graph/validate:
+    post:
+      summary: Validate graph.json (role operator+)
+      description: Chạy validator theo GRAPH_SCHEMA; không deploy, trả pass=false kèm errors nếu fail.
+      x-rbac: [operator, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Graph" }
+      responses:
+        "200":
+          description: Kết quả validate, schema khớp GraphValidationResult của FE
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GraphValidationResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /graph/deploy:
+    post:
+      summary: Validate rồi deploy graph.json (role admin)
+      description: >
+        Validate graph.json, gửi core build plan và áp dụng atomically nếu pass. Nếu validate/build fail,
+        giữ graph cũ và trả pass=false/deployed=false kèm errors.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Graph" }
+      responses:
+        "200":
+          description: Kết quả deploy hoặc lỗi validate/build
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GraphDeployResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -220,3 +742,349 @@ components:
           properties:
             count: { type: integer }
             overrun: { type: integer }
+    PointCommandValue:
+      oneOf:
+        - type: number
+        - type: boolean
+    CommissioningTestRequest:
+      type: object
+      required: [value]
+      properties:
+        value: { $ref: "#/components/schemas/PointCommandValue" }
+    CommissioningTestResult:
+      type: object
+      required: [result, pointId, message]
+      properties:
+        result: { type: string, enum: [passed, failed, running] }
+        pointId: { type: string, example: "DO1" }
+        appliedValue: { $ref: "#/components/schemas/PointCommandValue" }
+        message: { type: string, example: "Test accepted" }
+        scanMs: { type: number, example: 12 }
+    GraphValidationError:
+      type: object
+      required: [path, message, severity]
+      properties:
+        path: { type: string, example: "nodes[3].params.limit_hi" }
+        message: { type: string }
+        severity: { type: string, enum: [error, warn] }
+    GraphValidationResult:
+      type: object
+      required: [pass, errors]
+      properties:
+        pass: { type: boolean }
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/GraphValidationError" }
+    GraphDeployResult:
+      type: object
+      required: [pass, deployed, errors]
+      properties:
+        pass: { type: boolean, description: "Kết quả validate trước deploy" }
+        deployed: { type: boolean, description: "true nếu graph mới đã áp dụng atomically" }
+        message: { type: string }
+        activeRev:
+          oneOf:
+            - type: integer
+            - type: string
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/GraphValidationError" }
+    GraphPort:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [float, bool, int, string] }
+    GraphPortRef:
+      oneOf:
+        - type: string
+        - $ref: "#/components/schemas/GraphPort"
+    GraphNode:
+      type: object
+      required: [id, type]
+      additionalProperties: true
+      properties:
+        id: { type: string, pattern: "^[a-z][a-z0-9_]{0,31}$" }
+        type: { type: string }
+        ports:
+          type: object
+          properties:
+            inputs:
+              type: array
+              items: { $ref: "#/components/schemas/GraphPortRef" }
+            outputs:
+              type: array
+              items: { $ref: "#/components/schemas/GraphPortRef" }
+        inputs:
+          type: array
+          items: { $ref: "#/components/schemas/GraphPortRef" }
+        outputs:
+          type: array
+          items: { $ref: "#/components/schemas/GraphPortRef" }
+        params: { type: object, additionalProperties: true }
+        config: { type: object, additionalProperties: true }
+        limit:
+          type: object
+          additionalProperties: true
+          properties:
+            min: { type: number }
+            max: { type: number }
+            limit_lo: { type: number }
+            limit_hi: { type: number }
+        fallback: {}
+        safeState: {}
+        safe_state: {}
+        power_on: { type: object, additionalProperties: true }
+    GraphLink:
+      type: object
+      required: [from, to]
+      properties:
+        from: { type: string, example: "pid1.out" }
+        to: { type: string, example: "ao1.in" }
+    GraphIoPoint:
+      type: object
+      required: [node]
+      additionalProperties: true
+      properties:
+        node: { type: string }
+        channel: { type: integer }
+        sensor: { type: string }
+        unit: { type: string }
+        mode: { type: string }
+        limit_lo: { type: number }
+        limit_hi: { type: number }
+        fallback: {}
+        safeState: {}
+        safe_state: {}
+    GraphModbusPoint:
+      type: object
+      required: [node]
+      additionalProperties: true
+      properties:
+        node: { type: string }
+        fc: { type: integer }
+        addr: { type: integer }
+        type: { type: string }
+        scale: { type: number }
+        fallback: {}
+        safeState: {}
+        safe_state: {}
+    GraphModbusDevice:
+      type: object
+      additionalProperties: true
+      properties:
+        bus: { type: integer }
+        baud: { type: integer }
+        slave: { type: integer }
+        host: { type: string }
+        unit: { type: integer }
+        poll_ms: { type: integer }
+        points:
+          type: array
+          items: { $ref: "#/components/schemas/GraphModbusPoint" }
+    Graph:
+      type: object
+      required: [schema_version, device, io_map, nodes, links]
+      properties:
+        schema_version: { type: string, example: "1.0" }
+        device:
+          type: object
+          required: [bacnet_device_id, name, scan_ms]
+          properties:
+            bacnet_device_id:
+              oneOf:
+                - type: integer
+                - type: string
+            name: { type: string }
+            scan_ms: { type: integer, minimum: 500 }
+        io_map:
+          type: object
+          properties:
+            ai:
+              type: array
+              items: { $ref: "#/components/schemas/GraphIoPoint" }
+            ao:
+              type: array
+              items: { $ref: "#/components/schemas/GraphIoPoint" }
+            di:
+              type: array
+              items: { $ref: "#/components/schemas/GraphIoPoint" }
+            do:
+              type: array
+              items: { $ref: "#/components/schemas/GraphIoPoint" }
+        modbus:
+          type: object
+          properties:
+            rtu:
+              type: array
+              items: { $ref: "#/components/schemas/GraphModbusDevice" }
+            tcp:
+              type: array
+              items: { $ref: "#/components/schemas/GraphModbusDevice" }
+        nodes:
+          type: array
+          items: { $ref: "#/components/schemas/GraphNode" }
+        links:
+          type: array
+          items: { $ref: "#/components/schemas/GraphLink" }
+        meta: { type: object, additionalProperties: true }
+    SystemConfig:
+      type: object
+      properties:
+        device: { $ref: "#/components/schemas/ConfigDevice" }
+        network: { $ref: "#/components/schemas/ConfigNetwork" }
+        io: { $ref: "#/components/schemas/ConfigIO" }
+        safe_state: { $ref: "#/components/schemas/ConfigSafeState" }
+        bacnet: { $ref: "#/components/schemas/ConfigBacnet" }
+        fieldbus: { $ref: "#/components/schemas/ConfigFieldbus" }
+        time: { $ref: "#/components/schemas/ConfigTime" }
+    NetworkPageData:
+      type: object
+      required: [northbound, southbound]
+      properties:
+        northbound: { $ref: "#/components/schemas/NetworkPageConfig" }
+        southbound:
+          type: array
+          items: { $ref: "#/components/schemas/NetworkSlave" }
+    NetworkPageConfig:
+      type: object
+      required: [deviceName, ip, dhcp, wifiEnabled, subnet, gateway, bacnetDeviceId, bacnetDeviceName, bacnetPort, bmsLink]
+      properties:
+        deviceName: { type: string }
+        ip: { type: string, format: ipv4 }
+        dhcp: { type: boolean }
+        wifiEnabled: { type: boolean }
+        subnet: { type: string, format: ipv4 }
+        gateway: { type: string, format: ipv4 }
+        bacnetDeviceId: { type: string }
+        bacnetDeviceName: { type: string }
+        bacnetPort: { type: integer, minimum: 1, maximum: 65535 }
+        bmsLink: { type: string, enum: [online, offline] }
+    NetworkSlave:
+      type: object
+      required: [address, name, profile, baudRate, pollState, errorRate, lastPollMs]
+      properties:
+        address: { type: integer, minimum: 1, maximum: 247 }
+        name: { type: string }
+        profile: { type: string }
+        baudRate: { type: integer }
+        pollState: { type: string, enum: [online, degraded, offline] }
+        errorRate: { type: number }
+        lastPollMs: { type: integer }
+    ConfigDevice:
+      type: object
+      required: [device_id, device_name]
+      properties:
+        device_id: { type: integer }
+        device_name: { type: string }
+        description: { type: string }
+        location: { type: string }
+    ConfigNetwork:
+      type: object
+      properties:
+        eth: { type: object, additionalProperties: true }
+        wifi: { type: object, additionalProperties: true }
+        hostname: { type: string }
+    ConfigIO:
+      type: object
+      properties:
+        ui: { type: array, items: { type: object, additionalProperties: true } }
+        ao: { type: array, items: { type: object, additionalProperties: true } }
+    ConfigSafeState:
+      type: object
+      properties:
+        ao: { type: array, items: { type: object, additionalProperties: true } }
+        do: { type: array, items: { type: object, additionalProperties: true } }
+    ConfigBacnet:
+      type: object
+      properties:
+        bip: { type: object, additionalProperties: true }
+    ConfigFieldbus:
+      type: object
+      properties:
+        rs485: { type: object, additionalProperties: true }
+        poll_default_ms: { type: integer }
+        slaves: { type: array, items: { type: object, additionalProperties: true } }
+    ConfigTime:
+      type: object
+      properties:
+        timezone: { type: string }
+        ntp_enabled: { type: boolean }
+        ntp_servers: { type: array, items: { type: string } }
+        system_time: { type: string, format: date-time, description: "Cho phép set giờ thủ công" }
+    TrendSample:
+      type: object
+      required: [time]
+      description: "Wide FE TrendSample: `{time, AI-01: 23.4}`; extra keys are series/point ids."
+      properties:
+        time: { type: string, format: date-time }
+      additionalProperties:
+        oneOf:
+          - type: number
+          - type: string
+    TrendConfig:
+      type: object
+      required: [pointIds, intervalS, retentionRecords]
+      properties:
+        enabled: { type: boolean, default: true }
+        pointIds:
+          type: array
+          description: Points logged by the mkddc-web sampler.
+          items: { type: string }
+          example: ["AI-01", "AI-02", "AO-01"]
+        intervalS:
+          type: integer
+          minimum: 10
+          maximum: 300
+          default: 30
+          description: "Sampler interval in seconds; default 30s, configurable 10..300s for 30m/1h/6h/24h UI ranges."
+        retentionRecords:
+          type: integer
+          minimum: 1000
+          default: 2880
+          description: "Minimum retained samples per point/log; default 2880 (~24h at 30s), never below 1000."
+    ScheduleCell:
+      type: object
+      required: [day, value, start, end]
+      properties:
+        day: { type: string, example: "T2" }
+        value: { type: string, enum: ["ON", "OFF", "OPEN", "CLOSE"] }
+        start: { type: string, example: "08:00" }
+        end: { type: string, example: "17:00" }
+    ScheduleRow:
+      type: object
+      required: [id, label, cells]
+      properties:
+        id: { type: string, example: "SCH-01" }
+        label: { type: string, example: "Weekly Template" }
+        cells:
+          type: array
+          items: { $ref: "#/components/schemas/ScheduleCell" }
+    AlarmSetting:
+      type: object
+      required: [pointId, label, enabled, hh, h, l, ll, delayS, priority]
+      properties:
+        pointId: { type: string, example: "AI-01" }
+        label: { type: string, example: "Room temperature" }
+        enabled: { type: boolean }
+        hh: { type: number }
+        h: { type: number }
+        l: { type: number }
+        ll: { type: number }
+        delayS: { type: number }
+        priority: { type: string, enum: [low, medium, high, critical] }
+    ConfigPutResult:
+      type: object
+      required: [result, applied, reload]
+      description: "Ánh xạ SIGHUP/Restart: safe-state->sighup-core; device & io->sighup-iobus; bacnet & fieldbus->restart-iobus; network & time->system; (users->none, xử lý riêng ở /users)."
+      properties:
+        result: { type: string, enum: [success, failed, accepted, rejected] }
+        applied: { type: boolean }
+        reload: { type: string, enum: [sighup-core, sighup-iobus, restart-iobus, system, none] }
+        warnings: { type: array, items: { type: string } }
+    User:
+      type: object
+      required: [username, role]
+      properties:
+        username: { type: string }
+        role: { type: string, enum: [admin, operator, viewer] }
