@@ -8,6 +8,7 @@
 #ifndef IOBUS_BACNET_COV_HPP
 #define IOBUS_BACNET_COV_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 #include <limits>
