@@ -43,14 +43,6 @@ jobs:
             -exec sh -c 'echo "### {} ###" >> python-requirements.txt; cat {} >> python-requirements.txt' \;
 
 
-      - name: Debug Trivy (Table format)
-        uses: aquasecurity/trivy-action@master
-        continue-on-error: true
-        with:
-          scan-type: fs
-          scan-ref: .
-          format: table
-          severity: CRITICAL,HIGH
 
       - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
