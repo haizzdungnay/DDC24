@@ -66,8 +66,6 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
   useEffect(() => {
     const refreshMs = optionsRef.current.refreshMs
     if (!refreshMs) return undefined
-
-    let timerId: number | undefined
     let polling = false
 
     const poll = async () => {
@@ -77,7 +75,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
       polling = false
     }
 
-    timerId = window.setInterval(poll, refreshMs)
+    const timerId = window.setInterval(poll, refreshMs)
 
     return () => {
       if (timerId !== undefined) {
