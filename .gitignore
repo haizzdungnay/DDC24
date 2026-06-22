@@ -49,3 +49,5 @@ logs/*
 # Local backup of stale untracked files (manual cleanup)
 /.untracked_backup_2026-06-15/
 
+web/backend/mkddc-web-arm64
+web/backend/mkddc-web-arm64
