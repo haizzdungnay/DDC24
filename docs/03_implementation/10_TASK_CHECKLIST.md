@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch)
+> **Phiên bản:** 1.14 | 2026-06-22 (IOB local PASS; MOD native PTY PASS; BAC runtime wiring; external evidence pending)
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -248,6 +248,21 @@ Phụ thuộc: IOB-004
 
 ---
 
+```
+Task ID: IOB-006
+Tên: CI cleanup /dev/shm/mkddc_io_shm trước ctest — fix 2 test SKIP
+Owner: Dev SOM | Phase: 3 | Module: CI workflow
+Input: 2 test IoCache SKIP do SHM còn từ run trước
+Output: CI cleanup mkddc_io_shm + mkddc_plc_shm trước ctest; 226/226 inventory hiện tại PASS
+Test: CI xanh, không còn SKIP
+Done khi: CI green 226/226; IoCache.CleanBootInitsDefaults + ReattachPreservesCoreOwnedFields PASS
+Phụ thuộc: IOB-002
+Chi tiết: 30_PROTOCOL_LIB_INTEGRATION_PLAN.md §5
+Trạng thái: ĐÃ implement 2026-06-22 — workflow cleanup; local 226/226 PASS, 2 IoCache PASS; chờ remote CI green.
+```
+
+---
+
 ## Phase 4 — mkddc-core
 
 ```
@@ -405,9 +420,22 @@ Doc gap đã resolve (2026-06-17):
 | BAC-010 | TimeSync/ReinitializeDevice policy | Dev SOM | guarded restart/time sync | integration smoke |
 | BAC-011 | BTL pretest script/checklist | Tester + Dev SOM | repeatable B-ASC pretest | group 9 PASS |
 
-Trạng thái: ĐÃ làm 2026-06-17 — BAC-001..011 implementation hoàn tất; 114 unit test pass; bypass core check sạch.
+Trạng thái BACnet: BAC-001..011 logic/unit test ✅. BAC-012 IN PROGRESS 2026-06-22 — bacnet-stack 1.3.8 pin, ON build sạch trước final runtime wiring, API/callback/shm/core bridge đã implement; chờ exact-tree CI + LAN/board smoke.
 
 Done khi: DoD §8 pass; BACnet write không bypass core; safety/manual cao hơn vẫn thắng.
+
+```
+Task ID: BAC-012
+Tên: bacnet-stack install + MKDDC_ENABLE_BACNET=ON build + smoke test mạng thật
+Owner: Dev SOM | Phase: 4.5 | Module: bacnet_server, CMake, CI
+Input: bacnet-stack >= 1.3.x; LAN với máy test có bacnet-tools
+Output: mkddc-iobus bind UDP/47808 thật; Who-Is/I-Am/ReadProperty/WriteProperty pass từ máy khác
+Test: bacwi/bacrp/bacwp smoke; DoD §3.5 trong 30_PROTOCOL_LIB_INTEGRATION_PLAN
+Done khi: 10 checkbox DoD BAC-012 tick đủ; build CI có MKDDC_ENABLE_BACNET=ON xanh
+Phụ thuộc: BAC-001..011
+Chi tiết: 30_PROTOCOL_LIB_INTEGRATION_PLAN.md §3
+Trạng thái: IN PROGRESS 2026-06-22 — implementation complete locally; exact-tree CI, LAN, aarch64 và board evidence còn mở.
+```
 
 ---
 
@@ -434,9 +462,22 @@ Doc gap đã resolve (2026-06-17):
 | MOD-010 | BACnet expose ext points theo profile | Dev SOM | ext -> AV/BV/AI optional | object map test |
 | MOD-011 | 16-slave timing smoke | Tester + Dev SOM | stable poll budget | group 10 PASS |
 
-Trạng thái: ĐÃ làm 2026-06-17 — MOD-001..011 implementation hoàn tất; 114 unit test pass; bypass core check sạch.
+Trạng thái Modbus: MOD-001..011 logic/unit test ✅. MOD-012 IN PROGRESS 2026-06-22 — libmodbus 3.1.10, ON build và PTY FC03/FC05/FC06/timeout-E302 PASS, runtime worker + CI matrix đã implement; chờ cross-build/board/physical smoke.
 
 Done khi: DoD §9 pass; Modbus không làm slave northbound; không có output bypass core.
+
+```
+Task ID: MOD-012
+Tên: libmodbus install + MKDDC_ENABLE_MODBUS=ON build + fake slave + thiết bị thật RS-485
+Owner: Dev SOM | Phase: 3.5 | Module: modbus_master, CMake, CI
+Input: libmodbus >= 3.1.6; /dev/ttyUSB* hoặc socat PTY cho fake slave
+Output: modbus_master.open() kết nối RS-485 thật; FC03 đọc được; timeout → E302
+Test: diagslave PTY smoke; DoD §4.6 trong 30_PROTOCOL_LIB_INTEGRATION_PLAN
+Done khi: 11 checkbox DoD MOD-012 tick đủ; build CI có MKDDC_ENABLE_MODBUS=ON xanh
+Phụ thuộc: MOD-001..011
+Chi tiết: 30_PROTOCOL_LIB_INTEGRATION_PLAN.md §4
+Trạng thái: IN PROGRESS 2026-06-22 — native PTY transport PASS; cross-build, board, 1h soak và thiết bị thật còn mở.
+```
 
 ---
 
@@ -625,6 +666,6 @@ Phụ thuộc: E2E-003
 ```
 
 ---
-**Rev** 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) · 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
+**Rev** 1.14 | 2026-06-22 (IOB local PASS; MOD native PTY PASS; BAC source/runtime wiring; external evidence pending) · 1.13 | 2026-06-22 (Thêm BAC-012, MOD-012, IOB-006 — transport layer integration; sửa status BACnet/Modbus: logic ✅ transport no-op ⚠️; xem 30_PROTOCOL_LIB_INTEGRATION_PLAN) · 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) · 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
 1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit, COR-008 SIGHUP reload — cụm production-hardening 1+5+6 ĐÃ làm) · 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006 Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·
 Test chi tiết: [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)

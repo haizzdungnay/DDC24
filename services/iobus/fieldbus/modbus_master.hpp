@@ -79,6 +79,7 @@ private:
     std::vector<SlaveState>   slave_states_;
     std::vector<DeviceProfile> profiles_;
     std::vector<uint16_t>     slave_ext_base_;   /* index vào ext_cache cho slave[i] */
+    std::vector<uint16_t>     slave_ext_count_;  /* số ext points thực của slave[i] */
     std::vector<PendingWrite> pending_writes_;
     FieldbusConfig            cfg_;
 };

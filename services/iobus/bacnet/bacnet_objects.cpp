@@ -238,8 +238,11 @@ bool BacnetObjects::write_ao(uint32_t instance, uint8_t prio, float value,
     if (instance < 1 || instance > N_AO) return false;
     const bool changed = priority_.write(CmdObjectType::AO, instance, prio, value);
     if (!changed) return true;
-    const float winner = priority_.get_array(CmdObjectType::AO, instance)->winner();
-    const bool accepted = fn("ao_setpoint", instance - 1, winner, user, 3);
+    const PriorityArray* arr = priority_.get_array(CmdObjectType::AO, instance);
+    if (!arr) return false;
+    const float winner = arr->winner();
+    const bool accepted = fn(arr->is_empty() ? "release_ao" : "ao_setpoint",
+                             instance - 1, winner, user, 3);
     if (!accepted)
         priority_.on_overridden(CmdObjectType::AO, instance, winner);
     return accepted;
@@ -251,8 +254,11 @@ bool BacnetObjects::write_bo(uint32_t instance, uint8_t prio, float value,
     if (instance < 1 || instance > N_BO) return false;
     const bool changed = priority_.write(CmdObjectType::BO, instance, prio, value);
     if (!changed) return true;
-    const float winner = priority_.get_array(CmdObjectType::BO, instance)->winner();
-    const bool accepted = fn("do_cmd", instance - 1, winner, user, 3);
+    const PriorityArray* arr = priority_.get_array(CmdObjectType::BO, instance);
+    if (!arr) return false;
+    const float winner = arr->winner();
+    const bool accepted = fn(arr->is_empty() ? "release_bo" : "do_cmd",
+                             instance - 1, winner, user, 3);
     if (!accepted)
         priority_.on_overridden(CmdObjectType::BO, instance, winner);
     return accepted;
@@ -303,7 +309,8 @@ bool BacnetObjects::relinquish_ao(uint32_t instance, uint8_t prio,
     const PriorityArray* arr = priority_.get_array(CmdObjectType::AO, instance);
     if (!arr) return false;
     const float winner = arr->winner();
-    const bool accepted = fn("ao_setpoint", instance - 1, winner, user, 3);
+    const bool accepted = fn(arr->is_empty() ? "release_ao" : "ao_setpoint",
+                             instance - 1, winner, user, 3);
     if (!accepted) priority_.on_overridden(CmdObjectType::AO, instance, winner);
     return accepted;
 }
@@ -317,7 +324,8 @@ bool BacnetObjects::relinquish_bo(uint32_t instance, uint8_t prio,
     const PriorityArray* arr = priority_.get_array(CmdObjectType::BO, instance);
     if (!arr) return false;
     const float winner = arr->winner();
-    const bool accepted = fn("do_cmd", instance - 1, winner, user, 3);
+    const bool accepted = fn(arr->is_empty() ? "release_bo" : "do_cmd",
+                             instance - 1, winner, user, 3);
     if (!accepted) priority_.on_overridden(CmdObjectType::BO, instance, winner);
     return accepted;
 }

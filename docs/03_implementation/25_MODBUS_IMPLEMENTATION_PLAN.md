@@ -2,8 +2,8 @@
 ## MK-DDC-24 — Modbus RTU master + device profile + ext cache
 
 > **Document ID:** IMPL-MODBUS-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-16
-> **Trạng thái:** DONE 2026-06-17 — MOD-001..011 implemented; 114 unit test pass; bypass check sạch
+> **Phiên bản:** 1.5 | 2026-06-22
+> **Trạng thái:** IN PROGRESS — MOD-012 native libmodbus + PTY read/write/timeout PASS, runtime worker và CI matrix đã implement; cross/board/physical evidence còn mở. Xem [30_PROTOCOL_LIB_INTEGRATION_PLAN §4](30_PROTOCOL_LIB_INTEGRATION_PLAN.md)
 > **Owner:** Dev 2 (iobus) + Protocol Lead
 > **Đọc cùng:** [SW_FIELDBUS_DESIGN](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) ·
 > [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) ·
@@ -166,7 +166,7 @@ services/iobus/fieldbus/
 ## 8. Definition of Done S7 #6
 
 ```
-[ ] `MKDDC_ENABLE_MODBUS=ON` build sạch với `libmodbus`.
+[ ] `MKDDC_ENABLE_MODBUS=ON` build sạch với `libmodbus`.   ← MOD-012 (chưa xong)
 [ ] `fieldbus.conf` load/reject/reload đúng.
 [ ] Profile JSON validate đầy đủ; không crash khi profile lỗi.
 [ ] FC01/02/03/04 read pass với fake slave và ít nhất 1 slave thật.
@@ -177,6 +177,10 @@ services/iobus/fieldbus/
 [ ] 16 slave poll smoke pass; 1h không crash.
 [ ] Không có đường Modbus write bypass core/priority cho output nội bộ.
 ```
+
+> **Lưu ý:** Logic layer (MOD-001..011 unit test) ✅ hoàn tất. Toàn bộ DoD trên phụ thuộc vào
+> `libmodbus` 3.1.10 đã cài và PTY transport PASS; cross/board/soak evidence còn mở. Xem task MOD-012 tại
+> [30_PROTOCOL_LIB_INTEGRATION_PLAN §4](30_PROTOCOL_LIB_INTEGRATION_PLAN.md).
 
 ---
 
@@ -191,7 +195,9 @@ services/iobus/fieldbus/
 
 ---
 **Rev**
-1.3 | 2026-06-17 — DONE: MOD-001..011 implemented — fieldbus_config/device_profile/register_codec/poll_scheduler/ext_cache/fieldbus_metrics/modbus_master + test suite; 114 test pass
-1.2 | 2026-06-17 — §3: kx_ext_snapshot_msg_t gap CLOSED (struct + magic vào mkddc_shm.h); ext point fields table cụ thể hơn
-1.1 | 2026-06-16 — close FB-Q-001 (libmodbus confirmed) + FB-Q-002 (expose_bacnet per-profile); cập nhật MOD-009 + MOD-010
-1.0 | 2026-06-13 — tạo plan S7 #6 code-ready
+1.5 | 2026-06-22 — MOD-012 native PTY transport + runtime worker + CI matrix; external evidence pending
+1.4 | 2026-06-22 — Sửa status: PARTIALLY DONE — transport layer no-op, thêm ref MOD-012 + §8 note; xem 30_PROTOCOL_LIB_INTEGRATION_PLAN
+1.3 | 2026-06-17 — MOD-001..011 logic implemented — 114 unit test pass; bypass check sạch
+1.2 | 2026-06-17 — §3: kx_ext_snapshot_msg_t gap CLOSED
+1.1 | 2026-06-16 — close FB-Q-001/FB-Q-002
+1.0 | 2026-06-13 — tạo plan S7 #6

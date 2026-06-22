@@ -26,8 +26,24 @@ permissions:
 
 jobs:
   som-services:
-    name: C++ SOM Services
+    name: C++ SOM Services (${{ matrix.name }})
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: baseline
+            bacnet: OFF
+            modbus: OFF
+            extra_packages: ""
+          - name: modbus
+            bacnet: OFF
+            modbus: ON
+            extra_packages: libmodbus-dev
+          - name: bacnet
+            bacnet: ON
+            modbus: OFF
+            extra_packages: ""
 
     steps:
       - name: Checkout
@@ -41,19 +57,23 @@ jobs:
             g++ \
             libgtest-dev \
             libgmock-dev \
-            ninja-build
+            ninja-build \
+            ${{ matrix.extra_packages }}
 
       - name: Configure (CMake)
         run: |
           cmake -S services -B build/services \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror" \
-            -DMKDDC_ENABLE_BACNET=OFF \
-            -DMKDDC_ENABLE_MODBUS=OFF \
+            -DMKDDC_ENABLE_BACNET=${{ matrix.bacnet }} \
+            -DMKDDC_ENABLE_MODBUS=${{ matrix.modbus }} \
             -G Ninja
 
       - name: Build
         run: cmake --build build/services --parallel
+
+      - name: Cleanup stale shared memory
+        run: rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm
 
       - name: Run tests
         run: ctest --test-dir build/services --output-on-failure --parallel 4
@@ -62,14 +82,13 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results-${{ matrix.name }}
           path: build/services/Testing/
           retention-days: 7
 
   web-backend:
     name: Go Web Backend
     runs-on: ubuntu-22.04
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,7 +106,6 @@ jobs:
   web-frontend:
     name: React Web Frontend
     runs-on: ubuntu-22.04
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -112,7 +130,6 @@ jobs:
   mcu-firmware:
     name: MCU Firmware
     runs-on: ubuntu-22.04
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4

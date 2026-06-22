@@ -21,14 +21,14 @@
 #include <bacnet/rp.h>
 #include <bacnet/wp.h>
 #include <bacnet/rpm.h>
-#include <bacnet/tsm.h>
+#include <bacnet/basic/tsm/tsm.h>
+#include <bacnet/basic/services.h>
 #include <bacnet/dcc.h>
 #include <bacnet/getevent.h>
-#include <bacnet/device.h>
+#include <bacnet/basic/object/device.h>
 #include <bacnet/datalink/bip.h>
 #include <bacnet/datalink/datalink.h>
 #include <bacnet/timesync.h>
-#include <bacnet/reinit.h>
 #include <bacnet/basic/object/ai.h>
 #include <bacnet/basic/object/ao.h>
 #include <bacnet/basic/object/av.h>
@@ -39,6 +39,28 @@
 #endif
 
 namespace iobus::bacnet {
+#ifdef MKDDC_ENABLE_BACNET
+static BacnetServer* g_active_server = nullptr;
+
+static void ao_write_callback(uint32_t instance, float, float value)
+{
+    if (g_active_server) {
+        const bool released = Analog_Output_Present_Value_Priority(instance) == 0;
+        g_active_server->handle_output_write(true, instance, value, released);
+    }
+}
+
+static void bo_write_callback(uint32_t instance, BACNET_BINARY_PV,
+                              BACNET_BINARY_PV value)
+{
+    if (g_active_server) {
+        const bool released = Binary_Output_Present_Value_Priority(instance) == 0;
+        g_active_server->handle_output_write(false, instance,
+                                             value == BINARY_ACTIVE ? 1.0f : 0.0f,
+                                             released);
+    }
+}
+#endif
 
 BacnetServer::BacnetServer() = default;
 BacnetServer::~BacnetServer() { stop(); }
@@ -68,52 +90,64 @@ bool BacnetServer::start()
     if (running_) return true;
 
 #ifdef MKDDC_ENABLE_BACNET
-    /* BAC-010: Device Object setup */
+    Device_Init(nullptr);
     Device_Set_Object_Instance_Number(cfg_.device.device_id);
-    Device_Set_Object_Name(cfg_.device.device_name.c_str(), cfg_.device.device_name.size());
-    Device_Set_Description(cfg_.device.description.c_str());
-    Device_Set_Location(cfg_.device.location.c_str());
+    Device_Object_Name_ANSI_Init(cfg_.device.device_name.c_str());
+    Device_Set_Description(cfg_.device.description.c_str(), cfg_.device.description.size());
+    Device_Set_Location(cfg_.device.location.c_str(), cfg_.device.location.size());
+    Device_Set_Vendor_Identifier(9999);  /* placeholder until assigned by ASHRAE */
+    Device_Set_Model_Name("MK-DDC-24", std::strlen("MK-DDC-24"));
+    Device_Set_Application_Software_Version("1.0.0", std::strlen("1.0.0"));
 
-    /* PICS §7: Vendor = KINEXUS Technologies, Vendor_Identifier = 9999 (placeholder) */
-    Device_Set_Vendor_Name("KINEXUS Technologies");
-    Device_Set_Vendor_Identifier(9999);
-    Device_Set_Model_Name("MK-DDC-24");
-    Device_Set_Firmware_Revision("1.0.0");
-
-    /* BAC-005: BIP init with bind_interface (not 0.0.0.0 if configured) */
-    if (!cfg_.bip.bind_interface.empty()) {
-        bip_set_interface(cfg_.bip.bind_interface.c_str());
-        std::fprintf(stderr, "INFO  bacnet_server.bip_bind iface=%s port=%u\n",
-                     cfg_.bip.bind_interface.c_str(), cfg_.bip.udp_port);
-    } else {
-        std::fprintf(stderr, "WARN  bacnet_server.bip_bind_all (bind_interface not set)\n");
-    }
-    if (!bip_init(nullptr)) {
-        std::fprintf(stderr, "ERROR bacnet_server.bip_init_failed port=%u\n", cfg_.bip.udp_port);
+    /* Port must be configured before bip_init(), which opens the UDP socket. */
+    bip_set_port(cfg_.bip.udp_port);
+    char* iface = cfg_.bip.bind_interface.empty()
+        ? nullptr : const_cast<char*>(cfg_.bip.bind_interface.c_str());
+    if (!bip_init(iface)) {
+        std::fprintf(stderr, "ERROR bacnet_server.bip_init_failed iface=%s port=%u\n",
+                     iface ? iface : "default", cfg_.bip.udp_port);
         return false;
     }
-    bip_set_port(htons(cfg_.bip.udp_port));
 
-    /* Register objects */
     register_objects();
+    g_active_server = this;
+    Analog_Output_Write_Present_Value_Callback_Set(ao_write_callback);
+    Binary_Output_Write_Present_Value_Callback_Set(bo_write_callback);
+    apdu_set_unrecognized_service_handler_handler(handler_unrecognized_service);
+    apdu_set_confirmed_handler(SERVICE_CONFIRMED_READ_PROPERTY,
+                               handler_read_property);
+    apdu_set_confirmed_handler(SERVICE_CONFIRMED_READ_PROP_MULTIPLE,
+                               handler_read_property_multiple);
+    apdu_set_confirmed_handler(SERVICE_CONFIRMED_WRITE_PROPERTY,
+                               handler_write_property);
+    apdu_set_confirmed_handler(SERVICE_CONFIRMED_REINITIALIZE_DEVICE,
+                               handler_reinitialize_device);
+    apdu_set_unconfirmed_handler(SERVICE_UNCONFIRMED_WHO_IS, handler_who_is);
 
-    /* APDU / TSM */
-    apdu_set_confirmed_handler(SERVICE_CONFIRMED_READ_PROPERTY,    rphandler_handler);
-    apdu_set_confirmed_handler(SERVICE_CONFIRMED_READ_PROP_MULTIPLE, rpmhandler_handler);
-    apdu_set_confirmed_handler(SERVICE_CONFIRMED_WRITE_PROPERTY,   wphandler_handler);
-    apdu_set_confirmed_handler(SERVICE_CONFIRMED_REINITIALIZE_DEVICE, reinitialize_device_handler);
-    apdu_set_unconfirmed_handler(SERVICE_UNCONFIRMED_I_AM,         iam_handler);
-    apdu_set_unconfirmed_handler(SERVICE_UNCONFIRMED_WHO_IS,       whois_handler);
-
-    /* Announce ourselves */
     Send_I_Am(&Handler_Transmit_Buffer[0]);
-
-    std::fprintf(stderr, "INFO  bacnet_server.started device_id=%u\n", cfg_.device.device_id);
+    std::fprintf(stderr,
+                 "INFO  bacnet_server.started bound UDP/%u on %s device_id=%u\n",
+                 cfg_.bip.udp_port, iface ? iface : "default", cfg_.device.device_id);
 #else
     std::fprintf(stderr, "INFO  bacnet_server.start (MKDDC_ENABLE_BACNET=OFF, no-op)\n");
+    return false;
 #endif
     running_ = true;
     return true;
+}
+
+void BacnetServer::handle_output_write(bool analog, uint32_t instance, float value,
+                                       bool released)
+{
+    if (!core_fn_ || instance == 0) return;
+    const std::string op = released
+        ? (analog ? "release_ao" : "release_bo")
+        : (analog ? "ao_setpoint" : "do_cmd");
+    const bool accepted = core_fn_(op, instance - 1, value, "bacnet:udp", 3);
+    std::fprintf(stderr,
+                 "AUDIT bacnet_cmd object=%s%u op=%s value=%g result=%s\n",
+                 analog ? "AO" : "BO", instance, released ? "release" : "write",
+                 static_cast<double>(value), accepted ? "accepted" : "overridden");
 }
 
 void BacnetServer::register_objects()
@@ -130,9 +164,39 @@ void BacnetServer::register_objects()
 #endif
 }
 
+void BacnetServer::sync_stack_inputs(const kx_plc_shm_t* shm)
+{
+#ifdef MKDDC_ENABLE_BACNET
+    if (!objects_ || !shm) return;
+    for (uint32_t instance = 1; instance <= 8; ++instance) {
+        float value = 0.0f;
+        uint8_t status_flags = 0;
+        uint8_t reliability = 0;
+        if (objects_->read_ai(instance, &value, &status_flags, &reliability, shm)) {
+            Analog_Input_Present_Value_Set(instance, value);
+            Analog_Input_Reliability_Set(
+                instance, static_cast<BACNET_RELIABILITY>(reliability));
+            Analog_Input_Out_Of_Service_Set(instance,
+                                             objects_->oos_ai(instance));
+        }
+        if (objects_->read_bi(instance, &value, &status_flags, &reliability, shm)) {
+            Binary_Input_Present_Value_Set(
+                instance, value != 0.0f ? BINARY_ACTIVE : BINARY_INACTIVE);
+            Binary_Input_Reliability_Set(
+                instance, static_cast<BACNET_RELIABILITY>(reliability));
+            Binary_Input_Out_Of_Service_Set(instance,
+                                             objects_->oos_bi(instance));
+        }
+    }
+#else
+    (void)shm;
+#endif
+}
+
 void BacnetServer::tick(uint64_t now_ms, const kx_plc_shm_t* shm)
 {
     if (!running_) return;
+    sync_stack_inputs(shm);
     process_bacnet_packet(now_ms, shm);
     dispatch_cov(now_ms, shm);
     alarm_.drain(now_ms);
@@ -213,10 +277,7 @@ void BacnetServer::send_time_sync(uint64_t now_ms)
     last_timesync_ms_ = now_ms;
 
 #ifdef MKDDC_ENABLE_BACNET
-    const time_t t = static_cast<time_t>(now_ms / 1000);
-    BACNET_DATE_TIME bdt{};
-    datetime_set_values(&bdt.date, 0, 0, 0, 0); /* will be filled by bacnet-stack time API */
-    Send_TimeSync_Remote(BACNET_BROADCAST_NETWORK, nullptr, &bdt);
+    Send_TimeSync_Device();
     std::fprintf(stderr, "INFO  bacnet_server.timesync_sent\n");
 #endif
 }
@@ -225,6 +286,9 @@ void BacnetServer::stop()
 {
     if (!running_) return;
 #ifdef MKDDC_ENABLE_BACNET
+    Analog_Output_Write_Present_Value_Callback_Set(nullptr);
+    Binary_Output_Write_Present_Value_Callback_Set(nullptr);
+    if (g_active_server == this) g_active_server = nullptr;
     datalink_cleanup();
 #endif
     alarm_.close();

@@ -8,6 +8,16 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <chrono>
+#include <cerrno>
+#include <sstream>
+
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/un.h>
+#include <thread>
 #include <string>
 
 #include <unistd.h>
@@ -21,6 +31,14 @@
 #include "io/io_scaling.hpp"
 #include "io/io_types.hpp"
 #include "iop/iop_client.hpp"
+#include "fieldbus/ext_cache.hpp"
+#include "fieldbus/fieldbus_config.hpp"
+#include "fieldbus/fieldbus_metrics.hpp"
+#include "fieldbus/modbus_master.hpp"
+#include "bacnet/bacnet_config.hpp"
+#include "bacnet/bacnet_objects.hpp"
+#include "bacnet/bacnet_server.hpp"
+#include "mkddc_shm.h"
 #include "platform/realtime.hpp"
 #include "platform/systemd_notify.hpp"
 
@@ -46,6 +64,11 @@ uint64_t now_ns()
     return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
 }
 
+uint64_t now_ms()
+{
+    return now_ns() / 1000000ull;
+}
+
 void sleep_until(struct timespec* next, uint64_t period_ns)
 {
     next->tv_nsec += static_cast<long>(period_ns);
@@ -66,6 +89,73 @@ private:
     iobus::IopClient& c_;
 };
 
+const char* plc_shm_name()
+{
+    const char* path = KX_SHM_PLC_PATH;
+    const char* base = std::strrchr(path, '/');
+    return base ? base : path;
+}
+
+const kx_plc_shm_t* try_attach_plc_shm()
+{
+    const int fd = ::shm_open(plc_shm_name(), O_RDONLY, 0);
+    if (fd < 0) return nullptr;
+    void* mem = ::mmap(nullptr, sizeof(kx_plc_shm_t), PROT_READ, MAP_SHARED, fd, 0);
+    ::close(fd);
+    return mem == MAP_FAILED ? nullptr : static_cast<const kx_plc_shm_t*>(mem);
+}
+
+bool send_core_command(const std::string& sock_path, const std::string& op,
+                       uint32_t point_idx, float value, const std::string& user,
+                       int prio)
+{
+    std::string point;
+    if (op == "ao_setpoint" || op == "release_ao") point = "AO";
+    else if (op == "do_cmd" || op == "release_bo") point = "DO";
+    else if (op == "av_setpoint") point = "AV";
+    else if (op == "bv_setpoint") point = "BV";
+    else if (op == "msv_setpoint") point = "MSV";
+    else return false;
+    point += std::to_string(point_idx + 1);
+    const bool release = op.rfind("release_", 0) == 0;
+
+    const int fd = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (fd < 0) return false;
+    struct timeval timeout {2, 0};
+    ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    struct sockaddr_un addr {};
+    addr.sun_family = AF_UNIX;
+    std::strncpy(addr.sun_path, sock_path.c_str(), sizeof(addr.sun_path) - 1);
+    if (::connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) != 0) {
+        ::close(fd);
+        return false;
+    }
+
+    static std::atomic<uint64_t> command_id{1};
+    std::ostringstream json;
+    json << "{\"id\":" << command_id.fetch_add(1)
+         << ",\"op\":\"" << (release ? "release" : "write")
+         << "\",\"point\":\"" << point
+         << "\",\"source\":\"bacnet\",\"user\":\"" << user << "\"";
+    if (!release) json << ",\"value\":" << value;
+    json << ",\"priority\":" << prio << "}\n";
+    const std::string request = json.str();
+    if (::send(fd, request.data(), request.size(), MSG_NOSIGNAL) !=
+        static_cast<ssize_t>(request.size())) {
+        ::close(fd);
+        return false;
+    }
+
+    char response[512] = {};
+    const ssize_t n = ::recv(fd, response, sizeof(response) - 1, 0);
+    ::close(fd);
+    if (n <= 0) return false;
+    const std::string result(response, static_cast<size_t>(n));
+    return result.find("\"result\":\"accepted\"") != std::string::npos ||
+           result.find("\"result\":\"released\"") != std::string::npos;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -76,14 +166,26 @@ int main(int argc, char** argv)
     bool config_from_cli = false;
     std::string uart_override;
     std::string log_level_override;
+    std::string fieldbus_config_path = "/data/config/fieldbus.conf";
+    std::string fieldbus_sock_path = "/run/mkddc/fieldbus.sock";
+    bool fieldbus_config_from_cli = false;
+    std::string device_config_path = "/data/config/device.conf";
+    std::string bacnet_config_path = "/data/config/bacnet.conf";
+    std::string core_sock_path = "/run/mkddc/core.sock";
+    bool bacnet_config_from_cli = false;
 
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
         if (a == "--config" && i + 1 < argc)         { config_path = argv[++i]; config_from_cli = true; }
         else if (a == "--uart" && i + 1 < argc)      { uart_override = argv[++i]; }
         else if (a == "--log-level" && i + 1 < argc) { log_level_override = argv[++i]; }
+        else if (a == "--fieldbus-config" && i + 1 < argc) { fieldbus_config_path = argv[++i]; fieldbus_config_from_cli = true; }
+        else if (a == "--fieldbus-sock" && i + 1 < argc) { fieldbus_sock_path = argv[++i]; }
+        else if (a == "--device-config" && i + 1 < argc) { device_config_path = argv[++i]; bacnet_config_from_cli = true; }
+        else if (a == "--bacnet-config" && i + 1 < argc) { bacnet_config_path = argv[++i]; bacnet_config_from_cli = true; }
+        else if (a == "--core-sock" && i + 1 < argc) { core_sock_path = argv[++i]; }
         else if (a == "--help") {
-            std::printf("usage: mkddc-iobus [--config FILE] [--uart DEV] [--log-level LVL]\n");
+            std::printf("usage: mkddc-iobus [--config FILE] [--uart DEV] [--log-level LVL] [--fieldbus-config FILE] [--fieldbus-sock PATH] [--device-config FILE] [--bacnet-config FILE] [--core-sock PATH]\n");
             return 0;
         }
     }
@@ -131,6 +233,66 @@ int main(int argc, char** argv)
     struct sigaction sa_hup {};
     sa_hup.sa_handler = on_sighup;
     sigaction(SIGHUP, &sa_hup, nullptr);
+    fieldbus::FieldbusConfig fieldbus_cfg;
+    fieldbus::ModbusMaster modbus;
+    fieldbus::ExtCache ext_cache;
+    fieldbus::FieldbusMetrics fieldbus_metrics;
+    std::thread fieldbus_thread;
+    if (!fieldbus::load_fieldbus_config(fieldbus_config_path, fieldbus_config_from_cli,
+                                        &fieldbus_cfg)) {
+        cache.detach();
+        return 1;
+    }
+    if (fieldbus_cfg.loaded && !fieldbus_cfg.slaves.empty() && modbus.open(fieldbus_cfg)) {
+        fieldbus_thread = std::thread([&]() {
+            while (!g_shutdown.load()) {
+                const uint64_t poll_now = now_ms();
+                modbus.poll_once(poll_now, ext_cache, fieldbus_metrics, fieldbus_sock_path);
+                uint32_t wait_ms = modbus.sleep_ms_until_next(now_ms());
+                if (wait_ms == 0) wait_ms = 1;
+                if (wait_ms > 100) wait_ms = 100;
+                std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
+            }
+        });
+    }
+
+    bacnet::BacnetConfig bacnet_cfg;
+    bacnet::BacnetObjects bacnet_objects;
+    bacnet::BacnetServer bacnet_server;
+    std::thread bacnet_thread;
+    if (!bacnet::load_bacnet_config(device_config_path, bacnet_config_path,
+                                    bacnet_config_from_cli, &bacnet_cfg)) {
+        g_shutdown.store(true);
+        if (fieldbus_thread.joinable()) fieldbus_thread.join();
+        cache.detach();
+        return 1;
+    }
+    if (bacnet_cfg.bip.enabled) {
+        bacnet_objects.init(bacnet_cfg);
+        const auto core_write = [&](const std::string& op, uint32_t idx, float value,
+                                    const std::string& user, int prio) {
+            return send_core_command(core_sock_path, op, idx, value, user, prio);
+        };
+        const auto reinit = [](bool cold) {
+            std::fprintf(stderr, "WARN  bacnet.reinitialize requested cold=%u\n",
+                         cold ? 1u : 0u);
+        };
+        bacnet_server.init(bacnet_cfg, &bacnet_objects, core_write, reinit);
+        if (bacnet_server.start()) {
+            bacnet_thread = std::thread([&]() {
+                const kx_plc_shm_t* plc_shm = nullptr;
+                while (!g_shutdown.load()) {
+                    if (!plc_shm) plc_shm = try_attach_plc_shm();
+                    bacnet_server.tick(now_ms(), plc_shm);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
+                if (plc_shm) {
+                    ::munmap(const_cast<kx_plc_shm_t*>(plc_shm),
+                             sizeof(kx_plc_shm_t));
+                }
+            });
+        }
+    }
 
     IopClientConfig ccfg;
     ccfg.baud = cfg.baud;
@@ -447,6 +609,10 @@ int main(int argc, char** argv)
 
     /* Shutdown: đóng UART, KHÔNG xóa shm (core còn đọc) */
     std::fprintf(stderr, "INFO  iobus.shutdown\n");
+    if (fieldbus_thread.joinable()) fieldbus_thread.join();
+    if (bacnet_thread.joinable()) bacnet_thread.join();
+    bacnet_server.stop();
+    modbus.close();
     client.close();
     cache.detach();
     return 0;

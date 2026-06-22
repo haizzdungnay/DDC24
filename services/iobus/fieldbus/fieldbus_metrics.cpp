@@ -25,8 +25,11 @@ void FieldbusMetrics::update(uint8_t idx, bool ok, uint64_t now_ms)
     m.total_polls++;
     if (!ok) {
         m.total_errors++;
+        if (m.consecutive_errors < 255) m.consecutive_errors++;
+        if (m.consecutive_errors >= 2) m.online = false;
     } else {
         m.online = true;
+        m.consecutive_errors = 0;
         m.last_seen_ms = now_ms;
     }
 }
