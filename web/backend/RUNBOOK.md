@@ -40,6 +40,7 @@ Mo terminal khac chay frontend live mode:
 ```powershell
 cd E:\TuanDuong\INTERN\MK-DDC-24\src\frontend
 $env:VITE_DDC_MODE='live'
+$env:VITE_AUTH_MODE='jwt'
 $env:VITE_PROXY_TARGET='http://127.0.0.1:8081'
 npm run dev
 ```

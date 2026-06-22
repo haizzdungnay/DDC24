@@ -5,7 +5,7 @@ export const DDC_MODE: DdcMode = import.meta.env.VITE_DDC_MODE === 'live' ? 'liv
 export const IS_DEMO = DDC_MODE === 'demo'
 export const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || ''
 export const WS_ORIGIN = import.meta.env.VITE_WS_ORIGIN || ''
-export const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || (IS_DEMO ? 'mock' : 'none')
+export const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || (IS_DEMO ? 'mock' : 'jwt')
 export const DEVICE_DEFAULTS = {
   model: PRODUCT_INFO.model,
   name: PRODUCT_INFO.name,

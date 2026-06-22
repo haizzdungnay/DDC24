@@ -37,7 +37,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [getAuthHeader])
 
   useEffect(() => {
-    const handler = () => setSession(null)
+    const handler = () => {
+      setAuthHeaderProvider(() => ({}))
+      setSession(null)
+    }
     window.addEventListener('mkddc:auth-expired', handler)
     return () => window.removeEventListener('mkddc:auth-expired', handler)
   }, [])
@@ -61,10 +64,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
     if (!response.ok) throw new Error('Đăng nhập thất bại')
     const body = await response.json() as { token?: string; role?: UserRole }
+    if (body.token) setAuthHeaderProvider(() => ({ Authorization: `Bearer ${body.token}` }))
     setSession({ username, role: body.role ?? 'admin', token: body.token })
   }, [])
 
-  const logout = useCallback(() => setSession(null), [])
+  const logout = useCallback(() => {
+    setAuthHeaderProvider(() => ({}))
+    setSession(null)
+  }, [])
 
   const value = useMemo<AuthContextValue>(() => ({
     session,
