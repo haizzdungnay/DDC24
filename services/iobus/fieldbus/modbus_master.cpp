@@ -5,6 +5,7 @@
  *        Compile tanpa libmodbus: open() returns false, poll_once() no-op.
  */
 #include "modbus_master.hpp"
+#include "register_codec.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -16,15 +17,6 @@
 
 namespace iobus::fieldbus {
 
-#ifdef MKDDC_ENABLE_MODBUS
-static uint64_t now_ms_fn()
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return static_cast<uint64_t>(ts.tv_sec) * 1000ull +
-           static_cast<uint64_t>(ts.tv_nsec) / 1000000ull;
-}
-#endif
 
 ModbusMaster::~ModbusMaster()
 {
@@ -72,6 +64,8 @@ bool ModbusMaster::open(const FieldbusConfig& cfg)
     slave_states_.resize(cfg.slaves.size());
     profiles_.resize(cfg.slaves.size());
     slave_ext_base_.resize(cfg.slaves.size(), 0);
+    slave_ext_count_.resize(cfg.slaves.size(), 0);
+
 
     uint16_t ext_idx = 0;
     for (size_t i = 0; i < cfg.slaves.size(); i++) {
@@ -92,12 +86,13 @@ bool ModbusMaster::open(const FieldbusConfig& cfg)
         uint16_t pts = 0;
         for (const auto& pp : profiles_[i].points)
             pts += pp.count;
+        slave_ext_count_[i] = pts;
         ext_idx = static_cast<uint16_t>(ext_idx + pts);
         if (ext_idx > KX_N_EXT) { ext_idx = KX_N_EXT; break; }
     }
 
-    std::fprintf(stderr, "INFO  modbus_master.open device=%s slaves=%zu total_ext=%u\n",
-                 cfg.rs485.device.c_str(), cfg.slaves.size(), ext_idx);
+    std::fprintf(stderr, "INFO  modbus_master.open RS-485 opened %s %u%c8%u slaves=%zu total_ext=%u\n",
+                 cfg.rs485.device.c_str(), cfg.rs485.baud, cfg.rs485.parity, cfg.rs485.stop, cfg.slaves.size(), ext_idx);
     return true;
 #endif
 }
@@ -130,19 +125,6 @@ uint32_t ModbusMaster::sleep_ms_until_next(uint64_t now_ms) const
     return min_ms;
 }
 
-#ifdef MKDDC_ENABLE_MODBUS
-static const char* type_str(PointType t) {
-    switch (t) {
-        case PointType::Bool: return "bool";
-        case PointType::Int16: return "int16";
-        case PointType::Uint16: return "uint16";
-        case PointType::Int32: return "int32";
-        case PointType::Uint32: return "uint32";
-        case PointType::Float32: return "float32";
-    }
-    return "?";
-}
-#endif
 
 void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
                                ExtCache& cache, FieldbusMetrics& metrics)
@@ -188,7 +170,7 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
             }
             /* Đánh offline ext points */
             cache.mark_slave_offline(slave_ext_base_[slave_idx],
-                                      static_cast<uint16_t>(prof.points.size()),
+                                      slave_ext_count_[slave_idx],
                                       sc.addr);
             break;
         }
@@ -285,6 +267,17 @@ void ModbusMaster::poll_once(uint64_t now_ms, ExtCache& cache,
                               const std::string& fieldbus_sock_path)
 {
     if (!ctx_) return;
+    if (metrics.size() != cfg_.slaves.size()) {
+        std::vector<std::string> names;
+        std::vector<uint8_t> addrs;
+        names.reserve(cfg_.slaves.size());
+        addrs.reserve(cfg_.slaves.size());
+        for (const auto& slave : cfg_.slaves) {
+            names.push_back(slave.name);
+            addrs.push_back(slave.addr);
+        }
+        metrics.init(names, addrs);
+    }
     for (size_t i = 0; i < slave_states_.size(); i++) {
         if (!is_due(slave_states_[i], now_ms)) continue;
         read_slave(static_cast<uint8_t>(i), now_ms, cache, metrics);

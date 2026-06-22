@@ -2,8 +2,8 @@
 ## MK-DDC-24 — BACnet/IP object table + command path + BTL-ready tests
 
 > **Document ID:** IMPL-BACNET-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-13
-> **Trạng thái:** DONE 2026-06-17 — BAC-001..011 implemented; 114 unit test pass; bypass check sạch
+> **Phiên bản:** 1.4 | 2026-06-22
+> **Trạng thái:** IN PROGRESS — BAC-012 source integration và runtime wiring đã implement; native ON build sạch trước final wiring; chờ exact-tree CI + LAN/board/BTL. Xem [30_PROTOCOL_LIB_INTEGRATION_PLAN §3](30_PROTOCOL_LIB_INTEGRATION_PLAN.md)
 > **Owner:** Dev 2 (core/iobus) + Protocol Lead
 > **Đọc cùng:** [SW_BACNET_DESIGN](../02_design/software/SW_BACNET_DESIGN_MK-DDC-24_VI.md) ·
 > [BACNET_PICS_EPICS](../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) ·
@@ -180,7 +180,7 @@ services/core/
 ## 8. Definition of Done S7 #5
 
 ```
-[ ] `MKDDC_ENABLE_BACNET=ON` build sạch.
+[ ] `MKDDC_ENABLE_BACNET=ON` build sạch.                   ← BAC-012 (chưa xong)
 [ ] BACnet/IP bind đúng interface/port từ config; không bind WAN nếu không cấu hình.
 [ ] Who-Is/I-Am, ReadProperty, ReadPropertyMultiple PASS.
 [ ] AI/BI/AO/BO/AV/BV/MSV map đúng object count + instance + name.
@@ -191,6 +191,10 @@ services/core/
 [ ] Alarm bridge hoạt động tối thiểu với Notification Class.
 [ ] BTL pretest log lưu trong `docs/00_management/evidence/`.
 ```
+
+> **Lưu ý:** Logic layer (BAC-001..011 unit test) ✅ hoàn tất. Toàn bộ DoD trên phụ thuộc vào
+> `bacnet-stack` 1.3.8 được pin bằng FetchContent; exact-tree CI và network evidence còn mở. Xem task BAC-012 tại
+> [30_PROTOCOL_LIB_INTEGRATION_PLAN §3](30_PROTOCOL_LIB_INTEGRATION_PLAN.md).
 
 ---
 
@@ -204,6 +208,7 @@ services/core/
 | BTL scope quá rộng | Cao | Rev A target B-ASC; trend/schedule nâng cao chỉ khi code đủ |
 
 ---
-**Rev** 1.2 | 2026-06-17 (DONE: BAC-001..011 implemented — bacnet_config/objects/priority/cov/reliability/alarm/server + test suite + BTL pretest script; 114 test pass) ·
-1.1 | 2026-06-17 (BAC-CONFLICT-001 CLOSED: §1 open-points, §4b IPC protocol BACnet→core.sock) ·
-1.0 | 2026-06-13 — tạo plan S7 #5 code-ready
+**Rev** 1.4 | 2026-06-22 (BAC-012 native integration + runtime wiring; external evidence pending) · 1.3 | 2026-06-22 (Sửa status: PARTIALLY DONE — transport layer no-op, thêm ref BAC-012 + §8 note; xem 30_PROTOCOL_LIB_INTEGRATION_PLAN) ·
+1.2 | 2026-06-17 (BAC-001..011 logic implemented — 114 unit test pass; bypass check sạch) ·
+1.1 | 2026-06-17 (BAC-CONFLICT-001 CLOSED: §4b IPC protocol BACnet→core.sock) ·
+1.0 | 2026-06-13 — tạo plan S7 #5

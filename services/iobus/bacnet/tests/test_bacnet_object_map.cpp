@@ -5,6 +5,7 @@
  */
 #include <gtest/gtest.h>
 #include "bacnet_objects.hpp"
+#include "bacnet_server.hpp"
 
 using namespace iobus::bacnet;
 
@@ -123,6 +124,7 @@ TEST(BacnetObjects, RelinquishAoUpdatesCore)
     EXPECT_TRUE(changed);
     /* After relinquish, winner = relinquish_default = 0 */
     EXPECT_FLOAT_EQ(spy.last_val, 0.0f);
+    EXPECT_EQ(spy.last_op, "release_ao");
 }
 
 TEST(BacnetObjects, OutOfRangeWriteReturnsFalse)
@@ -133,4 +135,24 @@ TEST(BacnetObjects, OutOfRangeWriteReturnsFalse)
                                [&](auto&&... args){ return spy(args...); }));
     EXPECT_FALSE(obj.write_bo(5, 8, 1.0f, "test",
                                [&](auto&&... args){ return spy(args...); }));
+}
+TEST(BacnetServer, OutputCallbackMapsWriteAndReleaseToCore)
+{
+    BacnetConfig cfg;
+    BacnetObjects objects;
+    WriteSpy spy;
+    BacnetServer server;
+    server.init(cfg, &objects,
+                [&](auto&&... args) { return spy(args...); },
+                [](bool) {});
+
+    server.handle_output_write(true, 2, 7.5f, false);
+    EXPECT_EQ(spy.last_op, "ao_setpoint");
+    EXPECT_EQ(spy.last_idx, 1u);
+    EXPECT_FLOAT_EQ(spy.last_val, 7.5f);
+    EXPECT_EQ(spy.last_prio, 3);
+
+    server.handle_output_write(false, 3, 0.0f, true);
+    EXPECT_EQ(spy.last_op, "release_bo");
+    EXPECT_EQ(spy.last_idx, 2u);
 }

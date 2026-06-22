@@ -73,6 +73,10 @@ public:
      */
     void send_time_sync(uint64_t now_ms);
 
+    /* Called by bacnet-stack AO/BO callbacks after Priority_Array changes. */
+    void handle_output_write(bool analog, uint32_t instance, float value,
+                             bool released);
+
     void stop();
     bool is_running() const { return running_; }
 
@@ -90,6 +94,7 @@ private:
     uint64_t       last_timesync_ms_ = 0;
 
     void register_objects();
+    void sync_stack_inputs(const kx_plc_shm_t* shm);
     void process_bacnet_packet(uint64_t now_ms, const kx_plc_shm_t* shm);
     void dispatch_cov(uint64_t now_ms, const kx_plc_shm_t* shm);
 

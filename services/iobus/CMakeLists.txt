@@ -9,13 +9,23 @@ set(SHARED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../shared)
 set(TOOLS_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/../../tools)
 
 # ---- BAC-001: BACnet/IP stack option (bacnet-stack 1.3.x) ----
-option(MKDDC_ENABLE_BACNET "Enable BACnet/IP stack (bacnet-stack >= 1.3.x required)" OFF)
+option(MKDDC_ENABLE_BACNET "Enable BACnet/IP stack (bacnet-stack 1.3.8)" OFF)
 if(MKDDC_ENABLE_BACNET)
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(BACNET_STACK bacnet-stack REQUIRED)
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(BACNET_STACK bacnet-stack>=1.3 QUIET)
+  endif()
   if(NOT BACNET_STACK_FOUND)
-    message(FATAL_ERROR "MKDDC_ENABLE_BACNET=ON but bacnet-stack not found via pkg-config."
-            " Install bacnet-stack >= 1.3.x or set PKG_CONFIG_PATH.")
+    include(FetchContent)
+    set(BACNET_STACK_BUILD_APPS OFF CACHE BOOL "" FORCE)
+    set(BACDL_BIP ON CACHE BOOL "" FORCE)
+    set(BACDL_BIP6 OFF CACHE BOOL "" FORCE)
+    set(BAC_ROUTING OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(bacnet_stack_src
+      URL https://github.com/bacnet-stack/bacnet-stack/archive/refs/tags/bacnet-stack-1.3.8.tar.gz
+      DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    FetchContent_MakeAvailable(bacnet_stack_src)
+    set(BACNET_STACK_TARGET bacnet-stack::bacnet-stack)
   endif()
 endif()
 
@@ -69,8 +79,12 @@ target_link_libraries(iobus_lib PUBLIC pthread rt)   # rt: shm/clock
 
 if(MKDDC_ENABLE_BACNET)
   target_compile_definitions(iobus_lib PUBLIC MKDDC_ENABLE_BACNET)
-  target_include_directories(iobus_lib PUBLIC ${BACNET_STACK_INCLUDE_DIRS})
-  target_link_libraries(iobus_lib PUBLIC ${BACNET_STACK_LIBRARIES})
+  if(BACNET_STACK_FOUND)
+    target_include_directories(iobus_lib PUBLIC ${BACNET_STACK_INCLUDE_DIRS})
+    target_link_libraries(iobus_lib PUBLIC ${BACNET_STACK_LIBRARIES})
+  else()
+    target_link_libraries(iobus_lib PUBLIC ${BACNET_STACK_TARGET})
+  endif()
 endif()
 
 if(MKDDC_ENABLE_MODBUS)

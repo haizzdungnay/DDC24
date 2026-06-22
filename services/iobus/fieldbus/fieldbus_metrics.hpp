@@ -19,6 +19,7 @@ struct SlaveMetrics {
     bool        e303_triggered  = false;   /* error rate alarm đã gửi */
     uint32_t    total_polls     = 0;
     uint32_t    total_errors    = 0;
+    uint8_t     consecutive_errors = 0;
     uint64_t    last_seen_ms    = 0;
 
     float error_rate() const {

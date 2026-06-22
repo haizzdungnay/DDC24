@@ -238,6 +238,7 @@ bool load_device_profile(const std::string& path, DeviceProfile* out)
 std::string find_profile_path(const std::string& profile_id)
 {
     const std::string candidates[] = {
+        profile_id,
         "/data/config/profiles/" + profile_id + ".json",
         "/usr/share/kinexus/profiles/" + profile_id + ".json"
     };
