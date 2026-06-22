@@ -67,7 +67,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
     const refreshMs = optionsRef.current.refreshMs
     if (!refreshMs) return undefined
 
-    const timerId: number | undefined
+    let timerId: number | undefined
     let polling = false
 
     const poll = async () => {
