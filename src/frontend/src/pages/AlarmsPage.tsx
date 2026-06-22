@@ -13,7 +13,7 @@ import type { Alarm } from '../types'
 type AlarmFilter = 'all' | Alarm['status']
 
 export function AlarmsPage() {
-  const state = useApi(apiClient.getAlarms, [])
+  const state = useApi(apiClient.getAlarms, [], { refreshMs: 2000 })
   const toast = useToast()
   const { pick } = useI18n()
   const [filter, setFilter] = useState<AlarmFilter>('all')

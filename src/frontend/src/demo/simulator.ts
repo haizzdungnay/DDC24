@@ -106,6 +106,8 @@ export function getDemoHealth(): HealthResponse {
     overall: 'ok',
     cpuPercent: 23,
     ramPercent: 48,
+    ramUsedMb: 3100,
+    ramTotalMb: 8192,
     tempC: 38.6,
     uptimeS: Math.floor((Date.now() - startedAt) / 1000),
     firmware: 'v1.3.7',

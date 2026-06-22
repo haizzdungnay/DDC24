@@ -3,13 +3,13 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { IS_DEMO } from '../config'
 import { useI18n } from '../i18n'
-import type { ConnectionState } from '../types'
+import type { ConnectionState, CurrentUser } from '../types'
 import { Button } from './Button'
 import { StatusBadge } from './StatusBadge'
 
-export function TopBar({ connectionState, alarmCount }: { connectionState: ConnectionState; alarmCount: number }) {
+export function TopBar({ connectionState, alarmCount, currentUser }: { connectionState: ConnectionState; alarmCount: number; currentUser: CurrentUser | null }) {
   const [now, setNow] = useState(new Date())
-  const { session, logout } = useAuth()
+  const { logout } = useAuth()
   const { lang, locale, setLang, t, pick } = useI18n()
 
   useEffect(() => {
@@ -37,8 +37,8 @@ export function TopBar({ connectionState, alarmCount }: { connectionState: Conne
         <button className="grid h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)]" aria-label={pick("Trợ giúp", "Help")}><CircleHelp className="h-5 w-5" /></button>
         <button className="grid h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)]" aria-label={pick("Người dùng", "User")}><UserRound className="h-5 w-5" /></button>
         <div className="hidden min-w-[132px] md:block">
-          <div className="text-sm font-semibold">{session?.username ?? 'admin'}</div>
-          <div className="text-xs text-[var(--c-text-dim)]">{session?.role ?? 'Administrator'}</div>
+          <div className="text-sm font-semibold">{currentUser?.username ?? 'N/A'}</div>
+          <div className="text-xs text-[var(--c-text-dim)]">{currentUser?.role ?? 'N/A'}</div>
         </div>
         <button className="flex h-10 items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-3 text-xs font-semibold" onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')} aria-label={pick("Đổi ngôn ngữ", "Toggle language")}>
           {lang.toUpperCase()} <ChevronDown className="h-4 w-4" />

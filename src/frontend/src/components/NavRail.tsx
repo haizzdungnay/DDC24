@@ -1,8 +1,9 @@
 import { Bell, CalendarDays, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, Settings, ShieldCheck, SlidersHorizontal, TestTube2, UserRound, Users } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { DEVICE_DEFAULTS } from '../config'
 import { useI18n } from '../i18n'
+import { PRODUCT_INFO } from '../productInfo'
+import type { HealthResponse } from '../types'
 import { cn } from '../utils'
 
 const groups = [
@@ -12,7 +13,7 @@ const groups = [
     items: [
       { to: '/', key: 'dashboard', icon: Home, end: true },
       { to: '/monitor', key: 'monitor', icon: SlidersHorizontal },
-      { to: '/alarms', key: 'alarm-log', icon: Bell, badge: '5' },
+      { to: '/alarms', key: 'alarm-log', icon: Bell },
       { to: '/trends', key: 'trends', icon: LineChart },
       { to: '/me', key: 'me', icon: UserRound }
     ]
@@ -42,9 +43,12 @@ const groups = [
 
 type GroupId = typeof groups[number]['id']
 
-export function NavRail() {
+export function NavRail({ alarmCount, device }: { alarmCount: number; device: HealthResponse | null }) {
   const { t } = useI18n()
   const [openGroups, setOpenGroups] = useState<Record<GroupId, boolean>>({ overview: true, settings: true, engineering: true })
+  const deviceTitle = device?.deviceName ?? PRODUCT_INFO.name
+  const firmware = device?.firmware ?? PRODUCT_INFO.firmware
+  const deviceSubtitle = firmware ? `FW ${firmware}` : PRODUCT_INFO.code
 
   function toggleGroup(id: GroupId) {
     setOpenGroups((current) => ({ ...current, [id]: !current[id] }))
@@ -53,8 +57,8 @@ export function NavRail() {
   return (
     <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 border-r border-[var(--c-border)] bg-[var(--c-surface)] lg:flex lg:flex-col">
       <div className="border-b border-[var(--c-border)] p-5">
-        <div className="text-3xl font-black leading-none"><span className="text-[var(--c-text)]">DDC</span> 24</div>
-        <div className="mt-1 text-sm text-[var(--c-text-dim)]">Controller</div>
+        <div className="truncate text-2xl font-black leading-none text-[var(--c-text)]" title={deviceTitle}>{deviceTitle}</div>
+        <div className="mt-1 truncate text-sm text-[var(--c-text-dim)]" title={deviceSubtitle}>{deviceSubtitle}</div>
       </div>
       <nav className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3" aria-label="Main navigation">
         {groups.map((group) => {
@@ -87,7 +91,7 @@ export function NavRail() {
                       >
                         <Icon className="h-5 w-5" aria-hidden="true" />
                         <span className="flex-1">{t(item.key)}</span>
-                        {'badge' in item && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[var(--c-fault)] px-1 text-[10px] font-bold text-white">{item.badge}</span>}
+                        {item.key === 'alarm-log' && alarmCount > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[var(--c-fault)] px-1 text-[10px] font-bold text-white">{alarmCount}</span>}
                       </NavLink>
                     )
                   })}
@@ -103,11 +107,11 @@ export function NavRail() {
             <Gauge className="h-9 w-9 text-[var(--c-text-dim)]" aria-hidden="true" />
           </div>
           <div className="text-[10px] uppercase text-[var(--c-text-dim)]">Model</div>
-          <div className="text-xs font-semibold">DDC24-AC</div>
+          <div className="text-xs font-semibold">{PRODUCT_INFO.model}</div>
           <div className="mt-3 text-[10px] uppercase text-[var(--c-text-dim)]">Firmware</div>
-          <div className="text-xs font-semibold">{DEVICE_DEFAULTS.firmware}</div>
+          <div className="text-xs font-semibold">{firmware}</div>
           <div className="mt-3 text-[10px] uppercase text-[var(--c-text-dim)]">Serial</div>
-          <div className="mono text-xs">{DEVICE_DEFAULTS.serial}</div>
+          <div className="mono text-xs">{PRODUCT_INFO.serial}</div>
         </div>
       </div>
     </aside>

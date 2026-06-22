@@ -29,6 +29,15 @@ node_modules/
 *.log
 /data/
 
+# Dev/runtime SQLite của mkddc-web (không commit)
+services/web/.dev-config/
+web/backend/.dev-config/
+web/backend/mkddc-web
+web/backend/mkddc-web.exe
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
 # Security scan artifacts
 gitleaks-report.json
 
@@ -40,3 +49,5 @@ logs/*
 # Local backup of stale untracked files (manual cleanup)
 /.untracked_backup_2026-06-15/
 
+web/backend/mkddc-web-arm64
+web/backend/mkddc-web-arm64

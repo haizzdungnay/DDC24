@@ -5,11 +5,12 @@ import {
   getDemoAlarms,
   getDemoChannels,
   getDemoHealth,
+  getDemoNetwork,
   getDemoPoints,
   runDemoCommissioning,
   validateGraphLocal
 } from '../demo/simulator'
-import type { Alarm, CommissioningTestResult, GraphValidationResult, HealthResponse, IoChannel, Point } from '../types'
+import type { Alarm, CommissioningTestResult, CurrentUser, GraphValidationResult, HealthResponse, IoChannel, NetworkData, Point, TrendSample } from '../types'
 import { normalizeHealth, normalizeKind, normalizeQuality, nowIso } from '../utils'
 
 type AuthHeaderProvider = () => Record<string, string>
@@ -38,7 +39,7 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
   return response.json() as Promise<T>
 }
 
-function normalizePoint(raw: Record<string, unknown>): Point {
+export function normalizePoint(raw: Record<string, unknown>): Point {
   const id = String(raw.id ?? raw.point_id ?? 'UNKNOWN')
   const value = raw.value as Point['value'] ?? 0
   return {
@@ -70,6 +71,8 @@ function normalizeHealthResponse(raw: Record<string, unknown>): HealthResponse {
     services,
     cpuPercent: numberFrom(raw.cpuPercent ?? raw.cpu_percent),
     ramPercent: numberFrom(raw.ramPercent ?? raw.ram_percent),
+    ramUsedMb: numberFrom(raw.ramUsedMb ?? raw.ram_used_mb),
+    ramTotalMb: numberFrom(raw.ramTotalMb ?? raw.ram_total_mb),
     tempC: numberFrom(raw.tempC ?? raw.temp_c),
     uptimeS: numberFrom(raw.uptimeS ?? raw.uptime_s),
     firmware: stringFrom(raw.firmware),
@@ -83,12 +86,20 @@ function normalizeSystemStatus(raw: Record<string, unknown>): HealthResponse {
   const iop = (raw.iop ?? {}) as Record<string, unknown>
   const scan = (raw.scan ?? {}) as Record<string, unknown>
   const versions = (raw.versions ?? {}) as Record<string, unknown>
+  const ramPercent = numberFrom(raw.ram_percent)
+  const ramUsedMb = numberFrom(raw.ram_used_mb)
+  const ramTotalMb = numberFrom(raw.ram_total_mb)
+  const finalRamPercent = ramPercent ?? (ramUsedMb !== undefined && ramTotalMb !== undefined && ramTotalMb > 0 ? round2((ramUsedMb / ramTotalMb) * 100) : undefined)
   return {
     overall: normalizeHealth(iop.status ?? 'ok'),
     cpuPercent: numberFrom(raw.cpu_percent),
-    ramPercent: numberFrom(raw.ram_percent),
+    ramPercent: finalRamPercent,
+    ramUsedMb,
+    ramTotalMb,
+    tempC: numberFrom(raw.tempC ?? raw.temp_c),
     uptimeS: numberFrom(raw.uptime_s),
     firmware: stringFrom(versions.web ?? versions.core ?? versions.iobus),
+    deviceIp: stringFrom(raw.deviceIp ?? raw.device_ip),
     services: {
       core: { status: normalizeHealth('ok'), last_scan_ms: numberFrom(scan.overrun) },
       iobus: { status: normalizeHealth(iop.status), last_scan_ms: numberFrom(iop.last_io_resp_ms) },
@@ -99,16 +110,29 @@ function normalizeSystemStatus(raw: Record<string, unknown>): HealthResponse {
 }
 
 function normalizeAlarm(raw: Record<string, unknown>): Alarm {
+  const id = String(raw.id ?? raw.alarmId ?? raw.alarm_id ?? crypto.randomUUID())
+  const pointId = raw.pointId ?? raw.point_id
+  const source = raw.source ?? pointId ?? raw.device ?? 'SYSTEM'
+  const acknowledged = raw.acknowledged ?? raw.ack ?? raw.is_acknowledged
   return {
-    id: String(raw.id ?? raw.alarm_id ?? crypto.randomUUID()),
-    time: String(raw.time ?? raw.ts ?? raw.timestamp ?? nowIso()),
-    severity: severityFrom(raw.severity),
-    status: alarmStatusFrom(raw.status),
-    message: String(raw.message ?? raw.name ?? 'Alarm'),
-    source: String(raw.source ?? raw.point_id ?? 'SYSTEM'),
-    value: String(raw.value ?? ''),
-    detail: String(raw.detail ?? raw.description ?? '')
+    id,
+    time: String(raw.time ?? raw.ts ?? raw.timestamp ?? raw.createdAt ?? raw.created_at ?? nowIso()),
+    severity: severityFrom(raw.severity ?? raw.priority ?? raw.level),
+    status: alarmStatusFrom(raw.status ?? raw.state ?? acknowledged),
+    message: String(raw.message ?? raw.name ?? raw.type ?? `Alarm ${id}`),
+    source: String(source),
+    value: String(raw.value ?? raw.currentValue ?? raw.current_value ?? raw.triggerValue ?? raw.trigger_value ?? ''),
+    detail: String(raw.detail ?? raw.description ?? raw.reason ?? raw.condition ?? '')
   }
+}
+
+function normalizeTrendSample(raw: Record<string, unknown>): TrendSample {
+  const sample: TrendSample = { time: formatTrendTime(raw.time ?? raw.ts ?? raw.timestamp) }
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === 'time' || key === 'ts' || key === 'timestamp') continue
+    if (typeof value === 'number' && Number.isFinite(value)) sample[key] = value
+  }
+  return sample
 }
 
 function severityFrom(value: unknown): Alarm['severity'] {
@@ -118,26 +142,52 @@ function severityFrom(value: unknown): Alarm['severity'] {
 }
 
 function alarmStatusFrom(value: unknown): Alarm['status'] {
+  if (value === true) return 'acked'
+  if (value === false) return 'unack'
   const raw = String(value ?? 'active').toLowerCase()
   if (raw === 'unack' || raw === 'acked' || raw === 'shelved') return raw
+  if (raw === 'acknowledged') return 'acked'
+  if (raw === 'unacknowledged') return 'unack'
   return 'active'
+}
+
+function normalizeCommissioningResult(raw: Record<string, unknown>, pointId: string): CommissioningTestResult {
+  const result = String(raw.result ?? 'failed').toLowerCase()
+  return {
+    result: result === 'passed' || result === 'running' ? result : 'failed',
+    pointId: String(raw.pointId ?? raw.point_id ?? pointId),
+    appliedValue: raw.appliedValue as CommissioningTestResult['appliedValue'] ?? raw.applied_value as CommissioningTestResult['appliedValue'],
+    message: String(raw.message ?? raw.detail ?? 'Commissioning test completed'),
+    scanMs: numberFrom(raw.scanMs ?? raw.scan_ms)
+  }
 }
 
 function numberFrom(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
+function round2(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
 function stringFrom(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
+}
+
+function formatTrendTime(value: unknown): string {
+  if (typeof value !== 'string') return nowIso()
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
 export const apiClient = {
   async getHealth(): Promise<HealthResponse> {
     if (IS_DEMO) return getDemoHealth()
     try {
-      return normalizeHealthResponse(await requestJson<Record<string, unknown>>('/health'))
-    } catch {
       return normalizeSystemStatus(await requestJson<Record<string, unknown>>('/system/status'))
+    } catch {
+      return normalizeHealthResponse(await requestJson<Record<string, unknown>>('/health'))
     }
   },
 
@@ -145,6 +195,23 @@ export const apiClient = {
     if (IS_DEMO) return getDemoPoints()
     const raw = await requestJson<Array<Record<string, unknown>>>('/points')
     return raw.map(normalizePoint)
+  },
+
+  async getNetwork(): Promise<NetworkData> {
+    if (IS_DEMO) return getDemoNetwork()
+    return requestJson<NetworkData>('/network')
+  },
+
+  async saveNetwork(data: NetworkData) {
+    if (IS_DEMO) return { result: 'success', applied: true, reload: 'none', warnings: [] }
+    return requestJson('/network', { method: 'PUT', body: JSON.stringify(data) })
+  },
+
+  async getHistory(pointIds: string[], range: string): Promise<TrendSample[]> {
+    if (IS_DEMO || !pointIds.length) return []
+    const params = new URLSearchParams({ point: pointIds.join(','), range })
+    const raw = await requestJson<Array<Record<string, unknown>>>(`/history?${params.toString()}`)
+    return raw.map(normalizeTrendSample)
   },
 
   async getIoChannels(): Promise<IoChannel[]> {
@@ -156,6 +223,11 @@ export const apiClient = {
     if (IS_DEMO) return getDemoAlarms()
     const raw = await requestJson<Array<Record<string, unknown>>>('/alarms')
     return raw.map(normalizeAlarm)
+  },
+
+  async getMe(): Promise<CurrentUser> {
+    if (IS_DEMO) return { username: 'demo', role: 'admin' }
+    return requestJson<CurrentUser>('/me')
   },
 
   async ackAlarm(id: string): Promise<Alarm[]> {
@@ -174,10 +246,11 @@ export const apiClient = {
 
   async runCommissioningTest(pointId: string, value: number | boolean): Promise<CommissioningTestResult> {
     if (IS_DEMO) return runDemoCommissioning(pointId, value)
-    return requestJson<CommissioningTestResult>('/commissioning/test', {
+    const raw = await requestJson<Record<string, unknown>>(`/commissioning/points/${encodeURIComponent(pointId)}/test`, {
       method: 'POST',
-      body: JSON.stringify({ pointId, value })
+      body: JSON.stringify({ value })
     })
+    return normalizeCommissioningResult(raw, pointId)
   },
 
   async validateGraph(id: string, graph: unknown): Promise<GraphValidationResult> {
