@@ -18,6 +18,8 @@ import { TimeSettingsPage } from './pages/TimeSettingsPage'
 import { TrendsPage } from './pages/TrendsPage'
 import { UserInfoPage } from './pages/UserInfoPage'
 import { UsersPage } from './pages/UsersPage'
+import { DiagramPage } from './pages/DiagramPage'
+import { StubPage as AuxFunctionsPage } from './pages/_Stub'
 
 function ProtectedShell() {
   const { isAuthenticated } = useAuth()
@@ -52,8 +54,10 @@ export function App() {
         <Route path="eng/scheduler" element={<SchedulerPage />} />
         <Route path="eng/commissioning" element={<CommissioningPage />} />
         <Route path="eng/programming" element={<ProgrammingPage />} />
-        <Route path="eng/alarm-settings" element={<AlarmSettingsPage />} />
         <Route path="eng/inputs" element={<InputsPage />} />
+        <Route path="eng/diagram" element={<DiagramPage />} />
+        <Route path="eng/aux" element={<AuxFunctionsPage />} />
+        <Route path="eng/alarm-settings" element={<AlarmSettingsPage />} />
 
         <Route path="users" element={<Navigate to="/settings/users" replace />} />
         <Route path="network" element={<Navigate to="/settings/network" replace />} />

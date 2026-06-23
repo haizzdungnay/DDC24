@@ -484,6 +484,20 @@ Trạng thái: IN PROGRESS 2026-06-22 — native PTY transport PASS; cross-build
 ### EasySet Config Tasks
 
 ```
+Task ID: WEB-A01
+Tên: EasySet Controller Diagram
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: IN-PROGRESS
+```
+
+```
+Task ID: WEB-A02
+Tên: Engineering Nav/Routes/I18N
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: IN-PROGRESS
+```
+
+```
 Task ID: WEB-002
 Tên: EasySet Alarm Config
 Owner: Dev Web | Phase: A | Module: UI

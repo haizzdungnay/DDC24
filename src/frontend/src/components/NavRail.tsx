@@ -36,8 +36,10 @@ const groups = [
       { to: '/eng/scheduler', key: 'scheduler', icon: CalendarDays },
       { to: '/eng/commissioning', key: 'commissioning', icon: TestTube2 },
       { to: '/eng/programming', key: 'programming', icon: ShieldCheck },
-      { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell },
-      { to: '/eng/inputs', key: 'inputs', icon: Activity }
+      { to: '/eng/inputs', key: 'inputs', icon: Activity },
+      { to: '/eng/diagram', key: 'diagram', icon: Network },
+      { to: '/eng/aux', key: 'aux', icon: Settings },
+      { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell }
     ]
   }
 ] as const
