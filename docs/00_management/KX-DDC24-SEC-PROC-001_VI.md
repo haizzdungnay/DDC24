@@ -2,7 +2,7 @@
 ## IEC 62443-4-1 SM-6: Vulnerability Management Procedure
 
 > **Document ID:** KX-DDC24-SEC-PROC-001
-> **Phiên bản:** 1.0 | 2026-06-02
+> **Phiên bản:** 1.1 | 2026-06-23
 > **Trạng thái:** Approved
 > **Owner:** Tech Lead + DevOps
 > **Chuẩn tham chiếu:** IEC 62443-4-1 SM-6, IEC 62443-4-2 CR 1.14, ISO/IEC 30111, NIST SP 800-40
@@ -156,6 +156,13 @@ All CVEs and vulnerabilities are tracked in the project's issue tracker with the
 | Fix version | Version containing fix |
 | Verification evidence | Link to scan report, test result |
 
+### 6.1 Current Response Evidence
+
+| Date | Source | Finding | Component | Resolution | Verification |
+|------|--------|---------|-----------|------------|--------------|
+| 2026-06-23 | Security Scan PR gate | CVE-2025-22869 | `golang.org/x/crypto` | `web/backend/go.mod` pinned to fixed `v0.35.0` | `govulncheck ./...` reports 0 reachable vulnerabilities |
+| 2026-06-23 | npm audit / Grype gate | GHSA-fx2h-pf6j-xcff and related Vite advisories | `vite` frontend dev toolchain | Upgraded to `vite@8.0.16` and `@vitejs/plugin-react@6.0.2`; Node 22 CI | `npm audit --audit-level=high`, `npm run build`, `npm run lint` pass locally |
+
 ---
 
 ## 7. Roles & Responsibilities
@@ -190,4 +197,5 @@ All CVEs and vulnerabilities are tracked in the project's issue tracker with the
 
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
+| 1.1 | 2026-06-23 | Dev Web + DevOps | Ghi evidence response cho CVE-2025-22869 và Vite GHSA high gate; liên kết verification npm/go. |
 | 1.0 | 2026-06-02 | Tech Lead | Phát hành CVE monitoring process cho IOT-5575. |

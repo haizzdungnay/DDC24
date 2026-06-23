@@ -2,7 +2,7 @@
 ## MK-DDC-24 — REST API + Web UI + Config + Validator
 
 > **Document ID:** IMPL-WEB-MK-DDC-24-VI
-> **Phiên bản:** 1.9 | 2026-06-17 (chuẩn hóa i18n VI/EN frontend; contract §2 không đổi)
+> **Phiên bản:** 1.10 | 2026-06-23 (frontend dependency security refresh; contract §2 không đổi)
 > **Owner:** Dev 3 (Web/BE)
 > **Nguồn-chuẩn:** [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) ·
 > [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
@@ -171,6 +171,17 @@ Quy ước:
 - Dữ liệu mô phỏng như `point.name`, `alarm.message`, serial/model/IP được giữ nguyên theo simulator; i18n chỉ áp lên chrome/label/nội dung UI.
 
 Trạng thái: ĐÃ làm 2026-06-17 — chuẩn hóa tiếng Việt có dấu và English mode cho frontend demo; typecheck là verification bắt buộc.
+
+## 1.10 Frontend dependency security refresh (Approved 2026-06-23)
+
+Nguồn-chuẩn: SEC-PROC CVE gate (High/Critical block merge), security scan PR finding GHSA-fx2h-pf6j-xcff / Vite <= 6.4.2, and existing WEB frontend build contract. Scope is dependency/toolchain only; REST API, WebSocket contract, route tree, UI behavior, and runtime authorization are unchanged.
+
+Scope code:
+- Upgrade frontend dev toolchain to `vite@8.0.16` and `@vitejs/plugin-react@6.0.2`.
+- Update `vite.config.ts` chunk split config to function-form `manualChunks` compatible with Vite 8/Rolldown typing.
+- CI frontend build uses Node.js 22 to satisfy Vite 8 engine requirements.
+
+Trạng thái: ĐÃ làm 2026-06-23 — npm audit High gate is clean; `npm run build`, `npm run lint`, backend `go test ./...`, and `govulncheck ./...` pass locally. No REST/WS contract change.
 ## 2. API list (tối thiểu — khớp REST_API_OPENAPI)
 
 | Method | Endpoint | Auth | Đi tới | Mô tả |
@@ -296,7 +307,8 @@ Done khi : 4 check chạy đúng; deploy chỉ khi pass.
 | Không bypass core | core_client.go | group 6 (kiểm không có serial) |
 
 ---
-**Rev** 1.9 | 2026-06-17 · DoD: [12_DEFINITION_OF_DONE §5](12_DEFINITION_OF_DONE.md)
+**Rev** 1.10 | 2026-06-23 · DoD: [12_DEFINITION_OF_DONE §5](12_DEFINITION_OF_DONE.md)
+- 1.10 (2026-06-23): frontend security dependency refresh: Vite 8.0.16 + plugin-react 6.0.2, Node 22 CI, Vite config manualChunks compatibility; giữ nguyên REST/WS contract.
 - 1.9 (2026-06-17): chuẩn hóa i18n frontend: tiếng Việt có dấu + English mode cho label/nút/toast chính; giữ nguyên REST/WS contract.
 - 1.8 (2026-06-16): thêm sticky top status bar + NavRail cố định khi cuộn; giữ nguyên REST/WS contract.
 - 1.7 (2026-06-16): owner adjustment cho dashboard dynamic metrics: normal/in-range xanh lá, warn cam, fault đỏ; giữ nguyên REST/WS contract.
