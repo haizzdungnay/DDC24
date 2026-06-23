@@ -487,14 +487,21 @@ Trạng thái: IN PROGRESS 2026-06-22 — native PTY transport PASS; cross-build
 Task ID: WEB-A01
 Tên: EasySet Controller Diagram
 Owner: Dev Web | Phase: A | Module: UI
-Trạng thái: IN-PROGRESS
+Trạng thái: DONE
 ```
 
 ```
 Task ID: WEB-A02
 Tên: Engineering Nav/Routes/I18N
 Owner: Dev Web | Phase: A | Module: UI
-Trạng thái: IN-PROGRESS
+Trạng thái: DONE
+```
+
+```
+Task ID: WEB-A03
+Tên: Auxiliary Functions
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: DONE
 ```
 
 ```

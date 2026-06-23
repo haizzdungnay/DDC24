@@ -7,9 +7,13 @@
 ---
 
 ## [Unreleased]
-### Added — EasySet Parity Controller Diagram & Nav/I18N
-- Thêm EasySet parity Controller Diagram route (`/eng/diagram`) và cập nhật Engineering navigation, i18n theo ADR-010.
-- Diagram hiển thị read-only commissioning view với SVG responsive cho toàn bộ IO và network.
+### Added — ADR-010 EasySet Parity Config Surfaces
+- Added Alarm Wizard/Advanced parity.
+- Added AI/DI Inputs configuration surface.
+- Added Controller Diagram read-only commissioning view.
+- Added Auxiliary Functions node-compose wizard.
+- Kept backend REST/WS unchanged under Rev A demo-local scope.
+
 ### Fixed — FE i18n VI dấu + English mode thật (2026-06-17)
 - Chuẩn hóa text tiếng Việt có dấu trên shell và 12 trang frontend ADR-009; bỏ các chuỗi không dấu kiểu `Binh thuong`, `Da luu`, `Mat khau`.
 - Bổ sung helper i18n để các nhãn/nút/toast chính đổi theo VI/EN; không đổi REST/WebSocket contract.

@@ -166,6 +166,25 @@ export function forceDemoPoint(id: string, value: number | boolean, release = fa
   return { result: 'accepted' as const, applied_value: value, active_source: release ? 'core' : 'local_manual' }
 }
 
+export function updateDemoPointName(id: string, name: string) {
+  points = points.map((point) => point.id === id ? { ...point, name } : point)
+  return { id, name }
+}
+
+export function updateDemoPointConfig(id: string, config: { name?: string; unit?: string; trendEnabled?: boolean }) {
+  points = points.map((point) => {
+    if (point.id !== id) return point
+    const updated = { ...point }
+    if (config.name !== undefined) updated.name = config.name
+    if (config.unit !== undefined) updated.unit = config.unit
+    if (config.trendEnabled !== undefined) {
+      // Demo doesn't track trend enabled state, just return success
+    }
+    return updated
+  })
+  return { id, ...config }
+}
+
 export function runDemoCommissioning(pointId: string, value: number | boolean): CommissioningTestResult {
   forceDemoPoint(pointId, value)
   return { result: 'passed', pointId, appliedValue: value, message: 'Command accepted by demo core', scanMs: 12 }
@@ -247,6 +266,16 @@ const inferredInputs: Record<string, string[]> = {
   PID: ['pv', 'sp'],
   Compare: ['a', 'b'],
   Hysteresis: ['in']
+}
+
+export function getDemoGraph(): Graph {
+  return {
+    version: '1.0',
+    nodes: [],
+    links: [],
+    io_map: { ai: [], ao: [], di: [], do: [] },
+    modbus: { rtu: [], tcp: [] }
+  }
 }
 
 export function validateGraphLocal(input: unknown): GraphValidationResult {
