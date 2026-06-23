@@ -2,7 +2,7 @@
 ## IEC 62443-4-1 SM-6: Vulnerability Management Procedure
 
 > **Document ID:** KX-DDC24-SEC-PROC-001
-> **Phiên bản:** 1.0 | 2026-06-02
+> **Phiên bản:** 1.2 | 2026-06-23
 > **Trạng thái:** Approved
 > **Owner:** Tech Lead + DevOps
 > **Chuẩn tham chiếu:** IEC 62443-4-1 SM-6, IEC 62443-4-2 CR 1.14, ISO/IEC 30111, NIST SP 800-40
@@ -19,7 +19,7 @@ This document defines the CVE monitoring cadence, tooling, triage workflow, and 
 - **MCU firmware stack:** FreeRTOS kernel, STM32 HAL, IOP protocol
 - **Frontend:** Web IDE Svelte/TypeScript + npm dependencies
 - **Hardware:** SOM (Radxa CM3), MCU (STM32G0B1), ICs (ADC, DAC, etc.)
-- **Build toolchain:** arm-none-eabi-gcc, CMake, Python 3.11, Node.js 20
+- **Build toolchain:** arm-none-eabi-gcc, CMake, Python 3.11, Node.js 22
 
 Out of scope: third-party cloud services, customer network infrastructure, physical security.
 
@@ -156,6 +156,13 @@ All CVEs and vulnerabilities are tracked in the project's issue tracker with the
 | Fix version | Version containing fix |
 | Verification evidence | Link to scan report, test result |
 
+### 6.1 Current Response Evidence
+
+| Date | Source | Finding | Component | Resolution | Verification |
+|------|--------|---------|-----------|------------|--------------|
+| 2026-06-23 | Security Scan PR gate | CVE-2025-22869; GO-2026-5020 family | `golang.org/x/crypto`, `golang.org/x/sys` | `web/backend/go.mod` upgraded to `golang.org/x/crypto v0.53.0` and `golang.org/x/sys v0.46.0` | `govulncheck ./...` plus local Trivy/Grype clean archive scan; remote CI re-run pending |
+| 2026-06-23 | npm audit / Grype gate | GHSA-fx2h-pf6j-xcff and related Vite advisories | `vite` frontend dev toolchain | Upgraded to `vite@8.0.16` and `@vitejs/plugin-react@6.0.2`; Node 22 CI | `npm audit --audit-level=high`, `npm run build`, `npm run lint` pass locally |
+
 ---
 
 ## 7. Roles & Responsibilities
@@ -190,4 +197,6 @@ All CVEs and vulnerabilities are tracked in the project's issue tracker with the
 
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
+| 1.2 | 2026-06-23 | Dev Web + DevOps | Nâng Go security deps lên `x/crypto v0.53.0`, `x/sys v0.46.0`; cập nhật evidence Trivy/Grype high gate. |
+| 1.1 | 2026-06-23 | Dev Web + DevOps | Ghi evidence response cho CVE-2025-22869 và Vite GHSA high gate; liên kết verification npm/go. |
 | 1.0 | 2026-06-02 | Tech Lead | Phát hành CVE monitoring process cho IOT-5575. |
