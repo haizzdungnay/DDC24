@@ -1,6 +1,8 @@
 import type {
   Alarm,
   AlarmSetting,
+  AiInputConfig,
+  DiInputConfig,
   CommissioningTestResult,
   Graph,
   GraphLink,
@@ -142,11 +144,14 @@ export function getDemoAlarms(): Alarm[] {
 
 export function getAlarmSettings(): AlarmSetting[] {
   return [
-    { pointId: 'AI-01', label: 'Supply Air Temp', enabled: true, hh: 32, h: 28, l: 16, ll: 12, delayS: 10, priority: 'high' },
-    { pointId: 'AI-02', label: 'Duct Pressure', enabled: true, hh: 9.5, h: 8, l: 2, ll: 1, delayS: 5, priority: 'critical' },
-    { pointId: 'AI-03', label: 'Room Humidity', enabled: true, hh: 75, h: 65, l: 35, ll: 25, delayS: 30, priority: 'medium' },
-    { pointId: 'AI-04', label: 'Outdoor Temp', enabled: false, hh: 42, h: 38, l: 5, ll: 0, delayS: 60, priority: 'low' },
-    { pointId: 'AO-01', label: 'VFD Speed', enabled: true, hh: 100, h: 92, l: 10, ll: 0, delayS: 15, priority: 'medium' }
+    { pointId: 'AI-01', label: 'Supply Air Temp', enabled: true, hh: 32, h: 28, l: 16, ll: 12, delayS: 10, priority: 'high', alarmType: 1, sourcePointId: 'AI-01', ackDelayS: 0, interlock: false },
+    { pointId: 'AI-02', label: 'Duct Pressure', enabled: true, hh: 9.5, h: 8, l: 2, ll: 1, delayS: 5, priority: 'critical', alarmType: 2, sourcePointId: 'AI-02', ackDelayS: 60, interlock: false },
+    { pointId: 'DO-01', label: 'Supply Fan', enabled: true, hh: 0, h: 0, l: 0, ll: 0, delayS: 3600, priority: 'medium', alarmType: 3, sourcePointId: 'DO-01', ackDelayS: 0, interlock: true },
+    { pointId: 'DO-02', label: 'Exhaust Fan', enabled: true, hh: 0, h: 0, l: 0, ll: 0, delayS: 10, priority: 'critical', alarmType: 4, sourcePointId: 'DO-02', ackDelayS: 0, interlock: true },
+    { pointId: 'DO-03', label: 'Pump', enabled: true, hh: 0, h: 0, l: 0, ll: 0, delayS: 5, priority: 'medium', alarmType: 5, sourcePointId: 'DO-03', ackDelayS: 0, interlock: false },
+    { pointId: 'AO-01', label: 'VFD Speed', enabled: true, hh: 100, h: 92, l: 10, ll: 0, delayS: 15, priority: 'medium', alarmType: 6, sourcePointId: 'AO-01', ackDelayS: 0, interlock: false },
+    { pointId: 'AI-03', label: 'Room Humidity', enabled: true, hh: 75, h: 65, l: 35, ll: 25, delayS: 30, priority: 'medium', alarmType: 7, sourcePointId: 'AI-03', ackDelayS: 0, interlock: false },
+    { pointId: 'AI-04', label: 'Outdoor Temp', enabled: false, hh: 42, h: 38, l: 5, ll: 0, delayS: 60, priority: 'low', alarmType: 0, sourcePointId: '', ackDelayS: 0, interlock: false }
   ]
 }
 
@@ -424,4 +429,26 @@ function hasValue(value: JsonRecord, key: string): boolean {
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+export function getAiInputConfigs(): AiInputConfig[] {
+  return [
+    { channel: 1, node: 'AI-01', label: 'Supply Air Temp', signalType: '0-10V', unit: 'C', displayMin: 0, displayMax: 50, offset: 0, fallback: 25, enabled: true },
+    { channel: 2, node: 'AI-02', label: 'Duct Pressure', signalType: '2-10V', unit: 'bar', displayMin: 0, displayMax: 10, offset: 0, fallback: 5, enabled: true },
+    { channel: 3, node: 'AI-03', label: 'Room Humidity', signalType: '0-10V', unit: '%RH', displayMin: 0, displayMax: 100, offset: 0, fallback: 50, enabled: true },
+    { channel: 4, node: 'AI-04', label: 'Outdoor Temp', signalType: '0-10V', unit: 'C', displayMin: -10, displayMax: 50, offset: 0, fallback: 30, enabled: true }
+  ]
+}
+
+export function getDiInputConfigs(): DiInputConfig[] {
+  return [
+    { channel: 1, node: 'DI-01', label: 'Emergency Stop', invert: false, normalState: 'closed', debounceMs: 50, enabled: true },
+    { channel: 2, node: 'DI-02', label: 'Fan Status', invert: false, normalState: 'open', debounceMs: 100, enabled: true },
+    { channel: 3, node: 'DI-03', label: 'Filter Alarm', invert: false, normalState: 'closed', debounceMs: 500, enabled: true },
+    { channel: 4, node: 'DI-04', label: 'Fire Alarm', invert: false, normalState: 'open', debounceMs: 10, enabled: true },
+    { channel: 5, node: 'DI-05', label: 'Spare 1', invert: false, normalState: 'open', debounceMs: 100, enabled: false },
+    { channel: 6, node: 'DI-06', label: 'Spare 2', invert: false, normalState: 'open', debounceMs: 100, enabled: false },
+    { channel: 7, node: 'DI-07', label: 'Spare 3', invert: false, normalState: 'open', debounceMs: 100, enabled: false },
+    { channel: 8, node: 'DI-08', label: 'Spare 4', invert: false, normalState: 'open', debounceMs: 100, enabled: false }
+  ]
 }

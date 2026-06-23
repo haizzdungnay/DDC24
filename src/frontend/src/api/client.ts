@@ -84,28 +84,31 @@ function normalizeHealthResponse(raw: Record<string, unknown>): HealthResponse {
 
 function normalizeSystemStatus(raw: Record<string, unknown>): HealthResponse {
   const iop = (raw.iop ?? {}) as Record<string, unknown>
-  const scan = (raw.scan ?? {}) as Record<string, unknown>
+  const _scan = (raw.scan ?? {}) as Record<string, unknown>
   const versions = (raw.versions ?? {}) as Record<string, unknown>
   const ramPercent = numberFrom(raw.ram_percent)
   const ramUsedMb = numberFrom(raw.ram_used_mb)
   const ramTotalMb = numberFrom(raw.ram_total_mb)
   const finalRamPercent = ramPercent ?? (ramUsedMb !== undefined && ramTotalMb !== undefined && ramTotalMb > 0 ? round2((ramUsedMb / ramTotalMb) * 100) : undefined)
+
+  const servicesRaw = (raw.services ?? {}) as Record<string, Record<string, unknown>>
+  const services = Object.fromEntries(Object.entries(servicesRaw).map(([key, value]) => [key, {
+    status: normalizeHealth(value.status),
+    uptime_s: typeof value.uptime_s === 'number' ? value.uptime_s : undefined,
+    last_scan_ms: typeof value.last_scan_ms === 'number' ? value.last_scan_ms : undefined
+  }]))
+
   return {
-    overall: normalizeHealth(iop.status ?? 'ok'),
-    cpuPercent: numberFrom(raw.cpu_percent),
+    overall: normalizeHealth(iop.status ?? raw.overall ?? 'ok'),
+    cpuPercent: numberFrom(raw.cpu_percent ?? raw.cpuPercent),
     ramPercent: finalRamPercent,
     ramUsedMb,
     ramTotalMb,
     tempC: numberFrom(raw.tempC ?? raw.temp_c),
-    uptimeS: numberFrom(raw.uptime_s),
+    uptimeS: numberFrom(raw.uptime_s ?? raw.uptimeS),
     firmware: stringFrom(versions.web ?? versions.core ?? versions.iobus),
     deviceIp: stringFrom(raw.deviceIp ?? raw.device_ip),
-    services: {
-      core: { status: normalizeHealth('ok'), last_scan_ms: numberFrom(scan.overrun) },
-      iobus: { status: normalizeHealth(iop.status), last_scan_ms: numberFrom(iop.last_io_resp_ms) },
-      web: { status: 'ok' },
-      IOP: { status: normalizeHealth(iop.status), last_scan_ms: numberFrom(iop.last_io_resp_ms) }
-    }
+    services,
   }
 }
 
@@ -187,7 +190,11 @@ export const apiClient = {
     try {
       return normalizeSystemStatus(await requestJson<Record<string, unknown>>('/system/status'))
     } catch {
-      return normalizeHealthResponse(await requestJson<Record<string, unknown>>('/health'))
+      try {
+        return normalizeHealthResponse(await requestJson<Record<string, unknown>>('/health'))
+      } catch {
+        return getDemoHealth()
+      }
     }
   },
 

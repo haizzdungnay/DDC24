@@ -81,6 +81,8 @@ export interface Alarm {
   detail: string
 }
 
+export type AlarmType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
 export type AlarmPriority = 'low' | 'medium' | 'high' | 'critical'
 
 export interface AlarmSetting {
@@ -93,6 +95,10 @@ export interface AlarmSetting {
   ll: number
   delayS: number
   priority: AlarmPriority
+  alarmType: AlarmType
+  sourcePointId: string
+  ackDelayS: number
+  interlock: boolean
 }
 
 export interface CommissioningTestResult {
@@ -243,4 +249,30 @@ export interface UserRow {
   fullName: string
   role: UserRole
   online: boolean
+}
+
+
+export type AiSignalType = '0-10V' | '2-10V'
+
+export interface AiInputConfig {
+  channel: number
+  node: string
+  label: string
+  signalType: AiSignalType
+  unit: string
+  displayMin: number
+  displayMax: number
+  offset: number
+  fallback: number
+  enabled: boolean
+}
+
+export interface DiInputConfig {
+  channel: number
+  node: string
+  label: string
+  invert: boolean
+  normalState: 'open' | 'closed'
+  debounceMs: number
+  enabled: boolean
 }
