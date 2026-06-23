@@ -481,6 +481,29 @@ Trạng thái: IN PROGRESS 2026-06-22 — native PTY transport PASS; cross-build
 
 ---
 
+### EasySet Config Tasks
+
+```
+Task ID: WEB-002
+Tên: EasySet Alarm Config
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: IN-PROGRESS
+```
+
+```
+Task ID: WEB-003
+Tên: EasySet AI Inputs Config
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: IN-PROGRESS
+```
+
+```
+Task ID: WEB-004
+Tên: EasySet DI Inputs Config
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: IN-PROGRESS
+```
+
 ## Phase 5 — mkddc-web
 
 ```

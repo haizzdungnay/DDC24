@@ -80,7 +80,7 @@ Quy tắc:
 
 ```json
 "io_map": {
-  "ai": [ { "node": "ai1", "channel": 0, "sensor": "ntc10k", "unit": "degC" } ],
+  "ai": [ { "node": "ai1", "channel": 0, "mode": "0-10V", "unit": "degC" } ],
   "ao": [ { "node": "ao1", "channel": 0, "mode": "0-10V", "limit_lo": 0, "limit_hi": 100 } ],
   "di": [ { "node": "di1", "channel": 0, "invert": false } ],
   "do": [ { "node": "do1", "channel": 0 } ]
@@ -88,6 +88,7 @@ Quy tắc:
 ```
 
 `channel` ánh xạ tới IOP/MCU theo `SWFW_INTERFACE_SPEC`. `sensor`/`mode` hợp lệ theo HW.
+- **`ai.mode`**: nhận `"0-10V"` hoặc `"2-10V"` (hiện schema mới chỉ định nghĩa `ao.mode`). `2-10V` là live-zero (range hữu dụng 2–10V ↔ 0–100% EU).
 
 ## 6. `modbus` — field/expansion
 
@@ -125,7 +126,7 @@ trả lỗi. Chi tiết schema REST: [REST_API_OPENAPI](REST_API_OPENAPI_MK-DDC-
   "schema_version": "1.0",
   "device": { "bacnet_device_id": 1001, "name": "AHU01", "scan_ms": 1000 },
   "io_map": {
-    "ai": [ { "node": "ai1", "channel": 0, "sensor": "ntc10k", "unit": "degC" } ],
+    "ai": [ { "node": "ai1", "channel": 0, "mode": "0-10V", "unit": "degC" } ],
     "ao": [ { "node": "ao1", "channel": 0, "mode": "0-10V", "limit_lo": 0, "limit_hi": 100 } ]
   },
   "nodes": [
