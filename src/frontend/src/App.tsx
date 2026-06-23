@@ -3,6 +3,7 @@ import { useAuth } from './auth/AuthProvider'
 import { AppShell } from './components/AppShell'
 import { RealtimeProvider } from './realtime'
 import { AlarmSettingsPage } from './pages/AlarmSettingsPage'
+import { InputsPage } from './pages/InputsPage'
 import { AlarmsPage } from './pages/AlarmsPage'
 import { CommissioningPage } from './pages/CommissioningPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -52,6 +53,7 @@ export function App() {
         <Route path="eng/commissioning" element={<CommissioningPage />} />
         <Route path="eng/programming" element={<ProgrammingPage />} />
         <Route path="eng/alarm-settings" element={<AlarmSettingsPage />} />
+        <Route path="eng/inputs" element={<InputsPage />} />
 
         <Route path="users" element={<Navigate to="/settings/users" replace />} />
         <Route path="network" element={<Navigate to="/settings/network" replace />} />

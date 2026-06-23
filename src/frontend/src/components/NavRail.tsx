@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, Settings, ShieldCheck, SlidersHorizontal, TestTube2, UserRound, Users } from 'lucide-react'
+import { Bell, CalendarDays, Activity, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, Settings, ShieldCheck, SlidersHorizontal, TestTube2, UserRound, Users } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useI18n } from '../i18n'
@@ -36,7 +36,8 @@ const groups = [
       { to: '/eng/scheduler', key: 'scheduler', icon: CalendarDays },
       { to: '/eng/commissioning', key: 'commissioning', icon: TestTube2 },
       { to: '/eng/programming', key: 'programming', icon: ShieldCheck },
-      { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell }
+      { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell },
+      { to: '/eng/inputs', key: 'inputs', icon: Activity }
     ]
   }
 ] as const
