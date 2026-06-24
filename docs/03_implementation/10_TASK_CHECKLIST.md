@@ -509,7 +509,8 @@ Ghi chú: ĐÃ làm 2026-06-24 — wired /eng/aux route + fix tsc/lint (remove a
 Task ID: WEB-002
 Tên: EasySet Alarm Config
 Owner: Dev Web | Phase: A | Module: UI
-Trạng thái: IN-PROGRESS
+Trạng thái: DONE
+Ghi chú: ĐÃ làm 2026-06-24 — Alarm UI: wizard/advanced tabs, alarm type 0-7 conditional fields, interlock, sourcePointId, ackDelayS. Tabs component tái dùng.
 ```
 
 ```
