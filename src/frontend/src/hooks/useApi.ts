@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { DependencyList } from 'react'
 
 export interface ApiState<T> {
   data: T | null
@@ -11,7 +12,7 @@ interface UseApiOptions {
   refreshMs?: number
 }
 
-export function useApi<T>(fetcher: () => Promise<T>, _deps: unknown[] = [], options: UseApiOptions = {}): ApiState<T> {
+export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], options: UseApiOptions = {}): ApiState<T> {
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -58,6 +59,29 @@ export function useApi<T>(fetcher: () => Promise<T>, _deps: unknown[] = [], opti
     await fetchNow(true)
   }, [fetchNow])
 
+  // Custom hook logic to run fetchNow when deps change
+  // We use a ref to track if it's the first render or deps changed
+  const depsRef = useRef(deps)
+  useEffect(() => {
+    let changed = false
+    if (deps.length !== depsRef.current.length) {
+      changed = true
+    } else {
+      for (let i = 0; i < deps.length; i++) {
+        if (!Object.is(deps[i], depsRef.current[i])) {
+          changed = true
+          break
+        }
+      }
+    }
+
+    if (changed) {
+      depsRef.current = deps
+      void fetchNow(true)
+    }
+  }, [deps, fetchNow])
+
+  // Initial fetch
   useEffect(() => {
     void fetchNow(true)
   }, [fetchNow])
