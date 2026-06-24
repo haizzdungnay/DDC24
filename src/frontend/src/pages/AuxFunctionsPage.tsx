@@ -152,7 +152,7 @@ const auxFunctions: AuxFunctionDef[] = [
 ]
 
 export function AuxFunctionsPage() {
-  const { pick, t } = useI18n()
+  const { pick } = useI18n()
   const toast = useToast()
   const [selectedFu, setSelectedFu] = useState<AuxFunctionDef | null>(null)
   const [inputs, setInputs] = useState<Record<string, string>>({})
@@ -191,8 +191,7 @@ export function AuxFunctionsPage() {
 
       const valResult = validateGraphLocal(mergedGraph)
       setResult(valResult)
-      // @ts-expect-react-error
-      toast.push(valResult.pass ? 'success' : 'warn', valResult.pass ? (t('pass' as any) as string || 'PASS') : (t('fail' as any) as string || 'FAIL'))
+      toast.push(valResult.pass ? 'success' : 'warn', valResult.pass ? 'PASS' : 'FAIL')
     } catch (err) {
       toast.push('error', err instanceof Error ? err.message : 'Error generating graph')
     }
@@ -203,7 +202,7 @@ export function AuxFunctionsPage() {
       <div>
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight text-[var(--c-text)]">
-            {t('auxFunctions' as any) || pick('Hàm phụ trợ', 'Auxiliary Functions')}
+            {pick('Hàm phụ trợ', 'Auxiliary Functions')}
           </h1>
         </div>
         <p className="mt-1 text-sm text-[var(--c-text-dim)]">{pick('Trình tạo cụm khối logic theo thiết kế Rev A', 'Rev A logic block cluster generator')}</p>

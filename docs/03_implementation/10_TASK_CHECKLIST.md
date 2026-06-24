@@ -502,6 +502,7 @@ Task ID: WEB-A03
 Tên: Auxiliary Functions
 Owner: Dev Web | Phase: A | Module: UI
 Trạng thái: DONE
+Ghi chú: ĐÃ làm 2026-06-24 — wired /eng/aux route + fix tsc/lint (remove as any, @ts-expect hacks, fix getDemoGraph meta)
 ```
 
 ```

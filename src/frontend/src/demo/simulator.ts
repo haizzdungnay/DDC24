@@ -271,11 +271,12 @@ const inferredInputs: Record<string, string[]> = {
 export function getDemoGraph(): Graph {
   return {
     schema_version: '1.0',
-    device: { bacnet_device_id: 1, name: 'DEMO', scan_ms: 100 },
+    device: { bacnet_device_id: 1001, name: 'AHU01_DDC', scan_ms: 1000 },
+    io_map: { ai: [], ao: [], di: [], do: [] },
+    modbus: { rtu: [], tcp: [] },
     nodes: [],
     links: [],
-    io_map: { ai: [], ao: [], di: [], do: [] },
-    modbus: { rtu: [], tcp: [] }
+    meta: { author: 'demo', rev: 1 }
   }
 }
 
