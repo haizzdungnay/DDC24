@@ -270,7 +270,8 @@ const inferredInputs: Record<string, string[]> = {
 
 export function getDemoGraph(): Graph {
   return {
-    version: '1.0',
+    schema_version: '1.0',
+    device: { bacnet_device_id: 1, name: 'DEMO', scan_ms: 100 },
     nodes: [],
     links: [],
     io_map: { ai: [], ao: [], di: [], do: [] },

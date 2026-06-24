@@ -203,7 +203,6 @@ export function AuxFunctionsPage() {
       <div>
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight text-[var(--c-text)]">
-            {/* @ts-expect-error */}
             {t('auxFunctions' as any) || pick('Hàm phụ trợ', 'Auxiliary Functions')}
           </h1>
         </div>

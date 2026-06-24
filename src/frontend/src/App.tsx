@@ -19,7 +19,7 @@ import { TrendsPage } from './pages/TrendsPage'
 import { UserInfoPage } from './pages/UserInfoPage'
 import { UsersPage } from './pages/UsersPage'
 import { DiagramPage } from './pages/DiagramPage'
-import { StubPage as AuxFunctionsPage } from './pages/_Stub'
+import { AuxFunctionsPage } from './pages/AuxFunctionsPage'
 
 function ProtectedShell() {
   const { isAuthenticated } = useAuth()
