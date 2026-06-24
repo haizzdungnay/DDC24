@@ -1,5 +1,5 @@
-import { Circle, RefreshCw, Save, Search, ShieldAlert, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Circle, Pencil, RefreshCw, Save, Search, ShieldAlert, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
@@ -11,6 +11,25 @@ import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Point, PointKind, PointQuality } from '../types'
 import { cn, formatDateTime, formatTime, formatValue, pointNumber, statusColor, statusFill } from '../utils'
+
+const MAX_TREND_POINTS = 18
+
+// Hook to maintain a rolling buffer of trend values for a point
+function useTrendBuffer(pointId: string, value: number | boolean | string | undefined, trend: number[] | undefined): number[] {
+  const [buffer, setBuffer] = useState<number[]>(trend ?? [])
+
+  useEffect(() => {
+    const currentValue = pointNumber({ value } as Point)
+    if (typeof currentValue === 'number') {
+      setBuffer(prev => {
+        const next = [...prev, currentValue]
+        return next.length > MAX_TREND_POINTS ? next.slice(-MAX_TREND_POINTS) : next
+      })
+    }
+  }, [pointId, value])
+
+  return buffer
+}
 
 const kindLabel: Record<PointKind, string> = {
   DI: 'DIGITAL INPUT',
@@ -32,6 +51,12 @@ export function MonitorPage() {
   const [forceOpen, setForceOpen] = useState(false)
   const [forceValue, setForceValue] = useState('1')
   const [note, setNote] = useState('')
+  const [editingName, setEditingName] = useState<string | null>(null)
+  const [editingNameValue, setEditingNameValue] = useState('')
+  const [editingUnit, setEditingUnit] = useState<string | null>(null)
+  const [editingUnitValue, setEditingUnitValue] = useState('')
+  const [editingTrend, setEditingTrend] = useState<string | null>(null)
+  const [editingTrendEnabled, setEditingTrendEnabled] = useState<Record<string, boolean>>({})
 
   const points = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? []
   const selected = points.find((point) => point.id === selectedId) ?? points.find((point) => point.id === 'DI-01') ?? points[0]
@@ -74,6 +99,76 @@ export function MonitorPage() {
     }
   }
 
+  function startEditName(point: Point) {
+    setEditingName(point.id)
+    setEditingNameValue(point.name)
+  }
+
+  async function saveName(point: Point) {
+    if (!editingNameValue.trim()) {
+      toast.push('error', pick('Tên không được để trống', 'Name cannot be empty'))
+      return
+    }
+    try {
+      await apiClient.updatePointName(point.id, editingNameValue.trim())
+      toast.push('success', pick(`Đã đổi tên ${point.id}`, `Renamed ${point.id}`))
+      setEditingName(null)
+      pointsState.refetch()
+    } catch (err) {
+      toast.push('error', err instanceof Error ? err.message : 'Rename failed')
+    }
+  }
+
+  function cancelEditName() {
+    setEditingName(null)
+    setEditingNameValue('')
+  }
+
+  function startEditUnit(point: Point) {
+    setEditingUnit(point.id)
+    setEditingUnitValue(point.unit ?? '')
+  }
+
+  async function saveUnit(point: Point) {
+    try {
+      await apiClient.updatePointConfig(point.id, { unit: editingUnitValue.trim() || undefined })
+      toast.push('success', pick(`Đã cập nhật đơn vị ${point.id}`, `Updated unit for ${point.id}`))
+      setEditingUnit(null)
+      pointsState.refetch()
+    } catch (err) {
+      toast.push('error', err instanceof Error ? err.message : 'Update failed')
+    }
+  }
+
+  function cancelEditUnit() {
+    setEditingUnit(null)
+    setEditingUnitValue('')
+  }
+
+  function startEditTrend(point: Point) {
+    setEditingTrend(point.id)
+  }
+
+  async function saveTrend(point: Point) {
+    const enabled = editingTrendEnabled[point.id] ?? true
+    try {
+      await apiClient.updatePointConfig(point.id, { trendEnabled: enabled })
+      toast.push('success', pick(`Đã cập nhật trend ${point.id}`, `Updated trend for ${point.id}`))
+      setEditingTrend(null)
+      pointsState.refetch()
+    } catch (err) {
+      toast.push('error', err instanceof Error ? err.message : 'Update failed')
+    }
+  }
+
+  function cancelEditTrend() {
+    setEditingTrend(null)
+  }
+
+  function toggleTrend(pointId: string) {
+    setEditingTrendEnabled((prev) => ({ ...prev, [pointId]: !prev[pointId] }))
+  }
+
   return (
     <div className="space-y-3">
       <div>
@@ -109,7 +204,30 @@ export function MonitorPage() {
           <AnalogSection title="AI - ANALOG INPUT" rows={groups.AI} selectedId={selected?.id} onSelect={setSelectedId} />
           <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} onSelect={setSelectedId} onForce={(point) => { setSelectedId(point.id); setForceValue(String(pointNumber(point))); setForceOpen(true) }} />
         </div>
-        {selected && <DetailPanel point={selected} note={note} setNote={setNote} onForce={() => { setForceValue(selected.kind === 'DO' ? String(!selected.value) : String(pointNumber(selected))); setForceOpen(true) }} />}
+        {selected && <DetailPanel
+          point={selected}
+          note={note}
+          setNote={setNote}
+          editingName={editingName}
+          editingNameValue={editingNameValue}
+          setEditingNameValue={setEditingNameValue}
+          editingUnit={editingUnit}
+          editingUnitValue={editingUnitValue}
+          setEditingUnitValue={setEditingUnitValue}
+          editingTrend={editingTrend}
+          editingTrendEnabled={editingTrendEnabled}
+          onForce={() => { setForceValue(selected.kind === 'DO' ? String(!selected.value) : String(pointNumber(selected))); setForceOpen(true) }}
+          onStartEdit={() => startEditName(selected)}
+          onSaveEdit={() => saveName(selected)}
+          onCancelEdit={cancelEditName}
+          onStartEditUnit={() => startEditUnit(selected)}
+          onSaveEditUnit={() => saveUnit(selected)}
+          onCancelEditUnit={cancelEditUnit}
+          onStartEditTrend={() => startEditTrend(selected)}
+          onSaveEditTrend={() => saveTrend(selected)}
+          onCancelEditTrend={cancelEditTrend}
+          onToggleTrend={(id) => toggleTrend(id)}
+        />}
       </div>
 
       <Modal open={forceOpen} title={`Force ${selected?.id ?? ''}`} danger confirmLabel={pick('Force 10 phút', 'Force 10 minutes')} onConfirm={confirmForce} onClose={() => setForceOpen(false)}>
@@ -180,6 +298,7 @@ function AnalogSection({ title, rows, selectedId, onSelect, onForce }: { title: 
 
 function AnalogRow({ point, selected, onSelect, onForce }: { point: Point; selected: boolean; onSelect: (id: string) => void; onForce?: (point: Point) => void }) {
   const { pick } = useI18n()
+  const trendBuffer = useTrendBuffer(point.id, point.value, point.trend)
   const statusText = point.quality === 'good' ? pick('Bình thường', 'Normal') : point.quality === 'uncertain' ? pick('Lỗi - HIGH', 'Fault - HIGH') : point.quality.toUpperCase()
   return (
     <button type="button" onClick={() => onSelect(point.id)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
@@ -188,7 +307,7 @@ function AnalogRow({ point, selected, onSelect, onForce }: { point: Point; selec
       <span className="mono">{typeof point.value === 'number' ? point.value.toFixed(1) : point.value}</span>
       <span className="mono text-[var(--c-text-dim)]">{point.unit ?? '-'}</span>
       <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: statusFill(point.quality) }} />{statusText}</span>
-      <span onClick={(event) => { if (onForce) { event.stopPropagation(); onForce(point) } }}><Sparkline values={point.trend ?? [pointNumber(point)]} color={point.quality === 'good' ? 'var(--c-accent-2)' : point.quality === 'bad' ? 'var(--c-fault-fg)' : 'var(--c-warn-fg)'} /></span>
+      <span onClick={(event) => { if (onForce) { event.stopPropagation(); onForce(point) } }}><Sparkline values={trendBuffer.length > 0 ? trendBuffer : [pointNumber(point)]} color={point.quality === 'good' ? 'var(--c-accent-2)' : point.quality === 'bad' ? 'var(--c-fault-fg)' : 'var(--c-warn-fg)'} /></span>
       <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
     </button>
   )
@@ -203,10 +322,57 @@ function SectionFrame({ title, children }: { title: string; children: React.Reac
   )
 }
 
-function DetailPanel({ point, note, setNote, onForce }: { point: Point; note: string; setNote: (value: string) => void; onForce: () => void }) {
+function DetailPanel({
+  point,
+  note,
+  setNote,
+  editingName,
+  editingNameValue,
+  setEditingNameValue,
+  editingUnit,
+  editingUnitValue,
+  setEditingUnitValue,
+  editingTrend,
+  editingTrendEnabled,
+  onForce,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
+  onStartEditUnit,
+  onSaveEditUnit,
+  onCancelEditUnit,
+  onStartEditTrend,
+  onSaveEditTrend,
+  onCancelEditTrend,
+  onToggleTrend
+}: {
+  point: Point
+  note: string
+  setNote: (value: string) => void
+  editingName: string | null
+  editingNameValue: string
+  setEditingNameValue: (value: string) => void
+  editingUnit: string | null
+  editingUnitValue: string
+  setEditingUnitValue: (value: string) => void
+  editingTrend: string | null
+  editingTrendEnabled: Record<string, boolean>
+  onForce: () => void
+  onStartEdit: () => void
+  onSaveEdit: () => void
+  onCancelEdit: () => void
+  onStartEditUnit: () => void
+  onSaveEditUnit: () => void
+  onCancelEditUnit: () => void
+  onStartEditTrend: () => void
+  onSaveEditTrend: () => void
+  onCancelEditTrend: () => void
+  onToggleTrend: (id: string) => void
+}) {
   const { pick } = useI18n()
   const active = Boolean(point.value)
   const isBinary = point.kind === 'DI' || point.kind === 'DO'
+  const isAnalog = point.kind === 'AI' || point.kind === 'AO'
   const binaryState = active ? 'on' : 'off'
   const binaryTextColor = statusColor(binaryState)
   const valuePanelStyle = isBinary
@@ -215,14 +381,76 @@ function DetailPanel({ point, note, setNote, onForce }: { point: Point; note: st
   const canForce = point.kind === 'AO' || point.kind === 'DO'
   const groupText = `${point.kind} - ${kindLabel[point.kind]}`
   const history = [0, 1, 2, 3, 4].map((index) => ({ time: new Date(Date.now() - index * 7 * 60_000).toISOString(), value: index % 2 === 0 ? active : !active }))
+  const isEditing = editingName === point.id
+  const isEditingUnit = editingUnit === point.id
+  const isEditingTrend = editingTrend === point.id
+  const trendEnabled = editingTrendEnabled[point.id] ?? point.trend != null
   return (
     <div className="space-y-3">
       <Panel title={pick('Chi tiết điểm', 'Point details')} action={<X className="h-4 w-4 text-[var(--c-accent)]" />}>
         <div className="space-y-4">
-          <div><div className="text-2xl font-semibold">{point.id}</div><div className="mt-1 text-sm font-semibold">{point.name}</div></div>
+          <div><div className="text-2xl font-semibold">{point.id}</div>
+            <div className="mt-1 flex items-center gap-2">
+              {isEditing ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={editingNameValue}
+                    onChange={(e) => setEditingNameValue(e.target.value)}
+                    className="h-8 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-sm"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') onSaveEdit()
+                      if (e.key === 'Escape') onCancelEdit()
+                    }}
+                  />
+                  <Button size="sm" variant="primary" onClick={onSaveEdit}>{pick('Lưu', 'Save')}</Button>
+                  <Button size="sm" variant="ghost" onClick={onCancelEdit}>{pick('Hủy', 'Cancel')}</Button>
+                </div>
+              ) : (
+                <>
+                  <div className="text-sm font-semibold">{point.name}</div>
+                  <button onClick={onStartEdit} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Đổi tên', 'Rename')}>
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
           <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-4 text-center" style={valuePanelStyle}>
             <div className="mono text-2xl font-bold text-[var(--c-accent)]" style={isBinary ? { color: binaryTextColor } : undefined}>{formatValue(point.value, point.unit)}</div>
-            <div className="mt-1 text-xs font-semibold text-[var(--c-text-dim)]" style={isBinary ? { color: binaryTextColor } : undefined}>{active ? pick('Kích hoạt', 'Active') : pick('Không kích hoạt', 'Inactive')}</div>
+            <div className="mt-1 flex items-center justify-center gap-2 text-xs font-semibold text-[var(--c-text-dim)]" style={isBinary ? { color: binaryTextColor } : undefined}>
+              {isEditingUnit ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={editingUnitValue}
+                    onChange={(e) => setEditingUnitValue(e.target.value)}
+                    className="h-6 w-16 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-1 text-xs"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') onSaveEditUnit()
+                      if (e.key === 'Escape') onCancelEditUnit()
+                    }}
+                  />
+                  <button onClick={onSaveEditUnit} className="text-[var(--c-good-fg)]">✓</button>
+                  <button onClick={onCancelEditUnit} className="text-[var(--c-fault-fg)]">✗</button>
+                </div>
+              ) : (
+                <>
+                  <span>{active ? pick('Kích hoạt', 'Active') : pick('Không kích hoạt', 'Inactive')}</span>
+                  {isAnalog && (
+                    <>
+                      <span>|</span>
+                      <span className="mono">{point.unit ?? '-'}</span>
+                      <button onClick={onStartEditUnit} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Đổi đơn vị', 'Change unit')}>
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           <dl className="grid grid-cols-[118px_1fr] gap-y-3 text-xs">
             <dt className="text-[var(--c-text-dim)]">{pick('Nhóm I/O', 'I/O group')}</dt><dd>{groupText}</dd>
@@ -233,6 +461,31 @@ function DetailPanel({ point, note, setNote, onForce }: { point: Point; note: st
             <dt className="text-[var(--c-text-dim)]">{pick('Thời gian cập nhật', 'Updated at')}</dt><dd className="mono">{formatDateTime(point.updatedAt)}</dd>
             <dt className="text-[var(--c-text-dim)]">{pick('Bộ đếm kích hoạt', 'Activation count')}</dt><dd>15</dd>
             <dt className="text-[var(--c-text-dim)]">{pick('Mô tả', 'Description')}</dt><dd>{point.id === 'DI-01' ? pick('Nút dừng khẩn cấp hệ thống', 'System emergency stop button') : point.name}</dd>
+            {isAnalog && (
+              <div className="col-span-2 flex items-center justify-between rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2">
+                <span className="text-xs text-[var(--c-text-dim)]">{pick('Hiển thị trend', 'Show trend')}</span>
+                {isEditingTrend ? (
+                  <div className="flex items-center gap-1">
+                    <button onClick={onSaveEditTrend} className="text-xs font-semibold text-[var(--c-good-fg)]">{pick('Lưu', 'Save')}</button>
+                    <button onClick={onCancelEditTrend} className="text-xs font-semibold text-[var(--c-text-dim)]">{pick('Hủy', 'Cancel')}</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn('flex h-5 w-9 items-center rounded-full border px-0.5 transition cursor-pointer', trendEnabled ? 'justify-end border-[var(--c-good)] bg-[rgba(47,164,90,0.14)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface)]')}
+                      onClick={() => onToggleTrend(point.id)}
+                      role="switch"
+                      aria-checked={trendEnabled}
+                    >
+                      <span className={cn('h-3.5 w-3.5 rounded-full', trendEnabled ? 'bg-[var(--c-good)]' : 'bg-[var(--c-off)]')} />
+                    </span>
+                    <button onClick={onStartEditTrend} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Cài đặt trend', 'Trend settings')}>
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </dl>
           <StatusBadge state={point.forced ? 'force' : point.quality} />
           {canForce && <Button className="w-full" variant="danger" onClick={onForce}>Force output</Button>}

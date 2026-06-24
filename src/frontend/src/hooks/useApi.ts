@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DependencyList } from 'react'
 
 export interface ApiState<T> {
   data: T | null
@@ -12,7 +11,7 @@ interface UseApiOptions {
   refreshMs?: number
 }
 
-export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], options: UseApiOptions = {}): ApiState<T> {
+export function useApi<T>(fetcher: () => Promise<T>, _deps: unknown[] = [], options: UseApiOptions = {}): ApiState<T> {
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -53,7 +52,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
         setLoading(false)
       }
     }
-  }, deps)
+  }, [])
 
   const refetch = useCallback(async () => {
     await fetchNow(true)

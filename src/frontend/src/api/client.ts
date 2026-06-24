@@ -8,6 +8,7 @@ import {
   getDemoNetwork,
   getDemoPoints,
   runDemoCommissioning,
+  updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
 import type { Alarm, CommissioningTestResult, CurrentUser, GraphValidationResult, HealthResponse, IoChannel, NetworkData, Point, TrendSample } from '../types'
@@ -248,6 +249,18 @@ export const apiClient = {
     return requestJson(`/points/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify(release ? { release: true } : { value })
+    })
+  },
+
+  async updatePointName(id: string, name: string): Promise<{ id: string; name?: string }> {
+    return this.updatePointConfig(id, { name })
+  },
+
+  async updatePointConfig(id: string, config: { name?: string; unit?: string; trendEnabled?: boolean }): Promise<{ id: string; name?: string; unit?: string; trendEnabled?: boolean }> {
+    if (IS_DEMO) return updateDemoPointConfig(id, config)
+    return requestJson<{ id: string; name?: string; unit?: string; trendEnabled?: boolean }>(`/points/${encodeURIComponent(id)}/config`, {
+      method: 'PUT',
+      body: JSON.stringify(config)
     })
   },
 

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
 import { Panel } from '../components/Panel'
@@ -31,6 +31,7 @@ const dashboardTrendColors = ['var(--c-fault-fg)', 'var(--c-accent-2)', '#6E5A2E
 const dashboardTrendSampleLimit = 60
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const health = useApi(apiClient.getHealth, [], { refreshMs: 1000 })
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const alarms = useApi(apiClient.getAlarms, [], { refreshMs: 1000 })
@@ -124,7 +125,7 @@ export function DashboardPage() {
             <IoSummary kind="AI" count={count('AI')} lines={[`${points.filter((p) => p.kind === 'AI' && p.quality === 'good').length} ${pick('Bình thường', 'Normal')}`]} color="var(--c-good-fg)" />
           </div>
         </Panel>
-        <Panel title={pick('XU HƯỚNG AI (GIÁ TRỊ TRUNG BÌNH)', 'AI TREND (AVERAGE VALUE)')} action={<div className="flex gap-2"><Button size="sm" variant="secondary">{pick('Live', 'Live')}</Button><Button size="sm" variant="ghost" icon={<Maximize2 className="h-4 w-4" />} /></div>}>
+        <Panel title={pick('XU HƯỚNG AI (GIÁ TRỊ TRUNG BÌNH)', 'AI TREND (AVERAGE VALUE)')} action={<div className="flex gap-2"><Button size="sm" variant="secondary">{pick('Live', 'Live')}</Button><Button size="sm" variant="ghost" icon={<Maximize2 className="h-4 w-4" />} onClick={() => navigate('/trends')} title={pick('Mở rộng xu hướng', 'Expand trends')} /></div>}>
           {trendSamples.length > 1 && trendSeries.length
             ? <TrendChart data={trendSamples} series={trendSeries} height={250} />
             : <StateBlock state="empty" title={pick('Chưa có dữ liệu trend AI live', 'No live AI trend data')} detail={pick('Biểu đồ sẽ tự chạy khi /points hoặc WebSocket có giá trị AI.', 'Chart starts when /points or WebSocket provides AI values.')} />}
