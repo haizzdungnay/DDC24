@@ -167,13 +167,13 @@ function AiInputsView() {
                 <label className="text-xs font-semibold text-[var(--c-text-dim)] uppercase">Fallback Value (Required)</label>
                 <input
                   type="number"
-                  className={`w-full max-w-[200px] h-9 px-3 rounded-[var(--radius)] bg-[var(--c-bg)] border outline-none text-sm ${Number.isNaN(selected.fallback) ? 'border-red-500 focus:border-red-500' : 'border-[var(--c-border)] focus:border-[var(--c-accent)]'}`}
+                  className={`w-full max-w-[200px] h-9 px-3 rounded-[var(--radius)] bg-[var(--c-bg)] border outline-none text-sm ${Number.isNaN(selected.fallback) ? 'border-[var(--c-fault)] focus:border-[var(--c-fault)]' : 'border-[var(--c-border)] focus:border-[var(--c-accent)]'}`}
                   value={Number.isNaN(selected.fallback) ? '' : selected.fallback}
                   onChange={(e) => updateSelected({ fallback: e.target.value === '' ? NaN : Number(e.target.value) })}
                   placeholder="Required fallback..."
                 />
                 {Number.isNaN(selected.fallback) && (
-                  <p className="text-xs text-red-500 mt-1">Fallback is required for safe state.</p>
+                  <p className="text-xs text-[var(--c-fault-fg)] mt-1">Fallback is required for safe state.</p>
                 )}
               </div>
 
@@ -186,7 +186,7 @@ function AiInputsView() {
                   }
                 </p>
                 {selected.signalType === '2-10V' && (
-                  <p className="text-xs text-yellow-500 mt-1">Live-zero: V &lt; 2V will trigger fault state and use fallback value.</p>
+                  <p className="text-xs text-[var(--c-warn-fg)] mt-1">Live-zero: V &lt; 2V will trigger fault state and use fallback value.</p>
                 )}
               </div>
 
@@ -222,7 +222,7 @@ function AiInputsView() {
                      </select>
                      <input type="number" className="h-8 rounded bg-transparent border border-transparent hover:border-[var(--c-border)] focus:border-[var(--c-accent)] px-1 outline-none" value={c.displayMin} onChange={e => setConfigs(curr => curr.map(item => item.channel === c.channel ? {...item, displayMin: Number(e.target.value)} : item))} />
                      <input type="number" className="h-8 rounded bg-transparent border border-transparent hover:border-[var(--c-border)] focus:border-[var(--c-accent)] px-1 outline-none" value={c.displayMax} onChange={e => setConfigs(curr => curr.map(item => item.channel === c.channel ? {...item, displayMax: Number(e.target.value)} : item))} />
-                     <input type="number" className={`h-8 rounded bg-transparent border px-1 outline-none ${Number.isNaN(c.fallback) ? 'border-red-500' : 'border-transparent hover:border-[var(--c-border)] focus:border-[var(--c-accent)]'}`} value={Number.isNaN(c.fallback) ? '' : c.fallback} onChange={e => setConfigs(curr => curr.map(item => item.channel === c.channel ? {...item, fallback: e.target.value === '' ? NaN : Number(e.target.value)} : item))} />
+                     <input type="number" className={`h-8 rounded bg-transparent border px-1 outline-none ${Number.isNaN(c.fallback) ? 'border-[var(--c-fault)]' : 'border-transparent hover:border-[var(--c-border)] focus:border-[var(--c-accent)]'}`} value={Number.isNaN(c.fallback) ? '' : c.fallback} onChange={e => setConfigs(curr => curr.map(item => item.channel === c.channel ? {...item, fallback: e.target.value === '' ? NaN : Number(e.target.value)} : item))} />
                      <input type="checkbox" className="h-4 w-4 accent-[var(--c-accent)] mx-auto" checked={c.enabled} onChange={e => setConfigs(curr => curr.map(item => item.channel === c.channel ? {...item, enabled: e.target.checked} : item))} />
                   </div>
                 ))}

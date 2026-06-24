@@ -38,10 +38,10 @@ export function DiagramPage() {
   }
 
   function getQualityColor(point?: Point): string {
-    if (!point) return 'var(--c-muted)'
+    if (!point) return 'var(--c-off)'
     if (point.fault || point.quality === 'bad') return 'var(--c-fault)'
     if (point.quality === 'uncertain' || point.quality === 'stale' || point.forced) return 'var(--c-warn)'
-    return 'var(--c-good)'
+    return 'var(--c-online, var(--c-good))'
   }
 
   // Draw left side terminals (AI/AO)

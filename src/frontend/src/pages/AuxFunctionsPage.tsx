@@ -214,11 +214,11 @@ export function AuxFunctionsPage() {
             {auxFunctions.map((fu) => (
               <div
                 key={fu.id}
-                className={`cursor-pointer rounded-[var(--radius)] border p-4 transition ${selectedFu?.id === fu.id ? 'border-[var(--c-interact)] bg-[var(--c-surface-2)] shadow-sm' : 'border-[var(--c-border)] hover:border-[var(--c-text-dim)]'}`}
+                className={`cursor-pointer rounded-[var(--radius)] border p-4 transition ${selectedFu?.id === fu.id ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] shadow-sm' : 'border-[var(--c-border)] hover:border-[var(--c-text-dim)]'}`}
                 onClick={() => selectFn(fu)}
               >
                 <div className="flex items-center gap-2 font-semibold text-[var(--c-text)]">
-                  <Box className="h-4 w-4 text-[var(--c-interact)]" />
+                  <Box className="h-4 w-4 text-[var(--c-accent)]" />
                   {pick(fu.labelVi, fu.labelEn)}
                   {(fu.id === 'fu4' || fu.id === 'fu5') && (
                     <span className="ml-auto inline-flex items-center rounded-full bg-[var(--c-surface-2)] px-2 py-0.5 text-[10px] font-bold tracking-wide text-[var(--c-warn-fg)] border border-[var(--c-border)]">
@@ -244,7 +244,7 @@ export function AuxFunctionsPage() {
                         type={i.type === 'number' ? 'number' : 'text'}
                         value={inputs[i.key] || ''}
                         onChange={(e) => handleInput(i.key, e.target.value)}
-                        className="w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-3 py-2 text-sm text-[var(--c-text)] placeholder:text-[var(--c-text-dim)] outline-none focus:border-[var(--c-interact)]"
+                        className="w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-3 py-2 text-sm text-[var(--c-text)] placeholder:text-[var(--c-text-dim)] outline-none focus:border-[var(--c-accent)]"
                         placeholder={`${pick('Nhập', 'Enter')} ${i.key}...`}
                       />
                     </div>
