@@ -519,6 +519,7 @@ Tên: EasySet AI Inputs Config
 Owner: Dev Web | Phase: A | Module: UI
 Trạng thái: IN-PROGRESS
 Ghi chú: BE validate 2026-06-25 — `/system/config/io` chấp nhận AI Universal Input `type:"2-10V"` và optional `name/enabled/invert/range_mult(0..5)`; C++ iobus consumer field mới để downstream.
+Ghi chú: BE validate 2026-06-25 — mở đủ AI EasySet authoring `type:none/potentiometer/light/pulse` + optional `filter_samples(0..100)/sensor_cal(-12.7..12.8)/math_func(0..3)`.
 ```
 
 ```

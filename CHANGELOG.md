@@ -8,6 +8,7 @@
 
 ## [Unreleased]
 ### Added — ADR-010 EasySet Parity Config Surfaces
+- web: io config validate chấp nhận đủ AI signal type (`none`/`potentiometer`/`light`/`pulse`) + `filter_samples`/`sensor_cal`/`math_func`.
 - Added Alarm Wizard/Advanced parity.
 - Added AI/DI Inputs configuration surface.
 - Added Controller Diagram read-only commissioning view.

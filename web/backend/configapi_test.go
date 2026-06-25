@@ -128,6 +128,57 @@ func TestValidateConfigIORejectsInvalidAIUniversalInputFields(t *testing.T) {
 	}
 }
 
+func TestValidateConfigIOAcceptsFullEasySetAIFields(t *testing.T) {
+	cfg := ConfigIO{
+		UI: []map[string]any{
+			{
+				"ch":             1,
+				"type":           "potentiometer",
+				"filter_samples": 3,
+				"sensor_cal":     1.5,
+				"math_func":      2,
+			},
+		},
+	}
+
+	if errs := validateConfigIO(cfg); len(errs) != 0 {
+		t.Fatalf("validateConfigIO() errors = %+v; want none", errs)
+	}
+}
+
+func TestValidateConfigIORejectsInvalidFullEasySetAIFields(t *testing.T) {
+	tests := []struct {
+		name string
+		item map[string]any
+		path string
+	}{
+		{
+			name: "filter_samples out of range",
+			item: map[string]any{"ch": 1, "type": "0-10V", "filter_samples": 200},
+			path: "ui[0].filter_samples",
+		},
+		{
+			name: "math_func out of range",
+			item: map[string]any{"ch": 1, "type": "0-10V", "math_func": 9},
+			path: "ui[0].math_func",
+		},
+		{
+			name: "sensor_cal out of range",
+			item: map[string]any{"ch": 1, "type": "0-10V", "sensor_cal": 99},
+			path: "ui[0].sensor_cal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateConfigIO(ConfigIO{UI: []map[string]any{tt.item}})
+			if !hasConfigErrorPath(errs, tt.path) {
+				t.Fatalf("validateConfigIO() errors = %+v; want path %q", errs, tt.path)
+			}
+		})
+	}
+}
+
 func hasConfigErrorPath(errs []configValidationError, path string) bool {
 	for _, err := range errs {
 		if err.Path == path {
