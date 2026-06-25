@@ -187,6 +187,7 @@ type IoUiConfig = {
   scale_lo?: number
   scale_hi?: number
   name?: string
+  note?: string
   enabled?: boolean
   invert?: boolean
   range_mult?: number
@@ -254,7 +255,8 @@ function defaultAiConfig(channel: number): AiInputConfig {
     filterSamples: 3,
     sensorCal: 0,
     mathFunction: 0,
-    enabled: true
+    enabled: true,
+    note: ''
   }
 }
 
@@ -272,7 +274,8 @@ function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
     filterSamples: numberFrom(item.filter_samples) ?? 3,
     sensorCal: numberFrom(item.sensor_cal) ?? 0,
     mathFunction: numberFrom(item.math_func) ?? 0,
-    enabled: typeof item.enabled === 'boolean' ? item.enabled : true
+    enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
+    note: stringFrom(item.note) ?? ''
   }
 }
 
@@ -281,6 +284,7 @@ function aiConfigToIo(config: AiInputConfig): IoUiConfig {
     ch: config.channel,
     type: signalTypeToIoType(config.signalType),
     name: config.label,
+    note: config.note,
     enabled: config.enabled
   }
   if (isDigitalContact(config.signalType)) {

@@ -274,6 +274,7 @@ export interface AiInputConfig {
   sensorCal: number
   mathFunction: number
   enabled: boolean
+  note: string
 }
 
 export interface DiInputConfig {

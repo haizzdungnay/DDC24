@@ -6,13 +6,16 @@ import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
 import { useToast } from '../components/Toast'
+import { TrendChart } from '../components/TrendChart'
+import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
-import type { AiInputConfig, AiSignalType } from '../types'
-import { cn } from '../utils'
+import type { AiInputConfig, AiSignalType, Point, TrendSample } from '../types'
+import { cn, formatValue, pointNumber } from '../utils'
 
-type ViewMode = 'wizard' | 'advanced'
+type ViewMode = 'summary' | 'wizard' | 'advanced'
 type WizardStep = 'signal' | 'min' | 'max' | 'range' | 'unit' | 'filter' | 'cal' | 'math' | 'unused8' | 'unused9'
 type Translate = ReturnType<typeof useI18n>['t']
+type LiveTrendSample = TrendSample & { raw: number }
 
 const signalOptions: AiSignalType[] = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 const unitOptions = [0, 1, 2, 3]
@@ -24,11 +27,12 @@ export function InputsPage() {
   const toast = useToast()
   const [configs, setConfigs] = useState<AiInputConfig[]>([])
   const [selectedChannel, setSelectedChannel] = useState(1)
-  const [viewMode, setViewMode] = useState<ViewMode>('wizard')
+  const [viewMode, setViewMode] = useState<ViewMode>('summary')
   const [wizardIndex, setWizardIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
 
   useEffect(() => {
     let active = true
@@ -82,6 +86,19 @@ export function InputsPage() {
     }
   }
 
+  async function saveConfigs(nextConfigs = configs) {
+    setSaving(true)
+    try {
+      await apiClient.putAiInputs(nextConfigs)
+      toast.push('success', t('saveSuccess'))
+      setConfigs(nextConfigs)
+    } catch (error) {
+      toast.push('error', `${t('saveError')}: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -127,6 +144,7 @@ export function InputsPage() {
           title={selected ? `${aiNode(selected.channel)} - ${selected.label}` : t('empty')}
           action={
             <div className="flex rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-1">
+              <ModeButton active={viewMode === 'summary'} icon={<Activity className="h-4 w-4" />} label={pick('Summary', 'Summary')} onClick={() => setViewMode('summary')} />
               <ModeButton active={viewMode === 'wizard'} icon={<Wand2 className="h-4 w-4" />} label={t('wizard')} onClick={() => setViewMode('wizard')} />
               <ModeButton active={viewMode === 'advanced'} icon={<SlidersHorizontal className="h-4 w-4" />} label={t('advanced')} onClick={() => setViewMode('advanced')} />
             </div>
@@ -135,7 +153,16 @@ export function InputsPage() {
           {selected && (
             <div className="space-y-5">
               <ChannelBasics config={selected} onChange={(patch) => updateChannel(selected.channel, patch)} />
-              {viewMode === 'wizard' ? (
+              {viewMode === 'summary' ? (
+                <AiSummary
+                  config={selected}
+                  configs={configs}
+                  points={pointsState.data ?? []}
+                  onChange={(patch) => updateChannel(selected.channel, patch)}
+                  onSave={(nextConfigs) => { void saveConfigs(nextConfigs) }}
+                  saving={saving}
+                />
+              ) : viewMode === 'wizard' ? (
                 <WizardPanel
                   config={selected}
                   step={currentStep}
@@ -167,6 +194,139 @@ export function InputsPage() {
       </Modal>
     </div>
   )
+}
+
+function AiSummary({
+  config,
+  configs,
+  points,
+  onChange,
+  onSave,
+  saving
+}: {
+  config: AiInputConfig
+  configs: AiInputConfig[]
+  points: Point[]
+  onChange: (patch: Partial<AiInputConfig>) => void
+  onSave: (nextConfigs: AiInputConfig[]) => void
+  saving: boolean
+}) {
+  const { pick } = useI18n()
+  const pointId = aiNode(config.channel)
+  const point = points.find((item) => item.id === pointId)
+  const { data, reset } = useAiLiveTrend(pointId, point)
+  const values = data.map((sample) => sample.raw)
+  const stats = values.length > 0
+    ? {
+        min: Math.min(...values),
+        max: Math.max(...values),
+        avg: values.reduce((sum, value) => sum + value, 0) / values.length
+      }
+    : null
+  const unit = point?.unit
+
+  function saveNote() {
+    const nextConfigs = configs.map((item) => item.channel === config.channel ? { ...item, note: config.note } : item)
+    onSave(nextConfigs)
+  }
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="space-y-4">
+        <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Dữ liệu trực tiếp', 'Live Data')}</h3>
+            <Button size="sm" onClick={() => reset()}>{pick('Đặt lại', 'Reset')}</Button>
+          </div>
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <LiveDataItem label={pick('Giá trị', 'Value')} value={point ? formatValue(point.value, unit) : '--'} />
+            <LiveDataItem label={pick('Nhỏ nhất', 'Minimum')} value={stats ? formatStat(stats.min, unit) : '--'} />
+            <LiveDataItem label={pick('Lớn nhất', 'Maximum')} value={stats ? formatStat(stats.max, unit) : '--'} />
+            <LiveDataItem label={pick('Trung bình', 'Average')} value={stats ? formatStat(stats.avg, unit) : '--'} />
+          </dl>
+        </section>
+
+        <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Biểu đồ trực tiếp', 'Live Chart')}</h3>
+            <span className="text-xs font-semibold text-[var(--c-text-dim)]">{pointId}</span>
+          </div>
+          <TrendChart
+            data={data}
+            height={260}
+            series={[{ key: pointId, label: config.label || pointId, color: 'var(--c-accent)', unit }]}
+          />
+          {data.length === 0 && <div className="mt-2 text-xs text-[var(--c-text-dim)]">{pick('Chưa có dữ liệu live cho kênh này.', 'No live data for this channel yet.')}</div>}
+        </section>
+      </div>
+
+      <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
+        <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Ghi chú', 'Notes')}</h3>
+        <textarea
+          className="mt-3 min-h-40 w-full resize-y rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+          value={config.note}
+          onChange={(event) => onChange({ note: event.target.value })}
+          placeholder={pick('Nhập ghi chú riêng cho kênh AI này...', 'Enter notes for this AI channel...')}
+        />
+        <Button className="mt-3 w-full" variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={saveNote}>
+          {pick('Lưu ghi chú', 'Save')}
+        </Button>
+      </section>
+    </div>
+  )
+}
+
+function LiveDataItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">
+      <dt className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{label}</dt>
+      <dd className="mt-1 font-mono text-xl font-semibold text-[var(--c-text)]">{value}</dd>
+    </div>
+  )
+}
+
+function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample[]; reset: () => void } {
+  const [buffers, setBuffers] = useState<Record<string, LiveTrendSample[]>>({})
+
+  useEffect(() => {
+    if (!point) return
+    const value = pointNumber(point)
+    const time = new Date(point.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setBuffers((current) => {
+      const existing = current[pointId] ?? seedLiveTrend(pointId, point)
+      const last = existing[existing.length - 1]
+      if (last && last.time === time && last.raw === value) return current
+      const next = [...existing, { time, raw: value, [pointId]: value }].slice(-60)
+      return { ...current, [pointId]: next }
+    })
+  }, [pointId, point])
+
+  function reset() {
+    if (!point) {
+      setBuffers((current) => ({ ...current, [pointId]: [] }))
+      return
+    }
+    const value = pointNumber(point)
+    const time = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setBuffers((current) => ({ ...current, [pointId]: [{ time, raw: value, [pointId]: value }] }))
+  }
+
+  return { data: buffers[pointId] ?? seedLiveTrend(pointId, point), reset }
+}
+
+function seedLiveTrend(pointId: string, point?: Point): LiveTrendSample[] {
+  if (!point?.trend?.length) return []
+  const now = Date.now()
+  return point.trend.slice(-60).map((value, index, items) => ({
+    time: new Date(now - (items.length - index - 1) * 2000).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    raw: value,
+    [pointId]: value
+  }))
+}
+
+function formatStat(value: number, unit?: string): string {
+  const fixed = Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1)
+  return `${fixed}${unit ? ` ${unit}` : ''}`
 }
 
 function ChannelBasics({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {

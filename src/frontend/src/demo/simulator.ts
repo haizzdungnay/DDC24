@@ -41,6 +41,10 @@ const names: Record<string, string> = {
   'AI-02': 'DUCT PRESSURE',
   'AI-03': 'ROOM HUMIDITY',
   'AI-04': 'OUTDOOR TEMP',
+  'AI-05': 'FILTER SWITCH',
+  'AI-06': 'FIRE ALARM CONTACT',
+  'AI-07': 'DAMPER POTENTIOMETER',
+  'AI-08': 'PULSE METER SPARE',
   'AO-01': 'VFD SPEED',
   'AO-02': 'HEATING VALVE',
   'AO-03': 'COOLING VALVE',
@@ -60,6 +64,10 @@ const basePoints: Point[] = [
   { id: 'AI-02', name: names['AI-02'], kind: 'AI', value: 6.2, unit: 'bar', quality: 'uncertain', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: '4-20mA' },
   { id: 'AI-03', name: names['AI-03'], kind: 'AI', value: 54.2, unit: '%RH', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: '0-10V' },
   { id: 'AI-04', name: names['AI-04'], kind: 'AI', value: 18.6, unit: 'C', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'PT100' },
+  { id: 'AI-05', name: names['AI-05'], kind: 'AI', value: 1, unit: '', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'dry' },
+  { id: 'AI-06', name: names['AI-06'], kind: 'AI', value: 0, unit: '', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'dry' },
+  { id: 'AI-07', name: names['AI-07'], kind: 'AI', value: 72.4, unit: '%', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'potentiometer' },
+  { id: 'AI-08', name: names['AI-08'], kind: 'AI', value: 128, unit: 'pulse', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'pulse' },
   { id: 'AO-01', name: names['AO-01'], kind: 'AO', value: 62.5, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
   { id: 'AO-02', name: names['AO-02'], kind: 'AO', value: 35, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
   { id: 'AO-03', name: names['AO-03'], kind: 'AO', value: 12.5, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
@@ -467,14 +475,14 @@ export function getAiInputConfigs(): AiInputConfig[] {
 }
 
 let demoAiInputConfigs: AiInputConfig[] = [
-  { channel: 1, label: 'Supply Air Temp', signalType: 3, displayMin: -20, displayMax: 80, rangeMultiplier: 0, unit: 2, filterSamples: 3, sensorCal: 0, mathFunction: 1, enabled: true },
-  { channel: 2, label: 'Duct Pressure', signalType: 2, displayMin: 0, displayMax: 200, rangeMultiplier: 2, unit: 3, filterSamples: 5, sensorCal: 0.2, mathFunction: 0, enabled: true },
-  { channel: 3, label: 'Room Humidity', signalType: 1, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 3, sensorCal: 0, mathFunction: 2, enabled: true },
-  { channel: 4, label: 'Outdoor Light', signalType: 7, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 8, sensorCal: -0.5, mathFunction: 3, enabled: true },
-  { channel: 5, label: 'Filter Switch', signalType: 4, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true },
-  { channel: 6, label: 'Fire Alarm Contact', signalType: 5, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true },
-  { channel: 7, label: 'Damper Potentiometer', signalType: 6, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 4, sensorCal: 0, mathFunction: 0, enabled: true },
-  { channel: 8, label: 'Pulse Meter Spare', signalType: 8, displayMin: 0, displayMax: 205, rangeMultiplier: 1, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: false }
+  { channel: 1, label: 'Supply Air Temp', signalType: 3, displayMin: -20, displayMax: 80, rangeMultiplier: 0, unit: 2, filterSamples: 3, sensorCal: 0, mathFunction: 1, enabled: true, note: 'Check against handheld probe during commissioning.' },
+  { channel: 2, label: 'Duct Pressure', signalType: 2, displayMin: 0, displayMax: 200, rangeMultiplier: 2, unit: 3, filterSamples: 5, sensorCal: 0.2, mathFunction: 0, enabled: true, note: 'High alarm review after TAB.' },
+  { channel: 3, label: 'Room Humidity', signalType: 1, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 3, sensorCal: 0, mathFunction: 2, enabled: true, note: '' },
+  { channel: 4, label: 'Outdoor Light', signalType: 7, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 8, sensorCal: -0.5, mathFunction: 3, enabled: true, note: '' },
+  { channel: 5, label: 'Filter Switch', signalType: 4, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 6, label: 'Fire Alarm Contact', signalType: 5, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 7, label: 'Damper Potentiometer', signalType: 6, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 4, sensorCal: 0, mathFunction: 0, enabled: true, note: 'Authoring-only until iobus consumer supports EasySet signal 6.' },
+  { channel: 8, label: 'Pulse Meter Spare', signalType: 8, displayMin: 0, displayMax: 205, rangeMultiplier: 1, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: false, note: '' }
 ]
 
 export function putDemoAiInputs(configs: AiInputConfig[]): void {
