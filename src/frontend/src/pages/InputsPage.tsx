@@ -7,6 +7,7 @@ import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
 import { useToast } from '../components/Toast'
 import { TrendChart } from '../components/TrendChart'
+import { getDemoPoints } from '../demo/simulator'
 import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import type { AiInputConfig, AiSignalType, Point, TrendSample } from '../types'
@@ -212,8 +213,11 @@ function AiSummary({
   saving: boolean
 }) {
   const { pick } = useI18n()
-  const pointId = aiNode(config.channel)
-  const point = points.find((item) => item.id === pointId)
+  const livePoint = findAiPoint(points, config.channel)
+  const demoPoint = livePoint ? undefined : findAiPoint(getDemoPoints(), config.channel)
+  const point = livePoint ?? demoPoint
+  const pointId = point?.id ?? aiNode(config.channel)
+  const displayPointId = aiNode(config.channel)
   const { data, reset } = useAiLiveTrend(pointId, point)
   const values = data.map((sample) => sample.raw)
   const stats = values.length > 0
@@ -249,7 +253,7 @@ function AiSummary({
         <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Biểu đồ trực tiếp', 'Live Chart')}</h3>
-            <span className="text-xs font-semibold text-[var(--c-text-dim)]">{pointId}</span>
+            <span className="text-xs font-semibold text-[var(--c-text-dim)]">{displayPointId}</span>
           </div>
           <TrendChart
             data={data}
@@ -647,6 +651,16 @@ function wizardStepValue(step: WizardStep, config: AiInputConfig, t: Translate):
 
 function aiNode(channel: number): string {
   return `AI-${String(channel).padStart(2, '0')}`
+}
+
+function findAiPoint(points: Point[], channel: number): Point | undefined {
+  const ids = new Set(aiPointIds(channel).map((id) => id.toUpperCase()))
+  return points.find((point) => point.kind === 'AI' && ids.has(point.id.trim().toUpperCase()))
+}
+
+function aiPointIds(channel: number): string[] {
+  const padded = String(channel).padStart(2, '0')
+  return [aiNode(channel), `AI${channel}`, `AI${padded}`]
 }
 
 function signalLabel(value: AiSignalType, t: Translate): string {
