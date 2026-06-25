@@ -7,7 +7,7 @@ import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
 import { useToast } from '../components/Toast'
 import { useI18n } from '../i18n'
-import { isAnalogSignal, isDigitalContact, type AiInputConfig, type AiSignalType } from '../types'
+import type { AiInputConfig, AiSignalType } from '../types'
 import { cn } from '../utils'
 
 type ViewMode = 'wizard' | 'advanced'
@@ -253,10 +253,10 @@ function WizardPanel({
       <div className="min-h-44">
         {step === 'signal' && <SignalTypeField value={config.signalType} onChange={(signalType) => onChange({ signalType })} />}
         {step === 'unit' && <UnitField value={config.unit} onChange={(unit) => onChange({ unit })} />}
-        {step === 'range' && isAnalogSignal(config.signalType) && <RangeMultiplierField value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} />}
-        {step === 'min' && isAnalogSignal(config.signalType) && <NumberField label={t('displayMinLabel')} value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} />}
-        {step === 'max' && isAnalogSignal(config.signalType) && <NumberField label={t('displayMaxLabel')} value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} />}
-        {step === 'math' && isAnalogSignal(config.signalType) && <MathFunctionField value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} />}
+        {step === 'range' && <RangeMultiplierField value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} />}
+        {step === 'min' && <NumberField label={t('displayMinLabel')} value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} />}
+        {step === 'max' && <NumberField label={t('displayMaxLabel')} value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} />}
+        {step === 'math' && <MathFunctionField value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} />}
         {step === 'finish' && (
           <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4 text-sm text-[var(--c-text)]">
             <div className="font-semibold">{t('completed')}</div>
@@ -281,28 +281,17 @@ function WizardPanel({
 
 function AdvancedPanel({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
   const { t } = useI18n()
-  const analog = isAnalogSignal(config.signalType)
-  const contact = isDigitalContact(config.signalType)
-  const active = config.signalType !== 0
   const rows = [
     { register: 'u0', name: t('signalTypeLabel'), control: <SignalTypeSelect value={config.signalType} onChange={(signalType) => onChange({ signalType })} /> },
-    ...(analog ? [
-      { register: 'u1', name: t('displayMinLabel'), control: <SmallNumberInput value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} /> },
-      { register: 'u2', name: t('displayMaxLabel'), control: <SmallNumberInput value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} /> },
-      { register: 'u3', name: t('rangeMultiplierLabel'), control: <RangeMultiplierSelect value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} /> }
-    ] : []),
-    ...(active && (analog || contact) ? [
-      { register: 'u4', name: t('unitsLabel'), control: <UnitSelect value={config.unit} onChange={(unit) => onChange({ unit })} /> }
-    ] : []),
-    ...(analog ? [
-      { register: 'u5', name: t('filterSamplesLabel'), control: <SmallNumberInput value={config.filterSamples} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} /> },
-      { register: 'u6', name: t('sensorCalibrationLabel'), control: <SmallNumberInput value={config.sensorCal} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} /> },
-      { register: 'u7', name: t('mathFunctionLabel'), control: <MathFunctionSelect value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} /> }
-    ] : []),
-    ...(active ? [
-      { register: 'u8', name: t('notUsed'), control: <DisabledSelect label={`0 = ${t('off')}`} /> },
-      { register: 'u9', name: t('notUsed'), control: <DisabledSelect label={t('signalType0')} /> }
-    ] : [])
+    { register: 'u1', name: t('displayMinLabel'), control: <SmallNumberInput value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} /> },
+    { register: 'u2', name: t('displayMaxLabel'), control: <SmallNumberInput value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} /> },
+    { register: 'u3', name: t('rangeMultiplierLabel'), control: <RangeMultiplierSelect value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} /> },
+    { register: 'u4', name: t('unitsLabel'), control: <UnitSelect value={config.unit} onChange={(unit) => onChange({ unit })} /> },
+    { register: 'u5', name: t('filterSamplesLabel'), control: <SmallNumberInput value={config.filterSamples} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} /> },
+    { register: 'u6', name: t('sensorCalibrationLabel'), control: <SmallNumberInput value={config.sensorCal} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} /> },
+    { register: 'u7', name: t('mathFunctionLabel'), control: <MathFunctionSelect value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} /> },
+    { register: 'u8', name: t('notUsed'), control: <DisabledSelect label={`0 = ${t('off')}`} /> },
+    { register: 'u9', name: t('notUsed'), control: <DisabledSelect label={t('signalType0')} /> }
   ]
 
   return (
@@ -446,9 +435,8 @@ function ModeButton({ active, icon, label, onClick }: { active: boolean; icon: R
   )
 }
 
-function wizardSteps(signalType: AiSignalType): WizardStep[] {
-  if (signalType === 0) return ['signal', 'finish']
-  return isAnalogSignal(signalType) ? ['signal', 'unit', 'range', 'min', 'max', 'math', 'finish'] : ['signal', 'unit', 'finish']
+function wizardSteps(_signalType: AiSignalType): WizardStep[] {
+  return ['signal', 'unit', 'range', 'min', 'max', 'math', 'finish']
 }
 
 function wizardStepLabel(step: WizardStep, t: Translate): string {
