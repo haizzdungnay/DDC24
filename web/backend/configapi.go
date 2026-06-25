@@ -262,6 +262,7 @@ func validateConfigIO(cfg ConfigIO) []configValidationError {
 		validateStringEnum(&errs, item, base+".type", "type", true, "none", "0-10V", "2-10V", "4-20mA", "PT100", "PT1000", "NTC10k", "NTC20k", "dry", "potentiometer", "light", "pulse")
 		validateOptionalString(&errs, item, base+".unit", "unit")
 		validateOptionalString(&errs, item, base+".name", "name")
+		validateOptionalString(&errs, item, base+".note", "note")
 		if _, ok, good := boolField(item, "enabled"); ok && !good {
 			addConfigErr(&errs, base+".enabled", "must be boolean")
 		}

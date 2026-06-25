@@ -137,6 +137,7 @@ func TestValidateConfigIOAcceptsFullEasySetAIFields(t *testing.T) {
 				"filter_samples": 3,
 				"sensor_cal":     1.5,
 				"math_func":      2,
+				"note":           "Summary notes for AI-01",
 			},
 		},
 	}
