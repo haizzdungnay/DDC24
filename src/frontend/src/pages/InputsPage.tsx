@@ -231,24 +231,16 @@ function WizardPanel({
         </div>
       </div>
 
-      <div className="mb-4 grid gap-2 md:grid-cols-2">
-        {steps.map((item, index) => (
-          <button
-            key={`${item}-${index}`}
-            type="button"
-            onClick={() => onStepSelect(index)}
-            className={cn(
-              'min-h-14 rounded-[var(--radius)] border px-3 py-2 text-left text-xs transition',
-              index === stepIndex
-                ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]'
-                : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
-            )}
-          >
-            <span className="block font-semibold">{wizardStepLabel(item, t)}</span>
-            <span className="mt-1 block truncate">{wizardStepValue(item, config, t)}</span>
-          </button>
-        ))}
-      </div>
+      <label className="mb-4 block space-y-2">
+        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{wizardStepLabel(step, t)}</span>
+        <select className={controlClass()} value={stepIndex} onChange={(event) => onStepSelect(Number(event.target.value))}>
+          {steps.map((item, index) => (
+            <option key={`${item}-${index}`} value={index}>
+              {index + 1}. {wizardStepLabel(item, t)} - {wizardStepValue(item, config, t)}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <div className="min-h-44">
         {step === 'signal' && <SignalTypeField value={config.signalType} onChange={(signalType) => onChange({ signalType })} />}
