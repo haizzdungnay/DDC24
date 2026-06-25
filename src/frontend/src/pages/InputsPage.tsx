@@ -11,7 +11,7 @@ import type { AiInputConfig, AiSignalType } from '../types'
 import { cn } from '../utils'
 
 type ViewMode = 'wizard' | 'advanced'
-type WizardStep = 'signal' | 'unit' | 'range' | 'min' | 'max' | 'math' | 'finish'
+type WizardStep = 'signal' | 'min' | 'max' | 'range' | 'unit' | 'filter' | 'cal' | 'math' | 'unused8' | 'unused9'
 type Translate = ReturnType<typeof useI18n>['t']
 
 const signalOptions: AiSignalType[] = [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -231,32 +231,39 @@ function WizardPanel({
         </div>
       </div>
 
-      <label className="mb-4 block space-y-2">
-        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{wizardStepLabel(step, t)}</span>
-        <select className={controlClass()} value={stepIndex} onChange={(event) => onStepSelect(Number(event.target.value))}>
+      <div className="mb-4 overflow-x-auto border-b border-[var(--c-border)]">
+        <div className="flex min-w-max gap-1">
           {steps.map((item, index) => (
-            <option key={`${item}-${index}`} value={index}>
-              {index + 1}. {wizardStepLabel(item, t)} - {wizardStepValue(item, config, t)}
-            </option>
+            <button
+              key={item}
+              type="button"
+              title={`${wizardStepLabel(item, t)}: ${wizardStepValue(item, config, t)}`}
+              onClick={() => onStepSelect(index)}
+              className={cn(
+                'min-w-20 border-b-2 px-3 py-2 text-left text-xs font-semibold transition',
+                index === stepIndex
+                  ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]'
+                  : 'border-transparent text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'
+              )}
+            >
+              <span className="block font-mono">{wizardStepRegister(item)}</span>
+              <span className="block max-w-28 truncate">{wizardStepLabel(item, t)}</span>
+            </button>
           ))}
-        </select>
-      </label>
+        </div>
+      </div>
 
       <div className="min-h-44">
         {step === 'signal' && <SignalTypeField value={config.signalType} onChange={(signalType) => onChange({ signalType })} />}
-        {step === 'unit' && <UnitField value={config.unit} onChange={(unit) => onChange({ unit })} />}
-        {step === 'range' && <RangeMultiplierField value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} />}
         {step === 'min' && <NumberField label={t('displayMinLabel')} value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} />}
         {step === 'max' && <NumberField label={t('displayMaxLabel')} value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} />}
+        {step === 'range' && <RangeMultiplierField value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} />}
+        {step === 'unit' && <UnitField value={config.unit} onChange={(unit) => onChange({ unit })} />}
+        {step === 'filter' && <NumberField label={t('filterSamplesLabel')} value={config.filterSamples} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} />}
+        {step === 'cal' && <NumberField label={t('sensorCalibrationLabel')} value={config.sensorCal} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} />}
         {step === 'math' && <MathFunctionField value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} />}
-        {step === 'finish' && (
-          <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4 text-sm text-[var(--c-text)]">
-            <div className="font-semibold">{t('completed')}</div>
-            <div className="mt-2 text-[var(--c-text-dim)]">
-              {signalLabel(config.signalType, t)} / {unitLabel(config.unit, t)}
-            </div>
-          </div>
-        )}
+        {step === 'unused8' && <DisabledField label={t('notUsed')} value={`0 = ${t('off')}`} />}
+        {step === 'unused9' && <DisabledField label={t('notUsed')} value={t('signalType0')} />}
       </div>
 
       <div className="mt-5 flex justify-between gap-2">
@@ -344,11 +351,11 @@ function MathFunctionField({ value, onChange }: { value: number; onChange: (valu
   )
 }
 
-function NumberField({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+function NumberField({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step?: number; onChange: (value: number) => void }) {
   return (
     <label className="block space-y-2">
       <span className="text-sm font-semibold text-[var(--c-text)]">{label}</span>
-      <SmallNumberInput value={value} min={min} max={max} onChange={onChange} />
+      <SmallNumberInput value={value} min={min} max={max} step={step} onChange={onChange} />
     </label>
   )
 }
@@ -397,6 +404,15 @@ function DisabledSelect({ label }: { label: string }) {
   )
 }
 
+function DisabledField({ label, value }: { label: string; value: string }) {
+  return (
+    <label className="block space-y-2">
+      <span className="text-sm font-semibold text-[var(--c-text)]">{label}</span>
+      <DisabledSelect label={value} />
+    </label>
+  )
+}
+
 function SmallNumberInput({ value, min, max, step = 1, onChange }: { value: number; min: number; max: number; step?: number; onChange: (value: number) => void }) {
   return (
     <input
@@ -428,27 +444,45 @@ function ModeButton({ active, icon, label, onClick }: { active: boolean; icon: R
 }
 
 function wizardSteps(_signalType: AiSignalType): WizardStep[] {
-  return ['signal', 'unit', 'range', 'min', 'max', 'math', 'finish']
+  return ['signal', 'min', 'max', 'range', 'unit', 'filter', 'cal', 'math', 'unused8', 'unused9']
 }
 
 function wizardStepLabel(step: WizardStep, t: Translate): string {
   if (step === 'signal') return t('signalTypeLabel')
-  if (step === 'unit') return t('unitsLabel')
-  if (step === 'range') return t('rangeMultiplierLabel')
   if (step === 'min') return t('displayMinLabel')
   if (step === 'max') return t('displayMaxLabel')
+  if (step === 'range') return t('rangeMultiplierLabel')
+  if (step === 'unit') return t('unitsLabel')
+  if (step === 'filter') return t('filterSamplesLabel')
+  if (step === 'cal') return t('sensorCalibrationLabel')
   if (step === 'math') return t('mathFunctionLabel')
-  return t('finish')
+  return t('notUsed')
+}
+
+function wizardStepRegister(step: WizardStep): string {
+  if (step === 'signal') return 'u0'
+  if (step === 'min') return 'u1'
+  if (step === 'max') return 'u2'
+  if (step === 'range') return 'u3'
+  if (step === 'unit') return 'u4'
+  if (step === 'filter') return 'u5'
+  if (step === 'cal') return 'u6'
+  if (step === 'math') return 'u7'
+  if (step === 'unused8') return 'u8'
+  return 'u9'
 }
 
 function wizardStepValue(step: WizardStep, config: AiInputConfig, t: Translate): string {
   if (step === 'signal') return signalLabel(config.signalType, t)
-  if (step === 'unit') return unitLabel(config.unit, t)
-  if (step === 'range') return rangeLabel(config.rangeMultiplier, t)
   if (step === 'min') return String(config.displayMin)
   if (step === 'max') return String(config.displayMax)
+  if (step === 'range') return rangeLabel(config.rangeMultiplier, t)
+  if (step === 'unit') return unitLabel(config.unit, t)
+  if (step === 'filter') return String(config.filterSamples)
+  if (step === 'cal') return String(config.sensorCal)
   if (step === 'math') return mathFunctionLabel(config.mathFunction, t)
-  return `${signalLabel(config.signalType, t)} / ${unitLabel(config.unit, t)}`
+  if (step === 'unused8') return `0 = ${t('off')}`
+  return t('signalType0')
 }
 
 function aiNode(channel: number): string {
