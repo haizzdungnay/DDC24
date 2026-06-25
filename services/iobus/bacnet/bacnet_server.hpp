@@ -73,6 +73,10 @@ public:
      */
     void send_time_sync(uint64_t now_ms);
 
+    /** Push unit codes from objects->ai_unit() into bacnet-stack AI objects.
+     *  Call once after start() and after each SIGHUP config reload. */
+    void apply_ai_units();
+
     /* Called by bacnet-stack AO/BO callbacks after Priority_Array changes. */
     void handle_output_write(bool analog, uint32_t instance, float value,
                              bool released);

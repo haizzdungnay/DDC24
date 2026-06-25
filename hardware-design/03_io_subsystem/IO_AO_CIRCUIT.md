@@ -1,6 +1,7 @@
 # IO Subsystem — Analog Output Circuit
 
-> **Document:** HW-DES-03-AO | Rev 1.0 | 2026-05-27
+> **Document:** HW-DES-03-AO | Rev 1.2 | 2026-06-23
+> **Cập nhật:** Kênh đầu vào từ "8 UI + 8 DI" → "16 UI toàn bộ" (xem REWORK_DI_TO_UI.md)
 
 ---
 
@@ -144,4 +145,12 @@ Mode chọn bằng software (STM32 firmware nhận lệnh từ CM3 qua IOP):
 
 ---
 
-**Document ID:** HW-DES-03-AO | Rev 1.0 | 2026-05-27
+**Document ID:** HW-DES-03-AO | Rev 1.1 | 2026-06-23
+
+## Revision History
+
+| Rev | Ngày | Thay đổi |
+|-----|------|----------|
+| 1.0 | 2026-05-27 | Initial release — 4 kênh AO với DAC8554, TLV4110, hỗ trợ 0-10V/4-20mA |
+| 1.1 | 2026-06-23 | Update consistency — Kênh đầu vào từ "8 UI + 8 DI" → "16 UI toàn bộ" (xem REWORK_DI_TO_UI.md) |
+| 1.2 | 2026-06-23 | Final rev bump Phase 1 — I/O count update verified (16 UI only)

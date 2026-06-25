@@ -97,19 +97,28 @@ private:
             n = build_frame(CMD_NACK, seq, payload, IOP_NACK_LEN, out);
         } else if (f.cmd == CMD_HANDSHAKE) {
             handshake_count_.fetch_add(1);
+            /* HANDSHAKE_RESP v2 (8 bytes): [0..1]=MCU_IOP_VER [2..3]=FW_VER [4]=STATUS [5]=0 [6..7]=BOARD_CAP */
             payload[0] = IOP_VER_MAJOR; payload[1] = IOP_VER_MINOR;
-            payload[2] = 0x01; payload[3] = 0x00;
+            payload[2] = 0x02; payload[3] = 0x00;
             payload[4] = IOP_HS_STATUS_OK; payload[5] = 0;
+            payload[6] = static_cast<uint8_t>(IOP_BOARD_CAP_REV_A >> 8);
+            payload[7] = static_cast<uint8_t>(IOP_BOARD_CAP_REV_A & 0xFF);
             n = build_frame(CMD_HANDSHAKE_RESP, seq, payload, IOP_HANDSHAKE_RESP_LEN, out);
         } else if (f.cmd == CMD_GET_IO) {
-            /* UI1 raw = 0x000064=100; DI=0x05; DO_FB = do_state; temp 25.0; cnt++ */
-            payload[2] = 100;
-            payload[24] = 0x05;
-            payload[25] = do_state_.load();
-            payload[26] = 0x00; payload[27] = 0xFA;
-            payload[30] = static_cast<uint8_t>(sample_cnt_ >> 8);
-            payload[31] = static_cast<uint8_t>(sample_cnt_);
+            /* IO_RESP v2 (74 bytes, ADR-010): UI1=100 as int32 BE, temp=25.0, DO_FB */
+            /* [0..3] UI1 = 100 = 0x00000064 BE */
+            payload[3] = 100;
+            /* [64..65] ADC_STAT */
+            payload[64] = IOP_ADC_STAT_DRDY_OK;
+            payload[65] = IOP_ADC_STAT_DRDY_OK;
+            /* [66..67] MCU_TEMP = 250 (25.0°C) */
+            payload[66] = 0x00; payload[67] = 0xFA;
+            /* [70..71] SAMPLE_CNT */
+            payload[70] = static_cast<uint8_t>(sample_cnt_ >> 8);
+            payload[71] = static_cast<uint8_t>(sample_cnt_);
             sample_cnt_++;
+            /* [72] DO_FB_MASK */
+            payload[72] = do_state_.load();
             n = build_frame(CMD_IO_RESP, seq, payload, IOP_IO_RESP_LEN, out);
         } else if (f.cmd == CMD_SET_DO && f.len == IOP_SET_DO_LEN) {
             const uint8_t mask = f.payload[0], value = f.payload[1];
@@ -167,9 +176,9 @@ TEST(IopClientFakeMcu, HandshakeAndPoll)
         const IopResult r = client.get_io(&io);
         ASSERT_TRUE(r.ok()) << "poll #" << i << " code=" << r.code;
     }
-    EXPECT_EQ(io.ui_raw[0], 100u);
-    EXPECT_EQ(io.di_mask, 0x05);
+    EXPECT_EQ(io.ui_raw[0], 100);     /* int32_t, payload[3]=100 → iop_be32s=100 */
     EXPECT_EQ(io.mcu_temp_x10, 250);
+    EXPECT_EQ(io.adc1_stat, IOP_ADC_STAT_DRDY_OK);
     EXPECT_GE(metrics.rx_count.load(), 21u);
     EXPECT_EQ(metrics.crc_error_count.load(), 0u);
 }

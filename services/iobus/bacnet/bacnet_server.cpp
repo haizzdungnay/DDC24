@@ -150,11 +150,29 @@ void BacnetServer::handle_output_write(bool analog, uint32_t instance, float val
                  static_cast<double>(value), accepted ? "accepted" : "overridden");
 }
 
+void BacnetServer::apply_ai_units()
+{
+#ifdef MKDDC_ENABLE_BACNET
+    if (!objects_) return;
+    auto unit_code = [](const char* s) -> BACNET_ENGINEERING_UNITS {
+        if (!s || s[0] == '\0')          return (BACNET_ENGINEERING_UNITS)95;  /* NO_UNITS */
+        if (std::strcmp(s, "V") == 0)    return (BACNET_ENGINEERING_UNITS)501; /* VOLTS */
+        if (std::strcmp(s, "mA") == 0)   return (BACNET_ENGINEERING_UNITS)621; /* MILLIAMPERES */
+        if (std::strcmp(s, "degC") == 0) return (BACNET_ENGINEERING_UNITS)62;  /* DEGREES_CELSIUS */
+        return (BACNET_ENGINEERING_UNITS)95;
+    };
+    for (int i = 0; i < KX_N_UI; i++) {
+        Analog_Input_Units_Set(static_cast<uint32_t>(i + 1),
+                               unit_code(objects_->ai_unit(static_cast<uint32_t>(i + 1)).c_str()));
+    }
+#endif
+}
+
 void BacnetServer::register_objects()
 {
 #ifdef MKDDC_ENABLE_BACNET
-    /* BAC-003: register AI×8, BI×8, AO×4, BO×4, AV×32, BV×16, MSV×8 */
-    for (int i = 0; i < 8;  i++) Analog_Input_Create(i + 1);
+    /* BAC-003: AI×16 (ADR-010: KX_N_UI=16), BI×8, AO×4, BO×4, AV×32, BV×16, MSV×8 */
+    for (int i = 0; i < KX_N_UI; i++) Analog_Input_Create(i + 1);
     for (int i = 0; i < 8;  i++) Binary_Input_Create(i + 1);
     for (int i = 0; i < 4;  i++) Analog_Output_Create(i + 1);
     for (int i = 0; i < 4;  i++) Binary_Output_Create(i + 1);
@@ -168,7 +186,7 @@ void BacnetServer::sync_stack_inputs(const kx_plc_shm_t* shm)
 {
 #ifdef MKDDC_ENABLE_BACNET
     if (!objects_ || !shm) return;
-    for (uint32_t instance = 1; instance <= 8; ++instance) {
+    for (uint32_t instance = 1; instance <= KX_N_UI; ++instance) {
         float value = 0.0f;
         uint8_t status_flags = 0;
         uint8_t reliability = 0;

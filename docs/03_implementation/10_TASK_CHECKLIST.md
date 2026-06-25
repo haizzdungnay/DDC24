@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.15 | 2026-06-23 (WEB dependency security refresh; npm/go vuln gates clean locally)
+> **Phiên bản:** 1.17 | 2026-06-25 (IOB-006-V2: IOP v2 ADR-010 Done; WEB-014: security refresh Done)
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -259,6 +259,23 @@ Done khi: CI green 226/226; IoCache.CleanBootInitsDefaults + ReattachPreservesCo
 Phụ thuộc: IOB-002
 Chi tiết: 30_PROTOCOL_LIB_INTEGRATION_PLAN.md §5
 Trạng thái: ĐÃ implement 2026-06-22 — workflow cleanup; local 226/226 PASS, 2 IoCache PASS; chờ remote CI green.
+```
+
+```
+Task ID: IOB-006-V2
+Tên: IOP v2.0 protocol upgrade (ADR-010) — breaking change từ v1.1
+Owner: Dev SOM | Phase: 3 | Module: iobus/iop, shared headers, tools
+File: shared/iop_protocol.h, shared/mkddc_shm.h, services/iobus/iop/iop_parser.cpp,
+      services/iobus/iop/iop_client.cpp, services/iobus/io/io_types.hpp,
+      services/iobus/io/io_scaling.cpp, services/iobus/config/iobus_config.hpp,
+      tools/fake_mcu/fake_mcu.cpp, tools/shm_dump_io/shm_dump_io.c
+Input: ADR-010 (Accepted 2026-06-25) — Rev A HW: 16 UI analog, uint24→int32 signed, no DI base SKU
+Output: IOP_VER 2.0; IO_RESP 74B (16×int32); HANDSHAKE_RESP 8B + BOARD_CAP_MAP;
+        KX_N_UI=16; FAULT_FLAGS restructured; poll 500Hz; fake_mcu emit v2 frames
+Test: test_iop_parser (74B layout), test_io_scaling (int32 input), test_iop_client_fake_mcu (full round-trip)
+Done khi: all tests pass; fake_mcu HANDSHAKE_RESP = 8B with IOP_BOARD_CAP_REV_A; IoSnapshot 16-channel
+Phụ thuộc: IOB-006
+Trạng thái: ĐÃ làm 2026-06-25 — IOP v2 protocol implemented; ADR-010 Accepted; 05_IOP_UART_IMPLEMENTATION_GUIDE Rev 2.0 updated.
 ```
 
 ---
@@ -682,6 +699,6 @@ Phụ thuộc: E2E-003
 ```
 
 ---
-**Rev** 1.16 | 2026-06-23 (WEB-014 cập nhật: Go crypto/sys security refresh; Grype archive scan clean locally) · 1.15 | 2026-06-23 (WEB-014 ĐÃ làm: Vite security refresh; npm/go vuln gates clean locally) · 1.14 | 2026-06-22 (IOB local PASS; MOD native PTY PASS; BAC source/runtime wiring; external evidence pending) · 1.13 | 2026-06-22 (Thêm BAC-012, MOD-012, IOB-006 — transport layer integration; sửa status BACnet/Modbus: logic ✅ transport no-op ⚠️; xem 30_PROTOCOL_LIB_INTEGRATION_PLAN) · 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) · 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
+**Rev** 1.17 | 2026-06-25 (IOB-006-V2: IOP v2 ADR-010 — 74B IO_RESP, KX_N_UI=16, BOARD_CAP_MAP; 05 guide Rev 2.0 updated) · 1.16 | 2026-06-23 (WEB-014 cập nhật: Go crypto/sys security refresh; Grype archive scan clean locally) · 1.15 | 2026-06-23 (WEB-014 ĐÃ làm: Vite security refresh; npm/go vuln gates clean locally) · 1.14 | 2026-06-22 (IOB local PASS; MOD native PTY PASS; BAC source/runtime wiring; external evidence pending) · 1.13 | 2026-06-22 (Thêm BAC-012, MOD-012, IOB-006 — transport layer integration; sửa status BACnet/Modbus: logic ✅ transport no-op ⚠️; xem 30_PROTOCOL_LIB_INTEGRATION_PLAN) · 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) · 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
 1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit, COR-008 SIGHUP reload — cụm production-hardening 1+5+6 ĐÃ làm) · 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006 Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·
 Test chi tiết: [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)

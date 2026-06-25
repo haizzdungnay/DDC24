@@ -75,32 +75,39 @@ size_t build_frame(uint8_t cmd, uint8_t seq, const uint8_t* payload, uint8_t len
 }
 
 void put_be16(uint8_t* p, uint16_t v) { p[0] = static_cast<uint8_t>(v >> 8); p[1] = static_cast<uint8_t>(v); }
-void put_be24(uint8_t* p, uint32_t v)
+void put_be32s(uint8_t* p, int32_t v)
 {
-    p[0] = static_cast<uint8_t>(v >> 16);
-    p[1] = static_cast<uint8_t>(v >> 8);
-    p[2] = static_cast<uint8_t>(v);
+    const uint32_t u = static_cast<uint32_t>(v);
+    p[0] = static_cast<uint8_t>(u >> 24);
+    p[1] = static_cast<uint8_t>(u >> 16);
+    p[2] = static_cast<uint8_t>(u >> 8);
+    p[3] = static_cast<uint8_t>(u);
 }
 
 void build_io_resp_payload(McuState& st, const Inject& inj, uint8_t* p)
 {
+    /* IO_RESP v2 — 74 bytes (ADR-010) */
     const double t = static_cast<double>(now_ns() - st.boot_ns) / 1e9;
-    for (int i = 0; i < 8; i++) {
-        /* UI fake: ramp + sin, mỗi kênh lệch pha — scale trong dải s24 dương */
-        const double frac = 0.5 + 0.45 * std::sin(0.2 * t + i * 0.7);
-        put_be24(p + 3 * i, static_cast<uint32_t>(frac * 8388607.0));
+    /* [0..63] UI_RAW[16] — 16 × int32 BE signed */
+    for (int i = 0; i < 16; i++) {
+        const double frac = 0.5 + 0.45 * std::sin(0.2 * t + i * 0.44);
+        put_be32s(p + 4 * i, static_cast<int32_t>(frac * 8388607.0));
     }
-    p[24] = static_cast<uint8_t>((static_cast<int>(t) / 5) & 1 ? 0x0F : 0x00);  /* DI toggle 5s */
-    p[25] = inj.stuck_relay ? static_cast<uint8_t>(st.do_state ^ 0x01)          /* DO1 kẹt */
-                            : st.do_state;
-    int16_t temp = inj.overtemp ? 900 : 250;                                    /* 90.0 / 25.0 °C */
-    put_be16(p + 26, static_cast<uint16_t>(temp));
+    /* [64] ADC1_STAT  [65] ADC2_STAT */
+    p[64] = IOP_ADC_STAT_DRDY_OK;
+    p[65] = IOP_ADC_STAT_DRDY_OK;
+    /* [66..67] MCU_TEMP */
+    put_be16(p + 66, static_cast<uint16_t>(inj.overtemp ? 900 : 250));
+    /* [68..69] FAULT_FLAGS v2 */
     uint16_t flags = st.fault_flags;
     if (inj.stuck_relay) flags |= IOP_FAULT_RELAY_STUCK;
     if (inj.overtemp)    flags |= IOP_FAULT_MCU_OVERTEMP;
-    put_be16(p + 28, flags);
-    put_be16(p + 30, st.sample_cnt++);
-    put_be16(p + 32, 0);
+    put_be16(p + 68, flags);
+    /* [70..71] SAMPLE_CNT */
+    put_be16(p + 70, st.sample_cnt++);
+    /* [72] DO_FB_MASK  [73] reserved */
+    p[72] = inj.stuck_relay ? static_cast<uint8_t>(st.do_state ^ 0x01) : st.do_state;
+    p[73] = 0;
 }
 
 void build_diag_payload(McuState& st, const Inject& inj, uint8_t* p)
@@ -115,7 +122,7 @@ void build_diag_payload(McuState& st, const Inject& inj, uint8_t* p)
     put_be16(p + 14, static_cast<uint16_t>(inj.overtemp ? 900 : 300));
     put_be16(p + 16, 3300);                                               /* VDD mV */
     put_be16(p + 18, 0);
-    st.fault_flags &= static_cast<uint16_t>(~IOP_FAULT_WDG_RESET);        /* clear sticky */
+    st.fault_flags &= static_cast<uint16_t>(~IOP_FAULT_WDG_RESET);   /* clear sticky (v2: bit5) */
 }
 
 int open_uart(const std::string& dev)
@@ -300,9 +307,10 @@ int main(int argc, char** argv)
                 switch (cmd) {
                 case CMD_HANDSHAKE:
                     put_be16(resp_payload + 0, static_cast<uint16_t>((IOP_VER_MAJOR << 8) | IOP_VER_MINOR));
-                    put_be16(resp_payload + 2, 0x0100);
+                    put_be16(resp_payload + 2, 0x0200);   /* MCU FW version 2.0 */
                     resp_payload[4] = inj.hs_status;
                     resp_payload[5] = 0;
+                    put_be16(resp_payload + 6, IOP_BOARD_CAP_REV_A);  /* Rev A: UI_16|DO_4|AO_4 */
                     n = build_frame(CMD_HANDSHAKE_RESP, echo_seq, resp_payload, IOP_HANDSHAKE_RESP_LEN, out, corrupt);
                     st.safe_state = false;
                     if (verbose) std::fprintf(stderr, "fake_mcu: handshake status=%u\n", inj.hs_status);

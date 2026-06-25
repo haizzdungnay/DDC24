@@ -17,6 +17,8 @@ struct IoSnapshot {
     uint64_t ts_ns = 0;
     float    ui_value[KX_N_UI] = {};
     uint8_t  ui_quality[KX_N_UI] = {KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
+                                    KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
+                                    KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
                                     KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD};
     uint8_t  di_state[KX_N_DI] = {};
     uint32_t di_counter[KX_N_DI] = {};

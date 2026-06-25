@@ -1,8 +1,8 @@
 # 05 — IOP / UART Implementation Guide (hợp đồng MCU ↔ SOM)
-## MK-DDC-24 — IOP v1.1 (tên cũ: Kinexus-IOP — rename policy: 15_CONTRACT_FREEZE §6)
+## MK-DDC-24 — IOP v2.0 (ADR-010 — Breaking change từ v1.1, 2026-06-25)
 
 > **Document ID:** IMPL-IOP-MK-DDC-24-VI
-> **Phiên bản:** 1.2 | 2026-06-11 (Contract Freeze: FAULT bit6 VDD, bảng RESET reason, CRC vector đúng, header thắng)
+> **Phiên bản:** 2.0 | 2026-06-25 (IOP v2.0: IO_RESP 34B→74B, KX_N_UI 8→16, FAULT_FLAGS restructured, HANDSHAKE_RESP 6B→8B+BOARD_CAP_MAP — xem ADR-010)
 > **Owner:** Dev 1 (MCU slave) + Dev 2 (SOM master) — **CẢ HAI bắt buộc đọc**
 > **Nguồn-chuẩn CUỐI CÙNG:** [`shared/iop_protocol.h`](../../shared/iop_protocol.h) —
 > mọi giá trị (opcode, payload, enum, FAULT bit, RESET reason, hằng số) lấy theo header.
@@ -116,15 +116,15 @@ Hàm chung: iop_crc16() trong shared/iop_protocol.h — CẢ MCU lẫn SOM dùng
 | CMD | Tên | Hướng | LEN payload | Phản hồi |
 |-----|-----|-------|-------------|----------|
 | 0x01 | GET_IO | SOM→MCU | 0 | IO_RESP |
-| 0x02 | IO_RESP | MCU→SOM | 34 | — |
+| 0x02 | IO_RESP | MCU→SOM | **74** | — |
 | 0x10 | SET_AO | SOM→MCU | 8 | ACK |
 | 0x11 | SET_DO | SOM→MCU | 2 | ACK |
 | 0x12 | ACK | MCU→SOM | 1 | — |
-| 0x13 | SET_AO_CFG | SOM→MCU | 1 | ACK (v1.1) |
+| 0x13 | SET_AO_CFG | SOM→MCU | 1 | ACK |
 | 0x20 | GET_DIAG | SOM→MCU | 0 | DIAG_RESP |
 | 0x21 | DIAG_RESP | MCU→SOM | 20 | — |
 | 0x30 | HANDSHAKE | SOM→MCU | 4 | HANDSHAKE_RESP |
-| 0x31 | HANDSHAKE_RESP | MCU→SOM | 6 | — |
+| 0x31 | HANDSHAKE_RESP | MCU→SOM | **8** | — |
 | 0x40 | RESET_IO | SOM→MCU | 1 | ACK |
 | 0xFE | NACK | MCU→SOM | 2 | — |
 
@@ -132,16 +132,18 @@ Hàm chung: iop_crc16() trong shared/iop_protocol.h — CẢ MCU lẫn SOM dùng
 
 ## 6. Payload từng command (byte offset, big-endian)
 
-### 6.1 IO_RESP (0x02) — 34 byte
+### 6.1 IO_RESP (0x02) — **74 byte (IOP v2, ADR-010)**
 ```
-[0..23]  UI1..UI8 raw : 8 × uint24 BE (3B/kênh)
-[24]     DI_MASK      : bit0=DI1..bit7=DI8 (1=ON sau debounce)
-[25]     DO_FB_MASK   : bit0=DO1..bit3=DO4 (1=relay đóng, feedback)
-[26..27] MCU_TEMP     : int16 BE, ×10 (°C). 250=25.0°C
-[28..29] FAULT_FLAGS  : uint16 BE (xem §6.8)
-[30..31] SAMPLE_CNT   : uint16 BE (wrap) — phát hiện MCU hang
-[32..33] RESERVED     : 0x0000
+[0..63]  UI_RAW[16]  : 16 × int32 BE (ADS131M08 s24 sign-extended to int32; 4B/kênh)
+[64]     ADC1_STAT   : uint8 — ADS131M08 #1 chip status (ch1-8)  (IOP_ADC_STAT_* bits)
+[65]     ADC2_STAT   : uint8 — ADS131M08 #2 chip status (ch9-16) (IOP_ADC_STAT_* bits)
+[66..67] MCU_TEMP    : int16 BE, ×10 (°C). 250=25.0°C
+[68..69] FAULT_FLAGS : uint16 BE (xem §6.8)
+[70..71] SAMPLE_CNT  : uint16 BE (wrap) — phát hiện MCU hang
+[72]     DO_FB_MASK  : uint8 — bit0=DO1..bit3=DO4 (1=relay đóng, feedback)
+[73]     RESERVED    : 0x00
 ```
+> Không có DI_MASK — base SKU Rev A không có DI (xem ADR-010).
 ### 6.2 SET_AO (0x10) — 8 byte
 ```
 [0..1] AO1, [2..3] AO2, [4..5] AO3, [6..7] AO4 : uint16 BE raw DAC (0=min,65535=max)
@@ -158,11 +160,22 @@ Ví dụ đóng DO1, mở DO2, giữ DO3/4: MASK=0x03, VALUE=0x01
 [0] AO_MODE : bit0=AO1..bit3=AO4. 0=0-10V, 1=4-20mA
 MCU: set relay/switch PD1..PD4, lưu mode, áp safe-state đúng mode mới.
 ```
-### 6.5 HANDSHAKE (0x30, 4B) / HANDSHAKE_RESP (0x31, 6B)
+### 6.5 HANDSHAKE (0x30, 4B) / HANDSHAKE_RESP (0x31, **8B — IOP v2**)
 ```
-HANDSHAKE:      [0..1] SOM_IOP_VERSION u16, [2..3] SOM_CAPABILITIES u16 (bit0=CAP_DIAG,bit1=CAP_RESET_IO)
-HANDSHAKE_RESP: [0..1] MCU_IOP_VERSION, [2..3] MCU_FW_VERSION, [4] STATUS (0=OK,1=warn,2=incompat→abort), [5]=0
+HANDSHAKE:      [0..1] SOM_IOP_VERSION u16, [2..3] SOM_CAPABILITIES u16 (bit0=CAP_DIAG, bit1=CAP_RESET_IO)
+HANDSHAKE_RESP: [0..1] MCU_IOP_VERSION, [2..3] MCU_FW_VERSION,
+                [4] STATUS (0x00=OK, 0x01=warn, 0x02=incompat→abort), [5]=0,
+                [6..7] BOARD_CAP_MAP uint16 BE (IOP_BOARD_CAP_* bits — xem §6.5a)
 ```
+#### §6.5a BOARD_CAP_MAP bits
+```
+bit 0  IOP_BOARD_CAP_UI_16  : 16 UI analog (2× ADS131M08)
+bit 1  IOP_BOARD_CAP_DI_8   : 8 DI (optional SKU module — Rev A base: 0)
+bit 2  IOP_BOARD_CAP_DO_4   : 4 DO relay
+bit 3  IOP_BOARD_CAP_AO_4   : 4 AO (DAC8554)
+bit 4  IOP_BOARD_CAP_RTD    : PT100/PT1000 circuit populated (Rev A: 0)
+```
+> Rev A base SKU: `BOARD_CAP_MAP = 0x000D` (UI_16 | DO_4 | AO_4 = `IOP_BOARD_CAP_REV_A`).
 ### 6.6 DIAG_RESP (0x21) — 20 byte
 ```
 [0..1] FW_VERSION, [2..3] UPTIME_S, [4..5] IOP_RX_CNT, [6..7] IOP_CRC_ERR,
@@ -174,21 +187,25 @@ HANDSHAKE_RESP: [0..1] MCU_IOP_VERSION, [2..3] MCU_FW_VERSION, [4] STATUS (0=OK,
 ACK : [0] ECHOED_CMD (CMD được ACK)
 NACK: [0] REJECTED_CMD, [1] ERROR_CODE
 ```
-### 6.8 FAULT_FLAGS bitmask (bảng chuẩn duy nhất — macro `IOP_FAULT_*` trong header)
+### 6.8 FAULT_FLAGS bitmask — **IOP v2 (ADR-010, BREAKING từ v1.1)**
+
+> **BREAKING**: bit assignments hoàn toàn khác v1.1 — không dùng v1 constants với v2 FW.
 
 | Bit | Macro | Set khi | Clear khi | Sticky |
 |-----|-------|---------|-----------|--------|
-| 0 | `IOP_FAULT_ADC` | ADS131M08 không có mẫu hợp lệ trong 100ms | reinit OK + mẫu hợp lệ | Không |
-| 1 | `IOP_FAULT_DAC` | DAC8554 không phản hồi SPI | ghi DAC OK trở lại | Không |
-| 2 | `IOP_FAULT_UI_OV` | bất kỳ UI > 110% full scale | mọi UI ≤ 110% FS | Không |
-| 3 | `IOP_FAULT_RELAY_STUCK` | DO feedback ≠ lệnh sau 20ms | feedback khớp lại | Không |
-| 4 | `IOP_FAULT_WDG_RESET` | boot sau reset IWDG/WWDG (RCC_CSR) | MCU nhận GET_DIAG đầu tiên sau boot | **Sticky** |
-| 5 | `IOP_FAULT_MCU_OVERTEMP` | MCU_TEMP > 85.0°C | < 80.0°C (hysteresis 5°C) | Không |
-| 6 | `IOP_FAULT_VDD` | VDD ngoài [3.0, 3.6]V (MCU ngừng AO) | VDD trong dải | Không |
-| 7–15 | reserved | luôn 0 | — | — |
+| 0 | `IOP_FAULT_ADC1` | ADS131M08 #1 (ch1-8) không có mẫu hợp lệ trong 100ms | reinit OK + mẫu hợp lệ | Không |
+| 1 | `IOP_FAULT_ADC2` | ADS131M08 #2 (ch9-16) không có mẫu hợp lệ trong 100ms | reinit OK + mẫu hợp lệ | Không |
+| 2 | `IOP_FAULT_DAC` | DAC8554 không phản hồi SPI | ghi DAC OK trở lại | Không |
+| 3 | `IOP_FAULT_UI_OV` | bất kỳ UI > 110% full scale (aggregate, tất cả 16 kênh) | mọi UI ≤ 110% FS | Không |
+| 4 | `IOP_FAULT_RELAY_STUCK` | DO feedback ≠ lệnh sau 20ms | feedback khớp lại | Không |
+| 5 | `IOP_FAULT_WDG_RESET` | boot sau reset IWDG/WWDG (RCC_CSR) | MCU nhận GET_DIAG đầu tiên sau boot | **Sticky** |
+| 6 | `IOP_FAULT_MCU_OVERTEMP` | MCU_TEMP > 85.0°C | < 80.0°C (hysteresis 5°C) | Không |
+| 7 | `IOP_FAULT_VDD` | VDD ngoài [3.0, 3.6]V (MCU ngừng AO) | VDD trong dải | Không |
+| 8–15 | reserved | luôn 0 | — | — |
 
-> SOM: thấy bit4 → alarm `MCU_WATCHDOG_RESET` + gửi GET_DIAG để MCU clear. Mọi bit → mirror
-> nguyên xi vào `kx_io_shm.fault_flags`; mapping alarm: [06 §9](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md).
+> SOM: thấy bit5 (WDG_RESET) → alarm `MCU_WATCHDOG_RESET` + gửi GET_DIAG để MCU clear sticky.
+> Bits 3 (UI_OV), 4 (RELAY_STUCK), 6 (OVERTEMP), 7 (VDD) → alarm `"critical"`.
+> Mọi bit → mirror vào `kx_io_shm.fault_flags`; mapping alarm: [06 §9](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md).
 
 ### 6.9 RESET_IO (0x40) reason — bảng chuẩn duy nhất (`IOP_RESET_REASON_*`)
 
@@ -224,10 +241,10 @@ NACK: [0] REJECTED_CMD, [1] ERROR_CODE
 
 | Tham số | Giá trị | Hành động |
 |---------|---------|-----------|
-| Response timeout | 10 ms (`IOP_RESP_TIMEOUT_MS`) | retry lệnh (tối đa 3) |
+| Response timeout | **3 ms** (`IOP_RESP_TIMEOUT_MS`) | retry lệnh (tối đa 3) |
 | Max retry | 3 | sau 3: `iop_fault=TRUE`, log ERROR |
-| GET_IO period | 10 ms (`IOP_GET_IO_PERIOD_MS`) | poll 100Hz |
-| Fault timeout | 100 ms không IO_RESP hợp lệ | gửi RESET_IO, vào FAULT |
+| GET_IO period | **2 ms** (`IOP_GET_IO_PERIOD_MS`) | poll **500Hz** |
+| Fault timeout | **20 ms** không IO_RESP hợp lệ (10× period) | gửi RESET_IO, vào FAULT |
 | Reconnect | mỗi 5 s khi fault | gửi lại HANDSHAKE |
 | MCU safe timeout | 200 ms (`IOP_SAFE_TIMEOUT_MS`) | MCU tự safe-state |
 
@@ -316,10 +333,11 @@ void     iop_handle_command(const iop_frame_t *frame);              // dispatch 
 
 ### 12.1 SOM side
 ```cpp
-struct IopIoResp {              // parse từ IO_RESP 34B
-    uint32_t ui_raw[8];         // uint24 thực, lưu trong uint32 (0..0xFFFFFF)
-    uint8_t  di_mask;
-    uint8_t  do_fb_mask;
+struct IopIoResp {              // parse từ IO_RESP 74B (IOP v2, ADR-010)
+    int32_t  ui_raw[16];        // s24 sign-extended to int32 qua iop_be32s()
+    uint8_t  adc1_stat;         // IOP_ADC_STAT_* — chip status ADS131M08 #1 (ch1-8)
+    uint8_t  adc2_stat;         // IOP_ADC_STAT_* — chip status ADS131M08 #2 (ch9-16)
+    uint8_t  do_fb_mask;        // bit0..3 = DO1..DO4 relay feedback
     int16_t  mcu_temp_x10;      // 0.1°C
     uint16_t fault_flags;       // IOP_FAULT_*
     uint16_t sample_cnt;
@@ -431,5 +449,6 @@ Frame mẫu (GET_IO SEQ=1): `AA 00 01 01 AC E1` (CRC=0xACE1).
 | Negative test | §15 phía MCU | §15 phía SOM (fake MCU — 06 §11) |
 
 ---
+**Rev** 2.0 | 2026-06-25 · IOP v2 (ADR-010): IO_RESP 74B, HANDSHAKE_RESP 8B+BOARD_CAP_MAP, FAULT_FLAGS restructured, poll 500Hz. ·
 **Rev** 1.2 | 2026-06-11 · Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) ·
 Service-level (thread/config/shm/build): [06_MKDDC_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md)

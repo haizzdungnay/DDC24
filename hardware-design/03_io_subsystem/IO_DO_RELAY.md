@@ -1,6 +1,7 @@
 # IO Subsystem — Digital Output Relay Circuit
 
-> **Document:** HW-DES-03-DO | Rev 1.0 | 2026-05-27
+> **Document:** HW-DES-03-DO | Rev 1.2 | 2026-06-23
+> **Cập nhật:** Cấu trúc hệ thống từ "8 UI + 8 DI" → "16 UI toàn bộ" (xem REWORK_DI_TO_UI.md)
 
 ---
 
@@ -135,4 +136,12 @@ LED sáng khi ULN2003A kéo xuống GND (relay ON).
 
 ---
 
-**Document ID:** HW-DES-03-DO | Rev 1.0 | 2026-05-27
+**Document ID:** HW-DES-03-DO | Rev 1.1 | 2026-06-23
+
+## Revision History
+
+| Rev | Ngày | Thay đổi |
+|-----|------|----------|
+| 1.0 | 2026-05-27 | Initial release — 4 kênh DO với ULN2003A, HF46F relay, 5A@250VAC output |
+| 1.1 | 2026-06-23 | Update consistency — Cấu trúc hệ thống từ "8 UI + 8 DI" → "16 UI toàn bộ" (xem REWORK_DI_TO_UI.md) |
+| 1.2 | 2026-06-23 | Final rev bump Phase 1 — I/O count update verified (16 UI only, no DI)

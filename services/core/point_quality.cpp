@@ -15,7 +15,7 @@ void PointQuality::evaluate(PointTable& table, const IoSnapshot& io)
     }
 
     const bool fault_all = (io.iop_status == KX_IOP_FAULT || io.iop_status == KX_IOP_SAFE);
-    const bool adc_fault = (io.fault_flags & IOP_FAULT_ADC) != 0;
+    const bool adc_fault = (io.fault_flags & (IOP_FAULT_ADC1 | IOP_FAULT_ADC2)) != 0;
     const bool stale_bad = stale_scans_ > STALE_BAD_SCANS;
     const bool stale_unc = stale_scans_ > STALE_UNCERTAIN_SCANS;
 

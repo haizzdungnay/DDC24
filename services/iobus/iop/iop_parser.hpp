@@ -1,7 +1,7 @@
 /**
  * @file  iop_parser.hpp
- * @brief Parse payload IO_RESP (34B) / DIAG_RESP (20B) → struct (chưa scale).
- *        Byte offset theo 05 §6 — big-endian, dùng helper iop_be16/iop_be24.
+ * @brief Parse payload IO_RESP (74B v2) / DIAG_RESP (20B) → struct (chưa scale).
+ *        Byte offset per ADR-010 — big-endian, iop_be16/iop_be32s.
  */
 #ifndef IOBUS_IOP_PARSER_HPP
 #define IOBUS_IOP_PARSER_HPP

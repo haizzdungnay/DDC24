@@ -185,12 +185,15 @@ IopResult IopClient::handshake()
     }
     mcu_iop_version_ = iop_be16(resp.payload + 0);
     mcu_fw_version_  = iop_be16(resp.payload + 2);
-    const uint8_t hs_status = resp.payload[4];
-    std::fprintf(stderr, "INFO  iop.handshake mcu_iop=%u.%u mcu_fw=%u.%u status=%s\n",
+    const uint8_t  hs_status    = resp.payload[4];
+    /* resp.payload[5] reserved */
+    board_cap_map_   = iop_be16(resp.payload + 6);   /* BOARD_CAP_MAP v2 (ADR-010) */
+    std::fprintf(stderr, "INFO  iop.handshake mcu_iop=%u.%u mcu_fw=%u.%u status=%s board_cap=0x%04X\n",
                  mcu_iop_version_ >> 8, mcu_iop_version_ & 0xFF,
                  mcu_fw_version_ >> 8, mcu_fw_version_ & 0xFF,
                  hs_status == IOP_HS_STATUS_OK ? "ok"
-                 : hs_status == IOP_HS_STATUS_WARN ? "warn" : "incompat");
+                 : hs_status == IOP_HS_STATUS_WARN ? "warn" : "incompat",
+                 board_cap_map_);
     if (hs_status == IOP_HS_STATUS_INCOMPAT) {
         res.code = IopResult::NACK;
         res.nack_err = ERR_VERSION_INCOMPAT;

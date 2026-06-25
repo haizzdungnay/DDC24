@@ -26,10 +26,10 @@
 /* Path runtime Rev A — KHÔNG có alias, KHÔNG còn /dev/shm/kinexus_* */
 #define KX_SHM_IO_PATH    "/dev/shm/mkddc_io_shm"
 #define KX_SHM_PLC_PATH   "/dev/shm/mkddc_plc_shm"
-#define KX_SHM_MAGIC      0x4B584401u   /* "KXD\1" — giữ nguyên qua rename */
+#define KX_SHM_MAGIC      0x4B584402u   /* "KXD\2" — bumped v2: KX_N_UI 8→16 (ADR-010) */
 
-#define KX_N_UI   8
-#define KX_N_DI   8
+#define KX_N_UI   16   /* v2: Rev A 16 UI analog (ADR-010) */
+#define KX_N_DI   8    /* reserved: DI optional SKU; base SKU stays 0 in SHM */
 #define KX_N_AO   4
 #define KX_N_DO   4
 #define KX_N_AV   32

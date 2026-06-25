@@ -1,6 +1,6 @@
 # SOM Specification — Radxa CM3 (Rockchip RK3566)
 
-> **Document:** HW-DES-01-SOM | Rev 1.0 | 2026-05-27  
+> **Document:** HW-DES-01-SOM | Rev 1.1 | 2026-06-23
 > **Áp dụng cho:** MK-DDC-24 Carrier Board v1.x
 
 ---
@@ -28,7 +28,7 @@
 | Vấn đề | Giá trị CM3 | Yêu cầu DDC | Giải pháp |
 |--------|-----------|------------|---------|
 | Nhiệt độ hoạt động | 0°C ~ 50°C (consumer) | -20°C ~ 65°C | Heatsink 5540B + thermal design tốt; giám sát CPU temp |
-| ADC onboard | 2× 12-bit SAR | 8× UI multi-type | ADS131M08 ngoài do **MCU STM32 đọc qua SPI3** rồi gửi raw lên CM3 qua IOP (xem IO_UI_CIRCUIT.md) |
+| ADC onboard | 2× 12-bit SAR | 16× UI analog | 2× ADS131M08 ngoài do **MCU STM32 đọc qua SPI3** rồi gửi signed raw int32 lên CM3 qua IOP (xem IO_UI_CIRCUIT.md) |
 | Real-time I/O | Không có | 1ms sampling | STM32G0B1 MCU đảm nhiệm |
 | WiFi/BT | Optional onboard | Không yêu cầu | Dùng variant không WiFi để giảm giá |
 
@@ -65,6 +65,16 @@
 | **ADC** | 2× 12-bit | Đo nhiệt độ board, điện áp supply |
 | **GPIO** | 50× | DIP switch 8-bit, LED status ×4, MCU nRESET |
 
+### 2.3 I/O Architecture Overview
+
+| Loại I/O | Số kênh | Hardware | MCU Interface | Ghi chú |
+|----------|:-------:|---------|--------------|---------|
+| **UI (Universal Input)** | **16×** | Protection/front-end -> low-voltage mux/buffer -> 2× ADS131M08 | SPI3 (MCU STM32G0B1) | Rev A: 0-10V, 4-20mA, NTC, auxiliary dry contact |
+| **Optional isolated DI** | SKU dependent | Opto/digital isolator sheet if required | MCU/IO expander TBD | Not replaced by UI dry contact |
+| **AO (Analog Output)** | **4×** | DAC8554 | SPI1 (MCU STM32G0B1) | 0-10V, 4-20mA |
+| **DO (Digital Output)** | **4×** | Relay HF46F + ULN2003A | GPIO (MCU STM32G0B1) | 250VAC/30VDC |
+| **Total base I/O** | **24 ch** | 16 UI + 4 AO + 4 DO | CM3 receives data via UART IOP | Optional DI not counted in base Rev A |
+
 ### 2.3 Connector B2B
 
 | Connector | Số pin | Pitch | Nhà cung cấp gợi ý |
@@ -79,7 +89,7 @@
 
 ## 3. Pin Mapping CM3 → Carrier Board
 
-> Pin number theo Radxa CM3 Pinout XLSX (v1.32):  
+> Pin number theo Radxa CM3 Pinout XLSX (v1.32):
 > Source: https://dl.radxa.com/cm3/docs/radxa_cm3_v1300_to_1320_pinout.xlsx
 
 ### 3.1 Power Pins (CM3 yêu cầu từ Carrier)
@@ -143,8 +153,8 @@
 |-----------|-----|----------|-----|---------|
 | **GbE** | GMAC0 RGMII | CON3-40..70 | Onboard CM3 | Chỉ cần kéo transformer RJ-45 trên carrier |
 
-> CM3 đã tích hợp Gigabit PHY. Carrier board chỉ cần:  
-> 1. Kết nối RGMII từ CON3 → Ethernet magnetics → RJ-45  
+> CM3 đã tích hợp Gigabit PHY. Carrier board chỉ cần:
+> 1. Kết nối RGMII từ CON3 → Ethernet magnetics → RJ-45
 > 2. 1× 25MHz crystal cho PHY (một số variant đã có onboard)
 
 ---
@@ -194,4 +204,23 @@
 
 ---
 
-**Document ID:** HW-DES-01-SOM | Rev 1.0 | 2026-05-27
+| Rev | Date | Changes |
+|-----|------|---------|
+| 1.1 | 2026-06-23 | Updated I/O description: 16× UI (no separate DI), added I/O Architecture Overview table |
+| 1.2 | 2026-06-23 | Final rev bump Phase 1-2: Updated pin mapping consistency check, verified UI_EN[8-15] = PB4-PB11 |
+| 1.0 | 2026-05-27 | Initial release. |
+
+**Document ID:** HW-DES-01-SOM | Rev 1.2 | 2026-06-23
+
+---
+
+## Revision History
+
+| Rev | Date | Changes |
+|-----|------|---------|
+| 1.0 | 2026-05-27 | Initial SOM specification |
+| 1.1 | 2026-06-23 | UI Rev A clarification: 16 UI analog, optional isolated DI separate, signed raw IOP data |
+
+---
+
+**Document ID:** HW-DES-01-SOM | Rev 1.1 | 2026-06-23

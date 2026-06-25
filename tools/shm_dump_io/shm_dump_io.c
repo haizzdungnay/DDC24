@@ -56,7 +56,8 @@ static const char* status_name(uint8_t s)
 static void decode_faults(uint16_t f, char* buf, size_t n)
 {
     buf[0] = '\0';
-    if (f & IOP_FAULT_ADC)          strncat(buf, "ADC ", n - strlen(buf) - 1);
+    if (f & IOP_FAULT_ADC1)         strncat(buf, "ADC1 ", n - strlen(buf) - 1);
+    if (f & IOP_FAULT_ADC2)         strncat(buf, "ADC2 ", n - strlen(buf) - 1);
     if (f & IOP_FAULT_DAC)          strncat(buf, "DAC ", n - strlen(buf) - 1);
     if (f & IOP_FAULT_UI_OV)        strncat(buf, "UI_OV ", n - strlen(buf) - 1);
     if (f & IOP_FAULT_RELAY_STUCK)  strncat(buf, "RELAY_STUCK ", n - strlen(buf) - 1);
