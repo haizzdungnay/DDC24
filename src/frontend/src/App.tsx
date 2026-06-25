@@ -20,6 +20,7 @@ import { UserInfoPage } from './pages/UserInfoPage'
 import { UsersPage } from './pages/UsersPage'
 import { DiagramPage } from './pages/DiagramPage'
 import { AuxFunctionsPage } from './pages/AuxFunctionsPage'
+import { UserParametersPage } from './pages/UserParametersPage'
 
 function ProtectedShell() {
   const { isAuthenticated } = useAuth()
@@ -55,6 +56,7 @@ export function App() {
         <Route path="eng/commissioning" element={<CommissioningPage />} />
         <Route path="eng/programming" element={<ProgrammingPage />} />
         <Route path="eng/inputs" element={<InputsPage />} />
+        <Route path="eng/user-parameters" element={<UserParametersPage />} />
         <Route path="eng/diagram" element={<DiagramPage />} />
         <Route path="eng/aux" element={<AuxFunctionsPage />} />
         <Route path="eng/alarm-settings" element={<AlarmSettingsPage />} />

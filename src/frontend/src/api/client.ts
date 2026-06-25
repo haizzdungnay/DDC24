@@ -8,12 +8,14 @@ import {
   getDemoHealth,
   getDemoNetwork,
   getDemoPoints,
+  getUserParams as getDemoUserParams,
   putDemoAiInputs,
+  putUserParams as putDemoUserParams,
   runDemoCommissioning,
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { isAnalogSignal, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type CommissioningTestResult, type CurrentUser, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type Point, type TrendSample } from '../types'
+import { isAnalogSignal, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type CommissioningTestResult, type CurrentUser, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type Point, type TrendSample, type UserParamsConfig } from '../types'
 import { normalizeHealth, normalizeKind, normalizeQuality, nowIso } from '../utils'
 
 type AuthHeaderProvider = () => Record<string, string>
@@ -381,6 +383,16 @@ export const apiClient = {
         ao: current.ao ?? []
       })
     })
+  },
+
+  async getUserParams(): Promise<UserParamsConfig> {
+    // Mock demo-only: EasySet User Parameters has no backend/core hook yet.
+    return getDemoUserParams()
+  },
+
+  async putUserParams(config: UserParamsConfig): Promise<void> {
+    // Mock demo-only: do not call REST from this page.
+    putDemoUserParams(config)
   },
 
   async getAlarms(): Promise<Alarm[]> {

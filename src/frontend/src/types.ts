@@ -286,3 +286,15 @@ export interface DiInputConfig {
   debounceMs: number
   enabled: boolean
 }
+
+export type UserParamKey =
+  | 'UP00' | 'UP01' | 'UP02' | 'UP03' | 'UP04' | 'UP05' | 'UP06' | 'UP07' | 'UP08' | 'UP09'
+  | 'UP10' | 'UP11' | 'UP12' | 'UP13' | 'UP14' | 'UP15' | 'UP16' | 'UP17' | 'UP18' | 'UP19'
+  | 'UP20' | 'UP21' | 'UP22' | 'UP23' | 'UP24' | 'UP25' | 'UP26' | 'UP27' | 'UP28' | 'UP29'
+  | 'UPSP' | 'UPTS' | 'UPHT' | 'UPSB' | 'UPFAN' | 'LOCK1' | 'LOCK2' | 'LOCK3'
+
+export type UserParamValue = number | string
+
+export type UserParamsConfig = Record<UserParamKey, UserParamValue> & {
+  note: string
+}

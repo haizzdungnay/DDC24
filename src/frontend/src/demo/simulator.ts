@@ -13,6 +13,7 @@ import type {
   Point,
   ScheduleRow,
   TrendSample,
+  UserParamsConfig,
   UserRow
 } from '../types'
 import { DEVICE_DEFAULTS } from '../config'
@@ -487,6 +488,58 @@ let demoAiInputConfigs: AiInputConfig[] = [
 
 export function putDemoAiInputs(configs: AiInputConfig[]): void {
   demoAiInputConfigs = configs.map((config) => ({ ...config }))
+}
+
+const defaultUserParams: UserParamsConfig = {
+  note: 'Demo-only EasySet User Parameters mock. Backend/core hook is not available yet.',
+  UP00: 1,
+  UP01: 1,
+  UP02: 1,
+  UP03: 1,
+  UP04: 1,
+  UP05: 2,
+  UP06: 0,
+  UP07: 0,
+  UP08: 0,
+  UP09: 1,
+  UP10: 'Universal Input 1',
+  UP11: 2,
+  UP12: 1,
+  UP13: 3,
+  UP14: 'Analog Output 1',
+  UP15: 1,
+  UP16: 1,
+  UP17: 0,
+  UP18: '01:00',
+  UP19: 0,
+  UP20: 0,
+  UP21: 0,
+  UP22: 0,
+  UP23: 0,
+  UP24: 0,
+  UP25: 'Not used',
+  UP26: 1,
+  UP27: 0,
+  UP28: 'Not used',
+  UP29: 0,
+  UPSP: 1,
+  UPTS: 0,
+  UPHT: 'Auto',
+  UPSB: 'Occupied',
+  UPFAN: 0,
+  LOCK1: 1,
+  LOCK2: 9,
+  LOCK3: 241
+}
+
+let demoUserParams: UserParamsConfig = { ...defaultUserParams }
+
+export function getUserParams(): UserParamsConfig {
+  return { ...demoUserParams }
+}
+
+export function putUserParams(config: UserParamsConfig): void {
+  demoUserParams = { ...config }
 }
 
 export function getDiInputConfigs(): DiInputConfig[] {
