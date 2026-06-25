@@ -1,232 +1,144 @@
-import { Save, Activity, ToggleLeft } from 'lucide-react'
-import { useState } from 'react'
+import { Activity, ChevronLeft, ChevronRight, Save, SlidersHorizontal, Wand2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import type React from 'react'
+import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
 import { Panel } from '../components/Panel'
 import { useToast } from '../components/Toast'
-import { getAiInputConfigs, getDiInputConfigs } from '../demo/simulator'
 import { useI18n } from '../i18n'
-import type { AiInputConfig, DiInputConfig, AiSignalType } from '../types'
+import { isAnalogSignal, type AiInputConfig, type AiSignalType } from '../types'
+import { cn } from '../utils'
+
+type ViewMode = 'wizard' | 'advanced'
+type WizardStep = 'signal' | 'unit' | 'range' | 'min' | 'max' | 'finish'
+type Translate = ReturnType<typeof useI18n>['t']
+
+const signalOptions: AiSignalType[] = [0, 1, 2, 3, 4]
+const unitOptions = [0, 1, 2, 3]
+const rangeMultiplierOptions = [0, 1, 2, 3, 4, 5]
 
 export function InputsPage() {
-  const { pick } = useI18n()
-  const [tab, setTab] = useState<'ai' | 'di'>('ai')
+  const { t } = useI18n()
+  const toast = useToast()
+  const [configs, setConfigs] = useState<AiInputConfig[]>([])
+  const [selectedChannel, setSelectedChannel] = useState(1)
+  const [viewMode, setViewMode] = useState<ViewMode>('wizard')
+  const [wizardIndex, setWizardIndex] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    apiClient.getAiInputs()
+      .then((items) => {
+        if (active) setConfigs(items)
+      })
+      .catch((error) => {
+        if (active) toast.push('error', `${t('error')}: ${error instanceof Error ? error.message : String(error)}`)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [t, toast])
+
+  const selected = configs.find((config) => config.channel === selectedChannel) ?? configs[0]
+  const steps = useMemo(() => wizardSteps(selected?.signalType ?? 0), [selected?.signalType])
+  const currentStep = steps[Math.min(wizardIndex, steps.length - 1)] ?? 'signal'
+
+  useEffect(() => {
+    setWizardIndex((index) => Math.min(index, steps.length - 1))
+  }, [steps.length])
+
+  function updateChannel(channel: number, patch: Partial<AiInputConfig>) {
+    setConfigs((current) => current.map((config) => {
+      if (config.channel !== channel) return config
+      const next = { ...config, ...patch }
+      return isAnalogSignal(next.signalType) ? next : { ...next, unit: 0 }
+    }))
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await apiClient.putAiInputs(configs)
+      toast.push('success', t('saveSuccess'))
+    } catch (error) {
+      toast.push('error', `${t('saveError')}: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">{pick('Cấu hình Inputs', 'Inputs Config')}</h1>
-          <p className="text-sm text-[var(--c-text-dim)]">
-            {pick('Cấu hình Analog & Digital Inputs', 'Analog & Digital Inputs configuration')}
-          </p>
+          <h1 className="text-2xl font-semibold text-[var(--c-text)]">{t('aiConfigTitle')}</h1>
+          <p className="text-sm text-[var(--c-text-dim)]">{t('aiConfigSubtitle')}</p>
         </div>
-        <div className="flex gap-2 bg-[var(--c-surface-2)] p-1 rounded-[var(--radius)]">
-          <button
-            className={`px-4 py-1.5 rounded-[var(--radius)] text-sm font-semibold transition-colors ${tab === 'ai' ? 'bg-[var(--c-bg)] text-[var(--c-accent)] shadow-sm' : 'text-[var(--c-text-dim)] hover:text-[var(--c-text)]'}`}
-            onClick={() => setTab('ai')}
-          >
-            AI Inputs
-          </button>
-          <button
-            className={`px-4 py-1.5 rounded-[var(--radius)] text-sm font-semibold transition-colors ${tab === 'di' ? 'bg-[var(--c-bg)] text-[var(--c-accent)] shadow-sm' : 'text-[var(--c-text-dim)] hover:text-[var(--c-text)]'}`}
-            onClick={() => setTab('di')}
-          >
-            DI Inputs
-          </button>
-        </div>
+        <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={handleSave} disabled={loading || configs.length === 0}>
+          {t('save')}
+        </Button>
       </div>
 
-      {tab === 'ai' ? <AiInputsView /> : <DiInputsView />}
-    </div>
-  )
-}
+      <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <Panel title="AI Channels">
+          <div className="flex flex-col gap-1">
+            {configs.map((config) => (
+              <button
+                key={config.channel}
+                type="button"
+                onClick={() => {
+                  setSelectedChannel(config.channel)
+                  setWizardIndex(0)
+                }}
+                className={cn(
+                  'flex min-h-12 items-center gap-3 rounded-[var(--radius)] border px-3 py-2 text-left text-sm transition',
+                  selectedChannel === config.channel
+                    ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]'
+                    : 'border-transparent text-[var(--c-text-dim)] hover:border-[var(--c-border)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'
+                )}
+              >
+                <Activity className="h-4 w-4 shrink-0 text-[var(--c-accent)]" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block font-semibold">{aiNode(config.channel)}</span>
+                  <span className="block truncate text-xs">{config.label}</span>
+                </span>
+              </button>
+            ))}
+            {loading && <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">{t('loading')}</div>}
+          </div>
+        </Panel>
 
-function AiInputsView() {
-  const { pick } = useI18n()
-  const toast = useToast()
-  const [configs, setConfigs] = useState<AiInputConfig[]>(() => getAiInputConfigs())
-  const [selectedChannel, setSelectedChannel] = useState<number>(1)
-  const [viewMode, setViewMode] = useState<'wizard' | 'advanced'>('wizard')
-
-  const selected = configs.find(c => c.channel === selectedChannel)
-
-  function updateSelected(patch: Partial<AiInputConfig>) {
-    if (!selected) return
-    setConfigs(curr => curr.map(c => c.channel === selected.channel ? { ...c, ...patch } : c))
-  }
-
-  function handleSave() {
-    toast.push('success', pick('Đã lưu cấu hình AI (demo)', 'AI config saved (demo)'))
-  }
-
-  return (
-    <div className="grid grid-cols-[250px_1fr] gap-5 items-start">
-      <Panel title="AI Channels">
-        <div className="flex flex-col gap-1">
-          {configs.map((c) => (
-            <button
-              key={c.channel}
-              onClick={() => setSelectedChannel(c.channel)}
-              className={`flex items-center gap-2 p-2 rounded-[var(--radius)] text-sm transition-colors text-left ${selectedChannel === c.channel ? 'bg-[var(--c-surface-2)] text-[var(--c-accent)] font-semibold' : 'hover:bg-[var(--c-surface-2)]'}`}
-            >
-              <Activity className="h-4 w-4" />
-              <span>{c.node} - {c.label}</span>
-            </button>
-          ))}
-        </div>
-      </Panel>
-
-      <div className="space-y-5">
         <Panel
-          title={selected ? `${selected.node} Config` : 'Select a channel'}
+          title={selected ? `${aiNode(selected.channel)} - ${selected.label}` : t('empty')}
           action={
-            <div className="flex gap-2">
-              <div className="flex bg-[var(--c-bg)] p-1 rounded-[var(--radius)] border border-[var(--c-border)]">
-                <button
-                  className={`px-3 py-1 rounded-[calc(var(--radius)-4px)] text-xs font-semibold ${viewMode === 'wizard' ? 'bg-[var(--c-surface-2)] text-[var(--c-text)]' : 'text-[var(--c-text-dim)]'}`}
-                  onClick={() => setViewMode('wizard')}
-                >
-                  Wizard
-                </button>
-                <button
-                  className={`px-3 py-1 rounded-[calc(var(--radius)-4px)] text-xs font-semibold ${viewMode === 'advanced' ? 'bg-[var(--c-surface-2)] text-[var(--c-text)]' : 'text-[var(--c-text-dim)]'}`}
-                  onClick={() => setViewMode('advanced')}
-                >
-                  Advanced
-                </button>
-              </div>
-              <Button variant="primary" icon={<Save className="h-4 w-4" />} onClick={handleSave}>
-                {pick('Lưu', 'Save')}
-              </Button>
+            <div className="flex rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-1">
+              <ModeButton active={viewMode === 'wizard'} icon={<Wand2 className="h-4 w-4" />} label={t('wizard')} onClick={() => setViewMode('wizard')} />
+              <ModeButton active={viewMode === 'advanced'} icon={<SlidersHorizontal className="h-4 w-4" />} label={t('advanced')} onClick={() => setViewMode('advanced')} />
             </div>
           }
         >
-          {selected && viewMode === 'wizard' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--c-text-dim)] uppercase">Label</label>
-                  <input
-                    className="w-full h-9 px-3 rounded-[var(--radius)] bg-[var(--c-bg)] border border-[var(--c-border)] outline-none focus:border-[var(--c-accent)] text-sm"
-                    value={selected.label}
-                    onChange={(e) => updateSelected({ label: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--c-text-dim)] uppercase">Signal Type</label>
-                  <select
-                    className="w-full h-9 px-3 rounded-[var(--radius)] bg-[var(--c-bg)] border border-[var(--c-border)] outline-none focus:border-[var(--c-accent)] text-sm"
-                    value={selected.signalType}
-                    onChange={(e) => updateSelected({ signalType: e.target.value as AiSignalType })}
-                  >
-                    <option value="0-10V">0-10V</option>
-                    <option value="2-10V">2-10V (Live-Zero)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-4 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--c-text-dim)] uppercase">Display Min</label>
-                  <input
-                    type="number"
-                    className="w-full h-9 px-3 rounded-[var(--radius)] bg-[var(--c-bg)] border border-[var(--c-border)] outline-none focus:border-[var(--c-accent)] text-sm"
-                    value={selected.displayMin}
-                    onChange={(e) => updateSelected({ displayMin: Number(e.target.value) })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--c-text-dim)] uppercase">Display Max</label>
-                  <input
-                    type="number"
-                    className="w-full h-9 px-3 rounded-[var(--radius)] bg-[var(--c-bg)] border border-[var(--c-border)] outline-none focus:border-[var(--c-accent)] text-sm"
-                    value={selected.displayMax}
-                    onChange={(e) => updateSelected({ displayMax: Number(e.target.value) })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--c-text-dim)] uppercase">Unit</label>
-                  <input
-                    className="w-full h-9 px-3 rounded-[var(--radius)] bg-[var(--c-bg)] border border-[var(--c-border)] outline-none focus:border-[var(--c-accent)] text-sm"
-                    value={selected.unit}
-                    onChange={(e) => updateSelected({ unit: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-[var(--c-text-dim)] uppercase">Offset</label>
-                  <input
-                    type="number"
-                    className="w-full h-9 px-3 rounded-[var(--radius)] bg-[var(--c-bg)] border border-[var(--c-border)] outline-none focus:border-[var(--c-accent)] text-sm"
-                    value={selected.offset}
-                    onChange={(e) => updateSelected({ offset: Number(e.target.value) })}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-[var(--c-text-dim)] uppercase">Fallback Value (Required)</label>
-                <input
-                  type="number"
-                  className={`w-full max-w-[200px] h-9 px-3 rounded-[var(--radius)] bg-[var(--c-bg)] border outline-none text-sm ${Number.isNaN(selected.fallback) ? 'border-[var(--c-fault)] focus:border-[var(--c-fault)]' : 'border-[var(--c-border)] focus:border-[var(--c-accent)]'}`}
-                  value={Number.isNaN(selected.fallback) ? '' : selected.fallback}
-                  onChange={(e) => updateSelected({ fallback: e.target.value === '' ? NaN : Number(e.target.value) })}
-                  placeholder="Required fallback..."
+          {selected && (
+            <div className="space-y-5">
+              <ChannelBasics config={selected} onChange={(patch) => updateChannel(selected.channel, patch)} />
+              {viewMode === 'wizard' ? (
+                <WizardPanel
+                  config={selected}
+                  step={currentStep}
+                  stepIndex={Math.min(wizardIndex, steps.length - 1)}
+                  stepCount={steps.length}
+                  onChange={(patch) => updateChannel(selected.channel, patch)}
+                  onPrevious={() => setWizardIndex((index) => Math.max(index - 1, 0))}
+                  onNext={() => setWizardIndex((index) => Math.min(index + 1, steps.length - 1))}
                 />
-                {Number.isNaN(selected.fallback) && (
-                  <p className="text-xs text-[var(--c-fault-fg)] mt-1">Fallback is required for safe state.</p>
-                )}
-              </div>
-
-              <div className="p-4 bg-[var(--c-surface-2)] rounded-[var(--radius)] border border-[var(--c-border)] space-y-2">
-                <h4 className="text-sm font-semibold">Scaling Formula</h4>
-                <p className="text-sm text-[var(--c-text-dim)] mono">
-                  {selected.signalType === '0-10V'
-                    ? `EU = ${selected.displayMin} + (V / 10) * (${selected.displayMax} - ${selected.displayMin}) + ${selected.offset}`
-                    : `EU = ${selected.displayMin} + ((V - 2) / 8) * (${selected.displayMax} - ${selected.displayMin}) + ${selected.offset}`
-                  }
-                </p>
-                {selected.signalType === '2-10V' && (
-                  <p className="text-xs text-[var(--c-warn-fg)] mt-1">Live-zero: V &lt; 2V will trigger fault state and use fallback value.</p>
-                )}
-              </div>
-
-              {/*
-                AiInputConfig maps to:
-                - io_map.ai[].channel
-                - io_map.ai[].node
-                - io_map.ai[].mode
-                - io_config.conf ai fallback
-                - Scale node params: in_lo/in_hi/out_lo/out_hi
-              */}
-
-              <label className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text-dim)]">
-                <input className="h-4 w-4 accent-[var(--c-accent)]" type="checkbox" checked={selected.enabled} onChange={(e) => updateSelected({ enabled: e.target.checked })} />
-                Enable Channel
-              </label>
-            </div>
-          )}
-
-          {viewMode === 'advanced' && (
-             <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)]">
-              <div className="grid grid-cols-[80px_1fr_100px_80px_80px_80px_80px] bg-[var(--c-surface-2)] px-3 py-2 text-[10px] font-semibold uppercase text-[var(--c-text-dim)]">
-                <span>Node</span><span>Label</span><span>Signal</span><span>Min</span><span>Max</span><span>Fallback</span><span>Enabled</span>
-              </div>
-              <div className="overflow-auto max-h-[400px]">
-                {configs.map((c) => (
-                  <div key={c.channel} className="grid grid-cols-[80px_1fr_100px_80px_80px_80px_80px] items-center gap-2 border-t border-[var(--c-border)] px-3 py-2 text-sm">
-                     <div className="mono">{c.node}</div>
-                     <input className="h-8 rounded bg-transparent border border-transparent hover:border-[var(--c-border)] focus:border-[var(--c-accent)] px-1 outline-none" value={c.label} onChange={e => setConfigs(curr => curr.map(item => item.channel === c.channel ? {...item, label: e.target.value} : item))} />
-                     <select className="h-8 rounded bg-transparent border border-transparent hover:border-[var(--c-border)] focus:border-[var(--c-accent)] px-1 outline-none" value={c.signalType} onChange={e => setConfigs(curr => curr.map(item => item.channel === c.channel ? {...item, signalType: e.target.value as AiSignalType} : item))}>
-                        <option value="0-10V">0-10V</option>
-                        <option value="2-10V">2-10V</option>
-                     </select>
-                     <input type="number" className="h-8 rounded bg-transparent border border-transparent hover:border-[var(--c-border)] focus:border-[var(--c-accent)] px-1 outline-none" value={c.displayMin} onChange={e => setConfigs(curr => curr.map(item => item.channel === c.channel ? {...item, displayMin: Number(e.target.value)} : item))} />
-                     <input type="number" className="h-8 rounded bg-transparent border border-transparent hover:border-[var(--c-border)] focus:border-[var(--c-accent)] px-1 outline-none" value={c.displayMax} onChange={e => setConfigs(curr => curr.map(item => item.channel === c.channel ? {...item, displayMax: Number(e.target.value)} : item))} />
-                     <input type="number" className={`h-8 rounded bg-transparent border px-1 outline-none ${Number.isNaN(c.fallback) ? 'border-[var(--c-fault)]' : 'border-transparent hover:border-[var(--c-border)] focus:border-[var(--c-accent)]'}`} value={Number.isNaN(c.fallback) ? '' : c.fallback} onChange={e => setConfigs(curr => curr.map(item => item.channel === c.channel ? {...item, fallback: e.target.value === '' ? NaN : Number(e.target.value)} : item))} />
-                     <input type="checkbox" className="h-4 w-4 accent-[var(--c-accent)] mx-auto" checked={c.enabled} onChange={e => setConfigs(curr => curr.map(item => item.channel === c.channel ? {...item, enabled: e.target.checked} : item))} />
-                  </div>
-                ))}
-              </div>
+              ) : (
+                <AdvancedPanel config={selected} onChange={(patch) => updateChannel(selected.channel, patch)} />
+              )}
             </div>
           )}
         </Panel>
@@ -235,81 +147,276 @@ function AiInputsView() {
   )
 }
 
-function DiInputsView() {
-  const { pick } = useI18n()
-  const toast = useToast()
-  const [configs, setConfigs] = useState<DiInputConfig[]>(() => getDiInputConfigs())
+function ChannelBasics({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
+      <label className="space-y-1">
+        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{t('channelLabel')}</span>
+        <input
+          className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+          value={config.label}
+          onChange={(event) => onChange({ label: event.target.value })}
+        />
+      </label>
+      <label className="flex items-end gap-2 pb-2 text-sm font-semibold text-[var(--c-text-dim)]">
+        <input
+          className="h-4 w-4 accent-[var(--c-accent)]"
+          type="checkbox"
+          checked={config.enabled}
+          onChange={(event) => onChange({ enabled: event.target.checked })}
+        />
+        {t('enableChannel')}
+      </label>
+    </div>
+  )
+}
 
-  function update(channel: number, patch: Partial<DiInputConfig>) {
-    setConfigs(curr => curr.map(c => c.channel === channel ? { ...c, ...patch } : c))
-  }
-
-  function handleSave() {
-    toast.push('success', pick('Đã lưu cấu hình DI (demo)', 'DI config saved (demo)'))
-  }
+function WizardPanel({
+  config,
+  step,
+  stepIndex,
+  stepCount,
+  onChange,
+  onPrevious,
+  onNext
+}: {
+  config: AiInputConfig
+  step: WizardStep
+  stepIndex: number
+  stepCount: number
+  onChange: (patch: Partial<AiInputConfig>) => void
+  onPrevious: () => void
+  onNext: () => void
+}) {
+  const { t } = useI18n()
+  const atEnd = stepIndex === stepCount - 1
 
   return (
-    <Panel
-      title="Digital Inputs Configuration"
-      action={
-        <Button variant="primary" icon={<Save className="h-4 w-4" />} onClick={handleSave}>
-          {pick('Lưu', 'Save')}
-        </Button>
-      }
-    >
-      <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)]">
-        <div className="grid min-w-[800px] grid-cols-[80px_1.5fr_120px_120px_150px_100px_80px] bg-[var(--c-surface-2)] px-3 py-2 text-[10px] font-semibold uppercase text-[var(--c-text-dim)]">
-          <span>Node</span><span>Label</span><span>Contact</span><span>Normal State</span><span>Logic View</span><span>Debounce (ms)</span><span className="text-center">Enabled</span>
+    <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">
+          {stepIndex + 1} / {stepCount}
         </div>
-        <div className="overflow-auto">
-          {configs.map((c) => {
-            const isDirect = !c.invert;
-            return (
-              <div key={c.channel} className="grid min-w-[800px] grid-cols-[80px_1.5fr_120px_120px_150px_100px_80px] items-center gap-2 border-t border-[var(--c-border)] px-3 py-3 text-sm">
-                <div className="mono font-semibold flex items-center gap-2">
-                  <ToggleLeft className="h-4 w-4 text-[var(--c-accent)]" />
-                  {c.node}
-                </div>
-                <input
-                  className="h-9 rounded-[var(--radius)] border border-transparent bg-transparent px-2 text-sm text-[var(--c-text)] outline-none hover:border-[var(--c-border)] focus:border-[var(--c-accent)] focus:bg-[var(--c-bg)]"
-                  value={c.label}
-                  onChange={(e) => update(c.channel, { label: e.target.value })}
-                />
-                <select
-                  className="h-9 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
-                  value={isDirect ? 'direct' : 'reversed'}
-                  onChange={(e) => update(c.channel, { invert: e.target.value === 'reversed' })}
-                >
-                  <option value="direct">Direct</option>
-                  <option value="reversed">Reversed</option>
-                </select>
-                <select
-                  className="h-9 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
-                  value={c.normalState}
-                  onChange={(e) => update(c.channel, { normalState: e.target.value as 'open' | 'closed' })}
-                >
-                  <option value="open">Normally Open</option>
-                  <option value="closed">Normally Closed</option>
-                </select>
-                <div className="flex items-center gap-2">
-                   <span className="px-2 py-0.5 rounded bg-[var(--c-surface-2)] text-[11px] font-mono border border-[var(--c-border)]">
-                      {isDirect ? 'Direct' : 'Reversed'} / {c.normalState === 'open' ? 'Open' : 'Closed'}
-                   </span>
-                </div>
-                <input
-                  type="number"
-                  className="h-9 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
-                  value={c.debounceMs}
-                  onChange={(e) => update(c.channel, { debounceMs: Number(e.target.value) })}
-                />
-                <label className="flex items-center justify-center cursor-pointer">
-                  <input className="h-4 w-4 accent-[var(--c-accent)]" type="checkbox" checked={c.enabled} onChange={(e) => update(c.channel, { enabled: e.target.checked })} />
-                </label>
-              </div>
-            )
-          })}
+        <div className="h-2 flex-1 rounded-full bg-[var(--c-surface-2)]">
+          <div className="h-2 rounded-full bg-[var(--c-accent)]" style={{ width: `${((stepIndex + 1) / stepCount) * 100}%` }} />
         </div>
       </div>
-    </Panel>
+
+      <div className="min-h-44">
+        {step === 'signal' && <SignalTypeField value={config.signalType} onChange={(signalType) => onChange({ signalType })} />}
+        {step === 'unit' && <UnitField value={config.unit} onChange={(unit) => onChange({ unit })} />}
+        {step === 'range' && isAnalogSignal(config.signalType) && <RangeMultiplierField value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} />}
+        {step === 'min' && isAnalogSignal(config.signalType) && <NumberField label={t('displayMinLabel')} value={config.displayMin} onChange={(displayMin) => onChange({ displayMin })} />}
+        {step === 'max' && isAnalogSignal(config.signalType) && <NumberField label={t('displayMaxLabel')} value={config.displayMax} onChange={(displayMax) => onChange({ displayMax })} />}
+        {step === 'finish' && (
+          <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4 text-sm text-[var(--c-text)]">
+            <div className="font-semibold">{t('completed')}</div>
+            <div className="mt-2 text-[var(--c-text-dim)]">
+              {signalLabel(config.signalType, t)} / {unitLabel(config.unit, t)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-5 flex justify-between gap-2">
+        <Button icon={<ChevronLeft className="h-4 w-4" />} onClick={onPrevious} disabled={stepIndex === 0}>
+          {t('previous')}
+        </Button>
+        <Button variant="primary" icon={!atEnd ? <ChevronRight className="h-4 w-4" /> : undefined} onClick={atEnd ? undefined : onNext}>
+          {atEnd ? t('finish') : t('next')}
+        </Button>
+      </div>
+    </div>
   )
+}
+
+function AdvancedPanel({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
+  const { t } = useI18n()
+  const analog = isAnalogSignal(config.signalType)
+  const rows = [
+    { register: 'u0', name: t('signalTypeLabel'), control: <SignalTypeSelect value={config.signalType} onChange={(signalType) => onChange({ signalType })} /> },
+    ...(analog ? [
+      { register: 'u1', name: t('displayMinLabel'), control: <SmallNumberInput value={config.displayMin} onChange={(displayMin) => onChange({ displayMin })} /> },
+      { register: 'u2', name: t('displayMaxLabel'), control: <SmallNumberInput value={config.displayMax} onChange={(displayMax) => onChange({ displayMax })} /> },
+      { register: 'u3', name: t('rangeMultiplierLabel'), control: <RangeMultiplierSelect value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} /> }
+    ] : []),
+    { register: 'u4', name: t('unitsLabel'), control: <UnitSelect value={config.unit} onChange={(unit) => onChange({ unit })} /> }
+  ]
+
+  return (
+    <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)]">
+      <div className="grid grid-cols-[90px_minmax(0,1fr)_minmax(160px,240px)] bg-[var(--c-surface-2)] px-3 py-2 text-xs font-semibold uppercase text-[var(--c-text-dim)]">
+        <span>{t('register')}</span>
+        <span>{t('channelLabel')}</span>
+        <span>{t('value')}</span>
+      </div>
+      {rows.map((row) => (
+        <div key={row.register} className="grid grid-cols-[90px_minmax(0,1fr)_minmax(160px,240px)] items-center gap-3 border-t border-[var(--c-border)] px-3 py-3 text-sm">
+          <span className="font-mono text-[var(--c-text-dim)]">{String(config.channel).padStart(2, '0')} {row.register}</span>
+          <span className="font-medium text-[var(--c-text)]">{row.name}</span>
+          {row.control}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function SignalTypeField({ value, onChange }: { value: AiSignalType; onChange: (value: AiSignalType) => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="space-y-3">
+      <div className="text-sm font-semibold text-[var(--c-text)]">{t('signalTypeLabel')}</div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {signalOptions.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange(option)}
+            className={cn(
+              'rounded-[var(--radius)] border px-3 py-3 text-left text-sm transition',
+              value === option ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]' : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+            )}
+          >
+            {signalLabel(option, t)}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function UnitField({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="space-y-3">
+      <div className="text-sm font-semibold text-[var(--c-text)]">{t('unitsLabel')}</div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {unitOptions.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange(option)}
+            className={cn(
+              'rounded-[var(--radius)] border px-3 py-3 text-left text-sm transition',
+              value === option ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]' : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+            )}
+          >
+            {unitLabel(option, t)}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RangeMultiplierField({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="space-y-3">
+      <div className="text-sm font-semibold text-[var(--c-text)]">{t('rangeMultiplierLabel')}</div>
+      <RangeMultiplierSelect value={value} onChange={onChange} />
+    </div>
+  )
+}
+
+function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <label className="block space-y-2">
+      <span className="text-sm font-semibold text-[var(--c-text)]">{label}</span>
+      <SmallNumberInput value={value} onChange={onChange} />
+    </label>
+  )
+}
+
+function SignalTypeSelect({ value, onChange }: { value: AiSignalType; onChange: (value: AiSignalType) => void }) {
+  const { t } = useI18n()
+  return (
+    <select className={controlClass()} value={value} onChange={(event) => onChange(Number(event.target.value) as AiSignalType)}>
+      {signalOptions.map((option) => <option key={option} value={option}>{signalLabel(option, t)}</option>)}
+    </select>
+  )
+}
+
+function UnitSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const { t } = useI18n()
+  return (
+    <select className={controlClass()} value={value} onChange={(event) => onChange(Number(event.target.value))}>
+      {unitOptions.map((option) => <option key={option} value={option}>{unitLabel(option, t)}</option>)}
+    </select>
+  )
+}
+
+function RangeMultiplierSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const { t } = useI18n()
+  return (
+    <select className={controlClass()} value={value} onChange={(event) => onChange(Number(event.target.value))}>
+      {rangeMultiplierOptions.map((option) => <option key={option} value={option}>{rangeLabel(option, t)}</option>)}
+    </select>
+  )
+}
+
+function SmallNumberInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <input
+      className={controlClass()}
+      type="number"
+      min={-50}
+      max={205}
+      value={value}
+      onChange={(event) => onChange(Number(event.target.value))}
+    />
+  )
+}
+
+function ModeButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        'inline-flex h-8 items-center gap-2 rounded-[calc(var(--radius)-4px)] px-3 text-xs font-semibold transition',
+        active ? 'bg-[var(--c-surface-2)] text-[var(--c-text)]' : 'text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+      )}
+      onClick={onClick}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
+function wizardSteps(signalType: AiSignalType): WizardStep[] {
+  return isAnalogSignal(signalType) ? ['signal', 'unit', 'range', 'min', 'max', 'finish'] : ['signal', 'unit', 'finish']
+}
+
+function aiNode(channel: number): string {
+  return `AI-${String(channel).padStart(2, '0')}`
+}
+
+function signalLabel(value: AiSignalType, t: Translate): string {
+  if (value === 1) return t('signalType1')
+  if (value === 2) return t('signalType2')
+  if (value === 3) return t('signalType3')
+  if (value === 4) return t('signalType4')
+  return t('signalType0')
+}
+
+function unitLabel(value: number, t: Translate): string {
+  if (value === 1) return t('unit1')
+  if (value === 2) return t('unit2')
+  if (value === 3) return t('unit3')
+  return t('unit0')
+}
+
+function rangeLabel(value: number, t: Translate): string {
+  if (value === 1) return t('rangeMultiplier1')
+  if (value === 2) return t('rangeMultiplier2')
+  if (value === 3) return t('rangeMultiplier3')
+  if (value === 4) return t('rangeMultiplier4')
+  if (value === 5) return t('rangeMultiplier5')
+  return t('rangeMultiplier0')
+}
+
+function controlClass(): string {
+  return 'h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]'
 }

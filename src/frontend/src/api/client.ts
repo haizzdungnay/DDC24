@@ -2,16 +2,18 @@ import { API_ORIGIN, IS_DEMO } from '../config'
 import {
   ackDemoAlarm,
   forceDemoPoint,
+  getAiInputConfigs,
   getDemoAlarms,
   getDemoChannels,
   getDemoHealth,
   getDemoNetwork,
   getDemoPoints,
+  putDemoAiInputs,
   runDemoCommissioning,
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import type { Alarm, CommissioningTestResult, CurrentUser, GraphValidationResult, HealthResponse, IoChannel, NetworkData, Point, TrendSample } from '../types'
+import { isAnalogSignal, type AiInputConfig, type AiSignalType, type Alarm, type CommissioningTestResult, type CurrentUser, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type Point, type TrendSample } from '../types'
 import { normalizeHealth, normalizeKind, normalizeQuality, nowIso } from '../utils'
 
 type AuthHeaderProvider = () => Record<string, string>
@@ -178,6 +180,114 @@ function stringFrom(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
+type IoUiConfig = {
+  ch?: number
+  type?: string
+  unit?: string
+  scale_lo?: number
+  scale_hi?: number
+  name?: string
+  enabled?: boolean
+  invert?: boolean
+  range_mult?: number
+}
+
+type IoConfig = {
+  ui?: IoUiConfig[]
+  ao?: unknown[]
+}
+
+function aiNode(channel: number): string {
+  return `AI-${String(channel).padStart(2, '0')}`
+}
+
+function signalTypeFromIo(item: IoUiConfig): AiSignalType {
+  if (item.type === '2-10V') return 1
+  if (item.type === 'NTC10k' || item.type === 'NTC20k') return 2
+  if (item.type === 'dry') return item.invert ? 4 : 3
+  return 0
+}
+
+function signalTypeToIoType(signalType: AiSignalType): IoUiConfig['type'] {
+  if (signalType === 1) return '2-10V'
+  if (signalType === 2) return 'NTC10k'
+  if (signalType === 3 || signalType === 4) return 'dry'
+  return '0-10V'
+}
+
+function unitFromIo(value: unknown): number {
+  const unit = String(value ?? '').toLowerCase()
+  if (unit === 'percent' || unit === '%' || unit === '%rh') return 1
+  if (unit === 'degc' || unit === 'degf' || unit === 'c' || unit === 'f') return 2
+  if (unit === 'pa' || unit === 'pascal') return 3
+  return 0
+}
+
+function unitToIo(unit: number): string {
+  if (unit === 1) return 'percent'
+  if (unit === 2) return 'degC'
+  if (unit === 3) return 'Pa'
+  return ''
+}
+
+function defaultAiConfig(channel: number): AiInputConfig {
+  return {
+    channel,
+    label: aiNode(channel),
+    signalType: 0,
+    displayMin: 0,
+    displayMax: 100,
+    rangeMultiplier: 0,
+    unit: 0,
+    enabled: true
+  }
+}
+
+function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
+  const channel = typeof item.ch === 'number' && Number.isFinite(item.ch) ? item.ch : index + 1
+  const signalType = signalTypeFromIo(item)
+  return {
+    channel,
+    label: stringFrom(item.name) ?? aiNode(channel),
+    signalType,
+    displayMin: numberFrom(item.scale_lo) ?? 0,
+    displayMax: numberFrom(item.scale_hi) ?? 100,
+    rangeMultiplier: numberFrom(item.range_mult) ?? 0,
+    unit: unitFromIo(item.unit),
+    enabled: typeof item.enabled === 'boolean' ? item.enabled : true
+  }
+}
+
+function aiConfigToIo(config: AiInputConfig): IoUiConfig {
+  const item: IoUiConfig = {
+    ch: config.channel,
+    type: signalTypeToIoType(config.signalType),
+    name: config.label,
+    enabled: config.enabled
+  }
+  if (config.signalType === 3 || config.signalType === 4) {
+    item.invert = config.signalType === 4
+    item.unit = ''
+    return item
+  }
+  if (isAnalogSignal(config.signalType)) {
+    item.unit = unitToIo(config.unit)
+    item.scale_lo = config.displayMin
+    item.scale_hi = config.displayMax
+    item.range_mult = config.rangeMultiplier
+  }
+  return item
+}
+
+function aiConfigsFromIo(raw: IoConfig): AiInputConfig[] {
+  const byChannel = new Map<number, AiInputConfig>()
+  raw.ui?.forEach((item, index) => {
+    const config = aiConfigFromIo(item, index)
+    byChannel.set(config.channel, config)
+  })
+  return Array.from({ length: 8 }, (_, index) => byChannel.get(index + 1) ?? defaultAiConfig(index + 1))
+}
+
 function formatTrendTime(value: unknown): string {
   if (typeof value !== 'string') return nowIso()
   const parsed = new Date(value)
@@ -225,6 +335,27 @@ export const apiClient = {
   async getIoChannels(): Promise<IoChannel[]> {
     if (IS_DEMO) return getDemoChannels()
     return requestJson<IoChannel[]>('/io/channels')
+  },
+
+  async getAiInputs(): Promise<AiInputConfig[]> {
+    if (IS_DEMO) return getAiInputConfigs()
+    const raw = await requestJson<IoConfig>('/system/config/io')
+    return aiConfigsFromIo(raw)
+  },
+
+  async putAiInputs(configs: AiInputConfig[]): Promise<void> {
+    if (IS_DEMO) {
+      putDemoAiInputs(configs)
+      return
+    }
+    const current = await requestJson<IoConfig>('/system/config/io')
+    await requestJson('/system/config/io', {
+      method: 'PUT',
+      body: JSON.stringify({
+        ui: configs.map(aiConfigToIo),
+        ao: current.ao ?? []
+      })
+    })
   },
 
   async getAlarms(): Promise<Alarm[]> {

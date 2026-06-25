@@ -252,18 +252,20 @@ export interface UserRow {
 }
 
 
-export type AiSignalType = '0-10V' | '2-10V'
+export type AiSignalType = 0 | 1 | 2 | 3 | 4
+
+export function isAnalogSignal(signalType: AiSignalType): boolean {
+  return signalType === 0 || signalType === 1 || signalType === 2
+}
 
 export interface AiInputConfig {
   channel: number
-  node: string
   label: string
   signalType: AiSignalType
-  unit: string
   displayMin: number
   displayMax: number
-  offset: number
-  fallback: number
+  rangeMultiplier: number
+  unit: number
   enabled: boolean
 }
 
