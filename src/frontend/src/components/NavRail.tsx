@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Activity, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, ListChecks, Network, Settings, ShieldCheck, SlidersHorizontal, TestTube2, UserRound, Users } from 'lucide-react'
+import { Bell, CalendarDays, Activity, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, ListChecks, Network, Settings, ShieldCheck, SlidersHorizontal, TestTube2, UserRound, Users, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useI18n } from '../i18n'
@@ -37,6 +37,7 @@ const groups = [
       { to: '/eng/commissioning', key: 'commissioning', icon: TestTube2 },
       { to: '/eng/programming', key: 'programming', icon: ShieldCheck },
       { to: '/eng/inputs', key: 'inputs', icon: Activity },
+      { to: '/eng/outputs', key: 'outputs', icon: Zap },
       { to: '/eng/user-parameters', key: 'user-parameters', icon: ListChecks },
       { to: '/eng/diagram', key: 'diagram', icon: Network },
       { to: '/eng/aux', key: 'aux', icon: Settings },

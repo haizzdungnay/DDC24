@@ -8,6 +8,7 @@
 
 ## [Unreleased]
 ### Added — ADR-010 EasySet Parity Config Surfaces
+- fe(outputs): thêm `/eng/outputs` cho 4 AO + 4 DO, Summary/Wizard/Advanced; wire AO mode, AO/DO safe-state, manual force; field graph-level demo-local.
 - web: io config validate chấp nhận đủ AI signal type (`none`/`potentiometer`/`light`/`pulse`) + `filter_samples`/`sensor_cal`/`math_func`.
 - web: io config `ui[]` chấp nhận field `note` (ghi chú per-AI).
 - fe(AI inputs): full register u0-u9 + Signal Type 0-8 đúng EasySet, Range Multiplier/Math Function/Units full labels.

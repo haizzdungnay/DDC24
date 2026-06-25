@@ -20,6 +20,7 @@ import { UserInfoPage } from './pages/UserInfoPage'
 import { UsersPage } from './pages/UsersPage'
 import { DiagramPage } from './pages/DiagramPage'
 import { AuxFunctionsPage } from './pages/AuxFunctionsPage'
+import { OutputsPage } from './pages/OutputsPage'
 import { UserParametersPage } from './pages/UserParametersPage'
 
 function ProtectedShell() {
@@ -56,6 +57,7 @@ export function App() {
         <Route path="eng/commissioning" element={<CommissioningPage />} />
         <Route path="eng/programming" element={<ProgrammingPage />} />
         <Route path="eng/inputs" element={<InputsPage />} />
+        <Route path="eng/outputs" element={<OutputsPage />} />
         <Route path="eng/user-parameters" element={<UserParametersPage />} />
         <Route path="eng/diagram" element={<DiagramPage />} />
         <Route path="eng/aux" element={<AuxFunctionsPage />} />

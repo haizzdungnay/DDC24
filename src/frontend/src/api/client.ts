@@ -7,15 +7,17 @@ import {
   getDemoChannels,
   getDemoHealth,
   getDemoNetwork,
+  getDemoOutputs,
   getDemoPoints,
   getUserParams as getDemoUserParams,
   putDemoAiInputs,
+  putDemoOutputs,
   putUserParams as putDemoUserParams,
   runDemoCommissioning,
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { isAnalogSignal, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type CommissioningTestResult, type CurrentUser, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type Point, type TrendSample, type UserParamsConfig } from '../types'
+import { isAnalogSignal, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AoConfig, type AoSignalMode, type CommissioningTestResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
 import { normalizeHealth, normalizeKind, normalizeQuality, nowIso } from '../utils'
 
 type AuthHeaderProvider = () => Record<string, string>
@@ -200,7 +202,28 @@ type IoUiConfig = {
 
 type IoConfig = {
   ui?: IoUiConfig[]
-  ao?: unknown[]
+  ao?: IoAoConfig[]
+  [key: string]: unknown
+}
+
+type IoAoConfig = {
+  ch?: number
+  mode?: string
+  name?: string
+  enabled?: boolean
+  [key: string]: unknown
+}
+
+type SafeStateEntry = {
+  ch?: number
+  safe?: unknown
+  [key: string]: unknown
+}
+
+type SafeStateConfig = {
+  ao?: SafeStateEntry[]
+  do?: SafeStateEntry[]
+  [key: string]: unknown
 }
 
 function aiNode(channel: number): string {
@@ -315,6 +338,76 @@ function aiConfigsFromIo(raw: IoConfig): AiInputConfig[] {
   return Array.from({ length: 8 }, (_, index) => byChannel.get(index + 1) ?? defaultAiConfig(index + 1))
 }
 
+function channelFromEntry(item: { ch?: number }, index: number): number {
+  return typeof item.ch === 'number' && Number.isFinite(item.ch) ? item.ch : index + 1
+}
+
+function outputMode(value: unknown): AoSignalMode {
+  const raw = String(value ?? '').toUpperCase()
+  return raw === '4-20MA' || raw === '4-20M A' ? '4-20mA' : '0-10V'
+}
+
+function safeState(value: unknown): DoSafeState {
+  return String(value ?? '').toLowerCase() === 'closed' ? 'closed' : 'open'
+}
+
+function outputByChannel<T extends { ch?: number }>(items: T[] | undefined, channel: number): T | undefined {
+  return items?.find((item, index) => channelFromEntry(item, index) === channel)
+}
+
+function outputsFromConfig(io: IoConfig, safe: SafeStateConfig): OutputsConfig {
+  const demo = getDemoOutputs()
+  return {
+    ao: demo.ao.map((config) => {
+      const ioItem = outputByChannel(io.ao, config.channel)
+      const safeItem = outputByChannel(safe.ao, config.channel)
+      return {
+        ...config,
+        mode: outputMode(ioItem?.mode ?? config.mode),
+        safeValue: numberFrom(safeItem?.safe) ?? config.safeValue,
+        label: stringFrom(ioItem?.name) ?? config.label
+      }
+    }),
+    do: demo.do.map((config) => {
+      const safeItem = outputByChannel(safe.do, config.channel)
+      return {
+        ...config,
+        safeState: safeState(safeItem?.safe ?? config.safeState)
+      }
+    })
+  }
+}
+
+function mergeAoConfig(current: IoConfig, outputs: AoConfig[]): IoConfig {
+  const nextAo = [...(current.ao ?? [])]
+  for (const output of outputs) {
+    const index = nextAo.findIndex((item, itemIndex) => channelFromEntry(item, itemIndex) === output.channel)
+    const patch: IoAoConfig = { ch: output.channel, mode: output.mode }
+    if (output.label) patch.name = output.label
+    if (index >= 0) nextAo[index] = { ...nextAo[index], ...patch }
+    else nextAo.push(patch)
+  }
+  return { ...current, ui: current.ui ?? [], ao: nextAo }
+}
+
+function mergeSafeState(current: SafeStateConfig, outputs: OutputsConfig): SafeStateConfig {
+  const nextAo = [...(current.ao ?? [])]
+  const nextDo = [...(current.do ?? [])]
+  for (const output of outputs.ao) {
+    const index = nextAo.findIndex((item, itemIndex) => channelFromEntry(item, itemIndex) === output.channel)
+    const patch: SafeStateEntry = { ch: output.channel, safe: output.safeValue }
+    if (index >= 0) nextAo[index] = { ...nextAo[index], ...patch }
+    else nextAo.push(patch)
+  }
+  for (const output of outputs.do) {
+    const index = nextDo.findIndex((item, itemIndex) => channelFromEntry(item, itemIndex) === output.channel)
+    const patch: SafeStateEntry = { ch: output.channel, safe: output.safeState }
+    if (index >= 0) nextDo[index] = { ...nextDo[index], ...patch }
+    else nextDo.push(patch)
+  }
+  return { ...current, ao: nextAo, do: nextDo }
+}
+
 function formatTrendTime(value: unknown): string {
   if (typeof value !== 'string') return nowIso()
   const parsed = new Date(value)
@@ -383,6 +476,36 @@ export const apiClient = {
         ao: current.ao ?? []
       })
     })
+  },
+
+  async getOutputs(): Promise<OutputsConfig> {
+    if (IS_DEMO) return getDemoOutputs()
+    const [io, safe] = await Promise.all([
+      requestJson<IoConfig>('/system/config/io'),
+      requestJson<SafeStateConfig>('/system/config/safe-state')
+    ])
+    return outputsFromConfig(io, safe)
+  },
+
+  async putOutputs(config: OutputsConfig): Promise<void> {
+    putDemoOutputs(config)
+    if (IS_DEMO) return
+    const [currentIo, currentSafe] = await Promise.all([
+      requestJson<IoConfig>('/system/config/io'),
+      requestJson<SafeStateConfig>('/system/config/safe-state')
+    ])
+    await requestJson('/system/config/io', {
+      method: 'PUT',
+      body: JSON.stringify(mergeAoConfig(currentIo, config.ao))
+    })
+    await requestJson('/system/config/safe-state', {
+      method: 'PUT',
+      body: JSON.stringify(mergeSafeState(currentSafe, config))
+    })
+  },
+
+  async forceOutput(id: string, value: number | boolean, release = false) {
+    return this.forcePoint(id, value, release)
   },
 
   async getUserParams(): Promise<UserParamsConfig> {

@@ -287,6 +287,73 @@ export interface DiInputConfig {
   enabled: boolean
 }
 
+export type AoSignalMode = '0-10V' | '4-20mA'
+export type DoSafeState = 'open' | 'closed'
+export type OutputDemoNote = 'demo'
+
+export interface AoConfig {
+  kind: 'AO'
+  channel: number
+  id: string
+  label: string
+  enabled: boolean
+  mode: AoSignalMode
+  safeValue: number
+  source: number
+  loopConfig: number
+  minHeatOutput: number
+  maxHeatOutput: number
+  minCoolOutput: number
+  maxCoolOutput: number
+  alarm100: number
+  alarm0: number
+  input: number
+  notUsed10: number
+  notUsed11: number
+  piSeqLowerFan1: number
+  fanSpeed2: number
+  piSeqUpperFan3: number
+  setbackAlarm: number
+  notInUse16: number
+  manualValue: number
+  note: string
+  demoNote?: OutputDemoNote
+}
+
+export interface DoConfig {
+  kind: 'DO'
+  channel: number
+  id: string
+  label: string
+  enabled: boolean
+  safeState: DoSafeState
+  floatingMode: boolean
+  source: number
+  notInUse02: number
+  sequence: number
+  switchOffDelay: string
+  switchOnDelay: string
+  pwmCycleTime: string
+  alarmOn: number
+  alarmOff: number
+  runtimeCounter: boolean
+  runtimeAlarmHours: number
+  usePiSequence: boolean
+  activationLimitPi: number
+  deactivationLimitPi: number
+  notUsed14: number
+  notUsed15: number
+  notInUse16: number
+  manualValue: boolean
+  note: string
+  demoNote?: OutputDemoNote
+}
+
+export interface OutputsConfig {
+  ao: AoConfig[]
+  do: DoConfig[]
+}
+
 export type UserParamKey =
   | 'UP00' | 'UP01' | 'UP02' | 'UP03' | 'UP04' | 'UP05' | 'UP06' | 'UP07' | 'UP08' | 'UP09'
   | 'UP10' | 'UP11' | 'UP12' | 'UP13' | 'UP14' | 'UP15' | 'UP16' | 'UP17' | 'UP18' | 'UP19'

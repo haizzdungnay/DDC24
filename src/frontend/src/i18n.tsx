@@ -25,6 +25,7 @@ const copy = {
     validator: 'Lập trình',
     'alarm-settings': 'Cấu hình cảnh báo',
     inputs: 'Cấu hình Inputs',
+    outputs: 'Cấu hình Outputs',
     'user-parameters': 'Tham số người dùng',
     diagram: 'Sơ đồ điều khiển',
     'diagram-sub': 'Sơ đồ xem trước hệ thống',
@@ -159,7 +160,21 @@ const copy = {
     saveSuccess: 'Đã lưu cấu hình AI',
     saveError: 'Không lưu được cấu hình AI',
     register: 'Thanh ghi',
-    value: 'Giá trị'
+    value: 'Giá trị',
+    outputsTitle: 'Cấu hình Outputs',
+    outputsSubtitle: '4 AO + 4 DO theo EasySet, chỉ wire field có backend sẵn',
+    outputsChannels: 'Kênh Output',
+    outputsAoSubtitle: 'Analog Output - signal mode, safe value, manual force',
+    outputsDoSubtitle: 'Digital Output - safe state, timing, manual force',
+    outputsLiveData: 'Dữ liệu live',
+    outputsLiveTrend: 'Xu hướng live',
+    outputsManual: 'Manual output',
+    outputsDemoNote: 'demo - chưa nối backend',
+    outputsSaveSuccess: 'Đã lưu cấu hình Outputs',
+    outputsSaveError: 'Không lưu được cấu hình Outputs',
+    outputsForceError: 'Không force được output',
+    outputsSaveTitle: 'Lưu cấu hình Outputs?',
+    outputsSaveBody: 'Field wired sẽ ghi backend thật; field demo chỉ lưu cục bộ trong phiên này.'
   },
   en: {
     overview: 'Overview',
@@ -183,6 +198,7 @@ const copy = {
     validator: 'Programming',
     'alarm-settings': 'Alarm settings',
     inputs: 'Inputs Config',
+    outputs: 'Outputs Config',
     'user-parameters': 'User Parameters',
     diagram: 'Controller Diagram',
     'diagram-sub': 'Read-only commissioning diagram',
@@ -317,7 +333,21 @@ const copy = {
     saveSuccess: 'AI config saved',
     saveError: 'Could not save AI config',
     register: 'Register',
-    value: 'Value'
+    value: 'Value',
+    outputsTitle: 'Outputs Config',
+    outputsSubtitle: '4 AO + 4 DO EasySet-style hybrid page, only available backend fields are wired',
+    outputsChannels: 'Output Channels',
+    outputsAoSubtitle: 'Analog Output - signal mode, safe value, manual force',
+    outputsDoSubtitle: 'Digital Output - safe state, timing, manual force',
+    outputsLiveData: 'Live Data',
+    outputsLiveTrend: 'Live Trend',
+    outputsManual: 'Manual Output',
+    outputsDemoNote: 'demo - backend not wired yet',
+    outputsSaveSuccess: 'Outputs config saved',
+    outputsSaveError: 'Could not save Outputs config',
+    outputsForceError: 'Could not force output',
+    outputsSaveTitle: 'Save Outputs config?',
+    outputsSaveBody: 'Wired fields write to the live backend; demo fields stay local for this session.'
   }
 } as const
 

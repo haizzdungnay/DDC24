@@ -2,7 +2,9 @@ import type {
   Alarm,
   AlarmSetting,
   AiInputConfig,
+  AoConfig,
   DiInputConfig,
+  DoConfig,
   CommissioningTestResult,
   Graph,
   GraphLink,
@@ -12,6 +14,7 @@ import type {
   NetworkData,
   Point,
   ScheduleRow,
+  OutputsConfig,
   TrendSample,
   UserParamsConfig,
   UserRow
@@ -488,6 +491,39 @@ let demoAiInputConfigs: AiInputConfig[] = [
 
 export function putDemoAiInputs(configs: AiInputConfig[]): void {
   demoAiInputConfigs = configs.map((config) => ({ ...config }))
+}
+
+const defaultAoConfigs: AoConfig[] = [
+  { kind: 'AO', channel: 1, id: 'AO-01', label: 'VFD Speed', enabled: true, mode: '0-10V', safeValue: 0, source: 1, loopConfig: 1, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 1, alarm0: 2, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 62.5, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 2, id: 'AO-02', label: 'Heating Valve', enabled: true, mode: '0-10V', safeValue: 0, source: 1, loopConfig: 0, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 35, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 3, id: 'AO-03', label: 'Cooling Valve', enabled: true, mode: '4-20mA', safeValue: 0, source: 1, loopConfig: 4, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 12.5, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 4, id: 'AO-04', label: 'Damper Position', enabled: true, mode: '0-10V', safeValue: 0, source: 6, loopConfig: 7, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 45, note: '', demoNote: 'demo' }
+]
+
+const defaultDoConfigs: DoConfig[] = [
+  { kind: 'DO', channel: 1, id: 'DO-01', label: 'Pump Start', enabled: true, safeState: 'open', floatingMode: false, source: 1, notInUse02: 0, sequence: 1, switchOffDelay: '00:00:00', switchOnDelay: '00:00:03', pwmCycleTime: '00:00:00', alarmOn: 1, alarmOff: 2, runtimeCounter: true, runtimeAlarmHours: 1200, usePiSequence: false, activationLimitPi: 60, deactivationLimitPi: 45, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: true, note: '', demoNote: 'demo' },
+  { kind: 'DO', channel: 2, id: 'DO-02', label: 'Fan Start', enabled: true, safeState: 'open', floatingMode: false, source: 1, notInUse02: 0, sequence: 2, switchOffDelay: '00:00:05', switchOnDelay: '00:00:05', pwmCycleTime: '00:00:00', alarmOn: 3, alarmOff: 4, runtimeCounter: true, runtimeAlarmHours: 2400, usePiSequence: false, activationLimitPi: 60, deactivationLimitPi: 45, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: true, note: '', demoNote: 'demo' },
+  { kind: 'DO', channel: 3, id: 'DO-03', label: 'Valve Open', enabled: true, safeState: 'closed', floatingMode: true, source: 6, notInUse02: 0, sequence: 3, switchOffDelay: '00:00:00', switchOnDelay: '00:00:00', pwmCycleTime: '00:01:00', alarmOn: 0, alarmOff: 0, runtimeCounter: false, runtimeAlarmHours: 0, usePiSequence: true, activationLimitPi: 70, deactivationLimitPi: 30, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: true, note: '', demoNote: 'demo' },
+  { kind: 'DO', channel: 4, id: 'DO-04', label: 'Alarm Buzzer', enabled: true, safeState: 'open', floatingMode: false, source: 5, notInUse02: 0, sequence: 0, switchOffDelay: '00:00:10', switchOnDelay: '00:00:00', pwmCycleTime: '00:00:00', alarmOn: 5, alarmOff: 6, runtimeCounter: false, runtimeAlarmHours: 0, usePiSequence: false, activationLimitPi: 60, deactivationLimitPi: 45, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: false, note: '', demoNote: 'demo' }
+]
+
+let demoOutputs: OutputsConfig = {
+  ao: defaultAoConfigs.map((config) => ({ ...config })),
+  do: defaultDoConfigs.map((config) => ({ ...config }))
+}
+
+export function getDemoOutputs(): OutputsConfig {
+  return {
+    ao: demoOutputs.ao.map((config) => ({ ...config })),
+    do: demoOutputs.do.map((config) => ({ ...config }))
+  }
+}
+
+export function putDemoOutputs(config: OutputsConfig): void {
+  demoOutputs = {
+    ao: config.ao.map((item) => ({ ...item, demoNote: 'demo' })),
+    do: config.do.map((item) => ({ ...item, demoNote: 'demo' }))
+  }
 }
 
 const defaultUserParams: UserParamsConfig = {
