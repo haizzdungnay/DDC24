@@ -25,6 +25,10 @@ if(MKDDC_ENABLE_BACNET)
       URL https://github.com/bacnet-stack/bacnet-stack/archive/refs/tags/bacnet-stack-1.3.8.tar.gz
       DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
     FetchContent_MakeAvailable(bacnet_stack_src)
+    # GCC 12 (Debian Bookworm) false-positive array-bounds in bacnet-stack 1.3.8 h_cov.c
+    if(TARGET bacnet-stack)
+      target_compile_options(bacnet-stack PRIVATE -Wno-error=array-bounds)
+    endif()
     set(BACNET_STACK_TARGET bacnet-stack::bacnet-stack)
   endif()
 endif()

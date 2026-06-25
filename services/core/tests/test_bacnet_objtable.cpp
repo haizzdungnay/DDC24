@@ -28,26 +28,35 @@ TEST(BacnetObjtable, BadQuality)
 
 TEST(BacnetObjtable, AdcFaultGivesCommFailure)
 {
-    EXPECT_EQ(quality_to_reliability(KX_Q_GOOD, IOP_FAULT_ADC, 0), 5u);
+    EXPECT_EQ(quality_to_reliability(KX_Q_GOOD, IOP_FAULT_ADC1, 0), 5u);
 }
 
 TEST(BacnetObjtable, UIOverRangeCh0)
 {
-    const uint16_t fault = IOP_FAULT_UI_OV | static_cast<uint16_t>(1u << 8);
-    EXPECT_EQ(quality_to_reliability(KX_Q_GOOD, fault, 0), 1u);  /* OVER_RANGE */
+    /* IOP v2 (ADR-010): aggregate IOP_FAULT_UI_OV covers all 16 channels */
+    EXPECT_EQ(quality_to_reliability(KX_Q_GOOD, IOP_FAULT_UI_OV, 0), 1u);  /* OVER_RANGE */
 }
 
 TEST(BacnetObjtable, UIOverRangeCh3)
 {
-    const uint16_t fault = IOP_FAULT_UI_OV | static_cast<uint16_t>(1u << 11);
-    EXPECT_EQ(quality_to_reliability(KX_Q_GOOD, fault, 3), 1u);
+    EXPECT_EQ(quality_to_reliability(KX_Q_GOOD, IOP_FAULT_UI_OV, 3), 1u);
 }
 
-TEST(BacnetObjtable, UIOverRangeWrongChannel)
+TEST(BacnetObjtable, UIOverRangeCh8)
 {
-    /* OV for channel 2, checking channel 0 → NO_FAULT */
-    const uint16_t fault = IOP_FAULT_UI_OV | static_cast<uint16_t>(1u << 10);
-    EXPECT_EQ(quality_to_reliability(KX_Q_GOOD, fault, 0), 0u);
+    /* Second ADS131M08 channels must also trigger OVER_RANGE */
+    EXPECT_EQ(quality_to_reliability(KX_Q_GOOD, IOP_FAULT_UI_OV, 8), 1u);
+}
+
+TEST(BacnetObjtable, UIOverRangeCh15)
+{
+    EXPECT_EQ(quality_to_reliability(KX_Q_GOOD, IOP_FAULT_UI_OV, 15), 1u);
+}
+
+TEST(BacnetObjtable, NoOverRangeWithoutFlag)
+{
+    /* IOP_FAULT_UI_OV not set → NO_FAULT for any channel */
+    EXPECT_EQ(quality_to_reliability(KX_Q_GOOD, 0, 8), 0u);
 }
 
 /* ---- publish (stub shm via attach) ---- */

@@ -1,197 +1,243 @@
-# MCU Specification — STM32G0B1RBT6
+# MCU Specification - STM32G0B1RBT6
 
-> **Document:** HW-DES-05-MCU | Rev 1.0 | 2026-05-27  
-> **Vai trò:** Real-time I/O controller, FreeRTOS, giao tiếp với CM3 qua UART (Kinexus-IOP v1)
-
----
-
-## 1. Chọn MCU
-
-**Lý do chọn STM32G0B1RBT6:**
-- ARM Cortex-M0+ @ 64MHz — đủ cho 1ms real-time sampling
-- 128KB Flash — đủ cho FreeRTOS + firmware đầy đủ + OTA buffer
-- 144KB SRAM — dư địa lớn cho task stack + ring buffer I/O
-- **3× SPI** (SPI1→DAC8554, SPI3→ADS131M08, SPI2 spare) + **2× DMA controller** → đủ DMA đồng thời cho ADC + DAC + UART, không cần polling fallback
-- 12-bit ADC tích hợp (dự phòng, main ADC là ADS131M08)
-- UART, I2C đầy đủ
-- Package LQFP64 — pin-compatible với STM32G071RB, dễ SMT sản xuất hàng loạt
-- Giá: ~2.0–2.5 USD (mass production)
-- Công cụ phát triển: STM32CubeIDE + STM32CubeMX (free)
-
-> **Lịch sử chọn part:** Ban đầu là STM32G071RB (2× SPI, 1× DMA). Đổi sang **STM32G0B1RBT6** (Rev 2.0, 2026-05-30) để có 3× SPI + 2× DMA controller — hợp thức hóa thiết kế "SPI3 → ADS131M08, SPI1 → DAC8554 chạy DMA song song". Pin-compatible LQFP64, đổi không ảnh hưởng layout.
+> **Document:** HW-DES-05-MCU | Rev 1.3 | 2026-06-23
+> **Vai tro:** Real-time I/O controller, FreeRTOS, ADC acquisition, AO/DO control, binary IOP link to CM3
+> **UI Rev A impact:** 16 UI with 2x ADS131M08 and per-channel mode latch
 
 ---
 
-## 2. Thông số Kỹ thuật
+## Revision History
 
-| Thông số | Giá trị |
-|----------|---------|
-| **Core** | ARM Cortex-M0+ |
-| **Clock** | 64MHz (HSE 8MHz × PLL) |
-| **Flash** | 128KB |
-| **SRAM** | 144KB |
-| **ADC** | 2× 12-bit SAR, 12 channels |
-| **DAC** | 1× 12-bit (không dùng — dùng DAC8554 ngoài) |
-| **SPI** | 3× (SPI1 → DAC8554; SPI3 → ADS131M08; SPI2 spare) |
-| **UART** | 4× (UART1 → CM3 IOP; UART2 → debug) |
-| **I2C** | 2× |
-| **GPIO** | 51× |
-| **Timers** | 11× (dùng TIM1 cho 1ms task cycle) |
-| **IWDG** | Independent Watchdog (timeout 1s) |
-| **Operating temp** | -40°C ~ +85°C |
-| **Package** | LQFP64 |
-| **VDD** | 3.3V |
+| Rev | Ngay | Thay doi |
+|-----|------|----------|
+| 1.0 | 2026-05-27 | Initial STM32G0B1RBT6 spec, 8 UI + 8 DI architecture |
+| 1.1 | 2026-06-23 | DI to UI migration, PB4-PB11 repurposed, added ADS131M08 #2 pins |
+| 1.2 | 2026-06-23 | Phase 1 cross-check updates |
+| 1.3 | 2026-06-23 | UI architecture review: remove shared SEL, add per-channel mode latch, update ADC signed int32 protocol and sampling responsibilities |
+
+---
+
+## 1. MCU Selection
+
+STM32G0B1RBT6 remains the Rev A MCU.
+
+Key reasons:
+
+- ARM Cortex-M0+ at 64MHz is sufficient for 1ms ADC acquisition and 10ms IOP publishing.
+- 128KB Flash and 144KB SRAM leave room for double buffers, diagnostics, and OTA boot support.
+- SPI1 drives DAC8554, SPI3 drives 2x ADS131M08, and spare serial/GPIO resources support UI mode latch.
+- LQFP64 is manufacturable and has enough pins after DI opto removal.
+
+---
+
+## 2. Electrical Summary
+
+| Item | Value |
+|------|-------|
+| Core | ARM Cortex-M0+ |
+| Clock | 64MHz from 8MHz HSE + PLL |
+| Flash | 128KB |
+| SRAM | 144KB |
+| VDD | 3.3V |
+| Main ADC interface | SPI3 to 2x ADS131M08 |
+| IOP link | USART1 to CM3 UART2, 921600 8N1 |
+| Safety output | FAULT_OUT to CM3 GPIO |
 
 ---
 
 ## 3. Pin Mapping STM32G0B1RBT6
 
-> **⭐ NGUỒN CHUẨN DUY NHẤT cho pinout MCU.** `CB_BLOCK_DIAGRAM`, `CB_SCHEMATIC_NOTES`, `IO_DI_CIRCUIT`, `IO_DO_RELAY`, `IO_UI_CIRCUIT` PHẢI khớp bảng này. Phân bổ chân mux-enable đầy đủ (D-1) sẽ chốt ở giai đoạn pinmux design.
+This table is the hardware-design source for MCU pin use. Schematic, firmware pinout, and layout must match it before release.
 
 ### 3.1 UART
 
-| Signal | Pin STM32 | Kết nối | Tốc độ |
-|--------|-----------|---------|:------:|
-| **USART1_TX** | PA9 | CM3 UART2_RX (IOP) | 921.600 |
-| **USART1_RX** | PA10 | CM3 UART2_TX (IOP) | 921.600 |
-| **USART2_TX** | PA2 | Debug/Programming | 115.200 |
-| **USART2_RX** | PA3 | Debug/Programming | 115.200 |
+| Signal | Pin STM32 | Connection | Speed |
+|--------|-----------|------------|------:|
+| USART1_TX | PA9 | CM3 UART2_RX (IOP) | 921600 |
+| USART1_RX | PA10 | CM3 UART2_TX (IOP) | 921600 |
+| USART2_TX | PA2 | Debug/programming UART | 115200 |
+| USART2_RX | PA3 | Debug/programming UART | 115200 |
 
-### 3.2 SPI
+### 3.2 SPI and ADC Interrupts
 
-| Signal | Pin STM32 | Kết nối |
-|--------|-----------|---------|
-| **SPI1_CLK** | PA5 | DAC8554 SCLK |
-| **SPI1_MOSI** | PA7 | DAC8554 DIN |
-| **SPI1_CS** | PA4 | DAC8554 SYNC (active LOW) |
-| **SPI1_LDAC** | PB0 | DAC8554 LDAC (GPIO điều khiển — xem P2-10/§AO) |
-| **SPI3_CLK** | PC10 | ADS131M08 SCLK |
-| **SPI3_MISO** | PC11 | ADS131M08 DOUT |
-| **SPI3_MOSI** | PC12 | ADS131M08 DIN/SDI (**bắt buộc** — ghi config register) |
-| **SPI3_CS** | PB2 (GPIO) | ADS131M08 !CS — pull-up 10kΩ |
-| **DRDY_ADC** | PA8 (EXTI) | ADS131M08 !DRDY (interrupt báo data ready) |
+| Signal | Pin STM32 | Connection | Note |
+|--------|-----------|------------|------|
+| SPI1_CLK | PA5 | DAC8554 SCLK | AO DAC |
+| SPI1_MOSI | PA7 | DAC8554 DIN | AO DAC |
+| SPI1_CS | PA4 | DAC8554 SYNC | Active low |
+| SPI1_LDAC | PB0 | DAC8554 LDAC | GPIO |
+| SPI3_CLK | PC10 | ADS131M08 #1/#2 SCLK | Shared bus |
+| SPI3_MISO | PC11 | ADS131M08 #1/#2 DOUT | Shared bus |
+| SPI3_MOSI | PC12 | ADS131M08 #1/#2 DIN | Required for config writes |
+| ADC1_CS | PB2 | ADS131M08 #1 !CS | Pull-up 10k |
+| ADC1_DRDY | PA8 | ADS131M08 #1 !DRDY | EXTI input |
+| ADC2_CS | PA15 | ADS131M08 #2 !CS | Pull-up 10k |
+| ADC2_DRDY | PA6 | ADS131M08 #2 !DRDY | EXTI input |
 
-### 3.3 GPIO Digital Input (DI × 8)
+### 3.3 UI Per-Channel Mode Latch
 
-| Signal | Pin STM32 | Kết nối | Pull |
-|--------|-----------|---------|:----:|
-| DI1 | PB4 | Opto PC817 collector | Pull-up 10k (ext.) |
-| DI2 | PB5 | Opto | Pull-up |
-| DI3 | PB6 | Opto | Pull-up |
-| DI4 | PB7 | Opto | Pull-up |
-| DI5 | PB8 | Opto | Pull-up |
-| DI6 | PB9 | Opto | Pull-up |
-| DI7 | PB10 | Opto | Pull-up |
-| DI8 | PB11 | Opto | Pull-up |
+Shared direct `SEL[2:0]` is deprecated. PB12/PB13/PB14 no longer route as common address lines to all UI muxes.
 
-### 3.4 GPIO Digital Output (DO × 4 via ULN2003A)
+| Signal | Pin STM32 | Direction | Connection |
+|--------|-----------|-----------|------------|
+| UI_MODE_DATA | PB12 | OUT | Serial data to 48-bit mode latch chain |
+| UI_MODE_CLK | PB13 | OUT | Shift clock |
+| UI_MODE_LATCH | PB14 | OUT | Output latch / register clock |
+| UI_MODE_OE | PB15 | OUT | Optional output enable, active level per latch part |
 
-| Signal | Pin STM32 | Kết nối |
-|--------|-----------|---------|
+Latch output assignment:
+
+| Output group | Meaning |
+|--------------|---------|
+| UI_MODE[0].S0/S1/S2 | Mode bits for UI1 |
+| UI_MODE[1].S0/S1/S2 | Mode bits for UI2 |
+| ... | ... |
+| UI_MODE[15].S0/S1/S2 | Mode bits for UI16 |
+
+Recommended latch parts: 6x 74HC595/74HCS595 or equivalent 3.3V-compatible shift/latch devices. Outputs must default to safe disabled mode through reset behavior or external pulls.
+
+### 3.4 Retired Direct UI Enable Pins
+
+The previous Phase 1 mapping used direct STM32 pins for `UI_EN[0..15]`. Rev A per-channel mode latch removes the need to spend 16 MCU GPIOs on mux enables.
+
+| Pin group | Rev 1.2 use | Rev 1.3 status |
+|-----------|-------------|----------------|
+| PC4-PC9, PC13, PC15 | UI_EN[0..7] | Reserved/spare unless final schematic needs per-channel enable diagnostics |
+| PB4-PB11 | UI_EN[8..15] | Reserved/spare; no longer DI, no longer required for shared-mux enable |
+
+If the schematic still needs per-channel enable or analog-power gating, implement it through the latch chain or an IO expander, not by reintroducing shared SEL behavior.
+
+### 3.5 Digital Output
+
+| Signal | Pin STM32 | Connection |
+|--------|-----------|------------|
 | DO1_DRV | PC0 | ULN2003A IN1 |
 | DO2_DRV | PC1 | ULN2003A IN2 |
 | DO3_DRV | PC2 | ULN2003A IN3 |
 | DO4_DRV | PC3 | ULN2003A IN4 |
 
-### 3.5 GPIO UI Analog Mode Select (TMUX1208 SEL)
+### 3.6 Miscellaneous
 
-| Signal | Pin STM32 | Kết nối |
-|--------|-----------|---------|
-| UI_SEL_S0 | PB12 | TMUX1208 S0 (chung 8 mux) |
-| UI_SEL_S1 | PB13 | TMUX1208 S1 |
-| UI_SEL_S2 | PB14 | TMUX1208 S2 |
-| UI_EN[0..7] | PC4–PC9, PC13, PC15 | Enable từng kênh mux |
-
-> **Đã dời SEL khỏi PA0/PA1** để tránh đụng chân với ADC nội (§3.8) đo VCC/board temp. PA6 nay là spare.
-
-### 3.6 GPIO Misc
-
-| Signal | Pin STM32 | Kết nối | Direction |
-|--------|-----------|---------|:---------:|
-| **nRESET** | NRST | CM3 GPIO0_A4 | IN (CM3 reset MCU) |
-| **BOOT0** | BOOT0 | Pull-down 10kΩ (normal run) | IN |
-| **FAULT_OUT** | PD5 | CM3 GPIO0_A6 | OUT (báo lỗi) |
-| **MCU_LED** | PD6 | LED xanh MCU alive (blink 1Hz) | OUT |
-| **IWDG_FEED** | Internal | IWDG feed trong task cycle | — |
-
-### 3.7 Clock
-
-| Signal | Pin | Giá trị |
-|--------|-----|---------|
-| HSE Crystal | OSC_IN/OUT | 8MHz, load cap 12pF |
-| PLL | Internal | × 8 = 64MHz sysclk |
-
-### 3.8 ADC tích hợp (dự phòng)
-
-| Channel | Pin | Mục đích |
-|---------|-----|---------|
-| ADC_IN0 | PA0 | Đo VCC_5V (qua divider /3) |
-| ADC_IN1 | PA1 | Nhiệt độ board (NTC 10k trên PCB) |
+| Signal | Pin STM32 | Connection | Direction |
+|--------|-----------|------------|-----------|
+| nRESET | NRST | CM3 reset control / SWD | IN |
+| BOOT0 | BOOT0 | Pull-down 10k, CM3-controlled for OTA if fitted | IN |
+| FAULT_OUT | PD5 | CM3 GPIO0_A6 | OUT |
+| MCU_LED | PD6 | MCU alive LED | OUT |
+| ADC_IN0 | PA0 | Board voltage monitor | IN |
+| ADC_IN1 | PA1 | Board temperature or VREF_UI monitor | IN |
 
 ---
 
-## 4. FreeRTOS Task Structure
+## 4. ADC Acquisition Responsibilities
 
-> **⚠ Nguồn chuẩn:** Task model chi tiết (priority, period, stack, deadline, mutex/queue) được định nghĩa trong **`spec/FW_ARCH_SPEC_MK-DDC-24_VI.md` §2**. Bảng dưới chỉ là tóm tắt; nếu khác biệt, FW_ARCH là nguồn đúng.
+MCU responsibilities:
 
-| Task (theo FW_ARCH §2) | Priority | Period | Stack | Chức năng |
-|------------------------|:--------:|:------:|:-----:|-----------|
-| `io_sample_task` | 7 (High) | 1 ms | 512 B | ADC sampling ADS131M08 + DI debounce |
-| `iop_comm_task` | 6 | 10 ms | 512 B | IOP UART protocol (TX+RX gộp 1 task) |
-| `ao_output_task` | 6 | 10 ms | 256 B | Apply AO → DAC8554 |
-| `do_control_task` | 6 | 10 ms | 256 B | Relay control + feedback |
-| `diagnostics_task` | 2 | 1000 ms | 256 B | MCU temp, VDD, counters |
-| `watchdog_task` | 1 | 500 ms | 128 B | Task health check + IWDG kick |
+- Configure both ADS131M08 devices through SPI3 MOSI.
+- Wait for DRDY1/DRDY2 or detect timeout.
+- Read status words and 8 signed 24-bit channel values from each ADC.
+- Sign-extend ADS raw samples to int32.
+- Maintain `adc_status_1`, `adc_status_2`, `channel_status_bitmap`, sequence, and timestamp.
+- Never send float values over UART.
+- Publish binary frames to CM3 at 10ms nominal cadence.
 
-**Total SRAM task stack:** ~2KB + FreeRTOS kernel ~4KB + data buffers ~8KB (rất dư trong 144KB SRAM).
-
----
-
-## 5. Kinexus-IOP v1 Protocol (UART)
-
-> **⚠ Nguồn chuẩn DUY NHẤT:** **`spec/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md`** (IOP-SPEC v1.0). Mọi chi tiết frame format, command catalog, CRC, SEQ, timing, fault FSM đều ở đó. **Không** dùng lại bảng command cũ trong tài liệu này.
-
-Tóm tắt (chi tiết → IOP-SPEC):
-
-| Mục | Giá trị chuẩn (IOP-SPEC) |
-|-----|--------------------------|
-| Frame | `SOF(0xAA) · LEN · CMD · SEQ · PAYLOAD(0–252) · CRC16` |
-| CRC | **CRC-16/Modbus** (poly 0x8005, init 0xFFFF) — *không phải CCITT* |
-| SEQ | có (1 byte, MCU echo SEQ từ SOM) |
-| Command chính | `0x01 GET_IO`, `0x02 IO_RESP`, `0x10 SET_AO`, `0x11 SET_DO`, `0x12 ACK`, `0x20/0x21 DIAG`, `0x30/0x31 HANDSHAKE`, `0x40 RESET_IO`, `0xFE NACK` |
-| Poll interval | 10 ms (100 Hz) |
-| Response timeout | 10 ms (retry ×3) → 100 ms → safe state |
-| Baud rate | 921.600 bps |
-| Frame max | LEN+6 = tối đa 258 bytes |
-
-> **Lưu ý lịch sử:** Bảng command cũ (CMD_READ_AI/READ_DI/WRITE_AO, CRC-CCITT, không SEQ, timeout 50ms) ở Rev 1.0 đã **bị loại bỏ** khi IOP-SPEC v1.0 ban hành (2026-05-28).
+See `FW-ADC-SAMPLING.md` for the detailed sampling sequence and timing terms.
 
 ---
 
-## 6. Watchdog
+## 5. FreeRTOS Task Structure
 
-- **IWDG timeout:** 1 giây
-- `task_diagnostics` feed IWDG mỗi 500ms
-- Nếu IWDG reset xảy ra → MCU set FAULT_OUT pin HIGH → CM3 nhận interrupt → log sự kiện → reset MCU lần nữa
+| Task | Priority | Period | Function |
+|------|:--------:|:------:|----------|
+| `io_sample_task` | 7 | 1ms | Acquire ADS #1/#2, update raw buffers and channel status |
+| `iop_comm_task` | 6 | 10ms | Build/parse binary IOP frames, CRC, sequence, timeout handling |
+| `ao_output_task` | 6 | 10ms | Apply AO commands through DAC8554 |
+| `do_control_task` | 6 | 10ms | Relay drive and feedback checks |
+| `diagnostics_task` | 2 | 1000ms | MCU temperature, VDD/VREF, counters, fault aggregation |
+| `watchdog_task` | 1 | 500ms | IWDG kick and task health monitoring |
 
----
+Minimum buffers:
 
-## 7. OTA / Programming MCU
-
-> **⚠ Cập nhật (chốt P1-4):** SRS OTA-004, FW-OTA-001 và SW-OTA-004 **bắt buộc** SOM nạp firmware MCU trong cùng gói OTA **ngay từ Ver 1**. Do đó **Ver 1 PHẢI hỗ trợ đường CM3 → MCU UART bootloader** (không chỉ SWD).
-
-**Ver 1 — Hai đường nạp:**
-1. **Factory/Debug — SWD:** Header 5-pin SWD tại cạnh PCB (nạp lần đầu tại nhà máy, debug).
-2. **Field OTA — CM3 nạp MCU qua UART system bootloader (BẮT BUỘC Ver 1):**
-   - CM3 GPIO kéo **BOOT0 = HIGH** → assert **nRESET** → MCU vào ROM system bootloader.
-   - CM3 gửi firmware MCU `.bin` qua **USART (đường IOP UART2/USART1 hoặc USART2)** dùng giao thức ST AN3155.
-   - Trước khi flash: tất cả output PHẢI ở safe state (FW-OTA-002). Sau flash: verify CRC (FW-OTA-004), nhả BOOT0, reset → chạy firmware mới (≤ 5s, FW-OTA-003).
-   - Nếu CRC fail: bootloader giữ firmware cũ (FW-OTA-005).
-
-**Yêu cầu phần cứng kèm theo:** CM3 GPIO điều khiển được **BOOT0** (qua jumper-bypass FET hoặc trực tiếp) và **nRESET** của MCU — xem MCU pinout §3.6 và CB_SCHEMATIC §3.
-
-> **Ghi chú:** Việc chọn UART nào để nạp (tái dùng đường IOP hay USART2 debug) chốt ở giai đoạn thiết kế firmware bootloader (D-7).
+| Buffer | Size |
+|--------|------|
+| Raw ADC active | 16 x int32 |
+| Raw ADC publish copy | 16 x int32 |
+| Channel status | 32-bit bitmap minimum; 64-bit preferred for extended status |
+| ADC status words | 2 x uint32 |
+| Timestamp | uint32 microseconds, wraps acceptable |
 
 ---
 
-**Document ID:** HW-DES-05-MCU | Rev 1.0 | 2026-05-27
+## 6. IOP Protocol Summary
+
+The Rev A UI ADC transport is a binary frame defined in `hardware-design/05_mcu_io/IOP_PROTOCOL.md`.
+
+Minimum UI ADC frame fields:
+
+```text
+SOF
+version
+sequence
+timestamp_us
+adc_status_1
+adc_status_2
+16 x int32 raw_adc
+channel_status_bitmap
+crc16
+```
+
+Protocol rules:
+
+- Raw ADC is signed 24-bit two's complement sign-extended to int32.
+- CRC16 is mandatory.
+- Sequence gaps detect lost frames.
+- CRC fail, ADC timeout, and DRDY timeout have counters/status bits.
+- JSON and float are not allowed in realtime UART payloads.
+
+---
+
+## 7. Watchdog and Fault Handling
+
+- IWDG timeout: 1s nominal.
+- If `io_sample_task` misses ADC data beyond timeout, set ADC fault and continue publishing status frames.
+- If `iop_comm_task` loses CM3 polling beyond safe timeout, AO/DO enter configured safe state.
+- `FAULT_OUT` asserts for persistent unrecoverable faults and is mirrored in IOP diagnostics.
+
+---
+
+## 8. OTA / Programming MCU
+
+Rev A keeps two programming paths:
+
+1. Factory/debug through SWD header.
+2. Field OTA through CM3-controlled boot/reset path and STM32 ROM UART bootloader where fitted.
+
+All outputs must enter safe state before firmware flashing, and firmware image CRC must be verified before release from bootloader.
+
+---
+
+## 9. Release Checks Before Schematic/Layout
+
+- [ ] No shared SEL[2:0] net goes directly to all UI muxes.
+- [ ] UI mode latch reset/default state is safe and documented.
+- [ ] SPI3 has independent CS/DRDY for both ADS131M08 devices.
+- [ ] Firmware sampling design uses signed int32 raw buffer for 16 channels.
+- [ ] IOP protocol document and implementation plan agree on frame length, CRC, and endian.
+- [ ] PB4-PB11 are not documented as industrial DI inputs.
+- [ ] Dry contact through UI is not claimed as isolated DI.
+
+---
+
+## 10. Cross-References
+
+| Document | Required consistency |
+|----------|----------------------|
+| `hardware-design/03_io_subsystem/IO_UI_CIRCUIT.md` | Pin mapping for UI mode latch (PB12-15), ADC #1/#2 pins (PC10-15, PA8, PA6, PA15), SPI3 configuration |
+| `hardware-design/05_mcu_io/IOP_PROTOCOL.md` | Binary frame format (SOF, version, sequence, timestamp_us, adc_status×2, 16×int32, channel_status_bitmap, crc16), signed int32 encoding, CM3 publish rate |
+| `hardware-design/05_mcu_io/FW-ADC-SAMPLING.md` | ADC sample rate (1 kSPS), MCU scan rate (1 ms), CM3 publish rate (10 ms), per-channel mode latch stability, fault handling |
+| `hardware-design/02_carrier_board/CB_BLOCK_DIAGRAM.md` | Terminal -> protection -> front-end -> mux/buffer -> ADC signal chain, STM32 position in architecture |
+| `hardware-design/02_carrier_board/CB_SCHEMATIC_NOTES.md` | UI sheet rules, SPI3 routing, DRDY/EXTI configuration |
+| `hardware-design/06_bom/BOM_MK-DDC-24_v1.md` | STM32G0B1RBT6 part number and configuration |
+| `hardware-design/09_hw_bringup/HW-TEST-UI-16CH.md` | Pin mapping validation, SPI3 timing, ADC timeout behavior |
+
+**Document ID:** HW-DES-05-MCU | Rev 1.3 | 2026-06-23

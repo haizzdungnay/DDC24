@@ -5,9 +5,6 @@
 
 namespace iobus {
 
-/* Hằng số 06 §3.6 — chép đúng, không gõ lại từ trí nhớ */
-static constexpr double CVD_A = 3.9083e-3;
-static constexpr double CVD_B = -5.775e-7;
 static constexpr double SH_A = 1.129e-3;
 static constexpr double SH_B = 2.341e-4;
 static constexpr double SH_C = 8.76e-8;
@@ -39,19 +36,10 @@ const char* sensor_unit(SensorType t)
     }
 }
 
-/* R_from_raw: phụ thuộc mạch front-end (divider/excitation) — calib thật ở
- * Phase bring-up. Skeleton: coi raw tỉ lệ thuận R với hệ số danh định. */
-static double r_from_raw(int32_t raw_s24, double r_nominal)
+/* R_from_raw: phụ thuộc mạch front-end — calib thật ở bring-up. */
+static double r_from_raw(int32_t raw_s32, double r_nominal)
 {
-    return (static_cast<double>(raw_s24) / static_cast<double>(IO_S24_FS)) * 2.0 * r_nominal;
-}
-
-/* CVD ngược (IEC 60751), T≥0: R = R0(1 + A·T + B·T²) → giải bậc 2 */
-static double pt_resolve_temp(double r, double r0)
-{
-    const double disc = CVD_A * CVD_A - 4.0 * CVD_B * (1.0 - r / r0);
-    if (disc < 0.0) return NAN;
-    return (-CVD_A + std::sqrt(disc)) / (2.0 * CVD_B);
+    return (static_cast<double>(raw_s32) / static_cast<double>(IO_S24_FS)) * 2.0 * r_nominal;
 }
 
 static double ntc_resolve_temp(double r)
@@ -62,45 +50,42 @@ static double ntc_resolve_temp(double r)
     return t_k - 273.15;
 }
 
-float ui_to_eng(uint32_t raw_u24, SensorType t, kx_quality_t* q_out)
+float ui_to_eng(int32_t raw_s32, SensorType t, kx_quality_t* q_out)
 {
-    const uint8_t be[3] = { static_cast<uint8_t>(raw_u24 >> 16),
-                            static_cast<uint8_t>(raw_u24 >> 8),
-                            static_cast<uint8_t>(raw_u24) };
-    const int32_t raw = iop_s24(be);
-    const float frac = static_cast<float>(raw) / IO_S24_FS;
+    const float frac = static_cast<float>(raw_s32) / IO_S24_FS;
     *q_out = KX_Q_GOOD;
 
     switch (t) {
     case SensorType::V0_10: {
         const float v = frac * 10.0f;
-        if (frac > 1.10f || frac < -0.02f) *q_out = KX_Q_BAD;   /* >110%FS / <-2%FS */
+        if (frac > 1.10f || frac < -0.02f) *q_out = KX_Q_BAD;
         return v;
     }
     case SensorType::MA4_20: {
         const float ma = 4.0f + frac * 16.0f;
-        if (ma < 3.5f) *q_out = KX_Q_BAD;                        /* đứt loop */
+        if (ma < 3.5f) *q_out = KX_Q_BAD;
         else if (ma > 21.0f) *q_out = KX_Q_BAD;
         return ma;
     }
     case SensorType::PT100:
     case SensorType::PT1000: {
-        const double r0 = (t == SensorType::PT100) ? 100.0 : 1000.0;
-        const double temp = pt_resolve_temp(r_from_raw(raw, r0), r0);
-        if (std::isnan(temp) || temp < -50.0 || temp > 200.0) { *q_out = KX_Q_BAD; return 0.0f; }
-        return static_cast<float>(temp);
+        /* Rev A: IOP_BOARD_CAP_RTD not set — circuit not populated.
+         * When RTD hardware ships (BOARD_CAP_MAP & IOP_BOARD_CAP_RTD), reinstate
+         * CVD pt_resolve_temp() here. Track as follow-up task IOB-RTD-RevB. */
+        *q_out = KX_Q_BAD;
+        return 0.0f;
     }
     case SensorType::NTC10K:
     case SensorType::NTC20K: {
         const double r_nom = (t == SensorType::NTC10K) ? 10000.0 : 20000.0;
-        const double temp = ntc_resolve_temp(r_from_raw(raw, r_nom));
+        const double temp = ntc_resolve_temp(r_from_raw(raw_s32, r_nom));
         if (std::isnan(temp) || temp < -30.0 || temp > 70.0) { *q_out = KX_Q_BAD; return 0.0f; }
         return static_cast<float>(temp);
     }
     case SensorType::DRY_CONTACT:
-        return (static_cast<float>(raw) > DRY_CONTACT_THRESHOLD) ? 1.0f : 0.0f;
+        return (static_cast<float>(raw_s32) > DRY_CONTACT_THRESHOLD) ? 1.0f : 0.0f;
     default:
-        *q_out = KX_Q_BAD;   /* sensor_type không nhận ra → BAD, không scale (06 §4) */
+        *q_out = KX_Q_BAD;
         return 0.0f;
     }
 }
@@ -111,7 +96,7 @@ uint16_t ao_eng_to_raw(float v, AoMode m)
     if (m == AoMode::V0_10)
         frac = v / 10.0f;
     else
-        frac = (v - 4.0f) / 16.0f;      /* raw 0 = 4mA (IOP_AO_SAFE_CURR_RAW=0) */
+        frac = (v - 4.0f) / 16.0f;
     if (frac < 0.0f) frac = 0.0f;
     if (frac > 1.0f) frac = 1.0f;
     return static_cast<uint16_t>(frac * 65535.0f + 0.5f);

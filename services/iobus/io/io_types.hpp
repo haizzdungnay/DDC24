@@ -1,6 +1,6 @@
 /**
  * @file  io_types.hpp
- * @brief Kiểu dữ liệu nội bộ mkddc-iobus (struct theo 05 §12.1 — khớp byte layout 05 §6).
+ * @brief Kiểu dữ liệu nội bộ mkddc-iobus — khớp byte layout IOP v2 (ADR-010).
  *        Nguồn-chuẩn: shared/iop_protocol.h + shared/mkddc_shm.h.
  */
 #ifndef IOBUS_IO_TYPES_HPP
@@ -13,17 +13,18 @@
 
 namespace iobus {
 
-/* Parse từ IO_RESP 34B (05 §6.1) */
+/* Parse từ IO_RESP 74B (IOP v2, ADR-010) */
 struct IopIoResp {
-    uint32_t ui_raw[KX_N_UI];   /* uint24 thực, lưu trong uint32 (0..0xFFFFFF) */
-    uint8_t  di_mask;
-    uint8_t  do_fb_mask;
+    int32_t  ui_raw[KX_N_UI];   /* s24 sign-extended to int32, từ iop_be32s() */
+    uint8_t  adc1_stat;         /* IOP_ADC_STAT_* cho ADS131M08 #1 (ch1-8)   */
+    uint8_t  adc2_stat;         /* IOP_ADC_STAT_* cho ADS131M08 #2 (ch9-16)  */
+    uint8_t  do_fb_mask;        /* bit0..3 = DO1..DO4 relay feedback           */
     int16_t  mcu_temp_x10;      /* 0.1°C */
-    uint16_t fault_flags;       /* IOP_FAULT_* */
+    uint16_t fault_flags;       /* IOP_FAULT_* v2 */
     uint16_t sample_cnt;
 };
 
-/* Parse từ DIAG_RESP 20B (05 §6.6) */
+/* Parse từ DIAG_RESP 20B */
 struct IopDiagResp {
     uint16_t fw_version;
     uint16_t uptime_s;
@@ -36,19 +37,19 @@ struct IopDiagResp {
     uint16_t vdd_mv;
 };
 
-/* Kết quả mọi lệnh gửi-nhận (05 §12.1) */
+/* Kết quả mọi lệnh gửi-nhận */
 struct IopResult {
     enum Code { OK, TIMEOUT, CRC_FAIL, SEQ_FAIL, NACK, NOT_OPEN } code = NOT_OPEN;
-    uint8_t nack_err = 0;       /* hợp lệ khi code==NACK (ERR_*) */
-    uint8_t retries  = 0;       /* số lần đã retry */
+    uint8_t nack_err = 0;
+    uint8_t retries  = 0;
 
     bool ok() const { return code == OK; }
 };
 
-/* State machine master (05 §13) */
+/* State machine master */
 enum class IopStatus { INIT, OPEN_UART, HANDSHAKE, CONFIG_AO, NORMAL_POLL, FAULT, SAFE_STATE, RECONNECT };
 
-/* Map IopStatus → kx_iop_status_t (06 §5) */
+/* Map IopStatus → kx_iop_status_t */
 inline kx_iop_status_t to_kx_status(IopStatus s)
 {
     switch (s) {
@@ -58,7 +59,9 @@ inline kx_iop_status_t to_kx_status(IopStatus s)
     }
 }
 
-/* Loại cảm biến UI (bảng scaling 06 §3.6) */
+/* Loại cảm biến UI.
+ * PT100/PT1000: Rev A hardware không lắp mạch — quality luôn BAD nếu configure.
+ * NTC10K/NTC20K/DRY_CONTACT: vẫn hỗ trợ qua front-end Rev A. */
 enum class SensorType { V0_10, MA4_20, PT100, PT1000, NTC10K, NTC20K, DRY_CONTACT, UNKNOWN };
 
 /* Mode AO (0=0-10V, 1=4-20mA — khớp SET_AO_CFG bit) */
@@ -69,8 +72,10 @@ struct IoSnapshot {
     uint64_t ts_ns = 0;
     float    ui_value[KX_N_UI]   = {};
     uint8_t  ui_quality[KX_N_UI] = {KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
+                                    KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
+                                    KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
                                     KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD};
-    uint8_t  di_state[KX_N_DI]   = {};
+    uint8_t  di_state[KX_N_DI]   = {};   /* base SKU: always 0; reserved for DI SKU */
     uint8_t  do_feedback[KX_N_DO]= {};
     uint16_t fault_flags = 0;
     uint8_t  iop_status  = KX_IOP_FAULT;

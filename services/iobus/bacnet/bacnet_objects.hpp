@@ -84,6 +84,9 @@ public:
     bool relinquish_bo(uint32_t instance, uint8_t prio,
                         const std::string& user, const CoreWriteFn& fn);
 
+    /** Update unit strings from iobus config (called on load + SIGHUP). */
+    void update_ai_units(const char units[KX_N_UI][8]);
+
     /** Out_Of_Service flag (operator set, clears fault). */
     void set_oos_ai(uint32_t instance, bool oos);
     void set_oos_bi(uint32_t instance, bool oos);
@@ -124,7 +127,7 @@ private:
     BacnetPriority priority_;
     BacnetCov      cov_;
 
-    static constexpr int N_AI  = 8;
+    static constexpr int N_AI  = KX_N_UI;  /* ADR-010: 16 UI → 16 AI */
     static constexpr int N_BI  = 8;
     static constexpr int N_AO  = 4;
     static constexpr int N_BO  = 4;

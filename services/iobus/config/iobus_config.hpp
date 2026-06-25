@@ -26,7 +26,10 @@ struct IobusConfig {
     /* io */
     SensorType ui_sensor[KX_N_UI] = {SensorType::V0_10, SensorType::V0_10, SensorType::V0_10,
                                      SensorType::V0_10, SensorType::V0_10, SensorType::V0_10,
-                                     SensorType::V0_10, SensorType::V0_10};
+                                     SensorType::V0_10, SensorType::V0_10, SensorType::V0_10,
+                                     SensorType::V0_10, SensorType::V0_10, SensorType::V0_10,
+                                     SensorType::V0_10, SensorType::V0_10, SensorType::V0_10,
+                                     SensorType::V0_10};
     AoMode     ao_mode[KX_N_AO]   = {AoMode::V0_10, AoMode::V0_10, AoMode::V0_10, AoMode::V0_10};
 
     std::string log_level = "info";

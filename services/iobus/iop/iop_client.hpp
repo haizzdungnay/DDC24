@@ -48,9 +48,10 @@ public:
     /* CLOCK_MONOTONIC ns của IO_RESP hợp lệ gần nhất (0 = chưa có) — cho FAULT 100ms. */
     uint64_t last_io_resp_ns() const { return last_io_resp_ns_; }
 
-    /* Version MCU từ handshake gần nhất. */
+    /* Version và capability MCU từ handshake gần nhất. */
     uint16_t mcu_iop_version() const { return mcu_iop_version_; }
-    uint16_t mcu_fw_version() const { return mcu_fw_version_; }
+    uint16_t mcu_fw_version()  const { return mcu_fw_version_; }
+    uint16_t board_cap_map()   const { return board_cap_map_; }  /* IOP_BOARD_CAP_* v2 */
 
 private:
     IopResult transact(uint8_t cmd, const uint8_t* payload, uint8_t len,
@@ -69,7 +70,8 @@ private:
     uint8_t          seq_ = 0;
     uint64_t         last_io_resp_ns_ = 0;
     uint16_t         mcu_iop_version_ = 0;
-    uint16_t         mcu_fw_version_ = 0;
+    uint16_t         mcu_fw_version_  = 0;
+    uint16_t         board_cap_map_   = 0;
 };
 
 } // namespace iobus

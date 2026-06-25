@@ -8,14 +8,13 @@ namespace iobus::bacnet {
 
 BacnetReliability compute_reliability(kx_quality_t q, uint16_t fault_flags, int ch_idx)
 {
-    /* Channel UI over-range uses per-channel bit at fault_flags[8+ch_idx]. */
-    if ((fault_flags & IOP_FAULT_ADC) != 0)
+    if ((fault_flags & (IOP_FAULT_ADC1 | IOP_FAULT_ADC2)) != 0)
         return BacnetReliability::COMMUNICATION_FAILURE;
 
-    const uint16_t ch_ov_bit = (ch_idx >= 0 && ch_idx < 8)
-                                ? static_cast<uint16_t>(1u << (8 + ch_idx))
-                                : 0u;
-    if (ch_ov_bit && (fault_flags & ch_ov_bit) && (fault_flags & IOP_FAULT_UI_OV))
+    /* IOP v2 (ADR-010): FAULT_FLAGS bits 8-15 are reserved/always-0.
+     * Aggregate IOP_FAULT_UI_OV covers all 16 channels — no per-channel bit lookup. */
+    (void)ch_idx;
+    if (fault_flags & IOP_FAULT_UI_OV)
         return BacnetReliability::OVER_RANGE;
 
     switch (q) {
