@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
+import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
 import { useToast } from '../components/Toast'
 import { useI18n } from '../i18n'
@@ -19,7 +20,7 @@ const rangeMultiplierOptions = [0, 1, 2, 3, 4, 5]
 const mathFunctionOptions = [0, 1, 2, 3]
 
 export function InputsPage() {
-  const { t } = useI18n()
+  const { t, pick } = useI18n()
   const toast = useToast()
   const [configs, setConfigs] = useState<AiInputConfig[]>([])
   const [selectedChannel, setSelectedChannel] = useState(1)
@@ -27,6 +28,7 @@ export function InputsPage() {
   const [wizardIndex, setWizardIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -62,11 +64,17 @@ export function InputsPage() {
     }))
   }
 
-  async function handleSave() {
+  function requestSave() {
+    setConfirmOpen(true)
+  }
+
+  async function confirmSave() {
     setSaving(true)
     try {
       await apiClient.putAiInputs(configs)
       toast.push('success', t('saveSuccess'))
+      setConfirmOpen(false)
+      setViewMode('advanced')
     } catch (error) {
       toast.push('error', `${t('saveError')}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
@@ -81,7 +89,7 @@ export function InputsPage() {
           <h1 className="text-2xl font-semibold text-[var(--c-text)]">{t('aiConfigTitle')}</h1>
           <p className="text-sm text-[var(--c-text-dim)]">{t('aiConfigSubtitle')}</p>
         </div>
-        <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={handleSave} disabled={loading || configs.length === 0}>
+        <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={requestSave} disabled={loading || configs.length === 0}>
           {t('save')}
         </Button>
       </div>
@@ -131,11 +139,14 @@ export function InputsPage() {
                 <WizardPanel
                   config={selected}
                   step={currentStep}
+                  steps={steps}
                   stepIndex={Math.min(wizardIndex, steps.length - 1)}
                   stepCount={steps.length}
                   onChange={(patch) => updateChannel(selected.channel, patch)}
+                  onStepSelect={setWizardIndex}
                   onPrevious={() => setWizardIndex((index) => Math.max(index - 1, 0))}
                   onNext={() => setWizardIndex((index) => Math.min(index + 1, steps.length - 1))}
+                  onFinish={requestSave}
                 />
               ) : (
                 <AdvancedPanel config={selected} onChange={(patch) => updateChannel(selected.channel, patch)} />
@@ -144,6 +155,16 @@ export function InputsPage() {
           )}
         </Panel>
       </div>
+      <Modal
+        open={confirmOpen}
+        title={pick('Lưu cấu hình AI?', 'Save AI config?')}
+        confirmLabel="OK"
+        cancelLabel="Cancel"
+        onConfirm={() => { void confirmSave() }}
+        onClose={() => setConfirmOpen(false)}
+      >
+        {pick('Bạn có muốn lưu thay đổi không?', 'Do you want to save the changes?')}
+      </Modal>
     </div>
   )
 }
@@ -176,19 +197,25 @@ function ChannelBasics({ config, onChange }: { config: AiInputConfig; onChange: 
 function WizardPanel({
   config,
   step,
+  steps,
   stepIndex,
   stepCount,
   onChange,
+  onStepSelect,
   onPrevious,
-  onNext
+  onNext,
+  onFinish
 }: {
   config: AiInputConfig
   step: WizardStep
+  steps: WizardStep[]
   stepIndex: number
   stepCount: number
   onChange: (patch: Partial<AiInputConfig>) => void
+  onStepSelect: (index: number) => void
   onPrevious: () => void
   onNext: () => void
+  onFinish: () => void
 }) {
   const { t } = useI18n()
   const atEnd = stepIndex === stepCount - 1
@@ -202,6 +229,25 @@ function WizardPanel({
         <div className="h-2 flex-1 rounded-full bg-[var(--c-surface-2)]">
           <div className="h-2 rounded-full bg-[var(--c-accent)]" style={{ width: `${((stepIndex + 1) / stepCount) * 100}%` }} />
         </div>
+      </div>
+
+      <div className="mb-4 grid gap-2 md:grid-cols-2">
+        {steps.map((item, index) => (
+          <button
+            key={`${item}-${index}`}
+            type="button"
+            onClick={() => onStepSelect(index)}
+            className={cn(
+              'min-h-14 rounded-[var(--radius)] border px-3 py-2 text-left text-xs transition',
+              index === stepIndex
+                ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]'
+                : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+            )}
+          >
+            <span className="block font-semibold">{wizardStepLabel(item, t)}</span>
+            <span className="mt-1 block truncate">{wizardStepValue(item, config, t)}</span>
+          </button>
+        ))}
       </div>
 
       <div className="min-h-44">
@@ -225,7 +271,7 @@ function WizardPanel({
         <Button icon={<ChevronLeft className="h-4 w-4" />} onClick={onPrevious} disabled={stepIndex === 0}>
           {t('previous')}
         </Button>
-        <Button variant="primary" icon={!atEnd ? <ChevronRight className="h-4 w-4" /> : undefined} onClick={atEnd ? undefined : onNext}>
+        <Button variant="primary" icon={!atEnd ? <ChevronRight className="h-4 w-4" /> : undefined} onClick={atEnd ? onFinish : onNext}>
           {atEnd ? t('finish') : t('next')}
         </Button>
       </div>
@@ -282,21 +328,7 @@ function SignalTypeField({ value, onChange }: { value: AiSignalType; onChange: (
   return (
     <div className="space-y-3">
       <div className="text-sm font-semibold text-[var(--c-text)]">{t('signalTypeLabel')}</div>
-      <div className="grid gap-2 md:grid-cols-2">
-        {signalOptions.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => onChange(option)}
-            className={cn(
-              'rounded-[var(--radius)] border px-3 py-3 text-left text-sm transition',
-              value === option ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]' : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
-            )}
-          >
-            {signalLabel(option, t)}
-          </button>
-        ))}
-      </div>
+      <SignalTypeSelect value={value} onChange={onChange} />
     </div>
   )
 }
@@ -306,21 +338,7 @@ function UnitField({ value, onChange }: { value: number; onChange: (value: numbe
   return (
     <div className="space-y-3">
       <div className="text-sm font-semibold text-[var(--c-text)]">{t('unitsLabel')}</div>
-      <div className="grid gap-2 md:grid-cols-2">
-        {unitOptions.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => onChange(option)}
-            className={cn(
-              'rounded-[var(--radius)] border px-3 py-3 text-left text-sm transition',
-              value === option ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]' : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
-            )}
-          >
-            {unitLabel(option, t)}
-          </button>
-        ))}
-      </div>
+      <UnitSelect value={value} onChange={onChange} />
     </div>
   )
 }
@@ -431,6 +449,26 @@ function ModeButton({ active, icon, label, onClick }: { active: boolean; icon: R
 function wizardSteps(signalType: AiSignalType): WizardStep[] {
   if (signalType === 0) return ['signal', 'finish']
   return isAnalogSignal(signalType) ? ['signal', 'unit', 'range', 'min', 'max', 'math', 'finish'] : ['signal', 'unit', 'finish']
+}
+
+function wizardStepLabel(step: WizardStep, t: Translate): string {
+  if (step === 'signal') return t('signalTypeLabel')
+  if (step === 'unit') return t('unitsLabel')
+  if (step === 'range') return t('rangeMultiplierLabel')
+  if (step === 'min') return t('displayMinLabel')
+  if (step === 'max') return t('displayMaxLabel')
+  if (step === 'math') return t('mathFunctionLabel')
+  return t('finish')
+}
+
+function wizardStepValue(step: WizardStep, config: AiInputConfig, t: Translate): string {
+  if (step === 'signal') return signalLabel(config.signalType, t)
+  if (step === 'unit') return unitLabel(config.unit, t)
+  if (step === 'range') return rangeLabel(config.rangeMultiplier, t)
+  if (step === 'min') return String(config.displayMin)
+  if (step === 'max') return String(config.displayMax)
+  if (step === 'math') return mathFunctionLabel(config.mathFunction, t)
+  return `${signalLabel(config.signalType, t)} / ${unitLabel(config.unit, t)}`
 }
 
 function aiNode(channel: number): string {
