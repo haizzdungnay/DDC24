@@ -13,7 +13,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { isAnalogSignal, type AiInputConfig, type AiSignalType, type Alarm, type CommissioningTestResult, type CurrentUser, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type Point, type TrendSample } from '../types'
+import { isAnalogSignal, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type CommissioningTestResult, type CurrentUser, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type Point, type TrendSample } from '../types'
 import { normalizeHealth, normalizeKind, normalizeQuality, nowIso } from '../utils'
 
 type AuthHeaderProvider = () => Record<string, string>
@@ -190,6 +190,9 @@ type IoUiConfig = {
   enabled?: boolean
   invert?: boolean
   range_mult?: number
+  filter_samples?: number
+  sensor_cal?: number
+  math_func?: number
 }
 
 type IoConfig = {
@@ -202,17 +205,26 @@ function aiNode(channel: number): string {
 }
 
 function signalTypeFromIo(item: IoUiConfig): AiSignalType {
-  if (item.type === '2-10V') return 1
-  if (item.type === 'NTC10k' || item.type === 'NTC20k') return 2
-  if (item.type === 'dry') return item.invert ? 4 : 3
+  if (item.type === 'none') return 0
+  if (item.type === '0-10V') return 1
+  if (item.type === '2-10V' || item.type === '4-20mA') return 2
+  if (item.type === 'NTC10k' || item.type === 'NTC20k' || item.type === 'PT100' || item.type === 'PT1000') return 3
+  if (item.type === 'dry') return item.invert ? 5 : 4
+  if (item.type === 'potentiometer') return 6
+  if (item.type === 'light') return 7
+  if (item.type === 'pulse') return 8
   return 0
 }
 
 function signalTypeToIoType(signalType: AiSignalType): IoUiConfig['type'] {
-  if (signalType === 1) return '2-10V'
-  if (signalType === 2) return 'NTC10k'
-  if (signalType === 3 || signalType === 4) return 'dry'
-  return '0-10V'
+  if (signalType === 1) return '0-10V'
+  if (signalType === 2) return '2-10V'
+  if (signalType === 3) return 'NTC10k'
+  if (signalType === 4 || signalType === 5) return 'dry'
+  if (signalType === 6) return 'potentiometer'
+  if (signalType === 7) return 'light'
+  if (signalType === 8) return 'pulse'
+  return 'none'
 }
 
 function unitFromIo(value: unknown): number {
@@ -239,6 +251,9 @@ function defaultAiConfig(channel: number): AiInputConfig {
     displayMax: 100,
     rangeMultiplier: 0,
     unit: 0,
+    filterSamples: 3,
+    sensorCal: 0,
+    mathFunction: 0,
     enabled: true
   }
 }
@@ -254,6 +269,9 @@ function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
     displayMax: numberFrom(item.scale_hi) ?? 100,
     rangeMultiplier: numberFrom(item.range_mult) ?? 0,
     unit: unitFromIo(item.unit),
+    filterSamples: numberFrom(item.filter_samples) ?? 3,
+    sensorCal: numberFrom(item.sensor_cal) ?? 0,
+    mathFunction: numberFrom(item.math_func) ?? 0,
     enabled: typeof item.enabled === 'boolean' ? item.enabled : true
   }
 }
@@ -265,8 +283,8 @@ function aiConfigToIo(config: AiInputConfig): IoUiConfig {
     name: config.label,
     enabled: config.enabled
   }
-  if (config.signalType === 3 || config.signalType === 4) {
-    item.invert = config.signalType === 4
+  if (isDigitalContact(config.signalType)) {
+    item.invert = config.signalType === 5
     item.unit = ''
     return item
   }
@@ -275,6 +293,9 @@ function aiConfigToIo(config: AiInputConfig): IoUiConfig {
     item.scale_lo = config.displayMin
     item.scale_hi = config.displayMax
     item.range_mult = config.rangeMultiplier
+    item.filter_samples = config.filterSamples
+    item.sensor_cal = config.sensorCal
+    item.math_func = config.mathFunction
   }
   return item
 }

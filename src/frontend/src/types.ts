@@ -252,10 +252,14 @@ export interface UserRow {
 }
 
 
-export type AiSignalType = 0 | 1 | 2 | 3 | 4
+export type AiSignalType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
 
 export function isAnalogSignal(signalType: AiSignalType): boolean {
-  return signalType === 0 || signalType === 1 || signalType === 2
+  return signalType === 1 || signalType === 2 || signalType === 3 || signalType === 6 || signalType === 7 || signalType === 8
+}
+
+export function isDigitalContact(signalType: AiSignalType): boolean {
+  return signalType === 4 || signalType === 5
 }
 
 export interface AiInputConfig {
@@ -266,6 +270,9 @@ export interface AiInputConfig {
   displayMax: number
   rangeMultiplier: number
   unit: number
+  filterSamples: number
+  sensorCal: number
+  mathFunction: number
   enabled: boolean
 }
 

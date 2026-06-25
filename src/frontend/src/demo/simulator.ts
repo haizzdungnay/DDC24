@@ -467,14 +467,14 @@ export function getAiInputConfigs(): AiInputConfig[] {
 }
 
 let demoAiInputConfigs: AiInputConfig[] = [
-  { channel: 1, label: 'Supply Air Temp', signalType: 2, displayMin: -20, displayMax: 80, rangeMultiplier: 0, unit: 2, enabled: true },
-  { channel: 2, label: 'Duct Pressure', signalType: 1, displayMin: 0, displayMax: 200, rangeMultiplier: 2, unit: 3, enabled: true },
-  { channel: 3, label: 'Room Humidity', signalType: 0, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, enabled: true },
-  { channel: 4, label: 'Outdoor Temp', signalType: 2, displayMin: -40, displayMax: 70, rangeMultiplier: 0, unit: 2, enabled: true },
-  { channel: 5, label: 'Filter Switch', signalType: 3, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, enabled: true },
-  { channel: 6, label: 'Fire Alarm Contact', signalType: 4, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, enabled: true },
-  { channel: 7, label: 'Spare Universal Input 7', signalType: 0, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, enabled: false },
-  { channel: 8, label: 'Spare Universal Input 8', signalType: 0, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, enabled: false }
+  { channel: 1, label: 'Supply Air Temp', signalType: 3, displayMin: -20, displayMax: 80, rangeMultiplier: 0, unit: 2, filterSamples: 3, sensorCal: 0, mathFunction: 1, enabled: true },
+  { channel: 2, label: 'Duct Pressure', signalType: 2, displayMin: 0, displayMax: 200, rangeMultiplier: 2, unit: 3, filterSamples: 5, sensorCal: 0.2, mathFunction: 0, enabled: true },
+  { channel: 3, label: 'Room Humidity', signalType: 1, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 3, sensorCal: 0, mathFunction: 2, enabled: true },
+  { channel: 4, label: 'Outdoor Light', signalType: 7, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 8, sensorCal: -0.5, mathFunction: 3, enabled: true },
+  { channel: 5, label: 'Filter Switch', signalType: 4, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true },
+  { channel: 6, label: 'Fire Alarm Contact', signalType: 5, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true },
+  { channel: 7, label: 'Damper Potentiometer', signalType: 6, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 4, sensorCal: 0, mathFunction: 0, enabled: true },
+  { channel: 8, label: 'Pulse Meter Spare', signalType: 8, displayMin: 0, displayMax: 205, rangeMultiplier: 1, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: false }
 ]
 
 export function putDemoAiInputs(configs: AiInputConfig[]): void {
