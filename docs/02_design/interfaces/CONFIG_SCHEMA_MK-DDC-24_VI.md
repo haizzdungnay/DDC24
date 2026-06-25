@@ -68,9 +68,10 @@
   "ui": [
     {"ch":1, "type":"NTC10k",   "unit":"degC"},
     {"ch":2, "type":"PT1000",   "unit":"degC"},
-    {"ch":3, "type":"dry",      "unit":"bool"},
+    {"ch":3, "type":"dry",      "unit":"bool", "invert":false, "enabled":true},
     {"ch":4, "type":"4-20mA",   "unit":"percent", "scale_lo":0, "scale_hi":100},
-    {"ch":5, "type":"0-10V",    "unit":"ppm",     "scale_lo":0, "scale_hi":2000}
+    {"ch":5, "type":"0-10V",    "unit":"ppm",     "scale_lo":0, "scale_hi":2000},
+    {"ch":6, "type":"2-10V",    "unit":"degC",    "name":"Supply Temp", "range_mult":3}
   ],
   "ao": [
     {"ch":1, "mode":"0-10V"},
@@ -78,7 +79,12 @@
   ]
 }
 ```
-- `type` ∈ `0-10V|4-20mA|PT100|PT1000|NTC10k|NTC20k|dry`.
+- `type` ∈ `0-10V|2-10V|4-20mA|PT100|PT1000|NTC10k|NTC20k|dry`.
+- `ui[].name` không bắt buộc, kiểu string, dùng làm nhãn authoring UI.
+- `ui[].enabled` không bắt buộc, kiểu bool, bật/tắt kênh ở lớp authoring UI.
+- `ui[].invert` không bắt buộc, kiểu bool, dùng cho dry contact direct/reversed.
+- `ui[].range_mult` không bắt buộc, kiểu int 0..5, dùng cho dải đo EasySet AI.
+- Consumer C++ phía `mkddc-iobus` cho `ui[].name/enabled/invert/range_mult` chưa triển khai; các field mới hiện là authoring-only và được passthrough trong `io_config.conf`.
 - `ao.mode` ∈ `0-10V|4-20mA` → **mkddc-iobus** gửi `SET_AO_CFG` xuống MCU (mode đã áp dụng ghi vào `kx_io_shm.ao_mode[]`).
 
 ## 4. `io_safe_state.conf` — giá trị an toàn khi lỗi

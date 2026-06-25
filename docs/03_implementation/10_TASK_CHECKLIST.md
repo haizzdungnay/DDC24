@@ -518,6 +518,7 @@ Task ID: WEB-003
 Tên: EasySet AI Inputs Config
 Owner: Dev Web | Phase: A | Module: UI
 Trạng thái: IN-PROGRESS
+Ghi chú: BE validate 2026-06-25 — `/system/config/io` chấp nhận AI Universal Input `type:"2-10V"` và optional `name/enabled/invert/range_mult(0..5)`; C++ iobus consumer field mới để downstream.
 ```
 
 ```
