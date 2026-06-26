@@ -11,7 +11,7 @@
 set -u
 cd "$(dirname "$0")/.."
 
-BUILD=build/services
+BUILD=services/build
 SOCK=/tmp/mkddc-core.sock
 PTY_A=/tmp/mkddc-iop-a
 PTY_B=/tmp/mkddc-iop-b
@@ -59,7 +59,7 @@ run) ;;
 *) die "lệnh lạ: $1 (run|do1..do4 0/1|kill-mcu|revive|stop)" ;;
 esac
 
-[ -x "$IOBUS" ] || die "chưa build: cmake -S services -B build/services && cmake --build build/services -j"
+[ -x "$IOBUS" ] || die "chưa build: cmake -S services -B services/build && cmake --build services/build -j"
 mkdir -p "$LOGDIR"
 cmd_stop > /dev/null 2>&1
 sleep 0.5
@@ -72,8 +72,8 @@ echo "[2/4] fake_mcu (MCU giả) bám đầu B"
 nohup "$FAKE" --uart "$PTY_B" > "$LOGDIR/fake_mcu.log" 2>&1 &
 sleep 0.3
 
-echo "[3/4] mkddc-iobus poll 100Hz đầu A -> ghi /dev/shm/mkddc_io_shm"
-nohup "$IOBUS" --uart "$PTY_A" --log-level debug > "$LOGDIR/iobus.log" 2>&1 &
+echo "[3/4] mkddc-iobus poll 500Hz đầu A -> ghi /dev/shm/mkddc_io_shm"
+nohup "$IOBUS" --uart "$PTY_A" --config tools/demo/iobus_demo.conf --log-level debug > "$LOGDIR/iobus.log" 2>&1 &
 sleep 1.5
 
 echo "[4/4] mkddc-core scan 1s, IPC tại $SOCK"

@@ -62,7 +62,8 @@ set(MODBUS_SOURCES
     fieldbus/poll_scheduler.cpp
     fieldbus/ext_cache.cpp
     fieldbus/fieldbus_metrics.cpp
-    fieldbus/modbus_master.cpp)
+    fieldbus/modbus_master.cpp
+    fieldbus/modbus_tcp.cpp)
 
 add_library(iobus_lib STATIC
     config/iobus_config.cpp
@@ -133,7 +134,8 @@ if(IOBUS_BUILD_TESTS)
       fieldbus/tests/test_register_codec.cpp
       fieldbus/tests/test_poll_scheduler.cpp
       fieldbus/tests/test_ext_cache.cpp
-      fieldbus/tests/test_modbus_master_fake.cpp)
+      fieldbus/tests/test_modbus_master_fake.cpp
+      fieldbus/tests/test_modbus_tcp.cpp)
   target_link_libraries(iobus_tests PRIVATE iobus_lib)
   # GCC13 -O3 false positive (PR109945) với vector<struct nhỏ> trong test fixture
   target_compile_options(iobus_tests PRIVATE -Wno-error=stringop-overflow)

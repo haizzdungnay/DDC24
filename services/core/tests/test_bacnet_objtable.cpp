@@ -2,6 +2,7 @@
  * @file  test_bacnet_objtable.cpp
  * @brief BAC-004 unit tests — quality_to_reliability mapping + publish behavior.
  */
+#include <sys/socket.h>
 #include <gtest/gtest.h>
 #include "bacnet_objtable.hpp"
 #include "mkddc_shm.h"
@@ -82,4 +83,45 @@ TEST(BacnetObjtable, ReadExtNopWhenSockNeg)
     /* sockfd = -1 → no-op, no crash */
     obj.read_ext(-1);
     SUCCEED();
+}
+
+/* MOD-012 checkbox #9: core nhận ext snapshot qua socket → plc_shm.ext[] */
+TEST(BacnetObjtable, ReadExtReceivesSnapshot)
+{
+    BacnetObjTable obj;
+    if (!obj.attach()) {
+        SUCCEED();   /* /dev/shm không khả dụng trong môi trường này */
+        return;
+    }
+
+    int sv[2];
+    ASSERT_EQ(::socketpair(AF_UNIX, SOCK_DGRAM, 0, sv), 0);
+
+    kx_ext_snapshot_msg_t msg{};
+    msg.magic           = KX_EXT_SNAP_MAGIC;
+    msg.count           = 2;
+    msg.points[0].value      = 3.14f;
+    msg.points[0].quality    = KX_Q_GOOD;
+    msg.points[0].online     = 1;
+    msg.points[0].slave_addr = 10;
+    msg.points[1].value      = 9.81f;
+    msg.points[1].quality    = KX_Q_BAD;
+    msg.points[1].online     = 0;
+
+    ::send(sv[0], &msg, sizeof(msg), 0);
+    obj.read_ext(sv[1]);
+
+    const kx_plc_shm_t* shm = obj.shm();
+    ASSERT_NE(shm, nullptr);
+    EXPECT_EQ(shm->ext_count, 2u);
+    EXPECT_FLOAT_EQ(shm->ext[0].value, 3.14f);
+    EXPECT_EQ(shm->ext[0].quality,    KX_Q_GOOD);
+    EXPECT_EQ(shm->ext[0].online,     1u);
+    EXPECT_EQ(shm->ext[0].slave_addr, 10u);
+    EXPECT_FLOAT_EQ(shm->ext[1].value, 9.81f);
+    EXPECT_EQ(shm->ext[1].quality,    KX_Q_BAD);
+
+    ::close(sv[0]);
+    ::close(sv[1]);
+    obj.detach();
 }

@@ -35,6 +35,7 @@
 #include "fieldbus/fieldbus_config.hpp"
 #include "fieldbus/fieldbus_metrics.hpp"
 #include "fieldbus/modbus_master.hpp"
+#include "fieldbus/modbus_tcp.hpp"
 #include "bacnet/bacnet_config.hpp"
 #include "bacnet/bacnet_objects.hpp"
 #include "bacnet/bacnet_server.hpp"
@@ -235,6 +236,7 @@ int main(int argc, char** argv)
     sigaction(SIGHUP, &sa_hup, nullptr);
     fieldbus::FieldbusConfig fieldbus_cfg;
     fieldbus::ModbusMaster modbus;
+    fieldbus::ModbusTcp    modbus_tcp;
     fieldbus::ExtCache ext_cache;
     fieldbus::FieldbusMetrics fieldbus_metrics;
     std::thread fieldbus_thread;
@@ -243,12 +245,25 @@ int main(int argc, char** argv)
         cache.detach();
         return 1;
     }
-    if (fieldbus_cfg.loaded && !fieldbus_cfg.slaves.empty() && modbus.open(fieldbus_cfg)) {
+    const bool rtu_ok = fieldbus_cfg.loaded && !fieldbus_cfg.slaves.empty()
+                        && modbus.open(fieldbus_cfg);
+    if (fieldbus_cfg.loaded && !fieldbus_cfg.tcp_slaves.empty()) {
+        const uint16_t tcp_offset = modbus.total_ext_count();
+        modbus_tcp.open(fieldbus_cfg, tcp_offset);
+    }
+    if (rtu_ok || modbus_tcp.has_slaves()) {
         fieldbus_thread = std::thread([&]() {
             while (!g_shutdown.load()) {
                 const uint64_t poll_now = now_ms();
-                modbus.poll_once(poll_now, ext_cache, fieldbus_metrics, fieldbus_sock_path);
-                uint32_t wait_ms = modbus.sleep_ms_until_next(now_ms());
+                if (rtu_ok)
+                    modbus.poll_once(poll_now, ext_cache, fieldbus_metrics, fieldbus_sock_path);
+                if (modbus_tcp.has_slaves())
+                    modbus_tcp.poll_once(poll_now, ext_cache, fieldbus_sock_path);
+                uint32_t wait_ms = rtu_ok ? modbus.sleep_ms_until_next(now_ms()) : 1000u;
+                if (modbus_tcp.has_slaves()) {
+                    const uint32_t tcp_wait = modbus_tcp.sleep_ms_until_next(now_ms());
+                    if (tcp_wait < wait_ms) wait_ms = tcp_wait;
+                }
                 if (wait_ms == 0) wait_ms = 1;
                 if (wait_ms > 100) wait_ms = 100;
                 std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));

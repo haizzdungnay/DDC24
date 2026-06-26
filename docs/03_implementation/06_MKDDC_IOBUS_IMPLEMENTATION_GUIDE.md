@@ -269,6 +269,29 @@ Error: thiếu CAP_SYS_NICE → log WARN, chạy SCHED_OTHER (degraded).
 Done: poll thread SCHED_FIFO 70; jitter <2ms.
 ```
 
+### 3.14 `modbus_tcp` — MỚI (MOD-013)
+
+> **Trạng thái:** PLANNED — chờ owner approve SW_FIELDBUS_DESIGN §12.
+> Spec đầy đủ: [SW_FIELDBUS_DESIGN §12](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md).
+
+```
+File: fieldbus/modbus_tcp.{hpp,cpp} | Owner: Dev2
+Responsibility: Modbus TCP client — libmodbus TCP context, persistent connection,
+                reconnect state machine, poll loop integration với PollScheduler.
+Public API:
+  bool open(const TcpSlaveConfig& cfg)
+  void close()
+  bool poll_once(uint16_t addr, int fc, int count, uint16_t* regs_out)
+  bool write_once(uint16_t addr, int fc, const uint16_t* data, int count)
+  bool is_connected() const
+  void reconnect_if_needed()
+Dependency: libmodbus (cùng flag MKDDC_ENABLE_MODBUS với RTU), ExtCache, PollScheduler
+Error: TCP connect fail → DISCONNECTED → ext_cache quality BAD → fallback active
+       Reconnect sau reconnect_s; không block RTU poll loop
+Done: FC03 read OK từ diagslave TCP; disconnect → quality BAD → reconnect → GOOD.
+      12 unit test (DoD MOD-013 §12.8 tick đủ).
+```
+
 ---
 
 ## 4. Config schema

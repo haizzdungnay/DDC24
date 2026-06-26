@@ -97,7 +97,7 @@ services/core/
 ```
 1. Read IO state        : iobus_reader đọc kx_io_shm (seqlock) → IoSnapshot.
 2. Update point table   : value + ts; point_quality tính quality (kể cả stale check ts_ns).
-3. Read Modbus(cache)   : ext cache khi MOD-009 có; trước đó bỏ qua
+3. Read ext cache       : ext_cache snapshot → cập nhật Protocol node inputs (Modbus_RTU_Read, Modbus_TCP_Read); gọi trước graph_runtime.execute() — xem §12
 4. Read web/BACnet cmd  : web_ipc.drain() → command queue (KHÔNG ghi thẳng IO).
 5. Execute graph        : graph_runtime.execute() (Rev A.1 graph acyclic — node topo order).
 6. Resolve priority     : priority_resolver → 1 output/kênh DO/AO.
@@ -503,6 +503,88 @@ WantedBy=multi-user.target
 
 ---
 
+## 12. Protocol graph nodes — implementation spec (COR-011)
+
+> **Trạng thái:** DRAFT — chờ owner approve. Task: COR-011 trong 10_TASK_CHECKLIST.
+> **Nguồn contract:** [GRAPH_SCHEMA §10](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) + [SW_COMPONENT_LIBRARY §8](../02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md).
+
+### 12.1 Scan loop step 3 — ext_cache reader
+
+Thay thế stub "Read Modbus(cache): bỏ qua" bằng:
+
+```cpp
+// Step 3 — Protocol node input update (trước graph execute)
+for (auto& node : graph_runtime.protocol_readers()) {
+    if (node.type == NodeType::MODBUS_RTU_READ ||
+        node.type == NodeType::MODBUS_TCP_READ) {
+        ExtPoint pt;
+        if (ext_cache.lookup(node.params, &pt) && pt.quality == GOOD) {
+            node.set_output(pt.value * node.scale);
+            node.set_quality(Quality::GOOD);
+        } else {
+            node.set_output(node.fallback);
+            node.set_quality(Quality::BAD);
+        }
+    }
+    // BACnet_AV/BV: đọc từ bacnet_objtable (đã có trong BAC-004)
+    if (node.type == NodeType::BACNET_AV || node.type == NodeType::BACNET_BV) {
+        float pv; Quality q;
+        bacnet_objtable.read_av(node.instance, &pv, &q);
+        node.set_output(pv);
+        node.set_quality(q);
+    }
+}
+```
+
+### 12.2 graph_runtime thay đổi
+
+Cần thêm vào `graph_runtime.cpp`:
+
+1. **NodeType enum**: thêm `MODBUS_RTU_READ`, `MODBUS_RTU_WRITE`, `MODBUS_TCP_READ`, `BACNET_AV`, `BACNET_BV`.
+2. **build_plan()**: parse Protocol node type từ JSON, validate params (gọi validator check #4/#5/#6).
+3. **protocol_readers()**: iterator trả các node có type thuộc Protocol group.
+4. **`Modbus_RTU_Write` tick()**: trong execute(), push `in` value vào `fieldbus_write_queue` nếu thay đổi.
+5. **`BACnet_AV/BV` write path**: nếu `in` wired → push setpoint vào `bacnet_objtable` mức 5 (graph).
+
+### 12.3 ext_cache key lookup
+
+```cpp
+// RTU: key = (bus, slave, addr, fc)
+// TCP: key = (host, port, unit, addr, fc)
+bool ExtCache::lookup(const NodeParams& p, ExtPoint* out);
+```
+
+`ExtCache` hiện dùng linear scan trên `plc_shm.ext[]`. Cần extend hoặc thêm index cho TCP key.
+
+### 12.4 Unit test checklist COR-011
+
+```
+[ ] test_graph_protocol.cpp — Modbus_RTU_Read node: output = cached_value × scale khi GOOD
+[ ] Modbus_RTU_Read node: output = fallback khi cache stale
+[ ] Modbus_RTU_Write node: in=5.0 → fieldbus_write_queue nhận entry đúng
+[ ] Modbus_TCP_Read node: output = tcp_cached_value × scale khi GOOD
+[ ] Modbus_TCP_Read node: output = fallback khi TCP disconnected (quality BAD)
+[ ] BACnet_AV node (writable=false): out = bacnet_objtable.read_av(instance)
+[ ] BACnet_AV node (writable=true, in=22.5): bacnet_objtable.pv == 22.5 tại mức 5
+[ ] BACnet_BV node: in=true → bacnet_objtable active; out=false khi BMS write false
+[ ] graph validator: Modbus_TCP_Read host không trong modbus.tcp[] → reject
+[ ] graph validator: Modbus_RTU_Read missing fallback → reject
+[ ] Topo-sort không thay đổi: Protocol node không tạo cycle
+[ ] Quality BAD lan downstream: node sau Protocol node BAD cũng BAD (weakest-link)
+```
+
+### 12.5 Files cần tạo/sửa
+
+| File | Thay đổi |
+|------|---------|
+| `services/core/graph_runtime.cpp` | Thêm 5 Protocol node type parse + tick() |
+| `services/core/graph_runtime.hpp` | Thêm NodeType enum + ProtocolNodeParams struct |
+| `services/core/scan_loop.cpp` | Thêm step 3 ext_cache reader loop |
+| `services/core/ext_cache_reader.hpp` (mới) | Helper lookup RTU+TCP key từ ext_cache |
+| `services/core/tests/test_graph_protocol.cpp` (mới) | Unit test Protocol nodes |
+
+---
+
 ## 11. Done criteria (Phase 4 đóng) + Trace
 
 | Chủ đề | Module | Done khi | Test |
@@ -521,7 +603,8 @@ WantedBy=multi-user.target
 Trạng thái: ĐÃ làm 2026-06-17 — BAC-004 (bacnet_objtable publish+read_ext), web_ipc source=bacnet mức 3, fieldbus.sock SOCK_DGRAM mở trong main.cpp, scan_loop step 3 ext socket + step 4 cmd.prio routing; 106 core test pass.
 
 ---
-**Rev** 1.7 | 2026-06-17 (BAC-004+MOD-009 core: bacnet_objtable.cpp dùng iop_protocol.h, fieldbus.sock mở trong main.cpp, web_ipc source=bacnet mức 3, scan_loop routing — 106 test pass) ·
+**Rev** 1.8 | 2026-06-26 (§12 Protocol graph nodes COR-011 — scan loop step 3 spec, graph_runtime extension, unit test checklist; §2 step 3 cập nhật ext_cache reader) ·
+1.7 | 2026-06-17 (BAC-004+MOD-009 core: bacnet_objtable.cpp dùng iop_protocol.h, fieldbus.sock mở trong main.cpp, web_ipc source=bacnet mức 3, scan_loop routing — 106 test pass) ·
 1.6 | 2026-06-17 (§8: BAC-CONFLICT-001 CLOSED — mở rộng core.sock nhận source=bacnet mức 3,
 BACnet client persistent connection, audit format cập nhật, rejected "unknown_source" added) ·
 1.5 | 2026-06-13 (S7 #4/#5/#6 docs linked; priority test fixed web/manual=mức 2) ·

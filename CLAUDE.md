@@ -139,3 +139,20 @@ Khi review code hoặc verify feature:
 
 **File này được đọc tự động bởi Claude Code ở đầu mỗi session.**
 **Dev người thật: đọc [docs/DOC_GOVERNANCE.md](docs/DOC_GOVERNANCE.md)**
+
+## Documentation Governance
+
+- Không trộn spec chính với report review.
+- Không trộn protocol docs với implementation guide.
+- Không xóa tài liệu cũ nếu chưa có quyết định; đưa vào docs/archive/.
+- Mỗi thư mục docs chính phải có README hoặc index.
+- Tài liệu chính phải có:
+  - Purpose
+  - Scope
+  - Owner
+  - Status: Draft / Review / Approved / Deprecated
+  - Last Updated
+- Khi đổi protocol/runtime/API phải cập nhật docs liên quan và ADR nếu thay đổi kiến trúc.
+- Report theo ngày để trong docs/11_reports/, không để lẫn với spec chính.
+
+

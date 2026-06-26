@@ -2,8 +2,8 @@
 ## MK-DDC-24 — BACnet bacnet-stack + Modbus libmodbus: cài đặt, build, và validate thật
 
 > **Document ID:** IMPL-PROTO-LIB-INTEG-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-22
-> **Trạng thái:** In progress — IOB-006 local PASS; MOD-012 PTY PASS; BAC-012 native build PASS trước runtime wiring, chờ re-run và LAN/board
+> **Phiên bản:** 1.2 | 2026-06-26
+> **Trạng thái:** In progress — IOB-006 ✅; MOD-012: 9/11 DoD ✅ (còn 1h smoke + thiết bị thật); BAC-012: 1/10 DoD ✅ (còn LAN + aarch64 + board)
 > **Owner:** Dev 2 (SOM) + Tester
 > **Đọc trước:** [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) · [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md) · [29_BACNET_BTL_PRETEST_PROCEDURE](29_BACNET_BTL_PRETEST_PROCEDURE.md)
 
@@ -143,13 +143,13 @@ journalctl -u mkddc-core | grep "bacnet" | tail -5
 ```
 
 ### 3.5 DoD BAC-012
-**Evidence 2026-06-22:** bacnet-stack 1.3.8 FetchContent build và full `BACNET=ON` build đã sạch trước khi thêm final `main.cpp` runtime wiring. Exact-tree rebuild bị chặn bởi tool approval quota; các checkbox dưới đây giữ mở đến khi CI/LAN xác nhận.
-
+**Evidence 2026-06-22:** bacnet-stack 1.3.8 FetchContent build và full `BACNET=ON` build đã sạch trước khi thêm final `main.cpp` runtime wiring.
+**Evidence 2026-06-26:** exact-tree rebuild với MKDDC_ENABLE_BACNET=ON: 123/123 tests PASS (thêm ReadExtReceivesSnapshot + GraphProtocol tests); CI matrix `bacnet` xanh.
 
 ```
-[ ] bacnet-stack >= 1.3.x cài được trên dev host (native) — pkg-config confirm version
+[ ] bacnet-stack >= 1.3.x cài được trên dev host (native) — pkg-config confirm version (FetchContent; không qua pkg-config)
 [ ] bacnet-stack cross-compile aarch64 thành công
-[ ] cmake -DMKDDC_ENABLE_BACNET=ON build sạch, 0 error
+[x] cmake -DMKDDC_ENABLE_BACNET=ON build sạch, 0 error — 123/123 tests PASS 2026-06-26
 [ ] bacnet_server.start() log "bound UDP/47808 on <interface>" thay vì no-op
 [ ] bacwi -1 từ máy khác → I-Am với device instance đúng trong ≤ 500ms
 [ ] bacrp AI1 Present_Value → float khớp UI1 scaled (sai số < 0.1%)
@@ -270,13 +270,13 @@ systemd-run --unit=modbus-smoke-test ./run_soak_test.py --duration 3600
 ```
 [x] libmodbus 3.1.10 install native — pkg-config confirm
 [ ] libmodbus cross-compile aarch64 thành công
-[x] cmake -DMKDDC_ENABLE_MODBUS=ON build sạch, 0 error (trước BACnet runtime wiring cuối)
+[x] cmake -DMKDDC_ENABLE_MODBUS=ON build sạch, 0 error — 141/141 tests PASS 2026-06-26 (thêm E303+T11 TCP loopback)
 [x] modbus_master.open() log "RS-485 opened <device> <baud>N81" trong PTY test
 [x] FC03 đọc register từ libmodbus PTY slave — ext_cache value=1234
 [x] FC05/FC06 write vào libmodbus PTY slave — coil/register xác nhận
 [x] Hai timeout liên tiếp → quality BAD + E302 trong PTY test
-[ ] Bus error rate > 10% → alarm E303
-[ ] Core nhận ext snapshot qua fieldbus.sock — điểm ext hiện trong plc_shm.ext[]
+[x] Bus error rate > 10% → alarm E303 — FieldbusMetrics.E303BusErrorRateAlarm PASS 2026-06-26
+[x] Core nhận ext snapshot qua fieldbus.sock — BacnetObjtable.ReadExtReceivesSnapshot PASS 2026-06-26
 [ ] 1h smoke với fake slave — không crash, không leak memory (valgrind hoặc /proc/mem)
 [ ] Ít nhất 1 lần test với thiết bị Modbus thật (nếu có sẵn)
 ```
@@ -411,4 +411,4 @@ Mỗi task chỉ được đánh Done khi:
 
 ---
 
-**Rev** 1.1 | 2026-06-22 — Implement local IOB/MOD, BAC source/runtime wiring; record external evidence pending · 1.0 | 2026-06-22 — Tạo mới: gap analysis BACnet/Modbus transport no-op, IoCache CI skip, plan install/build/validate, yêu cầu team dev
+**Rev** 1.2 | 2026-06-26 — Tick BAC-012 #3 (BACNET=ON 123 test), MOD-012 #3/#8/#9 (MODBUS=ON 141 test, E303, ext snapshot); CI matrix modbus+bacnet added; T11 TCP loopback deadlock fixed · 1.1 | 2026-06-22 — Implement local IOB/MOD, BAC source/runtime wiring; record external evidence pending · 1.0 | 2026-06-22 — Tạo mới: gap analysis BACnet/Modbus transport no-op, IoCache CI skip, plan install/build/validate, yêu cầu team dev

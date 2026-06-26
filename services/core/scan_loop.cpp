@@ -46,6 +46,14 @@ void ScanLoop::step()
      * SOCK_DGRAM MSG_DONTWAIT — nếu không có datagram: dùng ext[] cũ (stale theo ts_ns). */
     d_.bacnet->read_ext(d_.fieldbus_sockfd);
 
+    /* 3a. COR-011: feed ext snapshot vào graph_runtime để Protocol nodes đọc.
+     * Chỉ copy khi shm tồn tại và ext_count > 0. */
+    {
+        const kx_plc_shm_t* shm = d_.bacnet->shm();
+        if (shm && shm->ext_count > 0)
+            d_.graph->feed_ext_snapshot(shm->ext, shm->ext_count);
+    }
+
     /* 4. Read web/BACnet command queue.
      * source=manual → PRIO_LOCAL_MANUAL (mức 2); source=bacnet → PRIO_BACNET (mức 3).
      * Response trả SAU resolve + safe-state (bước 7b): applied_value/active_source
@@ -71,6 +79,10 @@ void ScanLoop::step()
 
     /* 5. Execute graph */
     d_.graph->execute(*d_.table, *d_.resolver);
+
+    /* 5a. COR-011: apply Modbus write node setpoints → plc_shm.ext[].dirty.
+     * iobus fieldbus thread đọc dirty flag ở chu kỳ poll kế. */
+    d_.graph->apply_ext_writes(d_.bacnet->shm());
 
     /* 6. Resolve priority */
     OutputCmd out = d_.resolver->resolve();

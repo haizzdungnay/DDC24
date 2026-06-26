@@ -237,11 +237,131 @@ Web/BACnet → core priority_resolver
 
 ## 11. Trace REQ
 `SW-MOD-001..011`, `RTU-001..008`, `FR-024`, `FR-025`, `PRD UC-06`.
+TCP: `FR-026` (Modbus TCP client, REVA_SCOPE §2 T2).
 
 ---
+
+## 12. Modbus TCP client — thiết kế (MOD-013)
+
+> **Trạng thái:** DRAFT — chờ owner approve trước khi implement (LUẬT 1).
+> **Task:** [MOD-013](../../03_implementation/10_TASK_CHECKLIST.md) trong Phase 3/4.
+> **Scope:** REVA_SCOPE §2 T2 "Modbus TCP + hoàn thiện fallback"; 1 module TCP mới trong mkddc-iobus.
+
+### 12.1 Vị trí trong kiến trúc
+
+```
+mkddc-iobus
+  ├── modbus_master_rtu.cpp   (đã có — RTU over RS-485)
+  └── modbus_tcp.cpp          (MỚI — TCP client, libmodbus TCP context)
+        ↓ ext_cache
+      fieldbus.sock → mkddc-core (không thay đổi IPC path)
+```
+
+Dùng cùng `ext_cache`, `poll_scheduler`, `register_codec` với RTU. TCP chỉ thêm **transport layer** mới.
+
+### 12.2 Config (`fieldbus.conf` — bổ sung phần `tcp`)
+
+```toml
+[modbus.tcp]
+# Mỗi entry là 1 TCP slave
+[[modbus.tcp.slaves]]
+host        = "192.168.1.50"
+port        = 502               # default 502
+unit        = 1                 # Modbus unit ID
+poll_ms     = 1000
+reconnect_s = 5                 # giây chờ trước khi reconnect sau disconnect
+timeout_ms  = 500               # read/write timeout per request
+profile     = "generic-power-meter"
+
+[[modbus.tcp.slaves]]
+host        = "192.168.1.51"
+port        = 502
+unit        = 3
+poll_ms     = 2000
+reconnect_s = 10
+timeout_ms  = 500
+profile     = "vfd-generic"
+```
+
+### 12.3 Module `modbus_tcp` — contract
+
+```cpp
+// services/iobus/modbus_tcp.hpp
+class ModbusTcp {
+public:
+    bool open(const TcpSlaveConfig& cfg);   // modbus_new_tcp() + modbus_connect()
+    void close();
+    bool poll_once(uint16_t addr, int fc, int count,
+                   uint16_t* regs_out);     // modbus_read_registers / modbus_read_bits
+    bool write_once(uint16_t addr, int fc,
+                    const uint16_t* data, int count);
+    bool is_connected() const;
+    void reconnect_if_needed();             // gọi trong poll loop nếu !connected
+};
+```
+
+Mỗi TCP slave = 1 `ModbusTcp` instance. Poll thread chạy cùng scheduler RTU (chia sẻ `PollScheduler`).
+
+### 12.4 Reconnect logic
+
+```
+state: DISCONNECTED → connect() → CONNECTED → poll → (timeout/error) → DISCONNECTED
+  DISCONNECTED: chờ reconnect_s → connect() lại (không block poll RTU)
+  Trong lúc DISCONNECTED: ext_cache quality = BAD, fallback active
+  Sau connect(): quality trở lại GOOD khi poll thành công lần đầu
+```
+
+Connection được giữ persistent (1 TCP socket per slave). Không reconnect trong mỗi poll.
+
+### 12.5 ext_cache integration
+
+TCP slave points dùng cùng `ExtCache` với RTU:
+
+```cpp
+struct ExtPoint {
+    float   value;
+    uint8_t quality;     // GOOD=1 / BAD=0
+    int64_t ts_ns;
+    char    host[64];    // dùng để phân biệt TCP vs RTU
+    uint8_t unit;
+    uint16_t addr;
+};
+```
+
+`host + unit + addr` là key duy nhất cho TCP point; `bus + slave + addr` cho RTU.
+
+### 12.6 GRAPH_SCHEMA integration
+
+`Modbus_TCP_Read` node trong graph.json tham chiếu `host` + `unit` + `addr` — validator kiểm
+host có trong `modbus.tcp[]` config (check #5). Khi core scan, graph_runtime đọc ext_cache
+theo key `(host, unit, addr)` → output `out:float`.
+
+### 12.7 Thread model
+
+TCP slave poll chạy trong **cùng fieldbus thread** (hoặc pool) với RTU. Không tạo thread riêng per slave. `PollScheduler` đã support multi-slave (MOD-005); TCP slave được add vào scheduler như RTU slave với transport = TCP.
+
+### 12.8 DoD MOD-013
+
+```
+[ ] modbus_tcp.cpp/hpp tạo mới — ModbusTcp class theo §12.3
+[ ] fieldbus.conf parser bổ sung [modbus.tcp] section — extend ModbusConfig
+[ ] poll_scheduler extend: TCP transport type, reconnect state machine
+[ ] ext_cache: TCP key (host+unit+addr) phân biệt với RTU key (bus+slave+addr)
+[ ] graph_runtime: Modbus_TCP_Read node tick() đọc ext_cache TCP
+[ ] graph validator check #5: host trong TCP_Read phải có trong modbus.tcp[] config
+[ ] Unit test: fake TCP server (diagslave -m tcp hoặc socat TCP) — FC03 read OK
+[ ] Unit test: TCP disconnect → quality BAD → reconnect → quality GOOD
+[ ] Unit test: fallback khi stale > poll_ms×3
+[ ] CMake option MKDDC_ENABLE_MODBUS_TCP (default ON khi MODBUS=ON)
+[ ] Smoke test: 30 phút kết nối TCP thật với thiết bị hoặc diagslave
+```
+
+---
+
 ## Revision History
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
+| 1.4 | 2026-06-26 | Dev SOM | §12: Modbus TCP client design (MOD-013) — DRAFT chờ approve |
 | 1.3 | 2026-06-17 | Dev SOM | §10.3: kx_ext_snapshot_msg_t chuyển vào mkddc_shm.h (gap closed); cập nhật rs485 device config path |
 | 1.2 | 2026-06-16 | Dev SOM | Close FB-Q-001 (libmodbus), FB-Q-002 (expose_bacnet per-profile); thêm §9 ext IPC API |
 | 1.1 | 2026-06-13 | Codex | Active name = module trong `mkddc-iobus`; link implementation plan 25 |

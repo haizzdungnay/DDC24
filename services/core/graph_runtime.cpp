@@ -23,7 +23,10 @@ static const int
     NT_AO=11, NT_DO=12,
     NT_MA=13, NT_ON=14, NT_OFF=15,
     NT_IL=16, NT_RC=17, NT_PC=18,
-    NT_SS=19, NT_AH=20, NT_AL=21, NT_AD=22;
+    NT_SS=19, NT_AH=20, NT_AL=21, NT_AD=22,
+    /* COR-011 Protocol nodes */
+    NT_MRTU_R=23, NT_MRTU_W=24, NT_MTCP_R=25,
+    NT_BAV=26,    NT_BBV=27;
 
 bool type_from_string(const std::string& s, int* out)
 {
@@ -38,7 +41,11 @@ bool type_from_string(const std::string& s, int* out)
         {"Interlock",      NT_IL},
         {"RuntimeCounter", NT_RC},  {"PulseCounter", NT_PC},
         {"SafeState",      NT_SS},
-        {"AlarmHigh",      NT_AH},  {"AlarmLow",     NT_AL},  {"AlarmDelay",   NT_AD},
+        {"AlarmHigh",       NT_AH},    {"AlarmLow",      NT_AL},  {"AlarmDelay",    NT_AD},
+        /* COR-011 Protocol nodes */
+        {"Modbus_RTU_Read", NT_MRTU_R}, {"Modbus_RTU_Write", NT_MRTU_W},
+        {"Modbus_TCP_Read", NT_MTCP_R},
+        {"BACnet_AV",       NT_BAV},    {"BACnet_BV",        NT_BBV},
     };
     const auto it = kTypes.find(s);
     if (it == kTypes.end()) return false;
@@ -55,8 +62,10 @@ static const char* type_name(int t)
         "ManualAuto","OnDelay","OffDelay",
         "Interlock","RuntimeCounter","PulseCounter",
         "SafeState","AlarmHigh","AlarmLow","AlarmDelay",
+        "Modbus_RTU_Read","Modbus_RTU_Write","Modbus_TCP_Read",
+        "BACnet_AV","BACnet_BV",
     };
-    if (t < 0 || t > NT_AD) return "?";
+    if (t < 0 || t > NT_BBV) return "?";
     return kNames[static_cast<size_t>(t)];
 }
 
@@ -77,6 +86,10 @@ bool valid_input_port(int type, const std::string& port)
     case NT_SS:                  return port == "in" || port == "good";
     case NT_AH: case NT_AL:      return port == "pv";
     case NT_AD:                  return port == "in";
+    /* COR-011 Protocol nodes */
+    case NT_MRTU_W:              return port == "in";
+    case NT_BAV:                 return port == "in";  /* optional — write AV from graph */
+    case NT_BBV:                 return port == "in";  /* optional — write BV from graph */
     default:                     return false;
     }
 }
@@ -84,9 +97,11 @@ bool valid_input_port(int type, const std::string& port)
 bool valid_from_port(int type, const std::string& port)
 {
     switch (type) {
-    case NT_RC: return port == "hours" || port == "alarm";
-    case NT_IL: return port == "out"   || port == "tripped";
-    default:    return port == "out";
+    case NT_RC:     return port == "hours" || port == "alarm";
+    case NT_IL:     return port == "out"   || port == "tripped";
+    /* Protocol write nodes (sink) — không có output port */
+    case NT_MRTU_W: return false;
+    default:        return port == "out";
     }
 }
 
@@ -171,7 +186,44 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
         if (const json::Value* params = jn->get("params")) {
             for (const auto& kv : params->obj) {
                 if (kv.second->is_num()) n.num_params[kv.first] = kv.second->num;
-                else if (kv.second->is_str()) n.str_param = kv.second->str;
+                else if (kv.second->is_str()) {
+                    n.str_params[kv.first] = kv.second->str;
+                    n.str_param = kv.second->str;   /* backward compat: last string value */
+                }
+            }
+        }
+
+        /* COR-011: validate Protocol node required params */
+        if (ti == NT_MRTU_R || ti == NT_MRTU_W) {
+            if (!n.num_params.count("bus") || !n.num_params.count("slave") ||
+                !n.num_params.count("fc")  || !n.num_params.count("addr") ||
+                !n.str_params.count("type")) {
+                std::fprintf(stderr, "ERROR graph.protocol_missing_param node=%s"
+                             " (Modbus_RTU_* requires bus/slave/fc/addr/type)\n", n.id.c_str());
+                return false;
+            }
+            if (ti == NT_MRTU_R && !n.num_params.count("fallback")) {
+                std::fprintf(stderr, "ERROR graph.protocol_missing_param node=%s"
+                             " (Modbus_RTU_Read requires fallback)\n", n.id.c_str());
+                return false;
+            }
+        }
+        if (ti == NT_MTCP_R) {
+            if (!n.str_params.count("host") || !n.num_params.count("unit") ||
+                !n.num_params.count("fc")   || !n.num_params.count("addr") ||
+                !n.str_params.count("type") || !n.num_params.count("fallback")) {
+                std::fprintf(stderr, "ERROR graph.protocol_missing_param node=%s"
+                             " (Modbus_TCP_Read requires host/unit/fc/addr/type/fallback)\n",
+                             n.id.c_str());
+                return false;
+            }
+        }
+        if (ti == NT_BAV || ti == NT_BBV) {
+            const auto cit = n.num_params.find("instance");
+            if (cit == n.num_params.end() || cit->second < 1) {
+                std::fprintf(stderr, "ERROR graph.protocol_missing_param node=%s"
+                             " (BACnet_AV/BV requires instance >= 1)\n", n.id.c_str());
+                return false;
             }
         }
 
@@ -294,6 +346,31 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
             ai_set.insert(static_cast<int>(nd.num_params.at("channel")));
     used_ai_.assign(ai_set.begin(), ai_set.end());
 
+    /* COR-011: parse modbus section → gán proto_ext_idx cho Protocol nodes.
+     * Thứ tự: rtu[0].points, rtu[1].points, …, tcp[0].points, tcp[1].points, …
+     * Phải khớp với thứ tự ext_cache iobus cấp phát (RTU slaves rồi TCP slaves). */
+    if (const json::Value* jmod = root->get("modbus")) {
+        int ext_idx = 0;
+        for (const char* section : {"rtu", "tcp"}) {
+            const json::Value* jbus_arr = jmod->get(section);
+            if (!jbus_arr || !jbus_arr->is_arr()) continue;
+            for (const auto& jbus : jbus_arr->arr) {
+                const json::Value* jpts = jbus->get("points");
+                if (!jpts || !jpts->is_arr()) continue;
+                for (const auto& jpt : jpts->arr) {
+                    const std::string nid = jpt->get("node")
+                        ? jpt->get("node")->str_or("") : "";
+                    if (!nid.empty()) {
+                        const auto it = id_to_idx.find(nid);
+                        if (it != id_to_idx.end())
+                            nodes_[static_cast<size_t>(it->second)].proto_ext_idx = ext_idx;
+                    }
+                    ext_idx++;
+                }
+            }
+        }
+    }
+
     src_cached_        = src;
     declared_scan_ms_  = parsed_scan_ms;
     scan_ms_           = parsed_scan_ms;
@@ -358,9 +435,33 @@ void GraphRuntime::reset_runtime_state()
     dirty_ = false;
 }
 
+/* ---- COR-011: ext snapshot ---- */
+
+void GraphRuntime::feed_ext_snapshot(const kx_ext_point_t* pts, uint16_t count)
+{
+    const uint16_t n = (count < KX_N_EXT) ? count : static_cast<uint16_t>(KX_N_EXT);
+    for (uint16_t i = 0; i < n; i++) ext_snapshot_[i] = pts[i];
+    ext_snap_count_ = n;
+}
+
+void GraphRuntime::apply_ext_writes(kx_plc_shm_t* shm) const
+{
+    if (!shm || !loaded_) return;
+    KX_WRITE_BEGIN(shm);
+    for (const Node& n : nodes_) {
+        if (n.type != NodeType::MODBUS_RTU_WRITE) continue;
+        if (n.proto_ext_idx < 0 || n.proto_ext_idx >= shm->ext_count) continue;
+        const auto it = n.outputs.find("_setpoint");
+        if (it == n.outputs.end()) continue;
+        shm->ext[n.proto_ext_idx].setpoint = it->second;
+        shm->ext[n.proto_ext_idx].dirty    = 1;
+    }
+    KX_WRITE_END(shm);
+}
+
 /* ---- execute ---- */
 
-void GraphRuntime::execute(const PointTable& table, PriorityResolver& resolver)
+void GraphRuntime::execute(PointTable& table, PriorityResolver& resolver)
 {
     if (!loaded_) return;
     for (const int idx : order_) {
@@ -371,7 +472,7 @@ void GraphRuntime::execute(const PointTable& table, PriorityResolver& resolver)
 
 /* ---- compute: writes to n.outputs ---- */
 
-void GraphRuntime::compute(Node& n, const PointTable& table, PriorityResolver& resolver)
+void GraphRuntime::compute(Node& n, PointTable& table, PriorityResolver& resolver)
 {
     auto in = [&](const char* port) -> float {
         const auto it = n.inputs.find(port);
@@ -643,6 +744,52 @@ void GraphRuntime::compute(Node& n, const PointTable& table, PriorityResolver& r
             }
         }
         n.outputs["out"] = n.cmp_state ? 1.0f : 0.0f;
+        return;
+    }
+
+    /* ---- COR-011 Protocol nodes ---- */
+
+    case NodeType::MODBUS_RTU_READ:
+    case NodeType::MODBUS_TCP_READ: {
+        const float scale    = static_cast<float>(p("scale",    1.0));
+        const float fallback = static_cast<float>(p("fallback", 0.0));
+        const int   eidx     = n.proto_ext_idx;
+        if (eidx < 0 || eidx >= ext_snap_count_) {
+            n.outputs["out"] = fallback;
+            return;
+        }
+        const kx_ext_point_t& pt = ext_snapshot_[eidx];
+        if (pt.quality == KX_Q_BAD || !pt.online) {
+            n.outputs["out"] = fallback;
+        } else {
+            n.outputs["out"] = pt.value * scale;
+        }
+        return;
+    }
+
+    case NodeType::MODBUS_RTU_WRITE: {
+        /* Sink: stash input value for apply_ext_writes() */
+        n.outputs["_setpoint"] = in("in");
+        return;
+    }
+
+    case NodeType::BACNET_AV: {
+        const int inst = static_cast<int>(p("instance", 0)) - 1;  /* 0-based */
+        if (inst < 0 || inst >= KX_N_AV) return;
+        /* If "in" wired: write AV from graph at PointSource::GRAPH */
+        if (n.inputs.count("in"))
+            table.set_virtual({PointKind::AV, inst}, in("in"), PointSource::GRAPH);
+        /* Output: current AV value (after any write from web/bacnet/graph) */
+        n.outputs["out"] = table.get({PointKind::AV, inst}).value;
+        return;
+    }
+
+    case NodeType::BACNET_BV: {
+        const int inst = static_cast<int>(p("instance", 0)) - 1;
+        if (inst < 0 || inst >= KX_N_BV) return;
+        if (n.inputs.count("in"))
+            table.set_virtual({PointKind::BV, inst}, in("in"), PointSource::GRAPH);
+        n.outputs["out"] = table.get({PointKind::BV, inst}).value;
         return;
     }
 

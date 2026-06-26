@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.17 | 2026-06-25 (IOB-006-V2: IOP v2 ADR-010 Done; WEB-014: security refresh Done)
+> **Phiên bản:** 1.20 | 2026-06-26 (MOD-012: 9/11 DoD ✅ — E303+ext snapshot+T11 fixed; BAC-012: DoD #3 ✅ — BACNET=ON 123 test; CI modbus+bacnet matrix added)
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -411,6 +411,34 @@ Phụ thuộc: COR-009
 Trạng thái: ĐÃ làm 2026-06-13 — state_snapshot module; boot/shutdown/reload/60s persist; 97/97 test pass
 ```
 
+```
+Task ID: COR-011
+Tên: Protocol 5 graph nodes — implement trong graph_runtime (Modbus_RTU_Read/Write, Modbus_TCP_Read, BACnet_AV/BV)
+Owner: Dev SOM | Phase: 4 (Rev A feature-complete) | Module: graph_runtime, scan_loop, ext_cache_reader
+File: services/core/graph_runtime.cpp, graph_runtime.hpp, scan_loop.cpp,
+      services/core/ext_cache_reader.hpp (mới),
+      services/core/tests/test_graph_protocol.cpp (mới)
+Input: GRAPH_SCHEMA §10, SW_COMPONENT_LIBRARY §8, 07_guide §12 (COR-011 spec)
+Output:
+  - 5 Protocol node type parse + validate trong build_plan()
+  - Scan loop step 3 cập nhật ext_cache → Protocol node inputs
+  - Modbus_RTU_Write sink: push vào fieldbus write-queue
+  - BACnet_AV/BV: đọc/ghi bacnet_objtable mức 5 (graph)
+  - Quality BAD lan downstream (weakest-link rule §6 COMPLIB)
+  - Validator check #4/#5/#6 (fallback mandatory, host/bus ref check)
+Test: 12 unit test checklist COR-011 trong 07_guide §12.4 — tất cả PASS
+Done khi:
+  - graph_runtime.build_plan() accept/reject đúng các Protocol node type
+  - Test coverage 12/12 checklist pass
+  - Modbus_RTU_Read out = cached_value × scale (GOOD) / fallback (BAD)
+  - Modbus_TCP_Read out = tcp_cached_value × scale / fallback
+  - BACnet_AV in=22.5 → bacnet_objtable pv=22.5 tại mức 5
+  - Quality BAD propagation downstream verified
+  - 10_TASK_CHECKLIST + 07_guide Rev bump
+Phụ thuộc: COR-009 (graph engine), MOD-009 (ext_cache path), BAC-004 (bacnet_objtable), MOD-012 (TCP ext_cache TCP key — liên quan MOD-013)
+Trạng thái: ĐÃ làm 2026-06-26 — COR-011 DONE: 5 Protocol node type (Modbus_RTU_Read/Write, Modbus_TCP_Read, BACnet_AV/BV); str_params map; proto_ext_idx từ modbus section graph.json; feed_ext_snapshot + apply_ext_writes; scan_loop step 3a/5a; 12/12 test pass; 122/122 core_tests pass
+```
+
 ---
 
 ## Phase 4/5 — BACnet/IP (S7 #5)
@@ -437,7 +465,7 @@ Doc gap đã resolve (2026-06-17):
 | BAC-010 | TimeSync/ReinitializeDevice policy | Dev SOM | guarded restart/time sync | integration smoke |
 | BAC-011 | BTL pretest script/checklist | Tester + Dev SOM | repeatable B-ASC pretest | group 9 PASS |
 
-Trạng thái BACnet: BAC-001..011 logic/unit test ✅. BAC-012 IN PROGRESS 2026-06-22 — bacnet-stack 1.3.8 pin, ON build sạch trước final runtime wiring, API/callback/shm/core bridge đã implement; chờ exact-tree CI + LAN/board smoke.
+Trạng thái BACnet: BAC-001..011 logic/unit test ✅. BAC-012 IN PROGRESS 2026-06-26 — MKDDC_ENABLE_BACNET=ON: 123/123 test PASS (DoD #3 ✅); CI matrix bacnet + modbus+bacnet added; còn LAN/board smoke.
 
 Done khi: DoD §8 pass; BACnet write không bypass core; safety/manual cao hơn vẫn thắng.
 
@@ -451,7 +479,7 @@ Test: bacwi/bacrp/bacwp smoke; DoD §3.5 trong 30_PROTOCOL_LIB_INTEGRATION_PLAN
 Done khi: 10 checkbox DoD BAC-012 tick đủ; build CI có MKDDC_ENABLE_BACNET=ON xanh
 Phụ thuộc: BAC-001..011
 Chi tiết: 30_PROTOCOL_LIB_INTEGRATION_PLAN.md §3
-Trạng thái: IN PROGRESS 2026-06-22 — implementation complete locally; exact-tree CI, LAN, aarch64 và board evidence còn mở.
+Trạng thái: IN PROGRESS 2026-06-26 — DoD #3 (BACNET=ON build 123 test) ✅; còn LAN smoke, aarch64 cross-build, board.
 ```
 
 ---
@@ -479,7 +507,7 @@ Doc gap đã resolve (2026-06-17):
 | MOD-010 | BACnet expose ext points theo profile | Dev SOM | ext -> AV/BV/AI optional | object map test |
 | MOD-011 | 16-slave timing smoke | Tester + Dev SOM | stable poll budget | group 10 PASS |
 
-Trạng thái Modbus: MOD-001..011 logic/unit test ✅. MOD-012 IN PROGRESS 2026-06-22 — libmodbus 3.1.10, ON build và PTY FC03/FC05/FC06/timeout-E302 PASS, runtime worker + CI matrix đã implement; chờ cross-build/board/physical smoke.
+Trạng thái Modbus RTU: MOD-001..011 logic/unit test ✅. MOD-012 IN PROGRESS 2026-06-26 — 9/11 DoD ✅ (PTY+E302+E303+ext snapshot); T11 TCP loopback fixed; còn 1h smoke + thiết bị thật.
 
 Done khi: DoD §9 pass; Modbus không làm slave northbound; không có output bypass core.
 
@@ -493,7 +521,37 @@ Test: diagslave PTY smoke; DoD §4.6 trong 30_PROTOCOL_LIB_INTEGRATION_PLAN
 Done khi: 11 checkbox DoD MOD-012 tick đủ; build CI có MKDDC_ENABLE_MODBUS=ON xanh
 Phụ thuộc: MOD-001..011
 Chi tiết: 30_PROTOCOL_LIB_INTEGRATION_PLAN.md §4
-Trạng thái: IN PROGRESS 2026-06-22 — native PTY transport PASS; cross-build, board, 1h soak và thiết bị thật còn mở.
+Trạng thái: IN PROGRESS 2026-06-26 — 9/11 DoD ✅: libmodbus native, MODBUS=ON 141/141 test, PTY FC03/FC05/FC06, timeout→E302, E303 alarm, ext snapshot via fieldbus.sock; còn 1h smoke + thiết bị thật.
+```
+
+```
+Task ID: MOD-013
+Tên: Modbus TCP client — libmodbus TCP context, reconnect, ext_cache TCP key, graph Modbus_TCP_Read
+Owner: Dev SOM | Phase: 3.5/4 (Rev A feature-complete) | Module: modbus_tcp, fieldbus_config, ext_cache, graph_runtime
+File: services/iobus/fieldbus/modbus_tcp.{hpp,cpp} (mới),
+      services/iobus/fieldbus/fieldbus_config.cpp (extend [modbus.tcp]),
+      services/iobus/ext_cache.cpp (extend TCP key),
+      services/core/graph_runtime.cpp (Modbus_TCP_Read node),
+      services/iobus/tests/test_modbus_tcp.cpp (mới)
+Input: SW_FIELDBUS_DESIGN §12, 06_guide §3.14, GRAPH_SCHEMA §10.3
+Output:
+  - modbus_tcp.cpp: libmodbus TCP context + reconnect state machine
+  - fieldbus.conf: [modbus.tcp.slaves] section parse
+  - ext_cache: TCP key (host+unit+addr) cạnh RTU key (bus+slave+addr)
+  - poll_scheduler: TCP slave entries thêm vào scheduler
+  - graph_runtime: Modbus_TCP_Read tick() đọc ext_cache TCP
+  - graph validator check #5: host/unit match modbus.tcp[] config
+Test: 10 unit test (DoD MOD-013 §12.8): FC03 TCP read OK, disconnect→BAD→reconnect→GOOD,
+      fallback khi stale, graph_runtime output đúng, validator reject unknown host
+Done khi:
+  - modbus_tcp.open() connect thành công tới diagslave -m tcp
+  - FC03 read OK; ext_cache TCP point quality GOOD
+  - TCP disconnect → quality BAD; reconnect tự động sau reconnect_s
+  - Modbus_TCP_Read node trong graph: output = tcp_value × scale / fallback
+  - 10/10 DoD checklist tick đủ
+  - 10_TASK_CHECKLIST + 06_guide + SW_FIELDBUS_DESIGN Rev bump
+Phụ thuộc: MOD-001..011 (libmodbus, ext_cache, PollScheduler đã có), MOD-012 (transport pattern)
+Trạng thái: ĐÃ làm 2026-06-26 — MOD-013 DONE: modbus_tcp.{hpp,cpp} ModbusTcp class + reconnect FSM; fieldbus_config.cpp tcp_slaves parse + TCP-only config; ModbusMaster.total_ext_count(); wired vào main.cpp fieldbus thread; 10/10 test pass; 140/140 iobus_tests pass (138+2skip)
 ```
 
 ---
@@ -699,6 +757,6 @@ Phụ thuộc: E2E-003
 ```
 
 ---
-**Rev** 1.17 | 2026-06-25 (IOB-006-V2: IOP v2 ADR-010 — 74B IO_RESP, KX_N_UI=16, BOARD_CAP_MAP; 05 guide Rev 2.0 updated) · 1.16 | 2026-06-23 (WEB-014 cập nhật: Go crypto/sys security refresh; Grype archive scan clean locally) · 1.15 | 2026-06-23 (WEB-014 ĐÃ làm: Vite security refresh; npm/go vuln gates clean locally) · 1.14 | 2026-06-22 (IOB local PASS; MOD native PTY PASS; BAC source/runtime wiring; external evidence pending) · 1.13 | 2026-06-22 (Thêm BAC-012, MOD-012, IOB-006 — transport layer integration; sửa status BACnet/Modbus: logic ✅ transport no-op ⚠️; xem 30_PROTOCOL_LIB_INTEGRATION_PLAN) · 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) · 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
+**Rev** 1.20 | 2026-06-26 (MOD-012: 9/11 DoD — E303 alarm test + ext snapshot test + T11 TCP loopback fixed + CI modbus+bacnet matrix; BAC-012: DoD #3 BACNET=ON 123/123 test; 141 iobus + 123 core pass) · 1.19 | 2026-06-26 (COR-011 DONE: 5 Protocol nodes, 12/12 test; MOD-013 DONE: Modbus TCP client, 10/10 test; 122/122 core_tests + 138/140 iobus_tests) · 1.18 | 2026-06-26 (Thêm COR-011: Protocol 5 graph nodes PLANNED; MOD-013: Modbus TCP client PLANNED — 2 task mới chờ owner approve; 07_guide §12 + SW_FIELDBUS_DESIGN §12 bổ sung spec) · 1.17 | 2026-06-25 (IOB-006-V2: IOP v2 ADR-010 — 74B IO_RESP, KX_N_UI=16, BOARD_CAP_MAP; 05 guide Rev 2.0 updated) · 1.16 | 2026-06-23 (WEB-014 cập nhật: Go crypto/sys security refresh; Grype archive scan clean locally) · 1.15 | 2026-06-23 (WEB-014 ĐÃ làm: Vite security refresh; npm/go vuln gates clean locally) · 1.14 | 2026-06-22 (IOB local PASS; MOD native PTY PASS; BAC source/runtime wiring; external evidence pending) · 1.13 | 2026-06-22 (Thêm BAC-012, MOD-012, IOB-006 — transport layer integration; sửa status BACnet/Modbus: logic ✅ transport no-op ⚠️; xem 30_PROTOCOL_LIB_INTEGRATION_PLAN) · 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) · 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
 1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit, COR-008 SIGHUP reload — cụm production-hardening 1+5+6 ĐÃ làm) · 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006 Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·
 Test chi tiết: [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)

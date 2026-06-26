@@ -71,6 +71,30 @@ static bool jget_obj(const std::string& s, const char* key, std::string* out)
     return false;
 }
 
+/* Parse TCP slave object từ một phần tử mảng tcp_slaves[] */
+static bool parse_tcp_slave(const std::string& obj, uint32_t default_poll_ms, TcpSlaveConfig* ts)
+{
+    if (!jget_str(obj, "host", &ts->host) || ts->host.empty())
+        return false;   /* host bắt buộc */
+    if (!jget_str(obj, "profile", &ts->profile) || ts->profile.empty())
+        return false;   /* profile bắt buộc */
+    if (!jget_str(obj, "name", &ts->name) || ts->name.empty())
+        return false;   /* name bắt buộc */
+    long v = 0;
+    if (jget_int(obj, "port", &v) && v > 0 && v <= 65535)
+        ts->port = static_cast<uint16_t>(v);
+    if (jget_int(obj, "unit", &v) && v >= 0 && v <= 247)
+        ts->unit = static_cast<uint8_t>(v);
+    ts->poll_ms = default_poll_ms;
+    if (jget_int(obj, "poll_ms", &v) && v > 0)
+        ts->poll_ms = static_cast<uint32_t>(v);
+    if (jget_int(obj, "reconnect_s", &v) && v > 0)
+        ts->reconnect_s = static_cast<uint32_t>(v);
+    if (jget_int(obj, "timeout_ms", &v) && v > 0)
+        ts->timeout_ms = static_cast<uint32_t>(v);
+    return true;
+}
+
 /* Parse slave JSON object từ một phần tử mảng slaves[] */
 static bool parse_slave(const std::string& obj, uint32_t default_poll_ms, SlaveConfig* sl)
 {
@@ -127,12 +151,7 @@ bool load_fieldbus_config(const std::string& path, bool path_from_cli,
             out->rs485.stop = static_cast<uint8_t>(v);
     }
 
-    /* rs485.device bắt buộc (CONFIG_SCHEMA §5b, plan 25 §4 gap closed) */
-    if (out->rs485.device.empty()) {
-        std::fprintf(stderr, "ERROR fieldbus_config.rs485_device_missing — bắt buộc đặt"
-                     " rs485.device trong fieldbus.conf (plan 25 §4)\n");
-        return false;
-    }
+    /* rs485.device bắt buộc khi có RTU slaves */
 
     long v = 0;
     if (jget_int(json, "poll_default_ms", &v) && v > 0)
@@ -165,10 +184,44 @@ bool load_fieldbus_config(const std::string& path, bool path_from_cli,
         }
     }
 
+    /* rs485.device bắt buộc nếu có RTU slaves */
+    if (!out->slaves.empty() && out->rs485.device.empty()) {
+        std::fprintf(stderr, "ERROR fieldbus_config.rs485_device_missing — bắt buộc đặt"
+                     " rs485.device trong fieldbus.conf khi có RTU slaves\n");
+        return false;
+    }
+
+    /* tcp_slaves array */
+    std::string tcp_arr;
+    if (jget_obj(json, "tcp_slaves", &tcp_arr)) {
+        size_t p = 0;
+        while (p < tcp_arr.size()) {
+            const size_t ob = tcp_arr.find('{', p);
+            if (ob == std::string::npos) break;
+            int depth = 0;
+            size_t end = ob;
+            for (size_t k = ob; k < tcp_arr.size(); ++k) {
+                if (tcp_arr[k] == '{') ++depth;
+                else if (tcp_arr[k] == '}') { if (--depth == 0) { end = k; break; } }
+                else if (tcp_arr[k] == '"') { while (++k < tcp_arr.size() && tcp_arr[k] != '"') { if (tcp_arr[k] == '\\') ++k; } }
+            }
+            const std::string obj = tcp_arr.substr(ob, end - ob + 1);
+            TcpSlaveConfig ts;
+            if (parse_tcp_slave(obj, out->poll_default_ms, &ts)) {
+                out->tcp_slaves.push_back(ts);
+            } else {
+                std::fprintf(stderr, "WARN  fieldbus_config.tcp_slave_parse_error — thiếu"
+                             " host/profile/name; bỏ qua phần tử\n");
+            }
+            p = end + 1;
+        }
+    }
+
     out->loaded = true;
-    std::fprintf(stderr, "INFO  fieldbus_config.loaded path=%s device=%s baud=%u slaves=%zu\n",
+    std::fprintf(stderr, "INFO  fieldbus_config.loaded path=%s device=%s baud=%u slaves=%zu"
+                 " tcp_slaves=%zu\n",
                  path.c_str(), out->rs485.device.c_str(), out->rs485.baud,
-                 out->slaves.size());
+                 out->slaves.size(), out->tcp_slaves.size());
     return true;
 }
 

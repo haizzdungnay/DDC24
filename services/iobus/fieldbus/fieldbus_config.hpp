@@ -19,17 +19,29 @@ struct SlaveConfig {
     uint32_t    poll_ms = 1000;
 };
 
+struct TcpSlaveConfig {
+    std::string host;             /* IP hoặc hostname bắt buộc */
+    uint16_t    port        = 502;
+    uint8_t     unit        = 1;  /* Modbus unit ID */
+    std::string profile;          /* device profile ID */
+    std::string name;             /* prefix ext point name */
+    uint32_t    poll_ms     = 1000;
+    uint32_t    reconnect_s = 5;
+    uint32_t    timeout_ms  = 500;
+};
+
 struct Rs485Config {
-    std::string device;           /* bắt buộc — không hardcode trong code */
+    std::string device;           /* bắt buộc khi có RTU slaves */
     uint32_t    baud   = 19200;
     char        parity = 'N';     /* N / E / O */
     uint8_t     stop   = 1;
 };
 
 struct FieldbusConfig {
-    Rs485Config           rs485;
-    uint32_t              poll_default_ms = 1000;
-    std::vector<SlaveConfig> slaves;
+    Rs485Config              rs485;
+    uint32_t                 poll_default_ms = 1000;
+    std::vector<SlaveConfig>    slaves;
+    std::vector<TcpSlaveConfig> tcp_slaves;   /* MOD-013 */
     bool loaded = false;
 };
 
