@@ -19,8 +19,8 @@ Trước khi implement bất kỳ task nào, phải trả lời được 3 câu 
 | Câu | Nguồn tài liệu |
 |-----|----------------|
 | Spec/contract của feature này là gì? | `02_design/` hoặc `shared/*.h` |
-| Task này có trong checklist chưa? | `10_TASK_CHECKLIST.md` |
-| Có plan doc chi tiết chưa? | `21_SOM_SRC_IMPLEMENTATION_PLAN.md` hoặc file plan riêng |
+| Task này có trong checklist chưa? | `11_TASK_CHECKLIST.md` |
+| Có plan doc chi tiết chưa? | `22_SOM_SRC_IMPLEMENTATION_PLAN.md` hoặc file plan riêng |
 
 Nếu bất kỳ câu nào trả lời "không" → **VIẾT DOC TRƯỚC**.
 
@@ -30,16 +30,16 @@ Nếu bất kỳ câu nào trả lời "không" → **VIẾT DOC TRƯỚC**.
 
 ### A. Feature mới / module mới
 1. Kiểm tra doc `02_design/` tương ứng — nếu chưa có hoặc chưa đủ: **viết/cập nhật trước**
-2. Viết plan doc (như 22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) hoặc thêm block vào 21
+2. Viết plan doc (như 23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) hoặc thêm block vào 22
 3. Trình owner duyệt plan
-4. Sau khi duyệt: annotate 03 + 07/06 + 10 + 21 → MỚI code
+4. Sau khi duyệt: annotate 03 + 07/06 + 11 + 22 → MỚI code
 5. Sau khi code xong: bump Rev tất cả doc đã annotate
 
 ### B. Sửa behavior đã có (bug fix, spec change)
 1. Xác định doc nào đang mô tả behavior đó (`07` hoặc `06` hoặc `02_design/`)
 2. Sửa doc TRƯỚC — ghi rõ lý do thay đổi
 3. Nếu behavior thay đổi làm mâu thuẫn với doc khác → giải quyết mâu thuẫn TRƯỚC (xem Luật 5)
-4. Sau đó code → annotate 10 + 03
+4. Sau đó code → annotate 11 + 03
 
 ### C. Architectural decision
 1. Viết ADR trong `docs/adr/` TRƯỚC KHI code
@@ -54,14 +54,14 @@ Task CHƯA được đánh Done nếu chưa update tất cả doc liên quan:
 
 | Loại thay đổi | Bắt buộc update |
 |---------------|----------------|
-| SOM iobus | `03_PHASE_PLAN` + `06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE` + `10_TASK_CHECKLIST` + `21_SOM_SRC_IMPLEMENTATION_PLAN` |
-| SOM core | `03_PHASE_PLAN` + `07_MKDDC_CORE_IMPLEMENTATION_GUIDE` + `10_TASK_CHECKLIST` + `21_SOM_SRC_IMPLEMENTATION_PLAN` |
-| Component type mới | `SW_COMPONENT_LIBRARY` + `07` (§graph) + `10` + `21` |
+| SOM iobus | `03_PHASE_PLAN` + `06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE` + `11_TASK_CHECKLIST` + `22_SOM_SRC_IMPLEMENTATION_PLAN` |
+| SOM core | `03_PHASE_PLAN` + `07_MKDDC_CORE_IMPLEMENTATION_GUIDE` + `11_TASK_CHECKLIST` + `22_SOM_SRC_IMPLEMENTATION_PLAN` |
+| Component type mới | `SW_COMPONENT_LIBRARY` + `07` (§graph) + `11` + `22` |
 | Config field mới | `CONFIG_SCHEMA` (02_design/interfaces) + `07` |
-| API endpoint mới | `REST_API_OPENAPI` (02_design/interfaces) + `08_WEB_GUIDE` |
+| API endpoint mới | `REST_API_OPENAPI` (02_design/interfaces) + `09_WEB_GUIDE` |
 | State/persist behavior | `SW_RUNTIME_EXECUTION_MODEL` + `07` |
-| Safety trigger | `07 §5.2` (trigger matrix) + `10` |
-| Packaging/systemd | `06 §10` hoặc `07 §9` + `10` |
+| Safety trigger | `07 §5.2` (trigger matrix) + `11` |
+| Packaging/systemd | `06 §10` hoặc `07 §9` + `11` |
 
 **Annotation format:** `Trạng thái: ĐÃ làm YYYY-MM-DD — [1 dòng tóm tắt]`
 **Rev format:** bump minor (1.3→1.4) + thêm dòng vào Rev footer với ngày và tóm tắt.
@@ -73,7 +73,7 @@ Task CHƯA được đánh Done nếu chưa update tất cả doc liên quan:
 **DỪNG NGAY. Không được chọn "theo doc nào" rồi code.**
 
 Quy trình bắt buộc:
-1. Ghi rõ mâu thuẫn ra (như GAP-01 trong 22_GRAPH_STATEFUL_COMPONENTS_PLAN.md)
+1. Ghi rõ mâu thuẫn ra (như GAP-01 trong 23_GRAPH_STATEFUL_COMPONENTS_PLAN.md)
 2. Đề xuất resolution + lý do kỹ thuật
 3. Trình owner duyệt
 4. Sau khi duyệt: sửa doc bị sai → bump Rev → ghi "sửa do mâu thuẫn vs [tên doc kia]"
@@ -89,8 +89,8 @@ shared/*.h (frozen contract)
   > docs/02_design/software/*.md (design spec)
   > docs/adr/*.md (architectural decision)
   > docs/03_implementation/0[67]_*_GUIDE.md (implementation guide)
-  > docs/03_implementation/21_*.md (plan)
-  > docs/03_implementation/10_*.md (task checklist)
+  > docs/03_implementation/22_*.md (plan)
+  > docs/03_implementation/11_*.md (task checklist)
 ```
 
 Doc cấp thấp hơn KHÔNG được override doc cấp cao hơn mà không có ADR hoặc amendment.
@@ -122,9 +122,9 @@ docs/
     ├── 03_PHASE_PLAN           — phase tracker (update khi phase đổi trạng thái)
     ├── 06_MKDDC_IOBUS_*        — iobus implementation guide (update khi IOB task done)
     ├── 07_MKDDC_CORE_*         — core implementation guide (update khi COR task done)
-    ├── 08_MKDDC_WEB_*          — web implementation guide (update khi WEB task done)
-    ├── 10_TASK_CHECKLIST       — task tracker (update khi task done)
-    └── 21_SOM_SRC_IMPL_PLAN    — SOM microtask plan (update khi microtask done)
+    ├── 09_MKDDC_WEB_*          — web implementation guide (update khi WEB task done)
+    ├── 11_TASK_CHECKLIST       — task tracker (update khi task done)
+    └── 22_SOM_SRC_IMPL_PLAN    — SOM microtask plan (update khi microtask done)
 ```
 
 ---

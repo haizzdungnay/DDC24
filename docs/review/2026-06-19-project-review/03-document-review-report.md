@@ -135,7 +135,7 @@
 | Design System | ✅ | Complete |
 | HMI TFT UI | ✅ | Complete (Deferred Rev B) |
 
-### 1.8 Developer Kit (docs/05_implementation/)
+### 1.8 Developer Kit (docs/05_devguides/)
 
 | Tài liệu | Có | Tình trạng |
 |----------|:--:|:----------:|

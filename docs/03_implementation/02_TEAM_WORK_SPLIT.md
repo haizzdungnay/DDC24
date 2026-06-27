@@ -3,6 +3,7 @@
 
 > **Document ID:** IMPL-WORKSPLIT-MK-DDC-24-VI
 > **Phiên bản:** 1.1 | 2026-06-13 (làm rõ owner BACnet/Modbus S7 #5/#6 thuộc Dev2; Web giữ REST/UI) · 1.0 | 2026-06-10
+> **Trạng thái:** Active
 > **Đọc trước:** [00_README](00_IMPLEMENTATION_README.md), [01_OVERVIEW](01_SYSTEM_IMPLEMENTATION_OVERVIEW.md)
 
 ---
@@ -15,7 +16,7 @@
 | Dev 2 — SOM | `services/iobus/`, `services/core/`, `shared/` | `fw/`, `web/` | `iop_protocol.h` (với Dev 1), `mkddc_shm.h` (với Dev 3 đọc qua web→core) |
 | Dev 3 — Web/BE | `web/` | `fw/`, `services/` | REST + IPC command/setpoint tới core (với Dev 2) |
 
-> Quy tắc vàng: **`shared/iop_protocol.h` và `shared/mkddc_shm.h` là HỢP ĐỒNG + nguồn-chuẩn CUỐI (docs lệch → header thắng, xem [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md))**. Đổi 1
+> Quy tắc vàng: **`shared/iop_protocol.h` và `shared/mkddc_shm.h` là HỢP ĐỒNG + nguồn-chuẩn CUỐI (docs lệch → header thắng, xem [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md))**. Đổi 1
 > bên = đổi cả hai bên + bump version + chạy lại cross-test. KHÔNG fork.
 
 ---
@@ -132,9 +133,9 @@ shared/           — iop_protocol.h, mkddc_shm.h (rename từ kinexus_shm.h)
 [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) · [07_CORE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) ·
 [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) · [SW_ARCH_SPEC](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) ·
 [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) ·
-[22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) ·
-[24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) ·
-[25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md)
+[23_GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) ·
+[25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md) ·
+[26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md)
 
 ---
 
@@ -179,7 +180,7 @@ web/storage/    — SQLite: config.sqlite, eventlog.sqlite, audit
 ```
 
 ### 3.4 Tài liệu phải đọc trước
-[08_WEB](08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) · [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) ·
+[09_WEB](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) · [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) ·
 [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) · [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md)
 
 ---
@@ -191,8 +192,8 @@ web/storage/    — SQLite: config.sqlite, eventlog.sqlite, audit
 | FW ↔ iobus | `shared/iop_protocol.h` | Dev 1 + Dev 2 cùng đồng ý | bump `IOP_VER_*`, cross-test CRC/parse |
 | iobus ↔ core | `shared/mkddc_shm.h` (`kx_io_shm_t`) | Dev 2 | bump magic nếu đổi layout |
 | core ↔ web | IPC command/setpoint + REST read | Dev 2 (server) + Dev 3 (client) | đổi cùng nhau, version REST |
-| BMS ↔ iobus/core | BACnet/IP + `mkddc_plc_shm` + core IPC | Dev 2 | theo PICS + [24_BACNET](24_BACNET_IMPLEMENTATION_PLAN.md) |
-| Web/API ↔ client | REST OpenAPI + React UI | Dev 3 | theo OpenAPI + [08_WEB](08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) |
+| BMS ↔ iobus/core | BACnet/IP + `mkddc_plc_shm` + core IPC | Dev 2 | theo PICS + [24_BACNET](25_BACNET_IMPLEMENTATION_PLAN.md) |
+| Web/API ↔ client | REST OpenAPI + React UI | Dev 3 | theo OpenAPI + [09_WEB](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) |
 
 ---
 

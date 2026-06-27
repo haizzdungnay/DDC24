@@ -1,7 +1,7 @@
 # Rev A Scope & 90-Day Roadmap — MK-DDC-24
 
 > **Document ID:** REVA-SCOPE-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-08
+> **Phiên bản:** 1.2 | 2026-06-27
 > **Trạng thái:** Accepted — Nguồn-chuẩn DUY NHẤT về phạm vi Rev A & lịch 90 ngày
 > 📘 **Đọc cùng:** [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md) ·
 > [BMS_EDGE_STRATEGY](BMS_EDGE_STRATEGY_MK-DDC-24_VI.md) · ADR-004..008
@@ -38,7 +38,14 @@
 ✓ Config qua FORM + import/export graph.json (KHÔNG canvas)
 ✓ SQLite config + backup/restore (copy file)
 ✓ Commissioning test từng point + export report (CSV/PDF cơ bản)
+✓ HMI local tại chỗ (LVGL v9, DRM/KMS, 6 màn, 6 nút + CTP touch)  ← Amendment 2026-06-27
 ```
+
+> **Amendment 2026-06-27 — HMI kéo vào Rev A:**
+> Spec HMI hoàn chỉnh đã được duyệt (SW_HMI_DESIGN Rev 2.2, UC Rev 2.1, UX Rev 2.0).
+> HMI là yêu cầu thiết yếu cho demo tại chỗ (site acceptance) — không có màn hình local,
+> kỹ sư vận hành không thể kiểm tra DDC khi không có laptop. Kéo vào Rev A.
+> Implementation guide: [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](../03_implementation/08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md).
 
 ## 3. Scope Rev A.0 — CẮT (đẩy Rev B/C)
 
@@ -50,7 +57,7 @@
 ✗ StageControl / LeadLag / SequenceStep           → Rev B
 ✗ RBAC đầy đủ (Rev A.0 chỉ 1 password web)        → Rev B
 ✗ Audit log đầy đủ, component versioning          → Rev B
-✗ HMI local (LVGL), MQTT/agent, cloud             → Rev B+ (từ thiết kế cũ, không mất)
+✗ MQTT/agent, cloud                               → Rev B+
 ✗ OTA update                                       → Rev B
 ✗ BACnet/SC, scripted component, multi-DDC        → Rev C
 ✗ IEC 61131-3 FBD/ST                               → Rev C (ADR-004)

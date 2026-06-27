@@ -6,7 +6,7 @@
 > **Owner:** Dev 2 (SOM)
 > **Nguồn-chuẩn CUỐI CÙNG:** [`shared/iop_protocol.h`](../../shared/iop_protocol.h) (protocol) +
 > [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) (SHM layout/path/ownership) — docs lệch header
-> → **header thắng** ([15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md)). Diễn giải:
+> → **header thắng** ([16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)). Diễn giải:
 > [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) ·
 > [ADR-005](../adr/ADR-005-three-process-architecture.md) · [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md)
 
@@ -27,8 +27,8 @@ mkddc-iobus CHỈ làm:
 - scale raw IO → engineering value
 - ghi IO state cho core (kx_io_shm, seqlock writer)
 - đọc output command từ core (ao_setpoint/do_cmd) và gửi SET_DO/SET_AO xuống MCU
-- (S7 #6) Modbus RTU master poll → ext cache; xem [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md)
-- (S7 #5) BACnet/IP datalink/object callbacks; xem [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md)
+- (S7 #6) Modbus RTU master poll → ext cache; xem [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md)
+- (S7 #5) BACnet/IP datalink/object callbacks; xem [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md)
 - expose metrics + publish alarm
 
 mkddc-iobus KHÔNG làm:
@@ -135,7 +135,7 @@ Done: parse đúng frame ghép từ nhiều chunk; mọi negative §15(05) đún
 File: iop/iop_crc.{hpp,cpp} | Owner: Dev2
 Responsibility: CRC-16/Modbus, wrap iop_crc16 từ shared header (KHÔNG tự viết khác).
 Public API: uint16_t crc16(const uint8_t* d,size_t n);
-Unit test: test_iop_crc.cpp — 12 vector chuẩn (SWFW spec §10.1 / 15_CONTRACT_FREEZE §5);
+Unit test: test_iop_crc.cpp — 12 vector chuẩn (SWFW spec §10.1 / 16_CONTRACT_FREEZE §5);
           2 vector đầu: {AA 00 01 00}→0x6C20, {AA 00 01 01}→0xACE1.
 Done: khớp MCU 12/12 vector.
 ```
@@ -271,7 +271,7 @@ Done: poll thread SCHED_FIFO 70; jitter <2ms.
 
 ### 3.14 `modbus_tcp` — MỚI (MOD-013)
 
-> **Trạng thái:** PLANNED — chờ owner approve SW_FIELDBUS_DESIGN §12.
+> **Trạng thái:** ĐÃ làm 2026-06-26 — modbus_tcp.{hpp,cpp} ModbusTcp class; reconnect FSM; ext_offset từ ModbusMaster.total_ext_count(); wired fieldbus_thread; 10/10 test pass.
 > Spec đầy đủ: [SW_FIELDBUS_DESIGN §12](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md).
 
 ```
@@ -279,17 +279,16 @@ File: fieldbus/modbus_tcp.{hpp,cpp} | Owner: Dev2
 Responsibility: Modbus TCP client — libmodbus TCP context, persistent connection,
                 reconnect state machine, poll loop integration với PollScheduler.
 Public API:
-  bool open(const TcpSlaveConfig& cfg)
+  bool open(const FieldbusConfig& cfg, uint16_t ext_offset)
   void close()
-  bool poll_once(uint16_t addr, int fc, int count, uint16_t* regs_out)
-  bool write_once(uint16_t addr, int fc, const uint16_t* data, int count)
-  bool is_connected() const
-  void reconnect_if_needed()
+  void poll_once(uint64_t now_ms, ExtCache& cache, const std::string& fieldbus_sock_path)
+  bool has_slaves() const
+  uint16_t sleep_ms_until_next(uint64_t now_ms) const
 Dependency: libmodbus (cùng flag MKDDC_ENABLE_MODBUS với RTU), ExtCache, PollScheduler
 Error: TCP connect fail → DISCONNECTED → ext_cache quality BAD → fallback active
        Reconnect sau reconnect_s; không block RTU poll loop
 Done: FC03 read OK từ diagslave TCP; disconnect → quality BAD → reconnect → GOOD.
-      12 unit test (DoD MOD-013 §12.8 tick đủ).
+      10 unit test pass (DoD MOD-013 §12.8 tick đủ).
 ```
 
 ---
@@ -508,7 +507,7 @@ Chưa có subscriber → iobus drop + đếm (không buffer, không block poll).
 | `MCU_WATCHDOG_RESET` | critical | bit MCU_WATCHDOG_RESET (sticky) | SOM đọc/clear |
 | `RELAY_STUCK` | critical | bit RELAY_STUCK | feedback khớp lại |
 
-> Severity map sang hiển thị web tiếng Việt (xem [08_WEB §8](08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md)).
+> Severity map sang hiển thị web tiếng Việt (xem [09_WEB §8](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md)).
 
 ---
 
@@ -741,5 +740,5 @@ core ghi ao_setpoint/do_cmd → core_bridge.read_outputs → output_command (CHA
 | IOP-SW-008 | realtime | chrt prio check |
 
 ---
-**Rev** 1.4 | 2026-06-13 (thêm link/cây S7 #5/#6 BACnet/Modbus) · 1.3 | 2026-06-12 (packaging/systemd unit thật) · 1.2 | 2026-06-11 · Protocol: [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) ·
-Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) · DoD: [12_DEFINITION_OF_DONE §3](12_DEFINITION_OF_DONE.md)
+**Rev** 1.5 | 2026-06-27 (§3.14 MOD-013 DONE: ModbusTcp class, reconnect FSM, 10/10 test — annotate Done) · 1.4 | 2026-06-13 (thêm link/cây S7 #5/#6 BACnet/Modbus) · 1.3 | 2026-06-12 (packaging/systemd unit thật) · 1.2 | 2026-06-11 · Protocol: [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) ·
+Freeze: [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) · DoD: [13_DEFINITION_OF_DONE §3](13_DEFINITION_OF_DONE.md)

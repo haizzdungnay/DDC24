@@ -1,14 +1,14 @@
-# 25 — Modbus Implementation Plan (S7 #6)
+# 26 — Modbus Implementation Plan (S7 #6)
 ## MK-DDC-24 — Modbus RTU master + device profile + ext cache
 
 > **Document ID:** IMPL-MODBUS-PLAN-MK-DDC-24-VI
 > **Phiên bản:** 1.5 | 2026-06-22
-> **Trạng thái:** IN PROGRESS — MOD-012 native libmodbus + PTY read/write/timeout PASS, runtime worker và CI matrix đã implement; cross/board/physical evidence còn mở. Xem [30_PROTOCOL_LIB_INTEGRATION_PLAN §4](30_PROTOCOL_LIB_INTEGRATION_PLAN.md)
+> **Trạng thái:** IN PROGRESS — MOD-012 native libmodbus + PTY read/write/timeout PASS, runtime worker và CI matrix đã implement; cross/board/physical evidence còn mở. Xem [31_PROTOCOL_LIB_INTEGRATION_PLAN §4](31_PROTOCOL_LIB_INTEGRATION_PLAN.md)
 > **Owner:** Dev 2 (iobus) + Protocol Lead
 > **Đọc cùng:** [SW_FIELDBUS_DESIGN](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) ·
 > [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) ·
 > [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
-> [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) · [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md)
+> [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) · [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)
 
 ---
 
@@ -180,7 +180,7 @@ services/iobus/fieldbus/
 
 > **Lưu ý:** Logic layer (MOD-001..011 unit test) ✅ hoàn tất. Toàn bộ DoD trên phụ thuộc vào
 > `libmodbus` 3.1.10 đã cài và PTY transport PASS; cross/board/soak evidence còn mở. Xem task MOD-012 tại
-> [30_PROTOCOL_LIB_INTEGRATION_PLAN §4](30_PROTOCOL_LIB_INTEGRATION_PLAN.md).
+> [31_PROTOCOL_LIB_INTEGRATION_PLAN §4](31_PROTOCOL_LIB_INTEGRATION_PLAN.md).
 
 ---
 
@@ -196,7 +196,7 @@ services/iobus/fieldbus/
 ---
 **Rev**
 1.5 | 2026-06-22 — MOD-012 native PTY transport + runtime worker + CI matrix; external evidence pending
-1.4 | 2026-06-22 — Sửa status: PARTIALLY DONE — transport layer no-op, thêm ref MOD-012 + §8 note; xem 30_PROTOCOL_LIB_INTEGRATION_PLAN
+1.4 | 2026-06-22 — Sửa status: PARTIALLY DONE — transport layer no-op, thêm ref MOD-012 + §8 note; xem 31_PROTOCOL_LIB_INTEGRATION_PLAN
 1.3 | 2026-06-17 — MOD-001..011 logic implemented — 114 unit test pass; bypass check sạch
 1.2 | 2026-06-17 — §3: kx_ext_snapshot_msg_t gap CLOSED
 1.1 | 2026-06-16 — close FB-Q-001/FB-Q-002

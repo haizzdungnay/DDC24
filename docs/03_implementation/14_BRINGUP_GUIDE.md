@@ -1,8 +1,9 @@
-# 13 — Bring-up Guide
+# 14 — Bring-up Guide
 ## MK-DDC-24 — Dựng board lần đầu, theo đúng thứ tự
 
 > **Document ID:** IMPL-BRINGUP-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-06-10
+> **Trạng thái:** Active
 > **Đối tượng:** kỹ sư bring-up (HW + FW + SW). Làm theo ĐÚNG thứ tự, không nhảy bước.
 
 > ⚠️ Quy tắc an toàn: bước nào fail thì DỪNG, không qua bước sau. Mỗi bước có "✅ Đạt khi".
@@ -171,4 +172,4 @@
 | web báo lỗi khi chưa rút | timeout ngưỡng / nhiễu | kiểm iop_timeout, CRC error rate |
 
 ---
-**Rev** 1.0 | 2026-06-10 · Test chi tiết: [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)
+**Rev** 1.0 | 2026-06-10 · Test chi tiết: [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)

@@ -1,8 +1,9 @@
-# 09 — End-to-End Data Flow
+# 10 — End-to-End Data Flow
 ## MK-DDC-24 — Các flow thật, từng bước
 
 > **Document ID:** IMPL-E2EFLOW-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-06-10
+> **Trạng thái:** Active
 > **Dùng để:** hiểu đường dữ liệu để code đúng + debug khi sai. Mỗi flow = checklist khi lỗi.
 
 > ⚠️ Mọi flow đi đúng: **Web ↔ core ↔ iobus ↔ UART/IOP ↔ MCU ↔ IO**. Không có shortcut.

@@ -1,14 +1,15 @@
-# 18 — Docs Audit
+# 19 — Docs Audit
 ## MK-DDC-24 — Audit tài liệu implement SOM / IOP / Core / Web
 
 > **Document ID:** IMPL-DOCS-AUDIT-MK-DDC-24-VI
 > **Ngày audit:** 2026-06-11
+> **Trạng thái:** Historical — 16 findings resolved 2026-06-11
 > **Phạm vi:** `shared/`, `docs/01_specs/`, `docs/02_design/`, `docs/03_implementation/`
 > **Mục tiêu:** chỉ ra chỗ mâu thuẫn, thiếu rõ, hoặc còn mang kiến trúc cũ làm dev mới dễ code sai.
 
 > ✅ **CẬP NHẬT 2026-06-11 (cùng ngày):** toàn bộ 16 finding đã được xử lý trong 2 đợt
-> "Contract Freeze" — xem Status dưới từng finding và [19_DOCS_FIX_CHECKLIST](19_DOCS_FIX_CHECKLIST.md)
-> (16/16 tick). Bản chốt hợp đồng: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md).
+> "Contract Freeze" — xem Status dưới từng finding và [20_DOCS_FIX_CHECKLIST](20_DOCS_FIX_CHECKLIST.md)
+> (16/16 tick). Bản chốt hợp đồng: [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md).
 > ⚠️ Các link "bằng chứng" bên dưới trỏ **line number tại thời điểm audit** — nhiều file đã
 > sửa nên line/nội dung không còn khớp (đặc biệt `kinexus_shm.h` giờ chỉ là shim deprecated).
 > Đọc file này như HỒ SƠ audit lịch sử, không phải trạng thái hiện tại.
@@ -64,7 +65,7 @@
 - Header map bit tại [shared/iop_protocol.h](/home/chuong/Desktop/DDC-PROJECT/shared/iop_protocol.h:78)
 - Spec map bit khác tại [SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md](/home/chuong/Desktop/DDC-PROJECT/docs/01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md:187)
 - Guide IOP lặp lại mapping kiểu spec tại [05_IOP_UART_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/05_IOP_UART_IMPLEMENTATION_GUIDE.md:171)
-- Test plan kiểm watchdog bằng `FAULT bit5`: [11_INTEGRATION_TEST_PLAN.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/11_INTEGRATION_TEST_PLAN.md:75)
+- Test plan kiểm watchdog bằng `FAULT bit5`: [12_INTEGRATION_TEST_PLAN.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/12_INTEGRATION_TEST_PLAN.md:75)
 
 **Điểm lệch chính**
 - Header có `VDD`, spec/guide không có.
@@ -111,7 +112,7 @@
 - Header chốt `KX_SHM_IO_PATH="/dev/shm/kinexus_io_shm"`: [shared/kinexus_shm.h](/home/chuong/Desktop/DDC-PROJECT/shared/kinexus_shm.h:15)
 - Overview dùng `/dev/shm/mkddc_io_shm`: [01_SYSTEM_IMPLEMENTATION_OVERVIEW.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/01_SYSTEM_IMPLEMENTATION_OVERVIEW.md:108)
 - Guide `iobus` dùng `/dev/shm/mkddc_io_shm`: [06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md:264)
-- Bring-up hướng dẫn đọc `/dev/shm/mkddc_io_shm`: [13_BRINGUP_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/13_BRINGUP_GUIDE.md:107)
+- Bring-up hướng dẫn đọc `/dev/shm/mkddc_io_shm`: [14_BRINGUP_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/14_BRINGUP_GUIDE.md:107)
 - README nói “giữ nguyên contract, chỉ rename header”: [00_IMPLEMENTATION_README.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/00_IMPLEMENTATION_README.md:69)
 
 **Tác động**
@@ -156,7 +157,7 @@
 **Bằng chứng**
 - `SW_ARCH_SPEC` ghi dependency `mkddc-iobus -> mkddc-core`: [SW_ARCH_SPEC_MK-DDC-24_VI.md](/home/chuong/Desktop/DDC-PROJECT/docs/01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md:30)
 - `SW_ARCH_SPEC` startup order: `mkddc-core` trước `mkddc-iobus`: [SW_ARCH_SPEC_MK-DDC-24_VI.md](/home/chuong/Desktop/DDC-PROJECT/docs/01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md:38)
-- Bring-up guide lại cho start `mkddc-iobus` trước rồi mới start `mkddc-core`: [13_BRINGUP_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/13_BRINGUP_GUIDE.md:97), [13_BRINGUP_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/13_BRINGUP_GUIDE.md:116)
+- Bring-up guide lại cho start `mkddc-iobus` trước rồi mới start `mkddc-core`: [14_BRINGUP_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/14_BRINGUP_GUIDE.md:97), [14_BRINGUP_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/14_BRINGUP_GUIDE.md:116)
 
 **Tác động**
 - Systemd dependency, readiness, và bring-up script dễ lệch nhau.
@@ -176,8 +177,8 @@
 
 **Bằng chứng**
 - Core guide định nghĩa **6 mức**: `Fire/Safety`, `Local manual`, `BACnet command`, `Schedule`, `Local logic`, `Default`: [07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md:72)
-- DoD rút gọn thành `safety > BMS > schedule > logic > default`, bỏ `Local manual`: [12_DEFINITION_OF_DONE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/12_DEFINITION_OF_DONE.md:73)
-- Web guide nói commissioning test đi vào **Local manual prio 2**: [08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md:27)
+- DoD rút gọn thành `safety > BMS > schedule > logic > default`, bỏ `Local manual`: [13_DEFINITION_OF_DONE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/13_DEFINITION_OF_DONE.md:73)
+- Web guide nói commissioning test đi vào **Local manual prio 2**: [09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md:27)
 - OpenAPI `PUT /points/{id}` lại cho client truyền `priority` từ **1..16** kiểu BACnet array: [openapi.yaml](/home/chuong/Desktop/DDC-PROJECT/docs/02_design/interfaces/openapi.yaml:59)
 
 **Tác động**
@@ -198,7 +199,7 @@
 **Mức độ:** Medium-High
 
 **Bằng chứng**
-- Web guide dùng role `admin/engineer/operator`: [08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md:16)
+- Web guide dùng role `admin/engineer/operator`: [09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md:16)
 - OpenAPI login response chỉ enum `admin, operator, viewer`: [openapi.yaml](/home/chuong/Desktop/DDC-PROJECT/docs/02_design/interfaces/openapi.yaml:31)
 - `users.conf` example chỉ có `admin`, `operator`: [CONFIG_SCHEMA_MK-DDC-24_VI.md](/home/chuong/Desktop/DDC-PROJECT/docs/02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md:118)
 
@@ -261,7 +262,7 @@
 
 **Bằng chứng**
 - Core guide nói web IPC là Unix socket `/run/mkddc/core.sock` hoặc shared command ring: [07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md:63)
-- Web guide chỉ nói `core_client.go` nói chuyện IPC tới `/run/mkddc/core.sock`: [08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md:17)
+- Web guide chỉ nói `core_client.go` nói chuyện IPC tới `/run/mkddc/core.sock`: [09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md:17)
 - Không có contract message cụ thể: request schema, response schema, timeout, idempotency, error code, override result.
 
 **Tác động**
@@ -285,7 +286,7 @@
 **Mức độ:** Medium
 
 **Bằng chứng**
-- Web guide trả `fw_version`: [08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md:40)
+- Web guide trả `fw_version`: [09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md:40)
 - OpenAPI `SystemStatus` cũng chỉ có `fw_version`: [openapi.yaml](/home/chuong/Desktop/DDC-PROJECT/docs/02_design/interfaces/openapi.yaml:167)
 - Nhưng thực tế hệ thống có ít nhất 3 version đáng phân biệt: MCU FW, `mkddc-iobus`, `mkddc-core`, có thể cả web.
 
@@ -306,7 +307,7 @@
 **Mức độ:** Medium
 
 **Bằng chứng**
-- Bring-up nói “`cat /dev/shm/mkddc_io_shm | xxd | head` (hoặc tool đọc)”: [13_BRINGUP_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/13_BRINGUP_GUIDE.md:107)
+- Bring-up nói “`cat /dev/shm/mkddc_io_shm | xxd | head` (hoặc tool đọc)”: [14_BRINGUP_GUIDE.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/14_BRINGUP_GUIDE.md:107)
 
 **Vấn đề**
 - Với struct nhị phân + seqlock, `cat|xxd` không đủ để xác nhận field cụ thể.

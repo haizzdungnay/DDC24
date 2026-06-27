@@ -1,4 +1,4 @@
-# 15 — Contract Freeze
+# 16 — Contract Freeze
 ## MK-DDC-24 — Bản chốt hợp đồng kỹ thuật Rev A (1 trang để tra, hết tranh cãi)
 
 > **Document ID:** IMPL-FREEZE-MK-DDC-24-VI
@@ -101,4 +101,4 @@ KHÔNG BAO GIỜ: sửa 1 bên, "tạm hardcode", hay fork header.
 
 ---
 **Rev** 1.0 | 2026-06-11 · Header: [`iop_protocol.h`](../../shared/iop_protocol.h) ·
-[`mkddc_shm.h`](../../shared/mkddc_shm.h) · Quick start: [16_QUICK_START_SOM_DEV](16_QUICK_START_SOM_DEV.md)
+[`mkddc_shm.h`](../../shared/mkddc_shm.h) · Quick start: [17_QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md)

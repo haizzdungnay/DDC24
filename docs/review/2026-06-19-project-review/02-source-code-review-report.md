@@ -104,7 +104,7 @@ DDC-PROJECT/
 | Chạy local (service) | ✅ | Chạy được (cần SHM hoặc degraded mode) |
 | Docker | ❌ N/A | Không có Dockerfile |
 | Dependency lỗi | ✅ Không | GTest auto-fetch. BACnet/Modbus optional (OFF by default) |
-| Hướng dẫn setup | ✅ | `GETTING_STARTED_DEV.md`, `16_QUICK_START_SOM_DEV.md`, `13_BRINGUP_GUIDE.md` |
+| Hướng dẫn setup | ✅ | `GETTING_STARTED_DEV.md`, `17_QUICK_START_SOM_DEV.md`, `14_BRINGUP_GUIDE.md` |
 
 ### 3.2 Build command
 

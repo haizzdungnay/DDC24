@@ -3,16 +3,17 @@
 
 > **Document ID:** IMPL-IOP-MK-DDC-24-VI
 > **Phiên bản:** 2.0 | 2026-06-25 (IOP v2.0: IO_RESP 34B→74B, KX_N_UI 8→16, FAULT_FLAGS restructured, HANDSHAKE_RESP 6B→8B+BOARD_CAP_MAP — xem ADR-010)
+> **Trạng thái:** Active — IOP v2.0
 > **Owner:** Dev 1 (MCU slave) + Dev 2 (SOM master) — **CẢ HAI bắt buộc đọc**
 > **Nguồn-chuẩn CUỐI CÙNG:** [`shared/iop_protocol.h`](../../shared/iop_protocol.h) —
 > mọi giá trị (opcode, payload, enum, FAULT bit, RESET reason, hằng số) lấy theo header.
 > [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) và file này là
 > **diễn giải**: lệch header → **header thắng**, sửa docs theo
-> ([15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md)).
+> ([16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)).
 
 > ⚠️ File này là **HỢP ĐỒNG implement**. Nếu code MCU và code SOM bất đồng, sửa cho khớp
 > `iop_protocol.h`. **KHÔNG fork/sửa 1 bên.** Đổi hợp đồng = bump `IOP_VER_*` +
-> sửa cả 2 phía + cập nhật 15_CONTRACT_FREEZE + chạy lại cross-test.
+> sửa cả 2 phía + cập nhật 16_CONTRACT_FREEZE + chạy lại cross-test.
 
 ---
 
@@ -95,7 +96,7 @@ Hàm chung: iop_crc16() trong shared/iop_protocol.h — CẢ MCU lẫn SOM dùng
 ```
 > IOP-SW-010 + IOP-FW-010: mỗi phía PHẢI có unit test ≥10 vector — dùng **bộ chuẩn 12 vector**
 > trong [SWFW spec §10.1](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) /
-> [15_CONTRACT_FREEZE §5](15_CONTRACT_FREEZE.md). KHÔNG tự bịa vector khác làm chuẩn.
+> [16_CONTRACT_FREEZE §5](16_CONTRACT_FREEZE.md). KHÔNG tự bịa vector khác làm chuẩn.
 > ⚠️ Vector cũ `0x84C0`/`0x556B` (docs trước 2026-06-11) là SAI — nếu test của bạn pass với
 > giá trị đó nghĩa là CRC implement sai thuật toán.
 
@@ -450,5 +451,5 @@ Frame mẫu (GET_IO SEQ=1): `AA 00 01 01 AC E1` (CRC=0xACE1).
 
 ---
 **Rev** 2.0 | 2026-06-25 · IOP v2 (ADR-010): IO_RESP 74B, HANDSHAKE_RESP 8B+BOARD_CAP_MAP, FAULT_FLAGS restructured, poll 500Hz. ·
-**Rev** 1.2 | 2026-06-11 · Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) ·
+**Rev** 1.2 | 2026-06-11 · Freeze: [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) ·
 Service-level (thread/config/shm/build): [06_MKDDC_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md)

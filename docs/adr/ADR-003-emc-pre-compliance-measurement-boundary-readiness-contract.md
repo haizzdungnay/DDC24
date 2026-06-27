@@ -163,6 +163,18 @@ This ADR approves `IOT-5901` only if resulting bench evidence can satisfy rows a
   - `§10.3`, `§10.4`
   - `§11.1`, `§11.3`
 
+## Consequences
+
+**Positive:**
+- One unified readiness gate for all EMC pre-compliance sessions — no hidden prerequisites.
+- Equipment list explicitly distinguishes mandatory vs. optional items.
+
+**Negative / Trade-offs:**
+- All measurement families (radiated, conducted, ESD, ADC noise, clock harmonics) require a live DUT session — cannot be delegated to AI agents.
+- Blocked on CTO assigning human HW engineer and approving formal lab RFQ.
+
+See also: **Acceptance criteria** section below.
+
 ## Risks
 
 - `R1` Bench day scheduled with incomplete runtime accessories creates unusable evidence. Mitigation: treat missing `ground reference plane`, `load simulator`, or `BACnet client` as hard blockers.

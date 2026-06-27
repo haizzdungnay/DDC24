@@ -168,7 +168,7 @@
 }
 ```
 > `role` ∈ `admin|operator|viewer` (CHỐT Rev A — ma trận quyền:
-> [08 §1.1](../../03_implementation/08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md); role "engineer"
+> [08 §1.1](../../03_implementation/09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md); role "engineer"
 > cũ không còn). **KHÔNG** lưu mật khẩu plaintext (SW-IDE-021). Hash bcrypt cost ≥ 12.
 
 ## 8. Quy tắc chung

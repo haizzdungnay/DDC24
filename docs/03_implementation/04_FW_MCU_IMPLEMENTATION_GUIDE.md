@@ -3,6 +3,7 @@
 
 > **Document ID:** IMPL-FWMCU-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-06-10
+> **Trạng thái:** Draft — MCU FW chưa implement
 > **Owner:** Dev 1 (FW_MCU)
 > **Nguồn-chuẩn:** [FW_DDD](../02_design/firmware/FW_DDD_MK-DDC-24_VI.md) ·
 > [FW_PINOUT_MASTER](../02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) ·
@@ -306,4 +307,4 @@ File     : fw/app/watchdog.c, fw/drivers/wdg_drv.c
 | FW-WDG-001..006 | watchdog | T-FW-054, group 1 |
 
 ---
-**Rev** 1.0 | 2026-06-10 · DoD đầy đủ: [12_DEFINITION_OF_DONE §1](12_DEFINITION_OF_DONE.md)
+**Rev** 1.0 | 2026-06-10 · DoD đầy đủ: [13_DEFINITION_OF_DONE §1](13_DEFINITION_OF_DONE.md)

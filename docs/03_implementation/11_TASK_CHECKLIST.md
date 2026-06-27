@@ -1,4 +1,4 @@
-# 10 — Task Checklist
+# 11 — Task Checklist
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
@@ -257,7 +257,7 @@ Output: CI cleanup mkddc_io_shm + mkddc_plc_shm trước ctest; 226/226 inventor
 Test: CI xanh, không còn SKIP
 Done khi: CI green 226/226; IoCache.CleanBootInitsDefaults + ReattachPreservesCoreOwnedFields PASS
 Phụ thuộc: IOB-002
-Chi tiết: 30_PROTOCOL_LIB_INTEGRATION_PLAN.md §5
+Chi tiết: 31_PROTOCOL_LIB_INTEGRATION_PLAN.md §5
 Trạng thái: ĐÃ implement 2026-06-22 — workflow cleanup; local 226/226 PASS, 2 IoCache PASS; chờ remote CI green.
 ```
 
@@ -386,7 +386,7 @@ Task ID: COR-009
 Tên: Graph runtime multi-output + 10 component stateful/utility còn thiếu
 Owner: Dev SOM | Phase: 4 (S7 #4) | Module: graph_runtime
 File: services/core/graph_runtime.cpp, graph_runtime.hpp, tests/test_graph_runtime.cpp
-Input: 22_GRAPH_STATEFUL_COMPONENTS_PLAN §2-§3, SW_COMPONENT_LIBRARY
+Input: 23_GRAPH_STATEFUL_COMPONENTS_PLAN §2-§3, SW_COMPONENT_LIBRARY
 Output: engine hỗ trợ named output port; thêm ManualAuto, OnDelay, OffDelay, Interlock,
         RuntimeCounter, PulseCounter, SafeState, AlarmHigh, AlarmLow, AlarmDelay
 Test: unit từng component; RuntimeCounter hours/alarm; Interlock truth table; timer dt giả lập;
@@ -401,7 +401,7 @@ Tên: Persist state snapshot cho RuntimeCounter/PulseCounter
 Owner: Dev SOM | Phase: 4 (S7 #4) | Module: state_snapshot, graph_runtime, packaging
 File: services/core/state_snapshot.cpp, state_snapshot.hpp, graph_runtime.cpp,
       packaging/systemd/mkddc-core.service, packaging/install.sh
-Input: 22_GRAPH_STATEFUL_COMPONENTS_PLAN §4, SW_RUNTIME_EXECUTION_MODEL §6 Rev 1.1
+Input: 23_GRAPH_STATEFUL_COMPONENTS_PLAN §4, SW_RUNTIME_EXECUTION_MODEL §6 Rev 1.1
 Output: `/data/mkddc/state.snap` JSON version=1; ghi 60s khi dirty + shutdown + trước graph swap;
         restore theo node id+type; StateDirectory/install tạo thư mục
 Test: restore counter sau restart; bad snapshot bỏ qua + WARN; graph deploy giữ counter cùng id+type;
@@ -434,7 +434,7 @@ Done khi:
   - Modbus_TCP_Read out = tcp_cached_value × scale / fallback
   - BACnet_AV in=22.5 → bacnet_objtable pv=22.5 tại mức 5
   - Quality BAD propagation downstream verified
-  - 10_TASK_CHECKLIST + 07_guide Rev bump
+  - 11_TASK_CHECKLIST + 07_guide Rev bump
 Phụ thuộc: COR-009 (graph engine), MOD-009 (ext_cache path), BAC-004 (bacnet_objtable), MOD-012 (TCP ext_cache TCP key — liên quan MOD-013)
 Trạng thái: ĐÃ làm 2026-06-26 — COR-011 DONE: 5 Protocol node type (Modbus_RTU_Read/Write, Modbus_TCP_Read, BACnet_AV/BV); str_params map; proto_ext_idx từ modbus section graph.json; feed_ext_snapshot + apply_ext_writes; scan_loop step 3a/5a; 12/12 test pass; 122/122 core_tests pass
 ```
@@ -443,7 +443,7 @@ Trạng thái: ĐÃ làm 2026-06-26 — COR-011 DONE: 5 Protocol node type (Modb
 
 ## Phase 4/5 — BACnet/IP (S7 #5)
 
-> Chi tiết triển khai: [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md).
+> Chi tiết triển khai: [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md).
 > **Doc gap audit 2026-06-17 — tất cả gap BACnet ĐÃ CLOSED. Sẵn sàng implement toàn bộ BAC-001..011.**
 
 Doc gap đã resolve (2026-06-17):
@@ -475,10 +475,10 @@ Tên: bacnet-stack install + MKDDC_ENABLE_BACNET=ON build + smoke test mạng th
 Owner: Dev SOM | Phase: 4.5 | Module: bacnet_server, CMake, CI
 Input: bacnet-stack >= 1.3.x; LAN với máy test có bacnet-tools
 Output: mkddc-iobus bind UDP/47808 thật; Who-Is/I-Am/ReadProperty/WriteProperty pass từ máy khác
-Test: bacwi/bacrp/bacwp smoke; DoD §3.5 trong 30_PROTOCOL_LIB_INTEGRATION_PLAN
+Test: bacwi/bacrp/bacwp smoke; DoD §3.5 trong 31_PROTOCOL_LIB_INTEGRATION_PLAN
 Done khi: 10 checkbox DoD BAC-012 tick đủ; build CI có MKDDC_ENABLE_BACNET=ON xanh
 Phụ thuộc: BAC-001..011
-Chi tiết: 30_PROTOCOL_LIB_INTEGRATION_PLAN.md §3
+Chi tiết: 31_PROTOCOL_LIB_INTEGRATION_PLAN.md §3
 Trạng thái: IN PROGRESS 2026-06-26 — DoD #3 (BACNET=ON build 123 test) ✅; còn LAN smoke, aarch64 cross-build, board.
 ```
 
@@ -486,7 +486,7 @@ Trạng thái: IN PROGRESS 2026-06-26 — DoD #3 (BACNET=ON build 123 test) ✅;
 
 ## Phase 3/4 — Modbus RTU Master (S7 #6)
 
-> Chi tiết triển khai: [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md).
+> Chi tiết triển khai: [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md).
 > **Doc gap audit 2026-06-17 — tất cả gap Modbus ĐÃ CLOSED. Sẵn sàng implement toàn bộ MOD-001..011.**
 
 Doc gap đã resolve (2026-06-17):
@@ -517,10 +517,10 @@ Tên: libmodbus install + MKDDC_ENABLE_MODBUS=ON build + fake slave + thiết b�
 Owner: Dev SOM | Phase: 3.5 | Module: modbus_master, CMake, CI
 Input: libmodbus >= 3.1.6; /dev/ttyUSB* hoặc socat PTY cho fake slave
 Output: modbus_master.open() kết nối RS-485 thật; FC03 đọc được; timeout → E302
-Test: diagslave PTY smoke; DoD §4.6 trong 30_PROTOCOL_LIB_INTEGRATION_PLAN
+Test: diagslave PTY smoke; DoD §4.6 trong 31_PROTOCOL_LIB_INTEGRATION_PLAN
 Done khi: 11 checkbox DoD MOD-012 tick đủ; build CI có MKDDC_ENABLE_MODBUS=ON xanh
 Phụ thuộc: MOD-001..011
-Chi tiết: 30_PROTOCOL_LIB_INTEGRATION_PLAN.md §4
+Chi tiết: 31_PROTOCOL_LIB_INTEGRATION_PLAN.md §4
 Trạng thái: IN PROGRESS 2026-06-26 — 9/11 DoD ✅: libmodbus native, MODBUS=ON 141/141 test, PTY FC03/FC05/FC06, timeout→E302, E303 alarm, ext snapshot via fieldbus.sock; còn 1h smoke + thiết bị thật.
 ```
 
@@ -549,7 +549,7 @@ Done khi:
   - TCP disconnect → quality BAD; reconnect tự động sau reconnect_s
   - Modbus_TCP_Read node trong graph: output = tcp_value × scale / fallback
   - 10/10 DoD checklist tick đủ
-  - 10_TASK_CHECKLIST + 06_guide + SW_FIELDBUS_DESIGN Rev bump
+  - 11_TASK_CHECKLIST + 06_guide + SW_FIELDBUS_DESIGN Rev bump
 Phụ thuộc: MOD-001..011 (libmodbus, ext_cache, PollScheduler đã có), MOD-012 (transport pattern)
 Trạng thái: ĐÃ làm 2026-06-26 — MOD-013 DONE: modbus_tcp.{hpp,cpp} ModbusTcp class + reconnect FSM; fieldbus_config.cpp tcp_slaves parse + TCP-only config; ModbusMaster.total_ext_count(); wired vào main.cpp fieldbus thread; 10/10 test pass; 140/140 iobus_tests pass (138+2skip)
 ```
@@ -670,7 +670,7 @@ Task ID: WEB-011
 Tên: Frontend sticky top status bar/NavRail
 Owner: Dev Web | Phase: 5 | Module: frontend app shell/layout
 File: src/frontend/src/components/TopBar.tsx, src/frontend/src/components/AppShell.tsx, src/frontend/src/components/NavRail.tsx
-Input: Owner feedback 2026-06-16; 08_WEB §1.8; ADR-009/UX-SYSTEM Level A
+Input: Owner feedback 2026-06-16; 09_WEB §1.8; ADR-009/UX-SYSTEM Level A
 Output: TopBar luôn cố định khi cuộn; reconnect banner bám dưới TopBar; NavRail cố định bên trái; không dùng glow/dark overlay; không đổi REST/WebSocket contract
 Test: npm run typecheck; cuộn trang dài vẫn thấy top status bar/NavRail
 Done khi: typecheck sạch, thanh điều khiển không biến mất khi cuộn
@@ -694,7 +694,7 @@ Task ID: WEB-013
 Tên: Frontend i18n VI dấu + English mode thật
 Owner: Dev Web | Phase: 5 | Module: frontend i18n/pages
 File: src/frontend/src/i18n.tsx, src/frontend/src/components/*, src/frontend/src/pages/*
-Input: Owner feedback 2026-06-17; 08_WEB §1.9; Display `/settings/display` language vi/en
+Input: Owner feedback 2026-06-17; 09_WEB §1.9; Display `/settings/display` language vi/en
 Output: tiếng Việt hiển thị có dấu trên shell và 12 trang ADR-009; English mode đổi nhãn/nút/toast chính theo tiếng Anh; không đổi REST/WebSocket contract
 Test: npm run typecheck; bật VI/EN ở Display/TopBar và kiểm tra Dashboard, Monitor, Settings, Engineering không còn chuỗi VI không dấu ở UI chính
 Done khi: typecheck sạch, UI chính đọc tốt ở VI và EN
@@ -708,7 +708,7 @@ Owner: Dev Web | Phase: 5 | Module: frontend dependencies / CI
 File: src/frontend/package.json, src/frontend/package-lock.json, src/frontend/vite.config.ts,
       web/backend/go.mod, web/backend/go.sum, .github/workflows/build-and-test.yml,
       .github/workflows/security.yml
-Input: Security Scan PR failure (Trivy/Grype high gate), SEC-PROC CVE gate, 08_WEB §1.10
+Input: Security Scan PR failure (Trivy/Grype high gate), SEC-PROC CVE gate, 09_WEB §1.10
 Output: Vite upgraded to fixed major, plugin-react aligned, Vite 8 config typing fixed,
         frontend CI runs on Node 22, Go crypto/sys modules upgraded past Trivy/Grype high gate,
         temporary Trivy debug action removed
@@ -717,6 +717,163 @@ Done khi: npm/go security checks clean locally and Trivy/Grype no longer report 
 Phụ thuộc: WEB-013
 Trạng thái: ĐÃ làm 2026-06-23 — Vite 8.0.16 + @vitejs/plugin-react 6.0.2; x/crypto 0.53.0 + x/sys 0.46.0; audit/build/lint/go test/govulncheck/Grype archive scan pass locally; chờ remote CI green.
 ```
+---
+
+## Phase 5.5 — mkddc-hmi
+
+> **Amendment 2026-06-27:** HMI kéo vào Rev A — spec hoàn chỉnh tại SW_HMI_DESIGN Rev 2.2 + UC Rev 2.1 + UX Rev 2.0.
+> **Guide:** [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md)
+
+```
+Task ID: HMI-001
+Tên: CMake skeleton services/hmi/ + LVGL v9 + DRM/KMS init
+Owner: Dev SOM | Phase: 5.5 | Module: hmi/drm
+File: services/hmi/CMakeLists.txt, drm/drm_init.cpp/hpp, main.cpp
+Input: SW-HMI-001 (DRM/KMS /dev/dri/card0, LVGL v9)
+Output: MKDDC_ENABLE_HMI cmake option; lv_init + drm_init("/dev/dri/card0"); màn hình blank lên
+Test: build xanh; FPS ≥ 10; màn hiển thị màu nền
+Done khi: LVGL render được 1 label lên màn thật; CI build sạch
+Phụ thuộc: board Orange Pi 5B + module KD024QVFIA073-02-C021B
+Trạng thái: TODO
+```
+```
+Task ID: HMI-002
+Tên: Input drivers — FT5436 evdev touch + 6 GPIO buttons
+Owner: Dev SOM | Phase: 5.5 | Module: hmi/input
+File: input/evdev_touch.cpp/hpp, input/gpio_buttons.cpp/hpp
+Input: SW-HMI-006 (GPIO), FT5436 I2C 0x38 → /dev/input/touchscreen0
+Output: LV_INDEV_TYPE_POINTER (evdev); LV_INDEV_TYPE_KEYPAD (GPIO 20ms debounce)
+Test: tap vào widget đúng tọa độ; button UP/DOWN cuộn list; ENTER chọn; ESC thoát
+Done khi: cả 2 input path hoạt động; screen saver wake test pass
+Phụ thuộc: HMI-001
+Trạng thái: TODO
+```
+```
+Task ID: HMI-003
+Tên: Tab strip + 6-page ring navigation + screen saver + I/O FAULT banner
+Owner: Dev SOM | Phase: 5.5 | Module: hmi/ui
+File: ui/nav_controller.cpp/hpp, ui/screen_saver.cpp/hpp, ui/fault_banner.cpp/hpp
+Input: UX §3 (ring model), UX §4 (frame), UX §11 (I/O FAULT overlay)
+Output: tab strip + swipe/tap navigation vòng 6 màn; dim 5min; banner đỏ khi FAULT
+Test: UC-LOCAL-002 (navigation); screen saver dim 5min; FAULT banner không tắt được
+Done khi: vòng Home→Svc→Home qua cả swipe và tap; FAULT test pass
+Phụ thuộc: HMI-002
+Trạng thái: TODO
+```
+```
+Task ID: HMI-010
+Tên: SHM data binding 1s (kx_io_shm + kx_plc_shm) + AGE + point database
+Owner: Dev SOM | Phase: 5.5 | Module: hmi/data
+File: data/shm_reader.cpp/hpp, data/point_db.cpp/hpp
+Input: kx_io_shm_t (UI/DI/AO/DO value+quality), kx_plc_shm_t (alarm count, ext)
+Output: lv_timer 1s refresh; AGE = now - last_update_ts; STALE khi AGE > threshold
+       point_db: load display_name/unit/scale từ /data/config/point_db.json
+Test: thay đổi SHM → widget cập nhật ≤ 1s; AGE tăng đúng; STALE > 5s highlight
+Done khi: SHM reader stable; point_db load đúng; AGE column chính xác
+Phụ thuộc: HMI-003
+Trạng thái: TODO
+```
+```
+Task ID: HMI-004
+Tên: Screen 1 — Home / Controller Health
+Owner: Dev SOM | Phase: 5.5 | Module: hmi/screens
+File: screens/screen_home.cpp/hpp
+Input: UX §5, UC-LOCAL-001/003; kx_io_shm + kx_plc_shm
+Output: 6 block: ID+status, alarm summary, controller health, I/O health, comm, config
+Quy tắc: không hardcode "Room Temp/Fan/Power"; BACnet "Last req: Xs ago"
+Test: UC-LOCAL-001 (30s glance); UC-LOCAL-003 (CPU/RAM/Temp); alarm count đúng
+Done khi: tất cả 6 block hiển thị dữ liệu thật từ SHM
+Phụ thuộc: HMI-010
+Trạng thái: TODO
+```
+```
+Task ID: HMI-005
+Tên: Screen 2 — I/O Monitor (24 points, AGE, BAD/STALE filter)
+Owner: Dev SOM | Phase: 5.5 | Module: hmi/screens
+File: screens/screen_io.cpp/hpp
+Input: UX §6, UC-LOCAL-004/005/006; kx_io_shm
+Output: table POINT|NAME|TYPE|VALUE|UNIT|QUALITY|AGE; 3 page; filter BAD/STALE
+Test: UC-LOCAL-004 (I/O overview); UC-LOCAL-005 (detail 24); UC-LOCAL-006 (filter)
+Done khi: 24 điểm hiển thị đúng; AGE cập nhật; filter hoạt động
+Phụ thuộc: HMI-010
+Trạng thái: TODO
+```
+```
+Task ID: HMI-006
+Tên: Screen 3 — Alarm / Event (4-state model + ACK)
+Owner: Dev SOM | Phase: 5.5 | Module: hmi/screens
+File: screens/screen_alarm.cpp/hpp
+Input: UX §7, UC-LOCAL-007/008; alarm bus từ iobus
+Output: 4-state table; ACK đổi UNACK→ACK không xóa; filter; severity color
+Test: UC-LOCAL-007 (view active); UC-LOCAL-008 (ACK — count không giảm)
+Done khi: 4-state model đúng; ACK không xóa alarm; FAULT=đỏ, WARN=vàng, INFO=xám
+Phụ thuộc: HMI-010
+Trạng thái: TODO
+```
+```
+Task ID: HMI-007
+Tên: Screen 4 — Communication (BACnet/Modbus status codes)
+Owner: Dev SOM | Phase: 5.5 | Module: hmi/screens
+File: screens/screen_comm.cpp/hpp
+Input: UX §8, UC-LOCAL-009/010
+Output: Ethernet + BACnet (Last req: Xs ago) + Modbus RTU x2 + TCP sections
+Quy tắc: BACnet KHÔNG "Đang kết nối"; chỉ OK/NO_TRAFFIC/TIMEOUT/CONFIG_ERROR/DUPLICATE_ID
+Test: UC-LOCAL-009 (Ethernet); UC-LOCAL-010 (BACnet/Modbus)
+Done khi: status codes đúng; "Last req: Xs ago" tính đúng
+Phụ thuộc: HMI-010
+Trạng thái: TODO
+```
+```
+Task ID: HMI-008
+Tên: Screen 5 — System / Diagnostics (read-only)
+Owner: Dev SOM | Phase: 5.5 | Module: hmi/screens
+File: screens/screen_system.cpp/hpp
+Input: UX §9, UC-LOCAL-011
+Output: FW version, uptime, CPU/RAM/storage, process status, watchdog, last error
+Read-only: không có action button (restart → Screen 6)
+Test: UC-LOCAL-011; dữ liệu từ SHM/procfs đúng
+Done khi: 6 section hiển thị; không có nút nguy hiểm
+Phụ thuộc: HMI-010
+Trạng thái: TODO
+```
+```
+Task ID: HMI-009
+Tên: Screen 6 — Service / Config (PIN lock + Reload + Reboot 3s hold)
+Owner: Dev SOM | Phase: 5.5 | Module: hmi/screens
+File: screens/screen_service.cpp/hpp
+Input: UX §10, UC-LOCAL-012/013/014
+Output: LOCKED default; unlock = PIN OR service switch OR Engineer role
+       Reload Config: checksum check, rollback on fail
+       Reboot: hold 3s confirm; áp per-point safe_state trước khi tắt
+Test: UC-LOCAL-012 (unlock 3 path); UC-LOCAL-013 (reload); UC-LOCAL-014 (reboot 3s + safe state)
+Done khi: LOCKED mặc định; 3 unlock path; reboot 3s hold; safe state per-point
+Phụ thuộc: HMI-010
+Trạng thái: TODO
+```
+```
+Task ID: HMI-011
+Tên: Localization EN/VI + SIGHUP reload
+Owner: Dev SOM | Phase: 5.5 | Module: hmi/i18n
+File: i18n/locale.cpp/hpp
+Input: UX §12; NotoSans font hỗ trợ UTF-8 tiếng Việt
+Output: bảng locale EN + VI; SIGHUP đổi locale không restart service
+Test: SIGHUP → locale đổi trong 1s; VI hiển thị đầy đủ dấu
+Done khi: EN default; SIGHUP → VI; không lỗi font
+Phụ thuộc: HMI-004..009
+Trạng thái: TODO
+```
+```
+Task ID: HMI-012
+Tên: systemd mkddc-hmi.service + packaging + install script
+Owner: Dev SOM | Phase: 5.5 | Module: packaging
+File: packaging/mkddc-hmi.service, install.sh
+Output: systemd start/stop/restart; Restart=always; After=mkddc-core+mkddc-iobus
+Test: systemctl start mkddc-hmi; journalctl -u mkddc-hmi; reboot → tự start
+Done khi: service tự start sau reboot; log đủ debug
+Phụ thuộc: HMI-001..011
+Trạng thái: TODO
+```
+
 ---
 
 ## Phase 6 — End-to-end
@@ -757,6 +914,6 @@ Phụ thuộc: E2E-003
 ```
 
 ---
-**Rev** 1.20 | 2026-06-26 (MOD-012: 9/11 DoD — E303 alarm test + ext snapshot test + T11 TCP loopback fixed + CI modbus+bacnet matrix; BAC-012: DoD #3 BACNET=ON 123/123 test; 141 iobus + 123 core pass) · 1.19 | 2026-06-26 (COR-011 DONE: 5 Protocol nodes, 12/12 test; MOD-013 DONE: Modbus TCP client, 10/10 test; 122/122 core_tests + 138/140 iobus_tests) · 1.18 | 2026-06-26 (Thêm COR-011: Protocol 5 graph nodes PLANNED; MOD-013: Modbus TCP client PLANNED — 2 task mới chờ owner approve; 07_guide §12 + SW_FIELDBUS_DESIGN §12 bổ sung spec) · 1.17 | 2026-06-25 (IOB-006-V2: IOP v2 ADR-010 — 74B IO_RESP, KX_N_UI=16, BOARD_CAP_MAP; 05 guide Rev 2.0 updated) · 1.16 | 2026-06-23 (WEB-014 cập nhật: Go crypto/sys security refresh; Grype archive scan clean locally) · 1.15 | 2026-06-23 (WEB-014 ĐÃ làm: Vite security refresh; npm/go vuln gates clean locally) · 1.14 | 2026-06-22 (IOB local PASS; MOD native PTY PASS; BAC source/runtime wiring; external evidence pending) · 1.13 | 2026-06-22 (Thêm BAC-012, MOD-012, IOB-006 — transport layer integration; sửa status BACnet/Modbus: logic ✅ transport no-op ⚠️; xem 30_PROTOCOL_LIB_INTEGRATION_PLAN) · 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) · 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
+**Rev** 1.21 | 2026-06-27 (Phase 5.5 mkddc-hmi: HMI-001..012 tasks added — HMI kéo vào Rev A per REVA_SCOPE amendment) · 1.20 | 2026-06-26 (MOD-012: 9/11 DoD — E303 alarm test + ext snapshot test + T11 TCP loopback fixed + CI modbus+bacnet matrix; BAC-012: DoD #3 BACNET=ON 123/123 test; 141 iobus + 123 core pass) · 1.19 | 2026-06-26 (COR-011 DONE: 5 Protocol nodes, 12/12 test; MOD-013 DONE: Modbus TCP client, 10/10 test; 122/122 core_tests + 138/140 iobus_tests) · 1.18 | 2026-06-26 (Thêm COR-011: Protocol 5 graph nodes PLANNED; MOD-013: Modbus TCP client PLANNED — 2 task mới chờ owner approve; 07_guide §12 + SW_FIELDBUS_DESIGN §12 bổ sung spec) · 1.17 | 2026-06-25 (IOB-006-V2: IOP v2 ADR-010 — 74B IO_RESP, KX_N_UI=16, BOARD_CAP_MAP; 05 guide Rev 2.0 updated) · 1.16 | 2026-06-23 (WEB-014 cập nhật: Go crypto/sys security refresh; Grype archive scan clean locally) · 1.15 | 2026-06-23 (WEB-014 ĐÃ làm: Vite security refresh; npm/go vuln gates clean locally) · 1.14 | 2026-06-22 (IOB local PASS; MOD native PTY PASS; BAC source/runtime wiring; external evidence pending) · 1.13 | 2026-06-22 (Thêm BAC-012, MOD-012, IOB-006 — transport layer integration; sửa status BACnet/Modbus: logic ✅ transport no-op ⚠️; xem 31_PROTOCOL_LIB_INTEGRATION_PLAN) · 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) · 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
 1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit, COR-008 SIGHUP reload — cụm production-hardening 1+5+6 ĐÃ làm) · 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006 Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·
-Test chi tiết: [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)
+Test chi tiết: [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)

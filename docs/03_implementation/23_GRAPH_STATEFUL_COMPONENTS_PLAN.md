@@ -1,12 +1,13 @@
-# 22 — Graph Stateful Components Plan (S7 #4)
+# 23 — Graph Stateful Components Plan (S7 #4)
 ## MK-DDC-24 — Component có-state + persist qua reboot: quyết định triển khai Rev A.1
 
 > **Document ID:** IMPL-GRAPH-STATEFUL-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-13 — Active; đủ để code COR-009/COR-010 (code pending)
+> **Phiên bản:** 1.1 | 2026-06-13
+> **Trạng thái:** Active — COR-009/010 implemented, 97/97 test pass (2026-06-13)
 > **Đối tượng đọc:** Owner, Dev 2, Tester
 > **Đọc cùng:** [SW_COMPONENT_LIBRARY](../02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) ·
 > [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) ·
-> [21 §S7](21_SOM_SRC_IMPLEMENTATION_PLAN.md) · [ADR-008](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md)
+> [21 §S7](22_SOM_SRC_IMPLEMENTATION_PLAN.md) · [ADR-008](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md)
 
 ---
 

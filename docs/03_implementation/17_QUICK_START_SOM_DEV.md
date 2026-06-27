@@ -1,7 +1,8 @@
-# 16 — Quick Start for SOM Dev
+# 17 — Quick Start for SOM Dev
 ## MK-DDC-24 — Từ zero đến code chạy với fake MCU (tối đa 2 trang)
 
 > **Document ID:** IMPL-QUICKSTART-MK-DDC-24-VI · **Phiên bản:** 1.0 | 2026-06-11
+> **Trạng thái:** Active
 > **Đối tượng:** dev C/C++ MỚI vào dự án, phụ trách `services/iobus` + `services/core`.
 > Chưa cần board. Đọc xong file này là bắt đầu code được.
 
@@ -24,7 +25,7 @@
 |------|-------|
 | [`shared/iop_protocol.h`](../../shared/iop_protocol.h) | Hợp đồng UART/IOP — **chuẩn cuối**, docs lệch nó là docs sai |
 | [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) | Hợp đồng SHM — **chuẩn cuối** layout/path/ownership |
-| [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) | Bản chốt: FAULT bit, reset reason, CRC vector, rename policy |
+| [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) | Bản chốt: FAULT bit, reset reason, CRC vector, rename policy |
 
 Đọc sâu theo việc: iobus → [05](05_IOP_UART_IMPLEMENTATION_GUIDE.md) + [06](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md);
 core → [07](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md). Phase nào làm gì → [03](03_PHASE_PLAN.md).
@@ -42,7 +43,7 @@ core → [07](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md). Phase nào làm gì → [0
 7. iobus = creator + seqlock writer io_shm. Core CHỈ ghi ao_setpoint[]/do_cmd[] (atomic store).
 8. ao_setpoint là ENGINEERING (V/mA); iobus convert eng→raw theo ao_mode. AO safe: raw 0 (0V/4mA).
 9. Reader seqlock: đọc seq chẵn → copy → đọc lại seq, đổi thì retry. Không bao giờ block writer.
-10. Đổi header shared/ = đổi hợp đồng → quy trình 15_CONTRACT_FREEZE §7, không sửa lén.
+10. Đổi header shared/ = đổi hợp đồng → quy trình 16_CONTRACT_FREEZE §7, không sửa lén.
 ```
 
 ## 4. Scaffold + build trong 15 phút
@@ -77,18 +78,18 @@ Làm hết = Phase 0–2 phía SOM xong trước khi có board.
 
 ## 6. Lên board thật
 
-Theo đúng thứ tự [17_WEEK1_SOM_BRINGUP_CHECKLIST](17_WEEK1_SOM_BRINGUP_CHECKLIST.md)
+Theo đúng thứ tự [18_WEEK1_SOM_BRINGUP_CHECKLIST](18_WEEK1_SOM_BRINGUP_CHECKLIST.md)
 (8 mốc, mỗi mốc có command + log mong đợi + chỗ debug). Board-level (nguồn, flash MCU):
-[13_BRINGUP_GUIDE](13_BRINGUP_GUIDE.md).
+[14_BRINGUP_GUIDE](14_BRINGUP_GUIDE.md).
 
-Nếu board SOM đã có nhưng MCU chưa có: dùng [26_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK](26_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md)
+Nếu board SOM đã có nhưng MCU chưa có: dùng [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK](27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md)
 để build/deploy `--no-enable` và chạy `fake_mcu` no-board trên chính SOM.
 
 ## 7. Định nghĩa "xong"
 
 Mỗi module: unit test pass + done-criteria trong contract (06 §3 / 07 §11) + không vi phạm
 checklist review (06 §12). Mỗi phase: output đo được trong [03_PHASE_PLAN](03_PHASE_PLAN.md) +
-test group tương ứng [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md).
+test group tương ứng [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md).
 
 ---
 **Rev** 1.1 | 2026-06-13 (thêm link deploy SOM no-MCU doc 26) · 1.0 | 2026-06-11 · Hỏi gì cũng tra được theo thứ tự: header `shared/` → 15 → 05/06/07 → spec.

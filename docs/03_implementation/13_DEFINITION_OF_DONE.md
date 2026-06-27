@@ -1,8 +1,9 @@
-# 12 — Definition of Done
+# 13 — Definition of Done
 ## MK-DDC-24 — Khi nào từng phần được tính là XONG
 
 > **Document ID:** IMPL-DOD-MK-DDC-24-VI
 > **Phiên bản:** 1.1 | 2026-06-13 (thêm DoD S7 #4/#5/#6) · 1.0 | 2026-06-10
+> **Trạng thái:** Active
 > **Cách dùng:** tick từng ô. Chỉ "Done" khi tick đủ + test group tương ứng pass.
 
 ---
@@ -134,9 +135,9 @@ Test: group 6 + 7 + 8.
 [ ] Fault test pass.
 [ ] KHÔNG còn mock/demo path, KHÔNG còn bypass Web→UART.
 [ ] Release note + known issues.
-[ ] Toàn bộ checklist [14_RELEASE_HANDOVER](14_RELEASE_HANDOVER_CHECKLIST.md) tick đủ.
+[ ] Toàn bộ checklist [15_RELEASE_HANDOVER](15_RELEASE_HANDOVER_CHECKLIST.md) tick đủ.
 ```
-Test: toàn bộ + [14_HANDOVER](14_RELEASE_HANDOVER_CHECKLIST.md).
+Test: toàn bộ + [14_HANDOVER](15_RELEASE_HANDOVER_CHECKLIST.md).
 
 ---
 

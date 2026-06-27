@@ -12,7 +12,7 @@
 > (Contract Freeze: chốt MVP Rev A, module API, build/systemd đầy đủ, seqlock reader mẫu)
 > **Owner:** Dev 2 (SOM)
 > **Nguồn-chuẩn CUỐI CÙNG:** [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) (SHM) — docs lệch
-> header → **header thắng** ([15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md)). Diễn giải:
+> header → **header thắng** ([16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)). Diễn giải:
 > [ADR-005](../adr/ADR-005-three-process-architecture.md) ·
 > [PRODUCT_DEFINITION §10,§13](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) ·
 > [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) ·
@@ -42,8 +42,8 @@ safe-state, ghi `ao_setpoint[]/do_cmd[]` ngược vào shm — đủ để round
 | 7 | `output_writer` | **đầy đủ** | Ghi `ao_setpoint[]/do_cmd[]` vào shm (writer duy nhất 2 field này) |
 | 8 | `core_metrics` | **đầy đủ** | scan_count/scan_overrun/timing |
 | 9 | `web_ipc` | **stub được** | Nhận command từ web qua `/run/mkddc/core.sock`; stub = accept + log + đưa vào queue |
-| 10 | `graph_runtime` | **implemented (Rev A subset); S7 #4 planned** | Base 13 component đã có; COR-009/010 thêm 10 component stateful + persist theo [22](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) |
-| 11 | `bacnet_objtable` | **stub được; S7 #5 planned** | Stub ghi value/quality; full Priority_Array[16]/Reliability/COV theo [24](24_BACNET_IMPLEMENTATION_PLAN.md) |
+| 10 | `graph_runtime` | **implemented (Rev A subset); S7 #4 planned** | Base 13 component đã có; COR-009/010 thêm 10 component stateful + persist theo [22](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) |
+| 11 | `bacnet_objtable` | **stub được; S7 #5 planned** | Stub ghi value/quality; full Priority_Array[16]/Reliability/COV theo [24](25_BACNET_IMPLEMENTATION_PLAN.md) |
 
 **KHÔNG làm trong core (mọi Rev):**
 ```
@@ -505,7 +505,7 @@ WantedBy=multi-user.target
 
 ## 12. Protocol graph nodes — implementation spec (COR-011)
 
-> **Trạng thái:** DRAFT — chờ owner approve. Task: COR-011 trong 10_TASK_CHECKLIST.
+> **Trạng thái:** ĐÃ làm 2026-06-26 — 5 Protocol node type (NT_MRTU_R/W, NT_MTCP_R, NT_BAV, NT_BBV); str_params map; proto_ext_idx từ modbus section graph.json; feed_ext_snapshot + apply_ext_writes; scan_loop step 3a/5a; drain_ext_writes() write bridge (2026-06-27); 12/12 test pass. Task: COR-011 trong 11_TASK_CHECKLIST.
 > **Nguồn contract:** [GRAPH_SCHEMA §10](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) + [SW_COMPONENT_LIBRARY §8](../02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md).
 
 ### 12.1 Scan loop step 3 — ext_cache reader
@@ -559,18 +559,18 @@ bool ExtCache::lookup(const NodeParams& p, ExtPoint* out);
 ### 12.4 Unit test checklist COR-011
 
 ```
-[ ] test_graph_protocol.cpp — Modbus_RTU_Read node: output = cached_value × scale khi GOOD
-[ ] Modbus_RTU_Read node: output = fallback khi cache stale
-[ ] Modbus_RTU_Write node: in=5.0 → fieldbus_write_queue nhận entry đúng
-[ ] Modbus_TCP_Read node: output = tcp_cached_value × scale khi GOOD
-[ ] Modbus_TCP_Read node: output = fallback khi TCP disconnected (quality BAD)
-[ ] BACnet_AV node (writable=false): out = bacnet_objtable.read_av(instance)
-[ ] BACnet_AV node (writable=true, in=22.5): bacnet_objtable.pv == 22.5 tại mức 5
-[ ] BACnet_BV node: in=true → bacnet_objtable active; out=false khi BMS write false
-[ ] graph validator: Modbus_TCP_Read host không trong modbus.tcp[] → reject
-[ ] graph validator: Modbus_RTU_Read missing fallback → reject
-[ ] Topo-sort không thay đổi: Protocol node không tạo cycle
-[ ] Quality BAD lan downstream: node sau Protocol node BAD cũng BAD (weakest-link)
+[x] test_graph_protocol.cpp — Modbus_RTU_Read node: output = cached_value × scale khi GOOD
+[x] Modbus_RTU_Read node: output = fallback khi cache stale
+[x] Modbus_RTU_Write node: in=5.0 → fieldbus_write_queue nhận entry đúng
+[x] Modbus_TCP_Read node: output = tcp_cached_value × scale khi GOOD
+[x] Modbus_TCP_Read node: output = fallback khi TCP disconnected (quality BAD)
+[x] BACnet_AV node (writable=false): out = bacnet_objtable.read_av(instance)
+[x] BACnet_AV node (writable=true, in=22.5): bacnet_objtable.pv == 22.5 tại mức 5
+[x] BACnet_BV node: in=true → bacnet_objtable active; out=false khi BMS write false
+[x] graph validator: Modbus_TCP_Read host không trong modbus.tcp[] → reject
+[x] graph validator: Modbus_RTU_Read missing fallback → reject
+[x] Topo-sort không thay đổi: Protocol node không tạo cycle
+[x] Quality BAD lan downstream: node sau Protocol node BAD cũng BAD (weakest-link)
 ```
 
 ### 12.5 Files cần tạo/sửa
@@ -603,11 +603,11 @@ bool ExtCache::lookup(const NodeParams& p, ExtPoint* out);
 Trạng thái: ĐÃ làm 2026-06-17 — BAC-004 (bacnet_objtable publish+read_ext), web_ipc source=bacnet mức 3, fieldbus.sock SOCK_DGRAM mở trong main.cpp, scan_loop step 3 ext socket + step 4 cmd.prio routing; 106 core test pass.
 
 ---
-**Rev** 1.8 | 2026-06-26 (§12 Protocol graph nodes COR-011 — scan loop step 3 spec, graph_runtime extension, unit test checklist; §2 step 3 cập nhật ext_cache reader) ·
+**Rev** 1.9 | 2026-06-27 (§12 COR-011 DONE: annotate status, tick T1-T12 test checklist, drain_ext_writes() write bridge documented) · 1.8 | 2026-06-26 (§12 Protocol graph nodes COR-011 — scan loop step 3 spec, graph_runtime extension, unit test checklist; §2 step 3 cập nhật ext_cache reader) ·
 1.7 | 2026-06-17 (BAC-004+MOD-009 core: bacnet_objtable.cpp dùng iop_protocol.h, fieldbus.sock mở trong main.cpp, web_ipc source=bacnet mức 3, scan_loop routing — 106 test pass) ·
 1.6 | 2026-06-17 (§8: BAC-CONFLICT-001 CLOSED — mở rộng core.sock nhận source=bacnet mức 3,
 BACnet client persistent connection, audit format cập nhật, rejected "unknown_source" added) ·
 1.5 | 2026-06-13 (S7 #4/#5/#6 docs linked; priority test fixed web/manual=mức 2) ·
 1.4 | 2026-06-12 (web_ipc overridden+audit, SIGHUP reload, packaging/systemd) ·
-1.3 | 2026-06-12 · Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) ·
-DoD: [12_DEFINITION_OF_DONE §4](12_DEFINITION_OF_DONE.md)
+1.3 | 2026-06-12 · Freeze: [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) ·
+DoD: [13_DEFINITION_OF_DONE §4](13_DEFINITION_OF_DONE.md)

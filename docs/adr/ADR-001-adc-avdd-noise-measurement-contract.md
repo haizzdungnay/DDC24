@@ -151,6 +151,18 @@ Examples:
 3. Use one capture mode (`10 us/div`, AC-coupled) for all conclusions
    - Rejected because it hides low-frequency ripple differences between `24VAC` and `24VDC`.
 
+## Consequences
+
+**Positive:**
+- Measurement scope is explicitly bounded — prevents scope creep into formal EMC lab.
+- Evidence file paths and naming are pre-defined — QA can verify without ambiguity.
+
+**Negative / Trade-offs:**
+- Requires physical bench session with HW execution owner (cannot be done by AI agent alone).
+- Adds coordination overhead for CTO to assign a human HW engineer.
+
+See also: **Acceptance criteria** section below for concrete pass/fail criteria.
+
 ## Risks
 
 - `R1` Terminology drift: executor may keep calling `REF3025` node `AVDD` from old report wording, causing bad evidence-to-table mapping.

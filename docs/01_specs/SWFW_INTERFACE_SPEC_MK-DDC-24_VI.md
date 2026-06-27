@@ -9,7 +9,7 @@
 > **Owner duy nhất:** Tài liệu này là nguồn spec DUY NHẤT (dạng diễn giải) cho interface SOM↔MCU.
 > ⚠️ **Precedence (Contract Freeze):** giá trị thực thi — opcode, payload layout, enum, FAULT bit,
 > RESET reason, CRC, hằng số timing — lấy theo [`shared/iop_protocol.h`](../../shared/iop_protocol.h).
-> Spec lệch header → **header thắng**, sửa spec theo. Xem [15_CONTRACT_FREEZE](../03_implementation/15_CONTRACT_FREEZE.md).
+> Spec lệch header → **header thắng**, sửa spec theo. Xem [16_CONTRACT_FREEZE](../03_implementation/16_CONTRACT_FREEZE.md).
 
 **Tài liệu liên quan:**
 

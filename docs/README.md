@@ -19,7 +19,7 @@
           │                                              │
           ▼                                              │
    THIẾT KẾ CHI TIẾT ──────────────► HIỆN THỰC (CODE) ───┘
-   (03_design + 04_uiux)            (05_implementation)
+   (03_design + 04_uiux)            (05_devguides)
           ▲
           │
    QUẢN LÝ & KIỂM SOÁT (00_management) ── xuyên suốt
@@ -31,7 +31,7 @@
 2. [PROJECT_OVERVIEW](00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) — tóm tắt nhanh 1 trang.
 3. [GETTING_STARTED_DEV](02_design/GETTING_STARTED_DEV.md) — cài môi trường, build, "muốn sửa X vào đâu".
 4. [IMPLEMENTATION_PLAN](00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md) — **lộ trình code: phase → task → microtask → checklist**.
-5. ⭐ **Developer Kit** (gõ code từ đây): [Repo & Build](05_implementation/KX-DDC24-PM-REPO-001_VI.md) · [FW Dev Guide](05_implementation/KX-DDC24-FW-DEVGUIDE-001_VI.md) · [BE Dev Guide](05_implementation/KX-DDC24-BE-DEVGUIDE-001_VI.md) · [FE Dev Guide](05_implementation/KX-DDC24-FE-DEVGUIDE-001_VI.md) · hợp đồng code [`shared/`](../shared/).
+5. ⭐ **Developer Kit** (gõ code từ đây): [Repo & Build](05_devguides/KX-DDC24-PM-REPO-001_VI.md) · [FW Dev Guide](05_devguides/KX-DDC24-FW-DEVGUIDE-001_VI.md) · [BE Dev Guide](05_devguides/KX-DDC24-BE-DEVGUIDE-001_VI.md) · [FE Dev Guide](05_devguides/KX-DDC24-FE-DEVGUIDE-001_VI.md) · hợp đồng code [`shared/`](../shared/).
 6. [DOC_CONTROL_AND_NAMING](00_management/KX-DDC24-QA-DOCCTRL-001_VI.md) — quy tắc đặt tên/sắp xếp/version.
 
 ## 3. Cây thư mục chuẩn (ISO-aligned)
@@ -43,7 +43,7 @@
 | `02_architecture` | Kiến trúc | SW/FW arch, IOP interface | `../spec/` |
 | `03_design` | Thiết kế chi tiết | DDD, ICD, module/service design, coding std | `../design/` |
 | `04_uiux` | Thiết kế giao diện | Design system, Web IDE (FE), HMI | `docs/04_uiux/` |
-| `05_implementation` | Hiện thực | Coding standards, build/CI | `../design/*CODING*` |
+| `05_devguides` | Hiện thực | Coding standards, build/CI | `../design/*CODING*` |
 | `06_verification` | Kiểm thử | Test spec, traceability | `../spec/TEST_SPEC…` |
 | `07_hardware` | Phần cứng | Schematic, BOM, EMC | `../hardware-design/` |
 
@@ -67,13 +67,13 @@
 | KX-DDC24-UX-WEBIDE-001 | *(đã gỡ 2026-06-08)* — UX web Rev A form/JSON: [ADR-006](adr/ADR-006-rev-a-ui-form-json.md) |
 | KX-DDC24-UX-HMI-001 | [HMI TFT UI](04_uiux/KX-DDC24-UX-HMI-001_VI.md) |
 
-### 05_implementation — Developer Kit (gõ code từ đây)
+### 05_devguides — Developer Kit (gõ code từ đây)
 | ID | Tài liệu |
 |----|----------|
-| KX-DDC24-PM-REPO-001 | [Repository, Build & CI](05_implementation/KX-DDC24-PM-REPO-001_VI.md) |
-| KX-DDC24-FW-DEVGUIDE-001 | [FW Developer Guide & Backlog](05_implementation/KX-DDC24-FW-DEVGUIDE-001_VI.md) |
-| KX-DDC24-BE-DEVGUIDE-001 | [BE Developer Guide & Backlog](05_implementation/KX-DDC24-BE-DEVGUIDE-001_VI.md) |
-| KX-DDC24-FE-DEVGUIDE-001 | [FE Developer Guide & Backlog](05_implementation/KX-DDC24-FE-DEVGUIDE-001_VI.md) |
+| KX-DDC24-PM-REPO-001 | [Repository, Build & CI](05_devguides/KX-DDC24-PM-REPO-001_VI.md) |
+| KX-DDC24-FW-DEVGUIDE-001 | [FW Developer Guide & Backlog](05_devguides/KX-DDC24-FW-DEVGUIDE-001_VI.md) |
+| KX-DDC24-BE-DEVGUIDE-001 | [BE Developer Guide & Backlog](05_devguides/KX-DDC24-BE-DEVGUIDE-001_VI.md) |
+| KX-DDC24-FE-DEVGUIDE-001 | [FE Developer Guide & Backlog](05_devguides/KX-DDC24-FE-DEVGUIDE-001_VI.md) |
 | (code) | Hợp đồng dùng chung: [`shared/iop_protocol.h`](../shared/iop_protocol.h), [`shared/kinexus_shm.h`](../shared/kinexus_shm.h) |
 
 ### Yêu cầu / Kiến trúc / Thiết kế (giữ vị trí cũ)

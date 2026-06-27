@@ -1,4 +1,4 @@
-# 26 — SOM Board Deploy Runbook (No MCU)
+# 27 — SOM Board Deploy Runbook (No MCU)
 ## MK-DDC-24 — Build/deploy lên board SOM khi chưa có MCU
 
 > **Document ID:** IMPL-SOM-DEPLOY-NOMCU-MK-DDC-24-VI

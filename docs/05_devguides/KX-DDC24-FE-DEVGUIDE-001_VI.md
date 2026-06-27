@@ -20,7 +20,7 @@
 > **Scheduler** — BACnet Weekly_Schedule tuần-lặp, bỏ "Tháng" (PRD FR-004);
 > **Network** — Northbound BACnet/IP + Southbound Modbus RTU master, bỏ cây controller (ARCH-R010);
 > **Validator** — kiểm `graph.json` 4 check Rev A (GRAPH_SCHEMA), không FBD/ST (ADR-004 → Rev C).
-> Chi tiết: [08_MKDDC_WEB §1](../03_implementation/08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) + CHANGELOG `[Unreleased]`.
+> Chi tiết: [09_MKDDC_WEB §1](../03_implementation/09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) + CHANGELOG `[Unreleased]`.
 
 ---
 

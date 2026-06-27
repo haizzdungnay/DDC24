@@ -48,7 +48,7 @@
 | Requirement ID | Mô tả yêu cầu | Tài liệu liên quan | Module code | Test case | Trạng thái |
 |:-:|---|---|---|---|:--:|
 | SW-BAC-001..008 | BACnet/IP server | BACNET_PICS_EPICS, SW_BACNET_DESIGN | `services/iobus/bacnet/*` (14 files) | test_bacnet_*.cpp (4 files) | ✅ **Covered** |
-| BAC-001..011 | BACnet implementation | 24_BACNET_IMPLEMENTATION_PLAN | `services/iobus/bacnet/*` + `services/core/bacnet_objtable.*` | test_bacnet_*.cpp + test_bacnet_objtable.cpp | ✅ **Covered** |
+| BAC-001..011 | BACnet implementation | 25_BACNET_IMPLEMENTATION_PLAN | `services/iobus/bacnet/*` + `services/core/bacnet_objtable.*` | test_bacnet_*.cpp + test_bacnet_objtable.cpp | ✅ **Covered** |
 | NFR-009 BTL | BTL certification | IF-ICD-003 §9 | — | — | ⚠️ **Partial** (pretest script planned, no certification) |
 
 ### 1.6 Modbus RTU Master
@@ -56,7 +56,7 @@
 | Requirement ID | Mô tả yêu cầu | Tài liệu liên quan | Module code | Test case | Trạng thái |
 |:-:|---|---|---|---|:--:|
 | SW-MOD-001..011 | Modbus RTU master | SW_FIELDBUS_DESIGN, MODBUS_REGISTER_MAP | `services/iobus/fieldbus/*` (14 files) | test_fieldbus_*.cpp (5 files) | ✅ **Covered** |
-| MOD-001..011 | Modbus implementation | 25_MODBUS_IMPLEMENTATION_PLAN | `services/iobus/fieldbus/*` | test_fieldbus_*.cpp | ✅ **Covered** |
+| MOD-001..011 | Modbus implementation | 26_MODBUS_IMPLEMENTATION_PLAN | `services/iobus/fieldbus/*` | test_fieldbus_*.cpp | ✅ **Covered** |
 
 ### 1.7 REST API / Web
 

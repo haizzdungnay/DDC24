@@ -108,7 +108,7 @@
 | KX-DDC24-IF-ICD-005 | Config JSON Schema (D-5) | [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) | 1.0 | **Needs Reconciliation** |
 | KX-DDC24-IF-ICD-006 | Graph Schema (graph.json) + deploy contract | [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 
-### Coding standards / hỗ trợ (05_implementation)
+### Coding standards / hỗ trợ (05_devguides)
 | ID | Tài liệu | Legacy file | Ver | Trạng thái |
 |----|----------|-------------|:---:|:----------:|
 | KX-DDC24-FW-STD-001 | FW Coding Standard | [FW_CODING_STANDARD](../02_design/firmware/FW_CODING_STANDARD_MK-DDC-24_VI.md) | 1.0 | Approved |
@@ -116,13 +116,13 @@
 | KX-DDC24-PM-STD-001 | Getting Started Dev | [GETTING_STARTED_DEV](../02_design/GETTING_STARTED_DEV.md) | 1.1 | Active |
 | — | DDD Template | [_templates/TEMPLATE_DDD](../02_design/_templates/TEMPLATE_DDD.md) | — | Active |
 
-## 4b. Developer Kit (05_implementation) — `docs/05_implementation/` + `shared/`
+## 4b. Developer Kit (05_devguides) — `docs/05_devguides/` + `shared/`
 | ID | Tài liệu | Ver | Trạng thái |
 |----|----------|:---:|:----------:|
-| KX-DDC24-PM-REPO-001 | [Repository, Build & CI](../05_implementation/KX-DDC24-PM-REPO-001_VI.md) | 1.0 | Approved |
-| KX-DDC24-FW-DEVGUIDE-001 | [FW Developer Guide & Backlog](../05_implementation/KX-DDC24-FW-DEVGUIDE-001_VI.md) | 1.0 | Approved |
-| KX-DDC24-BE-DEVGUIDE-001 | [BE Developer Guide & Backlog](../05_implementation/KX-DDC24-BE-DEVGUIDE-001_VI.md) | 1.0 | **Needs Reconciliation** |
-| KX-DDC24-FE-DEVGUIDE-001 | [FE Developer Guide & Backlog](../05_implementation/KX-DDC24-FE-DEVGUIDE-001_VI.md) | 1.0 | **Needs Reconciliation** |
+| KX-DDC24-PM-REPO-001 | [Repository, Build & CI](../05_devguides/KX-DDC24-PM-REPO-001_VI.md) | 1.0 | Approved |
+| KX-DDC24-FW-DEVGUIDE-001 | [FW Developer Guide & Backlog](../05_devguides/KX-DDC24-FW-DEVGUIDE-001_VI.md) | 1.0 | Approved |
+| KX-DDC24-BE-DEVGUIDE-001 | [BE Developer Guide & Backlog](../05_devguides/KX-DDC24-BE-DEVGUIDE-001_VI.md) | 1.0 | **Needs Reconciliation** |
+| KX-DDC24-FE-DEVGUIDE-001 | [FE Developer Guide & Backlog](../05_devguides/KX-DDC24-FE-DEVGUIDE-001_VI.md) | 1.0 | **Needs Reconciliation** |
 | (code contract) | [`shared/iop_protocol.h`](../../shared/iop_protocol.h) · [`shared/kinexus_shm.h`](../../shared/kinexus_shm.h) | 1.1 / 1.0 | Active |
 
 ## 5. UI/UX (04_uiux) — `docs/04_uiux/`

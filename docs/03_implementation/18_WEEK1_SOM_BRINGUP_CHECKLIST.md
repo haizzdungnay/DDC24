@@ -1,10 +1,11 @@
-# 17 — SOM Week-1 Bring-up Checklist
+# 18 — SOM Week-1 Bring-up Checklist
 ## MK-DDC-24 — 8 mốc tuần đầu trên SOM, làm tuần tự, fail thì dừng
 
 > **Document ID:** IMPL-WEEK1-MK-DDC-24-VI · **Phiên bản:** 1.0 | 2026-06-11
-> **Đối tượng:** Dev 2 (SOM). Tiền đề: MCU đã qua Phase 1 ([13_BRINGUP §1–7](13_BRINGUP_GUIDE.md))
+> **Trạng thái:** Active
+> **Đối tượng:** Dev 2 (SOM). Tiền đề: MCU đã qua Phase 1 ([13_BRINGUP §1–7](14_BRINGUP_GUIDE.md))
 > hoặc dùng fake MCU cho mốc 1–2. Nếu chưa có MCU nhưng đã có SOM board, làm theo
-> [26_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK](26_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) trước.
+> [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK](27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) trước.
 > Mỗi mốc: command → log mong đợi → quan sát gì → fail debug ở đâu.
 > Quy tắc: **mốc nào fail thì DỪNG**, không nhảy mốc sau.
 
@@ -92,7 +93,7 @@ printf '{"point":"DO1","value":1,"priority_source":"operator","user":"dev"}\n' |
 - **Quan sát:** gửi value=0 → relay mở. Lặp 10 lần không miss.
 - **Fail →** core nhận nhưng iobus không gửi: kiểm core có ghi `do_cmd[]` (xxd offset tương ứng);
   iobus gửi nhưng NACK ERR_SAFE_STATE: MCU đang safe (mất GET_IO 200ms trước đó?);
-  ACK ok nhưng relay không đóng: phần cứng — quay lại [13 §5](13_BRINGUP_GUIDE.md).
+  ACK ok nhưng relay không đóng: phần cứng — quay lại [13 §5](14_BRINGUP_GUIDE.md).
 
 ---
 
@@ -111,8 +112,8 @@ printf '{"point":"DO1","value":1,"priority_source":"operator","user":"dev"}\n' |
 
 8/8 = đường trục `core → iobus → MCU → relay → feedback` sống. Phần còn lại của Phase 3/4
 (metrics, alarm, priority đầy đủ, soak test) theo [03_PHASE_PLAN](03_PHASE_PLAN.md) +
-[11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md).
+[12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md).
 
 ---
-**Rev** 1.1 | 2026-06-13 (link no-MCU SOM deploy doc 26) · 1.0 | 2026-06-11 · Board-level: [13_BRINGUP_GUIDE](13_BRINGUP_GUIDE.md) ·
-Không board: [06 §11.1](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) · Freeze: [15](15_CONTRACT_FREEZE.md)
+**Rev** 1.1 | 2026-06-13 (link no-MCU SOM deploy doc 26) · 1.0 | 2026-06-11 · Board-level: [14_BRINGUP_GUIDE](14_BRINGUP_GUIDE.md) ·
+Không board: [06 §11.1](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) · Freeze: [15](16_CONTRACT_FREEZE.md)

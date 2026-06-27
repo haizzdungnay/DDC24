@@ -1,4 +1,4 @@
-# 08 — mkddc-web Implementation Guide
+# 09 — mkddc-web Implementation Guide
 ## MK-DDC-24 — REST API + Web UI + Config + Validator
 
 > **Document ID:** IMPL-WEB-MK-DDC-24-VI
@@ -308,7 +308,7 @@ Done khi : 4 check chạy đúng; deploy chỉ khi pass.
 | Không bypass core | core_client.go | group 6 (kiểm không có serial) |
 
 ---
-**Rev** 1.11 | 2026-06-23 · DoD: [12_DEFINITION_OF_DONE §5](12_DEFINITION_OF_DONE.md)
+**Rev** 1.11 | 2026-06-23 · DoD: [13_DEFINITION_OF_DONE §5](13_DEFINITION_OF_DONE.md)
 - 1.11 (2026-06-23): Go security dependency refresh: `golang.org/x/crypto v0.53.0`, `golang.org/x/sys v0.46.0`; giữ nguyên REST/WS contract.
 - 1.10 (2026-06-23): frontend security dependency refresh: Vite 8.0.16 + plugin-react 6.0.2, Node 22 CI, Vite config manualChunks compatibility; giữ nguyên REST/WS contract.
 - 1.9 (2026-06-17): chuẩn hóa i18n frontend: tiếng Việt có dấu + English mode cho label/nút/toast chính; giữ nguyên REST/WS contract.

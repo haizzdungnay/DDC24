@@ -1,8 +1,9 @@
-# 11 — Integration Test Plan
+# 12 — Integration Test Plan
 ## MK-DDC-24 — Test plan thật trên board
 
 > **Document ID:** IMPL-TESTPLAN-MK-DDC-24-VI
 > **Phiên bản:** 1.2 | 2026-06-26 (Rev A + IOP v2 ADR-010: xoá DI/PT100, sửa bit FAULT, 500Hz, BOARD_CAP_MAP, UI×16, ADC2 test) · 1.1 | 2026-06-13 (thêm group 9 BACnet, group 10 Modbus) · 1.0 | 2026-06-10
+> **Trạng thái:** Active
 > **Owner:** Tester (+ dev hỗ trợ)
 > **Nguồn-chuẩn:** [TEST_SPEC](../01_specs/TEST_SPEC_MK-DDC-24_VI.md) · [SWFW_INTERFACE_SPEC §10](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) · ADR-010 (IOP v2)
 
@@ -361,7 +362,7 @@ Log: journalctl toàn kỳ + metrics snapshot mỗi giờ.
 
 ## Test group 9 — BACnet/IP
 
-> Chi tiết task: [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md).
+> Chi tiết task: [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md).
 
 ```
 TC-9-01  Who-Is/I-Am
@@ -403,7 +404,7 @@ Kết quả: B-ASC smoke pass; log lưu evidence.
 
 ## Test group 10 — Modbus RTU Master
 
-> Chi tiết task: [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md).
+> Chi tiết task: [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md).
 
 ```
 TC-10-01  Profile parser

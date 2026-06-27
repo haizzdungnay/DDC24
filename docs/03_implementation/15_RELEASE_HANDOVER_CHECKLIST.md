@@ -1,8 +1,9 @@
-# 14 — Release Handover Checklist
+# 15 — Release Handover Checklist
 ## MK-DDC-24 — Trước khi bàn giao
 
 > **Document ID:** IMPL-HANDOVER-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-06-10
+> **Trạng thái:** Draft — chưa đến giai đoạn release
 > **Owner:** PM/Lead. Bàn giao chỉ khi MỌI ô tick + ký.
 
 ---
@@ -66,7 +67,7 @@
 ```
 [ ] Release note (tính năng, version, ngày).
 [ ] Known issues (lỗi còn lại + workaround).
-[ ] Bring-up guide ([13](13_BRINGUP_GUIDE.md)) cập nhật khớp thực tế.
+[ ] Bring-up guide ([13](14_BRINGUP_GUIDE.md)) cập nhật khớp thực tế.
 [ ] Sơ đồ đấu dây IO + bảng điểm (point list) bàn giao.
 [ ] Hướng dẫn vận hành cơ bản cho người dùng cuối.
 [ ] Backup config mặc định + script restore.
@@ -97,4 +98,4 @@
 > Chỉ phát hành khi đủ chữ ký + mọi ô §1–§7 tick. Bất kỳ ô §4 chưa tick = **chặn release**.
 
 ---
-**Rev** 1.0 | 2026-06-10 · Liên quan: [12_DEFINITION_OF_DONE](12_DEFINITION_OF_DONE.md) · [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)
+**Rev** 1.0 | 2026-06-10 · Liên quan: [13_DEFINITION_OF_DONE](13_DEFINITION_OF_DONE.md) · [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)

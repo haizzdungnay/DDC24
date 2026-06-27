@@ -81,7 +81,7 @@ DDC-PROJECT/
 │   ├── 04_uiux/         thiết kế giao diện
 │   └── README.md        master index
 ├── spec/                01_requirements + 02_architecture (yêu cầu, kiến trúc, IOP)
-├── design/              03_design + 05_implementation (DDD, ICD, coding std)
+├── design/              03_design + 05_devguides (DDD, ICD, coding std)
 └── hardware-design/     07_hardware
 ```
 

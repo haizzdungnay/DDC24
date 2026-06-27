@@ -273,84 +273,142 @@ Mỗi kênh UI1-UI8 có mạch điều hòa tín hiệu hỗ trợ đa chế đ�
 
 > Dựa trên thiết kế 3D mặt trước thiết bị: 1× TFT 2.4" màu (dashboard chính) + 6× nút nhấn điều hướng + 5× LED trạng thái. Hàng trên là 3× lỗ dắt dây terminal (không phải display).
 
-### 11.1 TFT LCD 2.4" — Dashboard Chính
+### 11.1 LCM+CTP Module — KD024QVFIA073-02-C021B (Startek)
 
-**IC Controller: ILI9341** (hoặc tương thích ST7789V2)
+> **⚠ ERRATUM 2026-06-26:** Phiên bản doc trước ghi sai interface là SPI/ILI9341.
+> Module thực tế là **MIPI DSI + I2C CTP** theo spec `KD024QVFIA073-02-C021B V1.0`.
 
-| Thông số | Giá trị |
-|----------|---------|
-| **Kích thước** | 2.4 inch diagonal |
-| **Độ phân giải** | 240 × 320 pixels (QVGA) |
-| **Màu sắc** | 65K màu (16-bit RGB565) |
-| **Interface** | SPI 4-wire, tốc độ max 40 MHz |
-| **Nguồn** | 3.3V VCC, 3.3V I/O logic |
-| **Backlight** | LED backlight, điều chỉnh PWM |
-| **Góc nhìn** | IPS 160°/160° (nếu dùng bản IPS) |
-| **Nội dung hiển thị** | Dashboard: 3× gauge vòng tròn (temp/pressure/power), alarm status, network status |
-| **Thư viện phần mềm** | LVGL v9 + lv_drivers SPI (Debian userspace) |
-| **Frame rate** | ~20 FPS với SPI 20MHz |
+Module tích hợp: TFT panel + CTP (capacitive touch) optical-bonded G+G.
 
-**Kết nối CM3 ↔ ILI9341:**
+#### 11.1.1 TFT Display (LCM)
+
+| Thông số | Giá trị | Nguồn |
+|----------|---------|-------|
+| **Part number** | KD024QVFIA073-02-C021B | Startek spec §1.1 |
+| **Kích thước** | 2.4" (36.72 × 48.96 mm AA) | spec §1.3 |
+| **Độ phân giải** | 240(RGB) × 320 pixels (QVGA) | spec §1.1 |
+| **Màu sắc** | 65K / 262K | spec §1.1 |
+| **Controller IC** | **JD9852** | spec §1.1 |
+| **LCM Interface** | **MIPI DSI — 1 data lane** (DSI Video mode) | spec §1.1, §7.2 |
+| **Display mode** | Transmissive / Normally Black | spec §1.1 |
+| **Nhiệt độ vận hành** | **-20°C ~ +70°C** | spec §1.1 |
+| **Nhiệt độ lưu trữ** | -30°C ~ +80°C | spec §1.1 |
+| **Góc nhìn** | 80° × 4 hướng (CR > 10) | spec §5.1 |
+| **Contrast ratio** | 800:1 typ | spec §5.1 |
+
+**Tín hiệu MIPI DSI (qua LCM FPC, 20 pin):**
+
+| Pin | Symbol | Chức năng |
+|-----|--------|-----------|
+| 2 | LEDK | Backlight cathode |
+| 4 | LEDA | Backlight anode |
+| 6 | VCI | Supply 3.3V |
+| 7 | IOVCC | I/O supply 1.8–3.3V |
+| 8 | TE | Tearing Effect output (sync) |
+| 9 | RESET | Hardware reset, active LOW |
+| 14 | MIPI_CLP | DSI clock lane positive (LVDS diff) |
+| 15 | MIPI_CLN | DSI clock lane negative |
+| 17 | MIPI_D0P | DSI data lane 0 positive |
+| 18 | MIPI_D0N | DSI data lane 0 negative |
+
+**Kết nối CM3 ↔ KD024QVFIA073-02-C021B:**
 
 ```
-Radxa CM3 (CON1 B2B)          ILI9341 2.4" TFT
-────────────────────           ────────────────────
-SPI0_CLK  (CON1-37) ─────────► SCK
-SPI0_MOSI (CON1-39) ─────────► MOSI / SDA
-SPI0_CS0n (CON1-41) ─────────► CS#
-GPIO0_C0  (CON1-51) ─────────► DC (Data/Command, HIGH=data)
-GPIO0_C1  (CON1-53) ─────────► RST# (active LOW)
-PWM11_M1  (CON1-55) ─[33Ω]──► BL (LED anode, max 20mA)
-3V3       (CON1-17) ─────────► VCC
-GND       (CON1-18) ─────────► GND
+Radxa CM3 (B2B CON)              KD024QVFIA073 (LCM FPC)
+─────────────────                ──────────────────────────
+MIPI_TX_CKP  (*)  ─────[diff]──► MIPI_CLP  (pin 14)
+MIPI_TX_CKN  (*)  ─────[diff]──► MIPI_CLN  (pin 15)
+MIPI_TX_D0P  (*)  ─────[diff]──► MIPI_D0P  (pin 17)
+MIPI_TX_D0N  (*)  ─────[diff]──► MIPI_D0N  (pin 18)
+GPIO          (*)  ─────────────► RESET#    (pin 9,  active-LOW)
+GPIO          (*)  ◄────────────  TE        (pin 8,  output)
+LED driver    (*)  ─────────────► LEDA      (pin 4,  ~20mA/string)
+LED driver    (*)  ──────────── ► LEDK      (pin 2,  GND via driver)
+3V3                ─────────────► VCI       (pin 6)
 ```
 
-> **SPI0_MISO không cần nối** nếu module không có touch.  
-> Nếu dùng module có **touch (XPT2046)**: thêm `SPI0_MISO←TP_DOUT`, `GPIO→TP_CS`, `GPIO←TP_IRQ`.
+> (*) Pin số trên B2B connector CM3 cần xác nhận từ **carrier board schematic** (phụ thuộc layout PCB).
+> RK3566 có 1× MIPI DSI output — trỏ thẳng vào module qua carrier board routing.
 
-**Khởi tạo trên Debian CM3:**
-```bash
-# Enable SPI0 via device tree overlay
-echo "spi0-ili9341" >> /boot/armbianEnv.txt
-
-# Hoặc cấu hình thủ công via fbtft module
-modprobe fbtft_device name=adafruit22a rotate=270 speed=24000000 fps=20
-
-# Verify framebuffer
-ls /dev/fb0   # → ILI9341 framebuffer
+**LVGL render pipeline (SW):**
+```
+mkddc_io_shm / mkddc_plc_shm
+  → kinexus-hmid (LVGL v9)
+  → lv_drivers/display/drm.c   ← DRM/KMS framebuffer
+  → /dev/dri/card0              ← RK3566 VOP + MIPI DSI
+  → JD9852 controller           ← trên module
+  → TFT panel
 ```
 
-**LVGL render pipeline:**
+#### 11.1.2 CTP — Capacitive Touch (FT5436)
+
+| Thông số | Giá trị | Nguồn |
+|----------|---------|-------|
+| **Controller IC** | **FT5436** (Focal Tech) | spec §1.2 |
+| **Interface** | **I2C** | spec §1.2 |
+| **I2C address** | 0x38 (7-bit) / 0x70 Write / 0x71 Read | spec §1.2 |
+| **Touch points** | 5-point đồng thời + Gestures | spec §1.2 |
+| **Cấu trúc** | G+G (glass-glass optical bonding với TFT) | spec §1.2 |
+| **Resolution** | 240(H) × 320(V) | spec §1.2 |
+
+**Tín hiệu CTP (qua CTP FPC, 8 pin):**
+
+| Pin | Symbol | Chức năng |
+|-----|--------|-----------|
+| 2 | VDDIO | I/O power (1.8–3.3V) |
+| 3 | VDD | Supply voltage |
+| 4 | SCL | I2C clock |
+| 5 | SDA | I2C data (bidirectional) |
+| 6 | INT | Interrupt to host (active LOW, có touch mới) |
+| 7 | RST | Reset, active LOW |
+
+**Kết nối CM3 ↔ FT5436 CTP:**
+
 ```
-Soft PLC data → shared memory → lvgl_dashboard_app → SPI0 → ILI9341
+Radxa CM3 (B2B CON)              KD024QVFIA073 (CTP FPC)
+─────────────────                ──────────────────────────
+I2C_SCL  (I2C1, *)  ─────────── ► SCL  (pin 4)
+I2C_SDA  (I2C1, *)  ─────────── ► SDA  (pin 5)
+GPIO     (*)         ◄───────────  INT  (pin 6, active-LOW interrupt)
+GPIO     (*)         ─────────── ► RST  (pin 7, active-LOW)
+1V8 / 3V3            ─────────── ► VDDIO (pin 2)
+3V3                  ─────────── ► VDD  (pin 3)
 ```
+
+> (*) Cần xác nhận từ carrier board schematic.
+
+**SW driver path:** Linux input event `/dev/input/touchscreen0` (FT5436 kernel driver `ft5x06_ts`) → LVGL `lv_drivers/indev/evdev.c` → `LV_INDEV_TYPE_POINTER`.
 
 ---
 
-### 11.2 Nút Nhấn (×6)
+### 11.2 Nút Nhấn (×6) — Input bổ sung cho gloved-hand
 
-6 nút nhấn theo dạng 2×3 cho phép điều hướng menu local (không cần web browser).
+6 nút cứng dạng 2×3 — input thay thế khi đeo găng tay hoặc touch không khả dụng.
 
-| Vị trí | Chức năng | CM3 GPIO |
-|--------|----------|----------|
-| TOP-LEFT | UP / Scroll Up | GPIO1_A0 |
-| TOP-RIGHT | DOWN / Scroll Down | GPIO1_A1 |
-| MID-LEFT | LEFT / Back | GPIO1_A2 |
-| MID-RIGHT | RIGHT / Forward | GPIO1_A3 |
-| BOT-LEFT | ENTER / Confirm | GPIO1_A4 |
-| BOT-RIGHT | ESC / Cancel | GPIO1_A5 |
+| Vị trí | Nhãn | Chức năng | CM3 GPIO | Linux GPIO# |
+|--------|------|-----------|----------|------------|
+| TOP-LEFT | UP | Scroll Up / Focus Prev | GPIO1_A0 | gpio32 |
+| TOP-RIGHT | DOWN | Scroll Down / Focus Next | GPIO1_A1 | gpio33 |
+| MID-LEFT | LEFT | Màn trái / Back | GPIO1_A2 | gpio34 |
+| MID-RIGHT | RIGHT | Màn phải / Forward | GPIO1_A3 | gpio35 |
+| BOT-LEFT | ENTER | Xác nhận / Ack | GPIO1_A4 | gpio36 |
+| BOT-RIGHT | ESC | Huỷ / Thoát | GPIO1_A5 | gpio37 |
 
-Mạch nút: Pull-up 10kΩ lên 3.3V, debounce 20ms software. Nhấn → GPIO = LOW.
+Mạch: Pull-up 10kΩ lên 3.3V. Nhấn → LOW. Debounce 20ms software.
 
 ---
 
-### 11.3 CM3 SPI/I2C Resource Allocation (Display)
+### 11.3 CM3 Peripheral Resource Allocation (HMI)
 
-| Bus | Dùng cho | Tốc độ |
-|-----|---------|--------|
-| SPI0 | ILI9341 TFT 2.4" | 20–40 MHz |
+| Bus / Resource | Dùng cho | Ghi chú |
+|----------------|---------|---------|
+| MIPI DSI (1 lane) | JD9852 TFT display | 1× clock lane + 1× data lane differential |
 | I2C0 | RTC DS3231 | 400 kHz |
-| I2C1–I2C7 | Dự phòng Ver 2 | — |
+| I2C1 | FT5436 CTP touch (0x38) | 400 kHz; xác nhận carrier schematic |
+| GPIO (2×) | RESET# + TE của JD9852 | Carrier board schematic |
+| GPIO (2×) | INT + RST của FT5436 | Carrier board schematic |
+| GPIO (6×) | 6 nút nhấn | GPIO1_A0..A5 |
+| LED driver | Backlight LEDA/LEDK | Cần IC driver (constant current, ~20mA/string) |
 
 ---
 

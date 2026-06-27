@@ -76,11 +76,11 @@ mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master)
 ### 4.3 BACnet module trong `mkddc-iobus`
 - **Objects:** theo SRS §5.1 (Device, AI8/AO4/AV32/BI8/BO4/BV16/MSV8, Trend8, Schedule8, Calendar2, NC4, EE8). **PICS → [D-3]**.
 - **Transport:** BACnet/IP UDP 47808 (Ethernet/WiFi); COV; Who-Is<100ms. *(MS/TP bỏ — ARCH-R010.)*
-- **Nguồn dữ liệu:** đọc `/dev/shm/mkddc_plc_shm`; Write-Property cập nhật BACnet Priority_Array[16], winner đi vào core mức 3 qua IPC; không ghi IO trực tiếp. Chi tiết triển khai → [Implementation 24](../../03_implementation/24_BACNET_IMPLEMENTATION_PLAN.md).
+- **Nguồn dữ liệu:** đọc `/dev/shm/mkddc_plc_shm`; Write-Property cập nhật BACnet Priority_Array[16], winner đi vào core mức 3 qua IPC; không ghi IO trực tiếp. Chi tiết triển khai → [Implementation 24](../../03_implementation/25_BACNET_IMPLEMENTATION_PLAN.md).
 - **Device ID:** `/data/config/device.conf`, fallback DIP qua CM3 GPIO (SW-BAC-006).
 
 ### 4.4 Fieldbus module trong `mkddc-iobus` (Modbus RTU master)
-- **Fieldbus:** poll thiết bị phụ theo **device profile**; xem [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md), [SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md), [Implementation 25](../../03_implementation/25_MODBUS_IMPLEMENTATION_PLAN.md). Map điểm slave vào ext cache/core point. *(Không còn Modbus slave phục vụ BMS; MQTT/agent deferred Rev B+.)*
+- **Fieldbus:** poll thiết bị phụ theo **device profile**; xem [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md), [SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md), [Implementation 25](../../03_implementation/26_MODBUS_IMPLEMENTATION_PLAN.md). Map điểm slave vào ext cache/core point. *(Không còn Modbus slave phục vụ BMS; MQTT/agent deferred Rev B+.)*
 
 ### 4.5 `mkddc-web` (Go) *(thay kinexus-webide)*
 - **Form/JSON** config (KHÔNG FBD/ST): IO/BACnet/Modbus mapping + import/export `graph.json`; watch table/monitor (WebSocket), force I/O (auth admin); validator (library) chạy lúc deploy; commissioning + backup/restore. HTTP 8080 (LAN) → HTTPS 8443 (prod). **Graph/REST → [GRAPH_SCHEMA §7](../interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md)**, config schema → [D-5]. Xem [ADR-006](../../adr/ADR-006-rev-a-ui-form-json.md)/[ADR-007](../../adr/ADR-007-web-stack-go.md).

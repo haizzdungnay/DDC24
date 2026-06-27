@@ -1,4 +1,4 @@
-# 20 — Virtual COM Decision for No-Board Dev
+# 21 — Virtual COM Decision for No-Board Dev
 ## MK-DDC-24 — Chốt cách giả lập UART/IOP khi chưa có hardware thật
 
 > **Document ID:** IMPL-VCOM-DECISION-MK-DDC-24-VI
@@ -31,7 +31,7 @@ Giải pháp đúng nhất cho giai đoạn này:
 
 Docs đã chốt flow dev không có board bằng **fake MCU qua PTY**:
 - [06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) §11 / checklist §11.1
-- [16_QUICK_START_SOM_DEV.md](16_QUICK_START_SOM_DEV.md) §5
+- [17_QUICK_START_SOM_DEV.md](17_QUICK_START_SOM_DEV.md) §5
 - [03_PHASE_PLAN.md](03_PHASE_PLAN.md) Phase 2
 
 Nói ngắn:

@@ -114,7 +114,7 @@ Sprint 0 (Tuần 1-2)     Sprint 1 (Tuần 3-4)     Sprint 2 (Tuần 5-8)     Sp
 
 ## 5. Ghi chú
 
-- Mọi action item có trạng thái tracked trong `10_TASK_CHECKLIST.md` (đã có sẵn task ID map).
+- Mọi action item có trạng thái tracked trong `11_TASK_CHECKLIST.md` (đã có sẵn task ID map).
 - ACT-001..010 có thể làm song song bởi nhiều người nếu chia file.
 - ACT-014 (JSON parser) nên làm trước ACT-015 (SHM race) vì JSON parser ảnh hưởng cả config reload path.
 - ACT-023 (FW Phase 1) + ACT-011/012 (Web skeleton) có thể làm song song — không phụ thuộc nhau.

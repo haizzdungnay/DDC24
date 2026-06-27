@@ -19,7 +19,7 @@ Template này định nghĩa cấu trúc báo cáo **Secure Coding Compliance** 
 | # | Input | Nguồn |
 |---|-------|-------|
 | 1 | Pull request / code change | Git repository |
-| 2 | Coding standards | `docs/05_implementation/` |
+| 2 | Coding standards | `docs/05_devguides/` |
 | 3 | Static analysis results | CI pipeline (SAST, SCA) |
 | 4 | Secret scanning results | CI pipeline (gitleaks) |
 | 5 | Dependency scan results | CI pipeline (trivy, grype) |

@@ -3,8 +3,9 @@
 
 > **Document ID:** IMPL-PHASEPLAN-MK-DDC-24-VI
 > **Phiên bản:** 1.5 | 2026-06-13 (bổ sung S7 #4/#5/#6: stateful graph Active, BACnet/Modbus implementation plan) · 1.4 | 2026-06-12 (P4: web_ipc overridden+audit, SIGHUP reload, systemd units — COR-007/008, SKEL-005)
+> **Trạng thái:** Active
 > **Đọc trước:** [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md)
-> **Map sang task:** [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md) · **Map sang test:** [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md)
+> **Map sang task:** [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md) · **Map sang test:** [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
 
 ---
 
@@ -16,8 +17,8 @@ P0 Skeleton ──► P1 MCU bring-up ──► P2 IOP UART ──► P3 iobus �
 ```
 
 Mỗi phase chỉ "đóng" khi **Output** đạt + test group tương ứng trong
-[11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md) pass + DoD trong
-[12_DEFINITION_OF_DONE](12_DEFINITION_OF_DONE.md) tick đủ.
+[12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md) pass + DoD trong
+[13_DEFINITION_OF_DONE](13_DEFINITION_OF_DONE.md) tick đủ.
 
 ---
 
@@ -35,7 +36,7 @@ Mỗi phase chỉ "đóng" khi **Output** đạt + test group tương ứng tron
 - Chung: đưa `shared/iop_protocol.h` + `shared/mkddc_shm.h` vào build cả FW lẫn SOM
   (rename `kinexus_shm.h → mkddc_shm.h` ĐÃ làm 2026-06-11 — chỉ include, không copy).
 - Chung: lấy `systemd` unit ĐẦY ĐỦ từ 06 §10 + 07 §9 (không tự viết stub khác).
-- Trước khi code: cả 3 dev đọc [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) (10 phút).
+- Trước khi code: cả 3 dev đọc [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) (10 phút).
 
 **Output:**
 ```
@@ -149,14 +150,14 @@ BACnet object/priority bridge, Modbus ext cache integration.
 9. packaging/systemd unit files thật trong repo + install script
    (ĐÃ tạo 2026-06-12 — SKEL-005, điều kiện board bring-up 17_WEEK1).
 10. Stateful graph components còn thiếu + persist counter: COR-009/COR-010 theo
-    [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) — Active 2026-06-13.
+    [23_GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) — Active 2026-06-13.
 11. BACnet/IP full path: object registry, Read/WriteProperty, Priority_Array[16] → core.sock
     source=bacnet mức 3 (BAC-CONFLICT-001 CLOSED 2026-06-17 — 07 §8 Rev 1.6), Reliability/
-    Status_Flags, COV/alarm/pretest theo [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md).
+    Status_Flags, COV/alarm/pretest theo [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md).
     **ĐÃ implement 2026-06-17 — BAC-001..011 DONE (114 test pass).**
 12. Modbus RTU master: `fieldbus.conf` (incl. `rs485.device`), device profile, poll scheduler,
     ext cache (kx_ext_snapshot_msg_t vào mkddc_shm.h), write queue, E302/E303 alarm theo
-    [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md).
+    [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md).
     **ĐÃ implement 2026-06-17 — MOD-001..011 DONE (114 test pass).**
 ```
 
@@ -186,6 +187,37 @@ config, alarm, graph validate/deploy, audit log.
 ```
 
 **Test:** Test group 5 (web). **DoD:** §12.5.
+
+---
+
+## Phase 5.5 — mkddc-hmi
+
+**Mục tiêu:** Màn hình tại chỗ (local HMI) hiển thị trạng thái DDC, cho phép kỹ sư vận hành không cần laptop.
+
+**Owner:** Dev SOM (C++ / LVGL).
+
+**Spec:** [SW_HMI_DESIGN Rev 2.2](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md) · [UC Rev 2.1](../04_uiux/KX-DDC24-UC-HMI-001_VI.md) · [UX Rev 2.0](../04_uiux/KX-DDC24-UX-HMI-001_VI.md).
+**Guide:** [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md).
+
+**Hardware:** KD024QVFIA073-02-C021B (JD9852 MIPI DSI 240×320) · FT5436 CTP I2C 0x38 · 6 GPIO buttons.
+
+**Output:**
+```
+1. Build LVGL v9 + DRM/KMS /dev/dri/card0 (HMI-001).
+2. Input: FT5436 evdev touch + 6 GPIO buttons (HMI-002).
+3. Tab strip + 6-page ring navigation (HMI-003).
+4. Screen 1 — Home / Controller Health (HMI-004).
+5. Screen 2 — I/O Monitor + AGE column + BAD/STALE filter (HMI-005).
+6. Screen 3 — Alarm / Event (4-state model + ACK) (HMI-006).
+7. Screen 4 — Communication (BACnet/Modbus status, Last req: Xs ago) (HMI-007).
+8. Screen 5 — System / Diagnostics read-only (HMI-008).
+9. Screen 6 — Service / Config (PIN lock, Reload, Reboot 3s hold) (HMI-009).
+10. SHM data binding 1s (kx_io_shm + kx_plc_shm) + AGE (HMI-010).
+11. Localization EN/VI + SIGHUP reload locale (HMI-011).
+12. systemd mkddc-hmi.service + packaging (HMI-012).
+```
+
+**Test:** UC-LOCAL-001..014 theo [KX-DDC24-UC-HMI-001 Rev 2.1](../04_uiux/KX-DDC24-UC-HMI-001_VI.md). **DoD:** HMI-001..012 tick đủ + 6 màn render + touch/button pass.
 
 ---
 
@@ -219,14 +251,15 @@ config, alarm, graph validate/deploy, audit log.
 | P2→P3 | IOP cross-test pass, 12 CRC vector khớp 2 phía | FW + SW Lead |
 | P3→P4 | iobus service ổn định 1h, shm đúng | SW Lead |
 | P4→P5 | core priority/safe-state pass, output qua core; nếu scope Rev A production bật BACnet/Modbus thì BAC-001..011 + MOD-001..011 pass group 9/10 | SW Lead |
-| P5→P6 | web command path qua core, không bypass | SW + Web Lead |
-| P6→Release | group 6/7/8 pass, [14_HANDOVER](14_RELEASE_HANDOVER_CHECKLIST.md) tick đủ | PM |
+| P5→P5.5 | web command path qua core, không bypass | SW + Web Lead |
+| P5.5→P6 | HMI-001..012 done, 6 screens render trên board, touch + button input pass | SW Lead |
+| P6→Release | group 6/7/8 pass, [14_HANDOVER](15_RELEASE_HANDOVER_CHECKLIST.md) tick đủ | PM |
 
-> 📍 Tuần đầu trên SOM: làm theo 8 mốc [17_WEEK1_SOM_BRINGUP_CHECKLIST](17_WEEK1_SOM_BRINGUP_CHECKLIST.md)
-> (map P0→P4 round-trip). Dev mới: bắt đầu từ [16_QUICK_START_SOM_DEV](16_QUICK_START_SOM_DEV.md).
+> 📍 Tuần đầu trên SOM: làm theo 8 mốc [18_WEEK1_SOM_BRINGUP_CHECKLIST](18_WEEK1_SOM_BRINGUP_CHECKLIST.md)
+> (map P0→P4 round-trip). Dev mới: bắt đầu từ [17_QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md).
 
 ---
-**Rev** 1.7 | 2026-06-17 (P4 output 11/12 DONE: BAC-001..011 + MOD-001..011 implemented, 114 test pass, bypass check sạch) ·
+**Rev** 1.8 | 2026-06-27 (Phase 5.5 mkddc-hmi added — HMI kéo vào Rev A per REVA_SCOPE amendment 2026-06-27; gate P5.5→P6 added) · 1.7 | 2026-06-17 (P4 output 11/12 DONE: BAC-001..011 + MOD-001..011 implemented, 114 test pass, bypass check sạch) ·
 1.6 | 2026-06-17 (P4 output 11/12: BAC+MOD doc gap CLOSED — BAC-CONFLICT-001, bind_interface, kx_ext_snapshot, rs485.device; sẵn sàng implement) ·
 1.5 | 2026-06-13 (S7 #4/#5/#6 docs code-ready: 22 Active, 24 BACnet, 25 Modbus) ·
 1.4 | 2026-06-12 (P4: web_ipc overridden+audit COR-007, SIGHUP reload COR-008, systemd units SKEL-005) · 1.3 | 2026-06-12 (graph_runtime + T6/T7 implemented; E2E script) · 1.2 | 2026-06-12 (P4/P6: tham chiếu SAFETY SPEC 07 §5 — trigger matrix

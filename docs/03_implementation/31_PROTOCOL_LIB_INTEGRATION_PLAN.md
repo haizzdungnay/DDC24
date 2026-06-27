@@ -1,11 +1,11 @@
-# 30 — Protocol Library Integration Plan
+# 31 — Protocol Library Integration Plan
 ## MK-DDC-24 — BACnet bacnet-stack + Modbus libmodbus: cài đặt, build, và validate thật
 
 > **Document ID:** IMPL-PROTO-LIB-INTEG-MK-DDC-24-VI
 > **Phiên bản:** 1.2 | 2026-06-26
 > **Trạng thái:** In progress — IOB-006 ✅; MOD-012: 9/11 DoD ✅ (còn 1h smoke + thiết bị thật); BAC-012: 1/10 DoD ✅ (còn LAN + aarch64 + board)
 > **Owner:** Dev 2 (SOM) + Tester
-> **Đọc trước:** [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) · [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md) · [29_BACNET_BTL_PRETEST_PROCEDURE](29_BACNET_BTL_PRETEST_PROCEDURE.md)
+> **Đọc trước:** [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md) · [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md) · [30_BACNET_BTL_PRETEST_PROCEDURE](30_BACNET_BTL_PRETEST_PROCEDURE.md)
 
 ---
 
@@ -328,11 +328,11 @@ Task ID: BTL-001
 Tên: Thiết lập môi trường BTL pretest: VTS trên Windows VM + kết nối network với SOM
 Owner: Tester + Dev SOM
 Input: KVM VM setup (IOT-5674), bacnet-tools, VTS v3.x, SOM chạy mkddc-iobus với BACNET=ON
-Output: BTL pretest có thể chạy lặp lại theo quy trình 29_BACNET_BTL_PRETEST_PROCEDURE
+Output: BTL pretest có thể chạy lặp lại theo quy trình 30_BACNET_BTL_PRETEST_PROCEDURE
 Phụ thuộc: BAC-012 (BACnet transport hoạt động thật), IOT-5674 (Windows VM)
 ```
 
-Xem chi tiết quy trình tại [29_BACNET_BTL_PRETEST_PROCEDURE](29_BACNET_BTL_PRETEST_PROCEDURE.md).
+Xem chi tiết quy trình tại [30_BACNET_BTL_PRETEST_PROCEDURE](30_BACNET_BTL_PRETEST_PROCEDURE.md).
 
 ---
 
@@ -386,7 +386,7 @@ BAC-012 (cross-compile aarch64)   MOD-012 (cross-compile aarch64)
 - Deploy lên Orange Pi 5B, chạy smoke test trên board thật
 - Nếu có board + RS-485 converter: chạy test thiết bị thật theo §4.5
 
-**Sau khi xong việc 1–4:** update trạng thái các task trong `10_TASK_CHECKLIST.md` + bump Rev.
+**Sau khi xong việc 1–4:** update trạng thái các task trong `11_TASK_CHECKLIST.md` + bump Rev.
 
 ---
 
@@ -396,7 +396,7 @@ BAC-012 (cross-compile aarch64)   MOD-012 (cross-compile aarch64)
 - Setup KVM VM (xem IOT-5674 nếu chưa xong)
 - Cài VTS v3.x trên Windows VM
 - Kết nối VM cùng mạng với SOM đang chạy mkddc-iobus (BACNET=ON)
-- Thực hiện quy trình theo [29_BACNET_BTL_PRETEST_PROCEDURE](29_BACNET_BTL_PRETEST_PROCEDURE.md)
+- Thực hiện quy trình theo [30_BACNET_BTL_PRETEST_PROCEDURE](30_BACNET_BTL_PRETEST_PROCEDURE.md)
 - Lưu kết quả vào `docs/00_management/evidence/certification/bacnet-pretest-<date>.log`
 
 ---
@@ -407,7 +407,7 @@ Mỗi task chỉ được đánh Done khi:
 1. Build CI xanh với flag ON
 2. DoD checklist tick đủ (xem §3.5, §4.6, §5.2)
 3. Test log lưu tại `docs/00_management/evidence/`
-4. `10_TASK_CHECKLIST.md` cập nhật trạng thái + bump Rev
+4. `11_TASK_CHECKLIST.md` cập nhật trạng thái + bump Rev
 
 ---
 

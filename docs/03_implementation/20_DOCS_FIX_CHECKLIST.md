@@ -1,9 +1,10 @@
-# 19 — Docs Fix Checklist
+# 20 — Docs Fix Checklist
 ## MK-DDC-24 — Checklist cập nhật tài liệu SOM / IOP / Core / Web
 
 > **Document ID:** IMPL-DOCS-CHECKLIST-MK-DDC-24-VI
 > **Ngày tạo:** 2026-06-11
-> **Nguồn tổng hợp:** [18_DOCS_AUDIT_SOM_IMPLEMENTATION.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/18_DOCS_AUDIT_SOM_IMPLEMENTATION.md:1)
+> **Trạng thái:** Historical — tất cả items checked 2026-06-11
+> **Nguồn tổng hợp:** [19_DOCS_AUDIT_SOM_IMPLEMENTATION.md](/home/chuong/Desktop/DDC-PROJECT/docs/03_implementation/19_DOCS_AUDIT_SOM_IMPLEMENTATION.md:1)
 > **Mục tiêu:** danh sách ngắn để tick khi sửa docs, hoặc copy từng dòng vào tracker.
 
 ---
@@ -22,9 +23,9 @@
   Output cần có: tài liệu nói rõ `single-writer` hay `multi-writer`; nếu nhiều writer thì định nghĩa cơ chế mới, không dùng mô tả seqlock cũ mơ hồ.
   File chạm: `shared/kinexus_shm.h`, `06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md`, `01_SYSTEM_IMPLEMENTATION_OVERVIEW.md`, `00_IMPLEMENTATION_README.md`.
 
-- [x] `DOC-CRIT-02` ✔ 2026-06-11 (Contract Freeze batch — bảng bit0–6 + set/clear/sticky chốt tại iop_protocol.h + SWFW §4.3.1 + 05 §6.8 + 15_CONTRACT_FREEZE §3) — Freeze `FAULT_FLAGS` thành 1 bảng bitmask duy nhất
+- [x] `DOC-CRIT-02` ✔ 2026-06-11 (Contract Freeze batch — bảng bit0–6 + set/clear/sticky chốt tại iop_protocol.h + SWFW §4.3.1 + 05 §6.8 + 16_CONTRACT_FREEZE §3) — Freeze `FAULT_FLAGS` thành 1 bảng bitmask duy nhất
   Output cần có: bit `0..15`, tên, ý nghĩa, sticky/non-sticky, rule set/clear giống nhau giữa header/spec/guide/test.
-  File chạm: `shared/iop_protocol.h`, `SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md`, `05_IOP_UART_IMPLEMENTATION_GUIDE.md`, `11_INTEGRATION_TEST_PLAN.md`.
+  File chạm: `shared/iop_protocol.h`, `SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md`, `05_IOP_UART_IMPLEMENTATION_GUIDE.md`, `12_INTEGRATION_TEST_PLAN.md`.
 
 ---
 
@@ -34,9 +35,9 @@
   Output cần có: enum chuẩn trong header + bảng reason code trong spec/guide/test.
   File chạm: `shared/iop_protocol.h`, `SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md`, `05_IOP_UART_IMPLEMENTATION_GUIDE.md`.
 
-- [x] `DOC-HIGH-02` ✔ 2026-06-11 (Contract Freeze batch — rename mkddc_shm.h + path /dev/shm/mkddc_* + giữ kx_/magic — 15_CONTRACT_FREEZE §6) — Chốt SHM naming/path `kinexus` vs `mkddc`
+- [x] `DOC-HIGH-02` ✔ 2026-06-11 (Contract Freeze batch — rename mkddc_shm.h + path /dev/shm/mkddc_* + giữ kx_/magic — 16_CONTRACT_FREEZE §6) — Chốt SHM naming/path `kinexus` vs `mkddc`
   Output cần có: 1 path runtime duy nhất cho Rev A; ghi rõ rename policy cho file name, macro, struct, magic, shm path.
-  File chạm: `shared/kinexus_shm.h`, `00_IMPLEMENTATION_README.md`, `01_SYSTEM_IMPLEMENTATION_OVERVIEW.md`, `06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md`, `13_BRINGUP_GUIDE.md`.
+  File chạm: `shared/kinexus_shm.h`, `00_IMPLEMENTATION_README.md`, `01_SYSTEM_IMPLEMENTATION_OVERVIEW.md`, `06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md`, `14_BRINGUP_GUIDE.md`.
 
 - [x] `DOC-HIGH-03` ✔ 2026-06-11 (batch 2 — banner LEGACY + sửa nội dung trực tiếp: SW_REQ §2.2 (SHM layout legacy → mkddc_shm.h), SW_ARCH (freeze banner + §1.1/§1.2), SW_IODRIVER (reference-only banner)) — Gắn nhãn hoặc cập nhật lại spec cũ đang mâu thuẫn kiến trúc mới
   Output cần có: banner `legacy/reference-only` hoặc nội dung đã update theo `mkddc-*`, `graph runtime`, SHM layout mới.
@@ -44,15 +45,15 @@
 
 - [x] `DOC-HIGH-04` ✔ 2026-06-11 (Contract Freeze batch — iobus tạo SHM chạy trước, core After=mkddc-iobus — systemd đầy đủ 06 §10 + 07 §9) — Chốt startup order và dependency giữa `mkddc-core` và `mkddc-iobus`
   Output cần có: thứ tự boot thống nhất giữa architecture spec, systemd mẫu, bring-up guide.
-  File chạm: `SW_ARCH_SPEC_MK-DDC-24_VI.md`, `13_BRINGUP_GUIDE.md`, `03_PHASE_PLAN.md`.
+  File chạm: `SW_ARCH_SPEC_MK-DDC-24_VI.md`, `14_BRINGUP_GUIDE.md`, `03_PHASE_PLAN.md`.
 
 - [x] `DOC-HIGH-05` ✔ 2026-06-11 (batch 2 — chốt: web/commissioning LUÔN vào mức 2 Local manual, REST bỏ priority 1..16, BACnet array → mức 3; sửa openapi PUT /points + 08 §1.2 + 12 DoD) — Chuẩn hóa priority model giữa core/web/OpenAPI/DoD
   Output cần có: bảng priority chính thức, mapping `commissioning/manual/BACnet/web`, rule có cho client tự chọn priority hay không.
-  File chạm: `07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md`, `08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md`, `12_DEFINITION_OF_DONE.md`, `openapi.yaml`.
+  File chạm: `07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md`, `09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md`, `13_DEFINITION_OF_DONE.md`, `openapi.yaml`.
 
 - [x] `DOC-HIGH-06` ✔ 2026-06-11 (batch 2 — freeze 3 role admin/operator/viewer + ma trận quyền 08 §1.1; sửa openapi (đã đúng) + users.conf example + bỏ role engineer) — Freeze RBAC/role matrix
   Output cần có: role list chính thức, quyền từng role cho login/view/config/commissioning/deploy/ack alarm.
-  File chạm: `08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md`, `openapi.yaml`, `CONFIG_SCHEMA_MK-DDC-24_VI.md`.
+  File chạm: `09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md`, `openapi.yaml`, `CONFIG_SCHEMA_MK-DDC-24_VI.md`.
 
 ---
 
@@ -68,19 +69,19 @@
 
 - [x] `DOC-MED-03` ✔ 2026-06-11 (batch 2 — contract đầy đủ tại 07 §8: JSON lines /run/mkddc/core.sock, request/response schema, correlation id, timeout 3s, error codes, audit mapping; 08 reference) — Viết IPC contract riêng cho `web <-> core`
   Output cần có: path socket, request/response schema, timeout, error code, correlation id, result mapping cho audit.
-  File chạm: `07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md`, `08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md`, file contract mới nếu cần.
+  File chạm: `07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md`, `09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md`, file contract mới nếu cần.
 
 - [x] `DOC-MED-04` ✔ 2026-06-11 (batch 2 — SystemStatus tách versions{mcu_fw,iobus,core,web} + scan{count,overrun} + ghi nguồn metrics — openapi + 08 §3) — Mở rộng `SystemStatus` để phân biệt version và source metrics
   Output cần có: fields rõ cho `mcu_fw_version`, `core_version`, `iobus_version`, `web_version` nếu cần; metrics nào từ iobus, metrics nào từ core.
-  File chạm: `08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md`, `openapi.yaml`.
+  File chạm: `09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md`, `openapi.yaml`.
 
 - [x] `DOC-MED-05` ✔ 2026-06-11 (batch 2 — spec tool tools/shm_dump_io (seqlock reader, decode field+fault bit, --watch/--json, exit code) tại 06 §11; 13 §10 dùng tool thay cat|xxd) — Bổ sung tool/flow đọc SHM phục vụ bring-up
   Output cần có: tool hoặc format dump chuẩn, không chỉ `cat|xxd`.
-  File chạm: `13_BRINGUP_GUIDE.md`, có thể thêm `tools/` hoặc file hướng dẫn riêng.
+  File chạm: `14_BRINGUP_GUIDE.md`, có thể thêm `tools/` hoặc file hướng dẫn riêng.
 
-- [x] `DOC-MED-06` ✔ 2026-06-11 (Contract Freeze batch — fake MCU/PTY checklist 10 bước 06 §11.1 + 03 P2 + 16_QUICK_START §5) — Viết no-board bring-up path cho dev SOM
+- [x] `DOC-MED-06` ✔ 2026-06-11 (Contract Freeze batch — fake MCU/PTY checklist 10 bước 06 §11.1 + 03 P2 + 17_QUICK_START §5) — Viết no-board bring-up path cho dev SOM
   Output cần có: fake MCU/PTY flow chạy được `handshake -> GET_IO -> SHM write -> SET_DO` khi chưa có board.
-  File chạm: `06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md`, `03_PHASE_PLAN.md`, `13_BRINGUP_GUIDE.md`.
+  File chạm: `06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md`, `03_PHASE_PLAN.md`, `14_BRINGUP_GUIDE.md`.
 
 - [x] `DOC-MED-07` ✔ 2026-06-11 (batch 2 — CONFIG_SCHEMA: bảng owner/reader/reload từng file config + đổi hết io-driver/field-bus service → mkddc-iobus) — Chuẩn hóa tên service mới trong config docs
   Output cần có: bỏ cách gọi `io-driver`, `field-bus service` cũ; thay bằng `mkddc-iobus`, `mkddc-core`, `mkddc-web` và nêu rõ service owner từng file config.

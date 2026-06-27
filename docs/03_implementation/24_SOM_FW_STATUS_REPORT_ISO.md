@@ -44,8 +44,8 @@ Lý do chênh lệch: SOM software đã sẵn sàng và kiểm định kỹ tron
 
 | Nhóm | Bằng chứng |
 |---|---|
-| Kế hoạch SOM source | `docs/03_implementation/21_SOM_SRC_IMPLEMENTATION_PLAN.md` |
-| Task checklist | `docs/03_implementation/10_TASK_CHECKLIST.md` |
+| Kế hoạch SOM source | `docs/03_implementation/22_SOM_SRC_IMPLEMENTATION_PLAN.md` |
+| Task checklist | `docs/03_implementation/11_TASK_CHECKLIST.md` |
 | Yêu cầu firmware MCU để phân định phạm vi | `docs/01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md` |
 | Contract IOP | `shared/iop_protocol.h` |
 | Contract SHM | `shared/mkddc_shm.h` |
@@ -131,9 +131,9 @@ tools/test_reload_e2e.sh
 | GAP-01 | Kiểm thử UART/IOP với board MCU thật | Cao | Bắt buộc trước field test |
 | GAP-02 | Long-run 24h, memory leak, jitter, scan overrun trên SOM thật | Cao | Bắt buộc trước release candidate |
 | GAP-03 | Sửa `tools/test_reload_e2e.sh` để chọn đúng PID live, loại zombie | Trung bình | Quick fix trước khi báo PASS E2E reload |
-| GAP-04 | Graph component còn thiếu: OnDelay, OffDelay, Interlock, ManualAuto, RuntimeCounter, PulseCounter, SafeState, AlarmHigh/Low/Delay, persist state | Trung bình-Cao | Plan Active: [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md); chờ code COR-009/010 |
-| GAP-05 | Modbus RTU master trong iobus | Trung bình-Cao | Plan Active: [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md); chờ code MOD-001..011 |
-| GAP-06 | BACnet full: priority[16], relinquish_default, reliability, BACnet/IP datalink | Cao | Plan Active: [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md); chờ code BAC-001..011 + BTL pretest |
+| GAP-04 | Graph component còn thiếu: OnDelay, OffDelay, Interlock, ManualAuto, RuntimeCounter, PulseCounter, SafeState, AlarmHigh/Low/Delay, persist state | Trung bình-Cao | Plan Active: [23_GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md); chờ code COR-009/010 |
+| GAP-05 | Modbus RTU master trong iobus | Trung bình-Cao | Plan Active: [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md); chờ code MOD-001..011 |
+| GAP-06 | BACnet full: priority[16], relinquish_default, reliability, BACnet/IP datalink | Cao | Plan Active: [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md); chờ code BAC-001..011 + BTL pretest |
 | GAP-07 | Sensor scaling/calibration thật cho PT100/PT1000/NTC và IO analog trên board | Cao | Cần hardware bench test |
 | GAP-08 | Alarm subscriber/ack workflow production | Trung bình | Phụ thuộc web/backend hoặc alarm service |
 | GAP-09 | iobus SIGHUP reload / runtime config reload | Trung bình | Unit file ghi chưa hỗ trợ ExecReload iobus |

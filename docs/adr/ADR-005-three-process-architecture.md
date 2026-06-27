@@ -77,6 +77,19 @@ leads, code follows.**
 Rev A targets a **1 s** default scan; deterministic sub-100 ms fast IO and
 PREEMPT_RT tuning are Rev B scope and noted as such, not silently assumed.
 
+## Consequences
+
+**Positive:**
+- Fault isolation: crash in `mkddc-iobus` (UART fault) does not kill `mkddc-core` real-time loop.
+- Restartability: each process can be independently restarted via systemd without full reboot.
+- Real-time isolation: `mkddc-core` runs `SCHED_FIFO` free from network I/O jitter.
+- Separation of concerns: BACnet/Modbus network latency is absorbed in `mkddc-iobus`, not core.
+
+**Negative / Trade-offs:**
+- IPC overhead via shared memory (seqlock) adds ~50–200 ns read/write per scan cycle.
+- Header/code rename (`kinexus_shm.h` → `mkddc_shm.h`) requires tracked atomic change.
+- Three-process deployment means three systemd units to maintain and monitor.
+
 ## Rejected alternatives
 
 1. **Seven functional services (per product-definition section 5).** Rejected:

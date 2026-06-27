@@ -1,4 +1,4 @@
-# 27 — IO Calibration Test Plan
+# 28 — IO Calibration Test Plan
 ## MK-DDC-24 — Quy trình hiệu chuẩn và kiểm nghiệm bo mạch IO vật lý (Rev A)
 
 > **Document ID:** VAL-IO-CALIBRATION-MK-DDC-24-VI  

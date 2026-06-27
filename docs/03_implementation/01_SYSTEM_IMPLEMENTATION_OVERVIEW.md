@@ -3,6 +3,7 @@
 
 > **Document ID:** IMPL-OVERVIEW-MK-DDC-24-VI
 > **Phiên bản:** 1.1 | 2026-06-13 (chuẩn hóa BACnet/Modbus theo docs 24/25) · 1.0 | 2026-06-10
+> **Trạng thái:** Active
 > **Đọc trước:** [00_README](00_IMPLEMENTATION_README.md)
 
 ---
@@ -77,7 +78,7 @@
 | **Ghi** | snapshot IO vào `kx_io_shm` (seqlock); đọc `ao_setpoint[]`/`do_cmd[]` từ shm để gửi MCU |
 | **Cũng làm** | Modbus RTU master (poll async → ext cache; doc 25); BACnet/IP network datalink/callbacks (doc 24) |
 | **KHÔNG làm** | Không quyết định output theo logic (đó là việc core); chỉ thực thi lệnh đã được core quyết |
-| Trace | [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md), [24_BACNET](24_BACNET_IMPLEMENTATION_PLAN.md), [25_MODBUS](25_MODBUS_IMPLEMENTATION_PLAN.md), [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) |
+| Trace | [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md), [24_BACNET](25_BACNET_IMPLEMENTATION_PLAN.md), [25_MODBUS](26_MODBUS_IMPLEMENTATION_PLAN.md), [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) |
 
 ### 2.3 mkddc-core (SOM, SCHED_FIFO)
 
@@ -96,7 +97,7 @@
 | **Nhiệm vụ** | REST API; Web UI; config (form/JSON); commissioning; validator (library); audit log |
 | **Gửi lệnh** | qua IPC tới **core** (command/setpoint), **không** ghi thẳng IO |
 | **KHÔNG làm** | Không mở UART; không nói chuyện trực tiếp với MCU; không bypass core |
-| Trace | [08_WEB](08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md), [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) |
+| Trace | [09_WEB](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md), [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) |
 
 ---
 
@@ -111,7 +112,7 @@
 | web ↔ core | Unix socket / REST-internal (command/setpoint + read) | (định nghĩa ở [07_CORE §IPC](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md)) | web→core (cmd), core→web (read) | |
 | iobus → all | alarm bus `/run/mkddc/alarm.sock` (JSON lines) | SW_ARCH §2.3 | iobus/core | web |
 
-> Rename theo ADR-005: `kinexus_*` → `mkddc_*` — ĐÃ thực hiện 2026-06-11 (15_CONTRACT_FREEZE §6). Hợp đồng struct/seqlock
+> Rename theo ADR-005: `kinexus_*` → `mkddc_*` — ĐÃ thực hiện 2026-06-11 (16_CONTRACT_FREEZE §6). Hợp đồng struct/seqlock
 > **không đổi**, chỉ đổi tên path/header.
 
 ---
