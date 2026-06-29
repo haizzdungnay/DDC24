@@ -1,15 +1,23 @@
 import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { useI18n } from '../i18n'
+import { cn } from '../utils'
 import { Button } from './Button'
 
-export function Modal({ open, title, children, confirmLabel, cancelLabel, danger, onConfirm, onClose }: {
+const sizeClass = {
+  md: 'max-w-lg',
+  lg: 'max-w-2xl',
+  xl: 'max-w-4xl'
+}
+
+export function Modal({ open, title, children, confirmLabel, cancelLabel, danger, size = 'md', onConfirm, onClose }: {
   open: boolean
   title: string
   children: ReactNode
   confirmLabel?: string
   cancelLabel?: string
   danger?: boolean
+  size?: keyof typeof sizeClass
   onConfirm?: () => void
   onClose: () => void
 }) {
@@ -23,7 +31,7 @@ export function Modal({ open, title, children, confirmLabel, cancelLabel, danger
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="panel-shadow w-full max-w-lg rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-5"
+        className={cn('panel-shadow w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-5', sizeClass[size])}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">

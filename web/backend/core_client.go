@@ -9,13 +9,14 @@ import (
 	"math"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 )
 
 const (
-	kxShmMagic    = 0x4B584401
+	kxShmMagic    = 0x4B584402
 	defaultIOShm  = "/dev/shm/mkddc_io_shm"
 	defaultPLCShm = "/dev/shm/mkddc_plc_shm"
 )
@@ -109,13 +110,12 @@ func (c *CoreClient) ReadPoints(ctx context.Context) ([]PointDTO, error) {
 	if err != nil {
 		return []PointDTO{}, nil
 	}
-	if len(plcData) < kxPlcShmMinLen || binary.LittleEndian.Uint32(plcData[0:4]) != kxShmMagic {
+	if !validSHM(plcData, kxPlcShmMinLen) {
 		return []PointDTO{}, nil
 	}
 	// Read io_shm for AI unit strings (best-effort; nil on failure = empty units)
 	var ioData []byte
-	if raw, err2 := os.ReadFile(c.IOShm); err2 == nil &&
-		len(raw) >= kxIOShmMinLen && binary.LittleEndian.Uint32(raw[0:4]) == kxShmMagic {
+	if raw, err2 := os.ReadFile(c.IOShm); err2 == nil && validSHM(raw, kxIOShmMinLen) {
 		ioData = raw
 	}
 	return decodePoints(plcData, ioData), nil
@@ -137,7 +137,7 @@ func (c *CoreClient) ForcePoint(ctx context.Context, id string, value any, relea
 	cmd := map[string]any{
 		"id":     atomic.AddUint64(&webCommandID, 1),
 		"op":     op,
-		"point":  id,
+		"point":  coreCommandPointID(id),
 		"source": "manual",
 		"user":   "web",
 	}
@@ -206,14 +206,14 @@ func (c *CoreClient) readIOStatus() (IOPStatus, error) {
 	if err != nil {
 		return IOPStatus{Status: "fault"}, err
 	}
-	if len(data) < 216 || binary.LittleEndian.Uint32(data[0:4]) != kxShmMagic {
+	if !validSHM(data, kxIOShmMinLen) {
 		return IOPStatus{Status: "fault"}, fmt.Errorf("invalid io shm")
 	}
 	return IOPStatus{
-		Status:    mapIOPStatus(data[190]),
-		CRCErrors: binary.LittleEndian.Uint32(data[200:204]),
-		Timeouts:  binary.LittleEndian.Uint32(data[204:208]),
-		SeqErrors: binary.LittleEndian.Uint32(data[208:212]),
+		Status:    mapIOPStatus(data[offIOPStatus]),
+		CRCErrors: binary.LittleEndian.Uint32(data[offIOCRCErrors : offIOCRCErrors+4]),
+		Timeouts:  binary.LittleEndian.Uint32(data[offIOTimeouts : offIOTimeouts+4]),
+		SeqErrors: binary.LittleEndian.Uint32(data[offIOSeqErrors : offIOSeqErrors+4]),
 	}, nil
 }
 
@@ -222,15 +222,17 @@ func (c *CoreClient) readPLCStatus() (ScanStatus, error) {
 	if err != nil {
 		return ScanStatus{}, err
 	}
-	const scanCountOffset = 8660
-	const scanOverrunOffset = 8664
-	if len(data) < scanOverrunOffset+4 || binary.LittleEndian.Uint32(data[0:4]) != kxShmMagic {
+	if !validSHM(data, kxPlcShmMinLen) {
 		return ScanStatus{}, fmt.Errorf("invalid plc shm")
 	}
 	return ScanStatus{
-		Count:   binary.LittleEndian.Uint32(data[scanCountOffset : scanCountOffset+4]),
-		Overrun: binary.LittleEndian.Uint32(data[scanOverrunOffset : scanOverrunOffset+4]),
+		Count:   binary.LittleEndian.Uint32(data[offPLCScanCount : offPLCScanCount+4]),
+		Overrun: binary.LittleEndian.Uint32(data[offPLCScanOverrun : offPLCScanOverrun+4]),
 	}, nil
+}
+
+func validSHM(data []byte, minLen int) bool {
+	return len(data) >= minLen && binary.LittleEndian.Uint32(data[0:4]) == kxShmMagic
 }
 
 func degradedPoint(id string, value any, source string) PointDTO {
@@ -249,17 +251,94 @@ func degradedPoint(id string, value any, source string) PointDTO {
 func pointKindFromID(id string) string {
 	upper := strings.ToUpper(id)
 	switch {
-	case strings.HasPrefix(upper, "AI"):
-		return "AI"
+	case strings.HasPrefix(upper, "UI"), strings.HasPrefix(upper, "AI"):
+		return "UI"
 	case strings.HasPrefix(upper, "AO"):
 		return "AO"
 	case strings.HasPrefix(upper, "DI"), strings.HasPrefix(upper, "BI"):
-		return "DI"
+		return "UI"
 	case strings.HasPrefix(upper, "DO"), strings.HasPrefix(upper, "BO"):
 		return "DO"
 	default:
 		return "virtual"
 	}
+}
+
+func parsePointID(id string) (string, int, bool) {
+	raw := strings.ToUpper(strings.TrimSpace(id))
+	i := 0
+	for i < len(raw) && raw[i] >= 'A' && raw[i] <= 'Z' {
+		i++
+	}
+	if i == 0 || i >= len(raw) {
+		return "", 0, false
+	}
+	digits := raw[i:]
+	if strings.HasPrefix(digits, "-") || strings.HasPrefix(digits, "_") {
+		digits = digits[1:]
+	}
+	channel, err := strconv.Atoi(digits)
+	return raw[:i], channel, err == nil && channel > 0
+}
+
+func formatPointID(prefix string, channel int) string {
+	return fmt.Sprintf("%s-%02d", prefix, channel)
+}
+
+func canonicalPointID(id string) string {
+	prefix, channel, ok := parsePointID(id)
+	if !ok {
+		return strings.TrimSpace(id)
+	}
+	switch prefix {
+	case "UI", "AI":
+		return formatPointID("UI", channel)
+	case "DI", "BI":
+		return formatPointID("UI", kxNUI+channel)
+	case "AO", "DO":
+		return formatPointID(prefix, channel)
+	default:
+		return strings.TrimSpace(id)
+	}
+}
+
+func legacyPointIDAliases(id string) []string {
+	prefix, channel, ok := parsePointID(id)
+	if !ok {
+		return nil
+	}
+	switch prefix {
+	case "UI":
+		if channel <= kxNUI {
+			return []string{fmt.Sprintf("AI%d", channel), formatPointID("AI", channel)}
+		}
+		if channel <= kxNUI+kxNDI {
+			diChannel := channel - kxNUI
+			return []string{fmt.Sprintf("DI%d", diChannel), formatPointID("DI", diChannel)}
+		}
+	case "AO", "DO":
+		return []string{fmt.Sprintf("%s%d", prefix, channel)}
+	}
+	return nil
+}
+
+func coreCommandPointID(id string) string {
+	prefix, channel, ok := parsePointID(id)
+	if !ok {
+		return strings.TrimSpace(id)
+	}
+	switch prefix {
+	case "UI":
+		if channel <= kxNUI {
+			return fmt.Sprintf("AI%d", channel)
+		}
+		if channel <= kxNUI+kxNDI {
+			return fmt.Sprintf("DI%d", channel-kxNUI)
+		}
+	case "AO", "DO", "AI", "DI":
+		return fmt.Sprintf("%s%d", prefix, channel)
+	}
+	return strings.TrimSpace(id)
 }
 
 func mapIOPStatus(raw byte) string {
@@ -276,7 +355,7 @@ func mapIOPStatus(raw byte) string {
 // ---- kx_plc_shm point table offsets ----
 
 const (
-	kxNUI  = 8
+	kxNUI  = 16
 	kxNDI  = 8
 	kxNAO  = 4
 	kxNDO  = 4
@@ -301,12 +380,12 @@ const (
 	//   ext[64] at offset 6096 (kx_ext_point_t=40b): 64*40=2560
 	//   ext_count(2)+plc_running(1)+pad(1)+scan_count(4)+scan_overrun(4)=12 -> total 8668+4pad=8672
 	offAI  = 16
-	offBI  = 16 + kxNUI*kxPointSize                                                                                                     // 624
-	offAO  = 16 + kxNUI*kxPointSize + kxNDI*kxPointSize                                                                                 // 1232
-	offBO  = 16 + kxNUI*kxPointSize + kxNDI*kxPointSize + kxNAO*kxPointSize                                                             // 1536
-	offAV  = 16 + kxNUI*kxPointSize + kxNDI*kxPointSize + kxNAO*kxPointSize + kxNDO*kxPointSize                                         // 1840
-	offBV  = 16 + kxNUI*kxPointSize + kxNDI*kxPointSize + kxNAO*kxPointSize + kxNDO*kxPointSize + kxNAV*kxPointSize                     // 4272
-	offMSV = 16 + kxNUI*kxPointSize + kxNDI*kxPointSize + kxNAO*kxPointSize + kxNDO*kxPointSize + kxNAV*kxPointSize + kxNBV*kxPointSize // 5488
+	offBI  = offAI + kxNUI*kxPointSize
+	offAO  = offBI + kxNDI*kxPointSize
+	offBO  = offAO + kxNAO*kxPointSize
+	offAV  = offBO + kxNDO*kxPointSize
+	offBV  = offAV + kxNAV*kxPointSize
+	offMSV = offBV + kxNBV*kxPointSize
 
 	// kx_point_t field offsets within a point (76 bytes):
 	offValue      = 0  // float32
@@ -315,14 +394,20 @@ const (
 	offQuality    = 72 // uint8
 	offReliab     = 73 // uint8
 
-	kxPlcShmMinLen = 8672
+	offPLCScanCount   = 9268
+	offPLCScanOverrun = 9272
+	kxPlcShmMinLen    = 9280
 
 	// kx_io_shm_t offsets cÃ¡ÂºÂ§n cho ReadPoints() lÃ¡ÂºÂ¥y ui_unit[8][8]:
 	//   ui_unit at offset 56 (header16 + ui_value8*4=32 + ui_quality8=8 = 56)
 	//   ui_unit[i] = data[offIOUnit + i*8 : offIOUnit+i*8+8] (NUL-term string, max 8B)
-	offIOUnit     = 56
-	kxIOUnitSize  = 8
-	kxIOShmMinLen = 216
+	offIOUnit      = 96
+	kxIOUnitSize   = 8
+	offIOPStatus   = 294
+	offIOCRCErrors = 304
+	offIOTimeouts  = 308
+	offIOSeqErrors = 312
+	kxIOShmMinLen  = 320
 )
 
 // kx_quality_t ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ DTO quality string
@@ -375,32 +460,24 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 	if len(data) < kxPlcShmMinLen {
 		return nil
 	}
-	pts := make([]PointDTO, 0, kxNUI+kxNDI+kxNAO+kxNDO+kxNAV+kxNBV+kxNMSV)
+	pts := make([]PointDTO, 0, kxNUI+kxNAO+kxNDO+kxNAV+kxNBV+kxNMSV)
 
 	// AI[0..7]
 	for i := 0; i < kxNUI; i++ {
-		id := fmt.Sprintf("AI%d", i+1)
+		id := formatPointID("UI", i+1)
 		dto := decodePoint(data, offAI+i*kxPointSize, id, id)
 		dto.Unit = ioUnit(ioData, i)
 		pts = append(pts, dto)
 	}
 	// BI[0..7] ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â binary, bool as float
-	for i := 0; i < kxNDI; i++ {
-		id := fmt.Sprintf("DI%d", i+1)
-		dto := decodePoint(data, offBI+i*kxPointSize, id, id)
-		if v, ok := dto.Value.(float32); ok {
-			dto.Value = v > 0.5
-		}
-		pts = append(pts, dto)
-	}
 	// AO[0..3] ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â analog output (commandable)
 	for i := 0; i < kxNAO; i++ {
-		id := fmt.Sprintf("AO%d", i+1)
+		id := formatPointID("AO", i+1)
 		pts = append(pts, decodePoint(data, offAO+i*kxPointSize, id, id))
 	}
 	// DO[0..3] ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â digital output feedback (bo[] array)
 	for i := 0; i < kxNDO; i++ {
-		id := fmt.Sprintf("DO%d", i+1)
+		id := formatPointID("DO", i+1)
 		dto := decodePoint(data, offBO+i*kxPointSize, id, id)
 		if v, ok := dto.Value.(float32); ok {
 			dto.Value = v > 0.5

@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -65,6 +66,90 @@ static bool get_uint(const std::string& s, const std::string& key, uint32_t* out
     return true;
 }
 
+static bool get_int(const std::string& s, const std::string& key, int* out, size_t from = 0)
+{
+    size_t p = find_value(s, key, from);
+    if (p == std::string::npos) return false;
+    while (p < s.size() && std::isspace(static_cast<unsigned char>(s[p]))) p++;
+    if (p >= s.size() || (!std::isdigit(static_cast<unsigned char>(s[p])) && s[p] != '-')) return false;
+    char* end = nullptr;
+    const long v = std::strtol(s.c_str() + p, &end, 10);
+    if (end == s.c_str() + p) return false;
+    *out = static_cast<int>(v);
+    return true;
+}
+
+static bool get_float(const std::string& s, const std::string& key, float* out, size_t from = 0)
+{
+    size_t p = find_value(s, key, from);
+    if (p == std::string::npos) return false;
+    while (p < s.size() && std::isspace(static_cast<unsigned char>(s[p]))) p++;
+    if (p >= s.size()) return false;
+    char* end = nullptr;
+    const double v = std::strtod(s.c_str() + p, &end);
+    if (end == s.c_str() + p) return false;
+    *out = static_cast<float>(v);
+    return true;
+}
+
+static bool get_bool(const std::string& s, const std::string& key, bool* out, size_t from = 0)
+{
+    size_t p = find_value(s, key, from);
+    if (p == std::string::npos) return false;
+    while (p < s.size() && std::isspace(static_cast<unsigned char>(s[p]))) p++;
+    if (s.compare(p, 4, "true") == 0) { *out = true; return true; }
+    if (s.compare(p, 5, "false") == 0) { *out = false; return true; }
+    return false;
+}
+
+static bool next_object(const std::string& arr, size_t* from, std::string* out)
+{
+    size_t p = arr.find('{', *from);
+    if (p == std::string::npos) return false;
+    int depth = 0;
+    bool in_str = false;
+    for (size_t i = p; i < arr.size(); i++) {
+        const char c = arr[i];
+        if (in_str) {
+            if (c == '\\') i++;
+            else if (c == '"') in_str = false;
+            continue;
+        }
+        if (c == '"') in_str = true;
+        else if (c == '{') depth++;
+        else if (c == '}') {
+            depth--;
+            if (depth == 0) {
+                *out = arr.substr(p, i - p + 1);
+                *from = i + 1;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static int entry_index(const std::string& entry, const char* prefix, int positional)
+{
+    int ch = 0;
+    if (get_int(entry, "ch", &ch)) return ch - 1;
+
+    std::string id;
+    if (get_string(entry, "id", &id) &&
+        id.size() > std::strlen(prefix) &&
+        id.compare(0, std::strlen(prefix), prefix) == 0) {
+        return std::atoi(id.c_str() + std::strlen(prefix)) - 1;
+    }
+    return positional;
+}
+
+static uint8_t clamp_u8(int v, int lo, int hi)
+{
+    if (v < lo) return static_cast<uint8_t>(lo);
+    if (v > hi) return static_cast<uint8_t>(hi);
+    return static_cast<uint8_t>(v);
+}
+
 /* Cắt array JSON `"key": [ ... ]` (trả chuỗi giữa [ ]) */
 static bool get_array(const std::string& s, const std::string& key, std::string* out)
 {
@@ -123,53 +208,51 @@ bool load_config(const std::string& path, bool must_exist, IobusConfig* out)
     if (get_string(s, "log_level", &str))         out->log_level = str;
     if (get_uint(s, "rt_priority", &u))           out->rt_priority = static_cast<int>(u);
 
-    /* Lấy index kênh từ "id":"UI<n>"/"AO<n>" trong entry (schema 06 §4); entry
-     * thiếu id → positional. KHÔNG positional mù khi config sparse (kẻo lệch kênh
-     * với core/io_safe_state — analysis review PR#12). */
-    auto entry_index = [](const std::string& arr, size_t entry_from, size_t value_pos,
-                          const char* prefix, int positional) -> int {
-        const size_t idp = find_value(arr, "id", entry_from);
-        std::string id;
-        if (idp != std::string::npos && idp < value_pos &&
-            get_string(arr, "id", &id, entry_from) &&
-            id.size() > std::strlen(prefix) &&
-            id.compare(0, std::strlen(prefix), prefix) == 0) {
-            return std::atoi(id.c_str() + std::strlen(prefix)) - 1;
-        }
-        return positional;
-    };
-
-    /* ui[]: sensor_type theo id "UI<n>" (fallback thứ tự xuất hiện) */
+    /* ui[]: web schema ch/type/u1-u7; legacy id/sensor_type still accepted. */
     std::string arr;
     if (get_array(s, "ui", &arr)) {
         size_t from = 0;
         int positional = 0;
-        for (;;) {
-            const size_t p = find_value(arr, "sensor_type", from);
-            if (p == std::string::npos) break;
-            std::string t;
-            if (!get_string(arr, "sensor_type", &t, from)) break;
-            const int i = entry_index(arr, from, p, "UI", positional);
+        std::string entry;
+        while (next_object(arr, &from, &entry)) {
+            const int i = entry_index(entry, "UI", positional);
             positional = i + 1;
-            if (i >= 0 && i < KX_N_UI) {
-                out->ui_sensor[i] = sensor_type_from_string(t.c_str());
-                if (out->ui_sensor[i] == SensorType::UNKNOWN)
-                    std::fprintf(stderr, "ERROR config.bad_sensor_type ui=%d type=%s (quality=BAD)\n",
-                                 i + 1, t.c_str());
+            if (i < 0 || i >= KX_N_UI) continue;
+
+            std::string t;
+            if (get_string(entry, "type", &t) || get_string(entry, "sensor_type", &t)) {
+                out->ui[i].sensor = sensor_type_from_string(t.c_str());
+                if (out->ui[i].sensor == SensorType::UNKNOWN)
+                    std::fprintf(stderr, "ERROR config.bad_sensor_type ui=%d type=%s (quality=BAD)\n", i + 1, t.c_str());
             }
-            from = p;
+
+            bool b = false;
+            if (get_bool(entry, "enabled", &b)) out->ui[i].enabled = b;
+            if (get_bool(entry, "invert", &b)) out->ui[i].invert = b;
+
+            float f = 0.0f;
+            if (get_float(entry, "scale_lo", &f)) out->ui[i].scale_lo = f;
+            if (get_float(entry, "scale_hi", &f)) out->ui[i].scale_hi = f;
+            if (get_float(entry, "sensor_cal", &f)) out->ui[i].sensor_cal = f;
+
+            int n = 0;
+            if (get_int(entry, "range_mult", &n)) out->ui[i].range_mult = clamp_u8(n, 0, 5);
+            if (get_int(entry, "filter_samples", &n)) out->ui[i].filter_samples = clamp_u8(n, 0, 100);
+            if (get_int(entry, "math_func", &n)) out->ui[i].math_func = clamp_u8(n, 0, 3);
+
+            std::string unit;
+            if (get_string(entry, "unit", &unit)) out->ui[i].unit = unit;
         }
     }
     /* ao[]: mode theo id "AO<n>" (fallback thứ tự) */
     if (get_array(s, "ao", &arr)) {
         size_t from = 0;
         int positional = 0;
-        for (;;) {
-            const size_t p = find_value(arr, "mode", from);
-            if (p == std::string::npos) break;
+        std::string entry;
+        while (next_object(arr, &from, &entry)) {
             std::string m;
-            if (!get_string(arr, "mode", &m, from)) break;
-            const int i = entry_index(arr, from, p, "AO", positional);
+            if (!get_string(entry, "mode", &m)) continue;
+            const int i = entry_index(entry, "AO", positional);
             positional = i + 1;
             if (i >= 0 && i < KX_N_AO) {
                 if (m == "4-20mA")     out->ao_mode[i] = AoMode::MA4_20;
@@ -178,7 +261,6 @@ bool load_config(const std::string& path, bool must_exist, IobusConfig* out)
                     std::fprintf(stderr, "WARN  config.bad_ao_mode ao=%d mode=%s (giữ 0-10V)\n",
                                  i + 1, m.c_str());
             }
-            from = p;
         }
     }
 

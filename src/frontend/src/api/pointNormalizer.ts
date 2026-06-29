@@ -39,9 +39,19 @@ function pointChannel(raw: Record<string, unknown>): number | undefined {
   return numberFrom(raw.channel ?? raw.ch ?? raw.index ?? raw.idx)
 }
 
+function idChannel(id: string): number | undefined {
+  const numeric = numberFrom(id)
+  if (numeric !== undefined && numeric > 0) return numeric
+  const match = id.trim().match(/^[A-Z]+[-_]?(\d+)$/i)
+  if (!match) return undefined
+  const channel = Number(match[1])
+  return Number.isFinite(channel) && channel > 0 ? channel : undefined
+}
+
 function pointKind(raw: Record<string, unknown>, rawId: string, channel?: number): Point['kind'] {
   const rawKind = raw.kind ?? raw.type ?? raw.point_type ?? raw.pointType ?? raw.object_type ?? raw.objectType
-  const direct = normalizeKind(rawKind ?? rawId.split(/[-_.]/)[0])
+  const idPrefix = rawId.trim().match(/^([A-Z]+)[-_]?\d+$/i)?.[1]
+  const direct = normalizeKind(rawKind ?? idPrefix ?? rawId.split(/[-_.]/)[0])
   if (direct !== 'virtual') return direct
 
   const text = String(rawKind ?? rawId).toLowerCase()
@@ -55,12 +65,13 @@ function pointKind(raw: Record<string, unknown>, rawId: string, channel?: number
 function pointId(raw: Record<string, unknown>, kind: Point['kind'], channel?: number): string {
   const rawId = raw.id ?? raw.point_id ?? raw.pointId ?? raw.object_id ?? raw.objectId ?? raw.name ?? raw.label
   const id = rawId === undefined || rawId === null ? '' : String(rawId).trim()
-  const inferredChannel = channel ?? numberFrom(id)
+  const rawKind = String(raw.kind ?? raw.type ?? raw.point_type ?? raw.pointType ?? id).toUpperCase()
+  const inferredChannel = channel ?? idChannel(id)
   if (kind === 'UI') {
-    if (inferredChannel) return uiNode(inferredChannel)
+    if (inferredChannel) return uiNode(rawKind.startsWith('DI') || rawKind.startsWith('BI') ? inferredChannel + 8 : inferredChannel)
     return normalizeInputPointId(id || 'UNKNOWN')
   }
-  if ((kind === 'AO' || kind === 'DO') && inferredChannel && (!id || /^\d+$/.test(id))) {
+  if ((kind === 'AO' || kind === 'DO') && inferredChannel) {
     return `${kind}-${String(inferredChannel).padStart(2, '0')}`
   }
   return id || 'UNKNOWN'

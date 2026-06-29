@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -89,9 +89,9 @@
 - `ui[].filter_samples` không bắt buộc, kiểu int 0..100, số mẫu lọc EasySet u5.
 - `ui[].sensor_cal` không bắt buộc, kiểu number -12.7..12.8, hiệu chuẩn cảm biến EasySet u6.
 - `ui[].math_func` không bắt buộc, kiểu int 0..3, hàm toán EasySet u7.
-- `type` `potentiometer|light|pulse` (EasySet signal 6/7/8) hiện là authoring-only trên MK-DDC-24; consumer C++ phía `mkddc-iobus` là downstream.
-- Consumer C++ phía `mkddc-iobus` cho `ui[].name/note/enabled/invert/range_mult/filter_samples/sensor_cal/math_func` chưa triển khai; các field mới hiện là authoring-only và được passthrough trong `io_config.conf`.
 - `ao.mode` ∈ `0-10V|4-20mA` → **mkddc-iobus** gửi `SET_AO_CFG` xuống MCU (mode đã áp dụng ghi vào `kx_io_shm.ao_mode[]`).
+
+> 2026-06-29 implementation note: `mkddc-iobus` consumes EasySet UI `u0..u7` from `io_config.conf`: `type`, `scale_lo/scale_hi`, `range_mult`, `unit`, `filter_samples`, `sensor_cal`, and `math_func`. `ui[].name/note` stay web metadata.
 
 ## 4. `io_safe_state.conf` — giá trị an toàn khi lỗi
 ```json

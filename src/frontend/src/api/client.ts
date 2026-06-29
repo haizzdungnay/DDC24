@@ -14,11 +14,12 @@ import {
   putDemoOutputs,
   putUserParams as putDemoUserParams,
   runDemoCommissioning,
+  tickDemoPoints,
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { isAnalogSignal, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AoConfig, type AoSignalMode, type CommissioningTestResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
-import { normalizeHealth, nowIso, uiNode } from '../utils'
+import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AoConfig, type AoSignalMode, type CommissioningTestResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
+import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 
 export { normalizePoint, pointRecordsFrom } from './pointNormalizer'
@@ -27,8 +28,17 @@ type AuthHeaderProvider = () => Record<string, string>
 let authHeaderProvider: AuthHeaderProvider = () => ({})
 
 const base = `${API_ORIGIN.replace(/\/$/, '')}/api/v1`
+const pointConfigOverridesKey = 'mkddc:point-config-overrides:v1'
 
 type ApiRequestInit = RequestInit & { suppressAuthExpired?: boolean }
+type PointConfigPatch = { name?: string; unit?: string; trendEnabled?: boolean }
+
+export const POINT_UNIT_OPTIONS = [
+  { value: '', label: '0 = No units shown' },
+  { value: '%', label: '1 = % Percentage' },
+  { value: 'C', label: '2 = °C / °F Degrees Celsius or Degrees Fahrenheit' },
+  { value: 'Pa', label: '3 = P Pascals' }
+] as const
 
 export function setAuthHeaderProvider(provider: AuthHeaderProvider) {
   authHeaderProvider = provider
@@ -50,6 +60,103 @@ async function requestJson<T>(path: string, init: ApiRequestInit = {}): Promise<
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
+}
+
+function readPointConfigOverrides(): Record<string, PointConfigPatch> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(pointConfigOverridesKey)
+    return raw ? JSON.parse(raw) as Record<string, PointConfigPatch> : {}
+  } catch {
+    return {}
+  }
+}
+
+function savePointConfigOverride(id: string, config: PointConfigPatch): PointConfigPatch & { id: string } {
+  const overrides = readPointConfigOverrides()
+  const current = overrides[id] ?? {}
+  const next: PointConfigPatch = { ...current }
+  if (Object.prototype.hasOwnProperty.call(config, 'name')) next.name = config.name
+  if (Object.prototype.hasOwnProperty.call(config, 'unit')) next.unit = config.unit
+  if (Object.prototype.hasOwnProperty.call(config, 'trendEnabled')) next.trendEnabled = config.trendEnabled
+  overrides[id] = next
+  window.localStorage.setItem(pointConfigOverridesKey, JSON.stringify(overrides))
+  return { id, ...next }
+}
+
+function applyAiInputConfigOverrides(configs: AiInputConfig[]): AiInputConfig[] {
+  const overrides = readPointConfigOverrides()
+  return configs.map((config) => {
+    const id = uiNode(config.channel)
+    const override = overrides[id]
+    if (!override) return config
+    const genericName = override.name !== undefined && isGenericPointLabel(id, override.name)
+    return {
+      ...config,
+      ...(override.name !== undefined && !genericName ? { label: override.name } : {}),
+      ...(override.unit !== undefined && !genericName ? { unit: aiUnitFromPointUnit(override.unit) } : {})
+    }
+  })
+}
+
+function applyAiInputPointNames(configs: AiInputConfig[], points: Point[]): AiInputConfig[] {
+  const pointsById = new Map(points.map((point) => [point.id, point]))
+  return applyAiInputConfigOverrides(configs.map((config) => {
+    const point = pointsById.get(uiNode(config.channel))
+    if (!point) return config
+    return {
+      ...config,
+      label: point.name,
+      unit: aiUnitFromPointUnit(point.unit)
+    }
+  }))
+}
+
+function saveAiInputPointConfigOverrides(configs: AiInputConfig[]) {
+  configs.forEach((config) => {
+    savePointConfigOverride(uiNode(config.channel), { name: config.label, unit: pointUnitFromAiUnit(config.unit) })
+  })
+}
+
+export function applyDemoPointMetadata(points: Point[]): Point[] {
+  const demoById = new Map(getDemoPoints().map((point) => [point.id, point]))
+  return points.map((point) => {
+    const demo = demoById.get(point.id)
+    if (!demo) return point
+    const genericName = isGenericPointLabel(point.id, point.name)
+    return {
+      ...point,
+      ...(genericName ? { name: demo.name, unit: demo.unit, sensorType: demo.sensorType } : {}),
+      ...(!genericName && point.unit === undefined && demo.unit !== undefined ? { unit: demo.unit } : {}),
+      ...(!genericName && point.sensorType === undefined && demo.sensorType !== undefined ? { sensorType: demo.sensorType } : {}),
+      ...(point.trend === undefined && demo.trend !== undefined ? { trend: [...demo.trend] } : {})
+    }
+  })
+}
+
+export function applyPointConfigOverrides(points: Point[]): Point[] {
+  const overrides = readPointConfigOverrides()
+  return points.map((point) => {
+    const override = overrides[point.id]
+    if (!override) return point
+    const genericName = override.name !== undefined && isGenericPointLabel(point.id, override.name)
+    return {
+      ...point,
+      ...(override.name !== undefined && !genericName ? { name: override.name } : {}),
+      ...(override.unit !== undefined && !genericName ? { unit: override.unit } : {})
+    }
+  })
+}
+
+export function aiUnitFromPointUnit(unit: unknown): number {
+  return unitFromIo(unit)
+}
+
+export function pointUnitFromAiUnit(unit: number): string {
+  if (unit === 1) return '%'
+  if (unit === 2) return 'C'
+  if (unit === 3) return 'Pa'
+  return ''
 }
 
 function normalizeHealthResponse(raw: Record<string, unknown>): HealthResponse {
@@ -124,12 +231,26 @@ function normalizeAlarm(raw: Record<string, unknown>): Alarm {
 }
 
 function normalizeTrendSample(raw: Record<string, unknown>): TrendSample {
+  const timestamp = trendTimestamp(raw.time ?? raw.ts ?? raw.timestamp)
   const sample: TrendSample = { time: formatTrendTime(raw.time ?? raw.ts ?? raw.timestamp) }
+  if (timestamp !== null) sample.__ts = timestamp
   for (const [key, value] of Object.entries(raw)) {
     if (key === 'time' || key === 'ts' || key === 'timestamp') continue
-    if (typeof value === 'number' && Number.isFinite(value)) sample[key] = value
+    if (typeof value === 'number' && Number.isFinite(value)) sample[normalizeTrendPointKey(key)] = value
   }
   return sample
+}
+
+function normalizeTrendPointKey(key: string): string {
+  const match = key.trim().match(/^([A-Z]+)[-_]?(\d+)$/i)
+  if (!match) return key
+  const prefix = match[1].toUpperCase()
+  const channel = Number(match[2])
+  if (!Number.isFinite(channel) || channel <= 0) return key
+  if (prefix === 'UI' || prefix === 'AI') return uiNode(channel)
+  if (prefix === 'DI' || prefix === 'BI') return uiNode(channel + 8)
+  if (prefix === 'AO' || prefix === 'DO') return `${prefix}-${String(channel).padStart(2, '0')}`
+  return key
 }
 
 function severityFrom(value: unknown): Alarm['severity'] {
@@ -302,21 +423,18 @@ function aiConfigToIo(config: AiInputConfig): IoUiConfig {
     type: signalTypeToIoType(config.signalType),
     name: config.label,
     note: config.note,
-    enabled: config.enabled
+    enabled: config.enabled,
+    unit: unitToIo(config.unit),
+    scale_lo: config.displayMin,
+    scale_hi: config.displayMax,
+    range_mult: config.rangeMultiplier,
+    filter_samples: config.filterSamples,
+    sensor_cal: config.sensorCal,
+    math_func: config.mathFunction
   }
   if (isDigitalContact(config.signalType)) {
     item.invert = config.signalType === 5
     item.unit = ''
-    return item
-  }
-  if (isAnalogSignal(config.signalType)) {
-    item.unit = unitToIo(config.unit)
-    item.scale_lo = config.displayMin
-    item.scale_hi = config.displayMax
-    item.range_mult = config.rangeMultiplier
-    item.filter_samples = config.filterSamples
-    item.sensor_cal = config.sensorCal
-    item.math_func = config.mathFunction
   }
   return item
 }
@@ -407,6 +525,13 @@ function formatTrendTime(value: unknown): string {
   return parsed.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
+function trendTimestamp(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string') return null
+  const parsed = new Date(value).getTime()
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 export const apiClient = {
   async getHealth(): Promise<HealthResponse> {
     if (IS_DEMO) return getDemoHealth()
@@ -422,12 +547,13 @@ export const apiClient = {
   },
 
   async getPoints(): Promise<Point[]> {
-    if (IS_DEMO) return getDemoPoints()
+    if (IS_DEMO) return applyPointConfigOverrides(applyDemoPointMetadata(getDemoPoints()))
     try {
       const records = pointRecordsFrom(await requestJson<unknown>('/points', { suppressAuthExpired: true }))
-      return records.length ? records.map(normalizePoint) : getDemoPoints()
+      const points = records.length ? records.map(normalizePoint) : tickDemoPoints()
+      return applyPointConfigOverrides(applyDemoPointMetadata(points))
     } catch {
-      return getDemoPoints()
+      return applyPointConfigOverrides(applyDemoPointMetadata(tickDemoPoints()))
     }
   },
 
@@ -454,14 +580,15 @@ export const apiClient = {
   },
 
   async getAiInputs(): Promise<AiInputConfig[]> {
-    if (IS_DEMO) return getAiInputConfigs()
+    if (IS_DEMO) return applyAiInputPointNames(getAiInputConfigs(), applyPointConfigOverrides(getDemoPoints()))
     const raw = await requestJson<IoConfig>('/system/config/io')
-    return aiConfigsFromIo(raw)
+    return applyAiInputPointNames(aiConfigsFromIo(raw), await this.getPoints())
   },
 
   async putAiInputs(configs: AiInputConfig[]): Promise<void> {
     if (IS_DEMO) {
       putDemoAiInputs(configs)
+      saveAiInputPointConfigOverrides(configs)
       return
     }
     const current = await requestJson<IoConfig>('/system/config/io')
@@ -472,6 +599,7 @@ export const apiClient = {
         ao: current.ao ?? []
       })
     })
+    saveAiInputPointConfigOverrides(configs)
   },
 
   async getOutputs(): Promise<OutputsConfig> {
@@ -544,11 +672,20 @@ export const apiClient = {
   },
 
   async updatePointConfig(id: string, config: { name?: string; unit?: string; trendEnabled?: boolean }): Promise<{ id: string; name?: string; unit?: string; trendEnabled?: boolean }> {
-    if (IS_DEMO) return updateDemoPointConfig(id, config)
-    return requestJson<{ id: string; name?: string; unit?: string; trendEnabled?: boolean }>(`/points/${encodeURIComponent(id)}/config`, {
-      method: 'PUT',
-      body: JSON.stringify(config)
-    })
+    if (IS_DEMO) {
+      savePointConfigOverride(id, config)
+      return updateDemoPointConfig(id, config)
+    }
+    try {
+      return await requestJson<{ id: string; name?: string; unit?: string; trendEnabled?: boolean }>(`/points/${encodeURIComponent(id)}/config`, {
+        method: 'PUT',
+        body: JSON.stringify(config)
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (/401|403|forbidden|unauthorized/i.test(message)) throw err
+      return savePointConfigOverride(id, config)
+    }
   },
 
   async runCommissioningTest(pointId: string, value: number | boolean): Promise<CommissioningTestResult> {

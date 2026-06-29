@@ -55,12 +55,40 @@ function pointNumber(value: Point['value']) {
 
 function makeTrendSample(points: Point[]) {
   if (!points.length) return null
-  const sample: TrendSample = { time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }
+  const now = Date.now()
+  const sample: TrendSample = { time: new Date(now).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), __ts: now }
+  let hasValue = false
   for (const point of points) {
     const value = pointNumber(point.value)
-    if (value !== null) sample[point.id] = Number(value.toFixed(2))
+    if (value !== null) {
+      sample[point.id] = Number(value.toFixed(2))
+      hasValue = true
+    }
   }
-  return Object.keys(sample).length > 1 ? sample : null
+  return hasValue ? sample : null
+}
+
+function mergeTrendSamples(history: TrendSample[] | null | undefined, live: TrendSample[]) {
+  const historySamples = history ?? []
+  if (!historySamples.length) return stableTrendSamples(live)
+  const latestHistoryTs = Math.max(...historySamples.map(sampleTimestamp).filter(Number.isFinite))
+  const liveTail = Number.isFinite(latestHistoryTs) ? live.filter((sample) => sampleTimestamp(sample) > latestHistoryTs) : []
+  return stableTrendSamples([...historySamples, ...liveTail])
+}
+
+function sampleTimestamp(sample: TrendSample) {
+  const value = sample.__ts
+  return typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN
+}
+
+function stableTrendSamples(samples: TrendSample[]) {
+  const bySlot = new Map<string, TrendSample>()
+  for (const sample of samples) {
+    const timestamp = sampleTimestamp(sample)
+    const key = Number.isFinite(timestamp) ? String(Math.round(timestamp / 1000)) : sample.time
+    bySlot.set(key, { ...(bySlot.get(key) ?? {}), ...sample })
+  }
+  return [...bySlot.values()].sort((a, b) => sampleTimestamp(a) - sampleTimestamp(b))
 }
 
 function readTrendPrefs(): TrendPrefs | null {
@@ -112,7 +140,7 @@ export function TrendsPage() {
   const historyState = useApi(() => apiClient.getHistory(selectedIds, historyRange), [historyRange, selectedSignature], { refreshMs: 10_000 })
   const selectedPointsRef = useRef<Point[]>([])
   const [liveSamples, setLiveSamples] = useState<TrendSample[]>([])
-  const samples = historyState.data?.length ? historyState.data : liveSamples
+  const samples = useMemo(() => mergeTrendSamples(historyState.data, liveSamples), [historyState.data, liveSamples])
   const series = useMemo<TrendSeries[]>(() => selectedPoints.map((point, index) => ({
     key: point.id,
     label: `${point.id} - ${point.name}`,

@@ -258,7 +258,7 @@ func validateConfigIO(cfg ConfigIO) []configValidationError {
 	var errs []configValidationError
 	for i, item := range cfg.UI {
 		base := fmt.Sprintf("ui[%d]", i)
-		validateChannel(&errs, item, base+".ch", 1, 8)
+		validateChannel(&errs, item, base+".ch", 1, 16)
 		validateStringEnum(&errs, item, base+".type", "type", true, "none", "0-10V", "2-10V", "4-20mA", "PT100", "PT1000", "NTC10k", "NTC20k", "dry", "potentiometer", "light", "pulse")
 		validateOptionalString(&errs, item, base+".unit", "unit")
 		validateOptionalString(&errs, item, base+".name", "name")

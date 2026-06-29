@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { normalizePoint, pointRecordsFrom } from '../api/client'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { applyDemoPointMetadata, applyPointConfigOverrides, normalizePoint, pointRecordsFrom } from '../api/client'
 import { useAuth } from '../auth/AuthProvider'
 import { API_ORIGIN, IS_DEMO, WS_ORIGIN } from '../config'
-import { tickDemoPoints } from '../demo/simulator'
+import { forceDemoPoint, tickDemoPoints } from '../demo/simulator'
 import type { ConnectionState, Point } from '../types'
-import { nowIso } from '../utils'
+import { mergePointsById, nowIso } from '../utils'
 
 type MonitorEnvelope = Record<string, unknown> & { op: string }
 
@@ -35,12 +35,6 @@ function envelopeTs(message: Record<string, unknown>): string {
   return typeof value === 'string' ? value : nowIso()
 }
 
-function mergePointUpdates(current: Point[], updates: Point[]): Point[] {
-  const byId = new Map(current.map((point) => [point.id, point]))
-  for (const point of updates) byId.set(point.id, point)
-  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
-}
-
 export function useWebSocket() {
   const { session } = useAuth()
   const [connectionState, setConnectionState] = useState<ConnectionState>(IS_DEMO ? 'connected' : 'connecting')
@@ -51,19 +45,55 @@ export function useWebSocket() {
   const retryMs = useRef(1000)
   const timeoutRef = useRef<number | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
+  const demoReleaseTimersRef = useRef<Record<string, number>>({})
   const url = useMemo(() => wsEndpoint(session?.token), [session?.token])
+
+  const publishPoints = useCallback((points: Point[]) => {
+    const ts = nowIso()
+    const nextPoints = applyPointConfigOverrides(applyDemoPointMetadata(points))
+    const envelope: MonitorEnvelope = { op: 'update', ts, points: nextPoints }
+    setAllPoints(nextPoints)
+    setLastEnvelope(envelope)
+    setLastEventAt(ts)
+    setLastPointEventAt(ts)
+  }, [])
+
+  const forcePoint = useCallback((id: string, value: number | boolean, expireS?: number): boolean => {
+    const safeExpireS = typeof expireS === 'number' && Number.isFinite(expireS) && expireS > 0 ? Math.round(expireS) : 0
+    if (IS_DEMO) {
+      forceDemoPoint(id, value)
+      publishPoints(tickDemoPoints())
+      if (demoReleaseTimersRef.current[id]) window.clearTimeout(demoReleaseTimersRef.current[id])
+      if (safeExpireS > 0) {
+        demoReleaseTimersRef.current[id] = window.setTimeout(() => {
+          forceDemoPoint(id, value, true)
+          publishPoints(tickDemoPoints())
+          delete demoReleaseTimersRef.current[id]
+        }, safeExpireS * 1000)
+      }
+      return true
+    }
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false
+    socket.send(JSON.stringify({
+      op: 'force',
+      id,
+      value,
+      ...(safeExpireS > 0 ? { expire_s: safeExpireS } : {})
+    }))
+    const ts = nowIso()
+    setAllPoints((current) => mergePointsById(current, current
+      .filter((point) => point.id === id)
+      .map((point) => ({ ...point, value, forced: true, source: 'Local manual', priority: 'Manual override', updatedAt: ts }))))
+    setLastPointEventAt(ts)
+    return true
+  }, [publishPoints])
 
   useEffect(() => {
     if (IS_DEMO) {
-      setAllPoints(tickDemoPoints())
+      publishPoints(tickDemoPoints())
       const id = window.setInterval(() => {
-        const points = tickDemoPoints()
-        const ts = nowIso()
-        const envelope: MonitorEnvelope = { op: 'update', ts, points }
-        setAllPoints(points)
-        setLastEnvelope(envelope)
-        setLastEventAt(ts)
-        setLastPointEventAt(ts)
+        publishPoints(tickDemoPoints())
       }, 200)
       return () => window.clearInterval(id)
     }
@@ -89,8 +119,8 @@ export function useWebSocket() {
         const records = pointRecordsFrom(parsed)
 
         if (records.length) {
-          const points = records.map((point) => normalizePoint({ ts, ...point }))
-          setAllPoints((current) => mergePointUpdates(current, points))
+          const points = applyPointConfigOverrides(applyDemoPointMetadata(records.map((point) => normalizePoint({ ts, ...point }))))
+          setAllPoints((current) => mergePointsById(current, points))
           setLastEnvelope({ ...message, op, ts, points })
           setLastEventAt(ts)
           setLastPointEventAt(ts)
@@ -119,7 +149,12 @@ export function useWebSocket() {
       if (timeoutRef.current) window.clearTimeout(timeoutRef.current)
       socketRef.current?.close()
     }
-  }, [url])
+  }, [publishPoints, url])
 
-  return { connectionState, allPoints, lastEnvelope, lastEventAt, lastPointEventAt }
+  useEffect(() => () => {
+    Object.values(demoReleaseTimersRef.current).forEach((timerId) => window.clearTimeout(timerId))
+    demoReleaseTimersRef.current = {}
+  }, [])
+
+  return { connectionState, allPoints, lastEnvelope, lastEventAt, lastPointEventAt, forcePoint }
 }

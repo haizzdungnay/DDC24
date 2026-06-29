@@ -14,7 +14,7 @@ import type { AiInputConfig, AiSignalType, Point, TrendSample } from '../types'
 import { cn, formatValue, isVisibleUniversalInput, pointNumber, uiNode } from '../utils'
 
 type ViewMode = 'summary' | 'wizard' | 'advanced'
-type WizardStep = 'signal' | 'min' | 'max' | 'range' | 'unit' | 'filter' | 'cal' | 'math' | 'unused8' | 'unused9'
+type WizardStep = 'signal' | 'min' | 'max' | 'range' | 'unit' | 'filter' | 'cal' | 'math'
 type Translate = ReturnType<typeof useI18n>['t']
 type LiveTrendSample = TrendSample & { raw: number }
 
@@ -114,7 +114,7 @@ export function InputsPage() {
 
       <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         <Panel title="UI Channels">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 max-h-[calc(100vh-250px)] overflow-y-auto pr-2">
             {configs.map((config) => (
               <button
                 key={config.channel}
@@ -426,8 +426,6 @@ function WizardPanel({
         {step === 'filter' && <NumberField label={t('filterSamplesLabel')} value={config.filterSamples} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} />}
         {step === 'cal' && <NumberField label={t('sensorCalibrationLabel')} value={config.sensorCal} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} />}
         {step === 'math' && <MathFunctionField value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} />}
-        {step === 'unused8' && <DisabledField label={t('notUsed')} value={`0 = ${t('off')}`} />}
-        {step === 'unused9' && <DisabledField label={t('notUsed')} value={t('signalType0')} />}
       </div>
 
       <div className="mt-5 flex justify-between gap-2">
@@ -452,9 +450,7 @@ function AdvancedPanel({ config, onChange }: { config: AiInputConfig; onChange: 
     { register: 'u4', name: t('unitsLabel'), wired: true, control: <UnitSelect value={config.unit} onChange={(unit) => onChange({ unit })} /> },
     { register: 'u5', name: t('filterSamplesLabel'), wired: true, control: <SmallNumberInput value={config.filterSamples} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} /> },
     { register: 'u6', name: t('sensorCalibrationLabel'), wired: true, control: <SmallNumberInput value={config.sensorCal} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} /> },
-    { register: 'u7', name: t('mathFunctionLabel'), wired: true, control: <MathFunctionSelect value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} /> },
-    { register: 'u8', name: t('notUsed'), wired: false, control: <DisabledSelect label={`0 = ${t('off')}`} /> },
-    { register: 'u9', name: t('notUsed'), wired: false, control: <DisabledSelect label={t('signalType0')} /> }
+    { register: 'u7', name: t('mathFunctionLabel'), wired: true, control: <MathFunctionSelect value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} /> }
   ]
 
   return (
@@ -562,24 +558,6 @@ function MathFunctionSelect({ value, onChange }: { value: number; onChange: (val
   )
 }
 
-function DisabledSelect({ label }: { label: string }) {
-  return (
-    <select className={controlClass()} value={0} disabled>
-      <option value={0}>{label}</option>
-    </select>
-  )
-}
-
-function DisabledField({ label, value }: { label: string; value: string }) {
-  return (
-    <label className="block space-y-2">
-      <FieldHeader label={label} />
-      <DisabledSelect label={value} />
-      <DemoNote />
-    </label>
-  )
-}
-
 function FieldHeader({ label, wired }: { label: string; wired?: boolean }) {
   return (
     <span className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]">
@@ -595,11 +573,6 @@ function ModeBadge({ wired }: { wired?: boolean }) {
       {wired ? 'wired' : 'demo'}
     </span>
   )
-}
-
-function DemoNote() {
-  const { t } = useI18n()
-  return <div className="text-xs text-[var(--c-text-dim)]">{t('outputsDemoNote')}</div>
 }
 
 function SmallNumberInput({ value, min, max, step = 1, onChange }: { value: number; min: number; max: number; step?: number; onChange: (value: number) => void }) {
@@ -633,7 +606,7 @@ function ModeButton({ active, icon, label, onClick }: { active: boolean; icon: R
 }
 
 function wizardSteps(_signalType: AiSignalType): WizardStep[] {
-  return ['signal', 'min', 'max', 'range', 'unit', 'filter', 'cal', 'math', 'unused8', 'unused9']
+  return ['signal', 'min', 'max', 'range', 'unit', 'filter', 'cal', 'math']
 }
 
 function wizardStepLabel(step: WizardStep, t: Translate): string {
@@ -644,8 +617,7 @@ function wizardStepLabel(step: WizardStep, t: Translate): string {
   if (step === 'unit') return t('unitsLabel')
   if (step === 'filter') return t('filterSamplesLabel')
   if (step === 'cal') return t('sensorCalibrationLabel')
-  if (step === 'math') return t('mathFunctionLabel')
-  return t('notUsed')
+  return t('mathFunctionLabel')
 }
 
 function wizardStepRegister(step: WizardStep): string {
@@ -656,9 +628,7 @@ function wizardStepRegister(step: WizardStep): string {
   if (step === 'unit') return 'u4'
   if (step === 'filter') return 'u5'
   if (step === 'cal') return 'u6'
-  if (step === 'math') return 'u7'
-  if (step === 'unused8') return 'u8'
-  return 'u9'
+  return 'u7'
 }
 
 function wizardStepValue(step: WizardStep, config: AiInputConfig, t: Translate): string {
@@ -669,9 +639,7 @@ function wizardStepValue(step: WizardStep, config: AiInputConfig, t: Translate):
   if (step === 'unit') return unitLabel(config.unit, t)
   if (step === 'filter') return String(config.filterSamples)
   if (step === 'cal') return String(config.sensorCal)
-  if (step === 'math') return mathFunctionLabel(config.mathFunction, t)
-  if (step === 'unused8') return `0 = ${t('off')}`
-  return t('signalType0')
+  return mathFunctionLabel(config.mathFunction, t)
 }
 
 function aiNode(channel: number): string {

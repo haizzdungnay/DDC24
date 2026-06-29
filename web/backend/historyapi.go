@@ -142,7 +142,7 @@ func wideTrendSamples(samples []Sample) []TrendSample {
 			byTS[sample.TS] = row
 			keys = append(keys, sample.TS)
 		}
-		row[sample.PointID] = sample.Value
+		row[canonicalPointID(sample.PointID)] = sample.Value
 	}
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 	out := make([]TrendSample, 0, len(keys))
