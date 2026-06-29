@@ -192,9 +192,9 @@ export function TrendsPage() {
         <p className="text-sm text-[var(--c-text-dim)]">{pick('Trend Log live: object list, historian và buffer hiển thị 1s', 'Live Trend Log: object list, historian, and 1s display buffer')}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[300px_1fr]">
-        <Panel title="Series" action={<Button size="sm" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPickerOpen((open) => !open)}>{pickerOpen ? pick('Đóng', 'Close') : pick('Thêm trend', 'Add trend')}</Button>}>
-          <div className="space-y-2">
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[300px_1fr]">
+        <Panel title="Series" className="self-start" action={<Button size="sm" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPickerOpen((open) => !open)}>{pickerOpen ? pick('Đóng', 'Close') : pick('Thêm trend', 'Add trend')}</Button>}>
+          <div className="max-h-[420px] space-y-2 overflow-y-auto overscroll-contain pr-1">
             {selectedPoints.map((point, index) => <SeriesCard key={point.id} point={point} color={colors[index % colors.length]} onRemove={() => togglePoint(point.id)} />)}
             {!selectedPoints.length && <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Chưa chọn điểm trend.', 'No trend points selected.')}</div>}
           </div>
