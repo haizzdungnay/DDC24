@@ -22,21 +22,21 @@ const sampleGraph: Graph = {
   schema_version: '1.0',
   device: { bacnet_device_id: 1001, name: 'AHU01_DDC', scan_ms: 1000 },
   io_map: {
-    ai: [{ node: 'ai1', channel: 0, sensor: 'ntc10k', unit: 'degC', fallback: 22 }],
+    ui: [{ node: 'ui1', channel: 0, sensor: 'ntc10k', unit: 'degC', fallback: 22 }],
     ao: [{ node: 'ao1', channel: 0, mode: '0-10V', limit_lo: 0, limit_hi: 100, safeState: 0 }]
   },
   modbus: {
     rtu: [{ bus: 1, baud: 9600, slave: 5, poll_ms: 1000, points: [{ node: 'vfd_hz_r', fc: 4, addr: 100, type: 'u16', scale: 0.1, fallback: 0 }] }]
   },
   nodes: [
-    { id: 'ai1', type: 'AI_Input', ports: { outputs: ['out'] }, params: { channel: 0, fallback: 22 } },
+    { id: 'ui1', type: 'UI_Input', ports: { outputs: ['out'] }, params: { channel: 0, fallback: 22 } },
     { id: 'sp1', type: 'Setpoint', ports: { outputs: ['out'] }, params: { default: 24 } },
     { id: 'pid1', type: 'PID', ports: { inputs: ['pv', 'sp'], outputs: ['out'] }, params: { kp: 2, ki: 0.5, kd: 0, out_lo: 0, out_hi: 100, direction: 'reverse' }, power_on: { out: 0 } },
     { id: 'ao1', type: 'AO_Output', ports: { inputs: ['in'] }, params: { channel: 0, limit_lo: 0, limit_hi: 100, safeState: 0 }, power_on: { in: 0 } },
     { id: 'vfd_hz_r', type: 'Modbus_Read', ports: { outputs: ['out'] }, params: { fallback: 0 } }
   ],
   links: [
-    { from: 'ai1.out', to: 'pid1.pv' },
+    { from: 'ui1.out', to: 'pid1.pv' },
     { from: 'sp1.out', to: 'pid1.sp' },
     { from: 'pid1.out', to: 'ao1.in' }
   ],
@@ -44,7 +44,7 @@ const sampleGraph: Graph = {
 }
 
 const componentLibrary: LibraryItem[] = [
-  { type: 'AI_Input', label: 'AI_Input', detail: 'Analog input with fallback.', outputs: ['out'], params: { channel: 0, fallback: 0 } },
+  { type: 'UI_Input', label: 'UI_Input', detail: 'Universal input with fallback.', outputs: ['out'], params: { channel: 0, fallback: 0 } },
   { type: 'Setpoint', label: 'Setpoint', detail: 'Operator setpoint source.', outputs: ['out'], params: { default: 24 } },
   { type: 'PID', label: 'PID', detail: 'Closed-loop controller.', inputs: ['pv', 'sp'], outputs: ['out'], params: { kp: 1, ki: 0.1, kd: 0, out_lo: 0, out_hi: 100 }, power_on: { out: 0 } },
   { type: 'AO_Output', label: 'AO_Output', detail: 'Analog output with limits.', inputs: ['in'], params: { channel: 0, limit_lo: 0, limit_hi: 100, safeState: 0 }, power_on: { in: 0 } },

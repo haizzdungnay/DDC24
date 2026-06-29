@@ -18,24 +18,30 @@ import {
   validateGraphLocal
 } from '../demo/simulator'
 import { isAnalogSignal, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AoConfig, type AoSignalMode, type CommissioningTestResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
-import { normalizeHealth, normalizeKind, normalizeQuality, nowIso } from '../utils'
+import { normalizeHealth, nowIso, uiNode } from '../utils'
+import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
+
+export { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 
 type AuthHeaderProvider = () => Record<string, string>
 let authHeaderProvider: AuthHeaderProvider = () => ({})
 
 const base = `${API_ORIGIN.replace(/\/$/, '')}/api/v1`
 
+type ApiRequestInit = RequestInit & { suppressAuthExpired?: boolean }
+
 export function setAuthHeaderProvider(provider: AuthHeaderProvider) {
   authHeaderProvider = provider
 }
 
-async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers)
+async function requestJson<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
+  const { suppressAuthExpired, ...fetchInit } = init
+  const headers = new Headers(fetchInit.headers)
   for (const [key, value] of Object.entries(authHeaderProvider())) headers.set(key, value)
-  if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json')
+  if (fetchInit.body && !headers.has('content-type')) headers.set('content-type', 'application/json')
 
-  const response = await fetch(`${base}${path}`, { ...init, headers, credentials: 'include' })
-  if (response.status === 401 || response.status === 403) {
+  const response = await fetch(`${base}${path}`, { ...fetchInit, headers, credentials: 'include' })
+  if (!suppressAuthExpired && (response.status === 401 || response.status === 403)) {
     window.dispatchEvent(new CustomEvent('mkddc:auth-expired'))
   }
   if (!response.ok) {
@@ -44,25 +50,6 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
-}
-
-export function normalizePoint(raw: Record<string, unknown>): Point {
-  const id = String(raw.id ?? raw.point_id ?? 'UNKNOWN')
-  const value = raw.value as Point['value'] ?? 0
-  return {
-    id,
-    name: String(raw.name ?? raw.label ?? id),
-    kind: normalizeKind(raw.kind ?? raw.type),
-    value,
-    unit: raw.unit ? String(raw.unit) : undefined,
-    quality: normalizeQuality(raw.quality),
-    source: String(raw.source ?? 'Core'),
-    priority: raw.priority ? String(raw.priority) : raw.active_source ? String(raw.active_source) : undefined,
-    updatedAt: String(raw.updatedAt ?? raw.timestamp ?? raw.ts ?? nowIso()),
-    fault: Boolean(raw.fault ?? false),
-    forced: Boolean(raw.forced ?? false),
-    sensorType: raw.sensorType ? String(raw.sensorType) : raw.sensor_type ? String(raw.sensor_type) : undefined
-  }
 }
 
 function normalizeHealthResponse(raw: Record<string, unknown>): HealthResponse {
@@ -173,7 +160,12 @@ function normalizeCommissioningResult(raw: Record<string, unknown>, pointId: str
 }
 
 function numberFrom(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
 }
 
 function round2(value: number): number {
@@ -227,7 +219,7 @@ type SafeStateConfig = {
 }
 
 function aiNode(channel: number): string {
-  return `AI-${String(channel).padStart(2, '0')}`
+  return uiNode(channel)
 }
 
 function signalTypeFromIo(item: IoUiConfig): AiSignalType {
@@ -335,7 +327,7 @@ function aiConfigsFromIo(raw: IoConfig): AiInputConfig[] {
     const config = aiConfigFromIo(item, index)
     byChannel.set(config.channel, config)
   })
-  return Array.from({ length: 8 }, (_, index) => byChannel.get(index + 1) ?? defaultAiConfig(index + 1))
+  return Array.from({ length: 16 }, (_, index) => byChannel.get(index + 1) ?? defaultAiConfig(index + 1))
 }
 
 function channelFromEntry(item: { ch?: number }, index: number): number {
@@ -431,8 +423,12 @@ export const apiClient = {
 
   async getPoints(): Promise<Point[]> {
     if (IS_DEMO) return getDemoPoints()
-    const raw = await requestJson<Array<Record<string, unknown>>>('/points')
-    return raw.map(normalizePoint)
+    try {
+      const records = pointRecordsFrom(await requestJson<unknown>('/points', { suppressAuthExpired: true }))
+      return records.length ? records.map(normalizePoint) : getDemoPoints()
+    } catch {
+      return getDemoPoints()
+    }
   },
 
   async getNetwork(): Promise<NetworkData> {

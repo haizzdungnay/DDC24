@@ -28,7 +28,7 @@ const auxFunctions: AuxFunctionDef[] = [
     descVi: 'Bật/tắt thiết bị dựa trên điểm enable',
     descEn: 'Enable/disable equipment based on enable point',
     inputs: [
-      { key: 'enablePt', labelVi: 'Điểm Enable (DI/BV)', labelEn: 'Enable Point (DI/BV)', type: 'point' },
+      { key: 'enablePt', labelVi: 'Điểm Enable (UI/BV)', labelEn: 'Enable Point (UI/BV)', type: 'point' },
       { key: 'outPt', labelVi: 'Điểm Output (DO/BO)', labelEn: 'Output Point (DO/BO)', type: 'point' }
     ],
     generate: (inputs) => ({
@@ -74,7 +74,7 @@ const auxFunctions: AuxFunctionDef[] = [
     descVi: 'Chuyển đổi Heating/Cooling',
     descEn: 'Heating/Cooling switch',
     inputs: [
-      { key: 'tempPt', labelVi: 'Nhiệt độ (AI)', labelEn: 'Temperature (AI)', type: 'point' },
+      { key: 'tempPt', labelVi: 'Nhiệt độ (UI)', labelEn: 'Temperature (UI)', type: 'point' },
       { key: 'setpoint', labelVi: 'Setpoint', labelEn: 'Setpoint', type: 'number' },
       { key: 'deadband', labelVi: 'Deadband', labelEn: 'Deadband', type: 'number' },
       { key: 'heatOut', labelVi: 'Output Heating', labelEn: 'Heating Output', type: 'point' },
@@ -108,7 +108,7 @@ const auxFunctions: AuxFunctionDef[] = [
     descVi: 'Bù trừ setpoint theo nhiệt độ ngoài trời (Rev A Partial)',
     descEn: 'Setpoint compensation by outdoor temp (Rev A Partial)',
     inputs: [
-      { key: 'oatPt', labelVi: 'Outdoor Temp (AI)', labelEn: 'Outdoor Temp (AI)', type: 'point' },
+      { key: 'oatPt', labelVi: 'Outdoor Temp (UI)', labelEn: 'Outdoor Temp (UI)', type: 'point' },
       { key: 'spOut', labelVi: 'Setpoint Output', labelEn: 'Setpoint Output', type: 'point' }
     ],
     generate: (inputs) => ({

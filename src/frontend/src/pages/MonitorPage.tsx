@@ -32,9 +32,10 @@ function useTrendBuffer(pointId: string, value: number | boolean | string | unde
 }
 
 const kindLabel: Record<PointKind, string> = {
-  DI: 'DIGITAL INPUT',
+  UI: 'UNIVERSAL INPUT',
+  DI: 'LEGACY UNIVERSAL INPUT',
   DO: 'DIGITAL OUTPUT',
-  AI: 'ANALOG INPUT',
+  AI: 'LEGACY UNIVERSAL INPUT',
   AO: 'ANALOG OUTPUT',
   virtual: 'VIRTUAL'
 }
@@ -59,7 +60,7 @@ export function MonitorPage() {
   const [editingTrendEnabled, setEditingTrendEnabled] = useState<Record<string, boolean>>({})
 
   const points = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? []
-  const selected = points.find((point) => point.id === selectedId) ?? points.find((point) => point.id === 'DI-01') ?? points[0]
+  const selected = points.find((point) => point.id === selectedId) ?? points.find((point) => point.id === 'UI-01') ?? points[0]
   const offline = realtime.connectionState !== 'connected'
 
   const filtered = useMemo(() => points.filter((point) => {
@@ -70,20 +71,18 @@ export function MonitorPage() {
   }).sort((a, b) => a.id.localeCompare(b.id)), [kind, points, quality, query])
 
   const groups = useMemo(() => ({
-    DI: filtered.filter((point) => point.kind === 'DI'),
+    UI: filtered.filter((point) => point.kind === 'UI'),
     DO: filtered.filter((point) => point.kind === 'DO'),
-    AI: filtered.filter((point) => point.kind === 'AI'),
     AO: filtered.filter((point) => point.kind === 'AO')
   }), [filtered])
 
   const stats = {
     total: points.length,
-    di: points.filter((point) => point.kind === 'DI').length,
+    ui: points.filter((point) => point.kind === 'UI').length,
     do: points.filter((point) => point.kind === 'DO').length,
-    ai: points.filter((point) => point.kind === 'AI').length,
     ao: points.filter((point) => point.kind === 'AO').length,
     on: points.filter((point) => Boolean(point.value)).length,
-    analogGood: points.filter((point) => (point.kind === 'AI' || point.kind === 'AO') && point.quality === 'good').length,
+    analogGood: points.filter((point) => (point.kind === 'UI' || point.kind === 'AO') && point.quality === 'good').length,
     abnormal: points.filter((point) => point.quality !== 'good').length
   }
 
@@ -177,15 +176,15 @@ export function MonitorPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <StatCard label={pick('Tổng số điểm', 'Total points')} value={stats.total} detail={`DI ${stats.di} | DO ${stats.do} | AI ${stats.ai} | AO ${stats.ao}`} />
+        <StatCard label={pick('Tổng số điểm', 'Total points')} value={stats.total} detail={`UI ${stats.ui} | DO ${stats.do} | AO ${stats.ao}`} />
         <StatCard label={pick('Điểm ON', 'ON points')} value={stats.on} detail={`${Math.round((stats.on / Math.max(1, stats.total)) * 100)}%`} />
-        <StatCard label={pick('Điểm analog bình thường', 'Normal analog points')} value={stats.analogGood} detail="100%" />
+        <StatCard label={pick('Điểm UI/AO bình thường', 'Normal UI/AO points')} value={stats.analogGood} detail="100%" />
         <StatCard label={pick('Điểm lỗi / mất tín hiệu', 'Fault / signal-loss points')} value={stats.abnormal} detail={`${Math.round((stats.abnormal / Math.max(1, stats.total)) * 100)}%`} danger />
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_180px_1fr_132px]">
         <select value={kind} onChange={(event) => setKind(event.target.value as PointKind | 'all')} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
-          <option value="all">{pick('Nhóm I/O - Tất cả', 'I/O group - All')}</option><option value="DI">DI</option><option value="DO">DO</option><option value="AI">AI</option><option value="AO">AO</option>
+          <option value="all">{pick('Nhóm I/O - Tất cả', 'I/O group - All')}</option><option value="UI">UI</option><option value="DO">DO</option><option value="AO">AO</option>
         </select>
         <select value={quality} onChange={(event) => setQuality(event.target.value as PointQuality | 'all')} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
           <option value="all">{pick('Trạng thái - Tất cả', 'Status - All')}</option><option value="good">Good</option><option value="uncertain">Uncertain</option><option value="bad">Bad</option><option value="stale">Stale</option>
@@ -199,9 +198,8 @@ export function MonitorPage() {
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_334px]">
         <div className={cn('space-y-3', offline && 'stale')}>
-          <DigitalSection title="DI - DIGITAL INPUT" rows={groups.DI} selectedId={selected?.id} onSelect={setSelectedId} onToggle={(point) => { setSelectedId(point.id); setForceOpen(false) }} />
           <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} onSelect={setSelectedId} onToggle={(point) => { setSelectedId(point.id); setForceValue(String(!point.value)); setForceOpen(true) }} />
-          <AnalogSection title="AI - ANALOG INPUT" rows={groups.AI} selectedId={selected?.id} onSelect={setSelectedId} />
+          <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} onSelect={setSelectedId} />
           <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} onSelect={setSelectedId} onForce={(point) => { setSelectedId(point.id); setForceValue(String(pointNumber(point))); setForceOpen(true) }} />
         </div>
         {selected && <DetailPanel
@@ -304,7 +302,7 @@ function AnalogRow({ point, selected, onSelect, onForce }: { point: Point; selec
     <button type="button" onClick={() => onSelect(point.id)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
       <span className="mono font-semibold">{point.id}</span>
       <span className="truncate font-semibold">{point.name}</span>
-      <span className="mono">{typeof point.value === 'number' ? point.value.toFixed(1) : point.value}</span>
+      <span className="mono">{typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
       <span className="mono text-[var(--c-text-dim)]">{point.unit ?? '-'}</span>
       <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: statusFill(point.quality) }} />{statusText}</span>
       <span onClick={(event) => { if (onForce) { event.stopPropagation(); onForce(point) } }}><Sparkline values={trendBuffer.length > 0 ? trendBuffer : [pointNumber(point)]} color={point.quality === 'good' ? 'var(--c-accent-2)' : point.quality === 'bad' ? 'var(--c-fault-fg)' : 'var(--c-warn-fg)'} /></span>
@@ -371,8 +369,8 @@ function DetailPanel({
 }) {
   const { pick } = useI18n()
   const active = Boolean(point.value)
-  const isBinary = point.kind === 'DI' || point.kind === 'DO'
-  const isAnalog = point.kind === 'AI' || point.kind === 'AO'
+  const isBinary = point.kind === 'DO' || typeof point.value === 'boolean'
+  const isAnalog = point.kind === 'UI' || point.kind === 'AO'
   const binaryState = active ? 'on' : 'off'
   const binaryTextColor = statusColor(binaryState)
   const valuePanelStyle = isBinary
@@ -460,7 +458,7 @@ function DetailPanel({
             <dt className="text-[var(--c-text-dim)]">{pick('Thời gian thay đổi', 'Changed at')}</dt><dd className="mono">{formatDateTime(point.updatedAt)}</dd>
             <dt className="text-[var(--c-text-dim)]">{pick('Thời gian cập nhật', 'Updated at')}</dt><dd className="mono">{formatDateTime(point.updatedAt)}</dd>
             <dt className="text-[var(--c-text-dim)]">{pick('Bộ đếm kích hoạt', 'Activation count')}</dt><dd>15</dd>
-            <dt className="text-[var(--c-text-dim)]">{pick('Mô tả', 'Description')}</dt><dd>{point.id === 'DI-01' ? pick('Nút dừng khẩn cấp hệ thống', 'System emergency stop button') : point.name}</dd>
+            <dt className="text-[var(--c-text-dim)]">{pick('Mô tả', 'Description')}</dt><dd>{point.id === 'UI-05' ? pick('Ngõ vào universal dạng tiếp điểm', 'Universal input dry contact') : point.name}</dd>
             {isAnalog && (
               <div className="col-span-2 flex items-center justify-between rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2">
                 <span className="text-xs text-[var(--c-text-dim)]">{pick('Hiển thị trend', 'Show trend')}</span>

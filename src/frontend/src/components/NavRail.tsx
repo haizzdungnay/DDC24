@@ -108,8 +108,12 @@ export function NavRail({ alarmCount, device }: { alarmCount: number; device: He
       </nav>
       <div className="shrink-0 p-4">
         <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3">
-          <div className="mb-3 grid h-20 place-items-center rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]">
-            <Gauge className="h-9 w-9 text-[var(--c-text-dim)]" aria-hidden="true" />
+          <div className="mb-3 aspect-[1168/676] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]">
+            <img
+              src="/mk-ddc-24-front-panel.png"
+              alt="MK-DDC-24 front panel"
+              className="h-full w-full object-cover"
+            />
           </div>
           <div className="text-[10px] uppercase text-[var(--c-text-dim)]">Model</div>
           <div className="text-xs font-semibold">{PRODUCT_INFO.model}</div>

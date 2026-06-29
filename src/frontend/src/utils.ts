@@ -1,17 +1,44 @@
 import type { HealthStatus, Point, PointKind, PointQuality } from './types'
 
+export const VISIBLE_UI_CHANNELS = 16
+
 export function cn(...items: Array<string | false | null | undefined>): string {
   return items.filter(Boolean).join(' ')
 }
 
 export function normalizeKind(value: unknown): PointKind {
   const raw = String(value ?? '').toUpperCase()
-  if (raw === 'BI') return 'DI'
+  if (raw === 'UI' || raw === 'AI' || raw === 'DI' || raw === 'BI' || raw === 'AV') return 'UI'
   if (raw === 'BO') return 'DO'
-  if (raw === 'AV') return 'AI'
   if (raw === 'BV') return 'DO'
-  if (raw === 'AI' || raw === 'DI' || raw === 'AO' || raw === 'DO') return raw
+  if (raw === 'AO' || raw === 'DO') return raw
   return 'virtual'
+}
+
+export function uiNode(channel: number): string {
+  return `UI-${String(channel).padStart(2, '0')}`
+}
+
+export function uiChannelFromId(id: string): number | null {
+  const match = id.trim().match(/^(UI|AI|DI)[-_]?(\d+)$/i)
+  if (!match) return null
+  const channel = Number(match[2])
+  return Number.isFinite(channel) ? channel : null
+}
+
+export function normalizeInputPointId(id: string): string {
+  const channel = uiChannelFromId(id)
+  return channel ? uiNode(channel) : id
+}
+
+export function isUniversalInputKind(kind: PointKind): boolean {
+  return kind === 'UI' || kind === 'AI' || kind === 'DI'
+}
+
+export function isVisibleUniversalInput(point: Point, maxChannel = VISIBLE_UI_CHANNELS): boolean {
+  if (!isUniversalInputKind(point.kind)) return false
+  const channel = uiChannelFromId(point.id)
+  return channel === null || (channel >= 1 && channel <= maxChannel)
 }
 
 export function normalizeQuality(value: unknown): PointQuality {

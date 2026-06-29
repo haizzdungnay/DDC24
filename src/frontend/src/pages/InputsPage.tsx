@@ -11,7 +11,7 @@ import { getDemoPoints } from '../demo/simulator'
 import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import type { AiInputConfig, AiSignalType, Point, TrendSample } from '../types'
-import { cn, formatValue, pointNumber } from '../utils'
+import { cn, formatValue, isVisibleUniversalInput, pointNumber, uiNode } from '../utils'
 
 type ViewMode = 'summary' | 'wizard' | 'advanced'
 type WizardStep = 'signal' | 'min' | 'max' | 'range' | 'unit' | 'filter' | 'cal' | 'math' | 'unused8' | 'unused9'
@@ -113,7 +113,7 @@ export function InputsPage() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <Panel title="AI Channels">
+        <Panel title="UI Channels">
           <div className="flex flex-col gap-1">
             {configs.map((config) => (
               <button
@@ -185,7 +185,7 @@ export function InputsPage() {
       </div>
       <Modal
         open={confirmOpen}
-        title={pick('Lưu cấu hình AI?', 'Save AI config?')}
+        title={pick('Lưu cấu hình UI?', 'Save UI config?')}
         confirmLabel="OK"
         cancelLabel="Cancel"
         onConfirm={() => { void confirmSave() }}
@@ -270,7 +270,7 @@ function AiSummary({
           className="mt-3 min-h-40 w-full resize-y rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
           value={config.note}
           onChange={(event) => onChange({ note: event.target.value })}
-          placeholder={pick('Nhập ghi chú riêng cho kênh AI này...', 'Enter notes for this AI channel...')}
+          placeholder={pick('Nhập ghi chú riêng cho kênh UI này...', 'Enter notes for this UI channel...')}
         />
         <Button className="mt-3 w-full" variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={saveNote}>
           {pick('Lưu ghi chú', 'Save')}
@@ -445,30 +445,32 @@ function WizardPanel({
 function AdvancedPanel({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
   const { t } = useI18n()
   const rows = [
-    { register: 'u0', name: t('signalTypeLabel'), control: <SignalTypeSelect value={config.signalType} onChange={(signalType) => onChange({ signalType })} /> },
-    { register: 'u1', name: t('displayMinLabel'), control: <SmallNumberInput value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} /> },
-    { register: 'u2', name: t('displayMaxLabel'), control: <SmallNumberInput value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} /> },
-    { register: 'u3', name: t('rangeMultiplierLabel'), control: <RangeMultiplierSelect value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} /> },
-    { register: 'u4', name: t('unitsLabel'), control: <UnitSelect value={config.unit} onChange={(unit) => onChange({ unit })} /> },
-    { register: 'u5', name: t('filterSamplesLabel'), control: <SmallNumberInput value={config.filterSamples} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} /> },
-    { register: 'u6', name: t('sensorCalibrationLabel'), control: <SmallNumberInput value={config.sensorCal} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} /> },
-    { register: 'u7', name: t('mathFunctionLabel'), control: <MathFunctionSelect value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} /> },
-    { register: 'u8', name: t('notUsed'), control: <DisabledSelect label={`0 = ${t('off')}`} /> },
-    { register: 'u9', name: t('notUsed'), control: <DisabledSelect label={t('signalType0')} /> }
+    { register: 'u0', name: t('signalTypeLabel'), wired: true, control: <SignalTypeSelect value={config.signalType} onChange={(signalType) => onChange({ signalType })} /> },
+    { register: 'u1', name: t('displayMinLabel'), wired: true, control: <SmallNumberInput value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} /> },
+    { register: 'u2', name: t('displayMaxLabel'), wired: true, control: <SmallNumberInput value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} /> },
+    { register: 'u3', name: t('rangeMultiplierLabel'), wired: true, control: <RangeMultiplierSelect value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} /> },
+    { register: 'u4', name: t('unitsLabel'), wired: true, control: <UnitSelect value={config.unit} onChange={(unit) => onChange({ unit })} /> },
+    { register: 'u5', name: t('filterSamplesLabel'), wired: true, control: <SmallNumberInput value={config.filterSamples} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} /> },
+    { register: 'u6', name: t('sensorCalibrationLabel'), wired: true, control: <SmallNumberInput value={config.sensorCal} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} /> },
+    { register: 'u7', name: t('mathFunctionLabel'), wired: true, control: <MathFunctionSelect value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} /> },
+    { register: 'u8', name: t('notUsed'), wired: false, control: <DisabledSelect label={`0 = ${t('off')}`} /> },
+    { register: 'u9', name: t('notUsed'), wired: false, control: <DisabledSelect label={t('signalType0')} /> }
   ]
 
   return (
     <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)]">
-      <div className="grid grid-cols-[90px_minmax(0,1fr)_minmax(160px,240px)] bg-[var(--c-surface-2)] px-3 py-2 text-xs font-semibold uppercase text-[var(--c-text-dim)]">
+      <div className="grid grid-cols-[90px_minmax(0,1fr)_minmax(160px,240px)_82px] bg-[var(--c-surface-2)] px-3 py-2 text-xs font-semibold uppercase text-[var(--c-text-dim)]">
         <span>{t('register')}</span>
         <span>{t('channelLabel')}</span>
         <span>{t('value')}</span>
+        <span>Mode</span>
       </div>
       {rows.map((row) => (
-        <div key={row.register} className="grid grid-cols-[90px_minmax(0,1fr)_minmax(160px,240px)] items-center gap-3 border-t border-[var(--c-border)] px-3 py-3 text-sm">
+        <div key={row.register} className="grid grid-cols-[90px_minmax(0,1fr)_minmax(160px,240px)_82px] items-center gap-3 border-t border-[var(--c-border)] px-3 py-3 text-sm">
           <span className="font-mono text-[var(--c-text-dim)]">{String(config.channel).padStart(2, '0')} {row.register}</span>
           <span className="font-medium text-[var(--c-text)]">{row.name}</span>
           {row.control}
+          <ModeBadge wired={row.wired} />
         </div>
       ))}
     </div>
@@ -479,7 +481,7 @@ function SignalTypeField({ value, onChange }: { value: AiSignalType; onChange: (
   const { t } = useI18n()
   return (
     <div className="space-y-3">
-      <div className="text-sm font-semibold text-[var(--c-text)]">{t('signalTypeLabel')}</div>
+      <FieldHeader label={t('signalTypeLabel')} wired />
       <SignalTypeSelect value={value} onChange={onChange} />
     </div>
   )
@@ -489,7 +491,7 @@ function UnitField({ value, onChange }: { value: number; onChange: (value: numbe
   const { t } = useI18n()
   return (
     <div className="space-y-3">
-      <div className="text-sm font-semibold text-[var(--c-text)]">{t('unitsLabel')}</div>
+      <FieldHeader label={t('unitsLabel')} wired />
       <UnitSelect value={value} onChange={onChange} />
     </div>
   )
@@ -499,7 +501,7 @@ function RangeMultiplierField({ value, onChange }: { value: number; onChange: (v
   const { t } = useI18n()
   return (
     <div className="space-y-3">
-      <div className="text-sm font-semibold text-[var(--c-text)]">{t('rangeMultiplierLabel')}</div>
+      <FieldHeader label={t('rangeMultiplierLabel')} wired />
       <RangeMultiplierSelect value={value} onChange={onChange} />
     </div>
   )
@@ -509,7 +511,7 @@ function MathFunctionField({ value, onChange }: { value: number; onChange: (valu
   const { t } = useI18n()
   return (
     <div className="space-y-3">
-      <div className="text-sm font-semibold text-[var(--c-text)]">{t('mathFunctionLabel')}</div>
+      <FieldHeader label={t('mathFunctionLabel')} wired />
       <MathFunctionSelect value={value} onChange={onChange} />
     </div>
   )
@@ -518,7 +520,7 @@ function MathFunctionField({ value, onChange }: { value: number; onChange: (valu
 function NumberField({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step?: number; onChange: (value: number) => void }) {
   return (
     <label className="block space-y-2">
-      <span className="text-sm font-semibold text-[var(--c-text)]">{label}</span>
+      <FieldHeader label={label} wired />
       <SmallNumberInput value={value} min={min} max={max} step={step} onChange={onChange} />
     </label>
   )
@@ -571,10 +573,33 @@ function DisabledSelect({ label }: { label: string }) {
 function DisabledField({ label, value }: { label: string; value: string }) {
   return (
     <label className="block space-y-2">
-      <span className="text-sm font-semibold text-[var(--c-text)]">{label}</span>
+      <FieldHeader label={label} />
       <DisabledSelect label={value} />
+      <DemoNote />
     </label>
   )
+}
+
+function FieldHeader({ label, wired }: { label: string; wired?: boolean }) {
+  return (
+    <span className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]">
+      {label}
+      <ModeBadge wired={wired} />
+    </span>
+  )
+}
+
+function ModeBadge({ wired }: { wired?: boolean }) {
+  return (
+    <span className={cn('rounded-[var(--radius)] border px-2 py-0.5 text-center text-[10px] font-bold uppercase', wired ? 'border-[rgba(31,122,74,0.35)] bg-[rgba(31,122,74,0.10)] text-[var(--c-good-fg)]' : 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]')}>
+      {wired ? 'wired' : 'demo'}
+    </span>
+  )
+}
+
+function DemoNote() {
+  const { t } = useI18n()
+  return <div className="text-xs text-[var(--c-text-dim)]">{t('outputsDemoNote')}</div>
 }
 
 function SmallNumberInput({ value, min, max, step = 1, onChange }: { value: number; min: number; max: number; step?: number; onChange: (value: number) => void }) {
@@ -650,17 +675,17 @@ function wizardStepValue(step: WizardStep, config: AiInputConfig, t: Translate):
 }
 
 function aiNode(channel: number): string {
-  return `AI-${String(channel).padStart(2, '0')}`
+  return uiNode(channel)
 }
 
 function findAiPoint(points: Point[], channel: number): Point | undefined {
   const ids = new Set(aiPointIds(channel).map((id) => id.toUpperCase()))
-  return points.find((point) => point.kind === 'AI' && ids.has(point.id.trim().toUpperCase()))
+  return points.find((point) => isVisibleUniversalInput(point) && ids.has(point.id.trim().toUpperCase()))
 }
 
 function aiPointIds(channel: number): string[] {
   const padded = String(channel).padStart(2, '0')
-  return [aiNode(channel), `AI${channel}`, `AI${padded}`]
+  return [aiNode(channel), `UI${channel}`, `UI${padded}`, `AI${channel}`, `AI${padded}`, `DI${channel}`, `DI${padded}`]
 }
 
 function signalLabel(value: AiSignalType, t: Translate): string {

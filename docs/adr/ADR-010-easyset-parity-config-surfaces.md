@@ -1,6 +1,6 @@
 # ADR-010: EasySet Parity Config Surfaces
 
-- Date: 2026-06-23
+- Date: 2026-06-22
 - Owner: Solution Architect
 - Status: Accepted
 - Related: ADR-006 (Rev A UI Form JSON), ADR-008, ADR-009

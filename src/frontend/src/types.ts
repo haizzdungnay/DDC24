@@ -1,4 +1,4 @@
-export type PointKind = 'AI' | 'DI' | 'AO' | 'DO' | 'virtual'
+export type PointKind = 'UI' | 'AI' | 'DI' | 'AO' | 'DO' | 'virtual'
 export type PointQuality = 'good' | 'uncertain' | 'bad' | 'stale'
 export type HealthStatus = 'ok' | 'degraded' | 'fault' | 'unknown' | 'n/a'
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
@@ -180,6 +180,7 @@ export interface Graph {
   schema_version: string
   device: { bacnet_device_id: number | string; name: string; scan_ms: number }
   io_map: {
+    ui?: GraphIoPoint[]
     ai?: GraphIoPoint[]
     ao?: GraphIoPoint[]
     di?: GraphIoPoint[]
