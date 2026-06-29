@@ -193,7 +193,7 @@ export function TrendsPage() {
       </div>
 
       <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-[300px_1fr]">
-        <Panel title="Series" className="flex h-full min-h-0 flex-col" action={<Button size="sm" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPickerOpen((open) => !open)}>{pickerOpen ? pick('Đóng', 'Close') : pick('Thêm trend', 'Add trend')}</Button>}>
+        <Panel title="Series" className="flex h-full min-h-0 flex-col overflow-hidden" action={<Button size="sm" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPickerOpen((open) => !open)}>{pickerOpen ? pick('Đóng', 'Close') : pick('Thêm trend', 'Add trend')}</Button>}>
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
             {selectedPoints.map((point, index) => <SeriesCard key={point.id} point={point} color={colors[index % colors.length]} onRemove={() => togglePoint(point.id)} />)}
             {!selectedPoints.length && <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Chưa chọn điểm trend.', 'No trend points selected.')}</div>}
