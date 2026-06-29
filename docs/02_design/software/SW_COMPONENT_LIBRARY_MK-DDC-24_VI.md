@@ -141,3 +141,14 @@ PID/SafeState/Interlock; Alarm 3 = AlarmHigh/AlarmLow/AlarmDelay — ADR-008.) K
 
 > Đã promote vào Rev A.0 (ADR-008, không còn deferred): `Interlock`, `AlarmDelay`,
 > `RuntimeCounter`, `PulseCounter`.
+
+## 11. Aux composites (Rev A parity)
+
+Nhằm đáp ứng tính năng tương đương (parity) với EasySet trong Rev A (ADR-010), một số hàm phụ trợ (Auxiliary Functions) phức tạp được **compose** từ các node cơ bản trên. Giao diện (UI) chỉ đóng vai trò wizard tạo ra cụm node và link vào `graph.json`, KHÔNG tạo `type` mới.
+
+Các cụm compose được định nghĩa:
+- **Enable/Disable**: `DI_Input` hoặc `Setpoint` (bool) -> nối vào `permit` của `Interlock` (chặn output cuối).
+- **Occupied/Unoccupied**: Nguồn bool (từ DI hoặc Setpoint) -> nối vào `sel` của `ManualAuto` để chọn giữa setpoint occupied và unoccupied.
+- **Heating/Cooling switch**: Dùng `Compare_GT` / `Compare_LT` trên sai lệch để chọn nhánh PID heat hoặc cool.
+- **Setpoint compensation**: Dùng `Scale` biến đổi OAT (Outdoor Air Temp) thành offset -> cộng vào setpoint gốc. Vì Rev A chưa có node Add/Subtract, giới hạn Rev A dùng `Scale` trực tiếp vào setpoint base (hoặc đánh dấu Rev A partial).
+- **Economizer (Rev A partial)**: Dựng skeleton cơ bản: so sánh OAT < RAT bằng `Compare_LT` -> qua `Interlock` / `ManualAuto` -> điều khiển damper `AO_Output`. Economizer đầy đủ sẽ có trong Rev B.

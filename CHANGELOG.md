@@ -7,6 +7,24 @@
 ---
 
 ## [Unreleased]
+### Added — ADR-010 EasySet Parity Config Surfaces
+- fe(outputs): thêm `/eng/outputs` cho 4 AO + 4 DO, Summary/Wizard/Advanced; wire AO mode, AO/DO safe-state, manual force; field graph-level demo-local.
+- web: io config validate chấp nhận đủ AI signal type (`none`/`potentiometer`/`light`/`pulse`) + `filter_samples`/`sensor_cal`/`math_func`.
+- web: io config `ui[]` chấp nhận field `note` (ghi chú per-AI).
+- fe(AI inputs): full register u0-u9 + Signal Type 0-8 đúng EasySet, Range Multiplier/Math Function/Units full labels.
+- fe(AI inputs): wizard dùng dropdown + nhảy bước, fix nút Hoàn tất, popup OK/Cancel khi lưu → chuyển Advanced.
+- fe(AI inputs): Advanced luôn hiển thị đủ u0-u9 và Wizard đi đủ bước trước khi Hoàn tất.
+- fe(AI inputs): Wizard bỏ cụm lựa chọn dạng card/trắc nghiệm; nhảy bước bằng dropdown gọn.
+- fe(AI inputs): Wizard đủ tab u0-u9 để chuyển nhanh từng thanh ghi đã cấu hình.
+- fe(AI inputs): thêm tab Summary (Live Data + Reset, biểu đồ live, Notes riêng từng AI).
+- fe(AI inputs): Summary nhận live point `AI1`/`AI-01`, ưu tiên dữ liệu OrangePi và chỉ fallback demo khi thiếu live.
+- fe: thêm trang User Parameters (mock demo-only kiểu EasySet, chưa nối backend).
+- Added Alarm Wizard/Advanced parity.
+- Added AI/DI Inputs configuration surface.
+- Added Controller Diagram read-only commissioning view.
+- Added Auxiliary Functions node-compose wizard.
+- Kept backend REST/WS unchanged under Rev A demo-local scope.
+
 ### Fixed — FE i18n VI dấu + English mode thật (2026-06-17)
 - Chuẩn hóa text tiếng Việt có dấu trên shell và 12 trang frontend ADR-009; bỏ các chuỗi không dấu kiểu `Binh thuong`, `Da luu`, `Mat khau`.
 - Bổ sung helper i18n để các nhãn/nút/toast chính đổi theo VI/EN; không đổi REST/WebSocket contract.

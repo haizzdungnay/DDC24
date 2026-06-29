@@ -80,6 +80,115 @@ func TestConfigPutInvalidDeviceReturnsBadRequest(t *testing.T) {
 	}
 }
 
+func TestValidateConfigIOAcceptsAIUniversalInputFields(t *testing.T) {
+	cfg := ConfigIO{
+		UI: []map[string]any{
+			{
+				"ch":         1,
+				"type":       "2-10V",
+				"unit":       "degC",
+				"name":       "Supply Temp",
+				"enabled":    true,
+				"invert":     true,
+				"range_mult": 3,
+			},
+		},
+	}
+
+	if errs := validateConfigIO(cfg); len(errs) != 0 {
+		t.Fatalf("validateConfigIO() errors = %+v; want none", errs)
+	}
+}
+
+func TestValidateConfigIORejectsInvalidAIUniversalInputFields(t *testing.T) {
+	tests := []struct {
+		name string
+		item map[string]any
+		path string
+	}{
+		{
+			name: "range_mult out of range",
+			item: map[string]any{"ch": 1, "type": "0-10V", "range_mult": 9},
+			path: "ui[0].range_mult",
+		},
+		{
+			name: "invert must be boolean",
+			item: map[string]any{"ch": 1, "type": "dry", "invert": "yes"},
+			path: "ui[0].invert",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateConfigIO(ConfigIO{UI: []map[string]any{tt.item}})
+			if !hasConfigErrorPath(errs, tt.path) {
+				t.Fatalf("validateConfigIO() errors = %+v; want path %q", errs, tt.path)
+			}
+		})
+	}
+}
+
+func TestValidateConfigIOAcceptsFullEasySetAIFields(t *testing.T) {
+	cfg := ConfigIO{
+		UI: []map[string]any{
+			{
+				"ch":             1,
+				"type":           "potentiometer",
+				"filter_samples": 3,
+				"sensor_cal":     1.5,
+				"math_func":      2,
+				"note":           "Summary notes for AI-01",
+			},
+		},
+	}
+
+	if errs := validateConfigIO(cfg); len(errs) != 0 {
+		t.Fatalf("validateConfigIO() errors = %+v; want none", errs)
+	}
+}
+
+func TestValidateConfigIORejectsInvalidFullEasySetAIFields(t *testing.T) {
+	tests := []struct {
+		name string
+		item map[string]any
+		path string
+	}{
+		{
+			name: "filter_samples out of range",
+			item: map[string]any{"ch": 1, "type": "0-10V", "filter_samples": 200},
+			path: "ui[0].filter_samples",
+		},
+		{
+			name: "math_func out of range",
+			item: map[string]any{"ch": 1, "type": "0-10V", "math_func": 9},
+			path: "ui[0].math_func",
+		},
+		{
+			name: "sensor_cal out of range",
+			item: map[string]any{"ch": 1, "type": "0-10V", "sensor_cal": 99},
+			path: "ui[0].sensor_cal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateConfigIO(ConfigIO{UI: []map[string]any{tt.item}})
+			if !hasConfigErrorPath(errs, tt.path) {
+				t.Fatalf("validateConfigIO() errors = %+v; want path %q", errs, tt.path)
+			}
+		})
+	}
+}
+
+func hasConfigErrorPath(errs []configValidationError, path string) bool {
+	for _, err := range errs {
+		if err.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
 func newTestAppWithAdmin(t *testing.T) (*App, string) {
 	t.Helper()
 	users := writeTestUsers(t, "admin123", RoleAdmin)

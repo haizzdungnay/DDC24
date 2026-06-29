@@ -37,6 +37,8 @@ Thanh tab trên cùng cho biết đang ở màn nào.
 
 ## 4. Các màn
 
+> Note (2026-06-23): Web Engineering UI bổ sung thêm Inputs Page (/eng/inputs), Controller Diagram (/eng/diagram), và Aux Functions (/eng/aux) với mô hình config wizard + Advanced pattern. Diagram sử dụng SVG responsive, là view read-only commissioning, không phải graph editor. Màu trạng thái áp dụng theo chuẩn ISA-101 Level B hybrid.
+
 ### 4.1 Dashboard
 ```
 ┌ Dash  I/O  Alarm  Net  Sys        🟢 10:42 ┐

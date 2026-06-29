@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
 import { Panel } from '../components/Panel'
@@ -25,20 +25,22 @@ import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Alarm, HealthResponse, HealthStatus, Point, TrendSample } from '../types'
-import { formatDateTime, formatUptime, metricStatusColor, metricStatusFill, statusColor } from '../utils'
+import { formatDateTime, formatUptime, isVisibleUniversalInput, metricStatusColor, metricStatusFill, statusColor } from '../utils'
 
 const dashboardTrendColors = ['var(--c-fault-fg)', 'var(--c-accent-2)', '#6E5A2E', 'var(--c-warn-fg)']
 const dashboardTrendSampleLimit = 60
+const emptyPoints: Point[] = []
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const health = useApi(apiClient.getHealth, [], { refreshMs: 1000 })
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const alarms = useApi(apiClient.getAlarms, [], { refreshMs: 1000 })
   const realtime = useRealtime()
   const { pick } = useI18n()
-  const points: Point[] = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? []
+  const points: Point[] = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? emptyPoints
   const trendPoints = useMemo(() => points
-    .filter((point) => point.kind === 'AI' && pointNumber(point.value) !== null)
+    .filter((point) => isVisibleUniversalInput(point) && pointNumber(point.value) !== null)
     .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
     .slice(0, 4), [points])
   const trendSeries = useMemo<TrendSeries[]>(() => trendPoints.map((point, index) => ({
@@ -52,7 +54,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     trendPointsRef.current = trendPoints
-    if (!trendPoints.length) setTrendSamples([])
+    if (!trendPoints.length) setTrendSamples((current) => current.length ? [] : current)
   }, [trendPoints])
 
   useEffect(() => {
@@ -119,15 +121,15 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.62fr_1fr]">
         <Panel title={pick('TỔNG QUAN I/O (24 ĐIỂM)', 'I/O OVERVIEW (24 POINTS)')}>
           <div className="grid grid-cols-3 gap-3">
-            <IoSummary kind="DI" count={count('DI')} lines={[`${onCount('DI')} ON`, `${Math.max(0, count('DI') - onCount('DI'))} OFF`]} color="var(--c-info)" />
+            <IoSummary kind="UI" count={count('UI')} lines={[`${points.filter((p) => p.kind === 'UI' && p.quality === 'good').length} ${pick('Bình thường', 'Normal')}`]} color="var(--c-info)" />
             <IoSummary kind="DO" count={count('DO')} lines={[`${onCount('DO')} ON`, `${Math.max(0, count('DO') - onCount('DO'))} OFF`]} color="var(--c-good-fg)" />
-            <IoSummary kind="AI" count={count('AI')} lines={[`${points.filter((p) => p.kind === 'AI' && p.quality === 'good').length} ${pick('Bình thường', 'Normal')}`]} color="var(--c-good-fg)" />
+            <IoSummary kind="AO" count={count('AO')} lines={[`${points.filter((p) => p.kind === 'AO' && p.quality === 'good').length} ${pick('Bình thường', 'Normal')}`]} color="var(--c-good-fg)" />
           </div>
         </Panel>
-        <Panel title={pick('XU HƯỚNG AI (GIÁ TRỊ TRUNG BÌNH)', 'AI TREND (AVERAGE VALUE)')} action={<div className="flex gap-2"><Button size="sm" variant="secondary">{pick('Live', 'Live')}</Button><Button size="sm" variant="ghost" icon={<Maximize2 className="h-4 w-4" />} /></div>}>
+        <Panel title={pick('XU HƯỚNG UI (GIÁ TRỊ TRUNG BÌNH)', 'UI TREND (AVERAGE VALUE)')} action={<div className="flex gap-2"><Button size="sm" variant="secondary">{pick('Live', 'Live')}</Button><Button size="sm" variant="ghost" icon={<Maximize2 className="h-4 w-4" />} onClick={() => navigate('/trends')} title={pick('Mở rộng xu hướng', 'Expand trends')} /></div>}>
           {trendSamples.length > 1 && trendSeries.length
             ? <TrendChart data={trendSamples} series={trendSeries} height={250} />
-            : <StateBlock state="empty" title={pick('Chưa có dữ liệu trend AI live', 'No live AI trend data')} detail={pick('Biểu đồ sẽ tự chạy khi /points hoặc WebSocket có giá trị AI.', 'Chart starts when /points or WebSocket provides AI values.')} />}
+            : <StateBlock state="empty" title={pick('Chưa có dữ liệu trend UI live', 'No live UI trend data')} detail={pick('Biểu đồ sẽ tự chạy khi /points hoặc WebSocket có giá trị UI.', 'Chart starts when /points or WebSocket provides UI values.')} />}
         </Panel>
       </div>
 
@@ -280,7 +282,7 @@ function normalizeCommStatus(status?: HealthStatus): HealthStatus {
 }
 
 function scanValue(service?: { last_scan_ms?: number }) {
-  return typeof service?.last_scan_ms === 'number' ? `${service.last_scan_ms} ms` : undefined
+  return typeof service?.last_scan_ms === 'number' && service.last_scan_ms > 0 ? `${service.last_scan_ms} ms` : undefined
 }
 
 function IoSummary({ kind, count, lines, color }: { kind: string; count: number; lines: string[]; color: string }) {
@@ -325,8 +327,8 @@ function SystemHealthSummary({ health }: { health?: HealthResponse }) {
           {services.map(([name, service]) => (
             <div key={name} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">
               <div className="flex items-center justify-between gap-2"><div className="font-semibold">{name}</div><StatusBadge state={service.status} /></div>
-              <div className="mono mt-3 text-xs font-semibold text-[var(--c-good-fg)]">uptime {formatUptime(service.uptime_s ?? 0)}</div>
-              <div className="mono mt-1 text-xs font-semibold" style={{ color: metricStatusColor(service.last_scan_ms ?? 0, 50, 100) }}>scan {service.last_scan_ms ?? 0} ms</div>
+              {typeof service.uptime_s === 'number' && service.uptime_s > 0 && <div className="mono mt-3 text-xs font-semibold text-[var(--c-good-fg)]">uptime {formatUptime(service.uptime_s)}</div>}
+              {typeof service.last_scan_ms === 'number' && service.last_scan_ms > 0 && <div className="mono mt-1 text-xs font-semibold" style={{ color: metricStatusColor(service.last_scan_ms, 50, 100) }}>scan {service.last_scan_ms} ms</div>}
             </div>
           ))}
         </div>
@@ -334,7 +336,7 @@ function SystemHealthSummary({ health }: { health?: HealthResponse }) {
       <Panel title="IOP / SCAN METRICS">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <MetricTile label="Overall" value={health?.overall ?? 'unknown'} color={statusColor(health?.overall ?? 'unknown')} />
-          <MetricTile label="IOP scan" value={`${iop?.last_scan_ms ?? 0} ms`} color={metricStatusColor(iop?.last_scan_ms ?? 0, 50, 100)} />
+          <MetricTile label="IOP latency" value={typeof iop?.last_scan_ms === 'number' && iop.last_scan_ms > 0 ? `${iop.last_scan_ms} ms` : 'N/A'} color={typeof iop?.last_scan_ms === 'number' && iop.last_scan_ms > 0 ? metricStatusColor(iop.last_scan_ms, 50, 100) : 'var(--c-text-dim)'} />
           <MetricTile label="CPU" value={`${health?.cpuPercent ?? 0}%`} color={metricStatusColor(health?.cpuPercent ?? 0, 70, 90)} />
           <MetricTile label="RAM" value={typeof health?.ramUsedMb === 'number' ? `${Math.round(health.ramUsedMb)} MB` : `${health?.ramPercent ?? 0}%`} color={metricStatusColor(health?.ramPercent ?? 0, 70, 90)} />
         </div>

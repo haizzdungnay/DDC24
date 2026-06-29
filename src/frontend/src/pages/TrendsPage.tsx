@@ -61,7 +61,7 @@ export function TrendsPage() {
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const analogPoints = useMemo(() => {
     const source = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? []
-    return source.filter((point) => point.kind === 'AI' || point.kind === 'AO').sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
+    return source.filter((point) => (point.kind === 'UI' || point.kind === 'AO') && pointNumber(point.value) !== null).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
   }, [pointsState.data, realtime.allPoints])
   const autoSelectedRef = useRef(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -161,7 +161,7 @@ export function TrendsPage() {
           </div>
           {pickerOpen && (
             <div className="mb-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">
-              <div className="mb-2 text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Object list analog AI/AO', 'Analog AI/AO object list')}</div>
+              <div className="mb-2 text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Object list analog UI/AO', 'Analog UI/AO object list')}</div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {analogPoints.map((point) => (
                   <label key={point.id} className="flex cursor-pointer items-center gap-3 rounded-[var(--radius)] border border-[var(--c-border)] px-3 py-2 text-sm hover:bg-[rgba(42,92,138,0.08)]">

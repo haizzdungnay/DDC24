@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { normalizePoint } from '../api/client'
+import { normalizePoint, pointRecordsFrom } from '../api/client'
 import { useAuth } from '../auth/AuthProvider'
 import { API_ORIGIN, IS_DEMO, WS_ORIGIN } from '../config'
 import { tickDemoPoints } from '../demo/simulator'
@@ -21,7 +21,24 @@ function wsEndpoint(token?: string): string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function envelopeOp(message: Record<string, unknown>): string {
+  return String(message.op ?? message.type ?? message.event ?? message.topic ?? '')
+}
+
+function envelopeTs(message: Record<string, unknown>): string {
+  const payload = isRecord(message.payload) ? message.payload : {}
+  const data = isRecord(message.data) ? message.data : {}
+  const value = message.ts ?? message.timestamp ?? payload.ts ?? payload.timestamp ?? data.ts ?? data.timestamp
+  return typeof value === 'string' ? value : nowIso()
+}
+
+function mergePointUpdates(current: Point[], updates: Point[]): Point[] {
+  const byId = new Map(current.map((point) => [point.id, point]))
+  for (const point of updates) byId.set(point.id, point)
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
 }
 
 export function useWebSocket() {
@@ -63,24 +80,24 @@ export function useWebSocket() {
       }
 
       socket.onmessage = (event) => {
-        const message = JSON.parse(String(event.data)) as Record<string, unknown>
-        const op = typeof message.op === 'string' ? message.op : ''
-        if (!op) return
+        const parsed = JSON.parse(String(event.data)) as unknown
+        const message = isRecord(parsed) ? parsed : {}
+        const op = envelopeOp(message) || 'update'
+        const ts = envelopeTs(message)
+        const records = pointRecordsFrom(parsed)
 
-        if (op === 'update' && Array.isArray(message.points)) {
-          const ts = typeof message.ts === 'string' ? message.ts : nowIso()
-          const points = message.points
-            .filter(isRecord)
-            .map((point) => normalizePoint({ ts, ...point }))
-
-          setAllPoints(points)
-          setLastEnvelope({ op, ts, points })
+        if (records.length) {
+          const points = records.map((point) => normalizePoint({ ts, ...point }))
+          setAllPoints((current) => mergePointUpdates(current, points))
+          setLastEnvelope({ ...message, op, ts, points })
           setLastEventAt(ts)
           return
         }
 
-        setLastEnvelope({ ...message, op })
-        setLastEventAt(nowIso())
+        if (Object.keys(message).length) {
+          setLastEnvelope({ ...message, op })
+          setLastEventAt(ts)
+        }
       }
 
       socket.onerror = () => socket.close()

@@ -1,4 +1,4 @@
-export type PointKind = 'AI' | 'DI' | 'AO' | 'DO' | 'virtual'
+export type PointKind = 'UI' | 'AI' | 'DI' | 'AO' | 'DO' | 'virtual'
 export type PointQuality = 'good' | 'uncertain' | 'bad' | 'stale'
 export type HealthStatus = 'ok' | 'degraded' | 'fault' | 'unknown' | 'n/a'
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
@@ -81,6 +81,8 @@ export interface Alarm {
   detail: string
 }
 
+export type AlarmType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
 export type AlarmPriority = 'low' | 'medium' | 'high' | 'critical'
 
 export interface AlarmSetting {
@@ -93,6 +95,10 @@ export interface AlarmSetting {
   ll: number
   delayS: number
   priority: AlarmPriority
+  alarmType: AlarmType
+  sourcePointId: string
+  ackDelayS: number
+  interlock: boolean
 }
 
 export interface CommissioningTestResult {
@@ -174,6 +180,7 @@ export interface Graph {
   schema_version: string
   device: { bacnet_device_id: number | string; name: string; scan_ms: number }
   io_map: {
+    ui?: GraphIoPoint[]
     ai?: GraphIoPoint[]
     ao?: GraphIoPoint[]
     di?: GraphIoPoint[]
@@ -243,4 +250,119 @@ export interface UserRow {
   fullName: string
   role: UserRole
   online: boolean
+}
+
+
+export type AiSignalType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+
+export function isAnalogSignal(signalType: AiSignalType): boolean {
+  return signalType === 1 || signalType === 2 || signalType === 3 || signalType === 6 || signalType === 7 || signalType === 8
+}
+
+export function isDigitalContact(signalType: AiSignalType): boolean {
+  return signalType === 4 || signalType === 5
+}
+
+export interface AiInputConfig {
+  channel: number
+  label: string
+  signalType: AiSignalType
+  displayMin: number
+  displayMax: number
+  rangeMultiplier: number
+  unit: number
+  filterSamples: number
+  sensorCal: number
+  mathFunction: number
+  enabled: boolean
+  note: string
+}
+
+export interface DiInputConfig {
+  channel: number
+  node: string
+  label: string
+  invert: boolean
+  normalState: 'open' | 'closed'
+  debounceMs: number
+  enabled: boolean
+}
+
+export type AoSignalMode = '0-10V' | '4-20mA'
+export type DoSafeState = 'open' | 'closed'
+export type OutputDemoNote = 'demo'
+
+export interface AoConfig {
+  kind: 'AO'
+  channel: number
+  id: string
+  label: string
+  enabled: boolean
+  mode: AoSignalMode
+  safeValue: number
+  source: number
+  loopConfig: number
+  minHeatOutput: number
+  maxHeatOutput: number
+  minCoolOutput: number
+  maxCoolOutput: number
+  alarm100: number
+  alarm0: number
+  input: number
+  notUsed10: number
+  notUsed11: number
+  piSeqLowerFan1: number
+  fanSpeed2: number
+  piSeqUpperFan3: number
+  setbackAlarm: number
+  notInUse16: number
+  manualValue: number
+  note: string
+  demoNote?: OutputDemoNote
+}
+
+export interface DoConfig {
+  kind: 'DO'
+  channel: number
+  id: string
+  label: string
+  enabled: boolean
+  safeState: DoSafeState
+  floatingMode: boolean
+  source: number
+  notInUse02: number
+  sequence: number
+  switchOffDelay: string
+  switchOnDelay: string
+  pwmCycleTime: string
+  alarmOn: number
+  alarmOff: number
+  runtimeCounter: boolean
+  runtimeAlarmHours: number
+  usePiSequence: boolean
+  activationLimitPi: number
+  deactivationLimitPi: number
+  notUsed14: number
+  notUsed15: number
+  notInUse16: number
+  manualValue: boolean
+  note: string
+  demoNote?: OutputDemoNote
+}
+
+export interface OutputsConfig {
+  ao: AoConfig[]
+  do: DoConfig[]
+}
+
+export type UserParamKey =
+  | 'UP00' | 'UP01' | 'UP02' | 'UP03' | 'UP04' | 'UP05' | 'UP06' | 'UP07' | 'UP08' | 'UP09'
+  | 'UP10' | 'UP11' | 'UP12' | 'UP13' | 'UP14' | 'UP15' | 'UP16' | 'UP17' | 'UP18' | 'UP19'
+  | 'UP20' | 'UP21' | 'UP22' | 'UP23' | 'UP24' | 'UP25' | 'UP26' | 'UP27' | 'UP28' | 'UP29'
+  | 'UPSP' | 'UPTS' | 'UPHT' | 'UPSB' | 'UPFAN' | 'LOCK1' | 'LOCK2' | 'LOCK3'
+
+export type UserParamValue = number | string
+
+export type UserParamsConfig = Record<UserParamKey, UserParamValue> & {
+  note: string
 }
