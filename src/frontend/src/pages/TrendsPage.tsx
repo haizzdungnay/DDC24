@@ -103,6 +103,8 @@ export function TrendsPage() {
   const [rangeMinutes, setRangeMinutes] = useState<number>(() => initialPrefsRef.current?.rangeMinutes ?? 30)
   const [prefsReady, setPrefsReady] = useState(() => initialPrefsRef.current !== null)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const analogPanelRef = useRef<HTMLDivElement>(null)
+  const [analogPanelHeight, setAnalogPanelHeight] = useState<number | null>(null)
 
   const selectedPoints = useMemo(() => analogPoints.filter((point) => selectedIds.includes(point.id)), [analogPoints, selectedIds])
   const selectedSignature = selectedIds.join(',')
@@ -138,6 +140,23 @@ export function TrendsPage() {
     writeTrendPrefs({ selectedIds, rangeMinutes })
     hasSavedPrefsRef.current = true
   }, [prefsReady, rangeMinutes, selectedIds])
+
+  useEffect(() => {
+    const target = analogPanelRef.current
+    if (!target) return undefined
+
+    const syncHeight = () => setAnalogPanelHeight(Math.ceil(target.getBoundingClientRect().height))
+    syncHeight()
+
+    const observer = new ResizeObserver(syncHeight)
+    observer.observe(target)
+    window.addEventListener('resize', syncHeight)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', syncHeight)
+    }
+  }, [])
 
   useEffect(() => {
     selectedPointsRef.current = selectedPoints
@@ -192,15 +211,18 @@ export function TrendsPage() {
         <p className="text-sm text-[var(--c-text-dim)]">{pick('Trend Log live: object list, historian và buffer hiển thị 1s', 'Live Trend Log: object list, historian, and 1s display buffer')}</p>
       </div>
 
-      <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-[300px_1fr]">
-        <Panel title="Series" className="flex h-full min-h-0 flex-col overflow-hidden" action={<Button size="sm" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPickerOpen((open) => !open)}>{pickerOpen ? pick('Đóng', 'Close') : pick('Thêm trend', 'Add trend')}</Button>}>
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
-            {selectedPoints.map((point, index) => <SeriesCard key={point.id} point={point} color={colors[index % colors.length]} onRemove={() => togglePoint(point.id)} />)}
-            {!selectedPoints.length && <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Chưa chọn điểm trend.', 'No trend points selected.')}</div>}
-          </div>
-        </Panel>
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[300px_1fr]">
+        <div className="min-h-0" style={analogPanelHeight ? { height: analogPanelHeight } : undefined}>
+          <Panel title="Series" className="flex h-full min-h-0 flex-col overflow-hidden" action={<Button size="sm" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPickerOpen((open) => !open)}>{pickerOpen ? pick('Đóng', 'Close') : pick('Thêm trend', 'Add trend')}</Button>}>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
+              {selectedPoints.map((point, index) => <SeriesCard key={point.id} point={point} color={colors[index % colors.length]} onRemove={() => togglePoint(point.id)} />)}
+              {!selectedPoints.length && <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Chưa chọn điểm trend.', 'No trend points selected.')}</div>}
+            </div>
+          </Panel>
+        </div>
 
-        <Panel title={`${pick('Xu hướng analog', 'Analog trend')} - ${rangeLabel}`} action={<div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={resetAuto}>Auto</Button></div>}>
+        <div ref={analogPanelRef}>
+          <Panel title={`${pick('Xu hướng analog', 'Analog trend')} - ${rangeLabel}`} action={<div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={resetAuto}>Auto</Button></div>}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2">
               {rangeOptions.map((item) => <Button key={item.minutes} size="sm" variant={rangeMinutes === item.minutes ? 'primary' : 'secondary'} icon={<Clock3 className="h-4 w-4" />} onClick={() => setRangeMinutes(item.minutes)}>{pick(item.labelVi, item.labelEn)}</Button>)}
@@ -231,7 +253,8 @@ export function TrendsPage() {
               : series.length && samples.length > 1
                 ? <TrendChart data={samples} series={series} height={360} />
                 : <StateBlock state="empty" title={series.length ? pick('Chưa có dữ liệu xu hướng live', 'No live trend data yet') : pick('Chọn ít nhất một điểm analog', 'Select at least one analog point')} detail={series.length ? pick('Trang này đọc /history nếu có và tự ghi buffer 1s từ /points hoặc WebSocket khi historian chưa có mẫu.', 'This page reads /history when available and records a 1s local buffer from /points or WebSocket until historian has samples.') : undefined} />}
-        </Panel>
+          </Panel>
+        </div>
       </div>
 
       <Panel title={pick('Thống kê series đang hiển thị', 'Visible series statistics')}>
