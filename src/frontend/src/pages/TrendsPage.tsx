@@ -34,6 +34,13 @@ const rangeOptions = [
 const colors = ['#2A5C8A', 'var(--c-warn-fg)', '#6E5A2E', '#8A4FBF', '#5B6066', 'var(--c-fault-fg)', '#B0179C', 'var(--c-off)']
 const liveSampleLimit = 3600
 const REALTIME_STALE_MS = 2500
+const TREND_PREFS_KEY = 'mkddc:trends:v1'
+const DEFAULT_TREND_IDS = Array.from({ length: 8 }, (_, index) => `UI-${String(index + 1).padStart(2, '0')}`)
+
+interface TrendPrefs {
+  selectedIds: string[]
+  rangeMinutes: number
+}
 
 function historyRangeFromMinutes(minutes: number) {
   if (minutes <= 30) return '30m'
@@ -56,9 +63,34 @@ function makeTrendSample(points: Point[]) {
   return Object.keys(sample).length > 1 ? sample : null
 }
 
+function readTrendPrefs(): TrendPrefs | null {
+  try {
+    const raw = window.localStorage.getItem(TREND_PREFS_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<TrendPrefs>
+    const selectedIds = Array.isArray(parsed.selectedIds) ? parsed.selectedIds.filter((id): id is string => typeof id === 'string') : []
+    const storedRange = parsed.rangeMinutes
+    const rangeMinutes = typeof storedRange === 'number' && rangeOptions.some((item) => item.minutes === storedRange) ? storedRange : 30
+    return { selectedIds, rangeMinutes }
+  } catch {
+    return null
+  }
+}
+
+function writeTrendPrefs(prefs: TrendPrefs) {
+  try {
+    window.localStorage.setItem(TREND_PREFS_KEY, JSON.stringify(prefs))
+  } catch {
+    // localStorage can be unavailable in private/locked browser modes.
+  }
+}
+
 export function TrendsPage() {
   const realtime = useRealtime()
   const { pick } = useI18n()
+  const initialPrefsRef = useRef<TrendPrefs | null | undefined>(undefined)
+  if (initialPrefsRef.current === undefined) initialPrefsRef.current = readTrendPrefs()
+  const hasSavedPrefsRef = useRef(initialPrefsRef.current !== null)
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const analogPoints = useMemo(() => {
     const polledPoints = pointsState.data ?? []
@@ -67,9 +99,9 @@ export function TrendsPage() {
       : polledPoints
     return source.filter((point) => (point.kind === 'UI' || point.kind === 'AO') && pointNumber(point.value) !== null).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
   }, [pointsState.data, realtime.allPoints, realtime.lastPointEventAt])
-  const autoSelectedRef = useRef(false)
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [rangeMinutes, setRangeMinutes] = useState<number>(30)
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => initialPrefsRef.current?.selectedIds ?? [])
+  const [rangeMinutes, setRangeMinutes] = useState<number>(() => initialPrefsRef.current?.rangeMinutes ?? 30)
+  const [prefsReady, setPrefsReady] = useState(() => initialPrefsRef.current !== null)
   const [pickerOpen, setPickerOpen] = useState(false)
 
   const selectedPoints = useMemo(() => analogPoints.filter((point) => selectedIds.includes(point.id)), [analogPoints, selectedIds])
@@ -90,14 +122,22 @@ export function TrendsPage() {
   const rangeLabel = currentRange ? pick(currentRange.labelVi, currentRange.labelEn) : pick(`${rangeMinutes} phút`, `${rangeMinutes} min`)
 
   useEffect(() => {
+    if (!analogPoints.length) return
     setSelectedIds((current) => {
-      const existing = current.filter((id) => analogPoints.some((point) => point.id === id))
-      if (existing.length || autoSelectedRef.current) return existing
-      if (!analogPoints.length) return existing
-      autoSelectedRef.current = true
-      return analogPoints.slice(0, 4).map((point) => point.id)
+      const available = new Set(analogPoints.map((point) => point.id))
+      if (hasSavedPrefsRef.current) return current.filter((id) => available.has(id))
+
+      const defaults = DEFAULT_TREND_IDS.filter((id) => available.has(id))
+      return defaults.length ? defaults : analogPoints.slice(0, 8).map((point) => point.id)
     })
+    setPrefsReady(true)
   }, [analogPoints])
+
+  useEffect(() => {
+    if (!prefsReady) return
+    writeTrendPrefs({ selectedIds, rangeMinutes })
+    hasSavedPrefsRef.current = true
+  }, [prefsReady, rangeMinutes, selectedIds])
 
   useEffect(() => {
     selectedPointsRef.current = selectedPoints
@@ -120,11 +160,17 @@ export function TrendsPage() {
   }, [])
 
   function togglePoint(id: string) {
+    hasSavedPrefsRef.current = true
+    setPrefsReady(true)
     setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   }
 
   function resetAuto() {
-    setSelectedIds(analogPoints.slice(0, 4).map((point) => point.id))
+    hasSavedPrefsRef.current = true
+    setPrefsReady(true)
+    const available = new Set(analogPoints.map((point) => point.id))
+    const defaults = DEFAULT_TREND_IDS.filter((id) => available.has(id))
+    setSelectedIds(defaults.length ? defaults : analogPoints.slice(0, 8).map((point) => point.id))
     setRangeMinutes(30)
   }
 
