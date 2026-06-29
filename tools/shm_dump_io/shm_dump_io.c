@@ -56,7 +56,8 @@ static const char* status_name(uint8_t s)
 static void decode_faults(uint16_t f, char* buf, size_t n)
 {
     buf[0] = '\0';
-    if (f & IOP_FAULT_ADC)          strncat(buf, "ADC ", n - strlen(buf) - 1);
+    if (f & IOP_FAULT_ADC1)         strncat(buf, "ADC1 ", n - strlen(buf) - 1);
+    if (f & IOP_FAULT_ADC2)         strncat(buf, "ADC2 ", n - strlen(buf) - 1);
     if (f & IOP_FAULT_DAC)          strncat(buf, "DAC ", n - strlen(buf) - 1);
     if (f & IOP_FAULT_UI_OV)        strncat(buf, "UI_OV ", n - strlen(buf) - 1);
     if (f & IOP_FAULT_RELAY_STUCK)  strncat(buf, "RELAY_STUCK ", n - strlen(buf) - 1);
@@ -77,13 +78,8 @@ static void print_text(const kx_io_shm_t* s)
     printf("iop_status=%s fault_flags=0x%04X [%s] mcu_temp=%.1fC\n",
            status_name(s->iop_status), s->fault_flags, faults, s->mcu_temp_x10 / 10.0);
     for (int i = 0; i < KX_N_UI; i++)
-        printf("  UI%d = %10.3f %-5s %s\n", i + 1, (double)s->ui_value[i],
+        printf("  UI%-2d= %10.3f %-5s %s\n", i + 1, (double)s->ui_value[i],
                s->ui_unit[i], quality_name(s->ui_quality[i]));
-    printf("  DI  = [%u %u %u %u %u %u %u %u]  counters=[%u %u %u %u %u %u %u %u]\n",
-           s->di_state[0], s->di_state[1], s->di_state[2], s->di_state[3],
-           s->di_state[4], s->di_state[5], s->di_state[6], s->di_state[7],
-           s->di_counter[0], s->di_counter[1], s->di_counter[2], s->di_counter[3],
-           s->di_counter[4], s->di_counter[5], s->di_counter[6], s->di_counter[7]);
     printf("  AO  = sp[%.3f %.3f %.3f %.3f] mode[%u %u %u %u]\n",
            (double)s->ao_setpoint[0], (double)s->ao_setpoint[1],
            (double)s->ao_setpoint[2], (double)s->ao_setpoint[3],

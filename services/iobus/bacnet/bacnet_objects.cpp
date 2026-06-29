@@ -27,6 +27,12 @@ BacnetObjects::BacnetObjects()
     for (int i = 0; i < N_AI; i++) ai_units_[i] = "no-units";
 }
 
+void BacnetObjects::update_ai_units(const char units[KX_N_UI][8])
+{
+    for (int i = 0; i < N_AI; i++)
+        ai_units_[i] = units[i];
+}
+
 void BacnetObjects::init(const BacnetConfig& cfg)
 {
     cfg_ = cfg;

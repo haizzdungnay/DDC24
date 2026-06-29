@@ -1,8 +1,8 @@
 # Component Library (Rev A) — MK-DDC-24
 
 > **Document ID:** DDD-COMPLIB-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-08
-> **Trạng thái:** Approved (Owner 2026-06-08)
+> **Phiên bản:** 1.2 | 2026-06-26
+> **Trạng thái:** Draft amendment — §8 Protocol nodes mở rộng spec (param types, quality propagation, error behavior); chờ owner approve
 > 📘 **Đọc cùng:** [GRAPH_SCHEMA](../interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) ·
 > [SW_RUNTIME_EXECUTION_MODEL](SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) · [REVA_SCOPE](../../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) ·
 > [ADR-008](../../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md)
@@ -83,17 +83,47 @@ Kiểu: `f`=float, `b`=bool, `i`=int. `[S]` = stateful (giữ state qua scan).
 
 ## 8. Protocol components
 
-| type | in | out | params | ghi chú |
-|------|----|----|--------|---------|
-| `Modbus_RTU_Read` | — | `out:f` | `bus`,`slave`,`fc`,`addr`,`type`,`scale`,`fallback` | giá trị từ cache (mkddc-iobus); quality theo poll |
-| `Modbus_RTU_Write` | `in:f` | — | `bus`,`slave`,`fc`,`addr`,`type`,`scale` | đẩy vào write-queue |
-| `Modbus_TCP_Read` | — | `out:f` | `host`,`unit`,`fc`,`addr`,`type`,`scale`,`fallback` | |
-| `BACnet_AV` | `in:f?` | `out:f` | `instance`,`name`,`writable` | map Setpoint/command ↔ BACnet AV |
-| `BACnet_BV` | `in:b?` | `out:b` | `instance`,`name`,`writable` | |
+> Spec đầy đủ (param types, validator rules, ví dụ): [GRAPH_SCHEMA §10](../interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md).
+> Bảng dưới là tóm tắt contract. Implementation: [COR-011](../../docs/03_implementation/10_TASK_CHECKLIST.md) (graph_runtime) + [MOD-013](../../docs/03_implementation/10_TASK_CHECKLIST.md) (Modbus TCP transport).
+
+| type | in | out | params bắt buộc | quality behavior |
+|------|----|----|-----------------|-----------------|
+| `Modbus_RTU_Read` | — | `out:f` | `bus`,`slave`,`fc`,`addr`,`type`,`fallback` | GOOD khi ext_cache fresh; BAD/fallback khi stale > 3×poll |
+| `Modbus_RTU_Write` | `in:f` (bắt buộc wire) | — | `bus`,`slave`,`fc`,`addr`,`type` | sink — không có quality output |
+| `Modbus_TCP_Read` | — | `out:f` | `host`,`unit`,`fc`,`addr`,`type`,`fallback` | GOOD khi TCP conn OK + cache fresh; BAD/fallback khi disconnect/stale |
+| `BACnet_AV` | `in:f?` (optional) | `out:f` | `instance`,`name` | priority resolver — mức 5 (graph) vs mức 3 (BACnet write) |
+| `BACnet_BV` | `in:b?` (optional) | `out:b` | `instance`,`name` | tương tự BACnet_AV kiểu bool |
 
 > BACnet AI/AO/BI/BO không cần component riêng: phát sinh tự động từ `io_map`
 > (`AI_Input→AI`, `DI_Input→BI`, `AO_Output→AO`, `DO_Output→BO`) theo §11 product
 > definition. `BACnet_AV/BV` dùng cho điểm ảo (setpoint/mode).
+
+### 8.1 Source data của Protocol nodes trong scan loop
+
+```
+Modbus_RTU_Read  → đọc ext_cache (mkddc-iobus cập nhật mỗi poll_ms qua RS-485)
+Modbus_TCP_Read  → đọc ext_cache TCP (mkddc-iobus cập nhật mỗi poll_ms qua TCP)
+Modbus_RTU_Write → push write_cmd vào fieldbus.sock (mkddc-iobus thực thi FC05/06/15/16)
+BACnet_AV/BV     → đọc/ghi bacnet_objtable (trong mkddc-iobus; priority resolver quyết định)
+```
+
+Scan step 3 trong core (`07_MKDDC_CORE_IMPLEMENTATION_GUIDE §2`) mở rộng đọc ext_cache cho
+Protocol RTU và TCP nodes. Write nodes và BACnet nodes có path riêng (write-queue + bacnet_objtable).
+
+### 8.2 Ràng buộc power_on
+
+`Modbus_RTU_Write`: không cần `power_on` (sink node, không output ra IO onboard).
+`BACnet_AV`, `BACnet_BV`: không cần `power_on` nếu `out` không wired đến AO_Output/DO_Output.
+Nếu `out` của BACnet_AV/BV wired đến AO/DO node thì phải có `power_on.out` (validator enforces).
+
+### 8.3 Error / stale propagation
+
+Khi Protocol node có quality BAD:
+- Node output = `fallback` (Modbus_*_Read) hoặc giữ nguyên (BACnet_AV/BV).
+- Quality BAD lan theo link: node downstream nhận input có quality BAD → tính quality output theo `06_COMPLIB §6` (weakest-link rule).
+- Alarm E302 (poll timeout) hoặc E303 (bus error) phát từ mkddc-iobus; mkddc-core phản ánh quality qua bacnet_reliability map (BAC-005).
+
+> **Trạng thái:** §8 mở rộng 2026-06-26 — spec chi tiết; implementation pending COR-011 + MOD-013.
 
 ## 9. Đếm số component Rev A
 

@@ -1,12 +1,12 @@
 # Power Supply Design — MK-DDC-24 Carrier Board
 
-> **Document:** HW-DES-04-PWR | Rev 1.0 | 2026-05-27
+> **Document:** HW-DES-04-PWR | Rev 1.1 | 2026-06-23
 
 ---
 
 ## 1. Tổng quan
 
-Nguồn đầu vào duy nhất: **24 VAC hoặc 24 VDC ±20%** (19.2V – 28.8V).  
+Nguồn đầu vào duy nhất: **24 VAC hoặc 24 VDC ±20%** (19.2V – 28.8V).
 Carrier board tự tạo tất cả các rail nội bộ từ nguồn này.
 
 ---
@@ -16,7 +16,7 @@ Carrier board tự tạo tất cả các rail nội bộ từ nguồn này.
 | Rail | Điện áp | Dòng max | Tải chính |
 |------|:-------:|:--------:|---------|
 | **+5V** | 5.0V ±2% | 3.0A | Radxa CM3 (2.5A), RS-485, logic |
-| **+3.3V** | 3.3V ±1% | 1.0A | MCU STM32, ADS131M08, DI opto ref, DIP SW |
+| **+3.3V** | 3.3V ±1% | 1.1A | MCU STM32, 2× ADS131M08, UI protection, DIP SW |
 | **+1.8V** | 1.8V ±1% | 200mA | ADS131M08 DVDD, spare |
 | **+15V** | 15V ±2% | 200mA | AO op-amp rail (dùng 4 AO op-amp TLV4110) |
 | **+5V_RELAY** | 5.0V ±5% | 400mA | Relay coil ×4 (100mA/relay) |
@@ -45,14 +45,14 @@ Carrier board tự tạo tất cả các rail nội bộ từ nguồn này.
 | **C1** | 2200µF / 50V, electrolytic | Bulk cap, giảm ripple sau rectifier |
 | **C2** | 100nF / 63V, X7R | HF bypass |
 
-**DC_RAW:** 28–32V đỉnh (từ 24VAC) hoặc 19.2–28.8V (từ 24VDC).  
+**DC_RAW:** 28–32V đỉnh (từ 24VAC) hoặc 19.2–28.8V (từ 24VDC).
 **Voltage range vào DC/DC Stage 2:** 19–33V.
 
 ---
 
 ## 4. Stage 2 — DC/DC: Tạo +5V/3A
 
-**IC:** LM2596HVS-5.0 (Step-down, 5V fixed, 3A, 150kHz, input max 45V)  
+**IC:** LM2596HVS-5.0 (Step-down, 5V fixed, 3A, 150kHz, input max 45V)
 hoặc alternative: **MPQ8636** (synchronous, hiệu suất cao hơn)
 
 ```
@@ -71,7 +71,7 @@ DC_RAW ──[L1 100µH]──[LM2596HVS]──[D_catch SS34]──+5V
 | **C5** | 100nF X7R | Output HF bypass |
 | **C_in** | 470µF / 50V | Thêm vào input LM2596 |
 
-**Hiệu suất:** ~80% @ 2A → dissipation ≈ 2.5W (cần thermal pad trên PCB)  
+**Hiệu suất:** ~80% @ 2A → dissipation ≈ 2.5W (cần thermal pad trên PCB)
 **Ripple output:** < 50mVpp @ 3A
 
 ---
@@ -80,7 +80,7 @@ DC_RAW ──[L1 100µH]──[LM2596HVS]──[D_catch SS34]──+5V
 
 ### 5.1 +3.3V từ +5V
 
-**IC:** AMS1117-3.3 (LDO, 1A, dropout 1.3V @ 1A)  
+**IC:** AMS1117-3.3 (LDO, 1A, dropout 1.3V @ 1A)
 Hoặc: **AP2114H-3.3** (LDO, 1A, quiescent 55µA, ổn định hơn)
 
 ```
@@ -157,23 +157,41 @@ Hoặc: **AP2114H-3.3** (LDO, 1A, quiescent 55µA, ổn định hơn)
 
 ---
 
-## 10. Power Budget Tổng thể
+## 10. Power Budget Tong the
 
-| Tải | Điện áp | Dòng điển hình | Dòng max |
-|-----|:-------:|:--------------:|:--------:|
-| Radxa CM3 (idle) | 5V | 800mA | 2.5A (full load) |
-| STM32G0B1 | 3.3V | 20mA | 50mA |
-| ADS131M08 | 3.3V | 30mA | 50mA |
-| RS-485 MAX13487E | 3.3V | 20mA | 50mA |
-| DI Optocoupler ×8 | 3.3V | 80mA (10mA/kênh) | 80mA |
-| LED ×4 | 3.3V | 20mA (5mA/LED) | 20mA |
-| AO op-amp ×4 | 15V | 40mA | 80mA |
-| Relay coil ×4 | 5V | 320mA (80mA/relay) | 400mA |
-| **Tổng** | — | **~1.4A ×5V + ~0.25A×15V** | **~4.5W điển hình** |
-| **Nguồn cung cấp** | 24V input | **~250mA** | **375mA @ 80% eff** |
+| Load | Rail | Typical | Max | Notes |
+|------|------|--------:|----:|-------|
+| Radxa CM3 | 5V | 800mA | 2.5A | Load depends on CPU/peripherals |
+| STM32G0B1 | 3.3V | 20mA | 50mA | Realtime I/O controller |
+| ADS131M08 x2 | 3.3V | 60mA | 100mA | 2 ADC devices |
+| UI op-amp buffers | 3.3V | TBD | TBD | Select final part before release |
+| UI mode latch chain | 3.3V | <10mA est. | TBD | 6x shift/latch devices, no 120mA GPIO-enable assumption |
+| UI pull-ups/excitation | VREF_UI/3.3V | TBD | TBD | Depends on selected NTC/dry-contact excitation |
+| RS-485 MAX13487E | 3.3V | 20mA | 50mA | Transceiver side |
+| LEDs | 3.3V | 20mA | 20mA | User indicators |
+| AO op-amp/output section | 15V | 40mA | 80mA | Final AO design dependent |
+| Relay coil x4 | 5V | 320mA | 400mA | All relays energized |
 
-**Nguồn 24VAC/VDC 30W** là đủ cho toàn bộ tải.
+Power budget is not released until the final UI op-amp, mode latch, VREF_UI, and protection components are selected in schematic/BOM.
+
+## 11. UI Rev A Power Changes
+
+| Previous assumption | Rev A correction |
+|---------------------|------------------|
+| PB4-PB11 used as UI_EN with up to 120mA GPIO load | Removed. Per-channel mode latch uses serial control and low current. |
+| 16x REF200/current-source RTD path | Removed from Rev A UI because RTD is not supported. |
+| UI protection listed as fixed 5mA/channel | Must be recalculated from actual PTC/TVS/clamp/front-end design. |
+| Dry contact replaces DI | False. Dry contact is auxiliary and not isolated. |
+
+## Revision History
+
+| Rev | Ngay | Thay doi |
+|-----|------|----------|
+| 1.0 | 2026-05-27 | Initial power design |
+| 1.1 | 2026-06-23 | DI to UI migration |
+| 1.2 | 2026-06-23 | Phase 1-2 power budget refresh |
+| 1.3 | 2026-06-23 | UI architecture review: mode latch, buffers, RTD removed, power budget reopened pending final schematic |
 
 ---
 
-**Document ID:** HW-DES-04-PWR | Rev 1.0 | 2026-05-27
+**Document ID:** HW-DES-04-PWR | Rev 1.3 | 2026-06-23

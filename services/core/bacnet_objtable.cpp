@@ -73,13 +73,14 @@ void BacnetObjTable::detach()
 }
 
 /* BAC-008: map quality + fault → BACnet Reliability (SW_BACNET_DESIGN §6).
- * ch_mask_bit: bit tương ứng kênh trong fault_flags (1 << ch) để kiểm tra per-channel fault. */
+ * ch_mask_bit: reserved for future per-channel diagnostics (unused in IOP v2). */
 uint8_t quality_to_reliability(kx_quality_t q, uint16_t fault_flags, int ch_mask_bit)
 {
-    /* IOP ADC fault → communication failure cho tất cả AI */
-    if (fault_flags & IOP_FAULT_ADC) return 5;   /* COMM_FAILURE */
-    /* Per-channel over-voltage → OVER_RANGE */
-    if ((fault_flags & IOP_FAULT_UI_OV) && (fault_flags & (uint16_t)(1u << (ch_mask_bit + 8))))
+    if (fault_flags & (IOP_FAULT_ADC1 | IOP_FAULT_ADC2)) return 5;   /* COMM_FAILURE */
+    /* IOP v2 (ADR-010): FAULT_FLAGS bits 8-15 reserved/always-0.
+     * Aggregate IOP_FAULT_UI_OV covers all 16 channels — no per-channel bit lookup. */
+    (void)ch_mask_bit;
+    if (fault_flags & IOP_FAULT_UI_OV)
         return 1;   /* OVER_RANGE */
     switch (q) {
         case KX_Q_GOOD:      return 0;   /* NO_FAULT_DETECTED */

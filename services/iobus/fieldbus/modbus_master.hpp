@@ -68,6 +68,13 @@ public:
      * 0 = có slave đến hạn ngay. */
     uint32_t sleep_ms_until_next(uint64_t now_ms) const;
 
+    /* Tổng số ext slots đã cấp phát cho RTU slaves — TCP offset bắt đầu từ đây. */
+    uint16_t total_ext_count() const {
+        if (slave_ext_base_.empty()) return 0;
+        const size_t last = slave_ext_base_.size() - 1;
+        return static_cast<uint16_t>(slave_ext_base_[last] + slave_ext_count_[last]);
+    }
+
 private:
     void read_slave(uint8_t slave_idx, uint64_t now_ms,
                     ExtCache& cache, FieldbusMetrics& metrics);

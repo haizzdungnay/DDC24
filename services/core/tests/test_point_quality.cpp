@@ -92,7 +92,7 @@ TEST(PointQuality, AdcFaultMakesUiBad)
     PointTable t;
     PointQuality q;
     IoSnapshot io = good_io(1000);
-    io.fault_flags = IOP_FAULT_ADC;
+    io.fault_flags = IOP_FAULT_ADC1;
     t.update_inputs(io);
     q.evaluate(t, io);
     for (int i = 0; i < KX_N_UI; i++)

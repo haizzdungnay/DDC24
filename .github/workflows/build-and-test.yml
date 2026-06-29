@@ -44,6 +44,10 @@ jobs:
             bacnet: ON
             modbus: OFF
             extra_packages: ""
+          - name: modbus+bacnet
+            bacnet: ON
+            modbus: ON
+            extra_packages: libmodbus-dev
 
     steps:
       - name: Checkout

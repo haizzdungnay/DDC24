@@ -35,6 +35,7 @@
 #include "fieldbus/fieldbus_config.hpp"
 #include "fieldbus/fieldbus_metrics.hpp"
 #include "fieldbus/modbus_master.hpp"
+#include "fieldbus/modbus_tcp.hpp"
 #include "bacnet/bacnet_config.hpp"
 #include "bacnet/bacnet_objects.hpp"
 #include "bacnet/bacnet_server.hpp"
@@ -235,6 +236,7 @@ int main(int argc, char** argv)
     sigaction(SIGHUP, &sa_hup, nullptr);
     fieldbus::FieldbusConfig fieldbus_cfg;
     fieldbus::ModbusMaster modbus;
+    fieldbus::ModbusTcp    modbus_tcp;
     fieldbus::ExtCache ext_cache;
     fieldbus::FieldbusMetrics fieldbus_metrics;
     std::thread fieldbus_thread;
@@ -243,12 +245,25 @@ int main(int argc, char** argv)
         cache.detach();
         return 1;
     }
-    if (fieldbus_cfg.loaded && !fieldbus_cfg.slaves.empty() && modbus.open(fieldbus_cfg)) {
+    const bool rtu_ok = fieldbus_cfg.loaded && !fieldbus_cfg.slaves.empty()
+                        && modbus.open(fieldbus_cfg);
+    if (fieldbus_cfg.loaded && !fieldbus_cfg.tcp_slaves.empty()) {
+        const uint16_t tcp_offset = modbus.total_ext_count();
+        modbus_tcp.open(fieldbus_cfg, tcp_offset);
+    }
+    if (rtu_ok || modbus_tcp.has_slaves()) {
         fieldbus_thread = std::thread([&]() {
             while (!g_shutdown.load()) {
                 const uint64_t poll_now = now_ms();
-                modbus.poll_once(poll_now, ext_cache, fieldbus_metrics, fieldbus_sock_path);
-                uint32_t wait_ms = modbus.sleep_ms_until_next(now_ms());
+                if (rtu_ok)
+                    modbus.poll_once(poll_now, ext_cache, fieldbus_metrics, fieldbus_sock_path);
+                if (modbus_tcp.has_slaves())
+                    modbus_tcp.poll_once(poll_now, ext_cache, fieldbus_sock_path);
+                uint32_t wait_ms = rtu_ok ? modbus.sleep_ms_until_next(now_ms()) : 1000u;
+                if (modbus_tcp.has_slaves()) {
+                    const uint32_t tcp_wait = modbus_tcp.sleep_ms_until_next(now_ms());
+                    if (tcp_wait < wait_ms) wait_ms = tcp_wait;
+                }
                 if (wait_ms == 0) wait_ms = 1;
                 if (wait_ms > 100) wait_ms = 100;
                 std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
@@ -279,6 +294,16 @@ int main(int argc, char** argv)
         };
         bacnet_server.init(bacnet_cfg, &bacnet_objects, core_write, reinit);
         if (bacnet_server.start()) {
+            /* Push initial unit codes into bacnet-stack AI objects (thread not yet started) */
+            {
+                char units[KX_N_UI][8];
+                for (int i = 0; i < KX_N_UI; i++) {
+                    std::strncpy(units[i], sensor_unit(cfg.ui_sensor[i]), sizeof(units[i]) - 1);
+                    units[i][sizeof(units[i]) - 1] = '\0';
+                }
+                bacnet_objects.update_ai_units(units);
+                bacnet_server.apply_ai_units();
+            }
             bacnet_thread = std::thread([&]() {
                 const kx_plc_shm_t* plc_shm = nullptr;
                 while (!g_shutdown.load()) {
@@ -327,6 +352,27 @@ int main(int argc, char** argv)
             alarm.publish({"IOP_INIT_FAIL", "critical", "MCU handshake failed",
                            "{\"uart\":\"" + cfg.uart_device + "\"}"});
             return false;
+        }
+        /* Validate BOARD_CAP_MAP against expected Rev A capability (ADR-010). */
+        {
+            const uint16_t cap = client.board_cap_map();
+            if (!(cap & IOP_BOARD_CAP_UI_16)) {
+                char buf[64];
+                std::snprintf(buf, sizeof(buf), "{\"board_cap\":\"0x%04X\"}", cap);
+                alarm.publish({"IOP_CAP_MISMATCH", "critical",
+                               "Board does not advertise UI_16 — wrong SKU or stale FW", buf});
+                std::fprintf(stderr, "ERROR iop.cap_mismatch: UI_16 not set in board_cap=0x%04X\n", cap);
+                return false;
+            }
+            if ((cap & IOP_BOARD_CAP_REV_A) != IOP_BOARD_CAP_REV_A) {
+                char buf[64];
+                std::snprintf(buf, sizeof(buf), "{\"board_cap\":\"0x%04X\",\"expected\":\"0x%04X\"}",
+                              cap, IOP_BOARD_CAP_REV_A);
+                alarm.publish({"IOP_CAP_WARN", "warning",
+                               "Board cap map does not match Rev A baseline", buf});
+                std::fprintf(stderr, "WARN  iop.cap_mismatch: board_cap=0x%04X expected=0x%04X\n",
+                             cap, IOP_BOARD_CAP_REV_A);
+            }
         }
         /* RESET_IO reason=NORMAL — khuyến nghị, fail chỉ WARN */
         IopResult rst = client.reset_io(IOP_RESET_REASON_NORMAL);
@@ -448,6 +494,8 @@ int main(int argc, char** argv)
                         units[i][sizeof(units[i]) - 1] = '\0';
                     }
                     cache.write_ui_units(units);
+                    bacnet_objects.update_ai_units(units);
+                    bacnet_server.apply_ai_units();
                 }
 
                 bool ao_changed = false;
@@ -517,8 +565,7 @@ int main(int argc, char** argv)
                         snap.ui_value[i] = ui_to_eng(resp.ui_raw[i], cfg.ui_sensor[i], &q);
                         snap.ui_quality[i] = static_cast<uint8_t>(q);
                     }
-                    for (int i = 0; i < KX_N_DI; i++)
-                        snap.di_state[i] = (resp.di_mask >> i) & 1u;
+                    /* di_state stays 0: base SKU Rev A has no DI (ADR-010) */
                     for (int i = 0; i < KX_N_DO; i++)
                         snap.do_feedback[i] = (resp.do_fb_mask >> i) & 1u;
                     snap.fault_flags = resp.fault_flags;
@@ -533,7 +580,7 @@ int main(int argc, char** argv)
                             std::snprintf(data, sizeof(data), "{\"fault_flags\":%u}", resp.fault_flags);
                             alarm.publish({"MCU_FAULT_FLAGS",
                                            (resp.fault_flags & (IOP_FAULT_WDG_RESET | IOP_FAULT_RELAY_STUCK |
-                                                                IOP_FAULT_MCU_OVERTEMP)) ? "critical" : "warning",
+                                                                IOP_FAULT_MCU_OVERTEMP | IOP_FAULT_VDD)) ? "critical" : "warning",
                                            "MCU fault flags changed", data});
                             if (resp.fault_flags & IOP_FAULT_WDG_RESET) {
                                 IopDiagResp diag;

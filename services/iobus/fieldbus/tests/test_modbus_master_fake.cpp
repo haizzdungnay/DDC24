@@ -84,6 +84,28 @@ TEST(ModbusMaster, Rs485DeviceFromConfigNotHardcoded)
     /* Verify: device name từ config được sử dụng (test bằng cách kiểm tra build) */
     SUCCEED();
 }
+TEST(FieldbusMetrics, E303BusErrorRateAlarm)
+{
+    FieldbusMetrics metrics;
+    metrics.init({"slave1"}, {1});
+
+    /* 8 successes → error_rate = 0% — no alarm */
+    for (int i = 0; i < 8; i++) metrics.update(0, true, static_cast<uint64_t>(i) * 100);
+    EXPECT_FALSE(metrics.check_e303(0));
+
+    /* +2 errors → 2/10 = 20% > 10% threshold → first trigger = true */
+    metrics.update(0, false, 900);
+    metrics.update(0, false, 1000);
+
+    EXPECT_TRUE(metrics.check_e303(0));
+    EXPECT_TRUE(metrics.get(0).e303_triggered);
+    EXPECT_FALSE(metrics.check_e303(0));  /* no double-trigger */
+
+    /* reset_alarms clears flag */
+    metrics.reset_alarms(0);
+    EXPECT_FALSE(metrics.get(0).e303_triggered);
+}
+
 #ifdef MKDDC_ENABLE_MODBUS
 TEST(ModbusMaster, RtuPtyReadWriteAndTimeout)
 {

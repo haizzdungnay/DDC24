@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "mkddc_shm.h"
 #include "point_table.hpp"
 #include "priority_resolver.hpp"
 
@@ -42,8 +43,17 @@ public:
     /* Reload atomic: fail → giữ graph cũ; nội dung không đổi → giữ state node. */
     bool reload(const std::string& path);
 
-    /* Execute 1 scan theo topo order; sink ghi resolver mức PRIO_LOCAL_LOGIC. */
-    void execute(const PointTable& table, PriorityResolver& resolver);
+    /* Execute 1 scan theo topo order; sink ghi resolver mức PRIO_LOCAL_LOGIC.
+     * PointTable non-const: BACnet_AV/BV Protocol nodes ghi virtual points. */
+    void execute(PointTable& table, PriorityResolver& resolver);
+
+    /* COR-011: cập nhật ext snapshot từ plc_shm.ext[] trước khi execute().
+     * Protocol nodes đọc giá trị từ snapshot này trong compute(). */
+    void feed_ext_snapshot(const kx_ext_point_t* pts, uint16_t count);
+
+    /* COR-011: ghi setpoint/dirty cho Modbus write nodes vào plc_shm.ext[].
+     * Gọi SAU execute() trong scan_loop. */
+    void apply_ext_writes(kx_plc_shm_t* shm) const;
 
     uint32_t declared_scan_ms() const { return declared_scan_ms_; }
     uint32_t effective_scan_ms() const { return scan_ms_; }
@@ -67,7 +77,10 @@ private:
         /* 10 type mới COR-009 */
         MANUAL_AUTO, ON_DELAY, OFF_DELAY,
         INTERLOCK, RUNTIME_COUNTER, PULSE_COUNTER,
-        SAFE_STATE, ALARM_HIGH, ALARM_LOW, ALARM_DELAY
+        SAFE_STATE, ALARM_HIGH, ALARM_LOW, ALARM_DELAY,
+        /* 5 Protocol nodes COR-011 */
+        MODBUS_RTU_READ, MODBUS_RTU_WRITE, MODBUS_TCP_READ,
+        BACNET_AV, BACNET_BV
     };
 
     struct InputPin {
@@ -78,8 +91,10 @@ private:
     struct Node {
         std::string id;
         NodeType    type;
-        std::map<std::string, double> num_params;
-        std::string str_param;
+        std::map<std::string, double>      num_params;
+        std::string                        str_param;    /* backward compat: last string value */
+        std::map<std::string, std::string> str_params;   /* COR-011: all string params by key */
+        int                                proto_ext_idx = -1;  /* COR-011: ext_cache slot */
 
         std::map<std::string, InputPin> inputs;   /* dst_port → {src_idx, src_port} */
         std::map<std::string, float>    outputs;  /* named output ports */
@@ -106,7 +121,7 @@ private:
         bool     pc_di_init     = false;
     };
 
-    void compute(Node& n, const PointTable& table, PriorityResolver& resolver);
+    void compute(Node& n, PointTable& table, PriorityResolver& resolver);
     void reset_runtime_state();
 
     bool     loaded_          = false;
@@ -117,6 +132,9 @@ private:
     std::vector<Node> nodes_;
     std::vector<int>  order_;
     std::vector<int>  used_ai_;
+    /* COR-011: ext snapshot (copy từ plc_shm.ext[] sau read_ext()) */
+    kx_ext_point_t ext_snapshot_[KX_N_EXT] = {};
+    uint16_t       ext_snap_count_          = 0;
 };
 
 } // namespace core

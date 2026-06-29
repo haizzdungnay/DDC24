@@ -1,6 +1,6 @@
 /**
  * @file  fake_mcu.cpp
- * @brief Emulator MCU slave IOP qua PTY/UART — contract 06 §11.
+ * @brief Emulator MCU slave IOP qua PTY/UART — contract 05 §11 (ADR-010 v2).
  *        Self-contained: chỉ phụ thuộc shared/iop_protocol.h (không link iobus_lib).
  *
  * Hành vi:
@@ -47,8 +47,9 @@ struct Inject {
     uint8_t  nack_cmd = 0;            /* NACK command này... */
     uint8_t  nack_err = 0;            /* ...với error code này */
     bool     seq_wrong = false;       /* echo SEQ+1 (sai) */
-    bool     stuck_relay = false;     /* DO_FB không theo lệnh + FAULT bit3 */
-    bool     overtemp = false;        /* MCU_TEMP=90.0°C + FAULT bit5 */
+    bool     stuck_relay = false;     /* DO_FB không theo lệnh + FAULT bit4 (IOP_FAULT_RELAY_STUCK) */
+    bool     overtemp = false;        /* MCU_TEMP=90.0°C + FAULT bit6 (IOP_FAULT_MCU_OVERTEMP) */
+    bool     vdd_fault = false;       /* FAULT bit7 (IOP_FAULT_VDD) — critical alarm path */
     uint8_t  hs_status = IOP_HS_STATUS_OK;
 };
 
@@ -75,37 +76,66 @@ size_t build_frame(uint8_t cmd, uint8_t seq, const uint8_t* payload, uint8_t len
 }
 
 void put_be16(uint8_t* p, uint16_t v) { p[0] = static_cast<uint8_t>(v >> 8); p[1] = static_cast<uint8_t>(v); }
-void put_be24(uint8_t* p, uint32_t v)
+void put_be32s(uint8_t* p, int32_t v)
 {
-    p[0] = static_cast<uint8_t>(v >> 16);
-    p[1] = static_cast<uint8_t>(v >> 8);
-    p[2] = static_cast<uint8_t>(v);
+    const uint32_t u = static_cast<uint32_t>(v);
+    p[0] = static_cast<uint8_t>(u >> 24);
+    p[1] = static_cast<uint8_t>(u >> 16);
+    p[2] = static_cast<uint8_t>(u >> 8);
+    p[3] = static_cast<uint8_t>(u);
 }
 
 void build_io_resp_payload(McuState& st, const Inject& inj, uint8_t* p)
 {
+    /* IO_RESP v2 — 74 bytes (ADR-010) */
     const double t = static_cast<double>(now_ns() - st.boot_ns) / 1e9;
-    for (int i = 0; i < 8; i++) {
-        /* UI fake: ramp + sin, mỗi kênh lệch pha — scale trong dải s24 dương */
-        const double frac = 0.5 + 0.45 * std::sin(0.2 * t + i * 0.7);
-        put_be24(p + 3 * i, static_cast<uint32_t>(frac * 8388607.0));
+    constexpr double FS = 8388607.0;  /* IO_S24_FS */
+
+    /* [0..63] UI_RAW[16] — 16 × int32 BE signed, per-group sensor simulation:
+     *   UI1-4  (i=0-3):  0-10V    slow sin, frac 0.05-0.95 → 0.5-9.5V
+     *   UI5-8  (i=4-7):  4-20mA   frac 0.05-0.95 → iobus maps 4+frac×16 mA
+     *   UI9-10 (i=8-9):  NTC10K   frac 0.40-0.55 → R≈8-11kΩ → ~22-30°C
+     *   UI11-12(i=10-11):NTC20K   frac 0.40-0.55 → R≈16-22kΩ → ~21-28°C
+     *   UI13-14(i=12-13):dry-contact toggle ~5s
+     *   UI15-16(i=14-15):0-10V / 4-20mA fast variation */
+    for (int i = 0; i < 16; i++) {
+        double frac;
+        if (i < 4) {
+            frac = 0.5 + 0.45 * std::sin(0.3 * t + i * 0.8);
+        } else if (i < 8) {
+            frac = 0.5 + 0.45 * std::sin(0.5 * t + i * 0.6);
+        } else if (i < 10) {
+            frac = 0.475 + 0.075 * std::sin(0.07 * t + i * 1.1);
+        } else if (i < 12) {
+            frac = 0.475 + 0.075 * std::sin(0.09 * t + i * 1.3);
+        } else if (i < 14) {
+            frac = (std::sin(0.628 * t + i * 1.57) > 0.0) ? 0.9 : 0.05;
+        } else {
+            frac = 0.5 + 0.45 * std::sin(1.5 * t + i * 0.4);
+        }
+        put_be32s(p + 4 * i, static_cast<int32_t>(frac * FS));
     }
-    p[24] = static_cast<uint8_t>((static_cast<int>(t) / 5) & 1 ? 0x0F : 0x00);  /* DI toggle 5s */
-    p[25] = inj.stuck_relay ? static_cast<uint8_t>(st.do_state ^ 0x01)          /* DO1 kẹt */
-                            : st.do_state;
-    int16_t temp = inj.overtemp ? 900 : 250;                                    /* 90.0 / 25.0 °C */
-    put_be16(p + 26, static_cast<uint16_t>(temp));
+    /* [64] ADC1_STAT  [65] ADC2_STAT */
+    p[64] = IOP_ADC_STAT_DRDY_OK;
+    p[65] = IOP_ADC_STAT_DRDY_OK;
+    /* [66..67] MCU_TEMP */
+    put_be16(p + 66, static_cast<uint16_t>(inj.overtemp ? 900 : 250));
+    /* [68..69] FAULT_FLAGS v2 */
     uint16_t flags = st.fault_flags;
     if (inj.stuck_relay) flags |= IOP_FAULT_RELAY_STUCK;
     if (inj.overtemp)    flags |= IOP_FAULT_MCU_OVERTEMP;
-    put_be16(p + 28, flags);
-    put_be16(p + 30, st.sample_cnt++);
-    put_be16(p + 32, 0);
+    if (inj.vdd_fault)   flags |= IOP_FAULT_VDD;
+    put_be16(p + 68, flags);
+    /* [70..71] SAMPLE_CNT */
+    put_be16(p + 70, st.sample_cnt++);
+    /* [72] DO_FB_MASK  [73] reserved */
+    p[72] = inj.stuck_relay ? static_cast<uint8_t>(st.do_state ^ 0x01) : st.do_state;
+    p[73] = 0;
 }
 
 void build_diag_payload(McuState& st, const Inject& inj, uint8_t* p)
 {
-    put_be16(p + 0, 0x0100);                                              /* FW 1.0 */
+    put_be16(p + 0, 0x0200);                                              /* FW 2.0 */
     put_be16(p + 2, static_cast<uint16_t>((now_ns() - st.boot_ns) / 1000000000ull));
     put_be16(p + 4, st.rx_cnt);
     put_be16(p + 6, st.crc_err);
@@ -115,7 +145,7 @@ void build_diag_payload(McuState& st, const Inject& inj, uint8_t* p)
     put_be16(p + 14, static_cast<uint16_t>(inj.overtemp ? 900 : 300));
     put_be16(p + 16, 3300);                                               /* VDD mV */
     put_be16(p + 18, 0);
-    st.fault_flags &= static_cast<uint16_t>(~IOP_FAULT_WDG_RESET);        /* clear sticky */
+    st.fault_flags &= static_cast<uint16_t>(~IOP_FAULT_WDG_RESET);   /* clear sticky (v2: bit5) */
 }
 
 int open_uart(const std::string& dev)
@@ -194,12 +224,13 @@ int main(int argc, char** argv)
         else if (a == "--seq-wrong") inj.seq_wrong = true;
         else if (a == "--stuck-relay") inj.stuck_relay = true;
         else if (a == "--overtemp") inj.overtemp = true;
+        else if (a == "--vdd-fault") inj.vdd_fault = true;
         else if (a == "--hs-status" && i + 1 < argc) inj.hs_status = static_cast<uint8_t>(std::atoi(argv[++i]));
         else if (a == "--verbose" || a == "-v") verbose = true;
         else if (a == "--help") {
             std::printf("usage: fake_mcu (--pty | --uart DEV) [inject options]\n"
                         "  --crc-error RATE   --timeout N   --nack CMD ERR\n"
-                        "  --seq-wrong   --stuck-relay   --overtemp   --hs-status N\n");
+                        "  --seq-wrong   --stuck-relay   --overtemp   --vdd-fault   --hs-status N\n");
             return 0;
         }
     }
@@ -300,9 +331,10 @@ int main(int argc, char** argv)
                 switch (cmd) {
                 case CMD_HANDSHAKE:
                     put_be16(resp_payload + 0, static_cast<uint16_t>((IOP_VER_MAJOR << 8) | IOP_VER_MINOR));
-                    put_be16(resp_payload + 2, 0x0100);
+                    put_be16(resp_payload + 2, 0x0200);   /* MCU FW version 2.0 */
                     resp_payload[4] = inj.hs_status;
                     resp_payload[5] = 0;
+                    put_be16(resp_payload + 6, IOP_BOARD_CAP_REV_A);  /* Rev A: UI_16|DO_4|AO_4 */
                     n = build_frame(CMD_HANDSHAKE_RESP, echo_seq, resp_payload, IOP_HANDSHAKE_RESP_LEN, out, corrupt);
                     st.safe_state = false;
                     if (verbose) std::fprintf(stderr, "fake_mcu: handshake status=%u\n", inj.hs_status);

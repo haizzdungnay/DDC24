@@ -54,14 +54,16 @@ struct BacnetStatusFlags {
 
 /**
  * Compute BACnet Reliability from kx_quality_t + IOP fault flags.
- * ch_mask_bit: per-channel bit in fault_flags for UI_OV (bit 0..7 for ch 0..7, shifted +8).
+ * ch_idx: channel index (0-based); reserved for future per-channel diagnostics.
+ *         IOP v2 (ADR-010) FAULT_FLAGS bits 8-15 are reserved/always-0,
+ *         so IOP_FAULT_UI_OV is treated as aggregate covering all 16 channels.
  *
  * Map (SW_BACNET_DESIGN §6):
- *   KX_Q_GOOD   + no fault        → NO_FAULT_DETECTED
- *   KX_Q_GOOD   + IOP_FAULT_ADC   → COMMUNICATION_FAILURE
- *   KX_Q_GOOD   + UI_OV channel   → OVER_RANGE
- *   KX_Q_UNCERTAIN                → COMMUNICATION_FAILURE
- *   KX_Q_BAD                      → COMMUNICATION_FAILURE
+ *   KX_Q_GOOD   + no fault              → NO_FAULT_DETECTED
+ *   KX_Q_GOOD   + IOP_FAULT_ADC1/ADC2  → COMMUNICATION_FAILURE
+ *   KX_Q_GOOD   + IOP_FAULT_UI_OV      → OVER_RANGE (any channel, aggregate)
+ *   KX_Q_UNCERTAIN                      → COMMUNICATION_FAILURE
+ *   KX_Q_BAD                            → COMMUNICATION_FAILURE
  */
 BacnetReliability compute_reliability(kx_quality_t q, uint16_t fault_flags, int ch_idx);
 

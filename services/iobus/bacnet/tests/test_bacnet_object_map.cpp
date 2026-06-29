@@ -31,8 +31,10 @@ struct WriteSpy {
 TEST(BacnetObjects, DefaultNames)
 {
     BacnetObjects obj;
-    EXPECT_EQ(obj.ai_name(1), "AI1");
-    EXPECT_EQ(obj.ai_name(8), "AI8");
+    EXPECT_EQ(obj.ai_name(1),  "AI1");
+    EXPECT_EQ(obj.ai_name(8),  "AI8");
+    EXPECT_EQ(obj.ai_name(9),  "AI9");   /* ADR-010: N_AI=16 */
+    EXPECT_EQ(obj.ai_name(16), "AI16");
     EXPECT_EQ(obj.bi_name(1), "BI1");
     EXPECT_EQ(obj.ao_name(4), "AO4");
     EXPECT_EQ(obj.av_name(32), "AV32");
@@ -43,8 +45,27 @@ TEST(BacnetObjects, DefaultNames)
 TEST(BacnetObjects, OutOfRangeNameEmpty)
 {
     BacnetObjects obj;
-    EXPECT_TRUE(obj.ai_name(9).empty());
+    EXPECT_TRUE(obj.ai_name(17).empty()); /* first index beyond 16 AIs */
     EXPECT_TRUE(obj.ao_name(5).empty());
+}
+
+TEST(BacnetObjects, UpdateAiUnitsRoundTrip)
+{
+    BacnetObjects obj;
+    /* default: all "no-units" */
+    EXPECT_EQ(obj.ai_unit(1), "no-units");
+
+    char units[KX_N_UI][8] = {};
+    std::strncpy(units[0], "mA",   7);   /* UI1 → 4-20mA */
+    std::strncpy(units[1], "V",    7);   /* UI2 → 0-10V  */
+    std::strncpy(units[2], "degC", 7);   /* UI3 → NTC    */
+    obj.update_ai_units(units);
+
+    EXPECT_EQ(obj.ai_unit(1), "mA");
+    EXPECT_EQ(obj.ai_unit(2), "V");
+    EXPECT_EQ(obj.ai_unit(3), "degC");
+    EXPECT_EQ(obj.ai_unit(4), "");       /* unset → empty from units[] init */
+    EXPECT_EQ(obj.ai_unit(16), "");
 }
 
 TEST(BacnetObjects, WriteAoSendsToCoreWithPrio3)

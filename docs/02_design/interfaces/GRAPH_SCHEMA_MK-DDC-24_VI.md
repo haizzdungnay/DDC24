@@ -1,8 +1,8 @@
 # Graph Schema (`graph.json`) & Deploy Contract — MK-DDC-24
 
 > **Document ID:** IF-GRAPH-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-08
-> **Trạng thái:** Approved (Owner 2026-06-08)
+> **Phiên bản:** 1.1 | 2026-06-26
+> **Trạng thái:** Draft amendment — §10 Protocol node catalog thêm mới, chờ owner approve
 > 📘 **Đọc cùng:** [PRODUCT_DEFINITION](../../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) ·
 > [SW_RUNTIME_EXECUTION_MODEL](../software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) ·
 > [SW_COMPONENT_LIBRARY](../software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) · [ADR-004](../../adr/ADR-004-component-based-runtime.md)
@@ -149,3 +149,144 @@ trả lỗi. Chi tiết schema REST: [REST_API_OPENAPI](REST_API_OPENAPI_MK-DDC-
 là **phần logic điều khiển** (nodes/links) cộng tham chiếu io_map/modbus. Trong Rev A,
 io_map & modbus có thể nằm trong graph.json hoặc tách file config; **nguồn-chuẩn cấu trúc
 field = tài liệu này**; `CONFIG_SCHEMA` được cập nhật để trỏ về đây (Phase 3).
+
+---
+
+## 10. Protocol node type catalog (Rev A — 5 types)
+
+> Đây là contract **validator** cho Protocol component. Mỗi `node.type` trong bảng này phải
+> khớp chính xác (case-sensitive). Params được validator kiểm trước khi `graph_runtime.build_plan()`.
+> Nguồn chuẩn: [SW_COMPONENT_LIBRARY §8](../software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md).
+
+### 10.1 `Modbus_RTU_Read`
+
+| Param | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
+|-------|------|----------|-----------|-------|
+| `bus` | int | ✓ | 1 hoặc 2 | Cổng RS-485 (1=RS485-1, 2=RS485-2) |
+| `slave` | int | ✓ | 1–247 | Địa chỉ slave Modbus RTU |
+| `fc` | int | ✓ | 1,2,3,4 | Function code đọc |
+| `addr` | int | ✓ | 0–65535 | Địa chỉ register/coil |
+| `type` | string | ✓ | `"bool"`,`"u16"`,`"s16"`,`"u32"`,`"s32"`,`"f32"` | Kiểu dữ liệu register |
+| `scale` | float | ✗ | — | Hệ số nhân (default 1.0) |
+| `fallback` | float | ✓ | — | Giá trị dùng khi stale/quality BAD |
+
+Ports: `out:float` (sau scale).
+
+Quality propagation:
+- ext_cache quality = GOOD → `out` = `raw × scale`.
+- ext_cache quality = BAD hoặc stale > poll_ms × 3 → `out` = `fallback`; quality BAD lan downstream.
+
+Validator rule: `fallback` là **bắt buộc** (kiểm check #4 hiện tại trong GRAPH_SCHEMA §6).
+
+### 10.2 `Modbus_RTU_Write`
+
+| Param | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
+|-------|------|----------|-----------|-------|
+| `bus` | int | ✓ | 1 hoặc 2 | Cổng RS-485 |
+| `slave` | int | ✓ | 1–247 | Địa chỉ slave |
+| `fc` | int | ✓ | 5,6,15,16 | Function code ghi |
+| `addr` | int | ✓ | 0–65535 | Địa chỉ register/coil |
+| `type` | string | ✓ | `"bool"`,`"u16"`,`"s16"`,`"u32"`,`"s32"`,`"f32"` | Kiểu dữ liệu |
+| `scale` | float | ✗ | — | Hệ số nhân nghịch (graph_value / scale → raw) |
+
+Ports: `in:float` (đầu vào từ graph — bắt buộc wired).
+
+Behavior: mỗi scan, nếu `in` thay đổi (hoặc lần đầu), đẩy vào write-queue của `fieldbus`
+qua `fieldbus.sock`. Không có output port; node là **sink**. Không cần `power_on`.
+
+Validator rule: `in` port phải được wire (đúng 1 source); không có `fallback` (write-only).
+
+### 10.3 `Modbus_TCP_Read`
+
+| Param | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
+|-------|------|----------|-----------|-------|
+| `host` | string | ✓ | IP hoặc hostname | Địa chỉ server Modbus TCP |
+| `port` | int | ✗ | 1–65535 (default 502) | TCP port |
+| `unit` | int | ✓ | 1–247 | Unit ID (Modbus TCP slave address) |
+| `fc` | int | ✓ | 1,2,3,4 | Function code đọc |
+| `addr` | int | ✓ | 0–65535 | Địa chỉ register/coil |
+| `type` | string | ✓ | `"bool"`,`"u16"`,`"s16"`,`"u32"`,`"s32"`,`"f32"` | Kiểu dữ liệu |
+| `scale` | float | ✗ | — | Hệ số nhân (default 1.0) |
+| `fallback` | float | ✓ | — | Giá trị khi stale/disconnect |
+
+Ports: `out:float`.
+
+Quality propagation: giống `Modbus_RTU_Read` — stale = TCP connection lost hoặc poll timeout.
+Kết nối TCP do `modbus_tcp` module trong mkddc-iobus quản lý (xem SW_FIELDBUS_DESIGN §12).
+
+### 10.4 `BACnet_AV`
+
+| Param | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
+|-------|------|----------|-----------|-------|
+| `instance` | int | ✓ | 0–4194302 | BACnet Analog Value instance number |
+| `name` | string | ✓ | — | Object Name (unique trong device) |
+| `writable` | bool | ✗ | true/false (default false) | Cho phép WriteProperty từ BMS |
+| `units` | int | ✗ | BACnet Engineering Units code | Đơn vị (default 95 = no-units) |
+| `min_pres_value` | float | ✗ | — | Min_Pres_Value (optional) |
+| `max_pres_value` | float | ✗ | — | Max_Pres_Value (optional) |
+
+Ports: `in:float?` (optional — nếu wire thì push setpoint vào AV), `out:float` (Present_Value hiện tại).
+
+Behavior:
+- Nếu `writable=true` và có `in` wire: `in` → AV Present_Value ở mức 5 (graph). BMS WriteProperty
+  ở mức 3 có thể override (xem priority resolver).
+- `out` = AV Present_Value sau priority resolution.
+- Dùng cho điểm ảo (setpoint từ BMS/HMI). **Không** dùng cho AI/AO/BI/BO (phát sinh tự động từ io_map).
+
+Validator rule: `instance` phải unique trong graph; `name` phải unique.
+
+### 10.5 `BACnet_BV`
+
+| Param | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
+|-------|------|----------|-----------|-------|
+| `instance` | int | ✓ | 0–4194302 | BACnet Binary Value instance number |
+| `name` | string | ✓ | — | Object Name |
+| `writable` | bool | ✗ | true/false (default false) | Cho phép WriteProperty từ BMS |
+
+Ports: `in:bool?` (optional), `out:bool`.
+
+Behavior: tương tự `BACnet_AV` nhưng kiểu bool. Active/Inactive state.
+
+---
+
+### 10.6 Quy tắc validator chung cho Protocol nodes
+
+1. `Modbus_RTU_Read`, `Modbus_TCP_Read`: `fallback` **bắt buộc** — validator reject nếu thiếu.
+2. `Modbus_RTU_Write`: `in` port phải được wire — validator reject node không có source.
+3. `BACnet_AV`/`BACnet_BV`: `instance` không được trùng với nhau và không trùng AI/BI/AO/BO/AV/BV đã sinh từ io_map.
+4. `Modbus_TCP_Read`: tham chiếu `host` phải khớp một entry trong `modbus.tcp[]` của graph.json (validator check #5 — mới, thêm cùng COR-011).
+5. `Modbus_RTU_Read/Write`: tham chiếu `bus` + `slave` phải khớp entry trong `modbus.rtu[]` (validator check #6 — mới).
+
+### 10.7 Ví dụ Protocol node trong graph.json
+
+```json
+{
+  "nodes": [
+    {
+      "id": "vfd_hz",
+      "type": "Modbus_RTU_Read",
+      "params": { "bus": 1, "slave": 5, "fc": 3, "addr": 100, "type": "u16", "scale": 0.1, "fallback": 0.0 }
+    },
+    {
+      "id": "vfd_cmd",
+      "type": "Modbus_RTU_Write",
+      "params": { "bus": 1, "slave": 5, "fc": 6, "addr": 200, "type": "u16", "scale": 0.1 }
+    },
+    {
+      "id": "chiller_sp",
+      "type": "BACnet_AV",
+      "params": { "instance": 1, "name": "ChillerSetpoint", "writable": true, "units": 62 }
+    },
+    {
+      "id": "tcp_sensor",
+      "type": "Modbus_TCP_Read",
+      "params": { "host": "192.168.1.50", "unit": 1, "fc": 3, "addr": 0, "type": "f32", "scale": 1.0, "fallback": 0.0 }
+    }
+  ]
+}
+```
+
+---
+
+> **Rev** 1.1 | 2026-06-26 — Thêm §10 Protocol node type catalog (5 types: Modbus_RTU_Read/Write,
+> Modbus_TCP_Read, BACnet_AV/BV) với validator contract; xem SW_COMPONENT_LIBRARY §8 và COR-011.

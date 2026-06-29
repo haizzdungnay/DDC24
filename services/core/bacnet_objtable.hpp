@@ -40,6 +40,10 @@ public:
 
     bool attached() const { return shm_ != nullptr; }
 
+    /* COR-011: direct access to plc_shm for Protocol nodes (scan_loop reads ext[]). */
+    const kx_plc_shm_t* shm() const { return shm_; }
+    kx_plc_shm_t*       shm()       { return shm_; }
+
 private:
     kx_plc_shm_t* shm_ = nullptr;
 };

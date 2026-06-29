@@ -1,156 +1,180 @@
 # Carrier Board Schematic Notes & Design Guidelines
 
-> **Document:** HW-DES-02-SCH | Rev 1.0 | 2026-05-27  
-> **Dùng kết hợp với:** CB_BLOCK_DIAGRAM.md, SOM_SPEC_RADXA_CM3.md
+> **Document:** HW-DES-02-SCH | Rev 1.3 | 2026-06-23
+> **Dung ket hop voi:** CB_BLOCK_DIAGRAM.md, IO_UI_CIRCUIT.md, MCU_STM32G0_SPEC.md
+> **UI Rev A:** no field signal directly into mux/ADC
 
 ---
 
-## 1. Tài nguyên Schematic Tham khảo
+## Revision History
 
-| Tài liệu | Link | Ghi chú |
-|----------|------|---------|
-| Radxa CM3 Schematic V1.322 | https://dl.radxa.com/cm3/docs/v1.322/radxa_cm3_v1.322_schematic.pdf | Bắt buộc tham khảo |
-| Radxa CM3 Reference IO Board | https://github.com/radxa/radxa-som-projects/tree/main/cm3 | Tham khảo carrier board Radxa |
-| ADS131M08 EVM Schematic | https://www.ti.com/tool/ADS131M08EVM | Tham khảo mạch ADC |
-| DAC8554 Reference Design | TI Application Note SBAA186 | Tham khảo DAC design |
-| STM32G0B1 Reference Design | ST AN4296 (STM32G0 design guide) | Decoupling, crystal, boot |
-| IEC 61010-1 | Tiêu chuẩn clearance/creepage | Áp dụng cho relay HV section |
-| IEC 61326-1 | Tiêu chuẩn EMC đo lường/điều khiển | |
+| Rev | Date | Changes |
+|-----|------|---------|
+| 1.0 | 2026-05-27 | Initial 8 UI + 8 DI architecture |
+| 1.1 | 2026-06-23 | DI to UI migration, expanded 05_UI_INPUT to 16 channels |
+| 1.2 | 2026-06-23 | Phase 1 cross-check updates |
+| 1.3 | 2026-06-23 | UI architecture review: per-channel mode latch, protection/front-end before mux, 49.9R shunt, RTD removed from Rev A |
 
 ---
 
-## 2. Schematic Checklist — CM3 Interface
+## 1. Reference Documents
 
-### 2.1 Power Input CM3 (B2B pins)
-
-- [ ] VCC_5V kết nối tất cả VCC pins CON1-1, CON1-3, CON1-5 (không bỏ pin nào)
-- [ ] GND kết nối tất cả GND pins CON1-2, CON1-4, CON1-6
-- [ ] Bypass capacitor 100nF gần mỗi VCC B2B pin
-- [ ] Bulk capacitor 100µF tại VCC_5V input carrier (gần B2B)
-- [ ] Không kết nối các pin `NC` (No Connect) của CM3
-
-### 2.2 UART Debug (UART0 → CH340)
-
-- [ ] UART0_TX (CON1-68) → CH340G TX input
-- [ ] UART0_RX (CON1-70) → CH340G RX output
-- [ ] CH340G VCC = 3.3V (không dùng 5V — CM3 UART là 3.3V)
-- [ ] USB-C D+/D− cần CC resistors: CC1=5.1kΩ, CC2=5.1kΩ to GND (UFP mode)
-- [ ] ESD protection PRTR5V0U2X trên D+/D−
-
-### 2.3 UART MCU IOP (UART2)
-
-- [ ] UART2_TX (CON1-80) → STM32 USART1_RX (PA10) — chéo TX↔RX
-- [ ] UART2_RX (CON1-82) → STM32 USART1_TX (PA9)
-- [ ] Level: đều 3.3V, không cần level shifter
-- [ ] Series resistor 33Ω trên đường TX của mỗi bên (tránh ringing)
-
-### 2.4 SPI0 → HMI TFT ILI9341 (CM3)
-
-> **Lưu ý kiến trúc:** ADS131M08 **KHÔNG** nối tới CM3. ADC do MCU đọc qua SPI3 — xem §3.1. CM3 SPI0 dùng cho màn hình TFT.
-
-- [ ] CM3 SPI0_CLK (CON1-37) → ILI9341 SCK — series R 33Ω
-- [ ] CM3 SPI0_MOSI (CON1-39) → ILI9341 MOSI/SDA — series R 33Ω
-- [ ] CM3 SPI0_CS0 (CON1-41) → ILI9341 CS#
-- [ ] CM3 GPIO0_C0 (CON1-51) → ILI9341 DC (Data/Command)
-- [ ] CM3 GPIO0_C1 (CON1-53) → ILI9341 RST# (active LOW)
-- [ ] CM3 PWM11 (CON1-55) → ILI9341 BL qua R 33Ω (backlight, max 20mA)
-- [ ] ILI9341 VCC=3V3, GND; bypass 100nF gần module
-
-### 2.5 I2C0 → DS3231 RTC
-
-- [ ] I2C0_SDA (CON1-46) → DS3231 SDA — pull-up 4.7kΩ → 3.3V
-- [ ] I2C0_SCL (CON1-48) → DS3231 SCL — pull-up 4.7kΩ → 3.3V
-- [ ] DS3231: VBAT → CR2032 battery holder (backup 3V)
-- [ ] DS3231: INT/SQW pin → STM32 (optional wake-up)
-- [ ] Decoupling DS3231 VCC: 100nF
-
-### 2.6 Ethernet RGMII → RJ-45
-
-- [ ] Toàn bộ RGMII pins từ CON3: tham chiếu Radxa CM3 schematic V1.322 page GMAC
-- [ ] Magnetics integrated RJ-45 HR911105A (100/1000Base-T)
-- [ ] RGMII ref clock 25MHz: CM3 CM3 GMAC cấp (verify trong schematic Radxa)
-- [ ] Capacitor 0.1µF trên MDI pairs tại RJ-45 side
-- [ ] Bố trí: RJ-45 sát cạnh PCB, RGMII traces ngắn nhất có thể
+| Document | Use |
+|----------|-----|
+| Radxa CM3 schematic/reference IO board | CM3 B2B and power reference |
+| TI ADS131M08 datasheet/EVM | ADC power, SPI, reference and input guidance |
+| TI TMUX1208 datasheet | Low-voltage mux constraints: signal path must stay within GND to VDD operating range |
+| STM32G0B1 reference manual/design guide | MCU decoupling, boot, SPI, EXTI |
+| IEC 61010-1 / IEC 61326-1 | Safety spacing and EMC basis |
 
 ---
 
-## 3. Schematic Checklist — MCU STM32G0B1
+## 2. Schematic Sheet Organization
 
-- [ ] Decoupling: 100nF tại mỗi VDD pin (có 4 VDD pins), 10µF bulk
-- [ ] VDDA: 100nF + 1µF riêng biệt, không chung với VDD
-- [ ] Crystal 8MHz: load cap 12pF theo datasheet oscillator
-- [ ] NRST: 100nF bypass to GND, không kết nối trực tiếp với CM3 GPIO (dùng OD gate nếu cần)
-- [ ] BOOT0: pull-down 10kΩ (normal run mode), jumper để override
-- [ ] SWD header: SWDIO, SWDCLK, VCC, GND, NRST (5-pin 1.27mm)
-- [ ] Tất cả NC pins: đánh dấu NC trong schematic, không route
-
-### 3.1 SPI3 (MCU) → ADS131M08 ADC
-
-- [ ] MCU SPI3_CLK (PC10) → ADS131M08 SCLK — series R 33Ω
-- [ ] MCU SPI3_MOSI (PC12) → ADS131M08 DIN/SDI — **bắt buộc** (ghi config register)
-- [ ] MCU SPI3_MISO (PC11) ← ADS131M08 DOUT — series R 33Ω
-- [ ] MCU GPIO (PB2) → ADS131M08 !CS — pull-up 10kΩ → 3.3V
-- [ ] ADS131M08 !DRDY → MCU PA8 (interrupt báo data ready)
-- [ ] ADS131M08 CLKIN: crystal 4.096MHz (hoặc MCO từ MCU)
-- [ ] ADS131M08 AVDD, DVDD: bypass 10µF + 100nF riêng biệt mỗi pin
-- [ ] **Toàn bộ cụm MCU + ADS131M08 + DAC8554 ở cùng vùng PCB; không có đường SPI nào chạy tới CM3**
-
----
-
-## 4. Schematic Checklist — Power Supply
-
-- [ ] Polyfuse F1 2A trên đường dương 24V INPUT (trước bridge rectifier)
-- [ ] Bridge rectifier GBU4J: 2 chân AC vào terminal block (cực tính không quan trọng cho AC)
-- [ ] TVS P6KE33A: song song với đầu ra DC bridge, cathode → DC+, anode → GND
-- [ ] Bulk capacitor C1: electrolytic đặt đúng cực (dương → DC+)
-- [ ] LM2596HVS: follow datasheet layout recommendation (inductor gần Output pin, Schottky gần anode GND)
-- [ ] GND plane split: không split GND — dùng 1 GND plane liên tục (analog và digital GND kết hợp tại 1 điểm star ground)
-- [ ] Nhiệt DC/DC: thermal via bên dưới LM2596 SOT-223, ít nhất 4 via φ0.5mm
-- [ ] Relay: +5V_RELAY tách qua ferrite bead 600Ω từ main +5V
-
----
-
-## 5. Schematic Checklist — I/O Protection
-
-- [ ] Mỗi UI terminal: TVS SMAJ15A (trước mạch điều hòa), R_fuse 100Ω series
-- [ ] Mỗi DI terminal: D1 BAT85 + R1 2.2kΩ (không để hở)
-- [ ] RS-485 A/B: TVS SMAJ6.5A mỗi chân, sau terminal trước MAX13487E
-- [ ] DO relay contact terminal: copper clearance ≥ 3.2mm (IEC 61010-1)
-- [ ] ESD arrays PRTR5V0U2X: tại tất cả user-accessible connectors (USB-C, USB-A, SD, RS-485, debug UART)
-
----
-
-## 6. Signal Naming Convention
-
-Dùng tên thống nhất trong schematic để dễ cross-reference:
-
-| Signal | Convention | Ví dụ |
-|--------|-----------|-------|
-| Power | IN_CAPS | `VCC_5V`, `VCC_3V3`, `GND`, `VCC_15V` |
-| UART | UART_DEVICE_DIR | `UART_MCU_TX`, `UART_MCU_RX` |
-| SPI | SPI_DEVICE_SIG | `SPI_ADC_CLK`, `SPI_ADC_MOSI` |
-| Relay control | DO_x_DRV | `DO1_DRV`, `DO2_DRV` |
-| Relay contact | DO_x_COM/NO/NC | `DO1_COM`, `DO1_NO` |
-| UI analog | UI_x_ANA | `UI1_ANA`, `UI8_ANA` |
-| DI signal | DI_x_LOGIC | `DI1_LOGIC` (sau opto) |
-
----
-
-## 7. Schematic Sheet Organization (KiCad recommended)
-
-| Sheet | Nội dung |
+| Sheet | Content |
 |-------|---------|
-| **01_TOP** | Title block, project info, revision history |
-| **02_CM3** | CM3 B2B symbols, CM3 decoupling |
-| **03_MCU** | STM32G0B1, SWD, crystal, decoupling |
-| **04_POWER** | Bridge rect, DC/DC, LDOs, boost |
-| **05_UI_INPUT** | 8× UI kênh (signal conditioning, mux, TVS) |
-| **06_DI_INPUT** | 8× DI kênh (opto, resistor) |
-| **07_AO_OUTPUT** | DAC8554, op-amp, output circuit |
-| **08_DO_RELAY** | ULN2003A, 4× relay, terminal |
-| **09_COMM** | Ethernet (RGMII, RJ-45), RS-485, USB-C, USB-A |
-| **10_PERIPHERAL** | RTC DS3231, microSD, DIP switch, LEDs, test points |
+| 01_TOP | Title block, hierarchy, revision history |
+| 02_CM3 | Radxa CM3 B2B, CM3 decoupling, boot/reset support |
+| 03_MCU | STM32G0B1, SWD, boot, clocks, mode latch interface |
+| 04_POWER | 24VAC/DC input, DC/DC, LDOs, references |
+| 05_UI_INPUT | 16 UI terminal protection, mode front-end, low-voltage mux/buffer, 2x ADS131M08 |
+| 06_AO_OUTPUT | DAC8554 and AO output front-end |
+| 07_DO_RELAY | Relay outputs and driver |
+| 08_COMM | Ethernet, RS-485, USB |
+| 09_PERIPHERAL | RTC, SD, DIP switch, LEDs, test points |
+| 10_DI_ISOLATED_OPTION | Optional true DI isolated sheet if required by SKU |
+
+`10_DI_ISOLATED_OPTION` is optional/product-dependent. UI dry contact must not be documented as a substitute for isolated DI.
 
 ---
 
-**Document ID:** HW-DES-02-SCH | Rev 1.0 | 2026-05-27
+## 3. CM3 Interface Checklist
+
+- [ ] UART2_TX from CM3 crosses to STM32 USART1_RX PA10.
+- [ ] UART2_RX from CM3 crosses to STM32 USART1_TX PA9.
+- [ ] UART level is 3.3V CMOS; no JSON/float realtime payload is used.
+- [ ] CM3 has no SPI connection to ADS131M08.
+- [ ] CM3 reset/boot control of MCU is implemented only if OTA bootloader path is in scope.
+
+---
+
+## 4. MCU / ADC Checklist
+
+- [ ] STM32 VDD/VDDA decoupling per datasheet, 100nF close to every supply pin.
+- [ ] HSE 8MHz crystal and load caps placed close to MCU.
+- [ ] SPI3 PC10/PC11/PC12 routes to both ADS131M08 devices.
+- [ ] ADS #1: CS PB2, DRDY PA8.
+- [ ] ADS #2: CS PA15, DRDY PA6.
+- [ ] ADS #1/#2 have separate local decoupling and clean analog return.
+- [ ] ADS DIN/MOSI is routed; read-only SPI is not acceptable because registers must be configured.
+- [ ] ADC status words are available to firmware for `adc_status_1/2`.
+
+---
+
+## 5. UI Input Sheet Rules
+
+### 5.1 Mandatory Signal Order
+
+Every UI channel must follow this order:
+
+```text
+Terminal
+-> ESD/TVS/PTC or fusible protection
+-> EMC/current-limit/filter elements
+-> mode-specific front-end
+-> scaled low-voltage node
+-> mux/buffer/filter
+-> ADS131M08 input
+```
+
+A schematic that routes terminal field voltage directly to TMUX1208, any other low-voltage analog switch, or ADS input is not acceptable.
+
+### 5.2 Per-Channel Mode Select
+
+- [ ] Do not connect PB12/PB13/PB14 as shared SEL[2:0] to all muxes.
+- [ ] Add latch/shift-register chain for `UI_MODE[0..15].S0/S1/S2`.
+- [ ] Use PB12/PB13/PB14/PB15 as `UI_MODE_DATA/CLK/LATCH/OE` unless final pin review selects an equivalent mapping.
+- [ ] Latch reset/default state is safe disabled.
+- [ ] Mode bits are testable on at least representative channels.
+
+### 5.3 0-10V Front-End
+
+- [ ] Rtop = 100k 0.1% 25ppm or matched network equivalent.
+- [ ] Rbot = 12.1k 0.1% 25ppm or matched network equivalent.
+- [ ] Divider node at 10V is about 1.079V.
+- [ ] RC filter is before the buffer.
+- [ ] Rail-to-rail input/output buffer is present before ADC/mux low-voltage node.
+- [ ] 24V miswire clamp and protection current are calculated.
+- [ ] No +/-0.05% FS claim appears without final error budget.
+
+### 5.4 4-20mA Front-End
+
+- [ ] Rshunt = 49.9 Ohm, 0.1%, 25ppm/C, >=0.125W; 0.25W preferred.
+- [ ] 4mA = 0.1996V, 20mA = 0.9980V, 22mA = 1.0978V, 24mA = 1.1976V.
+- [ ] 24VDC miswire does not put 24V directly across the shunt indefinitely.
+- [ ] PTC/fusible element and TVS/clamp path have power/current calculation.
+- [ ] Firmware status covers warning at 22mA and fault/overrange at 24mA.
+
+### 5.5 NTC Front-End
+
+- [ ] NTC 10k B3950 is the default supported curve.
+- [ ] NTC 20k or other curves require configuration or lookup table.
+- [ ] Pull-up excitation is precision/ratiometric or measured by firmware.
+- [ ] Do not assume CM3 PMIC 3.3V is a precision reference without measurement/compensation.
+- [ ] Formula `R_ntc = R_pullup * Vadc / (Vexc - Vadc)` is valid for the chosen orientation.
+
+### 5.6 Dry Contact Front-End
+
+- [ ] Label as **Auxiliary Dry Contact** only.
+- [ ] No 24V wet-contact support unless a dedicated compatible circuit is added.
+- [ ] No isolation claim.
+- [ ] Keep separate industrial DI isolated sheet/module if product requirements need true DI.
+
+### 5.7 RTD/PT100/PT1000
+
+- [ ] PT100/PT1000 are not populated as Universal Input Rev A modes.
+- [ ] If RTD is required, create a dedicated 3-wire/4-wire RTD sheet with current source, Kelvin sense, and error budget.
+
+---
+
+## 6. I/O Protection Checklist
+
+| Event | Required schematic evidence |
+|-------|-----------------------------|
+| 0-10V tied to 24VDC | Divider/clamp current and component power |
+| 4-20mA tied to 24VDC | PTC/fuse/TVS/shunt power in fault |
+| NTC short to GND | Pull-up current and ADC status |
+| NTC short to 24V | Terminal protection path |
+| Dry contact long cable | RC/debounce/ESD protection |
+| ESD at terminal | TVS closest to connector |
+| EFT/surge basic | TVS/EMC component values and return path |
+| Reverse polarity | Clamp or bidirectional protection path |
+| Open/short wire | Firmware-detectable state or explicit not-supported note |
+
+---
+
+## 7. Signal Naming Convention
+
+| Signal type | Convention | Example |
+|-------------|------------|---------|
+| UI terminal field | `UIx_FIELD` | `UI1_FIELD` |
+| UI protected node | `UIx_PROT` | `UI1_PROT` |
+| UI low-voltage sense | `UIx_SENSE_LV` | `UI1_SENSE_LV` |
+| ADC input | `ADCn_CHm_P/N` | `ADC1_CH0_P` |
+| UI mode latch | `UI_MODE_x_Sy` | `UI_MODE_01_S0` |
+| UART | `UART_DEVICE_DIR` | `UART_MCU_TX` |
+| SPI | `SPI_DEVICE_SIG` | `SPI_ADC_CLK` |
+| Relay drive | `DOx_DRV` | `DO1_DRV` |
+
+---
+
+## 8. Release Sign-Off
+
+- [ ] HW Lead confirms analog front-end values and protection power.
+- [ ] FW Lead confirms mode latch, sampling sequence, and signed int32 frame.
+- [ ] QA confirms UI test plan and risk table are ready.
+- [ ] PM confirms Rev A feature claims exclude RTD and isolated DI replacement.
+
+---
+
+**Document ID:** HW-DES-02-SCH | Rev 1.3 | 2026-06-23

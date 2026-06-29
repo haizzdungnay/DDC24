@@ -25,6 +25,10 @@ if(MKDDC_ENABLE_BACNET)
       URL https://github.com/bacnet-stack/bacnet-stack/archive/refs/tags/bacnet-stack-1.3.8.tar.gz
       DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
     FetchContent_MakeAvailable(bacnet_stack_src)
+    # GCC 12 (Debian Bookworm) false-positive array-bounds in bacnet-stack 1.3.8 h_cov.c
+    if(TARGET bacnet-stack)
+      target_compile_options(bacnet-stack PRIVATE -Wno-error=array-bounds)
+    endif()
     set(BACNET_STACK_TARGET bacnet-stack::bacnet-stack)
   endif()
 endif()
@@ -58,7 +62,8 @@ set(MODBUS_SOURCES
     fieldbus/poll_scheduler.cpp
     fieldbus/ext_cache.cpp
     fieldbus/fieldbus_metrics.cpp
-    fieldbus/modbus_master.cpp)
+    fieldbus/modbus_master.cpp
+    fieldbus/modbus_tcp.cpp)
 
 add_library(iobus_lib STATIC
     config/iobus_config.cpp
@@ -129,7 +134,8 @@ if(IOBUS_BUILD_TESTS)
       fieldbus/tests/test_register_codec.cpp
       fieldbus/tests/test_poll_scheduler.cpp
       fieldbus/tests/test_ext_cache.cpp
-      fieldbus/tests/test_modbus_master_fake.cpp)
+      fieldbus/tests/test_modbus_master_fake.cpp
+      fieldbus/tests/test_modbus_tcp.cpp)
   target_link_libraries(iobus_tests PRIVATE iobus_lib)
   # GCC13 -O3 false positive (PR109945) với vector<struct nhỏ> trong test fixture
   target_compile_options(iobus_tests PRIVATE -Wno-error=stringop-overflow)
