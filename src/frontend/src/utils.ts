@@ -62,6 +62,18 @@ export function pointNumber(point: Point): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+export function isFreshIso(value: string | null | undefined, maxAgeMs: number): boolean {
+  if (!value) return false
+  const time = Date.parse(value)
+  return Number.isFinite(time) && Date.now() - time <= maxAgeMs
+}
+
+export function mergePointsById(base: Point[], updates: Point[]): Point[] {
+  const byId = new Map(base.map((point) => [point.id, point]))
+  for (const point of updates) byId.set(point.id, point)
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
+}
+
 export function formatValue(value: Point['value'], unit?: string): string {
   if (typeof value === 'boolean') return value ? 'ON' : 'OFF'
   if (typeof value === 'number') {

@@ -47,6 +47,7 @@ export function useWebSocket() {
   const [allPoints, setAllPoints] = useState<Point[]>([])
   const [lastEnvelope, setLastEnvelope] = useState<MonitorEnvelope | null>(null)
   const [lastEventAt, setLastEventAt] = useState<string | null>(null)
+  const [lastPointEventAt, setLastPointEventAt] = useState<string | null>(null)
   const retryMs = useRef(1000)
   const timeoutRef = useRef<number | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
@@ -62,6 +63,7 @@ export function useWebSocket() {
         setAllPoints(points)
         setLastEnvelope(envelope)
         setLastEventAt(ts)
+        setLastPointEventAt(ts)
       }, 200)
       return () => window.clearInterval(id)
     }
@@ -91,6 +93,7 @@ export function useWebSocket() {
           setAllPoints((current) => mergePointUpdates(current, points))
           setLastEnvelope({ ...message, op, ts, points })
           setLastEventAt(ts)
+          setLastPointEventAt(ts)
           return
         }
 
@@ -118,5 +121,5 @@ export function useWebSocket() {
     }
   }, [url])
 
-  return { connectionState, allPoints, lastEnvelope, lastEventAt }
+  return { connectionState, allPoints, lastEnvelope, lastEventAt, lastPointEventAt }
 }

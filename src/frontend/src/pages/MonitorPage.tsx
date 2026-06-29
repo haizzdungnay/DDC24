@@ -10,9 +10,10 @@ import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Point, PointKind, PointQuality } from '../types'
-import { cn, formatDateTime, formatTime, formatValue, pointNumber, statusColor, statusFill } from '../utils'
+import { cn, formatDateTime, formatTime, formatValue, isFreshIso, mergePointsById, pointNumber, statusColor, statusFill } from '../utils'
 
 const MAX_TREND_POINTS = 18
+const REALTIME_STALE_MS = 2500
 
 // Hook to maintain a rolling buffer of trend values for a point
 function useTrendBuffer(pointId: string, value: number | boolean | string | undefined, trend: number[] | undefined): number[] {
@@ -41,7 +42,7 @@ const kindLabel: Record<PointKind, string> = {
 }
 
 export function MonitorPage() {
-  const pointsState = useApi(apiClient.getPoints, [])
+  const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const realtime = useRealtime()
   const toast = useToast()
   const { pick } = useI18n()
@@ -59,7 +60,10 @@ export function MonitorPage() {
   const [editingTrend, setEditingTrend] = useState<string | null>(null)
   const [editingTrendEnabled, setEditingTrendEnabled] = useState<Record<string, boolean>>({})
 
-  const points = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? []
+  const polledPoints = pointsState.data ?? []
+  const points = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
+    ? mergePointsById(polledPoints, realtime.allPoints)
+    : polledPoints
   const selected = points.find((point) => point.id === selectedId) ?? points.find((point) => point.id === 'UI-01') ?? points[0]
   const offline = realtime.connectionState !== 'connected'
 

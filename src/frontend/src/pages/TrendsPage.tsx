@@ -11,7 +11,7 @@ import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Point, TrendSample } from '../types'
-import { cn } from '../utils'
+import { cn, isFreshIso, mergePointsById } from '../utils'
 
 interface TrendRow {
   id: string
@@ -33,6 +33,7 @@ const rangeOptions = [
 
 const colors = ['#2A5C8A', 'var(--c-warn-fg)', '#6E5A2E', '#8A4FBF', '#5B6066', 'var(--c-fault-fg)', '#B0179C', 'var(--c-off)']
 const liveSampleLimit = 3600
+const REALTIME_STALE_MS = 2500
 
 function historyRangeFromMinutes(minutes: number) {
   if (minutes <= 30) return '30m'
@@ -60,9 +61,12 @@ export function TrendsPage() {
   const { pick } = useI18n()
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const analogPoints = useMemo(() => {
-    const source = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? []
+    const polledPoints = pointsState.data ?? []
+    const source = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
+      ? mergePointsById(polledPoints, realtime.allPoints)
+      : polledPoints
     return source.filter((point) => (point.kind === 'UI' || point.kind === 'AO') && pointNumber(point.value) !== null).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
-  }, [pointsState.data, realtime.allPoints])
+  }, [pointsState.data, realtime.allPoints, realtime.lastPointEventAt])
   const autoSelectedRef = useRef(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [rangeMinutes, setRangeMinutes] = useState<number>(30)
