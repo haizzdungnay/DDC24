@@ -18,6 +18,7 @@ const char* sensor_unit(SensorType t);   /* "V","mA","degC","" */
 
 /* raw int32 signed (IOP v2 — iop_be32s() đã sign-extend) → eng + quality. */
 float ui_to_eng(int32_t raw_s32, SensorType t, kx_quality_t* q_out);
+float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out);
 
 /* eng (V hoặc mA theo mode) → raw DAC 16-bit, clamp [0,65535]. */
 uint16_t ao_eng_to_raw(float v, AoMode m);

@@ -364,7 +364,7 @@ interface I18nValue {
 const I18nContext = createContext<I18nValue | null>(null)
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Language>('vi')
+  const [lang, setLangState] = useState<Language>(() => (localStorage.getItem('mkddc-lang') as Language) || 'en'); const setLang = (l: Language) => { setLangState(l); localStorage.setItem('mkddc-lang', l); };
   const value = useMemo<I18nValue>(() => ({
     lang,
     locale: lang === 'vi' ? 'vi-VN' : 'en-US',

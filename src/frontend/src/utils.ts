@@ -19,6 +19,14 @@ export function uiNode(channel: number): string {
   return `UI-${String(channel).padStart(2, '0')}`
 }
 
+const genericPointNamePattern = /^(UI|AI|DI|AO|DO)[-_ ]?\d+$/i
+
+export function isGenericPointLabel(id: string, name: unknown): boolean {
+  const text = typeof name === 'string' ? name.trim() : ''
+  if (!text) return true
+  return text.toUpperCase() === id.trim().toUpperCase() || genericPointNamePattern.test(text)
+}
+
 export function uiChannelFromId(id: string): number | null {
   const match = id.trim().match(/^(UI|AI|DI)[-_]?(\d+)$/i)
   if (!match) return null
@@ -60,6 +68,32 @@ export function pointNumber(point: Point): number {
   if (typeof point.value === 'boolean') return point.value ? 1 : 0
   const parsed = Number(point.value)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+export function isFreshIso(value: string | null | undefined, maxAgeMs: number): boolean {
+  if (!value) return false
+  const time = Date.parse(value)
+  return Number.isFinite(time) && Date.now() - time <= maxAgeMs
+}
+
+export function mergePointsById(base: Point[], updates: Point[]): Point[] {
+  const byId = new Map(base.map((point) => [point.id, point]))
+  for (const point of updates) {
+    const current = byId.get(point.id)
+    byId.set(point.id, current ? mergePointUpdate(current, point) : point)
+  }
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
+}
+
+function mergePointUpdate(current: Point, update: Point): Point {
+  return {
+    ...current,
+    ...update,
+    name: isGenericPointLabel(update.id, update.name) ? current.name : update.name,
+    unit: update.unit ?? current.unit,
+    sensorType: update.sensorType ?? current.sensorType,
+    trend: update.trend ?? current.trend
+  }
 }
 
 export function formatValue(value: Point['value'], unit?: string): string {

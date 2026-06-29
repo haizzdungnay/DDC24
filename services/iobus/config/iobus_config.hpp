@@ -1,7 +1,7 @@
 /**
  * @file  iobus_config.hpp
  * @brief Config struct + default (06 §4). Thứ tự ưu tiên: CLI --config >
- *        /data/config/iobus.conf > default built-in.
+ *        /data/config/io_config.conf > default built-in.
  *        Fallback: thiếu file/field → default + WARN; JSON sai cú pháp → fail-fast.
  */
 #ifndef IOBUS_IOBUS_CONFIG_HPP
@@ -24,12 +24,7 @@ struct IobusConfig {
     uint32_t handshake_timeout_ms  = IOP_HANDSHAKE_TIMEOUT_MS;
 
     /* io */
-    SensorType ui_sensor[KX_N_UI] = {SensorType::V0_10, SensorType::V0_10, SensorType::V0_10,
-                                     SensorType::V0_10, SensorType::V0_10, SensorType::V0_10,
-                                     SensorType::V0_10, SensorType::V0_10, SensorType::V0_10,
-                                     SensorType::V0_10, SensorType::V0_10, SensorType::V0_10,
-                                     SensorType::V0_10, SensorType::V0_10, SensorType::V0_10,
-                                     SensorType::V0_10};
+    UiScaleConfig ui[KX_N_UI] = {};
     AoMode     ao_mode[KX_N_AO]   = {AoMode::V0_10, AoMode::V0_10, AoMode::V0_10, AoMode::V0_10};
 
     std::string log_level = "info";

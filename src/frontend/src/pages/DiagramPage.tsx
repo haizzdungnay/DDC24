@@ -20,8 +20,8 @@ const DEVICE_X = 28
 const DEVICE_Y = 46
 const DEVICE_W = 1104
 const DEVICE_H = 508
-const BODY_Y = 206
-const BODY_H = 248
+const BODY_Y = 170
+const BODY_H = 278
 
 function formatValue(point?: Point): string {
   if (!point) return '---'
@@ -185,13 +185,13 @@ export function DiagramPage() {
     slotH: number,
     direction: 'top' | 'bottom'
   ) {
-    const rows = group.length > 8 ? 2 : 1
+    const rows = 1
     const cols = Math.max(1, Math.ceil(group.length / rows))
     const pitch = stripW / cols
     const slotW = Math.min(48, Math.max(24, pitch - 12))
     const rowGap = title === 'UI' ? 54 : 44
     const showTerminalIds = pitch >= 28
-    const labelY = direction === 'top' ? y - 22 : y + slotH / 2 + 6
+    const labelY = direction === 'top' ? y + slotH / 2 + 6 : y + slotH / 2 + 6
     return (
       <g key={title}>
         <text x={x - 12} y={labelY} textAnchor="end" fontSize="16" fontWeight="900" fill="var(--c-text)">
@@ -375,22 +375,22 @@ export function DiagramPage() {
                 {pick('Click vào đầu nối để xem chi tiết điểm', 'Click a terminal to inspect point details')}
               </text>
 
-              <rect x={650} y={212} width={420} height={210} rx={10} fill="var(--c-surface-2)" stroke="var(--c-line-strong)" strokeWidth="1.5" />
-              <text x={674} y={248} fontSize="15" fontWeight="800" fill="var(--c-text)">
+              <rect x={650} y={192} width={420} height={230} rx={10} fill="var(--c-surface-2)" stroke="var(--c-line-strong)" strokeWidth="1.5" />
+              <text x={674} y={228} fontSize="15" fontWeight="800" fill="var(--c-text)">
                 {pick('Tóm tắt I/O', 'I/O Summary')}
               </text>
-              <text x={1046} y={247} textAnchor="end" fontSize="12" fontWeight="600" fill="var(--c-text-dim)">UI {ui.length} | AO {ao.length} | DO {doChannels.length}</text>
-              {renderMetricDial('CPU', cpuValue, '%', 720, 314, 70, 90)}
+              <text x={1046} y={227} textAnchor="end" fontSize="12" fontWeight="600" fill="var(--c-text-dim)">UI {ui.length} | AO {ao.length} | DO {doChannels.length}</text>
+              {renderMetricDial('CPU', cpuValue, '%', 720, 294, 70, 90)}
               {renderMetricDial(pick('Bộ nhớ', 'Memory'), ramValue, '%', 854, 314, 70, 90, ramDetail)}
               {renderMetricDial(pick('Nhiệt độ', 'Temp'), tempValue, '°C', 988, 314, 45, 70)}
-              <circle cx={676} cy={374} r={5} fill={qualityColor(totalFaults > 0 ? 'bad' : totalWarnings > 0 ? 'uncertain' : 'good')} />
-              <text x={692} y={378} fontSize="11" fill="var(--c-text)">
+              <circle cx={676} cy={354} r={5} fill={qualityColor(totalFaults > 0 ? 'bad' : totalWarnings > 0 ? 'uncertain' : 'good')} />
+              <text x={692} y={358} fontSize="11" fill="var(--c-text)">
                 {pick('Hệ thống', 'System')} {totalFaults > 0 ? 'FAULT' : totalWarnings > 0 ? 'WARN' : 'NORMAL'}
               </text>
-              <circle cx={676} cy={393} r={5} fill={networkColor(network?.northbound?.bmsLink)} />
-              <text x={692} y={397} fontSize="11" fill="var(--c-text)">BACnet {network?.northbound?.ip || 'DHCP'} | ID {network?.northbound?.bacnetDeviceId || 'N/A'}</text>
-              <circle cx={676} cy={412} r={5} fill={networkColor(rs485State)} />
-              <text x={692} y={416} fontSize="11" fill="var(--c-text)">
+              <circle cx={676} cy={373} r={5} fill={networkColor(network?.northbound?.bmsLink)} />
+              <text x={692} y={377} fontSize="11" fill="var(--c-text)">BACnet {network?.northbound?.ip || 'DHCP'} | ID {network?.northbound?.bacnetDeviceId || 'N/A'}</text>
+              <circle cx={676} cy={392} r={5} fill={networkColor(rs485State)} />
+              <text x={692} y={396} fontSize="11" fill="var(--c-text)">
                 {t('rs485')} / {t('modbus')} {southbound.length} {pick('thiết bị', 'dev')} | {degradedCount} {pick('suy giảm', 'deg')} | {offlineCount} offline
               </text>
               <text x={84} y={468} fontSize="10" fill="var(--c-text-dim)">

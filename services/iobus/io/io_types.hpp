@@ -7,6 +7,7 @@
 #define IOBUS_IO_TYPES_HPP
 
 #include <cstdint>
+#include <string>
 
 #include "iop_protocol.h"
 #include "mkddc_shm.h"
@@ -62,7 +63,48 @@ inline kx_iop_status_t to_kx_status(IopStatus s)
 /* Loại cảm biến UI.
  * PT100/PT1000: Rev A hardware không lắp mạch — quality luôn BAD nếu configure.
  * NTC10K/NTC20K/DRY_CONTACT: vẫn hỗ trợ qua front-end Rev A. */
-enum class SensorType { V0_10, MA4_20, PT100, PT1000, NTC10K, NTC20K, DRY_CONTACT, UNKNOWN };
+enum class SensorType {
+    NONE,
+    V0_10,
+    V2_10,
+    MA4_20,
+    PT100,
+    PT1000,
+    NTC10K,
+    NTC20K,
+    DRY_CONTACT,
+    POTENTIOMETER,
+    LIGHT,
+    PULSE,
+    UNKNOWN
+};
+
+struct UiScaleConfig {
+    SensorType sensor = SensorType::V0_10; /* u0 */
+    bool enabled = true;
+    bool invert = false;
+    float scale_lo = 0.0f;                 /* u1 */
+    float scale_hi = 10.0f;                 /* u2 */
+    uint8_t range_mult = 0;                 /* u3 */
+    std::string unit;                       /* u4 */
+    uint8_t filter_samples = 0;             /* u5 */
+    float sensor_cal = 0.0f;                /* u6 */
+    uint8_t math_func = 0;                  /* u7 */
+};
+
+inline bool operator==(const UiScaleConfig& a, const UiScaleConfig& b)
+{
+    return a.sensor == b.sensor && a.enabled == b.enabled && a.invert == b.invert &&
+           a.scale_lo == b.scale_lo && a.scale_hi == b.scale_hi &&
+           a.range_mult == b.range_mult && a.unit == b.unit &&
+           a.filter_samples == b.filter_samples && a.sensor_cal == b.sensor_cal &&
+           a.math_func == b.math_func;
+}
+
+inline bool operator!=(const UiScaleConfig& a, const UiScaleConfig& b)
+{
+    return !(a == b);
+}
 
 /* Mode AO (0=0-10V, 1=4-20mA — khớp SET_AO_CFG bit) */
 enum class AoMode : uint8_t { V0_10 = 0, MA4_20 = 1 };

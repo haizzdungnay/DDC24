@@ -20,7 +20,7 @@ func TestTrendStoreInsertQueryAndPrune(t *testing.T) {
 	if err := store.InsertBatch(ctx, batch); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
 	}
-	got, err := store.Query(ctx, []string{"AI-01", "AI-02"}, base+1, base+120)
+	got, err := store.Query(ctx, []string{"UI-01", "UI-02"}, base+1, base+120)
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
@@ -64,11 +64,11 @@ func TestTrendStoreConfigRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetConfig default: %v", err)
 	}
-	if !cfg.Enabled || cfg.IntervalS != 30 || cfg.RetentionRecords != 2880 || len(cfg.PointIDs) != 0 {
+	if !cfg.Enabled || cfg.IntervalS != 10 || cfg.RetentionRecords != 8640 || len(cfg.PointIDs) != 0 {
 		t.Fatalf("default cfg = %+v", cfg)
 	}
 
-	want := TrendConfig{Enabled: true, PointIDs: []string{"AI-02", "AI-01", "AI-02"}, IntervalS: 10, RetentionRecords: 1000}
+	want := TrendConfig{Enabled: true, PointIDs: []string{"AI-02", "AI-01", "AO1"}, IntervalS: 10, RetentionRecords: 1000}
 	if _, err := store.SaveConfig(ctx, want); err != nil {
 		t.Fatalf("SaveConfig: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestTrendStoreConfigRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetConfig: %v", err)
 	}
-	if got.IntervalS != 10 || got.RetentionRecords != 1000 || len(got.PointIDs) != 2 || got.PointIDs[0] != "AI-01" || got.PointIDs[1] != "AI-02" {
+	if got.IntervalS != 10 || got.RetentionRecords != 1000 || len(got.PointIDs) != 3 || got.PointIDs[0] != "AO-01" || got.PointIDs[1] != "UI-01" || got.PointIDs[2] != "UI-02" {
 		t.Fatalf("cfg = %+v", got)
 	}
 }

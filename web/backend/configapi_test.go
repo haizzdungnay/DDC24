@@ -84,7 +84,7 @@ func TestValidateConfigIOAcceptsAIUniversalInputFields(t *testing.T) {
 	cfg := ConfigIO{
 		UI: []map[string]any{
 			{
-				"ch":         1,
+				"ch":         16,
 				"type":       "2-10V",
 				"unit":       "degC",
 				"name":       "Supply Temp",

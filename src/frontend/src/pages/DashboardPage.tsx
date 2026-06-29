@@ -25,10 +25,11 @@ import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Alarm, HealthResponse, HealthStatus, Point, TrendSample } from '../types'
-import { formatDateTime, formatUptime, isVisibleUniversalInput, metricStatusColor, metricStatusFill, statusColor } from '../utils'
+import { formatDateTime, formatUptime, isFreshIso, isVisibleUniversalInput, mergePointsById, metricStatusColor, metricStatusFill, statusColor } from '../utils'
 
 const dashboardTrendColors = ['var(--c-fault-fg)', 'var(--c-accent-2)', '#6E5A2E', 'var(--c-warn-fg)']
 const dashboardTrendSampleLimit = 60
+const REALTIME_STALE_MS = 2500
 const emptyPoints: Point[] = []
 
 export function DashboardPage() {
@@ -38,7 +39,10 @@ export function DashboardPage() {
   const alarms = useApi(apiClient.getAlarms, [], { refreshMs: 1000 })
   const realtime = useRealtime()
   const { pick } = useI18n()
-  const points: Point[] = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? emptyPoints
+  const polledPoints = pointsState.data ?? emptyPoints
+  const points: Point[] = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
+    ? mergePointsById(polledPoints, realtime.allPoints)
+    : polledPoints
   const trendPoints = useMemo(() => points
     .filter((point) => isVisibleUniversalInput(point) && pointNumber(point.value) !== null)
     .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))

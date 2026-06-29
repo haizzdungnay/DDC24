@@ -1,6 +1,6 @@
-import { Circle, Pencil, RefreshCw, Save, Search, ShieldAlert, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { apiClient } from '../api/client'
+import { Circle, Pencil, Power, RefreshCw, RotateCcw, Save, Search, ShieldAlert, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { POINT_UNIT_OPTIONS, aiUnitFromPointUnit, apiClient, pointUnitFromAiUnit } from '../api/client'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
@@ -10,9 +10,10 @@ import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Point, PointKind, PointQuality } from '../types'
-import { cn, formatDateTime, formatTime, formatValue, pointNumber, statusColor, statusFill } from '../utils'
+import { cn, formatDateTime, formatTime, formatValue, isFreshIso, mergePointsById, pointNumber, statusColor, statusFill } from '../utils'
 
 const MAX_TREND_POINTS = 18
+const REALTIME_STALE_MS = 2500
 
 // Hook to maintain a rolling buffer of trend values for a point
 function useTrendBuffer(pointId: string, value: number | boolean | string | undefined, trend: number[] | undefined): number[] {
@@ -40,8 +41,34 @@ const kindLabel: Record<PointKind, string> = {
   virtual: 'VIRTUAL'
 }
 
+function canForcePoint(point: Point): boolean {
+  return point.kind === 'DO' || point.kind === 'AO'
+}
+
+function defaultForceValue(point: Point): string {
+  return point.kind === 'DO' ? String(!point.value) : String(pointNumber(point))
+}
+
+function parseForceValue(point: Point, raw: string): number | boolean {
+  const value = raw.trim()
+  if (point.kind === 'DO') return value === 'true' || value === '1' || value.toUpperCase() === 'ON'
+  const numberValue = Number(value)
+  if (!Number.isFinite(numberValue)) throw new Error('Force value must be a number')
+  return numberValue
+}
+
+function parseForceDurationSeconds(raw: string): number {
+  const minutes = Number(raw)
+  if (!Number.isFinite(minutes) || minutes <= 0) throw new Error('Force duration must be greater than 0 minutes')
+  return Math.round(minutes * 60)
+}
+
+function selectUnitValue(unit?: string): string {
+  return pointUnitFromAiUnit(aiUnitFromPointUnit(unit))
+}
+
 export function MonitorPage() {
-  const pointsState = useApi(apiClient.getPoints, [])
+  const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const realtime = useRealtime()
   const toast = useToast()
   const { pick } = useI18n()
@@ -51,6 +78,8 @@ export function MonitorPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [forceOpen, setForceOpen] = useState(false)
   const [forceValue, setForceValue] = useState('1')
+  const [forceDurationMinutes, setForceDurationMinutes] = useState('10')
+  const [pointModalId, setPointModalId] = useState<string | null>(null)
   const [note, setNote] = useState('')
   const [editingName, setEditingName] = useState<string | null>(null)
   const [editingNameValue, setEditingNameValue] = useState('')
@@ -58,9 +87,14 @@ export function MonitorPage() {
   const [editingUnitValue, setEditingUnitValue] = useState('')
   const [editingTrend, setEditingTrend] = useState<string | null>(null)
   const [editingTrendEnabled, setEditingTrendEnabled] = useState<Record<string, boolean>>({})
+  const forceReleaseTimers = useRef<Record<string, number>>({})
 
-  const points = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? []
+  const polledPoints = pointsState.data ?? []
+  const points = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
+    ? mergePointsById(polledPoints, realtime.allPoints)
+    : polledPoints
   const selected = points.find((point) => point.id === selectedId) ?? points.find((point) => point.id === 'UI-01') ?? points[0]
+  const modalPoint = pointModalId ? points.find((point) => point.id === pointModalId) : null
   const offline = realtime.connectionState !== 'connected'
 
   const filtered = useMemo(() => points.filter((point) => {
@@ -86,12 +120,67 @@ export function MonitorPage() {
     abnormal: points.filter((point) => point.quality !== 'good').length
   }
 
+  useEffect(() => () => {
+    Object.values(forceReleaseTimers.current).forEach((timerId) => window.clearTimeout(timerId))
+    forceReleaseTimers.current = {}
+  }, [])
+
+  function openPointModal(point: Point) {
+    setSelectedId(point.id)
+    setPointModalId(point.id)
+  }
+
+  async function savePointBasics(point: Point, config: { name: string; unit?: string }) {
+    if (!config.name.trim()) throw new Error('Name cannot be empty')
+    await apiClient.updatePointConfig(point.id, {
+      name: config.name.trim(),
+      unit: config.unit === undefined ? undefined : config.unit.trim()
+    })
+    toast.push('success', pick(`Updated ${point.id}`, `Updated ${point.id}`))
+    await pointsState.refetch()
+  }
+
+  async function forcePointWithDuration(point: Point, value: number | boolean, durationSeconds: number) {
+    if (!canForcePoint(point)) return
+    if (forceReleaseTimers.current[point.id]) {
+      window.clearTimeout(forceReleaseTimers.current[point.id])
+      delete forceReleaseTimers.current[point.id]
+    }
+    if (realtime.forcePoint(point.id, value, durationSeconds)) {
+      toast.push('success', pick(`Force sent to ${point.id}`, `Force sent to ${point.id}`))
+      window.setTimeout(() => void pointsState.refetch(), 250)
+      window.setTimeout(() => void pointsState.refetch(), 1000)
+      return
+    }
+    await apiClient.forcePoint(point.id, value)
+    forceReleaseTimers.current[point.id] = window.setTimeout(() => {
+      void apiClient.forcePoint(point.id, value, true)
+        .then(() => pointsState.refetch())
+        .finally(() => {
+          delete forceReleaseTimers.current[point.id]
+        })
+    }, durationSeconds * 1000)
+    toast.push('success', pick(`Force sent to ${point.id}`, `Force sent to ${point.id}`))
+    await pointsState.refetch()
+  }
+
+  async function releasePoint(point: Point) {
+    if (!canForcePoint(point)) return
+    if (forceReleaseTimers.current[point.id]) {
+      window.clearTimeout(forceReleaseTimers.current[point.id])
+      delete forceReleaseTimers.current[point.id]
+    }
+    await apiClient.forcePoint(point.id, point.value as number | boolean, true)
+    toast.push('success', pick(`Released ${point.id}`, `Released ${point.id}`))
+    await pointsState.refetch()
+  }
+
   async function confirmForce() {
     if (!selected) return
-    const value = selected.kind === 'DO' ? forceValue === 'true' || forceValue === '1' || forceValue.toUpperCase() === 'ON' : Number(forceValue)
     try {
-      await apiClient.forcePoint(selected.id, value)
-      toast.push('success', pick(`Đã gửi Force cho ${selected.id}`, `Force sent to ${selected.id}`))
+      const value = parseForceValue(selected, forceValue)
+      const durationSeconds = parseForceDurationSeconds(forceDurationMinutes)
+      await forcePointWithDuration(selected, value, durationSeconds)
       setForceOpen(false)
     } catch (err) {
       toast.push('error', err instanceof Error ? err.message : 'Force failed')
@@ -125,12 +214,12 @@ export function MonitorPage() {
 
   function startEditUnit(point: Point) {
     setEditingUnit(point.id)
-    setEditingUnitValue(point.unit ?? '')
+    setEditingUnitValue(selectUnitValue(point.unit))
   }
 
   async function saveUnit(point: Point) {
     try {
-      await apiClient.updatePointConfig(point.id, { unit: editingUnitValue.trim() || undefined })
+      await apiClient.updatePointConfig(point.id, { unit: editingUnitValue })
       toast.push('success', pick(`Đã cập nhật đơn vị ${point.id}`, `Updated unit for ${point.id}`))
       setEditingUnit(null)
       pointsState.refetch()
@@ -198,9 +287,9 @@ export function MonitorPage() {
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_334px]">
         <div className={cn('space-y-3', offline && 'stale')}>
-          <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} onSelect={setSelectedId} onToggle={(point) => { setSelectedId(point.id); setForceValue(String(!point.value)); setForceOpen(true) }} />
-          <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} onSelect={setSelectedId} />
-          <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} onSelect={setSelectedId} onForce={(point) => { setSelectedId(point.id); setForceValue(String(pointNumber(point))); setForceOpen(true) }} />
+          <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} onToggle={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
+          <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} />
+          <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
         </div>
         {selected && <DetailPanel
           point={selected}
@@ -214,7 +303,7 @@ export function MonitorPage() {
           setEditingUnitValue={setEditingUnitValue}
           editingTrend={editingTrend}
           editingTrendEnabled={editingTrendEnabled}
-          onForce={() => { setForceValue(selected.kind === 'DO' ? String(!selected.value) : String(pointNumber(selected))); setForceOpen(true) }}
+          onForce={() => { setForceValue(defaultForceValue(selected)); setForceOpen(true) }}
           onStartEdit={() => startEditName(selected)}
           onSaveEdit={() => saveName(selected)}
           onCancelEdit={cancelEditName}
@@ -228,13 +317,25 @@ export function MonitorPage() {
         />}
       </div>
 
-      <Modal open={forceOpen} title={`Force ${selected?.id ?? ''}`} danger confirmLabel={pick('Force 10 phút', 'Force 10 minutes')} onConfirm={confirmForce} onClose={() => setForceOpen(false)}>
+      {modalPoint && (
+        <PointDetailsModal
+          key={modalPoint.id}
+          point={modalPoint}
+          onClose={() => setPointModalId(null)}
+          onSave={savePointBasics}
+          onForce={forcePointWithDuration}
+          onRelease={releasePoint}
+        />
+      )}
+
+      <Modal open={forceOpen} title={`Force ${selected?.id ?? ''}`} danger confirmLabel={pick('Force output', 'Force output')} onConfirm={confirmForce} onClose={() => setForceOpen(false)}>
         <div className="space-y-4">
           <div className="flex gap-3 rounded-[var(--radius)] border border-[rgba(224,161,6,0.38)] bg-[rgba(224,161,6,0.08)] p-3 text-[var(--c-warn-fg)]">
             <ShieldAlert className="h-5 w-5 shrink-0" />
-            {pick('Force tự hết hạn sau 10 phút. Chỉ dùng khi commissioning hoặc xử lý sự cố có kiểm soát.', 'Force automatically expires after 10 minutes. Use only for commissioning or controlled troubleshooting.')}
+            {pick('Force uses the duration below. Use only for commissioning or controlled troubleshooting.', 'Force uses the duration below. Use only for commissioning or controlled troubleshooting.')}
           </div>
           <label className="block text-sm">{pick('Giá trị Force', 'Force value')}<input value={forceValue} onChange={(event) => setForceValue(event.target.value)} className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3" /></label>
+          <label className="block text-sm">{pick('Force duration (minutes)', 'Force duration (minutes)')}<input type="number" min="1" step="1" value={forceDurationMinutes} onChange={(event) => setForceDurationMinutes(event.target.value)} className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3" /></label>
         </div>
       </Modal>
     </div>
@@ -252,25 +353,25 @@ function StatCard({ label, value, detail, danger }: { label: string; value: numb
   )
 }
 
-function DigitalSection({ title, rows, selectedId, onSelect, onToggle }: { title: string; rows: Point[]; selectedId?: string; onSelect: (id: string) => void; onToggle: (point: Point) => void }) {
+function DigitalSection({ title, rows, selectedId, onSelect, onOpenDetails, onToggle }: { title: string; rows: Point[]; selectedId?: string; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void }) {
   const { pick } = useI18n()
   return (
     <SectionFrame title={`${title} (${rows.length})`}>
       <div className="grid grid-cols-[70px_minmax(150px,1fr)_112px_128px_58px] border-b border-[var(--c-border)] px-3 py-2 text-[10px] uppercase text-[var(--c-text-dim)]">
         <span>{pick('Điểm', 'Point')}</span><span>{pick('Tên điểm', 'Point name')}</span><span>{pick('Trạng thái', 'Status')}</span><span>{pick('Thời gian cập nhật', 'Updated at')}</span><span />
       </div>
-      {rows.map((point) => <DigitalRow key={point.id} point={point} selected={point.id === selectedId} onSelect={onSelect} onToggle={onToggle} />)}
+      {rows.map((point) => <DigitalRow key={point.id} point={point} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onToggle={onToggle} />)}
     </SectionFrame>
   )
 }
 
-function DigitalRow({ point, selected, onSelect, onToggle }: { point: Point; selected: boolean; onSelect: (id: string) => void; onToggle: (point: Point) => void }) {
+function DigitalRow({ point, selected, onSelect, onOpenDetails, onToggle }: { point: Point; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void }) {
   const active = Boolean(point.value)
   const state = active ? 'on' : 'off'
   const stateFillColor = statusFill(state)
   const stateTextColor = statusColor(state)
   return (
-    <button type="button" onClick={() => onSelect(point.id)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_112px_128px_58px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
+    <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_112px_128px_58px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
       <span className="mono font-semibold">{point.id}</span>
       <span className="truncate font-semibold">{point.name}</span>
       <span className="inline-flex items-center gap-2 font-semibold" style={{ color: stateTextColor }}><Circle className="h-2.5 w-2.5 fill-current" style={{ color: stateFillColor }} />{active ? 'ON' : 'OFF'}</span>
@@ -282,24 +383,24 @@ function DigitalRow({ point, selected, onSelect, onToggle }: { point: Point; sel
   )
 }
 
-function AnalogSection({ title, rows, selectedId, onSelect, onForce }: { title: string; rows: Point[]; selectedId?: string; onSelect: (id: string) => void; onForce?: (point: Point) => void }) {
+function AnalogSection({ title, rows, selectedId, onSelect, onOpenDetails, onForce }: { title: string; rows: Point[]; selectedId?: string; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void }) {
   const { pick } = useI18n()
   return (
     <SectionFrame title={`${title} (${rows.length})`}>
       <div className="grid grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] border-b border-[var(--c-border)] px-3 py-2 text-[10px] uppercase text-[var(--c-text-dim)]">
         <span>{pick('Điểm', 'Point')}</span><span>{pick('Tên điểm', 'Point name')}</span><span>{pick('Giá trị', 'Value')}</span><span>{pick('Đơn vị', 'Unit')}</span><span>{pick('Trạng thái', 'Status')}</span><span>Trend</span><span>{pick('Cập nhật', 'Updated')}</span>
       </div>
-      {rows.map((point) => <AnalogRow key={point.id} point={point} selected={point.id === selectedId} onSelect={onSelect} onForce={onForce} />)}
+      {rows.map((point) => <AnalogRow key={point.id} point={point} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onForce={onForce} />)}
     </SectionFrame>
   )
 }
 
-function AnalogRow({ point, selected, onSelect, onForce }: { point: Point; selected: boolean; onSelect: (id: string) => void; onForce?: (point: Point) => void }) {
+function AnalogRow({ point, selected, onSelect, onOpenDetails, onForce }: { point: Point; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void }) {
   const { pick } = useI18n()
   const trendBuffer = useTrendBuffer(point.id, point.value, point.trend)
   const statusText = point.quality === 'good' ? pick('Bình thường', 'Normal') : point.quality === 'uncertain' ? pick('Lỗi - HIGH', 'Fault - HIGH') : point.quality.toUpperCase()
   return (
-    <button type="button" onClick={() => onSelect(point.id)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
+    <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
       <span className="mono font-semibold">{point.id}</span>
       <span className="truncate font-semibold">{point.name}</span>
       <span className="mono">{typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
@@ -317,6 +418,161 @@ function SectionFrame({ title, children }: { title: string; children: React.Reac
       <div className="border-b border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2 text-xs font-semibold text-[var(--c-accent)]">{title}</div>
       <div className="overflow-x-auto">{children}</div>
     </section>
+  )
+}
+
+function PointDetailsModal({
+  point,
+  onClose,
+  onSave,
+  onForce,
+  onRelease
+}: {
+  point: Point
+  onClose: () => void
+  onSave: (point: Point, config: { name: string; unit?: string }) => Promise<void>
+  onForce: (point: Point, value: number | boolean, durationSeconds: number) => Promise<void>
+  onRelease: (point: Point) => Promise<void>
+}) {
+  const { pick } = useI18n()
+  const toast = useToast()
+  const [nameValue, setNameValue] = useState(point.name)
+  const [unitValue, setUnitValue] = useState(selectUnitValue(point.unit))
+  const [forceValue, setForceValue] = useState(defaultForceValue(point))
+  const [forceDurationMinutes, setForceDurationMinutes] = useState('10')
+  const [busy, setBusy] = useState<'save' | 'force' | 'release' | null>(null)
+  const isAnalog = point.kind === 'UI' || point.kind === 'AO'
+  const canForce = canForcePoint(point)
+  const active = Boolean(point.value)
+  const binaryState = active ? 'on' : 'off'
+  const binaryTextColor = statusColor(binaryState)
+  const groupText = `${point.kind} - ${kindLabel[point.kind]}`
+
+  async function handleSave() {
+    try {
+      setBusy('save')
+      const nextName = nameValue.trim()
+      const nextUnit = isAnalog ? unitValue : undefined
+      await onSave(point, { name: nextName, unit: nextUnit })
+      setNameValue(nextName)
+      if (nextUnit !== undefined) setUnitValue(nextUnit)
+    } catch (err) {
+      toast.push('error', err instanceof Error ? err.message : 'Update failed')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleForce() {
+    try {
+      setBusy('force')
+      await onForce(point, parseForceValue(point, forceValue), parseForceDurationSeconds(forceDurationMinutes))
+    } catch (err) {
+      toast.push('error', err instanceof Error ? err.message : 'Force failed')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleRelease() {
+    try {
+      setBusy('release')
+      await onRelease(point)
+    } catch (err) {
+      toast.push('error', err instanceof Error ? err.message : 'Release failed')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <Modal open title={`${point.id} details`} size="xl" cancelLabel={pick('Close', 'Close')} onClose={onClose}>
+      <div className="space-y-5 text-[var(--c-text)]">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Point name', 'Point name')}</span>
+                <input value={nameValue} onChange={(event) => setNameValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
+              </label>
+              {isAnalog && (
+                <label className="block space-y-1">
+                  <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Unit', 'Unit')}</span>
+                  <select value={unitValue} onChange={(event) => setUnitValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]">
+                    {POINT_UNIT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
+            <Button size="sm" variant="primary" icon={<Save className="h-4 w-4" />} loading={busy === 'save'} onClick={handleSave}>{pick('Save basics', 'Save basics')}</Button>
+          </div>
+
+          <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-4">
+            <div className="mono text-3xl font-bold text-[var(--c-accent)]" style={point.kind === 'DO' ? { color: binaryTextColor } : undefined}>
+              {formatValue(point.value, point.unit)}
+            </div>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <StatusBadge state={point.forced ? 'force' : point.quality} />
+              <span className="mono text-xs text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
+            </div>
+          </div>
+        </div>
+
+        <dl className="grid gap-2 md:grid-cols-2">
+          <PointInfo label="Point ID" value={point.id} />
+          <PointInfo label="I/O group" value={groupText} />
+          <PointInfo label="Signal type" value={point.sensorType ?? '-'} />
+          <PointInfo label="Current value" value={formatValue(point.value, point.unit)} />
+          <PointInfo label="Unit" value={point.unit || '-'} />
+          <PointInfo label="Quality" value={point.quality} />
+          <PointInfo label="Source" value={point.source} />
+          <PointInfo label="Priority" value={point.priority ?? '-'} />
+          <PointInfo label="Updated at" value={formatDateTime(point.updatedAt)} />
+          <PointInfo label="Forced" value={point.forced ? 'Yes' : 'No'} />
+          <PointInfo label="Fault" value={point.fault ? 'Yes' : 'No'} />
+          <PointInfo label="Trend samples" value={point.trend?.length ?? 0} />
+        </dl>
+
+        {canForce && (
+          <section className="rounded-[var(--radius)] border border-[rgba(224,161,6,0.38)] bg-[rgba(224,161,6,0.08)] p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--c-warn-fg)]">
+              <ShieldAlert className="h-4 w-4" />
+              {pick('Force output', 'Force output')}
+            </div>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Force value', 'Force value')}</span>
+                {point.kind === 'DO' ? (
+                  <select value={forceValue} onChange={(event) => setForceValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]">
+                    <option value="true">ON</option>
+                    <option value="false">OFF</option>
+                  </select>
+                ) : (
+                  <input type="number" value={forceValue} onChange={(event) => setForceValue(event.target.value)} className="mono h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
+                )}
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Duration (min)', 'Duration (min)')}</span>
+                <input type="number" min="1" step="1" value={forceDurationMinutes} onChange={(event) => setForceDurationMinutes(event.target.value)} className="mono h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="danger" icon={<Power className="h-4 w-4" />} loading={busy === 'force'} onClick={handleForce}>{pick('Force output', 'Force output')}</Button>
+              <Button icon={<RotateCcw className="h-4 w-4" />} loading={busy === 'release'} onClick={handleRelease}>{pick('Release force', 'Release force')}</Button>
+            </div>
+          </section>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function PointInfo({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[128px_minmax(0,1fr)] gap-3 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 py-2 text-xs">
+      <dt className="text-[var(--c-text-dim)]">{label}</dt>
+      <dd className="mono min-w-0 break-words font-semibold text-[var(--c-text)]">{value}</dd>
+    </div>
   )
 }
 
@@ -420,17 +676,18 @@ function DetailPanel({
             <div className="mt-1 flex items-center justify-center gap-2 text-xs font-semibold text-[var(--c-text-dim)]" style={isBinary ? { color: binaryTextColor } : undefined}>
               {isEditingUnit ? (
                 <div className="flex items-center gap-1">
-                  <input
-                    type="text"
+                  <select
                     value={editingUnitValue}
                     onChange={(e) => setEditingUnitValue(e.target.value)}
-                    className="h-6 w-16 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-1 text-xs"
+                    className="h-7 w-44 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-1 text-xs"
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') onSaveEditUnit()
                       if (e.key === 'Escape') onCancelEditUnit()
                     }}
-                  />
+                  >
+                    {POINT_UNIT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
                   <button onClick={onSaveEditUnit} className="text-[var(--c-good-fg)]">✓</button>
                   <button onClick={onCancelEditUnit} className="text-[var(--c-fault-fg)]">✗</button>
                 </div>
