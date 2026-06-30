@@ -1,0 +1,79 @@
+#ifndef HMI_LOCALE_HPP
+#define HMI_LOCALE_HPP
+
+#include <string>
+
+namespace hmi {
+
+enum class StrKey {
+    /* Tab labels */
+    TAB_HOME, TAB_IO, TAB_ALARM, TAB_COMM, TAB_SYSTEM, TAB_SERVICE,
+    /* General status */
+    STR_RUNNING, STR_FAULT, STR_SAFE, STR_OK, STR_DISABLED, STR_UNKNOWN,
+    STR_LOCKED, STR_UNLOCKED,
+    /* Home page */
+    STR_ALARM_HEADER, STR_ACTIVE, STR_UNACKED, STR_CRITICAL,
+    STR_CONTROLLER_HEALTH, STR_CPU, STR_RAM, STR_STORAGE, STR_TEMP, STR_UPTIME,
+    STR_IO_HEALTH, STR_COMMUNICATION, STR_CONFIG,
+    STR_PROFILE, STR_CONFIG_REV, STR_CHECKSUM,
+    /* I/O Monitor */
+    STR_IO_MONITOR, STR_POINT, STR_NAME, STR_TYPE, STR_VALUE, STR_UNIT,
+    STR_QUALITY, STR_AGE,
+    STR_FILTER_ALL, STR_FILTER_BAD, STR_FILTER_STALE,
+    STR_NO_FAULT_POINTS,
+    /* Quality */
+    STR_GOOD, STR_BAD, STR_STALE, STR_UNCERTAIN,
+    /* Alarm */
+    STR_ALARM_EVENT, STR_SUMMARY,
+    STR_ACTIVE_UNACK, STR_ACTIVE_ACK, STR_CLEARED_UNACK, STR_CLEARED_ACK,
+    STR_ACK_SELECTED, STR_FILTER_ACTIVE,
+    STR_SEV_FAULT, STR_SEV_WARN, STR_SEV_INFO,
+    /* Communication */
+    STR_COMMUNICATION_PAGE,
+    STR_ETHERNET, STR_LINK, STR_IP, STR_MASK, STR_GATEWAY, STR_MAC,
+    STR_BACNET_IP, STR_DEVICE_ID, STR_PORT, STR_STATUS, STR_LAST_REQ,
+    STR_MODBUS_RTU1, STR_MODBUS_RTU2, STR_MODBUS_TCP,
+    STR_BAUDRATE, STR_PARITY, STR_SLAVES, STR_TIMEOUTS,
+    /* BACnet status codes */
+    STR_NO_TRAFFIC, STR_TIMEOUT, STR_CONFIG_ERROR, STR_DUPLICATE_ID, STR_LINK_DOWN,
+    /* System */
+    STR_SYSTEM_DIAG,
+    STR_FIRMWARE, STR_RUNTIME, STR_RESOURCE, STR_PROCESS, STR_WATCHDOG, STR_LOG,
+    STR_SOM_FW, STR_MCU_FW, STR_BUILD_ID, STR_BOOT_REASON, STR_LAST_ERROR,
+    STR_LAST_WARN, STR_LAST_FAULT, STR_UPTIME_LABEL,
+    /* Service */
+    STR_SERVICE_CONFIG, STR_ACCESS, STR_PROJECT,
+    STR_POINT_DATABASE, STR_SAFE_STATE_POLICY, STR_ACTIONS,
+    STR_RELOAD_CONFIG, STR_RESTART_SERVICES, STR_REBOOT_SYSTEM,
+    STR_BACKUP_CONFIG, STR_RESTORE_CONFIG,
+    STR_REBOOT_CONFIRM,      /* "Hold ENTER 3s to reboot / ESC to cancel" */
+    STR_ENTER_PIN,           /* "Enter Service PIN:" */
+    STR_PIN_WRONG,
+    STR_PERMISSION_REQUIRED,
+    /* Fault banner */
+    STR_IO_FAULT_BANNER,
+    /* Hint bar */
+    STR_HINT_BAR,
+    /* Count */
+    STR_COUNT
+};
+
+class Locale {
+public:
+    bool load(const std::string& conf_path = "/etc/mkddc/hmi.conf");
+    void reload();
+
+    const char* str(StrKey k) const;
+    bool is_vi() const { return vi_; }
+
+private:
+    bool vi_ = false;
+    std::string conf_path_;
+
+    static const char* STR_EN[static_cast<int>(StrKey::STR_COUNT)];
+    static const char* STR_VI[static_cast<int>(StrKey::STR_COUNT)];
+};
+
+} // namespace hmi
+
+#endif

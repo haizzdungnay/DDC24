@@ -1,0 +1,33 @@
+{
+  "project_id": "MK-DDC-24",
+  "profile": "GENERIC_DDC",
+  "revision": 1,
+  "checksum": "",
+  "stale_threshold_s": 5,
+  "points": [
+    {"point_id":"UI1","io_type":"UI","channel":1,"display_name":"UI1","unit":"degC"},
+    {"point_id":"UI2","io_type":"UI","channel":2,"display_name":"UI2","unit":"V"},
+    {"point_id":"UI3","io_type":"UI","channel":3,"display_name":"UI3","unit":"mA"},
+    {"point_id":"UI4","io_type":"UI","channel":4,"display_name":"UI4","unit":"%"},
+    {"point_id":"UI5","io_type":"UI","channel":5,"display_name":"UI5","unit":"V"},
+    {"point_id":"UI6","io_type":"UI","channel":6,"display_name":"UI6","unit":"V"},
+    {"point_id":"UI7","io_type":"UI","channel":7,"display_name":"UI7","unit":"V"},
+    {"point_id":"UI8","io_type":"UI","channel":8,"display_name":"UI8","unit":"V"},
+    {"point_id":"DI1","io_type":"DI","channel":1,"display_name":"DI1","unit":""},
+    {"point_id":"DI2","io_type":"DI","channel":2,"display_name":"DI2","unit":""},
+    {"point_id":"DI3","io_type":"DI","channel":3,"display_name":"DI3","unit":""},
+    {"point_id":"DI4","io_type":"DI","channel":4,"display_name":"DI4","unit":""},
+    {"point_id":"DI5","io_type":"DI","channel":5,"display_name":"DI5","unit":""},
+    {"point_id":"DI6","io_type":"DI","channel":6,"display_name":"DI6","unit":""},
+    {"point_id":"DI7","io_type":"DI","channel":7,"display_name":"DI7","unit":""},
+    {"point_id":"DI8","io_type":"DI","channel":8,"display_name":"DI8","unit":""},
+    {"point_id":"AO1","io_type":"AO","channel":1,"display_name":"AO1","unit":"V","safe_state":0.0},
+    {"point_id":"AO2","io_type":"AO","channel":2,"display_name":"AO2","unit":"V","safe_state":0.0},
+    {"point_id":"AO3","io_type":"AO","channel":3,"display_name":"AO3","unit":"V","safe_state":0.0},
+    {"point_id":"AO4","io_type":"AO","channel":4,"display_name":"AO4","unit":"V","safe_state":0.0},
+    {"point_id":"DO1","io_type":"DO","channel":1,"display_name":"DO1","unit":"","safe_state":false},
+    {"point_id":"DO2","io_type":"DO","channel":2,"display_name":"DO2","unit":"","safe_state":false},
+    {"point_id":"DO3","io_type":"DO","channel":3,"display_name":"DO3","unit":"","safe_state":false},
+    {"point_id":"DO4","io_type":"DO","channel":4,"display_name":"DO4","unit":"","safe_state":false}
+  ]
+}
