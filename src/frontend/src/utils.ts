@@ -1,17 +1,52 @@
 import type { HealthStatus, Point, PointKind, PointQuality } from './types'
 
+export const VISIBLE_UI_CHANNELS = 16
+
 export function cn(...items: Array<string | false | null | undefined>): string {
   return items.filter(Boolean).join(' ')
 }
 
 export function normalizeKind(value: unknown): PointKind {
   const raw = String(value ?? '').toUpperCase()
-  if (raw === 'BI') return 'DI'
+  if (raw === 'UI' || raw === 'AI' || raw === 'DI' || raw === 'BI' || raw === 'AV') return 'UI'
   if (raw === 'BO') return 'DO'
-  if (raw === 'AV') return 'AI'
   if (raw === 'BV') return 'DO'
-  if (raw === 'AI' || raw === 'DI' || raw === 'AO' || raw === 'DO') return raw
+  if (raw === 'AO' || raw === 'DO') return raw
   return 'virtual'
+}
+
+export function uiNode(channel: number): string {
+  return `UI-${String(channel).padStart(2, '0')}`
+}
+
+const genericPointNamePattern = /^(UI|AI|DI|AO|DO)[-_ ]?\d+$/i
+
+export function isGenericPointLabel(id: string, name: unknown): boolean {
+  const text = typeof name === 'string' ? name.trim() : ''
+  if (!text) return true
+  return text.toUpperCase() === id.trim().toUpperCase() || genericPointNamePattern.test(text)
+}
+
+export function uiChannelFromId(id: string): number | null {
+  const match = id.trim().match(/^(UI|AI|DI)[-_]?(\d+)$/i)
+  if (!match) return null
+  const channel = Number(match[2])
+  return Number.isFinite(channel) ? channel : null
+}
+
+export function normalizeInputPointId(id: string): string {
+  const channel = uiChannelFromId(id)
+  return channel ? uiNode(channel) : id
+}
+
+export function isUniversalInputKind(kind: PointKind): boolean {
+  return kind === 'UI' || kind === 'AI' || kind === 'DI'
+}
+
+export function isVisibleUniversalInput(point: Point, maxChannel = VISIBLE_UI_CHANNELS): boolean {
+  if (!isUniversalInputKind(point.kind)) return false
+  const channel = uiChannelFromId(point.id)
+  return channel === null || (channel >= 1 && channel <= maxChannel)
 }
 
 export function normalizeQuality(value: unknown): PointQuality {
@@ -33,6 +68,32 @@ export function pointNumber(point: Point): number {
   if (typeof point.value === 'boolean') return point.value ? 1 : 0
   const parsed = Number(point.value)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+export function isFreshIso(value: string | null | undefined, maxAgeMs: number): boolean {
+  if (!value) return false
+  const time = Date.parse(value)
+  return Number.isFinite(time) && Date.now() - time <= maxAgeMs
+}
+
+export function mergePointsById(base: Point[], updates: Point[]): Point[] {
+  const byId = new Map(base.map((point) => [point.id, point]))
+  for (const point of updates) {
+    const current = byId.get(point.id)
+    byId.set(point.id, current ? mergePointUpdate(current, point) : point)
+  }
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
+}
+
+function mergePointUpdate(current: Point, update: Point): Point {
+  return {
+    ...current,
+    ...update,
+    name: isGenericPointLabel(update.id, update.name) ? current.name : update.name,
+    unit: update.unit ?? current.unit,
+    sensorType: update.sensorType ?? current.sensorType,
+    trend: update.trend ?? current.trend
+  }
 }
 
 export function formatValue(value: Point['value'], unit?: string): string {

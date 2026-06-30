@@ -16,8 +16,8 @@ import (
 
 const (
 	defaultTrendDBPath          = "/data/mkddc/trend.sqlite"
-	defaultTrendIntervalS       = 30
-	defaultTrendRetentionRecord = 2880
+	defaultTrendIntervalS       = 10
+	defaultTrendRetentionRecord = 8640
 )
 
 type TrendStore struct {
@@ -127,7 +127,7 @@ func (s *TrendStore) Query(ctx context.Context, pointIDs []string, fromTs, toTs 
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("trend store unavailable")
 	}
-	ids := normalizePointIDs(pointIDs)
+	ids := storagePointIDs(normalizePointIDs(pointIDs))
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -248,7 +248,7 @@ func normalizePointIDs(ids []string) []string {
 	seen := make(map[string]struct{}, len(ids))
 	out := make([]string, 0, len(ids))
 	for _, id := range ids {
-		id = strings.TrimSpace(id)
+		id = canonicalPointID(id)
 		if id == "" {
 			continue
 		}
@@ -257,6 +257,26 @@ func normalizePointIDs(ids []string) []string {
 		}
 		seen[id] = struct{}{}
 		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func storagePointIDs(ids []string) []string {
+	seen := make(map[string]struct{}, len(ids)*3)
+	out := make([]string, 0, len(ids)*3)
+	for _, id := range ids {
+		for _, item := range append([]string{id}, legacyPointIDAliases(id)...) {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			if _, ok := seen[item]; ok {
+				continue
+			}
+			seen[item] = struct{}{}
+			out = append(out, item)
+		}
 	}
 	sort.Strings(out)
 	return out

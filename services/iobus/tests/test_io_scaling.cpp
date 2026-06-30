@@ -141,8 +141,37 @@ TEST(IoScaling, AoEngToRawTable)
 TEST(IoScaling, SensorTypeFromString)
 {
     EXPECT_EQ(sensor_type_from_string("0-10V"),      SensorType::V0_10);
+    EXPECT_EQ(sensor_type_from_string("2-10V"),      SensorType::V2_10);
     EXPECT_EQ(sensor_type_from_string("4-20mA"),     SensorType::MA4_20);
     EXPECT_EQ(sensor_type_from_string("PT100"),      SensorType::PT100);
+    EXPECT_EQ(sensor_type_from_string("NTC10k"),     SensorType::NTC10K);
+    EXPECT_EQ(sensor_type_from_string("potentiometer"), SensorType::POTENTIOMETER);
     EXPECT_EQ(sensor_type_from_string("dry-contact"),SensorType::DRY_CONTACT);
     EXPECT_EQ(sensor_type_from_string("xyz"),        SensorType::UNKNOWN);
+}
+
+TEST(IoScaling, ConfiguredEasySetScaleCalibrationAndRangeMultiplier)
+{
+    UiScaleConfig cfg;
+    cfg.sensor = SensorType::V0_10;
+    cfg.scale_lo = 0.0f;
+    cfg.scale_hi = 100.0f;
+    cfg.range_mult = 1;
+    cfg.sensor_cal = 2.0f;
+
+    kx_quality_t q;
+    const float value = ui_to_eng(4194304, cfg, &q);
+    EXPECT_EQ(q, KX_Q_GOOD);
+    EXPECT_NEAR(value, 502.0f, 1.0f);
+}
+
+TEST(IoScaling, ConfiguredDryContactInvert)
+{
+    UiScaleConfig cfg;
+    cfg.sensor = SensorType::DRY_CONTACT;
+    cfg.invert = true;
+
+    kx_quality_t q;
+    EXPECT_FLOAT_EQ(ui_to_eng(8000000, cfg, &q), 0.0f);
+    EXPECT_EQ(q, KX_Q_GOOD);
 }

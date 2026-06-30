@@ -258,9 +258,29 @@ func validateConfigIO(cfg ConfigIO) []configValidationError {
 	var errs []configValidationError
 	for i, item := range cfg.UI {
 		base := fmt.Sprintf("ui[%d]", i)
-		validateChannel(&errs, item, base+".ch", 1, 8)
-		validateStringEnum(&errs, item, base+".type", "type", true, "0-10V", "4-20mA", "PT100", "PT1000", "NTC10k", "NTC20k", "dry")
+		validateChannel(&errs, item, base+".ch", 1, 16)
+		validateStringEnum(&errs, item, base+".type", "type", true, "none", "0-10V", "2-10V", "4-20mA", "PT100", "PT1000", "NTC10k", "NTC20k", "dry", "potentiometer", "light", "pulse")
 		validateOptionalString(&errs, item, base+".unit", "unit")
+		validateOptionalString(&errs, item, base+".name", "name")
+		validateOptionalString(&errs, item, base+".note", "note")
+		if _, ok, good := boolField(item, "enabled"); ok && !good {
+			addConfigErr(&errs, base+".enabled", "must be boolean")
+		}
+		if _, ok, good := boolField(item, "invert"); ok && !good {
+			addConfigErr(&errs, base+".invert", "must be boolean")
+		}
+		if rm, ok, good := intField(item, "range_mult"); ok && (!good || rm < 0 || rm > 5) {
+			addConfigErr(&errs, base+".range_mult", "must be integer in range 0..5")
+		}
+		if samples, ok, good := intField(item, "filter_samples"); ok && (!good || samples < 0 || samples > 100) {
+			addConfigErr(&errs, base+".filter_samples", "must be integer in range 0..100")
+		}
+		if mathFunc, ok, good := intField(item, "math_func"); ok && (!good || mathFunc < 0 || mathFunc > 3) {
+			addConfigErr(&errs, base+".math_func", "must be integer in range 0..3")
+		}
+		if cal, ok, good := numberField(item, "sensor_cal"); ok && (!good || cal < -12.7 || cal > 12.8) {
+			addConfigErr(&errs, base+".sensor_cal", "must be number in range -12.7..12.8")
+		}
 		lo, hasLo, okLo := numberField(item, "scale_lo")
 		hi, hasHi, okHi := numberField(item, "scale_hi")
 		if hasLo && !okLo {

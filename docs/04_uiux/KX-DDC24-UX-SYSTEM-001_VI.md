@@ -102,7 +102,7 @@ Trạng thái normal của PointCard hiển thị xanh lá theo convention SCADA
 |------|-------|
 | **Overview** | Dashboard (nhúng System Health), Monitoring, Alarm log, Trends, User info `/me` |
 | **Settings** | Display, Users, Network, Time/Date, Device |
-| **Engineering** | Scheduler, Commissioning, Programming/Validator, Alarm settings |
+| **Engineering** | Scheduler, Commissioning, Programming/Validator, Alarm settings, Inputs Config, Controller Diagram, Auxiliary Functions |
 
 Mục đang chọn dùng dấu hiệu trung tính (weight, line, marker, background nhẹ), không glow/bão hòa màu. Nhóm điều hướng có thể thu gọn để giảm tải thị giác.
 
@@ -128,6 +128,7 @@ Trạng thái phải có dấu hiệu phi-màu đi kèm: icon/chữ/shape/symbol
 ## Revision History
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
+| 1.5 | 2026-06-23 | UX Lead | Thêm Inputs Config, Controller Diagram, Aux Functions vào Engineering theo ADR-010 |
 | 1.4 | 2026-06-16 | UX Lead | Đổi sang Level B hybrid — bộ màu trạng thái SCADA + token *-fg cho nền sáng theo ADR-009 amendment |
 | 1.3 | 2026-06-16 | UX Lead | Owner adjustment: chữ/icon/chấm/value động normal xanh lá; warn cam, fault đỏ; surface vẫn xám ISA-101 |
 | 1.2 | 2026-06-16 | UX Lead | Bổ sung ngoại lệ chấm/icon binary indicator: OK/ONLINE xanh lá, OFF/OFFLINE xám, vẫn kèm chữ/icon |

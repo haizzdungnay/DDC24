@@ -2,33 +2,56 @@ import { API_ORIGIN, IS_DEMO } from '../config'
 import {
   ackDemoAlarm,
   forceDemoPoint,
+  getAiInputConfigs,
   getDemoAlarms,
   getDemoChannels,
   getDemoHealth,
   getDemoNetwork,
+  getDemoOutputs,
   getDemoPoints,
+  getUserParams as getDemoUserParams,
+  putDemoAiInputs,
+  putDemoOutputs,
+  putUserParams as putDemoUserParams,
   runDemoCommissioning,
+  tickDemoPoints,
+  updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import type { Alarm, CommissioningTestResult, CurrentUser, GraphValidationResult, HealthResponse, IoChannel, NetworkData, Point, TrendSample } from '../types'
-import { normalizeHealth, normalizeKind, normalizeQuality, nowIso } from '../utils'
+import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AoConfig, type AoSignalMode, type CommissioningTestResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
+import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
+import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
+
+export { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 
 type AuthHeaderProvider = () => Record<string, string>
 let authHeaderProvider: AuthHeaderProvider = () => ({})
 
 const base = `${API_ORIGIN.replace(/\/$/, '')}/api/v1`
+const pointConfigOverridesKey = 'mkddc:point-config-overrides:v1'
+
+type ApiRequestInit = RequestInit & { suppressAuthExpired?: boolean }
+type PointConfigPatch = { name?: string; unit?: string; trendEnabled?: boolean }
+
+export const POINT_UNIT_OPTIONS = [
+  { value: '', label: '0 = No units shown' },
+  { value: '%', label: '1 = % Percentage' },
+  { value: 'C', label: '2 = °C / °F Degrees Celsius or Degrees Fahrenheit' },
+  { value: 'Pa', label: '3 = P Pascals' }
+] as const
 
 export function setAuthHeaderProvider(provider: AuthHeaderProvider) {
   authHeaderProvider = provider
 }
 
-async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers)
+async function requestJson<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
+  const { suppressAuthExpired, ...fetchInit } = init
+  const headers = new Headers(fetchInit.headers)
   for (const [key, value] of Object.entries(authHeaderProvider())) headers.set(key, value)
-  if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json')
+  if (fetchInit.body && !headers.has('content-type')) headers.set('content-type', 'application/json')
 
-  const response = await fetch(`${base}${path}`, { ...init, headers, credentials: 'include' })
-  if (response.status === 401 || response.status === 403) {
+  const response = await fetch(`${base}${path}`, { ...fetchInit, headers, credentials: 'include' })
+  if (!suppressAuthExpired && (response.status === 401 || response.status === 403)) {
     window.dispatchEvent(new CustomEvent('mkddc:auth-expired'))
   }
   if (!response.ok) {
@@ -39,23 +62,101 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
   return response.json() as Promise<T>
 }
 
-export function normalizePoint(raw: Record<string, unknown>): Point {
-  const id = String(raw.id ?? raw.point_id ?? 'UNKNOWN')
-  const value = raw.value as Point['value'] ?? 0
-  return {
-    id,
-    name: String(raw.name ?? raw.label ?? id),
-    kind: normalizeKind(raw.kind ?? raw.type),
-    value,
-    unit: raw.unit ? String(raw.unit) : undefined,
-    quality: normalizeQuality(raw.quality),
-    source: String(raw.source ?? 'Core'),
-    priority: raw.priority ? String(raw.priority) : raw.active_source ? String(raw.active_source) : undefined,
-    updatedAt: String(raw.updatedAt ?? raw.timestamp ?? raw.ts ?? nowIso()),
-    fault: Boolean(raw.fault ?? false),
-    forced: Boolean(raw.forced ?? false),
-    sensorType: raw.sensorType ? String(raw.sensorType) : raw.sensor_type ? String(raw.sensor_type) : undefined
+function readPointConfigOverrides(): Record<string, PointConfigPatch> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(pointConfigOverridesKey)
+    return raw ? JSON.parse(raw) as Record<string, PointConfigPatch> : {}
+  } catch {
+    return {}
   }
+}
+
+function savePointConfigOverride(id: string, config: PointConfigPatch): PointConfigPatch & { id: string } {
+  const overrides = readPointConfigOverrides()
+  const current = overrides[id] ?? {}
+  const next: PointConfigPatch = { ...current }
+  if (Object.prototype.hasOwnProperty.call(config, 'name')) next.name = config.name
+  if (Object.prototype.hasOwnProperty.call(config, 'unit')) next.unit = config.unit
+  if (Object.prototype.hasOwnProperty.call(config, 'trendEnabled')) next.trendEnabled = config.trendEnabled
+  overrides[id] = next
+  window.localStorage.setItem(pointConfigOverridesKey, JSON.stringify(overrides))
+  return { id, ...next }
+}
+
+function applyAiInputConfigOverrides(configs: AiInputConfig[]): AiInputConfig[] {
+  const overrides = readPointConfigOverrides()
+  return configs.map((config) => {
+    const id = uiNode(config.channel)
+    const override = overrides[id]
+    if (!override) return config
+    const genericName = override.name !== undefined && isGenericPointLabel(id, override.name)
+    return {
+      ...config,
+      ...(override.name !== undefined && !genericName ? { label: override.name } : {}),
+      ...(override.unit !== undefined && !genericName ? { unit: aiUnitFromPointUnit(override.unit) } : {})
+    }
+  })
+}
+
+function applyAiInputPointNames(configs: AiInputConfig[], points: Point[]): AiInputConfig[] {
+  const pointsById = new Map(points.map((point) => [point.id, point]))
+  return applyAiInputConfigOverrides(configs.map((config) => {
+    const point = pointsById.get(uiNode(config.channel))
+    if (!point) return config
+    return {
+      ...config,
+      label: point.name,
+      unit: aiUnitFromPointUnit(point.unit)
+    }
+  }))
+}
+
+function saveAiInputPointConfigOverrides(configs: AiInputConfig[]) {
+  configs.forEach((config) => {
+    savePointConfigOverride(uiNode(config.channel), { name: config.label, unit: pointUnitFromAiUnit(config.unit) })
+  })
+}
+
+export function applyDemoPointMetadata(points: Point[]): Point[] {
+  const demoById = new Map(getDemoPoints().map((point) => [point.id, point]))
+  return points.map((point) => {
+    const demo = demoById.get(point.id)
+    if (!demo) return point
+    const genericName = isGenericPointLabel(point.id, point.name)
+    return {
+      ...point,
+      ...(genericName ? { name: demo.name, unit: demo.unit, sensorType: demo.sensorType } : {}),
+      ...(!genericName && point.unit === undefined && demo.unit !== undefined ? { unit: demo.unit } : {}),
+      ...(!genericName && point.sensorType === undefined && demo.sensorType !== undefined ? { sensorType: demo.sensorType } : {}),
+      ...(point.trend === undefined && demo.trend !== undefined ? { trend: [...demo.trend] } : {})
+    }
+  })
+}
+
+export function applyPointConfigOverrides(points: Point[]): Point[] {
+  const overrides = readPointConfigOverrides()
+  return points.map((point) => {
+    const override = overrides[point.id]
+    if (!override) return point
+    const genericName = override.name !== undefined && isGenericPointLabel(point.id, override.name)
+    return {
+      ...point,
+      ...(override.name !== undefined && !genericName ? { name: override.name } : {}),
+      ...(override.unit !== undefined && !genericName ? { unit: override.unit } : {})
+    }
+  })
+}
+
+export function aiUnitFromPointUnit(unit: unknown): number {
+  return unitFromIo(unit)
+}
+
+export function pointUnitFromAiUnit(unit: number): string {
+  if (unit === 1) return '%'
+  if (unit === 2) return 'C'
+  if (unit === 3) return 'Pa'
+  return ''
 }
 
 function normalizeHealthResponse(raw: Record<string, unknown>): HealthResponse {
@@ -84,28 +185,31 @@ function normalizeHealthResponse(raw: Record<string, unknown>): HealthResponse {
 
 function normalizeSystemStatus(raw: Record<string, unknown>): HealthResponse {
   const iop = (raw.iop ?? {}) as Record<string, unknown>
-  const scan = (raw.scan ?? {}) as Record<string, unknown>
+  const _scan = (raw.scan ?? {}) as Record<string, unknown>
   const versions = (raw.versions ?? {}) as Record<string, unknown>
   const ramPercent = numberFrom(raw.ram_percent)
   const ramUsedMb = numberFrom(raw.ram_used_mb)
   const ramTotalMb = numberFrom(raw.ram_total_mb)
   const finalRamPercent = ramPercent ?? (ramUsedMb !== undefined && ramTotalMb !== undefined && ramTotalMb > 0 ? round2((ramUsedMb / ramTotalMb) * 100) : undefined)
+
+  const servicesRaw = (raw.services ?? {}) as Record<string, Record<string, unknown>>
+  const services = Object.fromEntries(Object.entries(servicesRaw).map(([key, value]) => [key, {
+    status: normalizeHealth(value.status),
+    uptime_s: typeof value.uptime_s === 'number' ? value.uptime_s : undefined,
+    last_scan_ms: typeof value.last_scan_ms === 'number' ? value.last_scan_ms : undefined
+  }]))
+
   return {
-    overall: normalizeHealth(iop.status ?? 'ok'),
-    cpuPercent: numberFrom(raw.cpu_percent),
+    overall: normalizeHealth(iop.status ?? raw.overall ?? 'ok'),
+    cpuPercent: numberFrom(raw.cpu_percent ?? raw.cpuPercent),
     ramPercent: finalRamPercent,
     ramUsedMb,
     ramTotalMb,
     tempC: numberFrom(raw.tempC ?? raw.temp_c),
-    uptimeS: numberFrom(raw.uptime_s),
+    uptimeS: numberFrom(raw.uptime_s ?? raw.uptimeS),
     firmware: stringFrom(versions.web ?? versions.core ?? versions.iobus),
     deviceIp: stringFrom(raw.deviceIp ?? raw.device_ip),
-    services: {
-      core: { status: normalizeHealth('ok'), last_scan_ms: numberFrom(scan.overrun) },
-      iobus: { status: normalizeHealth(iop.status), last_scan_ms: numberFrom(iop.last_io_resp_ms) },
-      web: { status: 'ok' },
-      IOP: { status: normalizeHealth(iop.status), last_scan_ms: numberFrom(iop.last_io_resp_ms) }
-    }
+    services,
   }
 }
 
@@ -127,12 +231,26 @@ function normalizeAlarm(raw: Record<string, unknown>): Alarm {
 }
 
 function normalizeTrendSample(raw: Record<string, unknown>): TrendSample {
+  const timestamp = trendTimestamp(raw.time ?? raw.ts ?? raw.timestamp)
   const sample: TrendSample = { time: formatTrendTime(raw.time ?? raw.ts ?? raw.timestamp) }
+  if (timestamp !== null) sample.__ts = timestamp
   for (const [key, value] of Object.entries(raw)) {
     if (key === 'time' || key === 'ts' || key === 'timestamp') continue
-    if (typeof value === 'number' && Number.isFinite(value)) sample[key] = value
+    if (typeof value === 'number' && Number.isFinite(value)) sample[normalizeTrendPointKey(key)] = value
   }
   return sample
+}
+
+function normalizeTrendPointKey(key: string): string {
+  const match = key.trim().match(/^([A-Z]+)[-_]?(\d+)$/i)
+  if (!match) return key
+  const prefix = match[1].toUpperCase()
+  const channel = Number(match[2])
+  if (!Number.isFinite(channel) || channel <= 0) return key
+  if (prefix === 'UI' || prefix === 'AI') return uiNode(channel)
+  if (prefix === 'DI' || prefix === 'BI') return uiNode(channel + 8)
+  if (prefix === 'AO' || prefix === 'DO') return `${prefix}-${String(channel).padStart(2, '0')}`
+  return key
 }
 
 function severityFrom(value: unknown): Alarm['severity'] {
@@ -163,7 +281,12 @@ function normalizeCommissioningResult(raw: Record<string, unknown>, pointId: str
 }
 
 function numberFrom(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
 }
 
 function round2(value: number): number {
@@ -174,11 +297,239 @@ function stringFrom(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
+type IoUiConfig = {
+  ch?: number
+  type?: string
+  unit?: string
+  scale_lo?: number
+  scale_hi?: number
+  name?: string
+  note?: string
+  enabled?: boolean
+  invert?: boolean
+  range_mult?: number
+  filter_samples?: number
+  sensor_cal?: number
+  math_func?: number
+}
+
+type IoConfig = {
+  ui?: IoUiConfig[]
+  ao?: IoAoConfig[]
+  [key: string]: unknown
+}
+
+type IoAoConfig = {
+  ch?: number
+  mode?: string
+  name?: string
+  enabled?: boolean
+  [key: string]: unknown
+}
+
+type SafeStateEntry = {
+  ch?: number
+  safe?: unknown
+  [key: string]: unknown
+}
+
+type SafeStateConfig = {
+  ao?: SafeStateEntry[]
+  do?: SafeStateEntry[]
+  [key: string]: unknown
+}
+
+function aiNode(channel: number): string {
+  return uiNode(channel)
+}
+
+function signalTypeFromIo(item: IoUiConfig): AiSignalType {
+  if (item.type === 'none') return 0
+  if (item.type === '0-10V') return 1
+  if (item.type === '2-10V' || item.type === '4-20mA') return 2
+  if (item.type === 'NTC10k' || item.type === 'NTC20k' || item.type === 'PT100' || item.type === 'PT1000') return 3
+  if (item.type === 'dry') return item.invert ? 5 : 4
+  if (item.type === 'potentiometer') return 6
+  if (item.type === 'light') return 7
+  if (item.type === 'pulse') return 8
+  return 0
+}
+
+function signalTypeToIoType(signalType: AiSignalType): IoUiConfig['type'] {
+  if (signalType === 1) return '0-10V'
+  if (signalType === 2) return '2-10V'
+  if (signalType === 3) return 'NTC10k'
+  if (signalType === 4 || signalType === 5) return 'dry'
+  if (signalType === 6) return 'potentiometer'
+  if (signalType === 7) return 'light'
+  if (signalType === 8) return 'pulse'
+  return 'none'
+}
+
+function unitFromIo(value: unknown): number {
+  const unit = String(value ?? '').toLowerCase()
+  if (unit === 'percent' || unit === '%' || unit === '%rh') return 1
+  if (unit === 'degc' || unit === 'degf' || unit === 'c' || unit === 'f') return 2
+  if (unit === 'pa' || unit === 'pascal') return 3
+  return 0
+}
+
+function unitToIo(unit: number): string {
+  if (unit === 1) return 'percent'
+  if (unit === 2) return 'degC'
+  if (unit === 3) return 'Pa'
+  return ''
+}
+
+function defaultAiConfig(channel: number): AiInputConfig {
+  return {
+    channel,
+    label: aiNode(channel),
+    signalType: 0,
+    displayMin: 0,
+    displayMax: 100,
+    rangeMultiplier: 0,
+    unit: 0,
+    filterSamples: 3,
+    sensorCal: 0,
+    mathFunction: 0,
+    enabled: true,
+    note: ''
+  }
+}
+
+function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
+  const channel = typeof item.ch === 'number' && Number.isFinite(item.ch) ? item.ch : index + 1
+  const signalType = signalTypeFromIo(item)
+  return {
+    channel,
+    label: stringFrom(item.name) ?? aiNode(channel),
+    signalType,
+    displayMin: numberFrom(item.scale_lo) ?? 0,
+    displayMax: numberFrom(item.scale_hi) ?? 100,
+    rangeMultiplier: numberFrom(item.range_mult) ?? 0,
+    unit: unitFromIo(item.unit),
+    filterSamples: numberFrom(item.filter_samples) ?? 3,
+    sensorCal: numberFrom(item.sensor_cal) ?? 0,
+    mathFunction: numberFrom(item.math_func) ?? 0,
+    enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
+    note: stringFrom(item.note) ?? ''
+  }
+}
+
+function aiConfigToIo(config: AiInputConfig): IoUiConfig {
+  const item: IoUiConfig = {
+    ch: config.channel,
+    type: signalTypeToIoType(config.signalType),
+    name: config.label,
+    note: config.note,
+    enabled: config.enabled,
+    unit: unitToIo(config.unit),
+    scale_lo: config.displayMin,
+    scale_hi: config.displayMax,
+    range_mult: config.rangeMultiplier,
+    filter_samples: config.filterSamples,
+    sensor_cal: config.sensorCal,
+    math_func: config.mathFunction
+  }
+  if (isDigitalContact(config.signalType)) {
+    item.invert = config.signalType === 5
+    item.unit = ''
+  }
+  return item
+}
+
+function aiConfigsFromIo(raw: IoConfig): AiInputConfig[] {
+  const byChannel = new Map<number, AiInputConfig>()
+  raw.ui?.forEach((item, index) => {
+    const config = aiConfigFromIo(item, index)
+    byChannel.set(config.channel, config)
+  })
+  return Array.from({ length: 16 }, (_, index) => byChannel.get(index + 1) ?? defaultAiConfig(index + 1))
+}
+
+function channelFromEntry(item: { ch?: number }, index: number): number {
+  return typeof item.ch === 'number' && Number.isFinite(item.ch) ? item.ch : index + 1
+}
+
+function outputMode(value: unknown): AoSignalMode {
+  const raw = String(value ?? '').toUpperCase()
+  return raw === '4-20MA' || raw === '4-20M A' ? '4-20mA' : '0-10V'
+}
+
+function safeState(value: unknown): DoSafeState {
+  return String(value ?? '').toLowerCase() === 'closed' ? 'closed' : 'open'
+}
+
+function outputByChannel<T extends { ch?: number }>(items: T[] | undefined, channel: number): T | undefined {
+  return items?.find((item, index) => channelFromEntry(item, index) === channel)
+}
+
+function outputsFromConfig(io: IoConfig, safe: SafeStateConfig): OutputsConfig {
+  const demo = getDemoOutputs()
+  return {
+    ao: demo.ao.map((config) => {
+      const ioItem = outputByChannel(io.ao, config.channel)
+      const safeItem = outputByChannel(safe.ao, config.channel)
+      return {
+        ...config,
+        mode: outputMode(ioItem?.mode ?? config.mode),
+        safeValue: numberFrom(safeItem?.safe) ?? config.safeValue,
+        label: stringFrom(ioItem?.name) ?? config.label
+      }
+    }),
+    do: demo.do.map((config) => {
+      const safeItem = outputByChannel(safe.do, config.channel)
+      return {
+        ...config,
+        safeState: safeState(safeItem?.safe ?? config.safeState)
+      }
+    })
+  }
+}
+
+function mergeAoConfig(current: IoConfig, outputs: AoConfig[]): IoConfig {
+  const nextAo = [...(current.ao ?? [])]
+  for (const output of outputs) {
+    const index = nextAo.findIndex((item, itemIndex) => channelFromEntry(item, itemIndex) === output.channel)
+    const patch: IoAoConfig = { ch: output.channel, mode: output.mode }
+    if (output.label) patch.name = output.label
+    if (index >= 0) nextAo[index] = { ...nextAo[index], ...patch }
+    else nextAo.push(patch)
+  }
+  return { ...current, ui: current.ui ?? [], ao: nextAo }
+}
+
+function mergeSafeState(current: SafeStateConfig, outputs: OutputsConfig): SafeStateConfig {
+  const nextAo = [...(current.ao ?? [])]
+  const nextDo = [...(current.do ?? [])]
+  for (const output of outputs.ao) {
+    const index = nextAo.findIndex((item, itemIndex) => channelFromEntry(item, itemIndex) === output.channel)
+    const patch: SafeStateEntry = { ch: output.channel, safe: output.safeValue }
+    if (index >= 0) nextAo[index] = { ...nextAo[index], ...patch }
+    else nextAo.push(patch)
+  }
+  for (const output of outputs.do) {
+    const index = nextDo.findIndex((item, itemIndex) => channelFromEntry(item, itemIndex) === output.channel)
+    const patch: SafeStateEntry = { ch: output.channel, safe: output.safeState }
+    if (index >= 0) nextDo[index] = { ...nextDo[index], ...patch }
+    else nextDo.push(patch)
+  }
+  return { ...current, ao: nextAo, do: nextDo }
+}
+
 function formatTrendTime(value: unknown): string {
   if (typeof value !== 'string') return nowIso()
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return parsed.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+function trendTimestamp(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string') return null
+  const parsed = new Date(value).getTime()
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 export const apiClient = {
@@ -187,14 +538,23 @@ export const apiClient = {
     try {
       return normalizeSystemStatus(await requestJson<Record<string, unknown>>('/system/status'))
     } catch {
-      return normalizeHealthResponse(await requestJson<Record<string, unknown>>('/health'))
+      try {
+        return normalizeHealthResponse(await requestJson<Record<string, unknown>>('/health'))
+      } catch {
+        return getDemoHealth()
+      }
     }
   },
 
   async getPoints(): Promise<Point[]> {
-    if (IS_DEMO) return getDemoPoints()
-    const raw = await requestJson<Array<Record<string, unknown>>>('/points')
-    return raw.map(normalizePoint)
+    if (IS_DEMO) return applyPointConfigOverrides(applyDemoPointMetadata(getDemoPoints()))
+    try {
+      const records = pointRecordsFrom(await requestJson<unknown>('/points', { suppressAuthExpired: true }))
+      const points = records.length ? records.map(normalizePoint) : tickDemoPoints()
+      return applyPointConfigOverrides(applyDemoPointMetadata(points))
+    } catch {
+      return applyPointConfigOverrides(applyDemoPointMetadata(tickDemoPoints()))
+    }
   },
 
   async getNetwork(): Promise<NetworkData> {
@@ -217,6 +577,69 @@ export const apiClient = {
   async getIoChannels(): Promise<IoChannel[]> {
     if (IS_DEMO) return getDemoChannels()
     return requestJson<IoChannel[]>('/io/channels')
+  },
+
+  async getAiInputs(): Promise<AiInputConfig[]> {
+    if (IS_DEMO) return applyAiInputPointNames(getAiInputConfigs(), applyPointConfigOverrides(getDemoPoints()))
+    const raw = await requestJson<IoConfig>('/system/config/io')
+    return applyAiInputPointNames(aiConfigsFromIo(raw), await this.getPoints())
+  },
+
+  async putAiInputs(configs: AiInputConfig[]): Promise<void> {
+    if (IS_DEMO) {
+      putDemoAiInputs(configs)
+      saveAiInputPointConfigOverrides(configs)
+      return
+    }
+    const current = await requestJson<IoConfig>('/system/config/io')
+    await requestJson('/system/config/io', {
+      method: 'PUT',
+      body: JSON.stringify({
+        ui: configs.map(aiConfigToIo),
+        ao: current.ao ?? []
+      })
+    })
+    saveAiInputPointConfigOverrides(configs)
+  },
+
+  async getOutputs(): Promise<OutputsConfig> {
+    if (IS_DEMO) return getDemoOutputs()
+    const [io, safe] = await Promise.all([
+      requestJson<IoConfig>('/system/config/io'),
+      requestJson<SafeStateConfig>('/system/config/safe-state')
+    ])
+    return outputsFromConfig(io, safe)
+  },
+
+  async putOutputs(config: OutputsConfig): Promise<void> {
+    putDemoOutputs(config)
+    if (IS_DEMO) return
+    const [currentIo, currentSafe] = await Promise.all([
+      requestJson<IoConfig>('/system/config/io'),
+      requestJson<SafeStateConfig>('/system/config/safe-state')
+    ])
+    await requestJson('/system/config/io', {
+      method: 'PUT',
+      body: JSON.stringify(mergeAoConfig(currentIo, config.ao))
+    })
+    await requestJson('/system/config/safe-state', {
+      method: 'PUT',
+      body: JSON.stringify(mergeSafeState(currentSafe, config))
+    })
+  },
+
+  async forceOutput(id: string, value: number | boolean, release = false) {
+    return this.forcePoint(id, value, release)
+  },
+
+  async getUserParams(): Promise<UserParamsConfig> {
+    // Mock demo-only: EasySet User Parameters has no backend/core hook yet.
+    return getDemoUserParams()
+  },
+
+  async putUserParams(config: UserParamsConfig): Promise<void> {
+    // Mock demo-only: do not call REST from this page.
+    putDemoUserParams(config)
   },
 
   async getAlarms(): Promise<Alarm[]> {
@@ -242,6 +665,27 @@ export const apiClient = {
       method: 'PUT',
       body: JSON.stringify(release ? { release: true } : { value })
     })
+  },
+
+  async updatePointName(id: string, name: string): Promise<{ id: string; name?: string }> {
+    return this.updatePointConfig(id, { name })
+  },
+
+  async updatePointConfig(id: string, config: { name?: string; unit?: string; trendEnabled?: boolean }): Promise<{ id: string; name?: string; unit?: string; trendEnabled?: boolean }> {
+    if (IS_DEMO) {
+      savePointConfigOverride(id, config)
+      return updateDemoPointConfig(id, config)
+    }
+    try {
+      return await requestJson<{ id: string; name?: string; unit?: string; trendEnabled?: boolean }>(`/points/${encodeURIComponent(id)}/config`, {
+        method: 'PUT',
+        body: JSON.stringify(config)
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (/401|403|forbidden|unauthorized/i.test(message)) throw err
+      return savePointConfigOverride(id, config)
+    }
   },
 
   async runCommissioningTest(pointId: string, value: number | boolean): Promise<CommissioningTestResult> {

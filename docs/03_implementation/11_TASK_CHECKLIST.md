@@ -556,6 +556,54 @@ Trạng thái: ĐÃ làm 2026-06-26 — MOD-013 DONE: modbus_tcp.{hpp,cpp} Modbu
 
 ---
 
+### EasySet Config Tasks
+
+```
+Task ID: WEB-A01
+Tên: EasySet Controller Diagram
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: DONE
+```
+
+```
+Task ID: WEB-A02
+Tên: Engineering Nav/Routes/I18N
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: DONE
+```
+
+```
+Task ID: WEB-A03
+Tên: Auxiliary Functions
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: DONE
+Ghi chú: ĐÃ làm 2026-06-24 — wired /eng/aux route + fix tsc/lint (remove as any, @ts-expect hacks, fix getDemoGraph meta)
+```
+
+```
+Task ID: WEB-002
+Tên: EasySet Alarm Config
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: DONE
+Ghi chú: ĐÃ làm 2026-06-24 — Alarm UI: wizard/advanced tabs, alarm type 0-7 conditional fields, interlock, sourcePointId, ackDelayS. Tabs component tái dùng.
+```
+
+```
+Task ID: WEB-003
+Tên: EasySet AI Inputs Config
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: IN-PROGRESS
+Ghi chú: BE validate 2026-06-25 — `/system/config/io` chấp nhận AI Universal Input `type:"2-10V"` và optional `name/enabled/invert/range_mult(0..5)`; C++ iobus consumer field mới để downstream.
+Ghi chú: BE validate 2026-06-25 — mở đủ AI EasySet authoring `type:none/potentiometer/light/pulse` + optional `filter_samples(0..100)/sensor_cal(-12.7..12.8)/math_func(0..3)`.
+```
+
+```
+Task ID: WEB-004
+Tên: EasySet DI Inputs Config
+Owner: Dev Web | Phase: A | Module: UI
+Trạng thái: IN-PROGRESS
+```
+
 ## Phase 5 — mkddc-web
 
 ```

@@ -12,6 +12,7 @@ Scope B1:
 - `POST /api/v1/auth/login` — đọc `users.conf`, verify bcrypt, phát JWT HS256.
 - `POST /api/v1/auth/logout` — revoke token in-memory.
 - `GET /api/v1/system/status` — trả `SystemStatus` theo `openapi.yaml`/08_WEB.
+- `GET/PUT /api/v1/system/config/io` — ghi `io_config.conf`; `ui[].type` nhận `0-10V|2-10V|4-20mA|PT100|PT1000|NTC10k|NTC20k|dry`, thêm optional `name` string, `enabled` bool, `invert` bool, `range_mult` int 0..5 cho AI Universal Input authoring.
 - OS metrics (`cpu_percent`, `ram_percent`, `tempC`, `uptime_s`/`uptimeS`) đọc trực tiếp từ OS: Linux dùng `/proc/stat`, `/proc/meminfo`, `/sys/class/thermal/.../temp`, `/proc/uptime`; Windows dùng WinAPI cho CPU/RAM/uptime và WMI best-effort (LibreHardwareMonitor/OpenHardwareMonitor/ACPI) cho nhiệt độ.
 - Core/iobus metrics đọc best-effort read-only từ SHM theo `shared/mkddc_shm.h`; nếu core/iobus chưa chạy thì trả degraded/default, không crash.
 

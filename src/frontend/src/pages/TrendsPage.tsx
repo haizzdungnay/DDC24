@@ -11,7 +11,7 @@ import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Point, TrendSample } from '../types'
-import { cn } from '../utils'
+import { cn, isFreshIso, mergePointsById } from '../utils'
 
 interface TrendRow {
   id: string
@@ -33,6 +33,14 @@ const rangeOptions = [
 
 const colors = ['#2A5C8A', 'var(--c-warn-fg)', '#6E5A2E', '#8A4FBF', '#5B6066', 'var(--c-fault-fg)', '#B0179C', 'var(--c-off)']
 const liveSampleLimit = 3600
+const REALTIME_STALE_MS = 2500
+const TREND_PREFS_KEY = 'mkddc:trends:v1'
+const DEFAULT_TREND_IDS = Array.from({ length: 8 }, (_, index) => `UI-${String(index + 1).padStart(2, '0')}`)
+
+interface TrendPrefs {
+  selectedIds: string[]
+  rangeMinutes: number
+}
 
 function historyRangeFromMinutes(minutes: number) {
   if (minutes <= 30) return '30m'
@@ -47,26 +55,84 @@ function pointNumber(value: Point['value']) {
 
 function makeTrendSample(points: Point[]) {
   if (!points.length) return null
-  const sample: TrendSample = { time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }
+  const now = Date.now()
+  const sample: TrendSample = { time: new Date(now).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), __ts: now }
+  let hasValue = false
   for (const point of points) {
     const value = pointNumber(point.value)
-    if (value !== null) sample[point.id] = Number(value.toFixed(2))
+    if (value !== null) {
+      sample[point.id] = Number(value.toFixed(2))
+      hasValue = true
+    }
   }
-  return Object.keys(sample).length > 1 ? sample : null
+  return hasValue ? sample : null
+}
+
+function mergeTrendSamples(history: TrendSample[] | null | undefined, live: TrendSample[]) {
+  const historySamples = history ?? []
+  if (!historySamples.length) return stableTrendSamples(live)
+  const latestHistoryTs = Math.max(...historySamples.map(sampleTimestamp).filter(Number.isFinite))
+  const liveTail = Number.isFinite(latestHistoryTs) ? live.filter((sample) => sampleTimestamp(sample) > latestHistoryTs) : []
+  return stableTrendSamples([...historySamples, ...liveTail])
+}
+
+function sampleTimestamp(sample: TrendSample) {
+  const value = sample.__ts
+  return typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN
+}
+
+function stableTrendSamples(samples: TrendSample[]) {
+  const bySlot = new Map<string, TrendSample>()
+  for (const sample of samples) {
+    const timestamp = sampleTimestamp(sample)
+    const key = Number.isFinite(timestamp) ? String(Math.round(timestamp / 1000)) : sample.time
+    bySlot.set(key, { ...(bySlot.get(key) ?? {}), ...sample })
+  }
+  return [...bySlot.values()].sort((a, b) => sampleTimestamp(a) - sampleTimestamp(b))
+}
+
+function readTrendPrefs(): TrendPrefs | null {
+  try {
+    const raw = window.localStorage.getItem(TREND_PREFS_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<TrendPrefs>
+    const selectedIds = Array.isArray(parsed.selectedIds) ? parsed.selectedIds.filter((id): id is string => typeof id === 'string') : []
+    const storedRange = parsed.rangeMinutes
+    const rangeMinutes = typeof storedRange === 'number' && rangeOptions.some((item) => item.minutes === storedRange) ? storedRange : 30
+    return { selectedIds, rangeMinutes }
+  } catch {
+    return null
+  }
+}
+
+function writeTrendPrefs(prefs: TrendPrefs) {
+  try {
+    window.localStorage.setItem(TREND_PREFS_KEY, JSON.stringify(prefs))
+  } catch {
+    // localStorage can be unavailable in private/locked browser modes.
+  }
 }
 
 export function TrendsPage() {
   const realtime = useRealtime()
   const { pick } = useI18n()
+  const initialPrefsRef = useRef<TrendPrefs | null | undefined>(undefined)
+  if (initialPrefsRef.current === undefined) initialPrefsRef.current = readTrendPrefs()
+  const hasSavedPrefsRef = useRef(initialPrefsRef.current !== null)
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const analogPoints = useMemo(() => {
-    const source = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? []
-    return source.filter((point) => point.kind === 'AI' || point.kind === 'AO').sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
-  }, [pointsState.data, realtime.allPoints])
-  const autoSelectedRef = useRef(false)
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [rangeMinutes, setRangeMinutes] = useState<number>(30)
+    const polledPoints = pointsState.data ?? []
+    const source = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
+      ? mergePointsById(polledPoints, realtime.allPoints)
+      : polledPoints
+    return source.filter((point) => (point.kind === 'UI' || point.kind === 'AO') && pointNumber(point.value) !== null).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
+  }, [pointsState.data, realtime.allPoints, realtime.lastPointEventAt])
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => initialPrefsRef.current?.selectedIds ?? [])
+  const [rangeMinutes, setRangeMinutes] = useState<number>(() => initialPrefsRef.current?.rangeMinutes ?? 30)
+  const [prefsReady, setPrefsReady] = useState(() => initialPrefsRef.current !== null)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const analogPanelRef = useRef<HTMLDivElement>(null)
+  const [analogPanelHeight, setAnalogPanelHeight] = useState<number | null>(null)
 
   const selectedPoints = useMemo(() => analogPoints.filter((point) => selectedIds.includes(point.id)), [analogPoints, selectedIds])
   const selectedSignature = selectedIds.join(',')
@@ -74,7 +140,7 @@ export function TrendsPage() {
   const historyState = useApi(() => apiClient.getHistory(selectedIds, historyRange), [historyRange, selectedSignature], { refreshMs: 10_000 })
   const selectedPointsRef = useRef<Point[]>([])
   const [liveSamples, setLiveSamples] = useState<TrendSample[]>([])
-  const samples = historyState.data?.length ? historyState.data : liveSamples
+  const samples = useMemo(() => mergeTrendSamples(historyState.data, liveSamples), [historyState.data, liveSamples])
   const series = useMemo<TrendSeries[]>(() => selectedPoints.map((point, index) => ({
     key: point.id,
     label: `${point.id} - ${point.name}`,
@@ -86,14 +152,39 @@ export function TrendsPage() {
   const rangeLabel = currentRange ? pick(currentRange.labelVi, currentRange.labelEn) : pick(`${rangeMinutes} phút`, `${rangeMinutes} min`)
 
   useEffect(() => {
+    if (!analogPoints.length) return
     setSelectedIds((current) => {
-      const existing = current.filter((id) => analogPoints.some((point) => point.id === id))
-      if (existing.length || autoSelectedRef.current) return existing
-      if (!analogPoints.length) return existing
-      autoSelectedRef.current = true
-      return analogPoints.slice(0, 4).map((point) => point.id)
+      const available = new Set(analogPoints.map((point) => point.id))
+      if (hasSavedPrefsRef.current) return current.filter((id) => available.has(id))
+
+      const defaults = DEFAULT_TREND_IDS.filter((id) => available.has(id))
+      return defaults.length ? defaults : analogPoints.slice(0, 8).map((point) => point.id)
     })
+    setPrefsReady(true)
   }, [analogPoints])
+
+  useEffect(() => {
+    if (!prefsReady) return
+    writeTrendPrefs({ selectedIds, rangeMinutes })
+    hasSavedPrefsRef.current = true
+  }, [prefsReady, rangeMinutes, selectedIds])
+
+  useEffect(() => {
+    const target = analogPanelRef.current
+    if (!target) return undefined
+
+    const syncHeight = () => setAnalogPanelHeight(Math.ceil(target.getBoundingClientRect().height))
+    syncHeight()
+
+    const observer = new ResizeObserver(syncHeight)
+    observer.observe(target)
+    window.addEventListener('resize', syncHeight)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', syncHeight)
+    }
+  }, [])
 
   useEffect(() => {
     selectedPointsRef.current = selectedPoints
@@ -116,11 +207,17 @@ export function TrendsPage() {
   }, [])
 
   function togglePoint(id: string) {
+    hasSavedPrefsRef.current = true
+    setPrefsReady(true)
     setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   }
 
   function resetAuto() {
-    setSelectedIds(analogPoints.slice(0, 4).map((point) => point.id))
+    hasSavedPrefsRef.current = true
+    setPrefsReady(true)
+    const available = new Set(analogPoints.map((point) => point.id))
+    const defaults = DEFAULT_TREND_IDS.filter((id) => available.has(id))
+    setSelectedIds(defaults.length ? defaults : analogPoints.slice(0, 8).map((point) => point.id))
     setRangeMinutes(30)
   }
 
@@ -142,15 +239,18 @@ export function TrendsPage() {
         <p className="text-sm text-[var(--c-text-dim)]">{pick('Trend Log live: object list, historian và buffer hiển thị 1s', 'Live Trend Log: object list, historian, and 1s display buffer')}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[300px_1fr]">
-        <Panel title="Series" action={<Button size="sm" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPickerOpen((open) => !open)}>{pickerOpen ? pick('Đóng', 'Close') : pick('Thêm trend', 'Add trend')}</Button>}>
-          <div className="space-y-2">
-            {selectedPoints.map((point, index) => <SeriesCard key={point.id} point={point} color={colors[index % colors.length]} onRemove={() => togglePoint(point.id)} />)}
-            {!selectedPoints.length && <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Chưa chọn điểm trend.', 'No trend points selected.')}</div>}
-          </div>
-        </Panel>
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[300px_1fr]">
+        <div className="min-h-0" style={analogPanelHeight ? { height: analogPanelHeight } : undefined}>
+          <Panel title="Series" className="flex h-full min-h-0 flex-col overflow-hidden" action={<Button size="sm" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPickerOpen((open) => !open)}>{pickerOpen ? pick('Đóng', 'Close') : pick('Thêm trend', 'Add trend')}</Button>}>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
+              {selectedPoints.map((point, index) => <SeriesCard key={point.id} point={point} color={colors[index % colors.length]} onRemove={() => togglePoint(point.id)} />)}
+              {!selectedPoints.length && <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Chưa chọn điểm trend.', 'No trend points selected.')}</div>}
+            </div>
+          </Panel>
+        </div>
 
-        <Panel title={`${pick('Xu hướng analog', 'Analog trend')} - ${rangeLabel}`} action={<div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={resetAuto}>Auto</Button></div>}>
+        <div ref={analogPanelRef}>
+          <Panel title={`${pick('Xu hướng analog', 'Analog trend')} - ${rangeLabel}`} action={<div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={resetAuto}>Auto</Button></div>}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2">
               {rangeOptions.map((item) => <Button key={item.minutes} size="sm" variant={rangeMinutes === item.minutes ? 'primary' : 'secondary'} icon={<Clock3 className="h-4 w-4" />} onClick={() => setRangeMinutes(item.minutes)}>{pick(item.labelVi, item.labelEn)}</Button>)}
@@ -161,7 +261,7 @@ export function TrendsPage() {
           </div>
           {pickerOpen && (
             <div className="mb-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">
-              <div className="mb-2 text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Object list analog AI/AO', 'Analog AI/AO object list')}</div>
+              <div className="mb-2 text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Object list analog UI/AO', 'Analog UI/AO object list')}</div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {analogPoints.map((point) => (
                   <label key={point.id} className="flex cursor-pointer items-center gap-3 rounded-[var(--radius)] border border-[var(--c-border)] px-3 py-2 text-sm hover:bg-[rgba(42,92,138,0.08)]">
@@ -181,7 +281,8 @@ export function TrendsPage() {
               : series.length && samples.length > 1
                 ? <TrendChart data={samples} series={series} height={360} />
                 : <StateBlock state="empty" title={series.length ? pick('Chưa có dữ liệu xu hướng live', 'No live trend data yet') : pick('Chọn ít nhất một điểm analog', 'Select at least one analog point')} detail={series.length ? pick('Trang này đọc /history nếu có và tự ghi buffer 1s từ /points hoặc WebSocket khi historian chưa có mẫu.', 'This page reads /history when available and records a 1s local buffer from /points or WebSocket until historian has samples.') : undefined} />}
-        </Panel>
+          </Panel>
+        </div>
       </div>
 
       <Panel title={pick('Thống kê series đang hiển thị', 'Visible series statistics')}>

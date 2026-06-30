@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { normalizePoint } from '../api/client'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { applyDemoPointMetadata, applyPointConfigOverrides, normalizePoint, pointRecordsFrom } from '../api/client'
 import { useAuth } from '../auth/AuthProvider'
 import { API_ORIGIN, IS_DEMO, WS_ORIGIN } from '../config'
-import { tickDemoPoints } from '../demo/simulator'
+import { forceDemoPoint, tickDemoPoints } from '../demo/simulator'
 import type { ConnectionState, Point } from '../types'
-import { nowIso } from '../utils'
+import { mergePointsById, nowIso } from '../utils'
 
 type MonitorEnvelope = Record<string, unknown> & { op: string }
 
@@ -21,7 +21,18 @@ function wsEndpoint(token?: string): string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function envelopeOp(message: Record<string, unknown>): string {
+  return String(message.op ?? message.type ?? message.event ?? message.topic ?? '')
+}
+
+function envelopeTs(message: Record<string, unknown>): string {
+  const payload = isRecord(message.payload) ? message.payload : {}
+  const data = isRecord(message.data) ? message.data : {}
+  const value = message.ts ?? message.timestamp ?? payload.ts ?? payload.timestamp ?? data.ts ?? data.timestamp
+  return typeof value === 'string' ? value : nowIso()
 }
 
 export function useWebSocket() {
@@ -30,21 +41,59 @@ export function useWebSocket() {
   const [allPoints, setAllPoints] = useState<Point[]>([])
   const [lastEnvelope, setLastEnvelope] = useState<MonitorEnvelope | null>(null)
   const [lastEventAt, setLastEventAt] = useState<string | null>(null)
+  const [lastPointEventAt, setLastPointEventAt] = useState<string | null>(null)
   const retryMs = useRef(1000)
   const timeoutRef = useRef<number | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
+  const demoReleaseTimersRef = useRef<Record<string, number>>({})
   const url = useMemo(() => wsEndpoint(session?.token), [session?.token])
+
+  const publishPoints = useCallback((points: Point[]) => {
+    const ts = nowIso()
+    const nextPoints = applyPointConfigOverrides(applyDemoPointMetadata(points))
+    const envelope: MonitorEnvelope = { op: 'update', ts, points: nextPoints }
+    setAllPoints(nextPoints)
+    setLastEnvelope(envelope)
+    setLastEventAt(ts)
+    setLastPointEventAt(ts)
+  }, [])
+
+  const forcePoint = useCallback((id: string, value: number | boolean, expireS?: number): boolean => {
+    const safeExpireS = typeof expireS === 'number' && Number.isFinite(expireS) && expireS > 0 ? Math.round(expireS) : 0
+    if (IS_DEMO) {
+      forceDemoPoint(id, value)
+      publishPoints(tickDemoPoints())
+      if (demoReleaseTimersRef.current[id]) window.clearTimeout(demoReleaseTimersRef.current[id])
+      if (safeExpireS > 0) {
+        demoReleaseTimersRef.current[id] = window.setTimeout(() => {
+          forceDemoPoint(id, value, true)
+          publishPoints(tickDemoPoints())
+          delete demoReleaseTimersRef.current[id]
+        }, safeExpireS * 1000)
+      }
+      return true
+    }
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false
+    socket.send(JSON.stringify({
+      op: 'force',
+      id,
+      value,
+      ...(safeExpireS > 0 ? { expire_s: safeExpireS } : {})
+    }))
+    const ts = nowIso()
+    setAllPoints((current) => mergePointsById(current, current
+      .filter((point) => point.id === id)
+      .map((point) => ({ ...point, value, forced: true, source: 'Local manual', priority: 'Manual override', updatedAt: ts }))))
+    setLastPointEventAt(ts)
+    return true
+  }, [publishPoints])
 
   useEffect(() => {
     if (IS_DEMO) {
-      setAllPoints(tickDemoPoints())
+      publishPoints(tickDemoPoints())
       const id = window.setInterval(() => {
-        const points = tickDemoPoints()
-        const ts = nowIso()
-        const envelope: MonitorEnvelope = { op: 'update', ts, points }
-        setAllPoints(points)
-        setLastEnvelope(envelope)
-        setLastEventAt(ts)
+        publishPoints(tickDemoPoints())
       }, 200)
       return () => window.clearInterval(id)
     }
@@ -63,24 +112,25 @@ export function useWebSocket() {
       }
 
       socket.onmessage = (event) => {
-        const message = JSON.parse(String(event.data)) as Record<string, unknown>
-        const op = typeof message.op === 'string' ? message.op : ''
-        if (!op) return
+        const parsed = JSON.parse(String(event.data)) as unknown
+        const message = isRecord(parsed) ? parsed : {}
+        const op = envelopeOp(message) || 'update'
+        const ts = envelopeTs(message)
+        const records = pointRecordsFrom(parsed)
 
-        if (op === 'update' && Array.isArray(message.points)) {
-          const ts = typeof message.ts === 'string' ? message.ts : nowIso()
-          const points = message.points
-            .filter(isRecord)
-            .map((point) => normalizePoint({ ts, ...point }))
-
-          setAllPoints(points)
-          setLastEnvelope({ op, ts, points })
+        if (records.length) {
+          const points = applyPointConfigOverrides(applyDemoPointMetadata(records.map((point) => normalizePoint({ ts, ...point }))))
+          setAllPoints((current) => mergePointsById(current, points))
+          setLastEnvelope({ ...message, op, ts, points })
           setLastEventAt(ts)
+          setLastPointEventAt(ts)
           return
         }
 
-        setLastEnvelope({ ...message, op })
-        setLastEventAt(nowIso())
+        if (Object.keys(message).length) {
+          setLastEnvelope({ ...message, op })
+          setLastEventAt(ts)
+        }
       }
 
       socket.onerror = () => socket.close()
@@ -99,7 +149,12 @@ export function useWebSocket() {
       if (timeoutRef.current) window.clearTimeout(timeoutRef.current)
       socketRef.current?.close()
     }
-  }, [url])
+  }, [publishPoints, url])
 
-  return { connectionState, allPoints, lastEnvelope, lastEventAt }
+  useEffect(() => () => {
+    Object.values(demoReleaseTimersRef.current).forEach((timerId) => window.clearTimeout(timerId))
+    demoReleaseTimersRef.current = {}
+  }, [])
+
+  return { connectionState, allPoints, lastEnvelope, lastEventAt, lastPointEventAt, forcePoint }
 }

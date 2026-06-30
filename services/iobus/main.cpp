@@ -163,13 +163,26 @@ bool send_core_command(const std::string& sock_path, const std::string& op,
            result.find("\"result\":\"released\"") != std::string::npos;
 }
 
+const char* configured_unit(const iobus::UiScaleConfig& cfg)
+{
+    return cfg.unit.empty() ? iobus::sensor_unit(cfg.sensor) : cfg.unit.c_str();
+}
+
+void build_ui_units(const iobus::IobusConfig& cfg, char units[KX_N_UI][8])
+{
+    for (int i = 0; i < KX_N_UI; i++) {
+        std::strncpy(units[i], configured_unit(cfg.ui[i]), sizeof(units[i]) - 1);
+        units[i][sizeof(units[i]) - 1] = '\0';
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv)
 {
     using namespace iobus;
 
-    std::string config_path = "/data/config/iobus.conf";
+    std::string config_path = "/data/config/io_config.conf";
     bool config_from_cli = false;
     std::string uart_override;
     std::string log_level_override;
@@ -214,10 +227,7 @@ int main(int argc, char** argv)
     {
         char units[KX_N_UI][8];
         uint8_t modes[KX_N_AO];
-        for (int i = 0; i < KX_N_UI; i++) {
-            std::strncpy(units[i], sensor_unit(cfg.ui_sensor[i]), sizeof(units[i]) - 1);
-            units[i][sizeof(units[i]) - 1] = '\0';
-        }
+        build_ui_units(cfg, units);
         for (int i = 0; i < KX_N_AO; i++)
             modes[i] = 0;   /* default 0-10V (MCU boot); cập nhật sau ACK SET_AO_CFG */
         cache.write_ui_units(units);
@@ -310,10 +320,7 @@ int main(int argc, char** argv)
             /* Push initial unit codes into bacnet-stack AI objects (thread not yet started) */
             {
                 char units[KX_N_UI][8];
-                for (int i = 0; i < KX_N_UI; i++) {
-                    std::strncpy(units[i], sensor_unit(cfg.ui_sensor[i]), sizeof(units[i]) - 1);
-                    units[i][sizeof(units[i]) - 1] = '\0';
-                }
+                build_ui_units(cfg, units);
                 bacnet_objects.update_ai_units(units);
                 bacnet_server.apply_ai_units();
             }
@@ -450,6 +457,11 @@ int main(int argc, char** argv)
     int64_t sum_jitter_ns = 0;
     uint32_t overrun_count = 0;
     uint64_t last_stats_print = expected_ns;
+    constexpr int MAX_UI_FILTER_SAMPLES = 100;
+    float ui_filter_buf[KX_N_UI][MAX_UI_FILTER_SAMPLES] = {};
+    uint8_t ui_filter_pos[KX_N_UI] = {};
+    uint8_t ui_filter_count[KX_N_UI] = {};
+    uint8_t ui_filter_size[KX_N_UI] = {};
 
     /* ---- Main loop: poll 10ms tuyệt-đối-thời-gian ---- */
     while (!g_shutdown.load()) {
@@ -495,17 +507,14 @@ int main(int argc, char** argv)
 
                 bool ui_changed = false;
                 for (int i = 0; i < KX_N_UI; i++) {
-                    if (cfg.ui_sensor[i] != old_cfg.ui_sensor[i]) {
+                    if (cfg.ui[i] != old_cfg.ui[i]) {
                         ui_changed = true;
                         break;
                     }
                 }
                 if (ui_changed) {
                     char units[KX_N_UI][8];
-                    for (int i = 0; i < KX_N_UI; i++) {
-                        std::strncpy(units[i], sensor_unit(cfg.ui_sensor[i]), sizeof(units[i]) - 1);
-                        units[i][sizeof(units[i]) - 1] = '\0';
-                    }
+                    build_ui_units(cfg, units);
                     cache.write_ui_units(units);
                     bacnet_objects.update_ai_units(units);
                     bacnet_server.apply_ai_units();
@@ -573,10 +582,48 @@ int main(int argc, char** argv)
                     /* scale + build snapshot */
                     IoSnapshot snap;
                     snap.ts_ns = now_ns();
+                    float pre_math[KX_N_UI] = {};
                     for (int i = 0; i < KX_N_UI; i++) {
                         kx_quality_t q;
-                        snap.ui_value[i] = ui_to_eng(resp.ui_raw[i], cfg.ui_sensor[i], &q);
+                        float value = ui_to_eng(resp.ui_raw[i], cfg.ui[i], &q);
+                        const uint8_t samples = cfg.ui[i].filter_samples;
+                        if (q == KX_Q_GOOD && samples > 1) {
+                            if (ui_filter_size[i] != samples) {
+                                ui_filter_size[i] = samples;
+                                ui_filter_pos[i] = 0;
+                                ui_filter_count[i] = 0;
+                            }
+                            ui_filter_buf[i][ui_filter_pos[i]] = value;
+                            ui_filter_pos[i] = static_cast<uint8_t>((ui_filter_pos[i] + 1u) % samples);
+                            if (ui_filter_count[i] < samples) ui_filter_count[i]++;
+                            float sum = 0.0f;
+                            for (uint8_t j = 0; j < ui_filter_count[i]; j++) sum += ui_filter_buf[i][j];
+                            value = sum / static_cast<float>(ui_filter_count[i]);
+                        } else {
+                            ui_filter_size[i] = 0;
+                            ui_filter_count[i] = 0;
+                            ui_filter_pos[i] = 0;
+                        }
+                        pre_math[i] = value;
+                        snap.ui_value[i] = value;
                         snap.ui_quality[i] = static_cast<uint8_t>(q);
+                    }
+                    for (uint8_t fn = 1; fn <= 3; fn++) {
+                        float aggregate = 0.0f;
+                        uint8_t count = 0;
+                        for (int i = 0; i < KX_N_UI; i++) {
+                            if (cfg.ui[i].math_func != fn || snap.ui_quality[i] != KX_Q_GOOD) continue;
+                            if (count == 0) aggregate = pre_math[i];
+                            else if (fn == 1) aggregate += pre_math[i];
+                            else if (fn == 2 && pre_math[i] < aggregate) aggregate = pre_math[i];
+                            else if (fn == 3 && pre_math[i] > aggregate) aggregate = pre_math[i];
+                            count++;
+                        }
+                        if (count == 0) continue;
+                        if (fn == 1) aggregate /= static_cast<float>(count);
+                        for (int i = 0; i < KX_N_UI; i++) {
+                            if (cfg.ui[i].math_func == fn && snap.ui_quality[i] == KX_Q_GOOD) snap.ui_value[i] = aggregate;
+                        }
                     }
                     /* di_state stays 0: base SKU Rev A has no DI (ADR-010) */
                     for (int i = 0; i < KX_N_DO; i++)

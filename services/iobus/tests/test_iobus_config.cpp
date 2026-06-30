@@ -72,10 +72,43 @@ TEST(IobusConfig, ValidFullConfig)
     EXPECT_EQ(cfg.handshake_timeout_ms, 500u);
     EXPECT_EQ(cfg.log_level, "debug");
     EXPECT_EQ(cfg.rt_priority, 50);
-    EXPECT_EQ(cfg.ui_sensor[0], SensorType::MA4_20);
-    EXPECT_EQ(cfg.ui_sensor[1], SensorType::NTC10K);
+    EXPECT_EQ(cfg.ui[0].sensor, SensorType::MA4_20);
+    EXPECT_EQ(cfg.ui[1].sensor, SensorType::NTC10K);
     EXPECT_EQ(cfg.ao_mode[0], AoMode::V0_10);
     EXPECT_EQ(cfg.ao_mode[1], AoMode::MA4_20);
+}
+
+TEST(IobusConfig, WebIoConfigMapsEasySetU0ToU7)
+{
+    TempConfig f(R"({
+      "ui": [
+        {
+          "ch": 16,
+          "type": "potentiometer",
+          "unit": "percent",
+          "enabled": true,
+          "invert": false,
+          "scale_lo": -5,
+          "scale_hi": 205,
+          "range_mult": 4,
+          "filter_samples": 7,
+          "sensor_cal": -0.5,
+          "math_func": 3
+        }
+      ],
+      "ao": [ { "ch": 4, "mode": "4-20mA" } ]
+    })");
+    IobusConfig cfg;
+    ASSERT_TRUE(load_config(f.path(), true, &cfg));
+    EXPECT_EQ(cfg.ui[15].sensor, SensorType::POTENTIOMETER);
+    EXPECT_EQ(cfg.ui[15].unit, "percent");
+    EXPECT_FLOAT_EQ(cfg.ui[15].scale_lo, -5.0f);
+    EXPECT_FLOAT_EQ(cfg.ui[15].scale_hi, 205.0f);
+    EXPECT_EQ(cfg.ui[15].range_mult, 4);
+    EXPECT_EQ(cfg.ui[15].filter_samples, 7);
+    EXPECT_FLOAT_EQ(cfg.ui[15].sensor_cal, -0.5f);
+    EXPECT_EQ(cfg.ui[15].math_func, 3);
+    EXPECT_EQ(cfg.ao_mode[3], AoMode::MA4_20);
 }
 
 TEST(IobusConfig, MissingFileUsesDefaults)
@@ -118,7 +151,7 @@ TEST(IobusConfig, UnknownSensorTypeMarked)
     TempConfig f(R"({ "ui": [ { "id": "UI1", "sensor_type": "tu-che-9000" } ] })");
     IobusConfig cfg;
     ASSERT_TRUE(load_config(f.path(), true, &cfg)) << "service VẪN chạy (06 §4)";
-    EXPECT_EQ(cfg.ui_sensor[0], SensorType::UNKNOWN) << "kênh đó quality=BAD khi scale";
+    EXPECT_EQ(cfg.ui[0].sensor, SensorType::UNKNOWN) << "kênh đó quality=BAD khi scale";
 }
 
 TEST(IobusConfig, SparseIdEntriesMapToCorrectChannel)
@@ -131,8 +164,8 @@ TEST(IobusConfig, SparseIdEntriesMapToCorrectChannel)
     })");
     IobusConfig cfg;
     ASSERT_TRUE(load_config(f.path(), true, &cfg));
-    EXPECT_EQ(cfg.ui_sensor[2], SensorType::MA4_20) << "UI3 → index 2";
-    EXPECT_EQ(cfg.ui_sensor[0], SensorType::V0_10) << "UI1 không khai → default";
+    EXPECT_EQ(cfg.ui[2].sensor, SensorType::MA4_20) << "UI3 → index 2";
+    EXPECT_EQ(cfg.ui[0].sensor, SensorType::V0_10) << "UI1 không khai → default";
     EXPECT_EQ(cfg.ao_mode[1], AoMode::MA4_20) << "AO2 → index 1";
     EXPECT_EQ(cfg.ao_mode[0], AoMode::V0_10) << "AO1 không khai → default";
 }
@@ -201,4 +234,3 @@ TEST(IobusConfig, ReloadConfigSafeFailsOnBadJsonAndKeepsOld)
     EXPECT_EQ(cfg.poll_period_ms, 10u); // Unchanged
     EXPECT_EQ(cfg.log_level, "info");   // Unchanged
 }
-

@@ -101,17 +101,17 @@ void build_io_resp_payload(McuState& st, const Inject& inj, uint8_t* p)
     for (int i = 0; i < 16; i++) {
         double frac;
         if (i < 4) {
-            frac = 0.5 + 0.45 * std::sin(0.3 * t + i * 0.8);
+            frac = 0.5 + 0.45 * std::sin(0.015 * t + i * 0.8);
         } else if (i < 8) {
-            frac = 0.5 + 0.45 * std::sin(0.5 * t + i * 0.6);
+            frac = 0.5 + 0.45 * std::sin(0.018 * t + i * 0.6);
         } else if (i < 10) {
-            frac = 0.475 + 0.075 * std::sin(0.07 * t + i * 1.1);
+            frac = 0.475 + 0.075 * std::sin(0.006 * t + i * 1.1);
         } else if (i < 12) {
-            frac = 0.475 + 0.075 * std::sin(0.09 * t + i * 1.3);
+            frac = 0.475 + 0.075 * std::sin(0.007 * t + i * 1.3);
         } else if (i < 14) {
-            frac = (std::sin(0.628 * t + i * 1.57) > 0.0) ? 0.9 : 0.05;
+            frac = (std::sin(0.052 * t + i * 1.57) > 0.0) ? 0.9 : 0.05;
         } else {
-            frac = 0.5 + 0.45 * std::sin(1.5 * t + i * 0.4);
+            frac = 0.5 + 0.45 * std::sin(0.06 * t + i * 0.4);
         }
         put_be32s(p + 4 * i, static_cast<int32_t>(frac * FS));
     }

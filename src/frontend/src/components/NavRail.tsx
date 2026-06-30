@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, Settings, ShieldCheck, SlidersHorizontal, TestTube2, UserRound, Users } from 'lucide-react'
+import { Bell, CalendarDays, Activity, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, ListChecks, Network, Settings, ShieldCheck, SlidersHorizontal, TestTube2, UserRound, Users, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useI18n } from '../i18n'
@@ -36,6 +36,11 @@ const groups = [
       { to: '/eng/scheduler', key: 'scheduler', icon: CalendarDays },
       { to: '/eng/commissioning', key: 'commissioning', icon: TestTube2 },
       { to: '/eng/programming', key: 'programming', icon: ShieldCheck },
+      { to: '/eng/inputs', key: 'inputs', icon: Activity },
+      { to: '/eng/outputs', key: 'outputs', icon: Zap },
+      { to: '/eng/user-parameters', key: 'user-parameters', icon: ListChecks },
+      { to: '/eng/diagram', key: 'diagram', icon: Network },
+      { to: '/eng/aux', key: 'aux', icon: Settings },
       { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell }
     ]
   }
@@ -103,8 +108,12 @@ export function NavRail({ alarmCount, device }: { alarmCount: number; device: He
       </nav>
       <div className="shrink-0 p-4">
         <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3">
-          <div className="mb-3 grid h-20 place-items-center rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]">
-            <Gauge className="h-9 w-9 text-[var(--c-text-dim)]" aria-hidden="true" />
+          <div className="mb-3 aspect-[1168/676] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]">
+            <img
+              src="/mk-ddc-24-front-panel.png"
+              alt="MK-DDC-24 front panel"
+              className="h-full w-full object-cover"
+            />
           </div>
           <div className="text-[10px] uppercase text-[var(--c-text-dim)]">Model</div>
           <div className="text-xs font-semibold">{PRODUCT_INFO.model}</div>

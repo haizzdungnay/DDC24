@@ -1,6 +1,10 @@
 import type {
   Alarm,
   AlarmSetting,
+  AiInputConfig,
+  AoConfig,
+  DiInputConfig,
+  DoConfig,
   CommissioningTestResult,
   Graph,
   GraphLink,
@@ -10,7 +14,9 @@ import type {
   NetworkData,
   Point,
   ScheduleRow,
+  OutputsConfig,
   TrendSample,
+  UserParamsConfig,
   UserRow
 } from '../types'
 import { DEVICE_DEFAULTS } from '../config'
@@ -19,26 +25,26 @@ import { clamp, nowIso, pointNumber } from '../utils'
 const startedAt = Date.now() - 12 * 86400_000 - 4 * 3600_000 - 32 * 60_000
 
 const names: Record<string, string> = {
-  'DI-01': 'EMERGENCY STOP',
-  'DI-02': 'DOOR SWITCH',
-  'DI-03': 'HIGH PRESS SWITCH',
-  'DI-04': 'LOW PRESS SWITCH',
-  'DI-05': 'FLOW SWITCH',
-  'DI-06': 'FAN STATUS',
-  'DI-07': 'FILTER DIRTY',
-  'DI-08': 'FIRE ALARM',
   'DO-01': 'PUMP START',
   'DO-02': 'FAN START',
   'DO-03': 'VALVE OPEN',
   'DO-04': 'ALARM BUZZER',
-  'DO-05': 'HEATER ON',
-  'DO-06': 'COOLER ON',
-  'DO-07': 'LIGHT',
-  'DO-08': 'SPARE',
-  'AI-01': 'SUPPLY AIR TEMP',
-  'AI-02': 'DUCT PRESSURE',
-  'AI-03': 'ROOM HUMIDITY',
-  'AI-04': 'OUTDOOR TEMP',
+  'UI-01': 'SUPPLY AIR TEMP',
+  'UI-02': 'DUCT PRESSURE',
+  'UI-03': 'ROOM HUMIDITY',
+  'UI-04': 'OUTDOOR TEMP',
+  'UI-05': 'FILTER SWITCH',
+  'UI-06': 'FIRE ALARM CONTACT',
+  'UI-07': 'DAMPER POTENTIOMETER',
+  'UI-08': 'PULSE METER',
+  'UI-09': 'RETURN AIR TEMP',
+  'UI-10': 'CO2 SENSOR',
+  'UI-11': 'CHILLED WATER TEMP',
+  'UI-12': 'SUPPLY FAN STATUS',
+  'UI-13': 'MOTION SENSOR',
+  'UI-14': 'LIGHT LEVEL',
+  'UI-15': 'WATER LEAK CONTACT',
+  'UI-16': 'SPARE UNIVERSAL INPUT',
   'AO-01': 'VFD SPEED',
   'AO-02': 'HEATING VALVE',
   'AO-03': 'COOLING VALVE',
@@ -46,18 +52,26 @@ const names: Record<string, string> = {
 }
 
 const basePoints: Point[] = [
-  ...Array.from({ length: 8 }, (_, i) => {
-    const id = `DI-${String(i + 1).padStart(2, '0')}`
-    return { id, name: names[id], kind: 'DI' as const, value: i === 0 || i === 4, quality: 'good' as const, source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'Dry Contact' }
-  }),
-  ...Array.from({ length: 8 }, (_, i) => {
+  ...Array.from({ length: 4 }, (_, i) => {
     const id = `DO-${String(i + 1).padStart(2, '0')}`
     return { id, name: names[id], kind: 'DO' as const, value: i < 3, quality: 'good' as const, source: 'Core', priority: 'Schedule', updatedAt: nowIso(), sensorType: 'Relay' }
   }),
-  { id: 'AI-01', name: names['AI-01'], kind: 'AI', value: 23.7, unit: 'C', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'NTC10k' },
-  { id: 'AI-02', name: names['AI-02'], kind: 'AI', value: 6.2, unit: 'bar', quality: 'uncertain', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: '4-20mA' },
-  { id: 'AI-03', name: names['AI-03'], kind: 'AI', value: 54.2, unit: '%RH', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: '0-10V' },
-  { id: 'AI-04', name: names['AI-04'], kind: 'AI', value: 18.6, unit: 'C', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'PT100' },
+  { id: 'UI-01', name: names['UI-01'], kind: 'UI', value: 23.7, unit: 'C', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'NTC10k' },
+  { id: 'UI-02', name: names['UI-02'], kind: 'UI', value: 6.2, unit: 'bar', quality: 'uncertain', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: '4-20mA' },
+  { id: 'UI-03', name: names['UI-03'], kind: 'UI', value: 54.2, unit: '%RH', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: '0-10V' },
+  { id: 'UI-04', name: names['UI-04'], kind: 'UI', value: 18.6, unit: 'C', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'PT100' },
+  { id: 'UI-05', name: names['UI-05'], kind: 'UI', value: true, unit: '', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'dry' },
+  { id: 'UI-06', name: names['UI-06'], kind: 'UI', value: false, unit: '', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'dry' },
+  { id: 'UI-07', name: names['UI-07'], kind: 'UI', value: 72.4, unit: '%', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'potentiometer' },
+  { id: 'UI-08', name: names['UI-08'], kind: 'UI', value: 128, unit: 'pulse', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'pulse' },
+  { id: 'UI-09', name: names['UI-09'], kind: 'UI', value: 24.9, unit: 'C', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'NTC10k' },
+  { id: 'UI-10', name: names['UI-10'], kind: 'UI', value: 742, unit: 'ppm', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: '0-10V' },
+  { id: 'UI-11', name: names['UI-11'], kind: 'UI', value: 7.4, unit: 'C', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'PT1000' },
+  { id: 'UI-12', name: names['UI-12'], kind: 'UI', value: true, unit: '', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'dry' },
+  { id: 'UI-13', name: names['UI-13'], kind: 'UI', value: false, unit: '', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'dry' },
+  { id: 'UI-14', name: names['UI-14'], kind: 'UI', value: 68, unit: '%', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'light' },
+  { id: 'UI-15', name: names['UI-15'], kind: 'UI', value: false, unit: '', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'dry' },
+  { id: 'UI-16', name: names['UI-16'], kind: 'UI', value: 0, unit: '', quality: 'stale', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'none' },
   { id: 'AO-01', name: names['AO-01'], kind: 'AO', value: 62.5, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
   { id: 'AO-02', name: names['AO-02'], kind: 'AO', value: 35, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
   { id: 'AO-03', name: names['AO-03'], kind: 'AO', value: 12.5, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
@@ -67,11 +81,11 @@ const basePoints: Point[] = [
 let points: Point[] = basePoints.map((point) => ({ ...point, trend: makeTrend(pointNumber(point)) }))
 
 const alarms: Alarm[] = [
-  { id: 'AL-001', time: '2025-05-23T14:31:02Z', severity: 'critical', status: 'active', message: 'DI-01 Emergency Stop', source: 'DI-01', value: 'ON', detail: 'Nút dừng khẩn cấp đang kích hoạt' },
-  { id: 'AL-002', time: '2025-05-23T14:29:45Z', severity: 'high', status: 'active', message: 'AI-02 Pressure High', source: 'AI-02', value: '9.8 bar', detail: 'Áp suất vượt ngưỡng 5.0 bar' },
-  { id: 'AL-003', time: '2025-05-23T14:27:18Z', severity: 'info', status: 'acked', message: 'DO-03 Pump Start', source: 'DO-03', value: 'ON', detail: 'Trạng thái ON' },
-  { id: 'AL-004', time: '2025-05-23T14:25:03Z', severity: 'info', status: 'acked', message: 'SYSTEM', source: 'SYSTEM', value: 'admin', detail: 'Đăng nhập bởi admin' },
-  { id: 'AL-005', time: '2025-05-23T14:20:11Z', severity: 'info', status: 'acked', message: 'COMMUNICATION', source: 'SYSTEM', value: 'OK', detail: 'Modbus RTU kết nối thành công' }
+  { id: 'AL-001', time: '2025-05-23T14:31:02Z', severity: 'critical', status: 'active', message: 'UI-05 Filter Switch', source: 'UI-05', value: 'ON', detail: 'Emergency input is active' },
+  { id: 'AL-002', time: '2025-05-23T14:29:45Z', severity: 'high', status: 'active', message: 'UI-02 Pressure High', source: 'UI-02', value: '9.8 bar', detail: 'Pressure exceeded configured threshold' },
+  { id: 'AL-003', time: '2025-05-23T14:27:18Z', severity: 'info', status: 'acked', message: 'DO-03 Pump Start', source: 'DO-03', value: 'ON', detail: 'Output switched on' },
+  { id: 'AL-004', time: '2025-05-23T14:25:03Z', severity: 'info', status: 'acked', message: 'SYSTEM', source: 'SYSTEM', value: 'admin', detail: 'admin signed in' },
+  { id: 'AL-005', time: '2025-05-23T14:20:11Z', severity: 'info', status: 'acked', message: 'COMMUNICATION', source: 'SYSTEM', value: 'OK', detail: 'Modbus RTU connected' }
 ]
 
 function makeTrend(base: number): number[] {
@@ -80,13 +94,14 @@ function makeTrend(base: number): number[] {
 
 function jitter(point: Point): Point {
   const updatedAt = nowIso()
-  if (point.kind === 'AI' || point.kind === 'AO') {
-    const spread = point.kind === 'AI' ? 1.2 : 2.5
-    const next = clamp(pointNumber(point) + (Math.random() - 0.48) * spread, 0, point.unit === 'bar' ? 12 : 100)
+  if ((point.kind === 'UI' && typeof point.value === 'number') || point.kind === 'AO') {
+    const spread = point.kind === 'UI' ? 1.2 : 2.5
+    const max = point.unit === 'bar' ? 12 : point.unit === 'ppm' ? 2000 : point.unit === 'pulse' ? 9999 : 100
+    const next = clamp(pointNumber(point) + (Math.random() - 0.48) * spread, 0, max)
     const trend = [...(point.trend ?? []), Number(next.toFixed(1))].slice(-18)
     return { ...point, value: Number(next.toFixed(1)), trend, updatedAt }
   }
-  if (Math.random() < 0.025 && point.id !== 'DI-01') {
+  if (Math.random() < 0.025 && typeof point.value === 'boolean' && point.id !== 'UI-05') {
     return { ...point, value: !point.value, updatedAt }
   }
   return { ...point, updatedAt }
@@ -131,7 +146,7 @@ export function getDemoChannels(): IoChannel[] {
     kind: point.kind,
     label: point.name,
     signal: point.sensorType ?? 'Virtual',
-    range: point.kind === 'AI' || point.kind === 'AO' ? '0-100' : 'ON/OFF',
+    range: point.kind === 'UI' || point.kind === 'AO' ? '0-100' : 'ON/OFF',
     safeState: point.kind === 'AO' || point.kind === 'DO' ? 'OFF' : 'n/a'
   }))
 }
@@ -142,11 +157,14 @@ export function getDemoAlarms(): Alarm[] {
 
 export function getAlarmSettings(): AlarmSetting[] {
   return [
-    { pointId: 'AI-01', label: 'Supply Air Temp', enabled: true, hh: 32, h: 28, l: 16, ll: 12, delayS: 10, priority: 'high' },
-    { pointId: 'AI-02', label: 'Duct Pressure', enabled: true, hh: 9.5, h: 8, l: 2, ll: 1, delayS: 5, priority: 'critical' },
-    { pointId: 'AI-03', label: 'Room Humidity', enabled: true, hh: 75, h: 65, l: 35, ll: 25, delayS: 30, priority: 'medium' },
-    { pointId: 'AI-04', label: 'Outdoor Temp', enabled: false, hh: 42, h: 38, l: 5, ll: 0, delayS: 60, priority: 'low' },
-    { pointId: 'AO-01', label: 'VFD Speed', enabled: true, hh: 100, h: 92, l: 10, ll: 0, delayS: 15, priority: 'medium' }
+    { pointId: 'UI-01', label: 'Supply Air Temp', enabled: true, hh: 32, h: 28, l: 16, ll: 12, delayS: 10, priority: 'high', alarmType: 1, sourcePointId: 'UI-01', ackDelayS: 0, interlock: false },
+    { pointId: 'UI-02', label: 'Duct Pressure', enabled: true, hh: 9.5, h: 8, l: 2, ll: 1, delayS: 5, priority: 'critical', alarmType: 2, sourcePointId: 'UI-02', ackDelayS: 60, interlock: false },
+    { pointId: 'DO-01', label: 'Supply Fan', enabled: true, hh: 0, h: 0, l: 0, ll: 0, delayS: 3600, priority: 'medium', alarmType: 3, sourcePointId: 'DO-01', ackDelayS: 0, interlock: true },
+    { pointId: 'DO-02', label: 'Exhaust Fan', enabled: true, hh: 0, h: 0, l: 0, ll: 0, delayS: 10, priority: 'critical', alarmType: 4, sourcePointId: 'DO-02', ackDelayS: 0, interlock: true },
+    { pointId: 'DO-03', label: 'Pump', enabled: true, hh: 0, h: 0, l: 0, ll: 0, delayS: 5, priority: 'medium', alarmType: 5, sourcePointId: 'DO-03', ackDelayS: 0, interlock: false },
+    { pointId: 'AO-01', label: 'VFD Speed', enabled: true, hh: 100, h: 92, l: 10, ll: 0, delayS: 15, priority: 'medium', alarmType: 6, sourcePointId: 'AO-01', ackDelayS: 0, interlock: false },
+    { pointId: 'UI-03', label: 'Room Humidity', enabled: true, hh: 75, h: 65, l: 35, ll: 25, delayS: 30, priority: 'medium', alarmType: 7, sourcePointId: 'UI-03', ackDelayS: 0, interlock: false },
+    { pointId: 'UI-04', label: 'Outdoor Temp', enabled: false, hh: 42, h: 38, l: 5, ll: 0, delayS: 60, priority: 'low', alarmType: 0, sourcePointId: '', ackDelayS: 0, interlock: false }
   ]
 }
 
@@ -161,13 +179,32 @@ export function forceDemoPoint(id: string, value: number | boolean, release = fa
   return { result: 'accepted' as const, applied_value: value, active_source: release ? 'core' : 'local_manual' }
 }
 
+export function updateDemoPointName(id: string, name: string) {
+  points = points.map((point) => point.id === id ? { ...point, name } : point)
+  return { id, name }
+}
+
+export function updateDemoPointConfig(id: string, config: { name?: string; unit?: string; trendEnabled?: boolean }) {
+  points = points.map((point) => {
+    if (point.id !== id) return point
+    const updated = { ...point }
+    if (config.name !== undefined) updated.name = config.name
+    if (config.unit !== undefined) updated.unit = config.unit
+    if (config.trendEnabled !== undefined) {
+      // Demo doesn't track trend enabled state, just return success
+    }
+    return updated
+  })
+  return { id, ...config }
+}
+
 export function runDemoCommissioning(pointId: string, value: number | boolean): CommissioningTestResult {
   forceDemoPoint(pointId, value)
   return { result: 'passed', pointId, appliedValue: value, message: 'Command accepted by demo core', scanMs: 12 }
 }
 
-export function getTrendSamples(pointIds: string[] = ['AI-01', 'AI-02', 'AI-03', 'AI-04'], rangeMinutes = 30): TrendSample[] {
-  const tracked = pointIds.filter((id) => points.some((point) => point.id === id && (point.kind === 'AI' || point.kind === 'AO')))
+export function getTrendSamples(pointIds: string[] = ['UI-01', 'UI-02', 'UI-03', 'UI-04'], rangeMinutes = 30): TrendSample[] {
+  const tracked = pointIds.filter((id) => points.some((point) => point.id === id && (point.kind === 'UI' || point.kind === 'AO') && typeof point.value === 'number'))
   const sampleCount = rangeMinutes <= 30 ? 18 : rangeMinutes <= 60 ? 24 : rangeMinutes <= 360 ? 36 : 48
   const stepMs = (rangeMinutes * 60_000) / Math.max(1, sampleCount - 1)
   const now = Date.now()
@@ -244,6 +281,18 @@ const inferredInputs: Record<string, string[]> = {
   Hysteresis: ['in']
 }
 
+export function getDemoGraph(): Graph {
+  return {
+    schema_version: '1.0',
+    device: { bacnet_device_id: 1001, name: 'AHU01_DDC', scan_ms: 1000 },
+    io_map: { ui: [], ao: [], do: [] },
+    modbus: { rtu: [], tcp: [] },
+    nodes: [],
+    links: [],
+    meta: { author: 'demo', rev: 1 }
+  }
+}
+
 export function validateGraphLocal(input: unknown): GraphValidationResult {
   const parsed = parseGraphInput(input)
   if (!parsed.ok) return { pass: false, errors: [{ path: '$', message: parsed.message, severity: 'error' }] }
@@ -296,7 +345,7 @@ export function validateGraphLocal(input: unknown): GraphValidationResult {
   }
 
   const ioMap = isRecord(graph.io_map) ? graph.io_map : {}
-  const aiNodes = mapIoNodes(readRecordArray(ioMap.ai))
+  const inputNodes = mapIoNodes([...readRecordArray(ioMap.ui), ...readRecordArray(ioMap.ai)])
   const aoNodes = mapIoNodes(readRecordArray(ioMap.ao))
   const doNodes = mapIoNodes(readRecordArray(ioMap.do))
 
@@ -309,7 +358,7 @@ export function validateGraphLocal(input: unknown): GraphValidationResult {
         errors.push({ path: `$.nodes[${index}].params`, message: `AO ${id} thiếu limit min/max`, severity: 'error' })
       }
     }
-    if ((isSensorNode(node) || aiNodes.has(id)) && !hasFallbackOrSafe(node) && !hasFallbackOrSafe(aiNodes.get(id))) {
+    if ((isSensorNode(node) || inputNodes.has(id)) && !hasFallbackOrSafe(node) && !hasFallbackOrSafe(inputNodes.get(id))) {
       errors.push({ path: `$.nodes[${index}].fallback`, message: `Sensor ${id} thiếu fallback/safe-state`, severity: 'error' })
     }
     if ((isOutputNode(node) || aoNodes.has(id) || doNodes.has(id)) && !hasFallbackOrSafe(node) && !hasPowerOn(node) && !hasFallbackOrSafe(aoNodes.get(id)) && !hasFallbackOrSafe(doNodes.get(id))) {
@@ -380,7 +429,7 @@ function isOutputNode(node: JsonRecord): boolean {
 
 function isSensorNode(node: JsonRecord): boolean {
   const type = stringField(node, 'type').toLowerCase()
-  return type.includes('sensor') || (type.includes('ai') && type.includes('input'))
+  return type.includes('sensor') || ((type.includes('ui') || type.includes('ai')) && type.includes('input'))
 }
 
 function hasLimitPair(value: unknown): boolean {
@@ -424,4 +473,129 @@ function hasValue(value: JsonRecord, key: string): boolean {
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+export function getAiInputConfigs(): AiInputConfig[] {
+  return demoAiInputConfigs.map((config) => ({ ...config }))
+}
+
+let demoAiInputConfigs: AiInputConfig[] = [
+  { channel: 1, label: 'Supply Air Temp', signalType: 3, displayMin: -20, displayMax: 80, rangeMultiplier: 0, unit: 2, filterSamples: 3, sensorCal: 0, mathFunction: 1, enabled: true, note: 'Check against handheld probe during commissioning.' },
+  { channel: 2, label: 'Duct Pressure', signalType: 2, displayMin: 0, displayMax: 200, rangeMultiplier: 2, unit: 3, filterSamples: 5, sensorCal: 0.2, mathFunction: 0, enabled: true, note: 'High alarm review after TAB.' },
+  { channel: 3, label: 'Room Humidity', signalType: 1, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 3, sensorCal: 0, mathFunction: 2, enabled: true, note: '' },
+  { channel: 4, label: 'Outdoor Light', signalType: 7, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 8, sensorCal: -0.5, mathFunction: 3, enabled: true, note: '' },
+  { channel: 5, label: 'Filter Switch', signalType: 4, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 6, label: 'Fire Alarm Contact', signalType: 5, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 7, label: 'Damper Potentiometer', signalType: 6, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 4, sensorCal: 0, mathFunction: 0, enabled: true, note: 'Authoring-only until iobus consumer supports EasySet signal 6.' },
+  { channel: 8, label: 'Pulse Meter', signalType: 8, displayMin: 0, displayMax: 205, rangeMultiplier: 1, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 9, label: 'Return Air Temp', signalType: 3, displayMin: -20, displayMax: 80, rangeMultiplier: 0, unit: 2, filterSamples: 3, sensorCal: 0, mathFunction: 1, enabled: true, note: '' },
+  { channel: 10, label: 'CO2 Sensor', signalType: 1, displayMin: 0, displayMax: 2000, rangeMultiplier: 1, unit: 0, filterSamples: 5, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 11, label: 'Chilled Water Temp', signalType: 3, displayMin: -20, displayMax: 80, rangeMultiplier: 0, unit: 2, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 12, label: 'Supply Fan Status', signalType: 4, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 13, label: 'Motion Sensor', signalType: 5, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 14, label: 'Light Level', signalType: 7, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 4, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 15, label: 'Water Leak Contact', signalType: 4, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 16, label: 'Spare Universal Input', signalType: 0, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: false, note: '' }
+]
+
+export function putDemoAiInputs(configs: AiInputConfig[]): void {
+  demoAiInputConfigs = configs.map((config) => ({ ...config }))
+}
+
+const defaultAoConfigs: AoConfig[] = [
+  { kind: 'AO', channel: 1, id: 'AO-01', label: 'VFD Speed', enabled: true, mode: '0-10V', safeValue: 0, source: 1, loopConfig: 1, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 1, alarm0: 2, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 62.5, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 2, id: 'AO-02', label: 'Heating Valve', enabled: true, mode: '0-10V', safeValue: 0, source: 1, loopConfig: 0, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 35, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 3, id: 'AO-03', label: 'Cooling Valve', enabled: true, mode: '4-20mA', safeValue: 0, source: 1, loopConfig: 4, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 12.5, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 4, id: 'AO-04', label: 'Damper Position', enabled: true, mode: '0-10V', safeValue: 0, source: 6, loopConfig: 7, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 45, note: '', demoNote: 'demo' }
+]
+
+const defaultDoConfigs: DoConfig[] = [
+  { kind: 'DO', channel: 1, id: 'DO-01', label: 'Pump Start', enabled: true, safeState: 'open', floatingMode: false, source: 1, notInUse02: 0, sequence: 1, switchOffDelay: '00:00:00', switchOnDelay: '00:00:03', pwmCycleTime: '00:00:00', alarmOn: 1, alarmOff: 2, runtimeCounter: true, runtimeAlarmHours: 1200, usePiSequence: false, activationLimitPi: 60, deactivationLimitPi: 45, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: true, note: '', demoNote: 'demo' },
+  { kind: 'DO', channel: 2, id: 'DO-02', label: 'Fan Start', enabled: true, safeState: 'open', floatingMode: false, source: 1, notInUse02: 0, sequence: 2, switchOffDelay: '00:00:05', switchOnDelay: '00:00:05', pwmCycleTime: '00:00:00', alarmOn: 3, alarmOff: 4, runtimeCounter: true, runtimeAlarmHours: 2400, usePiSequence: false, activationLimitPi: 60, deactivationLimitPi: 45, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: true, note: '', demoNote: 'demo' },
+  { kind: 'DO', channel: 3, id: 'DO-03', label: 'Valve Open', enabled: true, safeState: 'closed', floatingMode: true, source: 6, notInUse02: 0, sequence: 3, switchOffDelay: '00:00:00', switchOnDelay: '00:00:00', pwmCycleTime: '00:01:00', alarmOn: 0, alarmOff: 0, runtimeCounter: false, runtimeAlarmHours: 0, usePiSequence: true, activationLimitPi: 70, deactivationLimitPi: 30, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: true, note: '', demoNote: 'demo' },
+  { kind: 'DO', channel: 4, id: 'DO-04', label: 'Alarm Buzzer', enabled: true, safeState: 'open', floatingMode: false, source: 5, notInUse02: 0, sequence: 0, switchOffDelay: '00:00:10', switchOnDelay: '00:00:00', pwmCycleTime: '00:00:00', alarmOn: 5, alarmOff: 6, runtimeCounter: false, runtimeAlarmHours: 0, usePiSequence: false, activationLimitPi: 60, deactivationLimitPi: 45, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: false, note: '', demoNote: 'demo' }
+]
+
+let demoOutputs: OutputsConfig = {
+  ao: defaultAoConfigs.map((config) => ({ ...config })),
+  do: defaultDoConfigs.map((config) => ({ ...config }))
+}
+
+export function getDemoOutputs(): OutputsConfig {
+  return {
+    ao: demoOutputs.ao.map((config) => ({ ...config })),
+    do: demoOutputs.do.map((config) => ({ ...config }))
+  }
+}
+
+export function putDemoOutputs(config: OutputsConfig): void {
+  demoOutputs = {
+    ao: config.ao.map((item) => ({ ...item, demoNote: 'demo' })),
+    do: config.do.map((item) => ({ ...item, demoNote: 'demo' }))
+  }
+}
+
+const defaultUserParams: UserParamsConfig = {
+  note: 'Demo-only EasySet User Parameters mock. Backend/core hook is not available yet.',
+  UP00: 1,
+  UP01: 1,
+  UP02: 1,
+  UP03: 1,
+  UP04: 1,
+  UP05: 2,
+  UP06: 0,
+  UP07: 0,
+  UP08: 0,
+  UP09: 1,
+  UP10: 'Universal Input 1',
+  UP11: 2,
+  UP12: 1,
+  UP13: 3,
+  UP14: 'Analog Output 1',
+  UP15: 1,
+  UP16: 1,
+  UP17: 0,
+  UP18: '01:00',
+  UP19: 0,
+  UP20: 0,
+  UP21: 0,
+  UP22: 0,
+  UP23: 0,
+  UP24: 0,
+  UP25: 'Not used',
+  UP26: 1,
+  UP27: 0,
+  UP28: 'Not used',
+  UP29: 0,
+  UPSP: 1,
+  UPTS: 0,
+  UPHT: 'Auto',
+  UPSB: 'Occupied',
+  UPFAN: 0,
+  LOCK1: 1,
+  LOCK2: 9,
+  LOCK3: 241
+}
+
+let demoUserParams: UserParamsConfig = { ...defaultUserParams }
+
+export function getUserParams(): UserParamsConfig {
+  return { ...demoUserParams }
+}
+
+export function putUserParams(config: UserParamsConfig): void {
+  demoUserParams = { ...config }
+}
+
+export function getDiInputConfigs(): DiInputConfig[] {
+  return [
+    { channel: 1, node: 'UI-01', label: 'Emergency Stop', invert: false, normalState: 'closed', debounceMs: 50, enabled: true },
+    { channel: 2, node: 'UI-02', label: 'Fan Status', invert: false, normalState: 'open', debounceMs: 100, enabled: true },
+    { channel: 3, node: 'UI-03', label: 'Filter Alarm', invert: false, normalState: 'closed', debounceMs: 500, enabled: true },
+    { channel: 4, node: 'UI-04', label: 'Fire Alarm', invert: false, normalState: 'open', debounceMs: 10, enabled: true },
+    { channel: 5, node: 'UI-05', label: 'Spare 1', invert: false, normalState: 'open', debounceMs: 100, enabled: false },
+    { channel: 6, node: 'UI-06', label: 'Spare 2', invert: false, normalState: 'open', debounceMs: 100, enabled: false },
+    { channel: 7, node: 'UI-07', label: 'Spare 3', invert: false, normalState: 'open', debounceMs: 100, enabled: false },
+    { channel: 8, node: 'UI-08', label: 'Spare 4', invert: false, normalState: 'open', debounceMs: 100, enabled: false }
+  ]
 }

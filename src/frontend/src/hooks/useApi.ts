@@ -53,12 +53,35 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
         setLoading(false)
       }
     }
-  }, deps)
+  }, [])
 
   const refetch = useCallback(async () => {
     await fetchNow(true)
   }, [fetchNow])
 
+  // Custom hook logic to run fetchNow when deps change
+  // We use a ref to track if it's the first render or deps changed
+  const depsRef = useRef(deps)
+  useEffect(() => {
+    let changed = false
+    if (deps.length !== depsRef.current.length) {
+      changed = true
+    } else {
+      for (let i = 0; i < deps.length; i++) {
+        if (!Object.is(deps[i], depsRef.current[i])) {
+          changed = true
+          break
+        }
+      }
+    }
+
+    if (changed) {
+      depsRef.current = deps
+      void fetchNow(true)
+    }
+  }, [deps, fetchNow])
+
+  // Initial fetch
   useEffect(() => {
     void fetchNow(true)
   }, [fetchNow])
