@@ -60,6 +60,8 @@ MQTT/REST Agent (`kinexus-agent`), Security Service, OTA (`kinexus-ota`), cloud.
 | SW-IOP-009 | Khi SAFE_STATE: gửi RESET_IO, set alarm qua shared alarm bus | MUST | IOP-005 | T-SW-009 |
 | SW-IOP-010 | PHẢI chạy với SCHED_FIFO priority 70 | MUST | — | T-SW-010 |
 | SW-IOP-011 | PHẢI expose metrics: iop_crc_err, iop_timeout, iop_seq_err qua REST `/api/v1/system/status` | MUST | IOP-006 | T-SW-011 |
+| SW-IOP-012 | `kx_reliability_t` enum PHẢI được tính bởi `io_scaling.cpp` cho từng UI channel và ghi vào `ui_reliability[KX_N_UI]` trong shared memory (kx_plc_shm_t) | MUST | ADR-011 | T-SW-012 |
+| SW-IOP-013 | IOP timeout > 5s phải trigger `KX_REL_COMMUNICATION_FAILURE` trên **tất cả** 16 UI channels (không phải chỉ channel lỗi) | MUST | ADR-011 | T-SW-013 |
 
 ### 2.2 Shared Memory Layout — ⛔ LEGACY, ĐÃ BỊ THAY THẾ
 
@@ -153,6 +155,9 @@ typedef struct {
 | SW-BAC-006 | Device ID: đọc từ `/data/config/device.conf`; nếu không tồn tại, đọc **DIP bootstrap ID (SW1–SW7) trực tiếp qua CM3 GPIO** (xem SOM_SPEC §3.5, HW_SPEC §16) | MUST | BAC-010 | T-SW-055 |
 | SW-BAC-007 | PHẢI pass BACnet BTL test suite (ASHRAE BACnet Stack Test) trước GA | MUST | BAC-011 | T-SW-056 |
 | SW-BAC-008 | Failsafe: khi mất kết nối BMS > 30s, PLC chuyển standalone mode; log event | MUST | PRD UC-05 | T-SW-057 |
+| SW-BAC-009 | `bacnet_objtable.cpp` PHẢI map `kx_reliability_t` → BACnet Reliability enum per ADR-011 §Decision table; phải support đủ 8 giá trị (bao gồm CONFIGURATION_ERROR, COMMUNICATION_FAILURE) | MUST | ADR-011, BAC-008 | T-SW-058 |
+| SW-BAC-010 | AO object PHẢI expose `Units`, `Min_Pres_Value`, `Max_Pres_Value` từ `io_config.conf` per ADR-012; nếu thiếu config → default (units=auto, min_pv=0, max_pv=10/20) | MUST | ADR-012, BAC-003 | T-SW-059 |
+| SW-BAC-011 | AO `Object_Name` PHẢI lấy từ `ao[].name` trong `io_config.conf`; nếu absent → default `"AO{n}"` | SHOULD | ADR-012 | T-SW-060 |
 
 ---
 
@@ -305,6 +310,5 @@ typedef struct {
 ---
 
 **Document ID:** SW-REQ-MK-DDC-24-VI  
-**Revision:** 2.0-DRAFT | 2026-06-30
-**Changes:** Breaking IOP timing/base-SKU I/O alignment; legacy inline struct retained only inside the marked reference block.
+**Revision:** 2.1 | 2026-06-30 (§2.1: SW-IOP-012..013 — kx_reliability_t per ADR-011; §4.2: SW-BAC-009..011 — Reliability map + AO config per ADR-011/ADR-012) · 2.0 | 2026-06-30 (Breaking IOP timing/base-SKU I/O alignment; legacy inline struct retained only inside the marked reference block)
 **Review required:** Software Lead, System Architect

@@ -512,6 +512,113 @@ Trạng thái: IN PROGRESS 2026-06-26 — DoD #3 (BACNET=ON build 123 test) ✅;
 
 ---
 
+## Phase 4.6 — BACnet Object Model Alignment (ADR-011 + ADR-012, Gate BTL) — PLANNED 2026-06-30
+
+> **Authority:** ADR-011 (Reliability mapping), ADR-012 (AO config model)
+> **Gate:** tất cả task group này PHẢI DONE trước khi close BAC-012 và schedule BTL lab.
+> **Blocker DAG:** BAC-013 → BAC-014 → BAC-015; IOB-AO-001 → IOB-AO-002 → BAC-014
+
+| Task ID | Tên | Owner | Output | Test |
+|---------|-----|-------|--------|------|
+| BAC-013 | Thêm `kx_reliability_t` enum + `ui_reliability[16]` field vào `shared/mkddc_shm.h` | Dev SOM | kx_reliability_t typedef; kx_plc_shm_t.ui_reliability[] | unit build clean iobus+core |
+| BAC-014 | `io_scaling.cpp`: compute `kx_reliability_t` per fault type + ghi SHM; xem ADR-011 §Decision table | Dev SOM | reliability populated per UI channel sau mỗi poll | iobus_tests: 11 test cases fault-inject R-01..R-09 |
+| BAC-015 | `bacnet_objtable.cpp` (BAC-008): map `kx_reliability_t` → BACnet Reliability enum; AI+AO+AV; xem ADR-011 | Dev SOM | ReadProperty AI1 Reliability trả giá trị đúng | core_tests: Reliability map unit; BTL test cases R-01..R-11 |
+| IOB-AO-001 | Parse `ao[].name/units/min_pv/max_pv` trong `iobus_config.cpp`; thêm `AoChannelConfig` struct | Dev SOM | AoChannelConfig populated cho 4 channel | iobus_tests: parse test + default test |
+| IOB-AO-002 | `bacnet_objtable.cpp`: populate AO Object_Name, Units, Min/Max_Pres_Value từ AoChannelConfig | Dev SOM | ReadProperty AO1 Units/Min/Max trả giá trị đúng | BTL test cases AO-01..AO-11 |
+| IOB-AO-003 | AO engineering conversion: `raw_u16 ↔ eng float` dùng min_pv/max_pv trong bacnet_objtable | Dev SOM | WriteProperty AO1 PV=50% → DAC ra 5V | AO-11 test + board smoke |
+
+```
+Task ID: BAC-013
+Tên: kx_reliability_t enum + SHM field (shared/mkddc_shm.h)
+Owner: Dev SOM | Phase: 4.6 | Module: shared/mkddc_shm.h, services/iobus, services/core
+Input: ADR-011 §Decision — 8 kx_reliability_t values + mapping table
+Output:
+  - typedef enum kx_reliability_t { KX_REL_RELIABLE=0, ..., KX_REL_UNRELIABLE_OTHER=7 }
+  - uint8_t ui_reliability[KX_N_UI] trong kx_plc_shm_t (sau ui_quality[])
+Test: build clean iobus + core (recompile đồng bộ — SHM size thay đổi)
+Done khi: mkddc_shm.h compile clean; iobus_tests + core_tests link OK
+Phụ thuộc: —
+Trạng thái: PLANNED 2026-06-30
+```
+
+```
+Task ID: BAC-014
+Tên: io_scaling.cpp — compute kx_reliability_t per fault type
+Owner: Dev SOM | Phase: 4.6 | Module: services/iobus/io/io_scaling.cpp
+Input: ADR-011 §Decision table; BAC-013 (kx_reliability_t available)
+Output: ui_to_eng() ghi ui_reliability[ch] theo fault type:
+  - type=none → KX_REL_CONFIGURATION_ERROR
+  - 4-20mA < 3.5mA → KX_REL_OPEN_LOOP
+  - 4-20mA > 21.0mA → KX_REL_SHORTED_LOOP
+  - overrange → KX_REL_OVER_RANGE; underrange → KX_REL_UNDER_RANGE
+  - IOP timeout > 5s → KX_REL_COMMUNICATION_FAILURE (all 16 channels)
+  - KX_Q_UNCERTAIN → KX_REL_UNRELIABLE_OTHER
+  - KX_Q_GOOD → KX_REL_RELIABLE
+Test: iobus_tests — 11 fault-inject test cases (R-01..R-09 + R-10 recovery + R-11 IOP recovery)
+Done khi: 11 test cases pass + ui_reliability populated trong board SHM (read via /dev/shm)
+Phụ thuộc: BAC-013
+Trạng thái: PLANNED 2026-06-30
+```
+
+```
+Task ID: BAC-015
+Tên: bacnet_objtable.cpp — BACnet Reliability enum map (BAC-008 completion)
+Owner: Dev SOM | Phase: 4.6 | Module: services/core/bacnet_objtable.cpp
+Input: ADR-011 §Decision; BAC-014 (ui_reliability[] populated); PICS/EPICS §4.1 Rev 1.2
+Output: AI ReadProperty Reliability → 1 trong 8 BACnet Reliability enum values
+  Map: KX_REL_RELIABLE→0, OVER_RANGE→2, UNDER_RANGE→3, OPEN_LOOP→4,
+       SHORTED_LOOP→5, UNRELIABLE_OTHER→7, CONFIGURATION_ERROR→8, COMMUNICATION_FAILURE→12
+  Status_Flags.FAULT bit = 1 khi Reliability ≠ NO_FAULT_DETECTED
+Test: core_tests: Reliability map unit (8 cases); BTL tool R-01..R-11 test cases
+Done khi: BTL pre-test R-01..R-11 tất cả PASS trên board với bacnet-tools
+Phụ thuộc: BAC-013, BAC-014
+Trạng thái: PLANNED 2026-06-30
+```
+
+```
+Task ID: IOB-AO-001
+Tên: iobus_config.cpp — parse AoChannelConfig (name/units/min_pv/max_pv)
+Owner: Dev SOM | Phase: 4.6 | Module: services/iobus/config/iobus_config.hpp/cpp
+Input: ADR-012 §Decision; CONFIG_SCHEMA §3 Rev 1.4
+Output: struct AoChannelConfig { std::string name; std::string units_str; float min_pv; float max_pv; };
+  Parse io_config.conf ao[].name/units/min_pv/max_pv
+  Default: name="AO{n}", units=auto từ mode, min_pv=0, max_pv=10/20
+Test: iobus_tests — parse test (4 channel explicit) + default test (empty ao[]) + backward compat test
+Done khi: 3 test cases pass; build clean
+Phụ thuộc: —
+Trạng thái: PLANNED 2026-06-30
+```
+
+```
+Task ID: IOB-AO-002
+Tên: bacnet_objtable.cpp — AO Units + Min/Max_Pres_Value + Object_Name
+Owner: Dev SOM | Phase: 4.6 | Module: services/core/bacnet_objtable.cpp
+Input: ADR-012; IOB-AO-001 (AoChannelConfig available); PICS/EPICS §4.1 AO section Rev 1.2
+Output:
+  - AO Object_Name = ao.name
+  - AO Units = units_str → BACnet enum (per CONFIG_SCHEMA §3.1 table)
+  - AO Min_Pres_Value = ao.min_pv; Max_Pres_Value = ao.max_pv
+Test: BTL AO test cases AO-01..AO-11; core_tests AO property unit
+Done khi: bacrp AO1 Units / Min_Pres_Value / Max_Pres_Value trả đúng giá trị từ io_config.conf
+Phụ thuộc: IOB-AO-001, BAC-013
+Trạng thái: PLANNED 2026-06-30
+```
+
+```
+Task ID: IOB-AO-003
+Tên: Engineering conversion raw_u16 ↔ eng float (AO Present_Value scale)
+Owner: Dev SOM | Phase: 4.6 | Module: services/core/bacnet_objtable.cpp + iobus AO path
+Input: ADR-012 §Decision §4; IOB-AO-002
+Output: WriteProperty AO1 PV=50.0 (percent) → raw_u16=32767 → DAC 5.0V on board
+  Formula: raw = clamp((eng-min)/(max-min), 0, 1) × 65535
+Test: AO-11 (board smoke); iobus_tests: AO conversion unit (boundary: 0%, 50%, 100%)
+Done khi: board smoke AO1 output đo được đúng voltage theo engineering value
+Phụ thuộc: IOB-AO-002
+Trạng thái: PLANNED 2026-06-30
+```
+
+---
+
 ## Phase 3/4 — Modbus RTU Master (S7 #6)
 
 > Chi tiết triển khai: [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md).
@@ -990,6 +1097,6 @@ Phụ thuộc: E2E-003
 ```
 
 ---
-**Rev** 1.21 | 2026-06-27 (Phase 5.5 mkddc-hmi: HMI-001..012 tasks added — HMI kéo vào Rev A per REVA_SCOPE amendment) · 1.20 | 2026-06-26 (MOD-012: 9/11 DoD — E303 alarm test + ext snapshot test + T11 TCP loopback fixed + CI modbus+bacnet matrix; BAC-012: DoD #3 BACNET=ON 123/123 test; 141 iobus + 123 core pass) · 1.19 | 2026-06-26 (COR-011 DONE: 5 Protocol nodes, 12/12 test; MOD-013 DONE: Modbus TCP client, 10/10 test; 122/122 core_tests + 138/140 iobus_tests) · 1.18 | 2026-06-26 (Thêm COR-011: Protocol 5 graph nodes PLANNED; MOD-013: Modbus TCP client PLANNED — 2 task mới chờ owner approve; 07_guide §12 + SW_FIELDBUS_DESIGN §12 bổ sung spec) · 1.17 | 2026-06-25 (IOB-006-V2: IOP v2 ADR-010 — 74B IO_RESP, KX_N_UI=16, BOARD_CAP_MAP; 05 guide Rev 2.0 updated) · 1.16 | 2026-06-23 (WEB-014 cập nhật: Go crypto/sys security refresh; Grype archive scan clean locally) · 1.15 | 2026-06-23 (WEB-014 ĐÃ làm: Vite security refresh; npm/go vuln gates clean locally) · 1.14 | 2026-06-22 (IOB local PASS; MOD native PTY PASS; BAC source/runtime wiring; external evidence pending) · 1.13 | 2026-06-22 (Thêm BAC-012, MOD-012, IOB-006 — transport layer integration; sửa status BACnet/Modbus: logic ✅ transport no-op ⚠️; xem 31_PROTOCOL_LIB_INTEGRATION_PLAN) · 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) · 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
+**Rev** 1.22 | 2026-06-30 (Phase 4.6: BAC-013..015 + IOB-AO-001..003 PLANNED — BACnet Object Model Alignment per ADR-011/ADR-012; gate BTL) · 1.21 | 2026-06-27 (Phase 5.5 mkddc-hmi: HMI-001..012 tasks added — HMI kéo vào Rev A per REVA_SCOPE amendment) · 1.20 | 2026-06-26 (MOD-012: 9/11 DoD — E303 alarm test + ext snapshot test + T11 TCP loopback fixed + CI modbus+bacnet matrix; BAC-012: DoD #3 BACNET=ON 123/123 test; 141 iobus + 123 core pass) · 1.19 | 2026-06-26 (COR-011 DONE: 5 Protocol nodes, 12/12 test; MOD-013 DONE: Modbus TCP client, 10/10 test; 122/122 core_tests + 138/140 iobus_tests) · 1.18 | 2026-06-26 (Thêm COR-011: Protocol 5 graph nodes PLANNED; MOD-013: Modbus TCP client PLANNED — 2 task mới chờ owner approve; 07_guide §12 + SW_FIELDBUS_DESIGN §12 bổ sung spec) · 1.17 | 2026-06-25 (IOB-006-V2: IOP v2 ADR-010 — 74B IO_RESP, KX_N_UI=16, BOARD_CAP_MAP; 05 guide Rev 2.0 updated) · 1.16 | 2026-06-23 (WEB-014 cập nhật: Go crypto/sys security refresh; Grype archive scan clean locally) · 1.15 | 2026-06-23 (WEB-014 ĐÃ làm: Vite security refresh; npm/go vuln gates clean locally) · 1.14 | 2026-06-22 (IOB local PASS; MOD native PTY PASS; BAC source/runtime wiring; external evidence pending) · 1.13 | 2026-06-22 (Thêm BAC-012, MOD-012, IOB-006 — transport layer integration; sửa status BACnet/Modbus: logic ✅ transport no-op ⚠️; xem 31_PROTOCOL_LIB_INTEGRATION_PLAN) · 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) · 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
 1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit, COR-008 SIGHUP reload — cụm production-hardening 1+5+6 ĐÃ làm) · 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006 Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·
 Test chi tiết: [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
