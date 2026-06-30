@@ -188,11 +188,6 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
                 if (kv.second->is_num()) n.num_params[kv.first] = kv.second->num;
                 else if (kv.second->is_str()) {
                     n.str_params[kv.first] = kv.second->str;
-                    if (!n.str_param.empty()) {
-                        std::fprintf(stderr, "WARN  graph.str_param_overwrite node=%s"
-                                     " key=%s (prev=%s) — use str_params[] for multi-string nodes\n",
-                                     n.id.c_str(), kv.first.c_str(), n.str_param.c_str());
-                    }
                     n.str_param = kv.second->str;   /* backward compat: last string value */
                 }
             }

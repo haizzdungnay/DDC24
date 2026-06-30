@@ -199,10 +199,12 @@ void ModbusTcp::read_conn(TcpConn& conn, uint64_t now_ms, ExtCache& cache)
                                    pt.type == PointType::Uint32 ||
                                    pt.type == PointType::Float32);
                 if (is32 && k + 1 >= pt.count) {
-                    /* Misconfigured profile: 32-bit type at odd register boundary — skip */
+                    /* Misconfigured profile: 32-bit type at odd register boundary — skip.
+                     * Still consume the ext_idx slot so downstream points stay aligned. */
                     std::fprintf(stderr, "WARN  modbus_tcp.odd_32bit slave=%s pt=%s k=%u count=%u"
                                  " — profile misconfigured, point skipped\n",
                                  conn.cfg.name.c_str(), pt.name.c_str(), k, pt.count);
+                    ext_idx++;
                     break;
                 }
                 const uint16_t cnt2 = is32 ? 2u : 1u;
