@@ -2,11 +2,11 @@
 ## MCU STM32G0B1RBT6 / FreeRTOS
 
 > **Document ID:** FW-REQ-MK-DDC-24-VI  
-> **Phiên bản:** 1.0 | 2026-05-28  
-> **Trạng thái:** Approved (Owner 2026-06-08)
+> **Phiên bản:** 2.0 | 2026-06-30
+> **Trạng thái:** In-Review — breaking I/O/IOP alignment to ADR-010
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
 > **Tác giả:** KINEXUS Technologies — Firmware Team  
-> **Nguồn gốc:** Trace từ SRS-MK-DDC-24-VI, HW-SPEC-MK-DDC-24-VI, IOP-SPEC-MK-DDC-24-VI
+> **Nguồn gốc:** Trace từ SRS/HW-SPEC và [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md) + `shared/iop_protocol.h`
 
 **Quy ước mức độ:**
 - **MUST** — Bắt buộc hoàn toàn. Thiếu = release fail.
@@ -23,51 +23,48 @@ Tài liệu này định nghĩa requirements cho **MCU firmware** chạy trên S
 
 ## 2. I/O Sampling Requirements
 
-### 2.1 ADC Sampling (Universal Input UI1–UI8)
+### 2.1 ADC Sampling (Universal Input UI1–UI16)
 
 | ID | Yêu cầu | Loại | Test Ref |
 |----|---------|------|---------|
-| FW-IO-001 | PHẢI sample tất cả 8 kênh UI từ ADS131M08 qua SPI3 với chu kỳ ≤ 1ms (≥ 1000 sps) | MUST | T-FW-001 |
+| FW-IO-001 | PHẢI sample tất cả 16 kênh UI từ 2× ADS131M08 qua SPI3 với chu kỳ ≤ 1ms | MUST | T-FW-001 |
 | FW-IO-002 | PHẢI áp dụng moving average filter 8 samples trước khi đưa vào IOP buffer | MUST | T-FW-002 |
 | FW-IO-003 | PHẢI detect và reject outlier vượt ±10% range trong 1 sample (spike filter) | SHOULD | T-FW-003 |
-| FW-IO-004 | ADC raw value PHẢI là uint24 (big-endian) theo định nghĩa ADS131M08 output register | MUST | T-FW-004 |
+| FW-IO-004 | ADC s24 PHẢI được sign-extend sang int32 và truyền big-endian trong IO_RESP v2 | MUST | T-FW-004 |
 | FW-IO-005 | PHẢI giữ timestamp (tick) của sample cuối cùng hợp lệ | MUST | T-FW-005 |
-| FW-IO-006 | Nếu ADS131M08 không trả lời trong 5ms liên tiếp: set `FAULT_FLAGS.ADC_FAULT = 1`, báo qua IOP | MUST | T-FW-006 |
+| FW-IO-006 | Nếu từng ADS131M08 không có mẫu hợp lệ trong 100ms: set đúng `ADC1_FAULT` hoặc `ADC2_FAULT`, báo qua IOP | MUST | T-FW-006 |
 | FW-IO-007 | SPI giao tiếp với ADS131M08 PHẢI dùng DMA (không blocking polling) | MUST | T-FW-007 |
 | FW-IO-008 | PHẢI recover tự động sau ADC_FAULT: thử reinit ADS131M08 mỗi 1 giây | SHOULD | T-FW-008 |
 
-### 2.2 Auto-Detection Sensor Type
+### 2.2 Per-channel UI Mode Configuration
 
 | ID | Yêu cầu | Loại | Test Ref |
 |----|---------|------|---------|
-| FW-IO-010 | PHẢI implement thuật toán auto-detect sensor type khi boot hoặc khi nhận lệnh từ SOM | MUST | T-FW-010 |
-| FW-IO-011 | Auto-detect PHẢI thực hiện theo thứ tự: (1) đo điện trở tĩnh, (2) đo điện áp DC, (3) đo current signature | MUST | T-FW-011 |
-| FW-IO-012 | Threshold auto-detect (dải điện trở → sensor type): xem Bảng 2.2.1 | MUST | T-FW-012 |
-| FW-IO-013 | Sau khi auto-detect, MCU PHẢI báo kết quả cho SOM qua `DIAG_RESP.SENSOR_TYPE_MAP` (reserved field — xem IOP SPEC) | SHOULD | T-FW-013 |
-| FW-IO-014 | MCU PHẢI nhận lệnh override sensor type từ SOM (qua command được bổ sung sau) và ưu tiên override | MUST | T-FW-014 |
+| FW-IO-010 | PHẢI nhận cấu hình mode riêng cho UI1-UI16 từ SOM/config được kiểm soát | MUST | T-FW-010 |
+| FW-IO-011 | PHẢI cập nhật serial mode-latch ngoài hot sampling path và giữ mode ổn định trong khi lấy mẫu | MUST | T-FW-011 |
+| FW-IO-012 | Sau đổi mode, PHẢI chờ settle và loại ít nhất mẫu đầu trước khi quality trở lại GOOD | MUST | T-FW-012 |
+| FW-IO-013 | PHẢI báo mode hiện hành và cấu hình không hỗ trợ qua diagnostics | SHOULD | T-FW-013 |
+| FW-IO-014 | PT100/PT1000 và auto-detect không được expose như capability Rev A | MUST | T-FW-014 |
 
-#### Bảng 2.2.1 — Auto-detect Threshold
+#### Bảng 2.2.1 — Rev A UI mode
 
-| Điện trở đo | → Sensor Type |
-|------------|--------------|
-| < 200 Ω | Short / wire → dry contact / DI mode |
-| 200 Ω – 2 kΩ | PT100 (nominal 100Ω @ 0°C) |
-| 2 kΩ – 4 kΩ | PT1000 (nominal 1kΩ @ 0°C) |
-| 8 kΩ – 12 kΩ | NTC 10kΩ |
-| 16 kΩ – 24 kΩ | NTC 20kΩ |
-| Điện áp 0–10V present | 0–10V analog |
-| Current loop detected | 4–20mA |
-| > 100 kΩ | Open / not connected |
+| Mode | Yêu cầu |
+|---|---|
+| 0–10V | Divider/buffer path selected |
+| 4–20mA | Protected 49.9Ω shunt path selected |
+| NTC | Ratiometric excitation/profile selected |
+| Auxiliary dry contact | Non-isolated pull-up sense + debounce |
+| Other/reserved | Disabled/unsupported quality |
 
-### 2.3 Debounce (Digital Input DI1–DI8)
+### 2.3 Debounce (Auxiliary Dry-contact UI)
 
 | ID | Yêu cầu | Loại | Test Ref |
 |----|---------|------|---------|
-| FW-IO-020 | PHẢI implement phần mềm debounce cho DI1–DI8 | MUST | T-FW-020 |
+| FW-IO-020 | PHẢI implement phần mềm debounce cho UI channel được cấu hình auxiliary dry-contact | MUST | T-FW-020 |
 | FW-IO-021 | Debounce time mặc định: 20ms (configurable 5ms–100ms qua SOM command) | MUST | T-FW-021 |
 | FW-IO-022 | State change chỉ được ghi nhận khi tín hiệu ổn định liên tục trong suốt debounce window | MUST | T-FW-022 |
-| FW-IO-023 | MCU PHẢI detect edge (R_TRIG / F_TRIG) và đếm pulse (counter per kênh) | SHOULD | T-FW-023 |
-| FW-IO-024 | Counter DI PHẢI là uint16, gửi trong IO_RESP nếu được bật (hiện IOP v1 chưa có — flag cho v1.1) | MAY | — |
+| FW-IO-023 | MCU MAY detect edge cho auxiliary dry-contact, nhưng không được claim là pulse-rated industrial DI khi chưa có evidence | SHOULD | T-FW-023 |
+| FW-IO-024 | Base IO_RESP v2 không có DI counter/DI_MASK; optional isolated-DI SKU cần contract riêng/capability bit | MUST | — |
 
 ---
 
@@ -81,11 +78,11 @@ Tài liệu này định nghĩa requirements cho **MCU firmware** chạy trên S
 | FW-AO-004 | Khi vào safe state: AO PHẢI output safe value trong ≤ 5ms | MUST | T-FW-033 |
 | FW-AO-005 | PHẢI hold last AO value nếu mất kết nối IOP (không tự về 0 trừ khi nhận RESET_IO) | MUST | T-FW-034 |
 | FW-AO-006 | PHẢI validate raw value: uint16 trong [0, 65535]. Nếu ngoài range → NACK + log | MUST | T-FW-035 |
-| FW-AO-007 | PHẢI nhận và lưu cấu hình AO mode per kênh qua IOP command `SET_AO_CFG` (v1.1): mode=0→0–10V, mode=1→4–20mA | MUST | T-FW-036 |
+| FW-AO-007 | PHẢI nhận và lưu cấu hình AO mode per kênh qua IOP v2 command `SET_AO_CFG`: mode=0→0–10V, mode=1→4–20mA | MUST | T-FW-036 |
 | FW-AO-008 | Mặc định khi boot (trước khi nhận `SET_AO_CFG`): tất cả AO kênh ở mode 0–10V | MUST | T-FW-037 |
 | FW-AO-009 | Safe state khi mode 0–10V: AO = 0V (protocol raw=0); khi mode 4–20mA: AO = 4mA (protocol raw=0 theo SWFW §6.3 — nếu DAC vật lý span 0–20mA, FW quy đổi nội bộ ≈ count 13107) | MUST | T-FW-038 |
 
-> **Ghi chú:** `SET_AO_CFG` là IOP command mới, dự kiến IOP v1.1. Đến khi v1.1 có hiệu lực, SOM gửi mode config ngay sau HANDSHAKE. Xem OPEN-ISSUES IOP-Q-004.
+> **Ghi chú:** `SET_AO_CFG` thuộc IOP v2 current contract. SOM gửi mode config sau handshake/capability validation.
 
 ---
 
@@ -185,5 +182,5 @@ Tài liệu này định nghĩa requirements cho **MCU firmware** chạy trên S
 ---
 
 **Document ID:** FW-REQ-MK-DDC-24-VI  
-**Revision:** 1.0 | 2026-05-28  
-**Approved by:** Firmware Lead, System Architect — KINEXUS Technologies
+**Revision:** 2.0 | 2026-06-30
+**Review required:** Firmware Lead, System Architect

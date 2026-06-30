@@ -26,7 +26,7 @@ Gap chính không nằm ở ý định kỹ thuật mà nằm ở bằng chứng
 | `PRD_MK-DDC-24_VI.md` | FR-030..035 bao phủ signed firmware, secure boot, TLS 1.3, SSH hardening, auth, audit log. |
 | `SRS_MK-DDC-24_VI.md` | SEC-002..025, OTA-001..008, API/MQTT TLS, JWT, firewall, CVE SLA mức high/medium. |
 | `docs/00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md` | DoD chung có coding standard, unit test, static analysis, reviewer, trace matrix; P5 Security + OTA gate; P7 release SBOM/dependency scan/pentest. |
-| `docs/05_implementation/KX-DDC24-PM-REPO-001_VI.md` | CI workflow dự kiến `security.yml` với trivy/grype, gitleaks, SBOM; PR cần reviewer; trace matrix cập nhật khi đóng task. |
+| `docs/05_devguides/KX-DDC24-PM-REPO-001_VI.md` | CI workflow dự kiến `security.yml` với trivy/grype, gitleaks, SBOM; PR cần reviewer; trace matrix cập nhật khi đóng task. |
 | `docs/00_management/KX-DDC24-QA-TRACE-001_VI.md` | Trace REQ -> design -> task -> test cho security, OTA, REST/MQTT, Web IDE auth. |
 | `design/software/SW_SECURITY_KEYSTORE_MK-DDC-24_VI.md` | Key store, TLS, JWT, firewall, audit log, static/dependency scan, CVE policy ở mức thiết kế. |
 | `spec/OPEN_ISSUES_MK-DDC-24_VI.md` | SW-Q-004 key storage và SW-Q-005 OTA endpoint còn mở, ảnh hưởng secure design/OTA cert pinning. |

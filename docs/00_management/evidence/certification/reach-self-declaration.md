@@ -41,7 +41,7 @@ The product is classified as an **article** under REACH Article 3(3) — an obje
 | Product name | Programmable BACnet/IP DDC Controller |
 | Model | MK-DDC-24 v1.0 |
 | Hardware revision | Carrier Board v1.0 + Radxa CM3 (RK3566) |
-| Inputs | 8x UI + 8x DI |
+| Inputs | 16x UI; no industrial DI on base SKU |
 | Outputs | 4x AO + 4x DO (relay) |
 | Communication | BACnet/IP, Modbus RTU (southbound), Ethernet |
 | Power supply | 24 VAC/DC |

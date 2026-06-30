@@ -1,6 +1,6 @@
 # SRS — MK-DDC-24 Software Requirements Specification
 
-> **Phiên bản:** 1.1 | 2026-05-28  
+> **Phiên bản:** 2.0 | 2026-06-30
 > **Trạng thái:** Draft — Ver 1  
 > **Tác giả:** KINEXUS Technologies — Software Team  
 > **Chuẩn tham chiếu:** IEC 62443-4-1, BACnet ASHRAE 135 (IEC 61131-3 → tầm nhìn Rev C, không thuộc Rev A)  
@@ -10,6 +10,7 @@
 > IEC 61131-3 (xem [ADR-004](../adr/ADR-004-component-based-runtime.md)). Yêu cầu engine/runtime trace theo
 > [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) (`RUN-*`) thay `PLC-*`. Nguồn-chuẩn sản phẩm:
 > [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md). Mục nào dưới đây nói "PLC/FBD/ST/IEC 61131-3" đọc như tầm nhìn Rev C.
+> I/O/IOP baseline theo [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md) và `shared/iop_protocol.h`.
 
 ---
 
@@ -232,10 +233,10 @@ Power ON
 | ID | Yêu cầu |
 |----|---------|
 | IOP-001 | SOM giao tiếp với MCU qua UART 921600 baud + CRC16 frame check |
-| IOP-002 | SOM poll MCU mỗi 10 ms (100 Hz) để lấy giá trị I/O |
-| IOP-003 | MCU trả giá trị UI (24-bit raw, ADS131M08), DI (8-bit bitmask), counter trong 1 frame |
+| IOP-002 | SOM poll MCU mỗi 2 ms (500 Hz) và MCU trả snapshot hoàn chỉnh mới nhất |
+| IOP-003 | MCU trả IO_RESP 74 byte: 16 × int32 signed UI raw, 2 ADC status, MCU temp, fault flags, sample counter, DO feedback; base SKU không có DI_MASK |
 | IOP-004 | SOM ghi AO (16-bit, DAC8554) và DO (4-bit) xuống MCU trong frame riêng |
-| IOP-005 | Nếu không nhận ACK từ MCU trong 100 ms: set Fault flag, ghi error log |
+| IOP-005 | Response timeout 3 ms, retry tối đa 3 lần; 20 ms không có response hợp lệ thì set fault/log; MCU mất GET_IO 200 ms thì vào safe-state |
 | IOP-006 | Protocol PHẢI có sequence number để phát hiện missed frame |
 
 ---
@@ -410,7 +411,7 @@ Màn hình TFT 2.4" ILI9341 hiển thị dashboard local, không phụ thuộc k
 | HMI-010 | PHẢI có menu điều hướng bằng 6 nút (UP/DOWN/LEFT/RIGHT/ENTER/ESC) | MUST |
 | HMI-011 | Menu PHẢI bao gồm: Dashboard / I/O Status / Network Info / Alarm List / System Info | MUST |
 | HMI-012 | PHẢI hiển thị danh sách ≥ 10 alarm gần nhất với timestamp và mức độ | MUST |
-| HMI-013 | PHẢI hiển thị giá trị thực của 8 UI + 8 DI + 4 AO + 4 DO trên màn hình I/O Status | MUST |
+| HMI-013 | PHẢI hiển thị 16 UI + 4 AO + 4 DO của base SKU; DI chỉ hiển thị trên optional SKU khi capability map xác nhận | MUST |
 | HMI-014 | Từ màn hình System Info PHẢI hiển thị: firmware version, uptime, CPU temp, RAM% | MUST |
 | HMI-015 | PHẢI có màn hình xác nhận (ENTER/ESC) trước khi thực hiện restart từ HMI | MUST |
 
@@ -509,5 +510,5 @@ Ví dụ: 2026-05-28T14:23:01+07:00 ERROR E101 MCU_IOP MCU no response for 100ms
 ---
 
 **Document ID:** SRS-MK-DDC-24-VI  
-**Revision:** 1.1 | 2026-05-28  
+**Revision:** 2.0 | 2026-06-30
 **Approved by:** Software Lead, CTO KINEXUS Technologies

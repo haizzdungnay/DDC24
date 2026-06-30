@@ -1,8 +1,8 @@
 # IOP Protocol Specification — MK-DDC-24 Rev A
 
-> **Document:** IOP_PROTOCOL | Rev 2.0 | 2026-06-25  
-> **Scope:** SOM ↔ MCU communication protocol for 16 UI Rev A hardware  
-> **Status:** APPROVED — supersedes Rev 2.0-draft (2026-06-23). Governing reference: ADR-010 + `shared/iop_protocol.h`.  
+> **Document:** IOP_PROTOCOL | Rev 2.1 | 2026-06-30
+> **Scope:** SOM ↔ MCU communication protocol for 16 UI Rev A hardware
+> **Status:** APPROVED — supersedes Rev 2.0-draft (2026-06-23). Governing reference: ADR-010 + `shared/iop_protocol.h`.
 > **Nguồn-chuẩn cuối cùng:** `shared/iop_protocol.h` — file này và ADR-010 là diễn giải.
 
 ---
@@ -17,6 +17,15 @@
 | MCU không tự push | MCU chỉ trả lời khi nhận lệnh từ SOM |
 
 Không dùng push model. Không dùng dual protocol.
+
+Timing source of truth is `shared/iop_protocol.h`:
+
+| Constant | Value | Meaning |
+|---|---:|---|
+| `IOP_GET_IO_PERIOD_MS` | 2 ms | SOM sends `CMD_GET_IO` at 500 Hz. |
+| `IOP_RESP_TIMEOUT_MS` | 3 ms | Response deadline for a transaction. |
+| `IOP_FAULT_TIMEOUT_MS` | 20 ms | Ten consecutive poll periods without a valid response. |
+| `IOP_SAFE_TIMEOUT_MS` | 200 ms | MCU forces outputs to their configured safe state when SOM polling is absent. |
 
 ---
 
@@ -69,6 +78,37 @@ offset  size  type       field          mô tả
 ```
 
 **Không có DI_MASK** — base SKU Rev A không có DI.
+
+### 4.1 Command registry
+
+This table mirrors `shared/iop_protocol.h`. A documentation change must not alter an opcode or length without changing the shared header, bumping IOP version, and updating ADR-010.
+
+| Opcode | Command | Direction | LEN | Successful response |
+|---:|---|---|---:|---|
+| `0x01` | `CMD_GET_IO` | SOM -> MCU | 0 | `CMD_IO_RESP` (`0x02`, LEN 74) |
+| `0x10` | `CMD_SET_AO` | SOM -> MCU | 8 | `CMD_ACK` with echoed command |
+| `0x11` | `CMD_SET_DO` | SOM -> MCU | 2 | `CMD_ACK` with echoed command |
+| `0x13` | `CMD_SET_AO_CFG` | SOM -> MCU | 1 | `CMD_ACK` with echoed command |
+| `0x20` | `CMD_GET_DIAG` | SOM -> MCU | 0 | `CMD_DIAG_RESP` (`0x21`, LEN 20) |
+| `0x30` | `CMD_HANDSHAKE` | SOM -> MCU | 4 | `CMD_HANDSHAKE_RESP` (`0x31`, LEN 8) |
+| `0x40` | `CMD_RESET_IO` | SOM -> MCU | 1 | `CMD_ACK` with echoed command |
+
+Invalid command, length, CRC, busy state, safe state, or incompatible version returns `CMD_NACK` (`0xFE`, LEN 2) with `[echoed_cmd][error_code]`.
+
+### 4.2 AO/DO command payloads
+
+`CMD_SET_AO` carries four unsigned 16-bit big-endian DAC values in AO1..AO4 order:
+
+```text
+[0..1] AO1_RAW  [2..3] AO2_RAW  [4..5] AO3_RAW  [6..7] AO4_RAW
+```
+
+- 0-10 V mode: `V = raw / 65535 * 10`.
+- 4-20 mA mode: `mA = 4 + raw / 65535 * 16`.
+
+`CMD_SET_DO` payload is `[mask][value]`; bits 0..3 address DO1..DO4. A bit changes only when its `mask` bit is 1.
+
+`CMD_SET_AO_CFG` payload is one mode bitmask; bit `i` is 0 for 0-10 V and 1 for 4-20 mA on AO channel `i`.
 
 ### UI_RAW encoding
 
@@ -180,3 +220,4 @@ GET_IO SEQ=1 hoàn chỉnh: AA 00 01 01 AC E1
 | 1.0-draft | 2026-06-23 | Initial draft (push model, 86B frame) — SUPERSEDED |
 | 2.0-draft | 2026-06-23 | Rev A 16 UI frame — SUPERSEDED |
 | **2.0** | **2026-06-25** | **Approved: poll model, 74B IO_RESP, BOARD_CAP_MAP, v2 FAULT bits. Governing: ADR-010 + shared/iop_protocol.h** |
+| **2.1** | **2026-06-30** | **Documented the 2 ms timing constants and AO/DO/diagnostic command registry from the shared header.** |

@@ -2,8 +2,8 @@
 ## MCU STM32G0B1RBT6 / FreeRTOS
 
 > **Document ID:** FW-ARCH-MK-DDC-24-VI  
-> **Phiên bản:** 1.0 | 2026-05-28  
-> **Trạng thái:** Approved (Owner 2026-06-08)
+> **Phiên bản:** 2.0 | 2026-06-30
+> **Trạng thái:** In-Review — aligned to ADR-010
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
 > **Tác giả:** KINEXUS Technologies — Firmware Team
 
@@ -59,8 +59,8 @@
 
 | Task Name | Priority | Period | Stack | Deadline | Mô tả |
 |-----------|:--------:|:------:|:-----:|:--------:|-------|
-| `io_sample_task` | 7 (High) | 1 ms | 512 B | 1 ms | ADC sampling, DI read, DI debounce |
-| `iop_comm_task` | 6 | 10 ms | 512 B | 10 ms | IOP UART protocol, TX/RX frame |
+| `io_sample_task` | 7 (High) | 1 ms | 512 B | 1 ms | Sample 2× ADC for UI1-UI16 and update status |
+| `iop_comm_task` | 6 | Event-driven | 512 B | 3 ms response timeout | IOP v2 UART protocol, TX/RX frame |
 | `ao_output_task` | 6 | 10 ms | 256 B | 10 ms | Apply AO values to DAC8554 |
 | `do_control_task` | 6 | 10 ms | 256 B | 10 ms | Relay control, feedback check |
 | `diagnostics_task` | 2 | 1000 ms | 256 B | 1000 ms | MCU temp, VDD, counters |
@@ -116,8 +116,9 @@
 
 ```c
 typedef struct {
-    uint32_t ui_raw[8];          // ADS131M08 24-bit raw (stored in uint32, upper 8 bits = 0)
-    uint8_t  di_mask;            // DI1-DI8 debounced state bitmask
+    int32_t  ui_raw[16];         // 2× ADS131M08 s24 sign-extended to int32
+    uint8_t  adc1_stat;          // ADC #1 status, UI1-UI8
+    uint8_t  adc2_stat;          // ADC #2 status, UI9-UI16
     uint8_t  do_fb_mask;         // DO1-DO4 relay feedback bitmask
     int16_t  mcu_temp_x10;       // MCU temp × 10 (°C)
     uint16_t fault_flags;        // FAULT_FLAGS per IOP spec
@@ -318,5 +319,5 @@ do_control_task (10ms):
 ---
 
 **Document ID:** FW-ARCH-MK-DDC-24-VI  
-**Revision:** 1.0 | 2026-05-28  
-**Approved by:** Firmware Lead — KINEXUS Technologies
+**Revision:** 2.0 | 2026-06-30
+**Review required:** Firmware Lead

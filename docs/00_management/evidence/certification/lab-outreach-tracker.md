@@ -138,7 +138,7 @@ Nhận báo giá chính thức từ 3 lab cho chứng nhận CR Mark / QCVN (QCV
 | **Kích thước** | Cần trích từ bản vẽ mechanical | |
 | **Khối lượng** | Cần cân mẫu thực tế | |
 | **Cổng kết nối** | Ethernet RJ-45, RS-485, WiFi (optional) | |
-| **Loại I/O** | 8 UI + 8 DI + 4 AO + 4 DO | DO relay SPDT 5A @ 250VAC |
+| **Loại I/O** | 16 UI + 4 AO + 4 DO; no base-SKU industrial DI | UI dry contact is auxiliary/non-isolated |
 | **Tiêu chuẩn tham chiếu** | IEC 61326-1 (EMC), IEC 60730-1 (auto controls) | |
 | **Số lượng mẫu thử** | ? (hỏi lab) | Thường 1-2 units |
 
@@ -220,10 +220,10 @@ QCVN 25:2025/BKHCN (ban hành theo Circular 01/2025/TT-BKHCN ngày 14/02/2025) q
 
 | Issue | Title | Assignee |
 |-------|-------|----------|
-| [IOT-5459](../../../../../../../../IOT/issues/IOT-5459) | VN CR Mark/QCVN — Lab quotes & application initiation | PMO |
-| [IOT-5555](../../../../../../../../IOT/issues/IOT-5555) | Chuẩn bị tài liệu thiết kế kỹ thuật cho hồ sơ CR/QCVN | TechLead |
-| [IOT-5556](../../../../../../../../IOT/issues/IOT-5556) | Chuẩn bị hồ sơ pháp lý doanh nghiệp cho CR/QCVN | PMO |
-| [IOT-5554](../../../../../../../../IOT/issues/IOT-5554) | Chuẩn bị tài liệu hướng dẫn sử dụng & cài đặt cho CR/QCVN | DocsRelease |
+| `IOT-5459` | VN CR Mark/QCVN — Lab quotes & application initiation | PMO |
+| `IOT-5555` | Chuẩn bị tài liệu thiết kế kỹ thuật cho hồ sơ CR/QCVN | TechLead |
+| `IOT-5556` | Chuẩn bị hồ sơ pháp lý doanh nghiệp cho CR/QCVN | PMO |
+| `IOT-5554` | Chuẩn bị tài liệu hướng dẫn sử dụng & cài đặt cho CR/QCVN | DocsRelease |
 
 ---
 ## Revision History

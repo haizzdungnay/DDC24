@@ -1,9 +1,9 @@
 # Product Definition — MK-DDC-24 (MEKONG DDC-24IO-LINUX)
 
 > **Document ID:** PRODUCT-DEF-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-08
+> **Phiên bản:** 2.0 | 2026-06-30
 > **Trạng thái:** Accepted — Nguồn-chuẩn DUY NHẤT về định vị & triết lý sản phẩm
-> 📘 **Đọc cùng:** [README](README.md) · [BMS_EDGE_STRATEGY](BMS_EDGE_STRATEGY_MK-DDC-24_VI.md) · Quyết định nền: [ADR-004](../adr/ADR-004-component-based-runtime.md), [ADR-005](../adr/ADR-005-three-process-architecture.md), [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md), [ADR-007](../adr/ADR-007-web-stack-go.md), [ADR-008](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md)
+> 📘 **Đọc cùng:** [README](README.md) · [BMS_EDGE_STRATEGY](BMS_EDGE_STRATEGY_MK-DDC-24_VI.md) · Quyết định nền: [ADR-004](../adr/ADR-004-component-based-runtime.md), [ADR-005](../adr/ADR-005-three-process-architecture.md), [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md), [ADR-007](../adr/ADR-007-web-stack-go.md), [ADR-008](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md), [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md)
 > **Phạm vi Rev A:** [REVA_SCOPE_ROADMAP](REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md)
 
 > ⚠️ **Đây là tài liệu canonical.** Khi bất kỳ doc nào (PRD/SRS/DS/design) mô tả sản phẩm khác với tài liệu này, theo tài liệu này. Tài liệu này thay thế cách framing cũ "IEC 61131-3 soft-PLC + Web IDE FBD/ST" (xem ADR-004/006).
@@ -60,17 +60,14 @@ firmware, không IDE phức tạp, chạy độc lập khi mất BMS, kết nố
 
 ```
 24 IO onboard
-├─ 8 DI   trạng thái quạt/bơm, alarm contact, flow switch
-├─ 8 DO   relay quạt/bơm, enable VFD, van ON/OFF
-├─ 4 AI   nhiệt độ, áp suất, độ ẩm, CO2
-└─ 4 AO   valve 0-10V, damper 0-10V, VFD speed
+├─ 16 UI  0-10V, 4-20mA, NTC và dry-contact phụ trợ không cách ly
+├─ 4 AO   0-10V / 4-20mA
+└─ 4 DO   relay dry-contact
 ```
 
-> ⚠️ Lưu ý nguồn-chuẩn HW: thiết kế phần cứng hiện tại (`HW_SPEC`, `hardware-design/`)
-> mô tả **8 UI (universal input) + 8 DI + 4 AO + 4 DO** với ADC ADS131M08 / DAC8554 do
-> MCU STM32G0B1 đọc. Bảng IO trên đây là mức marketing top-level; **số kênh & kiểu IO
-> theo nguồn-chuẩn `HW_SPEC` / `DS §4`** nếu có khác biệt. Reconcile chi tiết: xem
-> [REVA_SCOPE_ROADMAP](REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) §"HW reconcile".
+> **ADR-010 baseline:** Rev A base SKU không lắp 8 DI công nghiệp riêng. Dry-contact của UI
+> là chế độ phụ trợ, không cách ly; ứng dụng cần DI công nghiệp phải dùng module/SKU
+> isolated-DI tùy chọn và chỉ được expose khi `BOARD_CAP_MAP` báo capability tương ứng.
 
 Giao tiếp: Ethernet, RS485-1 Modbus RTU, RS485-2 Modbus RTU, Modbus TCP, BACnet/IP
 northbound, USB service. Nguồn: 24VAC/VDC, isolated DC/DC, hardware watchdog, RTC.
@@ -221,7 +218,14 @@ Validator + Commissioning: bắt buộc
 | Engine | `kinexus-plc` IEC 61131-3 (`SW_PLC_ENGINE_DESIGN`) | component graph (ADR-004, SW_RUNTIME_EXECUTION_MODEL) |
 | Web | `kinexus-webide` Python/Svelte FBD | `mkddc-web` Go, form/JSON (ADR-006/007) |
 | Naming | `kinexus-*` | `mkddc-*` (ADR-005) |
-| HMI/Agent/OTA/cloud | service riêng | deferred Rev B+ (REVA_SCOPE) |
+| HMI/Agent/OTA/cloud | service riêng | HMI local thuộc Rev A theo amendment 2026-06-27; Agent/OTA/cloud deferred Rev B+ |
+
+## Revision History
+
+| Version | Ngày | Thay đổi |
+|---|---|---|
+| 1.1 | 2026-06-08 | Canonical product direction and component-based runtime. |
+| 2.0 | 2026-06-30 | Breaking hardware-baseline alignment to ADR-010: 16 UI + 4 AO + 4 DO, no base-SKU industrial DI; reconciled HMI scope amendment. |
 
 ---
 

@@ -20,6 +20,9 @@ getent group mkddc >/dev/null || groupadd --system mkddc
 getent passwd mkddc >/dev/null || \
     useradd --system --gid mkddc --groups dialout --no-create-home \
             --shell /usr/sbin/nologin mkddc
+for group in video input; do
+    getent group "$group" >/dev/null && usermod -a -G "$group" mkddc
+done
 
 # /data/config: web ghi, service đọc (CONFIG_SCHEMA D-5)
 install -d -m 0775 -o mkddc -g mkddc /data/config
@@ -31,9 +34,20 @@ install -m 0755 "$BUILD/core/mkddc-core"   /usr/sbin/mkddc-core
 install -m 0644 packaging/systemd/mkddc-iobus.service /etc/systemd/system/
 install -m 0644 packaging/systemd/mkddc-core.service  /etc/systemd/system/
 
+HMI_INSTALLED=0
+if [ -x "$BUILD/hmi/mkddc-hmi" ]; then
+    install -m 0755 "$BUILD/hmi/mkddc-hmi" /usr/sbin/mkddc-hmi
+    install -m 0644 services/hmi/packaging/mkddc-hmi.service /etc/systemd/system/
+    install -d -m 0755 /etc/mkddc /usr/share/mkddc
+    [ -e /etc/mkddc/hmi.conf ] || install -m 0640 -o root -g mkddc services/hmi/packaging/hmi.conf /etc/mkddc/hmi.conf
+    [ -e /data/config/point_db.json ] || install -m 0640 -o mkddc -g mkddc services/hmi/packaging/point_db.example.json /data/config/point_db.json
+    HMI_INSTALLED=1
+fi
+
 systemctl daemon-reload
 if [ "$ENABLE" -eq 1 ]; then
     systemctl enable --now mkddc-iobus mkddc-core
+    [ "$HMI_INSTALLED" -eq 0 ] || systemctl enable --now mkddc-hmi
     systemctl --no-pager status mkddc-iobus mkddc-core || true
 else
     echo "OK: đã install, chưa enable (chạy: systemctl enable --now mkddc-iobus mkddc-core)"

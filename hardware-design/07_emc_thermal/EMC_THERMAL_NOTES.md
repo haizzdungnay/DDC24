@@ -1,6 +1,6 @@
 # EMC & Thermal Design Notes - MK-DDC-24
 
-> **Document:** HW-DES-07-EMC | Rev 1.3 | 2026-06-23
+> **Document:** HW-DES-07-EMC | Rev 1.4 | 2026-06-30
 > **Standards basis:** IEC 61326-1, IEC 61010-1
 > **UI Rev A:** 16 UI analog channels, protection/front-end before low-voltage mux/buffer
 
@@ -14,6 +14,7 @@
 | 1.1 | 2026-06-23 | DI to UI migration |
 | 1.2 | 2026-06-23 | Phase 1-2 refresh |
 | 1.3 | 2026-06-23 | UI architecture review: remove REF200/RTD Rev A assumptions, dry contact auxiliary only, protection matrix aligned to HW-DES-03-UI |
+| 1.4 | 2026-06-30 | Added port-by-port provisional immunity levels, evidence fields, and power/AO/relay thermal coverage |
 
 ---
 
@@ -27,6 +28,20 @@
 | IEC 61000-4-5 | Surge | Port-dependent target |
 | IEC 61010-1 | Electrical safety | Creepage/clearance basis |
 | CISPR 11 | Emissions | Class A basis |
+
+### 1.1 Provisional immunity target matrix
+
+These are Rev A **engineering pre-compliance targets**, not a certificate or a substitute for the compliance owner's final test plan. Final applicability, coupling network, cable length, source impedance, polarity, dwell, and performance criterion must be approved before formal testing.
+
+| Port | IEC 61000-4-2 ESD | IEC 61000-4-4 EFT | IEC 61000-4-5 surge | Provisional performance criterion |
+|---|---|---|---|---|
+| Enclosure/user-accessible metal | +/-8kV contact, +/-15kV air | N/A | N/A | No damage; no unsafe state; temporary UI disturbance only if recorded/recovered |
+| 24VAC/VDC power | +/-8kV contact at accessible terminal surfaces | +/-2kV via CDN | +/-1kV line-line, +/-2kV line-to-PE/chassis where applicable | No damage or data loss; controlled reset only if the approved criterion permits and outputs enter safe state |
+| UI/AO/DO field terminals | +/-8kV contact, +/-15kV air | +/-1kV capacitive clamp for long field cables | +/-1kV common-mode target; differential test set by circuit/load class | No damage; analog error/fault flagged; outputs never exceed safe command |
+| RS-485 A/B/COM/shield | +/-8kV contact, +/-15kV air | +/-1kV capacitive clamp | +/-1kV common-mode target | Communication may retry; no latch-up/damage; automatic recovery and E303 diagnostics |
+| Ethernet/USB | +/-8kV contact, +/-15kV air | Per applicable cable/port setup | Per shielded-port applicability | Link may recover automatically; no corruption or damage |
+
+Every test record must identify port, injection point, polarity, level, repetitions/duration, cable/termination, operating mode, performance criterion, observed reset/fault, and post-test functional result.
 
 ---
 
@@ -74,6 +89,11 @@ TMUX1208 or any equivalent low-voltage analog switch is protected by design beca
 | UI protection parts | 24V miswire and surge tests define transient/steady heating |
 | Op-amp buffers | Include quiescent current and temperature drift in budget |
 | Mode latch chain | Low current; place away from precision analog nodes where possible |
+| +5V main converter | Loss/Tj at 19.2–40.7V normal input, worst load and max ambient; load-step and thermal-soak evidence required |
+| +3.3V converter | Loss/Tj at 1.1A allocation plus transient response during ADC/mode-latch activity |
+| +15V AO converter | Switch/inductor/diode temperature at all AO channels full-scale and 500-ohm load |
+| DAC/AO drivers | Headroom and temperature during voltage/current sweeps, short and max load |
+| Relay driver/coils/suppression | All coils energized plus repeated inductive-load switching |
 
 ---
 
@@ -101,4 +121,4 @@ Rev A documentation must not claim:
 
 ---
 
-**Document ID:** HW-DES-07-EMC | Rev 1.3 | 2026-06-23
+**Document ID:** HW-DES-07-EMC | Rev 1.4 | 2026-06-30

@@ -7,7 +7,7 @@
 ---
 
 ## 1. Nhiệm vụ
-Phục vụ BMS qua BACnet: trả/ghi object, COV, alarm, time-sync. Dữ liệu publish từ `mkddc-core` qua `mkddc_plc_shm`; WriteProperty đi vào core mức `PRIO_BACNET`, không ghi IO trực tiếp. Chi tiết task/code path xem [Implementation 24](../../03_implementation/24_BACNET_IMPLEMENTATION_PLAN.md).
+Phục vụ BMS qua BACnet: trả/ghi object, COV, alarm, time-sync. Dữ liệu publish từ `mkddc-core` qua `mkddc_plc_shm`; WriteProperty đi vào core mức `PRIO_BACNET`, không ghi IO trực tiếp. Chi tiết task/code path xem [Implementation 24](../../03_implementation/25_BACNET_IMPLEMENTATION_PLAN.md).
 
 ## 2. Nền tảng: bacnet-stack 1.3.x
 - Dùng thư viện **bacnet-stack** (open source, ứng viên BTL) — **không tự viết stack** (SW_ARCH §7).
@@ -56,7 +56,7 @@ void Analog_Output_Relinquish(uint32_t inst, uint8_t prio) {
 ```
 
 > **BAC-CONFLICT-001 CLOSED 2026-06-17:** WriteProperty đi vào `core.sock` với `source=bacnet` (mức 3),
-> không ghi `plc_shm` trực tiếp. Core là writer duy nhất của plc_shm. Xem [07 §8](../../03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) và [24 §4b](../../03_implementation/24_BACNET_IMPLEMENTATION_PLAN.md).
+> không ghi `plc_shm` trực tiếp. Core là writer duy nhất của plc_shm. Xem [07 §8](../../03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) và [24 §4b](../../03_implementation/25_BACNET_IMPLEMENTATION_PLAN.md).
 
 ## 5. Dịch vụ BACnet (BIBBs — D-3)
 - Who-Is/I-Am (≤100ms — SW-BAC-005), Read/Write-Property(-Multiple), Subscribe-COV.

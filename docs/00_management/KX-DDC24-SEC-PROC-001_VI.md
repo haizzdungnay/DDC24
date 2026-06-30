@@ -6,7 +6,7 @@
 > **Trạng thái:** Approved
 > **Owner:** Tech Lead + DevOps
 > **Chuẩn tham chiếu:** IEC 62443-4-1 SM-6, IEC 62443-4-2 CR 1.14, ISO/IEC 30111, NIST SP 800-40
-> **Ref:** [SEC-SUP-001 §6](KX-DDC24-SEC-SUP-001_VI.md) | [SEC-GAP-001 SM-6](KX-DDC24-SEC-GAP-001_VI.md) | [SEC-PLAN-001](security_process_templates/KX-DDC24-SEC-PLAN-001_VI.md) | [PM-REPO-001](../05_implementation/KX-DDC24-PM-REPO-001_VI.md)
+> **Ref:** [SEC-SUP-001 §6](KX-DDC24-SEC-SUP-001_VI.md) | [SEC-GAP-001 SM-6](KX-DDC24-SEC-GAP-001_VI.md) | [SEC-PLAN-001](security_process_templates/KX-DDC24-SEC-PLAN-001_VI.md) | [PM-REPO-001](../05_devguides/KX-DDC24-PM-REPO-001_VI.md)
 > **Issue:** [IOT-5575](../../../../../../IOT/issues/IOT-5575)
 
 ---
@@ -187,7 +187,7 @@ All CVEs and vulnerabilities are tracked in the project's issue tracker with the
 | [SEC-SUP-001 §6](KX-DDC24-SEC-SUP-001_VI.md) | Baseline CVE monitoring proposal and component inventory |
 | [SEC-GAP-001 SM-6](KX-DDC24-SEC-GAP-001_VI.md) | Gap analysis: vulnerability management maturity requirements |
 | [SEC-PLAN-001](security_process_templates/KX-DDC24-SEC-PLAN-001_VI.md) | Vulnerability and patch management procedure template |
-| [PM-REPO-001](../05_implementation/KX-DDC24-PM-REPO-001_VI.md) | CI pipeline design including security.yml |
+| [PM-REPO-001](../05_devguides/KX-DDC24-PM-REPO-001_VI.md) | CI pipeline design including security.yml |
 | [SRS NFR-006](../01_specs/SRS_MK-DDC-24_VI.md) | Vulnerability response SLA (non-functional requirement) |
 | [PM-GOAL-001 OBJ-10](KX-DDC24-PM-GOAL-001_VI.md) | Security objective: no CVE >= 7.0 in production |
 

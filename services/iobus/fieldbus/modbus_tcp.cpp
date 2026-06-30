@@ -100,7 +100,14 @@ bool ModbusTcp::try_connect(TcpConn& conn)
         return false;
     }
 
-    modbus_set_response_timeout(ctx, 0, conn.cfg.timeout_ms * 1000u);
+    const uint32_t timeout_sec = conn.cfg.timeout_ms / 1000u;
+    const uint32_t timeout_us  = (conn.cfg.timeout_ms % 1000u) * 1000u;
+    if (modbus_set_response_timeout(ctx, timeout_sec, timeout_us) != 0) {
+        std::fprintf(stderr, "WARN  modbus_tcp.timeout_invalid slave=%s timeout_ms=%u\n",
+                     conn.cfg.name.c_str(), conn.cfg.timeout_ms);
+        modbus_free(ctx);
+        return false;
+    }
     modbus_set_byte_timeout(ctx, 0, 50000u);
 
     if (modbus_connect(ctx) != 0) {
@@ -114,6 +121,7 @@ bool ModbusTcp::try_connect(TcpConn& conn)
     modbus_set_slave(ctx, conn.cfg.unit);
     conn.ctx       = static_cast<void*>(ctx);
     conn.connected = true;
+    conn.offline_published = false;
     std::fprintf(stderr, "INFO  modbus_tcp.connected slave=%s host=%s:%u unit=%u\n",
                  conn.cfg.name.c_str(), conn.cfg.host.c_str(), conn.cfg.port, conn.cfg.unit);
     return true;
@@ -139,6 +147,7 @@ void ModbusTcp::mark_offline(TcpConn& conn, ExtCache& cache)
 {
     free_ctx(conn);
     cache.mark_slave_offline(conn.ext_base, conn.ext_count, conn.cfg.unit);
+    conn.offline_published = true;
     const uint64_t now = tcp_now_ms();
     conn.next_reconnect_ms = now + static_cast<uint64_t>(conn.cfg.reconnect_s) * 1000ull;
     std::fprintf(stderr, "WARN  modbus_tcp.slave_offline slave=%s host=%s — retry in %us\n",
@@ -186,12 +195,23 @@ void ModbusTcp::read_conn(TcpConn& conn, uint64_t now_ms, ExtCache& cache)
             if (pt.fc == 1 || pt.fc == 2) {
                 eng = bits[k] ? 1.0f : 0.0f;
             } else {
-                const uint16_t cnt2 = (k + 1 < pt.count) ? 2u : 1u;
+                const bool is32 = (pt.type == PointType::Int32 ||
+                                   pt.type == PointType::Uint32 ||
+                                   pt.type == PointType::Float32);
+                if (is32 && k + 1 >= pt.count) {
+                    /* Misconfigured profile: 32-bit type at odd register boundary — skip.
+                     * Still consume the ext_idx slot so downstream points stay aligned. */
+                    std::fprintf(stderr, "WARN  modbus_tcp.odd_32bit slave=%s pt=%s k=%u count=%u"
+                                 " — profile misconfigured, point skipped\n",
+                                 conn.cfg.name.c_str(), pt.name.c_str(), k, pt.count);
+                    ext_idx++;
+                    break;
+                }
+                const uint16_t cnt2 = is32 ? 2u : 1u;
                 eng = decode_register(regs + k, cnt2,
                                       pt.type, pt.byte_order,
                                       pt.scale, pt.offset);
-                if (pt.type == PointType::Int32 || pt.type == PointType::Uint32 ||
-                    pt.type == PointType::Float32) k++;
+                if (is32) k++;
             }
 
             cache.set_point(ext_idx++, pt_name, eng, KX_Q_GOOD,
@@ -224,7 +244,11 @@ void ModbusTcp::poll_once(uint64_t now_ms, ExtCache& cache,
                 }
             }
             if (!conn.connected) {
-                cache.mark_slave_offline(conn.ext_base, conn.ext_count, conn.cfg.unit);
+                if (!conn.offline_published) {
+                    cache.mark_slave_offline(conn.ext_base, conn.ext_count, conn.cfg.unit);
+                    conn.offline_published = true;
+                    pushed = true;  /* publish the offline transition once */
+                }
                 continue;
             }
         }

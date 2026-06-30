@@ -76,9 +76,9 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 |-------|-----|-----------|:--------:|
 | **P0** | Setup & Hạ tầng | repo+CI, board bring-up | ✅ (rút gọn) |
 | **P1** | Skeleton/Khung | MCU↔SOM handshake IOP | ✅ |
-| **P2** | I/O Path | đọc 8 UI + ghi AO/DO | ✅ |
+| **P2** | I/O Path | đọc 16 UI + ghi AO/DO; no base-SKU DI | ✅ |
 | **P3** | Protocols | BACnet/IP + RTU master *(MQTT → Rev B)* | ✅ một phần |
-| **P4** | ~~Control + UI (PLC + Web IDE FBD + HMI)~~ | thay bằng **component graph + web form/JSON**; HMI → Rev B | ⚠️ thay |
+| **P4** | Control + UI | component graph + web form/JSON; local HMI included by 2026-06-27 Rev A amendment | ✅ updated |
 | **P5** | ~~Security + OTA~~ | TLS/JWT/audit ✅; **OTA → Rev B** | ⚠️ một phần |
 | **P6** | ~~Integration + **BTL cert**~~ | FAT/SAT demo ✅; **BTL → không thuộc Rev A.0** | ⚠️ một phần |
 | **P7** | Release (GA) | → Rev A.1+ | ❌ |
@@ -179,8 +179,8 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 ### T-FW-04 — Đọc ADS131M08 + DI (FW)
 **INPUT:** [ ] [FW_MOD_IO_SAMPLE](../02_design/firmware/FW_MOD_IO_SAMPLE_MK-DDC-24_VI.md) · [ ] D-1.
 **Microtasks:**
-- [ ] Init ADS131M08 (SPI3, config register qua MOSI), đọc 8 kênh DMA 1ms.
-- [ ] Moving-average 8 + spike reject; debounce DI 20ms + đếm cạnh.
+- [ ] Init 2× ADS131M08 (SPI3, CS/DRDY độc lập), đọc 16 kênh DMA 1ms.
+- [ ] Sign-extend 16×s24; moving-average/status per ADC; auxiliary dry-contact debounce theo mode.
 - [ ] Ghi `io_data_buf` (mutex).
 **OUTPUT/DoD:** [ ] chu kỳ ≤1ms (scope CS) · [ ] giá trị raw hợp lý khi đổi input · [ ] ADC_FAULT khi rút cáp.
 **Trace:** FW-IO-001..024.
@@ -188,9 +188,9 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 ### T-FW-05 — GET_IO → IO_RESP (FW)
 **INPUT:** [ ] T-FW-03, T-FW-04.
 **Microtasks:**
-- [ ] Build IO_RESP 34 byte từ snapshot.
-- [ ] Đáp GET_IO ≤5ms; IOP watchdog 200ms → safe-state.
-**OUTPUT/DoD:** [ ] BE đọc được 8 UI raw + DI · [ ] latency ≤5ms đo được.
+- [ ] Build IO_RESP v2 payload 74 byte từ snapshot.
+- [ ] Đáp GET_IO trong response timeout 3ms; IOP watchdog 200ms → safe-state.
+**OUTPUT/DoD:** [ ] BE đọc được 16 UI signed + ADC status, no base DI_MASK · [ ] latency distribution đo được.
 **Trace:** IOP-FW, FW-WDG-005.
 
 ### T-FW-06 — SET_AO / SET_DO + safe-state (FW)
@@ -205,8 +205,8 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 ### T-BE-03 — GET_IO loop + scaling (BE) ⭐
 **INPUT:** [ ] T-BE-01, T-FW-05 · [ ] [SW_ARCH §4 scaling].
 **Microtasks:**
-- [ ] Poll GET_IO 100Hz, parse, retry×3 → fault FSM.
-- [ ] Scale raw→eng: 0-10V, 4-20mA, PT100/1000 (CVD), NTC (Steinhart β=3950), dry.
+- [ ] Poll GET_IO 2ms/500Hz, parse, retry×3 → fault FSM theo shared constants.
+- [ ] Scale raw→eng: 0-10V, 4-20mA, NTC, auxiliary dry contact; không expose PT100/PT1000 Rev A.
 - [ ] Ghi `kinexus_io_shm`; metrics crc/timeout.
 **OUTPUT/DoD:** [ ] shm có giá trị °C/V đúng (so chuẩn) · [ ] mất MCU → IOP_FAULT→SAFE_STATE.
 **Trace:** SW-IOP-004..011.
@@ -219,15 +219,15 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] ghi AO qua shm → đầu ra đổi đúng · [ ] mode V/mA chuyển đúng.
 **Trace:** SW-IOP, FW-AO-007.
 
-### T-UX-01 — Auto-detect sensor UX flow (UX, song song)
-**INPUT:** [ ] FW-IO-010 bảng nhận dạng.
+### T-UX-01 — Per-channel sensor-mode UX flow (UX, song song)
+**INPUT:** [ ] FW-IO-010 mode contract.
 **Microtasks:**
-- [ ] Flow màn "phát hiện sensor → gợi ý → user xác nhận".
+- [ ] Flow cấu hình/confirm mode riêng cho UI1-UI16.
 - [ ] Wireframe trạng thái good/uncertain/fault.
 **OUTPUT/DoD:** [ ] wireframe duyệt bởi PO (đưa vào UX_WEBIDE).
 **Trace:** FW-IO-010..012.
 
-**🚪 P2 Gate:** **đọc 8 UI (đúng đơn vị) + ghi AO/DO end-to-end qua shm**; safe-state hoạt động.
+**🚪 P2 Gate:** **đọc 16 UI (đúng đơn vị) + ghi AO/DO end-to-end qua shm**; capability map và safe-state hoạt động.
 
 ---
 

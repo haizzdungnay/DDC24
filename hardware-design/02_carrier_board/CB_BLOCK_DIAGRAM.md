@@ -1,6 +1,6 @@
 # Carrier Board - Block Diagram & Design Specification
 
-> **Document:** HW-DES-02-CB | Rev 1.3 | 2026-06-23
+> **Document:** HW-DES-02-CB | Rev 1.4 | 2026-06-30
 > **Ap dung cho:** MK-DDC-24 Carrier Board v1.x
 > **PCB layers:** 4-layer minimum
 > **UI Rev A:** 16 UI analog, per-channel mode latch, TMUX only on low-voltage conditioned nodes
@@ -15,6 +15,7 @@
 | 1.1 | 2026-06-23 | DI to UI migration: 16 UI, 2x ADS131M08 |
 | 1.2 | 2026-06-23 | Phase 1 cross-check updates |
 | 1.3 | 2026-06-23 | UI architecture review: terminal protection/front-end before mux, per-channel mode latch, dry contact auxiliary only |
+| 1.4 | 2026-06-30 | Added AO/DO test points, connector map, and full external-interface boundary |
 
 ---
 
@@ -63,6 +64,11 @@
         ^
         |
   UI1-UI16 field terminals
+
+  AO1-AO4 <----- AO output block
+  DO1-DO4 <----- isolated relay dry contacts
+  RS485 A/B/COM <----- protected RS-485 block <----- CM3 UART4
+  Ethernet / USB / HMI <---------------------------- Radxa CM3
 
 Optional separate industrial DI, if required by SKU:
   DI terminal -> TVS/current limit -> opto/digital isolator -> MCU/IO expander
@@ -117,7 +123,7 @@ High-current and transient return paths must not share narrow routes with ADC re
 
 | Zone | Area | Content |
 |------|------|---------|
-| Power | Top-left | 24V input, bridge, DC/DC, LDOs, input TVS |
+| Power | Top-left | 24V input, bridge, DC/DC converters, coordinated input protection |
 | CM3 | Top-center | B2B connectors, keepout under module |
 | MCU/ADC/DAC | Left/middle | STM32, 2x ADS131M08, DAC8554, references, crystals |
 | UI field/front-end | Bottom-middle | UI terminals, protection, dividers, shunts, pull-ups, filters |
@@ -176,6 +182,24 @@ High-current and transient return paths must not share narrow routes with ADC re
 | TP10-TP25 | UI1-UI16 field side | Pre-conditioning terminal-side checks |
 | TP26-TP41 | UI1-UI16 ADC node, representative or all if space permits | Low-voltage conditioned node checks |
 | TP42-TP45 | UI_MODE_DATA/CLK/LATCH/OE | Mode latch debug |
+| TP46-TP49 | AO1_OUT-AO4_OUT | Analog-output voltage/current verification at the protected output node |
+| TP50-TP53 | DO1_DRV-DO4_DRV | Logic-side relay-drive verification; do not create unsafe stubs on contact-side mains nets |
+
+### 6.1 Connector map
+
+Final RefDes are assigned by the annotated KiCad schematic; these logical names and pin functions are controlled now.
+
+| Logical connector | Pins/functions | Domain |
+|---|---|---|
+| `J_PWR` | 24VAC/VDC input pair plus PE/shield where fitted | Power/chassis entry |
+| `J_UI_A` | UI1-UI8 signal/return pairs | Non-isolated field input |
+| `J_UI_B` | UI9-UI16 signal/return pairs | Non-isolated field input |
+| `J_AO` | AO1-4 output/return | Analog output field |
+| `J_DO` | DO1-4 COM/NO/NC | Floating relay contacts |
+| `J_RS485` | A, B, COM, optional SHIELD | Southbound Modbus RTU master |
+| `J_SWD` | SWDIO, SWCLK, NRST, 3V3, GND | Factory/debug only |
+| `J_DBG_UART` | TX, RX, GND | Factory/debug only |
+| `J_ETH`, `J_USB_C`, `J_USB_A` | Network/commissioning/host | CM3 external interfaces |
 
 ---
 
@@ -194,4 +218,4 @@ Before schematic/layout release:
 
 ---
 
-**Document ID:** HW-DES-02-CB | Rev 1.3 | 2026-06-23
+**Document ID:** HW-DES-02-CB | Rev 1.4 | 2026-06-30

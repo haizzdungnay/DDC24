@@ -1,6 +1,6 @@
 # Schematic Review Checklist - MK-DDC-24 Carrier Board
 
-> **Document:** HW-REVIEW-01 | Rev 1.2 | 2026-06-23  
+> **Document:** HW-REVIEW-01 | Rev 1.3 | 2026-06-30
 > **Scope:** Review before PCB fabrication, with mandatory 16 UI Rev A architecture checks
 
 ---
@@ -47,6 +47,10 @@ Any unchecked item above blocks layout release unless formally waived by HW Lead
 | SPI3 | PC10/PC11/PC12 to both ADS devices, CS/DRDY independent | [ ] | |
 | UART2 | CM3<->MCU IOP route supports 921600 8N1 | [ ] | |
 | Relay clearance | Contact creepage/clearance meets selected safety basis | [ ] | |
+| +5V capacity | Final budget <=85% of selected converter continuous rating | [ ] | |
+| +3.3V thermal | Switching regulator calculation and prototype Tj evidence meet closure plan | [ ] | |
+| Input surge coordination | TVS/MOV clamp, regulator abs max, bridge/fuse stress and test level agree | [ ] | |
+| Grounding | Ground domains/net-tie/shield/return-current overlay approved | [ ] | |
 
 ---
 
@@ -113,6 +117,22 @@ Any unchecked item above blocks layout release unless formally waived by HW Lead
 | `HW-TEST-UI-16CH.md` | Test cases for modes and faults | [ ] |
 | `HW-RISK-UI-16CH.md` | Open risks reviewed | [ ] |
 | `BOM-UI-16CH.md` | UI BOM, alternates, tolerances | [ ] |
+| `GROUNDING_SCHEME.md` | Ground domains, return paths, shield and isolation rules | [ ] |
+| `IO_RS485_CIRCUIT.md` | RS-485 schematic/BOM/layout/test requirements | [ ] |
+| `HW_DOC_REVIEW_CLOSURE_PLAN.md` | P0 evidence links and issue dispositions current | [ ] |
+
+### 5.1 RS-485 review
+
+| Item | Pass criteria | Status | Reviewer |
+|---|---|---|---|
+| Role | Port is Modbus RTU master only; no MS/TP/slave label remains | [ ] | |
+| Transceiver | Voltage, common-mode, unit-load, baud and direction-control behavior verified | [ ] | |
+| Isolation | Digital isolator plus isolated power fitted together; barrier spacing/keepout passes | [ ] | |
+| Bias | One controlled fail-safe bias network per segment; idle differential measured | [ ] | |
+| Termination | 120R endpoint termination is selectable and default population documented | [ ] | |
+| Protection | TVS/filter clamp and pulse rating coordinate with transceiver and EMC target | [ ] | |
+| Ground/shield | COM and SHIELD follow `GROUNDING_SCHEME.md`; no accidental DGND/chassis bridge | [ ] | |
+| Routing/test | Coupled A/B pair, short stubs, connector-side TVS, and test points reviewed | [ ] | |
 
 ---
 
@@ -125,7 +145,15 @@ Any unchecked item above blocks layout release unless formally waived by HW Lead
 - [ ] FW Lead approves IOP frame and sampling sequence.
 - [ ] PM approves Rev A public feature claims.
 - [ ] Layout engineer confirms placement constraints are understood.
+- [ ] All P0 evidence rows in `HW_DOC_REVIEW_CLOSURE_PLAN.md` are closed or formally waived.
 
 ---
 
-**Document ID:** HW-REVIEW-01 | Rev 1.2 | 2026-06-23
+## Revision History
+
+| Rev | Date | Change |
+|---|---|---|
+| 1.2 | 2026-06-23 | UI Rev A schematic review checklist. |
+| 1.3 | 2026-06-30 | Added power, grounding, RS-485, and closure-plan gates. |
+
+**Document ID:** HW-REVIEW-01 | Rev 1.3 | 2026-06-30

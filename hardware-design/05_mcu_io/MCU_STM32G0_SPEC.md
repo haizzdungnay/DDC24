@@ -1,6 +1,6 @@
 # MCU Specification - STM32G0B1RBT6
 
-> **Document:** HW-DES-05-MCU | Rev 1.3 | 2026-06-23
+> **Document:** HW-DES-05-MCU | Rev 1.4 | 2026-06-30
 > **Vai tro:** Real-time I/O controller, FreeRTOS, ADC acquisition, AO/DO control, binary IOP link to CM3
 > **UI Rev A impact:** 16 UI with 2x ADS131M08 and per-channel mode latch
 
@@ -14,6 +14,7 @@
 | 1.1 | 2026-06-23 | DI to UI migration, PB4-PB11 repurposed, added ADS131M08 #2 pins |
 | 1.2 | 2026-06-23 | Phase 1 cross-check updates |
 | 1.3 | 2026-06-23 | UI architecture review: remove shared SEL, add per-channel mode latch, update ADC signed int32 protocol and sampling responsibilities |
+| 1.4 | 2026-06-30 | Align IOP to 2 ms SOM poll; define HSE and reserved-pin release rules; clarify SWD pins |
 
 ---
 
@@ -23,7 +24,7 @@ STM32G0B1RBT6 remains the Rev A MCU.
 
 Key reasons:
 
-- ARM Cortex-M0+ at 64MHz is sufficient for 1ms ADC acquisition and 10ms IOP publishing.
+- ARM Cortex-M0+ at 64MHz is sufficient for 1ms ADC acquisition and a 2ms SOM-polled IOP response.
 - 128KB Flash and 144KB SRAM leave room for double buffers, diagnostics, and OTA boot support.
 - SPI1 drives DAC8554, SPI3 drives 2x ADS131M08, and spare serial/GPIO resources support UI mode latch.
 - LQFP64 is manufacturable and has enough pins after DI opto removal.
@@ -74,6 +75,8 @@ This table is the hardware-design source for MCU pin use. Schematic, firmware pi
 | ADC2_CS | PA15 | ADS131M08 #2 !CS | Pull-up 10k |
 | ADC2_DRDY | PA6 | ADS131M08 #2 !DRDY | EXTI input |
 
+Debug uses two-wire SWD on PA13 (`SWDIO`) and PA14 (`SWCLK`). PA15 is not part of the Rev A debug connection and is assigned exclusively to `ADC2_CS`. CubeMX pin/alternate-function validation remains a schematic-release check.
+
 ### 3.3 UI Per-Channel Mode Latch
 
 Shared direct `SEL[2:0]` is deprecated. PB12/PB13/PB14 no longer route as common address lines to all UI muxes.
@@ -100,12 +103,12 @@ Recommended latch parts: 6x 74HC595/74HCS595 or equivalent 3.3V-compatible shift
 
 The previous Phase 1 mapping used direct STM32 pins for `UI_EN[0..15]`. Rev A per-channel mode latch removes the need to spend 16 MCU GPIOs on mux enables.
 
-| Pin group | Rev 1.2 use | Rev 1.3 status |
+| Pin group | Retired use | Rev A status |
 |-----------|-------------|----------------|
-| PC4-PC9, PC13, PC15 | UI_EN[0..7] | Reserved/spare unless final schematic needs per-channel enable diagnostics |
-| PB4-PB11 | UI_EN[8..15] | Reserved/spare; no longer DI, no longer required for shared-mux enable |
+| PC4-PC9, PC13, PC15 | UI_EN[0..7] | **NC/reserved by default**; no schematic connection without an approved pinout change |
+| PB4-PB11 | UI_EN[8..15] | **NC/reserved by default**; no longer DI and not required by the mode-latch design |
 
-If the schematic still needs per-channel enable or analog-power gating, implement it through the latch chain or an IO expander, not by reintroducing shared SEL behavior.
+If the schematic still needs per-channel enable or analog-power gating, implement it through the latch chain or an IO expander, not by reintroducing shared SEL behavior. Reuse of any NC/reserved pin requires one controlled change that updates this file, the firmware pinout master, schematic, CubeMX `.ioc`, test plan, and revision history together.
 
 ### 3.5 Digital Output
 
@@ -127,6 +130,17 @@ If the schematic still needs per-channel enable or analog-power gating, implemen
 | ADC_IN0 | PA0 | Board voltage monitor | IN |
 | ADC_IN1 | PA1 | Board temperature or VREF_UI monitor | IN |
 
+### 3.7 Clock and debug requirements
+
+| Item | Rev A requirement |
+|---|---|
+| HSE frequency | 8.000 MHz fundamental-mode crystal on PF0/PF1 |
+| Frequency tolerance | <= +/-20 ppm at 25 C; aging and temperature drift included in the selected-part review |
+| Load capacitance | Select crystal CL and calculate each load capacitor using `CL ~= (C1*C2)/(C1+C2) + Cstray`; do not copy a nominal capacitor value without the calculation |
+| Placement | Crystal and load capacitors adjacent to PF0/PF1, short symmetric traces, no fast/high-current route beneath |
+| Bring-up | Measure 8.000 MHz and verify PLL/system clock; record probe method to avoid oscillator loading |
+| Debug | PA13 SWDIO, PA14 SWCLK, NRST, 3V3 reference, GND on the factory header |
+
 ---
 
 ## 4. ADC Acquisition Responsibilities
@@ -139,7 +153,7 @@ MCU responsibilities:
 - Sign-extend ADS raw samples to int32.
 - Maintain `adc_status_1`, `adc_status_2`, `channel_status_bitmap`, sequence, and timestamp.
 - Never send float values over UART.
-- Publish binary frames to CM3 at 10ms nominal cadence.
+- Respond to each valid SOM `CMD_GET_IO` poll with the latest complete snapshot; nominal poll period is 2ms.
 
 See `FW-ADC-SAMPLING.md` for the detailed sampling sequence and timing terms.
 
@@ -150,7 +164,7 @@ See `FW-ADC-SAMPLING.md` for the detailed sampling sequence and timing terms.
 | Task | Priority | Period | Function |
 |------|:--------:|:------:|----------|
 | `io_sample_task` | 7 | 1ms | Acquire ADS #1/#2, update raw buffers and channel status |
-| `iop_comm_task` | 6 | 10ms | Build/parse binary IOP frames, CRC, sequence, timeout handling |
+| `iop_comm_task` | 6 | Event-driven; 2ms nominal request cadence | Parse request and build response, CRC, sequence, timeout handling |
 | `ao_output_task` | 6 | 10ms | Apply AO commands through DAC8554 |
 | `do_control_task` | 6 | 10ms | Relay drive and feedback checks |
 | `diagnostics_task` | 2 | 1000ms | MCU temperature, VDD/VREF, counters, fault aggregation |
@@ -234,10 +248,10 @@ All outputs must enter safe state before firmware flashing, and firmware image C
 |----------|----------------------|
 | `hardware-design/03_io_subsystem/IO_UI_CIRCUIT.md` | Pin mapping for UI mode latch (PB12-15), ADC #1/#2 pins (PC10-15, PA8, PA6, PA15), SPI3 configuration |
 | `hardware-design/05_mcu_io/IOP_PROTOCOL.md` | Binary frame format (SOF, version, sequence, timestamp_us, adc_status×2, 16×int32, channel_status_bitmap, crc16), signed int32 encoding, CM3 publish rate |
-| `hardware-design/05_mcu_io/FW-ADC-SAMPLING.md` | ADC sample rate (1 kSPS), MCU scan rate (1 ms), CM3 publish rate (10 ms), per-channel mode latch stability, fault handling |
+| `hardware-design/05_mcu_io/FW-ADC-SAMPLING.md` | ADC sample rate (1 kSPS), MCU scan rate (1 ms), SOM poll/MCU response period (2 ms), per-channel mode latch stability, fault handling |
 | `hardware-design/02_carrier_board/CB_BLOCK_DIAGRAM.md` | Terminal -> protection -> front-end -> mux/buffer -> ADC signal chain, STM32 position in architecture |
 | `hardware-design/02_carrier_board/CB_SCHEMATIC_NOTES.md` | UI sheet rules, SPI3 routing, DRDY/EXTI configuration |
 | `hardware-design/06_bom/BOM_MK-DDC-24_v1.md` | STM32G0B1RBT6 part number and configuration |
 | `hardware-design/09_hw_bringup/HW-TEST-UI-16CH.md` | Pin mapping validation, SPI3 timing, ADC timeout behavior |
 
-**Document ID:** HW-DES-05-MCU | Rev 1.3 | 2026-06-23
+**Document ID:** HW-DES-05-MCU | Rev 1.4 | 2026-06-30

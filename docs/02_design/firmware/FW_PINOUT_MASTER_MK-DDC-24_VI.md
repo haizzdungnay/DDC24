@@ -2,8 +2,8 @@
 ## MK-DDC-24 — D-1
 
 > **Document ID:** DDD-PINOUT-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-05-30
-> **Trạng thái:** Approved (Owner 2026-06-08)
+> **Phiên bản:** 2.0 | 2026-06-30
+> **Trạng thái:** Approved for Rev A (ADR-010; owner re-sign required at schematic release)
 > 📘 [README](../../01_specs/README.md) · Đồng bộ: `hardware-design/05_mcu_io/MCU_STM32G0_SPEC.md §3`
 
 > ⭐ **NGUỒN-CHUẨN DUY NHẤT cho chân MCU.** Schematic (`CB_SCHEMATIC_NOTES`), block diagram, CubeMX `.ioc`, và firmware HAL init **PHẢI** khớp bảng này. Mọi thay đổi qua DR gate + bump version.
@@ -32,17 +32,21 @@
 | ADS131M08 | SPI3_SCK | PC10 | AF | — | 4 MHz, Mode 1 |
 | ADS131M08 | SPI3_MISO | PC11 | AF | DMA ch (RX) | DOUT |
 | ADS131M08 | SPI3_MOSI | PC12 | AF | — | DIN/SDI (ghi config — **bắt buộc**) |
-| ADS131M08 | SPI3_CS | PB2 | GPIO | — | pull-up 10k |
-| ADS131M08 | ADC_DRDY | PA8 | EXTI | — | interrupt data-ready |
+| ADS131M08 #1 | SPI3_CS1 | PB2 | GPIO | — | pull-up 10k |
+| ADS131M08 #1 | ADC1_DRDY | PA8 | EXTI | — | interrupt data-ready |
+| ADS131M08 #2 | SPI3_CS2 | PA15 | GPIO | — | pull-up 10k; not part of two-wire SWD |
+| ADS131M08 #2 | ADC2_DRDY | PA6 | EXTI | — | interrupt data-ready |
 
-### 2.2 Digital Input (opto PC817 ×8)
-| Kênh | Pin | Mode | Kênh | Pin | Mode |
-|------|-----|------|------|-----|------|
-| DI1 | PB4 | IN, EXTI/poll | DI5 | PB8 | IN |
-| DI2 | PB5 | IN | DI6 | PB9 | IN |
-| DI3 | PB6 | IN | DI7 | PB10 | IN |
-| DI4 | PB7 | IN | DI8 | PB11 | IN |
-> Logic active-LOW sau opto (xem IO_DI). Pull-up ngoài 10k.
+### 2.2 Universal Input per-channel mode latch
+
+Base Rev A has 16 analog UI channels and no dedicated 8-DI bank. The retired PB4-PB11 DI mapping is forbidden unless a separately approved isolated-DI SKU is designed.
+
+| Signal | Pin | Mode | Function |
+|---|---|---|---|
+| UI_MODE_DATA | PB12 | GPIO OUT | Serial data for 48-bit mode-latch chain |
+| UI_MODE_CLK | PB13 | GPIO OUT | Shift clock |
+| UI_MODE_LATCH | PB14 | GPIO OUT | Output register/latch clock |
+| UI_MODE_OE | PB15 | GPIO OUT | Safe output enable; active level follows selected latch |
 
 ### 2.3 Digital Output (ULN2003 → relay ×4)
 | Kênh | Pin | Kênh | Pin |
@@ -50,15 +54,9 @@
 | DO1_DRV | PC0 | DO3_DRV | PC2 |
 | DO2_DRV | PC1 | DO4_DRV | PC3 |
 
-### 2.4 UI Analog Front-End (mux TMUX1208 ×8)
-| Chức năng | Pin | Ghi chú |
-|-----------|-----|---------|
-| UI_SEL_S0 | PB12 | chung 8 mux |
-| UI_SEL_S1 | PB13 | |
-| UI_SEL_S2 | PB14 | |
-| UI_EN0..5 | PC4, PC5, PC6, PC7, PC8, PC9 | enable mux kênh 1–6 |
-| UI_EN6 | PC13 | enable mux kênh 7 |
-| UI_EN7 | PC15 | enable mux kênh 8 |
+### 2.4 Retired direct UI enable/select pins
+
+The shared `UI_SEL_S0..S2` and direct `UI_EN0..15` architecture is retired. `PC4-PC9`, `PC13`, `PC15`, and `PB4-PB11` are NC/reserved by default. Any reuse requires one controlled pinout change across this file, `MCU_STM32G0_SPEC.md`, schematic, CubeMX `.ioc`, firmware, and tests.
 
 ### 2.5 AO mode-select (relay/analog-switch ×4, phần mềm — SET_AO_CFG)
 | Kênh | Pin | 0 = 0–10V, 1 = 4–20mA |
@@ -78,10 +76,10 @@
 | nRESET ← CM3 | NRST | CM3 GPIO0_A4 reset MCU |
 | BOOT0 | BOOT0 | pull-down 10k; CM3 kéo HIGH để vào bootloader (OTA) |
 | SWDIO / SWCLK | PA13 / PA14 | debug header 5-pin |
-| HSE crystal | PF0 / PF1 | OSC_IN/OUT 8 MHz, load 12 pF |
+| HSE crystal | PF0 / PF1 | OSC_IN/OUT 8 MHz, <= +/-20 ppm; load capacitors calculated from selected crystal CL + stray capacitance |
 
 ### 2.7 Chân dự phòng (spare)
-PA6, PA15, PB1, PB3, PB15, PD0, PC14, PF (còn lại). Dùng cho mở rộng Ver 2.
+PB1, PB3, PD0, PC14 và các chân PF còn lại là spare. `PC4-PC9`, `PC13`, `PC15`, `PB4-PB11` là **NC/reserved** from retired UI/DI mappings; they are not general spare pins until an approved change releases them.
 
 ---
 
@@ -89,11 +87,11 @@ PA6, PA15, PB1, PB3, PB15, PD0, PC14, PF (còn lại). Dùng cho mở rộng Ver
 
 | Port | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
 |------|---|---|---|---|---|---|---|---|---|---|----|----|----|----|----|----|
-| **PA** | ADCin0 | ADCin1 | dbgTX | dbgRX | DAC_CS | DAC_SCK | spare | DAC_MOSI | DRDY | IOP_TX | IOP_RX | — | — | SWDIO | SWCLK | spare |
-| **PB** | LDAC | spare | ADC_CS | spare | DI1 | DI2 | DI3 | DI4 | DI5 | DI6 | DI7 | DI8 | SEL0 | SEL1 | SEL2 | spare |
-| **PC** | DO1 | DO2 | DO3 | DO4 | EN0 | EN1 | EN2 | EN3 | EN4 | EN5 | SPI3_SCK | SPI3_MISO | SPI3_MOSI | EN6 | spare | EN7 |
+| **PA** | ADCin0 | ADCin1 | dbgTX | dbgRX | DAC_CS | DAC_SCK | ADC2_DRDY | DAC_MOSI | ADC1_DRDY | IOP_TX | IOP_RX | — | — | SWDIO | SWCLK | ADC2_CS |
+| **PB** | LDAC | spare | ADC1_CS | spare | NC | NC | NC | NC | NC | NC | NC | NC | MODE_DATA | MODE_CLK | MODE_LATCH | MODE_OE |
+| **PC** | DO1 | DO2 | DO3 | DO4 | NC | NC | NC | NC | NC | NC | SPI3_SCK | SPI3_MISO | SPI3_MOSI | NC | spare | NC |
 | **PD** | spare | AO1mode | AO2mode | AO3mode | AO4mode | FAULT | LED | — | — | — | — | — | — | — | — | — |
-| **PF** | OSC_IN | OSC_OUT | — | … |
+| **PF** | OSC_IN | OSC_OUT | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
 
 > ✅ Không có chân nào trùng chức năng. Cần verify lại bằng STM32CubeMX `.ioc` khi bring-up (một số AF mapping cần chọn đúng kênh DMAMUX).
 
@@ -117,11 +115,18 @@ PA6, PA15, PB1, PB3, PB15, PD0, PC14, PF (còn lại). Dùng cho mở rộng Ver
 | IOP UART | IOP-FW-002, FW-IOP-002 |
 | SPI3 ADC | FW-IO-001, FW-IO-007 |
 | SPI1 DAC | FW-AO-002 |
-| DI | FW-IO-020 |
+| UI mode latch | FW-IO-001, ADR-010 |
 | DO | FW-DO-001 |
 | AO mode | FW-AO-007 (SET_AO_CFG) |
 | BOOT0/nRESET | FW-OTA-001 (CM3 nạp MCU) |
 | FAULT_OUT | FW-WDG-006 |
 
 ---
-**Rev** 1.0 | 2026-05-30 · Ký: FW Lead ___ · HW Lead ___
+## Revision History
+
+| Rev | Date | Change |
+|---|---|---|
+| 1.0 | 2026-05-30 | Initial 8 UI + 8 DI pinout. |
+| 2.0 | 2026-06-30 | Rev A: 16 UI, second ADS131M08 CS/DRDY, per-channel mode latch, retired DI/direct UI-enable pins. |
+
+**Rev** 2.0 | 2026-06-30 · Ký lại khi schematic release: FW Lead ___ · HW Lead ___

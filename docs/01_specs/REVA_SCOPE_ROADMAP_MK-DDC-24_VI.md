@@ -1,10 +1,10 @@
 # Rev A Scope & 90-Day Roadmap — MK-DDC-24
 
 > **Document ID:** REVA-SCOPE-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-08
+> **Phiên bản:** 1.3 | 2026-06-30
 > **Trạng thái:** Accepted — Nguồn-chuẩn DUY NHẤT về phạm vi Rev A & lịch 90 ngày
 > 📘 **Đọc cùng:** [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md) ·
-> [BMS_EDGE_STRATEGY](BMS_EDGE_STRATEGY_MK-DDC-24_VI.md) · ADR-004..008
+> [BMS_EDGE_STRATEGY](BMS_EDGE_STRATEGY_MK-DDC-24_VI.md) · ADR-004..010
 
 > ⚠️ Deadline **90 ngày là cố định**; **scope là biến số**. Tài liệu định nghĩa
 > **Rev A.0 = "demo-grade"** (đủ chứng minh 3-domain acceptance §6, chưa production-grade).
@@ -27,6 +27,7 @@
 
 ```
 ✓ Linux boot ổn định + 24 IO đọc/ghi (scan 1 s; KHÔNG fast-IO 100ms)
+✓ HW base SKU: 16 UI + 4 AO + 4 DO; không có DI công nghiệp riêng (ADR-010)
 ✓ Graph engine + execution plan (topo-sort lúc deploy) — SW_RUNTIME_EXECUTION_MODEL
 ✓ Bộ component cố định Rev A = 28 type (KHÔNG composite) — SW_COMPONENT_LIBRARY
    (gồm Interlock, AlarmDelay, RuntimeCounter, PulseCounter cho BMS tổng quát — ADR-008)
@@ -38,7 +39,14 @@
 ✓ Config qua FORM + import/export graph.json (KHÔNG canvas)
 ✓ SQLite config + backup/restore (copy file)
 ✓ Commissioning test từng point + export report (CSV/PDF cơ bản)
+✓ HMI local tại chỗ (LVGL v9, DRM/KMS, 6 màn, 6 nút + CTP touch)  ← Amendment 2026-06-27
 ```
+
+> **Amendment 2026-06-27 — HMI kéo vào Rev A:**
+> Spec HMI hoàn chỉnh đã được duyệt (SW_HMI_DESIGN Rev 2.2, UC Rev 2.1, UX Rev 2.0).
+> HMI là yêu cầu thiết yếu cho demo tại chỗ (site acceptance) — không có màn hình local,
+> kỹ sư vận hành không thể kiểm tra DDC khi không có laptop. Kéo vào Rev A.
+> Implementation guide: [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](../03_implementation/08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md).
 
 ## 3. Scope Rev A.0 — CẮT (đẩy Rev B/C)
 
@@ -50,7 +58,7 @@
 ✗ StageControl / LeadLag / SequenceStep           → Rev B
 ✗ RBAC đầy đủ (Rev A.0 chỉ 1 password web)        → Rev B
 ✗ Audit log đầy đủ, component versioning          → Rev B
-✗ HMI local (LVGL), MQTT/agent, cloud             → Rev B+ (từ thiết kế cũ, không mất)
+✗ MQTT/agent, cloud                               → Rev B+
 ✗ OTA update                                       → Rev B
 ✗ BACnet/SC, scripted component, multi-DDC        → Rev C
 ✗ IEC 61131-3 FBD/ST                               → Rev C (ADR-004)
@@ -105,11 +113,11 @@ chạy ổn định; minh họa chạy được ở `examples/`.
 
 ### Demo 1 — HVAC mini (`examples/hvac-mini`)
 - AI nhiệt độ → Scale → PID → AO valve
-- DI fan status → AlarmHigh/Compare → DO fan enable + alarm
+- UI dry-contact fan status (auxiliary, non-isolated) → AlarmHigh/Compare → DO fan enable + alarm
 - BACnet expose AI/BI/AO/BO/AV/BV + ghi setpoint AV
 
 ### Demo 2 — Pump/Water (`examples/pump-water`)
-- DI level switch + AI pressure → DO pump enable
+- UI dry-contact level switch + UI analog pressure → DO pump enable
 - OnDelay/OffDelay sequencing
 - **Interlock** (chặn pump khi điều kiện an toàn sai)
 - dry-run / pressure alarm với **AlarmDelay** (chống báo giả)
@@ -135,10 +143,17 @@ Khác production: chưa soak 30 ngày, chưa BTL certified, chưa RBAC → đó 
 | R2 | BACnet conformance ngốn thời gian | Dùng bacnet-stack; Rev A.0 chỉ cần interop, KHÔNG BTL trong 90 ngày |
 | R3 | GRAPH_SCHEMA trượt sang tuần 3 | Tuần 1–2 là hard gate; không code engine trước khi spec xong |
 
-## 8. HW reconcile (cần xử trong tuần 1–2)
+## 8. HW baseline (đã chốt bằng ADR-010)
 
-Product definition mô tả top-level "8 DI/8 DO/4 AI/4 AO". Thiết kế HW hiện tại
-(`HW_SPEC`, `hardware-design/03_io_subsystem`, `DS §4`) là **8 UI + 8 DI + 4 AO +
-4 DO** (ADC ADS131M08, DAC8554, MCU đọc). **Nguồn-chuẩn IO = `HW_SPEC`/`DS §4`.**
-Cần một note chốt: bảng marketing 4AI/4AO ↔ thực tế HW (UI cấu hình được làm AI).
-Owner xác nhận trước khi in nhãn/PRD final.
+Rev A base SKU có **16 UI + 4 AO + 4 DO**. Hai ADS131M08 phục vụ UI1-UI16;
+không có DI công nghiệp riêng và không có `DI_MASK` trong IO_RESP v2. Dry-contact UI
+chỉ là input phụ trợ không cách ly. Module/SKU isolated-DI tùy chọn phải khai báo
+capability riêng; shared memory có thể giữ slot dự phòng nhưng giao diện base SKU
+không được quảng bá hoặc hiển thị chúng như phần cứng đã lắp.
+
+## Revision History
+
+| Version | Ngày | Thay đổi |
+|---|---|---|
+| 1.2 | 2026-06-27 | Added local-HMI Rev A amendment. |
+| 1.3 | 2026-06-30 | Aligned Rev A hardware and demo wording to ADR-010 base SKU. |

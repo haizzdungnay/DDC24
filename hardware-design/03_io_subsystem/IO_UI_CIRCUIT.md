@@ -1,6 +1,6 @@
 # IO Subsystem - Universal Input Circuit Design (16-Channel)
 
-> **Document:** HW-DES-03-UI | Rev 2.3 | 2026-06-23
+> **Document:** HW-DES-03-UI | Rev 2.5 | 2026-06-30
 > **Lien quan:** HW-DES-05-MCU, HW-DES-02-CB, IOP_PROTOCOL, FW-ADC-SAMPLING
 > **Trang thai:** Rev A architecture decision - ready for schematic review, not yet released for PCB layout
 
@@ -15,6 +15,8 @@
 | 2.1 | 2026-06-23 | Cross-check pinmap sau migration |
 | 2.2 | 2026-06-23 | Fix architecture review: TMUX low-voltage only, per-channel mode select, 49.9R shunt, buffer 0-10V, RTD removed from Rev A, dry contact auxiliary only, signed int32 ADC protocol |
 | 2.3 | 2026-06-23 | Error budget numeric tables: §5.1 0-10V, §5.2 4-20mA, §5.3 NTC — pre-cal/post-cal RSS, accuracy claims |
+| 2.4 | 2026-06-30 | Removed unverified protection current/power claims; made 24V miswire calculations and evidence a release blocker |
+| 2.5 | 2026-06-30 | Removed the stale legacy CM3 publish claim; aligned ADC snapshot delivery with ADR-010 GET_IO at 2ms/500Hz. |
 
 ---
 
@@ -95,7 +97,7 @@ UIx+ / UIx-
 | SPI master | STM32G0B1 only |
 | CM3 connection | UART/IOP only, no SPI to ADC |
 | Raw encoding | ADS signed 24-bit sign-extended to int32 before IOP |
-| Publish period to CM3 | 10 ms nominal |
+| SOM poll / MCU response | GET_IO/IO_RESP every 2 ms nominal (500 Hz); application-facing filtered values update independently at 10-100 ms |
 
 ### 3.1 ADS131M08 Pin Mapping
 
@@ -376,8 +378,8 @@ Errors expressed at three key temperatures. Single-point calibration at 25°C re
 
 | # | Error Source | 25°C (cal point) | 0°C (ΔT = −25°C) | 50°C (ΔT = +25°C) | Note |
 |---:|:---|---:|---:|---:|:---|
-| 1 | B-value tolerance (±1%) | 0.00 | 0.20 | 0.35 | ln(R/R0) grows with |ΔT|; zero at cal point |
-| 2 | R_pullup temp drift (25 ppm/°C) | 0.00 | 0.04 | 0.01 | Zero at cal point; scales with |ΔT| and sensitivity |
+| 1 | B-value tolerance (±1%) | 0.00 | 0.20 | 0.35 | ln(R/R0) grows with \|ΔT\|; zero at cal point |
+| 2 | R_pullup temp drift (25 ppm/°C) | 0.00 | 0.04 | 0.01 | Zero at cal point; scales with \|ΔT\| and sensitivity |
 | 3 | Self-heating (0.05–0.05°C) | 0.05 | 0.04 | 0.04 | Relatively constant, lower at extremes |
 | 4 | NTC long-term aging drift | 0.05 | 0.10 | 0.10 | Typical ±0.1°C/yr for quality NTC |
 | 5 | Cable resistance (<10 Ω) | 0.00 | 0.06 | 0.01 | Higher impact at 0°C (high R_NTC ≈ 33.6 kΩ) |
@@ -450,23 +452,23 @@ If RTD is required later, create a dedicated Rev B RTD input module with:
 
 | Fault / event | Hardware mitigation | ADC state | Firmware status | Numeric worst-case |
 |---------------|---------------------|-----------|-----------------|-------------------|
-| 0-10V input tied to 24VDC | Terminal TVS/PTC, divider limits node, clamp after divider | Saturated or overrange, no mux field exposure | `UIx_OVERRANGE`, optional latch fault if persistent | Divider node: max 2.6V before clamp; TVS power: 12W max transient |
-| 4-20mA input tied to 24VDC | PTC/fusible element + TVS/clamp before shunt front-end | Overrange until protection acts | `UIx_OVERRANGE`, `UIx_FAULT` if persistent | Shunt current: 24V/49.9Ω=481mA; PTC trip: 500mA; TVS power: 12W |
+| 0-10V input tied to 24VDC | Terminal TVS/PTC, divider limits node, clamp after divider | Saturated or overrange, no mux field exposure | `UIx_OVERRANGE`, optional latch fault if persistent | Calculate divider/clamp/PTC current, pulse/steady power and low-voltage-node maximum from final parts; legacy 12W claim is not released |
+| 4-20mA input tied to 24VDC | PTC/fusible element + TVS/clamp must prevent sustained 24V across the 49.9R shunt | Overrange until protection acts | `UIx_OVERRANGE`, `UIx_FAULT` if persistent | Direct fault would be about 481mA and 11.5W in the shunt and is destructive; final circuit must limit/interrupt it and prove pre-trip/post-trip energy |
 | NTC short to GND | Pull-up current limited by R_pullup | Near 0V | `UIx_SHORT` | Pull-up current: 3.3V/10k=0.33mA (safe) |
-| NTC short to 24V | Terminal protection/PTC clamps before low-voltage node | Overrange/clamped | `UIx_FAULT` | TVS breakdown at 24V; clamp current: 24V/49.9Ω=481mA |
+| NTC short to 24V | Terminal protection/PTC clamps before low-voltage node | Overrange/clamped | `UIx_FAULT` | Calculate from the NTC-mode series/pull-up/clamp path; the 49.9R current shunt is not the NTC fault-current limiter |
 | Dry contact long cable | Series resistor, RC debounce, ESD/TVS at terminal | May be noisy/deadband | `UIx_DEBOUNCE`, `UIx_INVALID` | Cable resistance <100Ω; debounce 20ms default |
 | ESD at terminal | TVS at terminal before front-end | No valid sample during event | Counter + transient status if detected | TVS response <1ns; ESD protection ±8kV contact |
 | EFT/surge basic | TVS + RC/ferrite + spacing | May saturate | Event/fault if persistent | Surge immunity: ±2kV burst; ferrite damping 100Ω@100MHz |
 | Reverse polarity | Bidirectional TVS or steering clamp, current limit | Below range/clamped | `UIx_REVERSE_OR_SHORT` if detectable | Reverse current limited by TVS breakdown: <100mA |
 | Open wire | Bias/diagnostic mode per channel | Rail or invalid value | `UIx_OPEN` where supported | High-impedance state: >1MΩ |
 
-**Note:** All protection paths are validated for:
+**Release environment for protection validation:**
 - Temperature range: -40°C to +85°C
 - Altitude: 2000m max
 - Pollution degree: 2
 - Material group: I (basic insulation)
 
-Final schematic release must fill exact component values and power ratings for every protection path based on worst-case field conditions.
+These conditions are requirements, not completed validation. Final schematic release must fill exact component values and power ratings for every protection path and attach calculation plus prototype fault/EMC evidence.
 
 ---
 
@@ -478,7 +480,7 @@ Definitions:
 |------|---------------|
 | ADC sample rate | ADS131M08 output data rate per converter |
 | MCU scan rate | Firmware rate at which fresh ADC samples are accepted and status updated |
-| CM3 publish rate | UART/IOP response update rate, nominal 10ms |
+| SOM poll / MCU response rate | GET_IO request/IO_RESP snapshot cadence, nominal 2ms / 500Hz |
 | UI application update rate | Filtered engineering-value update visible to control logic |
 
 Sampling policy:
@@ -547,4 +549,4 @@ See `hardware-design/05_mcu_io/IOP_PROTOCOL.md` for the full proposed Rev A UI A
 
 ---
 
-**Document ID:** HW-DES-03-UI | Rev 2.3 | 2026-06-23
+**Document ID:** HW-DES-03-UI | Rev 2.5 | 2026-06-30

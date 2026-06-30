@@ -5,7 +5,7 @@
 > 📘 [README](../../01_specs/README.md) · **Trace:** `SW-MQ/API/MOD-*` · Python 3.11
 
 > Service northbound deferred Rev B+: đẩy MQTT lên cloud + REST cho app. Nếu bật lại, đọc/ghi qua `mkddc-core`/`mkddc_plc_shm`, không bypass core.
-> ⚠ **ARCH-R010:** Modbus **không** thuộc agent nữa. DDC không là Modbus slave. Vai trò Modbus = **RTU master xuống thiết bị phụ**, nằm trong fieldbus module của `mkddc-iobus` ([SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md), [Implementation 25](../../03_implementation/25_MODBUS_IMPLEMENTATION_PLAN.md)).
+> ⚠ **ARCH-R010:** Modbus **không** thuộc agent nữa. DDC không là Modbus slave. Vai trò Modbus = **RTU master xuống thiết bị phụ**, nằm trong fieldbus module của `mkddc-iobus` ([SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md), [Implementation 25](../../03_implementation/26_MODBUS_IMPLEMENTATION_PLAN.md)).
 
 ---
 
@@ -35,7 +35,7 @@ Topic: `kinexus/{device_id}/io/{point_name}` (MQ-003).
 - `/system/status` lấy IOP metrics từ io-driver (đọc shm/metrics).
 
 ## 4. ~~Modbus slave~~ → chuyển sang `mkddc-iobus/fieldbus` (RTU master)
-> DDC **không** phục vụ Modbus về phía BMS. Modbus RTU **master** poll thiết bị phụ → xem [SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md), [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md), [Implementation 25](../../03_implementation/25_MODBUS_IMPLEMENTATION_PLAN.md). Phần này gỡ khỏi agent.
+> DDC **không** phục vụ Modbus về phía BMS. Modbus RTU **master** poll thiết bị phụ → xem [SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md), [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md), [Implementation 25](../../03_implementation/26_MODBUS_IMPLEMENTATION_PLAN.md). Phần này gỡ khỏi agent.
 - INT16 ×100 (KHÔNG float). Response ≤100ms.
 
 ## 5. Write arbitration

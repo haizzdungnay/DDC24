@@ -9,6 +9,7 @@
 #define IOBUS_MODBUS_MASTER_HPP
 
 #include <atomic>
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -18,6 +19,7 @@
 #include "fieldbus_config.hpp"
 #include "fieldbus_metrics.hpp"
 #include "poll_scheduler.hpp"
+#include "mkddc_shm.h"
 
 namespace iobus::fieldbus {
 
@@ -64,6 +66,13 @@ public:
      */
     void enqueue_write(const PendingWrite& w);
 
+    /**
+     * COR-011 write bridge: đọc dirty flags từ plc_shm, enqueue PendingWrite cho
+     * mỗi ext slot writable đang dirty. Gọi từ fieldbus_thread trước poll_once().
+     * Chỉ iterate RTU slaves — TCP writes xử lý riêng.
+     */
+    void drain_ext_writes(const kx_plc_shm_t* shm);
+
     /* Tính số ms nên sleep trước khi poll_once() kế.
      * 0 = có slave đến hạn ngay. */
     uint32_t sleep_ms_until_next(uint64_t now_ms) const;
@@ -88,6 +97,8 @@ private:
     std::vector<uint16_t>     slave_ext_base_;   /* index vào ext_cache cho slave[i] */
     std::vector<uint16_t>     slave_ext_count_;  /* số ext points thực của slave[i] */
     std::vector<PendingWrite> pending_writes_;
+    std::array<float, KX_N_EXT> last_written_{};
+    std::array<bool, KX_N_EXT>  has_last_written_{};
     FieldbusConfig            cfg_;
 };
 

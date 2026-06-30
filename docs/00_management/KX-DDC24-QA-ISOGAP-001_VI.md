@@ -57,14 +57,14 @@ docs/
   02_design/       software/ firmware/ interfaces/ _templates/  ← từ design/
   03_manuals/      (giữ)
   04_uiux/         (giữ)
-  05_implementation/ (giữ)
+  05_devguides/ (giữ)
   adr/             ADR-001..00n                      (giữ)
 hardware-design/   domain phần cứng riêng           (giữ — không gộp)
 shared/            hợp đồng code (header)            (giữ — là contract)
 ```
 
 > Dùng `01_specs/` + `02_design/` (không `01_product/02_architecture/03_design`) để **tránh đụng
-> số** với `03_manuals/04_uiux/05_implementation` đã tồn tại trong `docs/`. Root chỉ còn
+> số** với `03_manuals/04_uiux/05_devguides` đã tồn tại trong `docs/`. Root chỉ còn
 > `README.md` + `CHANGELOG.md` (trỏ vào `docs/`).
 
 ## 6. Quyết định định danh (cần chốt)

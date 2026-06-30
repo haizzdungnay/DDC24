@@ -1,7 +1,7 @@
 # HW_SPEC — MK-DDC-24 Hardware Specification
 
-> **Phiên bản:** 1.1 | 2026-05-28  
-> **Trạng thái:** Approved (Owner 2026-06-08)
+> **Phiên bản:** 2.0 | 2026-06-30
+> **Trạng thái:** In-Review — aligned to ADR-010; schematic/layout/fabrication release remains blocked by `hardware-design/hw_design_review/HW_DOC_REVIEW_CLOSURE_PLAN.md`
 > **Tác giả:** KINEXUS Technologies — Hardware Team  
 > **Chuẩn tham chiếu:** IEC 61010-1, IEC 60068, IEC 61326-1, RoHS 3, REACH  
 > **Liên quan:** [DS](DS_MK-DDC-24_VI.md) | [PRD](PRD_MK-DDC-24_VI.md) | [SRS](SRS_MK-DDC-24_VI.md)
@@ -16,14 +16,14 @@
                     ┌──────────────────────────────────────┐
                     │          CARRIER BOARD                │
     24VAC/VDC ─────►│ Power Supply                         │
-                    │  24V → 5V (DC/DC) → 3.3V (LDO)      │
+                    │  24V → 5V buck (TBD) → 3.3V buck    │
                     │                                       │
     RJ-45 ──────────►│ Eth Magnetics (GbE RGMII)           │
                     │         │ GbE PHY onboard CM3         │
     RS-485 A/B ─────►│ RS-485  │ SOM Connector              │
                     │  (MAX13487E) ┌────────────────────┐  │
     USB-C ──────────►│ USB-C OTG   │ Radxa CM3 (SOM)    │  │
-    USB-A ──────────►│ USB3.0 host │ RK3566 Cortex-A55  │──┼──► ILI9341 TFT 2.4" (SPI0)
+    USB-A ──────────►│ USB3.0 host │ RK3566 Cortex-A55  │──┼──► JD9852 TFT 2.4" (MIPI DSI)
                     │             │ 2GB LPDDR4         │──┼──► Button×6        (GPIO)
                     │             │ 8GB eMMC            │  │
                     │             │ Debian 12           │  │
@@ -33,10 +33,10 @@
                     │           │ MCU STM32G0B1RB      │    │
                     │           │ FreeRTOS, 64MHz      │    │
                     │           └──┬──────────┬────────┘    │
-                    │              │ ADC      │ GPIO/DAC    │
-                    │         ┌────▼────┐  ┌──▼──────────┐  │
-  UI1-UI8 ──────────►│ Input   │ADS131M08│  │ AO DAC16bit│◄──── AO1-AO4
-  DI1-DI8 ──────────►│ Cond.   └────────┘  └──────────┬─┘  │
+                    │              │ ADC x2   │ GPIO/DAC    │
+                    │        ┌─────▼─────┐ ┌──▼──────────┐  │
+ UI1-UI16 ──────────►│ Input  │2xADS131M08│ │ AO DAC16bit│◄──── AO1-AO4
+                    │ Cond.   └───────────┘ └──────────┬─┘  │
                     │                              ┌───▼──┐ │
                     │                              │Relay │◄──── DO1-DO4
                     │                              │SPDT  │    │
@@ -59,18 +59,18 @@
 | **Ethernet** | Gigabit RGMII (PHY onboard CM3) | Không cần PHY ngoài trên carrier |
 | **USB** | 1× USB3.0 host + 1× USB2.0 OTG | Via carrier board |
 | **UART** | 7× | UART2 MCU IOP, UART4 RS-485, UART0 debug |
-| **SPI** | 4× | SPI0 → HMI TFT ILI9341 (ADS131M08 do MCU đọc qua SPI3, không nối CM3) |
+| **SPI** | 4× | Available for carrier peripherals; HMI uses MIPI DSI, ADS131M08 devices are read by MCU SPI3 |
 | **I2C** | 8× | I2C0 → RTC DS3231 |
 | **GPIO** | 50× | LED status, DIP switch, reset MCU |
 | **Connector** | 3× 100-pin B2B 0.4mm (Hirose DF40C) | Chiều cao stack 3mm |
-| **Nguồn SOM** | 5V, max 3A | Do carrier cấp qua DC/DC LM2596 |
+| **Nguồn SOM** | 5V, allocated max 2.5A | Carrier converter is not frozen; see blocked power evidence gate |
 | **Nhiệt độ SOM** | 0°C đến +50°C (consumer grade) | ⚠ Xem biện pháp nhiệt bên dưới |
 | **Kích thước** | 55 × 40 mm | Fit trong carrier board DIN-rail |
 | **Giá** | ~25–35 USD (volume 500+) | Đáp ứng BOM ≤ 40 USD |
 
 > ⚠️ **Ràng buộc nhiệt độ:** CM3 consumer grade (0~50°C) vs mục tiêu sản phẩm (-20~65°C). Biện pháp: Heatsink Radxa 5540B, lỗ thông gió vỏ DIN-rail, cpufreq throttle tại 70°C. 
 >
-> **Dải đã xác nhận (validated):** 0°C ~ +55°C (với heatsink + throttle). **Dải mục tiêu (target):** -20°C ~ +65°C — đòi hỏi báo cáo thermal derating đầy đủ (bao gồm extended-temp CM3 option nếu cần) trước khi dùng trong tài liệu bán hàng và trước khi ship GA.
+> **Dải thử nghiệm dự kiến:** 0°C ~ +55°C với heatsink + throttle; repository hiện chưa có chamber report để gọi đây là dải đã xác nhận. **Dải mục tiêu:** -20°C ~ +65°C — đòi hỏi báo cáo thermal derating đầy đủ (bao gồm extended-temp CM3 option nếu cần) trước khi dùng trong tài liệu bán hàng và trước khi ship GA.
 >
 > Chi tiết: `hardware-design/07_emc_thermal/EMC_THERMAL_NOTES.md`.
 
@@ -99,7 +99,7 @@
 | **SRAM** | 144 KB | Buffer I/O data + dư địa lớn |
 | **ADC** | 12-bit on-chip (backup) | UI thô; ADS131M08 SPI là ADC chính 24-bit |
 | **DAC** | Chỉ GPIO/PWM | AO thực tế dùng DAC8554 16-bit SPI riêng |
-| **GPIO** | ≥ 20 | DI, DO relay control |
+| **GPIO** | ≥ 20 | Per-channel UI mode latch, ADC control, DO relay control |
 | **UART** | ≥ 2× | Giao tiếp SOM, debug |
 | **Watchdog** | IWDG + WWDG | Dual watchdog |
 | **Nhiệt độ** | -40°C đến +85°C | Industrial grade |
@@ -109,8 +109,8 @@
 
 | Task | Priority | Period | Mô tả |
 |------|:--------:|:------:|-------|
-| `io_sample_task` | High (7) | 1 ms | ADC sampling UI1-UI8 + DI debounce |
-| `iop_comm_task` | High (6) | 10 ms | Giao tiếp SOM (IOP protocol) |
+| `io_sample_task` | High (7) | 1 ms | ADC sampling UI1-UI16 and status update |
+| `iop_comm_task` | High (6) | Event-driven; 2ms nominal poll | Respond to SOM IOP v2 GET_IO using latest complete snapshot |
 | `ao_output_task` | High (6) | 10 ms | Ghi giá trị AO qua DAC SPI |
 | `do_control_task` | High (6) | 10 ms | Đóng/mở relay DO1-DO4 |
 | `diagnostics_task` | Low (2) | 1.000 ms | Ghi fault counter, nhiệt độ MCU |
@@ -122,19 +122,16 @@
 
 ### 4.1 Input Conditioning
 
-Mỗi kênh UI1-UI8 có mạch điều hòa tín hiệu hỗ trợ đa chế độ:
+Mỗi kênh UI1-UI16 có mạch điều hòa tín hiệu và mode latch độc lập:
 
 | Chế độ | Cấu hình | Dải đo | Độ chính xác |
 |--------|---------|--------|--------------|
-| **0–10V Analog** | Input divider 100kΩ/12.1kΩ + clamp TVS (xem IO_UI §3.2) | 0 – 10.5 V | ±0.1% FS |
-| **4–20mA Current** | Shunt 62Ω 0.1% + protection (xem IO_UI §3.3) | 0 – 25 mA | ±0.2% FS |
-| **PT100** | 2-wire, excitation 1mA, RTD amp | -50°C – 200°C | ±0.3°C |
-| **PT1000** | 2-wire, excitation 0.3mA | -50°C – 200°C | ±0.2°C |
-| **NTC 10kΩ** | Voltage divider 10kΩ pull-up to 3.3V | -30°C – 70°C | ±0.5°C |
-| **NTC 20kΩ** | Voltage divider 20kΩ pull-up to 3.3V | -30°C – 70°C | ±0.5°C |
-| **Dry Contact (DI)** | Pull-up 10kΩ, debounce 10ms | — | Reliable @ 24V |
+| **0–10V Analog** | Protected divider + RC + RRIO buffer | 0 – 10 V | Final claim requires approved error budget/calibration evidence |
+| **4–20mA Current** | Protected 49.9Ω, 0.1%, 25ppm/°C shunt + buffer | 4 – 20 mA nominal | Final claim requires approved error budget/calibration evidence |
+| **NTC** | Precision/ratiometric excitation + divider sense | Part/profile dependent | Final claim requires selected part and calibration evidence |
+| **Auxiliary dry contact** | Protected pull-up sense + firmware debounce | Clean contact only | Non-isolated; not an industrial 24V DI replacement |
 
-**Auto-detect:** MCU đo điện trở đầu vào khi khởi động → xác định loại sensor và cấu hình mạch tương ứng.
+PT100/PT1000 are not supported in the Rev A base SKU. Mode is configured per channel and latched by firmware; no unverified auto-detect claim is released.
 
 ### 4.2 Input Protection
 
@@ -148,13 +145,14 @@ Mỗi kênh UI1-UI8 có mạch điều hòa tín hiệu hỗ trợ đa chế đ�
 
 ---
 
-## 5. Digital Input (DI) Circuit
+## 5. Optional Industrial Digital Input (DI)
 
 ### 5.1 Yêu cầu
 
 | Thông số | Giá trị |
 |----------|---------|
-| **Số kênh** | 8 |
+| **Số kênh base SKU** | 0 |
+| **Optional SKU/module** | 8 isolated DI only when separate schematic/BOM is populated and `BOARD_CAP_MAP.DI_8=1` |
 | **Logic ON** | 15 – 30 V DC |
 | **Logic OFF** | 0 – 5 V DC |
 | **Dòng đầu vào** | 5 – 10 mA @ 24V (wet contact) |
@@ -174,9 +172,9 @@ Mỗi kênh UI1-UI8 có mạch điều hòa tín hiệu hỗ trợ đa chế đ�
 | **Số kênh** | 4 |
 | **Chế độ** | 0–10V hoặc 4–20mA — **chọn bằng phần mềm per kênh** (relay/analog-switch + lệnh IOP `SET_AO_CFG`; chốt IOP-Q-R008). Không dùng jumper |
 | **Độ phân giải** | 16-bit (DAC8554 SPI) |
-| **Độ chính xác** | ±0.1% FS |
+| **Độ chính xác** | Provisional; final claim requires signed error budget and calibration evidence |
 | **Tải tối thiểu (0–10V)** | ≥ 2 kΩ (≤ 5 mA @ 10V) — xem IO_AO §6. Tải thấp hơn gây sụt áp trên R_series 100Ω |
-| **Tải điện trở (4–20mA)** | Max 600Ω (IEC 61131-2) |
+| **Tải điện trở (4–20mA)** | 0–500Ω released target; 600Ω remains blocked pending compliance evidence |
 | **Isolation** | Không cô lập (Ver 1) |
 | **Short-circuit protection** | Current limit + fold-back |
 | **LED chỉ thị** | 1× LED xanh per kênh (active when non-zero) |
@@ -205,6 +203,8 @@ Mỗi kênh UI1-UI8 có mạch điều hòa tín hiệu hỗ trợ đa chế đ�
 
 ## 8. Power Supply Design
 
+> **Release status:** BLOCKED. Final +5V/+3.3V/+15V converters, input protection and surge coordination are not frozen. The detailed and controlling source is `hardware-design/04_power_supply/PWR_DESIGN.md`.
+
 ### 8.1 Input Power
 
 | Thông số | Giá trị |
@@ -213,24 +213,24 @@ Mỗi kênh UI1-UI8 có mạch điều hòa tín hiệu hỗ trợ đa chế đ�
 | **Tần số (AC)** | 50/60 Hz |
 | **Connector** | Terminal block 2-pin 5.08mm |
 | **Bảo vệ cực tính** | Diode bridge (cho cả AC và DC) |
-| **Bảo vệ transient** | MOV + fuse polyfuse 2A |
-| **Cách ly** | 3kV input → logic |
+| **Bảo vệ transient** | Fuse/bridge/TVS/MOV/filter TBD from coordinated surge and inrush study |
+| **Cách ly** | Not claimed by this specification; prove the final topology and safety boundary before release |
 
 ### 8.2 Internal Power Rails
 
 | Rail | Điện áp | Dòng max | Dùng cho |
 |------|:-------:|:--------:|---------|
-| **+5V** | 5.0V ±2% | 3A | SOM (max 2.5A), relay coil, RS-485, logic |
-| **+3.3V** | 3.3V ±1% | 1A | MCU, UI cond., RS-485 ref |
+| **+5V** | 5.0V ±2% | TBD; current upper-bound allocation 4.513A | SOM, relay and downstream converters |
+| **+3.3V** | 3.3V ±1% | 1.1A allocation; final budget pending | MCU, 2× ADC, UI front-ends, logic |
 | **+15V** | 15V ±2% | 200mA | AO output op-amp rail |
 
 ### 8.3 Tiêu thụ Điện
 
 | Trạng thái | Tiêu thụ |
 |-----------|---------|
-| Idle (không relay) | < 3W |
-| Điển hình (2 relay) | ~5W |
-| Max (4 relay, AO full) | < 8W |
+| Idle (không relay) | TBD by measured prototype budget |
+| Điển hình (2 relay) | TBD by measured prototype budget |
+| Max (4 relay, AO full) | TBD after frozen converters and load-step/thermal evidence |
 
 ---
 
@@ -273,84 +273,142 @@ Mỗi kênh UI1-UI8 có mạch điều hòa tín hiệu hỗ trợ đa chế đ�
 
 > Dựa trên thiết kế 3D mặt trước thiết bị: 1× TFT 2.4" màu (dashboard chính) + 6× nút nhấn điều hướng + 5× LED trạng thái. Hàng trên là 3× lỗ dắt dây terminal (không phải display).
 
-### 11.1 TFT LCD 2.4" — Dashboard Chính
+### 11.1 LCM+CTP Module — KD024QVFIA073-02-C021B (Startek)
 
-**IC Controller: ILI9341** (hoặc tương thích ST7789V2)
+> **⚠ ERRATUM 2026-06-26:** Phiên bản doc trước ghi sai interface là SPI/ILI9341.
+> Module thực tế là **MIPI DSI + I2C CTP** theo spec `KD024QVFIA073-02-C021B V1.0`.
 
-| Thông số | Giá trị |
-|----------|---------|
-| **Kích thước** | 2.4 inch diagonal |
-| **Độ phân giải** | 240 × 320 pixels (QVGA) |
-| **Màu sắc** | 65K màu (16-bit RGB565) |
-| **Interface** | SPI 4-wire, tốc độ max 40 MHz |
-| **Nguồn** | 3.3V VCC, 3.3V I/O logic |
-| **Backlight** | LED backlight, điều chỉnh PWM |
-| **Góc nhìn** | IPS 160°/160° (nếu dùng bản IPS) |
-| **Nội dung hiển thị** | Dashboard: 3× gauge vòng tròn (temp/pressure/power), alarm status, network status |
-| **Thư viện phần mềm** | LVGL v9 + lv_drivers SPI (Debian userspace) |
-| **Frame rate** | ~20 FPS với SPI 20MHz |
+Module tích hợp: TFT panel + CTP (capacitive touch) optical-bonded G+G.
 
-**Kết nối CM3 ↔ ILI9341:**
+#### 11.1.1 TFT Display (LCM)
+
+| Thông số | Giá trị | Nguồn |
+|----------|---------|-------|
+| **Part number** | KD024QVFIA073-02-C021B | Startek spec §1.1 |
+| **Kích thước** | 2.4" (36.72 × 48.96 mm AA) | spec §1.3 |
+| **Độ phân giải** | 240(RGB) × 320 pixels (QVGA) | spec §1.1 |
+| **Màu sắc** | 65K / 262K | spec §1.1 |
+| **Controller IC** | **JD9852** | spec §1.1 |
+| **LCM Interface** | **MIPI DSI — 1 data lane** (DSI Video mode) | spec §1.1, §7.2 |
+| **Display mode** | Transmissive / Normally Black | spec §1.1 |
+| **Nhiệt độ vận hành** | **-20°C ~ +70°C** | spec §1.1 |
+| **Nhiệt độ lưu trữ** | -30°C ~ +80°C | spec §1.1 |
+| **Góc nhìn** | 80° × 4 hướng (CR > 10) | spec §5.1 |
+| **Contrast ratio** | 800:1 typ | spec §5.1 |
+
+**Tín hiệu MIPI DSI (qua LCM FPC, 20 pin):**
+
+| Pin | Symbol | Chức năng |
+|-----|--------|-----------|
+| 2 | LEDK | Backlight cathode |
+| 4 | LEDA | Backlight anode |
+| 6 | VCI | Supply 3.3V |
+| 7 | IOVCC | I/O supply 1.8–3.3V |
+| 8 | TE | Tearing Effect output (sync) |
+| 9 | RESET | Hardware reset, active LOW |
+| 14 | MIPI_CLP | DSI clock lane positive (LVDS diff) |
+| 15 | MIPI_CLN | DSI clock lane negative |
+| 17 | MIPI_D0P | DSI data lane 0 positive |
+| 18 | MIPI_D0N | DSI data lane 0 negative |
+
+**Kết nối CM3 ↔ KD024QVFIA073-02-C021B:**
 
 ```
-Radxa CM3 (CON1 B2B)          ILI9341 2.4" TFT
-────────────────────           ────────────────────
-SPI0_CLK  (CON1-37) ─────────► SCK
-SPI0_MOSI (CON1-39) ─────────► MOSI / SDA
-SPI0_CS0n (CON1-41) ─────────► CS#
-GPIO0_C0  (CON1-51) ─────────► DC (Data/Command, HIGH=data)
-GPIO0_C1  (CON1-53) ─────────► RST# (active LOW)
-PWM11_M1  (CON1-55) ─[33Ω]──► BL (LED anode, max 20mA)
-3V3       (CON1-17) ─────────► VCC
-GND       (CON1-18) ─────────► GND
+Radxa CM3 (B2B CON)              KD024QVFIA073 (LCM FPC)
+─────────────────                ──────────────────────────
+MIPI_TX_CKP  (*)  ─────[diff]──► MIPI_CLP  (pin 14)
+MIPI_TX_CKN  (*)  ─────[diff]──► MIPI_CLN  (pin 15)
+MIPI_TX_D0P  (*)  ─────[diff]──► MIPI_D0P  (pin 17)
+MIPI_TX_D0N  (*)  ─────[diff]──► MIPI_D0N  (pin 18)
+GPIO          (*)  ─────────────► RESET#    (pin 9,  active-LOW)
+GPIO          (*)  ◄────────────  TE        (pin 8,  output)
+LED driver    (*)  ─────────────► LEDA      (pin 4,  ~20mA/string)
+LED driver    (*)  ──────────── ► LEDK      (pin 2,  GND via driver)
+3V3                ─────────────► VCI       (pin 6)
 ```
 
-> **SPI0_MISO không cần nối** nếu module không có touch.  
-> Nếu dùng module có **touch (XPT2046)**: thêm `SPI0_MISO←TP_DOUT`, `GPIO→TP_CS`, `GPIO←TP_IRQ`.
+> (*) Pin số trên B2B connector CM3 cần xác nhận từ **carrier board schematic** (phụ thuộc layout PCB).
+> RK3566 có 1× MIPI DSI output — trỏ thẳng vào module qua carrier board routing.
 
-**Khởi tạo trên Debian CM3:**
-```bash
-# Enable SPI0 via device tree overlay
-echo "spi0-ili9341" >> /boot/armbianEnv.txt
-
-# Hoặc cấu hình thủ công via fbtft module
-modprobe fbtft_device name=adafruit22a rotate=270 speed=24000000 fps=20
-
-# Verify framebuffer
-ls /dev/fb0   # → ILI9341 framebuffer
+**LVGL render pipeline (SW):**
+```
+mkddc_io_shm / mkddc_plc_shm
+  → kinexus-hmid (LVGL v9)
+  → lv_drivers/display/drm.c   ← DRM/KMS framebuffer
+  → /dev/dri/card0              ← RK3566 VOP + MIPI DSI
+  → JD9852 controller           ← trên module
+  → TFT panel
 ```
 
-**LVGL render pipeline:**
+#### 11.1.2 CTP — Capacitive Touch (FT5436)
+
+| Thông số | Giá trị | Nguồn |
+|----------|---------|-------|
+| **Controller IC** | **FT5436** (Focal Tech) | spec §1.2 |
+| **Interface** | **I2C** | spec §1.2 |
+| **I2C address** | 0x38 (7-bit) / 0x70 Write / 0x71 Read | spec §1.2 |
+| **Touch points** | 5-point đồng thời + Gestures | spec §1.2 |
+| **Cấu trúc** | G+G (glass-glass optical bonding với TFT) | spec §1.2 |
+| **Resolution** | 240(H) × 320(V) | spec §1.2 |
+
+**Tín hiệu CTP (qua CTP FPC, 8 pin):**
+
+| Pin | Symbol | Chức năng |
+|-----|--------|-----------|
+| 2 | VDDIO | I/O power (1.8–3.3V) |
+| 3 | VDD | Supply voltage |
+| 4 | SCL | I2C clock |
+| 5 | SDA | I2C data (bidirectional) |
+| 6 | INT | Interrupt to host (active LOW, có touch mới) |
+| 7 | RST | Reset, active LOW |
+
+**Kết nối CM3 ↔ FT5436 CTP:**
+
 ```
-Soft PLC data → shared memory → lvgl_dashboard_app → SPI0 → ILI9341
+Radxa CM3 (B2B CON)              KD024QVFIA073 (CTP FPC)
+─────────────────                ──────────────────────────
+I2C_SCL  (I2C1, *)  ─────────── ► SCL  (pin 4)
+I2C_SDA  (I2C1, *)  ─────────── ► SDA  (pin 5)
+GPIO     (*)         ◄───────────  INT  (pin 6, active-LOW interrupt)
+GPIO     (*)         ─────────── ► RST  (pin 7, active-LOW)
+1V8 / 3V3            ─────────── ► VDDIO (pin 2)
+3V3                  ─────────── ► VDD  (pin 3)
 ```
+
+> (*) Cần xác nhận từ carrier board schematic.
+
+**SW driver path:** Linux input event `/dev/input/touchscreen0` (FT5436 kernel driver `ft5x06_ts`) → LVGL `lv_drivers/indev/evdev.c` → `LV_INDEV_TYPE_POINTER`.
 
 ---
 
-### 11.2 Nút Nhấn (×6)
+### 11.2 Nút Nhấn (×6) — Input bổ sung cho gloved-hand
 
-6 nút nhấn theo dạng 2×3 cho phép điều hướng menu local (không cần web browser).
+6 nút cứng dạng 2×3 — input thay thế khi đeo găng tay hoặc touch không khả dụng.
 
-| Vị trí | Chức năng | CM3 GPIO |
-|--------|----------|----------|
-| TOP-LEFT | UP / Scroll Up | GPIO1_A0 |
-| TOP-RIGHT | DOWN / Scroll Down | GPIO1_A1 |
-| MID-LEFT | LEFT / Back | GPIO1_A2 |
-| MID-RIGHT | RIGHT / Forward | GPIO1_A3 |
-| BOT-LEFT | ENTER / Confirm | GPIO1_A4 |
-| BOT-RIGHT | ESC / Cancel | GPIO1_A5 |
+| Vị trí | Nhãn | Chức năng | CM3 GPIO | Linux GPIO# |
+|--------|------|-----------|----------|------------|
+| TOP-LEFT | UP | Scroll Up / Focus Prev | GPIO1_A0 | gpio32 |
+| TOP-RIGHT | DOWN | Scroll Down / Focus Next | GPIO1_A1 | gpio33 |
+| MID-LEFT | LEFT | Màn trái / Back | GPIO1_A2 | gpio34 |
+| MID-RIGHT | RIGHT | Màn phải / Forward | GPIO1_A3 | gpio35 |
+| BOT-LEFT | ENTER | Xác nhận / Ack | GPIO1_A4 | gpio36 |
+| BOT-RIGHT | ESC | Huỷ / Thoát | GPIO1_A5 | gpio37 |
 
-Mạch nút: Pull-up 10kΩ lên 3.3V, debounce 20ms software. Nhấn → GPIO = LOW.
+Mạch: Pull-up 10kΩ lên 3.3V. Nhấn → LOW. Debounce 20ms software.
 
 ---
 
-### 11.3 CM3 SPI/I2C Resource Allocation (Display)
+### 11.3 CM3 Peripheral Resource Allocation (HMI)
 
-| Bus | Dùng cho | Tốc độ |
-|-----|---------|--------|
-| SPI0 | ILI9341 TFT 2.4" | 20–40 MHz |
+| Bus / Resource | Dùng cho | Ghi chú |
+|----------------|---------|---------|
+| MIPI DSI (1 lane) | JD9852 TFT display | 1× clock lane + 1× data lane differential |
 | I2C0 | RTC DS3231 | 400 kHz |
-| I2C1–I2C7 | Dự phòng Ver 2 | — |
+| I2C1 | FT5436 CTP touch (0x38) | 400 kHz; xác nhận carrier schematic |
+| GPIO (2×) | RESET# + TE của JD9852 | Carrier board schematic |
+| GPIO (2×) | INT + RST của FT5436 | Carrier board schematic |
+| GPIO (6×) | 6 nút nhấn | GPIO1_A0..A5 |
+| LED driver | Backlight LEDA/LEDK | Cần IC driver (constant current, ~20mA/string) |
 
 ---
 
@@ -397,8 +455,8 @@ Mặt sau thiết bị:
 | Vùng | Ký hiệu | Số pin | Bước răng (pitch) | Vị trí |
 |------|--------|:-------:|:-----------------:|-------|
 | Nguồn vào | PWR (24V+, GND) | 2 | 5.08mm | Góc trái trên |
-| Universal Input | UI1–UI8 | 16 (2/kênh) | 3.81mm | Hàng 1–2 |
-| Digital Input | DI1–DI8 | 16 (2/kênh: IN, COM) | 3.81mm | Hàng 3–4 |
+| Universal Input | UI1–UI16 | 32 (2/kênh) | 3.81mm | Hàng 1–4 |
+| Optional isolated DI | DI1–DI8 | SKU dependent; not populated on base SKU | TBD | Separate optional sheet/module |
 | Analog Output | AO1–AO4 | 8 (2/kênh: OUT+, GND) | 3.81mm | Hàng 5 |
 | Relay Output | DO1–DO4 | 12 (3/kênh: NO, COM, NC) | 5.08mm | Hàng 6 |
 | RS-485 | A, B, GND | 3 | 5.08mm | Góc trái dưới |
@@ -410,9 +468,8 @@ Mặt sau thiết bị:
 
 [UI1][UI2][UI3][UI4]  ← Universal Input terminals
 [UI5][UI6][UI7][UI8]
-
-[DI1][DI2][DI3][DI4]  ← Digital Input terminals
-[DI5][DI6][DI7][DI8]
+[UI9][UI10][UI11][UI12]
+[UI13][UI14][UI15][UI16]
 
 [AO1][AO2][AO3][AO4]  ← Analog Output terminals
 [DO1][DO2][DO3][DO4]  ← Relay Output terminals
@@ -441,19 +498,19 @@ Mặt sau thiết bị:
 
 | Test | Tiêu chuẩn | Level | Yêu cầu |
 |------|-----------|-------|---------|
-| ESD Immunity | IEC 61000-4-2 | Level 3 (6kV contact, 8kV air) | PASS |
-| Radiated Immunity | IEC 61000-4-3 | Level 3, 10 V/m | PASS |
-| Fast Transient | IEC 61000-4-4 | Level 3, 2kV | PASS |
-| Surge | IEC 61000-4-5 | Level 3, 2kV DM / 4kV CM | PASS |
-| Conducted Immunity | IEC 61000-4-6 | Level 3, 10 Vrms | PASS |
-| Radiated Emission | CISPR 11 / EN 55011 | Class A | PASS |
-| Conducted Emission | CISPR 11 | Class A | PASS |
+| ESD Immunity | IEC 61000-4-2 | Port-level target in EMC test plan | PENDING EVIDENCE |
+| Radiated Immunity | IEC 61000-4-3 | Level 3 target, 10 V/m | PENDING EVIDENCE |
+| Fast Transient | IEC 61000-4-4 | Port-level target in EMC test plan | PENDING EVIDENCE |
+| Surge | IEC 61000-4-5 | Port-level target in EMC test plan | PENDING EVIDENCE |
+| Conducted Immunity | IEC 61000-4-6 | Level 3 target, 10 Vrms | PENDING EVIDENCE |
+| Radiated Emission | CISPR 11 / EN 55011 | Class A target | PENDING EVIDENCE |
+| Conducted Emission | CISPR 11 | Class A target | PENDING EVIDENCE |
 
 ### 13.2 Safety (IEC 61010-1)
 
 | Yêu cầu | Nội dung |
 |---------|---------|
-| **Isolation voltage** | Minimum 3kVAC (power input ↔ logic) |
+| **Isolation voltage** | No 3kVAC claim until the final power/isolation topology and dielectric test evidence are approved |
 | **Clearance & creepage** | Theo IEC 61010-1 Annex G, Cat II, Pollution 2 |
 | **Flammability** | Vỏ ABS/PA66 UL94 V-0 |
 | **Working voltage** | Max 300V CAT II trên relay contacts |
@@ -465,7 +522,7 @@ Mặt sau thiết bị:
 
 | Thông số | Yêu cầu | Test method |
 |----------|---------|------------|
-| **Nhiệt độ làm việc (validated)** | 0°C đến +55°C (với heatsink Radxa 5540B) | IEC 60068-2-1 / 2-2 |
+| **Nhiệt độ làm việc (interim target)** | 0°C đến +55°C with heatsink; not a validated release claim until chamber evidence exists | IEC 60068-2-1 / 2-2 |
 | **Nhiệt độ làm việc (target)** | -20°C đến +65°C (cần thermal derating report trước GA) | IEC 60068-2-1 / 2-2 |
 | **Nhiệt độ bảo quản** | -40°C đến +85°C | IEC 60068-2-1 / 2-2 |
 | **Độ ẩm** | 10–90% RH non-condensing | IEC 60068-2-78 |
@@ -510,6 +567,13 @@ Mặt sau thiết bị:
 
 ---
 
+## Revision History
+
+| Revision | Ngày | Thay đổi |
+|---|---|---|
+| 1.1 | 2026-05-28 | Previous approved hardware specification baseline. |
+| 2.0 | 2026-06-30 | Breaking alignment to ADR-010 and current hardware review: 16 UI base SKU, no populated DI, IOP 2ms, power/EMC/thermal claims returned to evidence-gated status. |
+
 **Document ID:** HW-SPEC-MK-DDC-24-VI  
-**Revision:** 1.1 | 2026-05-28  
-**Approved by:** Hardware Lead, CTO KINEXUS Technologies
+**Revision:** 2.0 | 2026-06-30
+**Review required:** Hardware Lead, Compliance/QA, Product Owner

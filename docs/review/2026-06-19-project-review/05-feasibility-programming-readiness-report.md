@@ -110,7 +110,7 @@
 - [ ] SOM: fix TD-002 (SHM race), fix TD-003 (EAGAIN semantics)
 
 #### Sprint 2+ — Theo Phase Plan đã có
-- Phase 2 (IOP UART), Phase 3 (iobus), Phase 4 (core)... đã plan chi tiết trong `03_PHASE_PLAN.md` + `10_TASK_CHECKLIST.md`
+- Phase 2 (IOP UART), Phase 3 (iobus), Phase 4 (core)... đã plan chi tiết trong `03_PHASE_PLAN.md` + `11_TASK_CHECKLIST.md`
 
 ### Effort ước tính cho Option 2
 

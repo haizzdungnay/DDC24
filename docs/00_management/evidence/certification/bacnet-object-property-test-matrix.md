@@ -48,7 +48,7 @@
 
 ---
 
-## 2. Analog Input (AI) — 8 instances (AI1–AI8)
+## 2. Analog Input (AI) — 16 instances (AI1–AI16)
 
 | # | Property | BTL Req | Writable | COV | Source | Notes |
 |---|----------|:-------:|:--------:|:---:|--------|-------|
@@ -113,14 +113,16 @@
 
 ---
 
-## 5. Binary Input (BI) — 8 instances (DI1–DI8 via BI1–BI8)
+## 5. Binary Input (BI) — optional SKU only
+
+Base SKU (`BOARD_CAP_MAP=0x000D`) has no physical industrial DI and shall not be certified as exposing DI1–DI8. Run the BI1–BI8 matrix below only on the optional isolated-DI SKU with the matching capability bit.
 
 | # | Property | BTL Req | Writable | COV | Source | Notes |
 |---|----------|:-------:|:--------:|:---:|--------|-------|
 | 5.1 | Object_Identifier | M | — | — | PICS §4 | instance 1–8 |
 | 5.2 | Object_Name | M | ✅ | — | | default "BI1".."BI8" |
 | 5.3 | Object_Type | M | — | — | | always BINARY_INPUT = 3 |
-| 5.4 | Present_Value | M | — | ✅ | PICS §4 | read from DI1–DI8 |
+| 5.4 | Present_Value | M | — | ✅ | PICS §4 | read from optional isolated DI1–DI8 |
 | 5.5 | Status_Flags | M | — | — | | |
 | 5.6 | Event_State | M | — | — | | |
 | 5.7 | Out_Of_Service | M | ✅ | — | | |
@@ -347,7 +349,7 @@
 | Object Type | Count | Required Properties | Writable | COV | Source Section |
 |-------------|:-----:|:-------------------:|:--------:|:---:|:--------------:|
 | Device | 1 | 20+ | partial | — | PICS §7 |
-| Analog Input (AI) | 8 | 10 | OOS | ✅ | PICS §4, §4.1 |
+| Analog Input (AI) | 16 | 10 | OOS | ✅ | PICS §4, §4.1 |
 | Analog Output (AO) | 4 | 12 | PV, OOS | ✅ | PICS §4, §4.2 |
 | Analog Value (AV) | 32 | 10 | PV, OOS | ✅ | PICS §4 |
 | Binary Input (BI) | 8 | 8 | OOS | ✅ | PICS §4 |

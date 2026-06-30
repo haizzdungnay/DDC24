@@ -33,7 +33,7 @@ Công ty chúng tôi — **KINEXUS** — là doanh nghiệp Việt Nam đang ph�
 | Dải nhiệt độ | -20°C … +65°C |
 | Cấp bảo vệ | IP20 (lắp trong tủ điện, DIN-rail) |
 | Cổng kết nối | Ethernet RJ-45, RS-485 (Modbus RTU master), WiFi (tùy chọn) |
-| I/O | 8 UI (universal) + 8 DI + 4 AO + 4 DO (relay 5A @ 250VAC) |
+| I/O | 16 UI (0–10V/4–20mA/NTC/aux dry contact) + 4 AO + 4 DO; no base-SKU industrial DI |
 | Tiêu chuẩn tham chiếu | IEC 61326-1 (EMC), IEC 60730-1 (automatic electrical controls) |
 
 **Kính đề nghị Quý lab cung cấp:**

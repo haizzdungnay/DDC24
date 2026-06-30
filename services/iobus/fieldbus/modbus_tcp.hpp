@@ -53,6 +53,7 @@ private:
         uint16_t      ext_base         = 0;
         uint16_t      ext_count        = 0;
         bool          connected        = false;
+        bool          offline_published = false;
         uint64_t      next_reconnect_ms = 0;
         TcpSlaveConfig cfg;
     };

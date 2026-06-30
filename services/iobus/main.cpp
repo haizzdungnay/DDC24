@@ -103,7 +103,13 @@ const kx_plc_shm_t* try_attach_plc_shm()
     if (fd < 0) return nullptr;
     void* mem = ::mmap(nullptr, sizeof(kx_plc_shm_t), PROT_READ, MAP_SHARED, fd, 0);
     ::close(fd);
-    return mem == MAP_FAILED ? nullptr : static_cast<const kx_plc_shm_t*>(mem);
+    if (mem == MAP_FAILED) return nullptr;
+    const auto* shm = static_cast<const kx_plc_shm_t*>(mem);
+    if (__atomic_load_n(&shm->magic, __ATOMIC_ACQUIRE) != KX_SHM_MAGIC) {
+        ::munmap(mem, sizeof(kx_plc_shm_t));
+        return nullptr;
+    }
+    return shm;
 }
 
 bool send_core_command(const std::string& sock_path, const std::string& op,
@@ -265,8 +271,15 @@ int main(int argc, char** argv)
         fieldbus_thread = std::thread([&]() {
             while (!g_shutdown.load()) {
                 const uint64_t poll_now = now_ms();
-                if (rtu_ok)
+                if (rtu_ok) {
+                    /* COR-011: bridge write setpoints from core before poll */
+                    const kx_plc_shm_t* rtu_plc_shm = try_attach_plc_shm();
+                    modbus.drain_ext_writes(rtu_plc_shm);
+                    if (rtu_plc_shm)
+                        ::munmap(const_cast<kx_plc_shm_t*>(rtu_plc_shm),
+                                 sizeof(kx_plc_shm_t));
                     modbus.poll_once(poll_now, ext_cache, fieldbus_metrics, fieldbus_sock_path);
+                }
                 if (modbus_tcp.has_slaves())
                     modbus_tcp.poll_once(poll_now, ext_cache, fieldbus_sock_path);
                 uint32_t wait_ms = rtu_ok ? modbus.sleep_ms_until_next(now_ms()) : 1000u;

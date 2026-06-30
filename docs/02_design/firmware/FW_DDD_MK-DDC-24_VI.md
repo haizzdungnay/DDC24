@@ -2,8 +2,8 @@
 ## MCU STM32G0B1RBT6 / FreeRTOS (IEEE 1016)
 
 > **Document ID:** DDD-FW-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-05-30
-> **Trạng thái:** Approved (Owner 2026-06-08) (DP-0 skeleton có decomposition) — chi tiết module bổ sung ở DP-2
+> **Phiên bản:** 2.0 | 2026-06-30
+> **Trạng thái:** In-Review — ADR-010 breaking I/O/IOP alignment
 > **Owner:** Firmware Team
 > 📘 [README](../../01_specs/README.md) · Nâng từ `FW_ARCH_SPEC` · Trace `FW_REQUIREMENTS`, `SWFW_INTERFACE_SPEC`
 
@@ -15,9 +15,9 @@ Không bao gồm: app SOM, schematic.
 
 ## 2. Bối cảnh & ràng buộc
 - MCU STM32G0B1RBT6 @64MHz, 128KB Flash/144KB SRAM; pinout = **[D-1 FW_PINOUT_MASTER](FW_PINOUT_MASTER_MK-DDC-24_VI.md)**.
-- Real-time cứng: ADC sampling 1ms; IOP response ≤5ms.
+- Real-time cứng: ADC sampling 1ms; IOP v2 response must fit the 3ms timeout budget.
 - Không dynamic alloc sau RTOS start (coding std §4).
-- Ngoại vi: SPI3↔ADS131M08, SPI1↔DAC8554, USART1↔SOM (IOP), GPIO DI/DO/mux.
+- Ngoại vi: SPI3↔2×ADS131M08, SPI1↔DAC8554, USART1↔SOM (IOP), UI mode-latch/DO GPIO.
 
 ## 3. Phân rã module
 ```
@@ -32,8 +32,8 @@ Không bao gồm: app SOM, schematic.
 
 | Module | Trách nhiệm | Task/Driver | Trace |
 |--------|-------------|-------------|-------|
-| `io_sample` | đọc ADS131M08, lọc, đọc+debounce DI | task Pri7 1ms | FW-IO-001..024 |
-| `iop_comm` | parse/build frame IOP, CRC, SEQ, dispatch | task Pri6 10ms | IOP-FW-001..010 |
+| `io_sample` | đọc 2× ADS131M08, lọc và cập nhật UI1-UI16/status | task Pri7 1ms | FW-IO-001..024 |
+| `iop_comm` | parse/build frame IOP v2, CRC, SEQ, dispatch | task Pri6 event-driven | IOP-FW-001..010 |
 | `ao_output` | nhận ao_cmd → ghi DAC8554, mode select | task Pri6 10ms | FW-AO-001..009 |
 | `do_control` | ghi relay, đọc feedback, stuck-detect | task Pri6 10ms | FW-DO-001..006 |
 | `diagnostics` | temp/VDD/counters, self-test | task Pri2 1s | FW-DIAG-001..006 |
@@ -45,16 +45,16 @@ Không bao gồm: app SOM, schematic.
 
 ### 4.1 `io_sample` (Pri 7, 1 ms) — hot-path
 - **Trigger:** TIM-based 1ms (xTaskNotifyFromISR).
-- **Luồng:** start SPI3 DMA đọc 8×24-bit → DMA TC callback ghi `io_data_buf` (bảo vệ `xIoDataMutex`); đọc 8 GPIO DI → debounce; tăng `sample_cnt`.
+- **Luồng:** đọc hai ADS131M08 qua SPI3/CS độc lập → sign-extend 16×s24 vào int32 → ghi `io_data_buf` (bảo vệ `xIoDataMutex`); tăng `sample_cnt`.
 - **Filter:** moving average 8 mẫu (FW-IO-002); spike reject ±10% (FW-IO-003).
 - **Lỗi:** ADS131M08 không phản hồi 5ms → `FAULT_FLAGS.ADC_FAULT`; thử reinit mỗi 1s (FW-IO-006/008).
 - **Tài nguyên:** stack 512B; budget < 200 µs/chu kỳ.
 - **Data:** `io_data_t` (xem FW_ARCH §4.1).
 
-### 4.2 `iop_comm` (Pri 6, 10 ms / event) — hợp đồng [SWFW_INTERFACE_SPEC]
+### 4.2 `iop_comm` (Pri 6, event-driven) — hợp đồng ADR-010 + `shared/iop_protocol.h`
 - **RX:** UART IDLE + DMA → frame; verify CRC-16/Modbus (cross-test với SOM, IOP-FW-010); check SEQ; dispatch theo CMD.
 - **Dispatch:** `GET_IO`→build `IO_RESP` từ `io_data_buf`; `SET_AO`→`xAoQueue`; `SET_DO`→`xDoQueue`; `SET_AO_CFG`→set AO mode pins; `RESET_IO`→safe-state flag; `HANDSHAKE`→version negotiate; lỗi→`NACK`.
-- **TX:** DMA; latency GET_IO→IO_RESP ≤5ms (FW-IOP-003).
+- **TX:** DMA; latency GET_IO→IO_RESP phải nằm trong response timeout 3ms (FW-IOP-003).
 - **Watchdog IOP:** không nhận GET_IO 200ms → safe-state (FW-WDG-005).
 - **Lỗi:** CRC/SEQ/len → NACK + counter (DIAG_RESP).
 
@@ -108,4 +108,4 @@ Không bao gồm: app SOM, schematic.
 | — | Module designs riêng (io_sample, iop_comm…) ở DP-2 | FW | DP-2 |
 
 ---
-**Rev** 1.0 | 2026-05-30
+**Rev** 2.0 | 2026-06-30 (16 UI, 2× ADS131M08, IOP v2 event-driven) · 1.0 | 2026-05-30

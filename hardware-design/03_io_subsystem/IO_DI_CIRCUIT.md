@@ -3,6 +3,7 @@
 > **Document:** HW-DES-03-DI | Rev 1.2 | 2026-06-23
 > **Status:** ARCHIVED reference design
 > **Important:** UI auxiliary dry-contact mode does **not** replace industrial isolated DI
+> **Current base Rev A input design:** [`IO_UI_CIRCUIT.md`](IO_UI_CIRCUIT.md). Optional isolated DI must use the `10_DI_ISOLATED_OPTION` sheet rule in [`CB_SCHEMATIC_NOTES.md`](../02_carrier_board/CB_SCHEMATIC_NOTES.md).
 
 ---
 

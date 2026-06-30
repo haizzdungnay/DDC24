@@ -37,9 +37,9 @@ Vi phạm nguyên tắc này → PR bị reject, không exception.
 - Task/microtask + effort estimate
 - Phụ thuộc vào task nào trước
 
-**Format:** theo 22_GRAPH_STATEFUL_COMPONENTS_PLAN.md làm mẫu.
+**Format:** theo 23_GRAPH_STATEFUL_COMPONENTS_PLAN.md làm mẫu.
 
-**Không cần plan riêng nếu:** task nhỏ (<4h), spec đã đủ trong 02_design + 06/07, và task block trong 10_TASK_CHECKLIST đã có đủ Input/Output/Test/Done.
+**Không cần plan riêng nếu:** task nhỏ (<4h), spec đã đủ trong 02_design + 06/07, và task block trong 11_TASK_CHECKLIST đã có đủ Input/Output/Test/Done.
 
 ### Bước 2 — Owner duyệt
 
@@ -55,8 +55,8 @@ Sau khi code xong từng microtask, DEV phải cập nhật ngay (không để c
 
 | Loại thay đổi | Doc phải update |
 |---------------|----------------|
-| Thêm module SOM iobus | `03_PHASE_PLAN` + `06_IOBUS_GUIDE` + `10_TASK_CHECKLIST` + `21_SOM_PLAN` |
-| Thêm module SOM core | `03_PHASE_PLAN` + `07_CORE_GUIDE` + `10_TASK_CHECKLIST` + `21_SOM_PLAN` |
+| Thêm module SOM iobus | `03_PHASE_PLAN` + `06_IOBUS_GUIDE` + `11_TASK_CHECKLIST` + `21_SOM_PLAN` |
+| Thêm module SOM core | `03_PHASE_PLAN` + `07_CORE_GUIDE` + `11_TASK_CHECKLIST` + `21_SOM_PLAN` |
 | Thêm component type | `SW_COMPONENT_LIBRARY` + `07 §graph` + `10` + `21` |
 | Thêm config field | `CONFIG_SCHEMA` + `07` |
 | Thêm API endpoint | `REST_API_OPENAPI` + `08_WEB_GUIDE` |
@@ -178,8 +178,8 @@ PR reviewer phải check các điểm sau trước khi Approve:
 Đọc theo thứ tự này trước khi viết bất kỳ dòng code nào:
 
 1. [docs/02_design/GETTING_STARTED_DEV.md](02_design/GETTING_STARTED_DEV.md)
-2. [docs/03_implementation/15_CONTRACT_FREEZE.md](03_implementation/15_CONTRACT_FREEZE.md)
-3. [docs/03_implementation/16_QUICK_START_SOM_DEV.md](03_implementation/16_QUICK_START_SOM_DEV.md)
+2. [docs/03_implementation/16_CONTRACT_FREEZE.md](03_implementation/16_CONTRACT_FREEZE.md)
+3. [docs/03_implementation/17_QUICK_START_SOM_DEV.md](03_implementation/17_QUICK_START_SOM_DEV.md)
 4. [docs/03_implementation/03_PHASE_PLAN.md](03_implementation/03_PHASE_PLAN.md)
 5. Module guide tương ứng: 06 (iobus) / 07 (core) / 08 (web)
 6. File này (DOC_GOVERNANCE.md)

@@ -6,7 +6,7 @@
 - Related: ADR-005 (process topology), ADR-006 (form/JSON UI)
 - Supersedes: backend stack in `SW_WEBIDE_DESIGN_MK-DDC-24_VI.md` (FastAPI/Python +
   Svelte) — **removed 2026-06-08** (see git history) — and the web parts of
-  `docs/05_implementation/KX-DDC24-BE-DEVGUIDE-001_VI.md`
+  `docs/05_devguides/KX-DDC24-BE-DEVGUIDE-001_VI.md`
 
 ## Context
 

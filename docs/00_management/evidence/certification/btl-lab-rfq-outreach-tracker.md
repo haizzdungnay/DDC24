@@ -51,7 +51,7 @@ KINEXUS Technologies (Vietnam) is developing a BACnet/IP DDC controller
 Device Profile:
 - BACnet Device Profile: B-BC (BACnet Building Controller)
 - BACnet/IP (Annex J) native
-- 24 I/O points (8 UI + 8 DI + 4 AO + 4 DO)
+- 24 I/O points (16 UI + 4 AO + 4 DO; base SKU has no industrial DI)
 - Linux-based (Debian 12), open-source bacnet-stack
 
 We are evaluating BACnet International Silver Corporate Membership for

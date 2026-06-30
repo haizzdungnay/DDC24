@@ -2,7 +2,7 @@
 
 > **SOM:** Radxa CM3 (RK3566, Quad-core A55, 2GB LPDDR4 baseline)
 > **MCU:** STM32G0B1RBT6
-> **Hardware docs rev:** HW-DES v1.3 | 2026-06-23
+> **Hardware docs rev:** HW-DES v1.4 | 2026-06-30
 > **Status:** Draft for Rev A schematic review after UI architecture correction
 
 ---
@@ -33,11 +33,13 @@ hardware-design/
 │   └── SOM_SPEC_RADXA_CM3.md
 ├── 02_carrier_board/
 │   ├── CB_BLOCK_DIAGRAM.md
-│   └── CB_SCHEMATIC_NOTES.md
+│   ├── CB_SCHEMATIC_NOTES.md
+│   └── GROUNDING_SCHEME.md
 ├── 03_io_subsystem/
 │   ├── IO_UI_CIRCUIT.md
 │   ├── IO_AO_CIRCUIT.md
 │   ├── IO_DO_RELAY.md
+│   ├── IO_RS485_CIRCUIT.md
 │   └── IO_DI_CIRCUIT.md              archived reference; not UI replacement
 ├── 04_power_supply/
 │   └── PWR_DESIGN.md
@@ -59,7 +61,8 @@ hardware-design/
 │   └── MFG_DATA_PACKAGE.md
 ├── hw_design_review/
 │   ├── SCHEMATIC_REVIEW_CHECKLIST.md
-│   └── HW-RISK-UI-16CH.md
+│   ├── HW-RISK-UI-16CH.md
+│   └── HW_DOC_REVIEW_CLOSURE_PLAN.md
 ├── kicad/
 │   └── PCB_PLACEMENT_GUIDE.md
 └── REWORK_DI_TO_UI.md                 superseded historical note
@@ -74,29 +77,38 @@ hardware-design/
 | 1 | `03_io_subsystem/IO_UI_CIRCUIT.md` | HW-DES-03-UI architecture decision and per-mode circuits |
 | 2 | `02_carrier_board/CB_BLOCK_DIAGRAM.md` | System signal chain and board-level boundary |
 | 3 | `02_carrier_board/CB_SCHEMATIC_NOTES.md` | Schematic checklist and sheet rules |
-| 4 | `05_mcu_io/MCU_STM32G0_SPEC.md` | MCU pinmap and mode latch |
-| 5 | `05_mcu_io/IOP_PROTOCOL.md` | Signed int32 UI ADC frame |
-| 6 | `05_mcu_io/FW-ADC-SAMPLING.md` | Firmware sampling sequence |
-| 7 | `06_bom/BOM-UI-16CH.md` | UI BOM, tolerances, alternates |
-| 8 | `09_hw_bringup/HW-TEST-UI-16CH.md` | UI test plan |
-| 9 | `hw_design_review/HW-RISK-UI-16CH.md` | Risk register and release blockers |
-| 10 | `hw_design_review/SCHEMATIC_REVIEW_CHECKLIST.md` | Sign-off checklist before layout |
+| 4 | `04_power_supply/PWR_DESIGN.md` | Power tree, budgets, regulator/protection release gates |
+| 5 | `02_carrier_board/GROUNDING_SCHEME.md` | Chassis, field, digital, and analog return strategy |
+| 6 | `03_io_subsystem/IO_RS485_CIRCUIT.md` | RS-485 transceiver, isolation, termination, protection |
+| 7 | `05_mcu_io/MCU_STM32G0_SPEC.md` | MCU pinmap and mode latch |
+| 8 | `05_mcu_io/IOP_PROTOCOL.md` | Signed int32 UI ADC frame and AO/DO commands |
+| 9 | `05_mcu_io/FW-ADC-SAMPLING.md` | 1ms acquisition and 2ms poll/response timing |
+| 10 | `06_bom/BOM-UI-16CH.md` | UI BOM, tolerances, alternates |
+| 11 | `07_emc_thermal/EMC_THERMAL_NOTES.md` | Port-level EMC targets and thermal checks |
+| 12 | `09_hw_bringup/HW-TEST-UI-16CH.md` | UI test plan |
+| 13 | `10_manufacturing/MFG_DATA_PACKAGE.md` | Fabrication outputs and approval gate |
+| 14 | `hw_design_review/HW_DOC_REVIEW_CLOSURE_PLAN.md` | Review issue status and required evidence |
+| 15 | `hw_design_review/SCHEMATIC_REVIEW_CHECKLIST.md` | Sign-off checklist before layout |
 
 ---
 
 ## 4. Architecture Diagram
 
 ```text
-UI field terminal
-  -> protection / miswire / EMC filter
-  -> mode front-end
-  -> scaled low-voltage node
-  -> mux / buffer / filter
-  -> 2x ADS131M08
-  -> STM32G0B1
-  -> binary IOP frame, 16 x int32 raw_adc
-  -> Radxa CM3
-  -> Linux scaling / linearization / application
+24VAC/VDC
+  -> fuse / bridge / coordinated surge protection
+  -> regulated 5V, 3.3V, 1.8V, +15V_AO, +5V_RELAY rails
+
+UI1..UI16 -> terminal protection -> mode front-end -> low-voltage mux/buffer
+           -> 2x ADS131M08 -> STM32G0B1
+
+STM32G0B1 -> DAC8554 / AO front-end -> AO1..AO4
+           -> relay driver / dry contacts -> DO1..DO4
+           <-> IOP v2 UART, SOM polls every 2ms <-> Radxa CM3
+
+Radxa CM3 -> Ethernet / USB / local HMI
+           -> protected RS-485 Modbus RTU master -> downstream devices
+           -> Linux scaling / control / BACnet-IP / MQTT / REST
 ```
 
 Optional true industrial DI, if required, must be a separate isolated-DI sheet/module. It is not provided by UI dry-contact mode.
@@ -110,6 +122,7 @@ Optional true industrial DI, if required, must be a separate isolated-DI sheet/m
 - [ ] FW Lead approves mode latch, sampling sequence, and IOP frame.
 - [ ] QA approves `HW-TEST-UI-16CH.md` and risk closure evidence.
 - [ ] BOM values match schematic.
+- [ ] P0 rows in `HW_DOC_REVIEW_CLOSURE_PLAN.md` have engineering evidence or signed waivers.
 - [ ] No document used for release contradicts HW-DES-03-UI Rev 2.2 or later.
 
 ---
@@ -122,7 +135,8 @@ Optional true industrial DI, if required, must be a separate isolated-DI sheet/m
 | 2026-05-30 | v1.1 | STM32G0B1 and MCU-master ADC architecture updates |
 | 2026-06-23 | v1.2 | Initial DI to UI migration |
 | 2026-06-23 | v1.3 | UI architecture review: per-channel mode select, TMUX low-voltage only, 49.9R shunt, RTD removed, dry contact auxiliary only, signed int32 IOP frame |
+| 2026-06-30 | v1.4 | Full-system diagram, power/EMC/grounding/RS-485 reading order, and hardware-review closure gate |
 
 ---
 
-**Document ID:** HW-DES-README | Rev 1.3 | 2026-06-23
+**Document ID:** HW-DES-README | Rev 1.4 | 2026-06-30

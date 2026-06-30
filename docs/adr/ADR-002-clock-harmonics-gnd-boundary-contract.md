@@ -172,6 +172,18 @@ Validation for this architecture contract is satisfied when:
 3. Treat all observed peaks as report-table rows
    - Rejected because report needs stable comparison bins, not open-ended spectrum dump.
 
+## Consequences
+
+**Positive:**
+- Clock harmonics and GND continuity measurement scope is explicit and bounded.
+- Mandatory vs. optional hotspot distinction reduces wasted bench time.
+
+**Negative / Trade-offs:**
+- Requires physical HW bench access — blocked on human HW engineer assignment.
+- Evidence photos/screenshots must be captured by executor and committed to repo.
+
+See also: **Acceptance criteria** section below.
+
 ## Risks
 
 - `R1` `RGMII` row ambiguity: docs mention `25 MHz` reference while report expects `100 MHz`. Mitigation: keep `100 MHz` as normative report row for hotspot reporting and note off-bin observations in evidence notes.

@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Bộ tài liệu triển khai lập trình thật
 
 > **Document ID:** IMPL-README-MK-DDC-24-VI
-> **Phiên bản:** 1.2 | 2026-06-13 (thêm docs 22-25 cho S7 #4/#5/#6) · 1.1 | 2026-06-11
+> **Phiên bản:** 1.3 | 2026-06-27 (restructure: fix duplicate 08/23, cascade rename, archive CODE_REVIEW, rename 05_devguides) · 1.2 | 2026-06-13
 > **Trạng thái:** Active — tài liệu khởi động giai đoạn implement
 > **Đối tượng đọc:** Dev FW_MCU · Dev SOM (iobus/core) · Dev Web/BE · Tester · PM/Lead
 
@@ -32,7 +32,8 @@ Nếu bạn chỉ có 5 phút: đọc §1 → §5 → §6 → §7 của file nà
 
 > ⚠️ Bất kỳ đường code nào "giả lập IO", "trả số random", "bỏ qua MCU" chỉ được phép tồn
 > tại sau cờ `#ifdef MOCK` và **phải bị gỡ trước handover** (xem
-> [14_RELEASE_HANDOVER_CHECKLIST](14_RELEASE_HANDOVER_CHECKLIST.md)).
+> [15_RELEASE_HANDOVER_CHECKLIST](15_RELEASE_HANDOVER_CHECKLIST.md)).
+> Sau restructure 2026-06-27: file 09_WEB (cũ 08_WEB), 11_TASK (cũ 10_TASK), 22_SOM_SRC (cũ 21).
 
 ---
 
@@ -67,7 +68,7 @@ Nguồn-chuẩn kiến trúc service: [ADR-005](../adr/ADR-005-three-process-arc
 > `mkddc-iobus` (ADR-005 ghi rõ "core gộp io-driver + engine" ở mức service, nhưng cổng
 > UART vật lý do iobus quản để cô lập I/O chậm/lỗi khỏi vòng real-time của core). Hợp đồng
 > seqlock/SHM **giữ nguyên**. Rename `kinexus_shm.h → mkddc_shm.h` **đã thực hiện 2026-06-11**
-> (struct/magic giữ nguyên — phạm vi rename chốt tại [15_CONTRACT_FREEZE §6](15_CONTRACT_FREEZE.md)).
+> (struct/magic giữ nguyên — phạm vi rename chốt tại [16_CONTRACT_FREEZE §6](16_CONTRACT_FREEZE.md)).
 
 ---
 
@@ -77,11 +78,11 @@ Nguồn-chuẩn kiến trúc service: [ADR-005](../adr/ADR-005-three-process-arc
 |------|-------|--------|----------------|
 | **Dev 1 — FW_MCU** | Dev firmware | `fw/` | [04_FW_MCU](04_FW_MCU_IMPLEMENTATION_GUIDE.md), [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) |
 | **Dev 2 — SOM/Core/Iobus** | Dev SOM | `services/iobus/`, `services/core/`, `shared/` | [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md), [07_CORE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md), [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) |
-| **Dev 3 — Web/BE** | Dev web | `web/` | [08_WEB](08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) |
+| **Dev 3 — Web/BE** | Dev web | `web/` | [09_WEB](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) |
 
 Phân việc chi tiết: [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md).
-Tester & PM: [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md), [11_INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md),
-[12_DEFINITION_OF_DONE](12_DEFINITION_OF_DONE.md).
+Tester & PM: [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md), [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md),
+[13_DEFINITION_OF_DONE](13_DEFINITION_OF_DONE.md).
 
 ---
 
@@ -107,7 +108,7 @@ Tester & PM: [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md), [11_INTEGRATION_TEST_PLA
 [Sensor / DI contact / relay feedback THẬT]
       ↑ ADS131M08 (SPI3) / GPIO DI / DO feedback
 [FW_MCU io_sample]    → io_data_buf (1ms)
-      ↑ MCU trả IO_RESP (34 byte) khi nhận GET_IO
+      ↑ MCU trả IO_RESP v2 (74-byte payload) khi nhận GET_IO
 [mkddc-iobus]         → parse IO_RESP → scale raw→engineering → ghi kx_io_shm (seqlock)
       ↑ core đọc seqlock
 [mkddc-core]          → point table update + quality + BACnet object table (plc_shm)
@@ -156,25 +157,26 @@ Tester & PM: [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md), [11_INTEGRATION_TEST_PLA
 | 05 | [IOP_UART_IMPLEMENTATION_GUIDE](05_IOP_UART_IMPLEMENTATION_GUIDE.md) | Dev 1 + Dev 2 | hợp đồng UART chung |
 | 06 | [MKDDC_IOBUS_IMPLEMENTATION_GUIDE](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) | Dev 2 | trước khi code iobus |
 | 07 | [MKDDC_CORE_IMPLEMENTATION_GUIDE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) | Dev 2 | trước khi code core |
-| 08 | [MKDDC_WEB_IMPLEMENTATION_GUIDE](08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) | Dev 3 | trước khi code web |
-| 09 | [END_TO_END_DATA_FLOW](09_END_TO_END_DATA_FLOW.md) | tất cả | hiểu flow để debug |
-| 10 | [TASK_CHECKLIST](10_TASK_CHECKLIST.md) | PM + dev | tạo Jira/GitHub issue |
-| 11 | [INTEGRATION_TEST_PLAN](11_INTEGRATION_TEST_PLAN.md) | Tester | test trên board |
-| 12 | [DEFINITION_OF_DONE](12_DEFINITION_OF_DONE.md) | tất cả | biết khi nào xong |
-| 13 | [BRINGUP_GUIDE](13_BRINGUP_GUIDE.md) | KS bring-up | dựng board lần đầu |
-| 14 | [RELEASE_HANDOVER_CHECKLIST](14_RELEASE_HANDOVER_CHECKLIST.md) | PM/Lead | trước bàn giao |
-| 15 | [CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) | tất cả | **trước khi code** — bản chốt hợp đồng, hết tranh cãi |
-| 16 | [QUICK_START_SOM_DEV](16_QUICK_START_SOM_DEV.md) | Dev 2 (mới) | ngày đầu tiên vào dự án |
-| 17 | [WEEK1_SOM_BRINGUP_CHECKLIST](17_WEEK1_SOM_BRINGUP_CHECKLIST.md) | Dev 2 | tuần đầu trên SOM |
-| 18 | [DOCS_AUDIT_SOM_IMPLEMENTATION](18_DOCS_AUDIT_SOM_IMPLEMENTATION.md) | Lead/PM | audit docs 2026-06-11 (meta) |
-| 19 | [DOCS_FIX_CHECKLIST](19_DOCS_FIX_CHECKLIST.md) | Lead/PM | tracker sửa docs theo audit (meta) |
-| 20 | [VIRTUAL_COM_DECISION](20_VIRTUAL_COM_DECISION.md) | Dev 2 + Tester | khi chưa có board, cần bridge serial ảo đúng chuẩn |
-| 21 | [SOM_SRC_IMPLEMENTATION_PLAN](21_SOM_SRC_IMPLEMENTATION_PLAN.md) | Dev 2 + Lead | khi cần plan cực chi tiết để dựng source SOM từ cây trống |
-| 22 | [GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | Dev 2 + Lead | S7 #4: stateful graph + persist counter |
-| 23 | [CODE_REVIEW_S7_HARDENING_CLUSTER123](23_CODE_REVIEW_S7_HARDENING_CLUSTER123.md) | Lead/Reviewer | review cụm S7 #1/#2/#3 đã code |
-| 24 | [BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) | Dev 2 + Protocol Lead | S7 #5: BACnet/IP full path + BTL pretest |
-| 25 | [MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md) | Dev 2 + Protocol Lead | S7 #6: Modbus RTU master + ext cache |
-| 26 | [SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK](26_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) | Dev 2 + DevOps + QA | build/deploy lên SOM khi chưa có MCU |
+| 09 | [MKDDC_WEB_IMPLEMENTATION_GUIDE](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) | Dev 3 | trước khi code web |
+| 10 | [END_TO_END_DATA_FLOW](10_END_TO_END_DATA_FLOW.md) | tất cả | hiểu flow để debug |
+| 11 | [TASK_CHECKLIST](11_TASK_CHECKLIST.md) | PM + dev | tạo Jira/GitHub issue |
+| 12 | [INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md) | Tester | test trên board |
+| 13 | [DEFINITION_OF_DONE](13_DEFINITION_OF_DONE.md) | tất cả | biết khi nào xong |
+| 14 | [BRINGUP_GUIDE](14_BRINGUP_GUIDE.md) | KS bring-up | dựng board lần đầu |
+| 15 | [RELEASE_HANDOVER_CHECKLIST](15_RELEASE_HANDOVER_CHECKLIST.md) | PM/Lead | trước bàn giao |
+| 16 | [CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) | tất cả | **trước khi code** — bản chốt hợp đồng, hết tranh cãi |
+| 17 | [QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md) | Dev 2 (mới) | ngày đầu tiên vào dự án |
+| 18 | [WEEK1_SOM_BRINGUP_CHECKLIST](18_WEEK1_SOM_BRINGUP_CHECKLIST.md) | Dev 2 | tuần đầu trên SOM |
+| 19 | [DOCS_AUDIT_SOM_IMPLEMENTATION](19_DOCS_AUDIT_SOM_IMPLEMENTATION.md) | Lead/PM | audit docs 2026-06-11 (meta) |
+| 20 | [DOCS_FIX_CHECKLIST](20_DOCS_FIX_CHECKLIST.md) | Lead/PM | tracker sửa docs theo audit (meta) |
+| 21 | [VIRTUAL_COM_DECISION](21_VIRTUAL_COM_DECISION.md) | Dev 2 + Tester | khi chưa có board, cần bridge serial ảo đúng chuẩn |
+| 22 | [SOM_SRC_IMPLEMENTATION_PLAN](22_SOM_SRC_IMPLEMENTATION_PLAN.md) | Dev 2 + Lead | khi cần plan cực chi tiết để dựng source SOM từ cây trống |
+| 23 | [GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | Dev 2 + Lead | S7 #4: stateful graph + persist counter |
+| [A] | [CODE_REVIEW_S7_HARDENING](../review/2026-06-13-s7-hardening-review.md) | Lead/Reviewer | [archived] review cụm S7 #1/#2/#3 |
+| 24 | [SOM_FW_STATUS_REPORT_ISO](24_SOM_FW_STATUS_REPORT_ISO.md) | PM/Lead | FW status report ISO format |
+| 25 | [BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md) | Dev 2 + Protocol Lead | S7 #5: BACnet/IP full path + BTL pretest |
+| 26 | [MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md) | Dev 2 + Protocol Lead | S7 #6: Modbus RTU master + ext cache |
+| 27 | [SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK](27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) | Dev 2 + DevOps + QA | build/deploy lên SOM khi chưa có MCU |
 
 ---
 
@@ -183,7 +185,7 @@ Tester & PM: [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md), [11_INTEGRATION_TEST_PLA
 > ⚠️ **Rule số 1 (Contract Freeze):** với mọi GIÁ TRỊ thực thi — opcode, payload, enum, FAULT
 > bit, RESET reason, CRC, hằng số, SHM layout/path/ownership — **header trong `shared/` là
 > chuẩn CUỐI CÙNG**. Docs (kể cả spec 01_specs) chỉ là diễn giải: docs lệch header → header
-> thắng → sửa docs. Chi tiết + quy trình đổi hợp đồng: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md).
+> thắng → sửa docs. Chi tiết + quy trình đổi hợp đồng: [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md).
 
 | Chủ đề | Nguồn-chuẩn |
 |--------|-------------|
@@ -195,9 +197,9 @@ Tester & PM: [10_TASK_CHECKLIST](10_TASK_CHECKLIST.md), [11_INTEGRATION_TEST_PLA
 | Chân MCU | [FW_PINOUT_MASTER](../02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) |
 | SHM/IPC SOM (diễn giải, ownership chi tiết) | [06_IOBUS §5](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) + [SW_ARCH_SPEC §2](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) |
 | Graph/Config/REST | [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) · [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) · [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) |
-| Stateful graph Rev A.1 | [22_GRAPH_STATEFUL_COMPONENTS_PLAN](22_GRAPH_STATEFUL_COMPONENTS_PLAN.md) + [SW_RUNTIME_EXECUTION_MODEL §6](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) |
-| BACnet/IP implementation | [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md) + [BACNET_PICS_EPICS](../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) |
-| Modbus RTU master implementation | [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md) + [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) |
+| Stateful graph Rev A.1 | [23_GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) + [SW_RUNTIME_EXECUTION_MODEL §6](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) |
+| BACnet/IP implementation | [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md) + [BACNET_PICS_EPICS](../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) |
+| Modbus RTU master implementation | [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md) + [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) |
 
 ---
 **Rev** 1.3 | 2026-06-13 (thêm doc 26 SOM no-MCU deploy runbook) ·

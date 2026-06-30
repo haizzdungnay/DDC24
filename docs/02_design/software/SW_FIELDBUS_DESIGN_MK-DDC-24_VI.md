@@ -4,7 +4,7 @@
 > **Document ID:** DDD-SWSVC-FIELDBUS-MK-DDC-24-VI · **Rev** 1.2 | 2026-06-16 (close FB-Q-001/Q-002; thêm §9 ext IPC API) · 1.1 | 2026-06-13 (mkddc-iobus module; implementation plan 25) · 1.0 | 2026-05-30
 > 📘 [README](../../01_specs/README.md) · **Trace:** `SW-MOD-001..011`, `RTU-001..008` · ICD: [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) · Config: [D-5 §5b](../interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md)
 
-> Module này trong `mkddc-iobus` biến DDC thành **Modbus RTU master**: poll các **thiết bị phụ** (module mở rộng I/O, màn hình phụ, thiết bị bên thứ 3) trên RS-485, đưa dữ liệu vào hệ thống như **I/O ảo**. Khung mở: thêm loại thiết bị = thêm **device profile**, không đổi code. Chi tiết task/code path xem [Implementation 25](../../03_implementation/25_MODBUS_IMPLEMENTATION_PLAN.md).
+> Module này trong `mkddc-iobus` biến DDC thành **Modbus RTU master**: poll các **thiết bị phụ** (module mở rộng I/O, màn hình phụ, thiết bị bên thứ 3) trên RS-485, đưa dữ liệu vào hệ thống như **I/O ảo**. Khung mở: thêm loại thiết bị = thêm **device profile**, không đổi code. Chi tiết task/code path xem [Implementation 25](../../03_implementation/26_MODBUS_IMPLEMENTATION_PLAN.md).
 
 ---
 
@@ -244,7 +244,7 @@ TCP: `FR-026` (Modbus TCP client, REVA_SCOPE §2 T2).
 ## 12. Modbus TCP client — thiết kế (MOD-013)
 
 > **Trạng thái:** DRAFT — chờ owner approve trước khi implement (LUẬT 1).
-> **Task:** [MOD-013](../../03_implementation/10_TASK_CHECKLIST.md) trong Phase 3/4.
+> **Task:** [MOD-013](../../03_implementation/11_TASK_CHECKLIST.md) trong Phase 3/4.
 > **Scope:** REVA_SCOPE §2 T2 "Modbus TCP + hoàn thiện fallback"; 1 module TCP mới trong mkddc-iobus.
 
 ### 12.1 Vị trí trong kiến trúc

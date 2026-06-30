@@ -362,8 +362,16 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
                         ? jpt->get("node")->str_or("") : "";
                     if (!nid.empty()) {
                         const auto it = id_to_idx.find(nid);
-                        if (it != id_to_idx.end())
-                            nodes_[static_cast<size_t>(it->second)].proto_ext_idx = ext_idx;
+                        if (it != id_to_idx.end()) {
+                            Node& nd = nodes_[static_cast<size_t>(it->second)];
+                            if (nd.proto_ext_idx >= 0) {
+                                std::fprintf(stderr, "WARN  graph.proto_ext_idx_duplicate"
+                                             " node=%s prev=%d new=%d"
+                                             " — check modbus section in graph.json\n",
+                                             nid.c_str(), nd.proto_ext_idx, ext_idx);
+                            }
+                            nd.proto_ext_idx = ext_idx;
+                        }
                     }
                     ext_idx++;
                 }

@@ -2,7 +2,7 @@
 ## SOM Application Layer / Debian 12 (IEEE 1016)
 
 > **Document ID:** DDD-SW-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-13 (reconcile 3-process mkddc, Modbus RTU master, BACnet/Modbus implementation docs) · 1.0 | 2026-05-30
+> **Phiên bản:** 1.2 | 2026-06-30 (ADR-010 I/O/IOP alignment) · 1.1 | 2026-06-13 · 1.0 | 2026-05-30
 > **Trạng thái:** Draft (DP-0 skeleton có decomposition) — chi tiết service ở DP-2
 > **Owner:** Software Team
 > 📘 [README](../../01_specs/README.md) · Nâng từ `SW_ARCH_SPEC` · Trace `SW_REQUIREMENTS`, `SRS`
@@ -61,9 +61,9 @@ mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master)
 
 ### 4.1 `mkddc-iobus` IOP layer
 - **Interface:** IOP master theo [SWFW_INTERFACE_SPEC]; ghi `/dev/shm/mkddc_io_shm` (seqlock, SW-IOP-006).
-- **Luồng:** poll GET_IO 100Hz → parse/CRC → **scale raw→engineering** (SW_ARCH §4: CVD, Steinhart-Hart β=3950) → write shm. Đọc AO/DO setpoint từ shm, đổi → SET_AO/SET_DO.
+- **Luồng:** poll GET_IO 2ms/500Hz → parse/CRC 16×int32 signed UI raw → **scale raw→engineering** theo configured Rev A mode → write shm. Đọc AO/DO setpoint từ shm, đổi → SET_AO/SET_DO.
 - **FSM:** NORMAL→IOP_FAULT→SAFE_STATE (gửi RESET_IO, alarm bus) (SW-IOP-008/009).
-- **Lỗi:** timeout 10ms ×3 → fault; metrics qua REST (SW-IOP-011).
+- **Lỗi:** response timeout 3ms, retry≤3, 20ms no-valid-response → fault; metrics qua REST (SW-IOP-011).
 - **Real-time:** SCHED_FIFO 70 (SW-IOP-010).
 
 ### 4.2 `mkddc-core` (component graph engine, gộp io-driver)
@@ -74,13 +74,13 @@ mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master)
 - **State:** snapshot chỉ node persist (`RuntimeCounter`, `PulseCounter`) ra `/data/mkddc/state.snap` (60s dirty + shutdown + graph swap) + recovery theo node id+type (RUN-004; xem RUNTIME_MODEL Rev 1.1).
 
 ### 4.3 BACnet module trong `mkddc-iobus`
-- **Objects:** theo SRS §5.1 (Device, AI8/AO4/AV32/BI8/BO4/BV16/MSV8, Trend8, Schedule8, Calendar2, NC4, EE8). **PICS → [D-3]**.
+- **Objects:** base SKU Device, AI16/AO4/AV32/BO4/BV16/MSV8 plus configured services; physical BI is optional-SKU capability-gated. **PICS → [D-3]**.
 - **Transport:** BACnet/IP UDP 47808 (Ethernet/WiFi); COV; Who-Is<100ms. *(MS/TP bỏ — ARCH-R010.)*
-- **Nguồn dữ liệu:** đọc `/dev/shm/mkddc_plc_shm`; Write-Property cập nhật BACnet Priority_Array[16], winner đi vào core mức 3 qua IPC; không ghi IO trực tiếp. Chi tiết triển khai → [Implementation 24](../../03_implementation/24_BACNET_IMPLEMENTATION_PLAN.md).
+- **Nguồn dữ liệu:** đọc `/dev/shm/mkddc_plc_shm`; Write-Property cập nhật BACnet Priority_Array[16], winner đi vào core mức 3 qua IPC; không ghi IO trực tiếp. Chi tiết triển khai → [Implementation 24](../../03_implementation/25_BACNET_IMPLEMENTATION_PLAN.md).
 - **Device ID:** `/data/config/device.conf`, fallback DIP qua CM3 GPIO (SW-BAC-006).
 
 ### 4.4 Fieldbus module trong `mkddc-iobus` (Modbus RTU master)
-- **Fieldbus:** poll thiết bị phụ theo **device profile**; xem [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md), [SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md), [Implementation 25](../../03_implementation/25_MODBUS_IMPLEMENTATION_PLAN.md). Map điểm slave vào ext cache/core point. *(Không còn Modbus slave phục vụ BMS; MQTT/agent deferred Rev B+.)*
+- **Fieldbus:** poll thiết bị phụ theo **device profile**; xem [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md), [SW_FIELDBUS_DESIGN](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md), [Implementation 25](../../03_implementation/26_MODBUS_IMPLEMENTATION_PLAN.md). Map điểm slave vào ext cache/core point. *(Không còn Modbus slave phục vụ BMS; MQTT/agent deferred Rev B+.)*
 
 ### 4.5 `mkddc-web` (Go) *(thay kinexus-webide)*
 - **Form/JSON** config (KHÔNG FBD/ST): IO/BACnet/Modbus mapping + import/export `graph.json`; watch table/monitor (WebSocket), force I/O (auth admin); validator (library) chạy lúc deploy; commissioning + backup/restore. HTTP 8080 (LAN) → HTTPS 8443 (prod). **Graph/REST → [GRAPH_SCHEMA §7](../interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md)**, config schema → [D-5]. Xem [ADR-006](../../adr/ADR-006-rev-a-ui-form-json.md)/[ADR-007](../../adr/ADR-007-web-stack-go.md).
@@ -124,4 +124,4 @@ mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master)
 | — | Service designs riêng ở DP-2 | SW | DP-2 |
 
 ---
-**Rev** 1.1 | 2026-06-13 (reconcile mkddc naming + S7 #4/#5/#6 docs) · 1.0 | 2026-05-30
+**Rev** 1.2 | 2026-06-30 (ADR-010: 16 UI, no base DI, IOP 2ms/500Hz) · 1.1 | 2026-06-13 · 1.0 | 2026-05-30

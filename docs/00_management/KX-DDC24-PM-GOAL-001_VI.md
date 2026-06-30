@@ -2,7 +2,7 @@
 ## Mục tiêu dự án
 
 > **Document ID:** KX-DDC24-PM-GOAL-001
-> **Phiên bản:** 1.2 | 2026-06-02 · **Trạng thái:** Approved (Owner 2026-06-08) · **Owner:** PMO
+> **Phiên bản:** 1.3 | 2026-06-30 · **Trạng thái:** In-Review — I/O baseline aligned to ADR-010 · **Owner:** PMO
 > *Cập nhật theo [PM-MARKET-001 v1.1](KX-DDC24-PM-MARKET-001_VI.md)*
 > 📘 [docs/README](../README.md) · Liên quan: [PM-OVERVIEW](KX-DDC24-PM-OVERVIEW-001_VI.md) · [PRD](../01_specs/PRD_MK-DDC-24_VI.md) · [IMPLPLAN](KX-DDC24-PM-IMPLPLAN-001_VI.md)
 
@@ -62,7 +62,7 @@
 
 Dự án Ver 1.0 coi là **đạt mục tiêu** khi toàn bộ Acceptance Criteria của PRD §9 pass:
 
-- [ ] 100% test case I/O hardware pass (8 UI × 6 types, 8 DI, 4 AO, 4 DO)
+- [ ] 100% test case base-SKU hardware pass (16 UI across supported Rev A modes, 4 AO, 4 DO; no populated DI)
 - [ ] BACnet BTL conformance test pass
 - [ ] Đọc/ghi toàn bộ I/O từ northbound không ảnh hưởng BACnet
 - [ ] FCU commissioning end-to-end < 2 giờ (SI độc lập)
@@ -118,3 +118,4 @@ Dự án Ver 1.0 coi là **đạt mục tiêu** khi toàn bộ Acceptance Criter
 | 1.0 | 2026-06-02 | PMO | Phát hành đầu — tổng hợp mục tiêu từ PRD Rev 1.1 |
 | 1.1 | 2026-06-02 | ResearchDirector | Cập nhật mục tiêu giá theo PM-MARKET-001: điều chỉnh chênh lệch SBO/PXC4, bổ sung rủi ro SOM temp + BTL lab booking |
 | 1.2 | 2026-06-02 | ResearchDirector | Deep-dive update từ PM-MARKET-001 v1.1: OBJ-07 thêm channel waterfall model confirmation; bổ sung 3 rủi ro (regional cert budget escalation, TI/Radxa catalog pricing gap, competitor pricing unverified) |
+| 1.3 | 2026-06-30 | PMO/QA | Aligned base-SKU acceptance wording to ADR-010: 16 UI + 4 AO + 4 DO, no populated industrial DI. |

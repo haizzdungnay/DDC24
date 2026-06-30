@@ -1,6 +1,6 @@
 # SOM Specification — Radxa CM3 (Rockchip RK3566)
 
-> **Document:** HW-DES-01-SOM | Rev 1.1 | 2026-06-23
+> **Document:** HW-DES-01-SOM | Rev 1.3 | 2026-06-30
 > **Áp dụng cho:** MK-DDC-24 Carrier Board v1.x
 
 ---
@@ -75,7 +75,7 @@
 | **DO (Digital Output)** | **4×** | Relay HF46F + ULN2003A | GPIO (MCU STM32G0B1) | 250VAC/30VDC |
 | **Total base I/O** | **24 ch** | 16 UI + 4 AO + 4 DO | CM3 receives data via UART IOP | Optional DI not counted in base Rev A |
 
-### 2.3 Connector B2B
+### 2.4 Connector B2B
 
 | Connector | Số pin | Pitch | Nhà cung cấp gợi ý |
 |-----------|:------:|:-----:|-------------------|
@@ -102,6 +102,7 @@
 | CON3-2 | VCC_3V3 | — | — | Output từ CM3 PMIC, có thể cấp ≤ 200mA peripheral |
 
 > ⚠️ Carrier PHẢI cấp 5V ổn định ±5% cho CM3. KHÔNG dùng trực tiếp 3.3V từ CM3 PMIC cho relay hoặc tải nặng.
+> Mọi tải ngoại vi vượt **200mA tổng** trên VCC_3V3 của CM3 phải dùng regulator/load switch trên carrier và được đưa vào power budget. Không cộng nhiều tải nhỏ vượt giới hạn rail chỉ vì từng tải riêng lẻ dưới 200mA.
 
 ### 3.2 UART Mapping
 
@@ -204,23 +205,15 @@
 
 ---
 
-| Rev | Date | Changes |
-|-----|------|---------|
-| 1.1 | 2026-06-23 | Updated I/O description: 16× UI (no separate DI), added I/O Architecture Overview table |
-| 1.2 | 2026-06-23 | Final rev bump Phase 1-2: Updated pin mapping consistency check, verified UI_EN[8-15] = PB4-PB11 |
-| 1.0 | 2026-05-27 | Initial release. |
-
-**Document ID:** HW-DES-01-SOM | Rev 1.2 | 2026-06-23
-
----
-
 ## Revision History
 
 | Rev | Date | Changes |
 |-----|------|---------|
 | 1.0 | 2026-05-27 | Initial SOM specification |
 | 1.1 | 2026-06-23 | UI Rev A clarification: 16 UI analog, optional isolated DI separate, signed raw IOP data |
+| 1.2 | 2026-06-23 | Phase 1-2 pin-mapping cross-check |
+| 1.3 | 2026-06-30 | Removed duplicate revision metadata, fixed section numbering, and made the CM3 peripheral rail limit explicit |
 
 ---
 
-**Document ID:** HW-DES-01-SOM | Rev 1.1 | 2026-06-23
+**Document ID:** HW-DES-01-SOM | Rev 1.3 | 2026-06-30

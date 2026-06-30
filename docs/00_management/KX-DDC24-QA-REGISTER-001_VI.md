@@ -2,7 +2,7 @@
 ## Danh mục kiểm soát toàn bộ tài liệu
 
 > **Document ID:** KX-DDC24-QA-REGISTER-001
-> **Phiên bản:** 1.2 | 2026-06-08 · **Trạng thái:** Approved · **Owner:** QA/PMO
+> **Phiên bản:** 1.3 | 2026-06-30 · **Trạng thái:** In-Review · **Owner:** QA/PMO
 > **Phê duyệt 2026-06-08 (Owner):** các tài liệu KHÔNG có banner RECONCILE/SUPERSEDED → `Approved (Owner 2026-06-08)`
 > (owner sign-off, không thay cho design-review gate DR-1..DR-4 từng môn). Tài liệu CÓ banner →
 > `Needs Reconciliation` (chưa được duyệt cho tới khi nội dung khớp [CANONICAL_DECISIONS](../CANONICAL_DECISIONS.md)).
@@ -32,12 +32,12 @@
 ## 1. Quản lý (00_management)
 | ID | Tài liệu | Ver | Trạng thái | Owner |
 |----|----------|:---:|:----------:|-------|
-| KX-DDC24-DEC-CANON-001 | [Canonical Decisions](../CANONICAL_DECISIONS.md) | 1.0 | **Canonical** | Architect |
+| KX-DDC24-DEC-CANON-001 | [Canonical Decisions](../CANONICAL_DECISIONS.md) | 1.1 | **Canonical** | Architect |
 | KX-DDC24-SYS-ARCH-001 | [System Handbook (hiểu hệ thống từ số 0)](KX-DDC24-SYS-ARCH-001_VI.md) | 1.0 | **Needs Reconciliation** | System Architect |
 | KX-DDC24-PM-OVERVIEW-001 | [Project Overview](KX-DDC24-PM-OVERVIEW-001_VI.md) | 1.0 | **Needs Reconciliation** | PMO |
 | KX-DDC24-PM-IMPLPLAN-001 | [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md) | 1.1 | **Active** | PM+Leads |
 | KX-DDC24-QA-DOCCTRL-001 | [Document Control & Naming](KX-DDC24-QA-DOCCTRL-001_VI.md) | 1.0 | Approved | QA |
-| KX-DDC24-QA-REGISTER-001 | Master Register (file này) | 1.0 | Approved | QA |
+| KX-DDC24-QA-REGISTER-001 | Master Register (file này) | 1.3 | In-Review | QA |
 | KX-DDC24-QA-TRACE-001 | [Traceability Matrix](KX-DDC24-QA-TRACE-001_VI.md) | 1.0 | Approved (Owner 2026-06-08) | QA |
 | KX-DDC24-QA-ISOGAP-001 | [ISO Gap Assessment & Restructure Plan](KX-DDC24-QA-ISOGAP-001_VI.md) | 1.0 | Approved (Owner 2026-06-08) | QA |
 | KX-DDC24-QA-CHANGELOG | [CHANGELOG](../../CHANGELOG.md) | 0.3.0 | Active | QA |
@@ -53,26 +53,28 @@
 | ADR-006 | [Rev A UI = form/JSON](../adr/ADR-006-rev-a-ui-form-json.md) | — | Accepted |
 | ADR-007 | [Web stack Go](../adr/ADR-007-web-stack-go.md) | — | Accepted |
 | ADR-008 | [BMS Edge positioning + Rev A component set 24→28](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md) | — | Accepted |
+| ADR-009 | [ISA-101 HMI and navigation restructure](../adr/ADR-009-isa101-hmi-and-nav-restructure.md) | — | Accepted |
+| ADR-010 | [IOP v2 poll + capability map](../adr/ADR-010-iop-v2-poll-capability-map.md) | — | Accepted |
 
 ## 2. Yêu cầu (01_specs)
 | ID | Tài liệu | Legacy file | Ver | Trạng thái |
 |----|----------|-------------|:---:|:----------:|
-| KX-DDC24-SYS-SPEC-001 | Product Requirements | [PRD_MK-DDC-24_VI](../01_specs/PRD_MK-DDC-24_VI.md) | 1.0 | **Needs Reconciliation** |
-| KX-DDC24-SYS-SPEC-002 | System Requirements | [SRS_MK-DDC-24_VI](../01_specs/SRS_MK-DDC-24_VI.md) | 1.0 | **Needs Reconciliation** |
-| KX-DDC24-SYS-SPEC-003 | Datasheet (Modbus map §4.1) | [DS_MK-DDC-24_VI](../01_specs/DS_MK-DDC-24_VI.md) | 2.1 | **Needs Reconciliation** |
-| KX-DDC24-HW-SPEC-001 | Hardware Spec | [HW_SPEC_MK-DDC-24_VI](../01_specs/HW_SPEC_MK-DDC-24_VI.md) | 1.0 | Approved |
-| KX-DDC24-SYS-DEF-001 | Product Definition (BMS Edge, component-based) | [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) | 1.1 | **Canonical** |
-| KX-DDC24-PM-SCOPE-001 | Rev A Scope & 90-day Roadmap | [REVA_SCOPE_ROADMAP](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) | 1.1 | **Canonical** |
+| KX-DDC24-SYS-SPEC-001 | Product Requirements | [PRD_MK-DDC-24_VI](../01_specs/PRD_MK-DDC-24_VI.md) | 2.0 | **Needs Reconciliation** |
+| KX-DDC24-SYS-SPEC-002 | System Requirements | [SRS_MK-DDC-24_VI](../01_specs/SRS_MK-DDC-24_VI.md) | 2.0 | **Needs Reconciliation** |
+| KX-DDC24-SYS-SPEC-003 | Datasheet | [DS_MK-DDC-24_VI](../01_specs/DS_MK-DDC-24_VI.md) | 3.0 | **Needs Reconciliation** |
+| KX-DDC24-HW-SPEC-001 | Hardware Spec | [HW_SPEC_MK-DDC-24_VI](../01_specs/HW_SPEC_MK-DDC-24_VI.md) | 2.0 | In-Review |
+| KX-DDC24-SYS-DEF-001 | Product Definition (BMS Edge, component-based) | [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) | 2.0 | **Canonical** |
+| KX-DDC24-PM-SCOPE-001 | Rev A Scope & 90-day Roadmap | [REVA_SCOPE_ROADMAP](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) | 1.3 | **Canonical** |
 | KX-DDC24-PM-STRATEGY-001 | BMS Edge Strategy (định vị/cạnh tranh) | [BMS_EDGE_STRATEGY](../01_specs/BMS_EDGE_STRATEGY_MK-DDC-24_VI.md) | 1.0 | Active |
-| KX-DDC24-FW-SPEC-001 | FW Requirements | [FW_REQUIREMENTS](../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
+| KX-DDC24-FW-SPEC-001 | FW Requirements | [FW_REQUIREMENTS](../01_specs/FW_REQUIREMENTS_MK-DDC-24_VI.md) | 2.0 | In-Review |
 | KX-DDC24-SW-SPEC-001 | SW Requirements | [SW_REQUIREMENTS](../01_specs/SW_REQUIREMENTS_MK-DDC-24_VI.md) | 1.0 | **Needs Reconciliation** |
 
 ## 3. Kiến trúc (gộp trong `docs/01_specs/`)
 | ID | Tài liệu | Legacy file | Ver | Trạng thái |
 |----|----------|-------------|:---:|:----------:|
-| KX-DDC24-FW-ARCH-001 | FW Architecture | [FW_ARCH_SPEC](../01_specs/FW_ARCH_SPEC_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
+| KX-DDC24-FW-ARCH-001 | FW Architecture | [FW_ARCH_SPEC](../01_specs/FW_ARCH_SPEC_MK-DDC-24_VI.md) | 2.0 | In-Review |
 | KX-DDC24-SW-ARCH-001 | SW Architecture | [SW_ARCH_SPEC](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) | 1.0 | **Needs Reconciliation** |
-| KX-DDC24-IF-ICD-001 | IOP Interface (SOM↔MCU) | [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
+| KX-DDC24-IF-ICD-001 | IOP v1 Interface (SOM↔MCU) | [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) | 1.2 | Superseded by ADR-010/shared header |
 | KX-DDC24-PM-PLAN-002 | Design Plan SW/FW | [DESIGN_PLAN_SWFW](../01_specs/DESIGN_PLAN_SWFW_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 | KX-DDC24-QA-RPT-001 | Design Readiness Review | [DESIGN_READINESS_REVIEW](../01_specs/DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md) | 1.0 | Approved |
 | KX-DDC24-QA-LOG-001 | Open Issues / Decision Log | [OPEN_ISSUES](../01_specs/OPEN_ISSUES_MK-DDC-24_VI.md) | — | Active |
@@ -81,8 +83,8 @@
 ## 4. Thiết kế chi tiết (`docs/02_design/`)
 | ID | Tài liệu | Legacy file | Ver | Trạng thái |
 |----|----------|-------------|:---:|:----------:|
-| KX-DDC24-FW-DDD-001 | FW Detailed Design | [FW_DDD](../02_design/firmware/FW_DDD_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
-| KX-DDC24-SW-DDD-001 | SW Detailed Design | [SW_DDD](../02_design/software/SW_DDD_MK-DDC-24_VI.md) | 1.0 | **Needs Reconciliation** |
+| KX-DDC24-FW-DDD-001 | FW Detailed Design | [FW_DDD](../02_design/firmware/FW_DDD_MK-DDC-24_VI.md) | 2.0 | In-Review |
+| KX-DDC24-SW-DDD-001 | SW Detailed Design | [SW_DDD](../02_design/software/SW_DDD_MK-DDC-24_VI.md) | 1.2 | **Needs Reconciliation** |
 | KX-DDC24-FW-DDD-002 | Pinout Master (D-1) | [FW_PINOUT_MASTER](../02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 | KX-DDC24-FW-DDD-010 | Module iop_comm | [FW_MOD_IOP_COMM](../02_design/firmware/FW_MOD_IOP_COMM_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 | KX-DDC24-FW-DDD-011 | Module io_sample | [FW_MOD_IO_SAMPLE](../02_design/firmware/FW_MOD_IO_SAMPLE_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
@@ -95,7 +97,7 @@
 | KX-DDC24-BE-DDD-004 | Agent (MQTT/REST) | [SW_AGENT_DESIGN](../02_design/software/SW_AGENT_DESIGN_MK-DDC-24_VI.md) | 1.1 | **Deferred Rev B** |
 | KX-DDC24-BE-DDD-006 | Field bus (Modbus RTU master) | [SW_FIELDBUS_DESIGN](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 | KX-DDC24-FE-DDD-001 | mkddc-web (Go, form/JSON) | [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md) · [ADR-007](../adr/ADR-007-web-stack-go.md) *(thay SW_WEBIDE_DESIGN đã gỡ)* | — | Active |
-| KX-DDC24-BE-DDD-005 | HMI | [SW_HMI_DESIGN](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md) | 1.0 | **Deferred Rev B** |
+| KX-DDC24-BE-DDD-005 | HMI | [SW_HMI_DESIGN](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md) | 2.3 | Active Rev A amendment |
 | KX-DDC24-OPS-DDD-002 | OTA (D-7 SOM) | [SW_OTA_DESIGN](../02_design/software/SW_OTA_DESIGN_MK-DDC-24_VI.md) | 1.0 | **Deferred Rev B** |
 | KX-DDC24-SEC-DDD-001 | Security/Key-store (D-11) | [SW_SECURITY_KEYSTORE](../02_design/software/SW_SECURITY_KEYSTORE_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 
@@ -108,7 +110,7 @@
 | KX-DDC24-IF-ICD-005 | Config JSON Schema (D-5) | [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) | 1.0 | **Needs Reconciliation** |
 | KX-DDC24-IF-ICD-006 | Graph Schema (graph.json) + deploy contract | [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 
-### Coding standards / hỗ trợ (05_implementation)
+### Coding standards / hỗ trợ (05_devguides)
 | ID | Tài liệu | Legacy file | Ver | Trạng thái |
 |----|----------|-------------|:---:|:----------:|
 | KX-DDC24-FW-STD-001 | FW Coding Standard | [FW_CODING_STANDARD](../02_design/firmware/FW_CODING_STANDARD_MK-DDC-24_VI.md) | 1.0 | Approved |
@@ -116,13 +118,13 @@
 | KX-DDC24-PM-STD-001 | Getting Started Dev | [GETTING_STARTED_DEV](../02_design/GETTING_STARTED_DEV.md) | 1.1 | Active |
 | — | DDD Template | [_templates/TEMPLATE_DDD](../02_design/_templates/TEMPLATE_DDD.md) | — | Active |
 
-## 4b. Developer Kit (05_implementation) — `docs/05_implementation/` + `shared/`
+## 4b. Developer Kit (05_devguides) — `docs/05_devguides/` + `shared/`
 | ID | Tài liệu | Ver | Trạng thái |
 |----|----------|:---:|:----------:|
-| KX-DDC24-PM-REPO-001 | [Repository, Build & CI](../05_implementation/KX-DDC24-PM-REPO-001_VI.md) | 1.0 | Approved |
-| KX-DDC24-FW-DEVGUIDE-001 | [FW Developer Guide & Backlog](../05_implementation/KX-DDC24-FW-DEVGUIDE-001_VI.md) | 1.0 | Approved |
-| KX-DDC24-BE-DEVGUIDE-001 | [BE Developer Guide & Backlog](../05_implementation/KX-DDC24-BE-DEVGUIDE-001_VI.md) | 1.0 | **Needs Reconciliation** |
-| KX-DDC24-FE-DEVGUIDE-001 | [FE Developer Guide & Backlog](../05_implementation/KX-DDC24-FE-DEVGUIDE-001_VI.md) | 1.0 | **Needs Reconciliation** |
+| KX-DDC24-PM-REPO-001 | [Repository, Build & CI](../05_devguides/KX-DDC24-PM-REPO-001_VI.md) | 1.0 | Approved |
+| KX-DDC24-FW-DEVGUIDE-001 | [FW Developer Guide & Backlog](../05_devguides/KX-DDC24-FW-DEVGUIDE-001_VI.md) | 1.0 | Approved |
+| KX-DDC24-BE-DEVGUIDE-001 | [BE Developer Guide & Backlog](../05_devguides/KX-DDC24-BE-DEVGUIDE-001_VI.md) | 1.0 | **Needs Reconciliation** |
+| KX-DDC24-FE-DEVGUIDE-001 | [FE Developer Guide & Backlog](../05_devguides/KX-DDC24-FE-DEVGUIDE-001_VI.md) | 1.0 | **Needs Reconciliation** |
 | (code contract) | [`shared/iop_protocol.h`](../../shared/iop_protocol.h) · [`shared/kinexus_shm.h`](../../shared/kinexus_shm.h) | 1.1 / 1.0 | Active |
 
 ## 5. UI/UX (04_uiux) — `docs/04_uiux/`
@@ -135,7 +137,7 @@
 ## 6. Kiểm thử (06_verification)
 | ID | Tài liệu | Legacy file | Ver | Trạng thái |
 |----|----------|-------------|:---:|:----------:|
-| KX-DDC24-TST-SPEC-001 | Test Specification | [TEST_SPEC](../01_specs/TEST_SPEC_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
+| KX-DDC24-TST-SPEC-001 | Test Specification | [TEST_SPEC](../01_specs/TEST_SPEC_MK-DDC-24_VI.md) | 2.0 | In-Review |
 
 ## 7. Phần cứng (07_hardware) — `hardware-design/`
 | ID | Tài liệu | Legacy file |
@@ -154,3 +156,4 @@
 |---------|------|-------|----------|
 | 1.0 | 2026-05-30 | QA/PMO | Phát hành đầu — đăng ký toàn bộ 50+ tài liệu, cấp Document ID |
 | 1.2 | 2026-06-08 | QA/PMO | DOC-REBASE-2026-06-BMS-EDGE: +ADR-008, +BMS_EDGE_STRATEGY; Product Definition→1.1, REVA_SCOPE→1.1, SW_COMPONENT_LIBRARY→1.1 (28 type); IMPLPLAN-001 & GETTING_STARTED reconciled → Active |
+| 1.3 | 2026-06-30 | QA/PMO | Registered ADR-009/010; reconciled Rev A 16 UI/no-base-DI/IOP-v2 revisions and HMI amendment; marked legacy IOP v1 spec superseded. |

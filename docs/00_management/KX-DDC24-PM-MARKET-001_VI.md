@@ -1,8 +1,8 @@
-# Product & Market Analysis — MK-DDC-24 Ver 1.1
+# Product & Market Analysis — MK-DDC-24 Ver 1.2
 ## Phân tích cạnh tranh, thị trường mục tiêu, BOM feasibility, supply risk & compliance — DEEP-DIVE
 
 > **Document ID:** KX-DDC24-PM-MARKET-001  
-> **Phiên bản:** 1.1 | 2026-06-02 · **Trạng thái:** Approved (Owner 2026-06-08) · **Owner:** ResearchDirector  
+> **Phiên bản:** 1.2 | 2026-06-30 · **Trạng thái:** In-Review — product profile aligned to ADR-010 · **Owner:** ResearchDirector
 > **Mục tiêu:** Đào sâu v1.0: validated competitor pricing, TAM/SAM/SOM định lượng, channel economics, regional cert, BOM RFQ.  
 > **Liên quan:** [GOAL-001](KX-DDC24-PM-GOAL-001_VI.md) · [PRD](../01_specs/PRD_MK-DDC-24_VI.md) · [DS](../01_specs/DS_MK-DDC-24_VI.md) · [BOM](../../hardware-design/06_bom/BOM_MK-DDC-24_v1.md) · [OPEN_ISSUES](../01_specs/OPEN_ISSUES_MK-DDC-24_VI.md)  
 > **Evidence:** `docs/00_management/evidence/pricing/` · `evidence/bom-rfq/` · `evidence/certification/`  
@@ -66,7 +66,7 @@
 | Tiêu chí | MK-DDC-24 | Schneider SBO | Siemens PXC4 |
 |----------|-----------|---------------|--------------|
 | **Giá EXW (USD)** | **450–550** | ~600 (ước tính) | ~700 (ước tính) |
-| **I/O tổng** | 24 (8UI+8DI+4AO+4DO) | 24 | 24 |
+| **I/O tổng** | 24 (16 UI + 4 AO + 4 DO; no base DI) | 24 | 24 |
 | **UI channels** | **8 (tự nhận dạng)** | 6 | 4 |
 | **BACnet** | BACnet/IP native | BACnet native | BACnet (qua gateway) |
 | **Lập trình** | **IEC 61131-3 FBD + ST** | Proprietary | Proprietary |
@@ -447,3 +447,4 @@ Các mục cần cập nhật trong [GOAL-001](KX-DDC24-PM-GOAL-001_VI.md):
 |---------|------|-------|----------|
 | 1.0 | 2026-06-02 | ResearchDirector | Phát hành đầu — phân tích cạnh tranh, thị trường, BOM, compliance |
 | 1.1 | 2026-06-02 | ResearchDirector | Deep-dive 5 blocks: B1 competitor pricing research, B2 TAM/SAM/SOM bottom-up model, B3 channel waterfall pricing, B4 regional certification (5 countries), B5 BOM RFQ verification. Bổ sung §2.4, §3.1, §3.5, §6.6, §6.7. Cập nhật §7. Escalation: cert budget 2× estimate. |
+| 1.2 | 2026-06-30 | ResearchDirector/QA | Updated MK-DDC-24 comparison profile to ADR-010 base SKU. |

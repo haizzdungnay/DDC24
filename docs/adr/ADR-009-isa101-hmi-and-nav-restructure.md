@@ -10,7 +10,7 @@
   [ADR-008](ADR-008-bms-edge-positioning-and-revA-component-set.md)
   (BMS edge positioning)
 - Canonical references: [UX-SYSTEM](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md),
-  [08_MKDDC_WEB](../03_implementation/08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md)
+  [08_MKDDC_WEB](../03_implementation/09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md)
 
 ## Context
 

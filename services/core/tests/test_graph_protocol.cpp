@@ -45,9 +45,11 @@ TEST(GraphProtocol, ModbusRtuReadScaled)
   "nodes": [
     { "id": "freq", "type": "Modbus_RTU_Read",
       "params": { "bus": 1, "slave": 5, "fc": 3, "addr": 100,
-                  "type": "u16", "scale": 0.1, "fallback": 0.0 } }
+                  "type": "u16", "scale": 0.1, "fallback": 0.0 } },
+    { "id": "av1", "type": "BACnet_AV",
+      "params": { "instance": 1, "name": "freq_av" } }
   ],
-  "links": [],
+  "links": [{ "from": "freq.out", "to": "av1.in" }],
   "modbus": {
     "rtu": [{ "bus": 1, "slave": 5, "points": [{ "node": "freq" }] }]
   }
@@ -63,9 +65,8 @@ TEST(GraphProtocol, ModbusRtuReadScaled)
     PointTable t = make_table(); PriorityResolver r = make_resolver();
     g.execute(t, r);
 
-    /* Chưa có API lấy output từ bên ngoài — verify qua BACnet_AV chain */
-    /* Chỉ verify không crash */
-    SUCCEED();
+    /* freq.out = 500.0f * scale(0.1) = 50.0f → AV[0] = 50.0f */
+    EXPECT_FLOAT_EQ(t.get({PointKind::AV, 0}).value, 50.0f);
 }
 
 /* ---- T2: Modbus_RTU_Read fallback khi quality BAD ---- */

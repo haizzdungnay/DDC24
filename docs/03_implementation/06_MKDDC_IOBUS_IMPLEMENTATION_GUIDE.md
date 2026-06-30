@@ -6,7 +6,7 @@
 > **Owner:** Dev 2 (SOM)
 > **Nguồn-chuẩn CUỐI CÙNG:** [`shared/iop_protocol.h`](../../shared/iop_protocol.h) (protocol) +
 > [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) (SHM layout/path/ownership) — docs lệch header
-> → **header thắng** ([15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md)). Diễn giải:
+> → **header thắng** ([16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)). Diễn giải:
 > [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) ·
 > [ADR-005](../adr/ADR-005-three-process-architecture.md) · [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md)
 
@@ -23,12 +23,12 @@
 
 ```
 mkddc-iobus CHỈ làm:
-- giao tiếp MCU qua UART/IOP (master, poll 100Hz)
+- giao tiếp MCU qua UART/IOP v2 (master, poll 2ms/500Hz)
 - scale raw IO → engineering value
 - ghi IO state cho core (kx_io_shm, seqlock writer)
 - đọc output command từ core (ao_setpoint/do_cmd) và gửi SET_DO/SET_AO xuống MCU
-- (S7 #6) Modbus RTU master poll → ext cache; xem [25_MODBUS_IMPLEMENTATION_PLAN](25_MODBUS_IMPLEMENTATION_PLAN.md)
-- (S7 #5) BACnet/IP datalink/object callbacks; xem [24_BACNET_IMPLEMENTATION_PLAN](24_BACNET_IMPLEMENTATION_PLAN.md)
+- (S7 #6) Modbus RTU master poll → ext cache; xem [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md)
+- (S7 #5) BACnet/IP datalink/object callbacks; xem [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md)
 - expose metrics + publish alarm
 
 mkddc-iobus KHÔNG làm:
@@ -135,7 +135,7 @@ Done: parse đúng frame ghép từ nhiều chunk; mọi negative §15(05) đún
 File: iop/iop_crc.{hpp,cpp} | Owner: Dev2
 Responsibility: CRC-16/Modbus, wrap iop_crc16 từ shared header (KHÔNG tự viết khác).
 Public API: uint16_t crc16(const uint8_t* d,size_t n);
-Unit test: test_iop_crc.cpp — 12 vector chuẩn (SWFW spec §10.1 / 15_CONTRACT_FREEZE §5);
+Unit test: test_iop_crc.cpp — 12 vector chuẩn (SWFW spec §10.1 / 16_CONTRACT_FREEZE §5);
           2 vector đầu: {AA 00 01 00}→0x6C20, {AA 00 01 01}→0xACE1.
 Done: khớp MCU 12/12 vector.
 ```
@@ -154,7 +154,7 @@ Done: handshake pass; 1000 GET_IO 0 lỗi; recover sau rút UART.
 ### 3.5 `iop_parser`
 ```
 File: iop/iop_parser.{hpp,cpp} | Owner: Dev2
-Responsibility: IO_RESP(34B)/DIAG_RESP(20B) → struct (chưa scale).
+Responsibility: IO_RESP v2 (74-byte payload)/DIAG_RESP(20B) → struct (chưa scale).
 Public API: bool parse_io(const uint8_t* p,IopIoResp* o); bool parse_diag(const uint8_t* p,IopDiagResp* o);
 Error: len≠34/20 → false.
 Unit test: test_iop_parser.cpp — byte layout §6(05) đúng, BE đúng.
@@ -271,7 +271,7 @@ Done: poll thread SCHED_FIFO 70; jitter <2ms.
 
 ### 3.14 `modbus_tcp` — MỚI (MOD-013)
 
-> **Trạng thái:** PLANNED — chờ owner approve SW_FIELDBUS_DESIGN §12.
+> **Trạng thái:** ĐÃ làm 2026-06-26 — modbus_tcp.{hpp,cpp} ModbusTcp class; reconnect FSM; ext_offset từ ModbusMaster.total_ext_count(); wired fieldbus_thread; 10/10 test pass.
 > Spec đầy đủ: [SW_FIELDBUS_DESIGN §12](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md).
 
 ```
@@ -279,17 +279,16 @@ File: fieldbus/modbus_tcp.{hpp,cpp} | Owner: Dev2
 Responsibility: Modbus TCP client — libmodbus TCP context, persistent connection,
                 reconnect state machine, poll loop integration với PollScheduler.
 Public API:
-  bool open(const TcpSlaveConfig& cfg)
+  bool open(const FieldbusConfig& cfg, uint16_t ext_offset)
   void close()
-  bool poll_once(uint16_t addr, int fc, int count, uint16_t* regs_out)
-  bool write_once(uint16_t addr, int fc, const uint16_t* data, int count)
-  bool is_connected() const
-  void reconnect_if_needed()
+  void poll_once(uint64_t now_ms, ExtCache& cache, const std::string& fieldbus_sock_path)
+  bool has_slaves() const
+  uint16_t sleep_ms_until_next(uint64_t now_ms) const
 Dependency: libmodbus (cùng flag MKDDC_ENABLE_MODBUS với RTU), ExtCache, PollScheduler
 Error: TCP connect fail → DISCONNECTED → ext_cache quality BAD → fallback active
        Reconnect sau reconnect_s; không block RTU poll loop
 Done: FC03 read OK từ diagslave TCP; disconnect → quality BAD → reconnect → GOOD.
-      12 unit test (DoD MOD-013 §12.8 tick đủ).
+      10 unit test pass (DoD MOD-013 §12.8 tick đủ).
 ```
 
 ---
@@ -329,7 +328,7 @@ default built-in. Sensor/AO mode lấy thêm từ `/data/config/io_config.conf`;
 
 | Tình huống | Hành vi |
 |------------|---------|
-| Thiếu file config | dùng default built-in (uart_device=/dev/ttyS2, baud=921600, poll=10ms, retry=3); log WARN |
+| Thiếu file config | dùng default built-in (uart_device=/dev/ttyS2, baud=921600, poll=2ms, retry=3); log WARN |
 | Thiếu field lẻ | dùng default field đó; log WARN field=.. |
 | `sensor_type` không nhận ra | UI đó quality=BAD, không scale; log ERROR; service VẪN chạy |
 | `uart_device` không mở được | log ERROR; vào FAULT/RECONNECT (không exit ngay, retry) |
@@ -352,7 +351,7 @@ Không có alias `/dev/shm/kinexus_*`.
 |------------------------|--------|--------|------|-------------|-------------------------------|----------------|
 | `magic` | iobus (1 lần) | tất cả | — | init | ≠`KX_SHM_MAGIC` → chưa sẵn sàng, retry attach | 0 → magic |
 | `seq` | iobus | tất cả | — | 2×/vòng ghi | lẻ/đổi giữa chừng → đọc lại | 0 |
-| `ts_ns` | iobus | core/web | ns (CLOCK_MONOTONIC) | mỗi vòng poll 10ms (kể cả giá trị không đổi) | không tăng >3 chu kỳ reader → UNCERTAIN→BAD | 0 |
+| `ts_ns` | iobus | core/web | ns (CLOCK_MONOTONIC) | mỗi vòng poll 2ms (kể cả giá trị không đổi) | không tăng >3 chu kỳ reader → UNCERTAIN→BAD | 0 |
 | `ui_value[8]` | iobus | core/web | theo `ui_unit` (V/mA/°C) | 10ms | theo `ts_ns` + `ui_quality` | 0.0 |
 | `ui_quality[8]` | iobus | core/web | `kx_quality_t` | 10ms | — | BAD (chưa có mẫu) |
 | `ui_unit[8][8]` | iobus | core/web | chuỗi "V","mA","degC","" | khi load config | — | "" |
@@ -399,7 +398,7 @@ main thread:
   - systemd_notify.ready() sau handshake OK
   - chờ shutdown; join loops; close UART; detach shm
 
-poll loop (RT, prio 70, timer 10ms tuyệt-đối):
+poll loop (RT, prio 70, timer 2ms tuyệt-đối):
   - iop_client.get_io() → parse → io_scaling → io_cache.write_io()
   - systemd_notify.watchdog_kick() (mỗi <WatchdogSec/2)
   - KHÔNG block > ~2ms; KHÔNG I/O file/log chặn trong loop
@@ -441,7 +440,7 @@ INFO  iop.reconnect attempt=2
 
 **Rule:**
 ```
-- KHÔNG log INFO mỗi chu kỳ 10ms (sẽ spam). Poll bình thường = im lặng.
+- KHÔNG log INFO mỗi chu kỳ 2ms (sẽ spam). Poll bình thường = im lặng.
 - Lỗi lặp (CRC/timeout) → rate-limit (vd tối đa 1 log/giây + count tổng).
 - Command output (SET_DO/SET_AO) → log INFO/DEBUG (phục vụ audit/đối soát với core).
 - Fault / state transition → ERROR/INFO (luôn log, không rate-limit transition).
@@ -508,7 +507,7 @@ Chưa có subscriber → iobus drop + đếm (không buffer, không block poll).
 | `MCU_WATCHDOG_RESET` | critical | bit MCU_WATCHDOG_RESET (sticky) | SOM đọc/clear |
 | `RELAY_STUCK` | critical | bit RELAY_STUCK | feedback khớp lại |
 
-> Severity map sang hiển thị web tiếng Việt (xem [08_WEB §8](08_MKDDC_WEB_IMPLEMENTATION_GUIDE.md)).
+> Severity map sang hiển thị web tiếng Việt (xem [09_WEB §8](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md)).
 
 ---
 
@@ -713,7 +712,7 @@ Làm tuần tự; mỗi bước có command + kết quả mong đợi. Fail bư�
 | 7 | HANDSHAKE | §9 của 05 | STATUS=0x00/0x01 | timeout×3 / STATUS=0x02 → alarm `IOP_INIT_FAIL` → RECONNECT 5s | **retry vô hạn** |
 | 8 | RESET_IO reason=NORMAL (0x00) — tùy chọn, khuyến nghị | — | ACK; IO về safe đã biết | NACK/timeout → WARN, tiếp tục | tiếp tục |
 | 9 | SET_AO_CFG (nếu config có AO 4-20mA) | `io_config` ao mode | ACK → ghi `ao_mode[]` vào shm | NACK UNKNOWN_CMD → giữ 0-10V, `ao_mode[]=0`, WARN | tiếp tục |
-| 10 | Start poll loop (10ms) + diag loop (1s) | — | GET_IO chạy, shm cập nhật | xem state machine 05 §13 | — |
+| 10 | Start poll loop (2ms) + diag loop (1s) | — | GET_IO chạy, shm cập nhật | xem state machine 05 §13 | — |
 | 11 | sd_notify READY=1 | sau handshake OK | systemd Active | — | — |
 | 12 | (chạy) watchdog_kick mỗi ≤2.5s | — | systemd không kill | quên kick → systemd restart (đúng thiết kế) | — |
 | 13 | Shutdown (SIGTERM) | signal | dừng loops → đóng UART → KHÔNG xóa shm (core còn đọc) → exit 0 | — | — |
@@ -741,5 +740,5 @@ core ghi ao_setpoint/do_cmd → core_bridge.read_outputs → output_command (CHA
 | IOP-SW-008 | realtime | chrt prio check |
 
 ---
-**Rev** 1.4 | 2026-06-13 (thêm link/cây S7 #5/#6 BACnet/Modbus) · 1.3 | 2026-06-12 (packaging/systemd unit thật) · 1.2 | 2026-06-11 · Protocol: [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) ·
-Freeze: [15_CONTRACT_FREEZE](15_CONTRACT_FREEZE.md) · DoD: [12_DEFINITION_OF_DONE §3](12_DEFINITION_OF_DONE.md)
+**Rev** 1.5 | 2026-06-27 (§3.14 MOD-013 DONE: ModbusTcp class, reconnect FSM, 10/10 test — annotate Done) · 1.4 | 2026-06-13 (thêm link/cây S7 #5/#6 BACnet/Modbus) · 1.3 | 2026-06-12 (packaging/systemd unit thật) · 1.2 | 2026-06-11 · Protocol: [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) ·
+Freeze: [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) · DoD: [13_DEFINITION_OF_DONE §3](13_DEFINITION_OF_DONE.md)

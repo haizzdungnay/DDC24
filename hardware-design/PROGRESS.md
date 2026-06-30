@@ -3,6 +3,8 @@
 > **Cập nhật tự động bởi:** Worker A, Worker B, Auditor (cron jobs)
 > **Thời gian hoạt động:** 17:00–00:00 hàng ngày (Europe/Vienna)
 > **Ngày bắt đầu:** 2026-06-22
+> **Closure register hiện hành:** [`hw_design_review/HW_DOC_REVIEW_CLOSURE_PLAN.md`](hw_design_review/HW_DOC_REVIEW_CLOSURE_PLAN.md)
+> **Cập nhật gần nhất:** 2026-06-30 09:50 CEST
 
 ---
 
@@ -85,4 +87,19 @@ _Chạy 23:00 hàng ngày, sau khi 2 workers xong_
 
 ---
 
-_Last updated: 2026-06-23 (B01-B04 completed, AUD-2026-06-23 completed)_
+## Hardware documentation review closure — 2026-06-30
+
+- [x] Chuẩn hóa 4 report snapshot thành 39 issue gốc + 2 issue mới thực sự; không cộng trùng ID tái sử dụng.
+- [x] Đồng bộ base Rev A thành 16 UI + 4 AO + 4 DO trong SYS-ARCH và pinout master.
+- [x] Đồng bộ IOP v2: acquisition 1ms, SOM GET_IO poll 2ms/500Hz, application update 10-100ms.
+- [x] Đồng bộ ADR-010 qua Canonical Decisions, Product Definition, Rev A Scope, HW/PRD/SRS/DS, FW/SW design, implementation, HMI/manual và hồ sơ chuẩn bị chứng nhận.
+- [x] Đánh dấu IOP v1 spec/contract freeze là `Superseded`; mở rộng harness bắt regression 10ms và 8 UI + 8 DI.
+- [x] Tạo tài liệu grounding và RS-485 controlled draft; bổ sung checklist review.
+- [x] Chuyển power/LDO/boost/AO claims chưa đủ bằng chứng về trạng thái BLOCKED rõ ràng.
+- [ ] Đóng P0 bằng schematic, calculation, prototype thermal/load-step, EMC và manufacturing artifacts.
+
+Trạng thái và evidence chi tiết chỉ quản lý tại closure register; các task A/B lịch sử phía trên không được dùng để kết luận release readiness.
+
+---
+
+_Last updated: 2026-06-30 09:50 CEST (documentation reconciliation verified; hardware evidence gate remains RED)_
