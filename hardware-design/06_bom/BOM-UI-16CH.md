@@ -1,7 +1,7 @@
 # BOM - Universal Input 16CH Rev A
 
-> **Document:** BOM-UI-16CH | Rev 1.0 | 2026-06-23  
-> **Ap dung cho:** HW-DES-03-UI Rev 2.2  
+> **Document:** BOM-UI-16CH | Rev 1.1 | 2026-06-30
+> **Ap dung cho:** HW-DES-03-UI Rev 2.2
 > **Trang thai:** Preliminary schematic BOM; pricing and alternates require sourcing review
 
 ---
@@ -78,6 +78,22 @@ Excluded from this BOM:
 - Op-amp selection drives the final error budget; do not freeze accuracy claims until selected.
 - PTC/fusible protection values must be chosen from a calculated 24V miswire table, not copied from a generic design.
 
+### 5.1 Alternate-part qualification
+
+An entry in the “Alternates / notes” column is a candidate, not an approved second source. For each critical part, sourcing must attach an equivalence record covering:
+
+| Part class | Mandatory comparison |
+|---|---|
+| ADS131M08 | Register/frame behavior, noise, reference, clocking, package/pinout, firmware impact |
+| Analog mux | Supply/signal range, on-resistance/flatness, leakage, charge injection, ESD, pinout/package |
+| RRIO op-amp | Input/output range, offset/bias/noise/drift, stability with RC/load, supply, pinout |
+| Mode latch | VIH/VIL at 3.3V, power-up/reset/OE behavior, output drive, package/pinout |
+| Divider/shunt network | Ratio/absolute tolerance, TCR tracking, voltage/power rating, pulse/fault behavior |
+| PTC/fuse/TVS/clamp | Hold/trip, leakage, standoff/clamp at test current, pulse energy, capacitance, failure mode |
+| Connector | Pitch/keying/current/voltage, wire range, enclosure fit, creepage/clearance |
+
+Approval requires HW, firmware (where behavior changes), sourcing, and QA sign-off plus a test result on the worst affected mode. Until then the part stays `candidate`, not `approved alternate`.
+
 ---
 
 ## 6. Release Checklist
@@ -92,4 +108,11 @@ Excluded from this BOM:
 
 ---
 
-**Document ID:** BOM-UI-16CH | Rev 1.0 | 2026-06-23
+## Revision History
+
+| Rev | Date | Change |
+|---|---|---|
+| 1.0 | 2026-06-23 | Preliminary UI Rev A BOM. |
+| 1.1 | 2026-06-30 | Defined critical-part second-source qualification and approval evidence. |
+
+**Document ID:** BOM-UI-16CH | Rev 1.1 | 2026-06-30

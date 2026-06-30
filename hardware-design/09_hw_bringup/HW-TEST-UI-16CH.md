@@ -1,7 +1,7 @@
 # HW Test Plan - Universal Input 16CH Rev A
 
-> **Document:** HW-TEST-UI-16CH | Rev 1.0 | 2026-06-23  
-> **Scope:** 16-channel Universal Input hardware/firmware validation before PCB release and during prototype bring-up  
+> **Document:** HW-TEST-UI-16CH | Rev 1.1 | 2026-06-30
+> **Scope:** 16-channel Universal Input hardware/firmware validation before PCB release and during prototype bring-up
 > **Related:** HW-DES-03-UI Rev 2.2, FW-ADC-SAMPLING, IOP_PROTOCOL, HW-RISK-UI-16CH
 
 ---
@@ -22,7 +22,7 @@
 |-----------|-------------|
 | Precision voltage calibrator | 0V, 2.5V, 5V, 10V points |
 | Current loop calibrator | 4mA, 12mA, 20mA, 22mA, 24mA |
-| Precision resistor decade box | NTC simulation, dry contact/open/short tests |
+| Precision resistor decade box | NTC simulation, dry contact/open/short tests; calibrated accuracy <=+/-0.1%, temperature coefficient <=25ppm/C, actual value and ambient recorded |
 | 24VDC supply with current limit | Miswire tests |
 | Oscilloscope | ADC SPI/DRDY timing, protection response where safe |
 | Logic analyzer | IOP frame, CRC, sequence, SPI capture |
@@ -48,7 +48,7 @@ Run on every UI channel unless first article triage defines a reduced sample pla
 
 | Test | Stimulus | Expected result |
 |------|----------|-----------------|
-| V-00 | 0.000V | Raw near calibrated zero; channel valid |
+| V-00 | 0.000V | After zero calibration: `abs(raw_zero) <= 8,389` counts (0.1% of signed 24-bit FS) and scaled absolute error <=10mV; channel valid |
 | V-25 | 2.500V | Scaled value within provisional error budget |
 | V-50 | 5.000V | Scaled value within provisional error budget |
 | V-100 | 10.000V | ADC node about 1.079V before calibration |
@@ -78,7 +78,7 @@ Record shunt temperature rise during 20mA and 24mA runs.
 
 ## 6. NTC Tests
 
-Use precision resistors to simulate NTC.
+Use calibrated <=+/-0.1%, <=25ppm/C precision resistors/decade box to simulate NTC. Record instrument ID, calibration due date, actual resistance, tolerance, lead compensation, and ambient temperature for every point.
 
 | Test | Simulated resistance | Expected behavior |
 |------|---------------------:|------------------|
@@ -144,7 +144,15 @@ Calibration data must be stored with channel ID, mode, date, firmware version, a
 - [ ] 24V miswire tests do not damage front-end/mux/ADC under controlled current-limited procedure.
 - [ ] Signed int32 ADC frame, CRC fail, sequence gap, ADC timeout, and DRDY timeout tests pass.
 - [ ] Error budget and calibration report are attached before any production accuracy claim.
+- [ ] V-00 numeric threshold and NTC resistor accuracy records pass on every tested channel.
 
 ---
 
-**Document ID:** HW-TEST-UI-16CH | Rev 1.0 | 2026-06-23
+## Revision History
+
+| Rev | Date | Change |
+|---|---|---|
+| 1.0 | 2026-06-23 | Initial UI 16-channel test plan. |
+| 1.1 | 2026-06-30 | Added objective zero threshold and calibrated NTC resistance requirements. |
+
+**Document ID:** HW-TEST-UI-16CH | Rev 1.1 | 2026-06-30

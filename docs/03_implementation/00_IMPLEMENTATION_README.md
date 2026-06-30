@@ -108,7 +108,7 @@ Tester & PM: [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md), [12_INTEGRATION_TEST_PLA
 [Sensor / DI contact / relay feedback THẬT]
       ↑ ADS131M08 (SPI3) / GPIO DI / DO feedback
 [FW_MCU io_sample]    → io_data_buf (1ms)
-      ↑ MCU trả IO_RESP (34 byte) khi nhận GET_IO
+      ↑ MCU trả IO_RESP v2 (74-byte payload) khi nhận GET_IO
 [mkddc-iobus]         → parse IO_RESP → scale raw→engineering → ghi kx_io_shm (seqlock)
       ↑ core đọc seqlock
 [mkddc-core]          → point table update + quality + BACnet object table (plc_shm)

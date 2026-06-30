@@ -1,7 +1,7 @@
 # FW ADC Sampling - Universal Input 16CH
 
-> **Document:** FW-ADC-SAMPLING | Rev 1.0 | 2026-06-23  
-> **Scope:** STM32 firmware sampling sequence for 16 UI Rev A  
+> **Document:** FW-ADC-SAMPLING | Rev 1.1 | 2026-06-30
+> **Scope:** STM32 firmware sampling sequence for 16 UI Rev A
 > **Related:** HW-DES-03-UI, HW-DES-05-MCU, IOP_PROTOCOL
 
 ---
@@ -12,7 +12,7 @@
 |------|------------|---------------------|
 | ADC sample rate | ADS131M08 converter output data rate | 1 kSPS/channel initial target |
 | MCU scan rate | STM32 task rate that accepts raw ADC samples and status | 1 ms |
-| CM3 publish rate | UART/IOP frame cadence to Linux | 10 ms |
+| SOM GET_IO poll rate | SOM request cadence; MCU responds with the latest complete snapshot | 2 ms / 500 Hz |
 | UI application update rate | Filtered/scaled value rate consumed by control logic | 10-100 ms, configurable |
 
 Do not use one number such as "16 channels / 1ms" without naming which rate is being discussed.
@@ -97,19 +97,19 @@ Initial Rev A filter policy:
 | Open/short | Mode-specific detection | Set channel open/short where supported |
 | Mode latch update | Configuration changed | Mark affected channel invalid until settle/discard done |
 
-The MCU continues to publish frames with invalid bits set so CM3 can distinguish stale/faulted data from a dead UART link.
+The MCU continues to answer valid polls with invalid bits set so CM3 can distinguish stale/faulted data from a dead UART link.
 
 ---
 
-## 7. CM3 Publish Sequence
+## 7. SOM Poll / MCU Response Sequence
 
-Every 10ms nominal:
+Every 2 ms nominal, as controlled by `IOP_GET_IO_PERIOD_MS` in `shared/iop_protocol.h`:
 
-1. `iop_comm_task` copies latest publish buffer.
-2. Build binary UI ADC frame defined in `IOP_PROTOCOL.md`.
-3. Include sequence, timestamp, ADC status words, raw int32 array, channel status bitmap.
-4. Append CRC16.
-5. Transmit over UART.
+1. SOM sends `CMD_GET_IO`; MCU does not push unsolicited frames.
+2. `iop_comm_task` copies the latest complete 1 ms acquisition buffer.
+3. Build `CMD_IO_RESP` as defined in `IOP_PROTOCOL.md`.
+4. Include the echoed sequence, ADC status words, 16 raw int32 values, fault flags, sample counter, and DO feedback.
+5. Append CRC16 and transmit over UART within the 3 ms response timeout.
 
 CM3 drops frames with bad CRC and detects missed sequence numbers.
 
@@ -134,11 +134,18 @@ Required firmware instrumentation:
 - [ ] ADS #1/#2 reads are both observed on SPI3 with independent CS pins.
 - [ ] Raw sign extension passes boundary tests: `0x7FFFFF`, `0x800000`, `0xFFFFFF`.
 - [ ] 16 x int32 raw values appear in IOP frame in channel order UI1..UI16.
-- [ ] CM3 receives frames at 10ms nominal without JSON or float payload.
+- [ ] SOM receives a valid response to the 2 ms GET_IO poll without JSON or float payload.
 - [ ] CRC fail causes frame drop and counter increment.
 - [ ] DRDY timeout and ADC timeout are distinguishable.
 - [ ] Mode change invalidates affected samples until settle/discard completes.
 
 ---
 
-**Document ID:** FW-ADC-SAMPLING | Rev 1.0 | 2026-06-23
+## Revision History
+
+| Rev | Date | Change |
+|---|---|---|
+| 1.0 | 2026-06-23 | Initial 16-channel sampling sequence. |
+| 1.1 | 2026-06-30 | Separated 1 ms acquisition, 2 ms IOP poll/response, and 10-100 ms application update rates. |
+
+**Document ID:** FW-ADC-SAMPLING | Rev 1.1 | 2026-06-30

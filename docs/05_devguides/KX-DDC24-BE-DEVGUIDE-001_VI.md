@@ -44,7 +44,7 @@ Mỗi service 1 systemd unit (`infra/debian-image/systemd/`), restart=always, `s
 ```
 B1  libkinexus: shm_create/open + seqlock write/read + test reader/writer  (T-BE-02)
 B2  io-driver: mở UART, iop_crc16 (từ header), HANDSHAKE với MCU           (T-BE-01)
-B3  io-driver: vòng GET_IO 100Hz, parse IO_RESP, ghi raw vào io_shm        (T-BE-03a)
+B3  iobus: vòng GET_IO 2ms/500Hz, parse IO_RESP v2, ghi raw vào io_shm     (T-BE-03a)
 B4  tool `shmdump`: đọc io_shm in ra terminal                              (debug)
 ✅  thấy giá trị MCU đổi realtime trên terminal = SKELETON SỐNG
 B5  thêm scaling raw→engineering (°C/V/mA)                                  (T-BE-03b)
@@ -55,7 +55,7 @@ B5  thêm scaling raw→engineering (°C/V/mA)                                  
 ### BE-T01 — libkinexus: shared memory + seqlock ` (S2) `
 - **Mục tiêu:** helper shm dùng chung.
 - **File:** `services/libkinexus/shm.c/.h` (include `shared/kinexus_shm.h`), `log.c`, `config.c`.
-- **Acceptance:** create/open `kinexus_io_shm` + `kinexus_plc_shm`; macro KX_WRITE_BEGIN/END; reader đọc đúng khi writer chạy 100Hz (không rách dữ liệu).
+- **Acceptance:** create/open SHM contract hiện hành; seqlock reader đọc đúng khi writer chạy 500Hz (không rách dữ liệu).
 - **Test:** stress reader/writer đa luồng (T-SW-005).
 - **Trace:** SW-IOP-006, SW_ARCH §2.
 
@@ -67,7 +67,7 @@ B5  thêm scaling raw→engineering (°C/V/mA)                                  
 
 ### BE-T03 — io-driver: GET_IO loop + scaling ⭐ ` (S2-3) `
 - **File:** `io-driver/iop_master.c`, `scale.c`.
-- **Acceptance:** poll 100Hz, parse IO_RESP (offsets từ header), retry×3→fault FSM; scale raw→eng (0-10V, 4-20mA, PT100/1000 CVD, NTC β=3950, dry); ghi `io_shm`; metrics.
+- **Acceptance:** poll 2ms/500Hz, parse 16×int32 IO_RESP v2 theo shared header, retry/fault theo constants; scale supported Rev A modes (0-10V, 4-20mA, NTC, auxiliary dry); ghi SHM; metrics.
 - **Test:** so giá trị chuẩn (T-SW-006..009); cắt MCU → IOP_FAULT→SAFE (gửi RESET_IO).
 - **Trace:** SW-IOP-004..011, [SW_IODRIVER](../02_design/software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md).
 

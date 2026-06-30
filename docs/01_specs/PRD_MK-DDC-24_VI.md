@@ -1,6 +1,6 @@
 # PRD — MK-DDC-24 Product Requirements Document
 
-> **Phiên bản:** 1.1 | 2026-05-28  
+> **Phiên bản:** 2.0 | 2026-06-30
 > **Trạng thái:** Draft — Ver 1  
 > **Tác giả:** KINEXUS Technologies — Product Team  
 > **Liên quan:** [DS](DS_MK-DDC-24_VI.md) | [SRS](SRS_MK-DDC-24_VI.md) | [HW_SPEC](HW_SPEC_MK-DDC-24_VI.md)
@@ -9,6 +9,7 @@
 > [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md): **component-based DDC**
 > (không IEC 61131-3/PLC IDE), Linux 3-process `mkddc-*`, UI Rev A form/JSON, BACnet/IP
 > northbound + Modbus RTU/TCP field. Phạm vi Rev A: [REVA_SCOPE](REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md).
+> Baseline I/O và IOP theo [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md): 16 UI + 4 AO + 4 DO, không có DI công nghiệp trên base SKU.
 
 ---
 
@@ -121,9 +122,9 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 
 | ID | Yêu cầu | Mức độ |
 |----|---------|--------|
-| FR-010 | 8 Universal Input phải tự nhận dạng loại sensor | MUST |
-| FR-011 | UI phải hỗ trợ: 0–10V, 4–20mA, PT100, PT1000, NTC10k, NTC20k, dry contact | MUST |
-| FR-012 | 8 Digital Input dry/wet contact 24V DC | MUST |
+| FR-010 | 16 Universal Input phải cấu hình mode độc lập theo từng kênh | MUST |
+| FR-011 | UI Rev A phải hỗ trợ 0–10V, 4–20mA, NTC và auxiliary dry contact; không claim PT100/PT1000 | MUST |
+| FR-012 | Base SKU không có DI công nghiệp; optional isolated-DI chỉ được expose khi capability map và phần cứng SKU xác nhận | MUST |
 | FR-013 | 4 Analog Output 0–10V hoặc 4–20mA (cấu hình per kênh), 16-bit DAC8554 | MUST |
 | FR-014 | 4 Digital Output relay SPDT 5A @ 250 VAC | MUST |
 | FR-015 | Sampling rate I/O phải ≤ 1 ms tại MCU layer | MUST |
@@ -212,19 +213,19 @@ Bảng dưới ánh xạ từng Functional Requirement (FR) sang ID trong SRS v�
 | FR-005 | Trend log ≥ 8, 1000 records | IDE-025, LOG-001 | FAT: Trend export |
 | FR-006 | Failsafe khi mất BACnet > 30s | PLC-013, E301 | FAT: Failsafe test |
 | FR-007 | ST đồng thời FBD | PLC-002, IDE-002 | TEST-001 |
-| FR-010 | UI tự nhận dạng sensor | IOP-003 | FAT: 8 UI × 6 types |
-| FR-011 | UI hỗ trợ 0-10V / 4-20mA / PT100 / PT1000 / NTC / dry | IOP-003 | FAT: I/O hardware |
-| FR-012 | 8 DI dry/wet 24VDC | IOP-003 | FAT: I/O hardware |
+| FR-010 | 16 UI cấu hình mode độc lập | IOP-003, ADR-010 | FAT: UI1-UI16 |
+| FR-011 | UI hỗ trợ 0-10V / 4-20mA / NTC / auxiliary dry contact | IOP-003, ADR-010 | FAT: I/O hardware |
+| FR-012 | 0 DI base SKU; optional isolated-DI capability-gated | IOP-003, ADR-010 | FAT: base/optional SKU capability |
 | FR-013 | 4 AO 0-10V/4-20mA 16-bit | IOP-004 | FAT: I/O hardware |
 | FR-014 | 4 DO relay SPDT 5A | IOP-004 | FAT: I/O hardware |
 | FR-015 | Sampling ≤ 1ms tại MCU | IOP-001, IOP-002 | TEST-003 (HIL) |
 | FR-016 | Over-range + short-circuit protection | E201–E211 | FAT: I/O hardware |
-| FR-020 | BACnet MS/TP + IP đồng thời | BAC-001, BAC-002 | FAT: BACnet BTL |
+| FR-020 | BACnet/IP northbound only | BAC-001, BAC-002 | FAT: BACnet/IP interop |
 | FR-021 | Device ID qua web UI + DIP | IDE-020 | FAT: Commissioning |
 | FR-022 | MQTT v3.1.1 + v5.0 TLS | MQ-001, MQ-002 | TEST-002 |
 | FR-023 | REST API JSON | API-001–API-009 | TEST-002 |
-| FR-024 | Modbus TCP slave port 502 | MB-001–MB-009 | FAT: Modbus TCP |
-| FR-025 | Modbus RTU trên RS-485 | RTU-001–RTU-006 | TEST-002 |
+| FR-024 | Modbus RTU master | RTU-001–RTU-006 | TEST-002 |
+| FR-025 | RTU expansion/device profiles | RTU-007, fieldbus design | FAT: configured field device |
 | FR-030 | Firmware ký GPG | SEC-011, SEC-013 | FAT: OTA + rollback |
 | FR-031 | Secure boot U-Boot | SEC-010, E404 | FAT: OTA + rollback |
 | FR-032 | TLS 1.3 toàn bộ API/MQTT/OTA | SEC-020, MQ-002, API-001, OTA-002 | TEST-004 (pentest) |
@@ -237,7 +238,7 @@ Bảng dưới ánh xạ từng Functional Requirement (FR) sang ID trong SRS v�
 
 ## 9. Tiêu chí Chấp nhận (Acceptance Criteria — Ver 1.0)
 
-- [ ] 100% test case I/O hardware pass (8 UI × 6 types, 8 DI, 4 AO, 4 DO)
+- [ ] 100% test case base-SKU hardware pass (16 UI across supported Rev A modes, 4 AO, 4 DO; capability map confirms no populated DI)
 - [ ] BACnet BTL conformance test pass (ASHRAE SSPC-135)
 - [ ] Modbus TCP: đọc/ghi toàn bộ I/O từ SCADA không ảnh hưởng BACnet
 - [ ] FCU commissioning end-to-end < 2 giờ (thực hiện bởi SI độc lập)
@@ -249,5 +250,5 @@ Bảng dưới ánh xạ từng Functional Requirement (FR) sang ID trong SRS v�
 ---
 
 **Document ID:** PRD-MK-DDC-24-VI  
-**Revision:** 1.1 | 2026-05-28  
+**Revision:** 2.0 | 2026-06-30
 **Approved by:** Product Manager, CTO KINEXUS Technologies

@@ -12,7 +12,7 @@
 
 ```
 [ ] HANDSHAKE pass (version negotiate, STATUS đúng).
-[ ] GET_IO/IO_RESP pass (34B, CRC đúng, SEQ echo, latency ≤5ms).
+[ ] GET_IO/IO_RESP v2 pass (74-byte payload, CRC đúng, SEQ echo, response within 3ms timeout budget).
 [ ] SET_DO pass với relay THẬT (đo đèn/đồng hồ).
 [ ] SET_AO pass với đồng hồ đo THẬT (0V/5V/10V hoặc 4/12/20mA).
 [ ] SET_AO_CFG pass (đổi mode 0-10V/4-20mA per kênh).
@@ -52,7 +52,7 @@ Test: group 2.
 
 ```
 [ ] systemd service chạy (Restart=always, WatchdogSec, SCHED_FIFO≥70).
-[ ] Poll MCU 100Hz ổn định, jitter <2ms.
+[ ] Poll MCU 2ms/500Hz ổn định; latency/timeout counters meet ADR-010 constants.
 [ ] Cập nhật kx_io_shm (seqlock), reader đọc nhất quán.
 [ ] Scale raw→engineering đúng mọi sensor_type (±1%).
 [ ] Gửi output (do_cmd/ao_setpoint → SET_DO/SET_AO) đúng.
@@ -68,7 +68,7 @@ Test: group 3.
 ## 4. mkddc-core xong khi
 
 ```
-[ ] Point table đủ 24 IO (8UI+8DI+4AO+4DO) + virtual.
+[ ] Point table đủ 24 IO base SKU (16 UI + 4 AO + 4 DO) + virtual; optional DI chỉ enable theo capability map.
 [ ] Scan loop 1s tuyệt-đối-thời-gian, scan_overrun=0.
 [ ] sd_notify READY=1 sau scan đầu.
 [ ] Priority resolver 6 mức chạy (safety > manual > BACnet > schedule > logic > default).

@@ -1,6 +1,6 @@
 # IO Subsystem — Analog Output Circuit
 
-> **Document:** HW-DES-03-AO | Rev 1.2 | 2026-06-23
+> **Document:** HW-DES-03-AO | Rev 1.3 | 2026-06-30
 > **Cập nhật:** Kênh đầu vào từ "8 UI + 8 DI" → "16 UI toàn bộ" (xem REWORK_DI_TO_UI.md)
 
 ---
@@ -57,14 +57,14 @@ DAC8554_OUT_x (0–5V)
   AO_x terminal (0–10V output)
 ```
 
-**Gain Op-amp:** Rf = Rin = 10kΩ → Gain = 1 + Rf/Rin = 2  
-**Output impedance:** 100Ω series (bảo vệ ngắn mạch tạm thời)  
+**Gain Op-amp:** Rf = Rin = 10kΩ → Gain = 1 + Rf/Rin = 2
+**Output impedance:** 100Ω series (bảo vệ ngắn mạch tạm thời)
 **Short circuit current:** 10V / 100Ω = 100mA max (OK cho load ≥ 2kΩ standard)
 
 ### 3.2 Mode 4–20mA (Current Output, V-to-I)
 
 ```
-DAC8554_OUT_x (0.8–4V → tương ứng 4–20mA)
+DAC8554_OUT_x (0–5V raw DAC range)
        │
    [Op-amp TLV4110 as V-to-I converter]
        │         │
@@ -81,20 +81,18 @@ DAC8554_OUT_x (0.8–4V → tương ứng 4–20mA)
    [Rs 50Ω] → feedback vào op-amp inverting input
 ```
 
-**Công thức:** `I_out = V_DAC / Rs = V_DAC / 50`  
-→ V_DAC = 0.2V → I = 4mA (offset 4mA cài trong DAC code)  
-→ V_DAC = 1.0V → I = 20mA
+**Required transfer:** `I_out = V_sense / Rs`, where `Rs = 50 ohm` and `V_sense` must span 0.2–1.0V for 4–20mA. The DAC itself spans 0–5V, so the final op-amp/resistor network must implement the required gain/offset and cannot connect the full DAC voltage directly across `Rs`. System mapping remains `raw=0 -> 4mA`, `raw=65535 -> 20mA`; final resistor values and error budget are blocked pending schematic review.
 
-**Load range 4–20mA:** 0–600Ω (tuân thủ IEC 61131-2)  
-**Compliance voltage:** 15V − V_drop_transistor − I×Rs ≥ 15 − 1 − 1 = 13V → đủ cho 600Ω load (600 × 20mA = 12V)
+**Released load target:** 0–500 ohm until the +15V converter and output transistor are frozen and measured.
+**Nominal headroom at 500 ohm/20mA:** `15V - 10V(load) - 1V(sense) - transistor/circuit drop`, provisionally about 3V before rail tolerance and temperature effects.
 
-> ⚠ **Margin mỏng (~1V):** Tại tải 600Ω/20mA chỉ dư ~1V headroom. Nếu rail +15V sụt khi tải nặng hoặc V_drop transistor cao hơn dự kiến → mất tuyến tính ở đầu thang. **Khuyến nghị thiết kế:** nâng rail AO lên +18V, hoặc giới hạn tải max 500Ω trong datasheet, hoặc dùng transistor V_ce(sat) thấp. Cần xác minh trên prototype (thêm vào HW open-issue).
+> **600 ohm is not released.** It may be restored only after a min-rail/max-load/max-temperature sweep proves 4–20mA linearity with the frozen +15V converter and output topology. Raising the AO rail is a design option, not an approved change.
 
 ---
 
 ## 4. Precision Voltage Reference
 
-**IC:** REF3025 (TI, 2.5V, ±0.05%, 5ppm/°C, SOT-23-3)  
+**IC:** REF3025 (TI, 2.5V, ±0.05%, 5ppm/°C, SOT-23-3)
 - Cấp cho VREF của DAC8554
 - Decoupling: 1µF + 100nF tại VREF pin
 
@@ -110,8 +108,8 @@ Mode chọn bằng software (STM32 firmware nhận lệnh từ CM3 qua IOP):
 | 0x8000 | 5V | 12mA |
 | 0xFFFF | 10V | 20mA |
 
-**Relay K_AO_x:** Mỗi kênh có 1 relay DPDT nhỏ (IM23 relay, 5V coil) để switch giữa đường ra 0–10V và 4–20mA.  
-- Relay OFF → 0–10V output path active  
+**Relay K_AO_x:** Mỗi kênh có 1 relay DPDT nhỏ (IM23 relay, 5V coil) để switch giữa đường ra 0–10V và 4–20mA.
+- Relay OFF → 0–10V output path active
 - Relay ON → 4–20mA output path active
 
 > Alternative: Dùng analog switch TMUX1219 thay relay để tốc độ cao và không wear.
@@ -124,13 +122,13 @@ Mode chọn bằng software (STM32 firmware nhận lệnh từ CM3 qua IOP):
 |----------|:-----:|:------:|
 | Phạm vi | 0 – 10V | 4 – 20mA |
 | Độ phân giải | 16-bit → 0.15mV | 16-bit → 0.244µA |
-| Độ chính xác | ±0.1% FS | ±0.1% FS |
+| Độ chính xác | Provisional; final claim requires signed error budget/calibration | Provisional; final claim requires signed error budget/compliance sweep |
 | Tải min (0–10V) | 2kΩ (5mA max) | — |
-| Tải max (4–20mA) | — | 600Ω |
+| Tải max (4–20mA) | — | **500Ω released target; 600Ω blocked** |
 | Ripple | < 2mVpp | < 10µApp |
 | Bảo vệ ngắn mạch | 100Ω series (tự giới hạn dòng) | Electronic current limit |
 | Cô lập | Không (Ver 1) | Không (Ver 1) |
-| Cập nhật rate | 1ms (từ STM32, đồng bộ PLC scan) | 1ms |
+| Cập nhật rate | Applied by STM32 output task within 10ms nominal | Applied by STM32 output task within 10ms nominal |
 
 ---
 
@@ -145,7 +143,14 @@ Mode chọn bằng software (STM32 firmware nhận lệnh từ CM3 qua IOP):
 
 ---
 
-**Document ID:** HW-DES-03-AO | Rev 1.1 | 2026-06-23
+## 8. Compliance verification gate
+
+- [ ] Sweep 4, 8, 12, 16, 20, and 22mA at 0, 250, and 500 ohm over min/nom/max +15V rail and temperature.
+- [ ] Record output error, transistor/op-amp headroom, +15V ripple, temperature, and loop stability for every AO channel.
+- [ ] Demonstrate short/open/reverse wiring behavior and recovery without damage.
+- [ ] Do not publish a 600-ohm or final accuracy claim until evidence is approved and linked in the closure register.
+
+**Document ID:** HW-DES-03-AO | Rev 1.3 | 2026-06-30
 
 ## Revision History
 
@@ -153,4 +158,5 @@ Mode chọn bằng software (STM32 firmware nhận lệnh từ CM3 qua IOP):
 |-----|------|----------|
 | 1.0 | 2026-05-27 | Initial release — 4 kênh AO với DAC8554, TLV4110, hỗ trợ 0-10V/4-20mA |
 | 1.1 | 2026-06-23 | Update consistency — Kênh đầu vào từ "8 UI + 8 DI" → "16 UI toàn bộ" (xem REWORK_DI_TO_UI.md) |
-| 1.2 | 2026-06-23 | Final rev bump Phase 1 — I/O count update verified (16 UI only)
+| 1.2 | 2026-06-23 | Final rev bump Phase 1 — I/O count update verified (16 UI only) |
+| 1.3 | 2026-06-30 | Corrected the 4–20mA transfer requirement, limited released load target to 500 ohm, and added compliance evidence gate |

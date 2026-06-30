@@ -31,8 +31,8 @@
 | **AC/DC Power Input** | Power | 1 (2-pin terminal) | ≤3m (unshielded) | Power port |
 | **RS-485 A/B** | Signal — I/O | 1 (3-pin terminal) | ≤10m (unshielded) | Signal/control port |
 | **Ethernet RJ-45** | Signal — network | 1 | ≤30m (STP) | Signal port |
-| **UI1–UI8** | Signal — input | 8 (terminal block) | ≤10m (unshielded) | Signal/control port |
-| **DI1–DI8** | Signal — input | 8 (terminal block) | ≤10m (unshielded) | Signal/control port |
+| **UI1–UI16** | Signal — input | 16 (terminal block) | ≤10m (unshielded) | Signal/control port |
+| **Optional DI1–DI8** | Signal — input | Optional SKU/module only | ≤10m (unshielded) | Exclude from base-SKU test; separate configuration when populated |
 | **AO1–AO4** | Signal — output | 4 (terminal block) | ≤10m (unshielded) | Signal/control port |
 | **DO1–DO4 (Relay)** | Signal — output | 4 (terminal block) | ≤10m (unshielded) | Signal/control port |
 | **USB-C** | Service port | 1 | ≤1m (shielded) | Signal port |
@@ -152,11 +152,10 @@ Mains  ─── LISN ─── MK-DDC-24 (24VAC via isolation transformer)
 | TP-A09 | All I/O terminal insulation | ±15kV | No upset |
 | TP-A10 | Screw gaps, plastic seams | ±15kV | No upset |
 
-#### Protection elements verified
-- TVS SMAJ15A (UI), P6KE36A (DI), SMAJ6.5A (RS-485)
-- PRTR5V0U2X (USB-C, USB-A, debug UART)
-- Magnetics integrated ESD (RJ-45 HR911105A)
-- Y-cap 10nF/1kV to chassis GND
+#### Protection elements to verify before execution
+- Final UI, optional-DI, RS-485 and USB protection parts against clamp/leakage/pulse limits
+- Final Ethernet magnetics/shield termination
+- Final chassis/functional-earth capacitor only if safety classification and grounding review approve it
 
 ---
 
@@ -217,16 +216,16 @@ Mains  ─── LISN ─── MK-DDC-24 (24VAC via isolation transformer)
 |------|----------------|-------|-----------|
 | 24VAC/VDC power input | Coupling/decoupling network (CDN) | ±2kV | A |
 | RS-485 A/B | Capacitive clamp | ±2kV | B |
-| UI1–UI8 | Capacitive clamp | ±2kV | B |
-| DI1–DI8 | Capacitive clamp | ±2kV | B |
+| UI1–UI16 | Capacitive clamp | ±2kV | B |
+| Optional DI1–DI8 | Capacitive clamp | ±2kV | B; optional-SKU test only |
 | AO1–AO4 | Capacitive clamp | ±2kV | B |
 | Ethernet RJ-45 | Capacitive clamp | ±2kV | B |
 
-#### Protection elements verified
-- CM choke 3.5mH + Y-cap 10nF/1kV (power input)
-- TVS devices on all ports
-- Ferrite beads RS-485, UI
-- Opto-isolation (DI, PC817)
+#### Protection elements to verify
+- Final input choke/capacitor network after schematic freeze
+- Final coordinated TVS/MOV devices on all applicable ports
+- Ferrite/filter implementation on RS-485 and UI
+- Optional-DI isolation/protection only when testing the populated optional SKU
 - ADUM1201 isolation (RS-485)
 - Magnetics common-mode rejection (Ethernet)
 
@@ -251,13 +250,12 @@ Mains  ─── LISN ─── MK-DDC-24 (24VAC via isolation transformer)
 |------|----------|-----------|------------|-----------------|
 | 24VAC/VDC power input | CDN | 2kV | 4kV | 2Ω (L-L), 12Ω (L-PE) |
 | RS-485 A/B | GDT + TVS | 2kV | N/A | 42Ω |
-| UI1–UI8 | TVS per channel | 1kV | N/A | 42Ω |
-| DI1–DI8 | TVS + opto isolation | 1kV | N/A | 42Ω |
+| UI1–UI16 | Final per-channel protection | 1kV target | N/A | 42Ω |
+| Optional DI1–DI8 | Final protection + isolation | 1kV target | N/A | 42Ω; optional-SKU test only |
 
-#### Protection elements verified
-- MOV SIOV-S14K275 (275V, 14mm, 175J)
-- TVS P6KE33A (power input secondary protection)
-- GDT + TVS (RS-485)
+#### Protection elements to verify
+- Input MOV/TVS/fuse/bridge selection and coordination are not frozen.
+- RS-485 GDT/TVS/filter selection must coordinate with the final transceiver and target pulse.
 - TVS per I/O channel
 - Galvanic isolation (DI opto, RS-485 ADUM1201)
 
@@ -280,8 +278,8 @@ Mains  ─── LISN ─── MK-DDC-24 (24VAC via isolation transformer)
 |------|-----------------|-------|-----------|
 | 24VAC/VDC power input | EMN (CDN-M1) | 10 Vrms | A |
 | RS-485 A/B | EMN (CDN-M2) | 10 Vrms | A |
-| UI1–UI8 | EMN (CDN-M2) or current clamp | 10 Vrms | A |
-| DI1–DI8 | EMN (CDN-M2) | 10 Vrms | A |
+| UI1–UI16 | EMN (CDN-M2) or current clamp | 10 Vrms | A |
+| Optional DI1–DI8 | EMN (CDN-M2) | 10 Vrms | A; optional-SKU test only |
 | AO1–AO4 | EMN (CDN-M2) | 10 Vrms | A |
 | Ethernet RJ-45 | EMN (CDN-M3) | 10 Vrms | A |
 
@@ -430,13 +428,13 @@ To minimize test time and EUT stress, execute in the following order:
 | # | Item | Done | Notes |
 |---|------|------|-------|
 | 1 | Near-field probe scan — clock harmonics | ☐ | 8MHz, 64MHz, 100MHz, 4.096MHz |
-| 2 | Near-field probe scan — DC/DC (150kHz) | ☐ | LM2596 inductor area |
-| 3 | Near-field probe scan — SPI0 (20-40MHz) | ☐ | CM3 → TFT traces |
+| 2 | Near-field probe scan — final DC/DC converters | ☐ | +5V/+3.3V/+15V switch loops and magnetics |
+| 3 | Near-field probe scan — MIPI DSI/display path | ☐ | CM3 → TFT connector/traces |
 | 4 | ESD gun pre-test (4kV contact on all ports) | ☐ | Verify TVS functionality |
-| 5 | Verify all TVS/MOV/ESD arrays soldered | ☐ | BOM check, visual inspection |
-| 6 | Verify Y-cap 10nF/1kV to chassis GND | ☐ | Correct value, correct placement |
-| 7 | Verify ferrite beads on RS-485, power input | ☐ | 600Ω@100MHz |
-| 8 | Verify CM choke on 24V input | ☐ | 3.5mH |
+| 5 | Verify all approved TVS/MOV/ESD arrays soldered | ☐ | Frozen BOM + visual inspection |
+| 6 | Verify approved chassis/functional-earth capacitor if populated | ☐ | Safety class/value/placement per final grounding review |
+| 7 | Verify final RS-485 and input filter parts | ☐ | Frozen BOM and layout |
+| 8 | Verify final power-input common-mode filter | ☐ | Selected value/part, not legacy assumption |
 | 9 | Verify decoupling caps on all IC VCC pins | ☐ | 100nF <2mm from each pin |
 | 10 | Verify GND continuity (L2) — no slots | ☐ | Visual + multimeter |
 | 11 | Verify relay HV clearance ≥3.2mm | ☐ | Creepage ≥4mm |

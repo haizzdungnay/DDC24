@@ -1,9 +1,9 @@
 # HW BRINGUP TEST PROCEDURE
 
-> **Document:** HW-TEST-01 | Status: Draft | 2026-06-23  
-> **Sản phẩm:** MK-DDC-24 Hardware Bringup & Test  
-> **Phiên bản:** HW-TEST v1.0 | 2026-06-23  
-> **Trạng thái:** Draft for Review  
+> **Document:** HW-TEST-01 | Rev 1.2 | Status: Draft | 2026-06-30
+> **Sản phẩm:** MK-DDC-24 Hardware Bringup & Test
+> **Phiên bản:** HW-TEST v1.2 | 2026-06-30
+> **Trạng thái:** Draft for Review
 > **Tổ chức:** MK-DDC Project — Hardware Team
 
 ---
@@ -79,13 +79,13 @@
 4. Check polarity: RED(+) to VCC terminal, BLACK(-) to GND terminal
 
 #### 3.2.2 5V Regulated Output
-1. Locate U10 (5V LDO regulator)
-2. Measure voltage between VCC and GND: **4.95-5.05V DC**
+1. Verify the selected +5V converter and RefDes match the approved `PWR_DESIGN.md` evidence; do not power a board built from the rejected 3A legacy design.
+2. Measure TP1 (`VCC_5V`) to TP3 (`GND`): **4.95-5.05V DC**
 3. Check ripple with oscilloscope: **<50mVpp**
 4. Verify no oscillations (>1MHz)
 
 #### 3.2.3 3.3V MCU Supply
-1. Locate U11 (3.3V LDO regulator)
+1. Verify the selected 3.3V switching regulator and RefDes match the approved power evidence; AMS1117 is not a released Rev A solution.
 2. Measure voltage at STM32 VDD pins: **3.27-3.33V DC**
 3. Check startup sequence: 24V→5V→3.3V (within 100ms)
 4. Verify current draw: **<100mA idle**
@@ -99,6 +99,8 @@
 2. Check MCU status LED (D5): **should blink 3 times**
 3. Verify USB enumeration: **STM32 Virtual COM Port**
 4. Check bootloader mode: **short press RESET button**
+5. Before I/O tests, send IOP `CMD_HANDSHAKE` and record `IOP_VER_MAJOR.MINOR`, `MCU_FW_VERSION`, handshake status, and `BOARD_CAP_MAP`.
+6. Pass only when IOP is 2.0-compatible and `BOARD_CAP_MAP` contains UI_16, AO_4, and DO_4 for the base Rev A SKU.
 
 #### 3.3.2 Crystal Oscillator
 1. Set oscilloscope to 10MHz/div, 1V/div
@@ -107,10 +109,11 @@
 4. Verify stable frequency (no drift >1%)
 
 #### 3.3.3 Serial Communication
-1. Connect terminal emulator to COM port
-2. Set baud rate: **921600, 8N1**
-3. Send command `*IDN?` → should respond `MK-DDC-24 HW REV 1.0`
-4. Check signal integrity with oscilloscope
+1. Connect the IOP protocol test tool/logic analyzer to the MCU-CM3 UART path.
+2. Set baud rate: **921600, 8N1**.
+3. Send binary `CMD_HANDSHAKE` and verify `CMD_HANDSHAKE_RESP` LEN=8 with IOP version, MCU firmware version, status, and board capability map.
+4. Send `CMD_GET_IO` and verify an 80-byte frame (header + 74-byte payload + CRC) within the 3ms response timeout.
+5. Check signal integrity and the nominal 2ms GET_IO request cadence with oscilloscope/logic analyzer.
 
 ---
 
@@ -156,11 +159,11 @@ Pass/fail details and calibration records are stored with the dedicated UI test 
 ```
 
 **Test Procedure:**
-1. Send command `AO:0:0V` → **Output: 0±50mV**
-2. Send command `AO:0:2.5V` → **Output: 2.5±100mV**
-3. Send command `AO:0:5V` → **Output: 5.0±100mV**
-4. Test all 4 channels: **±5% accuracy**
-5. Check settling time: **<100µs**
+1. In 0-10V mode, command and measure **0, 2.5, 5.0, 7.5, and 10.0V** on every AO channel with the declared voltage-mode load.
+2. In 4-20mA mode, command and measure **4, 8, 12, 16, 20, and 22mA** on every AO channel.
+3. Repeat current-mode points at **0, 250, and 500 ohm** loop load; 600 ohm is not released.
+4. Record raw command, measured output, error, +15V rail, settling time, and output-driver temperature at every point.
+5. Apply provisional acceptance limits from the signed AO error budget; do not substitute the old blanket +/-5% criterion for a linearity result.
 
 #### 3.4.3 Digital Output (DO) / Relay
 
@@ -227,11 +230,15 @@ Pass/fail details and calibration records are stored with the dedicated UI test 
 #### 3.6.2 Thermal Test
 1. Run full I/O load for 30 minutes
 2. Monitor temperature with thermal camera
-3. Check hot spots:
-   - STM32: **<85°C**
-   - LDOs: **<100°C**
-   - ADS131M08: **<70°C**
+3. Check and record hot spots:
+   - STM32 and both ADS131M08 devices
+   - +5V, +3.3V, +1.8V, and +15V regulator/controller, switch/diode, and inductor
+   - DAC8554, AO op-amp/output transistors at 500-ohm full-scale load
+   - UI buffers/muxes, references, shunts, and terminal protection
+   - ULN2003A, relay coils, relay-contact suppression parts, bridge, fuse, and input TVS/MOV
 4. Verify no thermal shutdown
+
+Acceptance temperatures come from the selected-part derating calculation and closure evidence, not a generic component-class limit.
 
 #### 3.6.3 Environmental Stress Test
 1. Vibration test: **5-500Hz, 0.5mm amplitude**
@@ -242,6 +249,24 @@ Pass/fail details and calibration records are stored with the dedicated UI test 
 ---
 
 ## 4. Test Results & Documentation
+
+### 4.0 Test-point measurement map
+
+| TP | Net/group | Instrument | Expected / use |
+|---|---|---|---|
+| TP1 | VCC_5V | DMM + scope | 4.95-5.05V, ripple/load-step capture |
+| TP2 | VCC_3V3 | DMM + scope | 3.27-3.33V, transient capture |
+| TP3 | GND | Probe ground | Primary low-voltage reference |
+| TP4 | UART0_TX | Logic analyzer | Debug UART |
+| TP5 | UART2_TX | Logic analyzer/scope | IOP 921600 8N1, 2ms request cadence |
+| TP6 | SPI3_CLK | Scope/logic analyzer | Both ADS transactions inside 1ms acquisition budget |
+| TP7-TP8 | RS485_A/B | Differential probe | Idle bias, termination, waveform and EMC recovery |
+| TP9 | MCU_nRESET | Scope | Startup/reset timing |
+| TP10-TP25 | UI1-UI16 field | DMM/calibrator | Applied field stimulus |
+| TP26-TP41 | UI1-UI16 ADC node | DMM/scope | Protected low-voltage conditioned node |
+| TP42-TP45 | UI mode latch bus | Logic analyzer | DATA/CLK/LATCH/OE and safe reset state |
+| TP46-TP49 | AO1-AO4 output | DMM/current calibrator | AO linearity/compliance sweep |
+| TP50-TP53 | DO1-DO4 drive | Scope | Driver timing and relay actuation; logic-side only |
 
 ### 4.1 Test Report Format
 
@@ -324,13 +349,13 @@ A board passes bringup if:
 |----------|---------|-------------|
 | BOM_MK-DDC-24_v1.md | v1.2 | Board-level Bill of Materials |
 | BOM-UI-16CH.md | v1.0 | Universal Input 16CH BOM |
-| MCU_STM32G0_SPEC.md | v1.3 | MCU specifications and UI mode latch pinmap |
+| MCU_STM32G0_SPEC.md | v1.4 | MCU specifications and UI mode latch pinmap |
 | IO_UI_CIRCUIT.md | v2.2 | Universal Input Rev A architecture |
 | HW-TEST-UI-16CH.md | v1.0 | Dedicated UI 16CH test plan |
-| IOP_PROTOCOL.md | v2.0-draft | Signed int32 UI ADC binary frame |
-| FW-ADC-SAMPLING.md | v1.0 | Firmware ADC sampling sequence |
-| IO_AO_CIRCUIT.md | v1.1 | Analog Output circuit |
-| IO_DO_RELAY.md | v1.1 | Digital Output circuit |
+| IOP_PROTOCOL.md | v2.1 | IOP v2 frame, timing, and command contract |
+| FW-ADC-SAMPLING.md | v1.1 | Firmware ADC sampling sequence |
+| IO_AO_CIRCUIT.md | v1.3 | Analog Output circuit |
+| IO_DO_RELAY.md | v1.3 | Digital Output circuit |
 
 ---
 
@@ -340,7 +365,8 @@ A board passes bringup if:
 |------|-----|---------|
 | 2026-06-23 | v1.1 | Final rev bump Phase 1-2: Updated test procedure for 16ch UI, added ADC #2 validation |
 | 2026-06-23 | v1.0 | Khởi tạo — quy trình bring-up và test MK-DDC-24 |
+| 2026-06-30 | v1.2 | Added IOP/FW version gate, TP map, AO linearity/compliance sweep, and expanded thermal coverage |
 
 ---
 
-_Document ID: HW-TEST-01 | Rev 1.1 | 2026-06-23_
+_Document ID: HW-TEST-01 | Rev 1.2 | 2026-06-30_

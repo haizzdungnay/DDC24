@@ -1,9 +1,9 @@
 # MECHANICAL ENCLOSURE — DIN-Rail Mounting
 
-> **Document:** ME-MECH-01 | Status: Draft | 2026-06-23  
-> **Sản phẩm:** MK-DDC-24 DIN-rail Enclosure  
-> **Phiên bản:** HW-MECH v1.0 | 2026-06-23  
-> **Trạng thái:** Draft for Review  
+> **Document:** ME-MECH-01 | Rev 1.2 | Status: Draft | 2026-06-30
+> **Sản phẩm:** MK-DDC-24 DIN-rail Enclosure
+> **Phiên bản:** HW-MECH v1.2 | 2026-06-30
+> **Trạng thái:** Draft for Review
 > **Tổ chức:** MK-DDC Project — Mechanical Team
 
 ---
@@ -92,10 +92,17 @@ Enclosure DIN-rail MK-DDC-24 được thiết kế cho ứng dụng công nghi�
 #### 2.3.3 Vents & Cooling
 
 - Front vents: 2× slots 100×3mm
-- Side vents: 4× slots 50×2mm  
+- Side vents: 4× slots 50×2mm
 - Top vents: 2× slots 150×2mm
 - Natural convection: >5 CFM airflow
 - Max temp rise: <15°C above ambient
+
+#### 2.3.4 Service/debug access and cable management
+
+- Provide factory access to the 5-pin SWD header (PA13/PA14/NRST/3V3/GND) and debug UART without removing the PCB from the DIN-rail base.
+- The production enclosure must cover or tamper-seal debug access; no externally accessible opening may defeat IP20 or the production debug-disable policy.
+- Reserve probe/cable clearance around SWD, UART, USB-C, RS-485, power, UI, AO, and DO connectors in the 2D drawing and STEP model.
+- Rev A uses front pluggable terminal blocks in an IP20 cabinet and therefore does not require sealed cable glands. Installation drawings must specify wire duct clearance, bend radius, ferrules, strain relief, and terminal-cover retention. Any variant claiming a higher IP rating requires separately specified glands/grommets and a new ingress test.
 
 ---
 
@@ -195,6 +202,19 @@ Enclosure DIN-rail MK-DDC-24 được thiết kế cho ứng dụng công nghi�
 - Twist test: 10° twist on DIN-rail mount
 - Lid opening force: <30N
 
+### 6.3 Enclosure thermal validation
+
+Test at minimum, nominal, and maximum declared ambient with the final enclosure, vents, CM3 heatsink, and production PCB orientation.
+
+| Operating case | Required measurements |
+|---|---|
+| Idle | Ambient/inlet/outlet air, CM3, +5V/+3.3V/+15V converters |
+| CPU/network load | CM3/PMIC/heatsink, enclosure rise, Ethernet/USB area |
+| Full I/O | All 16 UI active, four AO at worst load, four relay coils energized, RS-485/Ethernet active |
+| Switching stress | Relay cycling plus CM3 load steps; monitor ADC/reference/UI noise and regulator hot spots |
+
+Pass only when every component remains inside its derated limit, enclosure rise is <=15C, no thermal shutdown/reset occurs, and the report includes thermal images, sensor locations, load configuration, ambient, dwell time, and final temperatures. CFD may guide the design but does not replace prototype measurement.
+
 ---
 
 ## 7. CAD Files & Manufacturing
@@ -244,7 +264,8 @@ Enclosure DIN-rail MK-DDC-24 được thiết kế cho ứng dụng công nghi�
 |------|-----|---------|
 | 2026-06-23 | v1.1 | Final rev bump Phase 1-2: Verified thermal management for 16ch UI, updated terminal block layout |
 | 2026-06-23 | v1.0 | Khởi tạo — thiết kế enclosure DIN-rail MK-DDC-24 |
+| 2026-06-30 | v1.2 | Added controlled debug access, cable/strain-relief rules, and objective enclosure thermal validation |
 
 ---
 
-_Document ID: ME-MECH-01 | Rev 1.1 | 2026-06-23_
+_Document ID: ME-MECH-01 | Rev 1.2 | 2026-06-30_

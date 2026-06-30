@@ -54,9 +54,9 @@ journalctl -u mkddc-iobus -f   # hoặc stderr khi chạy tay
 ## Mốc 5 — GET_IO / IO_RESP pass
 
 - **Command:** để iobus chạy 60s rồi xem metrics (log DEBUG in chu kỳ, hoặc đọc shm mốc 6).
-- **Đạt khi:** poll 100Hz đều: `iop_rx` ≈ 6000/phút, `crc_err=0`, `timeout=0`, `sample_cnt` tăng.
+- **Đạt khi:** poll 500Hz đều: `iop_rx` ≈ 30000/phút, `crc_err=0`, `timeout=0`, `sample_cnt` tăng.
 - **Quan sát:** rút cáp UART 1s → log `iop.fault` → cắm lại → `iop.reconnect` → recover.
-- **Fail →** timeout lẻ tẻ: MCU latency >10ms (FW phải trả ≤5ms) hoặc SOM poll thread không RT
+- **Fail →** timeout lẻ tẻ: MCU response vượt 3ms budget hoặc SOM poll thread không đáp ứng cadence; kiểm tra distribution và counter thay vì chỉ average
   (`chrt -p $(pidof mkddc-iobus)` phải thấy SCHED_FIFO 70).
 
 ## Mốc 6 — Ghi SHM pass
@@ -87,7 +87,7 @@ xxd /dev/shm/mkddc_io_shm | head -8
 printf '{"point":"DO1","value":1,"priority_source":"operator","user":"dev"}\n' | \
   socat - UNIX-CONNECT:/run/mkddc/core.sock
 ```
-- **Đạt khi:** ≤1 scan core (1s) + ≤1 poll iobus (10ms): log iobus
+- **Đạt khi:** ≤1 scan core (1s) + ≤1 poll iobus nominal (2ms): log iobus
   `INFO output.set_do mask=0x01 value=0x01 ack=ok` → **relay DO1 đóng thật** (nghe tách,
   đèn sáng) → IO_RESP kế có DO_FB bit0=1 → `do_feedback[0]=1` → core/web thấy ON.
 - **Quan sát:** gửi value=0 → relay mở. Lặp 10 lần không miss.

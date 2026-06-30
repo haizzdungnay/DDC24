@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.20 | 2026-06-26 (MOD-012: 9/11 DoD ✅ — E303+ext snapshot+T11 fixed; BAC-012: DoD #3 ✅ — BACNET=ON 123 test; CI modbus+bacnet matrix added)
+> **Phiên bản:** 1.21 | 2026-06-27 (HMI-001..012 source status + automated evidence; hardware gates và 3 contract gaps ghi rõ, chưa đóng DoD giả)
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -90,9 +90,9 @@ Tên: adc_drv + io_sample (UI/DI)
 Owner: Dev FW_MCU | Phase: 1 | Module: io_sample, adc_drv
 File: fw/app/io_sample.c, fw/drivers/adc_drv.c
 Input: ADS131M08 SPI3; DI GPIO
-Output: ui_raw[8] s24, di_mask, sample_cnt
+Output: ui_raw[16] int32 signed, adc1/adc2 status, fault flags, sample_cnt, do_fb; no base-SKU DI_MASK
 Test: điện áp biết trước UI1 → raw đúng <1%; DI1 debounce; ADC_FAULT khi rút SPI
-Done khi: 8UI+8DI đọc đúng, budget<200µs
+Done khi: 16 UI từ 2× ADS131M08 đọc đúng; base SKU không DI; budget và ADC1/ADC2 fault đúng theo ADR-010
 Phụ thuộc: SKEL-001
 ```
 ```
@@ -150,7 +150,7 @@ Tên: GET_IO/IO_RESP trên MCU + parse trên SOM
 Owner: Dev FW_MCU (build) + Dev SOM (parse) | Phase: 2 | Module: iop_comm / iop_parser
 File: fw/app/iop_comm.c, fw/common/iop_protocol.h, services/iobus/iop_parser.cpp
 Input: GET_IO frame từ SOM
-Output: IO_RESP 34B
+Output: IO_RESP v2 payload 74 byte
 Test: SOM gửi GET_IO 1000 lần → 0 CRC/SEQ err; latency ≤5ms (scope GPIO toggle)
 Done khi: 1000 GET_IO không lỗi; IO_RESP parse được trên SOM
 Phụ thuộc: IOP-002, FW-002
@@ -205,10 +205,10 @@ Phụ thuộc: IOP-006
 ```
 ```
 Task ID: IOB-002
-Tên: Poll loop 100Hz + io_cache (shm writer)
+Tên: Poll loop 2ms/500Hz + io_cache (shm writer)
 Owner: Dev SOM | Phase: 3 | Module: iop_client, io_cache
 File: services/iobus/iop_client.cpp, io_cache.cpp
-Output: GET_IO 100Hz → kx_io_shm (seqlock)
+Output: GET_IO 2ms/500Hz → kx_io_shm (seqlock)
 Test: reader test đọc shm; DI đổi → di_state đổi; jitter <2ms
 Done khi: poll ổn định, reader đọc đúng không nửa-ghi
 Phụ thuộc: IOB-001
@@ -734,7 +734,7 @@ Output: MKDDC_ENABLE_HMI cmake option; lv_init + drm_init("/dev/dri/card0"); mà
 Test: build xanh; FPS ≥ 10; màn hiển thị màu nền
 Done khi: LVGL render được 1 label lên màn thật; CI build sạch
 Phụ thuộc: board Orange Pi 5B + module KD024QVFIA073-02-C021B
-Trạng thái: TODO
+Trạng thái: ĐÃ làm 2026-06-27 — source/build DRM RGB565 portrait→landscape hoàn tất; còn TFT/FPS hardware gate T-SW-100/101.
 ```
 ```
 Task ID: HMI-002
@@ -746,7 +746,7 @@ Output: LV_INDEV_TYPE_POINTER (evdev); LV_INDEV_TYPE_KEYPAD (GPIO 20ms debounce)
 Test: tap vào widget đúng tọa độ; button UP/DOWN cuộn list; ENTER chọn; ESC thoát
 Done khi: cả 2 input path hoạt động; screen saver wake test pass
 Phụ thuộc: HMI-001
-Trạng thái: TODO
+Trạng thái: ĐÃ làm 2026-06-27 — evdev calibration + GPIO debounce/SPSC/wake suppression có test; còn FT5436/GPIO target test.
 ```
 ```
 Task ID: HMI-003
@@ -758,7 +758,7 @@ Output: tab strip + swipe/tap navigation vòng 6 màn; dim 5min; banner đỏ kh
 Test: UC-LOCAL-002 (navigation); screen saver dim 5min; FAULT banner không tắt được
 Done khi: vòng Home→Svc→Home qua cả swipe và tap; FAULT test pass
 Phụ thuộc: HMI-002
-Trạng thái: TODO
+Trạng thái: ĐÃ làm 2026-06-27 — ring 6 page, tab/swipe/button, saver và FAULT overlay hoàn tất; còn UC-LOCAL-002 manual.
 ```
 ```
 Task ID: HMI-010
@@ -771,7 +771,7 @@ Output: lv_timer 1s refresh; AGE = now - last_update_ts; STALE khi AGE > thresho
 Test: thay đổi SHM → widget cập nhật ≤ 1s; AGE tăng đúng; STALE > 5s highlight
 Done khi: SHM reader stable; point_db load đúng; AGE column chính xác
 Phụ thuộc: HMI-003
-Trạng thái: TODO
+Trạng thái: ĐÃ làm 2026-06-27 — SHM magic/seqlock/late attach + AGE/STALE + point DB transactional validation có test; còn producer/latency target test.
 ```
 ```
 Task ID: HMI-004
@@ -784,7 +784,7 @@ Quy tắc: không hardcode "Room Temp/Fan/Power"; BACnet "Last req: Xs ago"
 Test: UC-LOCAL-001 (30s glance); UC-LOCAL-003 (CPU/RAM/Temp); alarm count đúng
 Done khi: tất cả 6 block hiển thị dữ liệu thật từ SHM
 Phụ thuộc: HMI-010
-Trạng thái: TODO
+Trạng thái: ĐÃ làm 2026-06-27 — đủ Home blocks và count theo point DB; còn UC-LOCAL-001/003 + communication telemetry target.
 ```
 ```
 Task ID: HMI-005
@@ -796,7 +796,7 @@ Output: table POINT|NAME|TYPE|VALUE|UNIT|QUALITY|AGE; 3 page; filter BAD/STALE
 Test: UC-LOCAL-004 (I/O overview); UC-LOCAL-005 (detail 24); UC-LOCAL-006 (filter)
 Done khi: 24 điểm hiển thị đúng; AGE cập nhật; filter hoạt động
 Phụ thuộc: HMI-010
-Trạng thái: TODO
+Trạng thái: ĐÃ làm 2026-06-27 — bảng point DB động, TYPE/VALUE/UNIT/QUALITY/AGE và BAD/STALE filter; còn UC-LOCAL-004..006 visual/manual.
 ```
 ```
 Task ID: HMI-006
@@ -808,7 +808,7 @@ Output: 4-state table; ACK đổi UNACK→ACK không xóa; filter; severity colo
 Test: UC-LOCAL-007 (view active); UC-LOCAL-008 (ACK — count không giảm)
 Done khi: 4-state model đúng; ACK không xóa alarm; FAULT=đỏ, WARN=vàng, INFO=xám
 Phụ thuộc: HMI-010
-Trạng thái: TODO
+Trạng thái: ĐÃ làm 2026-06-27 — alarm.sock reader, ring 10, severity + 4-state ACK test pass; còn chốt ACK upstream contract.
 ```
 ```
 Task ID: HMI-007
@@ -821,7 +821,7 @@ Quy tắc: BACnet KHÔNG "Đang kết nối"; chỉ OK/NO_TRAFFIC/TIMEOUT/CONFIG
 Test: UC-LOCAL-009 (Ethernet); UC-LOCAL-010 (BACnet/Modbus)
 Done khi: status codes đúng; "Last req: Xs ago" tính đúng
 Phụ thuộc: HMI-010
-Trạng thái: TODO
+Trạng thái: ĐÃ làm một phần 2026-06-27 — Ethernet/kernel và technical status UI; còn Device ID/Last Request/Modbus metrics vì contract SHM chưa cung cấp.
 ```
 ```
 Task ID: HMI-008
@@ -834,7 +834,7 @@ Read-only: không có action button (restart → Screen 6)
 Test: UC-LOCAL-011; dữ liệu từ SHM/procfs đúng
 Done khi: 6 section hiển thị; không có nút nguy hiểm
 Phụ thuộc: HMI-010
-Trạng thái: TODO
+Trạng thái: ĐÃ làm 2026-06-27 — diagnostics read-only từ proc/sys/package; còn UC-LOCAL-011 trên board.
 ```
 ```
 Task ID: HMI-009
@@ -848,7 +848,7 @@ Output: LOCKED default; unlock = PIN OR service switch OR Engineer role
 Test: UC-LOCAL-012 (unlock 3 path); UC-LOCAL-013 (reload); UC-LOCAL-014 (reboot 3s + safe state)
 Done khi: LOCKED mặc định; 3 unlock path; reboot 3s hold; safe state per-point
 Phụ thuộc: HMI-010
-Trạng thái: TODO
+Trạng thái: ĐÃ làm một phần 2026-06-27 — lock/unlock/revoke, hold 3s và per-point safe-state IPC có test; còn checksum algorithm và Web-role mapping chưa có contract.
 ```
 ```
 Task ID: HMI-011
@@ -860,7 +860,7 @@ Output: bảng locale EN + VI; SIGHUP đổi locale không restart service
 Test: SIGHUP → locale đổi trong 1s; VI hiển thị đầy đủ dấu
 Done khi: EN default; SIGHUP → VI; không lỗi font
 Phụ thuộc: HMI-004..009
-Trạng thái: TODO
+Trạng thái: ĐÃ làm 2026-06-27 — EN/VI UTF-8 + NotoSans FreeType + SIGHUP; còn visual font/reload test trên TFT.
 ```
 ```
 Task ID: HMI-012
@@ -871,7 +871,7 @@ Output: systemd start/stop/restart; Restart=always; After=mkddc-core+mkddc-iobus
 Test: systemctl start mkddc-hmi; journalctl -u mkddc-hmi; reboot → tự start
 Done khi: service tự start sau reboot; log đủ debug
 Phụ thuộc: HMI-001..011
-Trạng thái: TODO
+Trạng thái: ĐÃ làm 2026-06-27 — systemd notify/watchdog/capability + CMake/root installer; còn start/reboot acceptance trên Orange Pi.
 ```
 
 ---

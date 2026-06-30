@@ -2,7 +2,7 @@
 ## MK-DDC-24 | HMI Local Display (LVGL v9 / DRM / KMS)
 
 > **Document ID:** IMPL-HMI-GUIDE-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-27 · **Trạng thái:** Approved · **Owner:** Dev SOM
+> **Phiên bản:** 1.1 | 2026-06-27 · **Trạng thái:** Implementation in progress · **Owner:** Dev SOM
 > **Trace:** `SW-HMI-001..008`, `HMI-001..022`
 > **Spec:** [SW_HMI_DESIGN Rev 2.2](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md) ·
 >           [UC Rev 2.1](../04_uiux/KX-DDC24-UC-HMI-001_VI.md) ·
@@ -69,6 +69,8 @@ services/hmi/
 
 ### HMI-001: CMake skeleton + LVGL v9 + DRM/KMS init
 
+**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — build LVGL v9 + libdrm RGB565, double buffer, xoay framebuffer portrait→landscape; còn T-SW-100/101 trên TFT thật.
+
 ```
 File: services/hmi/CMakeLists.txt, drm/drm_init.cpp/hpp, main.cpp
 Dependency: liblvgl (v9), libdrm, libinput
@@ -82,6 +84,8 @@ Done khi: build xanh; màn hình bật lên hiển thị màu nền; FPS ≥ 10
 
 ### HMI-002: Input drivers
 
+**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — evdev ABS calibration/rotation, GPIO SPSC + debounce và wake-event suppression; còn xác nhận FT5436/GPIO trên board.
+
 ```
 File: input/evdev_touch.cpp/hpp, input/gpio_buttons.cpp/hpp
 Output:
@@ -93,6 +97,8 @@ Done khi: tap/swipe điều hướng được; button UP/DOWN cuộn; ENTER ch�
 ```
 
 ### HMI-003: Tab strip + 6-page ring + screen saver + I/O FAULT banner
+
+**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — đủ ring 6 page, tab/touch/button, dim/wake và global FAULT overlay; còn UC-LOCAL-002/T-SW-104 manual.
 
 ```
 File: ui/nav_controller.cpp/hpp, ui/screen_saver.cpp/hpp, ui/fault_banner.cpp/hpp
@@ -107,6 +113,8 @@ Done khi: vòng từ Home→Svc→Home bằng cả swipe và tap tab; FAULT bann
 ```
 
 ### HMI-004: Screen 1 — Home / Controller Health
+
+**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — đủ 6 block, alarm count 4-state, I/O count theo point DB và proc/sys health; còn UC-LOCAL-001/003 trên panel và telemetry communication thật.
 
 ```
 File: screens/screen_home.cpp/hpp
@@ -127,6 +135,8 @@ Done khi: UC-LOCAL-001 (30s glance) pass; BACnet status đúng format
 
 ### HMI-005: Screen 2 — I/O Monitor
 
+**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — bảng point DB động, VALUE/UNIT/QUALITY/AGE, BAD/STALE filter và không trình bày giá trị BAD/STALE như GOOD; còn UC-LOCAL-004..006 manual.
+
 ```
 File: screens/screen_io.cpp/hpp
 Layout: (ref UX §6)
@@ -139,6 +149,8 @@ Done khi: UC-LOCAL-004/005/006 pass; AGE cập nhật 1s; BAD/STALE highlight đ
 ```
 
 ### HMI-006: Screen 3 — Alarm / Event
+
+**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — subscriber alarm.sock, ring 10, severity mapping và 4-state ACK có unit test; còn chốt contract ACK upstream vì publisher hiện không có endpoint nhận ACK.
 
 ```
 File: screens/screen_alarm.cpp/hpp
@@ -157,6 +169,8 @@ Done khi: UC-LOCAL-007/008 pass; 4-state model đúng
 
 ### HMI-007: Screen 4 — Communication
 
+**Trạng thái triển khai:** ĐÃ làm một phần 2026-06-27 — Ethernet lấy từ kernel và UI chỉ dùng status kỹ thuật; CHƯA đóng UC-LOCAL-010 vì SHM hiện không chứa Device ID, BACnet last-request hay Modbus counters/config.
+
 ```
 File: screens/screen_comm.cpp/hpp
 Layout: (ref UX §8)
@@ -173,6 +187,8 @@ Done khi: UC-LOCAL-009/010 pass; status codes đúng theo UX §8
 
 ### HMI-008: Screen 5 — System / Diagnostics
 
+**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — read-only FW/runtime/resource/process/watchdog/log từ proc/sys/package; còn UC-LOCAL-011 manual trên target.
+
 ```
 File: screens/screen_system.cpp/hpp
 Layout: (ref UX §9)
@@ -188,6 +204,8 @@ Done khi: UC-LOCAL-011 pass; dữ liệu từ SHM đúng
 ```
 
 ### HMI-009: Screen 6 — Service / Config
+
+**Trạng thái triển khai:** ĐÃ làm một phần 2026-06-27 — LOCKED default, PIN/switch/role, revoke policy, hold 3s và safe-state per-point qua core IPC; CHƯA đóng UC-LOCAL-013 do spec chưa định nghĩa thuật toán/canonical payload checksum và role Web không map trực tiếp sang role HMI.
 
 ```
 File: screens/screen_service.cpp/hpp
@@ -209,6 +227,8 @@ Done khi: UC-LOCAL-012/013/014 pass; LOCKED default; unlock 3 điều kiện; re
 
 ### HMI-010: SHM data binding
 
+**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — mmap read-only, magic+seqlock, late attach, AGE/STALE và point DB transactional validation có unit test; còn T-SW-102/103 với producer thật.
+
 ```
 File: data/shm_reader.cpp/hpp, data/point_db.cpp/hpp
 Output:
@@ -222,6 +242,8 @@ Done khi: SHM update → widget cập nhật ≤ 1s; AGE tăng đều; STALE hig
 
 ### HMI-011: Localization EN/VI
 
+**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — bảng EN/VI UTF-8, NotoSans FreeType và SIGHUP reload; UTF-8/parser unit test pass, còn visual test dấu tiếng Việt trên TFT.
+
 ```
 File: i18n/locale.cpp/hpp
 Output:
@@ -232,6 +254,8 @@ Done khi: SIGHUP đổi VI → EN và ngược lại; không restart service
 ```
 
 ### HMI-012: systemd packaging
+
+**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — unit Type=notify/watchdog, device groups, CAP_SYS_BOOT, CMake install và root installer; còn systemctl/reboot acceptance trên Orange Pi.
 
 ```
 File: packaging/mkddc-hmi.service
@@ -302,5 +326,6 @@ Build flag: `MKDDC_ENABLE_HMI=ON` (cmake option) — tương tự pattern MODBUS
 
 ---
 
+**Rev** 1.1 | 2026-06-27 (Cập nhật implementation source, automated tests và hardware/integration gates còn mở; ghi rõ gap checksum, communication telemetry và Web-role mapping) ·
 **Rev** 1.0 | 2026-06-27 (Tạo mới — HMI kéo vào Rev A per REVA_SCOPE amendment; 12 task HMI-001..012; spec từ SW_HMI_DESIGN Rev 2.2 + UC Rev 2.1 + UX Rev 2.0) ·
 DoD: [13_DEFINITION_OF_DONE](13_DEFINITION_OF_DONE.md) · Phase: [03_PHASE_PLAN §5.5](03_PHASE_PLAN.md)

@@ -85,7 +85,7 @@ Sau đó mới đắp đọc ADC, AO/DO, diag...
 
 ### FW-T05 — GET_IO → IO_RESP ` (S2) `
 - **Mục tiêu:** ghép T03+T04, trả dữ liệu cho SOM.
-- **File:** `app/iop_comm.c` (build IO_RESP 34 byte theo header offsets).
+- **File:** `app/iop_comm.c` (build IORESP v2 payload 74 byte theo shared-header offsets).
 - **Acceptance:** BE đọc đúng 8 UI raw + DI; latency GET_IO→TX ≤5ms; không có GET_IO 200ms → safe-state.
 - **Test:** đo latency; cắt poll → kiểm safe-state.
 - **Trace:** IOP-FW, FW-WDG-005.

@@ -3,10 +3,10 @@
 
 > **Document ID:** IOP-SPEC-MK-DDC-24-VI  
 > **Phiên bản:** 1.2 | 2026-06-15 (Sửa tên service + SHM path theo ADR-005 + Contract Freeze: `kinexus-io-driver` → `mkddc-iobus`, `/kinexus/io_data` → `/dev/shm/mkddc_io_shm`)
-> **Trạng thái:** Approved (Owner 2026-06-08) · Frozen 2026-06-11 · §8/§9.1 reconciled 2026-06-15
+> **Trạng thái:** Superseded 2026-06-25 by ADR-010 and `shared/iop_protocol.h` v2.0; retained as IOP v1 history only
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
 > **Tác giả:** KINEXUS Technologies — System Architecture Team  
-> **Owner duy nhất:** Tài liệu này là nguồn spec DUY NHẤT (dạng diễn giải) cho interface SOM↔MCU.
+> **Current authority:** [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md), [`shared/iop_protocol.h`](../../shared/iop_protocol.h), and `hardware-design/05_mcu_io/IOP_PROTOCOL.md`. Do not implement payload/timing tables in this v1 file.
 > ⚠️ **Precedence (Contract Freeze):** giá trị thực thi — opcode, payload layout, enum, FAULT bit,
 > RESET reason, CRC, hằng số timing — lấy theo [`shared/iop_protocol.h`](../../shared/iop_protocol.h).
 > Spec lệch header → **header thắng**, sửa spec theo. Xem [16_CONTRACT_FREEZE](../03_implementation/16_CONTRACT_FREEZE.md).

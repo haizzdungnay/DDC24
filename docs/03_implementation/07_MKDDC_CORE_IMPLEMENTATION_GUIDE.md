@@ -324,7 +324,7 @@ log WARN mỗi 10s; sau 30s → vẫn chạy scan với toàn bộ quality=BAD (
   __atomic_store_n(&shm->do_cmd[ch], v, __ATOMIC_RELEASE);
 - ao_setpoint ghi giá trị ENGINEERING (V/mA theo ao_mode); iobus convert eng→raw.
 - Chỉ ghi khi giá trị đổi (đỡ cache-line bounce); iobus side cũng chỉ gửi khi CHANGED.
-Done khi: ghi do_cmd[0]=1 → iobus gửi SET_DO trong ≤1 chu kỳ poll (10ms).
+Done khi: ghi do_cmd[0]=1 → iobus phát hiện/gửi SET_DO trong ≤1 chu kỳ poll nominal (2ms), không tính actuator relay time.
 ```
 
 ---

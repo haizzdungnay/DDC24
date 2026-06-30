@@ -4,12 +4,14 @@
 >
 > ⚠️ **RECONCILE (2026-06-08):** mô hình lập trình là **component-based graph**, không phải IEC 61131-3 (→ Rev C). Nguồn-chuẩn định vị: [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md), [ADR-004](../adr/ADR-004-component-based-runtime.md).
 
-**Revision:** 2.1 | 2026-05-28 | Bổ sung HMI TFT display
+**Revision:** 3.0 | 2026-06-30 | Breaking I/O baseline alignment to ADR-010
 
 > ⚠ **CẬP NHẬT KIẾN TRÚC KẾT NỐI — 2026-05-30 (ARCH-R010):** Phần kết nối chuẩn đã đổi và **thay thế mọi đề cập cũ về "BACnet MS/TP" và "Modbus TCP/RTU slave" trong tài liệu này.**
 > - **Northbound (lên BMS/cloud): chỉ qua IP (Ethernet/WiFi)** — BACnet/IP + MQTT + REST. **Bỏ BACnet MS/TP. Bỏ Modbus slave.**
 > - **Southbound (RS-485): Modbus RTU MASTER** — DDC poll thiết bị phụ (module mở rộng I/O, màn hình phụ, thiết bị bên thứ 3).
 > Các mục marketing/topology phía dưới còn nhắc MS/TP sẽ được biên tập lại ở Rev 2.2. Nguồn-chuẩn: §3.3 + [OPEN_ISSUES ARCH-R010](OPEN_ISSUES_MK-DDC-24_VI.md).
+
+> **ADR-010 baseline (2026-06-25):** base SKU = **16 UI + 4 AO + 4 DO**, không có DI công nghiệp riêng; IOP v2 poll 2ms/500Hz. Dry-contact UI chỉ là auxiliary non-isolated input.
 
 ---
 
@@ -28,7 +30,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 
 | Tính năng | Lợi thế | Lợi ích Khách hàng |
 |-----------|---------|-------------------|
-| Universal Input (UI) | 8 kênh tự nhận dạng DI/AI/RTD/NTC | Giảm inventory spare parts, commissioning nhanh hơn |
+| Universal Input (UI) | 16 kênh cấu hình độc lập 0–10V / 4–20mA / NTC / auxiliary dry contact | Giảm inventory spare parts, commissioning nhanh hơn |
 | BACnet native | Không cần gateway | Tiết kiệm 200-300 USD/node, sơ đồ tủ sạch hơn |
 | IEC 61131-3 FBD | Lập trình khối chức năng chuẩn quốc tế | Integrator dễ maintain, giảm vendor lock-in |
 | DIN-rail compact | 150 × 90 × 55 mm | Phù hợp tủ điện chật, retrofit không phình tủ |
@@ -38,13 +40,13 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 ## 2. Tính năng Nổi bật
 
 - ✅ **24 điểm I/O tích hợp** — đáp ứng bài toán FCU, VAV và AHU nhỏ trong một bộ điều khiển
-- ✅ **8 kênh universal input tự nhận dạng** — NTC, PT100/1000, 0–10V, 4–20mA, dry contact — không cần cấu hình jumper
+- ✅ **16 kênh universal input cấu hình độc lập** — NTC, 0–10V, 4–20mA, auxiliary dry contact; PT100/PT1000 không thuộc Rev A
 - ✅ **4 AO + 4 DO Relay** — điều khiển van modulating, damper, quạt và bơm không cần module trung gian
 - ✅ **BACnet/IP** — tích hợp nhanh với BMS Siemens, Honeywell, Schneider — không cần gateway
 - ✅ **MQTT v5.0 + REST API HTTPS** — đẩy dữ liệu IoT upstream, tích hợp dashboard và cloud
 - ✅ **Soft PLC IEC 61131-3 FBD + ST** — KinexusET Web IDE, không cài phần mềm desktop
 - ✅ **Debian Linux trên SOM quad-core** — OTA A/B partition, SSH, web UI, extensible
-- ✅ **Màn hình TFT 2.4" local HMI** — ILI9341, 240×320 65K màu, dashboard gauge realtime; 6× nút điều hướng (không cần laptop khi vận hành)
+- ✅ **Màn hình TFT 2.4" local HMI** — JD9852 MIPI DSI, 240×320; CTP + 6× nút điều hướng
 - ✅ **Thiết kế compact DIN-rail 150×90×55 mm** — phù hợp tủ điện chật, retrofit không phình tủ
 
 ---
@@ -59,7 +61,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 |------|-----------|---------|
 | **Application Layer** | SOM Debian Linux | Soft PLC, BACnet stack, web UI, OTA |
 | **Real-time I/O Layer** | MCU STM32G0 | Sampling ADC, relay control, hard real-time |
-| **Bus nội bộ** | UART 921,600 baud isolated (Kinexus-IOP v1) | Giao tiếp SOM ↔ MCU |
+| **Bus nội bộ** | UART 921,600 baud (Kinexus-IOP v2, ADR-010) | SOM poll 2ms/500Hz; IO_RESP 74 byte |
 
 #### 3.1.1 SOM Module (Application Processor)
 
@@ -72,7 +74,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 | **microSD** | Slot dự phòng | Recovery image / factory reset |
 | **OS** | Debian 12 (Bookworm) | Kernel 6.1 LTS, PREEMPT_RT patch |
 | **RTC** | DS3231 external (I²C), battery backup | Lịch vận hành offline ≥ 30 ngày |
-| **HMI Display** | TFT 2.4" ILI9341, 240×320, SPI | Dashboard gauge realtime (LVGL v9) |
+| **HMI Display** | TFT 2.4" JD9852, 240×320, MIPI DSI | LVGL v9 via DRM/KMS |
 | **HMI Input** | 6× nút nhấn (UP/DOWN/LEFT/RIGHT/ENTER/ESC) | Điều hướng menu local, không cần laptop |
 
 #### 3.1.2 Real-time I/O MCU
@@ -82,14 +84,14 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 | **MCU** | STM32G0B1RB | Cortex-M0+, 64 MHz, 144 KB RAM |
 | **Firmware** | Bare-metal RTOS (FreeRTOS) | Chu kỳ I/O sampling 1 ms |
 | **Flash** | 128 KB | I/O firmware (cập nhật qua SOM) |
-| **Giao tiếp SOM** | UART 921,600 baud, ADUM1201 isolated | Protocol nội bộ Kinexus-IOP v1 |
+| **Giao tiếp SOM** | UART 921,600 baud | Kinexus-IOP v2, 2ms poll/response |
 
 ### 3.2 I/O tích hợp (24 điểm)
 
 | Loại I/O | Số kênh | Thông số kỹ thuật |
 |----------|:-------:|------------------|
-| **Universal Input (UI)** | 8 | 0–10V / 4–20mA / PT100/1000 / NTC 10k/20k, tự nhận dạng |
-| **Digital Input (DI)** | 8 | 24V DC, dry contact hoặc wet contact |
+| **Universal Input (UI)** | 16 | 0–10V / 4–20mA / NTC / auxiliary dry contact, per-channel mode |
+| **Digital Input (DI)** | 0 base SKU | Optional isolated-DI module/SKU only; capability-gated |
 | **Analog Output (AO)** | 4 | 0–10V hoặc 4–20mA (cấu hình per kênh), 16-bit DAC |
 | **Digital Output (DO)** | 4 | Relay SPDT 5A @ 250VAC, coil 5V DC |
 
@@ -157,10 +159,10 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 | Object Type | Số lượng | Read | Write | COV | Ghi chú |
 |-------------|:--------:|:----:|:-----:|:---:|---------|
 | **Device** | 1 | ✅ | ✅ | — | Device ID, name, description, location |
-| **Analog Input (AI)** | 8 | ✅ | — | ✅ | Ánh xạ 1:1 với UI1–UI8 (giá trị đã scale, đúng unit) |
+| **Analog Input (AI)** | 16 | ✅ | — | ✅ | Ánh xạ 1:1 với UI1–UI16 (giá trị đã scale, đúng unit) |
 | **Analog Output (AO)** | 4 | ✅ | ✅ | ✅ | Ánh xạ AO1–AO4, commandable |
 | **Analog Value (AV)** | 32 | ✅ | ✅ | ✅ | Biến nội bộ soft PLC (setpoint, tính toán…) |
-| **Binary Input (BI)** | 8 | ✅ | — | ✅ | Ánh xạ DI1–DI8 |
+| **Binary Input (BI)** | 0 base / 8 optional | ✅ | — | ✅ | Chỉ tạo cho optional isolated-DI SKU khi capability map xác nhận |
 | **Binary Output (BO)** | 4 | ✅ | ✅ | ✅ | Ánh xạ DO1–DO4 relay, commandable |
 | **Binary Value (BV)** | 16 | ✅ | ✅ | ✅ | Biến boolean soft PLC (flag, status…) |
 | **Multi-state Value (MSV)** | 8 | ✅ | ✅ | ✅ | Trạng thái enum (vd: mode: Off/Heat/Cool/Auto) |
@@ -173,20 +175,11 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 **BACnet/IP:** UDP port 47808, Max APDU 1476 bytes, Segmentation hỗ trợ  
 **Who-Is / I-Am / Time-Sync:** Hỗ trợ đầy đủ  
 
-### 4.1 Modbus RTU Register Map (BẢNG CHUẨN)
+### 4.1 Modbus field role
 
-> **Đây là register map chuẩn DUY NHẤT** (INT16 scaled ×100, 1 register/điểm — chốt IOP-Q-R009). Modbus RTU dùng map này. SRS §6.2 và SW-REQ §10 tham chiếu về đây.
-
-| Vùng | Địa chỉ | Mô tả |
-|------|:-------:|-------|
-| **Coils (0x)** | 0–3 | DO1–DO4 (read/write) |
-| **Discrete Inputs (1x)** | 0–7 | DI1–DI8 (read only) |
-| **Input Registers (3x)** | 0–7 | AI1–AI8 (giá trị × 100, INT16) |
-| **Input Registers (3x)** | 100–107 | DI1–DI8 (counter 0–65535) |
-| **Input Registers (3x)** | 200–209 | System: uptime, fault code, firmware ver |
-| **Holding Registers (4x)** | 0–3 | AO1–AO4 (0–10V → 0–10000, 0–20mA → 0–20000) |
-| **Holding Registers (4x)** | 100–131 | AV1–AV32 (REAL × 100, INT16) |
-| **Holding Registers (4x)** | 200–215 | BV1–BV16 (0=FALSE, 1=TRUE) |
+Rev A is a Modbus RTU/TCP **master/client**. It does not expose the local I/O image as a
+Modbus slave register map. Device-specific downstream register maps are supplied by field
+device profiles; the previous local-slave table is superseded by ARCH-R010.
 
 
 ---
@@ -224,13 +217,12 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 │                                                      │
 │ UNIVERSAL INPUTS (UI):                               │
 │   UI1 ◄── Room temp sensor    (NTC 10kΩ)            │
-│   UI2 ◄── Supply air temp     (PT1000, 2-wire)      │
-│   UI3 ◄── Chiller flow switch (dry contact)         │
+│   UI2 ◄── Supply air temp     (NTC profile)         │
+│   UI3 ◄── Chiller flow switch (aux dry contact)     │
 │   UI4 ◄── Filter DP switch    (dry contact)         │
 │   UI5 ◄── Humidity sensor     (4–20mA)              │
 │   UI6 ◄── CO₂ sensor          (0–10V, 0–2000ppm)   │
-│   UI7 ◄── (spare)                                   │
-│   UI8 ◄── (spare)                                   │
+│   UI7–UI16 ◄── Additional analog/NTC/aux dry inputs │
 │                                                      │
 │ ANALOG OUTPUTS (AO):                                 │
 │   AO1 ──► Cooling valve actuator  (0–10V)           │
@@ -244,10 +236,7 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 │   DO3 ──► Fan High speed  (relay NO contact)        │
 │   DO4 ──► Alarm beacon    (relay NO contact)        │
 │                                                      │
-│ DIGITAL INPUTS (DI):                                 │
-│   DI1 ◄── Fan run feedback   (24VDC aux contact)    │
-│   DI2 ◄── Valve open feedback                       │
-│   DI3–8 ◄── (spare)                                 │
+│ OPTIONAL ISOLATED DI MODULE: not populated base SKU │
 │                                                      │
 │ COMMUNICATION:                                       │
 │   [RS-485 A/B/GND] ──► Modbus RTU bus (daisy)         │
@@ -278,7 +267,7 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 1. **Physical install:** Đấu dây nguồn 24VAC, I/O theo wiring diagram, RS-485 BACnet
 2. **Power on:** Controller đọc BACnet Device ID từ DIP switch SW1–SW7 (bootstrap 1–127) nếu chưa có Web UI config; đặt Device ID đầy đủ (1–4.194.302) qua Web UI trong bước commissioning
 3. **Network discovery:** BMS server gửi Who-Is, controller responds I-Am
-4. **Point mapping:** Truy cập KinexusET IDE → cấu hình UI type (NTC/PT100/0-10V)
+4. **Point mapping:** Truy cập web commissioning → cấu hình UI type (NTC/0-10V/4-20mA/aux dry contact)
 5. **Logic programming:** Upload FBD program (PID loop, interlock, schedule)
 6. **Functional test:** Verify I/O, alarm, schedule theo checklist
 7. **Trend log enable:** Kích hoạt trend cho troubleshooting
@@ -317,9 +306,9 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 | Tiêu chí | MK-DDC-24 | Schneider SBO | Siemens PXC4 |
 |----------|-----------|---------------|--------------|
 | **Giá** | 450–550 USD | ~600 USD | ~700 USD |
-| **I/O** | 24 (8UI+8DI+4AO+4DO) | 24 | 24 |
+| **I/O** | 24 (16 UI + 4 AO + 4 DO) | 24 | 24 |
 | **BACnet** | BACnet/IP native | BACnet native | BACnet (gateway) |
-| **UI channels** | 8 (tự nhận dạng) | 6 | 4 |
+| **UI channels** | 16 (cấu hình mode độc lập) | 6 | 4 |
 | **Programming** | IEC 61131-3 FBD + ST | Proprietary | Proprietary |
 | **OS** | Debian 12 Linux | Bare-metal | Bare-metal |
 | **MQTT / REST API** | ✅ Native | ❌ | ❌ |
@@ -364,7 +353,7 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 
 - Thiệt hại do sét đánh, nguồn điện surge (khuyên dùng surge protector)
 - Sửa chữa, can thiệp phần cứng không được ủy quyền
-- Vận hành ngoài dải đã xác nhận: nhiệt độ > 55°C (validated operating limit), humidity ngưng tụ, IP rating vi phạm
+- Vận hành ngoài dải được ghi trên nhãn/release certificate cuối cùng; hiện chưa có chamber evidence để gọi 55°C là validated operating limit
 
 ---
 
@@ -384,9 +373,9 @@ Lô I-3, Khu Công nghệ Cao, Quận 9, TP. Hồ Chí Minh, Việt Nam
 ---
 
 **Document ID:** DS-MK-DDC-24-VI  
-**Revision:** 2.1 | 2026-05-28  
-**Supersedes:** Rev 1.1 (2026-04-14)  
-**Approved by:** CTO KINEXUS Technologies  
+**Revision:** 3.0 | 2026-06-30
+**Supersedes:** Rev 2.1 (2026-05-28)
+**Status:** In-Review — engineering evidence gates remain open
 **Related docs:** [PRD-MK-DDC-24-VI](PRD_MK-DDC-24_VI.md) | [SRS-MK-DDC-24-VI](SRS_MK-DDC-24_VI.md) | [HW-SPEC-MK-DDC-24-VI](HW_SPEC_MK-DDC-24_VI.md)
 
 ---

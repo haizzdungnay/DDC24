@@ -1,6 +1,6 @@
 # Use Cases — HMI TFT Local (MK-DDC-24)
 
-> **Document ID:** KX-DDC24-UC-HMI-001-VI · **Rev** 2.1 | 2026-06-26
+> **Document ID:** KX-DDC24-UC-HMI-001-VI · **Rev** 2.2 | 2026-06-30
 > **Trạng thái:** Draft — chờ owner review trước Rev B implementation
 > **Owner:** SW Lead / UX Lead
 > **Trace:** `HMI-001..022`, `SW-HMI-001..008`
@@ -360,7 +360,7 @@ Hiển thị thêm `Last Request: Xs ago` cho BACnet/IP.
 | Nhóm | Tiêu chí nghiệm thu |
 |------|-------------------|
 | Home | Không có Room/Power/Energy hardcode; không có service nội bộ (IOP/core/HMI process); hiển thị controller health đủ nhóm |
-| I/O | Hiển thị đủ 24 I/O (8UI+8DI+4AO+4DO); mỗi point có value/unit/quality/age |
+| I/O | Hiển thị đủ base SKU 24 I/O (16 UI + 4 AO + 4 DO); optional DI chỉ hiện khi capability map xác nhận; mỗi point có value/unit/quality/age |
 | Alarm | ACK không xóa lỗi active; có 4-state model; Active count không về 0 khi alarm vẫn tồn tại |
 | Communication | Hiển thị Ethernet/BACnet/Modbus bằng trạng thái kỹ thuật rõ ràng; không dùng "Đang kết nối" cho BACnet/UDP |
 | Diagnostics | Có FW, uptime, CPU/RAM/storage/temp, service/process, watchdog, log |
@@ -389,3 +389,4 @@ Hiển thị thêm `Last Request: Xs ago` cho BACnet/IP.
 | 1.0 | 2026-06-26 | SW Lead | Phát hành đầu — 7 UC (bị bãi bỏ: dựa SPI/ILI9341, không có touch, UC screen saver không hợp lệ) |
 | 2.0 | 2026-06-26 | SW Lead | Viết lại: dual-input (CTP touch + 6 nút), 6 UC thực tế, alarm 4-state, loại bỏ screen saver UC |
 | 2.1 | 2026-06-26 | SW Lead | Viết lại hoàn toàn: 6 page + 14 UC, nguyên tắc no-hardcode, alarm 4-state model chuẩn, BACnet status kỹ thuật, safe state per-point, service PIN/switch, data age mandatory, bỏ arc gauge và Power/Energy mặc định |
+| 2.2 | 2026-06-30 | SW Lead/QA | Aligned I/O Monitor inventory to ADR-010 base SKU. |

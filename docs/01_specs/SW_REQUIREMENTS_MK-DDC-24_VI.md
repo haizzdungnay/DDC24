@@ -2,11 +2,11 @@
 ## SOM Application Layer / Debian 12
 
 > **Document ID:** SW-REQ-MK-DDC-24-VI  
-> **Phiên bản:** 1.1-DRAFT (2026-06-15: §2.2 wrap legacy inline struct in <details>; actual contract = shared/mkddc_shm.h) | 2026-05-28  
+> **Phiên bản:** 2.0-DRAFT | 2026-06-30
 > **Trạng thái:** Draft — Pending SW Lead review  
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
 > **Tác giả:** KINEXUS Technologies — Software Team  
-> **Nguồn gốc:** Trace từ SRS-MK-DDC-24-VI (v1.1), PRD-MK-DDC-24-VI (v1.1)
+> **Nguồn gốc:** Trace từ SRS/PRD v2.0, ADR-010 và shared headers
 
 > **Quan hệ với SRS:** Tài liệu này phân rã SRS thành requirements cụ thể theo module. SRS vẫn là tài liệu cấp cao (functional). SW-REQ là cấp thấp hơn — implementation-binding.
 
@@ -50,9 +50,9 @@ MQTT/REST Agent (`kinexus-agent`), Security Service, OTA (`kinexus-ota`), cloud.
 | ID | Yêu cầu | Loại | Trace SRS | Test Ref |
 |----|---------|------|-----------|---------|
 | SW-IOP-001 | PHẢI implement IOP Master theo `IOP-SPEC-MK-DDC-24-VI` | MUST | IOP-001 | T-SW-001 |
-| SW-IOP-002 | PHẢI poll MCU mỗi 10ms (100Hz) bằng GET_IO frame | MUST | IOP-002 | T-SW-002 |
+| SW-IOP-002 | PHẢI poll MCU mỗi 2ms (500Hz) bằng GET_IO frame | MUST | IOP-002, ADR-010 | T-SW-002 |
 | SW-IOP-003 | PHẢI verify CRC-16/Modbus mọi frame nhận được | MUST | IOP-001 | T-SW-003 |
-| SW-IOP-004 | Implement timeout/retry: 10ms timeout, max 3 retry, sau đó set fault | MUST | IOP-005 | T-SW-004 |
+| SW-IOP-004 | Implement timeout/retry theo shared header: 3ms response timeout, max 3 retry, 20ms no-valid-response fault | MUST | IOP-005, ADR-010 | T-SW-004 |
 | SW-IOP-005 | PHẢI expose I/O snapshot qua POSIX shared memory `kinexus_io_shm` | MUST | — | T-SW-005 |
 | SW-IOP-006 | Shared memory PHẢI dùng seqlock pattern (reader không block writer) | MUST | — | T-SW-006 |
 | SW-IOP-007 | PHẢI gửi SET_AO / SET_DO khi PLC thay đổi giá trị output | MUST | IOP-004 | T-SW-007 |
@@ -286,7 +286,7 @@ typedef struct {
 
 | ID | Yêu cầu | Loại | Trace SRS | Test Ref |
 |----|---------|------|-----------|----------|
-| SW-IDE-010 | PHẢI cung cấp giao diện cấu hình sensor type per kênh UI1–UI8 (dropdown + manual coefficient input) | MUST | IDE-020 | T-SW-138 |
+| SW-IDE-010 | PHẢI cung cấp giao diện cấu hình sensor mode per kênh UI1–UI16 (dropdown + coefficient/profile input) | MUST | IDE-020, ADR-010 | T-SW-138 |
 | SW-IDE-011 | PHẢI cấu hình AO mode (0–10V / 4–20mA) per kênh AO1–AO4 | MUST | IDE-021 | T-SW-139 |
 | SW-IDE-012 | PHẢI cấu hình safe state value per kênh | MUST | IDE-022 | T-SW-140 |
 | SW-IDE-013 | PHẢI hiển thị I/O live dashboard: tất cả UI/DI/AO/DO với giá trị real-time, quality indicator | MUST | IDE-023 | T-SW-141 |
@@ -305,6 +305,6 @@ typedef struct {
 ---
 
 **Document ID:** SW-REQ-MK-DDC-24-VI  
-**Revision:** 1.1 | 2026-05-28  
-**Changes v1.1:** Thêm §10 Modbus TCP/RTU (SW-MOD-001..010), §11 Web IDE (SW-IDE-001..023)  
-**Approved by:** Software Lead, System Architect — KINEXUS Technologies
+**Revision:** 2.0-DRAFT | 2026-06-30
+**Changes:** Breaking IOP timing/base-SKU I/O alignment; legacy inline struct retained only inside the marked reference block.
+**Review required:** Software Lead, System Architect

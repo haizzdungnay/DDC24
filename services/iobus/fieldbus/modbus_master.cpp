@@ -111,7 +111,85 @@ void ModbusMaster::close()
 
 void ModbusMaster::enqueue_write(const PendingWrite& w)
 {
+    for (auto& pending : pending_writes_) {
+        if (!pending.submitted && pending.slave_addr == w.slave_addr &&
+            pending.fc == w.fc && pending.reg_addr == w.reg_addr) {
+            pending = w;  /* coalesce a newer setpoint for the same logical point */
+            return;
+        }
+    }
     pending_writes_.push_back(w);
+}
+
+void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm)
+{
+#ifndef MKDDC_ENABLE_MODBUS
+    (void)shm;
+#else
+    if (!shm || !ctx_) return;
+
+    kx_plc_shm_t snapshot{};
+    bool stable = false;
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        const uint32_t before = __atomic_load_n(&shm->seq, __ATOMIC_ACQUIRE);
+        if (before & 1u) continue;
+        std::memcpy(&snapshot, shm, sizeof(snapshot));
+        const uint32_t after = __atomic_load_n(&shm->seq, __ATOMIC_ACQUIRE);
+        if (before == after) {
+            stable = snapshot.magic == KX_SHM_MAGIC;
+            break;
+        }
+    }
+    if (!stable) return;
+
+    for (size_t si = 0; si < profiles_.size(); si++) {
+        const SlaveConfig& sc = cfg_.slaves[si];
+        uint16_t ext_idx = slave_ext_base_[si];
+
+        for (const auto& pt : profiles_[si].points) {
+            /* Mirror read_slave(): only read FCs consume ext_idx slots */
+            if (pt.fc != 1 && pt.fc != 2 && pt.fc != 3 && pt.fc != 4) continue;
+
+            for (uint16_t k = 0; k < pt.count; k++) {
+                if (ext_idx >= KX_N_EXT) break;
+
+                if (pt.writable && ext_idx < snapshot.ext_count && snapshot.ext[ext_idx].dirty &&
+                    (!has_last_written_[ext_idx] ||
+                     last_written_[ext_idx] != snapshot.ext[ext_idx].setpoint)) {
+                    /* Derive write FC from read FC + point type */
+                    uint8_t wfc = 0;
+                    if (pt.fc == 1) {
+                        wfc = 5;   /* coil → FC05 write single coil */
+                    } else if (pt.fc == 3) {
+                        const bool is32 = (pt.type == PointType::Int32 ||
+                                           pt.type == PointType::Uint32 ||
+                                           pt.type == PointType::Float32);
+                        wfc = is32 ? 16u : 6u;  /* 32-bit → FC16, 16-bit → FC06 */
+                    }
+                    /* fc==2 discrete inputs, fc==4 input registers: not writable */
+                    if (wfc != 0) {
+                        PendingWrite w;
+                        w.ext_idx    = ext_idx;
+                        w.slave_addr = sc.addr;
+                        w.fc         = wfc;
+                        w.reg_addr   = static_cast<uint16_t>(pt.addr + k);
+                        w.value      = snapshot.ext[ext_idx].setpoint;
+                        w.type       = pt.type;
+                        w.byte_order = pt.byte_order;
+                        w.scale      = pt.scale;
+                        w.offset     = pt.offset;
+                        enqueue_write(w);
+                    }
+                }
+
+                ext_idx++;
+                /* 32-bit types consume 2 registers per logical point */
+                if (pt.type == PointType::Int32 || pt.type == PointType::Uint32 ||
+                    pt.type == PointType::Float32) k++;
+            }
+        }
+    }
+#endif
 }
 
 uint32_t ModbusMaster::sleep_ms_until_next(uint64_t now_ms) const
@@ -249,6 +327,11 @@ void ModbusMaster::flush_pending(uint8_t slave_idx)
         if (rc < 0) {
             std::fprintf(stderr, "WARN  modbus.write_fail slave=%s fc=%u addr=%u err=%s\n",
                          sc.name.c_str(), w.fc, w.reg_addr, modbus_strerror(errno));
+            continue;  /* retain request for the next due poll */
+        }
+        if (w.ext_idx < KX_N_EXT) {
+            last_written_[w.ext_idx] = w.value;
+            has_last_written_[w.ext_idx] = true;
         }
         w.submitted = true;
     }

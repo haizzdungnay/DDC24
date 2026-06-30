@@ -2,7 +2,7 @@
 ## System Handbook — Hiểu toàn bộ sản phẩm từ số 0 (cho người không chuyên)
 
 > **Document ID:** KX-DDC24-SYS-ARCH-001
-> **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Approved · **Owner:** System Architect
+> **Phiên bản:** 1.1 | 2026-06-30 · **Trạng thái:** Approved · **Owner:** System Architect
 > 📘 [docs/README](../README.md)
 
 > 🎯 **Tài liệu này KHÁC mọi tài liệu khác.** Các file kia để **tra cứu khi code**. File này để **HIỂU** — đọc từ trên xuống dưới như đọc truyện. Không cần biết lập trình. Có hình vẽ, có ví von đời thường. Đọc xong bạn sẽ trả lời được: *"Cái hộp này là gì, bên trong có gì, dữ liệu chạy thế nào, vì sao cần từng thứ."*
@@ -11,7 +11,9 @@
 
 > ⚠️ **RECONCILE (2026-06-08).** Bản này viết trước khi chốt hướng **component-based** + Linux
 > **3 process `mkddc-*`** + UI **form/JSON** (Rev A). Khi đọc, hiểu "lập trình PLC / Web IDE FBD" theo
-> nghĩa mới. Nguồn-chuẩn: [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) · [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) · [ADR-004..007](../adr/).
+> nghĩa mới. Nguồn-chuẩn: [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) · [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) · [ADR-004..010](../adr/).
+
+> **Rev A hardware baseline (2026-06-30):** 24 điểm cơ sở = **16 UI + 4 AO + 4 DO**. Không có 8 DI tách riêng trong base SKU. Dry-contact của UI chỉ là chế độ phụ, không cách ly; nếu sản phẩm cần DI công nghiệp thì phải dùng sheet/module isolated-DI tùy chọn. IOP v2 dùng SOM-master poll **2 ms / 500 Hz** theo `shared/iop_protocol.h` và ADR-010.
 
 ---
 
@@ -63,10 +65,11 @@ Về mặt vật lý, nó là một **hộp nhỏ gắn trên thanh ray trong t�
 
 | Nhóm | Số lượng | Là gì | Ví dụ thực tế |
 |------|:--------:|-------|----------------|
-| **UI** (Universal Input) | 8 | cổng **đọc** giá trị đo được | cảm biến nhiệt độ, độ ẩm, áp suất |
-| **DI** (Digital Input) | 8 | cổng **đọc** tín hiệu bật/tắt | công tắc, báo cháy, trạng thái "máy đang chạy" |
+| **UI** (Universal Input) | 16 | cổng **đọc** 0–10V, 4–20mA, NTC hoặc dry-contact phụ | cảm biến nhiệt độ, độ ẩm, áp suất; công tắc khô không cách ly |
 | **AO** (Analog Output) | 4 | cổng **ra** tín hiệu điều chỉnh được | mở van 0–100%, chỉnh tốc độ quạt |
 | **DO** (Digital Output) | 4 | cổng **ra** bật/tắt (relay) | bật/tắt bơm, đèn, máy nén |
+
+DI công nghiệp 24V/cách ly không nằm trong 24 điểm base Rev A; đó là module/SKU tùy chọn nếu được phê duyệt riêng.
 
 ```
                        BMS / Cloud / Trình duyệt
@@ -75,7 +78,7 @@ Về mặt vật lý, nó là một **hộp nhỏ gắn trên thanh ray trong t�
                                 │ BACnet/IP · MQTT · REST
                      ┌──────────┴───────────┐
         ĐỌC VÀO ────►│     MK-DDC-24         ├────► RA LỆNH
-   8× UI, 8× DI      │  (xử lý + giao tiếp)  │      4× AO, 4× DO
+       16× UI         │  (xử lý + giao tiếp)  │      4× AO, 4× DO
                      └──────────┬───────────┘
                                 │ XUỐNG DƯỚI (southbound) — RS-485
                                 │ Modbus RTU (DDC = MASTER)
@@ -83,7 +86,7 @@ Về mặt vật lý, nó là một **hộp nhỏ gắn trên thanh ray trong t�
               Thiết bị phụ: module mở rộng I/O · màn hình phụ · đồng hồ/biến tần
 ```
 
-> **Ví von:** Cổng **UI/DI là "tai và mắt"**, cổng **AO/DO là "tay chân"**. Cổng **mạng phía trên** để báo cáo lên sếp (BMS/cloud); cổng **RS-485 phía dưới** để DDC **sai vặt đám lính phụ** (thiết bị phụ).
+> **Ví von:** Cổng **UI là "tai và mắt"**, cổng **AO/DO là "tay chân"**. Cổng **mạng phía trên** để báo cáo lên sếp (BMS/cloud); cổng **RS-485 phía dưới** để DDC **sai vặt đám lính phụ** (thiết bị phụ).
 >
 > ⚠ **Hai hướng đừng nhầm:** lên BMS/cloud **chỉ đi bằng Ethernet/WiFi** (giao thức IP: BACnet/IP, MQTT, REST). Cổng **RS-485/Modbus** là để DDC **làm chủ (master) đi sai khiến thiết bị phụ** — KHÔNG phải để BMS đọc DDC.
 
@@ -158,7 +161,7 @@ MCU chạy FreeRTOS với **6 việc lặp đi lặp lại ("task")**, mỗi vi�
 
 ```mermaid
 graph TB
-  T1["io_sample (mỗi 1ms)<br/>đọc 8 cảm biến + 8 input"]
+  T1["io_sample (mỗi 1ms)<br/>đọc 16 Universal Input"]
   T2["iop_comm<br/>nói chuyện với SOM"]
   T3["ao_output<br/>xuất tín hiệu van"]
   T4["do_control<br/>bật/tắt relay"]
@@ -185,7 +188,7 @@ sequenceDiagram
 
   S->>M: điện trở thay đổi theo nhiệt độ
   Note over M: đọc bằng mạch ADC<br/>mỗi 1ms, lọc nhiễu
-  D->>M: "Cho xem I/O đi" (GET_IO, mỗi 10ms)
+  D->>M: "Cho xem I/O đi" (GET_IO, mỗi 2ms)
   M-->>D: số thô (vd 8.388.000)
   Note over D: ĐỔI số thô → 23.5°C<br/>(công thức cho từng loại cảm biến)
   D->>P: ghi "23.5" lên bảng tin chung
@@ -198,8 +201,8 @@ sequenceDiagram
 
 1. **Cảm biến** không gửi chữ "23.5". Nó chỉ là một linh kiện mà **điện trở thay đổi theo nhiệt độ**. Nóng hơn → điện trở khác đi.
 2. **MCU** dùng mạch **ADC** (bộ chuyển đổi tương tự→số) đọc giá trị đó thành một **con số thô** rất to (ví dụ 8.388.000), làm **mỗi 1ms** và lọc bớt nhiễu. MCU **chưa biết** đó là bao nhiêu độ — nó chỉ có con số thô.
-3. **io-driver** (trên SOM) cứ mỗi 10ms lại **hỏi** MCU "cho xem I/O". MCU trả về con số thô.
-4. **io-driver đổi số thô → đơn vị thật** (23.5°C) bằng công thức toán tương ứng loại cảm biến (cảm biến NTC, PT100… mỗi loại một công thức). Đây là bước "phiên dịch".
+3. **io-driver** (trên SOM) cứ mỗi 2ms lại **hỏi** MCU "cho xem I/O". MCU trả về snapshot mới nhất; MCU vẫn lấy mẫu ADC theo nhịp 1ms riêng.
+4. **io-driver đổi số thô → đơn vị thật** (23.5°C) bằng công thức toán tương ứng loại cảm biến (ví dụ NTC). PT100/PT1000 không phải mode UI của base Rev A. Đây là bước "phiên dịch".
 5. io-driver **ghi 23.5 lên "bảng tin chung"** (shared memory — xem §8).
 6. **PLC** đọc bảng tin, cập nhật vào "ô nhớ" tên **AI1** (Analog Input 1). **BACnet** lấy AI1 để phục vụ BMS.
 7. **BMS** hỏi BACnet "đọc AI1" → nhận **23.5°C**. Xong! Con số đã đi trọn hành trình.
@@ -270,7 +273,7 @@ Trả lời: qua một vùng nhớ dùng chung gọi là **shared memory** — h
 
 ```mermaid
 graph TB
-  IOD[io-driver] -->|VIẾT giá trị mới| BOARD[("📋 Bảng trắng<br/>shared memory<br/>UI1=23.5, AO1=50%, DI1=ON...")]
+  IOD[io-driver] -->|VIẾT giá trị mới| BOARD[("📋 Bảng trắng<br/>shared memory<br/>UI1=23.5, UI16=OFF, AO1=50%...")]
   BOARD -->|đọc| PLC[PLC]
   BOARD -->|đọc| BAC[BACnet]
   BOARD -->|đọc| HMI[HMI]
@@ -353,7 +356,7 @@ Mỗi chặng có **"cổng"**: làm xong và đạt tiêu chí mới được q
 | **Linux/Debian** | hệ điều hành cho SOM (như Windows nhưng cho thiết bị) |
 | **IOP** | "ngôn ngữ" 2 não nói với nhau qua 1 dây |
 | **UART** | sợi dây truyền dữ liệu nối tiếp (IOP chạy trên nó) |
-| **UI/DI/AO/DO** | 4 loại cổng: đo / bật-tắt-vào / điều chỉnh-ra / relay-ra |
+| **UI/AO/DO** | 3 loại cổng base Rev A: đo đa chế độ / điều chỉnh-ra / relay-ra; DI cách ly là tùy chọn riêng |
 | **ADC** | mạch đổi tín hiệu tương tự (điện áp) → số |
 | **DAC** | mạch đổi số → điện áp (để xuất van 0–10V) |
 | **Relay** | công tắc điện tử, bật/tắt thiết bị to |
@@ -405,7 +408,7 @@ Có "retain" lưu lại biến quan trọng; có UPS tín hiệu báo trước; 
 
 ## Tôi nên đọc gì tiếp?
 - Muốn biết **đội sẽ code thế nào** → [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md).
-- Muốn **xem giao diện** → UX web Rev A form/JSON ([ADR-006](../adr/ADR-006-rev-a-ui-form-json.md)) · [HMI](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) *(deferred Rev B)*.
+- Muốn **xem giao diện** → UX web Rev A form/JSON ([ADR-006](../adr/ADR-006-rev-a-ui-form-json.md)) · [HMI](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) *(included in Rev A by 2026-06-27 amendment)*.
 - Muốn **đi sâu kỹ thuật** → [README](../01_specs/README.md) (yêu cầu+kiến trúc), [README](../02_design/README.md) (thiết kế).
 
 ---
@@ -413,3 +416,4 @@ Có "retain" lưu lại biến quan trọng; có UPS tín hiệu báo trước; 
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
 | 1.0 | 2026-05-30 | System Architect | Phát hành đầu — sổ tay hiểu hệ thống cho người không chuyên (kể chuyện + sơ đồ Mermaid + ví von) |
+| 1.1 | 2026-06-30 | System Architect | Đồng bộ Rev A: 16 UI + 4 AO + 4 DO, optional isolated DI, IOP GET_IO 2ms/500Hz |

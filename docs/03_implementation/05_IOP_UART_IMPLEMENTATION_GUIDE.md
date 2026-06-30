@@ -264,7 +264,7 @@ NACK: [0] REJECTED_CMD, [1] ERROR_CODE
 5. (tùy chọn, khuyến nghị) SOM gửi RESET_IO reason=IOP_RESET_REASON_NORMAL (0x00)
    → đưa IO về safe-state đã biết trước khi bắt đầu vận hành (xem §6.9).
 6. SOM gửi SET_AO_CFG (0x13) nếu cần đổi mode (MCU chưa hỗ trợ → NACK UNKNOWN_CMD, giữ 0-10V).
-7. SOM bắt đầu GET_IO poll loop (10ms timer).
+7. SOM bắt đầu GET_IO poll loop (2ms timer).
 8. MCU trả IO_RESP mỗi GET_IO.
 9. Timeout → retry (≤3).
 10. Retry fail → báo MCU fault (iop_status=FAULT, alarm bus).
@@ -391,8 +391,8 @@ INIT → OPEN_UART → HANDSHAKE → CONFIG_AO → NORMAL_POLL
 | INIT | reset counters, SEQ=0 | — | config loaded | — | — | INFO iobus.start |
 | OPEN_UART | open/cfg /dev/ttyS2, flush | — | fd ok | — | open fail → FAULT | INFO iop.open / ERROR iop.open_fail |
 | HANDSHAKE | gửi HANDSHAKE | chờ HANDSHAKE_RESP | STATUS=0x00/0x01 | 1000ms | timeout x3 / STATUS=0x02 → FAULT | INFO iop.handshake |
-| CONFIG_AO | gửi SET_AO_CFG (nếu cần) | chờ ACK | ACK / NACK UNKNOWN | 10ms | timeout → NORMAL (giữ default) | INFO iop.ao_cfg |
-| NORMAL_POLL | start 10ms timer | GET_IO→parse→(output nếu có) | — | 10ms/lệnh, retry≤3 | 3 retry liên tiếp / >100ms no valid → FAULT | WARN rate-limited |
+| CONFIG_AO | gửi SET_AO_CFG (nếu cần) | chờ ACK | ACK / NACK UNKNOWN | 3ms response timeout | timeout → NORMAL (giữ default) | INFO iop.ao_cfg |
+| NORMAL_POLL | start 2ms timer | GET_IO→parse→(output nếu có) | — | response timeout 3ms, retry≤3 | 10 poll periods / 20ms no valid → FAULT | WARN rate-limited |
 | FAULT | iop_status=FAULT, alarm | gửi RESET_IO (reason=IOP_FAULT 0x05) 1 lần | — | — | → SAFE_STATE | ERROR iop.fault |
 | SAFE_STATE | ngừng SET_*; giữ retry GET_IO | thử GET_IO | nhận IO_RESP hợp lệ → RECONNECT | — | — | ERROR iop.safe_state |
 | RECONNECT | timer 5s | gửi HANDSHAKE | HANDSHAKE_RESP OK → NORMAL_POLL | 5s/lần | — | INFO iop.reconnect |
@@ -405,7 +405,7 @@ Hằng số dùng: `IOP_RESP_TIMEOUT_MS=10`, fault 100ms, reconnect 5s, handshak
 
 | Mục | Giá trị |
 |-----|---------|
-| GET_IO period | 10 ms |
+| GET_IO period | 2 ms |
 | Response timeout | 10 ms |
 | Retry count | 3 |
 | MCU safe timeout | 200 ms |

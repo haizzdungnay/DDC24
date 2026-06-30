@@ -53,7 +53,7 @@
 
 ```
 - Đóng/mở từng DI1..DI8 bằng hộp công tắc.
-- Xem di_mask trên console.
+- Xác nhận base SKU không có DI_MASK và `BOARD_CAP_MAP=0x000D`; optional DI chỉ kiểm tra trên đúng SKU/module.
 ✅ Đạt khi: 8/8 kênh đổi đúng bit, debounce mượt.
 ```
 

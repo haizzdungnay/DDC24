@@ -394,8 +394,8 @@ Output:
 Microtask:
 1. Tạo `IopIoResp`, `IopDiagResp` trong `io_types.hpp`.
 2. Parse BE field đúng offset.
-3. Dùng `iop_s24()` cho raw UI.
-4. Test đủ `ui_raw`, `di_mask`, `fault_flags`, `sample_cnt`.
+3. Dùng `iop_be32s()` cho 16 raw UI signed.
+4. Test đủ `ui_raw[16]`, `adc1_stat`, `adc2_stat`, `fault_flags`, `sample_cnt`, `do_fb_mask`; no base DI_MASK.
 
 Done khi:
 - byte offset khớp đúng docs/header
@@ -447,7 +447,7 @@ Done khi:
 - `06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md`
 
 ### Output
-- `mkddc-iobus` poll 100Hz
+- `mkddc-iobus` poll 2ms/500Hz
 - ghi `kx_io_shm`
 - đọc output từ shm và gửi ngược xuống MCU/fake MCU
 
@@ -524,7 +524,7 @@ Microtask:
 
 #### `SOM-IOB-006` — runtime main loop
 Output:
-- service thực chạy 100Hz
+- service thực chạy 2ms/500Hz
 
 Microtask:
 1. init realtime + mlockall.
@@ -798,7 +798,7 @@ Mỗi task SOM chỉ merge khi qua đủ checklist này:
 5. `iobus` mới là process duy nhất mở UART.
 6. `core` không mở serial.
 7. `web` path chỉ là boundary/stub nếu chưa làm tới phase đó.
-8. Log đủ để debug nhưng không spam 100Hz.
+8. Log đủ để debug nhưng không spam 500Hz.
 9. Failure path có xử lý, không silent fail.
 10. Có command chứng minh output đo được hoặc assert được.
 

@@ -37,7 +37,7 @@ diagnostics/watchdog → drivers.
 | Task | Priority | Period | Stack | File |
 |------|----------|--------|-------|------|
 | io_sample | 7 | 1 ms | 512 B | io_sample.c |
-| iop_comm | 6 | event/10 ms | 1 KB | iop_comm.c |
+| iop_comm | 6 | event-driven; 2ms nominal GET_IO | 1 KB | iop_comm.c |
 | ao_output | 6 | 10 ms / queue | 512 B | ao_output.c |
 | do_control | 6 | 10 ms / queue | 512 B | do_control.c |
 | diagnostics | 2 | 1 s | 512 B | diagnostics.c |
@@ -62,9 +62,9 @@ fault_flags    — uint16, critical section (mọi task ghi, iop_comm đọc)
 ## 2. Module: `io_sample` (Pri 7, 1 ms)
 
 ```
-Mục tiêu : Đọc 8 UI (ADS131M08) + 8 DI (opto), lọc, debounce, cập nhật io_data_buf.
+Mục tiêu : Đọc 16 UI (2× ADS131M08), cập nhật snapshot/status; base SKU không có DI_MASK theo ADR-010.
 Input    : SPI3 DMA RX (8×24-bit từ ADC); GPIO PB4..PB11 (DI); TIM 1ms notify.
-Output   : io_data_buf{ ui_raw[8] (s24), di_mask (u8), sample_cnt (u16) } (mutex bảo vệ).
+Output   : io_data_buf{ ui_raw[16] (int32 signed), adc1_stat, adc2_stat, fault_flags, sample_cnt, do_fb_mask } (mutex bảo vệ).
 File     : fw/app/io_sample.c, fw/drivers/adc_drv.c, fw/drivers/gpio_drv.c
 ```
 **Luồng xử lý:**
@@ -73,7 +73,7 @@ File     : fw/app/io_sample.c, fw/drivers/adc_drv.c, fw/drivers/gpio_drv.c
 2. adc_drv_start_dma() đọc 8 kênh ADS131M08 (SPI3 DMA).
 3. DMA TC callback → copy raw vào buffer tạm.
 4. Moving average 8 mẫu/kênh (FW-IO-002); spike reject ±10% (FW-IO-003).
-5. Đọc 8 GPIO DI → debounce (N mẫu liên tiếp) → di_mask (active-LOW sau opto → đảo).
+5. Cập nhật ADC1/ADC2 status; base SKU không đọc DI GPIO và không tạo DI_MASK.
 6. Lock xIoDataMutex → ghi io_data_buf → unlock.
 7. sample_cnt++ (wrap u16).
 ```
@@ -87,10 +87,10 @@ File     : fw/app/io_sample.c, fw/drivers/adc_drv.c, fw/drivers/gpio_drv.c
 **Test (T-FW-001 / group 1):**
 ```
 - Cấp điện áp biết trước vào UI1 → raw đọc đúng tỉ lệ (sai số < 1%).
-- Đóng/mở contact DI1 → di_mask bit0 đổi sau debounce, không rung.
+- Chuyển UI auxiliary dry-contact trên kênh cấu hình → state/quality đổi đúng sau debounce; không quảng bá như isolated DI.
 - Rút SPI ADC → ADC_FAULT (bit0) bật sau ≤100ms (mẫu hỏng đầu tiên phát hiện ≤5ms).
 ```
-**Done khi:** 8 UI raw + 8 DI đọc đúng, sample_cnt tăng đều, budget < 200µs/chu kỳ, ADC_FAULT đúng.
+**Done khi:** 16 UI raw signed đọc đúng, sample_cnt tăng đều, budget đạt thiết kế, ADC1/ADC2 fault đúng và base SKU không phát DI_MASK.
 
 ---
 
@@ -114,7 +114,7 @@ File     : fw/app/iop_comm.c, fw/drivers/iop_drv.c, fw/common/crc16.c, fw/common
 8. Check CMD trong catalog. Lạ → NACK(ERR_UNKNOWN_CMD).
 9. Echo SEQ vào response.
 10. Dispatch:
-    - GET_IO     → lock mutex, đọc io_data_buf, build IO_RESP (34B), TX.
+    - GET_IO     → lock mutex, đọc io_data_buf, build IO_RESP v2 (74-byte payload), TX.
     - SET_AO     → parse 4×u16 → ao_cmd_t → xAoQueue; trả ACK(0x10).
     - SET_DO     → parse mask+value → do_cmd_t → xDoQueue; trả ACK(0x11).
     - SET_AO_CFG → set AO mode pins PD1..PD4; trả ACK(0x13) (nếu chưa hỗ trợ: NACK UNKNOWN_CMD).
@@ -136,7 +136,7 @@ File     : fw/app/iop_comm.c, fw/drivers/iop_drv.c, fw/common/crc16.c, fw/common
 **Test (T-FW-IOP-001 / group 2):**
 ```
 - Test vector CRC: {AA 00 01 00}→0x6C20; {AA 00 01 01}→0xACE1 (BẮT BUỘC khớp).
-- GET_IO → IO_RESP đúng 34B, latency ≤ 5ms (đo bằng GPIO toggle + oscilloscope).
+- GET_IO → IO_RESP đúng payload 74 byte, latency ≤3ms timeout budget (đo bằng GPIO toggle + oscilloscope).
 - SET_DO bật relay; SET_AO ra V đúng.
 - Gửi frame CRC hỏng → nhận NACK ERR_CRC_FAIL.
 ```

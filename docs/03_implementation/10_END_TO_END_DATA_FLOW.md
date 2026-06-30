@@ -10,18 +10,18 @@
 
 ---
 
-## Flow 1 — DI hardware → Web (đọc trạng thái số)
+## Flow 1 — UI auxiliary dry-contact → Web (đọc trạng thái số)
 
 ```
-1. Contact DI1 đóng (flow switch/relay phụ) → opto PC817 → MCU PB4 mức thay đổi.
-2. MCU io_sample (1ms): debounce → di_mask bit0 = 1.
-3. SOM iobus gửi GET_IO → MCU trả IO_RESP, byte[24] DI_MASK bit0=1.
-4. iobus iop_parser → di_state[0]=1 → io_cache ghi kx_io_shm (seqlock).
-5. core scan_loop đọc shm → point_table BI1.value=1, quality=good, ts mới.
-6. web GET /api/v1/points/DI1 → core trả {value:true, quality:"good"}.
-7. Web UI hiển thị DI1 = ON.
+1. Clean contact đóng trên UI1 đã cấu hình auxiliary dry-contact → protected pull-up sense thay đổi.
+2. MCU io_sample (1ms): debounce UI1 → cập nhật raw/status snapshot.
+3. SOM iobus gửi GET_IO 2ms/500Hz → MCU trả IO_RESP v2 với UI_RAW[0] signed int32.
+4. iobus parser/scale → UI1 binary engineering state → io_cache ghi kx_io_shm (seqlock).
+5. core scan_loop đọc shm → point table UI1.value=1, quality=good, ts mới.
+6. web GET /api/v1/points/UI1 → core trả {value:true, quality:"good"}.
+7. Web UI hiển thị UI1 auxiliary contact = ON.
 ```
-**Khi sai, kiểm:** opto/pin (1) → io_sample debounce (2) → IO_RESP byte24 (3) → shm di_state (4) → scan đọc shm (5) → REST (6).
+**Khi sai, kiểm:** UI mode/front-end (1) → debounce (2) → IO_RESP UI_RAW[0] (3) → shm UI state/quality (4) → scan (5) → REST (6). Đây không phải isolated industrial DI.
 
 ---
 
@@ -30,7 +30,7 @@
 ```
 1. Sensor (NTC/0-10V) → ADS131M08 kênh → MCU SPI3.
 2. MCU io_sample: raw s24, moving average, spike reject.
-3. GET_IO → IO_RESP byte[0..2]=UI1_RAW (uint24 BE).
+3. GET_IO → IO_RESP byte[0..3]=UI1_RAW (int32 signed BE).
 4. iobus iop_parser: scale raw→engineering theo sensor_type (NTC10k Steinhart-Hart / 0-10V / 4-20mA).
 5. io_cache ghi ui_value[0]=23.5, ui_unit="degC", ui_quality=good.
 6. core point_table AI1.value=23.5.

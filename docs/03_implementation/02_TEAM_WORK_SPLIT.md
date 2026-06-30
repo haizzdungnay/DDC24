@@ -64,7 +64,7 @@ fw/test/                 — Unity host test: crc, scale, fsm
 
 ```
 1. MCU nhận HANDSHAKE → trả HANDSHAKE_RESP (version + STATUS).
-2. MCU nhận GET_IO → trả IO_RESP 34 byte đúng format, CRC đúng, SEQ echo.
+2. MCU nhận GET_IO → trả IO_RESP v2 payload 74 byte đúng format, CRC đúng, SEQ echo.
 3. MCU nhận SET_DO → bật relay THẬT (đo bằng đồng hồ/đèn).
 4. MCU nhận SET_AO → xuất AO THẬT (đo bằng đồng hồ V/mA).
 5. MCU nhận SET_AO_CFG → đổi mode 0-10V/4-20mA per kênh.
@@ -89,14 +89,14 @@ fw/test/                 — Unity host test: crc, scale, fsm
 mkddc-iobus:
 1.  UART master (/dev/ttyS2, 921600 8N1, SCHED_FIFO ≥70).
 2.  IOP client (frame build/parse, CRC, SEQ, timeout/retry).
-3.  Poll GET_IO 100Hz.
+3.  Poll GET_IO 2ms/500Hz.
 4.  Parse IO_RESP + scale raw→engineering.
 5.  IO cache / shared state (ghi kx_io_shm seqlock).
 6.  Output command bridge (đọc ao_setpoint/do_cmd → SET_AO/SET_DO).
 
 mkddc-core:
 7.  mkddc-core skeleton (SCHED_FIFO, scan loop 1s, sd_notify READY).
-8.  Point table (8 UI + 8 DI + 4 AO + 4 DO + virtual).
+8.  Point table base SKU (16 UI + 4 AO + 4 DO + virtual; DI reserved for optional capability).
 9.  Scan loop (read IO → graph → priority → write output).
 10. Priority resolver (6 mức, BMS không ghi thẳng IO).
 11. Safe-state resolver (IO fault / iobus stale → fallback).

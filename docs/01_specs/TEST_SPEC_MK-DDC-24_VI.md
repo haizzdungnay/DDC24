@@ -2,8 +2,8 @@
 ## Software + Firmware + System
 
 > **Document ID:** TEST-SPEC-MK-DDC-24-VI  
-> **Phiên bản:** 1.0 | 2026-05-28  
-> **Trạng thái:** Approved (Owner 2026-06-08)
+> **Phiên bản:** 2.0 | 2026-06-30
+> **Trạng thái:** In-Review — aligned to ADR-010 and hardware evidence gates
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
 > **Tác giả:** KINEXUS Technologies — QA / Test Team
 
@@ -94,7 +94,7 @@
 | Test ID | Yêu cầu Trace | Mô tả | Pass Criteria | Level |
 |---------|--------------|-------|---------------|-------|
 | T-SW-001 | SW-IOP-001 | CRC16 unit test: 20 test vectors (SW và FW PHẢI match) | 100% pass | L1 |
-| T-SW-002 | SW-IOP-002 | Measure actual GET_IO poll period | 10ms ±1ms | L2 |
+| T-SW-002 | SW-IOP-002 | Measure actual GET_IO poll period and response latency distribution | 2ms nominal; no unaccounted timeout/deadline miss | L2 |
 | T-SW-004 | SW-IOP-004 | Block MCU responses → verify retry 3 lần → IOP_FAULT | 3 retries → fault state | L2 |
 | T-SW-005 | SW-IOP-005 | Read kinexus_io_shm từ separate process concurrently | No data corruption (seqlock verify) | L2 |
 | T-SW-008 | SW-IOP-008 | Trigger IOP_FAULT → verify state machine → SAFE_STATE | RESET_IO sent, alarm bus event | L2 |
@@ -154,8 +154,8 @@
 | Test ID | Mô tả | Pass Criteria | Thực hiện |
 |---------|-------|---------------|---------|
 | FAT-001 | Cold boot: power on → PLC ready | ≤ 30 giây | Tại nhà máy |
-| FAT-002 | All 8 UI channels: inject known value, read via BACnet AI | Error ≤ 0.5% FS per kênh | HIL rig |
-| FAT-003 | All 8 DI channels: open/close contact, read via BACnet BI | Debounce correct (20ms) | HIL rig |
+| FAT-002 | All 16 UI channels: inject supported-mode values, read via BACnet AI | Error within approved mode-specific limit per channel | HIL rig |
+| FAT-003 | Verify base-SKU capability has no DI; optional isolated-DI test only on matching SKU | UI dry-contact behavior and optional-DI capability are not conflated | HIL rig |
 | FAT-004 | All 4 AO channels: command 0V/5V/10V, measure with DMM | ±0.1% FS | HIL rig |
 | FAT-005 | All 4 DO relay: command ON/OFF, verify coil continuity | Correct per command | HIL rig |
 | FAT-006 | BACnet Who-Is / Read-Property / Write-Property | Per T-SW-050..054 | BACnet tool |
@@ -194,7 +194,7 @@
 | FR-030, FR-031 | Firmware GPG + Secure boot | SEC-010, SEC-011 | SW-SEC-001 | T-SW-080 |
 | FR-033 | Firewall / SSH / port policy | SEC-020..022 | SW-SEC-004 | T-SW-083 |
 | — (SRS §12) | HMI TFT display LVGL | HMI-001..015 | SW-HMI-001..008 | T-SW-100..107 |
-| FR-015 | IOP v1 + sampling ≤1ms | IOP-001..006 | IOP-SW-001..010, IOP-FW-001..010 | T-FW-IOP-001..006, T-SW-001..011 |
+| FR-015 | IOP v2 + sampling ≤1ms | IOP-001..006, ADR-010 | IOP-SW-001..010, IOP-FW-001..010 | T-FW-IOP-001..006, T-SW-001..011 |
 | FR-021 | BACnet Device ID DIP/WebUI | BAC-010 | SW-BAC-006 | T-SW-055 |
 | FR-006, FR-016 | Failsafe / safe state | PLC-013 | SW-IOP-008..009, FW-WDG-005 | T-SW-008, T-FW-054 |
 | FR-024, FR-025 | Modbus TCP/RTU slave | MB-001..010 | SW-MOD-001..010 | T-SW-120..129 |
@@ -221,7 +221,7 @@
 | NFR-009 | BACnet BTL certified | T-SW-056 |
 | NFR-010 | Hoạt động -20…+65°C (target) | HW thermal derating (HW-Q-001) |
 | — (SRS OS-001) | Boot ≤ 30s | FAT-001 |
-| — (IOP-002) | IOP 100Hz sustained | T-SW-002 |
+| — (IOP-002) | IOP 2ms/500Hz sustained | T-SW-002 |
 | — (SEC-023) | Auth brute-force lockout | T-SW-086 |
 
 ---
@@ -247,8 +247,8 @@ HIL Test Rig:
                        │ USB
               ┌────────▼──────────────────┐
               │ NI USB-6009 or similar    │
-              │  - Analog signal inject   │ ── UI1-UI8
-              │  - Digital I/O            │ ── DI1-DI8
+              │  - Analog signal inject   │ ── UI1-UI16
+              │  - Auxiliary dry contact  │ ── configured UI channels
               │  - Analog measure AO      │ ◄─ AO1-AO4 (DMM)
               │  - Relay state sense      │ ◄─ DO1-DO4 (GPIO)
               └───────────────────────────┘
@@ -275,5 +275,5 @@ Chỉ được release khi TẤT CẢ các điều kiện sau đạt:
 ---
 
 **Document ID:** TEST-SPEC-MK-DDC-24-VI  
-**Revision:** 1.0 | 2026-05-28  
-**Approved by:** QA Lead, SW Lead, FW Lead — KINEXUS Technologies
+**Revision:** 2.0 | 2026-06-30
+**Review required:** QA Lead, SW Lead, FW Lead

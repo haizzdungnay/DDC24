@@ -188,7 +188,7 @@ services/iobus/fieldbus/
 
 | Rủi ro | Mức | Kiểm soát |
 |--------|-----|-----------|
-| Slave chậm làm trễ iobus hot path | Cao | fieldbus loop priority thường, timeout budget, không chặn IOP 100Hz |
+| Slave chậm làm trễ iobus hot path | Cao | fieldbus loop priority thường, timeout budget, không chặn IOP 2ms/500Hz |
 | Profile sai gây decode sai | Trung bình | parser strict + profile unit tests |
 | RS-485 nhiễu/termination lỗi | Trung bình | E303 + bench 1h + wiring guide |
 | Ext contract đổi SHM | Trung bình | Rev A cache nội bộ; chỉ bump `mkddc_shm.h` khi cần shared ext stable |

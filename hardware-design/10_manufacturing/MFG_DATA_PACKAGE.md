@@ -1,7 +1,7 @@
 # Manufacturing Data Package - MK-DDC-24
 
-> **Document:** HW-MFG-01 | Rev 1.1 | 2026-06-23  
-> **Status:** BLOCKED - not ready for fabrication after UI Rev A architecture review  
+> **Document:** HW-MFG-01 | Rev 1.2 | 2026-06-30
+> **Status:** BLOCKED - not ready for fabrication after UI Rev A architecture review
 > **Reason:** UI schematic/BOM/placement changed and must be regenerated from KiCad
 
 ---
@@ -18,6 +18,19 @@ This package is intentionally blocked. The previous package was created from the
 - Old document revisions.
 
 Do not release Gerber, pick-and-place, stencil, assembly drawings, or vendor fabrication package from this document until the Rev A UI schematic is complete and reviewed.
+
+Repository check on 2026-06-30 found no `.kicad_sch` or `.kicad_pcb` source under `hardware-design/kicad/`; only `PCB_PLACEMENT_GUIDE.md` exists. Therefore fabrication outputs cannot be generated or truthfully marked complete from this repository state.
+
+### 1.1 Deliverable status
+
+| Deliverable | Required evidence | Status |
+|---|---|---|
+| KiCad source | Versioned `.kicad_pro`, `.kicad_sch`, `.kicad_pcb`, symbol/footprint dependencies | Missing |
+| Fabrication | Gerber X2/RS-274X, drill/map, stack-up, board outline, fab drawing | Missing |
+| Assembly | Annotated schematic, BOM, CPL/pick-place, assembly drawings, stencil data | Missing |
+| Verification | ERC/DRC reports with zero unwaived errors, 3D/clearance review | Missing |
+| Production test | TP/fixture map, programming image/hash, test limits, golden-unit result | Missing |
+| Release control | Manifest, SHA-256 hashes, ECO/revision, approvals, vendor acknowledgement | Missing |
 
 ---
 
@@ -47,6 +60,21 @@ Do not release Gerber, pick-and-place, stencil, assembly drawings, or vendor fab
 - [ ] DRC/ERC pass after layout.
 - [ ] Manufacturing files include a note that PT100/PT1000 are not populated/supported in Rev A UI.
 - [ ] Vendor package reviewed by HW Lead and QA.
+- [ ] `MANIFEST.sha256` covers every released source/fabrication/assembly/test file.
+- [ ] Package revision matches PCB silkscreen, schematic title block, BOM, CPL, firmware compatibility record, and serial label.
+
+### 3.1 Serial number and traceability
+
+Use `MK24-YYWW-NNNN-RR`, where:
+
+- `MK24` identifies MK-DDC-24.
+- `YYWW` is manufacturing year and ISO week.
+- `NNNN` is a zero-padded sequence unique within that week, allocated by the manufacturing database.
+- `RR` is the two-character PCB assembly revision (for example `RA`).
+
+Example: `MK24-2627-0042-RA`.
+
+The human-readable label and QR/DataMatrix payload must contain at least serial number, PCBA revision, BOM revision, manufacturing date, and production-test result ID. Manufacturing owns uniqueness; QA verifies no duplicate before release. Rework preserves the serial number and adds an ECO/rework event rather than relabeling the unit as new.
 
 ---
 
@@ -61,4 +89,11 @@ Do not release Gerber, pick-and-place, stencil, assembly drawings, or vendor fab
 
 ---
 
-**Document ID:** HW-MFG-01 | Rev 1.1 | 2026-06-23
+## Revision History
+
+| Rev | Date | Change |
+|---|---|---|
+| 1.1 | 2026-06-23 | UI Rev A package blocked pending regenerated source/outputs. |
+| 1.2 | 2026-06-30 | Added evidence manifest, current missing-artifact status, hashes, and serial traceability format. |
+
+**Document ID:** HW-MFG-01 | Rev 1.2 | 2026-06-30

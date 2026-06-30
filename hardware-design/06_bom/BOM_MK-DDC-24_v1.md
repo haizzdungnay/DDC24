@@ -1,6 +1,6 @@
 # Bill of Materials - MK-DDC-24 Carrier Board v1.0
 
-> **Document:** HW-DES-06-BOM | Rev 1.2 | 2026-06-23
+> **Document:** HW-DES-06-BOM | Rev 1.3 | 2026-06-30
 > **Status:** Draft for schematic release after UI Rev A architecture review
 > **UI detail BOM:** `BOM-UI-16CH.md`
 
@@ -45,6 +45,25 @@ Cost in previous Rev 1.1 is no longer controlled because UI architecture changed
 | Dry contact | Replaced DI | Auxiliary only, no isolation claim |
 | TMUX placement | Could be read as field-facing | Low-voltage conditioned nodes only |
 
+### 3.1 Controlled preliminary rows outside the UI sub-BOM
+
+These rows prevent silent omissions but are **not** a purchasable BOM. Final MPN, RefDes, package, quantity, lifecycle, and alternates must come from the annotated KiCad schematic.
+
+| Group/item | Controlled requirement | Current state |
+|---|---|---|
+| MCU HSE crystal | 8.000MHz fundamental, <=+/-20ppm at 25C; CL and load capacitors calculated from selected crystal and PCB stray capacitance | MPN/CL/Cload TBD |
+| Board-monitor ADC dividers | Divider values, voltage rating, tolerance, power, RC filter, and clamp for VCC_5V/board monitor inputs | Values/RefDes TBD |
+| +5V converter | >=5.31A continuous at current upper-bound allocation or revised evidence-backed budget; 19.2–40.7V normal input plus coordinated surge margin | Part/design TBD; legacy 3A solution rejected |
+| +3.3V converter | Switching regulator >=1.5A with thermal/load-step evidence | Part/design TBD; AMS1117 rejected |
+| +15V converter | Industrial boost controller, inductor/diode/cap network and protection validated at four AO full-load | Part/design TBD; MT3608/SX1308 rejected |
+| Input fuse/bridge/TVS | Coordinated ratings from rectified AC max, inrush, IEC surge, clamp, abs max, pulse energy and thermal study | Parts TBD |
+| UI PTC/fusible elements | Per-channel hold/trip/fault energy from 24V miswire calculation | Values TBD in UI BOM |
+| UI terminal TVS | Standoff/clamp/leakage/pulse rating per mode and ADC/front-end limits | Values TBD in UI BOM |
+| UI RRIO op-amp | Offset, bias, input/output range, noise, drift, supply, package and error-budget qualification | Final MPN TBD in UI BOM |
+| AO output stage | DAC8554 plus frozen op-amp/transistor/passives supporting 500-ohm 4–20mA compliance | Detailed BOM TBD |
+| DO suppression | SKU/load-class-specific safety-rated snubber/MOV/TVS parts or DNI declaration | Detailed BOM TBD |
+| RS-485 | Transceiver, optional isolator + isolated supply, termination/bias, TVS/filter and connector | Detailed BOM TBD |
+
 ---
 
 ## 4. Removed / Archived DI BOM
@@ -74,7 +93,8 @@ Do not use UI auxiliary dry contact to claim full DI compatibility.
 | 1.0 | 2026-05-27 | Initial BOM |
 | 1.1 | 2026-06-23 | DI to UI migration |
 | 1.2 | 2026-06-23 | UI architecture review: 49.9R shunts, per-channel mode latch, buffers, RTD removed from Rev A |
+| 1.3 | 2026-06-30 | Added controlled preliminary rows for previously omitted clock, monitor, power, protection, AO/DO, and RS-485 parts |
 
 ---
 
-**Document ID:** HW-DES-06-BOM | Rev 1.2 | 2026-06-23
+**Document ID:** HW-DES-06-BOM | Rev 1.3 | 2026-06-30

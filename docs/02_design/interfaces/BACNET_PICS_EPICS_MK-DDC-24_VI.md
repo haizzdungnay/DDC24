@@ -38,10 +38,10 @@ MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/
 | Object | Số lượng | Map vật lý | Writable | COV |
 |--------|:--------:|------------|:--------:|:---:|
 | Device | 1 | — | một số prop | — |
-| Analog Input (AI) | 8 | UI1–UI8 (đã scale) | Out_Of_Service | ✅ |
+| Analog Input (AI) | 16 | UI1–UI16 (đã scale) | Out_Of_Service | ✅ |
 | Analog Output (AO) | 4 | AO1–AO4 | Present_Value (commandable) | ✅ |
 | Analog Value (AV) | 32 | biến PLC | Present_Value | ✅ |
-| Binary Input (BI) | 8 | DI1–DI8 | Out_Of_Service | ✅ |
+| Binary Input (BI) | 0 base / 8 optional | Optional isolated-DI SKU only; capability-gated | Out_Of_Service | ✅ |
 | Binary Output (BO) | 4 | DO1–DO4 relay | Present_Value (commandable) | ✅ |
 | Binary Value (BV) | 16 | biến PLC | Present_Value | ✅ |
 | Multi-state Value (MSV) | 8 | enum PLC | Present_Value | ✅ |

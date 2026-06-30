@@ -87,10 +87,9 @@ Nhìn từ mặt trước, terminal block từ trái sang phải:
 |--------|---------|-----------|---------|
 | PWR+ | 24V+ | Nguồn 24 VAC/VDC (+) | 1.5 mm² |
 | GND  | GND | Nguồn 24 VAC/VDC (-) | 1.5 mm² |
-| UI1–UI8 | UI1–UI8 | Universal Input 1–8 | Xem §3.2 |
+| UI1–UI16 | UI1–UI16 | Universal Input 1–16 | Xem §3.2 |
 | COM_UI | COM | Common cho UI | Nối với GND |
-| DI1–DI8 | DI1–DI8 | Digital Input 1–8 | 24V DC |
-| COM_DI | COM | Common cho DI | Nối với GND |
+| Optional DI | SKU/module riêng | Không lắp trên base SKU | Chỉ đấu theo manual của optional isolated-DI module |
 | AO1–AO4 | AO1–AO4 | Analog Output 1–4 | 0–10V / 4–20mA |
 | GND_AO | GND | Ground cho AO | |
 | DO1–DO4 | DO1–DO4 (NO/COM/NC) | Digital Output relay 1–4 | 5A @ 250VAC |
@@ -101,7 +100,7 @@ Nhìn từ mặt trước, terminal block từ trái sang phải:
 
 ### 3.2 Đấu nối Universal Input (UI)
 
-UI tự động nhận dạng loại cảm biến. Chỉ đấu dây theo các sơ đồ dưới đây:
+Chọn đúng mode riêng cho từng UI trong commissioning trước khi đấu/energize. Rev A không phát hành claim auto-detect sensor.
 
 **Cảm biến NTC 10k/20k (2 dây):**
 ```
@@ -110,11 +109,7 @@ UI(N) ──────┬──── NTC sensor
 COM  ───────┴──── NTC sensor
 ```
 
-**PT100/PT1000 (2 dây):**
-```
-UI(N) ────── PT100/1000
-COM   ────── PT100/1000
-```
+**PT100/PT1000:** không hỗ trợ trên Rev A base SKU; dùng module dedicated nếu yêu cầu RTD công nghiệp.
 
 **0–10V:**
 ```
@@ -126,10 +121,10 @@ COM   ────── Signal (-) / GND của sensor
 ```
 UI(N) ────── Signal (+) của sensor
 COM   ────── Signal (-) / GND của sensor
-(Lưu ý: UI có sẵn resistor 250Ω cho 4–20mA)
+(Lưu ý: mode 4–20mA dùng shunt 49.9Ω theo thiết kế Rev A; không gắn thêm shunt ngoài nếu schematic/wiring release không yêu cầu.)
 ```
 
-**Dry contact (công tắc / relay):**
+**Auxiliary dry contact (công tắc / relay sạch, không cách ly):**
 ```
 UI(N) ────── Contact
 COM   ────── Contact còn lại

@@ -9,3 +9,8 @@ project(mkddc-services CXX C)
 enable_testing()   # cho phép `ctest --test-dir build/services` chạy test cả 2 service
 add_subdirectory(iobus)
 add_subdirectory(core)
+
+option(MKDDC_ENABLE_HMI "Build mkddc-hmi TFT local display service" OFF)
+if(MKDDC_ENABLE_HMI)
+    add_subdirectory(hmi)
+endif()

@@ -188,6 +188,11 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
                 if (kv.second->is_num()) n.num_params[kv.first] = kv.second->num;
                 else if (kv.second->is_str()) {
                     n.str_params[kv.first] = kv.second->str;
+                    if (!n.str_param.empty()) {
+                        std::fprintf(stderr, "WARN  graph.str_param_overwrite node=%s"
+                                     " key=%s (prev=%s) — use str_params[] for multi-string nodes\n",
+                                     n.id.c_str(), kv.first.c_str(), n.str_param.c_str());
+                    }
                     n.str_param = kv.second->str;   /* backward compat: last string value */
                 }
             }
@@ -362,8 +367,16 @@ bool GraphRuntime::load_string(const std::string& src, const std::string& name)
                         ? jpt->get("node")->str_or("") : "";
                     if (!nid.empty()) {
                         const auto it = id_to_idx.find(nid);
-                        if (it != id_to_idx.end())
-                            nodes_[static_cast<size_t>(it->second)].proto_ext_idx = ext_idx;
+                        if (it != id_to_idx.end()) {
+                            Node& nd = nodes_[static_cast<size_t>(it->second)];
+                            if (nd.proto_ext_idx >= 0) {
+                                std::fprintf(stderr, "WARN  graph.proto_ext_idx_duplicate"
+                                             " node=%s prev=%d new=%d"
+                                             " — check modbus section in graph.json\n",
+                                             nid.c_str(), nd.proto_ext_idx, ext_idx);
+                            }
+                            nd.proto_ext_idx = ext_idx;
+                        }
                     }
                     ext_idx++;
                 }

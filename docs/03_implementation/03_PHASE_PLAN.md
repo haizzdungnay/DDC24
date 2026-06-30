@@ -88,7 +88,7 @@ hoàn thành được phần lớn phase này KHÔNG cần board), rồi cross-t
 **Output (mỗi dòng đo được, pass/fail rõ):**
 ```
 1. HANDSHAKE pass (version negotiate, STATUS=0x00).
-2. GET_IO/IO_RESP pass (34 byte, CRC đúng, SEQ echo; 1000 poll liên tục 0 lỗi).
+2. GET_IO/IO_RESP v2 pass (74-byte payload, CRC đúng, SEQ echo; 1000 poll liên tục 0 lỗi).
 3. SET_AO pass (ACK, AO thật đổi — đo đồng hồ).
 4. SET_DO pass (ACK, relay thật đổi — DO_FB khớp).
 5. GET_DIAG/DIAG_RESP pass (20 byte).
@@ -107,13 +107,13 @@ vector cũ 0x84C0/0x556B là sai, đã thay 2026-06-11). **DoD:** §12.2.
 
 **Owner:** Dev 2.
 
-**Việc:** main loop SCHED_FIFO, poll 100Hz, parse+scale, ghi `kx_io_shm`, đọc output từ
+**Việc:** main loop SCHED_FIFO, poll 2ms/500Hz, parse+scale, ghi `kx_io_shm`, đọc output từ
 shm gửi MCU, metrics, log, systemd integration.
 
 **Output:**
 ```
 1. systemd service mkddc-iobus chạy (Restart=always, WatchdogSec).
-2. Poll MCU liên tục 100Hz (GET_IO).
+2. Poll MCU liên tục 2ms/500Hz (GET_IO).
 3. Cập nhật IO state vào kx_io_shm (seqlock), reader đọc đúng.
 4. Gửi output command (đọc do_cmd/ao_setpoint từ shm → SET_DO/SET_AO).
 5. Báo lỗi UART/MCU (timeout → iop_status=FAULT, alarm bus).
@@ -136,7 +136,7 @@ BACnet object/priority bridge, Modbus ext cache integration.
 
 **Output:**
 ```
-1. Point table đủ 24 IO (8UI+8DI+4AO+4DO) + virtual point.
+1. Point table đủ 24 IO base SKU (16 UI + 4 AO + 4 DO) + virtual point; optional DI capability-gated.
 2. Scan loop chạy 1s, clock_nanosleep ABSTIME, không overrun.
 3. Priority resolver chạy (6 mức, fire/safety > BMS > schedule > logic > default).
 4. Safe-state resolver chạy (IO fault/stale → fallback output — SAFETY SPEC 07 §5;

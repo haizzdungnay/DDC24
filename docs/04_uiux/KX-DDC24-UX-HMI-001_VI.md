@@ -131,9 +131,9 @@ Filter: ALL / BAD / STALE          [Page 2] [Page 3]
 ```
 
 **Phân page:**
-- Page 1: UI1–UI8 + DI1–DI8
-- Page 2: AO1–AO4 + DO1–DO4
-- Page 3: Tổng hợp hoặc filter BAD/STALE
+- Page 1: UI1–UI8
+- Page 2: UI9–UI16
+- Page 3: AO1–AO4 + DO1–DO4; optional DI appears only when capability map confirms it
 
 **Quality legend:**
 - `GOOD` — dữ liệu hợp lệ, trong ngưỡng
@@ -142,7 +142,7 @@ Filter: ALL / BAD / STALE          [Page 2] [Page 3]
 - `UNCERTAIN` — tín hiệu nghi ngờ nhưng chưa kết luận lỗi
 
 **Quy tắc:**
-- Tên point lấy từ `display_name` trong point database; nếu chưa có thì dùng mã kỹ thuật (UI1, DI1...).
+- Tên point lấy từ `display_name` trong point database; nếu chưa có thì dùng mã kỹ thuật (UI1, AO1, DO1...).
 - `AGE` hiển thị thời gian kể từ lần cập nhật cuối từ SHM.
 - Không hiển thị point thiếu `point_id`, `io_type`, `unit` (analog), `quality`.
 

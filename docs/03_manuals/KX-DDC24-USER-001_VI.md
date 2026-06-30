@@ -2,7 +2,7 @@
 
 > **Tài liệu:** KX-DDC24-USER-001_VI  
 > **Sản phẩm:** MK-DDC-24 — Bộ điều khiển DDC 24 điểm  
-> **Phiên bản:** 1.0 | 2026-06-02  
+> **Phiên bản:** 1.1 | 2026-06-30
 > **Mục đích:** Hướng dẫn vận hành, cấu hình và bảo trì — phục vụ hồ sơ CR Mark / QCVN (mục E4)
 
 > ⚠️ **RECONCILE (2026-06-08).** Rev A cấu hình bằng **component-based graph** qua web
@@ -39,7 +39,7 @@ Thiết bị có màn hình TFT màu 240×320 với 6 nút điều hướng (UP/
 | Mục | Nội dung |
 |-----|----------|
 | Dashboard | Gauge tổng quan |
-| I/O Status | Giá trị thực 8 UI + 8 DI + 4 AO + 4 DO |
+| I/O Status | Giá trị thực 16 UI + 4 AO + 4 DO; optional DI chỉ hiện khi phần cứng/capability map hỗ trợ |
 | Network Info | IP, BACnet status, MQTT status |
 | Alarm List | ≥ 10 alarm gần nhất (timestamp + severity) |
 | System Info | FW version, uptime, CPU temp, RAM % |
@@ -145,7 +145,7 @@ Xác thực: Bearer token JWT (exp 1 giờ). Rate limit: 100 req/s/IP.
 ### 5.1 Quy trình Commissioning
 
 1. **Kết nối:** Laptop cùng mạng LAN với thiết bị → truy cập Web UI.
-2. **Cấu hình UI type:** Kênh UI1–UI8 chọn loại cảm biến (tự động nhận dạng — chỉ cần xác nhận).
+2. **Cấu hình UI type:** Kênh UI1–UI16 chọn mode 0–10V, 4–20mA, NTC hoặc auxiliary dry contact; không dựa vào auto-detect.
 3. **Nạp graph:** import `graph.json` → validator (4 check an toàn) → deploy.
 4. **Force I/O test:** Kiểm tra từng AO/DO → xác nhận actuator/relay hoạt động.
 5. **BACnet discovery:** BMS gửi Who-Is → DDC trả I-Am.
@@ -213,7 +213,7 @@ Kiểm tra phiên bản sau OTA: HMI → System Info hoặc Web UI → Dashboard
 | RAM | 2 GB LPDDR4 |
 | Storage | 8 GB eMMC + microSD slot |
 | OS | Debian 12 (Bookworm), kernel PREEMPT_RT |
-| I/O | 8 UI + 8 DI + 4 AO + 4 DO |
+| I/O | 16 UI + 4 AO + 4 DO; 0 DI trên base SKU |
 | Nguồn | 24 VAC/VDC ±20%, < 8W |
 | Kích thước | 150 × 90 × 55 mm |
 | Trọng lượng | ~300 g |
@@ -237,5 +237,5 @@ Lô I-3, Khu Công nghệ Cao, Quận 9, TP. Hồ Chí Minh
 ---
 
 **Document ID:** KX-DDC24-USER-001_VI  
-**Revision:** 1.0 | 2026-06-02  
+**Revision:** 1.1 | 2026-06-30
 **Related docs:** [KX-DDC24-INSTALL-001_VI](KX-DDC24-INSTALL-001_VI.md) | [KX-DDC24-SWDESC-001_VI](KX-DDC24-SWDESC-001_VI.md)

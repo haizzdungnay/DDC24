@@ -2,8 +2,8 @@
 ## Giao thức IOP phía MCU — code-ready
 
 > **Document ID:** DDD-FWMOD-IOP-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-05-30 · 📘 [README](../../01_specs/README.md)
-> **Nguồn-chuẩn giao thức:** [SWFW_INTERFACE_SPEC](../../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) · **Trace:** `IOP-FW-001..010`, `FW-IOP-*`
+> **Phiên bản:** 2.0 | 2026-06-30 · 📘 [README](../../01_specs/README.md)
+> **Nguồn-chuẩn giao thức:** [ADR-010](../../adr/ADR-010-iop-v2-poll-capability-map.md) + `shared/iop_protocol.h` · **Trace:** `IOP-FW-001..010`, `FW-IOP-*`
 
 > Module quan trọng nhất của FW. Đây là "người phiên dịch" giữa MCU và SOM. Đọc xong file này là code được task `iop_comm`.
 
@@ -81,7 +81,7 @@ void dispatch(uint8_t cmd, const uint8_t *p, uint8_t len, uint8_t seq) {
       if (len != 2) { send_nack(cmd, ERR_BAD_LEN, seq); break; }
       do_cmd_t d = { p[0], p[1] };
       xQueueOverwrite(xDoQueue, &d); send_ack(CMD_SET_DO, seq); break;
-    case CMD_SET_AO_CFG:                    // 1 byte bitmask mode (v1.1)
+    case CMD_SET_AO_CFG:                    // 1 byte bitmask mode (v2)
       set_ao_mode_pins(p[0]); send_ack(CMD_SET_AO_CFG, seq); break;
     case CMD_GET_DIAG:   build_and_send_diag(seq); break;
     case CMD_RESET_IO:   enter_safe_state(p[0]); send_ack(CMD_RESET_IO, seq); break;
@@ -91,17 +91,18 @@ void dispatch(uint8_t cmd, const uint8_t *p, uint8_t len, uint8_t seq) {
 }
 ```
 
-## 6. Build IO_RESP (34 byte payload — IOP-SPEC §4.3)
+## 6. Build IO_RESP v2 (74-byte payload — ADR-010)
 ```
-[0..23]  UI1..UI8 raw  (uint24 BE mỗi kênh)   ← từ io_data_buf.ui_raw[]
-[24]     DI_MASK
-[25]     DO_FB_MASK
-[26..27] MCU_TEMP (int16 BE, ×10 °C)
-[28..29] FAULT_FLAGS (uint16 BE)
-[30..31] SAMPLE_CNT (uint16 BE)
-[32..33] 0x0000
+[0..63]  UI_RAW[16] (int32 signed BE; ADS s24 sign-extended)
+[64]     ADC1_STAT
+[65]     ADC2_STAT
+[66..67] MCU_TEMP (int16 BE, ×10 °C)
+[68..69] FAULT_FLAGS v2 (uint16 BE)
+[70..71] SAMPLE_CNT (uint16 BE)
+[72]     DO_FB_MASK
+[73]     reserved = 0x00
 ```
-Đọc snapshot dưới `xIoDataMutex` (ngắn). TX qua DMA. **Latency GET_IO→bắt đầu TX ≤ 5ms** (FW-IOP-003).
+Base SKU không có DI_MASK. Đọc snapshot dưới `xIoDataMutex` (ngắn). TX qua DMA. **GET_IO→IO_RESP phải nằm trong response timeout 3ms** (FW-IOP-003).
 
 ## 7. SEQ & timing
 - MCU **echo SEQ** từ request (không tự sinh) (IOP-SPEC §3.3).
@@ -113,8 +114,10 @@ nhận HANDSHAKE(SOM_IOP_VERSION, CAPS):
   if major(SOM_ver) != major(MCU_ver):  STATUS=0x02 (incompat)
   elif minor khác:                       STATUS=0x01 (warn)
   else:                                  STATUS=0x00
-  gửi HANDSHAKE_RESP(MCU_IOP_VERSION, MCU_FW_VERSION, STATUS)
+  gửi HANDSHAKE_RESP(MCU_IOP_VERSION, MCU_FW_VERSION, STATUS, BOARD_CAP_MAP)
 ```
+
+Base SKU gửi `BOARD_CAP_MAP=0x000D` (UI_16 | DO_4 | AO_4).
 
 ## 9. TX (gửi) — DMA, không blocking
 ```c
@@ -139,4 +142,4 @@ void send_frame(uint8_t cmd, uint8_t seq, const uint8_t *pl, uint8_t len){
 `IOP-FW-001..010`, `FW-IOP-001..007`, `T-FW-IOP-001..006`.
 
 ---
-**Rev** 1.0 | 2026-05-30
+**Rev** 2.0 | 2026-06-30 (IOP v2 ADR-010 payload/timing/capability map)

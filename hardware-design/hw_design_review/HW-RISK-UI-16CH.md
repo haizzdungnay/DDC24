@@ -1,6 +1,6 @@
 # Risk Register - Universal Input 16CH Rev A
 
-> **Document:** HW-RISK-UI-16CH | Rev 1.0 | 2026-06-23  
+> **Document:** HW-RISK-UI-16CH | Rev 1.1 | 2026-06-30
 > **Scope:** Hardware/Firmware/QA risks for 16-channel Universal Input before schematic/layout release
 
 ---
@@ -18,7 +18,7 @@
 | UI-R007 | NTC reference unstable if using CM3 PMIC 3.3V | Medium | Medium | Use precision/measured/ratiometric Vexc | HW/FW | Open |
 | UI-R008 | PT100/PT1000 claim inaccurate through 2-wire mux path | High | High | Remove RTD from Rev A UI; dedicated Rev B module if needed | PM/HW | Mitigated by scope |
 | UI-R009 | Dry contact incorrectly sold as industrial DI | High | Medium | Wording changed to auxiliary only; separate isolated DI SKU/module required | PM/HW | Open |
-| UI-R010 | UART frame too large or ambiguous after 16 x int32 | Medium | Medium | Define binary frame length, CRC, sequence, timestamp; measure 10ms cadence | FW | Open |
+| UI-R010 | UART frame too large or ambiguous after 16 x int32 | Medium | Medium | ADR-010 fixes a 74-byte IO_RESP with CRC/sequence; verify sustained 2ms/500Hz GET_IO cadence and timeout behavior | FW | Open |
 | UI-R011 | ADS signed raw parsed as unsigned | High | Medium | Sign-extension tests and parser vectors | FW/QA | Open |
 | UI-R012 | ADC/DRDY timeout indistinguishable from stale UART | Medium | Medium | Separate status bits and counters | FW | Open |
 | UI-R013 | Protection leakage affects measurement | Medium | Medium | Include TVS/clamp leakage in error budget | HW | Open |
@@ -65,4 +65,11 @@ The design must not proceed to PCB layout until these are closed or formally acc
 
 ---
 
-**Document ID:** HW-RISK-UI-16CH | Rev 1.0 | 2026-06-23
+## Revision History
+
+| Rev | Date | Change |
+|---|---|---|
+| 1.0 | 2026-06-23 | Initial Rev A UI risk register. |
+| 1.1 | 2026-06-30 | Aligned UI-R010 verification cadence with ADR-010 at 2ms/500Hz. |
+
+**Document ID:** HW-RISK-UI-16CH | Rev 1.1 | 2026-06-30

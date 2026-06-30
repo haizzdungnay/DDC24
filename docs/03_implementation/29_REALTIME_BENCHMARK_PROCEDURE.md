@@ -17,7 +17,7 @@ Hệ điều hành Linux trên SOM điều khiển phân tán MK-DDC-24 cần đ
 
 ### 2.1. Jitter vòng quét (Jitter)
 - **Core Scan Loop:** Chu kỳ danh định là `200ms` hoặc `1000ms` (tùy cấu hình). Sai lệch vòng quét (Jitter) yêu cầu: **$< 2\text{ms}$**.
-- **Iobus Poll Loop:** Chu kỳ danh định là `10ms` (100Hz). Sai lệch vòng quét (Jitter) yêu cầu: **$< 1\text{ms}$**.
+- **Iobus Poll Loop:** Chu kỳ danh định là `2ms` (500Hz) theo ADR-010. Ghi latency distribution, missed deadlines và timeout counters; không suy diễn pass chỉ từ average.
 
 ### 2.2. Overrun vòng quét (Overruns)
 - Số lần vòng quét bị chậm (không hoàn thành kịp trong chu kỳ quy định). Tiêu chí chấp nhận: **$0$ lần** trong điều kiện tải bình thường và **$< 0.01\%$** trong thử nghiệm stress-test.

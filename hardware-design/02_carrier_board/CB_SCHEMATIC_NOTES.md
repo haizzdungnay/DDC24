@@ -1,6 +1,6 @@
 # Carrier Board Schematic Notes & Design Guidelines
 
-> **Document:** HW-DES-02-SCH | Rev 1.3 | 2026-06-23
+> **Document:** HW-DES-02-SCH | Rev 1.4 | 2026-06-30
 > **Dung ket hop voi:** CB_BLOCK_DIAGRAM.md, IO_UI_CIRCUIT.md, MCU_STM32G0_SPEC.md
 > **UI Rev A:** no field signal directly into mux/ADC
 
@@ -14,6 +14,7 @@
 | 1.1 | 2026-06-23 | DI to UI migration, expanded 05_UI_INPUT to 16 channels |
 | 1.2 | 2026-06-23 | Phase 1 cross-check updates |
 | 1.3 | 2026-06-23 | UI architecture review: per-channel mode latch, protection/front-end before mux, 49.9R shunt, RTD removed from Rev A |
+| 1.4 | 2026-06-30 | Added AO/DO naming, grounding and RS-485 controlled references and review gates |
 
 ---
 
@@ -26,6 +27,9 @@
 | TI TMUX1208 datasheet | Low-voltage mux constraints: signal path must stay within GND to VDD operating range |
 | STM32G0B1 reference manual/design guide | MCU decoupling, boot, SPI, EXTI |
 | IEC 61010-1 / IEC 61326-1 | Safety spacing and EMC basis |
+| `GROUNDING_SCHEME.md` | PE/chassis, field, digital, analog, and isolated-return rules |
+| `../03_io_subsystem/IO_RS485_CIRCUIT.md` | RS-485 circuit, termination, isolation, protection, and tests |
+| `../04_power_supply/PWR_DESIGN.md` | Blocked power architecture and evidence gates |
 
 ---
 
@@ -165,6 +169,21 @@ A schematic that routes terminal field voltage directly to TMUX1208, any other l
 | UART | `UART_DEVICE_DIR` | `UART_MCU_TX` |
 | SPI | `SPI_DEVICE_SIG` | `SPI_ADC_CLK` |
 | Relay drive | `DOx_DRV` | `DO1_DRV` |
+| Relay feedback | `DOx_FB` | `DO1_FB` |
+| Relay contacts | `DOx_COM/NO/NC` | `DO1_NO` |
+| DAC raw output | `DAC_AOx` | `DAC_AO1` |
+| AO conditioned output | `AOx_VOUT` / `AOx_IOUT` | `AO1_VOUT` |
+| AO field terminal | `AOx_OUT` / `AOx_RET` | `AO1_OUT` |
+| RS-485 logic | `RS485_TX/RX/DE/RE_N` | `RS485_DE` |
+| RS-485 field | `RS485_A/B/COM/SHIELD` | `RS485_A` |
+
+### 7.1 RS-485 schematic checks
+
+- [ ] Transceiver, optional isolator, and isolated supply match `IO_RS485_CIRCUIT.md`.
+- [ ] A/B TVS is at the connector and backed by a clamp/abs-max/surge calculation.
+- [ ] 120R termination and fail-safe bias population are configurable and not duplicated by default.
+- [ ] `RS485_COM` and `RS485_SHIELD` follow `GROUNDING_SCHEME.md`; shield is not silently shorted to DGND.
+- [ ] A/B routing, isolation keepout, and TP stubs pass layout review.
 
 ---
 
@@ -174,7 +193,8 @@ A schematic that routes terminal field voltage directly to TMUX1208, any other l
 - [ ] FW Lead confirms mode latch, sampling sequence, and signed int32 frame.
 - [ ] QA confirms UI test plan and risk table are ready.
 - [ ] PM confirms Rev A feature claims exclude RTD and isolated DI replacement.
+- [ ] HW/Compliance approve grounding, power-protection, RS-485, and relay-contact suppression evidence.
 
 ---
 
-**Document ID:** HW-DES-02-SCH | Rev 1.3 | 2026-06-23
+**Document ID:** HW-DES-02-SCH | Rev 1.4 | 2026-06-30

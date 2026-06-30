@@ -162,7 +162,7 @@ Sau khi set RDP Level 1, cần verify:
 |-------|--------|------|
 | SWD debug bị khóa | STM32CubeProgrammer connect SWD | Connection rejected |
 | MCU boot OK | BOOT0=0, power cycle, IOP HANDSHAKE | SOM nhận HANDSHAKE trong 5s |
-| IOP communication OK | SOM gửi GET_IO | IO_RESP trong 10ms |
+| IOP communication OK | SOM gửi GET_IO | IO_RESP within 3ms response-timeout budget; 2ms nominal cadence |
 | OTA flash vẫn hoạt động | BOOT0=1 → AN3155 flash | Flash OK, verify CRC |
 
 > **Lưu ý quan trọng:** RDP Level 1 KHÔNG ngăn system bootloader (UART AN3155) flash firmware. OTA update vẫn hoạt động bình thường.

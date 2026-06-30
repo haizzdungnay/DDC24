@@ -12,7 +12,7 @@
 
 ```
 [MCU STM32]──UART 921600/IOP──[mkddc-iobus]──/dev/shm/mkddc_io_shm──[mkddc-core]──core.sock──[mkddc-web]
- đọc/ghi IO thật               poll 100Hz,                            priority +                REST/UI
+ đọc/ghi IO thật               poll 2ms/500Hz,                        priority +                REST/UI
  slave, safe-state             scale, đưa thư                         safe-state quyết output
 ```
 - **iobus** = người đưa thư UART: poll MCU, scale raw→engineering, ghi SHM; đọc lệnh từ SHM gửi xuống MCU. KHÔNG logic.
@@ -37,7 +37,7 @@ core → [07](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md). Phase nào làm gì → [0
 2. Test vector: {AA 00 01 00}→0x6C20, {AA 00 01 01}→0xACE1. GET_IO SEQ=1 = AA 00 01 01 AC E1.
    (Thấy 0x84C0/0x556B ở đâu = tài liệu cũ sai, đã thay 2026-06-11.)
 3. SOM tự tăng SEQ, MCU chỉ echo. Multi-byte = big-endian. UI raw = s24 (dùng iop_s24()).
-4. Timing: poll 10ms, resp timeout 10ms, retry 3, fault 100ms, reconnect 5s, MCU safe 200ms.
+4. Timing: poll 2ms, response timeout 3ms, retry 3, fault 20ms, reconnect 5s, MCU safe 200ms.
 5. FAULT bit: 0=ADC 1=DAC 2=UI_OV 3=RELAY_STUCK 4=WDG(sticky) 5=OVERTEMP 6=VDD.
 6. SHM path: /dev/shm/mkddc_io_shm. Struct giữ prefix kx_, magic 0x4B584401 — không rename.
 7. iobus = creator + seqlock writer io_shm. Core CHỈ ghi ao_setpoint[]/do_cmd[] (atomic store).
@@ -69,7 +69,7 @@ ctest --test-dir build/iobus --output-on-failure     # CRC 12/12 pass = bạn đ
 ```bash
 ./build/iobus/fake_mcu --pty            # in ra /dev/pts/N
 ./build/iobus/mkddc-iobus --uart /dev/pts/N --log-level debug
-# Mong đợi: INFO iop.handshake ... status=ok, rồi im lặng (poll 100Hz không log spam)
+# Mong đợi: INFO iop.handshake ... status=ok, cap=0x000D, rồi im lặng (poll 500Hz không log spam)
 xxd /dev/shm/mkddc_io_shm | head -4     # 4 byte đầu: 01 44 58 4b (magic LE), ts/seq đổi mỗi giây
 ./build/core/mkddc-core --log-level debug   # point table phản ánh UI ramp của fake MCU
 ```

@@ -23,7 +23,7 @@
 
 ```
 mkddc-iobus CHỈ làm:
-- giao tiếp MCU qua UART/IOP (master, poll 100Hz)
+- giao tiếp MCU qua UART/IOP v2 (master, poll 2ms/500Hz)
 - scale raw IO → engineering value
 - ghi IO state cho core (kx_io_shm, seqlock writer)
 - đọc output command từ core (ao_setpoint/do_cmd) và gửi SET_DO/SET_AO xuống MCU
@@ -154,7 +154,7 @@ Done: handshake pass; 1000 GET_IO 0 lỗi; recover sau rút UART.
 ### 3.5 `iop_parser`
 ```
 File: iop/iop_parser.{hpp,cpp} | Owner: Dev2
-Responsibility: IO_RESP(34B)/DIAG_RESP(20B) → struct (chưa scale).
+Responsibility: IO_RESP v2 (74-byte payload)/DIAG_RESP(20B) → struct (chưa scale).
 Public API: bool parse_io(const uint8_t* p,IopIoResp* o); bool parse_diag(const uint8_t* p,IopDiagResp* o);
 Error: len≠34/20 → false.
 Unit test: test_iop_parser.cpp — byte layout §6(05) đúng, BE đúng.
@@ -328,7 +328,7 @@ default built-in. Sensor/AO mode lấy thêm từ `/data/config/io_config.conf`;
 
 | Tình huống | Hành vi |
 |------------|---------|
-| Thiếu file config | dùng default built-in (uart_device=/dev/ttyS2, baud=921600, poll=10ms, retry=3); log WARN |
+| Thiếu file config | dùng default built-in (uart_device=/dev/ttyS2, baud=921600, poll=2ms, retry=3); log WARN |
 | Thiếu field lẻ | dùng default field đó; log WARN field=.. |
 | `sensor_type` không nhận ra | UI đó quality=BAD, không scale; log ERROR; service VẪN chạy |
 | `uart_device` không mở được | log ERROR; vào FAULT/RECONNECT (không exit ngay, retry) |
@@ -351,7 +351,7 @@ Không có alias `/dev/shm/kinexus_*`.
 |------------------------|--------|--------|------|-------------|-------------------------------|----------------|
 | `magic` | iobus (1 lần) | tất cả | — | init | ≠`KX_SHM_MAGIC` → chưa sẵn sàng, retry attach | 0 → magic |
 | `seq` | iobus | tất cả | — | 2×/vòng ghi | lẻ/đổi giữa chừng → đọc lại | 0 |
-| `ts_ns` | iobus | core/web | ns (CLOCK_MONOTONIC) | mỗi vòng poll 10ms (kể cả giá trị không đổi) | không tăng >3 chu kỳ reader → UNCERTAIN→BAD | 0 |
+| `ts_ns` | iobus | core/web | ns (CLOCK_MONOTONIC) | mỗi vòng poll 2ms (kể cả giá trị không đổi) | không tăng >3 chu kỳ reader → UNCERTAIN→BAD | 0 |
 | `ui_value[8]` | iobus | core/web | theo `ui_unit` (V/mA/°C) | 10ms | theo `ts_ns` + `ui_quality` | 0.0 |
 | `ui_quality[8]` | iobus | core/web | `kx_quality_t` | 10ms | — | BAD (chưa có mẫu) |
 | `ui_unit[8][8]` | iobus | core/web | chuỗi "V","mA","degC","" | khi load config | — | "" |
@@ -398,7 +398,7 @@ main thread:
   - systemd_notify.ready() sau handshake OK
   - chờ shutdown; join loops; close UART; detach shm
 
-poll loop (RT, prio 70, timer 10ms tuyệt-đối):
+poll loop (RT, prio 70, timer 2ms tuyệt-đối):
   - iop_client.get_io() → parse → io_scaling → io_cache.write_io()
   - systemd_notify.watchdog_kick() (mỗi <WatchdogSec/2)
   - KHÔNG block > ~2ms; KHÔNG I/O file/log chặn trong loop
@@ -440,7 +440,7 @@ INFO  iop.reconnect attempt=2
 
 **Rule:**
 ```
-- KHÔNG log INFO mỗi chu kỳ 10ms (sẽ spam). Poll bình thường = im lặng.
+- KHÔNG log INFO mỗi chu kỳ 2ms (sẽ spam). Poll bình thường = im lặng.
 - Lỗi lặp (CRC/timeout) → rate-limit (vd tối đa 1 log/giây + count tổng).
 - Command output (SET_DO/SET_AO) → log INFO/DEBUG (phục vụ audit/đối soát với core).
 - Fault / state transition → ERROR/INFO (luôn log, không rate-limit transition).
@@ -712,7 +712,7 @@ Làm tuần tự; mỗi bước có command + kết quả mong đợi. Fail bư�
 | 7 | HANDSHAKE | §9 của 05 | STATUS=0x00/0x01 | timeout×3 / STATUS=0x02 → alarm `IOP_INIT_FAIL` → RECONNECT 5s | **retry vô hạn** |
 | 8 | RESET_IO reason=NORMAL (0x00) — tùy chọn, khuyến nghị | — | ACK; IO về safe đã biết | NACK/timeout → WARN, tiếp tục | tiếp tục |
 | 9 | SET_AO_CFG (nếu config có AO 4-20mA) | `io_config` ao mode | ACK → ghi `ao_mode[]` vào shm | NACK UNKNOWN_CMD → giữ 0-10V, `ao_mode[]=0`, WARN | tiếp tục |
-| 10 | Start poll loop (10ms) + diag loop (1s) | — | GET_IO chạy, shm cập nhật | xem state machine 05 §13 | — |
+| 10 | Start poll loop (2ms) + diag loop (1s) | — | GET_IO chạy, shm cập nhật | xem state machine 05 §13 | — |
 | 11 | sd_notify READY=1 | sau handshake OK | systemd Active | — | — |
 | 12 | (chạy) watchdog_kick mỗi ≤2.5s | — | systemd không kill | quên kick → systemd restart (đúng thiết kế) | — |
 | 13 | Shutdown (SIGTERM) | signal | dừng loops → đóng UART → KHÔNG xóa shm (core còn đọc) → exit 0 | — | — |

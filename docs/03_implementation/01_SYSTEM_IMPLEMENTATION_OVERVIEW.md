@@ -46,12 +46,12 @@
                           │  SPI3/SPI1/GPIO
                           ▼
         ┌──────────────────────────────────────────┐
-        │  8 UI (ADS131M08) · 8 DI (PC817 opto)     │
+        │ 16 UI (2× ADS131M08) · no base-SKU DI    │
         │  4 AO (DAC8554)   · 4 DO (ULN2003→relay)  │
         └──────────────────────────────────────────┘
 ```
 
-> ⚠️ Số kênh THẬT theo nguồn-chuẩn HW = **8 UI + 8 DI + 4 AO + 4 DO** (FW_PINOUT_MASTER,
+> ⚠️ Số kênh THẬT theo ADR-010 = **16 UI + 4 AO + 4 DO**, không có DI công nghiệp trên base SKU (FW_PINOUT_MASTER,
 > HW_SPEC). Bảng "24 IO" trong marketing = 8+8+4+4. Mọi code đi theo 8/8/4/4.
 
 ---
@@ -65,7 +65,7 @@
 | **Nhiệm vụ** | Đọc UI/DI; ghi AO/DO; trả `IO_RESP` cho SOM; nhận `SET_DO`/`SET_AO`/`SET_AO_CFG`; safe-state khi lỗi |
 | **KHÔNG làm** | Không chạy logic điều khiển hệ thống (PID/interlock/schedule), không tự quyết relay theo logic nghiệp vụ |
 | **Vai trò IOP** | **Slave** — chỉ phản hồi, echo SEQ, không tự phát frame |
-| **Real-time** | io_sample 1ms; IOP response ≤ 5ms |
+| **Real-time** | io_sample 1ms; IOP v2 response timeout budget 3ms |
 | **Safe-state** | Không nhận `GET_IO` trong 200ms → AO=0V/4mA, DO=open tự động |
 | Trace | [FW_DDD](../02_design/firmware/FW_DDD_MK-DDC-24_VI.md), [FW_PINOUT_MASTER](../02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) |
 
@@ -73,7 +73,7 @@
 
 | Hạng mục | Nội dung |
 |----------|----------|
-| **Nhiệm vụ** | **Master UART/IOP**: poll `GET_IO` 100Hz, parse `IO_RESP`, gửi `SET_DO`/`SET_AO`, handshake, báo lỗi timeout/CRC/SEQ |
+| **Nhiệm vụ** | **Master UART/IOP**: poll `GET_IO` 2ms/500Hz, parse `IO_RESP` v2, gửi `SET_DO`/`SET_AO`, handshake, báo lỗi timeout/CRC/SEQ |
 | **Scale** | raw ADC/DAC ↔ engineering value (theo SW_ARCH §4) thực hiện ở đây, không ở core |
 | **Ghi** | snapshot IO vào `kx_io_shm` (seqlock); đọc `ao_setpoint[]`/`do_cmd[]` từ shm để gửi MCU |
 | **Cũng làm** | Modbus RTU master (poll async → ext cache; doc 25); BACnet/IP network datalink/callbacks (doc 24) |
@@ -121,8 +121,8 @@
 
 | Loại | Số | MCU peripheral | Pin (FW_PINOUT_MASTER) | Trong IO_RESP/SET_* | Trong kx_io_shm |
 |------|----|----|------------------------|---------------------|-----------------|
-| UI (universal input) | 8 | ADS131M08 / SPI3 | PC10/11/12, CS PB2, DRDY PA8 | `UI1..8_RAW` uint24 BE | `ui_value[8]`, `ui_quality[8]` |
-| DI (digital input) | 8 | GPIO opto PC817 | PB4..PB11 | `DI_MASK` byte24 | `di_state[8]` |
+| UI (universal input) | 16 | 2× ADS131M08 / SPI3 | Shared SPI, independent CS/DRDY per pinout master | `UI_RAW[16]` int32 signed BE | `ui_value[16]`, `ui_quality[16]` |
+| DI (digital input) | 0 base SKU | Optional isolated-DI module only | Capability dependent | No DI_MASK in base IO_RESP | SHM slots reserved; hide unless capability present |
 | AO (analog output) | 4 | DAC8554 / SPI1 | PA4/5/7, LDAC PB0 | `SET_AO` 4×uint16 BE | `ao_setpoint[4]`, `ao_mode[4]` |
 | DO (relay) | 4 | ULN2003 GPIO | PC0..PC3 | `SET_DO` mask+value; FB byte25 | `do_cmd[4]`, `do_feedback[4]` |
 | AO mode select | 4 | GPIO relay/switch | PD1..PD4 | `SET_AO_CFG` 1 byte | `ao_mode[4]` |
@@ -143,7 +143,7 @@
 
 ```
 HARD real-time (1ms)        ── FW_MCU (STM32)            : sampling + safe-state
-SOFT real-time (10–100ms)   ── mkddc-iobus               : UART poll 100Hz, Modbus
+SOFT real-time (2ms IOP)    ── mkddc-iobus               : UART poll 500Hz, async Modbus
 DETERMINISTIC loop (1s)     ── mkddc-core (SCHED_FIFO)   : scan + priority
 BEST EFFORT                 ── mkddc-web                 : UI/API/config
 ```
@@ -152,4 +152,4 @@ Lý do (ADR-005): vòng điều khiển (core) **không** băng qua ranh giới 
 mạng chậm (Modbus/BACnet) bị cô lập trong iobus để không kéo trễ vòng core.
 
 ---
-**Rev** 1.1 | 2026-06-13 (BACnet/Modbus owner/path chuẩn hóa) · 1.0 | 2026-06-10
+**Rev** 1.2 | 2026-06-30 (ADR-010: 16 UI, no base DI, IOP v2 2ms/500Hz) · 1.1 | 2026-06-13 (BACnet/Modbus owner/path chuẩn hóa) · 1.0 | 2026-06-10

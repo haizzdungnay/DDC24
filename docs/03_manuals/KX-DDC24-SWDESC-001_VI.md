@@ -59,9 +59,9 @@ MK-DDC-24 chạy kiến trúc phần mềm hai tầng (dual-layer):
 | Thành phần | Vai trò |
 |------------|---------|
 | FreeRTOS | HĐH thời gian thực |
-| ADC Driver | Sampling 8 UI (ADS131M08) |
+| ADC Driver | Sampling 16 UI (2× ADS131M08) |
 | DAC Driver | Output 4 AO (DAC8554) |
-| GPIO Driver | 8 DI, 4 DO relay |
+| GPIO Driver | UI mode latch + 4 DO relay; optional DI only on capability-enabled SKU |
 | Kinexus-IOP Slave | Giao tiếp UART với SOM, chu kỳ 10 ms |
 
 ### 1.3 Giao tiếp nội bộ (Kinexus-IOP)
@@ -69,7 +69,7 @@ MK-DDC-24 chạy kiến trúc phần mềm hai tầng (dual-layer):
 | Thông số | Giá trị |
 |----------|---------|
 | Physical | UART 921.600 baud, isolation ADUM1201 |
-| Chu kỳ poll | SOM poll MCU mỗi 10 ms |
+| Chu kỳ poll | SOM poll MCU mỗi 2 ms / 500Hz theo ADR-010 |
 | Frame | CRC16, sequence number |
 | Fail-safe | Timeout 100 ms → Fault flag; 5s → safe-state |
 

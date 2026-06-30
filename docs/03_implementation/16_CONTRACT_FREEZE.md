@@ -3,8 +3,10 @@
 
 > **Document ID:** IMPL-FREEZE-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | **Freeze date: 2026-06-11**
-> **Trạng thái:** FROZEN — đổi bất kỳ mục nào dưới đây = thay đổi hợp đồng, phải theo §7.
+> **Trạng thái:** SUPERSEDED — historical IOP v1.1 freeze; ADR-010 and `shared/iop_protocol.h` v2.0 are the current contract.
 > **Đối tượng đọc:** mọi dev trước khi viết dòng code đầu tiên.
+
+> ⚠️ Do not implement the v1.1 timing, payload, or FAULT tables below. They are retained only as change-history evidence. Current values are IOP v2, GET_IO 2ms/500Hz, response timeout 3ms, 74-byte IO_RESP payload, and base-SKU `BOARD_CAP_MAP=0x000D`.
 
 ---
 

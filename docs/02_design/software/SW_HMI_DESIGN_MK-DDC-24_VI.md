@@ -1,8 +1,8 @@
-# Service Design — `kinexus-hmi` (SW)
+# Service Design — `mkddc-hmi` (SW)
 ## Local TFT 2.4" Dashboard — JD9852 MIPI DSI / LVGL v9 / dual-input (CTP + 6 nút)
 
-> **Document ID:** DDD-SWSVC-HMI-MK-DDC-24-VI · **Rev** 2.0 | 2026-06-26
-> **Trạng thái:** Approved-for-Rev-B — thiết kế đóng băng; implementation deferred per [`REVA_SCOPE §3`](../../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md)
+> **Document ID:** DDD-SWSVC-HMI-MK-DDC-24-VI · **Rev** 2.3 | 2026-06-30
+> **Trạng thái:** Approved-for-Rev-A — included by the accepted 2026-06-27 [`REVA_SCOPE`](../../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) amendment
 > **Owner:** SW Lead
 > **Trace:** `SW-HMI-001..008`, `HMI-001..022`, `FAT-011`
 > **Phụ thuộc:** [HW_SPEC §11](../../01_specs/HW_SPEC_MK-DDC-24_VI.md) · [SRS §12](../../01_specs/SRS_MK-DDC-24_VI.md) · [SW_REQUIREMENTS §8](../../01_specs/SW_REQUIREMENTS_MK-DDC-24_VI.md) · [KX-DDC24-UX-HMI-001](../../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [KX-DDC24-UC-HMI-001](../../04_uiux/KX-DDC24-UC-HMI-001_VI.md)
@@ -11,7 +11,7 @@
 
 ## 1. Mục tiêu
 
-`kinexus-hmi` là daemon userspace chạy trên SOM (Radxa CM3 / RK3566) cung cấp **dashboard local không phụ thuộc mạng** trên màn hình TFT 2.4" gắn mặt trước tủ điện. Kỹ thuật viên xem giá trị I/O, danh sách alarm và trạng thái hệ thống bằng 6 nút cứng — không cần laptop hay web browser.
+`mkddc-hmi` là daemon userspace chạy trên SOM (Radxa CM3 / RK3566) cung cấp **dashboard local không phụ thuộc mạng** trên màn hình TFT 2.4" gắn mặt trước tủ điện. Kỹ thuật viên xem giá trị I/O, danh sách alarm và trạng thái hệ thống bằng 6 nút cứng — không cần laptop hay web browser.
 
 Dữ liệu lấy trực tiếp từ **shared memory** do `mkddc-iobus` và `mkddc-core` ghi ra — không qua HTTP/REST.
 
@@ -21,12 +21,12 @@ Dữ liệu lấy trực tiếp từ **shared memory** do `mkddc-iobus` và `mkd
 
 | Hạng mục | Rev A | Rev B+ |
 |----------|-------|--------|
-| `kinexus-hmi` daemon | ✗ deferred | ✅ |
-| JD9852 MIPI DSI DRM bring-up | ✗ | ✅ |
-| 6 màn LVGL (Home/IO/Alarm/Com/Sys/Svc) | ✗ | ✅ |
-| 6-nút GPIO navigation | ✗ | ✅ |
-| Alarm ack từ HMI | ✗ | ✅ |
-| Localization VI/EN | ✗ | ✅ |
+| `mkddc-hmi` daemon | ✅ | Harden/extend |
+| JD9852 MIPI DSI DRM bring-up | ✅ scope | Production qualification |
+| 6 màn LVGL (Home/IO/Alarm/Com/Sys/Svc) | ✅ | Extend |
+| 6-nút GPIO navigation | ✅ | Extend |
+| Alarm ack từ HMI | ✅ | Extend |
+| Localization VI/EN | ✅ | Extend |
 
 ---
 
@@ -43,7 +43,7 @@ Dữ liệu lấy trực tiếp từ **shared memory** do `mkddc-iobus` và `mkd
 | SW-HMI-007 | HMI-011..015 | 6 màn: Home / I/O Monitor / Alarm / Communication / System / Service | MUST | T-SW-106 |
 | SW-HMI-008 | HMI-012 | Alarm list ≥ 10 entry, timestamp + severity, 4-state model | MUST | T-SW-107 |
 | — | HMI-003/004 | Home: controller health tiles (no arc gauge, no hardcoded Power/Energy), fault indicator | MUST | T-SW-106 |
-| — | HMI-013 | I/O: 8 UI + 8 DI + 4 AO + 4 DO | MUST | T-SW-106 |
+| — | HMI-013 | Base SKU: 16 UI + 4 AO + 4 DO; optional DI visible only when capability map confirms it | MUST | T-SW-106 |
 | — | HMI-014 | System: FW version, uptime, CPU temp, RAM% | MUST | T-SW-106 |
 | — | HMI-015 | Restart cần xác nhận ENTER giữ 3s | MUST | T-SW-106 |
 | — | HMI-020..022 | Localization EN/VI, font NotoSans có dấu tiếng Việt | MUST | T-SW-106 |
@@ -56,7 +56,7 @@ Dữ liệu lấy trực tiếp từ **shared memory** do `mkddc-iobus` và `mkd
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│                   kinexus-hmid (PID)                       │
+│                    mkddc-hmi (PID)                         │
 │                                                            │
 │  ┌──────────────────────────┐   ┌─────────────────────┐   │
 │  │   LVGL Render Thread     │   │  GPIO Poll Thread   │   │
@@ -325,7 +325,7 @@ Bảng hành động theo phím + màn:
 │ MK-DDC-24-001                          RUNNING           │
 │ ALARM  Active: 0    Unacked: 0    Critical: 0            │
 │ HEALTH CPU:18%  RAM:312/2048MB  Temp:52.3°C  NORMAL      │
-│ I/O    UI:8OK/0BAD  DI:8OK  AO:4OK  DO:4OK/0STALE       │
+│ I/O    UI:16OK/0BAD  DI:N/A  AO:4OK  DO:4OK/0STALE      │
 │ COMM   ETH:OK  BACnet:OK (12s)  Modbus:OK  DISABLED      │
 │ CONFIG Profile:GENERIC_DDC  Rev:24  Checksum:OK           │
 └───────────────────────────────────────────────────────────┘
@@ -342,7 +342,7 @@ Bảng hành động theo phím + màn:
 │ UI1    UI1    UI    23.5    °C    GOOD      120ms       │
 │ UI2    UI2    UI    7.8     V     GOOD      120ms       │
 │ UI4    UI4    UI    ---     ---   BAD       2.3s        │
-│ DI1 ●  DI2 ○  DI3 ●  DI4 ○  DI5 ○  DI6 ○  (cuộn)    │
+│ UI9    UI9    UI    5.0     V     GOOD      120ms       │
 │ AO1: 50% GOOD  AO2: 4mA GOOD  DO1: ON  DO2: OFF        │
 │ Filter: ALL / BAD / STALE              [Page 1/3]       │
 └─────────────────────────────────────────────────────────┘
@@ -414,7 +414,7 @@ Bảng hành động theo phím + màn:
 │ ACCESS: PIN REQUIRED   Service SW: OFF                  │
 │                                                         │
 │ PROJECT: MK-DDC24-DEMO   Profile: GENERIC_DDC   Rev:24 │
-│ POINT DB: 24 points (UI:8 DI:8 AO:4 DO:4)              │
+│ POINT DB: 24 points (UI:16 DI:0 AO:4 DO:4)             │
 │ SAFE STATE: PER_POINT (per point_db safe_state field)   │
 │                                                         │
 │ [ Reload Config ]     LOCKED                            │
@@ -623,7 +623,7 @@ static const char *STR_VI[] = {
 
 Font: `lv_font_noto_sans_24` compile từ NotoSansCJK — cover Latin + tiếng Việt có dấu + °%/·.
 
-**Reload không reboot:** `mkddc-web` ghi `/etc/mkddc/hmi.conf` → gửi `SIGHUP` → `kinexus-hmid` reload config → redraw toàn bộ label.
+**Reload không reboot:** `mkddc-web` ghi `/etc/mkddc/hmi.conf` → gửi `SIGHUP` → `mkddc-hmi` reload config → redraw toàn bộ label.
 
 ---
 
@@ -660,9 +660,9 @@ services/hmi/
 cmake_minimum_required(VERSION 3.20)
 project(mkddc-hmi C)
 
-option(MKDDC_ENABLE_HMI "Build kinexus-hmi (Rev B feature)" OFF)
+option(MKDDC_ENABLE_HMI "Build mkddc-hmi local display service" OFF)
 if(NOT MKDDC_ENABLE_HMI)
-    message(STATUS "HMI: disabled (Rev B+ deferred)")
+    message(STATUS "HMI: disabled by build option")
     return()
 endif()
 
@@ -692,13 +692,13 @@ target_compile_definitions(mkddc-hmi PRIVATE
     LV_VER_RES_MAX=240
     LV_MEM_SIZE=262144)     /* 256 KB LVGL heap */
 
-install(TARGETS mkddc-hmi DESTINATION sbin RENAME kinexus-hmid)
+install(TARGETS mkddc-hmi DESTINATION sbin)
 ```
 
 ### 11.3 systemd Unit
 
 ```ini
-# /etc/systemd/system/kinexus-hmi.service
+# /etc/systemd/system/mkddc-hmi.service
 [Unit]
 Description=MK-DDC-24 Local HMI Dashboard (TFT 2.4")
 After=mkddc-iobus.service mkddc-core.service
@@ -706,7 +706,7 @@ Requires=mkddc-iobus.service
 
 [Service]
 Type=simple
-ExecStart=/usr/sbin/kinexus-hmid
+ExecStart=/usr/sbin/mkddc-hmi
 Restart=on-failure
 RestartSec=5
 User=root
@@ -770,3 +770,4 @@ WantedBy=multi-user.target
 | 2.0 | 2026-06-26 | SW Lead | Redesign toàn diện: architecture 2-thread, seqlock pattern, GPIO poll driver với debounce, widget inventory đầy đủ, alarm ring buffer + ack protocol, screen saver, localization table, build CMake, memory budget, test plan 8 case, open issues |
 | 2.1 | 2026-06-26 | SW Lead | Sửa erratum giao tiếp màn hình: SPI/ILI9341 → MIPI DSI/JD9852 (KD024QVFIA073-02-C021B); thêm CTP FT5436 I2C; backlight → LED driver IC; LVGL display driver fbdev → DRM/KMS; thêm dual-input (touch primary + GPIO button fallback) |
 | 2.2 | 2026-06-26 | SW Lead | Cập nhật theo UC Rev 2.1: 5→6 màn (thêm SCR_SERVICE); bỏ arc gauge → text tile trên SCR_HOME; alarm 4-state model (ACTIVE_UNACK/ACK, CLEARED_UNACK/ACK); BACnet status kỹ thuật (không "Kết nối", có Last Request age); safe state per-point (không hardcode); thêm I/O quality+age; restart chuyển sang SCR_SERVICE với PIN/switch lock; no-hardcode tên ứng dụng |
+| 2.3 | 2026-06-30 | SW Lead/QA | Aligned local-HMI scope and I/O inventory with REVA amendment and ADR-010. |
