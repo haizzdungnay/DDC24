@@ -212,7 +212,7 @@ float ui_to_eng(int32_t raw_s32, SensorType t, kx_quality_t* q_out, kx_reliabili
     case SensorType::NTC10K:
     case SensorType::NTC20K: {
         const double r_nom = (t == SensorType::NTC10K) ? 10000.0 : 20000.0;
-        const double temp = ntc_resolve_temp(r_from_raw(raw_s32, r_nom));
+        const double temp = ntc_resolve_temp(ntc_resistance_from_adc(adc_volts(raw_s32), r_nom), r_nom);
         if (std::isnan(temp) || temp < -30.0 || temp > 70.0) {
             *q_out = KX_Q_BAD;
             *r_out = (temp > 70.0) ? KX_REL_OVER_RANGE : KX_REL_UNDER_RANGE;
