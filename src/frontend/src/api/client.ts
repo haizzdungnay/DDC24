@@ -355,9 +355,10 @@ function signalTypeFromIo(item: IoUiConfig): AiSignalType {
   return 0
 }
 
-function signalTypeToIoType(signalType: AiSignalType): IoUiConfig['type'] {
+function signalTypeToIoType(config: Pick<AiInputConfig, 'signalType' | 'analogCurrent'>): IoUiConfig['type'] {
+  const signalType = config.signalType
   if (signalType === 1) return '0-10V'
-  if (signalType === 2) return '2-10V'
+  if (signalType === 2) return config.analogCurrent ? '4-20mA' : '2-10V'
   if (signalType === 3) return 'NTC10k'
   if (signalType === 4 || signalType === 5) return 'dry'
   if (signalType === 6) return 'potentiometer'
@@ -386,6 +387,7 @@ function defaultAiConfig(channel: number): AiInputConfig {
     channel,
     label: aiNode(channel),
     signalType: 0,
+    analogCurrent: false,
     displayMin: 0,
     displayMax: 100,
     rangeMultiplier: 0,
@@ -405,6 +407,7 @@ function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
     channel,
     label: stringFrom(item.name) ?? aiNode(channel),
     signalType,
+    analogCurrent: item.type === '4-20mA',
     displayMin: numberFrom(item.scale_lo) ?? 0,
     displayMax: numberFrom(item.scale_hi) ?? 100,
     rangeMultiplier: numberFrom(item.range_mult) ?? 0,
@@ -420,7 +423,7 @@ function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
 function aiConfigToIo(config: AiInputConfig): IoUiConfig {
   const item: IoUiConfig = {
     ch: config.channel,
-    type: signalTypeToIoType(config.signalType),
+    type: signalTypeToIoType(config),
     name: config.label,
     note: config.note,
     enabled: config.enabled,

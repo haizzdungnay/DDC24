@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.21 | 2026-06-27 (HMI-001..012 source status + automated evidence; hardware gates và 3 contract gaps ghi rõ, chưa đóng DoD giả)
+> **Phiên bản:** 1.22 | 2026-07-01 (Port UI raw live-data pipeline via SHM v3 onto updated docs baseline) · 1.21 | 2026-06-27 (HMI-001..012 source status + automated evidence; hardware gates và 3 contract gaps ghi rõ, chưa đóng DoD giả)
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -276,6 +276,34 @@ Test: test_iop_parser (74B layout), test_io_scaling (int32 input), test_iop_clie
 Done khi: all tests pass; fake_mcu HANDSHAKE_RESP = 8B with IOP_BOARD_CAP_REV_A; IoSnapshot 16-channel
 Phụ thuộc: IOB-006
 Trạng thái: ĐÃ làm 2026-06-25 — IOP v2 protocol implemented; ADR-010 Accepted; 05_IOP_UART_IMPLEMENTATION_GUIDE Rev 2.0 updated.
+```
+
+```
+Task ID: IOB-007
+Tên: UI raw live data SHM v3
+Owner: Dev SOM + Dev Web | Phase: 3/5 | Module: iobus/io_cache, web core_client, FE Inputs Summary
+File: shared/mkddc_shm.h, services/iobus/io/*, web/backend/core_client.go, src/frontend/src/pages/InputsPage.tsx
+Input: ADR-011 — raw electrical value must come from iobus raw ADC path, not FE reconstruction
+Output: `kx_io_shm.ui_raw[16]` + `ui_raw_unit[16][8]`; REST/WS points expose `raw`/`rawUnit`; FE shows Raw V/mA and dry-contact ON/OFF
+Test: test_io_scaling raw cases; go test ./...; npm run build; smoke `/eng/inputs` Summary
+Done khi: analog UI shows engineering Value + Raw V/mA; dry-contact hides raw and numeric min/max/avg
+Phụ thuộc: IOB-006-V2, WEB-003
+Trạng thái: ĐÃ làm 2026-06-30 — ADR-011 + SHM v3 contract, iobus raw writer, web `raw`/`rawUnit`, FE Raw card + dry-contact boolean handling. Verification: `go build ./...`, `go test ./...`, `npm run build` pass; C++ CMake tests blocked locally because `cmake`/`g++`/`cl` unavailable.
+```
+
+```
+Task ID: IOB-008
+Tên: Reconcile UI raw/engineering scaling theo HW Rev A
+Owner: Dev SOM | Phase: 3 | Module: iobus/io_scaling
+File: services/iobus/io/io_scaling.cpp, services/iobus/io/io_scaling.hpp,
+      services/iobus/io/io_types.hpp, services/iobus/config/iobus_config.cpp,
+      services/iobus/tests/test_io_scaling.cpp, services/iobus/tests/test_iobus_config.cpp
+Input: IO_UI_CIRCUIT §5.1/§5.2, BOM-UI-16CH 49.9R shunt, ADS131M08 VREF=2.44V
+Output: UI voltage/current scaling uses physical ADC transfer; per-channel cal_gain/cal_offset hook exists; no SHM/IOP/AO contract change
+Test: test_io_scaling: 10V, 2-10V under-range, 4/20mA, loop fault thresholds, cal identity/offset; ctest iobus PASS
+Done khi: raw V/mA and engineering match Rev A hardware formulas and default calibration remains identity
+Phụ thuộc: IOB-007
+Trạng thái: ĐÃ làm 2026-06-30 — HW scaling reconcile + cal hook; Orange Pi build pass, full ctest 148/148 with 2 IoCache skips due live SHM, `ctest -R IoScaling` 19/19 pass.
 ```
 
 ---

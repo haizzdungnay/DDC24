@@ -107,12 +107,16 @@ export function normalizePoint(raw: Record<string, unknown>): Point {
   const kind = pointKind(raw, rawId, channel)
   const id = pointId(raw, kind, channel)
   const value = pointValue(raw)
+  const rawValue = numberFrom(raw.raw)
+  const rawUnit = raw.rawUnit ?? raw.raw_unit
   return {
     id,
     name: String(raw.name ?? raw.label ?? id),
     kind,
     value,
     unit: raw.unit ? String(raw.unit) : undefined,
+    ...(rawValue !== undefined ? { raw: rawValue } : {}),
+    ...(rawUnit ? { rawUnit: String(rawUnit) } : {}),
     quality: pointQuality(raw),
     source: String(raw.source ?? 'Core'),
     priority: raw.priority ? String(raw.priority) : raw.active_source ? String(raw.active_source) : undefined,

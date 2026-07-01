@@ -115,17 +115,19 @@ type ChangePasswordRequest struct {
 }
 
 type PointDTO struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Kind      string `json:"kind"`
-	Value     any    `json:"value"`
-	Unit      string `json:"unit,omitempty"`
-	Quality   string `json:"quality"`
-	Source    string `json:"source"`
-	Priority  string `json:"priority,omitempty"`
-	UpdatedAt string `json:"updatedAt"`
-	Fault     bool   `json:"fault,omitempty"`
-	Forced    bool   `json:"forced,omitempty"`
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`
+	Value     any      `json:"value"`
+	Unit      string   `json:"unit,omitempty"`
+	Raw       *float32 `json:"raw,omitempty"`
+	RawUnit   string   `json:"rawUnit,omitempty"`
+	Quality   string   `json:"quality"`
+	Source    string   `json:"source"`
+	Priority  string   `json:"priority,omitempty"`
+	UpdatedAt string   `json:"updatedAt"`
+	Fault     bool     `json:"fault,omitempty"`
+	Forced    bool     `json:"forced,omitempty"`
 }
 
 // AlarmDTO mirrors FE Alarm (types.ts).

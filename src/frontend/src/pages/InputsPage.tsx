@@ -10,7 +10,7 @@ import { TrendChart } from '../components/TrendChart'
 import { getDemoPoints } from '../demo/simulator'
 import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
-import type { AiInputConfig, AiSignalType, Point, TrendSample } from '../types'
+import { isDigitalContact, type AiInputConfig, type AiSignalType, type Point, type TrendSample } from '../types'
 import { cn, formatValue, isVisibleUniversalInput, pointNumber, uiNode } from '../utils'
 
 type ViewMode = 'summary' | 'wizard' | 'advanced'
@@ -65,7 +65,8 @@ export function InputsPage() {
     setConfigs((current) => current.map((config) => {
       if (config.channel !== channel) return config
       const next = { ...config, ...patch }
-      return next.signalType === 0 ? { ...next, unit: 0, mathFunction: 0 } : next
+      const normalized = next.signalType === 2 ? next : { ...next, analogCurrent: false }
+      return normalized.signalType === 0 ? { ...normalized, unit: 0, mathFunction: 0 } : normalized
     }))
   }
 
@@ -212,14 +213,15 @@ function AiSummary({
   onSave: (nextConfigs: AiInputConfig[]) => void
   saving: boolean
 }) {
-  const { pick } = useI18n()
+  const { pick, t } = useI18n()
   const livePoint = findAiPoint(points, config.channel)
   const demoPoint = livePoint ? undefined : findAiPoint(getDemoPoints(), config.channel)
   const point = livePoint ?? demoPoint
   const pointId = point?.id ?? aiNode(config.channel)
   const displayPointId = aiNode(config.channel)
   const { data, reset } = useAiLiveTrend(pointId, point)
-  const values = data.map((sample) => sample.raw)
+  const booleanInput = isDigitalContact(config.signalType) || typeof point?.value === 'boolean'
+  const values = booleanInput ? [] : data.map((sample) => sample.raw)
   const stats = values.length > 0
     ? {
         min: Math.min(...values),
@@ -228,6 +230,9 @@ function AiSummary({
       }
     : null
   const unit = point?.unit
+  const rawUnit = String(point?.rawUnit ?? '').toLowerCase()
+  const rawVolts = !booleanInput && typeof point?.raw === 'number' && rawUnit === 'v' ? formatStat(point.raw) : '--'
+  const rawMilliamps = !booleanInput && typeof point?.raw === 'number' && rawUnit === 'ma' ? formatStat(point.raw) : '--'
 
   function saveNote() {
     const nextConfigs = configs.map((item) => item.channel === config.channel ? { ...item, note: config.note } : item)
@@ -243,7 +248,13 @@ function AiSummary({
             <Button size="sm" onClick={() => reset()}>{pick('Đặt lại', 'Reset')}</Button>
           </div>
           <dl className="grid gap-3 sm:grid-cols-2">
-            <LiveDataItem label={pick('Giá trị', 'Value')} value={point ? formatValue(point.value, unit) : '--'} />
+            <LiveDataItem label={pick('Giá trị', 'Value')} value={point ? formatLiveValue(point, unit, booleanInput) : '--'} />
+            {!booleanInput && (
+              <>
+                <LiveDataItem label={t('rawVolts')} value={rawVolts} />
+                <LiveDataItem label={t('rawMilliamps')} value={rawMilliamps} />
+              </>
+            )}
             <LiveDataItem label={pick('Nhỏ nhất', 'Minimum')} value={stats ? formatStat(stats.min, unit) : '--'} />
             <LiveDataItem label={pick('Lớn nhất', 'Maximum')} value={stats ? formatStat(stats.max, unit) : '--'} />
             <LiveDataItem label={pick('Trung bình', 'Average')} value={stats ? formatStat(stats.avg, unit) : '--'} />
@@ -333,6 +344,11 @@ function formatStat(value: number, unit?: string): string {
   return `${fixed}${unit ? ` ${unit}` : ''}`
 }
 
+function formatLiveValue(point: Point, unit: string | undefined, booleanInput: boolean): string {
+  if (booleanInput) return formatValue(pointNumber(point) > 0.5, undefined)
+  return formatValue(point.value, unit)
+}
+
 function ChannelBasics({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
   const { t } = useI18n()
   return (
@@ -418,7 +434,7 @@ function WizardPanel({
       </div>
 
       <div className="min-h-44">
-        {step === 'signal' && <SignalTypeField value={config.signalType} onChange={(signalType) => onChange({ signalType })} />}
+        {step === 'signal' && <SignalTypeField config={config} onChange={onChange} />}
         {step === 'min' && <NumberField label={t('displayMinLabel')} value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} />}
         {step === 'max' && <NumberField label={t('displayMaxLabel')} value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} />}
         {step === 'range' && <RangeMultiplierField value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} />}
@@ -443,7 +459,8 @@ function WizardPanel({
 function AdvancedPanel({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
   const { t } = useI18n()
   const rows = [
-    { register: 'u0', name: t('signalTypeLabel'), wired: true, control: <SignalTypeSelect value={config.signalType} onChange={(signalType) => onChange({ signalType })} /> },
+    { register: 'u0', name: t('signalTypeLabel'), wired: true, control: <SignalTypeSelect value={config.signalType} onChange={(signalType) => onChange(signalTypePatch(signalType, config.analogCurrent))} /> },
+    ...(config.signalType === 2 ? [{ register: 'u0', name: t('signalModeLabel'), wired: true, control: <AnalogSignalModeSelect value={Boolean(config.analogCurrent)} onChange={(analogCurrent) => onChange({ analogCurrent })} /> }] : []),
     { register: 'u1', name: t('displayMinLabel'), wired: true, control: <SmallNumberInput value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} /> },
     { register: 'u2', name: t('displayMaxLabel'), wired: true, control: <SmallNumberInput value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} /> },
     { register: 'u3', name: t('rangeMultiplierLabel'), wired: true, control: <RangeMultiplierSelect value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} /> },
@@ -462,7 +479,7 @@ function AdvancedPanel({ config, onChange }: { config: AiInputConfig; onChange: 
         <span>Mode</span>
       </div>
       {rows.map((row) => (
-        <div key={row.register} className="grid grid-cols-[90px_minmax(0,1fr)_minmax(160px,240px)_82px] items-center gap-3 border-t border-[var(--c-border)] px-3 py-3 text-sm">
+        <div key={`${row.register}-${row.name}`} className="grid grid-cols-[90px_minmax(0,1fr)_minmax(160px,240px)_82px] items-center gap-3 border-t border-[var(--c-border)] px-3 py-3 text-sm">
           <span className="font-mono text-[var(--c-text-dim)]">{String(config.channel).padStart(2, '0')} {row.register}</span>
           <span className="font-medium text-[var(--c-text)]">{row.name}</span>
           {row.control}
@@ -473,13 +490,24 @@ function AdvancedPanel({ config, onChange }: { config: AiInputConfig; onChange: 
   )
 }
 
-function SignalTypeField({ value, onChange }: { value: AiSignalType; onChange: (value: AiSignalType) => void }) {
+function SignalTypeField({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
   const { t } = useI18n()
   return (
     <div className="space-y-3">
       <FieldHeader label={t('signalTypeLabel')} wired />
-      <SignalTypeSelect value={value} onChange={onChange} />
+      <SignalTypeSelect value={config.signalType} onChange={(signalType) => onChange(signalTypePatch(signalType, config.analogCurrent))} />
+      {config.signalType === 2 && <AnalogSignalModeField value={Boolean(config.analogCurrent)} onChange={(analogCurrent) => onChange({ analogCurrent })} />}
     </div>
+  )
+}
+
+function AnalogSignalModeField({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
+  const { t } = useI18n()
+  return (
+    <label className="block space-y-2">
+      <FieldHeader label={t('signalModeLabel')} wired />
+      <AnalogSignalModeSelect value={value} onChange={onChange} />
+    </label>
   )
 }
 
@@ -527,6 +555,16 @@ function SignalTypeSelect({ value, onChange }: { value: AiSignalType; onChange: 
   return (
     <select className={controlClass()} value={value} onChange={(event) => onChange(Number(event.target.value) as AiSignalType)}>
       {signalOptions.map((option) => <option key={option} value={option}>{signalLabel(option, t)}</option>)}
+    </select>
+  )
+}
+
+function AnalogSignalModeSelect({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
+  const { t } = useI18n()
+  return (
+    <select className={controlClass()} value={value ? 'current' : 'volt'} onChange={(event) => onChange(event.target.value === 'current')}>
+      <option value="volt">{t('signalModeVolt')}</option>
+      <option value="current">{t('signalModeCurrent')}</option>
     </select>
   )
 }
@@ -632,7 +670,7 @@ function wizardStepRegister(step: WizardStep): string {
 }
 
 function wizardStepValue(step: WizardStep, config: AiInputConfig, t: Translate): string {
-  if (step === 'signal') return signalLabel(config.signalType, t)
+  if (step === 'signal') return config.signalType === 2 ? `${signalLabel(config.signalType, t)} / ${config.analogCurrent ? t('signalModeCurrent') : t('signalModeVolt')}` : signalLabel(config.signalType, t)
   if (step === 'min') return String(config.displayMin)
   if (step === 'max') return String(config.displayMax)
   if (step === 'range') return rangeLabel(config.rangeMultiplier, t)
@@ -644,6 +682,10 @@ function wizardStepValue(step: WizardStep, config: AiInputConfig, t: Translate):
 
 function aiNode(channel: number): string {
   return uiNode(channel)
+}
+
+function signalTypePatch(signalType: AiSignalType, analogCurrent?: boolean): Partial<AiInputConfig> {
+  return { signalType, analogCurrent: signalType === 2 ? Boolean(analogCurrent) : false }
 }
 
 function findAiPoint(points: Point[], channel: number): Point | undefined {

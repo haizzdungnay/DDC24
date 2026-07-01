@@ -77,9 +77,16 @@ static void print_text(const kx_io_shm_t* s)
            s->magic, s->seq, (unsigned long long)s->ts_ns, (long long)age_ms);
     printf("iop_status=%s fault_flags=0x%04X [%s] mcu_temp=%.1fC\n",
            status_name(s->iop_status), s->fault_flags, faults, s->mcu_temp_x10 / 10.0);
-    for (int i = 0; i < KX_N_UI; i++)
-        printf("  UI%-2d= %10.3f %-5s %s\n", i + 1, (double)s->ui_value[i],
-               s->ui_unit[i], quality_name(s->ui_quality[i]));
+    for (int i = 0; i < KX_N_UI; i++) {
+        if (s->ui_raw_unit[i][0] != '\0') {
+            printf("  UI%-2d= %10.3f %-5s raw=%8.3f %-3s %s\n", i + 1,
+                   (double)s->ui_value[i], s->ui_unit[i], (double)s->ui_raw[i],
+                   s->ui_raw_unit[i], quality_name(s->ui_quality[i]));
+        } else {
+            printf("  UI%-2d= %10.3f %-5s %s\n", i + 1, (double)s->ui_value[i],
+                   s->ui_unit[i], quality_name(s->ui_quality[i]));
+        }
+    }
     printf("  AO  = sp[%.3f %.3f %.3f %.3f] mode[%u %u %u %u]\n",
            (double)s->ao_setpoint[0], (double)s->ao_setpoint[1],
            (double)s->ao_setpoint[2], (double)s->ao_setpoint[3],
@@ -100,8 +107,9 @@ static void print_json(const kx_io_shm_t* s)
            status_name(s->iop_status), s->fault_flags, s->mcu_temp_x10);
     printf("\"ui\":[");
     for (int i = 0; i < KX_N_UI; i++)
-        printf("%s{\"value\":%.4f,\"quality\":\"%s\",\"unit\":\"%s\"}",
-               i ? "," : "", (double)s->ui_value[i], quality_name(s->ui_quality[i]), s->ui_unit[i]);
+        printf("%s{\"value\":%.4f,\"quality\":\"%s\",\"unit\":\"%s\",\"raw\":%.4f,\"rawUnit\":\"%s\"}",
+               i ? "," : "", (double)s->ui_value[i], quality_name(s->ui_quality[i]),
+               s->ui_unit[i], (double)s->ui_raw[i], s->ui_raw_unit[i]);
     printf("],\"di\":[");
     for (int i = 0; i < KX_N_DI; i++) printf("%s%u", i ? "," : "", s->di_state[i]);
     printf("],\"ao_setpoint\":[");

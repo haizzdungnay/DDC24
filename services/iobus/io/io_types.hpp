@@ -90,6 +90,8 @@ struct UiScaleConfig {
     uint8_t filter_samples = 0;             /* u5 */
     float sensor_cal = 0.0f;                /* u6 */
     uint8_t math_func = 0;                  /* u7 */
+    float cal_gain = 1.0f;                  /* bring-up 2-point calibration */
+    float cal_offset = 0.0f;                /* engineering/raw-electric units */
 };
 
 inline bool operator==(const UiScaleConfig& a, const UiScaleConfig& b)
@@ -98,7 +100,8 @@ inline bool operator==(const UiScaleConfig& a, const UiScaleConfig& b)
            a.scale_lo == b.scale_lo && a.scale_hi == b.scale_hi &&
            a.range_mult == b.range_mult && a.unit == b.unit &&
            a.filter_samples == b.filter_samples && a.sensor_cal == b.sensor_cal &&
-           a.math_func == b.math_func;
+           a.math_func == b.math_func &&
+           a.cal_gain == b.cal_gain && a.cal_offset == b.cal_offset;
 }
 
 inline bool operator!=(const UiScaleConfig& a, const UiScaleConfig& b)
@@ -113,6 +116,7 @@ enum class AoMode : uint8_t { V0_10 = 0, MA4_20 = 1 };
 struct IoSnapshot {
     uint64_t ts_ns = 0;
     float    ui_value[KX_N_UI]   = {};
+    float    ui_raw[KX_N_UI]     = {};
     uint8_t  ui_quality[KX_N_UI] = {KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
                                     KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
                                     KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,

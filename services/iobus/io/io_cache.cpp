@@ -68,8 +68,10 @@ bool IoCache::attach()
         shm_->ts_ns = 0;
         for (int i = 0; i < KX_N_UI; i++) {
             shm_->ui_value[i] = 0.0f;
+            shm_->ui_raw[i] = 0.0f;
             shm_->ui_quality[i] = KX_Q_BAD;
             std::memset(shm_->ui_unit[i], 0, sizeof(shm_->ui_unit[i]));
+            std::memset(shm_->ui_raw_unit[i], 0, sizeof(shm_->ui_raw_unit[i]));
         }
         for (int i = 0; i < KX_N_DI; i++) {
             shm_->di_state[i] = 0;
@@ -110,6 +112,7 @@ void IoCache::write_io(const IoSnapshot& s, const IobusMetrics& m)
     shm_->ts_ns = s.ts_ns;
     for (int i = 0; i < KX_N_UI; i++) {
         shm_->ui_value[i]   = s.ui_value[i];
+        shm_->ui_raw[i]     = s.ui_raw[i];
         shm_->ui_quality[i] = s.ui_quality[i];
     }
     for (int i = 0; i < KX_N_DI; i++) {
@@ -137,13 +140,15 @@ void IoCache::write_ao_mode(const uint8_t mode[KX_N_AO])
     KX_WRITE_END(shm_);
 }
 
-void IoCache::write_ui_units(const char units[KX_N_UI][8])
+void IoCache::write_ui_units(const char units[KX_N_UI][8], const char raw_units[KX_N_UI][8])
 {
     if (!shm_) return;
     KX_WRITE_BEGIN(shm_);
     for (int i = 0; i < KX_N_UI; i++) {
         std::strncpy(shm_->ui_unit[i], units[i], sizeof(shm_->ui_unit[i]) - 1);
         shm_->ui_unit[i][sizeof(shm_->ui_unit[i]) - 1] = '\0';
+        std::strncpy(shm_->ui_raw_unit[i], raw_units[i], sizeof(shm_->ui_raw_unit[i]) - 1);
+        shm_->ui_raw_unit[i][sizeof(shm_->ui_raw_unit[i]) - 1] = '\0';
     }
     KX_WRITE_END(shm_);
 }
