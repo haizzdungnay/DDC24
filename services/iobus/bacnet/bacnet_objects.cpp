@@ -25,12 +25,63 @@ BacnetObjects::BacnetObjects()
     for (int i = 0; i < N_MSV; i++) msv_names_[i] = "MSV" + std::to_string(i+1);
 
     for (int i = 0; i < N_AI; i++) ai_units_[i] = "no-units";
+    for (int i = 0; i < N_AO; i++) ao_unit_str_[i] = "volt";
 }
 
 void BacnetObjects::update_ai_units(const char units[KX_N_UI][8])
 {
     for (int i = 0; i < N_AI; i++)
         ai_units_[i] = units[i];
+}
+
+/* ADR-012: units_str → BACnet Engineering_Units enum integer (ASHRAE 135-2020 Appendix B). */
+static uint16_t units_str_to_bacnet(const std::string& s)
+{
+    if (s == "percent")     return 98;
+    if (s == "volt")        return 5;
+    if (s == "milliampere") return 2;
+    if (s == "degC")        return 62;
+    if (s == "Pa")          return 133;
+    if (s == "RPM")         return 104;
+    if (s == "ppm")         return 96;
+    return 95;  /* no_units */
+}
+
+void BacnetObjects::update_ao_config(const AoChannelConfig ao_channels[KX_N_AO])
+{
+    for (int i = 0; i < N_AO; i++) {
+        ao_names_[i]        = ao_channels[i].name.empty()
+                              ? "AO" + std::to_string(i + 1)
+                              : ao_channels[i].name;
+        ao_unit_str_[i]     = ao_channels[i].units_str;
+        ao_bacnet_units_[i] = units_str_to_bacnet(ao_channels[i].units_str);
+        ao_min_pv_[i]       = ao_channels[i].min_pv;
+        ao_max_pv_[i]       = ao_channels[i].max_pv;
+    }
+}
+
+const std::string& BacnetObjects::ao_unit_str(uint32_t instance) const
+{
+    if (instance < 1 || instance > N_AO) return kEmpty;
+    return ao_unit_str_[instance - 1];
+}
+
+uint16_t BacnetObjects::ao_bacnet_units(uint32_t instance) const
+{
+    if (instance < 1 || instance > N_AO) return 95;
+    return ao_bacnet_units_[instance - 1];
+}
+
+float BacnetObjects::ao_min_pv(uint32_t instance) const
+{
+    if (instance < 1 || instance > N_AO) return 0.0f;
+    return ao_min_pv_[instance - 1];
+}
+
+float BacnetObjects::ao_max_pv(uint32_t instance) const
+{
+    if (instance < 1 || instance > N_AO) return 10.0f;
+    return ao_max_pv_[instance - 1];
 }
 
 void BacnetObjects::init(const BacnetConfig& cfg)
@@ -54,19 +105,21 @@ bool BacnetObjects::read_ai(uint32_t instance, float* value, uint8_t* status_fla
     const int idx = static_cast<int>(instance) - 1;
 
     uint32_t seq1, seq2;
-    float    v;
-    uint8_t  q;
+    float   v;
+    uint8_t kx_rel;
     do {
-        seq1 = shm_read_seq(&shm->seq);
+        seq1   = shm_read_seq(&shm->seq);
         if (seq1 & 1u) continue;
-        v = shm->ai[idx].value;
-        q = shm->ai[idx].quality;
-        seq2 = shm_read_seq(&shm->seq);
+        v      = shm->ai[idx].value;
+        kx_rel = shm->ai[idx].reliability;
+        seq2   = shm_read_seq(&shm->seq);
     } while (seq1 != seq2 || (seq1 & 1u));
 
     *value = v;
-    const kx_quality_t kq = static_cast<kx_quality_t>(q);
-    const BacnetReliability rel = compute_reliability(kq, 0, idx);
+    /* ADR-011: use per-channel reliability from plc_shm (set by core from io_shm.ui_reliability[]).
+     * No longer re-compute from quality with fault_flags=0 (that path lost the fault cause). */
+    const BacnetReliability rel = kx_reliability_to_bacnet(
+        static_cast<kx_reliability_t>(kx_rel));
     *reliability = static_cast<uint8_t>(rel);
     const bool oos = ai_oos_[idx];
     const BacnetStatusFlags sf = compute_status_flags(rel, false, false, oos);

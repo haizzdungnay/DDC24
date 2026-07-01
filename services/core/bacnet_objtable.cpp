@@ -102,13 +102,17 @@ static void fill_point(kx_point_t* dst, const Point& p,
 
 void BacnetObjTable::publish(const PointTable& table,
                               uint32_t scan_count, uint32_t scan_overrun,
-                              uint16_t fault_flags, uint8_t /*iop_status*/)
+                              uint16_t fault_flags, uint8_t /*iop_status*/,
+                              const uint8_t ui_reliability[KX_N_UI])
 {
     if (!shm_) return;
     KX_WRITE_BEGIN(shm_);
     shm_->ts_ns = now_ns();
-    for (int i = 0; i < KX_N_UI; i++)
-        fill_point(&shm_->ai[i],  table.get({PointKind::AI,  i}), fault_flags, i);
+    for (int i = 0; i < KX_N_UI; i++) {
+        fill_point(&shm_->ai[i], table.get({PointKind::AI, i}), fault_flags, i);
+        /* ADR-011: override AI reliability with per-channel value from io_shm.ui_reliability[] */
+        shm_->ai[i].reliability = ui_reliability[i];
+    }
     for (int i = 0; i < KX_N_DI; i++)
         fill_point(&shm_->bi[i],  table.get({PointKind::BI,  i}), 0, 0);
     for (int i = 0; i < KX_N_AO; i++)

@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 1.4 | 2026-06-30 (§3: `io_config.conf` quyết định raw live-data unit V/mA qua ADR-011) · 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.4 | 2026-06-30 (§3: ao[] mở rộng per ADR-012 — thêm name/units/min_pv/max_pv; §3.1: bảng sensor_type→BACnet Units enum đầy đủ per ADR-011) · 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -89,7 +89,52 @@
 - `ui[].filter_samples` không bắt buộc, kiểu int 0..100, số mẫu lọc EasySet u5.
 - `ui[].sensor_cal` không bắt buộc, kiểu number -12.7..12.8, hiệu chuẩn cảm biến EasySet u6.
 - `ui[].math_func` không bắt buộc, kiểu int 0..3, hàm toán EasySet u7.
+**AO fields (2026-06-30, ADR-012 — BACnet AO object alignment):**
+
+```json
+"ao": [
+  {"ch":1, "name":"CHILLED WATER VALVE", "mode":"0-10V",  "units":"percent", "min_pv":0.0, "max_pv":100.0},
+  {"ch":2, "name":"SUPPLY FAN SPEED",    "mode":"4-20mA", "units":"percent", "min_pv":0.0, "max_pv":100.0},
+  {"ch":3, "mode":"0-10V"},
+  {"ch":4, "mode":"4-20mA"}
+]
+```
+
+| Field | Required | Default | BACnet property | Notes |
+|-------|:--------:|---------|----------------|-------|
+| `ch` | ✅ | — | Object_Identifier (instance) | 1..4 |
+| `mode` | ✅ | `"0-10V"` | — | `"0-10V"` \| `"4-20mA"` → SET_AO_CFG |
+| `name` | ✗ | `"AO{ch}"` | Object_Name | ≤64 chars |
+| `units` | ✗ | auto (từ mode) | Units | xem bảng sensor_type→Units §3.1 bên dưới |
+| `min_pv` | ✗ | `0.0` | Min_Pres_Value | engineering unit, ≤ max_pv |
+| `max_pv` | ✗ | `10.0` (V) / `20.0` (mA) | Max_Pres_Value | engineering unit |
+
 - `ao.mode` ∈ `0-10V|4-20mA` → **mkddc-iobus** gửi `SET_AO_CFG` xuống MCU (mode đã áp dụng ghi vào `kx_io_shm.ao_mode[]`).
+- `ao.units` absent → auto-derive: `"0-10V"` → `volts` (BACnet 5), `"4-20mA"` → `milliamperes` (BACnet 2).
+- `ao.name`/`units`/`min_pv`/`max_pv` đọc bởi **mkddc-core** (`bacnet_objtable.cpp`) để populate BACnet AO properties.
+- Engineering conversion: `raw_u16 = clamp((eng - min_pv)/(max_pv - min_pv), 0, 1) × 65535`.
+
+### 3.1 Bảng `sensor_type` → BACnet Units (cho UI/AI Reliability và AO config)
+
+| UI `type` / AO `units` string | BACnet Units label | BACnet enum |
+|-------------------------------|-------------------|:-----------:|
+| `NTC10k`, `NTC20k`, `PT100`, `PT1000` | `degrees_celsius` | 62 |
+| `0-10V`, `"volt"` | `volts` | 5 |
+| `2-10V` | `volts` | 5 |
+| `4-20mA`, `"milliampere"` | `milliamperes` | 2 |
+| `potentiometer` | `percent` | 98 |
+| `light` | `watts_per_square_meter` | 182 |
+| `pulse` | `pulses` | 195 |
+| `dry` | `no_units` | 95 |
+| `none` / `UNKNOWN` | `no_units` | 95 (+ `CONFIGURATION_ERROR` Reliability) |
+| `"percent"` | `percent` | 98 |
+| `"degC"` | `degrees_celsius` | 62 |
+| `"Pa"` | `pascals` | 133 |
+| `"RPM"` | `revolutions_per_minute` | 104 |
+| `"ppm"` | `parts_per_million` | 96 |
+| `"no_units"` | `no_units` | 95 |
+
+> **Mapping authority:** ADR-011 (Reliability), ADR-012 (AO config). Implementation: `bacnet_objtable.cpp`.
 
 > 2026-06-29 implementation note: `mkddc-iobus` consumes EasySet UI `u0..u7` from `io_config.conf`: `type`, `scale_lo/scale_hi`, `range_mult`, `unit`, `filter_samples`, `sensor_cal`, and `math_func`. `ui[].name/note` stay web metadata.
 

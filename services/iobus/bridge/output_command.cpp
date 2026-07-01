@@ -12,6 +12,12 @@ void OutputCommand::set_ao_modes(const AoMode modes[KX_N_AO])
         ao_mode_[i] = modes[i];
 }
 
+void OutputCommand::set_ao_channels(const AoChannelConfig channels[KX_N_AO])
+{
+    for (int i = 0; i < KX_N_AO; i++)
+        ao_channels_[i] = channels[i];
+}
+
 void OutputCommand::reset_last_sent()
 {
     has_sent_ao_ = false;
@@ -87,7 +93,10 @@ bool OutputCommand::process(const float ao_setpoint[KX_N_AO], const uint8_t do_c
     uint16_t raw[KX_N_AO];
     bool ao_changed = !has_sent_ao_;
     for (int i = 0; i < KX_N_AO; i++) {
-        raw[i] = ao_eng_to_raw(ao_setpoint[i], ao_mode_[i]);
+        raw[i] = ao_eng_to_raw_phys(ao_setpoint[i],
+                                     ao_channels_[i].min_pv,
+                                     ao_channels_[i].max_pv,
+                                     ao_mode_[i]);
         if (has_sent_ao_ && raw[i] != last_sent_ao_[i])
             ao_changed = true;
     }

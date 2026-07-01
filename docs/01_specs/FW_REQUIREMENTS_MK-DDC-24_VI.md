@@ -138,6 +138,8 @@ Tài liệu này định nghĩa requirements cho **MCU firmware** chạy trên S
 | FW-IOP-005 | PHẢI trả NACK cho frame CRC fail hoặc unknown CMD | MUST | IOP-FW-008 |
 | FW-IOP-006 | PHẢI implement HANDSHAKE và version check | MUST | IOP-FW-009 |
 | FW-IOP-007 | MCU-side IOP watchdog: safe state nếu không nhận GET_IO trong 200ms | MUST | IOP-FW-006 |
+| FW-IOP-008 | IO_RESP PHẢI bao gồm `fault_flags` byte: bit0=ADC1_FAULT, bit1=ADC2_FAULT, bit7=WATCHDOG_RESET | MUST | ADR-011 |
+| FW-IOP-009 | `fault_flags.ADC1_FAULT` hoặc `ADC2_FAULT` → SOM set `KX_REL_COMMUNICATION_FAILURE` cho các channel trên ADC đó | MUST | ADR-011 |
 
 ---
 
@@ -182,5 +184,5 @@ Tài liệu này định nghĩa requirements cho **MCU firmware** chạy trên S
 ---
 
 **Document ID:** FW-REQ-MK-DDC-24-VI  
-**Revision:** 2.0 | 2026-06-30
+**Revision:** 2.1 | 2026-06-30 (§7: FW-IOP-008..009 — IO_RESP fault_flags byte + ADC fault → COMMUNICATION_FAILURE trigger per ADR-011) · 2.0 | 2026-06-30
 **Review required:** Firmware Lead, System Architect

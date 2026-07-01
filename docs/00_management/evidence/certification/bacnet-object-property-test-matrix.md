@@ -1,6 +1,6 @@
 # BACnet Object/Property BTL Test Matrix
 
-> **Document ID:** EVD-BTL-MATRIX-MK-DDC-24-VI · **Rev** 1.0 | 2026-06-02
+> **Document ID:** EVD-BTL-MATRIX-MK-DDC-24-VI · **Rev** 1.1 | 2026-06-30 (§2.10: Reliability 8 values per ADR-011; §3.2/3.8/3.13/3.14: AO Name+Units+Min+Max required per ADR-012; §14.1: R-01..R-11 Reliability test cases; §14.2: AO-01..AO-11 AO property test cases) · 1.0 | 2026-06-02
 > **Objective:** Map all BACnet objects/properties for BTL pre-test (B-ASC profile)
 > **Parent:** IOT-5466 · **Input:** [PICS](../../../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md), [SW Design](../../../02_design/software/SW_BACNET_DESIGN_MK-DDC-24_VI.md)
 > **BTL Target Package:** v26.1-v2 · **Profile:** B-ASC (ASHRAE 135-2020)
@@ -61,7 +61,7 @@
 | 2.7 | Out_Of_Service | M | ✅ | — | PICS §4 | writable for test/bypass |
 | 2.8 | Units | M | — | — | PICS §4.1 | per sensor config (°C, V, mA, etc.) |
 | 2.9 | COV_Increment | O | ✅ | — | PICS §4 | writable for COV tuning |
-| 2.10 | Reliability | M | — | — | PICS §4.1 | NO_FAULT_DETECTED / OVER_RANGE / UNDER_RANGE / OPEN_LOOP / SHORTED_LOOP |
+| 2.10 | Reliability | M | — | — | PICS §4.1, ADR-011 | 8 values: NO_FAULT_DETECTED / OVER_RANGE / UNDER_RANGE / OPEN_LOOP / SHORTED_LOOP / UNRELIABLE_OTHER / **CONFIGURATION_ERROR** / **COMMUNICATION_FAILURE** |
 | 2.11 | Update_Interval | O | — | — | | measurement sampling rate |
 | 2.12 | Min_Pres_Value | O | — | — | | sensor min range |
 | 2.13 | Max_Pres_Value | O | — | — | | sensor max range |
@@ -75,19 +75,19 @@
 | # | Property | BTL Req | Writable | COV | Source | Notes |
 |---|----------|:-------:|:--------:|:---:|--------|-------|
 | 3.1 | Object_Identifier | M | — | — | PICS §4 | instance 1–4 |
-| 3.2 | Object_Name | M | ✅ | — | PICS §4.3 | default "AO1".."AO4" |
+| 3.2 | Object_Name | M | ✅ | — | PICS §4.3, ADR-012 | từ `ao[].name` trong io_config.conf; default "AO1".."AO4" |
 | 3.3 | Object_Type | M | — | — | | always ANALOG_OUTPUT = 1 |
-| 3.4 | Present_Value | M | ✅ | ✅ | PICS §4 | commandable via Priority_Array |
+| 3.4 | Present_Value | M | ✅ | ✅ | PICS §4 | commandable via Priority_Array; engineering unit per min_pv/max_pv |
 | 3.5 | Status_Flags | M | — | — | | |
 | 3.6 | Event_State | M | — | — | | |
 | 3.7 | Out_Of_Service | M | ✅ | — | | |
-| 3.8 | Units | M | — | — | | per output type (V=5, mA=2, etc.) |
+| 3.8 | Units | M | — | — | ADR-012 | từ `ao[].units`; auto: volts(5) khi 0-10V, milliamperes(2) khi 4-20mA |
 | 3.9 | Priority_Array | M | — | — | PICS §4.2 | 16 levels |
-| 3.10 | Relinquish_Default | M | — | — | PICS §4.2 | fallback when all priorities null |
+| 3.10 | Relinquish_Default | M | — | — | PICS §4.2, io_safe_state.conf | fallback khi tất cả priority null; load từ io_safe_state.conf |
 | 3.11 | COV_Increment | O | ✅ | — | | |
-| 3.12 | Reliability | M | — | — | | |
-| 3.13 | Min_Pres_Value | O | — | — | | output range |
-| 3.14 | Max_Pres_Value | O | — | — | | output range |
+| 3.12 | Reliability | M | — | — | ADR-011 | NO_FAULT_DETECTED / COMMUNICATION_FAILURE (khi IOP fault) |
+| 3.13 | Min_Pres_Value | M | — | — | ADR-012 | từ `ao[].min_pv`; default 0.0; **M per ASHRAE 135-2020 §12.4** |
+| 3.14 | Max_Pres_Value | M | — | — | ADR-012 | từ `ao[].max_pv`; default 10.0V/20.0mA; **M per ASHRAE 135-2020 §12.4** |
 | 3.15 | Resolution | O | — | — | | |
 | 3.16 | Profile_Name | O | — | — | | |
 
@@ -326,6 +326,44 @@ Base SKU (`BOARD_CAP_MAP=0x000D`) has no physical industrial DI and shall not be
 | DM-DOB-B (Dynamic Object Binding) | All | **Medium** | Who-Has/I-Have |
 | DM-TS-B (TimeSync) | Device | **Medium** | time synchronisation |
 | DM-RD-B (ReinitializeDevice) | Device | **Medium** | warm/cold restart |
+
+---
+
+## 14.1 Reliability Fault Injection Test Cases (AI — 16 instances, per ADR-011)
+
+> **Gate:** tất cả 8 Reliability values phải pass BTL test tool trước khi close BAC-008.
+
+| # | Test Case | Input / Trigger | Expected BACnet Reliability | Expected Status_Flags.FAULT | Source |
+|---|-----------|-----------------|----------------------------|:---------------------------:|----|
+| R-01 | Normal — no fault | UI channel type≠none, signal in range, IOP OK | NO_FAULT_DETECTED (0) | 0 | ADR-011 |
+| R-02 | CONFIGURATION_ERROR | UI channel `type=none` | CONFIGURATION_ERROR (8) | 1 | ADR-011 |
+| R-03 | OVER_RANGE — voltage | 0-10V channel, signal > 11.0V | OVER_RANGE (2) | 1 | ADR-011 |
+| R-04 | UNDER_RANGE — 2-10V | 2-10V channel, signal < 1.8V | UNDER_RANGE (3) | 1 | ADR-011 |
+| R-05 | OPEN_LOOP — 4-20mA | 4-20mA channel, loop current < 3.5mA | OPEN_LOOP (4) | 1 | ADR-011 |
+| R-06 | SHORTED_LOOP — 4-20mA | 4-20mA channel, loop current > 21.0mA | SHORTED_LOOP (5) | 1 | ADR-011 |
+| R-07 | OVER_RANGE — NTC/PT | NTC10k/PT100, temperature calc > physical max | OVER_RANGE (2) | 1 | ADR-011 |
+| R-08 | COMMUNICATION_FAILURE — IOP | IOP no response > 5s (simulated by stopping MCU serial) | COMMUNICATION_FAILURE (12) | 1 | ADR-011 |
+| R-09 | UNRELIABLE_OTHER — stale | KX_Q_UNCERTAIN: data stale < 4 scan (simulated) | UNRELIABLE_OTHER (7) | 1 | ADR-011 |
+| R-10 | Recovery R-02 → normal | Reconfigure channel to valid type → poll cycle | NO_FAULT_DETECTED (0) | 0 | ADR-011 |
+| R-11 | Recovery R-08 → normal | IOP reconnect > 5s after fault | NO_FAULT_DETECTED (0) | 0 | ADR-011 |
+
+## 14.2 AO Required Properties Test Cases (per ADR-012)
+
+> **Gate:** AO Units/Min_Pres_Value/Max_Pres_Value phải populated correctly trước BTL.
+
+| # | Test Case | Config input | Expected BACnet AO property | Expected value |
+|---|-----------|-------------|----------------------------|---------------|
+| AO-01 | Object_Name từ config | `ao[1].name="CW VALVE"` | Object_Name | "CW VALVE" |
+| AO-02 | Object_Name default | `ao[]` absent / no name field | Object_Name | "AO1".."AO4" |
+| AO-03 | Units — explicit | `ao[1].units="percent"` | Units | percent (98) |
+| AO-04 | Units — auto 0-10V | `ao[1].mode="0-10V"`, no units | Units | volts (5) |
+| AO-05 | Units — auto 4-20mA | `ao[2].mode="4-20mA"`, no units | Units | milliamperes (2) |
+| AO-06 | Min_Pres_Value | `ao[1].min_pv=0.0` | Min_Pres_Value | 0.0 |
+| AO-07 | Max_Pres_Value | `ao[1].max_pv=100.0` | Max_Pres_Value | 100.0 |
+| AO-08 | Min default 0-10V | `ao[3].mode="0-10V"`, no min/max | Min_Pres_Value | 0.0 |
+| AO-09 | Max default 0-10V | `ao[3].mode="0-10V"`, no min/max | Max_Pres_Value | 10.0 |
+| AO-10 | Max default 4-20mA | `ao[4].mode="4-20mA"`, no min/max | Max_Pres_Value | 20.0 |
+| AO-11 | Write engineering value | WriteProperty AO1 PV=50.0 (percent mode) | DAC output | 5.0V (50% × 10V) |
 
 ---
 

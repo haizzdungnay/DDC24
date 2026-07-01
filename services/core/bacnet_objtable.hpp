@@ -28,8 +28,13 @@ public:
      * Gọi ở scan step 9 (sau output_writer.write).
      * BAC-004: reliability map từ quality + fault_flags theo SW_BACNET_DESIGN §6.
      */
+    /**
+     * ADR-011 overload: thêm ui_reliability[] để ghi kx_point_t.reliability cho AI
+     * trực tiếp từ io_shm (thay vì re-compute từ quality, mất thông tin fault cause).
+     */
     void publish(const PointTable& table, uint32_t scan_count, uint32_t scan_overrun,
-                 uint16_t fault_flags = 0, uint8_t iop_status = KX_IOP_FAULT);
+                 uint16_t fault_flags, uint8_t iop_status,
+                 const uint8_t ui_reliability[KX_N_UI]);
 
     /**
      * MOD-009: đọc ext snapshot datagram từ fieldbus.sock (SOCK_DGRAM, MSG_DONTWAIT).
@@ -48,9 +53,8 @@ private:
     kx_plc_shm_t* shm_ = nullptr;
 };
 
-/* BAC-008: quality + fault_flags → BACnet Reliability value (kx_point_t.reliability).
- * 0=NO_FAULT, 1=OVER_RANGE, 2=UNDER_RANGE, 3=OPEN_LOOP, 4=SHORT_LOOP, 5=COMM_FAILURE.
- * IOP fault → 5 (comm failure, value stale). */
+/* BAC-008: quality + fault_flags → kx_reliability_t value for non-AI points (BI, AO, BO, AV...).
+ * AI reliability is now set directly from io_shm.ui_reliability[] (ADR-011). */
 uint8_t quality_to_reliability(kx_quality_t q, uint16_t fault_flags, int ch_mask_bit);
 
 } // namespace core

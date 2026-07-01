@@ -16,6 +16,7 @@
 #include "bacnet_reliability.hpp"
 #include "bacnet_priority.hpp"
 #include "bacnet_cov.hpp"
+#include "config/iobus_config.hpp"
 #include "mkddc_shm.h"
 
 namespace iobus::bacnet {
@@ -87,6 +88,15 @@ public:
     /** Update unit strings from iobus config (called on load + SIGHUP). */
     void update_ai_units(const char units[KX_N_UI][8]);
 
+    /** ADR-012: update AO channel metadata from iobus config (called on load + SIGHUP). */
+    void update_ao_config(const AoChannelConfig ao_channels[KX_N_AO]);
+
+    /** AO metadata accessors (1-based instance). */
+    const std::string& ao_unit_str(uint32_t instance) const;
+    uint16_t ao_bacnet_units(uint32_t instance) const;
+    float    ao_min_pv(uint32_t instance) const;
+    float    ao_max_pv(uint32_t instance) const;
+
     /** Out_Of_Service flag (operator set, clears fault). */
     void set_oos_ai(uint32_t instance, bool oos);
     void set_oos_bi(uint32_t instance, bool oos);
@@ -143,6 +153,12 @@ private:
     std::string bv_names_[N_BV];
     std::string msv_names_[N_MSV];
     std::string ai_units_[N_AI];
+
+    /* ADR-012: AO channel metadata */
+    std::string ao_unit_str_[N_AO];
+    uint16_t    ao_bacnet_units_[N_AO] = {};   /* BACnet Units enum integer */
+    float       ao_min_pv_[N_AO]       = {};
+    float       ao_max_pv_[N_AO]       = {10.0f, 10.0f, 10.0f, 10.0f};
 
     bool ai_oos_[N_AI] = {};
     bool bi_oos_[N_BI] = {};

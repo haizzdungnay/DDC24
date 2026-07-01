@@ -33,8 +33,16 @@ float ui_raw_electric(int32_t raw_s32, const UiScaleConfig& cfg);
 float ui_to_eng(int32_t raw_s32, SensorType t, kx_quality_t* q_out);
 float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out);
 
+/* Overloads với reliability output (ADR-011): ghi nguyên nhân lỗi cụ thể thay vì chỉ BAD. */
+float ui_to_eng(int32_t raw_s32, SensorType t, kx_quality_t* q_out, kx_reliability_t* r_out);
+float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out, kx_reliability_t* r_out);
+
 /* eng (V hoặc mA theo mode) → raw DAC 16-bit, clamp [0,65535]. */
 uint16_t ao_eng_to_raw(float v, AoMode m);
+
+/* Engineering units → raw DAC với phạm vi [min_pv, max_pv] → [0, 100%] output range.
+ * Dùng khi BACnet PV là engineering units khác với V/mA vật lý (ADR-012). */
+uint16_t ao_eng_to_raw_phys(float eng, float min_pv, float max_pv, AoMode m);
 
 } // namespace iobus
 

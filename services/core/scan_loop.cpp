@@ -127,7 +127,7 @@ void ScanLoop::step()
 
     /* 9. Publish BACnet object table — value/quality/reliability (BAC-004) */
     d_.bacnet->publish(*d_.table, d_.metrics->scan_count(), d_.metrics->scan_overrun(),
-                       last_io_.fault_flags, last_io_.iop_status);
+                       last_io_.fault_flags, last_io_.iop_status, last_io_.ui_reliability);
 
     /* 10. Metrics */
     d_.metrics->end_scan(now_ns() - t0, budget_ns_);

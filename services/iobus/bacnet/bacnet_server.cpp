@@ -168,6 +168,22 @@ void BacnetServer::apply_ai_units()
 #endif
 }
 
+void BacnetServer::apply_ao_config()
+{
+#ifdef MKDDC_ENABLE_BACNET
+    if (!objects_) return;
+    for (uint32_t i = 1; i <= 4; i++) {
+        char name_buf[64];
+        std::strncpy(name_buf, objects_->ao_name(i).c_str(), sizeof(name_buf) - 1);
+        name_buf[sizeof(name_buf) - 1] = '\0';
+        Analog_Output_Name_Set(i, name_buf);
+        Analog_Output_Units_Set(i, objects_->ao_bacnet_units(i));
+        Analog_Output_Min_Pres_Value_Set(i, objects_->ao_min_pv(i));
+        Analog_Output_Max_Pres_Value_Set(i, objects_->ao_max_pv(i));
+    }
+#endif
+}
+
 void BacnetServer::register_objects()
 {
 #ifdef MKDDC_ENABLE_BACNET
