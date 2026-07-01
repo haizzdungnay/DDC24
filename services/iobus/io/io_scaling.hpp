@@ -15,8 +15,10 @@ constexpr float IO_S24_FS = 8388607.0f;
 
 SensorType  sensor_type_from_string(const char* s);
 const char* sensor_unit(SensorType t);   /* "V","mA","degC","" */
+const char* sensor_raw_unit(SensorType t); /* "V","mA" or "" when not applicable */
 
 /* raw int32 signed (IOP v2 — iop_be32s() đã sign-extend) → eng + quality. */
+float ui_raw_electric(int32_t raw_s32, SensorType t);
 float ui_to_eng(int32_t raw_s32, SensorType t, kx_quality_t* q_out);
 float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out);
 

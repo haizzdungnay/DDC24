@@ -113,6 +113,7 @@ enum class AoMode : uint8_t { V0_10 = 0, MA4_20 = 1 };
 struct IoSnapshot {
     uint64_t ts_ns = 0;
     float    ui_value[KX_N_UI]   = {};
+    float    ui_raw[KX_N_UI]     = {};
     uint8_t  ui_quality[KX_N_UI] = {KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
                                     KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
                                     KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,

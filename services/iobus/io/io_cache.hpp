@@ -24,9 +24,9 @@ public:
     /* Ghi snapshot input + metrics + status qua seqlock. di_counter đếm cạnh lên nội bộ. */
     void write_io(const IoSnapshot& s, const IobusMetrics& m);
 
-    /* Ghi ao_mode[] (sau ACK SET_AO_CFG) + ui_unit[] (khi load config). */
+    /* Ghi ao_mode[] (sau ACK SET_AO_CFG) + ui_unit[]/ui_raw_unit[] (khi load config). */
     void write_ao_mode(const uint8_t mode[KX_N_AO]);
-    void write_ui_units(const char units[KX_N_UI][8]);
+    void write_ui_units(const char units[KX_N_UI][8], const char raw_units[KX_N_UI][8]);
 
     /* Chỉ cập nhật iop_status (khi đổi state mà không có IO_RESP mới). */
     void write_status(uint8_t iop_status, const IobusMetrics& m);

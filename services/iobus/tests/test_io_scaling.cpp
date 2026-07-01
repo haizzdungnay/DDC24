@@ -31,6 +31,19 @@ TEST(IoScaling, Ma4_20)
     EXPECT_EQ(q, KX_Q_GOOD);
 }
 
+TEST(IoScaling, RawElectricValueAndUnit)
+{
+    EXPECT_NEAR(ui_raw_electric(4194304, SensorType::V0_10), 5.0f, 0.05f);
+    EXPECT_STREQ(sensor_raw_unit(SensorType::V0_10), "V");
+
+    EXPECT_NEAR(ui_raw_electric(4194304, SensorType::MA4_20), 12.0f, 0.1f);
+    EXPECT_STREQ(sensor_raw_unit(SensorType::MA4_20), "mA");
+
+    EXPECT_FLOAT_EQ(ui_raw_electric(8000000, SensorType::DRY_CONTACT), 0.0f);
+    EXPECT_STREQ(sensor_raw_unit(SensorType::DRY_CONTACT), "");
+    EXPECT_STREQ(sensor_unit(SensorType::DRY_CONTACT), "bool");
+}
+
 TEST(IoScaling, UiOverrangeIsBad)
 {
     kx_quality_t q;

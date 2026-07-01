@@ -168,11 +168,19 @@ const char* configured_unit(const iobus::UiScaleConfig& cfg)
     return cfg.unit.empty() ? iobus::sensor_unit(cfg.sensor) : cfg.unit.c_str();
 }
 
-void build_ui_units(const iobus::IobusConfig& cfg, char units[KX_N_UI][8])
+const char* configured_raw_unit(const iobus::UiScaleConfig& cfg)
+{
+    return cfg.enabled ? iobus::sensor_raw_unit(cfg.sensor) : "";
+}
+
+void build_ui_units(const iobus::IobusConfig& cfg, char units[KX_N_UI][8],
+                    char raw_units[KX_N_UI][8])
 {
     for (int i = 0; i < KX_N_UI; i++) {
         std::strncpy(units[i], configured_unit(cfg.ui[i]), sizeof(units[i]) - 1);
         units[i][sizeof(units[i]) - 1] = '\0';
+        std::strncpy(raw_units[i], configured_raw_unit(cfg.ui[i]), sizeof(raw_units[i]) - 1);
+        raw_units[i][sizeof(raw_units[i]) - 1] = '\0';
     }
 }
 
@@ -226,11 +234,12 @@ int main(int argc, char** argv)
         return 1;
     {
         char units[KX_N_UI][8];
+        char raw_units[KX_N_UI][8];
         uint8_t modes[KX_N_AO];
-        build_ui_units(cfg, units);
+        build_ui_units(cfg, units, raw_units);
         for (int i = 0; i < KX_N_AO; i++)
             modes[i] = 0;   /* default 0-10V (MCU boot); cập nhật sau ACK SET_AO_CFG */
-        cache.write_ui_units(units);
+        cache.write_ui_units(units, raw_units);
         cache.write_ao_mode(modes);
     }
 
@@ -320,7 +329,8 @@ int main(int argc, char** argv)
             /* Push initial unit codes into bacnet-stack AI objects (thread not yet started) */
             {
                 char units[KX_N_UI][8];
-                build_ui_units(cfg, units);
+                char raw_units[KX_N_UI][8];
+                build_ui_units(cfg, units, raw_units);
                 bacnet_objects.update_ai_units(units);
                 bacnet_server.apply_ai_units();
             }
@@ -514,8 +524,9 @@ int main(int argc, char** argv)
                 }
                 if (ui_changed) {
                     char units[KX_N_UI][8];
-                    build_ui_units(cfg, units);
-                    cache.write_ui_units(units);
+                    char raw_units[KX_N_UI][8];
+                    build_ui_units(cfg, units, raw_units);
+                    cache.write_ui_units(units, raw_units);
                     bacnet_objects.update_ai_units(units);
                     bacnet_server.apply_ai_units();
                 }
@@ -586,6 +597,7 @@ int main(int argc, char** argv)
                     for (int i = 0; i < KX_N_UI; i++) {
                         kx_quality_t q;
                         float value = ui_to_eng(resp.ui_raw[i], cfg.ui[i], &q);
+                        snap.ui_raw[i] = cfg.ui[i].enabled ? ui_raw_electric(resp.ui_raw[i], cfg.ui[i].sensor) : 0.0f;
                         const uint8_t samples = cfg.ui[i].filter_samples;
                         if (q == KX_Q_GOOD && samples > 1) {
                             if (ui_filter_size[i] != samples) {

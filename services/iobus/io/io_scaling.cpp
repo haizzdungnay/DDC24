@@ -50,11 +50,39 @@ const char* sensor_unit(SensorType t)
     case SensorType::PT1000:
     case SensorType::NTC10K:
     case SensorType::NTC20K: return "degC";
+    case SensorType::DRY_CONTACT: return "bool";
     case SensorType::POTENTIOMETER:
     case SensorType::LIGHT:  return "%";
     case SensorType::PULSE:  return "pulse";
     default:                 return "";
     }
+}
+
+const char* sensor_raw_unit(SensorType t)
+{
+    switch (t) {
+    case SensorType::MA4_20:
+        return "mA";
+    case SensorType::V0_10:
+    case SensorType::V2_10:
+    case SensorType::PT100:
+    case SensorType::PT1000:
+    case SensorType::NTC10K:
+    case SensorType::NTC20K:
+    case SensorType::POTENTIOMETER:
+    case SensorType::LIGHT:
+        return "V";
+    default:
+        return "";
+    }
+}
+
+float ui_raw_electric(int32_t raw_s32, SensorType t)
+{
+    const float frac = static_cast<float>(raw_s32) / IO_S24_FS;
+    if (t == SensorType::MA4_20) return 4.0f + frac * 16.0f;
+    if (sensor_raw_unit(t)[0] == 'V') return frac * 10.0f;
+    return 0.0f;
 }
 
 /* R_from_raw: phụ thuộc mạch front-end — calib thật ở bring-up. */
