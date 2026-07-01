@@ -7,6 +7,7 @@
 #define IOBUS_OUTPUT_COMMAND_HPP
 
 #include "io/io_types.hpp"
+#include "config/iobus_config.hpp"
 
 namespace iobus {
 
@@ -24,6 +25,9 @@ public:
 
     /* Cấu hình mode AO đã áp dụng (để convert eng→raw). */
     void set_ao_modes(const AoMode modes[KX_N_AO]);
+
+    /* ADR-012: cập nhật min/max engineering range cho AO conversion. */
+    void set_ao_channels(const AoChannelConfig channels[KX_N_AO]);
 
     /* So với last_sent — gửi SET_DO/SET_AO nếu đổi. Trả false nếu có lệnh fail. */
     bool process(const float ao_setpoint[KX_N_AO], const uint8_t do_cmd[KX_N_DO]);
@@ -43,7 +47,8 @@ public:
 
 private:
     CommandSink& sink_;
-    AoMode   ao_mode_[KX_N_AO] = {AoMode::V0_10, AoMode::V0_10, AoMode::V0_10, AoMode::V0_10};
+    AoMode          ao_mode_[KX_N_AO]     = {AoMode::V0_10, AoMode::V0_10, AoMode::V0_10, AoMode::V0_10};
+    AoChannelConfig ao_channels_[KX_N_AO] = {};
     uint16_t last_sent_ao_[KX_N_AO] = {};
     uint8_t  last_sent_do_[KX_N_DO] = {};
     bool     has_sent_ao_ = false;

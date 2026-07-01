@@ -20,6 +20,14 @@ struct IoSnapshot {
                                     KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
                                     KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD,
                                     KX_Q_BAD, KX_Q_BAD, KX_Q_BAD, KX_Q_BAD};
+    uint8_t  ui_reliability[KX_N_UI] = {KX_REL_COMMUNICATION_FAILURE, KX_REL_COMMUNICATION_FAILURE,
+                                        KX_REL_COMMUNICATION_FAILURE, KX_REL_COMMUNICATION_FAILURE,
+                                        KX_REL_COMMUNICATION_FAILURE, KX_REL_COMMUNICATION_FAILURE,
+                                        KX_REL_COMMUNICATION_FAILURE, KX_REL_COMMUNICATION_FAILURE,
+                                        KX_REL_COMMUNICATION_FAILURE, KX_REL_COMMUNICATION_FAILURE,
+                                        KX_REL_COMMUNICATION_FAILURE, KX_REL_COMMUNICATION_FAILURE,
+                                        KX_REL_COMMUNICATION_FAILURE, KX_REL_COMMUNICATION_FAILURE,
+                                        KX_REL_COMMUNICATION_FAILURE, KX_REL_COMMUNICATION_FAILURE};
     uint8_t  di_state[KX_N_DI] = {};
     uint32_t di_counter[KX_N_DI] = {};
     uint8_t  do_feedback[KX_N_DO] = {};

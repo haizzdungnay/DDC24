@@ -26,7 +26,7 @@
 /* Path runtime Rev A — KHÔNG có alias, KHÔNG còn /dev/shm/kinexus_* */
 #define KX_SHM_IO_PATH    "/dev/shm/mkddc_io_shm"
 #define KX_SHM_PLC_PATH   "/dev/shm/mkddc_plc_shm"
-#define KX_SHM_MAGIC      0x4B584403u   /* "KXD\3" — bumped v3: UI raw live data fields (ADR-011) */
+#define KX_SHM_MAGIC      0x4B584403u   /* "KXD\3" — bumped v3: kx_reliability_t + ui_reliability[] (ADR-011) */
 
 #define KX_N_UI   16   /* v2: Rev A 16 UI analog (ADR-010) */
 #define KX_N_DI   8    /* reserved: DI optional SKU; base SKU stays 0 in SHM */
@@ -39,6 +39,20 @@
 
 /* Chất lượng điểm */
 typedef enum { KX_Q_GOOD = 0, KX_Q_UNCERTAIN = 1, KX_Q_BAD = 2 } kx_quality_t;
+
+/* Nguyên nhân lỗi điểm — 8 giá trị nội bộ tuần tự (0-7).
+ * Ánh xạ sang BACnet Reliability ASHRAE 135-2020: xem bacnet_reliability.hpp.
+ * ADR-011: iobus ghi ui_reliability[] trong io_shm → core chuyển vào plc_shm.ai[].reliability. */
+typedef enum {
+    KX_REL_RELIABLE              = 0,  /* NO_FAULT_DETECTED (BACnet 0) */
+    KX_REL_OVER_RANGE            = 1,  /* OVER_RANGE        (BACnet 2) */
+    KX_REL_UNDER_RANGE           = 2,  /* UNDER_RANGE       (BACnet 3) */
+    KX_REL_OPEN_LOOP             = 3,  /* OPEN_LOOP         (BACnet 4) */
+    KX_REL_SHORTED_LOOP          = 4,  /* SHORTED_LOOP      (BACnet 5) */
+    KX_REL_CONFIGURATION_ERROR   = 5,  /* CONFIGURATION_ERROR (BACnet 10) */
+    KX_REL_COMMUNICATION_FAILURE = 6,  /* COMMUNICATION_FAILURE (BACnet 12) */
+    KX_REL_UNRELIABLE_OTHER      = 7,  /* UNRELIABLE_OTHER  (BACnet 7) */
+} kx_reliability_t;
 
 /* Trạng thái IOP (map từ state machine iobus: NORMAL_POLL→NORMAL;
  * INIT/HANDSHAKE/FAULT/RECONNECT→FAULT; SAFE_STATE→SAFE) */
@@ -54,11 +68,10 @@ typedef struct {
     volatile uint32_t seq;          /* seqlock: lẻ=đang ghi, chẵn=ổn       */
     uint64_t ts_ns;                 /* mốc cập nhật (CLOCK_MONOTONIC)      */
 
-    float    ui_value[KX_N_UI];     /* engineering: °C, V, mA, %... default 0.0 */
-    float    ui_raw[KX_N_UI];       /* raw electrical input before eng scale: V or mA; default 0.0 */
-    uint8_t  ui_quality[KX_N_UI];   /* kx_quality_t; default BAD (chưa có mẫu)  */
-    char     ui_unit[KX_N_UI][8];   /* "degC","V","mA"... NUL-terminated   */
-    char     ui_raw_unit[KX_N_UI][8]; /* "V","mA" or "" when raw display is not applicable */
+    float    ui_value[KX_N_UI];      /* engineering: °C, V, mA, %... default 0.0 */
+    uint8_t  ui_quality[KX_N_UI];    /* kx_quality_t; default BAD (chưa có mẫu)  */
+    uint8_t  ui_reliability[KX_N_UI];/* kx_reliability_t per channel; default COMMUNICATION_FAILURE */
+    char     ui_unit[KX_N_UI][8];    /* "degC","V","mA"... NUL-terminated   */
 
     uint8_t  di_state[KX_N_DI];     /* 0/1 (đã debounce); default 0        */
     uint32_t di_counter[KX_N_DI];   /* đếm cạnh lên; default 0             */
@@ -96,7 +109,7 @@ typedef struct {
     float    priority[16];          /* priority array (commandable)        */
     float    relinquish_default;
     uint8_t  quality;
-    uint8_t  reliability;           /* 0=no-fault,1=over,2=under,3=open,4=short */
+    uint8_t  reliability;           /* kx_reliability_t (0-7); ADR-011; iobus copies from ui_reliability[] */
 } kx_point_t;
 
 typedef struct {

@@ -77,6 +77,10 @@ public:
      *  Call once after start() and after each SIGHUP config reload. */
     void apply_ai_units();
 
+    /** ADR-012: push AO metadata (Name/Units/Min/Max_Pres_Value) from objects into bacnet-stack.
+     *  Call once after start() and after each SIGHUP config reload. */
+    void apply_ao_config();
+
     /* Called by bacnet-stack AO/BO callbacks after Priority_Array changes. */
     void handle_output_write(bool analog, uint32_t instance, float value,
                              bool released);

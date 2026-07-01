@@ -13,6 +13,16 @@
 
 namespace iobus {
 
+/* ADR-012: per-channel AO config — tên, đơn vị engineering, phạm vi BACnet PV.
+ * Dùng để set BACnet AO Object_Name / Units / Min_Pres_Value / Max_Pres_Value.
+ * Engineering conversion: norm = (pv - min_pv)/(max_pv - min_pv) → DAC raw. */
+struct AoChannelConfig {
+    std::string name;          /* BACnet Object_Name; default "AO{n}" */
+    std::string units_str;     /* "percent","volt","milliampere","degC","Pa","RPM","ppm" */
+    float       min_pv = 0.0f; /* BACnet Min_Pres_Value (engineering units) */
+    float       max_pv = 10.0f;/* BACnet Max_Pres_Value; default 10 (volts 0-10V) */
+};
+
 struct IobusConfig {
     /* iop */
     std::string uart_device = "/dev/ttyS2";
@@ -24,8 +34,9 @@ struct IobusConfig {
     uint32_t handshake_timeout_ms  = IOP_HANDSHAKE_TIMEOUT_MS;
 
     /* io */
-    UiScaleConfig ui[KX_N_UI] = {};
-    AoMode     ao_mode[KX_N_AO]   = {AoMode::V0_10, AoMode::V0_10, AoMode::V0_10, AoMode::V0_10};
+    UiScaleConfig    ui[KX_N_UI]          = {};
+    AoMode           ao_mode[KX_N_AO]     = {AoMode::V0_10, AoMode::V0_10, AoMode::V0_10, AoMode::V0_10};
+    AoChannelConfig  ao_channels[KX_N_AO] = {};  /* ADR-012: name/units/min_pv/max_pv per channel */
 
     std::string log_level = "info";
     int rt_priority = 70;

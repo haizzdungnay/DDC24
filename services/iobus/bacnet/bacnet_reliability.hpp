@@ -14,23 +14,25 @@
 namespace iobus::bacnet {
 
 /**
- * BACnet Reliability property values (subset used by MK-DDC-24).
- * Per PICS §4 — SW_BACNET_DESIGN §6 Table.
+ * BACnet Reliability property values — ASHRAE 135-2020 Table 12-4 integer encoding.
+ * Values MUST match the BACnet enumeration integers sent in APDU (cast directly to uint8).
+ * ADR-011: fixed OVER_RANGE..SHORTED_LOOP from wrong sequential 1-4 to ASHRAE 2-5.
  */
 enum class BacnetReliability : uint8_t {
-    NO_FAULT_DETECTED  = 0,
-    OVER_RANGE         = 1,
-    UNDER_RANGE        = 2,
-    OPEN_LOOP          = 3,
-    SHORTED_LOOP       = 4,
-    NO_SENSOR          = 5,
-    UNRELIABLE_OTHER   = 7,
-    PROCESS_ERROR      = 8,
-    MULTI_STATE_FAULT  = 9,
-    CONFIGURATION_ERROR = 10,
+    NO_FAULT_DETECTED     = 0,
+    NO_SENSOR             = 1,
+    OVER_RANGE            = 2,   /* ASHRAE 2 (was 1 — BUG fixed ADR-011) */
+    UNDER_RANGE           = 3,   /* ASHRAE 3 (was 2 — BUG fixed ADR-011) */
+    OPEN_LOOP             = 4,   /* ASHRAE 4 (was 3 — BUG fixed ADR-011) */
+    SHORTED_LOOP          = 5,   /* ASHRAE 5 (was 4 — BUG fixed ADR-011) */
+    NO_OUTPUT             = 6,
+    UNRELIABLE_OTHER      = 7,
+    PROCESS_ERROR         = 8,
+    MULTI_STATE_FAULT     = 9,
+    CONFIGURATION_ERROR   = 10,
+    MEMBER_FAULT          = 11,
     COMMUNICATION_FAILURE = 12,
-    MEMBER_FAULT       = 13,
-    MONITORED_OBJECT_FAULT = 14,
+    MONITORED_OBJECT_FAULT = 13,
 };
 
 /**
@@ -66,6 +68,12 @@ struct BacnetStatusFlags {
  *   KX_Q_BAD                            → COMMUNICATION_FAILURE
  */
 BacnetReliability compute_reliability(kx_quality_t q, uint16_t fault_flags, int ch_idx);
+
+/**
+ * ADR-011: map kx_reliability_t (sequential 0-7) to BacnetReliability (ASHRAE integers).
+ * Used by read_ai() to directly convert per-channel reliability from plc_shm.
+ */
+BacnetReliability kx_reliability_to_bacnet(kx_reliability_t r);
 
 /**
  * Compute Status_Flags:

@@ -334,6 +334,9 @@ int main(int argc, char** argv)
                 bacnet_objects.update_ai_units(units);
                 bacnet_server.apply_ai_units();
             }
+            /* ADR-012: push initial AO config into bacnet-stack */
+            bacnet_objects.update_ao_config(cfg.ao_channels);
+            bacnet_server.apply_ao_config();
             bacnet_thread = std::thread([&]() {
                 const kx_plc_shm_t* plc_shm = nullptr;
                 while (!g_shutdown.load()) {
@@ -437,6 +440,7 @@ int main(int argc, char** argv)
         }
         cache.write_ao_mode(applied_modes);
         output.set_ao_modes(applied_enum);
+        output.set_ao_channels(cfg.ao_channels);
         output.reset_last_sent();
         client.set_status(IopStatus::NORMAL_POLL);
         cache.write_status(KX_IOP_NORMAL, metrics);
@@ -563,7 +567,11 @@ int main(int argc, char** argv)
                     }
                     cache.write_ao_mode(applied_modes);
                     output.set_ao_modes(applied_enum);
+                    output.set_ao_channels(cfg.ao_channels);
                 }
+                /* ADR-012: always refresh AO BACnet metadata on SIGHUP (name/units/min/max) */
+                bacnet_objects.update_ao_config(cfg.ao_channels);
+                bacnet_server.apply_ao_config();
             } else {
                 std::fprintf(stderr, "WARN  iobus.reload co phan fail — phan do giu config cu\n");
             }
@@ -596,8 +604,8 @@ int main(int argc, char** argv)
                     float pre_math[KX_N_UI] = {};
                     for (int i = 0; i < KX_N_UI; i++) {
                         kx_quality_t q;
-                        float value = ui_to_eng(resp.ui_raw[i], cfg.ui[i], &q);
-                        snap.ui_raw[i] = cfg.ui[i].enabled ? ui_raw_electric(resp.ui_raw[i], cfg.ui[i]) : 0.0f;
+                        kx_reliability_t r;
+                        float value = ui_to_eng(resp.ui_raw[i], cfg.ui[i], &q, &r);
                         const uint8_t samples = cfg.ui[i].filter_samples;
                         if (q == KX_Q_GOOD && samples > 1) {
                             if (ui_filter_size[i] != samples) {
@@ -616,9 +624,13 @@ int main(int argc, char** argv)
                             ui_filter_count[i] = 0;
                             ui_filter_pos[i] = 0;
                         }
+                        /* ADR-011: override reliability to COMMUNICATION_FAILURE when ADC fault */
+                        if (resp.fault_flags & (IOP_FAULT_ADC1 | IOP_FAULT_ADC2))
+                            r = KX_REL_COMMUNICATION_FAILURE;
                         pre_math[i] = value;
                         snap.ui_value[i] = value;
                         snap.ui_quality[i] = static_cast<uint8_t>(q);
+                        snap.ui_reliability[i] = static_cast<uint8_t>(r);
                     }
                     for (uint8_t fn = 1; fn <= 3; fn++) {
                         float aggregate = 0.0f;

@@ -25,6 +25,21 @@ BacnetReliability compute_reliability(kx_quality_t q, uint16_t fault_flags, int 
     }
 }
 
+BacnetReliability kx_reliability_to_bacnet(kx_reliability_t r)
+{
+    switch (r) {
+    case KX_REL_RELIABLE:              return BacnetReliability::NO_FAULT_DETECTED;
+    case KX_REL_OVER_RANGE:            return BacnetReliability::OVER_RANGE;
+    case KX_REL_UNDER_RANGE:           return BacnetReliability::UNDER_RANGE;
+    case KX_REL_OPEN_LOOP:             return BacnetReliability::OPEN_LOOP;
+    case KX_REL_SHORTED_LOOP:          return BacnetReliability::SHORTED_LOOP;
+    case KX_REL_CONFIGURATION_ERROR:   return BacnetReliability::CONFIGURATION_ERROR;
+    case KX_REL_COMMUNICATION_FAILURE: return BacnetReliability::COMMUNICATION_FAILURE;
+    case KX_REL_UNRELIABLE_OTHER:      return BacnetReliability::UNRELIABLE_OTHER;
+    default:                           return BacnetReliability::COMMUNICATION_FAILURE;
+    }
+}
+
 BacnetStatusFlags compute_status_flags(BacnetReliability rel,
                                         bool in_alarm,
                                         bool overridden,

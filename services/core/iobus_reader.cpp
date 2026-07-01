@@ -55,13 +55,14 @@ void IobusReader::detach()
 bool IobusReader::read_from(const kx_io_shm_t* s, IoSnapshot* out)
 {
     if (__atomic_load_n(&s->magic, __ATOMIC_ACQUIRE) != KX_SHM_MAGIC)
-        return false;
+        return false;   /* magic bumped to v3 (0x4B584403) in ADR-011 */
     for (int i = 0; i < 5; i++) {
         const uint32_t v1 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
         if (v1 & 1u) continue;                    /* đang ghi → thử lại */
         out->ts_ns = s->ts_ns;
         std::memcpy(out->ui_value, (const void*)s->ui_value, sizeof(out->ui_value));
         std::memcpy(out->ui_quality, (const void*)s->ui_quality, sizeof(out->ui_quality));
+        std::memcpy(out->ui_reliability, (const void*)s->ui_reliability, sizeof(out->ui_reliability));
         std::memcpy(out->di_state, (const void*)s->di_state, sizeof(out->di_state));
         std::memcpy(out->di_counter, (const void*)s->di_counter, sizeof(out->di_counter));
         std::memcpy(out->do_feedback, (const void*)s->do_feedback, sizeof(out->do_feedback));

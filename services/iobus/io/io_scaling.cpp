@@ -173,6 +173,72 @@ float ui_to_eng(int32_t raw_s32, SensorType t, kx_quality_t* q_out)
     }
 }
 
+/* ADR-011: overload với reliability output — phân biệt nguyên nhân lỗi cụ thể. */
+float ui_to_eng(int32_t raw_s32, SensorType t, kx_quality_t* q_out, kx_reliability_t* r_out)
+{
+    const float frac = static_cast<float>(raw_s32) / IO_S24_FS;
+    *q_out = KX_Q_GOOD;
+    *r_out = KX_REL_RELIABLE;
+
+    switch (t) {
+    case SensorType::NONE:
+        *q_out = KX_Q_BAD;
+        *r_out = KX_REL_CONFIGURATION_ERROR;
+        return 0.0f;
+    case SensorType::V0_10: {
+        const float v = frac * 10.0f;
+        if (frac > 1.10f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; }
+        else if (frac < -0.02f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; }
+        return v;
+    }
+    case SensorType::V2_10: {
+        const float v = frac * 10.0f;
+        if (v > 11.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; }
+        else if (v < 1.8f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; }
+        return v;
+    }
+    case SensorType::MA4_20: {
+        const float ma = 4.0f + frac * 16.0f;
+        if (ma < 3.5f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OPEN_LOOP; }
+        else if (ma > 21.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_SHORTED_LOOP; }
+        return ma;
+    }
+    case SensorType::PT100:
+    case SensorType::PT1000:
+        /* Rev A: hardware not populated — configuration mismatch. */
+        *q_out = KX_Q_BAD;
+        *r_out = KX_REL_CONFIGURATION_ERROR;
+        return 0.0f;
+    case SensorType::NTC10K:
+    case SensorType::NTC20K: {
+        const double r_nom = (t == SensorType::NTC10K) ? 10000.0 : 20000.0;
+        const double temp = ntc_resolve_temp(r_from_raw(raw_s32, r_nom));
+        if (std::isnan(temp) || temp < -30.0 || temp > 70.0) {
+            *q_out = KX_Q_BAD;
+            *r_out = (temp > 70.0) ? KX_REL_OVER_RANGE : KX_REL_UNDER_RANGE;
+            return 0.0f;
+        }
+        return static_cast<float>(temp);
+    }
+    case SensorType::DRY_CONTACT:
+        return (static_cast<float>(raw_s32) > DRY_CONTACT_THRESHOLD) ? 1.0f : 0.0f;
+    case SensorType::POTENTIOMETER:
+    case SensorType::LIGHT: {
+        const float pct = frac * 100.0f;
+        if (frac > 1.10f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; }
+        else if (frac < -0.02f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; }
+        return pct;
+    }
+    case SensorType::PULSE:
+        if (raw_s32 < 0) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNRELIABLE_OTHER; }
+        return static_cast<float>(raw_s32 < 0 ? 0 : raw_s32);
+    default:
+        *q_out = KX_Q_BAD;
+        *r_out = KX_REL_CONFIGURATION_ERROR;
+        return 0.0f;
+    }
+}
+
 static float range_factor(uint8_t range_mult)
 {
     if (range_mult == 1 || range_mult == 4) return 10.0f;
@@ -199,6 +265,42 @@ static float scale_range(float value, float in_lo, float in_hi, const UiScaleCon
     const float lo = cfg.scale_lo * factor;
     const float hi = cfg.scale_hi * factor;
     return lo + frac * (hi - lo);
+}
+
+float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out, kx_reliability_t* r_out)
+{
+    if (!cfg.enabled) {
+        *q_out = KX_Q_BAD;
+        *r_out = KX_REL_CONFIGURATION_ERROR;
+        return 0.0f;
+    }
+
+    float value = ui_to_eng(raw_s32, cfg.sensor, q_out, r_out);
+    if (*q_out == KX_Q_BAD) return value;
+
+    switch (cfg.sensor) {
+    case SensorType::V0_10:
+        value = scale_range(value, 0.0f, 10.0f, cfg, q_out);
+        break;
+    case SensorType::V2_10:
+        value = scale_range(value, 2.0f, 10.0f, cfg, q_out);
+        break;
+    case SensorType::MA4_20:
+        value = scale_range(value, 4.0f, 20.0f, cfg, q_out);
+        break;
+    case SensorType::POTENTIOMETER:
+    case SensorType::LIGHT:
+        value = scale_range(value, 0.0f, 100.0f, cfg, q_out);
+        break;
+    case SensorType::DRY_CONTACT:
+        value = cfg.invert ? (value > 0.5f ? 0.0f : 1.0f) : value;
+        break;
+    default:
+        break;
+    }
+    if (*q_out == KX_Q_BAD) *r_out = KX_REL_UNRELIABLE_OTHER;
+    else value += cfg.sensor_cal;
+    return value;
 }
 
 float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out)
@@ -266,6 +368,18 @@ uint16_t ao_eng_to_raw(float v, AoMode m)
     if (frac < 0.0f) frac = 0.0f;
     if (frac > 1.0f) frac = 1.0f;
     return static_cast<uint16_t>(frac * 65535.0f + 0.5f);
+}
+
+/* ADR-012: engineering units → raw DAC với phạm vi tùy chỉnh.
+ * Chuẩn hóa eng → [0,1] theo [min_pv, max_pv], rồi ánh xạ sang phạm vi vật lý (V hoặc mA). */
+uint16_t ao_eng_to_raw_phys(float eng, float min_pv, float max_pv, AoMode m)
+{
+    const float span = max_pv - min_pv;
+    float norm = (span > 0.0f) ? (eng - min_pv) / span : 0.5f;
+    if (norm < 0.0f) norm = 0.0f;
+    if (norm > 1.0f) norm = 1.0f;
+    const float phys = (m == AoMode::V0_10) ? norm * 10.0f : 4.0f + norm * 16.0f;
+    return ao_eng_to_raw(phys, m);
 }
 
 } // namespace iobus

@@ -246,23 +246,50 @@ bool load_config(const std::string& path, bool must_exist, IobusConfig* out)
             if (get_string(entry, "unit", &unit)) out->ui[i].unit = unit;
         }
     }
-    /* ao[]: mode theo id "AO<n>" (fallback thứ tự) */
+    /* Defaults cho ao_channels trước khi parse: tên/units tự động từ mode */
+    for (int i = 0; i < KX_N_AO; i++) {
+        out->ao_channels[i].name     = "AO" + std::to_string(i + 1);
+        out->ao_channels[i].units_str = "volt";   /* default 0-10V */
+        out->ao_channels[i].min_pv   = 0.0f;
+        out->ao_channels[i].max_pv   = 10.0f;
+    }
+
+    /* ao[]: mode + ADR-012 fields (name/units/min_pv/max_pv) */
     if (get_array(s, "ao", &arr)) {
         size_t from = 0;
         int positional = 0;
         std::string entry;
         while (next_object(arr, &from, &entry)) {
-            std::string m;
-            if (!get_string(entry, "mode", &m)) continue;
             const int i = entry_index(entry, "AO", positional);
             positional = i + 1;
-            if (i >= 0 && i < KX_N_AO) {
-                if (m == "4-20mA")     out->ao_mode[i] = AoMode::MA4_20;
-                else if (m == "0-10V") out->ao_mode[i] = AoMode::V0_10;
-                else
+            if (i < 0 || i >= KX_N_AO) continue;
+
+            std::string m;
+            if (get_string(entry, "mode", &m)) {
+                if (m == "4-20mA") {
+                    out->ao_mode[i] = AoMode::MA4_20;
+                    out->ao_channels[i].units_str = "milliampere";
+                    out->ao_channels[i].min_pv    = 4.0f;
+                    out->ao_channels[i].max_pv    = 20.0f;
+                } else if (m == "0-10V") {
+                    out->ao_mode[i] = AoMode::V0_10;
+                } else {
                     std::fprintf(stderr, "WARN  config.bad_ao_mode ao=%d mode=%s (giữ 0-10V)\n",
                                  i + 1, m.c_str());
+                }
             }
+
+            std::string nm;
+            if (get_string(entry, "name", &nm) && !nm.empty())
+                out->ao_channels[i].name = nm;
+
+            std::string units;
+            if (get_string(entry, "units", &units) && !units.empty())
+                out->ao_channels[i].units_str = units;
+
+            float f = 0.0f;
+            if (get_float(entry, "min_pv", &f)) out->ao_channels[i].min_pv = f;
+            if (get_float(entry, "max_pv", &f)) out->ao_channels[i].max_pv = f;
         }
     }
 
