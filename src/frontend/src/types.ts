@@ -12,6 +12,8 @@ export interface Point {
   kind: PointKind
   value: number | boolean | string
   unit?: string
+  raw?: number
+  rawUnit?: string
   quality: PointQuality
   source: string
   priority?: string
@@ -267,6 +269,7 @@ export interface AiInputConfig {
   channel: number
   label: string
   signalType: AiSignalType
+  analogCurrent?: boolean
   displayMin: number
   displayMax: number
   rangeMultiplier: number
