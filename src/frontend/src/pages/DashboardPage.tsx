@@ -16,6 +16,7 @@ import type React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
+import { ControllerDiagram } from '../components/ControllerDiagram'
 import { Panel } from '../components/Panel'
 import { StateBlock } from '../components/StateBlock'
 import { StatusBadge } from '../components/StatusBadge'
@@ -81,8 +82,9 @@ export function DashboardPage() {
   const critical = alarmRows.filter((alarm) => alarm.severity === 'critical').length
   const warning = alarmRows.filter((alarm) => alarm.severity === 'high' || alarm.severity === 'medium' || alarm.severity === 'low').length
   const alarmCount = alarmRows.length
-  const count = (kind: string) => points.filter((point) => point.kind === kind).length
-  const onCount = (kind: string) => points.filter((point) => point.kind === kind && Boolean(point.value)).length
+  const dataAgeLabel = realtime.lastPointEventAt ? new Date(realtime.lastPointEventAt).toLocaleTimeString('vi-VN') : 'API'
+  const cpuPercent = h?.cpuPercent ?? 23
+  const cpuDetail = [formatPercent(cpuPercent), formatCpuClock(h?.cpuClockMhz)].filter(Boolean).join(' | ')
 
   const ramDetail = (() => {
     if (typeof h?.ramUsedMb === 'number' && typeof h?.ramTotalMb === 'number' && h.ramTotalMb > 0) {
@@ -94,16 +96,16 @@ export function DashboardPage() {
   })()
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-end gap-4">
         <h1 className="text-2xl font-semibold leading-none">{pick('Bảng điều khiển', 'Dashboard')}</h1>
         <p className="text-sm text-[var(--c-text-dim)]">{pick('Tổng quan hệ thống', 'System overview')}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 2xl:grid-cols-[1.55fr_1fr_1fr_1fr_1fr_1fr]">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <DeviceStatusCard />
         <AlarmStatusCard count={alarmCount} critical={critical} warning={warning} />
-        <DialStatusCard icon={Cpu} label="CPU LOAD" value={h?.cpuPercent ?? 23} detail="" />
+        <DialStatusCard icon={Cpu} label="CPU LOAD" value={cpuPercent} detail={cpuDetail} />
         <DialStatusCard icon={MemoryStick} label={pick('BỘ NHỚ', 'MEMORY')} value={h?.ramPercent ?? 48} detail={ramDetail} />
         <TempStatusCard value={h?.tempC} />
         <UptimeStatusCard value={h?.uptimeS ?? 12 * 86400 + 4 * 3600 + 32 * 60 + 18} />
@@ -122,22 +124,28 @@ export function DashboardPage() {
 
       <SystemHealthSummary health={h ?? undefined} />
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.62fr_1fr]">
-        <Panel title={pick('TỔNG QUAN I/O (24 ĐIỂM)', 'I/O OVERVIEW (24 POINTS)')}>
-          <div className="grid grid-cols-3 gap-3">
-            <IoSummary kind="UI" count={count('UI')} lines={[`${points.filter((p) => p.kind === 'UI' && p.quality === 'good').length} ${pick('Bình thường', 'Normal')}`]} color="var(--c-info)" />
-            <IoSummary kind="DO" count={count('DO')} lines={[`${onCount('DO')} ON`, `${Math.max(0, count('DO') - onCount('DO'))} OFF`]} color="var(--c-good-fg)" />
-            <IoSummary kind="AO" count={count('AO')} lines={[`${points.filter((p) => p.kind === 'AO' && p.quality === 'good').length} ${pick('Bình thường', 'Normal')}`]} color="var(--c-good-fg)" />
-          </div>
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.35fr_0.9fr]">
+        <Panel
+          title={pick('Controller Diagram', 'Controller Diagram')}
+          className="p-3"
+          action={<Button size="sm" variant="secondary" onClick={() => navigate('/eng/diagram')}>{pick('Open', 'Open')}</Button>}
+        >
+          <ControllerDiagram
+            points={points}
+            health={h ?? undefined}
+            dataAgeLabel={dataAgeLabel}
+            compact
+            onOpenNetwork={() => navigate('/settings/network')}
+          />
         </Panel>
-        <Panel title={pick('XU HƯỚNG UI (GIÁ TRỊ TRUNG BÌNH)', 'UI TREND (AVERAGE VALUE)')} action={<div className="flex gap-2"><Button size="sm" variant="secondary">{pick('Live', 'Live')}</Button><Button size="sm" variant="ghost" icon={<Maximize2 className="h-4 w-4" />} onClick={() => navigate('/trends')} title={pick('Mở rộng xu hướng', 'Expand trends')} /></div>}>
+        <Panel className="p-3" title={pick('XU HƯỚNG UI (GIÁ TRỊ TRUNG BÌNH)', 'UI TREND (AVERAGE VALUE)')} action={<div className="flex gap-2"><Button size="sm" variant="secondary">{pick('Live', 'Live')}</Button><Button size="sm" variant="ghost" icon={<Maximize2 className="h-4 w-4" />} onClick={() => navigate('/trends')} title={pick('Mở rộng xu hướng', 'Expand trends')} /></div>}>
           {trendSamples.length > 1 && trendSeries.length
-            ? <TrendChart data={trendSamples} series={trendSeries} height={250} />
+            ? <TrendChart data={trendSamples} series={trendSeries} height={320} />
             : <StateBlock state="empty" title={pick('Chưa có dữ liệu trend UI live', 'No live UI trend data')} detail={pick('Biểu đồ sẽ tự chạy khi /points hoặc WebSocket có giá trị UI.', 'Chart starts when /points or WebSocket provides UI values.')} />}
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.3fr_0.72fr]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_0.8fr]">
         <Panel title={pick('SỰ KIỆN GẦN NHẤT', 'RECENT EVENTS')}>
           <RecentEvents rows={alarmRows} />
           <div className="mt-4 text-center">
@@ -163,11 +171,20 @@ export function DashboardPage() {
 }
 
 function StatusCard({ children }: { children: React.ReactNode }) {
-  return <div className="min-h-[142px] rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">{children}</div>
+  return <div className="min-h-[126px] rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">{children}</div>
 }
 
 function pointNumber(value: Point['value']) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function formatPercent(value: number) {
+  return `${Number(value.toFixed(2))}%`
+}
+
+function formatCpuClock(value?: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return ''
+  return value >= 1000 ? `${Number((value / 1000).toFixed(2))} GHz` : `${Math.round(value)} MHz`
 }
 
 function makeTrendSample(points: Point[]) {
@@ -289,18 +306,6 @@ function scanValue(service?: { last_scan_ms?: number }) {
   return typeof service?.last_scan_ms === 'number' && service.last_scan_ms > 0 ? `${service.last_scan_ms} ms` : undefined
 }
 
-function IoSummary({ kind, count, lines, color }: { kind: string; count: number; lines: string[]; color: string }) {
-  const { pick } = useI18n()
-  return (
-    <div className="rounded-[var(--radius)] border bg-[var(--c-surface)] p-4" style={{ borderColor: color }}>
-      <div className="text-lg font-semibold" style={{ color }}>{kind}</div>
-      <div className="mono mt-4 text-3xl font-bold">{count}</div>
-      <div className="text-xs text-[var(--c-text-dim)]">{pick('Điểm', 'Points')}</div>
-      <div className="mt-5 space-y-2 text-xs text-[var(--c-text-dim)]">{lines.map((line, index) => <div key={line} className="flex items-center gap-2"><span className={index === 0 ? 'h-2 w-2 rounded-full bg-[var(--c-indicator-ok)]' : 'h-2 w-2 rounded-full bg-[var(--c-indicator-off)]'} />{line}</div>)}</div>
-    </div>
-  )
-}
-
 function RecentEvents({ rows }: { rows: Alarm[] }) {
   const { pick } = useI18n()
   const displayRows = rows.slice(0, 5)
@@ -325,9 +330,9 @@ function SystemHealthSummary({ health }: { health?: HealthResponse }) {
   const services = Object.entries(health?.services ?? {})
   const iop = health?.services.IOP ?? health?.services.iobus
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.3fr_0.7fr]">
-      <Panel title="SERVICES">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-5">
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.15fr_0.85fr]">
+      <Panel title="SERVICES" className="p-3">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(128px,1fr))] gap-3">
           {services.map(([name, service]) => (
             <div key={name} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">
               <div className="flex items-center justify-between gap-2"><div className="font-semibold">{name}</div><StatusBadge state={service.status} /></div>
@@ -337,12 +342,10 @@ function SystemHealthSummary({ health }: { health?: HealthResponse }) {
           ))}
         </div>
       </Panel>
-      <Panel title="IOP / SCAN METRICS">
+      <Panel title="IOP / SCAN METRICS" className="self-start p-3">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <MetricTile label="Overall" value={health?.overall ?? 'unknown'} color={statusColor(health?.overall ?? 'unknown')} />
           <MetricTile label="IOP latency" value={typeof iop?.last_scan_ms === 'number' && iop.last_scan_ms > 0 ? `${iop.last_scan_ms} ms` : 'N/A'} color={typeof iop?.last_scan_ms === 'number' && iop.last_scan_ms > 0 ? metricStatusColor(iop.last_scan_ms, 50, 100) : 'var(--c-text-dim)'} />
-          <MetricTile label="CPU" value={`${health?.cpuPercent ?? 0}%`} color={metricStatusColor(health?.cpuPercent ?? 0, 70, 90)} />
-          <MetricTile label="RAM" value={typeof health?.ramUsedMb === 'number' ? `${Math.round(health.ramUsedMb)} MB` : `${health?.ramPercent ?? 0}%`} color={metricStatusColor(health?.ramPercent ?? 0, 70, 90)} />
         </div>
       </Panel>
       <span className="sr-only">{pick('Thông tin sức khỏe hệ thống', 'System health information')}</span>

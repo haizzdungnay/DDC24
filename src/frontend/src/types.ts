@@ -44,6 +44,7 @@ export interface HealthResponse {
   overall: HealthStatus
   services: Record<string, ServiceHealth>
   cpuPercent?: number
+  cpuClockMhz?: number
   ramPercent?: number
   ramUsedMb?: number
   ramTotalMb?: number

@@ -20,7 +20,7 @@ type LiveSample = TrendSample & { raw: number }
 
 const emptyOutputs: OutputsConfig = { ao: [], do: [] }
 const outputTrendLimit = 60
-const aoWizardKeys: Array<keyof AoConfig> = ['source', 'loopConfig', 'mode', 'minHeatOutput', 'maxHeatOutput', 'minCoolOutput', 'maxCoolOutput', 'alarm100', 'alarm0', 'piSeqLowerFan1', 'fanSpeed2', 'piSeqUpperFan3', 'setbackAlarm', 'safeValue', 'manualValue']
+const aoWizardKeys: Array<keyof AoConfig> = ['mode', 'safeValue', 'manualValue']
 const doWizardKeys: Array<keyof DoConfig> = ['floatingMode', 'source', 'notInUse02', 'sequence', 'switchOffDelay', 'switchOnDelay', 'pwmCycleTime', 'alarmOn', 'alarmOff', 'runtimeCounter', 'runtimeAlarmHours', 'usePiSequence', 'safeState', 'manualValue']
 
 export function OutputsPage() {
@@ -74,10 +74,11 @@ export function OutputsPage() {
   }
 
   async function saveOutputs(next = config) {
+    const normalized = normalizeOutputs(next)
     setSaving(true)
     try {
-      await apiClient.putOutputs(next)
-      setConfig(next)
+      await apiClient.putOutputs(normalized)
+      setConfig(normalized)
       toast.push('success', t('outputsSaveSuccess'))
     } catch (error) {
       toast.push('error', `${t('outputsSaveError')}: ${error instanceof Error ? error.message : String(error)}`)
@@ -90,7 +91,7 @@ export function OutputsPage() {
     if (!selected) return
     setSaving(true)
     try {
-      const value = selected.kind === 'AO' ? selected.manualValue : selected.manualValue
+      const value = selected.kind === 'AO' ? clampNumber(selected.manualValue, 0, 100, true) : selected.manualValue
       await apiClient.forceOutput(selected.id, value, release)
       toast.push('success', release ? pick('Đã gỡ manual output', 'Manual output released') : pick('Đã gửi manual output', 'Manual output forced'))
     } catch (error) {
@@ -134,7 +135,7 @@ export function OutputsPage() {
         >
           {selected && (
             <div className="space-y-5">
-              <OutputBasics output={selected} onChange={(patch) => updateOutput(selected.id, patch)} />
+              {selected.kind === 'DO' && <OutputBasics output={selected} onChange={(patch) => updateOutput(selected.id, patch)} />}
               {tab === 'summary' && (
                 <OutputSummary
                   output={selected}
@@ -275,7 +276,7 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
       <section className="space-y-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
         <h3 className="text-sm font-semibold text-[var(--c-text)]">{t('outputsManual')}</h3>
         {output.kind === 'AO' ? (
-          <NumberField label="AO SP" value={output.manualValue} min={0} max={100} onChange={(manualValue) => onChange({ manualValue })} wired />
+          <NumberField label="Analog output manual value (%)" value={output.manualValue} min={0} max={100} step={1} integer onChange={(manualValue) => onChange({ manualValue })} wired />
         ) : (
           <SelectField label="DO SP" value={output.manualValue ? '1' : '0'} options={[['0', 'OFF'], ['1', 'ON']]} onChange={(value) => onChange({ manualValue: value === '1' })} wired />
         )}
@@ -283,10 +284,12 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
           <Button variant="primary" icon={<Power className="h-4 w-4" />} loading={saving} onClick={onForce}>{t('force')}</Button>
           <Button icon={<RotateCcw className="h-4 w-4" />} loading={saving} onClick={onRelease}>{pick('Gỡ', 'Release')}</Button>
         </div>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{t('notes')}</span>
-          <textarea className="min-h-28 w-full resize-y rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]" value={output.note} onChange={(event) => onChange({ note: event.target.value })} />
-        </label>
+        {output.kind === 'DO' && (
+          <label className="block space-y-2">
+            <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{t('notes')}</span>
+            <textarea className="min-h-28 w-full resize-y rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]" value={output.note} onChange={(event) => onChange({ note: event.target.value })} />
+          </label>
+        )}
       </section>
     </div>
   )
@@ -344,7 +347,7 @@ function WizardPanel({ output, fieldKey, keys, index, onChange, onStepSelect, on
 function AdvancedPanel({ output, onChange }: { output: OutputConfig; onChange: (patch: Partial<AoConfig> | Partial<DoConfig>) => void }) {
   const { t } = useI18n()
   const keys = output.kind === 'AO'
-    ? ['source', 'loopConfig', 'mode', 'minHeatOutput', 'maxHeatOutput', 'minCoolOutput', 'maxCoolOutput', 'alarm100', 'alarm0', 'input', 'notUsed10', 'notUsed11', 'piSeqLowerFan1', 'fanSpeed2', 'piSeqUpperFan3', 'setbackAlarm', 'notInUse16', 'safeValue', 'manualValue'] as Array<keyof AoConfig>
+    ? ['mode', 'safeValue', 'manualValue'] as Array<keyof AoConfig>
     : ['floatingMode', 'source', 'notInUse02', 'sequence', 'switchOffDelay', 'switchOnDelay', 'pwmCycleTime', 'alarmOn', 'alarmOff', 'runtimeCounter', 'runtimeAlarmHours', 'usePiSequence', 'activationLimitPi', 'deactivationLimitPi', 'notUsed14', 'notUsed15', 'notInUse16', 'safeState', 'manualValue'] as Array<keyof DoConfig>
 
   return (
@@ -373,11 +376,14 @@ function renderOutputField(output: OutputConfig, key: keyof AoConfig | keyof DoC
   const label = fieldLabel(output.kind, key, t)
   if (output.kind === 'AO') {
     const ao = output
-    if (key === 'mode') return <SelectField label={label} value={ao.mode} options={[['0-10V', '0-10V'], ['4-20mA', '4-20mA']]} onChange={(mode) => onChange({ mode: mode as AoSignalMode })} wired large={large} />
+    if (key === 'mode') return <SelectField label={label} value={ao.mode} options={[['0-10V', '0-10V'], ['4-20mA', '4-20mA']]} onChange={(mode) => {
+      const nextMode = mode as AoSignalMode
+      onChange({ mode: nextMode, safeValue: clampNumber(ao.safeValue, 0, aoSafeMax(nextMode)) })
+    }} wired large={large} />
     if (key === 'source') return <SelectField label={label} value={String(ao.source)} options={aoSourceOptions(t)} onChange={(source) => onChange({ source: Number(source) })} large={large} />
     if (key === 'loopConfig') return <SelectField label={label} value={String(ao.loopConfig)} options={aoLoopOptions(t)} onChange={(loopConfig) => onChange({ loopConfig: Number(loopConfig) })} large={large} />
-    if (key === 'safeValue') return <NumberField label={label} value={ao.safeValue} min={0} max={100} onChange={(safeValue) => onChange({ safeValue })} wired large={large} />
-    if (key === 'manualValue') return <NumberField label={label} value={ao.manualValue} min={0} max={100} onChange={(manualValue) => onChange({ manualValue })} wired large={large} />
+    if (key === 'safeValue') return <NumberField label={`${label} (${aoSafeUnit(ao.mode)})`} value={ao.safeValue} min={0} max={aoSafeMax(ao.mode)} step={0.1} onChange={(safeValue) => onChange({ safeValue })} wired large={large} />
+    if (key === 'manualValue') return <NumberField label={label} value={ao.manualValue} min={0} max={100} step={1} integer onChange={(manualValue) => onChange({ manualValue })} wired large={large} />
     if (key === 'input') return <SelectField label={label} value={String(ao.input)} options={inputOptions(t)} onChange={(input) => onChange({ input: Number(input) })} large={large} />
     if (key === 'alarm100') return <SelectField label={label} value={String(ao.alarm100)} options={alarmOptions(t)} onChange={(alarm100) => onChange({ alarm100: Number(alarm100) })} large={large} />
     if (key === 'alarm0') return <SelectField label={label} value={String(ao.alarm0)} options={alarmOptions(t)} onChange={(alarm0) => onChange({ alarm0: Number(alarm0) })} large={large} />
@@ -395,11 +401,11 @@ function renderOutputField(output: OutputConfig, key: keyof AoConfig | keyof DoC
   return <NumberField label={label} value={Number(digital[key as keyof DoConfig] ?? 0)} min={key === 'runtimeAlarmHours' ? 0 : -50} max={key === 'runtimeAlarmHours' ? 12750 : 205} onChange={(value) => onChange({ [key]: value } as Partial<DoConfig>)} large={large} />
 }
 
-function NumberField({ label, value, min, max, wired, large, onChange }: { label: string; value: number; min: number; max: number; wired?: boolean; large?: boolean; onChange: (value: number) => void }) {
+function NumberField({ label, value, min, max, step = 1, integer, wired, large, onChange }: { label: string; value: number; min: number; max: number; step?: number; integer?: boolean; wired?: boolean; large?: boolean; onChange: (value: number) => void }) {
   return (
     <label className={large ? 'block space-y-2' : 'block'}>
       {large && <FieldHeader label={label} wired={wired} />}
-      <input className={controlClass()} type="number" min={min} max={max} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      <input className={controlClass()} type="number" min={min} max={max} step={step} value={clampNumber(value, min, max, integer)} onChange={(event) => onChange(clampNumber(event.currentTarget.valueAsNumber, min, max, integer))} />
       {large && !wired && <DemoNote />}
     </label>
   )
@@ -509,6 +515,31 @@ function formatStat(value: number, unit?: string): string {
   return `${fixed}${unit ? ` ${unit}` : ''}`
 }
 
+function normalizeOutputs(outputs: OutputsConfig): OutputsConfig {
+  return {
+    ao: outputs.ao.map((ao) => ({
+      ...ao,
+      safeValue: clampNumber(ao.safeValue, 0, aoSafeMax(ao.mode)),
+      manualValue: clampNumber(ao.manualValue, 0, 100, true)
+    })),
+    do: outputs.do
+  }
+}
+
+function aoSafeUnit(mode: AoSignalMode): string {
+  return mode === '4-20mA' ? 'mA' : 'V'
+}
+
+function aoSafeMax(mode: AoSignalMode): number {
+  return mode === '4-20mA' ? 20 : 10
+}
+
+function clampNumber(value: number, min: number, max: number, integer = false): number {
+  const finite = Number.isFinite(value) ? value : min
+  const clamped = Math.min(max, Math.max(min, finite))
+  return integer ? Math.round(clamped) : clamped
+}
+
 function registerFor(kind: OutputKind, channel: number, key: keyof AoConfig | keyof DoConfig): string {
   const prefix = kind === 'AO' ? `${channel}A` : `${channel}d`
   if (key === 'manualValue') return `${prefix} SP`
@@ -559,7 +590,7 @@ function fieldLabel(kind: OutputKind, key: keyof AoConfig | keyof DoConfig, t: T
   const labels: Record<string, string> = {
     source: kind === 'AO' ? 'Source' : 'Output signal source',
     loopConfig: 'Loop Configuration',
-    mode: 'Output Signal',
+    mode: 'Output signal type',
     minHeatOutput: 'Minimum Heat Output',
     maxHeatOutput: 'Maximum Heat Output',
     minCoolOutput: 'Minimum Cool Output',
@@ -574,7 +605,7 @@ function fieldLabel(kind: OutputKind, key: keyof AoConfig | keyof DoConfig, t: T
     piSeqUpperFan3: 'PI Seq Upper / Fan 3',
     setbackAlarm: 'Setback alarm',
     notInUse16: 'Not in use',
-    manualValue: kind === 'AO' ? 'Analog output manual value' : 'Digital output manual value',
+    manualValue: kind === 'AO' ? 'Analog output manual value (%)' : 'Digital output manual value',
     safeValue: 'Safe value',
     safeState: 'Safe state',
     floatingMode: 'Enable Floating Output Mode',
