@@ -234,6 +234,8 @@ bool load_config(const std::string& path, bool must_exist, IobusConfig* out)
             if (get_float(entry, "scale_lo", &f)) out->ui[i].scale_lo = f;
             if (get_float(entry, "scale_hi", &f)) out->ui[i].scale_hi = f;
             if (get_float(entry, "sensor_cal", &f)) out->ui[i].sensor_cal = f;
+            if (get_float(entry, "cal_gain", &f)) out->ui[i].cal_gain = f;
+            if (get_float(entry, "cal_offset", &f)) out->ui[i].cal_offset = f;
 
             int n = 0;
             if (get_int(entry, "range_mult", &n)) out->ui[i].range_mult = clamp_u8(n, 0, 5);

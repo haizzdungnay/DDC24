@@ -597,7 +597,7 @@ int main(int argc, char** argv)
                     for (int i = 0; i < KX_N_UI; i++) {
                         kx_quality_t q;
                         float value = ui_to_eng(resp.ui_raw[i], cfg.ui[i], &q);
-                        snap.ui_raw[i] = cfg.ui[i].enabled ? ui_raw_electric(resp.ui_raw[i], cfg.ui[i].sensor) : 0.0f;
+                        snap.ui_raw[i] = cfg.ui[i].enabled ? ui_raw_electric(resp.ui_raw[i], cfg.ui[i]) : 0.0f;
                         const uint8_t samples = cfg.ui[i].filter_samples;
                         if (q == KX_Q_GOOD && samples > 1) {
                             if (ui_filter_size[i] != samples) {

@@ -126,7 +126,7 @@ Mỗi kênh UI1-UI16 có mạch điều hòa tín hiệu và mode latch độc l
 
 | Chế độ | Cấu hình | Dải đo | Độ chính xác |
 |--------|---------|--------|--------------|
-| **0–10V Analog** | Protected divider + RC + RRIO buffer | 0 – 10 V | Final claim requires approved error budget/calibration evidence |
+| **0–10V Analog** | Protected 100kΩ/12.1kΩ divider (gain 9.2645) + RC + RRIO buffer | 0 – 10 V | Final claim requires approved error budget/calibration evidence |
 | **4–20mA Current** | Protected 49.9Ω, 0.1%, 25ppm/°C shunt + buffer | 4 – 20 mA nominal | Final claim requires approved error budget/calibration evidence |
 | **NTC** | Precision/ratiometric excitation + divider sense | Part/profile dependent | Final claim requires selected part and calibration evidence |
 | **Auxiliary dry contact** | Protected pull-up sense + firmware debounce | Clean contact only | Non-isolated; not an industrial 24V DI replacement |

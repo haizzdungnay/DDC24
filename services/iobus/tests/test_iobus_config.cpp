@@ -93,7 +93,9 @@ TEST(IobusConfig, WebIoConfigMapsEasySetU0ToU7)
           "range_mult": 4,
           "filter_samples": 7,
           "sensor_cal": -0.5,
-          "math_func": 3
+          "math_func": 3,
+          "cal_gain": 1.01,
+          "cal_offset": -0.02
         }
       ],
       "ao": [ { "ch": 4, "mode": "4-20mA" } ]
@@ -108,6 +110,8 @@ TEST(IobusConfig, WebIoConfigMapsEasySetU0ToU7)
     EXPECT_EQ(cfg.ui[15].filter_samples, 7);
     EXPECT_FLOAT_EQ(cfg.ui[15].sensor_cal, -0.5f);
     EXPECT_EQ(cfg.ui[15].math_func, 3);
+    EXPECT_FLOAT_EQ(cfg.ui[15].cal_gain, 1.01f);
+    EXPECT_FLOAT_EQ(cfg.ui[15].cal_offset, -0.02f);
     EXPECT_EQ(cfg.ao_mode[3], AoMode::MA4_20);
 }
 

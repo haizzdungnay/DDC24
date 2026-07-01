@@ -1,43 +1,93 @@
 /**
  * @file  test_io_scaling.cpp
- * @brief Scaling tests: ui_to_eng(int32_t raw_s32, ...) — IOP v2 signed input.
+ * @brief Scaling tests: ADS131M08 signed raw -> UI engineering/raw-electric.
  */
 #include <gtest/gtest.h>
+
+#include <cmath>
+#include <cstdint>
 
 #include "io/io_scaling.hpp"
 
 using namespace iobus;
 
-TEST(IoScaling, Volt0_10)
+namespace {
+
+int32_t raw_from_adc(float v_adc)
+{
+    return static_cast<int32_t>(std::lround((v_adc / IO_ADC_VREF_V) * IO_S24_FS));
+}
+
+int32_t raw_from_field_v(float v_field)
+{
+    return raw_from_adc(v_field / IO_UI_DIV_GAIN);
+}
+
+int32_t raw_from_ma(float ma)
+{
+    return raw_from_adc((ma / 1000.0f) * IO_UI_SHUNT_OHM);
+}
+
+} // namespace
+
+TEST(IoScaling, Volt0_10UsesDividerTransfer)
 {
     kx_quality_t q;
     EXPECT_FLOAT_EQ(ui_to_eng(0, SensorType::V0_10, &q), 0.0f);
     EXPECT_EQ(q, KX_Q_GOOD);
 
-    EXPECT_NEAR(ui_to_eng(8388607, SensorType::V0_10, &q), 10.0f, 0.1f);
+    const int32_t raw_10v = raw_from_field_v(10.0f);
+    EXPECT_NEAR(adc_volts(raw_10v), 10.0f / IO_UI_DIV_GAIN, 0.001f);
+    EXPECT_NEAR(ui_to_eng(raw_10v, SensorType::V0_10, &q), 10.0f, 0.02f);
     EXPECT_EQ(q, KX_Q_GOOD);
 
-    EXPECT_NEAR(ui_to_eng(4194304, SensorType::V0_10, &q), 5.0f, 0.05f);
+    EXPECT_NEAR(ui_to_eng(raw_from_field_v(5.0f), SensorType::V0_10, &q), 5.0f, 0.02f);
     EXPECT_EQ(q, KX_Q_GOOD);
 }
 
-TEST(IoScaling, Ma4_20)
+TEST(IoScaling, AdcFullScaleIsNotFieldFullScale)
 {
     kx_quality_t q;
-    EXPECT_NEAR(ui_to_eng(0, SensorType::MA4_20, &q), 4.0f, 0.04f);
+    const float v = ui_to_eng(static_cast<int32_t>(IO_S24_FS), SensorType::V0_10, &q);
+    EXPECT_NEAR(v, IO_ADC_VREF_V * IO_UI_DIV_GAIN, 0.02f);
+    EXPECT_EQ(q, KX_Q_BAD);
+}
+
+TEST(IoScaling, Volt2_10QualityUsesFieldVolts)
+{
+    kx_quality_t q;
+    EXPECT_NEAR(ui_to_eng(raw_from_field_v(2.0f), SensorType::V2_10, &q), 2.0f, 0.02f);
     EXPECT_EQ(q, KX_Q_GOOD);
 
-    EXPECT_NEAR(ui_to_eng(8388607, SensorType::MA4_20, &q), 20.0f, 0.2f);
+    EXPECT_NEAR(ui_to_eng(raw_from_field_v(10.0f), SensorType::V2_10, &q), 10.0f, 0.02f);
+    EXPECT_EQ(q, KX_Q_GOOD);
+
+    ui_to_eng(raw_from_field_v(1.7f), SensorType::V2_10, &q);
+    EXPECT_EQ(q, KX_Q_BAD);
+}
+
+TEST(IoScaling, Ma4_20UsesShuntTransfer)
+{
+    kx_quality_t q;
+    EXPECT_NEAR(ui_to_eng(raw_from_ma(4.0f), SensorType::MA4_20, &q), 4.0f, 0.02f);
+    EXPECT_EQ(q, KX_Q_GOOD);
+
+    const int32_t raw_20ma = raw_from_ma(20.0f);
+    EXPECT_NEAR(adc_volts(raw_20ma), 0.998f, 0.001f);
+    EXPECT_NEAR(ui_to_eng(raw_20ma, SensorType::MA4_20, &q), 20.0f, 0.02f);
     EXPECT_EQ(q, KX_Q_GOOD);
 }
 
 TEST(IoScaling, RawElectricValueAndUnit)
 {
-    EXPECT_NEAR(ui_raw_electric(4194304, SensorType::V0_10), 5.0f, 0.05f);
+    EXPECT_NEAR(ui_raw_electric(raw_from_field_v(10.0f), SensorType::V0_10), 10.0f, 0.02f);
     EXPECT_STREQ(sensor_raw_unit(SensorType::V0_10), "V");
 
-    EXPECT_NEAR(ui_raw_electric(4194304, SensorType::MA4_20), 12.0f, 0.1f);
+    EXPECT_NEAR(ui_raw_electric(raw_from_ma(20.0f), SensorType::MA4_20), 20.0f, 0.02f);
     EXPECT_STREQ(sensor_raw_unit(SensorType::MA4_20), "mA");
+
+    EXPECT_NEAR(ui_raw_electric(raw_from_adc(1.65f), SensorType::NTC10K), 1.65f, 0.001f);
+    EXPECT_STREQ(sensor_raw_unit(SensorType::NTC10K), "V");
 
     EXPECT_FLOAT_EQ(ui_raw_electric(8000000, SensorType::DRY_CONTACT), 0.0f);
     EXPECT_STREQ(sensor_raw_unit(SensorType::DRY_CONTACT), "");
@@ -47,17 +97,17 @@ TEST(IoScaling, RawElectricValueAndUnit)
 TEST(IoScaling, UiOverrangeIsBad)
 {
     kx_quality_t q;
-    /* raw=9300000 > 110%FS (8388607*1.10=9227467) → BAD */
-    ui_to_eng(9300000, SensorType::V0_10, &q);
+    ui_to_eng(raw_from_field_v(11.2f), SensorType::V0_10, &q);
     EXPECT_EQ(q, KX_Q_BAD);
 
-    /* raw=-4194304: mA=4+(-0.5*16)=-4.0 < 3.5 → broken loop → BAD */
-    ui_to_eng(-4194304, SensorType::MA4_20, &q);
+    ui_to_eng(raw_from_field_v(-0.3f), SensorType::V0_10, &q);
     EXPECT_EQ(q, KX_Q_BAD);
 
-    /* raw=-1: frac≈0, mA≈4.0 → GOOD (not a broken loop) */
-    ui_to_eng(-1, SensorType::MA4_20, &q);
-    EXPECT_EQ(q, KX_Q_GOOD);
+    ui_to_eng(raw_from_ma(3.4f), SensorType::MA4_20, &q);
+    EXPECT_EQ(q, KX_Q_BAD);
+
+    ui_to_eng(raw_from_ma(21.5f), SensorType::MA4_20, &q);
+    EXPECT_EQ(q, KX_Q_BAD);
 }
 
 TEST(IoScaling, DryContact)
@@ -69,7 +119,6 @@ TEST(IoScaling, DryContact)
 
 TEST(IoScaling, Pt100Pt1000RevAAlwaysBad)
 {
-    /* Rev A: circuit not populated — must return BAD regardless of input */
     kx_quality_t q;
     ui_to_eng(4000000, SensorType::PT100,  &q);
     EXPECT_EQ(q, KX_Q_BAD);
@@ -86,13 +135,10 @@ TEST(IoScaling, UnknownTypeIsBad)
 
 TEST(IoScaling, NegativeRawValid)
 {
-    /* IOP v2: negative raw_s32 is valid (ADS131M08 bidirectional) */
     kx_quality_t q;
-    /* -8388608 = min s24: frac = -1.0 → V = -10V → BAD (< -2%FS) */
-    ui_to_eng(-8388608, SensorType::V0_10, &q);
+    ui_to_eng(raw_from_field_v(-0.3f), SensorType::V0_10, &q);
     EXPECT_EQ(q, KX_Q_BAD);
 
-    /* raw = -1: frac ≈ 0 → V ≈ 0V → GOOD */
     const float v = ui_to_eng(-1, SensorType::V0_10, &q);
     EXPECT_EQ(q, KX_Q_GOOD);
     EXPECT_NEAR(v, 0.0f, 0.01f);
@@ -100,33 +146,26 @@ TEST(IoScaling, NegativeRawValid)
 
 TEST(IoScaling, Ntc10kAt25C)
 {
-    /* r_from_raw: r = (raw/FS) * 2 * r_nominal
-     * raw = FS/2 = 4194304 → r = 1.0 * 10000 = R0 → Steinhart-Hart ≈ 25°C */
     kx_quality_t q;
-    const float t = ui_to_eng(4194304, SensorType::NTC10K, &q);
+    const float t = ui_to_eng(raw_from_adc(1.65f), SensorType::NTC10K, &q);
     EXPECT_EQ(q, KX_Q_GOOD);
-    EXPECT_NEAR(t, 25.0f, 1.5f);   /* tolerance: SH coeffs for generic NTC */
+    EXPECT_NEAR(t, 25.0f, 0.2f);
 }
 
-TEST(IoScaling, Ntc20kAt10C)
+TEST(IoScaling, Ntc20kAt25C)
 {
-    /* raw=4194304 → r=(0.5)*2*20000=20000Ω; SH(20kΩ,same coeffs) ≈ 9.94°C.
-     * SH_A/B/C are calibrated for a ~10kΩ NTC curve; NTC20K uses same
-     * coefficients with scaled r_nominal — gives ~10°C at half-scale. */
     kx_quality_t q;
-    const float t = ui_to_eng(4194304, SensorType::NTC20K, &q);
+    const float t = ui_to_eng(raw_from_adc(1.65f), SensorType::NTC20K, &q);
     EXPECT_EQ(q, KX_Q_GOOD);
-    EXPECT_NEAR(t, 10.0f, 1.5f);
+    EXPECT_NEAR(t, 25.0f, 0.2f);
 }
 
 TEST(IoScaling, NtcBrokenWireIsBad)
 {
-    /* raw=0 → r=0 → ntc_resolve_temp(0) returns NAN → BAD */
     kx_quality_t q;
     ui_to_eng(0, SensorType::NTC10K, &q);
     EXPECT_EQ(q, KX_Q_BAD);
 
-    /* raw<0 → r<0 → NAN → BAD (reverse-biased / shorted) */
     ui_to_eng(-100000, SensorType::NTC10K, &q);
     EXPECT_EQ(q, KX_Q_BAD);
 
@@ -136,9 +175,8 @@ TEST(IoScaling, NtcBrokenWireIsBad)
 
 TEST(IoScaling, Ntc10kOutOfRangeIsBad)
 {
-    /* raw=1 → r very small → very high temp → > 70°C → BAD */
     kx_quality_t q;
-    ui_to_eng(1, SensorType::NTC10K, &q);
+    ui_to_eng(raw_from_adc(0.05f), SensorType::NTC10K, &q);
     EXPECT_EQ(q, KX_Q_BAD);
 }
 
@@ -173,9 +211,27 @@ TEST(IoScaling, ConfiguredEasySetScaleCalibrationAndRangeMultiplier)
     cfg.sensor_cal = 2.0f;
 
     kx_quality_t q;
-    const float value = ui_to_eng(4194304, cfg, &q);
+    const float value = ui_to_eng(raw_from_field_v(5.0f), cfg, &q);
     EXPECT_EQ(q, KX_Q_GOOD);
     EXPECT_NEAR(value, 502.0f, 1.0f);
+}
+
+TEST(IoScaling, ConfiguredTwoPointCalibrationHook)
+{
+    UiScaleConfig cfg;
+    cfg.sensor = SensorType::V0_10;
+    cfg.scale_lo = 0.0f;
+    cfg.scale_hi = 10.0f;
+
+    kx_quality_t q;
+    EXPECT_NEAR(ui_to_eng(raw_from_field_v(4.0f), cfg, &q), 4.0f, 0.02f);
+    EXPECT_EQ(q, KX_Q_GOOD);
+
+    cfg.cal_gain = 2.0f;
+    cfg.cal_offset = 1.0f;
+    EXPECT_NEAR(ui_to_eng(raw_from_field_v(4.0f), cfg, &q), 9.0f, 0.02f);
+    EXPECT_EQ(q, KX_Q_GOOD);
+    EXPECT_NEAR(ui_raw_electric(raw_from_field_v(4.0f), cfg), 9.0f, 0.02f);
 }
 
 TEST(IoScaling, ConfiguredDryContactInvert)

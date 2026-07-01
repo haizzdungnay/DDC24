@@ -56,13 +56,21 @@ Phát alarm qua `alarm.sock` (JSON line, SW_ARCH §2.3).
 ```python
 # minh hoạ; thực tế viết C
 def scale(raw_s24, sensor):
-    if sensor=="0-10V":  return raw_s24/8388607.0*10.0
-    if sensor=="4-20mA": return 4.0 + raw_s24/8388607.0*16.0
+    v_adc = raw_s24 / 8388607.0 * 2.44  # ADS131M08 VREF, PGA gain 1
+    if sensor=="0-10V":  return v_adc * 9.2645
+    if sensor=="2-10V":  return v_adc * 9.2645
+    if sensor=="4-20mA": return v_adc / 49.9 * 1000.0
     if sensor in ("PT100","PT1000"): return cvd_invert(R_from_raw(raw_s24))  # IEC 60751
-    if sensor in ("NTC10k","NTC20k"): return steinhart(R_from_raw(raw_s24))  # β=3950
+    if sensor in ("NTC10k","NTC20k"): return beta_ntc(R_pullup * v_adc / (Vexc - v_adc))  # B=3950
     if sensor=="dry": return 1.0 if raw_s24>thr else 0.0
 ```
 - Hệ số NTC β=3950: A=1.129e-3, B=2.341e-4, C=8.76e-8 (đồng bộ IO_UI/SW_ARCH).
+- Transfer Rev A theo `hardware-design/03_io_subsystem/IO_UI_CIRCUIT.md`:
+  - ADS131M08: `V_adc = raw_s24 / 8388607.0 * 2.44`, PGA gain = 1.
+  - Voltage UI: divider 100k/12.1k, `V_field = V_adc * 9.2645`.
+  - Current UI: shunt 49.9Ω, `I_mA = V_adc / 49.9 * 1000`.
+  - NTC: divider `R_ntc = R_pullup * V_adc / (Vexc - V_adc)`; Vexc phải được đo/compensate trong bring-up.
+- Calibration hook: mỗi UI channel có 2-point linear calibration `field_cal = raw_field * cal_gain + cal_offset`. Default identity (`cal_gain=1.0`, `cal_offset=0.0`); giá trị production nạp trong HW bring-up qua config/NVM.
 - Cấu hình sensor đọc từ `io_config.conf` (D-5).
 
 ## 5. Shared memory seqlock (SW_ARCH §2)

@@ -291,6 +291,21 @@ Phụ thuộc: IOB-006-V2, WEB-003
 Trạng thái: ĐÃ làm 2026-06-30 — ADR-011 + SHM v3 contract, iobus raw writer, web `raw`/`rawUnit`, FE Raw card + dry-contact boolean handling. Verification: `go build ./...`, `go test ./...`, `npm run build` pass; C++ CMake tests blocked locally because `cmake`/`g++`/`cl` unavailable.
 ```
 
+```
+Task ID: IOB-008
+Tên: Reconcile UI raw/engineering scaling theo HW Rev A
+Owner: Dev SOM | Phase: 3 | Module: iobus/io_scaling
+File: services/iobus/io/io_scaling.cpp, services/iobus/io/io_scaling.hpp,
+      services/iobus/io/io_types.hpp, services/iobus/config/iobus_config.cpp,
+      services/iobus/tests/test_io_scaling.cpp, services/iobus/tests/test_iobus_config.cpp
+Input: IO_UI_CIRCUIT §5.1/§5.2, BOM-UI-16CH 49.9R shunt, ADS131M08 VREF=2.44V
+Output: UI voltage/current scaling uses physical ADC transfer; per-channel cal_gain/cal_offset hook exists; no SHM/IOP/AO contract change
+Test: test_io_scaling: 10V, 2-10V under-range, 4/20mA, loop fault thresholds, cal identity/offset; ctest iobus PASS
+Done khi: raw V/mA and engineering match Rev A hardware formulas and default calibration remains identity
+Phụ thuộc: IOB-007
+Trạng thái: ĐÃ làm 2026-06-30 — HW scaling reconcile + cal hook; Orange Pi build pass, full ctest 148/148 with 2 IoCache skips due live SHM, `ctest -R IoScaling` 19/19 pass.
+```
+
 ---
 
 ## Phase 4 — mkddc-core
