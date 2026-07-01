@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	kxShmMagic    = 0x4B584402
+	kxShmMagic    = 0x4B584403
 	defaultIOShm  = "/dev/shm/mkddc_io_shm"
 	defaultPLCShm = "/dev/shm/mkddc_plc_shm"
 )
@@ -398,16 +398,18 @@ const (
 	offPLCScanOverrun = 9272
 	kxPlcShmMinLen    = 9280
 
-	// kx_io_shm_t offsets cÃ¡ÂºÂ§n cho ReadPoints() lÃ¡ÂºÂ¥y ui_unit[8][8]:
-	//   ui_unit at offset 56 (header16 + ui_value8*4=32 + ui_quality8=8 = 56)
-	//   ui_unit[i] = data[offIOUnit + i*8 : offIOUnit+i*8+8] (NUL-term string, max 8B)
-	offIOUnit      = 96
+	// kx_io_shm_t v3 offsets used by web:
+	//   header16 + ui_value[16]*4 + ui_raw[16]*4 + ui_quality[16]
+	//   + ui_unit[16][8] + ui_raw_unit[16][8] + rest = 512 bytes.
+	offIORaw       = 80
+	offIOUnit      = 160
+	offIORawUnit   = 288
 	kxIOUnitSize   = 8
-	offIOPStatus   = 294
-	offIOCRCErrors = 304
-	offIOTimeouts  = 308
-	offIOSeqErrors = 312
-	kxIOShmMinLen  = 320
+	offIOPStatus   = 490
+	offIOCRCErrors = 496
+	offIOTimeouts  = 500
+	offIOSeqErrors = 504
+	kxIOShmMinLen  = 512
 )
 
 // kx_quality_t ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ DTO quality string
@@ -440,11 +442,11 @@ func decodePoint(data []byte, offset int, id, name string) PointDTO {
 	}
 }
 
-func ioUnit(ioData []byte, ch int) string {
+func ioString(ioData []byte, base int, ch int) string {
 	if ioData == nil || ch < 0 || ch >= kxNUI {
 		return ""
 	}
-	start := offIOUnit + ch*kxIOUnitSize
+	start := base + ch*kxIOUnitSize
 	if start+kxIOUnitSize > len(ioData) {
 		return ""
 	}
@@ -456,26 +458,66 @@ func ioUnit(ioData []byte, ch int) string {
 	return string(b[:n])
 }
 
+func ioUnit(ioData []byte, ch int) string {
+	return ioString(ioData, offIOUnit, ch)
+}
+
+func ioRawUnit(ioData []byte, ch int) string {
+	return ioString(ioData, offIORawUnit, ch)
+}
+
+func ioRaw(ioData []byte, ch int) (float32, bool) {
+	if ioRawUnit(ioData, ch) == "" {
+		return 0, false
+	}
+	start := offIORaw + ch*4
+	if ioData == nil || start+4 > len(ioData) {
+		return 0, false
+	}
+	return math.Float32frombits(binary.LittleEndian.Uint32(ioData[start : start+4])), true
+}
+
+func pointFloat(value any) (float32, bool) {
+	switch v := value.(type) {
+	case float32:
+		return v, true
+	case float64:
+		return float32(v), true
+	case int:
+		return float32(v), true
+	default:
+		return 0, false
+	}
+}
+
 func decodePoints(data []byte, ioData []byte) []PointDTO {
 	if len(data) < kxPlcShmMinLen {
 		return nil
 	}
 	pts := make([]PointDTO, 0, kxNUI+kxNAO+kxNDO+kxNAV+kxNBV+kxNMSV)
 
-	// AI[0..7]
+	// UI[0..15]
 	for i := 0; i < kxNUI; i++ {
 		id := formatPointID("UI", i+1)
 		dto := decodePoint(data, offAI+i*kxPointSize, id, id)
 		dto.Unit = ioUnit(ioData, i)
+		if strings.EqualFold(dto.Unit, "bool") {
+			if v, ok := pointFloat(dto.Value); ok {
+				dto.Value = v > 0.5
+			}
+		}
+		if raw, ok := ioRaw(ioData, i); ok {
+			dto.Raw = &raw
+			dto.RawUnit = ioRawUnit(ioData, i)
+		}
 		pts = append(pts, dto)
 	}
-	// BI[0..7] ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â binary, bool as float
-	// AO[0..3] ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â analog output (commandable)
+	// AO[0..3] analog output (commandable)
 	for i := 0; i < kxNAO; i++ {
 		id := formatPointID("AO", i+1)
 		pts = append(pts, decodePoint(data, offAO+i*kxPointSize, id, id))
 	}
-	// DO[0..3] ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â digital output feedback (bo[] array)
+	// DO[0..3] digital output feedback (bo[] array)
 	for i := 0; i < kxNDO; i++ {
 		id := formatPointID("DO", i+1)
 		dto := decodePoint(data, offBO+i*kxPointSize, id, id)

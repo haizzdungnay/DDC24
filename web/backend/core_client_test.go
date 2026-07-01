@@ -131,17 +131,20 @@ func TestDecodePointsIOUnit(t *testing.T) {
 	binary.LittleEndian.PutUint32(plcData[0:4], kxShmMagic)
 	setPoint(plcData, offAI, 25.0, 0) // UI-01 good
 
-	// Build fake io_shm with magic + ui_unit at offset 56
+	// Build fake io_shm v3 with unit + raw metadata.
 	ioData := make([]byte, kxIOShmMinLen)
 	binary.LittleEndian.PutUint32(ioData[0:4], kxShmMagic)
-	// ui_unit[0] = "degC\0..." at offset 56
 	copy(ioData[offIOUnit:], []byte("degC\x00\x00\x00\x00"))
-	// ui_unit[1] = "V\0..." at offset 64
 	copy(ioData[offIOUnit+kxIOUnitSize:], []byte("V\x00\x00\x00\x00\x00\x00\x00"))
+	binary.LittleEndian.PutUint32(ioData[offIORaw:], float32bits(2.5))
+	copy(ioData[offIORawUnit:], []byte("V\x00\x00\x00\x00\x00\x00\x00"))
 
 	pts := decodePoints(plcData, ioData)
 	if pts[0].Unit != "degC" {
 		t.Errorf("UI-01 unit = %q, want degC", pts[0].Unit)
+	}
+	if pts[0].Raw == nil || *pts[0].Raw != 2.5 || pts[0].RawUnit != "V" {
+		t.Errorf("UI-01 raw = %v %q, want 2.5 V", pts[0].Raw, pts[0].RawUnit)
 	}
 	if pts[1].Unit != "V" {
 		t.Errorf("UI-02 unit = %q, want V", pts[1].Unit)
@@ -149,6 +152,24 @@ func TestDecodePointsIOUnit(t *testing.T) {
 	// AI3 (no unit set) should be empty string
 	if pts[2].Unit != "" {
 		t.Errorf("UI-03 unit = %q, want empty", pts[2].Unit)
+	}
+}
+
+func TestDecodePointsBoolUnitOmitsRaw(t *testing.T) {
+	plcData := make([]byte, kxPlcShmMinLen)
+	binary.LittleEndian.PutUint32(plcData[0:4], kxShmMagic)
+	setPoint(plcData, offAI, 1.0, 0)
+
+	ioData := make([]byte, kxIOShmMinLen)
+	binary.LittleEndian.PutUint32(ioData[0:4], kxShmMagic)
+	copy(ioData[offIOUnit:], []byte("bool\x00\x00\x00\x00"))
+
+	pts := decodePoints(plcData, ioData)
+	if pts[0].Value != true {
+		t.Errorf("UI-01 value = %#v, want true", pts[0].Value)
+	}
+	if pts[0].Raw != nil || pts[0].RawUnit != "" {
+		t.Errorf("UI-01 raw = %v %q, want omitted", pts[0].Raw, pts[0].RawUnit)
 	}
 }
 
