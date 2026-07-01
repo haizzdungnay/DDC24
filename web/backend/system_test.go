@@ -14,10 +14,11 @@ type fakeOS struct{}
 
 func (fakeOS) ReadMetrics(context.Context) (OSMetrics, error) {
 	cpu := 12.5
+	clock := 1512.5
 	ram := 34.75
 	temp := 42.25
 	up := uint64(12345)
-	return OSMetrics{CPUPercent: &cpu, RAMPercent: &ram, TempC: &temp, UptimeS: &up}, nil
+	return OSMetrics{CPUPercent: &cpu, CPUClockMhz: &clock, RAMPercent: &ram, TempC: &temp, UptimeS: &up}, nil
 }
 
 type fakeCore struct{}
@@ -57,10 +58,11 @@ func TestSystemStatusHandler(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	checks := map[string]float64{
-		"cpu_percent": 12.5,
-		"ram_percent": 34.75,
-		"tempC":       42.25,
-		"uptimeS":     12345,
+		"cpu_percent":   12.5,
+		"cpu_clock_mhz": 1512.5,
+		"ram_percent":   34.75,
+		"tempC":         42.25,
+		"uptimeS":       12345,
 	}
 	for key, want := range checks {
 		got, ok := resp[key].(float64)
@@ -70,6 +72,25 @@ func TestSystemStatusHandler(t *testing.T) {
 	}
 	if resp["overall"] != "ok" {
 		t.Fatalf("overall = %v", resp["overall"])
+	}
+}
+
+func TestReadCPUClockMhz(t *testing.T) {
+	sysRoot := t.TempDir()
+	dir := filepath.Join(sysRoot, "devices", "system", "cpu", "cpu0", "cpufreq")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir cpufreq: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "scaling_cur_freq"), []byte("1512000\n"), 0o644); err != nil {
+		t.Fatalf("write cpufreq: %v", err)
+	}
+
+	got, err := readCPUClockMhz(sysRoot)
+	if err != nil {
+		t.Fatalf("readCPUClockMhz: %v", err)
+	}
+	if got != 1512 {
+		t.Fatalf("clock = %v; want 1512", got)
 	}
 }
 

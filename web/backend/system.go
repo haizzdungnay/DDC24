@@ -19,12 +19,13 @@ type OSReader interface {
 }
 
 type OSMetrics struct {
-	CPUPercent *float64
-	RAMPercent *float64
-	RAMUsedMB  *float64
-	RAMTotalMB *float64
-	TempC      *float64
-	UptimeS    *uint64
+	CPUPercent  *float64
+	CPUClockMhz *float64
+	RAMPercent  *float64
+	RAMUsedMB   *float64
+	RAMTotalMB  *float64
+	TempC       *float64
+	UptimeS     *uint64
 }
 
 type LinuxOSReader struct {
@@ -33,22 +34,24 @@ type LinuxOSReader struct {
 }
 
 type SystemStatus struct {
-	Overall         string                   `json:"overall,omitempty"`
-	Services        map[string]ServiceHealth `json:"services,omitempty"`
-	CPUPercent      *float64                 `json:"cpu_percent,omitempty"`
-	RAMPercent      *float64                 `json:"ram_percent,omitempty"`
-	RAMUsedMB       *float64                 `json:"ram_used_mb,omitempty"`
-	RAMTotalMB      *float64                 `json:"ram_total_mb,omitempty"`
-	TempC           *float64                 `json:"tempC,omitempty"`
-	TempCSnake      *float64                 `json:"temp_c,omitempty"`
-	UptimeS         *uint64                  `json:"uptime_s,omitempty"`
-	UptimeSCamel    *uint64                  `json:"uptimeS,omitempty"`
-	CPUPercentCamel *float64                 `json:"cpuPercent,omitempty"`
-	RAMPercentCamel *float64                 `json:"ramPercent,omitempty"`
-	DeviceIP        string                   `json:"device_ip,omitempty"`
-	Versions        VersionStatus            `json:"versions"`
-	IOP             IOPStatus                `json:"iop"`
-	Scan            ScanStatus               `json:"scan"`
+	Overall          string                   `json:"overall,omitempty"`
+	Services         map[string]ServiceHealth `json:"services,omitempty"`
+	CPUPercent       *float64                 `json:"cpu_percent,omitempty"`
+	CPUClockMhz      *float64                 `json:"cpu_clock_mhz,omitempty"`
+	RAMPercent       *float64                 `json:"ram_percent,omitempty"`
+	RAMUsedMB        *float64                 `json:"ram_used_mb,omitempty"`
+	RAMTotalMB       *float64                 `json:"ram_total_mb,omitempty"`
+	TempC            *float64                 `json:"tempC,omitempty"`
+	TempCSnake       *float64                 `json:"temp_c,omitempty"`
+	UptimeS          *uint64                  `json:"uptime_s,omitempty"`
+	UptimeSCamel     *uint64                  `json:"uptimeS,omitempty"`
+	CPUPercentCamel  *float64                 `json:"cpuPercent,omitempty"`
+	CPUClockMhzCamel *float64                 `json:"cpuClockMhz,omitempty"`
+	RAMPercentCamel  *float64                 `json:"ramPercent,omitempty"`
+	DeviceIP         string                   `json:"device_ip,omitempty"`
+	Versions         VersionStatus            `json:"versions"`
+	IOP              IOPStatus                `json:"iop"`
+	Scan             ScanStatus               `json:"scan"`
 }
 
 type ServiceHealth struct {
@@ -70,22 +73,24 @@ func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	versions := core.Versions
 	versions.Web = a.cfg.WebVersion
 	status := SystemStatus{
-		Overall:         overallStatus(core),
-		Services:        servicesStatus(core, metrics.UptimeS),
-		CPUPercent:      metrics.CPUPercent,
-		RAMPercent:      metrics.RAMPercent,
-		RAMUsedMB:       metrics.RAMUsedMB,
-		RAMTotalMB:      metrics.RAMTotalMB,
-		TempC:           metrics.TempC,
-		TempCSnake:      metrics.TempC,
-		UptimeS:         metrics.UptimeS,
-		UptimeSCamel:    metrics.UptimeS,
-		CPUPercentCamel: metrics.CPUPercent,
-		RAMPercentCamel: metrics.RAMPercent,
-		DeviceIP:        primaryIPv4(),
-		Versions:        versions,
-		IOP:             core.IOP,
-		Scan:            core.Scan,
+		Overall:          overallStatus(core),
+		Services:         servicesStatus(core, metrics.UptimeS),
+		CPUPercent:       metrics.CPUPercent,
+		CPUClockMhz:      metrics.CPUClockMhz,
+		RAMPercent:       metrics.RAMPercent,
+		RAMUsedMB:        metrics.RAMUsedMB,
+		RAMTotalMB:       metrics.RAMTotalMB,
+		TempC:            metrics.TempC,
+		TempCSnake:       metrics.TempC,
+		UptimeS:          metrics.UptimeS,
+		UptimeSCamel:     metrics.UptimeS,
+		CPUPercentCamel:  metrics.CPUPercent,
+		CPUClockMhzCamel: metrics.CPUClockMhz,
+		RAMPercentCamel:  metrics.RAMPercent,
+		DeviceIP:         primaryIPv4(),
+		Versions:         versions,
+		IOP:              core.IOP,
+		Scan:             core.Scan,
 	}
 	writeJSON(w, http.StatusOK, status)
 }
@@ -158,6 +163,9 @@ func (r LinuxOSReader) ReadMetrics(ctx context.Context) (OSMetrics, error) {
 		metrics.CPUPercent = &cpu
 	} else {
 		errs = append(errs, err.Error())
+	}
+	if clock, err := readCPUClockMhz(sysRoot); err == nil {
+		metrics.CPUClockMhz = &clock
 	}
 	if ram, err := readRAMPercent(filepath.Join(procRoot, "meminfo")); err == nil {
 		metrics.RAMPercent = &ram
@@ -249,6 +257,34 @@ func readCPUSample(statPath string) (cpuSample, error) {
 		idle += values[4]
 	}
 	return cpuSample{idle: idle, total: total}, nil
+}
+
+func readCPUClockMhz(sysRoot string) (float64, error) {
+	matches, err := filepath.Glob(filepath.Join(sysRoot, "devices", "system", "cpu", "cpu*", "cpufreq", "*_cur_freq"))
+	if err != nil {
+		return 0, err
+	}
+	for _, match := range matches {
+		data, err := os.ReadFile(match)
+		if err != nil {
+			continue
+		}
+		raw := strings.TrimSpace(string(data))
+		value, err := strconv.ParseFloat(raw, 64)
+		if err != nil || value <= 0 {
+			continue
+		}
+		switch {
+		case value > 10_000_000:
+			value /= 1_000_000
+		case value > 10_000:
+			value /= 1_000
+		}
+		if value > 0 && value < 10_000 {
+			return round2(value), nil
+		}
+	}
+	return 0, fmt.Errorf("CPU clock not available")
 }
 
 func readRAMPercent(meminfoPath string) (float64, error) {
