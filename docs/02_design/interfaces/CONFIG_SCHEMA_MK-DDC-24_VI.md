@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.4 | 2026-06-30 (§3: `io_config.conf` quyết định raw live-data unit V/mA qua ADR-011) · 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -92,6 +92,8 @@
 - `ao.mode` ∈ `0-10V|4-20mA` → **mkddc-iobus** gửi `SET_AO_CFG` xuống MCU (mode đã áp dụng ghi vào `kx_io_shm.ao_mode[]`).
 
 > 2026-06-29 implementation note: `mkddc-iobus` consumes EasySet UI `u0..u7` from `io_config.conf`: `type`, `scale_lo/scale_hi`, `range_mult`, `unit`, `filter_samples`, `sensor_cal`, and `math_func`. `ui[].name/note` stay web metadata.
+
+> 2026-06-30 ADR-011 note: `mkddc-iobus` also writes live raw input into `kx_io_shm.ui_raw[]` with `ui_raw_unit[][]`. `0-10V`/`2-10V`/NTC/potentiometer/light use raw unit `"V"`, `4-20mA` uses `"mA"`, and `dry`/`pulse`/`none`/disabled channels use empty raw unit so web omits raw V/mA. Dry-contact engineering value is boolean 0/1 for ON/OFF display.
 
 ## 4. `io_safe_state.conf` — giá trị an toàn khi lỗi
 ```json
@@ -203,4 +205,4 @@
 `SW_ARCH §5`, `IDE-020..025`, `SW-IDE-010..015`, `RTU-002`, `MB-010`.
 
 ---
-**Rev** 1.0 | 2026-05-30
+**Rev** 1.4 | 2026-06-30

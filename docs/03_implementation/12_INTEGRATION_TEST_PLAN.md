@@ -177,7 +177,7 @@ Log: journalctl -u mkddc-iobus
 Test ID: TC-3-02  SHM writer đúng (16 UI)
 Thiết bị: shm_dump_io --watch
 Các bước: cấp 0-10V lần lượt UI1..UI16; đọc kx_io_shm
-Kết quả: ui_value[0..15] đổi đúng, seqlock không nửa-ghi, magic=0x4B584402
+Kết quả: ui_value[0..15] + ui_raw[0..15] đổi đúng, seqlock không nửa-ghi, magic=0x4B584403
 Pass/Fail: 16/16 kênh nhất quán, magic đúng v2
 Log: shm dump
 
