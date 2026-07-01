@@ -78,6 +78,20 @@ TEST(IoScaling, Ma4_20UsesShuntTransfer)
     EXPECT_EQ(q, KX_Q_GOOD);
 }
 
+TEST(IoScaling, ReliabilityOverloadUsesAdsTransfer)
+{
+    kx_quality_t q;
+    kx_reliability_t r;
+
+    EXPECT_NEAR(ui_to_eng(raw_from_field_v(10.0f), SensorType::V0_10, &q, &r), 10.0f, 0.02f);
+    EXPECT_EQ(q, KX_Q_GOOD);
+    EXPECT_EQ(r, KX_REL_RELIABLE);
+
+    EXPECT_NEAR(ui_to_eng(raw_from_ma(20.0f), SensorType::MA4_20, &q, &r), 20.0f, 0.02f);
+    EXPECT_EQ(q, KX_Q_GOOD);
+    EXPECT_EQ(r, KX_REL_RELIABLE);
+}
+
 TEST(IoScaling, RawElectricValueAndUnit)
 {
     EXPECT_NEAR(ui_raw_electric(raw_from_field_v(10.0f), SensorType::V0_10), 10.0f, 0.02f);
