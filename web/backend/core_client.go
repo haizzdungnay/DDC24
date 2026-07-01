@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	kxShmMagic    = 0x4B584403
+	kxShmMagic    = 0x4B584404
 	defaultIOShm  = "/dev/shm/mkddc_io_shm"
 	defaultPLCShm = "/dev/shm/mkddc_plc_shm"
 )
@@ -370,15 +370,15 @@ const (
 
 	// kx_plc_shm_t header + point arrays:
 	//   header: magic(4)+seq(4)+ts_ns(8) = 16
-	//   ai[8]   at offset 16
-	//   bi[8]   at offset 16 + 8*76 = 624
-	//   ao[4]   at offset 624 + 8*76 = 1232
-	//   bo[4]   at offset 1232 + 4*76 = 1536
-	//   av[32]  at offset 1536 + 4*76 = 1840
-	//   bv[16]  at offset 1840 + 32*76 = 4272
-	//   msv[8]  at offset 4272 + 16*76 = 5488
-	//   ext[64] at offset 6096 (kx_ext_point_t=40b): 64*40=2560
-	//   ext_count(2)+plc_running(1)+pad(1)+scan_count(4)+scan_overrun(4)=12 -> total 8668+4pad=8672
+	//   ai[16]  at offset 16
+	//   bi[8]   at offset 1232
+	//   ao[4]   at offset 1840
+	//   bo[4]   at offset 2144
+	//   av[32]  at offset 2448
+	//   bv[16]  at offset 4880
+	//   msv[8]  at offset 6096
+	//   ext[64] at offset 6704 (kx_ext_point_t=40b): 64*40=2560
+	//   scan_count at 9268; scan_overrun at 9272; sizeof(kx_plc_shm_t)=9280.
 	offAI  = 16
 	offBI  = offAI + kxNUI*kxPointSize
 	offAO  = offBI + kxNDI*kxPointSize
@@ -398,18 +398,18 @@ const (
 	offPLCScanOverrun = 9272
 	kxPlcShmMinLen    = 9280
 
-	// kx_io_shm_t v3 offsets used by web:
+	// kx_io_shm_t v4 offsets used by web:
 	//   header16 + ui_value[16]*4 + ui_raw[16]*4 + ui_quality[16]
-	//   + ui_unit[16][8] + ui_raw_unit[16][8] + rest = 512 bytes.
+	//   + ui_reliability[16] + ui_unit[16][8] + ui_raw_unit[16][8] + rest = 528 bytes.
 	offIORaw       = 80
-	offIOUnit      = 160
-	offIORawUnit   = 288
+	offIOUnit      = 176
+	offIORawUnit   = 304
 	kxIOUnitSize   = 8
-	offIOPStatus   = 490
-	offIOCRCErrors = 496
-	offIOTimeouts  = 500
-	offIOSeqErrors = 504
-	kxIOShmMinLen  = 512
+	offIOPStatus   = 502
+	offIOCRCErrors = 512
+	offIOTimeouts  = 516
+	offIOSeqErrors = 520
+	kxIOShmMinLen  = 528
 )
 
 // kx_quality_t ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ DTO quality string

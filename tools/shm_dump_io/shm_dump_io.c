@@ -44,6 +44,20 @@ static const char* quality_name(uint8_t q)
     }
 }
 
+static const char* reliability_name(uint8_t r)
+{
+    switch (r) {
+    case KX_REL_RELIABLE:              return "RELIABLE";
+    case KX_REL_OVER_RANGE:            return "OVER_RANGE";
+    case KX_REL_UNDER_RANGE:           return "UNDER_RANGE";
+    case KX_REL_OPEN_LOOP:             return "OPEN_LOOP";
+    case KX_REL_SHORTED_LOOP:          return "SHORTED_LOOP";
+    case KX_REL_CONFIGURATION_ERROR:   return "CONFIGURATION_ERROR";
+    case KX_REL_COMMUNICATION_FAILURE: return "COMMUNICATION_FAILURE";
+    default:                           return "UNRELIABLE_OTHER";
+    }
+}
+
 static const char* status_name(uint8_t s)
 {
     switch (s) {
@@ -79,12 +93,14 @@ static void print_text(const kx_io_shm_t* s)
            status_name(s->iop_status), s->fault_flags, faults, s->mcu_temp_x10 / 10.0);
     for (int i = 0; i < KX_N_UI; i++) {
         if (s->ui_raw_unit[i][0] != '\0') {
-            printf("  UI%-2d= %10.3f %-5s raw=%8.3f %-3s %s\n", i + 1,
+            printf("  UI%-2d= %10.3f %-5s raw=%8.3f %-3s %s rel=%s\n", i + 1,
                    (double)s->ui_value[i], s->ui_unit[i], (double)s->ui_raw[i],
-                   s->ui_raw_unit[i], quality_name(s->ui_quality[i]));
+                   s->ui_raw_unit[i], quality_name(s->ui_quality[i]),
+                   reliability_name(s->ui_reliability[i]));
         } else {
-            printf("  UI%-2d= %10.3f %-5s %s\n", i + 1, (double)s->ui_value[i],
-                   s->ui_unit[i], quality_name(s->ui_quality[i]));
+            printf("  UI%-2d= %10.3f %-5s %s rel=%s\n", i + 1, (double)s->ui_value[i],
+                   s->ui_unit[i], quality_name(s->ui_quality[i]),
+                   reliability_name(s->ui_reliability[i]));
         }
     }
     printf("  AO  = sp[%.3f %.3f %.3f %.3f] mode[%u %u %u %u]\n",
@@ -107,9 +123,10 @@ static void print_json(const kx_io_shm_t* s)
            status_name(s->iop_status), s->fault_flags, s->mcu_temp_x10);
     printf("\"ui\":[");
     for (int i = 0; i < KX_N_UI; i++)
-        printf("%s{\"value\":%.4f,\"quality\":\"%s\",\"unit\":\"%s\",\"raw\":%.4f,\"rawUnit\":\"%s\"}",
+        printf("%s{\"value\":%.4f,\"quality\":\"%s\",\"reliability\":\"%s\",\"unit\":\"%s\",\"raw\":%.4f,\"rawUnit\":\"%s\"}",
                i ? "," : "", (double)s->ui_value[i], quality_name(s->ui_quality[i]),
-               s->ui_unit[i], (double)s->ui_raw[i], s->ui_raw_unit[i]);
+               reliability_name(s->ui_reliability[i]), s->ui_unit[i],
+               (double)s->ui_raw[i], s->ui_raw_unit[i]);
     printf("],\"di\":[");
     for (int i = 0; i < KX_N_DI; i++) printf("%s%u", i ? "," : "", s->di_state[i]);
     printf("],\"ao_setpoint\":[");

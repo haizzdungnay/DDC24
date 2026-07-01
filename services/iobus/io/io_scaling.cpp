@@ -186,19 +186,19 @@ float ui_to_eng(int32_t raw_s32, SensorType t, kx_quality_t* q_out, kx_reliabili
         *r_out = KX_REL_CONFIGURATION_ERROR;
         return 0.0f;
     case SensorType::V0_10: {
-        const float v = frac * 10.0f;
-        if (frac > 1.10f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; }
-        else if (frac < -0.02f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; }
+        const float v = adc_volts(raw_s32) * IO_UI_DIV_GAIN;
+        if (v > 11.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; }
+        else if (v < -0.2f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; }
         return v;
     }
     case SensorType::V2_10: {
-        const float v = frac * 10.0f;
+        const float v = adc_volts(raw_s32) * IO_UI_DIV_GAIN;
         if (v > 11.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; }
         else if (v < 1.8f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; }
         return v;
     }
     case SensorType::MA4_20: {
-        const float ma = 4.0f + frac * 16.0f;
+        const float ma = (adc_volts(raw_s32) / IO_UI_SHUNT_OHM) * 1000.0f;
         if (ma < 3.5f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OPEN_LOOP; }
         else if (ma > 21.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_SHORTED_LOOP; }
         return ma;
@@ -280,16 +280,20 @@ float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out, 
 
     switch (cfg.sensor) {
     case SensorType::V0_10:
+        value = apply_cal(value, cfg);
         value = scale_range(value, 0.0f, 10.0f, cfg, q_out);
         break;
     case SensorType::V2_10:
+        value = apply_cal(value, cfg);
         value = scale_range(value, 2.0f, 10.0f, cfg, q_out);
         break;
     case SensorType::MA4_20:
+        value = apply_cal(value, cfg);
         value = scale_range(value, 4.0f, 20.0f, cfg, q_out);
         break;
     case SensorType::POTENTIOMETER:
     case SensorType::LIGHT:
+        value = apply_cal(value, cfg);
         value = scale_range(value, 0.0f, 100.0f, cfg, q_out);
         break;
     case SensorType::DRY_CONTACT:
