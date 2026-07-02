@@ -635,13 +635,39 @@ paths:
       responses: { "200": { description: OK } }
   /alarms:
     get:
-      summary: Danh sách alarm đang active
-      responses: { "200": { description: OK } }
+      summary: Runtime alarm list
+      description: >
+        Runtime alarm rows derived from ADR-013 alarm entities and ADR-014 ack lifecycle.
+        This is the visible current list, not full history: active unacked alarms,
+        active acked alarms, cleared-but-unacknowledged latched alarms, and future shelved alarms.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmEvent" }
   /alarms/{id}/ack:
     post:
       summary: Acknowledge alarm
+      description: >
+        Acknowledge one alarm entity id. If the alarm is active, status becomes acked until
+        clear. If the condition already cleared but is latched unack, ack removes it from
+        the visible list. Unknown or already-normal ids return 404.
       parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: Current visible alarm list after ack.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmEvent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /graph/validate:
     post:
       summary: Validate graph.json (role operator+)
@@ -1073,6 +1099,24 @@ components:
         ll: { type: number }
         delayS: { type: number }
         priority: { type: string, enum: [low, medium, high, critical] }
+    AlarmEvent:
+      type: object
+      description: >
+        Visible runtime alarm row from ADR-014. `active` means condition true and not acked;
+        `acked` means condition true and acknowledged; `unack` means condition cleared before
+        acknowledgement and remains latched; `shelved` is reserved for a future phase.
+      required: [id, time, severity, status, message, source, value, detail]
+      properties:
+        id: { type: string, description: "Alarm entity id used by /alarms/{id}/ack.", example: "ALM-001" }
+        alarmSettingId: { type: string, example: "ALM-001" }
+        sourcePointId: { type: string, example: "UI-01" }
+        time: { type: string, format: date-time, description: "Occurrence first-active timestamp from core wall clock." }
+        severity: { type: string, enum: [critical, high, medium, low, info], description: "Mapped from alarm priority; info is reserved for non-entity system alarms." }
+        status: { type: string, enum: [active, unack, acked, shelved] }
+        message: { type: string, description: "Display label, normally the alarm entity label." }
+        source: { type: string, description: "Display source, normally sourcePointId." }
+        value: { type: string, description: "Trigger/source value formatted for display." }
+        detail: { type: string, description: "Human-readable condition detail derived by web from core protocol fields." }
     ConfigPutResult:
       type: object
       required: [result, applied, reload]
