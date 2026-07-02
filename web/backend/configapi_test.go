@@ -128,6 +128,36 @@ func TestValidateConfigIORejectsInvalidAIUniversalInputFields(t *testing.T) {
 	}
 }
 
+func TestValidateConfigIOAcceptsAoBacnetProperties(t *testing.T) {
+	cfg := ConfigIO{AO: []map[string]any{{
+		"ch": 1, "mode": "0-10V", "name": "CW VALVE", "units": "percent",
+		"min_pv": 0.0, "max_pv": 100.0,
+	}}}
+	if errs := validateConfigIO(cfg); len(errs) != 0 {
+		t.Fatalf("validateConfigIO() errors = %+v; want none", errs)
+	}
+}
+
+func TestValidateConfigIORejectsInvalidAoBacnetProperties(t *testing.T) {
+	tests := []struct {
+		name string
+		item map[string]any
+		path string
+	}{
+		{"unknown units", map[string]any{"ch": 1, "mode": "0-10V", "units": "banana"}, "ao[0].units"},
+		{"reversed range", map[string]any{"ch": 1, "mode": "0-10V", "min_pv": 100.0, "max_pv": 0.0}, "ao[0].max_pv"},
+		{"long name", map[string]any{"ch": 1, "mode": "0-10V", "name": strings.Repeat("x", 65)}, "ao[0].name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateConfigIO(ConfigIO{AO: []map[string]any{tt.item}})
+			if !hasConfigErrorPath(errs, tt.path) {
+				t.Fatalf("validateConfigIO() errors = %+v; want path %q", errs, tt.path)
+			}
+		})
+	}
+}
+
 func TestValidateConfigIOAcceptsFullEasySetAIFields(t *testing.T) {
 	cfg := ConfigIO{
 		UI: []map[string]any{

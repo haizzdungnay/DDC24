@@ -168,10 +168,27 @@ void IoCache::write_status(uint8_t iop_status, const IobusMetrics& m)
     if (!shm_) return;
     KX_WRITE_BEGIN(shm_);
     shm_->iop_status  = iop_status;
+    if (iop_status != KX_IOP_NORMAL) {
+        for (int i = 0; i < KX_N_UI; i++) {
+            shm_->ui_quality[i] = KX_Q_BAD;
+            shm_->ui_reliability[i] = KX_REL_COMMUNICATION_FAILURE;
+        }
+    }
     shm_->iop_rx      = m.rx_count.load(std::memory_order_relaxed);
     shm_->iop_crc_err = m.crc_error_count.load(std::memory_order_relaxed);
     shm_->iop_timeout = m.timeout_count.load(std::memory_order_relaxed);
     shm_->iop_seq_err = m.seq_error_count.load(std::memory_order_relaxed);
+    KX_WRITE_END(shm_);
+}
+
+void IoCache::mark_inputs_unreliable()
+{
+    if (!shm_) return;
+    KX_WRITE_BEGIN(shm_);
+    for (int i = 0; i < KX_N_UI; i++) {
+        shm_->ui_quality[i] = KX_Q_UNCERTAIN;
+        shm_->ui_reliability[i] = KX_REL_UNRELIABLE_OTHER;
+    }
     KX_WRITE_END(shm_);
 }
 

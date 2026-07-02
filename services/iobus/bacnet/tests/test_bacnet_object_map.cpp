@@ -7,6 +7,12 @@
 #include "bacnet_objects.hpp"
 #include "bacnet_server.hpp"
 
+#ifdef MKDDC_ENABLE_BACNET
+#include <bacnet/bacstr.h>
+#include <bacnet/basic/object/ai.h>
+#include <bacnet/basic/object/ao.h>
+#endif
+
 using namespace iobus::bacnet;
 
 /* Stub CoreWriteFn: always returns accepted=true, records last call */
@@ -67,6 +73,63 @@ TEST(BacnetObjects, UpdateAiUnitsRoundTrip)
     EXPECT_EQ(obj.ai_unit(4), "");       /* unset → empty from units[] init */
     EXPECT_EQ(obj.ai_unit(16), "");
 }
+
+TEST(BacnetObjects, UpdateAoConfigRoundTrip)
+{
+    BacnetObjects obj;
+    iobus::AoChannelConfig channels[KX_N_AO];
+    channels[0].name = "CW VALVE";
+    channels[0].units_str = "percent";
+    channels[0].min_pv = 0.0f;
+    channels[0].max_pv = 100.0f;
+    channels[1].units_str = "Pa";
+    obj.update_ao_config(channels);
+
+    EXPECT_EQ(obj.ao_name(1), "CW VALVE");
+    EXPECT_EQ(obj.ao_bacnet_units(1), 98);
+    EXPECT_FLOAT_EQ(obj.ao_min_pv(1), 0.0f);
+    EXPECT_FLOAT_EQ(obj.ao_max_pv(1), 100.0f);
+    EXPECT_EQ(obj.ao_bacnet_units(2), 53); // pascals, not hectopascals (133)
+}
+
+#ifdef MKDDC_ENABLE_BACNET
+TEST(BacnetServer, AppliesAiAndAoPropertiesToBacnetStack)
+{
+    BacnetConfig cfg;
+    cfg.device.device_id = 4194001;
+    cfg.bip.bind_interface = "lo";
+    cfg.bip.udp_port = 47819;
+    BacnetObjects obj;
+    BacnetServer server;
+    ASSERT_TRUE(server.init(cfg, &obj, {}, {}));
+    ASSERT_TRUE(server.start());
+
+    char ai_units[KX_N_UI][8] = {};
+    std::strncpy(ai_units[0], "V", 7);
+    std::strncpy(ai_units[1], "mA", 7);
+    obj.update_ai_units(ai_units);
+    server.apply_ai_units();
+
+    iobus::AoChannelConfig channels[KX_N_AO];
+    channels[0].name = "CW VALVE";
+    channels[0].units_str = "percent";
+    channels[0].min_pv = 0.0f;
+    channels[0].max_pv = 100.0f;
+    obj.update_ao_config(channels);
+    server.apply_ao_config();
+
+    EXPECT_EQ(Analog_Input_Units(1), UNITS_VOLTS);
+    EXPECT_EQ(Analog_Input_Units(2), UNITS_MILLIAMPERES);
+    EXPECT_EQ(Analog_Output_Units(1), UNITS_PERCENT);
+    EXPECT_FLOAT_EQ(Analog_Output_Min_Pres_Value(1), 0.0f);
+    EXPECT_FLOAT_EQ(Analog_Output_Max_Pres_Value(1), 100.0f);
+    BACNET_CHARACTER_STRING name{};
+    ASSERT_TRUE(Analog_Output_Object_Name(1, &name));
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(characterstring_value(&name)),
+                          characterstring_length(&name)), "CW VALVE");
+    server.stop();
+}
+#endif
 
 TEST(BacnetObjects, WriteAoSendsToCoreWithPrio3)
 {

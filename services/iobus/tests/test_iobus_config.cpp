@@ -78,6 +78,49 @@ TEST(IobusConfig, ValidFullConfig)
     EXPECT_EQ(cfg.ao_mode[1], AoMode::MA4_20);
 }
 
+TEST(IobusConfig, AoBacnetPropertiesParseAndDefaultByMode)
+{
+    TempConfig f(R"({
+      "ao": [
+        {"ch":1,"name":"CW VALVE","mode":"0-10V","units":"percent","min_pv":0,"max_pv":100},
+        {"ch":2,"mode":"4-20mA"}
+      ]
+    })");
+    IobusConfig cfg;
+    ASSERT_TRUE(load_config(f.path(), true, &cfg));
+    EXPECT_EQ(cfg.ao_channels[0].name, "CW VALVE");
+    EXPECT_EQ(cfg.ao_channels[0].units_str, "percent");
+    EXPECT_FLOAT_EQ(cfg.ao_channels[0].min_pv, 0.0f);
+    EXPECT_FLOAT_EQ(cfg.ao_channels[0].max_pv, 100.0f);
+    EXPECT_EQ(cfg.ao_channels[1].units_str, "milliampere");
+    EXPECT_FLOAT_EQ(cfg.ao_channels[1].min_pv, 4.0f);
+    EXPECT_FLOAT_EQ(cfg.ao_channels[1].max_pv, 20.0f);
+    EXPECT_EQ(cfg.ao_channels[2].name, "AO3");
+    EXPECT_EQ(cfg.ao_channels[2].units_str, "volt");
+    EXPECT_FLOAT_EQ(cfg.ao_channels[2].max_pv, 10.0f);
+}
+
+TEST(IobusConfig, MissingFileHasUsableAoDefaults)
+{
+    IobusConfig cfg;
+    ASSERT_TRUE(load_config("/tmp/khong-ton-tai-ao-defaults.json", false, &cfg));
+    for (int i = 0; i < KX_N_AO; ++i) {
+        EXPECT_EQ(cfg.ao_channels[i].units_str, "volt");
+        EXPECT_FLOAT_EQ(cfg.ao_channels[i].min_pv, 0.0f);
+        EXPECT_FLOAT_EQ(cfg.ao_channels[i].max_pv, 10.0f);
+    }
+}
+
+TEST(IobusConfig, InvalidAoBacnetPropertiesFailFast)
+{
+    TempConfig bad_range(R"({"ao":[{"ch":1,"mode":"0-10V","min_pv":100,"max_pv":0}]})");
+    IobusConfig cfg;
+    EXPECT_FALSE(load_config(bad_range.path(), true, &cfg));
+
+    TempConfig bad_units(R"({"ao":[{"ch":1,"mode":"0-10V","units":"bananas"}]})");
+    EXPECT_FALSE(load_config(bad_units.path(), true, &cfg));
+}
+
 TEST(IobusConfig, WebIoConfigMapsEasySetU0ToU7)
 {
     TempConfig f(R"({
