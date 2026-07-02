@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <set>
 #include <sstream>
@@ -22,6 +23,22 @@ constexpr std::size_t kMaxBacnetPublishedAlarms = 8;
 constexpr int kAlarmDisabled = 0;
 constexpr int kAlarmHighLowInput = 1;
 constexpr int kAlarmRuntimeHours = 3;
+
+std::string iso_utc_now()
+{
+    const std::time_t now = std::time(nullptr);
+    std::tm tm{};
+#if defined(_WIN32)
+    gmtime_s(&tm, &now);
+#else
+    gmtime_r(&now, &tm);
+#endif
+    char buf[32];
+    if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm) == 0) {
+        return "1970-01-01T00:00:00Z";
+    }
+    return buf;
+}
 
 int read_file(const std::string& path, std::string* out)
 {
@@ -49,6 +66,31 @@ bool valid_priority(const std::string& value)
 {
     return value == "low" || value == "medium" || value == "high" || value == "critical";
 }
+
+bool same_source(const AlarmSourceConfig& a, const AlarmSourceConfig& b)
+{
+    return a.point.kind == b.point.kind && a.point.idx == b.point.idx &&
+           a.point_id == b.point_id;
+}
+
+bool same_params(const AlarmParamsConfig& a, const AlarmParamsConfig& b)
+{
+    return a.hh == b.hh && a.h == b.h && a.l == b.l && a.ll == b.ll &&
+           a.hysteresis == b.hysteresis && a.runtime_hours == b.runtime_hours;
+}
+
+bool same_fingerprint(const AlarmEntityConfig& a, const AlarmEntityConfig& b)
+{
+    if (a.id != b.id || a.alarm_type != b.alarm_type || a.delay_s != b.delay_s ||
+        !same_params(a.params, b.params) || a.sources.size() != b.sources.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < a.sources.size(); i++) {
+        if (!same_source(a.sources[i], b.sources[i])) return false;
+    }
+    return true;
+}
+
 
 bool valid_id(const std::string& value)
 {
@@ -250,6 +292,34 @@ bool parse_entity(const json::Value& row, AlarmEntityConfig* out, bool* skipped)
 
 } // namespace
 
+bool AlarmRuntime::visible(const Entity& entity)
+{
+    return entity.active || entity.latched_clear;
+}
+
+std::string AlarmRuntime::status_for(const Entity& entity)
+{
+    if (entity.active) return entity.acked ? "acked" : "active";
+    if (entity.latched_clear) return "unack";
+    return {};
+}
+
+void AlarmRuntime::copy_lifecycle(const Entity& old_entity, Entity* entity)
+{
+    entity->branches = old_entity.branches;
+    for (std::size_t i = 0; i < entity->branches.size(); i++) {
+        entity->branches[i].source = entity->cfg.sources[i];
+    }
+    entity->active = old_entity.active;
+    entity->acked = old_entity.acked;
+    entity->latched_clear = old_entity.latched_clear;
+    entity->occurrence = old_entity.occurrence;
+    entity->first_active_at = old_entity.first_active_at;
+    entity->active_source = old_entity.active_source;
+    entity->trigger_value = old_entity.trigger_value;
+    entity->last_status = old_entity.last_status;
+}
+
 bool load_alarm_config(const std::string& path, bool must_exist,
                        std::vector<AlarmEntityConfig>* out)
 {
@@ -328,6 +398,13 @@ void AlarmRuntime::configure(std::vector<AlarmEntityConfig> entities)
     std::vector<Entity> next;
     next.reserve(entities.size());
     for (AlarmEntityConfig& cfg : entities) {
+        const Entity* old_match = nullptr;
+        for (const Entity& old_entity : entities_) {
+            if (same_fingerprint(old_entity.cfg, cfg)) {
+                old_match = &old_entity;
+                break;
+            }
+        }
         Entity entity;
         entity.cfg = std::move(cfg);
         entity.branches.reserve(entity.cfg.sources.size());
@@ -336,6 +413,7 @@ void AlarmRuntime::configure(std::vector<AlarmEntityConfig> entities)
             branch.source = source;
             entity.branches.push_back(std::move(branch));
         }
+        if (old_match != nullptr) copy_lifecycle(*old_match, &entity);
         next.push_back(std::move(entity));
     }
     entities_ = std::move(next);
@@ -346,10 +424,12 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
     const uint32_t effective_ms = scan_ms == 0 ? 1 : scan_ms;
     const float dt = static_cast<float>(effective_ms) / 1000.0f;
     for (Entity& entity : entities_) {
-        const bool was_active = entity.active;
+        const bool was_condition_active = entity.active;
+        const bool was_visible = visible(entity);
         const std::string old_source = entity.active_source;
-        entity.active = false;
-        entity.active_source.clear();
+        bool condition_active = false;
+        std::string condition_source;
+        double condition_value = 0.0;
 
         for (Branch& branch : entity.branches) {
             const float value = table.get(branch.source.point).value;
@@ -374,13 +454,47 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
                                              static_cast<float>(entity.cfg.delay_s),
                                              0.0f, &branch.delay_state,
                                              &branch.delay_acc_s);
-            if (branch.active && !entity.active) {
-                entity.active = true;
-                entity.active_source = branch.source.point_id;
+            if (branch.active && !condition_active) {
+                condition_active = true;
+                condition_source = branch.source.point_id;
+                condition_value = value;
             }
         }
 
-        if (entity.active != was_active || (entity.active && entity.active_source != old_source)) {
+        if (condition_active) {
+            if (!was_visible) {
+                entity.occurrence++;
+                entity.first_active_at = iso_utc_now();
+                entity.acked = false;
+            } else if (entity.latched_clear) {
+                entity.acked = false;
+            }
+            entity.active = true;
+            entity.latched_clear = false;
+            entity.active_source = condition_source;
+            entity.trigger_value = condition_value;
+        } else if (was_condition_active) {
+            entity.active = false;
+            if (entity.acked) {
+                entity.acked = false;
+                entity.latched_clear = false;
+                entity.active_source.clear();
+                entity.first_active_at.clear();
+                entity.trigger_value = 0.0;
+            } else {
+                entity.latched_clear = true;
+            }
+        } else if (!entity.latched_clear) {
+            entity.active = false;
+            entity.acked = false;
+            entity.active_source.clear();
+            entity.first_active_at.clear();
+            entity.trigger_value = 0.0;
+        }
+        entity.last_status = status_for(entity);
+
+        if (entity.active != was_condition_active ||
+            (entity.active && entity.active_source != old_source)) {
             std::fprintf(stderr, "INFO  alarm.%s id=%s source=%s priority=%s\n",
                          entity.active ? "active" : "clear",
                          entity.cfg.id.c_str(),
@@ -394,10 +508,44 @@ std::vector<AlarmState> AlarmRuntime::active_states() const
 {
     std::vector<AlarmState> out;
     for (const Entity& entity : entities_) {
-        if (!entity.active) continue;
-        out.push_back({entity.cfg.id, entity.active_source, entity.cfg.priority, true});
+        if (!visible(entity)) continue;
+        out.push_back({
+            entity.cfg.id,
+            entity.cfg.id,
+            entity.first_active_at,
+            status_for(entity),
+            entity.active_source,
+            entity.trigger_value,
+            entity.cfg.priority,
+            entity.cfg.label,
+            entity.cfg.alarm_type,
+            entity.occurrence,
+            entity.active
+        });
     }
     return out;
+}
+
+bool AlarmRuntime::ack(const std::string& id)
+{
+    for (Entity& entity : entities_) {
+        if (entity.cfg.id != id) continue;
+        if (!visible(entity)) return false;
+        if (entity.latched_clear) {
+            entity.active = false;
+            entity.acked = false;
+            entity.latched_clear = false;
+            entity.active_source.clear();
+            entity.first_active_at.clear();
+            entity.trigger_value = 0.0;
+            entity.last_status.clear();
+            return true;
+        }
+        entity.acked = true;
+        entity.last_status = status_for(entity);
+        return true;
+    }
+    return false;
 }
 
 bool AlarmRuntime::entity_active(const std::string& id) const

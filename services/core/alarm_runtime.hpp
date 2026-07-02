@@ -39,8 +39,15 @@ struct AlarmEntityConfig {
 
 struct AlarmState {
     std::string id;
+    std::string alarm_setting_id;
+    std::string time;
+    std::string status;
     std::string source_point_id;
+    double value = 0.0;
     std::string priority;
+    std::string label;
+    int alarm_type = 0;
+    uint64_t occurrence = 0;
     bool active = false;
 };
 
@@ -51,6 +58,7 @@ public:
     void configure(std::vector<AlarmEntityConfig> entities);
 
     void evaluate(const PointTable& table, uint32_t scan_ms);
+    bool ack(const std::string& id);
 
     std::vector<AlarmState> active_states() const;
     bool entity_active(const std::string& id) const;
@@ -74,8 +82,18 @@ private:
         AlarmEntityConfig cfg;
         std::vector<Branch> branches;
         bool active = false;
+        bool acked = false;
+        bool latched_clear = false;
+        uint64_t occurrence = 0;
+        std::string first_active_at;
         std::string active_source;
+        double trigger_value = 0.0;
+        std::string last_status;
     };
+
+    static bool visible(const Entity& entity);
+    static std::string status_for(const Entity& entity);
+    static void copy_lifecycle(const Entity& old_entity, Entity* entity);
 
     std::vector<Entity> entities_;
 };
