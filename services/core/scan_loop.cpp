@@ -59,7 +59,12 @@ void ScanLoop::step()
      * Response trả SAU resolve + safe-state (bước 7b): applied_value/active_source
      * là giá trị THẬT sau khi mọi nguồn tranh chấp xong (07 §8, BAC-CONFLICT-001). */
     pending_.clear();
+    pending_alarm_.clear();
     for (const WebCommand& cmd : d_.web->drain()) {
+        if (cmd.kind != WebCommandKind::Point) {
+            pending_alarm_.push_back(cmd);
+            continue;
+        }
         const int prio = cmd.prio;   /* 2=manual, 3=bacnet */
         bool ok = true;
         if (cmd.point.kind == PointKind::AO) {
@@ -85,6 +90,19 @@ void ScanLoop::step()
 
     /* 5a. COR-011: apply Modbus write node setpoints → plc_shm.ext[].dirty.
      * iobus fieldbus thread đọc dirty flag ở chu kỳ poll kế. */
+    for (const WebCommand& cmd : pending_alarm_) {
+        if (cmd.kind == WebCommandKind::AlarmList) {
+            const std::vector<AlarmState> states =
+                d_.alarms ? d_.alarms->active_states() : std::vector<AlarmState>{};
+            d_.web->respond_alarm_list(cmd, states);
+        } else if (cmd.kind == WebCommandKind::AlarmAck) {
+            if (d_.alarms && d_.alarms->ack(cmd.alarm_id))
+                d_.web->respond_alarm_ack_accepted(cmd);
+            else
+                d_.web->respond_rejected(cmd, "unknown_alarm");
+        }
+    }
+
     d_.graph->apply_ext_writes(d_.bacnet->shm());
 
     /* 6. Resolve priority */

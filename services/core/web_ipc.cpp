@@ -94,6 +94,44 @@ static std::string sanitize_point_name(const std::string& s)
     return out.empty() ? "-" : out;
 }
 
+static bool valid_alarm_id(const std::string& s)
+{
+    if (s.empty()) return false;
+    for (const char c : s) {
+        if (c <= ' ' || c == '/' || c == '\\') return false;
+    }
+    return true;
+}
+
+static std::string json_escape(const std::string& s)
+{
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (const char c : s) {
+        switch (c) {
+        case '"':  out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\b': out += "\\b"; break;
+        case '\f': out += "\\f"; break;
+        case '\n': out += "\\n"; break;
+        case '\r': out += "\\r"; break;
+        case '\t': out += "\\t"; break;
+        default:
+            if (static_cast<unsigned char>(c) < 0x20) out += '?';
+            else out += c;
+            break;
+        }
+    }
+    return out;
+}
+
+static const char* op_name(const WebCommand& cmd)
+{
+    if (cmd.kind == WebCommandKind::AlarmList) return "alarm_list";
+    if (cmd.kind == WebCommandKind::AlarmAck) return "alarm_ack";
+    return cmd.is_write ? "write" : "release";
+}
+
 WebIpc::~WebIpc()
 {
     close();
@@ -151,7 +189,7 @@ void WebIpc::audit(const WebCommand& cmd, const char* result, const char* active
                  static_cast<unsigned long long>(cmd.id),
                  cmd.user.empty() ? "-" : cmd.user.c_str(),
                  cmd.point_name.empty() ? "-" : cmd.point_name.c_str(),
-                 cmd.is_write ? "write" : "release",
+                 op_name(cmd),
                  static_cast<double>(applied_value), result, active_source);
 }
 
@@ -190,6 +228,40 @@ void WebIpc::respond_rejected(const WebCommand& cmd, const char* error)
     audit(cmd, "rejected", "-", cmd.value);
 }
 
+void WebIpc::respond_alarm_list(const WebCommand& cmd, const std::vector<AlarmState>& alarms)
+{
+    std::string json = "{\"id\":" + std::to_string(cmd.id) +
+                       ",\"result\":\"accepted\",\"alarms\":[";
+    for (std::size_t i = 0; i < alarms.size(); i++) {
+        const AlarmState& alarm = alarms[i];
+        if (i != 0) json += ',';
+        json += "{\"id\":\"" + json_escape(alarm.id) + "\"";
+        json += ",\"alarmSettingId\":\"" + json_escape(alarm.alarm_setting_id) + "\"";
+        json += ",\"time\":\"" + json_escape(alarm.time) + "\"";
+        json += ",\"status\":\"" + json_escape(alarm.status) + "\"";
+        json += ",\"sourcePointId\":\"" + json_escape(alarm.source_point_id) + "\"";
+        json += ",\"value\":" + std::to_string(alarm.value);
+        json += ",\"priority\":\"" + json_escape(alarm.priority) + "\"";
+        json += ",\"label\":\"" + json_escape(alarm.label) + "\"";
+        json += ",\"alarmType\":" + std::to_string(alarm.alarm_type);
+        json += ",\"occurrence\":" + std::to_string(alarm.occurrence);
+        json += ",\"active\":" + std::string(alarm.active ? "true" : "false");
+        json += "}";
+    }
+    json += "]}";
+    respond(cmd.client_fd, json);
+    audit(cmd, "accepted", "alarm", 0.0f);
+}
+
+void WebIpc::respond_alarm_ack_accepted(const WebCommand& cmd)
+{
+    const std::string json = "{\"id\":" + std::to_string(cmd.id) +
+                             ",\"result\":\"accepted\",\"alarmId\":\"" +
+                             json_escape(cmd.alarm_id) + "\"}";
+    respond(cmd.client_fd, json);
+    audit(cmd, "accepted", "alarm", 0.0f);
+}
+
 void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand>* out)
 {
     double idv = 0;
@@ -200,7 +272,7 @@ void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand
     WebCommand cmd;
     cmd.id = has_id ? static_cast<uint64_t>(idv) : 0;
     cmd.client_fd = fd;
-    jget_string(line, "user", &user_raw);
+    const bool has_user = jget_string(line, "user", &user_raw);
     cmd.user = sanitize_user(user_raw);
     if (jget_string(line, "point", &point))
         cmd.point_name = sanitize_point_name(point);
@@ -208,6 +280,32 @@ void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand
     cmd.is_write = has_op && op == "write";
 
     auto reject = [&](const char* err) { respond_rejected(cmd, err); };
+
+    if (!has_id || !has_op) {
+        reject("bad_request");
+        return;
+    }
+    if (op == "alarm_list" || op == "alarm_ack") {
+        if (!has_user) {
+            reject("bad_request");
+            return;
+        }
+        cmd.kind = op == "alarm_list" ? WebCommandKind::AlarmList : WebCommandKind::AlarmAck;
+        if (cmd.kind == WebCommandKind::AlarmAck) {
+            std::string alarm_id;
+            if (!jget_string(line, "alarmId", &alarm_id) || !valid_alarm_id(alarm_id)) {
+                reject("bad_request");
+                return;
+            }
+            cmd.alarm_id = alarm_id;
+        }
+        if (out->size() >= 64) {
+            reject("busy");
+            return;
+        }
+        out->push_back(cmd);
+        return;
+    }
 
     if (!has_id || !has_op || point.empty() || !jget_string(line, "source", &source)) {
         reject("bad_request");

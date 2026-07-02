@@ -12,15 +12,24 @@
 #include <string>
 #include <vector>
 
+#include "alarm_runtime.hpp"
 #include "point_table.hpp"
 
 namespace core {
 
+enum class WebCommandKind {
+    Point,
+    AlarmList,
+    AlarmAck,
+};
+
 struct WebCommand {
     uint64_t    id = 0;
+    WebCommandKind kind = WebCommandKind::Point;
     bool        is_write = false;   /* write | release */
     PointId     point{PointKind::AV, -1};
     std::string point_name;         /* đã sanitize [A-Za-z0-9] ≤8 — cho audit log */
+    std::string alarm_id;
     float       value = 0.0f;
     std::string user;               /* đã sanitize [A-Za-z0-9_.@:-] ≤48 — cho audit */
     int         prio = 2;           /* PRIO_LOCAL_MANUAL=2 / PRIO_BACNET=3 (07 §8, BAC-CONFLICT-001) */
@@ -47,6 +56,8 @@ public:
     void respond_overridden(const WebCommand& cmd, float applied_value,
                             const char* active_source);
     void respond_rejected(const WebCommand& cmd, const char* error);
+    void respond_alarm_list(const WebCommand& cmd, const std::vector<AlarmState>& alarms);
+    void respond_alarm_ack_accepted(const WebCommand& cmd);
 
 private:
     void respond(int fd, const std::string& json_line);

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -22,6 +23,8 @@ const (
 )
 
 var webCommandID uint64
+
+var errCoreUnavailable = errors.New("core unavailable")
 
 type CoreStatusClient interface {
 	ReadStatus(ctx context.Context) (CoreStatus, error)
@@ -62,11 +65,27 @@ type ScanStatus struct {
 }
 
 type webIPCResponse struct {
-	ID           uint64 `json:"id"`
-	Result       string `json:"result"`
-	AppliedValue any    `json:"applied_value,omitempty"`
-	ActiveSource string `json:"active_source,omitempty"`
-	Error        string `json:"error,omitempty"`
+	ID           uint64           `json:"id"`
+	Result       string           `json:"result"`
+	AppliedValue any              `json:"applied_value,omitempty"`
+	ActiveSource string           `json:"active_source,omitempty"`
+	Error        string           `json:"error,omitempty"`
+	AlarmID      string           `json:"alarmId,omitempty"`
+	Alarms       []coreAlarmState `json:"alarms,omitempty"`
+}
+
+type coreAlarmState struct {
+	ID             string `json:"id"`
+	AlarmSettingID string `json:"alarmSettingId"`
+	Time           string `json:"time"`
+	Status         string `json:"status"`
+	SourcePointID  string `json:"sourcePointId"`
+	Value          any    `json:"value"`
+	Priority       string `json:"priority"`
+	Label          string `json:"label"`
+	AlarmType      int    `json:"alarmType"`
+	Occurrence     uint64 `json:"occurrence"`
+	Active         bool   `json:"active"`
 }
 
 func NewCoreClient(cfg Config) *CoreClient {
@@ -182,6 +201,32 @@ func (c *CoreClient) ForcePoint(ctx context.Context, id string, value any, relea
 		Forced:    !release,
 	}
 	return point, nil
+}
+
+func (c *CoreClient) sendWebIPC(ctx context.Context, cmd map[string]any) (webIPCResponse, error) {
+	conn, err := c.dialCore(ctx)
+	if err != nil {
+		return webIPCResponse{}, errCoreUnavailable
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+
+	line, err := json.Marshal(cmd)
+	if err != nil {
+		return webIPCResponse{}, fmt.Errorf("marshal web ipc command: %w", err)
+	}
+	if _, err := conn.Write(append(line, '\n')); err != nil {
+		return webIPCResponse{}, errCoreUnavailable
+	}
+	respLine, err := bufio.NewReader(conn).ReadBytes('\n')
+	if err != nil {
+		return webIPCResponse{}, errCoreUnavailable
+	}
+	var resp webIPCResponse
+	if err := json.Unmarshal(respLine, &resp); err != nil {
+		return webIPCResponse{}, fmt.Errorf("parse web ipc response: %w", err)
+	}
+	return resp, nil
 }
 
 func (c *CoreClient) coreSocketReady(ctx context.Context) bool {
@@ -570,8 +615,26 @@ func (c *CoreClient) ReadAlarms(ctx context.Context) ([]AlarmDTO, error) {
 		return nil, ctx.Err()
 	default:
 	}
-	// TODO(agent-B): read from core eventlog / alarm_publisher SHM or Unix socket.
-	return []AlarmDTO{}, nil
+	resp, err := c.sendWebIPC(ctx, map[string]any{
+		"id":   atomic.AddUint64(&webCommandID, 1),
+		"op":   "alarm_list",
+		"user": "web",
+	})
+	if errors.Is(err, errCoreUnavailable) {
+		return []AlarmDTO{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if resp.Result == "rejected" {
+		return []AlarmDTO{}, fmt.Errorf("core rejected alarm_list: %s", resp.Error)
+	}
+	receivedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	alarms := make([]AlarmDTO, 0, len(resp.Alarms))
+	for _, alarm := range resp.Alarms {
+		alarms = append(alarms, mapCoreAlarm(alarm, receivedAt))
+	}
+	return alarms, nil
 }
 
 // AckAlarm sends an acknowledge command for alarm id to core.
@@ -582,8 +645,100 @@ func (c *CoreClient) AckAlarm(ctx context.Context, id string) error {
 		return ctx.Err()
 	default:
 	}
-	// TODO(agent-B): send ack command via core Unix socket (07 Â§8 web_ipc).
+	id = strings.TrimSpace(id)
+	if !validAlarmID(id) {
+		return fmt.Errorf("invalid alarm id")
+	}
+	resp, err := c.sendWebIPC(ctx, map[string]any{
+		"id":      atomic.AddUint64(&webCommandID, 1),
+		"op":      "alarm_ack",
+		"alarmId": id,
+		"user":    "web",
+	})
+	if errors.Is(err, errCoreUnavailable) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if resp.Result == "rejected" {
+		if resp.Error == "unknown_alarm" {
+			return fmt.Errorf("unknown alarm")
+		}
+		return fmt.Errorf("core rejected alarm ack %s: %s", id, resp.Error)
+	}
 	return nil
+}
+
+func mapCoreAlarm(alarm coreAlarmState, fallbackTime string) AlarmDTO {
+	id := alarm.ID
+	if id == "" {
+		id = alarm.AlarmSettingID
+	}
+	timestamp := alarm.Time
+	if timestamp == "" {
+		timestamp = fallbackTime
+	}
+	status := alarmStatus(alarm.Status)
+	source := alarm.SourcePointID
+	if source == "" {
+		source = "SYSTEM"
+	}
+	message := alarm.Label
+	if message == "" {
+		message = "Alarm " + id
+	}
+	return AlarmDTO{
+		ID:       id,
+		Time:     timestamp,
+		Severity: alarmSeverity(alarm.Priority),
+		Status:   status,
+		Message:  message,
+		Source:   source,
+		Value:    formatAlarmValue(alarm.Value),
+		Detail: fmt.Sprintf("type=%d source=%s status=%s occurrence=%d",
+			alarm.AlarmType, source, status, alarm.Occurrence),
+	}
+}
+
+func alarmSeverity(priority string) string {
+	switch strings.ToLower(priority) {
+	case "critical", "high", "medium", "low":
+		return strings.ToLower(priority)
+	default:
+		return "info"
+	}
+}
+
+func alarmStatus(status string) string {
+	switch strings.ToLower(status) {
+	case "active", "unack", "acked", "shelved":
+		return strings.ToLower(status)
+	default:
+		return "active"
+	}
+}
+
+func formatAlarmValue(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case int:
+		return strconv.Itoa(v)
+	case string:
+		return v
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	default:
+		return fmt.Sprint(v)
+	}
 }
 
 // CommissionTest sends a commissioning test command for point id with the given value

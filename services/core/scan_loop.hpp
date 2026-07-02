@@ -70,6 +70,7 @@ private:
     void* reload_ctx_ = nullptr;
     /* pre-allocated: tránh heap alloc mỗi scan trong SCHED_FIFO (CR-007) */
     std::vector<PendingResp> pending_;
+    std::vector<WebCommand> pending_alarm_;
 };
 
 } // namespace core

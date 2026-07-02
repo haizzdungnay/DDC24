@@ -1,12 +1,117 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 	"unsafe"
 )
+
+func fakeCoreSocket(t *testing.T, response string) (string, <-chan map[string]any) {
+	t.Helper()
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("mkddc-core-test-%d-%d.sock", os.Getpid(), time.Now().UnixNano()))
+	_ = os.Remove(path)
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Skipf("unix socket unavailable: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = ln.Close()
+		_ = os.Remove(path)
+	})
+
+	cmdCh := make(chan map[string]any, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		line, err := bufio.NewReader(conn).ReadBytes('\n')
+		if err != nil {
+			return
+		}
+		var cmd map[string]any
+		if err := json.Unmarshal(line, &cmd); err == nil {
+			cmdCh <- cmd
+		}
+		_, _ = conn.Write([]byte(response + "\n"))
+	}()
+	return path, cmdCh
+}
+
+func readFakeCommand(t *testing.T, cmdCh <-chan map[string]any) map[string]any {
+	t.Helper()
+	select {
+	case cmd := <-cmdCh:
+		return cmd
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for fake core command")
+		return nil
+	}
+}
+
+func TestReadAlarmsUsesCoreIPCAndMapsDTO(t *testing.T) {
+	path, cmdCh := fakeCoreSocket(t, `{"id":7,"result":"accepted","alarms":[{"id":"ALM-1","alarmSettingId":"ALM-1","time":"2026-07-02T08:15:30Z","status":"active","sourcePointId":"UI-01","value":31.8,"priority":"high","label":"Supply air","alarmType":1,"occurrence":2,"active":true}]}`)
+	alarms, err := (&CoreClient{SockPath: path}).ReadAlarms(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := readFakeCommand(t, cmdCh)
+	if cmd["op"] != "alarm_list" || cmd["user"] != "web" {
+		t.Fatalf("command = %#v, want alarm_list from web", cmd)
+	}
+	if len(alarms) != 1 {
+		t.Fatalf("len(alarms) = %d, want 1", len(alarms))
+	}
+	got := alarms[0]
+	if got.ID != "ALM-1" || got.Severity != "high" || got.Status != "active" {
+		t.Fatalf("alarm identity/status = %#v", got)
+	}
+	if got.Message != "Supply air" || got.Source != "UI-01" || got.Value != "31.8" {
+		t.Fatalf("alarm display fields = %#v", got)
+	}
+	if got.Detail == "" {
+		t.Fatalf("detail empty: %#v", got)
+	}
+}
+
+func TestAckAlarmUsesCoreIPC(t *testing.T) {
+	path, cmdCh := fakeCoreSocket(t, `{"id":8,"result":"accepted","alarmId":"ALM-1"}`)
+	if err := (&CoreClient{SockPath: path}).AckAlarm(context.Background(), " ALM-1 "); err != nil {
+		t.Fatal(err)
+	}
+	cmd := readFakeCommand(t, cmdCh)
+	if cmd["op"] != "alarm_ack" || cmd["alarmId"] != "ALM-1" || cmd["user"] != "web" {
+		t.Fatalf("command = %#v, want alarm_ack ALM-1 from web", cmd)
+	}
+}
+
+func TestAckAlarmUnknownMapsError(t *testing.T) {
+	path, _ := fakeCoreSocket(t, `{"id":9,"result":"rejected","error":"unknown_alarm"}`)
+	err := (&CoreClient{SockPath: path}).AckAlarm(context.Background(), "ALM-missing")
+	if err == nil || ackAlarmErrorStatus(err) != 404 {
+		t.Fatalf("err = %v, want unknown alarm -> 404", err)
+	}
+}
+
+func TestReadAlarmsCoreUnavailableDegradesEmpty(t *testing.T) {
+	missing := filepath.Join(os.TempDir(), fmt.Sprintf("mkddc-missing-core-%d-%d.sock", os.Getpid(), time.Now().UnixNano()))
+	alarms, err := (&CoreClient{SockPath: missing}).ReadAlarms(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(alarms) != 0 {
+		t.Fatalf("len(alarms) = %d, want 0", len(alarms))
+	}
+}
 
 func TestDecodePoints(t *testing.T) {
 	data := make([]byte, kxPlcShmMinLen)
