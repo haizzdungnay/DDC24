@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -50,7 +52,7 @@ func TestAlarmSettingsPutValidWritesFileAndGetRoundTrips(t *testing.T) {
 	if err := json.Unmarshal(data, &saved); err != nil {
 		t.Fatalf("parse alarm_settings.conf: %v", err)
 	}
-	if len(saved) != 3 || saved[0].PointID != "AI-01" || saved[0].HH != 31.0 {
+	if len(saved) != 3 || saved[0].ID != "ALM-001" || saved[0].Params == nil || saved[0].Params.HH == nil || *saved[0].Params.HH != 31.0 {
 		t.Fatalf("saved = %+v", saved)
 	}
 
@@ -64,41 +66,118 @@ func TestAlarmSettingsPutValidWritesFileAndGetRoundTrips(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode GET: %v", err)
 	}
-	if len(got) != 3 || got[2].PointID != "AI-03" {
+	if len(got) != 3 || got[2].ID != "ALM-003" {
 		t.Fatalf("GET alarm_settings = %+v", got)
+	}
+}
+
+func TestValidateAlarmSettingsAcceptsEntityRoundTrip(t *testing.T) {
+	rows := validAlarmRows(1)
+	data, err := json.Marshal(rows)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got []AlarmSetting
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if errs := validateAlarmSettings(got); len(errs) > 0 {
+		t.Fatalf("validation errors = %+v", errs)
 	}
 }
 
 func TestAlarmSettingsValidationRejectsBadInputWithoutWrite(t *testing.T) {
 	cases := []struct {
 		name string
-		body string
+		rows []AlarmSetting
 	}{
 		{
 			name: "bad priority",
-			body: `[{"pointId":"AI-01","label":"Temp","enabled":true,"hh":30,"h":28,"l":18,"ll":16,"delayS":0,"priority":"urgent"}]`,
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].Priority = "urgent"
+			}),
 		},
 		{
-			name: "hh less than h when enabled",
-			body: `[{"pointId":"AI-01","label":"Temp","enabled":true,"hh":25,"h":28,"l":18,"ll":16,"delayS":0,"priority":"high"}]`,
+			name: "deferred type enabled",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].AlarmType = alarmTypeSetpointDeviation
+				rows[0].Params = &AlarmParams{}
+			}),
 		},
 		{
-			name: "duplicate pointId",
-			body: `[{"pointId":"AI-01","label":"A","enabled":false,"hh":0,"h":0,"l":0,"ll":0,"delayS":0,"priority":"low"},{"pointId":"AI-01","label":"B","enabled":false,"hh":0,"h":0,"l":0,"ll":0,"delayS":0,"priority":"low"}]`,
+			name: "source channel out of range",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].Sources[0].Channel = 17
+				rows[0].Sources[0].PointID = "UI-17"
+			}),
 		},
 		{
-			name: "empty pointId",
-			body: `[{"pointId":"","label":"Bad","enabled":false,"hh":0,"h":0,"l":0,"ll":0,"delayS":0,"priority":"low"}]`,
+			name: "pointId mismatch",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].Sources[0].PointID = "UI-02"
+			}),
+		},
+		{
+			name: "more than max alarms",
+			rows: validAlarmRows(maxAlarms + 1),
+		},
+		{
+			name: "more than max sources",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].Sources = validAlarmSources(maxSourcesPerAlarm + 1)
+			}),
+		},
+		{
+			name: "more than max bacnet published",
+			rows: mutateAlarmRows(maxBacnetPublishedAlarms+1, func(rows []AlarmSetting) {
+				for i := range rows {
+					rows[i].PublishBacnet = true
+				}
+			}),
+		},
+		{
+			name: "hh less than h",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].Params.HH = floatPtr(25)
+			}),
+		},
+		{
+			name: "runtimeHours not positive",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].AlarmType = alarmTypeRuntimeHours
+				rows[0].Params = &AlarmParams{RuntimeHours: floatPtr(0)}
+			}),
+		},
+		{
+			name: "notification class out of range",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].PublishBacnet = true
+				rows[0].NotificationClass = intPtr(5)
+			}),
+		},
+		{
+			name: "duplicate id",
+			rows: mutateAlarmRows(2, func(rows []AlarmSetting) {
+				rows[1].ID = rows[0].ID
+			}),
+		},
+		{
+			name: "empty id",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].ID = ""
+			}),
 		},
 		{
 			name: "negative delayS",
-			body: `[{"pointId":"AI-01","label":"Temp","enabled":false,"hh":0,"h":0,"l":0,"ll":0,"delayS":-1,"priority":"high"}]`,
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].DelayS = -1
+			}),
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			app, token := newAlarmSettingsTestApp(t)
-			req := newAuthRequest(http.MethodPut, "/api/v1/alarm-settings", tc.body, token)
+			req := newAuthRequest(http.MethodPut, "/api/v1/alarm-settings", alarmSettingsJSON(t, tc.rows), token)
 			w := httptest.NewRecorder()
 			app.Router().ServeHTTP(w, req)
 			if w.Code != http.StatusBadRequest {
@@ -108,6 +187,63 @@ func TestAlarmSettingsValidationRejectsBadInputWithoutWrite(t *testing.T) {
 				t.Fatalf("alarm_settings.conf written after validation failure: %v", err)
 			}
 		})
+	}
+}
+
+func TestLoadAlarmSettingsMigratesLegacyRows(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "alarm_settings.conf")
+	legacy := `[{"pointId":"AI-01","label":"Temp","enabled":true,"hh":30,"h":28,"l":18,"ll":16,"delayS":0,"priority":"high"}]`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatalf("write legacy: %v", err)
+	}
+	rows, err := loadAlarmSettingsFile(context.Background(), path)
+	if err != nil {
+		t.Fatalf("load legacy: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %+v", rows)
+	}
+	got := rows[0]
+	if got.ID != "ALM-AI-01" || got.AlarmType != alarmTypeHighLowInput || got.PublishBacnet {
+		t.Fatalf("migrated row = %+v", got)
+	}
+	if len(got.Sources) != 1 || got.Sources[0].Kind != "UI" || got.Sources[0].Channel != 1 || got.Sources[0].PointID != "UI-01" {
+		t.Fatalf("migrated sources = %+v", got.Sources)
+	}
+	if got.Params == nil || got.Params.HH == nil || *got.Params.HH != 30 {
+		t.Fatalf("migrated params = %+v", got.Params)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read after load: %v", err)
+	}
+	if string(data) != legacy {
+		t.Fatalf("load rewrote file: %s", string(data))
+	}
+}
+
+func TestAlarmSettingsEmptyAndNilBecomeEmptyArrays(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "alarm_settings.conf")
+	if err := os.WriteFile(path, []byte("null"), 0o600); err != nil {
+		t.Fatalf("write null: %v", err)
+	}
+	rows, err := loadAlarmSettingsFile(context.Background(), path)
+	if err != nil {
+		t.Fatalf("load null: %v", err)
+	}
+	if rows == nil || len(rows) != 0 {
+		t.Fatalf("rows = %#v", rows)
+	}
+	out := filepath.Join(t.TempDir(), "alarm_settings.conf")
+	if err := saveAlarmSettingsFile(context.Background(), out, nil); err != nil {
+		t.Fatalf("save nil: %v", err)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read nil save: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "[]" {
+		t.Fatalf("saved nil = %s", string(data))
 	}
 }
 
@@ -206,24 +342,77 @@ func testConfigAlarmSettings(t *testing.T, usersConf string) Config {
 }
 
 func validAlarmSettingsJSON(count int) string {
-	priorities := []string{"low", "medium", "high", "critical"}
-	rows := make([]AlarmSetting, 0, count)
-	for i := 1; i <= count; i++ {
-		rows = append(rows, AlarmSetting{
-			PointID:  "AI-" + twoDigits(i),
-			Label:    "Point " + twoDigits(i),
-			Enabled:  true,
-			HH:       float64(25+i) + 5.0,
-			H:        float64(25 + i),
-			L:        float64(20 - i),
-			LL:       float64(20-i) - 2.0,
-			DelayS:   float64(i * 10),
-			Priority: priorities[(i-1)%len(priorities)],
-		})
-	}
-	data, err := json.Marshal(rows)
+	data, err := json.Marshal(validAlarmRows(count))
 	if err != nil {
 		panic(err)
 	}
 	return string(data)
+}
+
+func validAlarmRows(count int) []AlarmSetting {
+	rows := make([]AlarmSetting, 0, count)
+	for i := 1; i <= count; i++ {
+		rows = append(rows, validAlarmSetting(i))
+	}
+	return rows
+}
+
+func mutateAlarmRows(count int, mutate func([]AlarmSetting)) []AlarmSetting {
+	rows := validAlarmRows(count)
+	mutate(rows)
+	return rows
+}
+
+func alarmSettingsJSON(t *testing.T, rows []AlarmSetting) string {
+	t.Helper()
+	data, err := json.Marshal(rows)
+	if err != nil {
+		t.Fatalf("marshal alarm settings: %v", err)
+	}
+	return string(data)
+}
+
+func validAlarmSetting(i int) AlarmSetting {
+	priorities := []string{"low", "medium", "high", "critical"}
+	channel := ((i - 1) % 16) + 1
+	hh := float64(30 + i)
+	h := float64(27 + i)
+	l := float64(17 - (i % 3))
+	ll := l - 2
+	return AlarmSetting{
+		ID:            fmt.Sprintf("ALM-%03d", i),
+		Label:         fmt.Sprintf("Point %03d", i),
+		Enabled:       true,
+		AlarmType:     alarmTypeHighLowInput,
+		Sources:       []AlarmSource{{Kind: "UI", Channel: channel, PointID: formatPointID("UI", channel)}},
+		Priority:      priorities[(i-1)%len(priorities)],
+		DelayS:        float64(i * 10),
+		PublishBacnet: false,
+		Params:        &AlarmParams{HH: &hh, H: &h, L: &l, LL: &ll},
+	}
+}
+
+func validAlarmSources(count int) []AlarmSource {
+	sources := make([]AlarmSource, 0, count)
+	for i := 1; i <= count; i++ {
+		switch {
+		case i <= 16:
+			sources = append(sources, AlarmSource{Kind: "UI", Channel: i, PointID: formatPointID("UI", i)})
+		case i <= 20:
+			channel := i - 16
+			sources = append(sources, AlarmSource{Kind: "AO", Channel: channel, PointID: formatPointID("AO", channel)})
+		default:
+			channel := i - 20
+			sources = append(sources, AlarmSource{Kind: "DO", Channel: channel, PointID: formatPointID("DO", channel)})
+		}
+	}
+	return sources
+}
+
+func floatPtr(value float64) *float64 {
+	return &value
+}
+
+func intPtr(value int) *int {
+	return &value
 }

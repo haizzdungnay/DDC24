@@ -50,21 +50,47 @@ func (a *App) handlePutAlarmSettings(w http.ResponseWriter, r *http.Request) {
 
 func validateAlarmSettings(rows []AlarmSetting) []configValidationError {
 	var errs []configValidationError
+	if len(rows) > maxAlarms {
+		addConfigErr(&errs, "$", fmt.Sprintf("must contain at most %d alarms", maxAlarms))
+	}
 	seen := make(map[string]int, len(rows))
+	bacnetPublished := 0
 	for i, row := range rows {
 		base := fmt.Sprintf("[%d]", i)
 
-		id := strings.TrimSpace(row.PointID)
+		id := strings.TrimSpace(row.ID)
 		if id == "" {
-			addConfigErr(&errs, base+".pointId", "is required")
+			addConfigErr(&errs, base+".id", "is required")
+		} else if !validAlarmID(row.ID) {
+			addConfigErr(&errs, base+".id", "must not contain whitespace, slash, or backslash")
 		} else if first, ok := seen[id]; ok {
-			addConfigErr(&errs, base+".pointId", fmt.Sprintf("duplicates [%d].pointId", first))
+			addConfigErr(&errs, base+".id", fmt.Sprintf("duplicates [%d].id", first))
 		} else {
 			seen[id] = i
 		}
 
 		if strings.TrimSpace(row.Label) == "" {
 			addConfigErr(&errs, base+".label", "is required")
+		}
+
+		if !validAlarmType(row.AlarmType) {
+			addConfigErr(&errs, base+".alarmType", "must be integer in range 0..7")
+		} else if row.Enabled && deferredAlarmType(row.AlarmType) {
+			addConfigErr(&errs, base+".alarmType", fmt.Sprintf("alarm type %d not yet supported; must be disabled", row.AlarmType))
+		}
+
+		if row.Sources == nil {
+			addConfigErr(&errs, base+".sources", "is required")
+		}
+		if len(row.Sources) > maxSourcesPerAlarm {
+			addConfigErr(&errs, base+".sources", fmt.Sprintf("must contain at most %d sources", maxSourcesPerAlarm))
+		}
+		if row.Enabled && row.AlarmType != alarmTypeDisabled && len(row.Sources) == 0 {
+			addConfigErr(&errs, base+".sources", "must contain at least one source when enabled")
+		}
+		seenSources := make(map[string]int, len(row.Sources))
+		for j, source := range row.Sources {
+			validateAlarmSource(&errs, fmt.Sprintf("%s.sources[%d]", base, j), j, source, seenSources)
 		}
 
 		if !validPriorities[row.Priority] {
@@ -75,17 +101,115 @@ func validateAlarmSettings(rows []AlarmSetting) []configValidationError {
 			addConfigErr(&errs, base+".delayS", "must be >= 0")
 		}
 
-		if row.Enabled {
-			if row.HH < row.H {
-				addConfigErr(&errs, base+".hh", "must be >= h when enabled")
+		if row.PublishBacnet && row.Enabled {
+			bacnetPublished++
+		}
+		if row.NotificationClass != nil {
+			if *row.NotificationClass < 1 || *row.NotificationClass > 4 {
+				addConfigErr(&errs, base+".notificationClass", "must be integer in range 1..4")
 			}
-			if row.H < row.L {
-				addConfigErr(&errs, base+".h", "must be >= l when enabled")
-			}
-			if row.L < row.LL {
-				addConfigErr(&errs, base+".l", "must be >= ll when enabled")
+			if !row.PublishBacnet {
+				addConfigErr(&errs, base+".notificationClass", "requires publishBacnet=true")
 			}
 		}
+
+		if row.Params == nil {
+			addConfigErr(&errs, base+".params", "is required")
+		} else if validAlarmType(row.AlarmType) {
+			validateAlarmParams(&errs, base+".params", row.AlarmType, row.Params)
+		}
+	}
+	if bacnetPublished > maxBacnetPublishedAlarms {
+		addConfigErr(&errs, "$.publishBacnet", fmt.Sprintf("enabled BACnet-published alarms must be <= %d", maxBacnetPublishedAlarms))
 	}
 	return errs
+}
+
+func validAlarmType(alarmType int) bool {
+	return alarmType >= alarmTypeDisabled && alarmType <= alarmTypePISequence
+}
+
+func deferredAlarmType(alarmType int) bool {
+	switch alarmType {
+	case alarmTypeSetpointDeviation, alarmTypeFanState, alarmTypeDigitalOutput, alarmTypeAnalogOutput, alarmTypePISequence:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateAlarmSource(errs *[]configValidationError, path string, index int, source AlarmSource, seen map[string]int) {
+	maxChannel := 0
+	switch source.Kind {
+	case "UI":
+		maxChannel = 16
+	case "AO", "DO":
+		maxChannel = 4
+	default:
+		addConfigErr(errs, path+".kind", "must be one of: UI, AO, DO")
+	}
+	if maxChannel > 0 && (source.Channel < 1 || source.Channel > maxChannel) {
+		addConfigErr(errs, path+".channel", fmt.Sprintf("must be integer in range 1..%d for %s", maxChannel, source.Kind))
+	}
+	pointID := strings.TrimSpace(source.PointID)
+	if pointID == "" {
+		addConfigErr(errs, path+".pointId", "is required")
+	} else if maxChannel > 0 && source.Channel >= 1 && source.Channel <= maxChannel {
+		expected := formatPointID(source.Kind, source.Channel)
+		if source.PointID != expected {
+			addConfigErr(errs, path+".pointId", fmt.Sprintf("must be %s for %s channel %d", expected, source.Kind, source.Channel))
+		}
+	}
+	if maxChannel == 0 || source.Channel < 1 || source.Channel > maxChannel {
+		return
+	}
+	key := fmt.Sprintf("%s:%d", source.Kind, source.Channel)
+	if first, ok := seen[key]; ok {
+		addConfigErr(errs, path, fmt.Sprintf("duplicates sources[%d]", first))
+		return
+	}
+	seen[key] = index
+}
+
+func validateAlarmParams(errs *[]configValidationError, path string, alarmType int, params *AlarmParams) {
+	if params.Hysteresis != nil && *params.Hysteresis < 0 {
+		addConfigErr(errs, path+".hysteresis", "must be >= 0")
+	}
+	switch alarmType {
+	case alarmTypeHighLowInput:
+		validateHighLowParams(errs, path, params)
+	case alarmTypeRuntimeHours:
+		if params.RuntimeHours == nil {
+			addConfigErr(errs, path+".runtimeHours", "is required for alarmType 3")
+		} else if *params.RuntimeHours <= 0 {
+			addConfigErr(errs, path+".runtimeHours", "must be > 0")
+		}
+	}
+}
+
+func validateHighLowParams(errs *[]configValidationError, path string, params *AlarmParams) {
+	if params.HH == nil {
+		addConfigErr(errs, path+".hh", "is required for alarmType 1")
+	}
+	if params.H == nil {
+		addConfigErr(errs, path+".h", "is required for alarmType 1")
+	}
+	if params.L == nil {
+		addConfigErr(errs, path+".l", "is required for alarmType 1")
+	}
+	if params.LL == nil {
+		addConfigErr(errs, path+".ll", "is required for alarmType 1")
+	}
+	if params.HH == nil || params.H == nil || params.L == nil || params.LL == nil {
+		return
+	}
+	if *params.HH < *params.H {
+		addConfigErr(errs, path+".hh", "must be >= h")
+	}
+	if *params.H < *params.L {
+		addConfigErr(errs, path+".h", "must be >= l")
+	}
+	if *params.L < *params.LL {
+		addConfigErr(errs, path+".l", "must be >= ll")
+	}
 }
