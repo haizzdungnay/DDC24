@@ -80,6 +80,9 @@ void ScanLoop::step()
     /* 5. Execute graph */
     d_.graph->execute(*d_.table, *d_.resolver);
 
+    if (d_.alarms)
+        d_.alarms->evaluate(*d_.table, d_.graph->effective_scan_ms());
+
     /* 5a. COR-011: apply Modbus write node setpoints → plc_shm.ext[].dirty.
      * iobus fieldbus thread đọc dirty flag ở chu kỳ poll kế. */
     d_.graph->apply_ext_writes(d_.bacnet->shm());

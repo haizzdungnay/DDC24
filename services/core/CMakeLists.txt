@@ -14,7 +14,7 @@ FetchContent_MakeAvailable(nlohmann_json)
 # BAC-004: full Priority_Array + Reliability + ext socket (MOD-009) always compiled;
 # MKDDC_ENABLE_BACNET flag chỉ dùng cho iobus bacnet-stack link, core không cần flag này.
 add_library(core_lib STATIC
-    scan_loop.cpp point_table.cpp point_quality.cpp graph_runtime.cpp
+    scan_loop.cpp point_table.cpp point_quality.cpp graph_runtime.cpp alarm_runtime.cpp
     priority_resolver.cpp safe_state.cpp safe_state_config.cpp config_reload.cpp
     iobus_reader.cpp output_writer.cpp state_snapshot.cpp
     bacnet_objtable.cpp web_ipc.cpp core_metrics.cpp)
@@ -40,7 +40,7 @@ if(CORE_BUILD_TESTS)
       tests/test_web_ipc.cpp tests/test_graph_runtime.cpp tests/test_safe_state_config.cpp
       tests/test_config_reload.cpp tests/test_state_snapshot.cpp
       tests/test_bacnet_objtable.cpp
-      tests/test_graph_protocol.cpp)
+      tests/test_graph_protocol.cpp tests/test_alarm_runtime.cpp)
   target_link_libraries(core_tests PRIVATE core_lib)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
   if(TARGET GTest::gtest_main)

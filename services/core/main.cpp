@@ -65,6 +65,7 @@ int main(int argc, char** argv)
     std::string graph_path = "/data/config/graph.json";
     std::string safe_cfg_path = "/data/config/io_safe_state.conf";
     std::string io_cfg_path = "/data/config/io_config.conf";
+    std::string alarm_cfg_path = "/data/config/alarm_settings.conf";
     bool safe_cfg_from_cli = false;
     bool io_cfg_from_cli = false;
     bool scan_ms_from_cli = false;
@@ -79,6 +80,7 @@ int main(int argc, char** argv)
         else if (a == "--graph" && i + 1 < argc) graph_path = argv[++i];
         else if (a == "--safe-state-conf" && i + 1 < argc) { safe_cfg_path = argv[++i]; safe_cfg_from_cli = true; }
         else if (a == "--io-conf" && i + 1 < argc) { io_cfg_path = argv[++i]; io_cfg_from_cli = true; }
+        else if (a == "--alarm-conf" && i + 1 < argc) alarm_cfg_path = argv[++i];
         else if (a == "--scan-ms" && i + 1 < argc) {
             const long long ms = std::atoll(argv[++i]);
             if (ms <= 0) {   /* 0/âm/không phải số → busy-spin SCHED_FIFO, fail-fast */
@@ -90,7 +92,7 @@ int main(int argc, char** argv)
         }
         else if (a == "--help") {
             std::printf("usage: mkddc-core [--sock PATH] [--fieldbus-sock PATH] [--graph FILE]"
-                        " [--safe-state-conf FILE] [--io-conf FILE] [--scan-ms N]"
+                        " [--safe-state-conf FILE] [--io-conf FILE] [--alarm-conf FILE] [--scan-ms N]"
                         " [--log-level LVL]\n");
             return 0;
         }
@@ -181,6 +183,11 @@ int main(int argc, char** argv)
         return 1;   /* config an toàn hỏng → fail-fast */
     apply_safe_state_config(safe_cfg, &resolver);
 
+    AlarmRuntime alarms;
+    if (!alarms.load(alarm_cfg_path, false))
+        std::fprintf(stderr, "WARN  alarm_cfg.boot_fail path=%s (alarms disabled)\n",
+                     alarm_cfg_path.c_str());
+
     SafeState safe(quality, &graph, &resolver);
     OutputWriter writer(reader);
     BacnetObjTable bacnet;
@@ -217,7 +224,7 @@ int main(int argc, char** argv)
     }
 
     ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver,
-                   &safe, &writer, &bacnet, &metrics, fieldbus_sockfd});
+                   &safe, &writer, &bacnet, &metrics, fieldbus_sockfd, &alarms});
 
     /* SIGHUP → reload io_config + io_safe_state + graph ở ranh giới scan;
      * fail → giữ config cũ (khác boot fail-fast); manual đang giữ không mất */
@@ -225,16 +232,26 @@ int main(int argc, char** argv)
         ReloadSpec spec;
         PriorityResolver* resolver;
         GraphRuntime* graph;
+        AlarmRuntime* alarms;
         StateSnapshot* snap;
-    } rctx{{graph_path, safe_cfg_path, io_cfg_path, safe_cfg_from_cli, io_cfg_from_cli},
-           &resolver, &graph, &snap};
+    } rctx{};
+    rctx.spec.graph_path = graph_path;
+    rctx.spec.safe_cfg_path = safe_cfg_path;
+    rctx.spec.io_cfg_path = io_cfg_path;
+    rctx.spec.alarm_cfg_path = alarm_cfg_path;
+    rctx.spec.safe_cfg_must_exist = safe_cfg_from_cli;
+    rctx.spec.io_cfg_must_exist = io_cfg_from_cli;
+    rctx.resolver = &resolver;
+    rctx.graph = &graph;
+    rctx.alarms = &alarms;
+    rctx.snap = &snap;
     auto on_reload = [](void* p) {
         ReloadCtx* c = static_cast<ReloadCtx*>(p);
         std::fprintf(stderr, "INFO  core.reload SIGHUP (ranh giới scan)\n");
         /* GAP-07: lưu persist state trước swap, restore sau */
         if (c->graph->dirty() || c->graph->loaded())
             c->snap->save(c->graph->get_persist_state());
-        if (!reload_configs(c->spec, c->resolver, c->graph))
+        if (!reload_configs(c->spec, c->resolver, c->graph, c->alarms))
             std::fprintf(stderr, "WARN  core.reload co phan fail — phan do giu config cu\n");
         c->graph->restore_persist_state(c->snap->load());
         c->graph->clear_dirty();

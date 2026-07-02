@@ -8,6 +8,7 @@
 #include <set>
 #include <sstream>
 
+#include "alarm_primitives.hpp"
 #include "json_min.hpp"
 
 namespace core {
@@ -646,19 +647,12 @@ void GraphRuntime::compute(Node& n, PointTable& table, PriorityResolver& resolve
     case NodeType::RUNTIME_COUNTER: {
         const bool run_in   = in("run")   != 0.0f;
         const bool reset_in = in("reset") != 0.0f;
-        if (reset_in && !n.rt_prev_reset) {
-            if (n.rt_seconds != 0.0) dirty_ = true;
-            n.rt_seconds = 0.0;
-        }
-        n.rt_prev_reset = reset_in;
-        if (run_in && !reset_in) {
-            n.rt_seconds += static_cast<double>(dt);
-            dirty_ = true;
-        }
-        const double hours = n.rt_seconds / 3600.0;
         const double maint = p("maint_hours", 0.0);
-        n.outputs["hours"] = static_cast<float>(hours);
-        n.outputs["alarm"] = (maint > 0.0 && hours >= maint) ? 1.0f : 0.0f;
+        const RuntimeCounterStep rc =
+            runtime_counter_step(run_in, reset_in, dt, maint, &n.rt_seconds, &n.rt_prev_reset);
+        if (rc.dirty) dirty_ = true;
+        n.outputs["hours"] = static_cast<float>(rc.hours);
+        n.outputs["alarm"] = rc.alarm ? 1.0f : 0.0f;
         return;
     }
 
@@ -718,7 +712,7 @@ void GraphRuntime::compute(Node& n, PointTable& table, PriorityResolver& resolve
         const float pv    = in("pv");
         const float limit = static_cast<float>(p("limit", 100.0));
         const float hyst  = static_cast<float>(p("hysteresis", 0.0));
-        n.cmp_state = n.cmp_state ? (pv > limit - hyst) : (pv > limit);
+        n.cmp_state = alarm_high_step(pv, limit, hyst, n.cmp_state);
         n.outputs["out"] = n.cmp_state ? 1.0f : 0.0f;
         return;
     }
@@ -727,7 +721,7 @@ void GraphRuntime::compute(Node& n, PointTable& table, PriorityResolver& resolve
         const float pv    = in("pv");
         const float limit = static_cast<float>(p("limit", 0.0));
         const float hyst  = static_cast<float>(p("hysteresis", 0.0));
-        n.cmp_state = n.cmp_state ? (pv < limit + hyst) : (pv < limit);
+        n.cmp_state = alarm_low_step(pv, limit, hyst, n.cmp_state);
         n.outputs["out"] = n.cmp_state ? 1.0f : 0.0f;
         return;
     }
@@ -736,21 +730,8 @@ void GraphRuntime::compute(Node& n, PointTable& table, PriorityResolver& resolve
         /* cmp_state = current output; acc_s shared cho ca on/off accumulator */
         const float on_d  = static_cast<float>(p("on_delay_s",  0.0));
         const float off_d = static_cast<float>(p("off_delay_s", 0.0));
-        if (in("in") != 0.0f) {
-            if (!n.cmp_state) {
-                n.acc_s += dt;
-                if (n.acc_s >= on_d) { n.cmp_state = true; n.acc_s = 0.0f; }
-            } else {
-                n.acc_s = 0.0f;
-            }
-        } else {
-            if (n.cmp_state) {
-                n.acc_s += dt;
-                if (n.acc_s >= off_d) { n.cmp_state = false; n.acc_s = 0.0f; }
-            } else {
-                n.acc_s = 0.0f;
-            }
-        }
+        n.cmp_state = alarm_delay_step(in("in") != 0.0f, dt, on_d, off_d,
+                                       &n.cmp_state, &n.acc_s);
         n.outputs["out"] = n.cmp_state ? 1.0f : 0.0f;
         return;
     }

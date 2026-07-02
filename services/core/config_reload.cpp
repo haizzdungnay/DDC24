@@ -2,11 +2,13 @@
 
 #include <cstdio>
 
+#include "alarm_runtime.hpp"
 #include "safe_state_config.hpp"
 
 namespace core {
 
-bool reload_configs(const ReloadSpec& spec, PriorityResolver* resolver, GraphRuntime* graph)
+bool reload_configs(const ReloadSpec& spec, PriorityResolver* resolver, GraphRuntime* graph,
+                    AlarmRuntime* alarms)
 {
     bool all_ok = true;
 
@@ -25,6 +27,10 @@ bool reload_configs(const ReloadSpec& spec, PriorityResolver* resolver, GraphRun
 
     /* graph: reload() atomic swap-on-success; nội dung không đổi → giữ state PID */
     if (graph && !graph->reload(spec.graph_path))
+        all_ok = false;
+
+    if (alarms && !spec.alarm_cfg_path.empty() &&
+        !alarms->reload(spec.alarm_cfg_path, spec.alarm_cfg_must_exist))
         all_ok = false;
 
     return all_ok;

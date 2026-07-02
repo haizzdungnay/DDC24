@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "alarm_runtime.hpp"
 #include "bacnet_objtable.hpp"
 #include "core_metrics.hpp"
 #include "graph_runtime.hpp"
@@ -38,6 +39,7 @@ struct ScanDeps {
     CoreMetrics*      metrics;
     /* MOD-009: fd của fieldbus.sock SOCK_DGRAM (bind bởi core); -1 = chưa open */
     int               fieldbus_sockfd = -1;
+    AlarmRuntime*     alarms = nullptr;
 };
 
 class ScanLoop {
