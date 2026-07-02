@@ -55,7 +55,7 @@ void IobusReader::detach()
 bool IobusReader::read_from(const kx_io_shm_t* s, IoSnapshot* out)
 {
     if (__atomic_load_n(&s->magic, __ATOMIC_ACQUIRE) != KX_SHM_MAGIC)
-        return false;   /* magic bumped to v4 (0x4B584404): raw-live + reliability */
+        return false;   /* magic bumped to v4 (0x4B584404): raw live data + reliability */
     for (int i = 0; i < 5; i++) {
         const uint32_t v1 = __atomic_load_n(&s->seq, __ATOMIC_ACQUIRE);
         if (v1 & 1u) continue;                    /* đang ghi → thử lại */

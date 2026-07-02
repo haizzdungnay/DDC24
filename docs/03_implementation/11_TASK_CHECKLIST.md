@@ -288,7 +288,7 @@ Output: `kx_io_shm.ui_raw[16]` + `ui_raw_unit[16][8]`; REST/WS points expose `ra
 Test: test_io_scaling raw cases; go test ./...; npm run build; smoke `/eng/inputs` Summary
 Done khi: analog UI shows engineering Value + Raw V/mA; dry-contact hides raw and numeric min/max/avg
 Phụ thuộc: IOB-006-V2, WEB-003
-Trạng thái: ĐÃ làm 2026-06-30 — ADR-011 + SHM v3 contract, iobus raw writer, web `raw`/`rawUnit`, FE Raw card + dry-contact boolean handling. Verification: `go build ./...`, `go test ./...`, `npm run build` pass; C++ CMake tests blocked locally because `cmake`/`g++`/`cl` unavailable.
+Trạng thái: ĐÃ làm 2026-06-30 — ADR-011 + SHM v3 contract, iobus raw writer, web `raw`/`rawUnit`, FE Raw card + dry-contact boolean handling. 2026-07-01: reconciled into SHM v4 with `ui_reliability[]`; raw fields remain in contract. Verification: `go build ./...`, `go test ./...`, `npm run build` pass; C++ CMake tests blocked locally because `cmake`/`g++`/`cl` unavailable.
 ```
 
 ```
@@ -520,7 +520,7 @@ Trạng thái: IN PROGRESS 2026-06-26 — DoD #3 (BACNET=ON build 123 test) ✅;
 
 | Task ID | Tên | Owner | Output | Test |
 |---------|-----|-------|--------|------|
-| BAC-013 | Thêm `kx_reliability_t` enum + `ui_reliability[16]` field vào `shared/mkddc_shm.h` | Dev SOM | kx_reliability_t typedef; kx_io_shm_t.ui_reliability[] | unit build clean iobus+core |
+| BAC-013 | Thêm `kx_reliability_t` enum + `ui_reliability[16]` field vào `shared/mkddc_shm.h` | Dev SOM | kx_reliability_t typedef; kx_io_shm_t.ui_reliability[] + kx_point_t.reliability | unit build clean iobus+core |
 | BAC-014 | `io_scaling.cpp`: compute `kx_reliability_t` per fault type + ghi SHM; xem ADR-011 §Decision table | Dev SOM | reliability populated per UI channel sau mỗi poll | iobus_tests: 11 test cases fault-inject R-01..R-09 |
 | BAC-015 | `bacnet_objtable.cpp` (BAC-008): map `kx_reliability_t` → BACnet Reliability enum; AI+AO+AV; xem ADR-011 | Dev SOM | ReadProperty AI1 Reliability trả giá trị đúng | core_tests: Reliability map unit; BTL test cases R-01..R-11 |
 | IOB-AO-001 | Parse `ao[].name/units/min_pv/max_pv` trong `iobus_config.cpp`; thêm `AoChannelConfig` struct | Dev SOM | AoChannelConfig populated cho 4 channel | iobus_tests: parse test + default test |
@@ -534,7 +534,8 @@ Owner: Dev SOM | Phase: 4.6 | Module: shared/mkddc_shm.h, services/iobus, servic
 Input: ADR-011 §Decision — 8 kx_reliability_t values + mapping table
 Output:
   - typedef enum kx_reliability_t { KX_REL_RELIABLE=0, ..., KX_REL_UNRELIABLE_OTHER=7 }
-  - uint8_t ui_reliability[KX_N_UI] trong kx_io_shm_t (core copy sang plc_shm.ai[].reliability)
+  - uint8_t ui_reliability[KX_N_UI] trong kx_io_shm_t (sau ui_quality[])
+  - uint8_t reliability trong kx_point_t để core publish vào plc_shm AI objects
 Test: build clean iobus + core (recompile đồng bộ — SHM size thay đổi)
 Done khi: mkddc_shm.h compile clean; iobus_tests + core_tests link OK
 Phụ thuộc: —

@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/binary"
+	"os"
+	"path/filepath"
 	"testing"
 	"unsafe"
 )
@@ -170,6 +172,31 @@ func TestDecodePointsBoolUnitOmitsRaw(t *testing.T) {
 	}
 	if pts[0].Raw != nil || pts[0].RawUnit != "" {
 		t.Errorf("UI-01 raw = %v %q, want omitted", pts[0].Raw, pts[0].RawUnit)
+	}
+}
+
+func TestReadIOStatusUsesV4IOPStatusOffset(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mkddc_io_shm")
+	data := make([]byte, kxIOShmMinLen)
+	binary.LittleEndian.PutUint32(data[0:4], kxShmMagic)
+	data[offIOPStatus] = 2   // real iop_status: SAFE
+	data[offIOPStatus+4] = 0 // padding after mcu_temp_x10; old-style bug would read NORMAL
+	binary.LittleEndian.PutUint32(data[offIOCRCErrors:offIOCRCErrors+4], 3)
+	binary.LittleEndian.PutUint32(data[offIOTimeouts:offIOTimeouts+4], 4)
+	binary.LittleEndian.PutUint32(data[offIOSeqErrors:offIOSeqErrors+4], 5)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := (&CoreClient{IOShm: path}).readIOStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Status != "safe" {
+		t.Fatalf("status = %q, want safe", status.Status)
+	}
+	if status.CRCErrors != 3 || status.Timeouts != 4 || status.SeqErrors != 5 {
+		t.Fatalf("metrics = %#v, want crc=3 timeout=4 seq=5", status)
 	}
 }
 

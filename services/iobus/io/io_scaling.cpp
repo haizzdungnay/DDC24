@@ -222,32 +222,22 @@ float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out, 
         return 0.0f;
     }
 
-    *q_out = KX_Q_GOOD;
-    *r_out = KX_REL_RELIABLE;
-    float value = 0.0f;
-    const float frac = static_cast<float>(raw_s32) / IO_S24_FS;
+    float value = ui_to_eng(raw_s32, cfg.sensor, q_out, r_out);
+    if (*q_out == KX_Q_BAD) return value;
+
     switch (cfg.sensor) {
-    case SensorType::V0_10: {
-        value = apply_cal(adc_volts(raw_s32) * IO_UI_DIV_GAIN, cfg);
-        if (value > 11.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; return value; }
-        if (value < -0.2f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; return value; }
+    case SensorType::V0_10:
+        value = apply_cal(value, cfg);
         value = scale_range(value, 0.0f, 10.0f, cfg, q_out);
         break;
-    }
-    case SensorType::V2_10: {
-        value = apply_cal(adc_volts(raw_s32) * IO_UI_DIV_GAIN, cfg);
-        if (value > 11.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; return value; }
-        if (value < 1.8f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; return value; }
+    case SensorType::V2_10:
+        value = apply_cal(value, cfg);
         value = scale_range(value, 2.0f, 10.0f, cfg, q_out);
         break;
-    }
-    case SensorType::MA4_20: {
-        value = apply_cal((adc_volts(raw_s32) / IO_UI_SHUNT_OHM) * 1000.0f, cfg);
-        if (value < 3.5f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OPEN_LOOP; return value; }
-        if (value > 21.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_SHORTED_LOOP; return value; }
+    case SensorType::MA4_20:
+        value = apply_cal(value, cfg);
         value = scale_range(value, 4.0f, 20.0f, cfg, q_out);
         break;
-    }
     case SensorType::NTC10K:
     case SensorType::NTC20K: {
         const double r_nom = (cfg.sensor == SensorType::NTC10K) ? 10000.0 : 20000.0;
@@ -263,19 +253,14 @@ float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out, 
         break;
     }
     case SensorType::POTENTIOMETER:
-    case SensorType::LIGHT: {
-        value = apply_cal(frac * 100.0f, cfg);
-        if (value > 110.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; return value; }
-        if (value < -2.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; return value; }
+    case SensorType::LIGHT:
+        value = apply_cal(value, cfg);
         value = scale_range(value, 0.0f, 100.0f, cfg, q_out);
         break;
-    }
     case SensorType::DRY_CONTACT:
-        value = ui_to_eng(raw_s32, cfg.sensor, q_out, r_out);
         value = cfg.invert ? (value > 0.5f ? 0.0f : 1.0f) : value;
         break;
     default:
-        value = ui_to_eng(raw_s32, cfg.sensor, q_out, r_out);
         break;
     }
     if (*q_out == KX_Q_BAD) *r_out = KX_REL_UNRELIABLE_OTHER;

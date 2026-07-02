@@ -633,6 +633,7 @@ int main(int argc, char** argv)
                         }
                         pre_math[i] = value;
                         snap.ui_value[i] = value;
+                        snap.ui_raw[i] = cfg.ui[i].enabled ? ui_raw_electric(resp.ui_raw[i], cfg.ui[i]) : 0.0f;
                         snap.ui_quality[i] = static_cast<uint8_t>(q);
                         snap.ui_reliability[i] = static_cast<uint8_t>(r);
                     }

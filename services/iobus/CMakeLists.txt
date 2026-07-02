@@ -125,7 +125,7 @@ if(IOBUS_BUILD_TESTS)
       tests/test_iop_crc.cpp tests/test_iop_frame.cpp tests/test_iop_parser.cpp
       tests/test_io_scaling.cpp tests/test_output_command.cpp
       tests/test_iop_client_fake_mcu.cpp
-      tests/test_iobus_config.cpp tests/test_io_cache.cpp
+      tests/test_iobus_config.cpp tests/test_io_cache.cpp tests/test_shm_layout.cpp
       bacnet/tests/test_bacnet_priority.cpp
       bacnet/tests/test_bacnet_reliability.cpp
       bacnet/tests/test_bacnet_object_map.cpp

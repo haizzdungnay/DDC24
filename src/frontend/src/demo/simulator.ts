@@ -120,6 +120,7 @@ export function getDemoHealth(): HealthResponse {
   return {
     overall: 'ok',
     cpuPercent: 23,
+    cpuClockMhz: 1512,
     ramPercent: 48,
     ramUsedMb: 3100,
     ramTotalMb: 8192,

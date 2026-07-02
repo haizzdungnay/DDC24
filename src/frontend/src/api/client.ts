@@ -171,6 +171,7 @@ function normalizeHealthResponse(raw: Record<string, unknown>): HealthResponse {
     overall: normalizeHealth(raw.overall ?? raw.status),
     services,
     cpuPercent: numberFrom(raw.cpuPercent ?? raw.cpu_percent),
+    cpuClockMhz: numberFrom(raw.cpuClockMhz ?? raw.cpu_clock_mhz ?? raw.cpuFreqMhz ?? raw.cpu_freq_mhz),
     ramPercent: numberFrom(raw.ramPercent ?? raw.ram_percent),
     ramUsedMb: numberFrom(raw.ramUsedMb ?? raw.ram_used_mb),
     ramTotalMb: numberFrom(raw.ramTotalMb ?? raw.ram_total_mb),
@@ -202,6 +203,7 @@ function normalizeSystemStatus(raw: Record<string, unknown>): HealthResponse {
   return {
     overall: normalizeHealth(iop.status ?? raw.overall ?? 'ok'),
     cpuPercent: numberFrom(raw.cpu_percent ?? raw.cpuPercent),
+    cpuClockMhz: numberFrom(raw.cpu_clock_mhz ?? raw.cpuClockMhz ?? raw.cpu_freq_mhz ?? raw.cpuFreqMhz),
     ramPercent: finalRamPercent,
     ramUsedMb,
     ramTotalMb,
