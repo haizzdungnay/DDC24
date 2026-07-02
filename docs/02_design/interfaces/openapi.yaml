@@ -1108,13 +1108,11 @@ components:
       required: [id, time, severity, status, message, source, value, detail]
       properties:
         id: { type: string, description: "Alarm entity id used by /alarms/{id}/ack.", example: "ALM-001" }
-        alarmSettingId: { type: string, example: "ALM-001" }
-        sourcePointId: { type: string, example: "UI-01" }
         time: { type: string, format: date-time, description: "Occurrence first-active timestamp from core wall clock." }
         severity: { type: string, enum: [critical, high, medium, low, info], description: "Mapped from alarm priority; info is reserved for non-entity system alarms." }
         status: { type: string, enum: [active, unack, acked, shelved] }
         message: { type: string, description: "Display label, normally the alarm entity label." }
-        source: { type: string, description: "Display source, normally sourcePointId." }
+        source: { type: string, description: "Display source from the core alarm event." }
         value: { type: string, description: "Trigger/source value formatted for display." }
         detail: { type: string, description: "Human-readable condition detail derived by web from core protocol fields." }
     ConfigPutResult:

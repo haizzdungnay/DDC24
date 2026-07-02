@@ -7,6 +7,9 @@
 ---
 
 ## [Unreleased]
+### Changed - ALARM-3b live alarm ack closure (2026-07-02)
+- docs/web/fe(alarm): aligned public AlarmEvent schema with the backend AlarmDTO, surfaced normalized alarm values in the live alarm row, and added handler regressions for alarm list degrade, ack success/refetch, unknown ack, RBAC, and empty IDs. Verification: `go build ./...` pass; `go test -count=1 ./...` pass; `go vet ./...` pass; `npm run build` pass; `npm run lint` pass; `git diff --check` pass.
+
 ### Changed - ALARM-01B frontend alarm entity settings (2026-07-02)
 - fe(alarm-settings): replaced the demo per-point alarm settings page with ADR-013 alarm entities backed by `/api/v1/alarm-settings`, including add/remove alarms, multi-source source rows, active-type validation, BACnet publish caps, and demo data updated to the entity model. Verification: `npm run build` pass; `npm run lint` pass; `git diff --check` pass.
 ### Changed - ALARM-01B backend alarm entity model (2026-07-02)
