@@ -49,6 +49,15 @@ static uint32_t monotonic_ms()
     return static_cast<uint32_t>(ts.tv_sec * 1000u + ts.tv_nsec / 1000000u);
 }
 
+static bool sysfs_write(int fd, const char* data, size_t len)
+{
+    ssize_t written;
+    do {
+        written = write(fd, data, len);
+    } while (written < 0 && errno == EINTR);
+    return written == static_cast<ssize_t>(len);
+}
+
 static bool gpio_export(int gpio)
 {
     char path[64];
@@ -58,9 +67,9 @@ static bool gpio_export(int gpio)
     if (fd < 0) return false;
     char buf[8];
     int n = snprintf(buf, sizeof(buf), "%d", gpio);
-    write(fd, buf, static_cast<size_t>(n));
+    const bool ok = sysfs_write(fd, buf, static_cast<size_t>(n));
     close(fd);
-    return true;
+    return ok;
 }
 
 static void gpio_set_direction(int gpio, const char* dir)
@@ -69,7 +78,7 @@ static void gpio_set_direction(int gpio, const char* dir)
     snprintf(path, sizeof(path), "/sys/class/gpio/gpio%d/direction", gpio);
     int fd = open(path, O_WRONLY);
     if (fd < 0) return;
-    write(fd, dir, strlen(dir));
+    sysfs_write(fd, dir, strlen(dir));
     close(fd);
 }
 
@@ -79,7 +88,7 @@ static void gpio_set_edge(int gpio, const char* edge)
     snprintf(path, sizeof(path), "/sys/class/gpio/gpio%d/edge", gpio);
     int fd = open(path, O_WRONLY);
     if (fd < 0) return;
-    write(fd, edge, strlen(edge));
+    sysfs_write(fd, edge, strlen(edge));
     close(fd);
 }
 

@@ -131,7 +131,7 @@ func TestDecodePointsIOUnit(t *testing.T) {
 	binary.LittleEndian.PutUint32(plcData[0:4], kxShmMagic)
 	setPoint(plcData, offAI, 25.0, 0) // UI-01 good
 
-	// Build fake io_shm v3 with unit + raw metadata.
+	// Build fake io_shm v4 with unit + raw metadata.
 	ioData := make([]byte, kxIOShmMinLen)
 	binary.LittleEndian.PutUint32(ioData[0:4], kxShmMagic)
 	copy(ioData[offIOUnit:], []byte("degC\x00\x00\x00\x00"))

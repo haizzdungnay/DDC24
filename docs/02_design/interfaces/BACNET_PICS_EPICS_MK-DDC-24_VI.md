@@ -65,11 +65,12 @@ MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/
 | `KX_REL_OPEN_LOOP` | `OPEN_LOOP` | 4 | 4-20mA < 3.5 mA (wire break) |
 | `KX_REL_SHORTED_LOOP` | `SHORTED_LOOP` | 5 | 4-20mA > 21.0 mA (short circuit) |
 | `KX_REL_UNRELIABLE_OTHER` | `UNRELIABLE_OTHER` | 7 | `KX_Q_UNCERTAIN` (data stale < 4 scan) |
-| `KX_REL_CONFIGURATION_ERROR` | `CONFIGURATION_ERROR` | 8 | `type=none` hoặc type không nhận dạng được |
+| `KX_REL_CONFIGURATION_ERROR` | `CONFIGURATION_ERROR` | 10 | `type=none` hoặc type không nhận dạng được |
 | `KX_REL_COMMUNICATION_FAILURE` | `COMMUNICATION_FAILURE` | 12 | IOP timeout > 5s; ADC hardware fault |
 
 > **Mapping authority:** ADR-011. Implementation: `services/core/bacnet_objtable.cpp` (BAC-008).
-> Field `kx_reliability_t ui_reliability[KX_N_UI]` trong `kx_plc_shm_t` (shared/mkddc_shm.h).
+> Field `ui_reliability[KX_N_UI]` trong `kx_io_shm_t`; core copy sang
+> `kx_plc_shm_t.ai[].reliability` (`shared/mkddc_shm.h`).
 
 **Units** (AI): theo cấu hình sensor — xem bảng sensor_type → BACnet Units tại CONFIG_SCHEMA §3.
 

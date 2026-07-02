@@ -3,6 +3,7 @@
 #include "io/io_scaling.hpp"
 
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -150,6 +151,13 @@ static uint8_t clamp_u8(int v, int lo, int hi)
     return static_cast<uint8_t>(v);
 }
 
+static bool valid_ao_units(const std::string& units)
+{
+    return units == "percent" || units == "volt" || units == "milliampere" ||
+           units == "degC" || units == "Pa" || units == "RPM" ||
+           units == "ppm" || units == "no_units";
+}
+
 /* Cắt array JSON `"key": [ ... ]` (trả chuỗi giữa [ ]) */
 static bool get_array(const std::string& s, const std::string& key, std::string* out)
 {
@@ -290,6 +298,24 @@ bool load_config(const std::string& path, bool must_exist, IobusConfig* out)
             float f = 0.0f;
             if (get_float(entry, "min_pv", &f)) out->ao_channels[i].min_pv = f;
             if (get_float(entry, "max_pv", &f)) out->ao_channels[i].max_pv = f;
+
+            if (out->ao_channels[i].name.size() > 64) {
+                std::fprintf(stderr, "ERROR config.bad_ao_name ao=%d max_bytes=64\n", i + 1);
+                return false;
+            }
+            if (!valid_ao_units(out->ao_channels[i].units_str)) {
+                std::fprintf(stderr, "ERROR config.bad_ao_units ao=%d units=%s\n",
+                             i + 1, out->ao_channels[i].units_str.c_str());
+                return false;
+            }
+            if (!std::isfinite(out->ao_channels[i].min_pv) ||
+                !std::isfinite(out->ao_channels[i].max_pv) ||
+                out->ao_channels[i].max_pv <= out->ao_channels[i].min_pv) {
+                std::fprintf(stderr, "ERROR config.bad_ao_range ao=%d min=%g max=%g\n",
+                             i + 1, static_cast<double>(out->ao_channels[i].min_pv),
+                             static_cast<double>(out->ao_channels[i].max_pv));
+                return false;
+            }
         }
     }
 

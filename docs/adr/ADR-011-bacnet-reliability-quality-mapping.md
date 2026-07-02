@@ -33,7 +33,7 @@ typedef enum {
     KX_REL_UNDER_RANGE           = 2,   /* UNDER_RANGE (BACnet 3)             */
     KX_REL_OPEN_LOOP             = 3,   /* OPEN_LOOP — 4-20mA wire break (4)  */
     KX_REL_SHORTED_LOOP          = 4,   /* SHORTED_LOOP — 4-20mA short (5)   */
-    KX_REL_CONFIGURATION_ERROR   = 5,   /* CONFIGURATION_ERROR (8)            */
+    KX_REL_CONFIGURATION_ERROR   = 5,   /* CONFIGURATION_ERROR (10)           */
     KX_REL_COMMUNICATION_FAILURE = 6,   /* COMMUNICATION_FAILURE (12)         */
     KX_REL_UNRELIABLE_OTHER      = 7,   /* UNRELIABLE_OTHER (7) — catch-all   */
 } kx_reliability_t;
@@ -43,7 +43,7 @@ typedef enum {
 
 | Trigger | `kx_reliability_t` | BACnet Reliability | ASHRAE 135 §12.4 |
 |---------|-------------------|--------------------|-----------------|
-| Sensor type = `none` hoặc `UNKNOWN` | `CONFIGURATION_ERROR` | 8 | Table 12-4 |
+| Sensor type = `none` hoặc `UNKNOWN` | `CONFIGURATION_ERROR` | 10 | Table 12-4 |
 | 4-20mA < 3.5 mA | `OPEN_LOOP` | 4 | §12.4.3 |
 | 4-20mA > 21.0 mA | `SHORTED_LOOP` | 5 | §12.4.3 |
 | 0-10V > 11.0 V hoặc < -0.2 V | `OVER_RANGE` | 2 | §12.4.2 |
@@ -66,9 +66,12 @@ Rule cứng:
 
 ### 4. SHM layout change
 
-Thêm `ui_reliability[KX_N_UI]` (`uint8_t[16]`) vào `kx_plc_shm_t` (hoặc `kx_io_shm_t`).
-Location: ngay sau `ui_quality[KX_N_UI]`.
-Backward compat: magic version không đổi (field thêm vào cuối struct phần mở rộng).
+Thêm `ui_reliability[KX_N_UI]` (`uint8_t[16]`) vào `kx_io_shm_t`; core copy giá trị
+vào `kx_plc_shm_t.ai[].reliability`.
+Location: sau block raw-live v3 (`ui_raw_unit[KX_N_UI][8]`) để giữ nguyên offset
+`ui_raw[]`, `ui_unit[]`, `ui_raw_unit[][]` mà web đã dùng.
+Backward compat: bump `KX_SHM_MAGIC` từ `0x4B584403` lên `0x4B584404` vì layout
+`kx_io_shm_t` thay đổi. Iobus/core/web/HMI/tools phải rebuild và deploy đồng bộ.
 
 ---
 
@@ -78,7 +81,7 @@ Backward compat: magic version không đổi (field thêm vào cuối struct ph�
 - `shared/mkddc_shm.h`: thêm `kx_reliability_t` + `ui_reliability[]` field.
 - `services/iobus/io/io_scaling.cpp`: `ui_to_eng()` trả thêm `kx_reliability_t*` out-param.
 - `services/core/bacnet_objtable.cpp` (`BAC-008`): map `kx_reliability_t` → BACnet Reliability enum value.
-- PICS/EPICS: bổ sung `CONFIGURATION_ERROR (8)` và `COMMUNICATION_FAILURE (12)` vào Reliability list.
+- PICS/EPICS: bổ sung `CONFIGURATION_ERROR (10)` và `COMMUNICATION_FAILURE (12)` vào Reliability list.
 - BTL test matrix: thêm test case per fault type.
 
 **Không thay đổi:**

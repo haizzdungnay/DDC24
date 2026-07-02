@@ -156,7 +156,7 @@ static int units_str_to_bacnet(const std::string& s) {
     if (s == "volt")         return 5;
     if (s == "milliampere")  return 2;
     if (s == "degC")         return 62;
-    if (s == "Pa")           return 133;
+    if (s == "Pa")           return 53;
     if (s == "RPM")          return 104;
     if (s == "ppm")          return 96;
     return 95; // no_units
@@ -202,12 +202,12 @@ float ao_raw_to_eng(uint16_t raw, const AoChannelConfig& cfg) {
 
 Sau khi unit test pass, chạy trên board Orange Pi 5B:
 ```bash
-# R-02: set UI-01 type=none → expect CONFIGURATION_ERROR (8)
+# R-02: set UI-01 type=none → expect CONFIGURATION_ERROR (10)
 ssh SOM-DDC-24 "echo '{\"ui\":[{\"ch\":1,\"type\":\"none\"}]}' > /data/config/io_config.conf && kill -HUP $(pidof mkddc-iobus)"
-bacrp <board_ip> 47808 1 analogInput 0 85  # property 85 = Reliability → expect 8
+readprop <device-id> analog-input 1 reliability --mac <board_ip>:47808
 
 # AO-03: set ao[1].units=percent → expect Units=98
-bacrp <board_ip> 47808 1 analogOutput 0 117  # property 117 = Units → expect 98
+readprop <device-id> analog-output 1 units --mac <board_ip>:47808
 ```
 
 Checklist R-01..R-11 và AO-01..AO-11 tại [BTL test matrix](../../00_management/evidence/certification/bacnet-object-property-test-matrix.md) §14.1/§14.2.
@@ -216,18 +216,18 @@ Checklist R-01..R-11 và AO-01..AO-11 tại [BTL test matrix](../../00_managemen
 
 ## 6. Definition of Done (Phase 4.6)
 
-- [ ] BAC-013: `kx_reliability_t` + `ui_reliability[]` committed; build clean iobus+core
-- [ ] BAC-014: 11 reliability test cases pass (iobus_tests)
+- [x] BAC-013: `kx_reliability_t` + `ui_reliability[]` implemented; build clean iobus+core
+- [x] BAC-014: reliability mapping/recovery unit tests pass (iobus_tests)
 - [ ] BAC-015: BTL R-01..R-11 tất cả PASS trên board
-- [ ] IOB-AO-001: 3 AoChannelConfig test cases pass (iobus_tests)
-- [ ] IOB-AO-002: AO Units/Name/Min/Max trả đúng qua ReadProperty
-- [ ] IOB-AO-003: AO engineering conversion board smoke OK
-- [ ] PICS/EPICS Rev 1.2 ✅ (đã update 2026-06-30)
-- [ ] CONFIG_SCHEMA Rev 1.4 ✅ (đã update 2026-06-30)
-- [ ] SW_REQUIREMENTS Rev 2.1 ✅ (đã update 2026-06-30)
-- [ ] FW_REQUIREMENTS Rev 2.1 ✅ (đã update 2026-06-30)
-- [ ] BTL matrix Rev 1.1 ✅ (đã update 2026-06-30)
-- [ ] ADR-011 + ADR-012 Status: Accepted ✅ (đã tạo 2026-06-30)
+- [x] IOB-AO-001: explicit/default/invalid AoChannelConfig test cases pass
+- [x] IOB-AO-002: AO Units/Name/Min/Max trả đúng qua local UDP ReadProperty
+- [ ] IOB-AO-003: local fake-MCU conversion pass; Orange Pi AO measurement remains
+- [x] PICS/EPICS Rev 1.2 (corrected 2026-07-01)
+- [x] CONFIG_SCHEMA Rev 1.4 (corrected 2026-07-01)
+- [x] SW_REQUIREMENTS Rev 2.1 (corrected 2026-07-01)
+- [x] FW_REQUIREMENTS Rev 2.1 (updated 2026-06-30)
+- [x] BTL matrix Rev 1.1 (corrected 2026-07-01)
+- [x] ADR-011 + ADR-012 Status: Accepted (corrected 2026-07-01)
 - [ ] BAC-012 closed sau khi tất cả trên Done
 - [ ] BTL lab scheduled
 
@@ -239,7 +239,7 @@ Checklist R-01..R-11 và AO-01..AO-11 tại [BTL test matrix](../../00_managemen
 |------|:---------:|:------:|-----------|
 | SHM recompile sync — board chạy mixed old/new binary | Medium | High | Restart cả iobus + core cùng lúc sau deploy; add version guard trong bacnet_objtable |
 | `io_scaling.cpp` signature change breaks existing callers | Medium | Medium | Grep tất cả callers trước khi merge; unit test coverage bắt buộc |
-| BTL test tool phiên bản không hỗ trợ CONFIGURATION_ERROR (8) | Low | High | Verify với BACnet Protocol Tester v26.1-v2 trước BTL lab |
+| BTL test tool phiên bản không hỗ trợ CONFIGURATION_ERROR (10) | Low | High | Verify với BACnet Protocol Tester v26.1-v2 trước BTL lab |
 | AO engineering conversion mismatch với DAC hardware | Low | Medium | Board smoke test với oscilloscope; verify tại 0%, 50%, 100% |
 
 ---

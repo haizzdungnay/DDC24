@@ -336,7 +336,7 @@ Base SKU (`BOARD_CAP_MAP=0x000D`) has no physical industrial DI and shall not be
 | # | Test Case | Input / Trigger | Expected BACnet Reliability | Expected Status_Flags.FAULT | Source |
 |---|-----------|-----------------|----------------------------|:---------------------------:|----|
 | R-01 | Normal — no fault | UI channel type≠none, signal in range, IOP OK | NO_FAULT_DETECTED (0) | 0 | ADR-011 |
-| R-02 | CONFIGURATION_ERROR | UI channel `type=none` | CONFIGURATION_ERROR (8) | 1 | ADR-011 |
+| R-02 | CONFIGURATION_ERROR | UI channel `type=none` | CONFIGURATION_ERROR (10) | 1 | ADR-011 |
 | R-03 | OVER_RANGE — voltage | 0-10V channel, signal > 11.0V | OVER_RANGE (2) | 1 | ADR-011 |
 | R-04 | UNDER_RANGE — 2-10V | 2-10V channel, signal < 1.8V | UNDER_RANGE (3) | 1 | ADR-011 |
 | R-05 | OPEN_LOOP — 4-20mA | 4-20mA channel, loop current < 3.5mA | OPEN_LOOP (4) | 1 | ADR-011 |

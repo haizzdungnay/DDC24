@@ -26,7 +26,7 @@
 /* Path runtime Rev A — KHÔNG có alias, KHÔNG còn /dev/shm/kinexus_* */
 #define KX_SHM_IO_PATH    "/dev/shm/mkddc_io_shm"
 #define KX_SHM_PLC_PATH   "/dev/shm/mkddc_plc_shm"
-#define KX_SHM_MAGIC      0x4B584403u   /* "KXD\3" — bumped v3: kx_reliability_t + ui_reliability[] (ADR-011) */
+#define KX_SHM_MAGIC      0x4B584404u   /* "KXD\4" — v3 raw-live fields + per-channel reliability */
 
 #define KX_N_UI   16   /* v2: Rev A 16 UI analog (ADR-010) */
 #define KX_N_DI   8    /* reserved: DI optional SKU; base SKU stays 0 in SHM */
@@ -69,9 +69,11 @@ typedef struct {
     uint64_t ts_ns;                 /* mốc cập nhật (CLOCK_MONOTONIC)      */
 
     float    ui_value[KX_N_UI];      /* engineering: °C, V, mA, %... default 0.0 */
+    float    ui_raw[KX_N_UI];        /* raw electrical input before eng scale: V or mA */
     uint8_t  ui_quality[KX_N_UI];    /* kx_quality_t; default BAD (chưa có mẫu)  */
-    uint8_t  ui_reliability[KX_N_UI];/* kx_reliability_t per channel; default COMMUNICATION_FAILURE */
     char     ui_unit[KX_N_UI][8];    /* "degC","V","mA"... NUL-terminated   */
+    char     ui_raw_unit[KX_N_UI][8];/* "V","mA" or "" when raw display is not applicable */
+    uint8_t  ui_reliability[KX_N_UI];/* kx_reliability_t per channel; default COMMUNICATION_FAILURE */
 
     uint8_t  di_state[KX_N_DI];     /* 0/1 (đã debounce); default 0        */
     uint32_t di_counter[KX_N_DI];   /* đếm cạnh lên; default 0             */

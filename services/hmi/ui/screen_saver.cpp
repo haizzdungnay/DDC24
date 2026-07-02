@@ -24,7 +24,11 @@ void ScreenSaver::backlight_set_pct(int pct)
     char buf[8];
     int n = snprintf(buf, sizeof(buf), "%d\n", value);
     int fd = open("/sys/class/backlight/backlight0/brightness", O_WRONLY | O_CLOEXEC);
-    if (fd >= 0) { write(fd, buf, static_cast<size_t>(n)); close(fd); }
+    if (fd >= 0) {
+        const ssize_t written = write(fd, buf, static_cast<size_t>(n));
+        (void)written;
+        close(fd);
+    }
 }
 
 void ScreenSaver::check()

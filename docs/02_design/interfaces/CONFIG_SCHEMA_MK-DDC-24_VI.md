@@ -129,7 +129,7 @@
 | `none` / `UNKNOWN` | `no_units` | 95 (+ `CONFIGURATION_ERROR` Reliability) |
 | `"percent"` | `percent` | 98 |
 | `"degC"` | `degrees_celsius` | 62 |
-| `"Pa"` | `pascals` | 133 |
+| `"Pa"` | `pascals` | 53 |
 | `"RPM"` | `revolutions_per_minute` | 104 |
 | `"ppm"` | `parts_per_million` | 96 |
 | `"no_units"` | `no_units` | 95 |

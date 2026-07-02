@@ -567,8 +567,8 @@ int main(int argc, char** argv)
                     }
                     cache.write_ao_mode(applied_modes);
                     output.set_ao_modes(applied_enum);
-                    output.set_ao_channels(cfg.ao_channels);
                 }
+                output.set_ao_channels(cfg.ao_channels);
                 /* ADR-012: always refresh AO BACnet metadata on SIGHUP (name/units/min/max) */
                 bacnet_objects.update_ao_config(cfg.ao_channels);
                 bacnet_server.apply_ao_config();
@@ -606,6 +606,8 @@ int main(int argc, char** argv)
                         kx_quality_t q;
                         kx_reliability_t r;
                         float value = ui_to_eng(resp.ui_raw[i], cfg.ui[i], &q, &r);
+                        snap.ui_raw[i] = cfg.ui[i].enabled
+                            ? ui_raw_electric(resp.ui_raw[i], cfg.ui[i]) : 0.0f;
                         const uint8_t samples = cfg.ui[i].filter_samples;
                         if (q == KX_Q_GOOD && samples > 1) {
                             if (ui_filter_size[i] != samples) {
@@ -625,8 +627,10 @@ int main(int argc, char** argv)
                             ui_filter_pos[i] = 0;
                         }
                         /* ADR-011: override reliability to COMMUNICATION_FAILURE when ADC fault */
-                        if (resp.fault_flags & (IOP_FAULT_ADC1 | IOP_FAULT_ADC2))
+                        if (resp.fault_flags & (IOP_FAULT_ADC1 | IOP_FAULT_ADC2)) {
+                            q = KX_Q_BAD;
                             r = KX_REL_COMMUNICATION_FAILURE;
+                        }
                         pre_math[i] = value;
                         snap.ui_value[i] = value;
                         snap.ui_quality[i] = static_cast<uint8_t>(q);
@@ -719,6 +723,8 @@ int main(int argc, char** argv)
                     client.set_status(IopStatus::SAFE_STATE);
                     cache.write_status(KX_IOP_SAFE, metrics);
                     output.reset_last_sent();
+                } else if (st == IopStatus::NORMAL_POLL) {
+                    cache.mark_inputs_unreliable();
                 }
             }
         } else if (st == IopStatus::RECONNECT || st == IopStatus::FAULT) {

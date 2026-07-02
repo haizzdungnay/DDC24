@@ -60,7 +60,7 @@ MQTT/REST Agent (`kinexus-agent`), Security Service, OTA (`kinexus-ota`), cloud.
 | SW-IOP-009 | Khi SAFE_STATE: gửi RESET_IO, set alarm qua shared alarm bus | MUST | IOP-005 | T-SW-009 |
 | SW-IOP-010 | PHẢI chạy với SCHED_FIFO priority 70 | MUST | — | T-SW-010 |
 | SW-IOP-011 | PHẢI expose metrics: iop_crc_err, iop_timeout, iop_seq_err qua REST `/api/v1/system/status` | MUST | IOP-006 | T-SW-011 |
-| SW-IOP-012 | `kx_reliability_t` enum PHẢI được tính bởi `io_scaling.cpp` cho từng UI channel và ghi vào `ui_reliability[KX_N_UI]` trong shared memory (kx_plc_shm_t) | MUST | ADR-011 | T-SW-012 |
+| SW-IOP-012 | `kx_reliability_t` enum PHẢI được tính bởi `io_scaling.cpp` cho từng UI channel và ghi vào `ui_reliability[KX_N_UI]` trong `kx_io_shm_t`; core copy sang `kx_plc_shm_t.ai[].reliability` | MUST | ADR-011 | T-SW-012 |
 | SW-IOP-013 | IOP timeout > 5s phải trigger `KX_REL_COMMUNICATION_FAILURE` trên **tất cả** 16 UI channels (không phải chỉ channel lỗi) | MUST | ADR-011 | T-SW-013 |
 
 ### 2.2 Shared Memory Layout — ⛔ LEGACY, ĐÃ BỊ THAY THẾ

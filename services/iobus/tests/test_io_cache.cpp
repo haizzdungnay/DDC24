@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <fcntl.h>
+#include <cstddef>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -14,6 +15,13 @@
 #include "io/io_cache.hpp"
 
 using namespace iobus;
+
+static_assert(offsetof(kx_io_shm_t, ui_raw) == 80, "web io_shm raw offset changed");
+static_assert(offsetof(kx_io_shm_t, ui_unit) == 160, "web io_shm unit offset changed");
+static_assert(offsetof(kx_io_shm_t, ui_raw_unit) == 288, "web io_shm raw-unit offset changed");
+static_assert(offsetof(kx_io_shm_t, iop_status) == 502, "web io_shm status offset changed");
+static_assert(offsetof(kx_io_shm_t, iop_crc_err) == 512, "web io_shm metrics offset changed");
+static_assert(sizeof(kx_io_shm_t) == 528, "web io_shm size changed");
 
 namespace {
 
@@ -42,10 +50,34 @@ TEST(IoCache, CleanBootInitsDefaults)
     const kx_io_shm_t* s = cache.shm();
     EXPECT_EQ(s->magic, KX_SHM_MAGIC);
     EXPECT_EQ(s->iop_status, KX_IOP_FAULT);
-    for (int i = 0; i < KX_N_UI; i++)
+    for (int i = 0; i < KX_N_UI; i++) {
         EXPECT_EQ(s->ui_quality[i], KX_Q_BAD);
+        EXPECT_EQ(s->ui_reliability[i], KX_REL_COMMUNICATION_FAILURE);
+    }
     for (int i = 0; i < KX_N_DO; i++)
         EXPECT_EQ(s->do_cmd[i], 0);
+    cache.detach();
+    cleanup_shm();
+}
+
+TEST(IoCache, StaleAndCommunicationFailureReliability)
+{
+    if (shm_exists())
+        GTEST_SKIP() << "/dev/shm/mkddc_io_shm đang tồn tại (iobus thật đang chạy?) — skip";
+
+    IoCache cache;
+    IobusMetrics metrics;
+    ASSERT_TRUE(cache.attach());
+    cache.mark_inputs_unreliable();
+    for (int i = 0; i < KX_N_UI; i++) {
+        EXPECT_EQ(cache.shm()->ui_quality[i], KX_Q_UNCERTAIN);
+        EXPECT_EQ(cache.shm()->ui_reliability[i], KX_REL_UNRELIABLE_OTHER);
+    }
+    cache.write_status(KX_IOP_SAFE, metrics);
+    for (int i = 0; i < KX_N_UI; i++) {
+        EXPECT_EQ(cache.shm()->ui_quality[i], KX_Q_BAD);
+        EXPECT_EQ(cache.shm()->ui_reliability[i], KX_REL_COMMUNICATION_FAILURE);
+    }
     cache.detach();
     cleanup_shm();
 }

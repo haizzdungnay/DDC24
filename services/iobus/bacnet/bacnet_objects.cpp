@@ -41,7 +41,7 @@ static uint16_t units_str_to_bacnet(const std::string& s)
     if (s == "volt")        return 5;
     if (s == "milliampere") return 2;
     if (s == "degC")        return 62;
-    if (s == "Pa")          return 133;
+    if (s == "Pa")          return 53;
     if (s == "RPM")         return 104;
     if (s == "ppm")         return 96;
     return 95;  /* no_units */

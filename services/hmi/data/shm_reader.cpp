@@ -158,10 +158,11 @@ static float read_cpu_pct()
     static uint64_t prev_total = 0, prev_idle = 0;
     FILE* f = fopen("/proc/stat", "r");
     if (!f) return 0.0f;
-    uint64_t user, nice, sys, idle, iowait, irq, sirq;
-    fscanf(f, "cpu %lu %lu %lu %lu %lu %lu %lu",
-           &user, &nice, &sys, &idle, &iowait, &irq, &sirq);
+    uint64_t user = 0, nice = 0, sys = 0, idle = 0, iowait = 0, irq = 0, sirq = 0;
+    const int parsed = fscanf(f, "cpu %lu %lu %lu %lu %lu %lu %lu",
+                              &user, &nice, &sys, &idle, &iowait, &irq, &sirq);
     fclose(f);
+    if (parsed != 7) return 0.0f;
     uint64_t total = user + nice + sys + idle + iowait + irq + sirq;
     uint64_t dt = total - prev_total;
     uint64_t di = idle - prev_idle;
@@ -192,8 +193,9 @@ static int32_t read_cpu_temp_c10()
     FILE* f = fopen("/sys/class/thermal/thermal_zone0/temp", "r");
     if (!f) return 0;
     int millideg = 0;
-    fscanf(f, "%d", &millideg);
+    const int parsed = fscanf(f, "%d", &millideg);
     fclose(f);
+    if (parsed != 1) return 0;
     return static_cast<int32_t>(millideg / 100);   /* millideg → 0.1°C */
 }
 
@@ -225,14 +227,19 @@ static void read_network(SysSnapshot* s)
     FILE* f = fopen(path, "r");
     if (f) {
         char state[16]{};
-        fscanf(f, "%15s", state);
+        const int parsed = fscanf(f, "%15s", state);
         fclose(f);
-        s->eth_link = (std::strncmp(state, "up", 2) == 0);
+        if (parsed == 1)
+            s->eth_link = (std::strncmp(state, "up", 2) == 0);
     }
     /* MAC */
     snprintf(path, sizeof(path), "/sys/class/net/%s/address", iface);
     f = fopen(path, "r");
-    if (f) { fscanf(f, "%17s", s->eth_mac); fclose(f); }
+    if (f) {
+        const int parsed = fscanf(f, "%17s", s->eth_mac);
+        if (parsed != 1) s->eth_mac[0] = '\0';
+        fclose(f);
+    }
 
     /* IP, mask, gateway via getifaddrs */
     struct ifaddrs* ifa_list = nullptr;
@@ -255,7 +262,8 @@ static void read_network(SysSnapshot* s)
         char route_iface[IFNAMSIZ];
         unsigned long destination = 0, gateway = 0;
         char line[256];
-        (void)fgets(line, sizeof(line), f);
+        char* header = fgets(line, sizeof(line), f);
+        (void)header;
         while (fgets(line, sizeof(line), f)) {
             if (sscanf(line, "%15s %lx %lx", route_iface, &destination, &gateway) == 3 &&
                 std::strcmp(route_iface, iface) == 0 && destination == 0) {
@@ -312,7 +320,12 @@ void sys_snapshot_update(SysSnapshot* snap)
 
     /* Uptime */
     FILE* f = fopen("/proc/uptime", "r");
-    if (f) { double up; fscanf(f, "%lf", &up); snap->uptime_s = static_cast<uint32_t>(up); fclose(f); }
+    if (f) {
+        double up = 0.0;
+        if (fscanf(f, "%lf", &up) == 1)
+            snap->uptime_s = static_cast<uint32_t>(up);
+        fclose(f);
+    }
 
     snap->cpu_pct    = read_cpu_pct();
     snap->cpu_temp_c10 = read_cpu_temp_c10();

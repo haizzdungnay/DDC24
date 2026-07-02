@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	kxShmMagic    = 0x4B584403
+	kxShmMagic    = 0x4B584404
 	defaultIOShm  = "/dev/shm/mkddc_io_shm"
 	defaultPLCShm = "/dev/shm/mkddc_plc_shm"
 )
@@ -398,18 +398,18 @@ const (
 	offPLCScanOverrun = 9272
 	kxPlcShmMinLen    = 9280
 
-	// kx_io_shm_t v3 offsets used by web:
+	// kx_io_shm_t v4 offsets used by web:
 	//   header16 + ui_value[16]*4 + ui_raw[16]*4 + ui_quality[16]
-	//   + ui_unit[16][8] + ui_raw_unit[16][8] + rest = 512 bytes.
+	//   + ui_unit[16][8] + ui_raw_unit[16][8] + ui_reliability[16] + rest.
 	offIORaw       = 80
 	offIOUnit      = 160
 	offIORawUnit   = 288
 	kxIOUnitSize   = 8
-	offIOPStatus   = 490
-	offIOCRCErrors = 496
-	offIOTimeouts  = 500
-	offIOSeqErrors = 504
-	kxIOShmMinLen  = 512
+	offIOPStatus   = 502
+	offIOCRCErrors = 512
+	offIOTimeouts  = 516
+	offIOSeqErrors = 520
+	kxIOShmMinLen  = 528
 )
 
 // kx_quality_t ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ DTO quality string

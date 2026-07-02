@@ -28,8 +28,11 @@ public:
     void write_ao_mode(const uint8_t mode[KX_N_AO]);
     void write_ui_units(const char units[KX_N_UI][8], const char raw_units[KX_N_UI][8]);
 
-    /* Chỉ cập nhật iop_status (khi đổi state mà không có IO_RESP mới). */
+    /* Cập nhật iop_status; trạng thái != NORMAL cũng đánh dấu toàn bộ UI mất liên lạc. */
     void write_status(uint8_t iop_status, const IobusMetrics& m);
+
+    /* Poll lỗi thoáng qua trước fault timeout: dữ liệu stale nhưng chưa mất liên lạc. */
+    void mark_inputs_unreliable();
 
     const kx_io_shm_t* shm() const { return shm_; }
 

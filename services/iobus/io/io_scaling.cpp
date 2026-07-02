@@ -116,61 +116,8 @@ static double ntc_resolve_temp(double r, double r0)
 
 float ui_to_eng(int32_t raw_s32, SensorType t, kx_quality_t* q_out)
 {
-    const float frac = static_cast<float>(raw_s32) / IO_S24_FS;
-    *q_out = KX_Q_GOOD;
-
-    switch (t) {
-    case SensorType::NONE:
-        *q_out = KX_Q_BAD;
-        return 0.0f;
-    case SensorType::V0_10: {
-        const float v = adc_volts(raw_s32) * IO_UI_DIV_GAIN;
-        if (v > 11.0f || v < -0.2f) *q_out = KX_Q_BAD;
-        return v;
-    }
-    case SensorType::V2_10: {
-        const float v = adc_volts(raw_s32) * IO_UI_DIV_GAIN;
-        if (v < 1.8f || v > 11.0f) *q_out = KX_Q_BAD;
-        return v;
-    }
-    case SensorType::MA4_20: {
-        const float ma = (adc_volts(raw_s32) / IO_UI_SHUNT_OHM) * 1000.0f;
-        if (ma < 3.5f) *q_out = KX_Q_BAD;
-        else if (ma > 21.0f) *q_out = KX_Q_BAD;
-        return ma;
-    }
-    case SensorType::PT100:
-    case SensorType::PT1000: {
-        /* Rev A: IOP_BOARD_CAP_RTD not set — circuit not populated.
-         * When RTD hardware ships (BOARD_CAP_MAP & IOP_BOARD_CAP_RTD), reinstate
-         * CVD pt_resolve_temp() here. Track as follow-up task IOB-RTD-RevB. */
-        *q_out = KX_Q_BAD;
-        return 0.0f;
-    }
-    case SensorType::NTC10K:
-    case SensorType::NTC20K: {
-        const double r_nom = (t == SensorType::NTC10K) ? 10000.0 : 20000.0;
-        const double temp = ntc_resolve_temp(ntc_resistance_from_adc(adc_volts(raw_s32), r_nom), r_nom);
-        if (std::isnan(temp) || temp < -30.0 || temp > 70.0) { *q_out = KX_Q_BAD; return 0.0f; }
-        return static_cast<float>(temp);
-    }
-    case SensorType::DRY_CONTACT:
-        return (static_cast<float>(raw_s32) > DRY_CONTACT_THRESHOLD) ? 1.0f : 0.0f;
-    case SensorType::POTENTIOMETER:
-    case SensorType::LIGHT: {
-        /* ponytail: true excitation/reference transfer is a bring-up item; keep ratio path until IO_UI provides a measured Vexc channel. */
-        const float pct = frac * 100.0f;
-        if (frac > 1.10f || frac < -0.02f) *q_out = KX_Q_BAD;
-        return pct;
-    }
-    case SensorType::PULSE:
-        /* ponytail: true pulse counter needs MCU edge count in IOP; until then expose raw nonnegative sample. */
-        if (raw_s32 < 0) *q_out = KX_Q_BAD;
-        return static_cast<float>(raw_s32 < 0 ? 0 : raw_s32);
-    default:
-        *q_out = KX_Q_BAD;
-        return 0.0f;
-    }
+    kx_reliability_t ignored;
+    return ui_to_eng(raw_s32, t, q_out, &ignored);
 }
 
 /* ADR-011: overload với reliability output — phân biệt nguyên nhân lỗi cụ thể. */
@@ -186,19 +133,19 @@ float ui_to_eng(int32_t raw_s32, SensorType t, kx_quality_t* q_out, kx_reliabili
         *r_out = KX_REL_CONFIGURATION_ERROR;
         return 0.0f;
     case SensorType::V0_10: {
-        const float v = frac * 10.0f;
-        if (frac > 1.10f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; }
-        else if (frac < -0.02f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; }
+        const float v = adc_volts(raw_s32) * IO_UI_DIV_GAIN;
+        if (v > 11.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; }
+        else if (v < -0.2f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; }
         return v;
     }
     case SensorType::V2_10: {
-        const float v = frac * 10.0f;
+        const float v = adc_volts(raw_s32) * IO_UI_DIV_GAIN;
         if (v > 11.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; }
         else if (v < 1.8f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; }
         return v;
     }
     case SensorType::MA4_20: {
-        const float ma = 4.0f + frac * 16.0f;
+        const float ma = (adc_volts(raw_s32) / IO_UI_SHUNT_OHM) * 1000.0f;
         if (ma < 3.5f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OPEN_LOOP; }
         else if (ma > 21.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_SHORTED_LOOP; }
         return ma;
@@ -275,27 +222,60 @@ float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out, 
         return 0.0f;
     }
 
-    float value = ui_to_eng(raw_s32, cfg.sensor, q_out, r_out);
-    if (*q_out == KX_Q_BAD) return value;
-
+    *q_out = KX_Q_GOOD;
+    *r_out = KX_REL_RELIABLE;
+    float value = 0.0f;
+    const float frac = static_cast<float>(raw_s32) / IO_S24_FS;
     switch (cfg.sensor) {
-    case SensorType::V0_10:
+    case SensorType::V0_10: {
+        value = apply_cal(adc_volts(raw_s32) * IO_UI_DIV_GAIN, cfg);
+        if (value > 11.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; return value; }
+        if (value < -0.2f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; return value; }
         value = scale_range(value, 0.0f, 10.0f, cfg, q_out);
         break;
-    case SensorType::V2_10:
+    }
+    case SensorType::V2_10: {
+        value = apply_cal(adc_volts(raw_s32) * IO_UI_DIV_GAIN, cfg);
+        if (value > 11.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; return value; }
+        if (value < 1.8f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; return value; }
         value = scale_range(value, 2.0f, 10.0f, cfg, q_out);
         break;
-    case SensorType::MA4_20:
+    }
+    case SensorType::MA4_20: {
+        value = apply_cal((adc_volts(raw_s32) / IO_UI_SHUNT_OHM) * 1000.0f, cfg);
+        if (value < 3.5f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OPEN_LOOP; return value; }
+        if (value > 21.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_SHORTED_LOOP; return value; }
         value = scale_range(value, 4.0f, 20.0f, cfg, q_out);
         break;
+    }
+    case SensorType::NTC10K:
+    case SensorType::NTC20K: {
+        const double r_nom = (cfg.sensor == SensorType::NTC10K) ? 10000.0 : 20000.0;
+        const double temp = ntc_resolve_temp(
+            ntc_resistance_from_adc(apply_cal(adc_volts(raw_s32), cfg), r_nom), r_nom);
+        if (std::isnan(temp) || temp < -30.0 || temp > 70.0) {
+            *q_out = KX_Q_BAD;
+            *r_out = (!std::isnan(temp) && temp > 70.0)
+                ? KX_REL_OVER_RANGE : KX_REL_UNDER_RANGE;
+            return 0.0f;
+        }
+        value = static_cast<float>(temp);
+        break;
+    }
     case SensorType::POTENTIOMETER:
-    case SensorType::LIGHT:
+    case SensorType::LIGHT: {
+        value = apply_cal(frac * 100.0f, cfg);
+        if (value > 110.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_OVER_RANGE; return value; }
+        if (value < -2.0f) { *q_out = KX_Q_BAD; *r_out = KX_REL_UNDER_RANGE; return value; }
         value = scale_range(value, 0.0f, 100.0f, cfg, q_out);
         break;
+    }
     case SensorType::DRY_CONTACT:
+        value = ui_to_eng(raw_s32, cfg.sensor, q_out, r_out);
         value = cfg.invert ? (value > 0.5f ? 0.0f : 1.0f) : value;
         break;
     default:
+        value = ui_to_eng(raw_s32, cfg.sensor, q_out, r_out);
         break;
     }
     if (*q_out == KX_Q_BAD) *r_out = KX_REL_UNRELIABLE_OTHER;
@@ -305,57 +285,8 @@ float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out, 
 
 float ui_to_eng(int32_t raw_s32, const UiScaleConfig& cfg, kx_quality_t* q_out)
 {
-    if (!cfg.enabled) {
-        *q_out = KX_Q_BAD;
-        return 0.0f;
-    }
-
-    *q_out = KX_Q_GOOD;
-    float value = 0.0f;
-    const float frac = static_cast<float>(raw_s32) / IO_S24_FS;
-    switch (cfg.sensor) {
-    case SensorType::V0_10: {
-        value = apply_cal(adc_volts(raw_s32) * IO_UI_DIV_GAIN, cfg);
-        if (value > 11.0f || value < -0.2f) { *q_out = KX_Q_BAD; return value; }
-        value = scale_range(value, 0.0f, 10.0f, cfg, q_out);
-        break;
-    }
-    case SensorType::V2_10: {
-        value = apply_cal(adc_volts(raw_s32) * IO_UI_DIV_GAIN, cfg);
-        if (value < 1.8f || value > 11.0f) { *q_out = KX_Q_BAD; return value; }
-        value = scale_range(value, 2.0f, 10.0f, cfg, q_out);
-        break;
-    }
-    case SensorType::MA4_20: {
-        value = apply_cal((adc_volts(raw_s32) / IO_UI_SHUNT_OHM) * 1000.0f, cfg);
-        if (value < 3.5f || value > 21.0f) { *q_out = KX_Q_BAD; return value; }
-        value = scale_range(value, 4.0f, 20.0f, cfg, q_out);
-        break;
-    }
-    case SensorType::NTC10K:
-    case SensorType::NTC20K: {
-        const double r_nom = (cfg.sensor == SensorType::NTC10K) ? 10000.0 : 20000.0;
-        const double temp = ntc_resolve_temp(ntc_resistance_from_adc(apply_cal(adc_volts(raw_s32), cfg), r_nom), r_nom);
-        if (std::isnan(temp) || temp < -30.0 || temp > 70.0) { *q_out = KX_Q_BAD; return 0.0f; }
-        value = static_cast<float>(temp);
-        break;
-    }
-    case SensorType::POTENTIOMETER:
-    case SensorType::LIGHT:
-        value = apply_cal(frac * 100.0f, cfg);
-        if (value > 110.0f || value < -2.0f) { *q_out = KX_Q_BAD; return value; }
-        value = scale_range(value, 0.0f, 100.0f, cfg, q_out);
-        break;
-    case SensorType::DRY_CONTACT:
-        value = ui_to_eng(raw_s32, cfg.sensor, q_out);
-        value = cfg.invert ? (value > 0.5f ? 0.0f : 1.0f) : value;
-        break;
-    default:
-        value = ui_to_eng(raw_s32, cfg.sensor, q_out);
-        break;
-    }
-    if (*q_out != KX_Q_BAD) value += cfg.sensor_cal;
-    return value;
+    kx_reliability_t ignored;
+    return ui_to_eng(raw_s32, cfg, q_out, &ignored);
 }
 
 uint16_t ao_eng_to_raw(float v, AoMode m)
