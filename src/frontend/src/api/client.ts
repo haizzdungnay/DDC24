@@ -3,6 +3,7 @@ import {
   ackDemoAlarm,
   forceDemoPoint,
   getAiInputConfigs,
+  getAlarmSettings as getDemoAlarmSettings,
   getDemoAlarms,
   getDemoChannels,
   getDemoHealth,
@@ -11,6 +12,7 @@ import {
   getDemoPoints,
   getUserParams as getDemoUserParams,
   putDemoAiInputs,
+  putAlarmSettings as putDemoAlarmSettings,
   putDemoOutputs,
   putUserParams as putDemoUserParams,
   runDemoCommissioning,
@@ -18,7 +20,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AoConfig, type AoSignalMode, type CommissioningTestResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
+import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmSetting, type AoConfig, type AoSignalMode, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 
@@ -374,6 +376,7 @@ function unitFromIo(value: unknown): number {
   if (unit === 'percent' || unit === '%' || unit === '%rh') return 1
   if (unit === 'degc' || unit === 'degf' || unit === 'c' || unit === 'f') return 2
   if (unit === 'pa' || unit === 'pascal') return 3
+  if (unit === 'ppm') return 4
   return 0
 }
 
@@ -381,6 +384,7 @@ function unitToIo(unit: number): string {
   if (unit === 1) return 'percent'
   if (unit === 2) return 'degC'
   if (unit === 3) return 'Pa'
+  if (unit === 4) return 'ppm'
   return ''
 }
 
@@ -651,6 +655,19 @@ export const apiClient = {
     if (IS_DEMO) return getDemoAlarms()
     const raw = await requestJson<Array<Record<string, unknown>>>('/alarms')
     return raw.map(normalizeAlarm)
+  },
+
+  async getAlarmSettings(): Promise<AlarmSetting[]> {
+    if (IS_DEMO) return getDemoAlarmSettings()
+    return requestJson<AlarmSetting[]>('/alarm-settings')
+  },
+
+  async putAlarmSettings(rows: AlarmSetting[]): Promise<ConfigPutResult> {
+    if (IS_DEMO) return putDemoAlarmSettings(rows)
+    return requestJson<ConfigPutResult>('/alarm-settings', {
+      method: 'PUT',
+      body: JSON.stringify(rows)
+    })
   },
 
   async getMe(): Promise<CurrentUser> {

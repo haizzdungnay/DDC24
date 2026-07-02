@@ -6,6 +6,7 @@ import type {
   DiInputConfig,
   DoConfig,
   CommissioningTestResult,
+  ConfigPutResult,
   Graph,
   GraphLink,
   GraphValidationResult,
@@ -54,7 +55,7 @@ const names: Record<string, string> = {
 const basePoints: Point[] = [
   ...Array.from({ length: 4 }, (_, i) => {
     const id = `DO-${String(i + 1).padStart(2, '0')}`
-    return { id, name: names[id], kind: 'DO' as const, value: i < 3, quality: 'good' as const, source: 'Core', priority: 'Schedule', updatedAt: nowIso(), sensorType: 'Relay' }
+    return { id, name: names[id], kind: 'DO' as const, value: demoDoValue(i), quality: 'good' as const, source: 'Core', priority: 'Logic', updatedAt: nowIso(), sensorType: 'Relay' }
   }),
   { id: 'UI-01', name: names['UI-01'], kind: 'UI', value: 23.7, unit: 'C', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'NTC10k' },
   { id: 'UI-02', name: names['UI-02'], kind: 'UI', value: 6.2, unit: 'bar', quality: 'uncertain', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: '4-20mA' },
@@ -92,8 +93,22 @@ function makeTrend(base: number): number[] {
   return Array.from({ length: 18 }, (_, i) => Number((base + Math.sin(i / 2) * 4 + (Math.random() - 0.5) * 2).toFixed(1)))
 }
 
+function demoDoValue(index: number, now = Date.now()): boolean {
+  const phase = Math.floor(now / 30_000) % 4
+  const ui12On = phase === 0 || phase === 1
+  const ui13On = phase === 1 || phase === 2
+  if (index === 0) return ui12On
+  if (index === 1) return ui13On
+  if (index === 2) return ui12On && !ui13On
+  return ui13On && !ui12On
+}
+
 function jitter(point: Point): Point {
   const updatedAt = nowIso()
+  if (point.kind === 'DO' && !point.forced) {
+    const channel = Number(point.id.slice(3)) || 1
+    return { ...point, value: demoDoValue(channel - 1), priority: 'Logic', updatedAt }
+  }
   if ((point.kind === 'UI' && typeof point.value === 'number') || point.kind === 'AO') {
     const spread = point.kind === 'UI' ? 1.2 : 2.5
     const max = point.unit === 'bar' ? 12 : point.unit === 'ppm' ? 2000 : point.unit === 'pulse' ? 9999 : 100
@@ -156,17 +171,75 @@ export function getDemoAlarms(): Alarm[] {
   return alarms.map((alarm) => ({ ...alarm }))
 }
 
+const defaultAlarmSettings: AlarmSetting[] = [
+  {
+    id: 'ALM-001',
+    label: 'Supply air temperature',
+    enabled: true,
+    alarmType: 1,
+    sources: [{ kind: 'UI', channel: 1, pointId: 'UI-01' }],
+    priority: 'high',
+    delayS: 10,
+    publishBacnet: true,
+    notificationClass: 1,
+    params: { hh: 32, h: 28, l: 16, ll: 12, hysteresis: 1 }
+  },
+  {
+    id: 'ALM-002',
+    label: 'Duct pressure range',
+    enabled: true,
+    alarmType: 1,
+    sources: [{ kind: 'UI', channel: 2, pointId: 'UI-02' }],
+    priority: 'critical',
+    delayS: 5,
+    publishBacnet: true,
+    notificationClass: 1,
+    params: { hh: 9.5, h: 8, l: 2, ll: 1, hysteresis: 0.2 }
+  },
+  {
+    id: 'ALM-003',
+    label: 'Fan runtime hours',
+    enabled: true,
+    alarmType: 3,
+    sources: [
+      { kind: 'DO', channel: 1, pointId: 'DO-01' },
+      { kind: 'DO', channel: 2, pointId: 'DO-02' }
+    ],
+    priority: 'medium',
+    delayS: 0,
+    publishBacnet: false,
+    params: { runtimeHours: 3600 }
+  },
+  {
+    id: 'ALM-004',
+    label: 'Outdoor temperature spare',
+    enabled: false,
+    alarmType: 0,
+    sources: [],
+    priority: 'low',
+    delayS: 0,
+    publishBacnet: false,
+    params: {}
+  }
+]
+
+let alarmSettings = defaultAlarmSettings.map(cloneAlarmSetting)
+
+function cloneAlarmSetting(row: AlarmSetting): AlarmSetting {
+  return {
+    ...row,
+    sources: row.sources.map((source) => ({ ...source })),
+    params: { ...row.params }
+  }
+}
+
 export function getAlarmSettings(): AlarmSetting[] {
-  return [
-    { pointId: 'UI-01', label: 'Supply Air Temp', enabled: true, hh: 32, h: 28, l: 16, ll: 12, delayS: 10, priority: 'high', alarmType: 1, sourcePointId: 'UI-01', ackDelayS: 0, interlock: false },
-    { pointId: 'UI-02', label: 'Duct Pressure', enabled: true, hh: 9.5, h: 8, l: 2, ll: 1, delayS: 5, priority: 'critical', alarmType: 2, sourcePointId: 'UI-02', ackDelayS: 60, interlock: false },
-    { pointId: 'DO-01', label: 'Supply Fan', enabled: true, hh: 0, h: 0, l: 0, ll: 0, delayS: 3600, priority: 'medium', alarmType: 3, sourcePointId: 'DO-01', ackDelayS: 0, interlock: true },
-    { pointId: 'DO-02', label: 'Exhaust Fan', enabled: true, hh: 0, h: 0, l: 0, ll: 0, delayS: 10, priority: 'critical', alarmType: 4, sourcePointId: 'DO-02', ackDelayS: 0, interlock: true },
-    { pointId: 'DO-03', label: 'Pump', enabled: true, hh: 0, h: 0, l: 0, ll: 0, delayS: 5, priority: 'medium', alarmType: 5, sourcePointId: 'DO-03', ackDelayS: 0, interlock: false },
-    { pointId: 'AO-01', label: 'VFD Speed', enabled: true, hh: 100, h: 92, l: 10, ll: 0, delayS: 15, priority: 'medium', alarmType: 6, sourcePointId: 'AO-01', ackDelayS: 0, interlock: false },
-    { pointId: 'UI-03', label: 'Room Humidity', enabled: true, hh: 75, h: 65, l: 35, ll: 25, delayS: 30, priority: 'medium', alarmType: 7, sourcePointId: 'UI-03', ackDelayS: 0, interlock: false },
-    { pointId: 'UI-04', label: 'Outdoor Temp', enabled: false, hh: 42, h: 38, l: 5, ll: 0, delayS: 60, priority: 'low', alarmType: 0, sourcePointId: '', ackDelayS: 0, interlock: false }
-  ]
+  return alarmSettings.map(cloneAlarmSetting)
+}
+
+export function putAlarmSettings(rows: AlarmSetting[]): ConfigPutResult {
+  alarmSettings = rows.map(cloneAlarmSetting)
+  return { result: 'success', applied: true, reload: 'sighup-core', warnings: [] }
 }
 
 export function ackDemoAlarm(id: string): Alarm[] {
@@ -490,7 +563,7 @@ let demoAiInputConfigs: AiInputConfig[] = [
   { channel: 7, label: 'Damper Potentiometer', signalType: 6, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 4, sensorCal: 0, mathFunction: 0, enabled: true, note: 'Authoring-only until iobus consumer supports EasySet signal 6.' },
   { channel: 8, label: 'Pulse Meter', signalType: 8, displayMin: 0, displayMax: 205, rangeMultiplier: 1, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
   { channel: 9, label: 'Return Air Temp', signalType: 3, displayMin: -20, displayMax: 80, rangeMultiplier: 0, unit: 2, filterSamples: 3, sensorCal: 0, mathFunction: 1, enabled: true, note: '' },
-  { channel: 10, label: 'CO2 Sensor', signalType: 1, displayMin: 0, displayMax: 2000, rangeMultiplier: 1, unit: 0, filterSamples: 5, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
+  { channel: 10, label: 'CO2 Sensor', signalType: 1, displayMin: 0, displayMax: 200, rangeMultiplier: 1, unit: 4, filterSamples: 5, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
   { channel: 11, label: 'Chilled Water Temp', signalType: 3, displayMin: -20, displayMax: 80, rangeMultiplier: 0, unit: 2, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
   { channel: 12, label: 'Supply Fan Status', signalType: 4, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
   { channel: 13, label: 'Motion Sensor', signalType: 5, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: true, note: '' },
@@ -511,10 +584,10 @@ const defaultAoConfigs: AoConfig[] = [
 ]
 
 const defaultDoConfigs: DoConfig[] = [
-  { kind: 'DO', channel: 1, id: 'DO-01', label: 'Pump Start', enabled: true, safeState: 'open', floatingMode: false, source: 1, notInUse02: 0, sequence: 1, switchOffDelay: '00:00:00', switchOnDelay: '00:00:03', pwmCycleTime: '00:00:00', alarmOn: 1, alarmOff: 2, runtimeCounter: true, runtimeAlarmHours: 1200, usePiSequence: false, activationLimitPi: 60, deactivationLimitPi: 45, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: true, note: '', demoNote: 'demo' },
-  { kind: 'DO', channel: 2, id: 'DO-02', label: 'Fan Start', enabled: true, safeState: 'open', floatingMode: false, source: 1, notInUse02: 0, sequence: 2, switchOffDelay: '00:00:05', switchOnDelay: '00:00:05', pwmCycleTime: '00:00:00', alarmOn: 3, alarmOff: 4, runtimeCounter: true, runtimeAlarmHours: 2400, usePiSequence: false, activationLimitPi: 60, deactivationLimitPi: 45, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: true, note: '', demoNote: 'demo' },
-  { kind: 'DO', channel: 3, id: 'DO-03', label: 'Valve Open', enabled: true, safeState: 'closed', floatingMode: true, source: 6, notInUse02: 0, sequence: 3, switchOffDelay: '00:00:00', switchOnDelay: '00:00:00', pwmCycleTime: '00:01:00', alarmOn: 0, alarmOff: 0, runtimeCounter: false, runtimeAlarmHours: 0, usePiSequence: true, activationLimitPi: 70, deactivationLimitPi: 30, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: true, note: '', demoNote: 'demo' },
-  { kind: 'DO', channel: 4, id: 'DO-04', label: 'Alarm Buzzer', enabled: true, safeState: 'open', floatingMode: false, source: 5, notInUse02: 0, sequence: 0, switchOffDelay: '00:00:10', switchOnDelay: '00:00:00', pwmCycleTime: '00:00:00', alarmOn: 5, alarmOff: 6, runtimeCounter: false, runtimeAlarmHours: 0, usePiSequence: false, activationLimitPi: 60, deactivationLimitPi: 45, notUsed14: 0, notUsed15: 0, notInUse16: 0, manualValue: false, note: '', demoNote: 'demo' }
+  { kind: 'DO', channel: 1, id: 'DO-01', label: 'Pump Start', safeState: 'open', manualValue: true },
+  { kind: 'DO', channel: 2, id: 'DO-02', label: 'Fan Start', safeState: 'open', manualValue: true },
+  { kind: 'DO', channel: 3, id: 'DO-03', label: 'Valve Open', safeState: 'closed', manualValue: true },
+  { kind: 'DO', channel: 4, id: 'DO-04', label: 'Alarm Buzzer', safeState: 'open', manualValue: false }
 ]
 
 let demoOutputs: OutputsConfig = {
@@ -532,7 +605,7 @@ export function getDemoOutputs(): OutputsConfig {
 export function putDemoOutputs(config: OutputsConfig): void {
   demoOutputs = {
     ao: config.ao.map((item) => ({ ...item, demoNote: 'demo' })),
-    do: config.do.map((item) => ({ ...item, demoNote: 'demo' }))
+    do: config.do.map((item) => ({ ...item }))
   }
 }
 
