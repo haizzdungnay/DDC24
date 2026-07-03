@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "device": {
+    "bacnet_device_id": 47808,
+    "name": "orangepi-do-demo",
+    "scan_ms": 1000
+  },
+  "io_map": {},
+  "nodes": [
+    { "id": "ui12", "type": "AI_Input", "params": { "channel": 11 } },
+    { "id": "ui13", "type": "AI_Input", "params": { "channel": 12 } },
+    { "id": "half", "type": "Setpoint", "params": { "default": 0.5 } },
+    { "id": "ui12_on", "type": "Compare_GT", "params": { "hysteresis": 0.1 } },
+    { "id": "ui13_on", "type": "Compare_GT", "params": { "hysteresis": 0.1 } },
+    { "id": "not_ui12", "type": "NOT" },
+    { "id": "not_ui13", "type": "NOT" },
+    { "id": "ui12_only", "type": "AND" },
+    { "id": "ui13_only", "type": "AND" },
+    { "id": "do1", "type": "DO_Output", "params": { "channel": 0 } },
+    { "id": "do2", "type": "DO_Output", "params": { "channel": 1 } },
+    { "id": "do3", "type": "DO_Output", "params": { "channel": 2 } },
+    { "id": "do4", "type": "DO_Output", "params": { "channel": 3 } }
+  ],
+  "links": [
+    { "from": "ui12.out", "to": "ui12_on.a" },
+    { "from": "half.out", "to": "ui12_on.b" },
+    { "from": "ui13.out", "to": "ui13_on.a" },
+    { "from": "half.out", "to": "ui13_on.b" },
+    { "from": "ui12_on.out", "to": "not_ui12.in" },
+    { "from": "ui13_on.out", "to": "not_ui13.in" },
+    { "from": "ui12_on.out", "to": "ui12_only.a" },
+    { "from": "not_ui13.out", "to": "ui12_only.b" },
+    { "from": "ui13_on.out", "to": "ui13_only.a" },
+    { "from": "not_ui12.out", "to": "ui13_only.b" },
+    { "from": "ui12_on.out", "to": "do1.in" },
+    { "from": "ui13_on.out", "to": "do2.in" },
+    { "from": "ui12_only.out", "to": "do3.in" },
+    { "from": "ui13_only.out", "to": "do4.in" }
+  ]
+}

@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 1.4 | 2026-06-30 (§3: ao[] mở rộng per ADR-012 — thêm name/units/min_pv/max_pv; §3.1: bảng sensor_type→BACnet Units enum đầy đủ per ADR-011) · 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.5 | 2026-07-02 (§4a: thêm `alarm_settings.conf` entity-list per ADR-013) · 1.4 | 2026-06-30 (§3: ao[] mở rộng per ADR-012 — thêm name/units/min_pv/max_pv; §3.1: bảng sensor_type→BACnet Units enum đầy đủ per ADR-011) · 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -15,6 +15,7 @@
 | `network.conf` | mkddc-web | mkddc-web (áp hệ thống) | apply ngay (netplan/networkd) |
 | `io_config.conf` | mkddc-web | **mkddc-iobus** (scale + SET_AO_CFG) | SIGHUP iobus (re-handshake AO cfg) |
 | `io_safe_state.conf` | mkddc-web | **mkddc-core** (relinquish default + safe-state) | SIGHUP core |
+| `alarm_settings.conf` | mkddc-web | **mkddc-core** (Phase 2 loader/evaluator) | SIGHUP core after Phase 2; Phase 1 is contract-only |
 | `bacnet.conf` | mkddc-web | mkddc-iobus | restart iobus |
 | `fieldbus.conf` | mkddc-web | mkddc-iobus | restart iobus |
 | `mqtt.conf` | mkddc-web | (Rev B+ agent) | — |
@@ -152,6 +153,104 @@
 > priority resolver (07 §4). Safety ACTION khi fault/stale (07 §5.3) CỐ ĐỊNH 0V/4mA/open
 > ở cả 3 lớp (MCU/iobus/core), KHÔNG đổi theo file này — config sai không thể làm
 > hệ mất đường về safe. Loader: `services/core/safe_state_config.*` (fail-fast khi JSON hỏng).
+
+## 4a. `alarm_settings.conf` — alarm entity list (ADR-013)
+
+> Phase 1 contract-only: `mkddc-web` đã có đường lưu file, nhưng `mkddc-core` hiện chưa load/evaluate file này. Phase 2/3 phải thêm loader boot/SIGHUP và expand entity→per-source branch trước khi alarm runtime active.
+
+**Schema (rút gọn):**
+```json
+{
+  "type": "array",
+  "maxItems": 64,
+  "items": {
+    "type": "object",
+    "required": ["id", "label", "enabled", "alarmType", "sources", "priority", "delayS", "params"],
+    "properties": {
+      "id": {"type": "string", "pattern": "^ALM-[A-Za-z0-9_-]+$", "maxLength": 64},
+      "label": {"type": "string", "maxLength": 96},
+      "enabled": {"type": "boolean"},
+      "alarmType": {"type": "integer", "enum": [0, 1, 2, 3, 4, 5, 6, 7]},
+      "sources": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 16,
+        "items": {
+          "type": "object",
+          "required": ["kind", "channel", "pointId"],
+          "properties": {
+            "kind": {"type": "string", "enum": ["UI", "AO", "DO"]},
+            "channel": {"type": "integer", "minimum": 1},
+            "pointId": {"type": "string", "pattern": "^(UI|AO|DO)-[0-9]{2}$"}
+          }
+        }
+      },
+      "priority": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+      "delayS": {"type": "number", "minimum": 0},
+      "publishBacnet": {"type": "boolean", "default": false},
+      "notificationClass": {"type": "integer", "minimum": 1, "maximum": 4},
+      "params": {"type": "object"}
+    }
+  }
+}
+```
+
+**Ví dụ:**
+```json
+[
+  {
+    "id": "ALM-001",
+    "label": "Supply air temperature",
+    "enabled": true,
+    "alarmType": 1,
+    "sources": [
+      {"kind": "UI", "channel": 1, "pointId": "UI-01"},
+      {"kind": "UI", "channel": 2, "pointId": "UI-02"}
+    ],
+    "priority": "high",
+    "delayS": 10,
+    "publishBacnet": true,
+    "notificationClass": 1,
+    "params": {"hh": 32, "h": 28, "l": 16, "ll": 12, "hysteresis": 0.5}
+  },
+  {
+    "id": "ALM-002",
+    "label": "Pump runtime",
+    "enabled": true,
+    "alarmType": 3,
+    "sources": [{"kind": "DO", "channel": 1, "pointId": "DO-01"}],
+    "priority": "medium",
+    "delayS": 0,
+    "publishBacnet": false,
+    "params": {"runtimeHours": 2000}
+  }
+]
+```
+
+**Alarm type contract:**
+
+| `alarmType` | Name | Status | Required `params` |
+|-------------|------|--------|-------------------|
+| 0 | disabled | ACTIVE no-op | `{}` |
+| 1 | high_low_input | ACTIVE | `hh`, `h`, `l`, `ll`, optional `hysteresis` |
+| 2 | setpoint_deviation | DEFERRED | `setpoint`, `deviationHigh`, `deviationLow` |
+| 3 | runtime_hours | ACTIVE | `runtimeHours` |
+| 4 | fan_state_supervision | DEFERRED | `expectedState` |
+| 5 | digital_output_supervision | DEFERRED | `expectedState` |
+| 6 | analog_output_supervision | DEFERRED | `expectedValue`, `tolerance` |
+| 7 | pi_sequence_supervision | DEFERRED | `sequence` |
+
+**Validation / semantics:**
+
+- `id` unique trong file; `sources[].pointId` phải khớp `kind` và `channel`.
+- `alarmType=1`: khi `enabled=true`, validate `hh >= h >= l >= ll`.
+- `alarmType=3`: `runtimeHours >= 0`.
+- Chỉ ACTIVE type (`0`, `1`, `3`) được `enabled=true` cho tới khi core hook của type DEFERRED được triển khai.
+- Multi-source = evaluate từng source riêng, entity state = OR; threshold/params dùng chung cho mọi source. Source cần threshold riêng phải tách alarm entity.
+- Tối đa 64 alarm entity nội bộ; tối đa 16 source/entity.
+- BACnet Event Enrollment cap = 8: chỉ tối đa 8 enabled entity được `publishBacnet=true`; alarm còn lại local/API-only.
+- Không đổi SHM v4 cho contract này. Core expose alarm qua API/core channel; nếu cần alarm array trong SHM thì phải có ADR/version bump riêng.
+- Migration Phase 2 tự động từ format cũ per-point: `pointId` → `id="ALM-"+normalized(pointId)`, `sources[0]`, `alarmType=1`, `params={hh,h,l,ll}`; không silent drop row lỗi.
 
 ## 5. `bacnet.conf` — BACnet/IP (chỉ IP — ARCH-R010)
 ```json
