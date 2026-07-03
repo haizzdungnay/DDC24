@@ -82,26 +82,51 @@ export interface Alarm {
   source: string
   value: string
   detail: string
+  triggerLevel?: string
+  threshold?: string
 }
 
-export type AlarmType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
-
+export type AlarmSourceKind = 'UI' | 'AO' | 'DO'
+export type AlarmType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+export type ActiveAlarmType = 0 | 1 | 3
+export type DeferredAlarmType = 2 | 4 | 5 | 6 | 7
 export type AlarmPriority = 'low' | 'medium' | 'high' | 'critical'
 
-export interface AlarmSetting {
+export interface AlarmSource {
+  kind: AlarmSourceKind
+  channel: number
   pointId: string
+}
+
+export interface AlarmParams {
+  hh?: number
+  h?: number
+  l?: number
+  ll?: number
+  hysteresis?: number
+  runtimeHours?: number
+}
+
+export interface AlarmSetting {
+  id: string
   label: string
   enabled: boolean
-  hh: number
-  h: number
-  l: number
-  ll: number
-  delayS: number
-  priority: AlarmPriority
   alarmType: AlarmType
-  sourcePointId: string
-  ackDelayS: number
-  interlock: boolean
+  sources: AlarmSource[]
+  priority: AlarmPriority
+  delayS: number
+  publishBacnet?: boolean
+  notificationClass?: number
+  params: AlarmParams
+}
+
+export type AlarmEntity = AlarmSetting
+
+export interface ConfigPutResult {
+  result: 'success' | 'failed' | 'accepted' | 'rejected'
+  applied: boolean
+  reload: 'sighup-core' | 'sighup-iobus' | 'restart-iobus' | 'system' | 'none'
+  warnings?: string[]
 }
 
 export interface CommissioningTestResult {
@@ -330,28 +355,22 @@ export interface DoConfig {
   channel: number
   id: string
   label: string
-  enabled: boolean
+  enabled?: boolean
   safeState: DoSafeState
-  floatingMode: boolean
-  source: number
-  notInUse02: number
-  sequence: number
-  switchOffDelay: string
-  switchOnDelay: string
-  pwmCycleTime: string
-  alarmOn: number
-  alarmOff: number
-  runtimeCounter: boolean
-  runtimeAlarmHours: number
-  usePiSequence: boolean
-  activationLimitPi: number
-  deactivationLimitPi: number
-  notUsed14: number
-  notUsed15: number
-  notInUse16: number
   manualValue: boolean
-  note: string
-  demoNote?: OutputDemoNote
+  floatingMode?: number
+  source?: number
+  notInUse02?: number
+  sequence?: number
+  switchOffDelay?: number
+  switchOnDelay?: number
+  pwmCycleTime?: number
+  alarmOn?: number
+  alarmOff?: number
+  runtimeCounter?: boolean
+  runtimeAlarmHours?: number
+  usePiSequence?: boolean
+  note?: string
 }
 
 export interface OutputsConfig {

@@ -1,346 +1,645 @@
-import { ChevronLeft, ChevronRight, Save, SlidersHorizontal, Wand2, Table2 } from 'lucide-react'
-import { useState } from 'react'
+import { BellRing, Plus, RefreshCw, Save, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import type React from 'react'
+import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
 import { Panel } from '../components/Panel'
 import { StatusBadge } from '../components/StatusBadge'
-import { Tabs } from '../components/Tabs'
 import { useToast } from '../components/Toast'
-import { getAlarmSettings, getDemoPoints } from '../demo/simulator'
 import { useI18n } from '../i18n'
-import type { AlarmPriority, AlarmSetting, AlarmType } from '../types'
+import type { ActiveAlarmType, AlarmPriority, AlarmSetting, AlarmSource, AlarmSourceKind, AlarmType, DeferredAlarmType } from '../types'
+import { cn } from '../utils'
 
-/* ── Alarm type label map (vi/en) ── */
-const ALARM_TYPE_LABELS: Record<AlarmType, { vi: string; en: string }> = {
-  0: { vi: 'Không kích hoạt', en: 'Not active' },
-  1: { vi: 'High/Low input', en: 'High/Low input' },
-  2: { vi: 'Setpoint deviation', en: 'Setpoint deviation' },
-  3: { vi: 'Runtime alarm', en: 'Runtime alarm' },
-  4: { vi: 'Supervise fan state', en: 'Supervise fan state' },
-  5: { vi: 'Supervise digital output', en: 'Supervise digital output' },
-  6: { vi: 'Supervise analog output', en: 'Supervise analog output' },
-  7: { vi: 'Supervise PI-sequence', en: 'Supervise PI-sequence' },
+const maxAlarms = 64
+const maxSourcesPerAlarm = 16
+const maxBacnetPublished = 8
+const activeAlarmTypes: ActiveAlarmType[] = [0, 1, 3]
+const deferredAlarmTypes: DeferredAlarmType[] = [2, 4, 5, 6, 7]
+const priorities: AlarmPriority[] = ['low', 'medium', 'high', 'critical']
+const sourceKinds: AlarmSourceKind[] = ['UI', 'AO', 'DO']
+
+const alarmTypeLabels: Record<AlarmType, string> = {
+  0: '0 - Disabled',
+  1: '1 - High/Low input',
+  2: '2 - Setpoint deviation',
+  3: '3 - Runtime hours',
+  4: '4 - Fan state supervision',
+  5: '5 - Digital output supervision',
+  6: '6 - Analog output supervision',
+  7: '7 - PI-sequence supervision'
 }
 
-const ALARM_TYPE_DESC: Record<AlarmType, { vi: string; en: string }> = {
-  0: { vi: 'Alarm không hoạt động, ẩn tất cả ngưỡng.', en: 'Alarm inactive, all thresholds hidden.' },
-  1: { vi: 'Cảnh báo dựa trên ngưỡng HH/H/L/LL + delay.', en: 'Alarm based on HH/H/L/LL thresholds + delay.' },
-  2: { vi: 'Cảnh báo khi giá trị lệch khỏi setpoint (H/L + delay).', en: 'Alarm when value deviates from setpoint (H/L + delay).' },
-  3: { vi: 'Cảnh báo giờ chạy thiết bị (runtime seconds).', en: 'Equipment runtime alarm (runtime seconds).' },
-  4: { vi: 'Giám sát trạng thái quạt qua source point.', en: 'Supervise fan state via source point.' },
-  5: { vi: 'Giám sát digital output qua source point.', en: 'Supervise digital output via source point.' },
-  6: { vi: 'Giám sát analog output qua source point.', en: 'Supervise analog output via source point.' },
-  7: { vi: 'Giám sát chuỗi PI qua source point.', en: 'Supervise PI-sequence via source point.' },
+const inputClass = 'h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)] disabled:cursor-not-allowed disabled:opacity-60'
+const checkboxClass = 'h-4 w-4 accent-[var(--c-accent)]'
+
+type PickText = ReturnType<typeof useI18n>['pick']
+
+interface ValidationIssue {
+  rowIndex?: number
+  message: string
 }
-
-const ALARM_TYPES: AlarmType[] = [0, 1, 2, 3, 4, 5, 6, 7]
-const PRIORITIES: AlarmPriority[] = ['low', 'medium', 'high', 'critical']
-
-/* ── Shared input styles ── */
-const INPUT_CLS = 'h-9 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]'
-const SELECT_CLS = INPUT_CLS
-const CHECKBOX_CLS = 'h-4 w-4 accent-[var(--c-accent)]'
 
 export function AlarmSettingsPage() {
-  const { pick } = useI18n()
+  const { t, pick } = useI18n()
   const toast = useToast()
-  const [rows, setRows] = useState<AlarmSetting[]>(() => getAlarmSettings())
-  const [wizardIdx, setWizardIdx] = useState(0)
+  const [rows, setRows] = useState<AlarmSetting[]>([])
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [statusMessage, setStatusMessage] = useState('')
 
-  const pointIds = getDemoPoints().map((p) => p.id)
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    apiClient.getAlarmSettings()
+      .then((items) => {
+        if (!active) return
+        setRows(items.map(normalizeLoadedAlarm))
+        setLoadError('')
+      })
+      .catch((error) => {
+        if (!active) return
+        const message = errorMessage(error)
+        setLoadError(message)
+        toast.push('error', `${t('error')}: ${message}`)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [t, toast])
 
-  function updateRow(pointId: string, patch: Partial<AlarmSetting>) {
-    setRows((cur) => cur.map((r) => (r.pointId === pointId ? { ...r, ...patch } : r)))
+  useEffect(() => {
+    setSelectedIndex((index) => rows.length === 0 ? 0 : Math.min(index, rows.length - 1))
+  }, [rows.length])
+
+  const selected = rows[selectedIndex]
+  const issues = useMemo(() => validateAlarms(rows, pick), [rows, pick])
+  const selectedIssues = issues.filter((issue) => issue.rowIndex === selectedIndex)
+  const enabledCount = rows.filter((row) => row.enabled).length
+  const publishedCount = rows.filter((row) => row.enabled && row.publishBacnet).length
+  const hasErrors = issues.length > 0
+
+  function updateAlarm(index: number, patch: Partial<AlarmSetting>) {
+    setStatusMessage('')
+    setRows((current) => current.map((row, itemIndex) => itemIndex === index ? normalizeDraftAlarm({ ...row, ...patch }) : row))
   }
 
-  function handleSave() {
-    toast.push('success', pick('Đã lưu cấu hình cảnh báo (demo)', 'Alarm settings saved (demo)'))
+  function updateParams(index: number, patch: AlarmSetting['params']) {
+    const row = rows[index]
+    if (!row) return
+    updateAlarm(index, { params: { ...row.params, ...patch } })
   }
 
-  const tabs = [
-    { key: 'wizard', label: pick('Wizard (Presets)', 'Wizard (Presets)'), icon: <Wand2 className="h-4 w-4" /> },
-    { key: 'advanced', label: pick('Advanced (Parameters)', 'Advanced (Parameters)'), icon: <Table2 className="h-4 w-4" /> },
-  ]
+  function updateSource(alarmIndex: number, sourceIndex: number, patch: Partial<AlarmSource>) {
+    const row = rows[alarmIndex]
+    if (!row) return
+    const sources = row.sources.map((source, itemIndex) => itemIndex === sourceIndex ? normalizeSource({ ...source, ...patch }) : source)
+    updateAlarm(alarmIndex, { sources })
+  }
+
+  function addSource(alarmIndex: number) {
+    const row = rows[alarmIndex]
+    if (!row || row.sources.length >= maxSourcesPerAlarm) return
+    updateAlarm(alarmIndex, { sources: [...row.sources, nextSource(row.sources)] })
+  }
+
+  function removeSource(alarmIndex: number, sourceIndex: number) {
+    const row = rows[alarmIndex]
+    if (!row) return
+    updateAlarm(alarmIndex, { sources: row.sources.filter((_, itemIndex) => itemIndex !== sourceIndex) })
+  }
+
+  function addAlarm() {
+    if (rows.length >= maxAlarms) return
+    const next = createAlarm(rows)
+    setRows((current) => [...current, next])
+    setSelectedIndex(rows.length)
+    setStatusMessage('')
+  }
+
+  function removeSelected() {
+    if (!selected) return
+    setRows((current) => current.filter((_, index) => index !== selectedIndex))
+    setSelectedIndex((index) => Math.max(0, index - 1))
+    setStatusMessage('')
+  }
+
+  async function reloadSettings() {
+    setLoading(true)
+    try {
+      const items = await apiClient.getAlarmSettings()
+      setRows(items.map(normalizeLoadedAlarm))
+      setLoadError('')
+      setStatusMessage(pick('Da tai lai tu backend.', 'Reloaded from backend.'))
+    } catch (error) {
+      const message = errorMessage(error)
+      setLoadError(message)
+      toast.push('error', `${t('error')}: ${message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function saveSettings() {
+    const saveIssues = validateAlarms(rows, pick)
+    if (saveIssues.length > 0) {
+      toast.push('error', saveIssues[0].message)
+      return
+    }
+    const payload = rows.map(normalizeForSave)
+    setSaving(true)
+    try {
+      const result = await apiClient.putAlarmSettings(payload)
+      const fresh = await apiClient.getAlarmSettings()
+      setRows(fresh.map(normalizeLoadedAlarm))
+      setStatusMessage(`${t('alarmSettingsSaved')} (${result.reload})`)
+      toast.push('success', t('alarmSettingsSaved'))
+    } catch (error) {
+      const message = errorMessage(error)
+      setStatusMessage(message)
+      toast.push('error', `${t('alarmSettingsSaveError')}: ${message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">{pick('Cấu hình cảnh báo', 'Alarm settings')}</h1>
-          <p className="text-sm text-[var(--c-text-dim)]">{pick('Alarm type, ngưỡng, interlock — EasySet parity Rev A', 'Alarm type, thresholds, interlock — EasySet parity Rev A')}</p>
+          <h1 className="text-2xl font-semibold text-[var(--c-text)]">{t('alarmSettingsTitle')}</h1>
+          <p className="text-sm text-[var(--c-text-dim)]">{t('alarmSettingsSubtitle')}</p>
         </div>
-        <Button variant="primary" icon={<Save className="h-4 w-4" />} onClick={handleSave}>{pick('Lưu', 'Save')}</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button icon={<RefreshCw className="h-4 w-4" />} loading={loading} onClick={() => void reloadSettings()}>
+            {pick('Tai lai', 'Reload')}
+          </Button>
+          <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} disabled={loading || hasErrors} onClick={() => void saveSettings()}>
+            {t('save')}
+          </Button>
+        </div>
       </div>
 
-      <Panel>
-        <Tabs tabs={tabs} defaultTab="wizard">
-          {(activeKey) =>
-            activeKey === 'wizard'
-              ? <WizardTab rows={rows} wizardIdx={wizardIdx} setWizardIdx={setWizardIdx} updateRow={updateRow} pointIds={pointIds} pick={pick} />
-              : <AdvancedTab rows={rows} updateRow={updateRow} pointIds={pointIds} pick={pick} />
-          }
-        </Tabs>
-      </Panel>
+      <div className="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <Panel
+          title={t('alarmSettingsList')}
+          subtitle={`${rows.length}/${maxAlarms}`}
+          action={<Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={rows.length >= maxAlarms} onClick={addAlarm}>{t('add')}</Button>}
+        >
+          <div className="max-h-[calc(100vh-260px)] space-y-1 overflow-y-auto pr-1">
+            {rows.map((row, index) => (
+              <button
+                key={`${row.id}-${index}`}
+                type="button"
+                onClick={() => setSelectedIndex(index)}
+                className={cn(
+                  'flex min-h-14 w-full items-center gap-3 rounded-[var(--radius)] border px-3 py-2 text-left text-sm transition',
+                  selectedIndex === index
+                    ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-text)]'
+                    : 'border-transparent text-[var(--c-text-dim)] hover:border-[var(--c-border)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'
+                )}
+              >
+                <BellRing className="h-4 w-4 shrink-0 text-[var(--c-accent)]" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold">{row.id || pick('Chua co ID', 'Missing ID')}</span>
+                  <span className="block truncate text-xs">{row.label || alarmTypeLabels[row.alarmType]}</span>
+                </span>
+                <StatusBadge state={row.enabled ? 'online' : 'inactive'} label={row.enabled ? 'ON' : 'OFF'} />
+              </button>
+            ))}
+            {loading && <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">{t('loading')}</div>}
+            {!loading && rows.length === 0 && <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">{t('empty')}</div>}
+          </div>
+        </Panel>
 
-      <Panel title={pick('Trạng thái cấu hình', 'Configuration status')}>
+        <Panel
+          title={selected ? `${selected.id || 'ALM'} - ${selected.label || alarmTypeLabels[selected.alarmType]}` : t('empty')}
+          subtitle={selected ? alarmTypeLabels[selected.alarmType] : undefined}
+          action={selected && <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={removeSelected}>{pick('Xoa', 'Remove')}</Button>}
+        >
+          {selected ? (
+            <AlarmEditor
+              row={selected}
+              rowIndex={selectedIndex}
+              issues={selectedIssues}
+              publishedCount={publishedCount}
+              onChange={(patch) => updateAlarm(selectedIndex, patch)}
+              onTypeChange={(alarmType) => updateAlarm(selectedIndex, { alarmType, enabled: isDeferredType(alarmType) ? false : selected.enabled, params: defaultParamsForType(alarmType, selected.params) })}
+              onParamsChange={(patch) => updateParams(selectedIndex, patch)}
+              onSourceChange={(sourceIndex, patch) => updateSource(selectedIndex, sourceIndex, patch)}
+              onSourceAdd={() => addSource(selectedIndex)}
+              onSourceRemove={(sourceIndex) => removeSource(selectedIndex, sourceIndex)}
+            />
+          ) : (
+            <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Them alarm dau tien de cau hinh.', 'Add the first alarm to configure settings.')}</div>
+          )}
+        </Panel>
+      </div>
+
+      <Panel title={pick('Trang thai cau hinh', 'Configuration status')}>
         <div className="flex flex-wrap gap-3">
-          <StatusBadge state="online" label={`${rows.filter((r) => r.enabled).length} ENABLED`} />
-          <StatusBadge state="critical" label={`${rows.filter((r) => r.priority === 'critical').length} CRITICAL`} />
-          <StatusBadge state="uncertain" label="DEMO LOCAL" />
+          <StatusBadge state={loadError ? 'fault' : 'online'} label={loadError ? 'LOAD ERROR' : 'API'} />
+          <StatusBadge state={hasErrors ? 'warning' : 'online'} label={hasErrors ? `${issues.length} VALIDATION` : 'VALID'} />
+          <StatusBadge state="online" label={`${enabledCount} ENABLED`} />
+          <StatusBadge state={publishedCount > maxBacnetPublished ? 'critical' : 'online'} label={`${publishedCount}/${maxBacnetPublished} BACNET`} />
         </div>
+        {(statusMessage || issues.length > 0) && (
+          <div className="mt-3 space-y-1 text-sm text-[var(--c-text-dim)]">
+            {statusMessage && <p>{statusMessage}</p>}
+            {issues.slice(0, 6).map((issue) => <p key={`${issue.rowIndex ?? 'global'}-${issue.message}`}>{issue.message}</p>)}
+          </div>
+        )}
       </Panel>
     </div>
   )
 }
 
-/* ══════════════════════════════════════════════════════
-   WIZARD TAB
-   ══════════════════════════════════════════════════════ */
-interface WizardProps {
-  rows: AlarmSetting[]
-  wizardIdx: number
-  setWizardIdx: (i: number) => void
-  updateRow: (pointId: string, patch: Partial<AlarmSetting>) => void
-  pointIds: string[]
-  pick: (vi: string, en: string) => string
+function AlarmEditor({
+  row,
+  rowIndex,
+  issues,
+  publishedCount,
+  onChange,
+  onTypeChange,
+  onParamsChange,
+  onSourceChange,
+  onSourceAdd,
+  onSourceRemove
+}: {
+  row: AlarmSetting
+  rowIndex: number
+  issues: ValidationIssue[]
+  publishedCount: number
+  onChange: (patch: Partial<AlarmSetting>) => void
+  onTypeChange: (alarmType: AlarmType) => void
+  onParamsChange: (patch: AlarmSetting['params']) => void
+  onSourceChange: (sourceIndex: number, patch: Partial<AlarmSource>) => void
+  onSourceAdd: () => void
+  onSourceRemove: (sourceIndex: number) => void
+}) {
+  const { pick } = useI18n()
+  const deferred = isDeferredType(row.alarmType)
+  return (
+    <div className="space-y-5">
+      {issues.length > 0 && (
+        <div className="rounded-[var(--radius)] border border-[rgba(232,181,0,0.45)] bg-[rgba(232,181,0,0.12)] p-3 text-sm text-[var(--c-warn-fg)]">
+          {issues.map((issue) => <div key={issue.message}>{issue.message}</div>)}
+        </div>
+      )}
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <TextField label="ID" value={row.id} onChange={(id) => onChange({ id })} />
+        <TextField label={pick('Nhan', 'Label')} value={row.label} onChange={(label) => onChange({ label })} />
+        <SelectField label={pick('Loai alarm', 'Alarm type')} value={String(row.alarmType)} onChange={(value) => onTypeChange(Number(value) as AlarmType)}>
+          {activeAlarmTypes.map((type) => <option key={type} value={type}>{alarmTypeLabels[type]}</option>)}
+          <optgroup label={pick('Deferred - chua ho tro enabled', 'Deferred - not enabled yet')}>
+            {deferredAlarmTypes.map((type) => <option key={type} value={type} disabled>{alarmTypeLabels[type]}</option>)}
+          </optgroup>
+        </SelectField>
+        <SelectField label={pick('Muc uu tien', 'Priority')} value={row.priority} onChange={(priority) => onChange({ priority: priority as AlarmPriority })}>
+          {priorities.map((priority) => <option key={priority} value={priority}>{priority.toUpperCase()}</option>)}
+        </SelectField>
+        <NumberField label="Delay (s)" min={0} value={row.delayS} onChange={(delayS) => onChange({ delayS })} />
+        <label className="flex items-end gap-2 pb-3 text-sm font-semibold text-[var(--c-text)]">
+          <input className={checkboxClass} type="checkbox" checked={row.enabled} disabled={deferred} onChange={(event) => onChange({ enabled: event.target.checked })} />
+          {pick('Bat alarm', 'Enabled')}
+        </label>
+      </section>
+
+      <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Nguon kich hoat', 'Sources')}</h3>
+            <p className="text-xs text-[var(--c-text-dim)]">{pick('Entity OR qua tat ca source; pointId tu suy tu kind/channel.', 'Entity OR across sources; pointId is derived from kind/channel.')}</p>
+          </div>
+          <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={row.sources.length >= maxSourcesPerAlarm} onClick={onSourceAdd}>{pick('Them source', 'Add source')}</Button>
+        </div>
+        <div className="space-y-2">
+          {row.sources.map((source, sourceIndex) => (
+            <SourceRow
+              key={`${source.kind}-${source.channel}-${sourceIndex}`}
+              source={source}
+              onChange={(patch) => onSourceChange(sourceIndex, patch)}
+              onRemove={() => onSourceRemove(sourceIndex)}
+            />
+          ))}
+          {row.sources.length === 0 && <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">{pick('Chua co source.', 'No sources yet.')}</div>}
+        </div>
+      </section>
+
+      <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <SlidersHorizontal className="h-4 w-4 text-[var(--c-accent)]" aria-hidden="true" />
+          <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Tham so', 'Parameters')}</h3>
+        </div>
+        <AlarmParamsEditor row={row} onChange={onParamsChange} />
+      </section>
+
+      <section className="grid gap-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4 md:grid-cols-[minmax(0,1fr)_180px]">
+        <label className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]">
+          <input
+            className={checkboxClass}
+            type="checkbox"
+            checked={Boolean(row.publishBacnet)}
+            onChange={(event) => onChange({ publishBacnet: event.target.checked, notificationClass: event.target.checked ? row.notificationClass ?? 1 : undefined })}
+          />
+          {pick('Publish BACnet Event Enrollment', 'Publish BACnet Event Enrollment')}
+          <StatusBadge state={publishedCount > maxBacnetPublished ? 'critical' : 'online'} label={`${publishedCount}/${maxBacnetPublished}`} />
+        </label>
+        <NumberField label={pick('Notification Class', 'Notification Class')} min={1} max={4} integer disabled={!row.publishBacnet} value={row.notificationClass ?? 1} onChange={(notificationClass) => onChange({ notificationClass })} />
+      </section>
+
+      {deferred && (
+        <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">
+          {pick('Type 2/4/5/6/7 dang deferred; UI khong cho bat enabled de backend khong reject.', 'Types 2/4/5/6/7 are deferred; UI keeps them disabled so backend will not reject them.')}
+        </div>
+      )}
+      <div className="text-xs text-[var(--c-text-dim)]">#{rowIndex + 1}</div>
+    </div>
+  )
 }
 
-function WizardTab({ rows, wizardIdx, setWizardIdx, updateRow, pointIds, pick }: WizardProps) {
-  const row = rows[wizardIdx]
-  if (!row) return null
-
-  const typeLabel = ALARM_TYPE_LABELS[row.alarmType]
-  const typeDesc = ALARM_TYPE_DESC[row.alarmType]
-
+function SourceRow({ source, onChange, onRemove }: { source: AlarmSource; onChange: (patch: Partial<AlarmSource>) => void; onRemove: () => void }) {
+  const { pick } = useI18n()
+  const max = maxChannel(source.kind)
   return (
-    <div className="space-y-6">
-      {/* alarm list strip */}
-      <div className="flex flex-wrap gap-2">
-        {rows.map((r, i) => (
-          <button
-            key={r.pointId}
-            onClick={() => setWizardIdx(i)}
-            className={`rounded-[var(--radius)] border px-3 py-1.5 text-xs font-semibold transition ${wizardIdx === i ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)] text-[var(--c-accent)]' : 'border-[var(--c-border)] text-[var(--c-text-dim)] hover:border-[var(--c-text-dim)]'}`}
-          >
-            {r.pointId}
-          </button>
-        ))}
-      </div>
-
-      {/* current alarm card */}
-      <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-5">
-        <div className="mb-4 flex items-center gap-3">
-          <SlidersHorizontal className="h-5 w-5 text-[var(--c-accent)]" />
-          <div>
-            <div className="text-base font-bold text-[var(--c-text)]">{row.pointId} — {row.label}</div>
-            <div className="text-xs text-[var(--c-text-dim)]">{pick(typeDesc.vi, typeDesc.en)}</div>
-          </div>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          {/* Alarm Type */}
-          <FieldGroup label={pick('Loại alarm', 'Alarm Type')}>
-            <select className={SELECT_CLS} value={row.alarmType} onChange={(e) => updateRow(row.pointId, { alarmType: Number(e.target.value) as AlarmType })}>
-              {ALARM_TYPES.map((t) => <option key={t} value={t}>{t} — {pick(ALARM_TYPE_LABELS[t].vi, ALARM_TYPE_LABELS[t].en)}</option>)}
-            </select>
-          </FieldGroup>
-
-          {/* Priority */}
-          <FieldGroup label={pick('Mức ưu tiên', 'Priority')}>
-            <select className={SELECT_CLS} value={row.priority} onChange={(e) => updateRow(row.pointId, { priority: e.target.value as AlarmPriority })}>
-              {PRIORITIES.map((p) => <option key={p} value={p}>{p.toUpperCase()}</option>)}
-            </select>
-          </FieldGroup>
-
-          {/* Enabled + Interlock */}
-          <FieldGroup label={pick('Bật', 'Enabled')}>
-            <label className="flex items-center gap-2 text-sm text-[var(--c-text)]">
-              <input className={CHECKBOX_CLS} type="checkbox" checked={row.enabled} onChange={(e) => updateRow(row.pointId, { enabled: e.target.checked })} />
-              {row.enabled ? 'ON' : 'OFF'}
-            </label>
-          </FieldGroup>
-
-          <FieldGroup label="Interlock">
-            <label className="flex items-center gap-2 text-sm text-[var(--c-text)]">
-              <input className={CHECKBOX_CLS} type="checkbox" checked={row.interlock} onChange={(e) => updateRow(row.pointId, { interlock: e.target.checked })} />
-              {row.interlock ? 'ON' : 'OFF'}
-            </label>
-          </FieldGroup>
-        </div>
-
-        {/* Conditional fields by alarm type */}
-        <div className="mt-5 border-t border-[var(--c-border)] pt-4">
-          <div className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--c-text-dim)]">
-            {pick(typeLabel.vi, typeLabel.en)} — {pick('Tham số', 'Parameters')}
-          </div>
-          <TypeFields row={row} updateRow={updateRow} pointIds={pointIds} pick={pick} />
-        </div>
-      </div>
-
-      {/* Prev / Next nav */}
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" icon={<ChevronLeft className="h-4 w-4" />} disabled={wizardIdx === 0} onClick={() => setWizardIdx(wizardIdx - 1)}>
-          {pick('Trước', 'Prev')}
-        </Button>
-        <span className="text-xs text-[var(--c-text-dim)]">{wizardIdx + 1} / {rows.length}</span>
-        <Button variant="ghost" disabled={wizardIdx >= rows.length - 1} onClick={() => setWizardIdx(wizardIdx + 1)}>
-          {pick('Kế tiếp', 'Next')}
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+    <div className="grid gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 sm:grid-cols-[120px_120px_minmax(0,1fr)_auto]">
+      <SelectField label="Kind" value={source.kind} onChange={(kind) => onChange(normalizeSource({ kind: kind as AlarmSourceKind, channel: 1 }))}>
+        {sourceKinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
+      </SelectField>
+      <SelectField label={pick('Kenh', 'Channel')} value={String(source.channel)} onChange={(channel) => onChange({ channel: Number(channel) })}>
+        {Array.from({ length: max }, (_, index) => index + 1).map((channel) => <option key={channel} value={channel}>{channel}</option>)}
+      </SelectField>
+      <TextField label="Point ID" value={source.pointId} disabled onChange={() => undefined} />
+      <div className="flex items-end">
+        <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={onRemove}>{pick('Xoa', 'Remove')}</Button>
       </div>
     </div>
   )
 }
 
-/* ── Conditional fields by alarm type ── */
-interface TypeFieldsProps {
-  row: AlarmSetting
-  updateRow: (pointId: string, patch: Partial<AlarmSetting>) => void
-  pointIds: string[]
-  pick: (vi: string, en: string) => string
-}
-
-function TypeFields({ row, updateRow, pointIds, pick }: TypeFieldsProps) {
-  const id = row.pointId
-  const t = row.alarmType
-
-  if (t === 0) {
-    return <p className="text-sm italic text-[var(--c-text-dim)]">{pick('Alarm không kích hoạt — không có tham số.', 'Alarm not active — no parameters.')}</p>
-  }
-
-  if (t === 1) {
+function AlarmParamsEditor({ row, onChange }: { row: AlarmSetting; onChange: (patch: AlarmSetting['params']) => void }) {
+  const { pick } = useI18n()
+  if (row.alarmType === 1) {
     return (
       <div className="grid gap-3 sm:grid-cols-5">
-        <NumField label="HH" value={row.hh} onChange={(v) => updateRow(id, { hh: v })} />
-        <NumField label="H" value={row.h} onChange={(v) => updateRow(id, { h: v })} />
-        <NumField label="L" value={row.l} onChange={(v) => updateRow(id, { l: v })} />
-        <NumField label="LL" value={row.ll} onChange={(v) => updateRow(id, { ll: v })} />
-        <NumField label={pick('Delay (s)', 'Delay (s)')} value={row.delayS} onChange={(v) => updateRow(id, { delayS: v })} />
+        <NumberField label="HH" value={row.params.hh ?? 0} onChange={(hh) => onChange({ hh })} />
+        <NumberField label="H" value={row.params.h ?? 0} onChange={(h) => onChange({ h })} />
+        <NumberField label="L" value={row.params.l ?? 0} onChange={(l) => onChange({ l })} />
+        <NumberField label="LL" value={row.params.ll ?? 0} onChange={(ll) => onChange({ ll })} />
+        <NumberField label={pick('Hysteresis', 'Hysteresis')} min={0} value={row.params.hysteresis ?? 0} onChange={(hysteresis) => onChange({ hysteresis })} />
       </div>
     )
   }
-
-  if (t === 2) {
+  if (row.alarmType === 3) {
     return (
-      <div className="grid gap-3 sm:grid-cols-3">
-        <NumField label={pick('Lệch H', 'Deviation H')} value={row.h} onChange={(v) => updateRow(id, { h: v })} />
-        <NumField label={pick('Lệch L', 'Deviation L')} value={row.l} onChange={(v) => updateRow(id, { l: v })} />
-        <NumField label={pick('Delay (s)', 'Delay (s)')} value={row.delayS} onChange={(v) => updateRow(id, { delayS: v })} />
+      <div className="max-w-xs">
+        <NumberField label={pick('Runtime hours', 'Runtime hours')} min={0.1} step={0.1} value={row.params.runtimeHours ?? 1} onChange={(runtimeHours) => onChange({ runtimeHours })} />
       </div>
     )
   }
-
-  if (t === 3) {
-    return (
-      <div className="grid gap-3 sm:grid-cols-1 max-w-xs">
-        <NumField label={pick('Runtime (giây)', 'Runtime (seconds)')} value={row.delayS} onChange={(v) => updateRow(id, { delayS: v })} />
-      </div>
-    )
-  }
-
-  // 4, 5, 6, 7 — supervise types
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 max-w-lg">
-      <FieldGroup label={pick('Source Point', 'Source Point')}>
-        <select className={SELECT_CLS} value={row.sourcePointId} onChange={(e) => updateRow(id, { sourcePointId: e.target.value })}>
-          <option value="">{pick('— Chọn —', '— Select —')}</option>
-          {pointIds.map((pid) => <option key={pid} value={pid}>{pid}</option>)}
-        </select>
-      </FieldGroup>
-      <NumField label={pick('Ack Delay (s)', 'Ack Delay (s)')} value={row.ackDelayS} onChange={(v) => updateRow(id, { ackDelayS: v })} />
-    </div>
-  )
+  return <p className="text-sm text-[var(--c-text-dim)]">{pick('Type nay khong co tham so active trong Phase 4.', 'This type has no active parameters in Phase 4.')}</p>
 }
 
-/* ══════════════════════════════════════════════════════
-   ADVANCED TAB — full table, inline-edit
-   ══════════════════════════════════════════════════════ */
-interface AdvancedProps {
-  rows: AlarmSetting[]
-  updateRow: (pointId: string, patch: Partial<AlarmSetting>) => void
-  pointIds: string[]
-  pick: (vi: string, en: string) => string
-}
-
-function AdvancedTab({ rows, updateRow, pointIds, pick }: AdvancedProps) {
-  return (
-    <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)]">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1200px] text-sm">
-          <thead>
-            <tr className="bg-[var(--c-surface-2)] text-[10px] font-semibold uppercase text-[var(--c-text-dim)]">
-              <th className="px-3 py-2 text-left">Point</th>
-              <th className="px-3 py-2 text-left">Label</th>
-              <th className="px-3 py-2 text-left">{pick('Loại', 'Type')}</th>
-              <th className="px-2 py-2">HH</th>
-              <th className="px-2 py-2">H</th>
-              <th className="px-2 py-2">L</th>
-              <th className="px-2 py-2">LL</th>
-              <th className="px-2 py-2">Delay</th>
-              <th className="px-3 py-2 text-left">Source</th>
-              <th className="px-2 py-2">AckDelay</th>
-              <th className="px-3 py-2 text-left">Priority</th>
-              <th className="px-2 py-2">{pick('Bật', 'En')}</th>
-              <th className="px-2 py-2">Intrlk</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.pointId} className="border-t border-[var(--c-border)]">
-                <td className="whitespace-nowrap px-3 py-2 font-mono font-semibold">{row.pointId}</td>
-                <td className="whitespace-nowrap px-3 py-2">
-                  <span className="flex items-center gap-1.5"><SlidersHorizontal className="h-3.5 w-3.5 text-[var(--c-accent)]" />{row.label}</span>
-                </td>
-                <td className="px-3 py-2">
-                  <select className={`${SELECT_CLS} w-full min-w-[140px]`} value={row.alarmType} onChange={(e) => updateRow(row.pointId, { alarmType: Number(e.target.value) as AlarmType })}>
-                    {ALARM_TYPES.map((at) => <option key={at} value={at}>{at} — {pick(ALARM_TYPE_LABELS[at].vi, ALARM_TYPE_LABELS[at].en)}</option>)}
-                  </select>
-                </td>
-                <td className="px-2 py-2"><input className={`${INPUT_CLS} w-[72px]`} type="number" value={row.hh} onChange={(e) => updateRow(row.pointId, { hh: Number(e.target.value) })} /></td>
-                <td className="px-2 py-2"><input className={`${INPUT_CLS} w-[72px]`} type="number" value={row.h} onChange={(e) => updateRow(row.pointId, { h: Number(e.target.value) })} /></td>
-                <td className="px-2 py-2"><input className={`${INPUT_CLS} w-[72px]`} type="number" value={row.l} onChange={(e) => updateRow(row.pointId, { l: Number(e.target.value) })} /></td>
-                <td className="px-2 py-2"><input className={`${INPUT_CLS} w-[72px]`} type="number" value={row.ll} onChange={(e) => updateRow(row.pointId, { ll: Number(e.target.value) })} /></td>
-                <td className="px-2 py-2"><input className={`${INPUT_CLS} w-[72px]`} type="number" value={row.delayS} onChange={(e) => updateRow(row.pointId, { delayS: Number(e.target.value) })} /></td>
-                <td className="px-3 py-2">
-                  <select className={`${SELECT_CLS} w-full min-w-[90px]`} value={row.sourcePointId} onChange={(e) => updateRow(row.pointId, { sourcePointId: e.target.value })}>
-                    <option value="">—</option>
-                    {pointIds.map((pid) => <option key={pid} value={pid}>{pid}</option>)}
-                  </select>
-                </td>
-                <td className="px-2 py-2"><input className={`${INPUT_CLS} w-[72px]`} type="number" value={row.ackDelayS} onChange={(e) => updateRow(row.pointId, { ackDelayS: Number(e.target.value) })} /></td>
-                <td className="px-3 py-2">
-                  <select className={`${SELECT_CLS} w-full min-w-[90px]`} value={row.priority} onChange={(e) => updateRow(row.pointId, { priority: e.target.value as AlarmPriority })}>
-                    {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </td>
-                <td className="px-2 py-2 text-center">
-                  <input className={CHECKBOX_CLS} type="checkbox" checked={row.enabled} onChange={(e) => updateRow(row.pointId, { enabled: e.target.checked })} />
-                </td>
-                <td className="px-2 py-2 text-center">
-                  <input className={CHECKBOX_CLS} type="checkbox" checked={row.interlock} onChange={(e) => updateRow(row.pointId, { interlock: e.target.checked })} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-/* ── Shared small components ── */
 function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <label className="mb-1 block text-xs font-semibold text-[var(--c-text-dim)]">{label}</label>
+    <label className="block space-y-1">
+      <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{label}</span>
       {children}
-    </div>
+    </label>
   )
 }
 
-function NumField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function TextField({ label, value, disabled, onChange }: { label: string; value: string; disabled?: boolean; onChange: (value: string) => void }) {
   return (
     <FieldGroup label={label}>
-      <input className={`${INPUT_CLS} w-full`} type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      <input className={inputClass} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
     </FieldGroup>
   )
+}
+
+function NumberField({ label, value, min, max, step = 1, integer, disabled, onChange }: { label: string; value: number; min?: number; max?: number; step?: number; integer?: boolean; disabled?: boolean; onChange: (value: number) => void }) {
+  return (
+    <FieldGroup label={label}>
+      <input
+        className={inputClass}
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+        value={Number.isFinite(value) ? value : 0}
+        onChange={(event) => onChange(normalizeNumber(event.currentTarget.valueAsNumber, min, max, integer))}
+      />
+    </FieldGroup>
+  )
+}
+
+function SelectField({ label, value, children, onChange }: { label: string; value: string; children: React.ReactNode; onChange: (value: string) => void }) {
+  return (
+    <FieldGroup label={label}>
+      <select className={inputClass} value={value} onChange={(event) => onChange(event.target.value)}>
+        {children}
+      </select>
+    </FieldGroup>
+  )
+}
+
+function normalizeLoadedAlarm(row: AlarmSetting): AlarmSetting {
+  return normalizeDraftAlarm({
+    ...row,
+    publishBacnet: Boolean(row.publishBacnet),
+    params: row.params ?? {},
+    sources: Array.isArray(row.sources) ? row.sources : []
+  })
+}
+
+function normalizeDraftAlarm(row: AlarmSetting): AlarmSetting {
+  return {
+    ...row,
+    alarmType: isAlarmType(row.alarmType) ? row.alarmType : 0,
+    priority: priorities.includes(row.priority) ? row.priority : 'medium',
+    delayS: Number.isFinite(row.delayS) ? row.delayS : 0,
+    sources: row.sources.map(normalizeSource),
+    params: row.params ?? {}
+  }
+}
+
+function normalizeForSave(row: AlarmSetting): AlarmSetting {
+  const publishBacnet = Boolean(row.publishBacnet)
+  const next: AlarmSetting = {
+    id: row.id.trim(),
+    label: row.label.trim(),
+    enabled: row.enabled,
+    alarmType: row.alarmType,
+    sources: row.sources.map(normalizeSource),
+    priority: row.priority,
+    delayS: row.delayS,
+    publishBacnet,
+    params: defaultParamsForType(row.alarmType, row.params)
+  }
+  if (publishBacnet) next.notificationClass = row.notificationClass ?? 1
+  return next
+}
+
+function createAlarm(rows: AlarmSetting[]): AlarmSetting {
+  const id = nextAlarmId(rows)
+  return {
+    id,
+    label: `Alarm ${id.replace(/^ALM-/, '')}`,
+    enabled: true,
+    alarmType: 1,
+    sources: [nextSource([])],
+    priority: 'medium',
+    delayS: 0,
+    publishBacnet: false,
+    params: { hh: 100, h: 90, l: 10, ll: 0, hysteresis: 0 }
+  }
+}
+
+function nextAlarmId(rows: AlarmSetting[]): string {
+  const used = new Set(rows.map((row) => row.id.trim().toUpperCase()))
+  for (let index = 1; index <= maxAlarms; index += 1) {
+    const id = `ALM-${String(index).padStart(3, '0')}`
+    if (!used.has(id)) return id
+  }
+  return `ALM-${Date.now()}`
+}
+
+function nextSource(sources: AlarmSource[]): AlarmSource {
+  const used = new Set(sources.map((source) => `${source.kind}:${source.channel}`))
+  for (const kind of sourceKinds) {
+    for (let channel = 1; channel <= maxChannel(kind); channel += 1) {
+      if (!used.has(`${kind}:${channel}`)) return makeSource(kind, channel)
+    }
+  }
+  return makeSource('UI', 1)
+}
+
+function normalizeSource(source: Partial<AlarmSource>): AlarmSource {
+  const kind = source.kind && sourceKinds.includes(source.kind) ? source.kind : 'UI'
+  const channel = normalizeNumber(source.channel ?? 1, 1, maxChannel(kind), true)
+  return makeSource(kind, channel)
+}
+
+function makeSource(kind: AlarmSourceKind, channel: number): AlarmSource {
+  return { kind, channel, pointId: pointIdFor(kind, channel) }
+}
+
+function pointIdFor(kind: AlarmSourceKind, channel: number): string {
+  return `${kind}-${String(channel).padStart(2, '0')}`
+}
+
+function maxChannel(kind: AlarmSourceKind): number {
+  return kind === 'UI' ? 16 : 4
+}
+
+function defaultParamsForType(alarmType: AlarmType, params: AlarmSetting['params']): AlarmSetting['params'] {
+  if (alarmType === 1) {
+    return {
+      hh: finiteOr(params.hh, 100),
+      h: finiteOr(params.h, 90),
+      l: finiteOr(params.l, 10),
+      ll: finiteOr(params.ll, 0),
+      hysteresis: finiteOr(params.hysteresis, 0)
+    }
+  }
+  if (alarmType === 3) return { runtimeHours: finiteOr(params.runtimeHours, 1) }
+  return {}
+}
+
+function validateAlarms(rows: AlarmSetting[], pick: PickText): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  if (rows.length > maxAlarms) issues.push({ message: pick(`Toi da ${maxAlarms} alarm.`, `At most ${maxAlarms} alarms.`) })
+
+  const seenIds = new Map<string, number>()
+  rows.forEach((row, rowIndex) => {
+    const prefix = row.id || `#${rowIndex + 1}`
+    const id = row.id.trim()
+    if (!id) addIssue(issues, rowIndex, pick('Alarm can co ID.', 'Alarm ID is required.'))
+    else if (!/^ALM-[A-Za-z0-9_-]+$/.test(id)) addIssue(issues, rowIndex, `${prefix}: ${pick('ID phai bat dau bang ALM-.', 'ID must start with ALM-.')}`)
+    else {
+      const key = id.toUpperCase()
+      const first = seenIds.get(key)
+      if (first !== undefined) addIssue(issues, rowIndex, `${prefix}: ${pick(`Trung ID voi alarm #${first + 1}.`, `Duplicate ID with alarm #${first + 1}.`)}`)
+      seenIds.set(key, rowIndex)
+    }
+
+    if (!row.label.trim()) addIssue(issues, rowIndex, `${prefix}: ${pick('Label bat buoc.', 'Label is required.')}`)
+    if (!isAlarmType(row.alarmType)) addIssue(issues, rowIndex, `${prefix}: alarmType must be 0..7.`)
+    if (row.enabled && isDeferredType(row.alarmType)) addIssue(issues, rowIndex, `${prefix}: ${pick('Deferred type chua duoc bat enabled.', 'Deferred alarm types cannot be enabled yet.')}`)
+    if (!priorities.includes(row.priority)) addIssue(issues, rowIndex, `${prefix}: ${pick('Priority khong hop le.', 'Invalid priority.')}`)
+    if (!Number.isFinite(row.delayS) || row.delayS < 0) addIssue(issues, rowIndex, `${prefix}: delayS must be >= 0.`)
+
+    if (row.sources.length > maxSourcesPerAlarm) addIssue(issues, rowIndex, `${prefix}: ${pick(`Toi da ${maxSourcesPerAlarm} source.`, `At most ${maxSourcesPerAlarm} sources.`)}`)
+    if (row.enabled && row.alarmType !== 0 && row.sources.length === 0) addIssue(issues, rowIndex, `${prefix}: ${pick('Enabled alarm can it nhat 1 source.', 'Enabled alarms need at least one source.')}`)
+    const seenSources = new Set<string>()
+    row.sources.forEach((source, sourceIndex) => {
+      const max = maxChannel(source.kind)
+      if (source.channel < 1 || source.channel > max) addIssue(issues, rowIndex, `${prefix}: ${source.kind} channel must be 1..${max}.`)
+      const expected = pointIdFor(source.kind, source.channel)
+      if (source.pointId !== expected) addIssue(issues, rowIndex, `${prefix}: source ${sourceIndex + 1} pointId must be ${expected}.`)
+      const key = `${source.kind}:${source.channel}`
+      if (seenSources.has(key)) addIssue(issues, rowIndex, `${prefix}: ${pick('Source bi trung.', 'Duplicate source.')} ${source.pointId}`)
+      seenSources.add(key)
+    })
+
+    if (row.publishBacnet && row.notificationClass !== undefined && (row.notificationClass < 1 || row.notificationClass > 4)) {
+      addIssue(issues, rowIndex, `${prefix}: notificationClass must be 1..4.`)
+    }
+    validateParams(row, rowIndex, prefix, issues, pick)
+  })
+
+  const published = rows.filter((row) => row.enabled && row.publishBacnet).length
+  if (published > maxBacnetPublished) issues.push({ message: pick(`Toi da ${maxBacnetPublished} alarm publish BACnet dang enabled.`, `At most ${maxBacnetPublished} enabled BACnet-published alarms.`) })
+  return issues
+}
+
+function validateParams(row: AlarmSetting, rowIndex: number, prefix: string, issues: ValidationIssue[], pick: PickText) {
+  const params = row.params
+  if (row.alarmType === 1) {
+    const values = [params.hh, params.h, params.l, params.ll]
+    if (values.some((value) => !Number.isFinite(value))) {
+      addIssue(issues, rowIndex, `${prefix}: HH/H/L/LL ${pick('phai la so.', 'must be numbers.')}`)
+      return
+    }
+    if (!(params.hh! >= params.h! && params.h! >= params.l! && params.l! >= params.ll!)) {
+      addIssue(issues, rowIndex, `${prefix}: HH >= H >= L >= LL`)
+    }
+    if (params.hysteresis !== undefined && params.hysteresis < 0) addIssue(issues, rowIndex, `${prefix}: hysteresis must be >= 0.`)
+  }
+  if (row.alarmType === 3 && (!Number.isFinite(params.runtimeHours) || Number(params.runtimeHours) <= 0)) {
+    addIssue(issues, rowIndex, `${prefix}: runtimeHours must be > 0.`)
+  }
+}
+
+function addIssue(issues: ValidationIssue[], rowIndex: number, message: string) {
+  issues.push({ rowIndex, message })
+}
+
+function isAlarmType(value: number): value is AlarmType {
+  return Number.isInteger(value) && value >= 0 && value <= 7
+}
+
+function isDeferredType(value: AlarmType): boolean {
+  return deferredAlarmTypes.includes(value as DeferredAlarmType)
+}
+
+function finiteOr(value: number | undefined, fallback: number): number {
+  return Number.isFinite(value) ? Number(value) : fallback
+}
+
+function normalizeNumber(value: number, min?: number, max?: number, integer = false): number {
+  const finite = Number.isFinite(value) ? value : min ?? 0
+  const low = min === undefined ? finite : Math.max(min, finite)
+  const clamped = max === undefined ? low : Math.min(max, low)
+  return integer ? Math.round(clamped) : clamped
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }

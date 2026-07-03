@@ -80,19 +80,50 @@ type ScheduleCell struct {
 	End   string `json:"end"`
 }
 
-type AlarmSetting struct {
-	PointID  string  `json:"pointId"`
-	Label    string  `json:"label"`
-	Enabled  bool    `json:"enabled"`
-	HH       float64 `json:"hh"`
-	H        float64 `json:"h"`
-	L        float64 `json:"l"`
-	LL       float64 `json:"ll"`
-	DelayS   float64 `json:"delayS"`
-	Priority string  `json:"priority"`
+const (
+	maxAlarms                  = 64
+	maxSourcesPerAlarm         = 16
+	maxBacnetPublishedAlarms   = 8
+	alarmTypeDisabled          = 0
+	alarmTypeHighLowInput      = 1
+	alarmTypeSetpointDeviation = 2
+	alarmTypeRuntimeHours      = 3
+	alarmTypeFanState          = 4
+	alarmTypeDigitalOutput     = 5
+	alarmTypeAnalogOutput      = 6
+	alarmTypePISequence        = 7
+)
+
+type AlarmSource struct {
+	Kind    string `json:"kind"`
+	Channel int    `json:"channel"`
+	PointID string `json:"pointId"`
 }
 
-// AlarmSetting mirrors FE AlarmSetting (types.ts) and openapi.yaml AlarmSetting schema.
+// AlarmParams keeps known numeric params type-safe while allowing type-specific optional fields.
+type AlarmParams struct {
+	HH           *float64 `json:"hh,omitempty"`
+	H            *float64 `json:"h,omitempty"`
+	L            *float64 `json:"l,omitempty"`
+	LL           *float64 `json:"ll,omitempty"`
+	Hysteresis   *float64 `json:"hysteresis,omitempty"`
+	RuntimeHours *float64 `json:"runtimeHours,omitempty"`
+}
+
+type AlarmSetting struct {
+	ID                string        `json:"id"`
+	Label             string        `json:"label"`
+	Enabled           bool          `json:"enabled"`
+	AlarmType         int           `json:"alarmType"`
+	Sources           []AlarmSource `json:"sources"`
+	Priority          string        `json:"priority"`
+	DelayS            float64       `json:"delayS"`
+	PublishBacnet     bool          `json:"publishBacnet"`
+	NotificationClass *int          `json:"notificationClass,omitempty"`
+	Params            *AlarmParams  `json:"params"`
+}
+
+// AlarmSetting mirrors ADR-013/openapi.yaml alarm entity schema.
 
 type UserDTO struct {
 	Username string `json:"username"`
@@ -132,14 +163,16 @@ type PointDTO struct {
 
 // AlarmDTO mirrors FE Alarm (types.ts).
 type AlarmDTO struct {
-	ID       string `json:"id"`
-	Time     string `json:"time"`
-	Severity string `json:"severity"` // critical | high | medium | low | info
-	Status   string `json:"status"`   // active | unack | acked | shelved
-	Message  string `json:"message"`
-	Source   string `json:"source"`
-	Value    string `json:"value"`
-	Detail   string `json:"detail"`
+	ID           string `json:"id"`
+	Time         string `json:"time"`
+	Severity     string `json:"severity"` // critical | high | medium | low | info
+	Status       string `json:"status"`   // active | unack | acked | shelved
+	Message      string `json:"message"`
+	Source       string `json:"source"`
+	Value        string `json:"value"`
+	Detail       string `json:"detail"`
+	TriggerLevel string `json:"triggerLevel,omitempty"`
+	Threshold    string `json:"threshold,omitempty"`
 }
 
 // CommissioningTestResult mirrors FE CommissioningTestResult (types.ts) and openapi.yaml.

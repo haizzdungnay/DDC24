@@ -3,6 +3,7 @@ import {
   ackDemoAlarm,
   forceDemoPoint,
   getAiInputConfigs,
+  getAlarmSettings as getDemoAlarmSettings,
   getDemoAlarms,
   getDemoChannels,
   getDemoHealth,
@@ -11,6 +12,7 @@ import {
   getDemoPoints,
   getUserParams as getDemoUserParams,
   putDemoAiInputs,
+  putAlarmSettings as putDemoAlarmSettings,
   putDemoOutputs,
   putUserParams as putDemoUserParams,
   runDemoCommissioning,
@@ -18,7 +20,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AoConfig, type AoSignalMode, type CommissioningTestResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
+import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmSetting, type AoConfig, type AoSignalMode, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 
@@ -220,6 +222,8 @@ function normalizeAlarm(raw: Record<string, unknown>): Alarm {
   const pointId = raw.pointId ?? raw.point_id
   const source = raw.source ?? pointId ?? raw.device ?? 'SYSTEM'
   const acknowledged = raw.acknowledged ?? raw.ack ?? raw.is_acknowledged
+  const triggerLevel = triggerLevelFrom(raw.triggerLevel ?? raw.trigger_level)
+  const threshold = raw.threshold ?? raw.thresholdValue ?? raw.threshold_value
   return {
     id,
     time: String(raw.time ?? raw.ts ?? raw.timestamp ?? raw.createdAt ?? raw.created_at ?? nowIso()),
@@ -228,7 +232,9 @@ function normalizeAlarm(raw: Record<string, unknown>): Alarm {
     message: String(raw.message ?? raw.name ?? raw.type ?? `Alarm ${id}`),
     source: String(source),
     value: String(raw.value ?? raw.currentValue ?? raw.current_value ?? raw.triggerValue ?? raw.trigger_value ?? ''),
-    detail: String(raw.detail ?? raw.description ?? raw.reason ?? raw.condition ?? '')
+    detail: String(raw.detail ?? raw.description ?? raw.reason ?? raw.condition ?? ''),
+    ...(triggerLevel ? { triggerLevel } : {}),
+    ...(threshold !== undefined && threshold !== null ? { threshold: String(threshold) } : {})
   }
 }
 
@@ -269,6 +275,11 @@ function alarmStatusFrom(value: unknown): Alarm['status'] {
   if (raw === 'acknowledged') return 'acked'
   if (raw === 'unacknowledged') return 'unack'
   return 'active'
+}
+
+function triggerLevelFrom(value: unknown): string | undefined {
+  const raw = String(value ?? '').trim().toUpperCase()
+  return raw === 'HH' || raw === 'H' || raw === 'L' || raw === 'LL' || raw === 'RUNTIME' ? raw : undefined
 }
 
 function normalizeCommissioningResult(raw: Record<string, unknown>, pointId: string): CommissioningTestResult {
@@ -374,6 +385,7 @@ function unitFromIo(value: unknown): number {
   if (unit === 'percent' || unit === '%' || unit === '%rh') return 1
   if (unit === 'degc' || unit === 'degf' || unit === 'c' || unit === 'f') return 2
   if (unit === 'pa' || unit === 'pascal') return 3
+  if (unit === 'ppm') return 4
   return 0
 }
 
@@ -381,6 +393,7 @@ function unitToIo(unit: number): string {
   if (unit === 1) return 'percent'
   if (unit === 2) return 'degC'
   if (unit === 3) return 'Pa'
+  if (unit === 4) return 'ppm'
   return ''
 }
 
@@ -651,6 +664,19 @@ export const apiClient = {
     if (IS_DEMO) return getDemoAlarms()
     const raw = await requestJson<Array<Record<string, unknown>>>('/alarms')
     return raw.map(normalizeAlarm)
+  },
+
+  async getAlarmSettings(): Promise<AlarmSetting[]> {
+    if (IS_DEMO) return getDemoAlarmSettings()
+    return requestJson<AlarmSetting[]>('/alarm-settings')
+  },
+
+  async putAlarmSettings(rows: AlarmSetting[]): Promise<ConfigPutResult> {
+    if (IS_DEMO) return putDemoAlarmSettings(rows)
+    return requestJson<ConfigPutResult>('/alarm-settings', {
+      method: 'PUT',
+      body: JSON.stringify(rows)
+    })
   },
 
   async getMe(): Promise<CurrentUser> {

@@ -565,7 +565,10 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
   /alarm-settings:
     get:
-      summary: Read alarm threshold settings (viewer+)
+      summary: Read alarm entity settings (viewer+)
+      description: >
+        Returns `alarm_settings.conf` as the ADR-013 entity-list model. Legacy per-point rows are
+        migrated by the Phase 2 backend before being returned.
       x-rbac: [viewer, operator, admin]
       responses:
         "200":
@@ -574,11 +577,17 @@ paths:
             application/json:
               schema:
                 type: array
+                maxItems: 64
                 items: { $ref: "#/components/schemas/AlarmSetting" }
         "403": { $ref: "#/components/responses/Error" }
     put:
-      summary: Update alarm threshold settings (admin)
-      description: Persist `alarm_settings.conf`, then apply by `sighup-core`; core evaluates thresholds.
+      summary: Replace alarm entity settings (admin)
+      description: >
+        Persist `alarm_settings.conf` using ADR-013 entity-list schema. Current web/backend stores
+        the file; Phase 2/3 core work must add `alarm_settings.conf` boot/SIGHUP loading and
+        per-source evaluation before this contract becomes runtime-active. At most 64 internal
+        alarm entities are accepted, and at most 8 enabled entities may set `publishBacnet=true`
+        because BACnet Event Enrollment capacity is 8.
       x-rbac: [admin]
       requestBody:
         required: true
@@ -586,6 +595,7 @@ paths:
           application/json:
             schema:
               type: array
+              maxItems: 64
               items: { $ref: "#/components/schemas/AlarmSetting" }
       responses:
         "200":
@@ -635,13 +645,39 @@ paths:
       responses: { "200": { description: OK } }
   /alarms:
     get:
-      summary: Danh sách alarm đang active
-      responses: { "200": { description: OK } }
+      summary: Runtime alarm list
+      description: >
+        Runtime alarm rows derived from ADR-013 alarm entities and ADR-014 ack lifecycle.
+        This is the visible current list, not full history: active unacked alarms,
+        active acked alarms, cleared-but-unacknowledged latched alarms, and future shelved alarms.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmEvent" }
   /alarms/{id}/ack:
     post:
       summary: Acknowledge alarm
+      description: >
+        Acknowledge one alarm entity id. If the alarm is active, status becomes acked until
+        clear. If the condition already cleared but is latched unack, ack removes it from
+        the visible list. Unknown or already-normal ids return 404.
       parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: Current visible alarm list after ack.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmEvent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /graph/validate:
     post:
       summary: Validate graph.json (role operator+)
@@ -1062,17 +1098,137 @@ components:
           items: { $ref: "#/components/schemas/ScheduleCell" }
     AlarmSetting:
       type: object
-      required: [pointId, label, enabled, hh, h, l, ll, delayS, priority]
+      required: [id, label, enabled, alarmType, sources, priority, delayS, params]
+      description: >
+        ADR-013 alarm entity config. Multi-source semantics are per-source evaluation with entity
+        state = OR. ACTIVE alarm types are 0, 1, and 3; types 2 and 4..7 are documented for
+        EasySet parity but must stay disabled until core hooks land.
       properties:
-        pointId: { type: string, example: "AI-01" }
+        id:
+          type: string
+          pattern: "^ALM-[A-Za-z0-9_-]+$"
+          maxLength: 64
+          example: "ALM-001"
         label: { type: string, example: "Room temperature" }
         enabled: { type: boolean }
+        alarmType: { $ref: "#/components/schemas/AlarmType" }
+        sources:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: { $ref: "#/components/schemas/AlarmSourceRef" }
+        delayS:
+          type: number
+          minimum: 0
+          description: Delay before asserting the alarm; maps to AlarmDelay on ACTIVE graph paths.
+        priority: { type: string, enum: [low, medium, high, critical] }
+        publishBacnet:
+          type: boolean
+          default: false
+          description: At most 8 enabled alarm entities may publish through BACnet Event Enrollment.
+        notificationClass:
+          type: integer
+          minimum: 1
+          maximum: 4
+          description: BACnet Notification Class when publishBacnet=true.
+        params:
+          oneOf:
+            - { $ref: "#/components/schemas/AlarmDisabledParams" }
+            - { $ref: "#/components/schemas/AlarmThresholdParams" }
+            - { $ref: "#/components/schemas/AlarmSetpointDeviationParams" }
+            - { $ref: "#/components/schemas/AlarmRuntimeParams" }
+            - { $ref: "#/components/schemas/AlarmSuperviseStateParams" }
+            - { $ref: "#/components/schemas/AlarmSuperviseAnalogParams" }
+            - { $ref: "#/components/schemas/AlarmPiSequenceParams" }
+    AlarmType:
+      type: integer
+      enum: [0, 1, 2, 3, 4, 5, 6, 7]
+      description: >
+        0 disabled (ACTIVE no-op), 1 high_low_input (ACTIVE: AlarmHigh/AlarmLow+AlarmDelay),
+        2 setpoint_deviation (DEFERRED), 3 runtime_hours (ACTIVE: RuntimeCounter.alarm),
+        4 fan_state_supervision (DEFERRED), 5 digital_output_supervision (DEFERRED),
+        6 analog_output_supervision (DEFERRED), 7 pi_sequence_supervision (DEFERRED).
+    AlarmSourceRef:
+      type: object
+      required: [kind, channel, pointId]
+      properties:
+        kind: { type: string, enum: [UI, AO, DO] }
+        channel:
+          type: integer
+          minimum: 1
+          maximum: 16
+          description: UI 1..16, AO 1..4, DO 1..4; kind-specific max is validated by backend.
+        pointId:
+          type: string
+          pattern: "^(UI|AO|DO)-[0-9]{2}$"
+          example: "UI-01"
+    AlarmDisabledParams:
+      type: object
+      maxProperties: 0
+      description: alarmType=0.
+    AlarmThresholdParams:
+      type: object
+      required: [hh, h, l, ll]
+      description: alarmType=1. Backend enforces hh >= h >= l >= ll when enabled.
+      properties:
         hh: { type: number }
         h: { type: number }
         l: { type: number }
         ll: { type: number }
-        delayS: { type: number }
-        priority: { type: string, enum: [low, medium, high, critical] }
+        hysteresis: { type: number, minimum: 0 }
+    AlarmSetpointDeviationParams:
+      type: object
+      required: [setpoint, deviationHigh, deviationLow]
+      description: alarmType=2, DEFERRED until core deviation hook exists.
+      properties:
+        setpoint: { type: number }
+        deviationHigh: { type: number, minimum: 0 }
+        deviationLow: { type: number, minimum: 0 }
+    AlarmRuntimeParams:
+      type: object
+      required: [runtimeHours]
+      description: alarmType=3. Maps to RuntimeCounter maint_hours.
+      properties:
+        runtimeHours: { type: number, minimum: 0 }
+    AlarmSuperviseStateParams:
+      type: object
+      required: [expectedState]
+      description: alarmType=4 or 5, DEFERRED until DO/fan supervision hook exists.
+      properties:
+        expectedState: { type: boolean }
+    AlarmSuperviseAnalogParams:
+      type: object
+      required: [expectedValue, tolerance]
+      description: alarmType=6, DEFERRED until AO supervision hook exists.
+      properties:
+        expectedValue: { type: number }
+        tolerance: { type: number, minimum: 0 }
+    AlarmPiSequenceParams:
+      type: object
+      required: [sequence]
+      description: alarmType=7, DEFERRED until PI sequence supervision hook exists.
+      properties:
+        sequence:
+          type: string
+          maxLength: 64
+    AlarmEvent:
+      type: object
+      description: >
+        Visible runtime alarm row from ADR-014. `active` means condition true and not acked;
+        `acked` means condition true and acknowledged; `unack` means condition cleared before
+        acknowledgement and remains latched; `shelved` is reserved for a future phase.
+      required: [id, time, severity, status, message, source, value, detail]
+      properties:
+        id: { type: string, description: "Alarm entity id used by /alarms/{id}/ack.", example: "ALM-001" }
+        time: { type: string, format: date-time, description: "Occurrence first-active timestamp from core wall clock." }
+        severity: { type: string, enum: [critical, high, medium, low, info], description: "Mapped from alarm priority; info is reserved for non-entity system alarms." }
+        status: { type: string, enum: [active, unack, acked, shelved] }
+        message: { type: string, description: "Display label, normally the alarm entity label." }
+        source: { type: string, description: "Display source from the core alarm event." }
+        value: { type: string, description: "Trigger/source value formatted for display." }
+        triggerLevel: { type: string, enum: [HH, H, L, LL, RUNTIME], description: "Threshold bucket that tripped the alarm, if known." }
+        threshold: { type: string, description: "Threshold value formatted for display, paired with triggerLevel." }
+        detail: { type: string, description: "Human-readable condition detail derived by web from core protocol fields." }
     ConfigPutResult:
       type: object
       required: [result, applied, reload]

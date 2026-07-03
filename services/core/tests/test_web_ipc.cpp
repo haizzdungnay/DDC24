@@ -70,10 +70,11 @@ struct Fixture {
     OutputWriter writer{reader};
     BacnetObjTable bacnet;
     CoreMetrics metrics;
+    AlarmRuntime alarms;
     ScanLoop loop;
 
     Fixture() : loop({&reader, &table, &quality, &web, &graph, &resolver,
-                      &safe, &writer, &bacnet, &metrics})
+                      &safe, &writer, &bacnet, &metrics, -1, &alarms})
     {
         char path[64];
         std::snprintf(path, sizeof(path), "/tmp/mkddc-test-core-%d.sock", getpid());
@@ -88,6 +89,23 @@ struct Fixture {
 
     void scan() { shm.ts_ns += 1000000; loop.step(); }
 };
+
+AlarmEntityConfig high_alarm()
+{
+    AlarmEntityConfig cfg;
+    cfg.id = "ALM-1";
+    cfg.label = "Supply alarm";
+    cfg.enabled = true;
+    cfg.alarm_type = 1;
+    cfg.sources.push_back({{PointKind::AI, 0}, "UI-01"});
+    cfg.priority = "high";
+    cfg.delay_s = 0.0;
+    cfg.params.hh = 32.0;
+    cfg.params.h = 28.0;
+    cfg.params.l = 16.0;
+    cfg.params.ll = 12.0;
+    return cfg;
+}
 
 } // namespace
 
@@ -258,6 +276,69 @@ TEST(WebIpc, AuditLinePerCommand)
     EXPECT_NE(log.find("AUDIT web_cmd id=7 user=admin point=DO2 op=write"),
               std::string::npos) << log;
     EXPECT_NE(log.find("result=accepted"), std::string::npos) << log;
+}
+
+TEST(WebIpc, AlarmListReturnsRuntimeSnapshot)
+{
+    Fixture f;
+    f.alarms.configure({high_alarm()});
+    f.shm.ui_value[0] = 30.0f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    c.send_line(R"({"id":9,"op":"alarm_list","user":"web"})");
+    usleep(50000);
+    f.scan();
+    const std::string resp = c.recv_line();
+    EXPECT_NE(resp.find("\"result\":\"accepted\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"alarms\":["), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"id\":\"ALM-1\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"status\":\"active\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"sourcePointId\":\"UI-01\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"triggerLevel\":\"H\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"threshold\":28"), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"priority\":\"high\""), std::string::npos) << resp;
+}
+
+TEST(WebIpc, AlarmAckRunsAfterEvaluateAndDoesNotUsePointResolver)
+{
+    Fixture f;
+    f.alarms.configure({high_alarm()});
+    f.shm.ui_value[0] = 30.0f;
+    f.scan();
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    c.send_line(R"({"id":10,"op":"alarm_ack","alarmId":"ALM-1","user":"web"})");
+    usleep(50000);
+    f.scan();
+    std::string resp = c.recv_line();
+    EXPECT_NE(resp.find("\"result\":\"accepted\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"alarmId\":\"ALM-1\""), std::string::npos) << resp;
+
+    c.send_line(R"({"id":11,"op":"alarm_list","user":"web"})");
+    usleep(50000);
+    f.scan();
+    resp = c.recv_line();
+    EXPECT_NE(resp.find("\"status\":\"acked\""), std::string::npos) << resp;
+    EXPECT_EQ(f.shm.do_cmd[0], 0) << "alarm ack must not touch output resolver";
+}
+
+TEST(WebIpc, AlarmAckUnknownRejected)
+{
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    c.send_line(R"({"id":12,"op":"alarm_ack","alarmId":"missing","user":"web"})");
+    usleep(50000);
+    f.scan();
+    const std::string resp = c.recv_line();
+    EXPECT_NE(resp.find("\"result\":\"rejected\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"error\":\"unknown_alarm\""), std::string::npos) << resp;
 }
 
 TEST(WebIpc, RejectsInvalidRequests)

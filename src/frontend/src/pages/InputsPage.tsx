@@ -19,7 +19,7 @@ type Translate = ReturnType<typeof useI18n>['t']
 type LiveTrendSample = TrendSample & { raw: number }
 
 const signalOptions: AiSignalType[] = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-const unitOptions = [0, 1, 2, 3]
+const unitOptions = [0, 1, 2, 3, 4]
 const rangeMultiplierOptions = [0, 1, 2, 3, 4, 5]
 const mathFunctionOptions = [0, 1, 2, 3]
 
@@ -308,7 +308,7 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
     const value = pointNumber(point)
     const time = new Date(point.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     setBuffers((current) => {
-      const existing = current[pointId] ?? seedLiveTrend(pointId, point)
+      const existing = current[pointId] ?? []
       const last = existing[existing.length - 1]
       if (last && last.time === time && last.raw === value) return current
       const next = [...existing, { time, raw: value, [pointId]: value }].slice(-60)
@@ -326,17 +326,7 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
     setBuffers((current) => ({ ...current, [pointId]: [{ time, raw: value, [pointId]: value }] }))
   }
 
-  return { data: buffers[pointId] ?? seedLiveTrend(pointId, point), reset }
-}
-
-function seedLiveTrend(pointId: string, point?: Point): LiveTrendSample[] {
-  if (!point?.trend?.length) return []
-  const now = Date.now()
-  return point.trend.slice(-60).map((value, index, items) => ({
-    time: new Date(now - (items.length - index - 1) * 2000).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-    raw: value,
-    [pointId]: value
-  }))
+  return { data: buffers[pointId] ?? [], reset }
 }
 
 function formatStat(value: number, unit?: string): string {
@@ -714,6 +704,7 @@ function unitLabel(value: number, t: Translate): string {
   if (value === 1) return t('unit1')
   if (value === 2) return t('unit2')
   if (value === 3) return t('unit3')
+  if (value === 4) return t('unit4')
   return t('unit0')
 }
 

@@ -60,6 +60,116 @@ uint64_t now_ns()
     return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
 }
 
+/* Mirror Rev A analog front-end constants from services/iobus/io/io_scaling.hpp.
+ * fake_mcu emits ADC raw, so 0-10V/4-20mA simulation must pass through
+ * divider/shunt instead of treating ADC full-scale as field full-scale. */
+constexpr double SIM_S24_FS = 8388607.0;
+constexpr double SIM_ADC_VREF_V = 2.44;
+constexpr double SIM_UI_DIV_GAIN = 9.2645;
+constexpr double SIM_UI_SHUNT_OHM = 49.9;
+
+int32_t clamp_s24(double raw)
+{
+    if (raw > SIM_S24_FS) return static_cast<int32_t>(SIM_S24_FS);
+    if (raw < -SIM_S24_FS) return static_cast<int32_t>(-SIM_S24_FS);
+    return static_cast<int32_t>(std::lround(raw));
+}
+
+int32_t raw_from_adc_volts(double v_adc)
+{
+    return clamp_s24((v_adc / SIM_ADC_VREF_V) * SIM_S24_FS);
+}
+
+int32_t raw_from_field_volts(double v_field)
+{
+    return raw_from_adc_volts(v_field / SIM_UI_DIV_GAIN);
+}
+
+int32_t raw_from_milliamps(double ma)
+{
+    return raw_from_adc_volts((ma / 1000.0) * SIM_UI_SHUNT_OHM);
+}
+
+int32_t raw_from_analog_safe_frac(double frac)
+{
+    return raw_from_milliamps(4.0 + frac * 16.0);
+}
+
+double adc_volts_from_raw(int32_t raw)
+{
+    return (static_cast<double>(raw) / SIM_S24_FS) * SIM_ADC_VREF_V;
+}
+
+double field_volts_from_raw(int32_t raw)
+{
+    return adc_volts_from_raw(raw) * SIM_UI_DIV_GAIN;
+}
+
+double milliamps_from_raw(int32_t raw)
+{
+    return (adc_volts_from_raw(raw) / SIM_UI_SHUNT_OHM) * 1000.0;
+}
+
+int32_t raw_from_adc_ratio(double frac)
+{
+    return raw_from_adc_volts(frac * SIM_ADC_VREF_V);
+}
+
+int32_t simulated_ui_raw(int i, double t)
+{
+    double frac;
+    if (i < 8) {
+        frac = 0.5 + 0.45 * std::sin((i < 4 ? 0.015 : 0.018) * t + i * 0.7);
+        return raw_from_analog_safe_frac(frac);
+    }
+    if (i == 8) { /* UI-09 return air temp: NTC10k, about 22-30 C. */
+        frac = 0.475 + 0.075 * std::sin(0.006 * t + i * 1.1);
+        return raw_from_adc_ratio(frac);
+    }
+    if (i == 9) { /* UI-10 CO2: 0-10V scaled by io_config to ppm. */
+        const double volts = 3.0 + 2.0 * (0.5 + 0.5 * std::sin(0.011 * t + 0.4));
+        return raw_from_field_volts(volts);
+    }
+    if (i == 10) { /* UI-11 chilled water temp: NTC10k, about 10-16 C. */
+        frac = 0.88 + 0.05 * std::sin(0.007 * t + i * 1.3);
+        return raw_from_adc_ratio(frac);
+    }
+    if (i == 11 || i == 12 || i == 14) { /* fan status, motion, water leak contacts. */
+        frac = (i == 14) ? 0.05 : ((std::sin(0.052 * t + i * 1.57) > 0.0) ? 0.9 : 0.05);
+        return raw_from_adc_ratio(frac);
+    }
+    if (i == 13) { /* UI-14 light level: percent ratio. */
+        frac = 0.35 + 0.35 * (0.5 + 0.5 * std::sin(0.012 * t + 1.8));
+        return raw_from_adc_ratio(frac);
+    }
+
+    frac = 0.5 + 0.45 * std::sin(0.06 * t + i * 0.4);
+    return raw_from_analog_safe_frac(frac);
+}
+
+bool run_self_test()
+{
+    for (int sample = 0; sample <= 20000; sample++) {
+        const double t = static_cast<double>(sample) * 0.1;
+        for (int i = 0; i < 16; i++) {
+            const int32_t raw = simulated_ui_raw(i, t);
+            const bool analog_safe_channel = i < 8 || i == 9 || i == 15;
+            if (analog_safe_channel && field_volts_from_raw(raw) > 10.001) {
+                std::fprintf(stderr, "fake_mcu: self-test fail ui=%d volts=%.6f\n",
+                             i + 1, field_volts_from_raw(raw));
+                return false;
+            }
+            if (analog_safe_channel && milliamps_from_raw(raw) > 20.001) {
+                std::fprintf(stderr, "fake_mcu: self-test fail ui=%d ma=%.6f\n",
+                             i + 1, milliamps_from_raw(raw));
+                return false;
+            }
+        }
+    }
+    std::printf("fake_mcu: self-test ok (analog channels <= 10V and <= 20mA)\n");
+    return true;
+}
+
 size_t build_frame(uint8_t cmd, uint8_t seq, const uint8_t* payload, uint8_t len,
                    uint8_t* out, bool corrupt_crc)
 {
@@ -89,31 +199,11 @@ void build_io_resp_payload(McuState& st, const Inject& inj, uint8_t* p)
 {
     /* IO_RESP v2 — 74 bytes (ADR-010) */
     const double t = static_cast<double>(now_ns() - st.boot_ns) / 1e9;
-    constexpr double FS = 8388607.0;  /* IO_S24_FS */
-
-    /* [0..63] UI_RAW[16] — 16 × int32 BE signed, per-group sensor simulation:
-     *   UI1-4  (i=0-3):  0-10V    slow sin, frac 0.05-0.95 → 0.5-9.5V
-     *   UI5-8  (i=4-7):  4-20mA   frac 0.05-0.95 → iobus maps 4+frac×16 mA
-     *   UI9-10 (i=8-9):  NTC10K   frac 0.40-0.55 → R≈8-11kΩ → ~22-30°C
-     *   UI11-12(i=10-11):NTC20K   frac 0.40-0.55 → R≈16-22kΩ → ~21-28°C
-     *   UI13-14(i=12-13):dry-contact toggle ~5s
-     *   UI15-16(i=14-15):0-10V / 4-20mA fast variation */
+    /* [0..63] UI_RAW[16] — 16 × int32 BE signed.
+     * UI1-8/UI16 are analog-safe; UI9/UI11 are NTC; UI10 is CO2 voltage;
+     * UI12/UI13/UI15 are dry contacts; UI14 is light percent. */
     for (int i = 0; i < 16; i++) {
-        double frac;
-        if (i < 4) {
-            frac = 0.5 + 0.45 * std::sin(0.015 * t + i * 0.8);
-        } else if (i < 8) {
-            frac = 0.5 + 0.45 * std::sin(0.018 * t + i * 0.6);
-        } else if (i < 10) {
-            frac = 0.475 + 0.075 * std::sin(0.006 * t + i * 1.1);
-        } else if (i < 12) {
-            frac = 0.475 + 0.075 * std::sin(0.007 * t + i * 1.3);
-        } else if (i < 14) {
-            frac = (std::sin(0.052 * t + i * 1.57) > 0.0) ? 0.9 : 0.05;
-        } else {
-            frac = 0.5 + 0.45 * std::sin(0.06 * t + i * 0.4);
-        }
-        put_be32s(p + 4 * i, static_cast<int32_t>(frac * FS));
+        put_be32s(p + 4 * i, simulated_ui_raw(i, t));
     }
     /* [64] ADC1_STAT  [65] ADC2_STAT */
     p[64] = IOP_ADC_STAT_DRDY_OK;
@@ -227,10 +317,12 @@ int main(int argc, char** argv)
         else if (a == "--vdd-fault") inj.vdd_fault = true;
         else if (a == "--hs-status" && i + 1 < argc) inj.hs_status = static_cast<uint8_t>(std::atoi(argv[++i]));
         else if (a == "--verbose" || a == "-v") verbose = true;
+        else if (a == "--self-test") return run_self_test() ? 0 : 1;
         else if (a == "--help") {
             std::printf("usage: fake_mcu (--pty | --uart DEV) [inject options]\n"
                         "  --crc-error RATE   --timeout N   --nack CMD ERR\n"
-                        "  --seq-wrong   --stuck-relay   --overtemp   --vdd-fault   --hs-status N\n");
+                        "  --seq-wrong   --stuck-relay   --overtemp   --vdd-fault   --hs-status N\n"
+                        "  --self-test\n");
             return 0;
         }
     }
