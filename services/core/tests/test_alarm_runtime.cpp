@@ -129,6 +129,35 @@ TEST(AlarmRuntime, MultiSourceEntityUsesOrAndKeepsTriggerPointId)
     EXPECT_FALSE(alarms.entity_active("ALM-001"));
 }
 
+TEST(AlarmRuntime, HighLowInputReportsTriggeredThresholdLevel)
+{
+    struct Case {
+        float value;
+        const char* level;
+        double threshold;
+    };
+    const Case cases[] = {
+        {33.0f, "HH", 32.0},
+        {30.0f, "H", 28.0},
+        {14.0f, "L", 16.0},
+        {10.0f, "LL", 12.0},
+    };
+
+    for (const Case& tc : cases) {
+        TempFile file(kValidAlarms);
+        AlarmRuntime alarms;
+        ASSERT_TRUE(alarms.load(file.path()));
+        PointTable table = table_with_ui(tc.value, 22.0f);
+        alarms.evaluate(table, 1000);
+
+        const std::vector<AlarmState> states = alarms.active_states();
+        const AlarmState* state = find_state(states, "ALM-001");
+        ASSERT_NE(state, nullptr) << tc.level;
+        EXPECT_EQ(state->trigger_level, tc.level);
+        EXPECT_DOUBLE_EQ(state->threshold, tc.threshold);
+    }
+}
+
 TEST(AlarmRuntime, DelaySMustElapseBeforeActive)
 {
     TempFile file(R"([
@@ -167,6 +196,11 @@ TEST(AlarmRuntime, RuntimeHoursTypeActivatesAfterRuntimeLimit)
     alarms.evaluate(table, 1000);
     EXPECT_TRUE(alarms.entity_active("ALM-R"));
     EXPECT_EQ(alarms.entity_source("ALM-R"), "DO-01");
+    const std::vector<AlarmState> states = alarms.active_states();
+    const AlarmState* state = find_state(states, "ALM-R");
+    ASSERT_NE(state, nullptr);
+    EXPECT_EQ(state->trigger_level, "RUNTIME");
+    EXPECT_DOUBLE_EQ(state->threshold, 0.001);
 }
 
 TEST(AlarmRuntime, DeferredEnabledTypeIsIgnored)
@@ -225,6 +259,8 @@ TEST(AlarmRuntime, AckActiveThenClearRemovesVisibleAlarm)
     EXPECT_TRUE(state->active);
     EXPECT_EQ(state->source_point_id, "UI-02");
     EXPECT_DOUBLE_EQ(state->value, 30.0);
+    EXPECT_EQ(state->trigger_level, "H");
+    EXPECT_DOUBLE_EQ(state->threshold, 28.0);
     EXPECT_EQ(state->priority, "high");
     EXPECT_EQ(state->label, "Supply air");
     EXPECT_EQ(state->alarm_type, 1);

@@ -82,8 +82,8 @@ const basePoints: Point[] = [
 let points: Point[] = basePoints.map((point) => ({ ...point, trend: makeTrend(pointNumber(point)) }))
 
 const alarms: Alarm[] = [
-  { id: 'AL-001', time: '2025-05-23T14:31:02Z', severity: 'critical', status: 'active', message: 'UI-05 Filter Switch', source: 'UI-05', value: 'ON', detail: 'Emergency input is active' },
-  { id: 'AL-002', time: '2025-05-23T14:29:45Z', severity: 'high', status: 'active', message: 'UI-02 Pressure High', source: 'UI-02', value: '9.8 bar', detail: 'Pressure exceeded configured threshold' },
+  { id: 'AL-001', time: '2025-05-23T14:31:02Z', severity: 'critical', status: 'active', message: 'UI-05 Filter Switch', source: 'UI-05', value: 'ON', detail: 'trip=HH threshold=1 current=ON (High-high); occurrence=1', triggerLevel: 'HH', threshold: '1' },
+  { id: 'AL-002', time: '2025-05-23T14:29:45Z', severity: 'high', status: 'active', message: 'UI-02 Pressure High', source: 'UI-02', value: '9.8 bar', detail: 'trip=H threshold=8 current=9.8 (High); occurrence=1', triggerLevel: 'H', threshold: '8' },
   { id: 'AL-003', time: '2025-05-23T14:27:18Z', severity: 'info', status: 'acked', message: 'DO-03 Pump Start', source: 'DO-03', value: 'ON', detail: 'Output switched on' },
   { id: 'AL-004', time: '2025-05-23T14:25:03Z', severity: 'info', status: 'acked', message: 'SYSTEM', source: 'SYSTEM', value: 'admin', detail: 'admin signed in' },
   { id: 'AL-005', time: '2025-05-23T14:20:11Z', severity: 'info', status: 'acked', message: 'COMMUNICATION', source: 'SYSTEM', value: 'OK', detail: 'Modbus RTU connected' }

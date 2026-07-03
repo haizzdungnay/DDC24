@@ -44,6 +44,8 @@ struct AlarmState {
     std::string status;
     std::string source_point_id;
     double value = 0.0;
+    std::string trigger_level;
+    double threshold = 0.0;
     std::string priority;
     std::string label;
     int alarm_type = 0;
@@ -88,6 +90,8 @@ private:
         std::string first_active_at;
         std::string active_source;
         double trigger_value = 0.0;
+        std::string trigger_level;
+        double trigger_threshold = 0.0;
         std::string last_status;
     };
 

@@ -59,10 +59,31 @@ func TestHandleAlarmsCoreReadErrorDegradesEmpty(t *testing.T) {
 	}
 }
 
+func TestHandleAlarmsPreservesTriggerFields(t *testing.T) {
+	core := &fakeAlarmCore{alarms: []AlarmDTO{{
+		ID: "ALM-1", Time: "2026-07-02T08:15:30Z", Severity: "high", Status: "active",
+		Message: "Supply air", Source: "UI-01", Value: "31.8",
+		Detail:       "trip=HH threshold=30 current=31.8 (High-high); occurrence=2",
+		TriggerLevel: "HH", Threshold: "30",
+	}}}
+	app, token := newTestAppWithRole(t, RoleViewer, core)
+
+	resp := serveAuth(t, app.Router(), http.MethodGet, "/api/v1/alarms", "", token)
+	assertStatus(t, resp, http.StatusOK)
+	var alarms []AlarmDTO
+	if err := json.Unmarshal(resp.Body.Bytes(), &alarms); err != nil {
+		t.Fatalf("decode alarms: %v", err)
+	}
+	if len(alarms) != 1 || alarms[0].TriggerLevel != "HH" || alarms[0].Threshold != "30" {
+		t.Fatalf("alarms = %#v; want HH threshold", alarms)
+	}
+}
+
 func TestHandleAckAlarmSuccessRefetchesAlarms(t *testing.T) {
 	core := &fakeAlarmCore{alarms: []AlarmDTO{{
 		ID: "ALM-1", Time: "2026-07-02T08:15:30Z", Severity: "high", Status: "acked",
 		Message: "Supply air", Source: "UI-01", Value: "31.8", Detail: "type=1 source=UI-01",
+		TriggerLevel: "H", Threshold: "28",
 	}}}
 	app, token := newTestAppWithRole(t, RoleOperator, core)
 
@@ -78,8 +99,8 @@ func TestHandleAckAlarmSuccessRefetchesAlarms(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &alarms); err != nil {
 		t.Fatalf("decode alarms: %v", err)
 	}
-	if len(alarms) != 1 || alarms[0].ID != "ALM-1" || alarms[0].Value != "31.8" {
-		t.Fatalf("alarms = %#v; want refetched ALM-1 with value", alarms)
+	if len(alarms) != 1 || alarms[0].ID != "ALM-1" || alarms[0].Value != "31.8" || alarms[0].TriggerLevel != "H" {
+		t.Fatalf("alarms = %#v; want refetched ALM-1 with value/trigger", alarms)
 	}
 }
 

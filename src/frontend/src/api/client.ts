@@ -222,6 +222,8 @@ function normalizeAlarm(raw: Record<string, unknown>): Alarm {
   const pointId = raw.pointId ?? raw.point_id
   const source = raw.source ?? pointId ?? raw.device ?? 'SYSTEM'
   const acknowledged = raw.acknowledged ?? raw.ack ?? raw.is_acknowledged
+  const triggerLevel = triggerLevelFrom(raw.triggerLevel ?? raw.trigger_level)
+  const threshold = raw.threshold ?? raw.thresholdValue ?? raw.threshold_value
   return {
     id,
     time: String(raw.time ?? raw.ts ?? raw.timestamp ?? raw.createdAt ?? raw.created_at ?? nowIso()),
@@ -230,7 +232,9 @@ function normalizeAlarm(raw: Record<string, unknown>): Alarm {
     message: String(raw.message ?? raw.name ?? raw.type ?? `Alarm ${id}`),
     source: String(source),
     value: String(raw.value ?? raw.currentValue ?? raw.current_value ?? raw.triggerValue ?? raw.trigger_value ?? ''),
-    detail: String(raw.detail ?? raw.description ?? raw.reason ?? raw.condition ?? '')
+    detail: String(raw.detail ?? raw.description ?? raw.reason ?? raw.condition ?? ''),
+    ...(triggerLevel ? { triggerLevel } : {}),
+    ...(threshold !== undefined && threshold !== null ? { threshold: String(threshold) } : {})
   }
 }
 
@@ -271,6 +275,11 @@ function alarmStatusFrom(value: unknown): Alarm['status'] {
   if (raw === 'acknowledged') return 'acked'
   if (raw === 'unacknowledged') return 'unack'
   return 'active'
+}
+
+function triggerLevelFrom(value: unknown): string | undefined {
+  const raw = String(value ?? '').trim().toUpperCase()
+  return raw === 'HH' || raw === 'H' || raw === 'L' || raw === 'LL' || raw === 'RUNTIME' ? raw : undefined
 }
 
 function normalizeCommissioningResult(raw: Record<string, unknown>, pointId: string): CommissioningTestResult {

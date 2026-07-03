@@ -59,7 +59,7 @@ func readFakeCommand(t *testing.T, cmdCh <-chan map[string]any) map[string]any {
 }
 
 func TestReadAlarmsUsesCoreIPCAndMapsDTO(t *testing.T) {
-	path, cmdCh := fakeCoreSocket(t, `{"id":7,"result":"accepted","alarms":[{"id":"ALM-1","alarmSettingId":"ALM-1","time":"2026-07-02T08:15:30Z","status":"active","sourcePointId":"UI-01","value":31.8,"priority":"high","label":"Supply air","alarmType":1,"occurrence":2,"active":true}]}`)
+	path, cmdCh := fakeCoreSocket(t, `{"id":7,"result":"accepted","alarms":[{"id":"ALM-1","alarmSettingId":"ALM-1","time":"2026-07-02T08:15:30Z","status":"active","sourcePointId":"UI-01","value":31.8,"triggerLevel":"HH","threshold":30,"priority":"high","label":"Supply air","alarmType":1,"occurrence":2,"active":true}]}`)
 	alarms, err := (&CoreClient{SockPath: path}).ReadAlarms(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -78,8 +78,11 @@ func TestReadAlarmsUsesCoreIPCAndMapsDTO(t *testing.T) {
 	if got.Message != "Supply air" || got.Source != "UI-01" || got.Value != "31.8" {
 		t.Fatalf("alarm display fields = %#v", got)
 	}
-	if got.Detail == "" {
-		t.Fatalf("detail empty: %#v", got)
+	if got.TriggerLevel != "HH" || got.Threshold != "30" {
+		t.Fatalf("alarm trigger fields = %#v", got)
+	}
+	if got.Detail != "trip=HH threshold=30 current=31.8 (High-high); occurrence=2" {
+		t.Fatalf("detail = %q", got.Detail)
 	}
 }
 

@@ -82,6 +82,8 @@ export interface Alarm {
   source: string
   value: string
   detail: string
+  triggerLevel?: string
+  threshold?: string
 }
 
 export type AlarmSourceKind = 'UI' | 'AO' | 'DO'

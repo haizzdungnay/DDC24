@@ -75,17 +75,19 @@ type webIPCResponse struct {
 }
 
 type coreAlarmState struct {
-	ID             string `json:"id"`
-	AlarmSettingID string `json:"alarmSettingId"`
-	Time           string `json:"time"`
-	Status         string `json:"status"`
-	SourcePointID  string `json:"sourcePointId"`
-	Value          any    `json:"value"`
-	Priority       string `json:"priority"`
-	Label          string `json:"label"`
-	AlarmType      int    `json:"alarmType"`
-	Occurrence     uint64 `json:"occurrence"`
-	Active         bool   `json:"active"`
+	ID             string   `json:"id"`
+	AlarmSettingID string   `json:"alarmSettingId"`
+	Time           string   `json:"time"`
+	Status         string   `json:"status"`
+	SourcePointID  string   `json:"sourcePointId"`
+	Value          any      `json:"value"`
+	TriggerLevel   string   `json:"triggerLevel"`
+	Threshold      *float64 `json:"threshold"`
+	Priority       string   `json:"priority"`
+	Label          string   `json:"label"`
+	AlarmType      int      `json:"alarmType"`
+	Occurrence     uint64   `json:"occurrence"`
+	Active         bool     `json:"active"`
 }
 
 func NewCoreClient(cfg Config) *CoreClient {
@@ -688,17 +690,67 @@ func mapCoreAlarm(alarm coreAlarmState, fallbackTime string) AlarmDTO {
 	if message == "" {
 		message = "Alarm " + id
 	}
+	value := formatAlarmValue(alarm.Value)
+	triggerLevel := normalizeTriggerLevel(alarm.TriggerLevel)
+	threshold := formatAlarmThreshold(alarm.Threshold)
 	return AlarmDTO{
-		ID:       id,
-		Time:     timestamp,
-		Severity: alarmSeverity(alarm.Priority),
-		Status:   status,
-		Message:  message,
-		Source:   source,
-		Value:    formatAlarmValue(alarm.Value),
-		Detail: fmt.Sprintf("type=%d source=%s status=%s occurrence=%d",
-			alarm.AlarmType, source, status, alarm.Occurrence),
+		ID:           id,
+		Time:         timestamp,
+		Severity:     alarmSeverity(alarm.Priority),
+		Status:       status,
+		Message:      message,
+		Source:       source,
+		Value:        value,
+		Detail:       formatAlarmDetail(alarm, source, status, value, triggerLevel, threshold),
+		TriggerLevel: triggerLevel,
+		Threshold:    threshold,
 	}
+}
+
+func formatAlarmDetail(alarm coreAlarmState, source, status, value, triggerLevel, threshold string) string {
+	if triggerLevel == "" {
+		return fmt.Sprintf("type=%d source=%s status=%s occurrence=%d",
+			alarm.AlarmType, source, status, alarm.Occurrence)
+	}
+	if threshold != "" {
+		return fmt.Sprintf("trip=%s threshold=%s current=%s (%s); occurrence=%d",
+			triggerLevel, threshold, value, triggerLabel(triggerLevel), alarm.Occurrence)
+	}
+	return fmt.Sprintf("trip=%s current=%s (%s); occurrence=%d",
+		triggerLevel, value, triggerLabel(triggerLevel), alarm.Occurrence)
+}
+
+func normalizeTriggerLevel(level string) string {
+	switch strings.ToUpper(strings.TrimSpace(level)) {
+	case "HH", "H", "L", "LL", "RUNTIME":
+		return strings.ToUpper(strings.TrimSpace(level))
+	default:
+		return ""
+	}
+}
+
+func triggerLabel(level string) string {
+	switch level {
+	case "HH":
+		return "High-high"
+	case "H":
+		return "High"
+	case "L":
+		return "Low"
+	case "LL":
+		return "Low-low"
+	case "RUNTIME":
+		return "Runtime"
+	default:
+		return "Alarm"
+	}
+}
+
+func formatAlarmThreshold(value *float64) string {
+	if value == nil {
+		return ""
+	}
+	return strconv.FormatFloat(*value, 'f', -1, 64)
 }
 
 func alarmSeverity(priority string) string {

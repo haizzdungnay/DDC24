@@ -132,6 +132,22 @@ bool as_bool(const json::Value* value, bool* out)
     return true;
 }
 
+struct TriggerInfo {
+    std::string level;
+    double threshold = 0.0;
+};
+
+TriggerInfo high_low_trigger(double value, const AlarmParamsConfig& params,
+                             bool high_state, bool low_state)
+{
+    if (!high_state && !low_state) return {};
+    if (high_state && value >= params.hh) return {"HH", params.hh};
+    if (low_state && value <= params.ll) return {"LL", params.ll};
+    if (high_state) return {"H", params.h};
+    if (low_state) return {"L", params.l};
+    return {};
+}
+
 std::string point_id(const std::string& kind, int channel)
 {
     char buf[8];
@@ -317,6 +333,8 @@ void AlarmRuntime::copy_lifecycle(const Entity& old_entity, Entity* entity)
     entity->first_active_at = old_entity.first_active_at;
     entity->active_source = old_entity.active_source;
     entity->trigger_value = old_entity.trigger_value;
+    entity->trigger_level = old_entity.trigger_level;
+    entity->trigger_threshold = old_entity.trigger_threshold;
     entity->last_status = old_entity.last_status;
 }
 
@@ -430,10 +448,13 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
         bool condition_active = false;
         std::string condition_source;
         double condition_value = 0.0;
+        std::string condition_level;
+        double condition_threshold = 0.0;
 
         for (Branch& branch : entity.branches) {
             const float value = table.get(branch.source.point).value;
             bool raw_active = false;
+            TriggerInfo trigger;
             if (entity.cfg.alarm_type == kAlarmHighLowInput) {
                 branch.high_state = alarm_high_step(value, static_cast<float>(entity.cfg.params.h),
                                                     static_cast<float>(entity.cfg.params.hysteresis),
@@ -442,6 +463,8 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
                                                   static_cast<float>(entity.cfg.params.hysteresis),
                                                   branch.low_state);
                 raw_active = branch.high_state || branch.low_state;
+                trigger = high_low_trigger(value, entity.cfg.params,
+                                           branch.high_state, branch.low_state);
             } else if (entity.cfg.alarm_type == kAlarmRuntimeHours) {
                 const RuntimeCounterStep rc =
                     runtime_counter_step(value != 0.0f, false, dt,
@@ -449,6 +472,7 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
                                          &branch.runtime_seconds,
                                          &branch.runtime_prev_reset);
                 raw_active = rc.alarm;
+                if (raw_active) trigger = {"RUNTIME", entity.cfg.params.runtime_hours};
             }
             branch.active = alarm_delay_step(raw_active, dt,
                                              static_cast<float>(entity.cfg.delay_s),
@@ -458,6 +482,8 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
                 condition_active = true;
                 condition_source = branch.source.point_id;
                 condition_value = value;
+                condition_level = trigger.level;
+                condition_threshold = trigger.threshold;
             }
         }
 
@@ -473,6 +499,8 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
             entity.latched_clear = false;
             entity.active_source = condition_source;
             entity.trigger_value = condition_value;
+            entity.trigger_level = condition_level;
+            entity.trigger_threshold = condition_threshold;
         } else if (was_condition_active) {
             entity.active = false;
             if (entity.acked) {
@@ -481,6 +509,8 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
                 entity.active_source.clear();
                 entity.first_active_at.clear();
                 entity.trigger_value = 0.0;
+                entity.trigger_level.clear();
+                entity.trigger_threshold = 0.0;
             } else {
                 entity.latched_clear = true;
             }
@@ -490,15 +520,18 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
             entity.active_source.clear();
             entity.first_active_at.clear();
             entity.trigger_value = 0.0;
+            entity.trigger_level.clear();
+            entity.trigger_threshold = 0.0;
         }
         entity.last_status = status_for(entity);
 
         if (entity.active != was_condition_active ||
             (entity.active && entity.active_source != old_source)) {
-            std::fprintf(stderr, "INFO  alarm.%s id=%s source=%s priority=%s\n",
+            std::fprintf(stderr, "INFO  alarm.%s id=%s source=%s level=%s priority=%s\n",
                          entity.active ? "active" : "clear",
                          entity.cfg.id.c_str(),
                          entity.active_source.empty() ? "-" : entity.active_source.c_str(),
+                         entity.trigger_level.empty() ? "-" : entity.trigger_level.c_str(),
                          entity.cfg.priority.c_str());
         }
     }
@@ -516,6 +549,8 @@ std::vector<AlarmState> AlarmRuntime::active_states() const
             status_for(entity),
             entity.active_source,
             entity.trigger_value,
+            entity.trigger_level,
+            entity.trigger_threshold,
             entity.cfg.priority,
             entity.cfg.label,
             entity.cfg.alarm_type,
@@ -538,6 +573,8 @@ bool AlarmRuntime::ack(const std::string& id)
             entity.active_source.clear();
             entity.first_active_at.clear();
             entity.trigger_value = 0.0;
+            entity.trigger_level.clear();
+            entity.trigger_threshold = 0.0;
             entity.last_status.clear();
             return true;
         }

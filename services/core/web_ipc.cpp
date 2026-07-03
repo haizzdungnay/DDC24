@@ -241,6 +241,8 @@ void WebIpc::respond_alarm_list(const WebCommand& cmd, const std::vector<AlarmSt
         json += ",\"status\":\"" + json_escape(alarm.status) + "\"";
         json += ",\"sourcePointId\":\"" + json_escape(alarm.source_point_id) + "\"";
         json += ",\"value\":" + std::to_string(alarm.value);
+        json += ",\"triggerLevel\":\"" + json_escape(alarm.trigger_level) + "\"";
+        json += ",\"threshold\":" + std::to_string(alarm.threshold);
         json += ",\"priority\":\"" + json_escape(alarm.priority) + "\"";
         json += ",\"label\":\"" + json_escape(alarm.label) + "\"";
         json += ",\"alarmType\":" + std::to_string(alarm.alarm_type);

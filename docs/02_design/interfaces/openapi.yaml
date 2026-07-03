@@ -1114,6 +1114,8 @@ components:
         message: { type: string, description: "Display label, normally the alarm entity label." }
         source: { type: string, description: "Display source from the core alarm event." }
         value: { type: string, description: "Trigger/source value formatted for display." }
+        triggerLevel: { type: string, enum: [HH, H, L, LL, RUNTIME], description: "Threshold bucket that tripped the alarm, if known." }
+        threshold: { type: string, description: "Threshold value formatted for display, paired with triggerLevel." }
         detail: { type: string, description: "Human-readable condition detail derived by web from core protocol fields." }
     ConfigPutResult:
       type: object

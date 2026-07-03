@@ -163,14 +163,16 @@ type PointDTO struct {
 
 // AlarmDTO mirrors FE Alarm (types.ts).
 type AlarmDTO struct {
-	ID       string `json:"id"`
-	Time     string `json:"time"`
-	Severity string `json:"severity"` // critical | high | medium | low | info
-	Status   string `json:"status"`   // active | unack | acked | shelved
-	Message  string `json:"message"`
-	Source   string `json:"source"`
-	Value    string `json:"value"`
-	Detail   string `json:"detail"`
+	ID           string `json:"id"`
+	Time         string `json:"time"`
+	Severity     string `json:"severity"` // critical | high | medium | low | info
+	Status       string `json:"status"`   // active | unack | acked | shelved
+	Message      string `json:"message"`
+	Source       string `json:"source"`
+	Value        string `json:"value"`
+	Detail       string `json:"detail"`
+	TriggerLevel string `json:"triggerLevel,omitempty"`
+	Threshold    string `json:"threshold,omitempty"`
 }
 
 // CommissioningTestResult mirrors FE CommissioningTestResult (types.ts) and openapi.yaml.

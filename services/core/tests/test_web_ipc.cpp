@@ -296,6 +296,8 @@ TEST(WebIpc, AlarmListReturnsRuntimeSnapshot)
     EXPECT_NE(resp.find("\"id\":\"ALM-1\""), std::string::npos) << resp;
     EXPECT_NE(resp.find("\"status\":\"active\""), std::string::npos) << resp;
     EXPECT_NE(resp.find("\"sourcePointId\":\"UI-01\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"triggerLevel\":\"H\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"threshold\":28"), std::string::npos) << resp;
     EXPECT_NE(resp.find("\"priority\":\"high\""), std::string::npos) << resp;
 }
 
