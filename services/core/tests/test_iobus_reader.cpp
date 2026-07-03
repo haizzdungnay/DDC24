@@ -70,10 +70,11 @@ TEST(IobusReader, NoTornReadUnderConcurrentWriter)
         while (!stop.load(std::memory_order_relaxed)) {
             KX_WRITE_BEGIN(&shm);
             for (int i = 0; i < KX_N_UI; i++)
-                shm.ui_value[i] = v;
+            shm.ui_value[i] = v;
             shm.ts_ns++;
             KX_WRITE_END(&shm);
             v += 1.0f;
+            std::this_thread::yield();
         }
     });
 

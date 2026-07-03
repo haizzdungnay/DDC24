@@ -150,9 +150,7 @@ TriggerInfo high_low_trigger(double value, const AlarmParamsConfig& params,
 
 std::string point_id(const std::string& kind, int channel)
 {
-    char buf[8];
-    std::snprintf(buf, sizeof(buf), "%s-%02d", kind.c_str(), channel);
-    return buf;
+    return kind + "-" + (channel < 10 ? "0" : "") + std::to_string(channel);
 }
 
 bool parse_source(const json::Value& src, AlarmSourceConfig* out)
