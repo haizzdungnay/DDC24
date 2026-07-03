@@ -297,6 +297,22 @@ func validateConfigIO(cfg ConfigIO) []configValidationError {
 		base := fmt.Sprintf("ao[%d]", i)
 		validateChannel(&errs, item, base+".ch", 1, 4)
 		validateStringEnum(&errs, item, base+".mode", "mode", true, "0-10V", "4-20mA")
+		if name, ok, good := stringField(item, "name"); ok && (!good || len(name) > 64) {
+			addConfigErr(&errs, base+".name", "must be a string of at most 64 bytes")
+		}
+		validateStringEnum(&errs, item, base+".units", "units", false,
+			"percent", "volt", "milliampere", "degC", "Pa", "RPM", "ppm", "no_units")
+		minPV, hasMin, okMin := numberField(item, "min_pv")
+		maxPV, hasMax, okMax := numberField(item, "max_pv")
+		if hasMin && !okMin {
+			addConfigErr(&errs, base+".min_pv", "must be number")
+		}
+		if hasMax && !okMax {
+			addConfigErr(&errs, base+".max_pv", "must be number")
+		}
+		if hasMin && hasMax && okMin && okMax && maxPV <= minPV {
+			addConfigErr(&errs, base+".max_pv", "must be greater than min_pv")
+		}
 	}
 	return errs
 }

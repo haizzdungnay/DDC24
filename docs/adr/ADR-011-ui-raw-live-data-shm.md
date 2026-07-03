@@ -19,6 +19,10 @@ Extend `kx_io_shm_t` with:
 
 Bump `KX_SHM_MAGIC` from `0x4B584402` to `0x4B584403` so stale consumers reject the new layout.
 
+> **Superseding integration note (2026-07-01):** ADR-011 Reliability adds
+> `ui_reliability[16]` without removing these raw-live fields and bumps the combined
+> contract to `0x4B584404` (v4).
+
 ## Consequences
 
 - `mkddc-iobus`, `mkddc-core`, and `mkddc-web` must be rebuilt and deployed together.

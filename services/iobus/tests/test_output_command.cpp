@@ -109,6 +109,27 @@ TEST(OutputCommand, AoChangeConvertsEngToRaw)
     EXPECT_EQ(sink.ao_calls[0][1], 65535);
 }
 
+TEST(OutputCommand, AoEngineeringConfigDrivesDacRange)
+{
+    FakeSink sink;
+    OutputCommand oc(sink);
+    const AoMode modes[4] = {AoMode::V0_10, AoMode::MA4_20, AoMode::V0_10, AoMode::V0_10};
+    AoChannelConfig channels[4];
+    for (auto& channel : channels) {
+        channel.min_pv = 0.0f;
+        channel.max_pv = 100.0f;
+    }
+    oc.set_ao_modes(modes);
+    oc.set_ao_channels(channels);
+
+    const float ao[4] = {50.0f, 50.0f, 0.0f, 0.0f};
+    const uint8_t dout[4] = {};
+    ASSERT_TRUE(oc.process(ao, dout));
+    ASSERT_EQ(sink.ao_calls.size(), 1u);
+    EXPECT_NEAR(sink.ao_calls[0][0], 32768, 1); // 5V
+    EXPECT_NEAR(sink.ao_calls[0][1], 32768, 1); // 12mA
+}
+
 TEST(OutputCommand, NackSafeStateStopsSending)
 {
     FakeSink sink;

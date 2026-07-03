@@ -122,7 +122,9 @@ bool BacnetServer::start()
                                handler_write_property);
     apdu_set_confirmed_handler(SERVICE_CONFIRMED_REINITIALIZE_DEVICE,
                                handler_reinitialize_device);
-    apdu_set_unconfirmed_handler(SERVICE_UNCONFIRMED_WHO_IS, handler_who_is);
+    /* Reply to the requester address. This also makes directed Who-Is work when
+     * the client uses a non-default source port (BACnet Addendum 135-2004q). */
+    apdu_set_unconfirmed_handler(SERVICE_UNCONFIRMED_WHO_IS, handler_who_is_unicast);
 
     Send_I_Am(&Handler_Transmit_Buffer[0]);
     std::fprintf(stderr,
@@ -155,11 +157,12 @@ void BacnetServer::apply_ai_units()
 #ifdef MKDDC_ENABLE_BACNET
     if (!objects_) return;
     auto unit_code = [](const char* s) -> BACNET_ENGINEERING_UNITS {
-        if (!s || s[0] == '\0')          return (BACNET_ENGINEERING_UNITS)95;  /* NO_UNITS */
-        if (std::strcmp(s, "V") == 0)    return (BACNET_ENGINEERING_UNITS)501; /* VOLTS */
-        if (std::strcmp(s, "mA") == 0)   return (BACNET_ENGINEERING_UNITS)621; /* MILLIAMPERES */
-        if (std::strcmp(s, "degC") == 0) return (BACNET_ENGINEERING_UNITS)62;  /* DEGREES_CELSIUS */
-        return (BACNET_ENGINEERING_UNITS)95;
+        if (!s || s[0] == '\0')          return UNITS_NO_UNITS;
+        if (std::strcmp(s, "V") == 0)    return UNITS_VOLTS;
+        if (std::strcmp(s, "mA") == 0)   return UNITS_MILLIAMPERES;
+        if (std::strcmp(s, "degC") == 0) return UNITS_DEGREES_CELSIUS;
+        if (std::strcmp(s, "%") == 0)    return UNITS_PERCENT;
+        return UNITS_NO_UNITS;
     };
     for (int i = 0; i < KX_N_UI; i++) {
         Analog_Input_Units_Set(static_cast<uint32_t>(i + 1),
@@ -173,10 +176,10 @@ void BacnetServer::apply_ao_config()
 #ifdef MKDDC_ENABLE_BACNET
     if (!objects_) return;
     for (uint32_t i = 1; i <= 4; i++) {
-        char name_buf[64];
-        std::strncpy(name_buf, objects_->ao_name(i).c_str(), sizeof(name_buf) - 1);
-        name_buf[sizeof(name_buf) - 1] = '\0';
-        Analog_Output_Name_Set(i, name_buf);
+        auto& name_buf = ao_name_storage_[i - 1];
+        std::strncpy(name_buf.data(), objects_->ao_name(i).c_str(), name_buf.size() - 1);
+        name_buf.back() = '\0';
+        Analog_Output_Name_Set(i, name_buf.data());
         Analog_Output_Units_Set(i, objects_->ao_bacnet_units(i));
         Analog_Output_Min_Pres_Value_Set(i, objects_->ao_min_pv(i));
         Analog_Output_Max_Pres_Value_Set(i, objects_->ao_max_pv(i));

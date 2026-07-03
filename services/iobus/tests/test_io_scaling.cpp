@@ -203,6 +203,61 @@ TEST(IoScaling, AoEngToRawTable)
     EXPECT_EQ(ao_eng_to_raw(20.0f, AoMode::MA4_20), 65535);
 }
 
+TEST(IoScaling, ReliabilityOverloadPreservesHardwareTransfer)
+{
+    kx_quality_t q;
+    kx_reliability_t r;
+    EXPECT_NEAR(ui_to_eng(raw_from_field_v(10.0f), SensorType::V0_10, &q, &r), 10.0f, 0.02f);
+    EXPECT_EQ(q, KX_Q_GOOD);
+    EXPECT_EQ(r, KX_REL_RELIABLE);
+    EXPECT_NEAR(ui_to_eng(raw_from_ma(20.0f), SensorType::MA4_20, &q, &r), 20.0f, 0.02f);
+    EXPECT_EQ(q, KX_Q_GOOD);
+    EXPECT_EQ(r, KX_REL_RELIABLE);
+}
+
+TEST(IoScaling, ReliabilityFaultMapping)
+{
+    kx_quality_t q;
+    kx_reliability_t r;
+
+    ui_to_eng(0, SensorType::NONE, &q, &r);
+    EXPECT_EQ(r, KX_REL_CONFIGURATION_ERROR);
+    ui_to_eng(raw_from_field_v(11.2f), SensorType::V0_10, &q, &r);
+    EXPECT_EQ(r, KX_REL_OVER_RANGE);
+    ui_to_eng(raw_from_field_v(1.7f), SensorType::V2_10, &q, &r);
+    EXPECT_EQ(r, KX_REL_UNDER_RANGE);
+    ui_to_eng(raw_from_ma(3.4f), SensorType::MA4_20, &q, &r);
+    EXPECT_EQ(r, KX_REL_OPEN_LOOP);
+    ui_to_eng(raw_from_ma(21.5f), SensorType::MA4_20, &q, &r);
+    EXPECT_EQ(r, KX_REL_SHORTED_LOOP);
+    ui_to_eng(-1, SensorType::PULSE, &q, &r);
+    EXPECT_EQ(r, KX_REL_UNRELIABLE_OTHER);
+}
+
+TEST(IoScaling, ReliabilityConfiguredPathPreservesCalibration)
+{
+    UiScaleConfig cfg;
+    cfg.sensor = SensorType::V0_10;
+    cfg.scale_lo = 0.0f;
+    cfg.scale_hi = 10.0f;
+    cfg.cal_gain = 2.0f;
+    cfg.cal_offset = 1.0f;
+
+    kx_quality_t q;
+    kx_reliability_t r;
+    EXPECT_NEAR(ui_to_eng(raw_from_field_v(4.0f), cfg, &q, &r), 9.0f, 0.02f);
+    EXPECT_EQ(q, KX_Q_GOOD);
+    EXPECT_EQ(r, KX_REL_RELIABLE);
+}
+
+TEST(IoScaling, AoEngineeringRangeMapsToPhysicalOutput)
+{
+    EXPECT_NEAR(ao_eng_to_raw_phys(50.0f, 0.0f, 100.0f, AoMode::V0_10), 32768, 1);
+    EXPECT_NEAR(ao_eng_to_raw_phys(50.0f, 0.0f, 100.0f, AoMode::MA4_20), 32768, 1);
+    EXPECT_EQ(ao_eng_to_raw_phys(-10.0f, 0.0f, 100.0f, AoMode::V0_10), 0);
+    EXPECT_EQ(ao_eng_to_raw_phys(110.0f, 0.0f, 100.0f, AoMode::V0_10), 65535);
+}
+
 TEST(IoScaling, SensorTypeFromString)
 {
     EXPECT_EQ(sensor_type_from_string("0-10V"),      SensorType::V0_10);

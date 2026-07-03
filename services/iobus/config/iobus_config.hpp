@@ -18,7 +18,7 @@ namespace iobus {
  * Engineering conversion: norm = (pv - min_pv)/(max_pv - min_pv) → DAC raw. */
 struct AoChannelConfig {
     std::string name;          /* BACnet Object_Name; default "AO{n}" */
-    std::string units_str;     /* "percent","volt","milliampere","degC","Pa","RPM","ppm" */
+    std::string units_str = "volt"; /* BACnet units string; default for 0-10V */
     float       min_pv = 0.0f; /* BACnet Min_Pres_Value (engineering units) */
     float       max_pv = 10.0f;/* BACnet Max_Pres_Value; default 10 (volts 0-10V) */
 };

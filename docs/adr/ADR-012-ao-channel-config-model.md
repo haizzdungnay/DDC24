@@ -72,7 +72,7 @@ Hiện tại `io_config.conf` chỉ lưu `{"ch": N, "mode": "0-10V|4-20mA"}`. Th
 | `"volt"` | `volts` | 5 |
 | `"milliampere"` | `milliamperes` | 2 |
 | `"degC"` | `degrees_celsius` | 62 |
-| `"Pa"` | `pascals` | 133 |
+| `"Pa"` | `pascals` | 53 |
 | `"RPM"` | `revolutions_per_minute` | 104 |
 | `"no_units"` | `no_units` | 95 |
 | *(absent)* | auto: `volts` (0-10V) / `milliamperes` (4-20mA) | 5 / 2 |
