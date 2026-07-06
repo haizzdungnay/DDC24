@@ -323,6 +323,18 @@ TEST(WebIpc, AlarmAckRunsAfterEvaluateAndDoesNotUsePointResolver)
     f.scan();
     resp = c.recv_line();
     EXPECT_NE(resp.find("\"status\":\"acked\""), std::string::npos) << resp;
+
+    c.send_line(R"({"id":12,"op":"alarm_return","alarmId":"ALM-1","user":"web"})");
+    usleep(50000);
+    f.scan();
+    resp = c.recv_line();
+    EXPECT_NE(resp.find("\"result\":\"accepted\""), std::string::npos) << resp;
+
+    c.send_line(R"({"id":13,"op":"alarm_list","user":"web"})");
+    usleep(50000);
+    f.scan();
+    resp = c.recv_line();
+    EXPECT_NE(resp.find("\"status\":\"active\""), std::string::npos) << resp;
     EXPECT_EQ(f.shm.do_cmd[0], 0) << "alarm ack must not touch output resolver";
 }
 

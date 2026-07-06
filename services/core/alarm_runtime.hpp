@@ -61,6 +61,7 @@ public:
 
     void evaluate(const PointTable& table, uint32_t scan_ms);
     bool ack(const std::string& id);
+    bool return_to_active(const std::string& id);
 
     std::vector<AlarmState> active_states() const;
     bool entity_active(const std::string& id) const;

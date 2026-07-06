@@ -100,6 +100,11 @@ void ScanLoop::step()
                 d_.web->respond_alarm_ack_accepted(cmd);
             else
                 d_.web->respond_rejected(cmd, "unknown_alarm");
+        } else if (cmd.kind == WebCommandKind::AlarmReturn) {
+            if (d_.alarms && d_.alarms->return_to_active(cmd.alarm_id))
+                d_.web->respond_alarm_return_accepted(cmd);
+            else
+                d_.web->respond_rejected(cmd, "unknown_alarm");
         }
     }
 

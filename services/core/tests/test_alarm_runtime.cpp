@@ -273,6 +273,15 @@ TEST(AlarmRuntime, AckActiveThenClearRemovesVisibleAlarm)
     ASSERT_NE(state, nullptr);
     EXPECT_EQ(state->status, "acked");
     EXPECT_TRUE(state->active);
+    EXPECT_TRUE(alarms.return_to_active("ALM-001"));
+    states = alarms.active_states();
+    state = find_state(states, "ALM-001");
+    ASSERT_NE(state, nullptr);
+    EXPECT_EQ(state->status, "active");
+    EXPECT_TRUE(state->active);
+    EXPECT_FALSE(alarms.return_to_active("missing"));
+    EXPECT_FALSE(alarms.return_to_active("ALM-001"));
+    EXPECT_TRUE(alarms.ack("ALM-001"));
 
     table = table_with_ui(22.0f, 22.0f);
     alarms.evaluate(table, 1000);

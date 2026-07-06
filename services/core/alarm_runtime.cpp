@@ -583,6 +583,18 @@ bool AlarmRuntime::ack(const std::string& id)
     return false;
 }
 
+bool AlarmRuntime::return_to_active(const std::string& id)
+{
+    for (Entity& entity : entities_) {
+        if (entity.cfg.id != id) continue;
+        if (!entity.active || !entity.acked) return false;
+        entity.acked = false;
+        entity.last_status = status_for(entity);
+        return true;
+    }
+    return false;
+}
+
 bool AlarmRuntime::entity_active(const std::string& id) const
 {
     for (const Entity& entity : entities_) {

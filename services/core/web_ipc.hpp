@@ -21,6 +21,7 @@ enum class WebCommandKind {
     Point,
     AlarmList,
     AlarmAck,
+    AlarmReturn,
 };
 
 struct WebCommand {
@@ -58,6 +59,7 @@ public:
     void respond_rejected(const WebCommand& cmd, const char* error);
     void respond_alarm_list(const WebCommand& cmd, const std::vector<AlarmState>& alarms);
     void respond_alarm_ack_accepted(const WebCommand& cmd);
+    void respond_alarm_return_accepted(const WebCommand& cmd);
 
 private:
     void respond(int fd, const std::string& json_line);
