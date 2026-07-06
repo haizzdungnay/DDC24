@@ -1,16 +1,22 @@
-import { Filter, Search } from 'lucide-react'
+import { Filter, RefreshCw, Search, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { apiClient } from '../api/client'
 import { AlarmRow } from '../components/AlarmRow'
 import { Button } from '../components/Button'
 import { Panel } from '../components/Panel'
 import { StateBlock } from '../components/StateBlock'
+import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
 import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
-import type { Alarm } from '../types'
+import type { Alarm, AlarmHistoryEntry, AlarmHistoryQuery } from '../types'
+import { formatDateTime } from '../utils'
 
 type AlarmFilter = 'all' | Alarm['status']
+
+const alarmFilters: AlarmFilter[] = ['all', 'active', 'unack', 'acked', 'cleared', 'shelved']
+const historyEvents = ['started', 'acked', 'returned', 'ended', 'setting_created', 'setting_changed', 'setting_deleted']
+const emptyHistoryFilters = { text: '', alarm: '', name: '', from: '', to: '', event: [] as string[], severity: '', status: '' }
 
 export function AlarmsPage() {
   const state = useApi(apiClient.getAlarms, [], { refreshMs: 2000 })
@@ -18,54 +24,236 @@ export function AlarmsPage() {
   const { pick } = useI18n()
   const [filter, setFilter] = useState<AlarmFilter>('all')
   const [query, setQuery] = useState('')
+  const [historyFull, setHistoryFull] = useState(false)
+  const [historyFilters, setHistoryFilters] = useState(emptyHistoryFilters)
+  const historyQuery = useMemo(() => makeHistoryQuery(historyFilters, historyFull), [historyFilters, historyFull])
+  const historyDeps = [historyFull, historyFilters.text, historyFilters.alarm, historyFilters.name, historyFilters.from, historyFilters.to, historyFilters.event.join(','), historyFilters.severity, historyFilters.status]
+  const historyState = useApi(() => apiClient.getAlarmHistory(historyQuery), historyDeps)
   const alarms = state.data ?? []
-  const rows = useMemo(() => alarms.filter((alarm) => (filter === 'all' || alarm.status === filter) && `${alarm.message} ${alarm.source}`.toLowerCase().includes(query.toLowerCase())), [alarms, filter, query])
+  const history = historyState.data ?? []
+  const rows = useMemo(() => alarms.filter((alarm) => alarmMatchesStatus(alarm, filter) && alarmMatchesQuery(alarm, query)), [alarms, filter, query])
+  const historyRows = useMemo(() => [...history].reverse(), [history])
+  const counts = useMemo(() => ({
+    all: alarms.length,
+    active: alarms.filter(isConditionActive).length,
+    unack: alarms.filter((alarm) => alarm.status === 'unack').length,
+    acked: alarms.filter((alarm) => alarm.status === 'acked').length,
+    cleared: alarms.filter((alarm) => alarm.status === 'cleared').length,
+    shelved: alarms.filter((alarm) => alarm.status === 'shelved').length
+  }), [alarms])
 
   async function ack(alarm: Alarm) {
     try {
       await apiClient.ackAlarm(alarm.id)
       await state.refetch()
+      await historyState.refetch()
+      window.dispatchEvent(new CustomEvent('mkddc:alarms-updated'))
       toast.push('success', `Ack ${alarm.id}`)
     } catch (err) {
       toast.push('error', err instanceof Error ? err.message : 'Ack failed')
     }
   }
 
-  if (state.loading && !alarms.length) return <StateBlock state="loading" title={pick('Đang tải alarm', 'Loading alarms')} />
-  if (state.error && !alarms.length) return <StateBlock state="error" title={pick('Không tải được alarm', 'Could not load alarms')} detail={state.error.message} onRetry={state.refetch} />
+  async function returnAlarm(alarm: Alarm) {
+    try {
+      await apiClient.returnAlarm(alarm.id)
+      await state.refetch()
+      await historyState.refetch()
+      window.dispatchEvent(new CustomEvent('mkddc:alarms-updated'))
+      toast.push('success', `Return ${alarm.id}`)
+    } catch (err) {
+      toast.push('error', err instanceof Error ? err.message : 'Return failed')
+    }
+  }
+
+  function toggleHistoryEvent(event: string) {
+    setHistoryFilters((current) => {
+      const enabled = current.event.includes(event)
+      return { ...current, event: enabled ? current.event.filter((item) => item !== event) : [...current.event, event] }
+    })
+  }
+
+  if (state.loading && !alarms.length) return <StateBlock state="loading" title={pick('Dang tai alarm', 'Loading alarms')} />
+  if (state.error && !alarms.length) return <StateBlock state="error" title={pick('Khong tai duoc alarm', 'Could not load alarms')} detail={state.error.message} onRetry={state.refetch} />
 
   const filterLabels: Record<AlarmFilter, string> = {
-    all: pick('tất cả', 'all'),
-    active: pick('active', 'active'),
-    unack: pick('chưa ack', 'unack'),
-    acked: pick('đã ack', 'acked'),
-    shelved: pick('shelved', 'shelved')
+    all: pick('tat ca', 'all'),
+    active: 'active',
+    unack: pick('chua ack', 'unack'),
+    acked: pick('da ack', 'acked'),
+    cleared: 'cleared',
+    shelved: 'shelved'
   }
 
   return (
     <div className="space-y-5">
-      <div><h1 className="text-2xl font-semibold">{pick('Cảnh báo', 'Alarms')}</h1><p className="text-sm text-[var(--c-text-dim)]">{pick('Theo dõi, lọc và acknowledge cảnh báo', 'Monitor, filter, and acknowledge alarms')}</p></div>
+      <div><h1 className="text-2xl font-semibold">{pick('Canh bao', 'Alarms')}</h1><p className="text-sm text-[var(--c-text-dim)]">{pick('Theo doi, loc va acknowledge canh bao', 'Monitor, filter, and acknowledge alarms')}</p></div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-        <Summary label={pick('Đang active', 'Active')} value={alarms.filter((a) => a.status === 'active').length} accent="fault" />
-        <Summary label={pick('Chưa acknowledge', 'Unacknowledged')} value={alarms.filter((a) => a.status === 'unack').length} accent="warn" />
-        <Summary label="Shelved" value={alarms.filter((a) => a.status === 'shelved').length} accent="info" />
-        <Summary label={pick('Hôm nay', 'Today')} value={alarms.length} accent="good" />
+        <Summary label={pick('Dang active', 'Active')} value={counts.active} accent="fault" />
+        <Summary label={pick('Chua acknowledge', 'Unacknowledged')} value={counts.unack} accent="warn" />
+        <Summary label="Shelved" value={counts.shelved} accent="info" />
+        <Summary label={pick('Dang hien thi', 'Listed')} value={alarms.length} accent="good" />
       </div>
       <Panel>
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          {(['all', 'active', 'unack', 'acked', 'shelved'] as const).map((item) => <Button key={item} size="sm" variant={filter === item ? 'primary' : 'secondary'} onClick={() => setFilter(item)}>{filterLabels[item]}</Button>)}
+          {alarmFilters.map((item) => (
+            <Button key={item} size="sm" variant={filter === item ? 'primary' : 'secondary'} onClick={() => setFilter(item)}>
+              {filterLabels[item]} {counts[item]}
+            </Button>
+          ))}
           <label className="ml-auto flex h-9 min-w-[260px] items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3">
-            <Search className="h-4 w-4 text-[var(--c-text-dim)]" /><input className="w-full bg-transparent text-sm outline-none" placeholder={pick('Tìm kiếm alarm...', 'Search alarms...')} value={query} onChange={(event) => setQuery(event.target.value)} />
+            <Search className="h-4 w-4 text-[var(--c-text-dim)]" /><input className="w-full bg-transparent text-sm outline-none" placeholder={pick('Tim kiem alarm...', 'Search alarms...')} value={query} onChange={(event) => setQuery(event.target.value)} />
           </label>
-          <Button size="sm" icon={<Filter className="h-4 w-4" />}>{pick('Lọc', 'Filter')}</Button>
+          <Button size="sm" icon={<Filter className="h-4 w-4" />} onClick={() => { setFilter('all'); setQuery('') }}>{pick('Xoa loc', 'Clear')}</Button>
         </div>
         <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]">
-          {rows.map((alarm) => <AlarmRow key={alarm.id} alarm={alarm} onAck={ack} />)}
-          {!rows.length && <StateBlock state="empty" title={pick('Không có alarm phù hợp', 'No matching alarms')} />}
+          {rows.map((alarm) => <AlarmRow key={alarm.id} alarm={alarm} onAck={ack} onReturn={returnAlarm} />)}
+          {!rows.length && <StateBlock state="empty" title={pick('Khong co alarm phu hop', 'No matching alarms')} />}
         </div>
+      </Panel>
+      <Panel
+        title={pick('Lich su alarm', 'Alarm history')}
+        subtitle={historyFull ? pick('Toan bo ban ghi khop bo loc', 'All matching records') : pick('20 ban ghi moi nhat khop bo loc', 'Latest 20 matching records')}
+        action={(
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button size="sm" variant={historyFull ? 'primary' : 'secondary'} onClick={() => setHistoryFull((value) => !value)}>
+              {historyFull ? pick('Thu gon', 'Latest 20') : pick('Mo toan bo', 'Full history')}
+            </Button>
+            <Button size="sm" variant="secondary" icon={<RefreshCw className="h-4 w-4" />} onClick={historyState.refetch}>{pick('Tai lai', 'Refresh')}</Button>
+          </div>
+        )}
+      >
+        <div className="mb-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <HistoryInput label="Text" value={historyFilters.text} onChange={(value) => setHistoryFilters((current) => ({ ...current, text: value }))} />
+          <HistoryInput label="Alarm" value={historyFilters.alarm} onChange={(value) => setHistoryFilters((current) => ({ ...current, alarm: value }))} />
+          <HistoryInput label="Name" value={historyFilters.name} onChange={(value) => setHistoryFilters((current) => ({ ...current, name: value }))} />
+          <HistoryInput label="From" type="datetime-local" value={historyFilters.from} onChange={(value) => setHistoryFilters((current) => ({ ...current, from: value }))} />
+          <HistoryInput label="To" type="datetime-local" value={historyFilters.to} onChange={(value) => setHistoryFilters((current) => ({ ...current, to: value }))} />
+          <label className="text-xs font-semibold text-[var(--c-text-dim)]">
+            Severity
+            <select className="mt-1 h-9 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 text-sm text-[var(--c-text)]" value={historyFilters.severity} onChange={(event) => setHistoryFilters((current) => ({ ...current, severity: event.target.value }))}>
+              <option value="">all</option><option value="critical">critical</option><option value="high">high</option><option value="medium">medium</option><option value="low">low</option><option value="info">info</option>
+            </select>
+          </label>
+        </div>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {historyEvents.map((event) => (
+            <label key={event} className="inline-flex h-8 items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-xs">
+              <input type="checkbox" checked={historyFilters.event.includes(event)} onChange={() => toggleHistoryEvent(event)} />
+              {event}
+            </label>
+          ))}
+          <select className="h-8 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 text-xs" value={historyFilters.status} onChange={(event) => setHistoryFilters((current) => ({ ...current, status: event.target.value }))}>
+            <option value="">status: all</option><option value="active">active</option><option value="acked">acked</option><option value="normal">normal</option><option value="cleared">cleared</option><option value="unack">unack</option>
+          </select>
+          <Button size="sm" variant="ghost" icon={<X className="h-4 w-4" />} onClick={() => setHistoryFilters(emptyHistoryFilters)}>{pick('Xoa loc', 'Clear')}</Button>
+        </div>
+        {historyState.loading && !history.length ? (
+          <StateBlock state="loading" title={pick('Dang tai lich su alarm', 'Loading alarm history')} />
+        ) : historyState.error && !history.length ? (
+          <StateBlock state="error" title={pick('Chua co endpoint lich su alarm', 'Alarm history endpoint unavailable')} detail={historyState.error.message} onRetry={historyState.refetch} />
+        ) : (
+          <div className="max-h-[560px] overflow-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]">
+            {historyRows.map((alarm, index) => <HistoryRow key={alarm.eventId ?? `${alarm.id}-${alarm.event ?? alarm.status}-${index}`} alarm={alarm} />)}
+            {!historyRows.length && <StateBlock state="empty" title={pick('Chua co lich su alarm', 'No alarm history')} />}
+          </div>
+        )}
       </Panel>
     </div>
   )
+}
+
+function isConditionActive(alarm: Alarm): boolean {
+  return alarm.active ?? (alarm.status === 'active' || alarm.status === 'acked')
+}
+
+function alarmMatchesStatus(alarm: Alarm, filter: AlarmFilter): boolean {
+  if (filter === 'all') return true
+  if (filter === 'active') return isConditionActive(alarm)
+  return alarm.status === filter
+}
+
+function alarmMatchesQuery(alarm: Alarm, query: string): boolean {
+  const text = `${alarm.id} ${alarm.message} ${alarm.source} ${alarm.value} ${alarm.detail}`.toLowerCase()
+  return text.includes(query.toLowerCase())
+}
+
+function makeHistoryQuery(filters: typeof emptyHistoryFilters, full: boolean): AlarmHistoryQuery {
+  return {
+    limit: full ? 'all' : 20,
+    text: filters.text,
+    alarm: filters.alarm,
+    name: filters.name,
+    from: localDateTimeToIso(filters.from),
+    to: localDateTimeToIso(filters.to),
+    event: filters.event,
+    severity: filters.severity,
+    status: filters.status
+  }
+}
+
+function localDateTimeToIso(value: string): string | undefined {
+  if (!value) return undefined
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString()
+}
+
+function HistoryInput({ label, value, onChange, type = 'search' }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+  return (
+    <label className="text-xs font-semibold text-[var(--c-text-dim)]">
+      {label}
+      <input className="mt-1 h-9 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 text-sm text-[var(--c-text)] outline-none" type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  )
+}
+
+function HistoryRow({ alarm }: { alarm: AlarmHistoryEntry }) {
+  const statusState = historyStateFor(alarm)
+  const severityState = alarm.severity === 'critical' || alarm.severity === 'high' ? 'fault' : alarm.severity === 'medium' ? 'uncertain' : 'ok'
+  const closedAt = alarm.clearedAt ?? alarm.acknowledgedAt
+  const detail = alarmHistoryDetail(alarm)
+  const actor = alarm.ackedBy ?? alarm.user
+  return (
+    <div className="grid grid-cols-[140px_112px_96px_1fr_136px] items-center gap-3 border-b border-[var(--c-border)] px-3 py-3 text-xs last:border-0 max-lg:grid-cols-1">
+      <span className="mono text-[var(--c-text-dim)]">{formatDateTime(alarm.time)}</span>
+      <StatusBadge state={statusState} label={historyLabel(alarm)} />
+      <StatusBadge state={severityState} label={alarm.severity.toUpperCase()} />
+      <div className="min-w-0">
+        <div className="truncate font-semibold">{alarm.message}</div>
+        <div className="mt-1 truncate text-[var(--c-text-dim)]">{detail}</div>
+      </div>
+      <div className="min-w-0 text-right max-lg:text-left">
+        <div className="truncate text-[var(--c-text-dim)]">{actor ?? '-'}</div>
+        {closedAt && <div className="mono mt-1 truncate text-[var(--c-text-dim)]">{formatDateTime(closedAt)}</div>}
+      </div>
+    </div>
+  )
+}
+
+function historyLabel(alarm: AlarmHistoryEntry): string {
+  if (alarm.event === 'started') return 'START'
+  if (alarm.event === 'ended') return 'END'
+  if (alarm.event === 'acked') return 'ACK'
+  if (alarm.event === 'returned') return 'RETURN'
+  if (alarm.event?.startsWith('setting_')) return 'SETTING'
+  return alarm.status.toUpperCase()
+}
+
+function historyStateFor(alarm: AlarmHistoryEntry): 'alarm' | 'warn' | 'good' | 'off' {
+  if (alarm.event === 'started' || alarm.event === 'returned') return 'alarm'
+  if (alarm.event === 'ended') return 'good'
+  if (alarm.event === 'acked' || alarm.event?.startsWith('setting_')) return 'off'
+  if (alarm.status === 'active') return 'alarm'
+  if (alarm.status === 'unack') return 'warn'
+  if (alarm.status === 'cleared') return 'good'
+  return 'off'
+}
+
+function alarmHistoryDetail(alarm: AlarmHistoryEntry): string {
+  if (alarm.event === 'setting_changed') return `${alarm.before?.label ?? alarm.id} -> ${alarm.after?.label ?? alarm.message}`
+  if (alarm.event === 'setting_deleted') return `deleted ${alarm.before?.label ?? alarm.message}`
+  if (alarm.event === 'setting_created') return `created ${alarm.after?.label ?? alarm.message}`
+  return [alarm.source, alarm.value || 'n/a', alarm.detail].filter(Boolean).join(' / ')
 }
 
 function Summary({ label, value, accent }: { label: string; value: number; accent: 'fault' | 'warn' | 'info' | 'good' }) {

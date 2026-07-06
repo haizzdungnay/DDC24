@@ -77,13 +77,38 @@ export interface Alarm {
   id: string
   time: string
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info'
-  status: 'active' | 'unack' | 'acked' | 'shelved'
+  status: 'active' | 'unack' | 'acked' | 'cleared' | 'shelved'
   message: string
   source: string
   value: string
   detail: string
   triggerLevel?: string
   threshold?: string
+  active?: boolean
+  returnable?: boolean
+}
+
+export interface AlarmHistoryEntry extends Alarm {
+  eventId?: string
+  event?: string
+  user?: string
+  acknowledgedAt?: string
+  ackedBy?: string
+  clearedAt?: string
+  before?: AlarmSetting
+  after?: AlarmSetting
+}
+
+export interface AlarmHistoryQuery {
+  limit?: number | 'all'
+  text?: string
+  alarm?: string
+  name?: string
+  from?: string
+  to?: string
+  event?: string[]
+  severity?: string
+  status?: string
 }
 
 export type AlarmSourceKind = 'UI' | 'AO' | 'DO'

@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { apiClient } from '../api/client'
 import { IS_DEMO } from '../config'
@@ -15,8 +16,14 @@ export function AppShell() {
   const alarms = useApi(apiClient.getAlarms, [], { refreshMs: 1000 })
   const health = useApi(apiClient.getHealth, [], { refreshMs: 5000 })
   const me = useApi(() => IS_DEMO ? Promise.resolve(session) : apiClient.getMe(), [session], { refreshMs: IS_DEMO ? undefined : 30000 })
-  const alarmCount = alarms.data?.length ?? 0
+  const alarmCount = alarms.data?.filter((alarm) => (alarm.active ?? (alarm.status === 'active' || alarm.status === 'acked')) || alarm.status === 'unack').length ?? 0
   const currentUser = me.data ?? session
+
+  useEffect(() => {
+    const refresh = () => { void alarms.refetch() }
+    window.addEventListener('mkddc:alarms-updated', refresh)
+    return () => window.removeEventListener('mkddc:alarms-updated', refresh)
+  }, [alarms.refetch])
 
   return (
     <div className="min-h-screen bg-[var(--c-bg)] text-[var(--c-text)]">

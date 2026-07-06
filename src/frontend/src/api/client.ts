@@ -4,6 +4,7 @@ import {
   forceDemoPoint,
   getAiInputConfigs,
   getAlarmSettings as getDemoAlarmSettings,
+  getDemoAlarmHistory,
   getDemoAlarms,
   getDemoChannels,
   getDemoHealth,
@@ -15,12 +16,13 @@ import {
   putAlarmSettings as putDemoAlarmSettings,
   putDemoOutputs,
   putUserParams as putDemoUserParams,
+  returnDemoAlarm,
   runDemoCommissioning,
   tickDemoPoints,
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmSetting, type AoConfig, type AoSignalMode, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
+import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoConfig, type AoSignalMode, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 
@@ -233,8 +235,44 @@ function normalizeAlarm(raw: Record<string, unknown>): Alarm {
     source: String(source),
     value: String(raw.value ?? raw.currentValue ?? raw.current_value ?? raw.triggerValue ?? raw.trigger_value ?? ''),
     detail: String(raw.detail ?? raw.description ?? raw.reason ?? raw.condition ?? ''),
+    active: typeof raw.active === 'boolean' ? raw.active : undefined,
+    returnable: typeof raw.returnable === 'boolean' ? raw.returnable : undefined,
     ...(triggerLevel ? { triggerLevel } : {}),
     ...(threshold !== undefined && threshold !== null ? { threshold: String(threshold) } : {})
+  }
+}
+
+function alarmHistoryParams(filters: AlarmHistoryQuery = {}): string {
+  const params = new URLSearchParams()
+  params.set('limit', String(filters.limit ?? 20))
+  if (filters.text?.trim()) params.set('text', filters.text.trim())
+  if (filters.alarm?.trim()) params.set('alarm', filters.alarm.trim())
+  if (filters.name?.trim()) params.set('name', filters.name.trim())
+  if (filters.from) params.set('from', filters.from)
+  if (filters.to) params.set('to', filters.to)
+  if (filters.event?.length) params.set('event', filters.event.join(','))
+  if (filters.severity) params.set('severity', filters.severity)
+  if (filters.status) params.set('status', filters.status)
+  return params.toString()
+}
+
+function normalizeAlarmHistory(raw: Record<string, unknown>): AlarmHistoryEntry {
+  const eventId = stringFrom(raw.eventId ?? raw.event_id)
+  const event = stringFrom(raw.event ?? raw.type ?? raw.eventType ?? raw.event_type)
+  const user = stringFrom(raw.user)
+  const acknowledgedAt = stringFrom(raw.acknowledgedAt ?? raw.acknowledged_at ?? raw.ackedAt ?? raw.acked_at)
+  const ackedBy = stringFrom(raw.ackedBy ?? raw.acked_by ?? raw.ackUser ?? raw.ack_user)
+  const clearedAt = stringFrom(raw.clearedAt ?? raw.cleared_at ?? raw.resolvedAt ?? raw.resolved_at)
+  return {
+    ...normalizeAlarm(raw),
+    ...(eventId ? { eventId } : {}),
+    ...(event ? { event } : {}),
+    ...(user ? { user } : {}),
+    ...(acknowledgedAt ? { acknowledgedAt } : {}),
+    ...(ackedBy ? { ackedBy } : {}),
+    ...(clearedAt ? { clearedAt } : {}),
+    ...(isAlarmSetting(raw.before) ? { before: raw.before } : {}),
+    ...(isAlarmSetting(raw.after) ? { after: raw.after } : {})
   }
 }
 
@@ -271,15 +309,20 @@ function alarmStatusFrom(value: unknown): Alarm['status'] {
   if (value === true) return 'acked'
   if (value === false) return 'unack'
   const raw = String(value ?? 'active').toLowerCase()
-  if (raw === 'unack' || raw === 'acked' || raw === 'shelved') return raw
+  if (raw === 'unack' || raw === 'acked' || raw === 'cleared' || raw === 'shelved') return raw
   if (raw === 'acknowledged') return 'acked'
   if (raw === 'unacknowledged') return 'unack'
+  if (raw === 'clear' || raw === 'resolved' || raw === 'normal') return 'cleared'
   return 'active'
 }
 
 function triggerLevelFrom(value: unknown): string | undefined {
   const raw = String(value ?? '').trim().toUpperCase()
   return raw === 'HH' || raw === 'H' || raw === 'L' || raw === 'LL' || raw === 'RUNTIME' ? raw : undefined
+}
+
+function isAlarmSetting(value: unknown): value is AlarmSetting {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && typeof (value as { id?: unknown }).id === 'string'
 }
 
 function normalizeCommissioningResult(raw: Record<string, unknown>, pointId: string): CommissioningTestResult {
@@ -666,6 +709,12 @@ export const apiClient = {
     return raw.map(normalizeAlarm)
   },
 
+  async getAlarmHistory(filters?: AlarmHistoryQuery): Promise<AlarmHistoryEntry[]> {
+    if (IS_DEMO) return getDemoAlarmHistory()
+    const raw = await requestJson<Array<Record<string, unknown>>>(`/alarm-history?${alarmHistoryParams(filters)}`)
+    return raw.map(normalizeAlarmHistory)
+  },
+
   async getAlarmSettings(): Promise<AlarmSetting[]> {
     if (IS_DEMO) return getDemoAlarmSettings()
     return requestJson<AlarmSetting[]>('/alarm-settings')
@@ -687,6 +736,12 @@ export const apiClient = {
   async ackAlarm(id: string): Promise<Alarm[]> {
     if (IS_DEMO) return ackDemoAlarm(id)
     await requestJson(`/alarms/${encodeURIComponent(id)}/ack`, { method: 'POST' })
+    return this.getAlarms()
+  },
+
+  async returnAlarm(id: string): Promise<Alarm[]> {
+    if (IS_DEMO) return returnDemoAlarm(id)
+    await requestJson(`/alarms/${encodeURIComponent(id)}/return`, { method: 'POST' })
     return this.getAlarms()
   },
 

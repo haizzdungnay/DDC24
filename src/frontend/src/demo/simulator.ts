@@ -1,5 +1,6 @@
 import type {
   Alarm,
+  AlarmHistoryEntry,
   AlarmSetting,
   AiInputConfig,
   AoConfig,
@@ -82,11 +83,17 @@ const basePoints: Point[] = [
 let points: Point[] = basePoints.map((point) => ({ ...point, trend: makeTrend(pointNumber(point)) }))
 
 const alarms: Alarm[] = [
-  { id: 'AL-001', time: '2025-05-23T14:31:02Z', severity: 'critical', status: 'active', message: 'UI-05 Filter Switch', source: 'UI-05', value: 'ON', detail: 'trip=HH threshold=1 current=ON (High-high); occurrence=1', triggerLevel: 'HH', threshold: '1' },
-  { id: 'AL-002', time: '2025-05-23T14:29:45Z', severity: 'high', status: 'active', message: 'UI-02 Pressure High', source: 'UI-02', value: '9.8 bar', detail: 'trip=H threshold=8 current=9.8 (High); occurrence=1', triggerLevel: 'H', threshold: '8' },
-  { id: 'AL-003', time: '2025-05-23T14:27:18Z', severity: 'info', status: 'acked', message: 'DO-03 Pump Start', source: 'DO-03', value: 'ON', detail: 'Output switched on' },
-  { id: 'AL-004', time: '2025-05-23T14:25:03Z', severity: 'info', status: 'acked', message: 'SYSTEM', source: 'SYSTEM', value: 'admin', detail: 'admin signed in' },
-  { id: 'AL-005', time: '2025-05-23T14:20:11Z', severity: 'info', status: 'acked', message: 'COMMUNICATION', source: 'SYSTEM', value: 'OK', detail: 'Modbus RTU connected' }
+  { id: 'AL-001', time: '2025-05-23T14:31:02Z', severity: 'critical', status: 'active', message: 'UI-05 Filter Switch', source: 'UI-05', value: 'ON', detail: 'trip=HH threshold=1 current=ON (High-high); occurrence=1', triggerLevel: 'HH', threshold: '1', active: true },
+  { id: 'AL-002', time: '2025-05-23T14:29:45Z', severity: 'high', status: 'active', message: 'UI-02 Pressure High', source: 'UI-02', value: '9.8 bar', detail: 'trip=H threshold=8 current=9.8 (High); occurrence=1', triggerLevel: 'H', threshold: '8', active: true },
+  { id: 'AL-003', time: '2025-05-23T14:27:18Z', severity: 'info', status: 'acked', message: 'DO-03 Pump Start', source: 'DO-03', value: 'ON', detail: 'Output switched on', active: true },
+  { id: 'AL-004', time: '2025-05-23T14:25:03Z', severity: 'info', status: 'acked', message: 'SYSTEM', source: 'SYSTEM', value: 'admin', detail: 'admin signed in', active: false },
+  { id: 'AL-005', time: '2025-05-23T14:20:11Z', severity: 'info', status: 'acked', message: 'COMMUNICATION', source: 'SYSTEM', value: 'OK', detail: 'Modbus RTU connected', active: false }
+]
+
+const demoAlarmHistory: AlarmHistoryEntry[] = [
+  { id: 'AL-006', time: '2025-05-23T13:54:12Z', severity: 'medium', status: 'cleared', message: 'UI-10 CO2 Sensor', source: 'UI-10', value: '1240 ppm', detail: 'CO2 returned below threshold', acknowledgedAt: '2025-05-23T13:56:03Z', ackedBy: 'operator1', clearedAt: '2025-05-23T14:05:44Z' },
+  { id: 'AL-007', time: '2025-05-23T13:21:49Z', severity: 'low', status: 'cleared', message: 'AO-02 Heating Valve', source: 'AO-02', value: '0%', detail: 'Output returned to normal range', acknowledgedAt: '2025-05-23T13:23:10Z', ackedBy: 'admin', clearedAt: '2025-05-23T13:39:20Z' },
+  { id: 'AL-008', time: '2025-05-23T12:44:08Z', severity: 'high', status: 'acked', message: 'UI-15 Water Leak Contact', source: 'UI-15', value: 'OFF', detail: 'Leak input acknowledged during inspection', acknowledgedAt: '2025-05-23T12:46:32Z', ackedBy: 'operator2' }
 ]
 
 function makeTrend(base: number): number[] {
@@ -171,6 +178,10 @@ export function getDemoAlarms(): Alarm[] {
   return alarms.map((alarm) => ({ ...alarm }))
 }
 
+export function getDemoAlarmHistory(): AlarmHistoryEntry[] {
+  return [...alarms, ...demoAlarmHistory].map((alarm) => ({ ...alarm }))
+}
+
 const defaultAlarmSettings: AlarmSetting[] = [
   {
     id: 'ALM-001',
@@ -245,6 +256,12 @@ export function putAlarmSettings(rows: AlarmSetting[]): ConfigPutResult {
 export function ackDemoAlarm(id: string): Alarm[] {
   const target = alarms.find((alarm) => alarm.id === id)
   if (target) target.status = 'acked'
+  return getDemoAlarms()
+}
+
+export function returnDemoAlarm(id: string): Alarm[] {
+  const target = alarms.find((alarm) => alarm.id === id && alarm.status === 'acked' && alarm.active !== false)
+  if (target) target.status = 'active'
   return getDemoAlarms()
 }
 
