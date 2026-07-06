@@ -24,7 +24,10 @@ func (a *App) handleAlarms(w http.ResponseWriter, r *http.Request) {
 	if alarms == nil {
 		alarms = []AlarmDTO{}
 	}
-	writeJSON(w, http.StatusOK, alarms)
+	if err == nil {
+		a.recordAlarmSnapshot(r.Context(), alarms)
+	}
+	writeJSON(w, http.StatusOK, a.mergeAlarmHistoryRows(r.Context(), alarms, err != nil))
 }
 
 // handleAckAlarm handles POST /api/v1/alarms/{id}/ack (RBAC operator+).
@@ -57,20 +60,65 @@ func (a *App) handleAckAlarm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.audit.AlarmAck(principal, id, "accepted", r.RemoteAddr)
+	user := principal.Username
 	if reader, ok := a.core.(alarmReader); ok {
 		alarms, err := reader.ReadAlarms(r.Context())
 		if err == nil {
 			if alarms == nil {
 				alarms = []AlarmDTO{}
 			}
-			writeJSON(w, http.StatusOK, alarms)
+			a.recordAlarmSnapshot(r.Context(), alarms)
+			a.recordAlarmAck(r.Context(), id, user, alarms)
+			writeJSON(w, http.StatusOK, a.mergeAlarmHistoryRows(r.Context(), alarms, false))
 			return
 		}
 		if a.logger != nil {
 			a.logger.Printf("WARN alarms_read_after_ack degraded id=%s err=%v", id, err)
 		}
 	}
+	a.recordAlarmAck(r.Context(), id, user, nil)
 	writeJSON(w, http.StatusOK, map[string]any{"result": "acked", "id": id})
+}
+
+// handleReturnAlarm handles POST /api/v1/alarms/{id}/return (RBAC operator+).
+func (a *App) handleReturnAlarm(w http.ResponseWriter, r *http.Request) {
+	principal := principalFromContext(r.Context())
+	if principal == nil || !RoleAllows(principal.Role, RoleOperator) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" || !validAlarmID(id) {
+		writeError(w, http.StatusBadRequest, "invalid alarm id")
+		return
+	}
+	returner, ok := a.core.(alarmReturner)
+	if !ok {
+		writeError(w, http.StatusConflict, "alarm return unsupported")
+		return
+	}
+	if err := returner.ReturnAlarm(r.Context(), id); err != nil {
+		writeError(w, ackAlarmErrorStatus(err), ackAlarmErrorMessage(err))
+		return
+	}
+	user := principal.Username
+	if reader, ok := a.core.(alarmReader); ok {
+		alarms, err := reader.ReadAlarms(r.Context())
+		if err == nil {
+			if alarms == nil {
+				alarms = []AlarmDTO{}
+			}
+			a.recordAlarmSnapshot(r.Context(), alarms)
+			a.recordAlarmReturn(r.Context(), id, user, alarms)
+			writeJSON(w, http.StatusOK, a.mergeAlarmHistoryRows(r.Context(), alarms, false))
+			return
+		}
+		if a.logger != nil {
+			a.logger.Printf("WARN alarms_read_after_return degraded id=%s err=%v", id, err)
+		}
+	}
+	a.recordAlarmReturn(r.Context(), id, user, nil)
+	writeJSON(w, http.StatusOK, map[string]any{"result": "returned", "id": id})
 }
 
 func validAlarmID(id string) bool {

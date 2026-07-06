@@ -12,14 +12,16 @@ import (
 )
 
 type App struct {
-	cfg     Config
-	logger  *log.Logger
-	audit   *AuditLogger
-	auth    *AuthService
-	core    CoreStatusClient
-	os      OSReader
-	trends  *TrendStore
-	sampler *Sampler
+	cfg          Config
+	logger       *log.Logger
+	audit        *AuditLogger
+	auth         *AuthService
+	core         CoreStatusClient
+	os           OSReader
+	trends       *TrendStore
+	sampler      *Sampler
+	alarmHistory *AlarmHistoryStore
+	alarmTracker *AlarmHistoryTracker
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
@@ -38,6 +40,8 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		osReader = NewDefaultOSReader()
 	}
 	app := &App{cfg: cfg, logger: logger, audit: audit, auth: auth, core: core, os: osReader}
+	app.alarmHistory = NewAlarmHistoryStore(app.alarmHistoryPath())
+	app.alarmTracker = NewAlarmHistoryTracker()
 	if cfg.TrendDBPath == "" {
 		return app, nil
 	}
@@ -100,6 +104,9 @@ func main() {
 func (a *App) StartSampler(ctx context.Context) {
 	if a != nil && a.sampler != nil {
 		a.sampler.Start(ctx)
+	}
+	if a != nil {
+		a.StartAlarmHistory(ctx)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -69,6 +70,29 @@ func TestAlarmSettingsPutValidWritesFileAndGetRoundTrips(t *testing.T) {
 	if len(got) != 3 || got[2].ID != "ALM-003" {
 		t.Fatalf("GET alarm_settings = %+v", got)
 	}
+}
+
+func TestAlarmSettingsPutRecordsChangedAndDeletedHistory(t *testing.T) {
+	app, token := newAlarmSettingsTestApp(t)
+	handler := app.Router()
+	initial := validAlarmRows(2)
+	if err := saveAlarmSettingsFile(context.Background(), app.alarmSettingsPath(), initial); err != nil {
+		t.Fatalf("seed alarm settings: %v", err)
+	}
+
+	updated := validAlarmRows(1)
+	updated[0].Label = "Supply air updated"
+	req := newAuthRequest(http.MethodPut, "/api/v1/alarm-settings", alarmSettingsJSON(t, updated), token)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	assertAlarmHistory(t, handler, token, []alarmHistoryExpectation{
+		{Event: "setting_changed", AlarmID: "ALM-001", Message: "Supply air updated", User: "admin"},
+		{Event: "setting_deleted", AlarmID: "ALM-002", Message: "Point 002", User: "admin"},
+	})
 }
 
 func TestValidateAlarmSettingsAcceptsEntityRoundTrip(t *testing.T) {
@@ -244,6 +268,30 @@ func TestAlarmSettingsEmptyAndNilBecomeEmptyArrays(t *testing.T) {
 	}
 	if strings.TrimSpace(string(data)) != "[]" {
 		t.Fatalf("saved nil = %s", string(data))
+	}
+}
+
+func TestSaveAlarmSettingsFileUsesGroupConfigPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not preserve POSIX config permission bits")
+	}
+	path := filepath.Join(t.TempDir(), "config", "alarm_settings.conf")
+	if err := saveAlarmSettingsFile(context.Background(), path, validAlarmRows(1)); err != nil {
+		t.Fatalf("save alarm settings: %v", err)
+	}
+	dirInfo, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatalf("stat dir: %v", err)
+	}
+	if got := dirInfo.Mode().Perm(); got != 0o770 {
+		t.Fatalf("dir mode = %o; want 770", got)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat file: %v", err)
+	}
+	if got := info.Mode().Perm(); got != alarmSettingsFilePerm {
+		t.Fatalf("file mode = %o; want %o", got, alarmSettingsFilePerm)
 	}
 }
 

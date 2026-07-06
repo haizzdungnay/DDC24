@@ -10,6 +10,9 @@ import (
 	"strings"
 )
 
+const alarmSettingsDirPerm os.FileMode = 0o2770
+const alarmSettingsFilePerm os.FileMode = 0o660
+
 func (a *App) LoadAlarmSettings(ctx context.Context) ([]AlarmSetting, error) {
 	return loadAlarmSettingsFile(ctx, a.alarmSettingsPath())
 }
@@ -74,14 +77,14 @@ func saveAlarmSettingsFile(ctx context.Context, path string, rows []AlarmSetting
 	}
 	data = append(data, '\n')
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, alarmSettingsDirPerm); err != nil {
 		return fmt.Errorf("prepare alarm_settings dir: %w", err)
 	}
-	_ = os.Chmod(dir, 0o700)
-	if err := writeConfigFileAtomic(path, data, 0o600); err != nil {
+	_ = os.Chmod(dir, alarmSettingsDirPerm)
+	if err := writeConfigFileAtomic(path, data, alarmSettingsFilePerm); err != nil {
 		return err
 	}
-	_ = os.Chmod(path, 0o600)
+	_ = os.Chmod(path, alarmSettingsFilePerm)
 	return nil
 }
 

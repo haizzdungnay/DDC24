@@ -605,12 +605,15 @@ type alarmAcker interface {
 	AckAlarm(ctx context.Context, id string) error
 }
 
+type alarmReturner interface {
+	ReturnAlarm(ctx context.Context, id string) error
+}
+
 type commissionTester interface {
 	CommissionTest(ctx context.Context, id string, value any) (CommissioningTestResult, error)
 }
 
-// ReadAlarms returns the current active/unacked alarm list from core (best-effort).
-// Core unavailable or SHM absent â†’ returns empty slice, no hard error.
+// ReadAlarms returns the current active/unacked alarm list from core.
 func (c *CoreClient) ReadAlarms(ctx context.Context) ([]AlarmDTO, error) {
 	select {
 	case <-ctx.Done():
@@ -623,7 +626,7 @@ func (c *CoreClient) ReadAlarms(ctx context.Context) ([]AlarmDTO, error) {
 		"user": "web",
 	})
 	if errors.Is(err, errCoreUnavailable) {
-		return []AlarmDTO{}, nil
+		return nil, errCoreUnavailable
 	}
 	if err != nil {
 		return nil, err
@@ -640,7 +643,6 @@ func (c *CoreClient) ReadAlarms(ctx context.Context) ([]AlarmDTO, error) {
 }
 
 // AckAlarm sends an acknowledge command for alarm id to core.
-// Core unavailable â†’ returns nil (degraded, no hard error).
 func (c *CoreClient) AckAlarm(ctx context.Context, id string) error {
 	select {
 	case <-ctx.Done():
@@ -658,7 +660,7 @@ func (c *CoreClient) AckAlarm(ctx context.Context, id string) error {
 		"user":    "web",
 	})
 	if errors.Is(err, errCoreUnavailable) {
-		return nil
+		return errCoreUnavailable
 	}
 	if err != nil {
 		return err
@@ -668,6 +670,38 @@ func (c *CoreClient) AckAlarm(ctx context.Context, id string) error {
 			return fmt.Errorf("unknown alarm")
 		}
 		return fmt.Errorf("core rejected alarm ack %s: %s", id, resp.Error)
+	}
+	return nil
+}
+
+// ReturnAlarm clears an acknowledge for a still-active alarm.
+func (c *CoreClient) ReturnAlarm(ctx context.Context, id string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	id = strings.TrimSpace(id)
+	if !validAlarmID(id) {
+		return fmt.Errorf("invalid alarm id")
+	}
+	resp, err := c.sendWebIPC(ctx, map[string]any{
+		"id":      atomic.AddUint64(&webCommandID, 1),
+		"op":      "alarm_return",
+		"alarmId": id,
+		"user":    "web",
+	})
+	if errors.Is(err, errCoreUnavailable) {
+		return errCoreUnavailable
+	}
+	if err != nil {
+		return err
+	}
+	if resp.Result == "rejected" {
+		if resp.Error == "unknown_alarm" {
+			return fmt.Errorf("unknown alarm")
+		}
+		return fmt.Errorf("core rejected alarm return %s: %s", id, resp.Error)
 	}
 	return nil
 }
@@ -704,6 +738,8 @@ func mapCoreAlarm(alarm coreAlarmState, fallbackTime string) AlarmDTO {
 		Detail:       formatAlarmDetail(alarm, source, status, value, triggerLevel, threshold),
 		TriggerLevel: triggerLevel,
 		Threshold:    threshold,
+		Active:       alarm.Active,
+		Returnable:   boolPtr(true),
 	}
 }
 

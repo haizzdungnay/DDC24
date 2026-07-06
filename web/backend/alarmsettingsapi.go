@@ -35,6 +35,7 @@ func (a *App) handlePutAlarmSettings(w http.ResponseWriter, r *http.Request) {
 		writeValidationErrors(w, errs)
 		return
 	}
+	before, beforeErr := a.LoadAlarmSettings(r.Context())
 	if err := a.SaveAlarmSettings(r.Context(), rows); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -43,6 +44,11 @@ func (a *App) handlePutAlarmSettings(w http.ResponseWriter, r *http.Request) {
 	user := "-"
 	if principal := principalFromContext(r.Context()); principal != nil {
 		user = principal.Username
+	}
+	if beforeErr == nil {
+		a.recordAlarmSettingHistory(r.Context(), user, before, rows)
+	} else if a.logger != nil {
+		a.logger.Printf("WARN alarm_settings history skipped old_load err=%v", beforeErr)
 	}
 	a.audit.Change(user, "alarm-settings", "alarm_settings.conf", "applied", r.RemoteAddr)
 	writeJSON(w, http.StatusOK, ConfigPutResult{Result: "applied", Applied: applied, Reload: reloadSIGHUPCore, Warnings: warnings})

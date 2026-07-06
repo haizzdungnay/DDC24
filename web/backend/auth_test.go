@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
@@ -114,5 +115,44 @@ func TestLoginHandler(t *testing.T) {
 	}
 	if resp["token"] == "" || resp["role"] != string(RoleAdmin) {
 		t.Fatalf("response = %+v", resp)
+	}
+}
+
+func TestStaticFallbackServesSPAAndLeavesAPINotFound(t *testing.T) {
+	users := writeTestUsers(t, "admin123", RoleAdmin)
+	cfg := testConfig(t, users)
+	staticDir := t.TempDir()
+	cfg.StaticDir = staticDir
+	if err := os.WriteFile(filepath.Join(staticDir, "index.html"), []byte("<html>mkddc app</html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(staticDir, "assets"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staticDir, "assets", "app.js"), []byte("console.log('ok')"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	app, err := NewApp(cfg, nil, fakeCore{}, fakeOS{})
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	handler := app.Router()
+
+	for _, route := range []string{"/", "/login", "/alarms"} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, route, nil))
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "mkddc app") {
+			t.Fatalf("%s status/body = %d/%q, want SPA index", route, w.Code, w.Body.String())
+		}
+	}
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets/app.js", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "console.log") {
+		t.Fatalf("asset status/body = %d/%q", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/missing", nil))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("api missing status = %d, want 404", w.Code)
 	}
 }

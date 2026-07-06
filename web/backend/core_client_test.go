@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -81,6 +82,12 @@ func TestReadAlarmsUsesCoreIPCAndMapsDTO(t *testing.T) {
 	if got.TriggerLevel != "HH" || got.Threshold != "30" {
 		t.Fatalf("alarm trigger fields = %#v", got)
 	}
+	if !got.Active {
+		t.Fatalf("alarm active = false, want true")
+	}
+	if got.Returnable == nil || !*got.Returnable {
+		t.Fatalf("alarm returnable = %#v, want true", got.Returnable)
+	}
 	if got.Detail != "trip=HH threshold=30 current=31.8 (High-high); occurrence=2" {
 		t.Fatalf("detail = %q", got.Detail)
 	}
@@ -105,14 +112,35 @@ func TestAckAlarmUnknownMapsError(t *testing.T) {
 	}
 }
 
-func TestReadAlarmsCoreUnavailableDegradesEmpty(t *testing.T) {
-	missing := filepath.Join(os.TempDir(), fmt.Sprintf("mkddc-missing-core-%d-%d.sock", os.Getpid(), time.Now().UnixNano()))
-	alarms, err := (&CoreClient{SockPath: missing}).ReadAlarms(context.Background())
-	if err != nil {
+func TestReturnAlarmUsesCoreIPC(t *testing.T) {
+	path, cmdCh := fakeCoreSocket(t, `{"id":10,"result":"accepted","alarmId":"ALM-1"}`)
+	if err := (&CoreClient{SockPath: path}).ReturnAlarm(context.Background(), " ALM-1 "); err != nil {
 		t.Fatal(err)
 	}
-	if len(alarms) != 0 {
-		t.Fatalf("len(alarms) = %d, want 0", len(alarms))
+	cmd := readFakeCommand(t, cmdCh)
+	if cmd["op"] != "alarm_return" || cmd["alarmId"] != "ALM-1" || cmd["user"] != "web" {
+		t.Fatalf("command = %#v, want alarm_return ALM-1 from web", cmd)
+	}
+}
+
+func TestAlarmWritesReturnCoreUnavailable(t *testing.T) {
+	missing := filepath.Join(os.TempDir(), fmt.Sprintf("mkddc-missing-core-%d-%d.sock", os.Getpid(), time.Now().UnixNano()))
+	if err := (&CoreClient{SockPath: missing}).AckAlarm(context.Background(), "ALM-1"); !errors.Is(err, errCoreUnavailable) {
+		t.Fatalf("AckAlarm err = %v, want core unavailable", err)
+	}
+	if err := (&CoreClient{SockPath: missing}).ReturnAlarm(context.Background(), "ALM-1"); !errors.Is(err, errCoreUnavailable) {
+		t.Fatalf("ReturnAlarm err = %v, want core unavailable", err)
+	}
+}
+
+func TestReadAlarmsCoreUnavailableReturnsError(t *testing.T) {
+	missing := filepath.Join(os.TempDir(), fmt.Sprintf("mkddc-missing-core-%d-%d.sock", os.Getpid(), time.Now().UnixNano()))
+	alarms, err := (&CoreClient{SockPath: missing}).ReadAlarms(context.Background())
+	if !errors.Is(err, errCoreUnavailable) {
+		t.Fatalf("ReadAlarms err = %v, want core unavailable", err)
+	}
+	if alarms != nil {
+		t.Fatalf("alarms = %#v, want nil on core unavailable", alarms)
 	}
 }
 

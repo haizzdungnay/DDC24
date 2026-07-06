@@ -7,6 +7,8 @@ import (
 )
 
 const webVersion = "0.1.0-be-b6c"
+const defaultAlarmSettingsConf = "/data/config/alarm_settings.conf"
+const defaultAlarmHistoryFile = "/data/config/alarm_history.jsonl"
 
 type Config struct {
 	Addr             string
@@ -20,6 +22,8 @@ type Config struct {
 	TrendDBPath      string
 	ScheduleConfPath string
 	AlarmConfPath    string
+	AlarmHistoryPath string
+	StaticDir        string
 	CORSOrigin       string
 	WebVersion       string
 }
@@ -37,7 +41,9 @@ func LoadConfig() (Config, error) {
 		CoreSock:         getenv("CORE_SOCK", "/run/mkddc/core.sock"),
 		TrendDBPath:      getenv("TREND_DB", defaultTrendDBPath),
 		ScheduleConfPath: getenv("SCHEDULE_CONF", filepath.Join(resolveConfigDir(), "schedule.conf")),
-		AlarmConfPath:    getenv("ALARM_SETTINGS_CONF", filepath.Join(resolveConfigDir(), "alarm_settings.conf")),
+		AlarmConfPath:    getenv("ALARM_SETTINGS_CONF", defaultAlarmSettingsConf),
+		AlarmHistoryPath: getenv("ALARM_HISTORY_FILE", defaultAlarmHistoryFile),
+		StaticDir:        getenv("STATIC_DIR", "dist"),
 		CORSOrigin:       os.Getenv("CORS_ORIGIN"),
 		WebVersion:       getenv("WEB_VERSION", webVersion),
 	}

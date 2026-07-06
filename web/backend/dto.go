@@ -173,6 +173,31 @@ type AlarmDTO struct {
 	Detail       string `json:"detail"`
 	TriggerLevel string `json:"triggerLevel,omitempty"`
 	Threshold    string `json:"threshold,omitempty"`
+	Active       bool   `json:"active,omitempty"`
+	Returnable   *bool  `json:"returnable,omitempty"`
+}
+
+type AlarmHistoryEvent struct {
+	EventID      string        `json:"eventId"`
+	Time         string        `json:"time"`
+	Event        string        `json:"event"`
+	AlarmID      string        `json:"alarmId,omitempty"`
+	User         string        `json:"user,omitempty"`
+	Severity     string        `json:"severity,omitempty"`
+	Status       string        `json:"status,omitempty"`
+	Message      string        `json:"message,omitempty"`
+	Source       string        `json:"source,omitempty"`
+	Value        string        `json:"value,omitempty"`
+	Detail       string        `json:"detail,omitempty"`
+	TriggerLevel string        `json:"triggerLevel,omitempty"`
+	Threshold    string        `json:"threshold,omitempty"`
+	Active       bool          `json:"active,omitempty"`
+	Before       *AlarmSetting `json:"before,omitempty"`
+	After        *AlarmSetting `json:"after,omitempty"`
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 // CommissioningTestResult mirrors FE CommissioningTestResult (types.ts) and openapi.yaml.

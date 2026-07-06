@@ -8,6 +8,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -133,7 +136,9 @@ func (a *App) Router() http.Handler {
 	mux.Handle("PUT /api/v1/points/{id}", a.auth.Require(RoleOperator, a.handleForcePoint))
 	mux.Handle("GET /api/v1/ws/monitor", a.requireWSAuth(a.handleMonitorWS))
 	mux.Handle("GET /api/v1/alarms", a.auth.Require(RoleViewer, a.handleAlarms))
+	mux.Handle("GET /api/v1/alarm-history", a.auth.Require(RoleViewer, a.handleAlarmHistory))
 	mux.Handle("POST /api/v1/alarms/{id}/ack", a.auth.Require(RoleOperator, a.handleAckAlarm))
+	mux.Handle("POST /api/v1/alarms/{id}/return", a.auth.Require(RoleOperator, a.handleReturnAlarm))
 	mux.Handle("POST /api/v1/commissioning/points/{id}/test", a.auth.Require(RoleOperator, a.handleCommissionTest))
 	mux.Handle("GET /api/v1/system/config", a.auth.Require(RoleAdmin, a.handleGetSystemConfig))
 	mux.Handle("PUT /api/v1/system/config", a.auth.Require(RoleAdmin, a.handlePutSystemConfig))
@@ -165,10 +170,39 @@ func (a *App) Router() http.Handler {
 	mux.Handle("PUT /api/v1/schedules", a.auth.Require(RoleAdmin, a.handlePutSchedules))
 	mux.Handle("GET /api/v1/alarm-settings", a.auth.Require(RoleViewer, a.handleGetAlarmSettings))
 	mux.Handle("PUT /api/v1/alarm-settings", a.auth.Require(RoleAdmin, a.handlePutAlarmSettings))
+	mux.HandleFunc("/", a.handleStatic)
 
 	var handler http.Handler = mux
 	handler = corsMiddleware(a.cfg.CORSOrigin, handler)
 	handler = recoverMiddleware(a.logger, handler)
 	handler = loggingMiddleware(a.logger, handler)
 	return handler
+}
+
+func (a *App) handleStatic(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/api/") || (r.Method != http.MethodGet && r.Method != http.MethodHead) {
+		http.NotFound(w, r)
+		return
+	}
+	dir := strings.TrimSpace(a.cfg.StaticDir)
+	if dir == "" {
+		http.NotFound(w, r)
+		return
+	}
+	index := filepath.Join(dir, "index.html")
+	if _, err := os.Stat(index); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	clean := path.Clean("/" + r.URL.Path)
+	name := strings.TrimPrefix(clean, "/")
+	if name == "" {
+		name = "index.html"
+	}
+	target := filepath.Join(dir, filepath.FromSlash(name))
+	if info, err := os.Stat(target); err == nil && !info.IsDir() {
+		http.ServeFile(w, r, target)
+		return
+	}
+	http.ServeFile(w, r, index)
 }
