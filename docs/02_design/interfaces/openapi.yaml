@@ -678,6 +678,50 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /alarms/{id}/return:
+    post:
+      summary: Return acknowledged alarm to active
+      description: >
+        Undo acknowledge for a still-active alarm entity id. This is only valid while
+        the underlying alarm condition remains true; unknown, cleared, or already-active ids return 404.
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200":
+          description: Current visible alarm list after return.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmEvent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /alarm-history:
+    get:
+      summary: Persistent alarm history
+      description: >
+        Reads JSONL alarm history persisted on the device. Filters are combined with AND;
+        comma-separated event values are OR-ed. `limit=all` returns every matching record.
+      parameters:
+        - { name: limit, in: query, schema: { type: string, default: "20" } }
+        - { name: text, in: query, schema: { type: string } }
+        - { name: alarm, in: query, schema: { type: string } }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: event, in: query, schema: { type: string }, description: "Comma-separated started,acked,returned,ended,setting_created,setting_changed,setting_deleted." }
+        - { name: severity, in: query, schema: { type: string, enum: [critical, high, medium, low, info] } }
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Matching persistent alarm history records.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmHistoryEvent" }
+        "400": { $ref: "#/components/responses/Error" }
   /graph/validate:
     post:
       summary: Validate graph.json (role operator+)
@@ -1214,7 +1258,7 @@ components:
     AlarmEvent:
       type: object
       description: >
-        Visible runtime alarm row from ADR-014. `active` means condition true and not acked;
+        Visible runtime alarm row from ADR-014. `status=active` means condition true and not acked;
         `acked` means condition true and acknowledged; `unack` means condition cleared before
         acknowledgement and remains latched; `shelved` is reserved for a future phase.
       required: [id, time, severity, status, message, source, value, detail]
@@ -1222,13 +1266,35 @@ components:
         id: { type: string, description: "Alarm entity id used by /alarms/{id}/ack.", example: "ALM-001" }
         time: { type: string, format: date-time, description: "Occurrence first-active timestamp from core wall clock." }
         severity: { type: string, enum: [critical, high, medium, low, info], description: "Mapped from alarm priority; info is reserved for non-entity system alarms." }
-        status: { type: string, enum: [active, unack, acked, shelved] }
+        status: { type: string, enum: [active, unack, acked, cleared, shelved] }
         message: { type: string, description: "Display label, normally the alarm entity label." }
         source: { type: string, description: "Display source from the core alarm event." }
         value: { type: string, description: "Trigger/source value formatted for display." }
         triggerLevel: { type: string, enum: [HH, H, L, LL, RUNTIME], description: "Threshold bucket that tripped the alarm, if known." }
         threshold: { type: string, description: "Threshold value formatted for display, paired with triggerLevel." }
         detail: { type: string, description: "Human-readable condition detail derived by web from core protocol fields." }
+        active: { type: boolean, description: "True while the underlying condition is still present, including acked active alarms." }
+        returnable: { type: boolean, description: "True when this row is known by core and an acked active alarm can be returned to active; false for history-only fallback rows." }
+    AlarmHistoryEvent:
+      type: object
+      required: [eventId, time, event]
+      properties:
+        eventId: { type: string }
+        time: { type: string, format: date-time }
+        event: { type: string, enum: [started, acked, returned, ended, setting_created, setting_changed, setting_deleted] }
+        alarmId: { type: string }
+        user: { type: string }
+        severity: { type: string, enum: [critical, high, medium, low, info] }
+        status: { type: string }
+        message: { type: string }
+        source: { type: string }
+        value: { type: string }
+        detail: { type: string }
+        triggerLevel: { type: string, enum: [HH, H, L, LL, RUNTIME] }
+        threshold: { type: string }
+        active: { type: boolean }
+        before: { $ref: "#/components/schemas/AlarmSetting" }
+        after: { $ref: "#/components/schemas/AlarmSetting" }
     ConfigPutResult:
       type: object
       required: [result, applied, reload]
