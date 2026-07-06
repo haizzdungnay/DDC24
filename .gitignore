@@ -28,12 +28,16 @@ node_modules/
 # Logs / local data
 *.log
 /data/
+/RUN_PROJECT.md
+src/frontend/.env
+src/frontend/.env.local
 
 # Dev/runtime SQLite của mkddc-web (không commit)
 services/web/.dev-config/
 web/backend/.dev-config/
 web/backend/mkddc-web
 web/backend/mkddc-web.exe
+web/backend/mkddc-web-*
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
@@ -48,6 +52,3 @@ logs/*
 
 # Local backup of stale untracked files (manual cleanup)
 /.untracked_backup_2026-06-15/
-
-web/backend/mkddc-web-arm64
-web/backend/mkddc-web-arm64
