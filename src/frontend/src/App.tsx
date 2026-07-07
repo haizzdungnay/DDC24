@@ -4,7 +4,7 @@ import { AppShell } from './components/AppShell'
 import { RealtimeProvider } from './realtime'
 import { AlarmSettingsPage } from './pages/AlarmSettingsPage'
 import { InputsPage } from './pages/InputsPage'
-import { AlarmsPage } from './pages/AlarmsPage'
+import { AlarmHistoryPage, AlarmsPage } from './pages/AlarmsPage'
 import { CommissioningPage } from './pages/CommissioningPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DisplaySettingsPage } from './pages/DisplaySettingsPage'
@@ -43,6 +43,7 @@ export function App() {
         <Route index element={<DashboardPage />} />
         <Route path="monitor" element={<MonitorPage />} />
         <Route path="alarms" element={<AlarmsPage />} />
+        <Route path="alarms/history" element={<AlarmHistoryPage />} />
         <Route path="trends" element={<TrendsPage />} />
         <Route path="me" element={<UserInfoPage />} />
 

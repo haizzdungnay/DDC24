@@ -115,7 +115,7 @@ export type AlarmSourceKind = 'UI' | 'AO' | 'DO'
 export type AlarmType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type ActiveAlarmType = 0 | 1 | 3
 export type DeferredAlarmType = 2 | 4 | 5 | 6 | 7
-export type AlarmPriority = 'low' | 'medium' | 'high' | 'critical'
+export type AlarmPriority = 'low' | 'medium' | 'high' | 'critical' | 'flexible'
 
 export interface AlarmSource {
   kind: AlarmSourceKind
@@ -130,6 +130,13 @@ export interface AlarmParams {
   ll?: number
   hysteresis?: number
   runtimeHours?: number
+  severityRules?: SeverityRule[]
+}
+
+export interface SeverityRule {
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info'
+  op: '>=' | '<='
+  value: number
 }
 
 export interface AlarmSetting {
@@ -139,6 +146,7 @@ export interface AlarmSetting {
   alarmType: AlarmType
   sources: AlarmSource[]
   priority: AlarmPriority
+  clearMode?: 'auto' | 'manual'
   delayS: number
   publishBacnet?: boolean
   notificationClass?: number

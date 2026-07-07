@@ -9,12 +9,24 @@ function triggerText(alarm: Alarm): string {
   return alarm.threshold ? `${alarm.triggerLevel} ${alarm.threshold}` : alarm.triggerLevel
 }
 
-export function AlarmRow({ alarm, onAck, onReturn }: { alarm: Alarm; onAck?: (alarm: Alarm) => void; onReturn?: (alarm: Alarm) => void }) {
+export function AlarmRow({
+  alarm,
+  onAck,
+  onSuppress,
+  onReturn
+}: {
+  alarm: Alarm
+  onAck?: (alarm: Alarm) => void
+  onSuppress?: (alarm: Alarm) => void
+  onReturn?: (alarm: Alarm) => void
+}) {
   const state = alarm.severity === 'critical' || alarm.severity === 'high' ? 'fault' : alarm.severity === 'medium' ? 'uncertain' : 'ok'
   const trigger = triggerText(alarm)
+  const canAck = alarm.status !== 'acked' && alarm.status !== 'cleared' && alarm.status !== 'shelved'
+  const canSuppress = alarm.returnable !== false && alarm.status !== 'cleared' && alarm.status !== 'shelved'
   const canReturn = alarm.status === 'acked' && alarm.active !== false && alarm.returnable !== false
   return (
-    <div className="grid grid-cols-[140px_96px_1fr_92px] items-center gap-3 border-b border-[var(--c-border)] px-3 py-3 text-xs last:border-0 max-lg:grid-cols-1">
+    <div className="grid grid-cols-[140px_96px_1fr_180px] items-center gap-3 border-b border-[var(--c-border)] px-3 py-3 text-xs last:border-0 max-lg:grid-cols-1">
       <span className="mono text-[var(--c-text-dim)]">{formatDateTime(alarm.time)}</span>
       <StatusBadge state={state} label={alarm.severity.toUpperCase()} />
       <div className="min-w-0">
@@ -29,13 +41,13 @@ export function AlarmRow({ alarm, onAck, onReturn }: { alarm: Alarm; onAck?: (al
         </div>
         <div className="mt-1 truncate text-[var(--c-text-dim)]">{alarm.source} · {alarm.value || 'n/a'} · {alarm.detail}</div>
       </div>
-      {canReturn ? (
-        <Button size="sm" variant="secondary" onClick={() => onReturn?.(alarm)}>Return</Button>
-      ) : (
-        <Button size="sm" variant={alarm.status === 'acked' ? 'ghost' : 'secondary'} disabled={alarm.status === 'acked' || alarm.status === 'cleared'} onClick={() => onAck?.(alarm)}>
-          {alarm.status === 'acked' ? 'Acked' : alarm.status === 'cleared' ? 'Cleared' : 'Ack'}
+      <div className="flex flex-wrap justify-end gap-2 max-lg:justify-start">
+        <Button size="sm" variant={canAck ? 'secondary' : 'ghost'} disabled={!canAck} onClick={() => onAck?.(alarm)}>
+          {alarm.status === 'acked' ? 'Acked' : alarm.status === 'cleared' ? 'Cleared' : alarm.status === 'shelved' ? 'Shelved' : 'Ack'}
         </Button>
-      )}
+        {canSuppress && <Button size="sm" variant="danger" onClick={() => onSuppress?.(alarm)}>Off</Button>}
+        {canReturn && <Button size="sm" variant="secondary" onClick={() => onReturn?.(alarm)}>Return</Button>}
+      </div>
     </div>
   )
 }

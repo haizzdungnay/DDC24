@@ -235,6 +235,7 @@ const defaultAlarmSettings: AlarmSetting[] = [
 ]
 
 let alarmSettings = defaultAlarmSettings.map(cloneAlarmSetting)
+type DemoAlarmDurationChoice = { permanent: boolean; durationS?: number }
 
 function cloneAlarmSetting(row: AlarmSetting): AlarmSetting {
   return {
@@ -253,9 +254,22 @@ export function putAlarmSettings(rows: AlarmSetting[]): ConfigPutResult {
   return { result: 'success', applied: true, reload: 'sighup-core', warnings: [] }
 }
 
-export function ackDemoAlarm(id: string): Alarm[] {
+export function ackDemoAlarm(id: string, choice?: DemoAlarmDurationChoice): Alarm[] {
   const target = alarms.find((alarm) => alarm.id === id)
-  if (target) target.status = 'acked'
+  if (target) {
+    target.status = 'acked'
+    if (choice) target.detail = `${target.detail}; ack=${formatDemoDuration(choice)}`
+  }
+  return getDemoAlarms()
+}
+
+export function suppressDemoAlarm(id: string, choice: DemoAlarmDurationChoice): Alarm[] {
+  const target = alarms.find((alarm) => alarm.id === id)
+  if (target) {
+    target.status = 'shelved'
+    target.active = false
+    target.detail = `${target.detail}; off=${formatDemoDuration(choice)}`
+  }
   return getDemoAlarms()
 }
 
@@ -263,6 +277,10 @@ export function returnDemoAlarm(id: string): Alarm[] {
   const target = alarms.find((alarm) => alarm.id === id && alarm.status === 'acked' && alarm.active !== false)
   if (target) target.status = 'active'
   return getDemoAlarms()
+}
+
+function formatDemoDuration(choice: DemoAlarmDurationChoice): string {
+  return choice.permanent ? 'permanent' : `${choice.durationS ?? 0}s`
 }
 
 export function forceDemoPoint(id: string, value: number | boolean, release = false) {

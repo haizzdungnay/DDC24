@@ -7,7 +7,7 @@ import { Panel } from '../components/Panel'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
 import { useI18n } from '../i18n'
-import type { ActiveAlarmType, AlarmPriority, AlarmSetting, AlarmSource, AlarmSourceKind, AlarmType, DeferredAlarmType } from '../types'
+import type { ActiveAlarmType, AlarmPriority, AlarmSetting, AlarmSource, AlarmSourceKind, AlarmType, DeferredAlarmType, SeverityRule } from '../types'
 import { cn } from '../utils'
 
 const maxAlarms = 64
@@ -15,7 +15,12 @@ const maxSourcesPerAlarm = 16
 const maxBacnetPublished = 8
 const activeAlarmTypes: ActiveAlarmType[] = [0, 1, 3]
 const deferredAlarmTypes: DeferredAlarmType[] = [2, 4, 5, 6, 7]
-const priorities: AlarmPriority[] = ['low', 'medium', 'high', 'critical']
+type AlarmClearMode = NonNullable<AlarmSetting['clearMode']>
+
+const priorities: AlarmPriority[] = ['low', 'medium', 'high', 'critical', 'flexible']
+const clearModes: AlarmClearMode[] = ['auto', 'manual']
+const severities: SeverityRule['severity'][] = ['critical', 'high', 'medium', 'low', 'info']
+const severityOps: SeverityRule['op'][] = ['>=', '<=']
 const sourceKinds: AlarmSourceKind[] = ['UI', 'AO', 'DO']
 
 const alarmTypeLabels: Record<AlarmType, string> = {
@@ -303,6 +308,9 @@ function AlarmEditor({
         <SelectField label={pick('Muc uu tien', 'Priority')} value={row.priority} onChange={(priority) => onChange({ priority: priority as AlarmPriority })}>
           {priorities.map((priority) => <option key={priority} value={priority}>{priority.toUpperCase()}</option>)}
         </SelectField>
+        <SelectField label={pick('Che do clear', 'Clear mode')} value={getClearMode(row)} onChange={(clearMode) => onChange({ clearMode: clearMode as AlarmClearMode })}>
+          {clearModes.map((mode) => <option key={mode} value={mode}>{mode === 'auto' ? pick('Auto', 'Auto') : pick('Manual', 'Manual')}</option>)}
+        </SelectField>
         <NumberField label="Delay (s)" min={0} value={row.delayS} onChange={(delayS) => onChange({ delayS })} />
         <label className="flex items-end gap-2 pb-3 text-sm font-semibold text-[var(--c-text)]">
           <input className={checkboxClass} type="checkbox" checked={row.enabled} disabled={deferred} onChange={(event) => onChange({ enabled: event.target.checked })} />
@@ -386,23 +394,64 @@ function AlarmParamsEditor({ row, onChange }: { row: AlarmSetting; onChange: (pa
   const { pick } = useI18n()
   if (row.alarmType === 1) {
     return (
-      <div className="grid gap-3 sm:grid-cols-5">
-        <NumberField label="HH" value={row.params.hh ?? 0} onChange={(hh) => onChange({ hh })} />
-        <NumberField label="H" value={row.params.h ?? 0} onChange={(h) => onChange({ h })} />
-        <NumberField label="L" value={row.params.l ?? 0} onChange={(l) => onChange({ l })} />
-        <NumberField label="LL" value={row.params.ll ?? 0} onChange={(ll) => onChange({ ll })} />
-        <NumberField label={pick('Hysteresis', 'Hysteresis')} min={0} value={row.params.hysteresis ?? 0} onChange={(hysteresis) => onChange({ hysteresis })} />
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-5">
+          <NumberField label="HH" value={row.params.hh ?? 0} onChange={(hh) => onChange({ hh })} />
+          <NumberField label="H" value={row.params.h ?? 0} onChange={(h) => onChange({ h })} />
+          <NumberField label="L" value={row.params.l ?? 0} onChange={(l) => onChange({ l })} />
+          <NumberField label="LL" value={row.params.ll ?? 0} onChange={(ll) => onChange({ ll })} />
+          <NumberField label={pick('Hysteresis', 'Hysteresis')} min={0} value={row.params.hysteresis ?? 0} onChange={(hysteresis) => onChange({ hysteresis })} />
+        </div>
+        {isFlexiblePriority(row) && <SeverityRulesEditor rules={getSeverityRules(row.params)} onChange={(severityRules) => onChange({ severityRules })} />}
       </div>
     )
   }
   if (row.alarmType === 3) {
     return (
-      <div className="max-w-xs">
-        <NumberField label={pick('Runtime hours', 'Runtime hours')} min={0.1} step={0.1} value={row.params.runtimeHours ?? 1} onChange={(runtimeHours) => onChange({ runtimeHours })} />
+      <div className="space-y-4">
+        <div className="max-w-xs">
+          <NumberField label={pick('Runtime hours', 'Runtime hours')} min={0.1} step={0.1} value={row.params.runtimeHours ?? 1} onChange={(runtimeHours) => onChange({ runtimeHours })} />
+        </div>
+        {isFlexiblePriority(row) && <SeverityRulesEditor rules={getSeverityRules(row.params)} onChange={(severityRules) => onChange({ severityRules })} />}
       </div>
     )
   }
-  return <p className="text-sm text-[var(--c-text-dim)]">{pick('Type nay khong co tham so active trong Phase 4.', 'This type has no active parameters in Phase 4.')}</p>
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-[var(--c-text-dim)]">{pick('Type nay khong co tham so active trong Phase 4.', 'This type has no active parameters in Phase 4.')}</p>
+      {isFlexiblePriority(row) && <SeverityRulesEditor rules={getSeverityRules(row.params)} onChange={(severityRules) => onChange({ severityRules })} />}
+    </div>
+  )
+}
+
+function SeverityRulesEditor({ rules, onChange }: { rules: SeverityRule[]; onChange: (rules: SeverityRule[]) => void }) {
+  const { pick } = useI18n()
+  const updateRule = (index: number, patch: Partial<SeverityRule>) => onChange(rules.map((rule, ruleIndex) => ruleIndex === index ? normalizeSeverityRule({ ...rule, ...patch }) : rule))
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Severity rules', 'Severity rules')}</h4>
+        <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => onChange([...rules, defaultSeverityRule()])}>{pick('Them rule', 'Add rule')}</Button>
+      </div>
+      <div className="space-y-2">
+        {rules.map((rule, index) => (
+          <div key={`${rule.severity}-${rule.op}-${index}`} className="grid gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 sm:grid-cols-[minmax(0,1fr)_100px_minmax(120px,1fr)_auto]">
+            <SelectField label={pick('Severity', 'Severity')} value={rule.severity} onChange={(severity) => updateRule(index, { severity: severity as SeverityRule['severity'] })}>
+              {severities.map((severity) => <option key={severity} value={severity}>{severity.toUpperCase()}</option>)}
+            </SelectField>
+            <SelectField label={pick('Operator', 'Operator')} value={rule.op} onChange={(op) => updateRule(index, { op: op as SeverityRule['op'] })}>
+              {severityOps.map((op) => <option key={op} value={op}>{op}</option>)}
+            </SelectField>
+            <NumberField label={pick('Value', 'Value')} value={rule.value} onChange={(value) => updateRule(index, { value })} />
+            <div className="flex items-end">
+              <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={() => onChange(rules.filter((_, ruleIndex) => ruleIndex !== index))}>{pick('Xoa', 'Remove')}</Button>
+            </div>
+          </div>
+        ))}
+        {rules.length === 0 && <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">{pick('Can it nhat 1 rule cho priority flexible.', 'At least one rule is required for flexible priority.')}</div>}
+      </div>
+    </div>
+  )
 }
 
 function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
@@ -462,10 +511,11 @@ function normalizeDraftAlarm(row: AlarmSetting): AlarmSetting {
   return {
     ...row,
     alarmType: isAlarmType(row.alarmType) ? row.alarmType : 0,
+    clearMode: clearModes.includes(getClearMode(row)) ? getClearMode(row) : 'auto',
     priority: priorities.includes(row.priority) ? row.priority : 'medium',
     delayS: Number.isFinite(row.delayS) ? row.delayS : 0,
     sources: row.sources.map(normalizeSource),
-    params: row.params ?? {}
+    params: normalizeParams(row.params ?? {})
   }
 }
 
@@ -478,6 +528,7 @@ function normalizeForSave(row: AlarmSetting): AlarmSetting {
     alarmType: row.alarmType,
     sources: row.sources.map(normalizeSource),
     priority: row.priority,
+    clearMode: getClearMode(row),
     delayS: row.delayS,
     publishBacnet,
     params: defaultParamsForType(row.alarmType, row.params)
@@ -495,6 +546,7 @@ function createAlarm(rows: AlarmSetting[]): AlarmSetting {
     alarmType: 1,
     sources: [nextSource([])],
     priority: 'medium',
+    clearMode: 'auto',
     delayS: 0,
     publishBacnet: false,
     params: { hh: 100, h: 90, l: 10, ll: 0, hysteresis: 0 }
@@ -539,16 +591,19 @@ function maxChannel(kind: AlarmSourceKind): number {
 }
 
 function defaultParamsForType(alarmType: AlarmType, params: AlarmSetting['params']): AlarmSetting['params'] {
+  const severityRules = getSeverityRules(params)
+  if (alarmType === 0 || isDeferredType(alarmType)) return {}
   if (alarmType === 1) {
     return {
       hh: finiteOr(params.hh, 100),
       h: finiteOr(params.h, 90),
       l: finiteOr(params.l, 10),
       ll: finiteOr(params.ll, 0),
-      hysteresis: finiteOr(params.hysteresis, 0)
+      hysteresis: finiteOr(params.hysteresis, 0),
+      severityRules
     }
   }
-  if (alarmType === 3) return { runtimeHours: finiteOr(params.runtimeHours, 1) }
+  if (alarmType === 3) return { runtimeHours: finiteOr(params.runtimeHours, 1), severityRules }
   return {}
 }
 
@@ -573,6 +628,7 @@ function validateAlarms(rows: AlarmSetting[], pick: PickText): ValidationIssue[]
     if (!isAlarmType(row.alarmType)) addIssue(issues, rowIndex, `${prefix}: alarmType must be 0..7.`)
     if (row.enabled && isDeferredType(row.alarmType)) addIssue(issues, rowIndex, `${prefix}: ${pick('Deferred type chua duoc bat enabled.', 'Deferred alarm types cannot be enabled yet.')}`)
     if (!priorities.includes(row.priority)) addIssue(issues, rowIndex, `${prefix}: ${pick('Priority khong hop le.', 'Invalid priority.')}`)
+    if (!clearModes.includes(getClearMode(row))) addIssue(issues, rowIndex, `${prefix}: clearMode must be auto or manual.`)
     if (!Number.isFinite(row.delayS) || row.delayS < 0) addIssue(issues, rowIndex, `${prefix}: delayS must be >= 0.`)
 
     if (row.sources.length > maxSourcesPerAlarm) addIssue(issues, rowIndex, `${prefix}: ${pick(`Toi da ${maxSourcesPerAlarm} source.`, `At most ${maxSourcesPerAlarm} sources.`)}`)
@@ -601,6 +657,12 @@ function validateAlarms(rows: AlarmSetting[], pick: PickText): ValidationIssue[]
 
 function validateParams(row: AlarmSetting, rowIndex: number, prefix: string, issues: ValidationIssue[], pick: PickText) {
   const params = row.params
+  const severityRules = getSeverityRules(params)
+  if (isFlexiblePriority(row) && (row.alarmType === 0 || isDeferredType(row.alarmType))) {
+    addIssue(issues, rowIndex, `${prefix}: ${pick('Priority flexible chi ap dung cho active alarm type.', 'Flexible priority applies only to active alarm types.')}`)
+  } else if (isFlexiblePriority(row) && severityRules.length === 0) {
+    addIssue(issues, rowIndex, `${prefix}: ${pick('Priority flexible can it nhat 1 severity rule.', 'Flexible priority needs at least one severity rule.')}`)
+  }
   if (row.alarmType === 1) {
     const values = [params.hh, params.h, params.l, params.ll]
     if (values.some((value) => !Number.isFinite(value))) {
@@ -615,6 +677,34 @@ function validateParams(row: AlarmSetting, rowIndex: number, prefix: string, iss
   if (row.alarmType === 3 && (!Number.isFinite(params.runtimeHours) || Number(params.runtimeHours) <= 0)) {
     addIssue(issues, rowIndex, `${prefix}: runtimeHours must be > 0.`)
   }
+}
+
+function getClearMode(row: AlarmSetting): AlarmClearMode {
+  return row.clearMode === 'manual' ? 'manual' : 'auto'
+}
+
+function isFlexiblePriority(row: AlarmSetting): boolean {
+  return row.priority === 'flexible'
+}
+
+function normalizeParams(params: AlarmSetting['params']): AlarmSetting['params'] {
+  return { ...params, severityRules: getSeverityRules(params) }
+}
+
+function getSeverityRules(params: AlarmSetting['params']): SeverityRule[] {
+  return Array.isArray(params.severityRules) ? params.severityRules.map(normalizeSeverityRule) : []
+}
+
+function normalizeSeverityRule(rule: Partial<SeverityRule>): SeverityRule {
+  return {
+    severity: rule.severity && severities.includes(rule.severity) ? rule.severity : 'critical',
+    op: rule.op && severityOps.includes(rule.op) ? rule.op : '>=',
+    value: Number.isFinite(rule.value) ? Number(rule.value) : 0
+  }
+}
+
+function defaultSeverityRule(): SeverityRule {
+  return { severity: 'critical', op: '>=', value: 0 }
 }
 
 function addIssue(issues: ValidationIssue[], rowIndex: number, message: string) {

@@ -18,6 +18,7 @@ import {
   putUserParams as putDemoUserParams,
   returnDemoAlarm,
   runDemoCommissioning,
+  suppressDemoAlarm,
   tickDemoPoints,
   updateDemoPointConfig,
   validateGraphLocal
@@ -36,6 +37,7 @@ const pointConfigOverridesKey = 'mkddc:point-config-overrides:v1'
 
 type ApiRequestInit = RequestInit & { suppressAuthExpired?: boolean }
 type PointConfigPatch = { name?: string; unit?: string; trendEnabled?: boolean }
+type AlarmDurationChoice = { permanent: boolean; durationS?: number }
 
 export const POINT_UNIT_OPTIONS = [
   { value: '', label: '0 = No units shown' },
@@ -733,9 +735,21 @@ export const apiClient = {
     return requestJson<CurrentUser>('/me')
   },
 
-  async ackAlarm(id: string): Promise<Alarm[]> {
-    if (IS_DEMO) return ackDemoAlarm(id)
-    await requestJson(`/alarms/${encodeURIComponent(id)}/ack`, { method: 'POST' })
+  async ackAlarm(id: string, choice?: AlarmDurationChoice): Promise<Alarm[]> {
+    if (IS_DEMO) return ackDemoAlarm(id, choice)
+    await requestJson(`/alarms/${encodeURIComponent(id)}/ack`, {
+      method: 'POST',
+      ...(choice ? { body: JSON.stringify({ durationS: choice.durationS, permanent: choice.permanent }) } : {})
+    })
+    return this.getAlarms()
+  },
+
+  async suppressAlarm(id: string, choice: AlarmDurationChoice): Promise<Alarm[]> {
+    if (IS_DEMO) return suppressDemoAlarm(id, choice)
+    await requestJson(`/alarms/${encodeURIComponent(id)}/suppress`, {
+      method: 'POST',
+      body: JSON.stringify({ durationS: choice.durationS, permanent: choice.permanent })
+    })
     return this.getAlarms()
   },
 
