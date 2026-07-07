@@ -22,6 +22,7 @@
 #include "point_table.hpp"
 #include "priority_resolver.hpp"
 #include "safe_state.hpp"
+#include "schedule_runtime.hpp"
 #include "web_ipc.hpp"
 
 namespace core {
@@ -40,6 +41,7 @@ struct ScanDeps {
     /* MOD-009: fd của fieldbus.sock SOCK_DGRAM (bind bởi core); -1 = chưa open */
     int               fieldbus_sockfd = -1;
     AlarmRuntime*     alarms = nullptr;
+    ScheduleRuntime*  schedules = nullptr;
 };
 
 class ScanLoop {

@@ -4,11 +4,12 @@
 
 #include "alarm_runtime.hpp"
 #include "safe_state_config.hpp"
+#include "schedule_runtime.hpp"
 
 namespace core {
 
 bool reload_configs(const ReloadSpec& spec, PriorityResolver* resolver, GraphRuntime* graph,
-                    AlarmRuntime* alarms)
+                    AlarmRuntime* alarms, ScheduleRuntime* schedules)
 {
     bool all_ok = true;
 
@@ -31,6 +32,10 @@ bool reload_configs(const ReloadSpec& spec, PriorityResolver* resolver, GraphRun
 
     if (alarms && !spec.alarm_cfg_path.empty() &&
         !alarms->reload(spec.alarm_cfg_path, spec.alarm_cfg_must_exist))
+        all_ok = false;
+
+    if (schedules && !spec.schedule_cfg_path.empty() &&
+        !schedules->reload(spec.schedule_cfg_path, spec.schedule_cfg_must_exist))
         all_ok = false;
 
     return all_ok;

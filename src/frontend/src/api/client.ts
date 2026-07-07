@@ -11,19 +11,20 @@ import {
   getDemoNetwork,
   getDemoOutputs,
   getDemoPoints,
+  getDemoSchedule,
   getUserParams as getDemoUserParams,
   putDemoAiInputs,
+  putDemoSchedule,
   putAlarmSettings as putDemoAlarmSettings,
   putDemoOutputs,
   putUserParams as putDemoUserParams,
   returnDemoAlarm,
   runDemoCommissioning,
   suppressDemoAlarm,
-  tickDemoPoints,
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoConfig, type AoSignalMode, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
+import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoConfig, type AoSignalMode, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TrendSample, type UserParamsConfig } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 
@@ -38,6 +39,7 @@ const pointConfigOverridesKey = 'mkddc:point-config-overrides:v1'
 type ApiRequestInit = RequestInit & { suppressAuthExpired?: boolean }
 type PointConfigPatch = { name?: string; unit?: string; trendEnabled?: boolean }
 type AlarmDurationChoice = { permanent: boolean; durationS?: number }
+const scheduleTypes: ScheduleType[] = ['not_active', 'controller_operation_mode', 'control_loop_setpoint', 'analog_output_value', 'fan_state_value', 'digital_output_value', 'holiday_period']
 
 export const POINT_UNIT_OPTIONS = [
   { value: '', label: '0 = No units shown' },
@@ -287,6 +289,48 @@ function normalizeTrendSample(raw: Record<string, unknown>): TrendSample {
     if (typeof value === 'number' && Number.isFinite(value)) sample[normalizeTrendPointKey(key)] = value
   }
   return sample
+}
+
+function normalizeSchedule(raw: Record<string, unknown>, index: number): ScheduleRow {
+  const scheduleType = scheduleTypes.includes(raw.scheduleType as ScheduleType) ? raw.scheduleType as ScheduleType : scheduleTypes.includes(raw.schedule_type as ScheduleType) ? raw.schedule_type as ScheduleType : 'not_active'
+  const weekdays = Array.isArray(raw.weekdays) ? raw.weekdays.map(String) : []
+  const startTime = String(raw.startTime ?? raw.start_time ?? raw.timeOfDay ?? raw.time_of_day ?? '08:00')
+  return {
+    id: String(raw.id ?? `SCH-${String(index + 1).padStart(3, '0')}`),
+    label: String(raw.label ?? raw.name ?? ''),
+    notes: stringFrom(raw.notes ?? raw.note),
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : false,
+    scheduleType,
+    timeOfDay: startTime,
+    startTime,
+    endTime: String(raw.endTime ?? raw.end_time ?? '17:00'),
+    startDate: stringFrom(raw.startDate ?? raw.start_date) || '01-01',
+    endDate: stringFrom(raw.endDate ?? raw.end_date) || '01-01',
+    weekdays,
+    target: normalizeScheduleTarget(raw.target),
+    value: numberFrom(raw.value) ?? 0
+  }
+}
+
+function normalizeScheduleTarget(value: unknown): ScheduleTarget | undefined {
+  if (typeof value === 'string') return scheduleTargetFromPointId(value)
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const raw = value as Record<string, unknown>
+  const kind = stringFrom(raw.kind)
+  if (kind !== 'AO' && kind !== 'DO' && kind !== 'AV' && kind !== 'MSV' && kind !== 'HOL') return undefined
+  const pointId = stringFrom(raw.pointId ?? raw.point_id)
+  const parsed = pointId ? scheduleTargetFromPointId(pointId) : undefined
+  const channel = numberFrom(raw.channel) ?? (parsed?.kind === kind ? parsed.channel : undefined)
+  return { kind, ...(channel !== undefined ? { channel } : {}), ...(pointId ? { pointId } : {}) }
+}
+
+function scheduleTargetFromPointId(pointId: string): ScheduleTarget | undefined {
+  const match = pointId.match(/^([A-Z]+)-?(\d+)$/)
+  if (!match) return undefined
+  const kind = match[1] === 'FAN' ? 'DO' : match[1]
+  const channel = Number(match[2])
+  if (kind !== 'AO' && kind !== 'DO' && kind !== 'AV' && kind !== 'MSV' && kind !== 'HOL') return undefined
+  return { kind, channel, pointId: `${kind}-${String(channel).padStart(2, '0')}` }
 }
 
 function normalizeTrendPointKey(key: string): string {
@@ -600,24 +644,19 @@ export const apiClient = {
     if (IS_DEMO) return getDemoHealth()
     try {
       return normalizeSystemStatus(await requestJson<Record<string, unknown>>('/system/status'))
-    } catch {
+    } catch (statusError) {
       try {
         return normalizeHealthResponse(await requestJson<Record<string, unknown>>('/health'))
-      } catch {
-        return getDemoHealth()
+      } catch (healthError) {
+        throw healthError instanceof Error ? healthError : statusError
       }
     }
   },
 
   async getPoints(): Promise<Point[]> {
     if (IS_DEMO) return applyPointConfigOverrides(applyDemoPointMetadata(getDemoPoints()))
-    try {
-      const records = pointRecordsFrom(await requestJson<unknown>('/points', { suppressAuthExpired: true }))
-      const points = records.length ? records.map(normalizePoint) : tickDemoPoints()
-      return applyPointConfigOverrides(applyDemoPointMetadata(points))
-    } catch {
-      return applyPointConfigOverrides(applyDemoPointMetadata(tickDemoPoints()))
-    }
+    const records = pointRecordsFrom(await requestJson<unknown>('/points', { suppressAuthExpired: true }))
+    return applyPointConfigOverrides(applyDemoPointMetadata(records.map(normalizePoint)))
   },
 
   async getNetwork(): Promise<NetworkData> {
@@ -703,6 +742,23 @@ export const apiClient = {
   async putUserParams(config: UserParamsConfig): Promise<void> {
     // Mock demo-only: do not call REST from this page.
     putDemoUserParams(config)
+  },
+
+  async getSchedules(): Promise<ScheduleRow[]> {
+    if (IS_DEMO) return getDemoSchedule()
+    const raw = await requestJson<Array<Record<string, unknown>>>('/schedules')
+    return raw.map(normalizeSchedule)
+  },
+
+  async putSchedules(rows: ScheduleRow[]): Promise<ConfigPutResult> {
+    if (IS_DEMO) {
+      putDemoSchedule(rows)
+      return { result: 'success', applied: true, reload: 'none', warnings: [] }
+    }
+    return requestJson<ConfigPutResult>('/schedules', {
+      method: 'PUT',
+      body: JSON.stringify(rows)
+    })
   },
 
   async getAlarms(): Promise<Alarm[]> {

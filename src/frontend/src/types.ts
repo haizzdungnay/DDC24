@@ -261,17 +261,37 @@ export interface TrendSample {
   [series: string]: string | number
 }
 
-export interface ScheduleCell {
-  day: string
-  value: 'ON' | 'OFF' | 'OPEN' | 'CLOSE'
-  start: string
-  end: string
+export type ScheduleType =
+  | 'not_active'
+  | 'controller_operation_mode'
+  | 'control_loop_setpoint'
+  | 'analog_output_value'
+  | 'fan_state_value'
+  | 'digital_output_value'
+  | 'holiday_period'
+
+export type ScheduleTargetKind = 'AO' | 'DO' | 'AV' | 'MSV' | 'HOL'
+
+export interface ScheduleTarget {
+  kind: ScheduleTargetKind
+  channel?: number
+  pointId?: string
 }
 
 export interface ScheduleRow {
   id: string
   label: string
-  cells: ScheduleCell[]
+  notes?: string
+  enabled: boolean
+  scheduleType: ScheduleType
+  timeOfDay?: string
+  startTime: string
+  endTime: string
+  startDate?: string
+  endDate?: string
+  weekdays: string[]
+  target?: ScheduleTarget
+  value: number
 }
 
 export type LinkState = 'online' | 'offline'

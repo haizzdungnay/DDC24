@@ -82,6 +82,9 @@ void ScanLoop::step()
         pending_.push_back({cmd, ok});
     }
 
+    if (d_.schedules)
+        d_.schedules->evaluate(last_io_, *d_.table, *d_.resolver);
+
     /* 5. Execute graph */
     d_.graph->execute(*d_.table, *d_.resolver);
 

@@ -542,6 +542,7 @@ paths:
             application/json:
               schema:
                 type: array
+                maxItems: 64
                 items: { $ref: "#/components/schemas/ScheduleRow" }
         "403": { $ref: "#/components/responses/Error" }
     put:
@@ -554,6 +555,7 @@ paths:
           application/json:
             schema:
               type: array
+              maxItems: 64
               items: { $ref: "#/components/schemas/ScheduleRow" }
       responses:
         "200":
@@ -1153,23 +1155,112 @@ components:
           minimum: 1000
           default: 2880
           description: "Minimum retained samples per point/log; default 2880 (~24h at 30s), never below 1000."
-    ScheduleCell:
+    ScheduleTarget:
       type: object
-      required: [day, value, start, end]
+      required: [kind]
       properties:
-        day: { type: string, example: "T2" }
-        value: { type: string, enum: ["ON", "OFF", "OPEN", "CLOSE"] }
-        start: { type: string, example: "08:00" }
-        end: { type: string, example: "17:00" }
+        kind:
+          type: string
+          enum: [AO, DO, AV, MSV]
+        channel:
+          type: integer
+          minimum: 1
+          description: AO/DO 1..4, AV 1..32, MSV-01 only for controller_operation_mode.
+        pointId:
+          type: string
+          example: "AO-01"
     ScheduleRow:
       type: object
-      required: [id, label, cells]
+      required: [id, label, enabled, scheduleType]
+      description: >
+        EasySet-style time schedule. Core executes active weekly intervals per target:
+        AO/DO through priority level 4 (`schedule`), AV/MSV as virtual points with source `SCHEDULE`.
+        `holiday_period` is an all-day MM-DD override that suppresses normal weekly schedules while active.
       properties:
-        id: { type: string, example: "SCH-01" }
-        label: { type: string, example: "Weekly Template" }
-        cells:
+        id:
+          type: string
+          pattern: "^SCH-[A-Za-z0-9_-]+$"
+          maxLength: 64
+          example: "SCH-001"
+        label:
+          type: string
+          maxLength: 80
+          example: "Time Schedule 1"
+        notes:
+          type: string
+          maxLength: 1024
+        enabled: { type: boolean }
+        scheduleType:
+          type: string
+          enum:
+            - not_active
+            - controller_operation_mode
+            - control_loop_setpoint
+            - analog_output_value
+            - fan_state_value
+            - digital_output_value
+            - holiday_period
+        timeOfDay:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          deprecated: true
+          description: Legacy alias for startTime during migration.
+          example: "07:00"
+        startTime:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          example: "07:00"
+        endTime:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          example: "18:00"
+        startDate:
+          type: string
+          pattern: "^(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          example: "01-01"
+        endDate:
+          type: string
+          pattern: "^(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          example: "01-01"
+        weekdays:
           type: array
-          items: { $ref: "#/components/schemas/ScheduleCell" }
+          items:
+            type: string
+            enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+          example: [monday, tuesday, wednesday, thursday, friday]
+        target:
+          $ref: "#/components/schemas/ScheduleTarget"
+        value:
+          type: number
+          description: >
+            controller_operation_mode targets MSV-01 with value 0..2; analog_output_value 0..100 percent; DO/fan 0 or 1;
+            control_loop_setpoint finite numeric value.
+      oneOf:
+        - title: Stored-only inactive row
+          properties:
+            scheduleType:
+              type: string
+              enum: [not_active]
+        - title: Holiday override row
+          required: [startDate, endDate]
+          properties:
+            scheduleType:
+              type: string
+              enum: [holiday_period]
+        - title: Executable schedule row
+          required: [startTime, endTime, weekdays, target, value]
+          properties:
+            scheduleType:
+              type: string
+              enum:
+                - controller_operation_mode
+                - control_loop_setpoint
+                - analog_output_value
+                - fan_state_value
+                - digital_output_value
+            weekdays:
+              type: array
+              minItems: 1
     AlarmSetting:
       type: object
       required: [id, label, enabled, alarmType, sources, priority, delayS, params]

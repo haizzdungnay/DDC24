@@ -68,16 +68,25 @@ type TrendConfig struct {
 }
 
 type ScheduleRow struct {
-	ID    string         `json:"id"`
-	Label string         `json:"label"`
-	Cells []ScheduleCell `json:"cells"`
+	ID           string          `json:"id"`
+	Label        string          `json:"label"`
+	Notes        string          `json:"notes,omitempty"`
+	Enabled      bool            `json:"enabled"`
+	ScheduleType string          `json:"scheduleType"`
+	TimeOfDay    string          `json:"timeOfDay,omitempty"`
+	StartTime    string          `json:"startTime,omitempty"`
+	EndTime      string          `json:"endTime,omitempty"`
+	StartDate    string          `json:"startDate,omitempty"`
+	EndDate      string          `json:"endDate,omitempty"`
+	Weekdays     []string        `json:"weekdays"`
+	Target       *ScheduleTarget `json:"target,omitempty"`
+	Value        *float64        `json:"value,omitempty"`
 }
 
-type ScheduleCell struct {
-	Day   string `json:"day"`
-	Value string `json:"value"`
-	Start string `json:"start"`
-	End   string `json:"end"`
+type ScheduleTarget struct {
+	Kind    string `json:"kind"`
+	Channel *int   `json:"channel,omitempty"`
+	PointID string `json:"pointId,omitempty"`
 }
 
 const (
