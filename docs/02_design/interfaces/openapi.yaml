@@ -664,11 +664,41 @@ paths:
       description: >
         Acknowledge one alarm entity id. If the alarm is active, status becomes acked until
         clear. If the condition already cleared but is latched unack, ack removes it from
-        the visible list. Unknown or already-normal ids return 404.
+        the visible list. Optional duration payload makes ack expire later; no body keeps
+        the legacy permanent ack behavior. Unknown or already-normal ids return 404.
       parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlarmActionRequest" }
       responses:
         "200":
           description: Current visible alarm list after ack.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmEvent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /alarms/{id}/suppress:
+    post:
+      summary: Suppress alarm
+      description: >
+        Hide an active or manually latched alarm for a selected duration, or permanently
+        until core restart. Used by the Alarm log Off action.
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlarmActionRequest" }
+      responses:
+        "200":
+          description: Current visible alarm list after suppress.
           content:
             application/json:
               schema:
@@ -1165,7 +1195,15 @@ components:
           type: number
           minimum: 0
           description: Delay before asserting the alarm; maps to AlarmDelay on ACTIVE graph paths.
-        priority: { type: string, enum: [low, medium, high, critical] }
+        priority:
+          type: string
+          enum: [low, medium, high, critical, flexible]
+          description: "`flexible` maps severity from params.severityRules."
+        clearMode:
+          type: string
+          enum: [auto, manual]
+          default: auto
+          description: "`manual` keeps a returned-to-normal alarm visible until /alarms/{id}/suppress."
         publishBacnet:
           type: boolean
           default: false
@@ -1220,6 +1258,9 @@ components:
         l: { type: number }
         ll: { type: number }
         hysteresis: { type: number, minimum: 0 }
+        severityRules:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmSeverityRule" }
     AlarmSetpointDeviationParams:
       type: object
       required: [setpoint, deviationHigh, deviationLow]
@@ -1234,6 +1275,16 @@ components:
       description: alarmType=3. Maps to RuntimeCounter maint_hours.
       properties:
         runtimeHours: { type: number, minimum: 0 }
+        severityRules:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmSeverityRule" }
+    AlarmSeverityRule:
+      type: object
+      required: [severity, op, value]
+      properties:
+        severity: { type: string, enum: [critical, high, medium, low, info] }
+        op: { type: string, enum: [">=", "<="] }
+        value: { type: number }
     AlarmSuperviseStateParams:
       type: object
       required: [expectedState]
@@ -1275,6 +1326,22 @@ components:
         detail: { type: string, description: "Human-readable condition detail derived by web from core protocol fields." }
         active: { type: boolean, description: "True while the underlying condition is still present, including acked active alarms." }
         returnable: { type: boolean, description: "True when this row is known by core and an acked active alarm can be returned to active; false for history-only fallback rows." }
+    AlarmActionRequest:
+      description: >
+        Duration choice for alarm ack/suppress actions. Use either permanent=true or
+        durationS > 0. Empty ack body is treated as permanent for legacy clients.
+      oneOf:
+        - type: object
+          required: [permanent]
+          additionalProperties: false
+          properties:
+            permanent: { type: boolean, enum: [true] }
+        - type: object
+          required: [durationS]
+          additionalProperties: false
+          properties:
+            durationS: { type: number, minimum: 1 }
+            permanent: { type: boolean, enum: [false] }
     AlarmHistoryEvent:
       type: object
       required: [eventId, time, event]
