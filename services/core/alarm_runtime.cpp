@@ -64,7 +64,19 @@ bool deferred_alarm_type(int value)
 
 bool valid_priority(const std::string& value)
 {
-    return value == "low" || value == "medium" || value == "high" || value == "critical";
+    return value == "low" || value == "medium" || value == "high" ||
+           value == "critical" || value == "flexible";
+}
+
+bool valid_severity(const std::string& value)
+{
+    return value == "critical" || value == "high" || value == "medium" ||
+           value == "low" || value == "info";
+}
+
+bool valid_clear_mode(const std::string& value)
+{
+    return value == "auto" || value == "manual";
 }
 
 bool same_source(const AlarmSourceConfig& a, const AlarmSourceConfig& b)
@@ -75,13 +87,26 @@ bool same_source(const AlarmSourceConfig& a, const AlarmSourceConfig& b)
 
 bool same_params(const AlarmParamsConfig& a, const AlarmParamsConfig& b)
 {
-    return a.hh == b.hh && a.h == b.h && a.l == b.l && a.ll == b.ll &&
-           a.hysteresis == b.hysteresis && a.runtime_hours == b.runtime_hours;
+    if (a.hh != b.hh || a.h != b.h || a.l != b.l || a.ll != b.ll ||
+        a.hysteresis != b.hysteresis || a.runtime_hours != b.runtime_hours ||
+        a.severity_rules.size() != b.severity_rules.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < a.severity_rules.size(); i++) {
+        const AlarmParamsConfig::SeverityRule& left = a.severity_rules[i];
+        const AlarmParamsConfig::SeverityRule& right = b.severity_rules[i];
+        if (left.severity != right.severity || left.op != right.op ||
+            left.value != right.value) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool same_fingerprint(const AlarmEntityConfig& a, const AlarmEntityConfig& b)
 {
-    if (a.id != b.id || a.alarm_type != b.alarm_type || a.delay_s != b.delay_s ||
+    if (a.id != b.id || a.alarm_type != b.alarm_type ||
+        a.clear_mode != b.clear_mode || a.delay_s != b.delay_s ||
         !same_params(a.params, b.params) || a.sources.size() != b.sources.size()) {
         return false;
     }
@@ -129,6 +154,32 @@ bool as_bool(const json::Value* value, bool* out)
 {
     if (!value || !value->is_bool()) return false;
     *out = value->b;
+    return true;
+}
+
+bool parse_severity_rules(const json::Value* params, AlarmParamsConfig* out)
+{
+    const json::Value* rules = params ? params->get("severityRules") : nullptr;
+    if (!rules || !rules->is_arr() || rules->arr.empty()) {
+        std::fprintf(stderr, "ERROR alarm_cfg.bad_severity_rules\n");
+        return false;
+    }
+    for (const auto& rule : rules->arr) {
+        if (!rule->is_obj()) {
+            std::fprintf(stderr, "ERROR alarm_cfg.bad_severity_rule\n");
+            return false;
+        }
+        AlarmParamsConfig::SeverityRule parsed;
+        if (!as_string(rule->get("severity"), &parsed.severity) ||
+            !as_string(rule->get("op"), &parsed.op) ||
+            !as_number(rule->get("value"), &parsed.value) ||
+            !valid_severity(parsed.severity) ||
+            (parsed.op != ">=" && parsed.op != "<=")) {
+            std::fprintf(stderr, "ERROR alarm_cfg.bad_severity_rule\n");
+            return false;
+        }
+        out->severity_rules.push_back(parsed);
+    }
     return true;
 }
 
@@ -248,7 +299,14 @@ bool parse_entity(const json::Value& row, AlarmEntityConfig* out, bool* skipped)
         std::fprintf(stderr, "ERROR alarm_cfg.bad_required id=%s\n", out->id.c_str());
         return false;
     }
-    if (!valid_priority(out->priority) || out->delay_s < 0.0 ||
+    if (const json::Value* mode = row.get("clearMode")) {
+        if (!as_string(mode, &out->clear_mode)) {
+            std::fprintf(stderr, "ERROR alarm_cfg.bad_clear_mode id=%s\n", out->id.c_str());
+            return false;
+        }
+    }
+    if (!valid_priority(out->priority) || !valid_clear_mode(out->clear_mode) ||
+        out->delay_s < 0.0 ||
         !is_alarm_type(out->alarm_type)) {
         std::fprintf(stderr, "ERROR alarm_cfg.bad_scalar id=%s\n", out->id.c_str());
         return false;
@@ -301,21 +359,59 @@ bool parse_entity(const json::Value& row, AlarmEntityConfig* out, bool* skipped)
         }
         out->sources.push_back(parsed);
     }
-    return parse_params(row.get("params"), out->alarm_type, &out->params);
+    if (!parse_params(row.get("params"), out->alarm_type, &out->params)) return false;
+    if (out->priority == "flexible" &&
+        !parse_severity_rules(row.get("params"), &out->params)) return false;
+    return true;
+}
+
+std::string runtime_priority(const AlarmEntityConfig& cfg, double value)
+{
+    if (cfg.priority != "flexible") return cfg.priority;
+    for (const AlarmParamsConfig::SeverityRule& rule : cfg.params.severity_rules) {
+        if ((rule.op == ">=" && value >= rule.value) ||
+            (rule.op == "<=" && value <= rule.value)) {
+            return rule.severity;
+        }
+    }
+    return "info";
 }
 
 } // namespace
 
-bool AlarmRuntime::visible(const Entity& entity)
+bool AlarmRuntime::raw_visible(const Entity& entity)
 {
     return entity.active || entity.latched_clear;
+}
+
+bool AlarmRuntime::visible(const Entity& entity)
+{
+    return raw_visible(entity) && !entity.suppressed;
 }
 
 std::string AlarmRuntime::status_for(const Entity& entity)
 {
     if (entity.active) return entity.acked ? "acked" : "active";
-    if (entity.latched_clear) return "unack";
+    if (entity.latched_clear) return entity.acked ? "acked" : "unack";
     return {};
+}
+
+void AlarmRuntime::clear_lifecycle(Entity* entity)
+{
+    entity->active = false;
+    entity->acked = false;
+    entity->latched_clear = false;
+    entity->ack_timed = false;
+    entity->ack_remaining_s = 0.0;
+    entity->suppressed = false;
+    entity->suppress_timed = false;
+    entity->suppress_remaining_s = 0.0;
+    entity->active_source.clear();
+    entity->first_active_at.clear();
+    entity->trigger_value = 0.0;
+    entity->trigger_level.clear();
+    entity->trigger_threshold = 0.0;
+    entity->last_status.clear();
 }
 
 void AlarmRuntime::copy_lifecycle(const Entity& old_entity, Entity* entity)
@@ -327,6 +423,11 @@ void AlarmRuntime::copy_lifecycle(const Entity& old_entity, Entity* entity)
     entity->active = old_entity.active;
     entity->acked = old_entity.acked;
     entity->latched_clear = old_entity.latched_clear;
+    entity->ack_timed = old_entity.ack_timed;
+    entity->ack_remaining_s = old_entity.ack_remaining_s;
+    entity->suppressed = old_entity.suppressed;
+    entity->suppress_timed = old_entity.suppress_timed;
+    entity->suppress_remaining_s = old_entity.suppress_remaining_s;
     entity->occurrence = old_entity.occurrence;
     entity->first_active_at = old_entity.first_active_at;
     entity->active_source = old_entity.active_source;
@@ -440,8 +541,24 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
     const uint32_t effective_ms = scan_ms == 0 ? 1 : scan_ms;
     const float dt = static_cast<float>(effective_ms) / 1000.0f;
     for (Entity& entity : entities_) {
+        if (raw_visible(entity) && entity.suppressed && entity.suppress_timed) {
+            entity.suppress_remaining_s -= dt;
+            if (entity.suppress_remaining_s <= 0.0) {
+                entity.suppressed = false;
+                entity.suppress_timed = false;
+                entity.suppress_remaining_s = 0.0;
+            }
+        }
+        if (raw_visible(entity) && entity.acked && entity.ack_timed) {
+            entity.ack_remaining_s -= dt;
+            if (entity.ack_remaining_s <= 0.0) {
+                entity.acked = false;
+                entity.ack_timed = false;
+                entity.ack_remaining_s = 0.0;
+            }
+        }
         const bool was_condition_active = entity.active;
-        const bool was_visible = visible(entity);
+        const bool was_raw_visible = raw_visible(entity);
         const std::string old_source = entity.active_source;
         bool condition_active = false;
         std::string condition_source;
@@ -486,12 +603,15 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
         }
 
         if (condition_active) {
-            if (!was_visible) {
+            if (!was_raw_visible) {
                 entity.occurrence++;
                 entity.first_active_at = iso_utc_now();
                 entity.acked = false;
-            } else if (entity.latched_clear) {
-                entity.acked = false;
+                entity.ack_timed = false;
+                entity.ack_remaining_s = 0.0;
+                entity.suppressed = false;
+                entity.suppress_timed = false;
+                entity.suppress_remaining_s = 0.0;
             }
             entity.active = true;
             entity.latched_clear = false;
@@ -501,25 +621,13 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
             entity.trigger_threshold = condition_threshold;
         } else if (was_condition_active) {
             entity.active = false;
-            if (entity.acked) {
-                entity.acked = false;
-                entity.latched_clear = false;
-                entity.active_source.clear();
-                entity.first_active_at.clear();
-                entity.trigger_value = 0.0;
-                entity.trigger_level.clear();
-                entity.trigger_threshold = 0.0;
+            if (entity.cfg.clear_mode == "auto" && entity.acked) {
+                clear_lifecycle(&entity);
             } else {
                 entity.latched_clear = true;
             }
         } else if (!entity.latched_clear) {
-            entity.active = false;
-            entity.acked = false;
-            entity.active_source.clear();
-            entity.first_active_at.clear();
-            entity.trigger_value = 0.0;
-            entity.trigger_level.clear();
-            entity.trigger_threshold = 0.0;
+            clear_lifecycle(&entity);
         }
         entity.last_status = status_for(entity);
 
@@ -530,7 +638,7 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
                          entity.cfg.id.c_str(),
                          entity.active_source.empty() ? "-" : entity.active_source.c_str(),
                          entity.trigger_level.empty() ? "-" : entity.trigger_level.c_str(),
-                         entity.cfg.priority.c_str());
+                         runtime_priority(entity.cfg, entity.trigger_value).c_str());
         }
     }
 }
@@ -549,7 +657,7 @@ std::vector<AlarmState> AlarmRuntime::active_states() const
             entity.trigger_value,
             entity.trigger_level,
             entity.trigger_threshold,
-            entity.cfg.priority,
+            runtime_priority(entity.cfg, entity.trigger_value),
             entity.cfg.label,
             entity.cfg.alarm_type,
             entity.occurrence,
@@ -559,25 +667,32 @@ std::vector<AlarmState> AlarmRuntime::active_states() const
     return out;
 }
 
-bool AlarmRuntime::ack(const std::string& id)
+bool AlarmRuntime::ack(const std::string& id, double duration_s, bool permanent)
 {
     for (Entity& entity : entities_) {
         if (entity.cfg.id != id) continue;
         if (!visible(entity)) return false;
-        if (entity.latched_clear) {
-            entity.active = false;
-            entity.acked = false;
-            entity.latched_clear = false;
-            entity.active_source.clear();
-            entity.first_active_at.clear();
-            entity.trigger_value = 0.0;
-            entity.trigger_level.clear();
-            entity.trigger_threshold = 0.0;
-            entity.last_status.clear();
+        if (entity.latched_clear && entity.cfg.clear_mode == "auto") {
+            clear_lifecycle(&entity);
             return true;
         }
         entity.acked = true;
+        entity.ack_timed = !permanent;
+        entity.ack_remaining_s = permanent ? 0.0 : duration_s;
         entity.last_status = status_for(entity);
+        return true;
+    }
+    return false;
+}
+
+bool AlarmRuntime::suppress(const std::string& id, double duration_s, bool permanent)
+{
+    for (Entity& entity : entities_) {
+        if (entity.cfg.id != id) continue;
+        if (!raw_visible(entity)) return false;
+        entity.suppressed = true;
+        entity.suppress_timed = !permanent;
+        entity.suppress_remaining_s = permanent ? 0.0 : duration_s;
         return true;
     }
     return false;
@@ -589,6 +704,8 @@ bool AlarmRuntime::return_to_active(const std::string& id)
         if (entity.cfg.id != id) continue;
         if (!entity.active || !entity.acked) return false;
         entity.acked = false;
+        entity.ack_timed = false;
+        entity.ack_remaining_s = 0.0;
         entity.last_status = status_for(entity);
         return true;
     }

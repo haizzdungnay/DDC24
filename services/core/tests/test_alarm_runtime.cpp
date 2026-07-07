@@ -369,6 +369,22 @@ TEST(AlarmRuntime, AckUnknownOrNormalReturnsFalse)
     EXPECT_FALSE(alarms.ack("ALM-001"));
 }
 
+TEST(AlarmRuntime, TimedAckClearsAutoLatchedClear)
+{
+    TempFile file(kValidAlarms);
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()));
+
+    PointTable table = table_with_ui(30.0f, 22.0f);
+    alarms.evaluate(table, 1000);
+    table = table_with_ui(22.0f, 22.0f);
+    alarms.evaluate(table, 1000);
+    ASSERT_NE(find_state(alarms.active_states(), "ALM-001"), nullptr);
+
+    EXPECT_TRUE(alarms.ack("ALM-001", 60.0, false));
+    EXPECT_EQ(find_state(alarms.active_states(), "ALM-001"), nullptr);
+}
+
 TEST(AlarmRuntime, ReloadKeepsAckWhenFingerprintUnchanged)
 {
     TempFile file(high_low_alarm_json(28.0));
@@ -415,4 +431,189 @@ TEST(AlarmRuntime, ReloadResetsAckWhenFingerprintChanges)
     ASSERT_NE(state, nullptr);
     EXPECT_EQ(state->status, "active");
     EXPECT_FALSE(alarms.ack("missing"));
+}
+
+TEST(AlarmRuntime, ReloadResetsAckWhenClearModeChanges)
+{
+    TempFile file(R"([
+      {"id":"ALM-M","label":"Mode","enabled":true,"alarmType":1,
+       "sources":[{"kind":"UI","channel":1,"pointId":"UI-01"}],
+       "priority":"high","clearMode":"auto","delayS":0,
+       "params":{"hh":32,"h":28,"l":16,"ll":12}}
+    ])");
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()));
+
+    PointTable table = table_with_ui(30.0f, 0.0f);
+    alarms.evaluate(table, 1000);
+    ASSERT_TRUE(alarms.ack("ALM-M"));
+
+    file.write(R"([
+      {"id":"ALM-M","label":"Mode","enabled":true,"alarmType":1,
+       "sources":[{"kind":"UI","channel":1,"pointId":"UI-01"}],
+       "priority":"high","clearMode":"manual","delayS":0,
+       "params":{"hh":32,"h":28,"l":16,"ll":12}}
+    ])");
+    ASSERT_TRUE(alarms.reload(file.path()));
+    EXPECT_EQ(find_state(alarms.active_states(), "ALM-M"), nullptr);
+
+    alarms.evaluate(table, 1000);
+    const AlarmState* state = find_state(alarms.active_states(), "ALM-M");
+    ASSERT_NE(state, nullptr);
+    EXPECT_EQ(state->status, "active");
+}
+
+TEST(AlarmRuntime, ManualClearModeStaysVisibleUntilSuppressed)
+{
+    TempFile file(R"([
+      {"id":"ALM-M","label":"Manual","enabled":true,"alarmType":1,
+       "sources":[{"kind":"UI","channel":1,"pointId":"UI-01"}],
+       "priority":"high","clearMode":"manual","delayS":0,
+       "params":{"hh":32,"h":28,"l":16,"ll":12}}
+    ])");
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()));
+
+    PointTable table = table_with_ui(30.0f, 0.0f);
+    alarms.evaluate(table, 1000);
+    table = table_with_ui(22.0f, 0.0f);
+    alarms.evaluate(table, 1000);
+
+    std::vector<AlarmState> states = alarms.active_states();
+    const AlarmState* state = find_state(states, "ALM-M");
+    ASSERT_NE(state, nullptr);
+    EXPECT_EQ(state->status, "unack");
+    EXPECT_FALSE(state->active);
+
+    EXPECT_TRUE(alarms.ack("ALM-M"));
+    states = alarms.active_states();
+    state = find_state(states, "ALM-M");
+    ASSERT_NE(state, nullptr);
+    EXPECT_EQ(state->status, "acked");
+    EXPECT_FALSE(state->active);
+
+    EXPECT_TRUE(alarms.suppress("ALM-M"));
+    EXPECT_EQ(find_state(alarms.active_states(), "ALM-M"), nullptr);
+}
+
+TEST(AlarmRuntime, FlexiblePriorityUsesFirstMatchingSeverityRule)
+{
+    TempFile file(R"([
+      {"id":"ALM-F","label":"Flexible","enabled":true,"alarmType":1,
+       "sources":[{"kind":"UI","channel":1,"pointId":"UI-01"}],
+       "priority":"flexible","delayS":0,
+       "params":{"hh":40,"h":28,"l":16,"ll":12,"severityRules":[
+         {"severity":"critical","op":">=","value":35},
+         {"severity":"high","op":">=","value":28}
+       ]}}
+    ])");
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()));
+
+    alarms.evaluate(table_with_ui(30.0f, 0.0f), 1000);
+    std::vector<AlarmState> states = alarms.active_states();
+    const AlarmState* state = find_state(states, "ALM-F");
+    ASSERT_NE(state, nullptr);
+    EXPECT_EQ(state->priority, "high");
+}
+
+TEST(AlarmRuntime, ReloadResetsAckWhenSeverityRulesChange)
+{
+    TempFile file(R"([
+      {"id":"ALM-F","label":"Flexible","enabled":true,"alarmType":1,
+       "sources":[{"kind":"UI","channel":1,"pointId":"UI-01"}],
+       "priority":"flexible","delayS":0,
+       "params":{"hh":40,"h":28,"l":16,"ll":12,"severityRules":[
+         {"severity":"high","op":">=","value":28}
+       ]}}
+    ])");
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()));
+
+    PointTable table = table_with_ui(30.0f, 0.0f);
+    alarms.evaluate(table, 1000);
+    ASSERT_TRUE(alarms.ack("ALM-F"));
+
+    file.write(R"([
+      {"id":"ALM-F","label":"Flexible","enabled":true,"alarmType":1,
+       "sources":[{"kind":"UI","channel":1,"pointId":"UI-01"}],
+       "priority":"flexible","delayS":0,
+       "params":{"hh":40,"h":28,"l":16,"ll":12,"severityRules":[
+         {"severity":"medium","op":">=","value":28}
+       ]}}
+    ])");
+    ASSERT_TRUE(alarms.reload(file.path()));
+    EXPECT_EQ(find_state(alarms.active_states(), "ALM-F"), nullptr);
+
+    alarms.evaluate(table, 1000);
+    const AlarmState* state = find_state(alarms.active_states(), "ALM-F");
+    ASSERT_NE(state, nullptr);
+    EXPECT_EQ(state->status, "active");
+    EXPECT_EQ(state->priority, "medium");
+}
+
+TEST(AlarmRuntime, FlexiblePriorityFallsBackToInfo)
+{
+    TempFile file(R"([
+      {"id":"ALM-F","label":"Flexible","enabled":true,"alarmType":1,
+       "sources":[{"kind":"UI","channel":1,"pointId":"UI-01"}],
+       "priority":"flexible","delayS":0,
+       "params":{"hh":40,"h":28,"l":16,"ll":12,"severityRules":[
+         {"severity":"critical","op":">=","value":100}
+       ]}}
+    ])");
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()));
+
+    alarms.evaluate(table_with_ui(30.0f, 0.0f), 1000);
+    std::vector<AlarmState> states = alarms.active_states();
+    const AlarmState* state = find_state(states, "ALM-F");
+    ASSERT_NE(state, nullptr);
+    EXPECT_EQ(state->priority, "info");
+}
+
+TEST(AlarmRuntime, FlexiblePriorityRequiresSeverityRule)
+{
+    TempFile file(R"([
+      {"id":"ALM-F","label":"Flexible","enabled":true,"alarmType":1,
+       "sources":[{"kind":"UI","channel":1,"pointId":"UI-01"}],
+       "priority":"flexible","delayS":0,
+       "params":{"hh":40,"h":28,"l":16,"ll":12,"severityRules":[]}}
+    ])");
+    AlarmRuntime alarms;
+    EXPECT_FALSE(alarms.load(file.path()));
+}
+
+TEST(AlarmRuntime, TimedAckExpiresWhileAlarmVisible)
+{
+    TempFile file(kValidAlarms);
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()));
+
+    alarms.evaluate(table_with_ui(30.0f, 22.0f), 1000);
+    ASSERT_TRUE(alarms.ack("ALM-001", 1.0, false));
+    std::vector<AlarmState> states = alarms.active_states();
+    const AlarmState* state = find_state(states, "ALM-001");
+    ASSERT_NE(state, nullptr);
+    EXPECT_EQ(state->status, "acked");
+
+    alarms.evaluate(table_with_ui(30.0f, 22.0f), 1000);
+    states = alarms.active_states();
+    state = find_state(states, "ALM-001");
+    ASSERT_NE(state, nullptr);
+    EXPECT_EQ(state->status, "active");
+}
+
+TEST(AlarmRuntime, TimedSuppressHidesThenReappears)
+{
+    TempFile file(kValidAlarms);
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()));
+
+    alarms.evaluate(table_with_ui(30.0f, 22.0f), 1000);
+    ASSERT_TRUE(alarms.suppress("ALM-001", 1.0, false));
+    EXPECT_EQ(find_state(alarms.active_states(), "ALM-001"), nullptr);
+
+    alarms.evaluate(table_with_ui(30.0f, 22.0f), 1000);
+    EXPECT_NE(find_state(alarms.active_states(), "ALM-001"), nullptr);
 }

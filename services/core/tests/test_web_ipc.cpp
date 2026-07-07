@@ -338,6 +338,52 @@ TEST(WebIpc, AlarmAckRunsAfterEvaluateAndDoesNotUsePointResolver)
     EXPECT_EQ(f.shm.do_cmd[0], 0) << "alarm ack must not touch output resolver";
 }
 
+TEST(WebIpc, AlarmAckAcceptsDuration)
+{
+    Fixture f;
+    f.alarms.configure({high_alarm()});
+    f.shm.ui_value[0] = 30.0f;
+    f.scan();
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    c.send_line(R"({"id":14,"op":"alarm_ack","alarmId":"ALM-1","durationS":100,"user":"web"})");
+    usleep(50000);
+    f.scan();
+    std::string resp = c.recv_line();
+    EXPECT_NE(resp.find("\"result\":\"accepted\""), std::string::npos) << resp;
+
+    c.send_line(R"({"id":15,"op":"alarm_list","user":"web"})");
+    usleep(50000);
+    f.scan();
+    resp = c.recv_line();
+    EXPECT_NE(resp.find("\"status\":\"acked\""), std::string::npos) << resp;
+}
+
+TEST(WebIpc, AlarmSuppressHidesAlarmFromList)
+{
+    Fixture f;
+    f.alarms.configure({high_alarm()});
+    f.shm.ui_value[0] = 30.0f;
+    f.scan();
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    c.send_line(R"({"id":16,"op":"alarm_suppress","alarmId":"ALM-1","permanent":true,"user":"web"})");
+    usleep(50000);
+    f.scan();
+    std::string resp = c.recv_line();
+    EXPECT_NE(resp.find("\"result\":\"accepted\""), std::string::npos) << resp;
+
+    c.send_line(R"({"id":17,"op":"alarm_list","user":"web"})");
+    usleep(50000);
+    f.scan();
+    resp = c.recv_line();
+    EXPECT_EQ(resp.find("\"id\":\"ALM-1\""), std::string::npos) << resp;
+}
+
 TEST(WebIpc, AlarmAckUnknownRejected)
 {
     Fixture f;

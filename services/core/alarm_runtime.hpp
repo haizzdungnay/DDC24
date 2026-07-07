@@ -16,12 +16,19 @@ struct AlarmSourceConfig {
 };
 
 struct AlarmParamsConfig {
+    struct SeverityRule {
+        std::string severity;
+        std::string op;
+        double value = 0.0;
+    };
+
     double hh = 0.0;
     double h = 0.0;
     double l = 0.0;
     double ll = 0.0;
     double hysteresis = 0.0;
     double runtime_hours = 0.0;
+    std::vector<SeverityRule> severity_rules;
 };
 
 struct AlarmEntityConfig {
@@ -31,6 +38,7 @@ struct AlarmEntityConfig {
     int alarm_type = 0;
     std::vector<AlarmSourceConfig> sources;
     std::string priority;
+    std::string clear_mode = "auto";
     double delay_s = 0.0;
     bool publish_bacnet = false;
     int notification_class = 0;
@@ -60,7 +68,8 @@ public:
     void configure(std::vector<AlarmEntityConfig> entities);
 
     void evaluate(const PointTable& table, uint32_t scan_ms);
-    bool ack(const std::string& id);
+    bool ack(const std::string& id, double duration_s = 0.0, bool permanent = true);
+    bool suppress(const std::string& id, double duration_s = 0.0, bool permanent = true);
     bool return_to_active(const std::string& id);
 
     std::vector<AlarmState> active_states() const;
@@ -87,6 +96,11 @@ private:
         bool active = false;
         bool acked = false;
         bool latched_clear = false;
+        bool ack_timed = false;
+        double ack_remaining_s = 0.0;
+        bool suppressed = false;
+        bool suppress_timed = false;
+        double suppress_remaining_s = 0.0;
         uint64_t occurrence = 0;
         std::string first_active_at;
         std::string active_source;
@@ -96,8 +110,10 @@ private:
         std::string last_status;
     };
 
+    static bool raw_visible(const Entity& entity);
     static bool visible(const Entity& entity);
     static std::string status_for(const Entity& entity);
+    static void clear_lifecycle(Entity* entity);
     static void copy_lifecycle(const Entity& old_entity, Entity* entity);
 
     std::vector<Entity> entities_;

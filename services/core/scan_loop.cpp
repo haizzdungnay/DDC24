@@ -96,8 +96,13 @@ void ScanLoop::step()
                 d_.alarms ? d_.alarms->active_states() : std::vector<AlarmState>{};
             d_.web->respond_alarm_list(cmd, states);
         } else if (cmd.kind == WebCommandKind::AlarmAck) {
-            if (d_.alarms && d_.alarms->ack(cmd.alarm_id))
+            if (d_.alarms && d_.alarms->ack(cmd.alarm_id, cmd.duration_s, cmd.permanent))
                 d_.web->respond_alarm_ack_accepted(cmd);
+            else
+                d_.web->respond_rejected(cmd, "unknown_alarm");
+        } else if (cmd.kind == WebCommandKind::AlarmSuppress) {
+            if (d_.alarms && d_.alarms->suppress(cmd.alarm_id, cmd.duration_s, cmd.permanent))
+                d_.web->respond_alarm_suppress_accepted(cmd);
             else
                 d_.web->respond_rejected(cmd, "unknown_alarm");
         } else if (cmd.kind == WebCommandKind::AlarmReturn) {

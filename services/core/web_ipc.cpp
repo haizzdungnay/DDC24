@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -51,6 +52,11 @@ static bool jget_string(const std::string& s, const char* key, std::string* out)
     return true;
 }
 
+static bool jhas_key(const std::string& s, const char* key)
+{
+    return s.find(std::string("\"") + key + "\"") != std::string::npos;
+}
+
 static bool jget_number(const std::string& s, const char* key, double* out)
 {
     const std::string pat = std::string("\"") + key + "\"";
@@ -65,6 +71,26 @@ static bool jget_number(const std::string& s, const char* key, double* out)
     if (end == s.c_str() + p) return false;
     *out = v;
     return true;
+}
+
+static bool jget_bool(const std::string& s, const char* key, bool* out)
+{
+    const std::string pat = std::string("\"") + key + "\"";
+    size_t p = s.find(pat);
+    if (p == std::string::npos) return false;
+    p = s.find(':', p + pat.size());
+    if (p == std::string::npos) return false;
+    p++;
+    while (p < s.size() && std::isspace(static_cast<unsigned char>(s[p]))) p++;
+    if (s.compare(p, 4, "true") == 0) {
+        *out = true;
+        return true;
+    }
+    if (s.compare(p, 5, "false") == 0) {
+        *out = false;
+        return true;
+    }
+    return false;
 }
 
 /* user vào audit log: [A-Za-z0-9_.@:-], max 48 (07 §8 — bacnet dùng ':' cho IP) */
@@ -129,6 +155,7 @@ static const char* op_name(const WebCommand& cmd)
 {
     if (cmd.kind == WebCommandKind::AlarmList) return "alarm_list";
     if (cmd.kind == WebCommandKind::AlarmAck) return "alarm_ack";
+    if (cmd.kind == WebCommandKind::AlarmSuppress) return "alarm_suppress";
     if (cmd.kind == WebCommandKind::AlarmReturn) return "alarm_return";
     return cmd.is_write ? "write" : "release";
 }
@@ -265,6 +292,15 @@ void WebIpc::respond_alarm_ack_accepted(const WebCommand& cmd)
     audit(cmd, "accepted", "alarm", 0.0f);
 }
 
+void WebIpc::respond_alarm_suppress_accepted(const WebCommand& cmd)
+{
+    const std::string json = "{\"id\":" + std::to_string(cmd.id) +
+                             ",\"result\":\"accepted\",\"alarmId\":\"" +
+                             json_escape(cmd.alarm_id) + "\"}";
+    respond(cmd.client_fd, json);
+    audit(cmd, "accepted", "alarm", 0.0f);
+}
+
 void WebIpc::respond_alarm_return_accepted(const WebCommand& cmd)
 {
     const std::string json = "{\"id\":" + std::to_string(cmd.id) +
@@ -297,21 +333,44 @@ void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand
         reject("bad_request");
         return;
     }
-    if (op == "alarm_list" || op == "alarm_ack" || op == "alarm_return") {
+    if (op == "alarm_list" || op == "alarm_ack" ||
+        op == "alarm_suppress" || op == "alarm_return") {
         if (!has_user) {
             reject("bad_request");
             return;
         }
         if (op == "alarm_list") cmd.kind = WebCommandKind::AlarmList;
         else if (op == "alarm_ack") cmd.kind = WebCommandKind::AlarmAck;
+        else if (op == "alarm_suppress") cmd.kind = WebCommandKind::AlarmSuppress;
         else cmd.kind = WebCommandKind::AlarmReturn;
-        if (cmd.kind == WebCommandKind::AlarmAck || cmd.kind == WebCommandKind::AlarmReturn) {
+        if (cmd.kind == WebCommandKind::AlarmAck ||
+            cmd.kind == WebCommandKind::AlarmSuppress ||
+            cmd.kind == WebCommandKind::AlarmReturn) {
             std::string alarm_id;
             if (!jget_string(line, "alarmId", &alarm_id) || !valid_alarm_id(alarm_id)) {
                 reject("bad_request");
                 return;
             }
             cmd.alarm_id = alarm_id;
+        }
+        if (cmd.kind == WebCommandKind::AlarmAck ||
+            cmd.kind == WebCommandKind::AlarmSuppress) {
+            const bool has_duration = jhas_key(line, "durationS");
+            const bool has_permanent = jhas_key(line, "permanent");
+            if (has_duration && (!jget_number(line, "durationS", &cmd.duration_s) ||
+                                 !std::isfinite(cmd.duration_s) || cmd.duration_s <= 0.0)) {
+                reject("bad_duration");
+                return;
+            }
+            if (has_permanent && !jget_bool(line, "permanent", &cmd.permanent)) {
+                reject("bad_request");
+                return;
+            }
+            if (has_duration && !has_permanent) cmd.permanent = false;
+            if (!cmd.permanent && !has_duration) {
+                reject("bad_duration");
+                return;
+            }
         }
         if (out->size() >= 64) {
             reject("busy");

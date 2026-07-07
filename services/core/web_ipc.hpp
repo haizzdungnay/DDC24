@@ -21,6 +21,7 @@ enum class WebCommandKind {
     Point,
     AlarmList,
     AlarmAck,
+    AlarmSuppress,
     AlarmReturn,
 };
 
@@ -31,6 +32,8 @@ struct WebCommand {
     PointId     point{PointKind::AV, -1};
     std::string point_name;         /* đã sanitize [A-Za-z0-9] ≤8 — cho audit log */
     std::string alarm_id;
+    double      duration_s = 0.0;
+    bool        permanent = true;
     float       value = 0.0f;
     std::string user;               /* đã sanitize [A-Za-z0-9_.@:-] ≤48 — cho audit */
     int         prio = 2;           /* PRIO_LOCAL_MANUAL=2 / PRIO_BACNET=3 (07 §8, BAC-CONFLICT-001) */
@@ -59,6 +62,7 @@ public:
     void respond_rejected(const WebCommand& cmd, const char* error);
     void respond_alarm_list(const WebCommand& cmd, const std::vector<AlarmState>& alarms);
     void respond_alarm_ack_accepted(const WebCommand& cmd);
+    void respond_alarm_suppress_accepted(const WebCommand& cmd);
     void respond_alarm_return_accepted(const WebCommand& cmd);
 
 private:
