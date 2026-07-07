@@ -56,6 +56,7 @@ func loadAlarmSettingsFile(ctx context.Context, path string) ([]AlarmSetting, er
 		}
 		rows = append(rows, row)
 	}
+	normalizeAlarmSettings(rows)
 	if errs := validateAlarmSettings(rows); len(errs) > 0 {
 		return nil, fmt.Errorf("validate alarm_settings %s: %s", path, configValidationSummary(errs))
 	}
@@ -108,6 +109,9 @@ func decodeAlarmSettingRow(raw json.RawMessage) (AlarmSetting, error) {
 	if err := json.Unmarshal(raw, &row); err != nil {
 		return AlarmSetting{}, err
 	}
+	if row.ClearMode == "" {
+		row.ClearMode = "auto"
+	}
 	return row, nil
 }
 
@@ -148,6 +152,7 @@ func migrateLegacyAlarmSetting(row legacyAlarmSetting) (AlarmSetting, error) {
 		AlarmType:     alarmTypeHighLowInput,
 		Sources:       []AlarmSource{{Kind: sourceKind, Channel: channel, PointID: formatPointID(sourceKind, channel)}},
 		Priority:      row.Priority,
+		ClearMode:     "auto",
 		DelayS:        row.DelayS,
 		PublishBacnet: false,
 		Params:        &AlarmParams{HH: row.HH, H: row.H, L: row.L, LL: row.LL},

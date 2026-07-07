@@ -138,6 +138,7 @@ func (a *App) Router() http.Handler {
 	mux.Handle("GET /api/v1/alarms", a.auth.Require(RoleViewer, a.handleAlarms))
 	mux.Handle("GET /api/v1/alarm-history", a.auth.Require(RoleViewer, a.handleAlarmHistory))
 	mux.Handle("POST /api/v1/alarms/{id}/ack", a.auth.Require(RoleOperator, a.handleAckAlarm))
+	mux.Handle("POST /api/v1/alarms/{id}/suppress", a.auth.Require(RoleOperator, a.handleSuppressAlarm))
 	mux.Handle("POST /api/v1/alarms/{id}/return", a.auth.Require(RoleOperator, a.handleReturnAlarm))
 	mux.Handle("POST /api/v1/commissioning/points/{id}/test", a.auth.Require(RoleOperator, a.handleCommissionTest))
 	mux.Handle("GET /api/v1/system/config", a.auth.Require(RoleAdmin, a.handleGetSystemConfig))

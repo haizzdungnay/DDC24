@@ -11,6 +11,25 @@ var validPriorities = map[string]bool{
 	"medium":   true,
 	"high":     true,
 	"critical": true,
+	"flexible": true,
+}
+
+var validAlarmClearModes = map[string]bool{
+	"auto":   true,
+	"manual": true,
+}
+
+var validAlarmSeverities = map[string]bool{
+	"critical": true,
+	"high":     true,
+	"medium":   true,
+	"low":      true,
+	"info":     true,
+}
+
+var validSeverityRuleOps = map[string]bool{
+	">=": true,
+	"<=": true,
 }
 
 func (a *App) handleGetAlarmSettings(w http.ResponseWriter, r *http.Request) {
@@ -31,6 +50,7 @@ func (a *App) handlePutAlarmSettings(w http.ResponseWriter, r *http.Request) {
 	if rows == nil {
 		rows = []AlarmSetting{}
 	}
+	normalizeAlarmSettings(rows)
 	if errs := validateAlarmSettings(rows); len(errs) > 0 {
 		writeValidationErrors(w, errs)
 		return
@@ -100,7 +120,11 @@ func validateAlarmSettings(rows []AlarmSetting) []configValidationError {
 		}
 
 		if !validPriorities[row.Priority] {
-			addConfigErr(&errs, base+".priority", "must be one of: low, medium, high, critical")
+			addConfigErr(&errs, base+".priority", "must be one of: low, medium, high, critical, flexible")
+		}
+
+		if !validAlarmClearModes[row.ClearMode] {
+			addConfigErr(&errs, base+".clearMode", "must be one of: auto, manual")
 		}
 
 		if row.DelayS < 0 {
@@ -123,12 +147,23 @@ func validateAlarmSettings(rows []AlarmSetting) []configValidationError {
 			addConfigErr(&errs, base+".params", "is required")
 		} else if validAlarmType(row.AlarmType) {
 			validateAlarmParams(&errs, base+".params", row.AlarmType, row.Params)
+			if row.Priority == "flexible" && len(row.Params.SeverityRules) == 0 {
+				addConfigErr(&errs, base+".params.severityRules", "must contain at least one rule when priority is flexible")
+			}
 		}
 	}
 	if bacnetPublished > maxBacnetPublishedAlarms {
 		addConfigErr(&errs, "$.publishBacnet", fmt.Sprintf("enabled BACnet-published alarms must be <= %d", maxBacnetPublishedAlarms))
 	}
 	return errs
+}
+
+func normalizeAlarmSettings(rows []AlarmSetting) {
+	for i := range rows {
+		if rows[i].ClearMode == "" {
+			rows[i].ClearMode = "auto"
+		}
+	}
 }
 
 func validAlarmType(alarmType int) bool {
@@ -181,6 +216,7 @@ func validateAlarmParams(errs *[]configValidationError, path string, alarmType i
 	if params.Hysteresis != nil && *params.Hysteresis < 0 {
 		addConfigErr(errs, path+".hysteresis", "must be >= 0")
 	}
+	validateSeverityRules(errs, path+".severityRules", params.SeverityRules)
 	switch alarmType {
 	case alarmTypeHighLowInput:
 		validateHighLowParams(errs, path, params)
@@ -189,6 +225,18 @@ func validateAlarmParams(errs *[]configValidationError, path string, alarmType i
 			addConfigErr(errs, path+".runtimeHours", "is required for alarmType 3")
 		} else if *params.RuntimeHours <= 0 {
 			addConfigErr(errs, path+".runtimeHours", "must be > 0")
+		}
+	}
+}
+
+func validateSeverityRules(errs *[]configValidationError, path string, rules []SeverityRule) {
+	for i, rule := range rules {
+		base := fmt.Sprintf("%s[%d]", path, i)
+		if !validAlarmSeverities[rule.Severity] {
+			addConfigErr(errs, base+".severity", "must be one of: critical, high, medium, low, info")
+		}
+		if !validSeverityRuleOps[rule.Op] {
+			addConfigErr(errs, base+".op", "must be one of: >=, <=")
 		}
 	}
 }

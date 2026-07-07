@@ -178,6 +178,9 @@ func (t *AlarmHistoryTracker) Reconcile(alarms []AlarmDTO, now time.Time) []Alar
 			}
 			continue
 		}
+		if !alarmConditionActive(prev.Status) && alarmConditionActive(alarm.Status) {
+			events = append(events, historyEventFromAlarm("started", alarm, now.Format(time.RFC3339Nano), ""))
+		}
 		if alarmConditionActive(prev.Status) && !alarmConditionActive(alarm.Status) {
 			events = append(events, historyEndEvent(alarm, now.Format(time.RFC3339Nano)))
 		}
@@ -547,38 +550,24 @@ func (a *App) mergeAlarmHistoryRows(ctx context.Context, alarms []AlarmDTO, incl
 		if id == "" {
 			continue
 		}
-		if !includeMissing && !liveIDs[id] {
+		if liveIDs[id] {
+			continue
+		}
+		if !includeMissing {
 			continue
 		}
 		switch normalizeHistoryEvent(event.Event) {
 		case "started", "returned":
-			if liveIDs[id] {
-				alarm := byID[id]
-				alarm.Status = "active"
-				alarm.Active = true
-				byID[id] = alarm
-				continue
-			}
 			if !containsString(order, id) {
 				order = append(order, id)
 			}
 			byID[id] = alarmDTOFromHistory(event, "active", true)
 		case "acked":
-			if liveIDs[id] {
-				alarm := byID[id]
-				alarm.Status = "acked"
-				alarm.Active = true
-				byID[id] = alarm
-				continue
-			}
 			if !containsString(order, id) {
 				order = append(order, id)
 			}
 			byID[id] = alarmDTOFromHistory(event, "acked", true)
 		case "ended":
-			if liveIDs[id] && byID[id].Status != "cleared" {
-				continue
-			}
 			if !containsString(order, id) {
 				order = append(order, id)
 			}

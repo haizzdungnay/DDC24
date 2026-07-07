@@ -110,6 +110,15 @@ func TestValidateAlarmSettingsAcceptsEntityRoundTrip(t *testing.T) {
 	}
 }
 
+func TestValidateAlarmSettingsAcceptsFlexibleSeverityRules(t *testing.T) {
+	rows := validAlarmRows(1)
+	rows[0].Priority = "flexible"
+	rows[0].Params.SeverityRules = []SeverityRule{{Severity: "critical", Op: ">=", Value: 90}}
+	if errs := validateAlarmSettings(rows); len(errs) > 0 {
+		t.Fatalf("validation errors = %+v", errs)
+	}
+}
+
 func TestAlarmSettingsValidationRejectsBadInputWithoutWrite(t *testing.T) {
 	cases := []struct {
 		name string
@@ -119,6 +128,25 @@ func TestAlarmSettingsValidationRejectsBadInputWithoutWrite(t *testing.T) {
 			name: "bad priority",
 			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
 				rows[0].Priority = "urgent"
+			}),
+		},
+		{
+			name: "bad clear mode",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].ClearMode = "sometimes"
+			}),
+		},
+		{
+			name: "flexible priority without severity rules",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].Priority = "flexible"
+			}),
+		},
+		{
+			name: "bad severity rule",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].Priority = "flexible"
+				rows[0].Params.SeverityRules = []SeverityRule{{Severity: "urgent", Op: ">", Value: 90}}
 			}),
 		},
 		{
@@ -230,6 +258,9 @@ func TestLoadAlarmSettingsMigratesLegacyRows(t *testing.T) {
 	got := rows[0]
 	if got.ID != "ALM-AI-01" || got.AlarmType != alarmTypeHighLowInput || got.PublishBacnet {
 		t.Fatalf("migrated row = %+v", got)
+	}
+	if got.ClearMode != "auto" {
+		t.Fatalf("migrated clearMode = %q; want auto", got.ClearMode)
 	}
 	if len(got.Sources) != 1 || got.Sources[0].Kind != "UI" || got.Sources[0].Channel != 1 || got.Sources[0].PointID != "UI-01" {
 		t.Fatalf("migrated sources = %+v", got.Sources)
@@ -434,6 +465,7 @@ func validAlarmSetting(i int) AlarmSetting {
 		AlarmType:     alarmTypeHighLowInput,
 		Sources:       []AlarmSource{{Kind: "UI", Channel: channel, PointID: formatPointID("UI", channel)}},
 		Priority:      priorities[(i-1)%len(priorities)],
+		ClearMode:     "auto",
 		DelayS:        float64(i * 10),
 		PublishBacnet: false,
 		Params:        &AlarmParams{HH: &hh, H: &h, L: &l, LL: &ll},

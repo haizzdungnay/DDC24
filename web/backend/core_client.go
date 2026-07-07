@@ -602,7 +602,11 @@ type alarmReader interface {
 }
 
 type alarmAcker interface {
-	AckAlarm(ctx context.Context, id string) error
+	AckAlarm(ctx context.Context, id string, action AlarmActionRequest) error
+}
+
+type alarmSuppressor interface {
+	SuppressAlarm(ctx context.Context, id string, action AlarmActionRequest) error
 }
 
 type alarmReturner interface {
@@ -643,7 +647,7 @@ func (c *CoreClient) ReadAlarms(ctx context.Context) ([]AlarmDTO, error) {
 }
 
 // AckAlarm sends an acknowledge command for alarm id to core.
-func (c *CoreClient) AckAlarm(ctx context.Context, id string) error {
+func (c *CoreClient) AckAlarm(ctx context.Context, id string, action AlarmActionRequest) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -653,12 +657,7 @@ func (c *CoreClient) AckAlarm(ctx context.Context, id string) error {
 	if !validAlarmID(id) {
 		return fmt.Errorf("invalid alarm id")
 	}
-	resp, err := c.sendWebIPC(ctx, map[string]any{
-		"id":      atomic.AddUint64(&webCommandID, 1),
-		"op":      "alarm_ack",
-		"alarmId": id,
-		"user":    "web",
-	})
+	resp, err := c.sendWebIPC(ctx, alarmActionCommand("alarm_ack", id, action))
 	if errors.Is(err, errCoreUnavailable) {
 		return errCoreUnavailable
 	}
@@ -672,6 +671,49 @@ func (c *CoreClient) AckAlarm(ctx context.Context, id string) error {
 		return fmt.Errorf("core rejected alarm ack %s: %s", id, resp.Error)
 	}
 	return nil
+}
+
+// SuppressAlarm sends an off/suppress command for alarm id to core.
+func (c *CoreClient) SuppressAlarm(ctx context.Context, id string, action AlarmActionRequest) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	id = strings.TrimSpace(id)
+	if !validAlarmID(id) {
+		return fmt.Errorf("invalid alarm id")
+	}
+	resp, err := c.sendWebIPC(ctx, alarmActionCommand("alarm_suppress", id, action))
+	if errors.Is(err, errCoreUnavailable) {
+		return errCoreUnavailable
+	}
+	if err != nil {
+		return err
+	}
+	if resp.Result == "rejected" {
+		if resp.Error == "unknown_alarm" {
+			return fmt.Errorf("unknown alarm")
+		}
+		return fmt.Errorf("core rejected alarm suppress %s: %s", id, resp.Error)
+	}
+	return nil
+}
+
+func alarmActionCommand(op string, id string, action AlarmActionRequest) map[string]any {
+	cmd := map[string]any{
+		"id":      atomic.AddUint64(&webCommandID, 1),
+		"op":      op,
+		"alarmId": id,
+		"user":    "web",
+	}
+	if action.DurationS != nil {
+		cmd["durationS"] = *action.DurationS
+	}
+	if action.Permanent != nil {
+		cmd["permanent"] = *action.Permanent
+	}
+	return cmd
 }
 
 // ReturnAlarm clears an acknowledge for a still-active alarm.

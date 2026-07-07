@@ -12,13 +12,17 @@ import (
 )
 
 type fakeAlarmCore struct {
-	alarms    []AlarmDTO
-	readErr   error
-	ackErr    error
-	returnErr error
-	acked     []string
-	returned  []string
-	readCount int
+	alarms          []AlarmDTO
+	readErr         error
+	ackErr          error
+	suppressErr     error
+	returnErr       error
+	acked           []string
+	suppressed      []string
+	returned        []string
+	ackActions      []AlarmActionRequest
+	suppressActions []AlarmActionRequest
+	readCount       int
 }
 
 func (f *fakeAlarmCore) ReadStatus(context.Context) (CoreStatus, error) {
@@ -40,11 +44,21 @@ func (f *fakeAlarmCore) ReadAlarms(context.Context) ([]AlarmDTO, error) {
 	return f.alarms, nil
 }
 
-func (f *fakeAlarmCore) AckAlarm(_ context.Context, id string) error {
+func (f *fakeAlarmCore) AckAlarm(_ context.Context, id string, action AlarmActionRequest) error {
 	if f.ackErr != nil {
 		return f.ackErr
 	}
 	f.acked = append(f.acked, id)
+	f.ackActions = append(f.ackActions, action)
+	return nil
+}
+
+func (f *fakeAlarmCore) SuppressAlarm(_ context.Context, id string, action AlarmActionRequest) error {
+	if f.suppressErr != nil {
+		return f.suppressErr
+	}
+	f.suppressed = append(f.suppressed, id)
+	f.suppressActions = append(f.suppressActions, action)
 	return nil
 }
 
@@ -143,6 +157,30 @@ func TestHandleAlarmsHealthyEmptyCoreDoesNotResurrectHistory(t *testing.T) {
 	}
 }
 
+func TestHandleAlarmsTrustsLiveRowsOverHistory(t *testing.T) {
+	core := &fakeAlarmCore{alarms: []AlarmDTO{{
+		ID: "ALM-1", Time: "2026-07-02T08:15:30Z", Severity: "high", Status: "unack",
+		Message: "Manual latch", Source: "UI-01", Active: false, Returnable: boolPtr(true),
+	}}}
+	app, token := newTestAppWithRole(t, RoleViewer, core)
+	if err := app.alarmHistory.Append(context.Background(), AlarmHistoryEvent{
+		Time: "2026-07-02T08:16:30Z", Event: "acked", AlarmID: "ALM-1", Severity: "high", Status: "acked",
+		Message: "Manual latch", Source: "UI-01", Active: true,
+	}); err != nil {
+		t.Fatalf("Append acked: %v", err)
+	}
+
+	resp := serveAuth(t, app.Router(), http.MethodGet, "/api/v1/alarms", "", token)
+	assertStatus(t, resp, http.StatusOK)
+	var alarms []AlarmDTO
+	if err := json.Unmarshal(resp.Body.Bytes(), &alarms); err != nil {
+		t.Fatalf("decode alarms: %v", err)
+	}
+	if len(alarms) != 1 || alarms[0].Status != "unack" || alarms[0].Active {
+		t.Fatalf("alarms = %#v; want live unack active=false", alarms)
+	}
+}
+
 func TestHandleAlarmsReadErrorDoesNotRecordEnded(t *testing.T) {
 	core := &fakeAlarmCore{alarms: []AlarmDTO{{
 		ID: "ALM-1", Time: "2026-07-02T08:15:30Z", Severity: "high", Status: "active",
@@ -173,6 +211,9 @@ func TestHandleAckAlarmSuccessRefetchesAlarms(t *testing.T) {
 	if len(core.acked) != 1 || core.acked[0] != "ALM-1" {
 		t.Fatalf("acked = %#v; want ALM-1", core.acked)
 	}
+	if len(core.ackActions) != 1 || core.ackActions[0].Permanent == nil || !*core.ackActions[0].Permanent {
+		t.Fatalf("ackActions = %#v; want legacy permanent ack", core.ackActions)
+	}
 	if core.readCount != 1 {
 		t.Fatalf("readCount = %d; want 1", core.readCount)
 	}
@@ -182,6 +223,124 @@ func TestHandleAckAlarmSuccessRefetchesAlarms(t *testing.T) {
 	}
 	if len(alarms) != 1 || alarms[0].ID != "ALM-1" || alarms[0].Value != "31.8" || alarms[0].TriggerLevel != "H" {
 		t.Fatalf("alarms = %#v; want refetched ALM-1 with value/trigger", alarms)
+	}
+}
+
+func TestHandleAckAlarmAcceptsDurationBody(t *testing.T) {
+	core := &fakeAlarmCore{}
+	app, token := newTestAppWithRole(t, RoleOperator, core)
+
+	resp := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/alarms/ALM-1/ack", `{"durationS":60,"permanent":false}`, token)
+	assertStatus(t, resp, http.StatusOK)
+	if len(core.ackActions) != 1 || core.ackActions[0].DurationS == nil || *core.ackActions[0].DurationS != 60 {
+		t.Fatalf("ackActions = %#v; want durationS=60", core.ackActions)
+	}
+	if core.ackActions[0].Permanent == nil || *core.ackActions[0].Permanent {
+		t.Fatalf("ackActions = %#v; want permanent=false", core.ackActions)
+	}
+}
+
+func TestHandleAckAlarmRejectsBadDuration(t *testing.T) {
+	core := &fakeAlarmCore{}
+	app, token := newTestAppWithRole(t, RoleOperator, core)
+
+	resp := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/alarms/ALM-1/ack", `{"durationS":0}`, token)
+	assertStatus(t, resp, http.StatusBadRequest)
+	if len(core.acked) != 0 {
+		t.Fatalf("acked = %#v; want none", core.acked)
+	}
+}
+
+func TestHandleAckAlarmRejectsExtraJSON(t *testing.T) {
+	core := &fakeAlarmCore{}
+	app, token := newTestAppWithRole(t, RoleOperator, core)
+
+	resp := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/alarms/ALM-1/ack", `{"durationS":60}{}`, token)
+	assertStatus(t, resp, http.StatusBadRequest)
+	if len(core.acked) != 0 {
+		t.Fatalf("acked = %#v; want none", core.acked)
+	}
+}
+
+func TestHandleAckAlarmRejectsUnknownField(t *testing.T) {
+	core := &fakeAlarmCore{}
+	app, token := newTestAppWithRole(t, RoleOperator, core)
+
+	resp := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/alarms/ALM-1/ack", `{"durationS":60,"unexpected":true}`, token)
+	assertStatus(t, resp, http.StatusBadRequest)
+	if len(core.acked) != 0 {
+		t.Fatalf("acked = %#v; want none", core.acked)
+	}
+}
+
+func TestHandleSuppressAlarmSuccessRefetchesAlarms(t *testing.T) {
+	core := &fakeAlarmCore{alarms: []AlarmDTO{{
+		ID: "ALM-1", Time: "2026-07-02T08:15:30Z", Severity: "high", Status: "active",
+		Message: "Supply air", Source: "UI-01", Value: "31.8", Detail: "type=1 source=UI-01",
+	}}}
+	app, token := newTestAppWithRole(t, RoleOperator, core)
+
+	resp := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/alarms/ALM-1/suppress", `{"durationS":120}`, token)
+	assertStatus(t, resp, http.StatusOK)
+	if len(core.suppressed) != 1 || core.suppressed[0] != "ALM-1" {
+		t.Fatalf("suppressed = %#v; want ALM-1", core.suppressed)
+	}
+	if len(core.suppressActions) != 1 || core.suppressActions[0].DurationS == nil || *core.suppressActions[0].DurationS != 120 {
+		t.Fatalf("suppressActions = %#v; want durationS=120", core.suppressActions)
+	}
+	if core.suppressActions[0].Permanent == nil || *core.suppressActions[0].Permanent {
+		t.Fatalf("suppressActions = %#v; want permanent=false", core.suppressActions)
+	}
+	var alarms []AlarmDTO
+	if err := json.Unmarshal(resp.Body.Bytes(), &alarms); err != nil {
+		t.Fatalf("decode alarms: %v", err)
+	}
+	if len(alarms) != 1 || alarms[0].ID != "ALM-1" {
+		t.Fatalf("alarms = %#v; want refetched ALM-1", alarms)
+	}
+}
+
+func TestHandleSuppressAlarmRequiresBody(t *testing.T) {
+	core := &fakeAlarmCore{}
+	app, token := newTestAppWithRole(t, RoleOperator, core)
+
+	resp := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/alarms/ALM-1/suppress", "", token)
+	assertStatus(t, resp, http.StatusBadRequest)
+	if len(core.suppressed) != 0 {
+		t.Fatalf("suppressed = %#v; want none", core.suppressed)
+	}
+}
+
+func TestHandleSuppressAlarmRejectsEmptyObject(t *testing.T) {
+	core := &fakeAlarmCore{}
+	app, token := newTestAppWithRole(t, RoleOperator, core)
+
+	resp := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/alarms/ALM-1/suppress", `{}`, token)
+	assertStatus(t, resp, http.StatusBadRequest)
+	if len(core.suppressed) != 0 {
+		t.Fatalf("suppressed = %#v; want none", core.suppressed)
+	}
+}
+
+func TestHandleSuppressAlarmRejectsUnknownField(t *testing.T) {
+	core := &fakeAlarmCore{}
+	app, token := newTestAppWithRole(t, RoleOperator, core)
+
+	resp := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/alarms/ALM-1/suppress", `{"durationS":120,"unexpected":true}`, token)
+	assertStatus(t, resp, http.StatusBadRequest)
+	if len(core.suppressed) != 0 {
+		t.Fatalf("suppressed = %#v; want none", core.suppressed)
+	}
+}
+
+func TestHandleSuppressAlarmRejectsConflictingDuration(t *testing.T) {
+	core := &fakeAlarmCore{}
+	app, token := newTestAppWithRole(t, RoleOperator, core)
+
+	resp := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/alarms/ALM-1/suppress", `{"durationS":120,"permanent":true}`, token)
+	assertStatus(t, resp, http.StatusBadRequest)
+	if len(core.suppressed) != 0 {
+		t.Fatalf("suppressed = %#v; want none", core.suppressed)
 	}
 }
 
@@ -261,6 +420,32 @@ func TestAlarmHistoryRecordsStartAckEnd(t *testing.T) {
 		{Event: "acked", AlarmID: "ALM-1", Status: "acked", User: "admin"},
 		{Event: "ended", AlarmID: "ALM-1", Status: "normal"},
 	})
+}
+
+func TestAlarmHistoryRecordsRestartAfterClearedSameID(t *testing.T) {
+	tracker := NewAlarmHistoryTracker()
+	t1 := time.Date(2026, 7, 6, 7, 0, 0, 0, time.UTC)
+	active := AlarmDTO{ID: "ALM-1", Time: t1.Format(time.RFC3339Nano), Severity: "medium", Status: "active", Message: "Supply air", Source: "UI-01"}
+	cleared := active
+	cleared.Status = "cleared"
+
+	got := append([]AlarmHistoryEvent{}, tracker.Reconcile([]AlarmDTO{active}, t1)...)
+	got = append(got, tracker.Reconcile([]AlarmDTO{cleared}, t1.Add(time.Minute))...)
+	got = append(got, tracker.Reconcile([]AlarmDTO{active}, t1.Add(2*time.Minute))...)
+	got = append(got, tracker.Reconcile([]AlarmDTO{cleared}, t1.Add(3*time.Minute))...)
+
+	want := []string{"started", "ended", "started", "ended"}
+	if len(got) != len(want) {
+		t.Fatalf("events = %#v; want %v", got, want)
+	}
+	for i, event := range got {
+		if event.Event != want[i] {
+			t.Fatalf("events[%d] = %q; want %q in %#v", i, event.Event, want[i], got)
+		}
+	}
+	if got[2].Time != t1.Add(2*time.Minute).Format(time.RFC3339Nano) {
+		t.Fatalf("restart time = %q; want observed transition time", got[2].Time)
+	}
 }
 
 func TestHandleAlarmHistoryFiltersAndAllLimit(t *testing.T) {

@@ -95,20 +95,33 @@ func TestReadAlarmsUsesCoreIPCAndMapsDTO(t *testing.T) {
 
 func TestAckAlarmUsesCoreIPC(t *testing.T) {
 	path, cmdCh := fakeCoreSocket(t, `{"id":8,"result":"accepted","alarmId":"ALM-1"}`)
-	if err := (&CoreClient{SockPath: path}).AckAlarm(context.Background(), " ALM-1 "); err != nil {
+	permanent := true
+	if err := (&CoreClient{SockPath: path}).AckAlarm(context.Background(), " ALM-1 ", AlarmActionRequest{Permanent: &permanent}); err != nil {
 		t.Fatal(err)
 	}
 	cmd := readFakeCommand(t, cmdCh)
-	if cmd["op"] != "alarm_ack" || cmd["alarmId"] != "ALM-1" || cmd["user"] != "web" {
+	if cmd["op"] != "alarm_ack" || cmd["alarmId"] != "ALM-1" || cmd["user"] != "web" || cmd["permanent"] != true {
 		t.Fatalf("command = %#v, want alarm_ack ALM-1 from web", cmd)
 	}
 }
 
 func TestAckAlarmUnknownMapsError(t *testing.T) {
 	path, _ := fakeCoreSocket(t, `{"id":9,"result":"rejected","error":"unknown_alarm"}`)
-	err := (&CoreClient{SockPath: path}).AckAlarm(context.Background(), "ALM-missing")
+	err := (&CoreClient{SockPath: path}).AckAlarm(context.Background(), "ALM-missing", AlarmActionRequest{})
 	if err == nil || ackAlarmErrorStatus(err) != 404 {
 		t.Fatalf("err = %v, want unknown alarm -> 404", err)
+	}
+}
+
+func TestSuppressAlarmUsesCoreIPC(t *testing.T) {
+	path, cmdCh := fakeCoreSocket(t, `{"id":11,"result":"accepted","alarmId":"ALM-1"}`)
+	duration := float64(90)
+	if err := (&CoreClient{SockPath: path}).SuppressAlarm(context.Background(), " ALM-1 ", AlarmActionRequest{DurationS: &duration}); err != nil {
+		t.Fatal(err)
+	}
+	cmd := readFakeCommand(t, cmdCh)
+	if cmd["op"] != "alarm_suppress" || cmd["alarmId"] != "ALM-1" || cmd["user"] != "web" || cmd["durationS"] != float64(90) {
+		t.Fatalf("command = %#v, want alarm_suppress ALM-1 durationS=90 from web", cmd)
 	}
 }
 
@@ -125,8 +138,11 @@ func TestReturnAlarmUsesCoreIPC(t *testing.T) {
 
 func TestAlarmWritesReturnCoreUnavailable(t *testing.T) {
 	missing := filepath.Join(os.TempDir(), fmt.Sprintf("mkddc-missing-core-%d-%d.sock", os.Getpid(), time.Now().UnixNano()))
-	if err := (&CoreClient{SockPath: missing}).AckAlarm(context.Background(), "ALM-1"); !errors.Is(err, errCoreUnavailable) {
+	if err := (&CoreClient{SockPath: missing}).AckAlarm(context.Background(), "ALM-1", AlarmActionRequest{}); !errors.Is(err, errCoreUnavailable) {
 		t.Fatalf("AckAlarm err = %v, want core unavailable", err)
+	}
+	if err := (&CoreClient{SockPath: missing}).SuppressAlarm(context.Background(), "ALM-1", AlarmActionRequest{}); !errors.Is(err, errCoreUnavailable) {
+		t.Fatalf("SuppressAlarm err = %v, want core unavailable", err)
 	}
 	if err := (&CoreClient{SockPath: missing}).ReturnAlarm(context.Background(), "ALM-1"); !errors.Is(err, errCoreUnavailable) {
 		t.Fatalf("ReturnAlarm err = %v, want core unavailable", err)

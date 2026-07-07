@@ -102,12 +102,19 @@ type AlarmSource struct {
 
 // AlarmParams keeps known numeric params type-safe while allowing type-specific optional fields.
 type AlarmParams struct {
-	HH           *float64 `json:"hh,omitempty"`
-	H            *float64 `json:"h,omitempty"`
-	L            *float64 `json:"l,omitempty"`
-	LL           *float64 `json:"ll,omitempty"`
-	Hysteresis   *float64 `json:"hysteresis,omitempty"`
-	RuntimeHours *float64 `json:"runtimeHours,omitempty"`
+	HH            *float64       `json:"hh,omitempty"`
+	H             *float64       `json:"h,omitempty"`
+	L             *float64       `json:"l,omitempty"`
+	LL            *float64       `json:"ll,omitempty"`
+	Hysteresis    *float64       `json:"hysteresis,omitempty"`
+	RuntimeHours  *float64       `json:"runtimeHours,omitempty"`
+	SeverityRules []SeverityRule `json:"severityRules,omitempty"`
+}
+
+type SeverityRule struct {
+	Severity string  `json:"severity"`
+	Op       string  `json:"op"`
+	Value    float64 `json:"value"`
 }
 
 type AlarmSetting struct {
@@ -117,6 +124,7 @@ type AlarmSetting struct {
 	AlarmType         int           `json:"alarmType"`
 	Sources           []AlarmSource `json:"sources"`
 	Priority          string        `json:"priority"`
+	ClearMode         string        `json:"clearMode,omitempty"`
 	DelayS            float64       `json:"delayS"`
 	PublishBacnet     bool          `json:"publishBacnet"`
 	NotificationClass *int          `json:"notificationClass,omitempty"`
@@ -175,6 +183,11 @@ type AlarmDTO struct {
 	Threshold    string `json:"threshold,omitempty"`
 	Active       bool   `json:"active,omitempty"`
 	Returnable   *bool  `json:"returnable,omitempty"`
+}
+
+type AlarmActionRequest struct {
+	DurationS *float64 `json:"durationS,omitempty"`
+	Permanent *bool    `json:"permanent,omitempty"`
 }
 
 type AlarmHistoryEvent struct {
