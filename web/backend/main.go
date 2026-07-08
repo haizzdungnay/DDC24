@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -22,6 +23,7 @@ type App struct {
 	sampler      *Sampler
 	alarmHistory *AlarmHistoryStore
 	alarmTracker *AlarmHistoryTracker
+	virtualIOMu  sync.Mutex
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {

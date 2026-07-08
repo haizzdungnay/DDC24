@@ -55,6 +55,15 @@ func (a *App) handlePutAlarmSettings(w http.ResponseWriter, r *http.Request) {
 		writeValidationErrors(w, errs)
 		return
 	}
+	virtualIO, err := readConfig(a, configGroupVirtualIO, defaultVirtualIOConfig())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if errs := validateAlarmVirtualIOSources(rows, normalizeVirtualIOConfig(virtualIO).Items); len(errs) > 0 {
+		writeValidationErrors(w, errs)
+		return
+	}
 	before, beforeErr := a.LoadAlarmSettings(r.Context())
 	if err := a.SaveAlarmSettings(r.Context(), rows); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -158,6 +167,32 @@ func validateAlarmSettings(rows []AlarmSetting) []configValidationError {
 	return errs
 }
 
+func validateAlarmVirtualIOSources(rows []AlarmSetting, virtualIO []VirtualIOPoint) []configValidationError {
+	var errs []configValidationError
+	byID := make(map[string]VirtualIOPoint, len(virtualIO))
+	for _, item := range virtualIO {
+		item = normalizeVirtualIOPoint(item)
+		byID[item.ID] = item
+	}
+	for i, row := range rows {
+		for j, source := range row.Sources {
+			if source.Kind != "VI" && source.Kind != "VO" {
+				continue
+			}
+			path := fmt.Sprintf("[%d].sources[%d]", i, j)
+			item, ok := byID[fmt.Sprintf("%s-%02d", source.Kind, source.Channel)]
+			if !ok {
+				addConfigErr(&errs, path+".channel", "must reference existing Virtual I/O metadata")
+				continue
+			}
+			if canonicalVirtualBackingPoint(source.PointID) != canonicalVirtualBackingPoint(item.BackingPoint) {
+				addConfigErr(&errs, path+".pointId", "must match "+item.BackingPoint)
+			}
+		}
+	}
+	return errs
+}
+
 func normalizeAlarmSettings(rows []AlarmSetting) {
 	for i := range rows {
 		if rows[i].ClearMode == "" {
@@ -186,8 +221,10 @@ func validateAlarmSource(errs *[]configValidationError, path string, index int, 
 		maxChannel = 16
 	case "AO", "DO":
 		maxChannel = 4
+	case "VI", "VO":
+		maxChannel = 64
 	default:
-		addConfigErr(errs, path+".kind", "must be one of: UI, AO, DO")
+		addConfigErr(errs, path+".kind", "must be one of: UI, AO, DO, VI, VO")
 	}
 	if maxChannel > 0 && (source.Channel < 1 || source.Channel > maxChannel) {
 		addConfigErr(errs, path+".channel", fmt.Sprintf("must be integer in range 1..%d for %s", maxChannel, source.Kind))
@@ -195,6 +232,10 @@ func validateAlarmSource(errs *[]configValidationError, path string, index int, 
 	pointID := strings.TrimSpace(source.PointID)
 	if pointID == "" {
 		addConfigErr(errs, path+".pointId", "is required")
+	} else if (source.Kind == "VI" || source.Kind == "VO") && maxChannel > 0 && source.Channel >= 1 && source.Channel <= maxChannel {
+		if !validVirtualAlarmSourcePoint(source.Kind, pointID) {
+			addConfigErr(errs, path+".pointId", fmt.Sprintf("must be a %s backing point", source.Kind))
+		}
 	} else if maxChannel > 0 && source.Channel >= 1 && source.Channel <= maxChannel {
 		expected := formatPointID(source.Kind, source.Channel)
 		if source.PointID != expected {
@@ -210,6 +251,29 @@ func validateAlarmSource(errs *[]configValidationError, path string, index int, 
 		return
 	}
 	seen[key] = index
+}
+
+func validVirtualAlarmSourcePoint(kind string, pointID string) bool {
+	prefix, channel, ok := parsePointID(pointID)
+	if !ok {
+		return false
+	}
+	switch prefix {
+	case "AV":
+		if kind == "VI" {
+			return channel >= 1 && channel <= 16
+		}
+		return channel >= 17 && channel <= 32
+	case "BV":
+		if kind == "VI" {
+			return channel >= 1 && channel <= 8
+		}
+		return channel >= 9 && channel <= 16
+	case "MSV":
+		return channel >= 2 && channel <= 8
+	default:
+		return false
+	}
 }
 
 func validateAlarmParams(errs *[]configValidationError, path string, alarmType int, params *AlarmParams) {

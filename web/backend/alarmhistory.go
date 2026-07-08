@@ -172,9 +172,8 @@ func (t *AlarmHistoryTracker) Reconcile(alarms []AlarmDTO, now time.Time) []Alar
 		next[id] = alarm
 		prev, existed := t.visible[id]
 		if !existed {
-			events = append(events, historyEventFromAlarm("started", alarm, alarm.Time, ""))
-			if !alarmConditionActive(alarm.Status) {
-				events = append(events, historyEndEvent(alarm, now.Format(time.RFC3339Nano)))
+			if alarmConditionActive(alarm.Status) {
+				events = append(events, historyEventFromAlarm("started", alarm, alarm.Time, ""))
 			}
 			continue
 		}

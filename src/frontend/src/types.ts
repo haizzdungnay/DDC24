@@ -111,7 +111,7 @@ export interface AlarmHistoryQuery {
   status?: string
 }
 
-export type AlarmSourceKind = 'UI' | 'AO' | 'DO'
+export type AlarmSourceKind = 'UI' | 'AO' | 'DO' | 'VI' | 'VO'
 export type AlarmType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type ActiveAlarmType = 0 | 1 | 3
 export type DeferredAlarmType = 2 | 4 | 5 | 6 | 7
@@ -270,7 +270,7 @@ export type ScheduleType =
   | 'digital_output_value'
   | 'holiday_period'
 
-export type ScheduleTargetKind = 'AO' | 'DO' | 'AV' | 'MSV' | 'HOL'
+export type ScheduleTargetKind = 'AO' | 'DO' | 'AV' | 'BV' | 'MSV' | 'HOL'
 
 export interface ScheduleTarget {
   kind: ScheduleTargetKind
@@ -429,6 +429,28 @@ export interface DoConfig {
 export interface OutputsConfig {
   ao: AoConfig[]
   do: DoConfig[]
+}
+
+export type VirtualIoDirection = 'input' | 'output'
+export type VirtualIoValueType = 'analog' | 'binary' | 'multistate'
+
+export interface VirtualIoPoint {
+  id: string
+  direction: VirtualIoDirection
+  valueType: VirtualIoValueType
+  label: string
+  enabled: boolean
+  backingPoint: string
+  signalType: number
+  unit?: string
+  displayMin: number
+  displayMax: number
+  rangeMultiplier: number
+  sensorCal: number
+  mathFunction: number
+  connectionTimeoutS: number
+  manualValue?: number | boolean
+  note?: string
 }
 
 export type UserParamKey =

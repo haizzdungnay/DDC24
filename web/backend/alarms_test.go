@@ -448,6 +448,30 @@ func TestAlarmHistoryRecordsRestartAfterClearedSameID(t *testing.T) {
 	}
 }
 
+func TestAlarmHistoryDoesNotRecordEndForFirstSeenClearedAlarm(t *testing.T) {
+	tracker := NewAlarmHistoryTracker()
+	t1 := time.Date(2026, 7, 7, 8, 0, 0, 0, time.UTC)
+	active := AlarmDTO{ID: "ALM-1", Time: t1.Format(time.RFC3339Nano), Severity: "medium", Status: "active", Message: "Supply air", Source: "UI-01"}
+	cleared := active
+	cleared.Status = "cleared"
+
+	got := tracker.Reconcile([]AlarmDTO{cleared}, t1)
+	if len(got) != 0 {
+		t.Fatalf("events = %#v; want no orphan end for first-seen cleared alarm", got)
+	}
+	got = append(got, tracker.Reconcile([]AlarmDTO{active}, t1.Add(time.Minute))...)
+	got = append(got, tracker.Reconcile([]AlarmDTO{cleared}, t1.Add(2*time.Minute))...)
+	want := []string{"started", "ended"}
+	if len(got) != len(want) {
+		t.Fatalf("events = %#v; want %v", got, want)
+	}
+	for i, event := range got {
+		if event.Event != want[i] {
+			t.Fatalf("events[%d] = %q; want %q in %#v", i, event.Event, want[i], got)
+		}
+	}
+}
+
 func TestHandleAlarmHistoryFiltersAndAllLimit(t *testing.T) {
 	core := &fakeAlarmCore{}
 	app, token := newTestAppWithRole(t, RoleViewer, core)

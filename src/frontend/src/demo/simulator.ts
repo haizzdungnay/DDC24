@@ -19,7 +19,8 @@ import type {
   OutputsConfig,
   TrendSample,
   UserParamsConfig,
-  UserRow
+  UserRow,
+  VirtualIoPoint
 } from '../types'
 import { DEVICE_DEFAULTS } from '../config'
 import { clamp, nowIso, pointNumber } from '../utils'
@@ -50,7 +51,12 @@ const names: Record<string, string> = {
   'AO-01': 'VFD SPEED',
   'AO-02': 'HEATING VALVE',
   'AO-03': 'COOLING VALVE',
-  'AO-04': 'DAMPER POSITION'
+  'AO-04': 'DAMPER POSITION',
+  AV1: 'ROOM SETPOINT',
+  AV17: 'VIRTUAL COOLING DEMAND',
+  BV1: 'OCCUPANCY REQUEST',
+  BV9: 'VIRTUAL ENABLE',
+  MSV2: 'VIRTUAL MODE'
 }
 
 const basePoints: Point[] = [
@@ -77,7 +83,12 @@ const basePoints: Point[] = [
   { id: 'AO-01', name: names['AO-01'], kind: 'AO', value: 62.5, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
   { id: 'AO-02', name: names['AO-02'], kind: 'AO', value: 35, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
   { id: 'AO-03', name: names['AO-03'], kind: 'AO', value: 12.5, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
-  { id: 'AO-04', name: names['AO-04'], kind: 'AO', value: 45, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' }
+  { id: 'AO-04', name: names['AO-04'], kind: 'AO', value: 45, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
+  { id: 'AV1', name: names.AV1, kind: 'virtual', value: 24, unit: 'C', quality: 'good', source: 'Default', priority: 'Virtual input', updatedAt: nowIso(), sensorType: 'AV' },
+  { id: 'AV17', name: names.AV17, kind: 'virtual', value: 55, unit: '%', quality: 'good', source: 'Default', priority: 'Virtual output', updatedAt: nowIso(), sensorType: 'AV' },
+  { id: 'BV1', name: names.BV1, kind: 'virtual', value: true, unit: '', quality: 'good', source: 'Default', priority: 'Virtual input', updatedAt: nowIso(), sensorType: 'BV' },
+  { id: 'BV9', name: names.BV9, kind: 'virtual', value: false, unit: '', quality: 'good', source: 'Default', priority: 'Virtual output', updatedAt: nowIso(), sensorType: 'BV' },
+  { id: 'MSV2', name: names.MSV2, kind: 'virtual', value: 1, unit: '', quality: 'good', source: 'Default', priority: 'Virtual output', updatedAt: nowIso(), sensorType: 'MSV' }
 ]
 
 let points: Point[] = basePoints.map((point) => ({ ...point, trend: makeTrend(pointNumber(point)) }))
@@ -284,7 +295,8 @@ function formatDemoDuration(choice: DemoAlarmDurationChoice): string {
 }
 
 export function forceDemoPoint(id: string, value: number | boolean, release = false) {
-  points = points.map((point) => point.id === id ? { ...point, value, forced: !release, source: release ? 'Core' : 'Local manual', priority: release ? 'Auto' : 'Manual override', updatedAt: nowIso() } : point)
+  const target = canonicalDemoVirtualBackingPoint(id)
+  points = points.map((point) => canonicalDemoVirtualBackingPoint(point.id) === target ? { ...point, value, forced: !release, source: release ? 'Core' : 'Local manual', priority: release ? 'Auto' : 'Manual override', updatedAt: nowIso() } : point)
   return { result: 'accepted' as const, applied_value: value, active_source: release ? 'core' : 'local_manual' }
 }
 
@@ -647,6 +659,127 @@ export function putDemoOutputs(config: OutputsConfig): void {
     ao: config.ao.map((item) => ({ ...item, demoNote: 'demo' })),
     do: config.do.map((item) => ({ ...item }))
   }
+}
+
+let demoVirtualIo: VirtualIoPoint[] = [
+  { id: 'VI-01', direction: 'input', valueType: 'analog', label: 'Room Setpoint', enabled: true, backingPoint: 'AV1', signalType: 1, unit: 'C', displayMin: 0, displayMax: 50, rangeMultiplier: 0, sensorCal: 0, mathFunction: 0, connectionTimeoutS: 60, note: '' },
+  { id: 'VO-01', direction: 'output', valueType: 'analog', label: 'Cooling Demand', enabled: true, backingPoint: 'AV17', signalType: 1, unit: '%', displayMin: 0, displayMax: 100, rangeMultiplier: 0, sensorCal: 0, mathFunction: 0, connectionTimeoutS: 60, manualValue: 55, note: '' },
+  { id: 'VI-02', direction: 'input', valueType: 'binary', label: 'Occupancy Request', enabled: true, backingPoint: 'BV1', signalType: 4, unit: '', displayMin: 0, displayMax: 1, rangeMultiplier: 0, sensorCal: 0, mathFunction: 0, connectionTimeoutS: 60, note: '' },
+  { id: 'VO-02', direction: 'output', valueType: 'binary', label: 'Virtual Enable', enabled: true, backingPoint: 'BV9', signalType: 4, unit: '', displayMin: 0, displayMax: 1, rangeMultiplier: 0, sensorCal: 0, mathFunction: 0, connectionTimeoutS: 60, manualValue: false, note: '' }
+]
+
+export function getDemoVirtualIo(): VirtualIoPoint[] {
+  return demoVirtualIo.map((item) => ({ ...item }))
+}
+
+export function putDemoVirtualIo(point: Partial<VirtualIoPoint>): VirtualIoPoint {
+  const direction = point.direction ?? 'input'
+  const valueType = point.valueType ?? 'analog'
+  const existingIndex = point.id ? demoVirtualIo.findIndex((item) => item.id === point.id) : -1
+  const current = existingIndex >= 0 ? demoVirtualIo[existingIndex] : undefined
+  const requestedBacking = canonicalDemoVirtualBackingPoint(point.backingPoint ?? current?.backingPoint ?? '')
+  const backingPoint = requestedBacking && demoVirtualBackingValid(direction, valueType, requestedBacking)
+    ? requestedBacking
+    : allocateDemoVirtualBacking(direction, valueType)
+  const requestedSignalType = point.signalType ?? current?.signalType
+  const next: VirtualIoPoint = {
+    id: point.id ?? nextDemoVirtualIoId(direction),
+    direction,
+    valueType,
+    label: point.label ?? (direction === 'input' ? 'Virtual Input' : 'Virtual Output'),
+    enabled: point.enabled ?? true,
+    backingPoint,
+    signalType: requestedSignalType !== undefined && demoVirtualSignalTypeValid(valueType, requestedSignalType) ? requestedSignalType : defaultDemoVirtualSignalType(valueType),
+    unit: point.unit ?? current?.unit ?? (valueType === 'analog' ? '%' : ''),
+    displayMin: point.displayMin ?? current?.displayMin ?? 0,
+    displayMax: point.displayMax ?? current?.displayMax ?? (valueType === 'binary' ? 1 : 100),
+    rangeMultiplier: point.rangeMultiplier ?? current?.rangeMultiplier ?? 0,
+    sensorCal: point.sensorCal ?? current?.sensorCal ?? 0,
+    mathFunction: point.mathFunction ?? current?.mathFunction ?? 0,
+    connectionTimeoutS: point.connectionTimeoutS ?? current?.connectionTimeoutS ?? 60,
+    manualValue: point.manualValue ?? current?.manualValue,
+    note: point.note ?? current?.note ?? ''
+  }
+  if (existingIndex >= 0) demoVirtualIo[existingIndex] = next
+  else demoVirtualIo = [...demoVirtualIo, next]
+  syncDemoVirtualPoints(current?.backingPoint)
+  return { ...next }
+}
+
+export function deleteDemoVirtualIo(id: string): void {
+  const removed = demoVirtualIo.find((item) => item.id === id)
+  demoVirtualIo = demoVirtualIo.filter((item) => item.id !== id)
+  syncDemoVirtualPoints(removed?.backingPoint)
+}
+
+function nextDemoVirtualIoId(direction: VirtualIoPoint['direction']): string {
+  const prefix = direction === 'input' ? 'VI' : 'VO'
+  const max = demoVirtualIo.reduce((value, item) => {
+    const match = item.id.match(new RegExp(`^${prefix}-(\\d+)$`))
+    return match ? Math.max(value, Number(match[1])) : value
+  }, 0)
+  return `${prefix}-${String(max + 1).padStart(2, '0')}`
+}
+
+function allocateDemoVirtualBacking(direction: VirtualIoPoint['direction'], valueType: VirtualIoPoint['valueType']): string {
+  const used = new Set(demoVirtualIo.map((item) => canonicalDemoVirtualBackingPoint(item.backingPoint)))
+  const pool = demoVirtualBackingPool(direction, valueType)
+  return pool.find((point) => !used.has(point)) ?? pool[0]
+}
+
+function demoVirtualBackingValid(direction: VirtualIoPoint['direction'], valueType: VirtualIoPoint['valueType'], point: string): boolean {
+  return demoVirtualBackingPool(direction, valueType).includes(canonicalDemoVirtualBackingPoint(point))
+}
+
+function demoVirtualBackingPool(direction: VirtualIoPoint['direction'], valueType: VirtualIoPoint['valueType']): string[] {
+  if (valueType === 'binary') return demoBackingPool('BV', direction === 'input' ? 1 : 9, direction === 'input' ? 8 : 16)
+  if (valueType === 'multistate') return demoBackingPool('MSV', 2, 8)
+  return demoBackingPool('AV', direction === 'input' ? 1 : 17, direction === 'input' ? 16 : 32)
+}
+
+function defaultDemoVirtualSignalType(valueType: VirtualIoPoint['valueType']): number {
+  if (valueType === 'binary') return 4
+  if (valueType === 'multistate') return 3
+  return 1
+}
+
+function demoVirtualSignalTypeValid(valueType: VirtualIoPoint['valueType'], signalType: number): boolean {
+  if (valueType === 'binary') return signalType === 0 || signalType === 4 || signalType === 5
+  if (valueType === 'multistate') return signalType === 0 || signalType === 3
+  return signalType >= 0 && signalType <= 3
+}
+
+function demoBackingPool(prefix: string, start: number, end: number): string[] {
+  return Array.from({ length: end - start + 1 }, (_, index) => `${prefix}${start + index}`)
+}
+
+function syncDemoVirtualPoints(previousBacking?: string): void {
+  const wanted = new Set(demoVirtualIo.map((item) => canonicalDemoVirtualBackingPoint(item.backingPoint)))
+  const previous = previousBacking ? canonicalDemoVirtualBackingPoint(previousBacking) : ''
+  points = points
+    .filter((point) => previous === '' || canonicalDemoVirtualBackingPoint(point.id) !== previous || wanted.has(previous))
+    .map((point) => {
+      const item = demoVirtualIo.find((entry) => canonicalDemoVirtualBackingPoint(entry.backingPoint) === canonicalDemoVirtualBackingPoint(point.id))
+      if (!item) return point
+      return { ...point, id: canonicalDemoVirtualBackingPoint(item.backingPoint), name: item.label, unit: item.unit, priority: item.direction === 'input' ? 'Virtual input' : 'Virtual output', sensorType: pointTypeFromBacking(item.backingPoint) }
+    })
+  for (const item of demoVirtualIo) {
+    const backingPoint = canonicalDemoVirtualBackingPoint(item.backingPoint)
+    if (points.some((point) => canonicalDemoVirtualBackingPoint(point.id) === backingPoint)) continue
+    points = [...points, { id: backingPoint, name: item.label, kind: 'virtual', value: item.manualValue ?? 0, unit: item.unit, quality: 'good', source: 'Default', priority: item.direction === 'input' ? 'Virtual input' : 'Virtual output', updatedAt: nowIso(), sensorType: pointTypeFromBacking(backingPoint), trend: makeTrend(Number(item.manualValue ?? 0)) }]
+  }
+}
+
+function canonicalDemoVirtualBackingPoint(point: string): string {
+  const match = point.trim().toUpperCase().match(/^(AV|BV|MSV)[-_]?0*(\d+)$/)
+  return match ? `${match[1]}${Number(match[2])}` : point.trim().toUpperCase()
+}
+
+function pointTypeFromBacking(point: string): string {
+  const canonical = canonicalDemoVirtualBackingPoint(point)
+  if (canonical.startsWith('BV')) return 'BV'
+  if (canonical.startsWith('MSV')) return 'MSV'
+  return 'AV'
 }
 
 const defaultUserParams: UserParamsConfig = {

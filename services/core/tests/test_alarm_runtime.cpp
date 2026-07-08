@@ -129,6 +129,74 @@ TEST(AlarmRuntime, MultiSourceEntityUsesOrAndKeepsTriggerPointId)
     EXPECT_FALSE(alarms.entity_active("ALM-001"));
 }
 
+TEST(AlarmRuntime, VirtualIOSourcesReadBackingPoints)
+{
+    TempFile file(R"([
+      {"id":"ALM-VI","label":"Virtual input","enabled":true,"alarmType":1,
+       "sources":[{"kind":"VI","channel":1,"pointId":"AV1"}],
+       "priority":"high","delayS":0,
+       "params":{"hh":32,"h":28,"l":16,"ll":12}},
+      {"id":"ALM-VO","label":"Virtual output","enabled":true,"alarmType":1,
+       "sources":[{"kind":"VO","channel":1,"pointId":"BV-09"}],
+       "priority":"medium","delayS":0,
+       "params":{"hh":1,"h":0.5,"l":-1,"ll":-2}}
+    ])");
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()));
+
+    PointTable table;
+    ASSERT_TRUE(table.set_virtual({PointKind::AV, 0}, 30.0f, PointSource::WEB));
+    ASSERT_TRUE(table.set_virtual({PointKind::BV, 8}, 1.0f, PointSource::WEB));
+    alarms.evaluate(table, 1000);
+
+    EXPECT_TRUE(alarms.entity_active("ALM-VI"));
+    EXPECT_EQ(alarms.entity_source("ALM-VI"), "AV-01");
+    EXPECT_TRUE(alarms.entity_active("ALM-VO"));
+    EXPECT_EQ(alarms.entity_source("ALM-VO"), "BV-09");
+}
+
+TEST(AlarmRuntime, VirtualIOSourceBackingBoundaries)
+{
+    TempFile file(R"([
+      {"id":"ALM-VI-AV","label":"VI AV16","enabled":true,"alarmType":1,
+       "sources":[{"kind":"VI","channel":16,"pointId":"AV-16"}],
+       "priority":"high","delayS":0,"params":{"hh":32,"h":28,"l":16,"ll":12}},
+      {"id":"ALM-VO-AV","label":"VO AV17","enabled":true,"alarmType":1,
+       "sources":[{"kind":"VO","channel":1,"pointId":"AV-17"}],
+       "priority":"high","delayS":0,"params":{"hh":32,"h":28,"l":16,"ll":12}},
+      {"id":"ALM-VI-BV","label":"VI BV8","enabled":true,"alarmType":1,
+       "sources":[{"kind":"VI","channel":8,"pointId":"BV-08"}],
+       "priority":"high","delayS":0,"params":{"hh":1,"h":0.5,"l":-1,"ll":-2}},
+      {"id":"ALM-VO-BV","label":"VO BV9","enabled":true,"alarmType":1,
+       "sources":[{"kind":"VO","channel":1,"pointId":"BV-09"}],
+       "priority":"high","delayS":0,"params":{"hh":1,"h":0.5,"l":-1,"ll":-2}},
+      {"id":"ALM-MSV","label":"MSV2","enabled":true,"alarmType":1,
+       "sources":[{"kind":"VI","channel":1,"pointId":"MSV-02"}],
+       "priority":"high","delayS":0,"params":{"hh":3,"h":2,"l":0,"ll":-1}}
+    ])");
+    AlarmRuntime alarms;
+    EXPECT_TRUE(alarms.load(file.path()));
+}
+
+TEST(AlarmRuntime, RejectsBadVirtualIOBackingPoints)
+{
+    const char* bad_sources[] = {
+        R"({"kind":"VI","channel":1,"pointId":"AV-17"})",
+        R"({"kind":"VO","channel":1,"pointId":"AV-16"})",
+        R"({"kind":"VI","channel":1,"pointId":"BV-09"})",
+        R"({"kind":"VO","channel":1,"pointId":"BV-08"})",
+        R"({"kind":"VI","channel":1,"pointId":"MSV-01"})",
+        R"({"kind":"VO","channel":1,"pointId":"AV999999999999999999"})",
+    };
+    for (const char* source : bad_sources) {
+        TempFile file(std::string(R"([{"id":"ALM-BAD","label":"Bad","enabled":true,"alarmType":1,"sources":[)") +
+                      source +
+                      R"(],"priority":"high","delayS":0,"params":{"hh":32,"h":28,"l":16,"ll":12}}])");
+        AlarmRuntime alarms;
+        EXPECT_FALSE(alarms.load(file.path())) << source;
+    }
+}
+
 TEST(AlarmRuntime, HighLowInputReportsTriggeredThresholdLevel)
 {
     struct Case {

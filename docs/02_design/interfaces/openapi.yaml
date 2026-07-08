@@ -87,7 +87,10 @@ paths:
             schema:
               type: object
               properties:
-                value: { type: number, description: "Bắt buộc trừ khi release=true" }
+                value:
+                  allOf:
+                    - $ref: "#/components/schemas/PointCommandValue"
+                  description: "Bắt buộc trừ khi release=true"
                 release: { type: boolean, default: false, description: "true = nhả manual override" }
       responses:
         "200":
@@ -102,6 +105,72 @@ paths:
                   active_source: { type: string, example: "safety", description: "Nguồn priority đang thắng kênh này" }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+  /virtual-io:
+    get:
+      summary: List Virtual I/O metadata (viewer+)
+      description: >
+        Returns VI/VO metadata backed by fixed core virtual points.
+        VI analog uses AV1..AV16, VO analog uses AV17..AV32,
+        VI binary uses BV1..BV8, VO binary uses BV9..BV16,
+        and multistate uses MSV2..MSV8. MSV1 is reserved.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VirtualIOPoint" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Create Virtual I/O metadata (admin)
+      description: Missing id/backingPoint are allocated from the reserved fixed pools.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VirtualIOPoint" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualIOPoint" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /virtual-io/{id}:
+    put:
+      summary: Update Virtual I/O metadata (admin)
+      x-rbac: [admin]
+      parameters: [ { $ref: "#/components/parameters/VirtualIoId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VirtualIOPoint" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualIOPoint" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Delete Virtual I/O metadata (admin)
+      x-rbac: [admin]
+      parameters: [ { $ref: "#/components/parameters/VirtualIoId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /system/status:
     get:
       summary: Trạng thái hệ thống (CPU/RAM/uptime/IOP/version)
@@ -165,7 +234,7 @@ paths:
   /system/config:
     get:
       summary: Đọc toàn bộ cấu hình hiện tại (gộp) (admin)
-      description: Trả về object gộp các nhóm (device, network, io, safe_state, bacnet, fieldbus, time).
+      description: Trả về object gộp các nhóm (device, network, io, safe_state, virtual_io, bacnet, fieldbus, time).
       x-rbac: [admin]
       responses:
         "200":
@@ -266,6 +335,32 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/ConfigSafeState" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/virtual-io:
+    get:
+      summary: Read Virtual I/O config (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigVirtualIO" }
+    put:
+      summary: Replace Virtual I/O config (admin)
+      description: Persists virtual_io.conf without core restart; backing points remain fixed core virtual slots.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigVirtualIO" }
       responses:
         "200":
           description: OK
@@ -801,6 +896,14 @@ components:
       in: path
       required: true
       schema: { type: string, example: "UI1" }
+    VirtualIoId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^(VI|VO)-[0-9]{2}$"
+        example: "VI-01"
   responses:
     Error:
       description: Lỗi
@@ -819,12 +922,57 @@ components:
       properties:
         id: { type: string, example: "UI1" }
         type: { type: string, enum: [AI, AO, BI, BO, AV, BV, MSV] }
-        value: { type: number, example: 23.5 }
+        value:
+          allOf:
+            - $ref: "#/components/schemas/PointCommandValue"
+          example: 23.5
         unit: { type: string, example: "°C" }
         quality: { type: string, enum: [good, uncertain, bad] }
         timestamp: { type: string, format: date-time }
         sensor_type: { type: string, example: "NTC10k" }
         fault: { type: boolean }
+    VirtualIOManualValue:
+      oneOf:
+        - type: number
+        - type: boolean
+    VirtualIOPoint:
+      type: object
+      required: [direction, valueType, label]
+      description: >
+        User-facing VI/VO metadata. Dynamic create allocates an existing fixed
+        core virtual slot; it does not expand AV/BV/MSV capacity.
+      properties:
+        id:
+          type: string
+          pattern: "^(VI|VO)-[0-9]{2}$"
+          example: "VI-01"
+        direction: { type: string, enum: [input, output] }
+        valueType: { type: string, enum: [analog, binary, multistate] }
+        label: { type: string, maxLength: 64 }
+        enabled: { type: boolean, default: true }
+        backingPoint:
+          type: string
+          description: "Core virtual point. Pools: VI analog AV1..AV16, VO analog AV17..AV32, VI binary BV1..BV8, VO binary BV9..BV16, MSV2..MSV8."
+          example: "AV1"
+        signalType:
+          type: integer
+          minimum: 0
+          maximum: 8
+          description: "Allowed by valueType: analog 0..3, binary 0/4/5, multistate 0/3."
+        unit: { type: string }
+        displayMin: { type: number }
+        displayMax: { type: number }
+        rangeMultiplier: { type: integer, minimum: 0, maximum: 5 }
+        sensorCal: { type: number, minimum: -12.7, maximum: 12.8 }
+        mathFunction: { type: integer, minimum: 0, maximum: 3 }
+        connectionTimeoutS: { type: integer, minimum: 0, maximum: 54000 }
+        manualValue: { $ref: "#/components/schemas/VirtualIOManualValue" }
+        note: { type: string }
+    VirtualIOConfigPoint:
+      allOf:
+        - $ref: "#/components/schemas/VirtualIOPoint"
+        - type: object
+          required: [id, direction, valueType, label, backingPoint, displayMin, displayMax]
     SystemStatus:
       type: object
       properties:
@@ -1047,6 +1195,7 @@ components:
         network: { $ref: "#/components/schemas/ConfigNetwork" }
         io: { $ref: "#/components/schemas/ConfigIO" }
         safe_state: { $ref: "#/components/schemas/ConfigSafeState" }
+        virtual_io: { $ref: "#/components/schemas/ConfigVirtualIO" }
         bacnet: { $ref: "#/components/schemas/ConfigBacnet" }
         fieldbus: { $ref: "#/components/schemas/ConfigFieldbus" }
         time: { $ref: "#/components/schemas/ConfigTime" }
@@ -1102,6 +1251,13 @@ components:
       properties:
         ui: { type: array, items: { type: object, additionalProperties: true } }
         ao: { type: array, items: { type: object, additionalProperties: true } }
+    ConfigVirtualIO:
+      type: object
+      properties:
+        items:
+          type: array
+          maxItems: 55
+          items: { $ref: "#/components/schemas/VirtualIOConfigPoint" }
     ConfigSafeState:
       type: object
       properties:
@@ -1161,11 +1317,11 @@ components:
       properties:
         kind:
           type: string
-          enum: [AO, DO, AV, MSV]
+          enum: [AO, DO, AV, BV, MSV]
         channel:
           type: integer
           minimum: 1
-          description: AO/DO 1..4, AV 1..32, MSV-01 only for controller_operation_mode.
+          description: AO/DO 1..4, AV 1..32, BV 9..16 for virtual binary outputs, MSV-01 only for controller_operation_mode.
         pointId:
           type: string
           example: "AO-01"
@@ -1174,7 +1330,7 @@ components:
       required: [id, label, enabled, scheduleType]
       description: >
         EasySet-style time schedule. Core executes active weekly intervals per target:
-        AO/DO through priority level 4 (`schedule`), AV/MSV as virtual points with source `SCHEDULE`.
+        AO/DO through priority level 4 (`schedule`), AV/BV/MSV as virtual points with source `SCHEDULE`.
         `holiday_period` is an all-day MM-DD override that suppresses normal weekly schedules while active.
       properties:
         id:
@@ -1233,7 +1389,7 @@ components:
         value:
           type: number
           description: >
-            controller_operation_mode targets MSV-01 with value 0..2; analog_output_value 0..100 percent; DO/fan 0 or 1;
+            controller_operation_mode targets MSV-01 with value 0..2; analog_output_value targets AO or VO analog backing AV17..32 with 0..100 percent; DO/fan targets DO or VO binary backing BV9..16 with 0 or 1;
             control_loop_setpoint finite numeric value.
       oneOf:
         - title: Stored-only inactive row
@@ -1325,15 +1481,16 @@ components:
       type: object
       required: [kind, channel, pointId]
       properties:
-        kind: { type: string, enum: [UI, AO, DO] }
+        kind: { type: string, enum: [UI, AO, DO, VI, VO] }
         channel:
           type: integer
           minimum: 1
-          maximum: 16
-          description: UI 1..16, AO 1..4, DO 1..4; kind-specific max is validated by backend.
+          maximum: 64
+          description: UI 1..16, AO 1..4, DO 1..4, VI/VO channel is the VI-xx/VO-xx metadata channel; kind-specific max is validated by backend.
         pointId:
           type: string
-          pattern: "^(UI|AO|DO)-[0-9]{2}$"
+          pattern: "^((UI|AO|DO)-[0-9]{2}|(AV|BV|MSV)-?[0-9]{1,2})$"
+          description: UI/AO/DO use their own point id; VI/VO store the AV/BV/MSV backing point id.
           example: "UI-01"
     AlarmDisabledParams:
       type: object

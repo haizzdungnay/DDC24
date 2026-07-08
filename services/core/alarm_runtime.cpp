@@ -6,6 +6,7 @@
 #include <cstring>
 #include <ctime>
 #include <fstream>
+#include <limits>
 #include <set>
 #include <sstream>
 #include <utility>
@@ -204,6 +205,61 @@ std::string point_id(const std::string& kind, int channel)
     return kind + "-" + (channel < 10 ? "0" : "") + std::to_string(channel);
 }
 
+bool parse_indexed_point(const std::string& value, std::string* prefix, int* channel)
+{
+    std::string raw = value;
+    for (char& c : raw) {
+        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+    }
+    std::size_t i = 0;
+    while (i < raw.size() && raw[i] >= 'A' && raw[i] <= 'Z') i++;
+    if (i == 0 || i >= raw.size()) return false;
+    *prefix = raw.substr(0, i);
+    if (raw[i] == '-' || raw[i] == '_') i++;
+    if (i >= raw.size()) return false;
+    int parsed = 0;
+    for (; i < raw.size(); i++) {
+        if (raw[i] < '0' || raw[i] > '9') return false;
+        const int digit = raw[i] - '0';
+        if (parsed > (std::numeric_limits<int>::max() - digit) / 10) return false;
+        parsed = parsed * 10 + digit;
+    }
+    if (parsed <= 0) return false;
+    *channel = parsed;
+    return true;
+}
+
+bool parse_virtual_source_point(const std::string& source_kind, const std::string& pid,
+                                PointKind* point_kind, int* idx, std::string* normalized_pid)
+{
+    std::string prefix;
+    int channel = 0;
+    if (!parse_indexed_point(pid, &prefix, &channel)) return false;
+    if (prefix == "AV") {
+        if ((source_kind == "VI" && channel >= 1 && channel <= 16) ||
+            (source_kind == "VO" && channel >= 17 && channel <= KX_N_AV)) {
+            *point_kind = PointKind::AV;
+        } else {
+            return false;
+        }
+    } else if (prefix == "BV") {
+        if ((source_kind == "VI" && channel >= 1 && channel <= 8) ||
+            (source_kind == "VO" && channel >= 9 && channel <= KX_N_BV)) {
+            *point_kind = PointKind::BV;
+        } else {
+            return false;
+        }
+    } else if (prefix == "MSV") {
+        if (channel < 2 || channel > KX_N_MSV) return false;
+        *point_kind = PointKind::MSV;
+    } else {
+        return false;
+    }
+    *idx = channel - 1;
+    *normalized_pid = point_id(prefix, channel);
+    return true;
+}
+
 bool parse_source(const json::Value& src, AlarmSourceConfig* out)
 {
     std::string kind;
@@ -227,6 +283,21 @@ bool parse_source(const json::Value& src, AlarmSourceConfig* out)
     } else if (kind == "DO") {
         max_channel = KX_N_DO;
         point_kind = PointKind::BO;
+    } else if (kind == "VI" || kind == "VO") {
+        if (channel < 1 || channel > 64) {
+            std::fprintf(stderr, "ERROR alarm_cfg.bad_source_channel kind=%s ch=%d\n",
+                         kind.c_str(), channel);
+            return false;
+        }
+        std::string normalized_pid;
+        if (!parse_virtual_source_point(kind, pid, &point_kind, &channel, &normalized_pid)) {
+            std::fprintf(stderr, "ERROR alarm_cfg.bad_source_point pointId=%s kind=%s\n",
+                         pid.c_str(), kind.c_str());
+            return false;
+        }
+        out->point = {point_kind, channel};
+        out->point_id = normalized_pid;
+        return true;
     } else {
         std::fprintf(stderr, "ERROR alarm_cfg.bad_source_kind kind=%s\n", kind.c_str());
         return false;

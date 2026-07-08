@@ -7,7 +7,7 @@ import { Panel } from '../components/Panel'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
 import { useI18n } from '../i18n'
-import type { ActiveAlarmType, AlarmPriority, AlarmSetting, AlarmSource, AlarmSourceKind, AlarmType, DeferredAlarmType, SeverityRule } from '../types'
+import type { ActiveAlarmType, AlarmPriority, AlarmSetting, AlarmSource, AlarmSourceKind, AlarmType, DeferredAlarmType, SeverityRule, VirtualIoPoint } from '../types'
 import { cn } from '../utils'
 
 const maxAlarms = 64
@@ -21,7 +21,7 @@ const priorities: AlarmPriority[] = ['low', 'medium', 'high', 'critical', 'flexi
 const clearModes: AlarmClearMode[] = ['auto', 'manual']
 const severities: SeverityRule['severity'][] = ['critical', 'high', 'medium', 'low', 'info']
 const severityOps: SeverityRule['op'][] = ['>=', '<=']
-const sourceKinds: AlarmSourceKind[] = ['UI', 'AO', 'DO']
+const sourceKinds: AlarmSourceKind[] = ['UI', 'AO', 'DO', 'VI', 'VO']
 
 const alarmTypeLabels: Record<AlarmType, string> = {
   0: '0 - Disabled',
@@ -53,14 +53,16 @@ export function AlarmSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [statusMessage, setStatusMessage] = useState('')
+  const [virtualIo, setVirtualIo] = useState<VirtualIoPoint[]>([])
 
   useEffect(() => {
     let active = true
     setLoading(true)
-    apiClient.getAlarmSettings()
-      .then((items) => {
+    Promise.all([apiClient.getAlarmSettings(), apiClient.getVirtualIo()])
+      .then(([items, virtualItems]) => {
         if (!active) return
-        setRows(items.map(normalizeLoadedAlarm))
+        setVirtualIo(virtualItems)
+        setRows(items.map((item) => normalizeLoadedAlarm(item, virtualItems)))
         setLoadError('')
       })
       .catch((error) => {
@@ -82,7 +84,7 @@ export function AlarmSettingsPage() {
   }, [rows.length])
 
   const selected = rows[selectedIndex]
-  const issues = useMemo(() => validateAlarms(rows, pick), [rows, pick])
+  const issues = useMemo(() => validateAlarms(rows, pick, virtualIo), [rows, pick, virtualIo])
   const selectedIssues = issues.filter((issue) => issue.rowIndex === selectedIndex)
   const enabledCount = rows.filter((row) => row.enabled).length
   const publishedCount = rows.filter((row) => row.enabled && row.publishBacnet).length
@@ -90,7 +92,7 @@ export function AlarmSettingsPage() {
 
   function updateAlarm(index: number, patch: Partial<AlarmSetting>) {
     setStatusMessage('')
-    setRows((current) => current.map((row, itemIndex) => itemIndex === index ? normalizeDraftAlarm({ ...row, ...patch }) : row))
+    setRows((current) => current.map((row, itemIndex) => itemIndex === index ? normalizeDraftAlarm({ ...row, ...patch }, virtualIo) : row))
   }
 
   function updateParams(index: number, patch: AlarmSetting['params']) {
@@ -102,14 +104,14 @@ export function AlarmSettingsPage() {
   function updateSource(alarmIndex: number, sourceIndex: number, patch: Partial<AlarmSource>) {
     const row = rows[alarmIndex]
     if (!row) return
-    const sources = row.sources.map((source, itemIndex) => itemIndex === sourceIndex ? normalizeSource({ ...source, ...patch }) : source)
+    const sources = row.sources.map((source, itemIndex) => itemIndex === sourceIndex ? normalizeSource({ ...source, ...patch }, virtualIo) : source)
     updateAlarm(alarmIndex, { sources })
   }
 
   function addSource(alarmIndex: number) {
     const row = rows[alarmIndex]
     if (!row || row.sources.length >= maxSourcesPerAlarm) return
-    updateAlarm(alarmIndex, { sources: [...row.sources, nextSource(row.sources)] })
+    updateAlarm(alarmIndex, { sources: [...row.sources, nextSource(row.sources, virtualIo)] })
   }
 
   function removeSource(alarmIndex: number, sourceIndex: number) {
@@ -120,7 +122,7 @@ export function AlarmSettingsPage() {
 
   function addAlarm() {
     if (rows.length >= maxAlarms) return
-    const next = createAlarm(rows)
+    const next = createAlarm(rows, virtualIo)
     setRows((current) => [...current, next])
     setSelectedIndex(rows.length)
     setStatusMessage('')
@@ -136,8 +138,9 @@ export function AlarmSettingsPage() {
   async function reloadSettings() {
     setLoading(true)
     try {
-      const items = await apiClient.getAlarmSettings()
-      setRows(items.map(normalizeLoadedAlarm))
+      const [items, virtualItems] = await Promise.all([apiClient.getAlarmSettings(), apiClient.getVirtualIo()])
+      setVirtualIo(virtualItems)
+      setRows(items.map((item) => normalizeLoadedAlarm(item, virtualItems)))
       setLoadError('')
       setStatusMessage(pick('Da tai lai tu backend.', 'Reloaded from backend.'))
     } catch (error) {
@@ -150,17 +153,18 @@ export function AlarmSettingsPage() {
   }
 
   async function saveSettings() {
-    const saveIssues = validateAlarms(rows, pick)
+    const saveIssues = validateAlarms(rows, pick, virtualIo)
     if (saveIssues.length > 0) {
       toast.push('error', saveIssues[0].message)
       return
     }
-    const payload = rows.map(normalizeForSave)
+    const payload = rows.map((row) => normalizeForSave(row, virtualIo))
     setSaving(true)
     try {
       const result = await apiClient.putAlarmSettings(payload)
-      const fresh = await apiClient.getAlarmSettings()
-      setRows(fresh.map(normalizeLoadedAlarm))
+      const [fresh, virtualItems] = await Promise.all([apiClient.getAlarmSettings(), apiClient.getVirtualIo()])
+      setVirtualIo(virtualItems)
+      setRows(fresh.map((item) => normalizeLoadedAlarm(item, virtualItems)))
       setStatusMessage(`${t('alarmSettingsSaved')} (${result.reload})`)
       toast.push('success', t('alarmSettingsSaved'))
     } catch (error) {
@@ -229,6 +233,7 @@ export function AlarmSettingsPage() {
           {selected ? (
             <AlarmEditor
               row={selected}
+              virtualIo={virtualIo}
               rowIndex={selectedIndex}
               issues={selectedIssues}
               publishedCount={publishedCount}
@@ -265,6 +270,7 @@ export function AlarmSettingsPage() {
 
 function AlarmEditor({
   row,
+  virtualIo,
   rowIndex,
   issues,
   publishedCount,
@@ -276,6 +282,7 @@ function AlarmEditor({
   onSourceRemove
 }: {
   row: AlarmSetting
+  virtualIo: VirtualIoPoint[]
   rowIndex: number
   issues: ValidationIssue[]
   publishedCount: number
@@ -331,6 +338,7 @@ function AlarmEditor({
             <SourceRow
               key={`${source.kind}-${source.channel}-${sourceIndex}`}
               source={source}
+              virtualIo={virtualIo}
               onChange={(patch) => onSourceChange(sourceIndex, patch)}
               onRemove={() => onSourceRemove(sourceIndex)}
             />
@@ -371,16 +379,16 @@ function AlarmEditor({
   )
 }
 
-function SourceRow({ source, onChange, onRemove }: { source: AlarmSource; onChange: (patch: Partial<AlarmSource>) => void; onRemove: () => void }) {
+function SourceRow({ source, virtualIo, onChange, onRemove }: { source: AlarmSource; virtualIo: VirtualIoPoint[]; onChange: (patch: Partial<AlarmSource>) => void; onRemove: () => void }) {
   const { pick } = useI18n()
-  const max = maxChannel(source.kind)
+  const channels = channelOptions(source.kind, virtualIo)
   return (
     <div className="grid gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 sm:grid-cols-[120px_120px_minmax(0,1fr)_auto]">
-      <SelectField label="Kind" value={source.kind} onChange={(kind) => onChange(normalizeSource({ kind: kind as AlarmSourceKind, channel: 1 }))}>
+      <SelectField label="Kind" value={source.kind} onChange={(kind) => onChange(normalizeSource({ kind: kind as AlarmSourceKind, channel: firstChannel(kind as AlarmSourceKind, virtualIo) }, virtualIo))}>
         {sourceKinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
       </SelectField>
       <SelectField label={pick('Kenh', 'Channel')} value={String(source.channel)} onChange={(channel) => onChange({ channel: Number(channel) })}>
-        {Array.from({ length: max }, (_, index) => index + 1).map((channel) => <option key={channel} value={channel}>{channel}</option>)}
+        {channels.map((channel) => <option key={channel} value={channel}>{channel}</option>)}
       </SelectField>
       <TextField label="Point ID" value={source.pointId} disabled onChange={() => undefined} />
       <div className="flex items-end">
@@ -498,35 +506,35 @@ function SelectField({ label, value, children, onChange }: { label: string; valu
   )
 }
 
-function normalizeLoadedAlarm(row: AlarmSetting): AlarmSetting {
+function normalizeLoadedAlarm(row: AlarmSetting, virtualIo: VirtualIoPoint[] = []): AlarmSetting {
   return normalizeDraftAlarm({
     ...row,
     publishBacnet: Boolean(row.publishBacnet),
     params: row.params ?? {},
     sources: Array.isArray(row.sources) ? row.sources : []
-  })
+  }, virtualIo)
 }
 
-function normalizeDraftAlarm(row: AlarmSetting): AlarmSetting {
+function normalizeDraftAlarm(row: AlarmSetting, virtualIo: VirtualIoPoint[] = []): AlarmSetting {
   return {
     ...row,
     alarmType: isAlarmType(row.alarmType) ? row.alarmType : 0,
     clearMode: clearModes.includes(getClearMode(row)) ? getClearMode(row) : 'auto',
     priority: priorities.includes(row.priority) ? row.priority : 'medium',
     delayS: Number.isFinite(row.delayS) ? row.delayS : 0,
-    sources: row.sources.map(normalizeSource),
+    sources: row.sources.map((source) => normalizeSource(source, virtualIo)),
     params: normalizeParams(row.params ?? {})
   }
 }
 
-function normalizeForSave(row: AlarmSetting): AlarmSetting {
+function normalizeForSave(row: AlarmSetting, virtualIo: VirtualIoPoint[] = []): AlarmSetting {
   const publishBacnet = Boolean(row.publishBacnet)
   const next: AlarmSetting = {
     id: row.id.trim(),
     label: row.label.trim(),
     enabled: row.enabled,
     alarmType: row.alarmType,
-    sources: row.sources.map(normalizeSource),
+    sources: row.sources.map((source) => normalizeSource(source, virtualIo)),
     priority: row.priority,
     clearMode: getClearMode(row),
     delayS: row.delayS,
@@ -537,14 +545,14 @@ function normalizeForSave(row: AlarmSetting): AlarmSetting {
   return next
 }
 
-function createAlarm(rows: AlarmSetting[]): AlarmSetting {
+function createAlarm(rows: AlarmSetting[], virtualIo: VirtualIoPoint[]): AlarmSetting {
   const id = nextAlarmId(rows)
   return {
     id,
     label: `Alarm ${id.replace(/^ALM-/, '')}`,
     enabled: true,
     alarmType: 1,
-    sources: [nextSource([])],
+    sources: [nextSource([], virtualIo)],
     priority: 'medium',
     clearMode: 'auto',
     delayS: 0,
@@ -562,32 +570,73 @@ function nextAlarmId(rows: AlarmSetting[]): string {
   return `ALM-${Date.now()}`
 }
 
-function nextSource(sources: AlarmSource[]): AlarmSource {
+function nextSource(sources: AlarmSource[], virtualIo: VirtualIoPoint[]): AlarmSource {
   const used = new Set(sources.map((source) => `${source.kind}:${source.channel}`))
   for (const kind of sourceKinds) {
-    for (let channel = 1; channel <= maxChannel(kind); channel += 1) {
-      if (!used.has(`${kind}:${channel}`)) return makeSource(kind, channel)
+    for (const channel of channelOptions(kind, virtualIo)) {
+      if (!used.has(`${kind}:${channel}`)) return makeSource(kind, channel, virtualIo)
     }
   }
-  return makeSource('UI', 1)
+  return makeSource('UI', 1, virtualIo)
 }
 
-function normalizeSource(source: Partial<AlarmSource>): AlarmSource {
+function normalizeSource(source: Partial<AlarmSource>, virtualIo: VirtualIoPoint[] = []): AlarmSource {
   const kind = source.kind && sourceKinds.includes(source.kind) ? source.kind : 'UI'
-  const channel = normalizeNumber(source.channel ?? 1, 1, maxChannel(kind), true)
-  return makeSource(kind, channel)
+  const channels = channelOptions(kind, virtualIo)
+  const fallbackChannel = channels[0] ?? 1
+  const max = Math.max(...channels, fallbackChannel)
+  const rawChannel = normalizeNumber(source.channel ?? fallbackChannel, 1, max, true)
+  const channel = channels.includes(rawChannel) ? rawChannel : fallbackChannel
+  return makeSource(kind, channel, virtualIo, source.pointId)
 }
 
-function makeSource(kind: AlarmSourceKind, channel: number): AlarmSource {
-  return { kind, channel, pointId: pointIdFor(kind, channel) }
+function makeSource(kind: AlarmSourceKind, channel: number, virtualIo: VirtualIoPoint[] = [], fallbackPointId = ''): AlarmSource {
+  return { kind, channel, pointId: pointIdFor(kind, channel, virtualIo, fallbackPointId) }
 }
 
-function pointIdFor(kind: AlarmSourceKind, channel: number): string {
+function pointIdFor(kind: AlarmSourceKind, channel: number, virtualIo: VirtualIoPoint[] = [], fallbackPointId = ''): string {
+  if (kind === 'VI' || kind === 'VO') {
+    const item = virtualIo.find((point) => point.id === `${kind}-${String(channel).padStart(2, '0')}`)
+    return item ? dashedVirtualBackingPoint(item.backingPoint) : fallbackPointId.trim().toUpperCase()
+  }
   return `${kind}-${String(channel).padStart(2, '0')}`
 }
 
 function maxChannel(kind: AlarmSourceKind): number {
-  return kind === 'UI' ? 16 : 4
+  if (kind === 'UI') return 16
+  if (kind === 'AO' || kind === 'DO') return 4
+  return 64
+}
+
+function channelOptions(kind: AlarmSourceKind, virtualIo: VirtualIoPoint[]): number[] {
+  if (kind !== 'VI' && kind !== 'VO') {
+    return Array.from({ length: maxChannel(kind) }, (_, index) => index + 1)
+  }
+  const direction = kind === 'VI' ? 'input' : 'output'
+  const channels = virtualIo
+    .filter((item) => item.direction === direction)
+    .map((item) => virtualChannel(item.id, kind))
+    .filter((channel): channel is number => channel !== undefined)
+  return channels.length > 0 ? [...new Set(channels)].sort((a, b) => a - b) : [1]
+}
+
+function firstChannel(kind: AlarmSourceKind, virtualIo: VirtualIoPoint[]): number {
+  return channelOptions(kind, virtualIo)[0] ?? 1
+}
+
+function virtualChannel(id: string, kind: AlarmSourceKind): number | undefined {
+  const match = id.trim().toUpperCase().match(new RegExp(`^${kind}-(\\d+)$`))
+  return match ? Number(match[1]) : undefined
+}
+
+function virtualSourceFor(kind: AlarmSourceKind, channel: number, virtualIo: VirtualIoPoint[]): VirtualIoPoint | undefined {
+  if (kind !== 'VI' && kind !== 'VO') return undefined
+  return virtualIo.find((item) => item.id === `${kind}-${String(channel).padStart(2, '0')}`)
+}
+
+function dashedVirtualBackingPoint(point: string): string {
+  const match = point.trim().toUpperCase().match(/^(AV|BV|MSV)[-_]?0*(\d+)$/)
+  return match ? `${match[1]}-${String(Number(match[2])).padStart(2, '0')}` : point.trim().toUpperCase()
 }
 
 function defaultParamsForType(alarmType: AlarmType, params: AlarmSetting['params']): AlarmSetting['params'] {
@@ -607,7 +656,7 @@ function defaultParamsForType(alarmType: AlarmType, params: AlarmSetting['params
   return {}
 }
 
-function validateAlarms(rows: AlarmSetting[], pick: PickText): ValidationIssue[] {
+function validateAlarms(rows: AlarmSetting[], pick: PickText, virtualIo: VirtualIoPoint[] = []): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   if (rows.length > maxAlarms) issues.push({ message: pick(`Toi da ${maxAlarms} alarm.`, `At most ${maxAlarms} alarms.`) })
 
@@ -637,8 +686,12 @@ function validateAlarms(rows: AlarmSetting[], pick: PickText): ValidationIssue[]
     row.sources.forEach((source, sourceIndex) => {
       const max = maxChannel(source.kind)
       if (source.channel < 1 || source.channel > max) addIssue(issues, rowIndex, `${prefix}: ${source.kind} channel must be 1..${max}.`)
-      const expected = pointIdFor(source.kind, source.channel)
-      if (source.pointId !== expected) addIssue(issues, rowIndex, `${prefix}: source ${sourceIndex + 1} pointId must be ${expected}.`)
+      if ((source.kind === 'VI' || source.kind === 'VO') && !virtualSourceFor(source.kind, source.channel, virtualIo)) {
+        addIssue(issues, rowIndex, `${prefix}: ${source.kind}-${String(source.channel).padStart(2, '0')} not found in Virtual I/O.`)
+      }
+      const expected = pointIdFor(source.kind, source.channel, virtualIo, source.pointId)
+      if (!expected) addIssue(issues, rowIndex, `${prefix}: source ${sourceIndex + 1} pointId is required.`)
+      else if (source.pointId !== expected) addIssue(issues, rowIndex, `${prefix}: source ${sourceIndex + 1} pointId must be ${expected}.`)
       const key = `${source.kind}:${source.channel}`
       if (seenSources.has(key)) addIssue(issues, rowIndex, `${prefix}: ${pick('Source bi trung.', 'Duplicate source.')} ${source.pointId}`)
       seenSources.add(key)

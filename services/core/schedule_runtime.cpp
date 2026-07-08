@@ -166,6 +166,9 @@ bool parse_target(const json::Value* value, ScheduleType type, ScheduleTarget* o
     } else if (kind == "AV") {
         out->kind = PointKind::AV;
         max_channel = KX_N_AV;
+    } else if (kind == "BV") {
+        out->kind = PointKind::BV;
+        max_channel = KX_N_BV;
     } else if (kind == "MSV") {
         out->kind = PointKind::MSV;
         max_channel = KX_N_MSV;
@@ -200,9 +203,13 @@ bool valid_target_for_type(ScheduleType type, const ScheduleTarget& target)
         return target.kind == PointKind::MSV && target.idx == 0;
     }
     if (type == ScheduleType::ControlLoopSetpoint) return target.kind == PointKind::AV;
-    if (type == ScheduleType::AnalogOutputValue) return target.kind == PointKind::AO;
+    if (type == ScheduleType::AnalogOutputValue) {
+        return target.kind == PointKind::AO ||
+               (target.kind == PointKind::AV && target.idx >= 16);
+    }
     if (type == ScheduleType::FanStateValue || type == ScheduleType::DigitalOutputValue) {
-        return target.kind == PointKind::BO;
+        return target.kind == PointKind::BO ||
+               (target.kind == PointKind::BV && target.idx >= 8);
     }
     return true;
 }

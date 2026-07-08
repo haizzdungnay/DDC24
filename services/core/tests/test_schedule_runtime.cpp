@@ -277,6 +277,75 @@ TEST(ScheduleRuntime, AppliesActiveIntervalsByTarget)
     EXPECT_EQ(table.get({PointKind::MSV, 0}).source, PointSource::DEFAULT);
 }
 
+TEST(ScheduleRuntime, AppliesVirtualOutputTargets)
+{
+    ScheduleRuntime runtime;
+    TempFile file(R"([
+      {
+        "id": "SCH-VO-A",
+        "label": "VO analog",
+        "enabled": true,
+        "scheduleType": "analog_output_value",
+        "startTime": "08:00",
+        "endTime": "12:00",
+        "weekdays": ["monday"],
+        "target": {"kind": "AV", "channel": 17, "pointId": "AV-17"},
+        "value": 42
+      },
+      {
+        "id": "SCH-VO-B",
+        "label": "VO binary",
+        "enabled": true,
+        "scheduleType": "digital_output_value",
+        "startTime": "08:00",
+        "endTime": "12:00",
+        "weekdays": ["monday"],
+        "target": {"kind": "BV", "channel": 9, "pointId": "BV-09"},
+        "value": 1
+      }
+    ])");
+    ASSERT_TRUE(runtime.load(file.path(), true));
+
+    IoSnapshot io;
+    PointTable table;
+    PriorityResolver resolver;
+    runtime.evaluate_week_minute(0 * 24 * 60 + 10 * 60, io, table, resolver);
+    EXPECT_FLOAT_EQ(table.get({PointKind::AV, 16}).value, 42.0f);
+    EXPECT_EQ(table.get({PointKind::AV, 16}).source, PointSource::SCHEDULE);
+    EXPECT_FLOAT_EQ(table.get({PointKind::BV, 8}).value, 1.0f);
+    EXPECT_EQ(table.get({PointKind::BV, 8}).source, PointSource::SCHEDULE);
+
+    runtime.evaluate_week_minute(0 * 24 * 60 + 13 * 60, io, table, resolver);
+    EXPECT_EQ(table.get({PointKind::AV, 16}).source, PointSource::DEFAULT);
+    EXPECT_EQ(table.get({PointKind::BV, 8}).source, PointSource::DEFAULT);
+}
+
+TEST(ScheduleRuntime, RejectsInvalidVirtualOutputTargetPools)
+{
+    struct Case {
+        const char* type;
+        const char* kind;
+        int channel;
+        const char* point_id;
+        double value;
+    };
+    const Case cases[] = {
+        {"analog_output_value", "AV", 16, "AV-16", 42},
+        {"analog_output_value", "AV", 33, "AV-33", 42},
+        {"digital_output_value", "BV", 8, "BV-08", 1},
+        {"digital_output_value", "BV", 17, "BV-17", 1},
+    };
+    for (const Case& tc : cases) {
+        char buf[512];
+        std::snprintf(buf, sizeof(buf),
+                      R"([{"id":"SCH-BAD","label":"Bad","enabled":true,"scheduleType":"%s","startTime":"08:00","endTime":"12:00","weekdays":["monday"],"target":{"kind":"%s","channel":%d,"pointId":"%s"},"value":%.1f}])",
+                      tc.type, tc.kind, tc.channel, tc.point_id, tc.value);
+        ScheduleRuntime runtime;
+        TempFile file(buf);
+        EXPECT_FALSE(runtime.load(file.path(), true)) << tc.kind << tc.channel;
+    }
+}
+
 TEST(ScheduleRuntime, HolidayPeriodSuppressesWeeklySchedules)
 {
     ScheduleRuntime runtime;

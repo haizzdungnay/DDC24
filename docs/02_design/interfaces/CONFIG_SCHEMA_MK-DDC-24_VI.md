@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 1.5 | 2026-07-02 (§4a: thêm `alarm_settings.conf` entity-list per ADR-013) · 1.4 | 2026-06-30 (§3: ao[] mở rộng per ADR-012 — thêm name/units/min_pv/max_pv; §3.1: bảng sensor_type→BACnet Units enum đầy đủ per ADR-011) · 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.6 | 2026-07-08 (§4a: alarm sources hỗ trợ VI/VO qua backing AV/BV/MSV) · 1.5 | 2026-07-02 (§4a: thêm `alarm_settings.conf` entity-list per ADR-013) · 1.4 | 2026-06-30 (§3: ao[] mở rộng per ADR-012 — thêm name/units/min_pv/max_pv; §3.1: bảng sensor_type→BACnet Units enum đầy đủ per ADR-011) · 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -179,9 +179,9 @@
           "type": "object",
           "required": ["kind", "channel", "pointId"],
           "properties": {
-            "kind": {"type": "string", "enum": ["UI", "AO", "DO"]},
+            "kind": {"type": "string", "enum": ["UI", "AO", "DO", "VI", "VO"]},
             "channel": {"type": "integer", "minimum": 1},
-            "pointId": {"type": "string", "pattern": "^(UI|AO|DO)-[0-9]{2}$"}
+            "pointId": {"type": "string", "pattern": "^((UI|AO|DO)-[0-9]{2}|(AV|BV|MSV)-?[0-9]{1,2})$"}
           }
         }
       },
@@ -242,7 +242,7 @@
 
 **Validation / semantics:**
 
-- `id` unique trong file; `sources[].pointId` phải khớp `kind` và `channel`.
+- `id` unique trong file; `sources[].pointId` phải khớp `kind` và `channel`. Với `kind=VI|VO`, `pointId` là backing point `AV/BV/MSV` của biến ảo.
 - `alarmType=1`: khi `enabled=true`, validate `hh >= h >= l >= ll`.
 - `alarmType=3`: `runtimeHours >= 0`.
 - Chỉ ACTIVE type (`0`, `1`, `3`) được `enabled=true` cho tới khi core hook của type DEFERRED được triển khai.

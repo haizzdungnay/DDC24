@@ -119,6 +119,48 @@ func TestValidateAlarmSettingsAcceptsFlexibleSeverityRules(t *testing.T) {
 	}
 }
 
+func TestValidateAlarmSettingsAcceptsVirtualIOSources(t *testing.T) {
+	rows := validAlarmRows(2)
+	rows[0].Sources = []AlarmSource{{Kind: "VI", Channel: 1, PointID: "AV-01"}}
+	rows[1].Sources = []AlarmSource{{Kind: "VO", Channel: 1, PointID: "BV-09"}}
+	if errs := validateAlarmSettings(rows); len(errs) > 0 {
+		t.Fatalf("validation errors = %+v", errs)
+	}
+}
+
+func TestAlarmSettingsPutAcceptsVirtualSourceWhenMetadataMatches(t *testing.T) {
+	app, token := newAlarmSettingsTestApp(t)
+	if err := os.WriteFile(filepath.Join(app.cfg.ConfigDir, "virtual_io.conf"), []byte(`{"items":[{"id":"VI-01","direction":"input","valueType":"analog","label":"A","backingPoint":"AV1","displayMin":0,"displayMax":100}]}`), 0o644); err != nil {
+		t.Fatalf("seed virtual_io.conf: %v", err)
+	}
+	rows := validAlarmRows(1)
+	rows[0].Sources = []AlarmSource{{Kind: "VI", Channel: 1, PointID: "AV-01"}}
+	req := newAuthRequest(http.MethodPut, "/api/v1/alarm-settings", alarmSettingsJSON(t, rows), token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestAlarmSettingsPutRejectsVirtualSourceMetadataMismatch(t *testing.T) {
+	app, token := newAlarmSettingsTestApp(t)
+	if err := os.WriteFile(filepath.Join(app.cfg.ConfigDir, "virtual_io.conf"), []byte(`{"items":[{"id":"VI-01","direction":"input","valueType":"analog","label":"A","backingPoint":"AV1","displayMin":0,"displayMax":100}]}`), 0o644); err != nil {
+		t.Fatalf("seed virtual_io.conf: %v", err)
+	}
+	rows := validAlarmRows(1)
+	rows[0].Sources = []AlarmSource{{Kind: "VI", Channel: 64, PointID: "AV-01"}}
+	req := newAuthRequest(http.MethodPut, "/api/v1/alarm-settings", alarmSettingsJSON(t, rows), token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "[0].sources[0].channel") {
+		t.Fatalf("body missing channel path: %s", w.Body.String())
+	}
+}
+
 func TestAlarmSettingsValidationRejectsBadInputWithoutWrite(t *testing.T) {
 	cases := []struct {
 		name string
@@ -167,6 +209,12 @@ func TestAlarmSettingsValidationRejectsBadInputWithoutWrite(t *testing.T) {
 			name: "pointId mismatch",
 			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
 				rows[0].Sources[0].PointID = "UI-02"
+			}),
+		},
+		{
+			name: "virtual source wrong backing pool",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].Sources[0] = AlarmSource{Kind: "VI", Channel: 1, PointID: "AV-17"}
 			}),
 		},
 		{

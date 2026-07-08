@@ -107,7 +107,8 @@ export function MonitorPage() {
   const groups = useMemo(() => ({
     UI: filtered.filter((point) => point.kind === 'UI'),
     DO: filtered.filter((point) => point.kind === 'DO'),
-    AO: filtered.filter((point) => point.kind === 'AO')
+    AO: filtered.filter((point) => point.kind === 'AO'),
+    Virtual: filtered.filter((point) => point.kind === 'virtual')
   }), [filtered])
 
   const stats = {
@@ -115,8 +116,9 @@ export function MonitorPage() {
     ui: points.filter((point) => point.kind === 'UI').length,
     do: points.filter((point) => point.kind === 'DO').length,
     ao: points.filter((point) => point.kind === 'AO').length,
+    virtual: points.filter((point) => point.kind === 'virtual').length,
     on: points.filter((point) => Boolean(point.value)).length,
-    analogGood: points.filter((point) => (point.kind === 'UI' || point.kind === 'AO') && point.quality === 'good').length,
+    analogGood: points.filter((point) => (point.kind === 'UI' || point.kind === 'AO' || point.kind === 'virtual') && point.quality === 'good').length,
     abnormal: points.filter((point) => point.quality !== 'good').length
   }
 
@@ -273,7 +275,7 @@ export function MonitorPage() {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_180px_1fr_132px]">
         <select value={kind} onChange={(event) => setKind(event.target.value as PointKind | 'all')} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
-          <option value="all">{pick('Nhóm I/O - Tất cả', 'I/O group - All')}</option><option value="UI">UI</option><option value="DO">DO</option><option value="AO">AO</option>
+          <option value="all">{pick('Nhóm I/O - Tất cả', 'I/O group - All')}</option><option value="UI">UI</option><option value="DO">DO</option><option value="AO">AO</option><option value="virtual">{pick('Ảo', 'Virtual')}</option>
         </select>
         <select value={quality} onChange={(event) => setQuality(event.target.value as PointQuality | 'all')} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
           <option value="all">{pick('Trạng thái - Tất cả', 'Status - All')}</option><option value="good">Good</option><option value="uncertain">Uncertain</option><option value="bad">Bad</option><option value="stale">Stale</option>
@@ -290,6 +292,7 @@ export function MonitorPage() {
           <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} onToggle={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
           <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} />
           <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
+          <AnalogSection title="VIRTUAL I/O" rows={groups.Virtual} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} />
         </div>
         {selected && <DetailPanel
           point={selected}

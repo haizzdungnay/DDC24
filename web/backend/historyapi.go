@@ -25,13 +25,24 @@ func (a *App) handleHistory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Translate VI/VO query IDs to backing points; remember mapping for output.
+	viToBack := make(map[string]string) // backing→VI id for output relabeling
+	queryIDs := make([]string, 0, len(pointIDs))
+	for _, id := range pointIDs {
+		if backing, _ := a.resolveVirtualID(id); backing != "" {
+			viToBack[backing] = id
+			queryIDs = append(queryIDs, backing)
+		} else {
+			queryIDs = append(queryIDs, id)
+		}
+	}
 	now := time.Now().UTC().Unix()
-	samples, err := a.trends.Query(r.Context(), pointIDs, now-rangeSeconds, now)
+	samples, err := a.trends.Query(r.Context(), queryIDs, now-rangeSeconds, now)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, wideTrendSamples(samples))
+	writeJSON(w, http.StatusOK, wideTrendSamplesWithOverlay(samples, viToBack))
 }
 
 func (a *App) handleGetTrendConfig(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +141,13 @@ func parseHistoryRange(raw string) (int64, error) {
 }
 
 func wideTrendSamples(samples []Sample) []TrendSample {
+	return wideTrendSamplesWithOverlay(samples, nil)
+}
+
+// wideTrendSamplesWithOverlay pivots row-per-point samples into wide-format
+// TrendSample maps. When viToBack is non-nil, backing point IDs (e.g. "AV1")
+// are relabeled to their VI/VO id (e.g. "VI-01") in the output keys.
+func wideTrendSamplesWithOverlay(samples []Sample, viToBack map[string]string) []TrendSample {
 	if len(samples) == 0 {
 		return []TrendSample{}
 	}
@@ -142,7 +160,11 @@ func wideTrendSamples(samples []Sample) []TrendSample {
 			byTS[sample.TS] = row
 			keys = append(keys, sample.TS)
 		}
-		row[canonicalPointID(sample.PointID)] = sample.Value
+		key := canonicalPointID(sample.PointID)
+		if vi, ok2 := viToBack[key]; ok2 {
+			key = vi
+		}
+		row[key] = sample.Value
 	}
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 	out := make([]TrendSample, 0, len(keys))

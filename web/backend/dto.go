@@ -42,11 +42,35 @@ type ConfigTime struct {
 	SystemTime string   `json:"system_time"`
 }
 
+type ConfigVirtualIO struct {
+	Items []VirtualIOPoint `json:"items"`
+}
+
+type VirtualIOPoint struct {
+	ID                 string  `json:"id"`
+	Direction          string  `json:"direction"`
+	ValueType          string  `json:"valueType"`
+	Label              string  `json:"label"`
+	Enabled            bool    `json:"enabled"`
+	BackingPoint       string  `json:"backingPoint"`
+	SignalType         int     `json:"signalType"`
+	Unit               string  `json:"unit,omitempty"`
+	DisplayMin         float64 `json:"displayMin"`
+	DisplayMax         float64 `json:"displayMax"`
+	RangeMultiplier    int     `json:"rangeMultiplier"`
+	SensorCal          float64 `json:"sensorCal"`
+	MathFunction       int     `json:"mathFunction"`
+	ConnectionTimeoutS int     `json:"connectionTimeoutS"`
+	ManualValue        any     `json:"manualValue,omitempty"`
+	Note               string  `json:"note,omitempty"`
+}
+
 type SystemConfig struct {
 	Device    ConfigDevice    `json:"device"`
 	Network   ConfigNetwork   `json:"network"`
 	IO        ConfigIO        `json:"io"`
 	SafeState ConfigSafeState `json:"safe_state"`
+	VirtualIO ConfigVirtualIO `json:"virtual_io"`
 	Bacnet    ConfigBacnet    `json:"bacnet"`
 	Fieldbus  ConfigFieldbus  `json:"fieldbus"`
 	Time      ConfigTime      `json:"time"`

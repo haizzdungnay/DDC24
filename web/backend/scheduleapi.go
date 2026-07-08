@@ -191,16 +191,40 @@ func validateScheduleAction(errs *[]configValidationError, base string, row Sche
 			addConfigErr(errs, base+".value", "must be finite number")
 		}
 	case "analog_output_value":
-		validateScheduleTarget(errs, base+".target", row.Target, "AO", 1, 4)
+		validateScheduleTargetOneOf(errs, base+".target", row.Target, []scheduleTargetSpec{{kind: "AO", minChannel: 1, maxChannel: 4}, {kind: "AV", minChannel: 17, maxChannel: 32}})
 		if !validScheduleRange(row.Value, 0, 100) {
 			addConfigErr(errs, base+".value", "must be finite number 0..100")
 		}
 	case "fan_state_value", "digital_output_value":
-		validateScheduleTarget(errs, base+".target", row.Target, "DO", 1, 4)
+		validateScheduleTargetOneOf(errs, base+".target", row.Target, []scheduleTargetSpec{{kind: "DO", minChannel: 1, maxChannel: 4}, {kind: "BV", minChannel: 9, maxChannel: 16}})
 		if !validScheduleInt(row.Value, 0, 1) {
 			addConfigErr(errs, base+".value", "must be 0 or 1")
 		}
 	}
+}
+
+type scheduleTargetSpec struct {
+	kind       string
+	minChannel int
+	maxChannel int
+}
+
+func validateScheduleTargetOneOf(errs *[]configValidationError, path string, target *ScheduleTarget, specs []scheduleTargetSpec) {
+	if target == nil {
+		addConfigErr(errs, path, "is required")
+		return
+	}
+	for _, spec := range specs {
+		if target.Kind == spec.kind {
+			validateScheduleTarget(errs, path, target, spec.kind, spec.minChannel, spec.maxChannel)
+			return
+		}
+	}
+	kinds := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		kinds = append(kinds, spec.kind)
+	}
+	addConfigErr(errs, path+".kind", "must be one of: "+strings.Join(kinds, ", "))
 }
 
 func validateScheduleTarget(errs *[]configValidationError, path string, target *ScheduleTarget, kind string, minChannel int, maxChannel int) {
@@ -220,9 +244,18 @@ func validateScheduleTarget(errs *[]configValidationError, path string, target *
 	}
 	if target.PointID != "" {
 		expected := fmt.Sprintf("%s-%02d", kind, *target.Channel)
-		if target.PointID != expected {
+		if !schedulePointIDMatches(target.PointID, expected, kind) {
 			addConfigErr(errs, path+".pointId", "must match "+expected)
 		}
+	}
+}
+
+func schedulePointIDMatches(got string, want string, kind string) bool {
+	switch kind {
+	case "AV", "BV", "MSV":
+		return canonicalPointID(got) == canonicalPointID(want)
+	default:
+		return got == want
 	}
 }
 

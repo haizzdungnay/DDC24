@@ -12,19 +12,22 @@ import {
   getDemoOutputs,
   getDemoPoints,
   getDemoSchedule,
+  getDemoVirtualIo,
   getUserParams as getDemoUserParams,
+  deleteDemoVirtualIo,
   putDemoAiInputs,
   putDemoSchedule,
   putAlarmSettings as putDemoAlarmSettings,
   putDemoOutputs,
   putUserParams as putDemoUserParams,
+  putDemoVirtualIo,
   returnDemoAlarm,
   runDemoCommissioning,
   suppressDemoAlarm,
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoConfig, type AoSignalMode, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TrendSample, type UserParamsConfig } from '../types'
+import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoConfig, type AoSignalMode, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TrendSample, type UserParamsConfig, type VirtualIoPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 
@@ -317,7 +320,7 @@ function normalizeScheduleTarget(value: unknown): ScheduleTarget | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
   const raw = value as Record<string, unknown>
   const kind = stringFrom(raw.kind)
-  if (kind !== 'AO' && kind !== 'DO' && kind !== 'AV' && kind !== 'MSV' && kind !== 'HOL') return undefined
+  if (kind !== 'AO' && kind !== 'DO' && kind !== 'AV' && kind !== 'BV' && kind !== 'MSV' && kind !== 'HOL') return undefined
   const pointId = stringFrom(raw.pointId ?? raw.point_id)
   const parsed = pointId ? scheduleTargetFromPointId(pointId) : undefined
   const channel = numberFrom(raw.channel) ?? (parsed?.kind === kind ? parsed.channel : undefined)
@@ -329,7 +332,7 @@ function scheduleTargetFromPointId(pointId: string): ScheduleTarget | undefined 
   if (!match) return undefined
   const kind = match[1] === 'FAN' ? 'DO' : match[1]
   const channel = Number(match[2])
-  if (kind !== 'AO' && kind !== 'DO' && kind !== 'AV' && kind !== 'MSV' && kind !== 'HOL') return undefined
+  if (kind !== 'AO' && kind !== 'DO' && kind !== 'AV' && kind !== 'BV' && kind !== 'MSV' && kind !== 'HOL') return undefined
   return { kind, channel, pointId: `${kind}-${String(channel).padStart(2, '0')}` }
 }
 
@@ -656,7 +659,7 @@ export const apiClient = {
   async getPoints(): Promise<Point[]> {
     if (IS_DEMO) return applyPointConfigOverrides(applyDemoPointMetadata(getDemoPoints()))
     const records = pointRecordsFrom(await requestJson<unknown>('/points', { suppressAuthExpired: true }))
-    return applyPointConfigOverrides(applyDemoPointMetadata(records.map(normalizePoint)))
+    return applyPointConfigOverrides(records.map(normalizePoint))
   },
 
   async getNetwork(): Promise<NetworkData> {
@@ -732,6 +735,39 @@ export const apiClient = {
 
   async forceOutput(id: string, value: number | boolean, release = false) {
     return this.forcePoint(id, value, release)
+  },
+
+  async getVirtualIo(): Promise<VirtualIoPoint[]> {
+    if (IS_DEMO) return getDemoVirtualIo()
+    return requestJson<VirtualIoPoint[]>('/virtual-io')
+  },
+
+  async createVirtualIo(point: Partial<VirtualIoPoint>): Promise<VirtualIoPoint> {
+    if (IS_DEMO) {
+      return putDemoVirtualIo(point)
+    }
+    return requestJson<VirtualIoPoint>('/virtual-io', {
+      method: 'POST',
+      body: JSON.stringify(point)
+    })
+  },
+
+  async updateVirtualIo(point: VirtualIoPoint): Promise<VirtualIoPoint> {
+    if (IS_DEMO) {
+      return putDemoVirtualIo(point)
+    }
+    return requestJson<VirtualIoPoint>(`/virtual-io/${encodeURIComponent(point.id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(point)
+    })
+  },
+
+  async deleteVirtualIo(id: string): Promise<void> {
+    if (IS_DEMO) {
+      deleteDemoVirtualIo(id)
+      return
+    }
+    await requestJson(`/virtual-io/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
 
   async getUserParams(): Promise<UserParamsConfig> {

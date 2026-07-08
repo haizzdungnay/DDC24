@@ -106,6 +106,34 @@ func TestSchedulesValidationRejectsBadInputWithoutWrite(t *testing.T) {
 	}
 }
 
+func TestSchedulesAcceptVirtualOutputTargets(t *testing.T) {
+	app, token := newScheduleTestApp(t)
+	body := `[
+		{"id":"SCH-VO-A","label":"VO analog","enabled":true,"scheduleType":"analog_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"AV","channel":17,"pointId":"AV-17"},"value":42},
+		{"id":"SCH-VO-B","label":"VO binary","enabled":true,"scheduleType":"digital_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"BV","channel":9,"pointId":"BV-09"},"value":1}
+	]`
+	req := newAuthRequest(http.MethodPut, "/api/v1/schedules", body, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestSchedulesAcceptCanonicalVirtualPointIDs(t *testing.T) {
+	app, token := newScheduleTestApp(t)
+	body := `[
+		{"id":"SCH-VO-A","label":"VO analog","enabled":true,"scheduleType":"analog_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"AV","channel":17,"pointId":"AV17"},"value":42},
+		{"id":"SCH-VO-B","label":"VO binary","enabled":true,"scheduleType":"digital_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"BV","channel":9,"pointId":"BV9"},"value":1}
+	]`
+	req := newAuthRequest(http.MethodPut, "/api/v1/schedules", body, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
 func newScheduleTestApp(t *testing.T) (*App, string) {
 	t.Helper()
 	app, token := newTestAppWithAdmin(t)
