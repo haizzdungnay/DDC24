@@ -11,19 +11,23 @@ import {
   getDemoNetwork,
   getDemoOutputs,
   getDemoPoints,
+  getDemoSchedule,
+  getDemoVirtualPoints,
   getUserParams as getDemoUserParams,
+  deleteDemoVirtualPoint,
   putDemoAiInputs,
+  putDemoSchedule,
   putAlarmSettings as putDemoAlarmSettings,
   putDemoOutputs,
   putUserParams as putDemoUserParams,
+  putDemoVirtualPoint,
   returnDemoAlarm,
   runDemoCommissioning,
   suppressDemoAlarm,
-  tickDemoPoints,
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoConfig, type AoSignalMode, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type TrendSample, type UserParamsConfig } from '../types'
+import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoConfig, type AoSignalMode, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TrendSample, type UserParamsConfig, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 
@@ -38,6 +42,7 @@ const pointConfigOverridesKey = 'mkddc:point-config-overrides:v1'
 type ApiRequestInit = RequestInit & { suppressAuthExpired?: boolean }
 type PointConfigPatch = { name?: string; unit?: string; trendEnabled?: boolean }
 type AlarmDurationChoice = { permanent: boolean; durationS?: number }
+const scheduleTypes: ScheduleType[] = ['not_active', 'controller_operation_mode', 'control_loop_setpoint', 'analog_output_value', 'fan_state_value', 'digital_output_value', 'holiday_period']
 
 export const POINT_UNIT_OPTIONS = [
   { value: '', label: '0 = No units shown' },
@@ -287,6 +292,55 @@ function normalizeTrendSample(raw: Record<string, unknown>): TrendSample {
     if (typeof value === 'number' && Number.isFinite(value)) sample[normalizeTrendPointKey(key)] = value
   }
   return sample
+}
+
+function normalizeSchedule(raw: Record<string, unknown>, index: number): ScheduleRow {
+  const scheduleType = scheduleTypes.includes(raw.scheduleType as ScheduleType) ? raw.scheduleType as ScheduleType : scheduleTypes.includes(raw.schedule_type as ScheduleType) ? raw.schedule_type as ScheduleType : 'not_active'
+  const weekdays = Array.isArray(raw.weekdays) ? raw.weekdays.map(String) : []
+  const startTime = String(raw.startTime ?? raw.start_time ?? raw.timeOfDay ?? raw.time_of_day ?? '08:00')
+  return {
+    id: String(raw.id ?? `SCH-${String(index + 1).padStart(3, '0')}`),
+    label: String(raw.label ?? raw.name ?? ''),
+    notes: stringFrom(raw.notes ?? raw.note),
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : false,
+    scheduleType,
+    timeOfDay: startTime,
+    startTime,
+    endTime: String(raw.endTime ?? raw.end_time ?? '17:00'),
+    startDate: stringFrom(raw.startDate ?? raw.start_date) || '01-01',
+    endDate: stringFrom(raw.endDate ?? raw.end_date) || '01-01',
+    weekdays,
+    target: normalizeScheduleTarget(raw.target),
+    value: numberFrom(raw.value) ?? 0
+  }
+}
+
+function normalizeScheduleTarget(value: unknown): ScheduleTarget | undefined {
+  if (typeof value === 'string') return scheduleTargetFromPointId(value)
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const raw = value as Record<string, unknown>
+  const kind = stringFrom(raw.kind)
+  const normalizedKind = kind === 'AV' ? 'VP' : kind
+  if (normalizedKind !== 'AO' && normalizedKind !== 'DO' && normalizedKind !== 'VP' && normalizedKind !== 'HOL') return undefined
+  const pointId = stringFrom(raw.pointId ?? raw.point_id)
+  const parsed = pointId ? scheduleTargetFromPointId(pointId) : undefined
+  const channel = numberFrom(raw.channel) ?? (parsed?.kind === normalizedKind ? parsed.channel : undefined)
+  return { kind: normalizedKind, ...(channel !== undefined ? { channel } : {}), ...(pointId ? { pointId: canonicalScheduleTargetPointId(normalizedKind, pointId) } : {}) }
+}
+
+function scheduleTargetFromPointId(pointId: string): ScheduleTarget | undefined {
+  const match = pointId.match(/^([A-Z]+)-?(\d+)$/)
+  if (!match) return undefined
+  const kind = match[1] === 'FAN' ? 'DO' : match[1] === 'AV' ? 'VP' : match[1]
+  const channel = Number(match[2])
+  if (kind !== 'AO' && kind !== 'DO' && kind !== 'VP' && kind !== 'HOL') return undefined
+  return { kind, channel, pointId: kind === 'VP' ? `VP${channel}` : `${kind}-${String(channel).padStart(2, '0')}` }
+}
+
+function canonicalScheduleTargetPointId(kind: ScheduleTarget['kind'], pointId: string): string {
+  if (kind !== 'VP') return pointId
+  const parsed = scheduleTargetFromPointId(pointId)
+  return parsed?.kind === 'VP' && parsed.channel !== undefined ? `VP${parsed.channel}` : pointId
 }
 
 function normalizeTrendPointKey(key: string): string {
@@ -600,24 +654,19 @@ export const apiClient = {
     if (IS_DEMO) return getDemoHealth()
     try {
       return normalizeSystemStatus(await requestJson<Record<string, unknown>>('/system/status'))
-    } catch {
+    } catch (statusError) {
       try {
         return normalizeHealthResponse(await requestJson<Record<string, unknown>>('/health'))
-      } catch {
-        return getDemoHealth()
+      } catch (healthError) {
+        throw healthError instanceof Error ? healthError : statusError
       }
     }
   },
 
   async getPoints(): Promise<Point[]> {
     if (IS_DEMO) return applyPointConfigOverrides(applyDemoPointMetadata(getDemoPoints()))
-    try {
-      const records = pointRecordsFrom(await requestJson<unknown>('/points', { suppressAuthExpired: true }))
-      const points = records.length ? records.map(normalizePoint) : tickDemoPoints()
-      return applyPointConfigOverrides(applyDemoPointMetadata(points))
-    } catch {
-      return applyPointConfigOverrides(applyDemoPointMetadata(tickDemoPoints()))
-    }
+    const records = pointRecordsFrom(await requestJson<unknown>('/points', { suppressAuthExpired: true }))
+    return applyPointConfigOverrides(records.map(normalizePoint))
   },
 
   async getNetwork(): Promise<NetworkData> {
@@ -695,6 +744,39 @@ export const apiClient = {
     return this.forcePoint(id, value, release)
   },
 
+  async getVirtualPoints(): Promise<VirtualPoint[]> {
+    if (IS_DEMO) return getDemoVirtualPoints()
+    return requestJson<VirtualPoint[]>('/virtual-points')
+  },
+
+  async createVirtualPoint(point: Partial<VirtualPoint>): Promise<VirtualPoint> {
+    if (IS_DEMO) {
+      return putDemoVirtualPoint(point)
+    }
+    return requestJson<VirtualPoint>('/virtual-points', {
+      method: 'POST',
+      body: JSON.stringify(point)
+    })
+  },
+
+  async updateVirtualPoint(point: VirtualPoint): Promise<VirtualPoint> {
+    if (IS_DEMO) {
+      return putDemoVirtualPoint(point)
+    }
+    return requestJson<VirtualPoint>(`/virtual-points/${encodeURIComponent(point.id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(point)
+    })
+  },
+
+  async deleteVirtualPoint(id: string): Promise<void> {
+    if (IS_DEMO) {
+      deleteDemoVirtualPoint(id)
+      return
+    }
+    await requestJson(`/virtual-points/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+
   async getUserParams(): Promise<UserParamsConfig> {
     // Mock demo-only: EasySet User Parameters has no backend/core hook yet.
     return getDemoUserParams()
@@ -703,6 +785,23 @@ export const apiClient = {
   async putUserParams(config: UserParamsConfig): Promise<void> {
     // Mock demo-only: do not call REST from this page.
     putDemoUserParams(config)
+  },
+
+  async getSchedules(): Promise<ScheduleRow[]> {
+    if (IS_DEMO) return getDemoSchedule()
+    const raw = await requestJson<Array<Record<string, unknown>>>('/schedules')
+    return raw.map(normalizeSchedule)
+  },
+
+  async putSchedules(rows: ScheduleRow[]): Promise<ConfigPutResult> {
+    if (IS_DEMO) {
+      putDemoSchedule(rows)
+      return { result: 'success', applied: true, reload: 'none', warnings: [] }
+    }
+    return requestJson<ConfigPutResult>('/schedules', {
+      method: 'PUT',
+      body: JSON.stringify(rows)
+    })
   },
 
   async getAlarms(): Promise<Alarm[]> {
@@ -759,7 +858,7 @@ export const apiClient = {
     return this.getAlarms()
   },
 
-  async forcePoint(id: string, value: number | boolean, release = false) {
+  async forcePoint(id: string, value: number | boolean | string, release = false) {
     if (IS_DEMO) return forceDemoPoint(id, value, release)
     return requestJson(`/points/${encodeURIComponent(id)}`, {
       method: 'PUT',

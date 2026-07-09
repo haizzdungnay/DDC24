@@ -51,7 +51,7 @@ func (a *App) handlePutAlarmSettings(w http.ResponseWriter, r *http.Request) {
 		rows = []AlarmSetting{}
 	}
 	normalizeAlarmSettings(rows)
-	if errs := validateAlarmSettings(rows); len(errs) > 0 {
+	if errs := a.validateAlarmSettingsForSave(rows); len(errs) > 0 {
 		writeValidationErrors(w, errs)
 		return
 	}
@@ -158,10 +158,63 @@ func validateAlarmSettings(rows []AlarmSetting) []configValidationError {
 	return errs
 }
 
+func (a *App) validateAlarmSettingsForSave(rows []AlarmSetting) []configValidationError {
+	errs := validateAlarmSettings(rows)
+	if a == nil {
+		return errs
+	}
+	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	if err != nil {
+		addConfigErr(&errs, "$.virtual_points", "could not load virtual_points.conf")
+		return errs
+	}
+	cfg = normalizeVirtualPointsConfig(cfg)
+	byID := make(map[string]VirtualPoint, len(cfg.Items))
+	for _, item := range cfg.Items {
+		item = normalizeVirtualPoint(item)
+		if item.Enabled {
+			byID[item.ID] = item
+		}
+	}
+	for i, row := range rows {
+		for j, source := range row.Sources {
+			if source.Kind != "VP" {
+				continue
+			}
+			path := fmt.Sprintf("[%d].sources[%d]", i, j)
+			if row.AlarmType != alarmTypeHighLowInput {
+				addConfigErr(&errs, path+".pointId", "VP virtual point sources support high/low alarms only")
+				continue
+			}
+			expected := formatVirtualPointID(source.Channel)
+			item, ok := byID[canonicalVirtualPointID(source.PointID)]
+			if !ok || item.ID != canonicalVirtualPointID(expected) {
+				addConfigErr(&errs, path+".pointId", "must reference an enabled virtual point")
+				continue
+			}
+			if !virtualPointNumericSignalType(item.SignalType) {
+				addConfigErr(&errs, path+".pointId", "must reference an integer or float virtual point")
+			}
+		}
+	}
+	return errs
+}
+
 func normalizeAlarmSettings(rows []AlarmSetting) {
 	for i := range rows {
 		if rows[i].ClearMode == "" {
 			rows[i].ClearMode = "auto"
+		}
+		for j := range rows[i].Sources {
+			rows[i].Sources[j].Kind = normalizeVirtualPointKind(rows[i].Sources[j].Kind)
+			if rows[i].Sources[j].Kind == "VP" {
+				if channel, ok := virtualPointChannel(rows[i].Sources[j].PointID); ok {
+					rows[i].Sources[j].Channel = channel
+				}
+				if rows[i].Sources[j].Channel > 0 {
+					rows[i].Sources[j].PointID = formatVirtualPointID(rows[i].Sources[j].Channel)
+				}
+			}
 		}
 	}
 }
@@ -180,14 +233,17 @@ func deferredAlarmType(alarmType int) bool {
 }
 
 func validateAlarmSource(errs *[]configValidationError, path string, index int, source AlarmSource, seen map[string]int) {
+	source.Kind = normalizeVirtualPointKind(source.Kind)
 	maxChannel := 0
 	switch source.Kind {
 	case "UI":
 		maxChannel = 16
 	case "AO", "DO":
 		maxChannel = 4
+	case "VP":
+		maxChannel = virtualPointTotalCapacity
 	default:
-		addConfigErr(errs, path+".kind", "must be one of: UI, AO, DO")
+		addConfigErr(errs, path+".kind", "must be one of: UI, AO, DO, VP")
 	}
 	if maxChannel > 0 && (source.Channel < 1 || source.Channel > maxChannel) {
 		addConfigErr(errs, path+".channel", fmt.Sprintf("must be integer in range 1..%d for %s", maxChannel, source.Kind))
@@ -197,7 +253,12 @@ func validateAlarmSource(errs *[]configValidationError, path string, index int, 
 		addConfigErr(errs, path+".pointId", "is required")
 	} else if maxChannel > 0 && source.Channel >= 1 && source.Channel <= maxChannel {
 		expected := formatPointID(source.Kind, source.Channel)
-		if source.PointID != expected {
+		if source.Kind == "VP" {
+			expected = formatVirtualPointID(source.Channel)
+			if canonicalVirtualPointID(source.PointID) != canonicalVirtualPointID(expected) {
+				addConfigErr(errs, path+".pointId", fmt.Sprintf("must be %s for %s channel %d", expected, source.Kind, source.Channel))
+			}
+		} else if source.PointID != expected {
 			addConfigErr(errs, path+".pointId", fmt.Sprintf("must be %s for %s channel %d", expected, source.Kind, source.Channel))
 		}
 	}

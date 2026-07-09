@@ -25,11 +25,11 @@ func (trendCore) ReadPoints(context.Context) ([]PointDTO, error) {
 
 func TestHistoryReturnsWideSamplesAndFiltersRange(t *testing.T) {
 	app, token := newHistoryTestApp(t)
-	now := time.Now().UTC().Unix()
+	now := time.Now().UTC().UnixMilli()
 	if err := app.trends.InsertBatch(context.Background(), []Sample{
-		{TS: now - 4000, PointID: "AI1", Value: 1, Quality: 0},
-		{TS: now - 60, PointID: "AI1", Value: 21.5, Quality: 0},
-		{TS: now - 60, PointID: "UI-02", Value: 22.5, Quality: 1},
+		{TS: now - 4_000_000, PointID: "AI1", Value: 1, Quality: 0},
+		{TS: now - 60_000, PointID: "AI1", Value: 21.5, Quality: 0},
+		{TS: now - 60_000, PointID: "UI-02", Value: 22.5, Quality: 1},
 	}); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
 	}
@@ -49,6 +49,81 @@ func TestHistoryReturnsWideSamplesAndFiltersRange(t *testing.T) {
 	}
 	if rows[0]["time"] == "" || rows[0]["UI-01"] != 21.5 || rows[0]["UI-02"] != 22.5 {
 		t.Fatalf("row = %+v", rows[0])
+	}
+}
+
+func TestHistoryHidesUncreatedVirtualSamples(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	now := time.Now().UTC().UnixMilli()
+	if err := app.trends.InsertBatch(context.Background(), []Sample{
+		{TS: now - 60_000, PointID: "AV1", Value: 21.5, Quality: 0},
+		{TS: now - 60_000, PointID: "BV1", Value: 1, Quality: 0},
+	}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	req := newAuthRequest(http.MethodGet, "/api/v1/history?point=VP-01,BV-01&range=30m", "", token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	if strings.TrimSpace(w.Body.String()) != "[]" {
+		t.Fatalf("body = %s", w.Body.String())
+	}
+}
+
+func TestHistoryReturnsCreatedLoggedVirtualSamples(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Room Setpoint","signalType":"float","enabled":true,"writable":true,"logEnabled":true,"logIntervalMs":1000,"value":22.5}]}`)
+	now := time.Now().UTC().UnixMilli()
+	if err := app.trends.InsertBatch(context.Background(), []Sample{{TS: now - 60_000, PointID: "AV1", Value: 21.5, Quality: 0}}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	req := newAuthRequest(http.MethodGet, "/api/v1/history?point=VP-01&range=30m", "", token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); !strings.Contains(body, "VP1") || !strings.Contains(body, "21.5") {
+		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestHistoryReturnsVirtualPointRingSamples(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Diagnostic","signalType":"float","enabled":true,"writable":true,"logEnabled":true,"logIntervalMs":10,"value":22.5}]}`)
+	now := time.Now().UTC().UnixMilli()
+	app.virtualPointRing.Add([]Sample{{TS: now - 1000, PointID: "AV1", Value: 21.5, Quality: 0}}, now)
+
+	req := newAuthRequest(http.MethodGet, "/api/v1/history?point=VP-01&range=30m", "", token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); !strings.Contains(body, "VP1") || !strings.Contains(body, "21.5") {
+		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestHistoryReadsLegacySecondTimestamps(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	now := time.Now().UTC().Unix()
+	if err := app.trends.InsertBatch(context.Background(), []Sample{{TS: now - 60, PointID: "AI1", Value: 19.5, Quality: 0}}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	req := newAuthRequest(http.MethodGet, "/api/v1/history?point=UI-01&range=30m", "", token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); !strings.Contains(body, "19.5") {
+		t.Fatalf("body = %s", body)
 	}
 }
 
@@ -81,6 +156,34 @@ func TestTrendConfigValidation(t *testing.T) {
 				t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 			}
 		})
+	}
+}
+
+func TestTrendConfigRejectsUncreatedVirtualPoint(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", `{"enabled":true,"pointIds":["VP-01"],"intervalS":10,"retentionRecords":1000}`, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestTrendConfigAcceptsCreatedLoggedVirtualPoint(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Room Setpoint","signalType":"float","enabled":true,"writable":true,"logEnabled":true,"logIntervalMs":1000,"value":22.5}]}`)
+	req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", `{"enabled":true,"pointIds":["VP-01"],"intervalS":10,"retentionRecords":1000}`, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	cfg, err := app.trends.GetConfig(context.Background())
+	if err != nil {
+		t.Fatalf("GetConfig: %v", err)
+	}
+	if strings.Join(cfg.PointIDs, ",") != "VP1" {
+		t.Fatalf("cfg = %+v", cfg)
 	}
 }
 

@@ -19,7 +19,8 @@ import type {
   OutputsConfig,
   TrendSample,
   UserParamsConfig,
-  UserRow
+  UserRow,
+  VirtualPoint
 } from '../types'
 import { DEVICE_DEFAULTS } from '../config'
 import { clamp, nowIso, pointNumber } from '../utils'
@@ -50,7 +51,11 @@ const names: Record<string, string> = {
   'AO-01': 'VFD SPEED',
   'AO-02': 'HEATING VALVE',
   'AO-03': 'COOLING VALVE',
-  'AO-04': 'DAMPER POSITION'
+  'AO-04': 'DAMPER POSITION',
+  VP1: 'ROOM SETPOINT',
+  VP2: 'OCCUPANCY REQUEST',
+  VP3: 'MODE INDEX',
+  VP17: 'VIRTUAL COOLING DEMAND'
 }
 
 const basePoints: Point[] = [
@@ -283,8 +288,9 @@ function formatDemoDuration(choice: DemoAlarmDurationChoice): string {
   return choice.permanent ? 'permanent' : `${choice.durationS ?? 0}s`
 }
 
-export function forceDemoPoint(id: string, value: number | boolean, release = false) {
-  points = points.map((point) => point.id === id ? { ...point, value, forced: !release, source: release ? 'Core' : 'Local manual', priority: release ? 'Auto' : 'Manual override', updatedAt: nowIso() } : point)
+export function forceDemoPoint(id: string, value: number | boolean | string, release = false) {
+  const target = canonicalDemoVirtualPointId(id)
+  points = points.map((point) => canonicalDemoVirtualPointId(point.id) === target ? { ...point, value, forced: !release, source: release ? 'Core' : 'Local manual', priority: release ? 'Auto' : 'Manual override', updatedAt: nowIso() } : point)
   return { result: 'accepted' as const, applied_value: value, active_source: release ? 'core' : 'local_manual' }
 }
 
@@ -334,13 +340,18 @@ export function getTrendSamples(pointIds: string[] = ['UI-01', 'UI-02', 'UI-03',
   })
 }
 
+let demoSchedules: ScheduleRow[] = [
+  { id: 'SCH-001', label: 'Occupied mode', notes: 'Weekday morning startup.', enabled: true, scheduleType: 'controller_operation_mode', timeOfDay: '06:00', startTime: '06:00', endTime: '18:00', weekdays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'], target: { kind: 'VP', channel: 3, pointId: 'VP3' }, value: 1 },
+  { id: 'SCH-002', label: 'Supply fan night off', notes: '', enabled: true, scheduleType: 'fan_state_value', timeOfDay: '18:00', startTime: '18:00', endTime: '23:00', weekdays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'], target: { kind: 'DO', channel: 1, pointId: 'DO-01' }, value: 0 },
+  { id: 'SCH-003', label: 'Cooling setpoint', notes: 'Weekend relaxed setpoint.', enabled: false, scheduleType: 'control_loop_setpoint', timeOfDay: '09:00', startTime: '09:00', endTime: '17:00', weekdays: ['saturday', 'sunday'], target: { kind: 'VP', channel: 1, pointId: 'VP1' }, value: 26 }
+]
+
 export function getDemoSchedule(): ScheduleRow[] {
-  const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
-  return ['AHU-01', 'PUMP-01', 'LIGHT-01', 'FAN-01', 'VLV-01'].map((id, rowIndex) => ({
-    id,
-    label: ['Air Handling Unit', 'Chilled Water Pump', 'Lobby Light', 'Exhaust Fan', 'Water Valve'][rowIndex],
-    cells: days.map((day) => ({ day, value: (['ON', 'ON', 'ON', 'ON', 'OPEN'] as const)[rowIndex], start: rowIndex === 2 ? '18:00' : '06:00', end: rowIndex === 2 ? '06:00' : '18:00' }))
-  }))
+  return demoSchedules.map((row) => ({ ...row, weekdays: [...row.weekdays], target: row.target ? { ...row.target } : undefined }))
+}
+
+export function putDemoSchedule(rows: ScheduleRow[]): void {
+  demoSchedules = rows.map((row) => ({ ...row, weekdays: [...row.weekdays], target: row.target ? { ...row.target } : undefined }))
 }
 
 export function getDemoNetwork(): NetworkData {
@@ -642,6 +653,140 @@ export function putDemoOutputs(config: OutputsConfig): void {
     ao: config.ao.map((item) => ({ ...item, demoNote: 'demo' })),
     do: config.do.map((item) => ({ ...item }))
   }
+}
+
+let demoVirtualPoints: VirtualPoint[] = [
+  { id: 'VP1', label: 'Room Setpoint', signalType: 'float', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 30 * 24 * 60 * 60, value: 24, unit: 'degC', displayMin: 16, displayMax: 30, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP2', label: 'Occupancy Request', signalType: 'boolean', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 7 * 24 * 60 * 60, value: true, unit: '', displayMin: 0, displayMax: 1, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP3', label: 'Mode Index', signalType: 'integer', enabled: true, writable: true, logEnabled: false, value: 1, unit: '', displayMin: 0, displayMax: 3, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP4', label: 'Mode Text', signalType: 'string', enabled: true, writable: true, logEnabled: false, value: 'auto', unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP5', label: 'Last Change', signalType: 'datetime', enabled: true, writable: false, logEnabled: false, value: nowIso(), unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() }
+]
+
+syncDemoVirtualPoints()
+
+export function getDemoVirtualPoints(): VirtualPoint[] {
+  return demoVirtualPoints.map((item) => ({ ...item }))
+}
+
+export function putDemoVirtualPoint(point: Partial<VirtualPoint>): VirtualPoint {
+  const existingIndex = point.id ? demoVirtualPoints.findIndex((item) => canonicalDemoVirtualPointId(item.id) === canonicalDemoVirtualPointId(point.id ?? '')) : -1
+  const current = existingIndex >= 0 ? demoVirtualPoints[existingIndex] : undefined
+  const next: VirtualPoint = normalizeDemoVirtualPoint({
+    id: point.id ?? nextDemoVirtualPointId(),
+    label: point.label ?? current?.label ?? 'Virtual Point',
+    signalType: point.signalType ?? current?.signalType ?? 'float',
+    enabled: point.enabled ?? current?.enabled ?? true,
+    writable: point.writable ?? current?.writable ?? true,
+    logEnabled: point.logEnabled ?? current?.logEnabled ?? false,
+    logIntervalMs: point.logIntervalMs ?? current?.logIntervalMs,
+    retentionS: point.retentionS ?? current?.retentionS,
+    value: point.value ?? current?.value,
+    unit: point.unit ?? current?.unit ?? '',
+    displayMin: point.displayMin ?? current?.displayMin ?? 0,
+    displayMax: point.displayMax ?? current?.displayMax ?? 100,
+    rangeMultiplier: point.rangeMultiplier ?? current?.rangeMultiplier ?? 0,
+    filterSamples: point.filterSamples ?? current?.filterSamples ?? 3,
+    sensorCal: point.sensorCal ?? current?.sensorCal ?? 0,
+    mathFunction: point.mathFunction ?? current?.mathFunction ?? 0,
+    note: point.note ?? current?.note ?? '',
+    updatedAt: nowIso()
+  })
+  if (existingIndex >= 0) demoVirtualPoints[existingIndex] = next
+  else demoVirtualPoints = [...demoVirtualPoints, next]
+  syncDemoVirtualPoints()
+  return { ...next }
+}
+
+export function deleteDemoVirtualPoint(id: string): void {
+  demoVirtualPoints = demoVirtualPoints.filter((item) => canonicalDemoVirtualPointId(item.id) !== canonicalDemoVirtualPointId(id))
+  syncDemoVirtualPoints()
+}
+
+function normalizeDemoVirtualPoint(point: VirtualPoint): VirtualPoint {
+  const id = canonicalDemoVirtualPointId(point.id)
+  const signalType = demoSignalTypes.includes(point.signalType) ? point.signalType : 'float'
+  return {
+    ...point,
+    id,
+    signalType,
+    unit: normalizeDemoVirtualUnit(point.unit),
+    displayMin: clampDemoNumber(point.displayMin, -50, 205, 0),
+    displayMax: clampDemoNumber(point.displayMax, -50, 205, 100),
+    rangeMultiplier: clampDemoInteger(point.rangeMultiplier, 0, 5, 0),
+    filterSamples: clampDemoInteger(point.filterSamples, 0, 100, 3),
+    sensorCal: clampDemoNumber(point.sensorCal, -12.7, 12.8, 0),
+    mathFunction: clampDemoInteger(point.mathFunction, 0, 3, 0),
+    value: normalizeDemoVirtualValue(signalType, point.value),
+    logIntervalMs: point.logEnabled ? point.logIntervalMs ?? 1000 : undefined,
+    retentionS: point.logEnabled ? point.retentionS ?? defaultDemoRetention(point.logIntervalMs ?? 1000) : undefined
+  }
+}
+
+function normalizeDemoVirtualUnit(unit?: string): string {
+  const text = String(unit ?? '').toLowerCase()
+  if (text === 'percent' || text === '%' || text === '%rh') return 'percent'
+  if (text === 'degc' || text === 'degf' || text === 'c' || text === 'f') return 'degC'
+  if (text === 'pa' || text === 'pascal') return 'Pa'
+  if (text === 'ppm') return 'ppm'
+  return ''
+}
+
+function clampDemoNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const next = Number(value)
+  const finite = Number.isFinite(next) ? next : fallback
+  return Math.min(max, Math.max(min, finite))
+}
+
+function clampDemoInteger(value: unknown, min: number, max: number, fallback: number): number {
+  return Math.round(clampDemoNumber(value, min, max, fallback))
+}
+
+const demoSignalTypes: VirtualPoint['signalType'][] = ['boolean', 'integer', 'float', 'string', 'datetime']
+
+function normalizeDemoVirtualValue(signalType: VirtualPoint['signalType'], value: unknown): number | boolean | string {
+  if (signalType === 'boolean') return value === true || value === 'true' || value === 1
+  if (signalType === 'integer') return Math.trunc(Number(value ?? 0))
+  if (signalType === 'float') return Number(value ?? 0)
+  if (signalType === 'datetime') {
+    const text = String(value ?? nowIso())
+    return Number.isNaN(new Date(text).getTime()) ? nowIso() : text
+  }
+  return String(value ?? '')
+}
+
+function defaultDemoRetention(intervalMs: number): number {
+  if (intervalMs === 10) return 60 * 60
+  if (intervalMs === 100) return 7 * 24 * 60 * 60
+  return 30 * 24 * 60 * 60
+}
+
+function nextDemoVirtualPointId(): string {
+  const used = new Set(demoVirtualPoints.map((item) => Number(canonicalDemoVirtualPointId(item.id).slice(2))))
+  for (let channel = 1; channel <= 464; channel += 1) {
+    if (!used.has(channel)) return `VP${channel}`
+  }
+  return 'VP464'
+}
+
+function syncDemoVirtualPoints(): void {
+  const wanted = new Set(demoVirtualPoints.filter((item) => item.enabled).map((item) => canonicalDemoVirtualPointId(item.id)))
+  points = points.filter((point) => point.kind !== 'virtual' || wanted.has(canonicalDemoVirtualPointId(point.id)))
+  for (const item of demoVirtualPoints) {
+    if (!item.enabled) continue
+    const id = canonicalDemoVirtualPointId(item.id)
+    const value = normalizeDemoVirtualValue(item.signalType, item.value)
+    const trend = typeof value === 'number' || typeof value === 'boolean' ? makeTrend(typeof value === 'boolean' ? Number(value) : value) : undefined
+    const point: Point = { id, name: item.label, kind: 'virtual', value, unit: item.unit, quality: 'good', source: 'Backend', priority: item.writable ? 'Writable' : 'Read only', updatedAt: item.updatedAt ?? nowIso(), sensorType: 'VP', signalType: item.signalType, writable: item.writable, logEnabled: item.logEnabled, logIntervalMs: item.logIntervalMs, ...(trend ? { trend } : {}) }
+    const index = points.findIndex((entry) => canonicalDemoVirtualPointId(entry.id) === id)
+    if (index >= 0) points[index] = { ...points[index], ...point }
+    else points = [...points, point]
+  }
+}
+
+function canonicalDemoVirtualPointId(point: string): string {
+  const match = point.trim().toUpperCase().match(/^(?:VP|AV)[-_]?0*(\d+)$/)
+  return match ? `VP${Number(match[1])}` : point.trim().toUpperCase()
 }
 
 const defaultUserParams: UserParamsConfig = {

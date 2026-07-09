@@ -27,13 +27,14 @@ type configValidationError struct {
 }
 
 var (
-	configGroupDevice    = configAPIGroup{key: "device", file: "device.conf", reload: reloadSIGHUPIobus}
-	configGroupNetwork   = configAPIGroup{key: "network", file: "network.conf", reload: reloadSystem}
-	configGroupIO        = configAPIGroup{key: "io", file: "io_config.conf", reload: reloadSIGHUPIobus}
-	configGroupSafeState = configAPIGroup{key: "safe-state", file: "io_safe_state.conf", reload: reloadSIGHUPCore}
-	configGroupBacnet    = configAPIGroup{key: "bacnet", file: "bacnet.conf", reload: reloadRestartIobus}
-	configGroupFieldbus  = configAPIGroup{key: "fieldbus", file: "fieldbus.conf", reload: reloadRestartIobus}
-	configGroupTime      = configAPIGroup{key: "time", file: "time.conf", reload: reloadSystem}
+	configGroupDevice        = configAPIGroup{key: "device", file: "device.conf", reload: reloadSIGHUPIobus}
+	configGroupNetwork       = configAPIGroup{key: "network", file: "network.conf", reload: reloadSystem}
+	configGroupIO            = configAPIGroup{key: "io", file: "io_config.conf", reload: reloadSIGHUPIobus}
+	configGroupSafeState     = configAPIGroup{key: "safe-state", file: "io_safe_state.conf", reload: reloadSIGHUPCore}
+	configGroupVirtualPoints = configAPIGroup{key: "virtual-points", file: "virtual_points.conf", reload: reloadNone}
+	configGroupBacnet        = configAPIGroup{key: "bacnet", file: "bacnet.conf", reload: reloadRestartIobus}
+	configGroupFieldbus      = configAPIGroup{key: "fieldbus", file: "fieldbus.conf", reload: reloadRestartIobus}
+	configGroupTime          = configAPIGroup{key: "time", file: "time.conf", reload: reloadSystem}
 )
 
 func (a *App) handleGetSystemConfig(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +82,31 @@ func (a *App) handlePutConfigSafeState(w http.ResponseWriter, r *http.Request) {
 	handlePutConfig(a, w, r, configGroupSafeState, validateConfigSafeState)
 }
 
+func (a *App) handleGetConfigVirtualPoints(w http.ResponseWriter, r *http.Request) {
+	handleGetConfig(a, w, configGroupVirtualPoints, defaultVirtualPointsConfig())
+}
+
+func (a *App) handlePutConfigVirtualPoints(w http.ResponseWriter, r *http.Request) {
+	a.virtualPointMu.Lock()
+	defer a.virtualPointMu.Unlock()
+
+	var cfg ConfigVirtualPoints
+	if err := decodeConfigBody(w, r, &cfg); err != nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
+		return
+	}
+	cfg = normalizeVirtualPointsConfig(cfg)
+	if errs := validateConfigVirtualPoints(cfg); len(errs) > 0 {
+		writeValidationErrors(w, errs)
+		return
+	}
+	if err := a.writeVirtualPointsConfig(r, cfg, "config"); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, ConfigPutResult{Result: "success", Applied: true, Reload: reloadNone, Warnings: []string{}})
+}
+
 func (a *App) handleGetConfigBacnet(w http.ResponseWriter, r *http.Request) {
 	handleGetConfig(a, w, configGroupBacnet, ConfigBacnet{})
 }
@@ -118,6 +144,9 @@ func (a *App) readSystemConfig() (SystemConfig, error) {
 		return SystemConfig{}, err
 	}
 	if cfg.SafeState, err = readConfig(a, configGroupSafeState, ConfigSafeState{}); err != nil {
+		return SystemConfig{}, err
+	}
+	if cfg.VirtualPoints, err = readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig()); err != nil {
 		return SystemConfig{}, err
 	}
 	if cfg.Bacnet, err = readConfig(a, configGroupBacnet, ConfigBacnet{}); err != nil {

@@ -38,6 +38,7 @@ const groups = [
       { to: '/eng/programming', key: 'programming', icon: ShieldCheck },
       { to: '/eng/inputs', key: 'inputs', icon: Activity },
       { to: '/eng/outputs', key: 'outputs', icon: Zap },
+      { to: '/eng/virtual-points', key: 'virtual-points', icon: SlidersHorizontal },
       { to: '/eng/user-parameters', key: 'user-parameters', icon: ListChecks },
       { to: '/eng/aux', key: 'aux', icon: Settings },
       { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell }

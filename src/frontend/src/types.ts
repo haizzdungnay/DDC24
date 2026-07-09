@@ -21,6 +21,10 @@ export interface Point {
   fault?: boolean
   forced?: boolean
   sensorType?: string
+  signalType?: VirtualPointSignalType | string
+  writable?: boolean
+  logEnabled?: boolean
+  logIntervalMs?: number
   trend?: number[]
 }
 
@@ -111,7 +115,7 @@ export interface AlarmHistoryQuery {
   status?: string
 }
 
-export type AlarmSourceKind = 'UI' | 'AO' | 'DO'
+export type AlarmSourceKind = 'UI' | 'AO' | 'DO' | 'VP'
 export type AlarmType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type ActiveAlarmType = 0 | 1 | 3
 export type DeferredAlarmType = 2 | 4 | 5 | 6 | 7
@@ -261,17 +265,37 @@ export interface TrendSample {
   [series: string]: string | number
 }
 
-export interface ScheduleCell {
-  day: string
-  value: 'ON' | 'OFF' | 'OPEN' | 'CLOSE'
-  start: string
-  end: string
+export type ScheduleType =
+  | 'not_active'
+  | 'controller_operation_mode'
+  | 'control_loop_setpoint'
+  | 'analog_output_value'
+  | 'fan_state_value'
+  | 'digital_output_value'
+  | 'holiday_period'
+
+export type ScheduleTargetKind = 'AO' | 'DO' | 'VP' | 'HOL'
+
+export interface ScheduleTarget {
+  kind: ScheduleTargetKind
+  channel?: number
+  pointId?: string
 }
 
 export interface ScheduleRow {
   id: string
   label: string
-  cells: ScheduleCell[]
+  notes?: string
+  enabled: boolean
+  scheduleType: ScheduleType
+  timeOfDay?: string
+  startTime: string
+  endTime: string
+  startDate?: string
+  endDate?: string
+  weekdays: string[]
+  target?: ScheduleTarget
+  value: number
 }
 
 export type LinkState = 'online' | 'offline'
@@ -409,6 +433,29 @@ export interface DoConfig {
 export interface OutputsConfig {
   ao: AoConfig[]
   do: DoConfig[]
+}
+
+export type VirtualPointSignalType = 'boolean' | 'integer' | 'float' | 'string' | 'datetime'
+
+export interface VirtualPoint {
+  id: string
+  label: string
+  signalType: VirtualPointSignalType
+  enabled: boolean
+  writable: boolean
+  logEnabled: boolean
+  logIntervalMs?: number
+  retentionS?: number
+  value?: number | boolean | string
+  unit?: string
+  displayMin?: number
+  displayMax?: number
+  rangeMultiplier?: number
+  filterSamples?: number
+  sensorCal?: number
+  mathFunction?: number
+  note?: string
+  updatedAt?: string
 }
 
 export type UserParamKey =

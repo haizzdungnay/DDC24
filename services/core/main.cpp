@@ -18,6 +18,7 @@
 
 #include "config_reload.hpp"
 #include "safe_state_config.hpp"
+#include "schedule_runtime.hpp"
 #include "scan_loop.hpp"
 #include "state_snapshot.hpp"
 
@@ -66,6 +67,7 @@ int main(int argc, char** argv)
     std::string safe_cfg_path = "/data/config/io_safe_state.conf";
     std::string io_cfg_path = "/data/config/io_config.conf";
     std::string alarm_cfg_path = "/data/config/alarm_settings.conf";
+    std::string schedule_cfg_path = "/data/config/schedule.conf";
     bool safe_cfg_from_cli = false;
     bool io_cfg_from_cli = false;
     bool scan_ms_from_cli = false;
@@ -81,6 +83,7 @@ int main(int argc, char** argv)
         else if (a == "--safe-state-conf" && i + 1 < argc) { safe_cfg_path = argv[++i]; safe_cfg_from_cli = true; }
         else if (a == "--io-conf" && i + 1 < argc) { io_cfg_path = argv[++i]; io_cfg_from_cli = true; }
         else if (a == "--alarm-conf" && i + 1 < argc) alarm_cfg_path = argv[++i];
+        else if (a == "--schedule-conf" && i + 1 < argc) schedule_cfg_path = argv[++i];
         else if (a == "--scan-ms" && i + 1 < argc) {
             const long long ms = std::atoll(argv[++i]);
             if (ms <= 0) {   /* 0/âm/không phải số → busy-spin SCHED_FIFO, fail-fast */
@@ -92,7 +95,8 @@ int main(int argc, char** argv)
         }
         else if (a == "--help") {
             std::printf("usage: mkddc-core [--sock PATH] [--fieldbus-sock PATH] [--graph FILE]"
-                        " [--safe-state-conf FILE] [--io-conf FILE] [--alarm-conf FILE] [--scan-ms N]"
+                        " [--safe-state-conf FILE] [--io-conf FILE] [--alarm-conf FILE]"
+                        " [--schedule-conf FILE] [--scan-ms N]"
                         " [--log-level LVL]\n");
             return 0;
         }
@@ -187,6 +191,10 @@ int main(int argc, char** argv)
     if (!alarms.load(alarm_cfg_path, false))
         std::fprintf(stderr, "WARN  alarm_cfg.boot_fail path=%s (alarms disabled)\n",
                      alarm_cfg_path.c_str());
+    ScheduleRuntime schedules;
+    if (!schedules.load(schedule_cfg_path, false))
+        std::fprintf(stderr, "WARN  schedule_cfg.boot_fail path=%s (schedules disabled)\n",
+                     schedule_cfg_path.c_str());
 
     SafeState safe(quality, &graph, &resolver);
     OutputWriter writer(reader);
@@ -224,7 +232,7 @@ int main(int argc, char** argv)
     }
 
     ScanLoop loop({&reader, &table, &quality, &web, &graph, &resolver,
-                   &safe, &writer, &bacnet, &metrics, fieldbus_sockfd, &alarms});
+                   &safe, &writer, &bacnet, &metrics, fieldbus_sockfd, &alarms, &schedules});
 
     /* SIGHUP → reload io_config + io_safe_state + graph ở ranh giới scan;
      * fail → giữ config cũ (khác boot fail-fast); manual đang giữ không mất */
@@ -233,17 +241,20 @@ int main(int argc, char** argv)
         PriorityResolver* resolver;
         GraphRuntime* graph;
         AlarmRuntime* alarms;
+        ScheduleRuntime* schedules;
         StateSnapshot* snap;
     } rctx{};
     rctx.spec.graph_path = graph_path;
     rctx.spec.safe_cfg_path = safe_cfg_path;
     rctx.spec.io_cfg_path = io_cfg_path;
     rctx.spec.alarm_cfg_path = alarm_cfg_path;
+    rctx.spec.schedule_cfg_path = schedule_cfg_path;
     rctx.spec.safe_cfg_must_exist = safe_cfg_from_cli;
     rctx.spec.io_cfg_must_exist = io_cfg_from_cli;
     rctx.resolver = &resolver;
     rctx.graph = &graph;
     rctx.alarms = &alarms;
+    rctx.schedules = &schedules;
     rctx.snap = &snap;
     auto on_reload = [](void* p) {
         ReloadCtx* c = static_cast<ReloadCtx*>(p);
@@ -251,7 +262,7 @@ int main(int argc, char** argv)
         /* GAP-07: lưu persist state trước swap, restore sau */
         if (c->graph->dirty() || c->graph->loaded())
             c->snap->save(c->graph->get_persist_state());
-        if (!reload_configs(c->spec, c->resolver, c->graph, c->alarms))
+        if (!reload_configs(c->spec, c->resolver, c->graph, c->alarms, c->schedules))
             std::fprintf(stderr, "WARN  core.reload co phan fail — phan do giu config cu\n");
         c->graph->restore_persist_state(c->snap->load());
         c->graph->clear_dirty();

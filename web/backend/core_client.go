@@ -344,6 +344,10 @@ func canonicalPointID(id string) string {
 		return formatPointID("UI", kxNUI+channel)
 	case "AO", "DO":
 		return formatPointID(prefix, channel)
+	case "AV", "BV", "MSV":
+		return fmt.Sprintf("%s%d", prefix, channel)
+	case "VP":
+		return fmt.Sprintf("VP%d", channel)
 	default:
 		return strings.TrimSpace(id)
 	}
@@ -365,6 +369,10 @@ func legacyPointIDAliases(id string) []string {
 		}
 	case "AO", "DO":
 		return []string{fmt.Sprintf("%s%d", prefix, channel)}
+	case "AV", "BV", "MSV":
+		return []string{fmt.Sprintf("%s-%02d", prefix, channel)}
+	case "VP":
+		return []string{fmt.Sprintf("VP-%02d", channel), fmt.Sprintf("AV%d", channel), fmt.Sprintf("AV-%02d", channel)}
 	}
 	return nil
 }
@@ -382,7 +390,7 @@ func coreCommandPointID(id string) string {
 		if channel <= kxNUI+kxNDI {
 			return fmt.Sprintf("DI%d", channel-kxNUI)
 		}
-	case "AO", "DO", "AI", "DI":
+	case "AO", "DO", "AI", "DI", "AV", "BV", "MSV":
 		return fmt.Sprintf("%s%d", prefix, channel)
 	}
 	return strings.TrimSpace(id)

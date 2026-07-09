@@ -42,14 +42,40 @@ type ConfigTime struct {
 	SystemTime string   `json:"system_time"`
 }
 
+type ConfigVirtualPoints struct {
+	Items []VirtualPoint `json:"items"`
+}
+
+type VirtualPoint struct {
+	ID              string  `json:"id"`
+	Label           string  `json:"label"`
+	SignalType      string  `json:"signalType"`
+	Enabled         bool    `json:"enabled"`
+	Writable        bool    `json:"writable"`
+	LogEnabled      bool    `json:"logEnabled"`
+	LogIntervalMs   *int    `json:"logIntervalMs,omitempty"`
+	RetentionS      int     `json:"retentionS,omitempty"`
+	Value           any     `json:"value,omitempty"`
+	Unit            string  `json:"unit,omitempty"`
+	DisplayMin      float64 `json:"displayMin,omitempty"`
+	DisplayMax      float64 `json:"displayMax,omitempty"`
+	RangeMultiplier int     `json:"rangeMultiplier,omitempty"`
+	FilterSamples   int     `json:"filterSamples,omitempty"`
+	SensorCal       float64 `json:"sensorCal,omitempty"`
+	MathFunction    int     `json:"mathFunction,omitempty"`
+	Note            string  `json:"note,omitempty"`
+	UpdatedAt       string  `json:"updatedAt,omitempty"`
+}
+
 type SystemConfig struct {
-	Device    ConfigDevice    `json:"device"`
-	Network   ConfigNetwork   `json:"network"`
-	IO        ConfigIO        `json:"io"`
-	SafeState ConfigSafeState `json:"safe_state"`
-	Bacnet    ConfigBacnet    `json:"bacnet"`
-	Fieldbus  ConfigFieldbus  `json:"fieldbus"`
-	Time      ConfigTime      `json:"time"`
+	Device        ConfigDevice        `json:"device"`
+	Network       ConfigNetwork       `json:"network"`
+	IO            ConfigIO            `json:"io"`
+	SafeState     ConfigSafeState     `json:"safe_state"`
+	VirtualPoints ConfigVirtualPoints `json:"virtual_points"`
+	Bacnet        ConfigBacnet        `json:"bacnet"`
+	Fieldbus      ConfigFieldbus      `json:"fieldbus"`
+	Time          ConfigTime          `json:"time"`
 }
 
 type ConfigPutResult struct {
@@ -68,16 +94,25 @@ type TrendConfig struct {
 }
 
 type ScheduleRow struct {
-	ID    string         `json:"id"`
-	Label string         `json:"label"`
-	Cells []ScheduleCell `json:"cells"`
+	ID           string          `json:"id"`
+	Label        string          `json:"label"`
+	Notes        string          `json:"notes,omitempty"`
+	Enabled      bool            `json:"enabled"`
+	ScheduleType string          `json:"scheduleType"`
+	TimeOfDay    string          `json:"timeOfDay,omitempty"`
+	StartTime    string          `json:"startTime,omitempty"`
+	EndTime      string          `json:"endTime,omitempty"`
+	StartDate    string          `json:"startDate,omitempty"`
+	EndDate      string          `json:"endDate,omitempty"`
+	Weekdays     []string        `json:"weekdays"`
+	Target       *ScheduleTarget `json:"target,omitempty"`
+	Value        *float64        `json:"value,omitempty"`
 }
 
-type ScheduleCell struct {
-	Day   string `json:"day"`
-	Value string `json:"value"`
-	Start string `json:"start"`
-	End   string `json:"end"`
+type ScheduleTarget struct {
+	Kind    string `json:"kind"`
+	Channel *int   `json:"channel,omitempty"`
+	PointID string `json:"pointId,omitempty"`
 }
 
 const (
@@ -154,19 +189,23 @@ type ChangePasswordRequest struct {
 }
 
 type PointDTO struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Kind      string   `json:"kind"`
-	Value     any      `json:"value"`
-	Unit      string   `json:"unit,omitempty"`
-	Raw       *float32 `json:"raw,omitempty"`
-	RawUnit   string   `json:"rawUnit,omitempty"`
-	Quality   string   `json:"quality"`
-	Source    string   `json:"source"`
-	Priority  string   `json:"priority,omitempty"`
-	UpdatedAt string   `json:"updatedAt"`
-	Fault     bool     `json:"fault,omitempty"`
-	Forced    bool     `json:"forced,omitempty"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Kind          string   `json:"kind"`
+	Value         any      `json:"value"`
+	Unit          string   `json:"unit,omitempty"`
+	Raw           *float32 `json:"raw,omitempty"`
+	RawUnit       string   `json:"rawUnit,omitempty"`
+	Quality       string   `json:"quality"`
+	Source        string   `json:"source"`
+	Priority      string   `json:"priority,omitempty"`
+	UpdatedAt     string   `json:"updatedAt"`
+	Fault         bool     `json:"fault,omitempty"`
+	Forced        bool     `json:"forced,omitempty"`
+	SignalType    string   `json:"signalType,omitempty"`
+	Writable      bool     `json:"writable,omitempty"`
+	LogEnabled    bool     `json:"logEnabled,omitempty"`
+	LogIntervalMs *int     `json:"logIntervalMs,omitempty"`
 }
 
 // AlarmDTO mirrors FE Alarm (types.ts).

@@ -25,22 +25,53 @@ type forcePointBody struct {
 }
 
 func (a *App) handlePoints(w http.ResponseWriter, r *http.Request) {
-	reader, ok := a.core.(pointReader)
-	if !ok {
-		writeJSON(w, http.StatusOK, []PointDTO{})
-		return
-	}
-	points, err := reader.ReadPoints(r.Context())
-	if err != nil {
-		if a.logger != nil {
-			a.logger.Printf("WARN points_read degraded err=%v", err)
-		}
-		points = []PointDTO{}
-	}
-	if points == nil {
-		points = []PointDTO{}
+	points, err := a.ReadPoints(r.Context())
+	if err != nil && a.logger != nil {
+		a.logger.Printf("WARN points_read degraded err=%v", err)
 	}
 	writeJSON(w, http.StatusOK, points)
+}
+
+func (a *App) ReadPoints(ctx context.Context) ([]PointDTO, error) {
+	reader, ok := a.core.(pointReader)
+	points := []PointDTO{}
+	if !ok {
+		return a.overlayVirtualPoints(points), nil
+	}
+	corePoints, err := reader.ReadPoints(ctx)
+	if err == nil && corePoints != nil {
+		points = corePoints
+	} else {
+		points = []PointDTO{}
+	}
+	return a.overlayVirtualPoints(points), err
+}
+
+// overlayVirtualPoints makes backend-created VP points the only visible
+// virtual points. Raw core AV/BV/MSV slots are hidden until represented by
+// virtual_points.conf.
+func (a *App) overlayVirtualPoints(points []PointDTO) []PointDTO {
+	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	if err != nil {
+		cfg = defaultVirtualPointsConfig()
+	}
+	cfg = normalizeVirtualPointsConfig(cfg)
+	out := make([]PointDTO, 0, len(points)+len(cfg.Items))
+	for _, p := range points {
+		if p.Kind == "virtual" {
+			continue
+		}
+		if prefix, _, ok := parsePointID(p.ID); ok && (prefix == "AV" || prefix == "BV" || prefix == "MSV") {
+			continue
+		}
+		out = append(out, p)
+	}
+	for _, item := range cfg.Items {
+		if item.Enabled {
+			out = append(out, virtualPointDTO(item))
+		}
+	}
+	return out
 }
 
 func (a *App) handlePoint(w http.ResponseWriter, r *http.Request) {
@@ -49,6 +80,15 @@ func (a *App) handlePoint(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "missing point id")
 		return
 	}
+	if item, ok := a.findVirtualPoint(id); ok {
+		writeJSON(w, http.StatusOK, virtualPointDTO(item))
+		return
+	}
+	if prefix, _, ok := parsePointID(id); ok && (virtualPointIDPrefix(prefix) || prefix == "BV" || prefix == "MSV") {
+		writeError(w, http.StatusNotFound, "point not found")
+		return
+	}
+	targetID := canonicalPointID(id)
 	reader, ok := a.core.(pointReader)
 	if !ok {
 		writeError(w, http.StatusNotFound, "point not found")
@@ -63,7 +103,7 @@ func (a *App) handlePoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, point := range points {
-		if point.ID == id {
+		if canonicalPointID(point.ID) == targetID {
 			writeJSON(w, http.StatusOK, point)
 			return
 		}
@@ -85,6 +125,22 @@ func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
 	body, err := decodeForcePointBody(w, r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if item, ok := a.findVirtualPoint(id); ok {
+		point, err := a.writeVirtualPointValue(r, item.ID, body.value, body.release)
+		if err != nil {
+			a.audit.PointForce(principal, id, body.release, "rejected", r.RemoteAddr)
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		a.audit.PointForce(principal, id, body.release, "accepted", r.RemoteAddr)
+		writeJSON(w, http.StatusOK, point)
+		return
+	}
+	if prefix, _, ok := parsePointID(id); ok && (virtualPointIDPrefix(prefix) || prefix == "BV" || prefix == "MSV") {
+		a.audit.PointForce(principal, id, body.release, "not_found", r.RemoteAddr)
+		writeError(w, http.StatusNotFound, "point not found")
 		return
 	}
 	forcer, ok := a.core.(pointForcer)
@@ -145,7 +201,75 @@ func decodeForcePointBody(w http.ResponseWriter, r *http.Request) (forcePointBod
 	if err := valueDec.Decode(&value); err != nil {
 		return forcePointBody{}, fmt.Errorf("invalid value")
 	}
+	if !validPointCommandValue(value) {
+		return forcePointBody{}, fmt.Errorf("value must be number or boolean")
+	}
 	return forcePointBody{value: value}, nil
+}
+
+func (a *App) findVirtualPoint(id string) (VirtualPoint, bool) {
+	target := canonicalVirtualPointID(id)
+	if !validVirtualPointID(target) {
+		return VirtualPoint{}, false
+	}
+	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	if err != nil {
+		return VirtualPoint{}, false
+	}
+	for _, item := range cfg.Items {
+		item = normalizeVirtualPoint(item)
+		if item.ID == target {
+			return item, true
+		}
+	}
+	return VirtualPoint{}, false
+}
+
+func (a *App) writeVirtualPointValue(r *http.Request, id string, value any, release bool) (PointDTO, error) {
+	if release {
+		return PointDTO{}, fmt.Errorf("virtual point release unsupported")
+	}
+	a.virtualPointMu.Lock()
+	defer a.virtualPointMu.Unlock()
+
+	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	if err != nil {
+		return PointDTO{}, err
+	}
+	target := canonicalVirtualPointID(id)
+	index := virtualPointIndex(cfg.Items, target)
+	if index < 0 {
+		return PointDTO{}, fmt.Errorf("virtual point not found")
+	}
+	item := normalizeVirtualPoint(cfg.Items[index])
+	if !item.Writable {
+		return PointDTO{}, fmt.Errorf("virtual point is read-only")
+	}
+	nextValue, ok := normalizeVirtualPointValue(item.SignalType, value)
+	if !ok {
+		return PointDTO{}, fmt.Errorf("value must match signalType")
+	}
+	item.Value = nextValue
+	item.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	cfg.Items[index] = item
+	if err := a.writeVirtualPointsConfig(r, cfg, "write"); err != nil {
+		return PointDTO{}, err
+	}
+	return virtualPointDTO(item), nil
+}
+
+func validPointCommandValue(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return true
+	case string:
+		return true
+	case json.Number:
+		_, err := typed.Float64()
+		return err == nil
+	default:
+		return false
+	}
 }
 
 func (a *AuditLogger) PointForce(principal *Principal, id string, release bool, result string, remote string) {

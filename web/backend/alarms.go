@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,25 +12,34 @@ import (
 // handleAlarms handles GET /api/v1/alarms.
 // Returns the current active/unacked alarm list from core.
 func (a *App) handleAlarms(w http.ResponseWriter, r *http.Request) {
-	reader, ok := a.core.(alarmReader)
-	if !ok {
-		writeJSON(w, http.StatusOK, []AlarmDTO{})
-		return
+	alarms, degraded := a.currentAlarms(r.Context())
+	if !degraded {
+		a.recordAlarmSnapshot(r.Context(), alarms)
 	}
-	alarms, err := reader.ReadAlarms(r.Context())
-	if err != nil {
-		if a.logger != nil {
-			a.logger.Printf("WARN alarms_read degraded err=%v", err)
+	writeJSON(w, http.StatusOK, a.mergeAlarmHistoryRows(r.Context(), alarms, degraded))
+}
+
+func (a *App) currentAlarms(ctx context.Context) ([]AlarmDTO, bool) {
+	reader, ok := a.core.(alarmReader)
+	alarms := []AlarmDTO{}
+	degraded := false
+	if !ok {
+		degraded = true
+	} else {
+		var err error
+		alarms, err = reader.ReadAlarms(ctx)
+		if err != nil {
+			if a.logger != nil {
+				a.logger.Printf("WARN alarms_read degraded err=%v", err)
+			}
+			alarms = []AlarmDTO{}
+			degraded = true
 		}
-		alarms = []AlarmDTO{}
 	}
 	if alarms == nil {
 		alarms = []AlarmDTO{}
 	}
-	if err == nil {
-		a.recordAlarmSnapshot(r.Context(), alarms)
-	}
-	writeJSON(w, http.StatusOK, a.mergeAlarmHistoryRows(r.Context(), alarms, err != nil))
+	return a.appendVirtualPointAlarms(ctx, alarms), degraded
 }
 
 // handleAckAlarm handles POST /api/v1/alarms/{id}/ack (RBAC operator+).

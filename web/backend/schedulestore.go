@@ -44,6 +44,7 @@ func loadSchedulesFile(ctx context.Context, path string) ([]ScheduleRow, error) 
 	if rows == nil {
 		rows = []ScheduleRow{}
 	}
+	normalizeSchedules(rows)
 	return rows, nil
 }
 

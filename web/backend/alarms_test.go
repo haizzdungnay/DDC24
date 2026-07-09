@@ -110,6 +110,66 @@ func TestHandleAlarmsPreservesTriggerFields(t *testing.T) {
 	}
 }
 
+func TestHandleAlarmsIncludesVirtualPointHighLow(t *testing.T) {
+	core := &fakeAlarmCore{alarms: []AlarmDTO{}}
+	app, token := newTestAppWithRole(t, RoleViewer, core)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Room Setpoint","signalType":"float","enabled":true,"writable":true,"value":32.5}]}`)
+	rows := []AlarmSetting{{
+		ID:        "ALM-VP-1",
+		Label:     "Virtual setpoint high",
+		Enabled:   true,
+		AlarmType: alarmTypeHighLowInput,
+		Sources:   []AlarmSource{{Kind: "VP", Channel: 1, PointID: "VP1"}},
+		Priority:  "high",
+		ClearMode: "auto",
+		DelayS:    0,
+		Params:    &AlarmParams{HH: floatPtr(32), H: floatPtr(30), L: floatPtr(10), LL: floatPtr(5)},
+	}}
+	if err := saveAlarmSettingsFile(context.Background(), app.alarmSettingsPath(), rows); err != nil {
+		t.Fatalf("seed alarm settings: %v", err)
+	}
+
+	resp := serveAuth(t, app.Router(), http.MethodGet, "/api/v1/alarms", "", token)
+	assertStatus(t, resp, http.StatusOK)
+	var alarms []AlarmDTO
+	if err := json.Unmarshal(resp.Body.Bytes(), &alarms); err != nil {
+		t.Fatalf("decode alarms: %v", err)
+	}
+	if len(alarms) != 1 || alarms[0].ID != "ALM-VP-1" || alarms[0].Source != "VP1" || alarms[0].TriggerLevel != "HH" {
+		t.Fatalf("alarms = %#v; want virtual HH alarm", alarms)
+	}
+}
+
+func TestHandleAlarmsSkipsDisabledVirtualPoint(t *testing.T) {
+	core := &fakeAlarmCore{alarms: []AlarmDTO{}}
+	app, token := newTestAppWithRole(t, RoleViewer, core)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Room Setpoint","signalType":"float","enabled":false,"writable":true,"value":32.5}]}`)
+	rows := []AlarmSetting{{
+		ID:        "ALM-VP-1",
+		Label:     "Virtual setpoint high",
+		Enabled:   true,
+		AlarmType: alarmTypeHighLowInput,
+		Sources:   []AlarmSource{{Kind: "VP", Channel: 1, PointID: "VP1"}},
+		Priority:  "high",
+		ClearMode: "auto",
+		DelayS:    0,
+		Params:    &AlarmParams{HH: floatPtr(32), H: floatPtr(30), L: floatPtr(10), LL: floatPtr(5)},
+	}}
+	if err := saveAlarmSettingsFile(context.Background(), app.alarmSettingsPath(), rows); err != nil {
+		t.Fatalf("seed alarm settings: %v", err)
+	}
+
+	resp := serveAuth(t, app.Router(), http.MethodGet, "/api/v1/alarms", "", token)
+	assertStatus(t, resp, http.StatusOK)
+	var alarms []AlarmDTO
+	if err := json.Unmarshal(resp.Body.Bytes(), &alarms); err != nil {
+		t.Fatalf("decode alarms: %v", err)
+	}
+	if len(alarms) != 0 {
+		t.Fatalf("alarms = %#v; want none", alarms)
+	}
+}
+
 func TestHandleAlarmsMergesAckedHistoryWhenCoreReadDegrades(t *testing.T) {
 	core := &fakeAlarmCore{readErr: errCoreUnavailable}
 	app, token := newTestAppWithRole(t, RoleViewer, core)
@@ -445,6 +505,30 @@ func TestAlarmHistoryRecordsRestartAfterClearedSameID(t *testing.T) {
 	}
 	if got[2].Time != t1.Add(2*time.Minute).Format(time.RFC3339Nano) {
 		t.Fatalf("restart time = %q; want observed transition time", got[2].Time)
+	}
+}
+
+func TestAlarmHistoryDoesNotRecordEndForFirstSeenClearedAlarm(t *testing.T) {
+	tracker := NewAlarmHistoryTracker()
+	t1 := time.Date(2026, 7, 7, 8, 0, 0, 0, time.UTC)
+	active := AlarmDTO{ID: "ALM-1", Time: t1.Format(time.RFC3339Nano), Severity: "medium", Status: "active", Message: "Supply air", Source: "UI-01"}
+	cleared := active
+	cleared.Status = "cleared"
+
+	got := tracker.Reconcile([]AlarmDTO{cleared}, t1)
+	if len(got) != 0 {
+		t.Fatalf("events = %#v; want no orphan end for first-seen cleared alarm", got)
+	}
+	got = append(got, tracker.Reconcile([]AlarmDTO{active}, t1.Add(time.Minute))...)
+	got = append(got, tracker.Reconcile([]AlarmDTO{cleared}, t1.Add(2*time.Minute))...)
+	want := []string{"started", "ended"}
+	if len(got) != len(want) {
+		t.Fatalf("events = %#v; want %v", got, want)
+	}
+	for i, event := range got {
+		if event.Event != want[i] {
+			t.Fatalf("events[%d] = %q; want %q in %#v", i, event.Event, want[i], got)
+		}
 	}
 }
 

@@ -119,6 +119,72 @@ func TestValidateAlarmSettingsAcceptsFlexibleSeverityRules(t *testing.T) {
 	}
 }
 
+func TestValidateAlarmSettingsAcceptsVirtualPointSources(t *testing.T) {
+	rows := validAlarmRows(2)
+	rows[0].Sources = []AlarmSource{{Kind: "VP", Channel: 1, PointID: "VP1"}}
+	rows[1].Sources = []AlarmSource{{Kind: "VP", Channel: virtualPointTotalCapacity, PointID: "VP464"}}
+	if errs := validateAlarmSettings(rows); len(errs) > 0 {
+		t.Fatalf("validation errors = %+v", errs)
+	}
+}
+
+func TestAlarmSettingsPutAcceptsVirtualPointSource(t *testing.T) {
+	app, token := newAlarmSettingsTestApp(t)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Room Setpoint","signalType":"float","enabled":true,"writable":true,"value":22.5}]}`)
+	rows := validAlarmRows(1)
+	rows[0].Sources = []AlarmSource{{Kind: "VP", Channel: 1, PointID: "VP1"}}
+	req := newAuthRequest(http.MethodPut, "/api/v1/alarm-settings", alarmSettingsJSON(t, rows), token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestAlarmSettingsPutRejectsBooleanVirtualPointSource(t *testing.T) {
+	app, token := newAlarmSettingsTestApp(t)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Virtual Enable","signalType":"boolean","enabled":true,"writable":true,"value":true}]}`)
+	rows := validAlarmRows(1)
+	rows[0].Sources = []AlarmSource{{Kind: "VP", Channel: 1, PointID: "VP1"}}
+	req := newAuthRequest(http.MethodPut, "/api/v1/alarm-settings", alarmSettingsJSON(t, rows), token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestAlarmSettingsPutRejectsRuntimeVirtualPointSource(t *testing.T) {
+	app, token := newAlarmSettingsTestApp(t)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Runtime","signalType":"float","enabled":true,"writable":true,"value":12}]}`)
+	rows := validAlarmRows(1)
+	rows[0].AlarmType = alarmTypeRuntimeHours
+	rows[0].Params = &AlarmParams{RuntimeHours: floatPtr(1)}
+	rows[0].Sources = []AlarmSource{{Kind: "VP", Channel: 1, PointID: "VP1"}}
+	req := newAuthRequest(http.MethodPut, "/api/v1/alarm-settings", alarmSettingsJSON(t, rows), token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestAlarmSettingsPutRejectsVirtualPointOutOfRange(t *testing.T) {
+	app, token := newAlarmSettingsTestApp(t)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Room Setpoint","signalType":"float","enabled":true,"writable":true,"value":22.5}]}`)
+	rows := validAlarmRows(1)
+	rows[0].Sources = []AlarmSource{{Kind: "VP", Channel: virtualPointTotalCapacity + 1, PointID: "VP465"}}
+	req := newAuthRequest(http.MethodPut, "/api/v1/alarm-settings", alarmSettingsJSON(t, rows), token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "[0].sources[0].channel") {
+		t.Fatalf("body missing channel path: %s", w.Body.String())
+	}
+}
+
 func TestAlarmSettingsValidationRejectsBadInputWithoutWrite(t *testing.T) {
 	cases := []struct {
 		name string
@@ -167,6 +233,12 @@ func TestAlarmSettingsValidationRejectsBadInputWithoutWrite(t *testing.T) {
 			name: "pointId mismatch",
 			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
 				rows[0].Sources[0].PointID = "UI-02"
+			}),
+		},
+		{
+			name: "virtual point id mismatch",
+			rows: mutateAlarmRows(1, func(rows []AlarmSetting) {
+				rows[0].Sources[0] = AlarmSource{Kind: "VP", Channel: 1, PointID: "VP17"}
 			}),
 		},
 		{

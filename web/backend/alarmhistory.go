@@ -172,9 +172,8 @@ func (t *AlarmHistoryTracker) Reconcile(alarms []AlarmDTO, now time.Time) []Alar
 		next[id] = alarm
 		prev, existed := t.visible[id]
 		if !existed {
-			events = append(events, historyEventFromAlarm("started", alarm, alarm.Time, ""))
-			if !alarmConditionActive(alarm.Status) {
-				events = append(events, historyEndEvent(alarm, now.Format(time.RFC3339Nano)))
+			if alarmConditionActive(alarm.Status) {
+				events = append(events, historyEventFromAlarm("started", alarm, alarm.Time, ""))
 			}
 			continue
 		}
@@ -260,10 +259,6 @@ func (a *App) StartAlarmHistory(ctx context.Context) {
 	if a == nil || a.alarmHistory == nil || a.alarmTracker == nil {
 		return
 	}
-	reader, ok := a.core.(alarmReader)
-	if !ok {
-		return
-	}
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
@@ -272,15 +267,9 @@ func (a *App) StartAlarmHistory(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				alarms, err := reader.ReadAlarms(ctx)
-				if err != nil {
-					if a.logger != nil {
-						a.logger.Printf("WARN alarm_history poll degraded err=%v", err)
-					}
+				alarms, degraded := a.currentAlarms(ctx)
+				if degraded {
 					continue
-				}
-				if alarms == nil {
-					alarms = []AlarmDTO{}
 				}
 				a.recordAlarmSnapshot(ctx, alarms)
 			}

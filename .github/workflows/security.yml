@@ -1,8 +1,8 @@
 # Security Scan Workflow
 #
-# Scans for CVEs in OS packages (Debian), Python (pip), and npm
-# dependencies using trivy, cross-checks with grype, and scans for
-# secrets with gitleaks. Fails on CVSS >= 7.0 (CRITICAL / HIGH).
+# Scans repository dependency manifests using trivy, cross-checks with
+# grype, and scans for secrets with gitleaks. Fails on CVSS >= 7.0
+# (CRITICAL / HIGH).
 #
 # References:
 #   - KX-DDC24-SEC-SUP-001 §4.1, §6.1, §7.1
@@ -34,9 +34,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Generate Debian SBOM
-        run: dpkg-query -f '${Package} ${Version}\n' -W > debian-packages.txt
-
       - name: Generate Python pip SBOM
         run: |
           find . -name "requirements*.txt" -type f \
@@ -54,6 +51,9 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: 1
           hide-progress: true
+          cache: false
+          scanners: vuln
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0

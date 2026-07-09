@@ -10,8 +10,8 @@ import { TrendChart, type TrendSeries } from '../components/TrendChart'
 import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
-import type { Point, TrendSample } from '../types'
-import { cn, isFreshIso, mergePointsById } from '../utils'
+import type { Point, TrendSample, VirtualPoint } from '../types'
+import { canonicalVirtualPointId, cn, isFreshIso, mergePointsById } from '../utils'
 
 interface TrendRow {
   id: string
@@ -50,7 +50,43 @@ function historyRangeFromMinutes(minutes: number) {
 }
 
 function pointNumber(value: Point['value']) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'boolean') return value ? 1 : 0
+  return null
+}
+
+function isPhysicalTrendPoint(point: Point): boolean {
+  return (point.kind === 'UI' || point.kind === 'AO') && pointNumber(point.value) !== null
+}
+
+function isVirtualTrendPoint(item: VirtualPoint): boolean {
+  return item.enabled && item.logEnabled && (item.signalType === 'boolean' || item.signalType === 'integer' || item.signalType === 'float')
+}
+
+function visibleTrendPoints(points: Point[], virtualPoints: VirtualPoint[]): Point[] {
+  const virtualById = new Map(
+    virtualPoints
+      .filter(isVirtualTrendPoint)
+      .map((item) => [canonicalVirtualPointId(item.id), item])
+  )
+  return points.flatMap((point) => {
+    if (point.kind !== 'virtual') return isPhysicalTrendPoint(point) ? [point] : []
+    const meta = virtualById.get(canonicalVirtualPointId(point.id))
+    if (!meta) return []
+    const value = meta.value ?? point.value
+    if (pointNumber(value) === null) return []
+    return [{
+      ...point,
+      id: canonicalVirtualPointId(meta.id),
+      name: meta.label || point.name,
+      value,
+      unit: meta.unit ?? point.unit,
+      signalType: meta.signalType,
+      logEnabled: meta.logEnabled,
+      logIntervalMs: meta.logIntervalMs,
+      updatedAt: meta.updatedAt ?? point.updatedAt
+    }]
+  })
 }
 
 function makeTrendSample(points: Point[]) {
@@ -120,13 +156,14 @@ export function TrendsPage() {
   if (initialPrefsRef.current === undefined) initialPrefsRef.current = readTrendPrefs()
   const hasSavedPrefsRef = useRef(initialPrefsRef.current !== null)
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
+  const virtualState = useApi(apiClient.getVirtualPoints, [], { refreshMs: 2000 })
   const analogPoints = useMemo(() => {
     const polledPoints = pointsState.data ?? []
     const source = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
       ? mergePointsById(polledPoints, realtime.allPoints)
       : polledPoints
-    return source.filter((point) => (point.kind === 'UI' || point.kind === 'AO') && pointNumber(point.value) !== null).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
-  }, [pointsState.data, realtime.allPoints, realtime.lastPointEventAt])
+    return visibleTrendPoints(source, virtualState.data ?? []).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
+  }, [pointsState.data, realtime.allPoints, realtime.lastPointEventAt, virtualState.data])
   const [selectedIds, setSelectedIds] = useState<string[]>(() => initialPrefsRef.current?.selectedIds ?? [])
   const [rangeMinutes, setRangeMinutes] = useState<number>(() => initialPrefsRef.current?.rangeMinutes ?? 30)
   const [prefsReady, setPrefsReady] = useState(() => initialPrefsRef.current !== null)
@@ -261,7 +298,7 @@ export function TrendsPage() {
           </div>
           {pickerOpen && (
             <div className="mb-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">
-              <div className="mb-2 text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Object list analog UI/AO', 'Analog UI/AO object list')}</div>
+              <div className="mb-2 text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Object list analog UI/AO/Virtual', 'Analog UI/AO/Virtual object list')}</div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {analogPoints.map((point) => (
                   <label key={point.id} className="flex cursor-pointer items-center gap-3 rounded-[var(--radius)] border border-[var(--c-border)] px-3 py-2 text-sm hover:bg-[rgba(42,92,138,0.08)]">

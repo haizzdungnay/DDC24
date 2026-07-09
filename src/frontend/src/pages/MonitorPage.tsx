@@ -9,8 +9,8 @@ import { useToast } from '../components/Toast'
 import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
-import type { Point, PointKind, PointQuality } from '../types'
-import { cn, formatDateTime, formatTime, formatValue, isFreshIso, mergePointsById, pointNumber, statusColor, statusFill } from '../utils'
+import type { Point, PointKind, PointQuality, VirtualPoint } from '../types'
+import { canonicalVirtualPointId, cn, formatDateTime, formatTime, formatValue, isFreshIso, mergePointsById, pointNumber, statusColor, statusFill } from '../utils'
 
 const MAX_TREND_POINTS = 18
 const REALTIME_STALE_MS = 2500
@@ -41,20 +41,52 @@ const kindLabel: Record<PointKind, string> = {
   virtual: 'VIRTUAL'
 }
 
+function visibleMonitorPoints(points: Point[], virtualPoints: VirtualPoint[]): Point[] {
+  const virtualById = new Map(
+    virtualPoints
+      .filter((item) => item.enabled)
+      .map((item) => [canonicalVirtualPointId(item.id), item])
+  )
+  return points.flatMap((point) => {
+    if (point.kind !== 'virtual') return [point]
+    const meta = virtualById.get(canonicalVirtualPointId(point.id))
+    if (!meta) return []
+    return [{
+      ...point,
+      id: canonicalVirtualPointId(meta.id),
+      name: meta.label || point.name,
+      value: meta.value ?? point.value,
+      unit: meta.unit ?? point.unit,
+      signalType: meta.signalType,
+      writable: meta.writable,
+      logEnabled: meta.logEnabled,
+      logIntervalMs: meta.logIntervalMs,
+      updatedAt: meta.updatedAt ?? point.updatedAt
+    }]
+  })
+}
+
 function canForcePoint(point: Point): boolean {
-  return point.kind === 'DO' || point.kind === 'AO'
+  return point.kind === 'DO' || point.kind === 'AO' || (point.kind === 'virtual' && point.writable === true)
 }
 
 function defaultForceValue(point: Point): string {
-  return point.kind === 'DO' ? String(!point.value) : String(pointNumber(point))
+  if (point.kind === 'DO') return String(!point.value)
+  if (point.kind === 'virtual') return String(point.value ?? '')
+  return String(pointNumber(point))
 }
 
-function parseForceValue(point: Point, raw: string): number | boolean {
+function parseForceValue(point: Point, raw: string): number | boolean | string {
   const value = raw.trim()
-  if (point.kind === 'DO') return value === 'true' || value === '1' || value.toUpperCase() === 'ON'
+  if (point.kind === 'DO' || point.signalType === 'boolean') return value === 'true' || value === '1' || value.toUpperCase() === 'ON'
+  if (point.signalType === 'string') return value
+  if (point.signalType === 'datetime') {
+    if (Number.isNaN(new Date(value).getTime())) throw new Error('Force value must be a datetime')
+    return value
+  }
   const numberValue = Number(value)
   if (!Number.isFinite(numberValue)) throw new Error('Force value must be a number')
-  return numberValue
+  return point.signalType === 'integer' ? Math.trunc(numberValue) : numberValue
 }
 
 function parseForceDurationSeconds(raw: string): number {
@@ -69,6 +101,7 @@ function selectUnitValue(unit?: string): string {
 
 export function MonitorPage() {
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
+  const virtualState = useApi(apiClient.getVirtualPoints, [], { refreshMs: 2000 })
   const realtime = useRealtime()
   const toast = useToast()
   const { pick } = useI18n()
@@ -90,9 +123,10 @@ export function MonitorPage() {
   const forceReleaseTimers = useRef<Record<string, number>>({})
 
   const polledPoints = pointsState.data ?? []
-  const points = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
+  const rawPoints = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
     ? mergePointsById(polledPoints, realtime.allPoints)
     : polledPoints
+  const points = useMemo(() => visibleMonitorPoints(rawPoints, virtualState.data ?? []), [rawPoints, virtualState.data])
   const selected = points.find((point) => point.id === selectedId) ?? points.find((point) => point.id === 'UI-01') ?? points[0]
   const modalPoint = pointModalId ? points.find((point) => point.id === pointModalId) : null
   const offline = realtime.connectionState !== 'connected'
@@ -107,7 +141,8 @@ export function MonitorPage() {
   const groups = useMemo(() => ({
     UI: filtered.filter((point) => point.kind === 'UI'),
     DO: filtered.filter((point) => point.kind === 'DO'),
-    AO: filtered.filter((point) => point.kind === 'AO')
+    AO: filtered.filter((point) => point.kind === 'AO'),
+    Virtual: filtered.filter((point) => point.kind === 'virtual')
   }), [filtered])
 
   const stats = {
@@ -115,8 +150,9 @@ export function MonitorPage() {
     ui: points.filter((point) => point.kind === 'UI').length,
     do: points.filter((point) => point.kind === 'DO').length,
     ao: points.filter((point) => point.kind === 'AO').length,
+    virtual: points.filter((point) => point.kind === 'virtual').length,
     on: points.filter((point) => Boolean(point.value)).length,
-    analogGood: points.filter((point) => (point.kind === 'UI' || point.kind === 'AO') && point.quality === 'good').length,
+    analogGood: points.filter((point) => (point.kind === 'UI' || point.kind === 'AO' || point.kind === 'virtual') && point.quality === 'good').length,
     abnormal: points.filter((point) => point.quality !== 'good').length
   }
 
@@ -140,13 +176,19 @@ export function MonitorPage() {
     await pointsState.refetch()
   }
 
-  async function forcePointWithDuration(point: Point, value: number | boolean, durationSeconds: number) {
+  async function forcePointWithDuration(point: Point, value: number | boolean | string, durationSeconds: number) {
     if (!canForcePoint(point)) return
     if (forceReleaseTimers.current[point.id]) {
       window.clearTimeout(forceReleaseTimers.current[point.id])
       delete forceReleaseTimers.current[point.id]
     }
-    if (realtime.forcePoint(point.id, value, durationSeconds)) {
+    if (point.kind === 'virtual') {
+      await apiClient.forcePoint(point.id, value)
+      toast.push('success', pick(`Wrote ${point.id}`, `Wrote ${point.id}`))
+      await pointsState.refetch()
+      return
+    }
+    if (realtime.forcePoint(point.id, value as number | boolean, durationSeconds)) {
       toast.push('success', pick(`Force sent to ${point.id}`, `Force sent to ${point.id}`))
       window.setTimeout(() => void pointsState.refetch(), 250)
       window.setTimeout(() => void pointsState.refetch(), 1000)
@@ -273,7 +315,7 @@ export function MonitorPage() {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_180px_1fr_132px]">
         <select value={kind} onChange={(event) => setKind(event.target.value as PointKind | 'all')} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
-          <option value="all">{pick('Nhóm I/O - Tất cả', 'I/O group - All')}</option><option value="UI">UI</option><option value="DO">DO</option><option value="AO">AO</option>
+          <option value="all">{pick('Nhóm I/O - Tất cả', 'I/O group - All')}</option><option value="UI">UI</option><option value="DO">DO</option><option value="AO">AO</option><option value="virtual">{pick('Ảo', 'Virtual')}</option>
         </select>
         <select value={quality} onChange={(event) => setQuality(event.target.value as PointQuality | 'all')} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
           <option value="all">{pick('Trạng thái - Tất cả', 'Status - All')}</option><option value="good">Good</option><option value="uncertain">Uncertain</option><option value="bad">Bad</option><option value="stale">Stale</option>
@@ -290,6 +332,7 @@ export function MonitorPage() {
           <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} onToggle={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
           <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} />
           <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
+          <AnalogSection title="VIRTUAL POINTS" rows={groups.Virtual} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
         </div>
         {selected && <DetailPanel
           point={selected}
@@ -328,14 +371,14 @@ export function MonitorPage() {
         />
       )}
 
-      <Modal open={forceOpen} title={`Force ${selected?.id ?? ''}`} danger confirmLabel={pick('Force output', 'Force output')} onConfirm={confirmForce} onClose={() => setForceOpen(false)}>
+      <Modal open={forceOpen} title={`${selected?.kind === 'virtual' ? 'Write' : 'Force'} ${selected?.id ?? ''}`} danger={selected?.kind !== 'virtual'} confirmLabel={selected?.kind === 'virtual' ? 'Write' : pick('Force output', 'Force output')} onConfirm={confirmForce} onClose={() => setForceOpen(false)}>
         <div className="space-y-4">
           <div className="flex gap-3 rounded-[var(--radius)] border border-[rgba(224,161,6,0.38)] bg-[rgba(224,161,6,0.08)] p-3 text-[var(--c-warn-fg)]">
             <ShieldAlert className="h-5 w-5 shrink-0" />
             {pick('Force uses the duration below. Use only for commissioning or controlled troubleshooting.', 'Force uses the duration below. Use only for commissioning or controlled troubleshooting.')}
           </div>
           <label className="block text-sm">{pick('Giá trị Force', 'Force value')}<input value={forceValue} onChange={(event) => setForceValue(event.target.value)} className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3" /></label>
-          <label className="block text-sm">{pick('Force duration (minutes)', 'Force duration (minutes)')}<input type="number" min="1" step="1" value={forceDurationMinutes} onChange={(event) => setForceDurationMinutes(event.target.value)} className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3" /></label>
+          {selected?.kind !== 'virtual' && <label className="block text-sm">{pick('Force duration (minutes)', 'Force duration (minutes)')}<input type="number" min="1" step="1" value={forceDurationMinutes} onChange={(event) => setForceDurationMinutes(event.target.value)} className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3" /></label>}
         </div>
       </Modal>
     </div>
@@ -431,7 +474,7 @@ function PointDetailsModal({
   point: Point
   onClose: () => void
   onSave: (point: Point, config: { name: string; unit?: string }) => Promise<void>
-  onForce: (point: Point, value: number | boolean, durationSeconds: number) => Promise<void>
+  onForce: (point: Point, value: number | boolean | string, durationSeconds: number) => Promise<void>
   onRelease: (point: Point) => Promise<void>
 }) {
   const { pick } = useI18n()
@@ -441,7 +484,7 @@ function PointDetailsModal({
   const [forceValue, setForceValue] = useState(defaultForceValue(point))
   const [forceDurationMinutes, setForceDurationMinutes] = useState('10')
   const [busy, setBusy] = useState<'save' | 'force' | 'release' | null>(null)
-  const isAnalog = point.kind === 'UI' || point.kind === 'AO'
+  const isAnalog = point.kind === 'UI' || point.kind === 'AO' || point.kind === 'virtual'
   const canForce = canForcePoint(point)
   const active = Boolean(point.value)
   const binaryState = active ? 'on' : 'off'
@@ -548,7 +591,7 @@ function PointDetailsModal({
                     <option value="false">OFF</option>
                   </select>
                 ) : (
-                  <input type="number" value={forceValue} onChange={(event) => setForceValue(event.target.value)} className="mono h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
+                  <input type={point.kind === 'virtual' && (point.signalType === 'string' || point.signalType === 'datetime') ? 'text' : 'number'} value={forceValue} onChange={(event) => setForceValue(event.target.value)} className="mono h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
                 )}
               </label>
               <label className="block space-y-1">
@@ -558,7 +601,7 @@ function PointDetailsModal({
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button variant="danger" icon={<Power className="h-4 w-4" />} loading={busy === 'force'} onClick={handleForce}>{pick('Force output', 'Force output')}</Button>
-              <Button icon={<RotateCcw className="h-4 w-4" />} loading={busy === 'release'} onClick={handleRelease}>{pick('Release force', 'Release force')}</Button>
+              {point.kind !== 'virtual' && <Button icon={<RotateCcw className="h-4 w-4" />} loading={busy === 'release'} onClick={handleRelease}>{pick('Release force', 'Release force')}</Button>}
             </div>
           </section>
         )}
@@ -626,13 +669,13 @@ function DetailPanel({
   const { pick } = useI18n()
   const active = Boolean(point.value)
   const isBinary = point.kind === 'DO' || typeof point.value === 'boolean'
-  const isAnalog = point.kind === 'UI' || point.kind === 'AO'
+  const isAnalog = point.kind === 'UI' || point.kind === 'AO' || point.kind === 'virtual'
   const binaryState = active ? 'on' : 'off'
   const binaryTextColor = statusColor(binaryState)
   const valuePanelStyle = isBinary
     ? { borderColor: active ? 'rgba(47,164,90,0.48)' : 'var(--c-border)', backgroundColor: active ? 'rgba(47,164,90,0.12)' : 'var(--c-surface-2)' }
     : undefined
-  const canForce = point.kind === 'AO' || point.kind === 'DO'
+  const canForce = canForcePoint(point)
   const groupText = `${point.kind} - ${kindLabel[point.kind]}`
   const history = [0, 1, 2, 3, 4].map((index) => ({ time: new Date(Date.now() - index * 7 * 60_000).toISOString(), value: index % 2 === 0 ? active : !active }))
   const isEditing = editingName === point.id
@@ -743,7 +786,7 @@ function DetailPanel({
             )}
           </dl>
           <StatusBadge state={point.forced ? 'force' : point.quality} />
-          {canForce && <Button className="w-full" variant="danger" onClick={onForce}>Force output</Button>}
+          {canForce && <Button className="w-full" variant={point.kind === 'virtual' ? 'primary' : 'danger'} onClick={onForce}>{point.kind === 'virtual' ? 'Write value' : 'Force output'}</Button>}
         </div>
       </Panel>
 
