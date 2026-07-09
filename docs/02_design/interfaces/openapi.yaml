@@ -1,17 +1,17 @@
-openapi: 3.1.0
+﻿openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
   version: "1.4.0"
   description: >
-    REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cổng 8443. Auth Bearer JWT (exp 1h).
-    Nguồn-chuẩn cho endpoint (D-4). Trace: SW-API-001..010, SRS §6.4.
-    BE-B0 2026-06-17: bổ sung commissioning test, graph validate/deploy; WebSocket
-    monitor chuẩn ở /api/v1/ws/monitor được tham chiếu bằng x-websocket.
-    BE-B5 2026-06-18: Mở contract chi tiết cho cấu hình (/system/config/*) và users CRUD, password self-service.
-    2026-06-18: thêm aggregate /network cho trang Network.
+    REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
+    Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
+    BE-B0 2026-06-17: bá»• sung commissioning test, graph validate/deploy; WebSocket
+    monitor chuáº©n á»Ÿ /api/v1/ws/monitor Ä‘Æ°á»£c tham chiáº¿u báº±ng x-websocket.
+    BE-B5 2026-06-18: Má»Ÿ contract chi tiáº¿t cho cáº¥u hÃ¬nh (/system/config/*) vÃ  users CRUD, password self-service.
+    2026-06-18: thÃªm aggregate /network cho trang Network.
 x-revision:
   date: "2026-06-18"
-  note: "v1.4.0 thêm /network aggregate cho trang Network, map config thật."
+  note: "v1.4.0 thÃªm /network aggregate cho trang Network, map config tháº­t."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -22,7 +22,7 @@ security:
 paths:
   /auth/login:
     post:
-      summary: Đăng nhập, trả JWT
+      summary: ÄÄƒng nháº­p, tráº£ JWT
       security: []
       requestBody:
         required: true
@@ -48,11 +48,11 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
   /auth/logout:
     post:
-      summary: Đăng xuất, vô hiệu token
+      summary: ÄÄƒng xuáº¥t, vÃ´ hiá»‡u token
       responses: { "200": { description: OK } }
   /points:
     get:
-      summary: Danh sách tất cả I/O point + giá trị
+      summary: Danh sÃ¡ch táº¥t cáº£ I/O point + giÃ¡ trá»‹
       responses:
         "200":
           description: OK
@@ -63,7 +63,7 @@ paths:
                 items: { $ref: "#/components/schemas/Point" }
   /points/{id}:
     get:
-      summary: Đọc 1 point
+      summary: Äá»c 1 point
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       responses:
         "200":
@@ -73,12 +73,12 @@ paths:
               schema: { $ref: "#/components/schemas/Point" }
         "404": { $ref: "#/components/responses/Error" }
     put:
-      summary: Ghi giá trị point (role operator+; LUÔN vào mức Local manual — client KHÔNG chọn priority)
+      summary: Ghi giÃ¡ trá»‹ point (role operator+; LUÃ”N vÃ o má»©c Local manual â€” client KHÃ”NG chá»n priority)
       description: >
-        Contract Freeze 2026-06-11: REST không expose BACnet priority 1..16.
-        Mọi lệnh web đi vào nguồn "Local manual" (mức 2 trong 6 mức của core —
-        PRODUCT_DEFINITION §13). BACnet client dùng priority array riêng qua BACnet/IP
-        (kết quả vào mức 3). Gửi release=true để nhả manual (relinquish mức 2).
+        Contract Freeze 2026-06-11: REST khÃ´ng expose BACnet priority 1..16.
+        Má»i lá»‡nh web Ä‘i vÃ o nguá»“n "Local manual" (má»©c 2 trong 6 má»©c cá»§a core â€”
+        PRODUCT_DEFINITION Â§13). BACnet client dÃ¹ng priority array riÃªng qua BACnet/IP
+        (káº¿t quáº£ vÃ o má»©c 3). Gá»­i release=true Ä‘á»ƒ nháº£ manual (relinquish má»©c 2).
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       requestBody:
         required: true
@@ -90,29 +90,23 @@ paths:
                 value:
                   allOf:
                     - $ref: "#/components/schemas/PointCommandValue"
-                  description: "Bắt buộc trừ khi release=true"
-                release: { type: boolean, default: false, description: "true = nhả manual override" }
+                  description: "Báº¯t buá»™c trá»« khi release=true"
+                release: { type: boolean, default: false, description: "true = nháº£ manual override" }
       responses:
         "200":
-          description: Kết quả áp lệnh từ core (ghi audit log)
+          description: Káº¿t quáº£ Ã¡p lá»‡nh tá»« core (ghi audit log)
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  result: { type: string, enum: [accepted, overridden, rejected] }
-                  applied_value: { type: number }
-                  active_source: { type: string, example: "safety", description: "Nguồn priority đang thắng kênh này" }
+                $ref: "#/components/schemas/Point"
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
-  /virtual-io:
+  /virtual-points:
     get:
-      summary: List Virtual I/O metadata (viewer+)
+      summary: List Virtual Points (viewer+)
       description: >
-        Returns VI/VO metadata backed by fixed core virtual points.
-        VI analog uses AV1..AV16, VO analog uses AV17..AV32,
-        VI binary uses BV1..BV8, VO binary uses BV9..BV16,
-        and multistate uses MSV2..MSV8. MSV1 is reserved.
+        Returns created backend-owned VP points only. Raw/uncreated AV/BV/MSV
+        core slots are hidden from /points, Monitoring, Trends, and history.
       x-rbac: [viewer, operator, admin]
       responses:
         "200":
@@ -121,48 +115,48 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/VirtualIOPoint" }
+                items: { $ref: "#/components/schemas/VirtualPoint" }
         "403": { $ref: "#/components/responses/Error" }
     post:
-      summary: Create Virtual I/O metadata (admin)
-      description: Missing id/backingPoint are allocated from the reserved fixed pools.
+      summary: Create Virtual Point (admin)
+      description: Missing id is allocated as the first free VP1..VP464.
       x-rbac: [admin]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/VirtualIOPoint" }
+            schema: { $ref: "#/components/schemas/VirtualPoint" }
       responses:
         "201":
           description: Created
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/VirtualIOPoint" }
+              schema: { $ref: "#/components/schemas/VirtualPoint" }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
-  /virtual-io/{id}:
+  /virtual-points/{id}:
     put:
-      summary: Update Virtual I/O metadata (admin)
+      summary: Update Virtual Point (admin)
       x-rbac: [admin]
-      parameters: [ { $ref: "#/components/parameters/VirtualIoId" } ]
+      parameters: [ { $ref: "#/components/parameters/VirtualPointId" } ]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/VirtualIOPoint" }
+            schema: { $ref: "#/components/schemas/VirtualPoint" }
       responses:
         "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/VirtualIOPoint" }
+              schema: { $ref: "#/components/schemas/VirtualPoint" }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
     delete:
-      summary: Delete Virtual I/O metadata (admin)
+      summary: Delete Virtual Point (admin)
       x-rbac: [admin]
-      parameters: [ { $ref: "#/components/parameters/VirtualIoId" } ]
+      parameters: [ { $ref: "#/components/parameters/VirtualPointId" } ]
       responses:
         "200":
           description: OK
@@ -173,7 +167,7 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
   /system/status:
     get:
-      summary: Trạng thái hệ thống (CPU/RAM/uptime/IOP/version)
+      summary: Tráº¡ng thÃ¡i há»‡ thá»‘ng (CPU/RAM/uptime/IOP/version)
       responses:
         "200":
           description: OK
@@ -182,8 +176,8 @@ paths:
               schema: { $ref: "#/components/schemas/SystemStatus" }
   /network:
     get:
-      summary: Dữ liệu trang Network (viewer+)
-      description: Gộp network/device/bacnet/fieldbus config và trạng thái poll tổng từ core/iobus; không sinh slave demo.
+      summary: Dá»¯ liá»‡u trang Network (viewer+)
+      description: Gá»™p network/device/bacnet/fieldbus config vÃ  tráº¡ng thÃ¡i poll tá»•ng tá»« core/iobus; khÃ´ng sinh slave demo.
       x-rbac: [viewer, operator, admin]
       responses:
         "200":
@@ -193,8 +187,8 @@ paths:
               schema: { $ref: "#/components/schemas/NetworkPageData" }
         "403": { $ref: "#/components/responses/Error" }
     put:
-      summary: Cập nhật cấu hình northbound trang Network (admin)
-      description: Ghi atomic `network.conf`, `device.conf`, `bacnet.conf`; preserve field không expose bởi form; fieldbus/slave chỉ đọc.
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh northbound trang Network (admin)
+      description: Ghi atomic `network.conf`, `device.conf`, `bacnet.conf`; preserve field khÃ´ng expose bá»Ÿi form; fieldbus/slave chá»‰ Ä‘á»c.
       x-rbac: [admin]
       requestBody:
         required: true
@@ -211,10 +205,10 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
   /commissioning/points/{id}/test:
     post:
-      summary: Test commissioning một point (role operator+)
+      summary: Test commissioning má»™t point (role operator+)
       description: >
-        Gửi lệnh test DO/AO qua mkddc-core, vào nguồn Local manual mức 2 như PUT /points/{id}.
-        Dùng cho màn Commissioning; mọi lệnh phải audit log.
+        Gá»­i lá»‡nh test DO/AO qua mkddc-core, vÃ o nguá»“n Local manual má»©c 2 nhÆ° PUT /points/{id}.
+        DÃ¹ng cho mÃ n Commissioning; má»i lá»‡nh pháº£i audit log.
       x-rbac: [operator, admin]
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       requestBody:
@@ -224,7 +218,7 @@ paths:
             schema: { $ref: "#/components/schemas/CommissioningTestRequest" }
       responses:
         "200":
-          description: Kết quả test từ core, schema khớp CommissioningTestResult của FE
+          description: Káº¿t quáº£ test tá»« core, schema khá»›p CommissioningTestResult cá»§a FE
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CommissioningTestResult" }
@@ -233,8 +227,8 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
   /system/config:
     get:
-      summary: Đọc toàn bộ cấu hình hiện tại (gộp) (admin)
-      description: Trả về object gộp các nhóm (device, network, io, safe_state, virtual_io, bacnet, fieldbus, time).
+      summary: Äá»c toÃ n bá»™ cáº¥u hÃ¬nh hiá»‡n táº¡i (gá»™p) (admin)
+      description: Tráº£ vá» object gá»™p cÃ¡c nhÃ³m (device, network, io, safe_state, virtual_points, bacnet, fieldbus, time).
       x-rbac: [admin]
       responses:
         "200":
@@ -244,7 +238,7 @@ paths:
               schema: { $ref: "#/components/schemas/SystemConfig" }
   /system/config/device:
     get:
-      summary: Đọc cấu hình device (admin)
+      summary: Äá»c cáº¥u hÃ¬nh device (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -253,7 +247,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigDevice" }
     put:
-      summary: Cập nhật cấu hình device (admin)
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh device (admin)
       x-rbac: [admin]
       requestBody:
         required: true
@@ -269,7 +263,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/network:
     get:
-      summary: Đọc cấu hình network (admin)
+      summary: Äá»c cáº¥u hÃ¬nh network (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -278,7 +272,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigNetwork" }
     put:
-      summary: Cập nhật cấu hình network (admin)
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh network (admin)
       x-rbac: [admin]
       requestBody:
         required: true
@@ -294,7 +288,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/io:
     get:
-      summary: Đọc cấu hình IO (admin)
+      summary: Äá»c cáº¥u hÃ¬nh IO (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -303,7 +297,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigIO" }
     put:
-      summary: Cập nhật cấu hình IO (admin)
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh IO (admin)
       x-rbac: [admin]
       requestBody:
         required: true
@@ -319,7 +313,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/safe-state:
     get:
-      summary: Đọc cấu hình IO safe-state (admin)
+      summary: Äá»c cáº¥u hÃ¬nh IO safe-state (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -328,7 +322,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigSafeState" }
     put:
-      summary: Cập nhật cấu hình IO safe-state (admin)
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh IO safe-state (admin)
       x-rbac: [admin]
       requestBody:
         required: true
@@ -342,25 +336,25 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigPutResult" }
         "400": { $ref: "#/components/responses/Error" }
-  /system/config/virtual-io:
+  /system/config/virtual-points:
     get:
-      summary: Read Virtual I/O config (admin)
+      summary: Read Virtual Points config (admin)
       x-rbac: [admin]
       responses:
         "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ConfigVirtualIO" }
+              schema: { $ref: "#/components/schemas/ConfigVirtualPoints" }
     put:
-      summary: Replace Virtual I/O config (admin)
-      description: Persists virtual_io.conf without core restart; backing points remain fixed core virtual slots.
+      summary: Replace Virtual Points config (admin)
+      description: Persists virtual_points.conf without expanding core SHM/BACnet object counts.
       x-rbac: [admin]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ConfigVirtualIO" }
+            schema: { $ref: "#/components/schemas/ConfigVirtualPoints" }
       responses:
         "200":
           description: OK
@@ -370,7 +364,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/bacnet:
     get:
-      summary: Đọc cấu hình BACnet/IP (admin)
+      summary: Äá»c cáº¥u hÃ¬nh BACnet/IP (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -379,7 +373,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigBacnet" }
     put:
-      summary: Cập nhật cấu hình BACnet/IP (admin)
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh BACnet/IP (admin)
       x-rbac: [admin]
       requestBody:
         required: true
@@ -395,7 +389,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/fieldbus:
     get:
-      summary: Đọc cấu hình Fieldbus (Modbus RTU master) (admin)
+      summary: Äá»c cáº¥u hÃ¬nh Fieldbus (Modbus RTU master) (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -404,7 +398,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigFieldbus" }
     put:
-      summary: Cập nhật cấu hình Fieldbus (admin)
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh Fieldbus (admin)
       x-rbac: [admin]
       requestBody:
         required: true
@@ -420,7 +414,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/time:
     get:
-      summary: Đọc cấu hình Time (admin)
+      summary: Äá»c cáº¥u hÃ¬nh Time (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -429,7 +423,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigTime" }
     put:
-      summary: Cập nhật cấu hình Time (admin)
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh Time (admin)
       x-rbac: [admin]
       requestBody:
         required: true
@@ -445,8 +439,8 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /users:
     get:
-      summary: Danh sách user (admin)
-      description: Không trả về mật khẩu (pw_bcrypt)
+      summary: Danh sÃ¡ch user (admin)
+      description: KhÃ´ng tráº£ vá» máº­t kháº©u (pw_bcrypt)
       x-rbac: [admin]
       responses:
         "200":
@@ -457,7 +451,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/User" }
     post:
-      summary: Tạo user (admin)
+      summary: Táº¡o user (admin)
       x-rbac: [admin]
       requestBody:
         required: true
@@ -480,7 +474,7 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
   /users/{username}:
     put:
-      summary: Đổi role user (admin)
+      summary: Äá»•i role user (admin)
       x-rbac: [admin]
       parameters:
         - name: username
@@ -505,7 +499,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
     delete:
-      summary: Xóa user (admin)
+      summary: XÃ³a user (admin)
       x-rbac: [admin]
       parameters:
         - name: username
@@ -515,10 +509,10 @@ paths:
       responses:
         "204": { description: No Content }
         "404": { $ref: "#/components/responses/Error" }
-        "409": { description: "Lỗi nếu là admin cuối cùng hoặc là chính mình" }
+        "409": { description: "Lá»—i náº¿u lÃ  admin cuá»‘i cÃ¹ng hoáº·c lÃ  chÃ­nh mÃ¬nh" }
   /users/{username}/reset-password:
     post:
-      summary: Reset mật khẩu user (admin)
+      summary: Reset máº­t kháº©u user (admin)
       x-rbac: [admin]
       parameters:
         - name: username
@@ -540,7 +534,7 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
   /me:
     get:
-      summary: Lấy thông tin user đang đăng nhập (role viewer+)
+      summary: Láº¥y thÃ´ng tin user Ä‘ang Ä‘Äƒng nháº­p (role viewer+)
       x-rbac: [viewer, operator, admin]
       responses:
         "200":
@@ -550,7 +544,7 @@ paths:
               schema: { $ref: "#/components/schemas/User" }
   /me/change-password:
     post:
-      summary: Đổi mật khẩu cá nhân (role viewer+)
+      summary: Äá»•i máº­t kháº©u cÃ¡ nhÃ¢n (role viewer+)
       x-rbac: [viewer, operator, admin]
       requestBody:
         required: true
@@ -565,7 +559,7 @@ paths:
       responses:
         "200": { description: OK }
         "400": { $ref: "#/components/responses/Error" }
-        "401": { description: "Mật khẩu cũ không đúng" }
+        "401": { description: "Máº­t kháº©u cÅ© khÃ´ng Ä‘Ãºng" }
   /history:
     get:
       summary: Historian/trend samples by point and range (viewer+)
@@ -704,7 +698,7 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
   /ota/upload:
     post:
-      summary: Upload gói firmware (admin)
+      summary: Upload gÃ³i firmware (admin)
       requestBody:
         content:
           application/octet-stream:
@@ -712,11 +706,11 @@ paths:
       responses: { "202": { description: Accepted } }
   /ota/apply:
     post:
-      summary: Kích hoạt OTA + reboot (admin)
+      summary: KÃ­ch hoáº¡t OTA + reboot (admin)
       responses: { "202": { description: Accepted } }
   /ota/status:
     get:
-      summary: Trạng thái + tiến độ OTA
+      summary: Tráº¡ng thÃ¡i + tiáº¿n Ä‘á»™ OTA
       responses:
         "200":
           description: OK
@@ -729,7 +723,7 @@ paths:
                   progress: { type: integer, minimum: 0, maximum: 100 }
   /logs/download:
     get:
-      summary: Tải log (gzip, admin)
+      summary: Táº£i log (gzip, admin)
       responses:
         "200":
           description: OK
@@ -738,7 +732,7 @@ paths:
               schema: { type: string, format: binary }
   /bacnet/objects:
     get:
-      summary: Danh sách object BACnet
+      summary: Danh sÃ¡ch object BACnet
       responses: { "200": { description: OK } }
   /alarms:
     get:
@@ -852,7 +846,7 @@ paths:
   /graph/validate:
     post:
       summary: Validate graph.json (role operator+)
-      description: Chạy validator theo GRAPH_SCHEMA; không deploy, trả pass=false kèm errors nếu fail.
+      description: Cháº¡y validator theo GRAPH_SCHEMA; khÃ´ng deploy, tráº£ pass=false kÃ¨m errors náº¿u fail.
       x-rbac: [operator, admin]
       requestBody:
         required: true
@@ -861,7 +855,7 @@ paths:
             schema: { $ref: "#/components/schemas/Graph" }
       responses:
         "200":
-          description: Kết quả validate, schema khớp GraphValidationResult của FE
+          description: Káº¿t quáº£ validate, schema khá»›p GraphValidationResult cá»§a FE
           content:
             application/json:
               schema: { $ref: "#/components/schemas/GraphValidationResult" }
@@ -869,10 +863,10 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
   /graph/deploy:
     post:
-      summary: Validate rồi deploy graph.json (role admin)
+      summary: Validate rá»“i deploy graph.json (role admin)
       description: >
-        Validate graph.json, gửi core build plan và áp dụng atomically nếu pass. Nếu validate/build fail,
-        giữ graph cũ và trả pass=false/deployed=false kèm errors.
+        Validate graph.json, gá»­i core build plan vÃ  Ã¡p dá»¥ng atomically náº¿u pass. Náº¿u validate/build fail,
+        giá»¯ graph cÅ© vÃ  tráº£ pass=false/deployed=false kÃ¨m errors.
       x-rbac: [admin]
       requestBody:
         required: true
@@ -881,7 +875,7 @@ paths:
             schema: { $ref: "#/components/schemas/Graph" }
       responses:
         "200":
-          description: Kết quả deploy hoặc lỗi validate/build
+          description: Káº¿t quáº£ deploy hoáº·c lá»—i validate/build
           content:
             application/json:
               schema: { $ref: "#/components/schemas/GraphDeployResult" }
@@ -896,17 +890,17 @@ components:
       in: path
       required: true
       schema: { type: string, example: "UI1" }
-    VirtualIoId:
+    VirtualPointId:
       name: id
       in: path
       required: true
       schema:
         type: string
-        pattern: "^(VI|VO)-[0-9]{2}$"
-        example: "VI-01"
+        pattern: "^(VP|AV)[-_]?0*([1-9]|[1-9][0-9]|[1-3][0-9]{2}|4[0-5][0-9]|46[0-4])$"
+        example: "VP1"
   responses:
     Error:
-      description: Lỗi
+      description: Lá»—i
       content:
         application/json:
           schema:
@@ -919,60 +913,62 @@ components:
   schemas:
     Point:
       type: object
+      required: [id, name, kind, value, quality, source, updatedAt]
       properties:
-        id: { type: string, example: "UI1" }
-        type: { type: string, enum: [AI, AO, BI, BO, AV, BV, MSV] }
+        id: { type: string, example: "UI-01" }
+        name: { type: string, example: "Room temperature" }
+        kind: { type: string, enum: [UI, AO, DO, virtual] }
         value:
           allOf:
             - $ref: "#/components/schemas/PointCommandValue"
           example: 23.5
-        unit: { type: string, example: "°C" }
+        unit: { type: string, example: "Â°C" }
         quality: { type: string, enum: [good, uncertain, bad] }
-        timestamp: { type: string, format: date-time }
-        sensor_type: { type: string, example: "NTC10k" }
+        source: { type: string, example: "backend" }
+        updatedAt: { type: string, format: date-time }
+        sensorType: { type: string, example: "NTC10k" }
+        raw: { type: number }
+        rawUnit: { type: string }
+        priority: { type: string }
         fault: { type: boolean }
-    VirtualIOManualValue:
+        forced: { type: boolean }
+        signalType: { type: string, enum: [boolean, integer, float, string, datetime] }
+        writable: { type: boolean, description: "Only writable=true VP may be written through PUT /points/{id}." }
+        logEnabled: { type: boolean }
+        logIntervalMs: { type: integer, enum: [1000, 100, 10] }
+    VirtualPointValue:
       oneOf:
         - type: number
         - type: boolean
-    VirtualIOPoint:
+        - type: string
+    VirtualPoint:
       type: object
-      required: [direction, valueType, label]
+      required: [label, signalType, enabled, writable, logEnabled]
       description: >
-        User-facing VI/VO metadata. Dynamic create allocates an existing fixed
-        core virtual slot; it does not expand AV/BV/MSV capacity.
+        Backend-owned Virtual Point. Total capacity is 464 VP: 256 non-logged,
+        128 logged at 1s, 64 logged at 100ms, and 16 diagnostic 10ms ring-buffer
+        channels. String/datetime VP cannot be logged or charted.
       properties:
         id:
           type: string
-          pattern: "^(VI|VO)-[0-9]{2}$"
-          example: "VI-01"
-        direction: { type: string, enum: [input, output] }
-        valueType: { type: string, enum: [analog, binary, multistate] }
+          pattern: "^(VP|AV)[-_]?0*([1-9]|[1-9][0-9]|[1-3][0-9]{2}|4[0-5][0-9]|46[0-4])$"
+          example: "VP1"
         label: { type: string, maxLength: 64 }
+        signalType: { type: string, enum: [boolean, integer, float, string, datetime] }
         enabled: { type: boolean, default: true }
-        backingPoint:
-          type: string
-          description: "Core virtual point. Pools: VI analog AV1..AV16, VO analog AV17..AV32, VI binary BV1..BV8, VO binary BV9..BV16, MSV2..MSV8."
-          example: "AV1"
-        signalType:
-          type: integer
-          minimum: 0
-          maximum: 8
-          description: "Allowed by valueType: analog 0..3, binary 0/4/5, multistate 0/3."
-        unit: { type: string }
-        displayMin: { type: number }
-        displayMax: { type: number }
-        rangeMultiplier: { type: integer, minimum: 0, maximum: 5 }
-        sensorCal: { type: number, minimum: -12.7, maximum: 12.8 }
-        mathFunction: { type: integer, minimum: 0, maximum: 3 }
-        connectionTimeoutS: { type: integer, minimum: 0, maximum: 54000 }
-        manualValue: { $ref: "#/components/schemas/VirtualIOManualValue" }
+        writable: { type: boolean, default: true }
+        logEnabled: { type: boolean, default: false }
+        logIntervalMs: { type: integer, enum: [1000, 100, 10], nullable: true }
+        retentionS: { type: integer, minimum: 0, description: "Max: 30d at 1s, 7d at 100ms, 1h at 10ms." }
+        value: { $ref: "#/components/schemas/VirtualPointValue" }
+        unit: { type: string, enum: ["", percent, degC, Pa, ppm], description: "Selected from the EasySet u4 Units list." }
+        displayMin: { type: number, minimum: -50, maximum: 205, default: 0, description: "EasySet-style u1 Display Min metadata." }
+        displayMax: { type: number, minimum: -50, maximum: 205, default: 100, description: "EasySet-style u2 Display Max metadata." }
+        rangeMultiplier: { type: integer, minimum: 0, maximum: 5, default: 0, description: "EasySet-style u3 Range Multiplier metadata." }
+        filterSamples: { type: integer, minimum: 0, maximum: 100, default: 3, description: "EasySet-style u5 Filter Samples metadata." }
+        sensorCal: { type: number, minimum: -12.7, maximum: 12.8, default: 0, description: "EasySet-style u6 Sensor Calibration metadata." }
+        mathFunction: { type: integer, minimum: 0, maximum: 3, default: 0, description: "EasySet-style u7 Math Function metadata." }
         note: { type: string }
-    VirtualIOConfigPoint:
-      allOf:
-        - $ref: "#/components/schemas/VirtualIOPoint"
-        - type: object
-          required: [id, direction, valueType, label, backingPoint, displayMin, displayMax]
     SystemStatus:
       type: object
       properties:
@@ -981,15 +977,15 @@ components:
         uptime_s: { type: integer }
         versions:
           type: object
-          description: Tách version từng thành phần (Contract Freeze 2026-06-11)
+          description: TÃ¡ch version tá»«ng thÃ nh pháº§n (Contract Freeze 2026-06-11)
           properties:
-            mcu_fw: { type: string, example: "1.0", description: "Từ HANDSHAKE_RESP/DIAG (iobus đọc)" }
+            mcu_fw: { type: string, example: "1.0", description: "Tá»« HANDSHAKE_RESP/DIAG (iobus Ä‘á»c)" }
             iobus: { type: string, example: "1.2.0" }
             core: { type: string, example: "1.1.0" }
             web: { type: string, example: "1.0.0" }
         iop:
           type: object
-          description: Nguồn = mkddc-iobus (đọc từ kx_io_shm metrics)
+          description: Nguá»“n = mkddc-iobus (Ä‘á»c tá»« kx_io_shm metrics)
           properties:
             status: { type: string, enum: [normal, fault, safe] }
             crc_errors: { type: integer }
@@ -998,14 +994,18 @@ components:
             last_io_resp_ms: { type: integer }
         scan:
           type: object
-          description: Nguồn = mkddc-core (đọc từ kx_plc_shm)
+          description: Nguá»“n = mkddc-core (Ä‘á»c tá»« kx_plc_shm)
           properties:
             count: { type: integer }
             overrun: { type: integer }
     PointCommandValue:
       oneOf:
+        - type: integer
         - type: number
         - type: boolean
+        - type: string
+          format: date-time
+        - type: string
     CommissioningTestRequest:
       type: object
       required: [value]
@@ -1039,8 +1039,8 @@ components:
       type: object
       required: [pass, deployed, errors]
       properties:
-        pass: { type: boolean, description: "Kết quả validate trước deploy" }
-        deployed: { type: boolean, description: "true nếu graph mới đã áp dụng atomically" }
+        pass: { type: boolean, description: "Káº¿t quáº£ validate trÆ°á»›c deploy" }
+        deployed: { type: boolean, description: "true náº¿u graph má»›i Ä‘Ã£ Ã¡p dá»¥ng atomically" }
         message: { type: string }
         activeRev:
           oneOf:
@@ -1195,7 +1195,7 @@ components:
         network: { $ref: "#/components/schemas/ConfigNetwork" }
         io: { $ref: "#/components/schemas/ConfigIO" }
         safe_state: { $ref: "#/components/schemas/ConfigSafeState" }
-        virtual_io: { $ref: "#/components/schemas/ConfigVirtualIO" }
+        virtual_points: { $ref: "#/components/schemas/ConfigVirtualPoints" }
         bacnet: { $ref: "#/components/schemas/ConfigBacnet" }
         fieldbus: { $ref: "#/components/schemas/ConfigFieldbus" }
         time: { $ref: "#/components/schemas/ConfigTime" }
@@ -1251,13 +1251,18 @@ components:
       properties:
         ui: { type: array, items: { type: object, additionalProperties: true } }
         ao: { type: array, items: { type: object, additionalProperties: true } }
-    ConfigVirtualIO:
+    ConfigVirtualPoints:
       type: object
+      description: >
+        Virtual Point capacity tiers: logEnabled=false <=256; logIntervalMs=1000
+        <=128; logIntervalMs=100 <=64; logIntervalMs=10 <=16 diagnostic
+        ring/non-permanent channels. logIntervalMs is required when
+        logEnabled=true; string/datetime VP cannot be logged.
       properties:
         items:
           type: array
-          maxItems: 55
-          items: { $ref: "#/components/schemas/VirtualIOConfigPoint" }
+          maxItems: 464
+          items: { $ref: "#/components/schemas/VirtualPoint" }
     ConfigSafeState:
       type: object
       properties:
@@ -1279,7 +1284,7 @@ components:
         timezone: { type: string }
         ntp_enabled: { type: boolean }
         ntp_servers: { type: array, items: { type: string } }
-        system_time: { type: string, format: date-time, description: "Cho phép set giờ thủ công" }
+        system_time: { type: string, format: date-time, description: "Cho phÃ©p set giá» thá»§ cÃ´ng" }
     TrendSample:
       type: object
       required: [time]
@@ -1297,7 +1302,11 @@ components:
         enabled: { type: boolean, default: true }
         pointIds:
           type: array
-          description: Points logged by the mkddc-web sampler.
+          description: >
+            Points logged by the mkddc-web sampler. Physical points use visible
+            UI/AO/DO IDs; VP entries must reference created enabled
+            logEnabled=true Virtual Points with boolean/integer/float signalType.
+            Raw/uncreated AV/BV/MSV slots are rejected/hidden; legacy AV aliases are accepted for VP references.
           items: { type: string }
           example: ["AI-01", "AI-02", "AO-01"]
         intervalS:
@@ -1317,11 +1326,11 @@ components:
       properties:
         kind:
           type: string
-          enum: [AO, DO, AV, BV, MSV]
+          enum: [AO, DO, VP]
         channel:
           type: integer
           minimum: 1
-          description: AO/DO 1..4, AV 1..32, BV 9..16 for virtual binary outputs, MSV-01 only for controller_operation_mode.
+          description: AO/DO 1..4; VP 1..464 only for created enabled writable integer/float Virtual Points.
         pointId:
           type: string
           example: "AO-01"
@@ -1329,8 +1338,9 @@ components:
       type: object
       required: [id, label, enabled, scheduleType]
       description: >
-        EasySet-style time schedule. Core executes active weekly intervals per target:
-        AO/DO through priority level 4 (`schedule`), AV/BV/MSV as virtual points with source `SCHEDULE`.
+        EasySet-style time schedule. Core executes AO/DO targets.
+        Backend executes created writable integer/float VP targets,
+        including controller_operation_mode.
         `holiday_period` is an all-day MM-DD override that suppresses normal weekly schedules while active.
       properties:
         id:
@@ -1389,8 +1399,10 @@ components:
         value:
           type: number
           description: >
-            controller_operation_mode targets MSV-01 with value 0..2; analog_output_value targets AO or VO analog backing AV17..32 with 0..100 percent; DO/fan targets DO or VO binary backing BV9..16 with 0 or 1;
-            control_loop_setpoint finite numeric value.
+            controller_operation_mode targets a created writable integer/float VP with value 0..2;
+            analog_output_value targets AO or created writable integer/float VP with 0..100 percent;
+            DO/fan targets DO with 0 or 1; control_loop_setpoint targets created writable
+            integer/float VP with a finite numeric value.
       oneOf:
         - title: Stored-only inactive row
           properties:
@@ -1481,16 +1493,16 @@ components:
       type: object
       required: [kind, channel, pointId]
       properties:
-        kind: { type: string, enum: [UI, AO, DO, VI, VO] }
+        kind: { type: string, enum: [UI, AO, DO, VP] }
         channel:
           type: integer
           minimum: 1
-          maximum: 64
-          description: UI 1..16, AO 1..4, DO 1..4, VI/VO channel is the VI-xx/VO-xx metadata channel; kind-specific max is validated by backend.
+          maximum: 464
+          description: UI 1..16, AO 1..4, DO 1..4; VP 1..464 must reference a created enabled integer/float Virtual Point.
         pointId:
           type: string
-          pattern: "^((UI|AO|DO)-[0-9]{2}|(AV|BV|MSV)-?[0-9]{1,2})$"
-          description: UI/AO/DO use their own point id; VI/VO store the AV/BV/MSV backing point id.
+          pattern: "^((UI|AO|DO)-[0-9]{2}|(VP|AV)-?[0-9]{1,3})$"
+          description: UI/AO/DO use their own point id; VP references a created Virtual Point; AV is accepted as a legacy alias.
           example: "UI-01"
     AlarmDisabledParams:
       type: object
@@ -1613,7 +1625,7 @@ components:
     ConfigPutResult:
       type: object
       required: [result, applied, reload]
-      description: "Ánh xạ SIGHUP/Restart: safe-state->sighup-core; device & io->sighup-iobus; bacnet & fieldbus->restart-iobus; network & time->system; (users->none, xử lý riêng ở /users)."
+      description: "Ãnh xáº¡ SIGHUP/Restart: safe-state->sighup-core; device & io->sighup-iobus; bacnet & fieldbus->restart-iobus; network & time->system; (users->none, xá»­ lÃ½ riÃªng á»Ÿ /users)."
       properties:
         result: { type: string, enum: [success, failed, accepted, rejected] }
         applied: { type: boolean }

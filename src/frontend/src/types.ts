@@ -21,6 +21,10 @@ export interface Point {
   fault?: boolean
   forced?: boolean
   sensorType?: string
+  signalType?: VirtualPointSignalType | string
+  writable?: boolean
+  logEnabled?: boolean
+  logIntervalMs?: number
   trend?: number[]
 }
 
@@ -111,7 +115,7 @@ export interface AlarmHistoryQuery {
   status?: string
 }
 
-export type AlarmSourceKind = 'UI' | 'AO' | 'DO' | 'VI' | 'VO'
+export type AlarmSourceKind = 'UI' | 'AO' | 'DO' | 'VP'
 export type AlarmType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type ActiveAlarmType = 0 | 1 | 3
 export type DeferredAlarmType = 2 | 4 | 5 | 6 | 7
@@ -270,7 +274,7 @@ export type ScheduleType =
   | 'digital_output_value'
   | 'holiday_period'
 
-export type ScheduleTargetKind = 'AO' | 'DO' | 'AV' | 'BV' | 'MSV' | 'HOL'
+export type ScheduleTargetKind = 'AO' | 'DO' | 'VP' | 'HOL'
 
 export interface ScheduleTarget {
   kind: ScheduleTargetKind
@@ -431,26 +435,27 @@ export interface OutputsConfig {
   do: DoConfig[]
 }
 
-export type VirtualIoDirection = 'input' | 'output'
-export type VirtualIoValueType = 'analog' | 'binary' | 'multistate'
+export type VirtualPointSignalType = 'boolean' | 'integer' | 'float' | 'string' | 'datetime'
 
-export interface VirtualIoPoint {
+export interface VirtualPoint {
   id: string
-  direction: VirtualIoDirection
-  valueType: VirtualIoValueType
   label: string
+  signalType: VirtualPointSignalType
   enabled: boolean
-  backingPoint: string
-  signalType: number
+  writable: boolean
+  logEnabled: boolean
+  logIntervalMs?: number
+  retentionS?: number
+  value?: number | boolean | string
   unit?: string
-  displayMin: number
-  displayMax: number
-  rangeMultiplier: number
-  sensorCal: number
-  mathFunction: number
-  connectionTimeoutS: number
-  manualValue?: number | boolean
+  displayMin?: number
+  displayMax?: number
+  rangeMultiplier?: number
+  filterSamples?: number
+  sensorCal?: number
+  mathFunction?: number
   note?: string
+  updatedAt?: string
 }
 
 export type UserParamKey =

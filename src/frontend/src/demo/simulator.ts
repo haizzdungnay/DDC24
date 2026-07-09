@@ -20,7 +20,7 @@ import type {
   TrendSample,
   UserParamsConfig,
   UserRow,
-  VirtualIoPoint
+  VirtualPoint
 } from '../types'
 import { DEVICE_DEFAULTS } from '../config'
 import { clamp, nowIso, pointNumber } from '../utils'
@@ -52,11 +52,10 @@ const names: Record<string, string> = {
   'AO-02': 'HEATING VALVE',
   'AO-03': 'COOLING VALVE',
   'AO-04': 'DAMPER POSITION',
-  AV1: 'ROOM SETPOINT',
-  AV17: 'VIRTUAL COOLING DEMAND',
-  BV1: 'OCCUPANCY REQUEST',
-  BV9: 'VIRTUAL ENABLE',
-  MSV2: 'VIRTUAL MODE'
+  VP1: 'ROOM SETPOINT',
+  VP2: 'OCCUPANCY REQUEST',
+  VP3: 'MODE INDEX',
+  VP17: 'VIRTUAL COOLING DEMAND'
 }
 
 const basePoints: Point[] = [
@@ -83,12 +82,7 @@ const basePoints: Point[] = [
   { id: 'AO-01', name: names['AO-01'], kind: 'AO', value: 62.5, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
   { id: 'AO-02', name: names['AO-02'], kind: 'AO', value: 35, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
   { id: 'AO-03', name: names['AO-03'], kind: 'AO', value: 12.5, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
-  { id: 'AO-04', name: names['AO-04'], kind: 'AO', value: 45, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
-  { id: 'AV1', name: names.AV1, kind: 'virtual', value: 24, unit: 'C', quality: 'good', source: 'Default', priority: 'Virtual input', updatedAt: nowIso(), sensorType: 'AV' },
-  { id: 'AV17', name: names.AV17, kind: 'virtual', value: 55, unit: '%', quality: 'good', source: 'Default', priority: 'Virtual output', updatedAt: nowIso(), sensorType: 'AV' },
-  { id: 'BV1', name: names.BV1, kind: 'virtual', value: true, unit: '', quality: 'good', source: 'Default', priority: 'Virtual input', updatedAt: nowIso(), sensorType: 'BV' },
-  { id: 'BV9', name: names.BV9, kind: 'virtual', value: false, unit: '', quality: 'good', source: 'Default', priority: 'Virtual output', updatedAt: nowIso(), sensorType: 'BV' },
-  { id: 'MSV2', name: names.MSV2, kind: 'virtual', value: 1, unit: '', quality: 'good', source: 'Default', priority: 'Virtual output', updatedAt: nowIso(), sensorType: 'MSV' }
+  { id: 'AO-04', name: names['AO-04'], kind: 'AO', value: 45, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' }
 ]
 
 let points: Point[] = basePoints.map((point) => ({ ...point, trend: makeTrend(pointNumber(point)) }))
@@ -294,9 +288,9 @@ function formatDemoDuration(choice: DemoAlarmDurationChoice): string {
   return choice.permanent ? 'permanent' : `${choice.durationS ?? 0}s`
 }
 
-export function forceDemoPoint(id: string, value: number | boolean, release = false) {
-  const target = canonicalDemoVirtualBackingPoint(id)
-  points = points.map((point) => canonicalDemoVirtualBackingPoint(point.id) === target ? { ...point, value, forced: !release, source: release ? 'Core' : 'Local manual', priority: release ? 'Auto' : 'Manual override', updatedAt: nowIso() } : point)
+export function forceDemoPoint(id: string, value: number | boolean | string, release = false) {
+  const target = canonicalDemoVirtualPointId(id)
+  points = points.map((point) => canonicalDemoVirtualPointId(point.id) === target ? { ...point, value, forced: !release, source: release ? 'Core' : 'Local manual', priority: release ? 'Auto' : 'Manual override', updatedAt: nowIso() } : point)
   return { result: 'accepted' as const, applied_value: value, active_source: release ? 'core' : 'local_manual' }
 }
 
@@ -347,9 +341,9 @@ export function getTrendSamples(pointIds: string[] = ['UI-01', 'UI-02', 'UI-03',
 }
 
 let demoSchedules: ScheduleRow[] = [
-  { id: 'SCH-001', label: 'Occupied mode', notes: 'Weekday morning startup.', enabled: true, scheduleType: 'controller_operation_mode', timeOfDay: '06:00', startTime: '06:00', endTime: '18:00', weekdays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'], target: { kind: 'MSV', channel: 1, pointId: 'MSV-01' }, value: 1 },
+  { id: 'SCH-001', label: 'Occupied mode', notes: 'Weekday morning startup.', enabled: true, scheduleType: 'controller_operation_mode', timeOfDay: '06:00', startTime: '06:00', endTime: '18:00', weekdays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'], target: { kind: 'VP', channel: 3, pointId: 'VP3' }, value: 1 },
   { id: 'SCH-002', label: 'Supply fan night off', notes: '', enabled: true, scheduleType: 'fan_state_value', timeOfDay: '18:00', startTime: '18:00', endTime: '23:00', weekdays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'], target: { kind: 'DO', channel: 1, pointId: 'DO-01' }, value: 0 },
-  { id: 'SCH-003', label: 'Cooling setpoint', notes: 'Weekend relaxed setpoint.', enabled: false, scheduleType: 'control_loop_setpoint', timeOfDay: '09:00', startTime: '09:00', endTime: '17:00', weekdays: ['saturday', 'sunday'], target: { kind: 'AV', channel: 1, pointId: 'AV-01' }, value: 26 }
+  { id: 'SCH-003', label: 'Cooling setpoint', notes: 'Weekend relaxed setpoint.', enabled: false, scheduleType: 'control_loop_setpoint', timeOfDay: '09:00', startTime: '09:00', endTime: '17:00', weekdays: ['saturday', 'sunday'], target: { kind: 'VP', channel: 1, pointId: 'VP1' }, value: 26 }
 ]
 
 export function getDemoSchedule(): ScheduleRow[] {
@@ -661,125 +655,138 @@ export function putDemoOutputs(config: OutputsConfig): void {
   }
 }
 
-let demoVirtualIo: VirtualIoPoint[] = [
-  { id: 'VI-01', direction: 'input', valueType: 'analog', label: 'Room Setpoint', enabled: true, backingPoint: 'AV1', signalType: 1, unit: 'C', displayMin: 0, displayMax: 50, rangeMultiplier: 0, sensorCal: 0, mathFunction: 0, connectionTimeoutS: 60, note: '' },
-  { id: 'VO-01', direction: 'output', valueType: 'analog', label: 'Cooling Demand', enabled: true, backingPoint: 'AV17', signalType: 1, unit: '%', displayMin: 0, displayMax: 100, rangeMultiplier: 0, sensorCal: 0, mathFunction: 0, connectionTimeoutS: 60, manualValue: 55, note: '' },
-  { id: 'VI-02', direction: 'input', valueType: 'binary', label: 'Occupancy Request', enabled: true, backingPoint: 'BV1', signalType: 4, unit: '', displayMin: 0, displayMax: 1, rangeMultiplier: 0, sensorCal: 0, mathFunction: 0, connectionTimeoutS: 60, note: '' },
-  { id: 'VO-02', direction: 'output', valueType: 'binary', label: 'Virtual Enable', enabled: true, backingPoint: 'BV9', signalType: 4, unit: '', displayMin: 0, displayMax: 1, rangeMultiplier: 0, sensorCal: 0, mathFunction: 0, connectionTimeoutS: 60, manualValue: false, note: '' }
+let demoVirtualPoints: VirtualPoint[] = [
+  { id: 'VP1', label: 'Room Setpoint', signalType: 'float', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 30 * 24 * 60 * 60, value: 24, unit: 'degC', displayMin: 16, displayMax: 30, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP2', label: 'Occupancy Request', signalType: 'boolean', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 7 * 24 * 60 * 60, value: true, unit: '', displayMin: 0, displayMax: 1, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP3', label: 'Mode Index', signalType: 'integer', enabled: true, writable: true, logEnabled: false, value: 1, unit: '', displayMin: 0, displayMax: 3, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP4', label: 'Mode Text', signalType: 'string', enabled: true, writable: true, logEnabled: false, value: 'auto', unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP5', label: 'Last Change', signalType: 'datetime', enabled: true, writable: false, logEnabled: false, value: nowIso(), unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() }
 ]
 
-export function getDemoVirtualIo(): VirtualIoPoint[] {
-  return demoVirtualIo.map((item) => ({ ...item }))
+syncDemoVirtualPoints()
+
+export function getDemoVirtualPoints(): VirtualPoint[] {
+  return demoVirtualPoints.map((item) => ({ ...item }))
 }
 
-export function putDemoVirtualIo(point: Partial<VirtualIoPoint>): VirtualIoPoint {
-  const direction = point.direction ?? 'input'
-  const valueType = point.valueType ?? 'analog'
-  const existingIndex = point.id ? demoVirtualIo.findIndex((item) => item.id === point.id) : -1
-  const current = existingIndex >= 0 ? demoVirtualIo[existingIndex] : undefined
-  const requestedBacking = canonicalDemoVirtualBackingPoint(point.backingPoint ?? current?.backingPoint ?? '')
-  const backingPoint = requestedBacking && demoVirtualBackingValid(direction, valueType, requestedBacking)
-    ? requestedBacking
-    : allocateDemoVirtualBacking(direction, valueType)
-  const requestedSignalType = point.signalType ?? current?.signalType
-  const next: VirtualIoPoint = {
-    id: point.id ?? nextDemoVirtualIoId(direction),
-    direction,
-    valueType,
-    label: point.label ?? (direction === 'input' ? 'Virtual Input' : 'Virtual Output'),
-    enabled: point.enabled ?? true,
-    backingPoint,
-    signalType: requestedSignalType !== undefined && demoVirtualSignalTypeValid(valueType, requestedSignalType) ? requestedSignalType : defaultDemoVirtualSignalType(valueType),
-    unit: point.unit ?? current?.unit ?? (valueType === 'analog' ? '%' : ''),
+export function putDemoVirtualPoint(point: Partial<VirtualPoint>): VirtualPoint {
+  const existingIndex = point.id ? demoVirtualPoints.findIndex((item) => canonicalDemoVirtualPointId(item.id) === canonicalDemoVirtualPointId(point.id ?? '')) : -1
+  const current = existingIndex >= 0 ? demoVirtualPoints[existingIndex] : undefined
+  const next: VirtualPoint = normalizeDemoVirtualPoint({
+    id: point.id ?? nextDemoVirtualPointId(),
+    label: point.label ?? current?.label ?? 'Virtual Point',
+    signalType: point.signalType ?? current?.signalType ?? 'float',
+    enabled: point.enabled ?? current?.enabled ?? true,
+    writable: point.writable ?? current?.writable ?? true,
+    logEnabled: point.logEnabled ?? current?.logEnabled ?? false,
+    logIntervalMs: point.logIntervalMs ?? current?.logIntervalMs,
+    retentionS: point.retentionS ?? current?.retentionS,
+    value: point.value ?? current?.value,
+    unit: point.unit ?? current?.unit ?? '',
     displayMin: point.displayMin ?? current?.displayMin ?? 0,
-    displayMax: point.displayMax ?? current?.displayMax ?? (valueType === 'binary' ? 1 : 100),
+    displayMax: point.displayMax ?? current?.displayMax ?? 100,
     rangeMultiplier: point.rangeMultiplier ?? current?.rangeMultiplier ?? 0,
+    filterSamples: point.filterSamples ?? current?.filterSamples ?? 3,
     sensorCal: point.sensorCal ?? current?.sensorCal ?? 0,
     mathFunction: point.mathFunction ?? current?.mathFunction ?? 0,
-    connectionTimeoutS: point.connectionTimeoutS ?? current?.connectionTimeoutS ?? 60,
-    manualValue: point.manualValue ?? current?.manualValue,
-    note: point.note ?? current?.note ?? ''
-  }
-  if (existingIndex >= 0) demoVirtualIo[existingIndex] = next
-  else demoVirtualIo = [...demoVirtualIo, next]
-  syncDemoVirtualPoints(current?.backingPoint)
+    note: point.note ?? current?.note ?? '',
+    updatedAt: nowIso()
+  })
+  if (existingIndex >= 0) demoVirtualPoints[existingIndex] = next
+  else demoVirtualPoints = [...demoVirtualPoints, next]
+  syncDemoVirtualPoints()
   return { ...next }
 }
 
-export function deleteDemoVirtualIo(id: string): void {
-  const removed = demoVirtualIo.find((item) => item.id === id)
-  demoVirtualIo = demoVirtualIo.filter((item) => item.id !== id)
-  syncDemoVirtualPoints(removed?.backingPoint)
+export function deleteDemoVirtualPoint(id: string): void {
+  demoVirtualPoints = demoVirtualPoints.filter((item) => canonicalDemoVirtualPointId(item.id) !== canonicalDemoVirtualPointId(id))
+  syncDemoVirtualPoints()
 }
 
-function nextDemoVirtualIoId(direction: VirtualIoPoint['direction']): string {
-  const prefix = direction === 'input' ? 'VI' : 'VO'
-  const max = demoVirtualIo.reduce((value, item) => {
-    const match = item.id.match(new RegExp(`^${prefix}-(\\d+)$`))
-    return match ? Math.max(value, Number(match[1])) : value
-  }, 0)
-  return `${prefix}-${String(max + 1).padStart(2, '0')}`
-}
-
-function allocateDemoVirtualBacking(direction: VirtualIoPoint['direction'], valueType: VirtualIoPoint['valueType']): string {
-  const used = new Set(demoVirtualIo.map((item) => canonicalDemoVirtualBackingPoint(item.backingPoint)))
-  const pool = demoVirtualBackingPool(direction, valueType)
-  return pool.find((point) => !used.has(point)) ?? pool[0]
-}
-
-function demoVirtualBackingValid(direction: VirtualIoPoint['direction'], valueType: VirtualIoPoint['valueType'], point: string): boolean {
-  return demoVirtualBackingPool(direction, valueType).includes(canonicalDemoVirtualBackingPoint(point))
-}
-
-function demoVirtualBackingPool(direction: VirtualIoPoint['direction'], valueType: VirtualIoPoint['valueType']): string[] {
-  if (valueType === 'binary') return demoBackingPool('BV', direction === 'input' ? 1 : 9, direction === 'input' ? 8 : 16)
-  if (valueType === 'multistate') return demoBackingPool('MSV', 2, 8)
-  return demoBackingPool('AV', direction === 'input' ? 1 : 17, direction === 'input' ? 16 : 32)
-}
-
-function defaultDemoVirtualSignalType(valueType: VirtualIoPoint['valueType']): number {
-  if (valueType === 'binary') return 4
-  if (valueType === 'multistate') return 3
-  return 1
-}
-
-function demoVirtualSignalTypeValid(valueType: VirtualIoPoint['valueType'], signalType: number): boolean {
-  if (valueType === 'binary') return signalType === 0 || signalType === 4 || signalType === 5
-  if (valueType === 'multistate') return signalType === 0 || signalType === 3
-  return signalType >= 0 && signalType <= 3
-}
-
-function demoBackingPool(prefix: string, start: number, end: number): string[] {
-  return Array.from({ length: end - start + 1 }, (_, index) => `${prefix}${start + index}`)
-}
-
-function syncDemoVirtualPoints(previousBacking?: string): void {
-  const wanted = new Set(demoVirtualIo.map((item) => canonicalDemoVirtualBackingPoint(item.backingPoint)))
-  const previous = previousBacking ? canonicalDemoVirtualBackingPoint(previousBacking) : ''
-  points = points
-    .filter((point) => previous === '' || canonicalDemoVirtualBackingPoint(point.id) !== previous || wanted.has(previous))
-    .map((point) => {
-      const item = demoVirtualIo.find((entry) => canonicalDemoVirtualBackingPoint(entry.backingPoint) === canonicalDemoVirtualBackingPoint(point.id))
-      if (!item) return point
-      return { ...point, id: canonicalDemoVirtualBackingPoint(item.backingPoint), name: item.label, unit: item.unit, priority: item.direction === 'input' ? 'Virtual input' : 'Virtual output', sensorType: pointTypeFromBacking(item.backingPoint) }
-    })
-  for (const item of demoVirtualIo) {
-    const backingPoint = canonicalDemoVirtualBackingPoint(item.backingPoint)
-    if (points.some((point) => canonicalDemoVirtualBackingPoint(point.id) === backingPoint)) continue
-    points = [...points, { id: backingPoint, name: item.label, kind: 'virtual', value: item.manualValue ?? 0, unit: item.unit, quality: 'good', source: 'Default', priority: item.direction === 'input' ? 'Virtual input' : 'Virtual output', updatedAt: nowIso(), sensorType: pointTypeFromBacking(backingPoint), trend: makeTrend(Number(item.manualValue ?? 0)) }]
+function normalizeDemoVirtualPoint(point: VirtualPoint): VirtualPoint {
+  const id = canonicalDemoVirtualPointId(point.id)
+  const signalType = demoSignalTypes.includes(point.signalType) ? point.signalType : 'float'
+  return {
+    ...point,
+    id,
+    signalType,
+    unit: normalizeDemoVirtualUnit(point.unit),
+    displayMin: clampDemoNumber(point.displayMin, -50, 205, 0),
+    displayMax: clampDemoNumber(point.displayMax, -50, 205, 100),
+    rangeMultiplier: clampDemoInteger(point.rangeMultiplier, 0, 5, 0),
+    filterSamples: clampDemoInteger(point.filterSamples, 0, 100, 3),
+    sensorCal: clampDemoNumber(point.sensorCal, -12.7, 12.8, 0),
+    mathFunction: clampDemoInteger(point.mathFunction, 0, 3, 0),
+    value: normalizeDemoVirtualValue(signalType, point.value),
+    logIntervalMs: point.logEnabled ? point.logIntervalMs ?? 1000 : undefined,
+    retentionS: point.logEnabled ? point.retentionS ?? defaultDemoRetention(point.logIntervalMs ?? 1000) : undefined
   }
 }
 
-function canonicalDemoVirtualBackingPoint(point: string): string {
-  const match = point.trim().toUpperCase().match(/^(AV|BV|MSV)[-_]?0*(\d+)$/)
-  return match ? `${match[1]}${Number(match[2])}` : point.trim().toUpperCase()
+function normalizeDemoVirtualUnit(unit?: string): string {
+  const text = String(unit ?? '').toLowerCase()
+  if (text === 'percent' || text === '%' || text === '%rh') return 'percent'
+  if (text === 'degc' || text === 'degf' || text === 'c' || text === 'f') return 'degC'
+  if (text === 'pa' || text === 'pascal') return 'Pa'
+  if (text === 'ppm') return 'ppm'
+  return ''
 }
 
-function pointTypeFromBacking(point: string): string {
-  const canonical = canonicalDemoVirtualBackingPoint(point)
-  if (canonical.startsWith('BV')) return 'BV'
-  if (canonical.startsWith('MSV')) return 'MSV'
-  return 'AV'
+function clampDemoNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const next = Number(value)
+  const finite = Number.isFinite(next) ? next : fallback
+  return Math.min(max, Math.max(min, finite))
+}
+
+function clampDemoInteger(value: unknown, min: number, max: number, fallback: number): number {
+  return Math.round(clampDemoNumber(value, min, max, fallback))
+}
+
+const demoSignalTypes: VirtualPoint['signalType'][] = ['boolean', 'integer', 'float', 'string', 'datetime']
+
+function normalizeDemoVirtualValue(signalType: VirtualPoint['signalType'], value: unknown): number | boolean | string {
+  if (signalType === 'boolean') return value === true || value === 'true' || value === 1
+  if (signalType === 'integer') return Math.trunc(Number(value ?? 0))
+  if (signalType === 'float') return Number(value ?? 0)
+  if (signalType === 'datetime') {
+    const text = String(value ?? nowIso())
+    return Number.isNaN(new Date(text).getTime()) ? nowIso() : text
+  }
+  return String(value ?? '')
+}
+
+function defaultDemoRetention(intervalMs: number): number {
+  if (intervalMs === 10) return 60 * 60
+  if (intervalMs === 100) return 7 * 24 * 60 * 60
+  return 30 * 24 * 60 * 60
+}
+
+function nextDemoVirtualPointId(): string {
+  const used = new Set(demoVirtualPoints.map((item) => Number(canonicalDemoVirtualPointId(item.id).slice(2))))
+  for (let channel = 1; channel <= 464; channel += 1) {
+    if (!used.has(channel)) return `VP${channel}`
+  }
+  return 'VP464'
+}
+
+function syncDemoVirtualPoints(): void {
+  const wanted = new Set(demoVirtualPoints.filter((item) => item.enabled).map((item) => canonicalDemoVirtualPointId(item.id)))
+  points = points.filter((point) => point.kind !== 'virtual' || wanted.has(canonicalDemoVirtualPointId(point.id)))
+  for (const item of demoVirtualPoints) {
+    if (!item.enabled) continue
+    const id = canonicalDemoVirtualPointId(item.id)
+    const value = normalizeDemoVirtualValue(item.signalType, item.value)
+    const trend = typeof value === 'number' || typeof value === 'boolean' ? makeTrend(typeof value === 'boolean' ? Number(value) : value) : undefined
+    const point: Point = { id, name: item.label, kind: 'virtual', value, unit: item.unit, quality: 'good', source: 'Backend', priority: item.writable ? 'Writable' : 'Read only', updatedAt: item.updatedAt ?? nowIso(), sensorType: 'VP', signalType: item.signalType, writable: item.writable, logEnabled: item.logEnabled, logIntervalMs: item.logIntervalMs, ...(trend ? { trend } : {}) }
+    const index = points.findIndex((entry) => canonicalDemoVirtualPointId(entry.id) === id)
+    if (index >= 0) points[index] = { ...points[index], ...point }
+    else points = [...points, point]
+  }
+}
+
+function canonicalDemoVirtualPointId(point: string): string {
+  const match = point.trim().toUpperCase().match(/^(?:VP|AV)[-_]?0*(\d+)$/)
+  return match ? `VP${Number(match[1])}` : point.trim().toUpperCase()
 }
 
 const defaultUserParams: UserParamsConfig = {

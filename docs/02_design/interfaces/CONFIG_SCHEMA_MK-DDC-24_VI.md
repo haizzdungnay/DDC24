@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 1.6 | 2026-07-08 (§4a: alarm sources hỗ trợ VI/VO qua backing AV/BV/MSV) · 1.5 | 2026-07-02 (§4a: thêm `alarm_settings.conf` entity-list per ADR-013) · 1.4 | 2026-06-30 (§3: ao[] mở rộng per ADR-012 — thêm name/units/min_pv/max_pv; §3.1: bảng sensor_type→BACnet Units enum đầy đủ per ADR-011) · 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.7 | 2026-07-09 (§4: thêm `virtual_points.conf` backend-owned VP public IDs; bỏ VI/VO) · 1.6 | 2026-07-08 (§4a: alarm sources hỗ trợ VI/VO qua backing AV/BV/MSV) · 1.5 | 2026-07-02 (§4a: thêm `alarm_settings.conf` entity-list per ADR-013) · 1.4 | 2026-06-30 (§3: ao[] mở rộng per ADR-012 — thêm name/units/min_pv/max_pv; §3.1: bảng sensor_type→BACnet Units enum đầy đủ per ADR-011) · 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -15,6 +15,7 @@
 | `network.conf` | mkddc-web | mkddc-web (áp hệ thống) | apply ngay (netplan/networkd) |
 | `io_config.conf` | mkddc-web | **mkddc-iobus** (scale + SET_AO_CFG) | SIGHUP iobus (re-handshake AO cfg) |
 | `io_safe_state.conf` | mkddc-web | **mkddc-core** (relinquish default + safe-state) | SIGHUP core |
+| `virtual_points.conf` | mkddc-web | **mkddc-web** (points overlay, trends, VP alarms/schedules) | apply ngay |
 | `alarm_settings.conf` | mkddc-web | **mkddc-core** (Phase 2 loader/evaluator) | SIGHUP core after Phase 2; Phase 1 is contract-only |
 | `bacnet.conf` | mkddc-web | mkddc-iobus | restart iobus |
 | `fieldbus.conf` | mkddc-web | mkddc-iobus | restart iobus |
@@ -154,6 +155,65 @@
 > ở cả 3 lớp (MCU/iobus/core), KHÔNG đổi theo file này — config sai không thể làm
 > hệ mất đường về safe. Loader: `services/core/safe_state_config.*` (fail-fast khi JSON hỏng).
 
+## 4. `virtual_points.conf` — backend-owned Virtual Points
+
+`virtual_points.conf` is the only source of truth for created VP points. Uncreated
+AV/BV/MSV slots are not shown by `/points`, Monitoring, Trends, or history.
+Legacy `AV` IDs are accepted as aliases and normalized to `VP`.
+
+**Capacity:**
+- Total VP: 464.
+- Non-logged VP: 256.
+- Logged VP: 128 at 1s.
+- Fast trend VP: 64 at 100ms.
+- Ultra-fast diagnostic VP: 16 at 10ms; ring/diagnostic retention only.
+
+**Schema (rút gọn):**
+```json
+{
+  "type": "object",
+  "required": ["items"],
+  "properties": {
+    "items": {
+      "type": "array",
+      "maxItems": 464,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "signalType", "enabled", "writable", "logEnabled"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^(VP|AV)[-_]?0*([1-9]|[1-9][0-9]|[1-3][0-9]{2}|4[0-5][0-9]|46[0-4])$"},
+          "label": {"type": "string", "maxLength": 64},
+          "signalType": {"type": "string", "enum": ["boolean", "integer", "float", "string", "datetime"]},
+          "enabled": {"type": "boolean"},
+          "writable": {"type": "boolean"},
+          "logEnabled": {"type": "boolean"},
+          "logIntervalMs": {"type": "integer", "enum": [1000, 100, 10]},
+          "retentionS": {"type": "integer", "minimum": 0},
+          "value": {},
+          "unit": {"type": "string", "enum": ["", "percent", "degC", "Pa", "ppm"]},
+          "displayMin": {"type": "number", "minimum": -50, "maximum": 205, "default": 0},
+          "displayMax": {"type": "number", "minimum": -50, "maximum": 205, "default": 100},
+          "rangeMultiplier": {"type": "integer", "minimum": 0, "maximum": 5, "default": 0},
+          "filterSamples": {"type": "integer", "minimum": 0, "maximum": 100, "default": 3},
+          "sensorCal": {"type": "number", "minimum": -12.7, "maximum": 12.8, "default": 0},
+          "mathFunction": {"type": "integer", "minimum": 0, "maximum": 3, "default": 0},
+          "note": {"type": "string"}
+        }
+      }
+    }
+  }
+}
+```
+
+**Validation / semantics:**
+- `signalType=string|datetime` cannot be logged or charted.
+- Trends/history list only created, enabled, `logEnabled=true` VP with `boolean|integer|float`.
+- Schedules can write only created, enabled, writable `integer|float` VP.
+- Alarms can source only created, enabled numeric `integer|float` VP.
+- Tier limits are enforced independently: `logEnabled=false <= 256`, `1000ms <= 128`, `100ms <= 64`, `10ms <= 16`.
+- 10ms logging retention is capped to diagnostic/ring duration; do not use permanent SD-card logging for 10ms data.
+- UI authoring mirrors the existing Inputs Wizard for metadata: `u0=signalType`, `u1=displayMin`, `u2=displayMax`, `u3=rangeMultiplier`, `u4=unit`, `u5=filterSamples`, `u6=sensorCal`, `u7=mathFunction`. Units must come from the fixed EasySet list, not free text.
+
 ## 4a. `alarm_settings.conf` — alarm entity list (ADR-013)
 
 > Phase 1 contract-only: `mkddc-web` đã có đường lưu file, nhưng `mkddc-core` hiện chưa load/evaluate file này. Phase 2/3 phải thêm loader boot/SIGHUP và expand entity→per-source branch trước khi alarm runtime active.
@@ -179,9 +239,9 @@
           "type": "object",
           "required": ["kind", "channel", "pointId"],
           "properties": {
-            "kind": {"type": "string", "enum": ["UI", "AO", "DO", "VI", "VO"]},
+            "kind": {"type": "string", "enum": ["UI", "AO", "DO", "VP"]},
             "channel": {"type": "integer", "minimum": 1},
-            "pointId": {"type": "string", "pattern": "^((UI|AO|DO)-[0-9]{2}|(AV|BV|MSV)-?[0-9]{1,2})$"}
+            "pointId": {"type": "string", "pattern": "^((UI|AO|DO)-[0-9]{2}|(VP|AV)-?[0-9]{1,3})$"}
           }
         }
       },
@@ -242,7 +302,7 @@
 
 **Validation / semantics:**
 
-- `id` unique trong file; `sources[].pointId` phải khớp `kind` và `channel`. Với `kind=VI|VO`, `pointId` là backing point `AV/BV/MSV` của biến ảo.
+- `id` unique trong file; `sources[].pointId` phải khớp `kind` và `channel`. Với `kind=VP`, `pointId` phải trỏ tới created Virtual Point `VP1..VP464`.
 - `alarmType=1`: khi `enabled=true`, validate `hh >= h >= l >= ll`.
 - `alarmType=3`: `runtimeHours >= 0`.
 - Chỉ ACTIVE type (`0`, `1`, `3`) được `enabled=true` cho tới khi core hook của type DEFERRED được triển khai.

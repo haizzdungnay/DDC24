@@ -42,38 +42,40 @@ type ConfigTime struct {
 	SystemTime string   `json:"system_time"`
 }
 
-type ConfigVirtualIO struct {
-	Items []VirtualIOPoint `json:"items"`
+type ConfigVirtualPoints struct {
+	Items []VirtualPoint `json:"items"`
 }
 
-type VirtualIOPoint struct {
-	ID                 string  `json:"id"`
-	Direction          string  `json:"direction"`
-	ValueType          string  `json:"valueType"`
-	Label              string  `json:"label"`
-	Enabled            bool    `json:"enabled"`
-	BackingPoint       string  `json:"backingPoint"`
-	SignalType         int     `json:"signalType"`
-	Unit               string  `json:"unit,omitempty"`
-	DisplayMin         float64 `json:"displayMin"`
-	DisplayMax         float64 `json:"displayMax"`
-	RangeMultiplier    int     `json:"rangeMultiplier"`
-	SensorCal          float64 `json:"sensorCal"`
-	MathFunction       int     `json:"mathFunction"`
-	ConnectionTimeoutS int     `json:"connectionTimeoutS"`
-	ManualValue        any     `json:"manualValue,omitempty"`
-	Note               string  `json:"note,omitempty"`
+type VirtualPoint struct {
+	ID              string  `json:"id"`
+	Label           string  `json:"label"`
+	SignalType      string  `json:"signalType"`
+	Enabled         bool    `json:"enabled"`
+	Writable        bool    `json:"writable"`
+	LogEnabled      bool    `json:"logEnabled"`
+	LogIntervalMs   *int    `json:"logIntervalMs,omitempty"`
+	RetentionS      int     `json:"retentionS,omitempty"`
+	Value           any     `json:"value,omitempty"`
+	Unit            string  `json:"unit,omitempty"`
+	DisplayMin      float64 `json:"displayMin,omitempty"`
+	DisplayMax      float64 `json:"displayMax,omitempty"`
+	RangeMultiplier int     `json:"rangeMultiplier,omitempty"`
+	FilterSamples   int     `json:"filterSamples,omitempty"`
+	SensorCal       float64 `json:"sensorCal,omitempty"`
+	MathFunction    int     `json:"mathFunction,omitempty"`
+	Note            string  `json:"note,omitempty"`
+	UpdatedAt       string  `json:"updatedAt,omitempty"`
 }
 
 type SystemConfig struct {
-	Device    ConfigDevice    `json:"device"`
-	Network   ConfigNetwork   `json:"network"`
-	IO        ConfigIO        `json:"io"`
-	SafeState ConfigSafeState `json:"safe_state"`
-	VirtualIO ConfigVirtualIO `json:"virtual_io"`
-	Bacnet    ConfigBacnet    `json:"bacnet"`
-	Fieldbus  ConfigFieldbus  `json:"fieldbus"`
-	Time      ConfigTime      `json:"time"`
+	Device        ConfigDevice        `json:"device"`
+	Network       ConfigNetwork       `json:"network"`
+	IO            ConfigIO            `json:"io"`
+	SafeState     ConfigSafeState     `json:"safe_state"`
+	VirtualPoints ConfigVirtualPoints `json:"virtual_points"`
+	Bacnet        ConfigBacnet        `json:"bacnet"`
+	Fieldbus      ConfigFieldbus      `json:"fieldbus"`
+	Time          ConfigTime          `json:"time"`
 }
 
 type ConfigPutResult struct {
@@ -187,19 +189,23 @@ type ChangePasswordRequest struct {
 }
 
 type PointDTO struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Kind      string   `json:"kind"`
-	Value     any      `json:"value"`
-	Unit      string   `json:"unit,omitempty"`
-	Raw       *float32 `json:"raw,omitempty"`
-	RawUnit   string   `json:"rawUnit,omitempty"`
-	Quality   string   `json:"quality"`
-	Source    string   `json:"source"`
-	Priority  string   `json:"priority,omitempty"`
-	UpdatedAt string   `json:"updatedAt"`
-	Fault     bool     `json:"fault,omitempty"`
-	Forced    bool     `json:"forced,omitempty"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Kind          string   `json:"kind"`
+	Value         any      `json:"value"`
+	Unit          string   `json:"unit,omitempty"`
+	Raw           *float32 `json:"raw,omitempty"`
+	RawUnit       string   `json:"rawUnit,omitempty"`
+	Quality       string   `json:"quality"`
+	Source        string   `json:"source"`
+	Priority      string   `json:"priority,omitempty"`
+	UpdatedAt     string   `json:"updatedAt"`
+	Fault         bool     `json:"fault,omitempty"`
+	Forced        bool     `json:"forced,omitempty"`
+	SignalType    string   `json:"signalType,omitempty"`
+	Writable      bool     `json:"writable,omitempty"`
+	LogEnabled    bool     `json:"logEnabled,omitempty"`
+	LogIntervalMs *int     `json:"logIntervalMs,omitempty"`
 }
 
 // AlarmDTO mirrors FE Alarm (types.ts).
