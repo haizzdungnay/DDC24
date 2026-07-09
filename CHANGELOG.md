@@ -8,7 +8,7 @@
 
 ## [Unreleased]
 ### Fixed - Trivy PR scan scope (2026-07-10)
-- ci(security): stopped the Trivy PR workflow from generating and scanning the GitHub runner Debian package list, kept the scan focused on repository dependency manifests, and disabled stale Trivy DB cache restore for PR scans so CI does not fail on unrelated hosted-runner OS CVEs or outdated vulnerability metadata. Verification: local `trivy fs --severity CRITICAL,HIGH --format table --exit-code 1 .` reported 0 npm/go vulnerabilities; GitHub PR #50 rerun pending.
+- ci(security): stopped the Trivy PR workflow from generating and scanning the GitHub runner Debian package list, kept the scan focused on repository dependency manifests, disabled stale Trivy DB cache restore, and limited Trivy to vulnerability scanning so CI does not fail on unrelated hosted-runner OS CVEs, outdated vulnerability metadata, or ephemeral checkout secrets already covered by Gitleaks. Verification: local `trivy fs --scanners vuln --severity CRITICAL,HIGH --format table --exit-code 1 .` reported 0 npm/go vulnerabilities on the PR #50 merge tree; GitHub PR #50 rerun pending.
 
 ### Fixed - Virtual Point PR CI call-site sync (2026-07-10)
 - web/fe(virtual-points): completed the remaining Virtual I/O to Virtual Point call-site migration for PR #49 so backend config, alarm, point, trend, scheduler, websocket, and frontend API/page paths compile against `virtual_points.conf`, `/api/v1/virtual-points`, and canonical `VP` IDs. Verification: `go test -count=1 -run TestVirtualPoint .` pass; `go test -count=1 ./...` pass in `web/backend`; `go build ./...` pass in `web/backend`; `npm run lint` pass; `npm run typecheck` pass; `npm run build` pass; `npx vite build --emptyOutDir=false` pass; `git diff --check` pass.
