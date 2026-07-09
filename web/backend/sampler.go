@@ -91,9 +91,12 @@ func (s *Sampler) sample(ctx context.Context, cfg TrendConfig) {
 		wanted[id] = struct{}{}
 	}
 	autoAll := len(wanted) == 0
-	ts := time.Now().UTC().Unix()
+	ts := time.Now().UTC().UnixMilli()
 	samples := make([]Sample, 0, len(points))
 	for _, point := range points {
+		if point.Kind == "virtual" {
+			continue
+		}
 		if !autoAll {
 			if _, ok := wanted[point.ID]; !ok {
 				continue
@@ -121,6 +124,11 @@ func (s *Sampler) sample(ctx context.Context, cfg TrendConfig) {
 
 func numericPointValue(value any) (float64, bool) {
 	switch typed := value.(type) {
+	case bool:
+		if typed {
+			return 1, true
+		}
+		return 0, true
 	case float64:
 		return typed, true
 	case float32:

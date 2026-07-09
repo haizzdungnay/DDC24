@@ -8,9 +8,8 @@ export function cn(...items: Array<string | false | null | undefined>): string {
 
 export function normalizeKind(value: unknown): PointKind {
   const raw = String(value ?? '').toUpperCase()
-  if (raw === 'UI' || raw === 'AI' || raw === 'DI' || raw === 'BI' || raw === 'AV') return 'UI'
+  if (raw === 'UI' || raw === 'AI' || raw === 'DI' || raw === 'BI') return 'UI'
   if (raw === 'BO') return 'DO'
-  if (raw === 'BV') return 'DO'
   if (raw === 'AO' || raw === 'DO') return raw
   return 'virtual'
 }
@@ -68,6 +67,11 @@ export function pointNumber(point: Point): number {
   if (typeof point.value === 'boolean') return point.value ? 1 : 0
   const parsed = Number(point.value)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+export function canonicalVirtualPointId(id: string): string {
+  const match = id.trim().toUpperCase().match(/^(?:VP|AV)[-_]?0*(\d+)$/)
+  return match ? `VP${Number(match[1])}` : id.trim().toUpperCase()
 }
 
 export function isFreshIso(value: string | null | undefined, maxAgeMs: number): boolean {

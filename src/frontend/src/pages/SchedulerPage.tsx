@@ -7,7 +7,7 @@ import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
 import { useToast } from '../components/Toast'
 import { useI18n } from '../i18n'
-import type { ScheduleRow, ScheduleTarget, ScheduleType, VirtualIoPoint } from '../types'
+import type { ScheduleRow, ScheduleTarget, ScheduleType, VirtualPoint } from '../types'
 import { cn } from '../utils'
 
 type ViewMode = 'summary' | 'wizard' | 'parameters'
@@ -38,7 +38,7 @@ export function SchedulerPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [virtualIo, setVirtualIo] = useState<VirtualIoPoint[]>([])
+  const [virtualPoints, setVirtualPoints] = useState<VirtualPoint[]>([])
 
   useEffect(() => { void reloadSchedules() }, [])
 
@@ -49,8 +49,8 @@ export function SchedulerPage() {
   async function reloadSchedules() {
     setLoading(true)
     try {
-      const [items, virtualItems] = await Promise.all([apiClient.getSchedules(), apiClient.getVirtualIo()])
-      setVirtualIo(virtualItems)
+      const [items, virtualItems] = await Promise.all([apiClient.getSchedules(), apiClient.getVirtualPoints()])
+      setVirtualPoints(virtualItems)
       setRows(items.map((item) => normalizeSchedulePatch(item, virtualItems)))
       setSelectedId((current) => items.some((item) => item.id === current) ? current : items[0]?.id ?? '')
     } catch (error) {
@@ -108,7 +108,7 @@ export function SchedulerPage() {
 
   function updateSelected(patch: Partial<ScheduleRow>) {
     if (!selected) return
-    const next = normalizeSchedulePatch({ ...selected, ...patch }, virtualIo)
+    const next = normalizeSchedulePatch({ ...selected, ...patch }, virtualPoints)
     setRows((current) => current.map((row) => row.id === selected.id ? next : row))
     if (patch.id !== undefined) setSelectedId(next.id)
   }
@@ -174,7 +174,7 @@ export function SchedulerPage() {
               {viewMode === 'wizard' && (
                 <SchedulerWizardPanel
                   row={selected}
-                  virtualIo={virtualIo}
+                  virtualPoints={virtualPoints}
                   step={currentWizardStep}
                   steps={wizardSteps}
                   stepIndex={Math.min(wizardIndex, wizardSteps.length - 1)}
@@ -184,10 +184,10 @@ export function SchedulerPage() {
                   onNext={() => setWizardIndex((index) => Math.min(index + 1, wizardSteps.length - 1))}
                   onFinish={requestSave}
                   onSavePreset={() => savePreset(selected, toast, pick)}
-                  onLoadPreset={() => loadPreset(updateSelected, toast, pick, virtualIo)}
+                  onLoadPreset={() => loadPreset(updateSelected, toast, pick, virtualPoints)}
                 />
               )}
-              {viewMode === 'parameters' && <ParametersPanel row={selected} virtualIo={virtualIo} onChange={updateSelected} />}
+              {viewMode === 'parameters' && <ParametersPanel row={selected} virtualPoints={virtualPoints} onChange={updateSelected} />}
               {validation && <div className="rounded-[var(--radius)] border border-[rgba(232,181,0,0.45)] bg-[rgba(232,181,0,0.10)] p-3 text-sm text-[var(--c-warn-fg)]">{validation}</div>}
             </div>
           ) : (
@@ -258,7 +258,7 @@ function SummaryPanel({ row, onChange }: { row: ScheduleRow; onChange: (patch: P
 
 function SchedulerWizardPanel({
   row,
-  virtualIo,
+  virtualPoints,
   step,
   steps,
   stepIndex,
@@ -271,7 +271,7 @@ function SchedulerWizardPanel({
   onLoadPreset
 }: {
   row: ScheduleRow
-  virtualIo: VirtualIoPoint[]
+  virtualPoints: VirtualPoint[]
   step: WizardStep
   steps: WizardStep[]
   stepIndex: number
@@ -284,7 +284,7 @@ function SchedulerWizardPanel({
   onLoadPreset: () => void
 }) {
   const { pick, t } = useI18n()
-  const targets = targetOptions(row.scheduleType, virtualIo)
+  const targets = targetOptions(row.scheduleType, virtualPoints)
   const bounds = valueBounds(row.scheduleType)
   const atEnd = stepIndex === steps.length - 1
 
@@ -323,7 +323,7 @@ function SchedulerWizardPanel({
 
       <div className="min-h-44">
         {step === 'type' && (
-          <ScheduleTypeField value={row.scheduleType} onChange={(value) => onChange(scheduleTypePatch(value, row, virtualIo))} />
+          <ScheduleTypeField value={row.scheduleType} onChange={(value) => onChange(scheduleTypePatch(value, row, virtualPoints))} />
         )}
         {step === 'time' && (
           row.scheduleType === 'holiday_period' ? (
@@ -411,13 +411,13 @@ function SchedulerWizardPanel({
   )
 }
 
-function ParametersPanel({ row, virtualIo, onChange }: { row: ScheduleRow; virtualIo: VirtualIoPoint[]; onChange: (patch: Partial<ScheduleRow>) => void }) {
-  const targets = targetOptions(row.scheduleType, virtualIo)
+function ParametersPanel({ row, virtualPoints, onChange }: { row: ScheduleRow; virtualPoints: VirtualPoint[]; onChange: (patch: Partial<ScheduleRow>) => void }) {
+  const targets = targetOptions(row.scheduleType, virtualPoints)
   const rows: { register: string; name: React.ReactNode; control: React.ReactNode }[] = [
     { register: 'TSx 0', name: 'ID', control: <input className={controlClass()} value={row.id} onChange={(event) => onChange({ id: event.target.value.trim().toUpperCase() })} /> },
     { register: 'TSx 1', name: 'Label', control: <input className={controlClass()} value={row.label} onChange={(event) => onChange({ label: event.target.value })} /> },
     { register: 'TSx 2', name: 'Enabled', control: <select className={controlClass()} value={row.enabled ? 1 : 0} onChange={(event) => onChange({ enabled: event.target.value === '1' })}><option value={1}>1</option><option value={0}>0</option></select> },
-    { register: 'TSx 3', name: <ScheduleTypeNameBadge type={row.scheduleType} />, control: <select className={controlClass()} value={row.scheduleType} onChange={(event) => onChange(scheduleTypePatch(event.target.value as ScheduleType, row, virtualIo))}>{scheduleTypes.map((type) => <option key={type} value={type}>{scheduleTypeLabel(type)}</option>)}</select> },
+    { register: 'TSx 3', name: <ScheduleTypeNameBadge type={row.scheduleType} />, control: <select className={controlClass()} value={row.scheduleType} onChange={(event) => onChange(scheduleTypePatch(event.target.value as ScheduleType, row, virtualPoints))}>{scheduleTypes.map((type) => <option key={type} value={type}>{scheduleTypeLabel(type)}</option>)}</select> },
     { register: 'TSx 4', name: 'Start Time', control: <input className={controlClass()} type="time" value={row.startTime} disabled={row.scheduleType === 'holiday_period'} onChange={(event) => onChange({ startTime: event.target.value, timeOfDay: event.target.value })} /> },
     { register: 'TSx 5', name: 'End Time', control: <input className={controlClass()} type="time" value={row.endTime} disabled={row.scheduleType === 'holiday_period'} onChange={(event) => onChange({ endTime: event.target.value })} /> },
     { register: 'TSx 6', name: 'Weekdays', control: <select className={controlClass()} value="" disabled={row.scheduleType === 'holiday_period'} onChange={(event) => event.target.value && onChange({ weekdays: toggleWeekday(row.weekdays, event.target.value) })}><option value="">{formatWeekdays(row.weekdays) || '--'}</option>{weekdays.map((day) => <option key={day.value} value={day.value}>{day.label}</option>)}</select> },
@@ -474,12 +474,12 @@ function ModeButton({ active, icon, label, onClick }: { active: boolean; icon: R
   )
 }
 
-function targetOptions(type: ScheduleType, virtualIo: VirtualIoPoint[] = []): TargetOption[] {
-  if (type === 'controller_operation_mode') return numbered('MSV', 1, 'virtual')
-  if (type === 'control_loop_setpoint') return mergeTargets(numbered('AV', 32, 'virtual'), virtualTargetOptions(virtualIo, 'analog'))
-  if (type === 'analog_output_value') return mergeTargets(numbered('AO', 4, 'wired'), virtualTargetOptions(virtualIo, 'analog'))
-  if (type === 'fan_state_value') return mergeTargets(numbered('DO', 4, 'wired'), virtualTargetOptions(virtualIo, 'binary'))
-  if (type === 'digital_output_value') return mergeTargets(numbered('DO', 4, 'wired'), virtualTargetOptions(virtualIo, 'binary'))
+function targetOptions(type: ScheduleType, virtualPoints: VirtualPoint[] = []): TargetOption[] {
+  if (type === 'controller_operation_mode') return virtualTargetOptions(virtualPoints)
+  if (type === 'control_loop_setpoint') return virtualTargetOptions(virtualPoints)
+  if (type === 'analog_output_value') return mergeTargets(numbered('AO', 4, 'wired'), virtualTargetOptions(virtualPoints))
+  if (type === 'fan_state_value') return numbered('DO', 4, 'wired')
+  if (type === 'digital_output_value') return numbered('DO', 4, 'wired')
   return []
 }
 
@@ -490,12 +490,12 @@ function numbered(prefix: string, count: number, capability: string): TargetOpti
   })
 }
 
-function virtualTargetOptions(virtualIo: VirtualIoPoint[], valueType: VirtualIoPoint['valueType']): TargetOption[] {
-  return virtualIo
-    .filter((item) => item.direction === 'output' && item.valueType === valueType)
+function virtualTargetOptions(virtualPoints: VirtualPoint[]): TargetOption[] {
+  return virtualPoints
+    .filter(isSchedulableVirtualPoint)
     .map((item) => {
-      const value = dashedVirtualPointId(item.backingPoint)
-      return { value, label: `${value} (${item.id} ${item.label || 'Virtual output'})` }
+      const value = dashedVirtualPointId(item.id)
+      return { value, label: `${value} (${item.label || 'Virtual Point'})` }
     })
     .filter((item) => item.value !== '')
 }
@@ -506,10 +506,11 @@ function mergeTargets(base: TargetOption[], extra: TargetOption[]): TargetOption
   return [...byValue.values()]
 }
 
-function normalizeSchedulePatch(row: ScheduleRow, virtualIo: VirtualIoPoint[] = []): ScheduleRow {
-  const targets = targetOptions(row.scheduleType, virtualIo)
-  const currentTarget = targetKey(row.target)
-  const target = targets.some((item) => item.value === currentTarget) ? row.target : targetFromKey(targets[0]?.value ?? '')
+function normalizeSchedulePatch(row: ScheduleRow, virtualPoints: VirtualPoint[] = []): ScheduleRow {
+  const targets = targetOptions(row.scheduleType, virtualPoints)
+  const normalizedTarget = row.target ? targetFromKey(targetKey(row.target)) : undefined
+  const currentTarget = targetKey(normalizedTarget)
+  const target = targets.some((item) => item.value === currentTarget) ? normalizedTarget : targetFromKey(targets[0]?.value ?? '')
   const startTime = row.startTime || row.timeOfDay || '08:00'
   return {
     ...row,
@@ -577,8 +578,8 @@ function ScheduleTypeNameBadge({ type }: { type: ScheduleType }) {
   )
 }
 
-function scheduleTypePatch(type: ScheduleType, row: ScheduleRow, virtualIo: VirtualIoPoint[] = []): Partial<ScheduleRow> {
-  const firstTarget = targetFromKey(targetOptions(type, virtualIo)[0]?.value ?? '')
+function scheduleTypePatch(type: ScheduleType, row: ScheduleRow, virtualPoints: VirtualPoint[] = []): Partial<ScheduleRow> {
+  const firstTarget = targetFromKey(targetOptions(type, virtualPoints)[0]?.value ?? '')
   return {
     scheduleType: type,
     enabled: type === 'not_active' ? false : row.enabled,
@@ -663,7 +664,7 @@ function savePreset(row: ScheduleRow, toast: ReturnType<typeof useToast>, pick: 
   toast.push('success', pick('Da luu mau', 'Preset saved'))
 }
 
-function loadPreset(onChange: (patch: Partial<ScheduleRow>) => void, toast: ReturnType<typeof useToast>, pick: ReturnType<typeof useI18n>['pick'], virtualIo: VirtualIoPoint[]) {
+function loadPreset(onChange: (patch: Partial<ScheduleRow>) => void, toast: ReturnType<typeof useToast>, pick: ReturnType<typeof useI18n>['pick'], virtualPoints: VirtualPoint[]) {
   const raw = window.localStorage.getItem(presetKey)
   if (!raw) {
     toast.push('info', pick('Chua co mau da luu', 'No saved preset'))
@@ -688,7 +689,7 @@ function loadPreset(onChange: (patch: Partial<ScheduleRow>) => void, toast: Retu
       weekdays: [],
       value: 0,
       ...parsed
-    }, virtualIo)
+    }, virtualPoints)
     onChange({ notes: preset.notes, enabled: preset.enabled, scheduleType: preset.scheduleType, timeOfDay: preset.timeOfDay, startTime: preset.startTime, endTime: preset.endTime, startDate: preset.startDate, endDate: preset.endDate, weekdays: preset.weekdays, target: preset.target ? { ...preset.target } : undefined, value: preset.value })
   } catch {
     window.localStorage.removeItem(presetKey)
@@ -700,22 +701,26 @@ function loadPreset(onChange: (patch: Partial<ScheduleRow>) => void, toast: Retu
 
 function targetKey(target?: ScheduleTarget): string {
   if (!target) return ''
-  if (target.channel !== undefined) return `${target.kind}-${String(target.channel).padStart(2, '0')}`
+  if (target.channel !== undefined) return target.kind === 'VP' ? `VP${target.channel}` : `${target.kind}-${String(target.channel).padStart(2, '0')}`
   if (target.pointId) return target.pointId
   return target.kind
 }
 
 function targetFromKey(key: string): ScheduleTarget | undefined {
-  const match = key.match(/^([A-Z]+)-(\d+)$/)
+  const match = key.match(/^([A-Z]+)[-_]?(\d+)$/)
   if (!match) return undefined
-  const kind = match[1] as ScheduleTarget['kind']
+  const kind = (match[1] === 'AV' ? 'VP' : match[1]) as ScheduleTarget['kind']
   const channel = Number(match[2])
-  return { kind, channel, pointId: `${kind}-${String(channel).padStart(2, '0')}` }
+  return { kind, channel, pointId: kind === 'VP' ? `VP${channel}` : `${kind}-${String(channel).padStart(2, '0')}` }
 }
 
 function dashedVirtualPointId(point: string): string {
-  const match = point.trim().toUpperCase().match(/^(AV|BV|MSV)[-_]?0*(\d+)$/)
-  return match ? `${match[1]}-${String(Number(match[2])).padStart(2, '0')}` : ''
+  const match = point.trim().toUpperCase().match(/^(?:VP|AV)[-_]?0*(\d+)$/)
+  return match ? `VP${Number(match[1])}` : ''
+}
+
+function isSchedulableVirtualPoint(item: VirtualPoint): boolean {
+  return item.enabled && item.writable && (item.signalType === 'integer' || item.signalType === 'float')
 }
 
 function formatWeekdays(values: string[]): string {

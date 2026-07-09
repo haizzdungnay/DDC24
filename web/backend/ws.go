@@ -60,7 +60,6 @@ func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 	readErrs := make(chan error, 1)
 	go readMonitorWS(ctx, conn, rawMessages, readErrs)
 
-	reader, canRead := a.core.(monitorPointReader)
 	forcer, canForce := a.core.(monitorPointForcer)
 	ticker := time.NewTicker(monitorUpdateInterval)
 	defer ticker.Stop()
@@ -85,7 +84,7 @@ func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 			if len(raw) == 0 {
 				continue
 			}
-			resetFingerprint, err := a.handleMonitorWSMessage(ctx, conn, raw, canRead, canForce, forcer, &subscription, &subscribed, expirations)
+			resetFingerprint, err := a.handleMonitorWSMessage(ctx, conn, raw, canForce, forcer, &subscription, &subscribed, expirations)
 			if err != nil {
 				cancel()
 				return
@@ -102,17 +101,7 @@ func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 			if !subscribed {
 				continue
 			}
-			if !canRead {
-				if lastReadErr == "" {
-					if err := writeWSError(ctx, conn, http.StatusServiceUnavailable, "core point reader unavailable"); err != nil {
-						cancel()
-						return
-					}
-					lastReadErr = "core point reader unavailable"
-				}
-				continue
-			}
-			changed, fingerprint, err := sendMonitorSnapshot(ctx, conn, reader, subscription, lastFingerprint)
+			changed, fingerprint, err := sendMonitorSnapshot(ctx, conn, a, subscription, lastFingerprint)
 			if err != nil {
 				errMsg := err.Error()
 				if errMsg != lastReadErr {
@@ -167,7 +156,7 @@ func readMonitorWS(ctx context.Context, conn *websocket.Conn, rawMessages chan<-
 	}
 }
 
-func (a *App) handleMonitorWSMessage(ctx context.Context, conn *websocket.Conn, raw json.RawMessage, canRead, canForce bool, forcer monitorPointForcer, subscription *SubscribePoints, subscribed *bool, expirations map[string]time.Time) (bool, error) {
+func (a *App) handleMonitorWSMessage(ctx context.Context, conn *websocket.Conn, raw json.RawMessage, canForce bool, forcer monitorPointForcer, subscription *SubscribePoints, subscribed *bool, expirations map[string]time.Time) (bool, error) {
 	var base struct {
 		Op WSOp `json:"op"`
 	}
@@ -184,25 +173,17 @@ func (a *App) handleMonitorWSMessage(ctx context.Context, conn *websocket.Conn, 
 		if err != nil {
 			return false, writeWSError(ctx, conn, http.StatusBadRequest, err.Error())
 		}
-		if !canRead {
-			if err := writeWSError(ctx, conn, http.StatusServiceUnavailable, "core point reader unavailable"); err != nil {
-				return false, err
-			}
-		}
 		*subscription = points
 		*subscribed = true
 		return true, nil
 	case WSOpForce:
-		if !canForce {
-			return false, writeWSError(ctx, conn, http.StatusServiceUnavailable, "core force unavailable")
-		}
-		return a.handleMonitorForce(ctx, conn, raw, forcer, expirations)
+		return a.handleMonitorForce(ctx, conn, raw, forcer, canForce, expirations)
 	default:
 		return false, writeWSError(ctx, conn, http.StatusBadRequest, "unknown op")
 	}
 }
 
-func (a *App) handleMonitorForce(ctx context.Context, conn *websocket.Conn, raw json.RawMessage, forcer monitorPointForcer, expirations map[string]time.Time) (bool, error) {
+func (a *App) handleMonitorForce(ctx context.Context, conn *websocket.Conn, raw json.RawMessage, forcer monitorPointForcer, canForce bool, expirations map[string]time.Time) (bool, error) {
 	principal := principalFromContext(ctx)
 	if principal == nil {
 		return false, writeWSError(ctx, conn, http.StatusUnauthorized, "unauthorized")
@@ -228,6 +209,29 @@ func (a *App) handleMonitorForce(ctx context.Context, conn *websocket.Conn, raw 
 	var value any
 	if err := json.Unmarshal(req.Value, &value); err != nil {
 		return false, writeWSError(ctx, conn, http.StatusBadRequest, "invalid force value")
+	}
+	if item, ok := a.findVirtualPoint(req.ID); ok {
+		if req.ExpireS != nil && *req.ExpireS > 0 {
+			return false, writeWSError(ctx, conn, http.StatusBadRequest, "virtual point force expiry unsupported")
+		}
+		httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPut, "/ws/v1/events", nil)
+		httpReq.RemoteAddr = "websocket"
+		point, err := a.writeVirtualPointValue(httpReq, item.ID, value, false)
+		if err != nil {
+			return false, writeWSError(ctx, conn, http.StatusConflict, err.Error())
+		}
+		delete(expirations, item.ID)
+		return true, writeWSJSON(ctx, conn, WSUpdateMessage{
+			Op:     WSOpUpdate,
+			TS:     time.Now().Format(time.RFC3339Nano),
+			Points: []PointDTO{point},
+		})
+	}
+	if prefix, _, ok := parsePointID(req.ID); ok && (virtualPointIDPrefix(prefix) || prefix == "BV" || prefix == "MSV") {
+		return false, writeWSError(ctx, conn, http.StatusNotFound, "point not found")
+	}
+	if !canForce {
+		return false, writeWSError(ctx, conn, http.StatusServiceUnavailable, "core force unavailable")
 	}
 	point, err := forcer.ForcePoint(ctx, req.ID, value, false)
 	if err != nil {
@@ -298,10 +302,17 @@ func filterSubscribedPoints(points []PointDTO, subscription SubscribePoints) []P
 	wanted := make(map[string]struct{}, len(subscription.IDs))
 	for _, id := range subscription.IDs {
 		wanted[id] = struct{}{}
+		if canonical := canonicalPointID(id); canonical != id {
+			wanted[canonical] = struct{}{}
+		}
 	}
 	filtered := make([]PointDTO, 0, len(subscription.IDs))
 	for _, point := range points {
 		if _, ok := wanted[point.ID]; ok {
+			filtered = append(filtered, point)
+			continue
+		}
+		if _, ok := wanted[canonicalPointID(point.ID)]; ok {
 			filtered = append(filtered, point)
 		}
 	}

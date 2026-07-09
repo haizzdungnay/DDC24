@@ -51,6 +51,7 @@ function idChannel(id: string): number | undefined {
 function pointKind(raw: Record<string, unknown>, rawId: string, channel?: number): Point['kind'] {
   const rawKind = raw.kind ?? raw.type ?? raw.point_type ?? raw.pointType ?? raw.object_type ?? raw.objectType
   const idPrefix = rawId.trim().match(/^([A-Z]+)[-_]?\d+$/i)?.[1]
+  if (idPrefix && ['VP', 'AV', 'BV', 'MSV'].includes(idPrefix.toUpperCase())) return 'virtual'
   const direct = normalizeKind(rawKind ?? idPrefix ?? rawId.split(/[-_.]/)[0])
   if (direct !== 'virtual') return direct
 
@@ -123,6 +124,10 @@ export function normalizePoint(raw: Record<string, unknown>): Point {
     updatedAt: String(raw.updatedAt ?? raw.updated_at ?? raw.timestamp ?? raw.ts ?? nowIso()),
     fault: Boolean(raw.fault ?? false),
     forced: Boolean(raw.forced ?? false),
-    sensorType: raw.sensorType ? String(raw.sensorType) : raw.sensor_type ? String(raw.sensor_type) : raw.type ? String(raw.type) : undefined
+    sensorType: raw.sensorType ? String(raw.sensorType) : raw.sensor_type ? String(raw.sensor_type) : raw.type ? String(raw.type) : undefined,
+    signalType: raw.signalType ? String(raw.signalType) : raw.signal_type ? String(raw.signal_type) : undefined,
+    writable: typeof raw.writable === 'boolean' ? raw.writable : undefined,
+    logEnabled: typeof raw.logEnabled === 'boolean' ? raw.logEnabled : typeof raw.log_enabled === 'boolean' ? raw.log_enabled : undefined,
+    logIntervalMs: numberFrom(raw.logIntervalMs ?? raw.log_interval_ms)
   }
 }

@@ -22,7 +22,7 @@ import { DiagramPage } from './pages/DiagramPage'
 import { AuxFunctionsPage } from './pages/AuxFunctionsPage'
 import { OutputsPage } from './pages/OutputsPage'
 import { UserParametersPage } from './pages/UserParametersPage'
-import { VirtualIoPage } from './pages/VirtualIoPage'
+import { VirtualPointsPage } from './pages/VirtualIoPage'
 
 function ProtectedShell() {
   const { isAuthenticated } = useAuth()
@@ -60,7 +60,8 @@ export function App() {
         <Route path="eng/programming" element={<ProgrammingPage />} />
         <Route path="eng/inputs" element={<InputsPage />} />
         <Route path="eng/outputs" element={<OutputsPage />} />
-        <Route path="eng/virtual-io" element={<VirtualIoPage />} />
+        <Route path="eng/virtual-points" element={<VirtualPointsPage />} />
+        <Route path="eng/virtual-io" element={<Navigate to="/eng/virtual-points" replace />} />
         <Route path="eng/user-parameters" element={<UserParametersPage />} />
         <Route path="eng/diagram" element={<DiagramPage />} />
         <Route path="eng/aux" element={<AuxFunctionsPage />} />

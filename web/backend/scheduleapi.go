@@ -53,7 +53,7 @@ func (a *App) handlePutSchedules(w http.ResponseWriter, r *http.Request) {
 		rows = []ScheduleRow{}
 	}
 	normalizeSchedules(rows)
-	if errs := validateSchedules(rows); len(errs) > 0 {
+	if errs := a.validateSchedulesForSave(rows); len(errs) > 0 {
 		writeValidationErrors(w, errs)
 		return
 	}
@@ -139,6 +139,48 @@ func validateSchedules(rows []ScheduleRow) []configValidationError {
 	return errs
 }
 
+func (a *App) validateSchedulesForSave(rows []ScheduleRow) []configValidationError {
+	errs := validateSchedules(rows)
+	if a == nil {
+		return errs
+	}
+	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	if err != nil {
+		addConfigErr(&errs, "$.virtual_points", "could not load virtual_points.conf")
+		return errs
+	}
+	cfg = normalizeVirtualPointsConfig(cfg)
+	byID := make(map[string]VirtualPoint, len(cfg.Items))
+	for _, item := range cfg.Items {
+		item = normalizeVirtualPoint(item)
+		if item.Enabled {
+			byID[item.ID] = item
+		}
+	}
+	for i, row := range rows {
+		if row.Target == nil || normalizeVirtualPointKind(row.Target.Kind) != "VP" || row.Target.Channel == nil {
+			continue
+		}
+		path := fmt.Sprintf("[%d].target", i)
+		expected := formatVirtualPointID(*row.Target.Channel)
+		item, ok := byID[canonicalVirtualPointID(row.Target.PointID)]
+		if !ok || item.ID != canonicalVirtualPointID(expected) {
+			addConfigErr(&errs, path+".pointId", "must reference an enabled virtual point")
+			continue
+		}
+		if !item.Writable {
+			addConfigErr(&errs, path+".pointId", "must reference a writable virtual point")
+		}
+		if item.SignalType != virtualPointSignalInteger && item.SignalType != virtualPointSignalFloat {
+			addConfigErr(&errs, path+".pointId", "must reference an integer or float virtual point")
+		}
+		if item.SignalType == virtualPointSignalInteger && (row.Value == nil || math.Trunc(*row.Value) != *row.Value) {
+			addConfigErr(&errs, path+".value", "must be an integer for integer virtual points")
+		}
+	}
+	return errs
+}
+
 func normalizeSchedules(rows []ScheduleRow) {
 	for i := range rows {
 		if rows[i].StartTime == "" && rows[i].TimeOfDay != "" {
@@ -147,23 +189,30 @@ func normalizeSchedules(rows []ScheduleRow) {
 		if rows[i].TimeOfDay == "" && rows[i].StartTime != "" {
 			rows[i].TimeOfDay = rows[i].StartTime
 		}
-		if rows[i].ScheduleType == "controller_operation_mode" {
-			channel := 1
-			if rows[i].Target == nil {
-				rows[i].Target = &ScheduleTarget{Kind: "MSV", Channel: &channel, PointID: "MSV-01"}
-			} else {
-				if rows[i].Target.Kind == "" {
-					rows[i].Target.Kind = "MSV"
-				}
-				if rows[i].Target.Channel == nil {
+		if rows[i].Target != nil {
+			rows[i].Target.Kind = normalizeVirtualPointKind(rows[i].Target.Kind)
+			if rows[i].Target.Channel == nil && rows[i].Target.PointID != "" {
+				if channel, ok := virtualPointChannel(rows[i].Target.PointID); ok {
 					rows[i].Target.Channel = &channel
 				}
-				if rows[i].Target.Kind == "MSV" && rows[i].Target.PointID == "" {
-					rows[i].Target.PointID = "MSV-" + fmt.Sprintf("%02d", *rows[i].Target.Channel)
+			}
+			if rows[i].Target.Channel != nil {
+				if rows[i].Target.Kind == "VP" {
+					rows[i].Target.PointID = formatVirtualPointID(*rows[i].Target.Channel)
+				} else if rows[i].Target.PointID == "" {
+					rows[i].Target.PointID = formatPointID(rows[i].Target.Kind, *rows[i].Target.Channel)
 				}
 			}
 		}
 	}
+}
+
+func normalizeVirtualPointKind(kind string) string {
+	kind = strings.ToUpper(strings.TrimSpace(kind))
+	if kind == "AV" {
+		return "VP"
+	}
+	return kind
 }
 
 func validScheduleDate(value string) bool {
@@ -177,6 +226,9 @@ func validScheduleDate(value string) bool {
 }
 
 func validateScheduleAction(errs *[]configValidationError, base string, row ScheduleRow) {
+	if row.Target != nil {
+		row.Target.Kind = normalizeVirtualPointKind(row.Target.Kind)
+	}
 	switch row.ScheduleType {
 	case "not_active", "holiday_period":
 		return
@@ -184,19 +236,19 @@ func validateScheduleAction(errs *[]configValidationError, base string, row Sche
 		if !validScheduleInt(row.Value, 0, 2) {
 			addConfigErr(errs, base+".value", "must be integer 0..2")
 		}
-		validateScheduleTarget(errs, base+".target", row.Target, "MSV", 1, 1)
+		validateScheduleTarget(errs, base+".target", row.Target, "VP", 1, virtualPointTotalCapacity)
 	case "control_loop_setpoint":
-		validateScheduleTarget(errs, base+".target", row.Target, "AV", 1, 32)
+		validateScheduleTarget(errs, base+".target", row.Target, "VP", 1, virtualPointTotalCapacity)
 		if !validScheduleNumber(row.Value) {
 			addConfigErr(errs, base+".value", "must be finite number")
 		}
 	case "analog_output_value":
-		validateScheduleTargetOneOf(errs, base+".target", row.Target, []scheduleTargetSpec{{kind: "AO", minChannel: 1, maxChannel: 4}, {kind: "AV", minChannel: 17, maxChannel: 32}})
+		validateScheduleTargetOneOf(errs, base+".target", row.Target, []scheduleTargetSpec{{kind: "AO", minChannel: 1, maxChannel: 4}, {kind: "VP", minChannel: 1, maxChannel: virtualPointTotalCapacity}})
 		if !validScheduleRange(row.Value, 0, 100) {
 			addConfigErr(errs, base+".value", "must be finite number 0..100")
 		}
 	case "fan_state_value", "digital_output_value":
-		validateScheduleTargetOneOf(errs, base+".target", row.Target, []scheduleTargetSpec{{kind: "DO", minChannel: 1, maxChannel: 4}, {kind: "BV", minChannel: 9, maxChannel: 16}})
+		validateScheduleTargetOneOf(errs, base+".target", row.Target, []scheduleTargetSpec{{kind: "DO", minChannel: 1, maxChannel: 4}})
 		if !validScheduleInt(row.Value, 0, 1) {
 			addConfigErr(errs, base+".value", "must be 0 or 1")
 		}
@@ -244,6 +296,9 @@ func validateScheduleTarget(errs *[]configValidationError, path string, target *
 	}
 	if target.PointID != "" {
 		expected := fmt.Sprintf("%s-%02d", kind, *target.Channel)
+		if kind == "VP" {
+			expected = formatVirtualPointID(*target.Channel)
+		}
 		if !schedulePointIDMatches(target.PointID, expected, kind) {
 			addConfigErr(errs, path+".pointId", "must match "+expected)
 		}
@@ -252,6 +307,8 @@ func validateScheduleTarget(errs *[]configValidationError, path string, target *
 
 func schedulePointIDMatches(got string, want string, kind string) bool {
 	switch kind {
+	case "VP":
+		return canonicalVirtualPointID(got) == canonicalVirtualPointID(want)
 	case "AV", "BV", "MSV":
 		return canonicalPointID(got) == canonicalPointID(want)
 	default:

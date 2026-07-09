@@ -346,6 +346,8 @@ func canonicalPointID(id string) string {
 		return formatPointID(prefix, channel)
 	case "AV", "BV", "MSV":
 		return fmt.Sprintf("%s%d", prefix, channel)
+	case "VP":
+		return fmt.Sprintf("VP%d", channel)
 	default:
 		return strings.TrimSpace(id)
 	}
@@ -369,6 +371,8 @@ func legacyPointIDAliases(id string) []string {
 		return []string{fmt.Sprintf("%s%d", prefix, channel)}
 	case "AV", "BV", "MSV":
 		return []string{fmt.Sprintf("%s-%02d", prefix, channel)}
+	case "VP":
+		return []string{fmt.Sprintf("VP-%02d", channel), fmt.Sprintf("AV%d", channel), fmt.Sprintf("AV-%02d", channel)}
 	}
 	return nil
 }

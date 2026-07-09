@@ -13,17 +13,18 @@ import (
 )
 
 type App struct {
-	cfg          Config
-	logger       *log.Logger
-	audit        *AuditLogger
-	auth         *AuthService
-	core         CoreStatusClient
-	os           OSReader
-	trends       *TrendStore
-	sampler      *Sampler
-	alarmHistory *AlarmHistoryStore
-	alarmTracker *AlarmHistoryTracker
-	virtualIOMu  sync.Mutex
+	cfg              Config
+	logger           *log.Logger
+	audit            *AuditLogger
+	auth             *AuthService
+	core             CoreStatusClient
+	os               OSReader
+	trends           *TrendStore
+	sampler          *Sampler
+	virtualPointRing *VirtualPointRing
+	alarmHistory     *AlarmHistoryStore
+	alarmTracker     *AlarmHistoryTracker
+	virtualPointMu   sync.Mutex
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
@@ -42,6 +43,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		osReader = NewDefaultOSReader()
 	}
 	app := &App{cfg: cfg, logger: logger, audit: audit, auth: auth, core: core, os: osReader}
+	app.virtualPointRing = NewVirtualPointRing(10 * time.Minute)
 	app.alarmHistory = NewAlarmHistoryStore(app.alarmHistoryPath())
 	app.alarmTracker = NewAlarmHistoryTracker()
 	if cfg.TrendDBPath == "" {
@@ -53,13 +55,13 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		return app, nil
 	}
 	app.trends = store
-	if reader, ok := core.(pointReader); ok {
+	if _, ok := core.(pointReader); ok {
 		trendCfg, err := store.GetConfig(context.Background())
 		if err != nil {
 			logger.Printf("WARN trend_config defaulted err=%v", err)
 			trendCfg = defaultTrendConfig()
 		}
-		app.sampler = NewSampler(store, reader, trendCfg, logger)
+		app.sampler = NewSampler(store, app, trendCfg, logger)
 	}
 	return app, nil
 }
@@ -108,6 +110,8 @@ func (a *App) StartSampler(ctx context.Context) {
 		a.sampler.Start(ctx)
 	}
 	if a != nil {
+		a.StartVirtualPointSampler(ctx)
+		a.StartVirtualPointScheduler(ctx)
 		a.StartAlarmHistory(ctx)
 	}
 }

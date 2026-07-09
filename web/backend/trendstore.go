@@ -27,7 +27,7 @@ type TrendStore struct {
 type Sample struct {
 	TS      int64
 	PointID string
-	Value   float64
+	Value   any
 	Quality int
 }
 
@@ -107,7 +107,11 @@ func (s *TrendStore) InsertBatch(ctx context.Context, samples []Sample) error {
 		if pointID == "" {
 			continue
 		}
-		if _, err := stmt.ExecContext(ctx, sample.TS, pointID, sample.Value, sample.Quality); err != nil {
+		value, ok := numericPointValue(sample.Value)
+		if !ok {
+			continue
+		}
+		if _, err := stmt.ExecContext(ctx, sample.TS, pointID, value, sample.Quality); err != nil {
 			_ = stmt.Close()
 			_ = tx.Rollback()
 			return fmt.Errorf("insert sample: %w", err)
@@ -146,10 +150,12 @@ func (s *TrendStore) Query(ctx context.Context, pointIDs []string, fromTs, toTs 
 	defer rows.Close()
 	var out []Sample
 	for rows.Next() {
+		var value float64
 		var sample Sample
-		if err := rows.Scan(&sample.TS, &sample.PointID, &sample.Value, &sample.Quality); err != nil {
+		if err := rows.Scan(&sample.TS, &sample.PointID, &value, &sample.Quality); err != nil {
 			return nil, fmt.Errorf("scan sample: %w", err)
 		}
+		sample.Value = value
 		out = append(out, sample)
 	}
 	if err := rows.Err(); err != nil {
@@ -176,6 +182,17 @@ func (s *TrendStore) Prune(ctx context.Context, retentionRecords int) error {
 		)`, retentionRecords)
 	if err != nil {
 		return fmt.Errorf("prune samples: %w", err)
+	}
+	return nil
+}
+
+func (s *TrendStore) PruneBefore(ctx context.Context, pointID string, beforeTs int64) error {
+	if s == nil || s.db == nil || strings.TrimSpace(pointID) == "" || beforeTs <= 0 {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM samples WHERE point_id = ? AND ts < ?`, canonicalPointID(pointID), beforeTs)
+	if err != nil {
+		return fmt.Errorf("prune samples before: %w", err)
 	}
 	return nil
 }
@@ -248,7 +265,7 @@ func normalizePointIDs(ids []string) []string {
 	seen := make(map[string]struct{}, len(ids))
 	out := make([]string, 0, len(ids))
 	for _, id := range ids {
-		id = canonicalPointID(id)
+		id = canonicalHistoryPointID(id)
 		if id == "" {
 			continue
 		}

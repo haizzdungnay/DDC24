@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSchedulesMissingFileReturnsEmptyArray(t *testing.T) {
@@ -25,6 +27,7 @@ func TestSchedulesMissingFileReturnsEmptyArray(t *testing.T) {
 
 func TestSchedulesPutValidWritesFileAndGetRoundTrips(t *testing.T) {
 	app, token := newScheduleTestApp(t)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Operation Mode","signalType":"integer","enabled":true,"writable":true,"value":0}]}`)
 	body := validSchedulesJSON(64)
 	req := newAuthRequest(http.MethodPut, "/api/v1/schedules", body, token)
 	w := httptest.NewRecorder()
@@ -62,7 +65,7 @@ func TestSchedulesPutValidWritesFileAndGetRoundTrips(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode GET: %v", err)
 	}
-	if len(got) != 64 || got[63].ID != "SCH-64" || got[0].Target == nil || *got[0].Target.Channel != 1 || got[63].Target == nil || got[63].Target.Channel == nil || *got[63].Target.Channel != 1 || got[63].Target.PointID != "MSV-01" {
+	if len(got) != 64 || got[63].ID != "SCH-64" || got[0].Target == nil || *got[0].Target.Channel != 1 || got[63].Target == nil || got[63].Target.Channel == nil || *got[63].Target.Channel != 1 || got[63].Target.PointID != "VP1" {
 		t.Fatalf("GET schedules = %+v", got)
 	}
 }
@@ -83,8 +86,8 @@ func TestSchedulesValidationRejectsBadInputWithoutWrite(t *testing.T) {
 		{name: "bad target", body: `[{"id":"SCH-01","label":"Bad","enabled":true,"scheduleType":"analog_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"AO","channel":5},"value":42}]`},
 		{name: "bad target point id", body: `[{"id":"SCH-01","label":"Bad","enabled":true,"scheduleType":"analog_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"AO","channel":1,"pointId":"AO-02"},"value":42}]`},
 		{name: "bad value", body: `[{"id":"SCH-01","label":"Bad","enabled":true,"scheduleType":"analog_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"AO","channel":1},"value":101}]`},
-		{name: "bad controller target", body: `[{"id":"SCH-01","label":"Bad","enabled":true,"scheduleType":"controller_operation_mode","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"MSV","channel":2},"value":1}]`},
-		{name: "bad controller point id", body: `[{"id":"SCH-01","label":"Bad","enabled":true,"scheduleType":"controller_operation_mode","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"MSV","channel":1,"pointId":"MSV-02"},"value":1}]`},
+		{name: "bad controller target", body: `[{"id":"SCH-01","label":"Bad","enabled":true,"scheduleType":"controller_operation_mode","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"MSV","channel":1},"value":1}]`},
+		{name: "bad controller point id", body: `[{"id":"SCH-01","label":"Bad","enabled":true,"scheduleType":"controller_operation_mode","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"VP","channel":1,"pointId":"VP2"},"value":1}]`},
 		{name: "bad holiday date", body: `[{"id":"SCH-01","label":"Bad","enabled":true,"scheduleType":"holiday_period","startDate":"02-30","endDate":"03-01","weekdays":[]}]`},
 		{name: "bad id", body: `[{"id":"BAD-01","label":"Bad","enabled":false,"scheduleType":"not_active","weekdays":[]}]`},
 		{name: "duplicate id", body: `[{"id":"SCH-01","label":"A","enabled":false,"scheduleType":"not_active","weekdays":[]},{"id":"SCH-01","label":"B","enabled":false,"scheduleType":"not_active","weekdays":[]}]`},
@@ -106,11 +109,12 @@ func TestSchedulesValidationRejectsBadInputWithoutWrite(t *testing.T) {
 	}
 }
 
-func TestSchedulesAcceptVirtualOutputTargets(t *testing.T) {
+func TestSchedulesAcceptVirtualPointTargets(t *testing.T) {
 	app, token := newScheduleTestApp(t)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP17","label":"Virtual analog","signalType":"float","enabled":true,"writable":true,"value":0},{"id":"VP464","label":"Virtual setpoint","signalType":"float","enabled":true,"writable":true,"value":22}]}`)
 	body := `[
-		{"id":"SCH-VO-A","label":"VO analog","enabled":true,"scheduleType":"analog_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"AV","channel":17,"pointId":"AV-17"},"value":42},
-		{"id":"SCH-VO-B","label":"VO binary","enabled":true,"scheduleType":"digital_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"BV","channel":9,"pointId":"BV-09"},"value":1}
+		{"id":"SCH-VP-A","label":"Virtual analog","enabled":true,"scheduleType":"analog_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"VP","channel":17,"pointId":"VP17"},"value":42},
+		{"id":"SCH-VP-B","label":"Virtual setpoint","enabled":true,"scheduleType":"control_loop_setpoint","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"VP","channel":464,"pointId":"VP464"},"value":24}
 	]`
 	req := newAuthRequest(http.MethodPut, "/api/v1/schedules", body, token)
 	w := httptest.NewRecorder()
@@ -122,15 +126,71 @@ func TestSchedulesAcceptVirtualOutputTargets(t *testing.T) {
 
 func TestSchedulesAcceptCanonicalVirtualPointIDs(t *testing.T) {
 	app, token := newScheduleTestApp(t)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP17","label":"Virtual analog","signalType":"float","enabled":true,"writable":true,"value":0},{"id":"VP464","label":"Virtual setpoint","signalType":"integer","enabled":true,"writable":true,"value":22}]}`)
 	body := `[
-		{"id":"SCH-VO-A","label":"VO analog","enabled":true,"scheduleType":"analog_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"AV","channel":17,"pointId":"AV17"},"value":42},
-		{"id":"SCH-VO-B","label":"VO binary","enabled":true,"scheduleType":"digital_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"BV","channel":9,"pointId":"BV9"},"value":1}
+		{"id":"SCH-VP-A","label":"Virtual analog","enabled":true,"scheduleType":"analog_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"VP","channel":17,"pointId":"VP17"},"value":42},
+		{"id":"SCH-VP-B","label":"Virtual setpoint","enabled":true,"scheduleType":"control_loop_setpoint","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"VP","channel":464,"pointId":"VP464"},"value":24}
 	]`
 	req := newAuthRequest(http.MethodPut, "/api/v1/schedules", body, token)
 	w := httptest.NewRecorder()
 	app.Router().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestSchedulesRejectUncreatedVirtualPointTargets(t *testing.T) {
+	app, token := newScheduleTestApp(t)
+	body := `[
+		{"id":"SCH-VP-A","label":"Virtual analog","enabled":true,"scheduleType":"analog_output_value","startTime":"08:00","endTime":"17:00","weekdays":["monday"],"target":{"kind":"VP","channel":17,"pointId":"VP17"},"value":42}
+	]`
+	req := newAuthRequest(http.MethodPut, "/api/v1/schedules", body, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestVirtualPointSchedulerWritesCreatedVP(t *testing.T) {
+	app, _ := newScheduleTestApp(t)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP17","label":"Virtual analog","signalType":"float","enabled":true,"writable":true,"value":0},{"id":"VP18","label":"Operation Mode","signalType":"integer","enabled":true,"writable":true,"value":0}]}`)
+	value := float64(42)
+	mode := float64(2)
+	rows := []ScheduleRow{{
+		ID:           "SCH-VP-A",
+		Label:        "Virtual analog",
+		Enabled:      true,
+		ScheduleType: "analog_output_value",
+		StartTime:    "08:00",
+		EndTime:      "17:00",
+		Weekdays:     []string{"monday"},
+		Target:       &ScheduleTarget{Kind: "VP", Channel: intPtr(17), PointID: "VP17"},
+		Value:        &value,
+	}, {
+		ID:           "SCH-VP-MODE",
+		Label:        "Operation mode",
+		Enabled:      true,
+		ScheduleType: "controller_operation_mode",
+		StartTime:    "08:00",
+		EndTime:      "17:00",
+		Weekdays:     []string{"monday"},
+		Target:       &ScheduleTarget{Kind: "VP", Channel: intPtr(18), PointID: "VP18"},
+		Value:        &mode,
+	}}
+	if err := app.SaveSchedules(context.Background(), rows); err != nil {
+		t.Fatalf("seed schedules: %v", err)
+	}
+	if err := app.applyVirtualPointSchedules(context.Background(), time.Date(2026, 7, 6, 9, 0, 0, 0, time.Local)); err != nil {
+		t.Fatalf("apply virtual schedules: %v", err)
+	}
+	got, ok := app.findVirtualPoint("VP17")
+	if !ok || got.Value != 42.0 {
+		t.Fatalf("virtual point = %+v, ok=%v; want value 42", got, ok)
+	}
+	got, ok = app.findVirtualPoint("VP18")
+	if !ok || got.Value != int64(2) {
+		t.Fatalf("virtual mode point = %+v, ok=%v; want value 2", got, ok)
 	}
 }
 
@@ -166,7 +226,8 @@ func validSchedulesJSON(count int) string {
 		if i == count {
 			mode := float64(1)
 			rows[i-1].ScheduleType = "controller_operation_mode"
-			rows[i-1].Target = nil
+			modeChannel := 1
+			rows[i-1].Target = &ScheduleTarget{Kind: "VP", Channel: &modeChannel, PointID: "VP1"}
 			rows[i-1].Value = &mode
 		}
 	}
