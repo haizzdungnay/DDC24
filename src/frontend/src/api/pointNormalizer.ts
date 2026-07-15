@@ -112,6 +112,7 @@ export function normalizePoint(raw: Record<string, unknown>): Point {
   const rawUnit = raw.rawUnit ?? raw.raw_unit
   return {
     id,
+    tag: String(raw.tag ?? id),
     name: String(raw.name ?? raw.label ?? id),
     kind,
     value,

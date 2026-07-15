@@ -2,7 +2,7 @@
 ## Danh mục kiểm soát toàn bộ tài liệu
 
 > **Document ID:** KX-DDC24-QA-REGISTER-001
-> **Phiên bản:** 1.3 | 2026-06-30 · **Trạng thái:** In-Review · **Owner:** QA/PMO
+> **Phiên bản:** 1.4 | 2026-07-15 · **Trạng thái:** In-Review · **Owner:** QA/PMO
 > **Phê duyệt 2026-06-08 (Owner):** các tài liệu KHÔNG có banner RECONCILE/SUPERSEDED → `Approved (Owner 2026-06-08)`
 > (owner sign-off, không thay cho design-review gate DR-1..DR-4 từng môn). Tài liệu CÓ banner →
 > `Needs Reconciliation` (chưa được duyệt cho tới khi nội dung khớp [CANONICAL_DECISIONS](../CANONICAL_DECISIONS.md)).
@@ -37,7 +37,7 @@
 | KX-DDC24-PM-OVERVIEW-001 | [Project Overview](KX-DDC24-PM-OVERVIEW-001_VI.md) | 1.0 | **Needs Reconciliation** | PMO |
 | KX-DDC24-PM-IMPLPLAN-001 | [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md) | 1.1 | **Active** | PM+Leads |
 | KX-DDC24-QA-DOCCTRL-001 | [Document Control & Naming](KX-DDC24-QA-DOCCTRL-001_VI.md) | 1.0 | Approved | QA |
-| KX-DDC24-QA-REGISTER-001 | Master Register (file này) | 1.3 | In-Review | QA |
+| KX-DDC24-QA-REGISTER-001 | Master Register (file này) | 1.4 | In-Review | QA |
 | KX-DDC24-QA-TRACE-001 | [Traceability Matrix](KX-DDC24-QA-TRACE-001_VI.md) | 1.0 | Approved (Owner 2026-06-08) | QA |
 | KX-DDC24-QA-ISOGAP-001 | [ISO Gap Assessment & Restructure Plan](KX-DDC24-QA-ISOGAP-001_VI.md) | 1.0 | Approved (Owner 2026-06-08) | QA |
 | KX-DDC24-QA-CHANGELOG | [CHANGELOG](../../CHANGELOG.md) | 0.3.0 | Active | QA |
@@ -55,6 +55,13 @@
 | ADR-008 | [BMS Edge positioning + Rev A component set 24→28](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md) | — | Accepted |
 | ADR-009 | [ISA-101 HMI and navigation restructure](../adr/ADR-009-isa101-hmi-and-nav-restructure.md) | — | Accepted |
 | ADR-010 | [IOP v2 poll + capability map](../adr/ADR-010-iop-v2-poll-capability-map.md) | — | Accepted |
+| ADR-011 | [BACnet reliability/quality mapping](../adr/ADR-011-bacnet-reliability-quality-mapping.md) | — | Accepted |
+| ADR-012 | [AO channel config model](../adr/ADR-012-ao-channel-config-model.md) | — | Accepted |
+| ADR-015 | [Privileged system config apply](../adr/ADR-015-privileged-system-config-apply.md) | — | Accepted |
+| ADR-016 | [Time authority model](../adr/ADR-016-time-authority-model.md) | — | Accepted |
+| ADR-017 | [Settings/Network tabs and state contract](../adr/ADR-017-settings-network-tabs-and-state-contract.md) | — | Accepted |
+| ADR-018 | [SQLite block historian + scheduled per-point policy](../adr/ADR-018-sqlite-block-historian.md) | 1.1 | Accepted |
+| ADR-019 | [Independent global point tag/name namespaces](../adr/ADR-019-global-point-tag-namespace.md) | 1.1 | Accepted |
 
 ## 2. Yêu cầu (01_specs)
 | ID | Tài liệu | Legacy file | Ver | Trạng thái |
@@ -92,7 +99,7 @@
 | KX-DDC24-FW-DDD-013 | Module diag_wdg | [FW_MOD_DIAG_WDG](../02_design/firmware/FW_MOD_DIAG_WDG_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 | KX-DDC24-OPS-DDD-001 | FW Bootloader/OTA (D-7 MCU) | [FW_BOOTLOADER_OTA](../02_design/firmware/FW_BOOTLOADER_OTA_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 | KX-DDC24-BE-DDD-001 | io-driver | [SW_IODRIVER_DESIGN](../02_design/software/SW_IODRIVER_DESIGN_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
-| KX-DDC24-BE-DDD-002 | Runtime Engine (D-6, component graph; lib 28 type) | [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) · [SW_COMPONENT_LIBRARY](../02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) | 1.1 | Approved (Owner 2026-06-08) |
+| KX-DDC24-BE-DDD-002 | Runtime Engine (D-6, component graph; lib 28 type) | [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) · [SW_COMPONENT_LIBRARY](../02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) | 1.3 | Approved (Owner amendment 2026-07-15) |
 | KX-DDC24-BE-DDD-003 | BACnet | [SW_BACNET_DESIGN](../02_design/software/SW_BACNET_DESIGN_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 | KX-DDC24-BE-DDD-004 | Agent (MQTT/REST) | [SW_AGENT_DESIGN](../02_design/software/SW_AGENT_DESIGN_MK-DDC-24_VI.md) | 1.1 | **Deferred Rev B** |
 | KX-DDC24-BE-DDD-006 | Field bus (Modbus RTU master) | [SW_FIELDBUS_DESIGN](../02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
@@ -106,8 +113,8 @@
 |----|----------|-------------|:---:|:----------:|
 | KX-DDC24-IF-ICD-002 | Modbus RTU Master / Expansion Bus (D-2) | [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | 2.0 | Approved (Owner 2026-06-08) |
 | KX-DDC24-IF-ICD-003 | BACnet PICS/EPICS (D-3) | [BACNET_PICS_EPICS](../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
-| KX-DDC24-IF-ICD-004 | REST OpenAPI (D-4) | [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) + [openapi.yaml](../02_design/interfaces/openapi.yaml) | 1.0 | Approved (Owner 2026-06-08) |
-| KX-DDC24-IF-ICD-005 | Config JSON Schema (D-5) | [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) | 1.0 | **Needs Reconciliation** |
+| KX-DDC24-IF-ICD-004 | REST OpenAPI (D-4) | [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) + [openapi.yaml](../02_design/interfaces/openapi.yaml) | 1.3 / 1.6.0 | Approved (Owner amendment 2026-07-15) |
+| KX-DDC24-IF-ICD-005 | Config JSON Schema (D-5) | [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) | 1.9 | Approved (Owner amendment 2026-07-15) |
 | KX-DDC24-IF-ICD-006 | Graph Schema (graph.json) + deploy contract | [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 
 ### Coding standards / hỗ trợ (05_devguides)
@@ -157,3 +164,4 @@
 | 1.0 | 2026-05-30 | QA/PMO | Phát hành đầu — đăng ký toàn bộ 50+ tài liệu, cấp Document ID |
 | 1.2 | 2026-06-08 | QA/PMO | DOC-REBASE-2026-06-BMS-EDGE: +ADR-008, +BMS_EDGE_STRATEGY; Product Definition→1.1, REVA_SCOPE→1.1, SW_COMPONENT_LIBRARY→1.1 (28 type); IMPLPLAN-001 & GETTING_STARTED reconciled → Active |
 | 1.3 | 2026-06-30 | QA/PMO | Registered ADR-009/010; reconciled Rev A 16 UI/no-base-DI/IOP-v2 revisions and HMI amendment; marked legacy IOP v1 spec superseded. |
+| 1.4 | 2026-07-15 | QA/PMO | Registered ADR-011/012/015..019; updated Runtime, Config and REST/OpenAPI revisions for owner-approved historian scheduling and independent point display-name uniqueness. |

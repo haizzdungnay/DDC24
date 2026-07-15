@@ -22,8 +22,14 @@ type configAPIGroup struct {
 }
 
 type configValidationError struct {
-	Path    string `json:"path"`
-	Message string `json:"message"`
+	Path            string `json:"path"`
+	Message         string `json:"message"`
+	Reason          string `json:"reason,omitempty"`
+	PointID         string `json:"pointId,omitempty"`
+	ConflictPointID string `json:"conflictPointId,omitempty"`
+	ConflictPath    string `json:"conflictPath,omitempty"`
+	Tag             string `json:"tag,omitempty"`
+	Name            string `json:"name,omitempty"`
 }
 
 var (
@@ -71,7 +77,40 @@ func (a *App) handleGetConfigIO(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handlePutConfigIO(w http.ResponseWriter, r *http.Request) {
-	handlePutConfig(a, w, r, configGroupIO, validateConfigIO)
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
+
+	beforeIO, err := readConfig(a, configGroupIO, ConfigIO{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	beforeVP, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	var cfg ConfigIO
+	if err := decodeConfigBody(w, r, &cfg); err != nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
+		return
+	}
+	if errs := append(validateConfigIO(cfg), validateConfigPointMetadata(cfg)...); len(errs) > 0 {
+		writePointTagErrors(w, errs)
+		return
+	}
+	cfg, _ = normalizePointTags(cfg, ConfigVirtualPoints{})
+	vpCfg := beforeVP
+	if errs := validatePointNamespaceTransition(beforeIO, beforeVP, cfg, vpCfg); len(errs) > 0 {
+		writePointTagErrors(w, errs)
+		return
+	}
+	result, err := a.writeConfigGroup(r, configGroupIO, cfg)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (a *App) handleGetConfigSafeState(w http.ResponseWriter, r *http.Request) {
@@ -87,17 +126,32 @@ func (a *App) handleGetConfigVirtualPoints(w http.ResponseWriter, r *http.Reques
 }
 
 func (a *App) handlePutConfigVirtualPoints(w http.ResponseWriter, r *http.Request) {
-	a.virtualPointMu.Lock()
-	defer a.virtualPointMu.Unlock()
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
 
+	beforeVP, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	beforeIO, err := readConfig(a, configGroupIO, ConfigIO{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	var cfg ConfigVirtualPoints
 	if err := decodeConfigBody(w, r, &cfg); err != nil {
 		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
 		return
 	}
+	if errs := append(validateConfigVirtualPoints(cfg), validateVirtualPointMetadata(cfg)...); len(errs) > 0 {
+		writePointTagErrors(w, errs)
+		return
+	}
 	cfg = normalizeVirtualPointsConfig(cfg)
-	if errs := validateConfigVirtualPoints(cfg); len(errs) > 0 {
-		writeValidationErrors(w, errs)
+	ioCfg := beforeIO
+	if errs := validatePointNamespaceTransition(beforeIO, beforeVP, ioCfg, cfg); len(errs) > 0 {
+		writePointTagErrors(w, errs)
 		return
 	}
 	if err := a.writeVirtualPointsConfig(r, cfg, "config"); err != nil {
@@ -170,30 +224,18 @@ func handleGetConfig[T any](a *App, w http.ResponseWriter, group configAPIGroup,
 	writeJSON(w, http.StatusOK, cfg)
 }
 
-func handlePutConfig[T any](a *App, w http.ResponseWriter, r *http.Request, group configAPIGroup, validate func(T) []configValidationError) {
-	var cfg T
-	if err := decodeConfigBody(w, r, &cfg); err != nil {
-		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
-		return
-	}
-	if errs := validate(cfg); len(errs) > 0 {
-		writeValidationErrors(w, errs)
-		return
-	}
+func (a *App) writeConfigGroup(r *http.Request, group configAPIGroup, cfg any) (ConfigPutResult, error) {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("encode config: %v", err))
-		return
+		return ConfigPutResult{}, fmt.Errorf("encode config: %w", err)
 	}
 	data = append(data, '\n')
 	path := a.configPath(group.file)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("prepare config dir: %v", err))
-		return
+		return ConfigPutResult{}, fmt.Errorf("prepare config dir: %w", err)
 	}
 	if err := writeConfigFileAtomic(path, data, 0o644); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+		return ConfigPutResult{}, err
 	}
 	applied, warnings := a.dispatchReload(group.reload)
 	result := "success"
@@ -205,12 +247,25 @@ func handlePutConfig[T any](a *App, w http.ResponseWriter, r *http.Request, grou
 		user = principal.Username
 	}
 	a.audit.Change(user, "config."+group.key, group.file, result, r.RemoteAddr)
-	writeJSON(w, http.StatusOK, ConfigPutResult{
-		Result:   result,
-		Applied:  applied,
-		Reload:   group.reload,
-		Warnings: warnings,
-	})
+	return ConfigPutResult{Result: result, Applied: applied, Reload: group.reload, Warnings: warnings}, nil
+}
+
+func handlePutConfig[T any](a *App, w http.ResponseWriter, r *http.Request, group configAPIGroup, validate func(T) []configValidationError) {
+	var cfg T
+	if err := decodeConfigBody(w, r, &cfg); err != nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
+		return
+	}
+	if errs := validate(cfg); len(errs) > 0 {
+		writeValidationErrors(w, errs)
+		return
+	}
+	result, err := a.writeConfigGroup(r, group, cfg)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func readConfig[T any](a *App, group configAPIGroup, zero T) (T, error) {
@@ -248,6 +303,24 @@ func writeValidationErrors(w http.ResponseWriter, details []configValidationErro
 	writeJSON(w, http.StatusBadRequest, map[string]any{
 		"error":      "validation failed",
 		"code":       http.StatusBadRequest,
+		"request_id": requestID(),
+		"details":    details,
+	})
+}
+
+func writePointTagErrors(w http.ResponseWriter, details []configValidationError) {
+	status := http.StatusBadRequest
+	message := "point metadata invalid"
+	for _, detail := range details {
+		if detail.Reason == "point_tag_conflict" || detail.Reason == "point_name_conflict" || detail.Reason == "point_namespace_conflicted" {
+			status = http.StatusConflict
+			message = "point namespace conflict"
+			break
+		}
+	}
+	writeJSON(w, status, map[string]any{
+		"error":      message,
+		"code":       status,
 		"request_id": requestID(),
 		"details":    details,
 	})
@@ -326,8 +399,8 @@ func validateConfigIO(cfg ConfigIO) []configValidationError {
 		base := fmt.Sprintf("ao[%d]", i)
 		validateChannel(&errs, item, base+".ch", 1, 4)
 		validateStringEnum(&errs, item, base+".mode", "mode", true, "0-10V", "4-20mA")
-		if name, ok, good := stringField(item, "name"); ok && (!good || len(name) > 64) {
-			addConfigErr(&errs, base+".name", "must be a string of at most 64 bytes")
+		if _, ok, good := stringField(item, "name"); ok && !good {
+			addConfigErr(&errs, base+".name", "must be string")
 		}
 		validateStringEnum(&errs, item, base+".units", "units", false,
 			"percent", "volt", "milliampere", "degC", "Pa", "RPM", "ppm", "no_units")
@@ -341,6 +414,13 @@ func validateConfigIO(cfg ConfigIO) []configValidationError {
 		}
 		if hasMin && hasMax && okMin && okMax && maxPV <= minPV {
 			addConfigErr(&errs, base+".max_pv", "must be greater than min_pv")
+		}
+	}
+	for i, item := range cfg.DO {
+		base := fmt.Sprintf("do[%d]", i)
+		validateChannel(&errs, item, base+".ch", 1, 4)
+		if _, ok, good := stringField(item, "name"); ok && !good {
+			addConfigErr(&errs, base+".name", "must be string")
 		}
 	}
 	return errs

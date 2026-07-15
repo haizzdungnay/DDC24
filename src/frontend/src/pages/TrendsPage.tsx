@@ -1,8 +1,9 @@
-import { Check, Clock3, Plus, RotateCcw } from 'lucide-react'
+import { Check, Clock3, Plus, RotateCcw, Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
 import { DataTable, Column } from '../components/DataTable'
+import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
 import { StateBlock } from '../components/StateBlock'
 import { StatusBadge } from '../components/StatusBadge'
@@ -12,6 +13,7 @@ import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Point, TrendSample, VirtualPoint } from '../types'
 import { canonicalVirtualPointId, cn, isFreshIso, mergePointsById } from '../utils'
+import { filterTrendPoints, filterTrendSamplesByRange, localDateTimeInputValue, parseTrendCustomRange, type TrendCustomRange, type TrendFilterKind } from './trendsFilters'
 
 interface TrendRow {
   id: string
@@ -36,6 +38,7 @@ const liveSampleLimit = 3600
 const REALTIME_STALE_MS = 2500
 const TREND_PREFS_KEY = 'mkddc:trends:v1'
 const DEFAULT_TREND_IDS = Array.from({ length: 8 }, (_, index) => `UI-${String(index + 1).padStart(2, '0')}`)
+const trendFilterKinds: TrendFilterKind[] = ['UI', 'AO', 'DO', 'VP']
 
 interface TrendPrefs {
   selectedIds: string[]
@@ -56,7 +59,7 @@ function pointNumber(value: Point['value']) {
 }
 
 function isPhysicalTrendPoint(point: Point): boolean {
-  return (point.kind === 'UI' || point.kind === 'AO') && pointNumber(point.value) !== null
+  return (point.kind === 'UI' || point.kind === 'AO' || point.kind === 'DO') && pointNumber(point.value) !== null
 }
 
 function isVirtualTrendPoint(item: VirtualPoint): boolean {
@@ -168,6 +171,13 @@ export function TrendsPage() {
   const [rangeMinutes, setRangeMinutes] = useState<number>(() => initialPrefsRef.current?.rangeMinutes ?? 30)
   const [prefsReady, setPrefsReady] = useState(() => initialPrefsRef.current !== null)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerQuery, setPickerQuery] = useState('')
+  const [pickerKinds, setPickerKinds] = useState<TrendFilterKind[]>(trendFilterKinds)
+  const [pickerDraft, setPickerDraft] = useState<string[]>([])
+  const [customFrom, setCustomFrom] = useState(() => localDateTimeInputValue(new Date(Date.now() - 30 * 60_000)))
+  const [customTo, setCustomTo] = useState(() => localDateTimeInputValue(new Date()))
+  const [customRange, setCustomRange] = useState<TrendCustomRange | null>(null)
+  const [customError, setCustomError] = useState<string | null>(null)
   const analogPanelRef = useRef<HTMLDivElement>(null)
   const [analogPanelHeight, setAnalogPanelHeight] = useState<number | null>(null)
 
@@ -177,12 +187,15 @@ export function TrendsPage() {
   const historyState = useApi(() => apiClient.getHistory(selectedIds, historyRange), [historyRange, selectedSignature], { refreshMs: 10_000 })
   const selectedPointsRef = useRef<Point[]>([])
   const [liveSamples, setLiveSamples] = useState<TrendSample[]>([])
-  const samples = useMemo(() => mergeTrendSamples(historyState.data, liveSamples), [historyState.data, liveSamples])
+  const mergedSamples = useMemo(() => mergeTrendSamples(historyState.data, liveSamples), [historyState.data, liveSamples])
+  const samples = useMemo(() => customRange ? filterTrendSamplesByRange(mergedSamples, customRange.fromMs, customRange.toMs) : mergedSamples, [customRange, mergedSamples])
+  const filteredPickerPoints = useMemo(() => filterTrendPoints(analogPoints, pickerQuery, pickerKinds), [analogPoints, pickerKinds, pickerQuery])
   const series = useMemo<TrendSeries[]>(() => selectedPoints.map((point, index) => ({
     key: point.id,
     label: `${point.id} - ${point.name}`,
     color: colors[index % colors.length],
-    unit: point.unit
+    unit: point.unit,
+    kind: point.kind === 'virtual' ? 'VP' : point.kind
   })), [selectedPoints])
   const tableRows = useMemo(() => buildTrendRows(selectedPoints, samples), [samples, selectedPoints])
   const currentRange = rangeOptions.find((item) => item.minutes === rangeMinutes)
@@ -246,7 +259,43 @@ export function TrendsPage() {
   function togglePoint(id: string) {
     hasSavedPrefsRef.current = true
     setPrefsReady(true)
-    setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
+    setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id].slice(0, 8))
+  }
+
+  function openPicker() {
+    setPickerDraft([...selectedIds])
+    setPickerOpen(true)
+  }
+
+  function togglePickerPoint(id: string) {
+    setPickerDraft((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < 8 ? [...current, id] : current)
+  }
+
+  function applyPicker() {
+    hasSavedPrefsRef.current = true
+    setPrefsReady(true)
+    setSelectedIds(pickerDraft)
+    setPickerOpen(false)
+  }
+
+  function togglePickerKind(kind: TrendFilterKind) {
+    setPickerKinds((current) => current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind])
+  }
+
+  function applyCustomRange() {
+    try {
+      setCustomRange(parseTrendCustomRange(customFrom, customTo))
+      setRangeMinutes(1440)
+      setCustomError(null)
+    } catch (error: unknown) {
+      setCustomError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  function applyQuickRange(minutes: number) {
+    setRangeMinutes(minutes)
+    setCustomRange(null)
+    setCustomError(null)
   }
 
   function resetAuto() {
@@ -256,6 +305,8 @@ export function TrendsPage() {
     const defaults = DEFAULT_TREND_IDS.filter((id) => available.has(id))
     setSelectedIds(defaults.length ? defaults : analogPoints.slice(0, 8).map((point) => point.id))
     setRangeMinutes(30)
+    setCustomRange(null)
+    setCustomError(null)
   }
 
   const columns: Array<Column<TrendRow>> = [
@@ -278,7 +329,7 @@ export function TrendsPage() {
 
       <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[300px_1fr]">
         <div className="min-h-0" style={analogPanelHeight ? { height: analogPanelHeight } : undefined}>
-          <Panel title="Series" className="flex h-full min-h-0 flex-col overflow-hidden" action={<Button size="sm" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPickerOpen((open) => !open)}>{pickerOpen ? pick('Đóng', 'Close') : pick('Thêm trend', 'Add trend')}</Button>}>
+          <Panel title="Series" className="flex h-full min-h-0 flex-col overflow-hidden" action={<Button size="sm" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={openPicker}>{pick('Thêm trend', 'Add trend')}</Button>}>
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
               {selectedPoints.map((point, index) => <SeriesCard key={point.id} point={point} color={colors[index % colors.length]} onRemove={() => togglePoint(point.id)} />)}
               {!selectedPoints.length && <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Chưa chọn điểm trend.', 'No trend points selected.')}</div>}
@@ -290,27 +341,18 @@ export function TrendsPage() {
           <Panel title={`${pick('Xu hướng analog', 'Analog trend')} - ${rangeLabel}`} action={<div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={resetAuto}>Auto</Button></div>}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2">
-              {rangeOptions.map((item) => <Button key={item.minutes} size="sm" variant={rangeMinutes === item.minutes ? 'primary' : 'secondary'} icon={<Clock3 className="h-4 w-4" />} onClick={() => setRangeMinutes(item.minutes)}>{pick(item.labelVi, item.labelEn)}</Button>)}
+              {rangeOptions.map((item) => <Button key={item.minutes} size="sm" variant={!customRange && rangeMinutes === item.minutes ? 'primary' : 'secondary'} icon={<Clock3 className="h-4 w-4" />} onClick={() => applyQuickRange(item.minutes)}>{pick(item.labelVi, item.labelEn)}</Button>)}
             </div>
             <div className="flex flex-wrap gap-2">
               {selectedPoints.map((point, index) => <button key={point.id} type="button" onClick={() => togglePoint(point.id)} className="inline-flex h-8 items-center gap-2 rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] px-3 text-xs text-[var(--c-text)]"><span className="h-2.5 w-2.5 rounded-full" style={{ background: colors[index % colors.length] }} />{point.id}</button>)}
             </div>
           </div>
-          {pickerOpen && (
-            <div className="mb-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">
-              <div className="mb-2 text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Object list analog UI/AO/Virtual', 'Analog UI/AO/Virtual object list')}</div>
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                {analogPoints.map((point) => (
-                  <label key={point.id} className="flex cursor-pointer items-center gap-3 rounded-[var(--radius)] border border-[var(--c-border)] px-3 py-2 text-sm hover:bg-[rgba(42,92,138,0.08)]">
-                    <input type="checkbox" className="accent-[var(--c-accent)]" checked={selectedIds.includes(point.id)} onChange={() => togglePoint(point.id)} />
-                    <span className="mono font-semibold">{point.id}</span>
-                    <span className="min-w-0 flex-1 truncate text-[var(--c-text-dim)]">{point.name}</span>
-                    <span className="mono text-xs text-[var(--c-text-dim)]">{point.unit ?? '-'}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="mb-4 grid gap-3 rounded-[var(--radius)] border border-[var(--c-border)] p-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <label className="text-xs">From<input type="datetime-local" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} className="mt-1 block h-9 w-full rounded border border-[var(--c-border)] bg-transparent px-2" /></label>
+            <label className="text-xs">To<input type="datetime-local" value={customTo} onChange={(event) => setCustomTo(event.target.value)} className="mt-1 block h-9 w-full rounded border border-[var(--c-border)] bg-transparent px-2" /></label>
+            <Button size="sm" onClick={applyCustomRange}>Apply custom</Button>
+            {customError && <span role="alert" className="text-xs text-[var(--c-fault-fg)] md:col-span-3">{customError}</span>}
+          </div>
           {pointsState.loading && !analogPoints.length
             ? <StateBlock state="loading" title={pick('Đang tải điểm analog', 'Loading analog points')} />
             : pointsState.error && !analogPoints.length
@@ -321,6 +363,30 @@ export function TrendsPage() {
           </Panel>
         </div>
       </div>
+
+      <Modal open={pickerOpen} title={pick('Thêm trend', 'Add trend')} size="xl" confirmLabel={pick('Áp dụng', 'Apply')} cancelLabel={pick('Hủy', 'Cancel')} onConfirm={applyPicker} onClose={() => setPickerOpen(false)}>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 rounded border border-[var(--c-border)] px-3">
+            <Search className="h-4 w-4" />
+            <input autoFocus value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder={pick('Tìm theo ID hoặc tên...', 'Search by ID or name...')} className="h-10 w-full bg-transparent outline-none" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {trendFilterKinds.map((kind) => <Button key={kind} size="sm" variant={pickerKinds.includes(kind) ? 'primary' : 'secondary'} onClick={() => togglePickerKind(kind)}>{kind}</Button>)}
+            <span className="self-center text-xs">{pickerDraft.length}/8 selected</span>
+          </div>
+          <div className="grid max-h-[52vh] gap-2 overflow-y-auto md:grid-cols-2">
+            {filteredPickerPoints.map((point) => (
+              <label key={point.id} className="flex cursor-pointer items-center gap-3 rounded border border-[var(--c-border)] p-3">
+                <input type="checkbox" checked={pickerDraft.includes(point.id)} disabled={!pickerDraft.includes(point.id) && pickerDraft.length >= 8} onChange={() => togglePickerPoint(point.id)} />
+                <span className="mono font-semibold">{point.id}</span>
+                <span className="min-w-0 flex-1 truncate">{point.name}</span>
+                <span className="text-xs">{point.unit ?? '-'}</span>
+              </label>
+            ))}
+            {!filteredPickerPoints.length && <p>{pick('Không tìm thấy điểm.', 'No matching points.')}</p>}
+          </div>
+        </div>
+      </Modal>
 
       <Panel title={pick('Thống kê series đang hiển thị', 'Visible series statistics')}>
         <DataTable rows={tableRows} columns={columns} getRowKey={(row) => row.id} emptyText={pick('Chưa chọn trend', 'No trend selected')} />

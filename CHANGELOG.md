@@ -7,6 +7,20 @@
 ---
 
 ## [Unreleased]
+### Fixed - Frontend point-name control validation (2026-07-15)
+- fe(point metadata): reject control characters before whitespace normalization so names containing newline/tab cannot pass client validation. Verification: `npm --prefix src/frontend test -- src/api/pointTags.test.ts` pass; `npm --prefix src/frontend test` pass.
+
+### Changed - Point historian scheduling and unique display-name contracts (2026-07-15)
+- docs(ADR-018/Plan 42): owner-approved one backend-owned per-point database logging policy for UI-01..16, AO-01..04, DO-01..04 and numeric/boolean VP, with 11 intervals, immediate server-time or future UTC start, persistent off/scheduled/recording states, restart gaps/no backfill, 48-hour hot cache, >=180-day archive and unified backend Trends merge.
+- docs(ADR-019/Plan 43): owner-approved independent global display-name namespace alongside existing technical tags; blank legacy names migrate to canonical IDs, content-duplicate legacy names stay readable but block unrelated mutations until conflict-reducing rename, and rename/delete preserve historian identity by canonical ID + generation.
+- docs(contracts/plans): bumped CONFIG_SCHEMA Rev 1.9, Runtime Model Rev 1.3, REST MD Rev 1.3/OpenAPI 1.6.0, guides 07/09, phase/checklist/SOM plans and indexes. Added PLANNED `COR-HIST-001`, `WEB-HIST-001..005`, `WEB-NAME-001`, `E2E-HIST-001`; no product completion claim.
+
+### Changed - Trends filters restored (2026-07-15)
+- fe(trends): restore Add Trend modal with ID/name search and point-kind filters, plus custom From/To filtering over the deployed legacy 24-hour historian window. Keep quick ranges, 1-second live display buffer, latest-five timestamp table, and no Historian policy panel.
+
+### Fixed - Live Trends legacy historian compatibility (2026-07-15)
+- fe(trends): removed the stale ADR-018 frontend prototype from the active source tree, restoring the deployed `GET /history?point=...&range=30m|1h|6h|24h` flow and the existing 1-second live display buffer. Trends no longer renders the unsupported Historian policy panel. Verification handed to owner; local frontend lint/typecheck/build pass.
+
 ### Fixed - Trivy PR scan scope (2026-07-10)
 - ci(security): stopped the Trivy PR workflow from generating and scanning the GitHub runner Debian package list, kept the scan focused on repository dependency manifests, disabled stale Trivy DB cache restore, limited Trivy to vulnerability scanning, and made SARIF output honor the configured `CRITICAL,HIGH` severity gate so UNKNOWN advisories do not fail the PR gate. Verification: local `trivy fs --scanners vuln --severity CRITICAL,HIGH --format table --exit-code 1 .` reported 0 npm/go vulnerabilities on the PR #50 merge tree; local all-severity scan reproduced `GO-2026-5932` as UNKNOWN; GitHub PR #50 rerun pending.
 

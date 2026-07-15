@@ -1,7 +1,7 @@
 # Runtime Execution Model — MK-DDC-24 (`mkddc-core`)
 
 > **Document ID:** DDD-RUNTIME-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-13 (reconcile S7 #4: chỉ node persist lưu state, cycle delay-1 lùi Rev B) · 1.0 | 2026-06-08
+> **Phiên bản:** 1.3 | 2026-07-15 (ADR-018/019: coherent historian snapshot + stable history identity across rename) · 1.2 | 2026-07-15 (ADR-019: tag là metadata mutable; runtime giữ canonical ID) · 1.1 | 2026-06-13 (reconcile S7 #4: chỉ node persist lưu state, cycle delay-1 lùi Rev B) · 1.0 | 2026-06-08
 > **Trạng thái:** Approved (Owner 2026-06-08)
 > 📘 **Đọc cùng:** [GRAPH_SCHEMA](../interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) ·
 > [SW_COMPONENT_LIBRARY](SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) · [ADR-004](../../adr/ADR-004-component-based-runtime.md), [ADR-005](../../adr/ADR-005-three-process-architecture.md)
@@ -117,6 +117,28 @@ hình biến cũ `PlcVarSpace`/retain trong `SW_PLC_ENGINE_DESIGN` được thay
 + snapshot ở §6; phần **hợp đồng shm với MCU giữ nguyên** (chỉ đổi tên `kinexus_shm.h`
 → `mkddc_shm.h`, task implementation riêng — xem ADR-005).
 
+## 11a. Identity runtime và technical tag (ADR-019)
+
+- Canonical point ID là identity duy nhất trong core IPC, execution plan, priority resolver, historian, alarm, schedule, audit và deployed graph.
+- Technical `tag` là metadata mutable do web/config quản lý; không đi vào SHM ABI và không thay canonical ID khi rename.
+- Phase A chỉ thêm persistence/projection/validation tag ở web. Core/runtime không lookup tag trong scan loop.
+- Phase B nếu được mở phải resolve structured `point_ref.tag` tại validate/deploy thành `point_ref.id` canonical trước artifact tới core. Rename/reuse tag sau deploy không retarget plan đang active.
+
+Trạng thái: ĐÃ duyệt 2026-07-15 — runtime identity contract theo ADR-019; không có core code Phase A.
+
+## 11b. Coherent historian snapshot (ADR-018)
+
+- Web historian không đọc tuần tự từng point và không ghi database trong scan loop. Core cung cấp một immutable snapshot từ cùng scan, sau priority resolve + safe-state.
+- Snapshot physical trả UI-01..16 engineering value, AO-01..04 post-priority resolved setpoint và DO-01..04 hardware feedback. Optional DI giữ kind riêng nhưng ngoài database-logging scope amendment 2026-07-15.
+- Mỗi row có `id`, `kind`, `value`, `quality`, `source`, `role`, `unit`, `updatedAtMonotonicNs`, `generation`; response có một `snapshotId` và `snapshotObservedAtUtc`.
+- Backend copy VP runtime registry ngay sau core response thành cùng web snapshot. `virtual_points.conf.value` là authoring value, không phải historian source.
+- Historian scheduler gom mọi point due tại cùng monotonic boundary và gọi đúng một snapshot. `startAtUtc` chỉ quyết định khi policy active; cadence sau đó dùng monotonic clock.
+- Canonical ID + generation là history identity. Rename tag/name không đổi generation; delete/recreate VP tăng generation để query không trộn series cũ/mới.
+- Restart, clock jump, queue/storage failure tạo explicit gap. Không backfill hoặc hold-last fabricated sample.
+- Hot cache mặc định 48 giờ; backend query merge RAM/hot/archive. Frontend không giữ/merge historian buffer riêng.
+
+Trạng thái: ĐÃ duyệt 2026-07-15 — snapshot/history identity amendment; implementation theo COR-HIST-001/Plan 42.
+
 ## 12. Trace tối thiểu (đặt lại từ PLC-*)
 
 | ID | Yêu cầu |
@@ -130,6 +152,7 @@ hình biến cũ `PlcVarSpace`/retain trong `SW_PLC_ENGINE_DESIGN` được thay
 | RUN-007 | Quality propagation + fallback + safe-state |
 | RUN-008 | Atomic deploy, không có khoảng mất plan |
 | RUN-009 | Đo scan budget, đếm overrun, expose qua REST |
+| RUN-010 | Coherent physical snapshot sau resolve/safe-state; web union VP runtime; historian identity theo canonical ID + generation |
 
 ---
-**Rev** 1.1 | 2026-06-13 — reconcile S7 #4 persist/cycle · 1.0 | 2026-06-08
+**Rev** 1.3 | 2026-07-15 — ADR-018/019 amendment: coherent post-resolve physical snapshot, backend VP runtime union, monotonic due-set sampling, explicit gaps and canonical-ID/generation history continuity across rename/delete/recreate. · **Rev** 1.2 | 2026-07-15 — ADR-019 locks canonical point ID as runtime identity; mutable tags stay web/config metadata and Phase B resolves statically before core. · 1.1 | 2026-06-13 — reconcile S7 #4 persist/cycle · 1.0 | 2026-06-08

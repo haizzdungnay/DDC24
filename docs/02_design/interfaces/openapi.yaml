@@ -1,7 +1,7 @@
 ﻿openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.4.0"
+  version: "1.6.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -9,9 +9,10 @@ info:
     monitor chuáº©n á»Ÿ /api/v1/ws/monitor Ä‘Æ°á»£c tham chiáº¿u báº±ng x-websocket.
     BE-B5 2026-06-18: Má»Ÿ contract chi tiáº¿t cho cáº¥u hÃ¬nh (/system/config/*) vÃ  users CRUD, password self-service.
     2026-06-18: thÃªm aggregate /network cho trang Network.
+    2026-07-15: thÃªm per-point historian policy/start scheduling, unified UTC history query vÃ  global display-name uniqueness.
 x-revision:
-  date: "2026-06-18"
-  note: "v1.4.0 thÃªm /network aggregate cho trang Network, map config tháº­t."
+  date: "2026-07-15"
+  note: "v1.6.0 adds ADR-018 v1.1 historian scheduling/unified query and ADR-019 v1.1 display-name uniqueness."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -22,7 +23,7 @@ security:
 paths:
   /auth/login:
     post:
-      summary: ÄÄƒng nháº­p, tráº£ JWT
+      summary: ÄÄƒng nháº­p, tráº£ JWT
       security: []
       requestBody:
         required: true
@@ -48,7 +49,7 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
   /auth/logout:
     post:
-      summary: ÄÄƒng xuáº¥t, vÃ´ hiá»‡u token
+      summary: ÄÄƒng xuáº¥t, vÃ´ hiá»‡u token
       responses: { "200": { description: OK } }
   /points:
     get:
@@ -63,7 +64,7 @@ paths:
                 items: { $ref: "#/components/schemas/Point" }
   /points/{id}:
     get:
-      summary: Äá»c 1 point
+      summary: Äá»c 1 point
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       responses:
         "200":
@@ -73,10 +74,10 @@ paths:
               schema: { $ref: "#/components/schemas/Point" }
         "404": { $ref: "#/components/responses/Error" }
     put:
-      summary: Ghi giÃ¡ trá»‹ point (role operator+; LUÃ”N vÃ o má»©c Local manual â€” client KHÃ”NG chá»n priority)
+      summary: Ghi giÃ¡ trá»‹ point (role operator+; LUÃ”N vÃ o má»©c Local manual â€” client KHÃ”NG chá»n priority)
       description: >
         Contract Freeze 2026-06-11: REST khÃ´ng expose BACnet priority 1..16.
-        Má»i lá»‡nh web Ä‘i vÃ o nguá»“n "Local manual" (má»©c 2 trong 6 má»©c cá»§a core â€”
+        Má»i lá»‡nh web Ä‘i vÃ o nguá»“n "Local manual" (má»©c 2 trong 6 má»©c cá»§a core â€”
         PRODUCT_DEFINITION Â§13). BACnet client dÃ¹ng priority array riÃªng qua BACnet/IP
         (káº¿t quáº£ vÃ o má»©c 3). Gá»­i release=true Ä‘á»ƒ nháº£ manual (relinquish má»©c 2).
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
@@ -101,6 +102,29 @@ paths:
                 $ref: "#/components/schemas/Point"
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+  /points/{id}/config:
+    put:
+      summary: Update point tag/display metadata by canonical point ID (admin)
+      description: >
+        Phase A accepts canonical point IDs only; tags are never path aliases. Validates
+        the final controller-local UI/AO/DO/VP tag namespace before atomic file replace.
+      x-rbac: [admin]
+      parameters: [ { $ref: "#/components/parameters/PointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PointConfigPatch" }
+      responses:
+        "200":
+          description: Updated point metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Point" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /virtual-points:
     get:
       summary: List Virtual Points (viewer+)
@@ -134,6 +158,7 @@ paths:
               schema: { $ref: "#/components/schemas/VirtualPoint" }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /virtual-points/{id}:
     put:
       summary: Update Virtual Point (admin)
@@ -153,6 +178,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
     delete:
       summary: Delete Virtual Point (admin)
       x-rbac: [admin]
@@ -188,7 +214,7 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh northbound trang Network (admin)
-      description: Ghi atomic `network.conf`, `device.conf`, `bacnet.conf`; preserve field khÃ´ng expose bá»Ÿi form; fieldbus/slave chá»‰ Ä‘á»c.
+      description: Ghi atomic `network.conf`, `device.conf`, `bacnet.conf`; preserve field khÃ´ng expose bá»Ÿi form; fieldbus/slave chá»‰ Ä‘á»c.
       x-rbac: [admin]
       requestBody:
         required: true
@@ -208,7 +234,7 @@ paths:
       summary: Test commissioning má»™t point (role operator+)
       description: >
         Gá»­i lá»‡nh test DO/AO qua mkddc-core, vÃ o nguá»“n Local manual má»©c 2 nhÆ° PUT /points/{id}.
-        DÃ¹ng cho mÃ n Commissioning; má»i lá»‡nh pháº£i audit log.
+        DÃ¹ng cho mÃ n Commissioning; má»i lá»‡nh pháº£i audit log.
       x-rbac: [operator, admin]
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       requestBody:
@@ -227,8 +253,8 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
   /system/config:
     get:
-      summary: Äá»c toÃ n bá»™ cáº¥u hÃ¬nh hiá»‡n táº¡i (gá»™p) (admin)
-      description: Tráº£ vá» object gá»™p cÃ¡c nhÃ³m (device, network, io, safe_state, virtual_points, bacnet, fieldbus, time).
+      summary: Äá»c toÃ n bá»™ cáº¥u hÃ¬nh hiá»‡n táº¡i (gá»™p) (admin)
+      description: Tráº£ vá» object gá»™p cÃ¡c nhÃ³m (device, network, io, safe_state, virtual_points, bacnet, fieldbus, time).
       x-rbac: [admin]
       responses:
         "200":
@@ -238,7 +264,7 @@ paths:
               schema: { $ref: "#/components/schemas/SystemConfig" }
   /system/config/device:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh device (admin)
+      summary: Äá»c cáº¥u hÃ¬nh device (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -263,7 +289,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/network:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh network (admin)
+      summary: Äá»c cáº¥u hÃ¬nh network (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -288,7 +314,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/io:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh IO (admin)
+      summary: Äá»c cáº¥u hÃ¬nh IO (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -311,9 +337,10 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigPutResult" }
         "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /system/config/safe-state:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh IO safe-state (admin)
+      summary: Äá»c cáº¥u hÃ¬nh IO safe-state (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -362,9 +389,10 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigPutResult" }
         "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /system/config/bacnet:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh BACnet/IP (admin)
+      summary: Äá»c cáº¥u hÃ¬nh BACnet/IP (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -389,7 +417,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/fieldbus:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh Fieldbus (Modbus RTU master) (admin)
+      summary: Äá»c cáº¥u hÃ¬nh Fieldbus (Modbus RTU master) (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -414,7 +442,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/time:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh Time (admin)
+      summary: Äá»c cáº¥u hÃ¬nh Time (admin)
       x-rbac: [admin]
       responses:
         "200":
@@ -440,7 +468,7 @@ paths:
   /users:
     get:
       summary: Danh sÃ¡ch user (admin)
-      description: KhÃ´ng tráº£ vá» máº­t kháº©u (pw_bcrypt)
+      description: KhÃ´ng tráº£ vá» máº­t kháº©u (pw_bcrypt)
       x-rbac: [admin]
       responses:
         "200":
@@ -474,7 +502,7 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
   /users/{username}:
     put:
-      summary: Äá»•i role user (admin)
+      summary: Äá»•i role user (admin)
       x-rbac: [admin]
       parameters:
         - name: username
@@ -544,7 +572,7 @@ paths:
               schema: { $ref: "#/components/schemas/User" }
   /me/change-password:
     post:
-      summary: Äá»•i máº­t kháº©u cÃ¡ nhÃ¢n (role viewer+)
+      summary: Äá»•i máº­t kháº©u cÃ¡ nhÃ¢n (role viewer+)
       x-rbac: [viewer, operator, admin]
       requestBody:
         required: true
@@ -562,63 +590,98 @@ paths:
         "401": { description: "Máº­t kháº©u cÅ© khÃ´ng Ä‘Ãºng" }
   /history:
     get:
-      summary: Historian/trend samples by point and range (viewer+)
+      summary: Unified historian query by point and explicit UTC range (viewer+)
       description: >
-        Returns wide TrendSample rows matching FE shape: `{time, <pointId>: value}`.
-        Query `point` accepts one id or comma-separated ids.
+        Backend merges RAM tail, 48-hour hot SQLite and archive tiers. Bounds are half-open
+        [from,to); frontend never selects or merges tiers. Point IDs are canonical only.
       x-rbac: [viewer, operator, admin]
       parameters:
         - name: point
           in: query
           required: true
+          description: One to eight comma-separated canonical point IDs.
           schema:
             type: string
-            example: "AI-01,AI-02"
-        - name: range
+            example: "UI-01,AO-01,DO-01,VP2"
+        - name: from
           in: query
           required: true
+          schema: { type: string, format: date-time, example: "2026-07-14T00:00:00Z" }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time, example: "2026-07-15T00:00:00Z" }
+        - name: resolution
+          in: query
+          required: false
           schema:
-            type: string
-            enum: [30m, 1h, 6h, 24h]
-            example: 30m
+            $ref: "#/components/schemas/HistorianInterval"
+        - name: maxPoints
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 5000, default: 5000 }
       responses:
         "200":
-          description: OK
+          description: Complete or partial merged history. Partial results set complete=false and include gaps.
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/TrendSample" }
+              schema: { $ref: "#/components/schemas/HistoryResponse" }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /history/export.csv:
+    get:
+      summary: Stream CSV from the same merged historian iterator (viewer+)
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: point, in: query, required: true, schema: { type: string } }
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: resolution, in: query, required: false, schema: { $ref: "#/components/schemas/HistorianInterval" } }
+        - { name: maxPoints, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 5000, default: 5000 } }
+      responses:
+        "200":
+          description: Streamed merged history CSV.
+          content:
+            text/csv:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /trends/config:
     get:
-      summary: Read historian/trend sampler config (admin)
-      x-rbac: [admin]
+      summary: Read per-point historian policy, state, capacity and server time (viewer+)
+      x-rbac: [viewer, operator, admin]
       responses:
         "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/TrendConfig" }
+              schema: { $ref: "#/components/schemas/HistorianConfig" }
         "403": { $ref: "#/components/responses/Error" }
     put:
-      summary: Update historian/trend sampler config (admin)
-      description: Persist trend config for mkddc-web sampler; apply mechanism is `none`.
+      summary: Atomically update per-point database historian policies (admin)
+      description: >
+        Validates the whole batch including base revision, point generation, namespace,
+        interval, future start, capacity and free-space. Failure leaves the prior revision active.
       x-rbac: [admin]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/TrendConfig" }
+            schema: { $ref: "#/components/schemas/HistorianConfigUpdate" }
       responses:
         "200":
-          description: OK
+          description: Updated policy snapshot.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+              schema: { $ref: "#/components/schemas/HistorianConfig" }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "507": { $ref: "#/components/responses/Error" }
   /schedules:
     get:
       summary: Read weekly/exception schedules (viewer+)
@@ -910,13 +973,74 @@ components:
               error: { type: string }
               code: { type: integer }
               request_id: { type: string }
+              details:
+                type: array
+                items: { $ref: "#/components/schemas/ValidationDetail" }
   schemas:
+    ValidationDetail:
+      type: object
+      required: [path, reason]
+      properties:
+        path: { type: string, example: "items[2].tag" }
+        reason:
+          type: string
+          enum:
+            - point_tag_invalid
+            - point_tag_reserved
+            - point_tag_conflict
+            - point_name_invalid
+            - point_name_conflict
+            - point_namespace_conflicted
+            - point_channel_conflict
+            - config_conflict
+            - historian_interval_invalid
+            - historian_start_in_past
+            - historian_generation_conflict
+            - historian_capacity_exceeded
+            - historian_storage_unavailable
+            - resolution_unavailable
+            - historian_unavailable
+        message: { type: string }
+        pointId: { type: string, example: "VP3" }
+        conflictPointId: { type: string, example: "UI-01" }
+        conflictPath: { type: string, example: "ui[0].tag" }
+        tag: { type: string, example: "fan 1" }
+        name: { type: string, example: "Virtual Point" }
+    PointTag:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: "^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$"
+      description: >
+        Canonical display technical tag. Backend trims/collapses ASCII spaces and compares
+        ASCII-lower keys across UI/AO/DO/all VP including disabled VP. Canonical ID families
+        are reserved for their owning point.
+    PointConfigPatch:
+      type: object
+      minProperties: 1
+      properties:
+        tag: { $ref: "#/components/schemas/PointTag" }
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Canonical display name/label. Backend trims/collapses whitespace, rejects control
+            characters and compares Unicode-lower keys in a namespace independent from PointTag.
     Point:
       type: object
-      required: [id, name, kind, value, quality, source, updatedAt]
+      required: [id, tag, name, kind, value, quality, source, updatedAt]
       properties:
-        id: { type: string, example: "UI-01" }
-        name: { type: string, example: "Room temperature" }
+        id: { type: string, example: "UI-01", description: "Stable canonical runtime identity." }
+        tag: { $ref: "#/components/schemas/PointTag" }
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: "Room temperature"
+          description: >
+            Display name; separate from technical tag and globally unique within the independent
+            UI/AO/DO/VP display-name namespace after backend canonicalization.
         kind: { type: string, enum: [UI, AO, DO, virtual] }
         value:
           allOf:
@@ -943,7 +1067,7 @@ components:
         - type: string
     VirtualPoint:
       type: object
-      required: [label, signalType, enabled, writable, logEnabled]
+      required: [tag, label, signalType, enabled, writable, logEnabled]
       description: >
         Backend-owned Virtual Point. Total capacity is 464 VP: 256 non-logged,
         128 logged at 1s, 64 logged at 100ms, and 16 diagnostic 10ms ring-buffer
@@ -953,7 +1077,14 @@ components:
           type: string
           pattern: "^(VP|AV)[-_]?0*([1-9]|[1-9][0-9]|[1-3][0-9]{2}|4[0-5][0-9]|46[0-4])$"
           example: "VP1"
-        label: { type: string, maxLength: 64 }
+        tag: { $ref: "#/components/schemas/PointTag" }
+        label:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Display label; separate from technical tag and globally unique in the independent
+            UI/AO/DO/VP display-name namespace.
         signalType: { type: string, enum: [boolean, integer, float, string, datetime] }
         enabled: { type: boolean, default: true }
         writable: { type: boolean, default: true }
@@ -979,13 +1110,13 @@ components:
           type: object
           description: TÃ¡ch version tá»«ng thÃ nh pháº§n (Contract Freeze 2026-06-11)
           properties:
-            mcu_fw: { type: string, example: "1.0", description: "Tá»« HANDSHAKE_RESP/DIAG (iobus Ä‘á»c)" }
+            mcu_fw: { type: string, example: "1.0", description: "Tá»« HANDSHAKE_RESP/DIAG (iobus Ä‘á»c)" }
             iobus: { type: string, example: "1.2.0" }
             core: { type: string, example: "1.1.0" }
             web: { type: string, example: "1.0.0" }
         iop:
           type: object
-          description: Nguá»“n = mkddc-iobus (Ä‘á»c tá»« kx_io_shm metrics)
+          description: Nguá»“n = mkddc-iobus (Ä‘á»c tá»« kx_io_shm metrics)
           properties:
             status: { type: string, enum: [normal, fault, safe] }
             crc_errors: { type: integer }
@@ -994,7 +1125,7 @@ components:
             last_io_resp_ms: { type: integer }
         scan:
           type: object
-          description: Nguá»“n = mkddc-core (Ä‘á»c tá»« kx_plc_shm)
+          description: Nguá»“n = mkddc-core (Ä‘á»c tá»« kx_plc_shm)
           properties:
             count: { type: integer }
             overrun: { type: integer }
@@ -1246,11 +1377,29 @@ components:
         eth: { type: object, additionalProperties: true }
         wifi: { type: object, additionalProperties: true }
         hostname: { type: string }
+    ConfigPointMetadata:
+      type: object
+      required: [ch, tag]
+      additionalProperties: true
+      properties:
+        ch: { type: integer, minimum: 1 }
+        tag: { $ref: "#/components/schemas/PointTag" }
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Canonical display name/label. Backend trims/collapses whitespace, rejects control
+            characters and compares Unicode-lower keys in a namespace independent from PointTag.
     ConfigIO:
       type: object
+      description: >
+        UI/AO/DO technical tags share one controller-local namespace with every VP.
+        DO rows are authoring metadata only; safe values remain in ConfigSafeState.do.
       properties:
-        ui: { type: array, items: { type: object, additionalProperties: true } }
-        ao: { type: array, items: { type: object, additionalProperties: true } }
+        ui: { type: array, items: { $ref: "#/components/schemas/ConfigPointMetadata" } }
+        ao: { type: array, items: { $ref: "#/components/schemas/ConfigPointMetadata" } }
+        do: { type: array, items: { $ref: "#/components/schemas/ConfigPointMetadata" } }
     ConfigVirtualPoints:
       type: object
       description: >
@@ -1284,42 +1433,141 @@ components:
         timezone: { type: string }
         ntp_enabled: { type: boolean }
         ntp_servers: { type: array, items: { type: string } }
-        system_time: { type: string, format: date-time, description: "Cho phÃ©p set giá» thá»§ cÃ´ng" }
-    TrendSample:
+        system_time: { type: string, format: date-time, description: "Cho phÃ©p set giá» thá»§ cÃ´ng" }
+    HistorianInterval:
+      type: string
+      enum: [auto, 1s, 3s, 5s, 15s, 30s, 1m, 3m, 5m, 15m, 30m, 60m]
+      description: >
+        `auto` is query-only. Policy updates use the eleven explicit intervals. UI may label
+        60m as 1h; config/wire canonical remains 60m.
+    HistorianPolicyState:
+      type: string
+      enum: [off, scheduled, recording]
+      description: Derived from dbLoggingEnabled, startAtUtc and serverNowUtc; never persisted separately.
+    HistorianPolicy:
       type: object
-      required: [time]
-      description: "Wide FE TrendSample: `{time, AI-01: 23.4}`; extra keys are series/point ids."
+      required:
+        - pointId
+        - generation
+        - dbLoggingEnabled
+        - dbInterval
+        - retentionDays
+        - hotCacheEnabled
+        - hotCacheHours
+        - startAtUtc
+        - state
+      properties:
+        pointId: { type: string, example: "VP2" }
+        generation: { type: integer, minimum: 1 }
+        dbLoggingEnabled: { type: boolean }
+        dbInterval:
+          allOf: [ { $ref: "#/components/schemas/HistorianInterval" } ]
+          description: Explicit value only; auto is invalid for policy updates.
+        retentionDays: { type: integer, minimum: 180, default: 180 }
+        hotCacheEnabled: { type: boolean, default: true }
+        hotCacheHours: { type: integer, minimum: 1, default: 48 }
+        startAtUtc:
+          type: string
+          format: date-time
+          description: Concrete backend-authoritative UTC start persisted after commit.
+        state: { $ref: "#/components/schemas/HistorianPolicyState" }
+        health: { type: string, enum: [healthy, degraded, error] }
+    HistorianPolicyPatch:
+      type: object
+      required: [pointId, generation, dbLoggingEnabled]
+      properties:
+        pointId: { type: string, example: "VP2" }
+        generation: { type: integer, minimum: 1 }
+        dbLoggingEnabled: { type: boolean }
+        dbInterval:
+          type: string
+          enum: [1s, 3s, 5s, 15s, 30s, 1m, 3m, 5m, 15m, 30m, 60m]
+        startAtUtc:
+          type: [string, "null"]
+          format: date-time
+          description: Null means start now using backend server time; explicit value must be future UTC Z.
+    HistorianCapacity:
+      type: object
+      required: [enabledPoints, reservedBytes, budgetBytes, freeBytes, requiredFreeBytes]
+      properties:
+        enabledPoints: { type: integer, minimum: 0 }
+        reservedBytes: { type: integer, minimum: 0 }
+        budgetBytes: { type: integer, minimum: 0 }
+        freeBytes: { type: integer, minimum: 0 }
+        requiredFreeBytes: { type: integer, minimum: 0 }
+    HistorianConfig:
+      type: object
+      required: [revision, serverNowUtc, points, capacity]
+      properties:
+        revision: { type: integer, minimum: 0 }
+        serverNowUtc: { type: string, format: date-time }
+        points:
+          type: array
+          items: { $ref: "#/components/schemas/HistorianPolicy" }
+        capacity: { $ref: "#/components/schemas/HistorianCapacity" }
+        namespaceState: { type: string, enum: [valid, conflicted] }
+    HistorianConfigUpdate:
+      type: object
+      required: [baseRevision, points]
+      properties:
+        baseRevision: { type: integer, minimum: 0 }
+        points:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/HistorianPolicyPatch" }
+    HistorySample:
+      type: object
+      required: [time, value, quality, source, tier, generation]
       properties:
         time: { type: string, format: date-time }
-      additionalProperties:
-        oneOf:
-          - type: number
-          - type: string
-    TrendConfig:
+        value: { type: number }
+        min: { type: number }
+        max: { type: number }
+        sum: { type: number }
+        count: { type: integer, minimum: 1 }
+        quality: { type: string, enum: [GOOD, UNCERTAIN, BAD] }
+        source: { type: string }
+        tier: { type: string, enum: [ram, hot, archive] }
+        generation: { type: integer, minimum: 1 }
+    HistorySeries:
       type: object
-      required: [pointIds, intervalS, retentionRecords]
+      required: [pointId, generation, effectiveResolution, samples]
       properties:
-        enabled: { type: boolean, default: true }
-        pointIds:
+        pointId: { type: string }
+        generation: { type: integer, minimum: 1 }
+        effectiveResolution: { $ref: "#/components/schemas/HistorianInterval" }
+        samples:
           type: array
-          description: >
-            Points logged by the mkddc-web sampler. Physical points use visible
-            UI/AO/DO IDs; VP entries must reference created enabled
-            logEnabled=true Virtual Points with boolean/integer/float signalType.
-            Raw/uncreated AV/BV/MSV slots are rejected/hidden; legacy AV aliases are accepted for VP references.
-          items: { type: string }
-          example: ["AI-01", "AI-02", "AO-01"]
-        intervalS:
-          type: integer
-          minimum: 10
-          maximum: 300
-          default: 30
-          description: "Sampler interval in seconds; default 30s, configurable 10..300s for 30m/1h/6h/24h UI ranges."
-        retentionRecords:
-          type: integer
-          minimum: 1000
-          default: 2880
-          description: "Minimum retained samples per point/log; default 2880 (~24h at 30s), never below 1000."
+          items: { $ref: "#/components/schemas/HistorySample" }
+    HistoryGap:
+      type: object
+      required: [pointId, generation, fromUtc, toUtc, reason]
+      properties:
+        pointId: { type: string }
+        generation: { type: integer, minimum: 1 }
+        fromUtc: { type: string, format: date-time }
+        toUtc: { type: string, format: date-time }
+        reason:
+          type: string
+          enum: [not_enabled, before_start, restart, runtime, queue, clock, sqlite, migration, disk]
+        detail: { type: string }
+    HistoryResponse:
+      type: object
+      required: [from, to, complete, series, gaps, tiersUsed]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        complete: { type: boolean }
+        series:
+          type: array
+          items: { $ref: "#/components/schemas/HistorySeries" }
+        gaps:
+          type: array
+          items: { $ref: "#/components/schemas/HistoryGap" }
+        tiersUsed:
+          type: array
+          uniqueItems: true
+          items: { type: string, enum: [ram, hot, archive] }
     ScheduleTarget:
       type: object
       required: [kind]
@@ -1625,7 +1873,7 @@ components:
     ConfigPutResult:
       type: object
       required: [result, applied, reload]
-      description: "Ãnh xáº¡ SIGHUP/Restart: safe-state->sighup-core; device & io->sighup-iobus; bacnet & fieldbus->restart-iobus; network & time->system; (users->none, xá»­ lÃ½ riÃªng á»Ÿ /users)."
+      description: "Ãnh xáº¡ SIGHUP/Restart: safe-state->sighup-core; device & io->sighup-iobus; bacnet & fieldbus->restart-iobus; network & time->system; (users->none, xá»­ lÃ½ riÃªng á»Ÿ /users)."
       properties:
         result: { type: string, enum: [success, failed, accepted, rejected] }
         applied: { type: boolean }

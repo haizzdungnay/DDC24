@@ -13,18 +13,19 @@ import (
 )
 
 type App struct {
-	cfg              Config
-	logger           *log.Logger
-	audit            *AuditLogger
-	auth             *AuthService
-	core             CoreStatusClient
-	os               OSReader
-	trends           *TrendStore
-	sampler          *Sampler
-	virtualPointRing *VirtualPointRing
-	alarmHistory     *AlarmHistoryStore
-	alarmTracker     *AlarmHistoryTracker
-	virtualPointMu   sync.Mutex
+	cfg                 Config
+	logger              *log.Logger
+	audit               *AuditLogger
+	auth                *AuthService
+	core                CoreStatusClient
+	os                  OSReader
+	trends              *TrendStore
+	sampler             *Sampler
+	virtualPointRing    *VirtualPointRing
+	alarmHistory        *AlarmHistoryStore
+	alarmTracker        *AlarmHistoryTracker
+	pointConfigMu       sync.Mutex
+	virtualPointRuntime map[string]RuntimePoint
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
@@ -42,7 +43,10 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	if osReader == nil {
 		osReader = NewDefaultOSReader()
 	}
-	app := &App{cfg: cfg, logger: logger, audit: audit, auth: auth, core: core, os: osReader}
+	app := &App{cfg: cfg, logger: logger, audit: audit, auth: auth, core: core, os: osReader, virtualPointRuntime: map[string]RuntimePoint{}}
+	if err := app.migrateLegacyPointConfig(); err != nil {
+		return nil, err
+	}
 	app.virtualPointRing = NewVirtualPointRing(10 * time.Minute)
 	app.alarmHistory = NewAlarmHistoryStore(app.alarmHistoryPath())
 	app.alarmTracker = NewAlarmHistoryTracker()

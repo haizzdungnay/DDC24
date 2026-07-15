@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.23 | 2026-07-01 (ADR-011/012 integration review: SHM v4, local BACnet smoke, implementation closed; Orange Pi/BTL gates remain) · 1.22 | 2026-07-01 (Port UI raw live-data pipeline via SHM v3 onto updated docs baseline)
+> **Phiên bản:** 1.30 | 2026-07-15 (WEB-HIST-005 dependencies name exact WEB-016 technical-tag foundation + WEB-NAME-001 display-name amendment) · 1.29 | 2026-07-15 (WEB-HIST-001 dependency reconciled to WEB-NAME-001; WEB-016 preserved as technical-tag foundation) · 1.28 | 2026-07-15 (ADR-018/019 historian scheduling + unique display names; implementation status/evidence reconciled) · 1.27 | 2026-07-15 (ADR-018/019 historian scheduling + unique display names planned) · 1.26 | 2026-07-15 (ADR-019 Phase A API-writer implementation verified locally) · 1.24 | 2026-07-15 (owner-approved Trends table latest-five FE adjustment) · 1.23 | 2026-07-01 (ADR-011/012 integration review: SHM v4, local BACnet smoke, implementation closed; Orange Pi/BTL gates remain) · 1.22 | 2026-07-01 (Port UI raw live-data pipeline via SHM v3 onto updated docs baseline)
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -901,6 +901,139 @@ Done khi: npm/go security checks clean locally and Trivy/Grype no longer report 
 Phụ thuộc: WEB-013
 Trạng thái: ĐÃ làm 2026-06-23 — Vite 8.0.16 + @vitejs/plugin-react 6.0.2; x/crypto 0.53.0 + x/sys 0.46.0; audit/build/lint/go test/govulncheck/Grype archive scan pass locally; chờ remote CI green.
 ```
+
+```
+Task ID: WEB-015
+Tên: Giới hạn bảng timestamp Trends còn 5 mốc gần nhất
+Owner: Dev Web | Phase: 5 | Module: frontend TrendChart
+File: src/frontend/src/components/TrendChart.tsx + src/frontend/src/components/TrendChart.test.tsx
+Input: owner feedback 2026-07-15; 09_WEB §1.11
+Output: chart giữ toàn bộ samples; bảng dưới chart chỉ render 5 timestamp mới nhất
+Test: render ít nhất 7 samples; bảng có đúng 5 data rows và bỏ 2 timestamp cũ nhất
+Done khi: focused test + frontend lint/typecheck/build pass; owner kiểm FE đạt trước mọi BE/phụ trợ
+Phụ thuộc: WEB-014
+Trạng thái: ĐÃ làm 2026-07-15 — Add Trend modal có tìm ID/tên + lọc UI/AO/DO/VP + Apply/Cancel; custom From/To lọc trong 24h legacy; fresh frontend full Vitest/lint/typecheck/Vite build passed locally; full typecheck clear.
+```
+
+```
+Task ID: WEB-016
+Tên: Global technical point tag namespace — Phase A
+Owner: Dev Web | Phase: 5 | Module: backend config/points + frontend Inputs/Outputs/VP/Monitor
+File: web/backend/pointtags.go, pointconfig.go, dto.go, configapi.go, virtualpoint.go, points.go, main.go, http.go; src/frontend/src/api/pointTags.ts, api/client.ts, types.ts, pages/InputsPage.tsx, OutputsPage.tsx, VirtualIoPage.tsx, MonitorPage.tsx
+Technical-tag foundation currently present in `web/backend/pointtags.go` and `src/frontend/src/api/pointTags.ts`; display-name amendment is tracked separately under `WEB-NAME-001`.
+Input: ADR-019 Accepted; Plan 43 Approved; CONFIG_SCHEMA Rev 1.8; OpenAPI 1.5.0; Runtime Model Rev 1.2
+Output: unique normalized ASCII tag across UI/AO/DO/all VP including disabled; tag separate name/label; Point id+tag; display-name amendment remains under WEB-NAME-001; canonical-ID-only API paths; structured 400/409 field details; deterministic tag migration
+Test: backend tag/collision/migration/concurrency/race; frontend utility/component field-error tests; lint/typecheck/build; E2E cross-kind collision matrix
+Done khi: toàn Phase A matrix pass; no localStorage authority; failed write preserves old config; docs status/rev updated. Phase B Programming alias không thuộc task này.
+Phụ thuộc: WEB-015, ADR-019, Plan 43
+Trạng thái: ĐÃ làm một phần 2026-07-15 — API-writer tag scope locally verified: global UI/AO/DO/VP tag validation + structured 400/409, point `id+tag`, FE tag surfaces, deterministic tag migration helper; Go test/vet và FE test/lint/typecheck/build pass locally. Còn release gates: race bị Windows CGO compiler chặn; backend normal coverage 59.7%; OpenAPI 1.6.0 parses với 41 paths/216 refs/zero decoded C1 controls; E2E/manual và generation-root authority chưa đóng. Display-name amendment thuộc WEB-NAME-001, không coi là WEB-016 hoàn tất.
+```
+
+## Phase 5.1 — Historian + global display-name amendment (Owner-approved design, product code open)
+
+```
+Task ID: COR-HIST-001
+Tên: Coherent runtime point snapshot for historian
+Owner: Dev SOM | Phase: 4/5 | Module: core web_ipc/scan_loop/point_table
+File: services/core/web_ipc.{hpp,cpp}, scan_loop.{hpp,cpp}, point_table.{hpp,cpp}, tests/test_web_ipc.cpp, tests/test_runtime_point_snapshot.cpp
+Input: ADR-018 v1.1; Runtime Model Rev 1.3; Plan 42 §4; frozen shared/mkddc_shm.h
+Output: one read-only snapshot from one scan for UI-01..16, AO-01..04 resolved setpoint, DO-01..04 feedback; quality/source/role/unit/monotonic age/generation; optional DI kind preserved but outside DB logging scope
+Test: snapshot JSON/escaping/bounds; one-scan coherence; AO winner; DO feedback; UI quality; DI capability; no DB write in core
+Done khi: C++ tests pass and web can read one bounded coherent snapshot without blocking scan
+Phụ thuộc: COR-011; DOC-HIST-001
+Trạng thái: IN PROGRESS 2026-07-15 — contract approved; untracked Go/C++ scaffolding/tests exist, but no complete registered core snapshot; product code not Done.
+```
+
+```
+Task ID: WEB-HIST-001
+Tên: Per-point policy, future-start scheduling and capacity API
+Owner: Dev Web | Phase: 5 | Module: historian policy/config/API
+File: web/backend/historian_policy.go, dto.go, http.go, main.go, historian_policy_test.go
+Input: ADR-018 v1.1; CONFIG_SCHEMA Rev 1.9; OpenAPI 1.6.0; Plan 42 §5
+Output: GET/PUT /trends/config with revision/serverNowUtc/capacity and UI/AO/DO/VP policy; 11 intervals; immediate server start or future UTC; off/scheduled/recording; atomic validation
+Test: all point kinds × intervals; past reject; restart persistence; disable preserves history; revision/generation/namespace/capacity/507; no empty auto-all
+Done khi: go test -race passes; failed batch leaves prior revision active; VP diagnostic log remains separate
+Phụ thuộc: COR-HIST-001; WEB-NAME-001; DOC-HIST-001
+Trạng thái: PLANNED 2026-07-15 — design approved; product code not Done; implementation remains behind the contract.
+```
+
+```
+Task ID: WEB-HIST-002
+Tên: SQLite hot/archive schema, migration and recovery
+Owner: Dev Web | Phase: 5 | Module: historian store/archive/migration/recovery
+File: web/backend/historian_store.go, historian_archive.go, historian_migration.go, historian_recovery.go + tests
+Input: ADR-018; Plan 42 §6
+Output: FULL-sync WAL, policy revisions, hot 15s rows, immutable blocks, gaps/meta, native backup, idempotent migration/recovery
+Test: codec/checksum; sec/ms legacy; empty legacy list; interrupted migration; power-cut reopen; corruption damaged copy; hot prune only after archive watermark
+Done khi: migration verified without destructive drop; no record-count pruning; corruption never auto-deletes data
+Phụ thuộc: WEB-HIST-001
+Trạng thái: PLANNED 2026-07-15 — product code not Done.
+```
+
+```
+Task ID: WEB-HIST-003
+Tên: Monotonic historian scheduler + bounded RAM/hot cache
+Owner: Dev Web | Phase: 5 | Module: historian scheduler/runtime snapshot
+File: web/backend/historian_scheduler.go, runtime_snapshot.go, virtualpoint_runtime.go, main.go + tests
+Input: ADR-018 v1.1; Plan 42 §7
+Output: one coherent snapshot per due boundary; no sample before start; restart at next boundary; 1/3/5s RAM fold; sparse slow slots; explicit gaps; 48h hot cache
+Test: 11 boundaries/no drift; immediate/future/restart; AO resolved/DO feedback/VP runtime; clock forward/back; queue overflow; no hold-last/backfill
+Done khi: old Sampler wiring removed after GREEN; no VP authoring-value sample; no empty policy auto-all
+Phụ thuộc: COR-HIST-001, WEB-HIST-002
+Trạng thái: PLANNED 2026-07-15 — product code not Done.
+```
+
+```
+Task ID: WEB-HIST-004
+Tên: Unified UTC history query + CSV
+Owner: Dev Web | Phase: 5 | Module: historian query/API
+File: web/backend/historian_query.go, historyapi.go + tests
+Input: OpenAPI 1.6.0; ADR-018 v1.1; Plan 42 §8
+Output: 1..8 canonical IDs; half-open UTC; RAM>hot>archive merge; generation dedupe; max 5000/series; quality/source/tier/gaps; partial 200 and all-tier 503; streamed CSV
+Test: 48h boundary; tier overlap/dedupe; rename/delete/recreate generation; fine resolution unavailable; partial failure; CSV parity
+Done khi: frontend needs one response only; no browser history merge; no false no-history before all tiers finish
+Phụ thuộc: WEB-HIST-003
+Trạng thái: PLANNED 2026-07-15 — product code not Done.
+```
+
+```
+Task ID: WEB-HIST-005
+Tên: Shared UI/AO/DO/VP Logging Control and unified Trends UX
+Owner: Dev Web | Phase: 5 | Module: frontend point pages/trends/accessibility
+File: src/frontend/src/components/PointLoggingControl.tsx, PointLoggingDialog.tsx, HistoryStateBanner.tsx, TrendSelectionDialog.tsx; pages/InputsPage.tsx, OutputsPage.tsx, VirtualIoPage.tsx, TrendsPage.tsx; api/client.ts; types.ts + tests
+Input: ADR-018 v1.1; ADR-019 v1.1; OpenAPI 1.6.0; Plan 42 §§9-10
+Output: same control and off/scheduled/recording/error badges on all point types; two-step interval/start modal; admin edit/view-only roles; backend-only merged Trends; DO/boolean stepped lines; explicit gaps
+Test: 4 kinds × 11 intervals; immediate/future/past; focus trap/Escape/restore/alert; 403 session; VP diagnostic separation; partial/fallback/no-history; latest-five table preserved
+Done khi: test/lint/typecheck/build + browser keyboard/a11y pass; no 1s browser historian buffer or frontend tier merge
+Phụ thuộc: WEB-HIST-001, WEB-HIST-004, WEB-016 technical-tag foundation, WEB-NAME-001 display-name amendment
+Trạng thái: PLANNED 2026-07-15 — product code not Done.
+```
+
+```
+Task ID: WEB-NAME-001
+Tên: Independent globally unique display-name namespace
+Owner: Dev Web | Phase: 5 | Module: backend point namespace + frontend point editors
+File: web/backend/pointtags.go, pointnames_test.go, configapi.go, virtualpoint.go, dto.go + tests; src/frontend/src/api/pointTags.ts, pointTags.test.ts; InputsPage.tsx, OutputsPage.tsx, VirtualIoPage.tsx, MonitorPage.tsx (optional extraction if cohesion/size requires)
+Input: ADR-019 v1.1; CONFIG_SCHEMA Rev 1.9; OpenAPI 1.6.0; Plan 43 Rev 0.3
+Output: required unique Unicode display name/label across UI/AO/DO/all VP, independent from tag; blank legacy to canonical ID; duplicate-content conflict state; conflict-reducing rename only; canonical history identity preserved
+Test: Unicode/whitespace/case; cross-kind collision; same tag/name allowed; concurrent writes; legacy blank/duplicate/idempotence; rename/delete/recreate history generation; field focus/details
+Done khi: no accepted duplicate nameKey; runtime/read works during legacy conflict; unrelated mutation blocked; no auto-suffix/first-wins
+Phụ thuộc: WEB-016 existing tag foundation; DOC-HIST-001
+Trạng thái: IN PROGRESS 2026-07-15 — tag foundation exists; display-name amendment code pending/in progress; product code not Done.
+```
+
+```
+Task ID: E2E-HIST-001
+Tên: Historian/name E2E, recovery and target eMMC benchmark
+Owner: Tester + Dev SOM + Dev Web | Phase: 6 | Module: all
+Input: COR-HIST-001, WEB-HIST-001..005, WEB-NAME-001
+Output: full UI/AO/DO/VP flow, restart/clock/disk/corruption/gap evidence, 48h/archive query, rename/delete/recreate, duplicate-name recovery, target capacity benchmark
+Test: Plan 42 §11 + owner acceptance matrix 2026-07-15
+Done khi: race/coverage/build/a11y/E2E pass; target benchmark gates pass; docs annotated with actual evidence
+Phụ thuộc: all above
+Trạng thái: PLANNED 2026-07-15 — no release claim.
+```
+
 ---
 
 ## Phase 5.5 — mkddc-hmi
@@ -1103,3 +1236,17 @@ Phụ thuộc: E2E-003
 Test chi tiết: [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
 
 Revision addendum: **Rev 1.23** | 2026-07-01 (Phase 4.6 implementation verified locally: SHM v4 and BACnet smoke 14/14; Orange Pi/BTL gates remain open).
+
+Revision addendum: **Rev 1.24** | 2026-07-15 — Added owner-approved `WEB-015`: chart keeps full samples while timestamp table renders only latest five rows.
+
+Revision addendum: **Rev 1.25** | 2026-07-15 — Added owner-approved `WEB-016` Phase A global point-tag namespace; contract amended, implementation remains IN PROGRESS.
+
+Revision addendum: **Rev 1.26** | 2026-07-15 — `WEB-016` API-writer implementation verified locally; Go test/vet and FE gates pass, remaining race/coverage/OpenAPI/E2E/generation release gates recorded explicitly.
+
+Revision addendum: **Rev 1.27** | 2026-07-15 — Added owner-approved `COR-HIST-001`, `WEB-HIST-001..005`, `WEB-NAME-001`, `E2E-HIST-001`: shared point logging, immediate/future start, unified 48h/archive Trends and independent unique display names; all new product work remains PLANNED.
+
+Revision addendum: **Rev 1.28** | 2026-07-15 — Replaced drifted historian-gate references with approved hard gate `DOC-HIST-001`; reconciled tag/name file map, partial statuses, and current local verification evidence.
+
+Revision addendum: **Rev 1.29** | 2026-07-15 — Reconciled `WEB-HIST-001` dependency to `WEB-NAME-001`; preserved `WEB-016` as technical-tag foundation.
+
+Revision addendum: **Rev 1.30** | 2026-07-15 — Replaced vague `WEB-016 amendment` dependency on `WEB-HIST-005` with exact `WEB-016` technical-tag foundation plus `WEB-NAME-001` display-name amendment.

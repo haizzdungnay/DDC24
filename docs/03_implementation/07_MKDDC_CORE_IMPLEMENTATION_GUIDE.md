@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Point table + scan loop + priority/safe-state
 
 > **Document ID:** IMPL-CORE-MK-DDC-24-VI
-> **Phiên bản:** 1.5 | 2026-06-13 (S7 #4/#5/#6 docs: stateful graph, BACnet, Modbus; fix priority test web=mức 2) ·
+> **Phiên bản:** 1.10 | 2026-07-15 (COR-HIST-001 coherent runtime snapshot planned; point-count drift corrected) · 1.9 | 2026-06-27 (COR-011 done) · 1.5 | 2026-06-13 (S7 #4/#5/#6 docs: stateful graph, BACnet, Modbus; fix priority test web=mức 2) ·
 > 1.4 | 2026-06-12 (§8: web_ipc đủ overridden + audit COR-007, SIGHUP reload
 > COR-008; §9: unit file thật packaging/systemd + ExecReload — SKEL-005) ·
 > 1.3 | 2026-06-12 (graph_runtime implemented Rev A subset; T6/T7 implemented;
@@ -138,10 +138,10 @@ while (!g_shutdown) {
 
 | Nhóm | Số | Nguồn (đọc) | Đích (ghi) |
 |------|----|----|----|
-| AI (UI scaled) | 8 | kx_io_shm.ui_value/ui_quality | — (read-only IO) |
-| BI (DI) | 8 | kx_io_shm.di_state | — |
-| AO | 4 | (feedback qua ao_setpoint đã ghi) | kx_io_shm.ao_setpoint (qua priority) |
-| BO (DO) | 4 | kx_io_shm.do_feedback | kx_io_shm.do_cmd (qua priority) |
+| UI scaled | 16 | kx_io_shm.ui_value/ui_quality | — (read-only IO) |
+| DI optional | 8 reserved | kx_io_shm.di_state khi board capability bật | — |
+| AO | 4 | post-priority resolved setpoint | kx_io_shm.ao_setpoint (qua priority) |
+| DO | 4 | kx_io_shm.do_feedback | kx_io_shm.do_cmd (qua priority) |
 | AV virtual | 32 | graph / web / BACnet | — |
 | BV virtual | 16 | graph / web / BACnet | — |
 | ext (Modbus) | 64 | ext cache (Rev A.1) | ext setpoint (dirty) |
@@ -158,8 +158,7 @@ public:
     // KHÔNG có set() cho AO/BO — output chỉ đi qua priority_resolver
 };
 ```
-**Done khi / Test:** 24 IO phản ánh đúng shm trong ≤1 scan; AV/BV set/get đúng;
-không có đường ghi AO/BO trực tiếp (compile-time: không tồn tại API).
+**Done khi / Test:** base SKU 24 IO (16 UI + 4 AO + 4 DO) phản ánh đúng shm trong ≤1 scan; optional DI chỉ expose khi capability bật; AV/BV set/get đúng; không có đường ghi AO/DO trực tiếp (compile-time: không tồn tại API).
 
 ---
 
@@ -396,6 +395,37 @@ socket CHỈ dùng cho command write/release.
 - ĐÃ implement đủ 3 result 2026-06-12 (COR-007). source=bacnet: thêm vào web_ipc cùng BAC-006.
 ```
 
+### 8.1 Coherent historian snapshot IPC (`COR-HIST-001`, PLANNED)
+
+Core không ghi SQLite. Web historian yêu cầu một snapshot physical bất biến từ cùng scan, sau priority resolve + safe-state.
+
+Request:
+
+```json
+{"id":1,"op":"point_snapshot","user":"web"}
+```
+
+Response:
+
+```json
+{"id":1,"result":"accepted","snapshotId":42,"snapshotObservedAtUtc":"2026-07-15T10:00:00Z","points":[{"id":"AO-01","kind":"AO","value":5.0,"quality":"GOOD","source":"manual","role":"resolved_setpoint","unit":"V","updatedAtMonotonicNs":1234,"generation":1}]}
+```
+
+Rules:
+
+- one request returns UI-01..16 engineering values, AO-01..04 resolved setpoints and DO-01..04 hardware feedback from one scan;
+- optional DI keeps kind `DI` but is excluded from the 2026-07-15 DB-logging scope until SKU contract amendment;
+- each point carries `quality/source/role/unit/updatedAtMonotonicNs/generation`;
+- core does not read config display name/tag and does not union backend VP;
+- web copies VP runtime registry immediately after core response and freezes both producers into one web snapshot;
+- no sequential per-point reads; no stale authoring VP value;
+- snapshot operation is read-only, cannot block scan, and gets bounded response size/test coverage;
+- canonical ID + generation is historian identity; metadata rename does not change generation.
+
+Tests: `test_web_ipc.cpp` snapshot JSON/escaping/bounds; `test_runtime_point_snapshot.cpp` one-scan coherence, AO source, DO feedback, UI quality, optional DI capability and generation. Product implementation remains blocked until Plan 42 phase/TDD gate.
+
+Trạng thái: ĐÃ duyệt 2026-07-15 — contract planned; product code not Done.
+
 **SIGHUP reload (CONFIG_SCHEMA D-5 — `io_safe_state.conf` → SIGHUP core, ĐÃ implement 2026-06-12, COR-008):**
 ```
 - SIGHUP → reload io_config.conf + io_safe_state.conf + graph.json Ở RANH GIỚI scan
@@ -599,11 +629,12 @@ bool ExtCache::lookup(const NodeParams& p, ExtPoint* out);
 | Config reload | config_reload | SIGHUP đổi default mức 6 không restart, manual giữ | test_config_reload |
 | Stateful graph | graph_runtime/state_snapshot | COR-009/010 pass theo doc 22 | unit + group 4 |
 | BACnet object | bacnet_objtable/BACnet bridge | BAC-001..011 pass theo doc 24 nếu thuộc scope | group 9 |
+| Historian snapshot | web_ipc/point_table/scan_loop | one-scan UI/AO/DO snapshot with quality/source/role/generation; core does not write DB | COR-HIST-001 tests |
 
 Trạng thái: ĐÃ làm 2026-06-17 — BAC-004 (bacnet_objtable publish+read_ext), web_ipc source=bacnet mức 3, fieldbus.sock SOCK_DGRAM mở trong main.cpp, scan_loop step 3 ext socket + step 4 cmd.prio routing; 106 core test pass.
 
 ---
-**Rev** 1.9 | 2026-06-27 (§12 COR-011 DONE: annotate status, tick T1-T12 test checklist, drain_ext_writes() write bridge documented) · 1.8 | 2026-06-26 (§12 Protocol graph nodes COR-011 — scan loop step 3 spec, graph_runtime extension, unit test checklist; §2 step 3 cập nhật ext_cache reader) ·
+**Rev** 1.10 | 2026-07-15 — Corrected point table to frozen 16 UI + optional 8 DI + 4 AO + 4 DO; added owner-approved read-only coherent historian snapshot IPC contract and COR-HIST-001 tests. · **Rev** 1.9 | 2026-06-27 (§12 COR-011 DONE: annotate status, tick T1-T12 test checklist, drain_ext_writes() write bridge documented) · 1.8 | 2026-06-26 (§12 Protocol graph nodes COR-011 — scan loop step 3 spec, graph_runtime extension, unit test checklist; §2 step 3 cập nhật ext_cache reader) ·
 1.7 | 2026-06-17 (BAC-004+MOD-009 core: bacnet_objtable.cpp dùng iop_protocol.h, fieldbus.sock mở trong main.cpp, web_ipc source=bacnet mức 3, scan_loop routing — 106 test pass) ·
 1.6 | 2026-06-17 (§8: BAC-CONFLICT-001 CLOSED — mở rộng core.sock nhận source=bacnet mức 3,
 BACnet client persistent connection, audit format cập nhật, rejected "unknown_source" added) ·

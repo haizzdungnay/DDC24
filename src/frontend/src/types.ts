@@ -8,6 +8,7 @@ export type Language = 'vi' | 'en'
 
 export interface Point {
   id: string
+  tag: string
   name: string
   kind: PointKind
   value: number | boolean | string
@@ -262,7 +263,7 @@ export interface Graph {
 
 export interface TrendSample {
   time: string
-  [series: string]: string | number
+  [series: string]: string | number | null
 }
 
 export type ScheduleType =
@@ -350,6 +351,7 @@ export function isDigitalContact(signalType: AiSignalType): boolean {
 
 export interface AiInputConfig {
   channel: number
+  tag: string
   label: string
   signalType: AiSignalType
   analogCurrent?: boolean
@@ -382,6 +384,7 @@ export interface AoConfig {
   kind: 'AO'
   channel: number
   id: string
+  tag: string
   label: string
   enabled: boolean
   mode: AoSignalMode
@@ -411,6 +414,7 @@ export interface DoConfig {
   kind: 'DO'
   channel: number
   id: string
+  tag: string
   label: string
   enabled?: boolean
   safeState: DoSafeState
@@ -439,6 +443,7 @@ export type VirtualPointSignalType = 'boolean' | 'integer' | 'float' | 'string' 
 
 export interface VirtualPoint {
   id: string
+  tag: string
   label: string
   signalType: VirtualPointSignalType
   enabled: boolean
@@ -456,6 +461,28 @@ export interface VirtualPoint {
   mathFunction?: number
   note?: string
   updatedAt?: string
+}
+
+export interface ApiValidationDetail {
+  path: string
+  message?: string
+  reason?: string
+  pointId?: string
+  conflictPointId?: string
+  conflictPath?: string
+  tag?: string
+  name?: string
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly details: ApiValidationDetail[] = []
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
 }
 
 export type UserParamKey =

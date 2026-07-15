@@ -2,7 +2,7 @@
 ## MK-DDC-24 — REST API + Web UI + Config + Validator
 
 > **Document ID:** IMPL-WEB-MK-DDC-24-VI
-> **Phiên bản:** 1.10 | 2026-06-23 (frontend dependency security refresh; contract §2 không đổi)
+> **Phiên bản:** 1.17 | 2026-07-15 (reconciled WEB-HIST-001..005 + WEB-NAME-001 implementation status and legacy custom-range containment wording) · 1.16 | 2026-07-15 (historian/name evidence reconciled: backend coverage 59.7%; OpenAPI 1.6.0 parses with 41 paths/216 local refs/zero decoded C1 controls; race/E2E/manual/generation-root gates remain open) · 1.15 | 2026-07-15 (ADR-018/019 per-point historian scheduling + unique display names planned) · 1.14 | 2026-07-15 (ADR-019 Phase A API-writer implementation verified locally) · 1.12 | 2026-07-15 (owner adjustment: bảng Trends chỉ hiện 5 mốc gần nhất; chart giữ đủ samples) · 1.11 | 2026-06-23 (Go dependency security refresh; contract §2 không đổi) · 1.10 | 2026-06-23 (frontend dependency security refresh; contract §2 không đổi)
 > **Owner:** Dev 3 (Web/BE)
 > **Nguồn-chuẩn:** [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) ·
 > [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
@@ -64,7 +64,7 @@ src/frontend/ (React 18 + TS + Vite + Tailwind v4) — app thực tế Rev A, IA
 │   ├── Dashboard `/` — KPI, health services + IOP/scan metrics, trạng thái truyền thông, I/O, sự kiện, trend
 │   ├── Monitoring `/monitor` — bảng 24 IO realtime + chi tiết point + DO toggle (commissioning)
 │   ├── Alarm log `/alarms` — list + ack
-│   ├── Trends `/trends` — object-list + time-range 30m/1h/6h/24h; chart + bảng stat động
+│   ├── Trends `/trends` — object-list + time-range 30m/1h/6h/24h; chart dùng đủ samples + bảng 5 timestamp gần nhất
 │   └── User info `/me` — danh tính, role/permission, session demo, đổi mật khẩu demo, đăng xuất
 ├── Settings
 │   ├── Display `/settings/display` — ngôn ngữ vi/en, ghi chú theme ISA-101 Level A, mật độ hiển thị demo
@@ -183,14 +183,50 @@ Scope code:
 - Upgrade backend Go security modules to `golang.org/x/crypto v0.53.0` and `golang.org/x/sys v0.46.0`; Go module directive becomes `go 1.25.0` with existing `toolchain go1.26.4`.
 
 Trạng thái: ĐÃ làm 2026-06-23 — npm audit High gate is clean; `npm run build`, `npm run lint`, backend `go test ./...`, `govulncheck ./...`, and local Grype clean archive scan pass. No REST/WS contract change.
+
+## 1.11 Owner adjustment — Trends filters and latest-five table (Approved 2026-07-15)
+
+Nguồn-chuẩn: owner feedback 2026-07-15. `Add trend` mở modal có tìm theo ID/tên và lọc loại `UI/AO/DO/VP`; Apply/Cancel giữ selection rõ ràng. Quick range 30m/1h/6h/24h dùng backend legacy tối đa 24h; frontend custom From/To chỉ cắt subwindow từ dữ liệu legacy đã fetch tối đa 24h. Backend explicit arbitrary UTC/custom query và range >24h deferred tới `WEB-HIST-004`. Chart dùng toàn bộ `samples` trong time range đã chọn. Bảng timestamp dưới chart chỉ render 5 mốc mới nhất theo thứ tự thời gian; mỗi row gồm `Time` và giá trị/metadata của các series. Không render Historian policy khi backend chưa có contract tương ứng.
+
+Trạng thái: ĐÃ làm 2026-07-15 — khôi phục Add Trend modal + tìm ID/tên + lọc UI/AO/DO/VP + custom From/To; bảng timestamp giữ 5 mốc mới nhất, chart giữ toàn bộ data. Focused lint/test và Vite build pass; current frontend npm test/lint/typecheck/Vite build pass. Do not claim repository-wide typecheck or E2E.
+
+## 1.12 Global technical point tags — Phase A (Approved 2026-07-15)
+
+Nguồn-chuẩn: ADR-019 Accepted + Plan 43 Approved + CONFIG_SCHEMA Rev 1.8 + OpenAPI 1.5.0. Scope Phase A: technical `tag` bắt buộc và unique theo normalized lowercase key trên UI/AO/DO/mọi VP kể cả disabled; tag tách `name`/`label`; canonical ID vẫn là runtime identity.
+
+Backend phải validate final candidate namespace dưới một serialization boundary chung cho IO PUT, VP create/update/full replace/delete và `PUT /points/{id}/config`; malformed/reserved sai owner trả 400, duplicate trả 409 kèm structured field details. Point/list response trả `id + tag + name`. Legacy migration deterministic, không suffix/first-wins. Flat-file authority chỉ bao phủ API writers; generation root validation vẫn là release gate.
+
+Frontend Inputs/Outputs/Virtual Points/Monitor phải edit tag riêng, preserve backend `details`, focus field lỗi đầu tiên và không fallback localStorage cho authoritative live rename. Phase B Programming alias không nằm trong completion claim Phase A.
+
+Trạng thái: ĐÃ làm 2026-07-15 — API-writer scope đã có global namespace validation, `id+tag+name`, deterministic migration helper, Inputs/Outputs/VP/Monitor tag editor và structured field errors; Go test/vet + FE test/lint/typecheck/build pass. Local evidence: backend coverage 59.7%; OpenAPI 1.6.0 parses with 41 paths, 216 local refs, zero decoded C1 controls. Release gates còn mở: race bị Windows CGO 64-bit compiler chặn; E2E/manual và generation-root authority chưa đóng.
+
+## 1.13 Owner amendment — unique display names + shared database Logging Control (Approved 2026-07-15)
+
+Nguồn-chuẩn: ADR-018 v1.1, ADR-019 v1.1, CONFIG_SCHEMA Rev 1.9, OpenAPI 1.6.0, Plans 42/43.
+
+- Scope: UI-01..16, AO-01..04, DO-01..04 và mọi created numeric/boolean VP; optional DI ngoài scope.
+- Backend quản lý hai namespace độc lập: technical `tagKey` và display `nameKey`. `name/label` required sau migration, trim/collapse whitespace, 1..64 Unicode code point, cấm control, compare Unicode lowercase. Name có thể giống tag.
+- Legacy blank name trở thành canonical ID. Content-duplicate name giữ nguyên/readable, nhưng mọi point mutation ngoài conflict-reducing rename trả `409 point_namespace_conflicted`; không auto-suffix, không fail runtime.
+- `GET/PUT /api/v1/trends/config` thay legacy global sampler bằng per-point policy revision. Admin chọn 11 interval và bắt đầu ngay bằng server time hoặc UTC tương lai; viewer/operator chỉ xem `off|scheduled|recording`.
+- Shared `PointLoggingControl` + one two-step `PointLoggingDialog` dùng trên Inputs/Outputs/Virtual Points. VP `logEnabled/logIntervalMs` phải được ghi nhãn Diagnostic log, không phải DB policy.
+- Policy sống qua restart, ghi tới khi tắt; disable/rename/delete không xóa history. Canonical ID+generation giữ identity; recreate VP tăng generation.
+- Trends bỏ browser historian buffer và frontend tier merge. Backend merge RAM/hot 48h/archive, trả quality/source/tier/gap; boolean dùng stepped line, missing/BAD ngắt line.
+- Implementation status: `WEB-HIST-001`, `WEB-HIST-002`, `WEB-HIST-003`, `WEB-HIST-004`, `WEB-HIST-005` = `PLANNED`; `WEB-NAME-001` = `IN PROGRESS`; all remain open, and no product task is marked Done. `WEB-016` remains technical-tag foundation; display-name amendment is `WEB-NAME-001`.
+- Accessibility: text badge không chỉ màu, modal focus trap/Escape/restore trigger, field error `role=alert`, backend past-time/conflict error giữ dialog mở và focus đúng field.
+
+Trạng thái: ĐÃ duyệt 2026-07-15 — guide/contract amendment; product implementation vẫn theo WEB-HIST-001..005 và WEB-016, chưa Done.
+
 ## 2. API list (tối thiểu — khớp REST_API_OPENAPI)
 
 | Method | Endpoint | Auth | Đi tới | Mô tả |
 |--------|----------|------|--------|-------|
 | POST | `/api/v1/auth/login` | none | — | Login, trả JWT + role (admin/operator/viewer) |
 | GET | `/api/v1/points` | Bearer | core (read) | Danh sách 24 IO |
-| GET | `/api/v1/points/{id}` | Bearer | core (read) | 1 point {value,quality,ts} |
+| GET | `/api/v1/points/{id}` | Bearer | core (read) | 1 point `{id,tag,name,value,quality,...}` bằng canonical ID |
 | PUT | `/api/v1/points/{id}` | Bearer operator+ | core (command) | Ghi giá trị → nguồn manual mức 2 (§1.2); body {value} hoặc {release:true} |
+| PUT | `/api/v1/points/{id}/config` | Bearer admin | config metadata | Đổi technical tag/display name bằng canonical ID; validate cả hai global namespaces |
+| GET/PUT | `/api/v1/trends/config` | Bearer viewer/admin | historian policy | Đọc state/capacity/server time; admin atomic-update per-point interval + immediate/future UTC start |
+| GET | `/api/v1/history` | Bearer viewer+ | historian query | Explicit UTC range; backend merge RAM/hot 48h/archive và trả gaps |
 | GET | `/api/v1/system/status` | Bearer | core/iobus metrics | CPU/RAM/IOP |
 | GET | `/api/v1/system/config` | Bearer admin | store | Đọc config |
 | PUT | `/api/v1/system/config` | Bearer admin | store + core reload | Cập nhật config |
@@ -230,6 +266,7 @@ System status (versions tách từng thành phần — Contract Freeze; nguồn 
 |------|----------|
 | `/data/config/io_config.conf` | sensor type per UI (0-10V/4-20mA/PT100/NTC10k/dry...), AO mode per kênh |
 | `/data/config/io_safe_state.conf` | safe-state value per kênh |
+| `/data/config/historian.conf` | per-point DB policy, 11 interval, start UTC, capacity và revision |
 | `/data/config/network.conf` | IP/DHCP/DNS |
 | `/data/config/device.conf` | BACnet device ID/name |
 | `/data/config/users.conf` | user accounts (bcrypt) |
@@ -294,6 +331,11 @@ Done khi : 4 check chạy đúng; deploy chỉ khi pass.
 | RELAY_STUCK | "Relay không phản hồi đúng lệnh" |
 | overridden-by-priority | "Lệnh bị ghi đè bởi mức ưu tiên cao hơn (an toàn/fire)" |
 | validator FAIL | liệt kê từng lỗi graph bằng tiếng Việt |
+| point_name_conflict | "Tên đã được dùng bởi <pointId>"; giữ form mở và focus field tên |
+| point_namespace_conflicted | "Cấu hình cũ còn tên trùng; hãy đổi một tên để giảm xung đột" |
+| historian_start_in_past | "Thời gian bắt đầu phải từ hiện tại của thiết bị trở đi" |
+| historian_storage_unavailable | "Không thể ghi lịch sử; dữ liệu live vẫn tiếp tục" |
+| history complete=false | banner partial + khoảng gap; không nối đường giả |
 
 ---
 
@@ -308,7 +350,7 @@ Done khi : 4 check chạy đúng; deploy chỉ khi pass.
 | Không bypass core | core_client.go | group 6 (kiểm không có serial) |
 
 ---
-**Rev** 1.11 | 2026-06-23 · DoD: [13_DEFINITION_OF_DONE §5](13_DEFINITION_OF_DONE.md)
+**Rev** 1.17 | 2026-07-15 — Reconciled WEB-HIST-001..005 and WEB-NAME-001 status, preserved WEB-016 as technical-tag foundation, and aligned legacy custom-range containment wording. · **Rev** 1.16 | 2026-07-15 — Reconciled local historian/name evidence: backend coverage 59.7%; OpenAPI 1.6.0 parses with 41 paths, 216 local refs, zero decoded C1 controls; Windows CGO 64-bit race block and E2E/manual/generation-root gates remain open. · **Rev** 1.15 | 2026-07-15 — ADR-018/019 amendments: independent unique display names, legacy conflict resolution, shared UI/AO/DO/VP Logging Control, immediate/future start, persistent policy states and backend-owned 48-hour/archive Trends merge; implementation remains open. · **Rev** 1.14 | 2026-07-15 — ADR-019 Phase A API-writer implementation verified locally: global validation, `id+tag+name`, FE tag/error surfaces and migration helper; release gates remain explicit. · 1.13 | 2026-07-15 — ADR-019 Phase A global point tags planned: backend aggregate validation, `id+tag+name`, FE field errors, migration/generation gates; Phase B deferred. · 1.12 | 2026-07-15 — Owner-approved FE adjustment: bảng timestamp Trends chỉ render 5 mốc gần nhất; chart giữ toàn bộ samples/range, không đổi REST/WS contract. · 1.11 | 2026-06-23 · DoD: [13_DEFINITION_OF_DONE §5](13_DEFINITION_OF_DONE.md)
 - 1.11 (2026-06-23): Go security dependency refresh: `golang.org/x/crypto v0.53.0`, `golang.org/x/sys v0.46.0`; giữ nguyên REST/WS contract.
 - 1.10 (2026-06-23): frontend security dependency refresh: Vite 8.0.16 + plugin-react 6.0.2, Node 22 CI, Vite config manualChunks compatibility; giữ nguyên REST/WS contract.
 - 1.9 (2026-06-17): chuẩn hóa i18n frontend: tiếng Việt có dấu + English mode cho label/nút/toast chính; giữ nguyên REST/WS contract.

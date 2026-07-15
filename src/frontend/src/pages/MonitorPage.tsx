@@ -1,6 +1,7 @@
 import { Circle, Pencil, Power, RefreshCw, RotateCcw, Save, Search, ShieldAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { POINT_UNIT_OPTIONS, aiUnitFromPointUnit, apiClient, pointUnitFromAiUnit } from '../api/client'
+import { normalizePointTag, pointTagFieldErrors, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
@@ -134,7 +135,7 @@ export function MonitorPage() {
   const filtered = useMemo(() => points.filter((point) => {
     const matchesKind = kind === 'all' || point.kind === kind
     const matchesQuality = quality === 'all' || point.quality === quality
-    const haystack = `${point.id} ${point.name}`.toLowerCase()
+    const haystack = `${point.id} ${point.tag} ${point.name}`.toLowerCase()
     return matchesKind && matchesQuality && haystack.includes(query.toLowerCase())
   }).sort((a, b) => a.id.localeCompare(b.id)), [kind, points, quality, query])
 
@@ -166,11 +167,13 @@ export function MonitorPage() {
     setPointModalId(point.id)
   }
 
-  async function savePointBasics(point: Point, config: { name: string; unit?: string }) {
+  async function savePointBasics(point: Point, config: { tag: string; name: string; unit?: string }) {
+    const tagError = validatePointTag(config.tag)
+    if (tagError) throw new Error(tagError)
     if (!config.name.trim()) throw new Error('Name cannot be empty')
     await apiClient.updatePointConfig(point.id, {
-      name: config.name.trim(),
-      unit: config.unit === undefined ? undefined : config.unit.trim()
+      tag: normalizePointTag(config.tag),
+      name: config.name.trim()
     })
     toast.push('success', pick(`Updated ${point.id}`, `Updated ${point.id}`))
     await pointsState.refetch()
@@ -473,12 +476,14 @@ function PointDetailsModal({
 }: {
   point: Point
   onClose: () => void
-  onSave: (point: Point, config: { name: string; unit?: string }) => Promise<void>
+  onSave: (point: Point, config: { tag: string; name: string; unit?: string }) => Promise<void>
   onForce: (point: Point, value: number | boolean | string, durationSeconds: number) => Promise<void>
   onRelease: (point: Point) => Promise<void>
 }) {
   const { pick } = useI18n()
   const toast = useToast()
+  const [tagValue, setTagValue] = useState(point.tag)
+  const [tagError, setTagError] = useState<string>()
   const [nameValue, setNameValue] = useState(point.name)
   const [unitValue, setUnitValue] = useState(selectUnitValue(point.unit))
   const [forceValue, setForceValue] = useState(defaultForceValue(point))
@@ -492,14 +497,23 @@ function PointDetailsModal({
   const groupText = `${point.kind} - ${kindLabel[point.kind]}`
 
   async function handleSave() {
+    const localError = validatePointTag(tagValue)
+    if (localError) {
+      setTagError(localError)
+      return
+    }
     try {
       setBusy('save')
+      const nextTag = normalizePointTag(tagValue)
       const nextName = nameValue.trim()
       const nextUnit = isAnalog ? unitValue : undefined
-      await onSave(point, { name: nextName, unit: nextUnit })
+      await onSave(point, { tag: nextTag, name: nextName, unit: nextUnit })
+      setTagValue(nextTag)
+      setTagError(undefined)
       setNameValue(nextName)
       if (nextUnit !== undefined) setUnitValue(nextUnit)
     } catch (err) {
+      setTagError(Object.values(pointTagFieldErrors(err))[0])
       toast.push('error', err instanceof Error ? err.message : 'Update failed')
     } finally {
       setBusy(null)
@@ -533,19 +547,16 @@ function PointDetailsModal({
       <div className="space-y-5 text-[var(--c-text)]">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
           <div className="space-y-3">
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Tag</span>
+                <input aria-invalid={Boolean(tagError)} aria-describedby={tagError ? `${point.id}-tag-error` : undefined} value={tagValue} onChange={(event) => setTagValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
+                {tagError && <span id={`${point.id}-tag-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{tagError}</span>}
+              </label>
               <label className="block space-y-1">
                 <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Point name', 'Point name')}</span>
                 <input value={nameValue} onChange={(event) => setNameValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
               </label>
-              {isAnalog && (
-                <label className="block space-y-1">
-                  <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Unit', 'Unit')}</span>
-                  <select value={unitValue} onChange={(event) => setUnitValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]">
-                    {POINT_UNIT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </label>
-              )}
             </div>
             <Button size="sm" variant="primary" icon={<Save className="h-4 w-4" />} loading={busy === 'save'} onClick={handleSave}>{pick('Save basics', 'Save basics')}</Button>
           </div>
@@ -563,6 +574,7 @@ function PointDetailsModal({
 
         <dl className="grid gap-2 md:grid-cols-2">
           <PointInfo label="Point ID" value={point.id} />
+          <PointInfo label="Tag" value={point.tag} />
           <PointInfo label="I/O group" value={groupText} />
           <PointInfo label="Signal type" value={point.sensorType ?? '-'} />
           <PointInfo label="Current value" value={formatValue(point.value, point.unit)} />

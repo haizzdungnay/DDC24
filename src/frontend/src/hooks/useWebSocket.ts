@@ -119,7 +119,7 @@ export function useWebSocket() {
         const records = pointRecordsFrom(parsed)
 
         if (records.length) {
-          const points = applyPointConfigOverrides(applyDemoPointMetadata(records.map((point) => normalizePoint({ ts, ...point }))))
+          const points = records.map((point) => normalizePoint({ ts, ...point }))
           setAllPoints((current) => mergePointsById(current, points))
           setLastEnvelope({ ...message, op, ts, points })
           setLastEventAt(ts)

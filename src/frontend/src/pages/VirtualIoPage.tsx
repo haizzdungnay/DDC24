@@ -2,6 +2,7 @@ import { Activity, ChevronLeft, ChevronRight, Database, Plus, Save, SlidersHoriz
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../api/client'
+import { normalizePointTag, pointTagFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
@@ -39,6 +40,7 @@ export function VirtualPointsPage() {
   const [saving, setSaving] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [tagErrors, setTagErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     let active = true
@@ -67,12 +69,24 @@ export function VirtualPointsPage() {
 
   async function saveSelected() {
     if (!selected) return
+    const index = items.findIndex((item) => item.id === selected.id)
+    const localTagError = validatePointTag(selected.tag)
+    const localNameError = validatePointName(selected.label)
+    if (localTagError || localNameError) {
+      setTagErrors({
+        ...(localTagError ? { [`items[${index}].tag`]: localTagError } : {}),
+        ...(localNameError ? { [`items[${index}].label`]: localNameError } : {})
+      })
+      return
+    }
     setSaving(true)
     try {
       const saved = normalizeVirtualPoint(await apiClient.updateVirtualPoint(normalizeVirtualPoint(selected)))
       setItems((current) => current.map((item) => item.id === saved.id ? saved : item))
+      setTagErrors({})
       toast.push('success', pick('Da luu Virtual Point', 'Virtual Point saved'))
     } catch (error) {
+      setTagErrors(pointTagFieldErrors(error))
       toast.push('error', error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(false)
@@ -80,6 +94,15 @@ export function VirtualPointsPage() {
   }
 
   async function createItem(input: Partial<VirtualPoint>) {
+    const localTagError = validatePointTag(input.tag ?? '')
+    const localNameError = validatePointName(input.label ?? '')
+    if (localTagError || localNameError) {
+      setTagErrors({
+        ...(localTagError ? { [`items[${items.length}].tag`]: localTagError } : {}),
+        ...(localNameError ? { [`items[${items.length}].label`]: localNameError } : {})
+      })
+      return
+    }
     setSaving(true)
     try {
       const created = normalizeVirtualPoint(await apiClient.createVirtualPoint(normalizeVirtualPoint({ ...defaultVirtualPoint(), ...input })))
@@ -87,8 +110,10 @@ export function VirtualPointsPage() {
       setSelectedId(created.id)
       setWizardIndex(0)
       setAddOpen(false)
+      setTagErrors({})
       toast.push('success', pick('Da tao VP', 'Virtual Point created'))
     } catch (error) {
+      setTagErrors(pointTagFieldErrors(error))
       toast.push('error', error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(false)
@@ -185,7 +210,12 @@ export function VirtualPointsPage() {
         >
           {selected ? (
             <div className="space-y-5">
-              <Basics item={selected} onChange={updateSelected} />
+              <Basics
+                item={selected}
+                tagError={tagErrors[`items[${items.findIndex((item) => item.id === selected.id)}].tag`]}
+                nameError={tagErrors[`items[${items.findIndex((item) => item.id === selected.id)}].label`]}
+                onChange={updateSelected}
+              />
               {mode === 'summary' && <Summary item={selected} livePoint={livePoint} saving={saving} onWrite={(raw) => void writeValue(raw)} />}
               {mode === 'wizard' && (
                 <WizardPanel
@@ -210,7 +240,7 @@ export function VirtualPointsPage() {
         </Panel>
       </div>
 
-      <AddVirtualPointModal open={addOpen} saving={saving} onCreate={createItem} onClose={() => setAddOpen(false)} />
+      <AddVirtualPointModal open={addOpen} saving={saving} tagError={tagErrors[`items[${items.length}].tag`]} onCreate={createItem} onClose={() => setAddOpen(false)} />
       <Modal open={deleteOpen} danger title={pick('Xoa VP?', 'Delete Virtual Point?')} confirmLabel="OK" cancelLabel="Cancel" onConfirm={() => void deleteSelected()} onClose={() => setDeleteOpen(false)}>
         {selected ? `${selected.id} - ${selected.label}` : ''}
       </Modal>
@@ -233,11 +263,12 @@ function QuotaStrip({ quotas }: { quotas: ReturnType<typeof quotaUsage> }) {
   )
 }
 
-function Basics({ item, onChange }: { item: VirtualPoint; onChange: (patch: Partial<VirtualPoint>) => void }) {
+function Basics({ item, tagError, nameError, onChange }: { item: VirtualPoint; tagError?: string; nameError?: string; onChange: (patch: Partial<VirtualPoint>) => void }) {
   const { t } = useI18n()
   return (
-    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px_120px]">
-      <TextInput label={t('channelLabel')} value={item.label} onChange={(label) => onChange({ label })} />
+    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px_120px_120px]">
+      <TextInput label="Tag" value={item.tag} error={tagError} onChange={(tag) => onChange({ tag })} />
+      <TextInput label={t('channelLabel')} value={item.label} error={nameError} onChange={(label) => onChange({ label })} />
       <SignalTypeSelect value={item.signalType} label onChange={(signalType) => onChange(signalTypePatch(item, signalType))} />
       <CheckField label="Enabled" checked={item.enabled} onChange={(enabled) => onChange({ enabled })} />
       <CheckField label="Writable" checked={item.writable} onChange={(writable) => onChange({ writable })} />
@@ -396,7 +427,8 @@ function WizardField({ label, children }: { label: string; children: React.React
   )
 }
 
-function AddVirtualPointModal({ open, saving, onCreate, onClose }: { open: boolean; saving: boolean; onCreate: (input: Partial<VirtualPoint>) => void; onClose: () => void }) {
+function AddVirtualPointModal({ open, saving, tagError, onCreate, onClose }: { open: boolean; saving: boolean; tagError?: string; onCreate: (input: Partial<VirtualPoint>) => void; onClose: () => void }) {
+  const [tag, setTag] = useState('')
   const [label, setLabel] = useState('Virtual Point')
   const [signalType, setSignalType] = useState<VirtualPointSignalType>('float')
   const [unit, setUnit] = useState(0)
@@ -406,6 +438,7 @@ function AddVirtualPointModal({ open, saving, onCreate, onClose }: { open: boole
 
   useEffect(() => {
     if (!open) return
+    setTag('')
     setLabel('Virtual Point')
     setSignalType('float')
     setUnit(0)
@@ -415,8 +448,9 @@ function AddVirtualPointModal({ open, saving, onCreate, onClose }: { open: boole
   }, [open])
 
   return (
-    <Modal open={open} title="Add Virtual Point" confirmLabel="Create" cancelLabel="Cancel" onConfirm={() => onCreate({ label, signalType, unit: unitToString(unit), writable, logEnabled: logMode !== 0, logIntervalMs: logMode || undefined, retentionS: logMode ? defaultRetention(logMode) : undefined, value: parseValue(signalType, value), enabled: true })} onClose={onClose}>
+    <Modal open={open} title="Add Virtual Point" confirmLabel="Create" cancelLabel="Cancel" onConfirm={() => onCreate({ tag, label, signalType, unit: unitToString(unit), writable, logEnabled: logMode !== 0, logIntervalMs: logMode || undefined, retentionS: logMode ? defaultRetention(logMode) : undefined, value: parseValue(signalType, value), enabled: true })} onClose={onClose}>
       <div className="space-y-4">
+        <TextInput label="Tag" value={tag} error={tagError} onChange={setTag} />
         <TextInput label="Label" value={label} onChange={setLabel} />
         <SignalTypeSelect value={signalType} label onChange={(type) => { setSignalType(type); setValue(String(defaultValue(type))) }} />
         <UnitSelect value={unit} label onChange={setUnit} />
@@ -456,11 +490,13 @@ function ValueInput({ signalType, value, compact, onChange }: { signalType: Virt
   return <TextInput label={compact ? '' : 'Value'} value={value} type={type} onChange={onChange} />
 }
 
-function TextInput({ label, value, type = 'text', disabled, onChange }: { label: string; value: string; type?: string; disabled?: boolean; onChange: (value: string) => void }) {
+function TextInput({ label, value, type = 'text', disabled, error, onChange }: { label: string; value: string; type?: string; disabled?: boolean; error?: string; onChange: (value: string) => void }) {
+  const errorId = error ? `${label.toLowerCase().replace(/\s+/g, '-')}-error` : undefined
   return (
     <label className="block space-y-2">
       {label && <span className="text-sm font-semibold text-[var(--c-text)]">{label}</span>}
-      <input type={type} disabled={disabled} className={controlClass()} value={value} onChange={(event) => onChange(event.target.value)} />
+      <input type={type} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={errorId} className={controlClass()} value={value} onChange={(event) => onChange(event.target.value)} />
+      {error && <span id={errorId} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{error}</span>}
     </label>
   )
 }
@@ -547,6 +583,7 @@ function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
   return {
     ...item,
     id: canonicalVirtualPointId(item.id),
+    tag: normalizePointTag(item.tag),
     label: item.label.trim() || 'Virtual Point',
     signalType,
     unit,
@@ -564,7 +601,7 @@ function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
 }
 
 function defaultVirtualPoint(): VirtualPoint {
-  return { id: '', label: 'Virtual Point', signalType: 'float', enabled: true, writable: true, logEnabled: false, value: 0, unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '' }
+  return { id: '', tag: '', label: 'Virtual Point', signalType: 'float', enabled: true, writable: true, logEnabled: false, value: 0, unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '' }
 }
 
 function signalTypePatch(item: VirtualPoint, signalType: VirtualPointSignalType): Partial<VirtualPoint> {

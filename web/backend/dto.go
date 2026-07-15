@@ -18,6 +18,7 @@ type ConfigNetwork struct {
 type ConfigIO struct {
 	UI []map[string]any `json:"ui"`
 	AO []map[string]any `json:"ao"`
+	DO []map[string]any `json:"do"`
 }
 
 type ConfigSafeState struct {
@@ -48,6 +49,7 @@ type ConfigVirtualPoints struct {
 
 type VirtualPoint struct {
 	ID              string  `json:"id"`
+	Tag             string  `json:"tag"`
 	Label           string  `json:"label"`
 	SignalType      string  `json:"signalType"`
 	Enabled         bool    `json:"enabled"`
@@ -188,8 +190,31 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"new_password"`
 }
 
+type RuntimePoint struct {
+	ID                   string `json:"id"`
+	Kind                 string `json:"kind"`
+	Value                any    `json:"value"`
+	Quality              string `json:"quality"`
+	Source               string `json:"source"`
+	Role                 string `json:"role"`
+	Unit                 string `json:"unit,omitempty"`
+	SignalType           string `json:"signalType,omitempty"`
+	Enabled              bool   `json:"enabled,omitempty"`
+	LogEnabled           bool   `json:"logEnabled,omitempty"`
+	LogIntervalMs        *int   `json:"logIntervalMs,omitempty"`
+	RetentionS           int    `json:"retentionS,omitempty"`
+	UpdatedAtMonotonicNs uint64 `json:"updatedAtMonotonicNs"`
+	Generation           uint64 `json:"generation"`
+}
+
+type PointConfigPatch struct {
+	Tag  *string `json:"tag,omitempty"`
+	Name *string `json:"name,omitempty"`
+}
+
 type PointDTO struct {
 	ID            string   `json:"id"`
+	Tag           string   `json:"tag"`
 	Name          string   `json:"name"`
 	Kind          string   `json:"kind"`
 	Value         any      `json:"value"`

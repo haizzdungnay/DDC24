@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Kế hoạch triển khai cấu trúc source thật chi tiết cho Dev 2
 
 > **Document ID:** IMPL-SOM-SRC-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
+> **Phiên bản:** 1.8 | 2026-07-15 (S8 COR-HIST-001 coherent runtime snapshot planned) · 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
 > 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device) ·
 > 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) ·
 > 1.4 | 2026-06-13 (S7 #4 Active; thêm plan S7 #5 BACnet và S7 #6 Modbus) ·
@@ -14,7 +14,7 @@
 > SAFETY SPEC 07 §5, thêm microtask 5 Rev A.1 cho trigger T6/T7) · 1.0 | 2026-06-11
 > **Trạng thái:** Active — S0–S6 ĐÃ thực thi xong 2026-06-11 (round-trip pass);
 > S7 #1/#2/#3 xong 2026-06-12; S7 #4/#5/#6 đã có task/code-ready docs 2026-06-13;
-> TD-001/002/003 xong 2026-06-19
+> TD-001/002/003 xong 2026-06-19; S8 COR-HIST-001 PLANNED 2026-07-15
 > **Đối tượng đọc:** Dev 2, Lead, Tester
 > **Phạm vi:** chỉ phía SOM: `services/iobus`, `services/core`, `tools/fake_mcu`, `tools/shm_dump_io`, `shared/`
 
@@ -741,6 +741,34 @@ Ràng buộc giữ nguyên:
 - Mapping 6 mức priority nội bộ ↔ 16 mức BACnet đã chốt trong [24 §4b](25_BACNET_IMPLEMENTATION_PLAN.md):
   BACnet priority array resolve riêng trong iobus, winner gửi vào core.sock source=bacnet mức 3.
 
+## S8 — Coherent historian runtime snapshot (ADR-018, COR-HIST-001)
+
+**Mục tiêu:** mở một read-only IPC operation để `mkddc-web` lấy state UI/AO/DO nhất quán từ cùng scan; core không sở hữu historian DB.
+
+**Files:**
+
+- modify `services/core/web_ipc.hpp/.cpp`;
+- modify `services/core/scan_loop.hpp/.cpp`;
+- modify `services/core/point_table.hpp/.cpp`;
+- modify `services/core/tests/test_web_ipc.cpp`;
+- create `services/core/tests/test_runtime_point_snapshot.cpp`;
+- modify `services/core/CMakeLists.txt`.
+
+**Microtasks:**
+
+1. RED: request `{"op":"point_snapshot"}` currently rejected; add JSON/size/escaping tests.
+2. RED: one-scan fixture for UI-01..16 engineering value, AO-01..04 post-safe resolved setpoint and DO-01..04 hardware feedback.
+3. GREEN: freeze immutable point enumeration after resolve + safe-state, before scan publication completes.
+4. Serialize one `snapshotId`, `snapshotObservedAtUtc` and each point `id/kind/value/quality/source/role/unit/updatedAtMonotonicNs/generation`.
+5. Keep optional DI kind/capability intact but exclude it from this owner-approved DB policy scope.
+6. No metadata/tag/name lookup and no backend VP inside core; web unions VP runtime registry after response.
+7. Bound response/request handling; snapshot read must not block scan or mutate priority/output.
+8. Run focused C++ tests, then full core CTest.
+
+**Done:** exact snapshot contract/tests pass; no `shared/mkddc_shm.h` change; no SQLite/database dependency in core; task still not Done until evidence recorded in 07/11/42.
+
+Trạng thái: PLANNED 2026-07-15 — owner-approved contract; code chưa Done.
+
 ---
 
 ## 8. Thứ tự làm thật ngoài đời
@@ -755,7 +783,8 @@ Không được làm lung tung. Thứ tự đúng:
 6. `S5` hoàn tất `shm_dump_io`
 7. `S4` hoàn tất core runtime tối thiểu
 8. `S6` chạy round-trip no-board
-9. mới được qua board thật / web thật
+9. `S8` thêm coherent historian snapshot bằng TDD, không đổi SHM
+10. mới được nối web historian/qua board thật
 
 Rule:
 - không viết core trước khi iobus có SHM sống
@@ -784,6 +813,7 @@ Rule:
 | `output_writer` | final output command | `ao_setpoint[]`, `do_cmd[]` | `mkddc_shm.h` |
 | `fake_mcu` | UART/PTTY bytes | fake slave behavior | `shared/iop_protocol.h` |
 | `shm_dump_io` | `kx_io_shm` | text/json dump | `mkddc_shm.h` |
+| `point_snapshot` IPC | post-resolve point table from one scan | immutable UI/AO/DO historian source DTO | `web_ipc`, `scan_loop`, `point_table`; no DB dependency |
 
 ---
 
@@ -835,6 +865,6 @@ Không làm bước 4 trước khi 3 bước này xanh.
 
 ---
 
-**Rev** 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
+**Rev** 1.8 | 2026-07-15 — Added owner-approved S8/COR-HIST-001 coherent read-only runtime snapshot microtasks, tests, boundaries and build order; product code remains PLANNED. · **Rev** 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device; cập nhật ràng buộc BACnet IPC path) ·
 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) · 1.4 | 2026-06-13 · 1.3 | 2026-06-12 · 1.2 | 2026-06-12 · 1.1 | 2026-06-12 · 1.0 | 2026-06-11

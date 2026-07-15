@@ -36,7 +36,7 @@ func (a *App) ReadPoints(ctx context.Context) ([]PointDTO, error) {
 	reader, ok := a.core.(pointReader)
 	points := []PointDTO{}
 	if !ok {
-		return a.overlayVirtualPoints(points), nil
+		return a.overlayPointMetadata(a.overlayVirtualPoints(points)), nil
 	}
 	corePoints, err := reader.ReadPoints(ctx)
 	if err == nil && corePoints != nil {
@@ -44,7 +44,7 @@ func (a *App) ReadPoints(ctx context.Context) ([]PointDTO, error) {
 	} else {
 		points = []PointDTO{}
 	}
-	return a.overlayVirtualPoints(points), err
+	return a.overlayPointMetadata(a.overlayVirtualPoints(points)), err
 }
 
 // overlayVirtualPoints makes backend-created VP points the only visible
@@ -70,6 +70,48 @@ func (a *App) overlayVirtualPoints(points []PointDTO) []PointDTO {
 		if item.Enabled {
 			out = append(out, virtualPointDTO(item))
 		}
+	}
+	return out
+}
+
+func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
+	ioCfg, err := readConfig(a, configGroupIO, ConfigIO{})
+	if err != nil {
+		ioCfg = ConfigIO{}
+	}
+	metadata := map[string]struct{ tag, name string }{}
+	addRows := func(rows []map[string]any, prefix string) {
+		for _, row := range rows {
+			channel, _, good := intField(row, "ch")
+			if !good {
+				continue
+			}
+			id := formatPointID(prefix, channel)
+			tag, _, _ := stringField(row, "tag")
+			name, _, _ := stringField(row, "name")
+			metadata[id] = struct{ tag, name string }{fallbackPointTag(tag, id), strings.TrimSpace(name)}
+		}
+	}
+	addRows(ioCfg.UI, "UI")
+	addRows(ioCfg.AO, "AO")
+	addRows(ioCfg.DO, "DO")
+	out := make([]PointDTO, len(points))
+	for i, point := range points {
+		id := canonicalPointID(point.ID)
+		point.ID = id
+		if point.Tag == "" {
+			point.Tag = id
+		}
+		if meta, ok := metadata[id]; ok {
+			point.Tag = meta.tag
+			if meta.name != "" {
+				point.Name = meta.name
+			}
+		}
+		if point.Name == "" {
+			point.Name = id
+		}
+		out[i] = point
 	}
 	return out
 }
@@ -104,7 +146,8 @@ func (a *App) handlePoint(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, point := range points {
 		if canonicalPointID(point.ID) == targetID {
-			writeJSON(w, http.StatusOK, point)
+			projected := a.overlayPointMetadata([]PointDTO{point})
+			writeJSON(w, http.StatusOK, projected[0])
 			return
 		}
 	}
@@ -160,7 +203,8 @@ func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
 		result = "degraded"
 	}
 	a.audit.PointForce(principal, id, body.release, result, r.RemoteAddr)
-	writeJSON(w, http.StatusOK, point)
+	projected := a.overlayPointMetadata([]PointDTO{point})
+	writeJSON(w, http.StatusOK, projected[0])
 }
 
 func decodeForcePointBody(w http.ResponseWriter, r *http.Request) (forcePointBody, error) {
@@ -229,8 +273,8 @@ func (a *App) writeVirtualPointValue(r *http.Request, id string, value any, rele
 	if release {
 		return PointDTO{}, fmt.Errorf("virtual point release unsupported")
 	}
-	a.virtualPointMu.Lock()
-	defer a.virtualPointMu.Unlock()
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
 
 	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
 	if err != nil {

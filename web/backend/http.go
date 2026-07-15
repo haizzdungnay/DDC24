@@ -134,6 +134,7 @@ func (a *App) Router() http.Handler {
 	mux.Handle("GET /api/v1/points", a.auth.Require(RoleViewer, a.handlePoints))
 	mux.Handle("GET /api/v1/points/{id}", a.auth.Require(RoleViewer, a.handlePoint))
 	mux.Handle("PUT /api/v1/points/{id}", a.auth.Require(RoleOperator, a.handleForcePoint))
+	mux.Handle("PUT /api/v1/points/{id}/config", a.auth.Require(RoleAdmin, a.handlePutPointConfig))
 	mux.Handle("GET /api/v1/virtual-points", a.auth.Require(RoleViewer, a.handleListVirtualPoints))
 	mux.Handle("POST /api/v1/virtual-points", a.auth.Require(RoleAdmin, a.handleCreateVirtualPoint))
 	mux.Handle("PUT /api/v1/virtual-points/{id}", a.auth.Require(RoleAdmin, a.handleUpdateVirtualPoint))

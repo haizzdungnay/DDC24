@@ -71,8 +71,8 @@ func (a *App) applyVirtualPointSchedules(ctx context.Context, now time.Time) err
 }
 
 func (a *App) writeScheduledVirtualPointValue(id string, value float64) error {
-	a.virtualPointMu.Lock()
-	defer a.virtualPointMu.Unlock()
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
 
 	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
 	if err != nil {

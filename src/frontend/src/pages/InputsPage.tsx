@@ -2,6 +2,7 @@ import { Activity, ChevronLeft, ChevronRight, Save, SlidersHorizontal, Wand2 } f
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../api/client'
+import { normalizePointTag, pointTagFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
@@ -33,6 +34,7 @@ export function InputsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [tagErrors, setTagErrors] = useState<Record<string, string>>({})
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
 
   useEffect(() => {
@@ -74,14 +76,32 @@ export function InputsPage() {
     setConfirmOpen(true)
   }
 
+  function validateTags(nextConfigs: AiInputConfig[]): boolean {
+    const errors = Object.fromEntries(nextConfigs.flatMap((config, index) => {
+      const tagError = validatePointTag(config.tag)
+      const nameError = validatePointName(config.label)
+      return [
+        ...(tagError ? [[`ui[${index}].tag`, tagError]] : []),
+        ...(nameError ? [[`ui[${index}].name`, nameError]] : [])
+      ]
+    }))
+    setTagErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
   async function confirmSave() {
+    if (!validateTags(configs)) return
     setSaving(true)
     try {
-      await apiClient.putAiInputs(configs)
+      const normalized = configs.map((config) => ({ ...config, tag: normalizePointTag(config.tag) }))
+      await apiClient.putAiInputs(normalized)
+      setConfigs(normalized)
+      setTagErrors({})
       toast.push('success', t('saveSuccess'))
       setConfirmOpen(false)
       setViewMode('advanced')
     } catch (error) {
+      setTagErrors(pointTagFieldErrors(error))
       toast.push('error', `${t('saveError')}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setSaving(false)
@@ -89,12 +109,16 @@ export function InputsPage() {
   }
 
   async function saveConfigs(nextConfigs = configs) {
+    if (!validateTags(nextConfigs)) return
     setSaving(true)
     try {
-      await apiClient.putAiInputs(nextConfigs)
+      const normalized = nextConfigs.map((config) => ({ ...config, tag: normalizePointTag(config.tag) }))
+      await apiClient.putAiInputs(normalized)
+      setTagErrors({})
       toast.push('success', t('saveSuccess'))
-      setConfigs(nextConfigs)
+      setConfigs(normalized)
     } catch (error) {
+      setTagErrors(pointTagFieldErrors(error))
       toast.push('error', `${t('saveError')}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setSaving(false)
@@ -154,7 +178,12 @@ export function InputsPage() {
         >
           {selected && (
             <div className="space-y-5">
-              <ChannelBasics config={selected} onChange={(patch) => updateChannel(selected.channel, patch)} />
+              <ChannelBasics
+                config={selected}
+                tagError={tagErrors[`ui[${configs.findIndex((config) => config.channel === selected.channel)}].tag`]}
+                nameError={tagErrors[`ui[${configs.findIndex((config) => config.channel === selected.channel)}].name`]}
+                onChange={(patch) => updateChannel(selected.channel, patch)}
+              />
               {viewMode === 'summary' ? (
                 <AiSummary
                   config={selected}
@@ -339,17 +368,31 @@ function formatLiveValue(point: Point, unit: string | undefined, booleanInput: b
   return formatValue(point.value, unit)
 }
 
-function ChannelBasics({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
+function ChannelBasics({ config, tagError, nameError, onChange }: { config: AiInputConfig; tagError?: string; nameError?: string; onChange: (patch: Partial<AiInputConfig>) => void }) {
   const { t } = useI18n()
   return (
-    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
+    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px]">
+      <label className="space-y-1">
+        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Tag</span>
+        <input
+          aria-invalid={Boolean(tagError)}
+          aria-describedby={tagError ? `ui-${config.channel}-tag-error` : undefined}
+          className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+          value={config.tag}
+          onChange={(event) => onChange({ tag: event.target.value })}
+        />
+        {tagError && <span id={`ui-${config.channel}-tag-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{tagError}</span>}
+      </label>
       <label className="space-y-1">
         <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{t('channelLabel')}</span>
         <input
+          aria-invalid={Boolean(nameError)}
+          aria-describedby={nameError ? `ui-${config.channel}-name-error` : undefined}
           className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
           value={config.label}
           onChange={(event) => onChange({ label: event.target.value })}
         />
+        {nameError && <span id={`ui-${config.channel}-name-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{nameError}</span>}
       </label>
       <label className="flex items-end gap-2 pb-2 text-sm font-semibold text-[var(--c-text-dim)]">
         <input

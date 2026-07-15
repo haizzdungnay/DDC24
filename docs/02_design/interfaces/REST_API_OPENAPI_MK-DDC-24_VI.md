@@ -2,7 +2,7 @@
 ## D-4 (đi kèm `openapi.yaml`)
 
 > **Document ID:** ICD-REST-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-05-30 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.3 | 2026-07-15 (per-point historian scheduling + global display-name uniqueness) · 1.2 | 2026-07-15 (global point-tag Phase A theo ADR-019) · 1.1 | 2026-06-13 · 📘 [README](../../01_specs/README.md)
 > **Nguồn-chuẩn máy đọc:** [`openapi.yaml`](openapi.yaml) (OpenAPI 3.1) · **Trace:** `SW-API-001..010`, `SRS §6.4`, `SW_ARCH §6`
 
 > File `.md` này giải thích cách dùng; **`openapi.yaml` là hợp đồng chính thức** (import vào Swagger/Postman, generate client).
@@ -13,7 +13,7 @@
 - HTTPS **TLS 1.3**, cổng **8443**. Không phục vụ HTTP plaintext (trừ redirect 8080→8443).
 - Auth: **Bearer JWT** (HS256, exp 1h). Secret từ key store (D-11), không hardcode.
 - Mọi response JSON, `Content-Type: application/json`.
-- Lỗi: `{"error","code","request_id"}` (SW-API-010).
+- Lỗi: `{"error","code","request_id","details?"}` (SW-API-010). Tag/name sai trả `400`; trùng namespace/revision/generation trả `409` với `details[]` gồm `path`, `reason`, `pointId`, `conflictPointId` và `tag|name`. Historian thiếu budget/free-space trả `507`; toàn bộ history tier unavailable trả `503`.
 - Rate limit **100 req/s/IP** → vượt trả **429** (SW-API-008/009).
 - Phân quyền: `admin` (full), `operator` (xem + force I/O), `viewer` (chỉ xem).
 
@@ -47,7 +47,14 @@ curl -k -X PUT https://<ip>:8443/api/v1/points/AO1 \
 | POST | /auth/logout | bearer | huỷ token |
 | GET | /points | bearer | tất cả point |
 | GET | /points/{id} | bearer | 1 point |
-| PUT | /points/{id} | bearer | ghi point |
+| PUT | /points/{id} | bearer operator+ | ghi giá trị point bằng canonical ID |
+| PUT | /points/{id}/config | bearer admin | đổi technical tag/display metadata bằng canonical ID; không nhận tag trong path |
+| GET/POST | /virtual-points | bearer viewer/admin | list/create VP; create validate global tag namespace |
+| PUT/DELETE | /virtual-points/{id} | bearer admin | update/delete VP bằng canonical ID |
+| GET/PUT | /system/config/io | bearer admin | UI/AO/DO metadata; validate tag cùng VP |
+| GET/PUT | /system/config/virtual-points | bearer admin | replace VP config; validate tag/name cùng physical points |
+| GET/PUT | /trends/config | bearer viewer/admin | viewer đọc trạng thái; admin atomic-update per-point DB logging policy, interval và start UTC |
+| GET | /history | bearer viewer+ | unified UTC range query; backend merge RAM/hot 48h/archive, trả quality/source/tier/gap |
 | GET | /system/status | bearer | CPU/RAM/IOP/ver |
 | GET/PUT | /system/config | admin | cấu hình |
 | POST | /ota/upload, /ota/apply | admin | OTA |
@@ -71,6 +78,34 @@ async def get_point(point_id: str, user=Depends(auth_bearer)):
 - FastAPI tự sinh `/docs` (Swagger) từ code; **giữ đồng bộ với `openapi.yaml`** (CI so khớp).
 - Đọc/ghi point đi qua `mkddc-core`/`mkddc_plc_shm` contract (không truy cập trực tiếp BACnet/MCU).
 
+## 4a. Global point tag Phase A (ADR-019)
+
+- `Point` luôn trả `id`, `tag`, `name`: `id` là canonical runtime identity ổn định; `tag` là alias kỹ thuật mutable; `name` là nhãn hiển thị/BACnet name tùy kind.
+- Một namespace trong controller gồm UI/AO/DO/mọi VP kể cả disabled VP. Backend trim/collapse ASCII spaces, so sánh ASCII lowercase, giới hạn 1..64 byte theo `^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$` và reserve canonical/legacy point-ID syntax cho owner tương ứng.
+- Backend aggregate validator là authority cho mọi API writer. Frontend validation chỉ early feedback. `PUT /points/{id}/config` và mọi point path chỉ nhận canonical ID, không resolve tag trong URL.
+- Tag sai grammar/reserved sai owner trả `400`; duplicate trả `409 point_tag_conflict`. `details[]` phải giữ field path và cả canonical ID đang sửa/xung đột để UI focus đúng field.
+- Legacy migration deterministic: existing valid tag; rồi unique valid display `name`/`label`; nếu blank/invalid/duplicate/reserved thì canonical ID. Mọi member của duplicate group cùng fallback canonical ID; không first-wins, không suffix; validate toàn candidate trước atomic write.
+- Flat-file phase bảo vệ approved API writers bằng mutex chung nhưng chưa bảo vệ direct filesystem edits/cross-file crash atomicity. Generation root validation theo ADR-015 là release gate authority cuối.
+- Phase A không đổi graph/core runtime. Programming tag alias thuộc Phase B: resolve tĩnh lúc validate/deploy thành canonical ID; không dynamic lookup trong scan loop.
+
+## 4b. Global display-name namespace Phase A (ADR-019 v1.1)
+
+- `Point.name` là display name/label canonical, required sau migration và unique độc lập với `Point.tag` trên UI/AO/DO/mọi created VP kể cả disabled.
+- Backend trim/collapse whitespace, giới hạn 1..64 Unicode code point, cấm control character và so sánh Unicode lowercase. Frontend chỉ early feedback.
+- `400 point_name_invalid`; `409 point_name_conflict`; legacy duplicate có nội dung trả `409 point_namespace_conflicted` cho mọi point mutation ngoài rename làm giảm conflict.
+- Blank legacy name được gán canonical ID. Duplicate có nội dung không auto-suffix/first-wins và không fail runtime/read.
+- Rename không đổi canonical ID, historian generation hoặc deployed graph binding. Delete VP giữ history theo ID+generation tới hết retention.
+
+## 4c. Per-point database historian (ADR-018 v1.1)
+
+- `GET /trends/config` cho viewer+ trả `revision`, `serverNowUtc`, capacity, policies và state `off|scheduled|recording` cùng health. `PUT` admin-only nhận atomic batch `{baseRevision, points[]}`.
+- Mỗi patch có `pointId`, `generation`, `dbLoggingEnabled`, `dbInterval`, `startAtUtc`. `startAtUtc=null` nghĩa là backend dùng server time khi commit; explicit value phải RFC3339 UTC `Z` và không ở quá khứ tại commit.
+- Interval wire canonical: `1s|3s|5s|15s|30s|1m|3m|5m|15m|30m|60m`; UI hiển thị `60m` là `1h`.
+- Disable không xóa history. Policy sống qua restart. Restart/clock/queue/storage gap không được backfill giả.
+- `GET /history` nhận 1..8 canonical IDs, `from/to` UTC half-open, `resolution`, `maxPoints<=5000`; backend merge RAM > hot SQLite > archive và dedupe theo `{pointId,generation,bucketUtc}`. Hot cache mặc định 48h; frontend không merge browser buffer.
+- Query partial trả `200 complete=false` + gaps khi còn ít nhất một tier. Mọi tier unavailable trả `503 historian_unavailable`; fine resolution ngoài RAM tail trả `400 resolution_unavailable`; output budget trả `413`.
+- UI/AO/DO/VP dùng cùng policy API. VP `logEnabled/logIntervalMs` là diagnostic-only, không phải database policy.
+
 ## 5. Bảo mật bắt buộc
 - Validate `value` theo range/quality trước khi ghi (SW-API-005).
 - Audit log mọi `PUT/POST` (user, point, giá trị, thời gian) (SW-SEC-006).
@@ -80,4 +115,6 @@ async def get_point(point_id: str, user=Depends(auth_bearer)):
 `SW-API-001..010`, `API-001..009`, `FR-023`, `T-SW-070..079`.
 
 ---
-**Rev** 1.1 | 2026-06-13 (mkddc naming + core-mediated point access) · 1.0 | 2026-05-30
+**Rev** 1.3 | 2026-07-15 — ADR-018/019 amendments: unique display-name namespace, structured name conflicts/migration, atomic per-point historian policy with immediate/future UTC start, 11 intervals, 48-hour hot-cache/backend merge and explicit gap/error behavior. · **Rev** 1.2 | 2026-07-15 — ADR-019 Phase A: `Point.id + tag + name`, canonical-ID-only point paths, global UI/AO/DO/VP tag validation, structured 400/409 details, deterministic migration and generation authority caveat. · 1.1 | 2026-06-13 · 1.0 | 2026-05-30
+
+Trạng thái: ĐÃ duyệt 2026-07-15 — REST/OpenAPI amendment historian + global tag/name; implementation vẫn theo Plans 42/43.

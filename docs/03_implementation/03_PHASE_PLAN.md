@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Chia phase làm thật
 
 > **Document ID:** IMPL-PHASEPLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.5 | 2026-06-13 (bổ sung S7 #4/#5/#6: stateful graph Active, BACnet/Modbus implementation plan) · 1.4 | 2026-06-12 (P4: web_ipc overridden+audit, SIGHUP reload, systemd units — COR-007/008, SKEL-005)
+> **Phiên bản:** 1.9 | 2026-07-15 (P4/P5/P6 historian + unique display-name workstream planned) · 1.8 | 2026-06-27 (P5.5 HMI added) · 1.5 | 2026-06-13 (bổ sung S7 #4/#5/#6: stateful graph Active, BACnet/Modbus implementation plan) · 1.4 | 2026-06-12 (P4: web_ipc overridden+audit, SIGHUP reload, systemd units — COR-007/008, SKEL-005)
 > **Trạng thái:** Active
 > **Đọc trước:** [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md)
 > **Map sang task:** [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md) · **Map sang test:** [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
@@ -159,6 +159,9 @@ BACnet object/priority bridge, Modbus ext cache integration.
     ext cache (kx_ext_snapshot_msg_t vào mkddc_shm.h), write queue, E302/E303 alarm theo
     [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md).
     **ĐÃ implement 2026-06-17 — MOD-001..011 DONE (114 test pass).**
+13. `COR-HIST-001`: read-only coherent historian snapshot từ cùng scan, sau resolve + safe-state;
+    UI-01..16/AO-01..04/DO-01..04 với quality/source/role/generation. Core không ghi DB.
+    **PLANNED 2026-07-15 — contract owner-approved, code chưa Done.**
 ```
 
 **Test:** Test group 4 (core). **DoD:** §12.4.
@@ -184,7 +187,15 @@ config, alarm, graph validate/deploy, audit log.
 6. Config (sensor type, network, safe-state).
 7. Alarm (list + ack).
 8. Graph validate/deploy (validator pass → deploy graph.json).
+9. Per-point historian policy UI/AO/DO/VP: 11 interval, start ngay/server time hoặc UTC tương lai,
+   state off/scheduled/recording, persist qua restart; VP diagnostic log tách riêng.
+10. SQLite historian: 48h hot cache + >=180d archive, backend merge RAM/hot/archive,
+    unified UTC query/CSV, quality/source/gap, không browser merge.
+11. Hai namespace độc lập unique `tag` và display `name/label`; legacy blank name→canonical ID,
+    duplicate content giữ runtime/read nhưng chặn mutation ngoài conflict-reducing rename.
 ```
+
+Trạng thái P5 amendment: PLANNED 2026-07-15 — WEB-HIST-001..005 + WEB-NAME-001; contract/docs approved, product code chưa Done.
 
 **Test:** Test group 5 (web). **DoD:** §12.5.
 
@@ -236,7 +247,11 @@ config, alarm, graph validate/deploy, audit log.
 5. Rút UART → web báo lỗi MCU timeout + safe-state (kiểm đủ 3 lớp: MCU 200ms /
    iobus 100ms / core ≤1 scan — 07 §5.1; no-board đo bằng `tools/test_safety_e2e.sh`).
 6. Reset MCU → hệ thống recover (handshake lại, IO trở lại normal).
+7. E2E-HIST-001: UI/AO/DO/VP logging immediate/future/restart/clock/disk; Trends qua ranh 48h;
+   rename/delete/recreate generation; duplicate-name migration/recovery; target eMMC benchmark.
 ```
+
+Trạng thái P6 historian gate: PLANNED 2026-07-15 — không claim release trước benchmark/race/a11y/E2E evidence.
 
 **Test:** Test group 6 (E2E) + group 7 (fault injection) + group 8 (long-run 24h). **DoD:** §12.6.
 
@@ -250,16 +265,16 @@ config, alarm, graph validate/deploy, audit log.
 | P1→P2 | MCU IO thật chạy (group 1 pass) | FW Lead |
 | P2→P3 | IOP cross-test pass, 12 CRC vector khớp 2 phía | FW + SW Lead |
 | P3→P4 | iobus service ổn định 1h, shm đúng | SW Lead |
-| P4→P5 | core priority/safe-state pass, output qua core; nếu scope Rev A production bật BACnet/Modbus thì BAC-001..011 + MOD-001..011 pass group 9/10 | SW Lead |
-| P5→P5.5 | web command path qua core, không bypass | SW + Web Lead |
+| P4→P5 | core priority/safe-state pass, output qua core; nếu historian scope active thì COR-HIST-001 coherent snapshot pass; nếu scope Rev A production bật BACnet/Modbus thì BAC-001..011 + MOD-001..011 pass group 9/10 | SW Lead |
+| P5→P5.5 | web command path qua core, không bypass; historian scope phải qua WEB-HIST-001..005 + WEB-NAME-001 contract/unit/build gates | SW + Web Lead |
 | P5.5→P6 | HMI-001..012 done, 6 screens render trên board, touch + button input pass | SW Lead |
-| P6→Release | group 6/7/8 pass, [14_HANDOVER](15_RELEASE_HANDOVER_CHECKLIST.md) tick đủ | PM |
+| P6→Release | group 6/7/8 + E2E-HIST-001/target eMMC benchmark pass, [14_HANDOVER](15_RELEASE_HANDOVER_CHECKLIST.md) tick đủ | PM |
 
 > 📍 Tuần đầu trên SOM: làm theo 8 mốc [18_WEEK1_SOM_BRINGUP_CHECKLIST](18_WEEK1_SOM_BRINGUP_CHECKLIST.md)
 > (map P0→P4 round-trip). Dev mới: bắt đầu từ [17_QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md).
 
 ---
-**Rev** 1.8 | 2026-06-27 (Phase 5.5 mkddc-hmi added — HMI kéo vào Rev A per REVA_SCOPE amendment 2026-06-27; gate P5.5→P6 added) · 1.7 | 2026-06-17 (P4 output 11/12 DONE: BAC-001..011 + MOD-001..011 implemented, 114 test pass, bypass check sạch) ·
+**Rev** 1.9 | 2026-07-15 — Added owner-approved P4/P5/P6 historian and unique display-name workstream: COR-HIST-001, WEB-HIST-001..005, WEB-NAME-001, E2E-HIST-001; all remain PLANNED. · **Rev** 1.8 | 2026-06-27 (Phase 5.5 mkddc-hmi added — HMI kéo vào Rev A per REVA_SCOPE amendment 2026-06-27; gate P5.5→P6 added) · 1.7 | 2026-06-17 (P4 output 11/12 DONE: BAC-001..011 + MOD-001..011 implemented, 114 test pass, bypass check sạch) ·
 1.6 | 2026-06-17 (P4 output 11/12: BAC+MOD doc gap CLOSED — BAC-CONFLICT-001, bind_interface, kx_ext_snapshot, rs485.device; sẵn sàng implement) ·
 1.5 | 2026-06-13 (S7 #4/#5/#6 docs code-ready: 22 Active, 24 BACnet, 25 Modbus) ·
 1.4 | 2026-06-12 (P4: web_ipc overridden+audit COR-007, SIGHUP reload COR-008, systemd units SKEL-005) · 1.3 | 2026-06-12 (graph_runtime + T6/T7 implemented; E2E script) · 1.2 | 2026-06-12 (P4/P6: tham chiếu SAFETY SPEC 07 §5 — trigger matrix

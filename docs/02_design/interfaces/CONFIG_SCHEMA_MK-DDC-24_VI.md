@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 1.7 | 2026-07-09 (§4: thêm `virtual_points.conf` backend-owned VP public IDs; bỏ VI/VO) · 1.6 | 2026-07-08 (§4a: alarm sources hỗ trợ VI/VO qua backing AV/BV/MSV) · 1.5 | 2026-07-02 (§4a: thêm `alarm_settings.conf` entity-list per ADR-013) · 1.4 | 2026-06-30 (§3: ao[] mở rộng per ADR-012 — thêm name/units/min_pv/max_pv; §3.1: bảng sensor_type→BACnet Units enum đầy đủ per ADR-011) · 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.9 | 2026-07-15 (§3/§8: unique display names + historian.conf per-point start policy) · 1.8 | 2026-07-15 (§3/§4: global technical point tag UI/AO/DO/VP theo ADR-019) · 1.7 | 2026-07-09 (§4: thêm `virtual_points.conf` backend-owned VP public IDs; bỏ VI/VO) · 1.6 | 2026-07-08 (§4a: alarm sources hỗ trợ VI/VO qua backing AV/BV/MSV) · 1.5 | 2026-07-02 (§4a: thêm `alarm_settings.conf` entity-list per ADR-013) · 1.4 | 2026-06-30 (§3: ao[] mở rộng per ADR-012 — thêm name/units/min_pv/max_pv; §3.1: bảng sensor_type→BACnet Units enum đầy đủ per ADR-011) · 1.3 | 2026-06-29 (§3: mkddc-iobus consumes EasySet UI u0-u7 từ `io_config.conf`) · 1.2 | 2026-06-17 (§5: bacnet.conf thêm `bind_interface`; §5b: fieldbus.conf thêm `rs485.device` bắt buộc + table đầy đủ) · 1.1 | 2026-06-11 · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -15,7 +15,8 @@
 | `network.conf` | mkddc-web | mkddc-web (áp hệ thống) | apply ngay (netplan/networkd) |
 | `io_config.conf` | mkddc-web | **mkddc-iobus** (scale + SET_AO_CFG) | SIGHUP iobus (re-handshake AO cfg) |
 | `io_safe_state.conf` | mkddc-web | **mkddc-core** (relinquish default + safe-state) | SIGHUP core |
-| `virtual_points.conf` | mkddc-web | **mkddc-web** (points overlay, trends, VP alarms/schedules) | apply ngay |
+| `virtual_points.conf` | mkddc-web | **mkddc-web** (points overlay, VP runtime/alarms/schedules; diagnostic VP log only) | apply ngay |
+| `historian.conf` | mkddc-web | **mkddc-web** (per-point database logging policy/capacity) | apply ngay qua atomic policy revision |
 | `alarm_settings.conf` | mkddc-web | **mkddc-core** (Phase 2 loader/evaluator) | SIGHUP core after Phase 2; Phase 1 is contract-only |
 | `bacnet.conf` | mkddc-web | mkddc-iobus | restart iobus |
 | `fieldbus.conf` | mkddc-web | mkddc-iobus | restart iobus |
@@ -68,17 +69,16 @@
 ```json
 {
   "ui": [
-    {"ch":1, "type":"NTC10k",   "unit":"degC"},
-    {"ch":2, "type":"PT1000",   "unit":"degC"},
-    {"ch":3, "type":"dry",      "unit":"bool", "invert":false, "enabled":true},
-    {"ch":4, "type":"4-20mA",   "unit":"percent", "scale_lo":0, "scale_hi":100},
-    {"ch":5, "type":"0-10V",    "unit":"ppm",     "scale_lo":0, "scale_hi":2000},
-    {"ch":6, "type":"2-10V",    "unit":"degC",    "name":"Supply Temp", "range_mult":3},
-    {"ch":7, "type":"potentiometer", "unit":"percent", "filter_samples":3, "sensor_cal":0, "math_func":0}
+    {"ch":1, "tag":"room temp", "type":"NTC10k", "unit":"degC"},
+    {"ch":2, "tag":"return temp", "type":"PT1000", "unit":"degC"},
+    {"ch":3, "tag":"fan proof", "type":"dry", "unit":"bool", "invert":false, "enabled":true}
   ],
   "ao": [
-    {"ch":1, "mode":"0-10V"},
-    {"ch":2, "mode":"4-20mA"}
+    {"ch":1, "tag":"valve command", "mode":"0-10V", "name":"CHILLED WATER VALVE"},
+    {"ch":2, "tag":"fan speed", "mode":"4-20mA", "name":"SUPPLY FAN SPEED"}
+  ],
+  "do": [
+    {"ch":1, "tag":"fan enable", "name":"Supply fan enable"}
   ]
 }
 ```
@@ -91,6 +91,28 @@
 - `ui[].filter_samples` không bắt buộc, kiểu int 0..100, số mẫu lọc EasySet u5.
 - `ui[].sensor_cal` không bắt buộc, kiểu number -12.7..12.8, hiệu chuẩn cảm biến EasySet u6.
 - `ui[].math_func` không bắt buộc, kiểu int 0..3, hàm toán EasySet u7.
+
+### 3.0 Global point tag UI/AO/DO/VP (ADR-019, Phase A)
+
+- `ui[].tag`, `ao[].tag`, `do[].tag`, `virtual_points.conf.items[].tag` là **technical tag bắt buộc** sau migration; tách khỏi display `name`/`label` và AO BACnet `Object_Name`.
+- Namespace local trong một controller, gồm UI-01..UI-16, AO-01..AO-04, DO-01..DO-04 và mọi VP đã tạo, kể cả VP `enabled=false`.
+- Canonical display: trim đầu/cuối, collapse run ASCII space thành một space, dài 1..64 byte, pattern `^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$`.
+- Comparison key tính tại backend: ASCII lowercase của canonical display; không persist/client-submit key. `Fan 1`, `fan 1`, ` fan   1 ` cùng một key và xung đột.
+- Canonical/legacy point-ID syntax (`UI/AI/DI/BI/AO/DO/BO/VP/AV/BV/MSV` + numeric suffix, separator/leading-zero theo parser) được reserve. Point chỉ được dùng fallback canonical ID của chính nó.
+- Physical point luôn giữ reservation. VP disabled vẫn giữ reservation. Xóa VP giải phóng tag sau commit.
+- DO metadata (`ch`, `tag`, optional `name`) nằm trong `io_config.conf.do[]`; safe state vẫn chỉ nằm ở `io_safe_state.conf.do[]`.
+- Migration legacy chọn: tag hợp lệ đang có; nếu thiếu thì dùng `name`/`label` chỉ khi hợp lệ, không reserved sai owner và unique; còn lại dùng canonical ID. Mọi member của một nhóm display duplicate cùng fallback canonical ID, không first-wins, không auto-suffix. Migration validate toàn candidate trước atomic write, tạo report và không ghi đè display field.
+- Flat-file phase enforce trên mọi approved API writer bằng một serialization boundary chung. Direct filesystem edit chưa được bảo vệ; generation seal/activate sẽ là authority cuối theo ADR-015. Không có atomic swap tag xuyên hai file trong flat-file mode.
+
+### 3.0a Global display-name namespace UI/AO/DO/VP (ADR-019 v1.1)
+
+- `ui[].name`, `ao[].name`, `do[].name`, `virtual_points.conf.items[].label` là display name/label. Chúng không thay `tag`, nhưng phải unique trong một namespace riêng trên cùng scope UI-01..16, AO-01..04, DO-01..04 và mọi VP đã tạo kể cả disabled.
+- Canonical display: trim đầu/cuối, collapse mọi whitespace run thành một ASCII space, dài 1..64 Unicode code point, cấm control character. Backend tính `nameKey` bằng Unicode lowercase của canonical display; client không submit/persist key.
+- Name có thể giống technical tag vì hai namespace độc lập. AO `name` tiếp tục là BACnet `Object_Name`; uniqueness mới không đổi mapping BACnet.
+- Sau migration, name/label là required. Legacy blank được gán canonical ID (`UI-01`, `AO-01`, `DO-01`, `VP1`).
+- Legacy duplicate có nội dung không bị auto-suffix/first-wins: giữ display hiện tại, báo `namespace_conflicted`, runtime/read/history vẫn chạy; chỉ mutation rename một member sang name unique và làm giảm conflict được phép qua.
+- Rename không đổi canonical ID, historian generation hoặc deployed graph binding. Xóa VP giải phóng name/tag reservation sau commit nhưng history theo canonical ID + generation vẫn giữ tới hết retention.
+
 **AO fields (2026-06-30, ADR-012 — BACnet AO object alignment):**
 
 ```json
@@ -179,9 +201,10 @@ Legacy `AV` IDs are accepted as aliases and normalized to `VP`.
       "maxItems": 464,
       "items": {
         "type": "object",
-        "required": ["id", "label", "signalType", "enabled", "writable", "logEnabled"],
+        "required": ["id", "tag", "label", "signalType", "enabled", "writable", "logEnabled"],
         "properties": {
           "id": {"type": "string", "pattern": "^(VP|AV)[-_]?0*([1-9]|[1-9][0-9]|[1-3][0-9]{2}|4[0-5][0-9]|46[0-4])$"},
+          "tag": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$"},
           "label": {"type": "string", "maxLength": 64},
           "signalType": {"type": "string", "enum": ["boolean", "integer", "float", "string", "datetime"]},
           "enabled": {"type": "boolean"},
@@ -213,6 +236,45 @@ Legacy `AV` IDs are accepted as aliases and normalized to `VP`.
 - Tier limits are enforced independently: `logEnabled=false <= 256`, `1000ms <= 128`, `100ms <= 64`, `10ms <= 16`.
 - 10ms logging retention is capped to diagnostic/ring duration; do not use permanent SD-card logging for 10ms data.
 - UI authoring mirrors the existing Inputs Wizard for metadata: `u0=signalType`, `u1=displayMin`, `u2=displayMax`, `u3=rangeMultiplier`, `u4=unit`, `u5=filterSamples`, `u6=sensorCal`, `u7=mathFunction`. Units must come from the fixed EasySet list, not free text.
+
+## 4h. `historian.conf` — per-point database historian policy (ADR-018)
+
+`historian.conf` là authority cấu hình cho database logging. Hot cache 48 giờ và DB archive tối thiểu 180 ngày là hai tier độc lập; VP diagnostic `logEnabled/logIntervalMs/retentionS` trong `virtual_points.conf` không được reinterpret thành policy này.
+
+```json
+{
+  "_schema_version": 1,
+  "revision": 7,
+  "historian_budget_bytes": 2147483648,
+  "wal_reserve_bytes": 134217728,
+  "migration_reserve_bytes": 268435456,
+  "required_free_space_bytes": 536870912,
+  "points": [
+    {
+      "pointId": "UI-01",
+      "generation": 1,
+      "dbLoggingEnabled": true,
+      "dbInterval": "15s",
+      "retentionDays": 180,
+      "hotCacheEnabled": true,
+      "hotCacheHours": 48,
+      "startAtUtc": "2026-07-16T02:00:00Z"
+    }
+  ]
+}
+```
+
+**Validation / semantics:**
+
+- Scope database historian: UI-01..16, AO-01..04, DO-01..04 và created numeric/boolean VP; optional DI ngoài scope amendment này.
+- `dbInterval` ∈ `1s|3s|5s|15s|30s|1m|3m|5m|15m|30m|60m`. UI có thể hiển thị `60m` thành `1h`, nhưng wire/config canonical là `60m`.
+- `startAtUtc` là RFC3339 UTC kết thúc `Z`. `null` trong API update nghĩa là backend gán server time khi commit; persisted active policy luôn có timestamp cụ thể.
+- Khi bật, explicit `startAtUtc` phải `>= serverNowUtc` tại lúc commit. Quá khứ bị reject; browser clock không có authority.
+- Policy state dẫn xuất: disabled=`off`; enabled và trước start=`scheduled`; enabled và tới giờ=`recording`. Không persist state thứ hai.
+- Policy sống qua restart và tiếp tục tới khi admin tắt. Restart sau giờ start lấy mẫu ở boundary kế tiếp và ghi gap; không backfill/hold-last giả.
+- Disable không xóa cache hoặc database history. Rename tag/name không đổi `pointId`/generation. Xóa VP giữ history tới hết retention; recreate cùng ID phải tăng generation.
+- `retentionDays >= 180` khi bật DB; `hotCacheHours` mặc định 48. Cache removal không xóa DB policy/history.
+- Full batch validate revision, generation, namespace, interval, capacity, budget/free space trước atomic commit. Failure giữ revision cũ active; empty policy không auto-all.
 
 ## 4a. `alarm_settings.conf` — alarm entity list (ADR-013)
 
@@ -409,4 +471,6 @@ Legacy `AV` IDs are accepted as aliases and normalized to `VP`.
 `SW_ARCH §5`, `IDE-020..025`, `SW-IDE-010..015`, `RTU-002`, `MB-010`.
 
 ---
-**Rev** 1.4 | 2026-06-30
+**Rev** 1.9 | 2026-07-15 — ADR-018/019 amendments: independent unique display-name namespace, blank/conflict migration, `historian.conf` per-point database policy, 11 intervals, immediate/future UTC start, persistent scheduled/recording semantics and 48-hour hot cache. · **Rev** 1.8 | 2026-07-15 — ADR-019 Phase A: separate controller-local unique technical tags for UI/AO/DO/VP, deterministic legacy migration, DO metadata location, flat-file/generation authority boundary. · 1.7 | 2026-07-09 · 1.4 | 2026-06-30
+
+Trạng thái: ĐÃ duyệt 2026-07-15 — contract amendment historian + global tag/name; implementation/test vẫn theo Plans 42/43.

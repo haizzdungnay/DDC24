@@ -2,6 +2,7 @@ import { Activity, ChevronLeft, ChevronRight, Power, RotateCcw, Save, SlidersHor
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../api/client'
+import { normalizePointTag, pointTagFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
@@ -33,6 +34,7 @@ export function OutputsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [tagErrors, setTagErrors] = useState<Record<string, string>>({})
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
 
   useEffect(() => {
@@ -74,13 +76,18 @@ export function OutputsPage() {
   }
 
   async function saveOutputs(next = config) {
+    const errors = outputTagErrors(next)
+    setTagErrors(errors)
+    if (Object.keys(errors).length > 0) return
     const normalized = normalizeOutputs(next)
     setSaving(true)
     try {
       await apiClient.putOutputs(normalized)
       setConfig(normalized)
+      setTagErrors({})
       toast.push('success', t('outputsSaveSuccess'))
     } catch (error) {
+      setTagErrors(pointTagFieldErrors(error))
       toast.push('error', `${t('outputsSaveError')}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setSaving(false)
@@ -135,6 +142,12 @@ export function OutputsPage() {
         >
           {selected && (
             <div className="space-y-5">
+              <OutputBasics
+                output={selected}
+                tagError={tagErrors[outputTagPath(config, selected)]}
+                nameError={tagErrors[outputTagPath(config, selected).replace('.tag', '.name')]}
+                onChange={(patch) => updateOutput(selected.id, patch)}
+              />
               {tab === 'summary' && (
                 <OutputSummary
                   output={selected}
@@ -178,6 +191,29 @@ export function OutputsPage() {
       >
         {t('outputsSaveBody')}
       </Modal>
+    </div>
+  )
+}
+
+function OutputBasics({ output, tagError, nameError, onChange }: { output: OutputConfig; tagError?: string; nameError?: string; onChange: (patch: Partial<AoConfig> | Partial<DoConfig>) => void }) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <label className="space-y-1">
+        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Tag</span>
+        <input
+          aria-invalid={Boolean(tagError)}
+          aria-describedby={tagError ? `${output.id}-tag-error` : undefined}
+          className={controlClass()}
+          value={output.tag}
+          onChange={(event) => onChange({ tag: event.target.value })}
+        />
+        {tagError && <span id={`${output.id}-tag-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{tagError}</span>}
+      </label>
+      <label className="space-y-1">
+        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Label</span>
+        <input aria-invalid={Boolean(nameError)} aria-describedby={nameError ? `${output.id}-name-error` : undefined} className={controlClass()} value={output.label} onChange={(event) => onChange({ label: event.target.value })} />
+        {nameError && <span id={`${output.id}-name-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{nameError}</span>}
+      </label>
     </div>
   )
 }
@@ -452,14 +488,32 @@ function formatStat(value: number, unit?: string): string {
   return `${fixed}${unit ? ` ${unit}` : ''}`
 }
 
+function outputTagErrors(outputs: OutputsConfig): Record<string, string> {
+  const errors = (kind: 'ao' | 'do', rows: OutputConfig[]) => rows.flatMap((output, index) => {
+    const tagError = validatePointTag(output.tag)
+    const nameError = validatePointName(output.label)
+    return [
+      ...(tagError ? [[`${kind}[${index}].tag`, tagError]] : []),
+      ...(nameError ? [[`${kind}[${index}].name`, nameError]] : [])
+    ]
+  })
+  return Object.fromEntries([...errors('ao', outputs.ao), ...errors('do', outputs.do)])
+}
+
+function outputTagPath(outputs: OutputsConfig, output: OutputConfig): string {
+  const items = output.kind === 'AO' ? outputs.ao : outputs.do
+  return `${output.kind.toLowerCase()}[${items.findIndex((item) => item.id === output.id)}].tag`
+}
+
 function normalizeOutputs(outputs: OutputsConfig): OutputsConfig {
   return {
     ao: outputs.ao.map((ao) => ({
       ...ao,
+      tag: normalizePointTag(ao.tag),
       safeValue: clampNumber(ao.safeValue, 0, aoSafeMax(ao.mode)),
       manualValue: clampNumber(ao.manualValue, 0, 100, true)
     })),
-    do: outputs.do
+    do: outputs.do.map((output) => ({ ...output, tag: normalizePointTag(output.tag) }))
   }
 }
 
