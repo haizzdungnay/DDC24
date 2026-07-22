@@ -40,9 +40,10 @@
 ## 3. Bản đồ Phase & đường găng (critical path)
 
 > ℹ️ **Kế hoạch Rev A.0 chính thức là §3.0 ngay dưới** (canonical, khớp
-> [CANONICAL_DECISIONS](../CANONICAL_DECISIONS.md) + [REVA_SCOPE_ROADMAP](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) + [ADR-008](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md)).
+> [Decision Log](../00_governance/DECISIONS.md) + [REVA_SCOPE_ROADMAP](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) + [ADR-008](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md)).
 > §3.1 phía dưới là **plan cũ P0–P7 viết trước pivot** (đường găng PLC→Web IDE→HMI→OTA→BTL) —
-> giữ làm **tham chiếu lịch sử**, các phase PLC/FBD/HMI/OTA/MQTT/BTL = **Deferred Rev B+**.
+> giữ làm **tham chiếu lịch sử**. PLC/FBD/OTA/MQTT/BTL của plan cũ vẫn deferred;
+> HMI local hiện là feature-gated Rev A theo ADR-016 và chỉ theo task HOP-000..077.
 
 ### 3.0 Rev A.0 Phase Plan (canonical — 90 ngày, demo/lab-grade)
 
@@ -330,16 +331,17 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** SW-WEB-006..009.
 > *FBD drag-drop canvas (wiresheet) → Rev B.*
 
-### T-FW/BE-11 — HMI TFT (BE/FW-display) ⛔ *Deferred Rev B — không thuộc Rev A.0* — xem [UX_HMI]
+### T-FW/BE-11 — HMI TFT local limited-operator *(feature-gated Rev A, ADR-016)*
 **INPUT:** [ ] [UX_HMI](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [ ] [SW_HMI_DESIGN](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md).
 **Microtasks:**
-- [ ] fbtft ILI9341 `/dev/fb0`; LVGL v9.
-- [ ] 5 màn: Dashboard, I/O, Alarm, Network, System; 6 nút GPIO.
-- [ ] Đọc shm ≤1s; screen saver; EN/VI.
-**OUTPUT/DoD:** [ ] 5 màn chạy ≥10 FPS · [ ] giá trị khớp BACnet · [ ] nút điều hướng OK.
-**Trace:** SW-HMI-001..008.
+- [ ] Thực hiện HOP-000..077 theo [08 HMI guide](../03_implementation/08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md); không duplicate task tại đây.
+- [ ] JD9852 MIPI DSI/DRM + FT5436 + 6 nút; giữ SHM read-only.
+- [ ] 5 surface Home/Points/Control/Alarms/Service; command whitelist qua broker/core.
+- [ ] Gỡ static role/PIN privilege, direct signal/reboot và CAP_SYS_BOOT.
+**OUTPUT/DoD:** [ ] host/integration pass · [ ] target ≥10 FPS/touch/buttons/usability pass · [ ] HMI release gate có evidence.
+**Trace:** HMI-001..032, SW-HMI-001..018, ADR-016.
 
-**🚪 P4 Gate (Rev A.0):** **component graph chạy + web form/JSON cấu hình/giám sát + deploy graph.json** — sản phẩm demo "dùng được". *(PLC FBD + HMI → Rev B/C.)*
+**🚪 P4 Gate (Rev A.0):** component graph + web form/JSON + deploy graph.json; HMI chỉ nằm trong gate của SKU/build enable và không được làm chậm control baseline. *(PLC FBD → Rev C.)*
 
 ---
 

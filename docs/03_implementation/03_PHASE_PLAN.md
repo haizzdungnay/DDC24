@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Chia phase làm thật
 
 > **Document ID:** IMPL-PHASEPLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.5 | 2026-06-13 (bổ sung S7 #4/#5/#6: stateful graph Active, BACnet/Modbus implementation plan) · 1.4 | 2026-06-12 (P4: web_ipc overridden+audit, SIGHUP reload, systemd units — COR-007/008, SKEL-005)
+> **Phiên bản:** 1.9 | 2026-07-22 (ADR-016: thay active six-screen plan bằng local limited-operator HMI và HOP microtasks) · 1.8 | 2026-06-27 · 1.7 | 2026-06-17
 > **Trạng thái:** Active
 > **Đọc trước:** [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md)
 > **Map sang task:** [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md) · **Map sang test:** [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
@@ -203,21 +203,18 @@ config, alarm, graph validate/deploy, audit log.
 
 **Output:**
 ```
-1. Build LVGL v9 + DRM/KMS /dev/dri/card0 (HMI-001).
-2. Input: FT5436 evdev touch + 6 GPIO buttons (HMI-002).
-3. Tab strip + 6-page ring navigation (HMI-003).
-4. Screen 1 — Home / Controller Health (HMI-004).
-5. Screen 2 — I/O Monitor + AGE column + BAD/STALE filter (HMI-005).
-6. Screen 3 — Alarm / Event (4-state model + ACK) (HMI-006).
-7. Screen 4 — Communication (BACnet/Modbus status, Last req: Xs ago) (HMI-007).
-8. Screen 5 — System / Diagnostics read-only (HMI-008).
-9. Screen 6 — Service / Config (PIN lock, Reload, Reboot 3s hold) (HMI-009).
-10. SHM data binding 1s (kx_io_shm + kx_plc_shm) + AGE (HMI-010).
-11. Localization EN/VI + SIGHUP reload locale (HMI-011).
-12. systemd mkddc-hmi.service + packaging (HMI-012).
+1. Giữ DRM/KMS, FT5436, 6 GPIO buttons và SHM read-only đã có.
+2. Refactor thành 5 surface: Home / Points / Control / Alarms / Service.
+3. Local authenticated broker: session/RBAC/policy/audit; không phải browser/Web HMI.
+4. Core: query effective state, setpoint/mode, bounded override TTL và release idempotent.
+5. HMI: authoritative point faceplate, alarm ACK, read-only degradation khi authority mất.
+6. Gỡ static role/PIN privilege, CAP_SYS_BOOT, direct signal/reboot và no-op maintenance.
+7. Host/integration/target/usability evidence đóng HOP-000..077.
 ```
 
-**Test:** UC-LOCAL-001..014 theo [KX-DDC24-UC-HMI-001 Rev 2.1](../04_uiux/KX-DDC24-UC-HMI-001_VI.md). **DoD:** HMI-001..012 tick đủ + 6 màn render + touch/button pass.
+**Microtask authority:** [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md).
+**Test:** UC-HMI-001..015 và Integration Test group 5.5.
+**DoD:** [13_DEFINITION_OF_DONE §6](13_DEFINITION_OF_DONE.md).
 
 ---
 
@@ -252,14 +249,14 @@ config, alarm, graph validate/deploy, audit log.
 | P3→P4 | iobus service ổn định 1h, shm đúng | SW Lead |
 | P4→P5 | core priority/safe-state pass, output qua core; nếu scope Rev A production bật BACnet/Modbus thì BAC-001..011 + MOD-001..011 pass group 9/10 | SW Lead |
 | P5→P5.5 | web command path qua core, không bypass | SW + Web Lead |
-| P5.5→P6 | HMI-001..012 done, 6 screens render trên board, touch + button input pass | SW Lead |
+| P5.5→P6 | HOP-000..077 done; five surfaces render trên board; touch/button, authoritative command, RBAC/audit, degraded mode và privilege gates pass | SW Lead + QA |
 | P6→Release | group 6/7/8 pass, [14_HANDOVER](15_RELEASE_HANDOVER_CHECKLIST.md) tick đủ | PM |
 
 > 📍 Tuần đầu trên SOM: làm theo 8 mốc [18_WEEK1_SOM_BRINGUP_CHECKLIST](18_WEEK1_SOM_BRINGUP_CHECKLIST.md)
 > (map P0→P4 round-trip). Dev mới: bắt đầu từ [17_QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md).
 
 ---
-**Rev** 1.8 | 2026-06-27 (Phase 5.5 mkddc-hmi added — HMI kéo vào Rev A per REVA_SCOPE amendment 2026-06-27; gate P5.5→P6 added) · 1.7 | 2026-06-17 (P4 output 11/12 DONE: BAC-001..011 + MOD-001..011 implemented, 114 test pass, bypass check sạch) ·
+**Rev** 1.9 | 2026-07-22 (ADR-016 local limited-operator HMI; active implementation plan moved to HOP-000..077) · 1.8 | 2026-06-27 (Phase 5.5 mkddc-hmi added — HMI kéo vào Rev A per REVA_SCOPE amendment 2026-06-27; gate P5.5→P6 added) · 1.7 | 2026-06-17 (P4 output 11/12 DONE: BAC-001..011 + MOD-001..011 implemented, 114 test pass, bypass check sạch) ·
 1.6 | 2026-06-17 (P4 output 11/12: BAC+MOD doc gap CLOSED — BAC-CONFLICT-001, bind_interface, kx_ext_snapshot, rs485.device; sẵn sàng implement) ·
 1.5 | 2026-06-13 (S7 #4/#5/#6 docs code-ready: 22 Active, 24 BACnet, 25 Modbus) ·
 1.4 | 2026-06-12 (P4: web_ipc overridden+audit COR-007, SIGHUP reload COR-008, systemd units SKEL-005) · 1.3 | 2026-06-12 (graph_runtime + T6/T7 implemented; E2E script) · 1.2 | 2026-06-12 (P4/P6: tham chiếu SAFETY SPEC 07 §5 — trigger matrix

@@ -2,7 +2,7 @@
 ## SOM / Debian 12 userspace
 
 > **Document ID:** STD-SW-CODE-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-13 (reconcile module names theo ADR-005 mkddc-*) · 1.0 | 2026-05-30
+> **Phiên bản:** 1.2 | 2026-07-22 (ADR-016 HMI mutation and privilege rules) · 1.1 | 2026-06-13 · 1.0 | 2026-05-30
 > **Áp dụng:** mọi service trên SOM (C/C++/Python/TypeScript). Rule "MUST" = block merge.
 > 📘 [README](../../01_specs/README.md) · Cơ sở: `SW_ARCH §7`, IEC 62443-4-1
 
@@ -15,13 +15,15 @@
 | `mkddc-core` | C++17 | component graph, priority/safe-state, SCHED_FIFO |
 | `mkddc-web` backend | Go | REST/config/validator/audit (ADR-007) |
 | `mkddc-web` frontend | TypeScript + React | Rev A form/JSON UI |
-| Agent/MQTT/HMI/OTA | Python/C/shell | Deferred Rev B+; legacy `kinexus-*` docs are reference-only |
+| `mkddc-hmi` | C++17 + LVGL v9 | Feature-gated Rev A limited-operator client; read-only SHM + versioned local IPC |
+| Agent/MQTT/OTA | Python/C/shell | Deferred Rev B+; legacy `kinexus-*` docs are reference-only |
 
 ## 2. Chuẩn từng ngôn ngữ
 ### 2.1 C11 / C++17 (driver, PLC, HMI)
 - `-Wall -Wextra -Werror`; C++ dùng RAII, không raw `new`/`delete` (smart pointer).
 - Không exception trên hot-path PLC scan; xử lý lỗi bằng status/Expected.
 - Concurrency: tuân thủ `SW_ARCH §2` (shm seqlock/rwlock). Reader **không** block writer.
+- HMI mutation MUST đi qua local broker/core; cấm HMI write SHM/hardware, raw signal hoặc direct reboot.
 - `clang-tidy` + `clang-format` (Google style rút gọn). AddressSanitizer trong test build.
 
 ### 2.2 Python 3.11 (agent, ota, security)
@@ -61,4 +63,4 @@
 - Ghi **REQ ID** + **design unit** (vd "SW-MOD-003 / D-2"). Reviewer ≥ 1; thay đổi security/interface cần Lead duyệt.
 
 ---
-**Rev** 1.0 | 2026-05-30
+**Rev** 1.2 | 2026-07-22 (ADR-016: HMI read-only SHM, command via versioned broker/core path, no direct process control) · 1.1 | 2026-06-13 · 1.0 | 2026-05-30

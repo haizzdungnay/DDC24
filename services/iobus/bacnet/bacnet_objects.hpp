@@ -159,11 +159,14 @@ private:
     uint16_t    ao_bacnet_units_[N_AO] = {};   /* BACnet Units enum integer */
     float       ao_min_pv_[N_AO]       = {};
     float       ao_max_pv_[N_AO]       = {10.0f, 10.0f, 10.0f, 10.0f};
+    AoMode      ao_mode_[N_AO]         = {AoMode::V0_10, AoMode::V0_10,
+                                          AoMode::V0_10, AoMode::V0_10};
 
     bool ai_oos_[N_AI] = {};
     bool bi_oos_[N_BI] = {};
 
     static const std::string kEmpty;
+    float ao_engineering_to_physical(int idx, float value) const;
 };
 
 } // namespace iobus::bacnet

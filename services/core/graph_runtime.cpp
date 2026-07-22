@@ -12,6 +12,13 @@
 
 namespace core {
 
+void GraphRuntime::set_ao_modes(const uint8_t modes[KX_N_AO])
+{
+    if (!modes) return;
+    for (int ch = 0; ch < KX_N_AO; ch++)
+        ao_modes_[ch] = modes[ch] == 1 ? 1 : 0;
+}
+
 namespace {
 
 /* Integer constants matching NodeType enum order — used in standalone helpers
@@ -582,12 +589,14 @@ void GraphRuntime::compute(Node& n, PointTable& table, PriorityResolver& resolve
     }
 
     case NodeType::AO_OUTPUT: {
+        const int ch = static_cast<int>(p("channel", 0));
         const float lo  = static_cast<float>(p("limit_lo", 0.0));
         const float hi  = static_cast<float>(p("limit_hi", 100.0));
         const float pct = std::min(std::max(in("in"), lo), hi);
-        const float eng = (n.str_param == "4-20mA") ? 4.0f + pct / 100.0f * 16.0f
-                                                    : pct / 100.0f * 10.0f;
-        resolver.set_ao(PRIO_LOCAL_LOGIC, static_cast<int>(p("channel",0)), eng);
+        const bool current_mode = ch >= 0 && ch < KX_N_AO && ao_modes_[ch] == 1;
+        const float eng = current_mode ? 4.0f + pct / 100.0f * 16.0f
+                                       : pct / 100.0f * 10.0f;
+        resolver.set_ao(PRIO_LOCAL_LOGIC, ch, eng);
         n.outputs["out"] = pct;
         return;
     }

@@ -7,6 +7,53 @@
 ---
 
 ## [Unreleased]
+### Changed — ADR-016 local limited-operator HMI specification and microtask plan (2026-07-22)
+- hmi/product: selected the existing 2.4-inch local HMI, not a Web HMI, with five surfaces `Home/Points/Control/Alarms/Service`; communication/system diagnostics are consolidated rather than removed.
+- hmi/control: specified authority-whitelisted setpoint/mode/override/release, bounded TTL/reason/explicit release, effective source/priority, authoritative alarm ACK and read-only degradation when broker/core is unavailable.
+- hmi/security: specified short-lived fail-closed sessions, RBAC/audit/idempotency and removal of static role/PIN production privilege, direct process signals, `CAP_SYS_BOOT` and direct reboot from `mkddc-hmi`.
+- docs/implementation: aligned product, requirements, architecture, interfaces, source specs, HMI design/UC/UX, integration/DoD/release documents and the existing review report; replaced the active six-screen plan with 54 microtasks `HOP-000..077` covering contract, broker, core, HMI model/UI, privilege removal and evidence.
+- verification: hardware documentation closure harness 18/18 pass; 337 local Markdown links across 38 ADR-016-related files resolve; 54 unique HOP headings; active-scope conflict scan and `git diff --check` pass.
+- repository: ignore generated `build_*` directories so local Core/IOBus build trees and binaries are not committed with the source/documentation baseline.
+- status: documentation/plan only; source remains partial and the HMI production gate remains RED pending implementation, host/integration tests and target usability evidence.
+
+### Changed — HW/FW/SOM/HMI design reconciliation and review (2026-07-22)
+- hw/docs: reconciled the active hardware baseline to Radxa CM3 onboard-PHY boundaries, JD9852 MIPI DSI + FT5436 I2C, and explicit carrier/power/backlight/button/DT gates; removed stale ILI9341/SPI/fbdev assumptions.
+- fw/docs: classified STM32 FreeRTOS/IOP/ADC/AO/DO/watchdog content as target design because `fw/Core/Src/main.c` and `fw/mkddc-fw.ioc` are placeholders; added implementation/HIL blockers.
+- hw/safety: reopened relay/driver selection, removed the unsupported 10k pull-up compatibility claim, and added HMI integration, MCU implementation and relay-driver rows to the hardware closure register.
+- hmi/docs: reframed the 2.4-inch display as a local status/commissioning/service panel; added authoritative alarm ACK/audit, fail-closed identity/RBAC, explicit unknown/unavailable state and operator-usability gates aligned as design guidance to IEC 60073/62682/62443, ISO 9241-210 and ISA-101.
+- hmi/config: corrected the packaged example inventory from UI8+DI8 to the Rev A base UI16+AO4+DO4.
+- records: added `KX-DDC24-HW-FW-SOM-HMI-REVIEW-2026-07-22.md` with source-aligned findings, Siemens/Rockwell/Honeywell benchmark, NO-GO decisions and closure plan.
+- verification: hardware-doc harness 18/18 pass; HMI Debug build pass and direct HMI suite 23/23 pass; packaged point DB JSON/count assertion pass; normalized internal Markdown links 0; `git diff --check` pass. The aggregate temporary CTest invocation also listed two intentionally unbuilt core/iobus targets, so only the direct HMI result is claimed. Host/docs results do not claim HIL, EMC, IEC conformity or manufacturing readiness.
+
+### Restored — Complete HW/FW/SW design corpus (2026-07-22)
+- docs/recovery: restored all 47 archived hardware-design Markdown sources, all 10 firmware-design sources, all 12 software-design sources, all 6 interface-design sources, all 17 source specifications, and all 35 implementation guides from the verified pre-cleanup archive.
+- docs/structure: placed lifecycle sources under `docs/01_specs`, `docs/02_design`, and `docs/03_implementation`; retained controlled baselines and hardware design under `docs/04_design`; separated 24 hardware findings/audit/risk records into `docs/07_records/reviews/hardware`.
+- docs/control: added active firmware baseline and controlled indexes; recovered detail is `In Review`, while top-level baseline documents, shared headers, decisions, and tested code retain authority.
+- harness: updated `check_hw_doc_closure.py` for the controlled baseline/detail/record locations while preserving the 41-finding closure assertions.
+- verification: hardware-doc harness passed 18/18; the repository now has 177 active Markdown files (172 under `docs/`), 0 normalized broken internal links, 0 empty project directories, the recovery archive SHA-256 remains unchanged, and `git diff --check` passed.
+
+### Removed — Empty project directories (2026-07-22)
+- repository: removed empty project-authored directories left after the Markdown dossier cleanup; dependency, VCS, build, distribution, and cache trees were excluded.
+- Verification: rescanned the same scope after cleanup and confirmed no empty directories remain.
+
+### Changed — Controlled Markdown dossier restructure (2026-07-22)
+- docs: consolidated the active project documentation into a 12-file controlled dossier covering governance, decisions, product, requirements, architecture, interfaces, software, hardware, verification, operations, and traceability.
+- docs: reconciled Rev A to 16 UI + 4 AO + 4 DO, three mandatory core services plus feature-gated HMI, IOP v2 2 ms/500 Hz timing, SHM v4, JD9852/MIPI HMI, and the 28 implemented graph node types.
+- docs: normalized duplicate ADR identifiers, removed superseded/duplicated Markdown from the active tree, and retained unresolved hardware/manufacturing items as an explicit RED release gate.
+- docs: relocated the retained OpenAPI, BACnet pretest, certification helper, and signing-key artifacts from legacy folders into `docs/04_design` and `docs/07_records` without deleting their content.
+- archive: captured all 303 pre-restructure Markdown files in `archives/markdown-before-restructure-2026-07-22.tar.gz`, with per-file SHA-256 manifest and archive checksum recorded in document control.
+- Verification: archive contains 303/303 source Markdown files with SHA-256 `60b6631dfdc1395f4292960097872417d149f2572eb15fd2e224aa869cd98857`; active tree has 17 Markdown files total (12 under `docs/`) and 0 broken internal Markdown links; `git diff --check` passed.
+
+### Changed — Agent communication rule cleanup (2026-07-02)
+- agent workflow: removed the forced personalized form of address from `AGENTS.md` and replaced the remaining personalized changelog exception with neutral wording.
+- Verification: repository-wide hidden-file search found no remaining references to the removed form of address.
+
+### Fixed — FW SOM AO physical-unit boundary (2026-07-02)
+- core/iobus: made the SHM AO contract consistently physical (`0..10V` or `4..20mA`), removed the second engineering-range conversion at the MCU command boundary, and made graph AO conversion follow the electrical mode actually acknowledged by the MCU.
+- safety/config: reject non-finite or out-of-range AO commands before SHM output, fail startup when `SET_AO_CFG` is not acknowledged, and require a coordinated service restart for AO mode changes instead of hot-applying mismatched modes.
+- BACnet: keep configured engineering units such as percent in the BACnet Priority Array, but convert the winning value exactly once to physical V/mA before forwarding it to core.
+- Verification: clean Debug build + CTest passed 285/285; BACnet-enabled build + CTest passed 286/286; SHM v4 layout assertions synchronized to `ui_unit=176`, `ui_raw_unit=304`, size 528.
+
 ### Fixed — ADR-011/012 BACnet alignment integration review (2026-07-01)
 - shm/consumers: restored the v3 `ui_raw[]`/`ui_raw_unit[][]` fields alongside `ui_reliability[]`, bumped the combined SHM contract to `0x4B584404` (v4), and synchronized web offsets/size; this prevents stale-layout web reads and restores `shm_dump_io` compilation.
 - iobus/reliability: preserved ADS131M08 divider/shunt scaling and per-channel calibration on the runtime reliability path; transient poll failures now publish `UNRELIABLE_OTHER`, IOP/ADC failures publish `COMMUNICATION_FAILURE`, and raw live values remain published.
@@ -201,24 +248,21 @@ audit 2026-06-15.
   Di chuyển 45 file bằng `git mv` (giữ history); **tính lại toàn bộ link** (79 file) — broken-link = 0.
 - **Master Register cover 100%** (đóng G2): thêm PRODUCT_DEFINITION, REVA_SCOPE, GRAPH_SCHEMA,
   ISOGAP + section ADR-001..007.
-- Thêm [QA-ISOGAP-001](docs/00_management/KX-DDC24-QA-ISOGAP-001_VI.md) — gap assessment theo §7.5 + kế hoạch.
+- Thêm `QA-ISOGAP-001` (nay đã archive) — gap assessment theo §7.5 + kế hoạch.
 ### Changed — ⚠ BREAKING (PIVOT-2026-06-08): Component-based DDC + 3-process + Go web
 - **Mô hình điều khiển:** chuyển từ **IEC 61131-3 soft-PLC (FBD/ST)** sang **component-based
-  graph runtime**. Artifact deploy = `graph.json`. IEC 61131-3 → Rev C. ([ADR-004](docs/adr/ADR-004-component-based-runtime.md))
+  graph runtime**. Artifact deploy = `graph.json`. IEC 61131-3 → Rev C. ([ADR-004](docs/00_governance/DECISIONS.md))
 - **Kiến trúc SOM:** 7 service `kinexus-*` → **3 process `mkddc-*`** (`mkddc-core` C++ real-time,
   `mkddc-iobus` C++, `mkddc-web` Go), chia theo real-time boundary. HMI/agent/OTA/cloud → deferred
-  Rev B+. Watchdog = systemd + HW. ([ADR-005](docs/adr/ADR-005-three-process-architecture.md))
+  Rev B+. Watchdog = systemd + HW. ([ADR-005](docs/00_governance/DECISIONS.md))
 - **Web/UI:** backend Python/FastAPI → **Go**; frontend Svelte → **React**; Rev A UI = **form +
   import `graph.json`**, bỏ FBD drag-drop (canvas → Rev B); validator = **Go library** (bỏ Rust
-  service). ([ADR-006](docs/adr/ADR-006-rev-a-ui-form-json.md), [ADR-007](docs/adr/ADR-007-web-stack-go.md))
+  service). ([ADR-006/ADR-007](docs/00_governance/DECISIONS.md))
 - **Naming:** retire codename `kinexus-*` → brand `mkddc-*` (rename `kinexus_shm.h`→`mkddc_shm.h`
   là task implementation riêng; hợp đồng shm/IOP với MCU giữ nguyên).
 ### Added — PIVOT-2026-06-08
-- **Nguồn-chuẩn mới:** [PRODUCT_DEFINITION](docs/01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md),
-  [REVA_SCOPE_ROADMAP](docs/01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) (Rev A.0 + lịch 90 ngày).
-- **Thiết kế lõi:** [interfaces/GRAPH_SCHEMA](docs/02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md),
-  [software/SW_RUNTIME_EXECUTION_MODEL](docs/02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md),
-  [software/SW_COMPONENT_LIBRARY](docs/02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md).
+- **Nguồn-chuẩn mới:** `PRODUCT_DEFINITION` và `REVA_SCOPE_ROADMAP` (nay đã hợp nhất vào [Product Baseline](docs/01_product/PRODUCT.md)).
+- **Thiết kế lõi:** `GRAPH_SCHEMA`, `SW_RUNTIME_EXECUTION_MODEL` và `SW_COMPONENT_LIBRARY` (nay đã hợp nhất vào [Software Design](docs/04_design/SOFTWARE.md)).
 - **ADR-004..007** ghi 4 quyết định pivot.
 ### Removed — PIVOT-2026-06-08
 - **Đã xóa** `design/software/SW_PLC_ENGINE_DESIGN_MK-DDC-24_VI.md`,
@@ -242,13 +286,13 @@ audit 2026-06-15.
   - FW / BE / FE Developer Guide & Backlog: walking skeleton + backlog cỡ ticket (mục tiêu/file/acceptance/test/trace).
   - **Hợp đồng code thật:** `shared/iop_protocol.h` (FW↔BE), `shared/kinexus_shm.h` (shared memory struct).
   - FE: hợp đồng WebSocket realtime (monitor/force).
-- **`kinexus-fieldbus`** service + [SW_FIELDBUS_DESIGN](docs/02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) (Modbus RTU master, device profile engine).
+- **`kinexus-fieldbus`** service + `SW_FIELDBUS_DESIGN` (tài liệu lịch sử đã archive; thiết kế hiện hành tại [Software Design](docs/04_design/SOFTWARE.md)).
 - Decision record **ARCH-R010** trong OPEN_ISSUES.
 - **KX-DDC24-SYS-ARCH-001 — System Handbook** ("Hiểu hệ thống từ số 0"): tài liệu giải thích toàn bộ sản phẩm cho người **không chuyên** — kể chuyện, sơ đồ Mermaid, ví von, đi theo chân 1 con số/1 mệnh lệnh xuyên hệ thống, từ điển thuật ngữ, FAQ. Đặt làm điểm bắt đầu số 1 ở mọi cổng (root README, docs/README, Overview).
 - `git init` + `.gitignore` + baseline commit lịch sử dự án.
 
 ### Đang làm
-- Implement code theo [Implementation Plan](docs/00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md) (Phase P1+).
+- Implement code theo `KX-DDC24-PM-IMPLPLAN-001` (đã archive; workflow hiện hành tại [Development and Operations](docs/06_operations/DEVELOPMENT_AND_OPERATIONS.md)).
 - Cần chốt: DEC-001 (PLC engine), SW-Q-004 (key store), SW-Q-005 (OTA endpoint).
 
 ---

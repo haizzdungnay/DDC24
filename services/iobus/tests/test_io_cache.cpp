@@ -17,8 +17,8 @@
 using namespace iobus;
 
 static_assert(offsetof(kx_io_shm_t, ui_raw) == 80, "web io_shm raw offset changed");
-static_assert(offsetof(kx_io_shm_t, ui_unit) == 160, "web io_shm unit offset changed");
-static_assert(offsetof(kx_io_shm_t, ui_raw_unit) == 288, "web io_shm raw-unit offset changed");
+static_assert(offsetof(kx_io_shm_t, ui_unit) == 176, "io_shm unit offset changed");
+static_assert(offsetof(kx_io_shm_t, ui_raw_unit) == 304, "io_shm raw-unit offset changed");
 static_assert(offsetof(kx_io_shm_t, iop_status) == 502, "web io_shm status offset changed");
 static_assert(offsetof(kx_io_shm_t, iop_crc_err) == 512, "web io_shm metrics offset changed");
 static_assert(sizeof(kx_io_shm_t) == 528, "web io_shm size changed");

@@ -102,6 +102,27 @@ TEST(ConfigReload, ManualHoldSurvivesReload)
     EXPECT_EQ(resolver.resolve().dout[0], 1);
 }
 
+TEST(ConfigReload, AoModeChangeRequiresRestart)
+{
+    PriorityResolver resolver;
+    const uint8_t applied_modes[KX_N_AO] = {0, 0, 0, 0};
+    resolver.set_ao_modes(applied_modes);
+    resolver.set_default_ao(0, 5.0f);
+
+    TempFile io_cfg(R"({ "ao": [ {"ch":1,"mode":"4-20mA"} ] })", "io");
+    TempFile safe_cfg(R"({ "ao": [ {"ch":1,"safe":4.0} ] })", "safe");
+    ReloadSpec spec;
+    spec.io_cfg_path = io_cfg.path();
+    spec.io_cfg_must_exist = true;
+    spec.safe_cfg_path = safe_cfg.path();
+    spec.safe_cfg_must_exist = true;
+    spec.graph_path = "/tmp/khong-co-graph-reload-9999.json";
+
+    EXPECT_FALSE(reload_configs(spec, &resolver, nullptr));
+    EXPECT_FLOAT_EQ(resolver.resolve().ao[0], 5.0f)
+        << "không được áp safe-state của mode mới khi MCU vẫn ở mode cũ";
+}
+
 TEST(GraphReload, FailKeepsOldGraph)
 {
     GraphRuntime graph;

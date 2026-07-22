@@ -4,7 +4,7 @@
 >
 > ⚠️ **RECONCILE (2026-06-08):** mô hình lập trình là **component-based graph**, không phải IEC 61131-3 (→ Rev C). Nguồn-chuẩn định vị: [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md), [ADR-004](../adr/ADR-004-component-based-runtime.md).
 
-**Revision:** 3.0 | 2026-06-30 | Breaking I/O baseline alignment to ADR-010
+**Revision:** 3.1 | 2026-07-22 | Local limited-operator HMI alignment to ADR-016
 
 > ⚠ **CẬP NHẬT KIẾN TRÚC KẾT NỐI — 2026-05-30 (ARCH-R010):** Phần kết nối chuẩn đã đổi và **thay thế mọi đề cập cũ về "BACnet MS/TP" và "Modbus TCP/RTU slave" trong tài liệu này.**
 > - **Northbound (lên BMS/cloud): chỉ qua IP (Ethernet/WiFi)** — BACnet/IP + MQTT + REST. **Bỏ BACnet MS/TP. Bỏ Modbus slave.**
@@ -46,7 +46,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 - ✅ **MQTT v5.0 + REST API HTTPS** — đẩy dữ liệu IoT upstream, tích hợp dashboard và cloud
 - ✅ **Soft PLC IEC 61131-3 FBD + ST** — KinexusET Web IDE, không cài phần mềm desktop
 - ✅ **Debian Linux trên SOM quad-core** — OTA A/B partition, SSH, web UI, extensible
-- ✅ **Màn hình TFT 2.4" local HMI** — JD9852 MIPI DSI, 240×320; CTP + 6× nút điều hướng
+- ✅ **Màn hình TFT 2.4" limited-operator HMI** — JD9852 MIPI DSI, 240×320; CTP + 6× nút; setpoint/mode/override/release chỉ cho point được authority whitelist
 - ✅ **Thiết kế compact DIN-rail 150×90×55 mm** — phù hợp tủ điện chật, retrofit không phình tủ
 
 ---
@@ -75,7 +75,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 | **OS** | Debian 12 (Bookworm) | Kernel 6.1 LTS, PREEMPT_RT patch |
 | **RTC** | DS3231 external (I²C), battery backup | Lịch vận hành offline ≥ 30 ngày |
 | **HMI Display** | TFT 2.4" JD9852, 240×320, MIPI DSI | LVGL v9 via DRM/KMS |
-| **HMI Input** | 6× nút nhấn (UP/DOWN/LEFT/RIGHT/ENTER/ESC) | Điều hướng menu local, không cần laptop |
+| **HMI Input** | FT5436 capacitive touch + 6× nút (UP/DOWN/LEFT/RIGHT/ENTER/ESC) | Home/Points/Control/Alarms/Service; không phải full Web HMI/SCADA |
 
 #### 3.1.2 Real-time I/O MCU
 
@@ -172,8 +172,8 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 | **Notification Class** | 4 | ✅ | ✅ | — | Routing alarm đến BMS |
 | **Event Enrollment** | 8 | ✅ | ✅ | — | Định nghĩa điều kiện alarm |
 
-**BACnet/IP:** UDP port 47808, Max APDU 1476 bytes, Segmentation hỗ trợ  
-**Who-Is / I-Am / Time-Sync:** Hỗ trợ đầy đủ  
+**BACnet/IP:** UDP port 47808, Max APDU 1476 bytes, Segmentation hỗ trợ
+**Who-Is / I-Am / Time-Sync:** Hỗ trợ đầy đủ
 
 ### 4.1 Modbus field role
 
@@ -359,22 +359,22 @@ device profiles; the previous local-slave table is superseded by ARCH-R010.
 
 ## 11. Liên hệ
 
-**KINEXUS Technologies JSC**  
+**KINEXUS Technologies JSC**
 Lô I-3, Khu Công nghệ Cao, Quận 9, TP. Hồ Chí Minh, Việt Nam
 
-📧 **Email:** sales@KINEXUS-tech.vn  
-📞 **Hotline:** 1900-xxxx (8h-17h, T2-T6)  
-🌐 **Website:** www.KINEXUS-tech.vn  
+📧 **Email:** sales@KINEXUS-tech.vn
+📞 **Hotline:** 1900-xxxx (8h-17h, T2-T6)
+🌐 **Website:** www.KINEXUS-tech.vn
 💬 **Zalo/WhatsApp:** +84-xxx-xxx-xxx
 
-**Technical support:** support@KINEXUS-tech.vn  
+**Technical support:** support@KINEXUS-tech.vn
 **RMA request:** rma@KINEXUS-tech.vn
 
 ---
 
-**Document ID:** DS-MK-DDC-24-VI  
-**Revision:** 3.0 | 2026-06-30
-**Supersedes:** Rev 2.1 (2026-05-28)
+**Document ID:** DS-MK-DDC-24-VI
+**Revision:** 3.1 | 2026-07-22
+**Supersedes:** Rev 3.0 (2026-06-30)
 **Status:** In-Review — engineering evidence gates remain open
 **Related docs:** [PRD-MK-DDC-24-VI](PRD_MK-DDC-24_VI.md) | [SRS-MK-DDC-24-VI](SRS_MK-DDC-24_VI.md) | [HW-SPEC-MK-DDC-24-VI](HW_SPEC_MK-DDC-24_VI.md)
 

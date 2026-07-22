@@ -250,14 +250,6 @@ TEST(IoScaling, ReliabilityConfiguredPathPreservesCalibration)
     EXPECT_EQ(r, KX_REL_RELIABLE);
 }
 
-TEST(IoScaling, AoEngineeringRangeMapsToPhysicalOutput)
-{
-    EXPECT_NEAR(ao_eng_to_raw_phys(50.0f, 0.0f, 100.0f, AoMode::V0_10), 32768, 1);
-    EXPECT_NEAR(ao_eng_to_raw_phys(50.0f, 0.0f, 100.0f, AoMode::MA4_20), 32768, 1);
-    EXPECT_EQ(ao_eng_to_raw_phys(-10.0f, 0.0f, 100.0f, AoMode::V0_10), 0);
-    EXPECT_EQ(ao_eng_to_raw_phys(110.0f, 0.0f, 100.0f, AoMode::V0_10), 65535);
-}
-
 TEST(IoScaling, SensorTypeFromString)
 {
     EXPECT_EQ(sensor_type_from_string("0-10V"),      SensorType::V0_10);

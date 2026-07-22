@@ -13,11 +13,11 @@
 
 namespace iobus {
 
-/* ADR-012: per-channel AO config — tên, đơn vị engineering, phạm vi BACnet PV.
- * Dùng để set BACnet AO Object_Name / Units / Min_Pres_Value / Max_Pres_Value.
- * Engineering conversion: norm = (pv - min_pv)/(max_pv - min_pv) → DAC raw. */
+/* ADR-012: per-channel AO metadata for BACnet engineering values. The physical
+ * hardware boundary remains V/mA; min/max must never be applied in OutputCommand. */
 struct AoChannelConfig {
     std::string name;          /* BACnet Object_Name; default "AO{n}" */
+    AoMode      mode = AoMode::V0_10; /* electrical mode used for BACnet<->physical conversion */
     std::string units_str = "volt"; /* BACnet units string; default for 0-10V */
     float       min_pv = 0.0f; /* BACnet Min_Pres_Value (engineering units) */
     float       max_pv = 10.0f;/* BACnet Max_Pres_Value; default 10 (volts 0-10V) */

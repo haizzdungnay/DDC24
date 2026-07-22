@@ -1,357 +1,280 @@
-# HMI TFT UI — MK-DDC-24
-## Thiết kế giao diện màn hình tại chỗ (2.4" TFT)
+# UX Design — HMI local MK-DDC-24
+## Five-surface limited operator interface on 320×240
 
-> **Document ID:** KX-DDC24-UX-HMI-001
-> **Phiên bản:** 2.0 | 2026-06-26 · **Trạng thái:** Draft · **Owner:** UX Lead
-> [docs/README](../README.md) · [SW_HMI_DESIGN Rev 2.1](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md) · Use Cases [KX-DDC24-UC-HMI-001 Rev 2.1](KX-DDC24-UC-HMI-001_VI.md)
-> **Trace:** `HMI-001..022`, `SW-HMI-001..008`
+**Document ID:** KX-DDC24-UX-HMI-001
+**Revision:** 3.0 — 2026-07-22
+**Status:** Controlled target; implementation partial
+**Owner:** UX Lead
+**Decision:** ADR-016
+**Use cases:** [KX-DDC24-UC-HMI-001](KX-DDC24-UC-HMI-001_VI.md)
 
----
+## 1. Hardware envelope
 
-## 1. Ràng buộc phần cứng
+| Item | Value |
+|---|---|
+| Panel | KD024QVFIA073-02-C021B, JD9852 |
+| Resolution | 240×320 rotated to 320×240 landscape |
+| Touch | FT5436 capacitive touch through evdev |
+| Hard keys | UP/DOWN/LEFT/RIGHT/ENTER/ESC |
+| Font | Noto Sans with Vietnamese glyphs |
+| Render/data | ≥10 FPS; telemetry refresh ≤1 s |
 
-| Thông số | Giá trị |
-|---------|--------|
-| Module | KD024QVFIA073-02-C021B (Startek) |
-| Display controller | JD9852, MIPI DSI 1-lane |
-| Resolution | 240×320 → xoay landscape **320×240** |
-| Display driver (Linux) | DRM/KMS `/dev/dri/card0` (không dùng fbdev) |
-| Touch controller | FT5436, I2C 0x38, 5-point capacitive |
-| Touch driver (Linux) | `ft5x06_ts` → `/dev/input/touchscreen0` |
-| Nút cứng | 6 nút GPIO: UP/DOWN/LEFT/RIGHT/ENTER/ESC |
-| Font | NotoSans (hỗ trợ tiếng Việt) |
-| FPS | ≥ 10 FPS |
-| Refresh dữ liệu | ≤ 1s (đọc shared memory, không mạng) |
+The small display is not a full Web HMI/SCADA. It is optimized for glance, point
+inspection, limited command, alarm response and service diagnostics.
 
----
+## 2. UX acceptance targets
 
-## 2. Input Methods
+- Body text: minimum 14 px.
+- Page title/value emphasis: 16–18 px.
+- Touch action target: minimum 40×40 px; otherwise a complete hard-key equivalent is
+  mandatory.
+- A first touch/key after dim only wakes the screen.
+- Every focused element has a visible outline/marker.
+- Telemetry age/quality and command source/priority are always visible where relevant.
+- Normal uses neutral styling; saturated color is reserved for abnormal attention,
+  energized state when necessary and explicit override.
+- No state is communicated by color alone.
 
-| Hành động | Touch (primary) | 6 nút cứng (fallback) |
-|-----------|----------------|----------------------|
-| Chuyển page | Vuốt trái / phải | LEFT / RIGHT |
-| Cuộn | Vuốt lên / xuống | UP / DOWN |
-| Chọn item | Tap vào row | UP/DOWN focus → ENTER |
-| Xác nhận nguy hiểm | Tap + hold 3s | ENTER giữ 3s |
-| Huỷ | Tap [X] | ESC |
-| Wake screen saver | Chạm bất kỳ | Nhấn bất kỳ nút |
+These are product design targets to verify on the actual panel, not IEC certification
+claims.
 
----
+## 3. Information architecture
 
-## 3. Mô hình điều hướng
-
-```
-Home ↔ I/O Monitor ↔ Alarm/Event ↔ Communication ↔ System/Diagnostics ↔ Service/Config ↔ Home
- [1]       [2]            [3]             [4]               [5]                 [6]
-```
-
-- Tab strip trên cùng luôn hiển thị, highlight tab đang active.
-- Vuốt / LEFT/RIGHT vòng tuần hoàn.
-- Tap trực tiếp vào tab để nhảy page.
-
----
-
-## 4. Khung chung
-
-```
-┌──────────────────────────────────────────────────┐
-│ Home  I/O  Alarm  Net  Sys  Svc      10:42:33    │  ← tab strip + giờ
-├──────────────────────────────────────────────────┤
-│                                                  │
-│                 [ Nội dung page ]                 │
-│                                                  │
-├──────────────────────────────────────────────────┤
-│ ◄ ►: page   ▲▼: chọn   ⏎: OK   ⎋: thoát         │  ← gợi ý phím
-└──────────────────────────────────────────────────┘
+```text
+Home ↔ Points ↔ Control ↔ Alarms ↔ Service
 ```
 
-**Overlay bắt buộc khi I/O FAULT:**
-```
-┌──────────────────────────────────────────────────┐
-│ ██████████████  I/O FAULT  ████████████████████  │  ← banner đỏ full width
-│ Home  I/O  Alarm  Net  Sys  Svc      10:42:33    │
-...
-```
+| Surface | Primary question |
+|---|---|
+| Home | Is the controller operating normally and what needs attention? |
+| Points | What is the current value, quality and age of each point? |
+| Control | Which approved points can I operate and what source currently wins? |
+| Alarms | What is abnormal, what response is expected and is it acknowledged? |
+| Service | What communication/system detail explains the issue? |
 
----
+The legacy Communication and System pages are consolidated into Home and Service.
 
-## 5. Page 1 — Home / Controller Health
+## 4. Global frame
 
-Màn mặc định sau boot. Kỹ sư nhìn trong 30 giây phải biết DDC bình thường hay không.
-
-```
-MK-DDC-24-001                              RUNNING
-2026-06-26  18:30:05
-──────────────────────────────────────────────────
-ALARM
-Active: 0          Unacked: 0          Critical: 0
-
-CONTROLLER HEALTH
-CPU: 18%           RAM: 312/2048 MB    Storage: 12/64 GB
-Temp: 52.3 °C      Uptime: 3d 14h      Health: NORMAL
-
-I/O HEALTH
-UI: 8 OK / 0 BAD / 0 STALE
-DI: 8 OK / 0 BAD / 0 STALE
-AO: 4 OK / 0 BAD / 0 STALE
-DO: 4 OK / 0 BAD / 0 STALE
-
-COMMUNICATION
-Ethernet: OK       IP: 192.168.1.18
-BACnet: OK         Device ID: 1001      Last req: 12s ago
-Modbus RTU-1: OK   Modbus RTU-2: DISABLED
-
-CONFIG
-Profile: GENERIC_DDC    Config Rev: 24    Checksum: OK
+```text
+┌────────────────────────────────────────┐
+│ ◀  HOME       DDC-001       10:42  ●A2 │  32 px header
+├────────────────────────────────────────┤
+│                                        │
+│             page content               │  164 px body
+│                                        │
+├────────────────────────────────────────┤
+│ ◀▶ Page   ▲▼ Focus   ENTER   ESC       │  44 px action/help area
+└────────────────────────────────────────┘
 ```
 
-**Quy tắc:**
-- Không hardcode "Room Temp", "Fan", "Power", "Energy", "AHU".
-- Không hiển thị IOP/core/HMI service process (debug only).
-- `Active: N` không giảm khi alarm chỉ được ACK mà vẫn còn active.
-- BACnet hiển thị `Last req: Xs ago` thay vì "Đang kết nối".
+- Header shows one page title, not five narrow touch tabs.
+- LEFT/RIGHT changes surface; a page chooser opened from the title provides direct
+  touch navigation with five large targets.
+- Alarm indicator shows priority/count with text/symbol.
+- Broker unavailable adds a persistent `READ ONLY` badge on Control/Alarms/Service.
 
----
+## 5. Home
 
-## 6. Page 2 — I/O Monitor
-
-```
-I/O MONITOR                                Page 1/3
-
-POINT   NAME    TYPE   VALUE    UNIT   QUALITY   AGE
-UI1     UI1     UI     23.5     °C     GOOD      120ms
-UI2     UI2     UI     7.8      V      GOOD      120ms
-UI3     UI3     UI     12.3     mA     GOOD      130ms
-UI4     UI4     UI     ---      ---    BAD       2.3s
-UI5     UI5     UI     45.0     %      GOOD      120ms
-UI6     UI6     UI     ---      ---    STALE     8.1s
-
-──────────────────────────────────────────────────
-Filter: ALL / BAD / STALE          [Page 2] [Page 3]
+```text
+STATE     RUNNING          DATA  0.3 s
+ALARM     P1:0  P2:2       UNACK 1
+I/O       GOOD 22  BAD 1   STALE 1
+CONTROL   AUTO 3  OVERRIDE 1
+SERVICES  CORE OK  IOBUS OK  BROKER OK
+COMM      ETH OK  BACnet 12 s  MBUS WARN
 ```
 
-**Phân page:**
-- Page 1: UI1–UI8
-- Page 2: UI9–UI16
-- Page 3: AO1–AO4 + DO1–DO4; optional DI appears only when capability map confirms it
+Rules:
 
-**Quality legend:**
-- `GOOD` — dữ liệu hợp lệ, trong ngưỡng
-- `BAD` — lỗi tín hiệu / đứt cảm biến / out of range
-- `STALE` — dữ liệu cũ quá ngưỡng cấu hình (thiếu cập nhật từ IOP/Modbus)
-- `UNCERTAIN` — tín hiệu nghi ngờ nhưng chưa kết luận lỗi
+- The highest-priority unacknowledged alarm is above resource metrics.
+- `GOOD` is not inferred when telemetry is absent.
+- BACnet shows traffic age/state, not a fictitious session connection.
+- CPU/RAM/temp/version details move to Service.
+- Selecting ALARM, I/O, CONTROL or SERVICE navigates to the corresponding surface.
 
-**Quy tắc:**
-- Tên point lấy từ `display_name` trong point database; nếu chưa có thì dùng mã kỹ thuật (UI1, AO1, DO1...).
-- `AGE` hiển thị thời gian kể từ lần cập nhật cuối từ SHM.
-- Không hiển thị point thiếu `point_id`, `io_type`, `unit` (analog), `quality`.
+## 6. Points
 
----
-
-## 7. Page 3 — Alarm / Event
-
-```
-ALARM / EVENT
-
-SUMMARY
-Active: 2          Unacked: 1          Critical: 1
-
-TIME        CODE   SEV     POINT   MESSAGE               STATE
-10:30:05    E302   FAULT   MB1     Modbus timeout        ACTIVE_UNACK
-09:12:41    E303   WARN    RS485   Bus error high        ACTIVE_ACK
-08:55:00    E001   FAULT   IO      I/O fault cleared     CLEARED_ACK
-
-──────────────────────────────────────────────────
-[Ack Selected]    [Filter: Active]    [Event Log]
+```text
+Filter [ALL]  Page 1/6
+UI1  Supply Temp       12.4 °C  GOOD  0.2s
+UI2  Return Temp       18.1 °C  GOOD  0.2s
+AO1  Cooling Valve     45.0 %   OVR   0.2s
+DO1  Supply Fan        ON       GOOD  0.2s
 ```
 
-**State model — bắt buộc:**
+Filters: All, Bad, Stale, Overridden. Rows show point ID/name, value, unit, quality and
+age. Inputs and feedback are read-only. Selecting a commandable row opens the same
+point on Control; selecting a read-only row opens a detail overlay without commands.
 
-| State | Ý nghĩa |
-|-------|---------|
-| `ACTIVE_UNACK` | Lỗi đang tồn tại, chưa xác nhận |
-| `ACTIVE_ACK` | Lỗi đang tồn tại, đã xác nhận |
-| `CLEARED_UNACK` | Lỗi đã hết, chưa xác nhận lịch sử |
-| `CLEARED_ACK` | Lỗi đã hết và đã xác nhận |
+## 7. Control
 
-**Quy tắc:**
-- ACK không xóa lỗi active — chỉ đổi UNACK → ACK.
-- `Active: N` trên Home không giảm khi chỉ ACK.
-- Severity FAULT = đỏ, WARN = vàng, INFO = xám.
-- INFO không có nút ACK.
+### 7.1 Commandable point list
 
----
+Only authoritative commandable points appear:
 
-## 8. Page 4 — Communication
-
-```
-COMMUNICATION
-
-ETHERNET
-Link         UP
-IP           192.168.1.18
-Mask         255.255.255.0
-Gateway      192.168.1.1
-MAC          b8:13:32:73:3e:4e
-
-BACnet/IP
-Enabled      YES
-Device ID    1001
-Port         47808
-Status       OK
-Last Request 12s ago
-
-Modbus RTU-1
-Port         RS485-1
-Baudrate     9600
-Parity       NONE
-Slaves       8
-Status       OK
-Timeouts     0
-
-Modbus RTU-2
-Port         RS485-2
-Status       DISABLED
-
-Modbus TCP
-Enabled      YES
-Port         502
-Status       OK
+```text
+CONTROL   [READ ONLY when authority unavailable]
+SP1  Room Setpoint     22.0 °C   AUTO
+AO1  Cooling Valve     45.0 %    OVR  12m
+DO1  Supply Fan        ON        AUTO
 ```
 
-**Status chuẩn (không dùng "Đang kết nối"):**
+### 7.2 Point faceplate
 
-| Status | Ý nghĩa |
-|--------|---------|
-| `OK` | Hoạt động bình thường |
-| `DISABLED` | Đã tắt trong cấu hình |
-| `NO_TRAFFIC` | Không có traffic |
-| `TIMEOUT` | Có timeout |
-| `CONFIG_ERROR` | Sai cấu hình |
-| `DUPLICATE_ID` | Trùng BACnet Device ID |
-| `LINK_DOWN` | Ethernet mất link |
+```text
+Cooling Valve                         AO1
+Effective       45.0 %       GOOD · 0.2s
+Feedback        44.2 %
+Mode            MANUAL
+Source          HMI_OPERATOR · P8
+Expires         12 min
 
----
-
-## 9. Page 5 — System / Diagnostics
-
-```
-SYSTEM / DIAGNOSTICS
-
-FIRMWARE
-SOM FW        v1.4.2-89fb37c
-MCU FW        v2.0.0
-Build ID      2026.06.26-r24
-Config Rev    24
-
-RUNTIME
-Uptime        3d 14h 22m
-Boot Reason   POWER_ON
-Last Error    NONE
-
-RESOURCE
-CPU           18%
-RAM           312 / 2048 MB
-Storage       12.3 / 64 GB
-CPU Temp      52.3 °C
-
-PROCESS / SERVICE
-core          RUNNING
-iobus         RUNNING
-hmi           RUNNING
-bacnet        RUNNING
-modbus        RUNNING
-
-WATCHDOG
-Status        OK
-Last Reset    NONE
-
-LOG
-Last Warn     NONE
-Last Fault    NONE
+[ Setpoint ]   [ Mode ]
+[ Override ]   [ Release ]
 ```
 
----
+Disabled actions remain visible only when the reason helps the operator; otherwise
+they are omitted. The reason must be available on focus/tap.
 
-## 10. Page 6 — Service / Config
+### 7.3 Edit and confirm
 
-Trang có khóa quyền. Hiển thị mặc định là LOCKED — mọi action bị disable.
+```text
+SETPOINT
+Current          22.0 °C
+New              [ 23.0 ] °C
+Allowed          18.0 … 26.0 °C
 
-```
-SERVICE / CONFIG                          LOCKED
-
-ACCESS
-Mode          PIN REQUIRED
-Role          VIEW ONLY
-Service SW    OFF
-
-PROJECT
-Project ID    MK-DDC24-DEMO
-Profile       GENERIC_DDC
-Config Rev    24
-Checksum      OK
-
-POINT DATABASE
-Total Points  24
-UI: 8    DI: 8    AO: 4    DO: 4
-
-SAFE STATE POLICY
-DO            PER_POINT (per point_db safe_state field)
-AO            PER_POINT (per point_db safe_state field)
-UI/DI         READ_ONLY
-
-ACTIONS
-[ Reload Config ]       LOCKED
-[ Restart Services ]    LOCKED
-[ Reboot System ]       LOCKED
-[ Backup Config ]       LOCKED
-[ Restore Config ]      LOCKED
+[ Cancel ]       [ Confirm ]
 ```
 
-**Điều kiện unlock (ít nhất 1 trong):**
-- Nhập Service PIN hợp lệ
-- Physical service switch đang ON
-- User role là Engineer/Service (set qua Web UI)
+Override additionally requires reason and TTL selected within policy. There is no
+indefinite default.
 
-**Reboot — safe state:**
-- Không hardcode AO=0V/4mA, DO=OFF cho toàn hệ thống.
-- Áp dụng `safe_state` per-point từ point database.
+### 7.4 Command states
 
----
+| State | Presentation |
+|---|---|
+| Editing | Local input only; no changed process value |
+| Pending | Spinner/text `PENDING`; edit actions disabled |
+| Accepted | Show authoritative effective value/source/priority |
+| Rejected | Preserve prior state; show stable reason in plain language |
+| Timeout | Show `UNKNOWN — checking authority`; no blind retry |
+| Active override | Distinct border/badge + `OVERRIDE`, source and expiry |
+| Expired/released | Show current automatic/priority winner, not assumed value |
 
-## 11. Phản hồi & an toàn
+## 8. Alarms
 
-| Tình huống | Hành vi |
-|-----------|--------|
-| Mất IOP | Banner đỏ "I/O FAULT" phủ toàn width trên mọi page, không tắt được cho đến khi fault clear |
-| Data STALE | Label AGE đổi màu vàng; quality hiện STALE; không hiển thị giá trị cũ như giá trị tốt |
-| Restart | Phải unlock Service Mode trước; giữ xác nhận 3 giây; safe state per-point trước khi tắt |
-| Screen saver | Dim sau 5 phút idle; chạm/nhấn bất kỳ để wake; cử chỉ wake bị nuốt không navigate |
-| BACnet status | Không bao giờ hiển thị "Đang kết nối" — chỉ dùng OK / NO_TRAFFIC / CONFIG_ERROR / DUPLICATE_ID |
+```text
+P1  ACTIVE UNACK   10:41  IOP communication
+    Source: IOP    Response: Check MCU link
 
----
+P2  ACTIVE ACK     10:38  Supply temperature high
+    Source: UI1    Response: Inspect airflow
 
-## 12. Localization
+[ Filter ]                       [ ACK ]
+```
 
-EN (mặc định) + VI; đổi qua SIGHUP hoặc Web UI; không reboot.
+- Priority, lifecycle state, time, source, message and response are mandatory.
+- ACK is at least 40×40 px and available through ENTER.
+- ACK changes to Pending, then Acked only after authority accepts it.
+- Alarm flood keeps the highest priority visible and offers deterministic filtering.
+- ACK does not remove an active alarm.
 
----
+## 9. Service
 
-## 13. Handoff (LVGL)
+Service uses sections rather than five tiny action buttons:
 
-- Mỗi page = 1 `lv_obj` screen; chuyển page = `lv_scr_load_anim(LV_SCR_LOAD_ANIM_MOVE_LEFT/RIGHT)`.
-- Display init: `drm_init("/dev/dri/card0")` — không dùng fbdev.
-- Touch input: `LV_INDEV_TYPE_POINTER` qua evdev `/dev/input/touchscreen0`.
-- Button input: `LV_INDEV_TYPE_KEYPAD` qua GPIO poll thread (20ms debounce).
-- Data binding: timer 1s đọc `kx_io_shm_t` + `kx_plc_shm_t` từ `/dev/shm/` cập nhật label/table.
-- AGE: tính từ `last_update_ts` trong SHM entry.
+```text
+COMMUNICATION  >
+SYSTEM         >
+CONFIG STATUS  >
+MAINTENANCE    >   [LOCKED]
+```
 
----
+Communication detail includes Ethernet/IP, BACnet traffic/error state and Modbus
+port/slave/error state. System includes firmware, uptime, CPU/RAM/storage/temp,
+process/watchdog and last fault.
 
-## Revision History
+Maintenance is hidden or locked without a Service session. An action appears only
+when an authoritative implementation exists. Reboot/restart/restore must not be
+executed directly by the HMI process.
 
-| Version | Ngày | Người | Thay đổi |
-|---------|------|-------|----------|
-| 1.0 | 2026-05-30 | UX Lead | Phát hành đầu — 5 màn HMI + điều hướng 6 nút |
-| 1.1 | 2026-06-26 | UX Lead | Thêm backlink UC doc |
-| 2.0 | 2026-06-26 | UX Lead | Viết lại hoàn toàn: sửa hardware (JD9852 MIPI DSI + FT5436 CTP, bỏ ILI9341/SPI), bỏ arc gauge → text tile, 6 page (thêm Service/Config), alarm 4-state model, BACnet status kỹ thuật, safe state per-point, data age mandatory, no-hardcode rule |
+## 10. Login and session
+
+- Login is opened only when a mutation is requested or from Service.
+- Credential entry supports touch keyboard and hard keys.
+- Password/PIN characters are masked and never shown in logs.
+- Header displays role and remaining session time while unlocked.
+- Idle expiry up to 15 minutes locks mutation but does not hide an active override.
+- Unknown role, broker loss or session expiry immediately changes mutation surfaces to
+  `READ ONLY`.
+
+## 11. Touch and hard-key mapping
+
+| Input | List | Faceplate/form | Confirmation |
+|---|---|---|---|
+| LEFT/RIGHT | Previous/next surface | Previous/next field only when editing | No action |
+| UP/DOWN | Move focus/scroll | Change selection/value | Move focus |
+| ENTER | Open selected item | Edit/apply selected action | Confirm |
+| ESC | Back/close | Cancel edit/back | Cancel |
+| Tap | Select/open | Focus/edit/action | Confirm/cancel target |
+| Swipe | Scroll or surface navigation when not editing | Disabled during value edit | Disabled |
+
+Gestures must never trigger a command without an explicit confirmation.
+
+## 12. Visual semantics
+
+| Meaning | Visual rule |
+|---|---|
+| Normal/available | Neutral background/text |
+| Running/energized | Green only when confirmed and operationally useful, plus text |
+| Off/stopped | Neutral gray plus text |
+| Warning | Yellow/amber badge plus symbol/text |
+| Fault/alarm | Red badge/banner plus symbol/text |
+| Override/manual | Distinct purple-style badge/border plus `OVERRIDE/MANUAL` text |
+| Stale/unavailable | Gray hatch/badge plus age/reason |
+| Pending | Spinner/progress plus `PENDING` |
+
+Colors inherit from [Design System](KX-DDC24-UX-SYSTEM-001_VI.md), but contrast must
+be measured on the actual panel/theme.
+
+## 13. Localization
+
+- English default and Vietnamese UTF-8 are mandatory.
+- Values, units, point IDs and reason codes remain stable across locale.
+- Translated text must be tested for clipping at 14 px.
+- A language change rebuilds labels without changing control/session state.
+
+## 14. Current source corrections required
+
+| Current source behavior | UX correction |
+|---|---|
+| Six always-visible tabs | Five surfaces with single title/page chooser |
+| 12 px runtime font | Minimum 14 px body |
+| 22–29 px action buttons | Minimum 40×40 px or hard-key equivalent |
+| Local alarm ACK | Pending/authoritative ACK lifecycle |
+| Static local role/PIN | Broker session with expiry |
+| No Control surface | Whitelist list + point faceplate |
+| Direct reboot/signal hooks | Remove privilege; brokered or disabled maintenance |
+| Communication defaults | Authoritative state or `UNAVAILABLE` |
+
+## 15. Target validation scenarios
+
+1. Thirty-second abnormal-state recognition.
+2. All five surfaces reachable by touch and hard keys.
+3. Setpoint at min/max and rejection outside range.
+4. Auto/Manual command with a higher priority winner.
+5. Override reason/TTL, expiry and explicit release.
+6. Alarm ACK accepted/rejected/timeout and alarm flood.
+7. Broker/core loss during Pending and recovery without replay.
+8. Session expiry while override remains active.
+9. Stale/corrupt SHM and recovery.
+10. Glove/light, font/localization, 40×40 targets and first-input wake suppression.
+
+## Revision history
+
+| Revision | Date | Change |
+|---|---|---|
+| 2.1 | 2026-07-22 | Service-panel UX and source-aligned release gaps. |
+| 3.0 | 2026-07-22 | ADR-016 five-surface limited operator UX, point faceplate, authoritative command/session states and measurable interaction targets. |

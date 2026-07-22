@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Trước khi bàn giao
 
 > **Document ID:** IMPL-HANDOVER-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-10
+> **Phiên bản:** 1.1 | 2026-07-22 (ADR-016 local HMI release gates)
 > **Trạng thái:** Draft — chưa đến giai đoạn release
 > **Owner:** PM/Lead. Bàn giao chỉ khi MỌI ô tick + ký.
 
@@ -41,6 +41,10 @@
 [ ] Commissioning export report nghiệm thu chạy.
 [ ] Alarm list + ack chạy.
 [ ] Validator chặn graph lỗi; deploy graph hợp lệ pass.
+[ ] Nếu HMI SKU enable: 5 surface local hiển thị đúng và target DRM/touch/6 nút pass.
+[ ] HMI setpoint/mode/override/release chỉ cho point whitelist; broker/core/audit path pass.
+[ ] HMI alarm ACK authoritative; broker loss chuyển read-only; không blind replay.
+[ ] HMI không có CAP_SYS_BOOT/direct signal/direct SHM write; maintenance unsupported bị disable.
 ```
 
 ## 4. Sạch demo/bypass (BẮT BUỘC)
@@ -50,6 +54,7 @@
 [ ] KHÔNG còn bypass Web → UART (lsof mkddc-web: 0 fd /dev/ttyS2).
 [ ] Web KHÔNG gọi thẳng MCU (không import serial/IOP trong web).
 [ ] Mọi DO/AO đi qua priority resolver (core) — không đường ghi tắt.
+[ ] HMI không ghi SHM/hardware, không kill core/iobus và không tự reboot host.
 [ ] iobus không tự quyết logic relay; MCU không chạy logic hệ thống.
 ```
 
@@ -98,4 +103,4 @@
 > Chỉ phát hành khi đủ chữ ký + mọi ô §1–§7 tick. Bất kỳ ô §4 chưa tick = **chặn release**.
 
 ---
-**Rev** 1.0 | 2026-06-10 · Liên quan: [13_DEFINITION_OF_DONE](13_DEFINITION_OF_DONE.md) · [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
+**Rev** 1.1 | 2026-07-22 (ADR-016 local HMI handover and privilege gates) · 1.0 | 2026-06-10 · Liên quan: [13_DEFINITION_OF_DONE](13_DEFINITION_OF_DONE.md) · [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
