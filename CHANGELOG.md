@@ -38,6 +38,9 @@
 - deploy(board/frontend): atomic window `frontend-trends-live-tail-20260722T074700Z` published the eight-file dist tree (`e57347d1...`) with asset SHA `8003863505693bf8dd336a69f112a99d9ce40bcd28ac105e3ad78bcd5881dea4`; `/login=200`, asset `200`, served SHA matched, rollback tree matched checkpoint (`5f9e234b...`), and web/Core/I/O plus the all-point soak kept their existing PIDs with `NRestarts=0`.
 - docs/evidence: postdeploy behavior, runtime API trace, browser tick capture, service invariants, checkpoint and rollback paths are recorded in `docs/00_management/evidence/historian/frontend-trends-live-tail-postdeploy-2026-07-22.json`.
 
+### Fixed - Frontend CI lockfile synchronization (2026-07-22)
+- frontend(ci): regenerated npm 10 lock metadata so `npm ci` resolves the required `@emnapi/core` and `@emnapi/runtime` peer/optional packages; transitive `brace-expansion` remains patched at `5.0.7`. Verification: `npx --yes npm@10.9.8 ci --ignore-scripts --dry-run` passes.
+
 ### Fixed - Core IPC status-probe pressure (2026-07-22)
 - web/backend(core-status): `ReadStatus` now treats valid PLC shared-memory scan state as primary Core liveness evidence and only opens `core.sock` as a fallback when that evidence is unavailable. This removes a dial-only client from each health poll while retaining the existing socket fallback and IOP/scan error semantics.
 - test(backend): added a regression with valid PLC/IO shared memory and a listening Unix socket. It failed before the fix because status probed the socket, and now proves `CoreAvailable=true`, the scan counter is read, and the socket receives no connection. Focused RED/GREEN passes; full `go test -count=1 ./...` passes (`54.471s`), with `go vet ./...` and `go build ./...` also passing.
