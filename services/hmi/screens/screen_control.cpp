@@ -53,10 +53,10 @@ void ScreenControl::build(lv_obj_t* root, const Locale& l, const PointDb&)
 
 std::string ScreenControl::point_id() const
 {
-    char id[8];
-    std::snprintf(id, sizeof(id), "%s-%02d", selected_ < KX_N_AO ? "AO" : "DO",
-                  selected_ < KX_N_AO ? selected_ + 1 : selected_ - KX_N_AO + 1);
-    return id;
+    const bool analog = selected_ < KX_N_AO;
+    const int channel = analog ? selected_ + 1 : selected_ - KX_N_AO + 1;
+    return std::string(analog ? "AO-" : "DO-") +
+           (channel < 10 ? "0" : "") + std::to_string(channel);
 }
 
 double ScreenControl::effective_value() const

@@ -13,6 +13,7 @@
 - fw-som/bacnet: added IPv4 address change detection and BACnet/IP datalink-only rebind with a new `I-Am`; the iobus process, IOP/UART owner, shared memory and Core control path remain running.
 - packaging: added the hardened `mkddc-netcfg.service`, Orange Pi Ethernet allowlist config (`end1`), install wiring and HMI service dependency/hardening.
 - verification: HMI-enabled host build and CTest pass 366/366; BACnet-enabled build and netcfg CTest pass 10/10; Go vet/backend tests pass; JSON schemas, installer shell syntax and diff checks pass. Target deployment/evidence is recorded separately after board execution; lack of a connected DSI/touch panel cannot be treated as HMI usability acceptance.
+- hmi/portability: replaced fixed-buffer point-ID formatting after the Orange Pi GCC 12 Release build correctly raised a `-Wformat-truncation` error under `-Werror`; point IDs remain canonical `AO-01`/`DO-01` without a truncation path.
 
 ### Changed — ADR-017 safe network commissioning documentation and implementation plan (2026-07-22)
 - docs/architecture: separated desired `network.conf` from active Linux state, recorded the current `applySystem()`/frontend truthfulness gap, and approved a narrow SOM `mkddc-netcfg` authority with versioned local IPC, least privilege, staged apply/confirm, last-known-good and automatic rollback within 120 seconds. IP change must not stop Core/IOP/STM32 control; BACnet must hot-rebind without restarting the whole iobus process.
