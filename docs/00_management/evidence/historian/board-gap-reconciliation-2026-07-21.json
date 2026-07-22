@@ -1,0 +1,25 @@
+{
+  "createdAtUtcMs": 1784624890521,
+  "checkpoint": "/data/config/historian-v2-migration/historian-cutover-20260721T082943Z/pre-gap-reconcile.sqlite",
+  "checkpointSHA256": "5356b447cbaba9be31770a54d97853f52d29a280cca24cd76ca06eb4dda1cade",
+  "checkpointQuickCheck": "ok",
+  "postQuickCheck": "ok",
+  "gaps": [
+    {
+      "pointId": "AO-01",
+      "generation": 1,
+      "fromUtcMs": 1784622795000,
+      "toUtcMs": 1784623560000,
+      "overlappingHotRows": 0,
+      "existedBefore": false
+    },
+    {
+      "pointId": "UI-01",
+      "generation": 1,
+      "fromUtcMs": 1784622785000,
+      "toUtcMs": 1784623545000,
+      "overlappingHotRows": 0,
+      "existedBefore": false
+    }
+  ]
+}

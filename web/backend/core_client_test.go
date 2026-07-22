@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unsafe"
@@ -56,6 +57,83 @@ func readFakeCommand(t *testing.T, cmdCh <-chan map[string]any) map[string]any {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for fake core command")
 		return nil
+	}
+}
+
+func TestCorePointSnapshotReadsCoherentEnvelope(t *testing.T) {
+	atomic.StoreUint64(&webCommandID, 40)
+	path, cmdCh := fakeCoreSocket(t, `{"id":41,"result":"accepted","snapshotId":7,"snapshotObservedAtUtc":"2026-07-17T10:00:00Z","capturedMonotonicNs":456,"points":[{"id":"AO-01","kind":"AO","value":7.5,"quality":"GOOD","source":"schedule","role":"resolved_setpoint","unit":"V","updatedAtMonotonicNs":450,"generation":1}]}`)
+
+	snapshot, err := (&CoreClient{SockPath: path}).ReadPointSnapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := readFakeCommand(t, cmdCh)
+	if cmd["id"] != float64(41) || cmd["op"] != "point_snapshot" || cmd["user"] != "web" {
+		t.Fatalf("command = %#v", cmd)
+	}
+	if snapshot.SnapshotID != 7 || snapshot.SnapshotObservedAtUTC != "2026-07-17T10:00:00Z" || snapshot.CapturedMonotonicNs != 456 {
+		t.Fatalf("snapshot = %+v", snapshot)
+	}
+	if len(snapshot.Points) != 1 || snapshot.Points[0].ID != "AO-01" || snapshot.Points[0].Generation != 1 || snapshot.Points[0].Quality != "GOOD" {
+		t.Fatalf("points = %+v", snapshot.Points)
+	}
+}
+
+func TestCorePointSnapshotRejectsMismatchedResponseID(t *testing.T) {
+	atomic.StoreUint64(&webCommandID, 50)
+	path, _ := fakeCoreSocket(t, `{"id":99,"result":"accepted","snapshotId":7,"snapshotObservedAtUtc":"2026-07-17T10:00:00Z","capturedMonotonicNs":456,"points":[]}`)
+	if _, err := (&CoreClient{SockPath: path}).ReadPointSnapshot(context.Background()); err == nil {
+		t.Fatal("expected mismatched response id error")
+	}
+}
+
+func TestReadStatusUsesValidSharedMemoryWithoutSocketProbe(t *testing.T) {
+	dir := t.TempDir()
+	plcPath := filepath.Join(dir, "mkddc_plc_shm")
+	ioPath := filepath.Join(dir, "mkddc_io_shm")
+	sockPath := filepath.Join(dir, "core.sock")
+	listener, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Skipf("unix socket unavailable: %v", err)
+	}
+	defer listener.Close()
+	plcData := make([]byte, kxPlcShmMinLen)
+	binary.LittleEndian.PutUint32(plcData[0:4], kxShmMagic)
+	binary.LittleEndian.PutUint32(plcData[offPLCScanCount:offPLCScanCount+4], 123)
+	ioData := make([]byte, kxIOShmMinLen)
+	binary.LittleEndian.PutUint32(ioData[0:4], kxShmMagic)
+	if err := os.WriteFile(plcPath, plcData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ioPath, ioData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &CoreClient{
+		SockPath: sockPath,
+		IOShm:    ioPath,
+		PLCShm:   plcPath,
+	}
+	status, err := client.ReadStatus(context.Background())
+	if err != nil {
+		t.Fatalf("ReadStatus err = %v, want valid shared-memory status", err)
+	}
+	if !status.CoreAvailable || !status.IobusPresent || status.Scan.Count != 123 {
+		t.Fatalf("status = %+v, want healthy shared-memory evidence", status)
+	}
+	if unixListener, ok := listener.(*net.UnixListener); ok {
+		if err := unixListener.SetDeadline(time.Now().Add(50 * time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	conn, err := listener.Accept()
+	if err == nil {
+		_ = conn.Close()
+		t.Fatal("ReadStatus probed core.sock despite valid PLC shared memory")
+	}
+	if netErr, ok := err.(net.Error); !ok || !netErr.Timeout() {
+		t.Fatalf("Accept err = %v, want timeout with no status probe", err)
 	}
 }
 
@@ -324,6 +402,23 @@ func TestDecodePointsBoolUnitOmitsRaw(t *testing.T) {
 	}
 	if pts[0].Raw != nil || pts[0].RawUnit != "" {
 		t.Errorf("UI-01 raw = %v %q, want omitted", pts[0].Raw, pts[0].RawUnit)
+	}
+}
+
+func TestDecodePointsAORawSetpoint(t *testing.T) {
+	plcData := make([]byte, kxPlcShmMinLen)
+	binary.LittleEndian.PutUint32(plcData[0:4], kxShmMagic)
+	setPoint(plcData, offAO, 52.0, 0)
+
+	ioData := make([]byte, kxIOShmMinLen)
+	binary.LittleEndian.PutUint32(ioData[0:4], kxShmMagic)
+	binary.LittleEndian.PutUint32(ioData[offIOAOSetpoint:], float32bits(12.5))
+	ioData[offIOAOMode] = 1
+
+	pts := decodePoints(plcData, ioData)
+	ao1 := pts[kxNUI]
+	if ao1.Raw == nil || *ao1.Raw != 12.5 || ao1.RawUnit != "mA" {
+		t.Errorf("AO-01 raw = %v %q, want 12.5 mA", ao1.Raw, ao1.RawUnit)
 	}
 }
 

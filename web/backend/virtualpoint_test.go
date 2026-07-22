@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,7 +14,7 @@ import (
 
 func TestVirtualPointCreateAllocatesVP(t *testing.T) {
 	app, token := newTestAppWithAdmin(t)
-	req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", `{"label":"Room Setpoint","signalType":"float","enabled":true,"writable":true,"value":22.5,"unit":"C"}`, token)
+	req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", `{"tag":"room setpoint","label":"Room Setpoint","signalType":"float","enabled":true,"writable":true,"value":22.5,"unit":"C"}`, token)
 	w := httptest.NewRecorder()
 	app.Router().ServeHTTP(w, req)
 
@@ -62,15 +64,16 @@ func TestVirtualPointCreateSerializesAllocation(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		wg.Add(1)
-		go func() {
+		go func(index int) {
 			defer wg.Done()
-			req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", `{"label":"Point","signalType":"integer","enabled":true,"writable":true,"value":1}`, token)
+			body := fmt.Sprintf(`{"tag":"point %d","label":"Point %d","signalType":"integer","enabled":true,"writable":true,"value":1}`, index+1, index+1)
+			req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", body, token)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 			if w.Code != http.StatusCreated {
 				errs <- w.Body.String()
 			}
-		}()
+		}(i)
 	}
 	wg.Wait()
 	close(errs)
@@ -100,7 +103,7 @@ func TestVirtualPointCreateSerializesAllocation(t *testing.T) {
 
 func TestVirtualPointRejectsBadSignalValue(t *testing.T) {
 	app, token := newTestAppWithAdmin(t)
-	req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", `{"id":"AV-001","label":"Bad Bool","signalType":"boolean","enabled":true,"value":"maybe"}`, token)
+	req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", `{"id":"AV-001","tag":"bad bool","label":"Bad Bool","signalType":"boolean","enabled":true,"value":"maybe"}`, token)
 	w := httptest.NewRecorder()
 	app.Router().ServeHTTP(w, req)
 
@@ -135,7 +138,7 @@ func TestVirtualPointUpdatePreservesMissingWritableFalse(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"items":[{"id":"VP1","label":"A","signalType":"float","enabled":true,"writable":false,"value":1}]}`), 0o644); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
-	req := newAuthRequest(http.MethodPut, "/api/v1/virtual-points/AV-001", `{"label":"B","signalType":"float","enabled":true,"value":2}`, token)
+	req := newAuthRequest(http.MethodPut, "/api/v1/virtual-points/AV-001", `{"tag":"vp one","label":"B","signalType":"float","enabled":true,"value":2}`, token)
 	w := httptest.NewRecorder()
 	app.Router().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -171,7 +174,7 @@ func TestVirtualPointRejectsLoggedStringAndLongDiagnosticRetention(t *testing.T)
 
 func TestVirtualPointPreservesWizardMetadata(t *testing.T) {
 	app, token := newTestAppWithAdmin(t)
-	req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", `{"label":"VP Wizard","signalType":"float","enabled":true,"writable":true,"value":5,"unit":"C","displayMin":-10,"displayMax":80,"rangeMultiplier":1,"filterSamples":5,"sensorCal":0.2,"mathFunction":2}`, token)
+	req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", `{"tag":"vp wizard","label":"VP Wizard","signalType":"float","enabled":true,"writable":true,"value":5,"unit":"C","displayMin":-10,"displayMax":80,"rangeMultiplier":1,"filterSamples":5,"sensorCal":0.2,"mathFunction":2}`, token)
 	w := httptest.NewRecorder()
 	app.Router().ServeHTTP(w, req)
 
@@ -210,6 +213,91 @@ func TestVirtualPointDeleteRemovesItem(t *testing.T) {
 	}
 	if len(cfg.Items) != 0 {
 		t.Fatalf("items = %+v, want empty", cfg.Items)
+	}
+}
+
+func TestVirtualPointRecreateIncrementsPersistedGeneration(t *testing.T) {
+	app, token := newTestAppWithAdmin(t)
+	router := app.Router()
+
+	create := func(tag string) VirtualPoint {
+		req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", fmt.Sprintf(`{"tag":%q,"signalType":"float","enabled":true,"writable":true,"value":1}`, tag), token)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
+		}
+		var point VirtualPoint
+		if err := json.Unmarshal(w.Body.Bytes(), &point); err != nil {
+			t.Fatalf("decode create response: %v", err)
+		}
+		return point
+	}
+
+	first := create("first")
+	if first.ID != "VP1" || first.Generation != 1 {
+		t.Fatalf("first = %+v, want VP1 generation 1", first)
+	}
+
+	deleteReq := newAuthRequest(http.MethodDelete, "/api/v1/virtual-points/VP1", "", token)
+	deleteResponse := httptest.NewRecorder()
+	router.ServeHTTP(deleteResponse, deleteReq)
+	if deleteResponse.Code != http.StatusOK {
+		t.Fatalf("delete status = %d body=%s", deleteResponse.Code, deleteResponse.Body.String())
+	}
+
+	second := create("second")
+	if second.ID != "VP1" || second.Generation != 2 {
+		t.Fatalf("second = %+v, want VP1 generation 2", second)
+	}
+
+	data, err := os.ReadFile(filepath.Join(app.cfg.ConfigDir, "point_namespace.conf"))
+	if err != nil {
+		t.Fatalf("read point_namespace.conf: %v", err)
+	}
+	var namespace struct {
+		Revision    uint64            `json:"revision"`
+		Generations map[string]uint64 `json:"generations"`
+	}
+	if err := json.Unmarshal(data, &namespace); err != nil {
+		t.Fatalf("parse point_namespace.conf: %v", err)
+	}
+	if namespace.Revision != 3 || namespace.Generations["VP1"] != 2 {
+		t.Fatalf("namespace = %+v, want revision 3 and VP1 generation 2", namespace)
+	}
+}
+
+func TestVirtualPointGenerationRecoversAfterNamespaceWriteFailure(t *testing.T) {
+	app, token := newTestAppWithAdmin(t)
+	app.pointNamespaceWriter = func(string, []byte, os.FileMode) error { return errors.New("injected namespace write failure") }
+	req := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", `{"tag":"first","signalType":"float","enabled":true,"writable":true,"value":1}`, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	data, err := os.ReadFile(filepath.Join(app.cfg.ConfigDir, "virtual_points.conf"))
+	if err != nil {
+		t.Fatalf("read committed virtual config: %v", err)
+	}
+	var cfg ConfigVirtualPoints
+	if err := json.Unmarshal(data, &cfg); err != nil || len(cfg.Items) != 1 || cfg.Items[0].Generation != 1 {
+		t.Fatalf("config = %+v err=%v, want VP generation 1", cfg, err)
+	}
+
+	app.pointNamespaceWriter = writeConfigFileAtomic
+	deleteReq := newAuthRequest(http.MethodDelete, "/api/v1/virtual-points/VP1", "", token)
+	deleteResponse := httptest.NewRecorder()
+	app.Router().ServeHTTP(deleteResponse, deleteReq)
+	if deleteResponse.Code != http.StatusOK {
+		t.Fatalf("delete status = %d body=%s", deleteResponse.Code, deleteResponse.Body.String())
+	}
+	createReq := newAuthRequest(http.MethodPost, "/api/v1/virtual-points", `{"tag":"second","signalType":"float","enabled":true,"writable":true,"value":1}`, token)
+	createResponse := httptest.NewRecorder()
+	app.Router().ServeHTTP(createResponse, createReq)
+	var recreated VirtualPoint
+	if err := json.Unmarshal(createResponse.Body.Bytes(), &recreated); err != nil || createResponse.Code != http.StatusCreated || recreated.Generation != 2 {
+		t.Fatalf("recreate status=%d point=%+v err=%v", createResponse.Code, recreated, err)
 	}
 }
 

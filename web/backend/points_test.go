@@ -41,7 +41,7 @@ func TestHandlePointHidesUncreatedCoreVirtualID(t *testing.T) {
 
 func TestHandlePointReturnsCreatedVirtualPoint(t *testing.T) {
 	app, token := newTestAppWithAdmin(t)
-	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Room Setpoint","signalType":"float","enabled":true,"writable":true,"value":22.5,"unit":"C"}]}`)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","tag":"room setpoint","label":"Room Setpoint","signalType":"float","enabled":true,"writable":true,"value":22.5,"unit":"C"}]}`)
 	app.core = &pointsCore{points: []PointDTO{{ID: "AV1", Value: 12.5, Quality: "good", Source: "core"}}}
 	req := newAuthRequest(http.MethodGet, "/api/v1/points/VP-01", "", token)
 	w := httptest.NewRecorder()
@@ -50,7 +50,7 @@ func TestHandlePointReturnsCreatedVirtualPoint(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	if body := w.Body.String(); !containsAll(body, "VP1", "Room Setpoint", "22.5") {
+	if body := w.Body.String(); !containsAll(body, "VP1", `"tag":"room setpoint"`, `"name":"room setpoint"`, "22.5") || strings.Contains(body, "Room Setpoint") {
 		t.Fatalf("body = %s", body)
 	}
 }
@@ -102,7 +102,7 @@ func TestForcePointAcceptsNumberAndBooleanValues(t *testing.T) {
 
 func TestForcePointWritesVirtualStringValue(t *testing.T) {
 	app, token := newTestAppWithAdmin(t)
-	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP2","label":"Mode Text","signalType":"string","enabled":true,"writable":true,"value":"auto"}]}`)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP2","tag":"mode text","label":"Mode Text","signalType":"string","enabled":true,"writable":true,"value":"auto"}]}`)
 	req := newAuthRequest(http.MethodPut, "/api/v1/points/VP-002", `{"value":"manual"}`, token)
 	w := httptest.NewRecorder()
 	app.Router().ServeHTTP(w, req)

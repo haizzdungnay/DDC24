@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "kind": "historian-rollback-package",
+  "packageMode": "prebuilt-native",
+  "generatedAtUtc": "2026-07-22T06:55:23.5275039Z",
+  "verificationHost": "linux/arm64",
+  "goCommandVersion": "",
+  "buildCommand": null,
+  "current": {
+    "name": "current",
+    "path": "/data/config/historian-v2-migration/historian-trendscache-allpoints-20260722T065257Z/package/mkddc-web-current",
+    "sha256": "f666b3cb1083a43e59c27e6f4e9709d1d78f37d5536711ceb079ceb7469734b9",
+    "size": 17024886,
+    "goVersion": "go1.26.4",
+    "goos": "linux",
+    "goarch": "arm64",
+    "cgoEnabled": "0",
+    "buildSettings": {
+      "CGO_ENABLED": "0",
+      "GOARCH": "arm64",
+      "GOOS": "linux"
+    }
+  },
+  "rollback": {
+    "name": "rollback-candidate",
+    "path": "/data/config/historian-v2-migration/historian-trendscache-allpoints-20260722T065257Z/package/mkddc-web-rollback-candidate",
+    "sha256": "f666b3cb1083a43e59c27e6f4e9709d1d78f37d5536711ceb079ceb7469734b9",
+    "size": 17024886,
+    "goVersion": "go1.26.4",
+    "goos": "linux",
+    "goarch": "arm64",
+    "cgoEnabled": "0",
+    "buildSettings": {
+      "CGO_ENABLED": "0",
+      "GOARCH": "arm64",
+      "GOOS": "linux"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "/data/config/historian-v2-migration/historian-trendscache-20260722T034500Z/soak-24h/summary.json",
+      "role": "artifact",
+      "sha256Before": "1d3b86e07a15fd85ddf8571937f073414c62f50dfc1711c0fbbe9e8ce0ef00ec",
+      "sha256After": "1d3b86e07a15fd85ddf8571937f073414c62f50dfc1711c0fbbe9e8ce0ef00ec",
+      "sizeBefore": 686,
+      "sizeAfter": 686,
+      "unchanged": true
+    },
+    {
+      "path": "/data/config/historian-v2-migration/historian-trendscache-allpoints-20260722T065257Z/package/active.sqlite",
+      "role": "sqlite-fixture",
+      "sha256Before": "222234b44f16ccf1d9614b666ef555cd25c1fde558e0b9266195ea40d747e7f1",
+      "sha256After": "222234b44f16ccf1d9614b666ef555cd25c1fde558e0b9266195ea40d747e7f1",
+      "sizeBefore": 90005504,
+      "sizeAfter": 90005504,
+      "unchanged": true,
+      "currentVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"active\",\"writerV2\":true,\"queryV2\":true,\"legacyWriterAllowed\":false,\"evidenceBound\":true}",
+      "rollbackVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"active\",\"writerV2\":true,\"queryV2\":true,\"legacyWriterAllowed\":false,\"evidenceBound\":true}"
+    },
+    {
+      "path": "/data/config/historian-v2-migration/historian-trendscache-allpoints-20260722T065257Z/package/legacy.sqlite",
+      "role": "sqlite-fixture",
+      "sha256Before": "40a7cf637d08825369bdcdc7b26193b7feb12192aaa27444bbf815cfed99e540",
+      "sha256After": "40a7cf637d08825369bdcdc7b26193b7feb12192aaa27444bbf815cfed99e540",
+      "sizeBefore": 90005504,
+      "sizeAfter": 90005504,
+      "unchanged": true,
+      "currentVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"legacy\",\"writerV2\":false,\"queryV2\":false,\"legacyWriterAllowed\":true,\"evidenceBound\":false}",
+      "rollbackVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"legacy\",\"writerV2\":false,\"queryV2\":false,\"legacyWriterAllowed\":true,\"evidenceBound\":false}"
+    },
+    {
+      "path": "/data/config/historian-v2-migration/historian-trendscache-allpoints-20260722T065257Z/predeploy-checkpoint.json",
+      "role": "artifact",
+      "sha256Before": "afcd0290a7a4a24a455f3ba978e00043eda393183b4b714f0ef6d8a64a7b85ff",
+      "sha256After": "afcd0290a7a4a24a455f3ba978e00043eda393183b4b714f0ef6d8a64a7b85ff",
+      "sizeBefore": 2592,
+      "sizeAfter": 2592,
+      "unchanged": true
+    },
+    {
+      "path": "/data/config/historian-v2-migration/historian-trendscache-allpoints-20260722T065257Z/predeploy/historian-v2-predeploy.sqlite",
+      "role": "artifact",
+      "sha256Before": "222234b44f16ccf1d9614b666ef555cd25c1fde558e0b9266195ea40d747e7f1",
+      "sha256After": "222234b44f16ccf1d9614b666ef555cd25c1fde558e0b9266195ea40d747e7f1",
+      "sizeBefore": 90005504,
+      "sizeAfter": 90005504,
+      "unchanged": true
+    }
+  ]
+}

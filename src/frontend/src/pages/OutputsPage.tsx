@@ -2,14 +2,16 @@ import { Activity, ChevronLeft, ChevronRight, Power, RotateCcw, Save, SlidersHor
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../api/client'
+import { pointTagFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
+import { PointLoggingSection } from '../components/PointLoggingSection'
 import { useToast } from '../components/Toast'
 import { TrendChart } from '../components/TrendChart'
 import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
-import type { AoConfig, AoSignalMode, DoConfig, DoSafeState, OutputsConfig, Point, TrendSample } from '../types'
+import type { AoConfig, AoEngineeringUnit, AoSignalMode, DoConfig, DoSafeState, OutputsConfig, Point, TrendSample } from '../types'
 import { cn, formatValue, pointNumber } from '../utils'
 
 type OutputTab = 'summary' | 'wizard' | 'advanced'
@@ -20,7 +22,7 @@ type LiveSample = TrendSample & { raw: number }
 
 const emptyOutputs: OutputsConfig = { ao: [], do: [] }
 const outputTrendLimit = 60
-const aoWizardKeys: Array<keyof AoConfig> = ['mode', 'safeValue', 'manualValue']
+const aoWizardKeys: Array<keyof AoConfig> = ['mode', 'units', 'minPv', 'maxPv', 'safeValue', 'manualValue']
 const doWizardKeys: Array<keyof DoConfig> = ['safeState', 'manualValue']
 
 export function OutputsPage() {
@@ -33,6 +35,7 @@ export function OutputsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [tagErrors, setTagErrors] = useState<Record<string, string>>({})
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
 
   useEffect(() => {
@@ -74,13 +77,18 @@ export function OutputsPage() {
   }
 
   async function saveOutputs(next = config) {
+    const errors = outputTagErrors(next)
+    setTagErrors(errors)
+    if (Object.keys(errors).length > 0) return
     const normalized = normalizeOutputs(next)
     setSaving(true)
     try {
       await apiClient.putOutputs(normalized)
       setConfig(normalized)
+      setTagErrors({})
       toast.push('success', t('outputsSaveSuccess'))
     } catch (error) {
+      setTagErrors(pointTagFieldErrors(error))
       toast.push('error', `${t('outputsSaveError')}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setSaving(false)
@@ -135,6 +143,15 @@ export function OutputsPage() {
         >
           {selected && (
             <div className="space-y-5">
+              <OutputBasics
+                output={selected}
+                rawValue={findOutputPoint(pointsState.data ?? [], selected)?.raw}
+                rawUnit={findOutputPoint(pointsState.data ?? [], selected)?.rawUnit ?? (selected.kind === 'AO' ? aoSafeUnit(selected.mode) : undefined)}
+                tagError={tagErrors[outputTagPath(config, selected)]}
+                nameError={tagErrors[outputTagPath(config, selected).replace('.tag', '.name')]}
+                onChange={(patch) => updateOutput(selected.id, patch)}
+              />
+              <PointLoggingSection pointId={selected.id} label={selected.label} kind={selected.kind} />
               {tab === 'summary' && (
                 <OutputSummary
                   output={selected}
@@ -178,6 +195,50 @@ export function OutputsPage() {
       >
         {t('outputsSaveBody')}
       </Modal>
+    </div>
+  )
+}
+
+function OutputBasics({ output, rawValue, rawUnit, tagError, nameError, onChange }: { output: OutputConfig; rawValue?: number; rawUnit?: string; tagError?: string; nameError?: string; onChange: (patch: Partial<AoConfig> | Partial<DoConfig>) => void }) {
+  const isAo = output.kind === 'AO'
+  return (
+    <div className={isAo ? 'grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_120px_140px]' : 'grid gap-4 md:grid-cols-3'}>
+      <label className="space-y-1">
+        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Tag</span>
+        <input
+          aria-invalid={Boolean(tagError)}
+          aria-describedby={tagError ? `${output.id}-tag-error` : undefined}
+          className={`${controlClass()} bg-[var(--c-surface-2)] text-[var(--c-text-dim)]`}
+          value={output.id}
+          readOnly
+        />
+        {tagError && <span id={`${output.id}-tag-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{tagError}</span>}
+      </label>
+      <label className="space-y-1">
+        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Channel</span>
+        <input className={`${controlClass()} bg-[var(--c-surface-2)] font-mono text-[var(--c-text-dim)]`} value={output.kind === 'AO' ? 16 + output.channel : 20 + output.channel} readOnly />
+      </label>
+      <label className="space-y-1">
+        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Label</span>
+        <input aria-invalid={Boolean(nameError)} aria-describedby={nameError ? `${output.id}-name-error` : undefined} className={controlClass()} value={output.label} onChange={(event) => onChange({ label: event.target.value })} />
+        {nameError && <span id={`${output.id}-name-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{nameError}</span>}
+      </label>
+      {isAo && (
+        <div className="space-y-1">
+          <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Mode</span>
+          <div className="flex h-10 items-center rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 font-mono text-sm text-[var(--c-text-dim)]">
+            {output.mode}
+          </div>
+        </div>
+      )}
+      {isAo && (
+        <div className="space-y-1">
+          <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Raw</span>
+          <div className="flex h-10 items-center rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 font-mono text-sm text-[var(--c-text-dim)]">
+            {typeof rawValue === 'number' && rawUnit ? formatStat(rawValue, rawUnit) : '--'}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -229,7 +290,11 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
     max: Math.max(...values),
     avg: values.reduce((sum, value) => sum + value, 0) / values.length
   } : null
-  const unit = point?.unit ?? (output.kind === 'AO' ? '%' : '')
+  const unit = point?.unit ?? (output.kind === 'AO' ? engineeringUnitLabel(output.units) : '')
+  const modeRawUnit = output.kind === 'AO' ? aoSafeUnit(output.mode) : undefined
+  const rawOutput = output.kind === 'AO' && typeof point?.raw === 'number'
+    ? { value: point.raw, unit: point.rawUnit ?? modeRawUnit ?? '' }
+    : undefined
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -241,6 +306,7 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
           </div>
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <LiveDataItem label={t('currentvalue')} value={point ? formatValue(point.value, unit) : '--'} />
+            {output.kind === 'AO' && <LiveDataItem label="Raw output" value={rawOutput ? formatStat(rawOutput.value, rawOutput.unit) : '--'} />}
             <LiveDataItem label={pick('Nhỏ nhất', 'Min')} value={stats ? formatStat(stats.min, unit) : '--'} />
             <LiveDataItem label={pick('Lớn nhất', 'Max')} value={stats ? formatStat(stats.max, unit) : '--'} />
             <LiveDataItem label={pick('Trung bình', 'Avg')} value={stats ? formatStat(stats.avg, unit) : '--'} />
@@ -252,7 +318,7 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
             <h3 className="text-sm font-semibold text-[var(--c-text)]">{t('outputsLiveTrend')}</h3>
             <span className="text-xs font-semibold text-[var(--c-text-dim)]">{output.id}</span>
           </div>
-          <TrendChart data={data} height={250} series={[{ key: output.id, label: output.label, color: 'var(--c-accent)', unit }]} />
+          <TrendChart data={data} height={250} series={[{ key: output.id, label: output.label, color: 'var(--c-accent)', unit }]} rawUnit={modeRawUnit} />
         </section>
       </div>
 
@@ -324,7 +390,7 @@ function WizardPanel({ output, fieldKey, keys, index, onChange, onStepSelect, on
 function AdvancedPanel({ output, onChange }: { output: OutputConfig; onChange: (patch: Partial<AoConfig> | Partial<DoConfig>) => void }) {
   const { t } = useI18n()
   const keys = output.kind === 'AO'
-    ? ['mode', 'safeValue', 'manualValue'] as Array<keyof AoConfig>
+    ? ['mode', 'units', 'minPv', 'maxPv', 'safeValue', 'manualValue'] as Array<keyof AoConfig>
     : ['safeState', 'manualValue'] as Array<keyof DoConfig>
 
   return (
@@ -357,6 +423,9 @@ function renderOutputField(output: OutputConfig, key: keyof AoConfig | keyof DoC
       const nextMode = mode as AoSignalMode
       onChange({ mode: nextMode, safeValue: clampNumber(ao.safeValue, 0, aoSafeMax(nextMode)) })
     }} wired large={large} />
+    if (key === 'units') return <SelectField label={label} value={ao.units} options={aoEngineeringUnits.map((unit) => [unit, engineeringUnitLabel(unit)])} onChange={(units) => onChange({ units: units as AoEngineeringUnit })} wired large={large} />
+    if (key === 'minPv') return <NumberField label={`${label} (${engineeringUnitLabel(ao.units)})`} value={ao.minPv} min={-999999} max={ao.maxPv - 0.001} step={0.1} onChange={(minPv) => onChange({ minPv })} wired large={large} />
+    if (key === 'maxPv') return <NumberField label={`${label} (${engineeringUnitLabel(ao.units)})`} value={ao.maxPv} min={ao.minPv + 0.001} max={999999} step={0.1} onChange={(maxPv) => onChange({ maxPv })} wired large={large} />
     if (key === 'safeValue') return <NumberField label={`${label} (${aoSafeUnit(ao.mode)})`} value={ao.safeValue} min={0} max={aoSafeMax(ao.mode)} step={0.1} onChange={(safeValue) => onChange({ safeValue })} wired large={large} />
     if (key === 'manualValue') return <NumberField label={label} value={ao.manualValue} min={0} max={100} step={1} integer onChange={(manualValue) => onChange({ manualValue })} wired large={large} />
     return null
@@ -431,7 +500,7 @@ function useOutputTrend(pointId: string, point?: Point): { data: LiveSample[]; r
     lastKeyRef.current = nextKey
     setBuffers((current) => {
       const existing = current[pointId] ?? []
-      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value }].slice(-outputTrendLimit) }
+      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null }].slice(-outputTrendLimit) }
     })
   }, [pointId, point])
 
@@ -452,14 +521,34 @@ function formatStat(value: number, unit?: string): string {
   return `${fixed}${unit ? ` ${unit}` : ''}`
 }
 
+function outputTagErrors(outputs: OutputsConfig): Record<string, string> {
+  const errors = (kind: 'ao' | 'do', rows: OutputConfig[]) => rows.flatMap((output, index) => {
+    const tagError = validatePointTag(output.id)
+    const nameError = validatePointName(output.label)
+    return [
+      ...(tagError ? [[`${kind}[${index}].tag`, tagError]] : []),
+      ...(nameError ? [[`${kind}[${index}].name`, nameError]] : [])
+    ]
+  })
+  return Object.fromEntries([...errors('ao', outputs.ao), ...errors('do', outputs.do)])
+}
+
+function outputTagPath(outputs: OutputsConfig, output: OutputConfig): string {
+  const items = output.kind === 'AO' ? outputs.ao : outputs.do
+  return `${output.kind.toLowerCase()}[${items.findIndex((item) => item.id === output.id)}].tag`
+}
+
 function normalizeOutputs(outputs: OutputsConfig): OutputsConfig {
   return {
     ao: outputs.ao.map((ao) => ({
       ...ao,
+      tag: ao.id,
+      minPv: clampNumber(ao.minPv, -999999, ao.maxPv - 0.001),
+      maxPv: clampNumber(ao.maxPv, ao.minPv + 0.001, 999999),
       safeValue: clampNumber(ao.safeValue, 0, aoSafeMax(ao.mode)),
       manualValue: clampNumber(ao.manualValue, 0, 100, true)
     })),
-    do: outputs.do
+    do: outputs.do.map((output) => ({ ...output, tag: output.id }))
   }
 }
 
@@ -487,7 +576,10 @@ function registerFor(kind: OutputKind, channel: number, key: keyof AoConfig | ke
 
 function registerIndex(key: keyof AoConfig | keyof DoConfig): number {
   const map: Record<string, number> = {
-    mode: 2
+    mode: 2,
+    units: 4,
+    minPv: 5,
+    maxPv: 6
   }
   return map[String(key)] ?? 0
 }
@@ -495,11 +587,30 @@ function registerIndex(key: keyof AoConfig | keyof DoConfig): number {
 function fieldLabel(kind: OutputKind, key: keyof AoConfig | keyof DoConfig, _t: Translate): string {
   const labels: Record<string, string> = {
     mode: 'Output signal type',
+    units: 'Engineering unit',
+    minPv: 'Minimum present value',
+    maxPv: 'Maximum present value',
     manualValue: kind === 'AO' ? 'Analog output manual value (%)' : 'Digital output manual value',
     safeValue: 'Safe value',
     safeState: 'Safe state'
   }
   return labels[String(key)] ?? String(key)
+}
+
+const aoEngineeringUnits: AoEngineeringUnit[] = ['percent', 'volt', 'milliampere', 'degC', 'Pa', 'RPM', 'ppm', 'no_units']
+
+function engineeringUnitLabel(unit: AoEngineeringUnit): string {
+  const labels: Record<AoEngineeringUnit, string> = {
+    percent: '%',
+    volt: 'V',
+    milliampere: 'mA',
+    degC: 'degC',
+    Pa: 'Pa',
+    RPM: 'RPM',
+    ppm: 'ppm',
+    no_units: 'No units'
+  }
+  return labels[unit]
 }
 
 function controlClass(): string {

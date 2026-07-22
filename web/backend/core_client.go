@@ -65,13 +65,17 @@ type ScanStatus struct {
 }
 
 type webIPCResponse struct {
-	ID           uint64           `json:"id"`
-	Result       string           `json:"result"`
-	AppliedValue any              `json:"applied_value,omitempty"`
-	ActiveSource string           `json:"active_source,omitempty"`
-	Error        string           `json:"error,omitempty"`
-	AlarmID      string           `json:"alarmId,omitempty"`
-	Alarms       []coreAlarmState `json:"alarms,omitempty"`
+	ID                    uint64           `json:"id"`
+	Result                string           `json:"result"`
+	AppliedValue          any              `json:"applied_value,omitempty"`
+	ActiveSource          string           `json:"active_source,omitempty"`
+	Error                 string           `json:"error,omitempty"`
+	AlarmID               string           `json:"alarmId,omitempty"`
+	Alarms                []coreAlarmState `json:"alarms,omitempty"`
+	SnapshotID            uint64           `json:"snapshotId,omitempty"`
+	SnapshotObservedAtUTC string           `json:"snapshotObservedAtUtc,omitempty"`
+	CapturedMonotonicNs   uint64           `json:"capturedMonotonicNs,omitempty"`
+	Points                []RuntimePoint   `json:"points,omitempty"`
 }
 
 type coreAlarmState struct {
@@ -101,7 +105,11 @@ func (c *CoreClient) ReadStatus(ctx context.Context) (CoreStatus, error) {
 		Scan:     ScanStatus{},
 	}
 	var firstErr error
-	if c.coreSocketReady(ctx) {
+	scan, scanErr := c.readPLCStatus()
+	if scanErr == nil {
+		status.Scan = scan
+		status.CoreAvailable = true
+	} else if c.coreSocketReady(ctx) {
 		status.CoreAvailable = true
 	} else {
 		firstErr = fmt.Errorf("core socket unavailable")
@@ -112,11 +120,8 @@ func (c *CoreClient) ReadStatus(ctx context.Context) (CoreStatus, error) {
 	} else if firstErr == nil {
 		firstErr = err
 	}
-	if scan, err := c.readPLCStatus(); err == nil {
-		status.Scan = scan
-		status.CoreAvailable = true
-	} else if firstErr == nil {
-		firstErr = err
+	if scanErr != nil && firstErr == nil {
+		firstErr = scanErr
 	}
 	return status, firstErr
 }
@@ -140,6 +145,26 @@ func (c *CoreClient) ReadPoints(ctx context.Context) ([]PointDTO, error) {
 		ioData = raw
 	}
 	return decodePoints(plcData, ioData), nil
+}
+
+func (c *CoreClient) ReadPointSnapshot(ctx context.Context) (RuntimePointSnapshot, error) {
+	id := atomic.AddUint64(&webCommandID, 1)
+	resp, err := c.sendWebIPC(ctx, map[string]any{"id": id, "op": "point_snapshot", "user": "web"})
+	if err != nil {
+		return RuntimePointSnapshot{}, err
+	}
+	if resp.ID != id {
+		return RuntimePointSnapshot{}, fmt.Errorf("point snapshot response id mismatch: got %d want %d", resp.ID, id)
+	}
+	if resp.Result != "accepted" {
+		return RuntimePointSnapshot{}, fmt.Errorf("core rejected point snapshot: %s", resp.Error)
+	}
+	return RuntimePointSnapshot{
+		SnapshotID:            resp.SnapshotID,
+		SnapshotObservedAtUTC: resp.SnapshotObservedAtUTC,
+		CapturedMonotonicNs:   resp.CapturedMonotonicNs,
+		Points:                resp.Points,
+	}, nil
 }
 
 func (c *CoreClient) ForcePoint(ctx context.Context, id string, value any, release bool) (PointDTO, error) {
@@ -455,16 +480,19 @@ const (
 
 	// kx_io_shm_t v4 offsets used by web:
 	//   header16 + ui_value[16]*4 + ui_raw[16]*4 + ui_quality[16]
-	//   + ui_reliability[16] + ui_unit[16][8] + ui_raw_unit[16][8] + rest = 528 bytes.
-	offIORaw       = 80
-	offIOUnit      = 176
-	offIORawUnit   = 304
-	kxIOUnitSize   = 8
-	offIOPStatus   = 502
-	offIOCRCErrors = 512
-	offIOTimeouts  = 516
-	offIOSeqErrors = 520
-	kxIOShmMinLen  = 528
+	//   + ui_reliability[16] + ui_unit[16][8] + ui_raw_unit[16][8]
+	//   + DI state/counter + ao_setpoint[4] + ao_mode[4] + rest = 528 bytes.
+	offIORaw        = 80
+	offIOUnit       = 176
+	offIORawUnit    = 304
+	offIOAOSetpoint = 472
+	offIOAOMode     = 488
+	kxIOUnitSize    = 8
+	offIOPStatus    = 502
+	offIOCRCErrors  = 512
+	offIOTimeouts   = 516
+	offIOSeqErrors  = 520
+	kxIOShmMinLen   = 528
 )
 
 // kx_quality_t ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ DTO quality string
@@ -532,6 +560,18 @@ func ioRaw(ioData []byte, ch int) (float32, bool) {
 	return math.Float32frombits(binary.LittleEndian.Uint32(ioData[start : start+4])), true
 }
 
+func ioAORaw(ioData []byte, ch int) (float32, string, bool) {
+	if ioData == nil || ch < 0 || ch >= kxNAO || offIOAOSetpoint+(ch+1)*4 > len(ioData) || offIOAOMode+ch >= len(ioData) {
+		return 0, "", false
+	}
+	unit := "V"
+	if ioData[offIOAOMode+ch] == 1 {
+		unit = "mA"
+	}
+	start := offIOAOSetpoint + ch*4
+	return math.Float32frombits(binary.LittleEndian.Uint32(ioData[start : start+4])), unit, true
+}
+
 func pointFloat(value any) (float32, bool) {
 	switch v := value.(type) {
 	case float32:
@@ -570,7 +610,12 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 	// AO[0..3] analog output (commandable)
 	for i := 0; i < kxNAO; i++ {
 		id := formatPointID("AO", i+1)
-		pts = append(pts, decodePoint(data, offAO+i*kxPointSize, id, id))
+		dto := decodePoint(data, offAO+i*kxPointSize, id, id)
+		if raw, unit, ok := ioAORaw(ioData, i); ok {
+			dto.Raw = &raw
+			dto.RawUnit = unit
+		}
+		pts = append(pts, dto)
 	}
 	// DO[0..3] digital output feedback (bo[] array)
 	for i := 0; i < kxNDO; i++ {

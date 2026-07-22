@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <ctime>
 #include <fstream>
 #include <limits>
 #include <set>
@@ -25,9 +24,9 @@ constexpr int kAlarmDisabled = 0;
 constexpr int kAlarmHighLowInput = 1;
 constexpr int kAlarmRuntimeHours = 3;
 
-std::string iso_utc_now()
+std::string iso_utc_at(int64_t utc_epoch_ms)
 {
-    const std::time_t now = std::time(nullptr);
+    const std::time_t now = static_cast<std::time_t>(utc_epoch_ms / 1000);
     std::tm tm{};
 #if defined(_WIN32)
     gmtime_s(&tm, &now);
@@ -611,6 +610,23 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
 {
     const uint32_t effective_ms = scan_ms == 0 ? 1 : scan_ms;
     const float dt = static_cast<float>(effective_ms) / 1000.0f;
+    const ClockSnapshot clock = capture_clock_snapshot();
+    last_monotonic_ns_ = clock.monotonic_ns;
+    evaluate(table, dt, clock.utc_epoch_ms);
+}
+
+void AlarmRuntime::evaluate(const PointTable& table, const ClockSnapshot& clock)
+{
+    float dt = 0.0f;
+    if (last_monotonic_ns_ != 0 && clock.monotonic_ns >= last_monotonic_ns_) {
+        dt = static_cast<float>(clock.monotonic_ns - last_monotonic_ns_) / 1000000000.0f;
+    }
+    last_monotonic_ns_ = clock.monotonic_ns;
+    evaluate(table, dt, clock.utc_epoch_ms);
+}
+
+void AlarmRuntime::evaluate(const PointTable& table, float dt, int64_t utc_epoch_ms)
+{
     for (Entity& entity : entities_) {
         if (raw_visible(entity) && entity.suppressed && entity.suppress_timed) {
             entity.suppress_remaining_s -= dt;
@@ -676,7 +692,7 @@ void AlarmRuntime::evaluate(const PointTable& table, uint32_t scan_ms)
         if (condition_active) {
             if (!was_raw_visible) {
                 entity.occurrence++;
-                entity.first_active_at = iso_utc_now();
+                entity.first_active_at = iso_utc_at(utc_epoch_ms);
                 entity.acked = false;
                 entity.ack_timed = false;
                 entity.ack_remaining_s = 0.0;

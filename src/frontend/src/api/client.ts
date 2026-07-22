@@ -12,11 +12,14 @@ import {
   getDemoOutputs,
   getDemoPoints,
   getDemoSchedule,
+  getDemoTimeConfig,
+  getDemoTimeStatus,
   getDemoVirtualPoints,
   getUserParams as getDemoUserParams,
   deleteDemoVirtualPoint,
   putDemoAiInputs,
   putDemoSchedule,
+  putDemoTimeConfig,
   putAlarmSettings as putDemoAlarmSettings,
   putDemoOutputs,
   putUserParams as putDemoUserParams,
@@ -27,7 +30,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoConfig, type AoSignalMode, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type IoChannel, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TrendSample, type UserParamsConfig, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserParamsConfig, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 
@@ -55,19 +58,80 @@ export function setAuthHeaderProvider(provider: AuthHeaderProvider) {
   authHeaderProvider = provider
 }
 
-async function requestJson<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
+const demoHistorianPolicies = new Map<string, HistorianPolicy>()
+let demoHistorianRevision = 0
+
+function getDemoHistorianConfig(): HistorianConfig {
+  const now = new Date()
+  for (const point of getDemoPoints()) {
+    if (point.kind !== 'UI' && point.kind !== 'AO' && point.kind !== 'DO' && point.kind !== 'virtual') continue
+    if (!demoHistorianPolicies.has(point.id)) {
+      demoHistorianPolicies.set(point.id, {
+        pointId: point.id,
+        generation: 1,
+        dbLoggingEnabled: false,
+        dbInterval: '15s',
+        retentionDays: 180,
+        maxRetentionDays: 180,
+        hotCacheEnabled: true,
+        hotCacheHours: 48,
+        startAtUtc: now.toISOString(),
+        state: 'off',
+        health: 'demo'
+      })
+    }
+  }
+  const points = [...demoHistorianPolicies.values()].map((policy) => {
+    if (!policy.dbLoggingEnabled) return { ...policy, state: 'off' as const }
+    const start = Date.parse(policy.startAtUtc)
+    return { ...policy, state: Number.isFinite(start) && start > now.getTime() ? 'scheduled' as const : 'recording' as const }
+  })
+  const enabled = points.filter((point) => point.dbLoggingEnabled).length
+  return {
+    revision: demoHistorianRevision,
+    serverNowUtc: now.toISOString(),
+    points,
+    capacity: { enabledPoints: enabled, reservedBytes: enabled * 1024 * 1024, budgetBytes: 2 * 1024 * 1024 * 1024, freeBytes: 2 * 1024 * 1024 * 1024, requiredFreeBytes: 512 * 1024 * 1024 },
+    namespaceRevision: 0,
+    retentionMaxDaysByInterval: { '1s': 30, '3s': 60, '5s': 90, '15s': 180, '30s': 365, '1m': 730, '3m': 1095, '5m': 1460, '15m': 1825, '30m': 2555, '60m': 3650 }
+  }
+}
+
+function putDemoHistorianConfig(update: HistorianConfigUpdate): HistorianConfig {
+  if (update.baseRevision !== demoHistorianRevision) throw new ApiError('historian policy revision conflict', 409, [{ path: '$', reason: 'config_conflict', message: 'Reload the current logging policy before saving.' }])
+  const known = new Set(getDemoHistorianConfig().points.map((point) => point.pointId))
+  for (const patch of update.points) {
+    if (!known.has(patch.pointId)) throw new ApiError(`unknown historian point ${patch.pointId}`, 400, [{ path: 'points', reason: 'point_unknown', message: 'Point is not available.' }])
+    const current = demoHistorianPolicies.get(patch.pointId)
+    if (!current) continue
+    demoHistorianPolicies.set(patch.pointId, { ...current, generation: patch.generation, dbLoggingEnabled: patch.dbLoggingEnabled, dbInterval: patch.dbInterval, retentionDays: patch.retentionDays, startAtUtc: patch.startAtUtc ?? new Date().toISOString() })
+  }
+  demoHistorianRevision += 1
+  return getDemoHistorianConfig()
+}
+
+export async function requestJson<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
   const { suppressAuthExpired, ...fetchInit } = init
   const headers = new Headers(fetchInit.headers)
   for (const [key, value] of Object.entries(authHeaderProvider())) headers.set(key, value)
   if (fetchInit.body && !headers.has('content-type')) headers.set('content-type', 'application/json')
 
   const response = await fetch(`${base}${path}`, { ...fetchInit, headers, credentials: 'include' })
-  if (!suppressAuthExpired && (response.status === 401 || response.status === 403)) {
+  if (!suppressAuthExpired && response.status === 401) {
     window.dispatchEvent(new CustomEvent('mkddc:auth-expired'))
   }
   if (!response.ok) {
     const body = await response.text().catch(() => '')
-    throw new Error(body || `${response.status} ${response.statusText}`)
+    let message = body || `${response.status} ${response.statusText}`
+    let details: ApiValidationDetail[] = []
+    try {
+      const parsed = JSON.parse(body) as { error?: unknown; details?: unknown }
+      if (typeof parsed.error === 'string') message = parsed.error
+      if (Array.isArray(parsed.details)) details = parsed.details.filter(isApiValidationDetail)
+    } catch {
+      // Preserve non-JSON error text.
+    }
+    throw new ApiError(message, response.status, details)
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
@@ -409,8 +473,13 @@ function stringFrom(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
+function isApiValidationDetail(value: unknown): value is ApiValidationDetail {
+  return typeof value === 'object' && value !== null && typeof (value as { path?: unknown }).path === 'string'
+}
+
 type IoUiConfig = {
   ch?: number
+  tag?: string
   type?: string
   unit?: string
   scale_lo?: number
@@ -428,12 +497,25 @@ type IoUiConfig = {
 type IoConfig = {
   ui?: IoUiConfig[]
   ao?: IoAoConfig[]
+  do?: IoDoConfig[]
   [key: string]: unknown
 }
 
 type IoAoConfig = {
   ch?: number
+  tag?: string
   mode?: string
+  units?: string
+  min_pv?: number
+  max_pv?: number
+  name?: string
+  enabled?: boolean
+  [key: string]: unknown
+}
+
+type IoDoConfig = {
+  ch?: number
+  tag?: string
   name?: string
   enabled?: boolean
   [key: string]: unknown
@@ -499,6 +581,7 @@ function unitToIo(unit: number): string {
 function defaultAiConfig(channel: number): AiInputConfig {
   return {
     channel,
+    tag: aiNode(channel),
     label: aiNode(channel),
     signalType: 0,
     analogCurrent: false,
@@ -519,6 +602,7 @@ function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
   const signalType = signalTypeFromIo(item)
   return {
     channel,
+    tag: stringFrom(item.tag) ?? aiNode(channel),
     label: stringFrom(item.name) ?? aiNode(channel),
     signalType,
     analogCurrent: item.type === '4-20mA',
@@ -537,6 +621,7 @@ function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
 function aiConfigToIo(config: AiInputConfig): IoUiConfig {
   const item: IoUiConfig = {
     ch: config.channel,
+    tag: config.tag,
     type: signalTypeToIoType(config),
     name: config.label,
     note: config.note,
@@ -574,6 +659,12 @@ function outputMode(value: unknown): AoSignalMode {
   return raw === '4-20MA' || raw === '4-20M A' ? '4-20mA' : '0-10V'
 }
 
+function outputUnit(value: unknown, mode: AoSignalMode): AoEngineeringUnit {
+  const unit = String(value ?? '')
+  if (['percent', 'volt', 'milliampere', 'degC', 'Pa', 'RPM', 'ppm', 'no_units'].includes(unit)) return unit as AoEngineeringUnit
+  return mode === '4-20mA' ? 'milliampere' : 'volt'
+}
+
 function safeState(value: unknown): DoSafeState {
   return String(value ?? '').toLowerCase() === 'closed' ? 'closed' : 'open'
 }
@@ -582,39 +673,76 @@ function outputByChannel<T extends { ch?: number }>(items: T[] | undefined, chan
   return items?.find((item, index) => channelFromEntry(item, index) === channel)
 }
 
+function completeIoConfig(io: IoConfig): IoConfig {
+  const demoOutputs = getDemoOutputs()
+  return {
+    ...io,
+    ui: Array.from({ length: 16 }, (_, index) => {
+      const channel = index + 1
+      const current = outputByChannel(io.ui, channel)
+      const id = aiNode(channel)
+      return { ...current, ch: channel, tag: id, name: current?.name || id, type: current?.type || 'none' }
+    }),
+    ao: demoOutputs.ao.map((fallback) => {
+      const current = outputByChannel(io.ao, fallback.channel)
+      return { ...current, ch: fallback.channel, tag: fallback.id, name: current?.name || fallback.label, mode: current?.mode || fallback.mode }
+    }),
+    do: demoOutputs.do.map((fallback) => {
+      const current = outputByChannel(io.do, fallback.channel)
+      return { ...current, ch: fallback.channel, tag: fallback.id, name: current?.name || fallback.label }
+    })
+  }
+}
+
 function outputsFromConfig(io: IoConfig, safe: SafeStateConfig): OutputsConfig {
   const demo = getDemoOutputs()
   return {
     ao: demo.ao.map((config) => {
       const ioItem = outputByChannel(io.ao, config.channel)
       const safeItem = outputByChannel(safe.ao, config.channel)
+      const mode = outputMode(ioItem?.mode ?? config.mode)
       return {
         ...config,
-        mode: outputMode(ioItem?.mode ?? config.mode),
+        tag: stringFrom(ioItem?.tag) ?? config.id,
+        mode,
+        units: outputUnit(ioItem?.units, mode),
+        minPv: numberFrom(ioItem?.min_pv) ?? config.minPv,
+        maxPv: numberFrom(ioItem?.max_pv) ?? config.maxPv,
         safeValue: numberFrom(safeItem?.safe) ?? config.safeValue,
         label: stringFrom(ioItem?.name) ?? config.label
       }
     }),
     do: demo.do.map((config) => {
+      const ioItem = outputByChannel(io.do, config.channel)
       const safeItem = outputByChannel(safe.do, config.channel)
       return {
         ...config,
+        tag: stringFrom(ioItem?.tag) ?? config.id,
+        label: stringFrom(ioItem?.name) ?? config.label,
         safeState: safeState(safeItem?.safe ?? config.safeState)
       }
     })
   }
 }
 
-function mergeAoConfig(current: IoConfig, outputs: AoConfig[]): IoConfig {
+function mergeOutputsConfig(current: IoConfig, outputs: OutputsConfig): IoConfig {
   const nextAo = [...(current.ao ?? [])]
-  for (const output of outputs) {
+  const nextDo = [...(current.do ?? [])]
+  for (const output of outputs.ao) {
     const index = nextAo.findIndex((item, itemIndex) => channelFromEntry(item, itemIndex) === output.channel)
-    const patch: IoAoConfig = { ch: output.channel, mode: output.mode }
+    const patch: IoAoConfig = { ch: output.channel, tag: output.tag, mode: output.mode, units: output.units, min_pv: output.minPv, max_pv: output.maxPv }
     if (output.label) patch.name = output.label
     if (index >= 0) nextAo[index] = { ...nextAo[index], ...patch }
     else nextAo.push(patch)
   }
-  return { ...current, ui: current.ui ?? [], ao: nextAo }
+  for (const output of outputs.do) {
+    const index = nextDo.findIndex((item, itemIndex) => channelFromEntry(item, itemIndex) === output.channel)
+    const patch: IoDoConfig = { ch: output.channel, tag: output.tag }
+    if (output.label) patch.name = output.label
+    if (index >= 0) nextDo[index] = { ...nextDo[index], ...patch }
+    else nextDo.push(patch)
+  }
+  return { ...current, ui: current.ui ?? [], ao: nextAo, do: nextDo }
 }
 
 function mergeSafeState(current: SafeStateConfig, outputs: OutputsConfig): SafeStateConfig {
@@ -665,13 +793,45 @@ export const apiClient = {
 
   async getPoints(): Promise<Point[]> {
     if (IS_DEMO) return applyPointConfigOverrides(applyDemoPointMetadata(getDemoPoints()))
-    const records = pointRecordsFrom(await requestJson<unknown>('/points', { suppressAuthExpired: true }))
-    return applyPointConfigOverrides(records.map(normalizePoint))
+    const records = pointRecordsFrom(await requestJson<unknown>('/points', { suppressAuthExpired: true, cache: 'no-store' }))
+    return records.map(normalizePoint)
   },
 
   async getNetwork(): Promise<NetworkData> {
     if (IS_DEMO) return getDemoNetwork()
     return requestJson<NetworkData>('/network')
+  },
+
+  async getTimeConfig(): Promise<TimeConfig> {
+    if (IS_DEMO) return getDemoTimeConfig()
+    const raw = await requestJson<Record<string, unknown>>('/system/config/time')
+    return {
+      timezone: String(raw.timezone ?? ''),
+      ntpEnabled: Boolean(raw.ntp_enabled),
+      ntpServers: Array.isArray(raw.ntp_servers) ? raw.ntp_servers.map(String) : [],
+      systemTime: typeof raw.system_time === 'string' ? raw.system_time : '',
+      revision: typeof raw.revision === 'number' ? raw.revision : 0
+    }
+  },
+
+  async getTimeStatus(): Promise<TimeStatus> {
+    if (IS_DEMO) return getDemoTimeStatus()
+    return requestJson<TimeStatus>('/system/time/status')
+  },
+
+  async putTimeConfig(config: TimeConfigUpdate): Promise<ConfigPutResult> {
+    if (IS_DEMO) return putDemoTimeConfig(config)
+    return requestJson<ConfigPutResult>('/system/config/time', {
+      method: 'PUT',
+      body: JSON.stringify({
+        timezone: config.timezone,
+        ntp_enabled: config.ntpEnabled,
+        ntp_servers: config.ntpServers,
+        system_time: config.systemTime,
+        baseRevision: config.baseRevision,
+        ...(config.operationId ? { operationId: config.operationId } : {})
+      })
+    })
   },
 
   async saveNetwork(data: NetworkData) {
@@ -684,6 +844,19 @@ export const apiClient = {
     const params = new URLSearchParams({ point: pointIds.join(','), range })
     const raw = await requestJson<Array<Record<string, unknown>>>(`/history?${params.toString()}`)
     return raw.map(normalizeTrendSample)
+  },
+
+  async getHistorianConfig(): Promise<HistorianConfig> {
+    if (IS_DEMO) return getDemoHistorianConfig()
+    return requestJson<HistorianConfig>('/trends/config')
+  },
+
+  async putHistorianConfig(update: HistorianConfigUpdate): Promise<HistorianConfig> {
+    if (IS_DEMO) return putDemoHistorianConfig(update)
+    return requestJson<HistorianConfig>('/trends/config', {
+      method: 'PUT',
+      body: JSON.stringify(update)
+    })
   },
 
   async getIoChannels(): Promise<IoChannel[]> {
@@ -703,15 +876,16 @@ export const apiClient = {
       saveAiInputPointConfigOverrides(configs)
       return
     }
-    const current = await requestJson<IoConfig>('/system/config/io')
+    const current = completeIoConfig(await requestJson<IoConfig>('/system/config/io'))
     await requestJson('/system/config/io', {
       method: 'PUT',
       body: JSON.stringify({
+        ...current,
         ui: configs.map(aiConfigToIo),
-        ao: current.ao ?? []
+        ao: current.ao,
+        do: current.do
       })
     })
-    saveAiInputPointConfigOverrides(configs)
   },
 
   async getOutputs(): Promise<OutputsConfig> {
@@ -720,7 +894,7 @@ export const apiClient = {
       requestJson<IoConfig>('/system/config/io'),
       requestJson<SafeStateConfig>('/system/config/safe-state')
     ])
-    return outputsFromConfig(io, safe)
+    return outputsFromConfig(completeIoConfig(io), safe)
   },
 
   async putOutputs(config: OutputsConfig): Promise<void> {
@@ -732,7 +906,7 @@ export const apiClient = {
     ])
     await requestJson('/system/config/io', {
       method: 'PUT',
-      body: JSON.stringify(mergeAoConfig(currentIo, config.ao))
+      body: JSON.stringify(mergeOutputsConfig(completeIoConfig(currentIo), config))
     })
     await requestJson('/system/config/safe-state', {
       method: 'PUT',
@@ -870,21 +1044,18 @@ export const apiClient = {
     return this.updatePointConfig(id, { name })
   },
 
-  async updatePointConfig(id: string, config: { name?: string; unit?: string; trendEnabled?: boolean }): Promise<{ id: string; name?: string; unit?: string; trendEnabled?: boolean }> {
+  async updatePointConfig(id: string, config: { tag?: string; name?: string; unit?: string; trendEnabled?: boolean }): Promise<{ id: string; tag?: string; name?: string; unit?: string; trendEnabled?: boolean }> {
     if (IS_DEMO) {
       savePointConfigOverride(id, config)
       return updateDemoPointConfig(id, config)
     }
-    try {
-      return await requestJson<{ id: string; name?: string; unit?: string; trendEnabled?: boolean }>(`/points/${encodeURIComponent(id)}/config`, {
-        method: 'PUT',
-        body: JSON.stringify(config)
-      })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      if (/401|403|forbidden|unauthorized/i.test(message)) throw err
+    if (config.tag === undefined && config.name === undefined) {
       return savePointConfigOverride(id, config)
     }
+    return requestJson<{ id: string; tag?: string; name?: string; unit?: string; trendEnabled?: boolean }>(`/points/${encodeURIComponent(id)}/config`, {
+      method: 'PUT',
+      body: JSON.stringify({ tag: config.tag, name: config.name })
+    })
   },
 
   async runCommissioningTest(pointId: string, value: number | boolean): Promise<CommissioningTestResult> {

@@ -1,0 +1,221 @@
+{
+  "after": {
+    "activation": [
+      "active",
+      3,
+      "v2",
+      1,
+      1,
+      0,
+      1784623205852,
+      1784623364013
+    ],
+    "atUtcMs": 1784688978883,
+    "frontiers": [
+      [
+        "AO-01",
+        1,
+        10244,
+        1784688975000,
+        1784688975000
+      ],
+      [
+        "UI-01",
+        1,
+        10264,
+        1784688960000,
+        1784688970000
+      ]
+    ],
+    "gapRows": 3295,
+    "hotRows": 466757,
+    "legacyRows": 596284,
+    "pendingOverflowAfterReady": 0,
+    "postRolloutGaps": [
+      [
+        "AO-01",
+        1,
+        1784688660000,
+        1784688675000,
+        "storage",
+        "pending_hot_overflow",
+        1784688675000
+      ],
+      [
+        "AO-01",
+        1,
+        1784629905000,
+        1784688690000,
+        "restart",
+        "scheduler_restart_no_backfill",
+        1784688681853
+      ],
+      [
+        "UI-01",
+        1,
+        1784629880000,
+        1784688685000,
+        "restart",
+        "scheduler_restart_no_backfill",
+        1784688681853
+      ]
+    ],
+    "quickCheck": "ok"
+  },
+  "before": {
+    "activation": [
+      "active",
+      3,
+      "v2",
+      1,
+      1,
+      0,
+      1784623205852,
+      1784623364013
+    ],
+    "atUtcMs": 1784688958681,
+    "frontiers": [
+      [
+        "AO-01",
+        1,
+        10242,
+        1784688945000,
+        1784688945000
+      ],
+      [
+        "UI-01",
+        1,
+        10262,
+        1784688930000,
+        1784688940000
+      ]
+    ],
+    "gapRows": 3295,
+    "hotRows": 466753,
+    "legacyRows": 596284,
+    "pendingOverflowAfterReady": 0,
+    "postRolloutGaps": [
+      [
+        "AO-01",
+        1,
+        1784688660000,
+        1784688675000,
+        "storage",
+        "pending_hot_overflow",
+        1784688675000
+      ],
+      [
+        "AO-01",
+        1,
+        1784629905000,
+        1784688690000,
+        "restart",
+        "scheduler_restart_no_backfill",
+        1784688681853
+      ],
+      [
+        "UI-01",
+        1,
+        1784629880000,
+        1784688685000,
+        "restart",
+        "scheduler_restart_no_backfill",
+        1784688681853
+      ]
+    ],
+    "quickCheck": "ok"
+  },
+  "binary": {
+    "path": "/opt/mkddc-web/mkddc-web",
+    "sha256": "8d756f593eda7978072673b911c37a984956537c245078cc73348192b2b9136e",
+    "size": 16881392
+  },
+  "canary": {
+    "frontiers": [
+      [
+        "AO-01",
+        10226,
+        1784688585000
+      ],
+      [
+        "UI-01",
+        10246,
+        1784688570000
+      ]
+    ],
+    "hotSampleConflictLogs": 0,
+    "quickCheck": "ok"
+  },
+  "checkpoint": {
+    "path": "/data/config/historian-v2-migration/historian-conflictfix-20260722T023931Z/historian-v2-predeploy.sqlite",
+    "sha256": "b5f612e0894ef00c3bfc91032bd463ca5b1edd3e5aae3887958446e50564ffa1"
+  },
+  "deltas": {
+    "gapRows": 0,
+    "hotRows": 4,
+    "legacyRows": 0
+  },
+  "deployment": {
+    "readyUtc": "2026-07-22T02:51:22.239545102Z",
+    "stopUtc": "2026-07-22T02:51:14.203920092Z"
+  },
+  "generatedAtUtc": "2026-07-22T02:56:19.442741+00:00",
+  "http": {
+    "history": {
+      "complete": true,
+      "from": "2026-07-22T02:55:30Z",
+      "gapCount": 0,
+      "sampleCount": 3,
+      "status": 200,
+      "to": "2026-07-22T02:56:15Z"
+    },
+    "login": 200,
+    "statusUnauthenticated": 401
+  },
+  "journalCounts": {
+    "SQLITE_BUSY": 0,
+    "alarms_read degraded": 0,
+    "core unavailable": 0,
+    "hot sample conflict": 0,
+    "pending_hot_overflow": 0
+  },
+  "kind": "historian-conflictfix-postdeploy-verification",
+  "packageManifest": {
+    "path": "/data/config/historian-v2-migration/historian-conflictfix-20260722T023931Z/historian-rollback-package-evidence.json",
+    "sha256": "3c85ae4f9de7a54d7f75d6d0c9f3f2f6108e6745498047f9dec335d76a49b030"
+  },
+  "predeployManifest": {
+    "path": "/data/config/historian-v2-migration/historian-conflictfix-20260722T023931Z/predeploy-checkpoint.json",
+    "sha256": "1c5974ddc985daaafd94dda8f1a5d0ba31e50dc6268f2b2d91495d664ba69ec5"
+  },
+  "rollbackVerification": {
+    "evidenceBound": true,
+    "legacyWriterAllowed": false,
+    "queryV2": true,
+    "quickCheck": "ok",
+    "schemaVersion": 5,
+    "state": "active",
+    "writerV2": true
+  },
+  "schemaVersion": 1,
+  "services": [
+    "MainPID=46445",
+    "NRestarts=0",
+    "Id=mkddc-web-pi.service",
+    "ActiveState=active",
+    "SubState=running",
+    "",
+    "MainPID=1376",
+    "NRestarts=0",
+    "Id=mkddc-core.service",
+    "ActiveState=active",
+    "SubState=running",
+    "",
+    "MainPID=979",
+    "NRestarts=0",
+    "Id=mkddc-iobus.service",
+    "ActiveState=active",
+    "SubState=running"
+  ],
+  "windowId": "historian-conflictfix-20260722T023931Z"
+}

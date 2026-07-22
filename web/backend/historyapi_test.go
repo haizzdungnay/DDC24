@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -169,52 +170,245 @@ func TestTrendConfigRejectsUncreatedVirtualPoint(t *testing.T) {
 	}
 }
 
-func TestTrendConfigAcceptsCreatedLoggedVirtualPoint(t *testing.T) {
+func TestHistorianConfigAcceptsCreatedVirtualPointWithoutDiagnosticLogging(t *testing.T) {
 	app, token := newHistoryTestApp(t)
-	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","label":"Room Setpoint","signalType":"float","enabled":true,"writable":true,"logEnabled":true,"logIntervalMs":1000,"value":22.5}]}`)
-	req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", `{"enabled":true,"pointIds":["VP-01"],"intervalS":10,"retentionRecords":1000}`, token)
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","generation":1,"tag":"room setpoint","signalType":"float","enabled":true,"writable":true,"logEnabled":false,"value":22.5}]}`)
+	req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", `{"baseRevision":0,"baseNamespaceRevision":0,"points":[{"pointId":"VP1","generation":1,"dbLoggingEnabled":true,"dbInterval":"15s","startAtUtc":null}]}`, token)
 	w := httptest.NewRecorder()
 	app.Router().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	cfg, err := app.trends.GetConfig(context.Background())
-	if err != nil {
-		t.Fatalf("GetConfig: %v", err)
+	var cfg HistorianConfig
+	if err := json.Unmarshal(w.Body.Bytes(), &cfg); err != nil {
+		t.Fatal(err)
 	}
-	if strings.Join(cfg.PointIDs, ",") != "VP1" {
+	if !hasHistorianPolicy(cfg.Points, "VP1", true) {
 		t.Fatalf("cfg = %+v", cfg)
 	}
 }
 
-func TestTrendConfigPutUpdatesSamplerAndReturnsReloadNone(t *testing.T) {
+func TestHistorianConfigAcceptsExplicitRetentionAndReturnsMaximum(t *testing.T) {
 	app, token := newHistoryTestApp(t)
-	body := `{"pointIds":["AI-02","AI-01"],"intervalS":10,"retentionRecords":1000}`
+	req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", `{"baseRevision":0,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":true,"dbInterval":"1s","retentionDays":21}]}`, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	var cfg HistorianConfig
+	if err := json.Unmarshal(w.Body.Bytes(), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	var ui HistorianPolicy
+	for _, point := range cfg.Points {
+		if point.PointID == "UI-01" {
+			ui = point
+		}
+	}
+	if ui.RetentionDays != 21 || ui.MaxRetentionDays != 30 || cfg.RetentionMaxDaysByInterval["15s"] != 180 {
+		t.Fatalf("config=%+v", cfg)
+	}
+}
+
+func TestHistorianConfigRejectsRetentionAboveIntervalMaximumAtomically(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", `{"baseRevision":0,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":true,"dbInterval":"1s","retentionDays":31}]}`, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || app.historian.revision() != 0 || !strings.Contains(w.Body.String(), "historian_retention_invalid") {
+		t.Fatalf("status=%d revision=%d body=%s", w.Code, app.historian.revision(), w.Body.String())
+	}
+}
+
+func TestHistorianConfigDisablePreservesSelectedRetention(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	for revision, body := range []string{
+		`{"baseRevision":0,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":true,"dbInterval":"1s","retentionDays":21}]}`,
+		`{"baseRevision":1,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":false}]}`,
+	} {
+		req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", body, token)
+		w := httptest.NewRecorder()
+		app.Router().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("revision=%d status=%d body=%s", revision, w.Code, w.Body.String())
+		}
+	}
+	got, err := app.historian.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, point := range got.Points {
+		if point.PointID == "UI-01" && (point.DBLoggingEnabled || point.RetentionDays != 21) {
+			t.Fatalf("disabled point=%+v", point)
+		}
+	}
+}
+
+func TestHistorianConfigRejectsStaleRevision(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	body := `{"baseRevision":1,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":true,"dbInterval":"15s","startAtUtc":null}]}`
 	req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", body, token)
 	w := httptest.NewRecorder()
 	app.Router().ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
-	}
-	var resp ConfigPutResult
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Reload != reloadNone || !resp.Applied || resp.Result != "applied" {
-		t.Fatalf("resp = %+v", resp)
-	}
-	cfg, err := app.trends.GetConfig(context.Background())
-	if err != nil {
-		t.Fatalf("GetConfig: %v", err)
-	}
-	if !cfg.Enabled || cfg.IntervalS != 10 || cfg.RetentionRecords != 1000 || strings.Join(cfg.PointIDs, ",") != "UI-01,UI-02" {
-		t.Fatalf("cfg = %+v", cfg)
 	}
 }
 
+func TestHistorianConfigRejectsMissingRequiredFields(t *testing.T) {
+	cases := []string{
+		`{"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":true,"dbInterval":"15s"}]}`,
+		`{"baseRevision":0}`,
+		`{"baseRevision":0,"baseNamespaceRevision":0,"points":[{"generation":1,"dbLoggingEnabled":true,"dbInterval":"15s"}]}`,
+		`{"baseRevision":0,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","dbLoggingEnabled":true,"dbInterval":"15s"}]}`,
+		`{"baseRevision":0,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","generation":1,"dbInterval":"15s"}]}`,
+	}
+	for _, body := range cases {
+		app, token := newHistoryTestApp(t)
+		req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", body, token)
+		w := httptest.NewRecorder()
+		app.Router().ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("body=%s status=%d response=%s", body, w.Code, w.Body.String())
+		}
+		if app.historian.revision() != 0 {
+			t.Fatalf("body=%s changed revision", body)
+		}
+	}
+}
+
+func TestHistorianConfigRejectsStaleNamespaceRevision(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	if err := app.writePointNamespaceAuthority(pointNamespaceAuthority{Revision: 3, Generations: map[string]uint64{}}); err != nil {
+		t.Fatal(err)
+	}
+	req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", `{"baseRevision":0,"baseNamespaceRevision":2,"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":true,"dbInterval":"15s"}]}`, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status=%d response=%s", w.Code, w.Body.String())
+	}
+
+	getReq := newAuthRequest(http.MethodGet, "/api/v1/trends/config", "", token)
+	getResponse := httptest.NewRecorder()
+	app.Router().ServeHTTP(getResponse, getReq)
+	var cfg HistorianConfig
+	if err := json.Unmarshal(getResponse.Body.Bytes(), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.NamespaceRevision != 3 {
+		t.Fatalf("namespace revision = %d, want 3", cfg.NamespaceRevision)
+	}
+}
+
+func TestHistorianConfigPutReturnsRevisionWithoutChangingLegacySampler(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	before := app.sampler.snapshot()
+	req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", `{"baseRevision":0,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":true,"dbInterval":"15s","startAtUtc":null}]}`, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var got HistorianConfig
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Revision != 1 || !hasHistorianPolicy(got.Points, "UI-01", true) {
+		t.Fatalf("config = %+v", got)
+	}
+	after := app.sampler.snapshot()
+	if before.Enabled != after.Enabled || before.IntervalS != after.IntervalS || before.RetentionRecords != after.RetentionRecords || strings.Join(before.PointIDs, ",") != strings.Join(after.PointIDs, ",") {
+		t.Fatalf("legacy sampler changed: before=%+v after=%+v", before, after)
+	}
+}
+
+func TestHistorianConfigRBAC(t *testing.T) {
+	for _, tc := range []struct {
+		role      Role
+		putStatus int
+	}{{RoleViewer, http.StatusForbidden}, {RoleOperator, http.StatusForbidden}, {RoleAdmin, http.StatusOK}} {
+		t.Run(string(tc.role), func(t *testing.T) {
+			app, token := newHistoryTestAppWithRole(t, tc.role)
+			getReq := newAuthRequest(http.MethodGet, "/api/v1/trends/config", "", token)
+			getResponse := httptest.NewRecorder()
+			app.Router().ServeHTTP(getResponse, getReq)
+			if getResponse.Code != http.StatusOK {
+				t.Fatalf("GET status=%d body=%s", getResponse.Code, getResponse.Body.String())
+			}
+			putReq := newAuthRequest(http.MethodPut, "/api/v1/trends/config", `{"baseRevision":0,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":true,"dbInterval":"15s"}]}`, token)
+			putResponse := httptest.NewRecorder()
+			app.Router().ServeHTTP(putResponse, putReq)
+			if putResponse.Code != tc.putStatus {
+				t.Fatalf("PUT status=%d body=%s", putResponse.Code, putResponse.Body.String())
+			}
+		})
+	}
+}
+
+func TestHistorianConfigReturnsMachineReadableReasons(t *testing.T) {
+	for _, tc := range []struct {
+		body   string
+		status int
+		reason string
+	}{
+		{`{"baseRevision":0,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":true,"dbInterval":"auto"}]}`, http.StatusBadRequest, "historian_interval_invalid"},
+		{`{"baseRevision":1,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":true,"dbInterval":"15s"}]}`, http.StatusConflict, "config_conflict"},
+	} {
+		app, token := newHistoryTestApp(t)
+		req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", tc.body, token)
+		w := httptest.NewRecorder()
+		app.Router().ServeHTTP(w, req)
+		if w.Code != tc.status {
+			t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+		}
+		var response struct {
+			Details []configValidationError `json:"details"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || len(response.Details) != 1 || response.Details[0].Reason != tc.reason {
+			t.Fatalf("response=%s err=%v want reason=%s", w.Body.String(), err, tc.reason)
+		}
+	}
+}
+
+func TestHistorianConfigDisablePreservesHistory(t *testing.T) {
+	app, token := newHistoryTestApp(t)
+	ts := time.Now().UTC().UnixMilli()
+	if err := app.trends.InsertBatch(context.Background(), []Sample{{TS: ts, PointID: "UI-01", Value: 21.5, Quality: 0}}); err != nil {
+		t.Fatal(err)
+	}
+	for revision, enabled := range []bool{true, false} {
+		body := fmt.Sprintf(`{"baseRevision":%d,"baseNamespaceRevision":0,"points":[{"pointId":"UI-01","generation":1,"dbLoggingEnabled":%t,"dbInterval":"15s"}]}`, revision, enabled)
+		req := newAuthRequest(http.MethodPut, "/api/v1/trends/config", body, token)
+		w := httptest.NewRecorder()
+		app.Router().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("enabled=%v status=%d body=%s", enabled, w.Code, w.Body.String())
+		}
+	}
+	samples, err := app.trends.Query(context.Background(), []string{"UI-01"}, ts, ts)
+	if err != nil || len(samples) != 1 || samples[0].Value != 21.5 {
+		t.Fatalf("samples=%+v err=%v", samples, err)
+	}
+}
+
+func hasHistorianPolicy(points []HistorianPolicy, pointID string, enabled bool) bool {
+	for _, point := range points {
+		if point.PointID == pointID && point.DBLoggingEnabled == enabled {
+			return true
+		}
+	}
+	return false
+}
+
 func newHistoryTestApp(t *testing.T) (*App, string) {
+	return newHistoryTestAppWithRole(t, RoleAdmin)
+}
+
+func newHistoryTestAppWithRole(t *testing.T, role Role) (*App, string) {
 	t.Helper()
-	users := writeTestUsers(t, "admin123", RoleAdmin)
+	users := writeTestUsers(t, "admin123", role)
 	cfg := testConfig(t, users)
 	cfg.TrendDBPath = filepath.Join(t.TempDir(), "trend.sqlite")
 	app, err := NewApp(cfg, nil, trendCore{}, fakeOS{})

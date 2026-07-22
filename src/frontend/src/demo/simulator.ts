@@ -18,6 +18,9 @@ import type {
   ScheduleRow,
   OutputsConfig,
   TrendSample,
+  TimeConfig,
+  TimeConfigUpdate,
+  TimeStatus,
   UserParamsConfig,
   UserRow,
   VirtualPoint
@@ -26,6 +29,7 @@ import { DEVICE_DEFAULTS } from '../config'
 import { clamp, nowIso, pointNumber } from '../utils'
 
 const startedAt = Date.now() - 12 * 86400_000 - 4 * 3600_000 - 32 * 60_000
+let demoTimeConfig: TimeConfig = { timezone: 'Asia/Ho_Chi_Minh', ntpEnabled: true, ntpServers: ['pool.ntp.org'], systemTime: '', revision: 1 }
 
 const names: Record<string, string> = {
   'DO-01': 'PUMP START',
@@ -58,7 +62,7 @@ const names: Record<string, string> = {
   VP17: 'VIRTUAL COOLING DEMAND'
 }
 
-const basePoints: Point[] = [
+const basePoints: Array<Omit<Point, 'tag'>> = [
   ...Array.from({ length: 4 }, (_, i) => {
     const id = `DO-${String(i + 1).padStart(2, '0')}`
     return { id, name: names[id], kind: 'DO' as const, value: demoDoValue(i), quality: 'good' as const, source: 'Core', priority: 'Logic', updatedAt: nowIso(), sensorType: 'Relay' }
@@ -79,13 +83,13 @@ const basePoints: Point[] = [
   { id: 'UI-14', name: names['UI-14'], kind: 'UI', value: 68, unit: '%', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'light' },
   { id: 'UI-15', name: names['UI-15'], kind: 'UI', value: false, unit: '', quality: 'good', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'dry' },
   { id: 'UI-16', name: names['UI-16'], kind: 'UI', value: 0, unit: '', quality: 'stale', source: 'IOP', priority: 'Input', updatedAt: nowIso(), sensorType: 'none' },
-  { id: 'AO-01', name: names['AO-01'], kind: 'AO', value: 62.5, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
-  { id: 'AO-02', name: names['AO-02'], kind: 'AO', value: 35, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
-  { id: 'AO-03', name: names['AO-03'], kind: 'AO', value: 12.5, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
-  { id: 'AO-04', name: names['AO-04'], kind: 'AO', value: 45, unit: '%', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' }
+  { id: 'AO-01', name: names['AO-01'], kind: 'AO', value: 62.5, unit: '%', raw: 6.25, rawUnit: 'V', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
+  { id: 'AO-02', name: names['AO-02'], kind: 'AO', value: 35, unit: '%', raw: 3.5, rawUnit: 'V', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' },
+  { id: 'AO-03', name: names['AO-03'], kind: 'AO', value: 12.5, unit: '%', raw: 6.0, rawUnit: 'mA', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '4-20mA' },
+  { id: 'AO-04', name: names['AO-04'], kind: 'AO', value: 45, unit: '%', raw: 4.5, rawUnit: 'V', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' }
 ]
 
-let points: Point[] = basePoints.map((point) => ({ ...point, trend: makeTrend(pointNumber(point)) }))
+let points: Point[] = basePoints.map((point) => ({ ...point, tag: point.id, trend: makeTrend(pointNumber(point as Point)) }))
 
 const alarms: Alarm[] = [
   { id: 'AL-001', time: '2025-05-23T14:31:02Z', severity: 'critical', status: 'active', message: 'UI-05 Filter Switch', source: 'UI-05', value: 'ON', detail: 'trip=HH threshold=1 current=ON (High-high); occurrence=1', triggerLevel: 'HH', threshold: '1', active: true },
@@ -125,8 +129,17 @@ function jitter(point: Point): Point {
     const spread = point.kind === 'UI' ? 1.2 : 2.5
     const max = point.unit === 'bar' ? 12 : point.unit === 'ppm' ? 2000 : point.unit === 'pulse' ? 9999 : 100
     const next = clamp(pointNumber(point) + (Math.random() - 0.48) * spread, 0, max)
-    const trend = [...(point.trend ?? []), Number(next.toFixed(1))].slice(-18)
-    return { ...point, value: Number(next.toFixed(1)), trend, updatedAt }
+    const rounded = Number(next.toFixed(1))
+    const trend = [...(point.trend ?? []), rounded].slice(-18)
+    const patch: Partial<Point> = { value: rounded, trend, updatedAt }
+    if (point.kind === 'AO') {
+      if (point.rawUnit === 'mA') {
+        patch.raw = Number((4 + rounded * 0.16).toFixed(1))
+      } else {
+        patch.raw = Number((rounded * 0.1).toFixed(1))
+      }
+    }
+    return { ...point, ...patch }
   }
   if (Math.random() < 0.025 && typeof point.value === 'boolean' && point.id !== 'UI-05') {
     return { ...point, value: !point.value, updatedAt }
@@ -164,6 +177,33 @@ export function getDemoHealth(): HealthResponse {
       IOP: { status: 'ok', uptime_s: 604500, last_scan_ms: 15 },
       bacnet: { status: 'ok', uptime_s: 604300, last_scan_ms: 18 }
     }
+  }
+}
+
+export function getDemoTimeConfig(): TimeConfig {
+  return { ...demoTimeConfig, ntpServers: [...demoTimeConfig.ntpServers] }
+}
+
+export function putDemoTimeConfig(config: TimeConfigUpdate): ConfigPutResult {
+  demoTimeConfig = { timezone: config.timezone, ntpEnabled: config.ntpEnabled, ntpServers: [...config.ntpServers], systemTime: '', revision: demoTimeConfig.revision + 1 }
+  return { result: 'success', applied: true, reload: 'none', warnings: [] }
+}
+
+export function getDemoTimeStatus(): TimeStatus {
+  const nowUtc = new Date().toISOString()
+  return {
+    nowUtc,
+    nowLocal: nowUtc,
+    timezone: demoTimeConfig.timezone,
+    mode: demoTimeConfig.ntpEnabled ? 'ntp' : 'manual',
+    synchronized: demoTimeConfig.ntpEnabled,
+    source: demoTimeConfig.ntpEnabled ? demoTimeConfig.ntpServers[0] ?? null : null,
+    offsetMs: demoTimeConfig.ntpEnabled ? 1.8 : null,
+    lastSyncUtc: demoTimeConfig.ntpEnabled ? nowUtc : null,
+    rtcPresent: true,
+    rtcUtc: nowUtc,
+    health: 'healthy',
+    warnings: []
   }
 }
 
@@ -299,10 +339,11 @@ export function updateDemoPointName(id: string, name: string) {
   return { id, name }
 }
 
-export function updateDemoPointConfig(id: string, config: { name?: string; unit?: string; trendEnabled?: boolean }) {
+export function updateDemoPointConfig(id: string, config: { tag?: string; name?: string; unit?: string; trendEnabled?: boolean }) {
   points = points.map((point) => {
     if (point.id !== id) return point
     const updated = { ...point }
+    if (config.tag !== undefined) updated.tag = config.tag
     if (config.name !== undefined) updated.name = config.name
     if (config.unit !== undefined) updated.unit = config.unit
     if (config.trendEnabled !== undefined) {
@@ -599,7 +640,7 @@ export function getAiInputConfigs(): AiInputConfig[] {
   return demoAiInputConfigs.map((config) => ({ ...config }))
 }
 
-let demoAiInputConfigs: AiInputConfig[] = [
+const demoAiInputConfigSeeds: Array<Omit<AiInputConfig, 'tag'>> = [
   { channel: 1, label: 'Supply Air Temp', signalType: 3, displayMin: -20, displayMax: 80, rangeMultiplier: 0, unit: 2, filterSamples: 3, sensorCal: 0, mathFunction: 1, enabled: true, note: 'Check against handheld probe during commissioning.' },
   { channel: 2, label: 'Duct Pressure', signalType: 2, displayMin: 0, displayMax: 200, rangeMultiplier: 2, unit: 3, filterSamples: 5, sensorCal: 0.2, mathFunction: 0, enabled: true, note: 'High alarm review after TAB.' },
   { channel: 3, label: 'Room Humidity', signalType: 1, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 3, sensorCal: 0, mathFunction: 2, enabled: true, note: '' },
@@ -618,23 +659,29 @@ let demoAiInputConfigs: AiInputConfig[] = [
   { channel: 16, label: 'Spare Universal Input', signalType: 0, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: false, note: '' }
 ]
 
+let demoAiInputConfigs: AiInputConfig[] = demoAiInputConfigSeeds.map((config) => ({ ...config, tag: `UI-${String(config.channel).padStart(2, '0')}` }))
+
 export function putDemoAiInputs(configs: AiInputConfig[]): void {
   demoAiInputConfigs = configs.map((config) => ({ ...config }))
 }
 
-const defaultAoConfigs: AoConfig[] = [
-  { kind: 'AO', channel: 1, id: 'AO-01', label: 'VFD Speed', enabled: true, mode: '0-10V', safeValue: 0, source: 1, loopConfig: 1, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 1, alarm0: 2, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 62.5, note: '', demoNote: 'demo' },
-  { kind: 'AO', channel: 2, id: 'AO-02', label: 'Heating Valve', enabled: true, mode: '0-10V', safeValue: 0, source: 1, loopConfig: 0, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 35, note: '', demoNote: 'demo' },
-  { kind: 'AO', channel: 3, id: 'AO-03', label: 'Cooling Valve', enabled: true, mode: '4-20mA', safeValue: 0, source: 1, loopConfig: 4, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 12.5, note: '', demoNote: 'demo' },
-  { kind: 'AO', channel: 4, id: 'AO-04', label: 'Damper Position', enabled: true, mode: '0-10V', safeValue: 0, source: 6, loopConfig: 7, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 45, note: '', demoNote: 'demo' }
+const defaultAoConfigSeeds: Array<Omit<AoConfig, 'tag'>> = [
+  { kind: 'AO', channel: 1, id: 'AO-01', label: 'VFD Speed', enabled: true, mode: '0-10V', units: 'percent', minPv: 0, maxPv: 100, safeValue: 0, source: 1, loopConfig: 1, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 1, alarm0: 2, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 62.5, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 2, id: 'AO-02', label: 'Heating Valve', enabled: true, mode: '0-10V', units: 'percent', minPv: 0, maxPv: 100, safeValue: 0, source: 1, loopConfig: 0, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 35, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 3, id: 'AO-03', label: 'Cooling Valve', enabled: true, mode: '4-20mA', units: 'percent', minPv: 0, maxPv: 100, safeValue: 4, source: 1, loopConfig: 4, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 12.5, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 4, id: 'AO-04', label: 'Damper Position', enabled: true, mode: '0-10V', units: 'percent', minPv: 0, maxPv: 100, safeValue: 0, source: 6, loopConfig: 7, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 45, note: '', demoNote: 'demo' }
 ]
 
-const defaultDoConfigs: DoConfig[] = [
+const defaultAoConfigs: AoConfig[] = defaultAoConfigSeeds.map((config) => ({ ...config, tag: config.id }))
+
+const defaultDoConfigSeeds: Array<Omit<DoConfig, 'tag'>> = [
   { kind: 'DO', channel: 1, id: 'DO-01', label: 'Pump Start', safeState: 'open', manualValue: true },
   { kind: 'DO', channel: 2, id: 'DO-02', label: 'Fan Start', safeState: 'open', manualValue: true },
   { kind: 'DO', channel: 3, id: 'DO-03', label: 'Valve Open', safeState: 'closed', manualValue: true },
   { kind: 'DO', channel: 4, id: 'DO-04', label: 'Alarm Buzzer', safeState: 'open', manualValue: false }
 ]
+
+const defaultDoConfigs: DoConfig[] = defaultDoConfigSeeds.map((config) => ({ ...config, tag: config.id }))
 
 let demoOutputs: OutputsConfig = {
   ao: defaultAoConfigs.map((config) => ({ ...config })),
@@ -656,11 +703,11 @@ export function putDemoOutputs(config: OutputsConfig): void {
 }
 
 let demoVirtualPoints: VirtualPoint[] = [
-  { id: 'VP1', label: 'Room Setpoint', signalType: 'float', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 30 * 24 * 60 * 60, value: 24, unit: 'degC', displayMin: 16, displayMax: 30, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
-  { id: 'VP2', label: 'Occupancy Request', signalType: 'boolean', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 7 * 24 * 60 * 60, value: true, unit: '', displayMin: 0, displayMax: 1, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
-  { id: 'VP3', label: 'Mode Index', signalType: 'integer', enabled: true, writable: true, logEnabled: false, value: 1, unit: '', displayMin: 0, displayMax: 3, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
-  { id: 'VP4', label: 'Mode Text', signalType: 'string', enabled: true, writable: true, logEnabled: false, value: 'auto', unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
-  { id: 'VP5', label: 'Last Change', signalType: 'datetime', enabled: true, writable: false, logEnabled: false, value: nowIso(), unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() }
+  { id: 'VP1', tag: 'VP1', label: 'Room Setpoint', signalType: 'float', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 30 * 24 * 60 * 60, value: 24, unit: 'degC', displayMin: 16, displayMax: 30, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP2', tag: 'VP2', label: 'Occupancy Request', signalType: 'boolean', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 7 * 24 * 60 * 60, value: true, unit: '', displayMin: 0, displayMax: 1, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP3', tag: 'VP3', label: 'Mode Index', signalType: 'integer', enabled: true, writable: true, logEnabled: false, value: 1, unit: '', displayMin: 0, displayMax: 3, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP4', tag: 'VP4', label: 'Mode Text', signalType: 'string', enabled: true, writable: true, logEnabled: false, value: 'auto', unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
+  { id: 'VP5', tag: 'VP5', label: 'Last Change', signalType: 'datetime', enabled: true, writable: false, logEnabled: false, value: nowIso(), unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() }
 ]
 
 syncDemoVirtualPoints()
@@ -672,8 +719,10 @@ export function getDemoVirtualPoints(): VirtualPoint[] {
 export function putDemoVirtualPoint(point: Partial<VirtualPoint>): VirtualPoint {
   const existingIndex = point.id ? demoVirtualPoints.findIndex((item) => canonicalDemoVirtualPointId(item.id) === canonicalDemoVirtualPointId(point.id ?? '')) : -1
   const current = existingIndex >= 0 ? demoVirtualPoints[existingIndex] : undefined
+  const id = point.id ?? nextDemoVirtualPointId()
   const next: VirtualPoint = normalizeDemoVirtualPoint({
-    id: point.id ?? nextDemoVirtualPointId(),
+    id,
+    tag: point.tag ?? current?.tag ?? canonicalDemoVirtualPointId(id),
     label: point.label ?? current?.label ?? 'Virtual Point',
     signalType: point.signalType ?? current?.signalType ?? 'float',
     enabled: point.enabled ?? current?.enabled ?? true,
@@ -709,6 +758,7 @@ function normalizeDemoVirtualPoint(point: VirtualPoint): VirtualPoint {
   return {
     ...point,
     id,
+    tag: point.tag.trim() || id,
     signalType,
     unit: normalizeDemoVirtualUnit(point.unit),
     displayMin: clampDemoNumber(point.displayMin, -50, 205, 0),
@@ -777,7 +827,7 @@ function syncDemoVirtualPoints(): void {
     const id = canonicalDemoVirtualPointId(item.id)
     const value = normalizeDemoVirtualValue(item.signalType, item.value)
     const trend = typeof value === 'number' || typeof value === 'boolean' ? makeTrend(typeof value === 'boolean' ? Number(value) : value) : undefined
-    const point: Point = { id, name: item.label, kind: 'virtual', value, unit: item.unit, quality: 'good', source: 'Backend', priority: item.writable ? 'Writable' : 'Read only', updatedAt: item.updatedAt ?? nowIso(), sensorType: 'VP', signalType: item.signalType, writable: item.writable, logEnabled: item.logEnabled, logIntervalMs: item.logIntervalMs, ...(trend ? { trend } : {}) }
+    const point: Point = { id, tag: item.tag, name: item.label, kind: 'virtual', value, unit: item.unit, quality: 'good', source: 'Backend', priority: item.writable ? 'Writable' : 'Read only', updatedAt: item.updatedAt ?? nowIso(), sensorType: 'VP', signalType: item.signalType, writable: item.writable, logEnabled: item.logEnabled, logIntervalMs: item.logIntervalMs, ...(trend ? { trend } : {}) }
     const index = points.findIndex((entry) => canonicalDemoVirtualPointId(entry.id) === id)
     if (index >= 0) points[index] = { ...points[index], ...point }
     else points = [...points, point]

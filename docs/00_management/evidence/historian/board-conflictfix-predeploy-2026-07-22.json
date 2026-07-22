@@ -1,0 +1,77 @@
+{
+  "activation": [
+    "active",
+    3,
+    "v2",
+    1,
+    1,
+    0,
+    1784623205852,
+    1784623364013
+  ],
+  "binaryBackup": {
+    "path": "/data/config/historian-v2-migration/historian-conflictfix-20260722T023931Z/mkddc-web-predeploy",
+    "sha256": "dcd171d35bfb3ccfedf4087726b0d1fe11b18b0ece90f1a7b7ce405cc8ffa52a",
+    "size": 16880280
+  },
+  "checkpoint": {
+    "path": "/data/config/historian-v2-migration/historian-conflictfix-20260722T023931Z/historian-v2-predeploy.sqlite",
+    "quickCheck": "ok",
+    "schemaVersion": 5,
+    "sha256": "b5f612e0894ef00c3bfc91032bd463ca5b1edd3e5aae3887958446e50564ffa1",
+    "size": 90005504
+  },
+  "configBackup": {
+    "path": "/data/config/historian-v2-migration/historian-conflictfix-20260722T023931Z/historian.conf.predeploy",
+    "sha256": "0808302c62fbd110a50968b8d595372ca9640ab8a0371440a45c72b69e5fd03f",
+    "size": 795
+  },
+  "frontiers": [
+    [
+      "AO-01",
+      1,
+      10224,
+      1782288525000,
+      1784629890000,
+      1784629890000
+    ],
+    [
+      "UI-01",
+      1,
+      10244,
+      1782288525000,
+      1784629875000,
+      1784629885000
+    ]
+  ],
+  "generatedAtUtc": "2026-07-22T02:39:30.921836+00:00",
+  "kind": "historian-conflictfix-predeploy-checkpoint",
+  "legacyRowCount": 596284,
+  "liveBinary": {
+    "path": "/opt/mkddc-web/mkddc-web",
+    "sha256": "dcd171d35bfb3ccfedf4087726b0d1fe11b18b0ece90f1a7b7ce405cc8ffa52a",
+    "size": 16880280
+  },
+  "recentGapCount": 79,
+  "schemaVersion": 1,
+  "services": [
+    "MainPID=1559",
+    "NRestarts=0",
+    "Id=mkddc-web-pi.service",
+    "ActiveState=active",
+    "SubState=running",
+    "",
+    "MainPID=1376",
+    "NRestarts=0",
+    "Id=mkddc-core.service",
+    "ActiveState=active",
+    "SubState=running",
+    "",
+    "MainPID=979",
+    "NRestarts=0",
+    "Id=mkddc-iobus.service",
+    "ActiveState=active",
+    "SubState=running"
+  ],
+  "windowId": "historian-conflictfix-20260722T023931Z"
+}

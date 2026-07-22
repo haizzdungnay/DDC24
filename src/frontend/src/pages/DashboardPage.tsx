@@ -26,7 +26,7 @@ import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Alarm, HealthResponse, HealthStatus, Point, TrendSample } from '../types'
-import { formatDateTime, formatUptime, isFreshIso, isVisibleUniversalInput, mergePointsById, metricStatusColor, metricStatusFill, statusColor } from '../utils'
+import { formatDateTime, formatUptime, isFreshIso, isVisibleUniversalInput, mergePointsById, metricStatusColor, metricStatusFill, pointDisplayTag, statusColor } from '../utils'
 
 const dashboardTrendColors = ['var(--c-fault-fg)', 'var(--c-accent-2)', '#6E5A2E', 'var(--c-warn-fg)']
 const dashboardTrendSampleLimit = 60
@@ -50,7 +50,7 @@ export function DashboardPage() {
     .slice(0, 4), [points])
   const trendSeries = useMemo<TrendSeries[]>(() => trendPoints.map((point, index) => ({
     key: point.id,
-    label: `${point.id} - ${point.name}`,
+    label: point.kind === 'virtual' ? pointDisplayTag(point) : `${point.id} - ${point.name}`,
     color: dashboardTrendColors[index % dashboardTrendColors.length],
     unit: point.unit
   })), [trendPoints])

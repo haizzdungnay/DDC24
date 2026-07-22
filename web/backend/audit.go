@@ -22,6 +22,32 @@ func (a *AuditLogger) Login(username, role, result, remote string) {
 		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(username, 32), sanitizeAudit(role, 16), result, sanitizeAudit(remote, 64))
 }
 
+func (a *AuditLogger) PointMetadata(user, pointID, field, oldValue, newValue, result, requestID, remote string) {
+	if a == nil || a.logger == nil {
+		return
+	}
+	a.logger.Printf("AUDIT point_metadata ts=%s point_id=%s field=%s old=%s new=%s actor=%s request_id=%s result=%s remote=%s",
+		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(pointID, 64), sanitizeAudit(field, 16), sanitizeAuditValue(oldValue, 128), sanitizeAuditValue(newValue, 128), sanitizeAudit(user, 32), sanitizeAudit(requestID, 64), sanitizeAudit(result, 16), sanitizeAudit(remote, 64))
+}
+
+func sanitizeAuditValue(value string, max int) string {
+	var b strings.Builder
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f || r == ' ' || r == '\t' {
+			b.WriteByte('_')
+		} else {
+			b.WriteRune(r)
+		}
+		if b.Len() >= max {
+			break
+		}
+	}
+	if b.Len() == 0 {
+		return "-"
+	}
+	return b.String()
+}
+
 func (a *AuditLogger) Change(user, action, target, result, remote string) {
 	if a == nil || a.logger == nil {
 		return

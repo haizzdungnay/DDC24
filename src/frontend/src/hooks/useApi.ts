@@ -17,6 +17,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
   const isMounted = useRef(true)
+  const requestSequence = useRef(0)
   const fetcherRef = useRef(fetcher)
   const optionsRef = useRef(options)
 
@@ -37,19 +38,20 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
 
   const fetchNow = useCallback(async (showLoading: boolean) => {
     if (!isMounted.current) return
+    const requestId = ++requestSequence.current
     if (showLoading) setLoading(true)
     setError(null)
     try {
       const result = await fetcherRef.current()
-      if (isMounted.current) {
+      if (isMounted.current && requestId === requestSequence.current) {
         setData(result)
       }
     } catch (err) {
-      if (isMounted.current) {
+      if (isMounted.current && requestId === requestSequence.current) {
         setError(err instanceof Error ? err : new Error(String(err)))
       }
     } finally {
-      if (isMounted.current && showLoading) {
+      if (isMounted.current && requestId === requestSequence.current && showLoading) {
         setLoading(false)
       }
     }

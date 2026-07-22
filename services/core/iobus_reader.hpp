@@ -28,6 +28,7 @@ struct IoSnapshot {
                                         KX_REL_COMMUNICATION_FAILURE, KX_REL_COMMUNICATION_FAILURE,
                                         KX_REL_COMMUNICATION_FAILURE, KX_REL_COMMUNICATION_FAILURE,
                                         KX_REL_COMMUNICATION_FAILURE, KX_REL_COMMUNICATION_FAILURE};
+    char     ui_unit[KX_N_UI][8] = {};
     uint8_t  di_state[KX_N_DI] = {};
     uint32_t di_counter[KX_N_DI] = {};
     uint8_t  do_feedback[KX_N_DO] = {};

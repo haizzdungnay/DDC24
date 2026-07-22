@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "kind": "historian-rollback-package",
+  "packageMode": "prebuilt-native",
+  "generatedAtUtc": "2026-07-21T08:08:12.750765072Z",
+  "verificationHost": "linux/arm64",
+  "goCommandVersion": "",
+  "buildCommand": null,
+  "current": {
+    "name": "current",
+    "path": "/tmp/historian-arm64-finalpkg-20260721/mkddc-web-current",
+    "sha256": "440aae2b3377e3fa65373663d59aecc5abfaf1fd28aa3cc4eb51bfee0835a39c",
+    "size": 16878111,
+    "goVersion": "go1.26.4",
+    "goos": "linux",
+    "goarch": "arm64",
+    "cgoEnabled": "0",
+    "buildSettings": {
+      "CGO_ENABLED": "0",
+      "GOARCH": "arm64",
+      "GOOS": "linux"
+    }
+  },
+  "rollback": {
+    "name": "rollback-candidate",
+    "path": "/tmp/historian-arm64-finalpkg-20260721/mkddc-web-rollback-candidate",
+    "sha256": "440aae2b3377e3fa65373663d59aecc5abfaf1fd28aa3cc4eb51bfee0835a39c",
+    "size": 16878111,
+    "goVersion": "go1.26.4",
+    "goos": "linux",
+    "goarch": "arm64",
+    "cgoEnabled": "0",
+    "buildSettings": {
+      "CGO_ENABLED": "0",
+      "GOARCH": "arm64",
+      "GOOS": "linux"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "/tmp/historian-arm64-finalpkg-20260721/archive.fixture",
+      "role": "artifact",
+      "sha256Before": "a0ea5780779a91f484d7b9efbd75b1e840a2d8281f0d3ce16ce6514693e74834",
+      "sha256After": "a0ea5780779a91f484d7b9efbd75b1e840a2d8281f0d3ce16ce6514693e74834",
+      "sizeBefore": 26,
+      "sizeAfter": 26,
+      "unchanged": true
+    },
+    {
+      "path": "/tmp/historian-arm64-finalpkg-20260721/evidence.fixture",
+      "role": "artifact",
+      "sha256Before": "9995d64a3d9995ea24a3cbfd3a124f2b0ae6519a625dc6bca765862f7062885d",
+      "sha256After": "9995d64a3d9995ea24a3cbfd3a124f2b0ae6519a625dc6bca765862f7062885d",
+      "sizeBefore": 27,
+      "sizeAfter": 27,
+      "unchanged": true
+    },
+    {
+      "path": "/tmp/historian-arm64-finalpkg-20260721/schema5-active.sqlite",
+      "role": "sqlite-fixture",
+      "sha256Before": "ee0f03fcd01421e349522fa852ac71839bc9da3032c2dfe69676f7ad816e7833",
+      "sha256After": "ee0f03fcd01421e349522fa852ac71839bc9da3032c2dfe69676f7ad816e7833",
+      "sizeBefore": 106496,
+      "sizeAfter": 106496,
+      "unchanged": true,
+      "currentVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"active\",\"writerV2\":true,\"queryV2\":true,\"legacyWriterAllowed\":false,\"evidenceBound\":true}",
+      "rollbackVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"active\",\"writerV2\":true,\"queryV2\":true,\"legacyWriterAllowed\":false,\"evidenceBound\":true}"
+    },
+    {
+      "path": "/tmp/historian-arm64-finalpkg-20260721/schema5-legacy.sqlite",
+      "role": "sqlite-fixture",
+      "sha256Before": "7628170bad1c70b960a1b5ee0becfb193a273057f797c8c42a4720fbfa5274e7",
+      "sha256After": "7628170bad1c70b960a1b5ee0becfb193a273057f797c8c42a4720fbfa5274e7",
+      "sizeBefore": 106496,
+      "sizeAfter": 106496,
+      "unchanged": true,
+      "currentVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"legacy\",\"writerV2\":false,\"queryV2\":false,\"legacyWriterAllowed\":true,\"evidenceBound\":false}",
+      "rollbackVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"legacy\",\"writerV2\":false,\"queryV2\":false,\"legacyWriterAllowed\":true,\"evidenceBound\":false}"
+    }
+  ]
+}

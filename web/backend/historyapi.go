@@ -77,46 +77,86 @@ func (a *App) visibleHistoryPointIDs(ids []string) []string {
 }
 
 func (a *App) handleGetTrendConfig(w http.ResponseWriter, r *http.Request) {
-	if a.trends == nil {
-		writeError(w, http.StatusServiceUnavailable, "trend store unavailable")
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
+	if a.historian == nil {
+		writeError(w, http.StatusServiceUnavailable, "historian policy unavailable")
 		return
 	}
-	cfg, err := a.trends.GetConfig(r.Context())
+	cfg, err := a.historian.Get()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, historianErrorStatus(err), err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, cfg)
 }
 
 func (a *App) handlePutTrendConfig(w http.ResponseWriter, r *http.Request) {
-	if a.trends == nil {
-		writeError(w, http.StatusServiceUnavailable, "trend store unavailable")
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
+	if a.historian == nil {
+		writeError(w, http.StatusServiceUnavailable, "historian policy unavailable")
 		return
 	}
-	cfg, err := decodeTrendConfig(w, r)
+	update, err := decodeHistorianConfigUpdate(w, r)
 	if err != nil {
 		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
 		return
 	}
-	if errs := a.validateTrendConfig(cfg); len(errs) > 0 {
-		writeValidationErrors(w, errs)
-		return
-	}
-	saved, err := a.trends.SaveConfig(r.Context(), cfg)
+	saved, err := a.historian.Update(update)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		if policyErr, ok := err.(historianPolicyError); ok {
+			writeJSON(w, policyErr.status, map[string]any{"error": policyErr.msg, "code": policyErr.status, "request_id": requestID(), "details": []configValidationError{{Path: "$", Reason: policyErr.reason, Message: policyErr.msg}}})
+		} else {
+			writeError(w, historianErrorStatus(err), err.Error())
+		}
 		return
-	}
-	if a.sampler != nil {
-		a.sampler.UpdateConfig(saved)
 	}
 	user := "-"
 	if principal := principalFromContext(r.Context()); principal != nil {
 		user = principal.Username
 	}
-	a.audit.Change(user, "trends.config", "trend.sqlite", "applied", r.RemoteAddr)
-	writeJSON(w, http.StatusOK, ConfigPutResult{Result: "applied", Applied: true, Reload: reloadNone, Warnings: []string{}})
+	a.audit.Change(user, "trends.config", "historian.conf", "applied", r.RemoteAddr)
+	writeJSON(w, http.StatusOK, saved)
+}
+
+func decodeHistorianConfigUpdate(w http.ResponseWriter, r *http.Request) (HistorianConfigUpdate, error) {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	var raw struct {
+		BaseRevision          *uint64 `json:"baseRevision"`
+		BaseNamespaceRevision *uint64 `json:"baseNamespaceRevision"`
+		Points                *[]struct {
+			PointID          *string `json:"pointId"`
+			Generation       *uint64 `json:"generation"`
+			DBLoggingEnabled *bool   `json:"dbLoggingEnabled"`
+			DBInterval       string  `json:"dbInterval"`
+			RetentionDays    *int    `json:"retentionDays"`
+			StartAtUTC       *string `json:"startAtUtc"`
+		} `json:"points"`
+	}
+	if err := dec.Decode(&raw); err != nil {
+		return HistorianConfigUpdate{}, fmt.Errorf("invalid json")
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		return HistorianConfigUpdate{}, fmt.Errorf("invalid json")
+	}
+	if raw.BaseRevision == nil || raw.BaseNamespaceRevision == nil || raw.Points == nil {
+		return HistorianConfigUpdate{}, fmt.Errorf("baseRevision, baseNamespaceRevision, and points are required")
+	}
+	update := HistorianConfigUpdate{BaseRevision: *raw.BaseRevision, BaseNamespaceRevision: *raw.BaseNamespaceRevision, Points: make([]HistorianPolicyPatch, len(*raw.Points))}
+	for i, point := range *raw.Points {
+		if point.PointID == nil || point.Generation == nil || point.DBLoggingEnabled == nil {
+			return HistorianConfigUpdate{}, fmt.Errorf("points[%d] requires pointId, generation, and dbLoggingEnabled", i)
+		}
+		patch := HistorianPolicyPatch{PointID: *point.PointID, Generation: *point.Generation, DBLoggingEnabled: *point.DBLoggingEnabled, DBInterval: point.DBInterval, StartAtUTC: point.StartAtUTC}
+		if point.RetentionDays != nil {
+			patch.RetentionDays = *point.RetentionDays
+			patch.retentionDaysSet = true
+		}
+		update.Points[i] = patch
+	}
+	return update, nil
 }
 
 func decodeTrendConfig(w http.ResponseWriter, r *http.Request) (TrendConfig, error) {
