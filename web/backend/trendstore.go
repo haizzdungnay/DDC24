@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -21,8 +23,14 @@ const (
 )
 
 type TrendStore struct {
-	db *sql.DB
+	db            *sql.DB
+	path          string
+	writesMu      sync.RWMutex
+	writeTxnMu    sync.Mutex
+	writesEnabled bool
 }
+
+var ErrLegacyHistorianQuiesced = errors.New("legacy historian writers are quiesced")
 
 type Sample struct {
 	TS      int64
@@ -42,7 +50,7 @@ func OpenTrendStore(path string) (*TrendStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open trend db: %w", err)
 	}
-	store := &TrendStore{db: db}
+	store := &TrendStore{db: db, path: path, writesEnabled: true}
 	if err := store.init(context.Background()); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -86,13 +94,66 @@ func (s *TrendStore) Close() error {
 	if s == nil || s.db == nil {
 		return nil
 	}
+	s.writesMu.Lock()
+	defer s.writesMu.Unlock()
 	return s.db.Close()
+}
+
+// QuiesceWriters fences legacy TrendStore mutations and checkpoints WAL.
+func (s *TrendStore) QuiesceWriters(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return ErrLegacyHistorianQuiesced
+	}
+	s.writesMu.Lock()
+	defer s.writesMu.Unlock()
+	if !s.writesEnabled {
+		return nil
+	}
+	s.writesEnabled = false
+	if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(FULL)"); err != nil {
+		s.writesEnabled = true
+		return fmt.Errorf("checkpoint legacy trend WAL: %w", err)
+	}
+	return nil
+}
+
+func (s *TrendStore) ResumeWriters() {
+	if s == nil {
+		return
+	}
+	s.writesMu.Lock()
+	s.writesEnabled = true
+	s.writesMu.Unlock()
+}
+
+func (s *TrendStore) beginWrite() (func(), error) {
+	if s == nil || s.db == nil {
+		return func() {}, fmt.Errorf("trend store unavailable")
+	}
+	s.writesMu.RLock()
+	if !s.writesEnabled {
+		s.writesMu.RUnlock()
+		return func() {}, ErrLegacyHistorianQuiesced
+	}
+	// SQLite WAL supports concurrent readers, but legacy sampler/config/prune
+	// transactions still contend on one writer lock. Serialize writers after
+	// the authority fence so SQLITE_BUSY does not become silent data loss.
+	s.writeTxnMu.Lock()
+	return func() {
+		s.writeTxnMu.Unlock()
+		s.writesMu.RUnlock()
+	}, nil
 }
 
 func (s *TrendStore) InsertBatch(ctx context.Context, samples []Sample) error {
 	if s == nil || s.db == nil || len(samples) == 0 {
 		return nil
 	}
+	release, err := s.beginWrite()
+	if err != nil {
+		return err
+	}
+	defer release()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin insert samples: %w", err)
@@ -168,10 +229,15 @@ func (s *TrendStore) Prune(ctx context.Context, retentionRecords int) error {
 	if s == nil || s.db == nil {
 		return nil
 	}
+	release, err := s.beginWrite()
+	if err != nil {
+		return err
+	}
+	defer release()
 	if retentionRecords < 1 {
 		retentionRecords = defaultTrendRetentionRecord
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 		DELETE FROM samples
 		WHERE rowid IN (
 			SELECT rowid FROM (
@@ -190,7 +256,12 @@ func (s *TrendStore) PruneBefore(ctx context.Context, pointID string, beforeTs i
 	if s == nil || s.db == nil || strings.TrimSpace(pointID) == "" || beforeTs <= 0 {
 		return nil
 	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM samples WHERE point_id = ? AND ts < ?`, canonicalPointID(pointID), beforeTs)
+	release, err := s.beginWrite()
+	if err != nil {
+		return err
+	}
+	defer release()
+	_, err = s.db.ExecContext(ctx, `DELETE FROM samples WHERE point_id = ? AND ts < ?`, canonicalPointID(pointID), beforeTs)
 	if err != nil {
 		return fmt.Errorf("prune samples before: %w", err)
 	}
@@ -226,6 +297,11 @@ func (s *TrendStore) SaveConfig(ctx context.Context, cfg TrendConfig) (TrendConf
 	if s == nil || s.db == nil {
 		return TrendConfig{}, fmt.Errorf("trend store unavailable")
 	}
+	release, err := s.beginWrite()
+	if err != nil {
+		return TrendConfig{}, err
+	}
+	defer release()
 	cfg.normalize()
 	pointIDsJSON, err := json.Marshal(cfg.PointIDs)
 	if err != nil {

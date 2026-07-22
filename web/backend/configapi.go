@@ -95,7 +95,9 @@ func (a *App) handlePutConfigIO(w http.ResponseWriter, r *http.Request) {
 		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
 		return
 	}
-	if errs := append(validateConfigIO(cfg), validateConfigPointMetadata(cfg)...); len(errs) > 0 {
+	errs := append(validateConfigIO(cfg), validateConfigPointMetadata(cfg)...)
+	errs = append(errs, validateFixedPhysicalPointTags(cfg)...)
+	if len(errs) > 0 {
 		writePointTagErrors(w, errs)
 		return
 	}
@@ -178,11 +180,16 @@ func (a *App) handlePutConfigFieldbus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleGetConfigTime(w http.ResponseWriter, r *http.Request) {
-	handleGetConfig(a, w, configGroupTime, ConfigTime{})
+	cfg, err := a.readTimeConfig()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, cfg)
 }
 
 func (a *App) handlePutConfigTime(w http.ResponseWriter, r *http.Request) {
-	handlePutConfig(a, w, r, configGroupTime, validateConfigTime)
+	a.handlePutTimeConfig(w, r)
 }
 
 func (a *App) readSystemConfig() (SystemConfig, error) {
@@ -209,7 +216,7 @@ func (a *App) readSystemConfig() (SystemConfig, error) {
 	if cfg.Fieldbus, err = readConfig(a, configGroupFieldbus, ConfigFieldbus{}); err != nil {
 		return SystemConfig{}, err
 	}
-	if cfg.Time, err = readConfig(a, configGroupTime, ConfigTime{}); err != nil {
+	if cfg.Time, err = a.readTimeConfig(); err != nil {
 		return SystemConfig{}, err
 	}
 	return cfg, nil
@@ -399,8 +406,12 @@ func validateConfigIO(cfg ConfigIO) []configValidationError {
 		base := fmt.Sprintf("ao[%d]", i)
 		validateChannel(&errs, item, base+".ch", 1, 4)
 		validateStringEnum(&errs, item, base+".mode", "mode", true, "0-10V", "4-20mA")
-		if _, ok, good := stringField(item, "name"); ok && !good {
+		if name, ok, good := stringField(item, "name"); ok && !good {
 			addConfigErr(&errs, base+".name", "must be string")
+		} else if ok {
+			if _, _, err := normalizePointName(name); err != nil {
+				addConfigErr(&errs, base+".name", err.Error())
+			}
 		}
 		validateStringEnum(&errs, item, base+".units", "units", false,
 			"percent", "volt", "milliampere", "degC", "Pa", "RPM", "ppm", "no_units")

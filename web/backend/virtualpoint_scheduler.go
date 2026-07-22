@@ -99,7 +99,11 @@ func (a *App) writeScheduledVirtualPointValue(id string, value float64) error {
 	item.Value = nextValue
 	item.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	cfg.Items[index] = item
-	return a.writeVirtualPointsConfig(&http.Request{RemoteAddr: "virtual-scheduler"}, cfg, "schedule")
+	if err := a.writeVirtualPointsConfig(&http.Request{RemoteAddr: "virtual-scheduler"}, cfg, "schedule"); err != nil {
+		return err
+	}
+	a.virtualPointRuntime.Update(RuntimePoint{ID: item.ID, Kind: "VP", Value: item.Value, Quality: "GOOD", Source: "schedule", Role: "runtime_value", Unit: item.Unit, SignalType: item.SignalType, Generation: item.Generation})
+	return nil
 }
 
 func virtualScheduleHolidayActive(rows []ScheduleRow, now time.Time) bool {

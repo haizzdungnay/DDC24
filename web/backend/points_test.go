@@ -50,7 +50,7 @@ func TestHandlePointReturnsCreatedVirtualPoint(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	if body := w.Body.String(); !containsAll(body, "VP1", "Room Setpoint", "22.5") {
+	if body := w.Body.String(); !containsAll(body, "VP1", `"tag":"room setpoint"`, `"name":"room setpoint"`, "22.5") || strings.Contains(body, "Room Setpoint") {
 		t.Fatalf("body = %s", body)
 	}
 }

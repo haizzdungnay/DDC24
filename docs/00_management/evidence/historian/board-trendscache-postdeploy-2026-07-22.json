@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "kind": "historian-trendscache-postdeploy-verification",
+  "windowId": "historian-trendscache-20260722T034500Z",
+  "generatedAtUtc": "2026-07-22T04:02:10Z",
+  "checkpoint": {
+    "path": "/data/config/historian-v2-migration/historian-trendscache-20260722T034500Z/historian-v2-predeploy.sqlite",
+    "sha256": "91404dbee4ca3d39d467e615cf5ed67be026c8a3a441af506c64ef281e10d0f0",
+    "quickCheck": "ok",
+    "schemaVersion": 5
+  },
+  "packageManifest": {
+    "path": "/data/config/historian-v2-migration/historian-trendscache-20260722T034500Z/rollback-package/historian-rollback-package-evidence.json",
+    "sha256": "520f02ea305ccab469d31ef00315441ca3b696233b460b29b56ce9f83267571f",
+    "verificationHost": "linux/arm64",
+    "artifacts": 8,
+    "unchanged": true
+  },
+  "candidate": {
+    "binarySha256": "319236d08c02be8712b0d49680cccb420e78528ea64fb1a619ecc674e21d5dad",
+    "binarySize": 17021693,
+    "distArchiveSha256": "9b080bc28ba73afa00a582c532c56a4e6541feb1796517c910fa609d2cf6ae9a",
+    "boardDistTreeSha256": "dfa62b566b1ec5c3d2822de4aab760e063025369b5c2455fd3e84b52eca75688"
+  },
+  "deployment": {
+    "firstAttempt": "rolled_back_readiness_probe_used_wrong_port_8080; production binary/dist restored",
+    "successfulRetry": "2026-07-22T03:55:58Z",
+    "port": 8081,
+    "loginStatus": 200,
+    "statusUnauthenticated": 401,
+    "services": {
+      "mkddc-web-pi": {"active": "active", "sub": "running", "nRestarts": 0, "mainPid": 54001},
+      "mkddc-core": {"active": "active", "sub": "running", "nRestarts": 0, "mainPid": 1376},
+      "mkddc-iobus": {"active": "active", "sub": "running", "nRestarts": 0, "mainPid": 979}
+    },
+    "webRssKiB": 31524,
+    "frontendAsset": "assets/index-WNwdq89B.js"
+  },
+  "postDeployReadOnly": {
+    "quickCheck": "ok",
+    "authority": ["active", "v2", 1, 1, 0],
+    "rollbackVerify": {"schemaVersion": 5, "state": "active", "writerV2": true, "queryV2": true, "legacyWriterAllowed": false, "evidenceBound": true},
+    "hotRows": 467241,
+    "gapRows": 3333,
+    "legacyRows": 596284,
+    "shortDelta30s": {"hotRows": 4, "gapRows": 0, "legacyRows": 0},
+    "storageConflictWarnings5m": 0,
+    "coreDegradedWarnings5m": 42
+  },
+  "sourceRoutingCanary": {
+    "host": "linux/arm64 isolated fixture",
+    "cache": {"status": 200, "tiersUsed": ["cache"], "sampleCount": 101, "gapCount": 20, "complete": false},
+    "database": {"status": 200, "tiersUsed": ["hot"], "sampleCount": 101, "gapCount": 20, "complete": false},
+    "unit": "mkddc-trendscache-canary.service",
+    "stopped": true
+  },
+  "soak": {
+    "unit": "mkddc-historian-soak-trendscache.service",
+    "outputDir": "/data/config/historian-v2-migration/historian-trendscache-20260722T034500Z/soak-24h",
+    "startedAtUtc": "2026-07-22T04:01:50Z",
+    "intervalSeconds": 60,
+    "durationSeconds": 86400,
+    "firstSample": {"hotRows": 467270, "gapRows": 3335, "legacyRows": 596284, "webRssKiB": 32480, "storageWarnings": 0, "coreWarnings": 0, "quickCheck": "ok"}
+  }
+}

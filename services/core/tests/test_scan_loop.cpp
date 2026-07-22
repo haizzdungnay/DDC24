@@ -122,6 +122,136 @@ TEST(ScanLoop, SeqlockFailKeepsOldSnapshot)
     KX_WRITE_END(&f.shm);
 }
 
+TEST(ScanLoop, PublishesOneCoherentPointSnapshotPerStep)
+{
+    Fixture f;
+    EXPECT_EQ(f.web.snapshot_cache_state_for_test(), SnapshotCacheState::UNAVAILABLE);
+
+    f.shm.ts_ns = 101;
+    f.shm.ui_value[0] = 1.25f;
+    f.shm.do_feedback[0] = 1;
+    f.resolver.set_ao(PRIO_LOCAL_MANUAL, 0, 5.0f);
+    f.loop.step();
+
+    ASSERT_EQ(f.web.snapshot_cache_state_for_test(), SnapshotCacheState::READY);
+    const RuntimePointSnapshot first = f.web.snapshot_for_test();
+    EXPECT_EQ(first.snapshot_id, 1u);
+    EXPECT_GT(first.observed_utc_ms, 0u);
+    EXPECT_GT(first.captured_monotonic_ns, 0u);
+    EXPECT_EQ(first.rows[16].updated_at_monotonic_ns, first.captured_monotonic_ns);
+    EXPECT_FLOAT_EQ(first.rows[0].value, 1.25f);
+    EXPECT_EQ(first.rows[0].updated_at_monotonic_ns, 101u);
+    EXPECT_FLOAT_EQ(first.rows[16].value, 5.0f);
+    EXPECT_EQ(first.rows[16].source, SnapshotSource::MANUAL);
+    EXPECT_FLOAT_EQ(first.rows[20].value, 1.0f);
+    EXPECT_EQ(first.rows[20].updated_at_monotonic_ns, 101u);
+
+    f.shm.ts_ns = 202;
+    f.shm.ui_value[0] = 2.5f;
+    f.shm.do_feedback[0] = 0;
+    f.resolver.set_ao(PRIO_LOCAL_MANUAL, 0, 6.0f);
+    f.loop.step();
+
+    const RuntimePointSnapshot second = f.web.snapshot_for_test();
+    EXPECT_EQ(second.snapshot_id, 2u);
+    EXPECT_FLOAT_EQ(second.rows[0].value, 2.5f);
+    EXPECT_EQ(second.rows[0].updated_at_monotonic_ns, 202u);
+    EXPECT_FLOAT_EQ(second.rows[16].value, 6.0f);
+    EXPECT_EQ(second.rows[16].source, SnapshotSource::MANUAL);
+    EXPECT_GT(second.rows[16].updated_at_monotonic_ns,
+              first.rows[16].updated_at_monotonic_ns);
+    EXPECT_FLOAT_EQ(second.rows[20].value, 0.0f);
+    EXPECT_EQ(second.rows[20].updated_at_monotonic_ns, 202u);
+}
+
+TEST(ScanLoop, PublishesPostSafeAoAndHardwareDoFeedback)
+{
+    Fixture f;
+    f.resolver.set_ao(PRIO_LOCAL_MANUAL, 0, 8.0f);
+    f.resolver.set_do(PRIO_LOCAL_MANUAL, 0, true);
+    f.shm.iop_status = KX_IOP_FAULT;
+    f.shm.ts_ns = 303;
+    f.shm.do_feedback[0] = 1;
+
+    f.loop.step();
+
+    const RuntimePointSnapshot snapshot = f.web.snapshot_for_test();
+    EXPECT_FLOAT_EQ(snapshot.rows[16].value, 0.0f);
+    EXPECT_EQ(snapshot.rows[16].source, SnapshotSource::SAFETY);
+    EXPECT_FLOAT_EQ(snapshot.rows[20].value, 1.0f);
+    EXPECT_EQ(snapshot.rows[20].role, SnapshotRole::HARDWARE_FEEDBACK);
+    EXPECT_EQ(f.shm.do_cmd[0], 0);
+}
+
+TEST(ScanLoop, WritesPhysicalOutputBeforeSnapshotPublication)
+{
+    Fixture f;
+    f.resolver.set_do(PRIO_LOCAL_MANUAL, 0, true);
+    f.web.set_snapshot_payload_limit_for_test(1);
+    bool output_written = false;
+    std::pair<kx_io_shm_t*, bool*> state{&f.shm, &output_written};
+    f.web.set_publish_observer_for_test(
+        [](void* context) {
+            auto* observed = static_cast<std::pair<kx_io_shm_t*, bool*>*>(context);
+            *observed->second = observed->first->do_cmd[0] == 1;
+        },
+        &state);
+
+    f.loop.step();
+
+    EXPECT_TRUE(output_written);
+    EXPECT_EQ(f.shm.do_cmd[0], 1);
+    EXPECT_EQ(f.web.snapshot_cache_state_for_test(), SnapshotCacheState::TOO_LARGE);
+}
+
+TEST(ScanLoop, TracksAoTimestampAcrossStableAndSourceChangedSteps)
+{
+    Fixture f;
+    f.resolver.set_ao(PRIO_LOCAL_MANUAL, 0, 5.0f);
+    f.tick_iobus();
+    f.loop.step();
+    const RuntimePointSnapshot first = f.web.snapshot_for_test();
+
+    f.tick_iobus();
+    f.loop.step();
+    const RuntimePointSnapshot stable = f.web.snapshot_for_test();
+    EXPECT_EQ(stable.rows[16].updated_at_monotonic_ns,
+              first.rows[16].updated_at_monotonic_ns);
+
+    f.resolver.release_ao(PRIO_LOCAL_MANUAL, 0);
+    f.resolver.set_ao(PRIO_SCHEDULE, 0, 5.0f);
+    f.tick_iobus();
+    f.loop.step();
+    const RuntimePointSnapshot changed_source = f.web.snapshot_for_test();
+    EXPECT_EQ(changed_source.rows[16].source, SnapshotSource::SCHEDULE);
+    EXPECT_GT(changed_source.rows[16].updated_at_monotonic_ns,
+              stable.rows[16].updated_at_monotonic_ns);
+}
+
+TEST(ScanLoop, ReusesProducerTimestampAfterSeqlockFailure)
+{
+    Fixture f;
+    f.shm.ts_ns = 700;
+    f.shm.ui_value[0] = 7.0f;
+    f.shm.do_feedback[0] = 1;
+    f.loop.step();
+    const RuntimePointSnapshot first = f.web.snapshot_for_test();
+
+    KX_WRITE_BEGIN(&f.shm);
+    f.shm.ts_ns = 800;
+    f.shm.ui_value[0] = 8.0f;
+    f.shm.do_feedback[0] = 0;
+    f.loop.step();
+    const RuntimePointSnapshot reused = f.web.snapshot_for_test();
+    KX_WRITE_END(&f.shm);
+
+    EXPECT_EQ(reused.snapshot_id, first.snapshot_id + 1);
+    EXPECT_FLOAT_EQ(reused.rows[0].value, 7.0f);
+    EXPECT_EQ(reused.rows[0].updated_at_monotonic_ns, 700u);
+    EXPECT_FLOAT_EQ(reused.rows[20].value, 1.0f);
+    EXPECT_EQ(reused.rows[20].updated_at_monotonic_ns, 700u);
+}
+
 TEST(ScanLoop, RunSyncsGraphDtToActualPeriod)
 {
     /* Yêu cầu fix timing: ScanLoop::run() phải sync dt của graph về chu kỳ thật */

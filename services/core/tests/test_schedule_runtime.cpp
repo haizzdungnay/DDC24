@@ -6,6 +6,7 @@
 
 #include <unistd.h>
 
+#include "clock_snapshot.hpp"
 #include "schedule_runtime.hpp"
 
 using namespace core;
@@ -275,6 +276,34 @@ TEST(ScheduleRuntime, AppliesActiveIntervalsByTarget)
     EXPECT_EQ(resolver.winning_do_level(1), PRIO_DEFAULT);
     EXPECT_EQ(table.get({PointKind::AV, 2}).source, PointSource::DEFAULT);
     EXPECT_EQ(table.get({PointKind::MSV, 0}).source, PointSource::DEFAULT);
+}
+
+TEST(ScheduleRuntime, UsesInjectedCivilTime)
+{
+    ScheduleConfig schedule;
+    schedule.id = "SCH-CLOCK";
+    schedule.enabled = true;
+    schedule.type = ScheduleType::AnalogOutputValue;
+    schedule.start_minute = 9 * 60;
+    schedule.end_minute = 11 * 60;
+    schedule.weekdays[0] = true;
+    schedule.target = {PointKind::AO, 0, "AO-01"};
+    schedule.value = 50.0;
+
+    ScheduleRuntime runtime;
+    runtime.configure({schedule});
+    IoSnapshot io;
+    PointTable table;
+    PriorityResolver resolver;
+    ClockSnapshot clock;
+    clock.civil_time.tm_wday = 1; // Monday
+    clock.civil_time.tm_hour = 10;
+    clock.civil_time.tm_mon = 0;
+    clock.civil_time.tm_mday = 15;
+
+    runtime.evaluate(clock, io, table, resolver);
+
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_SCHEDULE);
 }
 
 TEST(ScheduleRuntime, AppliesVirtualOutputTargets)

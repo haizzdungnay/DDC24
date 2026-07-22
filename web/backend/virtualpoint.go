@@ -92,6 +92,9 @@ func (a *App) handleCreateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 	if item.ID == "" {
 		item.ID = nextVirtualPointID(cfg.Items)
 	}
+	if strings.TrimSpace(item.Tag) == "" {
+		item.Tag = item.ID
+	}
 	beforeVP := clonePointVirtualConfig(cfg)
 	beforeIO, err := readConfig(a, configGroupIO, ConfigIO{})
 	if err != nil {
@@ -113,6 +116,9 @@ func (a *App) handleCreateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 	if err := a.writeVirtualPointsConfig(r, next, "create"); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if authority, err := a.readPointNamespaceAuthority(); err == nil {
+		item.Generation = authority.Generations[item.ID]
 	}
 	writeJSON(w, http.StatusCreated, item)
 }
@@ -206,6 +212,37 @@ func (a *App) handleDeleteVirtualPoint(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) writeVirtualPointsConfig(r *http.Request, cfg ConfigVirtualPoints, op string) error {
 	cfg = normalizeVirtualPointsConfig(cfg)
+	current, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	if err != nil {
+		return err
+	}
+	authority, err := a.readPointNamespaceAuthority()
+	if err != nil {
+		return err
+	}
+	currentGeneration := make(map[string]uint64, len(current.Items))
+	for _, point := range current.Items {
+		generation := point.Generation
+		if generation == 0 {
+			generation = authority.Generations[point.ID]
+		}
+		if generation == 0 {
+			generation = 1
+		}
+		currentGeneration[point.ID] = generation
+		if authority.Generations[point.ID] < generation {
+			authority.Generations[point.ID] = generation
+		}
+	}
+	for i := range cfg.Items {
+		generation := currentGeneration[cfg.Items[i].ID]
+		if generation == 0 {
+			generation = authority.Generations[cfg.Items[i].ID] + 1
+		}
+		cfg.Items[i].Generation = generation
+		authority.Generations[cfg.Items[i].ID] = generation
+	}
+	authority.Revision++
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode virtual points config: %w", err)
@@ -216,6 +253,9 @@ func (a *App) writeVirtualPointsConfig(r *http.Request, cfg ConfigVirtualPoints,
 		return fmt.Errorf("prepare config dir: %w", err)
 	}
 	if err := writeConfigFileAtomic(path, data, 0o644); err != nil {
+		return err
+	}
+	if err := a.writePointNamespaceAuthority(authority); err != nil {
 		return err
 	}
 	user := "-"
@@ -245,11 +285,12 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 			addConfigErr(&errs, base+".id", "must be unique")
 		}
 		ids[item.ID] = true
+		expectedChannel, channelOK := globalPointChannel(item.ID)
+		if item.Channel != 0 && (!channelOK || item.Channel != expectedChannel) {
+			addConfigErr(&errs, base+".channel", "must match the global channel derived from id")
+		}
 		if !validVirtualPointSignalType(item.SignalType) {
 			addConfigErr(&errs, base+".signalType", "must be boolean, integer, float, string, or datetime")
-		}
-		if _, _, err := normalizePointName(item.Label); err != nil {
-			errs = append(errs, configValidationError{Path: base + ".label", Message: err.Error(), Reason: "point_name_invalid", PointID: item.ID, Name: item.Label})
 		}
 		if item.LogEnabled {
 			if item.LogIntervalMs == nil {
@@ -314,7 +355,6 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 
 func defaultVirtualPoint() VirtualPoint {
 	return VirtualPoint{
-		Label:         "Virtual Point",
 		SignalType:    virtualPointSignalFloat,
 		Enabled:       true,
 		Writable:      true,
@@ -341,13 +381,12 @@ func normalizeVirtualPointsConfig(cfg ConfigVirtualPoints) ConfigVirtualPoints {
 
 func normalizeVirtualPoint(item VirtualPoint) VirtualPoint {
 	item.ID = canonicalVirtualPointID(item.ID)
+	item.Channel, _ = globalPointChannel(item.ID)
 	if display, _, err := normalizePointTag(fallbackPointTag(item.Tag, item.ID)); err == nil {
 		item.Tag = display
 	}
 	item.SignalType = strings.ToLower(strings.TrimSpace(item.SignalType))
-	if display, _, err := normalizePointName(item.Label); err == nil {
-		item.Label = display
-	}
+	item.Label = ""
 	item.Unit = normalizeVirtualPointUnit(item.Unit)
 	item.Note = strings.TrimSpace(item.Note)
 	if item.SignalType == "" {
@@ -566,8 +605,9 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 	}
 	return PointDTO{
 		ID:            item.ID,
+		Channel:       item.Channel,
 		Tag:           fallbackPointTag(item.Tag, item.ID),
-		Name:          item.Label,
+		Name:          fallbackPointTag(item.Tag, item.ID),
 		Kind:          "virtual",
 		Value:         value,
 		Unit:          item.Unit,

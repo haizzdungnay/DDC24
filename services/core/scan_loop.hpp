@@ -21,6 +21,7 @@
 #include "point_quality.hpp"
 #include "point_table.hpp"
 #include "priority_resolver.hpp"
+#include "runtime_point_snapshot.hpp"
 #include "safe_state.hpp"
 #include "schedule_runtime.hpp"
 #include "web_ipc.hpp"
@@ -66,6 +67,8 @@ private:
 
     ScanDeps d_;
     IoSnapshot last_io_;   /* giữ snapshot cũ khi seqlock fail */
+    RuntimePointSnapshotPublisher snapshot_publisher_;
+    uint64_t next_snapshot_id_ = 1;
     uint64_t budget_ns_ = 1000000000ull;   /* = period; overrun khi exec vượt */
     std::atomic<bool>* reload_flag_ = nullptr;
     void (*reload_fn_)(void*) = nullptr;

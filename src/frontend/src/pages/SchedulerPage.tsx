@@ -495,7 +495,7 @@ function virtualTargetOptions(virtualPoints: VirtualPoint[]): TargetOption[] {
     .filter(isSchedulableVirtualPoint)
     .map((item) => {
       const value = dashedVirtualPointId(item.id)
-      return { value, label: `${value} (${item.label || 'Virtual Point'})` }
+      return { value, label: item.tag }
     })
     .filter((item) => item.value !== '')
 }

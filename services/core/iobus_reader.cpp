@@ -63,6 +63,7 @@ bool IobusReader::read_from(const kx_io_shm_t* s, IoSnapshot* out)
         std::memcpy(out->ui_value, (const void*)s->ui_value, sizeof(out->ui_value));
         std::memcpy(out->ui_quality, (const void*)s->ui_quality, sizeof(out->ui_quality));
         std::memcpy(out->ui_reliability, (const void*)s->ui_reliability, sizeof(out->ui_reliability));
+        std::memcpy(out->ui_unit, (const void*)s->ui_unit, sizeof(out->ui_unit));
         std::memcpy(out->di_state, (const void*)s->di_state, sizeof(out->di_state));
         std::memcpy(out->di_counter, (const void*)s->di_counter, sizeof(out->di_counter));
         std::memcpy(out->do_feedback, (const void*)s->do_feedback, sizeof(out->do_feedback));

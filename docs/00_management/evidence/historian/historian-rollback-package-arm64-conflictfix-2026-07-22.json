@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "kind": "historian-rollback-package",
+  "packageMode": "prebuilt-native",
+  "generatedAtUtc": "2026-07-22T02:41:13.210859739Z",
+  "verificationHost": "linux/arm64",
+  "goCommandVersion": "",
+  "buildCommand": null,
+  "current": {
+    "name": "current",
+    "path": "/tmp/mkddc-web-conflictfix-current",
+    "sha256": "8d756f593eda7978072673b911c37a984956537c245078cc73348192b2b9136e",
+    "size": 16881392,
+    "goVersion": "go1.26.4",
+    "goos": "linux",
+    "goarch": "arm64",
+    "cgoEnabled": "0",
+    "buildSettings": {
+      "CGO_ENABLED": "0",
+      "GOARCH": "arm64",
+      "GOOS": "linux",
+      "vcs": "git",
+      "vcs.modified": "true",
+      "vcs.revision": "b15ee8b065ad4ae614e6a7b4a173a1dd4bbd64ff",
+      "vcs.time": "2026-07-15T12:41:31Z"
+    }
+  },
+  "rollback": {
+    "name": "rollback-candidate",
+    "path": "/tmp/mkddc-web-conflictfix-rollback",
+    "sha256": "8d756f593eda7978072673b911c37a984956537c245078cc73348192b2b9136e",
+    "size": 16881392,
+    "goVersion": "go1.26.4",
+    "goos": "linux",
+    "goarch": "arm64",
+    "cgoEnabled": "0",
+    "buildSettings": {
+      "CGO_ENABLED": "0",
+      "GOARCH": "arm64",
+      "GOOS": "linux",
+      "vcs": "git",
+      "vcs.modified": "true",
+      "vcs.revision": "b15ee8b065ad4ae614e6a7b4a173a1dd4bbd64ff",
+      "vcs.time": "2026-07-15T12:41:31Z"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "/data/config/historian-v2-migration/historian-cutover-20260721T082943Z/legacy-final.sqlite",
+      "role": "artifact",
+      "sha256Before": "c540256ac2ecebe1ec276d039cb604873dd5c7f9060925f3e4f779020fb1a1cc",
+      "sha256After": "c540256ac2ecebe1ec276d039cb604873dd5c7f9060925f3e4f779020fb1a1cc",
+      "sizeBefore": 46182400,
+      "sizeAfter": 46182400,
+      "unchanged": true
+    },
+    {
+      "path": "/data/config/historian-v2-migration/historian-cutover-20260721T082943Z/legacy-final.sqlite-shm",
+      "role": "artifact",
+      "sha256Before": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+      "sha256After": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+      "sizeBefore": 32768,
+      "sizeAfter": 32768,
+      "unchanged": true
+    },
+    {
+      "path": "/data/config/historian-v2-migration/historian-cutover-20260721T082943Z/legacy-final.sqlite-wal",
+      "role": "artifact",
+      "sha256Before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256After": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBefore": 0,
+      "sizeAfter": 0,
+      "unchanged": true
+    },
+    {
+      "path": "/data/config/historian-v2-migration/historian-cutover-20260721T082943Z/manifest-final.json",
+      "role": "artifact",
+      "sha256Before": "65e06b57d44e4ac7c03331d83c2efeb9595ea863382b0c8d19d44481bc4f3c3a",
+      "sha256After": "65e06b57d44e4ac7c03331d83c2efeb9595ea863382b0c8d19d44481bc4f3c3a",
+      "sizeBefore": 9145,
+      "sizeAfter": 9145,
+      "unchanged": true
+    },
+    {
+      "path": "/tmp/conflictfix-active.sqlite",
+      "role": "sqlite-fixture",
+      "sha256Before": "b5f612e0894ef00c3bfc91032bd463ca5b1edd3e5aae3887958446e50564ffa1",
+      "sha256After": "b5f612e0894ef00c3bfc91032bd463ca5b1edd3e5aae3887958446e50564ffa1",
+      "sizeBefore": 90005504,
+      "sizeAfter": 90005504,
+      "unchanged": true,
+      "currentVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"active\",\"writerV2\":true,\"queryV2\":true,\"legacyWriterAllowed\":false,\"evidenceBound\":true}",
+      "rollbackVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"active\",\"writerV2\":true,\"queryV2\":true,\"legacyWriterAllowed\":false,\"evidenceBound\":true}"
+    },
+    {
+      "path": "/tmp/conflictfix-active.sqlite-shm",
+      "role": "artifact",
+      "sha256Before": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+      "sha256After": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+      "sizeBefore": 32768,
+      "sizeAfter": 32768,
+      "unchanged": true
+    },
+    {
+      "path": "/tmp/conflictfix-active.sqlite-wal",
+      "role": "artifact",
+      "sha256Before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256After": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBefore": 0,
+      "sizeAfter": 0,
+      "unchanged": true
+    },
+    {
+      "path": "/tmp/conflictfix-legacy.sqlite",
+      "role": "sqlite-fixture",
+      "sha256Before": "e261bf9e2a5f3baa9da6f00a35f31681e0349acef5963ada52c731399851b60d",
+      "sha256After": "e261bf9e2a5f3baa9da6f00a35f31681e0349acef5963ada52c731399851b60d",
+      "sizeBefore": 90005504,
+      "sizeAfter": 90005504,
+      "unchanged": true,
+      "currentVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"legacy\",\"writerV2\":false,\"queryV2\":false,\"legacyWriterAllowed\":true,\"evidenceBound\":false}",
+      "rollbackVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"legacy\",\"writerV2\":false,\"queryV2\":false,\"legacyWriterAllowed\":true,\"evidenceBound\":false}"
+    }
+  ]
+}

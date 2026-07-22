@@ -1,0 +1,177 @@
+{
+  "canary": {
+    "isolated": true,
+    "loginStatus": 200,
+    "port": 18081,
+    "processStopped": true,
+    "statusUnauthenticated": 401
+  },
+  "candidate": {
+    "path": "/opt/mkddc-web/mkddc-web",
+    "sha256": "f666b3cb1083a43e59c27e6f4e9709d1d78f37d5536711ceb079ceb7469734b9",
+    "size": 17024886
+  },
+  "checkpoint": {
+    "path": "/data/config/historian-v2-migration/historian-trendscache-allpoints-20260722T065257Z/predeploy/historian-v2-predeploy.sqlite",
+    "quickCheck": "ok",
+    "schemaVersion": 5,
+    "sha256": "222234b44f16ccf1d9614b666ef555cd25c1fde558e0b9266195ea40d747e7f1"
+  },
+  "deltasFromCheckpoint": {
+    "gapCount": 9,
+    "hotCount": 102,
+    "legacyCount": 0
+  },
+  "deployment": {
+    "loginStatus": 200,
+    "port": 8081,
+    "readyUtc": "2026-07-22T07:01:58Z",
+    "rollbackTriggered": false,
+    "services": {
+      "mkddc-core": {
+        "active": "active",
+        "exitStatus": 0,
+        "pid": 1376,
+        "restarts": 0,
+        "sub": "running"
+      },
+      "mkddc-iobus": {
+        "active": "active",
+        "exitStatus": 0,
+        "pid": 979,
+        "restarts": 0,
+        "sub": "running"
+      },
+      "mkddc-web-pi": {
+        "active": "active",
+        "exitStatus": 0,
+        "pid": 68951,
+        "restarts": 0,
+        "sub": "running"
+      }
+    },
+    "statusUnauthenticated": 401,
+    "stopUtc": "2026-07-22T07:01:49Z"
+  },
+  "generatedAtUtc": "2026-07-22T07:06:34Z",
+  "journalCountsSinceDeploy": {
+    "SQLITE_BUSY": 0,
+    "alarms_read degraded": 0,
+    "core unavailable": 0,
+    "hot sample conflict": 0,
+    "pending_hot_overflow": 0,
+    "snapshot": 0
+  },
+  "kind": "historian-trendscache-allpoints-postdeploy-verification",
+  "packageManifest": {
+    "artifacts": 5,
+    "candidateSha256": "f666b3cb1083a43e59c27e6f4e9709d1d78f37d5536711ceb079ceb7469734b9",
+    "packageMode": "prebuilt-native",
+    "path": "/data/config/historian-v2-migration/historian-trendscache-allpoints-20260722T065257Z/package/evidence/historian-rollback-package-evidence.json",
+    "rollbackSha256": "f666b3cb1083a43e59c27e6f4e9709d1d78f37d5536711ceb079ceb7469734b9",
+    "sha256": "1faccebcf8c10b890ad2ccc7f5c7f15755f8a8a72bd7aba68a14fa67f8b2e2cf",
+    "unchanged": true,
+    "verificationHost": "linux/arm64"
+  },
+  "postDeployDatabase": {
+    "activation": {
+      "config_sha256": "<bytes:32>",
+      "legacy_quiesced": 1,
+      "migration_verified": 1,
+      "policy_revision": 3,
+      "prune_enabled": 0,
+      "reconciled_at_utc_ms": 1784623364013,
+      "singleton": 1,
+      "stable_utc_ms": 1784623205852,
+      "state": "active",
+      "writer_authority": "v2"
+    },
+    "gapCount": 3419,
+    "hotCount": 468722,
+    "legacyCount": 596284,
+    "maxHotBucketUtcMs": 1784703990000,
+    "quickCheck": "ok"
+  },
+  "predeployManifest": {
+    "path": "/data/config/historian-v2-migration/historian-trendscache-allpoints-20260722T065257Z/predeploy-checkpoint.json",
+    "sha256": "afcd0290a7a4a24a455f3ba978e00043eda393183b4b714f0ef6d8a64a7b85ff"
+  },
+  "previousSoak": {
+    "complete": false,
+    "reason": "owner-approved all-point cache visibility rollout",
+    "summaryPath": "/data/config/historian-v2-migration/historian-trendscache-20260722T034500Z/soak-24h/summary.json",
+    "summarySha256": "1d3b86e07a15fd85ddf8571937f073414c62f50dfc1711c0fbbe9e8ce0ef00ec",
+    "unit": "mkddc-historian-soak-trendscache.service"
+  },
+  "schemaVersion": 1,
+  "sourceRouting": {
+    "cache24h": {
+      "complete": false,
+      "from": "2026-07-21T07:05:01Z",
+      "gapCount": 1771,
+      "sampleCounts": {
+        "UI-01": 451,
+        "UI-02": 93,
+        "UI-06": 93
+      },
+      "seriesIds": [
+        "UI-01",
+        "UI-02",
+        "UI-06"
+      ],
+      "status": 200,
+      "tiersUsed": [
+        "cache"
+      ],
+      "to": "2026-07-22T07:05:01Z"
+    },
+    "cacheRecent": {
+      "complete": false,
+      "from": "2026-07-22T07:00:01Z",
+      "gapCount": 1,
+      "sampleCounts": {
+        "UI-01": 19,
+        "UI-02": 13,
+        "UI-06": 13
+      },
+      "seriesIds": [
+        "UI-01",
+        "UI-02",
+        "UI-06"
+      ],
+      "status": 200,
+      "tiersUsed": [
+        "cache"
+      ],
+      "to": "2026-07-22T07:05:01Z"
+    },
+    "contract": {
+      "cacheSeries": [
+        "UI-01",
+        "UI-02",
+        "UI-06"
+      ],
+      "customDatabaseOnly": true,
+      "databaseRecentSeries": [
+        "UI-01"
+      ]
+    },
+    "databaseRecent": {
+      "complete": false,
+      "from": "2026-07-22T07:00:01Z",
+      "gapCount": 1,
+      "sampleCounts": {
+        "UI-01": 18
+      },
+      "seriesIds": [
+        "UI-01"
+      ],
+      "status": 200,
+      "tiersUsed": [
+        "hot"
+      ],
+      "to": "2026-07-22T07:05:01Z"
+    }
+  },
+  "windowId": "historian-trendscache-allpoints-20260722T065257Z"
+}

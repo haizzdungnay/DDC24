@@ -41,6 +41,31 @@ type ConfigTime struct {
 	NTPEnabled bool     `json:"ntp_enabled"`
 	NTPServers []string `json:"ntp_servers"`
 	SystemTime string   `json:"system_time"`
+	Revision   uint64   `json:"revision"`
+}
+
+type ConfigTimeUpdate struct {
+	Timezone     string   `json:"timezone"`
+	NTPEnabled   bool     `json:"ntp_enabled"`
+	NTPServers   []string `json:"ntp_servers"`
+	SystemTime   string   `json:"system_time"`
+	BaseRevision uint64   `json:"baseRevision"`
+	OperationID  string   `json:"operationId"`
+}
+
+type TimeStatus struct {
+	NowUTC       string   `json:"nowUtc"`
+	NowLocal     string   `json:"nowLocal"`
+	Timezone     string   `json:"timezone"`
+	Mode         string   `json:"mode"`
+	Synchronized bool     `json:"synchronized"`
+	Source       *string  `json:"source"`
+	OffsetMS     *float64 `json:"offsetMs"`
+	LastSyncUTC  *string  `json:"lastSyncUtc"`
+	RTCPresent   bool     `json:"rtcPresent"`
+	RTCUTC       *string  `json:"rtcUtc"`
+	Health       string   `json:"health"`
+	Warnings     []string `json:"warnings"`
 }
 
 type ConfigVirtualPoints struct {
@@ -49,8 +74,10 @@ type ConfigVirtualPoints struct {
 
 type VirtualPoint struct {
 	ID              string  `json:"id"`
+	Generation      uint64  `json:"generation"`
+	Channel         int     `json:"channel"`
 	Tag             string  `json:"tag"`
-	Label           string  `json:"label"`
+	Label           string  `json:"label,omitempty"`
 	SignalType      string  `json:"signalType"`
 	Enabled         bool    `json:"enabled"`
 	Writable        bool    `json:"writable"`
@@ -207,6 +234,64 @@ type RuntimePoint struct {
 	Generation           uint64 `json:"generation"`
 }
 
+type RuntimePointSnapshot struct {
+	SnapshotID            uint64         `json:"snapshotId"`
+	SnapshotObservedAtUTC string         `json:"snapshotObservedAtUtc"`
+	CapturedMonotonicNs   uint64         `json:"capturedMonotonicNs"`
+	Points                []RuntimePoint `json:"points"`
+}
+
+type HistorianPolicyPatch struct {
+	PointID          string `json:"pointId"`
+	Generation       uint64 `json:"generation"`
+	DBLoggingEnabled bool   `json:"dbLoggingEnabled"`
+	DBInterval       string `json:"dbInterval,omitempty"`
+	// RetentionDays is optional for backwards-compatible callers. A non-zero
+	// value selects a rolling retention window bounded by the interval maximum.
+	RetentionDays    int     `json:"retentionDays,omitempty"`
+	StartAtUTC       *string `json:"startAtUtc"`
+	retentionDaysSet bool
+}
+
+type HistorianConfigUpdate struct {
+	BaseRevision          uint64                 `json:"baseRevision"`
+	BaseNamespaceRevision uint64                 `json:"baseNamespaceRevision"`
+	Points                []HistorianPolicyPatch `json:"points"`
+}
+
+type HistorianPolicy struct {
+	PointID          string `json:"pointId"`
+	Generation       uint64 `json:"generation"`
+	DBLoggingEnabled bool   `json:"dbLoggingEnabled"`
+	DBInterval       string `json:"dbInterval"`
+	RetentionDays    int    `json:"retentionDays"`
+	MaxRetentionDays int    `json:"maxRetentionDays"`
+	HotCacheEnabled  bool   `json:"hotCacheEnabled"`
+	HotCacheHours    int    `json:"hotCacheHours"`
+	StartAtUTC       string `json:"startAtUtc"`
+	State            string `json:"state"`
+	Health           string `json:"health"`
+	LastError        string `json:"lastError,omitempty"`
+}
+
+type HistorianCapacity struct {
+	EnabledPoints     int    `json:"enabledPoints"`
+	ReservedBytes     uint64 `json:"reservedBytes"`
+	BudgetBytes       uint64 `json:"budgetBytes"`
+	FreeBytes         uint64 `json:"freeBytes"`
+	RequiredFreeBytes uint64 `json:"requiredFreeBytes"`
+}
+
+type HistorianConfig struct {
+	Revision                   uint64            `json:"revision"`
+	ServerNowUTC               string            `json:"serverNowUtc"`
+	Points                     []HistorianPolicy `json:"points"`
+	Capacity                   HistorianCapacity `json:"capacity"`
+	NamespaceState             string            `json:"namespaceState,omitempty"`
+	NamespaceRevision          uint64            `json:"namespaceRevision"`
+	RetentionMaxDaysByInterval map[string]int    `json:"retentionMaxDaysByInterval"`
+}
+
 type PointConfigPatch struct {
 	Tag  *string `json:"tag,omitempty"`
 	Name *string `json:"name,omitempty"`
@@ -214,6 +299,7 @@ type PointConfigPatch struct {
 
 type PointDTO struct {
 	ID            string   `json:"id"`
+	Channel       int      `json:"channel"`
 	Tag           string   `json:"tag"`
 	Name          string   `json:"name"`
 	Kind          string   `json:"kind"`

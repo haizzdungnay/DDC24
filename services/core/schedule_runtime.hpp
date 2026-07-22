@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "clock_snapshot.hpp"
 #include "iobus_reader.hpp"
 #include "point_table.hpp"
 #include "priority_resolver.hpp"
@@ -53,6 +54,8 @@ public:
     void configure(std::vector<ScheduleConfig> schedules);
 
     void evaluate(const IoSnapshot& io, PointTable& table, PriorityResolver& resolver);
+    void evaluate(const ClockSnapshot& clock, const IoSnapshot& io, PointTable& table,
+                  PriorityResolver& resolver);
     void evaluate_week_minute(int week_minute, const IoSnapshot& io,
                               PointTable& table, PriorityResolver& resolver);
     void evaluate_at(int week_minute, ScheduleDate date, const IoSnapshot& io,

@@ -1,7 +1,7 @@
 ﻿openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.6.0"
+  version: "1.8.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -10,9 +10,11 @@ info:
     BE-B5 2026-06-18: Má»Ÿ contract chi tiáº¿t cho cáº¥u hÃ¬nh (/system/config/*) vÃ  users CRUD, password self-service.
     2026-06-18: thÃªm aggregate /network cho trang Network.
     2026-07-15: thÃªm per-point historian policy/start scheduling, unified UTC history query vÃ  global display-name uniqueness.
+    2026-07-22: thÃªm explicit historian source routing cho Trends cache 24h vÃ  Custom database.
+    2026-07-20: thÃªm retentionDays theo interval, maxRetentionDays vÃ  retentionMaxDaysByInterval cho historian policy.
 x-revision:
-  date: "2026-07-15"
-  note: "v1.6.0 adds ADR-018 v1.1 historian scheduling/unified query and ADR-019 v1.1 display-name uniqueness."
+  date: "2026-07-20"
+  note: "v1.7.0 adds selectable per-point historian retention bounded by the interval maximum; physical rolling prune remains activation-gated."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -457,7 +459,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/ConfigTime" }
+            schema: { $ref: "#/components/schemas/ConfigTimeUpdate" }
       responses:
         "200":
           description: OK
@@ -465,6 +467,18 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigPutResult" }
         "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /system/time/status:
+    get:
+      summary: Read controller clock, NTP and RTC status
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: Current controller time status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TimeStatus" }
+        "503": { $ref: "#/components/responses/Error" }
   /users:
     get:
       summary: Danh sÃ¡ch user (admin)
@@ -593,7 +607,9 @@ paths:
       summary: Unified historian query by point and explicit UTC range (viewer+)
       description: >
         Backend merges RAM tail, 48-hour hot SQLite and archive tiers. Bounds are half-open
-        [from,to); frontend never selects or merges tiers. Point IDs are canonical only.
+        [from,to); frontend never merges tiers. Trends presets explicitly request the bounded
+        24-hour RAM presentation cache, while Custom explicitly requests SQLite/archive database
+        history. Omitting source preserves the unified compatibility query. Point IDs are canonical only.
       x-rbac: [viewer, operator, admin]
       parameters:
         - name: point
@@ -620,6 +636,11 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 5000, default: 5000 }
+        - name: source
+          in: query
+          required: false
+          description: "`cache` is limited to 24 hours; `database` excludes RAM/cache tiers."
+          schema: { type: string, enum: [cache, database] }
       responses:
         "200":
           description: Complete or partial merged history. Partial results set complete=false and include gaps.
@@ -640,9 +661,14 @@ paths:
         - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
         - { name: resolution, in: query, required: false, schema: { $ref: "#/components/schemas/HistorianInterval" } }
         - { name: maxPoints, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 5000, default: 5000 } }
+        - { name: source, in: query, required: false, schema: { type: string, enum: [cache, database] } }
       responses:
         "200":
-          description: Streamed merged history CSV.
+          description: >
+            Streamed merged history CSV. Comment header rows begin with `#` and carry
+            from/to/complete/tiersUsed; gap rows use `# gap,...`. Data columns are
+            pointId,generation,time,value,min,max,sum,count,quality,source,tier and use
+            RFC 4180 escaping. Data, metadata and gaps come from the same iterator as JSON.
           content:
             text/csv:
               schema: { type: string }
@@ -665,7 +691,9 @@ paths:
       summary: Atomically update per-point database historian policies (admin)
       description: >
         Validates the whole batch including base revision, point generation, namespace,
-        interval, future start, capacity and free-space. Failure leaves the prior revision active.
+        interval, selected retentionDays (1..the interval maximum), future start, capacity and
+        free-space. Failure leaves the prior revision active. Invalid retention returns the
+        structured `historian_retention_invalid` error code.
       x-rbac: [admin]
       requestBody:
         required: true
@@ -993,7 +1021,9 @@ components:
             - point_namespace_conflicted
             - point_channel_conflict
             - config_conflict
+            - historian_policy_invalid
             - historian_interval_invalid
+            - historian_retention_invalid
             - historian_start_in_past
             - historian_generation_conflict
             - historian_capacity_exceeded
@@ -1429,11 +1459,43 @@ components:
         slaves: { type: array, items: { type: object, additionalProperties: true } }
     ConfigTime:
       type: object
+      required: [timezone, ntp_enabled, ntp_servers, system_time, revision]
       properties:
         timezone: { type: string }
         ntp_enabled: { type: boolean }
         ntp_servers: { type: array, items: { type: string } }
         system_time: { type: string, format: date-time, description: "Cho phÃ©p set giá» thá»§ cÃ´ng" }
+        revision: { type: integer, format: int64, minimum: 1 }
+    ConfigTimeUpdate:
+      type: object
+      additionalProperties: false
+      required: [timezone, ntp_enabled, ntp_servers, system_time, baseRevision, operationId]
+      properties:
+        timezone: { type: string, maxLength: 64 }
+        ntp_enabled: { type: boolean }
+        ntp_servers:
+          type: array
+          maxItems: 4
+          items: { type: string, maxLength: 253 }
+        system_time: { type: string, description: "One-shot RFC3339 instant with offset; empty when NTP is enabled" }
+        baseRevision: { type: integer, format: int64, minimum: 1 }
+        operationId: { type: string, minLength: 1, maxLength: 64 }
+    TimeStatus:
+      type: object
+      required: [nowUtc, nowLocal, timezone, mode, synchronized, rtcPresent, health, warnings]
+      properties:
+        nowUtc: { type: string, format: date-time }
+        nowLocal: { type: string, format: date-time }
+        timezone: { type: string }
+        mode: { type: string, enum: [ntp, manual] }
+        synchronized: { type: boolean }
+        source: { type: [string, "null"] }
+        offsetMs: { type: [number, "null"] }
+        lastSyncUtc: { type: [string, "null"], format: date-time }
+        rtcPresent: { type: boolean }
+        rtcUtc: { type: [string, "null"], format: date-time }
+        health: { type: string, enum: [healthy, degraded, fault, unknown] }
+        warnings: { type: array, items: { type: string } }
     HistorianInterval:
       type: string
       enum: [auto, 1s, 3s, 5s, 15s, 30s, 1m, 3m, 5m, 15m, 30m, 60m]
@@ -1452,10 +1514,12 @@ components:
         - dbLoggingEnabled
         - dbInterval
         - retentionDays
+        - maxRetentionDays
         - hotCacheEnabled
         - hotCacheHours
         - startAtUtc
         - state
+        - health
       properties:
         pointId: { type: string, example: "VP2" }
         generation: { type: integer, minimum: 1 }
@@ -1463,7 +1527,15 @@ components:
         dbInterval:
           allOf: [ { $ref: "#/components/schemas/HistorianInterval" } ]
           description: Explicit value only; auto is invalid for policy updates.
-        retentionDays: { type: integer, minimum: 180, default: 180 }
+        retentionDays:
+          type: integer
+          minimum: 1
+          description: Selected rolling window in days; must not exceed maxRetentionDays. Omitted patch values preserve the current selection or default to the interval maximum.
+        maxRetentionDays:
+          type: integer
+          minimum: 1
+          readOnly: true
+          description: Product cap for this point's selected dbInterval.
         hotCacheEnabled: { type: boolean, default: true }
         hotCacheHours: { type: integer, minimum: 1, default: 48 }
         startAtUtc:
@@ -1472,6 +1544,9 @@ components:
           description: Concrete backend-authoritative UTC start persisted after commit.
         state: { $ref: "#/components/schemas/HistorianPolicyState" }
         health: { type: string, enum: [healthy, degraded, error] }
+        lastError: { type: string, description: "Latest historian health error; empty or omitted while healthy." }
+        lastSampleUtc: { type: string, format: date-time }
+        nextBoundaryUtc: { type: string, format: date-time }
     HistorianPolicyPatch:
       type: object
       required: [pointId, generation, dbLoggingEnabled]
@@ -1482,6 +1557,10 @@ components:
         dbInterval:
           type: string
           enum: [1s, 3s, 5s, 15s, 30s, 1m, 3m, 5m, 15m, 30m, 60m]
+        retentionDays:
+          type: integer
+          minimum: 1
+          description: Optional rolling window in days; backend rejects values above the interval maximum with historian_retention_invalid.
         startAtUtc:
           type: [string, "null"]
           format: date-time
@@ -1497,7 +1576,7 @@ components:
         requiredFreeBytes: { type: integer, minimum: 0 }
     HistorianConfig:
       type: object
-      required: [revision, serverNowUtc, points, capacity]
+      required: [revision, serverNowUtc, points, capacity, namespaceRevision, retentionMaxDaysByInterval]
       properties:
         revision: { type: integer, minimum: 0 }
         serverNowUtc: { type: string, format: date-time }
@@ -1506,11 +1585,19 @@ components:
           items: { $ref: "#/components/schemas/HistorianPolicy" }
         capacity: { $ref: "#/components/schemas/HistorianCapacity" }
         namespaceState: { type: string, enum: [valid, conflicted] }
+        namespaceRevision: { type: integer, minimum: 0 }
+        retentionMaxDaysByInterval:
+          type: object
+          readOnly: true
+          description: Rev A maximum rolling retention by canonical interval.
+          additionalProperties: { type: integer, minimum: 1 }
+          example: { "1s": 30, "3s": 60, "5s": 90, "15s": 180, "30s": 365, "1m": 730, "3m": 1095, "5m": 1460, "15m": 1825, "30m": 2555, "60m": 3650 }
     HistorianConfigUpdate:
       type: object
-      required: [baseRevision, points]
+      required: [baseRevision, baseNamespaceRevision, points]
       properties:
         baseRevision: { type: integer, minimum: 0 }
+        baseNamespaceRevision: { type: integer, minimum: 0 }
         points:
           type: array
           minItems: 1
@@ -1527,7 +1614,7 @@ components:
         count: { type: integer, minimum: 1 }
         quality: { type: string, enum: [GOOD, UNCERTAIN, BAD] }
         source: { type: string }
-        tier: { type: string, enum: [ram, hot, archive] }
+        tier: { type: string, enum: [cache, ram, hot, archive] }
         generation: { type: integer, minimum: 1 }
     HistorySeries:
       type: object
@@ -1567,7 +1654,7 @@ components:
         tiersUsed:
           type: array
           uniqueItems: true
-          items: { type: string, enum: [ram, hot, archive] }
+          items: { type: string, enum: [cache, ram, hot, archive] }
     ScheduleTarget:
       type: object
       required: [kind]

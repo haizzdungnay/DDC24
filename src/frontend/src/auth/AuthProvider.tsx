@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type React from 'react'
 import { API_ORIGIN, AUTH_MODE, IS_DEMO } from '../config'
 import { setAuthHeaderProvider } from '../api/client'
+import { setHistoryAuthHeaderProvider } from '../api/history'
 import type { UserRole } from '../types'
 
 interface Session {
@@ -34,11 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setAuthHeaderProvider(getAuthHeader)
+    setHistoryAuthHeaderProvider(getAuthHeader)
   }, [getAuthHeader])
 
   useEffect(() => {
     const handler = () => {
       setAuthHeaderProvider(() => ({}))
+      setHistoryAuthHeaderProvider(() => ({}))
       setSession(null)
     }
     window.addEventListener('mkddc:auth-expired', handler)
@@ -64,12 +67,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
     if (!response.ok) throw new Error('Đăng nhập thất bại')
     const body = await response.json() as { token?: string; role?: UserRole }
-    if (body.token) setAuthHeaderProvider(() => ({ Authorization: `Bearer ${body.token}` }))
+    if (body.token) {
+      const provider = () => ({ Authorization: `Bearer ${body.token}` })
+      setAuthHeaderProvider(provider)
+      setHistoryAuthHeaderProvider(provider)
+    }
     setSession({ username, role: body.role ?? 'admin', token: body.token })
   }, [])
 
   const logout = useCallback(() => {
     setAuthHeaderProvider(() => ({}))
+    setHistoryAuthHeaderProvider(() => ({}))
     setSession(null)
   }, [])
 

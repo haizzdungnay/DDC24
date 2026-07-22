@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Point table + scan loop + priority/safe-state
 
 > **Document ID:** IMPL-CORE-MK-DDC-24-VI
-> **Phiên bản:** 1.10 | 2026-07-15 (COR-HIST-001 coherent runtime snapshot planned; point-count drift corrected) · 1.9 | 2026-06-27 (COR-011 done) · 1.5 | 2026-06-13 (S7 #4/#5/#6 docs: stateful graph, BACnet, Modbus; fix priority test web=mức 2) ·
+> **Phiên bản:** 1.11 | 2026-07-17 (COR-HIST-001 core/local Done; target historian E2E remains open) · 1.10 | 2026-07-15 (COR-HIST-001 coherent runtime snapshot planned; point-count drift corrected) · 1.9 | 2026-06-27 (COR-011 done) · 1.5 | 2026-06-13 (S7 #4/#5/#6 docs: stateful graph, BACnet, Modbus; fix priority test web=mức 2) ·
 > 1.4 | 2026-06-12 (§8: web_ipc đủ overridden + audit COR-007, SIGHUP reload
 > COR-008; §9: unit file thật packaging/systemd + ExecReload — SKEL-005) ·
 > 1.3 | 2026-06-12 (graph_runtime implemented Rev A subset; T6/T7 implemented;
@@ -395,7 +395,7 @@ socket CHỈ dùng cho command write/release.
 - ĐÃ implement đủ 3 result 2026-06-12 (COR-007). source=bacnet: thêm vào web_ipc cùng BAC-006.
 ```
 
-### 8.1 Coherent historian snapshot IPC (`COR-HIST-001`, PLANNED)
+### 8.1 Coherent historian snapshot IPC (`COR-HIST-001`, DONE — core/local)
 
 Core không ghi SQLite. Web historian yêu cầu một snapshot physical bất biến từ cùng scan, sau priority resolve + safe-state.
 
@@ -408,23 +408,39 @@ Request:
 Response:
 
 ```json
-{"id":1,"result":"accepted","snapshotId":42,"snapshotObservedAtUtc":"2026-07-15T10:00:00Z","points":[{"id":"AO-01","kind":"AO","value":5.0,"quality":"GOOD","source":"manual","role":"resolved_setpoint","unit":"V","updatedAtMonotonicNs":1234,"generation":1}]}
+{"id":1,"result":"accepted","snapshotId":42,"snapshotObservedAtUtc":"2026-07-15T10:00:00.000Z","capturedMonotonicNs":1200,"points":[{"id":"AO-01","kind":"AO","value":5.0,"quality":"GOOD","source":"manual","role":"resolved_setpoint","unit":"V","updatedAtMonotonicNs":1234,"generation":1}]}
 ```
 
 Rules:
 
-- one request returns UI-01..16 engineering values, AO-01..04 resolved setpoints and DO-01..04 hardware feedback from one scan;
-- optional DI keeps kind `DI` but is excluded from the 2026-07-15 DB-logging scope until SKU contract amendment;
+- one request returns exactly 24 rows: UI-01..16 engineering values, AO-01..04 post-safe resolved setpoints and DO-01..04 hardware feedback from one completed scan;
+- DI is deferred until capability authority/SKU contract defines its runtime source; Rev A response does not emit DI rows;
 - each point carries `quality/source/role/unit/updatedAtMonotonicNs/generation`;
+- wire quality is uppercase `GOOD`/`UNCERTAIN`/`BAD`; non-finite values serialize as JSON `null` with `BAD`;
+- UI and DO source is `io`; AO source is actual winner `safety`/`manual`/`bacnet`/`schedule`/`logic`/`default` after priority resolve and safe-state;
+- `generation=1` is fixed for Rev A physical rows; canonical ID plus generation remains historian identity;
 - core does not read config display name/tag and does not union backend VP;
 - web copies VP runtime registry immediately after core response and freezes both producers into one web snapshot;
 - no sequential per-point reads; no stale authoring VP value;
-- snapshot operation is read-only, cannot block scan, and gets bounded response size/test coverage;
-- canonical ID + generation is historian identity; metadata rename does not change generation.
+- snapshot operation is strictly parsed top-level JSON and read-only; malformed/duplicate/wrong-type requests are rejected and no point/priority state mutates;
+- server caps 4 clients, 4 accepts/scan, 64 KiB read/scan, 16 KiB read/client, 64 lines/scan, 16 lines/client, 64 KiB write/scan and 16 KiB write/client with rotating client start; one snapshot is accepted per drain;
+- physical AO/DO output is written before nonessential snapshot model serialization/publication;
+- cached payload is serialized once per publication into a fixed 65,536-byte buffer with no heap allocation on the zero-client per-scan path, retained over partial writes/half-close, and fatal send/input-cap states close deterministically;
+- synthetic worst-width stress fixture produces a 6,427-byte accepted JSON line including newline; its schedule source and max generation are not legal Rev A runtime metadata, so this is bounded host-stress evidence, not a runtime/protocol maximum.
 
-Tests: `test_web_ipc.cpp` snapshot JSON/escaping/bounds; `test_runtime_point_snapshot.cpp` one-scan coherence, AO source, DO feedback, UI quality, optional DI capability and generation. Product implementation remains blocked until Plan 42 phase/TDD gate.
+Evidence commands (WSL/Ninja, Release):
 
-Trạng thái: ĐÃ duyệt 2026-07-15 — contract planned; product code not Done.
+```bash
+cmake -S services/core -B build/core-release-task5-on -G Ninja -DCMAKE_BUILD_TYPE=Release -DCORE_BUILD_TESTS=ON
+cmake --build build/core-release-task5-on -j2
+ctest --test-dir build/core-release-task5-on --output-on-failure
+cmake -S services/core -B build/core-release-task5-off -G Ninja -DCMAKE_BUILD_TYPE=Release -DCORE_BUILD_TESTS=OFF
+cmake --build build/core-release-task5-off -j2
+```
+
+Local result 2026-07-17: full Release CTest 209/209; focused RuntimePointSnapshot/WebIpc/ScanLoop 64/64; production OFF build pass; `git diff --check` pass. Tests cover coherence, output-before-publication ordering, timestamp transitions and bounds, seqlock reuse, strict JSON, UTF-8/units, non-finite values, zero allocations across 1,000 warmed model builds plus zero-client publications, socket quotas and cached serialization.
+
+Trạng thái: **DONE 2026-07-17 cho COR-HIST-001 core/local gates**. Không đổi `shared/mkddc_shm.h`, không SQLite/DB dependency, không backend/FE change. Không claim board jitter hoặc historian release: `WEB-HIST-001..005` và `E2E-HIST-001` vẫn mở; target-board NFR/eMMC/recovery thuộc E2E evidence.
 
 **SIGHUP reload (CONFIG_SCHEMA D-5 — `io_safe_state.conf` → SIGHUP core, ĐÃ implement 2026-06-12, COR-008):**
 ```
@@ -634,7 +650,7 @@ bool ExtCache::lookup(const NodeParams& p, ExtPoint* out);
 Trạng thái: ĐÃ làm 2026-06-17 — BAC-004 (bacnet_objtable publish+read_ext), web_ipc source=bacnet mức 3, fieldbus.sock SOCK_DGRAM mở trong main.cpp, scan_loop step 3 ext socket + step 4 cmd.prio routing; 106 core test pass.
 
 ---
-**Rev** 1.10 | 2026-07-15 — Corrected point table to frozen 16 UI + optional 8 DI + 4 AO + 4 DO; added owner-approved read-only coherent historian snapshot IPC contract and COR-HIST-001 tests. · **Rev** 1.9 | 2026-06-27 (§12 COR-011 DONE: annotate status, tick T1-T12 test checklist, drain_ext_writes() write bridge documented) · 1.8 | 2026-06-26 (§12 Protocol graph nodes COR-011 — scan loop step 3 spec, graph_runtime extension, unit test checklist; §2 step 3 cập nhật ext_cache reader) ·
+**Rev** 1.11 | 2026-07-17 — Closed COR-HIST-001 core/local evidence with Release 209/209, output-before-publication ordering, allocation-free fixed-buffer publication and explicit downstream target gates. · **Rev** 1.10 | 2026-07-15 — Corrected point table to frozen 16 UI + optional 8 DI + 4 AO + 4 DO; added owner-approved read-only coherent historian snapshot IPC contract and COR-HIST-001 tests. · **Rev** 1.9 | 2026-06-27 (§12 COR-011 DONE: annotate status, tick T1-T12 test checklist, drain_ext_writes() write bridge documented) · 1.8 | 2026-06-26 (§12 Protocol graph nodes COR-011 — scan loop step 3 spec, graph_runtime extension, unit test checklist; §2 step 3 cập nhật ext_cache reader) ·
 1.7 | 2026-06-17 (BAC-004+MOD-009 core: bacnet_objtable.cpp dùng iop_protocol.h, fieldbus.sock mở trong main.cpp, web_ipc source=bacnet mức 3, scan_loop routing — 106 test pass) ·
 1.6 | 2026-06-17 (§8: BAC-CONFLICT-001 CLOSED — mở rộng core.sock nhận source=bacnet mức 3,
 BACnet client persistent connection, audit format cập nhật, rejected "unknown_source" added) ·

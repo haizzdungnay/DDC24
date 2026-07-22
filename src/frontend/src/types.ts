@@ -167,6 +167,34 @@ export interface ConfigPutResult {
   warnings?: string[]
 }
 
+export interface TimeConfig {
+  timezone: string
+  ntpEnabled: boolean
+  ntpServers: string[]
+  systemTime: string
+  revision: number
+}
+
+export interface TimeConfigUpdate extends Omit<TimeConfig, 'revision'> {
+  baseRevision: number
+  operationId?: string
+}
+
+export interface TimeStatus {
+  nowUtc: string
+  nowLocal: string
+  timezone: string
+  mode: 'ntp' | 'manual'
+  synchronized: boolean
+  source: string | null
+  offsetMs: number | null
+  lastSyncUtc: string | null
+  rtcPresent: boolean
+  rtcUtc: string | null
+  health: 'healthy' | 'degraded' | 'fault' | 'unknown'
+  warnings: string[]
+}
+
 export interface CommissioningTestResult {
   result: 'passed' | 'failed' | 'running'
   pointId: string
@@ -264,6 +292,57 @@ export interface Graph {
 export interface TrendSample {
   time: string
   [series: string]: string | number | null
+}
+
+export type HistorianInterval = '1s' | '3s' | '5s' | '15s' | '30s' | '1m' | '3m' | '5m' | '15m' | '30m' | '60m'
+export type HistorianPolicyState = 'off' | 'scheduled' | 'recording' | 'error'
+
+export interface HistorianPolicy {
+  pointId: string
+  generation: number
+  dbLoggingEnabled: boolean
+  dbInterval: HistorianInterval
+  retentionDays: number
+  maxRetentionDays?: number
+  hotCacheEnabled: boolean
+  hotCacheHours: number
+  startAtUtc: string
+  state: HistorianPolicyState
+  health: string
+  lastError?: string
+}
+
+export interface HistorianCapacity {
+  enabledPoints: number
+  reservedBytes: number
+  budgetBytes: number
+  freeBytes: number
+  requiredFreeBytes: number
+}
+
+export interface HistorianConfig {
+  revision: number
+  serverNowUtc: string
+  points: HistorianPolicy[]
+  capacity: HistorianCapacity
+  namespaceState?: string
+  namespaceRevision: number
+  retentionMaxDaysByInterval?: Partial<Record<HistorianInterval, number>>
+}
+
+export interface HistorianPolicyPatch {
+  pointId: string
+  generation: number
+  dbLoggingEnabled: boolean
+  dbInterval: HistorianInterval
+  retentionDays: number
+  startAtUtc: string | null
+}
+
+export interface HistorianConfigUpdate {
+  baseRevision: number
+  baseNamespaceRevision: number
+  points: HistorianPolicyPatch[]
 }
 
 export type ScheduleType =
@@ -377,6 +456,7 @@ export interface DiInputConfig {
 }
 
 export type AoSignalMode = '0-10V' | '4-20mA'
+export type AoEngineeringUnit = 'percent' | 'volt' | 'milliampere' | 'degC' | 'Pa' | 'RPM' | 'ppm' | 'no_units'
 export type DoSafeState = 'open' | 'closed'
 export type OutputDemoNote = 'demo'
 
@@ -388,6 +468,9 @@ export interface AoConfig {
   label: string
   enabled: boolean
   mode: AoSignalMode
+  units: AoEngineeringUnit
+  minPv: number
+  maxPv: number
   safeValue: number
   source: number
   loopConfig: number
@@ -443,6 +526,7 @@ export type VirtualPointSignalType = 'boolean' | 'integer' | 'float' | 'string' 
 
 export interface VirtualPoint {
   id: string
+  channel?: number
   tag: string
   label: string
   signalType: VirtualPointSignalType

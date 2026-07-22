@@ -99,6 +99,7 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 	for i, point := range points {
 		id := canonicalPointID(point.ID)
 		point.ID = id
+		point.Channel, _ = globalPointChannel(id)
 		if point.Tag == "" {
 			point.Tag = id
 		}
@@ -117,7 +118,7 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 }
 
 func (a *App) handlePoint(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimSpace(r.PathValue("id"))
+	id := pointIDOrGlobalChannel(r.PathValue("id"))
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing point id")
 		return
@@ -160,7 +161,7 @@ func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
-	id := strings.TrimSpace(r.PathValue("id"))
+	id := pointIDOrGlobalChannel(r.PathValue("id"))
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing point id")
 		return
@@ -299,6 +300,7 @@ func (a *App) writeVirtualPointValue(r *http.Request, id string, value any, rele
 	if err := a.writeVirtualPointsConfig(r, cfg, "write"); err != nil {
 		return PointDTO{}, err
 	}
+	a.virtualPointRuntime.Update(RuntimePoint{ID: item.ID, Kind: "VP", Value: item.Value, Quality: "GOOD", Source: "web", Role: "runtime_value", Unit: item.Unit, SignalType: item.SignalType, Generation: item.Generation})
 	return virtualPointDTO(item), nil
 }
 

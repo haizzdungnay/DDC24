@@ -454,11 +454,11 @@ func newAlarmSettingsTestAppMultiUser(t *testing.T) (*App, string, string) {
 
 func writeMultiTestUsers(t *testing.T) string {
 	t.Helper()
-	adminHash, err := bcrypt.GenerateFromPassword([]byte("admin123"), 12)
+	adminHash, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.MinCost)
 	if err != nil {
 		t.Fatalf("bcrypt admin: %v", err)
 	}
-	viewerHash, err := bcrypt.GenerateFromPassword([]byte("viewer123"), 12)
+	viewerHash, err := bcrypt.GenerateFromPassword([]byte("viewer123"), bcrypt.MinCost)
 	if err != nil {
 		t.Fatalf("bcrypt viewer: %v", err)
 	}

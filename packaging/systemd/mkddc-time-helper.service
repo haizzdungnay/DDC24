@@ -1,0 +1,22 @@
+[Unit]
+Description=MK-DDC-24 privileged time helper
+After=local-fs.target
+Before=mkddc-web-pi.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/mkddc-web/mkddc-web time-helper-server
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/mkddc /etc/chrony/sources.d
+CapabilityBoundingSet=CAP_SYS_TIME CAP_DAC_OVERRIDE CAP_CHOWN
+AmbientCapabilities=CAP_SYS_TIME CAP_DAC_OVERRIDE CAP_CHOWN
+
+[Install]
+WantedBy=multi-user.target

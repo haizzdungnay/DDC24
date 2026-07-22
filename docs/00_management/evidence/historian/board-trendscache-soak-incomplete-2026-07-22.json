@@ -1,0 +1,33 @@
+{
+  "authorityViolations": 0,
+  "complete": false,
+  "coreWarnings": 310,
+  "deltas": {
+    "gapCount": 75,
+    "hotCount": 1322,
+    "legacyCount": 0
+  },
+  "elapsedSeconds": 10080.315,
+  "final": {
+    "gapCount": 3410,
+    "hotCount": 468592,
+    "legacyCount": 596284
+  },
+  "finishedAtUtc": "2026-07-22T06:49:50Z",
+  "hashMismatches": 0,
+  "initial": {
+    "gapCount": 3335,
+    "hotCount": 467270,
+    "legacyCount": 596284
+  },
+  "integrityErrors": 0,
+  "kind": "historian-24h-soak-summary",
+  "maxWebRssKiB": 34964,
+  "minFreeBytes": 14404374528,
+  "pass": false,
+  "restartViolations": 0,
+  "sampleErrors": 0,
+  "samples": 169,
+  "serviceFailures": 0,
+  "storageWarnings": 0
+}

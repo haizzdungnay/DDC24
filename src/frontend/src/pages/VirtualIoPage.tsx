@@ -1,16 +1,18 @@
-import { Activity, ChevronLeft, ChevronRight, Database, Plus, Save, SlidersHorizontal, Trash2, Wand2, Zap } from 'lucide-react'
+import { Activity, ChevronLeft, ChevronRight, Database, Plus, RotateCcw, Save, SlidersHorizontal, Trash2, Wand2, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../api/client'
-import { normalizePointTag, pointTagFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
+import { normalizePointTag, pointTagFieldErrors, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
+import { PointLoggingSection } from '../components/PointLoggingSection'
 import { useToast } from '../components/Toast'
+import { TrendChart } from '../components/TrendChart'
 import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
-import type { Point, VirtualPoint, VirtualPointSignalType } from '../types'
-import { cn, formatValue } from '../utils'
+import type { Point, TrendSample, VirtualPoint, VirtualPointSignalType } from '../types'
+import { cn, formatValue, pointNumber } from '../utils'
 
 type ViewMode = 'summary' | 'wizard' | 'advanced'
 type WizardStep = 'signal' | 'min' | 'max' | 'range' | 'unit' | 'filter' | 'cal' | 'math'
@@ -23,8 +25,8 @@ const mathFunctionOptions = [0, 1, 2, 3]
 const wizardSteps: WizardStep[] = ['signal', 'min', 'max', 'range', 'unit', 'filter', 'cal', 'math']
 const logOptions = [
   { value: 0, label: 'Off', capacity: 256 },
-  { value: 1000, label: '1s', capacity: 128 },
-  { value: 100, label: '100ms', capacity: 64 },
+  { value: 1000, label: '1s diagnostic', capacity: 128 },
+  { value: 100, label: '100ms diagnostic', capacity: 64 },
   { value: 10, label: '10ms diagnostic', capacity: 16 }
 ] as const
 
@@ -71,11 +73,9 @@ export function VirtualPointsPage() {
     if (!selected) return
     const index = items.findIndex((item) => item.id === selected.id)
     const localTagError = validatePointTag(selected.tag)
-    const localNameError = validatePointName(selected.label)
-    if (localTagError || localNameError) {
+    if (localTagError) {
       setTagErrors({
-        ...(localTagError ? { [`items[${index}].tag`]: localTagError } : {}),
-        ...(localNameError ? { [`items[${index}].label`]: localNameError } : {})
+        [`items[${index}].tag`]: localTagError
       })
       return
     }
@@ -94,12 +94,10 @@ export function VirtualPointsPage() {
   }
 
   async function createItem(input: Partial<VirtualPoint>) {
-    const localTagError = validatePointTag(input.tag ?? '')
-    const localNameError = validatePointName(input.label ?? '')
-    if (localTagError || localNameError) {
+    const localTagError = input.tag?.trim() ? validatePointTag(input.tag) : undefined
+    if (localTagError) {
       setTagErrors({
-        ...(localTagError ? { [`items[${items.length}].tag`]: localTagError } : {}),
-        ...(localNameError ? { [`items[${items.length}].label`]: localNameError } : {})
+        [`items[${items.length}].tag`]: localTagError
       })
       return
     }
@@ -145,7 +143,7 @@ export function VirtualPointsPage() {
       const value = parseValue(selected.signalType, raw)
       await apiClient.forcePoint(selected.id, value)
       updateSelected({ value, updatedAt: new Date().toISOString() })
-      toast.push('success', pick(`Da ghi ${selected.id}`, `Wrote ${selected.id}`))
+      toast.push('success', pick(`Da ghi ${selected.tag}`, `Wrote ${selected.tag}`))
       await pointsState.refetch()
     } catch (error) {
       toast.push('error', error instanceof Error ? error.message : String(error))
@@ -184,8 +182,8 @@ export function VirtualPointsPage() {
               >
                 <Database className="h-4 w-4 shrink-0 text-[var(--c-accent)]" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
-                  <span className="block font-semibold">{item.id}</span>
-                  <span className="block truncate text-xs">{item.label}</span>
+                  <span className="block truncate font-semibold">{item.tag}</span>
+                  <span className="block text-xs">Channel {item.channel || globalVirtualPointChannel(item.id)}</span>
                 </span>
                 <span className="text-xs font-mono uppercase text-[var(--c-text-dim)]">{item.signalType}</span>
               </button>
@@ -195,8 +193,8 @@ export function VirtualPointsPage() {
         </Panel>
 
         <Panel
-          title={selected ? `${selected.id} - ${selected.label}` : t('empty')}
-          subtitle={selected ? `${selected.signalType.toUpperCase()} | ${selected.logEnabled ? `${selected.logIntervalMs}ms log` : 'no log'}` : undefined}
+          title={selected?.tag || t('empty')}
+           subtitle={selected ? `${selected.signalType.toUpperCase()} | ${selected.logEnabled ? `${selected.logIntervalMs}ms diagnostic log` : 'no diagnostic log'}` : undefined}
           action={selected && (
             <div className="flex items-center gap-2">
               <div className="flex rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-1">
@@ -213,9 +211,9 @@ export function VirtualPointsPage() {
               <Basics
                 item={selected}
                 tagError={tagErrors[`items[${items.findIndex((item) => item.id === selected.id)}].tag`]}
-                nameError={tagErrors[`items[${items.findIndex((item) => item.id === selected.id)}].label`]}
                 onChange={updateSelected}
               />
+              <PointLoggingSection pointId={selected.id} label={selected.tag} kind="VP" />
               {mode === 'summary' && <Summary item={selected} livePoint={livePoint} saving={saving} onWrite={(raw) => void writeValue(raw)} />}
               {mode === 'wizard' && (
                 <WizardPanel
@@ -242,7 +240,7 @@ export function VirtualPointsPage() {
 
       <AddVirtualPointModal open={addOpen} saving={saving} tagError={tagErrors[`items[${items.length}].tag`]} onCreate={createItem} onClose={() => setAddOpen(false)} />
       <Modal open={deleteOpen} danger title={pick('Xoa VP?', 'Delete Virtual Point?')} confirmLabel="OK" cancelLabel="Cancel" onConfirm={() => void deleteSelected()} onClose={() => setDeleteOpen(false)}>
-        {selected ? `${selected.id} - ${selected.label}` : ''}
+        {selected?.tag ?? ''}
       </Modal>
     </div>
   )
@@ -255,7 +253,7 @@ function QuotaStrip({ quotas }: { quotas: ReturnType<typeof quotaUsage> }) {
     <div className="grid gap-3 md:grid-cols-4">
       {logOptions.map((option) => (
         <div key={option.value} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3">
-          <div className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{option.label}</div>
+           <div className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{option.label}</div>
           <div className="mono mt-2 text-2xl font-bold text-[var(--c-text)]">{quotas[option.value]}/{option.capacity}</div>
         </div>
       ))}
@@ -263,12 +261,12 @@ function QuotaStrip({ quotas }: { quotas: ReturnType<typeof quotaUsage> }) {
   )
 }
 
-function Basics({ item, tagError, nameError, onChange }: { item: VirtualPoint; tagError?: string; nameError?: string; onChange: (patch: Partial<VirtualPoint>) => void }) {
+function Basics({ item, tagError, onChange }: { item: VirtualPoint; tagError?: string; onChange: (patch: Partial<VirtualPoint>) => void }) {
   const { t } = useI18n()
   return (
-    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px_120px_120px]">
+    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_180px_120px_120px]">
       <TextInput label="Tag" value={item.tag} error={tagError} onChange={(tag) => onChange({ tag })} />
-      <TextInput label={t('channelLabel')} value={item.label} error={nameError} onChange={(label) => onChange({ label })} />
+      <TextInput label={t('channelLabel')} value={String(item.channel || globalVirtualPointChannel(item.id))} disabled onChange={() => {}} />
       <SignalTypeSelect value={item.signalType} label onChange={(signalType) => onChange(signalTypePatch(item, signalType))} />
       <CheckField label="Enabled" checked={item.enabled} onChange={(enabled) => onChange({ enabled })} />
       <CheckField label="Writable" checked={item.writable} onChange={(writable) => onChange({ writable })} />
@@ -276,23 +274,86 @@ function Basics({ item, tagError, nameError, onChange }: { item: VirtualPoint; t
   )
 }
 
+type VpTrendSample = TrendSample & { raw: number }
+
+function useVpTrend(pointId: string, point?: Point): { data: VpTrendSample[]; reset: () => void } {
+  const [buffers, setBuffers] = useState<Record<string, VpTrendSample[]>>({})
+
+  useEffect(() => {
+    if (!point) return
+    const value = pointNumber(point)
+    const time = new Date(point.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setBuffers((current) => {
+      const existing = current[pointId] ?? []
+      const last = existing[existing.length - 1]
+      if (last && last.time === time && last.raw === value) return current
+      return { ...current, [pointId]: [...existing, { time, raw: value, [pointId]: value }].slice(-60) }
+    })
+  }, [pointId, point])
+
+  function reset() {
+    if (!point) {
+      setBuffers((current) => ({ ...current, [pointId]: [] }))
+      return
+    }
+    const value = pointNumber(point)
+    const time = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setBuffers((current) => ({ ...current, [pointId]: [{ time, raw: value, [pointId]: value }] }))
+  }
+
+  return { data: buffers[pointId] ?? [], reset }
+}
+
+function formatStat(value: number, unit?: string): string {
+  const fixed = Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1)
+  return `${fixed}${unit ? ` ${unit}` : ''}`
+}
+
 function Summary({ item, livePoint, saving, onWrite }: { item: VirtualPoint; livePoint?: Point; saving: boolean; onWrite: (raw: string) => void }) {
-  const { t } = useI18n()
+  const { t, pick } = useI18n()
   const [draft, setDraft] = useState(String(livePoint?.value ?? item.value ?? defaultValue(item.signalType)))
   useEffect(() => {
     setDraft(String(livePoint?.value ?? item.value ?? defaultValue(item.signalType)))
   }, [item.id, item.signalType, item.value, livePoint?.value])
+  const { data, reset } = useVpTrend(item.id, livePoint)
+  const values = data.map((sample) => sample.raw)
+  const stats = values.length ? {
+    min: Math.min(...values),
+    max: Math.max(...values),
+    avg: values.reduce((sum, value) => sum + value, 0) / values.length
+  } : null
+  const unit = item.unit ? unitLabel(unitFromString(item.unit), t) : undefined
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
-        <h3 className="mb-3 text-sm font-semibold text-[var(--c-text)]">Live Data</h3>
-        <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <LiveDataItem label="Value" value={formatValue(livePoint?.value ?? item.value ?? defaultValue(item.signalType), item.unit)} />
-          <LiveDataItem label="Quality" value={livePoint?.quality ?? 'good'} />
-          <LiveDataItem label={t('unitsLabel')} value={unitLabel(unitFromString(item.unit), t)} />
-          <LiveDataItem label="Log" value={item.logEnabled ? `${item.logIntervalMs}ms` : 'Off'} />
-        </dl>
-      </section>
+      <div className="space-y-4">
+        <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-[var(--c-text)]">Live Data</h3>
+            <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} onClick={reset}>{pick('Dat lai', 'Reset')}</Button>
+          </div>
+          <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <LiveDataItem label="Value" value={formatValue(livePoint?.value ?? item.value ?? defaultValue(item.signalType), item.unit)} />
+            <LiveDataItem label="Quality" value={livePoint?.quality ?? 'good'} />
+            <LiveDataItem label={pick('Nho nhat', 'Minimum')} value={stats ? formatStat(stats.min, unit) : '--'} />
+            <LiveDataItem label={pick('Lon nhat', 'Maximum')} value={stats ? formatStat(stats.max, unit) : '--'} />
+            <LiveDataItem label={pick('Trung binh', 'Average')} value={stats ? formatStat(stats.avg, unit) : '--'} />
+            <LiveDataItem label={t('unitsLabel')} value={unitLabel(unitFromString(item.unit), t)} />
+             <LiveDataItem label="Diagnostic log" value={item.logEnabled ? `${item.logIntervalMs}ms` : 'Off'} />
+          </dl>
+        </section>
+        <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Bieu do truc tiep', 'Live Chart')}</h3>
+            <span className="text-xs font-semibold text-[var(--c-text-dim)]">{item.id}</span>
+          </div>
+          <TrendChart
+            data={data}
+            height={250}
+            series={[{ key: item.id, label: item.tag, color: 'var(--c-accent)', unit }]}
+          />
+          {data.length === 0 && <div className="mt-2 text-xs text-[var(--c-text-dim)]">{pick('Chua co du lieu live cho VP nay.', 'No live data for this VP yet.')}</div>}
+        </section>
+      </div>
       <section className="space-y-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
         <h3 className="text-sm font-semibold text-[var(--c-text)]">Write Value</h3>
         {item.writable ? (
@@ -374,11 +435,11 @@ function Advanced({ item, onChange }: { item: VirtualPoint; onChange: (patch: Pa
     { register: 'u5', label: t('filterSamplesLabel'), control: <SmallNumberInput value={numberOr(item.filterSamples, 3)} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} /> },
     { register: 'u6', label: t('sensorCalibrationLabel'), control: <SmallNumberInput value={numberOr(item.sensorCal, 0)} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} /> },
     { register: 'u7', label: t('mathFunctionLabel'), control: <MathFunctionSelect value={numberOr(item.mathFunction, 0)} onChange={(mathFunction) => onChange({ mathFunction })} /> },
-    { register: 'LOG', label: 'Log mode', control: <SelectField value={String(logValue)} options={logOptions.map((option) => [String(option.value), option.label])} onChange={(raw) => {
+    { register: 'LOG', label: 'Diagnostic log mode', control: <SelectField value={String(logValue)} options={logOptions.map((option) => [String(option.value), option.label])} onChange={(raw) => {
       const value = Number(raw)
       onChange({ logEnabled: value !== 0, logIntervalMs: value === 0 ? undefined : value, retentionS: value === 0 ? undefined : defaultRetention(value) })
     }} /> },
-    { register: 'RET', label: 'Retention (s)', control: <SmallNumberInput value={item.retentionS ?? 0} min={0} max={defaultRetention(logValue)} disabled={!item.logEnabled} onChange={(retentionS) => onChange({ retentionS })} /> },
+    { register: 'RET', label: 'Diagnostic log retention (s)', control: <SmallNumberInput value={item.retentionS ?? 0} min={0} max={defaultRetention(logValue)} disabled={!item.logEnabled} onChange={(retentionS) => onChange({ retentionS })} /> },
     { register: 'VAL', label: 'Initial value', control: <ValueInput signalType={item.signalType} value={String(item.value ?? defaultValue(item.signalType))} onChange={(raw) => onChange({ value: parseValue(item.signalType, raw) })} compact /> }
   ]
   return (
@@ -429,7 +490,6 @@ function WizardField({ label, children }: { label: string; children: React.React
 
 function AddVirtualPointModal({ open, saving, tagError, onCreate, onClose }: { open: boolean; saving: boolean; tagError?: string; onCreate: (input: Partial<VirtualPoint>) => void; onClose: () => void }) {
   const [tag, setTag] = useState('')
-  const [label, setLabel] = useState('Virtual Point')
   const [signalType, setSignalType] = useState<VirtualPointSignalType>('float')
   const [unit, setUnit] = useState(0)
   const [writable, setWritable] = useState(true)
@@ -439,7 +499,6 @@ function AddVirtualPointModal({ open, saving, tagError, onCreate, onClose }: { o
   useEffect(() => {
     if (!open) return
     setTag('')
-    setLabel('Virtual Point')
     setSignalType('float')
     setUnit(0)
     setWritable(true)
@@ -448,14 +507,13 @@ function AddVirtualPointModal({ open, saving, tagError, onCreate, onClose }: { o
   }, [open])
 
   return (
-    <Modal open={open} title="Add Virtual Point" confirmLabel="Create" cancelLabel="Cancel" onConfirm={() => onCreate({ tag, label, signalType, unit: unitToString(unit), writable, logEnabled: logMode !== 0, logIntervalMs: logMode || undefined, retentionS: logMode ? defaultRetention(logMode) : undefined, value: parseValue(signalType, value), enabled: true })} onClose={onClose}>
+    <Modal open={open} title="Add Virtual Point" confirmLabel="Create" cancelLabel="Cancel" onConfirm={() => onCreate({ tag, signalType, unit: unitToString(unit), writable, logEnabled: logMode !== 0, logIntervalMs: logMode || undefined, retentionS: logMode ? defaultRetention(logMode) : undefined, value: parseValue(signalType, value), enabled: true })} onClose={onClose}>
       <div className="space-y-4">
         <TextInput label="Tag" value={tag} error={tagError} onChange={setTag} />
-        <TextInput label="Label" value={label} onChange={setLabel} />
         <SignalTypeSelect value={signalType} label onChange={(type) => { setSignalType(type); setValue(String(defaultValue(type))) }} />
         <UnitSelect value={unit} label onChange={setUnit} />
         <ValueInput signalType={signalType} value={value} onChange={setValue} />
-        <SelectField label="Log mode" value={String(logMode)} options={logOptions.map((option) => [String(option.value), option.label])} onChange={(raw) => setLogMode(Number(raw))} />
+         <SelectField label="Diagnostic log mode" value={String(logMode)} options={logOptions.map((option) => [String(option.value), option.label])} onChange={(raw) => setLogMode(Number(raw))} />
         <CheckField label="Writable" checked={writable} onChange={setWritable} />
         {saving && <div className="text-xs text-[var(--c-text-dim)]">Saving...</div>}
       </div>
@@ -583,8 +641,9 @@ function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
   return {
     ...item,
     id: canonicalVirtualPointId(item.id),
-    tag: normalizePointTag(item.tag),
-    label: item.label.trim() || 'Virtual Point',
+    channel: item.channel || globalVirtualPointChannel(item.id),
+    tag: normalizePointTag(item.tag ?? canonicalVirtualPointId(item.id)),
+    label: '',
     signalType,
     unit,
     displayMin: clampNumber(numberOr(item.displayMin, 0), -50, 205),
@@ -601,7 +660,12 @@ function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
 }
 
 function defaultVirtualPoint(): VirtualPoint {
-  return { id: '', tag: '', label: 'Virtual Point', signalType: 'float', enabled: true, writable: true, logEnabled: false, value: 0, unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '' }
+  return { id: '', channel: 0, tag: '', label: 'Virtual Point', signalType: 'float', enabled: true, writable: true, logEnabled: false, value: 0, unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '' }
+}
+
+function globalVirtualPointChannel(id: string): number {
+  const match = canonicalVirtualPointId(id).match(/^VP(\d+)$/)
+  return match ? 24 + Number(match[1]) : 0
 }
 
 function signalTypePatch(item: VirtualPoint, signalType: VirtualPointSignalType): Partial<VirtualPoint> {

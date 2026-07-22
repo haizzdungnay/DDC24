@@ -1,0 +1,492 @@
+{
+  "createdAtUTC": "2026-07-21T08:34:16Z",
+  "windowId": "historian-cutover-20260721T082943Z",
+  "trend": {
+    "source": "/opt/mkddc-web/trend.sqlite",
+    "path": "/data/config/historian-v2-migration/historian-cutover-20260721T082943Z/precutover-trend.sqlite",
+    "sha256": "28a4e0f8787d9529dd27b790714caffa090f65e2491abcad498625e5cc042d17",
+    "bytes": 46182400,
+    "quickCheck": "ok",
+    "userVersion": 0
+  },
+  "historian": {
+    "source": "/data/config/historian-v2.sqlite",
+    "path": "/data/config/historian-v2-migration/historian-cutover-20260721T082943Z/precutover-historian-v2.sqlite",
+    "sha256": "ae5dc945b3ddaf8283cfa3604719123921b949fe29dac6390db4fb58b6aa0097",
+    "bytes": 77824,
+    "quickCheck": "ok",
+    "userVersion": 1
+  },
+  "sourceRows": 596284,
+  "legacyIds": [
+    "AI1",
+    "AI2",
+    "AI3",
+    "AI4",
+    "AI5",
+    "AI6",
+    "AI7",
+    "AI8",
+    "AO-01",
+    "AO-02",
+    "AO-03",
+    "AO-04",
+    "AO1",
+    "AO2",
+    "AO3",
+    "AO4",
+    "AV1",
+    "AV10",
+    "AV11",
+    "AV12",
+    "AV13",
+    "AV14",
+    "AV15",
+    "AV16",
+    "AV17",
+    "AV18",
+    "AV19",
+    "AV2",
+    "AV20",
+    "AV21",
+    "AV22",
+    "AV23",
+    "AV24",
+    "AV25",
+    "AV26",
+    "AV27",
+    "AV28",
+    "AV29",
+    "AV3",
+    "AV30",
+    "AV31",
+    "AV32",
+    "AV4",
+    "AV5",
+    "AV6",
+    "AV7",
+    "AV8",
+    "AV9",
+    "DO-01",
+    "DO-02",
+    "DO-03",
+    "DO-04",
+    "MSV1",
+    "MSV2",
+    "MSV3",
+    "MSV4",
+    "MSV5",
+    "MSV6",
+    "MSV7",
+    "MSV8",
+    "UI-01",
+    "UI-02",
+    "UI-03",
+    "UI-04",
+    "UI-05",
+    "UI-06",
+    "UI-07",
+    "UI-08",
+    "UI-09",
+    "UI-10",
+    "UI-11",
+    "UI-12",
+    "UI-13",
+    "UI-14",
+    "UI-15",
+    "UI-16",
+    "VP1"
+  ],
+  "mappings": [
+    {
+      "legacyStorageId": "AI1",
+      "canonicalPointId": "UI-01",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AI2",
+      "canonicalPointId": "UI-02",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AI3",
+      "canonicalPointId": "UI-03",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AI4",
+      "canonicalPointId": "UI-04",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AI5",
+      "canonicalPointId": "UI-05",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AI6",
+      "canonicalPointId": "UI-06",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AI7",
+      "canonicalPointId": "UI-07",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AI8",
+      "canonicalPointId": "UI-08",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AO-01",
+      "canonicalPointId": "AO-01",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AO-02",
+      "canonicalPointId": "AO-02",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AO-03",
+      "canonicalPointId": "AO-03",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AO-04",
+      "canonicalPointId": "AO-04",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AO1",
+      "canonicalPointId": "AO-01",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AO2",
+      "canonicalPointId": "AO-02",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AO3",
+      "canonicalPointId": "AO-03",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AO4",
+      "canonicalPointId": "AO-04",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV1",
+      "canonicalPointId": "VP1",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV10",
+      "canonicalPointId": "VP10",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV11",
+      "canonicalPointId": "VP11",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV12",
+      "canonicalPointId": "VP12",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV13",
+      "canonicalPointId": "VP13",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV14",
+      "canonicalPointId": "VP14",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV15",
+      "canonicalPointId": "VP15",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV16",
+      "canonicalPointId": "VP16",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV17",
+      "canonicalPointId": "VP17",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV18",
+      "canonicalPointId": "VP18",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV19",
+      "canonicalPointId": "VP19",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV2",
+      "canonicalPointId": "VP2",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV20",
+      "canonicalPointId": "VP20",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV21",
+      "canonicalPointId": "VP21",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV22",
+      "canonicalPointId": "VP22",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV23",
+      "canonicalPointId": "VP23",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV24",
+      "canonicalPointId": "VP24",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV25",
+      "canonicalPointId": "VP25",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV26",
+      "canonicalPointId": "VP26",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV27",
+      "canonicalPointId": "VP27",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV28",
+      "canonicalPointId": "VP28",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV29",
+      "canonicalPointId": "VP29",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV3",
+      "canonicalPointId": "VP3",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV30",
+      "canonicalPointId": "VP30",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV31",
+      "canonicalPointId": "VP31",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV32",
+      "canonicalPointId": "VP32",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV4",
+      "canonicalPointId": "VP4",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV5",
+      "canonicalPointId": "VP5",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV6",
+      "canonicalPointId": "VP6",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV7",
+      "canonicalPointId": "VP7",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV8",
+      "canonicalPointId": "VP8",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "AV9",
+      "canonicalPointId": "VP9",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "DO-01",
+      "canonicalPointId": "DO-01",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "DO-02",
+      "canonicalPointId": "DO-02",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "DO-03",
+      "canonicalPointId": "DO-03",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "DO-04",
+      "canonicalPointId": "DO-04",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "MSV1",
+      "canonicalPointId": "MSV1",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "MSV2",
+      "canonicalPointId": "MSV2",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "MSV3",
+      "canonicalPointId": "MSV3",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "MSV4",
+      "canonicalPointId": "MSV4",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "MSV5",
+      "canonicalPointId": "MSV5",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "MSV6",
+      "canonicalPointId": "MSV6",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "MSV7",
+      "canonicalPointId": "MSV7",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "MSV8",
+      "canonicalPointId": "MSV8",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-01",
+      "canonicalPointId": "UI-01",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-02",
+      "canonicalPointId": "UI-02",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-03",
+      "canonicalPointId": "UI-03",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-04",
+      "canonicalPointId": "UI-04",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-05",
+      "canonicalPointId": "UI-05",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-06",
+      "canonicalPointId": "UI-06",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-07",
+      "canonicalPointId": "UI-07",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-08",
+      "canonicalPointId": "UI-08",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-09",
+      "canonicalPointId": "UI-09",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-10",
+      "canonicalPointId": "UI-10",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-11",
+      "canonicalPointId": "UI-11",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-12",
+      "canonicalPointId": "UI-12",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-13",
+      "canonicalPointId": "UI-13",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-14",
+      "canonicalPointId": "UI-14",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-15",
+      "canonicalPointId": "UI-15",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "UI-16",
+      "canonicalPointId": "UI-16",
+      "generation": 1
+    },
+    {
+      "legacyStorageId": "VP1",
+      "canonicalPointId": "VP1",
+      "generation": 1
+    }
+  ],
+  "policyRevision": 3,
+  "namespaceRevision": 5,
+  "currentBinarySHA256": "42deec2bdcfbc13d76bea819bd0c3b23a6b9d82bd2a9f89f6dfb9d1dffbd991d",
+  "candidateBinarySHA256": "440aae2b3377e3fa65373663d59aecc5abfaf1fd28aa3cc4eb51bfee0835a39c",
+  "templateSHA256": "6f391a94bd1c336e70847cbed7a3eff57347410a794375bc89805f51d690b006"
+}

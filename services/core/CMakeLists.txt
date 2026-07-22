@@ -16,7 +16,7 @@ FetchContent_MakeAvailable(nlohmann_json)
 add_library(core_lib STATIC
     scan_loop.cpp point_table.cpp point_quality.cpp graph_runtime.cpp alarm_runtime.cpp
     schedule_runtime.cpp priority_resolver.cpp safe_state.cpp safe_state_config.cpp config_reload.cpp
-    iobus_reader.cpp output_writer.cpp state_snapshot.cpp
+    iobus_reader.cpp output_writer.cpp state_snapshot.cpp runtime_point_snapshot.cpp
     bacnet_objtable.cpp web_ipc.cpp core_metrics.cpp)
 target_include_directories(core_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${SHARED_DIR})
 target_link_libraries(core_lib PUBLIC pthread rt nlohmann_json::nlohmann_json)
@@ -26,6 +26,7 @@ target_link_libraries(mkddc-core PRIVATE core_lib)
 
 option(CORE_BUILD_TESTS "Build core unit tests" ON)
 if(CORE_BUILD_TESTS)
+  target_compile_definitions(core_lib PUBLIC CORE_BUILD_TESTS=1)
   find_package(GTest QUIET)
   if(NOT GTest_FOUND)
     include(FetchContent)
@@ -41,7 +42,7 @@ if(CORE_BUILD_TESTS)
       tests/test_config_reload.cpp tests/test_state_snapshot.cpp
       tests/test_bacnet_objtable.cpp
       tests/test_graph_protocol.cpp tests/test_alarm_runtime.cpp
-      tests/test_schedule_runtime.cpp)
+      tests/test_schedule_runtime.cpp tests/test_runtime_point_snapshot.cpp)
   target_link_libraries(core_tests PRIVATE core_lib)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
   if(TARGET GTest::gtest_main)

@@ -5,6 +5,11 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <exception>
+#include <limits>
+#include <unordered_set>
+
+#include <nlohmann/json.hpp>
 
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -14,13 +19,56 @@
 
 namespace core {
 
+void WebIpc::publish_point_snapshot(const RuntimePointSnapshot& snapshot)
+{
+#ifdef CORE_BUILD_TESTS
+    if (publish_observer_) publish_observer_(publish_observer_context_);
+#endif
+    try {
+#ifdef CORE_BUILD_TESTS
+        snapshot_serialization_count_++;
+#endif
+        std::size_t payload_size = 0;
+        if (!serialize_runtime_point_snapshot(snapshot, snapshot_payload_.data(),
+                                              std::min(snapshot_payload_limit_,
+                                                       snapshot_payload_.size()),
+                                              &payload_size)) {
+            snapshot_ = {};
+            snapshot_payload_size_ = 0;
+            snapshot_state_ = SnapshotCacheState::TOO_LARGE;
+            return;
+        }
+        snapshot_ = snapshot;
+        snapshot_payload_size_ = payload_size;
+        snapshot_state_ = SnapshotCacheState::READY;
+        snapshot_publish_count_++;
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "ERROR point_snapshot.serialize error=%s\n", error.what());
+        snapshot_ = {};
+        snapshot_payload_size_ = 0;
+        snapshot_state_ = SnapshotCacheState::ERROR;
+    } catch (...) {
+        std::fprintf(stderr, "ERROR point_snapshot.serialize error=unknown\n");
+        snapshot_ = {};
+        snapshot_payload_size_ = 0;
+        snapshot_state_ = SnapshotCacheState::ERROR;
+    }
+}
+
 bool parse_point_name(const std::string& name, PointId* out)
 {
     size_t i = 0;
     while (i < name.size() && std::isalpha(static_cast<unsigned char>(name[i]))) i++;
     if (i == 0 || i >= name.size()) return false;
     const std::string kind = name.substr(0, i);
-    const int num = std::atoi(name.c_str() + i);
+    int num = 0;
+    for (; i < name.size(); ++i) {
+        const unsigned char c = static_cast<unsigned char>(name[i]);
+        if (c < '0' || c > '9') return false;
+        const int digit = c - '0';
+        if (num > (std::numeric_limits<int>::max() - digit) / 10) return false;
+        num = num * 10 + digit;
+    }
     if (num < 1) return false;
     out->idx = num - 1;
     if (kind == "AI")  out->kind = PointKind::AI;
@@ -34,63 +82,33 @@ bool parse_point_name(const std::string& name, PointId* out)
     return PointTable::valid(*out);
 }
 
-/* ---- JSON helpers tối thiểu (flat object, 1 dòng) ---- */
+enum class RequestParseError { None, Invalid, ValueOverflow, DurationOverflow };
 
-static bool jget_string(const std::string& s, const char* key, std::string* out)
+static RequestParseError parse_request(const std::string& line, nlohmann::json* request)
 {
-    const std::string pat = std::string("\"") + key + "\"";
-    size_t p = s.find(pat);
-    if (p == std::string::npos) return false;
-    p = s.find(':', p + pat.size());
-    if (p == std::string::npos) return false;
-    p++;
-    while (p < s.size() && std::isspace(static_cast<unsigned char>(s[p]))) p++;
-    if (p >= s.size() || s[p] != '"') return false;
-    const size_t e = s.find('"', p + 1);
-    if (e == std::string::npos) return false;
-    *out = s.substr(p + 1, e - p - 1);
-    return true;
-}
-
-static bool jhas_key(const std::string& s, const char* key)
-{
-    return s.find(std::string("\"") + key + "\"") != std::string::npos;
-}
-
-static bool jget_number(const std::string& s, const char* key, double* out)
-{
-    const std::string pat = std::string("\"") + key + "\"";
-    size_t p = s.find(pat);
-    if (p == std::string::npos) return false;
-    p = s.find(':', p + pat.size());
-    if (p == std::string::npos) return false;
-    p++;
-    while (p < s.size() && std::isspace(static_cast<unsigned char>(s[p]))) p++;
-    char* end = nullptr;
-    const double v = std::strtod(s.c_str() + p, &end);
-    if (end == s.c_str() + p) return false;
-    *out = v;
-    return true;
-}
-
-static bool jget_bool(const std::string& s, const char* key, bool* out)
-{
-    const std::string pat = std::string("\"") + key + "\"";
-    size_t p = s.find(pat);
-    if (p == std::string::npos) return false;
-    p = s.find(':', p + pat.size());
-    if (p == std::string::npos) return false;
-    p++;
-    while (p < s.size() && std::isspace(static_cast<unsigned char>(s[p]))) p++;
-    if (s.compare(p, 4, "true") == 0) {
-        *out = true;
-        return true;
+    std::string top_level_key;
+    try {
+        std::unordered_set<std::string> keys;
+        bool duplicate = false;
+        *request = nlohmann::json::parse(
+            line, [&](int depth, nlohmann::json::parse_event_t event, nlohmann::json& parsed) {
+                if (depth == 1 && event == nlohmann::json::parse_event_t::key) {
+                    top_level_key = parsed.get<std::string>();
+                    duplicate = !keys.insert(parsed.get<std::string>()).second || duplicate;
+                }
+                return true;
+            });
+        return request->is_object() && !duplicate ? RequestParseError::None
+                                                  : RequestParseError::Invalid;
+    } catch (const nlohmann::json::out_of_range& error) {
+        if (error.id == 406 && top_level_key == "value")
+            return RequestParseError::ValueOverflow;
+        if (error.id == 406 && top_level_key == "durationS")
+            return RequestParseError::DurationOverflow;
+        return RequestParseError::Invalid;
+    } catch (const nlohmann::json::exception&) {
+        return RequestParseError::Invalid;
     }
-    if (s.compare(p, 5, "false") == 0) {
-        *out = false;
-        return true;
-    }
-    return false;
 }
 
 /* user vào audit log: [A-Za-z0-9_.@:-], max 48 (07 §8 — bacnet dùng ':' cho IP) */
@@ -201,10 +219,173 @@ void WebIpc::close()
     }
 }
 
-void WebIpc::respond(int fd, const std::string& json_line)
+void WebIpc::respond(const WebCommand& command, const std::string& json_line)
 {
-    const std::string line = json_line + "\n";
-    (void)!::send(fd, line.c_str(), line.size(), MSG_NOSIGNAL | MSG_DONTWAIT);
+    for (auto it = clients_.begin(); it != clients_.end(); ++it) {
+        Client& client = *it;
+        if ((command.client_id != 0 && client.id != command.client_id) ||
+            (command.client_id == 0 && client.fd != command.client_fd))
+            continue;
+        queue_response(client, json_line + "\n");
+        if (client.outstanding > 0) client.outstanding--;
+        const std::size_t before = client.write_budget_remaining;
+        flush_client(client, &client.write_budget_remaining);
+        outbound_budget_remaining_ -= before - client.write_budget_remaining;
+        if (client.hard_close) {
+            ::close(client.fd);
+            clients_.erase(it);
+        }
+        return;
+    }
+}
+
+ssize_t WebIpc::send_bytes(int fd, const void* data, std::size_t size, int flags)
+{
+#ifdef CORE_BUILD_TESTS
+    if (send_adapter_) return send_adapter_(fd, data, size, flags, send_adapter_context_);
+#endif
+    return ::send(fd, data, size, flags);
+}
+
+bool WebIpc::queue_response(Client& client, std::string response, bool close_after)
+{
+    if (response.size() > KX_POINT_SNAPSHOT_MAX_PAYLOAD ||
+        client.output.size() > KX_POINT_SNAPSHOT_MAX_PAYLOAD - response.size()) {
+        if (client.output.empty()) {
+            client.output = "{\"id\":0,\"result\":\"rejected\","
+                            "\"error\":\"response_too_large\"}\n";
+        }
+        client.close_after_flush = true;
+        return false;
+    }
+    client.output += response;
+    client.close_after_flush = client.close_after_flush || close_after;
+    return true;
+}
+
+void WebIpc::flush_client(Client& client, std::size_t* write_budget)
+{
+    int interrupted = 0;
+    while (!client.output.empty() && *write_budget > 0) {
+        const std::size_t count = std::min(client.output.size(), *write_budget);
+        const ssize_t sent = send_bytes(client.fd, client.output.data(), count,
+                                        MSG_NOSIGNAL | MSG_DONTWAIT);
+        if (sent > 0) {
+            client.output.erase(0, static_cast<std::size_t>(sent));
+            *write_budget -= static_cast<std::size_t>(sent);
+#ifdef CORE_BUILD_TESTS
+            budget_counters_.write_bytes += static_cast<std::size_t>(sent);
+#endif
+            interrupted = 0;
+            continue;
+        }
+        if (sent < 0 && errno == EINTR && interrupted++ < 3) continue;
+        if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return;
+        client.hard_close = true;
+        return;
+    }
+}
+
+void WebIpc::reap_disconnected_clients()
+{
+    for (auto it = clients_.begin(); it != clients_.end();) {
+        Client& client = *it;
+        char byte = 0;
+        const ssize_t received = ::recv(client.fd, &byte, 1, MSG_PEEK | MSG_DONTWAIT);
+        if (received == 0) {
+            client.read_closed = true;
+        } else if (received < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            client.hard_close = true;
+        }
+        if (client.hard_close ||
+            (client.read_closed && client.outstanding == 0 && client.output.empty())) {
+            ::close(client.fd);
+            it = clients_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+bool WebIpc::handle_snapshot_line(Client& client, const std::string& line,
+                                  bool* snapshot_accepted)
+{
+    uint64_t id = 0;
+    bool valid = true;
+    nlohmann::json request;
+    try {
+        std::unordered_set<std::string> keys;
+        bool duplicate = false;
+        request = nlohmann::json::parse(
+            line, [&](int depth, nlohmann::json::parse_event_t event, nlohmann::json& parsed) {
+                if (depth == 1 && event == nlohmann::json::parse_event_t::key)
+                    duplicate = !keys.insert(parsed.get<std::string>()).second || duplicate;
+                return true;
+            });
+        valid = request.is_object() && !duplicate && request.contains("id") &&
+                request["id"].is_number_unsigned() && request.contains("op") &&
+                request["op"].is_string() && request["op"] == "point_snapshot" &&
+                request.contains("user") && request["user"].is_string() &&
+                !request["user"].get_ref<const std::string&>().empty();
+        if (valid) id = request["id"].get<uint64_t>();
+    } catch (const nlohmann::json::exception&) {
+        valid = false;
+    }
+
+    auto rejected = [&](const char* error) {
+        queue_response(client, "{\"id\":" + std::to_string(id) +
+                                   ",\"result\":\"rejected\",\"error\":\"" +
+                                   error + "\"}\n");
+    };
+    if (!valid) {
+        rejected("bad_request");
+        return true;
+    }
+    if (*snapshot_accepted) {
+        rejected("busy");
+        return true;
+    }
+    if (snapshot_state_ == SnapshotCacheState::UNAVAILABLE) {
+        rejected("snapshot_unavailable");
+        return true;
+    }
+    if (snapshot_state_ == SnapshotCacheState::TOO_LARGE) {
+        rejected("snapshot_too_large");
+        return true;
+    }
+    if (snapshot_state_ == SnapshotCacheState::ERROR) {
+        rejected("snapshot_error");
+        return true;
+    }
+
+    char prefix[96];
+    const int prefix_size = std::snprintf(prefix, sizeof(prefix),
+                                          "{\"id\":%llu,\"result\":\"accepted\",",
+                                          static_cast<unsigned long long>(id));
+    if (prefix_size <= 0 || static_cast<std::size_t>(prefix_size) >= sizeof(prefix) ||
+        snapshot_payload_size_ < 1) {
+        rejected("response_too_large");
+        return true;
+    }
+    std::string response;
+    response.reserve(static_cast<std::size_t>(prefix_size) + snapshot_payload_size_ + 1);
+    response.append(prefix, static_cast<std::size_t>(prefix_size));
+    response.append(snapshot_payload_.data() + 1, snapshot_payload_size_ - 1);
+    response += '\n';
+    if (!queue_response(client, std::move(response))) return true;
+    *snapshot_accepted = true;
+#ifdef CORE_BUILD_TESTS
+    budget_counters_.snapshot_accepted++;
+#endif
+    return true;
+}
+
+static bool is_snapshot_request(const std::string& line)
+{
+    nlohmann::json request;
+    return parse_request(line, &request) == RequestParseError::None &&
+           request.contains("op") &&
+           request["op"].is_string() && request["op"] == "point_snapshot";
 }
 
 /* 1 dòng/lệnh, format chuẩn 07 §8 — stderr→journald giữ timestamp */
@@ -230,7 +411,7 @@ void WebIpc::respond_accepted(const WebCommand& cmd, float applied_value,
                   "\"active_source\":\"%s\"}",
                   static_cast<unsigned long long>(cmd.id),
                   static_cast<double>(applied_value), active_source);
-    respond(cmd.client_fd, buf);
+    respond(cmd, buf);
     audit(cmd, "accepted", active_source, applied_value);
 }
 
@@ -243,7 +424,7 @@ void WebIpc::respond_overridden(const WebCommand& cmd, float applied_value,
                   "\"active_source\":\"%s\"}",
                   static_cast<unsigned long long>(cmd.id),
                   static_cast<double>(applied_value), active_source);
-    respond(cmd.client_fd, buf);
+    respond(cmd, buf);
     audit(cmd, "overridden", active_source, applied_value);
 }
 
@@ -252,7 +433,7 @@ void WebIpc::respond_rejected(const WebCommand& cmd, const char* error)
     char buf[128];
     std::snprintf(buf, sizeof(buf), "{\"id\":%llu,\"result\":\"rejected\",\"error\":\"%s\"}",
                   static_cast<unsigned long long>(cmd.id), error);
-    respond(cmd.client_fd, buf);
+    respond(cmd, buf);
     audit(cmd, "rejected", "-", cmd.value);
 }
 
@@ -279,7 +460,7 @@ void WebIpc::respond_alarm_list(const WebCommand& cmd, const std::vector<AlarmSt
         json += "}";
     }
     json += "]}";
-    respond(cmd.client_fd, json);
+    respond(cmd, json);
     audit(cmd, "accepted", "alarm", 0.0f);
 }
 
@@ -288,7 +469,7 @@ void WebIpc::respond_alarm_ack_accepted(const WebCommand& cmd)
     const std::string json = "{\"id\":" + std::to_string(cmd.id) +
                              ",\"result\":\"accepted\",\"alarmId\":\"" +
                              json_escape(cmd.alarm_id) + "\"}";
-    respond(cmd.client_fd, json);
+    respond(cmd, json);
     audit(cmd, "accepted", "alarm", 0.0f);
 }
 
@@ -297,7 +478,7 @@ void WebIpc::respond_alarm_suppress_accepted(const WebCommand& cmd)
     const std::string json = "{\"id\":" + std::to_string(cmd.id) +
                              ",\"result\":\"accepted\",\"alarmId\":\"" +
                              json_escape(cmd.alarm_id) + "\"}";
-    respond(cmd.client_fd, json);
+    respond(cmd, json);
     audit(cmd, "accepted", "alarm", 0.0f);
 }
 
@@ -306,39 +487,54 @@ void WebIpc::respond_alarm_return_accepted(const WebCommand& cmd)
     const std::string json = "{\"id\":" + std::to_string(cmd.id) +
                              ",\"result\":\"accepted\",\"alarmId\":\"" +
                              json_escape(cmd.alarm_id) + "\"}";
-    respond(cmd.client_fd, json);
+    respond(cmd, json);
     audit(cmd, "accepted", "alarm", 0.0f);
 }
 
-void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand>* out)
+void WebIpc::handle_line(Client& client, const std::string& line,
+                         std::vector<WebCommand>* out)
 {
-    double idv = 0;
-    std::string op, point, source, user_raw;
-    const bool has_id = jget_number(line, "id", &idv);
-
-    /* dựng cmd TRƯỚC validate — reject sớm vẫn có id/user/point cho audit */
     WebCommand cmd;
-    cmd.id = has_id ? static_cast<uint64_t>(idv) : 0;
-    cmd.client_fd = fd;
-    const bool has_user = jget_string(line, "user", &user_raw);
-    cmd.user = sanitize_user(user_raw);
-    if (jget_string(line, "point", &point))
-        cmd.point_name = sanitize_point_name(point);
-    const bool has_op = jget_string(line, "op", &op);
-    cmd.is_write = has_op && op == "write";
-
-    auto reject = [&](const char* err) { respond_rejected(cmd, err); };
-
-    if (!has_id || !has_op) {
+    cmd.client_fd = client.fd;
+    cmd.client_id = client.id;
+    auto reject = [&](const char* error) {
+        queue_response(client, "{\"id\":" + std::to_string(cmd.id) +
+                                   ",\"result\":\"rejected\",\"error\":\"" +
+                                   error + "\"}\n");
+        audit(cmd, "rejected", "-", cmd.value);
+    };
+    nlohmann::json request;
+    const RequestParseError parse_error = parse_request(line, &request);
+    if (parse_error != RequestParseError::None) {
+        reject(parse_error == RequestParseError::ValueOverflow
+                   ? "bad_value"
+                   : parse_error == RequestParseError::DurationOverflow ? "bad_duration"
+                                                                         : "bad_request");
+        return;
+    }
+    if (!request.contains("id") ||
+        !request["id"].is_number_unsigned() || !request.contains("op") ||
+        !request["op"].is_string()) {
         reject("bad_request");
         return;
     }
+    cmd.id = request["id"].get<uint64_t>();
+    const std::string op = request["op"].get<std::string>();
+    cmd.is_write = op == "write";
+    const bool has_user = request.contains("user") && request["user"].is_string() &&
+                          !request["user"].get_ref<const std::string&>().empty();
+    cmd.user = sanitize_user(has_user ? request["user"].get<std::string>() : "");
+    if (!has_user || cmd.user == "-") {
+        reject("bad_request");
+        return;
+    }
+    std::string point;
+    if (request.contains("point") && request["point"].is_string()) {
+        point = request["point"].get<std::string>();
+        cmd.point_name = sanitize_point_name(point);
+    }
     if (op == "alarm_list" || op == "alarm_ack" ||
         op == "alarm_suppress" || op == "alarm_return") {
-        if (!has_user) {
-            reject("bad_request");
-            return;
-        }
         if (op == "alarm_list") cmd.kind = WebCommandKind::AlarmList;
         else if (op == "alarm_ack") cmd.kind = WebCommandKind::AlarmAck;
         else if (op == "alarm_suppress") cmd.kind = WebCommandKind::AlarmSuppress;
@@ -346,26 +542,29 @@ void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand
         if (cmd.kind == WebCommandKind::AlarmAck ||
             cmd.kind == WebCommandKind::AlarmSuppress ||
             cmd.kind == WebCommandKind::AlarmReturn) {
-            std::string alarm_id;
-            if (!jget_string(line, "alarmId", &alarm_id) || !valid_alarm_id(alarm_id)) {
+            if (!request.contains("alarmId") || !request["alarmId"].is_string()) {
                 reject("bad_request");
                 return;
             }
+            const std::string alarm_id = request["alarmId"].get<std::string>();
+            if (!valid_alarm_id(alarm_id)) { reject("bad_request"); return; }
             cmd.alarm_id = alarm_id;
         }
         if (cmd.kind == WebCommandKind::AlarmAck ||
             cmd.kind == WebCommandKind::AlarmSuppress) {
-            const bool has_duration = jhas_key(line, "durationS");
-            const bool has_permanent = jhas_key(line, "permanent");
-            if (has_duration && (!jget_number(line, "durationS", &cmd.duration_s) ||
-                                 !std::isfinite(cmd.duration_s) || cmd.duration_s <= 0.0)) {
+            const bool has_duration = request.contains("durationS");
+            const bool has_permanent = request.contains("permanent");
+            if (has_duration && (!request["durationS"].is_number() ||
+                                 !std::isfinite(cmd.duration_s = request["durationS"].get<double>()) ||
+                                 cmd.duration_s <= 0.0)) {
                 reject("bad_duration");
                 return;
             }
-            if (has_permanent && !jget_bool(line, "permanent", &cmd.permanent)) {
+            if (has_permanent && !request["permanent"].is_boolean()) {
                 reject("bad_request");
                 return;
             }
+            if (has_permanent) cmd.permanent = request["permanent"].get<bool>();
             if (has_duration && !has_permanent) cmd.permanent = false;
             if (!cmd.permanent && !has_duration) {
                 reject("bad_duration");
@@ -377,13 +576,15 @@ void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand
             return;
         }
         out->push_back(cmd);
+        client.outstanding++;
         return;
     }
 
-    if (!has_id || !has_op || point.empty() || !jget_string(line, "source", &source)) {
+    if (point.empty() || !request.contains("source") || !request["source"].is_string()) {
         reject("bad_request");
         return;
     }
+    const std::string source = request["source"].get<std::string>();
     /* 07 §8 BAC-CONFLICT-001: source enum mức 2 manual + mức 3 bacnet */
     if (source == "manual") {
         cmd.prio = 2;   /* PRIO_LOCAL_MANUAL */
@@ -402,13 +603,18 @@ void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand
         return;
     }
     if (op == "write") {
-        double v;
-        if (!jget_number(line, "value", &v)) {
+        if (!request.contains("value") || !request["value"].is_number()) {
+            reject("bad_value");
+            return;
+        }
+        const double v = request["value"].get<double>();
+        const float fv = static_cast<float>(v);
+        if (!std::isfinite(v) || !std::isfinite(fv)) {
             reject("bad_value");
             return;
         }
         cmd.is_write = true;
-        cmd.value = static_cast<float>(v);
+        cmd.value = fv;
     } else if (op == "release") {
         cmd.is_write = false;
     } else {
@@ -420,6 +626,7 @@ void WebIpc::handle_line(int fd, const std::string& line, std::vector<WebCommand
         return;
     }
     out->push_back(cmd);
+    client.outstanding++;
 }
 
 std::vector<WebCommand> WebIpc::drain()
@@ -427,46 +634,126 @@ std::vector<WebCommand> WebIpc::drain()
     std::vector<WebCommand> out;
     if (fd_ < 0) return out;
 
+#ifdef CORE_BUILD_TESTS
+    budget_counters_ = {};
+#endif
+    outbound_budget_remaining_ = KX_POINT_SNAPSHOT_MAX_PAYLOAD;
+    constexpr std::size_t max_clients = 4;
+    constexpr std::size_t max_accept_attempts = 4;
+    constexpr std::size_t max_read_bytes = 64u * 1024u;
+    constexpr std::size_t max_lines = 64;
+    std::size_t read_budget = max_read_bytes;
+    std::size_t line_budget = max_lines;
+    bool snapshot_accepted = false;
+
+    /* One-shot clients close after reading their response; free those slots before admission. */
+    reap_disconnected_clients();
+
     /* accept client mới */
-    for (;;) {
+    for (std::size_t attempt = 0; attempt < max_accept_attempts; ++attempt) {
+#ifdef CORE_BUILD_TESTS
+        budget_counters_.accept_attempts++;
+#endif
         const int cfd = ::accept4(fd_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
         if (cfd < 0) break;
-        clients_.push_back({cfd, std::string()});
+        if (clients_.size() >= max_clients) {
+            ::close(cfd);
+            continue;
+        }
+        clients_.push_back({cfd, next_client_id_++, {}, {}, false, false, false, 0, 0});
         std::fprintf(stderr, "INFO  web_ipc.client_connected fd=%d\n", cfd);
     }
 
+    constexpr std::size_t read_quantum = 16u * 1024u;
+    constexpr std::size_t line_quantum = 16;
+    constexpr std::size_t write_quantum = 16u * 1024u;
+    std::vector<uint64_t> order;
+    order.reserve(clients_.size());
+    if (!clients_.empty()) {
+        round_robin_cursor_ %= clients_.size();
+        for (std::size_t offset = 0; offset < clients_.size(); ++offset)
+            order.push_back(clients_[(round_robin_cursor_ + offset) % clients_.size()].id);
+        round_robin_cursor_ = (round_robin_cursor_ + 1) % clients_.size();
+    }
+
     /* đọc JSON lines từ mọi client */
-    for (size_t i = 0; i < clients_.size();) {
-        Client& c = clients_[i];
+    for (const uint64_t client_id : order) {
+        const auto found = std::find_if(clients_.begin(), clients_.end(),
+                                        [client_id](const Client& client) {
+                                            return client.id == client_id;
+                                        });
+        if (found == clients_.end()) continue;
+        Client& c = *found;
+        std::size_t client_read_budget = std::min(read_budget, read_quantum);
+        std::size_t client_line_budget = std::min(line_budget, line_quantum);
+        c.write_budget_remaining = std::min(outbound_budget_remaining_, write_quantum);
         char buf[1024];
-        bool closed = false;
-        for (;;) {
-            const ssize_t r = ::recv(c.fd, buf, sizeof(buf), MSG_DONTWAIT);
+        for (; !c.read_closed && !c.close_after_flush && !c.hard_close &&
+               client_read_budget > 0;) {
+            const std::size_t count = std::min(sizeof(buf), client_read_budget);
+            const ssize_t r = ::recv(c.fd, buf, count, MSG_DONTWAIT);
             if (r > 0) {
-                c.buf.append(buf, static_cast<size_t>(r));
-                if (c.buf.size() > 64 * 1024) { closed = true; break; }   /* client hỏng */
+                c.input.append(buf, static_cast<size_t>(r));
+                client_read_budget -= static_cast<std::size_t>(r);
+                read_budget -= static_cast<std::size_t>(r);
+#ifdef CORE_BUILD_TESTS
+                budget_counters_.read_bytes += static_cast<std::size_t>(r);
+#endif
+                if (c.input.size() > KX_POINT_SNAPSHOT_MAX_PAYLOAD) {
+                    c.input.clear();
+                    c.read_closed = true;
+                    queue_response(c, "{\"id\":0,\"result\":\"rejected\","
+                                      "\"error\":\"bad_request\"}\n", true);
+                    c.hard_close = true;
+                    break;
+                }
             } else if (r == 0) {
-                closed = true;
+                c.read_closed = true;
                 break;
             } else {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) break;
                 if (errno == EINTR) continue;
-                closed = true;
+                c.read_closed = true;
+                c.close_after_flush = true;
                 break;
             }
         }
         size_t pos;
-        while ((pos = c.buf.find('\n')) != std::string::npos) {
-            const std::string line = c.buf.substr(0, pos);
-            c.buf.erase(0, pos + 1);
-            if (!line.empty())
-                handle_line(c.fd, line, &out);
+        while (!c.close_after_flush && !c.hard_close && client_line_budget > 0 &&
+               (pos = c.input.find('\n')) != std::string::npos) {
+            const std::string line = c.input.substr(0, pos);
+            const bool snapshot_request = is_snapshot_request(line);
+            if (snapshot_request) {
+                const std::size_t reserve = snapshot_accepted ||
+                                                     snapshot_state_ != SnapshotCacheState::READY
+                                                 ? 128u
+                                                 : snapshot_payload_size_ + 64u;
+                if ((reserve > KX_POINT_SNAPSHOT_MAX_PAYLOAD && !c.output.empty()) ||
+                    (reserve <= KX_POINT_SNAPSHOT_MAX_PAYLOAD &&
+                     c.output.size() > KX_POINT_SNAPSHOT_MAX_PAYLOAD - reserve))
+                    break;
+            }
+            c.input.erase(0, pos + 1);
+            client_line_budget--;
+            line_budget--;
+#ifdef CORE_BUILD_TESTS
+            budget_counters_.lines++;
+#endif
+            if (!line.empty() &&
+                !(snapshot_request && handle_snapshot_line(c, line, &snapshot_accepted)))
+                handle_line(c, line, &out);
         }
-        if (closed) {
+        flush_client(c, &c.write_budget_remaining);
+        const std::size_t written = std::min(write_quantum, outbound_budget_remaining_) -
+                                    c.write_budget_remaining;
+        outbound_budget_remaining_ -= written;
+        if (c.hard_close || ((c.read_closed || c.close_after_flush) &&
+                             c.outstanding == 0 && c.output.empty())) {
             ::close(c.fd);
-            clients_.erase(clients_.begin() + static_cast<long>(i));
-        } else {
-            i++;
+            clients_.erase(std::find_if(clients_.begin(), clients_.end(),
+                                        [client_id](const Client& client) {
+                                            return client.id == client_id;
+                                        }));
         }
     }
     return out;

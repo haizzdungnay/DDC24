@@ -15,6 +15,14 @@ func resolveConfigDir() string {
 }
 
 func writeConfigFileAtomic(path string, data []byte, perm os.FileMode) error {
+	return writeConfigFileAtomicWithDirectorySync(path, data, perm, false)
+}
+
+func writeConfigFileAtomicStrict(path string, data []byte, perm os.FileMode) error {
+	return writeConfigFileAtomicWithDirectorySync(path, data, perm, true)
+}
+
+func writeConfigFileAtomicWithDirectorySync(path string, data []byte, perm os.FileMode, strict bool) error {
 	dir := filepath.Dir(path)
 	file, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*.tmp")
 	if err != nil {
@@ -43,11 +51,18 @@ func writeConfigFileAtomic(path string, data []byte, perm os.FileMode) error {
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("close temp config %s: %w", path, err)
 	}
+	if err := preserveExistingFileOwnership(path, tmpPath); err != nil {
+		return fmt.Errorf("preserve config ownership %s: %w", path, err)
+	}
 	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("rename config %s: %w", path, err)
 	}
 	cleanup = false
-	if dirFile, err := os.Open(dir); err == nil {
+	if strict {
+		if err := syncDirectory(dir); err != nil {
+			return fmt.Errorf("fsync config directory %s: %w", dir, err)
+		}
+	} else if dirFile, err := os.Open(dir); err == nil {
 		_ = dirFile.Sync()
 		_ = dirFile.Close()
 	}

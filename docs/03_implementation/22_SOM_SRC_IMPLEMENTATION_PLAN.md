@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Kế hoạch triển khai cấu trúc source thật chi tiết cho Dev 2
 
 > **Document ID:** IMPL-SOM-SRC-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.8 | 2026-07-15 (S8 COR-HIST-001 coherent runtime snapshot planned) · 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
+> **Phiên bản:** 1.12 | 2026-07-20 (reconciled downstream WEB-HIST-001..005 code-local status; v2 Trends authority feature-gated) · 1.11 | 2026-07-20 (reconciled downstream WEB-HIST-001..004 code-local status) · 1.10 | 2026-07-20 (reconciled downstream WEB-HIST-001/002/003 code-local status) · 1.9 | 2026-07-17 (S8 COR-HIST-001 core/local Done) · 1.8 | 2026-07-15 (S8 COR-HIST-001 coherent runtime snapshot planned) · 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
 > 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device) ·
 > 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) ·
 > 1.4 | 2026-06-13 (S7 #4 Active; thêm plan S7 #5 BACnet và S7 #6 Modbus) ·
@@ -14,7 +14,7 @@
 > SAFETY SPEC 07 §5, thêm microtask 5 Rev A.1 cho trigger T6/T7) · 1.0 | 2026-06-11
 > **Trạng thái:** Active — S0–S6 ĐÃ thực thi xong 2026-06-11 (round-trip pass);
 > S7 #1/#2/#3 xong 2026-06-12; S7 #4/#5/#6 đã có task/code-ready docs 2026-06-13;
-> TD-001/002/003 xong 2026-06-19; S8 COR-HIST-001 PLANNED 2026-07-15
+> TD-001/002/003 xong 2026-06-19; S8 COR-HIST-001 core/local DONE 2026-07-17; historian target E2E chưa đóng
 > **Đối tượng đọc:** Dev 2, Lead, Tester
 > **Phạm vi:** chỉ phía SOM: `services/iobus`, `services/core`, `tools/fake_mcu`, `tools/shm_dump_io`, `shared/`
 
@@ -765,9 +765,9 @@ Ràng buộc giữ nguyên:
 7. Bound response/request handling; snapshot read must not block scan or mutate priority/output.
 8. Run focused C++ tests, then full core CTest.
 
-**Done:** exact snapshot contract/tests pass; no `shared/mkddc_shm.h` change; no SQLite/database dependency in core; task still not Done until evidence recorded in 07/11/42.
+**Done evidence:** strict read-only 24-row snapshot contract passes after resolve/safe-state; physical output write precedes allocation-free fixed-buffer publication; DI deferred pending capability authority; uppercase quality and actual source semantics; generation=1 Rev A; bounded cached IPC with 4-client/fair per-client quotas. Clean WSL/Ninja Release ON CTest passes 209/209, focused snapshot/IPC/scan 64/64, clean production OFF build passes, and synthetic worst-width stress fixture is 6,427 bytes including newline under the 64 KiB cap. No `shared/mkddc_shm.h`, SQLite, backend or FE change.
 
-Trạng thái: PLANNED 2026-07-15 — owner-approved contract; code chưa Done.
+Trạng thái: **DONE 2026-07-17 cho S8/COR-HIST-001 code/local gates**. Host timing is evidence only; no board-jitter claim. Downstream WEB-HIST-001..005 code-local slices are Done; v2 Trends authority remains feature-gated until activation/cutover, and E2E-HIST-001 target board/eMMC/recovery gates remain open. Plan 42 remains the historian source plan and is not a release-Done claim.
 
 ---
 
@@ -865,6 +865,6 @@ Không làm bước 4 trước khi 3 bước này xanh.
 
 ---
 
-**Rev** 1.8 | 2026-07-15 — Added owner-approved S8/COR-HIST-001 coherent read-only runtime snapshot microtasks, tests, boundaries and build order; product code remains PLANNED. · **Rev** 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
+**Rev** 1.12 | 2026-07-20 — Reconciled downstream WEB-HIST-001..005 code-local completion and retained feature-gated v2 authority, activation/cutover, target and E2E gates as open. · **Rev** 1.11 | 2026-07-20 — Reconciled downstream WEB-HIST-001..004 code-local completion and retained WEB-HIST-005, activation/cutover, target and E2E gates as open. · **Rev** 1.10 | 2026-07-20 — Reconciled downstream WEB-HIST-001/002/003 code-local completion and retained WEB-HIST-004/005, activation/cutover, target and E2E gates as open. · **Rev** 1.9 | 2026-07-17 — Closed S8/COR-HIST-001 code/local evidence; retained historian target E2E gates. · **Rev** 1.8 | 2026-07-15 — Added owner-approved S8/COR-HIST-001 coherent read-only runtime snapshot microtasks, tests, boundaries and build order; product code remains PLANNED. · **Rev** 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device; cập nhật ràng buộc BACnet IPC path) ·
 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) · 1.4 | 2026-06-13 · 1.3 | 2026-06-12 · 1.2 | 2026-06-12 · 1.1 | 2026-06-12 · 1.0 | 2026-06-11
