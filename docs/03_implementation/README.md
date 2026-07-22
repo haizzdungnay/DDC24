@@ -18,7 +18,7 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [05](05_IOP_UART_IMPLEMENTATION_GUIDE.md) | Hợp đồng IOP/UART v2.0 | Active |
 | [06](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) | Service mkddc-iobus | Active |
 | [07](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) | Service mkddc-core | Active |
-| [08](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md) | ADR-016 HMI microtask plan HOP-000..077 | Host implementation complete; target/HIL/usability acceptance pending |
+| [08](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md) | ADR-016 HOP-000..077 + ADR-017 network HMI HNW-000..013 | Existing host control complete; network/target acceptance pending |
 | [09](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) | Web REST API + UI (Go) | Active |
 | [10](10_END_TO_END_DATA_FLOW.md) | E2E data flow + debug checklist | Active |
 | [11](11_TASK_CHECKLIST.md) | Master task tracker | Active |
@@ -32,7 +32,7 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [19](19_DOCS_AUDIT_SOM_IMPLEMENTATION.md) | Docs audit 2026-06-11 | Historical |
 | [20](20_DOCS_FIX_CHECKLIST.md) | Fix checklist từ audit | Historical |
 | [21](21_VIRTUAL_COM_DECISION.md) | Virtual COM/PTY decision | Active |
-| [22](22_SOM_SRC_IMPLEMENTATION_PLAN.md) | SOM source build plan S0-S7 | Active |
+| [22](22_SOM_SRC_IMPLEMENTATION_PLAN.md) | SOM source S0-S7 + ADR-017 network authority S8/NWC-000..017 | Active plan; S8 not implemented |
 | [23](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | Stateful graph components plan | Active |
 | [24](24_SOM_FW_STATUS_REPORT_ISO.md) | FW status report ISO format | Active |
 | [25](25_BACNET_IMPLEMENTATION_PLAN.md) | BACnet/IP implementation plan | IN PROGRESS |

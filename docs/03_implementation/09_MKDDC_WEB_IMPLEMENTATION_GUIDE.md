@@ -2,7 +2,7 @@
 ## MK-DDC-24 — REST API + Web UI + Config + Validator
 
 > **Document ID:** IMPL-WEB-MK-DDC-24-VI
-> **Phiên bản:** 1.10 | 2026-06-23 (frontend dependency security refresh; contract §2 không đổi)
+> **Phiên bản:** 1.12 | 2026-07-22 (ADR-017: network hiện chỉ lưu desired config; SOM transaction handoff cho BE/FE)
 > **Owner:** Dev 3 (Web/BE)
 > **Nguồn-chuẩn:** [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) ·
 > [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
@@ -40,7 +40,8 @@ web/backend/
 | Ack alarm | — | ✅ | ✅ |
 | Graph validate (read-only check) | — | ✅ | ✅ |
 | Graph **deploy** | — | — | ✅ |
-| Config (io/network/device/safe-state) | — | — | ✅ |
+| Config (io/device/safe-state) | — | — | ✅ |
+| Network desired config | — | — | ✅ ghi file; OS apply/rollback **chưa implement**, pending B7/ADR-017 |
 | Users, OTA, download logs | — | — | ✅ |
 
 > Role cũ "engineer" trong bản trước = operator (commissioning) hoặc admin (deploy) theo bảng
@@ -236,6 +237,12 @@ System status (versions tách từng thành phần — Contract Freeze; nguồn 
 
 > Web validate input theo schema trước khi ghi; config IO → core/iobus reload (qua signal/IPC).
 
+`network.conf` chỉ là desired configuration. Source hiện tại ghi file nhưng
+`applySystem(system)` trả `applied=false`; frontend chưa xử lý warning này. Active IP
+phải lấy từ kernel/network authority. Target ADR-017 và SOM microtasks NWC-000..017
+nằm trong [22_SOM_SRC_IMPLEMENTATION_PLAN](22_SOM_SRC_IMPLEMENTATION_PLAN.md); BE/FE
+không được tự gọi OS command hoặc báo applied trước transaction confirm.
+
 ---
 
 ## 5. Validator rule (PRODUCT_DEFINITION §14 — Rev A: 4 check cốt lõi)
@@ -308,7 +315,8 @@ Done khi : 4 check chạy đúng; deploy chỉ khi pass.
 | Không bypass core | core_client.go | group 6 (kiểm không có serial) |
 
 ---
-**Rev** 1.11 | 2026-06-23 · DoD: [13_DEFINITION_OF_DONE §5](13_DEFINITION_OF_DONE.md)
+**Rev** 1.12 | 2026-07-22 · DoD: [13_DEFINITION_OF_DONE §5](13_DEFINITION_OF_DONE.md)
+- 1.12 (2026-07-22): ghi rõ source network chỉ lưu desired config/pending B7; target BE/FE phải dùng ADR-017/NWC transaction authority và xử lý active/pending/reconnect/rollback.
 - 1.11 (2026-06-23): Go security dependency refresh: `golang.org/x/crypto v0.53.0`, `golang.org/x/sys v0.46.0`; giữ nguyên REST/WS contract.
 - 1.10 (2026-06-23): frontend security dependency refresh: Vite 8.0.16 + plugin-react 6.0.2, Node 22 CI, Vite config manualChunks compatibility; giữ nguyên REST/WS contract.
 - 1.9 (2026-06-17): chuẩn hóa i18n frontend: tiếng Việt có dấu + English mode cho label/nút/toast chính; giữ nguyên REST/WS contract.

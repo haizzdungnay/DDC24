@@ -17,13 +17,18 @@
 | SWR-REQ-002 | Graph scan, priority arbitration, interlock và safe-state must deterministic trong giới hạn test được phê duyệt. | timing + unit test |
 | SWR-REQ-003 | Config must được validate, ghi bền vững và round-trip không mất field có consumer. | API/config test |
 | SWR-REQ-004 | Alarm, trend, schedule, user và commissioning endpoints must yêu cầu auth/role phù hợp. | API/security test |
+| SWR-REQ-005 | Network configuration must phân biệt desired/pending với active kernel state; không được báo applied/online chỉ từ file cấu hình hoặc field không rỗng. | unit + integration |
+| SWR-REQ-006 | Đổi Ethernet IPv4 must dùng transaction `stage/apply/confirm/rollback`, giữ last-known-good và tự rollback trong tối đa 120 s nếu không confirm hoặc health check thất bại. | fault + target network test |
+| SWR-REQ-007 | Đổi IP must không restart `mkddc-core`, không làm dừng IOP/UART scan và phải hot-rebind BACnet/IP rồi phát `I-Am`; Web và Modbus TCP phải phục hồi/reconnect theo interface mới. | multi-process + protocol test |
 | IF-REQ-001 | IOP must dùng 921600 baud, poll 2 ms, response timeout 3 ms, tối đa 3 retry và fault threshold 20 ms. | header assertion + HIL |
 | IF-REQ-002 | SHM consumers must dùng cùng magic/layout; đổi ABI must đổi magic và rebuild đồng bộ. | compile/layout test |
 | IF-REQ-003 | AO must đi qua ranh giới core/iobus bằng V hoặc mA hợp lệ và chỉ scale sang DAC một lần. | boundary test |
+| IF-REQ-004 | SOM network authority must cung cấp local versioned/bounded IPC cho `status/validate/stage/apply/confirm/rollback`, kiểm peer credential và trả transaction state/reason code ổn định. | contract + negative test |
 | SAFE-REQ-001 | MCU must đưa output về safe behavior nếu không nhận poll hợp lệ trong 200 ms. | HIL fault injection |
 | SAFE-REQ-002 | Giá trị output NaN, infinity hoặc ngoài dải must bị từ chối trước khi publish/actuate. | negative test |
 | SEC-REQ-001 | API must có authentication, role authorization và audit cho thay đổi cấu hình/force output. | security test |
 | SEC-REQ-002 | Secret must không được hard-code; production transport/config must dùng cơ chế bảo vệ được phê duyệt. | review + deployment test |
+| SEC-REQ-003 | Network mutation must yêu cầu Service/Admin session, audit old/new/actor/result và đi qua helper least-privilege; HMI/Web must không có quyền chạy shell hoặc sửa trực tiếp OS network state. | security + deployment negative test |
 | NFR-REQ-001 | Restart từng service must không gây output không kiểm soát; trạng thái lỗi phải quan sát được. | resilience test |
 | NFR-REQ-002 | Build release must tái lập được và toàn bộ test bắt buộc phải pass trên target/toolchain được ghi nhận. | CI/release record |
 | HW-REQ-001 | Mạch UI must hỗ trợ mode đã công bố, với STM32 là SPI master duy nhất của hai ADS131M08. | schematic review + bench |
@@ -44,5 +49,7 @@
 | HMI-REQ-013 | Khi broker/core/alarm authority unavailable hoặc timeout, mọi mutation must bị disable, pending phải kết thúc bằng lỗi rõ và HMI tiếp tục read-only từ SHM. | fault injection |
 | HMI-REQ-014 | Body text must đạt tối thiểu 14 px; touch target hành động must tối thiểu 40×40 px hoặc có thao tác nút cứng tương đương; focus, confirmation và first-input wake suppression phải quan sát được. | inspection + target usability |
 | HMI-REQ-015 | Telemetry refresh must ≤1 s; command phải có accepted/rejected/timeout feedback ≤2 s trong điều kiện nominal và duplicate request must không tạo double action. | timing + idempotency test |
+| HMI-REQ-016 | Trong `Service`, local HMI must cho Service role xem active/pending Ethernet IPv4, chọn DHCP hoặc nhập static IP/subnet/gateway, xem impact và thực hiện apply/confirm/rollback qua broker; không được mở rộng thành Wi-Fi/protocol/full engineering. | policy + target usability test |
+| HMI-REQ-017 | Khi đổi IP, local HMI must hiển thị transaction state và rollback countdown; mất broker/network authority phải giữ monitoring read-only, không báo thành công và không blind retry. | fault injection + target test |
 
 Các requirement về chứng nhận chỉ được thêm khi có tiêu chuẩn áp dụng, test plan, acceptance limit và chủ sở hữu bằng chứng.

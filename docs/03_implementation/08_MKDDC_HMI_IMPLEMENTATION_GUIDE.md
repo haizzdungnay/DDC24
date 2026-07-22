@@ -2,8 +2,8 @@
 ## ADR-016 limited-operator HMI — microtask plan
 
 **Document ID:** IMPL-HMI-MK-DDC-24
-**Revision:** 2.1 — 2026-07-22
-**Status:** Host implementation complete; target/HIL and usability acceptance pending
+**Revision:** 2.2 — 2026-07-22
+**Status:** Existing host control implementation complete; ADR-017 network HMI planned; target/HIL and usability acceptance pending
 **Owners:** Core, Go backend, HMI, QA
 **Design:** [SW HMI Design](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md)
 **UX/UC:** [UX](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [Use cases](../04_uiux/KX-DDC24-UC-HMI-001_VI.md)
@@ -21,6 +21,10 @@ Add authoritative setpoint/mode/override/release and alarm ACK without putting H
 the control path. Telemetry remains read-only SHM. Mutation goes through a local
 authenticated broker and existing/extended core IPC. Web UI/frontend is out of scope.
 
+ADR-017 adds one narrow Service workflow: inspect active/pending Ethernet state and
+request static/DHCP apply, confirm or rollback through the broker and SOM network
+authority. This does not add a sixth surface or general engineering to the panel.
+
 ## 2. Non-negotiable rules
 
 1. `mkddc-hmi` must never write command fields in SHM or hardware.
@@ -34,6 +38,8 @@ authenticated broker and existing/extended core IPC. Web UI/frontend is out of s
 7. Remove direct HMI reboot/signal privilege before enabling production Service action.
 8. Each microtask is merged only with its unit tests, doc/trace impact and changelog
    entry for that work session.
+9. HMI must not open the privileged network-authority socket, invoke `ip`/`networkctl`
+   or edit Linux network files. It uses the authenticated broker only.
 
 ## 3. Existing source to preserve
 
@@ -65,6 +71,7 @@ small vertical slices.
 | HOP-073 | Host complete | Real broker UDS plus real `CoreClient` against a deterministic Core socket stub covers login/policy/override/query/release; the C++ client independently covers broker loss/reconnect. Target orchestration remains open. |
 | HOP-074 | Host simulation complete; target open | Core socket loss proves cached reject/no blind replay and explicit new-ID retry; broker restart invalidates the old session. systemd/target process-loss evidence is still required. |
 | HOP-075..077 | Open | Target display/input, operator usability and final release-gate evidence are not available. HMI production gate remains **RED**. |
+| HNW-000..013 | Planned | ADR-017 Ethernet status/static/DHCP/confirm/rollback; depends on frozen SOM contract and BE broker adapter. No source implementation yet. |
 
 The verification host identified on 2026-07-22 is an x86_64 Lenovo ThinkStation with
 a PCI DRM device, no `/proc/device-tree/model`, and no active `mkddc-*` services. It is
@@ -84,6 +91,8 @@ P0 contract/policy
    └─► P2 core TTL/query/idempotency ──────────────┘
 
 P1 + P2 + P4 ─► P5 privilege removal ─► P6 integration/target acceptance
+
+NWC contract/SOM authority ─► BE broker adapter ─► HNW local-HMI client/UI ─► target recovery test
 ```
 
 Only one contract owner edits a shared message shape at a time. Core and HMI UI work
@@ -558,6 +567,138 @@ may proceed in parallel only after P0 is frozen.
 - **Depends:** HOP-070..076.
 - **Done:** HMI gate changes from RED only with current approved target/security evidence.
 
+### P7 — ADR-017 local Ethernet commissioning
+
+This phase is planned work. `NWC-*` SOM tasks are owned in
+[22 — SOM Source Implementation Plan](22_SOM_SRC_IMPLEMENTATION_PLAN.md). Go broker
+and Web FE are separate-team dependencies; HMI implementation must not invent their
+contract or call `mkddc-netcfg` directly.
+
+**Schedule baseline (một HMI engineer):** H0 `HNW-000..003` 1–2 ngày sau NWC contract;
+H1 `HNW-004..009` 3–4 ngày với fake broker; H2 `HNW-010..011` 2–3 ngày; H3 `HNW-012`
+2–3 ngày sau NWC-016 + BE adapter; H4 `HNW-013` 2–3 ngày trên target. Đây là effort
+estimate, không phải release commitment; exit gate quan trọng hơn ngày lịch.
+
+#### HNW-000 — Freeze HMI network fixtures
+
+- **Files:** controlled interface docs; future fixtures under existing HMI test tree.
+- **Output:** golden request/response/state/reason fixtures for `network_status`,
+  `network_validate`, `network_stage`, `network_apply`, `network_confirm`, rollback.
+- **Verify:** fixtures validate against broker extension and SOM `netcfg` schema.
+- **Depends:** NWC-000..003 and BE contract owner approval.
+- **Done:** active/pending/last-known-good and all terminal states are unambiguous.
+
+#### HNW-001 — Add read-only network presentation model
+
+- **Files:** future `services/hmi/data/network_model.*` and tests.
+- **Output:** bounded model for link, active IPv4/prefix/gateway/mode, transaction,
+  deadline and last result; no config-file inference.
+- **Verify:** parse normal/missing/malformed/stale/unknown fields and clock countdown.
+- **Depends:** HNW-000.
+- **Done:** desired value can never overwrite active value in presentation state.
+
+#### HNW-002 — Add Network section under Service
+
+- **Files:** `services/hmi/screens/screen_service.*`, navigation/focus tests.
+- **Output:** read-only summary/detail; no sixth surface.
+- **Verify:** Viewer can inspect; unavailable authority shows `UNAVAILABLE`, not `OK`.
+- **Depends:** HNW-001.
+- **Done:** existing system/communication diagnostics remain reachable.
+
+#### HNW-003 — Gate configuration by Service session
+
+- **Files:** Service/network presenter and session-policy tests.
+- **Output:** Configure appears only for authoritative Service capability/session.
+- **Verify:** Viewer/Operator/expired/unknown/broker-offline all deny mutation.
+- **Depends:** HNW-002 and BE broker capability projection.
+- **Done:** local metadata/config cannot grant network privilege.
+
+#### HNW-004 — Implement static IPv4 editor
+
+- **Files:** Service network form, numeric keyboard helpers, locale and tests.
+- **Output:** IPv4, subnet/prefix and gateway editor with cancel/back behavior.
+- **Verify:** valid boundaries, malformed octet/mask, network/broadcast/loopback and
+  clipping/hard-key cases; authority still revalidates.
+- **Depends:** HNW-003.
+- **Done:** no request is emitted before explicit confirmation.
+
+#### HNW-005 — Implement DHCP selection
+
+- **Files:** same form/model/tests.
+- **Output:** explicit DHCP choice and explanation that lease/address may change.
+- **Verify:** mode switch does not retain/send stale static fields ambiguously.
+- **Depends:** HNW-003.
+- **Done:** returned active lease is authoritative; candidate is never shown as lease.
+
+#### HNW-006 — Add impact confirmation
+
+- **Files:** confirmation overlay, localization and geometry tests.
+- **Output:** old/new/mode, Web/BACnet reconnect warning and hold-to-confirm.
+- **Verify:** cancel, session expiry, duplicate ENTER/touch and first-wake suppression.
+- **Depends:** HNW-004, HNW-005.
+- **Done:** one user confirmation produces one idempotent stage/apply transaction.
+
+#### HNW-007 — Render apply lifecycle and countdown
+
+- **Files:** network model/screen and fake-monotonic-clock tests.
+- **Output:** staged/applying/awaiting-confirmation/confirmed/failed/rolling-back/
+  rolled-back states with transaction ID and rollback countdown.
+- **Verify:** out-of-order/duplicate response, reconnect and deadline boundary.
+- **Depends:** HNW-001, HNW-006 and BE adapter.
+- **Done:** only `confirmed` is presented as applied success.
+
+#### HNW-008 — Implement explicit confirm and rollback actions
+
+- **Files:** network screen/client tests.
+- **Output:** transaction-bound Confirm/Rollback with pending/result states.
+- **Verify:** wrong/stale ID, duplicate action, timeout, automatic rollback race.
+- **Depends:** HNW-007.
+- **Done:** no blind retry and final state is re-queried from authority.
+
+#### HNW-009 — Add recovery guidance
+
+- **Files:** Service messages/help and locale tests.
+- **Output:** show active address for Web reconnect, rollback outcome and field-service
+  instruction when both active address and authority are unavailable.
+- **Verify:** static success, DHCP lease, auto rollback and failed rollback fixtures.
+- **Depends:** HNW-007, HNW-008.
+- **Done:** message never claims a rescue address unless deployment authority reports it.
+
+#### HNW-010 — Complete EN/VI and 320×240 interaction QA
+
+- **Files:** locale/style/focus tests for the new Service flow.
+- **Output:** all labels/reason codes translated; ≥14 px body and ≥40×40 action or
+  full six-button equivalent.
+- **Verify:** missing key, UTF-8, clipping, focus, touch and key-only traversal.
+- **Depends:** HNW-002..009.
+- **Done:** every state/action is usable without color-only meaning.
+
+#### HNW-011 — Add HMI unit/component suite
+
+- **Files:** existing `services/hmi/tests` structure.
+- **Output:** deterministic model, state-machine, form and screen coverage.
+- **Verify:** warnings-as-errors HMI build/test with fake clock/transport.
+- **Depends:** HNW-001..010.
+- **Done:** normal, boundary, malformed and failure paths pass on host.
+
+#### HNW-012 — Add broker/network-authority integration harness
+
+- **Files:** existing integration harness; no direct HMI-to-netcfg shortcut.
+- **Output:** HMI → real broker adapter → deterministic netcfg stub/full service.
+- **Verify:** role deny, duplicate, apply/confirm, timeout/rollback, broker/helper loss,
+  reconnect and audit correlation by transaction/request ID.
+- **Depends:** HNW-011, NWC-016 and BE adapter completion.
+- **Done:** integration proves HMI cannot mutate OS or bypass broker.
+
+#### HNW-013 — Execute target commissioning/recovery acceptance
+
+- **Files:** immutable target evidence and traceability only.
+- **Output:** UC-HMI-016..019 on RK3566/panel with Ethernet peer/BMS traffic.
+- **Verify:** glove/light/key-only use, old/new IP, DHCP, duplicate-IP reject, 120 s
+  rollback, helper/broker restart, BACnet rediscovery and uninterrupted control trace.
+- **Depends:** HNW-012, NWC-017, HOP-075.
+- **Done:** reviewed evidence closes network-HMI findings; host pass is insufficient.
+
 ## 6. Recommended implementation order
 
 1. HOP-000..005 — contract freeze.
@@ -567,6 +708,8 @@ may proceed in parallel only after P0 is frozen.
 5. HOP-060..063 — privilege removal before production enablement.
 6. HOP-070..077 — integration, target and usability gates.
 7. HOP-064 only after a separate privileged-maintenance approval.
+8. NWC-000..017 prepares SOM first; then BE broker adapter; then HNW-000..013. Web FE
+   can integrate independently against the same transaction API after contract freeze.
 
 The first demonstrable vertical slice should be: login → query one commandable point →
 setpoint accepted/rejected → audit → HMI authoritative result. Do not start visual
@@ -583,6 +726,8 @@ polish before this slice proves the control boundary.
 - HMI has no direct SHM write, hardware write, process signal or reboot capability.
 - Host, integration, target and usability evidence is current and traceable.
 - Unimplemented maintenance actions are not represented as working.
+- Ethernet configuration is Service-only, transaction-backed and distinguishes active
+  from pending; automatic rollback and control continuity have target evidence.
 - Controlled docs, traceability and changelog are updated with the implementation.
 
 ## Revision history
@@ -592,3 +737,4 @@ polish before this slice proves the control boundary.
 | 1.2 | 2026-07-22 | Source-aligned six-screen implementation gap audit. |
 | 2.0 | 2026-07-22 | ADR-016 microtask plan for five-surface limited-operator HMI, authoritative broker/core path, privilege removal and verification gates. |
 | 2.1 | 2026-07-22 | Recorded host implementation, artifact mapping and the remaining target/HIL/usability RED gates. |
+| 2.2 | 2026-07-22 | Added ADR-017 HNW-000..013 microtasks for local Ethernet commissioning after SOM and broker contract readiness. |

@@ -2,10 +2,10 @@
 ## Five-surface limited operator interface on 320×240
 
 **Document ID:** KX-DDC24-UX-HMI-001
-**Revision:** 3.0 — 2026-07-22
-**Status:** Controlled target; implementation partial
+**Revision:** 3.1 — 2026-07-22
+**Status:** Controlled target; network commissioning not implemented
 **Owner:** UX Lead
-**Decision:** ADR-016
+**Decision:** ADR-016, ADR-017
 **Use cases:** [KX-DDC24-UC-HMI-001](KX-DDC24-UC-HMI-001_VI.md)
 
 ## 1. Hardware envelope
@@ -20,7 +20,8 @@
 | Render/data | ≥10 FPS; telemetry refresh ≤1 s |
 
 The small display is not a full Web HMI/SCADA. It is optimized for glance, point
-inspection, limited command, alarm response and service diagnostics.
+inspection, limited command, alarm response, service diagnostics and a narrow
+Ethernet IPv4 commissioning/recovery workflow for a physically present Service user.
 
 ## 2. UX acceptance targets
 
@@ -200,6 +201,40 @@ Maintenance is hidden or locked without a Service session. An action appears onl
 when an authoritative implementation exists. Reboot/restart/restore must not be
 executed directly by the HMI process.
 
+### 9.1 Ethernet commissioning
+
+Network is a section inside Service, not a sixth surface:
+
+```text
+ETHERNET
+Link       UP
+Active     192.168.1.50 /24
+Mode       STATIC
+Gateway    192.168.1.1
+Pending    NONE
+
+[ Configure ]
+```
+
+After Service authentication, Configure offers only `DHCP` or `STATIC`. Static input
+contains IPv4, subnet/prefix and gateway. Confirmation shows old/new values, warns
+that Web/BACnet communication may reconnect, and requires explicit hold/confirm.
+
+```text
+APPLYING NETWORK
+New IP       192.168.1.80 /24
+Old IP       192.168.1.50 /24
+Rollback in  01:42
+
+[ Confirm new IP ]   [ Roll back ]
+```
+
+The panel remains usable when a browser loses the old IP. Success is shown only from
+authoritative `confirmed`; saved/staged/applying remain distinct. If broker/helper is
+unavailable, Configure is disabled and data is `UNAVAILABLE`, never inferred from
+`network.conf`. Wi-Fi credentials, DNS advanced settings, VLAN, routes, firewall and
+BACnet Device ID/port remain Web/engineering functions.
+
 ## 10. Login and session
 
 - Login is opened only when a mutation is requested or from Service.
@@ -271,6 +306,7 @@ be measured on the actual panel/theme.
 8. Session expiry while override remains active.
 9. Stale/corrupt SHM and recovery.
 10. Glove/light, font/localization, 40×40 targets and first-input wake suppression.
+11. Ethernet static/DHCP apply, old/new display, countdown, confirm and automatic/manual rollback.
 
 ## Revision history
 
@@ -278,3 +314,4 @@ be measured on the actual panel/theme.
 |---|---|---|
 | 2.1 | 2026-07-22 | Service-panel UX and source-aligned release gaps. |
 | 3.0 | 2026-07-22 | ADR-016 five-surface limited operator UX, point faceplate, authoritative command/session states and measurable interaction targets. |
+| 3.1 | 2026-07-22 | Added ADR-017 Ethernet IPv4 commissioning flow and rollback countdown under Service. |

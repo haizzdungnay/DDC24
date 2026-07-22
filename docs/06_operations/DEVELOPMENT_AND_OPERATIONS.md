@@ -47,6 +47,29 @@ Không mặc định rằng HMI đã nằm trong package chính; xác minh servi
 - Web lỗi points/config: kiểm tra auth, route/backend log, SHM consumer và config validator.
 - HMI blank/input lỗi: kiểm tra DRM `/dev/dri/card0`, DSI panel, FT5436 I²C, GPIO/backlight và build flag.
 
+## Network commissioning status and recovery
+
+Source baseline 2026-07-22 chưa có OS network applier: Web `PUT /api/v1/network`
+chỉ lưu desired files và trả warning `pending B7`. Không dùng toast “Đã lưu” hoặc IP
+trong `network.conf` làm bằng chứng kernel đã đổi địa chỉ. Active IPv4 phải kiểm tra từ
+kernel/system status trên target.
+
+Cho tới khi NWC-000..017 hoàn tất, đổi IP production phải theo runbook/image owner đã
+phê duyệt ngoài Web/local HMI, có console/local access và backup cấu hình. Không restart
+`mkddc-iobus` chỉ để thử nhận IP mới vì service còn sở hữu IOP/UART.
+
+Target ADR-017 sau implementation:
+
+1. Service/Admin tạo transaction và xem old/new/rollback deadline.
+2. Static apply giữ đường cũ tới confirm khi topology cho phép; DHCP chờ lease thật.
+3. Local HMI hiển thị active IP để reconnect Web.
+4. Không confirm/health fail trong tối đa 120 s thì helper tự phục hồi last-known-good.
+5. BACnet hot-rebind/phát `I-Am`; core/IOP/STM32 tiếp tục hoạt động.
+
+Runbook release phải ghi interface allowlist, location journal/last-known-good, recovery
+khi rollback fail, console/rescue access của image và lệnh quan sát đã được packaging
+phê duyệt. Không ghi lệnh giả trước khi platform backend được implement/test trên image.
+
 ## Backup, rollback và tài liệu
 
 Rollback phải khôi phục artifact và config tương thích ABI; không trộn binary dùng SHM version khác nhau. Tài liệu lịch sử được phục hồi từ archive theo [Document Control](../00_governance/CONTROL.md), vào thư mục tạm trước khi chọn lọc nội dung.

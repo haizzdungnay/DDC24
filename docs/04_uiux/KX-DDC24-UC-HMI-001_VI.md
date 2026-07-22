@@ -1,11 +1,11 @@
 # Use Cases — HMI local MK-DDC-24
 
 **Document ID:** KX-DDC24-UC-HMI-001
-**Revision:** 3.0 — 2026-07-22
-**Status:** Controlled target; implementation partial
+**Revision:** 3.1 — 2026-07-22
+**Status:** Controlled target; network commissioning not implemented
 **Owner:** Product/UX Lead
-**Decision:** ADR-016
-**Trace:** `HMI-REQ-001..015`, `HMI-001..032`
+**Decision:** ADR-016, ADR-017
+**Trace:** `HMI-REQ-001..017`, `IF-REQ-004`, `SWR-REQ-005..007`
 
 ## 1. Product role
 
@@ -28,7 +28,7 @@ Communication/System của thiết kế cũ được gộp vào Home/Service; kh
 | Viewer | Quan sát trạng thái, point, alarm và diagnostics | Không |
 | Operator | Điều chỉnh vận hành point được whitelist; ACK alarm | Setpoint/mode/override/release/ACK theo policy |
 | Commissioner | Kiểm tra hệ thống; cấu hình sâu vẫn ngoài panel local | Không thêm quyền engineering trên HMI |
-| Service | Chẩn đoán và yêu cầu maintenance được phê duyệt | Service request có authority/audit |
+| Service | Chẩn đoán và cấu hình/phục hồi Ethernet IPv4 được ADR-017 phê duyệt | Network transaction có authority/audit |
 
 Identity phải authoritative và session có thời hạn. `role=` hoặc static PIN trong file
 HMI không phải production identity.
@@ -179,11 +179,47 @@ HMI không phải production identity.
 | Main flow | SHM timestamp quá ngưỡng hoặc seqlock/magic lỗi → banner/quality `STALE/UNAVAILABLE` và block mutation phụ thuộc dữ liệu đó |
 | Acceptance | Không hiển thị giá trị cũ như current; recovery chỉ sau snapshot hợp lệ |
 
+### UC-HMI-016 — Xem active và pending network
+
+| Field | Nội dung |
+|---|---|
+| Actor | Viewer/Service |
+| Main flow | Service → Network hiển thị link/interface, active kernel IPv4/prefix/gateway/mode, pending transaction và rollback countdown |
+| Alternate | Authority thiếu → `UNAVAILABLE`; file desired không được trình bày như active |
+| Acceptance | Người dùng phân biệt Active, Pending và Last-known-good; không có `online` suy diễn từ field không rỗng |
+
+### UC-HMI-017 — Đổi Ethernet static IPv4
+
+| Field | Nội dung |
+|---|---|
+| Actor | Service có session |
+| Main flow | Chọn Static → nhập IPv4/subnet/gateway → xem old/new và impact → hold Confirm → broker/network authority stage+apply → HMI hiện countdown → Service confirm new IP |
+| Alternate | Format/range/route/duplicate IP invalid → reject trước activate; authority timeout → Unknown/rollback, không retry mù |
+| Acceptance | Có audit và transaction ID; success chỉ sau authoritative confirm; local control/IOP scan tiếp tục |
+
+### UC-HMI-018 — Chuyển Ethernet sang DHCP
+
+| Field | Nội dung |
+|---|---|
+| Actor | Service có session |
+| Main flow | Chọn DHCP → xem cảnh báo địa chỉ có thể thay đổi → apply → HMI hiển thị lease active mới và cho confirm |
+| Alternate | Không nhận lease/health fail trước deadline → tự rollback last-known-good |
+| Acceptance | IP mới lấy từ authority/kernel, không lấy từ candidate; panel hiển thị địa chỉ để kỹ thuật viên reconnect Web |
+
+### UC-HMI-019 — Rollback network
+
+| Field | Nội dung |
+|---|---|
+| Actor | Service có session hoặc authority tự động |
+| Main flow | Trong `awaiting_confirmation`, chọn Roll back hoặc hết deadline → authority phục hồi last-known-good → HMI rehydrate state `rolled_back` |
+| Alternate | Helper/host restart giữa transaction → journal boot recovery tiếp tục rollback |
+| Acceptance | IP cũ phục hồi trong giới hạn test; không restart core/iobus; BACnet rebind theo active address cuối cùng |
+
 ## 5. Global acceptance matrix
 
 | Topic | Acceptance |
 |---|---|
-| Scope | Chỉ five-surface local HMI; không có full Web/SCADA/engineering workflow |
+| Scope | Chỉ five-surface local HMI; Ethernet IPv4 Service workflow là ngoại lệ hẹp, không có full Web/SCADA/engineering workflow |
 | Authority | HMI không ghi SHM/hardware; mutation chỉ complete sau authoritative response |
 | Control | Chỉ whitelist; finite/range/role/priority/reason/TTL revalidated |
 | Alarm | Four-state semantics; ACK authoritative/audited, ACK ≠ clear |
@@ -199,3 +235,4 @@ HMI không phải production identity.
 |---|---|---|
 | 2.3 | 2026-07-22 | Service-panel use cases, authority/audit and target usability gates. |
 | 3.0 | 2026-07-22 | ADR-016 five-surface limited-operator use cases including setpoint, mode, override/release, session expiry and broker failure. |
+| 3.1 | 2026-07-22 | Added ADR-017 network status, static/DHCP apply and rollback use cases UC-HMI-016..019. |

@@ -7,6 +7,12 @@
 ---
 
 ## [Unreleased]
+### Changed — ADR-017 safe network commissioning documentation and implementation plan (2026-07-22)
+- docs/architecture: separated desired `network.conf` from active Linux state, recorded the current `applySystem()`/frontend truthfulness gap, and approved a narrow SOM `mkddc-netcfg` authority with versioned local IPC, least privilege, staged apply/confirm, last-known-good and automatic rollback within 120 seconds. IP change must not stop Core/IOP/STM32 control; BACnet must hot-rebind without restarting the whole iobus process.
+- docs/hmi: allowed Service-only Ethernet IPv4 static/DHCP commissioning as a narrow ADR-017 exception inside the existing five-surface local HMI; added active/pending/countdown/confirm/rollback UX and UC-HMI-016..019 while keeping Wi-Fi/protocol/full engineering out of the panel.
+- docs/plan: added FW SOM microtasks NWC-000..017 with dependency waves/effort estimates and BE/FE contract handoff, plus local-HMI microtasks HNW-000..013. This session intentionally changed documentation only; Go/React/C++ source implementation remains planned and network/HMI release gates remain RED.
+- verification: updated requirements, interfaces, verification findings, operations and traceability; verification for this docs-only change is the ISO/docs harness when available, Markdown link scan and `git diff --check`.
+
 ### Added — ADR-016 limited-operator HMI host implementation (2026-07-22)
 - hmi: replaced the legacy six-screen/service-PIN prototype with five `Home/Points/Control/Alarms/Service` surfaces, a bounded Unix-socket client, broker-authoritative login/policy/alarm ACK and AO/DO Control with explicit confirmation, reason, TTL, release and effective-source display. Monitoring remains read-only SHM; broker loss marks command authority OFFLINE, periodic query reconnects without replay, and mutations remain fail closed.
 - web/security: added the local HMI v1 broker on `/run/mkddc/hmi-api.sock` with `0660` permissions, `SO_PEERCRED`, optional UID allowlist, Viewer/Operator/Admin RBAC, opaque idle-expiring sessions, login rate limiting, bounded frames/connections/idempotency and durable append-only JSONL mutation audit without credential/token logging.

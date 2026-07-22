@@ -2,11 +2,11 @@
 ## Local limited-operator HMI — TFT 2.4 inch / LVGL v9 / DRM/KMS
 
 **Document ID:** DDD-SWSVC-HMI-MK-DDC-24-VI
-**Revision:** 3.1 — 2026-07-22
-**Status:** Host implementation complete; target/HIL acceptance pending
+**Revision:** 3.2 — 2026-07-22
+**Status:** Existing host control implementation complete; ADR-017 network commissioning planned; target/HIL acceptance pending
 **Owner:** Software Lead
-**Decision:** ADR-016
-**Trace:** `HMI-REQ-001..015`, `HMI-001..032`, `SW-HMI-001..018`
+**Decision:** ADR-016, ADR-017
+**Trace:** `HMI-REQ-001..017`, `IF-REQ-004`, `SWR-REQ-005..007`
 
 ## 1. Outcome and scope
 
@@ -18,11 +18,14 @@ the installed 2.4-inch panel. The selected product role is **limited operator HM
 - set setpoints/modes and create/release bounded overrides only for points that the
   authority marks commandable;
 - show diagnostics and request approved service actions;
+- let an authenticated Service user configure/recover Ethernet IPv4 through the
+  approved SOM network transaction authority;
 - remain outside the deterministic control and safety path.
 
 This design does **not** place a full Web HMI, engineering graph, schedule editor,
 alarm configuration, calibration, user administration or report workflow on the
-320×240 panel.
+320×240 panel. The ADR-017 Ethernet workflow is a narrow commissioning/recovery
+exception, not general engineering access.
 
 ## 2. Current implementation versus acceptance target
 
@@ -34,7 +37,7 @@ alarm configuration, calibration, user administration or report workflow on the
 | Alarm | Broker snapshot and authoritative ACK implemented; local ACK cannot mutate state | Target broker/core loss, flood and history evidence |
 | Control | Policy-gated AO/DO control, confirm, query, source and TTL implemented | Target lifecycle/latency/priority scenarios |
 | Identity | Broker login/logout, RBAC, idle expiry, rate limit and durable audit implemented | Target deployment identity/group and recovery evidence |
-| Service | Direct signal/reboot and static PIN/role removed; unsupported actions hidden | Separately approved maintenance authority, if required |
+| Service | Direct signal/reboot and static PIN/role removed; unsupported actions hidden | ADR-017 Ethernet workflow and broker/network-authority integration are planned, not implemented |
 | Communication telemetry | Partial/default values | Authoritative telemetry or explicit unavailable |
 
 Host-complete capability must not be reported as production-accepted until its target,
@@ -87,6 +90,7 @@ must not require an external network. Ownership is fixed as follows:
 | Alarm lifecycle/history and ACK result | alarm authority through the broker |
 | Rendering, focus, pending/error presentation | `mkddc-hmi` |
 | Local `point_db.json` | presentation only; never authorization |
+| Active/pending network state and rollback | `mkddc-netcfg`; broker owns identity/audit, HMI presentation only |
 
 ## 5. Data and IPC contracts
 
@@ -162,6 +166,12 @@ Mandatory properties:
 `ping` is unauthenticated health probing. No `service_request` action exists in v1;
 maintenance remains hidden until a separate authority is approved and implemented.
 
+ADR-017 approves only the network-specific extension. The BE owner must version or
+extend the broker contract with `network_status`, `network_validate`, `network_stage`,
+`network_apply`, `network_confirm` and `network_rollback`, using the same bounded frame,
+peer/session checks, idempotency and stable reason-code rules. Until cross-language
+fixtures and broker adapter tests pass, the HMI must keep Network mutation hidden.
+
 ## 6. Point control policy
 
 The authoritative projection for a commandable point contains at least:
@@ -217,7 +227,7 @@ second actuation.
 | Points | All available points with value/unit/quality/age | Read-only |
 | Control | Whitelisted points and point faceplate | Setpoint/mode/override/release |
 | Alarms | Active/history snapshot, priority/state/source/response | Authoritative ACK |
-| Service | System/communication diagnostics and approved maintenance requests | Service role only |
+| Service | System/communication diagnostics; approved Ethernet IPv4 commissioning/recovery | Network mutation: Service role only |
 
 Communication and System content from the legacy screens must be consolidated into
 Home and Service, not deleted.
@@ -261,6 +271,14 @@ maintenance requests. Production HMI must not have direct `CAP_SYS_BOOT`, send r
 signals to core/iobus or execute reboot itself. Unsupported backup/restore/restart/
 reboot actions stay hidden or disabled with reason.
 
+Network detail separates `ACTIVE` kernel state, `PENDING` candidate/transaction and
+`LAST KNOWN GOOD` recovery metadata. The edit flow is `view → Service login → DHCP or
+static IPv4/subnet/gateway → local format check → impact summary → stage/apply →
+awaiting confirmation → confirm or rollback`. HMI-side validation only improves
+usability; broker and SOM authority revalidate. Wi-Fi credentials, DNS advanced
+settings, BACnet ID/port, VLAN, routing and firewall are not shown. HMI never opens
+`/run/mkddc/netcfg.sock` directly.
+
 ## 10. Identity and audit
 
 - Viewer can inspect without mutation.
@@ -298,6 +316,9 @@ host test is not a certification claim.
 |---|---|
 | IO/PLC SHM missing or corrupt | Show data unavailable/fault; never use stale value as current |
 | Broker unavailable | Disable Control/ACK/Service mutation; monitoring remains read-only |
+| Network authority unavailable | Show active data if available; disable edit and never synthesize success |
+| Apply awaiting confirmation | Show old/new address, monotonic rollback countdown and Confirm/Rollback |
+| Confirm deadline/helper restart | Rehydrate transaction; authority automatically restores last-known-good |
 | Core rejects command | Show stable reason; retain authoritative prior state |
 | Command timeout | Show unknown/pending-resolve; query state; do not replay blindly |
 | Session expired | Lock mutation and preserve visible override status |
@@ -345,3 +366,4 @@ requirement mapping is in [Traceability](../../07_records/TRACEABILITY.md).
 | 2.4 | 2026-07-22 | Source-aligned service-panel design and production gaps. |
 | 3.0 | 2026-07-22 | ADR-016: selected local limited-operator HMI, five surfaces, authoritative command lifecycle, session/RBAC/audit and microtask handoff. |
 | 3.1 | 2026-07-22 | Aligned the controlled design with the implemented broker/Core/HMI protocol, five-surface host state and remaining target acceptance gates. |
+| 3.2 | 2026-07-22 | Added ADR-017 narrow Ethernet commissioning/recovery target and separated it from implemented HMI protocol v1. |

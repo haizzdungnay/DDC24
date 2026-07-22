@@ -28,6 +28,10 @@ Không dùng số test pass lịch sử làm evidence hiện hành. Mỗi releas
 - HMI usability: five-surface scenario trên panel thật với viewer/operator/service roles, body ≥14 px, action ≥40×40 px hoặc hard-key equivalent, glove/light, alarm flood, stale/lost data, localization và wake-event suppression.
 - Protocol: BACnet/IP discovery/read/write/reliability và Modbus RTU/TCP mapping/error paths.
 - System: stop/restart từng service, corrupt/stale SHM, loss of UART/network, MCU 200 ms safe timeout.
+- Network commissioning: active ≠ desired, static/DHCP validation, duplicate IP, staged
+  apply, confirm, 120 s auto/manual rollback, helper/host restart recovery, least
+  privilege, Web reconnect, BACnet hot-rebind/`I-Am`, Modbus TCP retry và continuous
+  core/IOP/STM32 trace.
 
 ## Hardware release gate — RED
 
@@ -68,6 +72,22 @@ target/HIL và usability evidence:
 | HMI-FUNC-001 | Unsupported backup/restore/restart/reboot actions hidden | Separate approved maintenance authority if product requires it |
 | HMI-HW-001 | Host DRM/touch rotation tests pass | Schematic/DT/power/pin freeze and panel/touch/button/backlight target tests |
 | HMI-UX-001 | Host typography/action geometry implemented | Five-surface glove/light/flood/stale/localization usability record; IEC/ISA references are guidance, not certification evidence |
+
+## Network commissioning release gate — RED
+
+ADR-017 và contract target đã được freeze ở mức tài liệu, nhưng source hiện tại chỉ ghi
+desired config. `applySystem()` vẫn trả `pending B7`; frontend hiện bỏ qua `applied=false`.
+Không được dùng Web/local HMI để tuyên bố đổi IP production trước khi đóng:
+
+| Finding | Hiện trạng | Evidence cần để đóng |
+|---|---|---|
+| NET-AUTH-001 | `mkddc-netcfg`/IPC chưa implement | Peer credential, bounded protocol, invalid-transition and privilege negative tests |
+| NET-STATE-001 | GET network có thể hiển thị desired IP; BMS link đang suy diễn | Active kernel/pending separation and real health integration tests |
+| NET-TXN-001 | Chưa có stage/apply/confirm/rollback | Static/DHCP, duplicate-IP, 120 s rollback, disk/process/host fault evidence |
+| NET-CONT-001 | Chưa có continuity evidence | Core scan, IOP/UART and STM32 output trace xuyên suốt address change/rollback |
+| NET-BAC-001 | BACnet config chỉ load lúc iobus start | Hot-rebind without iobus restart, broadcast refresh and `I-Am` packet evidence |
+| NET-HMI-001 | Local HMI network flow chưa implement | UC-HMI-016..019 on target, Service RBAC, countdown, confirm/rollback usability |
+| NET-WEB-001 | FE toast báo saved mà không đọc apply warnings | BE transaction adapter + FE reconnect/active-pending/error E2E evidence |
 
 Evidence packages tối thiểu: `PWR-5V`, `PWR-3V3`, `PWR-SURGE`, `AO-COMP`, `EMC`, `MFG`. Mỗi package phải có owner, setup, acceptance limit, raw result, conclusion và reviewer approval.
 

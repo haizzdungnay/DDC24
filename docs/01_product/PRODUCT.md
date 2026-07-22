@@ -27,7 +27,7 @@ MK-DDC-24 là Component-Based BMS Edge Automation Controller, hoạt động loc
 - commissioning, point monitoring, alarm, trend, schedule và user management qua web;
 - I/O scan qua Kinexus-IOP và shared-memory contracts;
 - protocol integration và safe output behavior;
-- HMI cục bộ khi SKU/build bật tính năng: xem trạng thái/I/O/alarm/service và vận hành giới hạn các point được whitelist qua authority/core.
+- HMI cục bộ khi SKU/build bật tính năng: xem trạng thái/I/O/alarm/service, vận hành giới hạn các point được whitelist qua authority/core và phục hồi/cấu hình Ethernet IPv4 cơ bản bằng Service role theo ADR-017.
 
 ## Ngoài phạm vi Rev A.0
 
@@ -35,7 +35,7 @@ MK-DDC-24 là Component-Based BMS Edge Automation Controller, hoạt động loc
 - MQTT/cloud agent và OTA A/B production workflow;
 - BACnet MS/TP, Modbus slave và BTL certification;
 - true isolated DI trong base SKU;
-- full Web HMI/SCADA, engineering graph, schedule editor, alarm configuration và user administration trên màn local 2.4 inch;
+- full Web HMI/SCADA, engineering graph, schedule editor, alarm configuration, user administration, Wi-Fi credential, routing/VLAN/firewall hoặc cấu hình protocol trên màn local 2.4 inch;
 - mọi claim EMC/safety/manufacturing chưa có evidence trong release gate.
 
 Roadmap không phải cam kết release. Thêm capability chỉ hợp lệ khi có decision, requirement, thiết kế, verification và cập nhật traceability.

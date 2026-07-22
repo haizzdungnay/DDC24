@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.24 | 2026-07-22 (ADR-016: historical six-screen HMI block superseded by HOP-000..077) · 1.23 | 2026-07-01 · 1.22 | 2026-07-01
+> **Phiên bản:** 1.25 | 2026-07-22 (ADR-017: active network plans NWC-000..017 và HNW-000..013) · 1.24 | 2026-07-22 (ADR-016: historical six-screen HMI block superseded by HOP-000..077) · 1.23 | 2026-07-01 · 1.22 | 2026-07-01
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -908,6 +908,10 @@ Trạng thái: ĐÃ làm 2026-06-23 — Vite 8.0.16 + @vitejs/plugin-react 6.0.2
 > **ADR-016 controlling plan (2026-07-22):** kế hoạch active là five-surface limited-
 > operator HMI và được chia thành microtask `HOP-000..077` tại
 > [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md).
+> ADR-017 network commissioning dùng `NWC-000..017` tại
+> [22_SOM_SRC_IMPLEMENTATION_PLAN](22_SOM_SRC_IMPLEMENTATION_PLAN.md) cho FW SOM và
+> `HNW-000..013` tại guide 08 cho local HMI. Các task đều đang Planned; không được
+> đánh dấu Done từ việc chỉ ghi `network.conf` hiện tại.
 > Block `HMI-001..012` bên dưới chỉ giữ như historical baseline của skeleton sáu màn;
 > không được dùng làm task đầu vào mới hoặc release evidence.
 
@@ -1105,7 +1109,7 @@ Phụ thuộc: E2E-003
 ```
 
 ---
-**Rev** 1.24 | 2026-07-22 (ADR-016: block HMI-001..012 is historical; active plan is 54 HOP microtasks) · 1.23 | 2026-07-01 (Phase 4.6 implementation verified locally; hardware/BTL gates remain) · 1.22 | 2026-06-30 (Phase 4.6 BACnet/Object Model plan) ·
+**Rev** 1.25 | 2026-07-22 (ADR-017: registered active NWC-000..017 FW SOM and HNW-000..013 local-HMI network plans; source not implemented) · 1.24 | 2026-07-22 (ADR-016: block HMI-001..012 is historical; active plan is 54 HOP microtasks) · 1.23 | 2026-07-01 (Phase 4.6 implementation verified locally; hardware/BTL gates remain) · 1.22 | 2026-06-30 (Phase 4.6 BACnet/Object Model plan) ·
 1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit, COR-008 SIGHUP reload — cụm production-hardening 1+5+6 ĐÃ làm) · 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006 Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·
 Test chi tiết: [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
 
