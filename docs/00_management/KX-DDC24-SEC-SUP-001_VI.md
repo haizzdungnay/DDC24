@@ -3,12 +3,12 @@
 
 > **Document ID:** KX-DDC24-SEC-SUP-001
 > **Phiên bản:** 1.1 | 2026-06-02
-> **Trạng thái:** Đã phê duyệt — CEO approved via [IOT-5491](../../../../../../IOT/issues/IOT-5491)
+> **Trạng thái lịch sử:** từng ghi nhận CEO approved qua issue `IOT-5491`; issue tracker ngoài repository chưa được phục hồi/xác minh.
 > **Tác giả:** ComplianceExpert (khởi tạo), ResearchDirector (review & bổ sung)
-> **Issue:** [IOT-5491](../../../../../../IOT/issues/IOT-5491)
+> **Issue lịch sử:** `IOT-5491`
 > **Chuẩn tham chiếu:** IEC 62443-4-1 SM-9, IEC 62443-4-2 (CR 1–4)
-> **Ref:** [SEC-GAP-001 SM-9](KX-DDC24-SEC-GAP-001_VI.md) | [BOM v1.0](../../hardware-design/06_bom/BOM_MK-DDC-24_v1.md) | [PM-MARKET-001 §5](KX-DDC24-PM-MARKET-001_VI.md)
-> **Recovery context:** ComplianceExpert runtime failed (DeepSeek thinking mode incompatibility — see [IOT-5546](../../../../../../IOT/issues/IOT-5546)). ResearchDirector reassigned from [IOT-5544](../../../../../../IOT/issues/IOT-5544) để hoàn thiện.
+> **Ref:** [SEC-GAP-001 SM-9](KX-DDC24-SEC-GAP-001_VI.md) | [BOM v1.0](../04_design/hardware/06_bom/BOM_MK-DDC-24_v1.md) | [PM-MARKET-001 §5](KX-DDC24-PM-MARKET-001_VI.md)
+> **Recovery context:** ComplianceExpert runtime failed (DeepSeek thinking mode incompatibility — issue `IOT-5546`). ResearchDirector reassigned from `IOT-5544` để hoàn thiện.
 
 ---
 

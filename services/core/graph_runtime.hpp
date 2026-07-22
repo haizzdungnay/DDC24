@@ -59,6 +59,9 @@ public:
     uint32_t effective_scan_ms() const { return scan_ms_; }
     void sync_actual_scan_ms(uint32_t actual_ms);
 
+    /* Mode điện thực tế MCU đã áp dụng, lấy từ iobus SHM mỗi scan. */
+    void set_ao_modes(const uint8_t modes[KX_N_AO]);
+
     const std::vector<int>& used_ai_channels() const { return used_ai_; }
 
     /* COR-010: persist state interface. */
@@ -132,6 +135,7 @@ private:
     std::vector<Node> nodes_;
     std::vector<int>  order_;
     std::vector<int>  used_ai_;
+    uint8_t           ao_modes_[KX_N_AO] = {};
     /* COR-011: ext snapshot (copy từ plc_shm.ext[] sau read_ext()) */
     kx_ext_point_t ext_snapshot_[KX_N_EXT] = {};
     uint16_t       ext_snap_count_          = 0;

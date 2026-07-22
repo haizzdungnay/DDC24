@@ -158,6 +158,28 @@ TEST(BacnetObjects, WriteAoOverridden)
     EXPECT_FLOAT_EQ(arr->slots[7], 5.5f);
 }
 
+TEST(BacnetObjects, EngineeringPercentConvertsToPhysicalCurrent)
+{
+    BacnetObjects obj;
+    iobus::AoChannelConfig channels[KX_N_AO];
+    channels[0].mode = iobus::AoMode::MA4_20;
+    channels[0].units_str = "percent";
+    channels[0].min_pv = 0.0f;
+    channels[0].max_pv = 100.0f;
+    obj.update_ao_config(channels);
+
+    WriteSpy spy;
+    EXPECT_TRUE(obj.write_ao(1, 8, 50.0f, "bacnet:test",
+                              [&](auto&&... args){ return spy(args...); }));
+    EXPECT_FLOAT_EQ(spy.last_val, 12.0f) << "50% BACnet phải gửi 12mA vật lý vào core";
+    const PriorityArray* arr = obj.priority().get_array(CmdObjectType::AO, 1);
+    ASSERT_NE(arr, nullptr);
+    EXPECT_FLOAT_EQ(arr->slots[7], 50.0f) << "Priority_Array vẫn giữ đơn vị BACnet";
+
+    EXPECT_FALSE(obj.write_ao(1, 8, 101.0f, "bacnet:test",
+                               [&](auto&&... args){ return spy(args...); }));
+}
+
 TEST(BacnetObjects, WriteBoSendsToCoreDoCmd)
 {
     BacnetObjects obj;

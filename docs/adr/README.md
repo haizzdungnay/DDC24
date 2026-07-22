@@ -1,5 +1,7 @@
 # docs/adr/ — Architectural Decision Records
 
+> **Recovery status (2026-07-22): Historical/In Review.** Các ADR rời được giữ để bảo toàn context. [Decision Log](../00_governance/DECISIONS.md) là register hiện hành và đã chuẩn hóa các ID trùng ADR-010/ADR-011.
+
 > **Owner:** Tech Lead / Architect | **Last Updated:** 2026-06-27
 
 ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Context, Decision, Consequences, Status.

@@ -218,7 +218,7 @@ Validator + Commissioning: bắt buộc
 | Engine | `kinexus-plc` IEC 61131-3 (`SW_PLC_ENGINE_DESIGN`) | component graph (ADR-004, SW_RUNTIME_EXECUTION_MODEL) |
 | Web | `kinexus-webide` Python/Svelte FBD | `mkddc-web` Go, form/JSON (ADR-006/007) |
 | Naming | `kinexus-*` | `mkddc-*` (ADR-005) |
-| HMI/Agent/OTA/cloud | service riêng | HMI local thuộc Rev A theo amendment 2026-06-27; Agent/OTA/cloud deferred Rev B+ |
+| HMI/Agent/OTA/cloud | service riêng | HMI local limited-operator thuộc Rev A theo ADR-016; chỉ command point whitelist qua authority/core. Agent/OTA/cloud deferred Rev B+ |
 
 ## Revision History
 
@@ -226,6 +226,7 @@ Validator + Commissioning: bắt buộc
 |---|---|---|
 | 1.1 | 2026-06-08 | Canonical product direction and component-based runtime. |
 | 2.0 | 2026-06-30 | Breaking hardware-baseline alignment to ADR-010: 16 UI + 4 AO + 4 DO, no base-SKU industrial DI; reconciled HMI scope amendment. |
+| 2.1 | 2026-07-22 | Selected five-surface limited-operator local HMI; excluded full Web HMI/engineering from the 2.4-inch panel. |
 
 ---
 

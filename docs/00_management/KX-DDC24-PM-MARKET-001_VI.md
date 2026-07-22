@@ -4,7 +4,7 @@
 > **Document ID:** KX-DDC24-PM-MARKET-001  
 > **Phiên bản:** 1.2 | 2026-06-30 · **Trạng thái:** In-Review — product profile aligned to ADR-010 · **Owner:** ResearchDirector
 > **Mục tiêu:** Đào sâu v1.0: validated competitor pricing, TAM/SAM/SOM định lượng, channel economics, regional cert, BOM RFQ.  
-> **Liên quan:** [GOAL-001](KX-DDC24-PM-GOAL-001_VI.md) · [PRD](../01_specs/PRD_MK-DDC-24_VI.md) · [DS](../01_specs/DS_MK-DDC-24_VI.md) · [BOM](../../hardware-design/06_bom/BOM_MK-DDC-24_v1.md) · [OPEN_ISSUES](../01_specs/OPEN_ISSUES_MK-DDC-24_VI.md)  
+> **Liên quan:** [GOAL-001](KX-DDC24-PM-GOAL-001_VI.md) · [PRD](../01_specs/PRD_MK-DDC-24_VI.md) · [DS](../01_specs/DS_MK-DDC-24_VI.md) · [BOM](../04_design/hardware/06_bom/BOM_MK-DDC-24_v1.md) · [OPEN_ISSUES](../01_specs/OPEN_ISSUES_MK-DDC-24_VI.md)
 > **Evidence:** `docs/00_management/evidence/pricing/` · `evidence/bom-rfq/` · `evidence/certification/`  
 > **Parent Issue:** IOT-5422 (Product & Market Analysis)  
 > **EPIC:** IOT-5420 (Design Gate v1)

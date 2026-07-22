@@ -57,7 +57,19 @@ void BacnetObjects::update_ao_config(const AoChannelConfig ao_channels[KX_N_AO])
         ao_bacnet_units_[i] = units_str_to_bacnet(ao_channels[i].units_str);
         ao_min_pv_[i]       = ao_channels[i].min_pv;
         ao_max_pv_[i]       = ao_channels[i].max_pv;
+        ao_mode_[i]         = ao_channels[i].mode;
     }
+}
+
+float BacnetObjects::ao_engineering_to_physical(int idx, float value) const
+{
+    if (idx < 0 || idx >= N_AO) return value;
+    const float span = ao_max_pv_[idx] - ao_min_pv_[idx];
+    if (!(span > 0.0f)) return value;
+    float norm = (value - ao_min_pv_[idx]) / span;
+    if (norm < 0.0f) norm = 0.0f;
+    if (norm > 1.0f) norm = 1.0f;
+    return ao_mode_[idx] == AoMode::MA4_20 ? 4.0f + norm * 16.0f : norm * 10.0f;
 }
 
 const std::string& BacnetObjects::ao_unit_str(uint32_t instance) const
@@ -295,13 +307,17 @@ bool BacnetObjects::write_ao(uint32_t instance, uint8_t prio, float value,
                               const std::string& user, const CoreWriteFn& fn)
 {
     if (instance < 1 || instance > N_AO) return false;
+    const int idx = static_cast<int>(instance - 1);
+    if (!std::isfinite(value) || value < ao_min_pv_[idx] || value > ao_max_pv_[idx])
+        return false;
     const bool changed = priority_.write(CmdObjectType::AO, instance, prio, value);
     if (!changed) return true;
     const PriorityArray* arr = priority_.get_array(CmdObjectType::AO, instance);
     if (!arr) return false;
     const float winner = arr->winner();
+    const float physical = arr->is_empty() ? winner : ao_engineering_to_physical(idx, winner);
     const bool accepted = fn(arr->is_empty() ? "release_ao" : "ao_setpoint",
-                             instance - 1, winner, user, 3);
+                             instance - 1, physical, user, 3);
     if (!accepted)
         priority_.on_overridden(CmdObjectType::AO, instance, winner);
     return accepted;
@@ -368,8 +384,10 @@ bool BacnetObjects::relinquish_ao(uint32_t instance, uint8_t prio,
     const PriorityArray* arr = priority_.get_array(CmdObjectType::AO, instance);
     if (!arr) return false;
     const float winner = arr->winner();
+    const int idx = static_cast<int>(instance - 1);
+    const float physical = arr->is_empty() ? winner : ao_engineering_to_physical(idx, winner);
     const bool accepted = fn(arr->is_empty() ? "release_ao" : "ao_setpoint",
-                             instance - 1, winner, user, 3);
+                             instance - 1, physical, user, 3);
     if (!accepted) priority_.on_overridden(CmdObjectType::AO, instance, winner);
     return accepted;
 }

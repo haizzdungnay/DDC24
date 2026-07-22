@@ -42,6 +42,11 @@ void ScanLoop::step()
     d_.table->update_inputs(last_io_);
     d_.quality->evaluate(*d_.table, last_io_);
 
+    /* Đồng bộ mode thực tế MCU đã ACK trước khi nhận lệnh hoặc chạy graph.
+     * Từ đây trở xuống AO luôn là giá trị vật lý V/mA, không phải phần trăm. */
+    d_.resolver->set_ao_modes(last_io_.ao_mode);
+    d_.graph->set_ao_modes(last_io_.ao_mode);
+
     /* 3. Read Modbus ext snapshot từ fieldbus.sock (MOD-009).
      * SOCK_DGRAM MSG_DONTWAIT — nếu không có datagram: dùng ext[] cũ (stale theo ts_ns). */
     d_.bacnet->read_ext(d_.fieldbus_sockfd);

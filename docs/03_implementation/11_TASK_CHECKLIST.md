@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.23 | 2026-07-01 (ADR-011/012 integration review: SHM v4, local BACnet smoke, implementation closed; Orange Pi/BTL gates remain) · 1.22 | 2026-07-01 (Port UI raw live-data pipeline via SHM v3 onto updated docs baseline)
+> **Phiên bản:** 1.24 | 2026-07-22 (ADR-016: historical six-screen HMI block superseded by HOP-000..077) · 1.23 | 2026-07-01 · 1.22 | 2026-07-01
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -905,8 +905,13 @@ Trạng thái: ĐÃ làm 2026-06-23 — Vite 8.0.16 + @vitejs/plugin-react 6.0.2
 
 ## Phase 5.5 — mkddc-hmi
 
-> **Amendment 2026-06-27:** HMI kéo vào Rev A — spec hoàn chỉnh tại SW_HMI_DESIGN Rev 2.2 + UC Rev 2.1 + UX Rev 2.0.
-> **Guide:** [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md)
+> **ADR-016 controlling plan (2026-07-22):** kế hoạch active là five-surface limited-
+> operator HMI và được chia thành microtask `HOP-000..077` tại
+> [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md).
+> Block `HMI-001..012` bên dưới chỉ giữ như historical baseline của skeleton sáu màn;
+> không được dùng làm task đầu vào mới hoặc release evidence.
+
+<details><summary>Historical HMI-001..012 skeleton baseline — superseded by ADR-016 microtasks</summary>
 
 ```
 Task ID: HMI-001
@@ -1058,6 +1063,8 @@ Phụ thuộc: HMI-001..011
 Trạng thái: ĐÃ làm 2026-06-27 — systemd notify/watchdog/capability + CMake/root installer; còn start/reboot acceptance trên Orange Pi.
 ```
 
+</details>
+
 ---
 
 ## Phase 6 — End-to-end
@@ -1098,7 +1105,7 @@ Phụ thuộc: E2E-003
 ```
 
 ---
-**Rev** 1.22 | 2026-06-30 (Phase 4.6: BAC-013..015 + IOB-AO-001..003 PLANNED — BACnet Object Model Alignment per ADR-011/ADR-012; gate BTL) · 1.21 | 2026-06-27 (Phase 5.5 mkddc-hmi: HMI-001..012 tasks added — HMI kéo vào Rev A per REVA_SCOPE amendment) · 1.20 | 2026-06-26 (MOD-012: 9/11 DoD — E303 alarm test + ext snapshot test + T11 TCP loopback fixed + CI modbus+bacnet matrix; BAC-012: DoD #3 BACNET=ON 123/123 test; 141 iobus + 123 core pass) · 1.19 | 2026-06-26 (COR-011 DONE: 5 Protocol nodes, 12/12 test; MOD-013 DONE: Modbus TCP client, 10/10 test; 122/122 core_tests + 138/140 iobus_tests) · 1.18 | 2026-06-26 (Thêm COR-011: Protocol 5 graph nodes PLANNED; MOD-013: Modbus TCP client PLANNED — 2 task mới chờ owner approve; 07_guide §12 + SW_FIELDBUS_DESIGN §12 bổ sung spec) · 1.17 | 2026-06-25 (IOB-006-V2: IOP v2 ADR-010 — 74B IO_RESP, KX_N_UI=16, BOARD_CAP_MAP; 05 guide Rev 2.0 updated) · 1.16 | 2026-06-23 (WEB-014 cập nhật: Go crypto/sys security refresh; Grype archive scan clean locally) · 1.15 | 2026-06-23 (WEB-014 ĐÃ làm: Vite security refresh; npm/go vuln gates clean locally) · 1.14 | 2026-06-22 (IOB local PASS; MOD native PTY PASS; BAC source/runtime wiring; external evidence pending) · 1.13 | 2026-06-22 (Thêm BAC-012, MOD-012, IOB-006 — transport layer integration; sửa status BACnet/Modbus: logic ✅ transport no-op ⚠️; xem 31_PROTOCOL_LIB_INTEGRATION_PLAN) · 1.12 | 2026-06-19 (BAC-001..011 DONE + MOD-001..011 DONE — 114 unit test pass; bypass core check sạch) · 1.11 | 2026-06-17 (WEB-013 ĐÃ làm: i18n VI có dấu + English mode; typecheck pass) · 1.10 | 2026-06-17 (WEB-012 ĐÃ làm: Monitor binary ON xanh/OFF xám; typecheck pass) · 1.9 | 2026-06-16 (WEB-009 cập nhật Level B hybrid status colors; typecheck pass) · 1.8 | 2026-06-16 (WEB-011 ĐÃ làm: sticky top status bar/NavRail; typecheck pass) · 1.7 | 2026-06-16 (WEB-010 ĐÃ làm: dashboard dynamic metrics normal xanh, warn/fault theo ngưỡng; typecheck pass) · 1.6 | 2026-06-16 (WEB-009 ĐÃ làm: compact indicator OK/ONLINE xanh, OFF xám; typecheck pass) · 1.5 | 2026-06-16 (WEB-008 ĐÃ làm: FE ISA-101 P3/3, typecheck pass, không đổi REST/WS contract) · 1.4 | 2026-06-13 (COR-009/010 ĐÃ làm: 10 component + state_snapshot, 97/97 test pass) · 1.3 | 2026-06-13 (bổ sung task S7 #4/#5/#6) ·
+**Rev** 1.24 | 2026-07-22 (ADR-016: block HMI-001..012 is historical; active plan is 54 HOP microtasks) · 1.23 | 2026-07-01 (Phase 4.6 implementation verified locally; hardware/BTL gates remain) · 1.22 | 2026-06-30 (Phase 4.6 BACnet/Object Model plan) ·
 1.2 | 2026-06-12 (thêm SKEL-005 packaging/systemd, COR-007 web_ipc overridden+audit, COR-008 SIGHUP reload — cụm production-hardening 1+5+6 ĐÃ làm) · 1.1 | 2026-06-12 (COR-004 chốt trạng thái theo SAFETY SPEC 07 §5; thêm COR-006 Rev A.1 cho trigger T6/T7; E2E-003 kiểm đủ 3 lớp safety) · 1.0 | 2026-06-10 ·
 Test chi tiết: [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
 

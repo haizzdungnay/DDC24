@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Khi nào từng phần được tính là XONG
 
 > **Document ID:** IMPL-DOD-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-13 (thêm DoD S7 #4/#5/#6) · 1.0 | 2026-06-10
+> **Phiên bản:** 1.2 | 2026-07-22 (ADR-016 local limited-operator HMI DoD) · 1.1 | 2026-06-13 · 1.0 | 2026-06-10
 > **Trạng thái:** Active
 > **Cách dùng:** tick từng ô. Chỉ "Done" khi tick đủ + test group tương ứng pass.
 
@@ -105,7 +105,26 @@ Test: group 5.
 
 ---
 
-## 6. Integration xong khi
+## 6. mkddc-hmi limited-operator xong khi
+
+```text
+[ ] Đúng 5 surface Home/Points/Control/Alarms/Service; communication/system không mất.
+[ ] Telemetry chỉ đọc SHM; không có HMI write SHM/hardware.
+[ ] Chỉ point authority whitelist xuất hiện trong Control.
+[ ] Setpoint/mode/override/release qua local broker và core priority/interlock/safety.
+[ ] Override có reason, bounded TTL, effective source/priority/expiry và explicit release.
+[ ] ACK alarm authoritative/audited, ACK không clear active condition.
+[ ] Session fail closed, idle expiry ≤15 phút; local role/PIN không grant privilege.
+[ ] Broker/core loss → mutation read-only, monitoring tiếp tục, không blind replay.
+[ ] Không CAP_SYS_BOOT, direct reboot hoặc raw signal từ HMI.
+[ ] Font ≥14px; action target ≥40×40px hoặc hard-key equivalent; focus nhìn thấy.
+[ ] Host/broker/core integration pass và target touch/button/glove/light/alarm-flood test pass.
+```
+Test: group 5.5; microtask plan HOP-000..077 trong [08_HMI](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md).
+
+---
+
+## 7. Integration xong khi
 
 ```
 [ ] Web bật/tắt DO1 → relay THẬT (TC-E2E-01/02).
@@ -124,7 +143,7 @@ Test: group 6 + 7 + 8.
 
 ---
 
-## 7. Release handover xong khi
+## 8. Release handover xong khi
 
 ```
 [ ] Build clean từ repo clone mới (4 phần).
@@ -141,7 +160,7 @@ Test: toàn bộ + [14_HANDOVER](15_RELEASE_HANDOVER_CHECKLIST.md).
 
 ---
 
-## 8. Stateful graph S7 #4 xong khi
+## 9. Stateful graph S7 #4 xong khi
 
 ```
 [ ] Multi-output port hoạt động (`hours`/`alarm`, `out`/`tripped`), không chỉ `out`.
@@ -157,7 +176,7 @@ Test: group 4 + unit COR-009/COR-010.
 
 ---
 
-## 9. BACnet S7 #5 xong khi
+## 10. BACnet S7 #5 xong khi
 
 ```
 [ ] `MKDDC_ENABLE_BACNET=ON` build sạch.
@@ -175,7 +194,7 @@ Test: group 9.
 
 ---
 
-## 10. Modbus S7 #6 xong khi
+## 11. Modbus S7 #6 xong khi
 
 ```
 [ ] `MKDDC_ENABLE_MODBUS=ON` build sạch với `libmodbus`.
@@ -206,4 +225,4 @@ Test: group 10.
 ```
 
 ---
-**Rev** 1.1 | 2026-06-13 (thêm DoD stateful graph/BACnet/Modbus) · 1.0 | 2026-06-10
+**Rev** 1.2 | 2026-07-22 (ADR-016 HMI command authority, session, degraded-mode and privilege gates) · 1.1 | 2026-06-13 · 1.0 | 2026-06-10

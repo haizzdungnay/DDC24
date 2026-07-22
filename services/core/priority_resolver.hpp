@@ -37,6 +37,11 @@ public:
     bool set_do(int level, int ch, bool on);
     bool release_do(int level, int ch);
 
+    /* Mode điện thực tế MCU đã ACK: 0=0-10V, 1=4-20mA. Dùng để chặn
+     * lệnh AO sai đơn vị/range trước khi ghi ra SHM. */
+    void set_ao_modes(const uint8_t modes[KX_N_AO]);
+    uint8_t ao_mode(int ch) const;
+
     /* default (mức 6) từ config io_safe_state — luôn active */
     void set_default_ao(int ch, float v);
     void set_default_do(int ch, bool on);
@@ -59,6 +64,7 @@ private:
     };
     Slot ao_[PRIO_LEVELS][KX_N_AO];   /* [level-1][ch] */
     Slot do_[PRIO_LEVELS][KX_N_DO];
+    uint8_t ao_modes_[KX_N_AO] = {};
 
     static bool valid_level(int level) { return level >= 1 && level <= PRIO_LEVELS; }
 };

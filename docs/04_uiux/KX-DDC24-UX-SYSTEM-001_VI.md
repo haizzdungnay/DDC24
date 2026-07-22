@@ -2,9 +2,9 @@
 ## Hệ thống thiết kế giao diện (tokens + components)
 
 > **Document ID:** KX-DDC24-UX-SYSTEM-001
-> **Phiên bản:** 1.4 | 2026-06-16 · **Trạng thái:** Approved (Owner 2026-06-16) · **Owner:** UX Lead
-> **Chuẩn:** ISA-101-based HMI Level B hybrid (web), WCAG 2.1 AA (tiếp cận), industrial HMI guideline
-> 📘 [docs/README](../README.md) · Dùng cho: web Rev A (form/JSON — [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md)), [HMI](KX-DDC24-UX-HMI-001_VI.md) *(deferred Rev B)*
+> **Phiên bản:** 1.7 | 2026-07-22 · **Trạng thái:** Approved design guidance; target validation pending · **Owner:** UX Lead
+> **Chuẩn:** ISA-101-based design guidance, IEC 60073 coding review, WCAG 2.1 AA; không phải tuyên bố certification
+> 📘 [docs/README](../README.md) · Dùng cho: web Rev A (form/JSON — [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md)) và local limited-operator [HMI](KX-DDC24-UX-HMI-001_VI.md) feature-gated theo ADR-016
 
 > 🎯 Đây là "nguồn-chuẩn hình ảnh": màu, chữ, khoảng cách, component dùng chung cho **web engineering (FE, React)** để nhất quán. FE dev lấy token này set CSS/theme. *(2026-06-08: web Rev A là React + form/JSON, không Svelte/FBD.)*
 
@@ -15,9 +15,9 @@
 2. **Trạng thái phải thấy ngay:** normal/online/off/warn/fault/alarm có chữ + icon rõ; màu theo convention SCADA nhưng không đứng một mình.
 3. **An toàn:** hành động nguy hiểm (force I/O, restart, OTA) phải có xác nhận.
 4. **Tiếp cận:** tương phản ≥ 4.5:1, không chỉ dùng màu để truyền nghĩa (kèm icon/chữ/shape).
-5. **Nhất quán:** cùng 1 ý nghĩa → cùng 1 chữ/icon/hình trong cùng surface (Web Rev A trước; HMI TFT deferred Rev B).
-6. **ISA-101-based, Level B hybrid:** khoảng 90% màn hình vẫn trung tính (xám/đen-trắng), giữ nền xám sáng + cấu trúc HMI high-performance; màu trạng thái dùng convention SCADA truyền thống.
-7. **Ngữ nghĩa màu SCADA:** green = online/ON/normal, gray = off/stopped, yellow = warning/lỗi nhỏ, red = fault/sự cố nặng, magenta = highest-priority/safety.
+5. **Nhất quán:** cùng một ý nghĩa → cùng chữ/icon/hình; Web và HMI local dùng chung semantic state dù layout khác nhau.
+6. **High-performance hierarchy:** phần lớn màn hình và trạng thái bình thường trung tính; màu bão hòa dành cho abnormal, attention, override hoặc energized state cần phân biệt.
+7. **Ngữ nghĩa màu có kiểm soát:** neutral = normal/available/unknown theo label; green chỉ cho confirmed running/energized/success, gray = off/stopped/unavailable, yellow = warning, red = fault/danger. Magenta không tự động gán `safety` nếu chưa có safety analysis/philosophy.
 8. **Không dùng màu là nghĩa duy nhất:** mọi trạng thái phải kèm chữ, biểu tượng, shape/pattern hoặc dấu hiệu phi-màu tương đương.
 9. **Điều hướng 3 nhóm:** Overview, Settings, Engineering theo mục "Phân cấp điều hướng (ISA-101)" bên dưới.
 10. **Nguồn-chuẩn:** [ADR-009](../adr/ADR-009-isa101-hmi-and-nav-restructure.md) là quyết định canonical cho ISA-101-based Level B hybrid và navigation 3 nhóm của web UI.
@@ -30,14 +30,14 @@
 | `--border` | #9AA0A6 | divider (giữ) |
 | `--text` | #1C1F23 | chữ chính (giữ) |
 | `--text-dim` | #4A4F55 | chữ phụ (giữ) |
-| `--good` | #2FA45A | NỀN/dot/badge: online/ON/normal (xanh lá) |
+| `--good` | #2FA45A | NỀN/dot/badge: confirmed running/energized/success; không dùng làm nền normal tổng quát |
 | `--good-fg` | #1E7A3D | CHỮ/icon xanh lá trên nền sáng (phải kiểm/tối chỉnh để đạt AA) |
 | `--off` | #6B7280 | off/stopped (xám trung tính) |
 | `--warn` | #E8B500 | NỀN cảnh báo (vàng) — chữ đè phải đậm |
 | `--warn-fg` | #6B5400 | CHỮ/đường cảnh báo trên nền sáng (amber sẫm, ~4.5:1) |
 | `--alarm` / `--fault` | #D5202A | NỀN sự cố nặng (đỏ) |
 | `--fault-fg` | #B01219 | CHỮ/đường đỏ trên nền sáng |
-| `--critical` | #B0179C | ưu tiên cao nhất/safety |
+| `--critical` | #B0179C | priority cao nhất khi alarm philosophy quy định; không đồng nghĩa safety certification |
 | `--force` | #8A4FBF | forced/override |
 | `--interact` | #2A5C8A | focus/link/primary (giữ) |
 
@@ -47,7 +47,8 @@
 ### 2.1 Ngữ nghĩa màu trạng thái
 | Trạng thái | Token | Ý nghĩa |
 |------------|-------|---------|
-| Online/ON/Normal | `--good` | chạy, OK |
+| Confirmed running/energized/success | `--good` | trạng thái động đã xác nhận |
+| Normal/available | neutral tokens | trạng thái nền, không cần thu hút chú ý |
 | Off/Stopped | `--off` | không hoạt động |
 | Warning/lỗi nhỏ | `--warn` (+ `--warn-fg`) | cần chú ý |
 | Fault/sự cố nặng | `--alarm` (+ `--fault-fg`) | nghiêm trọng |
@@ -68,6 +69,7 @@
 - Bo góc `--radius`: 6px (web), 4px (HMI).
 - Web breakpoint: ≥1280 desktop (chính), ≥768 tablet (commissioning).
 - HMI cố định 320×240 (landscape).
+- HMI body text tối thiểu 14px; action touch target tối thiểu 40×40px hoặc có hard-key equivalent.
 
 ## 5. Component dùng chung (spec props)
 | Component | Mô tả | State |
@@ -80,9 +82,13 @@
 | **Modal** | xác nhận hành động | confirm/cancel, danger variant |
 | **Toast** | thông báo | info/success/warn/error |
 | **NavRail** | điều hướng theo role | active item |
-| **AlarmRow** | 1 dòng alarm | severity, time, ack |
+| **AlarmRow** | 1 dòng alarm | priority, lifecycle state, time, source, response, ack-state |
+| **ControlFaceplate** | point được whitelist | effective value, feedback, mode, source, priority, expiry, actions |
+| **CommandStatus** | lifecycle command | editing/pending/accepted/rejected/timeout/expired/released |
 
-> Lưu ý Level B hybrid: normal/online/ON = xanh lá (`--good`), off/stopped = xám (`--off`), warn = vàng dạng chip/badge/bar, fault = đỏ, critical/safety = magenta, force = tím. Mọi trạng thái vẫn phải đi kèm chữ/icon/label; không dùng màu đơn độc.
+> Lưu ý: normal/available dùng neutral; `--good` chỉ cho running/energized/success
+> cần xác nhận. Off/stopped = xám, warn = vàng, fault = đỏ, priority cao nhất =
+> critical khi philosophy quy định, force = tím. Mọi trạng thái luôn có chữ/icon/label.
 
 ### 5.1 PointCard — quy ước hiển thị (dùng cả Web + HMI)
 ```
@@ -91,10 +97,11 @@
 │  23.5 °C                  │   ← giá trị lớn (mono)
 │  NTC10k · good · 10:42    │   ← loại sensor · quality · time
 └──────────────────────────┘
-quality normal/good → xanh lá + "✓ OK"; off/stopped → xám + "OFF"; uncertain/warn → chip vàng + "⚠ WARN"; fault → chip đỏ + "✕ FAULT"
+quality normal/good → neutral + "✓ GOOD"; confirmed energized/running có thể thêm xanh; off/stopped → xám + "OFF"; uncertain/warn → chip vàng + "⚠ WARN"; fault → chip đỏ + "✕ FAULT"
 đang force → viền/badge tím + "FORCED"
 ```
-Trạng thái normal của PointCard hiển thị xanh lá theo convention SCADA; off dùng xám; warn dùng vàng dạng chip; fault dùng đỏ. Luôn kèm chữ/icon/label theo ADR-009 amendment.
+Trạng thái normal của PointCard dùng neutral để abnormal nổi bật; xanh chỉ dùng cho
+energized/running/success khi hữu ích. Luôn kèm chữ/icon/label theo ADR-009.
 ## 6. Phân cấp điều hướng (ISA-101)
 Điều hướng web Rev A chia 3 nhóm để tách tác vụ vận hành, cấu hình và kỹ thuật theo [ADR-009](../adr/ADR-009-isa101-hmi-and-nav-restructure.md):
 
@@ -105,6 +112,14 @@ Trạng thái normal của PointCard hiển thị xanh lá theo convention SCADA
 | **Engineering** | Scheduler, Commissioning, Programming/Validator, Alarm settings, Inputs Config, Controller Diagram, Auxiliary Functions |
 
 Mục đang chọn dùng dấu hiệu trung tính (weight, line, marker, background nhẹ), không glow/bão hòa màu. Nhóm điều hướng có thể thu gọn để giảm tải thị giác.
+
+### 6.1 Điều hướng HMI local
+
+HMI 320×240 không dùng navigation Web ba nhóm. Nó có đúng năm surface
+`Home/Points/Control/Alarms/Service`, một page title lớn và page chooser với target
+tối thiểu 40×40px. Communication/System được gộp vào Home/Service. Control chỉ chứa
+point authority whitelist; không có schedule, engineering, alarm configuration hoặc
+user administration trên panel local.
 
 ## 7. Iconography
 Outline 24px (web) / 16px (HMI): home, io, alarm, network, settings, user, play, stop, upload, download, force, lock, refresh.
@@ -128,7 +143,9 @@ Trạng thái phải có dấu hiệu phi-màu đi kèm: icon/chữ/shape/symbol
 ## Revision History
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
+| 1.7 | 2026-07-22 | Tech Lead/UX | Đồng bộ semantic state, typography, touch target và component cho local limited-operator HMI theo ADR-016. |
 | 1.5 | 2026-06-23 | UX Lead | Thêm Inputs Config, Controller Diagram, Aux Functions vào Engineering theo ADR-010 |
+| 1.6 | 2026-07-22 | Tech Lead/UX | Reserved saturated color for abnormal/confirmed dynamic states; removed blanket green-normal and unsupported magenta=safety semantics; added IEC 60073 review boundary. |
 | 1.4 | 2026-06-16 | UX Lead | Đổi sang Level B hybrid — bộ màu trạng thái SCADA + token *-fg cho nền sáng theo ADR-009 amendment |
 | 1.3 | 2026-06-16 | UX Lead | Owner adjustment: chữ/icon/chấm/value động normal xanh lá; warn cam, fault đỏ; surface vẫn xám ISA-101 |
 | 1.2 | 2026-06-16 | UX Lead | Bổ sung ngoại lệ chấm/icon binary indicator: OK/ONLINE xanh lá, OFF/OFFLINE xám, vẫn kèm chữ/icon |

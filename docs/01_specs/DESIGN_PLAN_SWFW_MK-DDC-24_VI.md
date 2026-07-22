@@ -81,7 +81,7 @@ design/
 │   ├── SW_IODRIVER_DESIGN…           (gộp vào mkddc-core)
 │   ├── SW_AGENT_DESIGN…              (MQTT/REST/Modbus — deferred Rev B)
 │   ├── (SW_WEBIDE_DESIGN đã gỡ → web Rev A: ADR-006/007)
-│   ├── SW_HMI_DESIGN…                (deferred Rev B)
+│   ├── SW_HMI_DESIGN…                (feature-gated Rev A, ADR-016 limited-operator)
 │   ├── SW_SECURITY_KEYSTORE…         (D-11)
 │   └── SW_OTA_DESIGN…                (D-7 phần SOM, A/B)
 └── _templates/
@@ -168,7 +168,7 @@ Chuỗi bắt buộc: **PRD FR/NFR → SRS/SW-REQ/FW-REQ → Design unit → Cod
 | FW build/debug | STM32CubeIDE 1.15+ / CMake + arm-none-eabi-gcc 12, ST-Link V3 |
 | FW RTOS | FreeRTOS 10.5.1 |
 | SW build | Debian 12 toolchain, CMake, Python 3.11, Node 20 |
-| BACnet | bacnet-stack 1.3.x | 
+| BACnet | bacnet-stack 1.3.x |
 | Modbus | libmodbus 3.1.10 |
 | API | FastAPI + OpenAPI 3.1 (openapi.yaml là nguồn-chuẩn D-4) |
 | Diagram | Mermaid/PlantUML (text-based, versioned) |

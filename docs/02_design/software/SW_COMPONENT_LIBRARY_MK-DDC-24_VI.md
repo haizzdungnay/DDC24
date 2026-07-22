@@ -84,7 +84,7 @@ Kiểu: `f`=float, `b`=bool, `i`=int. `[S]` = stateful (giữ state qua scan).
 ## 8. Protocol components
 
 > Spec đầy đủ (param types, validator rules, ví dụ): [GRAPH_SCHEMA §10](../interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md).
-> Bảng dưới là tóm tắt contract. Implementation: [COR-011](../../docs/03_implementation/11_TASK_CHECKLIST.md) (graph_runtime) + [MOD-013](../../docs/03_implementation/11_TASK_CHECKLIST.md) (Modbus TCP transport).
+> Bảng dưới là tóm tắt contract. Implementation: [COR-011](../../03_implementation/11_TASK_CHECKLIST.md) (graph_runtime) + [MOD-013](../../03_implementation/11_TASK_CHECKLIST.md) (Modbus TCP transport).
 
 | type | in | out | params bắt buộc | quality behavior |
 |------|----|----|-----------------|-----------------|

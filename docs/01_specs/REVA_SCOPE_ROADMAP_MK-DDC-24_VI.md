@@ -39,11 +39,12 @@
 ✓ Config qua FORM + import/export graph.json (KHÔNG canvas)
 ✓ SQLite config + backup/restore (copy file)
 ✓ Commissioning test từng point + export report (CSV/PDF cơ bản)
-✓ HMI local tại chỗ (LVGL v9, DRM/KMS, 6 màn, 6 nút + CTP touch)  ← Amendment 2026-06-27
+✓ HMI local limited-operator (LVGL v9, DRM/KMS, 5 surface, 6 nút + CTP touch)  ← ADR-016
 ```
 
-> **Amendment 2026-06-27 — HMI kéo vào Rev A:**
-> Spec HMI hoàn chỉnh đã được duyệt (SW_HMI_DESIGN Rev 2.2, UC Rev 2.1, UX Rev 2.0).
+> **Amendment 2026-07-22 — HMI limited-operator:**
+> Spec HMI chọn Home/Points/Control/Alarms/Service; chỉ command point được whitelist
+> qua broker/core authority, không đưa full Web HMI/engineering lên TFT 2.4 inch.
 > HMI là yêu cầu thiết yếu cho demo tại chỗ (site acceptance) — không có màn hình local,
 > kỹ sư vận hành không thể kiểm tra DDC khi không có laptop. Kéo vào Rev A.
 > Implementation guide: [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](../03_implementation/08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md).
@@ -157,3 +158,4 @@ không được quảng bá hoặc hiển thị chúng như phần cứng đã l
 |---|---|---|
 | 1.2 | 2026-06-27 | Added local-HMI Rev A amendment. |
 | 1.3 | 2026-06-30 | Aligned Rev A hardware and demo wording to ADR-010 base SKU. |
+| 1.4 | 2026-07-22 | Replaced six-screen service-only scope with ADR-016 five-surface limited-operator HMI and authoritative command boundary. |

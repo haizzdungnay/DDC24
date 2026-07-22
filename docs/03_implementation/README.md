@@ -1,6 +1,8 @@
 # docs/03_implementation/ — Implementation Guides & Checklists
 
-> **Owner:** Dev Lead | **Last Updated:** 2026-06-27
+> **Recovery status (2026-07-22): In Review.** Bộ hướng dẫn đã được phục hồi đầy đủ để giữ implementation knowledge. Trạng thái `Active/FROZEN` trong bảng là trạng thái lịch sử; phải đối chiếu với baseline, code và test hiện hành trước khi dùng cho release.
+
+> **Owner:** Dev Lead | **Last Updated:** 2026-07-22
 
 Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTATION_README.md` trước.
 
@@ -16,7 +18,7 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [05](05_IOP_UART_IMPLEMENTATION_GUIDE.md) | Hợp đồng IOP/UART v2.0 | Active |
 | [06](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) | Service mkddc-iobus | Active |
 | [07](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) | Service mkddc-core | Active |
-| [08](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md) | HMI/LVGL/DRM local display | Implementation in progress |
+| [08](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md) | ADR-016 HMI microtask plan HOP-000..077 | Plan approved; source implementation pending |
 | [09](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) | Web REST API + UI (Go) | Active |
 | [10](10_END_TO_END_DATA_FLOW.md) | E2E data flow + debug checklist | Active |
 | [11](11_TASK_CHECKLIST.md) | Master task tracker | Active |

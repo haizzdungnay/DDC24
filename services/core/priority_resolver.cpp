@@ -1,5 +1,6 @@
 #include "priority_resolver.hpp"
 
+#include <cmath>
 #include <cstdio>
 
 namespace core {
@@ -20,6 +21,15 @@ PriorityResolver::PriorityResolver()
 bool PriorityResolver::set_ao(int level, int ch, float v)
 {
     if (!valid_level(level) || ch < 0 || ch >= KX_N_AO) return false;
+    const float lo = ao_modes_[ch] == 1 ? 4.0f : 0.0f;
+    const float hi = ao_modes_[ch] == 1 ? 20.0f : 10.0f;
+    if (!std::isfinite(v) || v < lo || v > hi) {
+        std::fprintf(stderr,
+                     "WARN  priority.reject_ao ch=%d mode=%s value=%.3f range=[%.1f,%.1f]\n",
+                     ch, ao_modes_[ch] == 1 ? "4-20mA" : "0-10V",
+                     static_cast<double>(v), static_cast<double>(lo), static_cast<double>(hi));
+        return false;
+    }
     Slot& s = ao_[level - 1][ch];
     if (s.active && s.value != v)
         std::fprintf(stderr, "WARN  priority.conflict ao ch=%d level=%d old=%.3f new=%.3f (nguồn sau thắng)\n",
@@ -27,6 +37,18 @@ bool PriorityResolver::set_ao(int level, int ch, float v)
     s.active = true;
     s.value = v;
     return true;
+}
+
+void PriorityResolver::set_ao_modes(const uint8_t modes[KX_N_AO])
+{
+    if (!modes) return;
+    for (int ch = 0; ch < KX_N_AO; ch++)
+        ao_modes_[ch] = modes[ch] == 1 ? 1 : 0;
+}
+
+uint8_t PriorityResolver::ao_mode(int ch) const
+{
+    return (ch >= 0 && ch < KX_N_AO) ? ao_modes_[ch] : 0;
 }
 
 bool PriorityResolver::release_ao(int level, int ch)

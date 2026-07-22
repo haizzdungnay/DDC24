@@ -107,6 +107,13 @@ TEST(GraphRuntime, ScaleAndAoOutputPercentToEng)
     OutputCmd out = r.resolve();
     ASSERT_TRUE(out.ao_valid[0]);
     EXPECT_NEAR(out.ao[0], 5.0f, 0.01f);
+
+    const uint8_t modes[KX_N_AO] = {1, 0, 0, 0};
+    g.set_ao_modes(modes);
+    r.set_ao_modes(modes);
+    g.execute(t, r);
+    EXPECT_NEAR(r.resolve().ao[0], 12.0f, 0.01f)
+        << "50% ở mode 4-20mA phải thành giá trị vật lý 12mA";
 }
 
 TEST(GraphRuntime, PidConverges)

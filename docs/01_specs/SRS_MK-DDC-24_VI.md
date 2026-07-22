@@ -1,9 +1,9 @@
 # SRS — MK-DDC-24 Software Requirements Specification
 
-> **Phiên bản:** 2.0 | 2026-06-30
-> **Trạng thái:** Draft — Ver 1  
-> **Tác giả:** KINEXUS Technologies — Software Team  
-> **Chuẩn tham chiếu:** IEC 62443-4-1, BACnet ASHRAE 135 (IEC 61131-3 → tầm nhìn Rev C, không thuộc Rev A)  
+> **Phiên bản:** 2.1 | 2026-07-22
+> **Trạng thái:** Draft — Ver 1
+> **Tác giả:** KINEXUS Technologies — Software Team
+> **Chuẩn tham chiếu:** IEC 62443-4-1, BACnet ASHRAE 135 (IEC 61131-3 → tầm nhìn Rev C, không thuộc Rev A)
 > **Liên quan:** [DS](DS_MK-DDC-24_VI.md) | [PRD](PRD_MK-DDC-24_VI.md) | [HW_SPEC](HW_SPEC_MK-DDC-24_VI.md)
 
 > ⚠️ **RECONCILE (2026-06-08).** Mô hình điều khiển nay là **component-based graph**, KHÔNG
@@ -389,31 +389,39 @@ KinexusET là web IDE browser-based chạy trên chính thiết bị.
 
 ## 12. HMI Display Software Requirements
 
-Màn hình TFT 2.4" ILI9341 hiển thị dashboard local, không phụ thuộc kết nối mạng.
+Màn hình local 2.4" KD024QVFIA073-02-C021B/JD9852 dùng MIPI DSI một lane,
+cảm ứng FT5436 qua I2C/evdev và DRM/KMS. HMI là presentation/limited-operator
+service tùy chọn, không phải control authority và không phụ thuộc kết nối mạng để
+đọc trạng thái local. Phạm vi này không bao gồm full Web HMI/SCADA.
 
 ### 12.1 Display Application
 
 | ID | Yêu cầu | Loại |
 |----|---------|------|
-| HMI-001 | PHẢI chạy LVGL v9 userspace trên Debian, render vào `/dev/fb0` (fbtft ILI9341) | MUST |
-| HMI-002 | Frame rate PHẢI ≥ 10 FPS (đủ cho dashboard gauge) | MUST |
-| HMI-003 | PHẢI hiển thị ≥ 3 gauge vòng tròn (arc gauge) cho giá trị AI quan trọng nhất | MUST |
-| HMI-004 | PHẢI hiển thị: network status (IP, BACnet connected), uptime, fault indicator | MUST |
-| HMI-005 | Dữ liệu hiển thị PHẢI lấy từ shared memory với Soft PLC (không polling qua network) | MUST |
+| HMI-001 | PHẢI chạy LVGL v9 userspace trên Debian, render qua DRM/KMS `/dev/dri/card0`; không dùng fbdev/fbtft/ILI9341 | MUST |
+| HMI-002 | Frame rate PHẢI ≥ 10 FPS trên target đã chọn | MUST |
+| HMI-003 | Home PHẢI dùng bố cục glanceable trung tính, dành màu bão hòa cho abnormal/attention; không bắt buộc arc gauge | MUST |
+| HMI-004 | PHẢI hiển thị network status kỹ thuật, uptime, data quality/age và fault indicator; không gọi BACnet/IP UDP là `connected` | MUST |
+| HMI-005 | Telemetry hiển thị PHẢI lấy từ shared memory read-only do `mkddc-iobus`/`mkddc-core` xuất bản; không polling qua network và không dùng SHM làm command channel | MUST |
 | HMI-006 | Refresh dữ liệu trên màn hình PHẢI ≤ 1 giây | MUST |
 | HMI-007 | PHẢI có screen saver (dim backlight sau 5 phút không nhấn nút) | SHOULD |
-| HMI-008 | Backlight PHẢI bật lại khi nhấn bất kỳ nút nào | MUST |
+| HMI-008 | Backlight PHẢI bật lại khi touch hoặc nhấn bất kỳ nút nào; thao tác đầu chỉ wake, không kích hoạt lệnh | MUST |
+| HMI-009 | Mọi trạng thái PHẢI có text/symbol/shape ngoài màu; coding màu và actuator phải được review theo IEC 60073 | MUST |
 
 ### 12.2 Navigation & Menu
 
 | ID | Yêu cầu | Loại |
 |----|---------|------|
-| HMI-010 | PHẢI có menu điều hướng bằng 6 nút (UP/DOWN/LEFT/RIGHT/ENTER/ESC) | MUST |
-| HMI-011 | Menu PHẢI bao gồm: Dashboard / I/O Status / Network Info / Alarm List / System Info | MUST |
+| HMI-010 | PHẢI hỗ trợ song song touch và 6 nút (UP/DOWN/LEFT/RIGHT/ENTER/ESC), với focus nhìn thấy được | MUST |
+| HMI-011 | Menu PHẢI gồm đúng năm surface: Home / Points / Control / Alarms / Service; communication/system diagnostics phải được giữ trong Home/Service | MUST |
 | HMI-012 | PHẢI hiển thị danh sách ≥ 10 alarm gần nhất với timestamp và mức độ | MUST |
 | HMI-013 | PHẢI hiển thị 16 UI + 4 AO + 4 DO của base SKU; DI chỉ hiển thị trên optional SKU khi capability map xác nhận | MUST |
 | HMI-014 | Từ màn hình System Info PHẢI hiển thị: firmware version, uptime, CPU temp, RAM% | MUST |
-| HMI-015 | PHẢI có màn hình xác nhận (ENTER/ESC) trước khi thực hiện restart từ HMI | MUST |
+| HMI-015 | Restart/reboot PHẢI yêu cầu quyền, tóm tắt ảnh hưởng và xác nhận giữ 3 giây; safe state phải được core chấp nhận trước reboot | MUST |
+| HMI-016 | ACK alarm PHẢI được gửi tới alarm authority, ghi user/time/result vào audit trail và không được làm mất alarm đang active | MUST |
+| HMI-017 | Alarm PHẢI có priority, state, timestamp, source, message và operator response text; lifecycle/historian/metrics được quản lý theo alarm philosophy dựa trên IEC 62682 | MUST |
+| HMI-018 | Service action PHẢI fail-closed khi identity/role không xác định; role từ file cấu hình hoặc PIN đơn lẻ không được coi là production identity | MUST |
+| HMI-019 | Action chưa triển khai hoặc thiếu telemetry PHẢI ẩn/disable với lý do rõ ràng; không hiển thị dữ liệu giả như trạng thái thật | MUST |
 
 ### 12.3 Localization
 
@@ -422,6 +430,16 @@ Màn hình TFT 2.4" ILI9341 hiển thị dashboard local, không phụ thuộc k
 | HMI-020 | Label trên HMI PHẢI hỗ trợ tiếng Anh (mặc định) và tiếng Việt (Unicode UTF-8) | MUST |
 | HMI-021 | Font PHẢI bao gồm ký tự có dấu tiếng Việt (LVGL lv_font_montserrat + NotoSans) | MUST |
 | HMI-022 | Ngôn ngữ hiển thị cấu hình được qua web UI, áp dụng không cần reboot | SHOULD |
+| HMI-023 | Mọi hành động thay đổi trạng thái PHẢI có audit gồm timestamp đồng bộ, user/role, action, target, old/new value và result | MUST |
+| HMI-024 | Thiết kế PHẢI qua scenario usability test trên panel thật với operator/commissioning/service, gồm găng tay, alarm flood, stale data và mất I/O | MUST |
+| HMI-025 | Control PHẢI chỉ hiển thị point được authoritative policy whitelist; input/raw/feedback, PID, mapping, calibration, alarm configuration và safety policy là read-only hoặc không xuất hiện với Operator | MUST |
+| HMI-026 | Setpoint/mode/override/release PHẢI qua authenticated local broker rồi core priority/interlock/safety; HMI không được ghi command trực tiếp vào SHM hoặc hardware | MUST |
+| HMI-027 | Override PHẢI có reason, bounded TTL, actor, policy priority và explicit release; effective source/priority/expiry phải hiển thị từ authoritative response | MUST |
+| HMI-028 | Nếu broker/core/alarm authority unavailable hoặc timeout, mutation PHẢI disable/fail rõ và HMI tiếp tục read-only; không replay command cũ khi reconnect | MUST |
+| HMI-029 | Production session PHẢI fail closed, idle expiry không quá 15 phút và audit login/logout/denial; static role/PIN trong `hmi.conf` không phải identity hợp lệ | MUST |
+| HMI-030 | Touch target hành động PHẢI tối thiểu 40×40 px hoặc có nút cứng tương đương; body text tối thiểu 14 px và focus phải quan sát được | MUST |
+| HMI-031 | Nominal telemetry refresh PHẢI ≤1 s; command accepted/rejected/timeout feedback PHẢI ≤2 s; duplicate request ID không được tạo double action | MUST |
+| HMI-032 | Local point DB chỉ được dùng cho presentation; quyền, range, priority và TTL PHẢI được authority revalidate tại mỗi mutation | MUST |
 
 ---
 
@@ -509,6 +527,6 @@ Ví dụ: 2026-05-28T14:23:01+07:00 ERROR E101 MCU_IOP MCU no response for 100ms
 
 ---
 
-**Document ID:** SRS-MK-DDC-24-VI  
-**Revision:** 2.0 | 2026-06-30
+**Document ID:** SRS-MK-DDC-24-VI
+**Revision:** 2.2 | 2026-07-22 — selected limited-operator local HMI: five surfaces, whitelisted point commands, broker/core authority, TTL/release, fail-closed session and measurable usability/timing
 **Approved by:** Software Lead, CTO KINEXUS Technologies

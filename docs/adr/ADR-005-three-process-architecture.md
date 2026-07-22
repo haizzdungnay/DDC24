@@ -4,6 +4,7 @@
 - Owner: Solution Architect
 - Status: Accepted
 - Related: ADR-004 (component runtime), ADR-007 (web stack)
+- Amendment: ADR-016 đưa `mkddc-hmi` trở lại Rev A dưới dạng optional limited-operator client; quyết định ba process authority vẫn giữ nguyên.
 - Canonical reference: `spec/PRODUCT_DEFINITION_MK-DDC-24_VI.md` (Phase 1)
 
 ## Context
@@ -51,11 +52,10 @@ mkddc-web    (non-real-time)            ── single process
 ### Services from the prior design deferred out of the Rev A core
 
 The 2026-05-30 design also defined `kinexus-hmi` (LVGL local display), `kinexus-agent`
-(MQTT/REST cloud), and `kinexus-ota`. These are **not** part of the Rev A three-process
-core and are deferred per the product definition (no cloud/OTA, no local HMI in Rev A
-scope, product definition §18). They are recorded in `spec/REVA_SCOPE_ROADMAP` as Rev B+
-items so the capability is not silently lost; their service designs are marked deferred,
-not superseded.
+(MQTT/REST cloud), and `kinexus-ota`. Cloud/OTA remain outside the Rev A three-process
+core. The original local-HMI deferral in this paragraph was amended by ADR-016:
+`mkddc-hmi` may be a feature-gated Rev A client, but it does not become a fourth
+authority process; mutation still passes through the local broker and `mkddc-core`.
 
 ### Service naming — MK-DDC-24 brand
 

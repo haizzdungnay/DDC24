@@ -1,17 +1,23 @@
-# docs/02_design/firmware/ — Firmware Detailed Design (STM32G0B1)
+# Firmware Detailed Design Index
 
-> **Owner:** Dev 1 (FW_MCU) | **Last Updated:** 2026-06-27
+**ID:** FW-DES-INDEX-001
+**Trạng thái:** In Review — recovered 2026-07-22
 
-Thiết kế chi tiết firmware MCU STM32G0B1RBT6. Đọc `FW_DDD` trước.
+Tài liệu trong thư mục này được phục hồi nguyên văn. [Firmware Baseline](../../04_design/FIRMWARE.md), `shared/iop_protocol.h` và firmware implementation hiện hành có thẩm quyền cao hơn khi có xung đột.
 
-| File | Mô tả |
-|------|-------|
-| [FW_DDD](FW_DDD_MK-DDC-24_VI.md) | Firmware DDD — entry point |
-| [FW_PINOUT_MASTER](FW_PINOUT_MASTER_MK-DDC-24_VI.md) | Pinout master (frozen) |
-| [FW_CODING_STANDARD](FW_CODING_STANDARD_MK-DDC-24_VI.md) | Coding standard C11 |
-| [FW_MCU_SECURE_BOOT](FW_MCU_SECURE_BOOT_MK-DDC-24_VI.md) | Secure boot design |
-| [FW_BOOTLOADER_OTA](FW_BOOTLOADER_OTA_MK-DDC-24_VI.md) | OTA bootloader |
-| [FW_MOD_IOP_COMM](FW_MOD_IOP_COMM_MK-DDC-24_VI.md) | IOP UART comm module |
-| [FW_MOD_IO_SAMPLE](FW_MOD_IO_SAMPLE_MK-DDC-24_VI.md) | IO sampling (ADS131M08) |
-| [FW_MOD_AO_DO](FW_MOD_AO_DO_MK-DDC-24_VI.md) | AO/DO output (DAC8554, ULN2003) |
-| [FW_MOD_DIAG_WDG](FW_MOD_DIAG_WDG_MK-DDC-24_VI.md) | Diagnostics & watchdog |
+## Current-path design cần đối chiếu
+
+- [Firmware detailed design](FW_DDD_MK-DDC-24_VI.md)
+- [Coding standard](FW_CODING_STANDARD_MK-DDC-24_VI.md)
+- [I/O sampling module](FW_MOD_IO_SAMPLE_MK-DDC-24_VI.md)
+- [AO/DO module](FW_MOD_AO_DO_MK-DDC-24_VI.md)
+- [IOP communication module](FW_MOD_IOP_COMM_MK-DDC-24_VI.md)
+- [Diagnostics and watchdog](FW_MOD_DIAG_WDG_MK-DDC-24_VI.md)
+- [MCU pinout master](FW_PINOUT_MASTER_MK-DDC-24_VI.md)
+
+## Deferred hoặc chưa có release evidence
+
+- [Bootloader/OTA design](FW_BOOTLOADER_OTA_MK-DDC-24_VI.md)
+- [MCU secure boot design](FW_MCU_SECURE_BOOT_MK-DDC-24_VI.md)
+
+Hai tài liệu deferred được giữ để bảo toàn thiết kế, nhưng không được dùng để tuyên bố OTA/secure-boot production capability của Rev A.0.
