@@ -38,7 +38,7 @@ func TestLoadConfigUsesDedicatedNetcfgSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if cfg.NetcfgSock != "/run/mkddc/netcfg.sock" {
+	if cfg.NetcfgSock != "/run/mkddc-netcfg/netcfg.sock" {
 		t.Fatalf("NetcfgSock = %q", cfg.NetcfgSock)
 	}
 }

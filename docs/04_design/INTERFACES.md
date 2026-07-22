@@ -51,7 +51,7 @@ Source hiện tại của `PUT /api/v1/network` chỉ validate cơ bản rồi g
 
 ### SOM network authority contract — implemented v1; target acceptance pending
 
-Authority dùng line-delimited JSON version 1 qua `/run/mkddc/netcfg.sock`, frame tối đa 8192 byte, socket `0660`, peer credential allowlist chỉ cho broker/service account đã phê duyệt. Schema authority: `shared/netcfg_protocol_v1.schema.json`.
+Authority dùng line-delimited JSON version 1 qua `/run/mkddc-netcfg/netcfg.sock`, frame tối đa 8192 byte, socket `0660` trong runtime directory riêng `root:mkddc 0750`; peer credential allowlist chỉ cho broker/service account đã phê duyệt. Schema authority: `shared/netcfg_protocol_v1.schema.json`.
 
 Action allowlist:
 

@@ -240,7 +240,7 @@ System status (versions tách từng thành phần — Contract Freeze; nguồn 
 `network.conf` chỉ là desired configuration. Web REST cũ vẫn ghi file,
 `applySystem(system)` trả `applied=false` và frontend chưa xử lý warning này. Local-HMI
 broker actions `network_status/validate/stage/apply/confirm/rollback` đã dùng
-`/run/mkddc/netcfg.sock`, nhưng việc đó không tự động sửa Web REST/FE. Active IP phải
+`/run/mkddc-netcfg/netcfg.sock`, nhưng việc đó không tự động sửa Web REST/FE. Active IP phải
 lấy từ network authority; BE/FE không được tự gọi OS command hoặc báo applied trước
 transaction confirm.
 

@@ -10,7 +10,7 @@
 
 int main(int argc, char** argv)
 {
-    std::string socket_path = "/run/mkddc/netcfg.sock";
+    std::string socket_path = "/run/mkddc-netcfg/netcfg.sock";
     std::string journal_path = "/data/mkddc/netcfg-transaction.json";
     std::string allowed_user = "mkddc";
     std::string interface;

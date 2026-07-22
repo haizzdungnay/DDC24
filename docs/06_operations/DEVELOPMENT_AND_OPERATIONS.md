@@ -54,10 +54,11 @@ Source baseline 2026-07-22 đã có `mkddc-netcfg` và local-HMI broker transact
 dùng toast “Đã lưu” hoặc `network.conf` làm bằng chứng kernel đã đổi địa chỉ. Active
 IPv4 phải lấy từ action `network_status`/kernel trên target.
 
-Cho tới khi NWC-017 target evidence được duyệt, đổi IP production qua HMI chỉ được chạy
-trong commissioning có local/console fallback, Ethernet interface allowlist và backup
-NetworkManager. Không restart `mkddc-iobus` chỉ để nhận IP mới vì service còn sở hữu
-IOP/UART; BACnet datalink tự rebind theo address change.
+Orange Pi service evidence 2026-07-22 đã xác nhận transaction, process recovery,
+120 s rollback và control continuity trên interface dummy tách khỏi management.
+Đổi IP production trên `end1` vẫn chỉ được chạy trong commissioning có local/console
+fallback và backup NetworkManager cho tới khi physical Ethernet HIL được duyệt. Không
+restart `mkddc-iobus` chỉ để nhận IP mới; BACnet datalink tự rebind theo address change.
 
 Luồng ADR-017 đã implement:
 
@@ -68,7 +69,11 @@ Luồng ADR-017 đã implement:
 5. BACnet hot-rebind/phát `I-Am`; core/IOP/STM32 tiếp tục hoạt động.
 
 Config mặc định Orange Pi dùng `/etc/mkddc/netcfg.conf` với `NETCFG_INTERFACE=end1`;
-journal ở `/data/mkddc/netcfg-transaction.json`, socket ở `/run/mkddc/netcfg.sock`.
+journal ở `/data/mkddc/netcfg-transaction.json`, socket đặc quyền ở
+`/run/mkddc-netcfg/netcfg.sock`. Directory riêng này là `root:mkddc 0750`; socket là
+`root:mkddc 0660`, nên restart core/iobus không được đổi ownership hoặc mode của nó.
+Runtime chung `/run/mkddc` cho core/iobus/Web là `0770` để broker tạo `hmi-api.sock`;
+các socket ứng dụng vẫn giữ `0660`.
 Khi rollback fail, giữ console/rescue access, lưu journal/log và không tiếp tục mutation
 cho tới khi phục hồi last-known-good bằng NetworkManager được phê duyệt.
 

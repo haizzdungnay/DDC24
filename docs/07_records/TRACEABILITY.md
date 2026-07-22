@@ -17,18 +17,18 @@ Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `P
 | SWR-REQ-002 | core graph/priority/safety | timing + unit + fault test | Partial |
 | SWR-REQ-003 | web validators + iobus config consumer | round-trip/reload test | Partial |
 | SWR-REQ-004 | `web/backend/http.go` + auth middleware | API role/security tests | Partial |
-| SWR-REQ-005 | ADR-017, `services/netcfg`, HMI broker/client | active/pending truth + negative UI/API tests | Host helper path implemented; Web REST migration and target evidence open |
-| SWR-REQ-006 | `mkddc-netcfg` transaction journal/coordinator | static/DHCP/confirm/120 s rollback + restart fault tests | Host fake-platform tests pass; target fault evidence RED |
-| SWR-REQ-007 | netcfg + iobus BACnet address watcher | multi-process continuity, BACnet `I-Am`, Web/Modbus reconnect | Hot-rebind source/build pass; live continuity/packet evidence RED |
+| SWR-REQ-005 | ADR-017, `services/netcfg`, HMI broker/client | active/pending truth + negative UI/API tests | Orange Pi service path and target negative tests pass; Web REST migration/panel open |
+| SWR-REQ-006 | `mkddc-netcfg` transaction journal/coordinator | static/DHCP/confirm/120 s rollback + restart fault tests | Target static confirm, process recovery, explicit/automatic rollback pass; DHCP/reboot/power fault open |
+| SWR-REQ-007 | netcfg + iobus BACnet address watcher | multi-process continuity, BACnet `I-Am`, Web/Modbus reconnect | Target control continuity and live hot-rebind pass; packet/Modbus/physical I/O evidence open |
 | IF-REQ-001 | `shared/iop_protocol.h`, [Firmware](../04_design/FIRMWARE.md) | assertions + HIL timing/fault | Partial |
 | IF-REQ-002 | `shared/mkddc_shm.h` + consumers | layout/magic tests | Implemented; release record required |
 | IF-REQ-003 | core/iobus AO path | physical-unit boundary regression + bench | Partial |
-| IF-REQ-004 | [Interfaces](../04_design/INTERFACES.md), `shared/netcfg_protocol_v1.schema.json` | cross-language fixtures + malformed/peer/state tests | Schema, C++ server and Go/C++ clients implemented; target peer evidence pending |
+| IF-REQ-004 | [Interfaces](../04_design/INTERFACES.md), `shared/netcfg_protocol_v1.schema.json` | cross-language fixtures + malformed/peer/state tests | Schema/clients implemented; target UID denial, socket permissions and allowlist pass |
 | SAFE-REQ-001 | MCU IOP/watchdog implementation | disconnect HIL ≤200 ms | Missing release evidence |
 | SAFE-REQ-002 | core/iobus validators | NaN/infinity/range negative tests | Partial |
 | SEC-REQ-001 | web auth/RBAC/audit paths | security/API test | Partial |
 | SEC-REQ-002 | deployment/config | secret/TLS review | Missing release evidence |
-| SEC-REQ-003 | ADR-017, netcfg UDS/systemd sandbox, Web/HMI adapter boundary | peer/RBAC/audit/privilege/bypass negative tests | Host RBAC/peer/interface allowlist implemented; target sandbox/bypass evidence RED |
+| SEC-REQ-003 | ADR-017, netcfg UDS/systemd sandbox, Web/HMI adapter boundary | peer/RBAC/audit/privilege/bypass negative tests | Target UID/interface denial and unit/socket boundary pass; broader security review still required |
 | NFR-REQ-001 | service/SHM failure handling | restart/corruption scenarios | Planned |
 | NFR-REQ-002 | build/test/package pipeline | reproducible release record | Planned |
 | HW-REQ-001 | [hardware detail](../04_design/hardware/README.md) + schematic/BOM + iobus scaling | review + ADC/UI bench | Missing controlled evidence |
@@ -49,8 +49,8 @@ Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `P
 | HMI-REQ-013 | HMI API client and fail-closed degradation | broker/core loss and reconnect tests | Host broker OFFLINE/reconnect and broker-restart token invalidation pass; target record pending |
 | HMI-REQ-014 | UX Rev 3.1 + shared HMI styles/input paths | geometry/focus/glove/light target test | Host geometry implemented; glove/light target test pending |
 | HMI-REQ-015 | versioned IPC request lifecycle | latency + duplicate request integration | Host correlation/idempotency tested; target latency record pending |
-| HMI-REQ-016 | ADR-017, Service network modal, broker/netcfg clients | UC-HMI-016..019 policy/usability/target test | Host source/model/RBAC implemented; connected-panel acceptance pending |
-| HMI-REQ-017 | HMI network model/state machine + netcfg transaction | helper/broker loss, countdown, no-success/no-replay tests | Host model and fail-closed adapter tests pass; target process-loss/countdown pending |
+| HMI-REQ-016 | ADR-017, Service network modal, broker/netcfg clients | UC-HMI-016..019 policy/usability/target test | Host source/model/RBAC and target service path pass; connected-panel acceptance pending |
+| HMI-REQ-017 | HMI network model/state machine + netcfg transaction | helper/broker loss, countdown, no-success/no-replay tests | Host fail-closed tests plus target restart/120 s rollback pass; panel countdown inspection pending |
 
 ## Quy tắc cập nhật
 

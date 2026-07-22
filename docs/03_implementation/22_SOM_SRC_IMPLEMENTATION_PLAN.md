@@ -746,11 +746,12 @@ Ràng buộc giữ nguyên:
 
 ---
 
-## S8 — ADR-017 SOM network authority (source implemented; target gate open)
+## S8 — ADR-017 SOM network authority (deployed; physical HIL gate open)
 
 **Mục tiêu:** cung cấp một FW SOM/network platform boundary hoàn chỉnh để BE và local
 HMI chỉ cần dùng contract, không tự quản Linux network. Host source hiện đã có helper,
-broker adapter, HMI flow và BACnet rebind; target/HIL evidence vẫn quyết định release.
+broker adapter, HMI flow và BACnet rebind. Orange Pi service/runtime evidence đã có;
+physical panel, real Ethernet/BMS packet capture và reboot/power-loss HIL vẫn quyết định release.
 
 **Ownership:** `mkddc-netcfg` sở hữu active/stage/apply/confirm/rollback Ethernet;
 `mkddc-iobus` sở hữu BACnet hot-rebind; `mkddc-core`, IOP/UART và STM32 không tham gia.
@@ -764,11 +765,11 @@ từ endpoint desired-config cũ.
 
 | Slice | Trạng thái | Evidence / còn thiếu |
 |---|---|---|
-| NWC-000..012 | Host source complete | Schema, bounded UDS, peer/transition checks, active state, validation/preflight, journal, static/DHCP, confirm/rollback/restart recovery pass bằng fake platform; target disk/process/host fault evidence còn mở. |
-| NWC-013 | Packaged | Hardened service, capability/path restriction and `end1` allowlist added; target `systemd-analyze security` review remains. |
-| NWC-014 | Source complete | Address signature and datalink-only BACnet rebind compile in BACnet-enabled matrix; live packet/`I-Am` capture remains. |
-| NWC-015..016 | Partial | Host suites and Go/C++ adapters pass; live Modbus/Web reconnect and continuous IOP trace across actual address mutation remain. |
-| NWC-017 | Open | Must be executed on identified Orange Pi/network/panel setup before the RED gate can close. |
+| NWC-000..012 | Target service pass | Real NetworkManager static apply/confirm, process restart recovery, explicit rollback and 120 s timeout rollback pass on isolated dummy interfaces; DHCP/host reboot/power-loss remain physical HIL. |
+| NWC-013 | Target service pass | Unit verified, `end1` allowlist active, unauthorized UID and `wlan0` candidate rejected; exposure review recorded as 6.3 MEDIUM due required network capabilities/shared group runtime. |
+| NWC-014 | Runtime pass / packet open | BACnet datalink rebind observed three times while iobus PID and IOP scan remained continuous; packet-level `I-Am` capture on a real BMS segment remains open. |
+| NWC-015..016 | Partial pass | Web listener/broker, Core and IOP remained active with unchanged PIDs; SHM stayed `NORMAL`, fault-free and reliable. Modbus TCP reconnect and browser FE migration remain open. |
+| NWC-017 | Partial / physical HIL blocked | Identified Orange Pi execution record exists. Target has no connected DRM/touch panel or physical MCU/commissioning Ethernet, so full HIL gate remains RED. |
 
 ### Dependency map
 
@@ -825,7 +826,7 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 ### NWC-002 — Implement bounded local UDS transport
 
 - **Files:** `services/netcfg/netcfg.*`, C++ engine tests and Go UDS client tests.
-- **Output:** `/run/mkddc/netcfg.sock`, 8192-byte limit, deadline, correlation ID,
+- **Output:** `/run/mkddc-netcfg/netcfg.sock`, 8192-byte limit, deadline, correlation ID,
   clean stale-socket/restart handling.
 - **Verify:** partial read/write, malformed/oversized input, timeout, disconnect and
   concurrent bounded-client cases.
@@ -1077,19 +1078,19 @@ Mỗi task SOM chỉ merge khi qua đủ checklist này:
 
 ## 12. Hành động tiếp theo cho ADR-017
 
-S0–S7 đã có source baseline; không lặp lại scaffold lịch sử. FW SOM bắt đầu đúng ba
-microtask sau và chưa nhận integration từ BE/FE trước khi chúng xanh:
+NWC-000..016 đã có implementation và target service evidence. Việc còn lại không phải
+scaffold lại source mà là đóng evidence vật lý theo thứ tự:
 
-1. `NWC-000`: freeze schema/state/reason và golden fixtures;
-2. `NWC-001`: scaffold `mkddc-netcfg` build/test độc lập;
-3. `NWC-002`: bounded UDS lifecycle với fake client.
-
-Sau đó đi tuần tự theo dependency map S8. Không nhảy vào gọi networkd/netlink thật
-trước khi validator, journal và rollback fake-platform tests hoàn tất.
+1. chạy static/DHCP trên cổng `end1` có switch/BMS và console rescue;
+2. capture BACnet `I-Am`, old/new/rollback traffic và Modbus TCP reconnect;
+3. chạy reboot/power-loss/disk-fault recovery với journal thật;
+4. lắp đúng DRM/touch/button hardware và thực hiện UC-HMI-016..019/usability;
+5. team BE/FE chuyển Web REST/UI từ desired-file path sang transaction contract.
 
 ---
 
-**Rev** 1.9 | 2026-07-22 (ADR-017 helper/broker/HMI/BACnet source implemented; target/HIL evidence open) ·
+**Rev** 2.0 | 2026-07-22 (ADR-017 deployed to Orange Pi; service transaction/recovery/continuity pass, physical HIL open) ·
+1.9 | 2026-07-22 (ADR-017 helper/broker/HMI/BACnet source implemented; target/HIL evidence open) ·
 1.8 | 2026-07-22 (ADR-017: thêm S8/NWC-000..017, BE/FE handoff và HMI dependency; docs-only baseline) ·
 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device; cập nhật ràng buộc BACnet IPC path) ·

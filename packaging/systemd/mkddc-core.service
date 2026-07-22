@@ -12,6 +12,7 @@ ExecReload=/bin/kill -HUP $MAINPID
 User=mkddc
 Group=mkddc
 RuntimeDirectory=mkddc
+RuntimeDirectoryMode=0770
 RuntimeDirectoryPreserve=yes
 StateDirectory=mkddc
 Restart=always

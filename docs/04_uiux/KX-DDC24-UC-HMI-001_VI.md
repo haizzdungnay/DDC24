@@ -1,8 +1,8 @@
 # Use Cases — HMI local MK-DDC-24
 
 **Document ID:** KX-DDC24-UC-HMI-001
-**Revision:** 3.1 — 2026-07-22
-**Status:** Controlled target; network commissioning not implemented
+**Revision:** 3.2 — 2026-07-22
+**Status:** Implemented and target service-verified; connected-panel acceptance open
 **Owner:** Product/UX Lead
 **Decision:** ADR-016, ADR-017
 **Trace:** `HMI-REQ-001..017`, `IF-REQ-004`, `SWR-REQ-005..007`

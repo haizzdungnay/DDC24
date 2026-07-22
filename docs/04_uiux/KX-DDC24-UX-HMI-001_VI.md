@@ -2,8 +2,8 @@
 ## Five-surface limited operator interface on 320×240
 
 **Document ID:** KX-DDC24-UX-HMI-001
-**Revision:** 3.1 — 2026-07-22
-**Status:** Controlled target; network commissioning not implemented
+**Revision:** 3.2 — 2026-07-22
+**Status:** Implemented and target service-verified; connected-panel usability open
 **Owner:** UX Lead
 **Decision:** ADR-016, ADR-017
 **Use cases:** [KX-DDC24-UC-HMI-001](KX-DDC24-UC-HMI-001_VI.md)

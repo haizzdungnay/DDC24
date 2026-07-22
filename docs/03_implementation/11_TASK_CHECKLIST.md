@@ -910,8 +910,9 @@ Trạng thái: ĐÃ làm 2026-06-23 — Vite 8.0.16 + @vitejs/plugin-react 6.0.2
 > [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md).
 > ADR-017 network commissioning dùng `NWC-000..017` tại
 > [22_SOM_SRC_IMPLEMENTATION_PLAN](22_SOM_SRC_IMPLEMENTATION_PLAN.md) cho FW SOM và
-> `HNW-000..013` tại guide 08 cho local HMI. Các task đều đang Planned; không được
-> đánh dấu Done từ việc chỉ ghi `network.conf` hiện tại.
+> `HNW-000..013` tại guide 08 cho local HMI. Source và target service path đã được
+> triển khai 2026-07-22; connected-panel usability/physical Ethernet HIL vẫn mở và
+> không được suy diễn từ việc chỉ ghi `network.conf` hiện tại.
 > Block `HMI-001..012` bên dưới chỉ giữ như historical baseline của skeleton sáu màn;
 > không được dùng làm task đầu vào mới hoặc release evidence.
 

@@ -12,7 +12,7 @@
 | `mkddc-iobus` | C/C++ | IOP, I/O conversion, IO SHM, Modbus, BACnet/IP |
 | `mkddc-web` | Go + React/TypeScript | API, auth, config, history, commissioning, Web UI và local HMI auth/audit broker |
 | `mkddc-hmi` | C++/LVGL | local display/input và limited operator client qua DRM/KMS; feature-gated |
-| `mkddc-netcfg` (planned ADR-017) | C/C++ SOM helper | active network state, staged Ethernet apply/confirm/rollback và last-known-good; on-demand, least-privilege, ngoài control path |
+| `mkddc-netcfg` | C++17 SOM helper | active network state, staged Ethernet apply/confirm/rollback và last-known-good; privileged boundary độc lập, ngoài control path |
 
 Mỗi service phải có failure boundary rõ, validate external input, log lỗi có hành động và không dựa vào presentation layer cho safety.
 

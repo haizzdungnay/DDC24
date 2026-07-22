@@ -56,17 +56,18 @@ Các finding sau đang blocked; không được phát hành manufacturing/produc
 
 ## HMI release gate — RED
 
-HMI host implementation đã đóng các finding về authority/control/IA/privilege ở mức
-source và unit test, nhưng chưa đạt production acceptance vì thiếu process-loss,
-target/HIL và usability evidence:
+HMI implementation đã đóng các finding về authority/control/IA/privilege ở mức
+source/unit và service deployment. Broker/helper process boundary, UID denial và
+network recovery đã được chạy trên Orange Pi; production acceptance vẫn thiếu panel,
+touch/button, physical I/O và usability evidence:
 
 | Finding | Host state | Evidence còn thiếu để đóng gate |
 |---|---|---|
 | HMI-AUTH-001 | Broker snapshot/ACK, Core result and durable audit implemented; local ACK cannot change state | Target reject/timeout/restart/history scenarios |
-| HMI-RBAC-001 | Session token, Viewer/Operator/Admin RBAC, idle expiry, rate limit and audit tests pass | Deployment UID/group and target expiry/recovery evidence |
+| HMI-RBAC-001 | Session token, Viewer/Operator/Admin RBAC, idle expiry, rate limit and audit tests pass; target sockets/UID denial pass | Target session expiry and operator recovery evidence |
 | HMI-CTRL-001 | Policy, query, setpoint/mode/override/release, Core TTL/idempotency/winner and host dual-socket lifecycle implemented | Target priority/latency and systemd process scenarios |
 | HMI-IA-001 | Five surfaces implemented; diagnostics consolidated into Service | 320×240 target focus/clipping/operator inspection |
-| HMI-PRIV-001 | Static role/PIN, direct signals/reboot and `CAP_SYS_BOOT` removed; maintenance hidden | Packaging/runtime negative test on target image |
+| HMI-PRIV-001 | Static role/PIN, direct signals/reboot and `CAP_SYS_BOOT` removed; unit/package verified and HMI cannot access helper directly | Physical-panel runtime negative scenarios |
 | HMI-DATA-001 | Packaged DB aligned UI16/AO4/DO4 | Capability-gate optional hardware test |
 | HMI-TEL-001 | Unknown/unavailable presentation retained | Authoritative BACnet/Modbus/system telemetry integration |
 | HMI-FUNC-001 | Unsupported backup/restore/restart/reboot actions hidden | Separate approved maintenance authority if product requires it |
@@ -75,18 +76,21 @@ target/HIL và usability evidence:
 
 ## Network commissioning release gate — RED
 
-ADR-017 helper, local-HMI broker/UI và BACnet rebind đã được implement và host-tested.
+ADR-017 helper, local-HMI broker/UI và BACnet rebind đã được implement, deployed và
+service-tested trên Orange Pi 5B.
 Web REST cũ vẫn chỉ ghi desired config: `applySystem()` trả `pending B7` và frontend bỏ
-qua `applied=false`. Gate vẫn RED cho tới khi target/HIL và Web migration được đóng:
+qua `applied=false`. Gate vẫn RED cho tới khi physical HIL và Web migration được đóng:
+
+Target evidence: [KX-DDC24 HMI–FW SOM deployment record](../07_records/reviews/KX-DDC24-HMI-FWSOM-DEPLOY-2026-07-22.md).
 
 | Finding | Hiện trạng | Evidence cần để đóng |
 |---|---|---|
-| NET-AUTH-001 | Host source/tests pass; target privilege review open | Target peer denial, unit sandbox and restart/reboot evidence |
-| NET-STATE-001 | Helper reports kernel active/pending separately; Web GET vẫn có thể hiển thị desired IP | Target multi-address/link/route evidence and Web migration |
-| NET-TXN-001 | Fake-platform static/DHCP/confirm/rollback/deadline tests pass | Actual NetworkManager static/DHCP, disk/process/host fault evidence |
-| NET-CONT-001 | Chưa có continuity evidence | Core scan, IOP/UART and STM32 output trace xuyên suốt address change/rollback |
-| NET-BAC-001 | Datalink-only hot-rebind source và BACnet build pass | Target old/new/rollback packet capture, broadcast refresh and `I-Am` evidence |
-| NET-HMI-001 | Service modal/client/model and Admin mutation policy host-tested | UC-HMI-016..019 on connected target panel, countdown and glove/key usability |
+| NET-AUTH-001 | Target unauthorized UID and `wlan0` allowlist denial pass; unit paths/socket modes verified | Reboot/power-loss and security approval of required capabilities |
+| NET-STATE-001 | Target active/pending/multi-address state and management-route preservation pass | Real `end1` link/gateway evidence and Web migration |
+| NET-TXN-001 | Real NetworkManager static confirm, process restart, explicit and 120 s automatic rollback pass on isolated target interface | Physical `end1` DHCP, disk/host/power fault evidence |
+| NET-CONT-001 | IOBus/Core/Web PIDs unchanged; IOP `NORMAL`, SHM fault-free/`RELIABLE` through address changes | Physical STM32/output trace and Modbus TCP reconnect |
+| NET-BAC-001 | Target logs show datalink-only rebind on new/rollback addresses without iobus restart | Packet capture proving broadcast refresh and `I-Am` on real BMS segment |
+| NET-HMI-001 | Service modal/client/model/Admin policy host-tested; target broker/helper service path pass | UC-HMI-016..019 on connected panel, countdown and glove/key usability |
 | NET-WEB-001 | FE toast báo saved mà không đọc apply warnings | BE transaction adapter + FE reconnect/active-pending/error E2E evidence |
 
 Evidence packages tối thiểu: `PWR-5V`, `PWR-3V3`, `PWR-SURGE`, `AO-COMP`, `EMC`, `MFG`. Mỗi package phải có owner, setup, acceptance limit, raw result, conclusion và reviewer approval.

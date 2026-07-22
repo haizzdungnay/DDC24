@@ -3,7 +3,7 @@
 
 **Document ID:** DDD-SWSVC-HMI-MK-DDC-24-VI
 **Revision:** 3.3 — 2026-07-22
-**Status:** Host control and ADR-017 network commissioning source complete; target/HIL acceptance pending
+**Status:** Host control and ADR-017 network commissioning deployed/service-verified; connected-panel HIL acceptance pending
 **Owner:** Software Lead
 **Decision:** ADR-016, ADR-017
 **Trace:** `HMI-REQ-001..017`, `IF-REQ-004`, `SWR-REQ-005..007`
@@ -277,7 +277,7 @@ static IPv4/subnet/gateway → local format check → impact summary → stage/a
 awaiting confirmation → confirm or rollback`. HMI-side validation only improves
 usability; broker and SOM authority revalidate. Wi-Fi credentials, DNS advanced
 settings, BACnet ID/port, VLAN, routing and firewall are not shown. HMI never opens
-`/run/mkddc/netcfg.sock` directly.
+`/run/mkddc-netcfg/netcfg.sock` directly.
 
 ## 10. Identity and audit
 

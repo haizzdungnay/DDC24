@@ -3,7 +3,7 @@
 
 **Document ID:** IMPL-HMI-MK-DDC-24
 **Revision:** 2.3 — 2026-07-22
-**Status:** Existing host control and ADR-017 network HMI source complete; target/HIL and usability acceptance pending
+**Status:** Existing host control and ADR-017 network service path target-verified; connected-panel HIL/usability acceptance pending
 **Owners:** Core, Go backend, HMI, QA
 **Design:** [SW HMI Design](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md)
 **UX/UC:** [UX](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [Use cases](../04_uiux/KX-DDC24-UC-HMI-001_VI.md)
@@ -72,8 +72,8 @@ small vertical slices.
 | HOP-074 | Host simulation complete; target open | Core socket loss proves cached reject/no blind replay and explicit new-ID retry; broker restart invalidates the old session. systemd/target process-loss evidence is still required. |
 | HOP-075..077 | Open | Target display/input, operator usability and final release-gate evidence are not available. HMI production gate remains **RED**. |
 | HNW-000..011 | Host source complete | Schema, broker adapter, C++ client/model, Service modal, active/pending/countdown, Admin-only mutation and host tests implemented. Target visual/input evidence remains open. |
-| HNW-012 | Component integration complete; fault matrix partial | Broker and netcfg adapters have deterministic UDS/component coverage. Real process-loss, audit correlation and target rollback orchestration remain open. |
-| HNW-013 | Open | Requires connected target panel/touch/buttons and live Ethernet/BMS evidence; host pass is insufficient. |
+| HNW-012 | Target service integration complete | Broker and netcfg adapters have deterministic UDS/component coverage; Orange Pi verified peer denial, broker/helper sockets, process restart recovery, explicit/automatic rollback and audit-capable path. |
+| HNW-013 | Partial / panel blocked | Orange Pi service path and live isolated network mutation pass. Connected panel/touch/buttons and operator usability remain unavailable on the identified board. |
 
 The verification host identified on 2026-07-22 is an x86_64 Lenovo ThinkStation with
 a PCI DRM device, no `/proc/device-tree/model`, and no active `mkddc-*` services. It is

@@ -38,6 +38,11 @@ install -m 0755 "$BUILD/netcfg/mkddc-netcfg" /usr/sbin/mkddc-netcfg
 install -m 0644 packaging/systemd/mkddc-iobus.service /etc/systemd/system/
 install -m 0644 packaging/systemd/mkddc-core.service  /etc/systemd/system/
 install -m 0644 packaging/systemd/mkddc-netcfg.service /etc/systemd/system/
+if [ -e /etc/systemd/system/mkddc-web-pi.service ]; then
+    install -d -m 0755 /etc/systemd/system/mkddc-web-pi.service.d
+    install -m 0644 packaging/systemd/mkddc-web-pi-netcfg.conf \
+        /etc/systemd/system/mkddc-web-pi.service.d/netcfg.conf
+fi
 
 HMI_INSTALLED=0
 if [ -x "$BUILD/hmi/mkddc-hmi" ]; then
