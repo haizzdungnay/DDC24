@@ -82,6 +82,10 @@ public:
      *  Call once after start() and after each SIGHUP config reload. */
     void apply_ao_config();
 
+    /** Reopen only the BACnet/IP UDP datalink after a host IPv4 change.
+     *  The iobus process, UART owner, object model and control state stay alive. */
+    bool rebind();
+
     /* Called by bacnet-stack AO/BO callbacks after Priority_Array changes. */
     void handle_output_write(bool analog, uint32_t instance, float value,
                              bool released);

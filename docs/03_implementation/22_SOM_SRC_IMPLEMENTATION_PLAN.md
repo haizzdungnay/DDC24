@@ -2,7 +2,8 @@
 ## MK-DDC-24 — Kế hoạch triển khai cấu trúc source thật chi tiết cho Dev 2
 
 > **Document ID:** IMPL-SOM-SRC-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.8 | 2026-07-22 (ADR-017: thêm S8/NWC-000..017 network authority, BACnet hot-rebind và target handoff) ·
+> **Phiên bản:** 1.9 | 2026-07-22 (ADR-017 host source implemented; target/HIL gate open) ·
+> 1.8 | 2026-07-22 (ADR-017: thêm S8/NWC-000..017 network authority, BACnet hot-rebind và target handoff) ·
 > 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
 > 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device) ·
 > 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) ·
@@ -15,9 +16,9 @@
 > SAFETY SPEC 07 §5, thêm microtask 5 Rev A.1 cho trigger T6/T7) · 1.0 | 2026-06-11
 > **Trạng thái:** Active — S0–S6 ĐÃ thực thi xong 2026-06-11 (round-trip pass);
 > S7 #1/#2/#3 xong 2026-06-12; S7 #4/#5/#6 đã có task/code-ready docs 2026-06-13;
-> TD-001/002/003 xong 2026-06-19; S8 network commissioning planned
+> TD-001/002/003 xong 2026-06-19; S8 host source implemented, target gate open
 > **Đối tượng đọc:** Dev 2, Lead, Tester
-> **Phạm vi:** phía SOM: `services/iobus`, `services/core`, planned `services/netcfg`, packaging/tools/shared contracts. Go BE và React FE chỉ là consumer handoff, không implement trong S8.
+> **Phạm vi:** phía SOM: `services/iobus`, `services/core`, `services/netcfg`, packaging/tools/shared contracts; local-HMI broker adapter tối thiểu. React FE/Web REST migration vẫn là consumer handoff.
 
 ---
 
@@ -745,18 +746,29 @@ Ràng buộc giữ nguyên:
 
 ---
 
-## S8 — ADR-017 SOM network authority (planned)
+## S8 — ADR-017 SOM network authority (source implemented; target gate open)
 
 **Mục tiêu:** cung cấp một FW SOM/network platform boundary hoàn chỉnh để BE và local
-HMI chỉ cần dùng contract, không tự quản Linux network. Phase này chưa sửa source trong
-revision tài liệu 1.8.
+HMI chỉ cần dùng contract, không tự quản Linux network. Host source hiện đã có helper,
+broker adapter, HMI flow và BACnet rebind; target/HIL evidence vẫn quyết định release.
 
 **Ownership:** `mkddc-netcfg` sở hữu active/stage/apply/confirm/rollback Ethernet;
 `mkddc-iobus` sở hữu BACnet hot-rebind; `mkddc-core`, IOP/UART và STM32 không tham gia.
-`mkddc-netcfg` là helper on-demand/socket-activated, không phải core process mới.
+`mkddc-netcfg` là helper độc lập do systemd quản lý, không phải core process mới.
 
-**Không thuộc scope FW SOM:** Go REST/broker adapter, React Web UI và thiết kế form Web.
-Team BE/FE nhận schema, golden fixtures, fake client và target behavior từ phase này.
+Go local-HMI broker adapter tối thiểu đã được nối để hoàn thành đường local panel.
+React Web UI và REST transaction migration vẫn thuộc team BE/FE và không được suy diễn
+từ endpoint desired-config cũ.
+
+### Execution snapshot — 2026-07-22
+
+| Slice | Trạng thái | Evidence / còn thiếu |
+|---|---|---|
+| NWC-000..012 | Host source complete | Schema, bounded UDS, peer/transition checks, active state, validation/preflight, journal, static/DHCP, confirm/rollback/restart recovery pass bằng fake platform; target disk/process/host fault evidence còn mở. |
+| NWC-013 | Packaged | Hardened service, capability/path restriction and `end1` allowlist added; target `systemd-analyze security` review remains. |
+| NWC-014 | Source complete | Address signature and datalink-only BACnet rebind compile in BACnet-enabled matrix; live packet/`I-Am` capture remains. |
+| NWC-015..016 | Partial | Host suites and Go/C++ adapters pass; live Modbus/Web reconnect and continuous IOP trace across actual address mutation remain. |
+| NWC-017 | Open | Must be executed on identified Orange Pi/network/panel setup before the RED gate can close. |
 
 ### Dependency map
 
@@ -791,7 +803,7 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 ### NWC-000 — Freeze protocol and state fixtures
 
-- **Files:** planned `shared/netcfg_protocol_v1.schema.json`, cross-language fixtures,
+- **Files:** `shared/netcfg_protocol_v1.schema.json`, broker/HMI client tests,
   [Interface Contracts](../04_design/INTERFACES.md).
 - **Output:** bounded JSON envelope, action/state/reason enums, Ethernet candidate and
   active/pending/last-known-good response shapes.
@@ -802,7 +814,7 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 ### NWC-001 — Scaffold `mkddc-netcfg`
 
-- **Files:** planned `services/netcfg/CMakeLists.txt`, `main.cpp`, module README and
+- **Files:** `services/netcfg/CMakeLists.txt`, `main.cpp`, `netcfg.*` and
   top-level CMake option/target.
 - **Output:** non-root host-testable daemon lifecycle with explicit exit/status logs.
 - **Verify:** warnings-as-errors build, start/stop, signal shutdown and no dependency on
@@ -812,7 +824,7 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 ### NWC-002 — Implement bounded local UDS transport
 
-- **Files:** planned `services/netcfg/ipc/*`, transport tests.
+- **Files:** `services/netcfg/netcfg.*`, C++ engine tests and Go UDS client tests.
 - **Output:** `/run/mkddc/netcfg.sock`, 8192-byte limit, deadline, correlation ID,
   clean stale-socket/restart handling.
 - **Verify:** partial read/write, malformed/oversized input, timeout, disconnect and
@@ -831,7 +843,7 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 ### NWC-004 — Read authoritative active network state
 
-- **Files:** planned `services/netcfg/platform/netlink_reader.*`, tests/fixtures.
+- **Files:** `services/netcfg/netcfg.cpp` Linux platform state reader and fake-platform tests.
 - **Output:** interface/link, active IPv4/prefix, default gateway, DHCP/static source
   and kernel generation timestamp; deterministic interface allowlist.
 - **Verify:** no address, multiple addresses, link-down, route change, interface rename
@@ -841,7 +853,7 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 ### NWC-005 — Normalize and validate candidate
 
-- **Files:** planned config/model/validator and table-driven tests.
+- **Files:** `services/netcfg/netcfg.*` candidate model/validator and table-driven tests.
 - **Output:** canonical static/DHCP candidate; IPv4/netmask/prefix/gateway validation.
 - **Verify:** min/max prefix, gateway outside subnet, network/broadcast/multicast/
   loopback/unspecified address, missing static field and stale unknown field rejection.
@@ -850,7 +862,7 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 ### NWC-006 — Add duplicate-address and route preflight
 
-- **Files:** planned ARP probe/preflight module with injectable interface.
+- **Files:** fixed-argv ARP preflight in `services/netcfg/netcfg.cpp` with injectable platform.
 - **Output:** bounded RFC5227-style conflict probe and route/interface readiness result.
 - **Verify:** no conflict, conflict reply, timeout, link-down and insufficient privilege.
 - **Depends:** NWC-004, NWC-005.
@@ -859,7 +871,7 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 ### NWC-007 — Persist transaction journal and last-known-good
 
-- **Files:** planned `services/netcfg/store/*`; deployment data path selected explicitly.
+- **Files:** atomic/fsync journal in `services/netcfg/netcfg.cpp`; `/data/mkddc/netcfg-transaction.json`.
 - **Output:** atomic+fsync journal containing transaction/config hashes, previous active
   state, state/deadline metadata and schema version; no secrets.
 - **Verify:** torn write, corrupt JSON, full disk, permission error and version mismatch.
@@ -868,7 +880,7 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 ### NWC-008 — Implement static make-before-break apply
 
-- **Files:** planned fixed platform backend using netlink/systemd-networkd integration;
+- **Files:** fixed-argv Linux backend using `ip` transient activation and NetworkManager persistence;
   no shell string construction.
 - **Output:** add candidate address/route while retaining old address during confirmation.
 - **Verify:** operation ordering, idempotent retry, partial add/route failure and cleanup.
@@ -912,7 +924,7 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 ### NWC-013 — Harden systemd packaging and privilege
 
-- **Files:** planned `packaging/systemd/mkddc-netcfg.{socket,service}`, tmpfiles/install
+- **Files:** `packaging/systemd/mkddc-netcfg.service`, `packaging/netcfg.conf`, install
   wiring and packaging tests.
 - **Output:** socket activation, dedicated identity/group, minimal capability/path,
   `NoNewPrivileges`, filesystem/device/kernel hardening compatible with apply backend.
@@ -1077,7 +1089,8 @@ trước khi validator, journal và rollback fake-platform tests hoàn tất.
 
 ---
 
-**Rev** 1.8 | 2026-07-22 (ADR-017: thêm S8/NWC-000..017, BE/FE handoff và HMI dependency; docs-only, chưa implement source) ·
+**Rev** 1.9 | 2026-07-22 (ADR-017 helper/broker/HMI/BACnet source implemented; target/HIL evidence open) ·
+1.8 | 2026-07-22 (ADR-017: thêm S8/NWC-000..017, BE/FE handoff và HMI dependency; docs-only baseline) ·
 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device; cập nhật ràng buộc BACnet IPC path) ·
 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) · 1.4 | 2026-06-13 · 1.3 | 2026-06-12 · 1.2 | 2026-06-12 · 1.1 | 2026-06-12 · 1.0 | 2026-06-11

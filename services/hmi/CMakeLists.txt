@@ -60,6 +60,7 @@ add_library(hmi_lib STATIC
     data/shm_reader.cpp
     data/point_db.cpp
     screens/alarm_model.cpp
+    screens/network_model.cpp
     screens/screen_home.cpp
     screens/screen_io.cpp
     screens/screen_alarm.cpp
@@ -109,6 +110,7 @@ if(HMI_BUILD_TESTS)
         tests/test_shm_reader.cpp
         tests/test_point_db.cpp
         tests/test_alarm_model.cpp
+        tests/test_network_model.cpp
         tests/test_hmi_api_client.cpp
         tests/test_locale.cpp
         tests/test_nav.cpp

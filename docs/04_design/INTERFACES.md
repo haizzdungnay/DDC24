@@ -49,9 +49,9 @@ Source hiện tại của `PUT /api/v1/network` chỉ validate cơ bản rồi g
 
 Đây là finding đang mở, không phải hành vi mục tiêu. Cho tới khi các task network hoàn tất, thay đổi qua Web chỉ được gọi là **saved desired configuration**, không được gọi là IP đã apply. OpenAPI hiện hành mô tả route đã implement; API transaction mới chỉ được publish sau khi BE team map đầy đủ sang contract SOM bên dưới và có contract tests.
 
-### SOM network authority contract — target v1
+### SOM network authority contract — implemented v1; target acceptance pending
 
-Authority dự kiến dùng line-delimited JSON version 1 qua `/run/mkddc/netcfg.sock`, frame tối đa 8192 byte, socket `0660`, peer credential allowlist chỉ cho broker/service account đã phê duyệt. Schema authority khi implementation bắt đầu: `shared/netcfg_protocol_v1.schema.json`.
+Authority dùng line-delimited JSON version 1 qua `/run/mkddc/netcfg.sock`, frame tối đa 8192 byte, socket `0660`, peer credential allowlist chỉ cho broker/service account đã phê duyệt. Schema authority: `shared/netcfg_protocol_v1.schema.json`.
 
 Action allowlist:
 
@@ -64,7 +64,7 @@ Action allowlist:
 | `confirm` | xác nhận đường mới hoạt động, commit và bỏ IP cũ | commit |
 | `rollback` | phục hồi last-known-good, explicit hoặc automatic | network change |
 
-Request tối thiểu có `version`, `requestId`, `action`, optional `transactionId` và candidate `{interface, mode, ipv4, netmask, gateway}`. Response có cùng `requestId`, `result`, stable `reasonCode`, `transactionId`, `state`, `rollbackDeadlineMonotonicMs`, `active`, `pending` và warnings. State machine:
+Request tối thiểu có `version`, `requestId`, `action`, optional `transactionId` và candidate `{interface, mode, ipv4, netmask, gateway}`. Response có cùng `requestId`, `result`, stable `reasonCode`, `transactionId`, `state`, `rollbackRemainingS`, `active`, `pending` và message. State machine:
 
 ```text
 idle → staged → applying → awaiting_confirmation → confirmed
@@ -89,13 +89,13 @@ Target hiện hành: KD024QVFIA073-02-C021B, controller JD9852, MIPI DSI một l
 
 HMI đọc telemetry từ SHM nhưng mọi mutation dùng Unix-domain IPC versioned qua local auth/audit broker; đây không phải HTTP, browser hay Web HMI. Contract v1 dùng line-delimited JSON tại `/run/mkddc/hmi-api.sock`, frame tối đa 8192 byte, socket mode `0660`, kiểm tra `SO_PEERCRED` và optional UID allowlist.
 
-Request gồm `version=1`, `requestId`, `action`, optional opaque `token`, `pointId`, `alarmId`, `mode`, finite `value`, `reason`, `ttlS`; login dùng `username/password`. Action allowlist: `ping`, `login`, `logout`, `policy`, `points`, `status`, `alarms`, `query`, `setpoint`, `mode`, `override`, `release`, `alarm_ack`. Unknown field/version/action bị reject.
+Request gồm `version=1`, `requestId`, `action`, optional opaque `token`, `pointId`, `alarmId`, `mode`, finite `value`, `reason`, `ttlS`, `transactionId`, `candidate`; login dùng `username/password`. Action allowlist thêm `network_status`, `network_validate`, `network_stage`, `network_apply`, `network_confirm`, `network_rollback` ngoài command/alarm actions. Unknown field/version/action bị reject.
 
 Response gồm cùng `requestId`, `result`, stable `reasonCode` và optional `point`; point chứa authoritative value/source priority và `overrideExpiresInS`. Duplicate `requestId` có cùng payload trả cached response; cùng ID khác payload bị reject `ID_CONFLICT`.
 
 Broker sở hữu authentication, role/policy validation và durable audit. Core sở hữu arbitration/interlock/safe-state/effective output và monotonic override TTL. HMI chỉ render response; local point DB không được dùng làm authorization source. Nếu broker/core không sẵn sàng trong deadline, mutation bị kết thúc bằng lỗi rõ và Control chuyển read-only, không blind replay. Không thay SHM layout cho contract này. Schema authority: `shared/hmi_protocol_v1.schema.json`.
 
-Network action chưa thuộc HMI protocol v1 đang implement. BE handoff phải version/extend contract với `network_status`, `network_validate`, `network_stage`, `network_apply`, `network_confirm`, `network_rollback`; các action này chỉ map sang SOM network authority, không map sang core và không cho phép payload command tùy ý. Cho tới khi broker adapter và cross-language fixtures pass, local HMI network mutation phải ẩn/disabled.
+Network actions đã thuộc HMI protocol v1 và broker chỉ map chúng sang SOM network authority, không map sang core hay cho phép payload command tùy ý. `network_status` là read-only; validate/stage/apply/confirm/rollback yêu cầu Admin, có audit và request-id cache. HMI unit bị chặn trực tiếp khỏi `netcfg.sock`.
 
 ## Detailed design
 

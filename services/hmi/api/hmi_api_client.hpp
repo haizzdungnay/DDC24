@@ -44,6 +44,12 @@ public:
     ApiReply command(const std::string& action, const std::string& point_id,
                      double value, const std::string& mode = {},
                      const std::string& reason = {}, uint32_t ttl_s = 0);
+    ApiReply network_status();
+    ApiReply network_validate(const nlohmann::json& candidate);
+    ApiReply network_stage(const nlohmann::json& candidate);
+    ApiReply network_apply(const std::string& transaction_id);
+    ApiReply network_confirm(const std::string& transaction_id);
+    ApiReply network_rollback(const std::string& transaction_id);
 
 private:
     mutable std::mutex mutex_;

@@ -2,7 +2,7 @@
 ## MK-DDC-24 — REST API + Web UI + Config + Validator
 
 > **Document ID:** IMPL-WEB-MK-DDC-24-VI
-> **Phiên bản:** 1.12 | 2026-07-22 (ADR-017: network hiện chỉ lưu desired config; SOM transaction handoff cho BE/FE)
+> **Phiên bản:** 1.13 | 2026-07-22 (ADR-017 local-HMI broker adapter implemented; Web REST/FE transaction migration pending)
 > **Owner:** Dev 3 (Web/BE)
 > **Nguồn-chuẩn:** [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) ·
 > [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
@@ -41,7 +41,7 @@ web/backend/
 | Graph validate (read-only check) | — | ✅ | ✅ |
 | Graph **deploy** | — | — | ✅ |
 | Config (io/device/safe-state) | — | — | ✅ |
-| Network desired config | — | — | ✅ ghi file; OS apply/rollback **chưa implement**, pending B7/ADR-017 |
+| Web network desired config | — | — | ✅ ghi file nhưng REST/FE chưa dùng transaction; local-HMI broker đã nối `mkddc-netcfg` |
 | Users, OTA, download logs | — | — | ✅ |
 
 > Role cũ "engineer" trong bản trước = operator (commissioning) hoặc admin (deploy) theo bảng
@@ -237,11 +237,12 @@ System status (versions tách từng thành phần — Contract Freeze; nguồn 
 
 > Web validate input theo schema trước khi ghi; config IO → core/iobus reload (qua signal/IPC).
 
-`network.conf` chỉ là desired configuration. Source hiện tại ghi file nhưng
-`applySystem(system)` trả `applied=false`; frontend chưa xử lý warning này. Active IP
-phải lấy từ kernel/network authority. Target ADR-017 và SOM microtasks NWC-000..017
-nằm trong [22_SOM_SRC_IMPLEMENTATION_PLAN](22_SOM_SRC_IMPLEMENTATION_PLAN.md); BE/FE
-không được tự gọi OS command hoặc báo applied trước transaction confirm.
+`network.conf` chỉ là desired configuration. Web REST cũ vẫn ghi file,
+`applySystem(system)` trả `applied=false` và frontend chưa xử lý warning này. Local-HMI
+broker actions `network_status/validate/stage/apply/confirm/rollback` đã dùng
+`/run/mkddc/netcfg.sock`, nhưng việc đó không tự động sửa Web REST/FE. Active IP phải
+lấy từ network authority; BE/FE không được tự gọi OS command hoặc báo applied trước
+transaction confirm.
 
 ---
 

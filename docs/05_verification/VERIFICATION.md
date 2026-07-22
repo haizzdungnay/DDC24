@@ -75,18 +75,18 @@ target/HIL và usability evidence:
 
 ## Network commissioning release gate — RED
 
-ADR-017 và contract target đã được freeze ở mức tài liệu, nhưng source hiện tại chỉ ghi
-desired config. `applySystem()` vẫn trả `pending B7`; frontend hiện bỏ qua `applied=false`.
-Không được dùng Web/local HMI để tuyên bố đổi IP production trước khi đóng:
+ADR-017 helper, local-HMI broker/UI và BACnet rebind đã được implement và host-tested.
+Web REST cũ vẫn chỉ ghi desired config: `applySystem()` trả `pending B7` và frontend bỏ
+qua `applied=false`. Gate vẫn RED cho tới khi target/HIL và Web migration được đóng:
 
 | Finding | Hiện trạng | Evidence cần để đóng |
 |---|---|---|
-| NET-AUTH-001 | `mkddc-netcfg`/IPC chưa implement | Peer credential, bounded protocol, invalid-transition and privilege negative tests |
-| NET-STATE-001 | GET network có thể hiển thị desired IP; BMS link đang suy diễn | Active kernel/pending separation and real health integration tests |
-| NET-TXN-001 | Chưa có stage/apply/confirm/rollback | Static/DHCP, duplicate-IP, 120 s rollback, disk/process/host fault evidence |
+| NET-AUTH-001 | Host source/tests pass; target privilege review open | Target peer denial, unit sandbox and restart/reboot evidence |
+| NET-STATE-001 | Helper reports kernel active/pending separately; Web GET vẫn có thể hiển thị desired IP | Target multi-address/link/route evidence and Web migration |
+| NET-TXN-001 | Fake-platform static/DHCP/confirm/rollback/deadline tests pass | Actual NetworkManager static/DHCP, disk/process/host fault evidence |
 | NET-CONT-001 | Chưa có continuity evidence | Core scan, IOP/UART and STM32 output trace xuyên suốt address change/rollback |
-| NET-BAC-001 | BACnet config chỉ load lúc iobus start | Hot-rebind without iobus restart, broadcast refresh and `I-Am` packet evidence |
-| NET-HMI-001 | Local HMI network flow chưa implement | UC-HMI-016..019 on target, Service RBAC, countdown, confirm/rollback usability |
+| NET-BAC-001 | Datalink-only hot-rebind source và BACnet build pass | Target old/new/rollback packet capture, broadcast refresh and `I-Am` evidence |
+| NET-HMI-001 | Service modal/client/model and Admin mutation policy host-tested | UC-HMI-016..019 on connected target panel, countdown and glove/key usability |
 | NET-WEB-001 | FE toast báo saved mà không đọc apply warnings | BE transaction adapter + FE reconnect/active-pending/error E2E evidence |
 
 Evidence packages tối thiểu: `PWR-5V`, `PWR-3V3`, `PWR-SURGE`, `AO-COMP`, `EMC`, `MFG`. Mỗi package phải có owner, setup, acceptance limit, raw result, conclusion và reviewer approval.

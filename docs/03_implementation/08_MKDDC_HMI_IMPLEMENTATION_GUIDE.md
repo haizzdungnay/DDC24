@@ -2,8 +2,8 @@
 ## ADR-016 limited-operator HMI — microtask plan
 
 **Document ID:** IMPL-HMI-MK-DDC-24
-**Revision:** 2.2 — 2026-07-22
-**Status:** Existing host control implementation complete; ADR-017 network HMI planned; target/HIL and usability acceptance pending
+**Revision:** 2.3 — 2026-07-22
+**Status:** Existing host control and ADR-017 network HMI source complete; target/HIL and usability acceptance pending
 **Owners:** Core, Go backend, HMI, QA
 **Design:** [SW HMI Design](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md)
 **UX/UC:** [UX](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [Use cases](../04_uiux/KX-DDC24-UC-HMI-001_VI.md)
@@ -71,7 +71,9 @@ small vertical slices.
 | HOP-073 | Host complete | Real broker UDS plus real `CoreClient` against a deterministic Core socket stub covers login/policy/override/query/release; the C++ client independently covers broker loss/reconnect. Target orchestration remains open. |
 | HOP-074 | Host simulation complete; target open | Core socket loss proves cached reject/no blind replay and explicit new-ID retry; broker restart invalidates the old session. systemd/target process-loss evidence is still required. |
 | HOP-075..077 | Open | Target display/input, operator usability and final release-gate evidence are not available. HMI production gate remains **RED**. |
-| HNW-000..013 | Planned | ADR-017 Ethernet status/static/DHCP/confirm/rollback; depends on frozen SOM contract and BE broker adapter. No source implementation yet. |
+| HNW-000..011 | Host source complete | Schema, broker adapter, C++ client/model, Service modal, active/pending/countdown, Admin-only mutation and host tests implemented. Target visual/input evidence remains open. |
+| HNW-012 | Component integration complete; fault matrix partial | Broker and netcfg adapters have deterministic UDS/component coverage. Real process-loss, audit correlation and target rollback orchestration remain open. |
+| HNW-013 | Open | Requires connected target panel/touch/buttons and live Ethernet/BMS evidence; host pass is insufficient. |
 
 The verification host identified on 2026-07-22 is an x86_64 Lenovo ThinkStation with
 a PCI DRM device, no `/proc/device-tree/model`, and no active `mkddc-*` services. It is
@@ -569,10 +571,10 @@ may proceed in parallel only after P0 is frozen.
 
 ### P7 — ADR-017 local Ethernet commissioning
 
-This phase is planned work. `NWC-*` SOM tasks are owned in
-[22 — SOM Source Implementation Plan](22_SOM_SRC_IMPLEMENTATION_PLAN.md). Go broker
-and Web FE are separate-team dependencies; HMI implementation must not invent their
-contract or call `mkddc-netcfg` directly.
+Host source for this phase is implemented against the frozen `NWC-*` schema in
+[22 — SOM Source Implementation Plan](22_SOM_SRC_IMPLEMENTATION_PLAN.md). The local Go
+broker adapter is present; Web REST/FE migration remains separate-team work. HMI never
+calls `mkddc-netcfg` directly.
 
 **Schedule baseline (một HMI engineer):** H0 `HNW-000..003` 1–2 ngày sau NWC contract;
 H1 `HNW-004..009` 3–4 ngày với fake broker; H2 `HNW-010..011` 2–3 ngày; H3 `HNW-012`

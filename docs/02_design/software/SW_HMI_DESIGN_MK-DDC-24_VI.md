@@ -2,8 +2,8 @@
 ## Local limited-operator HMI — TFT 2.4 inch / LVGL v9 / DRM/KMS
 
 **Document ID:** DDD-SWSVC-HMI-MK-DDC-24-VI
-**Revision:** 3.2 — 2026-07-22
-**Status:** Existing host control implementation complete; ADR-017 network commissioning planned; target/HIL acceptance pending
+**Revision:** 3.3 — 2026-07-22
+**Status:** Host control and ADR-017 network commissioning source complete; target/HIL acceptance pending
 **Owner:** Software Lead
 **Decision:** ADR-016, ADR-017
 **Trace:** `HMI-REQ-001..017`, `IF-REQ-004`, `SWR-REQ-005..007`
@@ -37,7 +37,7 @@ exception, not general engineering access.
 | Alarm | Broker snapshot and authoritative ACK implemented; local ACK cannot mutate state | Target broker/core loss, flood and history evidence |
 | Control | Policy-gated AO/DO control, confirm, query, source and TTL implemented | Target lifecycle/latency/priority scenarios |
 | Identity | Broker login/logout, RBAC, idle expiry, rate limit and durable audit implemented | Target deployment identity/group and recovery evidence |
-| Service | Direct signal/reboot and static PIN/role removed; unsupported actions hidden | ADR-017 Ethernet workflow and broker/network-authority integration are planned, not implemented |
+| Service | Direct signal/reboot and static PIN/role removed; Ethernet status/static/DHCP stage/apply/confirm/rollback implemented through broker/netcfg | Target panel, live Ethernet, timeout recovery and usability evidence |
 | Communication telemetry | Partial/default values | Authoritative telemetry or explicit unavailable |
 
 Host-complete capability must not be reported as production-accepted until its target,

@@ -7,6 +7,13 @@
 ---
 
 ## [Unreleased]
+### Added — ADR-017 HMI-to-SOM transactional network implementation (2026-07-22)
+- fw-som/network: added the privileged `mkddc-netcfg` service and JSON v1 schema with bounded Unix IPC, peer UID checks, Ethernet interface allowlisting, active kernel state, static/DHCP validation, duplicate-address preflight, atomic transaction journal, make-before-break static apply, explicit confirm/rollback and automatic rollback after at most 120 seconds. Fixed-argument `execv` calls are used for `ip`, `arping` and NetworkManager; no request field is evaluated by a shell.
+- hmi/broker: added the Go broker adapter and C++ HMI client/model/UI for `status → stage → apply → confirm/rollback`. Network mutations require Admin, are audited/idempotent at the broker boundary, display active versus pending address and countdown, and fail closed when the helper is absent. The HMI unit is explicitly denied direct access to `netcfg.sock`.
+- fw-som/bacnet: added IPv4 address change detection and BACnet/IP datalink-only rebind with a new `I-Am`; the iobus process, IOP/UART owner, shared memory and Core control path remain running.
+- packaging: added the hardened `mkddc-netcfg.service`, Orange Pi Ethernet allowlist config (`end1`), install wiring and HMI service dependency/hardening.
+- verification: HMI-enabled host build and CTest pass 366/366; BACnet-enabled build and netcfg CTest pass 10/10; Go vet/backend tests pass; JSON schemas, installer shell syntax and diff checks pass. Target deployment/evidence is recorded separately after board execution; lack of a connected DSI/touch panel cannot be treated as HMI usability acceptance.
+
 ### Changed — ADR-017 safe network commissioning documentation and implementation plan (2026-07-22)
 - docs/architecture: separated desired `network.conf` from active Linux state, recorded the current `applySystem()`/frontend truthfulness gap, and approved a narrow SOM `mkddc-netcfg` authority with versioned local IPC, least privilege, staged apply/confirm, last-known-good and automatic rollback within 120 seconds. IP change must not stop Core/IOP/STM32 control; BACnet must hot-rebind without restarting the whole iobus process.
 - docs/hmi: allowed Service-only Ethernet IPv4 static/DHCP commissioning as a narrow ADR-017 exception inside the existing five-surface local HMI; added active/pending/countdown/confirm/rollback UX and UC-HMI-016..019 while keeping Wi-Fi/protocol/full engineering out of the panel.

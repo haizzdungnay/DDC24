@@ -27,7 +27,7 @@ mkddc-core
 
 Ba service lõi là `mkddc-core`, `mkddc-iobus`, `mkddc-web`. `mkddc-hmi` là service presentation thứ tư chỉ được build khi `MKDDC_ENABLE_HMI=ON`.
 
-Target `mkddc-netcfg` theo ADR-017 là SOM platform authority hẹp, chạy on-demand/socket-activated và không phải core control process. Source hiện tại chưa implement helper này. Khi triển khai, nó sở hữu activation/rollback network của Linux; việc thiếu hoặc lỗi helper chỉ làm network mutation unavailable, không làm dừng core/iobus/MCU.
+`mkddc-netcfg` theo ADR-017 đã được implement như SOM platform authority hẹp và không phải core control process. Service sở hữu activation/rollback network của Linux qua bounded UDS; việc thiếu hoặc lỗi helper chỉ làm network mutation unavailable, không làm dừng core/iobus/MCU.
 
 Base SKU Rev A cung cấp 16 UI + 4 AO + 4 DO; true isolated DI là capability tùy chọn, không thuộc baseline.
 
@@ -81,4 +81,4 @@ Local HMI ─UDS─► mkddc-web broker ─versioned UDS─► mkddc-netcfg ─�
 - Mất IOP quá fault threshold tạo reliability fault; MCU timeout 200 ms thực thi safe behavior.
 - SHM magic/layout mismatch phải fail fast thay vì đọc offset cũ.
 
-Deployment unit, package và tên executable phải được kiểm tra từ build/packaging hiện hành trước release; HMI chưa được coi là package mặc định chỉ vì source tồn tại.
+Deployment unit, package và tên executable phải được kiểm tra từ build/packaging hiện hành trước release. `mkddc-netcfg` và HMI đã có install wiring; HMI vẫn feature-gated và chỉ được enable khi target có connector DRM 240×320/320×240 cùng touch/button phù hợp.

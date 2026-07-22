@@ -1,7 +1,7 @@
 [Unit]
 Description=MK-DDC-24 HMI Local Display
-After=mkddc-web.service mkddc-iobus.service
-Wants=mkddc-web.service
+After=mkddc-web.service mkddc-iobus.service mkddc-netcfg.service
+Wants=mkddc-web.service mkddc-netcfg.service
 
 [Service]
 Type=notify
@@ -14,6 +14,7 @@ Group=mkddc
 SupplementaryGroups=video input
 CapabilityBoundingSet=
 NoNewPrivileges=yes
+InaccessiblePaths=-/run/mkddc/netcfg.sock
 Environment=DISPLAY=
 Environment=XDG_RUNTIME_DIR=/run/mkddc
 StandardOutput=journal

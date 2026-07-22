@@ -20,6 +20,7 @@ type Config struct {
 	IobusPidPath     string
 	CoreSock         string
 	HMISock          string
+	NetcfgSock       string
 	HMIAllowedUID    string
 	HMIAuditPath     string
 	TrendDBPath      string
@@ -43,6 +44,7 @@ func LoadConfig() (Config, error) {
 		IobusPidPath:     getenv("IOBUS_PID", "/run/mkddc/iobus.pid"),
 		CoreSock:         getenv("CORE_SOCK", "/run/mkddc/core.sock"),
 		HMISock:          getenv("HMI_SOCK", "/run/mkddc/hmi-api.sock"),
+		NetcfgSock:       getenv("NETCFG_SOCK", "/run/mkddc/netcfg.sock"),
 		HMIAllowedUID:    os.Getenv("HMI_ALLOWED_UID"),
 		HMIAuditPath:     getenv("HMI_AUDIT_FILE", "/data/config/hmi_audit.jsonl"),
 		TrendDBPath:      getenv("TREND_DB", defaultTrendDBPath),

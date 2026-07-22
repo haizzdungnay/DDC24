@@ -287,4 +287,34 @@ ApiReply HmiApiClient::command(const std::string& action, const std::string& poi
     return request(action, std::move(fields));
 }
 
+ApiReply HmiApiClient::network_status()
+{
+    return request("network_status");
+}
+
+ApiReply HmiApiClient::network_validate(const nlohmann::json& candidate)
+{
+    return request("network_validate", {{"candidate", candidate}});
+}
+
+ApiReply HmiApiClient::network_stage(const nlohmann::json& candidate)
+{
+    return request("network_stage", {{"candidate", candidate}});
+}
+
+ApiReply HmiApiClient::network_apply(const std::string& transaction_id)
+{
+    return request("network_apply", {{"transactionId", transaction_id}});
+}
+
+ApiReply HmiApiClient::network_confirm(const std::string& transaction_id)
+{
+    return request("network_confirm", {{"transactionId", transaction_id}});
+}
+
+ApiReply HmiApiClient::network_rollback(const std::string& transaction_id)
+{
+    return request("network_rollback", {{"transactionId", transaction_id}});
+}
+
 } // namespace hmi

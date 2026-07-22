@@ -25,6 +25,21 @@ type fakeHMICore struct {
 	afterCommand func()
 }
 
+type fakeNetcfgAuthority struct {
+	calls         int
+	lastAction    string
+	lastTx        string
+	lastCandidate *NetcfgCandidate
+	response      NetcfgResponse
+	err           error
+}
+
+func (f *fakeNetcfgAuthority) Request(_ context.Context, _ string, action string, transactionID string, candidate *NetcfgCandidate) (NetcfgResponse, error) {
+	f.calls++
+	f.lastAction, f.lastTx, f.lastCandidate = action, transactionID, candidate
+	return f.response, f.err
+}
+
 func (f *fakeHMICore) ReadStatus(context.Context) (CoreStatus, error) {
 	return CoreStatus{CoreAvailable: true, IobusPresent: true, IOP: IOPStatus{Status: "normal"}}, nil
 }
@@ -92,6 +107,40 @@ func loginHMI(t *testing.T, broker *HMIBroker, requestID string) hmiResponse {
 		"version": 1, "requestId": requestID, "action": "login",
 		"username": "admin", "password": "admin123",
 	})
+}
+
+func TestHMIBrokerNetworkChangeRequiresAdminAndForwardsTransaction(t *testing.T) {
+	broker := newTestHMIBroker(t, RoleAdmin, &fakeHMICore{}, &bytes.Buffer{})
+	fake := &fakeNetcfgAuthority{response: NetcfgResponse{
+		Version: 1, RequestID: "net-stage", Result: "accepted", ReasonCode: "OK",
+		State: "staged", TransactionID: "tx-1",
+	}}
+	broker.netcfg = fake
+	login := loginHMI(t, broker, "login-net")
+	resp := callHMI(t, broker, map[string]any{
+		"version": 1, "requestId": "net-stage", "action": "network_stage", "token": login.Token,
+		"candidate": map[string]any{"interface": "eth0", "mode": "static", "ipv4": "192.168.10.20", "netmask": "255.255.255.0", "gateway": "192.168.10.1"},
+	})
+	if resp.Result != "accepted" || resp.Network == nil || resp.Network.TransactionID != "tx-1" {
+		t.Fatalf("response = %+v", resp)
+	}
+	if fake.calls != 1 || fake.lastAction != "stage" || fake.lastCandidate == nil || fake.lastCandidate.Interface != "eth0" {
+		t.Fatalf("forwarded call = %+v", fake)
+	}
+}
+
+func TestHMIBrokerNetworkMutationRejectsOperator(t *testing.T) {
+	broker := newTestHMIBroker(t, RoleOperator, &fakeHMICore{}, &bytes.Buffer{})
+	fake := &fakeNetcfgAuthority{}
+	broker.netcfg = fake
+	login := loginHMI(t, broker, "login-net-operator")
+	resp := callHMI(t, broker, map[string]any{
+		"version": 1, "requestId": "net-apply", "action": "network_apply", "token": login.Token,
+		"transactionId": "tx-1",
+	})
+	if resp.ReasonCode != "FORBIDDEN" || fake.calls != 0 {
+		t.Fatalf("response=%+v calls=%d", resp, fake.calls)
+	}
 }
 
 func callHMIOverSocket(t *testing.T, path string, req map[string]any) hmiResponse {

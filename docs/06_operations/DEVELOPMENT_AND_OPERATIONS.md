@@ -49,16 +49,17 @@ Không mặc định rằng HMI đã nằm trong package chính; xác minh servi
 
 ## Network commissioning status and recovery
 
-Source baseline 2026-07-22 chưa có OS network applier: Web `PUT /api/v1/network`
-chỉ lưu desired files và trả warning `pending B7`. Không dùng toast “Đã lưu” hoặc IP
-trong `network.conf` làm bằng chứng kernel đã đổi địa chỉ. Active IPv4 phải kiểm tra từ
-kernel/system status trên target.
+Source baseline 2026-07-22 đã có `mkddc-netcfg` và local-HMI broker transaction. Web
+`PUT /api/v1/network` cũ vẫn chỉ lưu desired files và trả warning `pending B7`; không
+dùng toast “Đã lưu” hoặc `network.conf` làm bằng chứng kernel đã đổi địa chỉ. Active
+IPv4 phải lấy từ action `network_status`/kernel trên target.
 
-Cho tới khi NWC-000..017 hoàn tất, đổi IP production phải theo runbook/image owner đã
-phê duyệt ngoài Web/local HMI, có console/local access và backup cấu hình. Không restart
-`mkddc-iobus` chỉ để thử nhận IP mới vì service còn sở hữu IOP/UART.
+Cho tới khi NWC-017 target evidence được duyệt, đổi IP production qua HMI chỉ được chạy
+trong commissioning có local/console fallback, Ethernet interface allowlist và backup
+NetworkManager. Không restart `mkddc-iobus` chỉ để nhận IP mới vì service còn sở hữu
+IOP/UART; BACnet datalink tự rebind theo address change.
 
-Target ADR-017 sau implementation:
+Luồng ADR-017 đã implement:
 
 1. Service/Admin tạo transaction và xem old/new/rollback deadline.
 2. Static apply giữ đường cũ tới confirm khi topology cho phép; DHCP chờ lease thật.
@@ -66,9 +67,10 @@ Target ADR-017 sau implementation:
 4. Không confirm/health fail trong tối đa 120 s thì helper tự phục hồi last-known-good.
 5. BACnet hot-rebind/phát `I-Am`; core/IOP/STM32 tiếp tục hoạt động.
 
-Runbook release phải ghi interface allowlist, location journal/last-known-good, recovery
-khi rollback fail, console/rescue access của image và lệnh quan sát đã được packaging
-phê duyệt. Không ghi lệnh giả trước khi platform backend được implement/test trên image.
+Config mặc định Orange Pi dùng `/etc/mkddc/netcfg.conf` với `NETCFG_INTERFACE=end1`;
+journal ở `/data/mkddc/netcfg-transaction.json`, socket ở `/run/mkddc/netcfg.sock`.
+Khi rollback fail, giữ console/rescue access, lưu journal/log và không tiếp tục mutation
+cho tới khi phục hồi last-known-good bằng NetworkManager được phê duyệt.
 
 ## Backup, rollback và tài liệu
 

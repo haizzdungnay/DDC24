@@ -40,18 +40,20 @@ type hmiCore interface {
 }
 
 type hmiRequest struct {
-	Version   int      `json:"version"`
-	RequestID string   `json:"requestId"`
-	Action    string   `json:"action"`
-	Token     string   `json:"token,omitempty"`
-	Username  string   `json:"username,omitempty"`
-	Password  string   `json:"password,omitempty"`
-	PointID   string   `json:"pointId,omitempty"`
-	AlarmID   string   `json:"alarmId,omitempty"`
-	Mode      string   `json:"mode,omitempty"`
-	Reason    string   `json:"reason,omitempty"`
-	Value     *float64 `json:"value,omitempty"`
-	TTLS      uint32   `json:"ttlS,omitempty"`
+	Version       int              `json:"version"`
+	RequestID     string           `json:"requestId"`
+	Action        string           `json:"action"`
+	Token         string           `json:"token,omitempty"`
+	Username      string           `json:"username,omitempty"`
+	Password      string           `json:"password,omitempty"`
+	PointID       string           `json:"pointId,omitempty"`
+	AlarmID       string           `json:"alarmId,omitempty"`
+	Mode          string           `json:"mode,omitempty"`
+	Reason        string           `json:"reason,omitempty"`
+	Value         *float64         `json:"value,omitempty"`
+	TTLS          uint32           `json:"ttlS,omitempty"`
+	TransactionID string           `json:"transactionId,omitempty"`
+	Candidate     *NetcfgCandidate `json:"candidate,omitempty"`
 }
 
 type hmiPolicyPoint struct {
@@ -78,6 +80,7 @@ type hmiResponse struct {
 	Points     []PointDTO       `json:"points,omitempty"`
 	Alarms     []AlarmDTO       `json:"alarms,omitempty"`
 	CoreStatus *CoreStatus      `json:"coreStatus,omitempty"`
+	Network    *NetcfgResponse  `json:"network,omitempty"`
 }
 
 type hmiSession struct {
@@ -100,6 +103,7 @@ type HMIBroker struct {
 	cfg      Config
 	auth     *AuthService
 	core     hmiCore
+	netcfg   netcfgAuthority
 	logger   *log.Logger
 	audit    *AuditLogger
 	auditLog *hmiAuditStore
@@ -119,7 +123,7 @@ func NewHMIBroker(cfg Config, auth *AuthService, core hmiCore, logger *log.Logge
 		logger = log.Default()
 	}
 	return &HMIBroker{
-		cfg: cfg, auth: auth, core: core, logger: logger, audit: audit,
+		cfg: cfg, auth: auth, core: core, netcfg: NewNetcfgClient(cfg.NetcfgSock), logger: logger, audit: audit,
 		auditLog: &hmiAuditStore{path: cfg.HMIAuditPath},
 		now:      time.Now, sessions: make(map[string]hmiSession),
 		loginRate: make(map[uint32]hmiLoginWindow), cache: make(map[string]hmiCachedResponse),
@@ -313,7 +317,8 @@ func (b *HMIBroker) handleFrame(ctx context.Context, raw []byte, uid uint32) []b
 	}
 
 	isMutation := req.Action == "setpoint" || req.Action == "mode" || req.Action == "override" ||
-		req.Action == "release" || req.Action == "alarm_ack"
+		req.Action == "release" || req.Action == "alarm_ack" || req.Action == "network_stage" ||
+		req.Action == "network_apply" || req.Action == "network_confirm" || req.Action == "network_rollback"
 	if isMutation {
 		if cached, conflict := b.cached(req.Token, req.RequestID, raw); cached != nil || conflict {
 			if conflict {
@@ -400,10 +405,34 @@ func (b *HMIBroker) authorizedAction(ctx context.Context, req hmiRequest, sessio
 		return base
 	case "setpoint", "mode", "override", "release":
 		return b.controlAction(ctx, req, session, base)
+	case "network_status", "network_validate", "network_stage", "network_apply", "network_confirm", "network_rollback":
+		return b.networkAction(ctx, req, session, base)
 	default:
 		base.ReasonCode = "UNKNOWN_ACTION"
 		return base
 	}
+}
+
+func (b *HMIBroker) networkAction(ctx context.Context, req hmiRequest, session hmiSession, base hmiResponse) hmiResponse {
+	if req.Action != "network_status" && session.role != RoleAdmin {
+		base.ReasonCode = "FORBIDDEN"
+		return base
+	}
+	if b.netcfg == nil {
+		base.ReasonCode = "NETCFG_UNAVAILABLE"
+		return base
+	}
+	action := strings.TrimPrefix(req.Action, "network_")
+	response, err := b.netcfg.Request(ctx, req.RequestID, action, req.TransactionID, req.Candidate)
+	if err != nil {
+		base.ReasonCode = "NETCFG_UNAVAILABLE"
+		return base
+	}
+	base.Result = response.Result
+	base.ReasonCode = response.ReasonCode
+	base.Message = response.Message
+	base.Network = &response
+	return base
 }
 
 func (b *HMIBroker) controlAction(ctx context.Context, req hmiRequest, session hmiSession, base hmiResponse) hmiResponse {
@@ -558,6 +587,15 @@ func (b *HMIBroker) auditHMI(session hmiSession, req hmiRequest, target string, 
 func mutationTarget(req hmiRequest) string {
 	if req.Action == "alarm_ack" {
 		return req.AlarmID
+	}
+	if strings.HasPrefix(req.Action, "network_") {
+		if req.TransactionID != "" {
+			return "network:" + req.TransactionID
+		}
+		if req.Candidate != nil {
+			return "network:" + req.Candidate.Interface
+		}
+		return "network"
 	}
 	return canonicalPointID(req.PointID)
 }

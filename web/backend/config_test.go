@@ -31,3 +31,14 @@ func TestLoadConfigAllowsAlarmSettingsOverride(t *testing.T) {
 		t.Fatalf("AlarmConfPath = %q; want %q", cfg.AlarmConfPath, want)
 	}
 }
+
+func TestLoadConfigUsesDedicatedNetcfgSocket(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.NetcfgSock != "/run/mkddc/netcfg.sock" {
+		t.Fatalf("NetcfgSock = %q", cfg.NetcfgSock)
+	}
+}

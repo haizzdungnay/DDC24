@@ -1,0 +1,47 @@
+cmake_minimum_required(VERSION 3.16)
+project(mkddc-netcfg CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include(FetchContent)
+find_package(nlohmann_json 3.11 QUIET)
+if(NOT nlohmann_json_FOUND)
+    FetchContent_Declare(nlohmann_json
+        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    set(JSON_Install OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(nlohmann_json)
+endif()
+
+add_library(netcfg_lib STATIC netcfg.cpp)
+target_include_directories(netcfg_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(netcfg_lib PUBLIC nlohmann_json::nlohmann_json pthread)
+target_compile_options(netcfg_lib PRIVATE -Wall -Wextra -Werror)
+
+add_executable(mkddc-netcfg main.cpp)
+target_link_libraries(mkddc-netcfg PRIVATE netcfg_lib)
+target_compile_options(mkddc-netcfg PRIVATE -Wall -Wextra -Werror)
+install(TARGETS mkddc-netcfg DESTINATION sbin)
+
+option(NETCFG_BUILD_TESTS "Build mkddc-netcfg tests" ON)
+if(NETCFG_BUILD_TESTS)
+    enable_testing()
+    find_package(GTest QUIET)
+    if(NOT GTest_FOUND)
+        set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+        FetchContent_Declare(googletest
+            URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+        FetchContent_MakeAvailable(googletest)
+    endif()
+    add_executable(netcfg_tests tests/test_netcfg.cpp)
+    target_link_libraries(netcfg_tests PRIVATE netcfg_lib)
+    if(TARGET GTest::gtest_main)
+        target_link_libraries(netcfg_tests PRIVATE GTest::gtest_main)
+    else()
+        target_link_libraries(netcfg_tests PRIVATE gtest_main)
+    endif()
+    target_compile_options(netcfg_tests PRIVATE -Wall -Wextra -Werror)
+    include(GoogleTest)
+    gtest_discover_tests(netcfg_tests)
+endif()

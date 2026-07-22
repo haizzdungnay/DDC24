@@ -187,6 +187,30 @@ void BacnetServer::apply_ao_config()
 #endif
 }
 
+bool BacnetServer::rebind()
+{
+#ifdef MKDDC_ENABLE_BACNET
+    if (!objects_) return false;
+    if (running_) datalink_cleanup();
+    running_ = false;
+    bip_set_port(cfg_.bip.udp_port);
+    char* iface = cfg_.bip.bind_interface.empty()
+        ? nullptr : const_cast<char*>(cfg_.bip.bind_interface.c_str());
+    if (!bip_init(iface)) {
+        std::fprintf(stderr, "ERROR bacnet_server.rebind_failed iface=%s port=%u\n",
+                     iface ? iface : "default", cfg_.bip.udp_port);
+        return false;
+    }
+    running_ = true;
+    Send_I_Am(&Handler_Transmit_Buffer[0]);
+    std::fprintf(stderr, "INFO  bacnet_server.rebound iface=%s port=%u\n",
+                 iface ? iface : "default", cfg_.bip.udp_port);
+    return true;
+#else
+    return false;
+#endif
+}
+
 void BacnetServer::register_objects()
 {
 #ifdef MKDDC_ENABLE_BACNET

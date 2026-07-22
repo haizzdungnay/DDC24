@@ -9,7 +9,7 @@
     "version": { "const": 1 },
     "requestId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$" },
     "action": {
-      "enum": ["ping", "login", "logout", "policy", "points", "status", "alarms", "query", "alarm_ack", "setpoint", "mode", "override", "release"]
+      "enum": ["ping", "login", "logout", "policy", "points", "status", "alarms", "query", "alarm_ack", "setpoint", "mode", "override", "release", "network_status", "network_validate", "network_stage", "network_apply", "network_confirm", "network_rollback"]
     },
     "token": { "type": "string", "maxLength": 128 },
     "username": { "type": "string", "maxLength": 32 },
@@ -19,6 +19,19 @@
     "mode": { "enum": ["auto", "manual"] },
     "reason": { "type": "string", "minLength": 3, "maxLength": 80 },
     "value": { "type": "number" },
-    "ttlS": { "type": "integer", "minimum": 60, "maximum": 3600 }
+    "ttlS": { "type": "integer", "minimum": 60, "maximum": 3600 },
+    "transactionId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_.:-]+$" },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface", "mode"],
+      "properties": {
+        "interface": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,15}$" },
+        "mode": { "enum": ["static", "dhcp"] },
+        "ipv4": { "type": "string", "maxLength": 15 },
+        "netmask": { "type": "string", "maxLength": 15 },
+        "gateway": { "type": "string", "maxLength": 15 }
+      }
+    }
   }
 }
