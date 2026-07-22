@@ -7,6 +7,14 @@
 ---
 
 ## [Unreleased]
+### Added — ADR-016 limited-operator HMI host implementation (2026-07-22)
+- hmi: replaced the legacy six-screen/service-PIN prototype with five `Home/Points/Control/Alarms/Service` surfaces, a bounded Unix-socket client, broker-authoritative login/policy/alarm ACK and AO/DO Control with explicit confirmation, reason, TTL, release and effective-source display. Monitoring remains read-only SHM; broker loss marks command authority OFFLINE, periodic query reconnects without replay, and mutations remain fail closed.
+- web/security: added the local HMI v1 broker on `/run/mkddc/hmi-api.sock` with `0660` permissions, `SO_PEERCRED`, optional UID allowlist, Viewer/Operator/Admin RBAC, opaque idle-expiring sessions, login rate limiting, bounded frames/connections/idempotency and durable append-only JSONL mutation audit without credential/token logging.
+- core/control: extended the existing Core IPC with authoritative point query, finite/range/TTL validation, bounded request-ID cache, effective winner/source response and Core-owned monotonic override expiry/release; safety/interlock priority remains authoritative.
+- hmi/privilege: removed static config role/PIN/service-switch authority, direct core/iobus signaling, direct reboot and `CAP_SYS_BOOT`; unsupported maintenance actions remain hidden pending a separately approved authority.
+- docs: aligned HMI design, interfaces, microtask guide, verification, traceability and the HW/FW/SOM/HMI review report with the implemented protocol and retained the production gate as RED pending process-loss, target/HIL and operator-usability evidence.
+- verification: HMI-enabled Debug build and HMI CTest 20/20 pass; Core CTest 172/172 pass; `go vet ./...` and `go test -count=1 ./...` pass; HMI race subset pass; real broker UDS + real `CoreClient`/Core-socket-stub lifecycle, Core-loss/no-replay, explicit retry and broker-restart session invalidation pass; protocol schema parses; unsafe-privilege source scan has no finding; hardware-doc/link harness 18/18 and `git diff --check` pass. These host results do not claim IEC conformity or target/HIL acceptance.
+
 ### Changed — Latest-main reconciliation merge (2026-07-22)
 - repository: fast-forwarded local `main` to `origin/main` at `9ca78bf`, then merged controller/document reconciliation commit `bf8c2d0`; preserved the current alarm, scheduler, Virtual Point and frontend work from main.
 - merge: resolved `CHANGELOG.md` by retaining both histories and kept the SHM v4 IOBus layout assertions at `ui_unit=176`, `ui_raw_unit=304`, size `528`.

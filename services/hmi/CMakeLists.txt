@@ -49,7 +49,7 @@ FetchContent_MakeAvailable(nlohmann_json)
 # ---- hmi_lib: tất cả logic trừ main.cpp (để unit tests link được) ----
 add_library(hmi_lib STATIC
     platform/systemd_notify.cpp
-    platform/core_control.cpp
+    api/hmi_api_client.cpp
     drm/drm_init.cpp
     drm/lv_drm_display.cpp
     input/evdev_touch.cpp
@@ -63,8 +63,7 @@ add_library(hmi_lib STATIC
     screens/screen_home.cpp
     screens/screen_io.cpp
     screens/screen_alarm.cpp
-    screens/screen_comm.cpp
-    screens/screen_system.cpp
+    screens/screen_control.cpp
     screens/screen_service.cpp
     i18n/locale.cpp)
 
@@ -110,10 +109,10 @@ if(HMI_BUILD_TESTS)
         tests/test_shm_reader.cpp
         tests/test_point_db.cpp
         tests/test_alarm_model.cpp
+        tests/test_hmi_api_client.cpp
         tests/test_locale.cpp
         tests/test_nav.cpp
-        tests/test_service_screen.cpp
-        tests/test_core_control.cpp)
+        )
     target_link_libraries(hmi_tests PRIVATE hmi_lib)
     target_compile_options(hmi_tests PRIVATE -Wno-error=unused-parameter)
     if(TARGET GTest::gtest_main)

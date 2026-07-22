@@ -2,8 +2,8 @@
 ## Local limited-operator HMI — TFT 2.4 inch / LVGL v9 / DRM/KMS
 
 **Document ID:** DDD-SWSVC-HMI-MK-DDC-24-VI
-**Revision:** 3.0 — 2026-07-22
-**Status:** Controlled target; implementation partial
+**Revision:** 3.1 — 2026-07-22
+**Status:** Host implementation complete; target/HIL acceptance pending
 **Owner:** Software Lead
 **Decision:** ADR-016
 **Trace:** `HMI-REQ-001..015`, `HMI-001..032`, `SW-HMI-001..018`
@@ -24,21 +24,21 @@ This design does **not** place a full Web HMI, engineering graph, schedule edito
 alarm configuration, calibration, user administration or report workflow on the
 320×240 panel.
 
-## 2. Current implementation versus target
+## 2. Current implementation versus acceptance target
 
 | Area | Source state on 2026-07-22 | Target gap |
 |---|---|---|
-| DRM/LVGL, FT5436 evdev, six GPIO buttons | Implemented skeleton and host tests | Target panel/device-tree/FPS evidence |
+| DRM/LVGL, FT5436 evdev, six GPIO buttons | Implemented and covered by host mapping tests | Target panel/device-tree/FPS evidence |
 | SHM telemetry | Read-only magic/seqlock reader implemented | Producer integration and latency evidence |
-| Navigation | Six legacy screens implemented | Refactor to five selected surfaces |
-| Alarm | Volatile local ring; ACK changes local memory | Authority snapshot, ACK response, persistence and audit |
-| Control | No operator point command surface | Policy projection, command client and faceplate |
-| Identity | Local role string/PIN/switch prototype | Authoritative session/RBAC/expiry/audit |
-| Service | Direct signal/reboot hooks; backup/restore false | Remove direct privilege; brokered maintenance or disabled action |
+| Navigation | Five surfaces `Home/Points/Control/Alarms/Service` implemented | Target focus/clipping/glove inspection |
+| Alarm | Broker snapshot and authoritative ACK implemented; local ACK cannot mutate state | Target broker/core loss, flood and history evidence |
+| Control | Policy-gated AO/DO control, confirm, query, source and TTL implemented | Target lifecycle/latency/priority scenarios |
+| Identity | Broker login/logout, RBAC, idle expiry, rate limit and durable audit implemented | Target deployment identity/group and recovery evidence |
+| Service | Direct signal/reboot and static PIN/role removed; unsupported actions hidden | Separately approved maintenance authority, if required |
 | Communication telemetry | Partial/default values | Authoritative telemetry or explicit unavailable |
 
-No target capability in this document may be reported as implemented until the
-corresponding microtask and verification evidence are complete.
+Host-complete capability must not be reported as production-accepted until its target,
+HIL, fault-recovery and usability evidence is complete.
 
 ## 3. Hardware and runtime constraints
 
@@ -98,22 +98,24 @@ by HMI and ADR-016 does not require a SHM ABI change.
 
 ### 5.2 Local command IPC
 
-The target is a versioned Unix-domain interface, proposed path
-`/run/mkddc/hmi-api.sock`. The final path and filesystem permissions must be frozen
-before implementation.
+The implemented contract is line-delimited JSON version 1 on
+`/run/mkddc/hmi-api.sock`, maximum frame 8192 bytes. The broker creates the socket as
+`0660`, checks `SO_PEERCRED` and may enforce `HMI_ALLOWED_UID`. Each frame has a
+four-second broker deadline; core forwarding uses two seconds and the HMI client uses
+2.5 seconds so a mutation fails closed with a visible timeout.
 
 Request envelope:
 
 ```json
 {
-  "schema_version": 1,
-  "request_id": "uuid",
-  "session_id": "opaque",
+  "version": 1,
+  "requestId": "hmi-42",
+  "token": "opaque",
   "action": "override",
-  "target_id": "AO1",
-  "value": 50.0,
+  "pointId": "AO-01",
+  "value": 12.0,
   "reason": "functional test",
-  "requested_ttl_s": 900
+  "ttlS": 900
 }
 ```
 
@@ -121,14 +123,16 @@ Response envelope:
 
 ```json
 {
-  "schema_version": 1,
-  "request_id": "uuid",
+  "version": 1,
+  "requestId": "hmi-42",
   "result": "accepted",
-  "reason_code": "OK",
-  "effective_value": 50.0,
-  "effective_source": "HMI_OPERATOR",
-  "effective_priority": 8,
-  "expires_at": "2026-07-22T12:15:00Z"
+  "reasonCode": "OK",
+  "point": {
+    "id": "AO-01",
+    "value": 12.0,
+    "priority": "manual",
+    "overrideExpiresInS": 899
+  }
 }
 ```
 
@@ -137,7 +141,7 @@ Mandatory properties:
 - bounded frame length and read/write timeout;
 - peer credential and socket permission checks;
 - opaque, short-lived session token;
-- idempotent `request_id` handling;
+- idempotent `requestId` handling;
 - stable machine-readable reject codes;
 - finite/range validation and no silent coercion;
 - no secret or raw credential in logs;
@@ -148,34 +152,34 @@ Mandatory properties:
 | Action | Minimum role | Authority result required |
 |---|---|---|
 | `login/logout` | all known users | identity/session authority |
-| `query_control` | Viewer | policy/core state |
+| `policy`, `points`, `status`, `alarms`, `query` | Viewer | broker/core state |
 | `setpoint` | Operator | broker + core |
-| `set_mode` | Operator | broker + core |
+| `mode` | Operator | broker + core |
 | `override` | Operator, if point policy allows | broker + core |
 | `release` | Operator, if policy allows | broker + core |
 | `alarm_ack` | Operator | alarm authority |
-| `service_request` | Service | broker + core + maintenance authority |
+
+`ping` is unauthenticated health probing. No `service_request` action exists in v1;
+maintenance remains hidden until a separate authority is approved and implemented.
 
 ## 6. Point control policy
 
 The authoritative projection for a commandable point contains at least:
 
-```yaml
-point_id: AO1
-display_name: Cooling Valve
-kind: analog_output
-commandable: true
-allowed_actions: [setpoint, set_mode, override, release]
-required_role: operator
-minimum: 0
-maximum: 100
-unit: percent
-operator_priority: 8
-default_ttl_s: 900
-maximum_ttl_s: 1800
-reason_required: true
-audit_required: true
+```json
+{
+  "id": "AO-01",
+  "kind": "analog",
+  "min": 0,
+  "max": 20,
+  "actions": ["query", "setpoint", "mode", "override", "release"],
+  "maxTtlS": 3600,
+  "reasonRequired": true
+}
 ```
+
+The Operator role is enforced by the authenticated broker session; audit is mandatory
+at the mutation boundary and is therefore not a client-selectable policy field.
 
 Rules:
 
@@ -340,3 +344,4 @@ requirement mapping is in [Traceability](../../07_records/TRACEABILITY.md).
 |---|---|---|
 | 2.4 | 2026-07-22 | Source-aligned service-panel design and production gaps. |
 | 3.0 | 2026-07-22 | ADR-016: selected local limited-operator HMI, five surfaces, authoritative command lifecycle, session/RBAC/audit and microtask handoff. |
+| 3.1 | 2026-07-22 | Aligned the controlled design with the implemented broker/Core/HMI protocol, five-surface host state and remaining target acceptance gates. |

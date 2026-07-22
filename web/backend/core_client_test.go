@@ -105,6 +105,38 @@ func TestAckAlarmUsesCoreIPC(t *testing.T) {
 	}
 }
 
+func TestHMICommandPointForwardsTTLAndActorToCore(t *testing.T) {
+	path, cmdCh := fakeCoreSocket(t, `{"id":8,"result":"accepted","applied_value":7.5,"active_source":"manual","remaining_ttl_s":300}`)
+	point, err := (&CoreClient{SockPath: path}).CommandPoint(
+		context.Background(), "AO-01", 7.5, false, 300, "hmi:operator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := readFakeCommand(t, cmdCh)
+	if cmd["op"] != "write" || cmd["point"] != "AO1" || cmd["source"] != "manual" ||
+		cmd["user"] != "hmi:operator" || cmd["ttlS"] != float64(300) {
+		t.Fatalf("command = %#v", cmd)
+	}
+	if point.Priority != "manual" || point.Value != float64(7.5) {
+		t.Fatalf("point = %#v", point)
+	}
+	if point.OverrideExpiresInS == nil || *point.OverrideExpiresInS != 300 {
+		t.Fatalf("expiry = %#v", point.OverrideExpiresInS)
+	}
+}
+
+func TestHMIAckForwardsActorToCore(t *testing.T) {
+	path, cmdCh := fakeCoreSocket(t, `{"id":9,"result":"accepted","alarmId":"ALM-1"}`)
+	if err := (&CoreClient{SockPath: path}).AckAlarmAs(
+		context.Background(), "ALM-1", AlarmActionRequest{}, "hmi:operator"); err != nil {
+		t.Fatal(err)
+	}
+	cmd := readFakeCommand(t, cmdCh)
+	if cmd["op"] != "alarm_ack" || cmd["user"] != "hmi:operator" {
+		t.Fatalf("command = %#v", cmd)
+	}
+}
+
 func TestAckAlarmUnknownMapsError(t *testing.T) {
 	path, _ := fakeCoreSocket(t, `{"id":9,"result":"rejected","error":"unknown_alarm"}`)
 	err := (&CoreClient{SockPath: path}).AckAlarm(context.Background(), "ALM-missing", AlarmActionRequest{})

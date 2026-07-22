@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mkddc://hmi/protocol/v1",
+  "title": "MK-DDC local HMI broker protocol v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "requestId", "action"],
+  "properties": {
+    "version": { "const": 1 },
+    "requestId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$" },
+    "action": {
+      "enum": ["ping", "login", "logout", "policy", "points", "status", "alarms", "query", "alarm_ack", "setpoint", "mode", "override", "release"]
+    },
+    "token": { "type": "string", "maxLength": 128 },
+    "username": { "type": "string", "maxLength": 32 },
+    "password": { "type": "string", "maxLength": 128 },
+    "pointId": { "type": "string", "maxLength": 16 },
+    "alarmId": { "type": "string", "maxLength": 128 },
+    "mode": { "enum": ["auto", "manual"] },
+    "reason": { "type": "string", "minLength": 3, "maxLength": 80 },
+    "value": { "type": "number" },
+    "ttlS": { "type": "integer", "minimum": 60, "maximum": 3600 }
+  }
+}

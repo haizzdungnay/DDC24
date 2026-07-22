@@ -1,19 +1,18 @@
 [Unit]
 Description=MK-DDC-24 HMI Local Display
-After=mkddc-core.service mkddc-iobus.service
-Requires=mkddc-core.service
+After=mkddc-web.service mkddc-iobus.service
+Wants=mkddc-web.service
 
 [Service]
 Type=notify
-ExecStart=/usr/sbin/mkddc-hmi --allow-reboot
+ExecStart=/usr/sbin/mkddc-hmi
 Restart=always
 RestartSec=3
 WatchdogSec=10
 User=mkddc
 Group=mkddc
 SupplementaryGroups=video input
-AmbientCapabilities=CAP_SYS_BOOT
-CapabilityBoundingSet=CAP_SYS_BOOT
+CapabilityBoundingSet=
 NoNewPrivileges=yes
 Environment=DISPLAY=
 Environment=XDG_RUNTIME_DIR=/run/mkddc

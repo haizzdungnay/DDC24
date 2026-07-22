@@ -2,7 +2,7 @@
 
 **Document ID:** KX-DDC24-REV-HW-FW-SOM-HMI-20260722
 **Ngày:** 2026-07-22
-**Trạng thái:** Review complete; corrective documentation/config applied; release gates open
+**Trạng thái:** Review and HMI host implementation complete; target release gates open
 **Quyết định:** **HW manufacturing NO-GO; MCU FW NO-GO; HMI production NO-GO**
 
 ## 1. Kết luận điều hành
@@ -91,17 +91,17 @@ Home phải trả lời trong khoảng 30 giây: controller có control được
 trọng nhất là gì, dữ liệu có stale không, I/O/communication nào cần xử lý. Normal dùng
 visual trung tính; màu bão hòa dành cho abnormal/attention hoặc energized state thật.
 
-### 4.2 Source-aligned gaps
+### 4.2 Source-aligned closure status
 
-| ID | Mức | Gap trong `services/hmi` | Required closure |
+| ID | Mức | Host closure 2026-07-22 | Remaining release evidence |
 |---|---|---|---|
-| HMI-AUTH-001 | P0 | ACK chỉ đổi local volatile ring; không gửi upstream, không historian/audit | Alarm command/result contract, durable state, identity/time/result audit |
-| HMI-RBAC-001 | P0 | Quyền dựa vào PIN/service switch/local role string; không unlock expiry | Authoritative identity/RBAC, fail-closed unknown role, timeout và audit |
-| HMI-CTRL-001 | P0 | Chưa có Control surface, point policy projection hoặc setpoint/mode/override/release authority path | Implement HOP-001..027 then HOP-030..046; broker/core loss must degrade read-only |
-| HMI-PRIV-001 | P0 | HMI còn direct signal/reboot và `CAP_SYS_BOOT` trong packaging | Remove via HOP-060..063 before production enablement |
-| HMI-IA-001 | P1 | Source còn six-screen tab navigation và action target 22–29 px | Refactor five surfaces, body ≥14 px, action ≥40×40 px or hard-key equivalent |
+| HMI-AUTH-001 | P0 | Broker snapshot/ACK, authoritative result and durable audit implemented; local ACK cannot mutate state | Target reject/timeout/restart/history scenarios |
+| HMI-RBAC-001 | P0 | Broker token session, Viewer/Operator/Admin RBAC, idle expiry, rate limit and audit implemented/tested | Target deployment UID/group and recovery evidence |
+| HMI-CTRL-001 | P0 | Policy-gated Control, broker/Core query, setpoint/mode/override/release, TTL and idempotency implemented | Process-loss and target priority/latency scenarios |
+| HMI-PRIV-001 | P0 | Static PIN/role, direct signal/reboot hooks and `CAP_SYS_BOOT` removed | Target image packaging/runtime negative test |
+| HMI-IA-001 | P1 | Five surfaces implemented; body 14 px and production actions 40 px | Target clipping/focus/glove/light inspection |
 | HMI-TEL-001 | P1 | BACnet/Modbus/system fields thiếu contract; default có thể trông như dữ liệu thật | Telemetry schema + explicit unknown/unavailable/stale |
-| HMI-FUNC-001 | P1 | Backup/restore buttons hiện hữu nhưng callbacks trả false | Ẩn/disable với reason hoặc implement integrity/rollback tests |
+| HMI-FUNC-001 | P1 | Unsupported backup/restore/restart/reboot actions hidden | Separate approved maintenance authority if required |
 | HMI-HW-001 | P0 | Chưa có schematic/DT/panel integration evidence | Freeze pin/power/driver and run DRM/touch/button/backlight tests |
 | HMI-UX-001 | P1 | Chưa có operator scenario/usability record | Test glove/light/alarm flood/stale/loss/recovery/localization |
 | HMI-DATA-001 | P1 | Example DB từng dùng UI8+DI8 | **Đã sửa** thành UI16 + AO4 + DO4; cần regression/capability test |
@@ -136,7 +136,7 @@ Benchmark chính thức:
 | Vendor | Capability đáng học | MK-DDC-24 gap/positioning |
 |---|---|---|
 | [Siemens WinCC Unified](https://www.siemens.com/en-us/products/simatic-hmi/wincc-unified/) | standardized interfaces/libraries, roles/access, alarms/events, archives, audit, multi-platform scaling | Local panel nên dùng component/state model nhất quán với Web; cần audit/history và library governance |
-| [Rockwell FactoryTalk Optix](https://www.rockwellautomation.com/en-us/products/software/factorytalk/optix.html) | alarm widgets, roles/auth, versioning, responsive deployment | Cần alarm manager semantics, RBAC và change/audit trail; tránh local-only ACK |
+| [Rockwell FactoryTalk Optix](https://www.rockwellautomation.com/en-us/products/software/factorytalk/optix.html) | alarm widgets, roles/auth, versioning, responsive deployment | Broker/RBAC/audit host path đã có; cần target lifecycle và historian evidence |
 | [Rockwell audit/event logger](https://www.rockwellautomation.com/en-us/docs/factorytalk-optix/1-03/contents-ditamap/using-the-software/logger/event-logger.html) | audit user writes, methods, login/logout và alarm ACK/confirm | MK-DDC-24 chưa có authoritative HMI audit contract |
 | [Honeywell Experion HMI](https://prod-edam.honeywell.com/content/dam/honeywell-edam/pmt/hps/products/pas/experion-pks/operations/operator-stations/pmt-hps-pin-experion-hmi.pdf) | alarm-flood handling, suppression visibility, context for upset diagnosis | Màn local chỉ nên triage; alarm lifecycle/flood analytics nằm ở Web/SCADA authority |
 
@@ -151,17 +151,20 @@ fail-safe service actions và cùng một semantic model giữa panel/Web/BACnet
 - HW design: hardware/firmware baseline, SOM, carrier block/schematic notes, power,
   MCU, DO relay/driver và closure register.
 - HMI: UC, UX, design system, service design, implementation guide và packaged point DB.
+- HMI implementation: versioned schema, Go local broker/durable audit, Core
+  query/TTL/idempotency, C++ client, five-surface UI and privilege-reduced packaging.
 
-Không sửa control/core/iobus/frontend logic ngoài packaged HMI example config.
+Không sửa I/O bus, firmware MCU hoặc frontend. Core chỉ được mở rộng tại command
+authority boundary để query winner và sở hữu monotonic TTL; HMI vẫn không write SHM.
 
 ## 7. Release plan đề nghị
 
 1. **Freeze schematic:** chọn converter, relay/driver, HMI pin/rail/FPC; tạo KiCad và
    chạy ERC/DRC/SI/power/thermal reviews.
 2. **Implement MCU FW:** CubeMX + drivers + IOP + safety; unit then HIL fault injection.
-3. **Implement ADR-016 HMI:** thực hiện microtask HOP-000..077 theo contract → broker →
-   core TTL/release → HMI model/UI → privilege removal; first slice là login → one
-   whitelisted setpoint → core result → audit → authoritative render.
+3. **Integrate ADR-016 HMI on target:** host source slice contract → broker → Core
+   TTL/release → HMI UI → privilege removal đã hoàn tất; tiếp theo chạy process-loss,
+   identified-target và priority/latency evidence.
 4. **Target integration:** DT overlay, DRM mode/rotation, FT5436, six buttons,
    backlight, systemd permissions and cold/recovery tests.
 5. **Operator validation:** controlled scenarios and alarm-flood/usability evidence.
@@ -175,23 +178,45 @@ Không sửa control/core/iobus/frontend logic ngoài packaged HMI example confi
 - Không đổi SHM ABI trong plan; telemetry vẫn read-only SHM.
 - `mkddc-web` chỉ cung cấp local Unix auth/audit broker, không cung cấp browser surface
   cho HMI local.
-- HMI production gate vẫn RED cho đến khi alarm authority, control path, session/RBAC,
-  privilege removal và target usability có evidence.
+- Alarm authority, control path, session/RBAC và privilege removal đã có host source/test.
+- HMI production gate vẫn RED cho đến khi process-loss, target hardware và operator
+  usability có controlled evidence.
+
+## 7.2 Implementation follow-up — 2026-07-22
+
+- `shared/hmi_protocol_v1.schema.json` đóng băng protocol v1 và reject unknown fields.
+- `web/backend/hmi_broker.go` cung cấp UDS `0660`, peer credential, bounded session,
+  RBAC/policy/idempotency; `hmi_audit_store.go` ghi JSONL append-only trước mutation.
+- `services/core/web_ipc.*` và `scan_loop.*` trả winner/source/TTL, cache duplicate ID
+  và tự release override theo monotonic clock.
+- `services/hmi/api/hmi_api_client.*` fail closed khi broker mất; Control yêu cầu hai
+  bước xác nhận, reason/TTL; Alarm ACK đi qua authority; Service không còn PIN/reboot.
+- Host integration dùng broker UDS thật và `CoreClient` thật qua Core socket stub để
+  kiểm login → policy → override → query → release, Core loss/no blind replay,
+  explicit retry và broker-restart session invalidation. C++ client kiểm OFFLINE/reconnect.
+- HMI production vẫn **NO-GO**. Host test không chứng minh DRM/DSI/touch trên panel,
+  HIL, alarm flood, glove/light, IEC conformity hoặc manufacturing readiness.
 
 ## 8. Verification record
 
 | Check | Kết quả |
 |---|---|
 | `python3 hardware-design/hw_design_review/check_hw_doc_closure.py` | 18/18 PASS |
-| HMI Debug configure/build, `MKDDC_ENABLE_HMI=ON` | PASS |
-| Direct `hmi_tests` | 23/23 PASS |
+| HMI Debug configure/build, `MKDDC_ENABLE_HMI=ON` | PASS after implementation |
+| Direct `hmi_tests` | Baseline 23/23; implemented suite 20/20 PASS after retired unsafe-screen tests and new broker-client/session-expiry tests |
+| Core build + CTest | 172/172 PASS, including query, TTL expiry and idempotency |
+| Go backend `go vet ./...` + `go test -count=1 ./...` | PASS |
+| Go HMI subset `go test -race -run '^TestHMI' -count=1 ./...` | PASS |
+| Host dual-socket lifecycle + Core/broker loss/reconnect | PASS; target systemd/HIL not claimed |
+| Target identity check | NOT RUN: current host is x86_64 ThinkStation/PCI DRM, has no device-tree model and is not RK3566/JD9852/FT5436 |
+| Protocol JSON schema + unsafe HMI privilege scan | PASS; no `kill()`, `reboot()`, `CAP_SYS_BOOT`, static PIN/role grant |
 | Packaged point DB JSON + UI16/DI0/AO4/DO4 assertion | PASS |
 | ADR-016 changed-document Markdown links | 337 checked across 38 files, 0 broken |
 | HOP headings | 54 unique microtasks |
 | Active HMI scope conflict scan | PASS; legacy six-screen block is explicitly historical |
 | `git diff --check` | PASS |
 
-Aggregate temporary CTest discovered 25 entries but two core/iobus targets were not
-built in that HMI-only build; 23 HMI tests passed. Báo cáo chỉ claim direct HMI suite,
-không claim full-repository CTest. Host tests hoặc documentation harness không phải
-HIL, EMC, safety, IEC conformity hoặc manufacturing release evidence.
+Initial aggregate temporary CTest discovered 25 entries but two core/iobus targets
+were not built in that HMI-only baseline. The follow-up therefore ran the implemented
+HMI suite and Core suite directly as recorded above. Host tests hoặc documentation
+harness không phải HIL, EMC, safety, IEC conformity hoặc manufacturing release evidence.

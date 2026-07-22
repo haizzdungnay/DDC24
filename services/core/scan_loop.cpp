@@ -12,6 +12,19 @@ static uint64_t now_ns()
     return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
 }
 
+static const char* point_source_name(PointSource source)
+{
+    switch (source) {
+    case PointSource::IO: return "input";
+    case PointSource::GRAPH: return "logic";
+    case PointSource::WEB: return "manual";
+    case PointSource::BACNET: return "bacnet";
+    case PointSource::SCHEDULE: return "schedule";
+    case PointSource::DEFAULT: return "default";
+    }
+    return "unknown";
+}
+
 void ScanLoop::step()
 {
     const uint64_t t0 = now_ns();
@@ -65,6 +78,27 @@ void ScanLoop::step()
      * là giá trị THẬT sau khi mọi nguồn tranh chấp xong (07 §8, BAC-CONFLICT-001). */
     pending_.clear();
     pending_alarm_.clear();
+    const uint64_t command_now = now_ns();
+    for (int ch = 0; ch < KX_N_AO; ch++) {
+        if (manual_ao_expiry_ns_[ch] != 0 && command_now >= manual_ao_expiry_ns_[ch]) {
+            (void)d_.resolver->release_ao(PRIO_LOCAL_MANUAL, ch);
+            manual_ao_expiry_ns_[ch] = 0;
+            std::fprintf(stderr, "AUDIT hmi_override_expired id=%llu user=%s point=AO%d\n",
+                         static_cast<unsigned long long>(manual_ao_request_id_[ch]),
+                         manual_ao_user_[ch].empty() ? "-" : manual_ao_user_[ch].c_str(), ch + 1);
+            manual_ao_request_id_[ch] = 0; manual_ao_user_[ch].clear();
+        }
+    }
+    for (int ch = 0; ch < KX_N_DO; ch++) {
+        if (manual_do_expiry_ns_[ch] != 0 && command_now >= manual_do_expiry_ns_[ch]) {
+            (void)d_.resolver->release_do(PRIO_LOCAL_MANUAL, ch);
+            manual_do_expiry_ns_[ch] = 0;
+            std::fprintf(stderr, "AUDIT hmi_override_expired id=%llu user=%s point=DO%d\n",
+                         static_cast<unsigned long long>(manual_do_request_id_[ch]),
+                         manual_do_user_[ch].empty() ? "-" : manual_do_user_[ch].c_str(), ch + 1);
+            manual_do_request_id_[ch] = 0; manual_do_user_[ch].clear();
+        }
+    }
     for (const WebCommand& cmd : d_.web->drain()) {
         if (cmd.kind != WebCommandKind::Point) {
             pending_alarm_.push_back(cmd);
@@ -72,12 +106,27 @@ void ScanLoop::step()
         }
         const int prio = cmd.prio;   /* 2=manual, 3=bacnet */
         bool ok = true;
-        if (cmd.point.kind == PointKind::AO) {
+        if (cmd.is_query) {
+            pending_.push_back({cmd, true});
+            continue;
+        } else if (cmd.point.kind == PointKind::AO) {
             if (cmd.is_write) ok = d_.resolver->set_ao(prio, cmd.point.idx, cmd.value);
             else              ok = d_.resolver->release_ao(prio, cmd.point.idx);
+            if (ok && prio == PRIO_LOCAL_MANUAL) {
+                manual_ao_expiry_ns_[cmd.point.idx] = cmd.is_write && cmd.ttl_s > 0
+                    ? command_now + static_cast<uint64_t>(cmd.ttl_s) * 1000000000ull : 0;
+                manual_ao_request_id_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.id : 0;
+                manual_ao_user_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.user : std::string();
+            }
         } else if (cmd.point.kind == PointKind::BO) {
             if (cmd.is_write) ok = d_.resolver->set_do(prio, cmd.point.idx, cmd.value != 0.0f);
             else              ok = d_.resolver->release_do(prio, cmd.point.idx);
+            if (ok && prio == PRIO_LOCAL_MANUAL) {
+                manual_do_expiry_ns_[cmd.point.idx] = cmd.is_write && cmd.ttl_s > 0
+                    ? command_now + static_cast<uint64_t>(cmd.ttl_s) * 1000000000ull : 0;
+                manual_do_request_id_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.id : 0;
+                manual_do_user_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.user : std::string();
+            }
         } else {
             /* AV/BV/MSV: ghi thẳng point table (không phải output vật lý);
              * release GIỮ value, chỉ nhả source — KHÔNG ghi cmd.value */
@@ -131,6 +180,7 @@ void ScanLoop::step()
 
     /* 7b. Respond web/BACnet command theo output THẬT.
      * Overridden khi: safe-state active OR nguồn cao hơn cmd.prio đang thắng (07 §8). */
+    const uint64_t response_now = now_ns();
     for (const PendingResp& p : pending_) {
         if (!p.ok) {
             d_.web->respond_rejected(p.cmd, "bad_request");
@@ -141,22 +191,27 @@ void ScanLoop::step()
             const bool is_ao = cmd.point.kind == PointKind::AO;
             const float applied = is_ao ? out.ao[cmd.point.idx]
                                         : static_cast<float>(out.dout[cmd.point.idx]);
+            const uint64_t expiry = is_ao ? manual_ao_expiry_ns_[cmd.point.idx]
+                                          : manual_do_expiry_ns_[cmd.point.idx];
+            const uint32_t remaining_ttl_s = expiry > response_now
+                ? static_cast<uint32_t>((expiry - response_now + 999999999ull) / 1000000000ull) : 0;
             if (d_.safe->active()) {
                 if (cmd.is_write)
-                    d_.web->respond_overridden(cmd, applied, "safety");
+                    d_.web->respond_overridden(cmd, applied, "safety", remaining_ttl_s);
                 else
-                    d_.web->respond_accepted(cmd, applied, "safety");
+                    d_.web->respond_accepted(cmd, applied, "safety", remaining_ttl_s);
             } else {
                 const int lv = is_ao ? d_.resolver->winning_ao_level(cmd.point.idx)
                                      : d_.resolver->winning_do_level(cmd.point.idx);
                 if (cmd.is_write && lv != cmd.prio)
-                    d_.web->respond_overridden(cmd, applied, prio_source_name(lv));
+                    d_.web->respond_overridden(cmd, applied, prio_source_name(lv), remaining_ttl_s);
                 else
-                    d_.web->respond_accepted(cmd, applied, prio_source_name(lv));
+                    d_.web->respond_accepted(cmd, applied, prio_source_name(lv), remaining_ttl_s);
             }
         } else {
             /* virtual point: không có nguồn vật lý tranh chấp */
-            const char* vsrc = prio_source_name(cmd.prio);
+            const char* vsrc = cmd.is_query ? point_source_name(d_.table->get(cmd.point).source)
+                                            : prio_source_name(cmd.prio);
             d_.web->respond_accepted(cmd, d_.table->get(cmd.point).value, vsrc);
         }
     }

@@ -47,15 +47,15 @@ Nguồn thực thi: `web/backend/http.go` và validator/schema liên quan. Route
 
 Target hiện hành: KD024QVFIA073-02-C021B, controller JD9852, MIPI DSI một lane, touch FT5436 qua I²C, DRM/KMS `/dev/dri/card0` và sáu GPIO buttons. ILI9341/SPI không thuộc baseline.
 
-### Local command contract — target, chưa triển khai
+### Local command contract — host implemented, target acceptance pending
 
-HMI đọc telemetry từ SHM nhưng mọi mutation dùng Unix-domain IPC versioned qua local auth/audit broker; đây không phải HTTP, browser hay Web HMI. Path cụ thể phải được freeze cùng permission trong implementation, target hiện đề nghị `/run/mkddc/hmi-api.sock`.
+HMI đọc telemetry từ SHM nhưng mọi mutation dùng Unix-domain IPC versioned qua local auth/audit broker; đây không phải HTTP, browser hay Web HMI. Contract v1 dùng line-delimited JSON tại `/run/mkddc/hmi-api.sock`, frame tối đa 8192 byte, socket mode `0660`, kiểm tra `SO_PEERCRED` và optional UID allowlist.
 
-Request tối thiểu gồm `schema_version`, UUID `request_id`, opaque `session_id`, `action`, `target_id`, optional finite `value`, `reason`, `requested_ttl_s` và client timestamp. Action allowlist: `login/logout`, `query_control`, `setpoint`, `set_mode`, `override`, `release`, `alarm_ack`, `service_request`.
+Request gồm `version=1`, `requestId`, `action`, optional opaque `token`, `pointId`, `alarmId`, `mode`, finite `value`, `reason`, `ttlS`; login dùng `username/password`. Action allowlist: `ping`, `login`, `logout`, `policy`, `points`, `status`, `alarms`, `query`, `setpoint`, `mode`, `override`, `release`, `alarm_ack`. Unknown field/version/action bị reject.
 
-Response tối thiểu gồm cùng `request_id`, `result` (`accepted/rejected/timeout`), stable `reason_code`, authoritative `effective_value/source/priority`, optional `expires_at` và server timestamp. Duplicate `request_id` phải idempotent; unknown field/version/action phải bị reject, không silently coerce.
+Response gồm cùng `requestId`, `result`, stable `reasonCode` và optional `point`; point chứa authoritative value/source priority và `overrideExpiresInS`. Duplicate `requestId` có cùng payload trả cached response; cùng ID khác payload bị reject `ID_CONFLICT`.
 
-Broker sở hữu authentication, role/policy validation và audit. Core sở hữu arbitration/interlock/safe-state/effective output. HMI chỉ render response; local point DB không được dùng làm authorization source. Nếu broker/core không sẵn sàng trong 2 giây nominal target, mutation bị kết thúc bằng lỗi rõ và control chuyển read-only. Không thay SHM layout cho contract này.
+Broker sở hữu authentication, role/policy validation và durable audit. Core sở hữu arbitration/interlock/safe-state/effective output và monotonic override TTL. HMI chỉ render response; local point DB không được dùng làm authorization source. Nếu broker/core không sẵn sàng trong deadline, mutation bị kết thúc bằng lỗi rõ và Control chuyển read-only, không blind replay. Không thay SHM layout cho contract này. Schema authority: `shared/hmi_protocol_v1.schema.json`.
 
 ## Detailed design
 

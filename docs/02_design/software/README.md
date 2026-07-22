@@ -13,7 +13,7 @@ Tài liệu chi tiết được phục hồi nguyên văn. [Software Baseline](.
 - [I/O driver design](SW_IODRIVER_DESIGN_MK-DDC-24_VI.md)
 - [BACnet design](SW_BACNET_DESIGN_MK-DDC-24_VI.md)
 - [Fieldbus design](SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md)
-- [HMI design](SW_HMI_DESIGN_MK-DDC-24_VI.md) — ADR-016 five-surface limited-operator target; implementation partial
+- [HMI design](SW_HMI_DESIGN_MK-DDC-24_VI.md) — ADR-016 five-surface limited-operator HMI; host implementation complete, target acceptance pending
 - [Security/keystore design](SW_SECURITY_KEYSTORE_MK-DDC-24_VI.md)
 - [Coding standard](SW_CODING_STANDARD_MK-DDC-24_VI.md)
 

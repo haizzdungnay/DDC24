@@ -22,7 +22,8 @@ const (
 	defaultPLCShm = "/dev/shm/mkddc_plc_shm"
 )
 
-var webCommandID uint64
+// Stay below JSON's exact integer range while avoiding collisions after a Web restart.
+var webCommandID = uint64(time.Now().UnixNano()) & ((1 << 52) - 1)
 
 var errCoreUnavailable = errors.New("core unavailable")
 
@@ -65,13 +66,14 @@ type ScanStatus struct {
 }
 
 type webIPCResponse struct {
-	ID           uint64           `json:"id"`
-	Result       string           `json:"result"`
-	AppliedValue any              `json:"applied_value,omitempty"`
-	ActiveSource string           `json:"active_source,omitempty"`
-	Error        string           `json:"error,omitempty"`
-	AlarmID      string           `json:"alarmId,omitempty"`
-	Alarms       []coreAlarmState `json:"alarms,omitempty"`
+	ID            uint64           `json:"id"`
+	Result        string           `json:"result"`
+	AppliedValue  any              `json:"applied_value,omitempty"`
+	ActiveSource  string           `json:"active_source,omitempty"`
+	RemainingTTLS uint32           `json:"remaining_ttl_s,omitempty"`
+	Error         string           `json:"error,omitempty"`
+	AlarmID       string           `json:"alarmId,omitempty"`
+	Alarms        []coreAlarmState `json:"alarms,omitempty"`
 }
 
 type coreAlarmState struct {
@@ -143,12 +145,22 @@ func (c *CoreClient) ReadPoints(ctx context.Context) ([]PointDTO, error) {
 }
 
 func (c *CoreClient) ForcePoint(ctx context.Context, id string, value any, release bool) (PointDTO, error) {
-	conn, err := c.dialCore(ctx)
-	if err != nil {
+	point, err := c.CommandPoint(ctx, id, value, release, 0, "web")
+	if errors.Is(err, errCoreUnavailable) {
 		return degradedPoint(id, value, "core_unavailable"), nil
 	}
+	return point, err
+}
+
+// CommandPoint is the single Core mutation path used by both Web and local HMI.
+// ttlS is enforced by Core for a manual override; zero means no automatic release.
+func (c *CoreClient) CommandPoint(ctx context.Context, id string, value any, release bool, ttlS uint32, user string) (PointDTO, error) {
+	conn, err := c.dialCore(ctx)
+	if err != nil {
+		return PointDTO{}, errCoreUnavailable
+	}
 	defer conn.Close()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(2 * time.Second)
 	_ = conn.SetDeadline(deadline)
 
 	op := "write"
@@ -160,7 +172,10 @@ func (c *CoreClient) ForcePoint(ctx context.Context, id string, value any, relea
 		"op":     op,
 		"point":  coreCommandPointID(id),
 		"source": "manual",
-		"user":   "web",
+		"user":   user,
+	}
+	if ttlS > 0 {
+		cmd["ttlS"] = ttlS
 	}
 	if !release {
 		if b, ok := value.(bool); ok {
@@ -178,11 +193,11 @@ func (c *CoreClient) ForcePoint(ctx context.Context, id string, value any, relea
 		return PointDTO{}, fmt.Errorf("marshal web ipc command: %w", err)
 	}
 	if _, err := conn.Write(append(line, '\n')); err != nil {
-		return degradedPoint(id, value, "core_unavailable"), nil
+		return PointDTO{}, errCoreUnavailable
 	}
 	respLine, err := bufio.NewReader(conn).ReadBytes('\n')
 	if err != nil {
-		return degradedPoint(id, value, "core_unavailable"), nil
+		return PointDTO{}, errCoreUnavailable
 	}
 	var resp webIPCResponse
 	if err := json.Unmarshal(respLine, &resp); err != nil {
@@ -202,6 +217,42 @@ func (c *CoreClient) ForcePoint(ctx context.Context, id string, value any, relea
 		UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
 		Forced:    !release,
 	}
+	if resp.RemainingTTLS > 0 {
+		point.OverrideExpiresInS = &resp.RemainingTTLS
+	}
+	return point, nil
+}
+
+// QueryPoint obtains the authoritative effective value/source without mutating a slot.
+func (c *CoreClient) QueryPoint(ctx context.Context, id, user string) (PointDTO, error) {
+	cmd := map[string]any{
+		"id":     atomic.AddUint64(&webCommandID, 1),
+		"op":     "query",
+		"point":  coreCommandPointID(id),
+		"source": "manual",
+		"user":   user,
+	}
+	resp, err := c.sendWebIPC(ctx, cmd)
+	if err != nil {
+		return PointDTO{}, err
+	}
+	if resp.Result == "rejected" {
+		return PointDTO{}, fmt.Errorf("core rejected %s: %s", id, resp.Error)
+	}
+	point := PointDTO{
+		ID:        canonicalPointID(id),
+		Name:      canonicalPointID(id),
+		Kind:      pointKindFromID(id),
+		Value:     resp.AppliedValue,
+		Quality:   "good",
+		Source:    "core",
+		Priority:  resp.ActiveSource,
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Forced:    resp.ActiveSource == "manual",
+	}
+	if resp.RemainingTTLS > 0 {
+		point.OverrideExpiresInS = &resp.RemainingTTLS
+	}
 	return point, nil
 }
 
@@ -211,7 +262,7 @@ func (c *CoreClient) sendWebIPC(ctx context.Context, cmd map[string]any) (webIPC
 		return webIPCResponse{}, errCoreUnavailable
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
 
 	line, err := json.Marshal(cmd)
 	if err != nil {
@@ -656,6 +707,10 @@ func (c *CoreClient) ReadAlarms(ctx context.Context) ([]AlarmDTO, error) {
 
 // AckAlarm sends an acknowledge command for alarm id to core.
 func (c *CoreClient) AckAlarm(ctx context.Context, id string, action AlarmActionRequest) error {
+	return c.AckAlarmAs(ctx, id, action, "web")
+}
+
+func (c *CoreClient) AckAlarmAs(ctx context.Context, id string, action AlarmActionRequest, user string) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -665,7 +720,9 @@ func (c *CoreClient) AckAlarm(ctx context.Context, id string, action AlarmAction
 	if !validAlarmID(id) {
 		return fmt.Errorf("invalid alarm id")
 	}
-	resp, err := c.sendWebIPC(ctx, alarmActionCommand("alarm_ack", id, action))
+	cmd := alarmActionCommand("alarm_ack", id, action)
+	cmd["user"] = user
+	resp, err := c.sendWebIPC(ctx, cmd)
 	if errors.Is(err, errCoreUnavailable) {
 		return errCoreUnavailable
 	}

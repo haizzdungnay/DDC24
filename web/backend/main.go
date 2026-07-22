@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -84,6 +85,12 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	hmiBroker := NewHMIBroker(cfg, app.auth, NewCoreClient(cfg), logger, app.audit)
+	go func() {
+		if err := hmiBroker.Serve(ctx); err != nil && ctx.Err() == nil {
+			logger.Printf("ERROR hmi_ipc_stopped reason=%v", err)
+		}
+	}()
 
 	go func() {
 		logger.Printf("INFO listen addr=%s core_sock=%s users_conf=%s trend_db=%s", cfg.Addr, cfg.CoreSock, cfg.UsersConf, cfg.TrendDBPath)
@@ -99,6 +106,9 @@ func main() {
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Printf("ERROR shutdown err=%v", err)
+	}
+	if err := hmiBroker.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+		logger.Printf("WARN hmi_ipc_close err=%v", err)
 	}
 	if err := app.Close(); err != nil {
 		logger.Printf("ERROR close err=%v", err)

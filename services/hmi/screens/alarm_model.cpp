@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstdio>
+#include <chrono>
 
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -18,9 +19,11 @@ using json = nlohmann::json;
 
 static AlarmSeverity parse_severity(const std::string& s)
 {
-    if (s == "fault" || s == "FAULT" || s == "critical" || s == "CRITICAL")
+    if (s == "fault" || s == "FAULT" || s == "critical" || s == "CRITICAL" ||
+        s == "high" || s == "HIGH")
         return AlarmSeverity::FAULT;
-    if (s == "warn" || s == "WARN" || s == "warning" || s == "WARNING")
+    if (s == "warn" || s == "WARN" || s == "warning" || s == "WARNING" ||
+        s == "medium" || s == "MEDIUM" || s == "low" || s == "LOW")
         return AlarmSeverity::WARN;
     return AlarmSeverity::INFO;
 }
@@ -80,6 +83,52 @@ void AlarmModel::drain_socket()
     }
 }
 
+void AlarmModel::refresh_async()
+{
+    if (!api_ || !api_->authenticated() || api_pending_.valid()) return;
+    ack_pending_ = false;
+    api_pending_ = std::async(std::launch::async, [this] {
+        return api_->request("alarms");
+    });
+}
+
+void AlarmModel::poll_api()
+{
+    if (!api_pending_.valid() ||
+        api_pending_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
+        return;
+    const bool was_ack = ack_pending_;
+    const ApiReply reply = api_pending_.get();
+    ack_pending_ = false;
+    if (reply.accepted() && reply.payload.contains("alarms")) {
+        std::lock_guard<std::mutex> lk(mtx_);
+        hydrated_ = true;
+        for (auto& entry : ring_) entry = AlarmEntry{};
+        head_ = 0; count_ = 0;
+        for (const auto& alarm : reply.payload["alarms"]) {
+            if (count_ >= RING) break;
+            AlarmEntry& e = ring_[count_++];
+            e.used = true;
+            const std::string id = alarm.value("id", "");
+            const std::string source = alarm.value("source", "");
+            const std::string message = alarm.value("message", "");
+            const std::string time = alarm.value("time", "");
+            const std::string status = alarm.value("status", "active");
+            std::snprintf(e.code, sizeof(e.code), "%s", id.c_str());
+            std::snprintf(e.source, sizeof(e.source), "%s", source.c_str());
+            std::snprintf(e.msg, sizeof(e.msg), "%s", message.c_str());
+            std::snprintf(e.ts, sizeof(e.ts), "%s", time.c_str());
+            e.severity = parse_severity(alarm.value("severity", "info"));
+            const bool active = alarm.value("active", status == "active" || status == "unack");
+            const bool acked = status == "acked" || status == "shelved";
+            e.state = active ? (acked ? AlarmState::ACTIVE_ACK : AlarmState::ACTIVE_UNACK)
+                             : (acked ? AlarmState::CLEARED_ACK : AlarmState::CLEARED_UNACK);
+            head_ = count_ % RING;
+        }
+    }
+    if (was_ack && reply.accepted()) refresh_async();
+}
+
 void AlarmModel::on_alarm_json(const char* buf, size_t len)
 {
     try {
@@ -134,12 +183,29 @@ void AlarmModel::update_condition(const char* code, bool active, AlarmSeverity s
 void AlarmModel::ack(int idx)
 {
     if (idx < 0 || idx >= RING) return;
+    std::string alarm_id;
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        const AlarmEntry& e = ring_[idx];
+        if (!e.used || e.severity == AlarmSeverity::INFO ||
+            (e.state != AlarmState::ACTIVE_UNACK && e.state != AlarmState::CLEARED_UNACK)) return;
+        alarm_id = e.code;
+    }
+    if (!api_ || !api_->authenticated() || api_pending_.valid()) return;
+    ack_pending_ = true;
+    api_pending_ = std::async(std::launch::async, [this, alarm_id] {
+        return api_->request("alarm_ack", {{"alarmId", alarm_id}});
+    });
+}
+
+bool AlarmModel::can_ack(int idx) const
+{
+    if (!api_ || !api_->authenticated() || api_pending_.valid()) return false;
     std::lock_guard<std::mutex> lk(mtx_);
-    AlarmEntry& e = ring_[idx];
-    if (!e.used) return;
-    if (e.severity == AlarmSeverity::INFO) return;
-    if (e.state == AlarmState::ACTIVE_UNACK)  e.state = AlarmState::ACTIVE_ACK;
-    if (e.state == AlarmState::CLEARED_UNACK) e.state = AlarmState::CLEARED_ACK;
+    if (!hydrated_ || idx < 0 || idx >= RING) return false;
+    const AlarmEntry& e = ring_[idx];
+    return e.used && e.severity != AlarmSeverity::INFO &&
+           (e.state == AlarmState::ACTIVE_UNACK || e.state == AlarmState::CLEARED_UNACK);
 }
 
 std::array<AlarmEntry, AlarmModel::RING> AlarmModel::snapshot(int* count) const

@@ -30,6 +30,16 @@ func (a *AuditLogger) Change(user, action, target, result, remote string) {
 		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(user, 32), sanitizeAudit(action, 32), sanitizeAudit(target, 64), sanitizeAudit(result, 32), sanitizeAudit(remote, 64))
 }
 
+func (a *AuditLogger) HMI(user string, role Role, requestID, action, target, reason, result, reasonCode, remote string) {
+	if a == nil || a.logger == nil {
+		return
+	}
+	a.logger.Printf("AUDIT hmi ts=%s request_id=%s user=%s role=%s action=%s target=%s reason=%s result=%s reason_code=%s remote=%s",
+		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(requestID, 64), sanitizeAudit(user, 32),
+		sanitizeAudit(string(role), 16), sanitizeAudit(action, 32), sanitizeAudit(target, 64),
+		sanitizeAudit(reason, 80), sanitizeAudit(result, 16), sanitizeAudit(reasonCode, 32), sanitizeAudit(remote, 64))
+}
+
 func sanitizeAudit(value string, max int) string {
 	var b strings.Builder
 	for _, r := range value {

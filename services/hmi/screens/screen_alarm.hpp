@@ -21,7 +21,7 @@ private:
     const Locale* locale_ = nullptr;
     lv_obj_t* title_ = nullptr;
     lv_obj_t* summary_ = nullptr;
-    static constexpr int VISIBLE_ROWS = 4;
+    static constexpr int VISIBLE_ROWS = 3;
     lv_obj_t* rows_[VISIBLE_ROWS]{};
     lv_obj_t* ack_btn_ = nullptr;
     lv_obj_t* ack_label_ = nullptr;

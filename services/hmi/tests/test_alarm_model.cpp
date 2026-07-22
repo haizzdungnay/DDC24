@@ -20,7 +20,7 @@ int index_for(const AlarmModel& model, const char* code)
     return -1;
 }
 
-TEST(AlarmModelTest, AckDoesNotClearAnActiveAlarm)
+TEST(AlarmModelTest, AckWithoutAuthoritativeBrokerDoesNotChangeState)
 {
     AlarmModel model;
     model.update_condition("F001", true, AlarmSeverity::FAULT, "IOP", "lost");
@@ -30,15 +30,15 @@ TEST(AlarmModelTest, AckDoesNotClearAnActiveAlarm)
     ASSERT_GE(idx, 0);
     model.ack(idx);
     EXPECT_EQ(model.active_count(), 1);
-    EXPECT_EQ(model.unacked_count(), 0);
+    EXPECT_EQ(model.unacked_count(), 1);
 
     model.update_condition("F001", false, AlarmSeverity::FAULT, "IOP", "restored");
     const auto entries = model.snapshot(nullptr);
-    EXPECT_EQ(entries[idx].state, AlarmState::CLEARED_ACK);
+    EXPECT_EQ(entries[idx].state, AlarmState::CLEARED_UNACK);
     EXPECT_EQ(model.active_count(), 0);
 }
 
-TEST(AlarmModelTest, ClearedUnacknowledgedAlarmCanBeAcknowledged)
+TEST(AlarmModelTest, ClearedUnacknowledgedAlarmRemainsUntilCoreAck)
 {
     AlarmModel model;
     const char* json =
@@ -48,7 +48,7 @@ TEST(AlarmModelTest, ClearedUnacknowledgedAlarmCanBeAcknowledged)
     ASSERT_GE(idx, 0);
     EXPECT_EQ(model.unacked_count(), 1);
     model.ack(idx);
-    EXPECT_EQ(model.unacked_count(), 0);
+    EXPECT_EQ(model.unacked_count(), 1);
 }
 
 TEST(AlarmModelTest, InfoEventsAreNotAcknowledgeable)

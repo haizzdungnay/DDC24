@@ -24,7 +24,8 @@ private:
     };
     lv_obj_t* title_ = nullptr;
     lv_obj_t* header_ = nullptr;
-    lv_obj_t* row_labels_[6]{};
+    static constexpr int VISIBLE_ROWS = 5;
+    lv_obj_t* row_labels_[VISIBLE_ROWS]{};
     lv_obj_t* filter_btn_ = nullptr;
     lv_obj_t* filter_label_ = nullptr;
     lv_obj_t* page_label_ = nullptr;

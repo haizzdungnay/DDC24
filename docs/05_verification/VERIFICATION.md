@@ -52,20 +52,22 @@ Các finding sau đang blocked; không được phát hành manufacturing/produc
 
 ## HMI release gate — RED
 
-HMI source có skeleton khả dụng nhưng chưa đạt production acceptance:
+HMI host implementation đã đóng các finding về authority/control/IA/privilege ở mức
+source và unit test, nhưng chưa đạt production acceptance vì thiếu process-loss,
+target/HIL và usability evidence:
 
-| Finding | Nội dung cần đóng |
-|---|---|
-| HMI-AUTH-001 | Define upstream alarm ACK/confirm contract, durable state and audit; local-only ACK is rejected |
-| HMI-RBAC-001 | Replace local role-string authorization with authoritative identity/role, timeout and action audit |
-| HMI-CTRL-001 | Implement authoritative point policy and setpoint/mode/override/release path through broker/core; include effective source/priority, bounded TTL, explicit release and idempotency |
-| HMI-IA-001 | Refactor legacy six-screen/tab UI to Home/Points/Control/Alarms/Service while preserving communication/system diagnostics |
-| HMI-PRIV-001 | Remove static role/PIN production privilege, direct core/iobus signals, `CAP_SYS_BOOT` and direct reboot; unsupported maintenance stays disabled |
-| HMI-DATA-001 | Packaged DB corrected to UI16/AO4/DO4; add regression and capability-gate optional DI |
-| HMI-TEL-001 | Define BACnet/Modbus/system telemetry and explicit unknown/unavailable behavior |
-| HMI-FUNC-001 | Hide or implement/test backup/restore; verify reload checksum/rollback |
-| HMI-HW-001 | Freeze schematic/DT/power/pin map and pass DRM/touch/button/backlight target tests |
-| HMI-UX-001 | Pass five-surface operator scenarios and panel usability targets; IEC/ISA references are guidance, not certification evidence |
+| Finding | Host state | Evidence còn thiếu để đóng gate |
+|---|---|---|
+| HMI-AUTH-001 | Broker snapshot/ACK, Core result and durable audit implemented; local ACK cannot change state | Target reject/timeout/restart/history scenarios |
+| HMI-RBAC-001 | Session token, Viewer/Operator/Admin RBAC, idle expiry, rate limit and audit tests pass | Deployment UID/group and target expiry/recovery evidence |
+| HMI-CTRL-001 | Policy, query, setpoint/mode/override/release, Core TTL/idempotency/winner and host dual-socket lifecycle implemented | Target priority/latency and systemd process scenarios |
+| HMI-IA-001 | Five surfaces implemented; diagnostics consolidated into Service | 320×240 target focus/clipping/operator inspection |
+| HMI-PRIV-001 | Static role/PIN, direct signals/reboot and `CAP_SYS_BOOT` removed; maintenance hidden | Packaging/runtime negative test on target image |
+| HMI-DATA-001 | Packaged DB aligned UI16/AO4/DO4 | Capability-gate optional hardware test |
+| HMI-TEL-001 | Unknown/unavailable presentation retained | Authoritative BACnet/Modbus/system telemetry integration |
+| HMI-FUNC-001 | Unsupported backup/restore/restart/reboot actions hidden | Separate approved maintenance authority if product requires it |
+| HMI-HW-001 | Host DRM/touch rotation tests pass | Schematic/DT/power/pin freeze and panel/touch/button/backlight target tests |
+| HMI-UX-001 | Host typography/action geometry implemented | Five-surface glove/light/flood/stale/localization usability record; IEC/ISA references are guidance, not certification evidence |
 
 Evidence packages tối thiểu: `PWR-5V`, `PWR-3V3`, `PWR-SURGE`, `AO-COMP`, `EMC`, `MFG`. Mỗi package phải có owner, setup, acceptance limit, raw result, conclusion và reviewer approval.
 

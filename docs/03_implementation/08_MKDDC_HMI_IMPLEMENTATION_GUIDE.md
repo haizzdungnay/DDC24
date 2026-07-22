@@ -2,8 +2,8 @@
 ## ADR-016 limited-operator HMI — microtask plan
 
 **Document ID:** IMPL-HMI-MK-DDC-24
-**Revision:** 2.0 — 2026-07-22
-**Status:** Approved implementation plan; source changes not started in this session
+**Revision:** 2.1 — 2026-07-22
+**Status:** Host implementation complete; target/HIL and usability acceptance pending
 **Owners:** Core, Go backend, HMI, QA
 **Design:** [SW HMI Design](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md)
 **UX/UC:** [UX](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [Use cases](../04_uiux/KX-DDC24-UC-HMI-001_VI.md)
@@ -49,6 +49,32 @@ authenticated broker and existing/extended core IPC. Web UI/frontend is out of s
 
 Do not rewrite unrelated frontend or I/O work. Refactor existing HMI components in
 small vertical slices.
+
+### 3.1 Execution snapshot — 2026-07-22
+
+| Slice | Host status | Evidence / remaining work |
+|---|---|---|
+| HOP-000..005 | Complete | Versioned JSON schema, reason/result vocabulary, point policy, RBAC/session and audit record frozen. |
+| HOP-010..019 | Complete | Go UDS broker, peer credentials, login/logout, expiry/rate limit, policy, idempotency, durable audit, alarm snapshot/ACK and broker tests. |
+| HOP-020..027 | Complete | Core query, validation, bounded TTL/release, idempotency and authoritative winner response with Core CTest coverage. |
+| HOP-030..035 | Source complete; component coverage partial | Bounded C++ client, session/policy state and authoritative alarm refresh/ACK are implemented. Direct client/alarm tests pass; a fake-clock command-state suite remains part of HOP-073. |
+| HOP-040..050 | Source complete; target coverage open | Five surfaces, Control confirmation, explicit setpoint/release, authoritative source/TTL display, EN/VI labels, 14 px body text and 40 px action geometry are implemented. Screen-state fixtures plus panel clipping/glove/light evidence remain open. |
+| HOP-060..063 | Complete | Static PIN/role, direct signal/reboot hooks and `CAP_SYS_BOOT` removed; unsupported maintenance actions hidden. |
+| HOP-064 | Deferred by design | Requires a separate approved privileged-maintenance architecture; it is not needed for Control or alarm ACK. |
+| HOP-070..072 | Complete | HMI warnings-as-errors build/unit suite, Go vet/test/race subset and Core CTest recorded. |
+| HOP-073 | Host complete | Real broker UDS plus real `CoreClient` against a deterministic Core socket stub covers login/policy/override/query/release; the C++ client independently covers broker loss/reconnect. Target orchestration remains open. |
+| HOP-074 | Host simulation complete; target open | Core socket loss proves cached reject/no blind replay and explicit new-ID retry; broker restart invalidates the old session. systemd/target process-loss evidence is still required. |
+| HOP-075..077 | Open | Target display/input, operator usability and final release-gate evidence are not available. HMI production gate remains **RED**. |
+
+The verification host identified on 2026-07-22 is an x86_64 Lenovo ThinkStation with
+a PCI DRM device, no `/proc/device-tree/model`, and no active `mkddc-*` services. It is
+not the RK3566/JD9852/FT5436 target and must not be used to close HOP-075/076.
+
+Implementation artifacts are `shared/hmi_protocol_v1.schema.json`,
+`web/backend/hmi_broker.go`, `web/backend/hmi_audit_store.go`,
+`services/core/web_ipc.*`, `services/core/scan_loop.*`,
+`services/hmi/api/hmi_api_client.*` and `services/hmi/screens/screen_control.*`.
+Host results do not establish IEC conformity or replace target/HIL acceptance.
 
 ## 4. Dependency map
 
@@ -279,7 +305,7 @@ may proceed in parallel only after P0 is frozen.
 
 #### HOP-030 — Add bounded HMI API transport
 
-- **Files:** new `services/hmi/platform/hmi_api_client.*`, CMake and tests.
+- **Files:** new `services/hmi/api/hmi_api_client.*`, CMake and tests.
 - **Output:** connect/send/receive with max frame, deadline and request correlation.
 - **Verify:** partial read/write, malformed frame, oversized frame, disconnect and timeout.
 - **Depends:** HOP-001, HOP-002, HOP-010.
@@ -429,7 +455,8 @@ may proceed in parallel only after P0 is frozen.
 #### HOP-061 — Remove direct core/iobus signals
 
 - **Files:** retire `CoreControl::reload_services/restart_services`, callers and tests.
-- **Output:** Service sends only broker `service_request` or displays unavailable.
+- **Output:** Service displays maintenance unavailable until a separately approved
+  broker action exists; it never signals a process directly.
 - **Verify:** repository scan finds no HMI `kill()`/raw process signal path.
 - **Depends:** HOP-048.
 - **Done:** presentation cannot directly stop core/iobus.
@@ -564,3 +591,4 @@ polish before this slice proves the control boundary.
 |---|---|---|
 | 1.2 | 2026-07-22 | Source-aligned six-screen implementation gap audit. |
 | 2.0 | 2026-07-22 | ADR-016 microtask plan for five-surface limited-operator HMI, authoritative broker/core path, privilege removal and verification gates. |
+| 2.1 | 2026-07-22 | Recorded host implementation, artifact mapping and the remaining target/HIL/usability RED gates. |

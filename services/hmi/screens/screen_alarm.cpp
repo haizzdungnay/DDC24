@@ -31,13 +31,13 @@ void ScreenAlarm::build(lv_obj_t* root, const Locale& l, const PointDb&)
     title_ = alarm_label(root, 0, 18);
     summary_ = alarm_label(root, 19, 20);
     for (int i = 0; i < VISIBLE_ROWS; ++i)
-        rows_[i] = alarm_label(root, 40 + i * 32, 31);
+        rows_[i] = alarm_label(root, 40 + i * 31, 30);
     ack_btn_ = lv_button_create(root);
-    lv_obj_set_pos(ack_btn_, 3, 171); lv_obj_set_size(ack_btn_, 135, 29);
+    lv_obj_set_pos(ack_btn_, 3, 140); lv_obj_set_size(ack_btn_, 135, 40);
     ack_label_ = lv_label_create(ack_btn_); lv_obj_center(ack_label_);
     lv_obj_add_event_cb(ack_btn_, ack_cb, LV_EVENT_CLICKED, this);
     filter_btn_ = lv_button_create(root);
-    lv_obj_set_pos(filter_btn_, 145, 171); lv_obj_set_size(filter_btn_, 165, 29);
+    lv_obj_set_pos(filter_btn_, 145, 140); lv_obj_set_size(filter_btn_, 172, 40);
     filter_label_ = lv_label_create(filter_btn_); lv_obj_center(filter_label_);
     lv_obj_add_event_cb(filter_btn_, filter_cb, LV_EVENT_CLICKED, this);
     render();
@@ -92,6 +92,11 @@ void ScreenAlarm::render()
             ? lv_color_hex(0xFFCC33) : lv_color_hex(0xBBBBBB), LV_PART_MAIN);
     }
     lv_label_set_text(ack_label_, locale_->str(StrKey::STR_ACK_SELECTED));
+    const bool ack_allowed = !idxs.empty() && selected_ >= 0 &&
+                             selected_ < static_cast<int>(idxs.size()) &&
+                             model_->can_ack(idxs[selected_]);
+    if (ack_allowed) lv_obj_clear_state(ack_btn_, LV_STATE_DISABLED);
+    else lv_obj_add_state(ack_btn_, LV_STATE_DISABLED);
     const char* filter = filter_ == Filter::ACTIVE ? "Active"
                        : filter_ == Filter::ALL ? "All" : "Unacked";
     lv_label_set_text_fmt(filter_label_, "Filter: %s", filter);

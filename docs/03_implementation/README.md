@@ -18,7 +18,7 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [05](05_IOP_UART_IMPLEMENTATION_GUIDE.md) | Hợp đồng IOP/UART v2.0 | Active |
 | [06](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) | Service mkddc-iobus | Active |
 | [07](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) | Service mkddc-core | Active |
-| [08](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md) | ADR-016 HMI microtask plan HOP-000..077 | Plan approved; source implementation pending |
+| [08](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md) | ADR-016 HMI microtask plan HOP-000..077 | Host implementation complete; target/HIL/usability acceptance pending |
 | [09](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) | Web REST API + UI (Go) | Active |
 | [10](10_END_TO_END_DATA_FLOW.md) | E2E data flow + debug checklist | Active |
 | [11](11_TASK_CHECKLIST.md) | Master task tracker | Active |

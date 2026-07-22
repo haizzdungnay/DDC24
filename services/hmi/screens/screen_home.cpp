@@ -21,10 +21,10 @@ void ScreenHome::build(lv_obj_t* root, const Locale& l, const PointDb& db)
     db_ = &db;
     title_  = home_label(root, 0, 20);
     alarm_  = home_label(root, 21, 28);
-    health_ = home_label(root, 50, 34);
-    io_     = home_label(root, 85, 48);
-    comm_   = home_label(root, 134, 34);
-    config_ = home_label(root, 169, 28);
+    health_ = home_label(root, 50, 31);
+    io_     = home_label(root, 82, 45);
+    comm_   = home_label(root, 128, 28);
+    config_ = home_label(root, 157, 25);
     lv_obj_set_style_text_color(title_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_set_style_text_color(alarm_, lv_color_hex(0xFFCC33), LV_PART_MAIN);
     rebuild_labels(l);
