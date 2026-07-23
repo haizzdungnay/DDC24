@@ -1,11 +1,12 @@
-import { Activity, ChevronLeft, ChevronRight, Save, SlidersHorizontal, Wand2 } from 'lucide-react'
+import { Activity, ChevronLeft, ChevronRight, LayoutGrid, Pencil, Save, SlidersHorizontal, Wand2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../api/client'
-import { pointTagFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
+import { displayPointName, focusPointField, normalizePointName, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
+import { PointNameConflictNotice } from '../components/PointNameConflictNotice'
 import { PointLoggingSection } from '../components/PointLoggingSection'
 import { useToast } from '../components/Toast'
 import { TrendChart } from '../components/TrendChart'
@@ -35,8 +36,21 @@ export function InputsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [overviewOpen, setOverviewOpen] = useState(false)
   const [tagErrors, setTagErrors] = useState<Record<string, string>>({})
+  const [errorFocusPath, setErrorFocusPath] = useState<string>()
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
+  const virtualPointsState = useApi(apiClient.getVirtualPoints, [], { refreshMs: 2000 })
+  const persistedNameConflicts = useMemo(() => pointNameConflicts([
+    ...(pointsState.data ?? []).map((point) => ({ id: point.id, name: point.name, kind: point.kind })),
+    ...(virtualPointsState.data ?? []).map((point) => ({ id: point.id, name: point.name ?? point.label, kind: 'virtual' }))
+  ]), [pointsState.data, virtualPointsState.data])
+  const namespaceEntries = useMemo(() => [
+    ...(pointsState.data ?? []).map((point) => ({ id: point.id, name: point.name, kind: point.kind })),
+    ...(virtualPointsState.data ?? []).map((point) => ({ id: point.id, name: point.name ?? point.label, kind: 'virtual' })),
+    ...configs.map((config) => ({ id: aiNode(config.channel), name: config.label, kind: 'UI' }))
+  ], [configs, pointsState.data, virtualPointsState.data])
+  const nameConflicts = useMemo(() => pointNameConflicts(namespaceEntries), [namespaceEntries])
 
   useEffect(() => {
     let active = true
@@ -55,6 +69,15 @@ export function InputsPage() {
       active = false
     }
   }, [t, toast])
+
+  useEffect(() => {
+    const first = errorFocusPath ?? Object.keys(tagErrors)[0]
+    if (!first) return
+    const location = pointFieldLocation(first)
+    if (location?.collection === 'ui' && configs[location.index]) setSelectedChannel(configs[location.index].channel)
+    const frame = window.requestAnimationFrame(() => focusPointField(Object.keys(tagErrors)))
+    return () => window.cancelAnimationFrame(frame)
+  }, [configs, errorFocusPath, tagErrors])
 
   const selected = configs.find((config) => config.channel === selectedChannel) ?? configs[0]
   const steps = useMemo(() => wizardSteps(selected?.signalType ?? 0), [selected?.signalType])
@@ -87,43 +110,57 @@ export function InputsPage() {
       ]
     }))
     setTagErrors(errors)
+    setErrorFocusPath(Object.keys(errors)[0])
     return Object.keys(errors).length === 0
   }
 
-  async function confirmSave() {
-    if (!validateTags(configs)) return
+  async function persistConfigs(nextConfigs: AiInputConfig[], closeConfirm = false) {
+    const recoveryIndex = nextConfigs.findIndex((config) => config.channel === selectedChannel)
+    const recoveryConfig = recoveryIndex >= 0 ? nextConfigs[recoveryIndex] : undefined
+    const recoveryId = recoveryConfig ? aiNode(recoveryConfig.channel) : undefined
+    const recoveringName = Boolean(recoveryId && persistedNameConflicts.has(recoveryId))
+    if (recoveringName && recoveryConfig) {
+      const nameError = validatePointName(recoveryConfig.label)
+      const errors = nameError ? { [`ui[${recoveryIndex}].name`]: nameError } : {}
+      setTagErrors(errors)
+      setErrorFocusPath(Object.keys(errors)[0])
+      if (nameError) return
+    } else if (!validateTags(nextConfigs)) return
     setSaving(true)
     try {
-      const normalized = configs.map((config) => ({ ...config, tag: aiNode(config.channel) }))
-      await apiClient.putAiInputs(normalized)
-      setConfigs(normalized)
+      if (recoveringName && recoveryConfig && recoveryId) {
+        const name = normalizePointName(recoveryConfig.label)
+        await apiClient.updatePointName(recoveryId, name)
+        setConfigs(nextConfigs.map((config) => config.channel === recoveryConfig.channel ? { ...config, label: name } : config))
+        void pointsState.refetch()
+      } else {
+        const normalized = nextConfigs.map((config) => ({ ...config, tag: aiNode(config.channel), label: displayPointName(normalizePointName(config.label), aiNode(config.channel)) }))
+        await apiClient.putAiInputs(normalized)
+        setConfigs(normalized)
+      }
       setTagErrors({})
+      setErrorFocusPath(undefined)
       toast.push('success', t('saveSuccess'))
-      setConfirmOpen(false)
-      setViewMode('advanced')
+      if (closeConfirm) {
+        setConfirmOpen(false)
+        setViewMode('advanced')
+      }
     } catch (error) {
-      setTagErrors(pointTagFieldErrors(error))
+      const errors = pointTagFieldErrors(error)
+      setTagErrors(errors)
+      setErrorFocusPath(pointFieldFocusPath(error, recoveryId ?? aiNode(selectedChannel), ['ui']) ?? Object.keys(errors)[0])
       toast.push('error', `${t('saveError')}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setSaving(false)
     }
   }
 
-  async function saveConfigs(nextConfigs = configs) {
-    if (!validateTags(nextConfigs)) return
-    setSaving(true)
-    try {
-      const normalized = nextConfigs.map((config) => ({ ...config, tag: aiNode(config.channel) }))
-      await apiClient.putAiInputs(normalized)
-      setTagErrors({})
-      toast.push('success', t('saveSuccess'))
-      setConfigs(normalized)
-    } catch (error) {
-      setTagErrors(pointTagFieldErrors(error))
-      toast.push('error', `${t('saveError')}: ${error instanceof Error ? error.message : String(error)}`)
-    } finally {
-      setSaving(false)
-    }
+  function confirmSave() {
+    void persistConfigs(configs, true)
+  }
+
+  function saveConfigs(nextConfigs = configs) {
+    void persistConfigs(nextConfigs)
   }
 
   return (
@@ -133,9 +170,12 @@ export function InputsPage() {
           <h1 className="text-2xl font-semibold text-[var(--c-text)]">{t('aiConfigTitle')}</h1>
           <p className="text-sm text-[var(--c-text-dim)]">{t('aiConfigSubtitle')}</p>
         </div>
-        <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={requestSave} disabled={loading || configs.length === 0}>
-          {t('save')}
-        </Button>
+        <div className="flex gap-2">
+          <Button icon={<LayoutGrid className="h-4 w-4" />} disabled={loading || configs.length === 0} onClick={() => setOverviewOpen(true)}>{pick('Tổng quan', 'Overview')}</Button>
+          <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={requestSave} disabled={loading || configs.length === 0}>
+            {t('save')}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -187,6 +227,7 @@ export function InputsPage() {
                 nameError={tagErrors[`ui[${configs.findIndex((config) => config.channel === selected.channel)}].name`]}
                 onChange={(patch) => updateChannel(selected.channel, patch)}
               />
+              <PointNameConflictNotice pointId={aiNode(selected.channel)} conflictIds={nameConflicts.get(aiNode(selected.channel))} />
               <PointLoggingSection pointId={aiNode(selected.channel)} label={selected.label} kind="UI" />
               {viewMode === 'summary' ? (
                 <AiSummary
@@ -227,7 +268,70 @@ export function InputsPage() {
       >
         {pick('Bạn có muốn lưu thay đổi không?', 'Do you want to save the changes?')}
       </Modal>
+      <InputsOverviewModal
+        open={overviewOpen}
+        configs={configs}
+        livePoints={pointsState.data ?? []}
+        onEdit={(channel) => {
+          setSelectedChannel(channel)
+          setWizardIndex(0)
+          setViewMode('advanced')
+          setOverviewOpen(false)
+        }}
+        onClose={() => setOverviewOpen(false)}
+      />
     </div>
+  )
+}
+
+function InputsOverviewModal({ open, configs, livePoints, onEdit, onClose }: { open: boolean; configs: AiInputConfig[]; livePoints: Point[]; onEdit: (channel: number) => void; onClose: () => void }) {
+  const { t, pick } = useI18n()
+  return (
+    <Modal open={open} size="xl" title={pick('Tổng quan UI', 'UI Overview')} onClose={onClose}>
+      <div className="max-h-[70vh] overflow-auto rounded-[var(--radius)] border border-[var(--c-border)]">
+        <table className="w-full min-w-[820px] border-collapse text-sm">
+          <thead className="sticky top-0 z-10 bg-[var(--c-surface-2)] text-xs uppercase text-[var(--c-text-dim)]">
+            <tr>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Ch</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Tag / Name</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Signal</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Value</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Unit</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Range</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Enabled</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-right" />
+            </tr>
+          </thead>
+          <tbody>
+            {configs.map((config) => {
+              const live = findAiPoint(livePoints, config.channel)
+              return (
+                <tr key={config.channel} className="border-t border-[var(--c-border)] hover:bg-[var(--c-surface-2)]">
+                  <td className="px-3 py-2 font-mono text-xs">{String(config.channel).padStart(2, '0')}</td>
+                  <td className="px-3 py-2">
+                    <span className="block font-semibold text-[var(--c-text)]">{aiNode(config.channel)}</span>
+                    <span className="block text-xs text-[var(--c-text-dim)]">{config.label}</span>
+                  </td>
+                  <td className="px-3 py-2 text-xs">{signalLabel(config.signalType, t)}</td>
+                  <td className="px-3 py-2">
+                    <span className="font-mono font-semibold">{live ? formatValue(live.value, live.unit) : '--'}</span>
+                    <span className="ml-2 text-xs text-[var(--c-text-dim)]">{live?.quality ?? '--'}</span>
+                  </td>
+                  <td className="px-3 py-2 text-xs">{unitLabel(config.unit, t)}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{config.displayMin}–{config.displayMax}</td>
+                  <td className="px-3 py-2 text-xs">
+                    <span className={config.enabled ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-text-dim)]'}>{config.enabled ? 'EN' : 'OFF'}</span>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Button size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => onEdit(config.channel)}>{pick('Sửa', 'Edit')}</Button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Modal>
   )
 }
 
@@ -378,6 +482,7 @@ function ChannelBasics({ config, rawValue, rawUnit, tagError, nameError, onChang
           aria-invalid={Boolean(tagError)}
           aria-describedby={tagError ? `ui-${config.channel}-tag-error` : undefined}
           className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm text-[var(--c-text-dim)]"
+          data-point-field={`ui[${config.channel - 1}].tag`}
           value={aiNode(config.channel)}
           readOnly
         />
@@ -393,6 +498,7 @@ function ChannelBasics({ config, rawValue, rawUnit, tagError, nameError, onChang
           aria-invalid={Boolean(nameError)}
           aria-describedby={nameError ? `ui-${config.channel}-name-error` : undefined}
           className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+          data-point-field={`ui[${config.channel - 1}].name`}
           value={config.label}
           onChange={(event) => onChange({ label: event.target.value })}
         />

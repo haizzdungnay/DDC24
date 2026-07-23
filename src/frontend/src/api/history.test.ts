@@ -4,6 +4,7 @@ import {
   buildHistoryQuery,
   createHistoryClient,
   historyCsvUrl,
+  historyPresetDurationMs,
   normalizeHistoryResponse,
   type HistoryQuery
 } from './history'
@@ -17,6 +18,15 @@ const query: HistoryQuery = {
 }
 
 describe('unified history client contract', () => {
+  it.each([
+    ['30m', 30 * 60_000],
+    ['1h', 60 * 60_000],
+    ['6h', 6 * 60 * 60_000],
+    ['24h', 24 * 60 * 60_000]
+  ] as const)('maps the %s preset to its exact duration', (range, durationMs) => {
+    expect(historyPresetDurationMs(range)).toBe(durationMs)
+  })
+
   it('builds an explicit UTC half-open query without legacy range fallback', () => {
     const params = buildHistoryQuery(query)
 

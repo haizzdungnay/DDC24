@@ -1,11 +1,12 @@
-import { Activity, ChevronLeft, ChevronRight, Database, Plus, RotateCcw, Save, SlidersHorizontal, Trash2, Wand2, Zap } from 'lucide-react'
+import { Activity, ChevronLeft, ChevronRight, Database, LayoutGrid, Pencil, Plus, RotateCcw, Save, SlidersHorizontal, Trash2, Wand2, Zap } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../api/client'
-import { normalizePointTag, pointTagFieldErrors, validatePointTag } from '../api/pointTags'
+import { displayPointName, focusPointField, normalizePointName, normalizePointTag, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
+import { PointNameConflictNotice } from '../components/PointNameConflictNotice'
 import { PointLoggingSection } from '../components/PointLoggingSection'
 import { useToast } from '../components/Toast'
 import { TrendChart } from '../components/TrendChart'
@@ -35,14 +36,27 @@ export function VirtualPointsPage() {
   const toast = useToast()
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const [items, setItems] = useState<VirtualPoint[]>([])
+  const [serverItems, setServerItems] = useState<VirtualPoint[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [mode, setMode] = useState<ViewMode>('summary')
   const [wizardIndex, setWizardIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
+  const [overviewOpen, setOverviewOpen] = useState(false)
+  const [overviewDeleteId, setOverviewDeleteId] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [tagErrors, setTagErrors] = useState<Record<string, string>>({})
+  const [errorFocusPath, setErrorFocusPath] = useState<string>()
+  const persistedNameConflicts = useMemo(() => pointNameConflicts([
+    ...(pointsState.data ?? []).map((point) => ({ id: point.id, name: point.name, kind: point.kind })),
+    ...serverItems.map((item) => ({ id: item.id, name: item.label, kind: 'virtual' }))
+  ]), [pointsState.data, serverItems])
+  const nameConflicts = useMemo(() => pointNameConflicts([
+    ...(pointsState.data ?? []).map((point) => ({ id: point.id, name: point.name, kind: point.kind })),
+    ...items.map((item) => ({ id: item.id, name: item.label, kind: 'virtual' }))
+  ]), [items, pointsState.data])
 
   useEffect(() => {
     let active = true
@@ -51,6 +65,7 @@ export function VirtualPointsPage() {
       .then((next) => {
         if (!active) return
         const normalized = next.map(normalizeVirtualPoint)
+        setServerItems(normalized)
         setItems(normalized)
         setSelectedId((current) => current || normalized[0]?.id || '')
       })
@@ -59,34 +74,66 @@ export function VirtualPointsPage() {
     return () => { active = false }
   }, [toast])
 
+  useEffect(() => {
+    const first = errorFocusPath ?? Object.keys(tagErrors)[0]
+    if (!first) return
+    const location = pointFieldLocation(first)
+    if (location?.collection === 'items' && items[location.index]) setSelectedId(items[location.index].id)
+    const frame = window.requestAnimationFrame(() => focusPointField(Object.keys(tagErrors)))
+    return () => window.cancelAnimationFrame(frame)
+  }, [errorFocusPath, items, tagErrors])
+
   const selected = items.find((item) => item.id === selectedId) ?? items[0]
+  const overviewDeleteTarget = overviewDeleteId ? items.find((item) => item.id === overviewDeleteId) : undefined
   const livePoint = selected ? findLivePoint(pointsState.data ?? [], selected.id) : undefined
   const quotas = useMemo(() => quotaUsage(items), [items])
   const currentStep = wizardSteps[Math.min(wizardIndex, wizardSteps.length - 1)]
 
   function updateSelected(patch: Partial<VirtualPoint>) {
     if (!selected) return
-    setItems((current) => current.map((item) => item.id === selected.id ? normalizeVirtualPoint({ ...item, ...patch }) : item))
+    // Keep the raw draft intact; canonicalization happens only after a successful save.
+    setItems((current) => current.map((item) => item.id === selected.id ? { ...item, ...patch } : item))
   }
 
-  async function saveSelected() {
+  async function saveSelected(closeConfirm = false) {
     if (!selected) return
     const index = items.findIndex((item) => item.id === selected.id)
-    const localTagError = validatePointTag(selected.tag)
-    if (localTagError) {
-      setTagErrors({
-        [`items[${index}].tag`]: localTagError
-      })
+    const errors: Record<string, string> = {}
+    const recoveringName = persistedNameConflicts.has(selected.id)
+    const localTagError = recoveringName ? undefined : validatePointTag(selected.tag)
+    const localNameError = validatePointName(selected.label)
+    if (localTagError) errors[`items[${index}].tag`] = localTagError
+    if (localNameError) errors[`items[${index}].name`] = localNameError
+    if (Object.keys(errors).length) {
+      setTagErrors(errors)
+      setErrorFocusPath(Object.keys(errors)[0])
       return
     }
     setSaving(true)
     try {
-      const saved = normalizeVirtualPoint(await apiClient.updateVirtualPoint(normalizeVirtualPoint(selected)))
-      setItems((current) => current.map((item) => item.id === saved.id ? saved : item))
+      if (recoveringName) {
+        const name = normalizePointName(selected.label)
+        await apiClient.updatePointName(selected.id, name)
+        const applyName = (item: VirtualPoint) => item.id === selected.id ? { ...item, name, label: name } : item
+        setItems((current) => current.map(applyName))
+        setServerItems((current) => current.map(applyName))
+        void pointsState.refetch()
+      } else {
+        const saved = normalizeVirtualPoint(await apiClient.updateVirtualPoint(normalizeVirtualPoint({ ...selected, tag: normalizePointTag(selected.tag), label: displayPointName(normalizePointName(selected.label), selected.id) })))
+        setItems((current) => current.map((item) => item.id === saved.id ? saved : item))
+        setServerItems((current) => current.map((item) => item.id === saved.id ? saved : item))
+      }
       setTagErrors({})
+      setErrorFocusPath(undefined)
       toast.push('success', pick('Da luu Virtual Point', 'Virtual Point saved'))
+      if (closeConfirm) {
+        setConfirmOpen(false)
+        setMode('advanced')
+      }
     } catch (error) {
-      setTagErrors(pointTagFieldErrors(error))
+      const fieldErrors = pointTagFieldErrors(error)
+      setTagErrors(fieldErrors)
+      setErrorFocusPath(pointFieldFocusPath(error, selected.id, ['items']) ?? Object.keys(fieldErrors)[0])
       toast.push('error', error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(false)
@@ -94,24 +141,37 @@ export function VirtualPointsPage() {
   }
 
   async function createItem(input: Partial<VirtualPoint>) {
+    const errors: Record<string, string> = {}
     const localTagError = input.tag?.trim() ? validatePointTag(input.tag) : undefined
-    if (localTagError) {
-      setTagErrors({
-        [`items[${items.length}].tag`]: localTagError
-      })
+    const localNameError = validatePointName(input.label ?? input.name ?? '')
+    if (localTagError) errors[`items[${items.length}].tag`] = localTagError
+    if (localNameError) errors[`items[${items.length}].name`] = localNameError
+    if (Object.keys(errors).length) {
+      setTagErrors(errors)
+      setErrorFocusPath(Object.keys(errors)[0])
       return
     }
     setSaving(true)
     try {
-      const created = normalizeVirtualPoint(await apiClient.createVirtualPoint(normalizeVirtualPoint({ ...defaultVirtualPoint(), ...input })))
+      const canonicalName = normalizePointName(input.label ?? input.name ?? '')
+      const created = normalizeVirtualPoint(await apiClient.createVirtualPoint({
+        ...defaultVirtualPoint(),
+        ...input,
+        tag: normalizePointTag(input.tag ?? ''),
+        label: canonicalName
+      }))
       setItems((current) => [...current, created])
+      setServerItems((current) => [...current, created])
       setSelectedId(created.id)
       setWizardIndex(0)
       setAddOpen(false)
       setTagErrors({})
+      setErrorFocusPath(undefined)
       toast.push('success', pick('Da tao VP', 'Virtual Point created'))
     } catch (error) {
-      setTagErrors(pointTagFieldErrors(error))
+      const fieldErrors = pointTagFieldErrors(error)
+      setTagErrors(fieldErrors)
+      setErrorFocusPath(pointFieldFocusPath(error, undefined, ['items']) ?? Object.keys(fieldErrors)[0])
       toast.push('error', error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(false)
@@ -125,9 +185,27 @@ export function VirtualPointsPage() {
       await apiClient.deleteVirtualPoint(selected.id)
       const next = items.filter((item) => item.id !== selected.id)
       setItems(next)
+      setServerItems((current) => current.filter((item) => item.id !== selected.id))
       setSelectedId(next[0]?.id ?? '')
       setWizardIndex(0)
       setDeleteOpen(false)
+      toast.push('success', pick('Da xoa VP', 'Virtual Point deleted'))
+    } catch (error) {
+      toast.push('error', error instanceof Error ? error.message : String(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function deleteById(id: string) {
+    setSaving(true)
+    try {
+      await apiClient.deleteVirtualPoint(id)
+      const next = items.filter((item) => item.id !== id)
+      setItems(next)
+      setServerItems((current) => current.filter((item) => item.id !== id))
+      setSelectedId((current) => (current === id ? (next[0]?.id ?? '') : current))
+      setWizardIndex(0)
       toast.push('success', pick('Da xoa VP', 'Virtual Point deleted'))
     } catch (error) {
       toast.push('error', error instanceof Error ? error.message : String(error))
@@ -161,7 +239,8 @@ export function VirtualPointsPage() {
         </div>
         <div className="flex gap-2">
           <Button icon={<Plus className="h-4 w-4" />} onClick={() => setAddOpen(true)}>{pick('Tao VP', 'Add VP')}</Button>
-          <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} disabled={!selected || loading} onClick={() => void saveSelected()}>{t('save')}</Button>
+          <Button icon={<LayoutGrid className="h-4 w-4" />} disabled={!items.length} onClick={() => setOverviewOpen(true)}>{pick('Tong quan', 'Overview')}</Button>
+          <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} disabled={!selected || loading} onClick={() => setConfirmOpen(true)}>{t('save')}</Button>
         </div>
       </div>
 
@@ -183,7 +262,7 @@ export function VirtualPointsPage() {
                 <Database className="h-4 w-4 shrink-0 text-[var(--c-accent)]" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-semibold">{item.tag}</span>
-                  <span className="block text-xs">Channel {item.channel || globalVirtualPointChannel(item.id)}</span>
+                  <span className="block truncate text-xs">{item.label}</span>
                 </span>
                 <span className="text-xs font-mono uppercase text-[var(--c-text-dim)]">{item.signalType}</span>
               </button>
@@ -193,7 +272,7 @@ export function VirtualPointsPage() {
         </Panel>
 
         <Panel
-          title={selected?.tag || t('empty')}
+          title={selected ? `${selected.tag} - ${selected.label}` : t('empty')}
            subtitle={selected ? `${selected.signalType.toUpperCase()} | ${selected.logEnabled ? `${selected.logIntervalMs}ms diagnostic log` : 'no diagnostic log'}` : undefined}
           action={selected && (
             <div className="flex items-center gap-2">
@@ -211,9 +290,12 @@ export function VirtualPointsPage() {
               <Basics
                 item={selected}
                 tagError={tagErrors[`items[${items.findIndex((item) => item.id === selected.id)}].tag`]}
+                nameError={tagErrors[`items[${items.findIndex((item) => item.id === selected.id)}].name`]}
+                fieldIndex={items.findIndex((item) => item.id === selected.id)}
                 onChange={updateSelected}
               />
-              <PointLoggingSection pointId={selected.id} label={selected.tag} kind="VP" />
+              <PointNameConflictNotice pointId={selected.id} conflictIds={nameConflicts.get(selected.id)} />
+              <PointLoggingSection pointId={selected.id} label={selected.label} kind="VP" />
               {mode === 'summary' && <Summary item={selected} livePoint={livePoint} saving={saving} onWrite={(raw) => void writeValue(raw)} />}
               {mode === 'wizard' && (
                 <WizardPanel
@@ -225,7 +307,7 @@ export function VirtualPointsPage() {
                   onStepSelect={setWizardIndex}
                   onPrevious={() => setWizardIndex((index) => Math.max(index - 1, 0))}
                   onNext={() => setWizardIndex((index) => Math.min(index + 1, wizardSteps.length - 1))}
-                  onFinish={() => void saveSelected()}
+                  onFinish={() => setConfirmOpen(true)}
                 />
               )}
               {mode === 'advanced' && <Advanced item={selected} onChange={updateSelected} />}
@@ -238,7 +320,33 @@ export function VirtualPointsPage() {
         </Panel>
       </div>
 
-      <AddVirtualPointModal open={addOpen} saving={saving} tagError={tagErrors[`items[${items.length}].tag`]} onCreate={createItem} onClose={() => setAddOpen(false)} />
+      <AddVirtualPointModal open={addOpen} saving={saving} tagError={tagErrors[`items[${items.length}].tag`]} nameError={tagErrors[`items[${items.length}].name`]} fieldIndex={items.length} onCreate={createItem} onClose={() => setAddOpen(false)} />
+      <VirtualPointOverviewModal
+        open={overviewOpen}
+        items={items}
+        livePoints={pointsState.data ?? []}
+        onEdit={(id) => {
+          setSelectedId(id)
+          setWizardIndex(0)
+          setMode('advanced')
+          setOverviewOpen(false)
+        }}
+        onDelete={(id) => setOverviewDeleteId(id)}
+        onClose={() => setOverviewOpen(false)}
+      />
+      <Modal open={overviewDeleteId !== null} danger title={pick('Xoa VP?', 'Delete Virtual Point?')} confirmLabel="OK" cancelLabel="Cancel" onConfirm={() => { if (overviewDeleteId) void deleteById(overviewDeleteId); setOverviewDeleteId(null) }} onClose={() => setOverviewDeleteId(null)}>
+        {overviewDeleteTarget?.tag ?? ''}
+      </Modal>
+      <Modal
+        open={confirmOpen}
+        title={pick('Lưu Virtual Point?', 'Save Virtual Point?')}
+        confirmLabel="OK"
+        cancelLabel="Cancel"
+        onConfirm={() => { void saveSelected(true) }}
+        onClose={() => setConfirmOpen(false)}
+      >
+        {pick('Bạn có muốn lưu thay đổi không?', 'Do you want to save the changes?')}
+      </Modal>
       <Modal open={deleteOpen} danger title={pick('Xoa VP?', 'Delete Virtual Point?')} confirmLabel="OK" cancelLabel="Cancel" onConfirm={() => void deleteSelected()} onClose={() => setDeleteOpen(false)}>
         {selected?.tag ?? ''}
       </Modal>
@@ -261,12 +369,13 @@ function QuotaStrip({ quotas }: { quotas: ReturnType<typeof quotaUsage> }) {
   )
 }
 
-function Basics({ item, tagError, onChange }: { item: VirtualPoint; tagError?: string; onChange: (patch: Partial<VirtualPoint>) => void }) {
+function Basics({ item, tagError, nameError, fieldIndex, onChange }: { item: VirtualPoint; tagError?: string; nameError?: string; fieldIndex: number; onChange: (patch: Partial<VirtualPoint>) => void }) {
   const { t } = useI18n()
   return (
-    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_180px_120px_120px]">
-      <TextInput label="Tag" value={item.tag} error={tagError} onChange={(tag) => onChange({ tag })} />
+    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)_180px_120px_120px]">
+      <TextInput fieldPath={`items[${fieldIndex}].tag`} label="Tag" value={item.tag} error={tagError} onChange={(tag) => onChange({ tag })} />
       <TextInput label={t('channelLabel')} value={String(item.channel || globalVirtualPointChannel(item.id))} disabled onChange={() => {}} />
+      <TextInput fieldPath={`items[${fieldIndex}].name`} label="Label" value={item.label} error={nameError} onChange={(label) => onChange({ label, name: label })} />
       <SignalTypeSelect value={item.signalType} label onChange={(signalType) => onChange(signalTypePatch(item, signalType))} />
       <CheckField label="Enabled" checked={item.enabled} onChange={(enabled) => onChange({ enabled })} />
       <CheckField label="Writable" checked={item.writable} onChange={(writable) => onChange({ writable })} />
@@ -488,8 +597,9 @@ function WizardField({ label, children }: { label: string; children: React.React
   )
 }
 
-function AddVirtualPointModal({ open, saving, tagError, onCreate, onClose }: { open: boolean; saving: boolean; tagError?: string; onCreate: (input: Partial<VirtualPoint>) => void; onClose: () => void }) {
+function AddVirtualPointModal({ open, saving, tagError, nameError, fieldIndex, onCreate, onClose }: { open: boolean; saving: boolean; tagError?: string; nameError?: string; fieldIndex: number; onCreate: (input: Partial<VirtualPoint>) => void; onClose: () => void }) {
   const [tag, setTag] = useState('')
+  const [label, setLabel] = useState('')
   const [signalType, setSignalType] = useState<VirtualPointSignalType>('float')
   const [unit, setUnit] = useState(0)
   const [writable, setWritable] = useState(true)
@@ -499,6 +609,7 @@ function AddVirtualPointModal({ open, saving, tagError, onCreate, onClose }: { o
   useEffect(() => {
     if (!open) return
     setTag('')
+    setLabel('')
     setSignalType('float')
     setUnit(0)
     setWritable(true)
@@ -507,9 +618,10 @@ function AddVirtualPointModal({ open, saving, tagError, onCreate, onClose }: { o
   }, [open])
 
   return (
-    <Modal open={open} title="Add Virtual Point" confirmLabel="Create" cancelLabel="Cancel" onConfirm={() => onCreate({ tag, signalType, unit: unitToString(unit), writable, logEnabled: logMode !== 0, logIntervalMs: logMode || undefined, retentionS: logMode ? defaultRetention(logMode) : undefined, value: parseValue(signalType, value), enabled: true })} onClose={onClose}>
+    <Modal open={open} title="Add Virtual Point" confirmLabel="Create" cancelLabel="Cancel" onConfirm={() => onCreate({ tag, label, signalType, unit: unitToString(unit), writable, logEnabled: logMode !== 0, logIntervalMs: logMode || undefined, retentionS: logMode ? defaultRetention(logMode) : undefined, value: parseValue(signalType, value), enabled: true })} onClose={onClose}>
       <div className="space-y-4">
-        <TextInput label="Tag" value={tag} error={tagError} onChange={setTag} />
+        <TextInput fieldPath={`items[${fieldIndex}].tag`} label="Tag" value={tag} error={tagError} onChange={setTag} />
+        <TextInput fieldPath={`items[${fieldIndex}].name`} label="Label" value={label} error={nameError} onChange={setLabel} />
         <SignalTypeSelect value={signalType} label onChange={(type) => { setSignalType(type); setValue(String(defaultValue(type))) }} />
         <UnitSelect value={unit} label onChange={setUnit} />
         <ValueInput signalType={signalType} value={value} onChange={setValue} />
@@ -523,6 +635,70 @@ function AddVirtualPointModal({ open, saving, tagError, onCreate, onClose }: { o
 
 function SignalTypeSelect({ value, label, onChange }: { value: VirtualPointSignalType; label?: boolean; onChange: (value: VirtualPointSignalType) => void }) {
   return <SelectField label={label ? 'Signal Type' : undefined} value={value} options={signalTypes.map((type) => [type, virtualSignalLabel(type)])} onChange={(raw) => onChange(raw as VirtualPointSignalType)} />
+}
+
+function VirtualPointOverviewModal({ open, items, livePoints, onEdit, onDelete, onClose }: { open: boolean; items: VirtualPoint[]; livePoints: Point[]; onEdit: (id: string) => void; onDelete: (id: string) => void; onClose: () => void }) {
+  const { t, pick } = useI18n()
+  const logLabel = (item: VirtualPoint) => {
+    if (!item.logEnabled) return 'Off'
+    const match = logOptions.find((option) => option.value === item.logIntervalMs)
+    return match?.label ?? `${item.logIntervalMs}ms`
+  }
+  return (
+    <Modal open={open} size="xl" title={t('overview')} onClose={onClose}>
+      <div className="max-h-[70vh] overflow-auto rounded-[var(--radius)] border border-[var(--c-border)]">
+        <table className="w-full min-w-[800px] border-collapse text-sm">
+          <thead className="sticky top-0 z-10 bg-[var(--c-surface-2)] text-xs uppercase text-[var(--c-text-dim)]">
+            <tr>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Ch</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Tag / Name</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Signal</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Value</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Unit</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Range</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">En/Wr</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Log</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-right" />
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const live = findLivePoint(livePoints, item.id)
+              const unit = item.unit ? unitLabel(unitFromString(item.unit), t) : '--'
+              return (
+                <tr key={item.id} className="border-t border-[var(--c-border)] hover:bg-[var(--c-surface-2)]">
+                  <td className="px-3 py-2 font-mono text-xs">{item.channel || globalVirtualPointChannel(item.id)}</td>
+                  <td className="px-3 py-2">
+                    <span className="block font-semibold text-[var(--c-text)]">{item.tag}</span>
+                    <span className="block text-xs text-[var(--c-text-dim)]">{item.label}</span>
+                  </td>
+                  <td className="px-3 py-2 font-mono uppercase text-xs">{item.signalType}</td>
+                  <td className="px-3 py-2">
+                    <span className="font-mono font-semibold">{formatValue(live?.value ?? item.value ?? defaultValue(item.signalType), item.unit)}</span>
+                    <span className="ml-2 text-xs text-[var(--c-text-dim)]">{live?.quality ?? 'good'}</span>
+                  </td>
+                  <td className="px-3 py-2 text-xs">{unit}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{numberOr(item.displayMin, 0)}–{numberOr(item.displayMax, 100)}</td>
+                  <td className="px-3 py-2 text-xs">
+                    <span className={item.enabled ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-text-dim)]'}>{item.enabled ? 'EN' : 'OFF'}</span>
+                    <span className="mx-1 text-[var(--c-text-dim)]">/</span>
+                    <span className={item.writable ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-text-dim)]'}>{item.writable ? 'WR' : 'RO'}</span>
+                  </td>
+                  <td className="px-3 py-2 text-xs">{logLabel(item)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => onEdit(item.id)}>{pick('Sửa', 'Edit')}</Button>
+                      <Button size="sm" variant="danger" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => onDelete(item.id)}>{pick('Xoa', 'Delete')}</Button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Modal>
+  )
 }
 
 function UnitSelect({ value, label, onChange }: { value: number; label?: boolean; onChange: (value: number) => void }) {
@@ -548,12 +724,12 @@ function ValueInput({ signalType, value, compact, onChange }: { signalType: Virt
   return <TextInput label={compact ? '' : 'Value'} value={value} type={type} onChange={onChange} />
 }
 
-function TextInput({ label, value, type = 'text', disabled, error, onChange }: { label: string; value: string; type?: string; disabled?: boolean; error?: string; onChange: (value: string) => void }) {
+function TextInput({ label, value, type = 'text', disabled, error, fieldPath, onChange }: { label: string; value: string; type?: string; disabled?: boolean; error?: string; fieldPath?: string; onChange: (value: string) => void }) {
   const errorId = error ? `${label.toLowerCase().replace(/\s+/g, '-')}-error` : undefined
   return (
     <label className="block space-y-2">
       {label && <span className="text-sm font-semibold text-[var(--c-text)]">{label}</span>}
-      <input type={type} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={errorId} className={controlClass()} value={value} onChange={(event) => onChange(event.target.value)} />
+      <input type={type} disabled={disabled} data-point-field={fieldPath} aria-invalid={Boolean(error)} aria-describedby={errorId} className={controlClass()} value={value} onChange={(event) => onChange(event.target.value)} />
       {error && <span id={errorId} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{error}</span>}
     </label>
   )
@@ -633,17 +809,20 @@ function quotaUsage(items: VirtualPoint[]): Record<(typeof logOptions)[number]['
   }
 }
 
-function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
+export function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
   const signalType = signalTypes.includes(item.signalType) ? item.signalType : 'float'
   const logEnabled = canLog(signalType) && item.logEnabled
   const logIntervalMs = logEnabled ? item.logIntervalMs ?? 1000 : undefined
   const unit = unitToString(unitFromString(item.unit))
+  const id = canonicalVirtualPointId(item.id)
+  const name = displayPointName(item.label ?? item.name, id || item.tag || 'VP')
   return {
     ...item,
-    id: canonicalVirtualPointId(item.id),
+    id,
     channel: item.channel || globalVirtualPointChannel(item.id),
     tag: normalizePointTag(item.tag ?? canonicalVirtualPointId(item.id)),
-    label: '',
+    name,
+    label: name,
     signalType,
     unit,
     displayMin: clampNumber(numberOr(item.displayMin, 0), -50, 205),
@@ -660,7 +839,7 @@ function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
 }
 
 function defaultVirtualPoint(): VirtualPoint {
-  return { id: '', channel: 0, tag: '', label: 'Virtual Point', signalType: 'float', enabled: true, writable: true, logEnabled: false, value: 0, unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '' }
+  return { id: '', channel: 0, tag: '', name: '', label: '', signalType: 'float', enabled: true, writable: true, logEnabled: false, value: 0, unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '' }
 }
 
 function globalVirtualPointChannel(id: string): number {

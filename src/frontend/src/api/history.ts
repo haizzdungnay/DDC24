@@ -2,10 +2,12 @@ import { API_ORIGIN } from '../config'
 
 export const HISTORY_FIXED_RESOLUTIONS = ['1s', '3s', '5s', '15s', '30s', '1m', '3m', '5m', '15m', '30m', '60m'] as const
 export const HISTORY_QUERY_RESOLUTIONS = ['auto', ...HISTORY_FIXED_RESOLUTIONS] as const
+export const HISTORY_PRESET_RANGES = ['30m', '1h', '6h', '24h'] as const
 export const HISTORY_MAX_POINTS = 5000
 
 export type HistoryFixedResolution = (typeof HISTORY_FIXED_RESOLUTIONS)[number]
 export type HistoryResolution = (typeof HISTORY_QUERY_RESOLUTIONS)[number]
+export type HistoryPresetRange = (typeof HISTORY_PRESET_RANGES)[number]
 export type HistoryTier = 'cache' | 'ram' | 'hot' | 'archive'
 export type HistorySource = 'cache' | 'database'
 export type HistoryQuality = 'GOOD' | 'UNCERTAIN' | 'BAD'
@@ -147,6 +149,15 @@ export function historyCsvUrl(query: HistoryQuery, baseUrl = historyApiBase): st
 
 export function historySeriesKey(pointId: string, generation: number): string {
   return `${pointId}\u0000${generation}`
+}
+
+export function historyPresetDurationMs(range: HistoryPresetRange): number {
+  switch (range) {
+    case '30m': return 30 * 60_000
+    case '1h': return 60 * 60_000
+    case '6h': return 6 * 60 * 60_000
+    case '24h': return 24 * 60 * 60_000
+  }
 }
 
 export function normalizeHistoryResponse(raw: unknown): HistoryResponse {

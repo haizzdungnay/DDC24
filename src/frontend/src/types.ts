@@ -27,6 +27,8 @@ export interface Point {
   logEnabled?: boolean
   logIntervalMs?: number
   trend?: number[]
+  /** Backend may surface this while legacy duplicate names are being repaired. */
+  namespaceState?: string
 }
 
 export interface IoChannel {
@@ -528,6 +530,8 @@ export interface VirtualPoint {
   id: string
   channel?: number
   tag: string
+  /** Legacy alias for label; label is the canonical display name field. */
+  name?: string
   label: string
   signalType: VirtualPointSignalType
   enabled: boolean
@@ -545,6 +549,8 @@ export interface VirtualPoint {
   mathFunction?: number
   note?: string
   updatedAt?: string
+  namespaceState?: string
+  generation?: number
 }
 
 export interface ApiValidationDetail {

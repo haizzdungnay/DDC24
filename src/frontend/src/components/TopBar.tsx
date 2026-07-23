@@ -1,5 +1,6 @@
 import { Bell, ChevronDown, CircleHelp, LogOut, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { IS_DEMO } from '../config'
 import { useI18n } from '../i18n'
@@ -30,12 +31,12 @@ export function TopBar({ connectionState, alarmCount, currentUser }: { connectio
           <div className="mono text-sm font-semibold">{now.toLocaleTimeString(locale, { hour12: false })}</div>
           <div className="text-xs text-[var(--c-text-dim)]">{now.toLocaleDateString(locale)}</div>
         </div>
-        <button className="relative grid h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)]" aria-label={pick("Cảnh báo", "Alarms")}>
+        <Link to="/alarms" className="relative grid h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)]" aria-label={pick("Cảnh báo", "Alarms")}>
           <Bell className="h-5 w-5" aria-hidden="true" />
           {alarmCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[var(--c-fault)] px-1 text-[10px] font-bold">{alarmCount}</span>}
-        </button>
-        <button className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Trợ giúp", "Help")}><CircleHelp className="h-5 w-5" /></button>
-        <button className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Người dùng", "User")}><UserRound className="h-5 w-5" /></button>
+        </Link>
+        <Link to="/help" className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Trợ giúp", "Help")}><CircleHelp className="h-5 w-5" /></Link>
+        <Link to="/me" className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Người dùng", "User")}><UserRound className="h-5 w-5" /></Link>
         <div className="hidden min-w-[132px] md:block">
           <div className="text-sm font-semibold">{currentUser?.username ?? 'N/A'}</div>
           <div className="text-xs text-[var(--c-text-dim)]">{currentUser?.role ?? 'N/A'}</div>

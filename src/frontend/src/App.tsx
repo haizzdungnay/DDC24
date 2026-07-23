@@ -23,6 +23,7 @@ import { AuxFunctionsPage } from './pages/AuxFunctionsPage'
 import { OutputsPage } from './pages/OutputsPage'
 import { UserParametersPage } from './pages/UserParametersPage'
 import { VirtualPointsPage } from './pages/VirtualIoPage'
+import { HelpPage } from './pages/HelpPage'
 
 function ProtectedShell() {
   const { isAuthenticated } = useAuth()
@@ -47,6 +48,7 @@ export function App() {
         <Route path="alarms/history" element={<AlarmHistoryPage />} />
         <Route path="trends" element={<TrendsPage />} />
         <Route path="me" element={<UserInfoPage />} />
+        <Route path="help" element={<HelpPage />} />
 
         <Route path="settings" element={<Navigate to="/settings/device" replace />} />
         <Route path="settings/display" element={<DisplaySettingsPage />} />

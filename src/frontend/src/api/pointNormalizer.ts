@@ -1,5 +1,6 @@
 import type { Point } from '../types'
 import { normalizeInputPointId, normalizeKind, normalizeQuality, nowIso, uiNode } from '../utils'
+import { displayPointName } from './pointTags'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -48,6 +49,15 @@ function idChannel(id: string): number | undefined {
   return Number.isFinite(channel) && channel > 0 ? channel : undefined
 }
 
+// Core exposes physical output channels in the global 1..24 namespace (AO=17..20, DO=21..24).
+// Trends and other APIs use the canonical per-kind 1..4 IDs instead.
+function canonicalOutputChannel(kind: Point['kind'], channel?: number): number | undefined {
+  if (channel === undefined) return undefined
+  if (kind === 'AO' && channel >= 17 && channel <= 20) return channel - 16
+  if (kind === 'DO' && channel >= 21 && channel <= 24) return channel - 20
+  return channel
+}
+
 function pointKind(raw: Record<string, unknown>, rawId: string, channel?: number): Point['kind'] {
   const rawKind = raw.kind ?? raw.type ?? raw.point_type ?? raw.pointType ?? raw.object_type ?? raw.objectType
   const idPrefix = rawId.trim().match(/^([A-Z]+)[-_]?\d+$/i)?.[1]
@@ -67,7 +77,7 @@ function pointId(raw: Record<string, unknown>, kind: Point['kind'], channel?: nu
   const rawId = raw.id ?? raw.point_id ?? raw.pointId ?? raw.object_id ?? raw.objectId ?? raw.name ?? raw.label
   const id = rawId === undefined || rawId === null ? '' : String(rawId).trim()
   const rawKind = String(raw.kind ?? raw.type ?? raw.point_type ?? raw.pointType ?? id).toUpperCase()
-  const inferredChannel = channel ?? idChannel(id)
+  const inferredChannel = canonicalOutputChannel(kind, channel ?? idChannel(id))
   if (kind === 'UI') {
     if (inferredChannel) return uiNode(rawKind.startsWith('DI') || rawKind.startsWith('BI') ? inferredChannel + 8 : inferredChannel)
     return normalizeInputPointId(id || 'UNKNOWN')
@@ -113,7 +123,7 @@ export function normalizePoint(raw: Record<string, unknown>): Point {
   return {
     id,
     tag: String(raw.tag ?? id),
-    name: String(raw.name ?? raw.label ?? id),
+    name: displayPointName(raw.name ?? raw.label, id),
     kind,
     value,
     unit: raw.unit ? String(raw.unit) : undefined,
@@ -129,6 +139,7 @@ export function normalizePoint(raw: Record<string, unknown>): Point {
     signalType: raw.signalType ? String(raw.signalType) : raw.signal_type ? String(raw.signal_type) : undefined,
     writable: typeof raw.writable === 'boolean' ? raw.writable : undefined,
     logEnabled: typeof raw.logEnabled === 'boolean' ? raw.logEnabled : typeof raw.log_enabled === 'boolean' ? raw.log_enabled : undefined,
-    logIntervalMs: numberFrom(raw.logIntervalMs ?? raw.log_interval_ms)
+    logIntervalMs: numberFrom(raw.logIntervalMs ?? raw.log_interval_ms),
+    namespaceState: raw.namespaceState ? String(raw.namespaceState) : raw.namespace_state ? String(raw.namespace_state) : undefined
   }
 }

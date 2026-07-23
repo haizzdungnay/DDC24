@@ -5,6 +5,7 @@ import {
   Clock3,
   Cpu,
   Database,
+  ListFilter,
   Maximize2,
   MemoryStick,
   Network,
@@ -17,6 +18,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
 import { ControllerDiagram } from '../components/ControllerDiagram'
+import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
 import { StateBlock } from '../components/StateBlock'
 import { StatusBadge } from '../components/StatusBadge'
@@ -26,12 +28,34 @@ import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Alarm, HealthResponse, HealthStatus, Point, TrendSample } from '../types'
-import { formatDateTime, formatUptime, isFreshIso, isVisibleUniversalInput, mergePointsById, metricStatusColor, metricStatusFill, pointDisplayTag, statusColor } from '../utils'
+import { formatDateTime, formatUptime, isFreshIso, mergePointsById, metricStatusColor, metricStatusFill, pointDisplayTag, statusColor } from '../utils'
 
 const dashboardTrendColors = ['var(--c-fault-fg)', 'var(--c-accent-2)', '#6E5A2E', 'var(--c-warn-fg)']
 const dashboardTrendSampleLimit = 60
+const dashboardTrendPrefsKey = 'mkddc:dashboard-trend-points:v1'
+const defaultDashboardTrendIds = ['UI-01', 'UI-02', 'UI-03', 'UI-04']
 const REALTIME_STALE_MS = 2500
 const emptyPoints: Point[] = []
+
+function readDashboardTrendIds(): string[] | null {
+  try {
+    const raw = window.localStorage.getItem(dashboardTrendPrefsKey)
+    if (raw === null) return null
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+    return Array.from(new Set(parsed.filter((id): id is string => typeof id === 'string'))).slice(0, 4)
+  } catch {
+    return null
+  }
+}
+
+function writeDashboardTrendIds(ids: string[]) {
+  try {
+    window.localStorage.setItem(dashboardTrendPrefsKey, JSON.stringify(ids))
+  } catch {
+    // localStorage can be unavailable in private or locked browser modes.
+  }
+}
 
 export function DashboardPage() {
   const navigate = useNavigate()
@@ -44,10 +68,18 @@ export function DashboardPage() {
   const points: Point[] = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
     ? mergePointsById(polledPoints, realtime.allPoints)
     : polledPoints
-  const trendPoints = useMemo(() => points
-    .filter((point) => isVisibleUniversalInput(point) && pointNumber(point.value) !== null)
-    .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
-    .slice(0, 4), [points])
+  const trendCandidates = useMemo(() => points
+    .filter((point) => pointNumber(point.value) !== null)
+    .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' })), [points])
+  const storedTrendIdsRef = useRef<string[] | null | undefined>(undefined)
+  if (storedTrendIdsRef.current === undefined) storedTrendIdsRef.current = readDashboardTrendIds()
+  const [selectedTrendIds, setSelectedTrendIds] = useState<string[]>(() => storedTrendIdsRef.current ?? [])
+  const [trendSelectionReady, setTrendSelectionReady] = useState(false)
+  const [trendPickerOpen, setTrendPickerOpen] = useState(false)
+  const initializedTrendSelectionRef = useRef(false)
+  const trendPoints = useMemo(() => selectedTrendIds
+    .map((id) => trendCandidates.find((point) => point.id === id))
+    .filter((point): point is Point => Boolean(point)), [selectedTrendIds, trendCandidates])
   const trendSeries = useMemo<TrendSeries[]>(() => trendPoints.map((point, index) => ({
     key: point.id,
     label: point.kind === 'virtual' ? pointDisplayTag(point) : `${point.id} - ${point.name}`,
@@ -58,9 +90,37 @@ export function DashboardPage() {
   const [trendSamples, setTrendSamples] = useState<TrendSample[]>([])
 
   useEffect(() => {
+    if (!trendCandidates.length) return
+    const availableIds = new Set(trendCandidates.map((point) => point.id))
+    setSelectedTrendIds((current) => {
+      if (!initializedTrendSelectionRef.current) {
+        initializedTrendSelectionRef.current = true
+        const storedIds = storedTrendIdsRef.current
+        if (storedIds !== null && storedIds !== undefined) return storedIds.filter((id) => availableIds.has(id)).slice(0, 4)
+        const preferred = defaultDashboardTrendIds
+          .map((id) => trendCandidates.find((point) => point.id === id))
+          .filter((point): point is Point => Boolean(point))
+        const defaults = [...preferred, ...trendCandidates.filter((point) => !preferred.some((item) => item.id === point.id))].slice(0, 4)
+        return defaults.map((point) => point.id)
+      }
+      const retained = current.filter((id) => availableIds.has(id)).slice(0, 4)
+      return retained.length === current.length && retained.every((id, index) => id === current[index]) ? current : retained
+    })
+    setTrendSelectionReady(true)
+  }, [trendCandidates])
+
+  useEffect(() => {
+    if (trendSelectionReady) writeDashboardTrendIds(selectedTrendIds)
+  }, [selectedTrendIds, trendSelectionReady])
+
+  useEffect(() => {
     trendPointsRef.current = trendPoints
     if (!trendPoints.length) setTrendSamples((current) => current.length ? [] : current)
   }, [trendPoints])
+
+  useEffect(() => {
+    setTrendSamples([])
+  }, [selectedTrendIds])
 
   useEffect(() => {
     const appendSample = () => {
@@ -85,6 +145,12 @@ export function DashboardPage() {
   const dataAgeLabel = realtime.lastPointEventAt ? new Date(realtime.lastPointEventAt).toLocaleTimeString('vi-VN') : 'API'
   const cpuPercent = h?.cpuPercent ?? 23
   const cpuDetail = [formatPercent(cpuPercent), formatCpuClock(h?.cpuClockMhz)].filter(Boolean).join(' | ')
+
+  function toggleTrendPoint(id: string) {
+    setSelectedTrendIds((current) => current.includes(id)
+      ? current.filter((item) => item !== id)
+      : current.length < 4 ? [...current, id] : current)
+  }
 
   const ramDetail = (() => {
     if (typeof h?.ramUsedMb === 'number' && typeof h?.ramTotalMb === 'number' && h.ramTotalMb > 0) {
@@ -138,12 +204,31 @@ export function DashboardPage() {
             onOpenNetwork={() => navigate('/settings/network')}
           />
         </Panel>
-        <Panel className="p-3" title={pick('XU HƯỚNG UI (GIÁ TRỊ TRUNG BÌNH)', 'UI TREND (AVERAGE VALUE)')} action={<div className="flex gap-2"><Button size="sm" variant="secondary">{pick('Live', 'Live')}</Button><Button size="sm" variant="ghost" icon={<Maximize2 className="h-4 w-4" />} onClick={() => navigate('/trends')} title={pick('Mở rộng xu hướng', 'Expand trends')} /></div>}>
+        <Panel className="p-3" title={pick('XU HƯỚNG POINT', 'POINT TREND')} action={<div className="flex flex-wrap justify-end gap-2"><Button size="sm" variant="secondary" icon={<ListFilter className="h-4 w-4" />} onClick={() => setTrendPickerOpen(true)}>{pick('Điểm', 'Points')} {selectedTrendIds.length}/4</Button><Button size="sm" variant="secondary">{pick('Live', 'Live')}</Button><Button size="sm" variant="ghost" icon={<Maximize2 className="h-4 w-4" />} onClick={() => navigate('/trends')} title={pick('Mở rộng xu hướng', 'Expand trends')} /></div>}>
           {trendSamples.length > 1 && trendSeries.length
-            ? <TrendChart data={trendSamples} series={trendSeries} height={320} />
-            : <StateBlock state="empty" title={pick('Chưa có dữ liệu trend UI live', 'No live UI trend data')} detail={pick('Biểu đồ sẽ tự chạy khi /points hoặc WebSocket có giá trị UI.', 'Chart starts when /points or WebSocket provides UI values.')} />}
+            ? <TrendChart data={trendSamples} series={trendSeries} height={320} showTable={false} />
+            : <StateBlock state="empty" title={pick('Chưa có dữ liệu point trend live', 'No live point trend data')} detail={pick('Biểu đồ sẽ tự chạy khi /points hoặc WebSocket có giá trị point.', 'Chart starts when /points or WebSocket provides point values.')} />}
         </Panel>
       </div>
+
+      <Modal open={trendPickerOpen} title={pick('Chọn điểm hiển thị', 'Select displayed points')} cancelLabel={pick('Xong', 'Done')} onClose={() => setTrendPickerOpen(false)}>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p>{pick('Chọn tối đa 4 point analog hoặc digital cho biểu đồ live.', 'Choose up to 4 analog or digital points for the live chart.')}</p>
+          <span className="shrink-0 font-semibold text-[var(--c-text)]" aria-live="polite">{selectedTrendIds.length}/4</span>
+        </div>
+        <div className="grid max-h-[50vh] gap-2 overflow-y-auto sm:grid-cols-2">
+          {trendCandidates.map((point) => {
+            const selected = selectedTrendIds.includes(point.id)
+            return (
+              <label key={point.id} className="flex cursor-pointer items-center gap-3 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-[var(--c-text)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50">
+                <input type="checkbox" checked={selected} disabled={!selected && selectedTrendIds.length >= 4} onChange={() => toggleTrendPoint(point.id)} />
+                <span className="min-w-0 flex-1"><span className="block font-semibold">{point.id}</span><span className="block truncate text-xs text-[var(--c-text-dim)]">{point.name}</span></span>
+                <span className="text-xs text-[var(--c-text-dim)]">{point.unit ?? '-'}</span>
+              </label>
+            )
+          })}
+        </div>
+      </Modal>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_0.8fr]">
         <Panel title={pick('SỰ KIỆN GẦN NHẤT', 'RECENT EVENTS')}>
@@ -175,7 +260,9 @@ function StatusCard({ children }: { children: React.ReactNode }) {
 }
 
 function pointNumber(value: Point['value']) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'boolean') return value ? 1 : 0
+  return null
 }
 
 function formatPercent(value: number) {

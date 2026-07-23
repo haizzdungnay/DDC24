@@ -38,6 +38,15 @@ export function normalizeInputPointId(id: string): string {
   return channel ? uiNode(channel) : id
 }
 
+export function canonicalOutputPointId(id: string): string {
+  const match = id.trim().toUpperCase().match(/^(AO|DO)[-_]?(\d+)$/)
+  if (!match) return id
+  const channel = Number(match[2])
+  if (match[1] === 'AO' && channel >= 17 && channel <= 20) return `AO-${String(channel - 16).padStart(2, '0')}`
+  if (match[1] === 'DO' && channel >= 21 && channel <= 24) return `DO-${String(channel - 20).padStart(2, '0')}`
+  return `${match[1]}-${String(channel).padStart(2, '0')}`
+}
+
 export function isUniversalInputKind(kind: PointKind): boolean {
   return kind === 'UI' || kind === 'AI' || kind === 'DI'
 }

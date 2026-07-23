@@ -76,6 +76,13 @@
 - repository: fast-forwarded local `main` to `origin/main` at `9ca78bf`, then merged controller/document reconciliation commit `bf8c2d0`; preserved the current alarm, scheduler, Virtual Point and frontend work from main.
 - merge: resolved `CHANGELOG.md` by retaining both histories and kept the SHM v4 IOBus layout assertions at `ui_unit=176`, `ui_raw_unit=304`, size `528`.
 - verification: merged-tree builds passed for Core baseline/BACnet and IOBus baseline/Modbus; CTest passed Core 169/169 in both configurations and IOBus 160/160 plus 162/162; `go test -count=1 ./...`, frontend lint/typecheck/production build, hardware-doc harness 18/18 and `git diff --check` passed.
+### Changed - Frontend point configuration and navigation bundle (2026-07-23)
+- frontend(points): align UI/AO/DO/VP tag and label semantics, add conflict recovery and normalization, and cover the shared namespace behavior with unit and browser regressions.
+- frontend(configuration): add overview and advanced editing flows, persist dashboard trend selections for up to four arbitrary points, and require confirmation before saving Outputs or Virtual Points.
+- frontend(navigation): add the Help FAQ and header routes, streamline/collapse the sidebar, remove duplicate User info navigation, and compact the device summary.
+- frontend(trends): clarify cache/database history routing, UTC custom ranges, canonical point identities, live-tail presentation, and missing-series feedback.
+- verification: frontend Vitest passes (`21` files, `109` tests); ESLint (`--max-warnings=0`), typecheck, and production build pass.
+
 ### Changed - Historian Trends source routing (2026-07-22)
 - web/backend(historian): added a durable-seeded, in-memory 15-second presentation cache retained for 24 hours. `source=cache` reads only this cache (no SQLite read-through); `source=database` reads hot SQLite/archive only; source-less callers keep the existing unified compatibility merge. Startup warmup uses the last 24 hours of durable hot rows, while live cache sampling now also consumes coherent runtime snapshots independently of database logging policy.
 - frontend(Trends): `Auto`, `30 min`, `1 hour`, `6 hours`, and `24 hours` send `source=cache`; `Custom` sends `source=database`. Live builds use v2 by default after activation while demo remains legacy-generated and `VITE_HISTORIAN_V2_TRENDS=0` remains an explicit rollback switch. OpenAPI, ADR-018, Plan 42 v1.20, web guide and task checklist now document the split and rollout state.

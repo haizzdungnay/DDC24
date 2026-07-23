@@ -33,6 +33,7 @@ import {
 import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserParamsConfig, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
+import { displayPointName } from './pointTags'
 
 export { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 
@@ -603,7 +604,7 @@ function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
   return {
     channel,
     tag: stringFrom(item.tag) ?? aiNode(channel),
-    label: stringFrom(item.name) ?? aiNode(channel),
+    label: displayPointName(item.name, aiNode(channel)),
     signalType,
     analogCurrent: item.type === '4-20mA',
     displayMin: numberFrom(item.scale_lo) ?? 0,
@@ -709,7 +710,7 @@ function outputsFromConfig(io: IoConfig, safe: SafeStateConfig): OutputsConfig {
         minPv: numberFrom(ioItem?.min_pv) ?? config.minPv,
         maxPv: numberFrom(ioItem?.max_pv) ?? config.maxPv,
         safeValue: numberFrom(safeItem?.safe) ?? config.safeValue,
-        label: stringFrom(ioItem?.name) ?? config.label
+        label: displayPointName(ioItem?.name, config.id)
       }
     }),
     do: demo.do.map((config) => {
@@ -718,7 +719,7 @@ function outputsFromConfig(io: IoConfig, safe: SafeStateConfig): OutputsConfig {
       return {
         ...config,
         tag: stringFrom(ioItem?.tag) ?? config.id,
-        label: stringFrom(ioItem?.name) ?? config.label,
+        label: displayPointName(ioItem?.name, config.id),
         safeState: safeState(safeItem?.safe ?? config.safeState)
       }
     })
@@ -929,7 +930,7 @@ export const apiClient = {
     }
     return requestJson<VirtualPoint>('/virtual-points', {
       method: 'POST',
-      body: JSON.stringify(point)
+      body: JSON.stringify({ ...point, name: undefined })
     })
   },
 
@@ -939,7 +940,7 @@ export const apiClient = {
     }
     return requestJson<VirtualPoint>(`/virtual-points/${encodeURIComponent(point.id)}`, {
       method: 'PUT',
-      body: JSON.stringify(point)
+      body: JSON.stringify({ ...point, name: undefined })
     })
   },
 
