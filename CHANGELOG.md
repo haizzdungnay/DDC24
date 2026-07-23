@@ -7,6 +7,11 @@
 ---
 
 ## [Unreleased]
+### Fixed - Netcfg socket startup safety (2026-07-23)
+- services(netcfg): fail closed when the Unix socket path, bind/listen, permissions, owner lookup, or ownership assignment is invalid; every failed startup now closes the listener and removes the partial socket.
+- CI: consume the previously ignored `chown` result so all `-Werror` C++ build matrices can compile the integrated main/frontend branch.
+- verification: Linux baseline builds with `-Wall -Wextra -Werror`; CTest passes (`390/390`), including overlong socket-path rejection.
+
 ### Changed — ADR-020 repository-wide synchronization, ACTION-01..08 (2026-07-23)
 - docs/governance: closed all 31 document conflicts found by a two-pass repo-wide scan (26 initial + 5 found on a confirmation pass) — see `KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md` v2.0. Every flagged line got a substantive correction (not a blanket banner): `docs/01_specs/*` (PRODUCT_DEFINITION, SW_ARCH_SPEC, REVA_SCOPE_ROADMAP, PRD, SRS, SW_REQUIREMENTS, DS, OPEN_ISSUES, TEST_SPEC, DESIGN_PLAN_SWFW), `docs/00_management/*` (PM-GOAL, PM-MARKET, PM-OVERVIEW, PM-IMPLPLAN), three historical ADRs (006/008/009, annotated without altering their original Decision/Context text), an implementation guide, `GETTING_STARTED_DEV.md`, `SW_DDD_MK-DDC-24_VI.md`, `BACNET_PICS_EPICS_MK-DDC-24_VI.md`, and `docs/adr/README.md`.
 - docs/governance: during merge with `origin/main`, Program Runtime was registered as `ADR-020` so existing remote `ADR-018` (SQLite block historian) and `ADR-019` (point namespace) remain stable.

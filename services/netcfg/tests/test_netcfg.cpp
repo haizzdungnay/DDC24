@@ -249,4 +249,16 @@ TEST(NetcfgEngine, MonotonicDeadlineRollsBackEvenIfWallClockMovesBackward)
     EXPECT_EQ(engine.transaction().last_reason, "CONFIRM_TIMEOUT");
 }
 
+TEST(NetcfgServer, RejectsOverlongSocketPathBeforeCreatingEndpoint)
+{
+    auto platform = std::make_shared<FakePlatform>();
+    netcfg::Engine engine(platform, journal_path(), "eth0");
+    const auto socket_path = std::filesystem::temp_directory_path() /
+        std::string(128, 's');
+    netcfg::Server server(engine, socket_path.string(), "root");
+
+    EXPECT_FALSE(server.run());
+    EXPECT_FALSE(std::filesystem::exists(socket_path));
+}
+
 } // namespace
