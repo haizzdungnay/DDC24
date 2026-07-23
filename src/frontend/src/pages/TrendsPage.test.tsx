@@ -1,11 +1,11 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { HistoryResponse } from '../api/history'
-import { TrendChart } from '../components/TrendChart'
-import { HISTORIAN_V2_TRENDS_ENABLED } from '../config'
+import { buildHistoryQuery, type HistoryResponse } from '../api/history'
+import { formatTrendTime, TrendChart } from '../components/TrendChart'
+import { HISTORIAN_V2_TRENDS_ENABLED, IS_DEMO } from '../config'
 import type { Point, TrendSample } from '../types'
-import { appendLiveTrendSample, buildHistoryChartModel, buildTrendRows, historyPresentationState, historySourceForRange, legacyHistoryResponse } from './TrendsPage'
+import { TREND_LIVE_REFRESH_MS, appendLiveTrendSample, buildHistoryChartModel, buildTrendHistoryRequest, buildTrendRows, historyPresentationState, historySourceForRange, legacyHistoryResponse } from './TrendsPage'
 
 vi.stubGlobal('ResizeObserver', class {
   observe() {}
@@ -83,7 +83,7 @@ describe('unified Trends presentation', () => {
   it('defaults live builds to v2 after activation and keeps the legacy adapter explicitly partial', () => {
     const rows: TrendSample[] = [{ time: '00:00:15', __ts: Date.parse('2026-07-20T00:00:15Z'), VP2: 1 }]
     const legacy = legacyHistoryResponse(['VP2'], rows, response.fromMs, response.toMs)
-    expect(HISTORIAN_V2_TRENDS_ENABLED).toBe(true)
+    expect(HISTORIAN_V2_TRENDS_ENABLED).toBe(!IS_DEMO)
     expect(legacy.complete).toBe(false)
     expect(legacy.gaps[0].reason).toBe('legacy_query_gap_evidence_unavailable')
   })
@@ -91,6 +91,39 @@ describe('unified Trends presentation', () => {
   it('uses the 24-hour cache for presets and the database only for Custom', () => {
     expect(historySourceForRange(null)).toBe('cache')
     expect(historySourceForRange({ fromMs: response.fromMs, toMs: response.toMs })).toBe('database')
+  })
+
+  it('formats Custom historian timestamps in UTC instead of browser-local time', () => {
+    const timestamp = Date.parse('2026-07-20T03:04:05Z')
+    expect(formatTrendTime(timestamp, 'UTC')).toContain('03:04:05')
+    expect(formatTrendTime(timestamp, 'UTC')).not.toContain('10:04:05')
+  })
+
+  it.each([
+    [30, '30m'],
+    [60, '1h'],
+    [360, '6h'],
+    [1440, '24h']
+  ] as const)('maps %i minutes to %s on the cache path without a legacy range query', (minutes, preset) => {
+    const request = buildTrendHistoryRequest(['VP2'], minutes, null, response.toMs)
+    const params = buildHistoryQuery(request.query)
+
+    expect(request.preset).toBe(preset)
+    expect(params.get('source')).toBe('cache')
+    expect(params.has('range')).toBe(false)
+    expect(Date.parse(params.get('to')!) - Date.parse(params.get('from')!)).toBe(minutes * 60_000)
+  })
+
+  it('maps Custom to exact database bounds without a legacy range value', () => {
+    const customRange = { fromMs: response.fromMs, toMs: response.toMs }
+    const request = buildTrendHistoryRequest(['VP2'], 30, customRange, response.toMs + 60_000)
+    const params = buildHistoryQuery(request.query)
+
+    expect(request.preset).toBeNull()
+    expect(params.get('from')).toBe(response.from)
+    expect(params.get('to')).toBe(response.to)
+    expect(params.get('source')).toBe('database')
+    expect(params.has('range')).toBe(false)
   })
 
   it('uses the live point value for the realtime table while preserving historian values for Custom', () => {
@@ -103,6 +136,7 @@ describe('unified Trends presentation', () => {
   })
 
   it('adds a one-second live chart tail to presets without changing cache statistics or Custom', () => {
+    expect(TREND_LIVE_REFRESH_MS).toBeLessThanOrEqual(1000)
     const livePoint = { ...point, value: 42, quality: 'good' as const, source: 'core' }
     const series = [{ key: 'VP2::g1', pointId: 'VP2', generation: 1, label: 'Fan enable', color: '#123456', stepped: true }]
     const samples: TrendSample[] = [

@@ -787,18 +787,37 @@ bool Server::run()
     const std::filesystem::path path(socket_path_);
     try { std::filesystem::create_directories(path.parent_path()); }
     catch (...) { return false; }
+    struct sockaddr_un address {};
+    if (socket_path_.size() >= sizeof(address.sun_path)) {
+        errno = ENAMETOOLONG;
+        return false;
+    }
     ::unlink(socket_path_.c_str());
     listen_fd_ = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
     if (listen_fd_ < 0) return false;
-    struct sockaddr_un address {};
+    const auto fail_startup = [&](const char* operation) {
+        const int saved_errno = errno;
+        std::fprintf(stderr, "ERROR netcfg.listen operation=%s errno=%d\n",
+                     operation, saved_errno);
+        ::close(listen_fd_);
+        listen_fd_ = -1;
+        ::unlink(socket_path_.c_str());
+        errno = saved_errno;
+        return false;
+    };
     address.sun_family = AF_UNIX;
-    if (socket_path_.size() >= sizeof(address.sun_path)) return false;
     std::snprintf(address.sun_path, sizeof(address.sun_path), "%s", socket_path_.c_str());
-    if (::bind(listen_fd_, reinterpret_cast<struct sockaddr*>(&address), sizeof(address)) != 0 ||
-        ::listen(listen_fd_, 8) != 0) return false;
-    (void)::chmod(socket_path_.c_str(), 0660);
-    if (const struct passwd* user = ::getpwnam(allowed_user_.c_str()))
-        (void)::chown(socket_path_.c_str(), 0, user->pw_gid);
+    if (::bind(listen_fd_, reinterpret_cast<struct sockaddr*>(&address), sizeof(address)) != 0)
+        return fail_startup("bind");
+    if (::listen(listen_fd_, 8) != 0) return fail_startup("listen");
+    if (::chmod(socket_path_.c_str(), 0660) != 0) return fail_startup("chmod");
+    const struct passwd* user = ::getpwnam(allowed_user_.c_str());
+    if (!user) {
+        errno = ENOENT;
+        return fail_startup("getpwnam");
+    }
+    if (::chown(socket_path_.c_str(), 0, user->pw_gid) != 0)
+        return fail_startup("chown");
     std::fprintf(stderr, "INFO  netcfg.listen socket=%s user=%s\n", socket_path_.c_str(), allowed_user_.c_str());
     while (!stopping_) {
         struct pollfd pfd {listen_fd_, POLLIN, 0};

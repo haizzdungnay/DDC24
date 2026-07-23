@@ -17,6 +17,8 @@ interface TrendChartProps {
   series: TrendSeries[]
   height?: number
   rawUnit?: string
+  timeZone?: 'UTC' | 'local'
+  showTable?: boolean
 }
 
 function displayValue(value: string | number | null | undefined, kind?: TrendSeries['kind'], stepped?: boolean): string {
@@ -26,9 +28,11 @@ function displayValue(value: string | number | null | undefined, kind?: TrendSer
   return String(value)
 }
 
-function formatTime(value: number | string): string {
+export function formatTrendTime(value: number | string, timeZone: 'UTC' | 'local' = 'local'): string {
   const date = new Date(value)
-  return Number.isFinite(date.getTime()) ? date.toLocaleString('vi-VN') : String(value)
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleString('vi-VN', timeZone === 'UTC' ? { timeZone: 'UTC', hour12: false } : undefined)
+    : String(value)
 }
 
 function formatRaw(value: unknown, unit: string): string {
@@ -37,11 +41,11 @@ function formatRaw(value: unknown, unit: string): string {
   return `${fixed} ${unit}`
 }
 
-function HistoryTooltip({ active, payload, label, series, rawUnit }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string }) {
+function HistoryTooltip({ active, payload, label, series, rawUnit, timeZone }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string; timeZone: 'UTC' | 'local' }) {
   if (!active || !payload?.length) return null
   return (
     <div className="rounded border border-[var(--c-border)] bg-[var(--c-surface)] p-2 text-xs shadow-lg">
-      <div className="mb-1 font-semibold">{formatTime(label ?? '')}</div>
+      <div className="mb-1 font-semibold">{formatTrendTime(label ?? '', timeZone)}</div>
       {payload.map((entry) => {
         const item = series.find((line) => line.key === entry.dataKey)
         const row: TrendSample = entry.payload ?? { time: String(label ?? '') }
@@ -52,9 +56,14 @@ function HistoryTooltip({ active, payload, label, series, rawUnit }: { active?: 
   )
 }
 
-export function TrendChart({ data, series, height = 260, rawUnit }: TrendChartProps) {
+export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true }: TrendChartProps) {
   const hasTimeAxis = data.every((sample) => typeof sample.__ts === 'number' && Number.isFinite(sample.__ts))
-  const formatAxisTime = (value: number) => new Date(value).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const formatAxisTime = (value: number) => new Date(value).toLocaleTimeString('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    ...(timeZone === 'UTC' ? { timeZone: 'UTC' } : {})
+  })
 
   return (
     <section aria-label="Historical trend chart" className="space-y-3">
@@ -64,7 +73,7 @@ export function TrendChart({ data, series, height = 260, rawUnit }: TrendChartPr
             <CartesianGrid stroke="rgba(91,96,102,0.34)" vertical={false} />
             <XAxis dataKey={hasTimeAxis ? '__ts' : 'time'} type={hasTimeAxis ? 'number' : 'category'} domain={hasTimeAxis ? ['dataMin', 'dataMax'] : undefined} tickFormatter={hasTimeAxis ? (value) => formatAxisTime(Number(value)) : undefined} stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-            <Tooltip content={<HistoryTooltip series={series} rawUnit={rawUnit} />} />
+            <Tooltip content={<HistoryTooltip series={series} rawUnit={rawUnit} timeZone={timeZone} />} />
             {series.map((item) => <Line key={item.key} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls={false} />)}
           </LineChart>
         </ResponsiveContainer>
@@ -72,13 +81,13 @@ export function TrendChart({ data, series, height = 260, rawUnit }: TrendChartPr
       <div className="sr-only" aria-hidden="true">
         {series.map((item) => <span key={item.key} data-testid={`trend-line-${item.key}`} data-connect-nulls="false" data-line-type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} />)}
       </div>
-      <div className="overflow-x-auto rounded border border-[var(--c-border)]">
+      {showTable && <div className="overflow-x-auto rounded border border-[var(--c-border)]">
         <table aria-label="Historical trend data" className="w-full border-collapse text-left text-xs">
           <caption className="sr-only">Historical values with quality, source, and storage tier</caption>
-          <thead className="bg-[var(--c-surface-2)]"><tr><th className="px-3 py-2">Time</th>{series.map((item) => <th key={item.key} className="px-3 py-2">{item.label}</th>)}{rawUnit && <th className="px-3 py-2">Raw</th>}</tr></thead>
-          <tbody>{data.slice(-5).map((row) => <tr key={String(row.__ts ?? row.time)} className="border-t border-[var(--c-border)]"><th className="whitespace-nowrap px-3 py-2 font-normal">{formatTime(row.__ts ?? row.time)}</th>{series.map((item) => { const value = row[item.key]; const quality = row[`${item.key}:quality`]; const source = row[`${item.key}:source`]; const tier = row[`${item.key}:tier`]; return <td key={item.key} className="px-3 py-2 align-top"><div>{displayValue(value, item.kind, item.stepped)}{item.unit ? ` ${item.unit}` : ''}</div><div className="text-[var(--c-text-dim)]">{quality ?? '—'} · {source ?? '—'} · {tier ?? '—'}</div></td> })}{rawUnit && <td className="whitespace-nowrap px-3 py-2 align-top"><div>{formatRaw(row.__raw, rawUnit)}</div></td>}</tr>)}</tbody>
+          <thead className="bg-[var(--c-surface-2)]"><tr><th className="px-3 py-2">Time{timeZone === 'UTC' ? ' (UTC)' : ''}</th>{series.map((item) => <th key={item.key} className="px-3 py-2">{item.label}</th>)}{rawUnit && <th className="px-3 py-2">Raw</th>}</tr></thead>
+          <tbody>{data.slice(-5).map((row) => <tr key={String(row.__ts ?? row.time)} className="border-t border-[var(--c-border)]"><th className="whitespace-nowrap px-3 py-2 font-normal">{formatTrendTime(row.__ts ?? row.time, timeZone)}</th>{series.map((item) => { const value = row[item.key]; const quality = row[`${item.key}:quality`]; const source = row[`${item.key}:source`]; const tier = row[`${item.key}:tier`]; return <td key={item.key} className="px-3 py-2 align-top"><div>{displayValue(value, item.kind, item.stepped)}{item.unit ? ` ${item.unit}` : ''}</div><div className="text-[var(--c-text-dim)]">{quality ?? '—'} · {source ?? '—'} · {tier ?? '—'}</div></td> })}{rawUnit && <td className="whitespace-nowrap px-3 py-2 align-top"><div>{formatRaw(row.__raw, rawUnit)}</div></td>}</tr>)}</tbody>
         </table>
-      </div>
+      </div>}
     </section>
   )
 }

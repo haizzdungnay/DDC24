@@ -7,6 +7,11 @@
 ---
 
 ## [Unreleased]
+### Fixed - Netcfg socket startup safety (2026-07-23)
+- services(netcfg): fail closed when the Unix socket path, bind/listen, permissions, owner lookup, or ownership assignment is invalid; every failed startup now closes the listener and removes the partial socket.
+- CI: consume the previously ignored `chown` result so all `-Werror` C++ build matrices can compile the integrated main/frontend branch.
+- verification: Linux baseline builds with `-Wall -Wextra -Werror`; CTest passes (`390/390`), including overlong socket-path rejection.
+
 ### Changed — ADR-020 repository-wide synchronization, ACTION-01..08 (2026-07-23)
 - docs/governance: closed all 31 document conflicts found by a two-pass repo-wide scan (26 initial + 5 found on a confirmation pass) — see `KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md` v2.0. Every flagged line got a substantive correction (not a blanket banner): `docs/01_specs/*` (PRODUCT_DEFINITION, SW_ARCH_SPEC, REVA_SCOPE_ROADMAP, PRD, SRS, SW_REQUIREMENTS, DS, OPEN_ISSUES, TEST_SPEC, DESIGN_PLAN_SWFW), `docs/00_management/*` (PM-GOAL, PM-MARKET, PM-OVERVIEW, PM-IMPLPLAN), three historical ADRs (006/008/009, annotated without altering their original Decision/Context text), an implementation guide, `GETTING_STARTED_DEV.md`, `SW_DDD_MK-DDC-24_VI.md`, `BACNET_PICS_EPICS_MK-DDC-24_VI.md`, and `docs/adr/README.md`.
 - docs/governance: during merge with `origin/main`, Program Runtime was registered as `ADR-020` so existing remote `ADR-018` (SQLite block historian) and `ADR-019` (point namespace) remain stable.
@@ -76,6 +81,13 @@
 - repository: fast-forwarded local `main` to `origin/main` at `9ca78bf`, then merged controller/document reconciliation commit `bf8c2d0`; preserved the current alarm, scheduler, Virtual Point and frontend work from main.
 - merge: resolved `CHANGELOG.md` by retaining both histories and kept the SHM v4 IOBus layout assertions at `ui_unit=176`, `ui_raw_unit=304`, size `528`.
 - verification: merged-tree builds passed for Core baseline/BACnet and IOBus baseline/Modbus; CTest passed Core 169/169 in both configurations and IOBus 160/160 plus 162/162; `go test -count=1 ./...`, frontend lint/typecheck/production build, hardware-doc harness 18/18 and `git diff --check` passed.
+### Changed - Frontend point configuration and navigation bundle (2026-07-23)
+- frontend(points): align UI/AO/DO/VP tag and label semantics, add conflict recovery and normalization, and cover the shared namespace behavior with unit and browser regressions.
+- frontend(configuration): add overview and advanced editing flows, persist dashboard trend selections for up to four arbitrary points, and require confirmation before saving Outputs or Virtual Points.
+- frontend(navigation): add the Help FAQ and header routes, streamline/collapse the sidebar, remove duplicate User info navigation, and compact the device summary.
+- frontend(trends): clarify cache/database history routing, UTC custom ranges, canonical point identities, live-tail presentation, and missing-series feedback.
+- verification: frontend Vitest passes (`21` files, `109` tests); ESLint (`--max-warnings=0`), typecheck, and production build pass.
+
 ### Changed - Historian Trends source routing (2026-07-22)
 - web/backend(historian): added a durable-seeded, in-memory 15-second presentation cache retained for 24 hours. `source=cache` reads only this cache (no SQLite read-through); `source=database` reads hot SQLite/archive only; source-less callers keep the existing unified compatibility merge. Startup warmup uses the last 24 hours of durable hot rows, while live cache sampling now also consumes coherent runtime snapshots independently of database logging policy.
 - frontend(Trends): `Auto`, `30 min`, `1 hour`, `6 hours`, and `24 hours` send `source=cache`; `Custom` sends `source=database`. Live builds use v2 by default after activation while demo remains legacy-generated and `VITE_HISTORIAN_V2_TRENDS=0` remains an explicit rollback switch. OpenAPI, ADR-018, Plan 42 v1.20, web guide and task checklist now document the split and rollout state.

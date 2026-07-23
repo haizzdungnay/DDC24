@@ -1,7 +1,7 @@
 import { Check, Clock3, Plus, RotateCcw, Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiClient } from '../api/client'
-import { historyClient, historySeriesKey, type HistoryResponse } from '../api/history'
+import { historyClient, historyPresetDurationMs, historySeriesKey, type HistoryPresetRange, type HistoryQuery, type HistoryResponse } from '../api/history'
 import { HISTORIAN_V2_TRENDS_ENABLED } from '../config'
 import { Button } from '../components/Button'
 import { DataTable, Column } from '../components/DataTable'
@@ -15,7 +15,7 @@ import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Point, TrendSample, VirtualPoint } from '../types'
-import { canonicalVirtualPointId, cn, isFreshIso, mergePointsById, pointDisplayTag } from '../utils'
+import { canonicalOutputPointId, canonicalVirtualPointId, cn, isFreshIso, mergePointsById, pointDisplayTag } from '../utils'
 import { filterTrendPoints, filterTrendSamplesByRange, parseTrendCustomRange, utcDateTimeInputValue, type TrendCustomRange, type TrendFilterKind } from './trendsFilters'
 
 interface TrendRow {
@@ -38,6 +38,7 @@ const rangeOptions = [
 
 const colors = ['#2A5C8A', 'var(--c-warn-fg)', '#6E5A2E', '#8A4FBF', '#5B6066', 'var(--c-fault-fg)', '#B0179C', 'var(--c-off)']
 const REALTIME_STALE_MS = 2500
+export const TREND_LIVE_REFRESH_MS = 1000
 const TREND_PREFS_KEY = 'mkddc:trends:v1'
 const DEFAULT_TREND_IDS = Array.from({ length: 8 }, (_, index) => `UI-${String(index + 1).padStart(2, '0')}`)
 const trendFilterKinds: TrendFilterKind[] = ['UI', 'AO', 'DO', 'VP']
@@ -45,6 +46,11 @@ const trendFilterKinds: TrendFilterKind[] = ['UI', 'AO', 'DO', 'VP']
 interface TrendPrefs {
   selectedIds: string[]
   rangeMinutes: number
+}
+
+export interface TrendHistoryRequest {
+  preset: HistoryPresetRange | null
+  query: HistoryQuery
 }
 
 function pointNumber(value: Point['value']) {
@@ -93,7 +99,9 @@ function readTrendPrefs(): TrendPrefs | null {
     const raw = window.localStorage.getItem(TREND_PREFS_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<TrendPrefs>
-    const selectedIds = Array.isArray(parsed.selectedIds) ? parsed.selectedIds.filter((id): id is string => typeof id === 'string') : []
+    const selectedIds = Array.isArray(parsed.selectedIds)
+      ? Array.from(new Set(parsed.selectedIds.filter((id): id is string => typeof id === 'string').map(canonicalOutputPointId)))
+      : []
     const storedRange = parsed.rangeMinutes
     const rangeMinutes = typeof storedRange === 'number' && rangeOptions.some((item) => item.minutes === storedRange) ? storedRange : 30
     return { selectedIds, rangeMinutes }
@@ -143,35 +151,36 @@ export function TrendsPage() {
   const selectedPoints = useMemo(() => analogPoints.filter((point) => selectedIds.includes(point.id)), [analogPoints, selectedIds])
   const selectedSignature = selectedIds.join(',')
   const historyState = useApi(async () => {
-    const toMs = customRange?.toMs ?? Date.now()
-    const fromMs = customRange?.fromMs ?? toMs - rangeMinutes * 60_000
+    const request = buildTrendHistoryRequest(selectedIds, rangeMinutes, customRange)
+    const fromMs = new Date(request.query.from).getTime()
+    const toMs = new Date(request.query.to).getTime()
     if (!selectedIds.length) return emptyHistoryResponse(fromMs, toMs)
     if (!HISTORIAN_V2_TRENDS_ENABLED) {
-      const legacy = await apiClient.getHistory(selectedIds, customRange ? '24h' : legacyHistoryRange(rangeMinutes))
+      const legacy = await apiClient.getHistory(selectedIds, request.preset ?? '24h')
       const samples = customRange ? filterTrendSamplesByRange(legacy, fromMs, toMs) : legacy
       return legacyHistoryResponse(selectedIds, samples, fromMs, toMs)
     }
-    return historyClient.query({
-      pointIds: selectedIds,
-      from: new Date(fromMs),
-      to: new Date(toMs),
-      resolution: 'auto',
-      maxPoints: 5000,
-      source: historySourceForRange(customRange)
-    })
+    return historyClient.query(request.query)
   }, [customRange?.fromMs, customRange?.toMs, rangeMinutes, selectedSignature], { refreshMs: 10_000 })
   const chartModel = useMemo(() => buildHistoryChartModel(historyState.data, selectedPoints), [historyState.data, selectedPoints])
   const samples = chartModel.samples
   const filteredPickerPoints = useMemo(() => filterTrendPoints(analogPoints, pickerQuery, pickerKinds), [analogPoints, pickerKinds, pickerQuery])
   const series = chartModel.series
+  const [liveTailNowMs, setLiveTailNowMs] = useState(() => Date.now())
   const chartSamples = useMemo(
-    () => appendLiveTrendSample(samples, series, selectedPoints, HISTORIAN_V2_TRENDS_ENABLED && !customRange),
-    [customRange, samples, selectedPoints, series]
+    () => appendLiveTrendSample(samples, series, selectedPoints, HISTORIAN_V2_TRENDS_ENABLED && !customRange, liveTailNowMs),
+    [customRange, liveTailNowMs, samples, selectedPoints, series]
   )
   const tableRows = useMemo(() => buildTrendRows(series, selectedPoints, samples, HISTORIAN_V2_TRENDS_ENABLED && !customRange), [customRange, samples, selectedPoints, series])
   const historyPresentation = historyPresentationState(historyState.data, historyState.error)
   const currentRange = rangeOptions.find((item) => item.minutes === rangeMinutes)
-  const rangeLabel = currentRange ? pick(currentRange.labelVi, currentRange.labelEn) : pick(`${rangeMinutes} phút`, `${rangeMinutes} min`)
+  const rangeLabel = customRange
+    ? pick('Tùy chỉnh (UTC)', 'Custom (UTC)')
+    : currentRange ? pick(currentRange.labelVi, currentRange.labelEn) : pick(`${rangeMinutes} phút`, `${rangeMinutes} min`)
+  const databaseSeriesIds = useMemo(() => new Set((historyState.data?.series ?? []).map((item) => item.pointId)), [historyState.data?.series])
+  const customPointsWithoutHistory = customRange && historyState.data
+    ? selectedPoints.filter((point) => !databaseSeriesIds.has(point.id))
+    : []
 
   useEffect(() => {
     if (!analogPoints.length) return
@@ -190,6 +199,13 @@ export function TrendsPage() {
     writeTrendPrefs({ selectedIds, rangeMinutes })
     hasSavedPrefsRef.current = true
   }, [prefsReady, rangeMinutes, selectedIds])
+
+  useEffect(() => {
+    if (customRange) return undefined
+    setLiveTailNowMs(Date.now())
+    const timerId = window.setInterval(() => setLiveTailNowMs(Date.now()), TREND_LIVE_REFRESH_MS)
+    return () => window.clearInterval(timerId)
+  }, [customRange])
 
   useEffect(() => {
     const target = analogPanelRef.current
@@ -306,6 +322,9 @@ export function TrendsPage() {
             {customError && <span role="alert" className="text-xs text-[var(--c-fault-fg)] md:col-span-3">{customError}</span>}
           </div>
           {historyPresentation && <HistoryStateBanner state={historyPresentation.state} gaps={historyPresentation.gaps} detail={historyPresentation.detail ?? (!HISTORIAN_V2_TRENDS_ENABLED ? pick('Legacy query vẫn authoritative; unified Trends chờ activation/cutover marker.', 'Legacy query remains authoritative; unified Trends awaits the activation/cutover marker.') : undefined)} onRetry={historyPresentation.state === 'unavailable' ? () => { void historyState.refetch() } : undefined} />}
+          {customPointsWithoutHistory.length > 0 && <div role="status" className="mb-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-xs text-[var(--c-text-dim)]">
+            {pick('Custom chỉ đọc lịch sử database. Không có series database cho:', 'Custom reads database history only. No database series were found for:')} {customPointsWithoutHistory.map(pointDisplayTag).join(', ')}.
+          </div>}
           {pointsState.loading && !analogPoints.length
             ? <StateBlock state="loading" title={pick('Đang tải điểm analog', 'Loading analog points')} />
             : pointsState.error && !analogPoints.length
@@ -315,7 +334,7 @@ export function TrendsPage() {
                 : historyState.error
                   ? <StateBlock state="error" title={pick('Không tải được historian', 'Could not load historian')} detail={historyState.error.message} />
                 : series.length && chartSamples.length > 1
-                ? <TrendChart data={chartSamples} series={series} height={360} />
+                ? <TrendChart data={chartSamples} series={series} height={360} timeZone="UTC" />
                 : <StateBlock state="empty" title={series.length ? pick('Không có mẫu trong khoảng đã chọn', 'No history in the selected range') : pick('Chọn ít nhất một điểm trend', 'Select at least one trend point')} detail={series.length ? pick('Backend không trả sample khả dụng; gap evidence ở banner phía trên.', 'The backend returned no available samples; see the gap evidence above.') : undefined} />}
           </Panel>
         </div>
@@ -493,6 +512,38 @@ export function historySourceForRange(customRange: TrendCustomRange | null): 'ca
   return customRange ? 'database' : 'cache'
 }
 
+export function historyPresetForMinutes(minutes: number): HistoryPresetRange {
+  switch (minutes) {
+    case 30: return '30m'
+    case 60: return '1h'
+    case 360: return '6h'
+    case 1440: return '24h'
+    default: throw new TypeError(`Unsupported trend history range: ${minutes} minutes`)
+  }
+}
+
+export function buildTrendHistoryRequest(
+  pointIds: readonly string[],
+  rangeMinutes: number,
+  customRange: TrendCustomRange | null,
+  nowMs = Date.now()
+): TrendHistoryRequest {
+  const preset = customRange ? null : historyPresetForMinutes(rangeMinutes)
+  const toMs = customRange?.toMs ?? nowMs
+  const fromMs = customRange?.fromMs ?? toMs - historyPresetDurationMs(preset!)
+  return {
+    preset,
+    query: {
+      pointIds,
+      from: new Date(fromMs),
+      to: new Date(toMs),
+      resolution: 'auto',
+      maxPoints: 5000,
+      source: historySourceForRange(customRange)
+    }
+  }
+}
+
 function emptyHistoryResponse(fromMs: number, toMs: number): HistoryResponse {
   return {
     from: new Date(fromMs).toISOString(),
@@ -504,13 +555,6 @@ function emptyHistoryResponse(fromMs: number, toMs: number): HistoryResponse {
     gaps: [],
     tiersUsed: []
   }
-}
-
-function legacyHistoryRange(minutes: number): string {
-  if (minutes <= 30) return '30m'
-  if (minutes <= 60) return '1h'
-  if (minutes <= 360) return '6h'
-  return '24h'
 }
 
 export function legacyHistoryResponse(pointIds: string[], rows: TrendSample[], fromMs: number, toMs: number): HistoryResponse {

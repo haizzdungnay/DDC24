@@ -1,11 +1,12 @@
-import { Activity, ChevronLeft, ChevronRight, Power, RotateCcw, Save, SlidersHorizontal, Wand2, Zap } from 'lucide-react'
+import { Activity, ChevronLeft, ChevronRight, LayoutGrid, Pencil, Power, RotateCcw, Save, SlidersHorizontal, Wand2, Zap } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../api/client'
-import { pointTagFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
+import { displayPointName, focusPointField, normalizePointName, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
+import { PointNameConflictNotice } from '../components/PointNameConflictNotice'
 import { PointLoggingSection } from '../components/PointLoggingSection'
 import { useToast } from '../components/Toast'
 import { TrendChart } from '../components/TrendChart'
@@ -35,8 +36,21 @@ export function OutputsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [overviewOpen, setOverviewOpen] = useState(false)
   const [tagErrors, setTagErrors] = useState<Record<string, string>>({})
+  const [errorFocusPath, setErrorFocusPath] = useState<string>()
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
+  const virtualPointsState = useApi(apiClient.getVirtualPoints, [], { refreshMs: 2000 })
+  const persistedNameConflicts = useMemo(() => pointNameConflicts([
+    ...(pointsState.data ?? []).map((point) => ({ id: point.id, name: point.name, kind: point.kind })),
+    ...(virtualPointsState.data ?? []).map((point) => ({ id: point.id, name: point.name ?? point.label, kind: 'virtual' }))
+  ]), [pointsState.data, virtualPointsState.data])
+  const namespaceEntries = useMemo(() => [
+    ...(pointsState.data ?? []).map((point) => ({ id: point.id, name: point.name, kind: point.kind })),
+    ...(virtualPointsState.data ?? []).map((point) => ({ id: point.id, name: point.name ?? point.label, kind: 'virtual' })),
+    ...outputsEntries(config).map((output) => ({ id: output.id, name: output.label, kind: output.kind }))
+  ], [config, pointsState.data, virtualPointsState.data])
+  const nameConflicts = useMemo(() => pointNameConflicts(namespaceEntries), [namespaceEntries])
 
   useEffect(() => {
     let active = true
@@ -60,6 +74,16 @@ export function OutputsPage() {
     }
   }, [selectedId, t, toast])
 
+  useEffect(() => {
+    const first = errorFocusPath ?? Object.keys(tagErrors)[0]
+    if (!first) return
+    const location = pointFieldLocation(first)
+    if (location?.collection === 'ao' && config.ao[location.index]) setSelectedId(config.ao[location.index].id)
+    if (location?.collection === 'do' && config.do[location.index]) setSelectedId(config.do[location.index].id)
+    const frame = window.requestAnimationFrame(() => focusPointField(Object.keys(tagErrors)))
+    return () => window.cancelAnimationFrame(frame)
+  }, [config.ao, config.do, errorFocusPath, tagErrors])
+
   const outputs = useMemo<OutputConfig[]>(() => [...config.ao, ...config.do], [config])
   const selected = outputs.find((item) => item.id === selectedId) ?? outputs[0]
   const wizardKeys = selected?.kind === 'DO' ? doWizardKeys : aoWizardKeys
@@ -76,19 +100,48 @@ export function OutputsPage() {
     }))
   }
 
-  async function saveOutputs(next = config) {
+  async function saveOutputs(next = config, closeConfirm = false) {
+    const recovery = outputsEntries(next).find((output) => output.id === selectedId)
+    const recoveringName = Boolean(recovery && persistedNameConflicts.has(recovery.id))
+    if (recoveringName && recovery) {
+      const nameError = validatePointName(recovery.label)
+      const errors = nameError ? { [`${recovery.kind.toLowerCase()}[${(recovery.kind === 'AO' ? next.ao : next.do).findIndex((item) => item.id === recovery.id)}].name`]: nameError } : {}
+      setTagErrors(errors)
+      setErrorFocusPath(Object.keys(errors)[0])
+      if (nameError) return
+    }
     const errors = outputTagErrors(next)
-    setTagErrors(errors)
-    if (Object.keys(errors).length > 0) return
+    if (!recoveringName) {
+      setTagErrors(errors)
+      setErrorFocusPath(Object.keys(errors)[0])
+      if (Object.keys(errors).length > 0) return
+    }
     const normalized = normalizeOutputs(next)
     setSaving(true)
     try {
-      await apiClient.putOutputs(normalized)
-      setConfig(normalized)
+      if (recoveringName && recovery) {
+        const name = normalizePointName(recovery.label)
+        await apiClient.updatePointName(recovery.id, name)
+        setConfig({
+          ao: next.ao.map((item) => item.id === recovery.id ? { ...item, label: name } : item),
+          do: next.do.map((item) => item.id === recovery.id ? { ...item, label: name } : item)
+        })
+        void pointsState.refetch()
+      } else {
+        await apiClient.putOutputs(normalized)
+        setConfig(normalized)
+      }
       setTagErrors({})
+      setErrorFocusPath(undefined)
       toast.push('success', t('outputsSaveSuccess'))
+      if (closeConfirm) {
+        setConfirmOpen(false)
+        setTab('advanced')
+      }
     } catch (error) {
-      setTagErrors(pointTagFieldErrors(error))
+      const fieldErrors = pointTagFieldErrors(error)
+      setTagErrors(fieldErrors)
+      setErrorFocusPath(pointFieldFocusPath(error, recovery?.id ?? selectedId, ['ao', 'do']) ?? Object.keys(fieldErrors)[0])
       toast.push('error', `${t('outputsSaveError')}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setSaving(false)
@@ -116,9 +169,12 @@ export function OutputsPage() {
           <h1 className="text-2xl font-semibold text-[var(--c-text)]">{t('outputsTitle')}</h1>
           <p className="text-sm text-[var(--c-text-dim)]">{t('outputsSubtitle')}</p>
         </div>
-        <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={() => void saveOutputs()} disabled={loading || outputs.length === 0}>
-          {t('save')}
-        </Button>
+        <div className="flex gap-2">
+          <Button icon={<LayoutGrid className="h-4 w-4" />} disabled={loading || outputs.length === 0} onClick={() => setOverviewOpen(true)}>{pick('Tổng quan', 'Overview')}</Button>
+          <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={() => setConfirmOpen(true)} disabled={loading || outputs.length === 0}>
+            {t('save')}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[276px_minmax(0,1fr)]">
@@ -151,6 +207,7 @@ export function OutputsPage() {
                 nameError={tagErrors[outputTagPath(config, selected).replace('.tag', '.name')]}
                 onChange={(patch) => updateOutput(selected.id, patch)}
               />
+              <PointNameConflictNotice pointId={selected.id} conflictIds={nameConflicts.get(selected.id)} />
               <PointLoggingSection pointId={selected.id} label={selected.label} kind={selected.kind} />
               {tab === 'summary' && (
                 <OutputSummary
@@ -186,16 +243,74 @@ export function OutputsPage() {
         title={t('outputsSaveTitle')}
         confirmLabel="OK"
         cancelLabel="Cancel"
-        onConfirm={() => {
-          setConfirmOpen(false)
-          setTab('advanced')
-          void saveOutputs()
-        }}
+        onConfirm={() => { void saveOutputs(config, true) }}
         onClose={() => setConfirmOpen(false)}
       >
-        {t('outputsSaveBody')}
+        {pick('Bạn có muốn lưu thay đổi không?', 'Do you want to save the changes?')}
       </Modal>
+      <OutputsOverviewModal
+        open={overviewOpen}
+        outputs={outputs}
+        livePoints={pointsState.data ?? []}
+        onEdit={(id) => {
+          setSelectedId(id)
+          setWizardIndex(0)
+          setTab('advanced')
+          setOverviewOpen(false)
+        }}
+        onClose={() => setOverviewOpen(false)}
+      />
     </div>
+  )
+}
+
+function OutputsOverviewModal({ open, outputs, livePoints, onEdit, onClose }: { open: boolean; outputs: OutputConfig[]; livePoints: Point[]; onEdit: (id: string) => void; onClose: () => void }) {
+  const { pick } = useI18n()
+  return (
+    <Modal open={open} size="xl" title={pick('Tổng quan Outputs', 'Outputs Overview')} onClose={onClose}>
+      <div className="max-h-[70vh] overflow-auto rounded-[var(--radius)] border border-[var(--c-border)]">
+        <table className="w-full min-w-[760px] border-collapse text-sm">
+          <thead className="sticky top-0 z-10 bg-[var(--c-surface-2)] text-xs uppercase text-[var(--c-text-dim)]">
+            <tr>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Ch</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Tag / Name</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Kind</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Mode</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Value</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-left">Safe</th>
+              <th className="border-b border-[var(--c-border)] px-3 py-2 text-right" />
+            </tr>
+          </thead>
+          <tbody>
+            {outputs.map((output) => {
+              const live = findOutputPoint(livePoints, output)
+              const unit = live?.unit ?? (output.kind === 'AO' ? engineeringUnitLabel(output.units) : '')
+              return (
+                <tr key={output.id} className="border-t border-[var(--c-border)] hover:bg-[var(--c-surface-2)]">
+                  <td className="px-3 py-2 font-mono text-xs">{output.kind === 'AO' ? 16 + output.channel : 20 + output.channel}</td>
+                  <td className="px-3 py-2">
+                    <span className="block font-semibold text-[var(--c-text)]">{output.id}</span>
+                    <span className="block text-xs text-[var(--c-text-dim)]">{output.label}</span>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs">{output.kind}</td>
+                  <td className="px-3 py-2 text-xs">{output.kind === 'AO' ? output.mode : 'Digital'}</td>
+                  <td className="px-3 py-2">
+                    <span className="font-mono font-semibold">{live ? formatValue(live.value, unit) : '--'}</span>
+                    <span className="ml-2 text-xs text-[var(--c-text-dim)]">{live?.quality ?? '--'}</span>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs">
+                    {output.kind === 'AO' ? output.safeValue : output.safeState}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Button size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => onEdit(output.id)}>{pick('Sửa', 'Edit')}</Button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Modal>
   )
 }
 
@@ -209,6 +324,7 @@ function OutputBasics({ output, rawValue, rawUnit, tagError, nameError, onChange
           aria-invalid={Boolean(tagError)}
           aria-describedby={tagError ? `${output.id}-tag-error` : undefined}
           className={`${controlClass()} bg-[var(--c-surface-2)] text-[var(--c-text-dim)]`}
+          data-point-field={`${output.kind.toLowerCase()}[${output.channel - 1}].tag`}
           value={output.id}
           readOnly
         />
@@ -220,7 +336,7 @@ function OutputBasics({ output, rawValue, rawUnit, tagError, nameError, onChange
       </label>
       <label className="space-y-1">
         <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Label</span>
-        <input aria-invalid={Boolean(nameError)} aria-describedby={nameError ? `${output.id}-name-error` : undefined} className={controlClass()} value={output.label} onChange={(event) => onChange({ label: event.target.value })} />
+        <input data-point-field={`${output.kind.toLowerCase()}[${output.channel - 1}].name`} aria-invalid={Boolean(nameError)} aria-describedby={nameError ? `${output.id}-name-error` : undefined} className={controlClass()} value={output.label} onChange={(event) => onChange({ label: event.target.value })} />
         {nameError && <span id={`${output.id}-name-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{nameError}</span>}
       </label>
       {isAo && (
@@ -543,13 +659,18 @@ function normalizeOutputs(outputs: OutputsConfig): OutputsConfig {
     ao: outputs.ao.map((ao) => ({
       ...ao,
       tag: ao.id,
+      label: displayPointName(normalizePointName(ao.label), ao.id),
       minPv: clampNumber(ao.minPv, -999999, ao.maxPv - 0.001),
       maxPv: clampNumber(ao.maxPv, ao.minPv + 0.001, 999999),
       safeValue: clampNumber(ao.safeValue, 0, aoSafeMax(ao.mode)),
       manualValue: clampNumber(ao.manualValue, 0, 100, true)
     })),
-    do: outputs.do.map((output) => ({ ...output, tag: output.id }))
+    do: outputs.do.map((output) => ({ ...output, tag: output.id, label: displayPointName(normalizePointName(output.label), output.id) }))
   }
+}
+
+function outputsEntries(config: OutputsConfig): OutputConfig[] {
+  return [...config.ao, ...config.do]
 }
 
 function aoSafeUnit(mode: AoSignalMode): string {

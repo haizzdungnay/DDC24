@@ -1,10 +1,11 @@
 import { Circle, Pencil, Power, RefreshCw, RotateCcw, Save, Search, ShieldAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { POINT_UNIT_OPTIONS, aiUnitFromPointUnit, apiClient, pointUnitFromAiUnit } from '../api/client'
-import { normalizePointTag, pointTagFieldErrors, validatePointTag } from '../api/pointTags'
+import { displayPointName, normalizePointName, normalizePointTag, pointNameConflicts, pointFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
+import { PointNameConflictNotice } from '../components/PointNameConflictNotice'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
 import { useApi } from '../hooks/useApi'
@@ -56,13 +57,14 @@ function visibleMonitorPoints(points: Point[], virtualPoints: VirtualPoint[]): P
       ...point,
       id: canonicalVirtualPointId(meta.id),
       tag: meta.tag,
-      name: meta.tag,
+      name: displayPointName(meta.name ?? meta.label, canonicalVirtualPointId(meta.id)),
       value: meta.value ?? point.value,
       unit: meta.unit ?? point.unit,
       signalType: meta.signalType,
       writable: meta.writable,
       logEnabled: meta.logEnabled,
       logIntervalMs: meta.logIntervalMs,
+      namespaceState: meta.namespaceState,
       updatedAt: meta.updatedAt ?? point.updatedAt
     }]
   })
@@ -129,6 +131,10 @@ export function MonitorPage() {
     ? mergePointsById(polledPoints, realtime.allPoints)
     : polledPoints
   const points = useMemo(() => visibleMonitorPoints(rawPoints, virtualState.data ?? []), [rawPoints, virtualState.data])
+  const nameConflicts = useMemo(() => pointNameConflicts([
+    ...rawPoints.map((point) => ({ id: point.id, name: point.name, kind: point.kind })),
+    ...(virtualState.data ?? []).map((point) => ({ id: canonicalVirtualPointId(point.id), name: point.name ?? point.label, kind: 'virtual' }))
+  ]), [rawPoints, virtualState.data])
   const selected = points.find((point) => point.id === selectedId) ?? points.find((point) => point.id === 'UI-01') ?? points[0]
   const modalPoint = pointModalId ? points.find((point) => point.id === pointModalId) : null
   const offline = realtime.connectionState !== 'connected'
@@ -169,13 +175,19 @@ export function MonitorPage() {
   }
 
   async function savePointBasics(point: Point, config: { tag: string; name: string; unit?: string }) {
-    const tagError = validatePointTag(config.tag)
+    const tagError = point.kind === 'virtual' ? validatePointTag(config.tag) : undefined
     if (tagError) throw new Error(tagError)
-    if (!config.name.trim()) throw new Error('Name cannot be empty')
-    await apiClient.updatePointConfig(point.id, {
-      tag: normalizePointTag(config.tag),
-      name: config.name.trim()
-    })
+    const nameError = validatePointName(config.name)
+    if (nameError) throw new Error(nameError)
+    const name = normalizePointName(config.name)
+    if (nameConflicts.has(point.id)) {
+      await apiClient.updatePointName(point.id, name)
+    } else {
+      await apiClient.updatePointConfig(point.id, {
+        ...(point.kind === 'virtual' ? { tag: normalizePointTag(config.tag) } : {}),
+        name
+      })
+    }
     toast.push('success', pick(`Updated ${pointDisplayTag(point)}`, `Updated ${pointDisplayTag(point)}`))
     await pointsState.refetch()
   }
@@ -239,12 +251,13 @@ export function MonitorPage() {
   }
 
   async function saveName(point: Point) {
-    if (!editingNameValue.trim()) {
-      toast.push('error', pick('Tên không được để trống', 'Name cannot be empty'))
+    const nameError = validatePointName(editingNameValue)
+    if (nameError) {
+      toast.push('error', nameError)
       return
     }
     try {
-      await apiClient.updatePointName(point.id, editingNameValue.trim())
+      await apiClient.updatePointName(point.id, normalizePointName(editingNameValue))
       toast.push('success', pick(`Đã đổi tên ${point.id}`, `Renamed ${point.id}`))
       setEditingName(null)
       pointsState.refetch()
@@ -333,10 +346,10 @@ export function MonitorPage() {
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_334px]">
         <div className={cn('space-y-3', offline && 'stale')}>
-          <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} onToggle={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
-          <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} />
-          <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
-          <AnalogSection title="VIRTUAL POINTS" rows={groups.Virtual} selectedId={selected?.id} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
+          <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onToggle={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
+          <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} />
+          <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
+          <AnalogSection title="VIRTUAL POINTS" rows={groups.Virtual} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
         </div>
         {selected && <DetailPanel
           point={selected}
@@ -361,6 +374,7 @@ export function MonitorPage() {
           onSaveEditTrend={() => saveTrend(selected)}
           onCancelEditTrend={cancelEditTrend}
           onToggleTrend={(id) => toggleTrend(id)}
+          conflictIds={nameConflicts.get(selected.id)}
         />}
       </div>
 
@@ -368,6 +382,7 @@ export function MonitorPage() {
         <PointDetailsModal
           key={modalPoint.id}
           point={modalPoint}
+          conflictIds={nameConflicts.get(modalPoint.id)}
           onClose={() => setPointModalId(null)}
           onSave={savePointBasics}
           onForce={forcePointWithDuration}
@@ -400,19 +415,19 @@ function StatCard({ label, value, detail, danger }: { label: string; value: numb
   )
 }
 
-function DigitalSection({ title, rows, selectedId, onSelect, onOpenDetails, onToggle }: { title: string; rows: Point[]; selectedId?: string; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void }) {
+function DigitalSection({ title, rows, selectedId, conflicts, onSelect, onOpenDetails, onToggle }: { title: string; rows: Point[]; selectedId?: string; conflicts: Map<string, string[]>; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void }) {
   const { pick } = useI18n()
   return (
     <SectionFrame title={`${title} (${rows.length})`}>
       <div className="grid grid-cols-[70px_minmax(150px,1fr)_112px_128px_58px] border-b border-[var(--c-border)] px-3 py-2 text-[10px] uppercase text-[var(--c-text-dim)]">
         <span>{pick('Điểm', 'Point')}</span><span>{pick('Tên điểm', 'Point name')}</span><span>{pick('Trạng thái', 'Status')}</span><span>{pick('Thời gian cập nhật', 'Updated at')}</span><span />
       </div>
-      {rows.map((point) => <DigitalRow key={point.id} point={point} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onToggle={onToggle} />)}
+      {rows.map((point) => <DigitalRow key={point.id} point={point} conflictIds={conflicts.get(point.id)} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onToggle={onToggle} />)}
     </SectionFrame>
   )
 }
 
-function DigitalRow({ point, selected, onSelect, onOpenDetails, onToggle }: { point: Point; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void }) {
+function DigitalRow({ point, conflictIds, selected, onSelect, onOpenDetails, onToggle }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void }) {
   const active = Boolean(point.value)
   const state = active ? 'on' : 'off'
   const stateFillColor = statusFill(state)
@@ -420,7 +435,7 @@ function DigitalRow({ point, selected, onSelect, onOpenDetails, onToggle }: { po
   return (
     <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_112px_128px_58px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
       <span className="mono font-semibold">{pointDisplayTag(point)}</span>
-      <span className="truncate font-semibold">{point.kind === 'virtual' ? '' : point.name}</span>
+      <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
       <span className="inline-flex items-center gap-2 font-semibold" style={{ color: stateTextColor }}><Circle className="h-2.5 w-2.5 fill-current" style={{ color: stateFillColor }} />{active ? 'ON' : 'OFF'}</span>
       <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
       <span onClick={(event) => { event.stopPropagation(); onToggle(point) }} className={cn('ml-auto flex h-5 w-9 items-center rounded-full border px-0.5 transition', active ? 'justify-end border-[var(--c-good)] bg-[rgba(47,164,90,0.14)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface-2)]')} role="switch" aria-checked={active} tabIndex={0}>
@@ -430,26 +445,26 @@ function DigitalRow({ point, selected, onSelect, onOpenDetails, onToggle }: { po
   )
 }
 
-function AnalogSection({ title, rows, selectedId, onSelect, onOpenDetails, onForce }: { title: string; rows: Point[]; selectedId?: string; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void }) {
+function AnalogSection({ title, rows, selectedId, conflicts, onSelect, onOpenDetails, onForce }: { title: string; rows: Point[]; selectedId?: string; conflicts: Map<string, string[]>; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void }) {
   const { pick } = useI18n()
   return (
     <SectionFrame title={`${title} (${rows.length})`}>
       <div className="grid grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] border-b border-[var(--c-border)] px-3 py-2 text-[10px] uppercase text-[var(--c-text-dim)]">
         <span>{pick('Điểm', 'Point')}</span><span>{pick('Tên điểm', 'Point name')}</span><span>{pick('Giá trị', 'Value')}</span><span>{pick('Đơn vị', 'Unit')}</span><span>{pick('Trạng thái', 'Status')}</span><span>Trend</span><span>{pick('Cập nhật', 'Updated')}</span>
       </div>
-      {rows.map((point) => <AnalogRow key={point.id} point={point} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onForce={onForce} />)}
+      {rows.map((point) => <AnalogRow key={point.id} point={point} conflictIds={conflicts.get(point.id)} selected={point.id === selectedId} onSelect={onSelect} onOpenDetails={onOpenDetails} onForce={onForce} />)}
     </SectionFrame>
   )
 }
 
-function AnalogRow({ point, selected, onSelect, onOpenDetails, onForce }: { point: Point; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void }) {
+function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onForce }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void }) {
   const { pick } = useI18n()
   const trendBuffer = useTrendBuffer(point.id, point.value, point.trend)
   const statusText = point.quality === 'good' ? pick('Bình thường', 'Normal') : point.quality === 'uncertain' ? pick('Lỗi - HIGH', 'Fault - HIGH') : point.quality.toUpperCase()
   return (
     <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
       <span className="mono font-semibold">{pointDisplayTag(point)}</span>
-      <span className="truncate font-semibold">{point.kind === 'virtual' ? '' : point.name}</span>
+      <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
       <span className="mono">{typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
       <span className="mono text-[var(--c-text-dim)]">{point.unit ?? '-'}</span>
       <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: statusFill(point.quality) }} />{statusText}</span>
@@ -470,12 +485,14 @@ function SectionFrame({ title, children }: { title: string; children: React.Reac
 
 function PointDetailsModal({
   point,
+  conflictIds,
   onClose,
   onSave,
   onForce,
   onRelease
 }: {
   point: Point
+  conflictIds?: string[]
   onClose: () => void
   onSave: (point: Point, config: { tag: string; name: string; unit?: string }) => Promise<void>
   onForce: (point: Point, value: number | boolean | string, durationSeconds: number) => Promise<void>
@@ -486,6 +503,7 @@ function PointDetailsModal({
   const [tagValue, setTagValue] = useState(point.tag)
   const [tagError, setTagError] = useState<string>()
   const [nameValue, setNameValue] = useState(point.name)
+  const [nameError, setNameError] = useState<string>()
   const [unitValue, setUnitValue] = useState(selectUnitValue(point.unit))
   const [forceValue, setForceValue] = useState(defaultForceValue(point))
   const [forceDurationMinutes, setForceDurationMinutes] = useState('10')
@@ -496,25 +514,38 @@ function PointDetailsModal({
   const binaryState = active ? 'on' : 'off'
   const binaryTextColor = statusColor(binaryState)
   const groupText = `${point.kind} - ${kindLabel[point.kind]}`
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   async function handleSave() {
-    const localError = validatePointTag(tagValue)
+    const localError = point.kind === 'virtual' ? validatePointTag(tagValue) : undefined
+    const localNameError = validatePointName(nameValue)
     if (localError) {
       setTagError(localError)
       return
     }
+    if (localNameError) {
+      setNameError(localNameError)
+      nameInputRef.current?.focus()
+      return
+    }
     try {
       setBusy('save')
-      const nextTag = normalizePointTag(tagValue)
-      const nextName = nameValue.trim()
+      const nextTag = point.kind === 'virtual' ? normalizePointTag(tagValue) : point.tag
+      const nextName = normalizePointName(nameValue)
       const nextUnit = isAnalog ? unitValue : undefined
       await onSave(point, { tag: nextTag, name: nextName, unit: nextUnit })
       setTagValue(nextTag)
       setTagError(undefined)
+      setNameError(undefined)
       setNameValue(nextName)
       if (nextUnit !== undefined) setUnitValue(nextUnit)
     } catch (err) {
-      setTagError(Object.values(pointTagFieldErrors(err))[0])
+      const errors = pointFieldErrors(err)
+      const nameMessage = Object.entries(errors).find(([path]) => /\.(?:name|label)$|^(?:name|label)$/.test(path))?.[1]
+      const tagMessage = Object.entries(errors).find(([path]) => /\.tag$|^tag$/.test(path))?.[1]
+      setNameError(nameMessage)
+      setTagError(tagMessage)
+      if (nameMessage) window.requestAnimationFrame(() => nameInputRef.current?.focus())
       toast.push('error', err instanceof Error ? err.message : 'Update failed')
     } finally {
       setBusy(null)
@@ -549,17 +580,19 @@ function PointDetailsModal({
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
           <div className="space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
-              {point.kind !== 'virtual' && <label className="block space-y-1">
+              <label className="block space-y-1">
                 <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Tag</span>
-                <input aria-invalid={Boolean(tagError)} aria-describedby={tagError ? `${point.id}-tag-error` : undefined} value={tagValue} onChange={(event) => setTagValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
+                <input readOnly={point.kind !== 'virtual'} aria-invalid={Boolean(tagError)} aria-describedby={tagError ? `${point.id}-tag-error` : undefined} value={tagValue} onChange={(event) => setTagValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
                 {tagError && <span id={`${point.id}-tag-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{tagError}</span>}
-              </label>}
+              </label>
               <label className="block space-y-1">
                 <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Point name', 'Point name')}</span>
-                <input value={nameValue} onChange={(event) => setNameValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
+                <input ref={nameInputRef} data-point-field="name" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? `${point.id}-name-error` : undefined} value={nameValue} onChange={(event) => setNameValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
+                {nameError && <span id={`${point.id}-name-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{nameError}</span>}
               </label>
             </div>
             <Button size="sm" variant="primary" icon={<Save className="h-4 w-4" />} loading={busy === 'save'} onClick={handleSave}>{pick('Save basics', 'Save basics')}</Button>
+            <PointNameConflictNotice pointId={point.id} conflictIds={conflictIds} />
           </div>
 
           <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-4">
@@ -654,7 +687,8 @@ function DetailPanel({
   onStartEditTrend,
   onSaveEditTrend,
   onCancelEditTrend,
-  onToggleTrend
+  onToggleTrend,
+  conflictIds
 }: {
   point: Point
   note: string
@@ -678,6 +712,7 @@ function DetailPanel({
   onSaveEditTrend: () => void
   onCancelEditTrend: () => void
   onToggleTrend: (id: string) => void
+  conflictIds?: string[]
 }) {
   const { pick } = useI18n()
   const active = Boolean(point.value)
@@ -720,13 +755,14 @@ function DetailPanel({
               ) : (
                 <>
                   <div className="text-sm font-semibold">{point.name}</div>
-                  {point.kind !== 'virtual' && <button onClick={onStartEdit} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Đổi tên', 'Rename')}>
+                  <button onClick={onStartEdit} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Đổi tên', 'Rename')}>
                     <Pencil className="h-4 w-4" />
-                  </button>}
+                  </button>
                 </>
               )}
             </div>
           </div>
+          <PointNameConflictNotice pointId={point.id} conflictIds={conflictIds} />
           <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-4 text-center" style={valuePanelStyle}>
             <div className="mono text-2xl font-bold text-[var(--c-accent)]" style={isBinary ? { color: binaryTextColor } : undefined}>{formatValue(point.value, point.unit)}</div>
             <div className="mt-1 flex items-center justify-center gap-2 text-xs font-semibold text-[var(--c-text-dim)]" style={isBinary ? { color: binaryTextColor } : undefined}>

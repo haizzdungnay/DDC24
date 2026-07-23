@@ -27,6 +27,7 @@ import type {
 } from '../types'
 import { DEVICE_DEFAULTS } from '../config'
 import { clamp, nowIso, pointNumber } from '../utils'
+import { displayPointName, normalizePointName } from '../api/pointTags'
 
 const startedAt = Date.now() - 12 * 86400_000 - 4 * 3600_000 - 32 * 60_000
 let demoTimeConfig: TimeConfig = { timezone: 'Asia/Ho_Chi_Minh', ntpEnabled: true, ntpServers: ['pool.ntp.org'], systemTime: '', revision: 1 }
@@ -703,12 +704,13 @@ export function putDemoOutputs(config: OutputsConfig): void {
 }
 
 let demoVirtualPoints: VirtualPoint[] = [
-  { id: 'VP1', tag: 'VP1', label: 'Room Setpoint', signalType: 'float', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 30 * 24 * 60 * 60, value: 24, unit: 'degC', displayMin: 16, displayMax: 30, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
-  { id: 'VP2', tag: 'VP2', label: 'Occupancy Request', signalType: 'boolean', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 7 * 24 * 60 * 60, value: true, unit: '', displayMin: 0, displayMax: 1, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
-  { id: 'VP3', tag: 'VP3', label: 'Mode Index', signalType: 'integer', enabled: true, writable: true, logEnabled: false, value: 1, unit: '', displayMin: 0, displayMax: 3, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
-  { id: 'VP4', tag: 'VP4', label: 'Mode Text', signalType: 'string', enabled: true, writable: true, logEnabled: false, value: 'auto', unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() },
-  { id: 'VP5', tag: 'VP5', label: 'Last Change', signalType: 'datetime', enabled: true, writable: false, logEnabled: false, value: nowIso(), unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso() }
+  { id: 'VP1', tag: 'VP1', name: 'Room Setpoint', label: 'Room Setpoint', signalType: 'float', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 30 * 24 * 60 * 60, value: 24, unit: 'degC', displayMin: 16, displayMax: 30, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso(), generation: 1 },
+  { id: 'VP2', tag: 'VP2', name: 'Occupancy Request', label: 'Occupancy Request', signalType: 'boolean', enabled: true, writable: true, logEnabled: true, logIntervalMs: 1000, retentionS: 7 * 24 * 60 * 60, value: true, unit: '', displayMin: 0, displayMax: 1, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso(), generation: 1 },
+  { id: 'VP3', tag: 'VP3', name: 'Mode Index', label: 'Mode Index', signalType: 'integer', enabled: true, writable: true, logEnabled: false, value: 1, unit: '', displayMin: 0, displayMax: 3, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso(), generation: 1 },
+  { id: 'VP4', tag: 'VP4', name: 'Mode Text', label: 'Mode Text', signalType: 'string', enabled: true, writable: true, logEnabled: false, value: 'auto', unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso(), generation: 1 },
+  { id: 'VP5', tag: 'VP5', name: 'Last Change', label: 'Last Change', signalType: 'datetime', enabled: true, writable: false, logEnabled: false, value: nowIso(), unit: '', displayMin: 0, displayMax: 100, rangeMultiplier: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, note: '', updatedAt: nowIso(), generation: 1 }
 ]
+const demoVirtualPointGenerations = new Map(demoVirtualPoints.map((item) => [canonicalDemoVirtualPointId(item.id), item.generation ?? 1]))
 
 syncDemoVirtualPoints()
 
@@ -719,11 +721,15 @@ export function getDemoVirtualPoints(): VirtualPoint[] {
 export function putDemoVirtualPoint(point: Partial<VirtualPoint>): VirtualPoint {
   const existingIndex = point.id ? demoVirtualPoints.findIndex((item) => canonicalDemoVirtualPointId(item.id) === canonicalDemoVirtualPointId(point.id ?? '')) : -1
   const current = existingIndex >= 0 ? demoVirtualPoints[existingIndex] : undefined
-  const id = point.id ?? nextDemoVirtualPointId()
+  const id = point.id?.trim() ? point.id : nextDemoVirtualPointId()
+  const canonicalId = canonicalDemoVirtualPointId(id)
+  const requestedName = point.label ?? point.name ?? current?.label ?? current?.name
+  const generation = current?.generation ?? (demoVirtualPointGenerations.get(canonicalId) ?? 0) + 1
   const next: VirtualPoint = normalizeDemoVirtualPoint({
     id,
     tag: point.tag ?? current?.tag ?? canonicalDemoVirtualPointId(id),
-    label: point.label ?? current?.label ?? 'Virtual Point',
+    name: requestedName,
+    label: requestedName ?? canonicalId,
     signalType: point.signalType ?? current?.signalType ?? 'float',
     enabled: point.enabled ?? current?.enabled ?? true,
     writable: point.writable ?? current?.writable ?? true,
@@ -739,10 +745,12 @@ export function putDemoVirtualPoint(point: Partial<VirtualPoint>): VirtualPoint 
     sensorCal: point.sensorCal ?? current?.sensorCal ?? 0,
     mathFunction: point.mathFunction ?? current?.mathFunction ?? 0,
     note: point.note ?? current?.note ?? '',
-    updatedAt: nowIso()
+    updatedAt: nowIso(),
+    generation
   })
   if (existingIndex >= 0) demoVirtualPoints[existingIndex] = next
   else demoVirtualPoints = [...demoVirtualPoints, next]
+  demoVirtualPointGenerations.set(canonicalId, generation)
   syncDemoVirtualPoints()
   return { ...next }
 }
@@ -755,10 +763,13 @@ export function deleteDemoVirtualPoint(id: string): void {
 function normalizeDemoVirtualPoint(point: VirtualPoint): VirtualPoint {
   const id = canonicalDemoVirtualPointId(point.id)
   const signalType = demoSignalTypes.includes(point.signalType) ? point.signalType : 'float'
+  const name = displayPointName(normalizePointName(point.label ?? point.name), id)
   return {
     ...point,
     id,
     tag: point.tag.trim() || id,
+    name,
+    label: name,
     signalType,
     unit: normalizeDemoVirtualUnit(point.unit),
     displayMin: clampDemoNumber(point.displayMin, -50, 205, 0),
@@ -827,7 +838,7 @@ function syncDemoVirtualPoints(): void {
     const id = canonicalDemoVirtualPointId(item.id)
     const value = normalizeDemoVirtualValue(item.signalType, item.value)
     const trend = typeof value === 'number' || typeof value === 'boolean' ? makeTrend(typeof value === 'boolean' ? Number(value) : value) : undefined
-    const point: Point = { id, tag: item.tag, name: item.label, kind: 'virtual', value, unit: item.unit, quality: 'good', source: 'Backend', priority: item.writable ? 'Writable' : 'Read only', updatedAt: item.updatedAt ?? nowIso(), sensorType: 'VP', signalType: item.signalType, writable: item.writable, logEnabled: item.logEnabled, logIntervalMs: item.logIntervalMs, ...(trend ? { trend } : {}) }
+    const point: Point = { id, tag: item.tag, name: displayPointName(item.label ?? item.name, id), kind: 'virtual', value, unit: item.unit, quality: 'good', source: 'Backend', priority: item.writable ? 'Writable' : 'Read only', updatedAt: item.updatedAt ?? nowIso(), sensorType: 'VP', signalType: item.signalType, writable: item.writable, logEnabled: item.logEnabled, logIntervalMs: item.logIntervalMs, ...(trend ? { trend } : {}) }
     const index = points.findIndex((entry) => canonicalDemoVirtualPointId(entry.id) === id)
     if (index >= 0) points[index] = { ...points[index], ...point }
     else points = [...points, point]
