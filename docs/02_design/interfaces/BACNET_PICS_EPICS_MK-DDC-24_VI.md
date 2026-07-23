@@ -9,7 +9,7 @@
 ---
 
 ## 1. Product Description
-MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/IP** (qua Ethernet/WiFi); lập trình bằng component graph hôm nay, roadmap Program Runtime IEC 61131-3-aligned (ADR-018, đang C0, chưa release). *(MS/TP đã bỏ — ARCH-R010.)*
+MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/IP** (qua Ethernet/WiFi); lập trình bằng component graph hôm nay, roadmap Program Runtime IEC 61131-3-aligned (ADR-020, đang C0, chưa release). *(MS/TP đã bỏ — ARCH-R010.)*
 
 ## 2. BACnet Standardized Device Profile
 - **B-ASC** (BACnet Application Specific Controller) — mục tiêu Ver 1.0.

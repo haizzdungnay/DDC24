@@ -9,7 +9,7 @@ ngày 2026-07-23. Downstream doc update đang thực hiện (xem §"Theo dõi th
 **Nguồn câu hỏi:** [`KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md`](KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md)
 (mục 3, 5) và [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md)
 mục 15 (RD-IEC-001..007) + mục 12.1 (sizing).
-**Quyết định đóng gói thành ADR:** [`ADR-018-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md)
+**Quyết định đóng gói thành ADR:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
 
 ---
 
@@ -36,8 +36,8 @@ assessment cùng ngày (giữ Rev A component-based, đẩy IEC sang Rev C).
 **Trả lời:** Xác nhận directive có thật. Directive chính thức: *"Rev A.0 phải hình thành
 nền tảng Program Runtime tương thích định hướng IEC 61131-3 do Mekong sở hữu. Phạm vi
 Rev A phải thu hẹp thành một MVP triển khai được, không làm toàn bộ bốn ngôn ngữ và toàn
-bộ chức năng PLC thương mại ngay trong một release."* → ghi thành ADR-018, ADR-004 chuyển
-`Superseded by ADR-018`.
+bộ chức năng PLC thương mại ngay trong một release."* → ghi thành ADR-020, ADR-004 chuyển
+`Superseded by ADR-020`.
 
 ---
 
@@ -182,7 +182,7 @@ sau khi C0 được review và phê duyệt.
 | # | Việc | Tài liệu | Trạng thái |
 |---|---|---|---|
 | 1 | Ghi nhận quyết định (file này) | `KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md` | Done |
-| 2 | ADR mới + cập nhật `DECISIONS.md`/ADR-004/`PRODUCT.md`/`SOFTWARE.md` | `ADR-018-mekong-owned-iec-aligned-program-runtime.md` | Done |
+| 2 | ADR mới + cập nhật `DECISIONS.md`/ADR-004/`PRODUCT.md`/`SOFTWARE.md` | `ADR-020-mekong-owned-iec-aligned-program-runtime.md` | Done |
 | 3 | Nâng bản thiết kế lên revision mới (ST+FBD, kiến trúc mới) | `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` v0.4 | Done |
 | 4 | C0 Architecture and Feasibility Plan | `KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md` | Done |
 | 5 | Implementation Plan C1–C10 | `KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md` | Done |

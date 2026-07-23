@@ -2,11 +2,11 @@
 
 **ID:** PROD-BASE-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-23 (ADR-018: Runtime đổi từ "chỉ component graph" sang "Mekong-owned Program Runtime, IEC 61131-3-aligned ST+FBD"; xem dòng Runtime và mục Ngoài phạm vi)
+**Cập nhật:** 2026-07-23 (ADR-020: Runtime đổi từ "chỉ component graph" sang "Mekong-owned Program Runtime, IEC 61131-3-aligned ST+FBD"; xem dòng Runtime và mục Ngoài phạm vi)
 
 ## Định vị
 
-MK-DDC-24 là BMS Edge Automation Controller với Program Runtime do Mekong sở hữu (IEC 61131-3-aligned, ST + FBD theo ADR-018), hoạt động local-first trên Debian Linux. Thiết bị thực thi logic điều khiển tại chỗ, tích hợp I/O và giao thức BMS, đồng thời cung cấp Web UI và HMI cục bộ tùy chọn. HVAC là use case đầu tiên, không giới hạn định vị sản phẩm. Không dùng nhãn "certified"/"compliant" cho tới khi có evidence theo release gate riêng.
+MK-DDC-24 là BMS Edge Automation Controller với Program Runtime do Mekong sở hữu (IEC 61131-3-aligned, ST + FBD theo ADR-020), hoạt động local-first trên Debian Linux. Thiết bị thực thi logic điều khiển tại chỗ, tích hợp I/O và giao thức BMS, đồng thời cung cấp Web UI và HMI cục bộ tùy chọn. HVAC là use case đầu tiên, không giới hạn định vị sản phẩm. Không dùng nhãn "certified"/"compliant" cho tới khi có evidence theo release gate riêng.
 
 ## Baseline Rev A.0
 
@@ -17,7 +17,7 @@ MK-DDC-24 là BMS Edge Automation Controller với Program Runtime do Mekong s�
 | UI modes | 0–10 V, 4–20 mA, NTC 10k/20k/configurable, auxiliary dry contact |
 | AO | 4 kênh qua DAC8554, command vật lý V/mA |
 | Network | Ethernet; BACnet/IP; Modbus TCP; 2 × Modbus RTU |
-| Runtime | Mekong-owned Program Runtime, IEC 61131-3-aligned, ngôn ngữ ST + FBD (ADR-018); priority và safe-state. Component graph 28 loại node cũ giữ vai trò legacy importer/nguồn vendor FB, không phải engine chính. |
+| Runtime | Mekong-owned Program Runtime, IEC 61131-3-aligned, ngôn ngữ ST + FBD (ADR-020); priority và safe-state. Component graph 28 loại node cũ giữ vai trò legacy importer/nguồn vendor FB, không phải engine chính. |
 | Configuration | REST API + React Web UI, form/JSON |
 | Local display | HMI LVGL/DRM feature-gated, MIPI DSI + FT5436 touch + 6 nút GPIO; limited operator HMI theo ADR-016 |
 
@@ -31,7 +31,7 @@ MK-DDC-24 là BMS Edge Automation Controller với Program Runtime do Mekong s�
 
 ## Ngoài phạm vi Rev A.0
 
-- LD, SFC, online change, PLCopen/IEC certification claim ("certified"/"compliant") và drag-drop wiresheet canvas (ADR-018 giới hạn Rev A.0 còn lại ST + FBD, build+atomic activation, không claim certification);
+- LD, SFC, online change, PLCopen/IEC certification claim ("certified"/"compliant") và drag-drop wiresheet canvas (ADR-020 giới hạn Rev A.0 còn lại ST + FBD, build+atomic activation, không claim certification);
 - MQTT/cloud agent và OTA A/B production workflow;
 - BACnet MS/TP, Modbus slave và BTL certification;
 - true isolated DI trong base SKU;

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { cn } from '../utils'
 
@@ -22,9 +22,10 @@ const sizeClass = {
   lg: 'h-12 px-5 text-base'
 }
 
-export function Button({ variant = 'secondary', size = 'md', icon, loading, className, children, disabled, ...props }: ButtonProps) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({ variant = 'secondary', size = 'md', icon, loading, className, children, disabled, ...props }, ref) {
   return (
     <button
+      ref={ref}
       className={cn('inline-flex items-center justify-center gap-2 rounded-[var(--radius)] border font-medium transition disabled:cursor-not-allowed disabled:opacity-50', variantClass[variant], sizeClass[size], className)}
       disabled={disabled || loading}
       {...props}
@@ -33,4 +34,4 @@ export function Button({ variant = 'secondary', size = 'md', icon, loading, clas
       {children}
     </button>
   )
-}
+})

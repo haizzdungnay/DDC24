@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <ctime>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -294,28 +293,14 @@ bool parse_schedule(const json::Value& row, ScheduleConfig* out)
     return true;
 }
 
-int current_week_minute()
+int week_minute(const std::tm& tm)
 {
-    const std::time_t now = std::time(nullptr);
-    std::tm tm{};
-#if defined(_WIN32)
-    localtime_s(&tm, &now);
-#else
-    localtime_r(&now, &tm);
-#endif
     const int monday_based = (tm.tm_wday + 6) % 7;
     return monday_based * 24 * 60 + tm.tm_hour * 60 + tm.tm_min;
 }
 
-ScheduleDate current_date()
+ScheduleDate schedule_date(const std::tm& tm)
 {
-    const std::time_t now = std::time(nullptr);
-    std::tm tm{};
-#if defined(_WIN32)
-    localtime_s(&tm, &now);
-#else
-    localtime_r(&now, &tm);
-#endif
     return ScheduleDate{tm.tm_mon + 1, tm.tm_mday};
 }
 
@@ -447,13 +432,21 @@ void ScheduleRuntime::configure(std::vector<ScheduleConfig> schedules)
 void ScheduleRuntime::evaluate(const IoSnapshot& io, PointTable& table,
                                PriorityResolver& resolver)
 {
-    evaluate_at(current_week_minute(), current_date(), io, table, resolver);
+    evaluate(capture_clock_snapshot(), io, table, resolver);
+}
+
+void ScheduleRuntime::evaluate(const ClockSnapshot& clock, const IoSnapshot& io,
+                               PointTable& table, PriorityResolver& resolver)
+{
+    evaluate_at(week_minute(clock.civil_time), schedule_date(clock.civil_time),
+                io, table, resolver);
 }
 
 void ScheduleRuntime::evaluate_week_minute(int week_minute, const IoSnapshot& io,
                                            PointTable& table, PriorityResolver& resolver)
 {
-    evaluate_at(week_minute, current_date(), io, table, resolver);
+    evaluate_at(week_minute, schedule_date(capture_clock_snapshot().civil_time),
+                io, table, resolver);
 }
 
 void ScheduleRuntime::evaluate_at(int week_minute, ScheduleDate date, const IoSnapshot& io,

@@ -6,12 +6,12 @@
 
 > ℹ️ **Kiến trúc Rev A (canonical).** Lớp SOM Rev A là **3 process `mkddc-*`** (core C++
 > chạy **component-graph** hôm nay; web **Go**, không Python/Svelte). **Cập nhật
-> 2026-07-23 (ADR-018):** roadmap Rev A.0 bổ sung Program Runtime Mekong-owned, IEC
+> 2026-07-23 (ADR-020):** roadmap Rev A.0 bổ sung Program Runtime Mekong-owned, IEC
 > 61131-3-aligned (ST+FBD), đang C0 — không phải code hiện có trong `services/core` hôm
 > nay, xem `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` trước khi bắt đầu làm phần Program.
 > Nguồn-chuẩn: [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md),
 > [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md), [ADR-004..008](../adr/),
-> [ADR-018](../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md). Mọi tên
+> [ADR-020](../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md). Mọi tên
 > `kinexus-*`/PLC/WebIDE còn sót đọc như **legacy reference**.
 
 ---

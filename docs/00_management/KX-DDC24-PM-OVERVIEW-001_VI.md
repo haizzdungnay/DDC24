@@ -5,14 +5,14 @@
 > **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Approved · **Owner:** PMO
 > 📘 [docs/README](../README.md)
 
-> ⚠️ **RECONCILE (2026-07-23, ADR-018 supersedes 2026-06-08 banner cũ).** Hướng sản phẩm:
+> ⚠️ **RECONCILE (2026-07-23, ADR-020 supersedes 2026-06-08 banner cũ).** Hướng sản phẩm:
 > **component-based DDC** là engine chạy thật hôm nay, Linux **3 process `mkddc-*`**, UI
 > Rev A **form/JSON**. **Không còn đúng:** "không PLC IDE/IEC 61131-3" — Rev A.0 roadmap
 > nay gồm Program Runtime do Mekong sở hữu, IEC 61131-3-aligned (ST+FBD), đang giai đoạn
 > C0, chưa release, không certified/compliant. Nguồn-chuẩn:
 > [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md),
 > [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md), [ADR-004..007](../adr/),
-> [ADR-018](../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md).
+> [ADR-020](../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md).
 
 ---
 

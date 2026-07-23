@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "kind": "frontend-trends-live-tail-postdeploy-verification",
+  "generatedAtUtc": "2026-07-22T07:53:00Z",
+  "windowId": "frontend-trends-live-tail-20260722T074700Z",
+  "behavior": {
+    "historyCacheBucketMs": 15000,
+    "presetHistorySource": "cache",
+    "customHistorySource": "database",
+    "pointPollMs": 1000,
+    "pointPollCacheMode": "no-store",
+    "presetCurrentUsesLivePoint": true,
+    "presetChartUsesTransientLiveTail": true,
+    "customHasLiveTail": false,
+    "cacheStatisticsRemainHistorianAggregates": true
+  },
+  "runtimeApiTrace": {
+    "endpoint": "/api/v1/points",
+    "pointIds": ["UI-01", "UI-02", "UI-06"],
+    "sampleCount": 12,
+    "firstReceivedAtUtc": "2026-07-22T07:35:40.803Z",
+    "lastReceivedAtUtc": "2026-07-22T07:35:52.613Z",
+    "valueChangedEveryPoll": true,
+    "updatedAtChangedEveryPoll": true,
+    "source": "core",
+    "observation": "Board endpoint supplied fresh values and updatedAt timestamps at approximately one-second cadence; the 15-second historian bucket was not the runtime source bottleneck."
+  },
+  "browserVerification": {
+    "url": "http://192.168.1.18:8081",
+    "asset": "/assets/index-WSSWDfxC.js",
+    "assetSha256": "8003863505693bf8dd336a69f112a99d9ce40bcd28ac105e3ad78bcd5881dea4",
+    "historyRequests": ["cache", "database"],
+    "liveTickAtMs": [0, 702, 1806, 2791, 3787, 4789],
+    "liveTickLabels": ["14:51:15", "14:51:16", "14:51:17", "14:51:18", "14:51:19", "14:51:20"],
+    "customHasLiveTier": false,
+    "observation": "Fresh Chrome loaded the candidate asset; the live tail changed once per second while Custom showed database samples without a live tier."
+  },
+  "candidate": {
+    "distTreeSha256": "e57347d108a515b386f7cea14ab4d46fe7489d7544601f5f30108af202b207fe",
+    "files": 8,
+    "assetPath": "/opt/mkddc-web/dist/assets/index-WSSWDfxC.js",
+    "assetSize": 390381,
+    "servedStatus": 200,
+    "servedSha256": "8003863505693bf8dd336a69f112a99d9ce40bcd28ac105e3ad78bcd5881dea4"
+  },
+  "checkpoint": {
+    "path": "/data/config/historian-v2-migration/frontend-trends-live-tail-20260722T074700Z/predeploy-checkpoint.json",
+    "sha256": "cf3ded1f6ef067bbf184d08426a3fec2c5a6183b0e5d2cd17b19494d56079fff",
+    "distTreeSha256": "5f9e234b6ead1a80feba038bc5f238f3e6ed509922bc97e73a4f1165fb9b6026",
+    "files": 8
+  },
+  "rollback": {
+    "treeSha256": "5f9e234b6ead1a80feba038bc5f238f3e6ed509922bc97e73a4f1165fb9b6026",
+    "matchesCheckpoint": true,
+    "runtimePath": "/opt/mkddc-web/.dist-before-frontend-trends-live-tail-20260722T074700Z",
+    "persistentPath": "/data/config/historian-v2-migration/frontend-trends-live-tail-20260722T074700Z/predeploy/dist-runtime-before"
+  },
+  "deployment": {
+    "swapUtc": "2026-07-22T07:47:18Z",
+    "readyUtc": "2026-07-22T07:47:18Z",
+    "loginStatus": 200,
+    "assetStatus": 200,
+    "rollbackTriggered": false,
+    "services": {
+      "mkddc-web-pi": {"mainPid": "68951", "nRestarts": "0", "activeState": "active", "subState": "running"},
+      "mkddc-core": {"mainPid": "1376", "nRestarts": "0", "activeState": "active", "subState": "running"},
+      "mkddc-iobus": {"mainPid": "979", "nRestarts": "0", "activeState": "active", "subState": "running"},
+      "mkddc-historian-soak-allpoints-20260722t065257z.service": {"mainPid": "70028", "nRestarts": "0", "activeState": "active", "subState": "running"}
+    }
+  }
+}

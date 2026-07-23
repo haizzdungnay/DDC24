@@ -5,11 +5,11 @@
 > **Tác giả:** KINEXUS Technologies — Product Team
 > **Liên quan:** [DS](DS_MK-DDC-24_VI.md) | [SRS](SRS_MK-DDC-24_VI.md) | [HW_SPEC](HW_SPEC_MK-DDC-24_VI.md)
 
-> ⚠️ **RECONCILE (2026-07-23, ADR-018 supersedes 2026-06-08 banner cũ).** Định vị & triết
+> ⚠️ **RECONCILE (2026-07-23, ADR-020 supersedes 2026-06-08 banner cũ).** Định vị & triết
 > lý sản phẩm theo nguồn-chuẩn [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md):
 > **component-based DDC** (engine chạy thật hôm nay), Linux 3-process `mkddc-*`, UI Rev A
 > form/JSON, BACnet/IP northbound + Modbus RTU/TCP field. **FR-001 bên dưới (IEC 61131-3
-> FBD+ST) không còn bị loại khỏi Rev A** — đã trở thành roadmap chính thức qua ADR-018
+> FBD+ST) không còn bị loại khỏi Rev A** — đã trở thành roadmap chính thức qua ADR-020
 > (Mekong-owned Program Runtime, ST+FBD, đang C0, chưa release, không certified/compliant).
 > Phạm vi Rev A: [REVA_SCOPE](REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md).
 > Baseline I/O và IOP theo [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md): 16 UI + 4 AO + 4 DO, không có DI công nghiệp trên base SKU.
@@ -126,7 +126,7 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 
 | ID | Yêu cầu | Mức độ |
 |----|---------|--------|
-| FR-001 | Phải chạy FBD và ST (Mekong Program Runtime, IEC 61131-3-aligned) trên Debian — roadmap Rev A.0, ADR-018, đang C0, không certified | MUST |
+| FR-001 | Phải chạy FBD và ST (Mekong Program Runtime, IEC 61131-3-aligned) trên Debian — roadmap Rev A.0, ADR-020, đang C0, không certified | MUST |
 | FR-002 | Chu kỳ scan phải cấu hình được 50 ms – 2 s | MUST |
 | FR-003 | Phải cung cấp PID block với auto-tuning cơ bản | MUST |
 | FR-004 | Phải hỗ trợ ≥ 8 schedule object (ngày/tuần/exception) | MUST |
@@ -219,7 +219,7 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 
 | Phiên bản | Tính năng | Target |
 |-----------|-----------|--------|
-| **Ver 1.0 (MVP)** | BACnet MS/TP + IP, web UI cơ bản, OTA. Program Runtime FBD/ST (ADR-018) không nằm trong Ver 1.0 — roadmap riêng, gate theo C0–C10 | Q4/Y7 |
+| **Ver 1.0 (MVP)** | BACnet MS/TP + IP, web UI cơ bản, OTA. Program Runtime FBD/ST (ADR-020) không nằm trong Ver 1.0 — roadmap riêng, gate theo C0–C10 | Q4/Y7 |
 | **Ver 1.1** | MQTT TLS, REST API đầy đủ, dashboard realtime | Q1/Y8 |
 | **Ver 1.2** | BACnet/SC (Secure Connect), IEC 62443-4-2 certification | Q2/Y8 |
 | **Ver 2.0** | IEC 62443-4-2 component certification, edge AI anomaly detection (NPU), advanced ST libraries | Q4/Y8 |
@@ -232,7 +232,7 @@ Bảng dưới ánh xạ từng Functional Requirement (FR) sang ID trong SRS v�
 
 | FR ID | Mô tả ngắn | SRS Requirement IDs | Test Case |
 |-------|-----------|--------------------|-----------|
-| FR-001 | FBD + ST (Mekong Program Runtime, roadmap ADR-018) | PLC-001, PLC-002, IDE-001, IDE-002 | TEST-001, FAT: PLC scan jitter |
+| FR-001 | FBD + ST (Mekong Program Runtime, roadmap ADR-020) | PLC-001, PLC-002, IDE-001, IDE-002 | TEST-001, FAT: PLC scan jitter |
 | FR-002 | Scan cycle 50ms–2s | PLC-010 | TEST-001 |
 | FR-003 | PID block + auto-tuning | PLC-004, PLC-005 | TEST-001 |
 | FR-004 | Schedule ≥ 8 objects | BAC-006 (Event), BACnet Schedule object | FAT: BACnet objects |

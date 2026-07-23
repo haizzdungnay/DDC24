@@ -2,14 +2,14 @@
 
 > **Bộ điều khiển DDC 24 điểm cho FCU, VAV và AHU nhỏ** — BACnet native, **cấu hình component-based (graph.json)**, kiến trúc SOM Debian Linux, phù hợp retrofit và điều khiển tầng phòng.
 >
-> ⚠️ **RECONCILE (2026-07-23, ADR-018 supersedes ADR-004 cho câu hỏi ngôn ngữ):** mô hình
+> ⚠️ **RECONCILE (2026-07-23, ADR-020 supersedes ADR-004 cho câu hỏi ngôn ngữ):** mô hình
 > đang **chạy thật hôm nay** là component-based graph (28 node, `graph.json`). Roadmap
 > Rev A.0 đã quyết định (2026-07-23) bổ sung một **Program Runtime do Mekong sở hữu**,
 > IEC 61131-3-aligned, scope **ST + FBD** — nhưng runtime này **đang trong giai đoạn C0
 > (architecture/feasibility), chưa có code, chưa release, không được gọi "Compliant" hay
 > "Certified"**. Toàn bộ mô tả "Soft PLC IEC 61131-3" trong tài liệu này (mục 3.5, 6.1, 8)
 > là target roadmap, không phải capability đang bán. Nguồn-chuẩn:
-> [ADR-018](../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md),
+> [ADR-020](../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md),
 > [PROGRAM_SOM_FW_DRAFT_DESIGN](../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md),
 > [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md).
 
@@ -26,7 +26,7 @@
 
 ## 1. Tổng quan Sản phẩm
 
-MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế cho các ứng dụng HVAC phân tán như FCU, VAV box và AHU nhỏ. Thiết bị chạy trên kiến trúc **SOM Debian Linux quad-core** kết hợp MCU real-time STM32, tích hợp universal input tự nhận dạng loại cảm biến, điều khiển cục bộ bằng component-based runtime hiện hành; roadmap Rev A.0 (ADR-018, đang C0) bổ sung **Mekong Program Runtime IEC 61131-3-aligned (ST + FBD)**, chưa release. Kết nối BMS/cloud (northbound, qua Ethernet/WiFi): **BACnet/IP, MQTT, REST API**; mở rộng thiết bị phụ (southbound, RS-485): **Modbus RTU master**. Phù hợp cho dự án retrofit hoặc tầng điều khiển phòng máy nhỏ, nơi chi phí đầu tư và không gian tủ điện cần được kiểm soát chặt.
+MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế cho các ứng dụng HVAC phân tán như FCU, VAV box và AHU nhỏ. Thiết bị chạy trên kiến trúc **SOM Debian Linux quad-core** kết hợp MCU real-time STM32, tích hợp universal input tự nhận dạng loại cảm biến, điều khiển cục bộ bằng component-based runtime hiện hành; roadmap Rev A.0 (ADR-020, đang C0) bổ sung **Mekong Program Runtime IEC 61131-3-aligned (ST + FBD)**, chưa release. Kết nối BMS/cloud (northbound, qua Ethernet/WiFi): **BACnet/IP, MQTT, REST API**; mở rộng thiết bị phụ (southbound, RS-485): **Modbus RTU master**. Phù hợp cho dự án retrofit hoặc tầng điều khiển phòng máy nhỏ, nơi chi phí đầu tư và không gian tủ điện cần được kiểm soát chặt.
 
 ### Ứng dụng Chính
 
@@ -53,7 +53,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 - ✅ **4 AO + 4 DO Relay** — điều khiển van modulating, damper, quạt và bơm không cần module trung gian
 - ✅ **BACnet/IP** — tích hợp nhanh với BMS Siemens, Honeywell, Schneider — không cần gateway
 - ✅ **MQTT v5.0 + REST API HTTPS** — đẩy dữ liệu IoT upstream, tích hợp dashboard và cloud
-- 🔜 **Program Runtime IEC 61131-3-aligned FBD + ST** *(roadmap Rev A.0, ADR-018, đang C0 — chưa release, không certified/compliant)* — Web IDE, không cài phần mềm desktop
+- 🔜 **Program Runtime IEC 61131-3-aligned FBD + ST** *(roadmap Rev A.0, ADR-020, đang C0 — chưa release, không certified/compliant)* — Web IDE, không cài phần mềm desktop
 - ✅ **Debian Linux trên SOM quad-core** — OTA A/B partition, SSH, web UI, extensible
 - ✅ **Màn hình TFT 2.4" limited-operator HMI** — JD9852 MIPI DSI, 240×320; CTP + 6× nút; setpoint/mode/override/release chỉ cho point được authority whitelist
 - ✅ **Thiết kế compact DIN-rail 150×90×55 mm** — phù hợp tủ điện chật, retrofit không phình tủ
@@ -152,7 +152,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 |------------|-----------|
 | **CE** | Dự kiến Q3/Y7 |
 | **BACnet BTL** | Testing in progress, expected Q4/Y7 |
-| **IEC 61131-3** | Not certified/compliant — Mekong-owned Program Runtime, IEC 61131-3-aligned architecture (ST + FBD), theo ADR-018. Cấm dùng "Compliant"/"Certified" cho tới khi có gate G0–G6 đóng (`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` §14). |
+| **IEC 61131-3** | Not certified/compliant — Mekong-owned Program Runtime, IEC 61131-3-aligned architecture (ST + FBD), theo ADR-020. Cấm dùng "Compliant"/"Certified" cho tới khi có gate G0–G6 đóng (`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` §14). |
 | **IEC 62443-4-1** | SDLC compliant (phát triển phần mềm) |
 | **IEC 61709** | MTBF estimation methodology |
 | **RoHS 3** | Compliant |
@@ -261,7 +261,7 @@ device profiles; the previous local-slave table is superseded by ARCH-R010.
 ## 6. Lập trình & Commissioning
 
 > ⚠️ **Roadmap, chưa release (2026-07-23):** toàn bộ mục 6.1 mô tả Program Runtime
-> IEC 61131-3-aligned (ADR-018) đang ở giai đoạn C0 (architecture/feasibility) — **chưa
+> IEC 61131-3-aligned (ADR-020) đang ở giai đoạn C0 (architecture/feasibility) — **chưa
 > có code, chưa build, chưa test, không certified/compliant**. Commissioning thật hôm
 > nay dùng component-based graph (`graph.json`, 28 node) qua trang Web `Programming`,
 > hiện ở trạng thái demo/chưa deploy thật (xem

@@ -69,6 +69,10 @@ export function pointNumber(point: Point): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+export function pointDisplayTag(point: Pick<Point, 'id' | 'tag' | 'kind'>): string {
+  return point.kind === 'virtual' ? point.tag : point.id
+}
+
 export function canonicalVirtualPointId(id: string): string {
   const match = id.trim().toUpperCase().match(/^(?:VP|AV)[-_]?0*(\d+)$/)
   return match ? `VP${Number(match[1])}` : id.trim().toUpperCase()

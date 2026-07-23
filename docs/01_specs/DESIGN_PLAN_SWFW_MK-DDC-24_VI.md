@@ -35,7 +35,7 @@ Tài liệu này định nghĩa **cách** đội SW/FW chuyển từ *yêu cầu
 ### 2.2 Tiêu chuẩn kỹ thuật sản phẩm (đã cam kết)
 | Tiêu chuẩn | Áp dụng |
 |-----------|---------|
-| **IEC 61131-3-aligned** | Program Runtime FBD+ST, Mekong-owned (roadmap ADR-018, đang C0, chưa release, không certified) |
+| **IEC 61131-3-aligned** | Program Runtime FBD+ST, Mekong-owned (roadmap ADR-020, đang C0, chưa release, không certified) |
 | **IEC 62443-4-1** | Quy trình phát triển bảo mật (SDLC) |
 | **IEC 62443-4-2** | Yêu cầu bảo mật component (roadmap Ver 1.2) |
 | **ASHRAE 135 (BACnet) + BTL** | Stack BACnet + conformance |
@@ -178,7 +178,7 @@ Chuỗi bắt buộc: **PRD FR/NFR → SRS/SW-REQ/FW-REQ → Design unit → Cod
 ---
 
 ## 9. Rủi ro thiết kế cần theo dõi (liên kết OPEN_ISSUES)
-- ~~**DEC-001** IEC 61131-3 engine build vs OpenPLC~~ — **Closed 2026-07-23 (ADR-018):** Mekong tự xây, không OpenPLC.
+- ~~**DEC-001** IEC 61131-3 engine build vs OpenPLC~~ — **Closed 2026-07-23 (ADR-020):** Mekong tự xây, không OpenPLC.
 - **HW-Q-002** CM3 extended-temp → ảnh hưởng dải nhiệt (không chặn SW/FW design).
 - **SW-Q-004** key storage (OP-TEE/TPM/encrypted FS) → quyết định trong D-11.
 - **SW-Q-005** OTA server endpoint → ảnh hưởng D-7 (cert pinning).

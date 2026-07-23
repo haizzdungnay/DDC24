@@ -50,7 +50,7 @@ every downstream edit traces to it.
 
 The architecture (ADR-004..007), 90-day deadline, Milestone-A interpretation constraints
 are **unchanged**. **Note (2026-07-23):** the "no IEC 61131-3" part of the original
-constraint list is superseded by ADR-018 — Rev A.0 roadmap now includes a Mekong-owned,
+constraint list is superseded by ADR-020 — Rev A.0 roadmap now includes a Mekong-owned,
 IEC 61131-3-aligned Program Runtime (ST+FBD, currently in phase C0, not yet released,
 not certified). "No BTL / no HMI / no OTA / no MQTT in Rev A.0" (the other constraints in
 the original sentence) are unchanged by this note.

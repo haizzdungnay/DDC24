@@ -2,7 +2,7 @@
 
 **ID:** TRACE-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-23 (ADR-018: thêm hàng cho SYS/SWR/IF/SAFE/NFR/FW-REQ-IEC/MCU, tất cả Planned — chưa có code C1–C10)
+**Cập nhật:** 2026-07-23 (ADR-020: thêm hàng cho SYS/SWR/IF/SAFE/NFR/FW-REQ-IEC/MCU, tất cả Planned — chưa có code C1–C10)
 
 Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `Planned` không phải bằng chứng pass.
 
@@ -13,7 +13,7 @@ Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `P
 | SYS-REQ-003 | `services/core/graph_runtime.cpp`, [Software](../04_design/SOFTWARE.md) | node registry/unit/integration | Implemented; release record required |
 | SYS-REQ-004 | `services/iobus` protocol adapters | BACnet/Modbus smoke + negative tests | Partial |
 | SYS-REQ-005 | `services/hmi`, CMake option | enabled build + target smoke | Partial |
-| SYS-REQ-IEC-001 | ADR-018, `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`, C0/C1–C10 plans (chưa có code) | inspection + conformance test ST+FBD | Planned — C0 chưa hoàn thành |
+| SYS-REQ-IEC-001 | ADR-020, `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`, C0/C1–C10 plans (chưa có code) | inspection + conformance test ST+FBD | Planned — C0 chưa hoàn thành |
 | SWR-REQ-001 | service entrypoints/CMake/system units | process isolation test | Planned |
 | SWR-REQ-002 | core graph/priority/safety | timing + unit + fault test | Partial |
 | SWR-REQ-003 | web validators + iobus config consumer | round-trip/reload test | Partial |

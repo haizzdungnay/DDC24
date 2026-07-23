@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "kind": "historian-rollback-package",
+  "packageMode": "prebuilt-native",
+  "generatedAtUtc": "2026-07-21T08:56:47.239438972Z",
+  "verificationHost": "linux/arm64",
+  "goCommandVersion": "",
+  "buildCommand": null,
+  "current": {
+    "name": "current",
+    "path": "/tmp/mkddc-web-ownerfix-current",
+    "sha256": "d319971f0a05e328ec275f88eb308891ff1508d300ac991a2281885c3372557e",
+    "size": 16879771,
+    "goVersion": "go1.26.4",
+    "goos": "linux",
+    "goarch": "arm64",
+    "cgoEnabled": "0",
+    "buildSettings": {
+      "CGO_ENABLED": "0",
+      "GOARCH": "arm64",
+      "GOOS": "linux"
+    }
+  },
+  "rollback": {
+    "name": "rollback-candidate",
+    "path": "/tmp/mkddc-web-ownerfix-rollback",
+    "sha256": "d319971f0a05e328ec275f88eb308891ff1508d300ac991a2281885c3372557e",
+    "size": 16879771,
+    "goVersion": "go1.26.4",
+    "goos": "linux",
+    "goarch": "arm64",
+    "cgoEnabled": "0",
+    "buildSettings": {
+      "CGO_ENABLED": "0",
+      "GOARCH": "arm64",
+      "GOOS": "linux"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "/data/config/historian-v2-migration/historian-cutover-20260721T082943Z/legacy-final.sqlite",
+      "role": "artifact",
+      "sha256Before": "c540256ac2ecebe1ec276d039cb604873dd5c7f9060925f3e4f779020fb1a1cc",
+      "sha256After": "c540256ac2ecebe1ec276d039cb604873dd5c7f9060925f3e4f779020fb1a1cc",
+      "sizeBefore": 46182400,
+      "sizeAfter": 46182400,
+      "unchanged": true
+    },
+    {
+      "path": "/data/config/historian-v2-migration/historian-cutover-20260721T082943Z/legacy-final.sqlite-shm",
+      "role": "artifact",
+      "sha256Before": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+      "sha256After": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+      "sizeBefore": 32768,
+      "sizeAfter": 32768,
+      "unchanged": true
+    },
+    {
+      "path": "/data/config/historian-v2-migration/historian-cutover-20260721T082943Z/legacy-final.sqlite-wal",
+      "role": "artifact",
+      "sha256Before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256After": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBefore": 0,
+      "sizeAfter": 0,
+      "unchanged": true
+    },
+    {
+      "path": "/data/config/historian-v2-migration/historian-cutover-20260721T082943Z/manifest-final.json",
+      "role": "artifact",
+      "sha256Before": "65e06b57d44e4ac7c03331d83c2efeb9595ea863382b0c8d19d44481bc4f3c3a",
+      "sha256After": "65e06b57d44e4ac7c03331d83c2efeb9595ea863382b0c8d19d44481bc4f3c3a",
+      "sizeBefore": 9145,
+      "sizeAfter": 9145,
+      "unchanged": true
+    },
+    {
+      "path": "/tmp/ownerfix-active.sqlite",
+      "role": "sqlite-fixture",
+      "sha256Before": "0c8c99612220c22bc0f9ad39c1cdc663adc056573e36e8a028ee30a6d8acc0ef",
+      "sha256After": "0c8c99612220c22bc0f9ad39c1cdc663adc056573e36e8a028ee30a6d8acc0ef",
+      "sizeBefore": 90005504,
+      "sizeAfter": 90005504,
+      "unchanged": true,
+      "currentVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"active\",\"writerV2\":true,\"queryV2\":true,\"legacyWriterAllowed\":false,\"evidenceBound\":true}",
+      "rollbackVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"active\",\"writerV2\":true,\"queryV2\":true,\"legacyWriterAllowed\":false,\"evidenceBound\":true}"
+    },
+    {
+      "path": "/tmp/ownerfix-legacy.sqlite",
+      "role": "sqlite-fixture",
+      "sha256Before": "7c354c979f87577f78b6312af56dc69fb8857489ed0295578d31084540eab41c",
+      "sha256After": "7c354c979f87577f78b6312af56dc69fb8857489ed0295578d31084540eab41c",
+      "sizeBefore": 106496,
+      "sizeAfter": 106496,
+      "unchanged": true,
+      "currentVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"legacy\",\"writerV2\":false,\"queryV2\":false,\"legacyWriterAllowed\":true,\"evidenceBound\":false}",
+      "rollbackVerificationOutput": "{\"schemaVersion\":5,\"quickCheck\":\"ok\",\"state\":\"legacy\",\"writerV2\":false,\"queryV2\":false,\"legacyWriterAllowed\":true,\"evidenceBound\":false}"
+    }
+  ]
+}

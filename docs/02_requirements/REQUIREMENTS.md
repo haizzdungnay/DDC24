@@ -2,7 +2,7 @@
 
 **ID:** SYS-REQSET-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-23 (ADR-018: thêm SYS/SWR/IF/SAFE/NFR/FW-REQ-IEC/MCU cho Mekong Program Runtime ST+FBD)
+**Cập nhật:** 2026-07-23 (ADR-020: thêm SYS/SWR/IF/SAFE/NFR/FW-REQ-IEC/MCU cho Mekong Program Runtime ST+FBD)
 
 `Must` là bắt buộc cho Rev A.0. Mỗi yêu cầu cần bằng chứng trong [Verification](../05_verification/VERIFICATION.md) và ánh xạ tại [Traceability](../07_records/TRACEABILITY.md).
 

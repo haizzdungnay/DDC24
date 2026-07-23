@@ -28,6 +28,7 @@ static const char* point_source_name(PointSource source)
 void ScanLoop::step()
 {
     const uint64_t t0 = now_ns();
+    const ClockSnapshot clock = capture_clock_snapshot();
 
     /* 0. Re-attach: core lên trước iobus quá 30s → main đã thoát vòng retry,
      * scan loop tự thử lại mỗi scan tới khi iobus tạo shm (gap #3 analysis report) */
@@ -137,16 +138,31 @@ void ScanLoop::step()
     }
 
     if (d_.schedules)
-        d_.schedules->evaluate(last_io_, *d_.table, *d_.resolver);
+        d_.schedules->evaluate(clock, last_io_, *d_.table, *d_.resolver);
 
     /* 5. Execute graph */
     d_.graph->execute(*d_.table, *d_.resolver);
 
     if (d_.alarms)
-        d_.alarms->evaluate(*d_.table, d_.graph->effective_scan_ms());
+        d_.alarms->evaluate(*d_.table, clock);
 
     /* 5a. COR-011: apply Modbus write node setpoints → plc_shm.ext[].dirty.
      * iobus fieldbus thread đọc dirty flag ở chu kỳ poll kế. */
+    d_.graph->apply_ext_writes(d_.bacnet->shm());
+
+    /* 6. Resolve priority */
+    OutputCmd out = d_.resolver->resolve();
+
+    /* 7. Safe-state có thể ghi đè */
+    d_.safe->apply(last_io_, *d_.table, &out);
+
+    /* Physical output is realtime-critical. Publish/serialization is nonessential. */
+    d_.writer->write(out);
+
+    d_.web->publish_point_snapshot(snapshot_publisher_.build(
+        next_snapshot_id_++, static_cast<uint64_t>(clock.utc_epoch_ms), clock.monotonic_ns, *d_.table,
+        last_io_, out, *d_.resolver, d_.safe->active()));
+
     for (const WebCommand& cmd : pending_alarm_) {
         if (cmd.kind == WebCommandKind::AlarmList) {
             const std::vector<AlarmState> states =
@@ -169,14 +185,6 @@ void ScanLoop::step()
                 d_.web->respond_rejected(cmd, "unknown_alarm");
         }
     }
-
-    d_.graph->apply_ext_writes(d_.bacnet->shm());
-
-    /* 6. Resolve priority */
-    OutputCmd out = d_.resolver->resolve();
-
-    /* 7. Safe-state có thể ghi đè */
-    d_.safe->apply(last_io_, *d_.table, &out);
 
     /* 7b. Respond web/BACnet command theo output THẬT.
      * Overridden khi: safe-state active OR nguồn cao hơn cmd.prio đang thắng (07 §8). */
@@ -215,9 +223,6 @@ void ScanLoop::step()
             d_.web->respond_accepted(cmd, d_.table->get(cmd.point).value, vsrc);
         }
     }
-
-    /* 8. Write output command (atomic, 2 field core sở hữu) */
-    d_.writer->write(out);
 
     /* 9. Publish BACnet object table — value/quality/reliability (BAC-004) */
     d_.bacnet->publish(*d_.table, d_.metrics->scan_count(), d_.metrics->scan_overrun(),

@@ -1,4 +1,4 @@
-# ADR-018: Mekong-Owned IEC 61131-3-Aligned Program Runtime (ST + FBD, Rev A.0)
+# ADR-020: Mekong-Owned IEC 61131-3-Aligned Program Runtime (ST + FBD, Rev A.0)
 
 - Date: 2026-07-23
 - Owner: Phạm Đình Chương — Project Engineering Owner / CTO
@@ -102,7 +102,7 @@ traceable record that DOC-REV-001 requires.
 
 ## Consequences
 
-- `ADR-004` status changes to `Superseded by ADR-018` in `docs/00_governance/DECISIONS.md`;
+- `ADR-004` status changes to `Superseded by ADR-020` in `docs/00_governance/DECISIONS.md`;
   its component-graph decision is narrowed to "legacy importer / vendor-FB source," not
   the Rev A programming paradigm.
 - `docs/00_governance/DECISIONS.md` "Diễn giải bắt buộc" line excluding IEC 61131-3 from

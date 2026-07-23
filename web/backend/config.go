@@ -11,25 +11,28 @@ const defaultAlarmSettingsConf = "/data/config/alarm_settings.conf"
 const defaultAlarmHistoryFile = "/data/config/alarm_history.jsonl"
 
 type Config struct {
-	Addr             string
-	Port             string
-	JWTSecret        string
-	UsersConf        string
-	ConfigDir        string
-	CorePidPath      string
-	IobusPidPath     string
-	CoreSock         string
-	HMISock          string
-	NetcfgSock       string
-	HMIAllowedUID    string
-	HMIAuditPath     string
-	TrendDBPath      string
-	ScheduleConfPath string
-	AlarmConfPath    string
-	AlarmHistoryPath string
-	StaticDir        string
-	CORSOrigin       string
-	WebVersion       string
+	Addr                    string
+	Port                    string
+	JWTSecret               string
+	UsersConf               string
+	ConfigDir               string
+	CorePidPath             string
+	IobusPidPath            string
+	CoreSock                string
+	HMISock                 string
+	NetcfgSock              string
+	HMIAllowedUID           string
+	HMIAuditPath            string
+	TrendDBPath             string
+	HistorianV2DBPath       string
+	HistorianV2ArchiveDir   string
+	HistorianV2MigrationDir string
+	ScheduleConfPath        string
+	AlarmConfPath           string
+	AlarmHistoryPath        string
+	StaticDir               string
+	CORSOrigin              string
+	WebVersion              string
 }
 
 func LoadConfig() (Config, error) {
@@ -58,7 +61,23 @@ func LoadConfig() (Config, error) {
 	if cfg.JWTSecret == "" {
 		return Config{}, errors.New("JWT_SECRET is required")
 	}
+	cfg.deriveHistorianV2Paths()
 	return cfg, nil
+}
+
+func (c *Config) deriveHistorianV2Paths() {
+	if c.ConfigDir == "" {
+		return
+	}
+	if c.HistorianV2DBPath == "" {
+		c.HistorianV2DBPath = filepath.Join(c.ConfigDir, "historian-v2.sqlite")
+	}
+	if c.HistorianV2ArchiveDir == "" {
+		c.HistorianV2ArchiveDir = filepath.Join(c.ConfigDir, "historian-v2-archive")
+	}
+	if c.HistorianV2MigrationDir == "" {
+		c.HistorianV2MigrationDir = filepath.Join(c.ConfigDir, "historian-v2-migration")
+	}
 }
 
 func getenv(key, fallback string) string {

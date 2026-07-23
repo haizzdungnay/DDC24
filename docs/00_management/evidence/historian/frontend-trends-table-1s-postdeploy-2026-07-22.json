@@ -1,0 +1,69 @@
+{
+  "behavior": {
+    "customDatabaseOnly": true,
+    "historyCacheBucketMs": 15000,
+    "livePointPollMs": 1000,
+    "realtimePresetCurrentUsesLivePoint": true
+  },
+  "candidate": {
+    "assetPath": "/opt/mkddc-web/dist/assets/index-Xej4g6MM.js",
+    "assetSha256": "4e344029dff36ab8bb3f2a02a61c7ef3740add6f79998a167bcb1575cba2cab8",
+    "assetSize": 389648,
+    "files": 8,
+    "treeSha256": "3163d40786101cc95cdc67f1cba14f05d51141446feef522789500780109de29"
+  },
+  "checkpoint": {
+    "files": 8,
+    "path": "/data/config/historian-v2-migration/frontend-trends-table-1s-20260722T072257Z/predeploy/dist",
+    "quickCheck": "not-applicable-static-assets",
+    "treeSha256": "87fc2980d5fefdf69cbb589021bda512dc1a0c2df8443fe6878586ec0d01c08d"
+  },
+  "deployment": {
+    "assetStatus": 200,
+    "backendRestarted": false,
+    "loginStatus": 200,
+    "readyUtc": "2026-07-22T07:25:01Z",
+    "rollbackTriggered": false,
+    "servedAssetSha256": "4e344029dff36ab8bb3f2a02a61c7ef3740add6f79998a167bcb1575cba2cab8",
+    "services": {
+      "mkddc-core": {
+        "ActiveState": "active",
+        "MainPID": "1376",
+        "NRestarts": "0",
+        "SubState": "running"
+      },
+      "mkddc-historian-soak-allpoints-20260722t065257z.service": {
+        "ActiveState": "active",
+        "MainPID": "70028",
+        "NRestarts": "0",
+        "SubState": "running"
+      },
+      "mkddc-iobus": {
+        "ActiveState": "active",
+        "MainPID": "979",
+        "NRestarts": "0",
+        "SubState": "running"
+      },
+      "mkddc-web-pi": {
+        "ActiveState": "active",
+        "MainPID": "68951",
+        "NRestarts": "0",
+        "SubState": "running"
+      }
+    },
+    "swapUtc": "2026-07-22T07:25:01Z"
+  },
+  "generatedAtUtc": "2026-07-22T07:25:32Z",
+  "kind": "frontend-trends-table-1s-postdeploy-verification",
+  "predeployManifest": {
+    "path": "/data/config/historian-v2-migration/frontend-trends-table-1s-20260722T072257Z/predeploy-checkpoint.json",
+    "sha256": "a3434569c29d2e35eeff7fdfd4a5d2037750bb90c8d4ff3e47c0d79216478a74"
+  },
+  "rollback": {
+    "matchesCheckpoint": true,
+    "runtimeBackup": "/data/config/historian-v2-migration/frontend-trends-table-1s-20260722T072257Z/predeploy/dist-runtime-before",
+    "treeSha256": "87fc2980d5fefdf69cbb589021bda512dc1a0c2df8443fe6878586ec0d01c08d"
+  },
+  "schemaVersion": 1,
+  "windowId": "frontend-trends-table-1s-20260722T072257Z"
+}

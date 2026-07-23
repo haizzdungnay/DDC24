@@ -66,7 +66,7 @@ Phase 6  3-domain demo + test report              (HVAC mini · Pump/Water · En
 drag-drop wiresheet canvas cho component graph legacy · online change · claim
 certified/compliant IEC. (Xem REVA_SCOPE §3.)
 
-> ⚠️ **Cập nhật 2026-07-23 (ADR-018):** HMI đã vào Rev A.0 từ ADR-016 (xem banner §3
+> ⚠️ **Cập nhật 2026-07-23 (ADR-020):** HMI đã vào Rev A.0 từ ADR-016 (xem banner §3
 > phía trên) — bullet cũ ở đây bị stale, đã sửa. Riêng Program Runtime: Rev A.0 Program
 > Editor **gồm ST Text Editor và FBD Graphical Editor** (Mekong-owned, IEC 61131-3-aligned,
 > roadmap — đang C0, chưa release). Không gọi chung là "canvas": **ST là text editor**,
@@ -305,7 +305,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** SW-PLC-020, SEC.
 
 ### T-UX-02 — Web config UX (UX) ⚠️ *Rev A.0: form/JSON cho I/O config; ST Text Editor +
-FBD Graphical Editor thuộc Program Runtime roadmap (ADR-018, đang C0) — không phải "canvas"
+FBD Graphical Editor thuộc Program Runtime roadmap (ADR-020, đang C0) — không phải "canvas"
 chung chung, xem C5/C7 ở Implementation Plan C1–C10. LD/SFC editor hoãn.*
 **INPUT:** [ ] [Design System](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) · [ ] requirement IDE.
 **Microtasks:**
@@ -341,7 +341,7 @@ chung chung, xem C5/C7 ở Implementation Plan C1–C10. LD/SFC editor hoãn.*
 **OUTPUT/DoD:** [ ] import graph hợp lệ → validate → deploy → core chạy.
 **Trace:** SW-WEB-006..009.
 > ⚠️ **2026-07-23:** task này chỉ là UI cho **legacy component graph** (28 node cũ, vai
-> trò importer theo ADR-018 §7.5). Đây **không phải** ST Text Editor / FBD Graphical
+> trò importer theo ADR-020 §7.5). Đây **không phải** ST Text Editor / FBD Graphical
 > Editor của Program Runtime — hai editor đó là task riêng (C5, C7) tại
 > [`KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`](../07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md),
 > blocked cho tới khi C0 duyệt. Drag-drop wiresheet canvas cho graph legacy vẫn hoãn
@@ -357,7 +357,7 @@ chung chung, xem C5/C7 ở Implementation Plan C1–C10. LD/SFC editor hoãn.*
 **OUTPUT/DoD:** [ ] host/integration pass · [ ] target ≥10 FPS/touch/buttons/usability pass · [ ] HMI release gate có evidence.
 **Trace:** HMI-001..032, SW-HMI-001..018, ADR-016.
 
-**🚪 P4 Gate (Rev A.0):** component graph (legacy importer) + web form/JSON + deploy graph.json; HMI chỉ nằm trong gate của SKU/build enable và không được làm chậm control baseline. *(Program Runtime ST+FBD là roadmap ADR-018 riêng, C0 hiện tại — không cùng gate P4 này.)*
+**🚪 P4 Gate (Rev A.0):** component graph (legacy importer) + web form/JSON + deploy graph.json; HMI chỉ nằm trong gate của SKU/build enable và không được làm chậm control baseline. *(Program Runtime ST+FBD là roadmap ADR-020 riêng, C0 hiện tại — không cùng gate P4 này.)*
 
 ---
 

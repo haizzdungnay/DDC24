@@ -2,7 +2,7 @@
 
 **Document ID:** KX-DDC24-PROGRAM-RUNTIME-C0-READINESS-001
 **Ngày:** 2026-07-23
-**Nguồn:** ADR-018 + 8 ACTION items yêu cầu bởi CTO (Phạm Đình Chương), 2026-07-23
+**Nguồn:** ADR-020 + 8 ACTION items yêu cầu bởi CTO (Phạm Đình Chương), 2026-07-23
 **Kết luận:** **C0_READY = NO** — một blocker duy nhất còn lại (owner assignment), không
 phải kỹ thuật hay tài liệu.
 
@@ -10,10 +10,10 @@ phải kỹ thuật hay tài liệu.
 
 ## Đối chiếu từng ACTION
 
-### ACTION-01 — Đồng bộ toàn bộ repository theo ADR-018
+### ACTION-01 — Đồng bộ toàn bộ repository theo ADR-020
 
 **Done.** Repo-wide grep (2 vòng, gồm vòng xác nhận sau khi sửa) không còn dòng nào
-tuyên bố "IEC 61131-3 không thuộc Rev A.0" hoặc mô tả kiến trúc runtime khác với ADR-018
+tuyên bố "IEC 61131-3 không thuộc Rev A.0" hoặc mô tả kiến trúc runtime khác với ADR-020
 mà không có ghi chú/sửa. 0 hit trong source code (chỉ hex literal vendored, không phải
 implementation). Chi tiết: `KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md`.
 
@@ -33,12 +33,12 @@ OPEN = 0
 **Done.** `REQUIREMENTS.md` (+13 requirement mới: SYS/SWR×9/IF/SAFE/NFR/FW-REQ-MCU×2),
 `VERIFICATION.md` (+test layer Program Runtime, +gate table G0–G6), `TRACEABILITY.md`
 (+hàng cho toàn bộ requirement mới, trạng thái Planned/Missing đúng thực tế — chưa có
-code). Không còn requirement cũ nào mâu thuẫn ADR-018 trong 3 file này.
+code). Không còn requirement cũ nào mâu thuẫn ADR-020 trong 3 file này.
 
 ### ACTION-04 — Chuẩn hóa Datasheet
 
 **Done.** `DS_MK-DDC-24_VI.md`: bỏ "IEC 61131-3 | Compliant (FBD + ST programming)",
-thay bằng "Not certified/compliant — ... theo ADR-018". Sửa thêm banner, tagline mục 1,
+thay bằng "Not certified/compliant — ... theo ADR-020". Sửa thêm banner, tagline mục 1,
 bullet tính năng mục 2, toàn bộ mục 6 (thêm cảnh báo roadmap/chưa release), bảng so sánh
 đối thủ mục 8 — không còn chỗ nào trong file mô tả Program Runtime như đang bán.
 
@@ -46,7 +46,7 @@ bullet tính năng mục 2, toàn bộ mục 6 (thêm cảnh báo roadmap/chưa 
 
 **Done, theo xác nhận trực tiếp của CTO.** `KX-DDC24-PM-IMPLPLAN-001_VI.md` nay ghi rõ:
 Rev A.0 Program Editor = **ST Text Editor** + **FBD Graphical Editor** (Mekong Program
-Runtime, ADR-018). Không còn dùng "canvas" mơ hồ cho cả hai — chỉ FBD được gọi là
+Runtime, ADR-020). Không còn dùng "canvas" mơ hồ cho cả hai — chỉ FBD được gọi là
 canvas/graphical, ST là text editor. Đã phân biệt rõ với legacy `graph.json` importer
 (T-FE-03, không phải Program Runtime editor).
 
@@ -91,7 +91,7 @@ FILES_UPDATED: 33
    KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT..., CHANGELOG.md, docs/README.md)
 
 FILES_CREATED: 4
-  (ADR-018-mekong-owned-iec-aligned-program-runtime.md,
+  (ADR-020-mekong-owned-iec-aligned-program-runtime.md,
    KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md,
    KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md,
    KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md)
@@ -101,7 +101,7 @@ FILES_CREATED: 4
 CONFLICT_REMAINING: 0
 
 BASELINE_STATUS: SYNCED
-  (Product/ADR/Requirements/Verification/Traceability đều phản ánh ADR-018: ST+FBD,
+  (Product/ADR/Requirements/Verification/Traceability đều phản ánh ADR-020: ST+FBD,
    Mekong Runtime, Typed IR, Atomic Activation, không Online Change, không
    PLCopen/IEC Certified. Không còn requirement cũ nào mâu thuẫn.)
 

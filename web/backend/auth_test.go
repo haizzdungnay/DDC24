@@ -15,7 +15,7 @@ import (
 
 func writeTestUsers(t *testing.T, password string, role Role) string {
 	t.Helper()
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	if err != nil {
 		t.Fatalf("bcrypt: %v", err)
 	}

@@ -1,6 +1,7 @@
 import { Circle, Pencil, Power, RefreshCw, RotateCcw, Save, Search, ShieldAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { POINT_UNIT_OPTIONS, aiUnitFromPointUnit, apiClient, pointUnitFromAiUnit } from '../api/client'
+import { normalizePointTag, pointTagFieldErrors, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
@@ -10,7 +11,7 @@ import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Point, PointKind, PointQuality, VirtualPoint } from '../types'
-import { canonicalVirtualPointId, cn, formatDateTime, formatTime, formatValue, isFreshIso, mergePointsById, pointNumber, statusColor, statusFill } from '../utils'
+import { canonicalVirtualPointId, cn, formatDateTime, formatTime, formatValue, isFreshIso, mergePointsById, pointDisplayTag, pointNumber, statusColor, statusFill } from '../utils'
 
 const MAX_TREND_POINTS = 18
 const REALTIME_STALE_MS = 2500
@@ -54,7 +55,8 @@ function visibleMonitorPoints(points: Point[], virtualPoints: VirtualPoint[]): P
     return [{
       ...point,
       id: canonicalVirtualPointId(meta.id),
-      name: meta.label || point.name,
+      tag: meta.tag,
+      name: meta.tag,
       value: meta.value ?? point.value,
       unit: meta.unit ?? point.unit,
       signalType: meta.signalType,
@@ -134,7 +136,7 @@ export function MonitorPage() {
   const filtered = useMemo(() => points.filter((point) => {
     const matchesKind = kind === 'all' || point.kind === kind
     const matchesQuality = quality === 'all' || point.quality === quality
-    const haystack = `${point.id} ${point.name}`.toLowerCase()
+    const haystack = `${point.id} ${point.tag} ${point.name}`.toLowerCase()
     return matchesKind && matchesQuality && haystack.includes(query.toLowerCase())
   }).sort((a, b) => a.id.localeCompare(b.id)), [kind, points, quality, query])
 
@@ -166,13 +168,15 @@ export function MonitorPage() {
     setPointModalId(point.id)
   }
 
-  async function savePointBasics(point: Point, config: { name: string; unit?: string }) {
+  async function savePointBasics(point: Point, config: { tag: string; name: string; unit?: string }) {
+    const tagError = validatePointTag(config.tag)
+    if (tagError) throw new Error(tagError)
     if (!config.name.trim()) throw new Error('Name cannot be empty')
     await apiClient.updatePointConfig(point.id, {
-      name: config.name.trim(),
-      unit: config.unit === undefined ? undefined : config.unit.trim()
+      tag: normalizePointTag(config.tag),
+      name: config.name.trim()
     })
-    toast.push('success', pick(`Updated ${point.id}`, `Updated ${point.id}`))
+    toast.push('success', pick(`Updated ${pointDisplayTag(point)}`, `Updated ${pointDisplayTag(point)}`))
     await pointsState.refetch()
   }
 
@@ -184,12 +188,12 @@ export function MonitorPage() {
     }
     if (point.kind === 'virtual') {
       await apiClient.forcePoint(point.id, value)
-      toast.push('success', pick(`Wrote ${point.id}`, `Wrote ${point.id}`))
+      toast.push('success', pick(`Wrote ${pointDisplayTag(point)}`, `Wrote ${pointDisplayTag(point)}`))
       await pointsState.refetch()
       return
     }
     if (realtime.forcePoint(point.id, value as number | boolean, durationSeconds)) {
-      toast.push('success', pick(`Force sent to ${point.id}`, `Force sent to ${point.id}`))
+      toast.push('success', pick(`Force sent to ${pointDisplayTag(point)}`, `Force sent to ${pointDisplayTag(point)}`))
       window.setTimeout(() => void pointsState.refetch(), 250)
       window.setTimeout(() => void pointsState.refetch(), 1000)
       return
@@ -202,7 +206,7 @@ export function MonitorPage() {
           delete forceReleaseTimers.current[point.id]
         })
     }, durationSeconds * 1000)
-    toast.push('success', pick(`Force sent to ${point.id}`, `Force sent to ${point.id}`))
+    toast.push('success', pick(`Force sent to ${pointDisplayTag(point)}`, `Force sent to ${pointDisplayTag(point)}`))
     await pointsState.refetch()
   }
 
@@ -213,7 +217,7 @@ export function MonitorPage() {
       delete forceReleaseTimers.current[point.id]
     }
     await apiClient.forcePoint(point.id, point.value as number | boolean, true)
-    toast.push('success', pick(`Released ${point.id}`, `Released ${point.id}`))
+    toast.push('success', pick(`Released ${pointDisplayTag(point)}`, `Released ${pointDisplayTag(point)}`))
     await pointsState.refetch()
   }
 
@@ -415,8 +419,8 @@ function DigitalRow({ point, selected, onSelect, onOpenDetails, onToggle }: { po
   const stateTextColor = statusColor(state)
   return (
     <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_112px_128px_58px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
-      <span className="mono font-semibold">{point.id}</span>
-      <span className="truncate font-semibold">{point.name}</span>
+      <span className="mono font-semibold">{pointDisplayTag(point)}</span>
+      <span className="truncate font-semibold">{point.kind === 'virtual' ? '' : point.name}</span>
       <span className="inline-flex items-center gap-2 font-semibold" style={{ color: stateTextColor }}><Circle className="h-2.5 w-2.5 fill-current" style={{ color: stateFillColor }} />{active ? 'ON' : 'OFF'}</span>
       <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
       <span onClick={(event) => { event.stopPropagation(); onToggle(point) }} className={cn('ml-auto flex h-5 w-9 items-center rounded-full border px-0.5 transition', active ? 'justify-end border-[var(--c-good)] bg-[rgba(47,164,90,0.14)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface-2)]')} role="switch" aria-checked={active} tabIndex={0}>
@@ -444,8 +448,8 @@ function AnalogRow({ point, selected, onSelect, onOpenDetails, onForce }: { poin
   const statusText = point.quality === 'good' ? pick('Bình thường', 'Normal') : point.quality === 'uncertain' ? pick('Lỗi - HIGH', 'Fault - HIGH') : point.quality.toUpperCase()
   return (
     <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
-      <span className="mono font-semibold">{point.id}</span>
-      <span className="truncate font-semibold">{point.name}</span>
+      <span className="mono font-semibold">{pointDisplayTag(point)}</span>
+      <span className="truncate font-semibold">{point.kind === 'virtual' ? '' : point.name}</span>
       <span className="mono">{typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
       <span className="mono text-[var(--c-text-dim)]">{point.unit ?? '-'}</span>
       <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: statusFill(point.quality) }} />{statusText}</span>
@@ -473,12 +477,14 @@ function PointDetailsModal({
 }: {
   point: Point
   onClose: () => void
-  onSave: (point: Point, config: { name: string; unit?: string }) => Promise<void>
+  onSave: (point: Point, config: { tag: string; name: string; unit?: string }) => Promise<void>
   onForce: (point: Point, value: number | boolean | string, durationSeconds: number) => Promise<void>
   onRelease: (point: Point) => Promise<void>
 }) {
   const { pick } = useI18n()
   const toast = useToast()
+  const [tagValue, setTagValue] = useState(point.tag)
+  const [tagError, setTagError] = useState<string>()
   const [nameValue, setNameValue] = useState(point.name)
   const [unitValue, setUnitValue] = useState(selectUnitValue(point.unit))
   const [forceValue, setForceValue] = useState(defaultForceValue(point))
@@ -492,14 +498,23 @@ function PointDetailsModal({
   const groupText = `${point.kind} - ${kindLabel[point.kind]}`
 
   async function handleSave() {
+    const localError = validatePointTag(tagValue)
+    if (localError) {
+      setTagError(localError)
+      return
+    }
     try {
       setBusy('save')
+      const nextTag = normalizePointTag(tagValue)
       const nextName = nameValue.trim()
       const nextUnit = isAnalog ? unitValue : undefined
-      await onSave(point, { name: nextName, unit: nextUnit })
+      await onSave(point, { tag: nextTag, name: nextName, unit: nextUnit })
+      setTagValue(nextTag)
+      setTagError(undefined)
       setNameValue(nextName)
       if (nextUnit !== undefined) setUnitValue(nextUnit)
     } catch (err) {
+      setTagError(Object.values(pointTagFieldErrors(err))[0])
       toast.push('error', err instanceof Error ? err.message : 'Update failed')
     } finally {
       setBusy(null)
@@ -529,23 +544,20 @@ function PointDetailsModal({
   }
 
   return (
-    <Modal open title={`${point.id} details`} size="xl" cancelLabel={pick('Close', 'Close')} onClose={onClose}>
+    <Modal open title={`${pointDisplayTag(point)} details`} size="xl" cancelLabel={pick('Close', 'Close')} onClose={onClose}>
       <div className="space-y-5 text-[var(--c-text)]">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
           <div className="space-y-3">
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+            <div className="grid gap-3 md:grid-cols-2">
+              {point.kind !== 'virtual' && <label className="block space-y-1">
+                <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Tag</span>
+                <input aria-invalid={Boolean(tagError)} aria-describedby={tagError ? `${point.id}-tag-error` : undefined} value={tagValue} onChange={(event) => setTagValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
+                {tagError && <span id={`${point.id}-tag-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{tagError}</span>}
+              </label>}
               <label className="block space-y-1">
                 <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Point name', 'Point name')}</span>
                 <input value={nameValue} onChange={(event) => setNameValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
               </label>
-              {isAnalog && (
-                <label className="block space-y-1">
-                  <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Unit', 'Unit')}</span>
-                  <select value={unitValue} onChange={(event) => setUnitValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]">
-                    {POINT_UNIT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </label>
-              )}
             </div>
             <Button size="sm" variant="primary" icon={<Save className="h-4 w-4" />} loading={busy === 'save'} onClick={handleSave}>{pick('Save basics', 'Save basics')}</Button>
           </div>
@@ -562,7 +574,8 @@ function PointDetailsModal({
         </div>
 
         <dl className="grid gap-2 md:grid-cols-2">
-          <PointInfo label="Point ID" value={point.id} />
+          {point.kind !== 'virtual' && <PointInfo label="Point ID" value={point.id} />}
+          <PointInfo label="Tag" value={point.tag} />
           <PointInfo label="I/O group" value={groupText} />
           <PointInfo label="Signal type" value={point.sensorType ?? '-'} />
           <PointInfo label="Current value" value={formatValue(point.value, point.unit)} />
@@ -686,7 +699,7 @@ function DetailPanel({
     <div className="space-y-3">
       <Panel title={pick('Chi tiết điểm', 'Point details')} action={<X className="h-4 w-4 text-[var(--c-accent)]" />}>
         <div className="space-y-4">
-          <div><div className="text-2xl font-semibold">{point.id}</div>
+          <div><div className="text-2xl font-semibold">{pointDisplayTag(point)}</div>
             <div className="mt-1 flex items-center gap-2">
               {isEditing ? (
                 <div className="flex items-center gap-2">
@@ -707,9 +720,9 @@ function DetailPanel({
               ) : (
                 <>
                   <div className="text-sm font-semibold">{point.name}</div>
-                  <button onClick={onStartEdit} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Đổi tên', 'Rename')}>
+                  {point.kind !== 'virtual' && <button onClick={onStartEdit} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Đổi tên', 'Rename')}>
                     <Pencil className="h-4 w-4" />
-                  </button>
+                  </button>}
                 </>
               )}
             </div>

@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "clock_snapshot.hpp"
 #include "point_table.hpp"
 
 namespace core {
@@ -68,6 +69,7 @@ public:
     void configure(std::vector<AlarmEntityConfig> entities);
 
     void evaluate(const PointTable& table, uint32_t scan_ms);
+    void evaluate(const PointTable& table, const ClockSnapshot& clock);
     bool ack(const std::string& id, double duration_s = 0.0, bool permanent = true);
     bool suppress(const std::string& id, double duration_s = 0.0, bool permanent = true);
     bool return_to_active(const std::string& id);
@@ -115,8 +117,10 @@ private:
     static std::string status_for(const Entity& entity);
     static void clear_lifecycle(Entity* entity);
     static void copy_lifecycle(const Entity& old_entity, Entity* entity);
+    void evaluate(const PointTable& table, float dt, int64_t utc_epoch_ms);
 
     std::vector<Entity> entities_;
+    uint64_t last_monotonic_ns_ = 0;
 };
 
 bool load_alarm_config(const std::string& path, bool must_exist,

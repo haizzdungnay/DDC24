@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"strconv"
 	"sync"
@@ -10,13 +11,16 @@ import (
 )
 
 type Sampler struct {
-	mu     sync.RWMutex
-	cfg    TrendConfig
-	store  *TrendStore
-	reader pointReader
-	logger *log.Logger
-	wake   chan struct{}
-	pruneN int
+	mu        sync.RWMutex
+	runMu     sync.Mutex
+	cfg       TrendConfig
+	store     *TrendStore
+	reader    pointReader
+	logger    *log.Logger
+	wake      chan struct{}
+	pruneN    int
+	runCancel context.CancelFunc
+	runDone   chan struct{}
 }
 
 func NewSampler(store *TrendStore, reader pointReader, cfg TrendConfig, logger *log.Logger) *Sampler {
@@ -28,7 +32,45 @@ func (s *Sampler) Start(ctx context.Context) {
 	if s == nil || s.store == nil || s.reader == nil {
 		return
 	}
-	go s.run(ctx)
+	s.runMu.Lock()
+	if s.runCancel != nil {
+		s.runMu.Unlock()
+		return
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	s.runCancel, s.runDone = cancel, done
+	s.runMu.Unlock()
+	go func() {
+		defer func() {
+			s.runMu.Lock()
+			if s.runDone == done {
+				s.runCancel, s.runDone = nil, nil
+			}
+			s.runMu.Unlock()
+			close(done)
+		}()
+		s.run(runCtx)
+	}()
+}
+
+func (s *Sampler) Stop(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.runMu.Lock()
+	cancel, done := s.runCancel, s.runDone
+	s.runMu.Unlock()
+	if cancel == nil {
+		return nil
+	}
+	cancel()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("stop legacy sampler: %w", ctx.Err())
+	}
 }
 
 func (s *Sampler) UpdateConfig(cfg TrendConfig) {

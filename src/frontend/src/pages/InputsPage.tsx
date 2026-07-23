@@ -2,9 +2,11 @@ import { Activity, ChevronLeft, ChevronRight, Save, SlidersHorizontal, Wand2 } f
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../api/client'
+import { pointTagFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
+import { PointLoggingSection } from '../components/PointLoggingSection'
 import { useToast } from '../components/Toast'
 import { TrendChart } from '../components/TrendChart'
 import { getDemoPoints } from '../demo/simulator'
@@ -33,6 +35,7 @@ export function InputsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [tagErrors, setTagErrors] = useState<Record<string, string>>({})
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 2000 })
 
   useEffect(() => {
@@ -74,14 +77,32 @@ export function InputsPage() {
     setConfirmOpen(true)
   }
 
+  function validateTags(nextConfigs: AiInputConfig[]): boolean {
+    const errors = Object.fromEntries(nextConfigs.flatMap((config, index) => {
+      const tagError = validatePointTag(aiNode(config.channel))
+      const nameError = validatePointName(config.label)
+      return [
+        ...(tagError ? [[`ui[${index}].tag`, tagError]] : []),
+        ...(nameError ? [[`ui[${index}].name`, nameError]] : [])
+      ]
+    }))
+    setTagErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
   async function confirmSave() {
+    if (!validateTags(configs)) return
     setSaving(true)
     try {
-      await apiClient.putAiInputs(configs)
+      const normalized = configs.map((config) => ({ ...config, tag: aiNode(config.channel) }))
+      await apiClient.putAiInputs(normalized)
+      setConfigs(normalized)
+      setTagErrors({})
       toast.push('success', t('saveSuccess'))
       setConfirmOpen(false)
       setViewMode('advanced')
     } catch (error) {
+      setTagErrors(pointTagFieldErrors(error))
       toast.push('error', `${t('saveError')}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setSaving(false)
@@ -89,12 +110,16 @@ export function InputsPage() {
   }
 
   async function saveConfigs(nextConfigs = configs) {
+    if (!validateTags(nextConfigs)) return
     setSaving(true)
     try {
-      await apiClient.putAiInputs(nextConfigs)
+      const normalized = nextConfigs.map((config) => ({ ...config, tag: aiNode(config.channel) }))
+      await apiClient.putAiInputs(normalized)
+      setTagErrors({})
       toast.push('success', t('saveSuccess'))
-      setConfigs(nextConfigs)
+      setConfigs(normalized)
     } catch (error) {
+      setTagErrors(pointTagFieldErrors(error))
       toast.push('error', `${t('saveError')}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setSaving(false)
@@ -154,7 +179,15 @@ export function InputsPage() {
         >
           {selected && (
             <div className="space-y-5">
-              <ChannelBasics config={selected} onChange={(patch) => updateChannel(selected.channel, patch)} />
+              <ChannelBasics
+                config={selected}
+                rawValue={findAiPoint(pointsState.data ?? [], selected.channel)?.raw}
+                rawUnit={findAiPoint(pointsState.data ?? [], selected.channel)?.rawUnit}
+                tagError={tagErrors[`ui[${configs.findIndex((config) => config.channel === selected.channel)}].tag`]}
+                nameError={tagErrors[`ui[${configs.findIndex((config) => config.channel === selected.channel)}].name`]}
+                onChange={(patch) => updateChannel(selected.channel, patch)}
+              />
+              <PointLoggingSection pointId={aiNode(selected.channel)} label={selected.label} kind="UI" />
               {viewMode === 'summary' ? (
                 <AiSummary
                   config={selected}
@@ -230,9 +263,9 @@ function AiSummary({
       }
     : null
   const unit = point?.unit
-  const rawUnit = String(point?.rawUnit ?? '').toLowerCase()
-  const rawVolts = !booleanInput && typeof point?.raw === 'number' && rawUnit === 'v' ? formatStat(point.raw) : '--'
-  const rawMilliamps = !booleanInput && typeof point?.raw === 'number' && rawUnit === 'ma' ? formatStat(point.raw) : '--'
+  const rawCell = !booleanInput && typeof point?.raw === 'number' && point?.rawUnit
+    ? { value: point.raw, unit: point.rawUnit }
+    : undefined
 
   function saveNote() {
     const nextConfigs = configs.map((item) => item.channel === config.channel ? { ...item, note: config.note } : item)
@@ -249,12 +282,7 @@ function AiSummary({
           </div>
           <dl className="grid gap-3 sm:grid-cols-2">
             <LiveDataItem label={pick('Giá trị', 'Value')} value={point ? formatLiveValue(point, unit, booleanInput) : '--'} />
-            {!booleanInput && (
-              <>
-                <LiveDataItem label={t('rawVolts')} value={rawVolts} />
-                <LiveDataItem label={t('rawMilliamps')} value={rawMilliamps} />
-              </>
-            )}
+            {rawCell && <LiveDataItem label={t('rawValue')} value={formatStat(rawCell.value, rawCell.unit)} />}
             <LiveDataItem label={pick('Nhỏ nhất', 'Minimum')} value={stats ? formatStat(stats.min, unit) : '--'} />
             <LiveDataItem label={pick('Lớn nhất', 'Maximum')} value={stats ? formatStat(stats.max, unit) : '--'} />
             <LiveDataItem label={pick('Trung bình', 'Average')} value={stats ? formatStat(stats.avg, unit) : '--'} />
@@ -270,6 +298,7 @@ function AiSummary({
             data={data}
             height={260}
             series={[{ key: pointId, label: config.label || pointId, color: 'var(--c-accent)', unit }]}
+            rawUnit={rawCell?.unit}
           />
           {data.length === 0 && <div className="mt-2 text-xs text-[var(--c-text-dim)]">{pick('Chưa có dữ liệu live cho kênh này.', 'No live data for this channel yet.')}</div>}
         </section>
@@ -311,7 +340,7 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
       const existing = current[pointId] ?? []
       const last = existing[existing.length - 1]
       if (last && last.time === time && last.raw === value) return current
-      const next = [...existing, { time, raw: value, [pointId]: value }].slice(-60)
+      const next = [...existing, { time, raw: value, [pointId]: value, __raw: point.raw ?? null }].slice(-60)
       return { ...current, [pointId]: next }
     })
   }, [pointId, point])
@@ -323,7 +352,7 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
     }
     const value = pointNumber(point)
     const time = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    setBuffers((current) => ({ ...current, [pointId]: [{ time, raw: value, [pointId]: value }] }))
+    setBuffers((current) => ({ ...current, [pointId]: [{ time, raw: value, [pointId]: value, __raw: point.raw ?? null }] }))
   }
 
   return { data: buffers[pointId] ?? [], reset }
@@ -339,17 +368,35 @@ function formatLiveValue(point: Point, unit: string | undefined, booleanInput: b
   return formatValue(point.value, unit)
 }
 
-function ChannelBasics({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
+function ChannelBasics({ config, rawValue, rawUnit, tagError, nameError, onChange }: { config: AiInputConfig; rawValue?: number; rawUnit?: string; tagError?: string; nameError?: string; onChange: (patch: Partial<AiInputConfig>) => void }) {
   const { t } = useI18n()
   return (
-    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
+    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_140px_minmax(0,1fr)_180px_120px]">
+      <label className="space-y-1">
+        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Tag</span>
+        <input
+          aria-invalid={Boolean(tagError)}
+          aria-describedby={tagError ? `ui-${config.channel}-tag-error` : undefined}
+          className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm text-[var(--c-text-dim)]"
+          value={aiNode(config.channel)}
+          readOnly
+        />
+        {tagError && <span id={`ui-${config.channel}-tag-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{tagError}</span>}
+      </label>
       <label className="space-y-1">
         <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{t('channelLabel')}</span>
+        <input className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 font-mono text-sm text-[var(--c-text-dim)]" value={config.channel} readOnly />
+      </label>
+      <label className="space-y-1">
+        <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Label</span>
         <input
+          aria-invalid={Boolean(nameError)}
+          aria-describedby={nameError ? `ui-${config.channel}-name-error` : undefined}
           className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
           value={config.label}
           onChange={(event) => onChange({ label: event.target.value })}
         />
+        {nameError && <span id={`ui-${config.channel}-name-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{nameError}</span>}
       </label>
       <label className="flex items-end gap-2 pb-2 text-sm font-semibold text-[var(--c-text-dim)]">
         <input
@@ -360,6 +407,14 @@ function ChannelBasics({ config, onChange }: { config: AiInputConfig; onChange: 
         />
         {t('enableChannel')}
       </label>
+      {typeof rawValue === 'number' && rawUnit && (
+        <div className="space-y-1">
+          <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Raw</span>
+          <div className="flex h-10 items-center rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 font-mono text-sm text-[var(--c-text-dim)]">
+            {formatStat(rawValue, rawUnit)}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

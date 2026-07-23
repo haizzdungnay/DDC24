@@ -388,9 +388,12 @@ function SourceRow({ source, virtualPoints, onChange, onRemove }: { source: Alar
         {sourceKinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
       </SelectField>
       <SelectField label={pick('Kenh', 'Channel')} value={String(source.channel)} onChange={(channel) => onChange({ channel: Number(channel) })}>
-        {channels.map((channel) => <option key={channel} value={channel}>{channel}</option>)}
+        {channels.map((channel) => {
+          const virtual = source.kind === 'VP' ? virtualSourceFor('VP', channel, virtualPoints) : undefined
+          return <option key={channel} value={channel}>{virtual ? `${channel} - ${virtual.tag}` : channel}</option>
+        })}
       </SelectField>
-      <TextField label="Point ID" value={source.pointId} disabled onChange={() => undefined} />
+      <TextField label={source.kind === 'VP' ? 'Tag' : 'Point ID'} value={source.kind === 'VP' ? virtualSourceFor('VP', source.channel, virtualPoints)?.tag ?? source.pointId : source.pointId} disabled onChange={() => undefined} />
       <div className="flex items-end">
         <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={onRemove}>{pick('Xoa', 'Remove')}</Button>
       </div>

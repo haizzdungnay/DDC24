@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -81,11 +83,59 @@ func TestTrendStoreConfigRoundTrip(t *testing.T) {
 	}
 }
 
+func TestTrendStoreQuiesceFencesAllLegacyWrites(t *testing.T) {
+	store := openTestTrendStore(t)
+	ctx := context.Background()
+	if err := store.QuiesceWriters(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.InsertBatch(ctx, []Sample{{TS: 1, PointID: "UI-01", Value: 1}}); !errors.Is(err, ErrLegacyHistorianQuiesced) {
+		t.Fatalf("insert err=%v", err)
+	}
+	if _, err := store.SaveConfig(ctx, defaultTrendConfig()); !errors.Is(err, ErrLegacyHistorianQuiesced) {
+		t.Fatalf("save config err=%v", err)
+	}
+	store.ResumeWriters()
+	if err := store.InsertBatch(ctx, []Sample{{TS: 1, PointID: "UI-01", Value: 1}}); err != nil {
+		t.Fatalf("resume insert: %v", err)
+	}
+}
+
+func TestTrendStoreSerializesConcurrentLegacyWriters(t *testing.T) {
+	store := openTestTrendStore(t)
+	ctx := context.Background()
+	const writers = 64
+	errs := make(chan error, writers)
+	var wg sync.WaitGroup
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			errs <- store.InsertBatch(ctx, []Sample{{TS: int64(index + 1), PointID: "UI-01", Value: float64(index)}})
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent writer error: %v", err)
+		}
+	}
+	var count int
+	if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM samples WHERE point_id='UI-01'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != writers {
+		t.Fatalf("stored rows=%d want=%d", count, writers)
+	}
+}
+
 func openTestTrendStore(t *testing.T) *TrendStore {
 	t.Helper()
 	store, err := OpenTrendStore(filepath.Join(t.TempDir(), "trend.sqlite"))
 	if err != nil {
 		t.Fatalf("OpenTrendStore: %v", err)
 	}
+	t.Cleanup(func() { _ = store.Close() })
 	return store
 }

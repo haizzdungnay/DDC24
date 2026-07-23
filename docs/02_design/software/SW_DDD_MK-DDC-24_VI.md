@@ -7,11 +7,11 @@
 > **Owner:** Software Team
 > 📘 [README](../../01_specs/README.md) · Nâng từ `SW_ARCH_SPEC` · Trace `SW_REQUIREMENTS`, `SRS`
 
-> ⚠️ **RECONCILE (2026-07-23, ADR-018 supersedes 2026-06-08 banner cũ).** Decomposition
+> ⚠️ **RECONCILE (2026-07-23, ADR-020 supersedes 2026-06-08 banner cũ).** Decomposition
 > theo [ADR-005](../../adr/ADR-005-three-process-architecture.md): **3 process `mkddc-*`**
 > (core C++ component-graph + iobus + web Go) — engine **component-based chạy thật hôm
 > nay** ([ADR-004](../../adr/ADR-004-component-based-runtime.md), nay legacy-importer
-> theo [ADR-018](../../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md)). Roadmap
+> theo [ADR-020](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)). Roadmap
 > Rev A.0 bổ sung Program Runtime IEC 61131-3-aligned (ST+FBD, Mekong-owned, đang C0,
 > chưa release, không certified) — sẽ thêm `mkddc-program-service`/`mkddc-program-core`
 > khi C1+ mở, xem `SOFTWARE.md` và `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`.

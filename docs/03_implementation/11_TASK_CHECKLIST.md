@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.25 | 2026-07-22 (ADR-017: active network plans NWC-000..017 và HNW-000..013) · 1.24 | 2026-07-22 (ADR-016: historical six-screen HMI block superseded by HOP-000..077) · 1.23 | 2026-07-01 · 1.22 | 2026-07-01
+> **Phiên bản:** 1.48 | 2026-07-22 (merge historian v2 release gates with ADR-016/017 HOP/NWC/HNW task sets) · 1.47 | 2026-07-21 (bounded board schema-v5 activation GREEN; release gates open) · 1.46 | 2026-07-21 (ARM64 frozen schema-v5 package parity GREEN) · 1.38 | 2026-07-21 (physical rolling-prune engine code-local GREEN) · 1.25 | 2026-07-22 (ADR-017 NWC-000..017/HNW-000..013) · 1.24 | 2026-07-22 (ADR-016 HOP-000..077)
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -901,6 +901,149 @@ Done khi: npm/go security checks clean locally and Trivy/Grype no longer report 
 Phụ thuộc: WEB-013
 Trạng thái: ĐÃ làm 2026-06-23 — Vite 8.0.16 + @vitejs/plugin-react 6.0.2; x/crypto 0.53.0 + x/sys 0.46.0; audit/build/lint/go test/govulncheck/Grype archive scan pass locally; chờ remote CI green.
 ```
+
+```
+Task ID: WEB-015
+Tên: Giới hạn bảng timestamp Trends còn 5 mốc gần nhất
+Owner: Dev Web | Phase: 5 | Module: frontend TrendChart
+File: src/frontend/src/components/TrendChart.tsx + src/frontend/src/components/TrendChart.test.tsx
+Input: owner feedback 2026-07-15; 09_WEB §1.11
+Output: chart giữ toàn bộ samples; bảng dưới chart chỉ render 5 timestamp mới nhất
+Test: render ít nhất 7 samples; bảng có đúng 5 data rows và bỏ 2 timestamp cũ nhất
+Done khi: focused test + frontend lint/typecheck/build pass; owner kiểm FE đạt trước mọi BE/phụ trợ
+Phụ thuộc: WEB-014
+Trạng thái: ĐÃ làm 2026-07-15 — Add Trend modal có tìm ID/tên + lọc UI/AO/DO/VP + Apply/Cancel; custom From/To lọc trong 24h legacy; fresh frontend full Vitest/lint/typecheck/Vite build passed locally; full typecheck clear.
+```
+
+```
+Task ID: WEB-016
+Tên: Global technical point tag namespace — Phase A
+Owner: Dev Web | Phase: 5 | Module: backend config/points + frontend Inputs/Outputs/VP/Monitor
+File: web/backend/pointtags.go, pointconfig.go, dto.go, configapi.go, virtualpoint.go, points.go, main.go, http.go; src/frontend/src/api/pointTags.ts, api/client.ts, types.ts, pages/InputsPage.tsx, OutputsPage.tsx, VirtualIoPage.tsx, MonitorPage.tsx
+Technical-tag foundation currently present in `web/backend/pointtags.go` and `src/frontend/src/api/pointTags.ts`; display-name amendment is tracked separately under `WEB-NAME-001`.
+Input: ADR-019 Accepted; Plan 43 Approved; CONFIG_SCHEMA Rev 1.8; OpenAPI 1.5.0; Runtime Model Rev 1.2
+Output: unique normalized ASCII tag across UI/AO/DO/all VP including disabled; tag separate name/label; Point id+tag; display-name amendment remains under WEB-NAME-001; canonical-ID-only API paths; structured 400/409 field details; deterministic tag migration
+Test: backend tag/collision/migration/concurrency/race; frontend utility/component field-error tests; lint/typecheck/build; E2E cross-kind collision matrix
+Done khi: toàn Phase A matrix pass; no localStorage authority; failed write preserves old config; docs status/rev updated. Phase B Programming alias không thuộc task này.
+Phụ thuộc: WEB-015, ADR-019, Plan 43
+Trạng thái: ĐÃ làm một phần 2026-07-15 — API-writer tag scope locally verified: global UI/AO/DO/VP tag validation + structured 400/409, point `id+tag`, FE tag surfaces, deterministic tag migration helper; Go test/vet và FE test/lint/typecheck/build pass locally. Còn release gates: race bị Windows CGO compiler chặn; backend normal coverage 59.7%; OpenAPI 1.6.0 parses với 41 paths/216 refs/zero decoded C1 controls; E2E/manual và generation-root authority chưa đóng. Display-name amendment thuộc WEB-NAME-001, không coi là WEB-016 hoàn tất.
+```
+
+## Phase 5.1 — Historian + global display-name amendment (Core snapshot Done; downstream product work open)
+
+```
+Task ID: COR-HIST-001
+Tên: Coherent runtime point snapshot for historian
+Owner: Dev SOM | Phase: 4/5 | Module: core web_ipc/scan_loop/point_table
+File: services/core/web_ipc.{hpp,cpp}, scan_loop.{hpp,cpp}, point_table.{hpp,cpp}, tests/test_web_ipc.cpp, tests/test_runtime_point_snapshot.cpp
+Input: ADR-018 v1.1; Runtime Model Rev 1.3; Plan 42 §4; frozen shared/mkddc_shm.h
+Output: one strict read-only 24-row snapshot from one completed scan for UI-01..16, AO-01..04 post-safe resolved setpoint, DO-01..04 feedback; uppercase quality, actual source/role/unit/monotonic timestamp, generation=1 Rev A; DI deferred pending capability authority
+Test: Release CTest 209/209; focused snapshot/IPC/scan 64/64; output write precedes publication; strict JSON/escaping/64 KiB bounds and client quotas; synthetic worst-width stress line 6,427 bytes including newline; zero allocations across 1,000 warmed publisher builds plus zero-client publications; no DB write in core
+Done khi: C++ tests pass and web can read one bounded coherent snapshot without blocking scan
+Phụ thuộc: COR-011; DOC-HIST-001
+Trạng thái: **DONE 2026-07-17 — code/local gates**. Clean WSL/Ninja Release ON build + CTest 209/209, clean production OFF build và `git diff --check` pass. Không đổi SHM ABI, SQLite, backend hoặc FE. Đây không phải historian release claim: downstream WEB-HIST-001..005 hiện đã DONE code/local nhưng authority/cutover vẫn feature-gated; board jitter/eMMC/recovery/full flow còn thuộc E2E-HIST-001 target gate.
+```
+
+```
+Task ID: WEB-HIST-001
+Tên: Per-point policy, future-start scheduling and capacity API
+Owner: Dev Web | Phase: 5 | Module: historian policy/config/API
+File: web/backend/historian_policy.go, dto.go, http.go, main.go, historian_policy_test.go
+Input: ADR-018 v1.1; CONFIG_SCHEMA Rev 1.9; OpenAPI 1.6.0; Plan 42 §5
+Output: GET/PUT /trends/config with revision/serverNowUtc/capacity and UI/AO/DO/VP policy; 11 intervals; immediate server start or future UTC; off/scheduled/recording; atomic validation
+Test: all point kinds × intervals; past reject; restart persistence; disable preserves history; revision/generation/namespace/capacity/507; no empty auto-all
+Done khi: go test -race passes; failed batch leaves prior revision active; VP diagnostic log remains separate
+Phụ thuộc: COR-HIST-001; WEB-NAME-001; DOC-HIST-001
+Trạng thái: **DONE 2026-07-17 — code/local gates**. Backend đã có coherent core reader, persisted VP generation/namespace revision authority, file-backed revisioned policy/capacity API, required-field/RBAC/machine-reason contract, atomic patch/restart, future/past UTC, stale generation reconciliation, reservation/free-space validation và legacy sampler coexistence. Focused/full Go test, vet, build, `git diff --check` và supported Linux/amd64 `go test -race -count=1 -timeout 10m ./...` GREEN (`266.998s`). Capacity Rev A dùng conservative fixed per-enabled-point ceiling; measured codec/tier projection thuộc WEB-HIST-002. Không claim historian release: WEB-HIST-002..005 và E2E-HIST-001 vẫn open.
+```
+
+```
+Task ID: WEB-HIST-002
+Tên: SQLite hot/archive schema, migration and recovery
+Owner: Dev Web | Phase: 5 | Module: historian store/archive/migration/recovery
+File: web/backend/historian_store.go, historian_archive.go, historian_migration.go, historian_recovery.go + tests
+Input: ADR-018; Plan 42 §6
+Output: FULL-sync WAL, policy revisions, hot 15s rows, immutable blocks, gaps/meta, native backup, idempotent migration/recovery
+Test: codec/checksum; sec/ms legacy; empty legacy list; interrupted migration; power-cut reopen; corruption damaged copy; hot prune only after archive watermark
+Done khi: migration verified without destructive drop; no record-count pruning; corruption never auto-deletes data
+Phụ thuộc: WEB-HIST-001
+Trạng thái: **DONE 2026-07-20 — code/local gates; board activation GREEN 2026-07-21**. Separate `historian-v2.sqlite` now has schema-v5 evidence-bound active authority on the board after a 596,284-row final migration; legacy `TrendStore`, sampler and `/history` remain in source for rollback. Final backup, ARM64 package parity, live rollback verification and unified query smoke are recorded. Prune, target eMMC, physical fault/power-cut, browser/manual E2E, long soak and legacy removal remain open.
+```
+
+```
+Task ID: WEB-HIST-003
+Tên: Monotonic historian scheduler + bounded RAM/hot cache
+Owner: Dev Web | Phase: 5 | Module: historian scheduler/runtime snapshot
+File: web/backend/historian_scheduler.go, runtime_snapshot.go, virtualpoint_runtime.go, main.go + tests
+Input: ADR-018 v1.1; Plan 42 §7
+Output: one coherent snapshot per due boundary; no sample before start; restart at next boundary; 1/3/5s RAM fold; sparse slow slots; explicit gaps; 48h hot cache
+Test: 11 boundaries/no drift; immediate/future/restart; AO resolved/DO feedback/VP runtime; clock forward/back; queue overflow; no hold-last/backfill
+Done code/local khi: shadow scheduler gates GREEN; no VP authoring-value sample; no empty policy auto-all. Old Sampler chỉ bị remove ở activation/cutover sau khi scheduler, query, FE và rollout gates đều GREEN.
+Phụ thuộc: COR-HIST-001, WEB-HIST-002
+Trạng thái: **DONE 2026-07-20 — shadow code/local gates; board runtime GREEN 2026-07-21**. Deterministic 11-interval scheduling, coherent snapshot fan-out, bounded RAM/fold/queue and explicit error gaps are covered; first active-cycle restart-gap wiring now has a TDD regression and produced two automatic board restart gaps after a controlled restart. Legacy paths remain for rollback; target/eMMC fault/soak, physical power-cut, browser/manual E2E and release removal remain open.
+```
+
+```
+Task ID: WEB-HIST-004
+Tên: Unified UTC history query + CSV
+Owner: Dev Web | Phase: 5 | Module: historian query/API
+File: web/backend/historian_query.go, historyapi.go + tests
+Input: OpenAPI 1.6.0; ADR-018 v1.1; Plan 42 §8
+Output: 1..8 canonical IDs; half-open UTC; RAM>hot>archive merge; generation dedupe; max 5000/series; quality/source/tier/gaps; partial 200 and all-tier 503; streamed CSV
+Test: 48h boundary; tier overlap/dedupe; rename/delete/recreate generation; fine resolution unavailable; partial failure; CSV parity
+Done code/local khi: query/CSV API gates GREEN; frontend can consume one response only; no browser history merge; no false no-history before all tiers finish. Query-authority cutover và legacy removal vẫn là rollout gates riêng.
+Phụ thuộc: WEB-HIST-003
+Trạng thái: **DONE 2026-07-20 — unified query/CSV code-local gates; board query authority GREEN 2026-07-21**. Explicit `[from,to)` v2 query returned `complete=true` on an aligned authenticated board window; legacy range adapter remains only for rollback. Target eMMC, 48-hour boundary, physical fault/power-cut, browser/manual E2E and legacy removal remain open.
+```
+
+```
+Task ID: WEB-HIST-005
+Tên: Shared UI/AO/DO/VP Logging Control and unified Trends UX
+Owner: Dev Web | Phase: 5 | Module: frontend point pages/trends/accessibility
+File: src/frontend/src/components/PointLoggingControl.tsx, PointLoggingDialog.tsx, HistoryStateBanner.tsx, TrendSelectionDialog.tsx; pages/InputsPage.tsx, OutputsPage.tsx, VirtualIoPage.tsx, TrendsPage.tsx; api/client.ts; types.ts + tests
+Input: ADR-018 v1.2; ADR-019 v1.1; OpenAPI 1.7.0; Plan 42 §§6.3, 9-10
+Output: same control and off/scheduled/recording/error badges on all point types; interval-bounded retention; two-step interval/start modal; admin edit/view-only roles; backend-only merged Trends; DO/boolean stepped lines; explicit gaps
+Test: 4 kinds × 11 intervals; retention 1..max and atomic invalid rejection; immediate/future/past; focus trap/Escape/restore/alert; 403 session; VP diagnostic separation; partial/fallback/no-history; latest-five table preserved
+Done khi: test/lint/typecheck/build + browser keyboard/a11y pass; no 1s browser historian buffer or frontend tier merge
+Phụ thuộc: WEB-HIST-001, WEB-HIST-004, WEB-016 technical-tag foundation, WEB-NAME-001 display-name amendment
+Trạng thái: **DONE 2026-07-22 — shared Logging Control/source-routed Trends + retention amendment + physical rolling-prune engine code-local gates; board activation GREEN**. Control/retention/query contracts are implemented and board v2 authority is active. Auto/presets use the 24-hour RAM presentation cache; Custom uses database-only history. Live defaults to v2 and explicit `VITE_HISTORIAN_V2_TRENDS=0` remains the rollback switch; prune remains disabled. Browser/manual accessibility, target eMMC, 48-hour boundary, physical power-cut, long soak, E2E and legacy removal remain open.
+```
+
+```
+Task ID: ACT-HIST-001
+Tên: Historian activation transaction and boot reconciliation
+Owner: Dev Web + Tester | Phase: 5/6 | Module: historian activation/recovery/authority
+Output: SQLite prepared marker; strict filesystem commit point; immutable backup/migration/policy evidence; maintenance-only quiesce/final-backup/migration/gap coordinator; idempotent boot reconcile; active-only writer/query/prune authority
+Test: prepare/commit; fault after filesystem rename; uncommitted prepared fail-closed; missing/stale evidence; migration phase/manifest/policy mismatch; active config corruption; no dual writer; query unavailable before active marker
+Done khi: production final backup is created after verified legacy quiesce and recorded through the durable evidence API; v2 writer/query switch and rollback fixture pass board power-cut/E2E
+Trạng thái: **IN PROGRESS 2026-07-21** — bounded production migration/activation is GREEN: final backup/evidence covers 596,284 rows, schema-v5 authority is active, final ARM64 package parity and live rollback verification pass, and legacy writers are quiesced. Physical power-cut, target benchmark, long soak, browser/manual E2E, prune scheduling and legacy removal remain open, so the task is not release-complete.
+```
+
+```
+Task ID: WEB-NAME-001
+Tên: Independent globally unique display-name namespace
+Owner: Dev Web | Phase: 5 | Module: backend point namespace + frontend point editors
+File: web/backend/pointtags.go, pointnames_test.go, configapi.go, virtualpoint.go, dto.go + tests; src/frontend/src/api/pointTags.ts, pointTags.test.ts; InputsPage.tsx, OutputsPage.tsx, VirtualIoPage.tsx, MonitorPage.tsx (optional extraction if cohesion/size requires)
+Input: ADR-019 v1.1; CONFIG_SCHEMA Rev 1.9; OpenAPI 1.6.0; Plan 43 Rev 0.3
+Output: required unique Unicode display name/label across UI/AO/DO/all VP, independent from tag; blank legacy to canonical ID; duplicate-content conflict state; conflict-reducing rename only; canonical history identity preserved
+Test: Unicode/whitespace/case; cross-kind collision; same tag/name allowed; concurrent writes; legacy blank/duplicate/idempotence; rename/delete/recreate history generation; field focus/details
+Done khi: no accepted duplicate nameKey; runtime/read works during legacy conflict; unrelated mutation blocked; no auto-suffix/first-wins
+Phụ thuộc: WEB-016 existing tag foundation; DOC-HIST-001
+Trạng thái: IN PROGRESS 2026-07-17 — tag/name work vẫn chưa đạt toàn DoD. Historian prerequisite đã thêm persisted VP generation/namespace revision authority tối thiểu và recreate generation test trong worktree; independent VP display-name amendment và full WEB-NAME test matrix vẫn open.
+```
+
+```
+Task ID: E2E-HIST-001
+Tên: Historian/name E2E, recovery and target eMMC benchmark
+Owner: Tester + Dev SOM + Dev Web | Phase: 6 | Module: all
+Input: COR-HIST-001, WEB-HIST-001..005, WEB-NAME-001
+Output: full UI/AO/DO/VP flow, restart/clock/disk/corruption/gap evidence, 48h/archive query, rename/delete/recreate, duplicate-name recovery, target capacity benchmark
+Test: Plan 42 §11 + owner acceptance matrix 2026-07-15
+Done khi: race/coverage/build/a11y/E2E pass; target benchmark gates pass; docs annotated with actual evidence
+Phụ thuộc: all above
+Trạng thái: PLANNED 2026-07-15 — no release claim.
+```
+
 ---
 
 ## Phase 5.5 — mkddc-hmi
@@ -1115,3 +1258,49 @@ Phụ thuộc: E2E-003
 Test chi tiết: [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
 
 Revision addendum: **Rev 1.23** | 2026-07-01 (Phase 4.6 implementation verified locally: SHM v4 and BACnet smoke 14/14; Orange Pi/BTL gates remain open).
+
+Revision addendum: **Rev 1.24** | 2026-07-15 — Added owner-approved `WEB-015`: chart keeps full samples while timestamp table renders only latest five rows.
+
+Revision addendum: **Rev 1.25** | 2026-07-15 — Added owner-approved `WEB-016` Phase A global point-tag namespace; contract amended, implementation remains IN PROGRESS.
+
+Revision addendum: **Rev 1.26** | 2026-07-15 — `WEB-016` API-writer implementation verified locally; Go test/vet and FE gates pass, remaining race/coverage/OpenAPI/E2E/generation release gates recorded explicitly.
+
+Revision addendum: **Rev 1.27** | 2026-07-15 — Added owner-approved `COR-HIST-001`, `WEB-HIST-001..005`, `WEB-NAME-001`, `E2E-HIST-001`: shared point logging, immediate/future start, unified 48h/archive Trends and independent unique display names; all new product work remains PLANNED.
+
+Revision addendum: **Rev 1.28** | 2026-07-15 — Replaced drifted historian-gate references with approved hard gate `DOC-HIST-001`; reconciled tag/name file map, partial statuses, and current local verification evidence.
+
+Revision addendum: **Rev 1.29** | 2026-07-15 — Reconciled `WEB-HIST-001` dependency to `WEB-NAME-001`; preserved `WEB-016` as technical-tag foundation.
+
+Revision addendum: **Rev 1.30** | 2026-07-15 — Replaced vague `WEB-016 amendment` dependency on `WEB-HIST-005` with exact `WEB-016` technical-tag foundation plus `WEB-NAME-001` display-name amendment.
+
+Revision addendum: **Rev 1.31** | 2026-07-17 — Closed `COR-HIST-001` code/local gates with Release 209/209, allocation-free publication, output ordering and 6,427-byte synthetic stress response evidence; retained `WEB-HIST-001..005` and `E2E-HIST-001` target gates as open.
+
+Revision addendum: **Rev 1.32** | 2026-07-18 — Recorded `WEB-HIST-002` readiness-only local implementation and measured non-race gates; retained task as IN PROGRESS because supported Linux/amd64 race, target eMMC and downstream scheduler/query/FE cutover gates remain open.
+
+Revision addendum: **Rev 1.33** | 2026-07-20 — Marked `WEB-HIST-002` DONE for code/local gates after Linux/amd64 ext4 race `GREEN` (`287.407s`); retained target eMMC, full historian E2E and downstream scheduler/query/FE cutover gates as open.
+Revision addendum: **Rev 1.34** | 2026-07-20 — Marked the `WEB-HIST-003` shadow scheduler code/local slice DONE after deterministic scheduler/error-path TDD, focused and full Linux/amd64 ext4 race GREEN (`55.385s`), Windows test/vet/build GREEN, and fixture-only bcrypt race acceleration; retained legacy authority, activation/cutover, target eMMC, full E2E and release gates as open.
+
+Revision addendum: **Rev 1.35** | 2026-07-20 — Marked `WEB-HIST-004` unified query/CSV code-local gates DONE after focused parity/integration tests, Windows full test/vet/build and Linux/amd64 ext4 race GREEN (`103.031s`); retained legacy adapter/query authority, WEB-HIST-005, activation/cutover, target eMMC, full E2E and release gates as open.
+
+Revision addendum: **Rev 1.36** | 2026-07-20 — Marked `WEB-HIST-005` shared Logging Control/unified Trends code-local gates DONE after 50 frontend tests, lint/typecheck/build GREEN, structured RBAC/error/a11y coverage, UTC/generation/gap/stepped-line tests and default-off v2 authority gate; retained legacy authority, activation/cutover, target eMMC, browser/manual accessibility, full E2E and release gates as open.
+
+Revision addendum: **Rev 1.37** | 2026-07-20 — Added WEB-HIST-005 retention amendment: selectable `retentionDays` from 1 day through interval maximum, backend `maxRetentionDays`/`retentionMaxDaysByInterval`, atomic invalid-value rejection, policy schema migration and scaled capacity projection; physical rolling prune remains deferred until activation/cutover and target capacity/endurance evidence is GREEN.
+
+Revision addendum: **Rev 1.38** | 2026-07-21 — Marked the physical rolling-prune engine code/local GREEN after activation-proof, frontier-rebase, all-tier cutoff, checksum fail-closed, bounded queue retry, cancellation and backward stable-UTC tests; execution remains inactive until activation/cutover, target benchmark and E2E gates are GREEN.
+
+Revision addendum: **Rev 1.39** | 2026-07-21 — Added ACT-HIST-001 activation transaction/reconciliation status: prepared SQLite marker, strict filesystem commit point, boot idempotence, fail-closed mismatch and active-only unified query/writer gate are code-local GREEN; production cutover, final backup/migration proof, legacy quiesce/removal, target and E2E remain open.
+
+Revision addendum: **Rev 1.40** | 2026-07-21 — Added schema-v4 durable cutover evidence binding for native backup, complete source keyspace/outcome, verified migration manifest/policy and active-config fail-closed checks; production final backup/quiesce/cutover, target and E2E remain open.
+
+Revision addendum: **Rev 1.41** | 2026-07-21 — Added maintenance-only ordered writer quiesce/final backup/full migration/evidence/gap/activation orchestration with schema-v5 token proof; production invocation, board cutover, legacy removal, target and E2E remain open.
+
+Revision addendum: **Rev 1.42** | 2026-07-21 — Added offline `historian-maintenance` CLI with exact confirmation, service-presence, contained output paths, stable UTC and manifest/window/fresh-authority preflight; board invocation and rollback rehearsal remain open.
+
+Revision addendum: **Rev 1.43** | 2026-07-21 — Added read-only `historian-rollback-verify` schema-v5 gate with exact active evidence, legacy/active authority matrix, future-schema rejection and no-mutation SHA proof; packaged binary and board rehearsal remain open.
+
+Revision addendum: **Rev 1.44** | 2026-07-21 — Added native `historian-rollback-package` parity gate with independent current/candidate builds, SHA-256/Go build metadata, legacy+active fixture execution, DB-family/archive/evidence immutability and atomic release manifest; ARM64/board and power-cut rehearsal remain open.
+
+Revision addendum: **Rev 1.45** | 2026-07-21 — Recorded ARM64 board preflight fail-closed on schema-v1 frozen fixture with unchanged SHA and added local activation crash coverage after prepare/SQLite-active; schema-v5 native fixtures, physical power-cut, target eMMC and cutover remain open.
+
+Revision addendum: **Rev 1.46** | 2026-07-21 — Closed ARM64 frozen schema-v5 package parity with prebuilt-native mode, native manifest and unchanged legacy/active/archive/evidence hashes; live-board schema-v1/SQLITE_BUSY, power-cut, target eMMC and production cutover remain open.
+Revision addendum: **Rev 1.47** | 2026-07-21 — Completed bounded Orange Pi schema-v5 migration/activation with final ARM64 owner/restart-gap package parity, 596,284-row evidence, explicit maintenance/restart gaps and live v2 query/writer smoke; retained physical fault, target eMMC, long-soak, browser/manual E2E, prune and legacy-removal gates.

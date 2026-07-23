@@ -72,7 +72,9 @@ func (a *App) StartVirtualPointSampler(ctx context.Context) {
 	if a == nil || a.trends == nil {
 		return
 	}
-	go a.runVirtualPointSampler(ctx)
+	a.legacyMu.Lock()
+	a.startVirtualPointSamplerLocked(ctx)
+	a.legacyMu.Unlock()
 }
 
 func (a *App) runVirtualPointSampler(ctx context.Context) {

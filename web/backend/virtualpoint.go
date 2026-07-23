@@ -76,8 +76,8 @@ func (a *App) handleListVirtualPoints(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleCreateVirtualPoint(w http.ResponseWriter, r *http.Request) {
-	a.virtualPointMu.Lock()
-	defer a.virtualPointMu.Unlock()
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
 
 	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
 	if err != nil {
@@ -92,22 +92,40 @@ func (a *App) handleCreateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 	if item.ID == "" {
 		item.ID = nextVirtualPointID(cfg.Items)
 	}
+	if strings.TrimSpace(item.Tag) == "" {
+		item.Tag = item.ID
+	}
+	beforeVP := clonePointVirtualConfig(cfg)
+	beforeIO, err := readConfig(a, configGroupIO, ConfigIO{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	next := ConfigVirtualPoints{Items: append(append([]VirtualPoint(nil), cfg.Items...), item)}
+	if errs := append(validateConfigVirtualPoints(next), validateVirtualPointMetadata(next)...); len(errs) > 0 {
+		writePointTagErrors(w, errs)
+		return
+	}
 	item = normalizeVirtualPoint(item)
-	next := ConfigVirtualPoints{Items: append(cfg.Items, item)}
-	if errs := validateConfigVirtualPoints(next); len(errs) > 0 {
-		writeValidationErrors(w, errs)
+	next.Items[len(next.Items)-1] = item
+	ioCfg := beforeIO
+	if errs := validatePointNamespaceTransition(beforeIO, beforeVP, ioCfg, next); len(errs) > 0 {
+		writePointTagErrors(w, errs)
 		return
 	}
 	if err := a.writeVirtualPointsConfig(r, next, "create"); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if authority, err := a.readPointNamespaceAuthority(); err == nil {
+		item.Generation = authority.Generations[item.ID]
+	}
 	writeJSON(w, http.StatusCreated, item)
 }
 
 func (a *App) handleUpdateVirtualPoint(w http.ResponseWriter, r *http.Request) {
-	a.virtualPointMu.Lock()
-	defer a.virtualPointMu.Unlock()
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
 
 	id := canonicalVirtualPointID(r.PathValue("id"))
 	if id == "" {
@@ -124,16 +142,28 @@ func (a *App) handleUpdateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "virtual point not found")
 		return
 	}
+	beforeVP := clonePointVirtualConfig(cfg)
+	beforeIO, err := readConfig(a, configGroupIO, ConfigIO{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	item := cfg.Items[index]
 	if err := decodeConfigBody(w, r, &item); err != nil {
 		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
 		return
 	}
 	item.ID = id
+	cfg.Items[index] = item
+	if errs := append(validateConfigVirtualPoints(cfg), validateVirtualPointMetadata(cfg)...); len(errs) > 0 {
+		writePointTagErrors(w, errs)
+		return
+	}
 	item = normalizeVirtualPoint(item)
 	cfg.Items[index] = item
-	if errs := validateConfigVirtualPoints(cfg); len(errs) > 0 {
-		writeValidationErrors(w, errs)
+	ioCfg := beforeIO
+	if errs := validatePointNamespaceTransition(beforeIO, beforeVP, ioCfg, cfg); len(errs) > 0 {
+		writePointTagErrors(w, errs)
 		return
 	}
 	if err := a.writeVirtualPointsConfig(r, cfg, "update"); err != nil {
@@ -144,8 +174,8 @@ func (a *App) handleUpdateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleDeleteVirtualPoint(w http.ResponseWriter, r *http.Request) {
-	a.virtualPointMu.Lock()
-	defer a.virtualPointMu.Unlock()
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
 
 	id := canonicalVirtualPointID(r.PathValue("id"))
 	if id == "" {
@@ -162,7 +192,17 @@ func (a *App) handleDeleteVirtualPoint(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "virtual point not found")
 		return
 	}
-	cfg.Items = append(cfg.Items[:index], cfg.Items[index+1:]...)
+	beforeVP := clonePointVirtualConfig(cfg)
+	beforeIO, err := readConfig(a, configGroupIO, ConfigIO{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	cfg.Items = append(append([]VirtualPoint(nil), cfg.Items[:index]...), cfg.Items[index+1:]...)
+	if errs := validatePointNamespaceTransition(beforeIO, beforeVP, beforeIO, cfg); len(errs) > 0 {
+		writePointTagErrors(w, errs)
+		return
+	}
 	if err := a.writeVirtualPointsConfig(r, cfg, "delete"); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -172,6 +212,37 @@ func (a *App) handleDeleteVirtualPoint(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) writeVirtualPointsConfig(r *http.Request, cfg ConfigVirtualPoints, op string) error {
 	cfg = normalizeVirtualPointsConfig(cfg)
+	current, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	if err != nil {
+		return err
+	}
+	authority, err := a.readPointNamespaceAuthority()
+	if err != nil {
+		return err
+	}
+	currentGeneration := make(map[string]uint64, len(current.Items))
+	for _, point := range current.Items {
+		generation := point.Generation
+		if generation == 0 {
+			generation = authority.Generations[point.ID]
+		}
+		if generation == 0 {
+			generation = 1
+		}
+		currentGeneration[point.ID] = generation
+		if authority.Generations[point.ID] < generation {
+			authority.Generations[point.ID] = generation
+		}
+	}
+	for i := range cfg.Items {
+		generation := currentGeneration[cfg.Items[i].ID]
+		if generation == 0 {
+			generation = authority.Generations[cfg.Items[i].ID] + 1
+		}
+		cfg.Items[i].Generation = generation
+		authority.Generations[cfg.Items[i].ID] = generation
+	}
+	authority.Revision++
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode virtual points config: %w", err)
@@ -182,6 +253,9 @@ func (a *App) writeVirtualPointsConfig(r *http.Request, cfg ConfigVirtualPoints,
 		return fmt.Errorf("prepare config dir: %w", err)
 	}
 	if err := writeConfigFileAtomic(path, data, 0o644); err != nil {
+		return err
+	}
+	if err := a.writePointNamespaceAuthority(authority); err != nil {
 		return err
 	}
 	user := "-"
@@ -211,13 +285,12 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 			addConfigErr(&errs, base+".id", "must be unique")
 		}
 		ids[item.ID] = true
+		expectedChannel, channelOK := globalPointChannel(item.ID)
+		if item.Channel != 0 && (!channelOK || item.Channel != expectedChannel) {
+			addConfigErr(&errs, base+".channel", "must match the global channel derived from id")
+		}
 		if !validVirtualPointSignalType(item.SignalType) {
 			addConfigErr(&errs, base+".signalType", "must be boolean, integer, float, string, or datetime")
-		}
-		if strings.TrimSpace(item.Label) == "" {
-			addConfigErr(&errs, base+".label", "is required")
-		} else if len(item.Label) > 64 {
-			addConfigErr(&errs, base+".label", "must be at most 64 bytes")
 		}
 		if item.LogEnabled {
 			if item.LogIntervalMs == nil {
@@ -282,7 +355,6 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 
 func defaultVirtualPoint() VirtualPoint {
 	return VirtualPoint{
-		Label:         "Virtual Point",
 		SignalType:    virtualPointSignalFloat,
 		Enabled:       true,
 		Writable:      true,
@@ -309,8 +381,12 @@ func normalizeVirtualPointsConfig(cfg ConfigVirtualPoints) ConfigVirtualPoints {
 
 func normalizeVirtualPoint(item VirtualPoint) VirtualPoint {
 	item.ID = canonicalVirtualPointID(item.ID)
+	item.Channel, _ = globalPointChannel(item.ID)
+	if display, _, err := normalizePointTag(fallbackPointTag(item.Tag, item.ID)); err == nil {
+		item.Tag = display
+	}
 	item.SignalType = strings.ToLower(strings.TrimSpace(item.SignalType))
-	item.Label = strings.TrimSpace(item.Label)
+	item.Label = ""
 	item.Unit = normalizeVirtualPointUnit(item.Unit)
 	item.Note = strings.TrimSpace(item.Note)
 	if item.SignalType == "" {
@@ -529,7 +605,9 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 	}
 	return PointDTO{
 		ID:            item.ID,
-		Name:          item.Label,
+		Channel:       item.Channel,
+		Tag:           fallbackPointTag(item.Tag, item.ID),
+		Name:          fallbackPointTag(item.Tag, item.ID),
 		Kind:          "virtual",
 		Value:         value,
 		Unit:          item.Unit,

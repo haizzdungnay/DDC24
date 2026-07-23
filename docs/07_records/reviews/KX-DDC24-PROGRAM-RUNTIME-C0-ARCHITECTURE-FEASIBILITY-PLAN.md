@@ -1,10 +1,10 @@
 # C0 — Program Runtime Architecture and Feasibility Baseline
 
 **Document ID:** KX-DDC24-PROGRAM-RUNTIME-C0-PLAN-001
-**Trạng thái:** Active — duy nhất phase được phép bắt đầu (ADR-018)
+**Trạng thái:** Active — duy nhất phase được phép bắt đầu (ADR-020)
 **Ngày tạo:** 2026-07-23
 **Chủ quản:** Project Engineering (Phạm Đình Chương — Project Engineering Owner / CTO)
-**Nguồn quyết định:** [`ADR-018-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md),
+**Nguồn quyết định:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md),
 [`KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md`](KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md) (Q8)
 **Tài liệu song song:** [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md) §12,
 [`KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`](KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md)
@@ -37,7 +37,7 @@ Trạng thái.
 ### C0.1 — Requirement baseline
 
 - **Owner:** Project Engineering + TechLead review
-- **Input:** ADR-018, `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` §11 candidate
+- **Input:** ADR-020, `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` §11 candidate
   requirements, decision record Q0–Q9.
 - **Output:** `REQUIREMENTS.md` cập nhật với SYS-REQ-IEC-001, SWR-REQ-IEC-001..009,
   IF-REQ-IEC-001, SAFE-REQ-IEC-001, NFR-REQ-IEC-001, FW-REQ-MCU-001..002 ở trạng thái
@@ -287,5 +287,5 @@ ETA thật là một phần kết quả của việc gán owner, không phải i
 
 | Version | Date | Change |
 |---|---|---|
-| 1.0 | 2026-07-23 | Tạo C0 plan theo quyết định CTO (ADR-018, Q8): 15 workstream, mỗi workstream có owner/input/output/dependency/acceptance/effort/risk/trạng thái. |
+| 1.0 | 2026-07-23 | Tạo C0 plan theo quyết định CTO (ADR-020, Q8): 15 workstream, mỗi workstream có owner/input/output/dependency/acceptance/effort/risk/trạng thái. |
 | 1.1 | 2026-07-23 | ACTION-06/07: thêm cột Reviewer/ETA vào bảng tổng hợp §3. Owner vẫn ở mức role, chưa có tên thật — đây là blocker duy nhất còn lại trước khi C0 có thể chuyển READY, ghi rõ trong `PROGRAM_RUNTIME_READY_FOR_C0.md`. |

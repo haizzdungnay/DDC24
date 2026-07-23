@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "alarm_runtime.hpp"
+#include "clock_snapshot.hpp"
 #include "config_reload.hpp"
 
 using namespace core;
@@ -241,6 +242,29 @@ TEST(AlarmRuntime, DelaySMustElapseBeforeActive)
     EXPECT_FALSE(alarms.entity_active("ALM-D"));
     alarms.evaluate(table, 1000);
     EXPECT_TRUE(alarms.entity_active("ALM-D"));
+}
+
+TEST(AlarmRuntime, WallClockJumpDoesNotAdvanceDelayAndTimestampUsesInjectedUtc)
+{
+    TempFile file(R"([
+      {"id":"ALM-D","label":"Delayed","enabled":true,"alarmType":1,
+       "sources":[{"kind":"UI","channel":1,"pointId":"UI-01"}],
+       "priority":"high","delayS":2,"params":{"hh":32,"h":28,"l":16,"ll":12}}
+    ])");
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()));
+    const PointTable table = table_with_ui(30.0f, 20.0f);
+
+    alarms.evaluate(table, ClockSnapshot{10'000'000'000ull, 1'700'000'000'000ll, {}});
+    alarms.evaluate(table, ClockSnapshot{11'000'000'000ull, 1'700'086'400'000ll, {}});
+    EXPECT_FALSE(alarms.entity_active("ALM-D"));
+
+    alarms.evaluate(table, ClockSnapshot{12'000'000'000ull, 1'577'934'245'000ll, {}});
+    ASSERT_TRUE(alarms.entity_active("ALM-D"));
+    const std::vector<AlarmState> states = alarms.active_states();
+    const AlarmState* state = find_state(states, "ALM-D");
+    ASSERT_NE(state, nullptr);
+    EXPECT_EQ(state->time, "2020-01-02T03:04:05Z");
 }
 
 TEST(AlarmRuntime, RuntimeHoursTypeActivatesAfterRuntimeLimit)

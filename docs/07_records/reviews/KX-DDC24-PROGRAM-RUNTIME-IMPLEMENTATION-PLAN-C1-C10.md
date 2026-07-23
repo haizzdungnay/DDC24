@@ -4,7 +4,7 @@
 **Trạng thái:** Blocked — **không mở bất kỳ slice nào cho tới khi C0 (`C0.15`) là Go**
 **Ngày tạo:** 2026-07-23
 **Chủ quản:** Project Engineering (Phạm Đình Chương — Project Engineering Owner / CTO)
-**Nguồn quyết định:** [`ADR-018-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md)
+**Nguồn quyết định:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
 **Tài liệu song song:** [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md),
 [`KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md`](KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md)
 
@@ -318,4 +318,4 @@ tổng hợp cuối tài liệu chỉ ghi lại dependency giữa các slice.
 
 | Version | Date | Change |
 |---|---|---|
-| 1.0 | 2026-07-23 | Tạo Implementation Plan C1–C10 theo quyết định CTO (ADR-018): mỗi slice có mục tiêu chạy được, component, API/schema, backend/frontend/runtime task, firmware/HIL dependency, test case, acceptance criteria, demo scenario, rollback, DoD. Blocked cho tới khi C0 (`C0.15`) là Go. |
+| 1.0 | 2026-07-23 | Tạo Implementation Plan C1–C10 theo quyết định CTO (ADR-020): mỗi slice có mục tiêu chạy được, component, API/schema, backend/frontend/runtime task, firmware/HIL dependency, test case, acceptance criteria, demo scenario, rollback, DoD. Blocked cho tới khi C0 (`C0.15`) là Go. |

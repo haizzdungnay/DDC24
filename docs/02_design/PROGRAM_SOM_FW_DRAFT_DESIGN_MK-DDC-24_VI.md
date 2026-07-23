@@ -5,7 +5,7 @@
 >
 > **Version:** 0.5 | 2026-07-23 (repository sync + 31 document conflict đóng — xem mục 16)
 >
-> **Trạng thái:** Draft — hướng kiến trúc đã **Decided** (ADR-018), chi tiết C0/C1–C10 đang
+> **Trạng thái:** Draft — hướng kiến trúc đã **Decided** (ADR-020), chi tiết C0/C1–C10 đang
 > lập thành tài liệu riêng; tài liệu này chưa chuyển `Active` cho tới khi C0 hoàn thành
 >
 > **Chủ quản:** Project Engineering (Phạm Đình Chương — Project Engineering Owner / CTO)
@@ -19,7 +19,7 @@
 > (bắt buộc đủ 4 ngôn ngữ ST/LD/FBD/SFC ngay Rev A.0) — phạm vi đã thu hẹp còn ST+FBD theo
 > quyết định CTO 2026-07-23.
 >
-> **Release gate hiện tại:** G0 chuyển **GREEN** (ADR-018 + PRODUCT.md/SOFTWARE.md/
+> **Release gate hiện tại:** G0 chuyển **GREEN** (ADR-020 + PRODUCT.md/SOFTWARE.md/
 > DECISIONS.md/REQUIREMENTS.md/VERIFICATION.md/TRACEABILITY.md đã cập nhật 2026-07-23;
 > 31/31 document conflict đóng, xem `KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md`).
 > G1–G6 vẫn **RED** — chưa có implementation/conformance evidence; C0 chưa hoàn thành.
@@ -34,7 +34,7 @@
 > [`KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md`](../07_records/reviews/KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md)
 > (gap assessment cùng ngày, từng khuyến nghị ngược lại — giữ Rev A component-based,
 > không IEC) đã được CTO Phạm Đình Chương giải quyết trực tiếp, ghi thành
-> [`ADR-018-mekong-owned-iec-aligned-program-runtime.md`](../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md)
+> [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
 > và [`KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md`](../07_records/reviews/KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md)
 > (Q0–Q9). Directive: Mekong tự sở hữu Program Runtime (không dùng runtime IEC bên
 > ngoài), Rev A.0 chỉ ST+FBD, không online change, không claim certified/compliant.
@@ -46,7 +46,7 @@
 
 ## 1. Quyết định bắt buộc
 
-**Cập nhật 2026-07-23 — quyết định đã chốt (ADR-018):** Rev A.0 phải hình thành nền tảng
+**Cập nhật 2026-07-23 — quyết định đã chốt (ADR-020):** Rev A.0 phải hình thành nền tảng
 Program Runtime **do Mekong sở hữu** (không dùng runtime IEC 61131-3 thương mại hay mã
 nguồn mở bên ngoài), tương thích định hướng IEC 61131-3, nhưng phạm vi Rev A.0 là một
 **MVP thu hẹp**: chỉ **ST + FBD**, không phải toàn bộ 4 ngôn ngữ. **LD và SFC hoãn**,
@@ -61,7 +61,7 @@ Quyết định này thay đổi phạm vi sản phẩm và đã được đối
 
 - `PRODUCT.md` đã cập nhật: Runtime = Mekong Program Runtime (ST+FBD), LD/SFC/online
   change/certification claim/wiresheet canvas ngoài phạm vi Rev A.0;
-- ADR-004 đã chuyển `Superseded by ADR-018`; component graph 28-node giữ vai trò legacy
+- ADR-004 đã chuyển `Superseded by ADR-020`; component graph 28-node giữ vai trò legacy
   importer/nguồn vendor FB;
 - ADR-006 (wiresheet canvas kéo-thả) không đổi — vẫn hoãn, tách biệt khỏi quyết định
   ngôn ngữ ST+FBD;
@@ -124,7 +124,7 @@ phải xử lý case này, không chỉ đổi tên port.
 
 ### 3.1 Ngôn ngữ và cấu trúc chương trình
 
-**Quyết định 2026-07-23 (ADR-018, RD-IEC-002 Modify):** Rev A.0 chỉ hỗ trợ **ST** và
+**Quyết định 2026-07-23 (ADR-020, RD-IEC-002 Modify):** Rev A.0 chỉ hỗ trợ **ST** và
 **FBD** trong cùng một project và cùng một semantic engine:
 
 - **Structured Text (ST)** — ngôn ngữ chính, bắt buộc;
@@ -187,7 +187,7 @@ Mỗi release candidate phải sinh một machine-readable và human-readable st
 
 ## 4. Kiến trúc tổng thể đề xuất
 
-**Quyết định 2026-07-23 (ADR-018, RD-IEC-004 Modify):** kiến trúc dưới đây thay thế bản
+**Quyết định 2026-07-23 (ADR-020, RD-IEC-004 Modify):** kiến trúc dưới đây thay thế bản
 0.2/0.3 — đổi tên/role thành phần theo directive CTO, và bỏ LD/SFC editor khỏi Web IDE
 (giữ IR/schema mở rộng được, không build editor). Tên service chính thức và API path
 chi tiết là một đầu ra của C0 (`C0.9`, xem C0 plan); diagram dưới là kiến trúc mức
@@ -536,7 +536,7 @@ của scheduler/I/O, không chỉ việc CPU còn chạy vòng lặp.
 
 ## 11. Candidate requirements phải đưa vào baseline
 
-Tất cả requirement dưới đây có **Source: ADR-018 / CTO decision 2026-07-23** (trước đây
+Tất cả requirement dưới đây có **Source: ADR-020 / CTO decision 2026-07-23** (trước đây
 ghi "management corrective directive 2026-07-22" — nay đã có decision record truy vết
 được, xem mục 1 và header), **Priority: Must**, **Owner: Project Engineering**, và chỉ
 được đánh dấu Accepted sau khi cập nhật `REQUIREMENTS.md` cùng traceability.
@@ -635,7 +635,7 @@ tại; Markdown/link checks chỉ chứng minh chất lượng tài liệu.
 
 | Gate | Điều kiện đóng | Hiện tại |
 |---|---|---|
-| G0 Scope/ADR | Product + ADR + requirements phê duyệt IEC-aligned ST+FBD trong Rev A.0. | **GREEN** — ADR-018 Accepted, `PRODUCT.md`/`SOFTWARE.md`/`DECISIONS.md`/`REQUIREMENTS.md`/`VERIFICATION.md`/`TRACEABILITY.md` cập nhật 2026-07-23; 31/31 document conflict đóng |
+| G0 Scope/ADR | Product + ADR + requirements phê duyệt IEC-aligned ST+FBD trong Rev A.0. | **GREEN** — ADR-020 Accepted, `PRODUCT.md`/`SOFTWARE.md`/`DECISIONS.md`/`REQUIREMENTS.md`/`VERIFICATION.md`/`TRACEABILITY.md` cập nhật 2026-07-23; 31/31 document conflict đóng |
 | G1 PSE | FE/Backend hỗ trợ project, **ST + FBD** (LD/SFC ngoài scope), build/deploy thật. | **RED** |
 | G2 Compiler | Type/POU/library/IR feature matrix pass. | **RED** |
 | G3 Runtime | Deterministic task execution, activation, retain và fault behavior pass. | **RED** |
@@ -667,15 +667,15 @@ hơn scope đã test.
 
 Quyết định đầy đủ (câu trả lời nguyên văn, lý do) nằm tại
 [`KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md`](../07_records/reviews/KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md)
-và [`ADR-018-mekong-owned-iec-aligned-program-runtime.md`](../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md).
+và [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md).
 Tài liệu này vẫn ở `Draft` cho tới khi C0 hoàn thành và `REQUIREMENTS.md`/
-`VERIFICATION.md`/`TRACEABILITY.md` được cập nhật theo ADR-018 (G0 §14 đóng hẳn).
+`VERIFICATION.md`/`TRACEABILITY.md` được cập nhật theo ADR-020 (G0 §14 đóng hẳn).
 
 ### 15.1 Approval log
 
 | Reviewer | Role | Ngày | RD-ID | Quyết định | Comment/deviation | Action owner |
 |---|---|---|---|---|---|---|
-| Phạm Đình Chương | Project Engineering Owner / CTO | 2026-07-23 | Q0 (DOC-REV-001) | Directive có thật, xác nhận ngày 2026-07-23 | Override gap assessment §8.1; lý do: Mekong sở hữu Program Runtime, không phụ thuộc runtime bên ngoài | Project Engineering — ghi ADR-018 |
+| Phạm Đình Chương | Project Engineering Owner / CTO | 2026-07-23 | Q0 (DOC-REV-001) | Directive có thật, xác nhận ngày 2026-07-23 | Override gap assessment §8.1; lý do: Mekong sở hữu Program Runtime, không phụ thuộc runtime bên ngoài | Project Engineering — ghi ADR-020 |
 | Phạm Đình Chương | Project Engineering Owner / CTO | 2026-07-23 | RD-IEC-001..007 | Xem bảng trên (Modify ×4, Approve ×3) | — | Project Engineering — cập nhật Requirements/Verification/Traceability |
 | Phạm Đình Chương | Project Engineering Owner / CTO | 2026-07-23 | Q8 (sizing) | Mở C0 giới hạn, sizing C1–C10 là deliverable của C0 | Owner ước lượng: Program Runtime Architect + SOM Backend Lead + Firmware Lead + QA/HIL Lead | C0 plan `C0.14` |
 
@@ -690,4 +690,4 @@ Nguồn đầy đủ (Q0–Q9) tại
 | 0.2 | 2026-07-22 | Làm lại thành corrective design bắt buộc IEC 61131-3:2025 ngay trong Rev A.0, gồm FE/BE/compiler/Core/IOBus/MCU, requirements, verification và release gates. |
 | 0.3 | 2026-07-23 | Document review (structure + design), findings tại [`KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md`](../07_records/reviews/KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md): ghi chú tường minh mâu thuẫn với gap assessment cùng ngày và directive chưa truy vết được (DOC-REV-001); backlink hai tài liệu (DOC-REV-002); khai báo tài liệu là biến thể corrective-design của `TEMPLATE_DDD.md` (DOC-REV-003); thêm khung approval log ở §15.1 (DOC-REV-004); bổ sung gap `UI_Input` không có counterpart trong Core registry vào §2 (DOC-REV-005); thêm open point sizing/resourcing ở §12.1 (DOC-REV-006); bổ sung Trạng thái/Entry criteria/Owner/Phụ thuộc vào bảng §12 (DOC-REV-007). Không có thay đổi code; không đổi trạng thái Draft; không tự quyết RD-IEC-001. |
 | 0.5 | 2026-07-23 | **Repository sync (ACTION-01..05).** `REQUIREMENTS.md`, `VERIFICATION.md`, `TRACEABILITY.md` cập nhật đầy đủ cho scope ST+FBD; 31 document conflict trong toàn repo (legacy `01_specs/*`, `00_management/*`, 3 ADR lịch sử, 1 implementation guide, +5 phát hiện thêm) đã đóng — xem `KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md` v2.0. Datasheet `DS_MK-DDC-24_VI.md` bỏ claim "IEC 61131-3: Compliant" (vi phạm cấm claim). `PM-IMPLPLAN-001` làm rõ Program Editor Rev A.0 = ST Text Editor + FBD Graphical Editor (không gọi chung "canvas"), theo xác nhận trực tiếp của CTO. G0 (§14, header) chuyển GREEN. |
-| 0.4 | 2026-07-23 | **CTO decision applied (ADR-018).** DOC-REV-001 đóng: directive xác nhận có thật, ghi thành `ADR-018-mekong-owned-iec-aligned-program-runtime.md`, ADR-004 → Superseded. Phạm vi ngôn ngữ thu hẹp còn **ST + FBD** (LD/SFC hoãn, bỏ khỏi §3.1/§5.1/§5.3/§7.1/§7.3/§11/§14/§15). Kiến trúc đổi tên: `mkddc-web`→`mkddc-program-service` (backend, Go) và `mkddc-core`→`mkddc-program-core` (runtime, C++17) cho phần Program; `libmkddc_iec` giữ nguyên vai trò compiler (§4/§4.1). Xác nhận không online change, không claim certified/compliant (chỉ "IEC 61131-3-aligned"). §12 rút gọn thành tóm tắt điều hướng, chi tiết chuyển sang hai tài liệu mới `KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md` và `KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`; sizing (DOC-REV-006) đóng thành deliverable `C0.14`. §15 điền quyết định thật + approval log. G0 (§14) chuyển YELLOW: ADR-018/`PRODUCT.md`/`SOFTWARE.md`/`DECISIONS.md` đã cập nhật; `REQUIREMENTS.md`/`VERIFICATION.md`/`TRACEABILITY.md` còn lại, tracked ở `KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md`. Chỉ C0 được phép bắt đầu; không có thay đổi code. |
+| 0.4 | 2026-07-23 | **CTO decision applied (ADR-020).** DOC-REV-001 đóng: directive xác nhận có thật, ghi thành `ADR-020-mekong-owned-iec-aligned-program-runtime.md`, ADR-004 → Superseded. Phạm vi ngôn ngữ thu hẹp còn **ST + FBD** (LD/SFC hoãn, bỏ khỏi §3.1/§5.1/§5.3/§7.1/§7.3/§11/§14/§15). Kiến trúc đổi tên: `mkddc-web`→`mkddc-program-service` (backend, Go) và `mkddc-core`→`mkddc-program-core` (runtime, C++17) cho phần Program; `libmkddc_iec` giữ nguyên vai trò compiler (§4/§4.1). Xác nhận không online change, không claim certified/compliant (chỉ "IEC 61131-3-aligned"). §12 rút gọn thành tóm tắt điều hướng, chi tiết chuyển sang hai tài liệu mới `KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md` và `KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`; sizing (DOC-REV-006) đóng thành deliverable `C0.14`. §15 điền quyết định thật + approval log. G0 (§14) chuyển YELLOW: ADR-020/`PRODUCT.md`/`SOFTWARE.md`/`DECISIONS.md` đã cập nhật; `REQUIREMENTS.md`/`VERIFICATION.md`/`TRACEABILITY.md` còn lại, tracked ở `KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md`. Chỉ C0 được phép bắt đầu; không có thay đổi code. |

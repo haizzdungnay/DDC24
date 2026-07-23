@@ -117,7 +117,7 @@ typedef struct {
 
 ### 3.1 Yêu cầu Ngôn ngữ & Chương trình
 
-> ⚠️ **Cập nhật 2026-07-23 (ADR-018):** SW-PLC-001/002 dưới đây vẫn là hướng đúng về mặt
+> ⚠️ **Cập nhật 2026-07-23 (ADR-020):** SW-PLC-001/002 dưới đây vẫn là hướng đúng về mặt
 > ngôn ngữ (FBD + ST) nhưng phải đọc lại trong khung Mekong-owned Program Runtime, **không
 > phải một PLC IEC 61131-3 đầy đủ/certified**: không claim `compliant`/`certified`, không
 > online change, runtime là `mkddc-program-core`/`libmkddc_iec` tự phát triển (không phải

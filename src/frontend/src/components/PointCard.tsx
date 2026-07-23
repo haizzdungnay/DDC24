@@ -1,5 +1,5 @@
 import type { Point } from '../types'
-import { cn, formatTime, formatValue, statusColor } from '../utils'
+import { cn, formatTime, formatValue, pointDisplayTag, statusColor } from '../utils'
 import { StatusBadge } from './StatusBadge'
 
 export function PointCard({ point, stale = false, compact = false, onClick }: { point: Point; stale?: boolean; compact?: boolean; onClick?: () => void }) {
@@ -14,8 +14,8 @@ export function PointCard({ point, stale = false, compact = false, onClick }: { 
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <div className="text-xs font-semibold text-[var(--c-accent)]">{point.id}</div>
-          <div className="mt-1 line-clamp-1 text-xs text-[var(--c-text-dim)]">{point.name}</div>
+          <div className="text-xs font-semibold text-[var(--c-accent)]">{pointDisplayTag(point)}</div>
+          {point.kind !== 'virtual' && <div className="mt-1 line-clamp-1 text-xs text-[var(--c-text-dim)]">{point.name}</div>}
         </div>
         <StatusBadge state={state} label={point.forced ? 'FORCED' : undefined} />
       </div>
