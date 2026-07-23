@@ -7,6 +7,75 @@
 ---
 
 ## [Unreleased]
+### Changed — ADR-020 repository-wide synchronization, ACTION-01..08 (2026-07-23)
+- docs/governance: closed all 31 document conflicts found by a two-pass repo-wide scan (26 initial + 5 found on a confirmation pass) — see `KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md` v2.0. Every flagged line got a substantive correction (not a blanket banner): `docs/01_specs/*` (PRODUCT_DEFINITION, SW_ARCH_SPEC, REVA_SCOPE_ROADMAP, PRD, SRS, SW_REQUIREMENTS, DS, OPEN_ISSUES, TEST_SPEC, DESIGN_PLAN_SWFW), `docs/00_management/*` (PM-GOAL, PM-MARKET, PM-OVERVIEW, PM-IMPLPLAN), three historical ADRs (006/008/009, annotated without altering their original Decision/Context text), an implementation guide, `GETTING_STARTED_DEV.md`, `SW_DDD_MK-DDC-24_VI.md`, `BACNET_PICS_EPICS_MK-DDC-24_VI.md`, and `docs/adr/README.md`.
+- docs/governance: during merge with `origin/main`, Program Runtime was registered as `ADR-020` so existing remote `ADR-018` (SQLite block historian) and `ADR-019` (point namespace) remain stable.
+- docs/baseline: `REQUIREMENTS.md`, `VERIFICATION.md`, `TRACEABILITY.md` updated with the ADR-020 requirement set (SYS-REQ-IEC-001, SWR-REQ-IEC-001..009, IF-REQ-IEC-001, SAFE-REQ-IEC-001, NFR-REQ-IEC-001, FW-REQ-MCU-001..002) and a Program Runtime release-gate section (G1-G6 RED, no code yet). G0 now GREEN across `VERIFICATION.md` and the design doc — Product/ADR/Requirements/Verification/Traceability are all synchronized with ADR-020.
+- docs/datasheet: `DS_MK-DDC-24_VI.md` no longer claims "IEC 61131-3: Compliant" (a prohibited claim per ADR-020/RD-IEC-006); replaced with an explicit not-certified/roadmap statement, and the surrounding tagline, feature bullets, commissioning section and competitor table were corrected so the datasheet no longer reads as if the Program Runtime already ships.
+- docs/pm-plan: `KX-DDC24-PM-IMPLPLAN-001_VI.md` updated per direct CTO clarification — Rev A.0's Program Editor is **ST Text Editor + FBD Graphical Editor**, not a generic "canvas" (ST is text, only FBD is graphical); the legacy `graph.json` importer task is now explicitly distinguished from the new Program Runtime editor tasks.
+- docs/design: `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` bumped to v0.5; G0 moved GREEN in both the header and §14 gate table, reflecting the completed baseline sync.
+- docs/planning: `KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md` §3 summary table gained Reviewer/ETA columns. Owner assignment remains role-only (Program Runtime Architect, SOM Backend Lead, Firmware Lead, QA/HIL Lead, TechLead review) — real personnel names were not fabricated, since that is information only the CTO/Project Engineering can supply; no workstream was marked READY as a result.
+- docs/review: added `PROGRAM_RUNTIME_READY_FOR_C0.md`, the final ACTION-01..08 readiness report. Conclusion: `CONFLICT_REMAINING = 0` and `BASELINE_STATUS = SYNCED`, but `OWNER_ASSIGNED = NO` and therefore `C0_READY = NO` — the single remaining blocker is real owner names for C0, not documentation or architecture. No production code was written; C0 authorization for prototypes remains bounded per the C0 plan's scope section.
+
+### Changed — ADR-020: Mekong-owned IEC 61131-3-aligned Program Runtime, CTO decision (2026-07-23)
+- governance: CTO Phạm Đình Chương answered decision request Q0–Q9 in `KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md` (now Decided/Closed), resolving the DOC-REV-001 conflict between the corrective design draft and the same-day gap assessment. Recorded as `docs/adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md`: Mekong will build and own its Program Runtime (no third-party/commercial/open-source IEC runtime); Rev A.0 scope is narrowed to a bounded MVP — **ST + FBD only**, with LD and SFC explicitly deferred out of the Rev A.0 release gate; no online change; no PLCopen/IEC "certified"/"compliant" claim (only "IEC 61131-3-aligned" self-description permitted); the legacy 28-node component graph is retained solely as a legacy importer/vendor-FB migration source, never relabeled FBD; firmware/HIL remains an independent release blocker. Only phase C0 (architecture/feasibility, bounded prototypes only) is authorized; C1–C10 production implementation may not start until C0 is reviewed and approved.
+- docs/governance: `docs/00_governance/DECISIONS.md` updated — ADR-004 marked `Superseded by ADR-020`, new ADR-020 row added, ADR-006 row annotated to decouple wiresheet-canvas deferral from the language/runtime question, and the blanket "IEC 61131-3... not in Rev A.0 baseline" exclusion line corrected (ST+FBD Program Runtime is now in baseline; LD/SFC/online-change/certification claims/wiresheet canvas remain out).
+- docs/product: `docs/01_product/PRODUCT.md` Runtime row and "Ngoài phạm vi Rev A.0" list updated to reflect the Mekong-owned Program Runtime and the narrowed exclusion list; positioning paragraph updated.
+- docs/design: `docs/04_design/SOFTWARE.md` adds placeholder `mkddc-program-service`/`mkddc-program-core` service rows (not yet implemented, C1+) and reframes the 28-node component graph section as a legacy importer under ADR-020.
+- docs/design: `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` revised to v0.4 applying the CTO decision throughout — language scope narrowed to ST+FBD (§3.1, §5.1, §5.3, §7.1, §7.3), architecture renamed to `libmkddc_iec`/`mkddc-program-service`/`mkddc-program-core` (§4, §4.1), requirements narrowed (§11), release gate G0 moved to YELLOW (§14), RD-IEC-001..007 filled with final decisions and a real approval-log entry (§15), and the vertical-slice plan (§12) condensed to a navigation summary pointing at two new dedicated planning documents.
+- docs/planning: added `KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md` (15 bounded workstreams C0.1–C0.15 with owner/input/output/dependency/acceptance/effort/risk/status, including the C1–C10 sizing/resourcing deliverable that closes finding DOC-REV-006) and `KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md` (10 vertical slices — project/artifact registry, typed variables/I/O image, task scheduler, ST parser/IR, ST web editor/build/deploy, standard function library, FBD editor/graph-to-IR, runtime trace/audit, SOM-MCU/HIL, conformance/soak/release — each with goal, component, API/schema, backend/frontend/runtime/firmware tasks, test cases, acceptance criteria, demo scenario, rollback and DoD). Both are blocked/gated: Implementation Plan cannot open until C0's go/no-go (`C0.15`) is Go.
+- docs/review: added `KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md` from a repo-wide scan (zero source-code hits; conflict is documentation-only). Catalogs 26 conflicting claims: 9 already fixed in the Active governance corpus (`DECISIONS.md`, `PRODUCT.md`, `SOFTWARE.md`, `ADR-004`) this same pass, and 17 still open in the legacy/In-Review corpus (`docs/01_specs/*`, `docs/00_management/*`, `docs/adr/ADR-006/008/009`, an implementation guide) — flagged as follow-up work that does not block C0. Highest-priority open item: `docs/01_specs/DS_MK-DDC-24_VI.md` has an "IEC 61131-3: Compliant" table cell, a claim ADR-020/RD-IEC-006 explicitly prohibits.
+- Documentation-only change across this entire entry; no source code was modified, consistent with the CTO's explicit instruction that C1–C10 production code may not start before C0 is approved.
+
+### Added — IEC 61131-3 corrective design doc review (2026-07-23)
+- docs/review: added `KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md`, a structure-and-design review of `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` v0.2. Top finding (DOC-REV-001, P0): the draft's "management corrective directive 2026-07-22" mandating IEC 61131-3 in Rev A.0 has no traceable decision record in `DECISIONS.md` and directly contradicts the same-day, same-baseline `KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md` gap assessment, which recommends keeping Rev A component-based and deferring IEC to Rev C. The review does not resolve which direction wins — that remains RD-IEC-001, a management decision — it only requires the conflict be traceable before either document is treated as authoritative.
+- docs/review: re-verified the design doc's §2 gap table against current code (`ProgrammingPage.tsx`, `graph_runtime.cpp`, backend routes, `fw/Core/Src/main.c`); confirmed the head commit is unchanged since the gap assessment (`18ee583`) so no source-level facts moved. Found one additional mismatch not in either prior document: the frontend sample library's `UI_Input` node type has no counterpart at all in the Core 28-node registry (Core only has separate `AI_Input`/`DI_Input`), so the Program page's own sample graph cannot load into `GraphRuntime`.
+- docs/design: applied all 7 review findings to `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`, bumping it to v0.3: added an explicit conflict notice and backlink to the gap assessment, declared the document's intentional structural deviation from `TEMPLATE_DDD.md`, added the missing `UI_Input` gap to §2, added a blank approval-log table to §15, and reworked the §12 vertical-slice plan with a Status/Entry-criteria/Owner/Dependency table (everything currently "Chưa bắt đầu", nothing may start before C0 closes) plus a new §12.1 open point flagging that no effort/resourcing/budget estimate exists for the compiler+runtime scope. Also added a reciprocal backlink from the gap assessment to the new review record. Documentation-only change; no code was modified and no `Draft` status was changed to `Active`.
+- docs/review: added `KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md`, a fill-in decision-request form consolidating every open question that needs the document owner's answer: Q0 (blocking) asks for the traceable source of the "management corrective directive," Q1-Q7 map to RD-IEC-001..007, Q8 covers the missing sizing/budget estimate, and Q9 captures reviewer identity for the design doc's approval log. Linked from both the review record and the design doc's §15.1.
+
+### Changed — Rev A IEC 61131-3 corrective design (2026-07-22)
+- docs/design: rewrote `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` version 0.2 so IEC 61131-3:2025 conformance is a mandatory corrective target in the current Rev A.0 rather than deferred work; the draft explicitly requires Product/requirements/ADR/verification/traceability reconciliation before approval because the active baseline still conflicts.
+- program/design: replaced the proprietary-graph closure direction with a detailed ST/LD/FBD/SFC PSE, common IEC type/POU semantic engine, deterministic typed IR, versioned compiler, Core task runtime, Backend project/build/deploy/audit/rollback APIs and authoritative FE state model. The existing 28-node graph is limited to legacy migration or reviewed vendor-function-block implementation and must not be relabeled as FBD.
+- fw/design: retained the IOBus/MCU safety boundary and made STM32 IOP, ADC/DAC/relay, watchdog and measured 200 ms safe-timeout HIL evidence a system release blocker for the IEC control path.
+- verification: added candidate requirements, normative feature traceability, conformance/target/HIL evidence rules and RED release gates; documentation-only change, with no conformity or certification claim created by this draft.
+
+### Added — IEC 61131-3 Program/SOM FW gap assessment (2026-07-22)
+- docs/review: added `KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md`, concluding that Rev A intentionally excludes IEC 61131-3 and must not claim conformity or certification. The report separates PLC-like graph behavior from IEC language/PSE requirements and records the Rev C closure path.
+- program/review: recorded P0 gaps that the current Programming page validates only in the frontend, its deploy action is demo-only, no reviewed backend graph validation route exists, and its sample node/port contract diverges from `GraphRuntime`.
+- fw/review: confirmed the STM32 source is still a one-file skeleton with placeholder CubeMX configuration and no target/HIL evidence; an ARM ELF build is compilation evidence only.
+- verification: isolated GCC 13.3 services build passed with warnings-as-errors and CTest passed 344/344; frontend typecheck and lint passed; the STM32 skeleton compiled in `/tmp` with expected `nosys` syscall-stub linker warnings. These checks do not claim IEC conformity, MCU behavior or release readiness.
+
+### Added — ADR-017 HMI-to-SOM transactional network implementation (2026-07-22)
+- fw-som/network: added the privileged `mkddc-netcfg` service and JSON v1 schema with bounded Unix IPC, peer UID checks, Ethernet interface allowlisting, active kernel state, static/DHCP validation, duplicate-address preflight, atomic transaction journal, make-before-break static apply, explicit confirm/rollback and automatic rollback after at most 120 seconds. Fixed-argument `execv` calls are used for `ip`, `arping` and NetworkManager; no request field is evaluated by a shell.
+- hmi/broker: added the Go broker adapter and C++ HMI client/model/UI for `status → stage → apply → confirm/rollback`. Network mutations require Admin, are audited/idempotent at the broker boundary, display active versus pending address and countdown, and fail closed when the helper is absent. The HMI unit is explicitly denied direct access to `netcfg.sock`.
+- fw-som/bacnet: added IPv4 address change detection and BACnet/IP datalink-only rebind with a new `I-Am`; the iobus process, IOP/UART owner, shared memory and Core control path remain running.
+- packaging: added the hardened `mkddc-netcfg.service`, Orange Pi Ethernet allowlist config (`end1`), install wiring and HMI service dependency/hardening.
+- verification: HMI-enabled host build and CTest pass 366/366; BACnet-enabled build and netcfg CTest pass 10/10; Go vet/backend tests pass; JSON schemas, installer shell syntax and diff checks pass. Target evidence is in `KX-DDC24-HMI-FWSOM-DEPLOY-2026-07-22.md`; lack of a connected DSI/touch panel cannot be treated as HMI usability acceptance.
+- hmi/portability: replaced fixed-buffer point-ID formatting after the Orange Pi GCC 12 Release build correctly raised a `-Wformat-truncation` error under `-Werror`; point IDs remain canonical `AO-01`/`DO-01` without a truncation path.
+- deploy/orangepi: added a reproducible `mkddc-web-pi` systemd drop-in so the deployed broker orders after `mkddc-netcfg` and receives the explicit helper socket; HMI ordering recognizes both generic and board Web unit names.
+- deploy/orangepi: aligned application owners of shared `/run/mkddc` to mode `0770`, then moved the privileged helper to dedicated `/run/mkddc-netcfg` (`root:mkddc 0750`, socket `0660`). This prevents Core/IOBus RuntimeDirectory restarts from recursively changing helper-socket ownership while preserving broker access and HMI direct-path denial.
+- deploy/orangepi: deployed native aarch64 HMI/Core/IOBus/netcfg plus the arm64 Web broker, kept HMI disabled because the identified board has no compatible DRM/touch hardware, and recorded artifact hashes plus rollback backup in `KX-DDC24-HMI-FWSOM-DEPLOY-2026-07-22.md`.
+- verification/target: Orange Pi CTest passed 367/367 (3 production-SHM skips) and final netcfg retest passed 10/10; real isolated NetworkManager transactions passed static confirm, helper restart recovery, explicit rollback and 120 s automatic rollback. UID/interface/HMI-direct-path denial passed; Web/Core/IOBus PIDs stayed stable, IOP/SHM remained normal/reliable and BACnet performed datalink-only hot-rebind. Physical panel, STM32, `end1`/BMS packet and Web FE evidence remain RED.
+- deploy/config: migrated two legacy empty `schedule.conf` skeleton rows (`cells:null`) to disabled `not_active` rows after the Core restart test exposed `schedule_cfg.bad_required`; preserved the original in the deployment backup and verified Core loads both rows without disabling the scheduler.
+
+### Changed — ADR-017 safe network commissioning documentation and implementation plan (2026-07-22)
+- docs/architecture: separated desired `network.conf` from active Linux state, recorded the current `applySystem()`/frontend truthfulness gap, and approved a narrow SOM `mkddc-netcfg` authority with versioned local IPC, least privilege, staged apply/confirm, last-known-good and automatic rollback within 120 seconds. IP change must not stop Core/IOP/STM32 control; BACnet must hot-rebind without restarting the whole iobus process.
+- docs/hmi: allowed Service-only Ethernet IPv4 static/DHCP commissioning as a narrow ADR-017 exception inside the existing five-surface local HMI; added active/pending/countdown/confirm/rollback UX and UC-HMI-016..019 while keeping Wi-Fi/protocol/full engineering out of the panel.
+- docs/plan: the `04e2e4d` docs-only checkpoint added FW SOM microtasks NWC-000..017 with dependency waves/effort estimates and BE/FE contract handoff, plus local-HMI microtasks HNW-000..013. Source was still planned at that checkpoint; the implementation/deployment entries above supersede its execution status while physical release gates remain RED.
+- verification: updated requirements, interfaces, verification findings, operations and traceability; verification for this docs-only change is the ISO/docs harness when available, Markdown link scan and `git diff --check`.
+
+### Added — ADR-016 limited-operator HMI host implementation (2026-07-22)
+- hmi: replaced the legacy six-screen/service-PIN prototype with five `Home/Points/Control/Alarms/Service` surfaces, a bounded Unix-socket client, broker-authoritative login/policy/alarm ACK and AO/DO Control with explicit confirmation, reason, TTL, release and effective-source display. Monitoring remains read-only SHM; broker loss marks command authority OFFLINE, periodic query reconnects without replay, and mutations remain fail closed.
+- web/security: added the local HMI v1 broker on `/run/mkddc/hmi-api.sock` with `0660` permissions, `SO_PEERCRED`, optional UID allowlist, Viewer/Operator/Admin RBAC, opaque idle-expiring sessions, login rate limiting, bounded frames/connections/idempotency and durable append-only JSONL mutation audit without credential/token logging.
+- core/control: extended the existing Core IPC with authoritative point query, finite/range/TTL validation, bounded request-ID cache, effective winner/source response and Core-owned monotonic override expiry/release; safety/interlock priority remains authoritative.
+- hmi/privilege: removed static config role/PIN/service-switch authority, direct core/iobus signaling, direct reboot and `CAP_SYS_BOOT`; unsupported maintenance actions remain hidden pending a separately approved authority.
+- docs: aligned HMI design, interfaces, microtask guide, verification, traceability and the HW/FW/SOM/HMI review report with the implemented protocol and retained the production gate as RED pending process-loss, target/HIL and operator-usability evidence.
+- verification: HMI-enabled Debug build and HMI CTest 20/20 pass; Core CTest 172/172 pass; `go vet ./...` and `go test -count=1 ./...` pass; HMI race subset pass; real broker UDS + real `CoreClient`/Core-socket-stub lifecycle, Core-loss/no-replay, explicit retry and broker-restart session invalidation pass; protocol schema parses; unsafe-privilege source scan has no finding; hardware-doc/link harness 18/18 and `git diff --check` pass. These host results do not claim IEC conformity or target/HIL acceptance.
+
+### Changed — Latest-main reconciliation merge (2026-07-22)
+- repository: fast-forwarded local `main` to `origin/main` at `9ca78bf`, then merged controller/document reconciliation commit `bf8c2d0`; preserved the current alarm, scheduler, Virtual Point and frontend work from main.
+- merge: resolved `CHANGELOG.md` by retaining both histories and kept the SHM v4 IOBus layout assertions at `ui_unit=176`, `ui_raw_unit=304`, size `528`.
+- verification: merged-tree builds passed for Core baseline/BACnet and IOBus baseline/Modbus; CTest passed Core 169/169 in both configurations and IOBus 160/160 plus 162/162; `go test -count=1 ./...`, frontend lint/typecheck/production build, hardware-doc harness 18/18 and `git diff --check` passed.
 ### Changed - Historian Trends source routing (2026-07-22)
 - web/backend(historian): added a durable-seeded, in-memory 15-second presentation cache retained for 24 hours. `source=cache` reads only this cache (no SQLite read-through); `source=database` reads hot SQLite/archive only; source-less callers keep the existing unified compatibility merge. Startup warmup uses the last 24 hours of durable hot rows, while live cache sampling now also consumes coherent runtime snapshots independently of database logging policy.
 - frontend(Trends): `Auto`, `30 min`, `1 hour`, `6 hours`, and `24 hours` send `source=cache`; `Custom` sends `source=database`. Live builds use v2 by default after activation while demo remains legacy-generated and `VITE_HISTORIAN_V2_TRENDS=0` remains an explicit rollback switch. OpenAPI, ADR-018, Plan 42 v1.20, web guide and task checklist now document the split and rollout state.
@@ -305,7 +374,54 @@
 ### Changed - Outputs DO real-only controls (2026-07-01)
 - fe(outputs): simplified DO output configuration to real wired controls only (safe state and manual force), removing EasySet-only demo rows without backend/core/iobus hooks. Verification: `npm run build` pass; `npm run lint` pass; `git diff --check` pass.
 
-### Fixed - ADR-011/012 BACnet alignment integration review (2026-07-01)
+### Changed — ADR-016 local limited-operator HMI specification and microtask plan (2026-07-22)
+- hmi/product: selected the existing 2.4-inch local HMI, not a Web HMI, with five surfaces `Home/Points/Control/Alarms/Service`; communication/system diagnostics are consolidated rather than removed.
+- hmi/control: specified authority-whitelisted setpoint/mode/override/release, bounded TTL/reason/explicit release, effective source/priority, authoritative alarm ACK and read-only degradation when broker/core is unavailable.
+- hmi/security: specified short-lived fail-closed sessions, RBAC/audit/idempotency and removal of static role/PIN production privilege, direct process signals, `CAP_SYS_BOOT` and direct reboot from `mkddc-hmi`.
+- docs/implementation: aligned product, requirements, architecture, interfaces, source specs, HMI design/UC/UX, integration/DoD/release documents and the existing review report; replaced the active six-screen plan with 54 microtasks `HOP-000..077` covering contract, broker, core, HMI model/UI, privilege removal and evidence.
+- verification: hardware documentation closure harness 18/18 pass; 337 local Markdown links across 38 ADR-016-related files resolve; 54 unique HOP headings; active-scope conflict scan and `git diff --check` pass.
+- repository: ignore generated `build_*` directories so local Core/IOBus build trees and binaries are not committed with the source/documentation baseline.
+- status: documentation/plan only; source remains partial and the HMI production gate remains RED pending implementation, host/integration tests and target usability evidence.
+
+### Changed — HW/FW/SOM/HMI design reconciliation and review (2026-07-22)
+- hw/docs: reconciled the active hardware baseline to Radxa CM3 onboard-PHY boundaries, JD9852 MIPI DSI + FT5436 I2C, and explicit carrier/power/backlight/button/DT gates; removed stale ILI9341/SPI/fbdev assumptions.
+- fw/docs: classified STM32 FreeRTOS/IOP/ADC/AO/DO/watchdog content as target design because `fw/Core/Src/main.c` and `fw/mkddc-fw.ioc` are placeholders; added implementation/HIL blockers.
+- hw/safety: reopened relay/driver selection, removed the unsupported 10k pull-up compatibility claim, and added HMI integration, MCU implementation and relay-driver rows to the hardware closure register.
+- hmi/docs: reframed the 2.4-inch display as a local status/commissioning/service panel; added authoritative alarm ACK/audit, fail-closed identity/RBAC, explicit unknown/unavailable state and operator-usability gates aligned as design guidance to IEC 60073/62682/62443, ISO 9241-210 and ISA-101.
+- hmi/config: corrected the packaged example inventory from UI8+DI8 to the Rev A base UI16+AO4+DO4.
+- records: added `KX-DDC24-HW-FW-SOM-HMI-REVIEW-2026-07-22.md` with source-aligned findings, Siemens/Rockwell/Honeywell benchmark, NO-GO decisions and closure plan.
+- verification: hardware-doc harness 18/18 pass; HMI Debug build pass and direct HMI suite 23/23 pass; packaged point DB JSON/count assertion pass; normalized internal Markdown links 0; `git diff --check` pass. The aggregate temporary CTest invocation also listed two intentionally unbuilt core/iobus targets, so only the direct HMI result is claimed. Host/docs results do not claim HIL, EMC, IEC conformity or manufacturing readiness.
+
+### Restored — Complete HW/FW/SW design corpus (2026-07-22)
+- docs/recovery: restored all 47 archived hardware-design Markdown sources, all 10 firmware-design sources, all 12 software-design sources, all 6 interface-design sources, all 17 source specifications, and all 35 implementation guides from the verified pre-cleanup archive.
+- docs/structure: placed lifecycle sources under `docs/01_specs`, `docs/02_design`, and `docs/03_implementation`; retained controlled baselines and hardware design under `docs/04_design`; separated 24 hardware findings/audit/risk records into `docs/07_records/reviews/hardware`.
+- docs/control: added active firmware baseline and controlled indexes; recovered detail is `In Review`, while top-level baseline documents, shared headers, decisions, and tested code retain authority.
+- harness: updated `check_hw_doc_closure.py` for the controlled baseline/detail/record locations while preserving the 41-finding closure assertions.
+- verification: hardware-doc harness passed 18/18; the repository now has 177 active Markdown files (172 under `docs/`), 0 normalized broken internal links, 0 empty project directories, the recovery archive SHA-256 remains unchanged, and `git diff --check` passed.
+
+### Removed — Empty project directories (2026-07-22)
+- repository: removed empty project-authored directories left after the Markdown dossier cleanup; dependency, VCS, build, distribution, and cache trees were excluded.
+- Verification: rescanned the same scope after cleanup and confirmed no empty directories remain.
+
+### Changed — Controlled Markdown dossier restructure (2026-07-22)
+- docs: consolidated the active project documentation into a 12-file controlled dossier covering governance, decisions, product, requirements, architecture, interfaces, software, hardware, verification, operations, and traceability.
+- docs: reconciled Rev A to 16 UI + 4 AO + 4 DO, three mandatory core services plus feature-gated HMI, IOP v2 2 ms/500 Hz timing, SHM v4, JD9852/MIPI HMI, and the 28 implemented graph node types.
+- docs: normalized duplicate ADR identifiers, removed superseded/duplicated Markdown from the active tree, and retained unresolved hardware/manufacturing items as an explicit RED release gate.
+- docs: relocated the retained OpenAPI, BACnet pretest, certification helper, and signing-key artifacts from legacy folders into `docs/04_design` and `docs/07_records` without deleting their content.
+- archive: captured all 303 pre-restructure Markdown files in `archives/markdown-before-restructure-2026-07-22.tar.gz`, with per-file SHA-256 manifest and archive checksum recorded in document control.
+- Verification: archive contains 303/303 source Markdown files with SHA-256 `60b6631dfdc1395f4292960097872417d149f2572eb15fd2e224aa869cd98857`; active tree has 17 Markdown files total (12 under `docs/`) and 0 broken internal Markdown links; `git diff --check` passed.
+
+### Changed — Agent communication rule cleanup (2026-07-02)
+- agent workflow: removed the forced personalized form of address from `AGENTS.md` and replaced the remaining personalized changelog exception with neutral wording.
+- Verification: repository-wide hidden-file search found no remaining references to the removed form of address.
+
+### Fixed — FW SOM AO physical-unit boundary (2026-07-02)
+- core/iobus: made the SHM AO contract consistently physical (`0..10V` or `4..20mA`), removed the second engineering-range conversion at the MCU command boundary, and made graph AO conversion follow the electrical mode actually acknowledged by the MCU.
+- safety/config: reject non-finite or out-of-range AO commands before SHM output, fail startup when `SET_AO_CFG` is not acknowledged, and require a coordinated service restart for AO mode changes instead of hot-applying mismatched modes.
+- BACnet: keep configured engineering units such as percent in the BACnet Priority Array, but convert the winning value exactly once to physical V/mA before forwarding it to core.
+- Verification: clean Debug build + CTest passed 285/285; BACnet-enabled build + CTest passed 286/286; SHM v4 layout assertions synchronized to `ui_unit=176`, `ui_raw_unit=304`, size 528.
+
+### Fixed — ADR-011/012 BACnet alignment integration review (2026-07-01)
 - shm/consumers: restored the v3 `ui_raw[]`/`ui_raw_unit[][]` fields alongside `ui_reliability[]`, bumped the combined SHM contract to `0x4B584404` (v4), and synchronized web offsets/size; this prevents stale-layout web reads and restores `shm_dump_io` compilation.
 - iobus/reliability: preserved ADS131M08 divider/shunt scaling and per-channel calibration on the runtime reliability path; transient poll failures now publish `UNRELIABLE_OTHER`, IOP/ADC failures publish `COMMUNICATION_FAILURE`, and raw live values remain published.
 - BACnet/AO: corrected AI V/mA Units to BACnet 5/2, Pa to 53, and the documented CONFIGURATION_ERROR enum to 10; kept AO Object_Name storage alive for bacnet-stack, made directed Who-Is return unicast I-Am, refreshed engineering conversion on metadata-only reloads, and validated AO name/units/min/max in both iobus and web config paths.
@@ -499,24 +615,21 @@ audit 2026-06-15.
   Di chuyển 45 file bằng `git mv` (giữ history); **tính lại toàn bộ link** (79 file) — broken-link = 0.
 - **Master Register cover 100%** (đóng G2): thêm PRODUCT_DEFINITION, REVA_SCOPE, GRAPH_SCHEMA,
   ISOGAP + section ADR-001..007.
-- Thêm [QA-ISOGAP-001](docs/00_management/KX-DDC24-QA-ISOGAP-001_VI.md) — gap assessment theo §7.5 + kế hoạch.
+- Thêm `QA-ISOGAP-001` (nay đã archive) — gap assessment theo §7.5 + kế hoạch.
 ### Changed — ⚠ BREAKING (PIVOT-2026-06-08): Component-based DDC + 3-process + Go web
 - **Mô hình điều khiển:** chuyển từ **IEC 61131-3 soft-PLC (FBD/ST)** sang **component-based
-  graph runtime**. Artifact deploy = `graph.json`. IEC 61131-3 → Rev C. ([ADR-004](docs/adr/ADR-004-component-based-runtime.md))
+  graph runtime**. Artifact deploy = `graph.json`. IEC 61131-3 → Rev C. ([ADR-004](docs/00_governance/DECISIONS.md))
 - **Kiến trúc SOM:** 7 service `kinexus-*` → **3 process `mkddc-*`** (`mkddc-core` C++ real-time,
   `mkddc-iobus` C++, `mkddc-web` Go), chia theo real-time boundary. HMI/agent/OTA/cloud → deferred
-  Rev B+. Watchdog = systemd + HW. ([ADR-005](docs/adr/ADR-005-three-process-architecture.md))
+  Rev B+. Watchdog = systemd + HW. ([ADR-005](docs/00_governance/DECISIONS.md))
 - **Web/UI:** backend Python/FastAPI → **Go**; frontend Svelte → **React**; Rev A UI = **form +
   import `graph.json`**, bỏ FBD drag-drop (canvas → Rev B); validator = **Go library** (bỏ Rust
-  service). ([ADR-006](docs/adr/ADR-006-rev-a-ui-form-json.md), [ADR-007](docs/adr/ADR-007-web-stack-go.md))
+  service). ([ADR-006/ADR-007](docs/00_governance/DECISIONS.md))
 - **Naming:** retire codename `kinexus-*` → brand `mkddc-*` (rename `kinexus_shm.h`→`mkddc_shm.h`
   là task implementation riêng; hợp đồng shm/IOP với MCU giữ nguyên).
 ### Added — PIVOT-2026-06-08
-- **Nguồn-chuẩn mới:** [PRODUCT_DEFINITION](docs/01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md),
-  [REVA_SCOPE_ROADMAP](docs/01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md) (Rev A.0 + lịch 90 ngày).
-- **Thiết kế lõi:** [interfaces/GRAPH_SCHEMA](docs/02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md),
-  [software/SW_RUNTIME_EXECUTION_MODEL](docs/02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md),
-  [software/SW_COMPONENT_LIBRARY](docs/02_design/software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md).
+- **Nguồn-chuẩn mới:** `PRODUCT_DEFINITION` và `REVA_SCOPE_ROADMAP` (nay đã hợp nhất vào [Product Baseline](docs/01_product/PRODUCT.md)).
+- **Thiết kế lõi:** `GRAPH_SCHEMA`, `SW_RUNTIME_EXECUTION_MODEL` và `SW_COMPONENT_LIBRARY` (nay đã hợp nhất vào [Software Design](docs/04_design/SOFTWARE.md)).
 - **ADR-004..007** ghi 4 quyết định pivot.
 ### Removed — PIVOT-2026-06-08
 - **Đã xóa** `design/software/SW_PLC_ENGINE_DESIGN_MK-DDC-24_VI.md`,
@@ -540,13 +653,13 @@ audit 2026-06-15.
   - FW / BE / FE Developer Guide & Backlog: walking skeleton + backlog cỡ ticket (mục tiêu/file/acceptance/test/trace).
   - **Hợp đồng code thật:** `shared/iop_protocol.h` (FW↔BE), `shared/kinexus_shm.h` (shared memory struct).
   - FE: hợp đồng WebSocket realtime (monitor/force).
-- **`kinexus-fieldbus`** service + [SW_FIELDBUS_DESIGN](docs/02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md) (Modbus RTU master, device profile engine).
+- **`kinexus-fieldbus`** service + `SW_FIELDBUS_DESIGN` (tài liệu lịch sử đã archive; thiết kế hiện hành tại [Software Design](docs/04_design/SOFTWARE.md)).
 - Decision record **ARCH-R010** trong OPEN_ISSUES.
 - **KX-DDC24-SYS-ARCH-001 — System Handbook** ("Hiểu hệ thống từ số 0"): tài liệu giải thích toàn bộ sản phẩm cho người **không chuyên** — kể chuyện, sơ đồ Mermaid, ví von, đi theo chân 1 con số/1 mệnh lệnh xuyên hệ thống, từ điển thuật ngữ, FAQ. Đặt làm điểm bắt đầu số 1 ở mọi cổng (root README, docs/README, Overview).
 - `git init` + `.gitignore` + baseline commit lịch sử dự án.
 
 ### Đang làm
-- Implement code theo [Implementation Plan](docs/00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md) (Phase P1+).
+- Implement code theo `KX-DDC24-PM-IMPLPLAN-001` (đã archive; workflow hiện hành tại [Development and Operations](docs/06_operations/DEVELOPMENT_AND_OPERATIONS.md)).
 - Cần chốt: DEC-001 (PLC engine), SW-Q-004 (key store), SW-Q-005 (OTA endpoint).
 
 ---

@@ -20,15 +20,15 @@ void ScreenIo::build(lv_obj_t* root, const Locale& l, const PointDb& db)
     root_ = root; locale_ = &l; db_ = &db;
     title_ = io_label(root, 3, 0, 220, 18);
     header_ = io_label(root, 3, 19, 314, 18);
-    for (int i = 0; i < 6; ++i)
-        row_labels_[i] = io_label(root, 3, 38 + i * 22, 314, 21);
+    for (int i = 0; i < VISIBLE_ROWS; ++i)
+        row_labels_[i] = io_label(root, 3, 38 + i * 20, 314, 19);
     filter_btn_ = lv_button_create(root);
-    lv_obj_set_pos(filter_btn_, 3, 173);
-    lv_obj_set_size(filter_btn_, 128, 27);
+    lv_obj_set_pos(filter_btn_, 3, 140);
+    lv_obj_set_size(filter_btn_, 140, 40);
     filter_label_ = lv_label_create(filter_btn_);
     lv_obj_center(filter_label_);
     lv_obj_add_event_cb(filter_btn_, filter_cb, LV_EVENT_CLICKED, this);
-    page_label_ = io_label(root, 180, 177, 135, 20);
+    page_label_ = io_label(root, 150, 150, 165, 24);
     lv_obj_set_style_text_align(page_label_, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     rebuild_labels(l);
 }
@@ -98,7 +98,7 @@ void ScreenIo::render()
     if (data.empty()) offset_ = 0;
     else if (offset_ >= data.size()) offset_ = data.size() - 1;
     char age[20]; fmt_age(age, sizeof(age), cache_.age_ns);
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < VISIBLE_ROWS; ++i) {
         const size_t idx = offset_ + static_cast<size_t>(i);
         if (idx >= data.size()) {
             lv_label_set_text(row_labels_[i], i == 0 ? locale_->str(StrKey::STR_NO_FAULT_POINTS) : "");
@@ -123,8 +123,8 @@ void ScreenIo::render()
                        : filter_ == Filter::BAD ? locale_->str(StrKey::STR_FILTER_BAD)
                                                : locale_->str(StrKey::STR_FILTER_STALE);
     lv_label_set_text_fmt(filter_label_, "Filter: %s", filter);
-    const size_t page = data.empty() ? 0 : offset_ / 6 + 1;
-    const size_t pages = data.empty() ? 0 : (data.size() + 5) / 6;
+    const size_t page = data.empty() ? 0 : offset_ / VISIBLE_ROWS + 1;
+    const size_t pages = data.empty() ? 0 : (data.size() + VISIBLE_ROWS - 1) / VISIBLE_ROWS;
     lv_label_set_text_fmt(page_label_, "Page %zu/%zu", page, pages);
 }
 

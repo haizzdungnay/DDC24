@@ -11,7 +11,7 @@ namespace hmi {
 /* English string table */
 const char* Locale::STR_EN[static_cast<int>(StrKey::STR_COUNT)] = {
     /* Tabs */
-    "Home", "I/O", "Alarm", "Comm", "System", "Service",
+    "Home", "Points", "Alarm", "Control", "System", "Service",
     /* Status */
     "RUNNING", "FAULT", "SAFE", "OK", "DISABLED", "UNKNOWN",
     "LOCKED", "UNLOCKED",
@@ -45,15 +45,11 @@ const char* Locale::STR_EN[static_cast<int>(StrKey::STR_COUNT)] = {
     "FIRMWARE", "RUNTIME", "RESOURCE", "PROCESS", "WATCHDOG", "LOG",
     "SOM FW", "MCU FW", "Build ID", "Boot Reason", "Last Error",
     "Last Warn", "Last Fault", "Uptime",
-    /* Service */
-    "SERVICE / CONFIG", "ACCESS", "PROJECT",
-    "POINT DATABASE", "SAFE STATE POLICY", "ACTIONS",
-    "Reload Config", "Restart Services", "Reboot System",
-    "Backup Config", "Restore Config",
-    "Hold ENTER 3s to reboot / ESC to cancel",
-    "Enter Service PIN:",
-    "Wrong PIN",
-    "Permission required",
+    /* Limited-operator Control and Service */
+    "SERVICE / SESSION", "SESSION", "DIAGNOSTICS",
+    "Username", "Password", "LOGIN", "LOGOUT", "READ ONLY",
+    "CONTROL", "AUTO", "MANUAL", "OVERRIDE", "SETPOINT", "RELEASE",
+    "CONFIRM", "REASON", "Username and password required",
     /* Fault banner */
     "I/O FAULT — Check MCU connection",
     /* Hint */
@@ -63,7 +59,7 @@ const char* Locale::STR_EN[static_cast<int>(StrKey::STR_COUNT)] = {
 /* Vietnamese string table */
 const char* Locale::STR_VI[static_cast<int>(StrKey::STR_COUNT)] = {
     /* Tabs */
-    "Trang ch\xe1""\xbb""\xa7""", "I/O", "C\xe1""\xba""\xa3""nh b\xc3""\xa1""o", "M\xe1""\xba""\xa1""ng", "H\xe1""\xbb""\x87"" th\xe1""\xbb""\x91""ng", "D\xe1""\xbb""\x8b""ch v\xe1""\xbb""\xa5""",
+    "Trang ch\xe1""\xbb""\xa7""", "\xc4""\x90""i\xe1""\xbb""\x83""m", "C\xe1""\xba""\xa3""nh b\xc3""\xa1""o", "\xc4""\x90""i\xe1""\xbb""\x81""u khi\xe1""\xbb""\x83""n", "H\xe1""\xbb""\x87"" th\xe1""\xbb""\x91""ng", "D\xe1""\xbb""\x8b""ch v\xe1""\xbb""\xa5""",
     /* Status */
     "\xc4""\x90""ANG CH\xe1""\xba""\xa0""Y", "L\xe1""\xbb""\x96""I", "AN TO\xc3""\x80""N", "OK", "T\xe1""\xba""\xaf""T", "UNKNOWN",
     "KH\xc3""\x93""A", "M\xe1""\xbb""\x9e"" KH\xc3""\x93""A",
@@ -99,16 +95,11 @@ const char* Locale::STR_VI[static_cast<int>(StrKey::STR_COUNT)] = {
     "FIRMWARE", "V\xe1""\xba""\xac""N H\xc3""\x80""NH", "T\xc3""\x80""I NGUY\xc3""\x8a""N", "TI\xe1""\xba""\xbe""N TR\xc3""\x8c""NH", "WATCHDOG", "NH\xe1""\xba""\xac""T K\xc3""\x9d""",
     "FW SOM", "FW MCU", "Build ID", "L\xc3""\xbd"" do kh\xe1""\xbb""\x9f""i \xc4""\x91""\xe1""\xbb""\x99""ng", "L\xe1""\xbb""\x97""i cu\xe1""\xbb""\x91""i",
     "C\xe1""\xba""\xa3""nh b\xc3""\xa1""o cu\xe1""\xbb""\x91""i", "L\xe1""\xbb""\x97""i cu\xe1""\xbb""\x91""i", "Ho\xe1""\xba""\xa1""t \xc4""\x91""\xe1""\xbb""\x99""ng",
-    /* Service */
-    "D\xe1""\xbb""\x8a""CH V\xe1""\xbb""\xa4"" / C\xe1""\xba""\xa4""U H\xc3""\x8c""NH", "QUY\xe1""\xbb""\x80""N TR\xc3""\x8c""Y C\xe1""\xba""\xac""P", "D\xe1""\xbb""\xb0"" \xc3""\x81""N",
-    "C\xc6""\xa0"" S\xe1""\xbb""\x9e"" D\xe1""\xbb""\xb0"" LI\xe1""\xbb""\x86""U \xc4""\x90""I\xe1""\xbb""\x82""M", "CH\xc3""\x8d""NH S\xc3""\x81""CH TR\xe1""\xba""\xa0""NG TH\xc3""\x81""I AN TO\xc3""\x80""N", "H\xc3""\x80""NH \xc4""\x90""\xe1""\xbb""\x98""NG",
-    "T\xe1""\xba""\xa3""i l\xe1""\xba""\xa1""i c\xe1""\xba""\xa5""u h\xc3""\xac""nh", "Kh\xe1""\xbb""\x9f""i \xc4""\x91""\xe1""\xbb""\x99""ng l\xe1""\xba""\xa1""i d\xe1""\xbb""\x8b""ch v\xe1""\xbb""\xa5""",
-    "Kh\xe1""\xbb""\x9f""i \xc4""\x91""\xe1""\xbb""\x99""ng l\xe1""\xba""\xa1""i h\xe1""\xbb""\x87"" th\xe1""\xbb""\x91""ng",
-    "Sao l\xc6""\xb0""u c\xe1""\xba""\xa5""u h\xc3""\xac""nh", "Ph\xe1""\xbb""\xa5""c h\xe1""\xbb""\x93""i c\xe1""\xba""\xa5""u h\xc3""\xac""nh",
-    "Gi\xe1""\xbb""\xaf"" ENTER 3 gi\xe2""\x80""\x8d""y \xc4""\x91""\xe1""\xbb""\x83"" kh\xe1""\xbb""\x9f""i \xc4""\x91""\xe1""\xbb""\x99""ng / ESC \xc4""\x91""\xe1""\xbb""\x83"" hu\xe1""\xbb""\xb7""",
-    "Nh\xe1""\xba""\xad""p m\xc3""\xa3"" PIN d\xe1""\xbb""\x8b""ch v\xe1""\xbb""\xa5"":",
-    "SAI PIN",
-    "Kh\xc3""\xb4""ng c\xc3""\xb3"" quy\xe1""\xbb""\x81""n",
+    /* Limited-operator Control and Service */
+    "DỊCH VỤ / PHIÊN", "PHIÊN", "CHẨN ĐOÁN",
+    "Tên người dùng", "Mật khẩu", "ĐĂNG NHẬP", "ĐĂNG XUẤT", "CHỈ ĐỌC",
+    "ĐIỀU KHIỂN", "TỰ ĐỘNG", "THỦ CÔNG", "GHI ĐÈ", "GIÁ TRỊ ĐẶT", "NHẢ",
+    "XÁC NHẬN", "LÝ DO", "Cần tên người dùng và mật khẩu",
     /* Fault banner */
     "L\xe1""\xbb""\x96""I I/O \xe2""\x80""\x94"" Ki\xe1""\xbb""\x83""m tra k\xe1""\xba""\xbf""t n\xe1""\xbb""\x91""i MCU",
     /* Hint */

@@ -9,16 +9,17 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-HW = ROOT / "hardware-design"
+HW = ROOT / "docs/04_design/hardware"
+HW_RECORDS = ROOT / "docs/07_records/reviews/hardware"
 
 REQUIRED = [
-    HW / "hw_design_review/HW_DOC_REVIEW_CLOSURE_PLAN.md",
+    HW_RECORDS / "hw_design_review/HW_DOC_REVIEW_CLOSURE_PLAN.md",
     HW / "02_carrier_board/GROUNDING_SCHEME.md",
     HW / "03_io_subsystem/IO_RS485_CIRCUIT.md",
     HW / "04_power_supply/PWR_DESIGN.md",
     HW / "05_mcu_io/IOP_PROTOCOL.md",
     HW / "05_mcu_io/FW-ADC-SAMPLING.md",
-    ROOT / "docs/00_management/KX-DDC24-SYS-ARCH-001_VI.md",
+    ROOT / "docs/03_architecture/SYSTEM.md",
     ROOT / "docs/02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md",
 ]
 
@@ -37,21 +38,27 @@ METADATA_DOCS = [
     HW / "07_emc_thermal/EMC_THERMAL_NOTES.md",
     HW / "09_hw_bringup/HW-TEST-UI-16CH.md",
     HW / "10_manufacturing/MFG_DATA_PACKAGE.md",
-    HW / "hw_design_review/SCHEMATIC_REVIEW_CHECKLIST.md",
+    HW_RECORDS / "hw_design_review/SCHEMATIC_REVIEW_CHECKLIST.md",
 ]
 
 BASELINE_DOCS = [
-    ROOT / "docs/CANONICAL_DECISIONS.md",
-    ROOT / "docs/01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md",
-    ROOT / "docs/01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md",
-    ROOT / "docs/01_specs/HW_SPEC_MK-DDC-24_VI.md",
-    ROOT / "docs/01_specs/PRD_MK-DDC-24_VI.md",
-    ROOT / "docs/01_specs/SRS_MK-DDC-24_VI.md",
-    ROOT / "docs/01_specs/DS_MK-DDC-24_VI.md",
-    ROOT / "docs/02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md",
+    ROOT / "docs/00_governance/DECISIONS.md",
+    ROOT / "docs/01_product/PRODUCT.md",
+    ROOT / "docs/02_requirements/REQUIREMENTS.md",
+    ROOT / "docs/03_architecture/SYSTEM.md",
+    ROOT / "docs/04_design/HARDWARE.md",
+    ROOT / "docs/04_design/FIRMWARE.md",
+    ROOT / "docs/04_design/SOFTWARE.md",
     ROOT / "docs/03_implementation/01_SYSTEM_IMPLEMENTATION_OVERVIEW.md",
-    ROOT / "docs/03_manuals/KX-DDC24-USER-001_VI.md",
+    ROOT / "docs/02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md",
     ROOT / "docs/04_uiux/KX-DDC24-UC-HMI-001_VI.md",
+]
+
+BASE_SKU_DOCS = [
+    ROOT / "docs/01_product/PRODUCT.md",
+    ROOT / "docs/02_requirements/REQUIREMENTS.md",
+    ROOT / "docs/04_design/HARDWARE.md",
+    ROOT / "docs/04_design/FIRMWARE.md",
 ]
 
 
@@ -115,16 +122,19 @@ def main() -> int:
     expected_ids = {f"HW-DOC-{n:03d}" for n in range(1, 40)} | {
         "HW-DOC-045",
         "HW-DOC-047",
+        "HW-DOC-048",
+        "HW-DOC-049",
+        "HW-DOC-050",
     }
-    checks.check(set(rows) == expected_ids, "canonical register has exactly 41 unique IDs")
+    checks.check(set(rows) == expected_ids, "canonical register has exactly 44 unique IDs")
     checks.check(
-        all(status in {"BLOCKED_HW", "CLOSED_DOC", "CLOSED_EVIDENCE", "REJECTED"} for status in rows.values()),
+        all(status in {"BLOCKED_HW", "BLOCKED_FW", "CLOSED_DOC", "CLOSED_EVIDENCE", "REJECTED"} for status in rows.values()),
         "register has no OPEN/IN_PROGRESS issue row",
     )
     counts = {status: list(rows.values()).count(status) for status in sorted(set(rows.values()))}
     checks.check(
-        counts == {"BLOCKED_HW": 11, "CLOSED_DOC": 28, "REJECTED": 2},
-        "status counts are 11 blocked / 28 doc-closed / 2 rejected",
+        counts == {"BLOCKED_FW": 1, "BLOCKED_HW": 13, "CLOSED_DOC": 28, "REJECTED": 2},
+        "status counts are 13 HW-blocked / 1 FW-blocked / 28 doc-closed / 2 rejected",
         str(counts),
     )
 
@@ -137,8 +147,8 @@ def main() -> int:
         HW / "05_mcu_io/FW-ADC-SAMPLING.md",
         HW / "05_mcu_io/MCU_STM32G0_SPEC.md",
         HW / "03_io_subsystem/IO_UI_CIRCUIT.md",
-        HW / "hw_design_review/HW-RISK-UI-16CH.md",
-        ROOT / "docs/00_management/KX-DDC24-SYS-ARCH-001_VI.md",
+        HW_RECORDS / "hw_design_review/HW-RISK-UI-16CH.md",
+        ROOT / "docs/03_architecture/SYSTEM.md",
         ROOT / "docs/01_specs/SRS_MK-DDC-24_VI.md",
         ROOT / "docs/03_implementation/01_SYSTEM_IMPLEMENTATION_OVERVIEW.md",
         ROOT / "docs/03_implementation/04_FW_MCU_IMPLEMENTATION_GUIDE.md",
@@ -163,11 +173,11 @@ def main() -> int:
     )
     checks.check(not stale_baseline, "active product/spec docs contain no 8 UI + 8 DI baseline", str(stale_baseline))
     checks.check(
-        all("16 UI" in text(path) for path in BASELINE_DOCS),
-        "active product/spec docs state the 16 UI base-SKU architecture",
+        all("16 UI" in text(path) for path in BASE_SKU_DOCS),
+        "active baseline docs state the 16 UI base-SKU architecture",
     )
 
-    sys_arch = text(ROOT / "docs/00_management/KX-DDC24-SYS-ARCH-001_VI.md")
+    sys_arch = text(ROOT / "docs/03_architecture/SYSTEM.md")
     checks.check("16 UI + 4 AO + 4 DO" in sys_arch, "SYS-ARCH states Rev A 16 UI + 4 AO + 4 DO")
     checks.check("8× UI, 8× DI" not in sys_arch, "SYS-ARCH has no active 8 UI + 8 DI diagram")
 
@@ -199,7 +209,11 @@ def main() -> int:
     kicad_sources = list((HW / "kicad").glob("*.kicad_sch")) + list((HW / "kicad").glob("*.kicad_pcb"))
     checks.check(bool(kicad_sources) or "**Status:** BLOCKED" in mfg, "manufacturing cannot appear released without KiCad sources")
 
-    link_docs = REQUIRED + METADATA_DOCS + BASELINE_DOCS + [HW / "README.md", HW / "PROGRESS.md"]
+    link_docs = REQUIRED + METADATA_DOCS + BASELINE_DOCS + [
+        HW / "README.md",
+        HW_RECORDS / "root/PROGRESS.md",
+        HW_RECORDS / "README.md",
+    ]
     broken_links: list[str] = []
     for path in dict.fromkeys(link_docs):
         for target, resolved in local_links(path):

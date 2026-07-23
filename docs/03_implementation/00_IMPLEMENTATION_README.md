@@ -49,7 +49,7 @@ Nếu bạn chỉ có 5 phút: đọc §1 → §5 → §6 → §7 của file nà
 
 ---
 
-## 3. Bốn phần code chính
+## 3. Năm phần code chính
 
 | Phần | Chạy ở | Ngôn ngữ | Thư mục code | Vai trò 1 dòng |
 |------|--------|----------|--------------|----------------|
@@ -57,6 +57,7 @@ Nếu bạn chỉ có 5 phút: đọc §1 → §5 → §6 → §7 của file nà
 | **mkddc-iobus** | SOM Debian | C++17 / C | `services/iobus/` | **Master UART/IOP** tới MCU + Modbus/BACnet network |
 | **mkddc-core** | SOM Debian (SCHED_FIFO) | C++17 | `services/core/` | Point table + scan loop + graph + priority/safe-state |
 | **mkddc-web** | SOM Debian | Go + React | `web/` | REST API + Web UI + config + validator + commissioning |
+| **mkddc-hmi** *(feature-gated)* | SOM Debian | C++17 + LVGL | `services/hmi/` | Local five-surface limited-operator client; read SHM, mutation qua broker/core |
 
 Nguồn-chuẩn kiến trúc service: [ADR-005](../adr/ADR-005-three-process-architecture.md) ·
 [PRODUCT_DEFINITION §6](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md).
@@ -77,8 +78,8 @@ Nguồn-chuẩn kiến trúc service: [ADR-005](../adr/ADR-005-three-process-arc
 | Nhóm | Người | Sở hữu | Tài liệu chính |
 |------|-------|--------|----------------|
 | **Dev 1 — FW_MCU** | Dev firmware | `fw/` | [04_FW_MCU](04_FW_MCU_IMPLEMENTATION_GUIDE.md), [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) |
-| **Dev 2 — SOM/Core/Iobus** | Dev SOM | `services/iobus/`, `services/core/`, `shared/` | [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md), [07_CORE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md), [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) |
-| **Dev 3 — Web/BE** | Dev web | `web/` | [09_WEB](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) |
+| **Dev 2 — SOM/Core/Iobus/HMI** | Dev SOM | `services/iobus/`, `services/core/`, `services/hmi/`, `shared/` | [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md), [07_CORE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md), [08_HMI](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md), [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) |
+| **Dev 3 — Web/BE** | Dev web | `web/` và local HMI auth/audit broker | [09_WEB](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md), [08_HMI](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md) |
 
 Phân việc chi tiết: [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md).
 Tester & PM: [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md), [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md),
@@ -118,6 +119,22 @@ Tester & PM: [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md), [12_INTEGRATION_TEST_PLA
 [Web UI hiển thị 24 IO]
 ```
 
+## 6.1 Đường HMI local — telemetry và command tách riêng
+
+```text
+Telemetry: IO/PLC SHM ──read-only────────────────────► mkddc-hmi
+
+Command:   mkddc-hmi ──versioned local UDS──────────► mkddc-web broker
+             session · request ID                       auth · RBAC · policy · audit
+                                                        │ validated command
+                                                        ▼
+                                                   mkddc-core
+                                         priority · interlock · safe-state
+```
+
+Broker local không phải browser/Web HMI. Broker hoặc core mất thì HMI disable mutation
+và tiếp tục read-only; không queue/replay lệnh mù.
+
 ---
 
 ## 7. ⛔ NHỮNG VIỆC KHÔNG ĐƯỢC LÀM
@@ -128,6 +145,8 @@ Tester & PM: [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md), [12_INTEGRATION_TEST_PLA
 ❌ iobus tự quyết định relay   (iobus tự bật DO theo logic riêng)
 ❌ MCU chạy logic điều khiển   (MCU tự PID/interlock/schedule hệ thống)
 ❌ Bỏ qua priority resolver    (ghi thẳng ao_setpoint/do_cmd không qua core)
+❌ HMI ghi SHM/hardware         (mọi mutation phải qua broker/core)
+❌ HMI tự reboot/kill service   (presentation không giữ CAP_SYS_BOOT/raw signal)
 ❌ Để mock/random IO trong build release
 ```
 
@@ -136,6 +155,7 @@ Tester & PM: [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md), [12_INTEGRATION_TEST_PLA
 ```
 ✅ Web → mkddc-core → mkddc-iobus → UART/IOP → MCU → IO thật
 ✅ Mọi DO/AO đi qua priority resolver trong mkddc-core
+✅ HMI → local auth/audit broker → core → priority/safety
 ✅ MCU chỉ đọc/ghi IO + safe-state, KHÔNG chạy logic hệ thống
 ✅ iobus chỉ là người đưa thư UART: poll, parse, gửi lệnh, báo lỗi
 ```
@@ -192,7 +212,7 @@ Tester & PM: [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md), [12_INTEGRATION_TEST_PLA
 | **Giá trị protocol UART/IOP** (opcode/payload/fault/reason/CRC/timing) | [`shared/iop_protocol.h`](../../shared/iop_protocol.h) — **cuối cùng** |
 | **SHM layout/magic/path/ownership** | [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) — **cuối cùng** |
 | Giao thức UART/IOP (diễn giải, hành vi, timing chart) | [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) + [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) |
-| Kiến trúc service / process | [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) + [ADR-005](../adr/ADR-005-three-process-architecture.md) + [CANONICAL_DECISIONS](../CANONICAL_DECISIONS.md) |
+| Kiến trúc service / process | [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) + [ADR-005](../adr/ADR-005-three-process-architecture.md) + [Decision Log](../00_governance/DECISIONS.md) |
 | Firmware STM32 | [FW_DDD](../02_design/firmware/FW_DDD_MK-DDC-24_VI.md) |
 | Chân MCU | [FW_PINOUT_MASTER](../02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) |
 | SHM/IPC SOM (diễn giải, ownership chi tiết) | [06_IOBUS §5](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) + [SW_ARCH_SPEC §2](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) |

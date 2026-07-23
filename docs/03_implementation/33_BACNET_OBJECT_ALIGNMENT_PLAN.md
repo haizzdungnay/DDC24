@@ -1,7 +1,7 @@
 # 33 — BACnet Object Model Alignment Implementation Plan
 
 > **Document ID:** PLAN-BAC-ALIGN-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-06-30
+> **Phiên bản:** 1.1 | 2026-07-22 (clarified ADR-016 local-HMI boundary)
 > **Status:** Approved (owner: Solution Architect 2026-06-30)
 > **Purpose:** Plan chi tiết cho Phase 4.6 — BACnet Reliability + AO config alignment với ASHRAE 135-2020
 > **Authority docs:** ADR-011, ADR-012, PICS/EPICS Rev 1.2, CONFIG_SCHEMA Rev 1.4
@@ -40,7 +40,8 @@ Phân tích live board data (2026-06-30) phát hiện 4 gap phải fix trước 
 **OUT of scope:**
 - AO Reliability (COMMUNICATION_FAILURE khi IOP fault) — covered by BAC-015
 - FW-IOP-008/009 (IO_RESP fault_flags byte) — separate FW task, không block SOM-side
-- FE display engineering AO values — defer HMI Rev B
+- Web engineering AO detail và local calibration/configuration UI — out of scope; local
+  Operator chỉ xem/điều khiển AO khi authoritative policy cho phép theo ADR-016.
 
 ---
 
@@ -210,7 +211,7 @@ readprop <device-id> analog-input 1 reliability --mac <board_ip>:47808
 readprop <device-id> analog-output 1 units --mac <board_ip>:47808
 ```
 
-Checklist R-01..R-11 và AO-01..AO-11 tại [BTL test matrix](../../00_management/evidence/certification/bacnet-object-property-test-matrix.md) §14.1/§14.2.
+Checklist R-01..R-11 và AO-01..AO-11 tại [BTL test matrix](../00_management/evidence/certification/bacnet-object-property-test-matrix.md) §14.1/§14.2.
 
 ---
 

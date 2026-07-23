@@ -78,8 +78,7 @@ struct SysSnapshot {
     char     last_fault[64]         = "NONE";
 };
 
-/* Read-only consumer of both SHM segments.
- * HMI never writes SHM (except safe-state in Screen 6 reboot). */
+/* Read-only consumer of both SHM segments. HMI never writes SHM. */
 class ShmReader {
 public:
     ~ShmReader() { detach(); }

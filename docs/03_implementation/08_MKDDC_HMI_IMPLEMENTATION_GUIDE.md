@@ -1,331 +1,742 @@
-# 08 — mkddc-hmi Implementation Guide
-## MK-DDC-24 | HMI Local Display (LVGL v9 / DRM / KMS)
+# 08 — `mkddc-hmi` Implementation Guide
+## ADR-016 limited-operator HMI — microtask plan
 
-> **Document ID:** IMPL-HMI-GUIDE-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-27 · **Trạng thái:** Implementation in progress · **Owner:** Dev SOM
-> **Trace:** `SW-HMI-001..008`, `HMI-001..022`
-> **Spec:** [SW_HMI_DESIGN Rev 2.2](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md) ·
->           [UC Rev 2.1](../04_uiux/KX-DDC24-UC-HMI-001_VI.md) ·
->           [UX Rev 2.0](../04_uiux/KX-DDC24-UX-HMI-001_VI.md)
-> **Scope:** `services/hmi/` — KHÔNG bao gồm `fw/` (MCU), `web/`, `services/core/`, `services/iobus/`.
-> **Amendment:** REVA_SCOPE Rev 1.2 (2026-06-27) — HMI kéo vào Rev A.
+**Document ID:** IMPL-HMI-MK-DDC-24
+**Revision:** 2.3 — 2026-07-22
+**Status:** Existing host control and ADR-017 network service path target-verified; connected-panel HIL/usability acceptance pending
+**Owners:** Core, Go backend, HMI, QA
+**Design:** [SW HMI Design](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md)
+**UX/UC:** [UX](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [Use cases](../04_uiux/KX-DDC24-UC-HMI-001_VI.md)
 
----
+## 1. Outcome
 
-## 1. Ràng buộc cứng (không thương lượng)
+Refactor the existing six-screen service-panel skeleton into the selected five-surface
+local HMI:
 
-| Ràng buộc | Giá trị | Nguồn |
-|-----------|---------|-------|
-| Display driver | DRM/KMS `/dev/dri/card0` — **KHÔNG dùng fbdev/fbtft** | SW-HMI-001 |
-| LVGL version | v9.x (không phải v8) | SW-HMI-001 |
-| Display controller | JD9852 MIPI DSI 1-lane, 240×320 xoay landscape 320×240 | UX §1 |
-| Touch controller | FT5436, I2C 0x38, `ft5x06_ts` → `/dev/input/touchscreen0` | UX §1 |
-| Input buttons | 6 GPIO: UP/DOWN/LEFT/RIGHT/ENTER/ESC (20ms debounce) | UX §2 |
-| Data feed | `kx_io_shm_t` + `kx_plc_shm_t` (SHM) — **KHÔNG HTTP/REST** | SW-HMI-003 |
-| Refresh | ≤ 1s từ SHM; ≥ 10 FPS render | SW-HMI-002/004 |
-| Alarm model | 4-state: ACTIVE_UNACK/ACK, CLEARED_UNACK/ACK — ACK ≠ clear | UC §7 |
-| BACnet status | Không bao giờ hiển thị "Đang kết nối" — OK/NO_TRAFFIC/TIMEOUT/... | UC §8 |
-| Safe state | Per-point từ point database — **không hardcode AO=4mA / DO=OFF** | UC-LOCAL-014 |
-| No-hardcode | Tên point, unit, scale từ point database — không embed Room/Fan/AHU | UX §6 |
-
----
-
-## 2. Cấu trúc thư mục
-
-```
-services/hmi/
-├── CMakeLists.txt
-├── main.cpp                    # entry: drm_init, indev init, lv_timer loop
-├── drm/
-│   ├── drm_init.cpp/hpp        # HMI-001: DRM/KMS /dev/dri/card0
-│   └── lv_drm_display.cpp/hpp  # LVGL display driver callback
-├── input/
-│   ├── evdev_touch.cpp/hpp     # HMI-002: FT5436 evdev → LV_INDEV_TYPE_POINTER
-│   └── gpio_buttons.cpp/hpp    # HMI-002: 6 GPIO → LV_INDEV_TYPE_KEYPAD
-├── screens/
-│   ├── screen_base.hpp         # tab strip + frame template
-│   ├── screen_home.cpp/hpp     # HMI-004: Screen 1 Home / Controller Health
-│   ├── screen_io.cpp/hpp       # HMI-005: Screen 2 I/O Monitor
-│   ├── screen_alarm.cpp/hpp    # HMI-006: Screen 3 Alarm / Event
-│   ├── screen_comm.cpp/hpp     # HMI-007: Screen 4 Communication
-│   ├── screen_system.cpp/hpp   # HMI-008: Screen 5 System / Diagnostics
-│   └── screen_service.cpp/hpp  # HMI-009: Screen 6 Service / Config
-├── data/
-│   ├── shm_reader.cpp/hpp      # HMI-010: kx_io_shm + kx_plc_shm 1s timer
-│   └── point_db.cpp/hpp        # name/unit/scale từ point database config
-├── ui/
-│   ├── nav_controller.cpp/hpp  # HMI-003: tab strip + 6-page ring
-│   ├── fault_banner.cpp/hpp    # I/O FAULT overlay full-width
-│   └── screen_saver.cpp/hpp    # HMI-003: dim 5min + wake on touch/key
-├── i18n/
-│   └── locale.cpp/hpp          # HMI-011: EN/VI, SIGHUP reload
-└── packaging/
-    └── mkddc-hmi.service       # HMI-012: systemd unit
+```text
+Home → Points → Control → Alarms → Service
 ```
 
----
+Add authoritative setpoint/mode/override/release and alarm ACK without putting HMI in
+the control path. Telemetry remains read-only SHM. Mutation goes through a local
+authenticated broker and existing/extended core IPC. Web UI/frontend is out of scope.
 
-## 3. Danh sách task HMI
+ADR-017 adds one narrow Service workflow: inspect active/pending Ethernet state and
+request static/DHCP apply, confirm or rollback through the broker and SOM network
+authority. This does not add a sixth surface or general engineering to the panel.
 
-### HMI-001: CMake skeleton + LVGL v9 + DRM/KMS init
+## 2. Non-negotiable rules
 
-**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — build LVGL v9 + libdrm RGB565, double buffer, xoay framebuffer portrait→landscape; còn T-SW-100/101 trên TFT thật.
+1. `mkddc-hmi` must never write command fields in SHM or hardware.
+2. `mkddc-core` remains priority/interlock/safe-state authority.
+3. `mkddc-web` backend owns local identity/RBAC/policy/audit broker; no browser is
+   involved in the local HMI flow.
+4. Local `point_db.json` is presentation metadata, not authorization.
+5. Broker/core loss makes mutation read-only; do not queue blind replay.
+6. No SHM ABI change is planned. If implementation discovers one is unavoidable,
+   stop and open a separate contract decision/migration task.
+7. Remove direct HMI reboot/signal privilege before enabling production Service action.
+8. Each microtask is merged only with its unit tests, doc/trace impact and changelog
+   entry for that work session.
+9. HMI must not open the privileged network-authority socket, invoke `ip`/`networkctl`
+   or edit Linux network files. It uses the authenticated broker only.
 
-```
-File: services/hmi/CMakeLists.txt, drm/drm_init.cpp/hpp, main.cpp
-Dependency: liblvgl (v9), libdrm, libinput
-Output:
-  - lv_init() + lv_display_create() gắn DRM buffer
-  - drm_init("/dev/dri/card0"): open DRM, create FB, set mode
-  - Render 10 FPS tối thiểu; blank screen trước khi load page
-Build: MKDDC_ENABLE_HMI cmake option (tương tự MKDDC_ENABLE_MODBUS)
-Done khi: build xanh; màn hình bật lên hiển thị màu nền; FPS ≥ 10
-```
+## 3. Existing source to preserve
 
-### HMI-002: Input drivers
+| Capability | Existing owner/source |
+|---|---|
+| SHM read/magic/seqlock | `services/hmi/data/shm_reader.*` |
+| DRM/LVGL/input/buttons | `services/hmi/drm`, `input`, `ui` |
+| Core manual command socket | `services/core/web_ipc.*` |
+| Priority arbitration | `services/core/priority_resolver.*`, `scan_loop.*` |
+| Go core client | `web/backend/core_client.go` |
+| Current alarm ring | `services/hmi/screens/alarm_model.cpp` |
+| Current direct maintenance hooks | `services/hmi/platform/core_control.*` — to retire from production path |
 
-**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — evdev ABS calibration/rotation, GPIO SPSC + debounce và wake-event suppression; còn xác nhận FT5436/GPIO trên board.
+Do not rewrite unrelated frontend or I/O work. Refactor existing HMI components in
+small vertical slices.
 
-```
-File: input/evdev_touch.cpp/hpp, input/gpio_buttons.cpp/hpp
-Output:
-  - evdev_touch: open /dev/input/touchscreen0, map event → lv_indev_data_t POINTER
-  - gpio_buttons: poll 6 GPIO (20ms debounce) → lv_indev_data_t KEYPAD
-    Keys: UP/DOWN/LEFT/RIGHT/ENTER/ESC
-  - Wake screen saver: any touch / any key nuốt gesture (không navigate)
-Done khi: tap/swipe điều hướng được; button UP/DOWN cuộn; ENTER chọn; ESC thoát
-```
+### 3.1 Execution snapshot — 2026-07-22
 
-### HMI-003: Tab strip + 6-page ring + screen saver + I/O FAULT banner
+| Slice | Host status | Evidence / remaining work |
+|---|---|---|
+| HOP-000..005 | Complete | Versioned JSON schema, reason/result vocabulary, point policy, RBAC/session and audit record frozen. |
+| HOP-010..019 | Complete | Go UDS broker, peer credentials, login/logout, expiry/rate limit, policy, idempotency, durable audit, alarm snapshot/ACK and broker tests. |
+| HOP-020..027 | Complete | Core query, validation, bounded TTL/release, idempotency and authoritative winner response with Core CTest coverage. |
+| HOP-030..035 | Source complete; component coverage partial | Bounded C++ client, session/policy state and authoritative alarm refresh/ACK are implemented. Direct client/alarm tests pass; a fake-clock command-state suite remains part of HOP-073. |
+| HOP-040..050 | Source complete; target coverage open | Five surfaces, Control confirmation, explicit setpoint/release, authoritative source/TTL display, EN/VI labels, 14 px body text and 40 px action geometry are implemented. Screen-state fixtures plus panel clipping/glove/light evidence remain open. |
+| HOP-060..063 | Complete | Static PIN/role, direct signal/reboot hooks and `CAP_SYS_BOOT` removed; unsupported maintenance actions hidden. |
+| HOP-064 | Deferred by design | Requires a separate approved privileged-maintenance architecture; it is not needed for Control or alarm ACK. |
+| HOP-070..072 | Complete | HMI warnings-as-errors build/unit suite, Go vet/test/race subset and Core CTest recorded. |
+| HOP-073 | Host complete | Real broker UDS plus real `CoreClient` against a deterministic Core socket stub covers login/policy/override/query/release; the C++ client independently covers broker loss/reconnect. Target orchestration remains open. |
+| HOP-074 | Host simulation complete; target open | Core socket loss proves cached reject/no blind replay and explicit new-ID retry; broker restart invalidates the old session. systemd/target process-loss evidence is still required. |
+| HOP-075..077 | Open | Target display/input, operator usability and final release-gate evidence are not available. HMI production gate remains **RED**. |
+| HNW-000..011 | Host source complete | Schema, broker adapter, C++ client/model, Service modal, active/pending/countdown, Admin-only mutation and host tests implemented. Target visual/input evidence remains open. |
+| HNW-012 | Target service integration complete | Broker and netcfg adapters have deterministic UDS/component coverage; Orange Pi verified peer denial, broker/helper sockets, process restart recovery, explicit/automatic rollback and audit-capable path. |
+| HNW-013 | Partial / panel blocked | Orange Pi service path and live isolated network mutation pass. Connected panel/touch/buttons and operator usability remain unavailable on the identified board. |
 
-**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — đủ ring 6 page, tab/touch/button, dim/wake và global FAULT overlay; còn UC-LOCAL-002/T-SW-104 manual.
+The verification host identified on 2026-07-22 is an x86_64 Lenovo ThinkStation with
+a PCI DRM device, no `/proc/device-tree/model`, and no active `mkddc-*` services. It is
+not the RK3566/JD9852/FT5436 target and must not be used to close HOP-075/076.
 
-```
-File: ui/nav_controller.cpp/hpp, ui/screen_saver.cpp/hpp, ui/fault_banner.cpp/hpp
-Output:
-  - Tab strip trên cùng: Home|I/O|Alarm|Comm|Sys|Svc + đồng hồ HH:MM:SS
-  - Ring navigation: vuốt LEFT/RIGHT = chuyển page vòng tròn
-  - Tap tab = nhảy page trực tiếp
-  - Screen saver: dim sau 5min idle; tap/key bất kỳ = wake (nuốt gesture)
-  - I/O FAULT banner: overlay đỏ full-width khi iop_status=FAULT,
-    không tắt được cho đến khi fault clear
-Done khi: vòng từ Home→Svc→Home bằng cả swipe và tap tab; FAULT banner test
-```
+Implementation artifacts are `shared/hmi_protocol_v1.schema.json`,
+`web/backend/hmi_broker.go`, `web/backend/hmi_audit_store.go`,
+`services/core/web_ipc.*`, `services/core/scan_loop.*`,
+`services/hmi/api/hmi_api_client.*` and `services/hmi/screens/screen_control.*`.
+Host results do not establish IEC conformity or replace target/HIL acceptance.
 
-### HMI-004: Screen 1 — Home / Controller Health
+## 4. Dependency map
 
-**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — đủ 6 block, alarm count 4-state, I/O count theo point DB và proc/sys health; còn UC-LOCAL-001/003 trên panel và telemetry communication thật.
+```text
+P0 contract/policy
+   ├─► P1 Go local broker ─► P3 HMI client/model ─► P4 five-surface UI
+   └─► P2 core TTL/query/idempotency ──────────────┘
 
-```
-File: screens/screen_home.cpp/hpp
-Layout: (ref UX §5)
-  - Controller ID + RUNNING/FAULT status
-  - Timestamp
-  - ALARM block: Active: N  Unacked: N  Critical: N
-  - CONTROLLER HEALTH: CPU%, RAM MB/total, Storage GB/total, Temp, Uptime, Health
-  - I/O HEALTH: UI/DI/AO/DO: N OK / N BAD / N STALE
-  - COMMUNICATION: Ethernet link/IP, BACnet OK + "Last req: Xs ago", Modbus status
-  - CONFIG: Profile, Config Rev, Checksum
-Quy tắc:
-  - Không hardcode "Room Temp" / "Fan" / "Power" / "Energy"
-  - BACnet: "Last req: Xs ago" — không bao giờ "Đang kết nối"
-  - Active alarm count không giảm khi chỉ ACK
-Done khi: UC-LOCAL-001 (30s glance) pass; BACnet status đúng format
-```
+P1 + P2 + P4 ─► P5 privilege removal ─► P6 integration/target acceptance
 
-### HMI-005: Screen 2 — I/O Monitor
-
-**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — bảng point DB động, VALUE/UNIT/QUALITY/AGE, BAD/STALE filter và không trình bày giá trị BAD/STALE như GOOD; còn UC-LOCAL-004..006 manual.
-
-```
-File: screens/screen_io.cpp/hpp
-Layout: (ref UX §6)
-  - Table: POINT | NAME | TYPE | VALUE | UNIT | QUALITY | AGE
-  - Paginated: Page 1 = UI1-8+DI1-8; Page 2 = AO1-4+DO1-4; Page 3 = filter view
-  - Filter: ALL / BAD / STALE (tap hoặc ENTER để toggle)
-  - AGE: tính từ SHM last_update_ts; vàng khi STALE
-  - NAME từ point database display_name; fallback → mã kỹ thuật (UI1, DI1...)
-Done khi: UC-LOCAL-004/005/006 pass; AGE cập nhật 1s; BAD/STALE highlight đúng
+NWC contract/SOM authority ─► BE broker adapter ─► HNW local-HMI client/UI ─► target recovery test
 ```
 
-### HMI-006: Screen 3 — Alarm / Event
+Only one contract owner edits a shared message shape at a time. Core and HMI UI work
+may proceed in parallel only after P0 is frozen.
 
-**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — subscriber alarm.sock, ring 10, severity mapping và 4-state ACK có unit test; còn chốt contract ACK upstream vì publisher hiện không có endpoint nhận ACK.
+## 5. Microtasks
 
-```
-File: screens/screen_alarm.cpp/hpp
-Layout: (ref UX §7)
-  - SUMMARY: Active: N  Unacked: N  Critical: N
-  - Table: TIME | CODE | SEV | POINT | MESSAGE | STATE
-  - STATE column: ACTIVE_UNACK / ACTIVE_ACK / CLEARED_UNACK / CLEARED_ACK
-  - [Ack Selected]: đổi UNACK → ACK, không xóa alarm
-  - Filter: Active / All / Unacked
-  - SEV color: FAULT=đỏ, WARN=vàng, INFO=xám; INFO không có nút ACK
-Quy tắc:
-  - ACK không xóa — state chỉ đổi từ UNACK → ACK
-  - Active count không giảm khi ACK alarm còn active
-Done khi: UC-LOCAL-007/008 pass; 4-state model đúng
-```
+### P0 — Freeze contracts and fixtures
 
-### HMI-007: Screen 4 — Communication
+#### HOP-000 — Capture current HMI regression baseline
 
-**Trạng thái triển khai:** ĐÃ làm một phần 2026-06-27 — Ethernet lấy từ kernel và UI chỉ dùng status kỹ thuật; CHƯA đóng UC-LOCAL-010 vì SHM hiện không chứa Device ID, BACnet last-request hay Modbus counters/config.
+- **Files:** no production edit; current HMI tests and screenshots/logs.
+- **Output:** exact build/test commands, source commit/worktree note, current six-screen
+  behavior and known failures.
+- **Verify:** run direct HMI host suite; record target tests as not run if unavailable.
+- **Depends:** none.
+- **Done:** baseline exists before refactor; historical pass is not called release evidence.
 
-```
-File: screens/screen_comm.cpp/hpp
-Layout: (ref UX §8)
-  Sections: ETHERNET / BACnet/IP / Modbus RTU-1 / Modbus RTU-2 / Modbus TCP
-  - Ethernet: Link UP/DOWN, IP, Mask, Gateway, MAC
-  - BACnet: Enabled, Device ID, Port, Status (OK/NO_TRAFFIC/TIMEOUT/CONFIG_ERROR/DUPLICATE_ID), Last Request Xs ago
-  - Modbus RTU: Port, Baudrate, Parity, Slaves, Status, Timeouts
-  - Modbus TCP: Enabled, Port, Status
-Quy tắc:
-  - BACnet status KHÔNG bao giờ dùng "Đang kết nối"
-  - "Last req: Xs ago" bắt buộc cho BACnet
-Done khi: UC-LOCAL-009/010 pass; status codes đúng theo UX §8
-```
+#### HOP-001 — Freeze local UDS envelope
 
-### HMI-008: Screen 5 — System / Diagnostics
+- **Files:** `docs/04_design/INTERFACES.md`, then shared test fixtures under
+  `web/backend/testdata/` and `services/hmi/tests/fixtures/`.
+- **Output:** schema version, maximum frame size, action enum, request/response fields.
+- **Verify:** the same valid/invalid fixture is parsed by Go and C++ tests.
+- **Depends:** HOP-000.
+- **Done:** unknown version/action/oversized/malformed frames have stable rejection.
 
-**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — read-only FW/runtime/resource/process/watchdog/log từ proc/sys/package; còn UC-LOCAL-011 manual trên target.
+#### HOP-002 — Freeze reason codes and lifecycle enums
 
-```
-File: screens/screen_system.cpp/hpp
-Layout: (ref UX §9)
-  Sections: FIRMWARE / RUNTIME / RESOURCE / PROCESS / WATCHDOG / LOG
-  - FW: SOM FW version + git short hash, MCU FW, Build ID, Config Rev
-  - Runtime: Uptime, Boot Reason, Last Error
-  - Resource: CPU%, RAM, Storage, CPU Temp
-  - Process: core/iobus/hmi/bacnet/modbus — RUNNING/STOPPED
-  - Watchdog: Status, Last Reset
-  - Log: Last Warn, Last Fault
-Read-only: không có action button trên màn này (restart → Screen 6)
-Done khi: UC-LOCAL-011 pass; dữ liệu từ SHM đúng
-```
+- **Files:** new generated-or-duplicated constants with a single checked fixture;
+  likely `web/backend/hmi_protocol.go`, `services/hmi/platform/hmi_protocol.hpp`.
+- **Output:** `accepted/rejected/timeout`, command lifecycle and stable reason codes.
+- **Verify:** cross-language golden JSON equality test.
+- **Depends:** HOP-001.
+- **Done:** UI text is mapped from stable codes, not parsed server strings.
 
-### HMI-009: Screen 6 — Service / Config
+#### HOP-003 — Freeze authoritative point-policy projection
 
-**Trạng thái triển khai:** ĐÃ làm một phần 2026-06-27 — LOCKED default, PIN/switch/role, revoke policy, hold 3s và safe-state per-point qua core IPC; CHƯA đóng UC-LOCAL-013 do spec chưa định nghĩa thuật toán/canonical payload checksum và role Web không map trực tiếp sang role HMI.
+- **Files:** `web/backend/hmi_policy.go`, config/schema owner selected after inspection,
+  fixtures and validator tests.
+- **Output:** commandable, allowed actions, role, min/max/unit, priority, default/max
+  TTL, reason/audit requirements and revision.
+- **Verify:** missing/non-finite/inverted range/unknown action/TTL overflow rejected.
+- **Depends:** HOP-001.
+- **Done:** local point DB cannot grant permission; authority projection is testable.
 
-```
-File: screens/screen_service.cpp/hpp
-Layout: (ref UX §10)
-  - Header: SERVICE / CONFIG  [LOCKED / UNLOCKED]
-  - ACCESS block: Mode, Role, Service SW
-  - PROJECT block: Project ID, Profile, Config Rev, Checksum
-  - POINT DATABASE block: Total Points, per-type count
-  - SAFE STATE POLICY block: DO/AO PER_POINT, UI/DI READ_ONLY
-  - ACTIONS (disabled khi LOCKED):
-    [ Reload Config ]   [ Restart Services ]   [ Reboot System ]
-    [ Backup Config ]   [ Restore Config ]
+#### HOP-004 — Freeze role matrix and session limits
 
-Unlock: PIN nhập đúng OR physical service switch ON OR Engineer role
-Reboot confirmation: hold 3 giây; áp per-point safe_state trước khi tắt
+- **Files:** auth policy docs and `web/backend/hmi_session.go` test table.
+- **Output:** Viewer/Operator/Service permissions, idle expiry ≤15 minutes, logout and
+  lockout behavior.
+- **Verify:** table-driven allow/deny matrix includes unknown/expired session.
+- **Depends:** HOP-003.
+- **Done:** no production privilege derives from `hmi.conf` role/PIN.
 
-Done khi: UC-LOCAL-012/013/014 pass; LOCKED default; unlock 3 điều kiện; reboot 3s hold
-```
+#### HOP-005 — Freeze audit record schema
 
-### HMI-010: SHM data binding
+- **Files:** `web/backend/hmi_audit.go`, migration/store tests.
+- **Output:** actor, role, request ID, action, target, requested/effective old/new,
+  reason, TTL, result, reason code and time quality.
+- **Verify:** accepted, rejected, timeout, login and logout records round-trip.
+- **Depends:** HOP-002, HOP-004.
+- **Done:** secrets/credential material never enter audit.
 
-**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — mmap read-only, magic+seqlock, late attach, AGE/STALE và point DB transactional validation có unit test; còn T-SW-102/103 với producer thật.
+### P1 — Go local auth/audit broker
 
-```
-File: data/shm_reader.cpp/hpp, data/point_db.cpp/hpp
-Output:
-  - Mmap kx_io_shm_t (PROT_READ) → đọc UI/DI/AO/DO value + quality
-  - Mmap kx_plc_shm_t (PROT_READ) → đọc alarm count, ext snapshot
-  - lv_timer 1s: refresh tất cả widgets; tính AGE = now - last_update_ts
-  - point_db: load display_name/unit/scale từ /data/config/point_db.json
-  - STALE nếu AGE > configured threshold (default 5s)
-Done khi: SHM update → widget cập nhật ≤ 1s; AGE tăng đều; STALE highlight đúng
-```
+#### HOP-010 — Add local socket lifecycle
 
-### HMI-011: Localization EN/VI
+- **Files:** new `web/backend/hmi_ipc.go`, `web/backend/hmi_ipc_test.go`, startup/shutdown
+  wiring in the existing backend entrypoint.
+- **Output:** bounded Unix socket listener with clean unlink/start/stop behavior.
+- **Verify:** start/stop/restart, stale socket, bind failure and goroutine cleanup tests.
+- **Depends:** HOP-001.
+- **Done:** broker failure does not stop HTTP/core processes and reports actionable log.
 
-**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — bảng EN/VI UTF-8, NotoSans FreeType và SIGHUP reload; UTF-8/parser unit test pass, còn visual test dấu tiếng Việt trên TFT.
+#### HOP-011 — Enforce filesystem and peer credentials
 
-```
-File: i18n/locale.cpp/hpp
-Output:
-  - Chuỗi UI lưu trong bảng locale (EN mặc định + VI)
-  - SIGHUP: reload locale từ config không reboot
-  - NotoSans font hỗ trợ UTF-8 tiếng Việt đầy đủ dấu
-Done khi: SIGHUP đổi VI → EN và ngược lại; không restart service
-```
+- **Files:** `hmi_ipc.go`, packaging tmpfiles/systemd permissions.
+- **Output:** restrictive owner/group/mode plus peer credential validation.
+- **Verify:** allowed HMI user connects; wrong UID/group and world access fail.
+- **Depends:** HOP-010.
+- **Done:** possession of socket path alone does not grant mutation.
 
-### HMI-012: systemd packaging
+#### HOP-012 — Implement login/logout session issue
 
-**Trạng thái triển khai:** ĐÃ làm 2026-06-27 — unit Type=notify/watchdog, device groups, CAP_SYS_BOOT, CMake install và root installer; còn systemctl/reboot acceptance trên Orange Pi.
+- **Files:** `web/backend/hmi_session.go`, tests.
+- **Output:** authenticate against existing user store; return opaque token/role/expiry;
+  logout revokes token.
+- **Verify:** success, bad credential, locked user, disabled user and logout cases.
+- **Depends:** HOP-004, HOP-010.
+- **Done:** no password/token is logged or stored in HMI config.
 
-```
-File: packaging/mkddc-hmi.service
-[Unit]
-Description=MK-DDC-24 HMI Local Display
-After=mkddc-core.service mkddc-iobus.service
-Requires=mkddc-core.service
+#### HOP-013 — Implement idle expiry and rate limiting
 
-[Service]
-ExecStart=/usr/sbin/mkddc-hmi
-Restart=always
-RestartSec=3
-User=mkddc
-Environment=DISPLAY= XDG_RUNTIME_DIR=/run/user/1000
+- **Files:** `hmi_session.go`, fake-clock tests.
+- **Output:** configurable idle limit capped at 15 minutes and bounded login attempts.
+- **Verify:** exact boundary, clock advance, concurrent use and expired token denial.
+- **Depends:** HOP-012.
+- **Done:** expiry is deterministic and does not depend on wall-clock jumps.
 
-[Install]
-WantedBy=multi-user.target
+#### HOP-014 — Implement point policy query
 
-Done khi: systemd start/stop/restart hoạt động; journalctl log đủ debug
-```
+- **Files:** `hmi_policy.go`, config consumer/validator and tests.
+- **Output:** revisioned projection containing only operator-visible fields.
+- **Verify:** Viewer can query; missing/invalid policy returns non-commandable state.
+- **Depends:** HOP-003, HOP-012.
+- **Done:** HMI can construct Control without trusting `point_db.json`.
 
----
+#### HOP-015 — Validate mutation envelope and RBAC
 
-## 4. Thứ tự làm
+- **Files:** `hmi_ipc.go`, `hmi_policy.go`, tests.
+- **Output:** action/role/point/range/reason/TTL validation before core call.
+- **Verify:** table-driven allow/deny tests for every action and boundary.
+- **Depends:** HOP-013, HOP-014.
+- **Done:** invalid input is rejected with stable code and no core side effect.
 
-```
-HMI-001 (DRM build) → HMI-002 (input) → HMI-003 (nav) → HMI-010 (SHM)
-  → HMI-004..009 (6 screens song song sau khi nav + SHM xong)
-  → HMI-011 (i18n) → HMI-012 (packaging)
-```
+#### HOP-016 — Add request idempotency cache
 
-HMI-004..009 có thể làm song song sau khi HMI-001/002/003/010 done.
+- **Files:** new `web/backend/hmi_idempotency.go`, fake-clock tests.
+- **Output:** bounded TTL/LRU result cache keyed by actor/session/request ID.
+- **Verify:** duplicate returns same result; conflicting payload with same ID rejects;
+  cache remains bounded.
+- **Depends:** HOP-002, HOP-015.
+- **Done:** duplicate transport retry cannot double-actuate.
 
----
+#### HOP-017 — Forward point command through existing core client
 
-## 5. Dependencies
+- **Files:** `web/backend/core_client.go`, `hmi_ipc.go`, tests with fake core.
+- **Output:** setpoint/mode/override/release translation and authoritative response.
+- **Verify:** accepted/rejected/timeout/core-disconnect cases; context cancellation bound.
+- **Depends:** HOP-015, P2 command support.
+- **Done:** broker never writes SHM and does not report success before core response.
 
-| Dep | Version | Ghi chú |
-|-----|---------|---------|
-| LVGL | v9.x | submodule hoặc system package |
-| libdrm | ≥ 2.4.100 | `apt install libdrm-dev` |
-| libinput | ≥ 1.19 | cho evdev touch |
-| libc | glibc | POSIX shm, mmap |
-| NotoSans | TTF | hỗ trợ VI có dấu |
+#### HOP-018 — Persist audit for all mutation outcomes
 
-Build flag: `MKDDC_ENABLE_HMI=ON` (cmake option) — tương tự pattern MODBUS/BACNET.
+- **Files:** `hmi_audit.go`, current SQLite/store migration owner, tests.
+- **Output:** transactionally record attempt/result with request ID.
+- **Verify:** accepted, rejected, timeout and duplicate behavior; DB failure fails closed.
+- **Depends:** HOP-005, HOP-015.
+- **Done:** audit failure cannot silently allow an audit-required action.
 
----
+#### HOP-019 — Expose alarm snapshot and ACK
 
-## 6. Test matrix
+- **Files:** new `web/backend/hmi_alarm.go`, alarm store/handler integration, tests.
+- **Output:** authoritative snapshot plus idempotent ACK response/audit.
+- **Verify:** active/unacked, active/acked, cleared states, stale ID, role deny, timeout.
+- **Depends:** HOP-012, HOP-016, HOP-018.
+- **Done:** ACK never clears active condition and local restart can rehydrate state.
 
-| UC | Test | Màn |
-|----|------|-----|
-| UC-LOCAL-001 | 30s glance — nhìn biết OK/FAULT | Home |
-| UC-LOCAL-002 | Navigation 6 màn — swipe + tap tab + button | All |
-| UC-LOCAL-003 | Controller resource: CPU/RAM/Temp đúng | Home |
-| UC-LOCAL-004 | I/O health overview 24 points | Home + I/O |
-| UC-LOCAL-005 | Chi tiết 24 point — VALUE/UNIT/QUALITY/AGE | I/O |
-| UC-LOCAL-006 | Filter BAD/STALE | I/O |
-| UC-LOCAL-007 | Xem alarm active — 4-state | Alarm |
-| UC-LOCAL-008 | ACK alarm — UNACK→ACK, không xóa | Alarm |
-| UC-LOCAL-009 | Ethernet/IP check | Comm |
-| UC-LOCAL-010 | BACnet/Modbus check — status codes đúng | Comm |
-| UC-LOCAL-011 | System diagnostics — read-only | Sys |
-| UC-LOCAL-012 | Enter Service Mode (PIN/switch) | Svc |
-| UC-LOCAL-013 | Reload config (checksum, rollback) | Svc |
-| UC-LOCAL-014 | Safe reboot (3s hold, per-point safe state) | Svc |
+### P2 — Core authoritative command lifecycle
 
----
+#### HOP-020 — Extend core IPC request ID and stable result
 
-**Rev** 1.1 | 2026-06-27 (Cập nhật implementation source, automated tests và hardware/integration gates còn mở; ghi rõ gap checksum, communication telemetry và Web-role mapping) ·
-**Rev** 1.0 | 2026-06-27 (Tạo mới — HMI kéo vào Rev A per REVA_SCOPE amendment; 12 task HMI-001..012; spec từ SW_HMI_DESIGN Rev 2.2 + UC Rev 2.1 + UX Rev 2.0) ·
-DoD: [13_DEFINITION_OF_DONE](13_DEFINITION_OF_DONE.md) · Phase: [03_PHASE_PLAN §5.5](03_PHASE_PLAN.md)
+- **Files:** `services/core/web_ipc.*`, `tests/test_web_ipc.cpp`.
+- **Output:** bounded UUID/string ID support and stable result/reason fields while
+  preserving compatibility for existing numeric clients.
+- **Verify:** old request fixtures still pass; malformed/new requests fail explicitly.
+- **Depends:** HOP-001, HOP-002.
+- **Done:** compatibility/migration behavior is documented and tested.
+
+#### HOP-021 — Implement authoritative control-state query
+
+- **Files:** `web_ipc.*`, `priority_resolver.*`, tests.
+- **Output:** effective value/source/priority and manual override expiry for a point.
+- **Verify:** default/graph/manual/BACnet/safety winner cases.
+- **Depends:** HOP-020.
+- **Done:** HMI need not infer winner from last command.
+
+#### HOP-022 — Validate setpoint and mode operations
+
+- **Files:** `web_ipc.*`, point table/policy adapter selected by code owner, tests.
+- **Output:** finite/range/type validation and explicit setpoint/mode result.
+- **Verify:** min/max, NaN/infinity, wrong type, read-only point and interlock cases.
+- **Depends:** HOP-020.
+- **Done:** no unsafe coercion or direct output bypass.
+
+#### HOP-023 — Add bounded override TTL state
+
+- **Files:** `priority_resolver.*` or a focused manual-command owner, scan-loop wiring,
+  fake-monotonic-clock tests.
+- **Output:** accepted override with expiry; automatic release at TTL.
+- **Verify:** zero/max/overflow TTL, scan across expiry, restart policy and priority winner.
+- **Depends:** HOP-021, HOP-022.
+- **Done:** no indefinite default and no wall-clock dependence.
+
+#### HOP-024 — Implement explicit release semantics
+
+- **Files:** `web_ipc.*`, `priority_resolver.*`, tests.
+- **Output:** release removes only the actor/source slot and reports the new winner.
+- **Verify:** release active, already released, expired and higher-priority winner cases.
+- **Depends:** HOP-023.
+- **Done:** release never writes a replacement process value.
+
+#### HOP-025 — Add core idempotency protection
+
+- **Files:** `web_ipc.*`, bounded cache helper, tests.
+- **Output:** duplicate request ID returns prior result without repeated mutation.
+- **Verify:** duplicate same/different payload, cache expiry and memory bound.
+- **Depends:** HOP-020, HOP-024.
+- **Done:** protection remains even if broker retries after uncertain delivery.
+
+#### HOP-026 — Report safety/interlock/priority outcome
+
+- **Files:** `scan_loop.*`, `web_ipc.*`, tests.
+- **Output:** distinguish request accepted from effective winner and provide reason code.
+- **Verify:** safety, interlock, BACnet/manual and default conflicts.
+- **Depends:** HOP-021, HOP-024.
+- **Done:** UI can truthfully show accepted-but-not-effective command.
+
+#### HOP-027 — Define restart/recovery of manual TTL state
+
+- **Files:** state snapshot owner and tests; do not persist unless decision approves it.
+- **Output:** explicit fail-safe policy for core restart while override exists.
+- **Verify:** restart before/at/after expiry and corrupted snapshot.
+- **Depends:** HOP-023.
+- **Done:** behavior is deterministic, documented and audited; no accidental indefinite hold.
+
+### P3 — HMI IPC client and presentation models
+
+#### HOP-030 — Add bounded HMI API transport
+
+- **Files:** new `services/hmi/api/hmi_api_client.*`, CMake and tests.
+- **Output:** connect/send/receive with max frame, deadline and request correlation.
+- **Verify:** partial read/write, malformed frame, oversized frame, disconnect and timeout.
+- **Depends:** HOP-001, HOP-002, HOP-010.
+- **Done:** transport has no unbounded block/allocation loop.
+
+#### HOP-031 — Add broker availability/read-only state
+
+- **Files:** HMI client/model and global status badge tests.
+- **Output:** reconnect with bounded backoff; mutation disabled when unavailable.
+- **Verify:** broker stop/start during idle and Pending; no blind replay.
+- **Depends:** HOP-030.
+- **Done:** SHM monitoring continues while command surfaces are read-only.
+
+#### HOP-032 — Add session model
+
+- **Files:** new `services/hmi/data/session_model.*`, tests.
+- **Output:** login/logout/token/role/expiry state without persisting credential.
+- **Verify:** success/deny/expiry/logout/reconnect; secret-redaction inspection.
+- **Depends:** HOP-012, HOP-030.
+- **Done:** static config role/PIN no longer grants production actions.
+
+#### HOP-033 — Add authoritative point-control model
+
+- **Files:** new `services/hmi/data/control_model.*`, tests.
+- **Output:** policy projection, effective state, source, priority and expiry cache.
+- **Verify:** invalid/missing policy becomes non-commandable; revision refresh revokes UI.
+- **Depends:** HOP-014, HOP-030.
+- **Done:** Control list derives only from authority projection.
+
+#### HOP-034 — Add command UI state machine
+
+- **Files:** `control_model.*`, tests with fake clock/transport.
+- **Output:** Editing/Confirming/Pending/Accepted/Rejected/Timeout/Unknown/Expired/Released.
+- **Verify:** every transition including timeout-query and duplicate response.
+- **Depends:** HOP-031, HOP-033.
+- **Done:** no optimistic effective-state update.
+
+#### HOP-035 — Replace volatile alarm authority model
+
+- **Files:** refactor `screens/alarm_model.*`, tests.
+- **Output:** snapshot hydration, stream update, ACK pending/result and gap handling.
+- **Verify:** restart hydrate, duplicate event, stale alarm, ACK reject/timeout.
+- **Depends:** HOP-019, HOP-030.
+- **Done:** local ring is cache only; ACK calls authority.
+
+### P4 — Five-surface LVGL UI
+
+#### HOP-040 — Refactor navigation from six to five surfaces
+
+- **Files:** `services/hmi/ui/nav_controller.*`, `main.cpp`, nav tests.
+- **Output:** Home/Points/Control/Alarms/Service ring and large page chooser.
+- **Verify:** touch and all six keys reach every surface; first-input wake suppression.
+- **Depends:** HOP-000.
+- **Done:** no narrow six-tab strip remains.
+
+#### HOP-041 — Refactor Home summary
+
+- **Files:** `screens/screen_home.*`, tests.
+- **Output:** state/data/alarm/I/O/control/service/communication summaries.
+- **Verify:** 30-second scenario fixture; missing telemetry renders unavailable.
+- **Depends:** HOP-040, HOP-031, HOP-035.
+- **Done:** highest-priority alarm and active override count are visible.
+
+#### HOP-042 — Rename/refactor I/O screen to Points
+
+- **Files:** `screen_io.*` renamed only if safe, point list tests.
+- **Output:** All/Bad/Stale/Overridden filters and read-only detail.
+- **Verify:** UI16/AO4/DO4, optional capability, quality/age and no input command action.
+- **Depends:** HOP-040, existing SHM reader.
+- **Done:** selecting commandable point navigates without executing command.
+
+#### HOP-043 — Build Control list
+
+- **Files:** new `screens/screen_control.*`, CMake/main/nav and tests.
+- **Output:** authority-whitelisted list with value/mode/source/priority/expiry.
+- **Verify:** policy add/remove/revision and read-only broker state.
+- **Depends:** HOP-033, HOP-040.
+- **Done:** no locally configured point can appear commandable by itself.
+
+#### HOP-044 — Build point faceplate read state
+
+- **Files:** `screen_control.*`, tests.
+- **Output:** effective value, feedback, quality, mode, source, priority and expiry.
+- **Verify:** unavailable fields, clipping, focus and hard-key navigation.
+- **Depends:** HOP-043.
+- **Done:** accepted command and effective winner are visually distinct.
+
+#### HOP-045 — Add setpoint and mode edit flow
+
+- **Files:** `screen_control.*`, numeric/select widgets, tests.
+- **Output:** edit → old/new/range confirm → pending → result.
+- **Verify:** min/max, cancel, reject, timeout and session expiry during edit.
+- **Depends:** HOP-034, HOP-044, HOP-017.
+- **Done:** no command fires before explicit confirm.
+
+#### HOP-046 — Add override/reason/TTL/release flow
+
+- **Files:** `screen_control.*`, locale strings and tests.
+- **Output:** bounded TTL selection, required reason, override badge/expiry and release.
+- **Verify:** empty reason, TTL limits, expiry, release, higher-priority winner.
+- **Depends:** HOP-023, HOP-024, HOP-045.
+- **Done:** indefinite default is impossible and release shows new authoritative winner.
+
+#### HOP-047 — Refactor Alarms surface
+
+- **Files:** `screen_alarm.*`, `alarm_model.*`, tests.
+- **Output:** priority/state/time/source/message/response, filters and pending ACK.
+- **Verify:** accepted/rejected/timeout, active count, alarm flood ordering.
+- **Depends:** HOP-035, HOP-040.
+- **Done:** ACK is disabled before hydration or without valid authority/session.
+
+#### HOP-048 — Consolidate Communication/System into Service
+
+- **Files:** refactor/reuse `screen_comm.*`, `screen_system.*`, `screen_service.*`.
+- **Output:** summary/detail sections without loss of existing diagnostics.
+- **Verify:** each unsupported field is unavailable, never default-OK.
+- **Depends:** HOP-040.
+- **Done:** five-surface navigation retains required communication/system information.
+
+#### HOP-049 — Enforce typography, targets and focus
+
+- **Files:** shared HMI style/component helpers and visual/unit tests.
+- **Output:** body ≥14 px, actions ≥40×40 px or hard-key equivalent, visible focus.
+- **Verify:** static geometry assertions plus target glove/light inspection.
+- **Depends:** HOP-041..048.
+- **Done:** no production action button remains at legacy 22–29 px size.
+
+#### HOP-050 — Complete EN/VI strings and clipping tests
+
+- **Files:** `services/hmi/i18n/locale.*`, all five screens, tests.
+- **Output:** translated lifecycle/reason/session/override/alarm strings.
+- **Verify:** missing-key, UTF-8 and 320×240 clipping fixtures; visual target test.
+- **Depends:** HOP-041..049.
+- **Done:** locale change does not alter session/command state.
+
+### P5 — Remove unsafe direct privilege
+
+#### HOP-060 — Remove static role/PIN authorization
+
+- **Files:** `main.cpp`, `screen_service.*`, `packaging/hmi.conf`, tests.
+- **Output:** production mutation uses SessionModel only; prototype path removed or
+  compile-time test-only.
+- **Verify:** `role=admin` and `service_pin=` cannot unlock production action.
+- **Depends:** HOP-032, HOP-048.
+- **Done:** HMI-REQ-012 is enforced by source, not only UI text.
+
+#### HOP-061 — Remove direct core/iobus signals
+
+- **Files:** retire `CoreControl::reload_services/restart_services`, callers and tests.
+- **Output:** Service displays maintenance unavailable until a separately approved
+  broker action exists; it never signals a process directly.
+- **Verify:** repository scan finds no HMI `kill()`/raw process signal path.
+- **Depends:** HOP-048.
+- **Done:** presentation cannot directly stop core/iobus.
+
+#### HOP-062 — Remove direct reboot capability
+
+- **Files:** `core_control.*`, `mkddc-hmi.service`, packaging tests.
+- **Output:** remove `reboot()` and `CAP_SYS_BOOT`; reboot remains disabled until an
+  approved maintenance authority implements the full handshake.
+- **Verify:** unit file capability scan and negative runtime test.
+- **Depends:** HOP-061.
+- **Done:** HMI cannot reboot host directly.
+
+#### HOP-063 — Hide unsupported maintenance actions
+
+- **Files:** `screen_service.*`, tests.
+- **Output:** backup/restore/restart/reboot shown only when broker capability query says
+  implemented and permitted; otherwise hidden/disabled with reason.
+- **Verify:** every capability combination and authority loss.
+- **Depends:** HOP-048, HOP-062.
+- **Done:** no button calls a false/no-op callback while appearing functional.
+
+#### HOP-064 — Implement approved maintenance authority separately
+
+- **Files:** to be chosen by an explicit security/architecture review; do not grant
+  broad privilege to HMI or core.
+- **Output:** allowlisted one-shot maintenance operation with core safe-state handshake,
+  audit and result.
+- **Verify:** role deny, safe-state reject, timeout, partial failure and recovery on target.
+- **Depends:** HOP-018, HOP-026, HOP-062.
+- **Done:** only after separate approval; not required to enable point Control/ACK.
+
+### P6 — Verification and release evidence
+
+#### HOP-070 — Run HMI warnings-as-errors build and unit suite
+
+- **Files:** isolated temporary build only; test updates belong with prior tasks.
+- **Output:** exact command/result/toolchain record for HMI-enabled build.
+- **Verify:** all HMI tests pass; no claim about target/HIL.
+- **Depends:** HOP-030..063.
+- **Done:** repeatable host result recorded.
+
+#### HOP-071 — Run Go broker tests and vet
+
+- **Files:** no production edit beyond discovered fixes.
+- **Output:** `go test ./...`, race subset where supported, `go vet ./...`.
+- **Verify:** auth/RBAC/audit/idempotency/session fake-clock suites included.
+- **Depends:** HOP-010..019.
+- **Done:** exact result recorded; failed/skipped checks stated.
+
+#### HOP-072 — Run core command/priority tests
+
+- **Files:** isolated build only.
+- **Output:** core unit suite covering query/setpoint/mode/TTL/release/idempotency/safety.
+- **Verify:** warnings-as-errors and CTest exact result.
+- **Depends:** HOP-020..027.
+- **Done:** no regression to existing Web/BACnet command behavior.
+
+#### HOP-073 — Add broker–core–HMI IPC integration suite
+
+- **Files:** test harness under existing service test structure.
+- **Output:** full local path with fake clock and deterministic process control.
+- **Verify:** accept/reject/timeout/duplicate/reconnect/session-expiry/TTL/release/audit.
+- **Depends:** HOP-017, HOP-027, HOP-034, HOP-035.
+- **Done:** no direct SHM mutation and no blind replay demonstrated.
+
+#### HOP-074 — Add process-loss fault suite
+
+- **Files:** integration harness/runbook.
+- **Output:** stop broker/core/HMI at each command state and verify recovery.
+- **Verify:** control continuity, read-only degradation, authoritative resync.
+- **Depends:** HOP-073.
+- **Done:** each failure boundary has an evidence record.
+
+#### HOP-075 — Execute target display/input acceptance
+
+- **Files:** immutable evidence record, not a design claim.
+- **Output:** DRM/DSI, ≥10 FPS, FT5436, six buttons, first-input wake, backlight and
+  cold/restart recovery results on identified hardware revision.
+- **Verify:** raw logs/photos/video/hash/reviewer as defined by Verification.
+- **Depends:** HOP-049, HOP-050, hardware integration gate.
+- **Done:** target evidence exists; host tests cannot substitute.
+
+#### HOP-076 — Execute operator usability scenarios
+
+- **Files:** controlled test record.
+- **Output:** UC-HMI-001..015 results with Viewer/Operator/Service, glove/light,
+  alarm flood, stale/loss, setpoint, override/release and localization.
+- **Verify:** acceptance criteria and observed issues signed by tester/reviewer.
+- **Depends:** HOP-073, HOP-075.
+- **Done:** HMI-REQ-006/007/014/015 evidence is reviewable.
+
+#### HOP-077 — Close traceability and release gate
+
+- **Files:** `docs/05_verification/VERIFICATION.md`,
+  `docs/07_records/TRACEABILITY.md`, release evidence and `CHANGELOG.md`.
+- **Output:** every requirement maps to real tests/results; remaining gaps explicit.
+- **Verify:** docs/link harness and `git diff --check`.
+- **Depends:** HOP-070..076.
+- **Done:** HMI gate changes from RED only with current approved target/security evidence.
+
+### P7 — ADR-017 local Ethernet commissioning
+
+Host source for this phase is implemented against the frozen `NWC-*` schema in
+[22 — SOM Source Implementation Plan](22_SOM_SRC_IMPLEMENTATION_PLAN.md). The local Go
+broker adapter is present; Web REST/FE migration remains separate-team work. HMI never
+calls `mkddc-netcfg` directly.
+
+**Schedule baseline (một HMI engineer):** H0 `HNW-000..003` 1–2 ngày sau NWC contract;
+H1 `HNW-004..009` 3–4 ngày với fake broker; H2 `HNW-010..011` 2–3 ngày; H3 `HNW-012`
+2–3 ngày sau NWC-016 + BE adapter; H4 `HNW-013` 2–3 ngày trên target. Đây là effort
+estimate, không phải release commitment; exit gate quan trọng hơn ngày lịch.
+
+#### HNW-000 — Freeze HMI network fixtures
+
+- **Files:** controlled interface docs; future fixtures under existing HMI test tree.
+- **Output:** golden request/response/state/reason fixtures for `network_status`,
+  `network_validate`, `network_stage`, `network_apply`, `network_confirm`, rollback.
+- **Verify:** fixtures validate against broker extension and SOM `netcfg` schema.
+- **Depends:** NWC-000..003 and BE contract owner approval.
+- **Done:** active/pending/last-known-good and all terminal states are unambiguous.
+
+#### HNW-001 — Add read-only network presentation model
+
+- **Files:** future `services/hmi/data/network_model.*` and tests.
+- **Output:** bounded model for link, active IPv4/prefix/gateway/mode, transaction,
+  deadline and last result; no config-file inference.
+- **Verify:** parse normal/missing/malformed/stale/unknown fields and clock countdown.
+- **Depends:** HNW-000.
+- **Done:** desired value can never overwrite active value in presentation state.
+
+#### HNW-002 — Add Network section under Service
+
+- **Files:** `services/hmi/screens/screen_service.*`, navigation/focus tests.
+- **Output:** read-only summary/detail; no sixth surface.
+- **Verify:** Viewer can inspect; unavailable authority shows `UNAVAILABLE`, not `OK`.
+- **Depends:** HNW-001.
+- **Done:** existing system/communication diagnostics remain reachable.
+
+#### HNW-003 — Gate configuration by Service session
+
+- **Files:** Service/network presenter and session-policy tests.
+- **Output:** Configure appears only for authoritative Service capability/session.
+- **Verify:** Viewer/Operator/expired/unknown/broker-offline all deny mutation.
+- **Depends:** HNW-002 and BE broker capability projection.
+- **Done:** local metadata/config cannot grant network privilege.
+
+#### HNW-004 — Implement static IPv4 editor
+
+- **Files:** Service network form, numeric keyboard helpers, locale and tests.
+- **Output:** IPv4, subnet/prefix and gateway editor with cancel/back behavior.
+- **Verify:** valid boundaries, malformed octet/mask, network/broadcast/loopback and
+  clipping/hard-key cases; authority still revalidates.
+- **Depends:** HNW-003.
+- **Done:** no request is emitted before explicit confirmation.
+
+#### HNW-005 — Implement DHCP selection
+
+- **Files:** same form/model/tests.
+- **Output:** explicit DHCP choice and explanation that lease/address may change.
+- **Verify:** mode switch does not retain/send stale static fields ambiguously.
+- **Depends:** HNW-003.
+- **Done:** returned active lease is authoritative; candidate is never shown as lease.
+
+#### HNW-006 — Add impact confirmation
+
+- **Files:** confirmation overlay, localization and geometry tests.
+- **Output:** old/new/mode, Web/BACnet reconnect warning and hold-to-confirm.
+- **Verify:** cancel, session expiry, duplicate ENTER/touch and first-wake suppression.
+- **Depends:** HNW-004, HNW-005.
+- **Done:** one user confirmation produces one idempotent stage/apply transaction.
+
+#### HNW-007 — Render apply lifecycle and countdown
+
+- **Files:** network model/screen and fake-monotonic-clock tests.
+- **Output:** staged/applying/awaiting-confirmation/confirmed/failed/rolling-back/
+  rolled-back states with transaction ID and rollback countdown.
+- **Verify:** out-of-order/duplicate response, reconnect and deadline boundary.
+- **Depends:** HNW-001, HNW-006 and BE adapter.
+- **Done:** only `confirmed` is presented as applied success.
+
+#### HNW-008 — Implement explicit confirm and rollback actions
+
+- **Files:** network screen/client tests.
+- **Output:** transaction-bound Confirm/Rollback with pending/result states.
+- **Verify:** wrong/stale ID, duplicate action, timeout, automatic rollback race.
+- **Depends:** HNW-007.
+- **Done:** no blind retry and final state is re-queried from authority.
+
+#### HNW-009 — Add recovery guidance
+
+- **Files:** Service messages/help and locale tests.
+- **Output:** show active address for Web reconnect, rollback outcome and field-service
+  instruction when both active address and authority are unavailable.
+- **Verify:** static success, DHCP lease, auto rollback and failed rollback fixtures.
+- **Depends:** HNW-007, HNW-008.
+- **Done:** message never claims a rescue address unless deployment authority reports it.
+
+#### HNW-010 — Complete EN/VI and 320×240 interaction QA
+
+- **Files:** locale/style/focus tests for the new Service flow.
+- **Output:** all labels/reason codes translated; ≥14 px body and ≥40×40 action or
+  full six-button equivalent.
+- **Verify:** missing key, UTF-8, clipping, focus, touch and key-only traversal.
+- **Depends:** HNW-002..009.
+- **Done:** every state/action is usable without color-only meaning.
+
+#### HNW-011 — Add HMI unit/component suite
+
+- **Files:** existing `services/hmi/tests` structure.
+- **Output:** deterministic model, state-machine, form and screen coverage.
+- **Verify:** warnings-as-errors HMI build/test with fake clock/transport.
+- **Depends:** HNW-001..010.
+- **Done:** normal, boundary, malformed and failure paths pass on host.
+
+#### HNW-012 — Add broker/network-authority integration harness
+
+- **Files:** existing integration harness; no direct HMI-to-netcfg shortcut.
+- **Output:** HMI → real broker adapter → deterministic netcfg stub/full service.
+- **Verify:** role deny, duplicate, apply/confirm, timeout/rollback, broker/helper loss,
+  reconnect and audit correlation by transaction/request ID.
+- **Depends:** HNW-011, NWC-016 and BE adapter completion.
+- **Done:** integration proves HMI cannot mutate OS or bypass broker.
+
+#### HNW-013 — Execute target commissioning/recovery acceptance
+
+- **Files:** immutable target evidence and traceability only.
+- **Output:** UC-HMI-016..019 on RK3566/panel with Ethernet peer/BMS traffic.
+- **Verify:** glove/light/key-only use, old/new IP, DHCP, duplicate-IP reject, 120 s
+  rollback, helper/broker restart, BACnet rediscovery and uninterrupted control trace.
+- **Depends:** HNW-012, NWC-017, HOP-075.
+- **Done:** reviewed evidence closes network-HMI findings; host pass is insufficient.
+
+## 6. Recommended implementation order
+
+1. HOP-000..005 — contract freeze.
+2. HOP-020..027 and HOP-010..019 — core and broker, with golden fixtures shared.
+3. HOP-030..035 — HMI transport/models.
+4. HOP-040..050 — five-surface UI.
+5. HOP-060..063 — privilege removal before production enablement.
+6. HOP-070..077 — integration, target and usability gates.
+7. HOP-064 only after a separate privileged-maintenance approval.
+8. NWC-000..017 prepares SOM first; then BE broker adapter; then HNW-000..013. Web FE
+   can integrate independently against the same transaction API after contract freeze.
+
+The first demonstrable vertical slice should be: login → query one commandable point →
+setpoint accepted/rejected → audit → HMI authoritative result. Do not start visual
+polish before this slice proves the control boundary.
+
+## 7. Definition of Done for the feature
+
+- Five surfaces replace the legacy six-screen navigation.
+- Monitoring continues with broker unavailable; mutation is read-only.
+- Only authority-whitelisted points can be operated.
+- Setpoint/mode/override/release are range/role/policy/priority/TTL validated and audited.
+- ACK is authoritative and does not clear active alarm.
+- Session expires fail-closed; local role/PIN cannot grant production privilege.
+- HMI has no direct SHM write, hardware write, process signal or reboot capability.
+- Host, integration, target and usability evidence is current and traceable.
+- Unimplemented maintenance actions are not represented as working.
+- Ethernet configuration is Service-only, transaction-backed and distinguishes active
+  from pending; automatic rollback and control continuity have target evidence.
+- Controlled docs, traceability and changelog are updated with the implementation.
+
+## Revision history
+
+| Revision | Date | Change |
+|---|---|---|
+| 1.2 | 2026-07-22 | Source-aligned six-screen implementation gap audit. |
+| 2.0 | 2026-07-22 | ADR-016 microtask plan for five-surface limited-operator HMI, authoritative broker/core path, privilege removal and verification gates. |
+| 2.1 | 2026-07-22 | Recorded host implementation, artifact mapping and the remaining target/HIL/usability RED gates. |
+| 2.2 | 2026-07-22 | Added ADR-017 HNW-000..013 microtasks for local Ethernet commissioning after SOM and broker contract readiness. |

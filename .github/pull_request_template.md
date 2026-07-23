@@ -1,19 +1,20 @@
-<!-- Mô tả ngắn thay đổi. Với PR tài liệu, đối chiếu checklist dưới. -->
+<!-- Mô tả ngắn thay đổi và cách xác minh. -->
 
 ## Tóm tắt
 
 
-## Documentation PR Checklist
-> Nguồn-chuẩn: [docs/CANONICAL_DECISIONS.md](../docs/CANONICAL_DECISIONS.md) · [PRODUCT_DEFINITION](../docs/01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md)
+## Verification
 
-- [ ] Không dùng lại thuật ngữ legacy nếu chưa đánh dấu **Superseded/Legacy**
-- [ ] Không mô tả DDC-24 là **HVAC-only** (sản phẩm là **BMS Edge Automation Controller**; HVAC là use-case đầu)
-- [ ] Không mô tả Rev A là **IEC 61131-3 PLC**
-- [ ] Không nhắc **Web IDE FBD/ST** như scope Rev A
-- [ ] Không đưa **HMI / OTA / MQTT / cloud** vào Rev A.0
-- [ ] Nếu nhắc **BACnet BTL** → phải ghi rõ **sau Rev A.0** (Rev A chỉ interop)
-- [ ] Mọi service runtime dùng tên **`mkddc-core` / `mkddc-iobus` / `mkddc-web`**
-- [ ] Nếu sửa requirement → đã cập nhật **Traceability Matrix** (cột Rev A.0/B/C)
-- [ ] Nếu thêm/đổi tài liệu → đã cập nhật **Master Register**
-- [ ] Link tương đối không gãy (chạy broken-link check)
-- [ ] Nếu có mâu thuẫn → **Product Definition + Canonical Decisions thắng**
+
+## Checklist
+
+Nguồn chuẩn: [Document Control](../docs/00_governance/CONTROL.md), [Decision Log](../docs/00_governance/DECISIONS.md), [Product Baseline](../docs/01_product/PRODUCT.md).
+
+- [ ] Phạm vi vẫn là BMS Edge Automation Controller, không HVAC-only hoặc IEC 61131-3 PLC.
+- [ ] Base SKU vẫn là 16 UI + 4 AO + 4 DO; optional DI được ghi rõ là option.
+- [ ] Runtime dùng ba core service; HMI chỉ là service feature-gated.
+- [ ] Không đưa MQTT/cloud, OTA A/B, wiresheet, BACnet MS/TP hoặc BTL claim vào Rev A.0.
+- [ ] Nếu đổi requirement/interface: đã cập nhật test và [Traceability](../docs/07_records/TRACEABILITY.md).
+- [ ] Nếu đổi code/config/deploy/docs: đã cập nhật `CHANGELOG.md` dưới `[Unreleased]`.
+- [ ] Không tạo Markdown phân tán nếu controlled dossier đã có tài liệu chủ quản.
+- [ ] Link nội bộ, build/test liên quan và release gate đã được kiểm tra.

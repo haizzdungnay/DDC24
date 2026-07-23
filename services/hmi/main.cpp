@@ -1,3 +1,4 @@
+#include "api/hmi_api_client.hpp"
 #include "data/point_db.hpp"
 #include "data/shm_reader.hpp"
 #include "drm/drm_init.hpp"
@@ -5,14 +6,12 @@
 #include "i18n/locale.hpp"
 #include "input/evdev_touch.hpp"
 #include "input/gpio_buttons.hpp"
-#include "platform/core_control.hpp"
 #include "platform/systemd_notify.hpp"
 #include "screens/screen_alarm.hpp"
-#include "screens/screen_comm.hpp"
+#include "screens/screen_control.hpp"
 #include "screens/screen_home.hpp"
 #include "screens/screen_io.hpp"
 #include "screens/screen_service.hpp"
-#include "screens/screen_system.hpp"
 #include "ui/fault_banner.hpp"
 #include "ui/nav_controller.hpp"
 #include "ui/screen_saver.hpp"
@@ -41,11 +40,8 @@ void signal_handler(int sig)
 }
 
 struct RuntimeConfig {
-    std::string pin;
-    std::string role = "View Only";
-    std::string service_switch_path = "/run/mkddc/service-switch";
     std::string font_path = "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf";
-    bool allow_reboot = false;
+    std::string hmi_socket = "/run/mkddc/hmi-api.sock";
 };
 
 std::string trim(std::string value)
@@ -56,10 +52,9 @@ std::string trim(std::string value)
     return value.substr(first, last - first + 1);
 }
 
-RuntimeConfig load_runtime_config(const std::string& path, bool cli_allow_reboot)
+RuntimeConfig load_runtime_config(const std::string& path)
 {
     RuntimeConfig cfg;
-    cfg.allow_reboot = cli_allow_reboot;
     std::ifstream f(path);
     std::string line;
     while (std::getline(f, line)) {
@@ -67,20 +62,10 @@ RuntimeConfig load_runtime_config(const std::string& path, bool cli_allow_reboot
         if (eq == std::string::npos) continue;
         const std::string key = trim(line.substr(0, eq));
         const std::string value = trim(line.substr(eq + 1));
-        if (key == "service_pin") cfg.pin = value;
-        else if (key == "role") cfg.role = value;
-        else if (key == "service_switch_path") cfg.service_switch_path = value;
-        else if (key == "font_path") cfg.font_path = value;
-        else if (key == "allow_reboot") cfg.allow_reboot = value == "true" || value == "1";
+        if (key == "font_path") cfg.font_path = value;
+        else if (key == "hmi_socket") cfg.hmi_socket = value;
     }
     return cfg;
-}
-
-bool read_switch(const std::string& path)
-{
-    std::ifstream f(path);
-    std::string value;
-    return (f >> value) && (value == "1" || value == "on" || value == "ON");
 }
 
 uint64_t monotonic_ms()
@@ -97,17 +82,15 @@ int main(int argc, char** argv)
     std::string touch_path = "/dev/input/touchscreen0";
     std::string point_db_path = "/data/config/point_db.json";
     std::string hmi_conf_path = "/etc/mkddc/hmi.conf";
-    bool cli_allow_reboot = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--drm" && i + 1 < argc) drm_path = argv[++i];
         else if (a == "--touch" && i + 1 < argc) touch_path = argv[++i];
         else if (a == "--point-db" && i + 1 < argc) point_db_path = argv[++i];
         else if (a == "--config" && i + 1 < argc) hmi_conf_path = argv[++i];
-        else if (a == "--allow-reboot") cli_allow_reboot = true;
         else if (a == "--help") {
             std::printf("usage: mkddc-hmi [--drm PATH] [--touch PATH] [--point-db FILE] "
-                        "[--config FILE] [--allow-reboot]\n");
+                        "[--config FILE]\n");
             return 0;
         }
     }
@@ -120,10 +103,10 @@ int main(int argc, char** argv)
 
     lv_init();
     lv_font_t* noto = nullptr;
-    RuntimeConfig runtime_cfg = load_runtime_config(hmi_conf_path, cli_allow_reboot);
+    RuntimeConfig runtime_cfg = load_runtime_config(hmi_conf_path);
     if (lv_freetype_init(256) == LV_RESULT_OK) {
         noto = lv_freetype_font_create(runtime_cfg.font_path.c_str(),
-                    LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 12,
+                    LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 14,
                     LV_FREETYPE_FONT_STYLE_NORMAL);
         if (noto) hmi::set_hmi_font(noto);
     }
@@ -142,38 +125,20 @@ int main(int argc, char** argv)
     point_db.load(point_db_path);
     hmi::ShmReader shm;
     shm.attach();
-    hmi::AlarmModel alarms;
+    hmi::HmiApiClient hmi_api(runtime_cfg.hmi_socket);
+    hmi::AlarmModel alarms(&hmi_api);
     alarms.open_socket();
-    hmi::CoreControl core_control;
 
     hmi::FaultBanner fault_banner;
     hmi::NavController nav(&saver, &fault_banner);
-    auto service_screen = std::make_unique<hmi::ScreenService>();
-    hmi::ScreenService* service = service_screen.get();
-    std::array<std::unique_ptr<hmi::ScreenBase>, 6> screens;
+    std::array<std::unique_ptr<hmi::ScreenBase>, 5> screens;
     screens[0] = std::make_unique<hmi::ScreenHome>(&alarms);
     screens[1] = std::make_unique<hmi::ScreenIo>();
-    screens[2] = std::make_unique<hmi::ScreenAlarm>(&alarms);
-    screens[3] = std::make_unique<hmi::ScreenComm>();
-    screens[4] = std::make_unique<hmi::ScreenSystem>();
-    screens[5] = std::move(service_screen);
+    screens[2] = std::make_unique<hmi::ScreenControl>(&hmi_api);
+    screens[3] = std::make_unique<hmi::ScreenAlarm>(&alarms);
+    screens[4] = std::make_unique<hmi::ScreenService>(&hmi_api);
     nav.build(locale, point_db, std::move(screens));
     fault_banner.create(&saver, locale);
-
-    service->set_access_policy(runtime_cfg.pin,
-        read_switch(runtime_cfg.service_switch_path), runtime_cfg.role);
-    service->set_actions({
-        [&]() {
-            const bool db_ok = point_db.reload(point_db_path);
-            const bool locale_ok = locale.load(hmi_conf_path);
-            nav.rebuild_labels(locale); fault_banner.rebuild_label(locale);
-            return db_ok && locale_ok && hmi::CoreControl::reload_services();
-        },
-        []() { return hmi::CoreControl::restart_services(); },
-        [&]() { return core_control.safe_reboot(point_db, runtime_cfg.allow_reboot); },
-        []() { return false; },
-        []() { return false; }
-    });
 
     hmi::EvdevTouch touch;
     touch.set_screensaver(&saver);
@@ -207,11 +172,12 @@ int main(int argc, char** argv)
         if (delta) { lv_tick_inc(delta); last_loop = now; }
 
         if (g_reload.exchange(false)) {
-            runtime_cfg = load_runtime_config(hmi_conf_path, cli_allow_reboot);
+            const std::string previous_socket = runtime_cfg.hmi_socket;
+            runtime_cfg = load_runtime_config(hmi_conf_path);
+            if (runtime_cfg.hmi_socket != previous_socket)
+                hmi_api.set_socket_path(runtime_cfg.hmi_socket);
             locale.reload();
             point_db.reload(point_db_path);
-            service->set_access_policy(runtime_cfg.pin,
-                read_switch(runtime_cfg.service_switch_path), runtime_cfg.role);
             nav.rebuild_labels(locale);
             fault_banner.rebuild_label(locale);
         }
@@ -236,13 +202,13 @@ int main(int argc, char** argv)
         }
         if (now >= next_alarm) {
             alarms.drain_socket();
-            next_alarm = now + 100u;
+            alarms.poll_api();
+            alarms.refresh_async();
+            next_alarm = now + 1000u;
         }
         if (now >= next_slow) {
             hmi::sys_snapshot_update(&sys);
             nav.on_sys_update(sys, locale);
-            service->set_access_policy(runtime_cfg.pin,
-                read_switch(runtime_cfg.service_switch_path), runtime_cfg.role);
             next_slow = now + 5000u;
         }
         saver.process_pending_wake();

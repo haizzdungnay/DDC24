@@ -2,8 +2,8 @@
 ## MK-DDC-24 — Chia phase làm thật
 
 > **Document ID:** IMPL-PHASEPLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.22 | 2026-07-21 (ARM64 frozen schema-v5 package parity GREEN; live-board cutover open) · 1.21 | 2026-07-21 (ARM64 live schema-v1 fail-closed preflight) · 1.20 | 2026-07-21 (native packaged rollback parity code-local) · 1.19 | 2026-07-21 (schema-v5 rollback verifier code-local) · 1.18 | 2026-07-21 (offline maintenance operator CLI code-local; board invocation inactive) · 1.17 | 2026-07-21 (maintenance-only cutover orchestration code-local; production cutover inactive) · 1.16 | 2026-07-21 (durable backup/migration evidence binding code-local; production cutover inactive) · 1.15 | 2026-07-21 (activation transaction/reconciliation engine code-local; production cutover inactive) · 1.14 | 2026-07-21 (physical rolling-prune engine code-local Done; activation guard inactive) · 1.13 | 2026-07-20 (WEB-HIST-005 retention amendment code-local; physical prune/cutover/target gates open) · 1.12 | 2026-07-20 (WEB-HIST-005 code-local Done; unified Trends feature-gated) · 1.11 | 2026-07-20 (WEB-HIST-001..004 code-local Done) · 1.10 | 2026-07-20 (WEB-HIST-001..003 code-local Done) · 1.9 | 2026-07-15 (historian/name workstream planned) · 1.8 | 2026-06-27 (P5.5 HMI added)
-> **Cập nhật hiện hành:** Rev 1.23 (2026-07-21) — bounded board schema-v5 activation GREEN; release vẫn mở cho physical fault, target eMMC, browser/manual E2E, long soak, prune và legacy removal.
+> **Phiên bản:** 1.24 | 2026-07-22 (merge historian v2 gates with ADR-016/017 five-surface local HMI/network authority) · 1.23 | 2026-07-21 (bounded board schema-v5 activation GREEN; release gates open) · 1.22 | 2026-07-21 (ARM64 frozen schema-v5 package parity GREEN; live-board cutover open) · 1.9 | 2026-07-22 (ADR-016 local limited-operator HMI) · 1.8 | 2026-06-27 (P5.5 HMI added)
+> **Cập nhật hiện hành:** Rev 1.24 (2026-07-22) — historian code-local/board activation evidence retained; local limited-operator HMI/network authority replaces historical six-screen gate; release vẫn mở cho physical fault, target eMMC, browser/manual E2E, long soak, prune, legacy removal và HMI/network HIL.
 > **Trạng thái:** Active
 > **Đọc trước:** [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md)
 > **Map sang task:** [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md) · **Map sang test:** [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
@@ -215,21 +215,18 @@ Trạng thái P5 amendment 2026-07-21: WEB-HIST-001/002/003/004/005, physical ro
 
 **Output:**
 ```
-1. Build LVGL v9 + DRM/KMS /dev/dri/card0 (HMI-001).
-2. Input: FT5436 evdev touch + 6 GPIO buttons (HMI-002).
-3. Tab strip + 6-page ring navigation (HMI-003).
-4. Screen 1 — Home / Controller Health (HMI-004).
-5. Screen 2 — I/O Monitor + AGE column + BAD/STALE filter (HMI-005).
-6. Screen 3 — Alarm / Event (4-state model + ACK) (HMI-006).
-7. Screen 4 — Communication (BACnet/Modbus status, Last req: Xs ago) (HMI-007).
-8. Screen 5 — System / Diagnostics read-only (HMI-008).
-9. Screen 6 — Service / Config (PIN lock, Reload, Reboot 3s hold) (HMI-009).
-10. SHM data binding 1s (kx_io_shm + kx_plc_shm) + AGE (HMI-010).
-11. Localization EN/VI + SIGHUP reload locale (HMI-011).
-12. systemd mkddc-hmi.service + packaging (HMI-012).
+1. Giữ DRM/KMS, FT5436, 6 GPIO buttons và SHM read-only đã có.
+2. Refactor thành 5 surface: Home / Points / Control / Alarms / Service.
+3. Local authenticated broker: session/RBAC/policy/audit; không phải browser/Web HMI.
+4. Core: query effective state, setpoint/mode, bounded override TTL và release idempotent.
+5. HMI: authoritative point faceplate, alarm ACK, read-only degradation khi authority mất.
+6. Gỡ static role/PIN privilege, CAP_SYS_BOOT, direct signal/reboot và no-op maintenance.
+7. Host/integration/target/usability evidence đóng HOP-000..077.
 ```
 
-**Test:** UC-LOCAL-001..014 theo [KX-DDC24-UC-HMI-001 Rev 2.1](../04_uiux/KX-DDC24-UC-HMI-001_VI.md). **DoD:** HMI-001..012 tick đủ + 6 màn render + touch/button pass.
+**Microtask authority:** [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md).
+**Test:** UC-HMI-001..015 và Integration Test group 5.5.
+**DoD:** [13_DEFINITION_OF_DONE §6](13_DEFINITION_OF_DONE.md).
 
 ---
 
@@ -268,13 +265,14 @@ Trạng thái P6 historian gate: bounded schema-v5 migration/activation and live
 | P3→P4 | iobus service ổn định 1h, shm đúng | SW Lead |
 | P4→P5 | core priority/safe-state pass, output qua core; nếu historian scope active thì COR-HIST-001 coherent snapshot pass; nếu scope Rev A production bật BACnet/Modbus thì BAC-001..011 + MOD-001..011 pass group 9/10 | SW Lead |
 | P5→P5.5 | web command path qua core, không bypass; historian scope phải qua WEB-HIST-001..005 + WEB-NAME-001 contract/unit/build gates | SW + Web Lead |
-| P5.5→P6 | HMI-001..012 done, 6 screens render trên board, touch + button input pass | SW Lead |
-| P6→Release | group 6/7/8 + E2E-HIST-001/target eMMC benchmark pass, [14_HANDOVER](15_RELEASE_HANDOVER_CHECKLIST.md) tick đủ | PM |
+| P5.5→P6 | HOP-000..077 done; five surfaces render trên board; touch/button, authoritative command, RBAC/audit, degraded mode và privilege gates pass | SW Lead + QA |
+| P6→Release | group 6/7/8 + E2E-HIST-001/target eMMC benchmark + local HMI/network HIL pass, [14_HANDOVER](15_RELEASE_HANDOVER_CHECKLIST.md) tick đủ | PM |
 
 > 📍 Tuần đầu trên SOM: làm theo 8 mốc [18_WEEK1_SOM_BRINGUP_CHECKLIST](18_WEEK1_SOM_BRINGUP_CHECKLIST.md)
 > (map P0→P4 round-trip). Dev mới: bắt đầu từ [17_QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md).
 
 ---
+**Rev** 1.24 | 2026-07-22 — Merged historian v2 release gates with ADR-016/017 local limited-operator HMI and network authority gates; historical six-screen wording superseded by HOP-000..077/five-surface acceptance. ·
 **Rev** 1.23 | 2026-07-21 — Completed bounded board migration/activation, final ARM64 parity, explicit maintenance/restart gaps and live v2 writer/query smoke; retained physical fault, target eMMC, long-soak, browser/manual E2E, prune and legacy-removal gates. · **Rev** 1.22 | 2026-07-21 — Closed ARM64 frozen schema-v5 package parity using prebuilt-native mode, native manifest and unchanged legacy/active/archive/evidence hashes; live-board migration/SQLITE_BUSY/power-cut/target/cutover remain open. · **Rev** 1.21 | 2026-07-21 — Recorded ARM64 native preflight fail-closed on board schema-v1 fixture with unchanged SHA. · **Rev** 1.20 | 2026-07-21 — Added native packaged rollback parity command with independent current/candidate builds, SHA/build metadata, legacy+active fixture execution and immutable DB-family/archive/evidence proof. · **Rev** 1.19 | 2026-07-21 — Added read-only schema-v5 rollback verifier/subcommand with active/legacy fixture matrix, future-schema rejection and no-mutation proof. · **Rev** 1.18 | 2026-07-21 — Added offline operator CLI with explicit confirmation/service-presence/path/manifest preflight; board invocation remains open. · **Rev** 1.17 | 2026-07-21 — Added maintenance-only ordered quiesce/final-backup/full-migration/evidence/gap/activation orchestration; no production invocation, board cutover or legacy removal.
 **Rev** 1.14 | 2026-07-21 — Reclassified physical rolling prune as implemented code/local but inactive behind the activation guard; retained activation/cutover, target eMMC and E2E as open. · **Rev** 1.13 | 2026-07-20 — Added interval-bounded retention selection and explicit deferred physical-prune/cutover gate to WEB-HIST-005 status. · **Rev** 1.12 | 2026-07-20 — Reconciled WEB-HIST-005 code/local frontend gates with default-off `VITE_HISTORIAN_V2_TRENDS`; retained legacy authority, activation/cutover, target eMMC, full E2E and release gates as open. · **Rev** 1.11 | 2026-07-20 — Reconciled WEB-HIST-004 unified explicit UTC query/CSV code-local gates; retained legacy range adapter, WEB-HIST-005, activation/cutover, target eMMC, full E2E and release gates as open. · **Rev** 1.10 | 2026-07-20 — Reconciled WEB-HIST-001/002/003 code-local completion while retaining WEB-HIST-004/005, activation/cutover, target eMMC, full E2E and release gates as open. · **Rev** 1.9 | 2026-07-15 — Added owner-approved P4/P5/P6 historian and unique display-name workstream: COR-HIST-001, WEB-HIST-001..005, WEB-NAME-001, E2E-HIST-001; all remain PLANNED. · **Rev** 1.8 | 2026-06-27 (Phase 5.5 mkddc-hmi added — HMI kéo vào Rev A per REVA_SCOPE amendment 2026-06-27; gate P5.5→P6 added) · 1.7 | 2026-06-17 (P4 output 11/12 DONE: BAC-001..011 + MOD-001..011 implemented, 114 test pass, bypass check sạch) ·
 1.6 | 2026-06-17 (P4 output 11/12: BAC+MOD doc gap CLOSED — BAC-CONFLICT-001, bind_interface, kx_ext_snapshot, rs485.device; sẵn sàng implement) ·

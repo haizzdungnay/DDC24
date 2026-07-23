@@ -2,13 +2,19 @@
 ## SOM Application Layer / Debian 12 (IEEE 1016)
 
 > **Document ID:** DDD-SW-MK-DDC-24-VI
-> **Phiên bản:** 1.2 | 2026-06-30 (ADR-010 I/O/IOP alignment) · 1.1 | 2026-06-13 · 1.0 | 2026-05-30
+> **Phiên bản:** 1.3 | 2026-07-22 (ADR-016 local limited-operator HMI authority boundary) · 1.2 | 2026-06-30 · 1.1 | 2026-06-13 · 1.0 | 2026-05-30
 > **Trạng thái:** Draft (DP-0 skeleton có decomposition) — chi tiết service ở DP-2
 > **Owner:** Software Team
 > 📘 [README](../../01_specs/README.md) · Nâng từ `SW_ARCH_SPEC` · Trace `SW_REQUIREMENTS`, `SRS`
 
-> ⚠️ **RECONCILE (2026-06-08).** Decomposition cập nhật theo [ADR-005](../../adr/ADR-005-three-process-architecture.md): **3 process `mkddc-*`**
-> (core C++ component-graph + iobus + web Go). Engine **component-based**, không IEC 61131-3 ([ADR-004](../../adr/ADR-004-component-based-runtime.md)).
+> ⚠️ **RECONCILE (2026-07-23, ADR-020 supersedes 2026-06-08 banner cũ).** Decomposition
+> theo [ADR-005](../../adr/ADR-005-three-process-architecture.md): **3 process `mkddc-*`**
+> (core C++ component-graph + iobus + web Go) — engine **component-based chạy thật hôm
+> nay** ([ADR-004](../../adr/ADR-004-component-based-runtime.md), nay legacy-importer
+> theo [ADR-020](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)). Roadmap
+> Rev A.0 bổ sung Program Runtime IEC 61131-3-aligned (ST+FBD, Mekong-owned, đang C0,
+> chưa release, không certified) — sẽ thêm `mkddc-program-service`/`mkddc-program-core`
+> khi C1+ mở, xem `SOFTWARE.md` và `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`.
 > Nguồn-chuẩn: [PRODUCT_DEFINITION](../../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md), [SW_RUNTIME_EXECUTION_MODEL](SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md).
 
 ---
@@ -28,8 +34,9 @@ Không bao gồm: firmware MCU (xem FW_DDD), phần cứng.
 Rev A: **3 process `mkddc-*`** (chia theo real-time boundary).
 ```
 mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master)
-                ──► mkddc-web   (REST/config/validator/commissioning)
-   (HMI / agent MQTT / OTA / cloud: deferred Rev B+)
+                ──► mkddc-web   (REST/config/validator/commissioning + local HMI broker)
+                ──► mkddc-hmi   (feature-gated limited-operator presentation client)
+   (agent MQTT / OTA / cloud: deferred Rev B+)
 ```
 
 | Process | Ngôn ngữ | Vai trò | Trace |
@@ -37,9 +44,11 @@ mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master)
 | `mkddc-core` | C++17 | IO image (gộp io-driver) + **component graph engine** (scan 1s) + priority/safe-state + BACnet object table | RUN-001..009, SW-IOP-* |
 | `mkddc-iobus` | C/C++17 | BACnet/IP (bacnet-stack), COV *(MS/TP bỏ)* + **Modbus RTU master** (async ext cache, device profile) | SW-BAC-*, SW-MOD-* |
 | `mkddc-web` | Go | web config (**form/JSON**) + **validator (library)** + monitor + commissioning + SQLite | SW-WEB-* (thay SW-IDE-*) |
+| `mkddc-hmi` | C++17 + LVGL | Home/Points/Control/Alarms/Service; telemetry SHM read-only, mutation qua broker/core | SW-HMI-* |
 
 **Deferred Rev B+** (thiết kế cũ giữ tham chiếu, không mất): `kinexus-agent` (MQTT/REST),
-`kinexus-hmi` (LVGL TFT), `kinexus-ota`, security service in-agent. Xem [REVA_SCOPE §3](../../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md).
+`kinexus-ota`, security service in-agent. HMI local hiện hành xem
+[SW HMI design](SW_HMI_DESIGN_MK-DDC-24_VI.md).
 
 <details><summary>§3-legacy — decomposition cũ (7+ service <code>kinexus-*</code>, IEC 61131-3 — tham chiếu)</summary>
 
@@ -124,4 +133,4 @@ mkddc-core (RT) ──► mkddc-iobus (BACnet/IP, Modbus RTU master)
 | — | Service designs riêng ở DP-2 | SW | DP-2 |
 
 ---
-**Rev** 1.2 | 2026-06-30 (ADR-010: 16 UI, no base DI, IOP 2ms/500Hz) · 1.1 | 2026-06-13 · 1.0 | 2026-05-30
+**Rev** 1.3 | 2026-07-22 (ADR-016: local HMI is a limited-operator client; mutations require broker/core authority) · 1.2 | 2026-06-30 · 1.1 | 2026-06-13 · 1.0 | 2026-05-30

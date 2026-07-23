@@ -175,6 +175,7 @@ static const char* op_name(const WebCommand& cmd)
     if (cmd.kind == WebCommandKind::AlarmAck) return "alarm_ack";
     if (cmd.kind == WebCommandKind::AlarmSuppress) return "alarm_suppress";
     if (cmd.kind == WebCommandKind::AlarmReturn) return "alarm_return";
+    if (cmd.is_query) return "query";
     return cmd.is_write ? "write" : "release";
 }
 
@@ -217,6 +218,8 @@ void WebIpc::close()
         ::unlink(path_.c_str());
         fd_ = -1;
     }
+    response_cache_.clear();
+    response_order_.clear();
 }
 
 void WebIpc::respond(const WebCommand& command, const std::string& json_line)
@@ -237,6 +240,23 @@ void WebIpc::respond(const WebCommand& command, const std::string& json_line)
         }
         return;
     }
+}
+
+void WebIpc::respond_command(const WebCommand& command, const std::string& json_line)
+{
+    const auto cached = response_cache_.find(command.id);
+    if (cached != response_cache_.end()) cached->second.response = json_line;
+    respond(command, json_line);
+}
+
+void WebIpc::remember_pending(uint64_t id, const std::string& request)
+{
+    while (response_order_.size() >= RESPONSE_CACHE_LIMIT) {
+        response_cache_.erase(response_order_.front());
+        response_order_.pop_front();
+    }
+    response_order_.push_back(id);
+    response_cache_[id] = CachedResponse{request, std::string()};
 }
 
 ssize_t WebIpc::send_bytes(int fd, const void* data, std::size_t size, int flags)
@@ -403,28 +423,30 @@ void WebIpc::audit(const WebCommand& cmd, const char* result, const char* active
 }
 
 void WebIpc::respond_accepted(const WebCommand& cmd, float applied_value,
-                              const char* active_source)
+                              const char* active_source, uint32_t remaining_ttl_s)
 {
-    char buf[160];
-    std::snprintf(buf, sizeof(buf),
-                  "{\"id\":%llu,\"result\":\"accepted\",\"applied_value\":%g,"
-                  "\"active_source\":\"%s\"}",
-                  static_cast<unsigned long long>(cmd.id),
-                  static_cast<double>(applied_value), active_source);
-    respond(cmd, buf);
+    std::string json = "{\"id\":" + std::to_string(cmd.id) +
+                       ",\"result\":\"accepted\",\"applied_value\":" +
+                       std::to_string(applied_value) + ",\"active_source\":\"" +
+                       active_source + "\"";
+    if (remaining_ttl_s > 0)
+        json += ",\"remaining_ttl_s\":" + std::to_string(remaining_ttl_s);
+    json += "}";
+    respond_command(cmd, json);
     audit(cmd, "accepted", active_source, applied_value);
 }
 
 void WebIpc::respond_overridden(const WebCommand& cmd, float applied_value,
-                                const char* active_source)
+                                const char* active_source, uint32_t remaining_ttl_s)
 {
-    char buf[160];
-    std::snprintf(buf, sizeof(buf),
-                  "{\"id\":%llu,\"result\":\"overridden\",\"applied_value\":%g,"
-                  "\"active_source\":\"%s\"}",
-                  static_cast<unsigned long long>(cmd.id),
-                  static_cast<double>(applied_value), active_source);
-    respond(cmd, buf);
+    std::string json = "{\"id\":" + std::to_string(cmd.id) +
+                       ",\"result\":\"overridden\",\"applied_value\":" +
+                       std::to_string(applied_value) + ",\"active_source\":\"" +
+                       active_source + "\"";
+    if (remaining_ttl_s > 0)
+        json += ",\"remaining_ttl_s\":" + std::to_string(remaining_ttl_s);
+    json += "}";
+    respond_command(cmd, json);
     audit(cmd, "overridden", active_source, applied_value);
 }
 
@@ -433,7 +455,7 @@ void WebIpc::respond_rejected(const WebCommand& cmd, const char* error)
     char buf[128];
     std::snprintf(buf, sizeof(buf), "{\"id\":%llu,\"result\":\"rejected\",\"error\":\"%s\"}",
                   static_cast<unsigned long long>(cmd.id), error);
-    respond(cmd, buf);
+    respond_command(cmd, buf);
     audit(cmd, "rejected", "-", cmd.value);
 }
 
@@ -460,7 +482,7 @@ void WebIpc::respond_alarm_list(const WebCommand& cmd, const std::vector<AlarmSt
         json += "}";
     }
     json += "]}";
-    respond(cmd, json);
+    respond_command(cmd, json);
     audit(cmd, "accepted", "alarm", 0.0f);
 }
 
@@ -469,7 +491,7 @@ void WebIpc::respond_alarm_ack_accepted(const WebCommand& cmd)
     const std::string json = "{\"id\":" + std::to_string(cmd.id) +
                              ",\"result\":\"accepted\",\"alarmId\":\"" +
                              json_escape(cmd.alarm_id) + "\"}";
-    respond(cmd, json);
+    respond_command(cmd, json);
     audit(cmd, "accepted", "alarm", 0.0f);
 }
 
@@ -478,7 +500,7 @@ void WebIpc::respond_alarm_suppress_accepted(const WebCommand& cmd)
     const std::string json = "{\"id\":" + std::to_string(cmd.id) +
                              ",\"result\":\"accepted\",\"alarmId\":\"" +
                              json_escape(cmd.alarm_id) + "\"}";
-    respond(cmd, json);
+    respond_command(cmd, json);
     audit(cmd, "accepted", "alarm", 0.0f);
 }
 
@@ -487,7 +509,7 @@ void WebIpc::respond_alarm_return_accepted(const WebCommand& cmd)
     const std::string json = "{\"id\":" + std::to_string(cmd.id) +
                              ",\"result\":\"accepted\",\"alarmId\":\"" +
                              json_escape(cmd.alarm_id) + "\"}";
-    respond(cmd, json);
+    respond_command(cmd, json);
     audit(cmd, "accepted", "alarm", 0.0f);
 }
 
@@ -533,6 +555,21 @@ void WebIpc::handle_line(Client& client, const std::string& line,
         point = request["point"].get<std::string>();
         cmd.point_name = sanitize_point_name(point);
     }
+    const auto cached = response_cache_.find(cmd.id);
+    if (cached != response_cache_.end()) {
+        if (cached->second.request != line) {
+            queue_response(client, "{\"id\":" + std::to_string(cmd.id) +
+                                       ",\"result\":\"rejected\","
+                                       "\"error\":\"id_conflict\"}\n");
+        } else if (cached->second.response.empty()) {
+            queue_response(client, "{\"id\":" + std::to_string(cmd.id) +
+                                       ",\"result\":\"rejected\","
+                                       "\"error\":\"duplicate_pending\"}\n");
+        } else {
+            queue_response(client, cached->second.response + "\n");
+        }
+        return;
+    }
     if (op == "alarm_list" || op == "alarm_ack" ||
         op == "alarm_suppress" || op == "alarm_return") {
         if (op == "alarm_list") cmd.kind = WebCommandKind::AlarmList;
@@ -575,6 +612,7 @@ void WebIpc::handle_line(Client& client, const std::string& line,
             reject("busy");
             return;
         }
+        remember_pending(cmd.id, line);
         out->push_back(cmd);
         client.outstanding++;
         return;
@@ -598,7 +636,7 @@ void WebIpc::handle_line(Client& client, const std::string& line,
         reject("unknown_point");
         return;
     }
-    if (cmd.point.kind == PointKind::AI || cmd.point.kind == PointKind::BI) {
+    if (op != "query" && (cmd.point.kind == PointKind::AI || cmd.point.kind == PointKind::BI)) {
         reject("readonly_point");
         return;
     }
@@ -617,14 +655,30 @@ void WebIpc::handle_line(Client& client, const std::string& line,
         cmd.value = fv;
     } else if (op == "release") {
         cmd.is_write = false;
+    } else if (op == "query") {
+        cmd.is_write = false;
+        cmd.is_query = true;
     } else {
         reject("bad_request");
         return;
+    }
+    if (request.contains("ttlS")) {
+        if (!cmd.is_write || source != "manual" || !request["ttlS"].is_number_unsigned()) {
+            reject("bad_ttl");
+            return;
+        }
+        const uint64_t ttl = request["ttlS"].get<uint64_t>();
+        if (ttl < 1 || ttl > 86400) {
+            reject("bad_ttl");
+            return;
+        }
+        cmd.ttl_s = static_cast<uint32_t>(ttl);
     }
     if (out->size() >= 64) {        /* queue đầy → rejected busy (07 §8) */
         reject("busy");
         return;
     }
+    remember_pending(cmd.id, line);
     out->push_back(cmd);
     client.outstanding++;
 }

@@ -1,7 +1,7 @@
 # HW_SPEC — MK-DDC-24 Hardware Specification
 
-> **Phiên bản:** 2.0 | 2026-06-30
-> **Trạng thái:** In-Review — aligned to ADR-010; schematic/layout/fabrication release remains blocked by `hardware-design/hw_design_review/HW_DOC_REVIEW_CLOSURE_PLAN.md`
+> **Phiên bản:** 2.1 | 2026-07-22
+> **Trạng thái:** In-Review / NO-GO — schematic/layout/fabrication release remains blocked by [HW closure register](../07_records/reviews/hardware/hw_design_review/HW_DOC_REVIEW_CLOSURE_PLAN.md)
 > **Tác giả:** KINEXUS Technologies — Hardware Team  
 > **Chuẩn tham chiếu:** IEC 61010-1, IEC 60068, IEC 61326-1, RoHS 3, REACH  
 > **Liên quan:** [DS](DS_MK-DDC-24_VI.md) | [PRD](PRD_MK-DDC-24_VI.md) | [SRS](SRS_MK-DDC-24_VI.md)
@@ -72,7 +72,7 @@
 >
 > **Dải thử nghiệm dự kiến:** 0°C ~ +55°C với heatsink + throttle; repository hiện chưa có chamber report để gọi đây là dải đã xác nhận. **Dải mục tiêu:** -20°C ~ +65°C — đòi hỏi báo cáo thermal derating đầy đủ (bao gồm extended-temp CM3 option nếu cần) trước khi dùng trong tài liệu bán hàng và trước khi ship GA.
 >
-> Chi tiết: `hardware-design/07_emc_thermal/EMC_THERMAL_NOTES.md`.
+> Chi tiết: [EMC/thermal notes](../04_design/hardware/07_emc_thermal/EMC_THERMAL_NOTES.md).
 
 ### 2.2 Lý do Chọn Radxa CM3
 
@@ -81,9 +81,9 @@
 | BOM ≤ 40 USD | ~30 USD | ✅ |
 | GbE onboard | ✅ (không cần PHY ngoài) | ✅ Tiết kiệm BOM |
 | UART × 7 | ✅ (đủ MCU + RS-485 + debug) | ✅ |
-| SPI × 4 | ✅ (SPI0 → HMI TFT) | ✅ |
+| SPI × 4 | Có sẵn cho carrier; HMI không dùng SPI | ✅ |
 | Debian BSP | ✅ chính thức | ✅ |
-| Tài liệu & schematic | ✅ đầy đủ (PDF, XLSX, STP) | ✅ |
+| Tài liệu module CM3 | Có datasheet/schematic/pinout từ Radxa | ✅; schematic/PCB sản phẩm MK-DDC-24 vẫn thiếu |
 | Form factor | 55×40mm, B2B 3×100-pin | ✅ |
 
 ---
@@ -104,6 +104,11 @@
 | **Watchdog** | IWDG + WWDG | Dual watchdog |
 | **Nhiệt độ** | -40°C đến +85°C | Industrial grade |
 | **Nguồn MCU** | 3.3V | Do carrier cấp |
+
+> **Implementation evidence 2026-07-22:** `fw/Core/Src/main.c` và
+> `fw/mkddc-fw.ioc` hiện chỉ là skeleton/placeholder. Các task, pin mapping,
+> IOP, ADC, AO/DO và watchdog trong tài liệu này là thiết kế mục tiêu, chưa phải
+> firmware đã triển khai hoặc HIL-verified.
 
 ### 3.2 Firmware MCU (FreeRTOS Tasks)
 
@@ -203,7 +208,7 @@ PT100/PT1000 are not supported in the Rev A base SKU. Mode is configured per cha
 
 ## 8. Power Supply Design
 
-> **Release status:** BLOCKED. Final +5V/+3.3V/+15V converters, input protection and surge coordination are not frozen. The detailed and controlling source is `hardware-design/04_power_supply/PWR_DESIGN.md`.
+> **Release status:** BLOCKED. Final +5V/+3.3V/+15V converters, input protection and surge coordination are not frozen. The detailed source is [PWR_DESIGN](../04_design/hardware/04_power_supply/PWR_DESIGN.md).
 
 ### 8.1 Input Power
 
@@ -333,7 +338,7 @@ LED driver    (*)  ──────────── ► LEDK      (pin 2,  G
 **LVGL render pipeline (SW):**
 ```
 mkddc_io_shm / mkddc_plc_shm
-  → kinexus-hmid (LVGL v9)
+  → mkddc-hmi (LVGL v9)
   → lv_drivers/display/drm.c   ← DRM/KMS framebuffer
   → /dev/dri/card0              ← RK3566 VOP + MIPI DSI
   → JD9852 controller           ← trên module
@@ -573,7 +578,8 @@ Mặt sau thiết bị:
 |---|---|---|
 | 1.1 | 2026-05-28 | Previous approved hardware specification baseline. |
 | 2.0 | 2026-06-30 | Breaking alignment to ADR-010 and current hardware review: 16 UI base SKU, no populated DI, IOP 2ms, power/EMC/thermal claims returned to evidence-gated status. |
+| 2.1 | 2026-07-22 | Corrected HMI/SPI and controlled-path references; separated target MCU design from placeholder firmware evidence; retained manufacturing NO-GO. |
 
 **Document ID:** HW-SPEC-MK-DDC-24-VI  
-**Revision:** 2.0 | 2026-06-30
+**Revision:** 2.1 | 2026-07-22
 **Review required:** Hardware Lead, Compliance/QA, Product Owner

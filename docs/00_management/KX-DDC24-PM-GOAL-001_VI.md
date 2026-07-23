@@ -18,7 +18,7 @@
 
 | # | Mục tiêu | Vì sao quan trọng |
 |---|----------|-------------------|
-| G1 | **Chuẩn mở, không vendor lock-in** | IEC 61131-3 + BACnet BTL giúp SI/BMS tích hợp tự do, mở rộng thị trường |
+| G1 | **Chuẩn mở, không vendor lock-in** | IEC 61131-3-aligned (Mekong-owned Program Runtime, roadmap ADR-020, đang C0) + BACnet BTL giúp SI/BMS tích hợp tự do, mở rộng thị trường |
 | G2 | **Giá cạnh tranh** | Thấp hơn ≥ 10% so với SBO, ≥ 20% so với PXC4 để thắng thầu phân khúc tầm trung. Mục tiêu khuyến nghị: ≥ 15% vs SBO tại mức giá ~500 USD (xem PM-MARKET-001 §2.2) |
 | G3 | **Tích hợp & commissioning nhanh** | Giảm chi phí nhân công lắp đặt — lợi thế bán hàng cho SI/OEM |
 | G4 | **Bảo mật tích hợp (security-by-design)** | Đáp ứng yêu cầu hạ tầng tòa nhà hiện đại; nền tảng cho IEC 62443-4-2 |
@@ -77,7 +77,7 @@ Dự án Ver 1.0 coi là **đạt mục tiêu** khi toàn bộ Acceptance Criter
 
 | Phiên bản | Mục tiêu trọng tâm | Target |
 |-----------|--------------------|--------|
-| **Ver 1.0 (MVP)** | BACnet/IP + IEC 61131-3 FBD/ST, Web IDE, OTA A/B, BTL certified | Q4/Y7 |
+| **Ver 1.0 (MVP)** | BACnet/IP, Web UI, OTA A/B, BTL testing in progress (chưa certified). Program Runtime FBD/ST (ADR-020, IEC 61131-3-aligned) là roadmap riêng đang C0, không nằm trong Ver 1.0 | Q4/Y7 |
 | **Ver 1.1** | MQTT TLS đầy đủ, REST API, dashboard realtime | Q1/Y8 |
 | **Ver 1.2** | BACnet/SC, khởi động IEC 62443-4-2 | Q2/Y8 |
 | **Ver 2.0** | IEC 62443-4-2 component cert, edge-AI anomaly detection (NPU), thư viện ST nâng cao | Q4/Y8 |

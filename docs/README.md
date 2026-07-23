@@ -1,87 +1,45 @@
-# MK-DDC-24 — Trung tâm Tài liệu Dự án (Document Hub)
-## ISO-aligned Documentation Index
+# MK-DDC-24 Document Hub
 
-> **Phiên bản:** 1.0 | 2026-05-30
-> **Chuẩn áp dụng:** ISO/IEC/IEEE 12207:2017 (vòng đời phần mềm), ISO/IEC/IEEE 15288 (hệ thống), ISO/IEC/IEEE 29148 (yêu cầu), ISO/IEC/IEEE 1016 (thiết kế), ISO/IEC 25010 (chất lượng), ISO 9001:2015 §7.5 (kiểm soát tài liệu), IEC 62443-4-1 (bảo mật), ASHRAE 135 (BACnet). *(IEC 61131-3 = tầm nhìn Rev C, Rev A KHÔNG dùng — xem ADR-004.)*
-> **Đối tượng:** PM, Tech Lead, FW/BE/FE Dev, UI/UX, QA, kỹ sư tích hợp. **Người mới đọc mục [§2 Bắt đầu](#2-người-mới-bắt-đầu-từ-đây).**
+**Trạng thái:** Active
+**Cập nhật:** 2026-07-22
 
----
+Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
-## 1. Bản đồ tài liệu theo vòng đời (V-Model / ISO 12207)
+| Hồ sơ | Mục đích |
+|---|---|
+| [Control](00_governance/CONTROL.md) | quản trị, thẩm quyền, trạng thái và quy tắc thay đổi |
+| [Decision log](00_governance/DECISIONS.md) | quyết định kiến trúc hiện hành, gồm các ADR đã hợp nhất |
+| [Product](01_product/PRODUCT.md) | định vị, baseline và phạm vi Rev A |
+| [Requirements](02_requirements/REQUIREMENTS.md) | yêu cầu có ID và tiêu chí chấp nhận |
+| [System](03_architecture/SYSTEM.md) | kiến trúc hệ thống và deployment topology |
+| [Interfaces](04_design/INTERFACES.md) | IOP, SHM, cấu hình và API contracts |
+| [Firmware](04_design/FIRMWARE.md) | baseline MCU, sampling, actuation, IOP và watchdog |
+| [Software](04_design/SOFTWARE.md) | thiết kế các service và component runtime |
+| [Hardware](04_design/HARDWARE.md) | baseline điện tử, I/O và ràng buộc thiết kế |
+| [Verification](05_verification/VERIFICATION.md) | chiến lược test, ma trận và release gates |
+| [Development & operations](06_operations/DEVELOPMENT_AND_OPERATIONS.md) | build, test, deploy, vận hành và phục hồi |
+| [Traceability](07_records/TRACEABILITY.md) | ánh xạ yêu cầu → thiết kế → code → bằng chứng |
 
-```
-        YÊU CẦU ──────────────────────────────────► KIỂM THỬ
-   (01_requirements)                              (06_verification)
-          │                                              ▲
-          ▼                                              │
-     KIẾN TRÚC ───────────────────────────────► TÍCH HỢP & V&V
-   (02_architecture)                                     ▲
-          │                                              │
-          ▼                                              │
-   THIẾT KẾ CHI TIẾT ──────────────► HIỆN THỰC (CODE) ───┘
-   (03_design + 04_uiux)            (05_devguides)
-          ▲
-          │
-   QUẢN LÝ & KIỂM SOÁT (00_management) ── xuyên suốt
-```
+## Detailed design corpus
 
-## 2. Người mới — Bắt đầu từ đây
-> 🌟 **Chưa hiểu sản phẩm? Đọc cuốn số 1 trước — nó giải thích TOÀN BỘ hệ thống từ số 0, kể như kể chuyện, có hình vẽ, không cần biết code.**
-1. ⭐ [**System Handbook — Hiểu hệ thống từ số 0**](00_management/KX-DDC24-SYS-ARCH-001_VI.md) — cái hộp là gì, "2 bộ não", dữ liệu chạy thế nào, từng khối vì sao cần. **Đọc cái này đầu tiên.**
-2. [PROJECT_OVERVIEW](00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) — tóm tắt nhanh 1 trang.
-3. [GETTING_STARTED_DEV](02_design/GETTING_STARTED_DEV.md) — cài môi trường, build, "muốn sửa X vào đâu".
-4. [IMPLEMENTATION_PLAN](00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md) — **lộ trình code: phase → task → microtask → checklist**.
-5. ⭐ **Developer Kit** (gõ code từ đây): [Repo & Build](05_devguides/KX-DDC24-PM-REPO-001_VI.md) · [FW Dev Guide](05_devguides/KX-DDC24-FW-DEVGUIDE-001_VI.md) · [BE Dev Guide](05_devguides/KX-DDC24-BE-DEVGUIDE-001_VI.md) · [FE Dev Guide](05_devguides/KX-DDC24-FE-DEVGUIDE-001_VI.md) · hợp đồng code [`shared/`](../shared/).
-6. [DOC_CONTROL_AND_NAMING](00_management/KX-DDC24-QA-DOCCTRL-001_VI.md) — quy tắc đặt tên/sắp xếp/version.
+- [Hardware detailed design](04_design/hardware/README.md)
+- [Firmware detailed design](02_design/firmware/README.md)
+- [Software detailed design](02_design/software/README.md)
+- [Interface detailed design](02_design/interfaces/README.md)
+- [Source specifications](01_specs/README.md)
+- [Implementation guides](03_implementation/README.md)
+- [Hardware review records](07_records/reviews/hardware/README.md)
+- [IEC 61131-3 Program/SOM FW gap assessment](07_records/reviews/KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md)
+- [IEC 61131-3 corrective design doc review — structure + design](07_records/reviews/KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md)
+- [IEC 61131-3 Program/SOM FW decisions — Q0–Q9 CTO 2026-07-23, Decided/Closed](07_records/reviews/KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md)
+- [ADR-020 — Mekong-owned IEC 61131-3-aligned Program Runtime](adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
+- [Program Runtime C0 Architecture and Feasibility Plan](07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md)
+- [Program Runtime Implementation Plan C1–C10](07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md)
+- [Program Runtime document conflict report (ADR-020 remediation, 31/31 closed)](07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md)
+- [Program Runtime readiness review for C0 — C0_READY status](07_records/reviews/PROGRAM_RUNTIME_READY_FOR_C0.md)
 
-## 3. Cây thư mục chuẩn (ISO-aligned)
+Luồng đọc khuyến nghị: Product → Requirements → System → baseline Design → Detailed design → Verification. Các tài liệu chi tiết có trạng thái `In Review` phải được đối chiếu với baseline/code trước khi dùng cho release.
 
-| Thư mục | Giai đoạn vòng đời | Nội dung | Vị trí thực tế |
-|---------|--------------------|----------|----------------|
-| `00_management` | Quản lý (xuyên suốt) | Plan, doc-control, register, changelog, traceability | `docs/00_management/` |
-| `01_requirements` | Yêu cầu | PRD, SRS, FW/SW requirements | `../` + `../spec/` |
-| `02_architecture` | Kiến trúc | SW/FW arch, IOP interface | `../spec/` |
-| `03_design` | Thiết kế chi tiết | DDD, ICD, module/service design, coding std | `../design/` |
-| `04_uiux` | Thiết kế giao diện | Design system, Web IDE (FE), HMI | `docs/04_uiux/` |
-| `05_devguides` | Hiện thực | Coding standards, build/CI | `../design/*CODING*` |
-| `06_verification` | Kiểm thử | Test spec, traceability | `../spec/TEST_SPEC…` |
-| `07_hardware` | Phần cứng | Schematic, BOM, EMC | `../hardware-design/` |
+Archive lịch sử không phải nguồn chuẩn: `archives/markdown-before-restructure-2026-07-22.tar.gz`.
 
-> Ghi chú: theo nguyên tắc **không phá vỡ tham chiếu đang có** (repo chưa dùng git), tài liệu yêu cầu/kiến trúc/thiết kế **giữ nguyên vị trí** ở `spec/` và `design/`; `docs/` bổ sung **lớp quản lý + UI/UX + register** và là **cổng điều hướng ISO**. Quy tắc đặt tên mới áp dụng cho tài liệu mới (xem DOC_CONTROL).
-
-## 4. Danh mục tài liệu chính
-
-### 00_management
-| ID | Tài liệu |
-|----|----------|
-| KX-DDC24-PM-OVERVIEW-001 | [Project Overview](00_management/KX-DDC24-PM-OVERVIEW-001_VI.md) |
-| KX-DDC24-PM-IMPLPLAN-001 | [Implementation Plan (phase/task/microtask)](00_management/KX-DDC24-PM-IMPLPLAN-001_VI.md) |
-| KX-DDC24-QA-DOCCTRL-001 | [Document Control & Naming Standard](00_management/KX-DDC24-QA-DOCCTRL-001_VI.md) |
-| KX-DDC24-QA-REGISTER-001 | [Master Document Register](00_management/KX-DDC24-QA-REGISTER-001_VI.md) |
-| KX-DDC24-QA-TRACE-001 | [Traceability Matrix](00_management/KX-DDC24-QA-TRACE-001_VI.md) |
-
-### 04_uiux
-| ID | Tài liệu |
-|----|----------|
-| KX-DDC24-UX-SYSTEM-001 | [Design System (tokens, components)](04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) |
-| KX-DDC24-UX-WEBIDE-001 | *(đã gỡ 2026-06-08)* — UX web Rev A form/JSON: [ADR-006](adr/ADR-006-rev-a-ui-form-json.md) |
-| KX-DDC24-UX-HMI-001 | [HMI TFT UI](04_uiux/KX-DDC24-UX-HMI-001_VI.md) |
-
-### 05_devguides — Developer Kit (gõ code từ đây)
-| ID | Tài liệu |
-|----|----------|
-| KX-DDC24-PM-REPO-001 | [Repository, Build & CI](05_devguides/KX-DDC24-PM-REPO-001_VI.md) |
-| KX-DDC24-FW-DEVGUIDE-001 | [FW Developer Guide & Backlog](05_devguides/KX-DDC24-FW-DEVGUIDE-001_VI.md) |
-| KX-DDC24-BE-DEVGUIDE-001 | [BE Developer Guide & Backlog](05_devguides/KX-DDC24-BE-DEVGUIDE-001_VI.md) |
-| KX-DDC24-FE-DEVGUIDE-001 | [FE Developer Guide & Backlog](05_devguides/KX-DDC24-FE-DEVGUIDE-001_VI.md) |
-| (code) | Hợp đồng dùng chung: [`shared/iop_protocol.h`](../shared/iop_protocol.h), [`shared/kinexus_shm.h`](../shared/kinexus_shm.h) |
-
-### Yêu cầu / Kiến trúc / Thiết kế (giữ vị trí cũ)
-→ Xem [Master Document Register](00_management/KX-DDC24-QA-REGISTER-001_VI.md) để có danh sách đầy đủ + Document ID + version + owner.
-→ Cổng kỹ thuật: [README](01_specs/README.md) · [README](02_design/README.md).
-
-## 5. Thay đổi & lịch sử
-→ [CHANGELOG.md](../CHANGELOG.md) (toàn dự án). Mỗi tài liệu có bảng Revision History riêng ở cuối.
-
----
-**Maintainer:** PMO / QA · **Rev** 1.0 | 2026-05-30
+Artifact hỗ trợ không phải Markdown được giữ tại `02_design/interfaces/openapi.yaml`, `07_records/evidence/` và `07_records/security/`; chúng không tự tạo thành bằng chứng release nếu chưa được review theo Verification.

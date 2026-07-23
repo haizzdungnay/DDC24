@@ -4,7 +4,7 @@
 > **Document ID:** KX-DDC24-PM-MARKET-001  
 > **Phiên bản:** 1.2 | 2026-06-30 · **Trạng thái:** In-Review — product profile aligned to ADR-010 · **Owner:** ResearchDirector
 > **Mục tiêu:** Đào sâu v1.0: validated competitor pricing, TAM/SAM/SOM định lượng, channel economics, regional cert, BOM RFQ.  
-> **Liên quan:** [GOAL-001](KX-DDC24-PM-GOAL-001_VI.md) · [PRD](../01_specs/PRD_MK-DDC-24_VI.md) · [DS](../01_specs/DS_MK-DDC-24_VI.md) · [BOM](../../hardware-design/06_bom/BOM_MK-DDC-24_v1.md) · [OPEN_ISSUES](../01_specs/OPEN_ISSUES_MK-DDC-24_VI.md)  
+> **Liên quan:** [GOAL-001](KX-DDC24-PM-GOAL-001_VI.md) · [PRD](../01_specs/PRD_MK-DDC-24_VI.md) · [DS](../01_specs/DS_MK-DDC-24_VI.md) · [BOM](../04_design/hardware/06_bom/BOM_MK-DDC-24_v1.md) · [OPEN_ISSUES](../01_specs/OPEN_ISSUES_MK-DDC-24_VI.md)
 > **Evidence:** `docs/00_management/evidence/pricing/` · `evidence/bom-rfq/` · `evidence/certification/`  
 > **Parent Issue:** IOT-5422 (Product & Market Analysis)  
 > **EPIC:** IOT-5420 (Design Gate v1)
@@ -69,7 +69,7 @@
 | **I/O tổng** | 24 (16 UI + 4 AO + 4 DO; no base DI) | 24 | 24 |
 | **UI channels** | **8 (tự nhận dạng)** | 6 | 4 |
 | **BACnet** | BACnet/IP native | BACnet native | BACnet (qua gateway) |
-| **Lập trình** | **IEC 61131-3 FBD + ST** | Proprietary | Proprietary |
+| **Lập trình** | Component-based (nay); **IEC 61131-3-aligned FBD + ST** roadmap Rev A.0 (ADR-020, đang C0, chưa release) | Proprietary | Proprietary |
 | **OS** | **Debian 12 Linux** | Bare-metal | Bare-metal |
 | **MQTT / REST API** | **✅ Native** | ❌ | ❌ |
 | **OTA update** | **✅ A/B partition** | Manual | Manual |
@@ -94,12 +94,12 @@
 
 | Đối thủ | Sản phẩm | Giá ước tính | Điểm yếu | Điểm mạnh MK-DDC-24 |
 |---------|---------|:-----------:|----------|-------------------|
-| **ICP DAS (Đài Loan)** | i-8417/i-8817 | 400–500 USD | BACnet limited, không IEC 61131-3 | BACnet BTL certified + IEC 61131-3 |
+| **ICP DAS (Đài Loan)** | i-8417/i-8817 | 400–500 USD | BACnet limited, không IEC 61131-3 | BACnet BTL testing in progress (chưa certified) + IEC 61131-3-aligned roadmap (ADR-020, chưa release) |
 | **Advantech (Đài Loan)** | ADAM-3600 series | 450–600 USD | Cấu hình phức tạp, không native BACnet | BACnet/IP native, commissioning nhanh |
-| **BacnetViet (VN)** | B-800 series | 350–450 USD | Tính năng hạn chế, không soft PLC | Soft PLC IEC 61131-3, Linux, OTA |
+| **BacnetViet (VN)** | B-800 series | 350–450 USD | Tính năng hạn chế, không soft PLC | Component-based runtime + Program Runtime IEC 61131-3-aligned roadmap (ADR-020, chưa release), Linux, OTA |
 | **WiseChip (Thái Lan)** | WT series | 300–400 USD | Chất lượng, không có BACnet BTL | BTL certified, reliability |
 
-> **Nhận xét (không đổi so với v1.0):** Đối thủ khu vực cạnh tranh về giá nhưng thiếu BACnet BTL, soft PLC, và Linux-based platform. MK-DDC-24 có lợi thế khác biệt hóa ở **tích hợp dọc**: BACnet BTL + IEC 61131-3 + Web IDE + OTA trên một thiết bị.
+> **Nhận xét (không đổi so với v1.0):** Đối thủ khu vực cạnh tranh về giá nhưng thiếu BACnet BTL, soft PLC, và Linux-based platform. MK-DDC-24 có lợi thế khác biệt hóa ở **tích hợp dọc**: BACnet BTL (testing) + Program Runtime IEC 61131-3-aligned (roadmap ADR-020, chưa release) + Web IDE + OTA trên một thiết bị.
 
 ### 2.4 Block 1 Deep-Dive: Competitor Pricing Verification
 

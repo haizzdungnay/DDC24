@@ -2,9 +2,18 @@
 
 > **Bộ điều khiển DDC 24 điểm cho FCU, VAV và AHU nhỏ** — BACnet native, **cấu hình component-based (graph.json)**, kiến trúc SOM Debian Linux, phù hợp retrofit và điều khiển tầng phòng.
 >
-> ⚠️ **RECONCILE (2026-06-08):** mô hình lập trình là **component-based graph**, không phải IEC 61131-3 (→ Rev C). Nguồn-chuẩn định vị: [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md), [ADR-004](../adr/ADR-004-component-based-runtime.md).
+> ⚠️ **RECONCILE (2026-07-23, ADR-020 supersedes ADR-004 cho câu hỏi ngôn ngữ):** mô hình
+> đang **chạy thật hôm nay** là component-based graph (28 node, `graph.json`). Roadmap
+> Rev A.0 đã quyết định (2026-07-23) bổ sung một **Program Runtime do Mekong sở hữu**,
+> IEC 61131-3-aligned, scope **ST + FBD** — nhưng runtime này **đang trong giai đoạn C0
+> (architecture/feasibility), chưa có code, chưa release, không được gọi "Compliant" hay
+> "Certified"**. Toàn bộ mô tả "Soft PLC IEC 61131-3" trong tài liệu này (mục 3.5, 6.1, 8)
+> là target roadmap, không phải capability đang bán. Nguồn-chuẩn:
+> [ADR-020](../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md),
+> [PROGRAM_SOM_FW_DRAFT_DESIGN](../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md),
+> [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md).
 
-**Revision:** 3.0 | 2026-06-30 | Breaking I/O baseline alignment to ADR-010
+**Revision:** 3.1 | 2026-07-22 | Local limited-operator HMI alignment to ADR-016
 
 > ⚠ **CẬP NHẬT KIẾN TRÚC KẾT NỐI — 2026-05-30 (ARCH-R010):** Phần kết nối chuẩn đã đổi và **thay thế mọi đề cập cũ về "BACnet MS/TP" và "Modbus TCP/RTU slave" trong tài liệu này.**
 > - **Northbound (lên BMS/cloud): chỉ qua IP (Ethernet/WiFi)** — BACnet/IP + MQTT + REST. **Bỏ BACnet MS/TP. Bỏ Modbus slave.**
@@ -17,7 +26,7 @@
 
 ## 1. Tổng quan Sản phẩm
 
-MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế cho các ứng dụng HVAC phân tán như FCU, VAV box và AHU nhỏ. Thiết bị chạy trên kiến trúc **SOM Debian Linux quad-core** kết hợp MCU real-time STM32, tích hợp universal input tự nhận dạng loại cảm biến, điều khiển cục bộ theo **IEC 61131-3 (FBD + ST)**. Kết nối BMS/cloud (northbound, qua Ethernet/WiFi): **BACnet/IP, MQTT, REST API**; mở rộng thiết bị phụ (southbound, RS-485): **Modbus RTU master**. Phù hợp cho dự án retrofit hoặc tầng điều khiển phòng máy nhỏ, nơi chi phí đầu tư và không gian tủ điện cần được kiểm soát chặt.
+MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế cho các ứng dụng HVAC phân tán như FCU, VAV box và AHU nhỏ. Thiết bị chạy trên kiến trúc **SOM Debian Linux quad-core** kết hợp MCU real-time STM32, tích hợp universal input tự nhận dạng loại cảm biến, điều khiển cục bộ bằng component-based runtime hiện hành; roadmap Rev A.0 (ADR-020, đang C0) bổ sung **Mekong Program Runtime IEC 61131-3-aligned (ST + FBD)**, chưa release. Kết nối BMS/cloud (northbound, qua Ethernet/WiFi): **BACnet/IP, MQTT, REST API**; mở rộng thiết bị phụ (southbound, RS-485): **Modbus RTU master**. Phù hợp cho dự án retrofit hoặc tầng điều khiển phòng máy nhỏ, nơi chi phí đầu tư và không gian tủ điện cần được kiểm soát chặt.
 
 ### Ứng dụng Chính
 
@@ -32,7 +41,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 |-----------|---------|-------------------|
 | Universal Input (UI) | 16 kênh cấu hình độc lập 0–10V / 4–20mA / NTC / auxiliary dry contact | Giảm inventory spare parts, commissioning nhanh hơn |
 | BACnet native | Không cần gateway | Tiết kiệm 200-300 USD/node, sơ đồ tủ sạch hơn |
-| IEC 61131-3 FBD | Lập trình khối chức năng chuẩn quốc tế | Integrator dễ maintain, giảm vendor lock-in |
+| IEC 61131-3-aligned FBD *(roadmap Rev A.0, đang C0, chưa release)* | Lập trình khối chức năng chuẩn quốc tế, Mekong-owned runtime | Integrator dễ maintain, giảm vendor lock-in |
 | DIN-rail compact | 150 × 90 × 55 mm | Phù hợp tủ điện chật, retrofit không phình tủ |
 
 ---
@@ -44,9 +53,9 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 - ✅ **4 AO + 4 DO Relay** — điều khiển van modulating, damper, quạt và bơm không cần module trung gian
 - ✅ **BACnet/IP** — tích hợp nhanh với BMS Siemens, Honeywell, Schneider — không cần gateway
 - ✅ **MQTT v5.0 + REST API HTTPS** — đẩy dữ liệu IoT upstream, tích hợp dashboard và cloud
-- ✅ **Soft PLC IEC 61131-3 FBD + ST** — KinexusET Web IDE, không cài phần mềm desktop
+- 🔜 **Program Runtime IEC 61131-3-aligned FBD + ST** *(roadmap Rev A.0, ADR-020, đang C0 — chưa release, không certified/compliant)* — Web IDE, không cài phần mềm desktop
 - ✅ **Debian Linux trên SOM quad-core** — OTA A/B partition, SSH, web UI, extensible
-- ✅ **Màn hình TFT 2.4" local HMI** — JD9852 MIPI DSI, 240×320; CTP + 6× nút điều hướng
+- ✅ **Màn hình TFT 2.4" limited-operator HMI** — JD9852 MIPI DSI, 240×320; CTP + 6× nút; setpoint/mode/override/release chỉ cho point được authority whitelist
 - ✅ **Thiết kế compact DIN-rail 150×90×55 mm** — phù hợp tủ điện chật, retrofit không phình tủ
 
 ---
@@ -75,7 +84,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 | **OS** | Debian 12 (Bookworm) | Kernel 6.1 LTS, PREEMPT_RT patch |
 | **RTC** | DS3231 external (I²C), battery backup | Lịch vận hành offline ≥ 30 ngày |
 | **HMI Display** | TFT 2.4" JD9852, 240×320, MIPI DSI | LVGL v9 via DRM/KMS |
-| **HMI Input** | 6× nút nhấn (UP/DOWN/LEFT/RIGHT/ENTER/ESC) | Điều hướng menu local, không cần laptop |
+| **HMI Input** | FT5436 capacitive touch + 6× nút (UP/DOWN/LEFT/RIGHT/ENTER/ESC) | Home/Points/Control/Alarms/Service; không phải full Web HMI/SCADA |
 
 #### 3.1.2 Real-time I/O MCU
 
@@ -143,7 +152,7 @@ MK-DDC-24 là bộ điều khiển DDC compact 24 điểm được thiết kế 
 |------------|-----------|
 | **CE** | Dự kiến Q3/Y7 |
 | **BACnet BTL** | Testing in progress, expected Q4/Y7 |
-| **IEC 61131-3** | Compliant (FBD + ST programming) |
+| **IEC 61131-3** | Not certified/compliant — Mekong-owned Program Runtime, IEC 61131-3-aligned architecture (ST + FBD), theo ADR-020. Cấm dùng "Compliant"/"Certified" cho tới khi có gate G0–G6 đóng (`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` §14). |
 | **IEC 62443-4-1** | SDLC compliant (phát triển phần mềm) |
 | **IEC 61709** | MTBF estimation methodology |
 | **RoHS 3** | Compliant |
@@ -172,8 +181,8 @@ MK-DDC-24 hỗ trợ các BACnet object types sau:
 | **Notification Class** | 4 | ✅ | ✅ | — | Routing alarm đến BMS |
 | **Event Enrollment** | 8 | ✅ | ✅ | — | Định nghĩa điều kiện alarm |
 
-**BACnet/IP:** UDP port 47808, Max APDU 1476 bytes, Segmentation hỗ trợ  
-**Who-Is / I-Am / Time-Sync:** Hỗ trợ đầy đủ  
+**BACnet/IP:** UDP port 47808, Max APDU 1476 bytes, Segmentation hỗ trợ
+**Who-Is / I-Am / Time-Sync:** Hỗ trợ đầy đủ
 
 ### 4.1 Modbus field role
 
@@ -251,10 +260,18 @@ device profiles; the previous local-slave table is superseded by ARCH-R010.
 
 ## 6. Lập trình & Commissioning
 
-### 6.1 Programming Environment
+> ⚠️ **Roadmap, chưa release (2026-07-23):** toàn bộ mục 6.1 mô tả Program Runtime
+> IEC 61131-3-aligned (ADR-020) đang ở giai đoạn C0 (architecture/feasibility) — **chưa
+> có code, chưa build, chưa test, không certified/compliant**. Commissioning thật hôm
+> nay dùng component-based graph (`graph.json`, 28 node) qua trang Web `Programming`,
+> hiện ở trạng thái demo/chưa deploy thật (xem
+> `KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md`). Không dùng mục 6 này làm căn cứ
+> chào bán năng lực hiện có.
 
-- **IDE:** KinexusET (web-based, truy cập qua IP Ethernet controller)
-- **Ngôn ngữ:** IEC 61131-3 Function Block Diagram (FBD), Structured Text (ST)
+### 6.1 Programming Environment *(roadmap Rev A.0 — chưa release)*
+
+- **IDE:** Web IDE Mekong Program Runtime (roadmap; tên "KinexusET" chưa xác nhận chính thức)
+- **Ngôn ngữ:** IEC 61131-3-aligned Function Block Diagram (FBD), Structured Text (ST) — LD/SFC hoãn
 - **Soft PLC runtime:** Chạy trên Debian Linux (Userspace), isolated cgroup
 - **Real-time:** PREEMPT_RT kernel, jitter < 5 ms cho control loop
 - **Function blocks chuẩn:** PID, hysteresis, time delay, counter, averaging, ramp
@@ -309,7 +326,7 @@ device profiles; the previous local-slave table is superseded by ARCH-R010.
 | **I/O** | 24 (16 UI + 4 AO + 4 DO) | 24 | 24 |
 | **BACnet** | BACnet/IP native | BACnet native | BACnet (gateway) |
 | **UI channels** | 16 (cấu hình mode độc lập) | 6 | 4 |
-| **Programming** | IEC 61131-3 FBD + ST | Proprietary | Proprietary |
+| **Programming** | Component-based (nay); IEC 61131-3-aligned FBD+ST roadmap Rev A.0, chưa release | Proprietary | Proprietary |
 | **OS** | Debian 12 Linux | Bare-metal | Bare-metal |
 | **MQTT / REST API** | ✅ Native | ❌ | ❌ |
 | **OTA update** | ✅ A/B partition | Manual | Manual |
@@ -359,22 +376,22 @@ device profiles; the previous local-slave table is superseded by ARCH-R010.
 
 ## 11. Liên hệ
 
-**KINEXUS Technologies JSC**  
+**KINEXUS Technologies JSC**
 Lô I-3, Khu Công nghệ Cao, Quận 9, TP. Hồ Chí Minh, Việt Nam
 
-📧 **Email:** sales@KINEXUS-tech.vn  
-📞 **Hotline:** 1900-xxxx (8h-17h, T2-T6)  
-🌐 **Website:** www.KINEXUS-tech.vn  
+📧 **Email:** sales@KINEXUS-tech.vn
+📞 **Hotline:** 1900-xxxx (8h-17h, T2-T6)
+🌐 **Website:** www.KINEXUS-tech.vn
 💬 **Zalo/WhatsApp:** +84-xxx-xxx-xxx
 
-**Technical support:** support@KINEXUS-tech.vn  
+**Technical support:** support@KINEXUS-tech.vn
 **RMA request:** rma@KINEXUS-tech.vn
 
 ---
 
-**Document ID:** DS-MK-DDC-24-VI  
-**Revision:** 3.0 | 2026-06-30
-**Supersedes:** Rev 2.1 (2026-05-28)
+**Document ID:** DS-MK-DDC-24-VI
+**Revision:** 3.1 | 2026-07-22
+**Supersedes:** Rev 3.0 (2026-06-30)
 **Status:** In-Review — engineering evidence gates remain open
 **Related docs:** [PRD-MK-DDC-24-VI](PRD_MK-DDC-24_VI.md) | [SRS-MK-DDC-24-VI](SRS_MK-DDC-24_VI.md) | [HW-SPEC-MK-DDC-24-VI](HW_SPEC_MK-DDC-24_VI.md)
 

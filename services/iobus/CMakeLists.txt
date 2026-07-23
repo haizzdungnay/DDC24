@@ -73,6 +73,7 @@ add_library(iobus_lib STATIC
     bridge/core_bridge.cpp bridge/output_command.cpp
     diagnostics/iobus_metrics.cpp diagnostics/alarm_publisher.cpp
     platform/systemd_notify.cpp platform/realtime.cpp
+    platform/network_address.cpp
     ${BACNET_SOURCES}
     ${MODBUS_SOURCES})
 target_include_directories(iobus_lib PUBLIC
@@ -126,6 +127,7 @@ if(IOBUS_BUILD_TESTS)
       tests/test_io_scaling.cpp tests/test_output_command.cpp
       tests/test_iop_client_fake_mcu.cpp
       tests/test_iobus_config.cpp tests/test_io_cache.cpp tests/test_shm_layout.cpp
+      tests/test_network_address.cpp
       bacnet/tests/test_bacnet_priority.cpp
       bacnet/tests/test_bacnet_reliability.cpp
       bacnet/tests/test_bacnet_object_map.cpp

@@ -12,8 +12,10 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "alarm_runtime.hpp"
@@ -34,12 +36,14 @@ struct WebCommand {
     uint64_t    id = 0;
     WebCommandKind kind = WebCommandKind::Point;
     bool        is_write = false;   /* write | release */
+    bool        is_query = false;   /* query không thay đổi priority array */
     PointId     point{PointKind::AV, -1};
     std::string point_name;         /* đã sanitize [A-Za-z0-9] ≤8 — cho audit log */
     std::string alarm_id;
     double      duration_s = 0.0;
     bool        permanent = true;
     float       value = 0.0f;
+    uint32_t    ttl_s = 0;          /* 0=không TTL; HMI override có TTL hữu hạn */
     std::string user;               /* đã sanitize [A-Za-z0-9_.@:-] ≤48 — cho audit */
     int         prio = 2;           /* PRIO_LOCAL_MANUAL=2 / PRIO_BACNET=3 (07 §8, BAC-CONFLICT-001) */
     int         client_fd = -1;     /* để trả response đúng connection */
@@ -76,9 +80,10 @@ public:
     /* Trả response cho lệnh đã xử lý — gọi SAU resolve + safe-state (scan step 7):
      * applied_value/active_source là giá trị THẬT sau khi mọi nguồn tranh chấp xong. */
     void respond_accepted(const WebCommand& cmd, float applied_value,
-                          const char* active_source = "manual");
+                          const char* active_source = "manual",
+                          uint32_t remaining_ttl_s = 0);
     void respond_overridden(const WebCommand& cmd, float applied_value,
-                            const char* active_source);
+                            const char* active_source, uint32_t remaining_ttl_s = 0);
     void respond_rejected(const WebCommand& cmd, const char* error);
     void respond_alarm_list(const WebCommand& cmd, const std::vector<AlarmState>& alarms);
     void respond_alarm_ack_accepted(const WebCommand& cmd);
@@ -143,6 +148,7 @@ private:
     };
 
     void respond(const WebCommand& command, const std::string& json_line);
+    void respond_command(const WebCommand& command, const std::string& json_line);
     void handle_line(Client& client, const std::string& line, std::vector<WebCommand>* out);
     bool handle_snapshot_line(Client& client, const std::string& line,
                               bool* snapshot_accepted);
@@ -150,6 +156,7 @@ private:
     void flush_client(Client& client, std::size_t* write_budget);
     void reap_disconnected_clients();
     ssize_t send_bytes(int fd, const void* data, std::size_t size, int flags);
+    void remember_pending(uint64_t id, const std::string& request);
     void audit(const WebCommand& cmd, const char* result, const char* active_source,
                 float applied_value);
 
@@ -162,6 +169,13 @@ private:
     std::size_t snapshot_payload_limit_ = KX_POINT_SNAPSHOT_MAX_PAYLOAD;
     uint64_t snapshot_publish_count_ = 0;
     std::vector<Client> clients_;
+    struct CachedResponse {
+        std::string request;
+        std::string response; /* rỗng khi command đang chờ scan loop xử lý */
+    };
+    static constexpr std::size_t RESPONSE_CACHE_LIMIT = 128;
+    std::unordered_map<uint64_t, CachedResponse> response_cache_;
+    std::deque<uint64_t> response_order_;
     std::size_t outbound_budget_remaining_ = KX_POINT_SNAPSHOT_MAX_PAYLOAD;
     std::size_t round_robin_cursor_ = 0;
     uint64_t next_client_id_ = 1;

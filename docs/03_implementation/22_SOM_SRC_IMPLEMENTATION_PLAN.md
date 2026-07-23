@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Kế hoạch triển khai cấu trúc source thật chi tiết cho Dev 2
 
 > **Document ID:** IMPL-SOM-SRC-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.12 | 2026-07-20 (reconciled downstream WEB-HIST-001..005 code-local status; v2 Trends authority feature-gated) · 1.11 | 2026-07-20 (reconciled downstream WEB-HIST-001..004 code-local status) · 1.10 | 2026-07-20 (reconciled downstream WEB-HIST-001/002/003 code-local status) · 1.9 | 2026-07-17 (S8 COR-HIST-001 core/local Done) · 1.8 | 2026-07-15 (S8 COR-HIST-001 coherent runtime snapshot planned) · 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
+> **Phiên bản:** 2.1 | 2026-07-22 (merge S8 COR-HIST snapshot with ADR-017 network authority/source evidence) · 2.0 | 2026-07-22 (ADR-017 deployed to Orange Pi; physical HIL open) · 1.12 | 2026-07-20 (WEB-HIST-001..005 code-local status) · 1.9 | 2026-07-17 (S8 COR-HIST-001 core/local Done) · 1.8 | 2026-07-15 (S8 COR-HIST-001 planned) · 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 done) ·
 > 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device) ·
 > 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) ·
 > 1.4 | 2026-06-13 (S7 #4 Active; thêm plan S7 #5 BACnet và S7 #6 Modbus) ·
@@ -14,9 +14,9 @@
 > SAFETY SPEC 07 §5, thêm microtask 5 Rev A.1 cho trigger T6/T7) · 1.0 | 2026-06-11
 > **Trạng thái:** Active — S0–S6 ĐÃ thực thi xong 2026-06-11 (round-trip pass);
 > S7 #1/#2/#3 xong 2026-06-12; S7 #4/#5/#6 đã có task/code-ready docs 2026-06-13;
-> TD-001/002/003 xong 2026-06-19; S8 COR-HIST-001 core/local DONE 2026-07-17; historian target E2E chưa đóng
+> TD-001/002/003 xong 2026-06-19; S8 COR-HIST-001 core/local DONE 2026-07-17; ADR-017 host/target network source implemented 2026-07-22; historian target E2E và network/HMI physical HIL chưa đóng
 > **Đối tượng đọc:** Dev 2, Lead, Tester
-> **Phạm vi:** chỉ phía SOM: `services/iobus`, `services/core`, `tools/fake_mcu`, `tools/shm_dump_io`, `shared/`
+> **Phạm vi:** phía SOM: `services/iobus`, `services/core`, `services/netcfg`, packaging/tools/shared contracts; local-HMI broker adapter tối thiểu. React FE/Web REST migration vẫn là consumer handoff.
 
 ---
 
@@ -63,7 +63,8 @@ Trong scope file này, đích gần nhất là:
 Không nằm trong scope file này:
 - code web chi tiết
 - board MCU firmware chi tiết
-- BACnet/Modbus Rev A.1+
+- Web FE/Go BE implementation; S8 chỉ giao contract/fixtures/client harness
+- thay đổi BACnet object model hoặc Modbus mapping; S8 chỉ làm address-change rebind/reconnect
 
 ---
 
@@ -771,6 +772,250 @@ Trạng thái: **DONE 2026-07-17 cho S8/COR-HIST-001 code/local gates**. Host ti
 
 ---
 
+## S8 — ADR-017 SOM network authority (deployed; physical HIL gate open)
+
+**Mục tiêu:** cung cấp một FW SOM/network platform boundary hoàn chỉnh để BE và local
+HMI chỉ cần dùng contract, không tự quản Linux network. Host source hiện đã có helper,
+broker adapter, HMI flow và BACnet rebind. Orange Pi service/runtime evidence đã có;
+physical panel, real Ethernet/BMS packet capture và reboot/power-loss HIL vẫn quyết định release.
+
+**Ownership:** `mkddc-netcfg` sở hữu active/stage/apply/confirm/rollback Ethernet;
+`mkddc-iobus` sở hữu BACnet hot-rebind; `mkddc-core`, IOP/UART và STM32 không tham gia.
+`mkddc-netcfg` là helper độc lập do systemd quản lý, không phải core process mới.
+
+Go local-HMI broker adapter tối thiểu đã được nối để hoàn thành đường local panel.
+React Web UI và REST transaction migration vẫn thuộc team BE/FE và không được suy diễn
+từ endpoint desired-config cũ.
+
+### Execution snapshot — 2026-07-22
+
+| Slice | Trạng thái | Evidence / còn thiếu |
+|---|---|---|
+| NWC-000..012 | Target service pass | Real NetworkManager static apply/confirm, process restart recovery, explicit rollback and 120 s timeout rollback pass on isolated dummy interfaces; DHCP/host reboot/power-loss remain physical HIL. |
+| NWC-013 | Target service pass | Unit verified, `end1` allowlist active, unauthorized UID and `wlan0` candidate rejected; exposure review recorded as 6.3 MEDIUM due required network capabilities/shared group runtime. |
+| NWC-014 | Runtime pass / packet open | BACnet datalink rebind observed three times while iobus PID and IOP scan remained continuous; packet-level `I-Am` capture on a real BMS segment remains open. |
+| NWC-015..016 | Partial pass | Web listener/broker, Core and IOP remained active with unchanged PIDs; SHM stayed `NORMAL`, fault-free and reliable. Modbus TCP reconnect and browser FE migration remain open. |
+| NWC-017 | Partial / physical HIL blocked | Identified Orange Pi execution record exists. Target has no connected DRM/touch panel or physical MCU/commissioning Ethernet, so full HIL gate remains RED. |
+
+### Dependency map
+
+```text
+NWC-000 contract
+   ├─► NWC-001..006 service/state/validation
+   ├─► NWC-007..012 apply/confirm/rollback/recovery
+   └─► NWC-013..015 packaging + protocol reconnect
+
+NWC-000..015 ─► NWC-016 host/fault suite ─► NWC-017 target acceptance
+                    │
+                    ├─► BE broker/REST adapter (team khác)
+                    └─► HNW-000..013 local HMI
+```
+
+### Execution schedule baseline
+
+Ước lượng dưới đây dùng một FW SOM engineer, không phải cam kết ngày phát hành. Mỗi
+wave chỉ mở khi exit gate wave trước xanh; BE/FE không nằm trong effort này.
+
+| Wave | Microtask | Effort dự kiến | Exit gate / handoff |
+|---|---|---:|---|
+| W0 Contract/security | NWC-000..003 | 2–3 ngày công | schema + golden fixtures + bounded/peer-negative tests; BE có thể bắt đầu adapter |
+| W1 State/preflight | NWC-004..007 | 3–4 ngày công | active state, validation, duplicate probe, durable journal pass trên fake platform |
+| W2 Transaction engine | NWC-008..012 | 5–7 ngày công | static/DHCP, confirm, ≤120 s rollback và restart recovery pass |
+| W3 Target integration | NWC-013..015 | 4–6 ngày công | hardened units, BACnet hot-rebind, Modbus/Web handoff, control-continuity host trace |
+| W4 Integration handoff | NWC-016 | 2–3 ngày công | full fake/fault suite + client package giao BE/HMI |
+| W5 Target evidence | NWC-017 | 3–5 ngày công | reviewed target/HIL record; phụ thuộc board/image/switch/BMS và BE adapter |
+
+HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fake broker;
+`HNW-012` chờ W4 + BE adapter và `HNW-013` chạy cùng W5.
+
+### NWC-000 — Freeze protocol and state fixtures
+
+- **Files:** `shared/netcfg_protocol_v1.schema.json`, broker/HMI client tests,
+  [Interface Contracts](../04_design/INTERFACES.md).
+- **Output:** bounded JSON envelope, action/state/reason enums, Ethernet candidate and
+  active/pending/last-known-good response shapes.
+- **Verify:** valid/invalid fixtures pass one schema harness; unknown version/action,
+  oversized frame and illegal transition reject deterministically.
+- **Depends:** ADR-017, IF-REQ-004.
+- **Done:** BE/HMI can generate clients without reading helper internals.
+
+### NWC-001 — Scaffold `mkddc-netcfg`
+
+- **Files:** `services/netcfg/CMakeLists.txt`, `main.cpp`, `netcfg.*` and
+  top-level CMake option/target.
+- **Output:** non-root host-testable daemon lifecycle with explicit exit/status logs.
+- **Verify:** warnings-as-errors build, start/stop, signal shutdown and no dependency on
+  core/SHM/UART.
+- **Depends:** NWC-000.
+- **Done:** disabling/removing helper leaves local control services operational.
+
+### NWC-002 — Implement bounded local UDS transport
+
+- **Files:** `services/netcfg/netcfg.*`, C++ engine tests and Go UDS client tests.
+- **Output:** `/run/mkddc-netcfg/netcfg.sock`, 8192-byte limit, deadline, correlation ID,
+  clean stale-socket/restart handling.
+- **Verify:** partial read/write, malformed/oversized input, timeout, disconnect and
+  concurrent bounded-client cases.
+- **Depends:** NWC-001.
+- **Done:** no unbounded allocation/block and no arbitrary command execution field.
+
+### NWC-003 — Enforce peer and transition authorization
+
+- **Files:** IPC peer-credential/state-policy module and tests.
+- **Output:** socket owner/group/mode, `SO_PEERCRED` allowlist and action/state matrix.
+- **Verify:** allowed service UID succeeds; wrong UID/group, stale transaction and
+  invalid transition fail with stable reason code.
+- **Depends:** NWC-002.
+- **Done:** access to filesystem path alone does not grant network mutation.
+
+### NWC-004 — Read authoritative active network state
+
+- **Files:** `services/netcfg/netcfg.cpp` Linux platform state reader and fake-platform tests.
+- **Output:** interface/link, active IPv4/prefix, default gateway, DHCP/static source
+  and kernel generation timestamp; deterministic interface allowlist.
+- **Verify:** no address, multiple addresses, link-down, route change, interface rename
+  and malformed netlink message cases.
+- **Depends:** NWC-001.
+- **Done:** no value is sourced from `network.conf` when reporting active state.
+
+### NWC-005 — Normalize and validate candidate
+
+- **Files:** `services/netcfg/netcfg.*` candidate model/validator and table-driven tests.
+- **Output:** canonical static/DHCP candidate; IPv4/netmask/prefix/gateway validation.
+- **Verify:** min/max prefix, gateway outside subnet, network/broadcast/multicast/
+  loopback/unspecified address, missing static field and stale unknown field rejection.
+- **Depends:** NWC-000.
+- **Done:** invalid candidate cannot reach platform apply code.
+
+### NWC-006 — Add duplicate-address and route preflight
+
+- **Files:** fixed-argv ARP preflight in `services/netcfg/netcfg.cpp` with injectable platform.
+- **Output:** bounded RFC5227-style conflict probe and route/interface readiness result.
+- **Verify:** no conflict, conflict reply, timeout, link-down and insufficient privilege.
+- **Depends:** NWC-004, NWC-005.
+- **Done:** conflict/unknown is explicit; policy for unavailable probe fails closed on
+  production target.
+
+### NWC-007 — Persist transaction journal and last-known-good
+
+- **Files:** atomic/fsync journal in `services/netcfg/netcfg.cpp`; `/data/mkddc/netcfg-transaction.json`.
+- **Output:** atomic+fsync journal containing transaction/config hashes, previous active
+  state, state/deadline metadata and schema version; no secrets.
+- **Verify:** torn write, corrupt JSON, full disk, permission error and version mismatch.
+- **Depends:** NWC-005.
+- **Done:** failed persistence prevents activation; old valid journal survives.
+
+### NWC-008 — Implement static make-before-break apply
+
+- **Files:** fixed-argv Linux backend using `ip` transient activation and NetworkManager persistence;
+  no shell string construction.
+- **Output:** add candidate address/route while retaining old address during confirmation.
+- **Verify:** operation ordering, idempotent retry, partial add/route failure and cleanup.
+- **Depends:** NWC-006, NWC-007.
+- **Done:** old path remains available until confirm/rollback wherever kernel/topology
+  supports make-before-break; unsupported topology rejects before mutation.
+
+### NWC-009 — Implement DHCP apply and lease observation
+
+- **Files:** platform networkd backend and deterministic fake backend tests.
+- **Output:** request DHCP, observe actual kernel lease/address and keep recovery state.
+- **Verify:** lease success/change, no lease, late lease, link flap and cancel/rollback.
+- **Depends:** NWC-004, NWC-007.
+- **Done:** reported DHCP IP comes from kernel/lease state, never candidate/default text.
+
+### NWC-010 — Implement confirm/commit
+
+- **Files:** transaction coordinator/platform backend tests.
+- **Output:** commit only an `awaiting_confirmation` transaction, remove obsolete old
+  address/route, persist new last-known-good and terminal result.
+- **Verify:** correct/stale/wrong/duplicate transaction ID and failure removing old path.
+- **Depends:** NWC-008, NWC-009.
+- **Done:** duplicate confirm is idempotent and active state is re-read from kernel.
+
+### NWC-011 — Implement explicit and automatic rollback
+
+- **Files:** transaction coordinator with injectable monotonic clock and tests.
+- **Output:** manual rollback plus automatic deadline/health rollback capped at 120 s.
+- **Verify:** before/at/after deadline, concurrent confirm, partial apply and rollback
+  failure with actionable terminal state.
+- **Depends:** NWC-008..010.
+- **Done:** last-known-good is restored and verified before `rolled_back` is returned.
+
+### NWC-012 — Recover transaction across process/host restart
+
+- **Files:** startup recovery module and fake-platform tests.
+- **Output:** journal rehydrate; safe decision for staged/applying/awaiting/rolling-back.
+- **Verify:** kill/restart at every persisted transition and corrupt/expired journal.
+- **Depends:** NWC-007, NWC-011.
+- **Done:** reboot cannot leave an unconfirmed candidate indefinitely active.
+
+### NWC-013 — Harden systemd packaging and privilege
+
+- **Files:** `packaging/systemd/mkddc-netcfg.service`, `packaging/netcfg.conf`, install
+  wiring and packaging tests.
+- **Output:** socket activation, dedicated identity/group, minimal capability/path,
+  `NoNewPrivileges`, filesystem/device/kernel hardening compatible with apply backend.
+- **Verify:** unit security inspection, wrong-user denial, read-only-path denial,
+  restart/reboot lifecycle and no shell/broad sudo entry.
+- **Depends:** NWC-002, NWC-008, NWC-009.
+- **Done:** deployment grants only measured privileges required by the fixed backend.
+
+### NWC-014 — Add BACnet address-change hot-rebind
+
+- **Files:** `services/iobus/bacnet/*`, iobus main/event adapter and tests.
+- **Output:** observe committed kernel address change, quiesce/reopen only BACnet UDP,
+  refresh local/broadcast address and send `I-Am`; UART/IOP threads remain running.
+- **Verify:** old→new, rollback, link flap, bind failure/retry, packet/error metrics and
+  continuous fake-MCU poll trace.
+- **Depends:** NWC-004 and existing BACnet implementation.
+- **Done:** no `mkddc-iobus` process restart is needed for host IP change.
+
+### NWC-015 — Verify other SOM consumers on address change
+
+- **Files:** integration tests and only consumer fixes found necessary.
+- **Output:** Web wildcard listener behavior contract for BE handoff; Modbus TCP
+  outbound reconnect; Modbus RTU/core/SHM unaffected assertions.
+- **Verify:** live TCP session loss/retry, no RTU interruption, core scan/outputs and
+  IOP poll continuity, active IP sourced from NWC status.
+- **Depends:** NWC-008..014.
+- **Done:** northbound interruption is bounded/visible and does not become control loss.
+
+### NWC-016 — Build host/fault integration harness and client handoff
+
+- **Files:** existing tools/test structure, fake platform backend and generated/example
+  client fixtures; no production BE/FE implementation.
+- **Output:** repeatable `status→validate→stage→apply→confirm/rollback` suite and client
+  package for BE/HMI teams.
+- **Verify:** malformed/RBAC peer, duplicate ID/IP, process kill, disk full, deadline,
+  rollback, BACnet rebind and control-continuity scenarios.
+- **Depends:** NWC-000..015.
+- **Done:** BE/HMI can integrate without privileged target access; simulation is not
+  mislabeled target evidence.
+
+### NWC-017 — Execute target network/HIL acceptance
+
+- **Files:** immutable evidence under controlled records, not design prose.
+- **Output:** identified SOM/image/NIC/switch/BMS setup, raw journal/log/packet/control
+  traces, hashes, operator and reviewer.
+- **Verify:** static, DHCP, duplicate IP, bad gateway, link loss, helper/host reboot,
+  confirm/120 s rollback, BACnet `I-Am`, Web reconnect, Modbus TCP retry and continuous
+  core/IOP/STM32 operation.
+- **Depends:** NWC-013..016 and BE adapter for end-to-end Web evidence.
+- **Done:** SWR-REQ-005..007, IF-REQ-004 and SEC-REQ-003 have approved target evidence;
+  otherwise network release gate remains RED.
+
+### BE/FE handoff contract — external team work
+
+- BE maps Admin REST and Service local-broker actions to the same NWC transaction;
+  it must audit actor/old/new/result and return `saved`, `staged`, `applying`,
+  `awaiting_confirmation`, `confirmed`, `rolled_back` truthfully.
+- FE renders Active and Pending separately, handles HTTP loss/reconnect to new IP,
+  exposes countdown/confirm/rollback and never ignores `applied=false` or warnings.
+- Neither team may call `networkctl`, `ip`, netlink, systemd or write network files
+  directly. NWC schema/golden fixtures are their integration authority.
+
+---
+
 ## 8. Thứ tự làm thật ngoài đời
 
 Không được làm lung tung. Thứ tự đúng:
@@ -784,7 +1029,9 @@ Không được làm lung tung. Thứ tự đúng:
 7. `S4` hoàn tất core runtime tối thiểu
 8. `S6` chạy round-trip no-board
 9. `S8` thêm coherent historian snapshot bằng TDD, không đổi SHM
-10. mới được nối web historian/qua board thật
+10. `S8` làm `NWC-000..016` theo contract → platform → rollback → BACnet rebind → host fault gate
+11. mới được nối web historian / giao BE adapter và HMI `HNW-*`
+12. NWC-017, historian target E2E và board thật chạy cuối trên target
 
 Rule:
 - không viết core trước khi iobus có SHM sống
@@ -813,6 +1060,8 @@ Rule:
 | `output_writer` | final output command | `ao_setpoint[]`, `do_cmd[]` | `mkddc_shm.h` |
 | `fake_mcu` | UART/PTTY bytes | fake slave behavior | `shared/iop_protocol.h` |
 | `shm_dump_io` | `kx_io_shm` | text/json dump | `mkddc_shm.h` |
+| `mkddc-netcfg` | broker UDS transaction + kernel state | active/pending status, Ethernet apply/confirm/rollback | ADR-017, netlink/networkd, journal |
+| BACnet address watcher | committed kernel address event | UDP hot-rebind + `I-Am` | `mkddc-netcfg` state, BACnet server |
 | `point_snapshot` IPC | post-resolve point table from one scan | immutable UI/AO/DO historian source DTO | `web_ipc`, `scan_loop`, `point_table`; no DB dependency |
 
 ---
@@ -831,6 +1080,8 @@ Mỗi task SOM chỉ merge khi qua đủ checklist này:
 8. Log đủ để debug nhưng không spam 500Hz.
 9. Failure path có xử lý, không silent fail.
 10. Có command chứng minh output đo được hoặc assert được.
+11. Network task không cho Web/HMI sửa OS trực tiếp và không nhận shell command tùy ý.
+12. Network apply/rebind phải kèm trace chứng minh core/IOP scan không dừng.
 
 ---
 
@@ -853,18 +1104,23 @@ Mỗi task SOM chỉ merge khi qua đủ checklist này:
 
 ---
 
-## 12. Hành động ngay sau file này
+## 12. Hành động tiếp theo cho ADR-017
 
-Ngay sau khi chốt plan này, Dev 2 nên làm đúng 3 việc đầu tiên:
+NWC-000..016 đã có implementation và target service evidence. Việc còn lại không phải
+scaffold lại source mà là đóng evidence vật lý theo thứ tự:
 
-1. tạo `services/`, `tools/` theo đúng cây §4
-2. dựng `CMakeLists.txt` để build 4 target stub
-3. ưu tiên `iop_crc -> iop_frame -> iop_parser -> fake_mcu tối thiểu`
-
-Không làm bước 4 trước khi 3 bước này xanh.
+1. chạy static/DHCP trên cổng `end1` có switch/BMS và console rescue;
+2. capture BACnet `I-Am`, old/new/rollback traffic và Modbus TCP reconnect;
+3. chạy reboot/power-loss/disk-fault recovery với journal thật;
+4. lắp đúng DRM/touch/button hardware và thực hiện UC-HMI-016..019/usability;
+5. team BE/FE chuyển Web REST/UI từ desired-file path sang transaction contract.
 
 ---
 
+**Rev** 2.1 | 2026-07-22 — Merged S8 COR-HIST coherent snapshot status with ADR-017 network authority source/deployment status; both remain bounded by their own target/E2E/HIL gates. ·
+**Rev** 2.0 | 2026-07-22 (ADR-017 deployed to Orange Pi; service transaction/recovery/continuity pass, physical HIL open) ·
+1.9 | 2026-07-22 (ADR-017 helper/broker/HMI/BACnet source implemented; target/HIL evidence open) ·
+1.8 | 2026-07-22 (ADR-017: thêm S8/NWC-000..017, BE/FE handoff và HMI dependency; docs-only baseline) ·
 **Rev** 1.12 | 2026-07-20 — Reconciled downstream WEB-HIST-001..005 code-local completion and retained feature-gated v2 authority, activation/cutover, target and E2E gates as open. · **Rev** 1.11 | 2026-07-20 — Reconciled downstream WEB-HIST-001..004 code-local completion and retained WEB-HIST-005, activation/cutover, target and E2E gates as open. · **Rev** 1.10 | 2026-07-20 — Reconciled downstream WEB-HIST-001/002/003 code-local completion and retained WEB-HIST-004/005, activation/cutover, target and E2E gates as open. · **Rev** 1.9 | 2026-07-17 — Closed S8/COR-HIST-001 code/local evidence; retained historian target E2E gates. · **Rev** 1.8 | 2026-07-15 — Added owner-approved S8/COR-HIST-001 coherent read-only runtime snapshot microtasks, tests, boundaries and build order; product code remains PLANNED. · **Rev** 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 ĐÃ làm: thay JSON parser, fix SHM race, phân biệt EAGAIN write) ·
 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device; cập nhật ràng buộc BACnet IPC path) ·
 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) · 1.4 | 2026-06-13 · 1.3 | 2026-06-12 · 1.2 | 2026-06-12 · 1.1 | 2026-06-12 · 1.0 | 2026-06-11

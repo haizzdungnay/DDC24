@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 2.2 | 2026-07-21 (§4h: physical rolling-prune engine code-local, activation guard) · 2.1 | 2026-07-20 (§4h: retention theo interval) · 2.0 | 2026-07-18 (`time.conf`) · 1.9 | 2026-07-15 (§3/§8: unique display names + historian.conf per-point start policy) · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 2.3 | 2026-07-22 (ADR-017: desired `network.conf` tách khỏi active kernel state; historian/time/namespace updates 2.2..1.9 retained) · 2.2 | 2026-07-21 (§4h: physical rolling-prune engine code-local, activation guard) · 2.1 | 2026-07-20 (§4h: retention theo interval) · 2.0 | 2026-07-18 (`time.conf`) · 1.9 | 2026-07-15 (§3/§8: unique display names + historian.conf per-point start policy) · 1.8 | 2026-07-22 (ADR-017 network authority) · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -12,7 +12,7 @@
 | File | Writer | Reader (service) | Reload khi đổi |
 |------|--------|------------------|-----------------|
 | `device.conf` | mkddc-web | mkddc-iobus (BACnet), mkddc-core | SIGHUP iobus |
-| `network.conf` | mkddc-web | mkddc-web (áp hệ thống) | apply ngay (netplan/networkd) |
+| `network.conf` | mkddc-web | mkddc-web (desired config); target `mkddc-netcfg` activate Linux | **Hiện tại chỉ lưu file, apply pending B7**; target stage/apply/confirm/rollback |
 | `io_config.conf` | mkddc-web | **mkddc-iobus** (scale + SET_AO_CFG) | SIGHUP iobus (re-handshake AO cfg) |
 | `io_safe_state.conf` | mkddc-web | **mkddc-core** (relinquish default + safe-state) | SIGHUP core |
 | `virtual_points.conf` | mkddc-web | **mkddc-web** (points overlay, VP runtime/alarms/schedules; diagnostic VP log only) | apply ngay |
@@ -65,6 +65,10 @@
   "hostname": "mk-ddc-24-fcu3a" }
 ```
 > Lên BMS/cloud (BACnet/IP, MQTT, REST) đi qua Ethernet hoặc WiFi (đều là IP).
+
+**Phân biệt bắt buộc:** `network.conf` là desired/pending configuration, không phải bằng chứng IP đang active. Active address phải đọc từ kernel hoặc SOM network authority. Source hiện tại chưa có netplan/networkd/polkit applier: `PUT /api/v1/network` ghi file nhưng `applySystem()` trả `applied=false`. Không được hiển thị `Applied`, `Online` hoặc new IP như runtime truth chỉ vì file đã ghi thành công.
+
+Target ADR-017 sử dụng transaction `stage → apply → awaiting_confirmation → confirm`; nếu không confirm hoặc health fail trong tối đa 120 s thì rollback last-known-good. Local HMI chỉ expose Ethernet IPv4 static/DHCP, subnet và gateway. Wi-Fi credential, DNS nâng cao, routing/VLAN/firewall và BACnet identity/port không thuộc local-panel scope.
 
 ## 3. `io_config.conf` — loại sensor mỗi kênh UI + mode AO
 ```json

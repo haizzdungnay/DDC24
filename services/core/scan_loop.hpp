@@ -9,7 +9,9 @@
 #define CORE_SCAN_LOOP_HPP
 
 #include <atomic>
+#include <array>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "alarm_runtime.hpp"
@@ -76,6 +78,12 @@ private:
     /* pre-allocated: tránh heap alloc mỗi scan trong SCHED_FIFO (CR-007) */
     std::vector<PendingResp> pending_;
     std::vector<WebCommand> pending_alarm_;
+    std::array<uint64_t, KX_N_AO> manual_ao_expiry_ns_{};
+    std::array<uint64_t, KX_N_DO> manual_do_expiry_ns_{};
+    std::array<uint64_t, KX_N_AO> manual_ao_request_id_{};
+    std::array<uint64_t, KX_N_DO> manual_do_request_id_{};
+    std::array<std::string, KX_N_AO> manual_ao_user_{};
+    std::array<std::string, KX_N_DO> manual_do_user_{};
 };
 
 } // namespace core

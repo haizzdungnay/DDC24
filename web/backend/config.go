@@ -19,6 +19,10 @@ type Config struct {
 	CorePidPath             string
 	IobusPidPath            string
 	CoreSock                string
+	HMISock                 string
+	NetcfgSock              string
+	HMIAllowedUID           string
+	HMIAuditPath            string
 	TrendDBPath             string
 	HistorianV2DBPath       string
 	HistorianV2ArchiveDir   string
@@ -42,6 +46,10 @@ func LoadConfig() (Config, error) {
 		CorePidPath:      getenv("CORE_PID", "/run/mkddc/core.pid"),
 		IobusPidPath:     getenv("IOBUS_PID", "/run/mkddc/iobus.pid"),
 		CoreSock:         getenv("CORE_SOCK", "/run/mkddc/core.sock"),
+		HMISock:          getenv("HMI_SOCK", "/run/mkddc/hmi-api.sock"),
+		NetcfgSock:       getenv("NETCFG_SOCK", "/run/mkddc-netcfg/netcfg.sock"),
+		HMIAllowedUID:    os.Getenv("HMI_ALLOWED_UID"),
+		HMIAuditPath:     getenv("HMI_AUDIT_FILE", "/data/config/hmi_audit.jsonl"),
 		TrendDBPath:      getenv("TREND_DB", defaultTrendDBPath),
 		ScheduleConfPath: getenv("SCHEDULE_CONF", filepath.Join(resolveConfigDir(), "schedule.conf")),
 		AlarmConfPath:    getenv("ALARM_SETTINGS_CONF", defaultAlarmSettingsConf),

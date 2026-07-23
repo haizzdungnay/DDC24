@@ -155,7 +155,7 @@ TEST(RuntimePointSnapshot, BuildsFixedOrderedPhysicalRows)
 
     PriorityResolver resolver;
     resolver.set_ao(PRIO_LOCAL_MANUAL, 0, 4.25f);
-    resolver.set_ao(PRIO_BACNET, 1, 12.5f);
+    resolver.set_ao(PRIO_BACNET, 1, 8.5f);
     const OutputCmd resolved = resolver.resolve();
 
     RuntimePointSnapshotPublisher publisher;
@@ -421,7 +421,7 @@ TEST(RuntimePointSnapshot, TracksAoQualityTransitions)
     EXPECT_EQ(stable_invalid.rows[16].updated_at_monotonic_ns, 200u);
 }
 
-TEST(RuntimePointSnapshot, TracksDistinctNonFiniteAoValues)
+TEST(RuntimePointSnapshot, RejectsNonFiniteAoValuesBeforeSnapshotPublication)
 {
     IoSnapshot io = make_io();
     PointTable table;
@@ -442,13 +442,14 @@ TEST(RuntimePointSnapshot, TracksDistinctNonFiniteAoValues)
     const auto stable_negative_inf = publisher.build(6, 60, 1100, table, io, resolved,
                                                      resolver, false);
 
-    EXPECT_TRUE(std::isnan(first_nan.rows[16].value));
+    EXPECT_FLOAT_EQ(first_nan.rows[16].value, 0.0f);
     EXPECT_TRUE(std::isnan(second_nan.rows[16].value));
-    EXPECT_EQ(first_nan.rows[16].quality, KX_Q_BAD);
+    EXPECT_EQ(first_nan.rows[16].quality, KX_Q_GOOD);
     EXPECT_EQ(second_nan.rows[16].quality, KX_Q_BAD);
-    EXPECT_EQ(first_nan.rows[16].source, SnapshotSource::LOGIC);
+    EXPECT_EQ(first_nan.rows[16].source, SnapshotSource::DEFAULT);
+    EXPECT_EQ(second_nan.rows[16].source, SnapshotSource::DEFAULT);
     EXPECT_EQ(first_nan.rows[16].updated_at_monotonic_ns, 600u);
-    EXPECT_EQ(second_nan.rows[16].updated_at_monotonic_ns, 600u);
+    EXPECT_EQ(second_nan.rows[16].updated_at_monotonic_ns, 700u);
     EXPECT_EQ(first_inf.rows[16].value, std::numeric_limits<float>::infinity());
     EXPECT_EQ(first_inf.rows[16].quality, KX_Q_BAD);
     EXPECT_EQ(first_inf.rows[16].updated_at_monotonic_ns, 800u);
@@ -502,8 +503,11 @@ TEST(RuntimePointSnapshot, CachesBoundedReusableWirePayload)
     resolver.set_ao(PRIO_LOCAL_LOGIC, 0, std::numeric_limits<float>::quiet_NaN());
     const OutputCmd output = resolver.resolve();
     RuntimePointSnapshotPublisher publisher;
-    const RuntimePointSnapshot snapshot = publisher.build(
+    RuntimePointSnapshot snapshot = publisher.build(
         42, 0, 987654321, table, io, output, resolver, false);
+    snapshot.rows[16].value = std::numeric_limits<float>::quiet_NaN();
+    snapshot.rows[16].quality = KX_Q_BAD;
+    snapshot.rows[16].source = SnapshotSource::LOGIC;
 
     WebIpc web;
     EXPECT_EQ(web.snapshot_cache_state_for_test(), SnapshotCacheState::UNAVAILABLE);

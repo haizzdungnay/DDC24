@@ -7,12 +7,14 @@
 #include <string>
 #include <cinttypes>
 #include <cstdio>
+#include <future>
 
 #include <lvgl.h>
 
 #include "data/shm_reader.hpp"
 #include "data/point_db.hpp"
 #include "i18n/locale.hpp"
+#include "api/hmi_api_client.hpp"
 
 namespace hmi {
 
@@ -29,7 +31,7 @@ inline void set_hmi_font(const lv_font_t* font)
 
 inline const lv_font_t* hmi_font() { return hmi_font_slot(); }
 
-/* Abstract base for all 6 HMI screens. */
+/* Abstract base for the five limited-operator HMI surfaces. */
 class ScreenBase {
 public:
     virtual ~ScreenBase() = default;
@@ -101,20 +103,24 @@ class AlarmModel {
 public:
     static constexpr int RING = 10;
 
+    explicit AlarmModel(HmiApiClient* api = nullptr) : api_(api) {}
     ~AlarmModel();
 
     /* Existing system alarm bus subscriber; non-blocking and polled by LVGL thread. */
     bool open_socket(const std::string& path = "/run/mkddc/alarm.sock");
     void close_socket();
     void drain_socket();
+    void refresh_async();
+    void poll_api();
 
     /* Parse JSON datagram from alarm.sock and add/update entry. */
     void on_alarm_json(const char* buf, size_t len);
     void update_condition(const char* code, bool active, AlarmSeverity severity,
                           const char* source, const char* message, const char* ts = "");
 
-    /* Transition ACTIVE_UNACK→ACTIVE_ACK or CLEARED_UNACK→CLEARED_ACK. */
+    /* ACK luôn gửi broker/Core; không thay đổi state cục bộ trước response. */
     void ack(int idx);
+    bool can_ack(int idx) const;
 
     /* Locked snapshot for render. Returns count of used entries. */
     std::array<AlarmEntry, RING> snapshot(int* count) const;
@@ -131,6 +137,10 @@ private:
     int count_ = 0;
     int socket_fd_ = -1;
     std::string socket_path_;
+    HmiApiClient* api_ = nullptr;
+    std::future<ApiReply> api_pending_;
+    bool ack_pending_ = false;
+    bool hydrated_ = false;
 
     int find_code(const char* code);   /* returns idx or -1 */
 };

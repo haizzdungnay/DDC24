@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mkddc.local/schemas/netcfg_protocol_v1.schema.json",
+  "title": "MK-DDC network configuration protocol v1",
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" }
+  ],
+  "$defs": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface", "mode"],
+      "properties": {
+        "interface": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,15}$" },
+        "mode": { "enum": ["static", "dhcp"] },
+        "ipv4": { "type": "string", "maxLength": 15 },
+        "netmask": { "type": "string", "maxLength": 15 },
+        "gateway": { "type": "string", "maxLength": 15 }
+      }
+    },
+    "active": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface", "link", "mode", "ipv4", "prefixLength", "gateway"],
+      "properties": {
+        "interface": { "type": "string" },
+        "link": { "enum": ["up", "down", "unknown"] },
+        "mode": { "enum": ["static", "dhcp", "unknown"] },
+        "ipv4": { "type": "string" },
+        "prefixLength": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "gateway": { "type": "string" }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "requestId", "action"],
+      "properties": {
+        "version": { "const": 1 },
+        "requestId": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,64}$" },
+        "action": { "enum": ["status", "validate", "stage", "apply", "confirm", "rollback"] },
+        "transactionId": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,64}$" },
+        "candidate": { "$ref": "#/$defs/candidate" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "requestId", "result", "reasonCode", "state"],
+      "properties": {
+        "version": { "const": 1 },
+        "requestId": { "type": "string" },
+        "result": { "enum": ["accepted", "rejected"] },
+        "reasonCode": { "type": "string" },
+        "message": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "state": { "enum": ["idle", "staged", "applying", "awaiting_confirmation", "confirmed", "rolling_back", "rolled_back", "failed"] },
+        "rollbackRemainingS": { "type": "integer", "minimum": 0, "maximum": 120 },
+        "active": { "$ref": "#/$defs/active" },
+        "pending": { "$ref": "#/$defs/candidate" }
+      }
+    }
+  }
+}

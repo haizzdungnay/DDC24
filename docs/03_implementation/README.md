@@ -1,6 +1,8 @@
 # docs/03_implementation/ — Implementation Guides & Checklists
 
-> **Owner:** Dev Lead | **Last Updated:** 2026-07-15
+> **Recovery status (2026-07-22): In Review.** Bộ hướng dẫn đã được phục hồi đầy đủ để giữ implementation knowledge. Trạng thái `Active/FROZEN` trong bảng là trạng thái lịch sử; phải đối chiếu với baseline, code và test hiện hành trước khi dùng cho release.
+
+> **Owner:** Dev Lead | **Last Updated:** 2026-07-22
 
 Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTATION_README.md` trước.
 
@@ -16,7 +18,7 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [05](05_IOP_UART_IMPLEMENTATION_GUIDE.md) | Hợp đồng IOP/UART v2.0 | Active |
 | [06](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) | Service mkddc-iobus | Active |
 | [07](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md) | Service mkddc-core | Active |
-| [08](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md) | HMI/LVGL/DRM local display | Implementation in progress |
+| [08](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md) | ADR-016 HOP-000..077 + ADR-017 network HMI HNW-000..013 | Network service path target-verified; panel usability pending |
 | [09](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md) | Web REST API + UI (Go) | Active |
 | [10](10_END_TO_END_DATA_FLOW.md) | E2E data flow + debug checklist | Active |
 | [11](11_TASK_CHECKLIST.md) | Master task tracker | Active |
@@ -30,7 +32,7 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [19](19_DOCS_AUDIT_SOM_IMPLEMENTATION.md) | Docs audit 2026-06-11 | Historical |
 | [20](20_DOCS_FIX_CHECKLIST.md) | Fix checklist từ audit | Historical |
 | [21](21_VIRTUAL_COM_DECISION.md) | Virtual COM/PTY decision | Active |
-| [22](22_SOM_SRC_IMPLEMENTATION_PLAN.md) | SOM source build plan S0-S8, gồm coherent historian snapshot | Active |
+| [22](22_SOM_SRC_IMPLEMENTATION_PLAN.md) | SOM source S0-S8, gồm coherent historian snapshot + ADR-017 network authority NWC-000..017 | Active; network service target-verified, physical HIL/Web FE migration open |
 | [23](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | Stateful graph components plan | Active |
 | [24](24_SOM_FW_STATUS_REPORT_ISO.md) | FW status report ISO format | Active |
 | [25](25_BACNET_IMPLEMENTATION_PLAN.md) | BACnet/IP implementation plan | IN PROGRESS |

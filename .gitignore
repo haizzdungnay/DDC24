@@ -1,5 +1,6 @@
 # Build / artifacts
 build/
+build_*/
 build_core_check/
 build_iobus_check/
 dist/

@@ -700,7 +700,8 @@ TEST(WebIpc, WriteDoFlowsToShm)
     c.send_line(R"({"id":1,"op":"write","point":"DO1","value":1,"source":"manual","user":"t"})");
     usleep(50000);
     f.scan();
-    EXPECT_NE(c.recv_line().find("\"result\":\"accepted\""), std::string::npos);
+    const std::string accepted = c.recv_line();
+    EXPECT_NE(accepted.find("\"result\":\"accepted\""), std::string::npos) << accepted;
     EXPECT_EQ(f.shm.do_cmd[0], 1);
 }
 
@@ -751,6 +752,72 @@ TEST(WebIpc, ReleaseDoFallsToDefault)
     f.scan();
     c.recv_line();
     EXPECT_EQ(f.shm.do_cmd[0], 0) << "release manual → rơi về default (open)";
+}
+
+TEST(WebIpc, QueryReadOnlyPointDoesNotMutateState)
+{
+    Fixture f;
+    f.shm.ui_value[0] = 23.5f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    c.send_line(R"({"id":31,"op":"query","point":"AI1","source":"manual","user":"hmi"})");
+    usleep(50000);
+    f.scan();
+    const std::string resp = c.recv_line();
+    EXPECT_NE(resp.find("\"result\":\"accepted\""), std::string::npos) << resp;
+    EXPECT_NE(resp.find("23.5"), std::string::npos) << resp;
+    EXPECT_NE(resp.find("\"active_source\":\"input\""), std::string::npos) << resp;
+}
+
+TEST(WebIpc, ManualOverrideExpiresAtCoreBoundary)
+{
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    c.send_line(R"({"id":32,"op":"write","point":"DO1","value":1,"ttlS":1,"source":"manual","user":"hmi"})");
+    usleep(50000);
+    f.scan();
+    const std::string accepted = c.recv_line();
+    EXPECT_NE(accepted.find("\"result\":\"accepted\""), std::string::npos) << accepted;
+    EXPECT_NE(accepted.find("\"remaining_ttl_s\":1"), std::string::npos) << accepted;
+    EXPECT_EQ(f.shm.do_cmd[0], 1);
+
+    usleep(1050000);
+    f.scan();
+    EXPECT_EQ(f.shm.do_cmd[0], 0) << "TTL phải release mức manual trong Core";
+    EXPECT_EQ(f.resolver.winning_do_level(0), PRIO_DEFAULT);
+}
+
+TEST(WebIpc, DuplicateIDReturnsCachedResponseWithoutApplyingAgain)
+{
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+    const std::string command =
+        R"({"id":33,"op":"write","point":"DO1","value":1,"source":"manual","user":"hmi"})";
+
+    c.send_line(command);
+    usleep(50000);
+    f.scan();
+    const std::string first = c.recv_line();
+    ASSERT_NE(first.find("\"result\":\"accepted\""), std::string::npos) << first;
+
+    c.send_line(command);
+    usleep(50000);
+    f.scan();
+    EXPECT_EQ(c.recv_line(), first);
+
+    c.send_line(R"({"id":33,"op":"write","point":"DO1","value":0,"source":"manual","user":"hmi"})");
+    usleep(50000);
+    f.scan();
+    const std::string conflict = c.recv_line();
+    EXPECT_NE(conflict.find("id_conflict"), std::string::npos) << conflict;
+    EXPECT_EQ(f.shm.do_cmd[0], 1);
 }
 
 TEST(WebIpc, OverriddenWhenFireSafetyWins)

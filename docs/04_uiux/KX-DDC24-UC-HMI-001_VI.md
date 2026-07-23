@@ -1,392 +1,238 @@
-# Use Cases — HMI TFT Local (MK-DDC-24)
-
-> **Document ID:** KX-DDC24-UC-HMI-001-VI · **Rev** 2.2 | 2026-06-30
-> **Trạng thái:** Draft — chờ owner review trước Rev B implementation
-> **Owner:** SW Lead / UX Lead
-> **Trace:** `HMI-001..022`, `SW-HMI-001..008`
-> **Phụ thuộc:** [SW_HMI_DESIGN Rev 2.1](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md) · [KX-DDC24-UX-HMI-001](KX-DDC24-UX-HMI-001_VI.md) · [SRS §12](../01_specs/SRS_MK-DDC-24_VI.md)
-
----
-
-## 1. Nguyên tắc thiết kế HMI Local
-
-HMI Local của MK-DDC-24 là màn tại tủ điện để kỹ sư automation, kỹ sư commissioning và kỹ thuật viên bảo trì kiểm tra nhanh tình trạng bộ điều khiển.
-
-HMI Local không phải:
-
-- màn BMS đầy đủ;
-- màn SCADA;
-- màn energy dashboard;
-- màn ứng dụng phòng;
-- màn debug phần mềm nhúng.
-
-Không được hardcode các tên như:
-
-- Room Temp;
-- Room RH;
-- AHU;
-- Pump;
-- Fan;
-- Power;
-- Energy.
-
-Các tên point vận hành chỉ được lấy từ `point database / project config`. Nếu chưa có cấu hình project thì chỉ hiển thị mã kỹ thuật như `UI1`, `UI2`, `DI1`, `AO1`, `DO1`.
-
----
-
-## 2. Actors & Môi trường
-
-| Actor | Mô tả | Thiết bị |
-|-------|-------|---------|
-| **Kỹ thuật viên (KTV)** | Vận hành / bảo trì thiết bị tại tủ điện. Không nhất thiết có laptop. Có thể đeo găng tay bảo hộ. | Touch + 6 nút |
-| **Kỹ sư commissioning (KS)** | Lắp đặt, cấu hình, kiểm định lần đầu. Thường có laptop cùng mạng. | Touch + 6 nút + Web UI |
-| **Service Engineer** | Cấu hình kỹ thuật, reload/reboot, backup/restore. Phải có quyền Service. | Touch + 6 nút + PIN hoặc service switch |
-
-## 3. Input Methods (2 cách điều khiển song song)
-
-| Hành động | Touch (primary) | 6 nút cứng (fallback — gloved hand) |
-|-----------|----------------|--------------------------------------|
-| Chuyển page | Vuốt trái / phải | LEFT / RIGHT |
-| Cuộn danh sách | Vuốt lên / xuống | UP / DOWN |
-| Chọn item | Tap vào row | UP/DOWN focus → ENTER |
-| Xác nhận | Tap + hold 3s (nút đỏ) | ENTER giữ 3s |
-| Huỷ / Thoát | Tap [X] hoặc vuốt ra | ESC |
-| Wake screen saver | Chạm bất kỳ | Nhấn bất kỳ nút |
-
----
-
-## 4. Tổng quan 6 Page
-
-| STT | Page | Mục đích | Hiển thị chính | Thao tác |
-|----:|------|---------|--------------|---------|
-| 1 | **Home / Controller Health** | Xem nhanh DDC có bình thường không | Alarm, CPU/RAM/temp/storage, I/O health, communication, config | Chỉ xem, tap block để mở page liên quan |
-| 2 | **I/O Monitor** | Xem chi tiết 24 I/O | UI/DI/AO/DO, value, unit, quality, age | Xem, cuộn, lọc BAD/STALE |
-| 3 | **Alarm / Event** | Xem lỗi, sự kiện, ACK | Active/Unacked/Cleared, code, point, message | ACK nếu có quyền |
-| 4 | **Communication** | Xem mạng và fieldbus | Ethernet, IP, BACnet, Modbus RTU/TCP | Xem; chỉnh sửa chỉ qua Service mode hoặc Web UI |
-| 5 | **System / Diagnostics** | Xem kỹ thuật hệ thống | FW, uptime, CPU/RAM chi tiết, process/service, watchdog, log | Xem log, xem trạng thái service |
-| 6 | **Service / Config** | Cấu hình kỹ thuật có khóa quyền | profile, point DB, safe state, reload/reboot | Reload config, reboot, backup/restore — có quyền mới thao tác |
-
-**Page order:** Home → I/O Monitor → Alarm/Event → Communication → System/Diagnostics → Service/Config → Home (vòng)
-
----
-
-## 5. Precondition chung
-
-- `kinexus-hmid` đang chạy, DRM display init thành công (`/dev/dri/card0`).
-- `mkddc-iobus` và `mkddc-core` đang chạy, SHM đang được ghi.
-- Module KD024QVFIA073-02-C021B: màn hình sáng, CTP FT5436 (I2C 0x38) đã init.
-
----
-
-## 6. Use Cases
-
-### UC-LOCAL-001 — Kiểm tra nhanh trạng thái DDC
-
-| Mục | Nội dung |
-|----|---------|
-| Page | Home / Controller Health |
-| Actor | KTV / Automation Engineer |
-| Trigger | Đầu ca, sau khi mở tủ, sau khi reboot |
-| Goal | Biết DDC có bình thường không trong dưới 30 giây |
-| Main flow | Mở Home → đọc RUNNING/FAULT → kiểm tra Alarm (Active/Unacked/Critical) → kiểm tra Controller Health (CPU/RAM/temp/storage) → kiểm tra I/O Health (OK/BAD/STALE từng nhóm) → kiểm tra Communication (Ethernet/BACnet/Modbus) → kiểm tra Config |
-| Alternate A1 | Alarm Active > 0 → chuyển Alarm/Event |
-| Alternate A2 | CPU/RAM/temp/storage warning → chuyển System/Diagnostics |
-| Alternate A3 | I/O BAD/STALE → chuyển I/O Monitor với filter |
-| Alternate A4 | BACnet/Modbus lỗi → chuyển Communication |
-| Acceptance | Người vận hành biết rõ DDC bình thường hay cần xử lý tiếp trong ≤ 30s |
-
----
-
-### UC-LOCAL-002 — Điều hướng giữa các page
-
-| Mục | Nội dung |
-|----|---------|
-| Page | Tất cả page |
-| Actor | KTV / Automation Engineer / Service Engineer |
-| Trigger | Cần xem thông tin chi tiết |
-| Goal | Di chuyển nhanh giữa 6 page |
-| Main flow (touch) | Vuốt trái/phải đổi page; tap tab nhảy trực tiếp; UP/DOWN cuộn; ENTER chọn; ESC thoát |
-| Main flow (nút) | LEFT/RIGHT đổi page; UP/DOWN cuộn; ENTER chọn; ESC thoát |
-| Alternate | Nếu màn đang sleep, thao tác đầu chỉ wake màn — không navigate |
-| Acceptance | Người dùng vào đúng page cần xem trong tối đa 2 thao tác |
-
----
-
-### UC-LOCAL-003 — Kiểm tra tài nguyên controller
-
-| Mục | Nội dung |
-|----|---------|
-| Page | Home, System / Diagnostics |
-| Actor | Automation Engineer |
-| Trigger | Nghi controller chạy chậm, nóng, đầy bộ nhớ, treo bất thường |
-| Goal | Biết CPU/RAM/storage/temp có bình thường không |
-| Main flow | Xem Home → nếu Health NORMAL không cần mở sâu → nếu WARNING/FAULT thì mở System/Diagnostics → đọc CPU/RAM/storage/temp chi tiết → ghi nhận nguyên nhân |
-| Alternate A1 | Temp > ngưỡng → hiện cảnh báo nhiệt |
-| Alternate A2 | Storage gần đầy → yêu cầu kiểm tra log/history |
-| Alternate A3 | RAM cao → kiểm tra process trong System/Diagnostics |
-| Acceptance | Xác định được controller bình thường hay có dấu hiệu quá tải |
-
----
-
-### UC-LOCAL-004 — Kiểm tra tổng quan I/O
-
-| Mục | Nội dung |
-|----|---------|
-| Page | Home |
-| Actor | KTV / Automation Engineer |
-| Trigger | Kiểm tra đầu ca hoặc sau khi đấu nối |
-| Goal | Biết nhóm UI/DI/AO/DO có lỗi không |
-| Main flow | Xem I/O Health trên Home → kiểm tra số OK/BAD/STALE từng nhóm → nếu tất cả 0 BAD/STALE thì I/O tổng thể OK |
-| Alternate | Có BAD/STALE → mở I/O Monitor với filter BAD/STALE |
-| Acceptance | Biết nhóm I/O nào đang có lỗi |
-
----
-
-### UC-LOCAL-005 — Kiểm tra chi tiết 24 I/O
-
-| Mục | Nội dung |
-|----|---------|
-| Page | I/O Monitor |
-| Actor | Automation Engineer / Commissioning Engineer |
-| Trigger | Vừa đấu dây, cần kiểm tra sensor/DI/AO/DO |
-| Goal | Xác nhận từng point đọc đúng, chất lượng tốt |
-| Main flow | Mở I/O Monitor → chọn page hoặc filter → đọc point / name / value / unit / quality / age → so sánh với tín hiệu thực tế → ghi nhận GOOD/BAD |
-| Alternate A1 | UI BAD → kiểm tra sensor/dây/signal type |
-| Alternate A2 | DI không đổi → kiểm tra tiếp điểm/pull-up |
-| Alternate A3 | AO sai → kiểm tra scale/output mode |
-| Alternate A4 | DO sai → kiểm tra relay/feedback |
-| Acceptance | Từng kênh I/O có trạng thái rõ ràng: GOOD hoặc cần xử lý |
-
----
-
-### UC-LOCAL-006 — Lọc các point lỗi
-
-| Mục | Nội dung |
-|----|---------|
-| Page | I/O Monitor |
-| Actor | Automation Engineer |
-| Trigger | Home báo có BAD/STALE I/O |
-| Goal | Tìm nhanh point lỗi |
-| Main flow | Mở I/O Monitor → chọn filter BAD/STALE → danh sách chỉ hiển thị point lỗi → đọc point/channel/source/quality/age |
-| Alternate | Không còn lỗi → hiển thị "No BAD/STALE points" |
-| Acceptance | Tìm được point lỗi trong dưới 10 giây |
-
----
-
-### UC-LOCAL-007 — Xem alarm đang active
-
-| Mục | Nội dung |
-|----|---------|
-| Page | Alarm / Event |
-| Actor | KTV / Automation Engineer |
-| Trigger | Home báo Active Alarm > 0 hoặc đèn alarm sáng |
-| Goal | Biết lỗi gì đang xảy ra |
-| Main flow | Mở Alarm/Event → xem summary Active/Unacked/Critical → đọc alarm mới nhất → xem code, severity, point, message, state |
-| Alternate A1 | Alarm liên quan I/O → mở I/O Monitor |
-| Alternate A2 | Alarm liên quan Modbus/BACnet → mở Communication |
-| Alternate A3 | Alarm hệ thống → mở System/Diagnostics |
-| Acceptance | Biết lỗi thuộc nhóm nào và cần xử lý ở đâu |
-
----
-
-### UC-LOCAL-008 — ACK alarm
-
-| Mục | Nội dung |
-|----|---------|
-| Page | Alarm / Event |
-| Actor | KTV có quyền / Automation Engineer |
-| Trigger | Có alarm cần xác nhận |
-| Goal | Xác nhận đã biết alarm |
-| Main flow | Chọn alarm ACTIVE_UNACK hoặc CLEARED_UNACK → bấm ACK → xác nhận → trạng thái chuyển sang ACTIVE_ACK hoặc CLEARED_ACK |
-| Alternate A1 | Không có quyền → hiện "Permission required" |
-| Alternate A2 | Alarm INFO không cần ACK → không hiện nút ACK |
-| Acceptance | ACK không làm mất active alarm; chỉ đổi trạng thái xác nhận. Active: N không giảm về 0 khi alarm vẫn đang active |
-
----
-
-### UC-LOCAL-009 — Kiểm tra Ethernet/IP
-
-| Mục | Nội dung |
-|----|---------|
-| Page | Communication |
-| Actor | Automation Engineer / BMS Engineer |
-| Trigger | BMS không thấy controller hoặc cần kiểm tra IP |
-| Goal | Biết IP/MAC/Gateway/Link có đúng không |
-| Main flow | Mở Communication → xem Ethernet Link → đọc IP/Mask/Gateway/MAC → so sánh với nhãn tủ hoặc bản vẽ mạng |
-| Alternate A1 | Link Down → kiểm tra cáp/switch |
-| Alternate A2 | IP sai → kiểm tra DHCP/static config, sửa qua Web UI hoặc Service mode |
-| Alternate A3 | Gateway sai → sửa qua Web UI hoặc Service mode |
-| Acceptance | Xác định được tình trạng Ethernet/IP |
-
----
-
-### UC-LOCAL-010 — Kiểm tra BACnet/Modbus
-
-| Mục | Nội dung |
-|----|---------|
-| Page | Communication |
-| Actor | Automation Engineer / BMS Engineer |
-| Trigger | BMS báo mất điểm, Modbus timeout, thiết bị fieldbus không phản hồi |
-| Goal | Biết BACnet/Modbus có hoạt động không |
-| Main flow | Mở Communication → xem BACnet status, Device ID, Last Request → xem Modbus RTU/TCP status, slave count, timeout count |
-| Alternate A1 | BACnet Duplicate ID → đổi Device ID |
-| Alternate A2 | Modbus Timeout → kiểm tra slave address/baudrate/dây RS485/termination |
-| Alternate A3 | No Traffic → kiểm tra BMS/master, không nói "kết nối" vì BACnet/IP là UDP |
-| Acceptance | Xác định được lỗi thuộc BACnet, Modbus hay network vật lý |
-
----
-
-### UC-LOCAL-011 — Xem diagnostics hệ thống
-
-| Mục | Nội dung |
-|----|---------|
-| Page | System / Diagnostics |
-| Actor | Automation Engineer / Service Engineer |
-| Trigger | Controller có dấu hiệu bất thường |
-| Goal | Xem thông tin kỹ thuật để chẩn đoán |
-| Main flow | Mở System/Diagnostics → xem FW, uptime, boot reason → xem CPU/RAM/storage/temp → xem process/service → xem watchdog/log |
-| Alternate A1 | Process chết → chuyển Service/Config để restart service nếu có quyền |
-| Alternate A2 | Watchdog reset → ghi nhận boot reason |
-| Alternate A3 | Log có lỗi → lưu mã lỗi để escalate |
-| Acceptance | Có đủ thông tin để quyết định reboot, reload, sửa config hoặc escalate |
-
----
-
-### UC-LOCAL-012 — Vào Service Mode
-
-| Mục | Nội dung |
-|----|---------|
-| Page | Service / Config |
-| Actor | Service Engineer / Commissioning Engineer |
-| Trigger | Cần reload config, reboot, backup/restore hoặc kiểm tra profile |
-| Goal | Truy cập thao tác kỹ thuật có kiểm soát |
-| Main flow | Mở Service/Config → nhập Service PIN hoặc bật service switch → hệ thống unlock → hiển thị action được phép |
-| Alternate A1 | PIN sai → giữ locked |
-| Alternate A2 | Service switch OFF → chỉ xem |
-| Alternate A3 | User không đủ quyền → không cho thao tác nguy hiểm |
-| Acceptance | Chỉ người có quyền mới thao tác được config/reboot/reload |
-
----
-
-### UC-LOCAL-013 — Reload cấu hình
-
-| Mục | Nội dung |
-|----|---------|
-| Page | Service / Config |
-| Actor | Service Engineer |
-| Trigger | Cập nhật point database, fieldbus config hoặc profile |
-| Goal | Nạp lại cấu hình mà không reboot toàn hệ thống nếu có thể |
-| Main flow | Unlock Service Mode → chọn Reload Config → hệ thống kiểm tra checksum → nếu hợp lệ thì reload → cập nhật Config Rev trên Home |
-| Alternate A1 | Checksum lỗi → từ chối reload |
-| Alternate A2 | Config thiếu point bắt buộc → báo CONFIG_ERROR |
-| Alternate A3 | Reload thất bại → giữ config cũ, không áp dụng config mới |
-| Acceptance | Config mới được nạp an toàn hoặc rollback về config cũ |
-
----
-
-### UC-LOCAL-014 — Reboot controller an toàn
-
-| Mục | Nội dung |
-|----|---------|
-| Page | Service / Config |
-| Actor | Service Engineer |
-| Trigger | Sau update firmware, lỗi hệ thống cần reboot |
-| Goal | Reboot có kiểm soát và áp dụng safe state đúng cấu hình |
-| Main flow | Unlock Service Mode → chọn Reboot System → hệ thống hiển thị cảnh báo → giữ xác nhận 3 giây → áp dụng safe state theo từng point config → reboot |
-| Alternate A1 | Người dùng thả tay trước 3 giây → hủy |
-| Alternate A2 | Không có quyền → không cho reboot |
-| Alternate A3 | Safe state config lỗi → chặn reboot, yêu cầu xác nhận cấp cao |
-| Constraint | Reboot không được hardcode DO OFF/AO 4mA; safe state phải theo từng point config (`safe_state` field trong point database) |
-| Acceptance | Reboot chỉ xảy ra khi đủ quyền; safe state áp dụng per-point trước khi tắt |
-
----
-
-## 7. Alarm State Model
-
-ACK không được hiểu là hết lỗi. ACK chỉ là "đã biết lỗi". Lỗi chỉ hết khi điều kiện lỗi không còn active.
-
-| State | Ý nghĩa |
-|-------|---------|
-| `ACTIVE_UNACK` | Lỗi đang tồn tại, chưa xác nhận |
-| `ACTIVE_ACK` | Lỗi đang tồn tại, đã xác nhận |
-| `CLEARED_UNACK` | Lỗi đã hết, nhưng chưa xác nhận lịch sử |
-| `CLEARED_ACK` | Lỗi đã hết và đã xác nhận |
-
-Bộ đếm trên Home/Dashboard hiển thị `Active: N | Unacked: M` — không giảm về 0 khi alarm vẫn ACTIVE dù đã ACK.
-
----
-
-## 8. Communication Status Model
-
-BACnet/IP là giao thức UDP — không có khái niệm "kết nối" (session). Không dùng chữ "Đang kết nối" hay "Connected". Dùng trạng thái kỹ thuật rõ ràng:
-
-| Status | Ý nghĩa |
-|--------|---------|
-| `OK` | Hoạt động bình thường, có traffic |
-| `DISABLED` | Đã tắt trong cấu hình |
-| `NO_TRAFFIC` | Không có traffic trong khoảng thời gian cấu hình |
-| `TIMEOUT` | Có timeout Modbus slave |
-| `CONFIG_ERROR` | Sai cấu hình |
-| `DUPLICATE_ID` | Trùng BACnet Device ID |
-| `LINK_DOWN` | Ethernet mất link |
-
-Hiển thị thêm `Last Request: Xs ago` cho BACnet/IP.
-
----
-
-## 9. Ma trận Page × Use Case
-
-| UC | Home | I/O Monitor | Alarm/Event | Communication | System/Diagnostics | Service/Config |
-|----|-----:|------------:|------------:|--------------:|-------------------:|---------------:|
-| UC-LOCAL-001 Kiểm tra nhanh DDC | x | | | | | |
-| UC-LOCAL-002 Điều hướng | x | x | x | x | x | x |
-| UC-LOCAL-003 Kiểm tra tài nguyên | x | | | | x | |
-| UC-LOCAL-004 Kiểm tra tổng quan I/O | x | | | | | |
-| UC-LOCAL-005 Kiểm tra chi tiết I/O | | x | | | | |
-| UC-LOCAL-006 Lọc point lỗi | | x | | | | |
-| UC-LOCAL-007 Xem alarm active | x | | x | | | |
-| UC-LOCAL-008 ACK alarm | | | x | | | |
-| UC-LOCAL-009 Kiểm tra Ethernet/IP | | | | x | | |
-| UC-LOCAL-010 Kiểm tra BACnet/Modbus | | | | x | | |
-| UC-LOCAL-011 Xem diagnostics | | | | | x | |
-| UC-LOCAL-012 Vào Service Mode | | | | | | x |
-| UC-LOCAL-013 Reload cấu hình | | | | | | x |
-| UC-LOCAL-014 Reboot an toàn | | | | | x | x |
-
----
-
-## 10. Acceptance Criteria tổng
-
-| Nhóm | Tiêu chí nghiệm thu |
-|------|-------------------|
-| Home | Không có Room/Power/Energy hardcode; không có service nội bộ (IOP/core/HMI process); hiển thị controller health đủ nhóm |
-| I/O | Hiển thị đủ base SKU 24 I/O (16 UI + 4 AO + 4 DO); optional DI chỉ hiện khi capability map xác nhận; mỗi point có value/unit/quality/age |
-| Alarm | ACK không xóa lỗi active; có 4-state model; Active count không về 0 khi alarm vẫn tồn tại |
-| Communication | Hiển thị Ethernet/BACnet/Modbus bằng trạng thái kỹ thuật rõ ràng; không dùng "Đang kết nối" cho BACnet/UDP |
-| Diagnostics | Có FW, uptime, CPU/RAM/storage/temp, service/process, watchdog, log |
-| Service | Có khóa quyền (PIN hoặc service switch); reload/reboot/safe state không cho thao tác tự do |
-| Safety | Safe state theo từng point config; không hardcode toàn hệ thống |
-| Config | Mọi tên point, unit, scale, alarm, safe state lấy từ config — không hardcode tên ứng dụng |
-
----
-
-## 11. Behaviors không phải UC (non-functional)
-
-| Behavior | Tham chiếu |
-|----------|-----------|
-| Screen saver dim sau 5 phút idle | SW_HMI_DESIGN §9 |
-| I/O FAULT banner tự động overlay | SW_HMI_DESIGN §6.5 |
-| Data refresh tự động ≤ 1s | SW_HMI_DESIGN §4, HMI-006 |
-| Đổi ngôn ngữ qua SIGHUP | SW_HMI_DESIGN §10 |
-| Hiển thị data age — STALE khi age > ngưỡng cấu hình | SW_HMI_DESIGN §4 |
-
----
-
-## Revision History
-
-| Rev | Ngày | Người | Thay đổi |
-|-----|------|-------|---------|
-| 1.0 | 2026-06-26 | SW Lead | Phát hành đầu — 7 UC (bị bãi bỏ: dựa SPI/ILI9341, không có touch, UC screen saver không hợp lệ) |
-| 2.0 | 2026-06-26 | SW Lead | Viết lại: dual-input (CTP touch + 6 nút), 6 UC thực tế, alarm 4-state, loại bỏ screen saver UC |
-| 2.1 | 2026-06-26 | SW Lead | Viết lại hoàn toàn: 6 page + 14 UC, nguyên tắc no-hardcode, alarm 4-state model chuẩn, BACnet status kỹ thuật, safe state per-point, service PIN/switch, data age mandatory, bỏ arc gauge và Power/Energy mặc định |
-| 2.2 | 2026-06-30 | SW Lead/QA | Aligned I/O Monitor inventory to ADR-010 base SKU. |
+# Use Cases — HMI local MK-DDC-24
+
+**Document ID:** KX-DDC24-UC-HMI-001
+**Revision:** 3.2 — 2026-07-22
+**Status:** Implemented and target service-verified; connected-panel acceptance open
+**Owner:** Product/UX Lead
+**Decision:** ADR-016, ADR-017
+**Trace:** `HMI-REQ-001..017`, `IF-REQ-004`, `SWR-REQ-005..007`
+
+## 1. Product role
+
+HMI local 2.4 inch là **limited operator HMI**, không phải full Web HMI/SCADA và
+không phải control/alarm authority. Nó hỗ trợ kiểm tra nhanh, vận hành giới hạn point
+được whitelist, alarm triage/ACK và service diagnostics tại tủ.
+
+Năm surface bắt buộc:
+
+```text
+Home ↔ Points ↔ Control ↔ Alarms ↔ Service
+```
+
+Communication/System của thiết kế cũ được gộp vào Home/Service; không bị mất.
+
+## 2. Actors và quyền
+
+| Actor | Mục tiêu | Mutation |
+|---|---|---|
+| Viewer | Quan sát trạng thái, point, alarm và diagnostics | Không |
+| Operator | Điều chỉnh vận hành point được whitelist; ACK alarm | Setpoint/mode/override/release/ACK theo policy |
+| Commissioner | Kiểm tra hệ thống; cấu hình sâu vẫn ngoài panel local | Không thêm quyền engineering trên HMI |
+| Service | Chẩn đoán và cấu hình/phục hồi Ethernet IPv4 được ADR-017 phê duyệt | Network transaction có authority/audit |
+
+Identity phải authoritative và session có thời hạn. `role=` hoặc static PIN trong file
+HMI không phải production identity.
+
+## 3. Preconditions chung
+
+- HMI SKU/build được enable và panel/input đã init.
+- SHM hợp lệ cho monitoring; nếu không, HMI hiển thị unavailable.
+- Local broker/core/alarm authority chỉ cần cho mutation; mất chúng không được dừng
+  local control và không được làm monitoring giả thành normal.
+- Clock/audit time đã đồng bộ hoặc audit đánh dấu time quality không xác định.
+
+## 4. Use cases
+
+### UC-HMI-001 — Glance trạng thái controller
+
+| Field | Nội dung |
+|---|---|
+| Actor | Viewer/Operator |
+| Trigger | Mở tủ, đầu ca hoặc sau reboot |
+| Main flow | Home hiển thị controller/data state, highest alarm, alarm counts, I/O health, broker/core/iobus, override count và communication summary |
+| Alternate | Telemetry thiếu → `UNAVAILABLE/STALE`, không hiện `OK` |
+| Acceptance | Trong 30 giây người dùng xác định được normal/abnormal, point/communication cần xử lý và có override hay không |
+
+### UC-HMI-002 — Điều hướng bằng touch và sáu nút
+
+| Field | Nội dung |
+|---|---|
+| Actor | Mọi actor |
+| Main flow | Swipe/tap hoặc LEFT/RIGHT đổi surface; UP/DOWN đổi focus; ENTER chọn; ESC huỷ/quay lại |
+| Alternate | Screen saver active → input đầu chỉ wake |
+| Acceptance | Cả năm surface và mọi action reachable bằng hard key; focus luôn nhìn thấy |
+
+### UC-HMI-003 — Xem point và data quality
+
+| Field | Nội dung |
+|---|---|
+| Actor | Viewer/Operator |
+| Main flow | Points → filter All/Bad/Stale/Overridden → chọn row → xem ID/name/value/unit/quality/age/source |
+| Alternate | Point optional absent → không hiển thị; point unsupported → `UNAVAILABLE` |
+| Acceptance | Base inventory đúng UI16/AO4/DO4; input/raw/feedback không có control action |
+
+### UC-HMI-004 — Đăng nhập Operator
+
+| Field | Nội dung |
+|---|---|
+| Actor | Operator |
+| Main flow | Chọn Login → nhập credential qua touch/keys → broker xác thực → HMI nhận opaque session + role + expiry |
+| Alternate | Sai/unknown/locked/broker unavailable → không tạo session, ghi audit denial khi authority sẵn sàng |
+| Acceptance | Không lưu plaintext credential; idle session hết hạn không quá 15 phút; logout/expiry khoá mutation |
+
+### UC-HMI-005 — Chỉnh setpoint được whitelist
+
+| Field | Nội dung |
+|---|---|
+| Actor | Operator có session |
+| Preconditions | Point `commandable`, action `setpoint`, role và range được authority cấp |
+| Main flow | Control → faceplate → nhập value → xem old/new/unit → Confirm → Pending → authoritative Accepted → hiển thị effective state |
+| Alternate | Ngoài range, quality/policy lỗi, interlock hoặc role deny → Rejected với stable reason; state cũ giữ nguyên |
+| Acceptance | HMI không optimistic-commit; feedback ≤2 s nominal; audit có actor/request/old/new/result |
+
+### UC-HMI-006 — Chọn Auto/Manual mode
+
+| Field | Nội dung |
+|---|---|
+| Actor | Operator có session |
+| Main flow | Chọn mode được policy cho phép → Confirm → broker/core validate → hiển thị effective mode/source |
+| Alternate | Safety/priority cao hơn thắng → command có thể accepted nhưng effective source khác; HMI phải hiện rõ |
+| Acceptance | Không đồng nhất `command accepted` với `effective output`; source/priority luôn visible |
+
+### UC-HMI-007 — Tạo override có thời hạn
+
+| Field | Nội dung |
+|---|---|
+| Actor | Operator có session |
+| Main flow | Chọn Override → nhập value, reason, TTL trong policy → Confirm → core arbitration → hiển thị `OVERRIDE`, actor/source/priority/expiry |
+| Alternate | TTL vượt max, reason trống, non-finite/out-of-range hoặc interlock deny → Rejected |
+| Acceptance | Override có bounded TTL; không cho indefinite default; mọi field audit được |
+
+### UC-HMI-008 — Release override
+
+| Field | Nội dung |
+|---|---|
+| Actor | Operator có session và policy phù hợp |
+| Main flow | Chọn point đang override → Release → Confirm → authoritative Released → effective source trở về automatic/priority winner |
+| Alternate | Override đã hết hạn hoặc nguồn khác sở hữu → response idempotent/explained, không tạo lệnh thứ hai |
+| Acceptance | `Release` không ép một output value mới; UI hiển thị source/value authoritative sau release |
+
+### UC-HMI-009 — Xem và lọc alarm
+
+| Field | Nội dung |
+|---|---|
+| Actor | Viewer/Operator |
+| Main flow | Alarms → xem priority/state/time/source/message/response → filter Active/Unacked/All |
+| Alternate | Stream gap/restart → hydrate snapshot; trước hydrate ACK disable |
+| Acceptance | Active count không giảm chỉ vì ACK; priority cao nhất không bị che trong alarm flood |
+
+### UC-HMI-010 — ACK alarm authoritative
+
+| Field | Nội dung |
+|---|---|
+| Actor | Operator có session |
+| Main flow | Chọn alarm cần ACK → đọc response → ACK → Pending → authority Accepted → state đổi Acked |
+| Alternate | Role deny, alarm stale, authority unavailable/timeout → state không đổi và có lỗi rõ |
+| Acceptance | ACK idempotent theo request ID, có audit, không clear active condition |
+
+### UC-HMI-011 — Xem communication/system diagnostics
+
+| Field | Nội dung |
+|---|---|
+| Actor | Viewer/Service |
+| Main flow | Home xem summary; Service xem Ethernet/IP, BACnet traffic age, Modbus status, version, uptime, resource, process, watchdog, last fault |
+| Alternate | Contract chưa có → `UNAVAILABLE`, không dùng default giả |
+| Acceptance | Giữ toàn bộ diagnostics cần thiết dù bỏ hai tab Communication/System cũ |
+
+### UC-HMI-012 — Yêu cầu maintenance an toàn
+
+| Field | Nội dung |
+|---|---|
+| Actor | Service có session |
+| Main flow | Service → chọn action đã enable → xem impact → hold/confirm → broker/core/maintenance authority thực hiện → audit/result |
+| Alternate | Action chưa triển khai, safe-state không được core xác nhận hoặc privilege không hợp lệ → disable/reject |
+| Acceptance | HMI không giữ `CAP_SYS_BOOT`, không gửi raw signal và không tự reboot/restart service |
+
+### UC-HMI-013 — Broker/core mất khi đang thao tác
+
+| Field | Nội dung |
+|---|---|
+| Actor | Operator |
+| Main flow | Request đang Pending → timeout → state `UNKNOWN` → query authority khi reconnect |
+| Alternate | Không reconnect → Control/ACK/Service giữ read-only |
+| Acceptance | Không replay mù; duplicate request không double action; local control tiếp tục |
+
+### UC-HMI-014 — Session hết hạn khi override còn active
+
+| Field | Nội dung |
+|---|---|
+| Actor | Operator |
+| Main flow | Session expire → mutation lock; override status/expiry vẫn hiển thị read-only |
+| Alternate | Override tự hết TTL → HMI cập nhật `EXPIRED/AUTO` từ authority |
+| Acceptance | Session expiry không kéo dài, huỷ hoặc che override đã accepted |
+
+### UC-HMI-015 — Stale/corrupt telemetry
+
+| Field | Nội dung |
+|---|---|
+| Actor | Mọi actor |
+| Main flow | SHM timestamp quá ngưỡng hoặc seqlock/magic lỗi → banner/quality `STALE/UNAVAILABLE` và block mutation phụ thuộc dữ liệu đó |
+| Acceptance | Không hiển thị giá trị cũ như current; recovery chỉ sau snapshot hợp lệ |
+
+### UC-HMI-016 — Xem active và pending network
+
+| Field | Nội dung |
+|---|---|
+| Actor | Viewer/Service |
+| Main flow | Service → Network hiển thị link/interface, active kernel IPv4/prefix/gateway/mode, pending transaction và rollback countdown |
+| Alternate | Authority thiếu → `UNAVAILABLE`; file desired không được trình bày như active |
+| Acceptance | Người dùng phân biệt Active, Pending và Last-known-good; không có `online` suy diễn từ field không rỗng |
+
+### UC-HMI-017 — Đổi Ethernet static IPv4
+
+| Field | Nội dung |
+|---|---|
+| Actor | Service có session |
+| Main flow | Chọn Static → nhập IPv4/subnet/gateway → xem old/new và impact → hold Confirm → broker/network authority stage+apply → HMI hiện countdown → Service confirm new IP |
+| Alternate | Format/range/route/duplicate IP invalid → reject trước activate; authority timeout → Unknown/rollback, không retry mù |
+| Acceptance | Có audit và transaction ID; success chỉ sau authoritative confirm; local control/IOP scan tiếp tục |
+
+### UC-HMI-018 — Chuyển Ethernet sang DHCP
+
+| Field | Nội dung |
+|---|---|
+| Actor | Service có session |
+| Main flow | Chọn DHCP → xem cảnh báo địa chỉ có thể thay đổi → apply → HMI hiển thị lease active mới và cho confirm |
+| Alternate | Không nhận lease/health fail trước deadline → tự rollback last-known-good |
+| Acceptance | IP mới lấy từ authority/kernel, không lấy từ candidate; panel hiển thị địa chỉ để kỹ thuật viên reconnect Web |
+
+### UC-HMI-019 — Rollback network
+
+| Field | Nội dung |
+|---|---|
+| Actor | Service có session hoặc authority tự động |
+| Main flow | Trong `awaiting_confirmation`, chọn Roll back hoặc hết deadline → authority phục hồi last-known-good → HMI rehydrate state `rolled_back` |
+| Alternate | Helper/host restart giữa transaction → journal boot recovery tiếp tục rollback |
+| Acceptance | IP cũ phục hồi trong giới hạn test; không restart core/iobus; BACnet rebind theo active address cuối cùng |
+
+## 5. Global acceptance matrix
+
+| Topic | Acceptance |
+|---|---|
+| Scope | Chỉ five-surface local HMI; Ethernet IPv4 Service workflow là ngoại lệ hẹp, không có full Web/SCADA/engineering workflow |
+| Authority | HMI không ghi SHM/hardware; mutation chỉ complete sau authoritative response |
+| Control | Chỉ whitelist; finite/range/role/priority/reason/TTL revalidated |
+| Alarm | Four-state semantics; ACK authoritative/audited, ACK ≠ clear |
+| Security | Short-lived session, fail closed, no static config privilege |
+| Failure | Broker/core loss → read-only; no blind replay |
+| Usability | Font ≥14 px; action target ≥40×40 px hoặc hard-key equivalent; visible focus |
+| Timing | Telemetry ≤1 s; nominal action feedback ≤2 s |
+| Target | Touch/buttons/glove/light/alarm flood/stale/loss/recovery/localization tested on panel |
+
+## Revision history
+
+| Revision | Date | Change |
+|---|---|---|
+| 2.3 | 2026-07-22 | Service-panel use cases, authority/audit and target usability gates. |
+| 3.0 | 2026-07-22 | ADR-016 five-surface limited-operator use cases including setpoint, mode, override/release, session expiry and broker failure. |
+| 3.1 | 2026-07-22 | Added ADR-017 network status, static/DHCP apply and rollback use cases UC-HMI-016..019. |

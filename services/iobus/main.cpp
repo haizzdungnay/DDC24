@@ -41,6 +41,7 @@
 #include "bacnet/bacnet_server.hpp"
 #include "mkddc_shm.h"
 #include "platform/realtime.hpp"
+#include "platform/network_address.hpp"
 #include "platform/systemd_notify.hpp"
 
 namespace {
@@ -339,9 +340,26 @@ int main(int argc, char** argv)
             bacnet_server.apply_ao_config();
             bacnet_thread = std::thread([&]() {
                 const kx_plc_shm_t* plc_shm = nullptr;
+                std::string address_signature = ipv4_address_signature(bacnet_cfg.bip.bind_interface);
+                uint64_t next_address_check_ms = 0;
                 while (!g_shutdown.load()) {
                     if (!plc_shm) plc_shm = try_attach_plc_shm();
-                    bacnet_server.tick(now_ms(), plc_shm);
+                    const uint64_t tick_ms = now_ms();
+                    if (tick_ms >= next_address_check_ms) {
+                        next_address_check_ms = tick_ms + 1000;
+                        const std::string current = ipv4_address_signature(bacnet_cfg.bip.bind_interface);
+                        if (current != address_signature) {
+                            std::fprintf(stderr, "INFO  bacnet_server.address_change old=%s new=%s\n",
+                                         address_signature.empty() ? "none" : address_signature.c_str(),
+                                         current.empty() ? "none" : current.c_str());
+                            if (bacnet_server.rebind()) {
+                                bacnet_server.apply_ai_units();
+                                bacnet_server.apply_ao_config();
+                                address_signature = current;
+                            }
+                        }
+                    }
+                    bacnet_server.tick(tick_ms, plc_shm);
                     std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 }
                 if (plc_shm) {
@@ -434,13 +452,13 @@ int main(int argc, char** argv)
                 }
                 std::fprintf(stderr, "INFO  iop.ao_cfg mask=0x%02X ack=ok\n", mode_mask);
             } else {
-                std::fprintf(stderr, "WARN  iop.ao_cfg fail code=%d nack=0x%02X (giữ 0-10V)\n",
+                std::fprintf(stderr, "ERROR iop.ao_cfg fail code=%d nack=0x%02X (không cho chạy sai mode)\n",
                              ac.code, ac.nack_err);
+                return false;
             }
         }
         cache.write_ao_mode(applied_modes);
         output.set_ao_modes(applied_enum);
-        output.set_ao_channels(cfg.ao_channels);
         output.reset_last_sent();
         client.set_status(IopStatus::NORMAL_POLL);
         cache.write_status(KX_IOP_NORMAL, metrics);
@@ -568,7 +586,6 @@ int main(int argc, char** argv)
                     cache.write_ao_mode(applied_modes);
                     output.set_ao_modes(applied_enum);
                 }
-                output.set_ao_channels(cfg.ao_channels);
                 /* ADR-012: always refresh AO BACnet metadata on SIGHUP (name/units/min/max) */
                 bacnet_objects.update_ao_config(cfg.ao_channels);
                 bacnet_server.apply_ao_config();

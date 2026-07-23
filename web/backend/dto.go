@@ -298,25 +298,26 @@ type PointConfigPatch struct {
 }
 
 type PointDTO struct {
-	ID            string   `json:"id"`
-	Channel       int      `json:"channel"`
-	Tag           string   `json:"tag"`
-	Name          string   `json:"name"`
-	Kind          string   `json:"kind"`
-	Value         any      `json:"value"`
-	Unit          string   `json:"unit,omitempty"`
-	Raw           *float32 `json:"raw,omitempty"`
-	RawUnit       string   `json:"rawUnit,omitempty"`
-	Quality       string   `json:"quality"`
-	Source        string   `json:"source"`
-	Priority      string   `json:"priority,omitempty"`
-	UpdatedAt     string   `json:"updatedAt"`
-	Fault         bool     `json:"fault,omitempty"`
-	Forced        bool     `json:"forced,omitempty"`
-	SignalType    string   `json:"signalType,omitempty"`
-	Writable      bool     `json:"writable,omitempty"`
-	LogEnabled    bool     `json:"logEnabled,omitempty"`
-	LogIntervalMs *int     `json:"logIntervalMs,omitempty"`
+	ID                 string   `json:"id"`
+	Channel            int      `json:"channel"`
+	Tag                string   `json:"tag"`
+	Name               string   `json:"name"`
+	Kind               string   `json:"kind"`
+	Value              any      `json:"value"`
+	Unit               string   `json:"unit,omitempty"`
+	Raw                *float32 `json:"raw,omitempty"`
+	RawUnit            string   `json:"rawUnit,omitempty"`
+	Quality            string   `json:"quality"`
+	Source             string   `json:"source"`
+	Priority           string   `json:"priority,omitempty"`
+	OverrideExpiresInS *uint32  `json:"overrideExpiresInS,omitempty"`
+	UpdatedAt          string   `json:"updatedAt"`
+	Fault              bool     `json:"fault,omitempty"`
+	Forced             bool     `json:"forced,omitempty"`
+	SignalType         string   `json:"signalType,omitempty"`
+	Writable           bool     `json:"writable,omitempty"`
+	LogEnabled         bool     `json:"logEnabled,omitempty"`
+	LogIntervalMs      *int     `json:"logIntervalMs,omitempty"`
 }
 
 // AlarmDTO mirrors FE Alarm (types.ts).

@@ -1,12 +1,18 @@
 # Getting Started — Hướng dẫn cho Developer mới
 ## MK-DDC-24 — "đọc là làm được"
 
-> **Phiên bản:** 1.2 | 2026-06-13 (chuẩn hóa Modbus RTU master + link implementation docs 24/25) · 1.1 | 2026-06-08 · 📘 [README](../01_specs/README.md) · [README](README.md)
+> **Phiên bản:** 1.3 | 2026-07-22 (ADR-016 local limited-operator HMI) · 1.2 | 2026-06-13 · 1.1 | 2026-06-08 · 📘 [README](../01_specs/README.md) · [README](README.md)
 > **Mục tiêu:** một người mới (kể cả chưa quen dự án) đọc xong là cài được môi trường, build, chạy, và biết bắt đầu sửa code ở đâu.
 
-> ℹ️ **Kiến trúc Rev A (canonical).** Lớp SOM Rev A là **3 process `mkddc-*`** (core C++ **component-graph**,
-> không PLC 61131-3; web **Go**, không Python/Svelte). Nguồn-chuẩn: [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md),
-> [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md), [ADR-004..008](../adr/). Mọi tên `kinexus-*`/PLC/WebIDE còn sót đọc như **legacy reference**.
+> ℹ️ **Kiến trúc Rev A (canonical).** Lớp SOM Rev A là **3 process `mkddc-*`** (core C++
+> chạy **component-graph** hôm nay; web **Go**, không Python/Svelte). **Cập nhật
+> 2026-07-23 (ADR-020):** roadmap Rev A.0 bổ sung Program Runtime Mekong-owned, IEC
+> 61131-3-aligned (ST+FBD), đang C0 — không phải code hiện có trong `services/core` hôm
+> nay, xem `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` trước khi bắt đầu làm phần Program.
+> Nguồn-chuẩn: [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md),
+> [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md), [ADR-004..008](../adr/),
+> [ADR-020](../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md). Mọi tên
+> `kinexus-*`/PLC/WebIDE còn sót đọc như **legacy reference**.
 
 ---
 
@@ -83,7 +89,7 @@ http://<ip-thiet-bi>:8080      # production sẽ redirect sang https://<ip>:8443
 ```
 
 ### 2.3 Các service (Rev A — chỉ 3 process)
-> Nguồn-chuẩn: [CANONICAL_DECISIONS](../CANONICAL_DECISIONS.md), [ADR-005](../adr/ADR-005-three-process-architecture.md).
+> Nguồn-chuẩn: [Decision Log](../00_governance/DECISIONS.md), [ADR-005](../adr/ADR-005-three-process-architecture.md).
 
 | Service | Code dir | Vai trò |
 |---------|----------|---------|
@@ -98,7 +104,7 @@ cat /dev/shm/mkddc_io_shm | xxd | head # dữ liệu I/O (shared memory)
 ```
 
 > ⛔ **Legacy — KHÔNG dùng cho Rev A:** `kinexus-io-driver/plc/bacnet/agent/webide/hmi/ota`.
-> Các tên này superseded ([CANONICAL_DECISIONS](../CANONICAL_DECISIONS.md)). HMI/agent/OTA → Rev B+.
+> Các tên này superseded theo [Decision Log](../00_governance/DECISIONS.md). Agent/OTA → Rev B+; HMI hiện là service feature-gated.
 
 ### 2.4 "Hello world" của software
 Mục tiêu đầu tiên: **đọc được giá trị I/O từ shared memory** mà `mkddc-iobus` ghi ra, in lên màn hình. Hiểu được `mkddc_io_shm` (hợp đồng IOP ở [SW_ARCH §2](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md)) là nắm được mạch máu dữ liệu. → xem [06_IOBUS](../03_implementation/06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) và [07_CORE](../03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md).
@@ -120,7 +126,8 @@ Mục tiêu đầu tiên: **đọc được giá trị I/O từ shared memory** 
 | Thêm API REST | [D-4 OpenAPI](interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) | `mkddc-web` (Go) |
 | Thêm tham số cấu hình | [D-5 Config Schema](interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) | `mkddc-web` (form/JSON) + service đọc config |
 | Logic điều khiển (PID, component graph) | [D-6 Runtime Execution Model](software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) · [Component Library](software/SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md) | `mkddc-core` |
-| OTA / Màn hình TFT *(Rev B+)* | [SW_OTA_DESIGN](software/SW_OTA_DESIGN_MK-DDC-24_VI.md) · [SW_HMI_DESIGN](software/SW_HMI_DESIGN_MK-DDC-24_VI.md) | *deferred — không thuộc Rev A.0* |
+| OTA *(Rev B+)* | [SW_OTA_DESIGN](software/SW_OTA_DESIGN_MK-DDC-24_VI.md) | `mkddc-web`/OTA — deferred, không thuộc Rev A.0 |
+| HMI local 2.4 inch | [SW_HMI_DESIGN](software/SW_HMI_DESIGN_MK-DDC-24_VI.md) · [HMI implementation](../03_implementation/08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md) | `mkddc-hmi` + local broker/core path — feature-gated Rev A theo ADR-016 |
 
 ---
 

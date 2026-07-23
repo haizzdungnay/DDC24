@@ -164,7 +164,7 @@
 | FAT-009 | Auth: 5 wrong passwords → lockout | Locked 15min | Web UI |
 | FAT-010 | 72-hour soak: continuous I/O cycling, BACnet polling | 0 crashes, 0 memory leaks | Automated |
 | FAT-011 | HMI display: all screens, all buttons | Correct navigation, values match | Manual |
-| FAT-012 | IEC 61131-3 FCU program: temperature control PID | Settles ±0.5°C | HIL simulation |
+| FAT-012 | Program Runtime FCU program (IEC 61131-3-aligned, roadmap ADR-020, đang C0): temperature control PID | Settles ±0.5°C | HIL simulation |
 | FAT-013 | Commissioning workflow per DS §6.2 | < 2 hours for one zone | Timed manual |
 
 ---
@@ -177,7 +177,7 @@
 
 | PRD ID | Mô tả | SRS IDs | Spec IDs | Test IDs |
 |--------|-----------|---------|---------|---------|
-| FR-001, FR-007 | IEC 61131-3 FBD/ST PLC | PLC-001..007 | SW-PLC-001..005 | T-SW-020..024 |
+| FR-001, FR-007 | FBD/ST Program Runtime (IEC 61131-3-aligned, roadmap ADR-020, đang C0) | PLC-001..007 | SW-PLC-001..005 | T-SW-020..024 |
 | FR-003 | PID_COMPACT + auto-tuning | PLC-004, PLC-005 | SW-PLC-003, SW-PLC-004 | T-SW-022 |
 | FR-020 | BACnet/IP | BAC-002..008 | SW-BAC-001, SW-BAC-003 | T-SW-050..056 |
 | FR-020 | BACnet MS/TP | BAC-001 | SW-BAC-002 | T-SW-051 |

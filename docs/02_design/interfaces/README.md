@@ -1,8 +1,10 @@
-# docs/02_design/interfaces/ — Protocol & API Contracts
+# Interface Detailed Design Index
 
-> **Owner:** Tech Lead | **Last Updated:** 2026-07-15
+**ID:** IF-DES-INDEX-001
+**Trạng thái:** In Review — recovered 2026-07-22
+> **Owner:** Tech Lead | **Last Updated:** 2026-07-22
 
-Hợp đồng interface giữa các subsystem. Đây là nguồn-chuẩn cấp cao nhất sau `shared/*.h`.
+Các tài liệu interface được phục hồi nguyên văn. [Interface Baseline](../../04_design/INTERFACES.md), `shared/iop_protocol.h`, `shared/mkddc_shm.h`, route/schema/validator code hiện hành là authority khi có xung đột.
 
 | File | Mô tả |
 |------|-------|
@@ -12,5 +14,6 @@ Hợp đồng interface giữa các subsystem. Đây là nguồn-chuẩn cấp c
 | [openapi.yaml](openapi.yaml) | REST API OpenAPI 3.1 v1.6.0 (machine-readable) |
 | [MODBUS_REGISTER_MAP](MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | Modbus register map |
 | [BACNET_PICS_EPICS](BACNET_PICS_EPICS_MK-DDC-24_VI.md) | BACnet PICS/EPICS |
+| [SWFW_INTERFACE_SPEC](../../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) | SOM/MCU interface specification |
 
-**Thứ tự ưu tiên:** `shared/*.h` > đây > `02_design/software/` > `03_implementation/`
+IOP v1 timing, BACnet MS/TP, MQTT/cloud hoặc field count 8 UI + 8 DI trong recovered content phải được coi là superseded cho đến khi được reconcile với baseline.

@@ -18,24 +18,23 @@ namespace hmi {
 
 enum class ScreenId : int {
     SCR_HOME    = 0,
-    SCR_IO      = 1,
-    SCR_ALARM   = 2,
-    SCR_COMM    = 3,
-    SCR_SYSTEM  = 4,
-    SCR_SERVICE = 5,
-    SCR_COUNT   = 6
+    SCR_POINTS  = 1,
+    SCR_CONTROL = 2,
+    SCR_ALARM   = 3,
+    SCR_SERVICE = 4,
+    SCR_COUNT   = 5
 };
 
-/* Container for the 6 screens + tab strip + clock.
+/* Container for the 5 operator surfaces + tab strip.
  * All LVGL UI lives here; screens are built once at init. */
 class NavController {
 public:
     NavController(ScreenSaver* ss, FaultBanner* fb);
     ~NavController();
 
-    /* Build all 6 screens (call once after lv_init). */
+    /* Build all 5 screens (call once after lv_init). */
     void build(const Locale& l, const PointDb& db,
-               std::array<std::unique_ptr<ScreenBase>, 6> screens);
+               std::array<std::unique_ptr<ScreenBase>, 5> screens);
 
     /* Navigate one page left/right. */
     void navigate_left();

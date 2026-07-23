@@ -286,16 +286,4 @@ uint16_t ao_eng_to_raw(float v, AoMode m)
     return static_cast<uint16_t>(frac * 65535.0f + 0.5f);
 }
 
-/* ADR-012: engineering units → raw DAC với phạm vi tùy chỉnh.
- * Chuẩn hóa eng → [0,1] theo [min_pv, max_pv], rồi ánh xạ sang phạm vi vật lý (V hoặc mA). */
-uint16_t ao_eng_to_raw_phys(float eng, float min_pv, float max_pv, AoMode m)
-{
-    const float span = max_pv - min_pv;
-    float norm = (span > 0.0f) ? (eng - min_pv) / span : 0.5f;
-    if (norm < 0.0f) norm = 0.0f;
-    if (norm > 1.0f) norm = 1.0f;
-    const float phys = (m == AoMode::V0_10) ? norm * 10.0f : 4.0f + norm * 16.0f;
-    return ao_eng_to_raw(phys, m);
-}
-
 } // namespace iobus

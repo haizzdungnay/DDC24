@@ -1,10 +1,10 @@
 # Software Architecture Specification — MK-DDC-24
 ## SOM Application Layer / Debian 12
 
-> **Document ID:** SW-ARCH-MK-DDC-24-VI  
-> **Phiên bản:** 1.0 | 2026-05-28  
-> **Trạng thái:** Draft — Pending SW Lead review  
-> 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
+> **Document ID:** SW-ARCH-MK-DDC-24-VI
+> **Phiên bản:** 1.0 | 2026-05-28
+> **Trạng thái:** Draft — Pending SW Lead review
+> 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))
 > **Tác giả:** KINEXUS Technologies — Software Team
 
 > ⚠️ **RECONCILE (2026-06-08) — kiến trúc cập nhật.** Nguồn-chuẩn mới về process/naming
@@ -12,9 +12,17 @@
 > - **7 service `kinexus-*` → 3 process `mkddc-*`** (chia theo real-time boundary):
 >   `mkddc-core` (IO+graph engine+priority, gộp io-driver+plc), `mkddc-iobus`
 >   (bacnet+modbus/fieldbus), `mkddc-web` (webide+validator-library).
->   `kinexus-hmi`/`kinexus-agent`/`kinexus-ota` → **deferred Rev B+** (REVA_SCOPE §3).
-> - Engine không còn là IEC 61131-3 PLC mà là **component graph** ([ADR-004](../adr/ADR-004-component-based-runtime.md));
+>   `mkddc-hmi` là fourth feature-gated Rev A service theo ADR-016;
+>   `kinexus-agent`/`kinexus-ota` vẫn deferred Rev B+.
+> - Engine chạy thật hôm nay là **component graph** ([ADR-004](../adr/ADR-004-component-based-runtime.md) — nay giữ vai trò legacy-importer theo [ADR-020](../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md));
 >   mô hình thực thi: [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md).
+>   **Cập nhật 2026-07-23:** roadmap Rev A.0 bổ sung một Program Runtime **mới**, do
+>   Mekong sở hữu, IEC 61131-3-aligned (ST+FBD, đang C0, chưa release) — đây **không phải**
+>   sự hồi sinh của `kinexus-plc`/`libkinexus-plc.so` mô tả bên dưới trong tài liệu này;
+>   toàn bộ chi tiết `kinexus-*` PLC runtime dưới đây là **lịch sử tiền-pivot**, không
+>   phải kiến trúc target. Kiến trúc target thật ở
+>   `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` §4 (`libmkddc_iec`,
+>   `mkddc-program-service`, `mkddc-program-core`).
 > - **Hợp đồng IPC/shm/seqlock với MCU bên dưới giữ nguyên** (rename header
 >   `kinexus_shm.h` → `mkddc_shm.h` ĐÃ thực hiện 2026-06-11). Bảng §1.1 dưới đây là
 >   decomposition cũ, đọc như tham chiếu; ánh xạ sang `mkddc-*` theo banner này.
@@ -37,11 +45,13 @@
 | `mkddc-iobus` | `/usr/sbin/mkddc-iobus` | `mkddc` | always | — (creator `/dev/shm/mkddc_io_shm`) |
 | `mkddc-core` | `/usr/sbin/mkddc-core` | `mkddc` | always | `After=mkddc-iobus` (Wants) |
 | `mkddc-web` | `/usr/bin/mkddc-web` | `mkddcweb` | always | `After=mkddc-core` (Wants) |
+| `mkddc-hmi` | `/usr/sbin/mkddc-hmi` | `mkddc` | always khi SKU enable | `After=mkddc-core mkddc-iobus` (Wants) |
 
 `mkddc-iobus` sở hữu UART/IOP tới MCU + scale + ghi SHM IO; gộp BACnet/IP datalink +
 fieldbus/modbus. `mkddc-core` chạy component graph engine + priority/safe-state (đọc SHM,
 ghi `ao_setpoint[]/do_cmd[]`). `mkddc-web` gồm web config + validator (library).
-**Deferred Rev B+:** `kinexus-agent` (MQTT), `kinexus-hmi`, `kinexus-ota`.
+`mkddc-hmi` đọc SHM read-only và gửi limited operator action qua local authenticated
+broker rồi core. **Deferred Rev B+:** `kinexus-agent` (MQTT), `kinexus-ota`.
 
 ### 1.2 Startup Order (chốt theo Contract Freeze — iobus tạo SHM nên chạy TRƯỚC)
 
@@ -270,7 +280,7 @@ Tất cả scaling PHẢI thực hiện trong `kinexus-io-driver` (không trong 
 **Hệ số CVD cho PT100/PT1000 (IEC 60751):**
 - A = 3.9083×10⁻³, B = -5.775×10⁻⁷, C = -4.183×10⁻¹² (below 0°C)
 
-**Hệ số Steinhart-Hart cho NTC 10kΩ β=3950 (sensor HVAC tiêu chuẩn — khớp IO_UI §3.5):**  
+**Hệ số Steinhart-Hart cho NTC 10kΩ β=3950 (sensor HVAC tiêu chuẩn — khớp IO_UI §3.5):**
 - A = 1.129×10⁻³, B = 2.341×10⁻⁴, C = 8.76×10⁻⁸
 - > NTC chuẩn của sản phẩm là **10kΩ β=3950**. Nếu dùng part khác (vd Murata NCP18XH103 β=3380) → user nhập hệ số riêng qua web UI (xem SW-Q-007).
 
@@ -373,7 +383,7 @@ Tất cả scaling PHẢI thực hiện trong `kinexus-io-driver` (không trong 
 | REST API | FastAPI (Python 3.11) | 0.111+ | Async, auto OpenAPI docs |
 | Web IDE (backend) | FastAPI | — | Shared với agent |
 | Web IDE (frontend) | Svelte + TypeScript | — | Lightweight, fast |
-| HMI | LVGL v9 (C) | 9.x | Proven on fbtft/ILI9341 |
+| HMI | C++17 + LVGL v9 + DRM/KMS | 9.x | JD9852 MIPI DSI, FT5436 evdev; feature-gated limited operator client |
 | Init system | systemd | 252+ | WatchdogSec support |
 | Firewall | nftables | — | SEC-020 |
 | Container | None (bare systemd services) | — | Simpler, lower overhead |
@@ -412,6 +422,6 @@ Tất cả scaling PHẢI thực hiện trong `kinexus-io-driver` (không trong 
 
 ---
 
-**Document ID:** SW-ARCH-MK-DDC-24-VI  
-**Revision:** 1.0 | 2026-05-28  
+**Document ID:** SW-ARCH-MK-DDC-24-VI
+**Revision:** 1.1 | 2026-07-22 — reconciled optional Rev A HMI, DRM/MIPI target and ADR-016 limited-operator command boundary
 **Approved by:** Software Lead, System Architect — KINEXUS Technologies

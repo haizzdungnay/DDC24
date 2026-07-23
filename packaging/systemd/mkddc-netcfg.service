@@ -1,0 +1,31 @@
+[Unit]
+Description=MK-DDC-24 transactional network configuration authority
+After=NetworkManager.service local-fs.target
+Wants=NetworkManager.service
+Before=mkddc-web.service mkddc-hmi.service
+
+[Service]
+Type=simple
+Environment=NETCFG_INTERFACE=end1
+EnvironmentFile=-/etc/mkddc/netcfg.conf
+ExecStart=/usr/sbin/mkddc-netcfg --socket /run/mkddc-netcfg/netcfg.sock --journal /data/mkddc/netcfg-transaction.json --allowed-user mkddc --interface ${NETCFG_INTERFACE}
+User=root
+Group=mkddc
+RuntimeDirectory=mkddc-netcfg
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+UMask=0007
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/run/mkddc-netcfg /data/mkddc
+RestrictAddressFamilies=AF_UNIX AF_INET AF_NETLINK AF_PACKET
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

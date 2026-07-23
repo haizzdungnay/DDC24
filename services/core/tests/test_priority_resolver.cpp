@@ -4,6 +4,8 @@
  */
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "priority_resolver.hpp"
 
 using namespace core;
@@ -81,4 +83,23 @@ TEST(PriorityResolver, ChannelsAreIndependent)
     OutputCmd out = r.resolve();
     EXPECT_EQ(out.dout[0], 1);
     EXPECT_EQ(out.dout[1], 0) << "kênh khác giữ default";
+}
+
+TEST(PriorityResolver, RejectsAoOutsideAppliedPhysicalRange)
+{
+    PriorityResolver r;
+    const uint8_t modes[KX_N_AO] = {0, 1, 0, 0};
+    r.set_ao_modes(modes);
+
+    EXPECT_TRUE(r.set_ao(PRIO_BACNET, 0, 0.0f));
+    EXPECT_TRUE(r.set_ao(PRIO_BACNET, 0, 10.0f));
+    EXPECT_FALSE(r.set_ao(PRIO_BACNET, 0, -0.01f));
+    EXPECT_FALSE(r.set_ao(PRIO_BACNET, 0, 10.01f));
+
+    EXPECT_TRUE(r.set_ao(PRIO_BACNET, 1, 4.0f));
+    EXPECT_TRUE(r.set_ao(PRIO_BACNET, 1, 12.0f));
+    EXPECT_TRUE(r.set_ao(PRIO_BACNET, 1, 20.0f));
+    EXPECT_FALSE(r.set_ao(PRIO_BACNET, 1, 3.99f));
+    EXPECT_FALSE(r.set_ao(PRIO_BACNET, 1, 20.01f));
+    EXPECT_FALSE(r.set_ao(PRIO_BACNET, 1, std::numeric_limits<float>::quiet_NaN()));
 }

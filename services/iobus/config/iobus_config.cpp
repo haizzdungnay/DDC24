@@ -257,6 +257,7 @@ bool load_config(const std::string& path, bool must_exist, IobusConfig* out)
     /* Defaults cho ao_channels trước khi parse: tên/units tự động từ mode */
     for (int i = 0; i < KX_N_AO; i++) {
         out->ao_channels[i].name     = "AO" + std::to_string(i + 1);
+        out->ao_channels[i].mode     = AoMode::V0_10;
         out->ao_channels[i].units_str = "volt";   /* default 0-10V */
         out->ao_channels[i].min_pv   = 0.0f;
         out->ao_channels[i].max_pv   = 10.0f;
@@ -276,11 +277,13 @@ bool load_config(const std::string& path, bool must_exist, IobusConfig* out)
             if (get_string(entry, "mode", &m)) {
                 if (m == "4-20mA") {
                     out->ao_mode[i] = AoMode::MA4_20;
+                    out->ao_channels[i].mode = AoMode::MA4_20;
                     out->ao_channels[i].units_str = "milliampere";
                     out->ao_channels[i].min_pv    = 4.0f;
                     out->ao_channels[i].max_pv    = 20.0f;
                 } else if (m == "0-10V") {
                     out->ao_mode[i] = AoMode::V0_10;
+                    out->ao_channels[i].mode = AoMode::V0_10;
                 } else {
                     std::fprintf(stderr, "WARN  config.bad_ao_mode ao=%d mode=%s (giữ 0-10V)\n",
                                  i + 1, m.c_str());
@@ -345,6 +348,16 @@ bool reload_config_safe(const std::string& path, bool must_exist, IobusConfig& c
     if (new_cfg.baud != current_cfg.baud) {
         std::fprintf(stderr, "WARN  reload.requires_restart field=baud\n");
         new_cfg.baud = current_cfg.baud;
+    }
+    for (int i = 0; i < KX_N_AO; i++) {
+        if (new_cfg.ao_mode[i] != current_cfg.ao_mode[i]) {
+            std::fprintf(stderr,
+                         "WARN  reload.requires_restart field=ao_mode ch=%d old=%d new=%d\n",
+                         i + 1, static_cast<int>(current_cfg.ao_mode[i]),
+                         static_cast<int>(new_cfg.ao_mode[i]));
+            new_cfg.ao_mode[i] = current_cfg.ao_mode[i];
+            new_cfg.ao_channels[i] = current_cfg.ao_channels[i];
+        }
     }
 
     current_cfg = new_cfg;

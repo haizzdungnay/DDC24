@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Test plan thật trên board
 
 > **Document ID:** IMPL-TESTPLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.2 | 2026-06-26 (Rev A + IOP v2 ADR-010: xoá DI/PT100, sửa bit FAULT, 500Hz, BOARD_CAP_MAP, UI×16, ADC2 test) · 1.1 | 2026-06-13 (thêm group 9 BACnet, group 10 Modbus) · 1.0 | 2026-06-10
+> **Phiên bản:** 1.3 | 2026-07-22 (ADR-016 local HMI command/session/failure integration tests) · 1.2 | 2026-06-26 · 1.1 | 2026-06-13 · 1.0 | 2026-06-10
 > **Trạng thái:** Active
 > **Owner:** Tester (+ dev hỗ trợ)
 > **Nguồn-chuẩn:** [TEST_SPEC](../01_specs/TEST_SPEC_MK-DDC-24_VI.md) · [SWFW_INTERFACE_SPEC §10](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) · ADR-010 (IOP v2)
@@ -288,6 +288,50 @@ Log: lsof -p $(pidof mkddc-web)
 
 ---
 
+## Test group 5.5 — HMI local limited-operator
+
+```text
+TC-HMI-01  Five-surface navigation
+Kết quả: Home/Points/Control/Alarms/Service reachable bằng touch + 6 nút; input đầu sau dim chỉ wake.
+
+TC-HMI-02  Read-only degradation
+Kết quả: stop local broker → SHM monitoring tiếp tục; Control/ACK/Service disable; không replay sau reconnect.
+
+TC-HMI-03  Session/RBAC
+Kết quả: Viewer deny mutation; Operator đúng policy; unknown/expired/locked user fail closed; idle expiry ≤15 phút.
+
+TC-HMI-04  Point policy
+Kết quả: chỉ point authority whitelist xuất hiện; local point_db sửa `commandable` không tự cấp quyền.
+
+TC-HMI-05  Setpoint boundary
+Kết quả: min/max accepted; ngoài range/NaN/infinity/wrong type rejected; feedback ≤2s nominal; audit đủ.
+
+TC-HMI-06  Mode and effective winner
+Kết quả: accepted command nhưng safety/priority cao hơn thắng được hiển thị đúng source/priority.
+
+TC-HMI-07  Override lifecycle
+Kết quả: reason bắt buộc; TTL bị bound; expiry tự release; explicit release không ghi replacement value.
+
+TC-HMI-08  Idempotency
+Kết quả: duplicate request ID cùng payload trả cùng result, không double action; khác payload bị reject.
+
+TC-HMI-09  Alarm authority
+Kết quả: snapshot hydrate; ACK accepted/rejected/timeout; ACK không clear active; restart HMI không mất authoritative state.
+
+TC-HMI-10  Pending failure
+Kết quả: broker/core chết khi Pending → UNKNOWN/read-only → query authoritative state; không blind retry.
+
+TC-HMI-11  Privilege boundary
+Kết quả: HMI không có CAP_SYS_BOOT, không kill core/iobus, không write SHM/hardware; unsupported maintenance disabled.
+
+TC-HMI-12  Target usability
+Kết quả: body ≥14px, action ≥40×40px hoặc hard-key equivalent; glove/light/alarm flood/localization/stale/loss/recovery pass trên panel thật.
+```
+
+Host tests không thay TC-HMI-12 hoặc hardware/DRM/FT5436 evidence.
+
+---
+
 ## Test group 6 — End-to-end IO
 
 ```
@@ -451,9 +495,10 @@ Kết quả: thiết bị thật đọc/ghi ổn định 1h.
 | 3 | P3 | P3→P4 |
 | 4 | P4 | P4→P5 |
 | 5 | P5 | P5→P6 |
+| 5.5 | HMI HOP-000..077 | HMI production gate |
 | 6,7,8 | P6 | Release |
 | 9 | P4/P6 | BACnet production gate / BTL pretest |
 | 10 | P3/P6 | Modbus production gate / fieldbus smoke |
 
 ---
-**Rev** 1.2 | 2026-06-26 (Rev A + IOP v2 ADR-010: xoá DI/PT100 hardware absent, sửa FAULT bit map v2, 500Hz, BOARD_CAP_MAP test TC-2-02+TC-3-06, UI×16+ADC2 test TC-1-03+TC-E2E-04, VDD fault TC-1-05+TC-7-05, IO_RESP 74B layout TC-2-04, aggregate OV TC-7-03+TC-9-07) · 1.1 | 2026-06-13 (thêm group 9/10 cho BACnet/Modbus) · 1.0 | 2026-06-10
+**Rev** 1.3 | 2026-07-22 (ADR-016: TC-HMI-01..12 for local limited-operator HMI) · 1.2 | 2026-06-26 (IOP v2 ADR-010) · 1.1 | 2026-06-13 · 1.0 | 2026-06-10

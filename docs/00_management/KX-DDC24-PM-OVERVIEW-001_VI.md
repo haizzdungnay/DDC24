@@ -5,8 +5,14 @@
 > **Phiên bản:** 1.0 | 2026-05-30 · **Trạng thái:** Approved · **Owner:** PMO
 > 📘 [docs/README](../README.md)
 
-> ⚠️ **RECONCILE (2026-06-08).** Hướng sản phẩm đã chốt: **component-based DDC** (không PLC IDE/IEC 61131-3),
-> Linux **3 process `mkddc-*`**, UI Rev A **form/JSON**. Nguồn-chuẩn: [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md), [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md), [ADR-004..007](../adr/).
+> ⚠️ **RECONCILE (2026-07-23, ADR-020 supersedes 2026-06-08 banner cũ).** Hướng sản phẩm:
+> **component-based DDC** là engine chạy thật hôm nay, Linux **3 process `mkddc-*`**, UI
+> Rev A **form/JSON**. **Không còn đúng:** "không PLC IDE/IEC 61131-3" — Rev A.0 roadmap
+> nay gồm Program Runtime do Mekong sở hữu, IEC 61131-3-aligned (ST+FBD), đang giai đoạn
+> C0, chưa release, không certified/compliant. Nguồn-chuẩn:
+> [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md),
+> [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md), [ADR-004..007](../adr/),
+> [ADR-020](../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md).
 
 ---
 
@@ -41,13 +47,13 @@ Cảm biến/Van/Relay ─► MCU (1ms) ─IOP─► SOM ─► BACnet/IP · MQT
 | **UI/UX** | UX | thiết kế giao diện Web IDE + màn hình TFT (HMI) |
 
 ## 5. Tôi nên đọc gì tiếp?
-1. ⭐ [System Handbook — Hiểu hệ thống từ số 0](KX-DDC24-SYS-ARCH-001_VI.md) — nếu chưa hình dung được sản phẩm, đọc cái này (kể chuyện + sơ đồ).
+1. ⭐ [System Architecture](../03_architecture/SYSTEM.md) — nếu chưa hình dung được sản phẩm, đọc tài liệu topology và luồng dữ liệu này trước.
 2. [GETTING_STARTED_DEV](../02_design/GETTING_STARTED_DEV.md) — cài môi trường + "muốn sửa X vào đâu".
 3. [Implementation Plan](KX-DDC24-PM-IMPLPLAN-001_VI.md) — lộ trình code chi tiết.
 4. Theo vai trò: [README §1](../01_specs/README.md) chỉ thứ tự đọc cho FW/SW/QA.
 
 ## 6. Tài liệu ở đâu?
-→ [Master Document Register](KX-DDC24-QA-REGISTER-001_VI.md) liệt kê **toàn bộ** tài liệu kèm Document ID, version, owner.
+→ [Document Hub](../README.md) là register điều hướng hiện hành cho toàn bộ baseline và detailed-design corpus.
 
 ---
 ## Revision History

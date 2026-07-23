@@ -13,6 +13,7 @@ User=mkddc
 Group=mkddc
 SupplementaryGroups=dialout
 RuntimeDirectory=mkddc
+RuntimeDirectoryMode=0770
 RuntimeDirectoryPreserve=yes
 Restart=always
 RestartSec=2

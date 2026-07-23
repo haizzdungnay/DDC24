@@ -6,12 +6,12 @@
 
 namespace hmi {
 
-static constexpr int TAB_H    = 22;
-static constexpr int HINT_H   = 14;
+static constexpr int TAB_H    = 40;
+static constexpr int HINT_H   = 16;
 static constexpr int DISP_W   = 320;
 static constexpr int DISP_H   = 240;
 static constexpr int CONTENT_H = DISP_H - TAB_H - HINT_H;
-static constexpr int TAB_AREA_W = 252;
+static constexpr int TAB_AREA_W = 320;
 static constexpr int TAB_W    = TAB_AREA_W / static_cast<int>(ScreenId::SCR_COUNT);
 
 NavController::NavController(ScreenSaver* ss, FaultBanner* fb)
@@ -20,7 +20,7 @@ NavController::NavController(ScreenSaver* ss, FaultBanner* fb)
 NavController::~NavController() {}
 
 void NavController::build(const Locale& l, const PointDb& db,
-                          std::array<std::unique_ptr<ScreenBase>, 6> screens)
+                          std::array<std::unique_ptr<ScreenBase>, 5> screens)
 {
     screens_ = std::move(screens);
 
@@ -64,9 +64,9 @@ void NavController::build_tab_bar_(const Locale& l)
     lv_obj_set_style_radius(tab_bar_, 0, LV_PART_MAIN);
     lv_obj_clear_flag(tab_bar_, LV_OBJ_FLAG_SCROLLABLE);
 
-    static const StrKey tab_keys[6] = {
-        StrKey::TAB_HOME, StrKey::TAB_IO, StrKey::TAB_ALARM,
-        StrKey::TAB_COMM, StrKey::TAB_SYSTEM, StrKey::TAB_SERVICE
+    static const StrKey tab_keys[5] = {
+        StrKey::TAB_HOME, StrKey::TAB_IO, StrKey::TAB_COMM,
+        StrKey::TAB_ALARM, StrKey::TAB_SERVICE
     };
 
     for (int i = 0; i < N; i++) {
@@ -91,14 +91,6 @@ void NavController::build_tab_bar_(const Locale& l)
         lv_obj_set_user_data(tab_btns_[i], reinterpret_cast<void*>(static_cast<intptr_t>(i)));
         lv_obj_add_event_cb(tab_btns_[i], tab_btn_cb_, LV_EVENT_CLICKED, this);
     }
-
-    /* Clock label in top-right corner of tab bar (overlay, smaller) */
-    clock_lbl_ = lv_label_create(top);
-    lv_label_set_text(clock_lbl_, "--:--:--");
-    lv_obj_set_style_text_color(clock_lbl_, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-    lv_obj_set_style_text_font(clock_lbl_, hmi_font(), LV_PART_MAIN);
-    /* Position: right-aligned in tab bar row */
-    lv_obj_set_pos(clock_lbl_, TAB_AREA_W + 5, 4);
 
     /* Hint bar at bottom */
     hint_lbl_ = lv_label_create(top);
@@ -170,9 +162,9 @@ void NavController::on_sys_update(const SysSnapshot& s, const Locale& l)
 void NavController::rebuild_labels(const Locale& l)
 {
     if (!built_) return;
-    static const StrKey tab_keys[6] = {
-        StrKey::TAB_HOME, StrKey::TAB_IO, StrKey::TAB_ALARM,
-        StrKey::TAB_COMM, StrKey::TAB_SYSTEM, StrKey::TAB_SERVICE
+    static const StrKey tab_keys[5] = {
+        StrKey::TAB_HOME, StrKey::TAB_IO, StrKey::TAB_COMM,
+        StrKey::TAB_ALARM, StrKey::TAB_SERVICE
     };
     for (int i = 0; i < N; i++) {
         if (tab_labels_[i])

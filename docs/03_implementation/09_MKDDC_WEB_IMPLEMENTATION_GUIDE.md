@@ -2,8 +2,8 @@
 ## MK-DDC-24 — REST API + Web UI + Config + Validator
 
 > **Document ID:** IMPL-WEB-MK-DDC-24-VI
-> **Phiên bản:** 1.31 | 2026-07-21 (ARM64 frozen schema-v5 package parity GREEN; live-board migration/SQLITE_BUSY/cutover open) · 1.30 | 2026-07-21 (ARM64 live schema-v1 fail-closed preflight) · 1.29 | 2026-07-21 (native packaged rollback parity code-local) · 1.28 | 2026-07-21 (schema-v5 rollback verifier code-local) · 1.27 | 2026-07-21 (offline maintenance operator CLI code-local; board invocation inactive) · 1.26 | 2026-07-21 (maintenance-only cutover orchestration code-local; production invocation inactive) · 1.25 | 2026-07-21 (durable backup/migration evidence binding code-local; production cutover inactive) · 1.24 | 2026-07-21 (activation prepare/commit/reconcile engine code-local; production cutover inactive) · 1.23 | 2026-07-21 (physical rolling-prune engine code-local GREEN; activation guard inactive) · 1.22 | 2026-07-20 (WEB-HIST-005 retention amendment code-local) · 1.21 | 2026-07-20 (WEB-HIST-005 shared Logging Control/unified Trends code-local Done; v2 Trends feature-gated, legacy authority/cutover/release gates remain open) · 1.20 | 2026-07-20 (WEB-HIST-004 unified query/CSV code-local Done) · 1.19 | 2026-07-20 (WEB-HIST-003 shadow scheduler code-local Done) · 1.18 | 2026-07-20 (WEB-HIST-001/002 code-local Done) · 1.17 | 2026-07-15 (historian/name status reconciliation) · 1.16 | 2026-07-15 (historian/name local evidence) · 1.15 | 2026-07-15 (historian/name planned) · 1.14 | 2026-07-15 (ADR-019 Phase A API-writer) · 1.12 | 2026-07-15 (Trends latest-five adjustment) · 1.11 | 2026-06-23 (Go dependency refresh) · 1.10 | 2026-06-23 (frontend dependency refresh)
-> **Cập nhật hiện hành:** Rev 1.32 (2026-07-21) đã ghi nhận bounded Orange Pi schema-v5 activation, final ARM64 owner/restart-gap package parity, explicit gaps và live v2 query/writer smoke; physical fault, target eMMC, browser/manual E2E, long soak, prune và legacy removal vẫn mở.
+> **Phiên bản:** 1.33 | 2026-07-22 (merge historian v2 guide with ADR-017 local-HMI broker/network transaction handoff) · 1.32 | 2026-07-21 (bounded Orange Pi schema-v5 activation) · 1.31 | 2026-07-21 (ARM64 frozen schema-v5 package parity GREEN; live-board migration/SQLITE_BUSY/cutover open) · 1.13 | 2026-07-22 (ADR-017 local-HMI broker adapter implemented; Web REST/FE transaction migration pending)
+> **Cập nhật hiện hành:** Rev 1.33 (2026-07-22) giữ historian v2 code-local/board evidence của Rev 1.32 và ghi rõ Web network config chỉ là desired/pending cho tới khi dùng ADR-017 transaction authority; physical fault, target eMMC, browser/manual E2E, long soak, prune, legacy removal và Web FE transaction migration vẫn mở.
 > **Owner:** Dev 3 (Web/BE)
 > **Nguồn-chuẩn:** [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) ·
 > [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
@@ -41,7 +41,8 @@ web/backend/
 | Ack alarm | — | ✅ | ✅ |
 | Graph validate (read-only check) | — | ✅ | ✅ |
 | Graph **deploy** | — | — | ✅ |
-| Config (io/network/device/safe-state) | — | — | ✅ |
+| Config (io/device/safe-state) | — | — | ✅ |
+| Web network desired config | — | — | ✅ ghi file nhưng REST/FE chưa dùng transaction; local-HMI broker đã nối `mkddc-netcfg` |
 | Users, OTA, download logs | — | — | ✅ |
 
 > Role cũ "engineer" trong bản trước = operator (commissioning) hoặc admin (deploy) theo bảng
@@ -90,7 +91,9 @@ web/storage/      — schema SQLite, migration
 > Trends bám mô hình BACnet Trend Log do kỹ sư cấu hình object-list (SRS IDE-024/025);
 > Scheduler theo BACnet Weekly_Schedule tuần-lặp, bỏ chế độ "Tháng" (PRD FR-004); Network theo
 > ARCH-R010 (north BACnet/IP, south Modbus RTU master), bỏ mô hình cây controller; Validator chạy
-> đúng 4 check §5 trên `graph.json`, không IEC 61131-3 (ADR-004 → Rev C). **KHÔNG** thêm/đổi
+> đúng 4 check §5 trên `graph.json` (component graph legacy — không phải IEC 61131-3
+> Program Runtime; roadmap ST+FBD riêng theo ADR-020, đang C0, xem
+> `KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`). **KHÔNG** thêm/đổi
 > endpoint REST hay WebSocket contract — hợp đồng §2 giữ nguyên.
 
 ---
@@ -275,6 +278,13 @@ System status (versions tách từng thành phần — Contract Freeze; nguồn 
 
 > Web validate input theo schema trước khi ghi; config IO → core/iobus reload (qua signal/IPC).
 
+`network.conf` chỉ là desired configuration. Web REST cũ vẫn ghi file,
+`applySystem(system)` trả `applied=false` và frontend chưa xử lý warning này. Local-HMI
+broker actions `network_status/validate/stage/apply/confirm/rollback` đã dùng
+`/run/mkddc-netcfg/netcfg.sock`, nhưng việc đó không tự động sửa Web REST/FE. Active IP phải
+lấy từ network authority; BE/FE không được tự gọi OS command hoặc báo applied trước
+transaction confirm.
+
 ---
 
 ## 5. Validator rule (PRODUCT_DEFINITION §14 — Rev A: 4 check cốt lõi)
@@ -352,6 +362,7 @@ Done khi : 4 check chạy đúng; deploy chỉ khi pass.
 | Không bypass core | core_client.go | group 6 (kiểm không có serial) |
 
 ---
+**Rev** 1.33 | 2026-07-22 — Merged ADR-017 local-HMI broker/network authority handoff with historian v2 guide history; Web network source remains desired/pending until BE/FE uses stage/apply/confirm/rollback and active/pending/reconnect/rollback UX. ·
 **Rev** 1.32 | 2026-07-21 — Completed bounded Orange Pi schema-v5 activation with final ARM64 package parity, owner-safe atomic config replacement, first-cycle restart gaps, 596,284-row migration evidence and live v2 query/writer smoke; release gates remain open. **Rev** 1.31 | 2026-07-21 — Closed ARM64 prebuilt-native parity on frozen schema-v5 legacy/active fixtures with native manifest and unchanged artifacts; live schema-v1/SQLITE_BUSY/migration/cutover remain open. **Rev** 1.30 | 2026-07-21 — Recorded ARM64 native preflight fail-closed on board schema-v1 fixture with unchanged SHA. **Rev** 1.29 | 2026-07-21 — Added native `historian-rollback-package` parity gate with independent current/candidate builds, SHA/build metadata, legacy+active fixture execution, DB-family/archive/evidence immutability and atomic manifest output. **Rev** 1.28 | 2026-07-21 — Added read-only `historian-rollback-verify` schema-v5 fixture gate with exact authority/evidence validation, future-schema rejection and no-mutation SHA proof. **Rev** 1.27 | 2026-07-21 — Added offline `historian-maintenance` operator CLI with exact confirmation, stable UTC, service-presence, path containment and manifest/window/fresh-authority preflight. **Rev** 1.26 | 2026-07-21 — Added maintenance-only ordered writer quiesce/final backup/full migration/evidence/gap/activation coordinator and schema-v5 quiesce proof.
 **Rev** 1.23 | 2026-07-21 — Physical rolling-prune engine code/local GREEN with fail-closed activation proof, durable queue/retry, checksum validation, all-tier cutoff and frontier rebase; execution, activation/cutover, target and E2E remain open.
 **Rev** 1.22 | 2026-07-20 — Added interval-bounded retention contract/UI, selected/max API fields, policy validation/schema migration and capacity projection; physical prune, target benchmark and activation/cutover remain open. · **Rev** 1.21 | 2026-07-20 — Closed WEB-HIST-005 shared Logging Control/unified Trends code-local gates with 50 frontend tests, UTC range/partial/generation/BAD-gap/stepped coverage, default-off v2 authority gate and no VP diagnostic/database conflation; retained legacy authority, activation/cutover, target and release gates as open. · **Rev** 1.20 | 2026-07-20 — Closed WEB-HIST-004 unified query/CSV code-local gates with JSON/CSV shared iteration, generation-aware RAM/hot/archive merge and supported Linux race; retained legacy authority, WEB-HIST-005, activation/cutover, target and release gates as open. · **Rev** 1.19 | 2026-07-20 — Closed the WEB-HIST-003 shadow code-local slice after deterministic scheduler/error-path TDD and supported Linux race; legacy authority, WEB-HIST-004/005, activation/cutover, target and release gates remain open. · **Rev** 1.18 | 2026-07-20 — Reconciled WEB-HIST-001/002 code-local completion and WEB-HIST-003 shadow-scheduler work in progress; WEB-HIST-004/005, activation/cutover, target and release gates remain open. · **Rev** 1.17 | 2026-07-15 — Reconciled WEB-HIST-001..005 and WEB-NAME-001 status, preserved WEB-016 as technical-tag foundation, and aligned legacy custom-range containment wording. · **Rev** 1.16 | 2026-07-15 — Reconciled local historian/name evidence: backend coverage 59.7%; OpenAPI 1.6.0 parses with 41 paths, 216 local refs, zero decoded C1 controls; Windows CGO 64-bit race block and E2E/manual/generation-root gates remain open. · **Rev** 1.15 | 2026-07-15 — ADR-018/019 amendments: independent unique display names, legacy conflict resolution, shared UI/AO/DO/VP Logging Control, immediate/future start, persistent policy states and backend-owned 48-hour/archive Trends merge; implementation remains open. · **Rev** 1.14 | 2026-07-15 — ADR-019 Phase A API-writer implementation verified locally: global validation, `id+tag+name`, FE tag/error surfaces and migration helper; release gates remain explicit. · 1.13 | 2026-07-15 — ADR-019 Phase A global point tags planned: backend aggregate validation, `id+tag+name`, FE field errors, migration/generation gates; Phase B deferred. · 1.12 | 2026-07-15 — Owner-approved FE adjustment: bảng timestamp Trends chỉ render 5 mốc mới nhất; chart giữ toàn bộ samples/range, không đổi REST/WS contract. · 1.11 | 2026-06-23 · DoD: [13_DEFINITION_OF_DONE §5](13_DEFINITION_OF_DONE.md)

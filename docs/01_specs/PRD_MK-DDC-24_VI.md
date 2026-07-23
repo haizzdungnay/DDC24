@@ -1,14 +1,17 @@
 # PRD — MK-DDC-24 Product Requirements Document
 
 > **Phiên bản:** 2.0 | 2026-06-30
-> **Trạng thái:** Draft — Ver 1  
-> **Tác giả:** KINEXUS Technologies — Product Team  
+> **Trạng thái:** Draft — Ver 1
+> **Tác giả:** KINEXUS Technologies — Product Team
 > **Liên quan:** [DS](DS_MK-DDC-24_VI.md) | [SRS](SRS_MK-DDC-24_VI.md) | [HW_SPEC](HW_SPEC_MK-DDC-24_VI.md)
 
-> ⚠️ **RECONCILE (2026-06-08).** Định vị & triết lý sản phẩm nay theo nguồn-chuẩn
-> [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md): **component-based DDC**
-> (không IEC 61131-3/PLC IDE), Linux 3-process `mkddc-*`, UI Rev A form/JSON, BACnet/IP
-> northbound + Modbus RTU/TCP field. Phạm vi Rev A: [REVA_SCOPE](REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md).
+> ⚠️ **RECONCILE (2026-07-23, ADR-020 supersedes 2026-06-08 banner cũ).** Định vị & triết
+> lý sản phẩm theo nguồn-chuẩn [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md):
+> **component-based DDC** (engine chạy thật hôm nay), Linux 3-process `mkddc-*`, UI Rev A
+> form/JSON, BACnet/IP northbound + Modbus RTU/TCP field. **FR-001 bên dưới (IEC 61131-3
+> FBD+ST) không còn bị loại khỏi Rev A** — đã trở thành roadmap chính thức qua ADR-020
+> (Mekong-owned Program Runtime, ST+FBD, đang C0, chưa release, không certified/compliant).
+> Phạm vi Rev A: [REVA_SCOPE](REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md).
 > Baseline I/O và IOP theo [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md): 16 UI + 4 AO + 4 DO, không có DI công nghiệp trên base SKU.
 
 ---
@@ -21,7 +24,7 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 |----------|------------------|
 | Chi phí cạnh tranh | Giá bán ≤ 550 USD (EXW), thấp hơn ≥ 15% so với SBO/PXC4 |
 | Tích hợp nhanh | Commissioning một FCU zone < 2 giờ |
-| Tiêu chuẩn mở | IEC 61131-3 + BACnet BTL — không vendor lock-in |
+| Tiêu chuẩn mở | IEC 61131-3-aligned (Mekong-owned, roadmap) + BACnet BTL — không vendor lock-in |
 | Linux-based | Chạy Debian trên SOM quad-core, RAM < 2 GB |
 | Linh hoạt kết nối | BACnet MS/TP + BACnet/IP + MQTT trên cùng thiết bị |
 | Bảo mật tích hợp | Secure boot, TLS 1.3, tuân thủ IEC 62443-4-1 |
@@ -43,8 +46,8 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 ## 3. Use Cases Chính
 
 ### UC-01 — FCU Zone Control
-**Actor:** Hệ thống tự động (soft PLC nội bộ)  
-**Trigger:** Giờ làm việc (schedule) hoặc lệnh BACnet từ BMS  
+**Actor:** Hệ thống tự động (soft PLC nội bộ)
+**Trigger:** Giờ làm việc (schedule) hoặc lệnh BACnet từ BMS
 **Flow:**
 1. Đọc nhiệt độ phòng từ UI1 (NTC 10k)
 2. Chạy PID loop → tính % valve cooling (AO1)
@@ -55,7 +58,7 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 **Tiêu chí hoàn thành:** Nhiệt độ duy trì ±0.5°C quanh setpoint trong điều kiện tải thay đổi 50%.
 
 ### UC-02 — BACnet Discovery & Integration
-**Actor:** BMS Server  
+**Actor:** BMS Server
 **Flow:**
 1. BMS gửi Who-Is (broadcast)
 2. DDC-24 trả I-Am (Device ID, vendor ID, max APDU)
@@ -64,7 +67,7 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 5. DDC-24 thực hiện output tương ứng trong < 500 ms
 
 ### UC-03 — OTA Firmware Update
-**Actor:** Admin kỹ thuật  
+**Actor:** Admin kỹ thuật
 **Flow:**
 1. Upload firmware package (signed .deb) lên portal KINEXUS
 2. DDC-24 download qua HTTPS (TLS 1.3) trong giờ bảo trì
@@ -73,7 +76,7 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 5. Nếu boot thất bại → rollback về A tự động
 
 ### UC-04 — Commissioning Web UI
-**Actor:** System Integrator  
+**Actor:** System Integrator
 **Flow:**
 1. Kết nối laptop cùng mạng Ethernet hoặc USB-C (serial console)
 2. Truy cập `http://<ip>:8080` — KinexusET IDE
@@ -83,7 +86,7 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 6. Enable trend log → export checklist FAT/SAT
 
 ### UC-05 — Failsafe & Recovery
-**Actor:** Hệ thống (tự động khi mất kết nối BMS)  
+**Actor:** Hệ thống (tự động khi mất kết nối BMS)
 **Flow:**
 1. BACnet connection timeout > 30 s
 2. Soft PLC chuyển sang chế độ local standalone
@@ -91,8 +94,8 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 4. Khi BACnet restore → resume bình thường, ghi event log
 
 ### UC-06 — Mở rộng I/O qua Modbus RTU master *(cập nhật ARCH-R010)*
-**Actor:** Kỹ thuật viên lắp đặt  
-**Trigger:** Dự án cần nhiều hơn 24 điểm, hoặc cần màn hình phụ / đọc đồng hồ điện  
+**Actor:** Kỹ thuật viên lắp đặt
+**Trigger:** Dự án cần nhiều hơn 24 điểm, hoặc cần màn hình phụ / đọc đồng hồ điện
 **Flow:**
 1. Đấu module mở rộng I/O (hoặc thiết bị Modbus bên thứ 3) vào bus RS-485 của DDC.
 2. Khai báo slave trong Web UI: địa chỉ + chọn **device profile** (template register-map).
@@ -102,6 +105,19 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 
 **Tiêu chí hoàn thành:** Thêm 1 module mở rộng I/O qua RTU không cần đổi code; điểm của nó dùng được trong PLC/BACnet; phát hiện được khi module rớt mạng.
 
+### UC-07 — Vận hành giới hạn tại HMI local
+**Actor:** Operator tại tủ điện
+**Trigger:** Cần kiểm tra hoặc điều chỉnh nhanh mà không dùng browser/laptop
+**Flow:**
+1. Operator đăng nhập session local có thời hạn.
+2. HMI hiển thị Home/Points/Control/Alarms/Service và chỉ đưa point được authority whitelist vào Control.
+3. Operator chỉnh setpoint hoặc chọn Auto/Manual; override phải có reason và TTL.
+4. Local broker xác thực role/policy và ghi audit; core kiểm priority/interlock/safety.
+5. HMI chỉ hiện accepted/active sau authoritative response; operator có thể Release để trả automatic control.
+6. Khi broker/core unavailable, Control/ACK/Service bị disable nhưng monitoring SHM vẫn hoạt động read-only.
+
+**Tiêu chí hoàn thành:** Không có đường ghi trực tiếp từ HMI tới SHM/hardware; command hợp lệ có feedback trong 2 giây nominal, command ngoài quyền/range hoặc duplicate bị từ chối/idempotent và có audit.
+
 ---
 
 ## 4. Yêu cầu Chức năng (Functional Requirements)
@@ -110,7 +126,7 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 
 | ID | Yêu cầu | Mức độ |
 |----|---------|--------|
-| FR-001 | Phải chạy IEC 61131-3 FBD và ST trên soft PLC Debian | MUST |
+| FR-001 | Phải chạy FBD và ST (Mekong Program Runtime, IEC 61131-3-aligned) trên Debian — roadmap Rev A.0, ADR-020, đang C0, không certified | MUST |
 | FR-002 | Chu kỳ scan phải cấu hình được 50 ms – 2 s | MUST |
 | FR-003 | Phải cung cấp PID block với auto-tuning cơ bản | MUST |
 | FR-004 | Phải hỗ trợ ≥ 8 schedule object (ngày/tuần/exception) | MUST |
@@ -155,6 +171,16 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 | FR-035 | Phải log toàn bộ auth events và config changes | MUST |
 | FR-036 | Phải tuân thủ quy trình SDLC theo IEC 62443-4-1 | MUST |
 
+### 4.5 HMI local
+
+| ID | Yêu cầu | Mức độ |
+|----|---------|--------|
+| FR-040 | HMI local phải có năm surface Home/Points/Control/Alarms/Service trên TFT 2.4 inch, touch + 6 nút | MUST |
+| FR-041 | Operator chỉ được setpoint/mode/override/release point được authority whitelist; không được engineering/configuration sâu | MUST |
+| FR-042 | Mọi HMI mutation phải qua authenticated broker, audit và core arbitration/safety; broker lỗi làm HMI read-only | MUST |
+| FR-043 | Alarm ACK phải authoritative, audited và không clear active condition | MUST |
+| FR-044 | Override phải có reason, bounded TTL, visible effective priority/source và explicit release | MUST |
+
 ---
 
 ## 5. Yêu cầu Phi chức năng (Non-Functional Requirements)
@@ -184,7 +210,7 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 
 ### Giả định
 - Mạng Ethernet sẵn có tại vị trí lắp đặt (cho BACnet/IP, MQTT)
-- SI đã quen IEC 61131-3 — không cần training về ngôn ngữ lập trình
+- SI đã quen IEC 61131-3 nên onboarding ST/FBD nhanh hơn khi Program Runtime roadmap release — vẫn cần training riêng cho Mekong Web IDE (chưa phải PLC IDE chuẩn thị trường)
 - BMS upstream đã sẵn BACnet/IP hoặc MS/TP router
 
 ---
@@ -193,7 +219,7 @@ MK-DDC-24 phải là bộ điều khiển DDC compact phù hợp cho **FCU, VAV 
 
 | Phiên bản | Tính năng | Target |
 |-----------|-----------|--------|
-| **Ver 1.0 (MVP)** | BACnet MS/TP + IP, IEC 61131-3 FBD, web UI cơ bản, OTA | Q4/Y7 |
+| **Ver 1.0 (MVP)** | BACnet MS/TP + IP, web UI cơ bản, OTA. Program Runtime FBD/ST (ADR-020) không nằm trong Ver 1.0 — roadmap riêng, gate theo C0–C10 | Q4/Y7 |
 | **Ver 1.1** | MQTT TLS, REST API đầy đủ, dashboard realtime | Q1/Y8 |
 | **Ver 1.2** | BACnet/SC (Secure Connect), IEC 62443-4-2 certification | Q2/Y8 |
 | **Ver 2.0** | IEC 62443-4-2 component certification, edge AI anomaly detection (NPU), advanced ST libraries | Q4/Y8 |
@@ -206,7 +232,7 @@ Bảng dưới ánh xạ từng Functional Requirement (FR) sang ID trong SRS v�
 
 | FR ID | Mô tả ngắn | SRS Requirement IDs | Test Case |
 |-------|-----------|--------------------|-----------|
-| FR-001 | IEC 61131-3 FBD + ST | PLC-001, PLC-002, IDE-001, IDE-002 | TEST-001, FAT: PLC scan jitter |
+| FR-001 | FBD + ST (Mekong Program Runtime, roadmap ADR-020) | PLC-001, PLC-002, IDE-001, IDE-002 | TEST-001, FAT: PLC scan jitter |
 | FR-002 | Scan cycle 50ms–2s | PLC-010 | TEST-001 |
 | FR-003 | PID block + auto-tuning | PLC-004, PLC-005 | TEST-001 |
 | FR-004 | Schedule ≥ 8 objects | BAC-006 (Event), BACnet Schedule object | FAT: BACnet objects |
@@ -233,6 +259,11 @@ Bảng dưới ánh xạ từng Functional Requirement (FR) sang ID trong SRS v�
 | FR-034 | Web UI authentication | IDE-030–IDE-034, SEC-023 | TEST-004 |
 | FR-035 | Audit log | SEC-025, LOG-005, IDE-033 | TEST-002 |
 | FR-036 | IEC 62443-4-1 SDLC | SEC-001–SEC-006 | Code review |
+| FR-040 | Five-surface local HMI | HMI-001–HMI-015, HMI-030 | T-SW-100–T-SW-106, T-SW-121 |
+| FR-041 | Whitelisted limited control | HMI-025–HMI-027, HMI-032 | T-SW-118 |
+| FR-042 | Broker/audit/core command boundary | HMI-026, HMI-028, HMI-029 | T-SW-117, T-SW-119, T-SW-122 |
+| FR-043 | Authoritative alarm ACK | HMI-016, HMI-017, HMI-023 | T-SW-107, T-SW-120 |
+| FR-044 | Override lifecycle | HMI-027, HMI-031 | T-SW-118, T-SW-121 |
 
 ---
 
@@ -249,6 +280,6 @@ Bảng dưới ánh xạ từng Functional Requirement (FR) sang ID trong SRS v�
 
 ---
 
-**Document ID:** PRD-MK-DDC-24-VI  
-**Revision:** 2.0 | 2026-06-30
+**Document ID:** PRD-MK-DDC-24-VI
+**Revision:** 2.1 | 2026-07-22 — added ADR-016 limited-operator local HMI use case, functional requirements and trace rows
 **Approved by:** Product Manager, CTO KINEXUS Technologies

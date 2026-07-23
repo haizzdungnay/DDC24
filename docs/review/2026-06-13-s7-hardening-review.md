@@ -6,7 +6,7 @@
 > **Scope commit:** `adedeeb` — feat: S7 hardening cụm 1+2+3
 > **Nội dung PR:** web_ipc overridden+audit (COR-007), SIGHUP reload (COR-008), packaging/systemd (SKEL-005)
 > **Reviewer:** Claude Code (high-effort — 7 angles × multi-agent verify)
-> **Đọc cùng:** [11_TASK_CHECKLIST](11_TASK_CHECKLIST.md) · [07_MKDDC_CORE_IMPLEMENTATION_GUIDE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md)
+> **Đọc cùng:** [11_TASK_CHECKLIST](../03_implementation/11_TASK_CHECKLIST.md) · [07_MKDDC_CORE_IMPLEMENTATION_GUIDE](../03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md)
 
 ---
 
@@ -384,7 +384,7 @@ PR #13 review chỉ cover **code correctness + design**. Những thứ KHÔNG n�
 - Test coverage % tổng thể (có CI check riêng)
 - Performance benchmark (chưa có board)
 - BACnet/Modbus (S7 #5/#6 — chưa implement)
-- Stateful component / state.snap (S7 #4 — xem [23_GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md))
+- Stateful component / state.snap (S7 #4 — xem [23_GRAPH_STATEFUL_COMPONENTS_PLAN](../03_implementation/23_GRAPH_STATEFUL_COMPONENTS_PLAN.md))
 
 ---
 

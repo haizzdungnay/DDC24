@@ -1,11 +1,11 @@
 # Software Requirements Specification (Detailed) — MK-DDC-24
 ## SOM Application Layer / Debian 12
 
-> **Document ID:** SW-REQ-MK-DDC-24-VI  
-> **Phiên bản:** 2.0-DRAFT | 2026-06-30
-> **Trạng thái:** Draft — Pending SW Lead review  
-> 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
-> **Tác giả:** KINEXUS Technologies — Software Team  
+> **Document ID:** SW-REQ-MK-DDC-24-VI
+> **Phiên bản:** 2.2-DRAFT | 2026-07-22
+> **Trạng thái:** Draft — Pending SW Lead review
+> 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))
+> **Tác giả:** KINEXUS Technologies — Software Team
 > **Nguồn gốc:** Trace từ SRS/PRD v2.0, ADR-010 và shared headers
 
 > **Quan hệ với SRS:** Tài liệu này phân rã SRS thành requirements cụ thể theo module. SRS vẫn là tài liệu cấp cao (functional). SW-REQ là cấp thấp hơn — implementation-binding.
@@ -22,8 +22,9 @@
 | `mkddc-iobus` | Modbus RTU x2 / TCP (async) + BACnet/IP datalink | C++17 / C | `SW-FB-*`, `SW-BAC-*` |
 | `mkddc-web` | Web config (form/JSON) + **validator (library)** + commissioning + SQLite | **Go** | `SW-IDE-*`→`SW-WEB-*` |
 
-**Deferred Rev B+** (giữ từ thiết kế cũ, không mất): HMI Display (`kinexus-hmi`, LVGL),
-MQTT/REST Agent (`kinexus-agent`), Security Service, OTA (`kinexus-ota`), cloud. Xem
+**Rev A optional/feature-gated:** HMI Display (`mkddc-hmi`, LVGL/DRM) theo ADR-016.
+**Deferred Rev B+** (giữ từ thiết kế cũ, không mất): MQTT/REST Agent (`kinexus-agent`),
+Security Service, OTA (`kinexus-ota`), cloud. Xem
 [REVA_SCOPE §3](REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md). Validator **không** dùng Rust service.
 
 <details><summary>§1-legacy — decomposition cũ (7+ service `kinexus-*`, tham chiếu)</summary>
@@ -116,10 +117,18 @@ typedef struct {
 
 ### 3.1 Yêu cầu Ngôn ngữ & Chương trình
 
+> ⚠️ **Cập nhật 2026-07-23 (ADR-020):** SW-PLC-001/002 dưới đây vẫn là hướng đúng về mặt
+> ngôn ngữ (FBD + ST) nhưng phải đọc lại trong khung Mekong-owned Program Runtime, **không
+> phải một PLC IEC 61131-3 đầy đủ/certified**: không claim `compliant`/`certified`, không
+> online change, runtime là `mkddc-program-core`/`libmkddc_iec` tự phát triển (không phải
+> engine bên thứ ba). "≥16 programs song song" là con số kế thừa từ spec cũ, cần C0 xác
+> nhận lại theo resource limit thật của roadmap ST+FBD trước khi coi là Accepted. Baseline
+> hiện hành cho scope ST+FBD là `REQUIREMENTS.md` SWR-REQ-IEC-001..009.
+
 | ID | Yêu cầu | Loại | Trace SRS | Test Ref |
 |----|---------|------|-----------|---------|
-| SW-PLC-001 | PHẢI thực thi chương trình FBD per IEC 61131-3 với ≥ 16 programs song song | MUST | PLC-001, PLC-006 | T-SW-020 |
-| SW-PLC-002 | PHẢI thực thi Structured Text (ST) per IEC 61131-3 | MUST | PLC-002 | T-SW-021 |
+| SW-PLC-001 | PHẢI thực thi chương trình FBD theo Mekong Program Runtime (IEC 61131-3-aligned), roadmap Rev A.0 — không certified | MUST | PLC-001, PLC-006 | T-SW-020 |
+| SW-PLC-002 | PHẢI thực thi Structured Text (ST) theo Mekong Program Runtime (IEC 61131-3-aligned), roadmap Rev A.0 — không certified | MUST | PLC-002 | T-SW-021 |
 | SW-PLC-003 | Standard FBs PHẢI có: TON, TOF, TP, CTU, CTD, CTUD, RS, SR, F_TRIG, R_TRIG, PID_COMPACT | MUST | PLC-003, PLC-004 | T-SW-022 |
 | SW-PLC-004 | PID_COMPACT PHẢI hỗ trợ bumpless manual→auto transfer | MUST | PLC-005 | T-SW-023 |
 | SW-PLC-005 | PHẢI map I/O objects (AI/AO/BI/BO) từ shared memory `kinexus_io_shm` | MUST | PLC-020 | T-SW-024 |
@@ -222,18 +231,28 @@ typedef struct {
 
 ---
 
-## 8. HMI Display Requirements (`kinexus-hmi`)
+## 8. HMI Display Requirements (`mkddc-hmi`)
 
 | ID | Yêu cầu | Loại | Trace SRS | Test Ref |
 |----|---------|------|-----------|---------|
-| SW-HMI-001 | PHẢI chạy LVGL v9 userspace, render vào `/dev/fb0` (fbtft/ILI9341 driver) | MUST | HMI-001 | T-SW-100 |
+| SW-HMI-001 | PHẢI chạy LVGL v9 userspace, render qua DRM/KMS `/dev/dri/card0` tới JD9852 MIPI DSI; cấm fbdev/fbtft/ILI9341 | MUST | HMI-001 | T-SW-100 |
 | SW-HMI-002 | Frame rate ≥ 10 FPS | MUST | HMI-002 | T-SW-101 |
-| SW-HMI-003 | Data feed từ `kinexus_io_shm` (shared memory), không HTTP | MUST | HMI-005 | T-SW-102 |
+| SW-HMI-003 | Data feed từ `kx_io_shm_t` + `kx_plc_shm_t` theo `shared/mkddc_shm.h`, không HTTP | MUST | HMI-005 | T-SW-102 |
 | SW-HMI-004 | Refresh display data ≤ 1 giây | MUST | HMI-006 | T-SW-103 |
 | SW-HMI-005 | Screen saver: dim backlight sau 5 phút không nhấn nút | SHOULD | HMI-007 | T-SW-104 |
-| SW-HMI-006 | 6-nút navigation (UP/DOWN/LEFT/RIGHT/ENTER/ESC) qua GPIO interrupt | MUST | HMI-010 | T-SW-105 |
-| SW-HMI-007 | Menu screens: Dashboard / I/O Status / Alarm List / Network Info / System Info | MUST | HMI-011 | T-SW-106 |
-| SW-HMI-008 | Alarm list: ≥ 10 entries, timestamp + severity | MUST | HMI-012 | T-SW-107 |
+| SW-HMI-006 | Touch FT5436/evdev và 6-nút navigation phải cùng hoạt động; focus và wake-event suppression phải test trên target | MUST | HMI-008/010 | T-SW-105 |
+| SW-HMI-007 | Năm surface: Home / Points / Control / Alarms / Service; communication/system diagnostics được gộp không mất dữ liệu | MUST | HMI-011 | T-SW-106 |
+| SW-HMI-008 | Alarm list ≥10 entry, đủ priority/state/time/source/message; ACK gửi authority và có audit | MUST | HMI-012/016/017/023 | T-SW-107 |
+| SW-HMI-009 | Service action fail-closed theo identity/role; reboot có impact summary + hold 3s + safe-state confirmation từ core | MUST | HMI-015/018 | T-SW-108 |
+| SW-HMI-010 | Telemetry/action chưa có contract phải ẩn/disable; không suy diễn `OK` hoặc hiển thị placeholder như dữ liệu thật | MUST | HMI-019 | T-SW-109 |
+| SW-HMI-011 | Coding màu, text/symbol và focus phải qua IEC 60073 review; alarm philosophy theo IEC 62682; không tuyên bố certification từ design review | MUST | HMI-009/017 | T-SW-115 |
+| SW-HMI-012 | HMI phải qua scenario usability test trên panel thật với operator, commissioning và service roles | MUST | HMI-024 | T-SW-116 |
+| SW-HMI-013 | Command client phải dùng versioned Unix-domain IPC qua local auth/audit broker; telemetry SHM giữ read-only và không đổi ABI | MUST | HMI-026/028 | T-SW-117 |
+| SW-HMI-014 | Point control model phải hỗ trợ authoritative query, setpoint, mode, override, release, reason, TTL, effective source/priority và stable reject code | MUST | HMI-025/027/032 | T-SW-118 |
+| SW-HMI-015 | Local session phải dùng opaque short-lived token, fail closed và idle expiry ≤15 phút; static role/PIN config không được grant production privilege | MUST | HMI-018/029 | T-SW-119 |
+| SW-HMI-016 | Alarm model phải hydrate từ authority, ACK bằng request ID idempotent và chỉ đổi state sau authoritative response | MUST | HMI-016/017/028 | T-SW-120 |
+| SW-HMI-017 | Action widget phải có ≥40×40 px hoặc hard-key equivalent, body font ≥14 px, visible focus/pending/rejected/expired states | MUST | HMI-009/030/031 | T-SW-121 |
+| SW-HMI-018 | HMI service không được giữ `CAP_SYS_BOOT`, gửi raw signal tới core/iobus hoặc tự execute privileged maintenance action | MUST | HMI-015/018/026 | T-SW-122 |
 
 ---
 
@@ -309,6 +328,6 @@ typedef struct {
 
 ---
 
-**Document ID:** SW-REQ-MK-DDC-24-VI  
-**Revision:** 2.1 | 2026-06-30 (§2.1: SW-IOP-012..013 — kx_reliability_t per ADR-011; §4.2: SW-BAC-009..011 — Reliability map + AO config per ADR-011/ADR-012) · 2.0 | 2026-06-30 (Breaking IOP timing/base-SKU I/O alignment; legacy inline struct retained only inside the marked reference block)
+**Document ID:** SW-REQ-MK-DDC-24-VI
+**Revision:** 2.3 | 2026-07-22 (limited-operator HMI, five surfaces, local broker/core command contract, session/TTL/release and privilege removal plan) · 2.2 | 2026-07-22 (HMI DRM/MIPI baseline, alarm authority/audit, fail-closed roles and usability gates) · 2.1 | 2026-06-30 (§2.1: SW-IOP-012..013 — kx_reliability_t per ADR-011; §4.2: SW-BAC-009..011 — Reliability map + AO config per ADR-011/ADR-012) · 2.0 | 2026-06-30 (Breaking IOP timing/base-SKU I/O alignment; legacy inline struct retained only inside the marked reference block)
 **Review required:** Software Lead, System Architect

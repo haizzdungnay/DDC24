@@ -1,0 +1,30 @@
+INFO  === MK-DDC-24 BACnet BTL Pre-test ===
+INFO  Date: 20260701T043258Z
+INFO  Target: 172.17.0.1:47808  Device_Instance: 4194002
+INFO
+INFO  T1: Who-Is / I-Am round-trip
+PASS  T1 Who-Is/I-Am: 58ms < 100ms (SW-BAC-005)
+INFO  T2: ReadProperty Device Object_Name (prop 77)
+PASS  T2 ReadProperty Device.Object_Name
+INFO  T3: ReadProperty AI1 properties
+PASS  T3 AI1.Present_Value (prop 85)
+PASS  T3 AI1.Status_Flags (prop 111)
+PASS  T3 AI1.Reliability (prop 103)
+INFO  T4: ReadProperty BI1 Present_Value
+PASS  T4 BI1.Present_Value
+INFO  T5: WriteProperty AV1 prio=8 value=42.5 + readback
+PASS  T5 WriteProperty AV1 prio=8 val=42.5 readback=42.500000
+INFO  T6: AO1 required properties + WriteProperty prio=8 value=50.0
+PASS  T6 AO1.object-name
+PASS  T6 AO1.units
+PASS  T6 AO1.min-pres-value
+PASS  T6 AO1.max-pres-value
+PASS  T6 WriteProperty AO1 prio=8 readback=50.000000
+INFO  T7: WriteProperty NULL (relinquish AO1 prio=8)
+PASS  T7 Relinquish AO1 prio=8
+INFO  T8: ReadProperty Device Vendor_Identifier (prop 120)
+PASS  T8 Vendor_Identifier=9999 (placeholder, PICS §7)
+INFO
+INFO  === SUMMARY ===
+INFO  PASS: 14  FAIL: 0
+INFO  Evidence: docs/07_records/evidence/bacnet-pretest/20260701T043258Z/

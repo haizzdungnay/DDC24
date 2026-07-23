@@ -92,6 +92,8 @@ TEST(IobusConfig, AoBacnetPropertiesParseAndDefaultByMode)
     EXPECT_EQ(cfg.ao_channels[0].units_str, "percent");
     EXPECT_FLOAT_EQ(cfg.ao_channels[0].min_pv, 0.0f);
     EXPECT_FLOAT_EQ(cfg.ao_channels[0].max_pv, 100.0f);
+    EXPECT_EQ(cfg.ao_channels[0].mode, AoMode::V0_10);
+    EXPECT_EQ(cfg.ao_channels[1].mode, AoMode::MA4_20);
     EXPECT_EQ(cfg.ao_channels[1].units_str, "milliampere");
     EXPECT_FLOAT_EQ(cfg.ao_channels[1].min_pv, 4.0f);
     EXPECT_FLOAT_EQ(cfg.ao_channels[1].max_pv, 20.0f);
@@ -264,6 +266,18 @@ TEST(IobusConfig, ReloadConfigSafeWarnsOnDangerousFieldsAndKeepsOld)
     EXPECT_EQ(cfg.uart_device, "/dev/ttyS2"); // Kept old dangerous field
     EXPECT_EQ(cfg.baud, 921600);              // Kept old dangerous field
     EXPECT_EQ(cfg.poll_period_ms, 30u);         // Updated safe field
+}
+
+TEST(IobusConfig, ReloadAoModeChangeRequiresRestart)
+{
+    IobusConfig cfg;
+    cfg.ao_mode[0] = AoMode::V0_10;
+    cfg.ao_channels[0].mode = AoMode::V0_10;
+
+    TempConfig f(R"({ "ao": [ {"ch":1,"mode":"4-20mA"} ] })");
+    ASSERT_TRUE(reload_config_safe(f.path(), true, cfg, "", ""));
+    EXPECT_EQ(cfg.ao_mode[0], AoMode::V0_10);
+    EXPECT_EQ(cfg.ao_channels[0].mode, AoMode::V0_10);
 }
 
 TEST(IobusConfig, ReloadConfigSafeFailsOnBadJsonAndKeepsOld)
