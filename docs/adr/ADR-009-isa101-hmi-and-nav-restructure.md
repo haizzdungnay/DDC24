@@ -4,8 +4,10 @@
 - Owner: Product Owner / FE Lead
 - Status: Accepted
 - Accepted: 2026-06-16 (owner)
-- Builds on: [ADR-004](ADR-004-component-based-runtime.md) (component-based runtime,
-  no IEC 61131-3 in Rev A), [ADR-006](ADR-006-rev-a-ui-form-json.md)
+- Builds on: [ADR-004](ADR-004-component-based-runtime.md) (component-based runtime;
+  **superseded 2026-07-23 by [ADR-018](ADR-018-mekong-owned-iec-aligned-program-runtime.md)**
+  for the "no IEC 61131-3 in Rev A" part only — this ADR's HMI/nav decision is unaffected),
+  [ADR-006](ADR-006-rev-a-ui-form-json.md)
   (Rev A form/JSON engineering UI),
   [ADR-008](ADR-008-bms-edge-positioning-and-revA-component-set.md)
   (BMS edge positioning)
@@ -30,9 +32,13 @@ red means fault, and magenta means highest-priority/safety. Color still cannot b
 of meaning.
 
 The current "Validator" label is also ambiguous. It can be misread as a programming IDE.
-Rev A programming is not IEC 61131-3 FBD/ST; ADR-004 and ADR-006 define it as configuring
-predefined components, importing/exporting `graph.json`, validating the graph, testing and
-deploying.
+Rev A programming (2026-06-16, at time of this decision) was configuring predefined
+components, importing/exporting `graph.json`, validating the graph, testing and deploying
+(ADR-004/ADR-006) — not IEC 61131-3 FBD/ST. **Note (2026-07-23):** ADR-018 has since
+added a separate, Mekong-owned IEC 61131-3-aligned Program Runtime (ST+FBD) to the Rev
+A.0 roadmap (in C0, not yet released). This ADR's "Programming" label decision below
+still stands for the legacy component-graph surface; it does not itself cover the new
+Program Runtime editor.
 
 Recent demo UI work on Trends, Scheduler, Network and Validator, recorded in the 2026-06-16
 Unreleased changelog, fits under this broader information-architecture decision.
@@ -69,7 +75,9 @@ Unreleased changelog, fits under this broader information-architecture decision.
 
 6. **Rename Validator to Programming.** Programming is the Rev A component-library assembly
    surface with validate/test actions, the four Rev A graph checks and demo deploy. It is not a
-   drag-and-drop canvas and not IEC 61131-3. Editable wiresheet/canvas remains Rev B scope.
+   drag-and-drop canvas. Editable wiresheet/canvas for the legacy component graph remains
+   Rev B scope. *(Note 2026-07-23: a separate Program Runtime ST/FBD editor is now on the
+   Rev A.0 roadmap per ADR-018, tracked outside this page's original scope.)*
 
 7. **Define `/me` as the RBAC self-service page.** It should show identity, role, permission
    summary, session information such as login time, auto-logout and IP address, plus Change

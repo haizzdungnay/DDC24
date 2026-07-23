@@ -1,8 +1,8 @@
 # Verification and Release Gates
 
 **ID:** VVP-001
-**Trạng thái:** Active — hardware gate RED
-**Cập nhật:** 2026-07-22
+**Trạng thái:** Active — hardware gate RED; Program Runtime gate RED (ADR-018, C0 chưa xong)
+**Cập nhật:** 2026-07-23
 
 ## Chiến lược
 
@@ -32,6 +32,28 @@ Không dùng số test pass lịch sử làm evidence hiện hành. Mỗi releas
   apply, confirm, 120 s auto/manual rollback, helper/host restart recovery, least
   privilege, Web reconnect, BACnet hot-rebind/`I-Am`, Modbus TCP retry và continuous
   core/IOP/STM32 trace.
+- Program Runtime (ADR-018, ST+FBD): parser/semantic ST+FBD, POU/type conformance,
+  standard/vendor FB golden vectors, deterministic task execution/WCET/overrun,
+  artifact/activation/rollback fault injection, I/O binding/quality negative tests,
+  FE authoritative state (không tự báo build/deploy thành công), RBAC/audit cho toàn bộ
+  vòng đời. Không test layer nào cho LD/SFC (ngoài scope Rev A.0).
+
+## Program Runtime release gate — RED (ADR-018)
+
+Chưa có implementation; C0 (architecture/feasibility) vừa mở, chưa có evidence nào ngoài
+tài liệu thiết kế. Không được release/claim `IEC 61131-3 compliant`, `conformant` hoặc
+`certified` cho tới khi các gate dưới đóng — chi tiết đầy đủ ở
+[`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md) §14:
+
+| Gate | Điều kiện đóng | Hiện tại |
+|---|---|---|
+| G0 Scope/ADR | Product + ADR + requirements phê duyệt ST+FBD trong Rev A.0. | **GREEN** — ADR-018 Accepted; `PRODUCT.md`/`SOFTWARE.md`/`DECISIONS.md`/`REQUIREMENTS.md`/`VERIFICATION.md`/`TRACEABILITY.md` cập nhật 2026-07-23; toàn bộ 31 document conflict đóng (`KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md`) |
+| G1 PSE | FE/Backend hỗ trợ project, ST+FBD, build/deploy thật. | RED |
+| G2 Compiler | Type/POU/library/IR feature matrix pass. | RED |
+| G3 Runtime | Deterministic task execution, activation, retain, fault behavior pass. | RED |
+| G4 I/O/MCU | Typed I/O integration + STM32 target/HIL pass. | RED |
+| G5 Conformance | Normative trace matrix không open deviation trong claim scope. | RED |
+| G6 Approval | Engineering/QA/Product sign-off. | RED |
 
 ## Hardware release gate — RED
 
@@ -97,4 +119,4 @@ Evidence packages tối thiểu: `PWR-5V`, `PWR-3V3`, `PWR-SURGE`, `AO-COMP`, `E
 
 ## Release decision
 
-Release chỉ `GO` khi requirement bắt buộc có trace, automated suites pass, target/HIL evidence hợp lệ, security/deployment checks hoàn tất và mọi gate P0/RED được đóng hoặc có waiver được phê duyệt. Hiện tại hardware/manufacturing status là `NO-GO`.
+Release chỉ `GO` khi requirement bắt buộc có trace, automated suites pass, target/HIL evidence hợp lệ, security/deployment checks hoàn tất và mọi gate P0/RED được đóng hoặc có waiver được phê duyệt. Hiện tại hardware/manufacturing status là `NO-GO`; Program Runtime status là `NO-GO` (C0 chưa hoàn thành, không code C1–C10).

@@ -62,7 +62,8 @@
 ✗ MQTT/agent, cloud                               → Rev B+
 ✗ OTA update                                       → Rev B
 ✗ BACnet/SC, scripted component, multi-DDC        → Rev C
-✗ IEC 61131-3 FBD/ST                               → Rev C (ADR-004)
+✓ IEC 61131-3-aligned ST+FBD Program Runtime         → Rev A.0 roadmap (ADR-018, đang C0, chưa release)
+✗ LD/SFC, online change, IEC certified/compliant claim → ngoài Rev A.0
 ```
 
 ## 4. Validator v1 — 4 check an toàn không thể bỏ

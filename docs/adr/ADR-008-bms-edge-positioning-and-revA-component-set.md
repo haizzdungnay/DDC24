@@ -48,8 +48,12 @@ every downstream edit traces to it.
    Demo 2 Pump/Water, Demo 3 Energy/Gateway. Each demonstrates local-first operation and
    stale/fallback. Detailed in REVA_SCOPE §6, illustrated by `examples/`.
 
-The architecture (ADR-004..007), 90-day deadline, Milestone-A interpretation, and "no
-BTL / no IEC 61131-3 / no HMI-OTA-MQTT in Rev A.0" constraints are **unchanged**.
+The architecture (ADR-004..007), 90-day deadline, Milestone-A interpretation constraints
+are **unchanged**. **Note (2026-07-23):** the "no IEC 61131-3" part of the original
+constraint list is superseded by ADR-018 — Rev A.0 roadmap now includes a Mekong-owned,
+IEC 61131-3-aligned Program Runtime (ST+FBD, currently in phase C0, not yet released,
+not certified). "No BTL / no HMI / no OTA / no MQTT in Rev A.0" (the other constraints in
+the original sentence) are unchanged by this note.
 
 ## Rejected alternatives
 

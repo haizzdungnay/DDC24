@@ -90,7 +90,9 @@ web/storage/      — schema SQLite, migration
 > Trends bám mô hình BACnet Trend Log do kỹ sư cấu hình object-list (SRS IDE-024/025);
 > Scheduler theo BACnet Weekly_Schedule tuần-lặp, bỏ chế độ "Tháng" (PRD FR-004); Network theo
 > ARCH-R010 (north BACnet/IP, south Modbus RTU master), bỏ mô hình cây controller; Validator chạy
-> đúng 4 check §5 trên `graph.json`, không IEC 61131-3 (ADR-004 → Rev C). **KHÔNG** thêm/đổi
+> đúng 4 check §5 trên `graph.json` (component graph legacy — không phải IEC 61131-3
+> Program Runtime; roadmap ST+FBD riêng theo ADR-018, đang C0, xem
+> `KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`). **KHÔNG** thêm/đổi
 > endpoint REST hay WebSocket contract — hợp đồng §2 giữ nguyên.
 
 ---

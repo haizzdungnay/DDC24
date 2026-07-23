@@ -14,8 +14,15 @@
 >   (bacnet+modbus/fieldbus), `mkddc-web` (webide+validator-library).
 >   `mkddc-hmi` là fourth feature-gated Rev A service theo ADR-016;
 >   `kinexus-agent`/`kinexus-ota` vẫn deferred Rev B+.
-> - Engine không còn là IEC 61131-3 PLC mà là **component graph** ([ADR-004](../adr/ADR-004-component-based-runtime.md));
+> - Engine chạy thật hôm nay là **component graph** ([ADR-004](../adr/ADR-004-component-based-runtime.md) — nay giữ vai trò legacy-importer theo [ADR-018](../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md));
 >   mô hình thực thi: [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md).
+>   **Cập nhật 2026-07-23:** roadmap Rev A.0 bổ sung một Program Runtime **mới**, do
+>   Mekong sở hữu, IEC 61131-3-aligned (ST+FBD, đang C0, chưa release) — đây **không phải**
+>   sự hồi sinh của `kinexus-plc`/`libkinexus-plc.so` mô tả bên dưới trong tài liệu này;
+>   toàn bộ chi tiết `kinexus-*` PLC runtime dưới đây là **lịch sử tiền-pivot**, không
+>   phải kiến trúc target. Kiến trúc target thật ở
+>   `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` §4 (`libmkddc_iec`,
+>   `mkddc-program-service`, `mkddc-program-core`).
 > - **Hợp đồng IPC/shm/seqlock với MCU bên dưới giữ nguyên** (rename header
 >   `kinexus_shm.h` → `mkddc_shm.h` ĐÃ thực hiện 2026-06-11). Bảng §1.1 dưới đây là
 >   decomposition cũ, đọc như tham chiếu; ánh xạ sang `mkddc-*` theo banner này.

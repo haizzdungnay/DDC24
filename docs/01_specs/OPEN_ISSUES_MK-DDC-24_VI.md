@@ -48,7 +48,7 @@
 | ID | Priority | Tiêu đề | Mô tả | Impact | Owner | Deadline |
 |----|----------|---------|-------|--------|-------|---------|
 | SW-Q-001 | P1 | BACnet BTL certification — chưa có plan | Chưa có kế hoạch chính thức, không có BTL accredited lab booked. BTL test thường 4-6 tuần lead time | P0 blocker cho GA nếu delay | SW Lead | Đặt lịch trước Month 3 |
-| SW-Q-002 | P2 | IEC 61131-3 engine — tự build hay dùng open source | Chưa quyết định: (a) tự build minimal FBD/ST engine; (b) sử dụng open-source (OpenPLC, MATIEC). License compatibility với commercial product cần review | Build time vs legal risk | SW Lead + Legal | Sprint 1 |
+| SW-Q-002 | Closed | ~~IEC 61131-3 engine — tự build hay dùng open source~~ | **Đã quyết 2026-07-23 (ADR-018):** Mekong tự xây (không dùng OpenPLC/MATIEC hay runtime IEC bên ngoài). Sizing C1–C10 là output của C0.14 (`KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md`). | Đóng, không còn build-vs-buy risk | SW Lead | Closed 2026-07-23 |
 | SW-Q-003 | P2 | LVGL memory consumption | LVGL v9 với frame buffer 320×240×16bpp = 150KB. RK3566 có 2GB RAM → OK, nhưng chưa đo actual heap usage trong production scenario | Memory leak risk | SW | Sprint 2 |
 | SW-Q-004 | P3 | JWT secret storage trên Radxa CM3 | Hiện tại spec "HSM / secure key store". Radxa CM3 không có dedicated HSM. Phương án: (a) OP-TEE TrustZone; (b) TPM chip; (c) encrypted /data partition key | Security architecture gap | SW + HW | Sprint 2 |
 | SW-Q-005 | P2 | OTA server URL chưa xác định | SW-OTA-001..008 cần biết OTA server endpoint để implement cert pinning và rollback prevention. Chưa có infrastructure decision | Cannot implement cert pinning | DevOps + PM | Sprint 2 |
@@ -73,7 +73,7 @@
 
 | ID | Quyết định | Options | Deadline | Owner |
 |----|-----------|---------|---------|-------|
-| DEC-001 | IEC 61131-3 engine: build vs open source | OpenPLC runtime vs tự build minimal | Sprint 1 | SW Lead |
+| DEC-001 | ~~IEC 61131-3 engine: build vs open source~~ | **Closed 2026-07-23 (ADR-018):** tự build (Mekong-owned), không OpenPLC/MATIEC. | Decided | SW Lead |
 | DEC-002 | AO safe state 4-20mA: 0mA vs 4mA | 4mA = "live zero" (recommended) vs 0mA = safe off | Sprint 2 | System Arch |
 | DEC-003 | DI counter bit-width: uint16 vs uint32 | uint32 = no overflow for high-speed, costs 4 bytes in IO_RESP | Sprint 3 | FW Lead |
 | DEC-004 | JWT secret storage: OP-TEE vs TPM vs encrypted FS | OP-TEE preferred if CM3 TrustZone confirmed functional | Sprint 2 | SW + HW |
@@ -102,7 +102,7 @@
 | EXT-003 | EMC lab booking | Not started | HW + PM | 2-4 weeks lead time |
 | EXT-004 | OTA server infrastructure provisioned | Not started | DevOps | Required for SW-OTA integration test |
 | EXT-005 | SSH port 2222 whitelisted trong customer deployment config | Unknown | SI / Customer | Field deployment note — all deployments need firewall update |
-| EXT-006 | IEC 61131-3 engine legal review (nếu dùng open source) | Not started | Legal | Required trước Sprint 2 decision |
+| EXT-006 | ~~IEC 61131-3 engine legal review (nếu dùng open source)~~ | **N/A — Closed 2026-07-23.** ADR-018: Mekong tự xây runtime, không dùng license/open-source bên thứ ba, không còn legal review scope này. | — | — |
 
 ---
 

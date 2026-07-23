@@ -3,13 +3,18 @@
 > **Phiên bản:** 2.1 | 2026-07-22
 > **Trạng thái:** Draft — Ver 1
 > **Tác giả:** KINEXUS Technologies — Software Team
-> **Chuẩn tham chiếu:** IEC 62443-4-1, BACnet ASHRAE 135 (IEC 61131-3 → tầm nhìn Rev C, không thuộc Rev A)
+> **Chuẩn tham chiếu:** IEC 62443-4-1, BACnet ASHRAE 135, IEC 61131-3-aligned (roadmap Rev A.0, ADR-018, đang C0 — không phải Rev C, nhưng cũng chưa release/certified)
 > **Liên quan:** [DS](DS_MK-DDC-24_VI.md) | [PRD](PRD_MK-DDC-24_VI.md) | [HW_SPEC](HW_SPEC_MK-DDC-24_VI.md)
 
-> ⚠️ **RECONCILE (2026-06-08).** Mô hình điều khiển nay là **component-based graph**, KHÔNG
-> IEC 61131-3 (xem [ADR-004](../adr/ADR-004-component-based-runtime.md)). Yêu cầu engine/runtime trace theo
-> [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) (`RUN-*`) thay `PLC-*`. Nguồn-chuẩn sản phẩm:
-> [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md). Mục nào dưới đây nói "PLC/FBD/ST/IEC 61131-3" đọc như tầm nhìn Rev C.
+> ⚠️ **RECONCILE (2026-07-23, ADR-018 supersedes 2026-06-08 banner cũ).** Mô hình điều
+> khiển **chạy thật hôm nay** là component-based graph ([ADR-004](../adr/ADR-004-component-based-runtime.md),
+> nay legacy-importer theo [ADR-018](../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md)).
+> Engine/runtime hiện tại trace theo
+> [SW_RUNTIME_EXECUTION_MODEL](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) (`RUN-*`). **Riêng mục 4 "Soft PLC Runtime" dưới đây (PLC-001..006) không còn là
+> "tầm nhìn Rev C"** — đã trở thành roadmap Rev A.0 chính thức qua ADR-018: Mekong-owned
+> Program Runtime, IEC 61131-3-aligned, scope **ST + FBD** (không LD/SFC, không online
+> change, không certified/compliant), hiện ở giai đoạn C0 (chưa release). Nguồn-chuẩn
+> sản phẩm: [PRODUCT_DEFINITION](PRODUCT_DEFINITION_MK-DDC-24_VI.md).
 > I/O/IOP baseline theo [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md) và `shared/iop_protocol.h`.
 
 ---
@@ -21,7 +26,7 @@
 Tài liệu này định nghĩa các yêu cầu phần mềm cho **hệ thống firmware và application** của MK-DDC-24, bao gồm:
 
 - **OS Layer:** Debian 12 Linux trên SOM quad-core ARM Cortex-A55 (Radxa CM3 / RK3566)
-- **Soft PLC Runtime:** IEC 61131-3 engine (FBD, ST)
+- **Soft PLC Runtime:** component graph (chạy thật hôm nay) + Mekong Program Runtime IEC 61131-3-aligned (FBD, ST) — roadmap ADR-018, đang C0, chưa release
 - **BACnet Stack:** BACnet/IP (Annex J), PICS-compliant *(MS/TP loại bỏ — ARCH-R010)*
 - **Communication Services:** Northbound (IP): BACnet/IP, MQTT, REST API · Southbound (RS-485): **Modbus RTU master** xuống thiết bị phụ
 - **I/O Driver Layer:** Giao tiếp SOM ↔ MCU qua Kinexus-IOP protocol
@@ -106,7 +111,7 @@ Power ON
 
 ---
 
-## 4. Soft PLC Runtime (IEC 61131-3)
+## 4. Soft PLC Runtime — Mekong Program Runtime, IEC 61131-3-aligned (roadmap Rev A.0, ADR-018, đang C0, chưa release; không certified/compliant)
 
 ### 4.1 Yêu cầu Ngôn ngữ
 
@@ -516,7 +521,7 @@ Ví dụ: 2026-05-28T14:23:01+07:00 ERROR E101 MCU_IOP MCU no response for 100ms
 | OS base image, U-Boot, PREEMPT_RT | Embedded Linux | C, Shell |
 | I/O MCU firmware (FreeRTOS) | Firmware | C (STM32 HAL) |
 | Kinexus-IOP protocol driver | Embedded Linux | C |
-| Soft PLC runtime (IEC 61131-3) | PLC Engine | C++ |
+| Component graph (nay) + Mekong Program Runtime IEC 61131-3-aligned (roadmap, đang C0) | PLC Engine | C++ |
 | BACnet stack (BACnet/IP) | Protocol | C |
 | Modbus RTU master / field bus (`kinexus-fieldbus`) | Backend | C / Python |
 | MQTT / REST API service | Backend | Python / Go |

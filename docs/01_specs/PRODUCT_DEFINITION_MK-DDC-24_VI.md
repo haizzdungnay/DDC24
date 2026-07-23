@@ -6,7 +6,7 @@
 > 📘 **Đọc cùng:** [README](README.md) · [BMS_EDGE_STRATEGY](BMS_EDGE_STRATEGY_MK-DDC-24_VI.md) · Quyết định nền: [ADR-004](../adr/ADR-004-component-based-runtime.md), [ADR-005](../adr/ADR-005-three-process-architecture.md), [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md), [ADR-007](../adr/ADR-007-web-stack-go.md), [ADR-008](../adr/ADR-008-bms-edge-positioning-and-revA-component-set.md), [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md)
 > **Phạm vi Rev A:** [REVA_SCOPE_ROADMAP](REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md)
 
-> ⚠️ **Đây là tài liệu canonical.** Khi bất kỳ doc nào (PRD/SRS/DS/design) mô tả sản phẩm khác với tài liệu này, theo tài liệu này. Tài liệu này thay thế cách framing cũ "IEC 61131-3 soft-PLC + Web IDE FBD/ST" (xem ADR-004/006).
+> ⚠️ **Đây là tài liệu canonical, nhưng đã lệch so với baseline `docs/01_product/PRODUCT.md` (Active) kể từ 2026-07-23 (ADR-018).** Framing cũ "IEC 61131-3 soft-PLC + Web IDE FBD/ST bị loại khỏi Rev A" (ADR-004) đã bị **supersede bởi ADR-018**: Rev A.0 roadmap nay gồm một Program Runtime do Mekong sở hữu, IEC 61131-3-aligned, scope **ST + FBD** (đang giai đoạn C0, chưa release, không certified/compliant). Component graph 28-node vẫn là engine **đang chạy thật hôm nay**, giữ vai trò legacy importer theo ADR-018. Xem [`ADR-018`](../adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md) và [`PROGRAM_SOM_FW_DRAFT_DESIGN`](../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md) trước khi trích dẫn các đoạn "không phải IEC 61131-3" bên dưới.
 
 ---
 
@@ -114,9 +114,11 @@ Component mẫu + User custom component (composite) → Wiresheet/Canvas →
 Validator → Deploy graph.json → Runtime
 ```
 
-> Đây là **component-based DDC**, không phải IEC 61131-3 PLC. FBD/ST và IDE 61131-3
-> bị loại khỏi Rev A (xem [ADR-004](../adr/ADR-004-component-based-runtime.md)),
-> đẩy sang Rev C.
+> Đây là **component-based DDC** — mô tả đúng engine đang chạy thật hôm nay. **Cập nhật
+> 2026-07-23 (ADR-018, supersedes ADR-004):** roadmap Rev A.0 bổ sung một Program Runtime
+> IEC 61131-3-aligned do Mekong sở hữu, scope **ST + FBD** (không phải IDE 61131-3 đầy đủ,
+> không LD/SFC, không certified/compliant), đang giai đoạn C0, chưa release. Component
+> graph ở trên giữ vai trò legacy importer/nguồn vendor FB, không đổi tên thành FBD.
 
 ## 8. Ngôn ngữ phát triển (xem ADR-007 — chốt 2 ngôn ngữ)
 
@@ -206,7 +208,7 @@ AI (artificial intelligence): bỏ khỏi Rev A/Rev B
 Template thiết bị cứng: không dùng làm lõi
 Component-based: lõi  ·  BACnet/IP: northbound  ·  Modbus RTU/TCP: field/expansion
 Linux 3-process (ADR-005)  ·  C++ core + Go web (ADR-007)
-IEC 61131-3 / IDE nặng: loại khỏi Rev A (ADR-004), → Rev C
+IEC 61131-3-aligned ST+FBD Program Runtime: roadmap Rev A.0 (ADR-018, đang C0, chưa release); LD/SFC/IDE nặng đầy đủ vẫn ngoài scope
 Rev A UI: form/JSON, canvas → Rev B (ADR-006)
 Validator + Commissioning: bắt buộc
 ```
@@ -215,7 +217,7 @@ Validator + Commissioning: bắt buộc
 
 | Chủ đề | Trước đây | Bây giờ (nguồn-chuẩn) |
 |--------|-----------|------------------------|
-| Engine | `kinexus-plc` IEC 61131-3 (`SW_PLC_ENGINE_DESIGN`) | component graph (ADR-004, SW_RUNTIME_EXECUTION_MODEL) |
+| Engine | `kinexus-plc` IEC 61131-3 (`SW_PLC_ENGINE_DESIGN`) | component graph chạy thật hôm nay (ADR-004 phần legacy-importer, SW_RUNTIME_EXECUTION_MODEL); **+ Program Runtime ST+FBD roadmap (ADR-018, C0, chưa release)** |
 | Web | `kinexus-webide` Python/Svelte FBD | `mkddc-web` Go, form/JSON (ADR-006/007) |
 | Naming | `kinexus-*` | `mkddc-*` (ADR-005) |
 | HMI/Agent/OTA/cloud | service riêng | HMI local limited-operator thuộc Rev A theo ADR-016; chỉ command point whitelist qua authority/core. Agent/OTA/cloud deferred Rev B+ |

@@ -2,7 +2,7 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-22
+**Cập nhật:** 2026-07-23
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: EasySet parity thành ADR-013; raw SHM thành ADR-014.
 
@@ -11,9 +11,9 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-001 | ADC và độ chính xác chỉ được chốt bằng đo kiểm trên phần cứng đại diện. | Accepted |
 | ADR-002 | Clock, reset và ground-domain phải được kiểm soát tại ranh giới SOM/MCU/I/O. | Accepted |
 | ADR-003 | Protection/EMC được thiết kế theo ranh giới terminal và phải có evidence trước release. | Accepted |
-| ADR-004 | Rev A dùng component graph runtime, không dùng IEC 61131-3/FBD/ST runtime. | Accepted |
+| ADR-004 | Rev A dùng component graph runtime, không dùng IEC 61131-3/FBD/ST runtime. | Superseded by ADR-018 |
 | ADR-005 | Kiến trúc là ba core processes; HMI là dịch vụ thứ tư feature-gated, không làm thay đổi core control path. | Amended |
-| ADR-006 | Web cấu hình bằng form/JSON; wiresheet canvas hoãn sau Rev A. | Accepted |
+| ADR-006 | Web cấu hình bằng form/JSON; wiresheet canvas (drag-drop) hoãn sau Rev A. Không còn hàm ý loại ngôn ngữ IEC-aligned ST/FBD khỏi Rev A — xem ADR-018. | Accepted, ghi chú theo ADR-018 |
 | ADR-007 | Backend web dùng Go; control và I/O path dùng C/C++. | Accepted |
 | ADR-008 | Sản phẩm là BMS Edge Automation Controller; HVAC là use case đầu, với 28 loại component Rev A. | Accepted |
 | ADR-009 | HMI áp dụng phân cấp hiển thị/alarms theo ISA-101 ở mức design guidance, không tuyên bố chứng nhận. | Accepted |
@@ -25,6 +25,7 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-015 | HMI 2.4 inch là local status/commissioning/service panel; HMI không là control/alarm authority; action/ACK chỉ complete sau authoritative response và audit. | Amended by ADR-016 |
 | ADR-016 | HMI 2.4 inch áp dụng phạm vi **limited operator HMI**: chỉ setpoint, mode, override và release cho point được authority whitelist. Mọi lệnh đi qua local authenticated broker rồi core priority/interlock/safety; mất broker làm HMI read-only. Không đưa full Web HMI, engineering, schedule hoặc alarm configuration lên panel local. | Accepted |
 | ADR-017 | Network commissioning dùng một authority hẹp trên SOM: Web/local HMI không sửa trực tiếp network của Linux. Local HMI chỉ được cấu hình Ethernet IPv4 static/DHCP trong `Service`, qua authenticated broker, transaction `stage/apply/confirm/rollback`, last-known-good và audit. Đổi IP không được dừng local control; BACnet/IP phải hot-rebind thay vì restart toàn bộ iobus. | Accepted |
+| ADR-018 | Rev A.0 dùng Program Runtime do Mekong sở hữu (không runtime IEC bên ngoài), IEC 61131-3-aligned, phạm vi ngôn ngữ **ST + FBD** (LD/SFC hoãn, chưa vào release gate Rev A.0). Component graph 28-node cũ chỉ còn là legacy importer/nguồn vendor FB, không gọi là FBD. Không online change, không claim certified/compliant trong Rev A.0. Chỉ mở phase C0 (architecture/feasibility); C1–C10 implementation chờ C0 duyệt. | Accepted — supersedes ADR-004 |
 
 ## Diễn giải bắt buộc
 
@@ -35,5 +36,5 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 - SOM network authority là helper/daemon least-privilege, không phải core process thứ tư và không nằm trong control path. `mkddc-hmi` chỉ gọi broker; `mkddc-web` chỉ làm auth/audit/adapter; chỉ network authority được activate cấu hình Linux.
 - Năm surface local là `Home`, `Points`, `Control`, `Alarms`, `Service`. Communication/System được giữ dưới Home/Service; không mất diagnostics khi bỏ hai tab riêng.
 - Base SKU là 16 UI + 4 AO + 4 DO. True isolated DI chỉ là capability/SKU tùy chọn và phải có phê duyệt riêng.
-- MQTT cloud agent, OTA A/B, IEC 61131-3, wiresheet canvas, BACnet MS/TP và BTL certification không thuộc baseline Rev A.0.
+- MQTT cloud agent, OTA A/B, wiresheet canvas (drag-drop FBD/LD editor), BACnet MS/TP và BTL certification không thuộc baseline Rev A.0. **IEC 61131-3-aligned Program Runtime (ST + FBD, Mekong-owned, không claim certified) thuộc baseline Rev A.0 theo ADR-018 — không còn bị loại trừ.** LD và SFC vẫn hoãn (schema mở rộng được, nhưng không build trong Rev A.0).
 - IEC 60073, IEC 62682, IEC 62443, ISO 9241-210 và ISA-101 được dùng làm design/verification guidance theo scope; không được biến review tài liệu thành tuyên bố conformity/certification.

@@ -3,9 +3,19 @@
 - Date: 2026-06-08
 - Owner: Solution Architect
 - Status: Accepted
-- Related: ADR-004 (component runtime), ADR-007 (web stack)
+- Related: ADR-004 (component runtime, superseded by ADR-018 for the language question
+  only — this ADR's UI-canvas decision is unaffected), ADR-007 (web stack)
 - Supersedes: FBD drag-drop scope in `SW_WEBIDE_DESIGN_MK-DDC-24_VI.md` and
   `KX-DDC24-UX-WEBIDE-001_VI.md` — both **removed 2026-06-08** (see git history)
+- **Note (2026-07-23, ADR-018):** this ADR's decision — no drag-drop wiresheet canvas
+  for the *legacy component graph* in Rev A — is unchanged and still Accepted. It does
+  **not** cover the new, separate FBD graphical editor for the Mekong Program Runtime
+  (ADR-018, ST+FBD, currently in C0). That editor is a different artifact (typed
+  pin/wire IEC-aligned FBD, not the composite-component wiresheet this ADR deferred) and
+  is tracked in `KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md` (slice C7), not
+  by this ADR. The "Rejected alternatives #2" reasoning below (citing ADR-004's exclusion
+  of IEC 61131-3) is historical context only — it does not extend to blocking the new
+  Program Runtime editor.
 
 ## Context
 

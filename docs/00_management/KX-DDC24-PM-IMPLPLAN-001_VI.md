@@ -62,8 +62,17 @@ Phase 6  3-domain demo + test report              (HVAC mini · Pump/Water · En
 
 ĐƯỜNG GĂNG Rev A.0: `graph.json spec → mkddc-core engine → mkddc-iobus (BACnet+Modbus) → 3-domain demo`.
 
-**KHÔNG thuộc Rev A.0:** IEC 61131-3 PLC runtime · Web IDE FBD/ST canvas · HMI · OTA ·
-MQTT/cloud · BTL certification. (Xem REVA_SCOPE §3.)
+**KHÔNG thuộc Rev A.0:** OTA A/B · MQTT/cloud · BTL certification · LD/SFC editor ·
+drag-drop wiresheet canvas cho component graph legacy · online change · claim
+certified/compliant IEC. (Xem REVA_SCOPE §3.)
+
+> ⚠️ **Cập nhật 2026-07-23 (ADR-018):** HMI đã vào Rev A.0 từ ADR-016 (xem banner §3
+> phía trên) — bullet cũ ở đây bị stale, đã sửa. Riêng Program Runtime: Rev A.0 Program
+> Editor **gồm ST Text Editor và FBD Graphical Editor** (Mekong-owned, IEC 61131-3-aligned,
+> roadmap — đang C0, chưa release). Không gọi chung là "canvas": **ST là text editor**,
+> chỉ **FBD mới là canvas/graphical**. Chi tiết:
+> [`KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`](../07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md)
+> (C5 = ST editor, C7 = FBD editor).
 
 ---
 
@@ -295,7 +304,9 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] force I/O override đúng ưu tiên · [ ] alarm hiện ở 3 kênh.
 **Trace:** SW-PLC-020, SEC.
 
-### T-UX-02 — Web config UX (UX) ⚠️ *Rev A: form/JSON. FBD/ST canvas → Deferred Rev B*
+### T-UX-02 — Web config UX (UX) ⚠️ *Rev A.0: form/JSON cho I/O config; ST Text Editor +
+FBD Graphical Editor thuộc Program Runtime roadmap (ADR-018, đang C0) — không phải "canvas"
+chung chung, xem C5/C7 ở Implementation Plan C1–C10. LD/SFC editor hoãn.*
 **INPUT:** [ ] [Design System](../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) · [ ] requirement IDE.
 **Microtasks:**
 - [ ] Wireframe + flow: login, FBD editor, ST editor, I/O config, watch table, force I/O, user mgmt.
@@ -322,14 +333,19 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] đổi sensor type lưu file đúng schema · [ ] watch cập nhật realtime · [ ] force expire.
 **Trace:** SW-IDE-010..015.
 
-### T-FE-03 — ~~FBD/ST editor~~ → **Rev A: import/export `graph.json`** ⚠️ *(FBD canvas Deferred Rev B)*
+### T-FE-03 — Legacy component graph import/export `graph.json` *(không phải Program Runtime FBD editor)*
 **INPUT:** [ ] [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md).
 **Microtasks (Rev A.0):**
 - [ ] UI import/export `graph.json`; xem read-only danh sách node/link.
 - [ ] Gọi `/graph/validate` + `/graph/deploy` (REST).
 **OUTPUT/DoD:** [ ] import graph hợp lệ → validate → deploy → core chạy.
 **Trace:** SW-WEB-006..009.
-> *FBD drag-drop canvas (wiresheet) → Rev B.*
+> ⚠️ **2026-07-23:** task này chỉ là UI cho **legacy component graph** (28 node cũ, vai
+> trò importer theo ADR-018 §7.5). Đây **không phải** ST Text Editor / FBD Graphical
+> Editor của Program Runtime — hai editor đó là task riêng (C5, C7) tại
+> [`KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`](../07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md),
+> blocked cho tới khi C0 duyệt. Drag-drop wiresheet canvas cho graph legacy vẫn hoãn
+> (ADR-006).
 
 ### T-FW/BE-11 — HMI TFT local limited-operator *(feature-gated Rev A, ADR-016)*
 **INPUT:** [ ] [UX_HMI](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [ ] [SW_HMI_DESIGN](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md).
@@ -341,7 +357,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **OUTPUT/DoD:** [ ] host/integration pass · [ ] target ≥10 FPS/touch/buttons/usability pass · [ ] HMI release gate có evidence.
 **Trace:** HMI-001..032, SW-HMI-001..018, ADR-016.
 
-**🚪 P4 Gate (Rev A.0):** component graph + web form/JSON + deploy graph.json; HMI chỉ nằm trong gate của SKU/build enable và không được làm chậm control baseline. *(PLC FBD → Rev C.)*
+**🚪 P4 Gate (Rev A.0):** component graph (legacy importer) + web form/JSON + deploy graph.json; HMI chỉ nằm trong gate của SKU/build enable và không được làm chậm control baseline. *(Program Runtime ST+FBD là roadmap ADR-018 riêng, C0 hiện tại — không cùng gate P4 này.)*
 
 ---
 

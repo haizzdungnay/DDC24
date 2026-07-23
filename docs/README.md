@@ -29,6 +29,14 @@
 - [Source specifications](01_specs/README.md)
 - [Implementation guides](03_implementation/README.md)
 - [Hardware review records](07_records/reviews/hardware/README.md)
+- [IEC 61131-3 Program/SOM FW gap assessment](07_records/reviews/KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md)
+- [IEC 61131-3 corrective design doc review — structure + design](07_records/reviews/KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md)
+- [IEC 61131-3 Program/SOM FW decisions — Q0–Q9 CTO 2026-07-23, Decided/Closed](07_records/reviews/KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md)
+- [ADR-018 — Mekong-owned IEC 61131-3-aligned Program Runtime](adr/ADR-018-mekong-owned-iec-aligned-program-runtime.md)
+- [Program Runtime C0 Architecture and Feasibility Plan](07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md)
+- [Program Runtime Implementation Plan C1–C10](07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md)
+- [Program Runtime document conflict report (ADR-018 remediation, 31/31 closed)](07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md)
+- [Program Runtime readiness review for C0 — C0_READY status](07_records/reviews/PROGRAM_RUNTIME_READY_FOR_C0.md)
 
 Luồng đọc khuyến nghị: Product → Requirements → System → baseline Design → Detailed design → Verification. Các tài liệu chi tiết có trạng thái `In Review` phải được đối chiếu với baseline/code trước khi dùng cho release.
 

@@ -117,10 +117,18 @@ typedef struct {
 
 ### 3.1 Yêu cầu Ngôn ngữ & Chương trình
 
+> ⚠️ **Cập nhật 2026-07-23 (ADR-018):** SW-PLC-001/002 dưới đây vẫn là hướng đúng về mặt
+> ngôn ngữ (FBD + ST) nhưng phải đọc lại trong khung Mekong-owned Program Runtime, **không
+> phải một PLC IEC 61131-3 đầy đủ/certified**: không claim `compliant`/`certified`, không
+> online change, runtime là `mkddc-program-core`/`libmkddc_iec` tự phát triển (không phải
+> engine bên thứ ba). "≥16 programs song song" là con số kế thừa từ spec cũ, cần C0 xác
+> nhận lại theo resource limit thật của roadmap ST+FBD trước khi coi là Accepted. Baseline
+> hiện hành cho scope ST+FBD là `REQUIREMENTS.md` SWR-REQ-IEC-001..009.
+
 | ID | Yêu cầu | Loại | Trace SRS | Test Ref |
 |----|---------|------|-----------|---------|
-| SW-PLC-001 | PHẢI thực thi chương trình FBD per IEC 61131-3 với ≥ 16 programs song song | MUST | PLC-001, PLC-006 | T-SW-020 |
-| SW-PLC-002 | PHẢI thực thi Structured Text (ST) per IEC 61131-3 | MUST | PLC-002 | T-SW-021 |
+| SW-PLC-001 | PHẢI thực thi chương trình FBD theo Mekong Program Runtime (IEC 61131-3-aligned), roadmap Rev A.0 — không certified | MUST | PLC-001, PLC-006 | T-SW-020 |
+| SW-PLC-002 | PHẢI thực thi Structured Text (ST) theo Mekong Program Runtime (IEC 61131-3-aligned), roadmap Rev A.0 — không certified | MUST | PLC-002 | T-SW-021 |
 | SW-PLC-003 | Standard FBs PHẢI có: TON, TOF, TP, CTU, CTD, CTUD, RS, SR, F_TRIG, R_TRIG, PID_COMPACT | MUST | PLC-003, PLC-004 | T-SW-022 |
 | SW-PLC-004 | PID_COMPACT PHẢI hỗ trợ bumpless manual→auto transfer | MUST | PLC-005 | T-SW-023 |
 | SW-PLC-005 | PHẢI map I/O objects (AI/AO/BI/BO) từ shared memory `kinexus_io_shm` | MUST | PLC-020 | T-SW-024 |
