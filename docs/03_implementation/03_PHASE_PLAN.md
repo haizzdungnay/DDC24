@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Chia phase làm thật
 
 > **Document ID:** IMPL-PHASEPLAN-MK-DDC-24-VI
-> **Phiên bản:** 1.24 | 2026-07-22 (merge historian v2 gates with ADR-016/017 five-surface local HMI/network authority) · 1.23 | 2026-07-21 (bounded board schema-v5 activation GREEN; release gates open) · 1.22 | 2026-07-21 (ARM64 frozen schema-v5 package parity GREEN; live-board cutover open) · 1.9 | 2026-07-22 (ADR-016 local limited-operator HMI) · 1.8 | 2026-06-27 (P5.5 HMI added)
+> **Phiên bản:** 1.25 | 2026-07-24 (Phase 4 #14: ADR-021 Phase A — services/core restructure theo domain) · 1.24 | 2026-07-22 (merge historian v2 gates with ADR-016/017 five-surface local HMI/network authority) · 1.23 | 2026-07-21 (bounded board schema-v5 activation GREEN; release gates open) · 1.22 | 2026-07-21 (ARM64 frozen schema-v5 package parity GREEN; live-board cutover open) · 1.9 | 2026-07-22 (ADR-016 local limited-operator HMI) · 1.8 | 2026-06-27 (P5.5 HMI added)
 > **Cập nhật hiện hành:** Rev 1.24 (2026-07-22) — historian code-local/board activation evidence retained; local limited-operator HMI/network authority replaces historical six-screen gate; release vẫn mở cho physical fault, target eMMC, browser/manual E2E, long soak, prune, legacy removal và HMI/network HIL.
 > **Trạng thái:** Active
 > **Đọc trước:** [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md)
@@ -163,6 +163,11 @@ BACnet object/priority bridge, Modbus ext cache integration.
 13. `COR-HIST-001`: read-only coherent historian snapshot từ cùng scan, sau resolve + safe-state;
     UI-01..16/AO-01..04/DO-01..04 với quality/source/role/generation. Core không ghi DB.
     **DONE code/local 2026-07-17 — target board jitter/E2E vẫn open.**
+14. Restructure `services/core` theo domain subfolder (st/graph/alarm/bacnet/schedule/safety/
+    ipc/diagnostics), mirror `services/iobus` — thuần tổ chức code, không đổi hành vi/API.
+    **ĐÃ làm 2026-07-24 — ADR-021 Phase A.** Verify: ctest 471/471 (trước/sau giống nhau),
+    3 script E2E runtime (safety-e2e, reload-e2e, advanced_stack_test) PASS khớp baseline.
+    Xem [ADR-021](../adr/ADR-021-restructure-core-and-backend-by-domain.md).
 ```
 
 **Test:** Test group 4 (core). **DoD:** §12.4.

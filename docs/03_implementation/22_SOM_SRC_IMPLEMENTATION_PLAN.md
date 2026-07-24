@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Kế hoạch triển khai cấu trúc source thật chi tiết cho Dev 2
 
 > **Document ID:** IMPL-SOM-SRC-PLAN-MK-DDC-24-VI
-> **Phiên bản:** 2.1 | 2026-07-22 (merge S8 COR-HIST snapshot with ADR-017 network authority/source evidence) · 2.0 | 2026-07-22 (ADR-017 deployed to Orange Pi; physical HIL open) · 1.12 | 2026-07-20 (WEB-HIST-001..005 code-local status) · 1.9 | 2026-07-17 (S8 COR-HIST-001 core/local Done) · 1.8 | 2026-07-15 (S8 COR-HIST-001 planned) · 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 done) ·
+> **Phiên bản:** 2.2 | 2026-07-24 (ADR-021 Phase A: `services/core` restructure theo domain — cây §4 cập nhật) · 2.1 | 2026-07-22 (merge S8 COR-HIST snapshot with ADR-017 network authority/source evidence) · 2.0 | 2026-07-22 (ADR-017 deployed to Orange Pi; physical HIL open) · 1.12 | 2026-07-20 (WEB-HIST-001..005 code-local status) · 1.9 | 2026-07-17 (S8 COR-HIST-001 core/local Done) · 1.8 | 2026-07-15 (S8 COR-HIST-001 planned) · 1.7 | 2026-06-19 (TD-001..003 / ACT-014..016 done) ·
 > 1.6 | 2026-06-17 (S7 #5/#6: doc gap CLOSED — BAC-CONFLICT-001/bind_interface/Vendor_Identifier/kx_ext_snapshot/rs485.device) ·
 > 1.5 | 2026-06-13 (S7 #4 ĐÃ làm: COR-009/010 done, 97/97 pass) ·
 > 1.4 | 2026-06-13 (S7 #4 Active; thêm plan S7 #5 BACnet và S7 #6 Modbus) ·
@@ -139,38 +139,60 @@ services/
 │       ├── test_io_scaling.cpp
 │       ├── test_output_command.cpp
 │       └── test_iop_client_fake_mcu.cpp
-├── core/
+├── core/                          # Trạng thái: ĐÃ làm 2026-07-24 — restructure theo domain
+│   │                              # (ADR-021 Phase A), mirror cây iobus/ ở trên. Include path
+│   │                              # nội bộ dùng full path từ core/ root (vd "st/st_parser.hpp"),
+│   │                              # kể cả include chính header cùng thư mục.
 │   ├── CMakeLists.txt
 │   ├── README.md
 │   ├── main.cpp
-│   ├── scan_loop.hpp
-│   ├── scan_loop.cpp
-│   ├── point_table.hpp
-│   ├── point_table.cpp
-│   ├── point_quality.hpp
-│   ├── point_quality.cpp
-│   ├── graph_runtime.hpp
-│   ├── graph_runtime.cpp
-│   ├── priority_resolver.hpp
-│   ├── priority_resolver.cpp
-│   ├── safe_state.hpp
-│   ├── safe_state.cpp
-│   ├── iobus_reader.hpp
-│   ├── iobus_reader.cpp
-│   ├── output_writer.hpp
-│   ├── output_writer.cpp
-│   ├── bacnet_objtable.hpp
-│   ├── bacnet_objtable.cpp
-│   ├── web_ipc.hpp
-│   ├── web_ipc.cpp
-│   ├── core_metrics.hpp
-│   ├── core_metrics.cpp
-│   └── tests/
-│       ├── test_iobus_reader.cpp
-│       ├── test_point_quality.cpp
-│       ├── test_priority_resolver.cpp
-│       ├── test_safe_state.cpp
-│       └── test_scan_loop.cpp
+│   ├── json_min.hpp               # tiện ích dùng chéo hầu hết module — giữ ở root
+│   ├── st/                        # ngôn ngữ ST: parser → semantic → runtime (FW-SOM-ST-001)
+│   │   ├── st_parser.hpp / .cpp
+│   │   ├── st_semantic.hpp / .cpp
+│   │   ├── st_runtime.hpp / .cpp
+│   │   ├── st_stdlib.hpp / .cpp
+│   │   ├── st_artifact.hpp / .cpp
+│   │   ├── st_io_map.hpp / .cpp
+│   │   ├── st_cyclic_runtime.hpp / .cpp
+│   │   ├── st_trace.hpp / .cpp
+│   │   ├── st_diagnostic.hpp
+│   │   ├── st_program.hpp
+│   │   ├── st_validate_main.cpp   # entry point mkddc-st-validate
+│   │   └── tests/
+│   ├── graph/                     # component graph + point data model + scan loop
+│   │   ├── scan_loop.hpp / .cpp
+│   │   ├── point_table.hpp / .cpp
+│   │   ├── point_quality.hpp / .cpp
+│   │   ├── graph_runtime.hpp / .cpp
+│   │   ├── runtime_point_snapshot.hpp / .cpp
+│   │   ├── state_snapshot.hpp / .cpp
+│   │   ├── clock_snapshot.hpp
+│   │   └── tests/
+│   ├── alarm/
+│   │   ├── alarm_runtime.hpp / .cpp
+│   │   ├── alarm_primitives.hpp
+│   │   └── tests/
+│   ├── bacnet/
+│   │   ├── bacnet_objtable.hpp / .cpp
+│   │   └── tests/
+│   ├── schedule/
+│   │   ├── schedule_runtime.hpp / .cpp
+│   │   └── tests/
+│   ├── safety/                    # safe-state / fail-safe
+│   │   ├── safe_state.hpp / .cpp
+│   │   ├── safe_state_config.hpp / .cpp
+│   │   └── tests/
+│   ├── ipc/                       # core ↔ iobus, core ↔ web backend
+│   │   ├── web_ipc.hpp / .cpp
+│   │   ├── iobus_reader.hpp / .cpp
+│   │   ├── output_writer.hpp / .cpp
+│   │   ├── priority_resolver.hpp / .cpp
+│   │   ├── config_reload.hpp / .cpp
+│   │   └── tests/
+│   └── diagnostics/
+│       ├── core_metrics.hpp / .cpp
+│       └── tests/
 └── CMakeLists.txt
 
 tools/

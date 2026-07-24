@@ -16,11 +16,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "config_reload.hpp"
-#include "safe_state_config.hpp"
-#include "schedule_runtime.hpp"
-#include "scan_loop.hpp"
-#include "state_snapshot.hpp"
+#include "ipc/config_reload.hpp"
+#include "safety/safe_state_config.hpp"
+#include "schedule/schedule_runtime.hpp"
+#include "graph/scan_loop.hpp"
+#include "graph/state_snapshot.hpp"
 
 namespace {
 
