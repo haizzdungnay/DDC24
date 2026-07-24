@@ -1,7 +1,7 @@
 # C0 — Program Runtime Architecture and Feasibility Baseline
 
 **Document ID:** KX-DDC24-PROGRAM-RUNTIME-C0-PLAN-001
-**Trạng thái:** Active — duy nhất phase được phép bắt đầu (ADR-020)
+**Trạng thái:** Active — FW SOM ST host execution slice delivered (PR #54, #55, 2026-07-24); C1 go/no-go vẫn chờ C0.14/C0.15 đầy đủ
 **Ngày tạo:** 2026-07-23
 **Chủ quản:** Project Engineering (Phạm Đình Chương — Project Engineering Owner / CTO)
 **Nguồn quyết định:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md),
@@ -20,11 +20,18 @@
   activation; basic trace/diagnostic.
 
 **Không được phép:**
-- Viết production runtime quy mô lớn.
-- Merge bất kỳ thay đổi nào vào `mkddc-core`, `mkddc-iobus`, `mkddc-web` production, hoặc
-  `fw/` production.
-- Mở bất kỳ slice C1–C10 nào (Implementation Plan) trước khi C0 được duyệt go/no-go
-  (workstream C0.15).
+- Viết production runtime quy mô lớn ngoài lát cắt FW SOM ST host execution đã được CTO
+  phê duyệt ngày 2026-07-24.
+- Merge thay đổi vào `mkddc-iobus`, `mkddc-web`, `src/frontend` hoặc `fw/` production
+  cho scope này.
+- Mở FE/Web Backend/STM32/HIL hoặc FBD editor/compiler đầy đủ trước khi có approval riêng.
+- Claim IEC/PLCopen compliant/conformant/certified trước khi G1-G6 có evidence và approval.
+
+**Ngoại lệ được phê duyệt 2026-07-24:** CTO/Project Engineering Owner cho phép next action
+FW SOM trong `services/core`: triển khai và test thực tế một chương trình ST tối thiểu
+trên SOM host runtime, dùng nền scan/snapshot/output-staging/activation/fault hiện có.
+Lát cắt này được phép tạo code production trong `services/core` nếu cần, nhưng PR phải
+giữ scope FW SOM only và không kéo FE/Web Backend/STM32/HIL vào.
 
 C0 đóng khi cả 15 workstream dưới có output được review và go/no-go (C0.15) là **Go**.
 
@@ -253,35 +260,38 @@ Trạng thái.
 
 ## 3. Bảng tổng hợp trạng thái
 
-> ⚠️ **BLOCKER (ACTION-06/07, 2026-07-23):** cột "Owner (role)" dưới đây là **vai trò**,
-> không phải tên người thật. Tôi (trợ lý) không có và không được tự đặt tên nhân sự thật —
-> đây là thông tin nhân sự nội bộ chỉ CTO/Project Engineering mới cung cấp được. Cho tới
-> khi có tên thật cho cả 5 vai trò (Program Runtime Architect, SOM Backend Lead, Firmware
-> Lead, QA/HIL Lead, TechLead review), **không workstream nào được đổi từ "Chưa bắt đầu"
-> sang "READY"** — làm vậy sẽ là ghi sai hồ sơ governance. Xem
-> `PROGRAM_RUNTIME_READY_FOR_C0.md` mục `OWNER_ASSIGNED`/`C0_READY`.
+> ✅ **APPROVAL (2026-07-24):** CTO/Project Engineering Owner phê duyệt bỏ blocker
+> owner-assignment cho **next action FW SOM ST host execution**. Bảng dưới chỉ mở READY
+> cho các workstream cần thiết để thực hiện/test ST tối thiểu trong `services/core`.
+> Các phần FE/Web Backend/STM32/HIL/FBD đầy đủ vẫn để phase sau.
 
-| # | Workstream | Owner (role — chờ tên thật) | Reviewer | Effort | ETA | Trạng thái |
+| # | Workstream | Owner | Reviewer | Effort | ETA | Trạng thái |
 |---|---|---|---|---|---|---|
-| C0.1 | Requirement baseline | Project Engineering | TechLead review | S | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.2 | Program/Resource/Task/POU model | Program Runtime Architect | TechLead review | M | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.3 | Type system | Program Runtime Architect | TechLead review | M | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.4 | ST subset grammar/semantic | Architect + DeveloperTeam | TechLead review | M | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.5 | FBD graph semantic | Architect + DeveloperTeam | TechLead review | M | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.6 | Typed IR | Program Runtime Architect | TechLead review | L | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.7 | Deterministic scheduler model | Architect + Firmware/Runtime Lead | TechLead review | M | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.8 | Artifact lifecycle | Program Runtime Architect | TechLead review | S | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.9 | Web IDE/backend/device architecture | SOM Backend Lead + FE Lead | TechLead review | M | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.10 | SOM–MCU I/O image contract | Firmware Lead + SOM Backend Lead | TechLead review | M | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.11 | Security/permission/audit model | SOM Backend Lead + Security reviewer | Security reviewer | S | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.12 | Test/conformance strategy | QA/HIL Lead | TechLead review | M | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.13 | Architecture prototype (spike) | DeveloperTeam + TechLead | TechLead review | L | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.14 | Effort estimate C1–C10 | Architect+Backend+FW+QA Leads | CTO | M | _(chờ owner)_ | Chưa bắt đầu — chờ owner |
-| C0.15 | C0 review, go/no-go | CTO | — (CTO tự quyết) | S | _(chờ C0.1–C0.14)_ | Chưa bắt đầu — chờ owner |
+| C0.1 | Requirement baseline | Project Engineering | CTO/TechLead | S | 2026-07-24 | Done cho next action — baseline ADR-020 đã sync |
+| C0.2 | Program/Resource/Task/POU model | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — `PROGRAM`/`VAR_INPUT`/`VAR_OUTPUT` model implemented (`st_program.hpp`, PR #55). Resource/multi-Task/multi-Program-instance model NGOÀI slice này — vẫn Chưa bắt đầu cho C1–C3 thật |
+| C0.3 | Type system | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — REAL/BOOL type + type-check implemented và test (`st_semantic.cpp`, PR #55). Type khác (INT/TIME/STRING/derived), retain rule, conversion rule đầy đủ — Chưa bắt đầu |
+| C0.4 | ST subset grammar/semantic | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — lexer/parser thật cho `PROGRAM/VAR_INPUT/VAR_OUTPUT/:=/>/IF..THEN..ELSE..END_IF`, 16 test case gồm golden program `HVAC_CTRL` (`st_parser.cpp`, PR #55). KHÔNG có arithmetic/CASE/loop/POU call — grammar đầy đủ cho C4 thật vẫn Chưa bắt đầu |
+| C0.5 | FBD graph semantic | Program Runtime Architect + DeveloperTeam | TechLead review | M | phase sau | Deferred — ngoài next action |
+| C0.6 | Typed IR | FW SOM DeveloperTeam | CTO/TechLead | L | PR kế tiếp | **Done (slice hẹp)** — typed IR nội bộ implemented (`st_program.hpp`: `StExpr`/`StStmt`/`StProgram`, PR #55). Chưa có source map, chưa chừa trường mở rộng LD/SFC, chưa version schema — cần làm lại/mở rộng khi C0.6 thật mở |
+| C0.7 | Deterministic scheduler model | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — tái dùng scan/scheduler substrate hiện có của `mkddc-core` (PR #54: overrun/no-alloc coverage) làm nền cho atomic activation demo (PR #55). Chưa có task priority/period/watchdog budget riêng cho Program Runtime — vẫn Chưa bắt đầu |
+| C0.8 | Artifact lifecycle | FW SOM DeveloperTeam | CTO/TechLead | S | PR kế tiếp | **Done (slice hẹp)** — atomic `activate()`/rollback-to-last-known-good implemented + test, cùng pattern với `GraphRuntime::reload()` (`st_runtime.cpp`, PR #55). Manifest/artifact hash/versioned storage — Chưa bắt đầu |
+| C0.9 | Web IDE/backend/device architecture | SOM Backend Lead + FE Lead | TechLead review | M | phase sau | Deferred — không thuộc FW SOM PR |
+| C0.10 | SOM–MCU I/O image contract | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (host/mock only)** — `StIoImage` input/output image demo với `SupplyTemp`/`Setpoint`/`FanEnable` (PR #55), thuần host/mock. Contract thật với `mkddc-iobus`/STM32 — Chưa bắt đầu, chờ C9 |
+| C0.11 | Security/permission/audit model | SOM Backend Lead + Security reviewer | Security reviewer | S | phase sau | Deferred — không có Web Backend/API trong next action |
+| C0.12 | Test/conformance strategy | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — 16 `StRuntime.*` test + full `services/` CTest 423/423 làm host evidence (PR #55) |
+| C0.13 | Architecture prototype/vertical host slice | FW SOM DeveloperTeam | CTO/TechLead | L | PR kế tiếp | **Done** — vertical slice chạy thật end-to-end trên host: parse → typecheck → activate → execute (PR #55), giữ như module test được trong `services/core`, KHÔNG gắn vào `ScanLoop`/`main.cpp` sản xuất (xem PR #55 scope note) |
+| C0.14 | Effort estimate C1–C10 | Architect+Backend+FW+QA Leads | CTO | M | sau evidence PR | Deferred — PR #54/#55 là dữ liệu thật đầu tiên (2 PR, ~1000 dòng code+test cho 1 slice hẹp) nhưng CHƯA có ai tổng hợp thành effort estimate chính thức cho toàn bộ C1–C10 |
+| C0.15 | C0 review, go/no-go | CTO | — (CTO tự quyết) | S | 2026-07-24 | Go-with-scope cho FW SOM ST host execution only — KHÔNG phải Go cho C1 toàn phần |
 
-Không có workstream nào ở trạng thái Done. ETA không thể điền vì phụ thuộc ai thực sự
-nhận việc (một Architect làm một mình cần thời gian khác một cặp Architect+Developer) —
-ETA thật là một phần kết quả của việc gán owner, không phải input độc lập.
+Go-with-scope này không đóng G1-G6 release gates. Nó chỉ bỏ blocker để developer hoàn
+thành một vertical host slice trong `services/core` và cung cấp evidence thật.
+
+> **Cập nhật 2026-07-24 (sau PR #54/#55):** các dòng đánh dấu "Done (slice hẹp)"/"Done
+> (host/mock only)" ở trên CHỈ đóng cho phạm vi lát cắt FW SOM ST host execution đã được
+> CTO duyệt — KHÔNG phải C0 workstream đầy đủ (vd C0.6 "Done" ở đây là 1 IR nội bộ tối
+> giản, không có source map/schema version/LD-SFC placeholder mà C0.6 thật yêu cầu).
+> C0.5/C0.9/C0.11/C0.14 vẫn Deferred/chưa bắt đầu, C0.15 vẫn là Go-with-scope hẹp — C0
+> chưa đóng, C1 chưa được mở toàn phần.
 
 ## 4. Revision history
 
@@ -289,3 +299,5 @@ ETA thật là một phần kết quả của việc gán owner, không phải i
 |---|---|---|
 | 1.0 | 2026-07-23 | Tạo C0 plan theo quyết định CTO (ADR-020, Q8): 15 workstream, mỗi workstream có owner/input/output/dependency/acceptance/effort/risk/trạng thái. |
 | 1.1 | 2026-07-23 | ACTION-06/07: thêm cột Reviewer/ETA vào bảng tổng hợp §3. Owner vẫn ở mức role, chưa có tên thật — đây là blocker duy nhất còn lại trước khi C0 có thể chuyển READY, ghi rõ trong `PROGRAM_RUNTIME_READY_FOR_C0.md`. |
+| 1.2 | 2026-07-24 | CTO/Project Engineering Owner phê duyệt Go-with-scope cho next action FW SOM ST host execution: cho phép code production trong `services/core` để chạy/test một chương trình ST tối thiểu trên SOM host runtime; FE/Web Backend/STM32/HIL/FBD đầy đủ vẫn deferred. |
+| 1.3 | 2026-07-24 | Cập nhật trạng thái §3 sau khi lát cắt có evidence thật: PR #54 (`fix(core): complete FW SOM IEC runtime foundation coverage`) và PR #55 (`feat(core): run minimal ST program on FW SOM runtime`, chương trình `HVAC_CTRL` chạy đúng qua parser/semantic/IR/runtime thật, 16 test mới, CTest services 423/423). C0.2/C0.3/C0.4/C0.6/C0.7/C0.8/C0.10/C0.12/C0.13 đánh dấu Done cho phạm vi slice hẹp — không phải C0 workstream đầy đủ. C0.5/C0.9/C0.11/C0.14 vẫn Deferred/chưa bắt đầu; C0.15 vẫn là Go-with-scope hẹp, C1 chưa mở toàn phần. |

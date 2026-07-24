@@ -1,7 +1,10 @@
 # Implementation Plan C1–C10 — Mekong Program Runtime (ST + FBD)
 
 **Document ID:** KX-DDC24-PROGRAM-RUNTIME-IMPLPLAN-001
-**Trạng thái:** Blocked — **không mở bất kỳ slice nào cho tới khi C0 (`C0.15`) là Go**
+**Trạng thái:** Partially opened — CTO approved FW SOM ST host execution slice
+(2026-07-24), slice đã có evidence thật (PR #54, #55); FE/Web Backend/STM32/HIL/FBD đầy
+đủ vẫn blocked cho tới approval riêng; C1–C10 slice detail dưới đây vẫn là KẾ HOẠCH, chưa
+mở thật (xem §0.1)
 **Ngày tạo:** 2026-07-23
 **Chủ quản:** Project Engineering (Phạm Đình Chương — Project Engineering Owner / CTO)
 **Nguồn quyết định:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
@@ -23,6 +26,37 @@ criteria | Demo scenario | Rollback | Definition of Done (DoD).
 
 **Effort/estimate cụ thể cho từng slice là output của `C0.14`, chưa điền ở đây** — bảng
 tổng hợp cuối tài liệu chỉ ghi lại dependency giữa các slice.
+
+### 0.1. Lát cắt được mở ngay — FW SOM ST host execution
+
+CTO/Project Engineering Owner phê duyệt ngày 2026-07-24 cho một lát cắt dọc hẹp trong
+`services/core`: ST source tối thiểu -> parse/semantic -> typed execution package/IR nội
+bộ -> chạy qua SOM runtime substrate hiện có -> snapshot/input quality/output staging/
+activation/fault tests. Lát cắt này phải tạo PR **FW SOM only** và không kéo FE/Web
+Backend/STM32/HIL vào. Mục tiêu demo bắt buộc: một chương trình ST thật, ví dụ:
+
+```iecst
+IF SupplyTemp > Setpoint THEN
+    FanEnable := TRUE;
+ELSE
+    FanEnable := FALSE;
+END_IF;
+```
+
+Chỉ sau khi lát cắt này có build/CTest evidence mới cập nhật effort/risk cho các phần
+C1-C10 còn lại.
+
+**Cập nhật 2026-07-24 — evidence đã có:** PR #54 (`fix(core): complete FW SOM IEC
+runtime foundation coverage`) và PR #55 (`feat(core): run minimal ST program on FW SOM
+runtime`) đã hoàn thành đúng chương trình demo bắt buộc ở trên — parse thật (không
+hard-code), typecheck, atomic activation/rollback, execute cho `SupplyTemp=28,
+Setpoint=24 → FanEnable=TRUE` và `SupplyTemp=22, Setpoint=24 → FanEnable=FALSE`, cùng 16
+test case (syntax/type/unbound-variable reject, activation-fail giữ package cũ,
+NaN/Inf không silent-GOOD, không parse lại trong scan path). `services/` CTest 423/423
+pass. Đây là dữ liệu thật đầu tiên cho `C0.14` (effort estimate) — **nhưng chưa có ai
+tổng hợp thành effort estimate chính thức**, và **toàn bộ chi tiết C1–C10 bên dưới vẫn
+là kế hoạch chưa mở** (`mkddc-program-service`/`mkddc-program-core`/`libmkddc_iec` chưa
+tồn tại). Không suy diễn từ 2 PR này rằng C1 đã Go.
 
 ---
 
@@ -319,3 +353,4 @@ tổng hợp cuối tài liệu chỉ ghi lại dependency giữa các slice.
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-07-23 | Tạo Implementation Plan C1–C10 theo quyết định CTO (ADR-020): mỗi slice có mục tiêu chạy được, component, API/schema, backend/frontend/runtime task, firmware/HIL dependency, test case, acceptance criteria, demo scenario, rollback, DoD. Blocked cho tới khi C0 (`C0.15`) là Go. |
+| 1.1 | 2026-07-24 | Ghi nhận evidence từ lát cắt FW SOM ST host execution (§0.1): PR #54 + PR #55 delivered, chương trình demo bắt buộc chạy đúng qua parser/semantic/IR/runtime thật, CTest services 423/423. Dữ liệu thật đầu tiên cho `C0.14` nhưng chưa tổng hợp thành effort estimate. Chi tiết C1–C10 bên dưới KHÔNG đổi — vẫn là kế hoạch, chưa mở. |
