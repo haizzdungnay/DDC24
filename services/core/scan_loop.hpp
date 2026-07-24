@@ -64,6 +64,14 @@ public:
      * dt của graph được re-sync về chu kỳ scan thật (reload reset về declared). */
     void set_reload_hook(std::atomic<bool>* flag, void (*fn)(void*), void* ctx);
 
+#ifdef CORE_BUILD_TESTS
+    /* CR-007: pending_/pending_alarm_ là member pre-allocated, .clear() mỗi scan
+     * (KHÔNG giải phóng capacity) để tránh heap alloc lặp lại trong scan hot path.
+     * Test dùng capacity để verify capacity không tăng lại sau khi đã ổn định. */
+    std::size_t pending_capacity_for_test() const { return pending_.capacity(); }
+    std::size_t pending_alarm_capacity_for_test() const { return pending_alarm_.capacity(); }
+#endif
+
 private:
     struct PendingResp { WebCommand cmd; bool ok; };
 

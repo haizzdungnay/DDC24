@@ -1061,3 +1061,34 @@ TEST(WebIpc, RejectsInvalidRequests)
     f.scan();
     EXPECT_NE(c.recv_line().find("bad_value"), std::string::npos);
 }
+
+TEST(ScanLoop, PendingCommandBuffersDoNotReallocateAcrossSteadyLoad)
+{
+    /* FW SOM group 7 (no-alloc scan hot path): ScanLoop::pending_/pending_alarm_
+     * là member pre-allocated, .clear() mỗi scan (không giải phóng capacity) — lệnh
+     * qua socket thật để chứng minh capacity ổn định (không heap-grow lặp lại) khi
+     * tải lệnh mỗi scan không tăng, thay vì chỉ dựa vào đảm bảo lý thuyết của
+     * std::vector::clear(). */
+    Fixture f;
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    EXPECT_EQ(f.loop.pending_capacity_for_test(), 0u) << "chưa có lệnh nào -> chưa cấp phát";
+
+    c.send_line(R"({"id":100,"op":"write","point":"DO1","value":1,"source":"manual","user":"t"})");
+    usleep(50000);
+    f.scan();
+    c.recv_line();
+    const std::size_t capacity_after_first = f.loop.pending_capacity_for_test();
+    EXPECT_GT(capacity_after_first, 0u) << "lệnh đầu tiên phải cấp phát capacity";
+
+    for (int i = 0; i < 20; i++) {
+        c.send_line(R"({"id":101,"op":"write","point":"DO1","value":1,"source":"manual","user":"t"})");
+        usleep(50000);
+        f.scan();
+        c.recv_line();
+        EXPECT_EQ(f.loop.pending_capacity_for_test(), capacity_after_first)
+            << "cùng tải 1 lệnh/scan -> capacity KHÔNG được tăng lại ở lần lặp " << i;
+    }
+}
