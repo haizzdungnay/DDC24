@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Toàn bộ implement thành task (Jira/GitHub ready)
 
 > **Document ID:** IMPL-TASKS-MK-DDC-24-VI
-> **Phiên bản:** 1.48 | 2026-07-22 (merge historian v2 release gates with ADR-016/017 HOP/NWC/HNW task sets) · 1.47 | 2026-07-21 (bounded board schema-v5 activation GREEN; release gates open) · 1.46 | 2026-07-21 (ARM64 frozen schema-v5 package parity GREEN) · 1.38 | 2026-07-21 (physical rolling-prune engine code-local GREEN) · 1.25 | 2026-07-22 (ADR-017 NWC-000..017/HNW-000..013) · 1.24 | 2026-07-22 (ADR-016 HOP-000..077)
+> **Phiên bản:** 1.49 | 2026-07-24 (COR-012: ADR-021 Phase A services/core restructure theo domain) · 1.48 | 2026-07-22 (merge historian v2 release gates with ADR-016/017 HOP/NWC/HNW task sets) · 1.47 | 2026-07-21 (bounded board schema-v5 activation GREEN; release gates open) · 1.46 | 2026-07-21 (ARM64 frozen schema-v5 package parity GREEN) · 1.38 | 2026-07-21 (physical rolling-prune engine code-local GREEN) · 1.25 | 2026-07-22 (ADR-017 NWC-000..017/HNW-000..013) · 1.24 | 2026-07-22 (ADR-016 HOP-000..077)
 > **Cách dùng:** mỗi task = 1 issue. Copy block vào Jira/GitHub. Owner: FW=Dev1, SOM=Dev2, WEB=Dev3.
 
 **Mã task:** `SKEL` (P0) · `FW` (firmware) · `IOP` (UART/IOP) · `IOB` (iobus) · `COR` (core) · `WEB` (web) · `E2E` (integration).
@@ -465,6 +465,38 @@ Done khi:
   - 11_TASK_CHECKLIST + 07_guide Rev bump
 Phụ thuộc: COR-009 (graph engine), MOD-009 (ext_cache path), BAC-004 (bacnet_objtable), MOD-012 (TCP ext_cache TCP key — liên quan MOD-013)
 Trạng thái: ĐÃ làm 2026-06-26 — COR-011 DONE: 5 Protocol node type (Modbus_RTU_Read/Write, Modbus_TCP_Read, BACnet_AV/BV); str_params map; proto_ext_idx từ modbus section graph.json; feed_ext_snapshot + apply_ext_writes; scan_loop step 3a/5a; 12/12 test pass; 122/122 core_tests pass
+```
+
+---
+
+```
+Task ID: COR-012
+Tên: Restructure services/core theo domain subfolder (mirror services/iobus) — ADR-021 Phase A
+Owner: Dev SOM | Phase: 4 (maintenance/tổ chức code, không phải feature) | Module: services/core (toàn bộ)
+File: toàn bộ services/core/*.{hpp,cpp} → di chuyển vào st/, graph/, alarm/, bacnet/, schedule/,
+      safety/, ipc/, diagnostics/ (giữ main.cpp, json_min.hpp, CMakeLists.txt ở root);
+      services/core/CMakeLists.txt (source/test list cập nhật path)
+Input: docs/adr/ADR-021-restructure-core-and-backend-by-domain.md (cấu trúc được duyệt trước khi làm)
+Output:
+  - 8 domain subfolder, mỗi domain có tests/ riêng — không đổi hành vi/API
+  - Include path nội bộ dùng full path từ services/core/ root (vd "st/st_parser.hpp"),
+    kể cả include header cùng thư mục — đồng bộ convention với services/iobus
+Test: build/test trước và sau restructure, so kết quả — không chỉ chạy 1 lần
+Done khi:
+  - Clean rebuild `cmake -S services -B build/services ... -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_MODBUS=ON`
+    + `cmake --build --parallel` — 0 lỗi
+  - `ctest --test-dir build/services --parallel 4` — 471/471 pass (giống hệt số trước restructure)
+  - `tools/test_safety_e2e.sh` — PASS cả 3 lớp (giống trước restructure)
+  - `tools/test_reload_e2e.sh` — PASS A-F (giống trước restructure)
+  - `tools/integration_test/advanced_stack_test.sh` — PASS=18 FAIL=0 SKIP=4 (giống hệt trước restructure,
+    kể cả tập SKIP)
+  - CHANGELOG.md + 03_PHASE_PLAN + 07_guide + 22_plan Rev bump
+Phụ thuộc: không — thuần refactor tổ chức, không phụ thuộc feature nào đang dang dở
+Trạng thái: ĐÃ làm 2026-07-24 — COR-012 DONE: 8 domain di chuyển tuần tự (build+ctest sau mỗi domain,
+không gộp 1 lượt); full rebuild sạch 0 lỗi; ctest 471/471 pass trước và sau giống nhau; 3 script E2E
+runtime (safety/reload/advanced-stack) PASS khớp baseline 100% kể cả tập SKIP. Xem
+[ADR-021](../adr/ADR-021-restructure-core-and-backend-by-domain.md). Phase B (web/backend →
+internal/ package) vẫn Proposed, chưa làm.
 ```
 
 ---

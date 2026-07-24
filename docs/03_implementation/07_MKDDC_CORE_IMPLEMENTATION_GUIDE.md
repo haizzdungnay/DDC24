@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Point table + scan loop + priority/safe-state
 
 > **Document ID:** IMPL-CORE-MK-DDC-24-VI
-> **Phiên bản:** 1.11 | 2026-07-17 (COR-HIST-001 core/local Done; target historian E2E remains open) · 1.10 | 2026-07-15 (COR-HIST-001 coherent runtime snapshot planned; point-count drift corrected) · 1.9 | 2026-06-27 (COR-011 done) · 1.5 | 2026-06-13 (S7 #4/#5/#6 docs: stateful graph, BACnet, Modbus; fix priority test web=mức 2) ·
+> **Phiên bản:** 1.12 | 2026-07-24 (ADR-021 Phase A: §1 cây thư mục cập nhật theo domain subfolder thật) · 1.11 | 2026-07-17 (COR-HIST-001 core/local Done; target historian E2E remains open) · 1.10 | 2026-07-15 (COR-HIST-001 coherent runtime snapshot planned; point-count drift corrected) · 1.9 | 2026-06-27 (COR-011 done) · 1.5 | 2026-06-13 (S7 #4/#5/#6 docs: stateful graph, BACnet, Modbus; fix priority test web=mức 2) ·
 > 1.4 | 2026-06-12 (§8: web_ipc đủ overridden + audit COR-007, SIGHUP reload
 > COR-008; §9: unit file thật packaging/systemd + ExecReload — SKEL-005) ·
 > 1.3 | 2026-06-12 (graph_runtime implemented Rev A subset; T6/T7 implemented;
@@ -61,34 +61,47 @@ config `/data/config/` (đọc qua web deploy).
 
 ## 1. Cây thư mục chuẩn
 
+> **Trạng thái:** ĐÃ làm 2026-07-24 — restructure theo domain subfolder (ADR-021 Phase A),
+> mirror `services/iobus/`. Include nội bộ dùng full path từ `services/core/` root
+> (vd `#include "st/st_parser.hpp"`), kể cả include header cùng thư mục — xem
+> `docs/adr/ADR-021-restructure-core-and-backend-by-domain.md`.
+
 ```
 services/core/
 ├── CMakeLists.txt
-├── README.md
-├── main.cpp             — init, SCHED_FIFO 80, attach shm (retry), sd_notify, signal
-├── scan_loop.{hpp,cpp}  — vòng quét clock_nanosleep(ABSTIME) 1s
-├── point_table.{hpp,cpp}— 24 IO + AV/BV/MSV, value+quality+ts+source
-├── point_quality.{hpp,cpp}— quality từ fault/stale
-├── graph_runtime.{hpp,cpp}— load/validate/topo/execute graph.json → resolver mức 5
-├── json_min.hpp         — parser JSON đệ quy tối thiểu (graph + safe config)
-├── safe_state_config.{hpp,cpp}— loader io_safe_state.conf → default mức 6
-├── priority_resolver.{hpp,cpp}— 6 mức → 1 output cuối/kênh
-├── safe_state.{hpp,cpp} — fallback khi IO fault/stale/T6/T7 (trigger matrix §5.2)
-├── iobus_reader.{hpp,cpp}— seqlock reader kx_io_shm
-├── output_writer.{hpp,cpp}— ghi ao_setpoint[]/do_cmd[]
-├── bacnet_objtable.{hpp,cpp}— STUB: ghi kx_plc_shm (creator plc_shm = core)
-├── web_ipc.{hpp,cpp}    — STUB: Unix socket /run/mkddc/core.sock, JSON lines
-├── core_metrics.{hpp,cpp}— scan_count, overrun, exec time
-└── tests/
-    ├── test_iobus_reader.cpp      — seqlock đọc nhất quán (writer giả ghi đồng thời)
-    ├── test_point_quality.cpp     — bảng quality §6
-    ├── test_priority_resolver.cpp — bảng test §4
-    ├── test_safe_state.cpp        — trigger matrix §5.2 (T1/T2/T3/T6/T7)
-    ├── test_scan_loop.cpp         — không overrun với load giả; re-attach muộn
-    ├── test_web_ipc.cpp           — contract §8 qua socket thật
-    ├── test_graph_runtime.cpp     — load/validate/topo/PID/thermostat
-    └── test_safe_state_config.cpp — loader io_safe_state.conf
+├── main.cpp              — init, SCHED_FIFO 80, attach shm (retry), sd_notify, signal
+├── json_min.hpp          — parser JSON đệ quy tối thiểu (dùng chéo nhiều domain, giữ ở root)
+├── st/                    — ngôn ngữ ST: parser/semantic/runtime/stdlib/io_map/cyclic_runtime
+│   ├── st_parser.{hpp,cpp} · st_semantic.{hpp,cpp} · st_runtime.{hpp,cpp} · st_stdlib.{hpp,cpp}
+│   ├── st_artifact.{hpp,cpp} · st_io_map.{hpp,cpp} · st_cyclic_runtime.{hpp,cpp} · st_trace.{hpp,cpp}
+│   ├── st_diagnostic.hpp · st_program.hpp · st_validate_main.cpp (entry mkddc-st-validate)
+│   └── tests/
+├── graph/                 — component graph + point data model
+│   ├── scan_loop.{hpp,cpp}          — vòng quét clock_nanosleep(ABSTIME) 1s
+│   ├── point_table.{hpp,cpp}        — 24 IO + AV/BV/MSV, value+quality+ts+source
+│   ├── point_quality.{hpp,cpp}      — quality từ fault/stale
+│   ├── graph_runtime.{hpp,cpp}      — load/validate/topo/execute graph.json → resolver mức 5
+│   ├── runtime_point_snapshot.{hpp,cpp} · state_snapshot.{hpp,cpp} · clock_snapshot.hpp
+│   └── tests/
+├── alarm/                 — alarm_runtime.{hpp,cpp}, alarm_primitives.hpp + tests/
+├── bacnet/                — bacnet_objtable.{hpp,cpp}: ghi kx_plc_shm (creator plc_shm = core) + tests/
+├── schedule/               — schedule_runtime.{hpp,cpp} + tests/
+├── safety/                 — safe_state.{hpp,cpp} (fallback IO fault/stale/T6/T7, §5.2),
+│                            safe_state_config.{hpp,cpp} (loader io_safe_state.conf → default mức 6) + tests/
+├── ipc/                    — core ↔ iobus, core ↔ web backend
+│   ├── web_ipc.{hpp,cpp}            — Unix socket /run/mkddc/core.sock, JSON lines (§8)
+│   ├── iobus_reader.{hpp,cpp}       — seqlock reader kx_io_shm
+│   ├── output_writer.{hpp,cpp}      — ghi ao_setpoint[]/do_cmd[]
+│   ├── priority_resolver.{hpp,cpp}  — 6 mức → 1 output cuối/kênh
+│   ├── config_reload.{hpp,cpp}      — SIGHUP reload (COR-008)
+│   └── tests/
+└── diagnostics/
+    ├── core_metrics.{hpp,cpp}      — scan_count, overrun, exec time
+    └── tests/
 ```
+
+Test liệt kê ở §5.5/§8 dưới đây tham chiếu theo basename (vd `test_iobus_reader.cpp`) — vị trí
+thật là `<domain>/tests/test_*.cpp` theo cây trên, không phải `tests/` phẳng.
 
 ---
 
