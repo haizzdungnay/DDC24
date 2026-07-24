@@ -40,7 +40,15 @@ public:
     bool load_string(const std::string& src, const std::string& name = "<inline>");
     bool loaded() const { return loaded_; }
 
-    /* Reload atomic: fail → giữ graph cũ; nội dung không đổi → giữ state node. */
+    /* Reload atomic: fail → giữ graph cũ; nội dung không đổi → giữ state node.
+     * Đây là activation boundary contract hiện tại của FW SOM (load → validate →
+     * atomic swap tại ranh giới scan → rollback-to-last-known-good khi fail, không
+     * online mutation giữa scan — xem config_reload.cpp/scan_loop.cpp reload_flag_).
+     * Theo ADR-020 §3/§4/§8: mkddc-program-core (typed IR interpreter cho ST/FBD,
+     * chưa triển khai, C1+, gate G3 RED — VERIFICATION.md) sẽ cần đúng contract này
+     * (validate → immutable artifact → atomic activation → rollback) khi được xây,
+     * nhưng KHÔNG được thực thi source ST/FBD hay artifact ở đây — GraphRuntime chỉ
+     * là legacy importer 28-node, không phải Program Runtime. */
     bool reload(const std::string& path);
 
     /* Execute 1 scan theo topo order; sink ghi resolver mức PRIO_LOCAL_LOGIC.

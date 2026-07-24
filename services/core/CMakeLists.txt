@@ -42,7 +42,8 @@ if(CORE_BUILD_TESTS)
       tests/test_config_reload.cpp tests/test_state_snapshot.cpp
       tests/test_bacnet_objtable.cpp
       tests/test_graph_protocol.cpp tests/test_alarm_runtime.cpp
-      tests/test_schedule_runtime.cpp tests/test_runtime_point_snapshot.cpp)
+      tests/test_schedule_runtime.cpp tests/test_runtime_point_snapshot.cpp
+      tests/test_core_metrics.cpp tests/test_output_writer.cpp)
   target_link_libraries(core_tests PRIVATE core_lib)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
   if(TARGET GTest::gtest_main)
