@@ -412,6 +412,46 @@ export interface NetworkData {
   southbound: ModbusSlave[]
 }
 
+export type NetcfgMode = 'static' | 'dhcp'
+export type NetcfgLink = 'up' | 'down' | 'unknown'
+export type NetcfgState = 'idle' | 'staged' | 'applying' | 'awaiting_confirmation' | 'confirmed' | 'rolling_back' | 'rolled_back' | 'failed'
+export type NetcfgTransactionAction = 'validate' | 'stage' | 'apply' | 'confirm' | 'rollback'
+
+export interface NetcfgCandidate {
+  interface: string
+  mode: NetcfgMode
+  ipv4?: string
+  netmask?: string
+  gateway?: string
+}
+
+export interface NetcfgActive {
+  interface: string
+  link: NetcfgLink
+  mode: NetcfgMode | 'unknown'
+  ipv4: string
+  prefixLength: number
+  gateway: string
+}
+
+export interface NetcfgResponse {
+  version: 1
+  requestId: string
+  result: 'accepted' | 'rejected'
+  reasonCode: string
+  message?: string
+  transactionId?: string
+  state: NetcfgState
+  rollbackRemainingS?: number
+  active?: NetcfgActive
+  pending?: NetcfgCandidate
+}
+
+export interface NetcfgTransactionRequest {
+  transactionId?: string
+  candidate?: NetcfgCandidate
+}
+
 export interface UserRow {
   username: string
   fullName: string

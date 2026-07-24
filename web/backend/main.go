@@ -20,6 +20,7 @@ type App struct {
 	audit                  *AuditLogger
 	auth                   *AuthService
 	core                   CoreStatusClient
+	netcfg                 netcfgAuthority
 	os                     OSReader
 	time                   TimeService
 	trends                 *TrendStore
@@ -70,7 +71,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	if osReader == nil {
 		osReader = NewDefaultOSReader()
 	}
-	app := &App{cfg: cfg, logger: logger, audit: audit, auth: auth, core: core, os: osReader, time: NewSystemTimeService(), virtualPointRuntime: NewHistorianRuntimeRegistry(), historianAuthority: HistorianRuntimeAuthority{State: "legacy", LegacyWriterAllowed: true}, legacyState: "stopped"}
+	app := &App{cfg: cfg, logger: logger, audit: audit, auth: auth, core: core, netcfg: NewNetcfgClient(cfg.NetcfgSock), os: osReader, time: NewSystemTimeService(), virtualPointRuntime: NewHistorianRuntimeRegistry(), historianAuthority: HistorianRuntimeAuthority{State: "legacy", LegacyWriterAllowed: true}, legacyState: "stopped"}
 	app.pointNamespaceWriter = writeConfigFileAtomic
 	if err := app.migrateLegacyPointConfig(); err != nil {
 		return nil, err

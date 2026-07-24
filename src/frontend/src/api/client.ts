@@ -30,7 +30,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserParamsConfig, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserParamsConfig, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -42,6 +42,70 @@ let authHeaderProvider: AuthHeaderProvider = () => ({})
 
 const base = `${API_ORIGIN.replace(/\/$/, '')}/api/v1`
 const pointConfigOverridesKey = 'mkddc:point-config-overrides:v1'
+let demoNetcfgResponse: NetcfgResponse | null = null
+
+function netmaskPrefix(netmask: string): number {
+  return netmask.split('.').reduce((count, part) => {
+    const value = Number(part)
+    if (!Number.isInteger(value) || value < 0 || value > 255) return count
+    return count + value.toString(2).replace(/0/g, '').length
+  }, 0)
+}
+
+function demoNetcfgActive(): NetcfgActive {
+  const network = getDemoNetwork().northbound
+  return {
+    interface: 'eth0',
+    link: network.bmsLink === 'online' ? 'up' : 'down',
+    mode: network.dhcp ? 'dhcp' : 'static',
+    ipv4: network.ip,
+    prefixLength: netmaskPrefix(network.subnet),
+    gateway: network.gateway
+  }
+}
+
+function candidateAsActive(candidate: NetcfgCandidate): NetcfgActive {
+  return {
+    interface: candidate.interface,
+    link: 'up',
+    mode: candidate.mode,
+    ipv4: candidate.ipv4 ?? '',
+    prefixLength: netmaskPrefix(candidate.netmask ?? ''),
+    gateway: candidate.gateway ?? ''
+  }
+}
+
+function runDemoNetworkTransaction(action: NetcfgTransactionAction, payload: NetcfgTransactionRequest): NetcfgResponse {
+  const previous = demoNetcfgResponse ?? {
+    version: 1,
+    requestId: 'demo-status',
+    result: 'accepted',
+    reasonCode: 'OK',
+    state: 'idle',
+    active: demoNetcfgActive()
+  }
+  const requestId = `demo-${action}`
+  if ((action === 'validate' || action === 'stage') && payload.candidate) {
+    demoNetcfgResponse = {
+      ...previous,
+      requestId,
+      result: 'accepted',
+      reasonCode: 'OK',
+      state: action === 'stage' ? 'staged' : previous.state,
+      transactionId: action === 'stage' ? 'demo-tx-1' : previous.transactionId,
+      pending: payload.candidate
+    }
+  } else if (action === 'apply' && previous.pending) {
+    demoNetcfgResponse = { ...previous, requestId, state: 'awaiting_confirmation', rollbackRemainingS: 120, active: candidateAsActive(previous.pending) }
+  } else if (action === 'confirm') {
+    const { pending: _pending, rollbackRemainingS: _remaining, ...confirmed } = previous
+    demoNetcfgResponse = { ...confirmed, requestId, state: 'confirmed' }
+  } else if (action === 'rollback') {
+    const { pending: _pending, rollbackRemainingS: _remaining, ...rolledBack } = previous
+    demoNetcfgResponse = { ...rolledBack, requestId, state: 'rolled_back', active: demoNetcfgActive() }
+  }
+  return demoNetcfgResponse ?? previous
+}
 
 type ApiRequestInit = RequestInit & { suppressAuthExpired?: boolean }
 type PointConfigPatch = { name?: string; unit?: string; trendEnabled?: boolean }
@@ -803,6 +867,31 @@ export const apiClient = {
     return requestJson<NetworkData>('/network')
   },
 
+  async getNetworkTransaction(): Promise<NetcfgResponse> {
+    if (IS_DEMO) {
+      if (!demoNetcfgResponse) {
+        demoNetcfgResponse = {
+          version: 1,
+          requestId: 'demo-status',
+          result: 'accepted',
+          reasonCode: 'OK',
+          state: 'idle',
+          active: demoNetcfgActive()
+        }
+      }
+      return demoNetcfgResponse
+    }
+    return requestJson<NetcfgResponse>('/network/transaction', { cache: 'no-store' })
+  },
+
+  async runNetworkTransaction(action: NetcfgTransactionAction, payload: NetcfgTransactionRequest): Promise<NetcfgResponse> {
+    if (IS_DEMO) return runDemoNetworkTransaction(action, payload)
+    return requestJson<NetcfgResponse>(`/network/transaction/${action}`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  },
+
   async getTimeConfig(): Promise<TimeConfig> {
     if (IS_DEMO) return getDemoTimeConfig()
     const raw = await requestJson<Record<string, unknown>>('/system/config/time')
@@ -835,9 +924,9 @@ export const apiClient = {
     })
   },
 
-  async saveNetwork(data: NetworkData) {
+  async saveNetwork(data: NetworkData): Promise<ConfigPutResult> {
     if (IS_DEMO) return { result: 'success', applied: true, reload: 'none', warnings: [] }
-    return requestJson('/network', { method: 'PUT', body: JSON.stringify(data) })
+    return requestJson<ConfigPutResult>('/network', { method: 'PUT', body: JSON.stringify(data) })
   },
 
   async getHistory(pointIds: string[], range: string): Promise<TrendSample[]> {
