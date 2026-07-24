@@ -2,7 +2,7 @@
 
 **ID:** IF-SPEC-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-22
+**Cập nhật:** 2026-07-24 (thêm FW SOM IEC programming validate gateway contract, host-only)
 
 ## Kinexus-IOP v2
 
@@ -38,6 +38,75 @@ Mọi thay đổi field, alignment hoặc semantic unit là ABI change: đổi m
 ## AO boundary
 
 AO ở core/iobus boundary là giá trị vật lý V hoặc mA theo electrical mode đã được MCU acknowledge. BACnet/config engineering range được convert đúng một lần trước boundary. Non-finite/out-of-range bị reject.
+
+## FW SOM IEC programming — validate gateway (host-only, no target/HIL evidence)
+
+Nguồn thực thi: `services/core/st_*.{hpp,cpp}`. Đây là contract của một component
+đọc lập test trong `services/core` (`mkddc-core`) — KHÔNG phải
+`mkddc-program-service`/`mkddc-program-core` (ADR-020, chưa triển khai, C1+).
+Không gắn vào scan loop sản xuất; BE gọi component này như 1 CLI riêng.
+
+**CLI:** `mkddc-st-validate --source <path>` — argv cố định, source luôn qua
+file path (không bao giờ đưa source text vào argv/shell), input đọc tối đa
+64 KiB. BE tự set timeout khi spawn subprocess; CLI không tự chờ vô hạn.
+
+| Exit code | Ý nghĩa |
+|---|---|
+| 0 | `ok=true` — source hợp lệ |
+| 1 | `ok=false` vì lỗi ST thật (syntax/semantic) — CLI chạy đúng, source sai |
+| 2 | lỗi usage/IO phía CLI (thiếu argv, không đọc được file, file quá lớn) |
+
+Output: đúng 1 dòng JSON ra stdout, shape cố định dù ok=true/false:
+
+```json
+{
+  "ok": false,
+  "diagnostics": [
+    {"severity":"error","code":"ST-SEM-001","message":"...",
+     "sourceId":"","line":8,"column":8,"length":1}
+  ],
+  "symbols": [{"name":"SupplyTemp","direction":"input","type":"REAL"}],
+  "artifactHash": "3F2A9C1B7E4D5061",
+  "compilerVersion": "fwsom-st-0.2.0",
+  "irSchemaVersion": 1
+}
+```
+
+`artifactHash` = FNV-1a 64-bit hex của source text — **hash nội dung, KHÔNG
+phải hash mật mã học**; dùng để so sánh 2 lần build cùng input có ra cùng kết
+quả không, không dùng cho chữ ký/integrity chống giả mạo. `diagnostics[]`
+hiện luôn ≤1 phần tử (parser/semantic fail-fast ở lỗi đầu tiên) nhưng field
+là mảng để BE/FE không cần đổi shape khi sau này hỗ trợ multi-diagnostic.
+Diagnostic code ổn định — xem `st_diagnostic.hpp` (`ST-LEX-*`, `ST-SYN-*`,
+`ST-SEM-*`, `ST-IOMAP-*`, `ST-CLI-*`); FE/BE map theo code, không parse
+`message` (tiếng Anh, có thể đổi câu chữ).
+
+**Ngôn ngữ ST hỗ trợ (không được suy diễn thêm từ đây):** `PROGRAM`/
+`VAR_INPUT`/`VAR_OUTPUT` với kiểu `REAL`/`BOOL`; assignment `:=`; so sánh
+`>`,`>=`,`<`,`<=`,`=`,`<>`; boolean `AND`/`OR`/`NOT`; ngoặc đơn; gọi hàm
+chuẩn — hiện chỉ `LIMIT(MN, IN, MX): REAL`; `IF..THEN..ELSE..END_IF`. Chưa
+có: arithmetic, `CASE`, loop, `FUNCTION_BLOCK` instance/state (nên `TON`
+CHƯA implement — cần kiểu `TIME` + dot-member access, xem `st_stdlib.hpp`),
+`SEL`, LD/SFC.
+
+**io_map validation** (`st_io_map.hpp`, chưa có file `io_map.json`/CRUD
+thật — đó là việc của BE khi có storage layer, xem C2): mỗi biến
+`VAR_INPUT`/`VAR_OUTPUT` phải có đúng 1 binding; `direction` phải khớp
+input/output khai báo; `type` phải khớp; `point_id` phải đúng dạng
+`PREFIX-NN` với `PREFIX ∈ {UI,DI,AO,DO}` (physical point — `AV/BV/MSV`
+binding chưa thuộc phạm vi này); range (nếu có) chỉ áp dụng cho `REAL`,
+`range_min < range_max`. Trả về TẤT CẢ lỗi tìm thấy trong 1 lần gọi (khác
+parser/semantic fail-fast), vì io_map thường có nhiều dòng độc lập.
+
+**Cyclic runtime + trace** (`st_cyclic_runtime.hpp`, `st_trace.hpp`, host-only
+— chưa nối `mkddc-iobus`/STM32 thật, xem C9): activation request áp dụng
+CHỈ tại đầu cycle kế tiếp (không giữa lúc execute() đang chạy), fail thì
+package cũ tiếp tục. Metric quan sát được: `cycle_count`, `overrun_count`
+(exec vượt budget), `exec_fault_count`, `last_exec_ns`, `max_exec_ns`.
+`StTraceEvent` kind: `VALIDATE_RESULT`, `ACTIVATION_RESULT`, `RUNTIME_FAULT`,
+`OVERRUN`, `ROLLBACK` — giữ trong `StTraceLog` (bounded ring buffer, in
+process, chưa persist) tới khi `mkddc-program-service` có audit storage
+thật.
 
 ## Web/API
 

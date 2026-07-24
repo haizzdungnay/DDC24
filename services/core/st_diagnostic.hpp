@@ -1,0 +1,54 @@
+/**
+ * @file  st_diagnostic.hpp
+ * @brief FW SOM IEC programming foundation: diagnostic 1 lỗi (fail-fast, giữ
+ *        nguyên kiến trúc "return false ở lỗi đầu tiên" của st_parser/st_semantic)
+ *        nhưng có đủ vị trí/severity/code để FE bôi đúng chỗ và BE forward JSON
+ *        ổn định, không phải string tự do.
+ */
+#ifndef CORE_ST_DIAGNOSTIC_HPP
+#define CORE_ST_DIAGNOSTIC_HPP
+
+#include <string>
+
+namespace core {
+
+enum class StSeverity { ERROR, WARNING };
+
+/* Stable error code — KHÔNG đổi text nếu message thay đổi (FE/BE map theo code,
+ * không parse message tiếng Anh). Thêm code mới: nối vào cuối, không đổi số cũ. */
+namespace st_diag_code {
+constexpr const char* kLexUnexpectedChar = "ST-LEX-001";
+constexpr const char* kSyntaxUnexpected  = "ST-SYN-001";
+constexpr const char* kUnboundVariable   = "ST-SEM-001";
+constexpr const char* kTypeMismatch      = "ST-SEM-002";
+constexpr const char* kReadonlyInput     = "ST-SEM-003";
+constexpr const char* kDuplicateVar      = "ST-SEM-004";
+constexpr const char* kUnknownType       = "ST-SEM-005";
+constexpr const char* kUnknownFunction   = "ST-SEM-006";
+constexpr const char* kArgCountMismatch  = "ST-SEM-007";
+
+/* IO map validation (st_io_map.hpp) */
+constexpr const char* kIoMapUnknownVar      = "ST-IOMAP-001";
+constexpr const char* kIoMapBadDirection    = "ST-IOMAP-002";
+constexpr const char* kIoMapTypeMismatch    = "ST-IOMAP-003";
+constexpr const char* kIoMapBadPointId      = "ST-IOMAP-004";
+constexpr const char* kIoMapBadRange        = "ST-IOMAP-005";
+constexpr const char* kIoMapMissingBinding  = "ST-IOMAP-006";
+constexpr const char* kIoMapDuplicateBinding = "ST-IOMAP-007";
+} // namespace st_diag_code
+
+struct StDiagnostic {
+    StSeverity  severity = StSeverity::ERROR;
+    std::string code;               /* xem st_diag_code::* — luôn set khi ok=false */
+    std::string message;            /* tiếng Anh kỹ thuật, ngắn gọn */
+    std::string source_id;          /* rỗng nếu single-source (chưa có multi-file) */
+    int         line = 0;           /* 1-based; 0 = không xác định được vị trí */
+    int         column = 0;         /* 1-based */
+    int         length = 1;         /* số ký tự bị đánh dấu, tối thiểu 1 */
+
+    bool has_position() const { return line > 0 && column > 0; }
+};
+
+} // namespace core
+
+#endif /* CORE_ST_DIAGNOSTIC_HPP */
