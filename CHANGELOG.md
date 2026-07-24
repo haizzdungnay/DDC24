@@ -46,6 +46,9 @@
 - Verification: `cmake -S services -B <tmp> -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror"` then `cmake --build <tmp> --parallel` — 0 warnings across core/iobus/netcfg. `ctest --test-dir <tmp> --output-on-failure --parallel 4` — **407/407 passed** (core_tests 296 incl. 24 new, iobus_tests 96, netcfg_tests 15 — unaffected by this change, run as part of the shared `services/` build tree).
 - No controlled contract docs changed because behavior/ABI/SHM layout/output semantics are unchanged — this change is test coverage plus one clarifying code comment; `docs/04_design/SOFTWARE.md`, `docs/04_design/INTERFACES.md`, `docs/05_verification/VERIFICATION.md`, `docs/07_records/TRACEABILITY.md` were read for consistency but not edited.
 - Not in this change (explicitly out of scope): FE/Web IDE, Go backend/API, STM32 firmware (`fw/`), HIL/target bring-up, ST parser/FBD canvas/compiler/IR (`mkddc-program-service`/`mkddc-program-core`, ADR-020 C1-C10, gated on C0 approval).
+### Changed - Restart local project runtime via WAN (2026-07-24)
+- deployment(runtime): restore the WAN SSH tunnel on local port 18081 and restart the local Vite frontend on port 5173 in live JWT mode without changing frontend source files.
+- verification: login and `/api/v1/me` return `admin`; `/api/v1/system/status` returns `overall=ok` with live CPU, RAM, temperature, and uptime values from the Orange Pi backend.
 
 ### Fixed - Netcfg socket startup safety (2026-07-23)
 - services(netcfg): fail closed when the Unix socket path, bind/listen, permissions, owner lookup, or ownership assignment is invalid; every failed startup now closes the listener and removes the partial socket.
