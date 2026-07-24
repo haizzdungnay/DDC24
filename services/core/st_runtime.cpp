@@ -4,6 +4,7 @@
 
 #include "st_parser.hpp"
 #include "st_semantic.hpp"
+#include "st_stdlib.hpp"
 
 namespace core {
 namespace {
@@ -27,13 +28,60 @@ bool eval_expr(const StExpr& e, const StIoImage& view, StValue* out, std::string
         *out = it->second;
         return true;
     }
-    case StExpr::Kind::GT: {
+    case StExpr::Kind::CMP: {
+        StValue lv, rv;
+        if (!eval_expr(*e.lhs, view, &lv, fault)) return false;
+        if (!eval_expr(*e.rhs, view, &rv, fault)) return false;
+        bool result = false;
+        if (e.cmp_op == StCompareOp::EQ || e.cmp_op == StCompareOp::NE) {
+            const bool equal = (lv.type == StType::BOOL) ? (lv.bool_value == rv.bool_value)
+                                                          : (lv.real_value == rv.real_value);
+            result = (e.cmp_op == StCompareOp::EQ) ? equal : !equal;
+        } else {
+            switch (e.cmp_op) {
+            case StCompareOp::GT: result = lv.real_value > rv.real_value; break;
+            case StCompareOp::GE: result = lv.real_value >= rv.real_value; break;
+            case StCompareOp::LT: result = lv.real_value < rv.real_value; break;
+            case StCompareOp::LE: result = lv.real_value <= rv.real_value; break;
+            default: break;
+            }
+        }
+        out->type = StType::BOOL;
+        out->bool_value = result;
+        return true;
+    }
+    case StExpr::Kind::AND_: {
         StValue lv, rv;
         if (!eval_expr(*e.lhs, view, &lv, fault)) return false;
         if (!eval_expr(*e.rhs, view, &rv, fault)) return false;
         out->type = StType::BOOL;
-        out->bool_value = lv.real_value > rv.real_value;
+        out->bool_value = lv.bool_value && rv.bool_value;
         return true;
+    }
+    case StExpr::Kind::OR_: {
+        StValue lv, rv;
+        if (!eval_expr(*e.lhs, view, &lv, fault)) return false;
+        if (!eval_expr(*e.rhs, view, &rv, fault)) return false;
+        out->type = StType::BOOL;
+        out->bool_value = lv.bool_value || rv.bool_value;
+        return true;
+    }
+    case StExpr::Kind::NOT_: {
+        StValue v;
+        if (!eval_expr(*e.operand, view, &v, fault)) return false;
+        out->type = StType::BOOL;
+        out->bool_value = !v.bool_value;
+        return true;
+    }
+    case StExpr::Kind::CALL: {
+        std::vector<StValue> args;
+        args.reserve(e.call_args.size());
+        for (const auto& a : e.call_args) {
+            StValue v;
+            if (!eval_expr(*a, view, &v, fault)) return false;
+            args.push_back(v);
+        }
+        return eval_std_function(e.call_name, args, out, fault);
     }
     }
     *fault = "internal_error: unknown expr kind at runtime";
@@ -68,17 +116,16 @@ bool exec_stmt_list(const std::vector<StStmt>& stmts, StIoImage* view, StIoImage
 
 } // namespace
 
-bool StProgramRuntime::activate(const std::string& source, std::string* error)
+bool StProgramRuntime::activate(const std::string& source, StDiagnostic* diag)
 {
-    std::string err;
+    StDiagnostic local_diag;
+    StDiagnostic* d = diag ? diag : &local_diag;
     auto candidate = std::make_unique<StProgram>();
-    if (!parse_st_program(source, candidate.get(), &err)) {
-        if (error) *error = err;
+    if (!parse_st_program(source, candidate.get(), d)) {
         activation_fail_count_++;
         return false;   /* active_ giữ nguyên (last-known-good) */
     }
-    if (!typecheck_st_program(candidate.get(), &err)) {
-        if (error) *error = err;
+    if (!typecheck_st_program(candidate.get(), d)) {
         activation_fail_count_++;
         return false;   /* active_ giữ nguyên */
     }
