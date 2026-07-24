@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useI18n } from '../i18n'
 import { PRODUCT_INFO } from '../productInfo'
+import { LEGACY_GRAPH_DEMO_ENABLED } from '../config'
 import type { HealthResponse } from '../types'
 import { cn } from '../utils'
 
@@ -96,7 +97,7 @@ export function NavRail({ alarmCount, device }: { alarmCount: number; device: He
               )}
               {isOpen && (
                 <div className={cn('mt-1 space-y-1', collapsed && 'mt-0')}>
-                  {group.items.map((item) => {
+                  {group.items.filter((item) => item.key !== 'programming' || LEGACY_GRAPH_DEMO_ENABLED).map((item) => {
                     const Icon = item.icon
                     return (
                       <NavLink

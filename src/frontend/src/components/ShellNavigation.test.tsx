@@ -38,6 +38,12 @@ describe('shell user navigation', () => {
     expect(screen.queryByRole('link', { name: 'User' })).not.toBeInTheDocument()
   })
 
+  it('does not expose the legacy Programming demo without its explicit demo flag', () => {
+    renderNavigation(<NavRail alarmCount={0} device={null} />)
+
+    expect(screen.queryByRole('link', { name: 'Programming' })).not.toBeInTheDocument()
+  })
+
   it('shows Model and Firmware in two columns without Serial', () => {
     renderNavigation(<NavRail alarmCount={0} device={{ overall: 'ok', services: {}, firmware: 'FW-TEST' }} />)
 

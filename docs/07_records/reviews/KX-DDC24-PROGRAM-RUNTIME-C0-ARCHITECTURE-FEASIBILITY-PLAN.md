@@ -1,7 +1,7 @@
 # C0 — Program Runtime Architecture and Feasibility Baseline
 
 **Document ID:** KX-DDC24-PROGRAM-RUNTIME-C0-PLAN-001
-**Trạng thái:** Active — FW SOM ST host execution slice delivered (PR #54, #55, 2026-07-24); C1 go/no-go vẫn chờ C0.14/C0.15 đầy đủ
+**Trạng thái:** Active — FW SOM ST host foundation delivered (PR #54, #55, #57, 2026-07-24); C1 go/no-go vẫn chờ toàn bộ C0.1–C0.14 Done và C0.15 full Go
 **Ngày tạo:** 2026-07-23
 **Chủ quản:** Project Engineering (Phạm Đình Chương — Project Engineering Owner / CTO)
 **Nguồn quyết định:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md),
@@ -269,18 +269,18 @@ Trạng thái.
 |---|---|---|---|---|---|---|
 | C0.1 | Requirement baseline | Project Engineering | CTO/TechLead | S | 2026-07-24 | Done cho next action — baseline ADR-020 đã sync |
 | C0.2 | Program/Resource/Task/POU model | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — `PROGRAM`/`VAR_INPUT`/`VAR_OUTPUT` model implemented (`st_program.hpp`, PR #55). Resource/multi-Task/multi-Program-instance model NGOÀI slice này — vẫn Chưa bắt đầu cho C1–C3 thật |
-| C0.3 | Type system | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — REAL/BOOL type + type-check implemented và test (`st_semantic.cpp`, PR #55). Type khác (INT/TIME/STRING/derived), retain rule, conversion rule đầy đủ — Chưa bắt đầu |
-| C0.4 | ST subset grammar/semantic | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — lexer/parser thật cho `PROGRAM/VAR_INPUT/VAR_OUTPUT/:=/>/IF..THEN..ELSE..END_IF`, 16 test case gồm golden program `HVAC_CTRL` (`st_parser.cpp`, PR #55). KHÔNG có arithmetic/CASE/loop/POU call — grammar đầy đủ cho C4 thật vẫn Chưa bắt đầu |
+| C0.3 | Type system | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — REAL/BOOL type + type-check implemented và test (`st_semantic.cpp`, PR #55/#57). PR #57 thêm diagnostic code/vị trí ổn định và kiểm tra lời gọi hàm. Type khác (INT/TIME/STRING/derived), retain rule, conversion rule đầy đủ — Chưa bắt đầu |
+| C0.4 | ST subset grammar/semantic | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — lexer/parser thật cho `PROGRAM/VAR_INPUT/VAR_OUTPUT/:=/IF..THEN..ELSE..END_IF` (PR #55); PR #57 thêm comparator đầy đủ, boolean, ngoặc và function-call syntax. KHÔNG có arithmetic/CASE/loop/POU call — grammar đầy đủ cho C4 thật vẫn Chưa bắt đầu |
 | C0.5 | FBD graph semantic | Program Runtime Architect + DeveloperTeam | TechLead review | M | phase sau | Deferred — ngoài next action |
 | C0.6 | Typed IR | FW SOM DeveloperTeam | CTO/TechLead | L | PR kế tiếp | **Done (slice hẹp)** — typed IR nội bộ implemented (`st_program.hpp`: `StExpr`/`StStmt`/`StProgram`, PR #55). Chưa có source map, chưa chừa trường mở rộng LD/SFC, chưa version schema — cần làm lại/mở rộng khi C0.6 thật mở |
 | C0.7 | Deterministic scheduler model | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — tái dùng scan/scheduler substrate hiện có của `mkddc-core` (PR #54: overrun/no-alloc coverage) làm nền cho atomic activation demo (PR #55). Chưa có task priority/period/watchdog budget riêng cho Program Runtime — vẫn Chưa bắt đầu |
-| C0.8 | Artifact lifecycle | FW SOM DeveloperTeam | CTO/TechLead | S | PR kế tiếp | **Done (slice hẹp)** — atomic `activate()`/rollback-to-last-known-good implemented + test, cùng pattern với `GraphRuntime::reload()` (`st_runtime.cpp`, PR #55). Manifest/artifact hash/versioned storage — Chưa bắt đầu |
+| C0.8 | Artifact lifecycle | FW SOM DeveloperTeam | CTO/TechLead | S | PR kế tiếp | **Done (slice hẹp)** — atomic `activate()`/rollback-to-last-known-good implemented + test (PR #55); PR #57 thêm content hash FNV-1a và compiler/IR version metadata cho validate gateway. Manifest, cryptographic integrity/signature và versioned storage — Chưa bắt đầu |
 | C0.9 | Web IDE/backend/device architecture | SOM Backend Lead + FE Lead | TechLead review | M | phase sau | Deferred — không thuộc FW SOM PR |
-| C0.10 | SOM–MCU I/O image contract | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (host/mock only)** — `StIoImage` input/output image demo với `SupplyTemp`/`Setpoint`/`FanEnable` (PR #55), thuần host/mock. Contract thật với `mkddc-iobus`/STM32 — Chưa bắt đầu, chờ C9 |
+| C0.10 | SOM–MCU I/O image contract | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (host/mock only)** — `StIoImage` input/output image demo (PR #55); PR #57 thêm `StIoMapEntry` và validator typed binding cho physical point UI/DI/AO/DO. CRUD/storage, quality/writable/scale ownership và contract thật với `mkddc-iobus`/STM32 — Chưa bắt đầu, chờ C0.10 đầy đủ/C9 |
 | C0.11 | Security/permission/audit model | SOM Backend Lead + Security reviewer | Security reviewer | S | phase sau | Deferred — không có Web Backend/API trong next action |
-| C0.12 | Test/conformance strategy | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — 16 `StRuntime.*` test + full `services/` CTest 423/423 làm host evidence (PR #55) |
-| C0.13 | Architecture prototype/vertical host slice | FW SOM DeveloperTeam | CTO/TechLead | L | PR kế tiếp | **Done** — vertical slice chạy thật end-to-end trên host: parse → typecheck → activate → execute (PR #55), giữ như module test được trong `services/core`, KHÔNG gắn vào `ScanLoop`/`main.cpp` sản xuất (xem PR #55 scope note) |
-| C0.14 | Effort estimate C1–C10 | Architect+Backend+FW+QA Leads | CTO | M | sau evidence PR | Deferred — PR #54/#55 là dữ liệu thật đầu tiên (2 PR, ~1000 dòng code+test cho 1 slice hẹp) nhưng CHƯA có ai tổng hợp thành effort estimate chính thức cho toàn bộ C1–C10 |
+| C0.12 | Test/conformance strategy | FW SOM DeveloperTeam | CTO/TechLead | M | PR kế tiếp | **Done (slice hẹp)** — parser/semantic/runtime/io-map/cyclic/stdlib/CLI gateway host tests cùng full `services/` CTest **468/468** làm evidence (PR #55/#57). Test/conformance strategy đầy đủ cho C1–C10 và target/HIL vẫn Chưa bắt đầu |
+| C0.13 | Architecture prototype/vertical host slice | FW SOM DeveloperTeam | CTO/TechLead | L | PR kế tiếp | **Done (host-only)** — parse → typecheck → activate → execute (PR #55); PR #57 thêm CLI gateway JSON ổn định, cyclic boundary/metrics và trace ring in-process. Module vẫn nằm trong `services/core`, KHÔNG gắn vào production scan loop hoặc `mkddc-program-service`/`mkddc-program-core` |
+| C0.14 | Effort estimate C1–C10 | Architect+Backend+FW+QA Leads | CTO | M | sau evidence PR | Deferred — PR #54/#55/#57 là ba nguồn evidence host thật, nhưng CHƯA có owner tổng hợp thành effort estimate chính thức cho toàn bộ C1–C10 |
 | C0.15 | C0 review, go/no-go | CTO | — (CTO tự quyết) | S | 2026-07-24 | Go-with-scope cho FW SOM ST host execution only — KHÔNG phải Go cho C1 toàn phần |
 
 Go-with-scope này không đóng G1-G6 release gates. Nó chỉ bỏ blocker để developer hoàn
@@ -293,6 +293,11 @@ thành một vertical host slice trong `services/core` và cung cấp evidence t
 > C0.5/C0.9/C0.11/C0.14 vẫn Deferred/chưa bắt đầu, C0.15 vẫn là Go-with-scope hẹp — C0
 > chưa đóng, C1 chưa được mở toàn phần.
 
+> **Cập nhật sau PR #57:** validate gateway, diagnostic, io-map validator, cyclic metrics,
+> thư viện `LIMIT` và trace ring chỉ giảm rủi ro kỹ thuật cho các C2/C3/C4/C6/C8 tương
+> lai. Chúng không thay thế output kiến trúc, storage/API, security/audit, target/HIL hoặc
+> approval bắt buộc của C0.1–C0.15.
+
 ## 4. Revision history
 
 | Version | Date | Change |
@@ -301,3 +306,4 @@ thành một vertical host slice trong `services/core` và cung cấp evidence t
 | 1.1 | 2026-07-23 | ACTION-06/07: thêm cột Reviewer/ETA vào bảng tổng hợp §3. Owner vẫn ở mức role, chưa có tên thật — đây là blocker duy nhất còn lại trước khi C0 có thể chuyển READY, ghi rõ trong `PROGRAM_RUNTIME_READY_FOR_C0.md`. |
 | 1.2 | 2026-07-24 | CTO/Project Engineering Owner phê duyệt Go-with-scope cho next action FW SOM ST host execution: cho phép code production trong `services/core` để chạy/test một chương trình ST tối thiểu trên SOM host runtime; FE/Web Backend/STM32/HIL/FBD đầy đủ vẫn deferred. |
 | 1.3 | 2026-07-24 | Cập nhật trạng thái §3 sau khi lát cắt có evidence thật: PR #54 (`fix(core): complete FW SOM IEC runtime foundation coverage`) và PR #55 (`feat(core): run minimal ST program on FW SOM runtime`, chương trình `HVAC_CTRL` chạy đúng qua parser/semantic/IR/runtime thật, 16 test mới, CTest services 423/423). C0.2/C0.3/C0.4/C0.6/C0.7/C0.8/C0.10/C0.12/C0.13 đánh dấu Done cho phạm vi slice hẹp — không phải C0 workstream đầy đủ. C0.5/C0.9/C0.11/C0.14 vẫn Deferred/chưa bắt đầu; C0.15 vẫn là Go-with-scope hẹp, C1 chưa mở toàn phần. |
+| 1.4 | 2026-07-24 | Đồng bộ PR #57: ghi nhận CLI validate JSON/exit-code ổn định, diagnostic source position, io-map validator, cyclic metrics, `LIMIT` và trace ring host-only; cập nhật CTest 468/468. Làm rõ đây là foundation/evidence giảm rủi ro, không phải full C0 Go hoặc quyền mở production FE/BE C1–C10. |

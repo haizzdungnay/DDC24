@@ -24,6 +24,7 @@ import { OutputsPage } from './pages/OutputsPage'
 import { UserParametersPage } from './pages/UserParametersPage'
 import { VirtualPointsPage } from './pages/VirtualIoPage'
 import { HelpPage } from './pages/HelpPage'
+import { LEGACY_GRAPH_DEMO_ENABLED } from './config'
 
 function ProtectedShell() {
   const { isAuthenticated } = useAuth()
@@ -59,7 +60,7 @@ export function App() {
 
         <Route path="eng/scheduler" element={<SchedulerPage />} />
         <Route path="eng/commissioning" element={<CommissioningPage />} />
-        <Route path="eng/programming" element={<ProgrammingPage />} />
+        <Route path="eng/programming" element={LEGACY_GRAPH_DEMO_ENABLED ? <ProgrammingPage /> : <Navigate to="/" replace />} />
         <Route path="eng/inputs" element={<InputsPage />} />
         <Route path="eng/outputs" element={<OutputsPage />} />
         <Route path="eng/virtual-points" element={<VirtualPointsPage />} />
@@ -73,7 +74,7 @@ export function App() {
         <Route path="network" element={<Navigate to="/settings/network" replace />} />
         <Route path="scheduler" element={<Navigate to="/eng/scheduler" replace />} />
         <Route path="commissioning" element={<Navigate to="/eng/commissioning" replace />} />
-        <Route path="validator" element={<Navigate to="/eng/programming" replace />} />
+        <Route path="validator" element={<Navigate to={LEGACY_GRAPH_DEMO_ENABLED ? '/eng/programming' : '/'} replace />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
