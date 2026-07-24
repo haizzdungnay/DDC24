@@ -2,7 +2,7 @@
 
 **Document ID:** KX-DDC24-PROGRAM-RUNTIME-IMPLPLAN-001
 **Trạng thái:** Partially opened — CTO approved FW SOM ST host execution slice
-(2026-07-24), slice đã có evidence thật (PR #54, #55); FE/Web Backend/STM32/HIL/FBD đầy
+(2026-07-24), slice đã có evidence thật (PR #54, #55, #57); FE/Web Backend/STM32/HIL/FBD đầy
 đủ vẫn blocked cho tới approval riêng; C1–C10 slice detail dưới đây vẫn là KẾ HOẠCH, chưa
 mở thật (xem §0.1)
 **Ngày tạo:** 2026-07-23
@@ -47,16 +47,22 @@ Chỉ sau khi lát cắt này có build/CTest evidence mới cập nhật effort
 C1-C10 còn lại.
 
 **Cập nhật 2026-07-24 — evidence đã có:** PR #54 (`fix(core): complete FW SOM IEC
-runtime foundation coverage`) và PR #55 (`feat(core): run minimal ST program on FW SOM
+runtime foundation coverage`), PR #55 (`feat(core): run minimal ST program on FW SOM
 runtime`) đã hoàn thành đúng chương trình demo bắt buộc ở trên — parse thật (không
 hard-code), typecheck, atomic activation/rollback, execute cho `SupplyTemp=28,
 Setpoint=24 → FanEnable=TRUE` và `SupplyTemp=22, Setpoint=24 → FanEnable=FALSE`, cùng 16
 test case (syntax/type/unbound-variable reject, activation-fail giữ package cũ,
-NaN/Inf không silent-GOOD, không parse lại trong scan path). `services/` CTest 423/423
-pass. Đây là dữ liệu thật đầu tiên cho `C0.14` (effort estimate) — **nhưng chưa có ai
+NaN/Inf không silent-GOOD, không parse lại trong scan path), và PR #57 (`feat(core):
+complete FW SOM IEC programming foundation`) thêm validate gateway, diagnostic source
+position, io-map validator, cyclic metrics, `LIMIT` và trace ring. `services/` CTest
+**468/468** pass. Đây là dữ liệu thật đầu tiên cho `C0.14` (effort estimate) — **nhưng chưa có ai
 tổng hợp thành effort estimate chính thức**, và **toàn bộ chi tiết C1–C10 bên dưới vẫn
 là kế hoạch chưa mở** (`mkddc-program-service`/`mkddc-program-core`/`libmkddc_iec` chưa
-tồn tại). Không suy diễn từ 2 PR này rằng C1 đã Go.
+tồn tại). Không suy diễn từ ba PR này rằng C1 đã Go.
+
+Các primitive PR #57 phải được xem là input/reuse candidate, không phải component C1–C8
+đã hoàn thành: CLI đang thuộc `services/core`; io-map chưa có CRUD/storage; cyclic runtime
+chưa là service/production scheduler; trace chưa persist/publish; stdlib mới có `LIMIT`.
 
 ---
 
@@ -101,7 +107,9 @@ tồn tại). Không suy diễn từ 2 PR này rằng C1 đã Go.
 - **API/schema:** `io_map.json` bind located/symbolic variable → point contract (type,
   direction, unit, quality) đúng ví dụ §8; `GET/PUT /projects/{id}/io-map`.
 - **Backend task:** validate io_map (type/direction/range) trước khi cho phép build tham
-  chiếu; reject unbound/mismatched point.
+  chiếu; reject unbound/mismatched point. Reuse test vectors/diagnostic code của
+  `StIoMapEntry`/`validate_io_map()` từ PR #57, nhưng không đóng schema production trước
+  khi C0.10 chốt quality, writable policy và scale ownership.
 - **Frontend task:** trang I/O Mapping tối thiểu (list/bind), có thể tối giản ở C2, hoàn
   chỉnh hơn ở C5/C7.
 - **Runtime task:** input snapshot value+timestamp+quality struct (mock nguồn ở C2, nối
@@ -132,6 +140,9 @@ tồn tại). Không suy diễn từ 2 PR này rằng C1 đã Go.
 - **Runtime task:** task scheduler (period/priority/watchdog budget từ manifest), input
   snapshot capture, no-allocation-in-scan, atomic swap tại safe boundary, retain state
   storage (rỗng ở C3), rollback về last-known-good khi activation fail.
+- **Foundation đã có:** `StCyclicRuntime`/`StCycleMetrics` PR #57 chứng minh activation
+  tại cycle boundary và host metrics; chưa có process lifecycle, persistence, task set,
+  API hoặc production scan-loop integration của C3.
 - **Firmware/HIL dependency:** none (host-only scheduler timing ở C3; target timing ở
   C9).
 - **Test case:** activation fail (giả lập crash) → package cũ tiếp tục chạy; power loss
@@ -156,7 +167,9 @@ tồn tại). Không suy diễn từ 2 PR này rằng C1 đã Go.
 - **API/schema:** IR schema theo `C0.6`; `symbols.json`, `diagnostics.json` theo §6.2.
 - **Backend task:** `POST /projects/{id}/validate` (parse+semantic, không sinh artifact),
   gọi compiler CLI với executable/argument cố định, timeout, memory/CPU limit (§6.1 —
-  source text không đưa vào shell command).
+  source text không đưa vào shell command). Contract `mkddc-st-validate --source <path>`
+  từ PR #57 là input cho task này; BE phải forward metadata/diagnostics từ CLI, không
+  hard-code version và phải phân biệt input quá lớn với lỗi server/IO.
 - **Frontend task:** không bắt buộc (dùng validate API trực tiếp để demo); editor thật ở
   C5.
 - **Runtime task:** load IR thật vào `mkddc-program-core` (thay cho package rỗng ở C3).
@@ -214,6 +227,9 @@ tồn tại). Không suy diễn từ 2 PR này rằng C1 đã Go.
 - **Frontend task:** hiển thị library trong Project tree (`Libraries`, §5.1).
 - **Runtime task:** instance state cho Function Block (mỗi instance state riêng, Function
   không giữ state — theo §7.4); EN/ENO nếu áp dụng.
+- **Foundation đã có:** registry version 1 và `LIMIT(MN, IN, MX): REAL` từ PR #57. `TON`,
+  `SEL`, arithmetic, counter/edge và vendor FB vẫn chưa implement; FE không được expose
+  chúng trước khi C6 có evidence tương ứng.
 - **Firmware/HIL dependency:** none.
 - **Test case:** mỗi function/FB có test normal/boundary/invalid type/overflow/time
   progression/restart/multi-instance isolation (§3.3); vendor FB migrate từ node cũ (vd
@@ -270,6 +286,9 @@ tồn tại). Không suy diễn từ 2 PR này rằng C1 đã Go.
 - **Frontend task:** trace view tối thiểu (không cần debugger đầy đủ ở Rev A.0).
 - **Runtime task:** publish diagnostic/retained dirty state **ngoài critical path**
   (§7.3), không impact WCET.
+- **Foundation đã có:** `StTraceEvent` và `StTraceLog` bounded in-process từ PR #57 với
+  năm event kind. C8 vẫn phải chốt transport/API, dropped-count semantics, durable audit,
+  actor/project/hash context và kiểm chứng không ảnh hưởng WCET.
 - **Firmware/HIL dependency:** none.
 - **Test case:** trace không impact cycle time (đo trước/sau khi bật trace); audit log
   đầy đủ actor/hash cho toàn bộ chuỗi build→activate→rollback.
@@ -354,3 +373,4 @@ tồn tại). Không suy diễn từ 2 PR này rằng C1 đã Go.
 |---|---|---|
 | 1.0 | 2026-07-23 | Tạo Implementation Plan C1–C10 theo quyết định CTO (ADR-020): mỗi slice có mục tiêu chạy được, component, API/schema, backend/frontend/runtime task, firmware/HIL dependency, test case, acceptance criteria, demo scenario, rollback, DoD. Blocked cho tới khi C0 (`C0.15`) là Go. |
 | 1.1 | 2026-07-24 | Ghi nhận evidence từ lát cắt FW SOM ST host execution (§0.1): PR #54 + PR #55 delivered, chương trình demo bắt buộc chạy đúng qua parser/semantic/IR/runtime thật, CTest services 423/423. Dữ liệu thật đầu tiên cho `C0.14` nhưng chưa tổng hợp thành effort estimate. Chi tiết C1–C10 bên dưới KHÔNG đổi — vẫn là kế hoạch, chưa mở. |
+| 1.2 | 2026-07-24 | Đồng bộ PR #57 và CTest 468/468; ghi rõ primitive host-only nào có thể tái dùng cho C2/C3/C4/C6/C8 và phần production API/storage/runtime/audit còn thiếu. Dependency C1–C10 và gate C0 full Go không đổi. |

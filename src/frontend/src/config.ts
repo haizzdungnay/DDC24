@@ -3,6 +3,10 @@ import { PRODUCT_INFO } from './productInfo'
 
 export const DDC_MODE: DdcMode = import.meta.env.VITE_DDC_MODE === 'live' ? 'live' : 'demo'
 export const IS_DEMO = DDC_MODE === 'demo'
+export function isLegacyGraphDemoEnabled(mode: DdcMode, flag: string | undefined): boolean {
+  return mode === 'demo' && flag === '1'
+}
+export const LEGACY_GRAPH_DEMO_ENABLED = isLegacyGraphDemoEnabled(DDC_MODE, import.meta.env.VITE_ENABLE_LEGACY_GRAPH_DEMO)
 export const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || ''
 export const WS_ORIGIN = import.meta.env.VITE_WS_ORIGIN || ''
 export const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || (IS_DEMO ? 'mock' : 'jwt')

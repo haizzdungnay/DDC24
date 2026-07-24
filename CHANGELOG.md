@@ -12,6 +12,21 @@
 - Full ADR at `docs/adr/ADR-021-restructure-core-and-backend-by-domain.md` (Phase A: `services/core`, Accepted and executed; Phase B: `web/backend` → Go `internal/` packages, still Proposed/not started — separate follow-up after Phase A is confirmed stable).
 - Verification (before AND after the move, same commands, results identical): `cmake -S services -B build/services -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror" -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_MODBUS=ON` + `cmake --build build/services --parallel` (clean rebuild from scratch after the move, 0 errors) + `ctest --test-dir build/services --output-on-failure --parallel 4` — **471/471 passed, both before and after**. Also re-ran the 3 full-runtime integration scripts before/after with identical results: `tools/test_safety_e2e.sh` (3 safety layers PASS), `tools/test_reload_e2e.sh` (SIGHUP reload A-F all PASS), `tools/integration_test/advanced_stack_test.sh` (Group A-E, **PASS=18 FAIL=0 SKIP=4, identical pass/skip set before and after**). Moved domain-by-domain with a build+test checkpoint after each of the 8 domains, not one bulk move.
 
+### Added — Web Ethernet transaction authority (2026-07-24)
+- backend(network): thêm adapter admin-only `GET /api/v1/network/transaction` và `POST /api/v1/network/transaction/{action}` tới `mkddc-netcfg`; body 4 KiB, JSON strict, validate shape theo action, giữ nguyên authoritative response và fail closed 502/503 khi authority lỗi/mất kết nối.
+- backend(audit/rbac): inject `netcfgAuthority` qua `App`, audit user/action/transaction/result không ghi candidate hoặc credential; viewer/operator không được gọi endpoint transaction.
+- frontend(network): tách ACTIVE/KERNEL khỏi PENDING CANDIDATE, poll status mỗi giây, triển khai Validate → Stage → Apply → Confirm/Rollback, countdown tự rollback, trạng thái stale/unavailable/rejected và khóa transition sai; Ethernet không còn sửa qua form desired config BACnet/WiFi.
+- frontend(network): xử lý `ConfigPutResult.applied=false`/warnings thay vì luôn báo lưu thành công; thêm type/client contract v1 và simulator transaction cho demo.
+- docs(api/web): nâng OpenAPI lên v1.9.0 với 2 route và schema netcfg; cập nhật Web implementation guide Rev 1.34 để phân biệt `network.conf` desired với kernel active.
+- tests/verification: FE `typecheck`, `lint`, `test` (23 files, 112 tests) và production `build` pass; Linux cross-compile Go pass, network/netcfg + historian 48h boundary targeted tests pass, backend suite pass khi bỏ qua 2 test phụ thuộc môi trường (`go` không có trong WSL và HMI restart Unix socket trên WSL mount); OpenAPI parse thành công (44 paths, 69 schemas), `git diff --check` pass.
+
+### Changed — Đồng bộ kế hoạch FE/BE Program Runtime sau PR #57 (2026-07-24)
+- docs(program-runtime): cập nhật C0 plan, C1–C10 implementation plan và readiness review với evidence PR #57/CTest 468/468; phân biệt rõ validate gateway, io-map, cyclic metrics, `LIMIT` và trace ring host-only với production API/storage/runtime/audit còn thiếu.
+- docs(governance): khẳng định dependency C1–C10 và điều kiện toàn bộ C0.1–C0.14 Done trước C0.15 full Go; ngoại lệ FW SOM host-only không mở production FE/Web Backend/STM32/HIL/FBD.
+- frontend(programming): ẩn legacy Programming demo khỏi live/production route và navigation; chỉ mở khi đồng thời chạy demo mode và opt-in `VITE_ENABLE_LEGACY_GRAPH_DEMO=1`, kèm banner local-only và đổi action thành Simulate.
+- tests(frontend): thêm unit test cho feature gate và navigation regression để production không expose legacy Programming demo.
+- verification: đối chiếu nội dung với `CHANGELOG.md`, `docs/04_design/INTERFACES.md` và source `services/core/st_*`; FE `typecheck`, `lint`, 112 tests và production build pass; markdown/OpenAPI parse và `git diff --check` pass.
+
 ### Added — `CLAUDE.md` project instructions (2026-07-24)
 - Added `CLAUDE.md` at repo root — Claude Code (the harness this session runs in) auto-loads this file every session, unlike `AGENTS.md`, which this harness does not read automatically. Mirrors `AGENTS.md`'s existing rules (changelog discipline, FE local changes as source of truth) so they actually take effect for Claude Code sessions, plus the always-respond-in-Vietnamese / minimize-English-in-rules-and-skills rule that was previously only sitting uncommitted in `AGENTS.md`. Root cause: a prior session answered in English despite that rule existing in the working tree, because `AGENTS.md` was never being auto-loaded in the first place. Docs-only change; no code/behavior affected.
 
@@ -51,6 +66,9 @@
 - Verification: `cmake -S services -B <tmp> -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror"` then `cmake --build <tmp> --parallel` — 0 warnings across core/iobus/netcfg. `ctest --test-dir <tmp> --output-on-failure --parallel 4` — **407/407 passed** (core_tests 296 incl. 24 new, iobus_tests 96, netcfg_tests 15 — unaffected by this change, run as part of the shared `services/` build tree).
 - No controlled contract docs changed because behavior/ABI/SHM layout/output semantics are unchanged — this change is test coverage plus one clarifying code comment; `docs/04_design/SOFTWARE.md`, `docs/04_design/INTERFACES.md`, `docs/05_verification/VERIFICATION.md`, `docs/07_records/TRACEABILITY.md` were read for consistency but not edited.
 - Not in this change (explicitly out of scope): FE/Web IDE, Go backend/API, STM32 firmware (`fw/`), HIL/target bring-up, ST parser/FBD canvas/compiler/IR (`mkddc-program-service`/`mkddc-program-core`, ADR-020 C1-C10, gated on C0 approval).
+### Changed - Restart local project runtime via WAN (2026-07-24)
+- deployment(runtime): restore the WAN SSH tunnel on local port 18081 and restart the local Vite frontend on port 5173 in live JWT mode without changing frontend source files.
+- verification: login and `/api/v1/me` return `admin`; `/api/v1/system/status` returns `overall=ok` with live CPU, RAM, temperature, and uptime values from the Orange Pi backend.
 
 ### Fixed - Netcfg socket startup safety (2026-07-23)
 - services(netcfg): fail closed when the Unix socket path, bind/listen, permissions, owner lookup, or ownership assignment is invalid; every failed startup now closes the listener and removes the partial socket.

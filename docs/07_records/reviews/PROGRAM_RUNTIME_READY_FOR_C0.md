@@ -3,8 +3,19 @@
 **Document ID:** KX-DDC24-PROGRAM-RUNTIME-C0-READINESS-001
 **Ngày:** 2026-07-23
 **Nguồn:** ADR-020 + 8 ACTION items yêu cầu bởi CTO (Phạm Đình Chương), 2026-07-23
-**Kết luận:** **C0_READY = NO** — một blocker duy nhất còn lại (owner assignment), không
-phải kỹ thuật hay tài liệu.
+**Kết luận:** **C0_READY = NO** cho C0 đầy đủ — tại thời điểm review, blocker để mở C0 là
+owner assignment; tài liệu này không phải quyết định C0.15 full Go.
+
+---
+
+## Cập nhật sau readiness review — 2026-07-24
+
+CTO/Project Engineering Owner đã cấp ngoại lệ **Go-with-scope** cho lát cắt FW SOM ST
+host-only trong `services/core`. PR #54/#55/#57 đã giao vertical host slice, validate
+gateway/diagnostic/io-map/cyclic/stdlib/trace foundation và CTest 468/468. Ngoại lệ này
+không đổi `OWNER_ASSIGNED = NO`, không chuyển C0 đầy đủ thành READY và không mở production
+FE/Web Backend/STM32/HIL/FBD hoặc C1–C10. Trạng thái chi tiết hiện hành thuộc C0 plan
+v1.4; phần dưới giữ lại snapshot ACTION-01..08 ngày 2026-07-23.
 
 ---
 
@@ -121,7 +132,8 @@ NEXT_ACTION: CTO hoặc Project Engineering cung cấp tên thật cho 5 vai tr�
   giới hạn theo ranh giới đã định nghĩa ở C0 plan §1).
 ```
 
-**Không được mở C1–C10 hoặc viết production code cho tới khi:**
+**Ngoài lát cắt FW SOM host-only đã được duyệt, không được mở C1–C10 hoặc viết production
+FE/Web Backend/STM32/HIL/FBD cho Program Runtime cho tới khi:**
 
 ```text
 CONFLICT_REMAINING = 0     ✅ (đạt)
@@ -134,3 +146,4 @@ C0_READY = YES             ❌ (chưa — phụ thuộc dòng trên)
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-07-23 | Review cuối ACTION-01..08. 7/8 action Done hoặc đã làm phần trong khả năng; ACTION-06 (assign owner thật) blocked — cần input CTO. C0_READY = NO cho tới khi có owner. |
+| 1.1 | 2026-07-24 | Ghi nhận ngoại lệ Go-with-scope và evidence PR #54/#55/#57, CTest 468/468; làm rõ full C0/C1–C10 vẫn blocked và snapshot owner readiness không phải C0.15 full Go. |

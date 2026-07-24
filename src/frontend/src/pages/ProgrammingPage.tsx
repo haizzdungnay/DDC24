@@ -113,6 +113,12 @@ export function ProgrammingPage() {
 
   return (
     <div className="space-y-5">
+      <div role="status" className="rounded-[var(--radius)] border border-[rgba(232,181,0,0.46)] bg-[rgba(232,181,0,0.12)] px-4 py-3 text-sm text-[var(--c-warn-fg)]">
+        {pick(
+          'Legacy graph demo — chỉ mô phỏng cục bộ, không validate hoặc deploy tới thiết bị.',
+          'Legacy graph demo — local simulation only; it does not validate or deploy to the device.'
+        )}
+      </div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">{pick('Lập trình', 'Programming')}</h1>
@@ -159,7 +165,7 @@ export function ProgrammingPage() {
         <Panel
           title={pick('Kết quả', 'Results')}
           subtitle={pick('Validator v1: input chưa nối, nhiều nguồn ghi output, AO limit, Modbus/sensor fallback.', 'Validator v1: unconnected input, multiple output writers, AO limits, Modbus/sensor fallback.')}
-          action={<Button variant="primary" icon={<Rocket className="h-4 w-4" />} disabled={!result?.pass} onClick={deployDemo}>Deploy (demo)</Button>}
+          action={<Button variant="primary" icon={<Rocket className="h-4 w-4" />} disabled={!result?.pass} onClick={deployDemo}>{pick('Mô phỏng (demo)', 'Simulate (demo)')}</Button>}
         >
           {!result && <p className="text-sm text-[var(--c-text-dim)]">{pick('Chưa chạy kiểm tra. Dán hoặc sửa graph rồi bấm Validate/Test.', 'No validation run yet. Paste or edit the graph, then click Validate/Test.')}</p>}
 
