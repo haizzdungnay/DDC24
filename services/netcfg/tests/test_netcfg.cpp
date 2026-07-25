@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <set>
 
 namespace {
 
@@ -46,6 +47,59 @@ public:
         if (reason) *reason = rollback_ok ? "OK" : "ROLLBACK_FAILED";
         return rollback_ok;
     }
+};
+
+class FakeLinuxPlatform final : public netcfg::LinuxPlatform {
+public:
+    netcfg::ActiveState current;
+    netcfg::ActiveState restored_after_reapply;
+    netcfg::Candidate persisted;
+    bool persist_ok = true;
+    bool reapply_ok = true;
+    bool address_remove_ok = true;
+    std::set<std::string> addresses;
+    std::vector<std::vector<std::string>> commands;
+
+    netcfg::ActiveState status(const std::string& interface, std::string* reason) override {
+        auto result = current;
+        if (!interface.empty()) result.interface = interface;
+        if (reason) *reason = "OK";
+        return result;
+    }
+
+protected:
+    bool run(const std::vector<std::string>& args, std::string*) override {
+        commands.push_back(args);
+        if (args.size() >= 4 && args[1] == "device" && args[2] == "reapply") {
+            if (reapply_ok) current = restored_after_reapply;
+            return reapply_ok;
+        }
+        if (args.size() >= 5 && args[1] == "address" && args[2] == "del") {
+            if (!address_remove_ok) return false;
+            addresses.erase(args[3].substr(0, args[3].find('/')));
+            return true;
+        }
+        return true;
+    }
+
+    std::string binary(const std::vector<std::string>& choices) override {
+        return choices.empty() ? std::string{} : choices.front();
+    }
+
+    bool persist(const netcfg::Candidate& candidate, std::string* reason) override {
+        persisted = candidate;
+        if (reason) *reason = persist_ok ? "OK" : "PERSIST_FAILED";
+        return persist_ok;
+    }
+
+    bool interface_has_address(const std::string&, const std::string& ipv4,
+                               bool* present) const override {
+        if (!present) return false;
+        *present = addresses.count(ipv4) != 0;
+        return true;
+    }
+
+    void rollback_retry_delay() const override {}
 };
 
 std::string journal_path()
@@ -166,6 +220,40 @@ TEST(NetcfgEngine, FailedApplyRollsBackAndReportsFailureCause)
     EXPECT_EQ(platform->rollback_calls, 1);
 }
 
+TEST(NetcfgEngine, FailedRollbackNeverReportsRolledBack)
+{
+    auto platform = std::make_shared<FakePlatform>();
+    platform->apply_ok = false;
+    platform->rollback_ok = false;
+    netcfg::Engine engine(platform, journal_path(), "eth0");
+    auto stage = request("stage-rollback-fail", "stage");
+    stage["candidate"] = candidate();
+    const std::string transaction = engine.handle(stage).at("transactionId");
+    auto apply = request("apply-rollback-fail", "apply");
+    apply["transactionId"] = transaction;
+
+    const auto response = engine.handle(apply);
+
+    EXPECT_EQ(response.at("result"), "rejected");
+    EXPECT_EQ(response.at("state"), "failed");
+    EXPECT_EQ(engine.transaction().last_reason, "ROLLBACK_FAILED");
+}
+
+TEST(NetcfgEngine, StageRejectsAnUnrestorablePreviousState)
+{
+    auto platform = std::make_shared<FakePlatform>();
+    platform->active.mode = "unknown";
+    netcfg::Engine engine(platform, journal_path(), "eth0");
+    auto stage = request("stage-no-rollback", "stage");
+    stage["candidate"] = candidate();
+
+    const auto response = engine.handle(stage);
+
+    EXPECT_EQ(response.at("result"), "rejected");
+    EXPECT_EQ(response.at("reasonCode"), "PREVIOUS_STATE_NOT_RESTORABLE");
+    EXPECT_EQ(engine.transaction().state, "idle");
+}
+
 TEST(NetcfgEngine, DhcpWaitsForARealLeaseBeforeConfirmation)
 {
     auto platform = std::make_shared<FakePlatform>();
@@ -247,6 +335,78 @@ TEST(NetcfgEngine, MonotonicDeadlineRollsBackEvenIfWallClockMovesBackward)
     engine.tick();
     EXPECT_EQ(engine.transaction().state, "rolled_back");
     EXPECT_EQ(engine.transaction().last_reason, "CONFIRM_TIMEOUT");
+}
+
+TEST(NetcfgLinuxPlatform, DhcpRollbackReappliesStaticProfileAndRemovesNewLease)
+{
+    FakeLinuxPlatform platform;
+    const netcfg::ActiveState previous{"eth0", "up", "static", "192.168.1.50", 24,
+                                       "192.168.1.1"};
+    platform.current = {"eth0", "up", "dhcp", "192.168.1.99", 24, "192.168.1.1"};
+    platform.restored_after_reapply = previous;
+    platform.addresses = {previous.ipv4, platform.current.ipv4};
+    const netcfg::Candidate dhcp{"eth0", "dhcp", {}, {}, {}};
+    std::string reason;
+
+    EXPECT_TRUE(platform.rollback(dhcp, previous, &reason));
+    EXPECT_EQ(platform.persisted.interface, previous.interface);
+    EXPECT_EQ(platform.persisted.mode, "static");
+    EXPECT_EQ(platform.persisted.ipv4, previous.ipv4);
+    EXPECT_EQ(platform.persisted.netmask, "255.255.255.0");
+    EXPECT_EQ(platform.persisted.gateway, previous.gateway);
+    EXPECT_EQ(platform.addresses.count("192.168.1.99"), 0u);
+    ASSERT_EQ(platform.commands.size(), 2u);
+    EXPECT_EQ(platform.commands[0], (std::vector<std::string>{
+        "/usr/bin/nmcli", "device", "reapply", "eth0"}));
+    EXPECT_EQ(platform.commands[1], (std::vector<std::string>{
+        "/usr/sbin/ip", "address", "del", "192.168.1.99/24", "dev", "eth0"}));
+}
+
+TEST(NetcfgLinuxPlatform, RollbackFailsClosedWhenReapplyFails)
+{
+    FakeLinuxPlatform platform;
+    const netcfg::ActiveState previous{"eth0", "up", "static", "192.168.1.50", 24,
+                                       "192.168.1.1"};
+    platform.current = {"eth0", "up", "dhcp", "192.168.1.99", 24, "192.168.1.1"};
+    platform.restored_after_reapply = previous;
+    platform.reapply_ok = false;
+    const netcfg::Candidate dhcp{"eth0", "dhcp", {}, {}, {}};
+    std::string reason;
+
+    EXPECT_FALSE(platform.rollback(dhcp, previous, &reason));
+    EXPECT_EQ(reason, "ROLLBACK_REAPPLY_FAILED");
+}
+
+TEST(NetcfgLinuxPlatform, RollbackFailsClosedWhenAddressRemovalFails)
+{
+    FakeLinuxPlatform platform;
+    const netcfg::ActiveState previous{"eth0", "up", "static", "192.168.1.50", 24,
+                                       "192.168.1.1"};
+    platform.current = {"eth0", "up", "dhcp", "192.168.1.99", 24, "192.168.1.1"};
+    platform.restored_after_reapply = previous;
+    platform.addresses = {previous.ipv4, platform.current.ipv4};
+    platform.address_remove_ok = false;
+    const netcfg::Candidate dhcp{"eth0", "dhcp", {}, {}, {}};
+    std::string reason;
+
+    EXPECT_FALSE(platform.rollback(dhcp, previous, &reason));
+    EXPECT_EQ(reason, "ROLLBACK_ADDRESS_REMOVE_FAILED");
+}
+
+TEST(NetcfgLinuxPlatform, RollbackFailsClosedWhenKernelStateDoesNotMatch)
+{
+    FakeLinuxPlatform platform;
+    const netcfg::ActiveState previous{"eth0", "up", "static", "192.168.1.50", 24,
+                                       "192.168.1.1"};
+    platform.current = previous;
+    platform.restored_after_reapply = previous;
+    platform.restored_after_reapply.gateway = "192.168.1.254";
+    const netcfg::Candidate candidate_value{"eth0", "static", "192.168.1.80",
+                                             "255.255.255.0", "192.168.1.1"};
+    std::string reason;
+
+    EXPECT_FALSE(platform.rollback(candidate_value, previous, &reason));
+    EXPECT_EQ(reason, "ROLLBACK_VERIFY_FAILED");
 }
 
 TEST(NetcfgServer, RejectsOverlongSocketPathBeforeCreatingEndpoint)

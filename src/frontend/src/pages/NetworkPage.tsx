@@ -1,5 +1,5 @@
 import { CheckCircle2, Database, Network, Play, RotateCcw, Save, Server, ShieldCheck, Wifi } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { apiClient } from '../api/client'
 import { Button } from '../components/Button'
 import { Panel } from '../components/Panel'
@@ -27,6 +27,7 @@ export function NetworkPage() {
   const [candidate, setCandidate] = useState<NetcfgCandidate | null>(null)
   const [transaction, setTransaction] = useState<NetcfgResponse | null>(null)
   const [transactionBusy, setTransactionBusy] = useState<NetcfgTransactionAction | null>(null)
+  const previousAuthority = useRef<{ transactionId: string | null; state: NetcfgResponse['state'] } | null>(null)
   const networkData = networkState.data
   const slaves = networkData?.southbound ?? []
   const onlineSlaves = slaves.filter((slave) => slave.pollState === 'online').length
@@ -39,8 +40,22 @@ export function NetworkPage() {
   useEffect(() => {
     const authoritative = transactionState.data
     if (!authoritative) return
+    const previous = previousAuthority.current
+    const transactionChanged = previous?.transactionId !== (authoritative.transactionId ?? null)
+    const transactionActive = isActiveTransactionState(authoritative.state)
+    const transactionCompleted = Boolean(previous && isActiveTransactionState(previous.state) && !transactionActive)
     setTransaction(authoritative)
-    setCandidate((current) => current ?? candidateFromAuthority(authoritative, networkData?.northbound))
+    setCandidate((current) => {
+      if (transactionActive && authoritative.pending) return { ...authoritative.pending }
+      if (!current || transactionChanged || transactionCompleted) {
+        return candidateFromAuthority(authoritative, networkData?.northbound)
+      }
+      return current
+    })
+    previousAuthority.current = {
+      transactionId: authoritative.transactionId ?? null,
+      state: authoritative.state
+    }
   }, [networkData?.northbound, transactionState.data])
 
   function setConfigField<K extends keyof NetworkConfig>(field: K, value: NetworkConfig[K]) {
@@ -86,6 +101,10 @@ export function NetworkPage() {
     if (!candidate) return
     const needsCandidate = action === 'validate' || action === 'stage'
     const transactionId = transaction?.transactionId
+    if (action === 'apply' && (!transaction?.pending || !sameCandidate(candidate, transaction.pending))) {
+      toast.push('error', pick('Candidate hiển thị không khớp giao dịch đang chờ; hãy tải lại trạng thái mạng.', 'The visible candidate does not match the pending transaction; refresh network state.'))
+      return
+    }
     if (!needsCandidate && !transactionId) {
       toast.push('error', pick('Thiếu mã giao dịch mạng', 'Network transaction ID is missing'))
       return
@@ -114,6 +133,8 @@ export function NetworkPage() {
   if (!config) return <StateBlock state="empty" title={pick('Chưa có cấu hình mạng', 'No network settings')} />
 
   const ethernetState = transaction?.active?.link === 'up' ? 'online' : transaction?.active ? 'offline' : config.bmsLink
+  const transactionLocked = Boolean(transaction && isActiveTransactionState(transaction.state))
+  const pendingMatchesCandidate = Boolean(candidate && transaction?.pending && sameCandidate(candidate, transaction.pending))
 
   return (
     <div className="space-y-5">
@@ -155,23 +176,25 @@ export function NetworkPage() {
             </div>
 
             <div className="grid gap-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4 md:grid-cols-2 xl:grid-cols-5">
-              <Field label="Interface" value={candidate.interface} onChange={(value) => setCandidateField('interface', value)} mono />
+              <Field label="Interface" value={candidate.interface} onChange={(value) => setCandidateField('interface', value)} mono disabled={transactionLocked} />
               <label className="block text-sm text-[var(--c-text)]">
                 Mode
-                <select value={candidate.mode} onChange={(event) => setCandidateMode(event.target.value as NetcfgCandidate['mode'])} className={inputClass}>
+                <select value={candidate.mode} onChange={(event) => setCandidateMode(event.target.value as NetcfgCandidate['mode'])} className={inputClass} disabled={transactionLocked}>
                   <option value="static">Static IPv4</option>
                   <option value="dhcp">DHCP</option>
                 </select>
               </label>
-              <Field label="IPv4" value={candidate.ipv4 ?? ''} onChange={(value) => setCandidateField('ipv4', value)} mono disabled={candidate.mode === 'dhcp'} />
-              <Field label="Subnet Mask" value={candidate.netmask ?? ''} onChange={(value) => setCandidateField('netmask', value)} mono disabled={candidate.mode === 'dhcp'} />
-              <Field label="Gateway" value={candidate.gateway ?? ''} onChange={(value) => setCandidateField('gateway', value)} mono disabled={candidate.mode === 'dhcp'} />
+              <Field label="IPv4" value={candidate.ipv4 ?? ''} onChange={(value) => setCandidateField('ipv4', value)} mono disabled={transactionLocked || candidate.mode === 'dhcp'} />
+              <Field label="Subnet Mask" value={candidate.netmask ?? ''} onChange={(value) => setCandidateField('netmask', value)} mono disabled={transactionLocked || candidate.mode === 'dhcp'} />
+              <Field label="Gateway" value={candidate.gateway ?? ''} onChange={(value) => setCandidateField('gateway', value)} mono disabled={transactionLocked || candidate.mode === 'dhcp'} />
             </div>
 
+            {transactionLocked && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[rgba(232,181,0,0.10)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">{pick('Form đang khóa theo pending candidate của giao dịch authoritative.', 'The form is locked to the authoritative pending candidate.')}</div>}
+
             <div className="flex flex-wrap gap-2">
-              <Button icon={<ShieldCheck className="h-4 w-4" />} loading={transactionBusy === 'validate'} disabled={transactionBusy !== null} onClick={() => runTransaction('validate')}>{pick('Kiểm tra', 'Validate')}</Button>
-              <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={transactionBusy === 'stage'} disabled={transactionBusy !== null || transaction.state === 'applying' || transaction.state === 'awaiting_confirmation'} onClick={() => runTransaction('stage')}>Stage</Button>
-              <Button icon={<Play className="h-4 w-4" />} loading={transactionBusy === 'apply'} disabled={transactionBusy !== null || transaction.state !== 'staged'} onClick={() => runTransaction('apply')}>Apply</Button>
+              <Button icon={<ShieldCheck className="h-4 w-4" />} loading={transactionBusy === 'validate'} disabled={transactionBusy !== null || transactionLocked} onClick={() => runTransaction('validate')}>{pick('Kiểm tra', 'Validate')}</Button>
+              <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={transactionBusy === 'stage'} disabled={transactionBusy !== null || transactionLocked} onClick={() => runTransaction('stage')}>Stage</Button>
+              <Button icon={<Play className="h-4 w-4" />} loading={transactionBusy === 'apply'} disabled={transactionBusy !== null || transaction.state !== 'staged' || !pendingMatchesCandidate} onClick={() => runTransaction('apply')}>Apply</Button>
               <Button variant="primary" icon={<CheckCircle2 className="h-4 w-4" />} loading={transactionBusy === 'confirm'} disabled={transactionBusy !== null || transaction.state !== 'awaiting_confirmation'} onClick={() => runTransaction('confirm')}>Confirm</Button>
               <Button variant="danger" icon={<RotateCcw className="h-4 w-4" />} loading={transactionBusy === 'rollback'} disabled={transactionBusy !== null || !['staged', 'applying', 'awaiting_confirmation'].includes(transaction.state)} onClick={() => runTransaction('rollback')}>Rollback</Button>
             </div>
@@ -242,6 +265,17 @@ function candidateFromAuthority(response: NetcfgResponse, fallback?: NetworkConf
     mode: fallback?.dhcp ? 'dhcp' : 'static',
     ...(fallback?.dhcp ? {} : { ipv4: fallback?.ip ?? '', netmask: fallback?.subnet ?? '', gateway: fallback?.gateway ?? '' })
   }
+}
+
+function isActiveTransactionState(state: NetcfgResponse['state']): boolean {
+  return state === 'staged' || state === 'applying' || state === 'awaiting_confirmation'
+}
+
+function sameCandidate(left: NetcfgCandidate, right: NetcfgCandidate): boolean {
+  return left.interface === right.interface && left.mode === right.mode &&
+    (left.ipv4 ?? '') === (right.ipv4 ?? '') &&
+    (left.netmask ?? '') === (right.netmask ?? '') &&
+    (left.gateway ?? '') === (right.gateway ?? '')
 }
 
 function prefixToNetmask(prefix: number): string {
