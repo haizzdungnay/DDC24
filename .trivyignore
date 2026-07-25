@@ -1,0 +1,3 @@
+# GHSA-qwww-vcr4-c8h2 only affects unstable React Server Components APIs.
+# This frontend is a client-side SPA and imports only react-router-dom APIs.
+GHSA-qwww-vcr4-c8h2 exp:2026-10-25

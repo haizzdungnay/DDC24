@@ -23,7 +23,8 @@
 ### Fixed — Network transaction rollback và khóa candidate authoritative (2026-07-25)
 - services/netcfg(network-safety): chỉ Stage khi kernel state trước đó đủ khả năng khôi phục; rollback bắt buộc persist/reapply NetworkManager profile cũ, xóa địa chỉ tạm/DHCP lease phát sinh và xác minh lại interface/link/mode/IPv4/prefix/gateway trước khi báo `rolled_back`; lỗi ở bất kỳ bước nào chuyển transaction sang `failed` với reason code fail-closed.
 - frontend(network-safety): đồng bộ form theo `pending` mỗi khi transaction authoritative thay đổi, khóa chỉnh sửa/Validate/Stage trong transaction active và chỉ cho Apply khi candidate hiển thị khớp transaction đang chờ, tránh áp nhầm giao dịch từ browser/HMI khác.
-- verification: WSL Linux build `mkddc-netcfg` với `-Wall -Wextra -Werror` và CTest 17/17 pass; FE 23 test files/113 tests, `typecheck`, `lint` và production build pass; Go backend Linux cross-compile pass.
+- frontend(dependency-security): nâng `react-router-dom`/`react-router` lên 7.18.1 để vá `CVE-2026-55685`; thêm ignore có hạn đến 2026-10-25 cho `GHSA-qwww-vcr4-c8h2` vì advisory chỉ ảnh hưởng unstable RSC APIs trong khi frontend là client-side SPA và không dùng RSC, chờ migration React/Router 8 tương thích.
+- verification: WSL Linux build `mkddc-netcfg` với `-Wall -Wextra -Werror` và CTest 17/17 pass; FE 23 test files/113 tests, `typecheck`, `lint` và production build pass; Go backend Linux cross-compile pass; Trivy v0.70.0 không còn HIGH/CRITICAL chưa xử lý.
 
 ### Changed — Đồng bộ kế hoạch FE/BE Program Runtime sau PR #57 (2026-07-24)
 - docs(program-runtime): cập nhật C0 plan, C1–C10 implementation plan và readiness review với evidence PR #57/CTest 468/468; phân biệt rõ validate gateway, io-map, cyclic metrics, `LIMIT` và trace ring host-only với production API/storage/runtime/audit còn thiếu.
