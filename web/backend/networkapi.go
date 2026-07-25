@@ -175,25 +175,21 @@ func networkPageConfigToFiles(cfg NetworkPageConfig, baseNetwork ConfigNetwork, 
 	if err != nil {
 		addConfigErr(&errs, "bacnetDeviceId", "must be integer")
 	}
-	eth := cloneMap(baseNetwork.Eth)
-	eth["mode"] = modeFromDHCP(cfg.DHCP)
-	setOptionalString(eth, "ip", cfg.IP)
-	setOptionalString(eth, "netmask", cfg.Subnet)
-	setOptionalString(eth, "gateway", cfg.Gateway)
 	wifi := cloneMap(baseNetwork.Wifi)
 	wifi["enabled"] = cfg.WifiEnabled
-	wifi["mode"] = modeFromDHCP(cfg.DHCP)
 	bip := cloneMap(baseBacnet.BIP)
 	bip["enabled"] = true
 	bip["udp_port"] = cfg.BacnetPort
 	networkCfg := ConfigNetwork{
 		Hostname: firstNonEmpty(cfg.DeviceName, baseNetwork.Hostname),
-		Eth:      eth,
-		Wifi:     wifi,
+		// Ethernet is owned by mkddc-netcfg/NetworkManager and is never rewritten
+		// by the compatibility BACnet/WiFi save path.
+		Eth:  baseNetwork.Eth,
+		Wifi: wifi,
 	}
 	deviceCfg := ConfigDevice{DeviceID: deviceID, DeviceName: firstNonEmpty(cfg.BacnetDeviceName, cfg.DeviceName), Description: baseDevice.Description, Location: baseDevice.Location}
 	bacnetCfg := ConfigBacnet{BIP: bip}
-	errs = append(errs, validateConfigNetwork(networkCfg)...)
+	errs = append(errs, validateNetworkServiceConfig(networkCfg)...)
 	errs = append(errs, validateConfigDevice(deviceCfg)...)
 	errs = append(errs, validateConfigBacnet(bacnetCfg)...)
 	return networkCfg, deviceCfg, bacnetCfg, errs
@@ -229,13 +225,6 @@ func bmsLinkStatus(ip string, enabled bool, port int) string {
 		return "online"
 	}
 	return "offline"
-}
-
-func modeFromDHCP(enabled bool) string {
-	if enabled {
-		return "dhcp"
-	}
-	return "static"
 }
 
 func intString(value int) string {

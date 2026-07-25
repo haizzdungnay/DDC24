@@ -7,11 +7,16 @@ import { I18nProvider } from '../i18n'
 import { NavRail } from './NavRail'
 import { TopBar } from './TopBar'
 
+const authMocks = vi.hoisted(() => ({ role: 'admin' as 'admin' | 'operator' | 'viewer' }))
+
 vi.mock('../auth/AuthProvider', () => ({
-  useAuth: () => ({ logout: vi.fn() })
+  useAuth: () => ({ logout: vi.fn(), session: { username: 'test', role: authMocks.role } })
 }))
 
-beforeEach(() => localStorage.setItem('mkddc-lang', 'en'))
+beforeEach(() => {
+  localStorage.setItem('mkddc-lang', 'en')
+  authMocks.role = 'admin'
+})
 afterEach(cleanup)
 
 function renderNavigation(node: React.ReactNode) {
@@ -42,6 +47,13 @@ describe('shell user navigation', () => {
     renderNavigation(<NavRail alarmCount={0} device={null} />)
 
     expect(screen.queryByRole('link', { name: 'Programming' })).not.toBeInTheDocument()
+  })
+
+  it('does not expose Network configuration to non-admin roles', () => {
+    authMocks.role = 'operator'
+    renderNavigation(<NavRail alarmCount={0} device={null} />)
+
+    expect(screen.queryByRole('link', { name: 'Network' })).not.toBeInTheDocument()
   })
 
   it('shows Model and Firmware in two columns without Serial', () => {

@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import type { ReactNode } from 'react'
 import { useAuth } from './auth/AuthProvider'
 import { AppShell } from './components/AppShell'
 import { RealtimeProvider } from './realtime'
@@ -37,6 +38,11 @@ function ProtectedShell() {
   )
 }
 
+export function RequireAdmin({ children }: { children: ReactNode }) {
+  const { session } = useAuth()
+  return session?.role === 'admin' ? children : <Navigate to="/" replace />
+}
+
 export function App() {
   const { isAuthenticated } = useAuth()
   return (
@@ -54,7 +60,7 @@ export function App() {
         <Route path="settings" element={<Navigate to="/settings/device" replace />} />
         <Route path="settings/display" element={<DisplaySettingsPage />} />
         <Route path="settings/users" element={<UsersPage />} />
-        <Route path="settings/network" element={<NetworkPage />} />
+        <Route path="settings/network" element={<RequireAdmin><NetworkPage /></RequireAdmin>} />
         <Route path="settings/time" element={<TimeSettingsPage />} />
         <Route path="settings/device" element={<SettingsPage />} />
 

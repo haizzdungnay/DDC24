@@ -7,6 +7,7 @@ import { StateBlock } from '../components/StateBlock'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
 import { useApi } from '../hooks/useApi'
+import { useAuth } from '../auth/AuthProvider'
 import { useI18n } from '../i18n'
 import type { ModbusSlave, NetcfgCandidate, NetcfgResponse, NetcfgTransactionAction, NetworkConfig, PollState } from '../types'
 
@@ -21,8 +22,14 @@ const pollStateClass: Record<PollState, string> = {
 export function NetworkPage() {
   const toast = useToast()
   const { locale, pick } = useI18n()
+  const { session } = useAuth()
+  const canManageNetwork = session?.role === 'admin'
   const networkState = useApi(apiClient.getNetwork, [], { refreshMs: 1000 })
-  const transactionState = useApi(apiClient.getNetworkTransaction, [], { refreshMs: 1000 })
+  const transactionState = useApi<NetcfgResponse | null>(
+    () => canManageNetwork ? apiClient.getNetworkTransaction() : Promise.resolve(null),
+    [canManageNetwork],
+    { refreshMs: canManageNetwork ? 1000 : undefined }
+  )
   const [config, setConfig] = useState<NetworkConfig | null>(null)
   const [candidate, setCandidate] = useState<NetcfgCandidate | null>(null)
   const [transaction, setTransaction] = useState<NetcfgResponse | null>(null)
@@ -75,7 +82,7 @@ export function NetworkPage() {
   }
 
   async function saveServiceConfig() {
-    if (!config || !networkData) return
+    if (!canManageNetwork || !config || !networkData) return
     const originalEthernet = networkData.northbound
     const northbound = {
       ...config,
@@ -98,7 +105,7 @@ export function NetworkPage() {
   }
 
   async function runTransaction(action: NetcfgTransactionAction) {
-    if (!candidate) return
+    if (!canManageNetwork || !candidate) return
     const needsCandidate = action === 'validate' || action === 'stage'
     const transactionId = transaction?.transactionId
     if (action === 'apply' && (!transaction?.pending || !sameCandidate(candidate, transaction.pending))) {

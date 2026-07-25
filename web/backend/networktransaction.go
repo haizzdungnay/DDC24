@@ -127,47 +127,79 @@ func validateNetworkTransactionRequest(action string, payload networkTransaction
 
 func validateNetcfgCandidate(candidate NetcfgCandidate) []configValidationError {
 	var details []configValidationError
-	if !netcfgInterfacePattern.MatchString(candidate.Interface) {
-		addConfigErr(&details, "candidate.interface", "must match ^[A-Za-z0-9_.-]{1,15}$")
+	if !netcfgInterfacePattern.MatchString(candidate.Interface) || candidate.Interface == "lo" {
+		addConfigErr(&details, "candidate.interface", "must be a non-loopback interface matching ^[A-Za-z0-9_.-]{1,15}$")
 	}
 	if candidate.Mode != "static" && candidate.Mode != "dhcp" {
 		addConfigErr(&details, "candidate.mode", "must be static or dhcp")
+		return details
 	}
-	if candidate.Mode == "static" {
-		validateNetcfgIPv4(&details, "candidate.ipv4", candidate.IPv4, true)
-		if !validIPv4Netmask(candidate.Netmask) {
-			addConfigErr(&details, "candidate.netmask", "must be a contiguous IPv4 netmask")
+	if candidate.Mode == "dhcp" {
+		if candidate.IPv4 != "" {
+			addConfigErr(&details, "candidate.ipv4", "must be empty for dhcp mode")
 		}
-	} else {
-		validateNetcfgIPv4(&details, "candidate.ipv4", candidate.IPv4, false)
-		if candidate.Netmask != "" && !validIPv4Netmask(candidate.Netmask) {
-			addConfigErr(&details, "candidate.netmask", "must be a contiguous IPv4 netmask")
+		if candidate.Netmask != "" {
+			addConfigErr(&details, "candidate.netmask", "must be empty for dhcp mode")
 		}
+		if candidate.Gateway != "" {
+			addConfigErr(&details, "candidate.gateway", "must be empty for dhcp mode")
+		}
+		return details
 	}
-	validateNetcfgIPv4(&details, "candidate.gateway", candidate.Gateway, false)
+
+	ip, ipOK := parseNetcfgIPv4(&details, "candidate.ipv4", candidate.IPv4, true)
+	prefix, maskOK := netcfgNetmaskPrefix(candidate.Netmask)
+	if !maskOK || prefix < 1 || prefix > 30 {
+		addConfigErr(&details, "candidate.netmask", "must be a contiguous IPv4 netmask with prefix length 1..30")
+	}
+	if ipOK && maskOK && prefix >= 1 && prefix <= 30 {
+		firstOctet := ip >> 24
+		if firstOctet == 0 || firstOctet == 127 || ip>>28 == 0xe || ip == 0xffffffff {
+			addConfigErr(&details, "candidate.ipv4", "must be a usable unicast IPv4 address")
+		} else {
+			mask := uint32(0xffffffff) << (32 - prefix)
+			host := ip & ^mask
+			if host == 0 || host == ^mask {
+				addConfigErr(&details, "candidate.ipv4", "must not be the network or broadcast address")
+			}
+			if candidate.Gateway != "" {
+				gateway, gatewayOK := parseNetcfgIPv4(&details, "candidate.gateway", candidate.Gateway, false)
+				if gatewayOK {
+					gatewayHost := gateway & ^mask
+					if gateway == ip || gateway&mask != ip&mask || gatewayHost == 0 || gatewayHost == ^mask {
+						addConfigErr(&details, "candidate.gateway", "must be a usable address in the candidate subnet and differ from candidate.ipv4")
+					}
+				}
+			}
+		}
+	} else if candidate.Gateway != "" {
+		parseNetcfgIPv4(&details, "candidate.gateway", candidate.Gateway, false)
+	}
 	return details
 }
 
-func validateNetcfgIPv4(details *[]configValidationError, path, value string, required bool) {
-	value = strings.TrimSpace(value)
+func parseNetcfgIPv4(details *[]configValidationError, path, value string, required bool) (uint32, bool) {
 	if value == "" {
 		if required {
 			addConfigErr(details, path, "is required for static mode")
 		}
-		return
+		return 0, false
 	}
 	parsed := net.ParseIP(value)
 	if parsed == nil || parsed.To4() == nil || strings.Contains(value, ":") {
 		addConfigErr(details, path, "must be a valid IPv4 address")
+		return 0, false
 	}
+	ip := parsed.To4()
+	return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3]), true
 }
 
-func validIPv4Netmask(value string) bool {
-	parsed := net.ParseIP(strings.TrimSpace(value))
+func netcfgNetmaskPrefix(value string) (int, bool) {
+	parsed := net.ParseIP(value)
 	if parsed == nil || parsed.To4() == nil || strings.Contains(value, ":") {
-		return false
+		return 0, false
 	}
 	mask := net.IPMask(parsed.To4())
 	ones, bits := mask.Size()
-	return bits == 32 && ones >= 0
+	return ones, bits == 32 && ones >= 0
 }

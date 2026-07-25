@@ -64,6 +64,51 @@ func TestNetworkTransactionStageForwardsStrictCandidate(t *testing.T) {
 	}
 }
 
+func TestValidateNetcfgCandidateMatchesCppAuthorityPolicy(t *testing.T) {
+	tests := []struct {
+		name      string
+		candidate NetcfgCandidate
+		path      string
+	}{
+		{"loopback interface", NetcfgCandidate{Interface: "lo", Mode: "dhcp"}, "candidate.interface"},
+		{"dhcp ipv4", NetcfgCandidate{Interface: "eth0", Mode: "dhcp", IPv4: "192.168.1.20"}, "candidate.ipv4"},
+		{"dhcp netmask", NetcfgCandidate{Interface: "eth0", Mode: "dhcp", Netmask: "255.255.255.0"}, "candidate.netmask"},
+		{"dhcp gateway", NetcfgCandidate{Interface: "eth0", Mode: "dhcp", Gateway: "192.168.1.1"}, "candidate.gateway"},
+		{"prefix zero", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "192.168.1.20", Netmask: "0.0.0.0"}, "candidate.netmask"},
+		{"prefix 31", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "192.168.1.20", Netmask: "255.255.255.254"}, "candidate.netmask"},
+		{"prefix 32", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "192.168.1.20", Netmask: "255.255.255.255"}, "candidate.netmask"},
+		{"zero network", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "0.1.2.3", Netmask: "255.0.0.0"}, "candidate.ipv4"},
+		{"loopback address", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "127.0.0.2", Netmask: "255.0.0.0"}, "candidate.ipv4"},
+		{"multicast address", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "224.0.0.2", Netmask: "255.255.255.0"}, "candidate.ipv4"},
+		{"network address", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "192.168.1.0", Netmask: "255.255.255.0"}, "candidate.ipv4"},
+		{"broadcast address", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "192.168.1.255", Netmask: "255.255.255.0"}, "candidate.ipv4"},
+		{"gateway equals ipv4", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "192.168.1.20", Netmask: "255.255.255.0", Gateway: "192.168.1.20"}, "candidate.gateway"},
+		{"off-subnet gateway", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "192.168.1.20", Netmask: "255.255.255.0", Gateway: "192.168.2.1"}, "candidate.gateway"},
+		{"network gateway", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "192.168.1.20", Netmask: "255.255.255.0", Gateway: "192.168.1.0"}, "candidate.gateway"},
+		{"broadcast gateway", NetcfgCandidate{Interface: "eth0", Mode: "static", IPv4: "192.168.1.20", Netmask: "255.255.255.0", Gateway: "192.168.1.255"}, "candidate.gateway"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			errs := validateNetcfgCandidate(test.candidate)
+			if !hasConfigErrorPath(errs, test.path) {
+				t.Fatalf("validateNetcfgCandidate() errors = %+v; want path %q", errs, test.path)
+			}
+		})
+	}
+}
+
+func TestValidateNetcfgCandidateAcceptsAuthorityValidCandidates(t *testing.T) {
+	tests := []NetcfgCandidate{
+		{Interface: "eth0", Mode: "dhcp"},
+		{Interface: "end1", Mode: "static", IPv4: "192.168.1.20", Netmask: "255.255.255.0", Gateway: "192.168.1.1"},
+	}
+	for _, candidate := range tests {
+		if errs := validateNetcfgCandidate(candidate); len(errs) != 0 {
+			t.Fatalf("validateNetcfgCandidate(%+v) errors = %+v; want none", candidate, errs)
+		}
+	}
+}
+
 func TestNetworkTransactionRejectsInvalidActionShape(t *testing.T) {
 	app, token := newTestAppWithAdmin(t)
 	stub := &netcfgAuthorityStub{}

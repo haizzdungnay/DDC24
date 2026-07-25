@@ -19,15 +19,10 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
   const isMounted = useRef(true)
   const requestSequence = useRef(0)
   const fetcherRef = useRef(fetcher)
-  const optionsRef = useRef(options)
 
   useEffect(() => {
     fetcherRef.current = fetcher
   }, [fetcher])
-
-  useEffect(() => {
-    optionsRef.current = options
-  }, [options])
 
   useEffect(() => {
     isMounted.current = true
@@ -89,7 +84,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
   }, [fetchNow])
 
   useEffect(() => {
-    const refreshMs = optionsRef.current.refreshMs
+    const refreshMs = options.refreshMs
     if (!refreshMs) return undefined
     let polling = false
 
@@ -107,7 +102,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
         window.clearInterval(timerId)
       }
     }
-  }, [fetchNow])
+  }, [fetchNow, options.refreshMs])
 
   return { data, loading, error, refetch }
 }
