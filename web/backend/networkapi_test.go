@@ -36,7 +36,7 @@ func TestNetworkPageReadsConfigFiles(t *testing.T) {
 	}
 }
 
-func TestNetworkPagePutWritesConfigAndPreservesWifiFields(t *testing.T) {
+func TestNetworkPagePutWritesServiceConfigWithoutRewritingEthernetOrWifiMode(t *testing.T) {
 	app, token := newTestAppWithAdmin(t)
 	writeNetworkPageFixture(t, app.cfg.ConfigDir)
 	body := `{"northbound":{"deviceName":"DDC-Office","ip":"10.9.8.7","dhcp":false,"wifiEnabled":true,"subnet":"255.255.255.0","gateway":"10.9.8.1","bacnetDeviceId":"2222","bacnetDeviceName":"DDC-Office","bacnetPort":47810,"bmsLink":"online"},"southbound":[]}`
@@ -50,7 +50,12 @@ func TestNetworkPagePutWritesConfigAndPreservesWifiFields(t *testing.T) {
 	}
 	var network ConfigNetwork
 	readJSONFile(t, filepath.Join(app.cfg.ConfigDir, "network.conf"), &network)
-	if network.Hostname != "DDC-Office" || stringValue(network.Eth, "ip") != "10.9.8.7" || stringValue(network.Wifi, "ssid") != "lab-wifi" {
+	if network.Hostname != "DDC-Office" ||
+		stringValue(network.Eth, "ip") != "10.1.2.3" ||
+		stringValue(network.Eth, "gateway") != "10.1.2.1" ||
+		stringValue(network.Wifi, "mode") != "dhcp" ||
+		stringValue(network.Wifi, "ssid") != "lab-wifi" ||
+		!boolValue(network.Wifi, "enabled") {
 		t.Fatalf("network.conf = %+v", network)
 	}
 	var device ConfigDevice

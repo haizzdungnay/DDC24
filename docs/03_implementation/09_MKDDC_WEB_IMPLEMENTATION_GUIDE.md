@@ -2,8 +2,8 @@
 ## MK-DDC-24 — REST API + Web UI + Config + Validator
 
 > **Document ID:** IMPL-WEB-MK-DDC-24-VI
-> **Phiên bản:** 1.34 | 2026-07-24 (Web BE/FE dùng ADR-017 network transaction authority) · 1.33 | 2026-07-22 (merge historian v2 guide with ADR-017 local-HMI broker/network transaction handoff) · 1.32 | 2026-07-21 (bounded Orange Pi schema-v5 activation)
-> **Cập nhật hiện hành:** Rev 1.34 (2026-07-24) thêm Web adapter admin tới `mkddc-netcfg` và FE hiển thị active/pending/countdown với luồng Stage → Apply → Confirm/Rollback. `network.conf` cũ vẫn được giữ cho tương thích desired config nhưng không còn được FE xem là kernel active.
+> **Phiên bản:** 1.35 | 2026-07-25 (đồng bộ network authority, validation và FE RBAC) · 1.34 | 2026-07-24 (Web BE/FE dùng ADR-017 network transaction authority) · 1.33 | 2026-07-22 (merge historian v2 guide with ADR-017 local-HMI broker/network transaction handoff)
+> **Cập nhật hiện hành:** Rev 1.35 (2026-07-25) đặt Ethernet legacy thành compatibility read-only, đồng bộ pre-validation với `mkddc-netcfg`, và chỉ cho admin thấy/truy cập/poll trang Network.
 > **Owner:** Dev 3 (Web/BE)
 > **Nguồn-chuẩn:** [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) ·
 > [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) ·
@@ -275,25 +275,32 @@ System status (versions tách từng thành phần — Contract Freeze; nguồn 
 | `/data/config/io_config.conf` | sensor type per UI (0-10V/4-20mA/PT100/NTC10k/dry...), AO mode per kênh |
 | `/data/config/io_safe_state.conf` | safe-state value per kênh |
 | `/data/config/historian.conf` | per-point DB policy, 11 interval, start UTC, capacity và revision |
-| `/data/config/network.conf` | IP/DHCP/DNS |
+| `/data/config/network.conf` | BACnet/WiFi/hostname; `eth` chỉ là compatibility shadow read-only |
 | `/data/config/device.conf` | BACnet device ID/name |
 | `/data/config/users.conf` | user accounts (bcrypt) |
 
 > Web validate input theo schema trước khi ghi; config IO → core/iobus reload (qua signal/IPC).
 
 `network.conf` chỉ là desired configuration và REST `PUT /api/v1/network` cũ vẫn được giữ
-cho tương thích BACnet/WiFi. FE không còn cho sửa Ethernet IPv4 qua form này và phải xử lý
-`ConfigPutResult.applied=false`/warnings, không báo thành công vô điều kiện.
+cho tương thích BACnet/WiFi. Cả endpoint này và `PUT /api/v1/system/config/network` phải giữ
+nguyên `eth`; endpoint config từ chối payload cố thay đổi Ethernet. Luồng lưu BACnet/WiFi
+không được sao chép IP/mode/gateway cũ sang authority hoặc đổi WiFi mode. FE không còn cho
+sửa Ethernet IPv4 qua form legacy và phải xử lý `ConfigPutResult.applied=false`/warnings,
+không báo thành công vô điều kiện.
 
 Web adapter authoritative:
 - `GET /api/v1/network/transaction` chuyển `status` tới `/run/mkddc-netcfg/netcfg.sock`.
 - `POST /api/v1/network/transaction/{validate|stage|apply|confirm|rollback}` chỉ cho admin;
   body tối đa 4 KiB, JSON strict, candidate/transactionId bắt buộc theo action.
+- Candidate từ chối interface `lo`; DHCP cấm static fields; static chỉ chấp nhận prefix
+  `/1..30`, usable unicast host và gateway usable cùng subnet, khác chính candidate IPv4.
 - Response giữ nguyên `result`, `reasonCode`, `state`, `active`, `pending`,
   `rollbackRemainingS`; authority `rejected` không bị đổi thành trạng thái Web tự suy diễn.
 - FE poll trạng thái authoritative mỗi giây, tách ACTIVE/KERNEL khỏi PENDING CANDIDATE,
   khóa transition không hợp lệ và hiển thị countdown Confirm/Rollback. Mọi action được audit
   theo user/action/transaction/result nhưng không ghi candidate hoặc credential.
+- Route `/settings/network`, navigation entry và transaction polling chỉ bật cho admin;
+  viewer/operator bị redirect về dashboard và không tạo request authority nền.
 
 ---
 
@@ -372,7 +379,7 @@ Done khi : 4 check chạy đúng; deploy chỉ khi pass.
 | Không bypass core | core_client.go | group 6 (kiểm không có serial) |
 
 ---
-**Rev** 1.34 | 2026-07-24 — Added admin-only strict/bounded Web adapter to `mkddc-netcfg`, authoritative active/pending/countdown FE transaction UX, explicit Confirm/Rollback controls, and fail-aware legacy config toast handling; target/manual disconnect-reconnect evidence remains open. · **Rev** 1.33 | 2026-07-22 — Merged ADR-017 local-HMI broker/network authority handoff with historian v2 guide history; Web network source remains desired/pending until BE/FE uses stage/apply/confirm/rollback and active/pending/reconnect/rollback UX. ·
+**Rev** 1.35 | 2026-07-25 — Made legacy Ethernet fields compatibility read-only across both config write paths, aligned Go candidate validation with `mkddc-netcfg`, and restricted Network navigation, route access, and authority polling to admins. · **Rev** 1.34 | 2026-07-24 — Added admin-only strict/bounded Web adapter to `mkddc-netcfg`, authoritative active/pending/countdown FE transaction UX, explicit Confirm/Rollback controls, and fail-aware legacy config toast handling; target/manual disconnect-reconnect evidence remains open. · **Rev** 1.33 | 2026-07-22 — Merged ADR-017 local-HMI broker/network authority handoff with historian v2 guide history; Web network source remains desired/pending until BE/FE uses stage/apply/confirm/rollback and active/pending/reconnect/rollback UX. ·
 **Rev** 1.32 | 2026-07-21 — Completed bounded Orange Pi schema-v5 activation with final ARM64 package parity, owner-safe atomic config replacement, first-cycle restart gaps, 596,284-row migration evidence and live v2 query/writer smoke; release gates remain open. **Rev** 1.31 | 2026-07-21 — Closed ARM64 prebuilt-native parity on frozen schema-v5 legacy/active fixtures with native manifest and unchanged artifacts; live schema-v1/SQLITE_BUSY/migration/cutover remain open. **Rev** 1.30 | 2026-07-21 — Recorded ARM64 native preflight fail-closed on board schema-v1 fixture with unchanged SHA. **Rev** 1.29 | 2026-07-21 — Added native `historian-rollback-package` parity gate with independent current/candidate builds, SHA/build metadata, legacy+active fixture execution, DB-family/archive/evidence immutability and atomic manifest output. **Rev** 1.28 | 2026-07-21 — Added read-only `historian-rollback-verify` schema-v5 fixture gate with exact authority/evidence validation, future-schema rejection and no-mutation SHA proof. **Rev** 1.27 | 2026-07-21 — Added offline `historian-maintenance` operator CLI with exact confirmation, stable UTC, service-presence, path containment and manifest/window/fresh-authority preflight. **Rev** 1.26 | 2026-07-21 — Added maintenance-only ordered writer quiesce/final backup/full migration/evidence/gap/activation coordinator and schema-v5 quiesce proof.
 **Rev** 1.23 | 2026-07-21 — Physical rolling-prune engine code/local GREEN with fail-closed activation proof, durable queue/retry, checksum validation, all-tier cutoff and frontier rebase; execution, activation/cutover, target and E2E remain open.
 **Rev** 1.22 | 2026-07-20 — Added interval-bounded retention contract/UI, selected/max API fields, policy validation/schema migration and capacity projection; physical prune, target benchmark and activation/cutover remain open. · **Rev** 1.21 | 2026-07-20 — Closed WEB-HIST-005 shared Logging Control/unified Trends code-local gates with 50 frontend tests, UTC range/partial/generation/BAD-gap/stepped coverage, default-off v2 authority gate and no VP diagnostic/database conflation; retained legacy authority, activation/cutover, target and release gates as open. · **Rev** 1.20 | 2026-07-20 — Closed WEB-HIST-004 unified query/CSV code-local gates with JSON/CSV shared iteration, generation-aware RAM/hot/archive merge and supported Linux race; retained legacy authority, WEB-HIST-005, activation/cutover, target and release gates as open. · **Rev** 1.19 | 2026-07-20 — Closed the WEB-HIST-003 shadow code-local slice after deterministic scheduler/error-path TDD and supported Linux race; legacy authority, WEB-HIST-004/005, activation/cutover, target and release gates remain open. · **Rev** 1.18 | 2026-07-20 — Reconciled WEB-HIST-001/002 code-local completion and WEB-HIST-003 shadow-scheduler work in progress; WEB-HIST-004/005, activation/cutover, target and release gates remain open. · **Rev** 1.17 | 2026-07-15 — Reconciled WEB-HIST-001..005 and WEB-NAME-001 status, preserved WEB-016 as technical-tag foundation, and aligned legacy custom-range containment wording. · **Rev** 1.16 | 2026-07-15 — Reconciled local historian/name evidence: backend coverage 59.7%; OpenAPI 1.6.0 parses with 41 paths, 216 local refs, zero decoded C1 controls; Windows CGO 64-bit race block and E2E/manual/generation-root gates remain open. · **Rev** 1.15 | 2026-07-15 — ADR-018/019 amendments: independent unique display names, legacy conflict resolution, shared UI/AO/DO/VP Logging Control, immediate/future start, persistent policy states and backend-owned 48-hour/archive Trends merge; implementation remains open. · **Rev** 1.14 | 2026-07-15 — ADR-019 Phase A API-writer implementation verified locally: global validation, `id+tag+name`, FE tag/error surfaces and migration helper; release gates remain explicit. · 1.13 | 2026-07-15 — ADR-019 Phase A global point tags planned: backend aggregate validation, `id+tag+name`, FE field errors, migration/generation gates; Phase B deferred. · 1.12 | 2026-07-15 — Owner-approved FE adjustment: bảng timestamp Trends chỉ render 5 mốc mới nhất; chart giữ toàn bộ samples/range, không đổi REST/WS contract. · 1.11 | 2026-06-23 · DoD: [13_DEFINITION_OF_DONE §5](13_DEFINITION_OF_DONE.md)

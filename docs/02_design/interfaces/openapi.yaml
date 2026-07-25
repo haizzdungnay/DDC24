@@ -1,7 +1,7 @@
 ﻿openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.9.0"
+  version: "1.9.1"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -13,9 +13,10 @@ info:
     2026-07-22: thÃªm explicit historian source routing cho Trends cache 24h vÃ  Custom database.
     2026-07-20: thÃªm retentionDays theo interval, maxRetentionDays vÃ  retentionMaxDaysByInterval cho historian policy.
     2026-07-24: thêm Web adapter authoritative cho giao dịch Ethernet validate/stage/apply/confirm/rollback.
+    2026-07-25: legacy config endpoints no longer mutate Ethernet; candidate validation matches mkddc-netcfg.
 x-revision:
-  date: "2026-07-24"
-  note: "v1.9.0 adds the admin-only authoritative Ethernet transaction adapter backed by mkddc-netcfg."
+  date: "2026-07-25"
+  note: "v1.9.1 makes legacy Ethernet config read-only and aligns Web validation with mkddc-netcfg."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -217,8 +218,9 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh northbound trang Network (admin)
-      description: Ghi atomic `network.conf`, `device.conf`, `bacnet.conf`; preserve field khÃ´ng expose bá»Ÿi form; fieldbus/slave chá»‰ Ä‘á»c.
+      description: Writes BACnet, Wi-Fi, and hostname service configuration atomically; Ethernet fields are read-only compatibility data owned by mkddc-netcfg.
       x-rbac: [admin]
+      x-ethernet-authority: mkddc-netcfg
       requestBody:
         required: true
         content:
@@ -344,7 +346,9 @@ paths:
               schema: { $ref: "#/components/schemas/ConfigNetwork" }
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh network (admin)
+      description: Ethernet fields are read-only compatibility data; use `/network/transaction/{action}` for mutations.
       x-rbac: [admin]
+      x-ethernet-authority: mkddc-netcfg
       requestBody:
         required: true
         content:
@@ -1416,15 +1420,15 @@ components:
       required: [deviceName, ip, dhcp, wifiEnabled, subnet, gateway, bacnetDeviceId, bacnetDeviceName, bacnetPort, bmsLink]
       properties:
         deviceName: { type: string }
-        ip: { type: string, format: ipv4 }
-        dhcp: { type: boolean }
+        ip: { type: string, format: ipv4, readOnly: true }
+        dhcp: { type: boolean, readOnly: true }
         wifiEnabled: { type: boolean }
-        subnet: { type: string, format: ipv4 }
-        gateway: { type: string, format: ipv4 }
+        subnet: { type: string, format: ipv4, readOnly: true }
+        gateway: { type: string, format: ipv4, readOnly: true }
         bacnetDeviceId: { type: string }
         bacnetDeviceName: { type: string }
         bacnetPort: { type: integer, minimum: 1, maximum: 65535 }
-        bmsLink: { type: string, enum: [online, offline] }
+        bmsLink: { type: string, enum: [online, offline], readOnly: true }
     NetworkSlave:
       type: object
       required: [address, name, profile, baudRate, pollState, errorRate, lastPollMs]
@@ -1447,11 +1451,14 @@ components:
       additionalProperties: false
       required: [interface, mode]
       properties:
-        interface: { type: string, pattern: "^[A-Za-z0-9_.-]{1,15}$" }
+        interface:
+          type: string
+          pattern: "^[A-Za-z0-9_.-]{1,15}$"
+          not: { enum: [lo] }
         mode: { type: string, enum: [static, dhcp] }
-        ipv4: { type: string, format: ipv4, maxLength: 15 }
-        netmask: { type: string, format: ipv4, maxLength: 15 }
-        gateway: { type: string, format: ipv4, maxLength: 15 }
+        ipv4: { type: string, format: ipv4, maxLength: 15, description: "Required usable host address for static mode; forbidden for DHCP." }
+        netmask: { type: string, format: ipv4, maxLength: 15, description: "Static mode requires a contiguous prefix length 1..30; forbidden for DHCP." }
+        gateway: { type: string, format: ipv4, maxLength: 15, description: "Optional usable address in the candidate subnet for static mode; forbidden for DHCP." }
     NetcfgActive:
       type: object
       additionalProperties: false
@@ -1489,7 +1496,11 @@ components:
     ConfigNetwork:
       type: object
       properties:
-        eth: { type: object, additionalProperties: true }
+        eth:
+          type: object
+          readOnly: true
+          description: Compatibility shadow only; Ethernet mutation is owned by mkddc-netcfg transactions.
+          additionalProperties: true
         wifi: { type: object, additionalProperties: true }
         hostname: { type: string }
     ConfigPointMetadata:

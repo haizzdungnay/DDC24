@@ -8,9 +8,14 @@ import type { NetcfgResponse, NetcfgTransactionRequest } from '../types'
 import { NetworkPage } from './NetworkPage'
 
 const networkMocks = vi.hoisted(() => ({
+  role: 'admin' as 'admin' | 'operator' | 'viewer',
   transaction: null as NetcfgResponse | null,
   getNetworkTransaction: vi.fn(),
   runNetworkTransaction: vi.fn()
+}))
+
+vi.mock('../auth/AuthProvider', () => ({
+  useAuth: () => ({ session: { username: 'test', role: networkMocks.role } })
 }))
 
 vi.mock('../api/client', () => {
@@ -29,6 +34,7 @@ vi.mock('../api/client', () => {
 
 beforeEach(() => {
   localStorage.setItem('mkddc-lang', 'en')
+  networkMocks.role = 'admin'
   networkMocks.transaction = idleTransaction()
   networkMocks.getNetworkTransaction.mockReset()
   networkMocks.getNetworkTransaction.mockImplementation(async () => networkMocks.transaction)
@@ -116,5 +122,19 @@ describe('NetworkPage authority flow', () => {
     await user.click(screen.getByRole('button', { name: 'Apply' }))
 
     await waitFor(() => expect(networkMocks.runNetworkTransaction).toHaveBeenCalledWith('apply', { transactionId: 'tx-remote' }))
+  })
+
+  it('does not request or poll the admin transaction authority for a non-admin session', async () => {
+    networkMocks.role = 'viewer'
+    render(
+      <I18nProvider>
+        <ToastProvider>
+          <NetworkPage />
+        </ToastProvider>
+      </I18nProvider>
+    )
+
+    expect(await screen.findByText('Network')).toBeInTheDocument()
+    expect(networkMocks.getNetworkTransaction).not.toHaveBeenCalled()
   })
 })

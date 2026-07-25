@@ -80,6 +80,54 @@ func TestConfigPutInvalidDeviceReturnsBadRequest(t *testing.T) {
 	}
 }
 
+func TestConfigNetworkPutRejectsEthernetMutation(t *testing.T) {
+	app, token := newTestAppWithAdmin(t)
+	path := filepath.Join(app.cfg.ConfigDir, "network.conf")
+	original := `{"eth":{"mode":"static","ip":"10.1.2.3","netmask":"255.255.255.0","gateway":"10.1.2.1"},"wifi":{"enabled":false,"mode":"dhcp","ssid":"lab-wifi"},"hostname":"ddc-lab"}`
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"eth":{"mode":"dhcp"},"wifi":{"enabled":false,"mode":"dhcp","ssid":"lab-wifi"},"hostname":"ddc-lab"}`
+
+	req := newAuthRequest(http.MethodPut, "/api/v1/system/config/network", body, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != original {
+		t.Fatalf("network.conf changed after rejected Ethernet mutation: %s", data)
+	}
+}
+
+func TestConfigNetworkPutWithoutEthernetPreservesLegacyShadow(t *testing.T) {
+	app, token := newTestAppWithAdmin(t)
+	path := filepath.Join(app.cfg.ConfigDir, "network.conf")
+	original := `{"eth":{"mode":"static","ip":"10.1.2.3","netmask":"255.255.255.0","gateway":"10.1.2.1"},"wifi":{"enabled":false,"mode":"dhcp","ssid":"lab-wifi"},"hostname":"ddc-lab"}`
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"wifi":{"enabled":true,"mode":"dhcp","ssid":"new-wifi"},"hostname":"ddc-new"}`
+
+	req := newAuthRequest(http.MethodPut, "/api/v1/system/config/network", body, token)
+	w := httptest.NewRecorder()
+	app.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var network ConfigNetwork
+	readJSONFile(t, path, &network)
+	if stringValue(network.Eth, "ip") != "10.1.2.3" || stringValue(network.Wifi, "ssid") != "new-wifi" {
+		t.Fatalf("network.conf = %+v", network)
+	}
+}
+
 func TestValidateConfigIOAcceptsAIUniversalInputFields(t *testing.T) {
 	cfg := ConfigIO{
 		UI: []map[string]any{

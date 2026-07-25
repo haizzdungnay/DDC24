@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -69,7 +70,35 @@ func (a *App) handleGetConfigNetwork(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handlePutConfigNetwork(w http.ResponseWriter, r *http.Request) {
-	handlePutConfig(a, w, r, configGroupNetwork, validateConfigNetwork)
+	var cfg ConfigNetwork
+	if err := decodeConfigBody(w, r, &cfg); err != nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
+		return
+	}
+	current, err := readConfig(a, configGroupNetwork, ConfigNetwork{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if cfg.Eth != nil && !reflect.DeepEqual(cfg.Eth, current.Eth) {
+		writeValidationErrors(w, []configValidationError{{
+			Path:    "eth",
+			Message: "is read-only; use /network/transaction for Ethernet changes",
+		}})
+		return
+	}
+	// Preserve the legacy shadow exactly; only mkddc-netcfg may mutate Ethernet.
+	cfg.Eth = current.Eth
+	if errs := validateNetworkServiceConfig(cfg); len(errs) > 0 {
+		writeValidationErrors(w, errs)
+		return
+	}
+	result, err := a.writeConfigGroup(r, configGroupNetwork, cfg)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (a *App) handleGetConfigIO(w http.ResponseWriter, r *http.Request) {
@@ -361,6 +390,13 @@ func validateConfigNetwork(cfg ConfigNetwork) []configValidationError {
 		}
 	}
 	return errs
+}
+
+func validateNetworkServiceConfig(cfg ConfigNetwork) []configValidationError {
+	// Ethernet in network.conf is a compatibility shadow, not an input to the
+	// desired-service save path. The authoritative validator lives in netcfg.
+	cfg.Eth = nil
+	return validateConfigNetwork(cfg)
 }
 
 func validateConfigIO(cfg ConfigIO) []configValidationError {
