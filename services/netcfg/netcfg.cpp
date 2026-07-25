@@ -68,6 +68,38 @@ std::string cidr(const ActiveState& state)
     return state.ipv4 + "/" + std::to_string(state.prefix_length);
 }
 
+bool netmask_from_prefix(int prefix, std::string* netmask)
+{
+    if (prefix < 1 || prefix > 30 || !netmask) return false;
+    const uint32_t mask = 0xFFFFFFFFu << (32 - prefix);
+    struct in_addr address { htonl(mask) };
+    std::array<char, INET_ADDRSTRLEN> text {};
+    if (!::inet_ntop(AF_INET, &address, text.data(), text.size())) return false;
+    *netmask = text.data();
+    return true;
+}
+
+bool restore_candidate_from(const ActiveState& previous, Candidate* restore)
+{
+    if (!restore || previous.interface.empty() || previous.ipv4.empty() ||
+        (previous.mode != "static" && previous.mode != "dhcp")) return false;
+    *restore = Candidate{previous.interface, previous.mode, {}, {}, {}};
+    if (previous.mode == "static") {
+        restore->ipv4 = previous.ipv4;
+        restore->gateway = previous.gateway;
+        if (!netmask_from_prefix(previous.prefix_length, &restore->netmask)) return false;
+    }
+    std::string ignored;
+    return validate_candidate(*restore, &ignored);
+}
+
+bool restored_state_matches(const ActiveState& previous, const ActiveState& active)
+{
+    return active.interface == previous.interface && active.link == previous.link &&
+        active.mode == previous.mode && active.ipv4 == previous.ipv4 &&
+        active.prefix_length == previous.prefix_length && active.gateway == previous.gateway;
+}
+
 bool write_all(int fd, const char* data, size_t size)
 {
     while (size > 0) {
@@ -390,6 +422,32 @@ bool LinuxPlatform::persist(const Candidate& candidate, std::string* reason)
     return true;
 }
 
+bool LinuxPlatform::interface_has_address(const std::string& interface,
+                                          const std::string& ipv4, bool* present) const
+{
+    if (!present || interface.empty() || ipv4.empty()) return false;
+    *present = false;
+    struct ifaddrs* addresses = nullptr;
+    if (::getifaddrs(&addresses) != 0) return false;
+    bool found = false;
+    for (const auto* item = addresses; item && !found; item = item->ifa_next) {
+        if (!item->ifa_name || interface != item->ifa_name || !item->ifa_addr ||
+            item->ifa_addr->sa_family != AF_INET) continue;
+        std::array<char, INET_ADDRSTRLEN> text {};
+        const auto* address = reinterpret_cast<const struct sockaddr_in*>(item->ifa_addr);
+        found = ::inet_ntop(AF_INET, &address->sin_addr, text.data(), text.size()) &&
+            ipv4 == text.data();
+    }
+    ::freeifaddrs(addresses);
+    *present = found;
+    return true;
+}
+
+void LinuxPlatform::rollback_retry_delay() const
+{
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+}
+
 bool LinuxPlatform::apply(const Candidate& candidate, const ActiveState&, std::string* reason)
 {
     if (candidate.mode == "dhcp") {
@@ -435,32 +493,62 @@ bool LinuxPlatform::confirm(const Candidate& candidate, const ActiveState& previ
 }
 
 bool LinuxPlatform::rollback(const Candidate& candidate, const ActiveState& previous,
-                             std::string* reason)
+                              std::string* reason)
 {
-    const std::string ip = binary({"/usr/sbin/ip", "/usr/bin/ip"});
-    if (ip.empty()) { if (reason) *reason = "IP_TOOL_UNAVAILABLE"; return false; }
-    std::string output;
-    if (!previous.ipv4.empty()) {
-        (void)run({ip, "address", "add", cidr(previous), "dev", previous.interface}, &output);
-        Candidate restore{previous.interface, previous.mode == "dhcp" ? "dhcp" : "static",
-                          previous.ipv4, "", previous.gateway};
-        if (restore.mode == "static") {
-            const uint32_t mask = previous.prefix_length == 0 ? 0 :
-                0xFFFFFFFFu << (32 - previous.prefix_length);
-            struct in_addr addr { htonl(mask) };
-            std::array<char, INET_ADDRSTRLEN> text {};
-            if (::inet_ntop(AF_INET, &addr, text.data(), text.size())) restore.netmask = text.data();
-        } else {
-            restore.ipv4.clear(); restore.gateway.clear();
-        }
-        if (!persist(restore, reason)) return false;
-        if (!previous.gateway.empty())
-            (void)run({ip, "route", "replace", "default", "via", previous.gateway,
-                       "dev", previous.interface, "src", previous.ipv4}, &output);
+    Candidate restore;
+    if (!restore_candidate_from(previous, &restore)) {
+        if (reason) *reason = "PREVIOUS_STATE_NOT_RESTORABLE";
+        return false;
     }
-    if (!candidate.ipv4.empty() && candidate.ipv4 != previous.ipv4)
-        (void)run({ip, "address", "del", cidr(candidate), "dev", candidate.interface}, &output);
-    return true;
+
+    std::string status_reason;
+    const ActiveState applied = status(candidate.interface, &status_reason);
+    const std::string applied_ipv4 = candidate.mode == "dhcp" &&
+        !applied.ipv4.empty() && applied.ipv4 != previous.ipv4
+        ? applied.ipv4 : candidate.ipv4;
+
+    if (!persist(restore, reason)) return false;
+    const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
+    if (nmcli.empty()) {
+        if (reason) *reason = "NETWORKMANAGER_UNAVAILABLE";
+        return false;
+    }
+    std::string output;
+    if (!run({nmcli, "device", "reapply", previous.interface}, &output)) {
+        if (reason) *reason = "ROLLBACK_REAPPLY_FAILED";
+        return false;
+    }
+
+    if (!applied_ipv4.empty() && applied_ipv4 != previous.ipv4) {
+        bool applied_present = false;
+        if (!interface_has_address(candidate.interface, applied_ipv4, &applied_present)) {
+            if (reason) *reason = "KERNEL_STATE_UNAVAILABLE";
+            return false;
+        }
+        if (applied_present) {
+            const std::string ip = binary({"/usr/sbin/ip", "/usr/bin/ip"});
+            const int applied_prefix = candidate.mode == "static"
+                ? netmask_to_prefix(candidate.netmask) : applied.prefix_length;
+            const std::string applied_cidr = applied_ipv4 + "/" +
+                std::to_string(applied_prefix);
+            if (ip.empty() || applied_prefix < 1 || applied_prefix > 32 ||
+                !run({ip, "address", "del", applied_cidr, "dev", candidate.interface}, &output) ||
+                !interface_has_address(candidate.interface, applied_ipv4, &applied_present) ||
+                applied_present) {
+                if (reason) *reason = "ROLLBACK_ADDRESS_REMOVE_FAILED";
+                return false;
+            }
+        }
+    }
+
+    constexpr int kVerifyAttempts = 20;
+    for (int attempt = 0; attempt < kVerifyAttempts; ++attempt) {
+        const ActiveState active = status(previous.interface, &status_reason);
+        if (restored_state_matches(previous, active)) return true;
+        if (attempt + 1 < kVerifyAttempts) rollback_retry_delay();
+    }
+    if (reason) *reason = "ROLLBACK_VERIFY_FAILED";
+    return false;
 }
 
 Engine::Engine(std::shared_ptr<Platform> platform, std::string journal_path,
@@ -652,8 +740,11 @@ nlohmann::json Engine::handle(const nlohmann::json& request)
             result = response(request_id, "accepted", "OK");
         else {
             const ActiveState active = platform_->status(candidate.interface, &reason);
+            Candidate restore;
             if (active.interface.empty()) {
                 result = response(request_id, "rejected", reason.empty() ? "KERNEL_STATE_UNAVAILABLE" : reason);
+            } else if (!restore_candidate_from(active, &restore)) {
+                result = response(request_id, "rejected", "PREVIOUS_STATE_NOT_RESTORABLE");
             } else {
                 Transaction next;
                 next.id = "net-" + std::to_string(epoch_now_ms_()) + "-" +

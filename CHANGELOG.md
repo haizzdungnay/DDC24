@@ -20,6 +20,11 @@
 - docs(api/web): nâng OpenAPI lên v1.9.0 với 2 route và schema netcfg; cập nhật Web implementation guide Rev 1.34 để phân biệt `network.conf` desired với kernel active.
 - tests/verification: FE `typecheck`, `lint`, `test` (23 files, 112 tests) và production `build` pass; Linux cross-compile Go pass, network/netcfg + historian 48h boundary targeted tests pass, backend suite pass khi bỏ qua 2 test phụ thuộc môi trường (`go` không có trong WSL và HMI restart Unix socket trên WSL mount); OpenAPI parse thành công (44 paths, 69 schemas), `git diff --check` pass.
 
+### Fixed — Network transaction rollback và khóa candidate authoritative (2026-07-25)
+- services/netcfg(network-safety): chỉ Stage khi kernel state trước đó đủ khả năng khôi phục; rollback bắt buộc persist/reapply NetworkManager profile cũ, xóa địa chỉ tạm/DHCP lease phát sinh và xác minh lại interface/link/mode/IPv4/prefix/gateway trước khi báo `rolled_back`; lỗi ở bất kỳ bước nào chuyển transaction sang `failed` với reason code fail-closed.
+- frontend(network-safety): đồng bộ form theo `pending` mỗi khi transaction authoritative thay đổi, khóa chỉnh sửa/Validate/Stage trong transaction active và chỉ cho Apply khi candidate hiển thị khớp transaction đang chờ, tránh áp nhầm giao dịch từ browser/HMI khác.
+- verification: WSL Linux build `mkddc-netcfg` với `-Wall -Wextra -Werror` và CTest 17/17 pass; FE 23 test files/113 tests, `typecheck`, `lint` và production build pass; Go backend Linux cross-compile pass.
+
 ### Changed — Đồng bộ kế hoạch FE/BE Program Runtime sau PR #57 (2026-07-24)
 - docs(program-runtime): cập nhật C0 plan, C1–C10 implementation plan và readiness review với evidence PR #57/CTest 468/468; phân biệt rõ validate gateway, io-map, cyclic metrics, `LIMIT` và trace ring host-only với production API/storage/runtime/audit còn thiếu.
 - docs(governance): khẳng định dependency C1–C10 và điều kiện toàn bộ C0.1–C0.14 Done trước C0.15 full Go; ngoại lệ FW SOM host-only không mở production FE/Web Backend/STM32/HIL/FBD.

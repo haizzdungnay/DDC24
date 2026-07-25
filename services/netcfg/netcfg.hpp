@@ -68,7 +68,7 @@ public:
                           std::string* reason) = 0;
 };
 
-class LinuxPlatform final : public Platform {
+class LinuxPlatform : public Platform {
 public:
     ActiveState status(const std::string& interface, std::string* reason) override;
     bool preflight(const Candidate& candidate, std::string* reason) override;
@@ -79,11 +79,14 @@ public:
     bool rollback(const Candidate& candidate, const ActiveState& previous,
                   std::string* reason) override;
 
-private:
-    static bool run(const std::vector<std::string>& args, std::string* output);
-    static std::string binary(const std::vector<std::string>& choices);
-    static std::string connection_name(const std::string& interface);
-    static bool persist(const Candidate& candidate, std::string* reason);
+protected:
+    virtual bool run(const std::vector<std::string>& args, std::string* output);
+    virtual std::string binary(const std::vector<std::string>& choices);
+    virtual std::string connection_name(const std::string& interface);
+    virtual bool persist(const Candidate& candidate, std::string* reason);
+    virtual bool interface_has_address(const std::string& interface,
+                                       const std::string& ipv4, bool* present) const;
+    virtual void rollback_retry_delay() const;
 };
 
 class Engine {
