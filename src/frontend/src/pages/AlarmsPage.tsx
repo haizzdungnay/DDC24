@@ -2,6 +2,8 @@ import { ArrowLeft, Filter, History, RefreshCw, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
+import { useAuth } from '../auth/AuthProvider'
+import { can, permissions } from '../auth/permissions'
 import { AlarmDurationDialog, type AlarmDurationAction, type AlarmDurationChoice } from '../components/AlarmDurationDialog'
 import { AlarmRow } from '../components/AlarmRow'
 import { Button } from '../components/Button'
@@ -25,6 +27,8 @@ type HistoryOption = { value: string; label: string }
 type AlarmActionDialog = { action: AlarmDurationAction; alarm: Alarm } | null
 
 export function AlarmsPage() {
+  const { session } = useAuth()
+  const canOperate = can(session?.role, permissions.operate)
   const state = useApi(apiClient.getAlarms, [], { refreshMs: 2000 })
   const toast = useToast()
   const { pick } = useI18n()
@@ -44,7 +48,7 @@ export function AlarmsPage() {
   }), [alarms])
 
   async function confirmAlarmAction(choice: AlarmDurationChoice) {
-    if (!dialog) return
+    if (!dialog || !canOperate) return
     setActionLoading(true)
     try {
       if (dialog.action === 'ack') await apiClient.ackAlarm(dialog.alarm.id, choice)
@@ -61,6 +65,7 @@ export function AlarmsPage() {
   }
 
   async function returnAlarm(alarm: Alarm) {
+    if (!canOperate) return
     try {
       await apiClient.returnAlarm(alarm.id)
       await state.refetch()
@@ -109,9 +114,9 @@ export function AlarmsPage() {
             <AlarmRow
               key={alarm.id}
               alarm={alarm}
-              onAck={(item) => setDialog({ action: 'ack', alarm: item })}
-              onSuppress={(item) => setDialog({ action: 'off', alarm: item })}
-              onReturn={returnAlarm}
+              onAck={canOperate ? (item) => setDialog({ action: 'ack', alarm: item }) : undefined}
+              onSuppress={canOperate ? (item) => setDialog({ action: 'off', alarm: item }) : undefined}
+              onReturn={canOperate ? returnAlarm : undefined}
             />
           ))}
           {!rows.length && <StateBlock state="empty" title={pick('Khong co alarm phu hop', 'No matching alarms')} />}

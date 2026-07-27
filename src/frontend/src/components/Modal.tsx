@@ -10,12 +10,13 @@ const sizeClass = {
   xl: 'max-w-4xl'
 }
 
-export function Modal({ open, title, children, confirmLabel, cancelLabel, danger, size = 'md', returnFocusRef, onConfirm, onClose }: {
+export function Modal({ open, title, children, confirmLabel, cancelLabel, confirmLoading = false, danger, size = 'md', returnFocusRef, onConfirm, onClose }: {
   open: boolean
   title: string
   children: ReactNode
   confirmLabel?: string
   cancelLabel?: string
+  confirmLoading?: boolean
   danger?: boolean
   size?: keyof typeof sizeClass
   returnFocusRef?: RefObject<HTMLElement | null>
@@ -106,7 +107,7 @@ export function Modal({ open, title, children, confirmLabel, cancelLabel, danger
         <div className="mt-4 text-sm text-[var(--c-text-dim)]">{children}</div>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>{cancelText}</Button>
-          {onConfirm && <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm}>{confirmText}</Button>}
+          {onConfirm && <Button variant={danger ? 'danger' : 'primary'} loading={confirmLoading} onClick={onConfirm}>{confirmText}</Button>}
         </div>
       </section>
     </div>

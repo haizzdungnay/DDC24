@@ -137,7 +137,7 @@ describe('NetworkPage authority flow', () => {
     await waitFor(() => expect(networkMocks.runNetworkTransaction).toHaveBeenCalledWith('apply', { transactionId: 'tx-remote' }))
   })
 
-  it('lets a viewer read authority state but disables all mutations', async () => {
+  it('lets a viewer read aggregate network data without polling transaction state', async () => {
     networkMocks.role = 'viewer'
     render(
       <I18nProvider>
@@ -148,10 +148,11 @@ describe('NetworkPage authority flow', () => {
     )
 
     expect(await screen.findByText('Network')).toBeInTheDocument()
-    expect(networkMocks.getNetworkTransaction).toHaveBeenCalled()
-    expect(screen.getByLabelText('IPv4')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Validate' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Stage' })).toBeDisabled()
+    expect(networkMocks.getNetwork).toHaveBeenCalled()
+    expect(networkMocks.getNetworkTransaction).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('IPv4')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Validate' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stage' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save BACnet/WiFi' })).toBeDisabled()
   })
 

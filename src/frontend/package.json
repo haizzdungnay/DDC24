@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
+    "check:rbac-source": "node scripts/check-rbac-source.mjs",
     "lint": "eslint src --max-warnings=0",
     "test": "vitest --run --environment jsdom src",
     "test:e2e": "playwright test",
+    "test:e2e:rbac": "playwright test --config playwright.rbac.config.ts",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview --host 0.0.0.0"
   },

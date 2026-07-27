@@ -3,7 +3,7 @@ export type PointQuality = 'good' | 'uncertain' | 'bad' | 'stale'
 export type HealthStatus = 'ok' | 'degraded' | 'fault' | 'unknown' | 'n/a'
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
 export type DdcMode = 'demo' | 'live'
-export type UserRole = 'admin' | 'operator' | 'viewer'
+export type UserRole = 'admin' | 'engineer' | 'operator' | 'viewer'
 export type Language = 'vi' | 'en'
 
 export interface Point {
@@ -66,6 +66,15 @@ export interface HealthResponse {
 export interface CurrentUser {
   username: string
   role: UserRole
+}
+
+export interface UserAccount {
+  username: string
+  role: UserRole
+}
+
+export interface CreateUserInput extends UserAccount {
+  password: string
 }
 
 export interface Envelope<TPayload = unknown> {

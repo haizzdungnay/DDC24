@@ -2,11 +2,13 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { ChangeEvent, JSX, KeyboardEvent } from 'react'
 import { AlertTriangle, CalendarClock, Database, X } from 'lucide-react'
 import { Button } from './Button'
+import type { UserRole } from '../types'
+import { can, permissions } from '../auth/permissions'
 
 export const HISTORIAN_INTERVALS = ['1s', '3s', '5s', '15s', '30s', '1m', '3m', '5m', '15m', '30m', '60m'] as const
 
 export type HistorianInterval = (typeof HISTORIAN_INTERVALS)[number]
-export type PointLoggingRole = 'admin' | 'operator' | 'viewer'
+export type PointLoggingRole = UserRole
 export type PointLoggingState = 'off' | 'scheduled' | 'recording' | 'error'
 export type PointLoggingKind = 'UI' | 'AO' | 'DO' | 'VP'
 
@@ -62,6 +64,7 @@ export interface PointLoggingDialogProps {
   point: PointLoggingPoint
   policy: PointLoggingPolicy
   role: PointLoggingRole
+  canManagePolicy?: boolean
   serverNowUtc: string
   loading?: boolean
   errors?: PointLoggingError[]
@@ -79,6 +82,7 @@ export function PointLoggingDialog({
   point,
   policy,
   role,
+  canManagePolicy = can(role, permissions.databaseManage),
   serverNowUtc,
   loading = false,
   errors = [],
@@ -105,7 +109,7 @@ export function PointLoggingDialog({
   const [startMode, setStartMode] = useState<StartMode>(initialStartMode(policy, serverNowUtc))
   const [futureStart, setFutureStart] = useState(toUTCInputValue(policy.startAtUtc))
   const [localStartError, setLocalStartError] = useState('')
-  const editable = role === 'admin'
+  const editable = canManagePolicy
 
   useEffect(() => {
     if (!open) {
@@ -485,7 +489,7 @@ function StartChoice({ checked, label, description, disabled, onChange }: { chec
   )
 }
 
-function ReadOnlyPolicy({ policy, role }: { policy: PointLoggingPolicy; role: Exclude<PointLoggingRole, 'admin'> }) {
+function ReadOnlyPolicy({ policy, role }: { policy: PointLoggingPolicy; role: PointLoggingRole }) {
   return (
     <div className="mt-5">
       <p className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">

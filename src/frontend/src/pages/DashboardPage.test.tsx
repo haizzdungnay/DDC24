@@ -6,6 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { DashboardPage } from './DashboardPage'
 
+vi.mock('../auth/AuthProvider', () => ({
+  useAuth: () => ({ session: { username: 'admin', role: 'admin' } })
+}))
+
 const mocks = vi.hoisted(() => ({
   getHealth: vi.fn(),
   getPoints: vi.fn(),

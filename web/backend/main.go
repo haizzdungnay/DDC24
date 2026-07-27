@@ -165,6 +165,41 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 }
 
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "rbac-target-smoke" {
+		if err := runRBACTargetSmokeCommand(os.Args[2:], os.Stdin, os.Stdout); err != nil {
+			log.Printf("rbac-target-smoke: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) >= 2 && os.Args[1] == "rbac-users-migrate" {
+		if err := runRBACUsersMigrateCommand(os.Args[2:], os.Stdout); err != nil {
+			log.Printf("rbac-users-migrate: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) >= 2 && os.Args[1] == "rbac-users-rollback" {
+		if err := runRBACUsersRollbackCommand(os.Args[2:], os.Stdout); err != nil {
+			log.Printf("rbac-users-rollback: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) >= 2 && os.Args[1] == "rbac-smoke-users-provision" {
+		if err := runRBACSmokeUsersProvisionCommand(os.Args[2:], os.Stdout); err != nil {
+			log.Printf("rbac-smoke-users-provision: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) >= 2 && os.Args[1] == "rbac-smoke-users-cleanup" {
+		if err := runRBACSmokeUsersCleanupCommand(os.Args[2:], os.Stdout); err != nil {
+			log.Printf("rbac-smoke-users-cleanup: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) >= 2 && os.Args[1] == "historian-rollback-package" {
 		if err := runHistorianRollbackPackageCommand(os.Args[2:], os.Stdout); err != nil {
 			log.Printf("historian-rollback-package: %v", err)
