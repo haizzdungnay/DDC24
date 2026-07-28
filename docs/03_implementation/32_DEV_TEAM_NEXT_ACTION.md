@@ -2,9 +2,31 @@
 ## MK-DDC-24 — Yêu cầu triển khai các task còn lại
 
 > **Document ID:** IMPL-DEV-NEXTACTION-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-06-22
+> **Phiên bản:** 2.0 | 2026-07-28 · 1.1 | 2026-06-22
 > **Người nhận:** Dev 2 (SOM), Tester
-> **Trạng thái:** In progress — IOB local PASS, MOD native PTY PASS, BAC native build/wiring done; external evidence còn mở
+> **Trạng thái:** ⛔ **SUPERSEDED** — nội dung dưới đây giữ lại làm hồ sơ lịch sử, KHÔNG dùng làm chỉ dẫn công việc
+
+---
+
+## ⛔ Tài liệu này đã hết hiệu lực (2026-07-28)
+
+Cả 3 task blocking mô tả bên dưới **đã hoàn thành**. Số liệu trong tài liệu này
+sai so với thực tế đo được ngày 2026-07-28 — đừng dùng nó để lập kế hoạch.
+
+| Nội dung trong tài liệu (2026-06-22) | Thực tế đo 2026-07-28 |
+|---|---|
+| "226/226 unit test pass" | **504/504 pass, 0 skip** (`ctest --test-dir build/services`) |
+| IOB-006: 2 test `IoCache` bị SKIP | Không còn SKIP nào |
+| MOD-012: "`libmodbus` chưa install, `modbus_master.open()` trả `false` ngay" | `libmodbus 3.1.10` resolve qua pkg-config; build `-DMKDDC_ENABLE_MODBUS=ON` sạch |
+| BAC-012: "`bacnet-stack` chưa install, `bacnet_server.start()` là `fprintf + return`" | `bacnet-stack` build với `BACDL_BIP=ON`, `BACNET_PROTOCOL_REVISION=19` |
+
+**Việc còn mở thật sự** không nằm ở đây mà ở:
+
+- [`docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md`](../review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md) — trạng thái và blocker hiện hành của FW SOM;
+- [`docs/handoff/`](../handoff/) — hợp đồng bàn giao BE (khi hoàn thành).
+
+Phần còn lại của tài liệu này giữ nguyên nội dung gốc 2026-06-22 để truy vết
+lịch sử quyết định, không chỉnh sửa.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **ID:** IF-SPEC-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-24 (thêm FW SOM IEC programming validate gateway contract, host-only)
+**Cập nhật:** 2026-07-28 (M-01: giới hạn tài nguyên parser + diagnostic `ST-LIM-*`/`ST-SYN-002`; sửa path sau ADR-021)
 
 ## Kinexus-IOP v2
 
@@ -41,7 +41,7 @@ AO ở core/iobus boundary là giá trị vật lý V hoặc mA theo electrical 
 
 ## FW SOM IEC programming — validate gateway (host-only, no target/HIL evidence)
 
-Nguồn thực thi: `services/core/st_*.{hpp,cpp}`. Đây là contract của một component
+Nguồn thực thi: `services/core/st/st_*.{hpp,cpp}`. Đây là contract của một component
 đọc lập test trong `services/core` (`mkddc-core`) — KHÔNG phải
 `mkddc-program-service`/`mkddc-program-core` (ADR-020, chưa triển khai, C1+).
 Không gắn vào scan loop sản xuất; BE gọi component này như 1 CLI riêng.
@@ -78,15 +78,44 @@ quả không, không dùng cho chữ ký/integrity chống giả mạo. `diagnos
 hiện luôn ≤1 phần tử (parser/semantic fail-fast ở lỗi đầu tiên) nhưng field
 là mảng để BE/FE không cần đổi shape khi sau này hỗ trợ multi-diagnostic.
 Diagnostic code ổn định — xem `st_diagnostic.hpp` (`ST-LEX-*`, `ST-SYN-*`,
-`ST-SEM-*`, `ST-IOMAP-*`, `ST-CLI-*`); FE/BE map theo code, không parse
-`message` (tiếng Anh, có thể đổi câu chữ).
+`ST-SEM-*`, `ST-LIM-*`, `ST-IOMAP-*`, `ST-CLI-*`); FE/BE map theo code, không
+parse `message` (tiếng Anh, có thể đổi câu chữ).
+
+**Giới hạn tài nguyên (M-01, nguồn thực thi `services/core/st/st_limits.hpp`).**
+Parser tự kiểm mọi giới hạn dưới đây, không phụ thuộc caller đã kiểm hộ hay
+chưa. Vượt giới hạn luôn trả diagnostic có code ổn định — **không bao giờ
+segfault/abort/stdout rỗng**:
+
+| Giới hạn | Giá trị | Code khi vượt |
+|---|---|---|
+| Kích thước source | 64 KiB | `ST-LIM-001` (qua CLI: `ST-CLI-TOOLARGE`, exit 2) |
+| Số token | 32768 | `ST-LIM-002` |
+| Số biến | 512 | `ST-LIM-003` |
+| Số statement | 4096 | `ST-LIM-004` |
+| Độ dài identifier | 64 ký tự | `ST-LIM-005` |
+| Độ sâu biểu thức | 32 | `ST-SYN-002` |
+| Độ sâu statement (IF lồng) | 16 | `ST-SYN-002` |
+| Số diagnostic trả về | 64 | `ST-LIM-006` ở phần tử cuối |
+
+`ST-SYN-002` tách riêng khỏi `ST-SYN-001` vì đây không phải "viết sai cú pháp"
+mà là "vượt giới hạn tài nguyên" — BE nên báo user đơn giản hoá chương trình,
+không phải đi tìm lỗi gõ. Tương tự, `ST-LIM-*` tách khỏi `ST-SYN-*` để BE phân
+biệt "chương trình sai" với "chương trình quá lớn".
+
+`ST-LIM-006` luôn là **phần tử cuối** của `diagnostics[]` khi danh sách bị cắt;
+BE thấy code này thì biết còn lỗi chưa hiển thị, không được kết luận "hết lỗi".
+
+Bảo đảm bắt buộc của CLI với mọi input, kể cả đối kháng: exit code luôn thuộc
+`{0, 1, 2}`, stdout luôn là **đúng một dòng JSON** parse được với đủ 6 field.
+Verify bằng `st/tests/test_st_limits.cpp` và nhóm test đối kháng trong
+`st/tests/test_st_validate_cli.cpp` (fork+execv binary thật).
 
 **Ngôn ngữ ST hỗ trợ (không được suy diễn thêm từ đây):** `PROGRAM`/
 `VAR_INPUT`/`VAR_OUTPUT` với kiểu `REAL`/`BOOL`; assignment `:=`; so sánh
 `>`,`>=`,`<`,`<=`,`=`,`<>`; boolean `AND`/`OR`/`NOT`; ngoặc đơn; gọi hàm
 chuẩn — hiện chỉ `LIMIT(MN, IN, MX): REAL`; `IF..THEN..ELSE..END_IF`. Chưa
 có: arithmetic, `CASE`, loop, `FUNCTION_BLOCK` instance/state (nên `TON`
-CHƯA implement — cần kiểu `TIME` + dot-member access, xem `st_stdlib.hpp`),
+CHƯA implement — cần kiểu `TIME` + dot-member access, xem `st/st_stdlib.hpp`),
 `SEL`, LD/SFC.
 
 **io_map validation** (`st_io_map.hpp`, chưa có file `io_map.json`/CRUD

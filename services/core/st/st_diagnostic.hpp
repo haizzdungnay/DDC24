@@ -19,6 +19,10 @@ enum class StSeverity { ERROR, WARNING };
 namespace st_diag_code {
 constexpr const char* kLexUnexpectedChar = "ST-LEX-001";
 constexpr const char* kSyntaxUnexpected  = "ST-SYN-001";
+/* Lồng quá sâu — biểu thức HOẶC statement. Tách khỏi ST-SYN-001 vì đây không
+ * phải "viết sai cú pháp" mà là "vượt giới hạn tài nguyên": BE nên báo user
+ * đơn giản hoá chương trình, không phải đi tìm lỗi gõ. Xem st_limits.hpp. */
+constexpr const char* kNestingTooDeep    = "ST-SYN-002";
 constexpr const char* kUnboundVariable   = "ST-SEM-001";
 constexpr const char* kTypeMismatch      = "ST-SEM-002";
 constexpr const char* kReadonlyInput     = "ST-SEM-003";
@@ -26,6 +30,18 @@ constexpr const char* kDuplicateVar      = "ST-SEM-004";
 constexpr const char* kUnknownType       = "ST-SEM-005";
 constexpr const char* kUnknownFunction   = "ST-SEM-006";
 constexpr const char* kArgCountMismatch  = "ST-SEM-007";
+
+/* Vượt giới hạn tài nguyên (st_limits.hpp). Tách riêng khỏi ST-SYN-* để BE
+ * phân biệt được "chương trình sai" với "chương trình quá lớn" — hai hành
+ * động sửa hoàn toàn khác nhau về phía người dùng. */
+constexpr const char* kSourceTooLarge     = "ST-LIM-001";
+constexpr const char* kTooManyTokens      = "ST-LIM-002";
+constexpr const char* kTooManyVariables   = "ST-LIM-003";
+constexpr const char* kTooManyStatements  = "ST-LIM-004";
+constexpr const char* kIdentifierTooLong  = "ST-LIM-005";
+/* Danh sách diagnostic bị cắt vì chạm trần — luôn là phần tử CUỐI của mảng.
+ * BE thấy code này thì biết còn lỗi chưa hiển thị, không được kết luận "hết lỗi". */
+constexpr const char* kDiagnosticsTruncated = "ST-LIM-006";
 
 /* IO map validation (st_io_map.hpp) */
 constexpr const char* kIoMapUnknownVar      = "ST-IOMAP-001";

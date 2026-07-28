@@ -227,3 +227,159 @@ TEST(StValidateCli, SameSourceProducesSameArtifactHashAcrossRuns)
     EXPECT_EQ(j1.at("artifactHash"), j2.at("artifactHash"))
         << "2 lần build cùng input phải ra cùng hash (deterministic)";
 }
+
+/* ---- M-01 / PARSER_SAFETY_GATE: input đối kháng qua CLI thật ----
+ * Yêu cầu tuyệt đối: dù input độc hại tới đâu, CLI phải kết thúc bằng exit
+ * code hợp lệ (0/1/2) và ĐÚNG MỘT dòng JSON parse được. Không segfault
+ * (exit 139), không abort (134), không stdout rỗng. */
+
+namespace {
+
+std::string repeat_str(const std::string& unit, std::size_t n)
+{
+    std::string s;
+    s.reserve(unit.size() * n);
+    for (std::size_t i = 0; i < n; i++) s += unit;
+    return s;
+}
+
+std::string wrap_program(const std::string& body)
+{
+    return "PROGRAM p\nVAR_INPUT a : REAL; END_VAR\nVAR_OUTPUT b : REAL; END_VAR\n" +
+           body + "END_PROGRAM\n";
+}
+
+/* Kiểm bất biến chung cho MỌI input đối kháng. */
+void expect_controlled_rejection(const CliRun& run, const char* what)
+{
+    EXPECT_NE(run.exit_code, 139) << what << ": segfault (SIGSEGV)";
+    EXPECT_NE(run.exit_code, 134) << what << ": abort (SIGABRT)";
+    EXPECT_NE(run.exit_code, -1) << what << ": bị kill bởi signal";
+    EXPECT_TRUE(run.exit_code == 0 || run.exit_code == 1 || run.exit_code == 2)
+        << what << ": exit code ngoài hợp đồng = " << run.exit_code;
+    ASSERT_FALSE(run.stdout_text.empty()) << what << ": stdout RỖNG";
+    /* Đúng 1 dòng: chính xác một '\n' và nằm ở cuối. */
+    EXPECT_EQ(run.stdout_text.find('\n'), run.stdout_text.size() - 1)
+        << what << ": stdout không phải đúng 1 dòng";
+    ASSERT_NO_THROW({
+        const nlohmann::json j = nlohmann::json::parse(run.stdout_text);
+        EXPECT_TRUE(j.contains("ok"));
+        EXPECT_TRUE(j.contains("diagnostics"));
+        EXPECT_TRUE(j.contains("symbols"));
+        EXPECT_TRUE(j.contains("artifactHash"));
+        EXPECT_TRUE(j.contains("compilerVersion"));
+        EXPECT_TRUE(j.contains("irSchemaVersion"));
+    }) << what << ": stdout không parse được thành JSON";
+}
+
+} // namespace
+
+TEST(StValidateCli, DeepParen12000ExitsOneWithJsonNotSegfault)
+{
+    const std::string src =
+        wrap_program("b := " + repeat_str("(", 12000) + "a" + repeat_str(")", 12000) + ";\n");
+    const std::string path = write_temp_source(src);
+    ASSERT_FALSE(path.empty());
+    const CliRun run = run_cli(path);
+    ::unlink(path.c_str());
+
+    expect_controlled_rejection(run, "12000 ngoặc lồng");
+    EXPECT_EQ(run.exit_code, 1) << "lỗi ST thật -> exit 1";
+    const nlohmann::json j = nlohmann::json::parse(run.stdout_text);
+    EXPECT_FALSE(j.at("ok").get<bool>());
+    const std::string code = j.at("diagnostics")[0].at("code");
+    EXPECT_TRUE(code == "ST-SYN-002" || code == "ST-LIM-002") << "actual: " << code;
+}
+
+TEST(StValidateCli, DeepParen20000ExitsCleanlyWithJson)
+{
+    const std::string src =
+        wrap_program("b := " + repeat_str("(", 20000) + "a" + repeat_str(")", 20000) + ";\n");
+    const std::string path = write_temp_source(src);
+    ASSERT_FALSE(path.empty());
+    const CliRun run = run_cli(path);
+    ::unlink(path.c_str());
+
+    expect_controlled_rejection(run, "20000 ngoặc lồng");
+}
+
+TEST(StValidateCli, DeepNestedIfExitsOneWithNestingCode)
+{
+    const std::string src = wrap_program(repeat_str("IF a > 1.0 THEN\n", 500) + "b := 1.0;\n" +
+                                         repeat_str("END_IF;\n", 500));
+    const std::string path = write_temp_source(src);
+    ASSERT_FALSE(path.empty());
+    const CliRun run = run_cli(path);
+    ::unlink(path.c_str());
+
+    expect_controlled_rejection(run, "IF lồng sâu");
+    EXPECT_EQ(run.exit_code, 1);
+    const nlohmann::json j = nlohmann::json::parse(run.stdout_text);
+    EXPECT_EQ(j.at("diagnostics")[0].at("code"), "ST-SYN-002");
+}
+
+TEST(StValidateCli, SourceOverSizeLimitExitsTwoWithJson)
+{
+    std::string src = wrap_program("b := a;\n");
+    src += std::string(70u * 1024u, ' ');   /* > kMaxSourceBytes = 64 KiB */
+    const std::string path = write_temp_source(src);
+    ASSERT_FALSE(path.empty());
+    const CliRun run = run_cli(path);
+    ::unlink(path.c_str());
+
+    expect_controlled_rejection(run, "source vượt giới hạn");
+    EXPECT_EQ(run.exit_code, 2) << "quá lớn = lỗi phía caller -> exit 2";
+    const nlohmann::json j = nlohmann::json::parse(run.stdout_text);
+    EXPECT_EQ(j.at("diagnostics")[0].at("code"), "ST-CLI-TOOLARGE");
+}
+
+TEST(StValidateCli, BinaryGarbageExitsOneWithJson)
+{
+    std::string src;
+    for (int i = 0; i < 8192; i++) src += static_cast<char>(i % 251 + 1);
+    const std::string path = write_temp_source(src);
+    ASSERT_FALSE(path.empty());
+    const CliRun run = run_cli(path);
+    ::unlink(path.c_str());
+
+    expect_controlled_rejection(run, "rác nhị phân");
+}
+
+TEST(StValidateCli, EmptySourceExitsOneWithJson)
+{
+    const std::string path = write_temp_source("");
+    ASSERT_FALSE(path.empty());
+    const CliRun run = run_cli(path);
+    ::unlink(path.c_str());
+
+    expect_controlled_rejection(run, "source rỗng");
+    EXPECT_EQ(run.exit_code, 1);
+}
+
+TEST(StValidateCli, OnlyOpenParensExitsCleanlyWithJson)
+{
+    const std::string src = wrap_program("b := " + repeat_str("(", 30000) + ";\n");
+    const std::string path = write_temp_source(src);
+    ASSERT_FALSE(path.empty());
+    const CliRun run = run_cli(path);
+    ::unlink(path.c_str());
+
+    expect_controlled_rejection(run, "chỉ toàn ngoặc mở");
+}
+
+TEST(StValidateCli, LongIdentifierExitsOneWithLimitCode)
+{
+    const std::string long_name = "V" + std::string(200, 'x');
+    const std::string src = "PROGRAM p\nVAR_INPUT " + long_name +
+                            " : REAL; END_VAR\nVAR_OUTPUT b : REAL; END_VAR\nb := " + long_name +
+                            ";\nEND_PROGRAM\n";
+    const std::string path = write_temp_source(src);
+    ASSERT_FALSE(path.empty());
+    const CliRun run = run_cli(path);
+    ::unlink(path.c_str());
+
+    expect_controlled_rejection(run, "identifier quá dài");
+    EXPECT_EQ(run.exit_code, 1);
+    const nlohmann::json j = nlohmann::json::parse(run.stdout_text);
+    EXPECT_EQ(j.at("diagnostics")[0].at("code"), "ST-LIM-005");
+}

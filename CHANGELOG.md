@@ -7,6 +7,31 @@
 ---
 
 ## [Unreleased]
+### Added — Phase 2: chốt 3 SPEC kiến trúc FW SOM (ARCHITECTURE_SPEC_GATE) (2026-07-28)
+- `docs/02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md` (MS-02 / C0.4): chốt tập con ST chính thức — `BOOL`/`INT`/`REAL`/`TIME`, số học đầy đủ + `MOD`, `XOR`, `ELSIF`, chú thích `(* *)` và `//`, Function Block chuẩn `TON`/`TOF`/`R_TRIG`/`F_TRIG`, `VAR`/`VAR RETAIN`, 11 hàm chuẩn. Grammar EBNF đầy đủ; bảng đối chiếu với parser hiện tại (phủ ~40%, liệt kê từng mục thiếu); 8 khác biệt cố ý so với IEC kèm lý do (không short-circuit để WCET ổn định, tràn INT là fault chứ không wrap, NaN/Inf luôn từ chối); danh mục diagnostic đầy đủ gồm `ST-LEX-*`/`ST-SYN-*`/`ST-SEM-*`/`ST-RT-*`/`ST-LIM-*`/`ST-WARN-*`; chương trình tham chiếu normative kèm bảng hành vi mong đợi theo chu kỳ.
+- `docs/02_design/software/TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md` (MS-01 / C0.6): định dạng artifact nhị phân `MKDDCIR1` — header 128 byte, 6 section bắt buộc + 2 tuỳ chọn, máy thanh ghi 16 byte/lệnh với 33 opcode, không gian slot tách biến/hằng để "hằng không ghi đè được" thành bất biến kiểm được, **chỉ cho nhảy tiến** nên mọi chương trình chấm dứt trong ≤ số lệnh. Toàn vẹn SHA-256 + chữ ký Ed25519 (public key nhúng trong build); ghi rõ lý do dùng Ed25519 thay vì GPG như OTA: artifact phải verify in-process trong vòng `SCHED_FIFO 80`. Quy trình load 22 bước; 15 mã lỗi `IR-E-*` trả BE kèm cột "giữ package đang chạy" và "retry được không"; quy tắc tương thích phiên bản; bắt buộc fuzzing loader và kiểm symbol CI để chặn parser lọt vào `mkddc-core`.
+- `docs/02_design/software/PROGRAM_TASK_SCHEDULER_SPEC_MK-DDC-24_VI.md` (MS-03 / C0.7): mô hình **fixed-priority, non-preemptive tại task boundary** kèm 3 lý do; mô hình Resource/Task/ProgramInstance/Artifact; tick cơ sở 50 ms, bù trôi theo mốc lý thuyết, lỡ chu kỳ thì bỏ chứ không chạy bù; đồng hồ đơn điệu chụp **một lần mỗi tick** để hai timer cùng tick hết hạn cùng tick. **Phân tách bắt buộc** `CoreMetrics` (chỉ đo) / `OverrunMonitor` / `SafetyManager` / `AlarmRuntime`. Chính sách overrun bất đối xứng (vào safe sau N lần hỏng, ra sau N lần tốt) để tránh dao động. Máy trạng thái 11 trạng thái + 9 lệnh; RETAIN với CRC-32 + atomic write + giãn cách 60 s; watchdog **chỉ kick sau tick hoàn tất** kèm công thức chọn `WatchdogSec` từ đo trên target.
+- Cập nhật C0 plan: workstream **C0.4, C0.6, C0.7 chuyển Done**.
+- **ARCHITECTURE_SPEC_GATE = PASS.**
+
+### Changed — ACTION 2: đồng bộ tài liệu baseline sau M-01 (BASELINE_DOC_SYNC) (2026-07-28)
+- `docs/03_implementation/32_DEV_TEAM_NEXT_ACTION.md` → **SUPERSEDED** (Rev 2.0). Cả 3 task blocking (IOB-006/MOD-012/BAC-012) đã xong; số liệu trong đó sai so với đo thật. Thêm bảng đối chiếu "tài liệu ghi gì vs thực tế đo" và trỏ sang tài liệu còn hiệu lực. Nội dung gốc giữ nguyên để truy vết lịch sử, không viết lại.
+- C1–C10 plan: ghi rõ 468/468 là số của 2026-07-24, bổ sung số đo lại 504/504 ngày 2026-07-28.
+- `docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md`: cập nhật traceability sau M-01 — T-10 và T-18 đóng finding F-01, T-18 chuyển DONE, thêm dòng T-10b cho giới hạn tài nguyên, blocker **B-01 đánh dấu ĐÃ GỠ**.
+- Path `services/core/st/st_*` đã sửa ở `INTERFACES.md` trong commit M-01.
+- **BASELINE_DOC_SYNC = PASS.**
+
+### Fixed — M-01: ST parser không còn crash với input đối kháng (PARSER_SAFETY_GATE) (2026-07-28)
+- `services/core/st/st_parser.cpp` là recursive-descent không giới hạn độ sâu; một biểu thức lồng ~12000 dấu ngoặc (~24 KB, dưới hạn mức 64 KiB) làm tràn stack và `mkddc-st-validate` chết bằng SIGSEGV (exit 139, stdout rỗng) — phá vỡ chính hợp đồng "luôn đúng 1 dòng JSON". Cùng hàm `parse_st_program()` này được `StProgramRuntime::activate()` gọi in-process, nên khi wire vào scan loop sẽ crash `mkddc-core`.
+- Thêm `services/core/st/st_limits.hpp` — MỘT nguồn sự thật cho toàn bộ giới hạn tài nguyên: source 64 KiB, 32768 token, độ sâu biểu thức 32, độ sâu statement 16, 512 biến, 4096 statement, identifier 64 ký tự, 64 diagnostic. `st_validate_main.cpp` bỏ hằng số hard-code riêng, dùng chung header này.
+- Chặn đệ quy tại 2 điểm: `parse_expr()` (ngoặc + argument lời gọi hàm) và `parse_not()` (`NOT NOT NOT ...` tự đệ quy không đi qua `parse_expr`). Dùng RAII `DepthGuard` để depth luôn giảm đúng kể cả khi thoát bằng `return false` giữa hàm.
+- Diagnostic code mới: `ST-SYN-002` (lồng quá sâu — tách khỏi `ST-SYN-001` vì là vượt tài nguyên, không phải sai cú pháp), `ST-LIM-001..005` (source/token/biến/statement/identifier), `ST-LIM-006` (danh sách diagnostic bị cắt, luôn là phần tử cuối để BE biết còn lỗi chưa hiển thị).
+- Ngưỡng token cố ý đặt (32768) CAO hơn mức giới hạn cấu trúc chặn, để input lồng sâu nhận đúng `ST-SYN-002` ("đơn giản hoá chương trình") thay vì `ST-LIM-002` ("quá nhiều token" — không hữu ích cho user).
+- Test: thêm `st/tests/test_st_limits.cpp` (19 test đối kháng) và 8 test đối kháng vào `st/tests/test_st_validate_cli.cpp` chạy fork+execv binary thật, khẳng định exit code luôn ∈ {0,1,2} và stdout luôn đúng 1 dòng JSON đủ 6 field.
+- `docs/04_design/INTERFACES.md`: thêm bảng giới hạn + code mới vào contract validate gateway; sửa path `services/core/st_*` → `services/core/st/st_*` (lỗi thời sau ADR-021).
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 504/504 pass** (477 → +27); repro gốc xác nhận đã đóng — 12000 ngoặc → exit 1 `ST-SYN-002`, 20000 ngoặc → exit 1 `ST-LIM-002`, 50000 ngoặc → exit 2 `ST-CLI-TOOLARGE`, `NOT`×5000 → exit 1 `ST-SYN-002`.
+- **PARSER_SAFETY_GATE = PASS.**
+
 ### Changed — Review FW SOM Rev 1.1: kết luận chuyển BLOCKED, sắp lại plan theo dependency (2026-07-28)
 - `docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md` lên Rev 1.1. Kết luận tổng thể đổi từ `FW_SOM_READY_WITH_FIXES` sang **`FW_SOM_IMPLEMENTATION_BLOCKED`**.
 - Tách 4 cờ trạng thái theo phạm vi thay cho một nhãn chung: `EXISTING_FW_SOM_BASELINE = STABLE`, `FW_SOM_ST_HOST_SLICE = COMPLETED`, `PRODUCTION_ST_INTEGRATION = BLOCKED`, `C1_PLUS_OPENING = BLOCKED` (§1.1, §16, §18.1).

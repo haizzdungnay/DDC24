@@ -177,7 +177,7 @@ Kiến trúc **thực tế đọc từ code**, không từ diagram tài liệu:
 | T-07 | Atomic activation + rollback last-known-good | Design §10 | [st_runtime.cpp:119-135](services/core/st/st_runtime.cpp#L119-L135) `active_` chỉ swap khi parse+typecheck OK | `StRuntime`, `StCyclicRuntime` 9 | DONE | — | Giữ |
 | T-08 | Activation chỉ áp tại ranh giới cycle | Design §7.3 | [st_cyclic_runtime.cpp:19-49](services/core/st/st_cyclic_runtime.cpp#L19-L49) | `StCyclicRuntime` 9 | DONE | — | Giữ |
 | T-09 | NaN/Inf/out-of-range reject trước commit | Design §8 | [st_runtime.cpp:146-161](services/core/st/st_runtime.cpp#L146-L161) | `StRuntime` | DONE | — | Giữ |
-| T-10 | ST parser + semantic (subset REAL/BOOL/IF/CMP/bool/LIMIT) | Design §7.1, C0.4 | [st_parser.cpp](services/core/st/st_parser.cpp), [st_semantic.cpp](services/core/st/st_semantic.cpp) | `StRuntime` 23, `StValidateCli` 6 | **PARTIAL** | **F-01** crash đệ quy; C0.4 chưa có SPEC | Fix M-01, viết C0.4 |
+| T-10 | ST parser + semantic (subset REAL/BOOL/IF/CMP/bool/LIMIT) | Design §7.1, C0.4 | [st_parser.cpp](services/core/st/st_parser.cpp), [st_semantic.cpp](services/core/st/st_semantic.cpp), [st_limits.hpp](services/core/st/st_limits.hpp) | `StRuntime` 23, `StLimits` 19, `StValidateCli` 14 | **PARTIAL** | ~~F-01~~ **ĐÓNG 2026-07-28 (M-01)**; C0.4 vẫn chưa có SPEC | Viết C0.4 (MS-02) |
 | T-11 | Typed IR có schema/version, loader reject magic/ABI/hash/limit | Design §4, §7.2, C0.6 | **KHÔNG TỒN TẠI** — [st_program.hpp:47-80](services/core/st/st_program.hpp#L47-L80) là AST con trỏ, không serialize | — | **CODE_WITHOUT_SPEC** | **F-02** runtime chạy AST parse từ source text | M-02 + viết C0.6 |
 | T-12 | Không allocation trong scan execution | Design §7.2 | Vi phạm: [st_runtime.cpp:167-173](services/core/st/st_runtime.cpp#L167-L173) `std::map` mỗi cycle | — | **PARTIAL** | **F-03** | M-03 |
 | T-13 | Multi-task scheduler: task set, priority, period, watchdog budget từ manifest | Design §7.3, C0.7 | Chỉ 1 cyclic loop cứng, period từ `graph.json` [main.cpp:160-173](services/core/main.cpp#L160-L173) | `ScanLoop` | **NOT_STARTED** | **F-05** | Viết C0.7 trước khi code |
@@ -185,7 +185,8 @@ Kiến trúc **thực tế đọc từ code**, không từ diagram tài liệu:
 | T-15 | RETAIN, cold/warm start, migration, CRC retain record | Design §7.4 | **KHÔNG TỒN TẠI** trong `st/` (grep `retain\|persist` chỉ ra 1 dòng comment) | — | **NOT_STARTED** | **F-06** | Sau C0.2/C0.6 |
 | T-16 | Persistence graph state (không phải ST RETAIN) | 22 plan COR-010 | [state_snapshot.cpp](services/core/graph/state_snapshot.cpp) atomic tmp+rename, version=1 | `StateSnapshot` 8 | DONE | — | Giữ |
 | T-17 | io_map binding typed variable ↔ physical point | Design §8, C0.10 | [st_io_map.cpp](services/core/st/st_io_map.cpp) validator thuần | `StIoMap` 12 | **PARTIAL** | Chưa có file `io_map.json`, chưa CRUD, chưa consumer | C2/BE |
-| T-18 | Validate gateway CLI, JSON shape ổn định, exit code | INTERFACES.md §"validate gateway" | [st_validate_main.cpp](services/core/st/st_validate_main.cpp) | `StValidateCli` 6 | **PARTIAL** | **F-01** phá vỡ chính contract "luôn 1 dòng JSON" | M-01 |
+| T-18 | Validate gateway CLI, JSON shape ổn định, exit code | INTERFACES.md §"validate gateway" | [st_validate_main.cpp](services/core/st/st_validate_main.cpp) | `StValidateCli` 14 (8 đối kháng) | **DONE** | ~~F-01~~ **ĐÓNG 2026-07-28 (M-01)** — exit ∈ {0,1,2} và 1 dòng JSON được test bằng fork+execv binary thật | — |
+| T-10b | Giới hạn tài nguyên parser (source/token/depth/biến/statement/identifier/diagnostic) | INTERFACES.md §"Giới hạn tài nguyên", MS-02 (chờ) | [st_limits.hpp](services/core/st/st_limits.hpp), [st_parser.cpp](services/core/st/st_parser.cpp) | `StLimits` 19, `StValidateCli` 8 đối kháng | **DONE** (ngưỡng tạm) | Ngưỡng chính thức chốt ở MS-02 | MS-02 |
 | T-19 | Deterministic build: cùng source → cùng hash | SWR-REQ-IEC-005 | [st_artifact.cpp:7-17](services/core/st/st_artifact.cpp#L7-L17) FNV-1a 64 | `StValidateCli.SameSourceProducesSameArtifactHash` | DONE | Hash không mật mã (đã ghi rõ trong doc) | Xem F-07 |
 | T-20 | Package integrity / signature verification | Design §7.2, C0.11 | **KHÔNG TỒN TẠI** | — | **NOT_STARTED** | **F-07** | Sau C0.11 |
 | T-21 | Trace/diagnostic runtime (activation/fault/overrun/rollback) | Design §7.3 | [st_trace.hpp](services/core/st/st_trace.hpp) ring buffer bounded, in-process | `StTraceLogTest` 1, `StCyclicRuntime` | **PARTIAL** | Chưa persist, chưa publish ra ngoài process | C1+ |
@@ -209,7 +210,7 @@ Kiến trúc **thực tế đọc từ code**, không từ diagram tài liệu:
 | FW SOM iobus ↔ core | `/dev/shm/mkddc_io_shm` seqlock, magic `0x4B584404` | [shared/mkddc_shm.h](shared/mkddc_shm.h) | **IMPLEMENTED** | `test_shm_layout.cpp`, `IobusReader` 7 test |
 | FW SOM core → BACnet/Web | `/dev/shm/mkddc_plc_shm` (core là creator) | INTERFACES.md | **IMPLEMENTED** | `BacnetObjtable` 12 test |
 | FW SOM ↔ BE SOM (command) | Unix stream `/run/mkddc/core.sock`, line-JSON, accepted/rejected/overridden + audit | Design §4.1, INTERFACES.md | **IMPLEMENTED** | `WebIpc` 39 test |
-| FW SOM ↔ BE SOM (ST validate) | CLI `mkddc-st-validate --source <path>`, 1 dòng JSON, exit 0/1/2 | [INTERFACES.md:42-109](docs/04_design/INTERFACES.md#L42-L109) | **IMPLEMENTED nhưng CHƯA CÓ CONSUMER** | `StValidateCli` 6 test. grep `mkddc-st-validate` trong `*.go`/`*.ts` → **0 caller**. Contract bị **F-01** phá vỡ |
+| FW SOM ↔ BE SOM (ST validate) | CLI `mkddc-st-validate --source <path>`, 1 dòng JSON, exit 0/1/2 | [INTERFACES.md:42-109](docs/04_design/INTERFACES.md#L42-L109) | **IMPLEMENTED nhưng CHƯA CÓ CONSUMER** | `StValidateCli` 14 test (8 đối kháng). grep `mkddc-st-validate` trong `*.go`/`*.ts` → **0 caller**. ~~Contract bị F-01 phá vỡ~~ **F-01 đóng 2026-07-28 (M-01)** |
 | FW SOM iobus fieldbus → core | `SOCK_DGRAM /run/mkddc/fieldbus.sock`, `kx_ext_snapshot_msg_t` | 22 plan MOD-009 | **IMPLEMENTED** | [main.cpp:206-232](services/core/main.cpp#L206-L232), `GraphProtocol` 12 test |
 | FW SOM ↔ config storage | `graph.json`, `io_config.conf`, `io_safe_state.conf`, `alarm_settings.conf`, `schedule.conf` + SIGHUP reload | 07 guide, CONFIG_SCHEMA | **IMPLEMENTED** | `ConfigReload`, `IobusConfig` 16 test |
 | FW SOM ↔ persistence | `StateSnapshot` JSON version=1, atomic tmp+rename, 60-scan dirty flush | 22 plan COR-010 | **IMPLEMENTED** | `StateSnapshot` 8 test |
@@ -488,7 +489,7 @@ Hướng đúng: **chỉ kick sau một cycle hoàn tất thành công** (giữ 
 
 | # | Blocker | Chặn cái gì | Mức |
 |---|---|---|---|
-| **B-01** | **F-01** — parser segfault | Chặn MI-10 (wire vào scan loop) và MI-11 (BE gọi CLI). Wire vào `mkddc-core` khi chưa fix = một deploy ST hỏng làm chết process điều khiển | **CHẶN CỨNG** |
+| ~~**B-01**~~ | ~~**F-01** — parser segfault~~ | **ĐÓNG 2026-07-28 (M-01)** — giới hạn tài nguyên + `ST-SYN-002`/`ST-LIM-*`, 27 test đối kháng, ctest 504/504. `PARSER_SAFETY_GATE = PASS` | ~~CHẶN CỨNG~~ **ĐÃ GỠ** |
 | **B-02** | **F-02** — chưa có typed IR/artifact contract | Chặn C1+ (`mkddc-program-service` không có gì để build/deploy), chặn F-07 | **CHẶN CỨNG cho C1+** |
 | **B-03** | **F-03** — allocation trong scan path | Chặn MI-10: không được đưa allocation vào vòng RT SCHED_FIFO 80 | **CHẶN CỨNG cho MI-10** |
 | **B-04** | **MS-01/MS-03** — C0.6, C0.7 chưa có SPEC | Chặn MI-01, MI-04, MI-05 | CHẶN THIẾT KẾ |

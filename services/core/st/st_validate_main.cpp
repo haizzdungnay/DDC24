@@ -24,15 +24,17 @@
 
 #include "st/st_artifact.hpp"
 #include "st/st_diagnostic.hpp"
+#include "st/st_limits.hpp"
 #include "st/st_parser.hpp"
 #include "st/st_semantic.hpp"
 #include "st/st_stdlib.hpp"
 
 namespace {
 
-/* Cùng convention 64 KiB đã dùng cho bounded read khác trong core (xem
- * web_ipc.cpp max_read_bytes) — chương trình ST tối thiểu không cần lớn hơn. */
-constexpr std::size_t kMaxSourceBytes = 64u * 1024u;
+/* MỘT nguồn sự thật: giới hạn source lấy từ st_limits.hpp, không hard-code
+ * lại ở đây. CLI kiểm trước khi parse để trả exit 2 (lỗi phía caller/IO);
+ * parser cũng tự kiểm và trả ST-LIM-001 (exit 1) cho caller không qua CLI. */
+constexpr std::size_t kMaxSourceBytes = core::st_limits::kMaxSourceBytes;
 
 nlohmann::json diagnostic_to_json(const core::StDiagnostic& d)
 {

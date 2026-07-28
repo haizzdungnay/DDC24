@@ -53,7 +53,7 @@ if(CORE_BUILD_TESTS)
       schedule/tests/test_schedule_runtime.cpp graph/tests/test_runtime_point_snapshot.cpp
       diagnostics/tests/test_core_metrics.cpp ipc/tests/test_output_writer.cpp st/tests/test_st_runtime.cpp
       st/tests/test_st_stdlib.cpp st/tests/test_st_io_map.cpp st/tests/test_st_cyclic_runtime.cpp
-      st/tests/test_st_validate_cli.cpp)
+      st/tests/test_st_validate_cli.cpp st/tests/test_st_limits.cpp)
   target_link_libraries(core_tests PRIVATE core_lib)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
   # test_st_validate_cli.cpp fork+execv nhị phân thật — cần path tuyệt đối,
