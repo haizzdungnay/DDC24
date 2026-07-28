@@ -91,6 +91,20 @@ const AlarmState* find_state(const std::vector<AlarmState>& states, const std::s
     return nullptr;
 }
 
+/* CẤM truyền temporary. `AlarmRuntime::active_states()` trả vector THEO GIÁ
+ const auto states_1 = alarms.active_states();
+ * TRỊ, nên `find_state(states_1, id)` trả về con trỏ trỏ vào một
+ * vector đã bị huỷ ngay cuối biểu thức — dùng tiếp là heap-use-after-free.
+ *
+ * Lỗi này từng "chạy đúng" vì bộ nhớ vừa giải phóng còn giữ nguyên nội dung
+ * cũ; ASan mới phát hiện ra. Xoá overload này = biến lỗi runtime thành lỗi
+ * BIÊN DỊCH, nên không ai có thể mắc lại. Cách dùng đúng:
+ *
+ *     const auto states = alarms.active_states();      // giữ vector sống
+ *     const AlarmState* s = find_state(states, "ALM-1");
+ */
+const AlarmState* find_state(std::vector<AlarmState>&&, const std::string&) = delete;
+
 std::string high_low_alarm_json(double h, double delay_s = 0.0)
 {
     std::ostringstream out;
@@ -441,7 +455,8 @@ TEST(AlarmRuntime, RetriggerAfterAckAndClearCreatesNewOccurrence)
 
     table = table_with_ui(22.0f, 22.0f);
     alarms.evaluate(table, 1000);
-    EXPECT_EQ(find_state(alarms.active_states(), "ALM-001"), nullptr);
+    const auto states_2 = alarms.active_states();
+    EXPECT_EQ(find_state(states_2, "ALM-001"), nullptr);
 
     table = table_with_ui(30.0f, 22.0f);
     alarms.evaluate(table, 1000);
@@ -471,10 +486,12 @@ TEST(AlarmRuntime, TimedAckClearsAutoLatchedClear)
     alarms.evaluate(table, 1000);
     table = table_with_ui(22.0f, 22.0f);
     alarms.evaluate(table, 1000);
-    ASSERT_NE(find_state(alarms.active_states(), "ALM-001"), nullptr);
+    const auto states_3 = alarms.active_states();
+    ASSERT_NE(find_state(states_3, "ALM-001"), nullptr);
 
     EXPECT_TRUE(alarms.ack("ALM-001", 60.0, false));
-    EXPECT_EQ(find_state(alarms.active_states(), "ALM-001"), nullptr);
+    const auto states_4 = alarms.active_states();
+    EXPECT_EQ(find_state(states_4, "ALM-001"), nullptr);
 }
 
 TEST(AlarmRuntime, ReloadKeepsAckWhenFingerprintUnchanged)
@@ -515,7 +532,8 @@ TEST(AlarmRuntime, ReloadResetsAckWhenFingerprintChanges)
 
     file.write(high_low_alarm_json(27.0));
     ASSERT_TRUE(alarms.reload(file.path()));
-    EXPECT_EQ(find_state(alarms.active_states(), "ALM-A"), nullptr);
+    const auto states_5 = alarms.active_states();
+    EXPECT_EQ(find_state(states_5, "ALM-A"), nullptr);
 
     alarms.evaluate(table, 1000);
     const std::vector<AlarmState> states = alarms.active_states();
@@ -547,10 +565,12 @@ TEST(AlarmRuntime, ReloadResetsAckWhenClearModeChanges)
        "params":{"hh":32,"h":28,"l":16,"ll":12}}
     ])");
     ASSERT_TRUE(alarms.reload(file.path()));
-    EXPECT_EQ(find_state(alarms.active_states(), "ALM-M"), nullptr);
+    const auto states_6 = alarms.active_states();
+    EXPECT_EQ(find_state(states_6, "ALM-M"), nullptr);
 
     alarms.evaluate(table, 1000);
-    const AlarmState* state = find_state(alarms.active_states(), "ALM-M");
+    const auto states_7 = alarms.active_states();
+    const AlarmState* state = find_state(states_7, "ALM-M");
     ASSERT_NE(state, nullptr);
     EXPECT_EQ(state->status, "active");
 }
@@ -585,7 +605,8 @@ TEST(AlarmRuntime, ManualClearModeStaysVisibleUntilSuppressed)
     EXPECT_FALSE(state->active);
 
     EXPECT_TRUE(alarms.suppress("ALM-M"));
-    EXPECT_EQ(find_state(alarms.active_states(), "ALM-M"), nullptr);
+    const auto states_8 = alarms.active_states();
+    EXPECT_EQ(find_state(states_8, "ALM-M"), nullptr);
 }
 
 TEST(AlarmRuntime, FlexiblePriorityUsesFirstMatchingSeverityRule)
@@ -635,10 +656,12 @@ TEST(AlarmRuntime, ReloadResetsAckWhenSeverityRulesChange)
        ]}}
     ])");
     ASSERT_TRUE(alarms.reload(file.path()));
-    EXPECT_EQ(find_state(alarms.active_states(), "ALM-F"), nullptr);
+    const auto states_9 = alarms.active_states();
+    EXPECT_EQ(find_state(states_9, "ALM-F"), nullptr);
 
     alarms.evaluate(table, 1000);
-    const AlarmState* state = find_state(alarms.active_states(), "ALM-F");
+    const auto states_10 = alarms.active_states();
+    const AlarmState* state = find_state(states_10, "ALM-F");
     ASSERT_NE(state, nullptr);
     EXPECT_EQ(state->status, "active");
     EXPECT_EQ(state->priority, "medium");
@@ -704,8 +727,10 @@ TEST(AlarmRuntime, TimedSuppressHidesThenReappears)
 
     alarms.evaluate(table_with_ui(30.0f, 22.0f), 1000);
     ASSERT_TRUE(alarms.suppress("ALM-001", 1.0, false));
-    EXPECT_EQ(find_state(alarms.active_states(), "ALM-001"), nullptr);
+    const auto states_11 = alarms.active_states();
+    EXPECT_EQ(find_state(states_11, "ALM-001"), nullptr);
 
     alarms.evaluate(table_with_ui(30.0f, 22.0f), 1000);
-    EXPECT_NE(find_state(alarms.active_states(), "ALM-001"), nullptr);
+    const auto states_12 = alarms.active_states();
+    EXPECT_NE(find_state(states_12, "ALM-001"), nullptr);
 }

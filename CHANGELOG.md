@@ -7,6 +7,19 @@
 ---
 
 ## [Unreleased]
+### Added — Phase 7: ASan, UBSan, fuzzing và mở rộng fake MCU (2026-07-28)
+- **ASan tìm ra một lỗi thật: heap-use-after-free** trong `test_alarm_runtime.cpp`. `AlarmRuntime::active_states()` trả vector **theo giá trị**; 12 chỗ gọi `find_state(alarms.active_states(), ...)` giữ con trỏ trỏ vào temporary đã bị huỷ. Lỗi này "chạy đúng" suốt vì bộ nhớ vừa giải phóng còn nguyên nội dung.
+- Sửa bằng cách **biến lỗi runtime thành lỗi biên dịch**: thêm overload `find_state(std::vector<AlarmState>&&, ...) = delete`. Compiler chỉ ra đúng 12 chỗ, sửa hết. Không ai mắc lại được.
+- Sửa `-Wformat-truncation` thật trong `runtime_point_snapshot.cpp`: `set_id` ghi `"%s-%02d"` vào buffer 6 byte — `snprintf` không tràn nhưng số kênh > 99 sẽ **cắt âm thầm thành ID sai**. Kẹp tường minh thay vì tin caller.
+- Thêm preset sanitizer vào `services/CMakeLists.txt`: `-DMKDDC_SANITIZE=address|undefined|thread`. UBSan bật `-fno-sanitize-recover=all` — UB phải làm test **fail**, không được chỉ in cảnh báo rồi chạy tiếp.
+- Thêm 2 fuzz harness libFuzzer: `fuzz_st_parser` (đường source ST) và `fuzz_st_loader` (artifact — harness quan trọng nhất, vì executor không kiểm biên sau load).
+- **Harness loader ban đầu gần như vô dụng, đã đo và sửa:** đo phân bố lỗi trên 1000 đột biến cho thấy **947/1000 chết ở `IR-E-005` (sai hash)** — fuzzer không bao giờ chạm tới bảng section/biến/lệnh. Vá hash trong harness thì nghẽn **chuyển sang `IR-E-006`** (947/1000, vì cờ `kSigned` vẫn bật). Xoá cờ **trước** khi tính hash mới mở được: **277/1000 load thành công**, phần còn lại phân bố đều khắp `IR-E-008/010/011/014`.
+- Kết quả fuzzing: parser **698 815 lần chạy**, loader **7 563 082 lần chạy** — **0 crash, 0 phát hiện ASan**.
+- **Fake MCU** thêm 4 loại fault injection phủ nốt SPEC §9.3: `--adc-fault {1|2|3}` (mất DRDY + LOCK), `--dac-fault`, `--wdg-reset N` (trước đây `WDG_RESET_CNT` hằng 0 nên không test được), `--stuck-ui CH RAW` (cảm biến đơ — hỏng mà CRC/quality **không** bắt được).
+- Verify end-to-end fake MCU ↔ iobus: inject `--adc-fault 1 --dac-fault` → iobus nhận `fault_flags: 5` (bit0 ADC1 + bit2 DAC) và raise alarm `MCU_FAULT_FLAGS`.
+- Thêm 2 CI job: `sanitizers` (ASan + UBSan) và `fuzz-smoke` (60 s mỗi harness trên PR).
+- Verification: build `-Werror` **649/649**, ASan **646/646 + 0 phát hiện**, UBSan **646/646 + 0 runtime error**, symbol check 0.
+
 ### Added — Build native aarch64 và deploy lên Orange Pi 5B (2026-07-28)
 - Build native trên board: configure + build `-Wall -Wextra -Werror` **0 lỗi**, sinh 4 binary aarch64 (`mkddc-core`, `mkddc-iobus`, `mkddc-st-compile`, `mkddc-st-validate`). Board chỉ thiếu `libsodium-dev`, cài qua apt.
 - **`ctest` trên aarch64: 646/646 pass.** Lần chạy đầu 641/646 — 5 fail do test bám vào SHM production đang bị service ghi đè; loại trừ bằng hai bước (chạy `sudo` vẫn fail ⇒ không phải vấn đề quyền), xác nhận bằng cách dừng service rồi chạy lại. **Không phải khác biệt kiến trúc.**

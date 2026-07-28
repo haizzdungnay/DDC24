@@ -91,3 +91,22 @@ if(CORE_BUILD_TESTS)
   include(GoogleTest)
   gtest_discover_tests(core_tests)
 endif()
+
+# ---- Fuzz harness (Phase 7 / VG-03) ----
+#   CXX=clang++ cmake -S services -B build/fuzz -DMKDDC_BUILD_FUZZ=ON \
+#       -DMKDDC_SANITIZE=address -DCORE_BUILD_TESTS=OFF
+#
+# Cần clang (libFuzzer). Chạy kèm ASan để lỗi bộ nhớ lộ ra ngay tại input gây
+# lỗi, thay vì hỏng âm thầm rồi crash ở chỗ khác.
+option(MKDDC_BUILD_FUZZ "Build libFuzzer harnesses (cần clang)" OFF)
+if(MKDDC_BUILD_FUZZ)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "MKDDC_BUILD_FUZZ cần clang++ (libFuzzer). Đặt CXX=clang++.")
+  endif()
+  foreach(fz st_parser st_loader)
+    add_executable(fuzz_${fz} st/fuzz/fuzz_${fz}.cpp)
+    target_link_libraries(fuzz_${fz} PRIVATE st_compiler_lib)
+    target_compile_options(fuzz_${fz} PRIVATE -fsanitize=fuzzer)
+    target_link_options(fuzz_${fz} PRIVATE -fsanitize=fuzzer)
+  endforeach()
+endif()
