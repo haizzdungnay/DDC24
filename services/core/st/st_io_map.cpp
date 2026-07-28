@@ -4,11 +4,27 @@
 #include <unordered_map>
 #include <utility>
 
+#include "st/st_limits.hpp"
+
 namespace core {
 namespace {
 
 void push_diag(std::vector<StDiagnostic>* out, const char* code, const std::string& msg)
 {
+    /* Trần số diagnostic: io_map hỏng nặng (vd 10000 dòng sai) không được
+     * sinh response JSON khổng lồ cho BE. Khi chạm trần, phần tử cuối cùng
+     * được thay bằng một diagnostic báo bị cắt bớt — BE luôn biết là còn lỗi
+     * chưa hiển thị, thay vì tưởng đã hết lỗi. */
+    if (out->size() >= st_limits::kMaxDiagnostics) {
+        StDiagnostic& last = out->back();
+        last.code = st_diag_code::kDiagnosticsTruncated;
+        last.message = "diagnostic list truncated at " +
+                       std::to_string(st_limits::kMaxDiagnostics) +
+                       " entries; fix the reported errors and re-validate";
+        last.line = 0;
+        last.column = 0;
+        return;
+    }
     StDiagnostic d;
     d.severity = StSeverity::ERROR;
     d.code = code;

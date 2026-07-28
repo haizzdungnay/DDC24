@@ -2,6 +2,9 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <string>
+
+#include "st/st_limits.hpp"
 
 namespace core {
 namespace {
@@ -29,9 +32,29 @@ void set_diag(StDiagnostic* diag, const char* code, const std::string& msg, int 
 
 bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* diag)
 {
+    /* Giới hạn source PHẢI kiểm trước khi chạm ký tự đầu tiên: parser không
+     * được giả định caller (CLI/BE/loader) đã kiểm hộ. */
+    if (src.size() > st_limits::kMaxSourceBytes) {
+        set_diag(diag, st_diag_code::kSourceTooLarge,
+                 "source is " + std::to_string(src.size()) + " bytes, limit is " +
+                     std::to_string(st_limits::kMaxSourceBytes),
+                 1, 1);
+        return false;
+    }
     std::size_t i = 0;
     const std::size_t n = src.size();
     int line = 1, col = 1;
+    /* Mỗi lần push_back token đều phải đi qua đây — không có đường vòng. */
+    auto push_token = [&](Token t) -> bool {
+        if (out->size() >= st_limits::kMaxTokens) {
+            set_diag(diag, st_diag_code::kTooManyTokens,
+                     "token count exceeds limit of " + std::to_string(st_limits::kMaxTokens),
+                     t.line, t.column);
+            return false;
+        }
+        out->push_back(std::move(t));
+        return true;
+    };
     auto advance_pos = [&](char c) {
         if (c == '\n') { line++; col = 1; }
         else { col++; }
@@ -45,7 +68,16 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
             while (i < n && (std::isalnum(static_cast<unsigned char>(src[i])) || src[i] == '_')) {
                 advance_pos(src[i]); i++;
             }
-            out->push_back({Token::Kind::Ident, src.substr(start, i - start), 0.0f, start_line, start_col});
+            const std::size_t len = i - start;
+            if (len > st_limits::kMaxIdentifierLength) {
+                set_diag(diag, st_diag_code::kIdentifierTooLong,
+                         "identifier is " + std::to_string(len) + " characters, limit is " +
+                             std::to_string(st_limits::kMaxIdentifierLength),
+                         start_line, start_col);
+                return false;
+            }
+            if (!push_token({Token::Kind::Ident, src.substr(start, len), 0.0f, start_line, start_col}))
+                return false;
             continue;
         }
         if (std::isdigit(static_cast<unsigned char>(c))) {
@@ -56,43 +88,45 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
                 while (i < n && std::isdigit(static_cast<unsigned char>(src[i]))) { advance_pos(src[i]); i++; }
             }
             const std::string text = src.substr(start, i - start);
-            out->push_back({Token::Kind::Number, text, std::strtof(text.c_str(), nullptr), start_line, start_col});
+            if (!push_token({Token::Kind::Number, text, std::strtof(text.c_str(), nullptr),
+                             start_line, start_col}))
+                return false;
             continue;
         }
         if (c == ':') {
             if (i + 1 < n && src[i + 1] == '=') {
-                out->push_back({Token::Kind::ColonEq, ":=", 0.0f, start_line, start_col});
+                if (!push_token({Token::Kind::ColonEq, ":=", 0.0f, start_line, start_col})) return false;
                 advance_pos(src[i]); i++; advance_pos(src[i]); i++;
             } else {
-                out->push_back({Token::Kind::Colon, ":", 0.0f, start_line, start_col});
+                if (!push_token({Token::Kind::Colon, ":", 0.0f, start_line, start_col})) return false;
                 advance_pos(src[i]); i++;
             }
             continue;
         }
-        if (c == ';') { out->push_back({Token::Kind::Semicolon, ";", 0.0f, start_line, start_col}); advance_pos(c); i++; continue; }
-        if (c == ',') { out->push_back({Token::Kind::Comma, ",", 0.0f, start_line, start_col}); advance_pos(c); i++; continue; }
-        if (c == '(') { out->push_back({Token::Kind::LParen, "(", 0.0f, start_line, start_col}); advance_pos(c); i++; continue; }
-        if (c == ')') { out->push_back({Token::Kind::RParen, ")", 0.0f, start_line, start_col}); advance_pos(c); i++; continue; }
-        if (c == '=') { out->push_back({Token::Kind::Eq, "=", 0.0f, start_line, start_col}); advance_pos(c); i++; continue; }
+        if (c == ';') { if (!push_token({Token::Kind::Semicolon, ";", 0.0f, start_line, start_col})) return false; advance_pos(c); i++; continue; }
+        if (c == ',') { if (!push_token({Token::Kind::Comma, ",", 0.0f, start_line, start_col})) return false; advance_pos(c); i++; continue; }
+        if (c == '(') { if (!push_token({Token::Kind::LParen, "(", 0.0f, start_line, start_col})) return false; advance_pos(c); i++; continue; }
+        if (c == ')') { if (!push_token({Token::Kind::RParen, ")", 0.0f, start_line, start_col})) return false; advance_pos(c); i++; continue; }
+        if (c == '=') { if (!push_token({Token::Kind::Eq, "=", 0.0f, start_line, start_col})) return false; advance_pos(c); i++; continue; }
         if (c == '>') {
             if (i + 1 < n && src[i + 1] == '=') {
-                out->push_back({Token::Kind::Ge, ">=", 0.0f, start_line, start_col});
+                if (!push_token({Token::Kind::Ge, ">=", 0.0f, start_line, start_col})) return false;
                 advance_pos(src[i]); i++; advance_pos(src[i]); i++;
             } else {
-                out->push_back({Token::Kind::Gt, ">", 0.0f, start_line, start_col});
+                if (!push_token({Token::Kind::Gt, ">", 0.0f, start_line, start_col})) return false;
                 advance_pos(src[i]); i++;
             }
             continue;
         }
         if (c == '<') {
             if (i + 1 < n && src[i + 1] == '=') {
-                out->push_back({Token::Kind::Le, "<=", 0.0f, start_line, start_col});
+                if (!push_token({Token::Kind::Le, "<=", 0.0f, start_line, start_col})) return false;
                 advance_pos(src[i]); i++; advance_pos(src[i]); i++;
             } else if (i + 1 < n && src[i + 1] == '>') {
-                out->push_back({Token::Kind::Ne, "<>", 0.0f, start_line, start_col});
+                if (!push_token({Token::Kind::Ne, "<>", 0.0f, start_line, start_col})) return false;
                 advance_pos(src[i]); i++; advance_pos(src[i]); i++;
             } else {
-                out->push_back({Token::Kind::Lt, "<", 0.0f, start_line, start_col});
+                if (!push_token({Token::Kind::Lt, "<", 0.0f, start_line, start_col})) return false;
                 advance_pos(src[i]); i++;
             }
             continue;
@@ -101,7 +135,9 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
                  std::string("unexpected character '") + c + "'", start_line, start_col);
         return false;
     }
-    out->push_back({Token::Kind::End, "", 0.0f, line, col});
+    /* Token End luôn phải vào được — nếu vừa chạm trần thì báo tràn thay vì
+     * trả vector không có sentinel (Parser::peek() sẽ đọc ngoài mảng). */
+    if (!push_token({Token::Kind::End, "", 0.0f, line, col})) return false;
     return true;
 }
 
@@ -137,6 +173,35 @@ private:
 
     std::vector<Token> tok_;
     std::size_t pos_ = 0;
+
+    /* Bộ đếm giới hạn — xem st_limits.hpp. expr_depth_/stmt_depth_ là độ sâu
+     * ĐANG lồng (tăng khi vào, giảm khi ra); var_count_/stmt_count_ là tổng
+     * tích luỹ cho cả chương trình. */
+    int         expr_depth_ = 0;
+    int         stmt_depth_ = 0;
+    std::size_t var_count_ = 0;
+    std::size_t stmt_count_ = 0;
+
+    /* RAII guard: bảo đảm depth luôn giảm đúng kể cả khi thoát bằng return
+     * false ở giữa hàm. Đếm tay bằng ++/-- thủ công là nguồn lỗi kinh điển
+     * ở parser có nhiều nhánh fail. */
+    class DepthGuard {
+    public:
+        DepthGuard(int* d) : d_(d) { ++(*d_); }
+        ~DepthGuard() { --(*d_); }
+        DepthGuard(const DepthGuard&) = delete;
+        DepthGuard& operator=(const DepthGuard&) = delete;
+    private:
+        int* d_;
+    };
+
+    bool fail_depth(const char* what, int limit, StDiagnostic* diag)
+    {
+        set_diag(diag, st_diag_code::kNestingTooDeep,
+                 std::string(what) + " nesting exceeds limit of " + std::to_string(limit),
+                 peek().line, peek().column);
+        return false;
+    }
 
     const Token& peek() const { return tok_[pos_]; }
     Token advance() { return tok_[pos_ < tok_.size() - 1 ? pos_++ : pos_]; }
@@ -190,6 +255,13 @@ private:
             else if (type_name == "BOOL") decl.type = StType::BOOL;
             else return fail("unknown type '" + type_name + "' (only REAL/BOOL supported)", diag);
             if (!expect_kind(Token::Kind::Semicolon, "';'", diag)) return false;
+            if (++var_count_ > st_limits::kMaxVariables) {
+                set_diag(diag, st_diag_code::kTooManyVariables,
+                         "variable count exceeds limit of " +
+                             std::to_string(st_limits::kMaxVariables),
+                         decl.line, decl.column);
+                return false;
+            }
             out->push_back(std::move(decl));
         }
         return true;
@@ -198,8 +270,20 @@ private:
     bool parse_stmt_list(const std::vector<std::string>& stop_keywords, std::vector<StStmt>* out,
                          StDiagnostic* diag)
     {
+        /* Độ sâu statement đo ở đây (mỗi IF mở một stmt_list lồng thêm 1 cấp),
+         * chặn TRƯỚC khi đệ quy xuống parse_stmt -> parse_if_stmt. */
+        if (stmt_depth_ >= st_limits::kMaxStmtDepth)
+            return fail_depth("statement", st_limits::kMaxStmtDepth, diag);
+        DepthGuard guard(&stmt_depth_);
         while (!at_stop(stop_keywords)) {
             if (at_end()) return fail("unexpected end of source in statement list", diag);
+            if (++stmt_count_ > st_limits::kMaxStatements) {
+                set_diag(diag, st_diag_code::kTooManyStatements,
+                         "statement count exceeds limit of " +
+                             std::to_string(st_limits::kMaxStatements),
+                         peek().line, peek().column);
+                return false;
+            }
             StStmt stmt;
             if (!parse_stmt(&stmt, diag)) return false;
             out->push_back(std::move(stmt));
@@ -255,7 +339,15 @@ private:
     /* Precedence (thấp -> cao): OR > AND > NOT > so sánh > primary.
      * Không chain nhiều so sánh liên tiếp (A > B > C không hợp lệ — đúng ngữ
      * nghĩa ST, mỗi so sánh trả BOOL, muốn nối cần AND tường minh). */
-    bool parse_expr(std::unique_ptr<StExpr>* out, StDiagnostic* diag) { return parse_or(out, diag); }
+    /* Chốt chặn đệ quy #1: mọi lần xuống một cấp ngoặc hoặc một argument của
+     * lời gọi hàm đều quay lại đây (parse_primary -> parse_expr). */
+    bool parse_expr(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
+    {
+        if (expr_depth_ >= st_limits::kMaxExprDepth)
+            return fail_depth("expression", st_limits::kMaxExprDepth, diag);
+        DepthGuard guard(&expr_depth_);
+        return parse_or(out, diag);
+    }
 
     bool parse_or(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
     {
@@ -296,6 +388,11 @@ private:
     bool parse_not(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
     {
         if (at_ident("NOT")) {
+            /* Chốt chặn đệ quy #2: `NOT NOT NOT ...` tự gọi lại parse_not mà
+             * KHÔNG đi qua parse_expr, nên guard ở parse_expr không bắt được. */
+            if (expr_depth_ >= st_limits::kMaxExprDepth)
+                return fail_depth("expression", st_limits::kMaxExprDepth, diag);
+            DepthGuard guard(&expr_depth_);
             const int line = peek().line, col = peek().column;
             advance();
             std::unique_ptr<StExpr> operand;
