@@ -167,13 +167,22 @@ Nguồn thực thi: `web/backend/http.go` và validator/schema liên quan. Route
 
 ### Network API — implemented baseline versus target
 
-Source hiện tại của `PUT /api/v1/network` chỉ validate cơ bản rồi ghi riêng lẻ `network.conf`, `device.conf`, `bacnet.conf`. `dispatchReload(system|restart-iobus)` đi vào `applySystem()` nhưng implementation trả `applied=false` với warning `pending B7`; frontend hiện không phân biệt kết quả này. GET network ưu tiên IP desired trong file và `bmsLink` chỉ được suy ra từ IP/enabled/port, nên không phải active-kernel/BACnet health authority.
+`PUT /api/v1/network` chỉ lưu cấu hình dịch vụ BACnet, Wi-Fi và field hostname tương thích;
+các field Ethernet là compatibility shadow read-only và field hostname này không đổi hostname
+hệ điều hành. Mọi thay đổi Ethernet/DNS đi qua `GET /api/v1/network/transaction` và
+`POST /api/v1/network/transaction/{action}`. GET status cho session xác thực
+(`viewer|operator|admin`); POST mutation chỉ dành cho `admin`. Aggregate `GET /api/v1/network` vẫn phục vụ dữ liệu trang Network và
+không thay thế authority trạng thái kernel.
 
-Đây là finding đang mở, không phải hành vi mục tiêu. Cho tới khi các task network hoàn tất, thay đổi qua Web chỉ được gọi là **saved desired configuration**, không được gọi là IP đã apply. OpenAPI hiện hành mô tả route đã implement; API transaction mới chỉ được publish sau khi BE team map đầy đủ sang contract SOM bên dưới và có contract tests.
+API transaction phân biệt ba nguồn trạng thái: `active` là trạng thái kernel hiện tại, `configured` là profile đã lưu trong NetworkManager, và `pending` là candidate của giao dịch đang chờ. Không được suy diễn active IP, carrier hoặc mode từ `network.conf` hay từ candidate đã lưu.
 
 ### SOM network authority contract — implemented v1; target acceptance pending
 
-Authority dùng line-delimited JSON version 1 qua `/run/mkddc-netcfg/netcfg.sock`, frame tối đa 8192 byte, socket `0660` trong runtime directory riêng `root:mkddc 0750`; peer credential allowlist chỉ cho broker/service account đã phê duyệt. Schema authority: `shared/netcfg_protocol_v1.schema.json`.
+Authority dùng line-delimited JSON version 1 qua `/run/mkddc-netcfg/netcfg.sock`, frame tối đa
+8192 byte, socket `0660` trong runtime directory riêng `root:mkddc 0750`; peer credential
+allowlist chỉ cho broker/service account đã phê duyệt. Protocol strict từ chối unknown field ở
+request, candidate và object `dns`, unknown version/action và payload sai theo action. Schema
+authority: `shared/netcfg_protocol_v1.schema.json`.
 
 Action allowlist:
 
@@ -186,7 +195,49 @@ Action allowlist:
 | `confirm` | xác nhận đường mới hoạt động, commit và bỏ IP cũ | commit |
 | `rollback` | phục hồi last-known-good, explicit hoặc automatic | network change |
 
-Request tối thiểu có `version`, `requestId`, `action`, optional `transactionId` và candidate `{interface, mode, ipv4, netmask, gateway}`. Response có cùng `requestId`, `result`, stable `reasonCode`, `transactionId`, `state`, `rollbackRemainingS`, `active`, `pending` và message. State machine:
+Request tối thiểu có `version`, `requestId`, `action`, optional `transactionId` và candidate
+`{interface, mode, ipv4, netmask, gateway, dns?}`. `dns` có shape
+`{mode:"auto"|"manual",servers:string[]}`; thiếu `dns` bảo toàn DNS profile hiện tại, `auto`
+chỉ hợp lệ cùng DHCP với list rỗng, `manual` yêu cầu 1..4 IPv4 canonical duy nhất. Response có
+cùng `requestId`, `result`, stable `reasonCode`, `transactionId`, `state`,
+`rollbackRemainingS`, `active`, optional `configured`, `pending`, exact `capabilities` và
+`management`. Capability luôn gồm `dns` và `management-hostname`; `management` là
+`{hostname,mdnsName,stable}` chỉ đọc. `reasonCode` cấp response mô tả kết quả request hoặc
+transition của giao dịch; `active.reasonCode` là mã sức khỏe interface độc lập. `active` luôn
+có `adminUp`, `carrier`, `reasonCode`, `dnsServers`; `configured` là profile NetworkManager đã
+lưu và không khẳng định profile đó đang active. Ví dụ status khi Ethernet administratively up
+nhưng chưa có carrier:
+
+```json
+{
+  "version": 1,
+  "requestId": "status-1",
+  "result": "accepted",
+  "reasonCode": "OK",
+  "state": "idle",
+  "active": {
+    "interface": "end1",
+    "link": "down",
+    "adminUp": true,
+    "carrier": false,
+    "reasonCode": "NO_CARRIER",
+    "mode": "unknown",
+    "ipv4": "",
+    "prefixLength": 0,
+    "gateway": "",
+    "dnsServers": []
+  },
+  "configured": { "interface": "end1", "mode": "dhcp" },
+  "capabilities": ["dns", "management-hostname"],
+  "management": {
+    "hostname": "mkddc-ddc24-001",
+    "mdnsName": "mkddc-ddc24-001.local",
+    "stable": true
+  }
+}
+```
+
+`active.reasonCode` dùng allowlist `OK|INTERFACE_NOT_FOUND|KERNEL_STATE_UNAVAILABLE|ADMIN_DOWN|NO_CARRIER|NO_ACTIVE_ADDRESS`. `link=up` chỉ khi interface administratively up và có carrier; ví dụ `adminUp=true`, `carrier=false` phải trả `link=down`, `active.reasonCode=NO_CARRIER`. State machine:
 
 ```text
 idle → staged → applying → awaiting_confirmation → confirmed
@@ -199,9 +250,12 @@ Ràng buộc contract:
 - chỉ Ethernet IPv4 `static|dhcp` là Rev A local-HMI scope; interface phải nằm trong allowlist deployment;
 - helper validate IP/netmask/gateway, network/broadcast/multicast/loopback, route consistency và duplicate address probe trước apply;
 - `requestId` và transaction transition phải idempotent; state transition sai trả stable reject, không silent retry;
+- DNS là một phần của cùng journal/confirm/rollback với IPv4; không có đường ghi DNS riêng;
+- management hostname chỉ đọc trong authority, không xuất hiện trong candidate; chỉ provision
+  bằng `packaging/configure-web-hostname.sh` sau preflight/backup;
 - deadline dùng monotonic clock trong runtime và journal đủ dữ liệu để boot recovery; tối đa 120 s;
 - response/log không chứa credential; actor/role do broker audit, helper log peer UID + transaction ID + config hash;
-- HMI không kết nối socket này trực tiếp. Broker phải map action có Service/Admin session và audit trước/sau mutation.
+- HMI không kết nối socket này trực tiếp. Broker chỉ map mutation khi session role Admin và audit trước/sau; Service chỉ là surface.
 
 ## HMI
 
@@ -217,7 +271,11 @@ Response gồm cùng `requestId`, `result`, stable `reasonCode` và optional `po
 
 Broker sở hữu authentication, role/policy validation và durable audit. Core sở hữu arbitration/interlock/safe-state/effective output và monotonic override TTL. HMI chỉ render response; local point DB không được dùng làm authorization source. Nếu broker/core không sẵn sàng trong deadline, mutation bị kết thúc bằng lỗi rõ và Control chuyển read-only, không blind replay. Không thay SHM layout cho contract này. Schema authority: `shared/hmi_protocol_v1.schema.json`.
 
-Network actions đã thuộc HMI protocol v1 và broker chỉ map chúng sang SOM network authority, không map sang core hay cho phép payload command tùy ý. `network_status` là read-only; validate/stage/apply/confirm/rollback yêu cầu Admin, có audit và request-id cache. HMI unit bị chặn trực tiếp khỏi `netcfg.sock`.
+Network actions đã thuộc HMI protocol v1 và broker chỉ map chúng sang SOM network authority,
+không map sang core hay cho phép payload command tùy ý. `network_status` là read-only;
+validate/stage/apply/confirm/rollback yêu cầu role Admin, có audit và request-id cache. Service
+là tên surface HMI, không phải role hoặc nguồn cấp quyền. HMI không expose DNS/management
+hostname editor và unit bị chặn trực tiếp khỏi `netcfg.sock`.
 
 ## Detailed design
 

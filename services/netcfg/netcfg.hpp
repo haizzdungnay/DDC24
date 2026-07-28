@@ -8,7 +8,9 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -19,12 +21,34 @@ constexpr int kProtocolVersion = 1;
 constexpr size_t kMaxFrameBytes = 8192;
 constexpr uint32_t kRollbackMaxSeconds = 120;
 
+struct DnsConfig {
+    std::string mode;
+    std::vector<std::string> servers;
+};
+
 struct Candidate {
     std::string interface;
     std::string mode;
     std::string ipv4;
     std::string netmask;
     std::string gateway;
+    std::optional<DnsConfig> dns;
+
+    Candidate() = default;
+    Candidate(std::string interface_value, std::string mode_value,
+              std::string ipv4_value, std::string netmask_value,
+              std::string gateway_value, std::optional<DnsConfig> dns_value = std::nullopt)
+        : interface(std::move(interface_value)), mode(std::move(mode_value)),
+          ipv4(std::move(ipv4_value)), netmask(std::move(netmask_value)),
+          gateway(std::move(gateway_value)), dns(std::move(dns_value)) {}
+};
+
+struct InterfaceSnapshot {
+    bool present = false;
+    bool admin_up = false;
+    bool carrier = false;
+    std::string ipv4;
+    int prefix_length = 0;
 };
 
 struct ActiveState {
@@ -34,6 +58,30 @@ struct ActiveState {
     std::string ipv4;
     int prefix_length = 0;
     std::string gateway;
+    bool admin_up = false;
+    bool carrier = false;
+    std::string reason_code = "OK";
+    std::vector<std::string> dns_servers;
+
+    ActiveState() = default;
+    ActiveState(std::string interface_value, std::string link_value,
+                std::string mode_value, std::string ipv4_value,
+                int prefix_length_value, std::string gateway_value,
+                bool admin_up_value = false, bool carrier_value = false,
+                std::string reason_code_value = "OK",
+                std::vector<std::string> dns_servers_value = {})
+        : interface(std::move(interface_value)), link(std::move(link_value)),
+          mode(std::move(mode_value)), ipv4(std::move(ipv4_value)),
+          prefix_length(prefix_length_value), gateway(std::move(gateway_value)),
+          admin_up(admin_up_value), carrier(carrier_value),
+          reason_code(std::move(reason_code_value)),
+          dns_servers(std::move(dns_servers_value)) {}
+};
+
+struct ManagementState {
+    std::string hostname;
+    std::string mdns_name;
+    bool stable = false;
 };
 
 struct Transaction {
@@ -41,14 +89,19 @@ struct Transaction {
     std::string state = "idle";
     Candidate candidate;
     ActiveState previous;
+    std::optional<Candidate> previous_configured;
+    bool previous_configured_complete = false;
     int64_t rollback_deadline_epoch_ms = 0;
     std::string last_reason = "OK";
 };
 
+void to_json(nlohmann::json& j, const DnsConfig& value);
+void from_json(const nlohmann::json& j, DnsConfig& value);
 void to_json(nlohmann::json& j, const Candidate& value);
 void from_json(const nlohmann::json& j, Candidate& value);
 void to_json(nlohmann::json& j, const ActiveState& value);
 void from_json(const nlohmann::json& j, ActiveState& value);
+void to_json(nlohmann::json& j, const ManagementState& value);
 void to_json(nlohmann::json& j, const Transaction& value);
 void from_json(const nlohmann::json& j, Transaction& value);
 
@@ -59,31 +112,44 @@ class Platform {
 public:
     virtual ~Platform() = default;
     virtual ActiveState status(const std::string& interface, std::string* reason) = 0;
+    virtual Candidate configured(const std::string& interface) = 0;
+    virtual ManagementState management() = 0;
     virtual bool preflight(const Candidate& candidate, std::string* reason) = 0;
     virtual bool apply(const Candidate& candidate, const ActiveState& previous,
                        std::string* reason) = 0;
     virtual bool confirm(const Candidate& candidate, const ActiveState& previous,
                          std::string* reason) = 0;
     virtual bool rollback(const Candidate& candidate, const ActiveState& previous,
+                          const Candidate& previous_configured,
+                          bool previous_configured_complete,
                           std::string* reason) = 0;
 };
 
 class LinuxPlatform : public Platform {
 public:
     ActiveState status(const std::string& interface, std::string* reason) override;
+    Candidate configured(const std::string& interface) override;
+    ManagementState management() override;
     bool preflight(const Candidate& candidate, std::string* reason) override;
     bool apply(const Candidate& candidate, const ActiveState& previous,
                std::string* reason) override;
     bool confirm(const Candidate& candidate, const ActiveState& previous,
                  std::string* reason) override;
     bool rollback(const Candidate& candidate, const ActiveState& previous,
+                  const Candidate& previous_configured,
+                  bool previous_configured_complete,
                   std::string* reason) override;
 
 protected:
     virtual bool run(const std::vector<std::string>& args, std::string* output);
     virtual std::string binary(const std::vector<std::string>& choices);
     virtual std::string connection_name(const std::string& interface);
-    virtual bool persist(const Candidate& candidate, std::string* reason);
+    virtual std::string configured_connection_name(const std::string& interface);
+    virtual bool persist(const Candidate& candidate, std::string* reason,
+                         bool preserve_missing_dns = true);
+    virtual bool read_interface_state(const std::string& interface,
+                                      InterfaceSnapshot* state) const;
+    virtual std::string management_hostname() const;
     virtual bool interface_has_address(const std::string& interface,
                                        const std::string& ipv4, bool* present) const;
     virtual void rollback_retry_delay() const;

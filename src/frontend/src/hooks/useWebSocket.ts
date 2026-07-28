@@ -99,8 +99,18 @@ export function useWebSocket() {
     }
 
     let stopped = false
+    const clearReconnectTimer = () => {
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    }
+
     const connect = () => {
       if (stopped) return
+      const current = socketRef.current
+      if (current && (current.readyState === WebSocket.CONNECTING || current.readyState === WebSocket.OPEN)) return
+      clearReconnectTimer()
       setConnectionState(retryMs.current === 1000 ? 'connecting' : 'reconnecting')
       const socket = new WebSocket(url)
       socketRef.current = socket
@@ -136,18 +146,33 @@ export function useWebSocket() {
       socket.onerror = () => socket.close()
       socket.onclose = () => {
         if (stopped) return
+        if (socketRef.current === socket) socketRef.current = null
         setConnectionState('reconnecting')
         timeoutRef.current = window.setTimeout(connect, retryMs.current)
         retryMs.current = Math.min(5000, retryMs.current + 1000)
       }
     }
 
+    const reconnectIfDisconnected = () => {
+      const current = socketRef.current
+      if (!current || current.readyState === WebSocket.CLOSING || current.readyState === WebSocket.CLOSED) connect()
+    }
+
+    const reconnectWhenVisible = () => {
+      if (document.visibilityState === 'visible') reconnectIfDisconnected()
+    }
+
+    window.addEventListener('online', reconnectIfDisconnected)
+    document.addEventListener('visibilitychange', reconnectWhenVisible)
     connect()
     return () => {
       stopped = true
       setConnectionState('disconnected')
-      if (timeoutRef.current) window.clearTimeout(timeoutRef.current)
+      window.removeEventListener('online', reconnectIfDisconnected)
+      document.removeEventListener('visibilitychange', reconnectWhenVisible)
+      clearReconnectTimer()
       socketRef.current?.close()
+      socketRef.current = null
     }
   }, [publishPoints, url])
 

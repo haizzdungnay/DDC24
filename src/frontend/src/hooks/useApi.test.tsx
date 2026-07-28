@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, renderHook } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useApi } from './useApi'
 
 afterEach(cleanup)
@@ -20,5 +20,58 @@ describe('useApi request ordering', () => {
     expect(hook.result.current.data).toBe('new-value')
     await act(async () => { resolveOld('old-value'); await oldRequest })
     expect(hook.result.current.data).toBe('new-value')
+  })
+
+  it('keeps a polling error visible until a later request succeeds', async () => {
+    vi.useFakeTimers()
+    try {
+      let resolveRecovery!: (value: string) => void
+      const recovery = new Promise<string>((resolve) => { resolveRecovery = resolve })
+      const fetcher = vi.fn()
+        .mockRejectedValueOnce(new Error('authority unavailable'))
+        .mockImplementationOnce(() => recovery)
+      const hook = renderHook(() => useApi(fetcher, [], { refreshMs: 1000 }))
+
+      await act(async () => { await Promise.resolve() })
+      expect(hook.result.current.error?.message).toBe('authority unavailable')
+
+      await act(async () => {
+        vi.advanceTimersByTime(1000)
+        await Promise.resolve()
+      })
+      expect(fetcher).toHaveBeenCalledTimes(2)
+      expect(hook.result.current.error?.message).toBe('authority unavailable')
+
+      await act(async () => { resolveRecovery('recovered'); await recovery })
+      expect(hook.result.current.data).toBe('recovered')
+      expect(hook.result.current.error).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('automatically retries a transient browser network failure', async () => {
+    vi.useFakeTimers()
+    try {
+      const fetcher = vi.fn()
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce('reconnected')
+      const hook = renderHook(() => useApi(fetcher))
+
+      await act(async () => { await Promise.resolve(); await Promise.resolve() })
+      expect(hook.result.current.error).toBeInstanceOf(TypeError)
+
+      await act(async () => {
+        vi.advanceTimersByTime(2000)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(fetcher).toHaveBeenCalledTimes(2)
+      expect(hook.result.current.data).toBe('reconnected')
+      expect(hook.result.current.error).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

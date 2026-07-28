@@ -7,6 +7,30 @@
     { "$ref": "#/$defs/response" }
   ],
   "$defs": {
+    "dns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "servers"],
+      "properties": {
+        "mode": { "enum": ["auto", "manual"] },
+        "servers": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "ipv4", "maxLength": 15 }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "auto" } } },
+          "then": { "properties": { "servers": { "maxItems": 0 } } }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "manual" } } },
+          "then": { "properties": { "servers": { "minItems": 1 } } }
+        }
+      ]
+    },
     "candidate": {
       "type": "object",
       "additionalProperties": false,
@@ -16,20 +40,66 @@
         "mode": { "enum": ["static", "dhcp"] },
         "ipv4": { "type": "string", "maxLength": 15 },
         "netmask": { "type": "string", "maxLength": 15 },
-        "gateway": { "type": "string", "maxLength": 15 }
-      }
+        "gateway": { "type": "string", "maxLength": 15 },
+        "dns": { "$ref": "#/$defs/dns" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "static" } } },
+          "then": { "required": ["ipv4", "netmask"] }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "dhcp" } } },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["ipv4"] },
+                { "required": ["netmask"] },
+                { "required": ["gateway"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["dns"],
+            "properties": {
+              "dns": { "properties": { "mode": { "const": "auto" } } }
+            }
+          },
+          "then": { "properties": { "mode": { "const": "dhcp" } } }
+        }
+      ]
     },
     "active": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["interface", "link", "mode", "ipv4", "prefixLength", "gateway"],
+      "required": ["interface", "link", "mode", "ipv4", "prefixLength", "gateway", "adminUp", "carrier", "reasonCode", "dnsServers"],
       "properties": {
         "interface": { "type": "string" },
         "link": { "enum": ["up", "down", "unknown"] },
         "mode": { "enum": ["static", "dhcp", "unknown"] },
         "ipv4": { "type": "string" },
         "prefixLength": { "type": "integer", "minimum": 0, "maximum": 32 },
-        "gateway": { "type": "string" }
+        "gateway": { "type": "string" },
+        "adminUp": { "type": "boolean" },
+        "carrier": { "type": "boolean" },
+        "reasonCode": { "enum": ["OK", "INTERFACE_NOT_FOUND", "KERNEL_STATE_UNAVAILABLE", "ADMIN_DOWN", "NO_CARRIER", "NO_ACTIVE_ADDRESS"] },
+        "dnsServers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "format": "ipv4", "maxLength": 15 }
+        }
+      }
+    },
+    "management": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname", "mdnsName", "stable"],
+      "properties": {
+        "hostname": { "type": "string", "maxLength": 253 },
+        "mdnsName": { "type": "string", "maxLength": 259 },
+        "stable": { "type": "boolean" }
       }
     },
     "request": {
@@ -47,7 +117,7 @@
     "response": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["version", "requestId", "result", "reasonCode", "state"],
+      "required": ["version", "requestId", "result", "reasonCode", "state", "capabilities", "management"],
       "properties": {
         "version": { "const": 1 },
         "requestId": { "type": "string" },
@@ -56,9 +126,12 @@
         "message": { "type": "string" },
         "transactionId": { "type": "string" },
         "state": { "enum": ["idle", "staged", "applying", "awaiting_confirmation", "confirmed", "rolling_back", "rolled_back", "failed"] },
+        "capabilities": { "const": ["dns", "management-hostname"] },
         "rollbackRemainingS": { "type": "integer", "minimum": 0, "maximum": 120 },
         "active": { "$ref": "#/$defs/active" },
-        "pending": { "$ref": "#/$defs/candidate" }
+        "configured": { "$ref": "#/$defs/candidate" },
+        "pending": { "$ref": "#/$defs/candidate" },
+        "management": { "$ref": "#/$defs/management" }
       }
     }
   }

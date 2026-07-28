@@ -10,6 +10,7 @@ export interface ApiState<T> {
 
 interface UseApiOptions {
   refreshMs?: number
+  networkRetryMs?: number | false
 }
 
 export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], options: UseApiOptions = {}): ApiState<T> {
@@ -34,12 +35,15 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
   const fetchNow = useCallback(async (showLoading: boolean) => {
     if (!isMounted.current) return
     const requestId = ++requestSequence.current
-    if (showLoading) setLoading(true)
-    setError(null)
+    if (showLoading) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const result = await fetcherRef.current()
       if (isMounted.current && requestId === requestSequence.current) {
         setData(result)
+        setError(null)
       }
     } catch (err) {
       if (isMounted.current && requestId === requestSequence.current) {
@@ -82,6 +86,29 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
   useEffect(() => {
     void fetchNow(true)
   }, [fetchNow])
+
+  const networkRetryMs = options.networkRetryMs === false ? 0 : (options.networkRetryMs ?? 2000)
+  useEffect(() => {
+    if (networkRetryMs <= 0 || !(error instanceof TypeError)) return undefined
+    const timerId = window.setTimeout(() => {
+      void fetchNow(false)
+    }, networkRetryMs)
+    return () => window.clearTimeout(timerId)
+  }, [error, fetchNow, networkRetryMs])
+
+  useEffect(() => {
+    if (!error) return undefined
+    const retry = () => { void fetchNow(false) }
+    const retryWhenVisible = () => {
+      if (document.visibilityState === 'visible') retry()
+    }
+    window.addEventListener('online', retry)
+    document.addEventListener('visibilitychange', retryWhenVisible)
+    return () => {
+      window.removeEventListener('online', retry)
+      document.removeEventListener('visibilitychange', retryWhenVisible)
+    }
+  }, [error, fetchNow])
 
   useEffect(() => {
     const refreshMs = options.refreshMs

@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 2.3 | 2026-07-22 (ADR-017: desired `network.conf` tách khỏi active kernel state; historian/time/namespace updates 2.2..1.9 retained) · 2.2 | 2026-07-21 (§4h: physical rolling-prune engine code-local, activation guard) · 2.1 | 2026-07-20 (§4h: retention theo interval) · 2.0 | 2026-07-18 (`time.conf`) · 1.9 | 2026-07-15 (§3/§8: unique display names + historian.conf per-point start policy) · 1.8 | 2026-07-22 (ADR-017 network authority) · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 2.4 | 2026-07-28 (ADR-017: Ethernet IPv4/DNS transaction authority, management hostname read-only) · 2.3 | 2026-07-22 (desired `network.conf` tách khỏi active kernel state; historian/time/namespace updates 2.2..1.9 retained) · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -12,7 +12,7 @@
 | File | Writer | Reader (service) | Reload khi đổi |
 |------|--------|------------------|-----------------|
 | `device.conf` | mkddc-web | mkddc-iobus (BACnet), mkddc-core | SIGHUP iobus |
-| `network.conf` | mkddc-web | mkddc-web (desired config); target `mkddc-netcfg` activate Linux | **Hiện tại chỉ lưu file, apply pending B7**; target stage/apply/confirm/rollback |
+| `network.conf` | mkddc-web | mkddc-web (BACnet/Wi-Fi/service compatibility); `mkddc-netcfg` không đọc file này để báo active | apply ngay cho service config; `eth`/DNS/management hostname không mutate qua file |
 | `io_config.conf` | mkddc-web | **mkddc-iobus** (scale + SET_AO_CFG) | SIGHUP iobus (re-handshake AO cfg) |
 | `io_safe_state.conf` | mkddc-web | **mkddc-core** (relinquish default + safe-state) | SIGHUP core |
 | `virtual_points.conf` | mkddc-web | **mkddc-web** (points overlay, VP runtime/alarms/schedules; diagnostic VP log only) | apply ngay |
@@ -55,7 +55,7 @@
 ## 2. `network.conf` — mạng (Ethernet + WiFi, northbound IP)
 ```json
 { "eth": {
-    "mode": "dhcp",            // "dhcp" | "static"
+    "mode": "dhcp",            // compatibility shadow read-only
     "ip": "192.168.1.50", "netmask": "255.255.255.0",
     "gateway": "192.168.1.1", "dns": ["8.8.8.8"] },
   "wifi": {
@@ -66,9 +66,25 @@
 ```
 > Lên BMS/cloud (BACnet/IP, MQTT, REST) đi qua Ethernet hoặc WiFi (đều là IP).
 
-**Phân biệt bắt buộc:** `network.conf` là desired/pending configuration, không phải bằng chứng IP đang active. Active address phải đọc từ kernel hoặc SOM network authority. Source hiện tại chưa có netplan/networkd/polkit applier: `PUT /api/v1/network` ghi file nhưng `applySystem()` trả `applied=false`. Không được hiển thị `Applied`, `Online` hoặc new IP như runtime truth chỉ vì file đã ghi thành công.
+**Phân biệt bắt buộc:** `network.conf.eth` là compatibility shadow read-only, không phải
+desired candidate và không phải bằng chứng IP/DNS đang active. Active/configured/pending phải
+đọc từ SOM network authority. `PUT /api/v1/network` chỉ lưu cấu hình dịch vụ BACnet/Wi-Fi và
+field hostname tương thích; endpoint phải bảo toàn nguyên `eth`, không được dùng field
+`hostname` để gọi `hostnamectl` hoặc đổi management origin.
 
-Target ADR-017 sử dụng transaction `stage → apply → awaiting_confirmation → confirm`; nếu không confirm hoặc health fail trong tối đa 120 s thì rollback last-known-good. Local HMI chỉ expose Ethernet IPv4 static/DHCP, subnet và gateway. Wi-Fi credential, DNS nâng cao, routing/VLAN/firewall và BACnet identity/port không thuộc local-panel scope.
+ADR-017 sử dụng transaction `validate → stage → apply → awaiting_confirmation → confirm`; nếu
+không confirm hoặc health fail trong tối đa 120 s thì rollback last-known-good. Candidate có
+Ethernet IPv4 và optional `dns:{mode,servers}`: thiếu `dns` bảo toàn DNS profile hiện tại;
+`auto` chỉ đi cùng DHCP và danh sách rỗng; `manual` yêu cầu 1..4 IPv4 canonical, duy nhất.
+Response capability phải có `dns` trước khi client gửi DNS mutation; response validate/stage phải
+giữ capability và echo đúng pending DNS/candidate, nếu không adapter trả lỗi authority.
+
+Management hostname là read-only trong authority qua
+`management:{hostname,mdnsName,stable}`. Provisioning/đổi hostname chỉ dùng
+`packaging/configure-web-hostname.sh`; không nằm trong transaction IP/DNS. Local HMI chỉ
+expose Ethernet IPv4 static/DHCP, subnet và gateway, và network mutation yêu cầu Admin.
+Wi-Fi credential, DNS editor, routing/VLAN/firewall và BACnet identity/port không thuộc
+local-panel scope.
 
 ## 3. `io_config.conf` — loại sensor mỗi kênh UI + mode AO
 ```json
@@ -506,6 +522,6 @@ Legacy `AV` IDs are accepted as aliases and normalized to `VP`.
 `SW_ARCH §5`, `IDE-020..025`, `SW-IDE-010..015`, `RTU-002`, `MB-010`.
 
 ---
-**Rev** 2.2 | 2026-07-21 — physical rolling-prune engine code-local với activation guard fail-closed; execution vẫn inactive trước cutover. · **Rev** 2.1 | 2026-07-20 — historian rolling retention theo interval, selected `retentionDays`, maximum map và archive-fold caveat; physical prune vẫn activation-gated. · **Rev** 2.0 | 2026-07-18 — thêm `time.conf` production contract, one-shot manual time, revision và clock-domain rules theo Plan 44. · **Rev** 1.9 | 2026-07-15 — ADR-018/019 amendments: independent unique display-name namespace, blank/conflict migration, `historian.conf` per-point database policy, 11 intervals, immediate/future UTC start, persistent scheduled/recording semantics and 48-hour hot cache. · **Rev** 1.8 | 2026-07-15 — ADR-019 Phase A: separate controller-local unique technical tags for UI/AO/DO/VP, deterministic legacy migration, DO metadata location, flat-file/generation authority boundary. · 1.7 | 2026-07-09 · 1.4 | 2026-06-30
+**Rev** 2.4 | 2026-07-28 — khóa `network.conf.eth` compatibility read-only; IPv4/DNS thuộc strict transaction authority, management hostname chỉ đọc và provision bằng script. · **Rev** 2.2 | 2026-07-21 — physical rolling-prune engine code-local với activation guard fail-closed; execution vẫn inactive trước cutover. · **Rev** 2.1 | 2026-07-20 — historian rolling retention theo interval, selected `retentionDays`, maximum map và archive-fold caveat; physical prune vẫn activation-gated. · **Rev** 2.0 | 2026-07-18 — thêm `time.conf` production contract, one-shot manual time, revision và clock-domain rules theo Plan 44. · **Rev** 1.9 | 2026-07-15 — ADR-018/019 amendments: independent unique display-name namespace, blank/conflict migration, `historian.conf` per-point database policy, 11 intervals, immediate/future UTC start, persistent scheduled/recording semantics and 48-hour hot cache. · **Rev** 1.8 | 2026-07-15 — ADR-019 Phase A: separate controller-local unique technical tags for UI/AO/DO/VP, deterministic legacy migration, DO metadata location, flat-file/generation authority boundary. · 1.7 | 2026-07-09 · 1.4 | 2026-06-30
 
 Trạng thái: ĐÃ duyệt 2026-07-15 — contract amendment historian + global tag/name; implementation/test vẫn theo Plans 42/43.

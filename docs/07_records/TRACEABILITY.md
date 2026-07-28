@@ -18,21 +18,22 @@ Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `P
 | SWR-REQ-002 | core graph/priority/safety | timing + unit + fault test | Partial |
 | SWR-REQ-003 | web validators + iobus config consumer | round-trip/reload test | Partial |
 | SWR-REQ-004 | `web/backend/http.go` + auth middleware | API role/security tests | Partial |
-| SWR-REQ-005 | ADR-017, `services/netcfg`, HMI broker/client | active/pending truth + negative UI/API tests | Orange Pi service path and target negative tests pass; Web REST migration/panel open |
-| SWR-REQ-006 | `mkddc-netcfg` transaction journal/coordinator | static/DHCP/confirm/120 s rollback + restart fault tests | Target static confirm, process recovery, explicit/automatic rollback pass; DHCP/reboot/power fault open |
-| SWR-REQ-007 | netcfg + iobus BACnet address watcher | multi-process continuity, BACnet `I-Am`, Web/Modbus reconnect | Target control continuity and live hot-rebind pass; packet/Modbus/physical I/O evidence open |
+| SWR-REQ-005 | ADR-017, `services/netcfg`, Web adapter/FE, HMI broker/client | active/configured/pending/capability/management truth + negative UI/API tests | Code-local Web migration và target service/no-carrier negative path pass; real carrier/IP handoff/panel open |
+| SWR-REQ-006 | `mkddc-netcfg` transaction journal/coordinator | static/DHCP/DNS/confirm/120 s rollback + restart fault tests | Target-dummy static confirm, process recovery, explicit/automatic rollback pass; physical DHCP/DNS/reboot/power/disk fault open |
+| SWR-REQ-007 | netcfg + iobus BACnet address watcher + same-origin Web | multi-process continuity, BACnet `I-Am`, Web/Modbus reconnect | Target-dummy control continuity và live hot-rebind log pass; packet/Modbus/physical I/O/real-IP handoff evidence open |
+| NET-WEB-001 | Go netcfg adapter, OpenAPI, Network FE/E2E | GET authenticated-read, POST Admin-only, strict DNS capability, authoritative UI/recovery | Code-local complete; target mDNS/dummy transaction pass, real carrier/IP handoff and browser reconnect open |
 | SWR-REQ-IEC-001..009 | `libmkddc_iec`/`mkddc-program-service`/`mkddc-program-core` (chưa triển khai — C1+) | theo `KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md` mỗi slice | Planned — C0 chưa hoàn thành, C1–C10 blocked |
 | IF-REQ-001 | `shared/iop_protocol.h`, [Firmware](../04_design/FIRMWARE.md) | assertions + HIL timing/fault | Partial |
 | IF-REQ-002 | `shared/mkddc_shm.h` + consumers | layout/magic tests | Implemented; release record required |
 | IF-REQ-003 | core/iobus AO path | physical-unit boundary regression + bench | Partial |
-| IF-REQ-004 | [Interfaces](../04_design/INTERFACES.md), `shared/netcfg_protocol_v1.schema.json` | cross-language fixtures + malformed/peer/state tests | Schema/clients implemented; target UID denial, socket permissions and allowlist pass |
+| IF-REQ-004 | [Interfaces](../04_design/INTERFACES.md), `shared/netcfg_protocol_v1.schema.json` | cross-language strict fixtures + malformed/peer/state/DNS/capability tests | Contract/schema/clients code-local; target UID denial, socket permissions and allowlist pass; physical fault approval open |
 | IF-REQ-IEC-001 | `io_map.json` schema (chưa triển khai — C2) | mapping/round-trip/negative tests | Planned |
 | SAFE-REQ-001 | MCU IOP/watchdog implementation | disconnect HIL ≤200 ms | Missing release evidence |
 | SAFE-REQ-002 | core/iobus validators | NaN/infinity/range negative tests | Partial |
 | SAFE-REQ-IEC-001 | `mkddc-program-core` priority/interlock boundary (chưa triển khai — C3) | bypass review + fault injection + HIL | Planned |
 | SEC-REQ-001 | web auth/RBAC/audit paths | security/API test | Partial |
 | SEC-REQ-002 | deployment/config | secret/TLS review | Missing release evidence |
-| SEC-REQ-003 | ADR-017, netcfg UDS/systemd sandbox, Web/HMI adapter boundary | peer/RBAC/audit/privilege/bypass negative tests | Target UID/interface denial and unit/socket boundary pass; broader security review still required |
+| SEC-REQ-003 | ADR-017, netcfg UDS/systemd sandbox, Web/HMI adapter boundary | local-HMI/Web Admin mutation + authenticated Web read, peer/RBAC/audit/bypass tests | Target UID/interface denial và unit/socket boundary pass; Web/local-HMI isolation code-local pass; target security review open |
 | NFR-REQ-001 | service/SHM failure handling | restart/corruption scenarios | Planned |
 | NFR-REQ-002 | build/test/package pipeline | reproducible release record | Planned |
 | NFR-REQ-IEC-001 | `mkddc-program-core` (chưa triển khai — C3) | multi-process fault test | Planned |
@@ -55,8 +56,8 @@ Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `P
 | HMI-REQ-013 | HMI API client and fail-closed degradation | broker/core loss and reconnect tests | Host broker OFFLINE/reconnect and broker-restart token invalidation pass; target record pending |
 | HMI-REQ-014 | UX Rev 3.1 + shared HMI styles/input paths | geometry/focus/glove/light target test | Host geometry implemented; glove/light target test pending |
 | HMI-REQ-015 | versioned IPC request lifecycle | latency + duplicate request integration | Host correlation/idempotency tested; target latency record pending |
-| HMI-REQ-016 | ADR-017, Service network modal, broker/netcfg clients | UC-HMI-016..019 policy/usability/target test | Host source/model/RBAC and target service path pass; connected-panel acceptance pending |
-| HMI-REQ-017 | HMI network model/state machine + netcfg transaction | helper/broker loss, countdown, no-success/no-replay tests | Host fail-closed tests plus target restart/120 s rollback pass; panel countdown inspection pending |
+| HMI-REQ-016 | ADR-017, surface Service network modal, broker/netcfg clients | Admin-only policy + UC-HMI-016..019 usability/target test | Host source/model/RBAC và target service path pass; Service không phải role; connected-panel acceptance pending |
+| HMI-REQ-017 | HMI network model/state machine + netcfg transaction | helper/broker loss, double-confirm impact, monotonic countdown, no-success/no-replay tests | Code-local fail-closed/countdown pass plus target-dummy restart/120 s rollback; panel/physical inspection pending |
 
 ## Quy tắc cập nhật
 

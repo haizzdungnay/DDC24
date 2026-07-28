@@ -26,7 +26,7 @@ Không dùng số test pass lịch sử làm evidence hiện hành. Mỗi releas
 - HMI build: compile/test khi enabled; DRM/input/GPIO smoke trên target.
 - HMI authority: login/session expiry, policy query, setpoint/mode/override/release, effective source/priority/TTL, upstream ACK/reject/timeout, idempotency và audit.
 - HMI failure: broker/core/alarm authority loss phải chuyển mutation read-only, monitoring SHM tiếp tục và không blind replay; HMI không write SHM/hardware, signal process hoặc direct reboot.
-- HMI usability: five-surface scenario trên panel thật với viewer/operator/service roles, body ≥14 px, action ≥40×40 px hoặc hard-key equivalent, glove/light, alarm flood, stale/lost data, localization và wake-event suppression.
+- HMI usability: five-surface scenario trên panel thật với Viewer/Operator/Admin session; Service là surface, không phải role. Kiểm body ≥14 px, action ≥40×40 px hoặc hard-key equivalent, glove/light, alarm flood, stale/lost data, localization và wake-event suppression.
 - Protocol: BACnet/IP discovery/read/write/reliability và Modbus RTU/TCP mapping/error paths.
 - System: stop/restart từng service, corrupt/stale SHM, loss of UART/network, MCU 200 ms safe timeout.
 - Network commissioning: active ≠ desired, static/DHCP validation, duplicate IP, staged
@@ -101,25 +101,27 @@ touch/button, physical I/O và usability evidence:
 
 ## Network commissioning release gate — RED
 
-ADR-017 helper, local-HMI broker/UI và BACnet rebind đã được implement, deployed và
-service-tested trên Orange Pi 5B.
-Web REST cũ vẫn chỉ ghi desired config: `applySystem()` trả `pending B7` và frontend bỏ
-qua `applied=false`. Gate vẫn RED cho tới khi physical HIL và Web migration được đóng:
+ADR-017 helper, local-HMI broker/UI, Web transaction adapter/FE và BACnet rebind đã được
+implement code-local; service/dummy-interface evidence đã có trên Orange Pi 5B. Protocol v1
+khóa strict unknown-field handling, exact capability `dns|management-hostname`, optional DNS
+transaction và management hostname read-only. GET transaction status dùng permission `read`;
+POST mutation chỉ Admin. Code-local pass không đóng physical HIL; gate vẫn RED.
 
 Target evidence: [KX-DDC24 HMI–FW SOM deployment record](../07_records/reviews/KX-DDC24-HMI-FWSOM-DEPLOY-2026-07-22.md).
 
 | Finding | Hiện trạng | Evidence cần để đóng |
 |---|---|---|
-| NET-AUTH-001 | Target unauthorized UID and `wlan0` allowlist denial pass; unit paths/socket modes verified | Reboot/power-loss and security approval of required capabilities |
-| NET-STATE-001 | Target active/pending/multi-address state and management-route preservation pass | Real `end1` link/gateway evidence and Web migration |
-| NET-TXN-001 | Real NetworkManager static confirm, process restart, explicit and 120 s automatic rollback pass on isolated target interface | Physical `end1` DHCP, disk/host/power fault evidence |
+| NET-AUTH-001 | Strict v1 contract/capability, target unauthorized UID và `wlan0` allowlist denial, unit path/socket mode code-local/target-dummy pass | Reboot/power-loss và security approval của required capabilities |
+| NET-STATE-001 | Active/configured/pending, admin/carrier/reason, DNS và management hostname shape code-local; target dummy/multi-address preservation pass | Real `end1` carrier/gateway/DNS và approved management-origin evidence |
+| NET-TXN-001 | Real NetworkManager static confirm, process restart, explicit và 120 s automatic rollback pass trên isolated target interface | Physical `end1` DHCP/DNS, disk/host/power fault evidence |
 | NET-CONT-001 | IOBus/Core/Web PIDs unchanged; IOP `NORMAL`, SHM fault-free/`RELIABLE` through address changes | Physical STM32/output trace and Modbus TCP reconnect |
 | NET-BAC-001 | Target logs show datalink-only rebind on new/rollback addresses without iobus restart | Packet capture proving broadcast refresh and `I-Am` on real BMS segment |
-| NET-HMI-001 | Service modal/client/model/Admin policy host-tested; target broker/helper service path pass | UC-HMI-016..019 on connected panel, countdown and glove/key usability |
-| NET-WEB-001 | FE toast báo saved mà không đọc apply warnings | BE transaction adapter + FE reconnect/active-pending/error E2E evidence |
+| NET-HMI-001 | Surface Service; mutation Admin-only, double-confirm impact warning, monotonic countdown và confirm/rollback state code-local; target broker/helper path pass | UC-HMI-016..019 trên connected panel, countdown/glove/key usability và physical commissioning |
+| NET-WEB-001 | BE adapter/FE authoritative migration, GET-read/POST-settings RBAC, active/configured/pending/DNS UI và intercepted E2E code-local pass | Browser REST/WebSocket reconnect qua stable hostname sau đổi IP thật, target failure/rollback record |
+| NET-MGMT-001 | Same-origin/reconnect và hostname provisioning tool/template code-local; authority management field read-only | Install-only package verify, target `--check/--apply`, unique mDNS resolution, IP handoff và hostname rollback evidence |
 
 Evidence packages tối thiểu: `PWR-5V`, `PWR-3V3`, `PWR-SURGE`, `AO-COMP`, `EMC`, `MFG`. Mỗi package phải có owner, setup, acceptance limit, raw result, conclusion và reviewer approval.
 
 ## Release decision
 
-Release chỉ `GO` khi requirement bắt buộc có trace, automated suites pass, target/HIL evidence hợp lệ, security/deployment checks hoàn tất và mọi gate P0/RED được đóng hoặc có waiver được phê duyệt. Hiện tại hardware/manufacturing status là `NO-GO`; Program Runtime release status là `NO-GO`. CTO đã mở next action FW SOM ST host execution để tạo evidence đầu tiên, nhưng FE/Web Backend/STM32/HIL/FBD đầy đủ và mọi claim conformance vẫn RED.
+Release chỉ `GO` khi requirement bắt buộc có trace, automated suites pass, target/HIL evidence hợp lệ, security/deployment checks hoàn tất và mọi gate P0/RED được đóng hoặc có waiver được phê duyệt. Network không được claim GREEN từ host/mock/dummy-interface evidence: physical Ethernet DHCP/static/DNS, reboot/power-loss/disk fault, stable-hostname IP handoff, BACnet packet capture, Modbus reconnect, physical control continuity và connected-panel HMI vẫn mở. Hiện tại hardware/manufacturing status là `NO-GO`; Program Runtime release status là `NO-GO`.

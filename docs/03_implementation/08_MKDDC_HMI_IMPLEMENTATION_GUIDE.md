@@ -2,8 +2,8 @@
 ## ADR-016 limited-operator HMI — microtask plan
 
 **Document ID:** IMPL-HMI-MK-DDC-24
-**Revision:** 2.3 — 2026-07-22
-**Status:** Existing host control and ADR-017 network service path target-verified; connected-panel HIL/usability acceptance pending
+**Revision:** 2.4 — 2026-07-28
+**Status:** Host network broker/client, double-confirm impact và monotonic countdown code-local; target service path verified một phần, connected-panel/physical commissioning usability HIL vẫn RED
 **Owners:** Core, Go backend, HMI, QA
 **Design:** [SW HMI Design](../02_design/software/SW_HMI_DESIGN_MK-DDC-24_VI.md)
 **UX/UC:** [UX](../04_uiux/KX-DDC24-UX-HMI-001_VI.md) · [Use cases](../04_uiux/KX-DDC24-UC-HMI-001_VI.md)
@@ -571,10 +571,15 @@ may proceed in parallel only after P0 is frozen.
 
 ### P7 — ADR-017 local Ethernet commissioning
 
-Host source for this phase is implemented against the frozen `NWC-*` schema in
-[22 — SOM Source Implementation Plan](22_SOM_SRC_IMPLEMENTATION_PLAN.md). The local Go
-broker adapter is present; Web REST/FE migration remains separate-team work. HMI never
-calls `mkddc-netcfg` directly.
+Host source for this phase uses the strict `NWC-*` protocol v1 in
+[22 — SOM Source Implementation Plan](22_SOM_SRC_IMPLEMENTATION_PLAN.md). Local Go broker và
+Web REST/FE transaction migration đã code-local; target handoff vẫn là gate riêng. HMI không
+gọi `mkddc-netcfg` trực tiếp, không expose DNS editor và chỉ hiển thị management hostname
+read-only nếu broker cung cấp.
+
+Service là tên surface HMI, không phải role. Session hợp lệ có thể đọc `network_status`; mọi
+`network_validate|stage|apply|confirm|rollback` yêu cầu role `admin`. Viewer, Operator,
+role không biết, token hết hạn và broker offline đều fail closed cho mutation.
 
 **Schedule baseline (một HMI engineer):** H0 `HNW-000..003` 1–2 ngày sau NWC contract;
 H1 `HNW-004..009` 3–4 ngày với fake broker; H2 `HNW-010..011` 2–3 ngày; H3 `HNW-012`
@@ -607,11 +612,13 @@ estimate, không phải release commitment; exit gate quan trọng hơn ngày l�
 - **Depends:** HNW-001.
 - **Done:** existing system/communication diagnostics remain reachable.
 
-#### HNW-003 — Gate configuration by Service session
+#### HNW-003 — Gate configuration by Admin session trong surface Service
 
 - **Files:** Service/network presenter and session-policy tests.
-- **Output:** Configure appears only for authoritative Service capability/session.
-- **Verify:** Viewer/Operator/expired/unknown/broker-offline all deny mutation.
+- **Output:** Configure/mutation chỉ xuất hiện cho authoritative Admin session; Service không
+  được dùng như role hoặc capability.
+- **Verify:** Viewer/Operator/expired/unknown/broker-offline đều deny mutation;
+  session hợp lệ vẫn có thể đọc status.
 - **Depends:** HNW-002 and BE broker capability projection.
 - **Done:** local metadata/config cannot grant network privilege.
 
@@ -636,7 +643,8 @@ estimate, không phải release commitment; exit gate quan trọng hơn ngày l�
 
 - **Files:** confirmation overlay, localization and geometry tests.
 - **Output:** old/new/mode, Web/BACnet reconnect warning and hold-to-confirm.
-- **Verify:** cancel, session expiry, duplicate ENTER/touch and first-wake suppression.
+- **Verify:** Stage yêu cầu nhấn lần hai trong 5 giây trên cùng candidate; cancel, candidate
+  đổi, session expiry, duplicate ENTER/touch và first-wake suppression không được apply nhầm.
 - **Depends:** HNW-004, HNW-005.
 - **Done:** one user confirmation produces one idempotent stage/apply transaction.
 
@@ -644,8 +652,10 @@ estimate, không phải release commitment; exit gate quan trọng hơn ngày l�
 
 - **Files:** network model/screen and fake-monotonic-clock tests.
 - **Output:** staged/applying/awaiting-confirmation/confirmed/failed/rolling-back/
-  rolled-back states with transaction ID and rollback countdown.
-- **Verify:** out-of-order/duplicate response, reconnect and deadline boundary.
+  rolled-back states with transaction ID and monotonic rollback countdown; confirm và
+  rollback có guard riêng.
+- **Verify:** fake monotonic clock, out-of-order/duplicate response, reconnect và deadline
+  boundary; countdown không dựa vào wall clock hoặc chỉ snapshot một lần.
 - **Depends:** HNW-001, HNW-006 and BE adapter.
 - **Done:** only `confirmed` is presented as applied success.
 
@@ -728,8 +738,10 @@ polish before this slice proves the control boundary.
 - HMI has no direct SHM write, hardware write, process signal or reboot capability.
 - Host, integration, target and usability evidence is current and traceable.
 - Unimplemented maintenance actions are not represented as working.
-- Ethernet configuration is Service-only, transaction-backed and distinguishes active
-  from pending; automatic rollback and control continuity have target evidence.
+- Ethernet configuration nằm trong surface Service nhưng mutation là Admin-only,
+  transaction-backed và phân biệt active/configured/pending; DNS/management hostname không có
+  editor trên local HMI. Automatic rollback/control continuity evidence hiện chỉ một phần và
+  không thay connected-panel/physical HIL.
 - Controlled docs, traceability and changelog are updated with the implementation.
 
 ## Revision history
@@ -740,3 +752,4 @@ polish before this slice proves the control boundary.
 | 2.0 | 2026-07-22 | ADR-016 microtask plan for five-surface limited-operator HMI, authoritative broker/core path, privilege removal and verification gates. |
 | 2.1 | 2026-07-22 | Recorded host implementation, artifact mapping and the remaining target/HIL/usability RED gates. |
 | 2.2 | 2026-07-22 | Added ADR-017 HNW-000..013 microtasks for local Ethernet commissioning after SOM and broker contract readiness. |
+| 2.4 | 2026-07-28 | Khóa Service là surface, network mutation Admin-only; ghi nhận Web migration code-local, DNS/management ngoài HMI và giữ physical/panel HIL RED. |

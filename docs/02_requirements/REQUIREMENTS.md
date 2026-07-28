@@ -40,7 +40,7 @@
 | SAFE-REQ-IEC-001 | Program must không bypass Core priority, interlock, safety hoặc MCU independent safe timeout. | bypass review + process/UART fault injection + HIL |
 | SEC-REQ-001 | API must có authentication, role authorization và audit cho thay đổi cấu hình/force output. | security test |
 | SEC-REQ-002 | Secret must không được hard-code; production transport/config must dùng cơ chế bảo vệ được phê duyệt. | review + deployment test |
-| SEC-REQ-003 | Network mutation must yêu cầu Service/Admin session, audit old/new/actor/result và đi qua helper least-privilege; HMI/Web must không có quyền chạy shell hoặc sửa trực tiếp OS network state. | security + deployment negative test |
+| SEC-REQ-003 | Network mutation must audit old/new/actor/result và đi qua helper least-privilege; local HMI đặt flow trong surface Service nhưng mutation yêu cầu Admin, Web cho mọi session xác thực đọc authority state nhưng chỉ Admin được validate/stage/apply/confirm/rollback. HMI/Web must không có quyền chạy shell hoặc sửa trực tiếp OS network state. | security + deployment negative test |
 | NFR-REQ-001 | Restart từng service must không gây output không kiểm soát; trạng thái lỗi phải quan sát được. | resilience test |
 | NFR-REQ-002 | Build release must tái lập được và toàn bộ test bắt buộc phải pass trên target/toolchain được ghi nhận. | CI/release record |
 | NFR-REQ-IEC-001 | Program Runtime must tiếp tục active control khi FE/Web mất kết nối và recover không replay mutation. | multi-process fault test |
@@ -64,7 +64,7 @@
 | HMI-REQ-013 | Khi broker/core/alarm authority unavailable hoặc timeout, mọi mutation must bị disable, pending phải kết thúc bằng lỗi rõ và HMI tiếp tục read-only từ SHM. | fault injection |
 | HMI-REQ-014 | Body text must đạt tối thiểu 14 px; touch target hành động must tối thiểu 40×40 px hoặc có thao tác nút cứng tương đương; focus, confirmation và first-input wake suppression phải quan sát được. | inspection + target usability |
 | HMI-REQ-015 | Telemetry refresh must ≤1 s; command phải có accepted/rejected/timeout feedback ≤2 s trong điều kiện nominal và duplicate request must không tạo double action. | timing + idempotency test |
-| HMI-REQ-016 | Trong `Service`, local HMI must cho Service role xem active/pending Ethernet IPv4, chọn DHCP hoặc nhập static IP/subnet/gateway, xem impact và thực hiện apply/confirm/rollback qua broker; không được mở rộng thành Wi-Fi/protocol/full engineering. | policy + target usability test |
+| HMI-REQ-016 | Trong surface `Service`, local HMI must cho session hợp lệ xem active/pending Ethernet IPv4; chỉ role Admin được chọn DHCP hoặc nhập static IP/subnet/gateway, xem impact và thực hiện apply/confirm/rollback qua broker. Service là surface, không phải role; không mở rộng thành DNS/Wi-Fi/protocol/full engineering. | policy + target usability test |
 | HMI-REQ-017 | Khi đổi IP, local HMI must hiển thị transaction state và rollback countdown; mất broker/network authority phải giữ monitoring read-only, không báo thành công và không blind retry. | fault injection + target test |
 
 Các requirement về chứng nhận chỉ được thêm khi có tiêu chuẩn áp dụng, test plan, acceptance limit và chủ sở hữu bằng chứng.

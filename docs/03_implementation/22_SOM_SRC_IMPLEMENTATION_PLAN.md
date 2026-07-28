@@ -16,7 +16,7 @@
 > S7 #1/#2/#3 xong 2026-06-12; S7 #4/#5/#6 đã có task/code-ready docs 2026-06-13;
 > TD-001/002/003 xong 2026-06-19; S8 COR-HIST-001 core/local DONE 2026-07-17; ADR-017 host/target network source implemented 2026-07-22; historian target E2E và network/HMI physical HIL chưa đóng
 > **Đối tượng đọc:** Dev 2, Lead, Tester
-> **Phạm vi:** phía SOM: `services/iobus`, `services/core`, `services/netcfg`, packaging/tools/shared contracts; local-HMI broker adapter tối thiểu. React FE/Web REST migration vẫn là consumer handoff.
+> **Phạm vi:** phía SOM: `services/iobus`, `services/core`, `services/netcfg`, packaging/tools/shared contracts; local-HMI broker adapter tối thiểu. React FE/Web REST migration đã code-local; target handoff vẫn là consumer acceptance riêng.
 
 ---
 
@@ -801,23 +801,26 @@ HMI chỉ cần dùng contract, không tự quản Linux network. Host source hi
 broker adapter, HMI flow và BACnet rebind. Orange Pi service/runtime evidence đã có;
 physical panel, real Ethernet/BMS packet capture và reboot/power-loss HIL vẫn quyết định release.
 
-**Ownership:** `mkddc-netcfg` sở hữu active/stage/apply/confirm/rollback Ethernet;
+**Ownership:** `mkddc-netcfg` sở hữu active/configured/pending, capability discovery và
+validate/stage/apply/confirm/rollback Ethernet IPv4 + optional DNS;
 `mkddc-iobus` sở hữu BACnet hot-rebind; `mkddc-core`, IOP/UART và STM32 không tham gia.
 `mkddc-netcfg` là helper độc lập do systemd quản lý, không phải core process mới.
 
-Go local-HMI broker adapter tối thiểu đã được nối để hoàn thành đường local panel.
-React Web UI và REST transaction migration vẫn thuộc team BE/FE và không được suy diễn
-từ endpoint desired-config cũ.
+Go local-HMI broker adapter và Web REST/React transaction migration đã hoàn tất code-local.
+GET status cho session xác thực, POST mutation chỉ Admin; kết quả code-local
+không thay thế physical IP-handoff/HIL. Management hostname chỉ đọc trong authority và chỉ
+provision bằng `packaging/configure-web-hostname.sh`.
 
 ### Execution snapshot — 2026-07-22
 
 | Slice | Trạng thái | Evidence / còn thiếu |
 |---|---|---|
-| NWC-000..012 | Target service pass | Real NetworkManager static apply/confirm, process restart recovery, explicit rollback and 120 s timeout rollback pass on isolated dummy interfaces; DHCP/host reboot/power-loss remain physical HIL. |
+| NWC-000 | Contract locked 2026-07-28 | Strict protocol v1, exact capability `dns`/`management-hostname`, optional transactional DNS và management hostname read-only; schema/client fixtures là code-local gate, không phải HIL. |
+| NWC-001..012 | Target service pass một phần | Real NetworkManager static apply/confirm, process restart recovery, explicit rollback and 120 s timeout rollback pass on isolated dummy interfaces; physical DHCP/DNS/host reboot/power-loss remain HIL. |
 | NWC-013 | Target service pass | Unit verified, `end1` allowlist active, unauthorized UID and `wlan0` candidate rejected; exposure review recorded as 6.3 MEDIUM due required network capabilities/shared group runtime. |
 | NWC-014 | Runtime pass / packet open | BACnet datalink rebind observed three times while iobus PID and IOP scan remained continuous; packet-level `I-Am` capture on a real BMS segment remains open. |
-| NWC-015..016 | Partial pass | Web listener/broker, Core and IOP remained active with unchanged PIDs; SHM stayed `NORMAL`, fault-free and reliable. Modbus TCP reconnect and browser FE migration remain open. |
-| NWC-017 | Partial / physical HIL blocked | Identified Orange Pi execution record exists. Target has no connected DRM/touch panel or physical MCU/commissioning Ethernet, so full HIL gate remains RED. |
+| NWC-015..016 | Code-local/Web pass một phần | Web adapter/FE authority migration, same-origin recovery và process-continuity host/target-dummy evidence đã có; Modbus TCP reconnect và browser handoff qua đổi IP thật còn mở. |
+| NWC-017 | Partial / physical HIL blocked | Identified Orange Pi execution record exists. Target chưa có connected DRM/touch panel, physical MCU/commissioning Ethernet/DNS hoặc approved stable-hostname handoff, nên full HIL gate vẫn RED. |
 
 ### Dependency map
 
@@ -854,10 +857,12 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 - **Files:** `shared/netcfg_protocol_v1.schema.json`, broker/HMI client tests,
   [Interface Contracts](../04_design/INTERFACES.md).
-- **Output:** bounded JSON envelope, action/state/reason enums, Ethernet candidate and
-  active/pending/last-known-good response shapes.
-- **Verify:** valid/invalid fixtures pass one schema harness; unknown version/action,
-  oversized frame and illegal transition reject deterministically.
+- **Output:** bounded strict JSON envelope, action/state/reason enums, exact capability
+  `dns|management-hostname`, Ethernet/DNS candidate, active/configured/pending và read-only
+  management response shapes.
+- **Verify:** valid/invalid fixtures pass one schema harness; unknown field ở mọi object,
+  unknown version/action, oversized frame, DNS rule sai và illegal transition reject
+  deterministically.
 - **Depends:** ADR-017, IF-REQ-004.
 - **Done:** BE/HMI can generate clients without reading helper internals.
 
@@ -893,8 +898,9 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 ### NWC-004 — Read authoritative active network state
 
 - **Files:** `services/netcfg/netcfg.cpp` Linux platform state reader and fake-platform tests.
-- **Output:** interface/link, active IPv4/prefix, default gateway, DHCP/static source
-  and kernel generation timestamp; deterministic interface allowlist.
+- **Output:** interface/link/admin/carrier/health, active IPv4/prefix/gateway/DNS,
+  configured profile, exact capability và management hostname read-only; deterministic
+  interface allowlist.
 - **Verify:** no address, multiple addresses, link-down, route change, interface rename
   and malformed netlink message cases.
 - **Depends:** NWC-001.
@@ -903,9 +909,11 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 ### NWC-005 — Normalize and validate candidate
 
 - **Files:** `services/netcfg/netcfg.*` candidate model/validator and table-driven tests.
-- **Output:** canonical static/DHCP candidate; IPv4/netmask/prefix/gateway validation.
+- **Output:** canonical static/DHCP candidate; IPv4/netmask/prefix/gateway validation;
+  optional DNS preserve/auto/manual validation theo capability.
 - **Verify:** min/max prefix, gateway outside subnet, network/broadcast/multicast/
-  loopback/unspecified address, missing static field and stale unknown field rejection.
+  loopback/unspecified address, missing static field, unknown field, DNS auto với static,
+  DNS manual rỗng/trùng/không canonical/quá bốn server đều bị reject.
 - **Depends:** NWC-000.
 - **Done:** invalid candidate cannot reach platform apply code.
 
@@ -939,8 +947,8 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 ### NWC-009 — Implement DHCP apply and lease observation
 
-- **Files:** platform networkd backend and deterministic fake backend tests.
-- **Output:** request DHCP, observe actual kernel lease/address and keep recovery state.
+- **Files:** NetworkManager backend và deterministic fake backend tests.
+- **Output:** request DHCP, observe actual kernel lease/address/DNS và giữ recovery state.
 - **Verify:** lease success/change, no lease, late lease, link flap and cancel/rollback.
 - **Depends:** NWC-004, NWC-007.
 - **Done:** reported DHCP IP comes from kernel/lease state, never candidate/default text.
@@ -992,7 +1000,7 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 - **Depends:** NWC-004 and existing BACnet implementation.
 - **Done:** no `mkddc-iobus` process restart is needed for host IP change.
 
-### NWC-015 — Verify other SOM consumers on address change
+### NWC-015 — Verify other SOM/Web consumers on address change
 
 - **Files:** integration tests and only consumer fixes found necessary.
 - **Output:** Web wildcard listener behavior contract for BE handoff; Modbus TCP
@@ -1004,10 +1012,10 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 
 ### NWC-016 — Build host/fault integration harness and client handoff
 
-- **Files:** existing tools/test structure, fake platform backend and generated/example
-  client fixtures; no production BE/FE implementation.
-- **Output:** repeatable `status→validate→stage→apply→confirm/rollback` suite and client
-  package for BE/HMI teams.
+- **Files:** existing tools/test structure, fake platform backend, strict schema fixtures và
+  production BE/FE clients.
+- **Output:** repeatable `status→validate→stage→apply→confirm/rollback` IPv4/DNS suite và
+  client package dùng chung cho BE/HMI/FE.
 - **Verify:** malformed/RBAC peer, duplicate ID/IP, process kill, disk full, deadline,
   rollback, BACnet rebind and control-continuity scenarios.
 - **Depends:** NWC-000..015.
@@ -1019,16 +1027,18 @@ HMI `HNW-000..011` có thể chạy song song từ cuối W0 bằng fixtures/fak
 - **Files:** immutable evidence under controlled records, not design prose.
 - **Output:** identified SOM/image/NIC/switch/BMS setup, raw journal/log/packet/control
   traces, hashes, operator and reviewer.
-- **Verify:** static, DHCP, duplicate IP, bad gateway, link loss, helper/host reboot,
-  confirm/120 s rollback, BACnet `I-Am`, Web reconnect, Modbus TCP retry and continuous
+- **Verify:** static, DHCP, DNS auto/manual/preserve/rollback, duplicate IP, bad gateway,
+  link loss, helper/host reboot, stable management hostname handoff, confirm/120 s rollback,
+  BACnet `I-Am`, Web REST/WebSocket reconnect, Modbus TCP retry and continuous
   core/IOP/STM32 operation.
 - **Depends:** NWC-013..016 and BE adapter for end-to-end Web evidence.
 - **Done:** SWR-REQ-005..007, IF-REQ-004 and SEC-REQ-003 have approved target evidence;
   otherwise network release gate remains RED.
 
-### BE/FE handoff contract — external team work
+### BE/FE handoff contract — code-local complete, target handoff open
 
-- BE maps Admin REST and Service local-broker actions to the same NWC transaction;
+- BE maps Web GET status authenticated-read, Web POST Admin-only và local-HMI Admin action tới
+  cùng NWC transaction; Service chỉ là surface HMI;
   it must audit actor/old/new/result and return `saved`, `staged`, `applying`,
   `awaiting_confirmation`, `confirmed`, `rolled_back` truthfully.
 - FE renders Active and Pending separately, handles HTTP loss/reconnect to new IP,
@@ -1135,7 +1145,8 @@ scaffold lại source mà là đóng evidence vật lý theo thứ tự:
 2. capture BACnet `I-Am`, old/new/rollback traffic và Modbus TCP reconnect;
 3. chạy reboot/power-loss/disk-fault recovery với journal thật;
 4. lắp đúng DRM/touch/button hardware và thực hiện UC-HMI-016..019/usability;
-5. team BE/FE chuyển Web REST/UI từ desired-file path sang transaction contract.
+5. chạy Web REST/WebSocket same-origin handoff qua management hostname trên IP mới; BE/FE
+   transaction migration đã code-local, không dùng lại desired-file path.
 
 ---
 

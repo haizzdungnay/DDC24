@@ -36,7 +36,18 @@ func TestNetworkPageReadsConfigFiles(t *testing.T) {
 	}
 }
 
-func TestNetworkPagePutWritesServiceConfigWithoutRewritingEthernetOrWifiMode(t *testing.T) {
+func TestNetworkPageDoesNotSubstituteAnotherInterfaceAddress(t *testing.T) {
+	result := networkPageConfigFromFiles(
+		ConfigDevice{DeviceName: "DDC-Lab"},
+		ConfigNetwork{Eth: map[string]any{"mode": "dhcp"}},
+		ConfigBacnet{BIP: map[string]any{"enabled": true, "udp_port": 47808}},
+	)
+	if result.IP != "" || result.BMSLink != "offline" {
+		t.Fatalf("northbound = %+v; want configured Ethernet state without host-interface fallback", result)
+	}
+}
+
+func TestNetworkPagePutPreservesHostnameEthernetAndWifiMode(t *testing.T) {
 	app, token := newTestAppWithAdmin(t)
 	writeNetworkPageFixture(t, app.cfg.ConfigDir)
 	body := `{"northbound":{"deviceName":"DDC-Office","ip":"10.9.8.7","dhcp":false,"wifiEnabled":true,"subnet":"255.255.255.0","gateway":"10.9.8.1","bacnetDeviceId":"2222","bacnetDeviceName":"DDC-Office","bacnetPort":47810,"bmsLink":"online"},"southbound":[]}`
@@ -50,7 +61,7 @@ func TestNetworkPagePutWritesServiceConfigWithoutRewritingEthernetOrWifiMode(t *
 	}
 	var network ConfigNetwork
 	readJSONFile(t, filepath.Join(app.cfg.ConfigDir, "network.conf"), &network)
-	if network.Hostname != "DDC-Office" ||
+	if network.Hostname != "ddc-lab" ||
 		stringValue(network.Eth, "ip") != "10.1.2.3" ||
 		stringValue(network.Eth, "gateway") != "10.1.2.1" ||
 		stringValue(network.Wifi, "mode") != "dhcp" ||

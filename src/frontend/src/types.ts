@@ -417,21 +417,37 @@ export type NetcfgLink = 'up' | 'down' | 'unknown'
 export type NetcfgState = 'idle' | 'staged' | 'applying' | 'awaiting_confirmation' | 'confirmed' | 'rolling_back' | 'rolled_back' | 'failed'
 export type NetcfgTransactionAction = 'validate' | 'stage' | 'apply' | 'confirm' | 'rollback'
 
+export interface NetcfgDns {
+  mode: 'auto' | 'manual'
+  servers: string[]
+}
+
 export interface NetcfgCandidate {
   interface: string
   mode: NetcfgMode
   ipv4?: string
   netmask?: string
   gateway?: string
+  dns?: NetcfgDns
 }
 
 export interface NetcfgActive {
   interface: string
   link: NetcfgLink
+  adminUp?: boolean
+  carrier?: boolean
+  reasonCode?: string
   mode: NetcfgMode | 'unknown'
   ipv4: string
   prefixLength: number
   gateway: string
+  dnsServers?: string[]
+}
+
+export interface NetcfgManagement {
+  hostname: string
+  mdnsName: string
+  stable: boolean
 }
 
 export interface NetcfgResponse {
@@ -445,6 +461,9 @@ export interface NetcfgResponse {
   rollbackRemainingS?: number
   active?: NetcfgActive
   pending?: NetcfgCandidate
+  configured?: NetcfgCandidate
+  capabilities?: string[]
+  management?: NetcfgManagement
 }
 
 export interface NetcfgTransactionRequest {
