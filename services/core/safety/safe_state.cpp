@@ -29,14 +29,21 @@ void SafeState::apply(const IoSnapshot& io, const PointTable& table, OutputCmd* 
                              ? (!graph_->loaded() && !resolver_->any_active_above_default())
                              : false;
 
-    const bool trigger = fault || stale || graph_input_bad || no_controller;
+    /* T8: Task overrun lặp quá ngưỡng. Ngang hàng với các trigger khác —
+     * không phải đường riêng, để mọi nguồn nguy hiểm hội tụ về cùng một hành
+     * động an toàn. */
+    const bool overrun = overrun_ && overrun_->should_force_safe();
+
+    const bool trigger = fault || stale || graph_input_bad || no_controller || overrun;
+
+    triggers_ = Triggers{fault, stale, graph_input_bad, no_controller, overrun};
 
     if (trigger != active_) {
         if (trigger)
             std::fprintf(stderr,
                          "ERROR safe_state.enter fault=%d stale=%d graph_bad=%d no_ctrl=%d"
-                         " (AO->safe, DO->open)\n",
-                         fault, stale, graph_input_bad, no_controller);
+                         " overrun=%d (AO->safe, DO->open)\n",
+                         fault, stale, graph_input_bad, no_controller, overrun);
         else
             std::fprintf(stderr, "INFO  safe_state.exit (trả quyền cho priority resolver)\n");
         active_ = trigger;   /* log 1 lần/transition (§5.3) */

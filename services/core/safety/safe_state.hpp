@@ -17,6 +17,7 @@
 #include "graph/point_quality.hpp"
 #include "graph/point_table.hpp"
 #include "ipc/priority_resolver.hpp"
+#include "safety/overrun_monitor.hpp"
 
 namespace core {
 
@@ -29,6 +30,21 @@ public:
               const PriorityResolver* resolver = nullptr)
         : quality_(quality), graph_(graph), resolver_(resolver) {}
 
+    /* T8: Task overrun vượt ngưỡng liên tiếp (PROGRAM_TASK_SCHEDULER_SPEC §6.4).
+     * OverrunMonitor chỉ ĐÁNH GIÁ; quyền ép output nằm ở đây — đúng phân tách
+     * trách nhiệm ở §6.1. nullptr = không đánh giá T8. */
+    void set_overrun_monitor(const OverrunMonitor* m) { overrun_ = m; }
+
+    /* Lý do vào safe của lần transition gần nhất — cho alarm và chẩn đoán. */
+    struct Triggers {
+        bool iop_fault = false;
+        bool stale = false;
+        bool graph_input_bad = false;
+        bool no_controller = false;
+        bool overrun = false;
+    };
+    const Triggers& triggers() const { return triggers_; }
+
     /* Có thể ghi đè *inout — gọi SAU priority_resolver.resolve() (scan step 7). */
     void apply(const IoSnapshot& io, const PointTable& table, OutputCmd* inout);
 
@@ -38,6 +54,8 @@ private:
     const PointQuality& quality_;
     const GraphRuntime* graph_;
     const PriorityResolver* resolver_;
+    const OverrunMonitor*   overrun_ = nullptr;
+    Triggers triggers_;
     bool active_ = false;
 };
 

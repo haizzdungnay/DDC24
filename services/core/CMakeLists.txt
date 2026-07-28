@@ -16,7 +16,7 @@ FetchContent_MakeAvailable(nlohmann_json)
 add_library(core_lib STATIC
     graph/scan_loop.cpp graph/point_table.cpp graph/point_quality.cpp graph/graph_runtime.cpp
     alarm/alarm_runtime.cpp
-    schedule/schedule_runtime.cpp ipc/priority_resolver.cpp safety/safe_state.cpp safety/safe_state_config.cpp ipc/config_reload.cpp
+    schedule/schedule_runtime.cpp ipc/priority_resolver.cpp safety/safe_state.cpp safety/safe_state_config.cpp safety/overrun_monitor.cpp ipc/config_reload.cpp
     ipc/iobus_reader.cpp ipc/output_writer.cpp graph/state_snapshot.cpp graph/runtime_point_snapshot.cpp
     bacnet/bacnet_objtable.cpp ipc/web_ipc.cpp diagnostics/core_metrics.cpp
     st/st_program.cpp st/st_runtime.cpp st/st_artifact.cpp
@@ -60,7 +60,7 @@ if(CORE_BUILD_TESTS)
   enable_testing()
   add_executable(core_tests
       ipc/tests/test_iobus_reader.cpp graph/tests/test_point_quality.cpp
-      ipc/tests/test_priority_resolver.cpp safety/tests/test_safe_state.cpp graph/tests/test_scan_loop.cpp
+      ipc/tests/test_priority_resolver.cpp safety/tests/test_safe_state.cpp safety/tests/test_overrun_monitor.cpp graph/tests/test_scan_loop.cpp
       ipc/tests/test_web_ipc.cpp graph/tests/test_graph_runtime.cpp safety/tests/test_safe_state_config.cpp
       ipc/tests/test_config_reload.cpp graph/tests/test_state_snapshot.cpp
       bacnet/tests/test_bacnet_objtable.cpp

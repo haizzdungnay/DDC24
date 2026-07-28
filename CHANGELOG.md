@@ -7,6 +7,15 @@
 ---
 
 ## [Unreleased]
+### Added — ACTION 7: OverrunMonitor tách khỏi CoreMetrics (TASK_SAFETY_GATE) (2026-07-28)
+- Thêm `services/core/safety/overrun_monitor.{hpp,cpp}` — đánh giá sức khoẻ thời gian của Task và trả `should_force_safe()`. **Đặt trong `safety/`, không phải `diagnostics/`**: `CoreMetrics` là observability thuần tuý (có thể tắt/lấy mẫu thưa/hỏng mà hệ vẫn phải điều khiển đúng), nên nhét ngưỡng an toàn vào đó sẽ khiến một thành phần không thiết yếu nắm quyền thiết yếu và làm chính sách an toàn không test được độc lập với bộ đếm.
+- `SafeState` nhận `OverrunMonitor` như **trigger T8 ngang hàng** với IOP fault / SHM stale / input BAD / no-controller — không phải đường riêng, để mọi nguồn nguy hiểm hội tụ về cùng một hành động an toàn. Thêm `SafeState::triggers()` để alarm và chẩn đoán biết lý do vào safe.
+- Chính sách **bất đối xứng có chủ ý**: vào safe sau N lần overrun liên tiếp, nhưng ra cũng cần N lần chạy trong budget liên tiếp. Ra ngay sau một lần tốt sẽ gây dao động vào/ra safe-state khi tải dao động quanh ngưỡng — trạng thái tệ hơn cả ở yên trong safe.
+- `reset()` xoá trạng thái quyết định nhưng **giữ** `total`/`max_exec_ns` — xoá chúng sẽ xoá dấu vết một Task từng có vấn đề. Ngưỡng 0 bị kẹp về 1 (ngưỡng 0 = "safe ngay cả khi không overrun", vô nghĩa).
+- Test: 16 test mới, gồm nhóm `OverrunMonitorSeparation` khoá lại việc `CoreMetrics` không có API nào ảnh hưởng đầu ra, và 3 test T8 trong `test_safe_state.cpp`.
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 568/568 pass** (552 → +16).
+- **TASK_SAFETY_GATE = PASS.**
+
 ### Changed — ACTION 6: Typed IR + runtime zero-allocation (TYPED_IR_GATE, ZERO_ALLOCATION_GATE) (2026-07-28)
 - **Đóng finding F-02.** `mkddc-core` không còn thực thi source ST. `StProgramRuntime::activate()` nay nhận **byte artifact** đã verify thay vì chuỗi source — đúng `PROGRAM_SOM_FW_DRAFT_DESIGN` §4.
 - **Đóng finding F-03.** Executor không cấp phát trong scan path: mọi slot, mọi state FB, mọi bộ đệm ảnh chụp đều cấp phát một lần lúc load. Kiểm bằng test đếm `operator new` qua 1000 chu kỳ → **0 lần**.
