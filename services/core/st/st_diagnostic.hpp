@@ -18,6 +18,8 @@ enum class StSeverity { ERROR, WARNING };
  * không parse message tiếng Anh). Thêm code mới: nối vào cuối, không đổi số cũ. */
 namespace st_diag_code {
 constexpr const char* kLexUnexpectedChar = "ST-LEX-001";
+constexpr const char* kBadTimeLiteral    = "ST-LEX-002";
+constexpr const char* kUnterminatedComment = "ST-LEX-003";
 constexpr const char* kSyntaxUnexpected  = "ST-SYN-001";
 /* Lồng quá sâu — biểu thức HOẶC statement. Tách khỏi ST-SYN-001 vì đây không
  * phải "viết sai cú pháp" mà là "vượt giới hạn tài nguyên": BE nên báo user
@@ -30,6 +32,24 @@ constexpr const char* kDuplicateVar      = "ST-SEM-004";
 constexpr const char* kUnknownType       = "ST-SEM-005";
 constexpr const char* kUnknownFunction   = "ST-SEM-006";
 constexpr const char* kArgCountMismatch  = "ST-SEM-007";
+constexpr const char* kIntLiteralOutOfRange = "ST-SEM-008";
+constexpr const char* kAssignToFbInstance   = "ST-SEM-009";
+constexpr const char* kFbCalledTwice        = "ST-SEM-010";
+constexpr const char* kWriteToFbOutput      = "ST-SEM-011";
+constexpr const char* kFbFunctionConfusion  = "ST-SEM-012";
+constexpr const char* kBadFbParam           = "ST-SEM-013";
+constexpr const char* kBadRetainType        = "ST-SEM-014";
+
+/* Runtime fault (ST_SUBSET_SPEC §12.4) — không crash process; kết thúc chu kỳ,
+ * không commit output, chuyển cho chính sách fault của scheduler. */
+constexpr const char* kRtIntOverflow     = "ST-RT-001";
+constexpr const char* kRtDivByZero       = "ST-RT-002";
+constexpr const char* kRtConvOutOfRange  = "ST-RT-003";
+constexpr const char* kRtNonFiniteReal   = "ST-RT-004";
+constexpr const char* kRtNegativeTime    = "ST-RT-005";
+constexpr const char* kRtLimitMinMax     = "ST-RT-006";
+constexpr const char* kRtSqrtNegative    = "ST-RT-007";
+constexpr const char* kRtNonFiniteInput  = "ST-RT-008";
 
 /* Vượt giới hạn tài nguyên (st_limits.hpp). Tách riêng khỏi ST-SYN-* để BE
  * phân biệt được "chương trình sai" với "chương trình quá lớn" — hai hành
@@ -42,6 +62,8 @@ constexpr const char* kIdentifierTooLong  = "ST-LIM-005";
 /* Danh sách diagnostic bị cắt vì chạm trần — luôn là phần tử CUỐI của mảng.
  * BE thấy code này thì biết còn lỗi chưa hiển thị, không được kết luận "hết lỗi". */
 constexpr const char* kDiagnosticsTruncated = "ST-LIM-006";
+constexpr const char* kTooManyFbInstances   = "ST-LIM-007";
+constexpr const char* kTooManyRetainVars    = "ST-LIM-008";
 
 /* IO map validation (st_io_map.hpp) */
 constexpr const char* kIoMapUnknownVar      = "ST-IOMAP-001";
