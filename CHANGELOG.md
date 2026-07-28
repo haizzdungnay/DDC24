@@ -7,6 +7,11 @@
 ---
 
 ## [Unreleased]
+### Fixed — CI dependency and scoped Grype exception (2026-07-28)
+- build-and-test: cài `libsodium-dev` trong toàn bộ C++ matrix để các cấu hình dùng ST package integrity configure được nhất quán với sanitizer job.
+- security: thêm `.grype.yaml` chỉ bỏ qua `GHSA-qwww-vcr4-c8h2` cho `react-router@7.18.1` vì advisory chỉ ảnh hưởng unstable RSC APIs không được FE SPA sử dụng; mọi finding High khác vẫn fail CI.
+- verification: local FE test/lint/build pass; Grype v0.110.0 tái hiện và suppress đúng một advisory trên package/version nêu trên.
+
 ### Fixed — Network no-carrier Apply and offline rollback verification (2026-07-28)
 - frontend/network: hiển thị `NO_CARRIER`, khóa riêng `Apply` khi interface chưa `adminUp+carrier`, giữ Validate/Stage và tách ACTIVE/CONFIGURED/PENDING/EDITABLE DRAFT theo authority.
 - netcfg/rollback: luôn xác minh interface + configured profile kể cả DNS; snapshot runtime vốn offline/no-IP không bị ép khớp kernel state giả, còn snapshot healthy vẫn verify nghiêm ngặt và luôn gỡ candidate address.

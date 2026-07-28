@@ -61,6 +61,7 @@ jobs:
             g++ \
             libgtest-dev \
             libgmock-dev \
+            libsodium-dev \
             ninja-build \
             ${{ matrix.extra_packages }}
 
