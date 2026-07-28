@@ -7,6 +7,18 @@
 ---
 
 ## [Unreleased]
+### Added — ACTION 9: multi-task scheduler (SCHEDULER_GATE) (2026-07-28)
+- Thêm `services/core/st/st_scheduler.{hpp,cpp}` — **fixed-priority, non-preemptive tại task boundary** theo `PROGRAM_TASK_SCHEDULER_SPEC`. Không preempt làm "process image không đổi trong một lần thực thi Program" thành bất biến **cấu trúc** thay vì quy ước, và loại hẳn khoá khỏi đường điều khiển nên không có priority inversion.
+- Mô hình đối tượng: Resource → Task (≤8, ưu tiên duy nhất) → ProgramInstance (≤16/task, ≤32 toàn hệ) → Artifact. Hai instance cùng artifact có **trạng thái hoàn toàn tách biệt**.
+- Tick cơ sở 50 ms; chu kỳ phải là bội số của tick (nếu không task trôi so với chính chu kỳ khai báo). Bù trôi theo mốc **lý thuyết**; lỡ nhiều chu kỳ thì **bỏ, không chạy bù** — chạy bù làm timer nhảy và làm quá tải nặng thêm.
+- Máy trạng thái 11 trạng thái + 6 lệnh vòng đời. `stop` **không** ép safe-state (hành động vận hành có chủ ý ≠ yêu cầu an toàn); "không ai điều khiển" xử lý ở tầng Resource qua trigger `no_controller`.
+- Fault của **một** Program huỷ toàn bộ phần còn lại của Task: các Program trong một Task thường phối hợp, chạy tiếp sẽ đẩy đầu ra vào tổ hợp chưa từng được thiết kế.
+- Rollback đi **lại** đúng đường verify thay vì nạp thẳng — rollback không được là cửa sau bỏ qua kiểm tra. Last-known-good chỉ được ghi nhận **sau khi** package chạy ≥1 tick không fault.
+- **Hai lỗi thiết kế do test phát hiện, đã sửa:** (1) `ACTIVE` từng tự động lên `RUNNING` khiến lệnh `start` vô nghĩa — nay chỉ `RUNNING` mới được thực thi; (2) activation từng chỉ áp cho task **đến hạn**, khiến task chu kỳ dài phải đợi trọn một chu kỳ dù BE đã báo "đã activate" — nay áp cho **mọi** task ở đầu tick.
+- Test: 30 test mới phủ đủ 12 nhóm bắt buộc ở SPEC §11 (thứ tự ưu tiên, chu kỳ không trôi, bỏ tick, nhiều task cùng hạn, fault dừng task, không commit nửa chừng, overrun→safe, enable/disable, vòng đời, instance độc lập).
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 603/603 pass** (573 → +30); `nm mkddc-core` = 0 symbol compiler.
+- **SCHEDULER_GATE = PASS.**
+
 ### Added — RT health metric quan sát được từ Web/BE (chống tái diễn VG-05) (2026-07-28)
 - `shared/mkddc_shm.h`: nối 4 field vào **cuối** `kx_plc_shm_t` — `rt_sched_policy`, `rt_sched_priority`, `rt_mlock_ok`, `rt_degraded`. Lý do: cảnh báo RT trước đây chỉ log một dòng lúc khởi động rồi cuộn khỏi journal, nên core đã chạy nhiều ngày ở `SCHED_OTHER` mà không ai biết.
 - **Không đổi magic** — có chủ ý: consumer đọc PLC SHM bằng offset cứng + kiểm độ dài theo ngữ nghĩa min-length (`web/backend/core_client.go`), nên nối vào cuối là tương thích ngược và binary cũ vẫn đọc đúng. Đổi thứ tự/kiểu/kích thước field cũ vẫn là ABI change đầy đủ.
