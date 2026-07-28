@@ -24,7 +24,17 @@ SnapshotSource source_for_level(int level)
 
 void set_id(std::array<char, 6>& id, const char* prefix, int channel)
 {
-    std::snprintf(id.data(), id.size(), "%s-%02d", prefix, channel + 1);
+    /* Buffer 6 byte chứa đúng "XX-NN\0" — prefix 2 ký tự + '-' + 2 chữ số.
+     * `snprintf` không tràn bộ nhớ, nhưng nếu số kênh vượt 99 thì ID bị CẮT
+     * ÂM THẦM thành một ID khác hợp lệ về hình thức nhưng sai điểm — loại lỗi
+     * không có cách nào phát hiện ở phía đọc.
+     *
+     * Kẹp tường minh ở đây thay vì tin caller: hôm nay KX_N_UI = 16 nên không
+     * thể xảy ra, nhưng ràng buộc đó nằm ở file khác và sẽ không ai nhớ khi
+     * tăng số kênh. Kẹp cũng cho compiler chứng minh được biên nên
+     * -Wformat-truncation không còn cảnh báo. */
+    const int ch = (channel + 1 < 1) ? 1 : ((channel + 1 > 99) ? 99 : channel + 1);
+    std::snprintf(id.data(), id.size(), "%.2s-%02d", prefix, ch);
 }
 
 bool same_value(float left, float right)

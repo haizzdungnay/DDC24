@@ -10,7 +10,8 @@
  *   GET_DIAG    → DIAG_RESP fake + clear sticky WDG_RESET
  *   RESET_IO    → ACK + IO về safe
  * Inject: --crc-error RATE, --timeout N, --nack CMD ERR, --seq-wrong,
- *         --stuck-relay, --overtemp, --hs-status N
+ *         --stuck-relay, --overtemp, --hs-status N, --vdd-fault,
+ *         --adc-fault {1|2|3}, --dac-fault, --wdg-reset N, --stuck-ui CH RAW
  */
 #include <cmath>
 #include <cstdint>
@@ -51,6 +52,13 @@ struct Inject {
     bool     overtemp = false;        /* MCU_TEMP=90.0°C + FAULT bit6 (IOP_FAULT_MCU_OVERTEMP) */
     bool     vdd_fault = false;       /* FAULT bit7 (IOP_FAULT_VDD) — critical alarm path */
     uint8_t  hs_status = IOP_HS_STATUS_OK;
+
+    /* --- Fault injection bổ sung, phủ nốt SPEC §9.3 --- */
+    int      adc_fault = 0;           /* 0=không, 1=ADC1 (ch1-8), 2=ADC2 (ch9-16), 3=cả hai */
+    bool     dac_fault = false;       /* FAULT bit2 (IOP_FAULT_DAC) — AO không ra được lệnh */
+    uint16_t wdg_reset_cnt = 0;       /* WDG_RESET_CNT + sticky FAULT bit5 */
+    int      stuck_ui_ch = -1;        /* kênh UI bị "đơ" ở giá trị cố định (0-based) */
+    int32_t  stuck_ui_raw = 0;
 };
 
 uint64_t now_ns()
@@ -203,15 +211,30 @@ void build_io_resp_payload(McuState& st, const Inject& inj, uint8_t* p)
      * UI1-8/UI16 are analog-safe; UI9/UI11 are NTC; UI10 is CO2 voltage;
      * UI12/UI13/UI15 are dry contacts; UI14 is light percent. */
     for (int i = 0; i < 16; i++) {
-        put_be32s(p + 4 * i, simulated_ui_raw(i, t));
+        /* --stuck-ui mô phỏng cảm biến "đơ": giá trị không đổi dù thời gian
+         * trôi. Đây là hỏng hóc thực tế mà CRC/quality KHÔNG bắt được, nên
+         * phải test được rằng logic phía trên phát hiện bằng cách khác. */
+        const int32_t raw = (i == inj.stuck_ui_ch) ? inj.stuck_ui_raw
+                                                   : simulated_ui_raw(i, t);
+        put_be32s(p + 4 * i, raw);
     }
-    /* [64] ADC1_STAT  [65] ADC2_STAT */
-    p[64] = IOP_ADC_STAT_DRDY_OK;
-    p[65] = IOP_ADC_STAT_DRDY_OK;
+    /* [64] ADC1_STAT  [65] ADC2_STAT
+     * --adc-fault mô phỏng mất DRDY của chip ADS131M08: SOM phải hạ quality
+     * kênh tương ứng xuống BAD và (nếu kênh đó đang được graph dùng) vào
+     * safe-state theo trigger T6 — đúng kịch bản "ADC loss" của SPEC §9.3. */
+    /* Mất ADC = KHÔNG set DRDY_OK (chip không báo mẫu mới) và bật LOCK
+     * (lỗi giao tiếp SPI) — đúng cách ADS131M08 biểu hiện khi mất kết nối. */
+    p[64] = (inj.adc_fault == 1 || inj.adc_fault == 3)
+                ? static_cast<uint8_t>(IOP_ADC_STAT_LOCK) : IOP_ADC_STAT_DRDY_OK;
+    p[65] = (inj.adc_fault == 2 || inj.adc_fault == 3)
+                ? static_cast<uint8_t>(IOP_ADC_STAT_LOCK) : IOP_ADC_STAT_DRDY_OK;
     /* [66..67] MCU_TEMP */
     put_be16(p + 66, static_cast<uint16_t>(inj.overtemp ? 900 : 250));
     /* [68..69] FAULT_FLAGS v2 */
     uint16_t flags = st.fault_flags;
+    if (inj.adc_fault == 1 || inj.adc_fault == 3) flags |= IOP_FAULT_ADC1;
+    if (inj.adc_fault == 2 || inj.adc_fault == 3) flags |= IOP_FAULT_ADC2;
+    if (inj.dac_fault)   flags |= IOP_FAULT_DAC;
     if (inj.stuck_relay) flags |= IOP_FAULT_RELAY_STUCK;
     if (inj.overtemp)    flags |= IOP_FAULT_MCU_OVERTEMP;
     if (inj.vdd_fault)   flags |= IOP_FAULT_VDD;
@@ -230,7 +253,9 @@ void build_diag_payload(McuState& st, const Inject& inj, uint8_t* p)
     put_be16(p + 4, st.rx_cnt);
     put_be16(p + 6, st.crc_err);
     put_be16(p + 8, st.seq_err);
-    put_be16(p + 10, 0);                                                  /* WDG_RESET_CNT */
+    /* WDG_RESET_CNT: trước đây hằng 0 nên không test được đường "MCU vừa
+     * reset do watchdog". --wdg-reset N cho phép mô phỏng, kèm sticky bit5. */
+    put_be16(p + 10, inj.wdg_reset_cnt);                                  /* WDG_RESET_CNT */
     put_be16(p + 12, 1000);                                               /* ADC rate Hz */
     put_be16(p + 14, static_cast<uint16_t>(inj.overtemp ? 900 : 300));
     put_be16(p + 16, 3300);                                               /* VDD mV */
@@ -315,6 +340,14 @@ int main(int argc, char** argv)
         else if (a == "--stuck-relay") inj.stuck_relay = true;
         else if (a == "--overtemp") inj.overtemp = true;
         else if (a == "--vdd-fault") inj.vdd_fault = true;
+        else if (a == "--adc-fault" && i + 1 < argc) inj.adc_fault = std::atoi(argv[++i]);
+        else if (a == "--dac-fault") inj.dac_fault = true;
+        else if (a == "--wdg-reset" && i + 1 < argc)
+            inj.wdg_reset_cnt = static_cast<uint16_t>(std::atoi(argv[++i]));
+        else if (a == "--stuck-ui" && i + 2 < argc) {
+            inj.stuck_ui_ch = std::atoi(argv[++i]);
+            inj.stuck_ui_raw = static_cast<int32_t>(std::atol(argv[++i]));
+        }
         else if (a == "--hs-status" && i + 1 < argc) inj.hs_status = static_cast<uint8_t>(std::atoi(argv[++i]));
         else if (a == "--verbose" || a == "-v") verbose = true;
         else if (a == "--self-test") return run_self_test() ? 0 : 1;
@@ -322,6 +355,12 @@ int main(int argc, char** argv)
             std::printf("usage: fake_mcu (--pty | --uart DEV) [inject options]\n"
                         "  --crc-error RATE   --timeout N   --nack CMD ERR\n"
                         "  --seq-wrong   --stuck-relay   --overtemp   --vdd-fault   --hs-status N\n"
+                        "  --adc-fault {1|2|3}  1=ADC1 ch1-8, 2=ADC2 ch9-16, 3=cả hai\n"
+                        "                       (mất DRDY + LOCK -> SOM phải hạ quality BAD)\n"
+                        "  --dac-fault          FAULT bit2, AO không ra được lệnh\n"
+                        "  --wdg-reset N        WDG_RESET_CNT=N + sticky FAULT bit5\n"
+                        "  --stuck-ui CH RAW    kênh UI đơ ở giá trị RAW\n"
+                        "                       (hỏng mà CRC/quality không bắt được)\n"
                         "  --self-test\n");
             return 0;
         }

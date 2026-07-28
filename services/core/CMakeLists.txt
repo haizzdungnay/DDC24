@@ -21,7 +21,7 @@ add_library(core_lib STATIC
     bacnet/bacnet_objtable.cpp ipc/web_ipc.cpp diagnostics/core_metrics.cpp
     st/st_program.cpp st/st_runtime.cpp st/st_artifact.cpp
     st/st_io_map.cpp st/st_cyclic_runtime.cpp st/st_trace.cpp
-    st/st_loader.cpp st/st_exec.cpp st/st_public_key.cpp)
+    st/st_loader.cpp st/st_exec.cpp st/st_public_key.cpp st/st_scheduler.cpp st/st_process_image.cpp st/st_retain.cpp st/st_control_api.cpp)
 target_include_directories(core_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${SHARED_DIR})
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SODIUM REQUIRED IMPORTED_TARGET libsodium)
@@ -47,6 +47,10 @@ target_link_libraries(mkddc-core PRIVATE core_lib)
 add_executable(mkddc-st-validate st/st_validate_main.cpp)
 target_link_libraries(mkddc-st-validate PRIVATE st_compiler_lib)
 
+# ACTION 15: công cụ CHÍNH THỨC để BE sinh artifact đã ký.
+add_executable(mkddc-st-compile st/st_compile_main.cpp)
+target_link_libraries(mkddc-st-compile PRIVATE st_compiler_lib)
+
 option(CORE_BUILD_TESTS "Build core unit tests" ON)
 if(CORE_BUILD_TESTS)
   target_compile_definitions(core_lib PUBLIC CORE_BUILD_TESTS=1)
@@ -70,6 +74,7 @@ if(CORE_BUILD_TESTS)
       st/tests/test_st_io_map.cpp st/tests/test_st_cyclic_runtime.cpp
       st/tests/test_st_validate_cli.cpp st/tests/test_st_limits.cpp
       st/tests/test_st_lang.cpp st/tests/test_st_ir.cpp st/tests/test_st_exec.cpp
+      st/tests/test_st_scheduler.cpp st/tests/test_st_integration.cpp st/tests/test_st_retain.cpp st/tests/test_st_control_api.cpp
       tests/allocation_probe.cpp)
   target_link_libraries(core_tests PRIVATE st_compiler_lib)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
@@ -85,4 +90,23 @@ if(CORE_BUILD_TESTS)
   endif()
   include(GoogleTest)
   gtest_discover_tests(core_tests)
+endif()
+
+# ---- Fuzz harness (Phase 7 / VG-03) ----
+#   CXX=clang++ cmake -S services -B build/fuzz -DMKDDC_BUILD_FUZZ=ON \
+#       -DMKDDC_SANITIZE=address -DCORE_BUILD_TESTS=OFF
+#
+# Cần clang (libFuzzer). Chạy kèm ASan để lỗi bộ nhớ lộ ra ngay tại input gây
+# lỗi, thay vì hỏng âm thầm rồi crash ở chỗ khác.
+option(MKDDC_BUILD_FUZZ "Build libFuzzer harnesses (cần clang)" OFF)
+if(MKDDC_BUILD_FUZZ)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "MKDDC_BUILD_FUZZ cần clang++ (libFuzzer). Đặt CXX=clang++.")
+  endif()
+  foreach(fz st_parser st_loader)
+    add_executable(fuzz_${fz} st/fuzz/fuzz_${fz}.cpp)
+    target_link_libraries(fuzz_${fz} PRIVATE st_compiler_lib)
+    target_compile_options(fuzz_${fz} PRIVATE -fsanitize=fuzzer)
+    target_link_options(fuzz_${fz} PRIVATE -fsanitize=fuzzer)
+  endforeach()
 endif()

@@ -32,6 +32,17 @@ public:
      * ADR-011 overload: thêm ui_reliability[] để ghi kx_point_t.reliability cho AI
      * trực tiếp từ io_shm (thay vì re-compute từ quality, mất thông tin fault cause).
      */
+    /* Sức khoẻ RT — đo MỘT LẦN lúc khởi động rồi giữ nguyên. Tách khỏi
+     * publish() vì nó không đổi theo scan; publish() gọi 1 Hz thì không việc
+     * gì phải truyền lại giá trị bất biến mỗi lần. */
+    struct RtHealth {
+        uint8_t sched_policy = 0;
+        uint8_t sched_priority = 0;
+        bool    mlock_ok = false;
+        bool    degraded = true;
+    };
+    void set_rt_health(const RtHealth& h) { rt_ = h; }
+
     void publish(const PointTable& table, uint32_t scan_count, uint32_t scan_overrun,
                  uint16_t fault_flags, uint8_t iop_status,
                  const uint8_t ui_reliability[KX_N_UI]);
@@ -50,6 +61,8 @@ public:
     kx_plc_shm_t*       shm()       { return shm_; }
 
 private:
+    RtHealth rt_;
+
     kx_plc_shm_t* shm_ = nullptr;
 };
 

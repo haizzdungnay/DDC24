@@ -128,6 +128,10 @@ void BacnetObjTable::publish(const PointTable& table,
     shm_->plc_running  = 1;
     shm_->scan_count   = scan_count;
     shm_->scan_overrun = scan_overrun;
+    shm_->rt_sched_policy = rt_.sched_policy;
+    shm_->rt_sched_priority = rt_.sched_priority;
+    shm_->rt_mlock_ok = rt_.mlock_ok ? 1u : 0u;
+    shm_->rt_degraded = rt_.degraded ? 1u : 0u;
     KX_WRITE_END(shm_);
 }
 

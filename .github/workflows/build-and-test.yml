@@ -79,6 +79,21 @@ jobs:
       - name: Cleanup stale shared memory
         run: rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm
 
+      - name: Kiểm bất biến — watchdog chỉ kick sau khi hoàn tất scan
+        run: |
+          # PROGRAM_TASK_SCHEDULER_SPEC §9: kick giữa scan biến watchdog
+          # thành liveness check vô nghĩa — một step() treo vẫn kick đều.
+          # Kick hợp lệ CHỈ nằm trong main.cpp (hook after_scan).
+          if grep -n 'WATCHDOG=1' services/core/graph/scan_loop.cpp; then
+            echo 'LỖI: watchdog kick nằm trong scan loop'
+            exit 1
+          fi
+          test "$(grep -c 'WATCHDOG=1' services/core/main.cpp)" = "1" || {
+            echo 'LỖI: số điểm kick trong main.cpp phải đúng bằng 1'
+            exit 1
+          }
+          echo 'OK: watchdog chỉ kick tại một điểm, sau khi scan hoàn tất'
+
       - name: Kiểm bất biến — mkddc-core KHÔNG được chứa parser ST
         run: |
           # TYPED_IR_ARTIFACT_SPEC §10.3: runtime chỉ thực thi artifact đã
@@ -160,3 +175,50 @@ jobs:
         run: |
           cd fw
           make
+
+  sanitizers:
+    name: ASan + UBSan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cài phụ thuộc
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libsodium-dev
+      - name: ASan
+        run: |
+          # -Werror bắt lỗi compile-time; ASan bắt lỗi bộ nhớ lúc chạy. Loader IR
+          # không kiểm biên sau khi load nên một lỗi ở đó là lỗi an toàn bộ nhớ.
+          cmake -S services -B build/asan -DCMAKE_BUILD_TYPE=Debug -DMKDDC_SANITIZE=address
+          cmake --build build/asan --parallel $(nproc)
+          rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm
+          ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build/asan --output-on-failure --parallel 4
+      - name: UBSan
+        run: |
+          # -fno-sanitize-recover: UB phải làm test FAIL, không được chỉ in cảnh
+          # báo rồi chạy tiếp — UB im lặng lọt qua CI tệ hơn không chạy UBSan.
+          cmake -S services -B build/ubsan -DCMAKE_BUILD_TYPE=Debug -DMKDDC_SANITIZE=undefined
+          cmake --build build/ubsan --parallel $(nproc)
+          rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm
+          ctest --test-dir build/ubsan --output-on-failure --parallel 4
+
+  fuzz-smoke:
+    name: Fuzz smoke (parser + loader)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cài phụ thuộc
+        run: sudo apt-get update && sudo apt-get install -y cmake clang libsodium-dev
+      - name: Build fuzz harness
+        run: |
+          CXX=clang++ CC=clang cmake -S services -B build/fuzz -DCMAKE_BUILD_TYPE=Debug \
+            -DMKDDC_BUILD_FUZZ=ON -DMKDDC_SANITIZE=address \
+            -DCORE_BUILD_TESTS=OFF -DIOBUS_BUILD_TESTS=OFF
+          cmake --build build/fuzz --target fuzz_st_parser fuzz_st_loader --parallel $(nproc)
+      - name: Fuzz smoke 60s mỗi harness
+        run: |
+          # PR chạy smoke ngắn để bắt hồi quy rõ ràng; chiến dịch fuzz dài chạy
+          # nightly. Corpus seed lấy từ sample thật để bắt đầu từ input hợp lệ.
+          mkdir -p /tmp/cp /tmp/cl
+          cp services/core/st/samples/*.st /tmp/cp/ || true
+          cp services/core/st/samples/*.mkir /tmp/cl/ || true
+          ./build/fuzz/core/fuzz_st_parser /tmp/cp -max_total_time=60 -rss_limit_mb=2048
+          ./build/fuzz/core/fuzz_st_loader /tmp/cl -max_total_time=60 -rss_limit_mb=2048
