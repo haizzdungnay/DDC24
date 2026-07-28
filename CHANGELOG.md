@@ -7,6 +7,15 @@
 ---
 
 ## [Unreleased]
+### Added — ACTION 14 + 15: tài liệu, tool và mẫu bàn giao BE (2026-07-28)
+- **Tool** `mkddc-st-compile` — công cụ **chính thức** để BE sinh artifact đã ký. Cùng contract với `mkddc-st-validate`: argv cố định, source luôn qua file path, đúng một dòng JSON ổn định. Trả `artifact` dạng base64 để BE dùng thẳng cho `program_stage` mà không phải đọc lại file. `--key` cho release; mặc định dùng khoá test.
+- **Mẫu** `services/core/st/samples/`: 1 chương trình hợp lệ (chính là chương trình tham chiếu normative của SPEC §13), 4 chương trình lỗi phủ 4 mã khác nhau, artifact mẫu, `program_tasks.example.conf`, `io_map.example.json`. **Cả 5 sample đã verify bằng tool thật**, không phải viết tay rồi tin.
+- **Script** `be_integration_test.sh` — 18 kiểm tra end-to-end cho BE: validate, compile, build tất định (`cmp` hai lần compile), base64 khớp file, 4 mã lỗi, input đối kháng không crash. **18/18 pass**.
+- **Schema** `shared/st_program_control_v1.schema.json` — hợp đồng JSON đầy đủ cho protocol điều khiển.
+- **7 tài liệu bàn giao** tại `docs/handoff/`: Integration Guide (điểm vào, có mục "bảy điều dễ làm sai"), Runtime API Contract, Artifact Format, Error Codes (4 họ mã, kèm cột "BE retry được không"), Program/Task Model, Test Evidence (số đo thật + mục **Hạn chế** nói rõ điều gì chưa tin được), Handoff Checklist.
+- Checklist kết luận **chưa** `FW_SOM_READY_FOR_BE_HANDOFF`: phần hợp đồng và chức năng (A/B/C) đã xong và BE tích hợp được ngay, nhưng verification trên phần cứng đúng cấu hình (E1–E8) chưa đóng. Đề xuất **bàn giao có điều kiện**.
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 646/646**; script BE 18/18; `nm mkddc-core` = 0 symbol compiler; mọi link markdown nội bộ hợp lệ.
+
 ### Added — ACTION 13: interface điều khiển Program Runtime cho BE (2026-07-28)
 - Thêm `services/core/st/st_control_api.{hpp,cpp}` — hợp đồng JSON cho BE: `program_capabilities`, `program_status`, `program_stage`, `program_start`, `program_stop`, `program_enable`, `program_disable`, `program_reset`, `program_rollback`.
 - **Tách khỏi `web_ipc` có chủ ý**: file này là logic hợp đồng thuần tuý (chuỗi JSON vào → chuỗi JSON ra), không sở hữu socket. Nhờ vậy toàn bộ hợp đồng test được mà không cần dựng socket, và đổi transport không phải viết lại hợp đồng.

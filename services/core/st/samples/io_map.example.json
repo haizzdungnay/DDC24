@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "_comment": "Mẫu io_map cho AHU_FanControl. Mỗi biến VAR_INPUT/VAR_OUTPUT phải có ĐÚNG 1 binding; direction và type phải khớp khai báo ST; point_id dạng PREFIX-NN với PREFIX thuộc {UI,DI,AO,DO}. Một đầu ra vật lý chỉ được có MỘT người ghi.",
+  "bindings": [
+    { "variable": "SupplyTemp", "direction": "input",  "point_id": "UI-01", "type": "REAL", "unit": "degC", "range_min": -50.0, "range_max": 150.0 },
+    { "variable": "Setpoint",   "direction": "input",  "point_id": "UI-02", "type": "REAL", "unit": "degC" },
+    { "variable": "Occupied",   "direction": "input",  "point_id": "DI-01", "type": "BOOL" },
+    { "variable": "FanEnable",  "direction": "output", "point_id": "DO-01", "type": "BOOL" },
+    { "variable": "FanSpeed",   "direction": "output", "point_id": "AO-01", "type": "REAL", "unit": "%", "range_min": 0.0, "range_max": 100.0 },
+    { "variable": "AlarmHigh",  "direction": "output", "point_id": "DO-02", "type": "BOOL" }
+  ]
+}

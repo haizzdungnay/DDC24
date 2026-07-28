@@ -47,6 +47,10 @@ target_link_libraries(mkddc-core PRIVATE core_lib)
 add_executable(mkddc-st-validate st/st_validate_main.cpp)
 target_link_libraries(mkddc-st-validate PRIVATE st_compiler_lib)
 
+# ACTION 15: công cụ CHÍNH THỨC để BE sinh artifact đã ký.
+add_executable(mkddc-st-compile st/st_compile_main.cpp)
+target_link_libraries(mkddc-st-compile PRIVATE st_compiler_lib)
+
 option(CORE_BUILD_TESTS "Build core unit tests" ON)
 if(CORE_BUILD_TESTS)
   target_compile_definitions(core_lib PUBLIC CORE_BUILD_TESTS=1)
