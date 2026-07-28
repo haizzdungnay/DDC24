@@ -26,6 +26,8 @@
 #include "graph/runtime_point_snapshot.hpp"
 #include "safety/safe_state.hpp"
 #include "schedule/schedule_runtime.hpp"
+#include "st/st_process_image.hpp"
+#include "st/st_scheduler.hpp"
 #include "ipc/web_ipc.hpp"
 
 namespace core {
@@ -45,6 +47,9 @@ struct ScanDeps {
     int               fieldbus_sockfd = -1;
     AlarmRuntime*     alarms = nullptr;
     ScheduleRuntime*  schedules = nullptr;
+    /* ACTION 10: Program Runtime. nullptr = không có chương trình ST nào được
+     * cấu hình — scan loop chạy y như trước, không thêm chi phí nào. */
+    StScheduler*      st_sched = nullptr;
 };
 
 class ScanLoop {
@@ -70,6 +75,8 @@ public:
      * Test dùng capacity để verify capacity không tăng lại sau khi đã ổn định. */
     std::size_t pending_capacity_for_test() const { return pending_.capacity(); }
     std::size_t pending_alarm_capacity_for_test() const { return pending_alarm_.capacity(); }
+    const StIoBridgeStats& st_io_stats_for_test() const { return st_io_stats_; }
+    const StSchedulerTickResult& st_tick_for_test() const { return st_tick_; }
 #endif
 
 private:
@@ -86,6 +93,8 @@ private:
     /* pre-allocated: tránh heap alloc mỗi scan trong SCHED_FIFO (CR-007) */
     std::vector<PendingResp> pending_;
     std::vector<WebCommand> pending_alarm_;
+    StIoBridgeStats       st_io_stats_{};
+    StSchedulerTickResult st_tick_{};
     std::array<uint64_t, KX_N_AO> manual_ao_expiry_ns_{};
     std::array<uint64_t, KX_N_DO> manual_do_expiry_ns_{};
     std::array<uint64_t, KX_N_AO> manual_ao_request_id_{};

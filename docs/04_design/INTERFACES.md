@@ -35,6 +35,34 @@ Nguồn thực thi: `shared/mkddc_shm.h`.
 
 Mọi thay đổi field, alignment hoặc semantic unit là ABI change: đổi magic, cập nhật tất cả consumer và layout tests, rebuild/deploy đồng bộ.
 
+**Ngoại lệ duy nhất — nối field vào CUỐI `kx_plc_shm_t`.** Consumer đọc PLC SHM
+bằng offset cứng và kiểm độ dài theo ngữ nghĩa **min-length**
+(`web/backend/core_client.go`: `len(data) < kxPlcShmMinLen`), nên nối thêm vào
+cuối giữ nguyên mọi offset cũ và binary cũ vẫn đọc đúng — **không đổi magic**.
+Đổi thứ tự, kiểu hoặc kích thước field cũ vẫn là ABI change đầy đủ. Ràng buộc
+này được khoá bằng test `BacnetObjTableAbi.*` (đối chiếu trực tiếp các hằng
+offset copy từ `core_client.go`).
+
+### Runtime health (PLC SHM, WRITER = core)
+
+| Field | Ý nghĩa |
+|---|---|
+| `rt_sched_policy` | Giá trị `SCHED_*` **thật**, đo bằng `sched_getscheduler()` sau khi đã cố đặt |
+| `rt_sched_priority` | Ưu tiên RT thật đang chạy; 0 khi không phải RT |
+| `rt_mlock_ok` | 1 = `mlockall` thành công |
+| `rt_degraded` | 1 = **không** đạt cấu hình RT mong đợi → Web/BE phải hiển thị cảnh báo |
+
+Lý do tồn tại: cảnh báo RT trước đây chỉ log một dòng lúc khởi động rồi cuộn
+khỏi journal, nên `mkddc-core` đã chạy nhiều ngày ở `SCHED_OTHER` thay vì
+`SCHED_FIFO 80` mà không ai biết (evidence:
+`docs/07_records/test-evidence/fw-som/2026-07-28-watchdog-target.md`). Suy giảm
+im lặng phải quan sát được **liên tục**, không chỉ tại một thời điểm.
+
+Core đo trạng thái **thật** thay vì tin vào mã trả về của `pthread_setschedparam`:
+trên hệ có `CONFIG_RT_GROUP_SCHED` + cgroup v2, systemd có thể đã ép policy về
+`SCHED_OTHER` trước khi process chạy, nên lời gọi thành công hay thất bại đều
+không nói lên trạng thái cuối cùng.
+
 ## AO boundary
 
 AO ở core/iobus boundary là giá trị vật lý V hoặc mA theo electrical mode đã được MCU acknowledge. BACnet/config engineering range được convert đúng một lần trước boundary. Non-finite/out-of-range bị reject.

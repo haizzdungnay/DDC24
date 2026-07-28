@@ -143,6 +143,24 @@ void ScanLoop::step()
     /* 5. Execute graph */
     d_.graph->execute(*d_.table, *d_.resolver);
 
+    /* 5b. ACTION 10 — Program Runtime (ST).
+     *
+     * Vị trí trong chuỗi là có chủ ý: SAU khi point table đã cập nhật (bước 2)
+     * và TRƯỚC trọng tài ưu tiên (bước 6). Nhờ vậy đầu ra của chương trình ST
+     * đi qua đúng cùng một trọng tài với graph/manual/BACnet/schedule, rồi mới
+     * tới safe-state ở bước 7. Chương trình ST KHÔNG có đường tắt nào ra thẳng
+     * phần cứng (PROGRAM_SOM_FW_DRAFT_DESIGN §8).
+     *
+     * `clock.monotonic_ns` chụp MỘT LẦN ở đầu scan và dùng chung cho mọi Task
+     * và mọi FB — hai timer khởi động cùng scan sẽ hết hạn cùng scan
+     * (PROGRAM_TASK_SCHEDULER_SPEC §4). */
+    if (d_.st_sched) {
+        st_io_stats_ = StIoBridgeStats{};
+        st_load_all_inputs(d_.st_sched, *d_.table, &st_io_stats_);
+        st_tick_ = d_.st_sched->tick(clock.monotonic_ns);
+        st_apply_all_outputs(d_.st_sched, d_.resolver, d_.table, &st_io_stats_);
+    }
+
     if (d_.alarms)
         d_.alarms->evaluate(*d_.table, clock);
 

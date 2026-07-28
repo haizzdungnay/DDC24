@@ -22,6 +22,108 @@
 ### Changed — Temporary dummy0 Network transaction test completed (2026-07-28)
 - target/test: static transaction trên `dummy0` và truy cập Web bằng hostname từ Windows pass; teardown xác nhận authority về `end1`, state `idle`, `dummy0` đã xóa và management vẫn qua `wlan0=192.168.1.18/24`.
 - workstation cleanup: hai route `/32` tạm `10.77.0.10`/`10.77.0.20` qua `192.168.1.18` cần PowerShell Administrator để xóa nếu còn tồn tại; runbook ghi exact command, không coi route Windows là cấu hình Orange Pi.
+### Added — Phase 7: ASan, UBSan, fuzzing và mở rộng fake MCU (2026-07-28)
+- **ASan tìm ra một lỗi thật: heap-use-after-free** trong `test_alarm_runtime.cpp`. `AlarmRuntime::active_states()` trả vector **theo giá trị**; 12 chỗ gọi `find_state(alarms.active_states(), ...)` giữ con trỏ trỏ vào temporary đã bị huỷ. Lỗi này "chạy đúng" suốt vì bộ nhớ vừa giải phóng còn nguyên nội dung.
+- Sửa bằng cách **biến lỗi runtime thành lỗi biên dịch**: thêm overload `find_state(std::vector<AlarmState>&&, ...) = delete`. Compiler chỉ ra đúng 12 chỗ, sửa hết. Không ai mắc lại được.
+- Sửa `-Wformat-truncation` thật trong `runtime_point_snapshot.cpp`: `set_id` ghi `"%s-%02d"` vào buffer 6 byte — `snprintf` không tràn nhưng số kênh > 99 sẽ **cắt âm thầm thành ID sai**. Kẹp tường minh thay vì tin caller.
+- Thêm preset sanitizer vào `services/CMakeLists.txt`: `-DMKDDC_SANITIZE=address|undefined|thread`. UBSan bật `-fno-sanitize-recover=all` — UB phải làm test **fail**, không được chỉ in cảnh báo rồi chạy tiếp.
+- Thêm 2 fuzz harness libFuzzer: `fuzz_st_parser` (đường source ST) và `fuzz_st_loader` (artifact — harness quan trọng nhất, vì executor không kiểm biên sau load).
+- **Harness loader ban đầu gần như vô dụng, đã đo và sửa:** đo phân bố lỗi trên 1000 đột biến cho thấy **947/1000 chết ở `IR-E-005` (sai hash)** — fuzzer không bao giờ chạm tới bảng section/biến/lệnh. Vá hash trong harness thì nghẽn **chuyển sang `IR-E-006`** (947/1000, vì cờ `kSigned` vẫn bật). Xoá cờ **trước** khi tính hash mới mở được: **277/1000 load thành công**, phần còn lại phân bố đều khắp `IR-E-008/010/011/014`.
+- Kết quả fuzzing: parser **698 815 lần chạy**, loader **7 563 082 lần chạy** — **0 crash, 0 phát hiện ASan**.
+- **Fake MCU** thêm 4 loại fault injection phủ nốt SPEC §9.3: `--adc-fault {1|2|3}` (mất DRDY + LOCK), `--dac-fault`, `--wdg-reset N` (trước đây `WDG_RESET_CNT` hằng 0 nên không test được), `--stuck-ui CH RAW` (cảm biến đơ — hỏng mà CRC/quality **không** bắt được).
+- Verify end-to-end fake MCU ↔ iobus: inject `--adc-fault 1 --dac-fault` → iobus nhận `fault_flags: 5` (bit0 ADC1 + bit2 DAC) và raise alarm `MCU_FAULT_FLAGS`.
+- Thêm 2 CI job: `sanitizers` (ASan + UBSan) và `fuzz-smoke` (60 s mỗi harness trên PR).
+- Verification: build `-Werror` **649/649**, ASan **646/646 + 0 phát hiện**, UBSan **646/646 + 0 runtime error**, symbol check 0.
+
+### Added — Build native aarch64 và deploy lên Orange Pi 5B (2026-07-28)
+- Build native trên board: configure + build `-Wall -Wextra -Werror` **0 lỗi**, sinh 4 binary aarch64 (`mkddc-core`, `mkddc-iobus`, `mkddc-st-compile`, `mkddc-st-validate`). Board chỉ thiếu `libsodium-dev`, cài qua apt.
+- **`ctest` trên aarch64: 646/646 pass.** Lần chạy đầu 641/646 — 5 fail do test bám vào SHM production đang bị service ghi đè; loại trừ bằng hai bước (chạy `sudo` vẫn fail ⇒ không phải vấn đề quyền), xác nhận bằng cách dừng service rồi chạy lại. **Không phải khác biệt kiến trúc.**
+- Deploy có backup: binary cũ lưu tại `/usr/sbin/mkddc-backup-<stamp>/`, unit file backup kèm timestamp, `WatchdogSec` 3 → 6. Lệnh rollback ghi trong evidence.
+- **Sự cố khi start lần đầu:** `plc_shm.attach_fail errno=13` — lần chạy `ctest` để lại `/dev/shm/mkddc_plc_shm` thuộc user `orangepi`, service chạy dưới `mkddc` không mở ghi được. Đã đưa `rm -f /dev/shm/mkddc_*` vào quy trình deploy chuẩn.
+- Vận hành sau deploy: 3 phút **0 restart**, `scan_count` tăng đúng chu kỳ, jitter max **250–294 µs** với **0 overrun** (tương đương bản cũ 284–356 µs — thêm Program Runtime **không làm xấu** đặc tính thời gian), output tới MCU vẫn `ack=ok`, script integration BE **18/18 pass trên aarch64**.
+- **RT health metric hoạt động đúng thiết kế**: đọc từ SHM cho `rt_degraded=1`, `rt_policy=0`, log mức `ERROR`. Lần đầu tình trạng `F-13` quan sát được từ **metric** thay vì nằm im trong một dòng log khởi động.
+- **Phát hiện về ABI:** `sizeof(kx_plc_shm_t)` vẫn **9280 byte** — 4 field RT health lọt vừa vào padding đuôi sẵn có (offset 9276–9279). ABI **không đổi chút nào**, binary Go cũ đọc SHM mới vẫn đúng tuyệt đối.
+- **Build tất định cross-architecture — kiểm lần đầu:** compile cùng source trên x86_64 và aarch64 cho artifact **giống hệt từng byte** (`79438ca91be784444b158104a8fd3f42`). BE có thể compile trên server x86_64 mà không cần build farm ARM.
+- Evidence đầy đủ: `docs/07_records/test-evidence/fw-som/2026-07-28-aarch64-build-deploy.md`.
+
+### Changed — Review FW SOM Rev 2.0: cập nhật theo source code hiện tại (2026-07-28)
+- `docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md` lên **Rev 2.0**, viết lại theo commit `5c39c61` sau khi ACTION 1–15 hoàn tất. Kết luận đổi từ `FW_SOM_IMPLEMENTATION_BLOCKED` → **`FW_SOM_HANDOFF_CONDITIONAL`**.
+- **7/12 finding của Rev 1.1 đóng hoàn toàn** (F-01 parser segfault, F-02 runtime chạy AST, F-03 allocation trong scan, F-04 overrun không ép safe, F-05 thiếu scheduler, F-06 thiếu RETAIN, F-07 thiếu chữ ký) + 3 finding tài liệu; **2 đóng một phần** (F-11 còn 12/15 workstream C0, B-07 có test đối kháng nhưng chưa có ASan/fuzz/soak).
+- **Finding mới `F-13`** — target chạy `SCHED_OTHER` thay vì `SCHED_FIFO 80` do `CONFIG_RT_GROUP_SCHED` + cgroup v2. Đây là finding **chặn duy nhất còn lại** và thuộc Platform/BSP, không thuộc FW SOM. Kèm đính chính con số overrun iobus (0,009% chứ không phải 76%).
+- Thêm 6 cờ trạng thái tách bạch thay cho một nhãn chung: `EXISTING_FW_SOM_BASELINE` STABLE, `FW_SOM_ST_HOST_SLICE` COMPLETED, `PRODUCTION_ST_INTEGRATION` **IMPLEMENTED**, `C1_PLUS_OPENING` UNBLOCKED một phần, `BE_HANDOFF_CONTRACT` **COMPLETE**, `TARGET_VERIFICATION` BLOCKED.
+- Thêm §0 bảng đối chiếu Rev 1.1 → Rev 2.0; traceability mở rộng lên 33 dòng (T-10b giới hạn parser, T-18b compile CLI, T-29 ST trong ScanLoop, T-30 control interface, T-31 RT health, T-32/33 ngoài scope).
+- Số đo thật, build sạch từ đầu với BACNET=ON MODBUS=ON: **ctest 649/649 pass**, 220 test lớp ST, cppcheck 0 lỗi, `nm mkddc-core` 0 symbol compiler, script integration BE 18/18, mọi link markdown hợp lệ.
+- Đề xuất **bàn giao có điều kiện**: BE tích hợp ngay, song song với Platform/BSP xử lý `F-13` và FW SOM chạy ASan/UBSan/fuzzing/soak; ký nghiệm thu khi B-05/B-07/B-08 đóng.
+
+### Added — ACTION 14 + 15: tài liệu, tool và mẫu bàn giao BE (2026-07-28)
+- **Tool** `mkddc-st-compile` — công cụ **chính thức** để BE sinh artifact đã ký. Cùng contract với `mkddc-st-validate`: argv cố định, source luôn qua file path, đúng một dòng JSON ổn định. Trả `artifact` dạng base64 để BE dùng thẳng cho `program_stage` mà không phải đọc lại file. `--key` cho release; mặc định dùng khoá test.
+- **Mẫu** `services/core/st/samples/`: 1 chương trình hợp lệ (chính là chương trình tham chiếu normative của SPEC §13), 4 chương trình lỗi phủ 4 mã khác nhau, artifact mẫu, `program_tasks.example.conf`, `io_map.example.json`. **Cả 5 sample đã verify bằng tool thật**, không phải viết tay rồi tin.
+- **Script** `be_integration_test.sh` — 18 kiểm tra end-to-end cho BE: validate, compile, build tất định (`cmp` hai lần compile), base64 khớp file, 4 mã lỗi, input đối kháng không crash. **18/18 pass**.
+- **Schema** `shared/st_program_control_v1.schema.json` — hợp đồng JSON đầy đủ cho protocol điều khiển.
+- **7 tài liệu bàn giao** tại `docs/handoff/`: Integration Guide (điểm vào, có mục "bảy điều dễ làm sai"), Runtime API Contract, Artifact Format, Error Codes (4 họ mã, kèm cột "BE retry được không"), Program/Task Model, Test Evidence (số đo thật + mục **Hạn chế** nói rõ điều gì chưa tin được), Handoff Checklist.
+- Checklist kết luận **chưa** `FW_SOM_READY_FOR_BE_HANDOFF`: phần hợp đồng và chức năng (A/B/C) đã xong và BE tích hợp được ngay, nhưng verification trên phần cứng đúng cấu hình (E1–E8) chưa đóng. Đề xuất **bàn giao có điều kiện**.
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 646/646**; script BE 18/18; `nm mkddc-core` = 0 symbol compiler; mọi link markdown nội bộ hợp lệ.
+
+### Added — ACTION 13: interface điều khiển Program Runtime cho BE (2026-07-28)
+- Thêm `services/core/st/st_control_api.{hpp,cpp}` — hợp đồng JSON cho BE: `program_capabilities`, `program_status`, `program_stage`, `program_start`, `program_stop`, `program_enable`, `program_disable`, `program_reset`, `program_rollback`.
+- **Tách khỏi `web_ipc` có chủ ý**: file này là logic hợp đồng thuần tuý (chuỗi JSON vào → chuỗi JSON ra), không sở hữu socket. Nhờ vậy toàn bộ hợp đồng test được mà không cần dựng socket, và đổi transport không phải viết lại hợp đồng.
+- **Bất biến**: mọi request — kể cả JSON rác, mảng thay vì object, thiếu field — đều nhận lại JSON đúng shape có `errorCode` ổn định và cờ **`keepsRunningPackage`**. BE không bao giờ phải đoán chương trình đang chạy có bị ảnh hưởng không.
+- Ba họ mã lỗi tách biệt để BE biết lỗi đến từ đâu mà không phân tích message: `API-E-*` (interface), `IR-E-*` (loader), `ST-*` (compiler).
+- `program_capabilities` công bố `artifactSchemaVersion`/`compilerProfile`/`targetAbi`/`maxArtifactBytes` để BE biết **trước** nên compile với profile nào, thay vì thử rồi nhận `IR-E-003`/`IR-E-004`.
+- `program_stage` trả `appliedAt: "next_tick_boundary"` — BE không được kết luận "đã chạy" khi mới stage xong.
+- `program_status` trả `artifactSha256` để BE **xác minh được cái đang chạy đúng là cái mình gửi**, kèm `lastFault` có mã và dòng ST gốc.
+- Artifact truyền base64; chuỗi quá lớn bị từ chối bằng **ước lượng kích thước trước khi giải mã**, không phải sau.
+- Test: 17 test gồm nhóm request rác, vòng đời đầy đủ, artifact hỏng vẫn giữ package đang chạy.
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 646/646 pass** (629 → +17).
+
+### Added — ACTION 11 + 12: RETAIN và package integrity (PACKAGE_SECURITY_GATE) (2026-07-28)
+- Thêm `services/core/st/st_retain.{hpp,cpp}` — bản ghi RETAIN có magic `MKRT`, version, `layout_hash`, `record_size`, CRC-32. Ghi **atomic**: tmp → `fsync` → `rename` → `fsync` thư mục.
+- Ba bất biến: (1) bản ghi sai **không bao giờ** là lý do không khởi động chương trình — từ chối thì cold start kèm chẩn đoán; (2) mất điện giữa lúc ghi không để lại file nửa vời mà lần sau tưởng hợp lệ; (3) đổi layout biến RETAIN làm **hiện ra** mã `RT-RETAIN-003` chứ không âm thầm đọc bytes của layout cũ.
+- Wear control: chỉ ghi khi **giá trị đã đổi** *và* đã qua 60 s. Điều kiện "có thay đổi" đặt trước điều kiện thời gian — chương trình có RETAIN nhưng giá trị đứng yên không tốn chu kỳ ghi nào. `force` cho shutdown sạch.
+- CRC kiểm **trước** `layout_hash`: file bị cắt do mất điện là nguyên nhân thường gặp nhất, báo đúng nguyên nhân giúp phân biệt "mất điện" với "đã đổi chương trình".
+- Test RETAIN: 12 test phủ đủ 6 kịch bản bắt buộc (cold start, warm restart, mất điện khi ghi, CRC sai, đổi tên biến, đổi kiểu biến) + 4 test chính sách ghi.
+- **ACTION 12** — 5 trường hợp reject bắt buộc (bị sửa / sai chữ ký / thiếu chữ ký / sai target / sai version) đã có từ ACTION 6. Bổ sung 5 test cho phần các test đó **không** bắt được: gói ký bằng **khoá khác** (kịch bản tấn công thật — cấu trúc hợp lệ, hash đúng, chữ ký đúng, chỉ sai khoá), cơ chế thay khoá release qua `StLoaderOptions::public_key`, binary tự khai báo đang dùng khoá test hay không, `allow_unsigned` **không** bỏ qua kiểm hash, và xoá cờ `kSigned` **không** vượt được chữ ký (cờ nằm trong vùng hash).
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 629/629 pass** (612 → +17).
+- **PACKAGE_SECURITY_GATE = PASS.**
+
+### Added — ACTION 10: wire ST vào production ScanLoop (2026-07-28)
+- Thêm `services/core/st/st_process_image.{hpp,cpp}` — cầu nối giữa process image của SOM và không gian slot ST. Mọi luật biên tập trung ở một chỗ thay vì rải rác.
+- `ScanDeps.st_sched` (mặc định `nullptr`): không cấu hình chương trình ST thì scan loop chạy y như trước, không thêm chi phí nào.
+- Vị trí trong chuỗi scan có chủ ý: **sau** cập nhật point table (bước 2), **trước** trọng tài ưu tiên (bước 6). Đầu ra ST đi vào `PriorityResolver` ở mức `PRIO_LOCAL_LOGIC` — **không có đường tắt ra thẳng phần cứng**. Nhờ vậy "chương trình ST không thể vượt mặt manual/BACnet/safety" là bất biến **cấu trúc**, không phải kỷ luật lập trình.
+- Đồng hồ `clock.monotonic_ns` chụp **một lần** đầu scan, dùng chung cho mọi Task và mọi FB — hai timer khởi động cùng scan hết hạn cùng scan.
+- Instance vừa FAULTED **không** đẩy đầu ra: trạng thái của nó đã được khôi phục, đẩy ra trọng tài là đẩy dữ liệu chu kỳ trước như thể vừa tính xong.
+- Giá trị không hữu hạn chặn tại biên cả hai chiều.
+- Test: 9 test tích hợp gồm manual thắng ST, safe-state thắng tất cả, overrun→safe qua `SafeState`, chương trình lỗi không crash và không phát output, `st_sched=nullptr` không đổi hành vi, và **zero-allocation vẫn giữ sau tích hợp**.
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 612/612 pass** (603 → +9).
+
+### Added — ACTION 9: multi-task scheduler (SCHEDULER_GATE) (2026-07-28)
+- Thêm `services/core/st/st_scheduler.{hpp,cpp}` — **fixed-priority, non-preemptive tại task boundary** theo `PROGRAM_TASK_SCHEDULER_SPEC`. Không preempt làm "process image không đổi trong một lần thực thi Program" thành bất biến **cấu trúc** thay vì quy ước, và loại hẳn khoá khỏi đường điều khiển nên không có priority inversion.
+- Mô hình đối tượng: Resource → Task (≤8, ưu tiên duy nhất) → ProgramInstance (≤16/task, ≤32 toàn hệ) → Artifact. Hai instance cùng artifact có **trạng thái hoàn toàn tách biệt**.
+- Tick cơ sở 50 ms; chu kỳ phải là bội số của tick (nếu không task trôi so với chính chu kỳ khai báo). Bù trôi theo mốc **lý thuyết**; lỡ nhiều chu kỳ thì **bỏ, không chạy bù** — chạy bù làm timer nhảy và làm quá tải nặng thêm.
+- Máy trạng thái 11 trạng thái + 6 lệnh vòng đời. `stop` **không** ép safe-state (hành động vận hành có chủ ý ≠ yêu cầu an toàn); "không ai điều khiển" xử lý ở tầng Resource qua trigger `no_controller`.
+- Fault của **một** Program huỷ toàn bộ phần còn lại của Task: các Program trong một Task thường phối hợp, chạy tiếp sẽ đẩy đầu ra vào tổ hợp chưa từng được thiết kế.
+- Rollback đi **lại** đúng đường verify thay vì nạp thẳng — rollback không được là cửa sau bỏ qua kiểm tra. Last-known-good chỉ được ghi nhận **sau khi** package chạy ≥1 tick không fault.
+- **Hai lỗi thiết kế do test phát hiện, đã sửa:** (1) `ACTIVE` từng tự động lên `RUNNING` khiến lệnh `start` vô nghĩa — nay chỉ `RUNNING` mới được thực thi; (2) activation từng chỉ áp cho task **đến hạn**, khiến task chu kỳ dài phải đợi trọn một chu kỳ dù BE đã báo "đã activate" — nay áp cho **mọi** task ở đầu tick.
+- Test: 30 test mới phủ đủ 12 nhóm bắt buộc ở SPEC §11 (thứ tự ưu tiên, chu kỳ không trôi, bỏ tick, nhiều task cùng hạn, fault dừng task, không commit nửa chừng, overrun→safe, enable/disable, vòng đời, instance độc lập).
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 603/603 pass** (573 → +30); `nm mkddc-core` = 0 symbol compiler.
+- **SCHEDULER_GATE = PASS.**
+
+### Added — RT health metric quan sát được từ Web/BE (chống tái diễn VG-05) (2026-07-28)
+- `shared/mkddc_shm.h`: nối 4 field vào **cuối** `kx_plc_shm_t` — `rt_sched_policy`, `rt_sched_priority`, `rt_mlock_ok`, `rt_degraded`. Lý do: cảnh báo RT trước đây chỉ log một dòng lúc khởi động rồi cuộn khỏi journal, nên core đã chạy nhiều ngày ở `SCHED_OTHER` mà không ai biết.
+- **Không đổi magic** — có chủ ý: consumer đọc PLC SHM bằng offset cứng + kiểm độ dài theo ngữ nghĩa min-length (`web/backend/core_client.go`), nên nối vào cuối là tương thích ngược và binary cũ vẫn đọc đúng. Đổi thứ tự/kiểu/kích thước field cũ vẫn là ABI change đầy đủ.
+- `main.cpp` đo trạng thái RT **thật** bằng `sched_getscheduler()`/`sched_getparam()` thay vì tin vào mã trả về của `pthread_setschedparam` — trên hệ `CONFIG_RT_GROUP_SCHED` + cgroup v2, systemd đã ép policy trước khi process chạy nên lời gọi thành/bại đều không phản ánh trạng thái cuối.
+- Log degraded nâng từ `WARN` lên **`ERROR`** và nêu rõ hệ quả ("jitter KHÔNG được bảo đảm") — chạy không RT là sai lệch so với thiết kế đã duyệt, không phải ghi chú thông tin.
+- Test: 5 test mới gồm nhóm `BacnetObjTableAbi` đối chiếu trực tiếp các hằng offset copy từ `core_client.go` — ai đổi layout làm lệch offset thì test fail và buộc phải đồng bộ cả hai phía.
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 573/573 pass** (568 → +5).
+
+### Changed — ACTION 8: watchdog đúng hành vi + evidence trên target SOM (2026-07-28)
+- `main.cpp`: ghi rõ luật kick — **chỉ kick sau khi `ScanLoop::step()` trả về trọn vẹn, tuyệt đối không kick giữa scan**. Kick giữa chu kỳ biến watchdog thành liveness check vô nghĩa: một `step()` treo vĩnh viễn vẫn kick đều và systemd không bao giờ restart, đúng loại lỗi watchdog sinh ra để bắt.
+- Thêm CI guard: fail build nếu `WATCHDOG=1` xuất hiện trong `scan_loop.cpp`, hoặc nếu số điểm kick trong `main.cpp` khác 1.
+- `WatchdogSec` 3 → **6** theo công thức `PROGRAM_TASK_SCHEDULER_SPEC` §9 (`2 × chu kỳ scan lớn nhất + WCET + biên 1 s`). `graph.json` cho phép `scan_ms` ∈ [500, 2000] nên giá trị cũ chỉ còn 1 s biên ở `scan_ms=2000`. Kéo dài không làm chậm bảo vệ đầu ra vì MCU tự ép AO/DO an toàn sau 200 ms, độc lập với SOM.
+- Evidence target tại `docs/07_records/test-evidence/fw-som/2026-07-28-watchdog-target.md`: T1 scan treo (`kill -STOP`) → systemd restart sau **6 s**; T2 `SIGKILL` → khởi động lại sau **2 672 ms**; T3 khôi phục `core.ready` đúng; T4 45 s vận hành không bị restart oan. Jitter chu kỳ 1 s: max **284–356 µs**, **0 overrun**.
+- **⚠️ Phát hiện:** `mkddc-core` trên board chạy `SCHED_OTHER` prio 0 chứ không phải `SCHED_FIFO 80`, do drop-in `nofifo.conf`. Đã kiểm chứng tiền đề của drop-in là **đúng** (root cũng không đặt được `SCHED_FIFO`: `ulimit -r`=0, `systemd-run` fail `status=214`), nhưng lý do ghi trong drop-in ("kernel không hỗ trợ RT") **sai** — kernel thread vẫn chạy `FF 99`; nguyên nhân gốc đã xác định: `CONFIG_RT_GROUP_SCHED=y` **cộng** cgroup v2 — cgroup v2 không có interface `cpu.rt_runtime_us` nên **không service systemd nào** dùng được RT. Quyết định 2026-07-28: rebuild kernel với `RT_GROUP_SCHED=n`. Đính chính: tỉ lệ overrun thật của iobus là **0,009%** (`overruns=` là bộ đếm tích luỹ từ lúc khởi động, không phải trong cửa sổ 60 s) — không thành phần nào đang gặp sự cố vận hành vì thiếu RT. Cảnh báo `rt.sched_fifo_fail (degraded)` có hoạt động nhưng cuộn khỏi journal. Đây đúng là rủi ro `VG-05` trong review, nay xác nhận là suy giảm **đang xảy ra thật**.
+- Do đó `WatchdogSec=6` là **giá trị tạm**: số đo lấy trên hệ không có RT nên không đại diện cho cấu hình production. `WATCHDOG_GATE` đạt phần hành vi, còn chờ đo lại trên target có RT.
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 568/568 pass**.
 
 ### Added — ACTION 7: OverrunMonitor tách khỏi CoreMetrics (TASK_SAFETY_GATE) (2026-07-28)
 - Thêm `services/core/safety/overrun_monitor.{hpp,cpp}` — đánh giá sức khoẻ thời gian của Task và trả `should_force_safe()`. **Đặt trong `safety/`, không phải `diagnostics/`**: `CoreMetrics` là observability thuần tuý (có thể tắt/lấy mẫu thưa/hỏng mà hệ vẫn phải điều khiển đúng), nên nhét ngưỡng an toàn vào đó sẽ khiến một thành phần không thiết yếu nắm quyền thiết yếu và làm chính sách an toàn không test được độc lập với bộ đếm.

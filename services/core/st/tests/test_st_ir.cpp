@@ -15,6 +15,9 @@
 #include "st/st_compile.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_loader.hpp"
+#include <sodium.h>
+
+#include "st/st_public_key.hpp"
 #include "st/st_test_key.hpp"
 
 namespace core {
@@ -268,6 +271,120 @@ TEST(StIr, RandomGarbageNeverLoadsAndNeverCrashes)
         StLoadError err;
         EXPECT_FALSE(try_load(a, &err));
     }
+}
+
+/* ---- ACTION 12: PACKAGE_SECURITY_GATE ----
+ * Năm trường hợp reject bắt buộc đã có ở trên (bị sửa / sai chữ ký / thiếu
+ * chữ ký / sai target / sai version). Phần dưới bổ sung điều mà các test đó
+ * KHÔNG bắt được: chữ ký HỢP LỆ nhưng của khoá KHÁC, và cơ chế thay khoá cho
+ * release. */
+
+namespace {
+
+/* Khoá thứ hai, seed khác — mô phỏng kẻ tấn công tự ký gói của mình. */
+const uint8_t* other_secret_key()
+{
+    static uint8_t sk[64];
+    static uint8_t pk[32];
+    static bool init = false;
+    if (!init) {
+        uint8_t seed[32];
+        for (int i = 0; i < 32; i++) seed[i] = static_cast<uint8_t>(0x5A ^ (i * 11 + 7));
+        crypto_sign_seed_keypair(pk, sk, seed);
+        init = true;
+    }
+    return sk;
+}
+
+} // namespace
+
+TEST(StIrSecurity, ArtifactSignedWithDifferentKeyIsRejected)
+{
+    /* Đây mới là kịch bản tấn công thật: gói hoàn toàn hợp lệ về cấu trúc,
+     * SHA-256 đúng, chữ ký đúng — nhưng ký bằng khoá không phải của Mekong.
+     * Test lật bit chữ ký KHÔNG bắt được trường hợp này. */
+    StIrModule mod;
+    StDiagnostic d;
+    ASSERT_TRUE(compile_st_source(kSimple, &mod, &d));
+    std::vector<uint8_t> a;
+    std::string err_s;
+    ASSERT_TRUE(serialize_st_ir(mod, &a, &err_s));
+    ASSERT_TRUE(sign_st_artifact(&a, other_secret_key()));
+
+    StLoadError err;
+    EXPECT_FALSE(try_load(a, &err));
+    EXPECT_EQ(err.code, st_ir_error::kBadSignature);
+}
+
+TEST(StIrSecurity, ExplicitPublicKeyOptionIsHonoured)
+{
+    /* Cơ chế thay khoá cho release: loader phải dùng khoá được truyền vào chứ
+     * không cứng nhắc dùng khoá nhúng. */
+    uint8_t pk[32], sk[64], seed[32];
+    for (int i = 0; i < 32; i++) seed[i] = static_cast<uint8_t>(0x33 ^ (i * 5 + 1));
+    crypto_sign_seed_keypair(pk, sk, seed);
+
+    StIrModule mod;
+    StDiagnostic d;
+    ASSERT_TRUE(compile_st_source(kSimple, &mod, &d));
+    std::vector<uint8_t> a;
+    std::string err_s;
+    ASSERT_TRUE(serialize_st_ir(mod, &a, &err_s));
+    ASSERT_TRUE(sign_st_artifact(&a, sk));
+
+    /* Khoá nhúng (test key) phải TỪ CHỐI gói này. */
+    StLoadError err1;
+    EXPECT_FALSE(try_load(a, &err1));
+    EXPECT_EQ(err1.code, st_ir_error::kBadSignature);
+
+    /* Nhưng truyền đúng public key thì phải chấp nhận. */
+    StLoadedProgram p;
+    StLoaderOptions o;
+    o.public_key = pk;
+    StLoadError err2;
+    EXPECT_TRUE(load_st_artifact(a.data(), a.size(), o, &p, &err2)) << err2.code;
+}
+
+TEST(StIrSecurity, BuildReportsWhetherItUsesTheTestKey)
+{
+    /* Quy trình release phải chặn được việc ship binary dùng khoá test. Điều
+     * đó chỉ làm được nếu binary tự khai báo nó đang dùng khoá nào. */
+    EXPECT_TRUE(st_public_key_is_test_key())
+        << "build test PHẢI dùng khoá test; nếu false nghĩa là "
+           "MKDDC_ST_PUBLIC_KEY_HEX đã được set trong build test";
+}
+
+TEST(StIrSecurity, AllowUnsignedDoesNotBypassHashCheck)
+{
+    /* allow_unsigned chỉ bỏ qua CHỮ KÝ, không được bỏ qua toàn vẹn. Nếu nó
+     * bỏ qua cả hai thì cờ phát triển này thành lỗ hổng thật. */
+    StIrModule mod;
+    StDiagnostic d;
+    ASSERT_TRUE(compile_st_source(kSimple, &mod, &d));
+    std::vector<uint8_t> a;
+    std::string err_s;
+    ASSERT_TRUE(serialize_st_ir(mod, &a, &err_s));
+    a[a.size() - 1] ^= 0xFF;   /* hỏng payload */
+
+    StLoadedProgram p;
+    StLoaderOptions o;
+    o.allow_unsigned = true;
+    StLoadError err;
+    EXPECT_FALSE(load_st_artifact(a.data(), a.size(), o, &p, &err));
+    EXPECT_EQ(err.code, st_ir_error::kBadHash);
+}
+
+TEST(StIrSecurity, SignedFlagCannotBeClearedToBypassSignature)
+{
+    /* Tấn công hiển nhiên: xoá cờ kSigned để loader coi như gói chưa ký, rồi
+     * hy vọng allow_unsigned. Cờ nằm trong vùng SHA-256 nên phải hỏng hash. */
+    std::vector<uint8_t> a = build_signed();
+    a[26] &= static_cast<uint8_t>(~st_ir::kFlagSigned);
+
+    StLoadError err;
+    EXPECT_FALSE(try_load(a, &err));
+    EXPECT_EQ(err.code, st_ir_error::kBadHash)
+        << "cờ chữ ký phải nằm trong vùng được hash";
 }
 
 } // namespace core

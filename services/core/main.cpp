@@ -16,6 +16,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <sched.h>
+
+#include "bacnet/bacnet_objtable.hpp"
 #include "ipc/config_reload.hpp"
 #include "safety/safe_state_config.hpp"
 #include "schedule/schedule_runtime.hpp"
@@ -105,14 +108,41 @@ int main(int argc, char** argv)
     /* scan_ms log SAU khi chốt với graph.json (tránh log giá trị không dùng) */
     std::fprintf(stderr, "INFO  core.start version=1.0.0 pid=%d\n", getpid());
 
-    /* RT + mlockall — thiếu cap → degraded WARN */
+    /* RT + mlockall. Đo lại trạng thái THẬT sau khi cố đặt, thay vì tin vào
+     * mã trả về: trên hệ có CONFIG_RT_GROUP_SCHED + cgroup v2, systemd có thể
+     * đã ép policy về SCHED_OTHER trước khi process chạy, nên gọi thành công
+     * hay thất bại đều không nói lên trạng thái cuối cùng. */
+    BacnetObjTable::RtHealth rt_health;
     {
         struct sched_param sp {};
         sp.sched_priority = rt_prio;
         if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp) != 0)
-            std::fprintf(stderr, "WARN  rt.sched_fifo_fail prio=%d (degraded)\n", rt_prio);
-        if (mlockall(MCL_CURRENT | MCL_FUTURE) != 0)
-            std::fprintf(stderr, "WARN  rt.mlockall_fail (degraded)\n");
+            std::fprintf(stderr, "WARN  rt.sched_fifo_fail prio=%d\n", rt_prio);
+        rt_health.mlock_ok = (mlockall(MCL_CURRENT | MCL_FUTURE) == 0);
+        if (!rt_health.mlock_ok)
+            std::fprintf(stderr, "WARN  rt.mlockall_fail\n");
+
+        const int policy = sched_getscheduler(0);
+        struct sched_param actual {};
+        sched_getparam(0, &actual);
+        rt_health.sched_policy = static_cast<uint8_t>(policy < 0 ? 0 : policy);
+        rt_health.sched_priority = static_cast<uint8_t>(actual.sched_priority);
+        rt_health.degraded = (policy != SCHED_FIFO) || (actual.sched_priority != rt_prio) ||
+                             !rt_health.mlock_ok;
+
+        /* ERROR chứ không WARN, và nêu rõ hệ quả: chạy không RT là sai lệch so
+         * với thiết kế đã duyệt, không phải một ghi chú thông tin. Trạng thái
+         * này còn được publish vào plc_shm để Web/BE thấy liên tục — log một
+         * dòng lúc khởi động rồi cuộn mất là lý do suy giảm từng tồn tại nhiều
+         * ngày mà không ai biết. */
+        if (rt_health.degraded)
+            std::fprintf(stderr,
+                         "ERROR rt.degraded policy=%d prio=%d mlock=%d"
+                         " (mong đợi SCHED_FIFO=%d prio=%d) — jitter KHÔNG được bảo đảm\n",
+                         policy, actual.sched_priority, rt_health.mlock_ok ? 1 : 0,
+                         SCHED_FIFO, rt_prio);
+        else
+            std::fprintf(stderr, "INFO  rt.ok policy=SCHED_FIFO prio=%d mlock=1\n", rt_prio);
     }
 
     struct sigaction sa {};
@@ -199,6 +229,7 @@ int main(int argc, char** argv)
     SafeState safe(quality, &graph, &resolver);
     OutputWriter writer(reader);
     BacnetObjTable bacnet;
+    bacnet.set_rt_health(rt_health);
     if (!bacnet.attach())
         return 1;   /* core là creator plc_shm — không có thì web/BACnet mù */
     CoreMetrics metrics;
@@ -269,7 +300,22 @@ int main(int argc, char** argv)
     };
     loop.set_reload_hook(&g_reload, on_reload, &rctx);
 
-    /* sd_notify READY=1 sau scan đầu + WATCHDOG=1 mỗi scan; snapshot 60s dirty (COR-010) */
+    /* LUẬT WATCHDOG (PROGRAM_TASK_SCHEDULER_SPEC §9) — đọc trước khi sửa:
+     *
+     *   Kick CHỈ ở đây, tức là SAU KHI ScanLoop::step() trả về trọn vẹn.
+     *   TUYỆT ĐỐI KHÔNG kick ở giữa step().
+     *
+     * Lý do: watchdog phải chứng minh MỘT CHU KỲ ĐIỀU KHIỂN HOÀN TẤT, không
+     * phải chứng minh process còn sống. Kick giữa chu kỳ biến nó thành
+     * liveness check vô nghĩa — một step() treo vĩnh viễn ở giữa vẫn kick đều
+     * và systemd sẽ không bao giờ khởi động lại, đúng loại lỗi mà watchdog
+     * sinh ra để bắt. Xem thêm PROGRAM_SOM_FW_DRAFT_DESIGN §9.2 (diag_wdg).
+     *
+     * Trong khoảng core chưa chạy (đang restart), MCU tự ép AO/DO về an toàn
+     * sau IOP_SAFE_TIMEOUT_MS = 200 ms — lớp bảo vệ ĐỘC LẬP với SOM, và là lý
+     * do việc systemd restart core chấp nhận được.
+     *
+     * sd_notify READY=1 sau scan đầu; snapshot 60s dirty (COR-010). */
     struct NotifyCtx {
         bool ready_sent = false;
         int snap_ticks  = 0;
