@@ -7,6 +7,17 @@
 ---
 
 ## [Unreleased]
+### Added — Build native aarch64 và deploy lên Orange Pi 5B (2026-07-28)
+- Build native trên board: configure + build `-Wall -Wextra -Werror` **0 lỗi**, sinh 4 binary aarch64 (`mkddc-core`, `mkddc-iobus`, `mkddc-st-compile`, `mkddc-st-validate`). Board chỉ thiếu `libsodium-dev`, cài qua apt.
+- **`ctest` trên aarch64: 646/646 pass.** Lần chạy đầu 641/646 — 5 fail do test bám vào SHM production đang bị service ghi đè; loại trừ bằng hai bước (chạy `sudo` vẫn fail ⇒ không phải vấn đề quyền), xác nhận bằng cách dừng service rồi chạy lại. **Không phải khác biệt kiến trúc.**
+- Deploy có backup: binary cũ lưu tại `/usr/sbin/mkddc-backup-<stamp>/`, unit file backup kèm timestamp, `WatchdogSec` 3 → 6. Lệnh rollback ghi trong evidence.
+- **Sự cố khi start lần đầu:** `plc_shm.attach_fail errno=13` — lần chạy `ctest` để lại `/dev/shm/mkddc_plc_shm` thuộc user `orangepi`, service chạy dưới `mkddc` không mở ghi được. Đã đưa `rm -f /dev/shm/mkddc_*` vào quy trình deploy chuẩn.
+- Vận hành sau deploy: 3 phút **0 restart**, `scan_count` tăng đúng chu kỳ, jitter max **250–294 µs** với **0 overrun** (tương đương bản cũ 284–356 µs — thêm Program Runtime **không làm xấu** đặc tính thời gian), output tới MCU vẫn `ack=ok`, script integration BE **18/18 pass trên aarch64**.
+- **RT health metric hoạt động đúng thiết kế**: đọc từ SHM cho `rt_degraded=1`, `rt_policy=0`, log mức `ERROR`. Lần đầu tình trạng `F-13` quan sát được từ **metric** thay vì nằm im trong một dòng log khởi động.
+- **Phát hiện về ABI:** `sizeof(kx_plc_shm_t)` vẫn **9280 byte** — 4 field RT health lọt vừa vào padding đuôi sẵn có (offset 9276–9279). ABI **không đổi chút nào**, binary Go cũ đọc SHM mới vẫn đúng tuyệt đối.
+- **Build tất định cross-architecture — kiểm lần đầu:** compile cùng source trên x86_64 và aarch64 cho artifact **giống hệt từng byte** (`79438ca91be784444b158104a8fd3f42`). BE có thể compile trên server x86_64 mà không cần build farm ARM.
+- Evidence đầy đủ: `docs/07_records/test-evidence/fw-som/2026-07-28-aarch64-build-deploy.md`.
+
 ### Changed — Review FW SOM Rev 2.0: cập nhật theo source code hiện tại (2026-07-28)
 - `docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md` lên **Rev 2.0**, viết lại theo commit `5c39c61` sau khi ACTION 1–15 hoàn tất. Kết luận đổi từ `FW_SOM_IMPLEMENTATION_BLOCKED` → **`FW_SOM_HANDOFF_CONDITIONAL`**.
 - **7/12 finding của Rev 1.1 đóng hoàn toàn** (F-01 parser segfault, F-02 runtime chạy AST, F-03 allocation trong scan, F-04 overrun không ép safe, F-05 thiếu scheduler, F-06 thiếu RETAIN, F-07 thiếu chữ ký) + 3 finding tài liệu; **2 đóng một phần** (F-11 còn 12/15 workstream C0, B-07 có test đối kháng nhưng chưa có ASan/fuzz/soak).

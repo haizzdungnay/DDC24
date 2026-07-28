@@ -68,7 +68,11 @@ binary CLI: `mkddc-st-validate` và `mkddc-st-compile`.
 | Hạng mục | Kết quả |
 |---|---|
 | Configure + build `-Wall -Wextra -Werror`, BACNET=ON, MODBUS=ON | **exit 0, 0 lỗi** |
-| `ctest` | **649/649 PASS, 0 FAIL, 0 SKIP** |
+| `ctest` (host x86_64) | **649/649 PASS, 0 FAIL, 0 SKIP** |
+| **Build native aarch64 trên Orange Pi 5B** | **exit 0, 0 lỗi** |
+| **`ctest` trên aarch64** | **646/646 PASS** |
+| **Deploy lên board + vận hành 3 phút** | **ổn định, 0 restart, jitter max 250–294 µs, 0 overrun** |
+| **Artifact tất định giữa x86_64 và aarch64** | **giống hệt từng byte** |
 | Test thuộc lớp ST | **220** |
 | `cppcheck` trên `services/core/st/*.cpp` | **0 lỗi** |
 | Symbol compiler trong `mkddc-core` | **0** |
@@ -347,6 +351,8 @@ compile, **build tất định** (`cmp` hai lần compile), base64 khớp file, 
 | VG-02 | UBSan | KHÔNG CÓ | **vẫn KHÔNG CÓ** |
 | VG-03 | Fuzzing parser/loader | KHÔNG CÓ | **vẫn KHÔNG CÓ** — nhưng đã có test cắt xén/lật bit toàn diện |
 | VG-04 | WCET/jitter trên target | KHÔNG CÓ | 🟡 **có số, nhưng KHÔNG hợp lệ** vì đo không có RT (`F-13`) |
+| VG-08 | **Build + test native trên aarch64** | KHÔNG CÓ | ✅ **ĐÃ LÀM** — 646/646, deploy chạy ổn định |
+| VG-09 | **Build tất định cross-arch** | KHÔNG CÓ | ✅ **ĐÃ LÀM** — artifact giống hệt byte giữa x86_64 và aarch64 |
 | VG-05 | Xác minh RT capability | KHÔNG CÓ | ✅ **ĐÃ LÀM** — và phát hiện `F-13` |
 | VG-06 | HIL MCU thật | KHÔNG CÓ | **DEFERRED** có ghi nhận |
 | VG-07 | Fault injection | KHÔNG CÓ | 🟡 một phần — watchdog T1–T4 trên target |
