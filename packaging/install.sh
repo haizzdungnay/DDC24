@@ -38,6 +38,9 @@ install -m 0755 "$BUILD/netcfg/mkddc-netcfg" /usr/sbin/mkddc-netcfg
 install -m 0644 packaging/systemd/mkddc-iobus.service /etc/systemd/system/
 install -m 0644 packaging/systemd/mkddc-core.service  /etc/systemd/system/
 install -m 0644 packaging/systemd/mkddc-netcfg.service /etc/systemd/system/
+install -d -m 0755 /usr/libexec/mkddc /usr/share/mkddc/avahi
+install -m 0755 packaging/configure-web-hostname.sh /usr/libexec/mkddc/configure-web-hostname
+install -m 0644 packaging/avahi/mkddc-web.service /usr/share/mkddc/avahi/mkddc-web.service
 if [ -e /etc/systemd/system/mkddc-web-pi.service ]; then
     install -d -m 0755 /etc/systemd/system/mkddc-web-pi.service.d
     install -m 0644 packaging/systemd/mkddc-web-pi-netcfg.conf \

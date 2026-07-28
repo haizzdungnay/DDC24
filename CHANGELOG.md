@@ -7,6 +7,26 @@
 ---
 
 ## [Unreleased]
+### Fixed — CI dependency and scoped Grype exception (2026-07-28)
+- build-and-test: cài `libsodium-dev` trong toàn bộ C++ matrix để các cấu hình dùng ST package integrity configure được nhất quán với sanitizer job.
+- security: thêm `.grype.yaml` chỉ bỏ qua `GHSA-qwww-vcr4-c8h2` cho `react-router@7.18.1` vì advisory chỉ ảnh hưởng unstable RSC APIs không được FE SPA sử dụng; mọi finding High khác vẫn fail CI.
+- verification: local FE test/lint/build pass; Grype v0.110.0 tái hiện và suppress đúng một advisory trên package/version nêu trên.
+
+### Fixed — Network no-carrier Apply and offline rollback verification (2026-07-28)
+- frontend/network: hiển thị `NO_CARRIER`, khóa riêng `Apply` khi interface chưa `adminUp+carrier`, giữ Validate/Stage và tách ACTIVE/CONFIGURED/PENDING/EDITABLE DRAFT theo authority.
+- netcfg/rollback: luôn xác minh interface + configured profile kể cả DNS; snapshot runtime vốn offline/no-IP không bị ép khớp kernel state giả, còn snapshot healthy vẫn verify nghiêm ngặt và luôn gỡ candidate address.
+
+### Changed — Network authority v1 hardening and stable-host recovery (2026-07-28)
+- network/protocol: hoàn tất contract v1 strict cho DNS `auto|manual`, static/DHCP, active/configured/pending, exact capabilities `dns` + `management-hostname`, management hostname read-only, journal/restart/rollback và carrier/admin health riêng.
+- web/backend: GET transaction cho mọi session xác thực, POST mutation Admin-only; adapter strict/bounded, preflight DNS capability, reject response sai contract và audit mỗi POST mà không log candidate/DNS/token.
+- frontend: production `.env.production` chạy live/JWT; REST/WebSocket cùng-origin, tự retry/reconnect qua hostname hiện tại, reconcile outcome không xác định và không hardcode IP. Network UI hỗ trợ DNS preserve/auto/manual và fail-closed khi authority stale.
+- deployment/docs: thêm Avahi `_http._tcp`, `configure-web-hostname.sh --check|--apply`, package wiring, ADR-017, OpenAPI/schema, HMI/Web guides, checklist/traceability và runbook Network-only Rev 1.10 có backup/rollback/evidence Windows + Orange Pi.
+- verification trước PR: C++ Network CTest **42/42**, FE NetworkPage **16/16** cùng typecheck/lint/production build, Go network/full suite, schema/OpenAPI và shell syntax đều pass; clean-branch gates được chạy lại trước commit.
+- target: deploy helper ARM64 SHA-256 `8667127633e3a274347d98ca66e2a9a1e7cda5c78e85428e0d2fc718e5e3d7aa` và FE bundle `8cffbf024347621aa02e9be54f61161d363fb5ce3f2d30c643622c3380465aab`; `orangepi5b.local:8081`, `mkddc-netcfg`, `mkddc-web-pi` và Avahi hoạt động. Chưa claim physical Ethernet/IP-handoff HIL.
+
+### Changed — Temporary dummy0 Network transaction test completed (2026-07-28)
+- target/test: static transaction trên `dummy0` và truy cập Web bằng hostname từ Windows pass; teardown xác nhận authority về `end1`, state `idle`, `dummy0` đã xóa và management vẫn qua `wlan0=192.168.1.18/24`.
+- workstation cleanup: hai route `/32` tạm `10.77.0.10`/`10.77.0.20` qua `192.168.1.18` cần PowerShell Administrator để xóa nếu còn tồn tại; runbook ghi exact command, không coi route Windows là cấu hình Orange Pi.
 ### Added — Phase 7: ASan, UBSan, fuzzing và mở rộng fake MCU (2026-07-28)
 - **ASan tìm ra một lỗi thật: heap-use-after-free** trong `test_alarm_runtime.cpp`. `AlarmRuntime::active_states()` trả vector **theo giá trị**; 12 chỗ gọi `find_state(alarms.active_states(), ...)` giữ con trỏ trỏ vào temporary đã bị huỷ. Lỗi này "chạy đúng" suốt vì bộ nhớ vừa giải phóng còn nguyên nội dung.
 - Sửa bằng cách **biến lỗi runtime thành lỗi biên dịch**: thêm overload `find_state(std::vector<AlarmState>&&, ...) = delete`. Compiler chỉ ra đúng 12 chỗ, sửa hết. Không ai mắc lại được.

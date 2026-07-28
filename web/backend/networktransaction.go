@@ -22,51 +22,122 @@ type networkTransactionRequest struct {
 }
 
 func (a *App) handleGetNetworkTransaction(w http.ResponseWriter, r *http.Request) {
-	a.forwardNetworkTransaction(w, r, "status", "", nil)
+	a.forwardNetworkTransaction(w, r, "status", "", nil, false)
 }
 
 func (a *App) handlePostNetworkTransaction(w http.ResponseWriter, r *http.Request) {
 	action := r.PathValue("action")
 	if !isNetworkTransactionAction(action) {
+		a.auditNetworkTransaction(r, action, "", "invalid_action")
 		writeError(w, http.StatusNotFound, "network transaction action not found")
 		return
 	}
 
 	var payload networkTransactionRequest
 	if err := decodeNetworkTransactionBody(w, r, &payload); err != nil {
+		a.auditNetworkTransaction(r, action, "", "invalid_body")
 		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
 		return
 	}
 	if details := validateNetworkTransactionRequest(action, payload); len(details) > 0 {
+		a.auditNetworkTransaction(r, action, payload.TransactionID, "invalid_candidate")
 		writeValidationErrors(w, details)
 		return
 	}
-	a.forwardNetworkTransaction(w, r, action, payload.TransactionID, payload.Candidate)
+	if payload.Candidate != nil && payload.Candidate.DNS != nil && !a.requireNetworkCapability(w, r, action, "dns") {
+		return
+	}
+	a.forwardNetworkTransaction(w, r, action, payload.TransactionID, payload.Candidate, true)
 }
 
-func (a *App) forwardNetworkTransaction(w http.ResponseWriter, r *http.Request, action, transactionID string, candidate *NetcfgCandidate) {
+func (a *App) forwardNetworkTransaction(w http.ResponseWriter, r *http.Request, action, transactionID string, candidate *NetcfgCandidate, auditMutation bool) {
 	reqID := requestID()
 	if a.netcfg == nil {
-		a.auditNetworkTransaction(r, action, transactionID, "unavailable")
+		if auditMutation {
+			a.auditNetworkTransaction(r, action, transactionID, "unavailable")
+		}
 		writeError(w, http.StatusServiceUnavailable, "network configuration service unavailable")
 		return
 	}
 	response, err := a.netcfg.Request(r.Context(), reqID, action, transactionID, candidate)
 	if err != nil {
-		result := "error"
-		status := http.StatusBadGateway
-		message := "network configuration service failed"
-		if errors.Is(err, errNetcfgUnavailable) {
-			result = "unavailable"
-			status = http.StatusServiceUnavailable
-			message = "network configuration service unavailable"
+		result, status, message := networkAuthorityError(err)
+		if auditMutation {
+			a.auditNetworkTransaction(r, action, transactionID, result)
 		}
-		a.auditNetworkTransaction(r, action, transactionID, result)
 		writeError(w, status, message)
 		return
 	}
-	a.auditNetworkTransaction(r, action, firstNonEmpty(response.TransactionID, transactionID), response.Result+":"+response.ReasonCode)
+	if auditMutation && candidate != nil && candidate.DNS != nil {
+		if err := validateNetcfgDNSMutationResponse(action, *candidate.DNS, response); err != nil {
+			a.auditNetworkTransaction(r, action, firstNonEmpty(response.TransactionID, transactionID), "error")
+			writeError(w, http.StatusBadGateway, "invalid network configuration service response")
+			return
+		}
+	}
+	if auditMutation {
+		a.auditNetworkTransaction(r, action, firstNonEmpty(response.TransactionID, transactionID), response.Result+":"+response.ReasonCode)
+	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (a *App) requireNetworkCapability(w http.ResponseWriter, r *http.Request, action, capability string) bool {
+	if a.netcfg == nil {
+		return true
+	}
+	response, err := a.netcfg.Request(r.Context(), requestID(), "status", "", nil)
+	if err != nil {
+		result, status, message := networkAuthorityError(err)
+		a.auditNetworkTransaction(r, action, "", result)
+		writeError(w, status, message)
+		return false
+	}
+	if response.Result != "accepted" || !hasNetcfgCapability(response.Capabilities, capability) {
+		a.auditNetworkTransaction(r, action, "", "unsupported:"+capability)
+		writeError(w, http.StatusServiceUnavailable, "network configuration service does not support "+capability+" transactions")
+		return false
+	}
+	return true
+}
+
+func networkAuthorityError(err error) (result string, status int, message string) {
+	if errors.Is(err, errNetcfgUnavailable) {
+		return "unavailable", http.StatusServiceUnavailable, "network configuration service unavailable"
+	}
+	if errors.Is(err, errNetcfgInvalidResponse) {
+		return "error", http.StatusBadGateway, "invalid network configuration service response"
+	}
+	return "error", http.StatusBadGateway, "network configuration service failed"
+}
+
+func validateNetcfgDNSMutationResponse(action string, candidateDNS NetcfgDNS, response NetcfgResponse) error {
+	if !hasExactNetcfgCapabilities(response.Capabilities) {
+		return errNetcfgInvalidResponse
+	}
+	if action != "stage" || response.Result != "accepted" {
+		return nil
+	}
+	if response.State != "staged" || !netcfgTokenPattern.MatchString(response.TransactionID) || response.Pending == nil || response.Pending.DNS == nil {
+		return errNetcfgInvalidResponse
+	}
+	if response.Pending.DNS.Mode != candidateDNS.Mode || len(response.Pending.DNS.Servers) != len(candidateDNS.Servers) {
+		return errNetcfgInvalidResponse
+	}
+	for i := range candidateDNS.Servers {
+		if response.Pending.DNS.Servers[i] != candidateDNS.Servers[i] {
+			return errNetcfgInvalidResponse
+		}
+	}
+	return nil
+}
+
+func hasNetcfgCapability(capabilities []string, expected string) bool {
+	for _, capability := range capabilities {
+		if capability == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) auditNetworkTransaction(r *http.Request, action, transactionID, result string) {
@@ -134,6 +205,7 @@ func validateNetcfgCandidate(candidate NetcfgCandidate) []configValidationError 
 		addConfigErr(&details, "candidate.mode", "must be static or dhcp")
 		return details
 	}
+	details = append(details, validateNetcfgDNS(candidate.Mode, candidate.DNS)...)
 	if candidate.Mode == "dhcp" {
 		if candidate.IPv4 != "" {
 			addConfigErr(&details, "candidate.ipv4", "must be empty for dhcp mode")
@@ -174,6 +246,42 @@ func validateNetcfgCandidate(candidate NetcfgCandidate) []configValidationError 
 		}
 	} else if candidate.Gateway != "" {
 		parseNetcfgIPv4(&details, "candidate.gateway", candidate.Gateway, false)
+	}
+	return details
+}
+
+func validateNetcfgDNS(candidateMode string, dns *NetcfgDNS) []configValidationError {
+	if dns == nil {
+		return nil
+	}
+	var details []configValidationError
+	switch dns.Mode {
+	case "auto":
+		if candidateMode != "dhcp" {
+			addConfigErr(&details, "candidate.dns.mode", "auto is only allowed for dhcp mode")
+		}
+		if len(dns.Servers) != 0 {
+			addConfigErr(&details, "candidate.dns.servers", "must be empty for auto mode")
+		}
+	case "manual":
+		if len(dns.Servers) < 1 || len(dns.Servers) > 4 {
+			addConfigErr(&details, "candidate.dns.servers", "must contain 1..4 IPv4 addresses for manual mode")
+		}
+		seen := make(map[string]struct{}, len(dns.Servers))
+		for i, server := range dns.Servers {
+			path := fmt.Sprintf("candidate.dns.servers[%d]", i)
+			if !isCanonicalNetcfgIPv4(server) {
+				addConfigErr(&details, path, "must be a canonical IPv4 address")
+				continue
+			}
+			if _, duplicate := seen[server]; duplicate {
+				addConfigErr(&details, path, "must be unique")
+				continue
+			}
+			seen[server] = struct{}{}
+		}
+	default:
+		addConfigErr(&details, "candidate.dns.mode", "must be auto or manual")
 	}
 	return details
 }

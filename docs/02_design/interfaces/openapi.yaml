@@ -1,7 +1,7 @@
 ﻿openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.9.1"
+  version: "1.10.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -14,9 +14,12 @@ info:
     2026-07-20: thÃªm retentionDays theo interval, maxRetentionDays vÃ  retentionMaxDaysByInterval cho historian policy.
     2026-07-24: thêm Web adapter authoritative cho giao dịch Ethernet validate/stage/apply/confirm/rollback.
     2026-07-25: legacy config endpoints no longer mutate Ethernet; candidate validation matches mkddc-netcfg.
+    2026-07-25: protocol v1 reports administrative/carrier health separately and exposes the saved NetworkManager profile.
+    2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
+    hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-07-25"
-  note: "v1.9.1 makes legacy Ethernet config read-only and aligns Web validation with mkddc-netcfg."
+  date: "2026-07-28"
+  note: "v1.10.0 khóa Network transaction DNS/capability/management contract; overall target/HIL gate vẫn RED."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -218,7 +221,7 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh northbound trang Network (admin)
-      description: Writes BACnet, Wi-Fi, and hostname service configuration atomically; Ethernet fields are read-only compatibility data owned by mkddc-netcfg.
+      description: Chỉ ghi BACnet và Wi-Fi bằng replace nguyên tử trên từng file; Ethernet/DNS và compatibility service hostname là shadow chỉ đọc do authority/cấu hình hiện hữu sở hữu, endpoint này không đổi hostname quản trị của hệ điều hành.
       x-rbac: [admin]
       x-ethernet-authority: mkddc-netcfg
       requestBody:
@@ -236,9 +239,14 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
   /network/transaction:
     get:
-      summary: Đọc trạng thái giao dịch Ethernet authoritative (admin)
-      description: Chuyển action `status` tới `mkddc-netcfg`; `active` phản ánh kernel, không suy diễn từ `network.conf`.
-      x-rbac: [admin]
+      summary: Đọc trạng thái Ethernet/DNS authoritative (viewer+)
+      description: >
+        Chuyển action `status` tới `mkddc-netcfg`. `active` phản ánh trạng thái kernel hiện tại,
+        `configured` phản ánh profile đã lưu trong NetworkManager, và `pending` phản ánh candidate
+        của giao dịch đang chờ. `reasonCode` cấp response mô tả kết quả request/giao dịch;
+        `active.reasonCode` độc lập và mô tả sức khỏe interface. `capabilities` công bố feature
+        protocol v1; `management` trả stable hostname/mDNS read-only.
+      x-rbac: [viewer, operator, admin]
       responses:
         "200":
           description: Trạng thái authoritative hiện tại
@@ -253,7 +261,11 @@ paths:
       description: >
         Adapter strict/bounded tới `mkddc-netcfg`. `validate`/`stage` yêu cầu candidate;
         `apply`/`confirm`/`rollback` yêu cầu transactionId. Response `rejected` vẫn trả HTTP 200
-        để giữ đầy đủ reasonCode/state authoritative; lỗi adapter/socket trả 502/503.
+        để giữ đầy đủ reasonCode/state authoritative; lỗi adapter/socket hoặc authority response
+         không hợp đồng trả 502/503. DNS mutation chỉ được gửi sau status-preflight có capability
+         `dns` và chỉ accepted khi response validate/stage vẫn công bố capability, echo đúng pending
+         DNS/candidate tương ứng; mỗi POST sau authorization ghi đúng một audit event không chứa
+         candidate, DNS hoặc token, kể cả request sai shape/action.
       x-rbac: [admin]
       parameters:
         - name: action
@@ -1459,21 +1471,78 @@ components:
         ipv4: { type: string, format: ipv4, maxLength: 15, description: "Required usable host address for static mode; forbidden for DHCP." }
         netmask: { type: string, format: ipv4, maxLength: 15, description: "Static mode requires a contiguous prefix length 1..30; forbidden for DHCP." }
         gateway: { type: string, format: ipv4, maxLength: 15, description: "Optional usable address in the candidate subnet for static mode; forbidden for DHCP." }
+        dns:
+          $ref: "#/components/schemas/NetcfgDns"
+          description: Omitted to preserve the current profile DNS; included DNS is committed and rolled back with the same transaction.
+      allOf:
+        - if:
+            properties: { mode: { const: static } }
+            required: [mode]
+          then:
+            required: [ipv4, netmask]
+        - if:
+            properties: { mode: { const: dhcp } }
+            required: [mode]
+          then:
+            not:
+              anyOf:
+                - required: [ipv4]
+                - required: [netmask]
+                - required: [gateway]
+        - if:
+            properties:
+              dns:
+                properties: { mode: { const: auto } }
+                required: [mode]
+            required: [dns]
+          then:
+            properties: { mode: { const: dhcp } }
+    NetcfgDns:
+      type: object
+      additionalProperties: false
+      required: [mode, servers]
+      properties:
+        mode: { type: string, enum: [auto, manual] }
+        servers:
+          type: array
+          items: { type: string, format: ipv4 }
+          uniqueItems: true
+          maxItems: 4
+      allOf:
+        - if:
+            properties: { mode: { const: auto } }
+            required: [mode]
+          then:
+            properties: { servers: { maxItems: 0 } }
+        - if:
+            properties: { mode: { const: manual } }
+            required: [mode]
+          then:
+            properties: { servers: { minItems: 1, maxItems: 4 } }
     NetcfgActive:
       type: object
       additionalProperties: false
-      required: [interface, link, mode, ipv4, prefixLength, gateway]
+      description: Current kernel-observed interface state; this is not the saved NetworkManager profile.
+      required: [interface, link, adminUp, carrier, reasonCode, mode, ipv4, prefixLength, gateway, dnsServers]
       properties:
         interface: { type: string }
         link: { type: string, enum: [up, down, unknown] }
+        adminUp: { type: boolean }
+        carrier: { type: boolean }
+        reasonCode: { type: string }
         mode: { type: string, enum: [static, dhcp, unknown] }
         ipv4: { type: string }
         prefixLength: { type: integer, minimum: 0, maximum: 32 }
         gateway: { type: string }
+        dnsServers:
+          type: array
+          items: { type: string, format: ipv4 }
+          uniqueItems: true
+          maxItems: 4
     NetcfgResponse:
       type: object
       additionalProperties: false
-      required: [version, requestId, result, reasonCode, state]
+      required: [version, requestId, result, reasonCode, state, capabilities, management]
       properties:
         version: { type: integer, enum: [1] }
         requestId: { type: string }
@@ -1483,8 +1552,33 @@ components:
         transactionId: { type: string }
         state: { type: string, enum: [idle, staged, applying, awaiting_confirmation, confirmed, rolling_back, rolled_back, failed] }
         rollbackRemainingS: { type: integer, minimum: 0, maximum: 120 }
-        active: { $ref: "#/components/schemas/NetcfgActive" }
-        pending: { $ref: "#/components/schemas/NetcfgCandidate" }
+        active:
+          $ref: "#/components/schemas/NetcfgActive"
+          description: Current kernel-observed state and interface health.
+        configured:
+          $ref: "#/components/schemas/NetcfgCandidate"
+          description: Saved NetworkManager connection profile; omitted when no readable profile exists.
+        pending:
+          $ref: "#/components/schemas/NetcfgCandidate"
+          description: Candidate held by an active transaction; omitted when no transaction candidate exists.
+        capabilities:
+          type: array
+          description: Exact protocol-v1 capability allowlist; clients must preflight before optional mutation.
+          prefixItems:
+            - { const: dns }
+            - { const: management-hostname }
+          minItems: 2
+          maxItems: 2
+        management: { $ref: "#/components/schemas/NetcfgManagement" }
+    NetcfgManagement:
+      type: object
+      additionalProperties: false
+      description: Read-only stable management origin; never accepted in a transaction candidate.
+      required: [hostname, mdnsName, stable]
+      properties:
+        hostname: { type: string, readOnly: true }
+        mdnsName: { type: string, readOnly: true }
+        stable: { type: boolean, readOnly: true }
     ConfigDevice:
       type: object
       required: [device_id, device_name]
@@ -1502,7 +1596,9 @@ components:
           description: Compatibility shadow only; Ethernet mutation is owned by mkddc-netcfg transactions.
           additionalProperties: true
         wifi: { type: object, additionalProperties: true }
-        hostname: { type: string }
+        hostname:
+          type: string
+          description: Compatibility service field only; does not mutate the OS management hostname or NetcfgManagement.
     ConfigPointMetadata:
       type: object
       required: [ch, tag]

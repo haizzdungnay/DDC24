@@ -118,9 +118,6 @@ func networkPageConfigFromFiles(device ConfigDevice, network ConfigNetwork, bacn
 	wifi := network.Wifi
 	bip := bacnet.BIP
 	ip := stringValue(eth, "ip")
-	if ip == "" {
-		ip = primaryIPv4()
-	}
 	deviceName := device.DeviceName
 	if deviceName == "" {
 		deviceName = network.Hostname
@@ -181,7 +178,7 @@ func networkPageConfigToFiles(cfg NetworkPageConfig, baseNetwork ConfigNetwork, 
 	bip["enabled"] = true
 	bip["udp_port"] = cfg.BacnetPort
 	networkCfg := ConfigNetwork{
-		Hostname: firstNonEmpty(cfg.DeviceName, baseNetwork.Hostname),
+		Hostname: baseNetwork.Hostname,
 		// Ethernet is owned by mkddc-netcfg/NetworkManager and is never rewritten
 		// by the compatibility BACnet/WiFi save path.
 		Eth:  baseNetwork.Eth,

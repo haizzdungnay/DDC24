@@ -1,0 +1,11 @@
+# GHSA-qwww-vcr4-c8h2 only affects React Router's unstable RSC APIs.
+# This application is a client-only SPA using BrowserRouter and does not
+# enable or import the unstable RSC entry points. Keep the exception scoped
+# to the affected package/version while retaining all other high-severity
+# findings as CI failures.
+ignore:
+  - vulnerability: GHSA-qwww-vcr4-c8h2
+    package:
+      name: react-router
+      version: 7.18.1
+      type: npm

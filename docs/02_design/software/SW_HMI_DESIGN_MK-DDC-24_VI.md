@@ -227,7 +227,7 @@ second actuation.
 | Points | All available points with value/unit/quality/age | Read-only |
 | Control | Whitelisted points and point faceplate | Setpoint/mode/override/release |
 | Alarms | Active/history snapshot, priority/state/source/response | Authoritative ACK |
-| Service | System/communication diagnostics; approved Ethernet IPv4 commissioning/recovery | Network mutation: Service role only |
+| Service | System/communication diagnostics; approved Ethernet IPv4 commissioning/recovery | Network status read-only cho session hợp lệ; mutation chỉ role Admin. Service là surface, không phải role |
 
 Communication and System content from the legacy screens must be consolidated into
 Home and Service, not deleted.

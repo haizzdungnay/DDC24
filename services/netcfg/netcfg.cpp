@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
+#include <limits.h>
 #include <net/if.h>
 #include <poll.h>
 #include <pwd.h>
@@ -15,13 +16,16 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <initializer_list>
 #include <regex>
+#include <set>
 #include <sstream>
 #include <thread>
 
@@ -58,6 +62,78 @@ std::string trim(std::string value)
     return first == std::string::npos ? std::string{} : value.substr(first);
 }
 
+bool canonical_ipv4(const std::string& value)
+{
+    struct in_addr address {};
+    if (::inet_pton(AF_INET, value.c_str(), &address) != 1) return false;
+    std::array<char, INET_ADDRSTRLEN> text {};
+    return ::inet_ntop(AF_INET, &address, text.data(), text.size()) && value == text.data();
+}
+
+std::vector<std::string> parse_dns_servers(std::string value, bool* valid = nullptr)
+{
+    if (valid) *valid = true;
+    std::replace_if(value.begin(), value.end(), [](char c) {
+        return c == ',' || c == ';';
+    }, ' ');
+    std::istringstream fields(value);
+    std::vector<std::string> servers;
+    std::set<std::string> seen;
+    std::string server;
+    while (fields >> server) {
+        if (!canonical_ipv4(server) || !seen.insert(server).second) {
+            if (valid) *valid = false;
+            continue;
+        }
+        servers.push_back(server);
+    }
+    return servers;
+}
+
+std::string join_dns_servers(const std::vector<std::string>& servers)
+{
+    std::ostringstream value;
+    for (size_t index = 0; index < servers.size(); ++index) {
+        if (index != 0) value << ',';
+        value << servers[index];
+    }
+    return value.str();
+}
+
+bool valid_management_hostname(const std::string& hostname)
+{
+    if (hostname.empty() || hostname.size() > 63 || hostname == "localhost" ||
+        hostname.front() == '-' || hostname.back() == '-') return false;
+    return std::all_of(hostname.begin(), hostname.end(), [](unsigned char c) {
+        return (c >= 'a' && c <= 'z') || std::isdigit(c) || c == '-';
+    });
+}
+
+bool has_only_fields(const nlohmann::json& value,
+                     std::initializer_list<const char*> allowed)
+{
+    if (!value.is_object()) return false;
+    for (auto it = value.begin(); it != value.end(); ++it) {
+        const bool known = std::any_of(allowed.begin(), allowed.end(), [&](const char* field) {
+            return it.key() == field;
+        });
+        if (!known) return false;
+    }
+    return true;
+}
+
+bool valid_request_shape(const nlohmann::json& request)
+{
+    if (!has_only_fields(request, {"version", "requestId", "action", "transactionId",
+                                   "candidate"})) return false;
+    if (!request.contains("candidate")) return true;
+    const auto& candidate = request.at("candidate");
+    if (!has_only_fields(candidate, {"interface", "mode", "ipv4", "netmask", "gateway",
+                                     "dns"})) return false;
+    return !candidate.contains("dns") ||
+        has_only_fields(candidate.at("dns"), {"mode", "servers"});
+}
+
 std::string cidr(const Candidate& candidate)
 {
     return candidate.ipv4 + "/" + std::to_string(netmask_to_prefix(candidate.netmask));
@@ -70,8 +146,8 @@ std::string cidr(const ActiveState& state)
 
 bool netmask_from_prefix(int prefix, std::string* netmask)
 {
-    if (prefix < 1 || prefix > 30 || !netmask) return false;
-    const uint32_t mask = 0xFFFFFFFFu << (32 - prefix);
+    if (prefix < 0 || prefix > 32 || !netmask) return false;
+    const uint32_t mask = prefix == 0 ? 0 : 0xFFFFFFFFu << (32 - prefix);
     struct in_addr address { htonl(mask) };
     std::array<char, INET_ADDRSTRLEN> text {};
     if (!::inet_ntop(AF_INET, &address, text.data(), text.size())) return false;
@@ -93,11 +169,58 @@ bool restore_candidate_from(const ActiveState& previous, Candidate* restore)
     return validate_candidate(*restore, &ignored);
 }
 
-bool restored_state_matches(const ActiveState& previous, const ActiveState& active)
+bool configured_dns_matches(const Candidate& expected, const Candidate& configured)
 {
-    return active.interface == previous.interface && active.link == previous.link &&
-        active.mode == previous.mode && active.ipv4 == previous.ipv4 &&
-        active.prefix_length == previous.prefix_length && active.gateway == previous.gateway;
+    if (!expected.dns.has_value()) return !configured.dns.has_value();
+    return configured.dns.has_value() && configured.dns->mode == expected.dns->mode &&
+        configured.dns->servers == expected.dns->servers;
+}
+
+bool configured_profile_matches(const Candidate& expected, const Candidate& configured,
+                                bool verify_dns)
+{
+    if (configured.interface != expected.interface || configured.mode != expected.mode)
+        return false;
+    if (expected.mode == "static" &&
+        (configured.ipv4 != expected.ipv4 || configured.netmask != expected.netmask ||
+         configured.gateway != expected.gateway)) return false;
+    return !verify_dns || configured_dns_matches(expected, configured);
+}
+
+bool dhcp_candidate_ready(const Candidate& candidate, const ActiveState& active,
+                          const Candidate& configured)
+{
+    if (active.interface != candidate.interface || active.mode != "dhcp" ||
+        active.link != "up" || active.reason_code != "OK" || active.ipv4.empty() ||
+        !configured_profile_matches(candidate, configured, candidate.dns.has_value())) {
+        return false;
+    }
+    return !candidate.dns.has_value() || candidate.dns->mode == "auto" ||
+        active.dns_servers == candidate.dns->servers;
+}
+
+bool restored_state_matches(const ActiveState& previous, const ActiveState& active,
+                            const Candidate& previous_configured,
+                            const Candidate& configured, bool verify_dns)
+{
+    if (active.interface != previous.interface ||
+        (verify_dns && !configured_profile_matches(previous_configured, configured, true))) {
+        return false;
+    }
+
+    const bool previous_runtime_verifiable = previous.link == "up" &&
+        (previous.mode == "static" || previous.mode == "dhcp") && !previous.ipv4.empty();
+    if (!previous_runtime_verifiable) return true;
+
+    const bool runtime_dns_matches = !verify_dns ||
+        (previous_configured.dns.has_value()
+             ? previous_configured.dns->mode == "auto" ||
+                   active.dns_servers == previous_configured.dns->servers
+             : active.dns_servers.empty());
+    return active.link == previous.link && active.mode == previous.mode &&
+        active.ipv4 == previous.ipv4 &&
+        active.prefix_length == previous.prefix_length && active.gateway == previous.gateway &&
+        runtime_dns_matches;
 }
 
 bool write_all(int fd, const char* data, size_t size)
@@ -179,10 +302,22 @@ bool atomic_write_json(const std::string& path, const nlohmann::json& value,
 
 } // namespace
 
+void to_json(nlohmann::json& j, const DnsConfig& value)
+{
+    j = {{"mode", value.mode}, {"servers", value.servers}};
+}
+
+void from_json(const nlohmann::json& j, DnsConfig& value)
+{
+    j.at("mode").get_to(value.mode);
+    j.at("servers").get_to(value.servers);
+}
+
 void to_json(nlohmann::json& j, const Candidate& value)
 {
     j = {{"interface", value.interface}, {"mode", value.mode}, {"ipv4", value.ipv4},
          {"netmask", value.netmask}, {"gateway", value.gateway}};
+    if (value.dns.has_value()) j["dns"] = *value.dns;
 }
 
 void from_json(const nlohmann::json& j, Candidate& value)
@@ -192,13 +327,17 @@ void from_json(const nlohmann::json& j, Candidate& value)
     if (j.contains("ipv4")) j.at("ipv4").get_to(value.ipv4);
     if (j.contains("netmask")) j.at("netmask").get_to(value.netmask);
     if (j.contains("gateway")) j.at("gateway").get_to(value.gateway);
+    if (j.contains("dns")) value.dns = j.at("dns").get<DnsConfig>();
+    else value.dns.reset();
 }
 
 void to_json(nlohmann::json& j, const ActiveState& value)
 {
     j = {{"interface", value.interface}, {"link", value.link}, {"mode", value.mode},
          {"ipv4", value.ipv4}, {"prefixLength", value.prefix_length},
-         {"gateway", value.gateway}};
+         {"gateway", value.gateway}, {"adminUp", value.admin_up},
+         {"carrier", value.carrier}, {"reasonCode", value.reason_code},
+         {"dnsServers", value.dns_servers}};
 }
 
 void from_json(const nlohmann::json& j, ActiveState& value)
@@ -209,14 +348,27 @@ void from_json(const nlohmann::json& j, ActiveState& value)
     value.ipv4 = j.value("ipv4", "");
     value.prefix_length = j.value("prefixLength", 0);
     value.gateway = j.value("gateway", "");
+    value.admin_up = j.value("adminUp", false);
+    value.carrier = j.value("carrier", false);
+    value.reason_code = j.value("reasonCode", "OK");
+    value.dns_servers = j.value("dnsServers", std::vector<std::string>{});
+}
+
+void to_json(nlohmann::json& j, const ManagementState& value)
+{
+    j = {{"hostname", value.hostname}, {"mdnsName", value.mdns_name},
+         {"stable", value.stable}};
 }
 
 void to_json(nlohmann::json& j, const Transaction& value)
 {
     j = {{"schemaVersion", 1}, {"id", value.id}, {"state", value.state},
          {"candidate", value.candidate}, {"previous", value.previous},
+         {"previousConfiguredComplete", value.previous_configured_complete},
          {"rollbackDeadlineEpochMs", value.rollback_deadline_epoch_ms},
          {"lastReason", value.last_reason}};
+    if (value.previous_configured.has_value())
+        j["previousConfigured"] = *value.previous_configured;
 }
 
 void from_json(const nlohmann::json& j, Transaction& value)
@@ -226,6 +378,15 @@ void from_json(const nlohmann::json& j, Transaction& value)
     value.state = j.value("state", "idle");
     value.candidate = j.at("candidate").get<Candidate>();
     value.previous = j.at("previous").get<ActiveState>();
+    if (j.contains("previousConfigured")) {
+        value.previous_configured = j.at("previousConfigured").get<Candidate>();
+        value.previous_configured_complete = j.value("previousConfiguredComplete", true);
+    } else {
+        Candidate fallback;
+        if (restore_candidate_from(value.previous, &fallback)) value.previous_configured = fallback;
+        else value.previous_configured.reset();
+        value.previous_configured_complete = false;
+    }
     value.rollback_deadline_epoch_ms = j.value("rollbackDeadlineEpochMs", int64_t{0});
     value.last_reason = j.value("lastReason", "OK");
 }
@@ -257,32 +418,64 @@ bool validate_candidate(const Candidate& value, std::string* reason)
             if (reason) *reason = "DHCP_STATIC_FIELDS_PRESENT";
             return false;
         }
-        return true;
-    }
-    if (value.mode != "static") {
+    } else if (value.mode != "static") {
         if (reason) *reason = "INVALID_MODE";
         return false;
-    }
-    uint32_t ip = 0, gateway = 0;
-    const int prefix = netmask_to_prefix(value.netmask);
-    if (!parse_ipv4(value.ipv4, &ip) || prefix < 1 || prefix > 30) {
-        if (reason) *reason = "INVALID_ADDRESS";
-        return false;
-    }
-    if ((ip >> 24) == 0 || (ip >> 24) == 127 || (ip >> 28) == 0xEu || ip == 0xFFFFFFFFu) {
-        if (reason) *reason = "UNUSABLE_ADDRESS";
-        return false;
-    }
-    const uint32_t mask = prefix == 0 ? 0 : 0xFFFFFFFFu << (32 - prefix);
-    if ((ip & ~mask) == 0 || (ip & ~mask) == ~mask) {
-        if (reason) *reason = "NETWORK_OR_BROADCAST_ADDRESS";
-        return false;
-    }
-    if (!value.gateway.empty()) {
-        if (!parse_ipv4(value.gateway, &gateway) || gateway == ip ||
-            (gateway & mask) != (ip & mask) || (gateway & ~mask) == 0 ||
-            (gateway & ~mask) == ~mask) {
+    } else {
+        uint32_t ip = 0, gateway = 0;
+        const int prefix = netmask_to_prefix(value.netmask);
+        if (!parse_ipv4(value.ipv4, &ip) || prefix < 1 || prefix > 30) {
+            if (reason) *reason = "INVALID_ADDRESS";
+            return false;
+        }
+        if ((ip >> 24) == 0 || (ip >> 24) == 127 || (ip >> 28) == 0xEu ||
+            ip == 0xFFFFFFFFu) {
+            if (reason) *reason = "UNUSABLE_ADDRESS";
+            return false;
+        }
+        const uint32_t mask = 0xFFFFFFFFu << (32 - prefix);
+        if ((ip & ~mask) == 0 || (ip & ~mask) == ~mask) {
+            if (reason) *reason = "NETWORK_OR_BROADCAST_ADDRESS";
+            return false;
+        }
+        if (!value.gateway.empty() &&
+            (!parse_ipv4(value.gateway, &gateway) || gateway == ip ||
+             (gateway & mask) != (ip & mask) || (gateway & ~mask) == 0 ||
+             (gateway & ~mask) == ~mask)) {
             if (reason) *reason = "INVALID_GATEWAY";
+            return false;
+        }
+    }
+
+    if (!value.dns.has_value()) return true;
+    if (value.dns->mode == "auto") {
+        if (value.mode != "dhcp") {
+            if (reason) *reason = "DNS_AUTO_REQUIRES_DHCP";
+            return false;
+        }
+        if (!value.dns->servers.empty()) {
+            if (reason) *reason = "DNS_AUTO_SERVERS_PRESENT";
+            return false;
+        }
+        return true;
+    }
+    if (value.dns->mode != "manual") {
+        if (reason) *reason = "INVALID_DNS_MODE";
+        return false;
+    }
+    if (value.dns->servers.empty() || value.dns->servers.size() > 4) {
+        if (reason) *reason = value.dns->servers.empty() ? "DNS_SERVERS_REQUIRED"
+                                                        : "TOO_MANY_DNS_SERVERS";
+        return false;
+    }
+    std::set<std::string> unique_servers;
+    for (const auto& server : value.dns->servers) {
+        if (!canonical_ipv4(server)) {
+            if (reason) *reason = "INVALID_DNS_SERVER";
+            return false;
+        }
+        if (!unique_servers.insert(server).second) {
+            if (reason) *reason = "DUPLICATE_DNS_SERVER";
             return false;
         }
     }
@@ -337,41 +530,97 @@ std::string LinuxPlatform::connection_name(const std::string& interface)
     std::string output;
     if (nmcli.empty() || !run({nmcli, "-g", "GENERAL.CONNECTION", "device", "show", interface}, &output))
         return {};
-    return trim(output);
+    output = trim(output);
+    return output == "--" ? std::string{} : output;
+}
+
+std::string LinuxPlatform::configured_connection_name(const std::string& interface)
+{
+    const std::string active_connection = connection_name(interface);
+    if (!active_connection.empty()) return active_connection;
+
+    const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
+    std::string output;
+    if (nmcli.empty() || !run({nmcli, "-g", "UUID", "connection", "show"}, &output))
+        return {};
+
+    std::istringstream profiles(output);
+    std::string uuid;
+    while (std::getline(profiles, uuid)) {
+        uuid = trim(uuid);
+        if (uuid.empty()) continue;
+        std::string bound_interface;
+        if (run({nmcli, "-g", "connection.interface-name", "connection", "show",
+                 "uuid", uuid}, &bound_interface) &&
+            trim(bound_interface) == interface) {
+            return uuid;
+        }
+    }
+    return {};
+}
+
+bool LinuxPlatform::read_interface_state(const std::string& interface,
+                                         InterfaceSnapshot* state) const
+{
+    if (!state || interface.empty()) return false;
+    *state = InterfaceSnapshot{};
+    struct ifaddrs* addresses = nullptr;
+    if (::getifaddrs(&addresses) != 0) return false;
+    for (const auto* item = addresses; item; item = item->ifa_next) {
+        if (!item->ifa_name || interface != item->ifa_name) continue;
+        state->present = true;
+        state->admin_up = (item->ifa_flags & IFF_UP) != 0;
+        state->carrier = (item->ifa_flags & IFF_RUNNING) != 0;
+        if (!item->ifa_addr || item->ifa_addr->sa_family != AF_INET ||
+            !state->ipv4.empty()) continue;
+        std::array<char, INET_ADDRSTRLEN> text {};
+        const auto* address = reinterpret_cast<const struct sockaddr_in*>(item->ifa_addr);
+        if (::inet_ntop(AF_INET, &address->sin_addr, text.data(), text.size()))
+            state->ipv4 = text.data();
+        if (item->ifa_netmask) {
+            const auto* mask = reinterpret_cast<const struct sockaddr_in*>(item->ifa_netmask);
+            state->prefix_length = __builtin_popcount(ntohl(mask->sin_addr.s_addr));
+        }
+    }
+    ::freeifaddrs(addresses);
+    return true;
 }
 
 ActiveState LinuxPlatform::status(const std::string& requested_interface, std::string* reason)
 {
     ActiveState result;
-    result.gateway.clear();
     result.interface = requested_interface.empty() ? default_route_interface(&result.gateway)
                                                    : requested_interface;
+    const auto set_reason = [&](const std::string& value) {
+        result.reason_code = value;
+        if (reason) *reason = value;
+    };
     if (result.interface.empty()) {
-        if (reason) *reason = "INTERFACE_NOT_FOUND";
+        set_reason("INTERFACE_NOT_FOUND");
         return result;
     }
-    if (requested_interface.size()) {
+
+    InterfaceSnapshot snapshot;
+    if (!read_interface_state(result.interface, &snapshot)) {
+        set_reason("KERNEL_STATE_UNAVAILABLE");
+        return result;
+    }
+    if (!snapshot.present) {
+        set_reason("INTERFACE_NOT_FOUND");
+        return result;
+    }
+
+    result.admin_up = snapshot.admin_up;
+    result.carrier = snapshot.carrier;
+    result.link = result.admin_up && result.carrier ? "up" : "down";
+    result.ipv4 = snapshot.ipv4;
+    result.prefix_length = snapshot.prefix_length;
+    if (!requested_interface.empty()) {
         std::string route_gateway;
-        if (default_route_interface(&route_gateway) == result.interface) result.gateway = route_gateway;
+        if (default_route_interface(&route_gateway) == result.interface)
+            result.gateway = route_gateway;
     }
-    struct ifaddrs* addresses = nullptr;
-    if (::getifaddrs(&addresses) != 0) {
-        if (reason) *reason = "KERNEL_STATE_UNAVAILABLE";
-        return result;
-    }
-    for (const auto* item = addresses; item; item = item->ifa_next) {
-        if (!item->ifa_name || result.interface != item->ifa_name) continue;
-        result.link = (item->ifa_flags & IFF_UP) ? "up" : "down";
-        if (!item->ifa_addr || item->ifa_addr->sa_family != AF_INET || !result.ipv4.empty()) continue;
-        std::array<char, INET_ADDRSTRLEN> text {};
-        const auto* address = reinterpret_cast<const struct sockaddr_in*>(item->ifa_addr);
-        if (::inet_ntop(AF_INET, &address->sin_addr, text.data(), text.size())) result.ipv4 = text.data();
-        if (item->ifa_netmask) {
-            const auto* mask = reinterpret_cast<const struct sockaddr_in*>(item->ifa_netmask);
-            result.prefix_length = __builtin_popcount(ntohl(mask->sin_addr.s_addr));
-        }
-    }
-    ::freeifaddrs(addresses);
+
     const std::string connection = connection_name(result.interface);
     const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
     std::string mode;
@@ -379,7 +628,116 @@ ActiveState LinuxPlatform::status(const std::string& requested_interface, std::s
         run({nmcli, "-g", "ipv4.method", "connection", "show", connection}, &mode)) {
         result.mode = trim(mode) == "auto" ? "dhcp" : (trim(mode) == "manual" ? "static" : "unknown");
     }
-    if (reason) *reason = result.ipv4.empty() ? "NO_ACTIVE_ADDRESS" : "OK";
+    std::string dns_servers;
+    if (!nmcli.empty() &&
+        run({nmcli, "-g", "IP4.DNS", "device", "show", result.interface}, &dns_servers))
+        result.dns_servers = parse_dns_servers(dns_servers);
+    if (!result.admin_up) set_reason("ADMIN_DOWN");
+    else if (!result.carrier) set_reason("NO_CARRIER");
+    else if (result.ipv4.empty()) set_reason("NO_ACTIVE_ADDRESS");
+    else set_reason("OK");
+    return result;
+}
+
+Candidate LinuxPlatform::configured(const std::string& requested_interface)
+{
+    Candidate result;
+    result.interface = requested_interface.empty() ? default_route_interface(nullptr)
+                                                   : requested_interface;
+    result.mode = "unknown";
+    if (result.interface.empty()) return result;
+
+    const std::string connection = configured_connection_name(result.interface);
+    const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
+    std::string method;
+    if (connection.empty() || nmcli.empty() ||
+        !run({nmcli, "-g", "ipv4.method", "connection", "show", connection}, &method))
+        return result;
+
+    method = trim(method);
+    if (method == "auto") result.mode = "dhcp";
+    else if (method == "manual") {
+        result.mode = "static";
+        std::string addresses;
+        if (run({nmcli, "-g", "ipv4.addresses", "connection", "show", connection},
+                &addresses)) {
+            std::istringstream values(addresses);
+            std::string address;
+            while (std::getline(values, address)) {
+                address = trim(address);
+                const size_t separator = address.find('/');
+                if (separator == std::string::npos) continue;
+                const std::string ipv4 = address.substr(0, separator);
+                const std::string prefix_text = address.substr(separator + 1);
+                uint32_t ignored = 0;
+                try {
+                    size_t parsed = 0;
+                    const int prefix = std::stoi(prefix_text, &parsed);
+                    if (parsed == prefix_text.size() && parse_ipv4(ipv4, &ignored) &&
+                        netmask_from_prefix(prefix, &result.netmask)) {
+                        result.ipv4 = ipv4;
+                        break;
+                    }
+                } catch (...) {
+                    continue;
+                }
+            }
+        }
+        std::string gateway;
+        if (run({nmcli, "-g", "ipv4.gateway", "connection", "show", connection},
+                &gateway))
+            result.gateway = trim(gateway);
+    } else return result;
+
+    std::string dns_output;
+    std::string ignore_auto_dns;
+    const bool has_dns_setting = run(
+        {nmcli, "-g", "ipv4.dns", "connection", "show", connection}, &dns_output);
+    bool dns_valid = true;
+    const std::vector<std::string> dns = has_dns_setting
+        ? parse_dns_servers(dns_output, &dns_valid) : std::vector<std::string>{};
+    const bool has_ignore_setting = run(
+        {nmcli, "-g", "ipv4.ignore-auto-dns", "connection", "show", connection},
+        &ignore_auto_dns);
+    if (!has_dns_setting || !has_ignore_setting || !dns_valid || dns.size() > 4) {
+        result.mode = "unknown";
+        return result;
+    }
+    const std::string dns_policy = trim(ignore_auto_dns);
+    if (dns_policy != "yes" && dns_policy != "no") {
+        result.mode = "unknown";
+        return result;
+    }
+    if (dns_policy == "no") {
+        if (!dns.empty()) {
+            result.mode = "unknown";
+            return result;
+        }
+        if (result.mode == "dhcp") result.dns = DnsConfig{"auto", {}};
+        return result;
+    }
+    if (dns.empty()) {
+        result.mode = "unknown";
+        return result;
+    }
+    result.dns = DnsConfig{"manual", dns};
+    return result;
+}
+
+std::string LinuxPlatform::management_hostname() const
+{
+    std::array<char, HOST_NAME_MAX + 1> hostname {};
+    if (::gethostname(hostname.data(), HOST_NAME_MAX) != 0) return {};
+    hostname.back() = '\0';
+    return trim(hostname.data());
+}
+
+ManagementState LinuxPlatform::management()
+{
+    ManagementState result;
+    result.hostname = management_hostname();
+    result.stable = valid_management_hostname(result.hostname);
+    if (!result.hostname.empty()) result.mdns_name = result.hostname + ".local";
     return result;
 }
 
@@ -399,10 +757,11 @@ bool LinuxPlatform::preflight(const Candidate& candidate, std::string* reason)
     return true;
 }
 
-bool LinuxPlatform::persist(const Candidate& candidate, std::string* reason)
+bool LinuxPlatform::persist(const Candidate& candidate, std::string* reason,
+    bool preserve_missing_dns)
 {
     const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
-    const std::string connection = connection_name(candidate.interface);
+    const std::string connection = configured_connection_name(candidate.interface);
     if (nmcli.empty() || connection.empty()) {
         if (reason) *reason = "NETWORKMANAGER_UNAVAILABLE";
         return false;
@@ -413,6 +772,15 @@ bool LinuxPlatform::persist(const Candidate& candidate, std::string* reason)
     } else {
         args.insert(args.end(), {"ipv4.method", "manual", "ipv4.addresses", cidr(candidate),
                                  "ipv4.gateway", candidate.gateway});
+    }
+    if (candidate.dns.has_value()) {
+        if (candidate.dns->mode == "auto")
+            args.insert(args.end(), {"ipv4.ignore-auto-dns", "no", "ipv4.dns", ""});
+        else
+            args.insert(args.end(), {"ipv4.ignore-auto-dns", "yes", "ipv4.dns",
+                                     join_dns_servers(candidate.dns->servers)});
+    } else if (!preserve_missing_dns) {
+        args.insert(args.end(), {"ipv4.ignore-auto-dns", "no", "ipv4.dns", ""});
     }
     std::string output;
     if (!run(args, &output)) {
@@ -493,10 +861,13 @@ bool LinuxPlatform::confirm(const Candidate& candidate, const ActiveState& previ
 }
 
 bool LinuxPlatform::rollback(const Candidate& candidate, const ActiveState& previous,
+                              const Candidate& previous_configured,
+                              bool previous_configured_complete,
                               std::string* reason)
 {
-    Candidate restore;
-    if (!restore_candidate_from(previous, &restore)) {
+    Candidate restore = previous_configured;
+    std::string validation_reason;
+    if (!validate_candidate(restore, &validation_reason)) {
         if (reason) *reason = "PREVIOUS_STATE_NOT_RESTORABLE";
         return false;
     }
@@ -507,7 +878,7 @@ bool LinuxPlatform::rollback(const Candidate& candidate, const ActiveState& prev
         !applied.ipv4.empty() && applied.ipv4 != previous.ipv4
         ? applied.ipv4 : candidate.ipv4;
 
-    if (!persist(restore, reason)) return false;
+    if (!persist(restore, reason, !previous_configured_complete)) return false;
     const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
     if (nmcli.empty()) {
         if (reason) *reason = "NETWORKMANAGER_UNAVAILABLE";
@@ -544,7 +915,10 @@ bool LinuxPlatform::rollback(const Candidate& candidate, const ActiveState& prev
     constexpr int kVerifyAttempts = 20;
     for (int attempt = 0; attempt < kVerifyAttempts; ++attempt) {
         const ActiveState active = status(previous.interface, &status_reason);
-        if (restored_state_matches(previous, active)) return true;
+        const Candidate configured_state = previous_configured_complete
+            ? configured(previous.interface) : Candidate{};
+        if (restored_state_matches(previous, active, previous_configured,
+                                   configured_state, previous_configured_complete)) return true;
         if (attempt + 1 < kVerifyAttempts) rollback_retry_delay();
     }
     if (reason) *reason = "ROLLBACK_VERIFY_FAILED";
@@ -632,9 +1006,22 @@ nlohmann::json Engine::response(const std::string& request_id, const std::string
     const std::string iface = transaction_.candidate.interface.empty() ? default_interface_
                                                                        : transaction_.candidate.interface;
     const ActiveState active = platform_->status(iface, &status_reason);
+    const Candidate configured = platform_->configured(iface);
+    const ManagementState management = platform_->management();
     nlohmann::json value{{"version", kProtocolVersion}, {"requestId", request_id},
                          {"result", result}, {"reasonCode", reason_code},
-                         {"state", transaction_.state}, {"active", active}};
+                         {"state", transaction_.state}, {"active", active},
+                         {"capabilities", {"dns", "management-hostname"}},
+                         {"management", management}};
+    if (configured.mode == "static" || configured.mode == "dhcp") {
+        nlohmann::json configured_json{{"interface", configured.interface},
+                                       {"mode", configured.mode}};
+        if (!configured.ipv4.empty()) configured_json["ipv4"] = configured.ipv4;
+        if (!configured.netmask.empty()) configured_json["netmask"] = configured.netmask;
+        if (!configured.gateway.empty()) configured_json["gateway"] = configured.gateway;
+        if (configured.dns.has_value()) configured_json["dns"] = *configured.dns;
+        value["configured"] = std::move(configured_json);
+    }
     if (!message.empty()) value["message"] = message;
     if (!transaction_.id.empty()) value["transactionId"] = transaction_.id;
     if (!transaction_.candidate.interface.empty() &&
@@ -666,7 +1053,12 @@ void Engine::rollback_locked(const std::string& cause)
     std::string ignored;
     (void)save_journal(&ignored);
     std::string reason;
-    if (platform_->rollback(transaction_.candidate, transaction_.previous, &reason)) {
+    if (!transaction_.previous_configured.has_value()) {
+        transaction_.state = "failed";
+        transaction_.last_reason = "PREVIOUS_STATE_NOT_RESTORABLE";
+    } else if (platform_->rollback(transaction_.candidate, transaction_.previous,
+                                   *transaction_.previous_configured,
+                                   transaction_.previous_configured_complete, &reason)) {
         transaction_.state = "rolled_back";
         transaction_.last_reason = cause;
     } else {
@@ -693,7 +1085,8 @@ void Engine::tick()
     if (transaction_.state == "applying" && transaction_.candidate.mode == "dhcp") {
         std::string reason;
         const ActiveState active = platform_->status(transaction_.candidate.interface, &reason);
-        if (!active.ipv4.empty() && active.ipv4 != transaction_.previous.ipv4) {
+        const Candidate configured = platform_->configured(transaction_.candidate.interface);
+        if (dhcp_candidate_ready(transaction_.candidate, active, configured)) {
             transaction_.state = "awaiting_confirmation";
             std::string ignored;
             (void)save_journal(&ignored);
@@ -704,7 +1097,9 @@ void Engine::tick()
 nlohmann::json Engine::handle(const nlohmann::json& request)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    const std::string request_id = request.value("requestId", "");
+    const std::string request_id = request.is_object() && request.contains("requestId") &&
+        request.at("requestId").is_string() ? request.at("requestId").get<std::string>() : "";
+    if (!valid_request_shape(request)) return response(request_id, "rejected", "INVALID_REQUEST");
     const std::string hash = request_hash(request);
     if (const auto it = cache_.find(request_id); it != cache_.end()) {
         if (it->second.first == hash) return it->second.second;
@@ -740,10 +1135,11 @@ nlohmann::json Engine::handle(const nlohmann::json& request)
             result = response(request_id, "accepted", "OK");
         else {
             const ActiveState active = platform_->status(candidate.interface, &reason);
-            Candidate restore;
+            const Candidate configured = platform_->configured(candidate.interface);
             if (active.interface.empty()) {
                 result = response(request_id, "rejected", reason.empty() ? "KERNEL_STATE_UNAVAILABLE" : reason);
-            } else if (!restore_candidate_from(active, &restore)) {
+            } else if (configured.interface != candidate.interface ||
+                       !validate_candidate(configured, &reason)) {
                 result = response(request_id, "rejected", "PREVIOUS_STATE_NOT_RESTORABLE");
             } else {
                 Transaction next;
@@ -753,6 +1149,8 @@ nlohmann::json Engine::handle(const nlohmann::json& request)
                 next.state = "staged";
                 next.candidate = candidate;
                 next.previous = active;
+                next.previous_configured = configured;
+                next.previous_configured_complete = true;
                 const Transaction old = transaction_;
                 transaction_ = next;
                 if (!save_journal(&reason)) {
@@ -865,9 +1263,7 @@ void Server::handle_client(int fd)
         if (frame.empty() || frame.size() > kMaxFrameBytes) throw std::runtime_error("bad frame");
         response = engine_.handle(nlohmann::json::parse(frame));
     } catch (...) {
-        response = {{"version", kProtocolVersion}, {"requestId", ""},
-                    {"result", "rejected"}, {"reasonCode", "INVALID_REQUEST"},
-                    {"state", "idle"}};
+        response = engine_.handle(nlohmann::json{{"invalid", true}});
     }
     const std::string output = response.dump() + "\n";
     (void)write_all(fd, output.data(), output.size());

@@ -2,7 +2,7 @@
 ## MK-DDC-24 — Trước khi bàn giao
 
 > **Document ID:** IMPL-HANDOVER-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-07-22 (ADR-016 local HMI release gates)
+> **Phiên bản:** 1.2 | 2026-07-28 (ADR-017 Network release gates)
 > **Trạng thái:** Draft — chưa đến giai đoạn release
 > **Owner:** PM/Lead. Bàn giao chỉ khi MỌI ô tick + ký.
 
@@ -14,7 +14,7 @@
 [ ] Build clean từ repo CLONE MỚI (không dùng workspace cũ) — cả 4 phần:
       fw/ · services/iobus · services/core · web/
 [ ] Firmware version rõ (DIAG_RESP FW_VERSION khớp tag git).
-[ ] SOM service version rõ (mkddc-core/iobus/web --version khớp tag).
+[ ] SOM service version rõ (mkddc-core/iobus/netcfg/web --version khớp tag).
 [ ] IOP version đúng (IOP_VER_MAJOR.MINOR = 1.1) khớp 2 phía.
 [ ] shared/iop_protocol.h + mkddc_shm.h không bị fork (1 nguồn).
 ```
@@ -22,11 +22,11 @@
 ## 2. Cấu hình & triển khai
 
 ```
-[ ] Config mặc định có sẵn (io_config, network, device, safe_state, users).
-[ ] systemd 3 service (mkddc-core, mkddc-iobus, mkddc-web) enable được.
-[ ] Sau reboot: 3 service tự lên đúng thứ tự (core → iobus → web).
+[ ] Config mặc định có sẵn (io_config, network, netcfg allowlist, device, safe_state, users).
+[ ] systemd core/iobus/netcfg/web enable được; HMI chỉ enable theo SKU/hardware.
+[ ] Sau reboot: netcfg sẵn sàng trước Web transaction; systemd dependency verify PASS.
 [ ] WatchdogSec + hardware watchdog hoạt động.
-[ ] Quyền user đúng (mkddc / mkddcweb), không chạy root thừa.
+[ ] Quyền user/socket đúng; netcfg chỉ giữ capability bắt buộc, HMI không truy cập trực tiếp netcfg.sock.
 ```
 
 ## 3. Chức năng (smoke test trên board thật)
@@ -45,6 +45,14 @@
 [ ] HMI setpoint/mode/override/release chỉ cho point whitelist; broker/core/audit path pass.
 [ ] HMI alarm ACK authoritative; broker loss chuyển read-only; không blind replay.
 [ ] HMI không có CAP_SYS_BOOT/direct signal/direct SHM write; maintenance unsupported bị disable.
+[ ] Network GET status cho viewer+; mọi POST transaction chỉ Admin.
+[ ] Strict protocol v1 từ chối unknown field/version/action; capability exact có dns + management-hostname.
+[ ] DNS preserve/auto/manual validate đúng; DNS rollback cùng IPv4, không có writer riêng.
+[ ] Management hostname chỉ đọc trong authority; package chỉ cài hostname tool/template, không tự apply.
+[ ] HMI surface Service đọc status; mutation Admin-only, Stage double-confirm 5 s và countdown monotonic.
+[ ] Physical end1 static/DHCP/DNS, confirm/120 s rollback, reboot/power/disk fault PASS có raw evidence.
+[ ] Stable hostname/mDNS IP handoff, REST/WebSocket reconnect, BACnet I-Am packet capture và Modbus reconnect PASS.
+[ ] Core/IOP/STM32/output continuity qua đổi IP được đo trên hardware thật.
 ```
 
 ## 4. Sạch demo/bypass (BẮT BUỘC)
@@ -76,6 +84,8 @@
 [ ] Sơ đồ đấu dây IO + bảng điểm (point list) bàn giao.
 [ ] Hướng dẫn vận hành cơ bản cho người dùng cuối.
 [ ] Backup config mặc định + script restore.
+[ ] Network evidence ghi commit/toolchain/target/artifact hash, old/new/DNS/management path và reviewer.
+[ ] Known issues nói rõ Network gate RED nếu còn bất kỳ physical/HIL/security item chưa đóng.
 ```
 
 ## 7. Bảo mật (tối thiểu)
@@ -103,4 +113,4 @@
 > Chỉ phát hành khi đủ chữ ký + mọi ô §1–§7 tick. Bất kỳ ô §4 chưa tick = **chặn release**.
 
 ---
-**Rev** 1.1 | 2026-07-22 (ADR-016 local HMI handover and privilege gates) · 1.0 | 2026-06-10 · Liên quan: [13_DEFINITION_OF_DONE](13_DEFINITION_OF_DONE.md) · [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)
+**Rev** 1.2 | 2026-07-28 — thêm strict Network v1, DNS/capability/management hostname, Web/HMI RBAC và physical HIL checklist; mọi ô chưa tick tiếp tục chặn release. · 1.1 | 2026-07-22 (ADR-016 local HMI handover and privilege gates) · 1.0 | 2026-06-10 · Liên quan: [13_DEFINITION_OF_DONE](13_DEFINITION_OF_DONE.md) · [12_INTEGRATION_TEST_PLAN](12_INTEGRATION_TEST_PLAN.md)

@@ -27,7 +27,7 @@ MK-DDC-24 là BMS Edge Automation Controller với Program Runtime do Mekong s�
 - commissioning, point monitoring, alarm, trend, schedule và user management qua web;
 - I/O scan qua Kinexus-IOP và shared-memory contracts;
 - protocol integration và safe output behavior;
-- HMI cục bộ khi SKU/build bật tính năng: xem trạng thái/I/O/alarm/service, vận hành giới hạn các point được whitelist qua authority/core và phục hồi/cấu hình Ethernet IPv4 cơ bản bằng Service role theo ADR-017.
+- HMI cục bộ khi SKU/build bật tính năng: xem trạng thái/I/O/alarm/service, vận hành giới hạn các point được whitelist qua authority/core; phục hồi/cấu hình Ethernet IPv4 cơ bản nằm trong surface Service nhưng network mutation yêu cầu role Admin theo ADR-017.
 
 ## Ngoài phạm vi Rev A.0
 

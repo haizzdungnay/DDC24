@@ -131,7 +131,7 @@ func (a *App) Router() http.Handler {
 	mux.Handle("GET /api/v1/system/status", a.auth.Require(RoleViewer, a.handleSystemStatus))
 	mux.Handle("GET /api/v1/network", a.auth.Require(RoleViewer, a.handleGetNetworkPage))
 	mux.Handle("PUT /api/v1/network", a.auth.Require(RoleAdmin, a.handlePutNetworkPage))
-	mux.Handle("GET /api/v1/network/transaction", a.auth.Require(RoleAdmin, a.handleGetNetworkTransaction))
+	mux.Handle("GET /api/v1/network/transaction", a.auth.Require(RoleViewer, a.handleGetNetworkTransaction))
 	mux.Handle("POST /api/v1/network/transaction/{action}", a.auth.Require(RoleAdmin, a.handlePostNetworkTransaction))
 	mux.Handle("GET /api/v1/points", a.auth.Require(RoleViewer, a.handlePoints))
 	mux.Handle("GET /api/v1/points/{id}", a.auth.Require(RoleViewer, a.handlePoint))

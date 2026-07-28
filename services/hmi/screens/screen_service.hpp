@@ -26,6 +26,8 @@ private:
     std::string pending_action_;
     std::string status_ = "Login required for operator actions";
     std::string diagnostics_ = "Core: unknown";
+    std::string network_impact_;
+    NetworkStageGuard network_stage_guard_;
     NetworkModel network_model_;
 
     lv_obj_t* title_ = nullptr;
@@ -60,6 +62,7 @@ private:
     void close_network();
     void network_action(const std::string& action);
     void render_network();
+    void sync_network_form();
     static void auth_cb(lv_event_t* e);
     static void network_open_cb(lv_event_t* e);
     static void network_cb(lv_event_t* e);

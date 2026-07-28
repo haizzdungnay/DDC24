@@ -246,7 +246,7 @@ typedef struct {
 | SW-HMI-009 | Service action fail-closed theo identity/role; reboot có impact summary + hold 3s + safe-state confirmation từ core | MUST | HMI-015/018 | T-SW-108 |
 | SW-HMI-010 | Telemetry/action chưa có contract phải ẩn/disable; không suy diễn `OK` hoặc hiển thị placeholder như dữ liệu thật | MUST | HMI-019 | T-SW-109 |
 | SW-HMI-011 | Coding màu, text/symbol và focus phải qua IEC 60073 review; alarm philosophy theo IEC 62682; không tuyên bố certification từ design review | MUST | HMI-009/017 | T-SW-115 |
-| SW-HMI-012 | HMI phải qua scenario usability test trên panel thật với operator, commissioning và service roles | MUST | HMI-024 | T-SW-116 |
+| SW-HMI-012 | HMI phải qua scenario usability test trên panel thật với Viewer/Operator/Admin session và các surface vận hành/commissioning/Service; Service không phải role | MUST | HMI-024 | T-SW-116 |
 | SW-HMI-013 | Command client phải dùng versioned Unix-domain IPC qua local auth/audit broker; telemetry SHM giữ read-only và không đổi ABI | MUST | HMI-026/028 | T-SW-117 |
 | SW-HMI-014 | Point control model phải hỗ trợ authoritative query, setpoint, mode, override, release, reason, TTL, effective source/priority và stable reject code | MUST | HMI-025/027/032 | T-SW-118 |
 | SW-HMI-015 | Local session phải dùng opaque short-lived token, fail closed và idle expiry ≤15 phút; static role/PIN config không được grant production privilege | MUST | HMI-018/029 | T-SW-119 |

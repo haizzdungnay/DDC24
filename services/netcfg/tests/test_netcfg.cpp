@@ -12,6 +12,9 @@ namespace {
 class FakePlatform final : public netcfg::Platform {
 public:
     netcfg::ActiveState active{"eth0", "up", "static", "192.168.1.50", 24, "192.168.1.1"};
+    netcfg::Candidate configured_state{"eth0", "static", "192.168.1.50",
+                                       "255.255.255.0", "192.168.1.1"};
+    netcfg::ManagementState management_state{"mkddc-lab", "mkddc-lab.local", true};
     bool preflight_ok = true;
     bool apply_ok = true;
     bool confirm_ok = true;
@@ -19,13 +22,21 @@ public:
     int apply_calls = 0;
     int confirm_calls = 0;
     int rollback_calls = 0;
+    bool rollback_previous_complete = true;
+    netcfg::Candidate rollback_previous_configured;
 
     netcfg::ActiveState status(const std::string& interface, std::string* reason) override {
         auto result = active;
         if (!interface.empty()) result.interface = interface;
-        if (reason) *reason = "OK";
+        if (reason) *reason = result.reason_code;
         return result;
     }
+    netcfg::Candidate configured(const std::string& interface) override {
+        auto result = configured_state;
+        if (!interface.empty()) result.interface = interface;
+        return result;
+    }
+    netcfg::ManagementState management() override { return management_state; }
     bool preflight(const netcfg::Candidate&, std::string* reason) override {
         if (reason) *reason = preflight_ok ? "OK" : "DUPLICATE_ADDRESS";
         return preflight_ok;
@@ -41,12 +52,83 @@ public:
         if (reason) *reason = confirm_ok ? "OK" : "CONFIRM_FAILED";
         return confirm_ok;
     }
-    bool rollback(const netcfg::Candidate&, const netcfg::ActiveState& previous, std::string* reason) override {
+    bool rollback(const netcfg::Candidate&, const netcfg::ActiveState& previous,
+                  const netcfg::Candidate& previous_configured,
+                  bool previous_complete, std::string* reason) override {
         ++rollback_calls;
+        rollback_previous_configured = previous_configured;
+        rollback_previous_complete = previous_complete;
         if (rollback_ok) active = previous;
         if (reason) *reason = rollback_ok ? "OK" : "ROLLBACK_FAILED";
         return rollback_ok;
     }
+};
+
+class FakeStatusLinuxPlatform final : public netcfg::LinuxPlatform {
+public:
+    netcfg::InterfaceSnapshot snapshot;
+    bool kernel_state_available = true;
+    std::string active_connection;
+    std::string profile_uuid;
+    std::string profile_interface;
+    std::string profile_method;
+    std::string profile_addresses;
+    std::string profile_gateway;
+    std::string profile_dns;
+    std::string profile_ignore_auto_dns = "no";
+    std::string runtime_dns;
+    std::string hostname = "mkddc-lab";
+    std::vector<std::vector<std::string>> commands;
+
+    bool persist_candidate(const netcfg::Candidate& candidate, std::string* reason) {
+        return persist(candidate, reason);
+    }
+    bool preflight(const netcfg::Candidate&, std::string* reason) override {
+        if (reason) *reason = "OK";
+        return true;
+    }
+
+protected:
+    bool read_interface_state(const std::string&, netcfg::InterfaceSnapshot* state) const override {
+        if (!kernel_state_available) return false;
+        *state = snapshot;
+        return true;
+    }
+
+    bool run(const std::vector<std::string>& args, std::string* output) override {
+        commands.push_back(args);
+        const auto return_output = [&](const std::string& value) {
+            if (output) *output = value;
+            return true;
+        };
+        if (args.size() >= 6 && args[1] == "-g" && args[2] == "GENERAL.CONNECTION")
+            return return_output(active_connection);
+        if (args.size() == 5 && args[1] == "-g" && args[2] == "UUID")
+            return return_output(profile_uuid);
+        if (args.size() == 7 && args[1] == "-g" && args[2] == "connection.interface-name")
+            return return_output(profile_interface);
+        if (args.size() >= 6 && args[1] == "-g" && args[2] == "ipv4.method")
+            return return_output(profile_method);
+        if (args.size() >= 6 && args[1] == "-g" && args[2] == "ipv4.addresses")
+            return return_output(profile_addresses);
+        if (args.size() >= 6 && args[1] == "-g" && args[2] == "ipv4.gateway")
+            return return_output(profile_gateway);
+        if (args.size() >= 6 && args[1] == "-g" && args[2] == "ipv4.dns")
+            return return_output(profile_dns);
+        if (args.size() >= 6 && args[1] == "-g" && args[2] == "ipv4.ignore-auto-dns")
+            return return_output(profile_ignore_auto_dns);
+        if (args.size() >= 6 && args[1] == "-g" && args[2] == "IP4.DNS")
+            return return_output(runtime_dns);
+        if (args.size() >= 3 && args[1] == "connection" && args[2] == "modify")
+            return return_output({});
+        return false;
+    }
+
+    std::string binary(const std::vector<std::string>& choices) override {
+        return choices.empty() ? std::string{} : choices.front();
+    }
+
+    std::string management_hostname() const override { return hostname; }
 };
 
 class FakeLinuxPlatform final : public netcfg::LinuxPlatform {
@@ -54,9 +136,11 @@ public:
     netcfg::ActiveState current;
     netcfg::ActiveState restored_after_reapply;
     netcfg::Candidate persisted;
+    netcfg::Candidate configured_state;
     bool persist_ok = true;
     bool reapply_ok = true;
     bool address_remove_ok = true;
+    bool preserve_missing_dns = true;
     std::set<std::string> addresses;
     std::vector<std::vector<std::string>> commands;
 
@@ -64,6 +148,12 @@ public:
         auto result = current;
         if (!interface.empty()) result.interface = interface;
         if (reason) *reason = "OK";
+        return result;
+    }
+
+    netcfg::Candidate configured(const std::string& interface) override {
+        auto result = configured_state;
+        if (!interface.empty()) result.interface = interface;
         return result;
     }
 
@@ -86,8 +176,11 @@ protected:
         return choices.empty() ? std::string{} : choices.front();
     }
 
-    bool persist(const netcfg::Candidate& candidate, std::string* reason) override {
+    bool persist(const netcfg::Candidate& candidate, std::string* reason,
+                 bool preserve_dns) override {
         persisted = candidate;
+        configured_state = candidate;
+        preserve_missing_dns = preserve_dns;
         if (reason) *reason = persist_ok ? "OK" : "PERSIST_FAILED";
         return persist_ok;
     }
@@ -122,6 +215,45 @@ nlohmann::json candidate()
             {"netmask", "255.255.255.0"}, {"gateway", "192.168.1.1"}};
 }
 
+struct StatusReasonCase {
+    const char* name;
+    bool kernel_state_available;
+    netcfg::InterfaceSnapshot snapshot;
+    const char* expected_link;
+    const char* expected_reason;
+};
+
+class NetcfgStatusReasonTest : public testing::TestWithParam<StatusReasonCase> {};
+
+TEST_P(NetcfgStatusReasonTest, AppliesOperationalReasonPrecedence)
+{
+    const auto& test_case = GetParam();
+    FakeStatusLinuxPlatform platform;
+    platform.kernel_state_available = test_case.kernel_state_available;
+    platform.snapshot = test_case.snapshot;
+    std::string reason;
+
+    const auto active = platform.status("end1", &reason);
+
+    EXPECT_EQ(active.interface, "end1");
+    EXPECT_EQ(active.link, test_case.expected_link);
+    EXPECT_EQ(active.admin_up, test_case.snapshot.admin_up);
+    EXPECT_EQ(active.carrier, test_case.snapshot.carrier);
+    EXPECT_EQ(active.reason_code, test_case.expected_reason);
+    EXPECT_EQ(reason, test_case.expected_reason);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ReasonPrecedence, NetcfgStatusReasonTest,
+    testing::Values(
+        StatusReasonCase{"InterfaceNotFound", true, {}, "unknown", "INTERFACE_NOT_FOUND"},
+        StatusReasonCase{"KernelUnavailable", false, {}, "unknown", "KERNEL_STATE_UNAVAILABLE"},
+        StatusReasonCase{"AdminDown", true, {true, false, false, {}, 0}, "down", "ADMIN_DOWN"},
+        StatusReasonCase{"NoCarrier", true, {true, true, false, {}, 0}, "down", "NO_CARRIER"},
+        StatusReasonCase{"NoActiveAddress", true, {true, true, true, {}, 0}, "up", "NO_ACTIVE_ADDRESS"},
+        StatusReasonCase{"Ok", true, {true, true, true, "192.168.1.50", 24}, "up", "OK"}),
+    [](const testing::TestParamInfo<StatusReasonCase>& info) { return info.param.name; });
+
 TEST(NetcfgValidation, RejectsUnsafeAndInconsistentAddresses)
 {
     std::string reason;
@@ -137,6 +269,308 @@ TEST(NetcfgValidation, RejectsUnsafeAndInconsistentAddresses)
     bad = {{"interface", "eth0"}, {"mode", "dhcp"}, {"ipv4", "192.168.1.2"}};
     EXPECT_FALSE(netcfg::validate_candidate(bad.get<netcfg::Candidate>(), &reason));
     EXPECT_EQ(reason, "DHCP_STATIC_FIELDS_PRESENT");
+}
+
+TEST(NetcfgValidation, EnforcesDnsModeAndCanonicalUniqueServers)
+{
+    struct TestCase {
+        netcfg::Candidate candidate;
+        bool accepted;
+        const char* reason;
+    };
+    const std::vector<TestCase> cases{
+        {{"eth0", "dhcp", {}, {}, {}, netcfg::DnsConfig{"auto", {}}}, true, ""},
+        {{"eth0", "static", "192.168.1.20", "255.255.255.0", "192.168.1.1",
+          netcfg::DnsConfig{"auto", {}}}, false, "DNS_AUTO_REQUIRES_DHCP"},
+        {{"eth0", "dhcp", {}, {}, {}, netcfg::DnsConfig{"auto", {"1.1.1.1"}}},
+         false, "DNS_AUTO_SERVERS_PRESENT"},
+        {{"eth0", "dhcp", {}, {}, {}, netcfg::DnsConfig{"manual", {}}},
+         false, "DNS_SERVERS_REQUIRED"},
+        {{"eth0", "dhcp", {}, {}, {},
+          netcfg::DnsConfig{"manual", {"1.1.1.1", "8.8.8.8", "9.9.9.9",
+                                           "208.67.222.222", "208.67.220.220"}}},
+         false, "TOO_MANY_DNS_SERVERS"},
+        {{"eth0", "dhcp", {}, {}, {},
+          netcfg::DnsConfig{"manual", {"192.168.001.1"}}},
+         false, "INVALID_DNS_SERVER"},
+        {{"eth0", "dhcp", {}, {}, {},
+          netcfg::DnsConfig{"manual", {"1.1.1.1", "1.1.1.1"}}},
+         false, "DUPLICATE_DNS_SERVER"},
+        {{"eth0", "dhcp", {}, {}, {},
+          netcfg::DnsConfig{"manual", {"1.1.1.1", "8.8.8.8"}}}, true, ""},
+    };
+
+    for (const auto& test_case : cases) {
+        std::string reason;
+        EXPECT_EQ(netcfg::validate_candidate(test_case.candidate, &reason), test_case.accepted);
+        if (!test_case.accepted) {
+            EXPECT_EQ(reason, test_case.reason);
+        }
+    }
+}
+
+TEST(NetcfgValidation, MissingDnsPreservesTheExistingProfile)
+{
+    const netcfg::Candidate candidate_value{"eth0", "dhcp", {}, {}, {}};
+    std::string reason;
+
+    EXPECT_TRUE(netcfg::validate_candidate(candidate_value, &reason));
+    EXPECT_FALSE(candidate_value.dns.has_value());
+}
+
+TEST(NetcfgEngine, StatusIncludesConfiguredAndOperationalFields)
+{
+    auto platform = std::make_shared<FakePlatform>();
+    platform->configured_state = {"eth0", "dhcp", {}, {}, {}};
+    platform->configured_state.dns = netcfg::DnsConfig{"auto", {}};
+    platform->active.admin_up = true;
+    platform->active.carrier = false;
+    platform->active.reason_code = "NO_CARRIER";
+    platform->active.dns_servers = {"192.168.1.1"};
+    netcfg::Engine engine(platform, journal_path(), "eth0");
+
+    const auto response = engine.handle(request("status-contract", "status"));
+
+    ASSERT_TRUE(response.contains("configured"));
+    EXPECT_EQ(response.at("configured").at("interface"), "eth0");
+    EXPECT_EQ(response.at("configured").at("mode"), "dhcp");
+    EXPECT_FALSE(response.at("configured").contains("ipv4"));
+    EXPECT_FALSE(response.at("configured").contains("netmask"));
+    EXPECT_FALSE(response.at("configured").contains("gateway"));
+    EXPECT_EQ(response.at("configured").at("dns").at("mode"), "auto");
+    EXPECT_TRUE(response.at("active").at("adminUp"));
+    EXPECT_FALSE(response.at("active").at("carrier"));
+    EXPECT_EQ(response.at("active").at("reasonCode"), "NO_CARRIER");
+    EXPECT_EQ(response.at("active").at("dnsServers"),
+              nlohmann::json::array({"192.168.1.1"}));
+    EXPECT_EQ(response.at("capabilities"),
+              nlohmann::json::array({"dns", "management-hostname"}));
+    EXPECT_EQ(response.at("management").at("hostname"), "mkddc-lab");
+    EXPECT_EQ(response.at("management").at("mdnsName"), "mkddc-lab.local");
+    EXPECT_TRUE(response.at("management").at("stable"));
+}
+
+TEST(NetcfgEngine, StatusOmitsUnknownConfiguredProfile)
+{
+    auto platform = std::make_shared<FakePlatform>();
+    platform->configured_state = {"eth0", "unknown", {}, {}, {}};
+    netcfg::Engine engine(platform, journal_path(), "eth0");
+
+    const auto response = engine.handle(request("status-no-profile", "status"));
+
+    EXPECT_FALSE(response.contains("configured"));
+}
+
+TEST(NetcfgLinuxPlatform, InactiveBoundDhcpProfileIsConfiguredButNotActive)
+{
+    auto platform = std::make_shared<FakeStatusLinuxPlatform>();
+    platform->snapshot = {true, true, false, {}, 0};
+    platform->profile_uuid = "profile-uuid";
+    platform->profile_interface = "end1";
+    platform->profile_method = "auto";
+    netcfg::Engine engine(platform, journal_path(), "end1");
+
+    const auto response = engine.handle(request("status-inactive-profile", "status"));
+
+    EXPECT_EQ(response.at("configured").at("interface"), "end1");
+    EXPECT_EQ(response.at("configured").at("mode"), "dhcp");
+    EXPECT_EQ(response.at("active").at("mode"), "unknown");
+    EXPECT_EQ(response.at("active").at("link"), "down");
+    EXPECT_EQ(response.at("active").at("reasonCode"), "NO_CARRIER");
+}
+
+TEST(NetcfgLinuxPlatform, ConfiguredStaticProfileUsesFirstValidAddress)
+{
+    FakeStatusLinuxPlatform platform;
+    platform.profile_uuid = "profile-uuid";
+    platform.profile_interface = "end1";
+    platform.profile_method = "manual";
+    platform.profile_addresses = "not-an-address\n192.168.10.25/24\n192.168.20.25/24";
+    platform.profile_gateway = "192.168.10.1";
+
+    const auto configured = platform.configured("end1");
+
+    EXPECT_EQ(configured.interface, "end1");
+    EXPECT_EQ(configured.mode, "static");
+    EXPECT_EQ(configured.ipv4, "192.168.10.25");
+    EXPECT_EQ(configured.netmask, "255.255.255.0");
+    EXPECT_EQ(configured.gateway, "192.168.10.1");
+}
+
+TEST(NetcfgLinuxPlatform, StageRejectsUnrepresentableStaticHybridDnsProfile)
+{
+    auto platform = std::make_shared<FakeStatusLinuxPlatform>();
+    platform->snapshot = {true, true, true, "192.168.1.50", 24};
+    platform->active_connection = "wired-end1";
+    platform->profile_method = "manual";
+    platform->profile_addresses = "192.168.1.50/24";
+    platform->profile_gateway = "192.168.1.1";
+    platform->profile_dns = "1.1.1.1";
+    platform->profile_ignore_auto_dns = "no";
+    netcfg::Engine engine(platform, journal_path(), "end1");
+    auto stage = request("stage-static-hybrid-dns", "stage");
+    stage["candidate"] = {
+        {"interface", "end1"}, {"mode", "static"}, {"ipv4", "192.168.1.80"},
+        {"netmask", "255.255.255.0"}, {"gateway", "192.168.1.1"}};
+
+    const auto response = engine.handle(stage);
+
+    EXPECT_EQ(response.at("result"), "rejected");
+    EXPECT_EQ(response.at("reasonCode"), "PREVIOUS_STATE_NOT_RESTORABLE");
+    EXPECT_EQ(engine.transaction().state, "idle");
+}
+
+TEST(NetcfgLinuxPlatform, ReportsConfiguredAndRuntimeDnsSeparately)
+{
+    FakeStatusLinuxPlatform platform;
+    platform.active_connection = "wired-end1";
+    platform.profile_method = "auto";
+    platform.profile_ignore_auto_dns = "yes";
+    platform.profile_dns = "1.1.1.1\n8.8.8.8";
+    platform.runtime_dns = "1.1.1.1,8.8.8.8\n1.1.1.1";
+    platform.snapshot = {true, true, true, "192.168.1.50", 24};
+    std::string reason;
+
+    const auto configured = platform.configured("end1");
+    const auto active = platform.status("end1", &reason);
+
+    ASSERT_TRUE(configured.dns.has_value());
+    EXPECT_EQ(configured.dns->mode, "manual");
+    EXPECT_EQ(configured.dns->servers,
+              (std::vector<std::string>{"1.1.1.1", "8.8.8.8"}));
+    EXPECT_EQ(active.dns_servers,
+              (std::vector<std::string>{"1.1.1.1", "8.8.8.8"}));
+}
+
+TEST(NetcfgLinuxPlatform, PersistsManualDnsWithNetworkManagerFlags)
+{
+    FakeStatusLinuxPlatform platform;
+    platform.active_connection = "wired-end1";
+    const netcfg::Candidate candidate_value{
+        "end1", "dhcp", {}, {}, {},
+        netcfg::DnsConfig{"manual", {"1.1.1.1", "8.8.8.8"}}};
+    std::string reason;
+
+    ASSERT_TRUE(platform.persist_candidate(candidate_value, &reason));
+    ASSERT_GE(platform.commands.size(), 2u);
+    EXPECT_EQ(platform.commands.back(), (std::vector<std::string>{
+        "/usr/bin/nmcli", "connection", "modify", "wired-end1",
+        "ipv4.method", "auto", "ipv4.addresses", "", "ipv4.gateway", "",
+        "ipv4.ignore-auto-dns", "yes", "ipv4.dns", "1.1.1.1,8.8.8.8"}));
+}
+
+TEST(NetcfgLinuxPlatform, PersistsAutomaticDnsByClearingManualOverrides)
+{
+    FakeStatusLinuxPlatform platform;
+    platform.active_connection = "wired-end1";
+    const netcfg::Candidate candidate_value{
+        "end1", "dhcp", {}, {}, {}, netcfg::DnsConfig{"auto", {}}};
+    std::string reason;
+
+    ASSERT_TRUE(platform.persist_candidate(candidate_value, &reason));
+    EXPECT_EQ(platform.commands.back(), (std::vector<std::string>{
+        "/usr/bin/nmcli", "connection", "modify", "wired-end1",
+        "ipv4.method", "auto", "ipv4.addresses", "", "ipv4.gateway", "",
+        "ipv4.ignore-auto-dns", "no", "ipv4.dns", ""}));
+}
+
+TEST(NetcfgLinuxPlatform, MissingDnsLeavesNetworkManagerDnsPropertiesUntouched)
+{
+    FakeStatusLinuxPlatform platform;
+    platform.active_connection = "wired-end1";
+    const netcfg::Candidate candidate_value{"end1", "dhcp", {}, {}, {}};
+    std::string reason;
+
+    ASSERT_TRUE(platform.persist_candidate(candidate_value, &reason));
+    EXPECT_EQ(platform.commands.back(), (std::vector<std::string>{
+        "/usr/bin/nmcli", "connection", "modify", "wired-end1",
+        "ipv4.method", "auto", "ipv4.addresses", "", "ipv4.gateway", ""}));
+}
+
+TEST(NetcfgLinuxPlatform, ReportsManagementHostnameWithoutMutatingIt)
+{
+    FakeStatusLinuxPlatform platform;
+    platform.hostname = "mkddc-zone-3";
+
+    const auto management = platform.management();
+
+    EXPECT_EQ(management.hostname, "mkddc-zone-3");
+    EXPECT_EQ(management.mdns_name, "mkddc-zone-3.local");
+    EXPECT_TRUE(management.stable);
+    EXPECT_TRUE(platform.commands.empty());
+}
+
+TEST(NetcfgEngine, RejectsUnknownRequestCandidateAndDnsFields)
+{
+    auto platform = std::make_shared<FakePlatform>();
+    netcfg::Engine engine(platform, journal_path(), "eth0");
+
+    auto top_level = request("unknown-top", "status");
+    top_level["unexpected"] = true;
+    EXPECT_EQ(engine.handle(top_level).at("reasonCode"), "INVALID_REQUEST");
+
+    auto candidate_field = request("unknown-candidate", "validate");
+    candidate_field["candidate"] = candidate();
+    candidate_field["candidate"]["unexpected"] = true;
+    EXPECT_EQ(engine.handle(candidate_field).at("reasonCode"), "INVALID_REQUEST");
+
+    auto dns_field = request("unknown-dns", "validate");
+    dns_field["candidate"] = candidate();
+    dns_field["candidate"]["dns"] = {
+        {"mode", "manual"}, {"servers", {"1.1.1.1"}}, {"unexpected", true}};
+    EXPECT_EQ(engine.handle(dns_field).at("reasonCode"), "INVALID_REQUEST");
+}
+
+TEST(NetcfgEngine, StageJournalsConfiguredDnsSnapshot)
+{
+    auto platform = std::make_shared<FakePlatform>();
+    platform->configured_state.dns =
+        netcfg::DnsConfig{"manual", {"192.168.1.1", "1.1.1.1"}};
+    netcfg::Engine engine(platform, journal_path(), "eth0");
+    auto stage = request("stage-dns-snapshot", "stage");
+    stage["candidate"] = candidate();
+    stage["candidate"]["dns"] = {
+        {"mode", "manual"}, {"servers", {"8.8.8.8"}}};
+
+    const auto staged = engine.handle(stage);
+    ASSERT_EQ(staged.at("result"), "accepted");
+    EXPECT_EQ(staged.at("pending").at("dns").at("servers"),
+              nlohmann::json::array({"8.8.8.8"}));
+    const auto transaction = engine.transaction();
+    ASSERT_TRUE(transaction.previous_configured.has_value());
+    ASSERT_TRUE(transaction.previous_configured->dns.has_value());
+    EXPECT_TRUE(transaction.previous_configured_complete);
+    EXPECT_EQ(transaction.previous_configured->dns->servers,
+              (std::vector<std::string>{"192.168.1.1", "1.1.1.1"}));
+}
+
+TEST(NetcfgEngine, LegacyJournalFallbackPreservesUnknownDnsDuringRollback)
+{
+    auto platform = std::make_shared<FakePlatform>();
+    const std::string path = journal_path();
+    const nlohmann::json legacy_journal{
+        {"schemaVersion", 1},
+        {"id", "legacy-tx"},
+        {"state", "staged"},
+        {"candidate", candidate()},
+        {"previous", {
+            {"interface", "eth0"}, {"link", "up"}, {"mode", "static"},
+            {"ipv4", "192.168.1.50"}, {"prefixLength", 24},
+            {"gateway", "192.168.1.1"}}},
+        {"rollbackDeadlineEpochMs", 0},
+        {"lastReason", "OK"}};
+    {
+        std::ofstream output(path);
+        output << legacy_journal.dump(2) << '\n';
+    }
+    netcfg::Engine engine(platform, path, "eth0");
+    auto rollback = request("legacy-rollback", "rollback");
+    rollback["transactionId"] = "legacy-tx";
+
+    ASSERT_EQ(engine.handle(rollback).at("result"), "accepted");
+    EXPECT_FALSE(platform->rollback_previous_complete);
+    EXPECT_FALSE(platform->rollback_previous_configured.dns.has_value());
+    EXPECT_EQ(platform->rollback_previous_configured.ipv4, "192.168.1.50");
 }
 
 TEST(NetcfgEngine, StaticStageApplyConfirmIsDurableAndIdempotent)
@@ -243,6 +677,7 @@ TEST(NetcfgEngine, StageRejectsAnUnrestorablePreviousState)
 {
     auto platform = std::make_shared<FakePlatform>();
     platform->active.mode = "unknown";
+    platform->configured_state.mode = "unknown";
     netcfg::Engine engine(platform, journal_path(), "eth0");
     auto stage = request("stage-no-rollback", "stage");
     stage["candidate"] = candidate();
@@ -270,7 +705,39 @@ TEST(NetcfgEngine, DhcpWaitsForARealLeaseBeforeConfirmation)
     EXPECT_EQ(engine.transaction().state, "applying");
     platform->active.ipv4 = "192.168.1.99";
     platform->active.mode = "dhcp";
+    platform->configured_state = {"eth0", "dhcp", {}, {}, {}};
     engine.tick();
+    EXPECT_EQ(engine.transaction().state, "awaiting_confirmation");
+}
+
+TEST(NetcfgEngine, DhcpSameLeaseDnsChangeCanAwaitConfirmation)
+{
+    auto platform = std::make_shared<FakePlatform>();
+    platform->active.mode = "dhcp";
+    platform->active.dns_servers = {"192.168.1.1"};
+    platform->configured_state = {
+        "eth0", "dhcp", {}, {}, {},
+        netcfg::DnsConfig{"manual", {"192.168.1.1"}}};
+    const std::string previous_ipv4 = platform->active.ipv4;
+    netcfg::Engine engine(platform, journal_path(), "eth0");
+    auto stage = request("stage-dhcp-dns", "stage");
+    stage["candidate"] = {
+        {"interface", "eth0"}, {"mode", "dhcp"},
+        {"dns", {{"mode", "manual"}, {"servers", {"1.1.1.1", "8.8.8.8"}}}}};
+    const std::string transaction = engine.handle(stage).at("transactionId");
+    auto apply = request("apply-dhcp-dns", "apply");
+    apply["transactionId"] = transaction;
+
+    ASSERT_EQ(engine.handle(apply).at("state"), "applying");
+    engine.tick();
+    EXPECT_EQ(engine.transaction().state, "applying");
+
+    platform->configured_state.dns =
+        netcfg::DnsConfig{"manual", {"1.1.1.1", "8.8.8.8"}};
+    platform->active.dns_servers = {"1.1.1.1", "8.8.8.8"};
+    engine.tick();
+
+    EXPECT_EQ(platform->active.ipv4, previous_ipv4);
     EXPECT_EQ(engine.transaction().state, "awaiting_confirmation");
 }
 
@@ -346,9 +813,11 @@ TEST(NetcfgLinuxPlatform, DhcpRollbackReappliesStaticProfileAndRemovesNewLease)
     platform.restored_after_reapply = previous;
     platform.addresses = {previous.ipv4, platform.current.ipv4};
     const netcfg::Candidate dhcp{"eth0", "dhcp", {}, {}, {}};
+    const netcfg::Candidate previous_profile{"eth0", "static", "192.168.1.50",
+                                              "255.255.255.0", "192.168.1.1"};
     std::string reason;
 
-    EXPECT_TRUE(platform.rollback(dhcp, previous, &reason));
+    EXPECT_TRUE(platform.rollback(dhcp, previous, previous_profile, true, &reason));
     EXPECT_EQ(platform.persisted.interface, previous.interface);
     EXPECT_EQ(platform.persisted.mode, "static");
     EXPECT_EQ(platform.persisted.ipv4, previous.ipv4);
@@ -362,6 +831,50 @@ TEST(NetcfgLinuxPlatform, DhcpRollbackReappliesStaticProfileAndRemovesNewLease)
         "/usr/sbin/ip", "address", "del", "192.168.1.99/24", "dev", "eth0"}));
 }
 
+TEST(NetcfgLinuxPlatform, RollbackRestoresAndVerifiesConfiguredDnsSnapshot)
+{
+    FakeLinuxPlatform platform;
+    netcfg::ActiveState previous{"eth0", "up", "static", "192.168.1.50", 24,
+                                 "192.168.1.1"};
+    previous.dns_servers = {"192.168.1.1", "1.1.1.1"};
+    platform.current = {"eth0", "up", "static", "192.168.1.80", 24,
+                        "192.168.1.1"};
+    platform.current.dns_servers = {"8.8.8.8"};
+    platform.restored_after_reapply = previous;
+    platform.addresses = {previous.ipv4, platform.current.ipv4};
+    const netcfg::Candidate candidate_value{
+        "eth0", "static", "192.168.1.80", "255.255.255.0", "192.168.1.1",
+        netcfg::DnsConfig{"manual", {"8.8.8.8"}}};
+    const netcfg::Candidate previous_profile{
+        "eth0", "static", "192.168.1.50", "255.255.255.0", "192.168.1.1",
+        netcfg::DnsConfig{"manual", {"192.168.1.1", "1.1.1.1"}}};
+    std::string reason;
+
+    ASSERT_TRUE(platform.rollback(candidate_value, previous, previous_profile, true, &reason));
+    ASSERT_TRUE(platform.persisted.dns.has_value());
+    EXPECT_EQ(platform.persisted.dns->servers,
+              (std::vector<std::string>{"192.168.1.1", "1.1.1.1"}));
+    EXPECT_FALSE(platform.preserve_missing_dns);
+}
+
+TEST(NetcfgLinuxPlatform, RollbackRejectsUnrepresentableConfiguredSnapshotBeforePersist)
+{
+    FakeLinuxPlatform platform;
+    const netcfg::ActiveState previous{
+        "eth0", "up", "static", "192.168.1.50", 24, "192.168.1.1"};
+    const netcfg::Candidate candidate_value{
+        "eth0", "static", "192.168.1.80", "255.255.255.0", "192.168.1.1"};
+    const netcfg::Candidate unrepresentable_snapshot{
+        "eth0", "unknown", {}, {}, {}};
+    std::string reason;
+
+    EXPECT_FALSE(platform.rollback(candidate_value, previous, unrepresentable_snapshot,
+                                   true, &reason));
+    EXPECT_EQ(reason, "PREVIOUS_STATE_NOT_RESTORABLE");
+    EXPECT_TRUE(platform.persisted.interface.empty());
+    EXPECT_TRUE(platform.commands.empty());
+}
+
 TEST(NetcfgLinuxPlatform, RollbackFailsClosedWhenReapplyFails)
 {
     FakeLinuxPlatform platform;
@@ -371,9 +884,11 @@ TEST(NetcfgLinuxPlatform, RollbackFailsClosedWhenReapplyFails)
     platform.restored_after_reapply = previous;
     platform.reapply_ok = false;
     const netcfg::Candidate dhcp{"eth0", "dhcp", {}, {}, {}};
+    const netcfg::Candidate previous_profile{"eth0", "static", "192.168.1.50",
+                                              "255.255.255.0", "192.168.1.1"};
     std::string reason;
 
-    EXPECT_FALSE(platform.rollback(dhcp, previous, &reason));
+    EXPECT_FALSE(platform.rollback(dhcp, previous, previous_profile, true, &reason));
     EXPECT_EQ(reason, "ROLLBACK_REAPPLY_FAILED");
 }
 
@@ -387,10 +902,41 @@ TEST(NetcfgLinuxPlatform, RollbackFailsClosedWhenAddressRemovalFails)
     platform.addresses = {previous.ipv4, platform.current.ipv4};
     platform.address_remove_ok = false;
     const netcfg::Candidate dhcp{"eth0", "dhcp", {}, {}, {}};
+    const netcfg::Candidate previous_profile{"eth0", "static", "192.168.1.50",
+                                              "255.255.255.0", "192.168.1.1"};
     std::string reason;
 
-    EXPECT_FALSE(platform.rollback(dhcp, previous, &reason));
+    EXPECT_FALSE(platform.rollback(dhcp, previous, previous_profile, true, &reason));
     EXPECT_EQ(reason, "ROLLBACK_ADDRESS_REMOVE_FAILED");
+}
+
+TEST(NetcfgLinuxPlatform, RollbackAcceptsRestoredDhcpProfileWhenPreviousLinkWasOffline)
+{
+    FakeLinuxPlatform platform;
+    const netcfg::ActiveState previous{
+        "end1", "down", "unknown", {}, 0, {}, true, false, "NO_CARRIER"};
+    platform.current = {
+        "end1", "down", "static", "192.168.50.20", 24, "192.168.50.1",
+        true, false, "NO_CARRIER"};
+    platform.restored_after_reapply = previous;
+    platform.addresses = {platform.current.ipv4};
+    const netcfg::Candidate candidate_value{
+        "end1", "static", "192.168.50.20", "255.255.255.0", "192.168.50.1"};
+    const netcfg::Candidate previous_profile{
+        "end1", "dhcp", {}, {}, {}, netcfg::DnsConfig{"auto", {}}};
+    platform.configured_state = previous_profile;
+    std::string reason;
+
+    EXPECT_TRUE(platform.rollback(candidate_value, previous, previous_profile, true, &reason));
+    EXPECT_EQ(platform.persisted.mode, "dhcp");
+    ASSERT_TRUE(platform.persisted.dns.has_value());
+    EXPECT_EQ(platform.persisted.dns->mode, "auto");
+    EXPECT_EQ(platform.addresses.count("192.168.50.20"), 0u);
+    ASSERT_EQ(platform.commands.size(), 2u);
+    EXPECT_EQ(platform.commands[0], (std::vector<std::string>{
+        "/usr/bin/nmcli", "device", "reapply", "end1"}));
+    EXPECT_EQ(platform.commands[1], (std::vector<std::string>{
+        "/usr/sbin/ip", "address", "del", "192.168.50.20/24", "dev", "end1"}));
 }
 
 TEST(NetcfgLinuxPlatform, RollbackFailsClosedWhenKernelStateDoesNotMatch)
@@ -403,9 +949,11 @@ TEST(NetcfgLinuxPlatform, RollbackFailsClosedWhenKernelStateDoesNotMatch)
     platform.restored_after_reapply.gateway = "192.168.1.254";
     const netcfg::Candidate candidate_value{"eth0", "static", "192.168.1.80",
                                              "255.255.255.0", "192.168.1.1"};
+    const netcfg::Candidate previous_profile{"eth0", "static", "192.168.1.50",
+                                              "255.255.255.0", "192.168.1.1"};
     std::string reason;
 
-    EXPECT_FALSE(platform.rollback(candidate_value, previous, &reason));
+    EXPECT_FALSE(platform.rollback(candidate_value, previous, previous_profile, true, &reason));
     EXPECT_EQ(reason, "ROLLBACK_VERIFY_FAILED");
 }
 

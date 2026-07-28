@@ -2,7 +2,7 @@
 ## D-4 (đi kèm `openapi.yaml`)
 
 > **Document ID:** ICD-REST-MK-DDC-24-VI
-> **Phiên bản:** 1.3 | 2026-07-15 (per-point historian scheduling + global display-name uniqueness) · 1.2 | 2026-07-15 (global point-tag Phase A theo ADR-019) · 1.1 | 2026-06-13 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.4 | 2026-07-28 (ADR-017 Network DNS/capability/management contract) · 1.3 | 2026-07-15 (per-point historian scheduling + global display-name uniqueness) · 1.2 | 2026-07-15 (global point-tag Phase A theo ADR-019) · 1.1 | 2026-06-13 · 📘 [README](../../01_specs/README.md)
 > **Nguồn-chuẩn máy đọc:** [`openapi.yaml`](openapi.yaml) (OpenAPI 3.1) · **Trace:** `SW-API-001..010`, `SRS §6.4`, `SW_ARCH §6`
 
 > File `.md` này giải thích cách dùng; **`openapi.yaml` là hợp đồng chính thức** (import vào Swagger/Postman, generate client).
@@ -57,11 +57,17 @@ curl -k -X PUT https://<ip>:8443/api/v1/points/AO1 \
 | GET | /history | bearer viewer+ | unified UTC range query; backend merge RAM/hot 48h/archive, trả quality/source/tier/gap |
 | GET | /system/status | bearer | CPU/RAM/IOP/ver |
 | GET/PUT | /system/config | admin | cấu hình |
+| GET | /network/transaction | bearer viewer+ | status active/configured/pending, capability và management hostname read-only |
+| POST | /network/transaction/{action} | bearer admin | validate/stage/apply/confirm/rollback Ethernet IPv4 + optional DNS |
 | POST | /ota/upload, /ota/apply | admin | OTA |
 | GET | /ota/status | bearer | tiến độ OTA |
 | GET | /logs/download | admin | log gzip |
 | GET | /bacnet/objects | bearer | object BACnet |
 | GET | /alarms, POST /alarms/{id}/ack | bearer | alarm |
+Network status GET cho viewer+, còn mọi POST transaction chỉ dành cho Admin.
+Candidate DNS chỉ hợp lệ khi status-preflight công bố capability `dns` và chính response
+`validate`/`stage` vẫn công bố capability, echo đúng pending DNS/candidate; management hostname chỉ
+đọc và không được gửi trong candidate.
 
 ## 4. Triển khai (gợi ý FastAPI)
 ```python
@@ -115,6 +121,6 @@ async def get_point(point_id: str, user=Depends(auth_bearer)):
 `SW-API-001..010`, `API-001..009`, `FR-023`, `T-SW-070..079`.
 
 ---
-**Rev** 1.3 | 2026-07-15 — ADR-018/019 amendments: unique display-name namespace, structured name conflicts/migration, atomic per-point historian policy with immediate/future UTC start, 11 intervals, 48-hour hot-cache/backend merge and explicit gap/error behavior. · **Rev** 1.2 | 2026-07-15 — ADR-019 Phase A: `Point.id + tag + name`, canonical-ID-only point paths, global UI/AO/DO/VP tag validation, structured 400/409 details, deterministic migration and generation authority caveat. · 1.1 | 2026-06-13 · 1.0 | 2026-05-30
+**Rev** 1.4 | 2026-07-28 — khóa ADR-017 strict Network v1: GET status cho viewer+, POST transaction Admin-only, optional DNS auto/manual theo capability và management hostname read-only. Overall target/HIL gate vẫn RED. · **Rev** 1.3 | 2026-07-15 — ADR-018/019 amendments: unique display-name namespace, structured name conflicts/migration, atomic per-point historian policy with immediate/future UTC start, 11 intervals, 48-hour hot-cache/backend merge and explicit gap/error behavior. · **Rev** 1.2 | 2026-07-15 — ADR-019 Phase A: `Point.id + tag + name`, canonical-ID-only point paths, global UI/AO/DO/VP tag validation, structured 400/409 details, deterministic migration and generation authority caveat. · 1.1 | 2026-06-13 · 1.0 | 2026-05-30
 
-Trạng thái: ĐÃ duyệt 2026-07-15 — REST/OpenAPI amendment historian + global tag/name; implementation vẫn theo Plans 42/43.
+Trạng thái: Web Network adapter/FE migration code-local DONE; target mDNS/dummy transaction pass, còn IP handoff thật, security review và release approval chưa hoàn tất.

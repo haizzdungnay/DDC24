@@ -44,7 +44,7 @@ Network config là transaction nhiều bước, không phải config-file write 
 
 ## HMI
 
-HMI là consumer/presenter và limited operator client, không phải core control process. Năm surface local là Home/Points/Control/Alarms/Service. Operator chỉ được setpoint, mode, override và release point có authoritative policy cho phép. Service role có ngoại lệ hẹp theo ADR-017 để cấu hình/phục hồi Ethernet IPv4; engineering/configuration sâu còn lại không thuộc panel 2.4 inch.
+HMI là consumer/presenter và limited operator client, không phải core control process. Năm surface local là Home/Points/Control/Alarms/Service. Operator chỉ được setpoint, mode, override và release point có authoritative policy cho phép. Service là surface, không phải role; ngoại lệ hẹp ADR-017 cho cấu hình/phục hồi Ethernet IPv4 yêu cầu Admin, còn DNS/management hostname và engineering sâu không thuộc panel 2.4 inch.
 
 Telemetry tiếp tục đọc SHM read-only. Mutation phải dùng versioned Unix-domain IPC qua auth/audit broker rồi core arbitration; local display metadata không cấp quyền. Broker mất hoặc response timeout làm action fail closed và HMI tiếp tục read-only. Build mặc định tắt qua `MKDDC_ENABLE_HMI`; release có HMI phải chứng minh target rendering, input, command lifecycle, RBAC/audit, backlight/GPIO error handling và failure isolation.
 
