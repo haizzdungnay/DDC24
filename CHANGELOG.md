@@ -7,6 +7,18 @@
 ---
 
 ## [Unreleased]
+### Added — ACTION 13: interface điều khiển Program Runtime cho BE (2026-07-28)
+- Thêm `services/core/st/st_control_api.{hpp,cpp}` — hợp đồng JSON cho BE: `program_capabilities`, `program_status`, `program_stage`, `program_start`, `program_stop`, `program_enable`, `program_disable`, `program_reset`, `program_rollback`.
+- **Tách khỏi `web_ipc` có chủ ý**: file này là logic hợp đồng thuần tuý (chuỗi JSON vào → chuỗi JSON ra), không sở hữu socket. Nhờ vậy toàn bộ hợp đồng test được mà không cần dựng socket, và đổi transport không phải viết lại hợp đồng.
+- **Bất biến**: mọi request — kể cả JSON rác, mảng thay vì object, thiếu field — đều nhận lại JSON đúng shape có `errorCode` ổn định và cờ **`keepsRunningPackage`**. BE không bao giờ phải đoán chương trình đang chạy có bị ảnh hưởng không.
+- Ba họ mã lỗi tách biệt để BE biết lỗi đến từ đâu mà không phân tích message: `API-E-*` (interface), `IR-E-*` (loader), `ST-*` (compiler).
+- `program_capabilities` công bố `artifactSchemaVersion`/`compilerProfile`/`targetAbi`/`maxArtifactBytes` để BE biết **trước** nên compile với profile nào, thay vì thử rồi nhận `IR-E-003`/`IR-E-004`.
+- `program_stage` trả `appliedAt: "next_tick_boundary"` — BE không được kết luận "đã chạy" khi mới stage xong.
+- `program_status` trả `artifactSha256` để BE **xác minh được cái đang chạy đúng là cái mình gửi**, kèm `lastFault` có mã và dòng ST gốc.
+- Artifact truyền base64; chuỗi quá lớn bị từ chối bằng **ước lượng kích thước trước khi giải mã**, không phải sau.
+- Test: 17 test gồm nhóm request rác, vòng đời đầy đủ, artifact hỏng vẫn giữ package đang chạy.
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 646/646 pass** (629 → +17).
+
 ### Added — ACTION 11 + 12: RETAIN và package integrity (PACKAGE_SECURITY_GATE) (2026-07-28)
 - Thêm `services/core/st/st_retain.{hpp,cpp}` — bản ghi RETAIN có magic `MKRT`, version, `layout_hash`, `record_size`, CRC-32. Ghi **atomic**: tmp → `fsync` → `rename` → `fsync` thư mục.
 - Ba bất biến: (1) bản ghi sai **không bao giờ** là lý do không khởi động chương trình — từ chối thì cold start kèm chẩn đoán; (2) mất điện giữa lúc ghi không để lại file nửa vời mà lần sau tưởng hợp lệ; (3) đổi layout biến RETAIN làm **hiện ra** mã `RT-RETAIN-003` chứ không âm thầm đọc bytes của layout cũ.
