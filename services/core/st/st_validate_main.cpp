@@ -27,7 +27,6 @@
 #include "st/st_limits.hpp"
 #include "st/st_parser.hpp"
 #include "st/st_semantic.hpp"
-#include "st/st_stdlib.hpp"
 
 namespace {
 
@@ -57,12 +56,16 @@ nlohmann::json make_result(bool ok, const std::vector<core::StDiagnostic>& diags
 
     nlohmann::json symbols = nlohmann::json::array();
     if (prog) {
-        for (const core::StVarDecl& v : prog->inputs)
-            symbols.push_back({{"name", v.name}, {"direction", "input"},
-                               {"type", v.type == core::StType::REAL ? "REAL" : "BOOL"}});
-        for (const core::StVarDecl& v : prog->outputs)
-            symbols.push_back({{"name", v.name}, {"direction", "output"},
-                               {"type", v.type == core::StType::REAL ? "REAL" : "BOOL"}});
+        /* Chỉ công bố VAR_INPUT/VAR_OUTPUT — đó là bề mặt BE cần để bind
+         * io_map. VAR/VAR RETAIN là trạng thái nội bộ, không phải giao diện. */
+        for (const core::StVarDecl& v : prog->vars) {
+            const char* dir = nullptr;
+            if (v.storage == core::StStorage::VAR_INPUT) dir = "input";
+            else if (v.storage == core::StStorage::VAR_OUTPUT) dir = "output";
+            if (!dir) continue;
+            symbols.push_back({{"name", v.name}, {"direction", dir},
+                               {"type", core::st_type_name(v.type)}});
+        }
     }
 
     return {

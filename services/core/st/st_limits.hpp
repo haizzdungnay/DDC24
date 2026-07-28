@@ -58,6 +58,12 @@ constexpr std::size_t kMaxStatements = 4096u;
 /* Độ dài định danh tối đa (ký tự). */
 constexpr std::size_t kMaxIdentifierLength = 64u;
 
+/* Số instance Function Block tối đa (ST_SUBSET_SPEC §8). */
+constexpr std::size_t kMaxFbInstances = 64u;
+
+/* Số biến RETAIN tối đa. */
+constexpr std::size_t kMaxRetainVars = 128u;
+
 /* Số diagnostic tối đa trả về trong một lần gọi. Parser/semantic fail-fast
  * nên luôn ≤1; giới hạn này áp cho validator trả nhiều lỗi (io_map) để một
  * file io_map hỏng nặng không sinh response JSON khổng lồ. */

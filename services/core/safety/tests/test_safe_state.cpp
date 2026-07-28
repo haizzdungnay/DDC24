@@ -223,3 +223,80 @@ TEST(SafeState, T7OffWhenGraphLoaded)
     s.apply(io, t, &out);
     EXPECT_FALSE(s.active()) << "graph loaded → T7 off dù không manual";
 }
+
+/* ---- T8: Task overrun (ACTION 7 / TASK_SAFETY_GATE) ---- */
+
+TEST(SafeState, OverrunMonitorForcesSafeWhenThresholdReached)
+{
+    PointQuality quality;
+    OverrunMonitor mon(2);
+    SafeState safe(quality);
+    safe.set_overrun_monitor(&mon);
+
+    IoSnapshot io{};
+    io.iop_status = KX_IOP_NORMAL;
+    PointTable table;
+    OutputCmd out{};
+    out.ao[0] = 7.5f;
+    out.ao_valid[0] = true;
+    out.dout[0] = 1;
+    out.do_valid[0] = true;
+
+    /* Chưa overrun -> không đụng output. */
+    safe.apply(io, table, &out);
+    EXPECT_FALSE(safe.active());
+    EXPECT_FLOAT_EQ(out.ao[0], 7.5f);
+
+    mon.record(1000, 100);
+    mon.record(1000, 100);
+    ASSERT_TRUE(mon.should_force_safe());
+
+    out.ao[0] = 7.5f;
+    out.dout[0] = 1;
+    safe.apply(io, table, &out);
+    EXPECT_TRUE(safe.active());
+    EXPECT_TRUE(safe.triggers().overrun);
+    EXPECT_FLOAT_EQ(out.ao[0], 0.0f) << "AO phải về safe";
+    EXPECT_EQ(out.dout[0], 0) << "DO phải mở";
+}
+
+TEST(SafeState, OverrunSafeReleasedAfterRecoveryStreak)
+{
+    PointQuality quality;
+    OverrunMonitor mon(2);
+    SafeState safe(quality);
+    safe.set_overrun_monitor(&mon);
+
+    IoSnapshot io{};
+    io.iop_status = KX_IOP_NORMAL;
+    PointTable table;
+    OutputCmd out{};
+
+    mon.record(1000, 100);
+    mon.record(1000, 100);
+    safe.apply(io, table, &out);
+    ASSERT_TRUE(safe.active());
+
+    mon.record(10, 100);
+    safe.apply(io, table, &out);
+    EXPECT_TRUE(safe.active()) << "một lần tốt chưa đủ để rời safe";
+
+    mon.record(10, 100);
+    out.ao[0] = 7.5f;
+    safe.apply(io, table, &out);
+    EXPECT_FALSE(safe.active());
+    EXPECT_FLOAT_EQ(out.ao[0], 7.5f) << "rời safe thì trả quyền cho resolver";
+}
+
+TEST(SafeState, WithoutMonitorOverrunTriggerNeverFires)
+{
+    /* Không gắn monitor = T8 không được đánh giá; các trigger khác không đổi. */
+    PointQuality quality;
+    SafeState safe(quality);
+    IoSnapshot io{};
+    io.iop_status = KX_IOP_NORMAL;
+    PointTable table;
+    OutputCmd out{};
+    safe.apply(io, table, &out);
+    EXPECT_FALSE(safe.triggers().overrun);
+}

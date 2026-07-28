@@ -1,3 +1,11 @@
+/**
+ * @file  st_parser.cpp
+ * @brief Lexer + parser cho tập con ST, theo đúng grammar EBNF ở
+ *        docs/02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md §10.
+ *
+ *        Mọi giới hạn tài nguyên lấy từ st_limits.hpp và được kiểm ngay tại
+ *        đây — parser không giả định caller đã kiểm hộ. Xem M-01.
+ */
 #include "st/st_parser.hpp"
 
 #include <cctype>
@@ -9,13 +17,21 @@
 namespace core {
 namespace {
 
+/* ============================ Lexer ============================ */
+
 struct Token {
-    enum class Kind {
-        Ident, Number, Colon, ColonEq, Semicolon, Comma, LParen, RParen,
-        Gt, Ge, Lt, Le, Eq, Ne, End
+    enum class Kind : uint8_t {
+        Ident, IntLit, RealLit, TimeLit,
+        Colon, ColonEq, Semicolon, Comma, Dot, LParen, RParen,
+        Plus, Minus, Star, Slash,
+        Gt, Ge, Lt, Le, Eq, Ne,
+        End,
     } kind = Kind::End;
-    std::string text;
-    float       num = 0.0f;
+    std::string text;        /* Ident: tên gốc (giữ hoa thường) */
+    std::string upper;       /* Ident: bản in hoa — so từ khoá không phân biệt hoa thường */
+    int64_t     int_val = 0;
+    float       real_val = 0.0f;
+    int64_t     time_ns = 0;
     int         line = 1;
     int         column = 1;
 };
@@ -30,10 +46,82 @@ void set_diag(StDiagnostic* diag, const char* code, const std::string& msg, int 
     diag->length = 1;
 }
 
+std::string to_upper(const std::string& s)
+{
+    std::string u = s;
+    for (char& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return u;
+}
+
+/* Phân tích literal TIME: T#<số><đơn vị>{...}, đơn vị giảm dần, không lặp
+ * (SPEC §3.2). Trả false + diag khi sai định dạng. */
+bool parse_time_literal(const std::string& body, int line, int col, int64_t* out,
+                        StDiagnostic* diag)
+{
+    if (body.empty()) {
+        set_diag(diag, st_diag_code::kBadTimeLiteral, "empty TIME literal after 'T#'", line, col);
+        return false;
+    }
+    /* Thứ tự bắt buộc: d > h > m > s > ms. Chỉ số càng lớn càng nhỏ đơn vị. */
+    struct Unit { const char* name; int64_t ns; };
+    static const Unit kUnits[] = {
+        {"d",  86400000000000ll},
+        {"h",   3600000000000ll},
+        {"m",     60000000000ll},
+        {"s",      1000000000ll},
+        {"ms",       1000000ll},
+    };
+    int last_unit = -1;
+    int64_t total = 0;
+    std::size_t i = 0;
+    while (i < body.size()) {
+        if (!std::isdigit(static_cast<unsigned char>(body[i]))) {
+            set_diag(diag, st_diag_code::kBadTimeLiteral,
+                     "expected digits in TIME literal", line, col);
+            return false;
+        }
+        int64_t value = 0;
+        while (i < body.size() && std::isdigit(static_cast<unsigned char>(body[i]))) {
+            value = value * 10 + (body[i] - '0');
+            if (value > 1000000000ll) {   /* chặn tràn sớm */
+                set_diag(diag, st_diag_code::kBadTimeLiteral,
+                         "TIME literal component too large", line, col);
+                return false;
+            }
+            i++;
+        }
+        /* "ms" phải thử TRƯỚC "m", nếu không "ms" sẽ khớp "m" rồi để lại 's'. */
+        int unit_idx = -1;
+        if (i + 1 < body.size() && body[i] == 'm' && body[i + 1] == 's') {
+            unit_idx = 4; i += 2;
+        } else if (i < body.size()) {
+            for (int u = 0; u < 4; u++) {
+                if (body[i] == kUnits[u].name[0]) { unit_idx = u; i++; break; }
+            }
+        }
+        if (unit_idx < 0) {
+            set_diag(diag, st_diag_code::kBadTimeLiteral,
+                     "unknown or missing TIME unit (expected d, h, m, s or ms)", line, col);
+            return false;
+        }
+        if (unit_idx <= last_unit) {
+            set_diag(diag, st_diag_code::kBadTimeLiteral,
+                     "TIME units must be in decreasing order and not repeat", line, col);
+            return false;
+        }
+        last_unit = unit_idx;
+        total += value * kUnits[unit_idx].ns;
+        if (total < 0) {   /* tràn int64 */
+            set_diag(diag, st_diag_code::kBadTimeLiteral, "TIME literal overflows", line, col);
+            return false;
+        }
+    }
+    *out = total;
+    return true;
+}
+
 bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* diag)
 {
-    /* Giới hạn source PHẢI kiểm trước khi chạm ký tự đầu tiên: parser không
-     * được giả định caller (CLI/BE/loader) đã kiểm hộ. */
     if (src.size() > st_limits::kMaxSourceBytes) {
         set_diag(diag, st_diag_code::kSourceTooLarge,
                  "source is " + std::to_string(src.size()) + " bytes, limit is " +
@@ -41,11 +129,12 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
                  1, 1);
         return false;
     }
+
     std::size_t i = 0;
     const std::size_t n = src.size();
     int line = 1, col = 1;
-    /* Mỗi lần push_back token đều phải đi qua đây — không có đường vòng. */
-    auto push_token = [&](Token t) -> bool {
+
+    auto push = [&](Token t) -> bool {
         if (out->size() >= st_limits::kMaxTokens) {
             set_diag(diag, st_diag_code::kTooManyTokens,
                      "token count exceeds limit of " + std::to_string(st_limits::kMaxTokens),
@@ -55,91 +144,182 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
         out->push_back(std::move(t));
         return true;
     };
-    auto advance_pos = [&](char c) {
-        if (c == '\n') { line++; col = 1; }
-        else { col++; }
+    auto step = [&](char c) {
+        if (c == '\n') { line++; col = 1; } else { col++; }
     };
+    auto simple = [&](Token::Kind k, const char* text, int l, int c) {
+        Token t; t.kind = k; t.text = text; t.line = l; t.column = c; return t;
+    };
+
     while (i < n) {
         const char c = src[i];
-        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') { advance_pos(c); i++; continue; }
-        const int start_line = line, start_col = col;
-        if (std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
-            std::size_t start = i;
-            while (i < n && (std::isalnum(static_cast<unsigned char>(src[i])) || src[i] == '_')) {
-                advance_pos(src[i]); i++;
+
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') { step(c); i++; continue; }
+
+        const int sl = line, sc = col;
+
+        /* Chú thích khối (* ... *) — KHÔNG lồng nhau (SPEC §10). */
+        if (c == '(' && i + 1 < n && src[i + 1] == '*') {
+            step(src[i]); i++; step(src[i]); i++;
+            bool closed = false;
+            while (i < n) {
+                if (src[i] == '*' && i + 1 < n && src[i + 1] == ')') {
+                    step(src[i]); i++; step(src[i]); i++;
+                    closed = true;
+                    break;
+                }
+                step(src[i]); i++;
             }
-            const std::size_t len = i - start;
-            if (len > st_limits::kMaxIdentifierLength) {
-                set_diag(diag, st_diag_code::kIdentifierTooLong,
-                         "identifier is " + std::to_string(len) + " characters, limit is " +
-                             std::to_string(st_limits::kMaxIdentifierLength),
-                         start_line, start_col);
+            if (!closed) {
+                set_diag(diag, st_diag_code::kUnterminatedComment,
+                         "block comment '(*' is never closed", sl, sc);
                 return false;
             }
-            if (!push_token({Token::Kind::Ident, src.substr(start, len), 0.0f, start_line, start_col}))
-                return false;
             continue;
         }
+
+        /* Chú thích dòng // ... */
+        if (c == '/' && i + 1 < n && src[i + 1] == '/') {
+            while (i < n && src[i] != '\n') { step(src[i]); i++; }
+            continue;
+        }
+
+        /* Định danh / từ khoá / literal TIME (T#...) */
+        if (std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
+            const std::size_t start = i;
+            while (i < n && (std::isalnum(static_cast<unsigned char>(src[i])) || src[i] == '_')) {
+                step(src[i]); i++;
+            }
+            const std::string word = src.substr(start, i - start);
+
+            /* T# hoặc t# mở đầu literal TIME */
+            if ((word == "T" || word == "t") && i < n && src[i] == '#') {
+                step(src[i]); i++;
+                const std::size_t bstart = i;
+                while (i < n && (std::isalnum(static_cast<unsigned char>(src[i])))) {
+                    step(src[i]); i++;
+                }
+                Token t;
+                t.kind = Token::Kind::TimeLit;
+                t.line = sl; t.column = sc;
+                if (!parse_time_literal(src.substr(bstart, i - bstart), sl, sc, &t.time_ns, diag))
+                    return false;
+                if (!push(std::move(t))) return false;
+                continue;
+            }
+
+            if (word.size() > st_limits::kMaxIdentifierLength) {
+                set_diag(diag, st_diag_code::kIdentifierTooLong,
+                         "identifier is " + std::to_string(word.size()) +
+                             " characters, limit is " +
+                             std::to_string(st_limits::kMaxIdentifierLength),
+                         sl, sc);
+                return false;
+            }
+            Token t;
+            t.kind = Token::Kind::Ident;
+            t.text = word;
+            t.upper = to_upper(word);
+            t.line = sl; t.column = sc;
+            if (!push(std::move(t))) return false;
+            continue;
+        }
+
+        /* Số: nguyên hoặc thực (bắt buộc chữ số hai bên dấu chấm — SPEC §3.2) */
         if (std::isdigit(static_cast<unsigned char>(c))) {
-            std::size_t start = i;
-            while (i < n && std::isdigit(static_cast<unsigned char>(src[i]))) { advance_pos(src[i]); i++; }
-            if (i < n && src[i] == '.') {
-                advance_pos(src[i]); i++;
-                while (i < n && std::isdigit(static_cast<unsigned char>(src[i]))) { advance_pos(src[i]); i++; }
+            const std::size_t start = i;
+            while (i < n && std::isdigit(static_cast<unsigned char>(src[i]))) { step(src[i]); i++; }
+            bool is_real = false;
+            if (i + 1 < n && src[i] == '.' && std::isdigit(static_cast<unsigned char>(src[i + 1]))) {
+                is_real = true;
+                step(src[i]); i++;
+                while (i < n && std::isdigit(static_cast<unsigned char>(src[i]))) { step(src[i]); i++; }
             }
             const std::string text = src.substr(start, i - start);
-            if (!push_token({Token::Kind::Number, text, std::strtof(text.c_str(), nullptr),
-                             start_line, start_col}))
-                return false;
+            Token t;
+            t.line = sl; t.column = sc; t.text = text;
+            if (is_real) {
+                t.kind = Token::Kind::RealLit;
+                t.real_val = std::strtof(text.c_str(), nullptr);
+            } else {
+                t.kind = Token::Kind::IntLit;
+                errno = 0;
+                t.int_val = std::strtoll(text.c_str(), nullptr, 10);
+                if (errno == ERANGE) {
+                    set_diag(diag, st_diag_code::kIntLiteralOutOfRange,
+                             "integer literal out of range", sl, sc);
+                    return false;
+                }
+            }
+            if (!push(std::move(t))) return false;
             continue;
         }
-        if (c == ':') {
+
+        /* Toán tử và dấu */
+        switch (c) {
+        case ':':
             if (i + 1 < n && src[i + 1] == '=') {
-                if (!push_token({Token::Kind::ColonEq, ":=", 0.0f, start_line, start_col})) return false;
-                advance_pos(src[i]); i++; advance_pos(src[i]); i++;
+                if (!push(simple(Token::Kind::ColonEq, ":=", sl, sc))) return false;
+                step(src[i]); i++; step(src[i]); i++;
             } else {
-                if (!push_token({Token::Kind::Colon, ":", 0.0f, start_line, start_col})) return false;
-                advance_pos(src[i]); i++;
+                if (!push(simple(Token::Kind::Colon, ":", sl, sc))) return false;
+                step(src[i]); i++;
             }
             continue;
-        }
-        if (c == ';') { if (!push_token({Token::Kind::Semicolon, ";", 0.0f, start_line, start_col})) return false; advance_pos(c); i++; continue; }
-        if (c == ',') { if (!push_token({Token::Kind::Comma, ",", 0.0f, start_line, start_col})) return false; advance_pos(c); i++; continue; }
-        if (c == '(') { if (!push_token({Token::Kind::LParen, "(", 0.0f, start_line, start_col})) return false; advance_pos(c); i++; continue; }
-        if (c == ')') { if (!push_token({Token::Kind::RParen, ")", 0.0f, start_line, start_col})) return false; advance_pos(c); i++; continue; }
-        if (c == '=') { if (!push_token({Token::Kind::Eq, "=", 0.0f, start_line, start_col})) return false; advance_pos(c); i++; continue; }
-        if (c == '>') {
+        case '<':
             if (i + 1 < n && src[i + 1] == '=') {
-                if (!push_token({Token::Kind::Ge, ">=", 0.0f, start_line, start_col})) return false;
-                advance_pos(src[i]); i++; advance_pos(src[i]); i++;
-            } else {
-                if (!push_token({Token::Kind::Gt, ">", 0.0f, start_line, start_col})) return false;
-                advance_pos(src[i]); i++;
-            }
-            continue;
-        }
-        if (c == '<') {
-            if (i + 1 < n && src[i + 1] == '=') {
-                if (!push_token({Token::Kind::Le, "<=", 0.0f, start_line, start_col})) return false;
-                advance_pos(src[i]); i++; advance_pos(src[i]); i++;
+                if (!push(simple(Token::Kind::Le, "<=", sl, sc))) return false;
+                step(src[i]); i++; step(src[i]); i++;
             } else if (i + 1 < n && src[i + 1] == '>') {
-                if (!push_token({Token::Kind::Ne, "<>", 0.0f, start_line, start_col})) return false;
-                advance_pos(src[i]); i++; advance_pos(src[i]); i++;
+                if (!push(simple(Token::Kind::Ne, "<>", sl, sc))) return false;
+                step(src[i]); i++; step(src[i]); i++;
             } else {
-                if (!push_token({Token::Kind::Lt, "<", 0.0f, start_line, start_col})) return false;
-                advance_pos(src[i]); i++;
+                if (!push(simple(Token::Kind::Lt, "<", sl, sc))) return false;
+                step(src[i]); i++;
             }
             continue;
+        case '>':
+            if (i + 1 < n && src[i + 1] == '=') {
+                if (!push(simple(Token::Kind::Ge, ">=", sl, sc))) return false;
+                step(src[i]); i++; step(src[i]); i++;
+            } else {
+                if (!push(simple(Token::Kind::Gt, ">", sl, sc))) return false;
+                step(src[i]); i++;
+            }
+            continue;
+        default: break;
         }
-        set_diag(diag, st_diag_code::kLexUnexpectedChar,
-                 std::string("unexpected character '") + c + "'", start_line, start_col);
-        return false;
+
+        Token::Kind k = Token::Kind::End;
+        const char* txt = "";
+        switch (c) {
+        case ';': k = Token::Kind::Semicolon; txt = ";"; break;
+        case ',': k = Token::Kind::Comma;     txt = ","; break;
+        case '.': k = Token::Kind::Dot;       txt = "."; break;
+        case '(': k = Token::Kind::LParen;    txt = "("; break;
+        case ')': k = Token::Kind::RParen;    txt = ")"; break;
+        case '+': k = Token::Kind::Plus;      txt = "+"; break;
+        case '-': k = Token::Kind::Minus;     txt = "-"; break;
+        case '*': k = Token::Kind::Star;      txt = "*"; break;
+        case '/': k = Token::Kind::Slash;     txt = "/"; break;
+        case '=': k = Token::Kind::Eq;        txt = "="; break;
+        default:
+            set_diag(diag, st_diag_code::kLexUnexpectedChar,
+                     std::string("unexpected character '") + c + "'", sl, sc);
+            return false;
+        }
+        if (!push(simple(k, txt, sl, sc))) return false;
+        step(c); i++;
     }
-    /* Token End luôn phải vào được — nếu vừa chạm trần thì báo tràn thay vì
-     * trả vector không có sentinel (Parser::peek() sẽ đọc ngoài mảng). */
-    if (!push_token({Token::Kind::End, "", 0.0f, line, col})) return false;
+
+    Token end;
+    end.kind = Token::Kind::End;
+    end.line = line; end.column = col;
+    if (!push(std::move(end))) return false;
     return true;
 }
+
+/* ============================ Parser ============================ */
 
 class Parser {
 public:
@@ -147,53 +327,70 @@ public:
 
     bool parse_program(StProgram* out, StDiagnostic* diag)
     {
-        if (!expect_ident("PROGRAM", diag)) return false;
+        if (!expect_kw("PROGRAM", diag)) return false;
         if (!at_ident()) return fail("expected program name", diag);
+        if (is_keyword(peek().upper)) return fail("program name cannot be a keyword", diag);
         out->name = advance().text;
 
-        if (!expect_ident("VAR_INPUT", diag)) return false;
-        if (!parse_var_decls("END_VAR", &out->inputs, diag)) return false;
-        if (!expect_ident("END_VAR", diag)) return false;
-
-        if (!expect_ident("VAR_OUTPUT", diag)) return false;
-        if (!parse_var_decls("END_VAR", &out->outputs, diag)) return false;
-        if (!expect_ident("END_VAR", diag)) return false;
+        while (at_var_block_start()) {
+            if (!parse_var_block(out, diag)) return false;
+        }
 
         if (!parse_stmt_list({"END_PROGRAM"}, &out->body, diag)) return false;
-        if (!expect_ident("END_PROGRAM", diag)) return false;
+        if (!expect_kw("END_PROGRAM", diag)) return false;
         return true;
     }
 
 private:
-    static constexpr const char* kReservedWords[] = {
-        "PROGRAM", "VAR_INPUT", "VAR_OUTPUT", "END_VAR", "END_PROGRAM",
-        "IF", "THEN", "ELSE", "END_IF", "REAL", "BOOL", "TRUE", "FALSE",
-        "AND", "OR", "NOT"
-    };
-
     std::vector<Token> tok_;
     std::size_t pos_ = 0;
 
-    /* Bộ đếm giới hạn — xem st_limits.hpp. expr_depth_/stmt_depth_ là độ sâu
-     * ĐANG lồng (tăng khi vào, giảm khi ra); var_count_/stmt_count_ là tổng
-     * tích luỹ cho cả chương trình. */
     int         expr_depth_ = 0;
     int         stmt_depth_ = 0;
-    std::size_t var_count_ = 0;
     std::size_t stmt_count_ = 0;
 
-    /* RAII guard: bảo đảm depth luôn giảm đúng kể cả khi thoát bằng return
-     * false ở giữa hàm. Đếm tay bằng ++/-- thủ công là nguồn lỗi kinh điển
-     * ở parser có nhiều nhánh fail. */
+    /* Cờ đánh dấu khối VAR_* nào đã gặp — mỗi loại tối đa 1 lần (SPEC §2). */
+    bool seen_input_ = false, seen_output_ = false, seen_local_ = false, seen_retain_ = false;
+
     class DepthGuard {
     public:
-        DepthGuard(int* d) : d_(d) { ++(*d_); }
+        explicit DepthGuard(int* d) : d_(d) { ++(*d_); }
         ~DepthGuard() { --(*d_); }
         DepthGuard(const DepthGuard&) = delete;
         DepthGuard& operator=(const DepthGuard&) = delete;
     private:
         int* d_;
     };
+
+    static bool is_keyword(const std::string& up)
+    {
+        static const char* kKeywords[] = {
+            "PROGRAM", "END_PROGRAM", "VAR", "VAR_INPUT", "VAR_OUTPUT", "END_VAR",
+            "RETAIN", "IF", "THEN", "ELSIF", "ELSE", "END_IF",
+            "AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE",
+            "BOOL", "INT", "REAL", "TIME", "TON", "TOF", "R_TRIG", "F_TRIG",
+        };
+        for (const char* k : kKeywords)
+            if (up == k) return true;
+        return false;
+    }
+
+    const Token& peek() const { return tok_[pos_]; }
+    const Token& peek_at(std::size_t off) const
+    {
+        const std::size_t p = pos_ + off;
+        return tok_[p < tok_.size() ? p : tok_.size() - 1];
+    }
+    Token advance() { return tok_[pos_ + 1 < tok_.size() ? pos_++ : pos_]; }
+    bool at_ident() const { return peek().kind == Token::Kind::Ident; }
+    bool at_kw(const char* up) const { return at_ident() && peek().upper == up; }
+    bool at_end() const { return peek().kind == Token::Kind::End; }
+
+    bool fail(const std::string& msg, StDiagnostic* diag)
+    {
+        set_diag(diag, st_diag_code::kSyntaxUnexpected, msg, peek().line, peek().column);
+        return false;
+    }
 
     bool fail_depth(const char* what, int limit, StDiagnostic* diag)
     {
@@ -203,79 +400,127 @@ private:
         return false;
     }
 
-    const Token& peek() const { return tok_[pos_]; }
-    Token advance() { return tok_[pos_ < tok_.size() - 1 ? pos_++ : pos_]; }
-    bool at_ident() const { return peek().kind == Token::Kind::Ident; }
-    bool at_ident(const char* text) const { return at_ident() && peek().text == text; }
-    bool at_end() const { return peek().kind == Token::Kind::End; }
-
-    static bool is_reserved(const std::string& text)
+    bool expect_kw(const char* up, StDiagnostic* diag)
     {
-        for (const char* w : kReservedWords)
-            if (text == w) return true;
-        return false;
-    }
-
-    bool fail(const std::string& msg, StDiagnostic* diag)
-    {
-        set_diag(diag, st_diag_code::kSyntaxUnexpected, msg, peek().line, peek().column);
-        return false;
-    }
-
-    bool expect_ident(const char* keyword, StDiagnostic* diag)
-    {
-        if (!at_ident(keyword))
-            return fail(std::string("expected '") + keyword + "'", diag);
+        if (!at_kw(up)) return fail(std::string("expected '") + up + "'", diag);
         advance();
         return true;
     }
 
-    bool expect_kind(Token::Kind k, const char* what, StDiagnostic* diag)
+    bool expect(Token::Kind k, const char* what, StDiagnostic* diag)
     {
         if (peek().kind != k) return fail(std::string("expected ") + what, diag);
         advance();
         return true;
     }
 
-    bool parse_var_decls(const char* stop_keyword, std::vector<StVarDecl>* out, StDiagnostic* diag)
+    /* ---- Khối VAR ---- */
+
+    bool at_var_block_start() const
     {
-        while (!at_ident(stop_keyword)) {
-            if (at_end()) return fail("unexpected end of source in VAR block", diag);
-            if (!at_ident()) return fail("expected variable name", diag);
-            if (is_reserved(peek().text))
-                return fail("'" + peek().text + "' is a reserved word, cannot be used as variable name", diag);
-            StVarDecl decl;
-            decl.line = peek().line;
-            decl.column = peek().column;
-            decl.name = advance().text;
-            if (!expect_kind(Token::Kind::Colon, "':'", diag)) return false;
-            if (!at_ident()) return fail("expected type (REAL|BOOL)", diag);
-            const std::string type_name = advance().text;
-            if (type_name == "REAL") decl.type = StType::REAL;
-            else if (type_name == "BOOL") decl.type = StType::BOOL;
-            else return fail("unknown type '" + type_name + "' (only REAL/BOOL supported)", diag);
-            if (!expect_kind(Token::Kind::Semicolon, "';'", diag)) return false;
-            if (++var_count_ > st_limits::kMaxVariables) {
-                set_diag(diag, st_diag_code::kTooManyVariables,
-                         "variable count exceeds limit of " +
-                             std::to_string(st_limits::kMaxVariables),
-                         decl.line, decl.column);
-                return false;
-            }
-            out->push_back(std::move(decl));
-        }
-        return true;
+        return at_kw("VAR") || at_kw("VAR_INPUT") || at_kw("VAR_OUTPUT");
     }
 
-    bool parse_stmt_list(const std::vector<std::string>& stop_keywords, std::vector<StStmt>* out,
+    bool parse_var_block(StProgram* out, StDiagnostic* diag)
+    {
+        StStorage storage;
+        bool* seen;
+        const char* label;
+        if (at_kw("VAR_INPUT"))       { storage = StStorage::VAR_INPUT;  seen = &seen_input_;  label = "VAR_INPUT"; }
+        else if (at_kw("VAR_OUTPUT")) { storage = StStorage::VAR_OUTPUT; seen = &seen_output_; label = "VAR_OUTPUT"; }
+        else                          { storage = StStorage::VAR_LOCAL;  seen = &seen_local_;  label = "VAR"; }
+        advance();
+
+        if (storage == StStorage::VAR_LOCAL && at_kw("RETAIN")) {
+            advance();
+            storage = StStorage::VAR_RETAIN;
+            seen = &seen_retain_;
+            label = "VAR RETAIN";
+        }
+
+        if (*seen)
+            return fail(std::string("duplicate ") + label + " block (each may appear at most once)",
+                        diag);
+        *seen = true;
+
+        while (!at_kw("END_VAR")) {
+            if (at_end()) return fail("unexpected end of source inside VAR block", diag);
+            if (!at_ident()) return fail("expected variable name", diag);
+            if (is_keyword(peek().upper))
+                return fail("'" + peek().text + "' is a keyword and cannot be a variable name", diag);
+
+            const Token name_tok = advance();
+            if (!expect(Token::Kind::Colon, "':' after variable name", diag)) return false;
+            if (!at_ident()) return fail("expected type name", diag);
+            const Token type_tok = advance();
+
+            const StFbType fb = st_fb_type_from_name(type_tok.upper);
+            if (fb != StFbType::NONE) {
+                if (storage == StStorage::VAR_INPUT || storage == StStorage::VAR_OUTPUT)
+                    return fail("function block instances may only be declared in VAR or VAR RETAIN",
+                                diag);
+                StFbDecl d;
+                d.name = name_tok.text;
+                d.fb_type = fb;
+                d.retained = (storage == StStorage::VAR_RETAIN);
+                d.line = name_tok.line;
+                d.column = name_tok.column;
+                if (out->fbs.size() >= st_limits::kMaxFbInstances) {
+                    set_diag(diag, st_diag_code::kTooManyFbInstances,
+                             "function block instance count exceeds limit of " +
+                                 std::to_string(st_limits::kMaxFbInstances),
+                             d.line, d.column);
+                    return false;
+                }
+                out->fbs.push_back(std::move(d));
+            } else {
+                StVarDecl d;
+                d.name = name_tok.text;
+                d.storage = storage;
+                d.line = name_tok.line;
+                d.column = name_tok.column;
+                if (type_tok.upper == "BOOL")      d.type = StType::BOOL;
+                else if (type_tok.upper == "INT")  d.type = StType::INT;
+                else if (type_tok.upper == "REAL") d.type = StType::REAL;
+                else if (type_tok.upper == "TIME") d.type = StType::TIME;
+                else {
+                    set_diag(diag, st_diag_code::kUnknownType,
+                             "unknown type '" + type_tok.text + "'",
+                             type_tok.line, type_tok.column);
+                    return false;
+                }
+                if (out->vars.size() >= st_limits::kMaxVariables) {
+                    set_diag(diag, st_diag_code::kTooManyVariables,
+                             "variable count exceeds limit of " +
+                                 std::to_string(st_limits::kMaxVariables),
+                             d.line, d.column);
+                    return false;
+                }
+                out->vars.push_back(std::move(d));
+            }
+            if (!expect(Token::Kind::Semicolon, "';' after variable declaration", diag)) return false;
+        }
+        return expect_kw("END_VAR", diag);
+    }
+
+    /* ---- Câu lệnh ---- */
+
+    bool at_stop(const std::vector<std::string>& kws) const
+    {
+        if (!at_ident()) return false;
+        for (const std::string& k : kws)
+            if (peek().upper == k) return true;
+        return false;
+    }
+
+    bool parse_stmt_list(const std::vector<std::string>& stop, std::vector<StStmt>* out,
                          StDiagnostic* diag)
     {
-        /* Độ sâu statement đo ở đây (mỗi IF mở một stmt_list lồng thêm 1 cấp),
-         * chặn TRƯỚC khi đệ quy xuống parse_stmt -> parse_if_stmt. */
         if (stmt_depth_ >= st_limits::kMaxStmtDepth)
             return fail_depth("statement", st_limits::kMaxStmtDepth, diag);
         DepthGuard guard(&stmt_depth_);
-        while (!at_stop(stop_keywords)) {
+
+        while (!at_stop(stop)) {
             if (at_end()) return fail("unexpected end of source in statement list", diag);
             if (++stmt_count_ > st_limits::kMaxStatements) {
                 set_diag(diag, st_diag_code::kTooManyStatements,
@@ -284,63 +529,130 @@ private:
                          peek().line, peek().column);
                 return false;
             }
-            StStmt stmt;
-            if (!parse_stmt(&stmt, diag)) return false;
-            out->push_back(std::move(stmt));
+            StStmt s;
+            if (!parse_stmt(&s, diag)) return false;
+            out->push_back(std::move(s));
         }
         return true;
-    }
-
-    bool at_stop(const std::vector<std::string>& keywords) const
-    {
-        if (!at_ident()) return false;
-        for (const std::string& kw : keywords)
-            if (peek().text == kw) return true;
-        return false;
     }
 
     bool parse_stmt(StStmt* out, StDiagnostic* diag)
     {
-        if (at_ident("IF")) return parse_if_stmt(out, diag);
-        return parse_assign_stmt(out, diag);
+        if (at_kw("IF")) return parse_if(out, diag);
+
+        if (!at_ident()) return fail("expected identifier or IF at start of statement", diag);
+        if (is_keyword(peek().upper))
+            return fail("'" + peek().text + "' is a keyword and cannot start a statement", diag);
+
+        /* Phân biệt lời gọi FB với phép gán bằng token kế tiếp:
+         *   ident '('  -> lời gọi FB (câu lệnh)
+         *   ident ':=' -> phép gán
+         * Lời gọi HÀM chuẩn không bao giờ đứng ở vị trí câu lệnh vì hàm không
+         * có tác dụng phụ; nếu người dùng viết vậy, semantic báo ST-SEM-012. */
+        if (peek_at(1).kind == Token::Kind::LParen) return parse_fb_call(out, diag);
+        return parse_assign(out, diag);
     }
 
-    bool parse_if_stmt(StStmt* out, StDiagnostic* diag)
+    bool parse_if(StStmt* out, StDiagnostic* diag)
     {
         advance();   /* IF */
         out->kind = StStmt::Kind::IF;
-        if (!parse_expr(&out->if_cond, diag)) return false;
-        if (!expect_ident("THEN", diag)) return false;
-        if (!parse_stmt_list({"ELSE", "END_IF"}, &out->if_then, diag)) return false;
-        if (at_ident("ELSE")) {
-            advance();
-            if (!parse_stmt_list({"END_IF"}, &out->if_else, diag)) return false;
+
+        for (;;) {
+            StIfBranch branch;
+            if (!parse_expr(&branch.cond, diag)) return false;
+            if (!expect_kw("THEN", diag)) return false;
+            if (!parse_stmt_list({"ELSIF", "ELSE", "END_IF"}, &branch.body, diag)) return false;
+            out->branches.push_back(std::move(branch));
+            if (at_kw("ELSIF")) { advance(); continue; }
+            break;
         }
-        if (!expect_ident("END_IF", diag)) return false;
-        if (!expect_kind(Token::Kind::Semicolon, "';' after END_IF", diag)) return false;
-        return true;
+
+        if (at_kw("ELSE")) {
+            advance();
+            StIfBranch els;   /* cond == nullptr đánh dấu nhánh ELSE */
+            if (!parse_stmt_list({"END_IF"}, &els.body, diag)) return false;
+            out->branches.push_back(std::move(els));
+        }
+
+        if (!expect_kw("END_IF", diag)) return false;
+        return expect(Token::Kind::Semicolon, "';' after END_IF", diag);
     }
 
-    bool parse_assign_stmt(StStmt* out, StDiagnostic* diag)
+    bool parse_assign(StStmt* out, StDiagnostic* diag)
     {
-        if (!at_ident()) return fail("expected identifier or IF at start of statement", diag);
-        if (is_reserved(peek().text))
-            return fail("'" + peek().text + "' is a reserved word, cannot be an assignment target", diag);
+        const Token target = advance();
         out->kind = StStmt::Kind::ASSIGN;
-        out->assign_target_line = peek().line;
-        out->assign_target_column = peek().column;
-        out->assign_target = advance().text;
-        if (!expect_kind(Token::Kind::ColonEq, "':=' in assignment", diag)) return false;
+        out->assign_target = target.text;
+        out->assign_target_line = target.line;
+        out->assign_target_column = target.column;
+
+        /* `inst.Q := ...` là ghi vào đầu ra FB — bắt ở đây để báo đúng lỗi
+         * thay vì để nó rơi vào "expected ':='". */
+        if (peek().kind == Token::Kind::Dot) {
+            set_diag(diag, st_diag_code::kWriteToFbOutput,
+                     "cannot assign to a function block output", target.line, target.column);
+            return false;
+        }
+        if (!expect(Token::Kind::ColonEq, "':=' in assignment", diag)) return false;
         if (!parse_expr(&out->assign_expr, diag)) return false;
-        if (!expect_kind(Token::Kind::Semicolon, "';' after assignment", diag)) return false;
-        return true;
+        return expect(Token::Kind::Semicolon, "';' after assignment", diag);
     }
 
-    /* Precedence (thấp -> cao): OR > AND > NOT > so sánh > primary.
-     * Không chain nhiều so sánh liên tiếp (A > B > C không hợp lệ — đúng ngữ
-     * nghĩa ST, mỗi so sánh trả BOOL, muốn nối cần AND tường minh). */
-    /* Chốt chặn đệ quy #1: mọi lần xuống một cấp ngoặc hoặc một argument của
-     * lời gọi hàm đều quay lại đây (parse_primary -> parse_expr). */
+    bool parse_fb_call(StStmt* out, StDiagnostic* diag)
+    {
+        const Token inst = advance();
+
+        /* Tên hàm chuẩn ở vị trí câu lệnh: bắt NGAY tại đây thay vì để nó rơi
+         * vào luật tham số FB. Nếu không, `ABS(r);` sẽ báo "tham số phải đặt
+         * tên" — đúng về mặt luật nhưng chỉ sai nguyên nhân, khiến người viết
+         * đi sửa nhầm chỗ. Parser biết tĩnh tập tên hàm chuẩn nên không cần
+         * chờ tới semantic. */
+        StFunc fn;
+        if (st_func_from_name(inst.upper, &fn)) {
+            set_diag(diag, st_diag_code::kFbFunctionConfusion,
+                     "'" + inst.text +
+                         "' is a standard function; use it inside an expression, "
+                         "not as a statement",
+                     inst.line, inst.column);
+            return false;
+        }
+
+        out->kind = StStmt::Kind::FB_CALL;
+        out->fb_instance = inst.text;
+        out->fb_line = inst.line;
+        out->fb_column = inst.column;
+
+        if (!expect(Token::Kind::LParen, "'(' in function block call", diag)) return false;
+        if (peek().kind != Token::Kind::RParen) {
+            for (;;) {
+                if (!at_ident()) return fail("expected parameter name in function block call", diag);
+                StFbArg arg;
+                const Token pname = advance();
+                arg.name = pname.upper;   /* tên tham số chuẩn hoá in hoa */
+                arg.line = pname.line;
+                arg.column = pname.column;
+                /* Chỉ chấp nhận tham số ĐẶT TÊN (SPEC §5.3) — tham số theo vị
+                 * trí bị từ chối tường minh, không im lặng hiểu sai. */
+                if (peek().kind != Token::Kind::ColonEq) {
+                    set_diag(diag, st_diag_code::kBadFbParam,
+                             "function block arguments must use named form 'NAME := value'",
+                             arg.line, arg.column);
+                    return false;
+                }
+                advance();
+                if (!parse_expr(&arg.value, diag)) return false;
+                out->fb_args.push_back(std::move(arg));
+                if (peek().kind == Token::Kind::Comma) { advance(); continue; }
+                break;
+            }
+        }
+        if (!expect(Token::Kind::RParen, "')' to close function block call", diag)) return false;
+        return expect(Token::Kind::Semicolon, "';' after function block call", diag);
+    }
+
+    /* ---- Biểu thức (thứ tự ưu tiên SPEC §4.1) ---- */
+
     bool parse_expr(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
     {
         if (expr_depth_ >= st_limits::kMaxExprDepth)
@@ -349,152 +661,263 @@ private:
         return parse_or(out, diag);
     }
 
+    /* Sinh node nhị phân — dùng chung cho mọi mức ưu tiên. */
+    static std::unique_ptr<StExpr> make_bin(StBinOp op, std::unique_ptr<StExpr> l,
+                                            std::unique_ptr<StExpr> r, int line, int col)
+    {
+        auto n = std::make_unique<StExpr>();
+        n->kind = StExpr::Kind::BINOP;
+        n->bin_op = op;
+        n->lhs = std::move(l);
+        n->rhs = std::move(r);
+        n->line = line;
+        n->column = col;
+        return n;
+    }
+
     bool parse_or(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
     {
+        if (!parse_xor(out, diag)) return false;
+        while (at_kw("OR")) {
+            const int l = peek().line, c = peek().column;
+            advance();
+            std::unique_ptr<StExpr> rhs;
+            if (!parse_xor(&rhs, diag)) return false;
+            *out = make_bin(StBinOp::OR, std::move(*out), std::move(rhs), l, c);
+        }
+        return true;
+    }
+
+    bool parse_xor(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
+    {
         if (!parse_and(out, diag)) return false;
-        while (at_ident("OR")) {
-            const int line = peek().line, col = peek().column;
+        while (at_kw("XOR")) {
+            const int l = peek().line, c = peek().column;
             advance();
             std::unique_ptr<StExpr> rhs;
             if (!parse_and(&rhs, diag)) return false;
-            auto node = std::make_unique<StExpr>();
-            node->kind = StExpr::Kind::OR_;
-            node->lhs = std::move(*out);
-            node->rhs = std::move(rhs);
-            node->line = line; node->column = col;
-            *out = std::move(node);
+            *out = make_bin(StBinOp::XOR, std::move(*out), std::move(rhs), l, c);
         }
         return true;
     }
 
     bool parse_and(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
     {
-        if (!parse_not(out, diag)) return false;
-        while (at_ident("AND")) {
-            const int line = peek().line, col = peek().column;
+        if (!parse_equality(out, diag)) return false;
+        while (at_kw("AND")) {
+            const int l = peek().line, c = peek().column;
             advance();
             std::unique_ptr<StExpr> rhs;
-            if (!parse_not(&rhs, diag)) return false;
-            auto node = std::make_unique<StExpr>();
-            node->kind = StExpr::Kind::AND_;
-            node->lhs = std::move(*out);
-            node->rhs = std::move(rhs);
-            node->line = line; node->column = col;
-            *out = std::move(node);
+            if (!parse_equality(&rhs, diag)) return false;
+            *out = make_bin(StBinOp::AND, std::move(*out), std::move(rhs), l, c);
         }
         return true;
     }
 
-    bool parse_not(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
+    bool parse_equality(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
     {
-        if (at_ident("NOT")) {
-            /* Chốt chặn đệ quy #2: `NOT NOT NOT ...` tự gọi lại parse_not mà
-             * KHÔNG đi qua parse_expr, nên guard ở parse_expr không bắt được. */
+        if (!parse_relational(out, diag)) return false;
+        for (;;) {
+            StBinOp op;
+            if (peek().kind == Token::Kind::Eq)      op = StBinOp::EQ;
+            else if (peek().kind == Token::Kind::Ne) op = StBinOp::NE;
+            else break;
+            const int l = peek().line, c = peek().column;
+            advance();
+            std::unique_ptr<StExpr> rhs;
+            if (!parse_relational(&rhs, diag)) return false;
+            *out = make_bin(op, std::move(*out), std::move(rhs), l, c);
+        }
+        return true;
+    }
+
+    bool parse_relational(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
+    {
+        if (!parse_additive(out, diag)) return false;
+        for (;;) {
+            StBinOp op;
+            switch (peek().kind) {
+            case Token::Kind::Lt: op = StBinOp::LT; break;
+            case Token::Kind::Le: op = StBinOp::LE; break;
+            case Token::Kind::Gt: op = StBinOp::GT; break;
+            case Token::Kind::Ge: op = StBinOp::GE; break;
+            default: return true;
+            }
+            const int l = peek().line, c = peek().column;
+            advance();
+            std::unique_ptr<StExpr> rhs;
+            if (!parse_additive(&rhs, diag)) return false;
+            *out = make_bin(op, std::move(*out), std::move(rhs), l, c);
+        }
+    }
+
+    bool parse_additive(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
+    {
+        if (!parse_multiplicative(out, diag)) return false;
+        for (;;) {
+            StBinOp op;
+            if (peek().kind == Token::Kind::Plus)       op = StBinOp::ADD;
+            else if (peek().kind == Token::Kind::Minus) op = StBinOp::SUB;
+            else return true;
+            const int l = peek().line, c = peek().column;
+            advance();
+            std::unique_ptr<StExpr> rhs;
+            if (!parse_multiplicative(&rhs, diag)) return false;
+            *out = make_bin(op, std::move(*out), std::move(rhs), l, c);
+        }
+    }
+
+    bool parse_multiplicative(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
+    {
+        if (!parse_unary(out, diag)) return false;
+        for (;;) {
+            StBinOp op;
+            if (peek().kind == Token::Kind::Star)        op = StBinOp::MUL;
+            else if (peek().kind == Token::Kind::Slash)  op = StBinOp::DIV;
+            else if (at_kw("MOD"))                       op = StBinOp::MOD;
+            else return true;
+            const int l = peek().line, c = peek().column;
+            advance();
+            std::unique_ptr<StExpr> rhs;
+            if (!parse_unary(&rhs, diag)) return false;
+            *out = make_bin(op, std::move(*out), std::move(rhs), l, c);
+        }
+    }
+
+    bool parse_unary(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
+    {
+        const bool is_neg = (peek().kind == Token::Kind::Minus);
+        const bool is_not = at_kw("NOT");
+        if (is_neg || is_not) {
+            /* `NOT NOT x` đệ quy qua chính hàm này mà không đi qua parse_expr,
+             * nên phải có guard riêng — nếu không vẫn tràn stack được. */
             if (expr_depth_ >= st_limits::kMaxExprDepth)
                 return fail_depth("expression", st_limits::kMaxExprDepth, diag);
             DepthGuard guard(&expr_depth_);
-            const int line = peek().line, col = peek().column;
+            const int l = peek().line, c = peek().column;
             advance();
             std::unique_ptr<StExpr> operand;
-            if (!parse_not(&operand, diag)) return false;
-            auto node = std::make_unique<StExpr>();
-            node->kind = StExpr::Kind::NOT_;
-            node->operand = std::move(operand);
-            node->line = line; node->column = col;
-            *out = std::move(node);
+            if (!parse_unary(&operand, diag)) return false;
+            auto n = std::make_unique<StExpr>();
+            n->kind = StExpr::Kind::UNOP;
+            n->un_op = is_neg ? StUnOp::NEG : StUnOp::NOT;
+            n->operand = std::move(operand);
+            n->line = l; n->column = c;
+            *out = std::move(n);
             return true;
         }
-        return parse_comparison(out, diag);
-    }
-
-    bool parse_comparison(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
-    {
-        std::unique_ptr<StExpr> lhs;
-        if (!parse_primary(&lhs, diag)) return false;
-        StCompareOp op;
-        bool has_op = true;
-        switch (peek().kind) {
-        case Token::Kind::Gt: op = StCompareOp::GT; break;
-        case Token::Kind::Ge: op = StCompareOp::GE; break;
-        case Token::Kind::Lt: op = StCompareOp::LT; break;
-        case Token::Kind::Le: op = StCompareOp::LE; break;
-        case Token::Kind::Eq: op = StCompareOp::EQ; break;
-        case Token::Kind::Ne: op = StCompareOp::NE; break;
-        default: has_op = false; op = StCompareOp::GT; break;
-        }
-        if (!has_op) { *out = std::move(lhs); return true; }
-        const int line = peek().line, col = peek().column;
-        advance();
-        std::unique_ptr<StExpr> rhs;
-        if (!parse_primary(&rhs, diag)) return false;
-        auto node = std::make_unique<StExpr>();
-        node->kind = StExpr::Kind::CMP;
-        node->cmp_op = op;
-        node->lhs = std::move(lhs);
-        node->rhs = std::move(rhs);
-        node->line = line; node->column = col;
-        *out = std::move(node);
-        return true;
+        return parse_primary(out, diag);
     }
 
     bool parse_primary(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
     {
         const Token t = peek();
+
         if (t.kind == Token::Kind::LParen) {
             advance();
             if (!parse_expr(out, diag)) return false;
-            if (!expect_kind(Token::Kind::RParen, "')'", diag)) return false;
-            return true;
+            return expect(Token::Kind::RParen, "')'", diag);
         }
-        if (t.kind == Token::Kind::Number) {
-            auto node = std::make_unique<StExpr>();
-            node->kind = StExpr::Kind::LITERAL;
-            node->literal = {StType::REAL, t.num, false};
-            node->line = t.line; node->column = t.column;
+
+        if (t.kind == Token::Kind::IntLit) {
             advance();
-            *out = std::move(node);
+            auto n = std::make_unique<StExpr>();
+            n->kind = StExpr::Kind::LITERAL;
+            /* Literal nguyên là ĐA HÌNH (SPEC §3.4) — semantic chọn INT hay
+             * REAL theo ngữ cảnh. Ở đây chỉ giữ giá trị gốc. */
+            n->literal_polymorphic = true;
+            n->literal_int_value = t.int_val;
+            n->literal = StValue::make_int(0);
+            n->line = t.line; n->column = t.column;
+            *out = std::move(n);
             return true;
         }
+
+        if (t.kind == Token::Kind::RealLit) {
+            advance();
+            auto n = std::make_unique<StExpr>();
+            n->kind = StExpr::Kind::LITERAL;
+            n->literal = StValue::make_real(t.real_val);
+            n->line = t.line; n->column = t.column;
+            *out = std::move(n);
+            return true;
+        }
+
+        if (t.kind == Token::Kind::TimeLit) {
+            advance();
+            auto n = std::make_unique<StExpr>();
+            n->kind = StExpr::Kind::LITERAL;
+            n->literal = StValue::make_time(t.time_ns);
+            n->line = t.line; n->column = t.column;
+            *out = std::move(n);
+            return true;
+        }
+
         if (t.kind == Token::Kind::Ident) {
-            if (t.text == "TRUE" || t.text == "FALSE") {
-                auto node = std::make_unique<StExpr>();
-                node->kind = StExpr::Kind::LITERAL;
-                node->literal = {StType::BOOL, 0.0f, t.text == "TRUE"};
-                node->line = t.line; node->column = t.column;
+            if (t.upper == "TRUE" || t.upper == "FALSE") {
                 advance();
-                *out = std::move(node);
+                auto n = std::make_unique<StExpr>();
+                n->kind = StExpr::Kind::LITERAL;
+                n->literal = StValue::make_bool(t.upper == "TRUE");
+                n->line = t.line; n->column = t.column;
+                *out = std::move(n);
                 return true;
             }
-            if (is_reserved(t.text))
-                return fail("unexpected reserved word '" + t.text + "' in expression", diag);
+            if (is_keyword(t.upper))
+                return fail("unexpected keyword '" + t.text + "' in expression", diag);
+
             advance();
+
+            /* Truy cập thành viên: inst.Q */
+            if (peek().kind == Token::Kind::Dot) {
+                advance();
+                if (!at_ident()) return fail("expected member name after '.'", diag);
+                const Token field = advance();
+                auto n = std::make_unique<StExpr>();
+                n->kind = StExpr::Kind::MEMBER;
+                n->member_object = t.text;
+                n->member_field = field.upper;
+                n->line = t.line; n->column = t.column;
+                *out = std::move(n);
+                return true;
+            }
+
+            /* Gọi hàm chuẩn */
             if (peek().kind == Token::Kind::LParen) {
-                advance();   /* '(' */
-                auto node = std::make_unique<StExpr>();
-                node->kind = StExpr::Kind::CALL;
-                node->call_name = t.text;
-                node->line = t.line; node->column = t.column;
+                advance();
+                StFunc f;
+                if (!st_func_from_name(t.upper, &f)) {
+                    set_diag(diag, st_diag_code::kUnknownFunction,
+                             "unknown function '" + t.text + "'", t.line, t.column);
+                    return false;
+                }
+                auto n = std::make_unique<StExpr>();
+                n->kind = StExpr::Kind::CALL;
+                n->func = f;
+                n->line = t.line; n->column = t.column;
                 if (peek().kind != Token::Kind::RParen) {
                     for (;;) {
                         std::unique_ptr<StExpr> arg;
                         if (!parse_expr(&arg, diag)) return false;
-                        node->call_args.push_back(std::move(arg));
+                        n->args.push_back(std::move(arg));
                         if (peek().kind == Token::Kind::Comma) { advance(); continue; }
                         break;
                     }
                 }
-                if (!expect_kind(Token::Kind::RParen, "')' to close function call", diag)) return false;
-                *out = std::move(node);
+                if (!expect(Token::Kind::RParen, "')' to close function call", diag)) return false;
+                *out = std::move(n);
                 return true;
             }
-            auto node = std::make_unique<StExpr>();
-            node->kind = StExpr::Kind::VAR;
-            node->var_name = t.text;
-            node->line = t.line; node->column = t.column;
-            *out = std::move(node);
+
+            auto n = std::make_unique<StExpr>();
+            n->kind = StExpr::Kind::VAR;
+            n->var_name = t.text;
+            n->line = t.line; n->column = t.column;
+            *out = std::move(n);
             return true;
         }
-        return fail("expected expression (identifier, number, TRUE, FALSE, NOT or '(')", diag);
+
+        return fail("expected expression (identifier, literal, NOT, '-' or '(')", diag);
     }
 };
 
