@@ -7,6 +7,16 @@
 ---
 
 ## [Unreleased]
+### Added — ACTION 11 + 12: RETAIN và package integrity (PACKAGE_SECURITY_GATE) (2026-07-28)
+- Thêm `services/core/st/st_retain.{hpp,cpp}` — bản ghi RETAIN có magic `MKRT`, version, `layout_hash`, `record_size`, CRC-32. Ghi **atomic**: tmp → `fsync` → `rename` → `fsync` thư mục.
+- Ba bất biến: (1) bản ghi sai **không bao giờ** là lý do không khởi động chương trình — từ chối thì cold start kèm chẩn đoán; (2) mất điện giữa lúc ghi không để lại file nửa vời mà lần sau tưởng hợp lệ; (3) đổi layout biến RETAIN làm **hiện ra** mã `RT-RETAIN-003` chứ không âm thầm đọc bytes của layout cũ.
+- Wear control: chỉ ghi khi **giá trị đã đổi** *và* đã qua 60 s. Điều kiện "có thay đổi" đặt trước điều kiện thời gian — chương trình có RETAIN nhưng giá trị đứng yên không tốn chu kỳ ghi nào. `force` cho shutdown sạch.
+- CRC kiểm **trước** `layout_hash`: file bị cắt do mất điện là nguyên nhân thường gặp nhất, báo đúng nguyên nhân giúp phân biệt "mất điện" với "đã đổi chương trình".
+- Test RETAIN: 12 test phủ đủ 6 kịch bản bắt buộc (cold start, warm restart, mất điện khi ghi, CRC sai, đổi tên biến, đổi kiểu biến) + 4 test chính sách ghi.
+- **ACTION 12** — 5 trường hợp reject bắt buộc (bị sửa / sai chữ ký / thiếu chữ ký / sai target / sai version) đã có từ ACTION 6. Bổ sung 5 test cho phần các test đó **không** bắt được: gói ký bằng **khoá khác** (kịch bản tấn công thật — cấu trúc hợp lệ, hash đúng, chữ ký đúng, chỉ sai khoá), cơ chế thay khoá release qua `StLoaderOptions::public_key`, binary tự khai báo đang dùng khoá test hay không, `allow_unsigned` **không** bỏ qua kiểm hash, và xoá cờ `kSigned` **không** vượt được chữ ký (cờ nằm trong vùng hash).
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 629/629 pass** (612 → +17).
+- **PACKAGE_SECURITY_GATE = PASS.**
+
 ### Added — ACTION 10: wire ST vào production ScanLoop (2026-07-28)
 - Thêm `services/core/st/st_process_image.{hpp,cpp}` — cầu nối giữa process image của SOM và không gian slot ST. Mọi luật biên tập trung ở một chỗ thay vì rải rác.
 - `ScanDeps.st_sched` (mặc định `nullptr`): không cấu hình chương trình ST thì scan loop chạy y như trước, không thêm chi phí nào.
