@@ -7,6 +7,16 @@
 ---
 
 ## [Unreleased]
+### Changed — Review FW SOM Rev 1.1: kết luận chuyển BLOCKED, sắp lại plan theo dependency (2026-07-28)
+- `docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md` lên Rev 1.1. Kết luận tổng thể đổi từ `FW_SOM_READY_WITH_FIXES` sang **`FW_SOM_IMPLEMENTATION_BLOCKED`**.
+- Tách 4 cờ trạng thái theo phạm vi thay cho một nhãn chung: `EXISTING_FW_SOM_BASELINE = STABLE`, `FW_SOM_ST_HOST_SLICE = COMPLETED`, `PRODUCTION_ST_INTEGRATION = BLOCKED`, `C1_PLUS_OPENING = BLOCKED` (§1.1, §16, §18.1).
+- §17 sắp lại theo dependency thành 9 chặng: M-01 → cập nhật docs → MS-02/MS-01/MS-03 → M-02 + M-03 → M-04/M-05 → verification gates → C0.15 → M-09 → BE integration. M-03 lùi sau M-02 vì exec context phải cấp phát theo layout IR; MS-02 đứng trước MS-01 vì grammar quyết định IR mã hoá cái gì.
+- F-04/M-04: **không đặt safety policy trong `CoreMetrics`** — tách thành `OverrunMonitor` + `TaskHealthMonitor` đặt trong `safety/`, `CoreMetrics` giữ nguyên vai trò observability thuần tuý.
+- F-12/M-05: **cấm kick watchdog giữa scan** — chỉ kick sau cycle hoàn tất thành công; `WatchdogSec` phải chốt từ WCET đo trên target SOM, không từ suy đoán trên host.
+- Thêm §8.5 khoảng trống verification, blocker B-07, microtask V-01..V-07 và MI-13..MI-18: ASan, UBSan, fuzzing parser/CLI, đo WCET/jitter trên SOM target, xác minh systemd RT capability trên target, HIL với MCU thật, fault-injection suite.
+- Thêm §14.1 quy tắc gating: chưa được wire ST vào `ScanLoop` hoặc mở C1+ cho tới khi toàn bộ B-01 → B-05 đóng **và** C0.15 PASS. Ghi rõ đóng B-01 một mình là không đủ.
+- Không thay đổi source code.
+
 ### Added — Review trạng thái source/SPEC module FW SOM (2026-07-28)
 - Thêm `docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md` — review độc lập toàn bộ `services/core` + `services/iobus` đối chiếu SPEC/design/ADR/plan FW SOM. Gồm 30 dòng traceability matrix, bảng interface status, functional status matrix, 12 finding và 15 microtask kế tiếp.
 - Verification thật tại thời điểm review (không lấy số từ tài liệu): configure + build `services/` với `-Wall -Wextra -Werror -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_MODBUS=ON` → exit 0, 0 lỗi (`libmodbus 3.1.10`, `bacnet-stack` BACDL_BIP=ON); `ctest` → **477/477 pass, 0 fail, 0 skip**; `cppcheck` trên `core/{st,graph,safety,ipc}` → 0 error.

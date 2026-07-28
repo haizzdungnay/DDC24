@@ -1,11 +1,20 @@
 # FW SOM — Source, SPEC và Implementation Status Review
 
 > **Document ID:** REV-FWSOM-STATUS-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-07-28
+> **Phiên bản:** 1.1 | 2026-07-28
 > **Người thực hiện:** PM kỹ thuật (review độc lập)
 > **Phạm vi:** `services/core`, `services/iobus`, `shared/`, `packaging/systemd` + toàn bộ tài liệu SPEC/design/ADR/plan liên quan FW SOM
 > **Commit review:** `7fff012` trên nhánh `docs/fw-som-st-scope-and-vi-rule` (nền `origin/main` = `8f2f330`)
-> **Kết luận:** `FW_SOM_READY_WITH_FIXES` — xem §18
+> **Kết luận tổng thể:** `FW_SOM_IMPLEMENTATION_BLOCKED` — xem §18
+>
+> **Trạng thái tách riêng theo từng phạm vi** (không gộp thành một con số chung):
+>
+> | Phạm vi | Trạng thái |
+> |---|---|
+> | `EXISTING_FW_SOM_BASELINE` | **STABLE** |
+> | `FW_SOM_ST_HOST_SLICE` | **COMPLETED** |
+> | `PRODUCTION_ST_INTEGRATION` | **BLOCKED** |
+> | `C1_PLUS_OPENING` | **BLOCKED** |
 
 ---
 
@@ -13,7 +22,20 @@
 
 FW SOM hiện là **hai process C++17 chạy trên SOM Linux**: `mkddc-iobus` (chủ IOP/UART tới STM32, Modbus, BACnet) và `mkddc-core` (point table, priority arbitration, graph runtime, safe-state, alarm, schedule, IPC tới Web/HMI). Cộng thêm một binary CLI phụ `mkddc-st-validate`.
 
-**Baseline kỹ thuật xanh và đo được thật** (không lấy từ tài liệu):
+### 1.1 Trạng thái tách theo phạm vi — đọc bảng này trước
+
+Một kết luận chung duy nhất sẽ che mất sự thật rằng phần đang chạy production thì ổn định, còn phần muốn mở rộng thì bị chặn. Vì vậy trạng thái được ghi tách riêng:
+
+| Cờ trạng thái | Giá trị | Nghĩa vận hành |
+|---|---|---|
+| `EXISTING_FW_SOM_BASELINE` | **STABLE** | `mkddc-iobus` + `mkddc-core` hiện hành (scan loop, arbitration, safe-state, alarm, schedule, IPC, IOP, Modbus/BACnet) build sạch, 477/477 test, đang vận hành được. Không có finding nào chặn việc tiếp tục dùng và bảo trì baseline này. |
+| `FW_SOM_ST_HOST_SLICE` | **COMPLETED** | Lát cắt host-only theo `FW-SOM-ST-001` đã hoàn thành đúng phạm vi được phê duyệt và có bằng chứng build/CTest thật (61 test ST). Deliverable đã giao. |
+| `PRODUCTION_ST_INTEGRATION` | **BLOCKED** | Cấm wire `StCyclicRuntime` vào `ScanLoop`. Chặn bởi B-01 (`F-01` segfault), B-02 (`F-02` không có typed IR), B-03 (`F-03` allocation trong scan path). |
+| `C1_PLUS_OPENING` | **BLOCKED** | Cấm mở C1–C10. Chặn bởi B-02, B-04 (MS-01/MS-03 chưa có SPEC), B-05 (C0.15 chưa chạy). |
+
+**Kết luận tổng thể `FW_SOM_IMPLEMENTATION_BLOCKED`** phản ánh hai cờ `BLOCKED` ở trên: mọi hướng *đi tiếp* đều đang bị chặn, kể cả khi baseline hiện tại ổn định và lát cắt đã giao xong. Xem §18.
+
+### 1.2 Baseline kỹ thuật đo được thật (không lấy từ tài liệu)
 
 | Hạng mục | Kết quả đo 2026-07-28 |
 |---|---|
@@ -22,12 +44,13 @@ FW SOM hiện là **hai process C++17 chạy trên SOM Linux**: `mkddc-iobus` (c
 | `cppcheck` (warning/performance/portability) trên `core/{st,graph,safety,ipc}` | **0 error**, 8 note mức performance/portability, **0 note trong `st/`** |
 | Thư viện transport thật | `libmodbus 3.1.10` (pkg-config), `bacnet-stack` BACDL_BIP=ON, protocol revision 19 |
 
-**Nhưng "xanh" không đồng nghĩa "sẵn sàng đi tiếp".** Review này tìm thấy 3 vấn đề chặn việc mở rộng, và 1 mâu thuẫn governance:
+**Nhưng "xanh" không đồng nghĩa "sẵn sàng đi tiếp".** Review này tìm thấy 3 vấn đề chặn việc mở rộng, 1 mâu thuẫn governance, và 1 khoảng trống verification:
 
 1. **Lỗi crash đã repro** — ST parser đệ quy không giới hạn độ sâu, segfault với input hợp lệ về kích thước (§10, F-01).
 2. **Runtime thực thi AST parse trực tiếp từ source text**, trong khi thiết kế §4/§7.2 cấm rõ điều này và bắt buộc phải có typed IR + loader validation (§10, F-02).
 3. **Cấp phát heap trong scan execution path**, trong khi §7.2 ghi "không allocation ... trong scan execution" (§10, F-03).
 4. **Governance lệch:** cả **15/15 workstream C0 đều `Chưa bắt đầu`**, nhưng code ST đã merge vào production `services/core`. Đây là hệ quả có chủ ý của ngoại lệ CTO ngày 2026-07-24, nhưng hậu quả là 4 hạng mục rơi vào trạng thái `CODE_WITHOUT_SPEC` (§11, §13).
+5. **Toàn bộ evidence hiện có là host x86_64, chức năng, không đối kháng.** Không có ASan/UBSan, không có fuzzing, không có đo WCET/jitter trên SOM target, không có xác minh systemd RT capability trên target, không có HIL, không có fault-injection. `F-01` tồn tại được chính vì khoảng trống này — 477 test chỉ kiểm đường đi đúng (§8.5, §12 MI-13..MI-18).
 
 **Điểm mạnh thật sự cần ghi nhận:** lớp runtime substrate (scan loop deterministic, seqlock snapshot, priority arbitration 6 mức, safe-state đa trigger, atomic activation + last-known-good, staging không commit nửa chừng, reject NaN/Inf) đã implement **và có test bao phủ**. Đây là nền tốt; các fix bên dưới là fix có mục tiêu, không phải viết lại.
 
@@ -253,6 +276,22 @@ cppcheck --enable=warning,performance,portability --std=c++17 \
 
 Ngưỡng đo được: depth 10000 → exit 0; **depth 12000 → exit 139**. Nested `IF` không khai thác được (18 B/cấp, hạn mức 64 KiB chặn ở ~3640 cấp; test 3500 cấp → exit 0).
 
+### 8.5 Khoảng trống verification — những gì KHÔNG được kiểm
+
+Toàn bộ evidence ở §8.1–§8.3 là **host x86_64, build chức năng, input hợp lệ**. Đây là điểm yếu hệ thống, không phải thiếu sót ngẫu nhiên: `F-01` sống sót qua 477 test chính vì không có lớp kiểm nào ở dưới đây.
+
+| # | Loại verification | Trạng thái | Vì sao bắt buộc với FW SOM |
+|---|---|---|---|
+| VG-01 | **AddressSanitizer (ASan)** | **KHÔNG CÓ** | Bắt buffer overflow, use-after-free, **stack overflow có chẩn đoán** thay vì SIGSEGV câm. ASan sẽ báo `F-01` ngay lần chạy đầu |
+| VG-02 | **UndefinedBehaviorSanitizer (UBSan)** | **KHÔNG CÓ** | Code có số học float, ép kiểu int24→int32 ([iop_protocol.h:210](shared/iop_protocol.h#L210)), shift, so sánh signed/unsigned — đúng loại UB mà `-Werror` không bắt được |
+| VG-03 | **Fuzzing parser/CLI** | **KHÔNG CÓ** | `parse_st_program()` và `mkddc-st-validate` nhận input từ ngoài. Đây là bề mặt tấn công duy nhất của FW SOM hiện nay |
+| VG-04 | **Đo WCET/jitter trên SOM target** | **KHÔNG CÓ** | Mọi số jitter hiện có là từ log runtime trên host dev. Không có phép đo nào trên aarch64/Orange Pi 5B. Không thể khẳng định cycle time deterministic nếu chưa đo trên phần cứng đích |
+| VG-05 | **Xác minh systemd RT capability trên target** | **KHÔNG CÓ** | [main.cpp:112-115](services/core/main.cpp#L112-L115) chỉ in `WARN ... (degraded)` khi `SCHED_FIFO`/`mlockall` thất bại — service vẫn chạy tiếp **không có RT**. Chưa có test nào xác nhận `AmbientCapabilities=CAP_SYS_NICE CAP_IPC_LOCK` thực sự hiệu lực trên target |
+| VG-06 | **HIL với MCU thật** | **KHÔNG CÓ** | Toàn bộ test IOP là fake-MCU trong process. Chưa có evidence UART thật, chưa có phép đo 200 ms safe timeout bằng thiết bị |
+| VG-07 | **Fault injection** | **KHÔNG CÓ** | Design §7.3 yêu cầu rõ "fault injection test" cho overrun policy. §9.3 yêu cầu fault-inject UART disconnect, corrupted frame, ADC loss, DAC/relay fault, watchdog reset trên target |
+
+Các mục này được đưa thành microtask **V-01..V-07** ở §17 và là điều kiện bắt buộc trước `C0.15`.
+
 ---
 
 ## 9. Functional Status Matrix
@@ -323,6 +362,10 @@ Ngưỡng đo được: depth 10000 → exit 0; **depth 12000 → exit 139**. Ne
 - **SPEC nói gì:** Design §10 — *"Task overrun | Ghi WCET/overrun, **alarm**; **repeated threshold chuyển safe** theo config đã test."* §7.3 — *"Overrun policy và safe output phải cấu hình có giới hạn, có alarm, fault injection test."*
 - **Code làm gì:** [core_metrics.cpp:13-15](services/core/diagnostics/core_metrics.cpp#L13-L15) tăng counter + in `WARN scan.overrun`. Counter được publish vào PLC SHM ([scan_loop.cpp:228](services/core/graph/scan_loop.cpp#L228)) và in ở shutdown. **Hết.**
 - **Thiếu:** không có ngưỡng cấu hình được, không có đường nối tới `SafeState::apply()` ([safe_state.cpp:32](services/core/safety/safe_state.cpp#L32) — `trigger` chỉ gồm `fault || stale || graph_input_bad || no_controller`), không có alarm code trong `AlarmRuntime`.
+- **Ràng buộc thiết kế khi fix — KHÔNG đặt safety policy vào `CoreMetrics`:** `CoreMetrics` là **observability thuần tuý** (đếm, đo, publish). Nhét ngưỡng an toàn và quyết định chuyển safe-state vào đây sẽ trộn hai trách nhiệm khác hạng: một component có thể tắt/bỏ qua mà không ảnh hưởng điều khiển sẽ bỗng nhiên nắm quyền quyết định an toàn, và policy an toàn sẽ không thể test độc lập khỏi bộ đếm.
+  - Tách thành **`OverrunMonitor`** (nhận `exec_ns`/`budget_ns`, giữ ngưỡng cấu hình, quyết định `should_force_safe()`) và **`TaskHealthMonitor`** (tổng hợp sức khoẻ per-task khi có multi-task ở M-06), đặt trong `safety/`, **không** đặt trong `diagnostics/`.
+  - `CoreMetrics` giữ nguyên vai trò cũ: chỉ đếm và publish, không có nhánh điều khiển nào.
+  - `SafeState::apply()` nhận kết quả từ `OverrunMonitor` như một trigger ngang hàng với `fault`/`stale`/`graph_input_bad`/`no_controller`.
 - **Fix:** M-04.
 
 ### F-05 — [MEDIUM] Không có multi-task scheduler
@@ -366,6 +409,10 @@ Doc v1.1 (2026-06-22) ghi "226/226 test", "`modbus_master.open()` trả `false` 
 
 [mkddc-core.service](packaging/systemd/mkddc-core.service) đặt `WatchdogSec=3`; core gửi `WATCHDOG=1` sau **mỗi** scan ([main.cpp:286](services/core/main.cpp#L286)). Với `scan_ms` tối đa hợp lệ = 2000 ms, khoảng kick là 2 s — vẫn dưới 3 s nên đúng, nhưng chỉ còn **1 s biên**. Một scan overrun >1 s sẽ khiến systemd restart core. Hành vi này có thể là mong muốn (watchdog đúng nghĩa) nhưng **chưa được ghi ở tài liệu nào** và chưa có test.
 
+**Ràng buộc bắt buộc khi fix — KHÔNG kick watchdog giữa scan.** Cách sửa "dễ" là gọi `WATCHDOG=1` thêm ở giữa `step()` để nới biên. **Cấm làm vậy.** Watchdog phải chứng minh *scan hoàn tất thành công*, không phải *process còn sống*. Kick giữa scan biến watchdog thành liveness check vô nghĩa: một `step()` treo vĩnh viễn ở giữa vẫn kick đều và systemd sẽ không bao giờ restart — đúng loại lỗi mà watchdog sinh ra để bắt. Điều này cũng khớp Design §9.2 (`diag_wdg`): *"Watchdog feed phải phản ánh health của scheduler/I/O, không chỉ việc CPU còn chạy vòng lặp."*
+
+Hướng đúng: **chỉ kick sau một cycle hoàn tất thành công** (giữ nguyên vị trí hiện tại trong `after_scan`), rồi chọn `WatchdogSec` từ số đo WCET thật trên target chứ không từ suy đoán. Việc chốt giá trị này phụ thuộc `V-03` (đo WCET/jitter trên SOM) và `V-04` (xác minh RT capability trên target) — không được chốt bằng đo trên host.
+
 ### Đánh giá chất lượng — các câu hỏi bắt buộc
 
 | Câu hỏi | Trả lời | Bằng chứng |
@@ -403,15 +450,21 @@ Doc v1.1 (2026-06-22) ghi "226/226 test", "`modbus_master.open()` trả `false` 
 | MI-01 | Typed IR + serializer + loader validation | NOT_STARTED | MS-01 |
 | MI-02 | Depth limit trong parser + diagnostic code | NOT_STARTED | MS-02 (có thể làm ngay với ngưỡng tạm) |
 | MI-03 | Pre-allocated execution context (bỏ allocation trong scan) | NOT_STARTED | — |
-| MI-04 | Overrun threshold → safe state + alarm code | NOT_STARTED | MS-03 |
+| MI-04 | `OverrunMonitor` + `TaskHealthMonitor` trong `safety/` (tách khỏi `CoreMetrics`) → safe state + alarm code | NOT_STARTED | MS-03 |
 | MI-05 | Multi-task scheduler | NOT_STARTED | MS-03 |
 | MI-06 | ST RETAIN + cold/warm start | NOT_STARTED | MS-08 |
 | MI-07 | Package signature/integrity | NOT_STARTED | MS-06 |
 | MI-08 | `io_map.json` storage + CRUD | NOT_STARTED | BE (C2) |
 | MI-09 | Trace persist + publish ra ngoài process | NOT_STARTED | C1+ |
-| MI-10 | Wire `StCyclicRuntime` vào `ScanLoop` | NOT_STARTED | **Bị chặn bởi M-01, M-02, M-03** |
+| MI-10 | Wire `StCyclicRuntime` vào `ScanLoop` | NOT_STARTED | **Bị chặn bởi B-01..B-05 + C0.15 PASS** |
 | MI-11 | BE Go gọi `mkddc-st-validate` | NOT_STARTED | M-01 phải xong trước |
 | MI-12 | ST stdlib mở rộng (arith, `SEL`, `TON`, `CASE`) | NOT_STARTED | MS-02 |
+| MI-13 | Build + CI job ASan/UBSan (VG-01, VG-02) | NOT_STARTED | — (làm được ngay) |
+| MI-14 | Fuzz harness cho `parse_st_program()` + `mkddc-st-validate` (VG-03) | NOT_STARTED | M-01 (fix trước, fuzz để chứng minh) |
+| MI-15 | Đo WCET/jitter trên SOM target aarch64 (VG-04) | NOT_STARTED | Cần board |
+| MI-16 | Xác minh systemd RT capability trên target (VG-05) | NOT_STARTED | Cần board |
+| MI-17 | HIL rig với MCU thật (VG-06) | NOT_STARTED | Cần board + MCU |
+| MI-18 | Fault-injection suite (VG-07) | NOT_STARTED | MI-17 |
 
 ## 13. Conflicts and Technical Debt
 
@@ -441,80 +494,190 @@ Doc v1.1 (2026-06-22) ghi "226/226 test", "`modbus_master.open()` trả `false` 
 | **B-04** | **MS-01/MS-03** — C0.6, C0.7 chưa có SPEC | Chặn MI-01, MI-04, MI-05 | CHẶN THIẾT KẾ |
 | **B-05** | C0.15 go/no-go chưa chạy | Chặn chính thức toàn bộ C1–C10 | CHẶN QUY TRÌNH |
 | **B-06** | Không có board/HIL evidence | Chặn G4 (I/O/MCU gate) | Ngoài scope code |
+| **B-07** | **VG-01..VG-07** — không có ASan/UBSan/fuzzing/WCET target/RT capability/HIL/fault-injection | Chặn C0.15 PASS: không có cơ sở để tuyên bố runtime an toàn khi chưa từng kiểm bằng input đối kháng và chưa từng đo trên target | **CHẶN VERIFICATION** |
 
 **Không phải blocker:** build, test, lint, transport library — tất cả đã xanh và verify được.
+
+### 14.1 Quy tắc gating (bắt buộc, không diễn giải lại)
+
+> **Chưa được wire ST vào `ScanLoop`, và chưa được mở C1+, cho tới khi TOÀN BỘ blocker `B-01` → `B-05` được đóng VÀ `C0.15` cho kết quả PASS.**
+
+Ba hệ quả cụ thể của quy tắc này:
+
+1. Đóng `B-01` (fix `F-01`) **một mình không đủ** để wire vào `ScanLoop`. Đây là hiểu nhầm dễ xảy ra nhất vì `F-01` là finding dễ thấy nhất.
+2. `B-07` không nằm trong danh sách `B-01..B-05` nhưng là **điều kiện đầu vào của `C0.15`** — không có evidence VG-01..VG-07 thì `C0.15` không có cơ sở để PASS.
+3. Không có đường tắt "wire tạm để test tích hợp". Một khi `StCyclicRuntime` nằm trong `ScanLoop`, nó chạy trong vòng `SCHED_FIFO 80` của process điều khiển — không còn là host-only nữa, bất kể chủ ý.
 
 ---
 
 ## 15. Recommended Fixes
 
-Xem bảng microtask §17. Tóm tắt ưu tiên:
+Thứ tự đã được sắp lại **theo dependency**, không theo mức độ dễ làm. Bảng chi tiết ở §17; đây là 8 chặng:
 
-1. **P0 — M-01:** depth limit trong parser. Nhỏ, độc lập, gỡ B-01 ngay.
-2. **P0 — M-03:** pre-allocate execution context. Độc lập với IR, gỡ B-03.
-3. **P1 — M-04:** overrun → alarm + ngưỡng → safe state. Đóng khoảng cách với §10.
-4. **P1 — M-02:** typed IR + loader validation. Cần MS-01 trước; đây là việc lớn nhất.
-5. **P2 — M-05..M-06:** watchdog doc/test, C0 SPEC.
-6. **P2 — M-07..M-08:** sửa 3 tài liệu lỗi thời (rẻ, làm ngay được).
+```text
+① M-01 (depth limit — chặn cứng, làm trước hết)
+      ↓
+② Cập nhật docs lỗi thời (M-07, M-08 — rẻ, gỡ nhiễu cho người làm tiếp)
+      ↓
+③ MS-02 (C0.4 grammar+limits) → MS-01 (C0.6 typed IR) → MS-03 (C0.7 scheduler)
+      ↓            SPEC phải xong trước khi chạm lại runtime
+④ M-02 (typed IR impl) + M-03 (pre-allocated exec context)
+      ↓
+⑤ M-04 (OverrunMonitor tách khỏi Metrics) / M-05 (watchdog sau cycle thành công)
+      ↓
+⑥ Verification gates V-01..V-07 (ASan, UBSan, fuzzing, WCET target,
+      ↓                            RT capability, HIL, fault-injection)
+⑦ C0.15 go/no-go — PASS
+      ↓
+⑧ M-09 (wire ST vào ScanLoop) → M-10 (BE integration)
+```
+
+**Vì sao MS-02 đứng trước MS-01:** grammar và bảng giới hạn (C0.4) quyết định IR phải mã hoá được cái gì và loader phải reject ngưỡng nào. Viết IR schema trước grammar là đặt cày trước trâu — và cũng là lý do ngưỡng depth trong M-01 chỉ là **giá trị tạm**, chốt chính thức ở MS-02.
+
+**Vì sao M-03 lùi xuống chặng ④ thay vì làm sớm:** pre-allocated execution context phải cấp phát theo *layout của IR* (số slot, số constant, số instance). Làm M-03 trước M-02 sẽ phải viết lại toàn bộ khi IR ra đời.
+
+**Vì sao verification gates đứng trước C0.15 chứ không sau:** `C0.15` là go/no-go. Nếu evidence đối kháng và evidence trên target chưa có, `C0.15` không có dữ liệu để quyết định — nó sẽ trở thành thủ tục đóng dấu.
 
 ---
 
 ## 16. Implementation Readiness
 
-| Câu hỏi | Trả lời |
-|---|---|
-| Lát cắt "chạy ST tối thiểu trên SOM host runtime" (`FW-SOM-ST-001`) đã xong chưa? | **Rồi.** Chương trình demo bắt buộc trong C1–C10 plan §0.1 đã chạy thật, 61 test ST pass, build/CTest evidence có |
-| Có đủ điều kiện tiếp tục implement **trong lát cắt host-only** không? | **Có, sau khi fix M-01 và M-03** |
-| Có đủ điều kiện **wire ST vào production scan loop** không? | **Chưa.** B-01, B-03 phải đóng trước |
-| Có đủ điều kiện mở **C1+** không? | **Chưa.** B-02, B-04, B-05 |
-| Baseline kỹ thuật có ổn định để làm tiếp không? | **Có.** 477/477, 0 skip, `-Werror` sạch, cppcheck 0 error |
+| Câu hỏi | Trả lời | Cờ trạng thái |
+|---|---|---|
+| Baseline `mkddc-iobus` + `mkddc-core` hiện hành có ổn định để tiếp tục vận hành/bảo trì không? | **Có.** 477/477, 0 skip, `-Werror` sạch, cppcheck 0 error. Không finding nào chặn baseline | `EXISTING_FW_SOM_BASELINE = STABLE` |
+| Lát cắt "chạy ST tối thiểu trên SOM host runtime" (`FW-SOM-ST-001`) đã xong chưa? | **Rồi.** Chương trình demo bắt buộc trong C1–C10 plan §0.1 đã chạy thật, 61 test ST pass, build/CTest evidence có | `FW_SOM_ST_HOST_SLICE = COMPLETED` |
+| Có đủ điều kiện **wire ST vào production scan loop** không? | **Không.** Cần B-01..B-05 đóng **và** C0.15 PASS (§14.1) | `PRODUCTION_ST_INTEGRATION = BLOCKED` |
+| Có đủ điều kiện mở **C1+** không? | **Không.** B-02, B-04, B-05 chưa đóng | `C1_PLUS_OPENING = BLOCKED` |
+| Có đủ điều kiện tiếp tục implement **trong lát cắt host-only** không? | **Có, theo đúng thứ tự §15** — bắt đầu từ M-01 rồi docs rồi SPEC. Không được nhảy cóc sang M-09 | — |
+| Có cơ sở để tuyên bố runtime an toàn không? | **Chưa.** Không có ASan/UBSan/fuzzing/WCET target/HIL/fault-injection (§8.5, B-07) | — |
 
 ---
 
 ## 17. Next Implementation Plan
 
+Thứ tự dưới đây là **thứ tự thi hành theo dependency**, đọc từ trên xuống. ID microtask (`M-xx`, `MS-xx`, `V-xx`) giữ nguyên để cross-reference với §11–§15 không đổi; chỉ cột "Thứ tự" phản ánh trình tự làm.
+
+### Chặng ① — Gỡ blocker cứng
+
 | Thứ tự | Microtask | File/module tác động | Điều kiện đầu vào | Kết quả đầu ra | Cách kiểm thử | Mức ưu tiên |
 |--------|-----------|----------------------|-------------------|----------------|--------------|-------------|
-| 1 | **M-01** Thêm depth counter cho recursive descent. Trường `int depth_` trong parser; tăng/giảm ở `parse_expr`, `parse_stmt_list`; vượt ngưỡng → trả `StDiagnostic` code mới `ST-SYN-002` (nesting quá sâu) kèm line/column. Ngưỡng tạm **64** (đủ rộng cho chương trình thật, đủ hẹp để không tràn stack); ghi rõ trong comment là giá trị tạm chờ MS-02 | `st/st_parser.cpp`, `st/st_parser.hpp`, `st/st_diagnostic.hpp` | Không | Parser không bao giờ segfault; CLI luôn trả 1 dòng JSON | Test mới `StParser.DeepNestingRejectedNotCrash`: source 12000 ngoặc → `parse_st_program()` trả false, code `ST-SYN-002`. Test CLI `StValidateCli.DeepNestingExitsOneWithJson`: exit 1, stdout parse được JSON. Chạy lại repro thủ công 20000 ngoặc | **P0** |
-| 2 | **M-03** Pre-allocate execution context. Thêm struct `StExecContext` giữ `std::vector<StValue>` cho input/output + bảng chỉ số `name → slot` dựng **một lần** tại `activate()`. `execute()` chỉ ghi vào vector đã cấp, không tạo `std::map` mới. Thay `view.find(name)` bằng tra chỉ số đã resolve tại semantic phase | `st/st_runtime.cpp`, `st/st_runtime.hpp`, `st/st_program.hpp`, `st/st_semantic.cpp` | M-01 xong (tránh xung đột merge trong cùng file) | `execute()` không cấp phát heap; O(1) truy cập biến | Test `StRuntime.ExecuteDoesNotAllocate`: override `operator new` đếm allocation trong test binary, chạy 1000 cycle → count == 0. Giữ nguyên 23 test `StRuntime` hiện có phải pass | **P0** |
-| 3 | **M-04** Overrun → alarm + ngưỡng → safe state. Thêm `overrun_consecutive_` và `overrun_threshold_` (cấu hình từ `io_safe_state.conf`) vào `CoreMetrics`; thêm trigger `overrun_exceeded` vào `SafeState::apply()`; thêm alarm code `E4xx` vào `AlarmRuntime` | `diagnostics/core_metrics.{hpp,cpp}`, `safety/safe_state.{hpp,cpp}`, `safety/safe_state_config.cpp`, `alarm/alarm_runtime.cpp` | MS-03 duyệt ngưỡng mặc định | Overrun lặp N lần → AO safe/DO open + alarm | Test `CoreMetrics.ConsecutiveOverrunTriggersThreshold`; `SafeState.OverrunThresholdForcesSafe`; test reset counter khi scan trở lại bình thường | **P1** |
-| 4 | **M-05** Ghi + test hành vi watchdog khi scan chậm | `packaging/systemd/mkddc-core.service`, `docs/04_design/INTERFACES.md`, `docs/03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md` | Không | Ghi rõ quan hệ `WatchdogSec` ↔ `scan_ms` max; cân nhắc nâng `WatchdogSec` lên 5 hoặc kick giữa scan | Test tích hợp: chạy core với `--scan-ms 2000`, xác nhận không bị systemd kill trong 60 s | **P1** |
-| 5 | **MS-01** Viết C0.6 Typed IR spec: magic, schema version, target ABI, encoding instruction, bảng constant, giới hạn tài nguyên, danh sách luật reject của loader | `docs/07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md` §C0.6 + tài liệu schema mới | Design §7.2 | SPEC đủ để implement M-02 | Review bởi Architect; đối chiếu từng dòng luật reject §7.2 | **P1** |
-| 6 | **MS-02** Viết C0.4 ST subset grammar EBNF + bảng giới hạn (độ sâu, số biến, số statement, độ dài định danh) | C0 plan §C0.4 | M-01 đã cho số liệu thực nghiệm về ngưỡng | Grammar chính thức; chốt ngưỡng depth thay giá trị tạm của M-01 | Đối chiếu grammar với `st_parser.cpp` từng luật; cập nhật ngưỡng M-01 nếu khác 64 | **P1** |
-| 7 | **MS-03** Viết C0.7 Deterministic scheduler model: task set, priority, period, per-task watchdog budget, overrun policy | C0 plan §C0.7 | MS-01 | SPEC đủ để implement M-06 | Review Architect + SOM Backend Lead | **P1** |
-| 8 | **M-02** Implement typed IR: serializer từ AST → IR, loader validate (magic/version/ABI/limit/binding), `activate()` đổi chữ ký sang nhận **artifact bytes** thay vì source text. Compiler CLI sinh artifact | `st/st_ir.{hpp,cpp}` (mới), `st/st_runtime.{hpp,cpp}`, `st/st_artifact.{hpp,cpp}`, `st/st_validate_main.cpp` | MS-01 duyệt | Runtime không còn parse source; đúng Design §4/§7.2 | Test round-trip AST→IR→execute cho toàn bộ 23 case `StRuntime` hiện có; test loader reject từng luật §7.2 (magic sai, version sai, vượt limit, binding sai type) | **P1** |
-| 9 | **M-06** Implement multi-task scheduler theo MS-03 | `st/st_scheduler.{hpp,cpp}` (mới), `st/st_cyclic_runtime.cpp` | MS-03, M-02 | Task set với priority/period/budget | Test task order deterministic, per-task overrun, priority preemption | **P2** |
-| 10 | **M-09** Wire `StCyclicRuntime` vào `ScanLoop` | `services/core/main.cpp`, `graph/scan_loop.{hpp,cpp}` | **M-01, M-02, M-03 đều xong** | ST chạy thật trong `mkddc-core` | Test `ScanLoop.StProgramExecutesInScan`; test integration: deploy ST hỏng → core không crash, giữ package cũ; đo jitter trước/sau | **P2** |
-| 11 | **M-10** BE Go gọi `mkddc-st-validate` với timeout + parse JSON | `web/backend/` | M-01 xong | BE validate được ST source | Test Go: exit 0/1/2, timeout, stdout không phải JSON → lỗi rõ ràng | **P2** |
-| 12 | **M-07** Sửa `INTERFACES.md`: path `services/core/st/st_*`, cập nhật mô tả sau khi M-02 đổi kiến trúc | `docs/04_design/INTERFACES.md` | Không (phần path làm ngay được) | Doc khớp code | Đối chiếu từng path bằng `ls` | **P2** |
-| 13 | **M-08** Cập nhật `32_DEV_TEAM_NEXT_ACTION.md` (226→477 test, MOD-012/BAC-012 đã có thư viện thật) và C1–C10 plan (468→477) | `docs/03_implementation/32_DEV_TEAM_NEXT_ACTION.md`, `docs/07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md` | Không | Doc khớp kết quả đo | Chạy lại `ctest`, đối chiếu số | **P2** |
-| 14 | **M-11** ST RETAIN + cold/warm start | `st/st_retain.{hpp,cpp}` (mới) | MS-08, M-02 | Retain record có CRC, atomic write, reject corrupt | Test cold start, warm start, retain corrupt, layout mismatch | **P3** |
-| 15 | **M-12** Package signature/integrity (thay FNV-1a bằng SHA-256 + chữ ký) | `st/st_artifact.cpp`, loader | MS-06, M-02 | Loader reject package giả mạo | Test chữ ký hợp lệ/không hợp lệ/thiếu | **P3** |
+| 1 | **M-01** Thêm depth counter cho recursive descent. Trường `int depth_` trong parser; tăng/giảm ở `parse_expr`, `parse_stmt_list`; vượt ngưỡng → trả `StDiagnostic` code mới `ST-SYN-002` (nesting quá sâu) kèm line/column. Ngưỡng tạm **64**, ghi rõ trong comment là giá trị tạm **chờ MS-02 chốt** | `st/st_parser.cpp`, `st/st_parser.hpp`, `st/st_diagnostic.hpp` | Không | Parser không bao giờ segfault; CLI luôn trả 1 dòng JSON | Test `StParser.DeepNestingRejectedNotCrash`: source 12000 ngoặc → `parse_st_program()` trả false, code `ST-SYN-002`. Test `StValidateCli.DeepNestingExitsOneWithJson`: exit 1, stdout parse được JSON. Chạy lại repro thủ công 20000 ngoặc | **P0** |
 
-**Thứ tự khuyến nghị cho một kỹ sư làm liên tục:** 1 → 2 → 4 → 12 → 13 (nhóm P0 + doc rẻ, không phụ thuộc ai) → 3 (cần MS-03) → 5,6,7 (SPEC) → 8 → 9 → 10 → 11 → 14 → 15.
+### Chặng ② — Cập nhật tài liệu lỗi thời (gỡ nhiễu cho người làm tiếp)
+
+| Thứ tự | Microtask | File/module tác động | Điều kiện đầu vào | Kết quả đầu ra | Cách kiểm thử | Mức ưu tiên |
+|--------|-----------|----------------------|-------------------|----------------|--------------|-------------|
+| 2 | **M-07** Sửa `INTERFACES.md`: path `services/core/st/st_*` (F-08). Phần mô tả kiến trúc runtime để lại, cập nhật sau M-02 | `docs/04_design/INTERFACES.md` | Không | Doc khớp code | Đối chiếu từng path bằng `ls` | **P0** |
+| 3 | **M-08** Cập nhật `32_DEV_TEAM_NEXT_ACTION.md` (226→477 test; MOD-012/BAC-012 đã có thư viện thật — F-10) và C1–C10 plan (468→477 — F-09) | `docs/03_implementation/32_DEV_TEAM_NEXT_ACTION.md`, `docs/07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md` | Không | Doc khớp kết quả đo | Chạy lại `ctest`, đối chiếu số | **P0** |
+
+### Chặng ③ — SPEC (bắt buộc xong trước khi chạm lại runtime)
+
+| Thứ tự | Microtask | File/module tác động | Điều kiện đầu vào | Kết quả đầu ra | Cách kiểm thử | Mức ưu tiên |
+|--------|-----------|----------------------|-------------------|----------------|--------------|-------------|
+| 4 | **MS-02** Viết C0.4: ST subset grammar EBNF + **bảng giới hạn** (độ sâu biểu thức, số biến, số statement, độ dài định danh, kích thước source) | C0 plan §C0.4 | M-01 đã cho số liệu thực nghiệm về ngưỡng | Grammar chính thức; **chốt ngưỡng depth thay giá trị tạm 64 của M-01** | Đối chiếu grammar với `st_parser.cpp` từng luật; cập nhật ngưỡng M-01 nếu khác 64 | **P1** |
+| 5 | **MS-01** Viết C0.6 Typed IR spec: magic, schema version, target ABI, encoding instruction, bảng constant, giới hạn tài nguyên, **danh sách đầy đủ luật reject của loader** | C0 plan §C0.6 + tài liệu schema mới | **MS-02** (grammar quyết định IR phải mã hoá cái gì) | SPEC đủ để implement M-02 | Review Architect; đối chiếu từng dòng luật reject Design §7.2 | **P1** |
+| 6 | **MS-03** Viết C0.7 Deterministic scheduler model: task set, priority, period, per-task watchdog budget, **overrun policy + ngưỡng mặc định**, ranh giới trách nhiệm `OverrunMonitor` vs `CoreMetrics` | C0 plan §C0.7 | MS-01 | SPEC đủ để implement M-04 và M-06 | Review Architect + SOM Backend Lead | **P1** |
+
+### Chặng ④ — Runtime core (IR + determinism)
+
+| Thứ tự | Microtask | File/module tác động | Điều kiện đầu vào | Kết quả đầu ra | Cách kiểm thử | Mức ưu tiên |
+|--------|-----------|----------------------|-------------------|----------------|--------------|-------------|
+| 7 | **M-02** Implement typed IR: serializer AST→IR, loader validate (magic/version/ABI/limit/binding), `activate()` đổi chữ ký nhận **artifact bytes** thay vì source text. CLI sinh artifact. Sửa comment "typed IR" sai ở `st_program.hpp` (C-08), gắn nghĩa thật cho `kStIrSchemaVersion` (TD-01) | `st/st_ir.{hpp,cpp}` (mới), `st/st_runtime.{hpp,cpp}`, `st/st_artifact.{hpp,cpp}`, `st/st_program.hpp`, `st/st_validate_main.cpp` | **MS-01 duyệt** | Runtime không còn parse source; đúng Design §4/§7.2 | Round-trip AST→IR→execute cho toàn bộ 23 case `StRuntime` hiện có; test loader reject **từng** luật §7.2 (magic sai, version sai, ABI sai, vượt limit, binding sai type) | **P1** |
+| 8 | **M-03** Pre-allocate execution context theo **layout của IR**: `StExecContext` giữ `std::vector<StValue>` slot input/output + bảng chỉ số dựng **một lần** khi load artifact. `execute()` chỉ ghi vào vector đã cấp, bỏ `std::map` và bỏ copy `view`. Thay `view.find(name)` bằng chỉ số resolve tại compile time | `st/st_runtime.{hpp,cpp}`, `st/st_ir.{hpp,cpp}`, `st/st_semantic.cpp` | **M-02** (layout slot đến từ IR — làm trước sẽ phải viết lại) | `execute()` không cấp phát heap; O(1) truy cập biến | `StRuntime.ExecuteDoesNotAllocate`: override `operator new` đếm allocation, chạy 1000 cycle → count == 0. 23 test `StRuntime` cũ vẫn phải pass | **P1** |
+| 9 | **M-06** Implement multi-task scheduler theo MS-03 | `st/st_scheduler.{hpp,cpp}` (mới), `st/st_cyclic_runtime.cpp` | MS-03, M-02, M-03 | Task set với priority/period/budget | Test task order deterministic, per-task overrun, priority preemption | **P2** |
+
+### Chặng ⑤ — Safety policy và watchdog
+
+| Thứ tự | Microtask | File/module tác động | Điều kiện đầu vào | Kết quả đầu ra | Cách kiểm thử | Mức ưu tiên |
+|--------|-----------|----------------------|-------------------|----------------|--------------|-------------|
+| 10 | **M-04** Tạo **`OverrunMonitor`** trong `safety/` (giữ ngưỡng cấu hình từ `io_safe_state.conf`, đếm overrun liên tiếp, expose `should_force_safe()`) và **`TaskHealthMonitor`** (tổng hợp sức khoẻ per-task). Thêm trigger `overrun_exceeded` vào `SafeState::apply()`; thêm alarm code `E4xx` vào `AlarmRuntime`. **`CoreMetrics` KHÔNG được đổi vai trò — giữ nguyên chỉ đếm/publish, không chứa ngưỡng an toàn, không có nhánh điều khiển** | `safety/overrun_monitor.{hpp,cpp}` (mới), `safety/task_health_monitor.{hpp,cpp}` (mới), `safety/safe_state.{hpp,cpp}`, `safety/safe_state_config.cpp`, `alarm/alarm_runtime.cpp`. **KHÔNG sửa `diagnostics/core_metrics.*`** | MS-03 duyệt ngưỡng mặc định | Overrun lặp N lần → AO safe/DO open + alarm, policy test được độc lập khỏi bộ đếm | `OverrunMonitor.ConsecutiveOverrunTriggersThreshold`; `OverrunMonitor.ResetsWhenScanRecovers`; `SafeState.OverrunMonitorForcesSafe`; test khẳng định `CoreMetrics` không có API nào ảnh hưởng output | **P1** |
+| 11 | **M-05** Watchdog: **giữ kick CHỈ sau một cycle hoàn tất thành công** (vị trí `after_scan` hiện tại). **Cấm thêm kick giữa `step()`.** Chốt `WatchdogSec` từ WCET đo trên target (V-03), không từ suy đoán; ghi quan hệ `WatchdogSec` ↔ `scan_ms` max vào doc | `packaging/systemd/mkddc-core.service`, `docs/04_design/INTERFACES.md`, `docs/03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md`. **KHÔNG sửa `graph/scan_loop.cpp` để chèn kick** | **V-03, V-04** (phải có số đo target trước khi chốt giá trị) | Watchdog chứng minh *cycle hoàn tất*, không phải *process còn sống* | Test tích hợp trên **target SOM**: chạy `--scan-ms 2000`, không bị systemd kill trong 60 s. Test fault-injection: treo `step()` nhân tạo → systemd **phải** restart trong `WatchdogSec` | **P1** |
+
+### Chặng ⑥ — Verification gates (điều kiện đầu vào của C0.15)
+
+| Thứ tự | Microtask | File/module tác động | Điều kiện đầu vào | Kết quả đầu ra | Cách kiểm thử | Mức ưu tiên |
+|--------|-----------|----------------------|-------------------|----------------|--------------|-------------|
+| 12 | **V-01** Thêm build preset + CI job **ASan** (`-fsanitize=address -fno-omit-frame-pointer`) chạy toàn bộ CTest | `services/CMakeLists.txt`, `.github/workflows/build-and-test.yml` | Không (làm được ngay) | CI bắt được stack/heap overflow có chẩn đoán | Job ASan xanh trên 477 test; chạy lại repro `F-01` dưới ASan phải cho stack-overflow report thay vì SIGSEGV câm | **P1** |
+| 13 | **V-02** Thêm build preset + CI job **UBSan** (`-fsanitize=undefined,float-divide-by-zero,implicit-conversion`) | `services/CMakeLists.txt`, `.github/workflows/build-and-test.yml` | Không | Bắt UB trong số học float và ép kiểu int24→int32 | Job UBSan xanh trên 477 test; mọi finding phải fix hoặc suppress có lý do ghi rõ | **P1** |
+| 14 | **V-03** Fuzz harness (libFuzzer/AFL++) cho `parse_st_program()` và `mkddc-st-validate`; corpus seed từ test hiện có; chạy tối thiểu 1 giờ trong CI nightly | `services/core/st/fuzz/` (mới), workflow nightly | **M-01** (fix trước, fuzz để chứng minh không còn crash class này) | Không còn crash/hang trên bề mặt input ngoài | Fuzz 1 giờ → 0 crash, 0 timeout, 0 OOM. Lưu corpus + log làm evidence | **P1** |
+| 15 | **V-04** Đo **WCET và jitter trên SOM target aarch64** (Orange Pi 5B): chạy `mkddc-core` ≥1 giờ dưới tải, thu `max_exec_ns`, phân bố jitter, overrun count | `tools/` script đo + `docs/00_management/evidence/` | Cần board | Số WCET thật để chốt `WatchdogSec` (M-05) và budget task (MS-03) | Log có timestamp + histogram jitter; so sánh với `scan_ms` đã cấu hình | **P1** |
+| 16 | **V-05** Xác minh **systemd RT capability trên target**: khẳng định `SCHED_FIFO 80` và `mlockall` thực sự hiệu lực, không rơi vào nhánh `WARN ... (degraded)` | `packaging/systemd/mkddc-core.service`, script kiểm tra | Cần board | RT thật sự bật trên target, không phải giả định | Trên target: `chrt -p $(pidof mkddc-core)` cho `SCHED_FIFO prio 80`; `grep VmLck /proc/<pid>/status` > 0; journal **không** có dòng `rt.sched_fifo_fail`/`rt.mlockall_fail` | **P1** |
+| 17 | **V-06** Dựng **HIL rig** với MCU thật: UART 921600, đo `IO_RESP` round-trip, đo **200 ms safe timeout bằng thiết bị** (oscilloscope/logic analyzer) | `docs/00_management/evidence/hil/` | Cần board + MCU | Evidence G4 | Đo timestamp thật cho safe timeout; xác nhận `HANDSHAKE_RESP` cap `0x000D`; xác nhận `IO_RESP` 74/80 byte đúng endian | **P2** |
+| 18 | **V-07** **Fault-injection suite** theo Design §7.3/§9.3: UART disconnect, frame sai CRC/LEN/SEQ, ADC loss, DAC/relay fault, watchdog reset, SHM stale, overrun nhân tạo | `tools/fault_injection/` (mới) | V-06 | Chứng minh safe-state và recovery hoạt động thật, không chỉ trên unit test | Mỗi kịch bản: AO về safe, DO open, alarm đúng code, recovery đúng; lưu log evidence | **P2** |
+
+### Chặng ⑦ — Cổng quyết định
+
+| Thứ tự | Microtask | Điều kiện đầu vào | Kết quả đầu ra | Mức ưu tiên |
+|--------|-----------|-------------------|----------------|-------------|
+| 19 | **C0.15 go/no-go** — review toàn bộ C0.1–C0.14 + evidence V-01..V-07, ra quyết định chính thức | **B-01..B-05 đã đóng** + V-01..V-07 có evidence | `PASS` hoặc `FAIL` có ghi lý do. Chỉ khi `PASS` mới mở chặng ⑧ | **P1** |
+
+### Chặng ⑧ — Tích hợp production (KHÓA cho tới khi C0.15 PASS)
+
+| Thứ tự | Microtask | File/module tác động | Điều kiện đầu vào | Kết quả đầu ra | Cách kiểm thử | Mức ưu tiên |
+|--------|-----------|----------------------|-------------------|----------------|--------------|-------------|
+| 20 | **M-09** Wire `StCyclicRuntime` vào `ScanLoop` | `services/core/main.cpp`, `graph/scan_loop.{hpp,cpp}` | **B-01..B-05 đóng VÀ C0.15 = PASS** (§14.1) | ST chạy thật trong `mkddc-core` | `ScanLoop.StProgramExecutesInScan`; integration: deploy ST hỏng → core không crash, giữ package cũ; **đo lại jitter trên target** trước/sau, không được xấu đi | **P2** |
+| 21 | **M-10** BE Go gọi `mkddc-st-validate` với timeout + parse JSON (đóng TD-02) | `web/backend/` | M-01, M-02 xong | BE validate được ST source | Test Go: exit 0/1/2, timeout, stdout không phải JSON → lỗi rõ ràng, không panic | **P2** |
+
+### Chặng ⑨ — Sau tích hợp
+
+| Thứ tự | Microtask | File/module tác động | Điều kiện đầu vào | Kết quả đầu ra | Cách kiểm thử | Mức ưu tiên |
+|--------|-----------|----------------------|-------------------|----------------|--------------|-------------|
+| 22 | **M-11** ST RETAIN + cold/warm start | `st/st_retain.{hpp,cpp}` (mới) | MS-08, M-02 | Retain record có CRC, atomic write, reject corrupt | Test cold start, warm start, retain corrupt, layout mismatch | **P3** |
+| 23 | **M-12** Package signature/integrity (thay FNV-1a bằng SHA-256 + chữ ký) | `st/st_artifact.cpp`, loader | MS-06, M-02 | Loader reject package giả mạo | Test chữ ký hợp lệ/không hợp lệ/thiếu | **P3** |
+| 24 | **M-13** ST stdlib mở rộng (arith, `SEL`, `TON`, `CASE`) | `st/st_stdlib.*`, `st/st_parser.cpp` | MS-02 | Ngôn ngữ đủ dùng thực tế | Test từng function + typecheck | **P3** |
+
+**Đường găng (critical path) cho một kỹ sư làm liên tục:** `1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 10 → 12 → 13 → 14` rồi dừng chờ board cho `15 → 16 → 17 → 18`, sau đó `11 → 19 → 20 → 21`. Các mục `9`, `22`, `23`, `24` chạy song song được khi có người thứ hai.
 
 ---
 
 ## 18. Final PM Conclusion
 
-### `FW_SOM_READY_WITH_FIXES`
+### Kết luận tổng thể: `FW_SOM_IMPLEMENTATION_BLOCKED`
 
-**Diễn giải chính xác của kết luận này — đọc cả 3 vế:**
+### 18.1 Bốn trạng thái tách riêng — đây mới là bức tranh đúng
 
-1. **Lát cắt đã được phê duyệt (`FW-SOM-ST-001`, host-only) đã HOÀN THÀNH và có bằng chứng thật.** Chương trình ST demo bắt buộc chạy được, 61 test ST pass, build sạch với `-Werror`, ctest 477/477, cppcheck 0 error. Không có gì phải nghi ngờ về chất lượng nền runtime substrate — scan loop deterministic, seqlock snapshot, arbitration, safe-state, atomic activation đều implement đúng và có test.
+Một nhãn duy nhất không mô tả được tình trạng thật của FW SOM. Phải đọc bốn cờ:
 
-2. **Được phép tiếp tục implement trong phạm vi host-only, SAU KHI đóng M-01 và M-03.** Hai fix này nhỏ, độc lập, không cần chờ tài liệu nào — làm được ngay.
+| Cờ | Giá trị | Diễn giải |
+|---|---|---|
+| `EXISTING_FW_SOM_BASELINE` | **STABLE** | `mkddc-iobus` + `mkddc-core` hiện hành ổn định, build sạch `-Werror`, 477/477 test, 0 skip, cppcheck 0 error. **Không có finding nào chặn việc tiếp tục vận hành và bảo trì baseline này.** Đừng đọc nhãn `BLOCKED` ở trên thành "hệ thống hiện tại có vấn đề" |
+| `FW_SOM_ST_HOST_SLICE` | **COMPLETED** | Lát cắt host-only theo `FW-SOM-ST-001` đã giao đúng phạm vi được phê duyệt, có bằng chứng thật: chương trình ST demo bắt buộc chạy được, 61 test ST pass. **Deliverable này đã xong, không nợ gì** |
+| `PRODUCTION_ST_INTEGRATION` | **BLOCKED** | Cấm wire `StCyclicRuntime` vào `ScanLoop`. Chặn bởi B-01, B-02, B-03 — và theo §14.1 còn cần B-04, B-05 đóng cùng `C0.15 = PASS` |
+| `C1_PLUS_OPENING` | **BLOCKED** | Cấm mở C1–C10. Chặn bởi B-02 (không có artifact contract để build/deploy), B-04 (MS-01/MS-03 chưa có SPEC), B-05 (C0.15 chưa chạy) |
 
-3. **KHÔNG được wire ST vào production scan loop, và KHÔNG được mở C1+, cho tới khi:**
-   - B-01 (`F-01` parser segfault) đóng — nếu không, một deploy ST hỏng sẽ giết `mkddc-core`;
-   - B-03 (`F-03` allocation trong scan path) đóng — nếu không, đưa allocation vào vòng `SCHED_FIFO 80`;
-   - B-02 (`F-02` chưa có typed IR) và B-04 (MS-01/MS-03) đóng — nếu không, C1 không có artifact contract để build/deploy;
-   - B-05 (C0.15 go/no-go) chạy chính thức.
+**Kết luận tổng thể lấy giá trị `FW_SOM_IMPLEMENTATION_BLOCKED`** vì cả hai hướng *đi tiếp* đều đang bị chặn. Nhãn này nói về **khả năng mở rộng**, không nói về chất lượng phần đã có.
 
-**Nhận định PM:** đây không phải dự án "làm ẩu rồi báo xong". Tài liệu C0/C1–C10 tự cảnh báo rất rõ ("Không suy diễn từ ba PR này rằng C1 đã Go"), `st_artifact.hpp` tự khai báo hash không phải mật mã, `INTERFACES.md` ghi rõ "chưa nối scan loop sản xuất". Mức độ trung thực của tài liệu ở đây **cao hơn mức trung bình** và làm review này dễ hơn nhiều.
+### 18.2 Điều kiện gỡ chặn
 
-Vấn đề thật nằm ở chỗ khác: **ngoại lệ CTO cho code chạy trước C0 đã tạo ra 4 hạng mục `CODE_WITHOUT_SPEC` và một lỗi crash mà không tầng kiểm soát nào bắt được** — vì test suite chỉ test đường đi đúng, không test input đối kháng. Đề nghị bổ sung một tiêu chí vào Definition of Done cho mọi component nhận input từ bên ngoài: **phải có ít nhất một test đối kháng (input quá lớn / quá sâu / sai định dạng) chứng minh component từ chối có kiểm soát thay vì crash.**
+> Chưa được wire ST vào `ScanLoop`, và chưa được mở C1+, cho tới khi **toàn bộ B-01 → B-05 đóng** VÀ **`C0.15` cho kết quả PASS**.
+
+| Blocker | Gỡ bằng | Nằm ở chặng |
+|---|---|---|
+| B-01 — `F-01` parser segfault | M-01 | ① |
+| B-02 — `F-02` chưa có typed IR/artifact contract | MS-01 → M-02 | ③ → ④ |
+| B-03 — `F-03` allocation trong scan path | M-03 (sau M-02) | ④ |
+| B-04 — MS-01/MS-03 chưa có SPEC | MS-02 → MS-01 → MS-03 | ③ |
+| B-05 — C0.15 chưa chạy | C0.15 sau khi có evidence V-01..V-07 | ⑦ |
+| B-07 — không có evidence đối kháng/target | V-01..V-07 | ⑥ |
+
+Lưu ý quan trọng: **đóng B-01 một mình không đủ.** Đây là hiểu nhầm dễ xảy ra nhất, vì `F-01` là finding nổi bật nhất trong báo cáo này.
+
+### 18.3 Nhận định PM
+
+Đây không phải dự án "làm ẩu rồi báo xong". Tài liệu C0/C1–C10 tự cảnh báo rất rõ ("Không suy diễn từ ba PR này rằng C1 đã Go"), `st_artifact.hpp` tự khai báo hash không phải mật mã, `INTERFACES.md` ghi rõ "chưa nối scan loop sản xuất". Mức độ trung thực của tài liệu ở đây **cao hơn mức trung bình** và làm review này dễ hơn nhiều.
+
+Vấn đề thật nằm ở hai chỗ:
+
+1. **Ngoại lệ CTO cho code chạy trước C0 đã tạo ra 4 hạng mục `CODE_WITHOUT_SPEC`.** Code ST tồn tại trong production `services/core` trong khi C0.4/C0.6/C0.7/C0.10 đều `Chưa bắt đầu`. Nợ này phải trả trước C1, không phải sau.
+
+2. **Không có tầng kiểm soát nào có thể bắt được `F-01`.** 477 test đều kiểm đường đi đúng; không có ASan, không có UBSan, không có fuzzing, không có phép đo nào trên target. Một lỗi crash hạng CRITICAL sống sót qua toàn bộ quy trình review và merge — đó là lỗi của **quy trình verification**, không phải của người viết code.
+
+**Hai đề nghị quy trình:**
+
+- Bổ sung vào Definition of Done: mọi component nhận input từ bên ngoài **phải có ít nhất một test đối kháng** (input quá lớn / quá sâu / sai định dạng) chứng minh component từ chối có kiểm soát thay vì crash.
+- Bổ sung ASan + UBSan thành **job CI bắt buộc** (V-01, V-02) — chi phí thấp, làm được ngay, và sẽ bắt được đúng lớp lỗi vừa lọt lưới.
 
 ---
 
-**Rev** 1.0 | 2026-07-28 — Tạo mới. Review toàn bộ source `services/core` + `services/iobus`, 9 tài liệu SPEC/design/plan, build + ctest + cppcheck thật, 12 finding (1 CRITICAL, 2 HIGH, 4 MEDIUM, 5 LOW/DOC/GOV), 30 dòng traceability, 15 microtask.
+**Rev** 1.1 | 2026-07-28 — Đổi kết luận tổng thể sang `FW_SOM_IMPLEMENTATION_BLOCKED`; tách 4 cờ trạng thái theo phạm vi (§1.1, §16, §18.1); sắp lại §17 theo dependency thành 9 chặng (M-01 → docs → MS-02/MS-01/MS-03 → M-02+M-03 → M-04/M-05 → verification gates → C0.15 → M-09 → BE integration); tách safety policy khỏi `CoreMetrics` thành `OverrunMonitor`/`TaskHealthMonitor` trong `safety/` (F-04, M-04); cấm kick watchdog giữa scan, chỉ kick sau cycle thành công và chốt `WatchdogSec` từ đo trên target (F-12, M-05); thêm §8.5 khoảng trống verification + blocker B-07 + microtask V-01..V-07 (ASan, UBSan, fuzzing, WCET/jitter target, systemd RT capability, HIL, fault-injection) + MI-13..MI-18; thêm §14.1 quy tắc gating B-01..B-05 + C0.15 PASS.
+· 1.0 | 2026-07-28 — Tạo mới. Review toàn bộ source `services/core` + `services/iobus`, 9 tài liệu SPEC/design/plan, build + ctest + cppcheck thật, 12 finding (1 CRITICAL, 2 HIGH, 4 MEDIUM, 5 LOW/DOC/GOV), 30 dòng traceability, 15 microtask.
