@@ -57,28 +57,28 @@ Checklist:
    - ADR có tồn tại nếu đổi kiến trúc/protocol
    - changelog có ghi thay đổi behavior không
 
-Output bắt buộc:
+Output bắt buộc (tiêu đề và nội dung bằng tiếng Việt, chỉ giữ nguyên thuật ngữ kỹ thuật không có bản dịch tương đương):
 
-## Verdict
+## Kết luận
 PASS / FAIL
 
-## Critical DDC Findings
+## Lỗi nghiêm trọng (Critical DDC)
 Lỗi ảnh hưởng protocol/runtime/safety.
 
-## Protocol Findings
+## Lỗi Protocol
 Lỗi mapping/frame/version/fault flags.
 
-## Runtime Findings
+## Lỗi Runtime
 Lỗi timeout/retry/safe-state/log.
 
-## HMI Findings
+## Lỗi HMI
 Lỗi dashboard/alarm/historian/UX.
 
-## Documentation Findings
+## Lỗi tài liệu
 Sai lệch docs/spec/ADR.
 
-## Required Tests
-Test bắt buộc.
+## Test bắt buộc
+Test bắt buộc phải bổ sung/chạy lại.
 
-## Next Actions
+## Việc cần làm tiếp
 Việc giao cho DEV/QA/PM.
