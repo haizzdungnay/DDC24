@@ -269,7 +269,22 @@ int main(int argc, char** argv)
     };
     loop.set_reload_hook(&g_reload, on_reload, &rctx);
 
-    /* sd_notify READY=1 sau scan đầu + WATCHDOG=1 mỗi scan; snapshot 60s dirty (COR-010) */
+    /* LUẬT WATCHDOG (PROGRAM_TASK_SCHEDULER_SPEC §9) — đọc trước khi sửa:
+     *
+     *   Kick CHỈ ở đây, tức là SAU KHI ScanLoop::step() trả về trọn vẹn.
+     *   TUYỆT ĐỐI KHÔNG kick ở giữa step().
+     *
+     * Lý do: watchdog phải chứng minh MỘT CHU KỲ ĐIỀU KHIỂN HOÀN TẤT, không
+     * phải chứng minh process còn sống. Kick giữa chu kỳ biến nó thành
+     * liveness check vô nghĩa — một step() treo vĩnh viễn ở giữa vẫn kick đều
+     * và systemd sẽ không bao giờ khởi động lại, đúng loại lỗi mà watchdog
+     * sinh ra để bắt. Xem thêm PROGRAM_SOM_FW_DRAFT_DESIGN §9.2 (diag_wdg).
+     *
+     * Trong khoảng core chưa chạy (đang restart), MCU tự ép AO/DO về an toàn
+     * sau IOP_SAFE_TIMEOUT_MS = 200 ms — lớp bảo vệ ĐỘC LẬP với SOM, và là lý
+     * do việc systemd restart core chấp nhận được.
+     *
+     * sd_notify READY=1 sau scan đầu; snapshot 60s dirty (COR-010). */
     struct NotifyCtx {
         bool ready_sent = false;
         int snap_ticks  = 0;

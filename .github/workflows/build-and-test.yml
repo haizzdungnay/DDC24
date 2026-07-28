@@ -79,6 +79,21 @@ jobs:
       - name: Cleanup stale shared memory
         run: rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm
 
+      - name: Kiểm bất biến — watchdog chỉ kick sau khi hoàn tất scan
+        run: |
+          # PROGRAM_TASK_SCHEDULER_SPEC §9: kick giữa scan biến watchdog
+          # thành liveness check vô nghĩa — một step() treo vẫn kick đều.
+          # Kick hợp lệ CHỈ nằm trong main.cpp (hook after_scan).
+          if grep -n 'WATCHDOG=1' services/core/graph/scan_loop.cpp; then
+            echo 'LỖI: watchdog kick nằm trong scan loop'
+            exit 1
+          fi
+          test "$(grep -c 'WATCHDOG=1' services/core/main.cpp)" = "1" || {
+            echo 'LỖI: số điểm kick trong main.cpp phải đúng bằng 1'
+            exit 1
+          }
+          echo 'OK: watchdog chỉ kick tại một điểm, sau khi scan hoàn tất'
+
       - name: Kiểm bất biến — mkddc-core KHÔNG được chứa parser ST
         run: |
           # TYPED_IR_ARTIFACT_SPEC §10.3: runtime chỉ thực thi artifact đã

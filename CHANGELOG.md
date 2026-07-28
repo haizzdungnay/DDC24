@@ -7,6 +7,15 @@
 ---
 
 ## [Unreleased]
+### Changed — ACTION 8: watchdog đúng hành vi + evidence trên target SOM (2026-07-28)
+- `main.cpp`: ghi rõ luật kick — **chỉ kick sau khi `ScanLoop::step()` trả về trọn vẹn, tuyệt đối không kick giữa scan**. Kick giữa chu kỳ biến watchdog thành liveness check vô nghĩa: một `step()` treo vĩnh viễn vẫn kick đều và systemd không bao giờ restart, đúng loại lỗi watchdog sinh ra để bắt.
+- Thêm CI guard: fail build nếu `WATCHDOG=1` xuất hiện trong `scan_loop.cpp`, hoặc nếu số điểm kick trong `main.cpp` khác 1.
+- `WatchdogSec` 3 → **6** theo công thức `PROGRAM_TASK_SCHEDULER_SPEC` §9 (`2 × chu kỳ scan lớn nhất + WCET + biên 1 s`). `graph.json` cho phép `scan_ms` ∈ [500, 2000] nên giá trị cũ chỉ còn 1 s biên ở `scan_ms=2000`. Kéo dài không làm chậm bảo vệ đầu ra vì MCU tự ép AO/DO an toàn sau 200 ms, độc lập với SOM.
+- Evidence target tại `docs/07_records/test-evidence/fw-som/2026-07-28-watchdog-target.md`: T1 scan treo (`kill -STOP`) → systemd restart sau **6 s**; T2 `SIGKILL` → khởi động lại sau **2 672 ms**; T3 khôi phục `core.ready` đúng; T4 45 s vận hành không bị restart oan. Jitter chu kỳ 1 s: max **284–356 µs**, **0 overrun**.
+- **⚠️ Phát hiện chặn:** `mkddc-core` trên board chạy `SCHED_OTHER` prio 0 chứ không phải `SCHED_FIFO 80`, do drop-in `nofifo.conf`. Đã kiểm chứng tiền đề của drop-in là **đúng** (root cũng không đặt được `SCHED_FIFO`: `ulimit -r`=0, `systemd-run` fail `status=214`), nhưng lý do ghi trong drop-in ("kernel không hỗ trợ RT") **sai** — kernel thread vẫn chạy `FF 99`; nhiều khả năng do `CONFIG_RT_GROUP_SCHED` bật mà cgroup service chưa được cấp `rt_runtime`. Cảnh báo `rt.sched_fifo_fail (degraded)` có hoạt động nhưng cuộn khỏi journal. Đây đúng là rủi ro `VG-05` trong review, nay xác nhận là suy giảm **đang xảy ra thật**.
+- Do đó `WatchdogSec=6` là **giá trị tạm**: số đo lấy trên hệ không có RT nên không đại diện cho cấu hình production. `WATCHDOG_GATE` đạt phần hành vi, còn chờ đo lại trên target có RT.
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 568/568 pass**.
+
 ### Added — ACTION 7: OverrunMonitor tách khỏi CoreMetrics (TASK_SAFETY_GATE) (2026-07-28)
 - Thêm `services/core/safety/overrun_monitor.{hpp,cpp}` — đánh giá sức khoẻ thời gian của Task và trả `should_force_safe()`. **Đặt trong `safety/`, không phải `diagnostics/`**: `CoreMetrics` là observability thuần tuý (có thể tắt/lấy mẫu thưa/hỏng mà hệ vẫn phải điều khiển đúng), nên nhét ngưỡng an toàn vào đó sẽ khiến một thành phần không thiết yếu nắm quyền thiết yếu và làm chính sách an toàn không test được độc lập với bộ đếm.
 - `SafeState` nhận `OverrunMonitor` như **trigger T8 ngang hàng** với IOP fault / SHM stale / input BAD / no-controller — không phải đường riêng, để mọi nguồn nguy hiểm hội tụ về cùng một hành động an toàn. Thêm `SafeState::triggers()` để alarm và chẩn đoán biết lý do vào safe.
