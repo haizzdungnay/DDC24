@@ -7,6 +7,15 @@
 ---
 
 ## [Unreleased]
+### Changed — Review FW SOM Rev 2.0: cập nhật theo source code hiện tại (2026-07-28)
+- `docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md` lên **Rev 2.0**, viết lại theo commit `5c39c61` sau khi ACTION 1–15 hoàn tất. Kết luận đổi từ `FW_SOM_IMPLEMENTATION_BLOCKED` → **`FW_SOM_HANDOFF_CONDITIONAL`**.
+- **7/12 finding của Rev 1.1 đóng hoàn toàn** (F-01 parser segfault, F-02 runtime chạy AST, F-03 allocation trong scan, F-04 overrun không ép safe, F-05 thiếu scheduler, F-06 thiếu RETAIN, F-07 thiếu chữ ký) + 3 finding tài liệu; **2 đóng một phần** (F-11 còn 12/15 workstream C0, B-07 có test đối kháng nhưng chưa có ASan/fuzz/soak).
+- **Finding mới `F-13`** — target chạy `SCHED_OTHER` thay vì `SCHED_FIFO 80` do `CONFIG_RT_GROUP_SCHED` + cgroup v2. Đây là finding **chặn duy nhất còn lại** và thuộc Platform/BSP, không thuộc FW SOM. Kèm đính chính con số overrun iobus (0,009% chứ không phải 76%).
+- Thêm 6 cờ trạng thái tách bạch thay cho một nhãn chung: `EXISTING_FW_SOM_BASELINE` STABLE, `FW_SOM_ST_HOST_SLICE` COMPLETED, `PRODUCTION_ST_INTEGRATION` **IMPLEMENTED**, `C1_PLUS_OPENING` UNBLOCKED một phần, `BE_HANDOFF_CONTRACT` **COMPLETE**, `TARGET_VERIFICATION` BLOCKED.
+- Thêm §0 bảng đối chiếu Rev 1.1 → Rev 2.0; traceability mở rộng lên 33 dòng (T-10b giới hạn parser, T-18b compile CLI, T-29 ST trong ScanLoop, T-30 control interface, T-31 RT health, T-32/33 ngoài scope).
+- Số đo thật, build sạch từ đầu với BACNET=ON MODBUS=ON: **ctest 649/649 pass**, 220 test lớp ST, cppcheck 0 lỗi, `nm mkddc-core` 0 symbol compiler, script integration BE 18/18, mọi link markdown hợp lệ.
+- Đề xuất **bàn giao có điều kiện**: BE tích hợp ngay, song song với Platform/BSP xử lý `F-13` và FW SOM chạy ASan/UBSan/fuzzing/soak; ký nghiệm thu khi B-05/B-07/B-08 đóng.
+
 ### Added — ACTION 14 + 15: tài liệu, tool và mẫu bàn giao BE (2026-07-28)
 - **Tool** `mkddc-st-compile` — công cụ **chính thức** để BE sinh artifact đã ký. Cùng contract với `mkddc-st-validate`: argv cố định, source luôn qua file path, đúng một dòng JSON ổn định. Trả `artifact` dạng base64 để BE dùng thẳng cho `program_stage` mà không phải đọc lại file. `--key` cho release; mặc định dùng khoá test.
 - **Mẫu** `services/core/st/samples/`: 1 chương trình hợp lệ (chính là chương trình tham chiếu normative của SPEC §13), 4 chương trình lỗi phủ 4 mã khác nhau, artifact mẫu, `program_tasks.example.conf`, `io_map.example.json`. **Cả 5 sample đã verify bằng tool thật**, không phải viết tay rồi tin.
