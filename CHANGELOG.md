@@ -7,6 +7,14 @@
 ---
 
 ## [Unreleased]
+### Added — RT health metric quan sát được từ Web/BE (chống tái diễn VG-05) (2026-07-28)
+- `shared/mkddc_shm.h`: nối 4 field vào **cuối** `kx_plc_shm_t` — `rt_sched_policy`, `rt_sched_priority`, `rt_mlock_ok`, `rt_degraded`. Lý do: cảnh báo RT trước đây chỉ log một dòng lúc khởi động rồi cuộn khỏi journal, nên core đã chạy nhiều ngày ở `SCHED_OTHER` mà không ai biết.
+- **Không đổi magic** — có chủ ý: consumer đọc PLC SHM bằng offset cứng + kiểm độ dài theo ngữ nghĩa min-length (`web/backend/core_client.go`), nên nối vào cuối là tương thích ngược và binary cũ vẫn đọc đúng. Đổi thứ tự/kiểu/kích thước field cũ vẫn là ABI change đầy đủ.
+- `main.cpp` đo trạng thái RT **thật** bằng `sched_getscheduler()`/`sched_getparam()` thay vì tin vào mã trả về của `pthread_setschedparam` — trên hệ `CONFIG_RT_GROUP_SCHED` + cgroup v2, systemd đã ép policy trước khi process chạy nên lời gọi thành/bại đều không phản ánh trạng thái cuối.
+- Log degraded nâng từ `WARN` lên **`ERROR`** và nêu rõ hệ quả ("jitter KHÔNG được bảo đảm") — chạy không RT là sai lệch so với thiết kế đã duyệt, không phải ghi chú thông tin.
+- Test: 5 test mới gồm nhóm `BacnetObjTableAbi` đối chiếu trực tiếp các hằng offset copy từ `core_client.go` — ai đổi layout làm lệch offset thì test fail và buộc phải đồng bộ cả hai phía.
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 573/573 pass** (568 → +5).
+
 ### Changed — ACTION 8: watchdog đúng hành vi + evidence trên target SOM (2026-07-28)
 - `main.cpp`: ghi rõ luật kick — **chỉ kick sau khi `ScanLoop::step()` trả về trọn vẹn, tuyệt đối không kick giữa scan**. Kick giữa chu kỳ biến watchdog thành liveness check vô nghĩa: một `step()` treo vĩnh viễn vẫn kick đều và systemd không bao giờ restart, đúng loại lỗi watchdog sinh ra để bắt.
 - Thêm CI guard: fail build nếu `WATCHDOG=1` xuất hiện trong `scan_loop.cpp`, hoặc nếu số điểm kick trong `main.cpp` khác 1.

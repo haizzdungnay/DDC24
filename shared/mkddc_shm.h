@@ -133,6 +133,25 @@ typedef struct {
     uint8_t  plc_running;
     uint32_t scan_count;
     uint32_t scan_overrun;
+
+    /* ---- Runtime health (WRITER=core, ghi 1 lần lúc khởi động) ----
+     *
+     * Vì sao tồn tại: cảnh báo `rt.sched_fifo_fail (degraded)` chỉ được log
+     * MỘT LẦN lúc khởi động rồi cuộn khỏi journal. Trên board lab, core đã
+     * chạy nhiều ngày ở SCHED_OTHER thay vì SCHED_FIFO 80 mà không ai biết
+     * (xem docs/07_records/test-evidence/fw-som/2026-07-28-watchdog-target.md).
+     * Suy giảm im lặng phải quan sát được liên tục, không chỉ ở một dòng log.
+     *
+     * NỐI VÀO CUỐI struct có chủ ý — KHÔNG đổi magic:
+     * mọi offset cũ giữ nguyên, và consumer dùng ngữ nghĩa min-length
+     * (web/backend/core_client.go: `len(data) < kxPlcShmMinLen`) nên binary cũ
+     * đọc SHM mới vẫn đúng. Quy tắc bắt buộc cho lần sau: chỉ được NỐI THÊM
+     * vào cuối; đổi thứ tự/kiểu/kích thước field cũ vẫn là ABI change và vẫn
+     * phải đổi magic. */
+    uint8_t  rt_sched_policy;    /* giá trị SCHED_* thật đo bằng sched_getscheduler() */
+    uint8_t  rt_sched_priority;  /* ưu tiên RT thật đang chạy; 0 khi không phải RT   */
+    uint8_t  rt_mlock_ok;        /* 1 = mlockall thành công                          */
+    uint8_t  rt_degraded;        /* 1 = KHÔNG đạt cấu hình RT mong đợi -> cảnh báo   */
 } kx_plc_shm_t;
 
 /* ---- seqlock helpers (single-writer / multi-reader) ---- */
