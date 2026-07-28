@@ -99,7 +99,7 @@ Trạng thái.
   được liệt kê làm test fixture cho C4.
 - **Effort:** M
 - **Risk:** trung bình — dễ overscope nếu không giới hạn rõ subset.
-- **Trạng thái:** Chưa bắt đầu
+- **Trạng thái:** **Done 2026-07-28** — [`ST_SUBSET_SPEC_MK-DDC-24_VI.md`](../../02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md) Rev 1.0 (EBNF đầy đủ, bảng đối chiếu parser, 8 khác biệt cố ý so với IEC, danh mục diagnostic)
 
 ### C0.5 — FBD graph semantic
 
@@ -130,7 +130,7 @@ Trạng thái.
 - **Effort:** L
 - **Risk:** cao — đây là hợp đồng trung tâm giữa compiler và runtime; đổi sau C1 sẽ tốn
   kém.
-- **Trạng thái:** Chưa bắt đầu
+- **Trạng thái:** **Done 2026-07-28** — [`TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md`](../../02_design/software/TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md) Rev 1.0 (định dạng file, 33 opcode, quy trình load 22 bước, 15 mã lỗi, SHA-256 + Ed25519)
 
 ### C0.7 — Deterministic scheduler model
 
@@ -143,7 +143,7 @@ Trạng thái.
   thật ở C9/HIL).
 - **Effort:** M
 - **Risk:** trung bình.
-- **Trạng thái:** Chưa bắt đầu
+- **Trạng thái:** **Done 2026-07-28** — [`PROGRAM_TASK_SCHEDULER_SPEC_MK-DDC-24_VI.md`](../../02_design/software/PROGRAM_TASK_SCHEDULER_SPEC_MK-DDC-24_VI.md) Rev 1.0 (fixed-priority non-preemptive, tick 50 ms, phân tách OverrunMonitor/SafetyManager, máy trạng thái 11 trạng thái)
 
 ### C0.8 — Artifact lifecycle
 
