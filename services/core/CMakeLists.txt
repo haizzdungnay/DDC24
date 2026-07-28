@@ -21,7 +21,7 @@ add_library(core_lib STATIC
     bacnet/bacnet_objtable.cpp ipc/web_ipc.cpp diagnostics/core_metrics.cpp
     st/st_program.cpp st/st_runtime.cpp st/st_artifact.cpp
     st/st_io_map.cpp st/st_cyclic_runtime.cpp st/st_trace.cpp
-    st/st_loader.cpp st/st_exec.cpp st/st_public_key.cpp st/st_scheduler.cpp)
+    st/st_loader.cpp st/st_exec.cpp st/st_public_key.cpp st/st_scheduler.cpp st/st_process_image.cpp)
 target_include_directories(core_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${SHARED_DIR})
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SODIUM REQUIRED IMPORTED_TARGET libsodium)
@@ -70,7 +70,7 @@ if(CORE_BUILD_TESTS)
       st/tests/test_st_io_map.cpp st/tests/test_st_cyclic_runtime.cpp
       st/tests/test_st_validate_cli.cpp st/tests/test_st_limits.cpp
       st/tests/test_st_lang.cpp st/tests/test_st_ir.cpp st/tests/test_st_exec.cpp
-      st/tests/test_st_scheduler.cpp
+      st/tests/test_st_scheduler.cpp st/tests/test_st_integration.cpp
       tests/allocation_probe.cpp)
   target_link_libraries(core_tests PRIVATE st_compiler_lib)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)

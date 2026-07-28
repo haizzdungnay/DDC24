@@ -7,6 +7,16 @@
 ---
 
 ## [Unreleased]
+### Added — ACTION 10: wire ST vào production ScanLoop (2026-07-28)
+- Thêm `services/core/st/st_process_image.{hpp,cpp}` — cầu nối giữa process image của SOM và không gian slot ST. Mọi luật biên tập trung ở một chỗ thay vì rải rác.
+- `ScanDeps.st_sched` (mặc định `nullptr`): không cấu hình chương trình ST thì scan loop chạy y như trước, không thêm chi phí nào.
+- Vị trí trong chuỗi scan có chủ ý: **sau** cập nhật point table (bước 2), **trước** trọng tài ưu tiên (bước 6). Đầu ra ST đi vào `PriorityResolver` ở mức `PRIO_LOCAL_LOGIC` — **không có đường tắt ra thẳng phần cứng**. Nhờ vậy "chương trình ST không thể vượt mặt manual/BACnet/safety" là bất biến **cấu trúc**, không phải kỷ luật lập trình.
+- Đồng hồ `clock.monotonic_ns` chụp **một lần** đầu scan, dùng chung cho mọi Task và mọi FB — hai timer khởi động cùng scan hết hạn cùng scan.
+- Instance vừa FAULTED **không** đẩy đầu ra: trạng thái của nó đã được khôi phục, đẩy ra trọng tài là đẩy dữ liệu chu kỳ trước như thể vừa tính xong.
+- Giá trị không hữu hạn chặn tại biên cả hai chiều.
+- Test: 9 test tích hợp gồm manual thắng ST, safe-state thắng tất cả, overrun→safe qua `SafeState`, chương trình lỗi không crash và không phát output, `st_sched=nullptr` không đổi hành vi, và **zero-allocation vẫn giữ sau tích hợp**.
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 612/612 pass** (603 → +9).
+
 ### Added — ACTION 9: multi-task scheduler (SCHEDULER_GATE) (2026-07-28)
 - Thêm `services/core/st/st_scheduler.{hpp,cpp}` — **fixed-priority, non-preemptive tại task boundary** theo `PROGRAM_TASK_SCHEDULER_SPEC`. Không preempt làm "process image không đổi trong một lần thực thi Program" thành bất biến **cấu trúc** thay vì quy ước, và loại hẳn khoá khỏi đường điều khiển nên không có priority inversion.
 - Mô hình đối tượng: Resource → Task (≤8, ưu tiên duy nhất) → ProgramInstance (≤16/task, ≤32 toàn hệ) → Artifact. Hai instance cùng artifact có **trạng thái hoàn toàn tách biệt**.
