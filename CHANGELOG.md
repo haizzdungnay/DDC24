@@ -7,6 +7,13 @@
 ---
 
 ## [Unreleased]
+### Added — Review trạng thái source/SPEC module FW SOM (2026-07-28)
+- Thêm `docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md` — review độc lập toàn bộ `services/core` + `services/iobus` đối chiếu SPEC/design/ADR/plan FW SOM. Gồm 30 dòng traceability matrix, bảng interface status, functional status matrix, 12 finding và 15 microtask kế tiếp.
+- Verification thật tại thời điểm review (không lấy số từ tài liệu): configure + build `services/` với `-Wall -Wextra -Werror -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_MODBUS=ON` → exit 0, 0 lỗi (`libmodbus 3.1.10`, `bacnet-stack` BACDL_BIP=ON); `ctest` → **477/477 pass, 0 fail, 0 skip**; `cppcheck` trên `core/{st,graph,safety,ipc}` → 0 error.
+- Finding chính: F-01 CRITICAL — ST parser đệ quy không giới hạn độ sâu, repro segfault (`mkddc-st-validate` exit 139 với source 24 KB / 12000 ngoặc lồng, dưới hạn mức 64 KiB); F-02 HIGH — runtime thực thi AST parse trực tiếp từ source text, trái Design §4/§7.2 vốn bắt buộc typed IR + loader validation; F-03 HIGH — cấp phát heap trong scan execution path, trái Design §7.2.
+- Kết luận: `FW_SOM_READY_WITH_FIXES` — lát cắt host-only `FW-SOM-ST-001` đã hoàn thành có bằng chứng; không được wire ST vào production scan loop hoặc mở C1+ cho tới khi đóng F-01/F-02/F-03 và C0.6/C0.7.
+- Review này không sửa source code (theo yêu cầu phạm vi review).
+
 ### Changed — CTO mở scope FW SOM ST host execution + quy tắc tài liệu tiếng Việt (2026-07-28)
 - governance(ADR-020): ghi nhận quyết định `FW-SOM-ST-001` của CTO ngày 2026-07-24 — go-with-scope, cho phép code production trong `services/core` để chạy/test một chương trình ST tối thiểu trên SOM host runtime. FE/Web Backend/STM32/HIL/FBD đầy đủ vẫn ngoài scope, không claim `IEC 61131-3 compliant`/`certified`. ADR-020 chuyển sang trạng thái `Accepted — supersedes ADR-004; amended 2026-07-24`.
 - docs(design): `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` lên v0.6 — cập nhật header trạng thái/release gate, thêm dòng approval log `FW-SOM-ST-001` ở §15.1 và entry Revision History 0.6.
