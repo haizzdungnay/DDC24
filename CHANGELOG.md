@@ -7,6 +7,13 @@
 ---
 
 ## [Unreleased]
+### Changed — CTO mở scope FW SOM ST host execution + quy tắc tài liệu tiếng Việt (2026-07-28)
+- governance(ADR-020): ghi nhận quyết định `FW-SOM-ST-001` của CTO ngày 2026-07-24 — go-with-scope, cho phép code production trong `services/core` để chạy/test một chương trình ST tối thiểu trên SOM host runtime. FE/Web Backend/STM32/HIL/FBD đầy đủ vẫn ngoài scope, không claim `IEC 61131-3 compliant`/`certified`. ADR-020 chuyển sang trạng thái `Accepted — supersedes ADR-004; amended 2026-07-24`.
+- docs(design): `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` lên v0.6 — cập nhật header trạng thái/release gate, thêm dòng approval log `FW-SOM-ST-001` ở §15.1 và entry Revision History 0.6.
+- docs(verification): `VERIFICATION.md` ghi rõ Program Runtime release gate **vẫn RED** dù scope đã mở; G2/G3 nêu điều kiện evidence đầu tiên (ST subset/typed execution, chạy ST program thật trên SOM host runtime); Release decision giữ `NO-GO`.
+- docs(rules): bổ sung quy tắc tiếng Việt vào `AGENTS.md` (đồng bộ với `CLAUDE.md`) và chuyển toàn bộ tiêu đề output của skill `mekong-ddc-review` sang tiếng Việt.
+- Chỉ thay đổi tài liệu/quy tắc, không đổi code. Verification trên `services/core` tại thời điểm commit: cấu hình + build sạch với `-Wall -Wextra -Werror` (0 lỗi) và `ctest` **295/295 pass**.
+
 ### Fixed — Network authority consistency và FE RBAC (2026-07-25)
 - backend(network): giữ `network.conf.eth` ở trạng thái compatibility read-only, chặn mutation Ethernet qua `/system/config/network` và không cho luồng lưu BACnet/WiFi ghi lại IP/mode/gateway cũ hoặc đổi WiFi mode; Ethernet chỉ thay đổi qua `mkddc-netcfg` transaction.
 - backend(validation): đồng bộ pre-validation Go với C++ authority cho loopback `lo`, DHCP có static fields, prefix `/0`/`/31`/`/32`, địa chỉ network/broadcast/unusable và gateway khác subnet.

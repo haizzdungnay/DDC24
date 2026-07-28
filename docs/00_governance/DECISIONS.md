@@ -2,7 +2,7 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-23
+**Cập nhật:** 2026-07-24
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: EasySet parity thành ADR-013; raw SHM thành ADR-014.
 
@@ -27,7 +27,7 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-017 | Network commissioning dùng một authority hẹp trên SOM: Web/local HMI không sửa trực tiếp network của Linux. Local HMI chỉ được cấu hình Ethernet IPv4 static/DHCP trong `Service`, qua authenticated broker, transaction `stage/apply/confirm/rollback`, last-known-good và audit. Đổi IP không được dừng local control; BACnet/IP phải hot-rebind thay vì restart toàn bộ iobus. | Accepted |
 | ADR-018 | SQLite block historian: backend-owned per-point database logging policy, hot/archive tiers, bounded migration/recovery and unified Trends authority. | Accepted |
 | ADR-019 | Independent global point tag/name namespaces, static references and generation-aware rename/delete behavior. | Accepted |
-| ADR-020 | Rev A.0 dùng Program Runtime do Mekong sở hữu (không runtime IEC bên ngoài), IEC 61131-3-aligned, phạm vi ngôn ngữ **ST + FBD** (LD/SFC hoãn, chưa vào release gate Rev A.0). Component graph 28-node cũ chỉ còn là legacy importer/nguồn vendor FB, không gọi là FBD. Không online change, không claim certified/compliant trong Rev A.0. Chỉ mở phase C0 (architecture/feasibility); C1–C10 implementation chờ C0 duyệt. | Accepted — supersedes ADR-004 |
+| ADR-020 | Rev A.0 dùng Program Runtime do Mekong sở hữu (không runtime IEC bên ngoài), IEC 61131-3-aligned, phạm vi ngôn ngữ **ST + FBD** (LD/SFC hoãn, chưa vào release gate Rev A.0). Component graph 28-node cũ chỉ còn là legacy importer/nguồn vendor FB, không gọi là FBD. Không online change, không claim certified/compliant trong Rev A.0. C0 là phase kiểm soát; CTO phê duyệt `FW-SOM-ST-001` ngày 2026-07-24 để mở next action FW SOM trong `services/core`: chạy/test một chương trình ST tối thiểu trên SOM host runtime. FE/Web Backend/STM32/HIL/FBD đầy đủ vẫn chờ approval riêng. | Accepted — supersedes ADR-004; amended 2026-07-24 |
 
 ## Diễn giải bắt buộc
 

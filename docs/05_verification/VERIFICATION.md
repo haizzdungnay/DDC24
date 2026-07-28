@@ -1,8 +1,9 @@
 # Verification and Release Gates
 
 **ID:** VVP-001
-**Trạng thái:** Active — hardware gate RED; Program Runtime gate RED (ADR-020, C0 chưa xong)
-**Cập nhật:** 2026-07-23
+**Trạng thái:** Active — hardware gate RED; Program Runtime gate RED, FW SOM ST host
+execution opened by CTO for evidence collection (ADR-020, 2026-07-24)
+**Cập nhật:** 2026-07-24
 
 ## Chiến lược
 
@@ -38,19 +39,21 @@ Không dùng số test pass lịch sử làm evidence hiện hành. Mỗi releas
   FE authoritative state (không tự báo build/deploy thành công), RBAC/audit cho toàn bộ
   vòng đời. Không test layer nào cho LD/SFC (ngoài scope Rev A.0).
 
-## Program Runtime release gate — RED (ADR-020)
+## Program Runtime release gate — RED; FW SOM ST host execution opened (ADR-020)
 
-Chưa có implementation; C0 (architecture/feasibility) vừa mở, chưa có evidence nào ngoài
-tài liệu thiết kế. Không được release/claim `IEC 61131-3 compliant`, `conformant` hoặc
-`certified` cho tới khi các gate dưới đóng — chi tiết đầy đủ ở
+CTO/Project Engineering Owner đã mở next action FW SOM ST host execution ngày
+2026-07-24 để tạo implementation/evidence đầu tiên trong `services/core`. Release gate
+vẫn RED cho tới khi PR có kết quả build/CTest và evidence thật. Không được release/claim
+`IEC 61131-3 compliant`, `conformant` hoặc `certified` cho tới khi các gate dưới đóng —
+chi tiết đầy đủ ở
 [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md) §14:
 
 | Gate | Điều kiện đóng | Hiện tại |
 |---|---|---|
 | G0 Scope/ADR | Product + ADR + requirements phê duyệt ST+FBD trong Rev A.0. | **GREEN** — ADR-020 Accepted; `PRODUCT.md`/`SOFTWARE.md`/`DECISIONS.md`/`REQUIREMENTS.md`/`VERIFICATION.md`/`TRACEABILITY.md` cập nhật 2026-07-23; toàn bộ 31 document conflict đóng (`KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md`) |
 | G1 PSE | FE/Backend hỗ trợ project, ST+FBD, build/deploy thật. | RED |
-| G2 Compiler | Type/POU/library/IR feature matrix pass. | RED |
-| G3 Runtime | Deterministic task execution, activation, retain, fault behavior pass. | RED |
+| G2 Compiler | Type/POU/library/IR feature matrix pass. | RED — next action phải cung cấp ST subset/typed execution evidence đầu tiên |
+| G3 Runtime | Deterministic task execution, activation, retain, fault behavior pass. | RED — next action phải chạy một ST program thật trên SOM host runtime |
 | G4 I/O/MCU | Typed I/O integration + STM32 target/HIL pass. | RED |
 | G5 Conformance | Normative trace matrix không open deviation trong claim scope. | RED |
 | G6 Approval | Engineering/QA/Product sign-off. | RED |
@@ -119,4 +122,4 @@ Evidence packages tối thiểu: `PWR-5V`, `PWR-3V3`, `PWR-SURGE`, `AO-COMP`, `E
 
 ## Release decision
 
-Release chỉ `GO` khi requirement bắt buộc có trace, automated suites pass, target/HIL evidence hợp lệ, security/deployment checks hoàn tất và mọi gate P0/RED được đóng hoặc có waiver được phê duyệt. Hiện tại hardware/manufacturing status là `NO-GO`; Program Runtime status là `NO-GO` (C0 chưa hoàn thành, không code C1–C10).
+Release chỉ `GO` khi requirement bắt buộc có trace, automated suites pass, target/HIL evidence hợp lệ, security/deployment checks hoàn tất và mọi gate P0/RED được đóng hoặc có waiver được phê duyệt. Hiện tại hardware/manufacturing status là `NO-GO`; Program Runtime release status là `NO-GO`. CTO đã mở next action FW SOM ST host execution để tạo evidence đầu tiên, nhưng FE/Web Backend/STM32/HIL/FBD đầy đủ và mọi claim conformance vẫn RED.
