@@ -2,7 +2,7 @@
 
 **ID:** IF-SPEC-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-28 (M-01: giới hạn tài nguyên parser + diagnostic `ST-LIM-*`/`ST-SYN-002`; sửa path sau ADR-021)
+**Cập nhật:** 2026-07-28 (ACTION 6: Typed IR + artifact contract; runtime không còn thực thi source ST)
 
 ## Kinexus-IOP v2
 
@@ -110,13 +110,37 @@ Bảo đảm bắt buộc của CLI với mọi input, kể cả đối kháng: 
 Verify bằng `st/tests/test_st_limits.cpp` và nhóm test đối kháng trong
 `st/tests/test_st_validate_cli.cpp` (fork+execv binary thật).
 
-**Ngôn ngữ ST hỗ trợ (không được suy diễn thêm từ đây):** `PROGRAM`/
-`VAR_INPUT`/`VAR_OUTPUT` với kiểu `REAL`/`BOOL`; assignment `:=`; so sánh
-`>`,`>=`,`<`,`<=`,`=`,`<>`; boolean `AND`/`OR`/`NOT`; ngoặc đơn; gọi hàm
-chuẩn — hiện chỉ `LIMIT(MN, IN, MX): REAL`; `IF..THEN..ELSE..END_IF`. Chưa
-có: arithmetic, `CASE`, loop, `FUNCTION_BLOCK` instance/state (nên `TON`
-CHƯA implement — cần kiểu `TIME` + dot-member access, xem `st/st_stdlib.hpp`),
-`SEL`, LD/SFC.
+**Ngôn ngữ ST hỗ trợ:** đặc tả normative đầy đủ ở
+[`ST_SUBSET_SPEC_MK-DDC-24_VI.md`](../02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md)
+(kiểu `BOOL`/`INT`/`REAL`/`TIME`, số học đầy đủ + `MOD`, `XOR`, `ELSIF`, chú
+thích, `VAR`/`VAR RETAIN`, 10 hàm chuẩn, Function Block `TON`/`TOF`/`R_TRIG`/
+`F_TRIG`). Chưa có: `CASE`, vòng lặp, POU do người dùng định nghĩa, LD/SFC.
+
+## FW SOM — Typed IR artifact contract
+
+Nguồn thực thi: `services/core/st/st_ir.hpp`, đặc tả đầy đủ ở
+[`TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md`](../02_design/software/TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md).
+
+**Thay đổi kiến trúc 2026-07-28:** `mkddc-core` **không còn thực thi source
+ST**. BE compile source thành artifact `MKDDCIR1` rồi gửi artifact xuống;
+runtime chỉ nạp artifact đã verify. Đây là ranh giới tin cậy duy nhất giữa
+"cái BE gửi" và "cái runtime chạy".
+
+| Hạng mục | Giá trị |
+|---|---|
+| Magic | `MKDDCIR1` |
+| `schema_version` | 1 |
+| `compiler_profile` | `0x0001` (`MKDDC_ST_BASE_A0`) |
+| `target_abi` | `0x00000F01` |
+| Toàn vẹn | SHA-256 toàn file + chữ ký Ed25519 trên digest |
+| Kích thước tối đa | 1 MiB |
+| Mã lỗi trả BE | `IR-E-001` … `IR-E-015` |
+
+**Bất biến bắt buộc:** mọi lỗi load đều **giữ nguyên package đang chạy** —
+không có mã lỗi nào dẫn tới trạng thái "không có chương trình nào chạy" nếu
+trước đó đã có chương trình chạy. Bất biến "không có parser trong
+`mkddc-core`" được bảo đảm ở mức **link** (`st_compiler_lib` tách khỏi
+`core_lib`) và kiểm lại bằng symbol check trong CI.
 
 **io_map validation** (`st_io_map.hpp`, chưa có file `io_map.json`/CRUD
 thật — đó là việc của BE khi có storage layer, xem C2): mỗi biến

@@ -19,10 +19,25 @@ add_library(core_lib STATIC
     schedule/schedule_runtime.cpp ipc/priority_resolver.cpp safety/safe_state.cpp safety/safe_state_config.cpp ipc/config_reload.cpp
     ipc/iobus_reader.cpp ipc/output_writer.cpp graph/state_snapshot.cpp graph/runtime_point_snapshot.cpp
     bacnet/bacnet_objtable.cpp ipc/web_ipc.cpp diagnostics/core_metrics.cpp
-    st/st_parser.cpp st/st_semantic.cpp st/st_runtime.cpp st/st_stdlib.cpp st/st_artifact.cpp
-    st/st_io_map.cpp st/st_cyclic_runtime.cpp st/st_trace.cpp)
+    st/st_program.cpp st/st_runtime.cpp st/st_artifact.cpp
+    st/st_io_map.cpp st/st_cyclic_runtime.cpp st/st_trace.cpp
+    st/st_loader.cpp st/st_exec.cpp st/st_public_key.cpp)
 target_include_directories(core_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${SHARED_DIR})
-target_link_libraries(core_lib PUBLIC pthread rt nlohmann_json::nlohmann_json)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SODIUM REQUIRED IMPORTED_TARGET libsodium)
+# libsodium: SHA-256 + Ed25519 cho artifact integrity (TYPED_IR_ARTIFACT_SPEC §3).
+# Chọn libsodium thay vì GPG vì verify phải chạy IN-PROCESS trong vòng SCHED_FIFO:
+# crypto_sign_verify_detached không cấp phát, không I/O, thời gian ổn định.
+target_link_libraries(core_lib PUBLIC pthread rt nlohmann_json::nlohmann_json PkgConfig::SODIUM)
+
+# st_compiler_lib TÁCH RIÊNG khỏi core_lib có chủ ý kiến trúc:
+# PROGRAM_SOM_FW_DRAFT_DESIGN §4 cấm runtime thực thi source ST. Tách thư viện
+# làm cho điều đó thành ràng buộc LINK-TIME chứ không phải kỷ luật lập trình —
+# mkddc-core không liên kết st_compiler_lib nên không thể vô tình gọi parser.
+# Chiều phụ thuộc: st_compiler_lib -> core_lib (không bao giờ ngược lại).
+add_library(st_compiler_lib STATIC
+    st/st_parser.cpp st/st_semantic.cpp st/st_compile.cpp st/st_ir.cpp)
+target_link_libraries(st_compiler_lib PUBLIC core_lib)
 
 add_executable(mkddc-core main.cpp)
 target_link_libraries(mkddc-core PRIVATE core_lib)
@@ -30,7 +45,7 @@ target_link_libraries(mkddc-core PRIVATE core_lib)
 # FW-SOM-IEC-002 item 2: validate gateway CLI cho BE gọi (fixed argv, source
 # luôn qua file path, không shell-eval — xem st/st_validate_main.cpp).
 add_executable(mkddc-st-validate st/st_validate_main.cpp)
-target_link_libraries(mkddc-st-validate PRIVATE core_lib)
+target_link_libraries(mkddc-st-validate PRIVATE st_compiler_lib)
 
 option(CORE_BUILD_TESTS "Build core unit tests" ON)
 if(CORE_BUILD_TESTS)
@@ -51,10 +66,12 @@ if(CORE_BUILD_TESTS)
       bacnet/tests/test_bacnet_objtable.cpp
       graph/tests/test_graph_protocol.cpp alarm/tests/test_alarm_runtime.cpp
       schedule/tests/test_schedule_runtime.cpp graph/tests/test_runtime_point_snapshot.cpp
-      diagnostics/tests/test_core_metrics.cpp ipc/tests/test_output_writer.cpp st/tests/test_st_runtime.cpp
-      st/tests/test_st_stdlib.cpp st/tests/test_st_io_map.cpp st/tests/test_st_cyclic_runtime.cpp
-      st/tests/test_st_validate_cli.cpp st/tests/test_st_limits.cpp)
-  target_link_libraries(core_tests PRIVATE core_lib)
+      diagnostics/tests/test_core_metrics.cpp ipc/tests/test_output_writer.cpp
+      st/tests/test_st_io_map.cpp st/tests/test_st_cyclic_runtime.cpp
+      st/tests/test_st_validate_cli.cpp st/tests/test_st_limits.cpp
+      st/tests/test_st_lang.cpp st/tests/test_st_ir.cpp st/tests/test_st_exec.cpp
+      tests/allocation_probe.cpp)
+  target_link_libraries(core_tests PRIVATE st_compiler_lib)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
   # test_st_validate_cli.cpp fork+execv nhị phân thật — cần path tuyệt đối,
   # không đoán build layout (generator expression cho đúng dù đổi cấu trúc).

@@ -79,6 +79,19 @@ jobs:
       - name: Cleanup stale shared memory
         run: rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm
 
+      - name: Kiểm bất biến — mkddc-core KHÔNG được chứa parser ST
+        run: |
+          # TYPED_IR_ARTIFACT_SPEC §10.3: runtime chỉ thực thi artifact đã
+          # verify, không bao giờ parse source. Kiểm ở mức symbol để vi phạm
+          # bị bắt ngay tại CI thay vì lộ ra khi đã chạy production.
+          BIN=$(find build -name mkddc-core -type f | head -1)
+          test -n "$BIN" || { echo 'không tìm thấy mkddc-core'; exit 1; }
+          if nm -C "$BIN" | grep -E 'parse_st_program|typecheck_st_program|compile_st_to_ir'; then
+            echo 'LỖI KIẾN TRÚC: compiler ST bị liên kết vào mkddc-core'
+            exit 1
+          fi
+          echo 'OK: mkddc-core không chứa symbol compiler'
+
       - name: Run tests
         run: ctest --test-dir build/services --output-on-failure --parallel 4
 

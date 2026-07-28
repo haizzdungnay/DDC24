@@ -60,9 +60,13 @@ bool validate_io_map(const StProgram& prog, const std::vector<StIoMapEntry>& ent
 {
     diagnostics->clear();
 
+    /* Chỉ VAR_INPUT/VAR_OUTPUT tham gia io_map — VAR/VAR RETAIN là trạng thái
+     * nội bộ của chương trình, không bind ra điểm vật lý. */
     std::unordered_map<std::string, std::pair<StType, bool>> syms;
-    for (const StVarDecl& d : prog.inputs) syms[d.name] = {d.type, false};
-    for (const StVarDecl& d : prog.outputs) syms[d.name] = {d.type, true};
+    for (const StVarDecl& d : prog.vars) {
+        if (d.storage == StStorage::VAR_INPUT)       syms[d.name] = {d.type, false};
+        else if (d.storage == StStorage::VAR_OUTPUT) syms[d.name] = {d.type, true};
+    }
 
     std::unordered_map<std::string, int> binding_count;
 
@@ -117,14 +121,13 @@ bool validate_io_map(const StProgram& prog, const std::vector<StIoMapEntry>& ent
                          " io_map entries, expected exactly 1");
     }
 
-    for (const StVarDecl& d : prog.inputs)
-        if (!binding_count.count(d.name))
-            push_diag(diagnostics, st_diag_code::kIoMapMissingBinding,
-                     "VAR_INPUT '" + d.name + "' has no io_map binding");
-    for (const StVarDecl& d : prog.outputs)
-        if (!binding_count.count(d.name))
-            push_diag(diagnostics, st_diag_code::kIoMapMissingBinding,
-                     "VAR_OUTPUT '" + d.name + "' has no io_map binding");
+    for (const StVarDecl& d : prog.vars) {
+        if (d.storage != StStorage::VAR_INPUT && d.storage != StStorage::VAR_OUTPUT) continue;
+        if (binding_count.count(d.name)) continue;
+        push_diag(diagnostics, st_diag_code::kIoMapMissingBinding,
+                  std::string(d.storage == StStorage::VAR_INPUT ? "VAR_INPUT '" : "VAR_OUTPUT '") +
+                      d.name + "' has no io_map binding");
+    }
 
     return diagnostics->empty();
 }

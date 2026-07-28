@@ -7,6 +7,20 @@
 ---
 
 ## [Unreleased]
+### Changed — ACTION 6: Typed IR + runtime zero-allocation (TYPED_IR_GATE, ZERO_ALLOCATION_GATE) (2026-07-28)
+- **Đóng finding F-02.** `mkddc-core` không còn thực thi source ST. `StProgramRuntime::activate()` nay nhận **byte artifact** đã verify thay vì chuỗi source — đúng `PROGRAM_SOM_FW_DRAFT_DESIGN` §4.
+- **Đóng finding F-03.** Executor không cấp phát trong scan path: mọi slot, mọi state FB, mọi bộ đệm ảnh chụp đều cấp phát một lần lúc load. Kiểm bằng test đếm `operator new` qua 1000 chu kỳ → **0 lần**.
+- Ngôn ngữ ST mở rộng theo `ST_SUBSET_SPEC`: kiểu `INT`/`TIME` (ngoài `BOOL`/`REAL`), số học `+ - * / MOD` và đảo dấu, `XOR`, `ELSIF`, chú thích `(* *)` và `//`, từ khoá không phân biệt hoa thường, literal `T#1m30s`, khối `VAR`/`VAR RETAIN`, Function Block `TON`/`TOF`/`R_TRIG`/`F_TRIG` với tham số đặt tên và truy cập thành viên, 10 hàm chuẩn.
+- Typed IR: máy thanh ghi 16 byte/lệnh, 33 opcode, không gian slot tách biến/hằng nên "hằng không ghi đè được" là bất biến kiểm được tại load; **chỉ cho nhảy tiến** nên mọi chương trình chấm dứt trong ≤ số lệnh.
+- Artifact `MKDDCIR1`: SHA-256 toàn file + chữ ký Ed25519 (libsodium), loader 22 bước, 15 mã lỗi `IR-E-*`. Khoá test sinh từ seed cố định, cam kết vào repo cho CI; build release truyền `-DMKDDC_ST_PUBLIC_KEY_HEX`.
+- **Bất biến "không parser trong mkddc-core" nay là ràng buộc LINK-TIME**: tách `st_compiler_lib` (parser/semantic/compile/serialize) khỏi `core_lib` (loader/exec/runtime); `mkddc-core` không liên kết `st_compiler_lib`. Thêm symbol check vào CI để vi phạm bị bắt tại CI thay vì lộ ra ở production.
+- Không commit nửa chừng: mỗi chu kỳ chụp trạng thái trước khi chạy; chu kỳ fault khôi phục nguyên vẹn cả slot lẫn state FB.
+- Tràn `INT` là **fault** (`ST-RT-001`) chứ không wrap im lặng; `NaN`/`Inf` luôn bị từ chối; `AND`/`OR` không short-circuit để WCET ổn định.
+- Tách `allocation_probe` từ `test_runtime_point_snapshot.cpp` thành `tests/allocation_probe.{hpp,cpp}` dùng chung — toán tử `new`/`delete` toàn cục chỉ được ghi đè ở một translation unit.
+- Gỡ `st_stdlib.{hpp,cpp}` (thay bằng bảng hàm trong `st_program.cpp` + executor).
+- Verification: build `-Wall -Wextra -Werror` 0 lỗi; **ctest 552/552 pass** (504 → +48); cppcheck trên toàn bộ `services/core/st/*.cpp` **0 lỗi**; symbol check `mkddc-core` = 0 symbol compiler.
+- **TYPED_IR_GATE = PASS. ZERO_ALLOCATION_GATE = PASS.**
+
 ### Added — Phase 2: chốt 3 SPEC kiến trúc FW SOM (ARCHITECTURE_SPEC_GATE) (2026-07-28)
 - `docs/02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md` (MS-02 / C0.4): chốt tập con ST chính thức — `BOOL`/`INT`/`REAL`/`TIME`, số học đầy đủ + `MOD`, `XOR`, `ELSIF`, chú thích `(* *)` và `//`, Function Block chuẩn `TON`/`TOF`/`R_TRIG`/`F_TRIG`, `VAR`/`VAR RETAIN`, 11 hàm chuẩn. Grammar EBNF đầy đủ; bảng đối chiếu với parser hiện tại (phủ ~40%, liệt kê từng mục thiếu); 8 khác biệt cố ý so với IEC kèm lý do (không short-circuit để WCET ổn định, tràn INT là fault chứ không wrap, NaN/Inf luôn từ chối); danh mục diagnostic đầy đủ gồm `ST-LEX-*`/`ST-SYN-*`/`ST-SEM-*`/`ST-RT-*`/`ST-LIM-*`/`ST-WARN-*`; chương trình tham chiếu normative kèm bảng hành vi mong đợi theo chu kỳ.
 - `docs/02_design/software/TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md` (MS-01 / C0.6): định dạng artifact nhị phân `MKDDCIR1` — header 128 byte, 6 section bắt buộc + 2 tuỳ chọn, máy thanh ghi 16 byte/lệnh với 33 opcode, không gian slot tách biến/hằng để "hằng không ghi đè được" thành bất biến kiểm được, **chỉ cho nhảy tiến** nên mọi chương trình chấm dứt trong ≤ số lệnh. Toàn vẹn SHA-256 + chữ ký Ed25519 (public key nhúng trong build); ghi rõ lý do dùng Ed25519 thay vì GPG như OTA: artifact phải verify in-process trong vòng `SCHED_FIFO 80`. Quy trình load 22 bước; 15 mã lỗi `IR-E-*` trả BE kèm cột "giữ package đang chạy" và "retry được không"; quy tắc tương thích phiên bản; bắt buộc fuzzing loader và kiểm symbol CI để chặn parser lọt vào `mkddc-core`.
