@@ -7,6 +7,13 @@
 ---
 
 ## [Unreleased]
+### Changed — ACTION 2: đồng bộ tài liệu baseline sau M-01 (BASELINE_DOC_SYNC) (2026-07-28)
+- `docs/03_implementation/32_DEV_TEAM_NEXT_ACTION.md` → **SUPERSEDED** (Rev 2.0). Cả 3 task blocking (IOB-006/MOD-012/BAC-012) đã xong; số liệu trong đó sai so với đo thật. Thêm bảng đối chiếu "tài liệu ghi gì vs thực tế đo" và trỏ sang tài liệu còn hiệu lực. Nội dung gốc giữ nguyên để truy vết lịch sử, không viết lại.
+- C1–C10 plan: ghi rõ 468/468 là số của 2026-07-24, bổ sung số đo lại 504/504 ngày 2026-07-28.
+- `docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md`: cập nhật traceability sau M-01 — T-10 và T-18 đóng finding F-01, T-18 chuyển DONE, thêm dòng T-10b cho giới hạn tài nguyên, blocker **B-01 đánh dấu ĐÃ GỠ**.
+- Path `services/core/st/st_*` đã sửa ở `INTERFACES.md` trong commit M-01.
+- **BASELINE_DOC_SYNC = PASS.**
+
 ### Fixed — M-01: ST parser không còn crash với input đối kháng (PARSER_SAFETY_GATE) (2026-07-28)
 - `services/core/st/st_parser.cpp` là recursive-descent không giới hạn độ sâu; một biểu thức lồng ~12000 dấu ngoặc (~24 KB, dưới hạn mức 64 KiB) làm tràn stack và `mkddc-st-validate` chết bằng SIGSEGV (exit 139, stdout rỗng) — phá vỡ chính hợp đồng "luôn đúng 1 dòng JSON". Cùng hàm `parse_st_program()` này được `StProgramRuntime::activate()` gọi in-process, nên khi wire vào scan loop sẽ crash `mkddc-core`.
 - Thêm `services/core/st/st_limits.hpp` — MỘT nguồn sự thật cho toàn bộ giới hạn tài nguyên: source 64 KiB, 32768 token, độ sâu biểu thức 32, độ sâu statement 16, 512 biến, 4096 statement, identifier 64 ký tự, 64 diagnostic. `st_validate_main.cpp` bỏ hằng số hard-code riêng, dùng chung header này.

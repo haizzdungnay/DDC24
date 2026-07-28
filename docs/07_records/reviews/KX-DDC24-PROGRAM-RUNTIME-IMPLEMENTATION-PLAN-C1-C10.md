@@ -55,7 +55,8 @@ test case (syntax/type/unbound-variable reject, activation-fail giữ package c�
 NaN/Inf không silent-GOOD, không parse lại trong scan path), và PR #57 (`feat(core):
 complete FW SOM IEC programming foundation`) thêm validate gateway, diagnostic source
 position, io-map validator, cyclic metrics, `LIMIT` và trace ring. `services/` CTest
-**468/468** pass. Đây là dữ liệu thật đầu tiên cho `C0.14` (effort estimate) — **nhưng chưa có ai
+**468/468** pass tại thời điểm 2026-07-24; đo lại 2026-07-28 sau M-01 là **504/504** pass,
+0 skip. Đây là dữ liệu thật đầu tiên cho `C0.14` (effort estimate) — **nhưng chưa có ai
 tổng hợp thành effort estimate chính thức**, và **toàn bộ chi tiết C1–C10 bên dưới vẫn
 là kế hoạch chưa mở** (`mkddc-program-service`/`mkddc-program-core`/`libmkddc_iec` chưa
 tồn tại). Không suy diễn từ ba PR này rằng C1 đã Go.
