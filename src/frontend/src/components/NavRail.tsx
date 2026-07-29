@@ -5,7 +5,6 @@ import { useI18n } from '../i18n'
 import { PRODUCT_INFO } from '../productInfo'
 import { LEGACY_GRAPH_DEMO_ENABLED } from '../config'
 import { useAuth } from '../auth/AuthProvider'
-import { can, permissions, type Permission } from '../auth/permissions'
 import type { HealthResponse } from '../types'
 import { cn } from '../utils'
 
@@ -14,36 +13,36 @@ const groups = [
     id: 'overview',
     titleKey: 'overview',
     items: [
-      { to: '/', key: 'dashboard', icon: Home, end: true, permission: permissions.read },
-      { to: '/monitor', key: 'monitor', icon: SlidersHorizontal, permission: permissions.read },
-      { to: '/alarms', key: 'alarm-log', icon: Bell, permission: permissions.read },
-      { to: '/trends', key: 'trends', icon: LineChart, permission: permissions.read }
+      { to: '/', key: 'dashboard', icon: Home, end: true },
+      { to: '/monitor', key: 'monitor', icon: SlidersHorizontal },
+      { to: '/alarms', key: 'alarm-log', icon: Bell },
+      { to: '/trends', key: 'trends', icon: LineChart }
     ]
   },
   {
     id: 'settings',
     titleKey: 'settings',
     items: [
-      { to: '/settings/display', key: 'display', icon: Gauge, permission: permissions.selfManage },
-      { to: '/settings/users', key: 'users', icon: Users, permission: permissions.usersManage },
-      { to: '/settings/network', key: 'network', icon: Network, permission: permissions.settingsManage },
-      { to: '/settings/time', key: 'time', icon: Clock3, permission: permissions.settingsManage },
-      { to: '/settings/device', key: 'device', icon: Settings, permission: permissions.settingsManage }
+      { to: '/settings/display', key: 'display', icon: Gauge },
+      { to: '/settings/users', key: 'users', icon: Users },
+      { to: '/settings/network', key: 'network', icon: Network },
+      { to: '/settings/time', key: 'time', icon: Clock3 },
+      { to: '/settings/device', key: 'device', icon: Settings }
     ]
   },
   {
     id: 'engineering',
     titleKey: 'engineering',
     items: [
-      { to: '/eng/scheduler', key: 'scheduler', icon: CalendarDays, permission: permissions.settingsManage },
-      { to: '/eng/commissioning', key: 'commissioning', icon: TestTube2, permission: permissions.operate },
-      { to: '/eng/programming', key: 'programming', icon: ShieldCheck, permission: permissions.read },
-      { to: '/eng/inputs', key: 'inputs', icon: Activity, permission: permissions.settingsManage },
-      { to: '/eng/outputs', key: 'outputs', icon: Zap, permission: permissions.settingsManage },
-      { to: '/eng/virtual-points', key: 'virtual-points', icon: SlidersHorizontal, permission: permissions.settingsManage },
+      { to: '/eng/scheduler', key: 'scheduler', icon: CalendarDays },
+      { to: '/eng/commissioning', key: 'commissioning', icon: TestTube2 },
+      { to: '/eng/programming', key: 'programming', icon: ShieldCheck },
+      { to: '/eng/inputs', key: 'inputs', icon: Activity },
+      { to: '/eng/outputs', key: 'outputs', icon: Zap },
+      { to: '/eng/virtual-points', key: 'virtual-points', icon: SlidersHorizontal },
       // { to: '/eng/user-parameters', key: 'user-parameters', icon: ListChecks },
       // { to: '/eng/aux', key: 'aux', icon: Settings },
-      { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell, permission: permissions.settingsManage }
+      { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell }
     ]
   }
 ] as const
@@ -102,7 +101,7 @@ export function NavRail({ alarmCount, device }: { alarmCount: number; device: He
                 <div className={cn('mt-1 space-y-1', collapsed && 'mt-0')}>
                   {group.items.filter((item) =>
                     (item.key !== 'programming' || LEGACY_GRAPH_DEMO_ENABLED) &&
-                    can(session?.role, item.permission as Permission)
+                    (item.key !== 'network' || session?.role === 'admin')
                   ).map((item) => {
                     const Icon = item.icon
                     return (

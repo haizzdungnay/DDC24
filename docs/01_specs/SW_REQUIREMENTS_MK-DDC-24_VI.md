@@ -2,7 +2,7 @@
 ## SOM Application Layer / Debian 12
 
 > **Document ID:** SW-REQ-MK-DDC-24-VI
-> **Phiên bản:** 2.4-DRAFT | 2026-07-27
+> **Phiên bản:** 2.2-DRAFT | 2026-07-22
 > **Trạng thái:** Draft — Pending SW Lead review
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))
 > **Tác giả:** KINEXUS Technologies — Software Team
@@ -194,7 +194,7 @@ typedef struct {
 | SW-API-004 | `GET /api/v1/points/{id}`: trả giá trị + timestamp + quality | MUST | API-004 | T-SW-073 |
 | SW-API-005 | `PUT /api/v1/points/{id}`: ghi giá trị (auth required, kiểm tra range) | MUST | API-005 | T-SW-074 |
 | SW-API-006 | `GET /api/v1/system/status`: CPU%, RAM%, uptime, firmware ver, IOP metrics | MUST | API-006 | T-SW-075 |
-| SW-API-007 | `POST /api/v1/ota/apply`: trigger OTA (auth: Web Engineer/Admin capability) | MUST | API-007 | T-SW-076 |
+| SW-API-007 | `POST /api/v1/ota/apply`: trigger OTA (auth: admin role only) | MUST | API-007 | T-SW-076 |
 | SW-API-008 | Rate limit: 100 req/s per IP. HTTP 429 khi vượt. | MUST | API-008, API-009 | T-SW-077 |
 | SW-API-009 | Tất cả response PHẢI có `Content-Type: application/json` | MUST | — | T-SW-078 |
 | SW-API-010 | Error response format: `{"error": "...", "code": NNN, "request_id": "..."}` | MUST | — | T-SW-079 |
@@ -213,8 +213,6 @@ typedef struct {
 | SW-SEC-006 | Audit log: mọi login attempt, config change, output write, OTA PHẢI được ghi vào `/data/log/audit.log` | MUST | SEC-025 | T-SW-085 |
 | SW-SEC-007 | Web UI: brute-force lockout 15 phút sau 5 lần sai | MUST | SEC-023 | T-SW-086 |
 | SW-SEC-008 | TLS certificate: self-signed mặc định; hỗ trợ import custom cert (LetsEncrypt / enterprise CA) | MUST | — | T-SW-087 |
-| SW-SEC-009 | Mọi Web route ngoài login PHẢI dùng `RequirePermission` deny-by-default theo OpenAPI `x-rbac`; thiếu/invalid/stale token trả `401`, token hợp lệ thiếu capability trả `403`; không authorize chỉ bằng rank `Require(Role)`/`RoleAllows` | MUST | IDE-035 | T-SW-088 |
-| SW-SEC-010 | User store PHẢI persist `session_version`; JWT PHẢI đối chiếu version mỗi request; role/password change increment version, deletion invalidates immediately; self-delete và concurrent demote/delete admin cuối trả `409` | MUST | IDE-036 | T-SW-089 |
 
 ---
 
@@ -303,10 +301,10 @@ typedef struct {
 | SW-IDE-002 | Web IDE PHẢI truy cập được từ Chrome 120+, Firefox 120+ mà không cần plugin | MUST | IDE-002 | T-SW-131 |
 | SW-IDE-003 | PHẢI cung cấp trình soạn thảo FBD (Function Block Diagram) dạng đồ họa | MUST | IDE-010 | T-SW-132 |
 | SW-IDE-004 | PHẢI cung cấp trình soạn thảo Structured Text với syntax highlighting | MUST | IDE-011 | T-SW-133 |
-| SW-IDE-005 | PHẢI hỗ trợ Operator+ edit/validate/build và Engineer+ upload/deploy/activate/rollback program; authoritative Backend/Core result quyết định thành công | MUST | IDE-012, IDE-035 | T-SW-134 |
-| SW-IDE-006 | PHẢI hỗ trợ Start / Stop / Reset PLC program từ Web IDE với Engineer/Admin capability và audit | MUST | IDE-013, IDE-035 | T-SW-135 |
+| SW-IDE-005 | PHẢI hỗ trợ upload program lên PLC runtime và download program từ PLC | MUST | IDE-012 | T-SW-134 |
+| SW-IDE-006 | PHẢI hỗ trợ Start / Stop / Reset PLC program từ Web IDE | MUST | IDE-013 | T-SW-135 |
 | SW-IDE-007 | PHẢI hiển thị giá trị biến real-time (watch table / variable monitor) trong khi PLC đang chạy | MUST | IDE-014 | T-SW-136 |
-| SW-IDE-008 | PHẢI cho phép Operator+ force / write giá trị runtime qua core priority/safety authority, có bounded TTL/release và audit | MUST | IDE-015, IDE-035 | T-SW-137 |
+| SW-IDE-008 | PHẢI cho phép force / write giá trị biến PLC (yêu cầu auth admin) | MUST | IDE-015 | T-SW-137 |
 
 ### 11.2 I/O Configuration & Monitoring
 
@@ -323,14 +321,13 @@ typedef struct {
 
 | ID | Yêu cầu | Loại | Trace SRS | Test Ref |
 |----|---------|------|-----------|----------|
-| SW-IDE-020 | PHẢI dùng đúng bốn Web role `viewer/operator/engineer/admin` theo ADR-022: Viewer read-only ngoài self-password/Display/language local; Operator runtime operation và edit/validate/build nhưng không Settings/deploy; Engineer Settings/deploy/OTA/log nhưng không Users/database historian mutation; Admin full business capability với safety invariant | MUST | IDE-030, IDE-035 | T-SW-144 |
+| SW-IDE-020 | PHẢI có 2 roles: `admin` (full access) và `operator` (view + force I/O, không upload program) | MUST | IDE-030 | T-SW-144 |
 | SW-IDE-021 | Password PHẢI hash bcrypt, không lưu plaintext | MUST | SEC-023 | T-SW-145 |
 | SW-IDE-022 | PHẢI lock account sau 5 lần đăng nhập sai trong 15 phút | MUST | SEC-023 | T-SW-146 |
 | SW-IDE-023 | Web UI session PHẢI tự logout sau **30 phút idle** (khớp SRS IDE-031). JWT REST token (API-002) expire 1 giờ là cơ chế riêng | MUST | IDE-031 | T-SW-147 |
-| SW-IDE-024 | FE PHẢI dùng capability catalog tập trung cho route/menu/action/query gating, không hardcode role rải rác; direct URL/API vẫn phải bị backend chặn và hidden page không được chạy background query trái quyền | MUST | IDE-035 | T-SW-148 |
 
 ---
 
 **Document ID:** SW-REQ-MK-DDC-24-VI
-**Revision:** 2.4 | 2026-07-27 (ADR-022 Web RBAC target: four-role capability matrix, Engineer+ OTA/deploy/config, Operator+ runtime/edit/build, persisted session invalidation, FE deny-by-default gating) · 2.3 | 2026-07-22 (limited-operator HMI, five surfaces, local broker/core command contract, session/TTL/release and privilege removal plan) · 2.2 | 2026-07-22 (HMI DRM/MIPI baseline, alarm authority/audit, fail-closed roles and usability gates) · 2.1 | 2026-06-30 (§2.1: SW-IOP-012..013 — kx_reliability_t per ADR-011; §4.2: SW-BAC-009..011 — Reliability map + AO config per ADR-011/ADR-012) · 2.0 | 2026-06-30 (Breaking IOP timing/base-SKU I/O alignment; legacy inline struct retained only inside the marked reference block)
+**Revision:** 2.3 | 2026-07-22 (limited-operator HMI, five surfaces, local broker/core command contract, session/TTL/release and privilege removal plan) · 2.2 | 2026-07-22 (HMI DRM/MIPI baseline, alarm authority/audit, fail-closed roles and usability gates) · 2.1 | 2026-06-30 (§2.1: SW-IOP-012..013 — kx_reliability_t per ADR-011; §4.2: SW-BAC-009..011 — Reliability map + AO config per ADR-011/ADR-012) · 2.0 | 2026-06-30 (Breaking IOP timing/base-SKU I/O alignment; legacy inline struct retained only inside the marked reference block)
 **Review required:** Software Lead, System Architect

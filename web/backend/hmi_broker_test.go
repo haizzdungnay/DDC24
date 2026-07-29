@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -33,13 +32,6 @@ type fakeNetcfgAuthority struct {
 	lastCandidate *NetcfgCandidate
 	response      NetcfgResponse
 	err           error
-}
-
-func requireLinuxHMIIPC(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS != "linux" {
-		t.Skip("HMI IPC integration requires Linux AF_UNIX peer credentials")
-	}
 }
 
 func (f *fakeNetcfgAuthority) Request(_ context.Context, _ string, action string, transactionID string, candidate *NetcfgCandidate) (NetcfgResponse, error) {
@@ -305,27 +297,6 @@ func TestHMIBrokerViewerCannotMutate(t *testing.T) {
 	}
 }
 
-func TestHMIBrokerDoesNotProjectWebEngineerIntoLocalOperator(t *testing.T) {
-	core := &fakeHMICore{}
-	broker := newTestHMIBroker(t, RoleEngineer, core, &bytes.Buffer{})
-	login := loginHMI(t, broker, "login-engineer")
-	if login.Result != "accepted" || login.Token == "" {
-		t.Fatalf("login = %+v", login)
-	}
-	value := 1.0
-	resp := callHMI(t, broker, map[string]any{
-		"version": 1, "requestId": "engineer-override", "action": "override",
-		"token": login.Token, "pointId": "DO-01", "value": value,
-		"reason": "web role isolation", "ttlS": 60,
-	})
-	if resp.ReasonCode != "FORBIDDEN" {
-		t.Fatalf("response = %+v", resp)
-	}
-	if core.commands != 0 {
-		t.Fatalf("Web Engineer reached local-HMI control path: %d calls", core.commands)
-	}
-}
-
 func TestHMIBrokerOverrideIsBoundedAuditedAndIdempotent(t *testing.T) {
 	var logs bytes.Buffer
 	core := &fakeHMICore{}
@@ -383,7 +354,7 @@ func TestHMIBrokerAuditFailurePreventsCoreMutation(t *testing.T) {
 	core := &fakeHMICore{}
 	broker := newTestHMIBroker(t, RoleOperator, core, &bytes.Buffer{})
 	login := loginHMI(t, broker, "login-audit")
-	broker.auditLog.path = t.TempDir()
+	broker.auditLog.path = "/proc/mkddc-hmi-audit-denied.jsonl"
 	resp := callHMI(t, broker, map[string]any{
 		"version": 1, "requestId": "override-audit", "action": "override", "token": login.Token,
 		"pointId": "DO-01", "value": 1, "ttlS": 300, "reason": "maintenance",
@@ -438,7 +409,6 @@ func TestHMIBrokerProtocolRejectsUnknownField(t *testing.T) {
 }
 
 func TestHMIPeerCredentialsComeFromKernel(t *testing.T) {
-	requireLinuxHMIIPC(t)
 	path := filepath.Join(t.TempDir(), "peer.sock")
 	listener, err := net.Listen("unix", path)
 	if err != nil {
@@ -470,7 +440,6 @@ func TestHMIBrokerRejectsOversizedFrame(t *testing.T) {
 }
 
 func TestHMIBrokerSocketRunsLoginControlQueryReleaseLifecycle(t *testing.T) {
-	requireLinuxHMIIPC(t)
 	corePath := filepath.Join(t.TempDir(), "core.sock")
 	core := startFakeCoreSocket(t, corePath)
 	defer core.stop(t)
@@ -527,7 +496,6 @@ func TestHMIBrokerSocketRunsLoginControlQueryReleaseLifecycle(t *testing.T) {
 }
 
 func TestHMIBrokerCoreLossDoesNotReplayRejectedCommand(t *testing.T) {
-	requireLinuxHMIIPC(t)
 	corePath := filepath.Join(t.TempDir(), "core.sock")
 	core := startFakeCoreSocket(t, corePath)
 	broker := newSocketIntegratedHMIBroker(t, RoleOperator, corePath, &bytes.Buffer{})
@@ -565,7 +533,6 @@ func TestHMIBrokerCoreLossDoesNotReplayRejectedCommand(t *testing.T) {
 }
 
 func TestHMIBrokerRestartInvalidatesSession(t *testing.T) {
-	requireLinuxHMIIPC(t)
 	core := &fakeHMICore{}
 	first := newTestHMIBroker(t, RoleOperator, core, &bytes.Buffer{})
 	cancel, done := startTestHMIBroker(t, first)
@@ -588,7 +555,6 @@ func TestHMIBrokerRestartInvalidatesSession(t *testing.T) {
 }
 
 func TestHMIBrokerServesVersionedFrameOverUnixSocket(t *testing.T) {
-	requireLinuxHMIIPC(t)
 	broker := newTestHMIBroker(t, RoleOperator, &fakeHMICore{}, &bytes.Buffer{})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

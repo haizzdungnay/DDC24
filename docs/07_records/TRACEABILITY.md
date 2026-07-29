@@ -2,7 +2,7 @@
 
 **ID:** TRACE-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-27 (`RBAC-BE/FE/TEST`, offline smoke-account tooling, target-smoke và native Linux race complete local; `WEB-RBAC-001` còn RED/Partial vì clean CI/target/approval; bảy business authority tách sang `WEB-FEATURE-AUTH-001`)
+**Cập nhật:** 2026-07-23 (ADR-020: thêm hàng cho SYS/SWR/IF/SAFE/NFR/FW-REQ-IEC/MCU, tất cả Planned — chưa có code C1–C10)
 
 Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `Planned` không phải bằng chứng pass.
 
@@ -17,15 +17,12 @@ Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `P
 | SWR-REQ-001 | service entrypoints/CMake/system units | process isolation test | Planned |
 | SWR-REQ-002 | core graph/priority/safety | timing + unit + fault test | Partial |
 | SWR-REQ-003 | web validators + iobus config consumer | round-trip/reload test | Partial |
-| SWR-REQ-004 | ADR-022, OpenAPI `x-rbac`, `web/backend/http.go` + auth middleware, FE permission map/route guard | deny-by-default route coverage + API/FE capability matrix | Partial — exact 61-route matrix và live JWT E2E bốn account pass code-local; target/release approval open |
+| SWR-REQ-004 | `web/backend/http.go` + auth middleware | API role/security tests | Partial |
 | SWR-REQ-005 | ADR-017, `services/netcfg`, Web adapter/FE, HMI broker/client | active/configured/pending/capability/management truth + negative UI/API tests | Code-local Web migration và target service/no-carrier negative path pass; real carrier/IP handoff/panel open |
 | SWR-REQ-006 | `mkddc-netcfg` transaction journal/coordinator | static/DHCP/DNS/confirm/120 s rollback + restart fault tests | Target-dummy static confirm, process recovery, explicit/automatic rollback pass; physical DHCP/DNS/reboot/power/disk fault open |
 | SWR-REQ-007 | netcfg + iobus BACnet address watcher + same-origin Web | multi-process continuity, BACnet `I-Am`, Web/Modbus reconnect | Target-dummy control continuity và live hot-rebind log pass; packet/Modbus/physical I/O/real-IP handoff evidence open |
-| NET-WEB-001 | Go netcfg adapter, OpenAPI, Network FE/E2E | GET aggregate authenticated-read, transaction GET/POST Engineer/Admin, strict DNS capability, authoritative UI/recovery | Code-local complete; target mDNS/dummy transaction pass, real carrier/IP handoff and browser reconnect open |
-| SWR-REQ-008 | ADR-022, OpenAPI v1.11.0, [Interfaces](../04_design/INTERFACES.md), `src/frontend/src/auth/permissions.ts` | `WEB-RBAC-001` API/URL/FE matrix bốn role | Partial — `RBAC-BE/FE/TEST` code-local và rollout verifier pass; rollout target và approval open |
-| WEB-FEATURE-AUTH-001 | BACnet/Program/OTA/log service authorities behind seven OpenAPI operations marked `x-runtime-status: authority-pending` | feature-specific functional/safety/target suites after exact RBAC `401/403` checks | RED / Separate — authorization mapping proven; business implementation still returns audited `501` and is not part of the RBAC closure claim |
+| NET-WEB-001 | Go netcfg adapter, OpenAPI, Network FE/E2E | GET authenticated-read, POST Admin-only, strict DNS capability, authoritative UI/recovery | Code-local complete; target mDNS/dummy transaction pass, real carrier/IP handoff and browser reconnect open |
 | SWR-REQ-IEC-001..009 | `libmkddc_iec`/`mkddc-program-service`/`mkddc-program-core` (chưa triển khai — C1+) | theo `KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md` mỗi slice | Planned — C0 chưa hoàn thành, C1–C10 blocked |
-| SWR-REQ-IEC-009 | ADR-022 + Program service route policy (chưa triển khai — C1+) | Operator edit/validate/build; Engineer deploy/activate/rollback; audit denial/result | Planned — RBAC contract chốt, runtime chưa triển khai |
 | IF-REQ-001 | `shared/iop_protocol.h`, [Firmware](../04_design/FIRMWARE.md) | assertions + HIL timing/fault | Partial |
 | IF-REQ-002 | `shared/mkddc_shm.h` + consumers | layout/magic tests | Implemented; release record required |
 | IF-REQ-003 | core/iobus AO path | physical-unit boundary regression + bench | Partial |
@@ -34,12 +31,11 @@ Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `P
 | SAFE-REQ-001 | MCU IOP/watchdog implementation | disconnect HIL ≤200 ms | Missing release evidence |
 | SAFE-REQ-002 | core/iobus validators | NaN/infinity/range negative tests | Partial |
 | SAFE-REQ-IEC-001 | `mkddc-program-core` priority/interlock boundary (chưa triển khai — C3) | bypass review + fault injection + HIL | Planned |
-| SEC-REQ-001 | ADR-022, backend/FE `RequirePermission`, web auth/RBAC/audit paths | route coverage, bypass, hidden-query, audit security tests and Linux race | Partial — rank/hardcode source guard, deny-before-side-effect, audit redaction, native Linux race và live four-account E2E pass; independent review/target open |
+| SEC-REQ-001 | web auth/RBAC/audit paths | security/API test | Partial |
 | SEC-REQ-002 | deployment/config | secret/TLS review | Missing release evidence |
-| SEC-REQ-003 | ADR-017/022, netcfg UDS/systemd sandbox, Web/HMI adapter boundary | local HMI Service/Admin + Web Engineer/Admin peer/RBAC/audit/bypass tests | Target UID/interface denial và unit/socket boundary pass; Web Engineer/local-HMI isolation code-local pass; E2E/target review open |
-| SEC-REQ-004 | persisted user store/JWT middleware + last-admin transaction guard + migration/rollback + offline smoke-account provision/cleanup + credential-safe target smoke | restart persistence, stale-token `401`, concurrent last-admin/self-delete `409`, backup/rollback, owned-account exact cleanup and full temporary-user target smoke | Implemented code-local — unique JWT `jti`, session schema 2.0, restart/persist-failure/concurrency/API/migration/rollback/provision→real-router-smoke→cleanup tests pass; read-only target preflight shows legacy schema 1.0, execution pending |
+| SEC-REQ-003 | ADR-017, netcfg UDS/systemd sandbox, Web/HMI adapter boundary | local-HMI/Web Admin mutation + authenticated Web read, peer/RBAC/audit/bypass tests | Target UID/interface denial và unit/socket boundary pass; Web/local-HMI isolation code-local pass; target security review open |
 | NFR-REQ-001 | service/SHM failure handling | restart/corruption scenarios | Planned |
-| NFR-REQ-002 | build/test/package pipeline; clean-checkout `linux/arm64` Web candidate metadata/hash/upload gate | reproducible release record + immutable artifact/hash review | Partial — local ARM64 package preflight/hash pass but artifact has `vcs.modified=true`; clean CI execution and release record pending |
+| NFR-REQ-002 | build/test/package pipeline | reproducible release record | Planned |
 | NFR-REQ-IEC-001 | `mkddc-program-core` (chưa triển khai — C3) | multi-process fault test | Planned |
 | HW-REQ-001 | [hardware detail](../04_design/hardware/README.md) + schematic/BOM + iobus scaling | review + ADC/UI bench | Missing controlled evidence |
 | HW-REQ-002 | [Hardware](../04_design/HARDWARE.md) | hardware gate packages | Blocked / RED |

@@ -14,7 +14,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/run/mkddc /etc/chrony/sources.d /etc/timezone
+ReadWritePaths=/run/mkddc /etc/chrony/sources.d
 CapabilityBoundingSet=CAP_SYS_TIME CAP_DAC_OVERRIDE CAP_CHOWN
 AmbientCapabilities=CAP_SYS_TIME CAP_DAC_OVERRIDE CAP_CHOWN
 

@@ -14,7 +14,7 @@ import (
 // Sends a commissioning test command to core via CommissionTest and returns CommissioningTestResult.
 func (a *App) handleCommissionTest(w http.ResponseWriter, r *http.Request) {
 	principal := principalFromContext(r.Context())
-	if principal == nil || !principal.HasPermission(PermissionOperate) {
+	if principal == nil || !RoleAllows(principal.Role, RoleOperator) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}

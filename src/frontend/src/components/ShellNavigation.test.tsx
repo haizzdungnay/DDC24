@@ -7,7 +7,7 @@ import { I18nProvider } from '../i18n'
 import { NavRail } from './NavRail'
 import { TopBar } from './TopBar'
 
-const authMocks = vi.hoisted(() => ({ role: 'admin' as 'admin' | 'engineer' | 'operator' | 'viewer' }))
+const authMocks = vi.hoisted(() => ({ role: 'admin' as 'admin' | 'operator' | 'viewer' }))
 
 vi.mock('../auth/AuthProvider', () => ({
   useAuth: () => ({ logout: vi.fn(), session: { username: 'test', role: authMocks.role } })
@@ -54,24 +54,6 @@ describe('shell user navigation', () => {
     renderNavigation(<NavRail alarmCount={0} device={null} />)
 
     expect(screen.queryByRole('link', { name: 'Network' })).not.toBeInTheDocument()
-  })
-
-  it('shows Settings to engineers but keeps Users and database-sensitive surfaces admin-only', () => {
-    authMocks.role = 'engineer'
-    renderNavigation(<NavRail alarmCount={0} device={null} />)
-
-    expect(screen.getByRole('link', { name: 'Network' })).toHaveAttribute('href', '/settings/network')
-    expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument()
-  })
-
-  it.each(['operator', 'viewer'] as const)('hides device configuration navigation from %s', (role) => {
-    authMocks.role = role
-    renderNavigation(<NavRail alarmCount={0} device={null} />)
-
-    expect(screen.queryByRole('link', { name: 'Network' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Scheduler' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Inputs' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Display' })).toBeInTheDocument()
   })
 
   it('shows Model and Firmware in two columns without Serial', () => {

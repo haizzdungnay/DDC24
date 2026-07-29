@@ -8,7 +8,6 @@ import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
 import { useApi } from '../hooks/useApi'
 import { useAuth } from '../auth/AuthProvider'
-import { can, permissions } from '../auth/permissions'
 import { useI18n } from '../i18n'
 import type { ModbusSlave, NetcfgCandidate, NetcfgResponse, NetcfgTransactionAction, NetworkConfig, PollState } from '../types'
 
@@ -32,12 +31,12 @@ export function NetworkPage() {
   const toast = useToast()
   const { locale, pick } = useI18n()
   const { session } = useAuth()
-  const canManageNetwork = can(session?.role, permissions.settingsManage)
+  const canManageNetwork = session?.role === 'admin'
   const networkState = useApi(apiClient.getNetwork, [], { refreshMs: 1000 })
   const transactionState = useApi<NetcfgResponse | null>(
     apiClient.getNetworkTransaction,
-    [canManageNetwork],
-    { enabled: canManageNetwork, refreshMs: 1000 }
+    [session?.username],
+    { refreshMs: session ? 1000 : undefined }
   )
   const [config, setConfig] = useState<NetworkConfig | null>(null)
   const [candidate, setCandidate] = useState<NetcfgCandidate | null>(null)

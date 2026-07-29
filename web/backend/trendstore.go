@@ -268,65 +268,6 @@ func (s *TrendStore) PruneBefore(ctx context.Context, pointID string, beforeTs i
 	return nil
 }
 
-func (s *TrendStore) PurgePoint(ctx context.Context, pointID string) error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	pointID = canonicalHistoryPointID(pointID)
-	if pointID == "" {
-		return fmt.Errorf("point id is required")
-	}
-	// Administrative deletion is allowed while legacy sampling is quiesced.
-	s.writesMu.RLock()
-	s.writeTxnMu.Lock()
-	defer func() {
-		s.writeTxnMu.Unlock()
-		s.writesMu.RUnlock()
-	}()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin trend point purge: %w", err)
-	}
-	defer tx.Rollback()
-	ids := storagePointIDs([]string{pointID})
-	placeholders := make([]string, len(ids))
-	args := make([]any, len(ids))
-	for i, id := range ids {
-		placeholders[i], args[i] = "?", id
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM samples WHERE point_id IN (`+strings.Join(placeholders, ",")+`)`, args...); err != nil {
-		return fmt.Errorf("purge trend samples: %w", err)
-	}
-	var raw string
-	err = tx.QueryRowContext(ctx, `SELECT point_ids_json FROM trend_config WHERE id=1`).Scan(&raw)
-	if err != nil && err != sql.ErrNoRows {
-		return fmt.Errorf("read trend point selection: %w", err)
-	}
-	if err == nil {
-		var selected []string
-		if err := json.Unmarshal([]byte(raw), &selected); err != nil {
-			return fmt.Errorf("parse trend point selection: %w", err)
-		}
-		kept := make([]string, 0, len(selected))
-		for _, id := range selected {
-			if canonicalHistoryPointID(id) != pointID {
-				kept = append(kept, id)
-			}
-		}
-		data, err := json.Marshal(normalizePointIDs(kept))
-		if err != nil {
-			return fmt.Errorf("encode trend point selection: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE trend_config SET point_ids_json=?,updated_at=? WHERE id=1`, string(data), time.Now().UTC().Unix()); err != nil {
-			return fmt.Errorf("purge trend point selection: %w", err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit trend point purge: %w", err)
-	}
-	return nil
-}
-
 func (s *TrendStore) GetConfig(ctx context.Context) (TrendConfig, error) {
 	cfg := defaultTrendConfig()
 	if s == nil || s.db == nil {

@@ -68,15 +68,6 @@ func (r *VirtualPointRing) Query(pointIDs []string, fromTs int64, toTs int64) []
 	return out
 }
 
-func (r *VirtualPointRing) Remove(pointID string) {
-	if r == nil {
-		return
-	}
-	r.mu.Lock()
-	delete(r.byPoint, canonicalHistoryPointID(pointID))
-	r.mu.Unlock()
-}
-
 func (a *App) StartVirtualPointSampler(ctx context.Context) {
 	if a == nil || a.trends == nil {
 		return

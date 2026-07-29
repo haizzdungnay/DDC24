@@ -124,91 +124,64 @@ func isAllowedOrigin(origin, configured string) bool {
 		strings.HasPrefix(origin, "http://[::1]:")
 }
 
-type protectedRoute struct {
-	pattern    string
-	permission Permission
-	handler    http.HandlerFunc
-	websocket  bool
-}
-
-func (a *App) protectedRoutes() []protectedRoute {
-	return []protectedRoute{
-		{pattern: "POST /api/v1/auth/logout", permission: PermissionRead, handler: a.handleLogout},
-		{pattern: "GET /api/v1/system/status", permission: PermissionRead, handler: a.handleSystemStatus},
-		{pattern: "GET /api/v1/network", permission: PermissionRead, handler: a.handleGetNetworkPage},
-		{pattern: "PUT /api/v1/network", permission: PermissionSettingsManage, handler: a.handlePutNetworkPage},
-		{pattern: "GET /api/v1/network/transaction", permission: PermissionSettingsManage, handler: a.handleGetNetworkTransaction},
-		{pattern: "POST /api/v1/network/transaction/{action}", permission: PermissionSettingsManage, handler: a.handlePostNetworkTransaction},
-		{pattern: "GET /api/v1/points", permission: PermissionRead, handler: a.handlePoints},
-		{pattern: "GET /api/v1/points/{id}", permission: PermissionRead, handler: a.handlePoint},
-		{pattern: "PUT /api/v1/points/{id}", permission: PermissionOperate, handler: a.handleForcePoint},
-		{pattern: "PUT /api/v1/points/{id}/config", permission: PermissionSettingsManage, handler: a.handlePutPointConfig},
-		{pattern: "GET /api/v1/virtual-points", permission: PermissionRead, handler: a.handleListVirtualPoints},
-		{pattern: "POST /api/v1/virtual-points", permission: PermissionSettingsManage, handler: a.handleCreateVirtualPoint},
-		{pattern: "PUT /api/v1/virtual-points/{id}", permission: PermissionSettingsManage, handler: a.handleUpdateVirtualPoint},
-		{pattern: "DELETE /api/v1/virtual-points/{id}", permission: PermissionSettingsManage, handler: a.handleDeleteVirtualPoint},
-		{pattern: "GET /api/v1/ws/monitor", permission: PermissionRead, handler: a.handleMonitorWS, websocket: true},
-		{pattern: "GET /api/v1/alarms", permission: PermissionRead, handler: a.handleAlarms},
-		{pattern: "GET /api/v1/alarm-history", permission: PermissionRead, handler: a.handleAlarmHistory},
-		{pattern: "POST /api/v1/alarms/{id}/ack", permission: PermissionOperate, handler: a.handleAckAlarm},
-		{pattern: "POST /api/v1/alarms/{id}/suppress", permission: PermissionOperate, handler: a.handleSuppressAlarm},
-		{pattern: "POST /api/v1/alarms/{id}/return", permission: PermissionOperate, handler: a.handleReturnAlarm},
-		{pattern: "POST /api/v1/commissioning/points/{id}/test", permission: PermissionOperate, handler: a.handleCommissionTest},
-		{pattern: "GET /api/v1/bacnet/objects", permission: PermissionRead, handler: a.handleUnavailableFeature("bacnet.objects")},
-		{pattern: "POST /api/v1/graph/validate", permission: PermissionProgramEdit, handler: a.handleUnavailableFeature("graph.validate")},
-		{pattern: "POST /api/v1/graph/deploy", permission: PermissionProgramActivate, handler: a.handleUnavailableFeature("graph.deploy")},
-		{pattern: "POST /api/v1/ota/upload", permission: PermissionSystemRelease, handler: a.handleUnavailableFeature("ota.upload")},
-		{pattern: "POST /api/v1/ota/apply", permission: PermissionSystemRelease, handler: a.handleUnavailableFeature("ota.apply")},
-		{pattern: "GET /api/v1/ota/status", permission: PermissionSystemRelease, handler: a.handleUnavailableFeature("ota.status")},
-		{pattern: "GET /api/v1/logs/download", permission: PermissionSystemRelease, handler: a.handleUnavailableFeature("logs.download")},
-		{pattern: "GET /api/v1/system/config", permission: PermissionSettingsManage, handler: a.handleGetSystemConfig},
-		{pattern: "GET /api/v1/system/config/device", permission: PermissionSettingsManage, handler: a.handleGetConfigDevice},
-		{pattern: "PUT /api/v1/system/config/device", permission: PermissionSettingsManage, handler: a.handlePutConfigDevice},
-		{pattern: "GET /api/v1/system/config/network", permission: PermissionSettingsManage, handler: a.handleGetConfigNetwork},
-		{pattern: "PUT /api/v1/system/config/network", permission: PermissionSettingsManage, handler: a.handlePutConfigNetwork},
-		{pattern: "GET /api/v1/system/config/io", permission: PermissionSettingsManage, handler: a.handleGetConfigIO},
-		{pattern: "PUT /api/v1/system/config/io", permission: PermissionSettingsManage, handler: a.handlePutConfigIO},
-		{pattern: "GET /api/v1/system/config/safe-state", permission: PermissionSettingsManage, handler: a.handleGetConfigSafeState},
-		{pattern: "PUT /api/v1/system/config/safe-state", permission: PermissionSettingsManage, handler: a.handlePutConfigSafeState},
-		{pattern: "GET /api/v1/system/config/virtual-points", permission: PermissionSettingsManage, handler: a.handleGetConfigVirtualPoints},
-		{pattern: "PUT /api/v1/system/config/virtual-points", permission: PermissionSettingsManage, handler: a.handlePutConfigVirtualPoints},
-		{pattern: "GET /api/v1/system/config/bacnet", permission: PermissionSettingsManage, handler: a.handleGetConfigBacnet},
-		{pattern: "PUT /api/v1/system/config/bacnet", permission: PermissionSettingsManage, handler: a.handlePutConfigBacnet},
-		{pattern: "GET /api/v1/system/config/fieldbus", permission: PermissionSettingsManage, handler: a.handleGetConfigFieldbus},
-		{pattern: "PUT /api/v1/system/config/fieldbus", permission: PermissionSettingsManage, handler: a.handlePutConfigFieldbus},
-		{pattern: "GET /api/v1/system/config/time", permission: PermissionSettingsManage, handler: a.handleGetConfigTime},
-		{pattern: "PUT /api/v1/system/config/time", permission: PermissionSettingsManage, handler: a.handlePutConfigTime},
-		{pattern: "GET /api/v1/system/time/status", permission: PermissionRead, handler: a.handleGetTimeStatus},
-		{pattern: "GET /api/v1/users", permission: PermissionUsersManage, handler: a.handleListUsers},
-		{pattern: "POST /api/v1/users", permission: PermissionUsersManage, handler: a.handleCreateUser},
-		{pattern: "PUT /api/v1/users/{username}", permission: PermissionUsersManage, handler: a.handleUpdateUser},
-		{pattern: "DELETE /api/v1/users/{username}", permission: PermissionUsersManage, handler: a.handleDeleteUser},
-		{pattern: "POST /api/v1/users/{username}/reset-password", permission: PermissionUsersManage, handler: a.handleResetPassword},
-		{pattern: "GET /api/v1/me", permission: PermissionRead, handler: a.handleGetMe},
-		{pattern: "POST /api/v1/me/change-password", permission: PermissionSelfManage, handler: a.handleChangePassword},
-		{pattern: "GET /api/v1/history", permission: PermissionRead, handler: a.handleHistoryRoute},
-		{pattern: "GET /api/v1/history/export.csv", permission: PermissionRead, handler: a.handleHistoryExport},
-		{pattern: "GET /api/v1/trends/config", permission: PermissionRead, handler: a.handleGetTrendConfig},
-		{pattern: "PUT /api/v1/trends/config", permission: PermissionDatabaseManage, handler: a.handlePutTrendConfig},
-		{pattern: "GET /api/v1/schedules", permission: PermissionRead, handler: a.handleGetSchedules},
-		{pattern: "PUT /api/v1/schedules", permission: PermissionSettingsManage, handler: a.handlePutSchedules},
-		{pattern: "GET /api/v1/alarm-settings", permission: PermissionRead, handler: a.handleGetAlarmSettings},
-		{pattern: "PUT /api/v1/alarm-settings", permission: PermissionSettingsManage, handler: a.handlePutAlarmSettings},
-	}
-}
-
 func (a *App) Router() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/auth/login", a.handleLogin)
-	for _, route := range a.protectedRoutes() {
-		var handler http.Handler
-		if route.websocket {
-			handler = a.requireWSPermission(route.permission, route.handler)
-		} else {
-			handler = a.auth.RequirePermission(route.permission, route.handler)
-		}
-		mux.Handle(route.pattern, handler)
-	}
+	mux.Handle("POST /api/v1/auth/logout", a.auth.Require(RoleViewer, a.handleLogout))
+	mux.Handle("GET /api/v1/system/status", a.auth.Require(RoleViewer, a.handleSystemStatus))
+	mux.Handle("GET /api/v1/network", a.auth.Require(RoleViewer, a.handleGetNetworkPage))
+	mux.Handle("PUT /api/v1/network", a.auth.Require(RoleAdmin, a.handlePutNetworkPage))
+	mux.Handle("GET /api/v1/network/transaction", a.auth.Require(RoleViewer, a.handleGetNetworkTransaction))
+	mux.Handle("POST /api/v1/network/transaction/{action}", a.auth.Require(RoleAdmin, a.handlePostNetworkTransaction))
+	mux.Handle("GET /api/v1/points", a.auth.Require(RoleViewer, a.handlePoints))
+	mux.Handle("GET /api/v1/points/{id}", a.auth.Require(RoleViewer, a.handlePoint))
+	mux.Handle("PUT /api/v1/points/{id}", a.auth.Require(RoleOperator, a.handleForcePoint))
+	mux.Handle("PUT /api/v1/points/{id}/config", a.auth.Require(RoleAdmin, a.handlePutPointConfig))
+	mux.Handle("GET /api/v1/virtual-points", a.auth.Require(RoleViewer, a.handleListVirtualPoints))
+	mux.Handle("POST /api/v1/virtual-points", a.auth.Require(RoleAdmin, a.handleCreateVirtualPoint))
+	mux.Handle("PUT /api/v1/virtual-points/{id}", a.auth.Require(RoleAdmin, a.handleUpdateVirtualPoint))
+	mux.Handle("DELETE /api/v1/virtual-points/{id}", a.auth.Require(RoleAdmin, a.handleDeleteVirtualPoint))
+	mux.Handle("GET /api/v1/ws/monitor", a.requireWSAuth(a.handleMonitorWS))
+	mux.Handle("GET /api/v1/alarms", a.auth.Require(RoleViewer, a.handleAlarms))
+	mux.Handle("GET /api/v1/alarm-history", a.auth.Require(RoleViewer, a.handleAlarmHistory))
+	mux.Handle("POST /api/v1/alarms/{id}/ack", a.auth.Require(RoleOperator, a.handleAckAlarm))
+	mux.Handle("POST /api/v1/alarms/{id}/suppress", a.auth.Require(RoleOperator, a.handleSuppressAlarm))
+	mux.Handle("POST /api/v1/alarms/{id}/return", a.auth.Require(RoleOperator, a.handleReturnAlarm))
+	mux.Handle("POST /api/v1/commissioning/points/{id}/test", a.auth.Require(RoleOperator, a.handleCommissionTest))
+	mux.Handle("GET /api/v1/system/config", a.auth.Require(RoleAdmin, a.handleGetSystemConfig))
+	mux.Handle("PUT /api/v1/system/config", a.auth.Require(RoleAdmin, a.handlePutSystemConfig))
+	mux.Handle("GET /api/v1/system/config/device", a.auth.Require(RoleAdmin, a.handleGetConfigDevice))
+	mux.Handle("PUT /api/v1/system/config/device", a.auth.Require(RoleAdmin, a.handlePutConfigDevice))
+	mux.Handle("GET /api/v1/system/config/network", a.auth.Require(RoleAdmin, a.handleGetConfigNetwork))
+	mux.Handle("PUT /api/v1/system/config/network", a.auth.Require(RoleAdmin, a.handlePutConfigNetwork))
+	mux.Handle("GET /api/v1/system/config/io", a.auth.Require(RoleAdmin, a.handleGetConfigIO))
+	mux.Handle("PUT /api/v1/system/config/io", a.auth.Require(RoleAdmin, a.handlePutConfigIO))
+	mux.Handle("GET /api/v1/system/config/safe-state", a.auth.Require(RoleAdmin, a.handleGetConfigSafeState))
+	mux.Handle("PUT /api/v1/system/config/safe-state", a.auth.Require(RoleAdmin, a.handlePutConfigSafeState))
+	mux.Handle("GET /api/v1/system/config/virtual-points", a.auth.Require(RoleAdmin, a.handleGetConfigVirtualPoints))
+	mux.Handle("PUT /api/v1/system/config/virtual-points", a.auth.Require(RoleAdmin, a.handlePutConfigVirtualPoints))
+	mux.Handle("GET /api/v1/system/config/bacnet", a.auth.Require(RoleAdmin, a.handleGetConfigBacnet))
+	mux.Handle("PUT /api/v1/system/config/bacnet", a.auth.Require(RoleAdmin, a.handlePutConfigBacnet))
+	mux.Handle("GET /api/v1/system/config/fieldbus", a.auth.Require(RoleAdmin, a.handleGetConfigFieldbus))
+	mux.Handle("PUT /api/v1/system/config/fieldbus", a.auth.Require(RoleAdmin, a.handlePutConfigFieldbus))
+	mux.Handle("GET /api/v1/system/config/time", a.auth.Require(RoleAdmin, a.handleGetConfigTime))
+	mux.Handle("PUT /api/v1/system/config/time", a.auth.Require(RoleAdmin, a.handlePutConfigTime))
+	mux.Handle("GET /api/v1/system/time/status", a.auth.Require(RoleViewer, a.handleGetTimeStatus))
+	mux.Handle("GET /api/v1/users", a.auth.Require(RoleAdmin, a.handleListUsers))
+	mux.Handle("POST /api/v1/users", a.auth.Require(RoleAdmin, a.handleCreateUser))
+	mux.Handle("PUT /api/v1/users/{username}", a.auth.Require(RoleAdmin, a.handleUpdateUser))
+	mux.Handle("DELETE /api/v1/users/{username}", a.auth.Require(RoleAdmin, a.handleDeleteUser))
+	mux.Handle("POST /api/v1/users/{username}/reset-password", a.auth.Require(RoleAdmin, a.handleResetPassword))
+	mux.Handle("GET /api/v1/me", a.auth.Require(RoleViewer, a.handleGetMe))
+	mux.Handle("POST /api/v1/me/change-password", a.auth.Require(RoleViewer, a.handleChangePassword))
+	mux.Handle("GET /api/v1/history", a.auth.Require(RoleViewer, a.handleHistoryRoute))
+	mux.Handle("GET /api/v1/history/export.csv", a.auth.Require(RoleViewer, a.handleHistoryExport))
+	mux.Handle("GET /api/v1/trends/config", a.auth.Require(RoleViewer, a.handleGetTrendConfig))
+	mux.Handle("PUT /api/v1/trends/config", a.auth.Require(RoleAdmin, a.handlePutTrendConfig))
+	mux.Handle("GET /api/v1/schedules", a.auth.Require(RoleViewer, a.handleGetSchedules))
+	mux.Handle("PUT /api/v1/schedules", a.auth.Require(RoleAdmin, a.handlePutSchedules))
+	mux.Handle("GET /api/v1/alarm-settings", a.auth.Require(RoleViewer, a.handleGetAlarmSettings))
+	mux.Handle("PUT /api/v1/alarm-settings", a.auth.Require(RoleAdmin, a.handlePutAlarmSettings))
 	mux.HandleFunc("/", a.handleStatic)
 
 	var handler http.Handler = mux

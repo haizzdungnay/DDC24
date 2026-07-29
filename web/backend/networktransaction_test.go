@@ -213,18 +213,17 @@ func TestNetworkTransactionUnavailableReturns503(t *testing.T) {
 	}
 }
 
-func TestNetworkTransactionViewerCannotReadOrMutate(t *testing.T) {
+func TestNetworkTransactionViewerCanReadButCannotMutate(t *testing.T) {
 	app, token := newTestAppWithRole(t, RoleViewer, nil)
 	stub := &netcfgAuthorityStub{response: NetcfgResponse{Version: 1, Result: "accepted", ReasonCode: "OK", State: "idle"}}
 	app.netcfg = stub
 	read := httptest.NewRecorder()
 	app.Router().ServeHTTP(read, newAuthRequest(http.MethodGet, "/api/v1/network/transaction", "", token))
-	if read.Code != http.StatusForbidden {
+	if read.Code != http.StatusOK || stub.action != "status" {
 		t.Fatalf("GET status=%d action=%q body=%s", read.Code, stub.action, read.Body.String())
 	}
-	if stub.action != "" || len(stub.calls) != 0 {
-		t.Fatalf("authority called for forbidden GET: %q", stub.action)
-	}
+	stub.action = ""
+	stub.calls = nil
 	write := httptest.NewRecorder()
 	app.Router().ServeHTTP(write, newAuthRequest(http.MethodPost, "/api/v1/network/transaction/stage", `{"candidate":{"interface":"eth0","mode":"dhcp"}}`, token))
 	if write.Code != http.StatusForbidden {

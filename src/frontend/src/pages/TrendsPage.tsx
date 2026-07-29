@@ -126,7 +126,6 @@ export function TrendsPage() {
   const hasSavedPrefsRef = useRef(initialPrefsRef.current !== null)
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const virtualState = useApi(apiClient.getVirtualPoints, [], { refreshMs: 2000 })
-  const timeStatusState = useApi(apiClient.getTimeStatus, [], { refreshMs: 60_000 })
   const analogPoints = useMemo(() => {
     const polledPoints = pointsState.data ?? []
     const source = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
@@ -174,7 +173,6 @@ export function TrendsPage() {
   )
   const tableRows = useMemo(() => buildTrendRows(series, selectedPoints, samples, HISTORIAN_V2_TRENDS_ENABLED && !customRange), [customRange, samples, selectedPoints, series])
   const historyPresentation = historyPresentationState(historyState.data, historyState.error)
-  const trendTimeZone = timeStatusState.data?.timezone || 'local'
   const currentRange = rangeOptions.find((item) => item.minutes === rangeMinutes)
   const rangeLabel = customRange
     ? pick('Tùy chỉnh (UTC)', 'Custom (UTC)')
@@ -336,7 +334,7 @@ export function TrendsPage() {
                 : historyState.error
                   ? <StateBlock state="error" title={pick('Không tải được historian', 'Could not load historian')} detail={historyState.error.message} />
                 : series.length && chartSamples.length > 1
-                ? <TrendChart data={chartSamples} series={series} height={360} timeZone={trendTimeZone} />
+                ? <TrendChart data={chartSamples} series={series} height={360} timeZone="UTC" />
                 : <StateBlock state="empty" title={series.length ? pick('Không có mẫu trong khoảng đã chọn', 'No history in the selected range') : pick('Chọn ít nhất một điểm trend', 'Select at least one trend point')} detail={series.length ? pick('Backend không trả sample khả dụng; gap evidence ở banner phía trên.', 'The backend returned no available samples; see the gap evidence above.') : undefined} />}
           </Panel>
         </div>

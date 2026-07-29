@@ -7,7 +7,6 @@ import { Panel } from '../components/Panel'
 import { useToast } from '../components/Toast'
 import { useI18n } from '../i18n'
 import { formatDateTime } from '../utils'
-import type { UserRole } from '../types'
 
 export function UserInfoPage() {
   const { session, logout } = useAuth()
@@ -27,9 +26,8 @@ export function UserInfoPage() {
   const role = session?.role ?? 'viewer'
   const initial = username.slice(0, 1).toUpperCase()
   const countdownText = `${Math.floor(countdown / 60).toString().padStart(2, '0')}:${(countdown % 60).toString().padStart(2, '0')}`
-  const roleSummary: Record<UserRole, string> = {
+  const roleSummary = {
     admin: pick('Toàn quyền: cấu hình, override, acknowledge alarm, deploy demo.', 'Full access: configuration, override, alarm acknowledge, demo deploy.'),
-    engineer: pick('Kỹ sư: cấu hình và deploy, không quản lý user hoặc database.', 'Engineer access: configuration and deploy, excluding users and database policy.'),
     operator: pick('Vận hành: override có kiểm soát và acknowledge alarm.', 'Operator access: controlled override and alarm acknowledge.'),
     viewer: pick('Chỉ xem: theo dõi dashboard, monitoring, alarm và trends.', 'Read-only access: dashboard, monitoring, alarms, and trends.')
   }

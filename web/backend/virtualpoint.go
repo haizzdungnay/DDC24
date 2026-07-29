@@ -95,7 +95,6 @@ func (a *App) handleCreateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(item.Tag) == "" {
 		item.Tag = item.ID
 	}
-	item.Tag = canonicalVirtualPointSelfTag(item.Tag, item.ID)
 	beforeVP := clonePointVirtualConfig(cfg)
 	beforeIO, err := readConfig(a, configGroupIO, ConfigIO{})
 	if err != nil {
@@ -112,14 +111,6 @@ func (a *App) handleCreateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 	ioCfg := beforeIO
 	if errs := validatePointNamespaceTransition(beforeIO, beforeVP, ioCfg, next); len(errs) > 0 {
 		writePointTagErrors(w, errs)
-		return
-	}
-	if err := a.resetVirtualPointSlot(item.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if err := a.purgeVirtualPointData(r.Context(), item.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if err := a.writeVirtualPointsConfig(r, next, "create"); err != nil {
@@ -163,7 +154,6 @@ func (a *App) handleUpdateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item.ID = id
-	item.Tag = canonicalVirtualPointSelfTag(item.Tag, item.ID)
 	cfg.Items[index] = item
 	if errs := append(validateConfigVirtualPoints(cfg), validateVirtualPointMetadata(cfg)...); len(errs) > 0 {
 		writePointTagErrors(w, errs)
@@ -217,20 +207,6 @@ func (a *App) handleDeleteVirtualPoint(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := a.purgeVirtualPointData(r.Context(), id); err != nil {
-		user := "-"
-		if principal := principalFromContext(r.Context()); principal != nil {
-			user = principal.Username
-		}
-		a.audit.Change(user, "virtual-points.delete", configGroupVirtualPoints.file, "failed", r.RemoteAddr)
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	user := "-"
-	if principal := principalFromContext(r.Context()); principal != nil {
-		user = principal.Username
-	}
-	a.audit.Change(user, "virtual-points.delete", configGroupVirtualPoints.file, "applied", r.RemoteAddr)
 	writeJSON(w, http.StatusOK, ConfigPutResult{Result: "success", Applied: true, Reload: reloadNone, Warnings: []string{}})
 }
 
@@ -266,17 +242,6 @@ func (a *App) writeVirtualPointsConfig(r *http.Request, cfg ConfigVirtualPoints,
 		cfg.Items[i].Generation = generation
 		authority.Generations[cfg.Items[i].ID] = generation
 	}
-	if op == "delete" {
-		active := make(map[string]struct{}, len(cfg.Items))
-		for _, point := range cfg.Items {
-			active[point.ID] = struct{}{}
-		}
-		for _, point := range current.Items {
-			if _, ok := active[point.ID]; !ok {
-				delete(authority.Generations, point.ID)
-			}
-		}
-	}
 	authority.Revision++
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -297,24 +262,8 @@ func (a *App) writeVirtualPointsConfig(r *http.Request, cfg ConfigVirtualPoints,
 	if principal := principalFromContext(r.Context()); principal != nil {
 		user = principal.Username
 	}
-	if op != "delete" {
-		a.audit.Change(user, "virtual-points."+op, configGroupVirtualPoints.file, "applied", r.RemoteAddr)
-	}
+	a.audit.Change(user, "virtual-points."+op, configGroupVirtualPoints.file, "applied", r.RemoteAddr)
 	return nil
-}
-
-func (a *App) resetVirtualPointSlot(pointID string) error {
-	authority, err := a.readPointNamespaceAuthority()
-	if err != nil {
-		return err
-	}
-	pointID = canonicalHistoryPointID(pointID)
-	if _, exists := authority.Generations[pointID]; !exists {
-		return nil
-	}
-	delete(authority.Generations, pointID)
-	authority.Revision++
-	return a.writePointNamespaceAuthority(authority)
 }
 
 func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationError {
@@ -434,7 +383,7 @@ func normalizeVirtualPoint(item VirtualPoint) VirtualPoint {
 	item.ID = canonicalVirtualPointID(item.ID)
 	item.Channel, _ = globalPointChannel(item.ID)
 	if display, _, err := normalizePointTag(fallbackPointTag(item.Tag, item.ID)); err == nil {
-		item.Tag = canonicalVirtualPointSelfTag(display, item.ID)
+		item.Tag = display
 	}
 	item.SignalType = strings.ToLower(strings.TrimSpace(item.SignalType))
 	item.Label = ""
@@ -453,14 +402,6 @@ func normalizeVirtualPoint(item VirtualPoint) VirtualPoint {
 		}
 	}
 	return item
-}
-
-func canonicalVirtualPointSelfTag(tag, pointID string) string {
-	display, _, err := normalizePointTag(tag)
-	if err == nil && strings.EqualFold(display, pointID) {
-		return pointID
-	}
-	return tag
 }
 
 func normalizeVirtualPointUnit(unit string) string {

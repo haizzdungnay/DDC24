@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,23 +21,7 @@ type Role string
 const (
 	RoleViewer   Role = "viewer"
 	RoleOperator Role = "operator"
-	RoleEngineer Role = "engineer"
 	RoleAdmin    Role = "admin"
-)
-
-type Permission string
-
-const (
-	PermissionRead            Permission = "read"
-	PermissionSelfManage      Permission = "self.manage"
-	PermissionOperate         Permission = "operate"
-	PermissionProgramEdit     Permission = "program.edit"
-	PermissionProgramActivate Permission = "program.activate"
-	PermissionSettingsManage  Permission = "settings.manage"
-	PermissionDatabaseManage  Permission = "database.manage"
-	PermissionUsersManage     Permission = "users.manage"
-	PermissionSystemRelease   Permission = "system.release"
-	usersSchemaVersion                   = "2.0"
 )
 
 type contextKey string
@@ -47,10 +29,9 @@ type contextKey string
 const principalContextKey contextKey = "principal"
 
 type User struct {
-	Username       string `json:"username"`
-	Role           Role   `json:"role"`
-	Password       string `json:"pw_bcrypt"`
-	SessionVersion uint64 `json:"session_version"`
+	Username string `json:"username"`
+	Role     Role   `json:"role"`
+	Password string `json:"pw_bcrypt"`
 }
 
 type usersFile struct {
@@ -59,20 +40,18 @@ type usersFile struct {
 }
 
 type Principal struct {
-	Username       string
-	Role           Role
-	SessionVersion uint64
-	Token          string
+	Username string
+	Role     Role
+	Token    string
 }
 
 type AuthService struct {
-	secret         []byte
-	usersConf      string
-	users          map[string]User
-	revoked        map[string]time.Time
-	mu             sync.Mutex
-	audit          *AuditLogger
-	writeUsersFile func(string, []byte, os.FileMode) error
+	secret    []byte
+	usersConf string
+	users     map[string]User
+	revoked   map[string]time.Time
+	mu        sync.Mutex
+	audit     *AuditLogger
 }
 
 var (
@@ -81,14 +60,12 @@ var (
 	ErrInvalidUserInput   = errors.New("invalid user input")
 	ErrInvalidPassword    = errors.New("invalid password")
 	ErrInvalidOldPassword = errors.New("invalid old password")
-	ErrLastAdmin          = errors.New("cannot demote or delete last admin")
+	ErrLastAdmin          = errors.New("cannot delete last admin")
 	ErrSelfDelete         = errors.New("cannot delete acting user")
-	ErrSessionVersion     = errors.New("session version exhausted")
 )
 
 type jwtClaims struct {
-	Role           string `json:"role"`
-	SessionVersion uint64 `json:"session_version"`
+	Role string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -98,12 +75,11 @@ func NewAuthService(cfg Config, audit *AuditLogger) (*AuthService, error) {
 		return nil, err
 	}
 	return &AuthService{
-		secret:         []byte(cfg.JWTSecret),
-		usersConf:      cfg.UsersConf,
-		users:          users,
-		revoked:        make(map[string]time.Time),
-		audit:          audit,
-		writeUsersFile: writeConfigFileAtomic,
+		secret:    []byte(cfg.JWTSecret),
+		usersConf: cfg.UsersConf,
+		users:     users,
+		revoked:   make(map[string]time.Time),
+		audit:     audit,
 	}, nil
 }
 
@@ -120,9 +96,6 @@ func loadUsers(path string) (map[string]User, error) {
 	for _, user := range file.Users {
 		if user.Username == "" || user.Password == "" || !validRole(user.Role) {
 			return nil, fmt.Errorf("invalid user entry %q", user.Username)
-		}
-		if user.SessionVersion == 0 {
-			user.SessionVersion = 1
 		}
 		if _, exists := users[user.Username]; exists {
 			return nil, fmt.Errorf("duplicate user entry %q", user.Username)
@@ -143,15 +116,9 @@ func (a *AuthService) Authenticate(username, password, remote string) (string, R
 		return "", "", errors.New("invalid credentials")
 	}
 	now := time.Now().UTC()
-	jwtID, err := newJWTID()
-	if err != nil {
-		return "", "", fmt.Errorf("generate jwt id: %w", err)
-	}
 	claims := jwtClaims{
-		Role:           string(user.Role),
-		SessionVersion: user.SessionVersion,
+		Role: string(user.Role),
 		RegisteredClaims: jwt.RegisteredClaims{
-			ID:        jwtID,
 			Subject:   user.Username,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
@@ -165,14 +132,6 @@ func (a *AuthService) Authenticate(username, password, remote string) (string, R
 		a.audit.Login(username, string(user.Role), "accepted", remote)
 	}
 	return token, user.Role, nil
-}
-
-func newJWTID() (string, error) {
-	var id [16]byte
-	if _, err := rand.Read(id[:]); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(id[:]), nil
 }
 
 func (a *AuthService) ListUsers() []UserDTO {
@@ -208,7 +167,7 @@ func (a *AuthService) AddUser(username string, role Role, password string) error
 		return fmt.Errorf("hash password: %w", err)
 	}
 	users := cloneUsers(a.users)
-	users[username] = User{Username: username, Role: role, Password: string(hash), SessionVersion: 1}
+	users[username] = User{Username: username, Role: role, Password: string(hash)}
 	return a.persistUsers(users)
 }
 
@@ -223,15 +182,6 @@ func (a *AuthService) SetRole(username string, role Role) error {
 	user, exists := a.users[username]
 	if !exists {
 		return ErrUserNotFound
-	}
-	if user.Role == role {
-		return nil
-	}
-	if user.Role == RoleAdmin && role != RoleAdmin && countAdmins(a.users) <= 1 {
-		return ErrLastAdmin
-	}
-	if err := incrementSessionVersion(&user); err != nil {
-		return err
 	}
 	users := cloneUsers(a.users)
 	user.Role = role
@@ -282,9 +232,6 @@ func (a *AuthService) SetPassword(username, newpw string) error {
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
-	if err := incrementSessionVersion(&user); err != nil {
-		return err
-	}
 	users := cloneUsers(a.users)
 	user.Password = string(hash)
 	users[username] = user
@@ -313,9 +260,6 @@ func (a *AuthService) ChangePassword(username, oldpw, newpw string) error {
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
-	if err := incrementSessionVersion(&user); err != nil {
-		return err
-	}
 	users := cloneUsers(a.users)
 	user.Password = string(hash)
 	users[username] = user
@@ -329,7 +273,7 @@ func (a *AuthService) persistUsers(users map[string]User) error {
 	}
 	sort.Strings(names)
 
-	file := usersFile{SchemaVersion: usersSchemaVersion, Users: make([]User, 0, len(names))}
+	file := usersFile{SchemaVersion: "1.0", Users: make([]User, 0, len(names))}
 	for _, username := range names {
 		file.Users = append(file.Users, users[username])
 	}
@@ -338,7 +282,7 @@ func (a *AuthService) persistUsers(users map[string]User) error {
 		return fmt.Errorf("marshal users: %w", err)
 	}
 	data = append(data, '\n')
-	if err := a.writeUsersFile(a.usersConf, data, 0o600); err != nil {
+	if err := writeConfigFileAtomic(a.usersConf, data, 0o600); err != nil {
 		return err
 	}
 	reloaded, err := loadUsers(a.usersConf)
@@ -353,6 +297,15 @@ func (a *AuthService) Validate(rawToken string) (*Principal, error) {
 	if rawToken == "" {
 		return nil, errors.New("missing token")
 	}
+	a.mu.Lock()
+	if exp, ok := a.revoked[rawToken]; ok {
+		if time.Now().Before(exp) {
+			a.mu.Unlock()
+			return nil, errors.New("token revoked")
+		}
+		delete(a.revoked, rawToken)
+	}
+	a.mu.Unlock()
 
 	claims := &jwtClaims{}
 	token, err := jwt.ParseWithClaims(rawToken, claims, func(token *jwt.Token) (any, error) {
@@ -365,28 +318,10 @@ func (a *AuthService) Validate(rawToken string) (*Principal, error) {
 		return nil, errors.New("invalid token")
 	}
 	role := Role(claims.Role)
-	if !validRole(role) || claims.Subject == "" || claims.SessionVersion == 0 {
+	if !validRole(role) || claims.Subject == "" {
 		return nil, errors.New("invalid claims")
 	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if exp, ok := a.revoked[rawToken]; ok {
-		if time.Now().Before(exp) {
-			return nil, errors.New("token revoked")
-		}
-		delete(a.revoked, rawToken)
-	}
-	user, ok := a.users[claims.Subject]
-	if !ok || user.Role != role || user.SessionVersion != claims.SessionVersion {
-		return nil, errors.New("stale token")
-	}
-	return &Principal{
-		Username:       claims.Subject,
-		Role:           role,
-		SessionVersion: claims.SessionVersion,
-		Token:          rawToken,
-	}, nil
+	return &Principal{Username: claims.Subject, Role: role, Token: rawToken}, nil
 }
 
 func (a *AuthService) Revoke(rawToken string) {
@@ -404,21 +339,15 @@ func (a *AuthService) Revoke(rawToken string) {
 	a.mu.Unlock()
 }
 
-func (a *AuthService) RequirePermission(permission Permission, next http.HandlerFunc) http.Handler {
+func (a *AuthService) Require(min Role, next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := bearerToken(r)
 		principal, err := a.Validate(token)
 		if err != nil {
-			if a.audit != nil {
-				a.audit.Authorization(nil, permission, r.Method, r.URL.Path, "unauthenticated", r.RemoteAddr)
-			}
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		if !principal.HasPermission(permission) {
-			if a.audit != nil {
-				a.audit.Authorization(principal, permission, r.Method, r.URL.Path, "denied", r.RemoteAddr)
-			}
+		if !RoleAllows(principal.Role, min) {
 			writeError(w, http.StatusForbidden, "forbidden")
 			return
 		}
@@ -440,45 +369,12 @@ func principalFromContext(ctx context.Context) *Principal {
 	return principal
 }
 
-func (p *Principal) HasPermission(permission Permission) bool {
-	return p != nil && RoleHasPermission(p.Role, permission)
-}
-
-func RoleHasPermission(role Role, permission Permission) bool {
-	if !knownPermission(permission) {
-		return false
-	}
-	switch role {
-	case RoleViewer:
-		return permission == PermissionRead || permission == PermissionSelfManage
-	case RoleOperator:
-		return permission == PermissionRead || permission == PermissionSelfManage ||
-			permission == PermissionOperate || permission == PermissionProgramEdit
-	case RoleEngineer:
-		return permission == PermissionRead || permission == PermissionSelfManage ||
-			permission == PermissionOperate || permission == PermissionProgramEdit ||
-			permission == PermissionProgramActivate || permission == PermissionSettingsManage ||
-			permission == PermissionSystemRelease
-	case RoleAdmin:
-		return true
-	default:
-		return false
-	}
-}
-
-func knownPermission(permission Permission) bool {
-	switch permission {
-	case PermissionRead, PermissionSelfManage, PermissionOperate, PermissionProgramEdit,
-		PermissionProgramActivate, PermissionSettingsManage, PermissionDatabaseManage,
-		PermissionUsersManage, PermissionSystemRelease:
-		return true
-	default:
-		return false
-	}
+func RoleAllows(actual, required Role) bool {
+	return roleRank(actual) >= roleRank(required)
 }
 
 func validRole(role Role) bool {
-	return role == RoleViewer || role == RoleOperator || role == RoleEngineer || role == RoleAdmin
+	return role == RoleViewer || role == RoleOperator || role == RoleAdmin
 }
 
 func validUsername(username string) bool {
@@ -516,12 +412,17 @@ func countAdmins(users map[string]User) int {
 	return count
 }
 
-func incrementSessionVersion(user *User) error {
-	if user == nil || user.SessionVersion == ^uint64(0) {
-		return ErrSessionVersion
+func roleRank(role Role) int {
+	switch role {
+	case RoleAdmin:
+		return 3
+	case RoleOperator:
+		return 2
+	case RoleViewer:
+		return 1
+	default:
+		return 0
 	}
-	user.SessionVersion++
-	return nil
 }
 
 func osReadFile(path string) ([]byte, error) {

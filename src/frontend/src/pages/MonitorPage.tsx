@@ -2,8 +2,6 @@ import { Circle, Pencil, Power, RefreshCw, RotateCcw, Save, Search, ShieldAlert,
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { POINT_UNIT_OPTIONS, aiUnitFromPointUnit, apiClient, pointUnitFromAiUnit } from '../api/client'
 import { displayPointName, normalizePointName, normalizePointTag, pointNameConflicts, pointFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
-import { useAuth } from '../auth/AuthProvider'
-import { can, permissions } from '../auth/permissions'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
@@ -106,9 +104,6 @@ function selectUnitValue(unit?: string): string {
 }
 
 export function MonitorPage() {
-  const { session } = useAuth()
-  const canOperate = can(session?.role, permissions.operate)
-  const canConfigure = can(session?.role, permissions.settingsManage)
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const virtualState = useApi(apiClient.getVirtualPoints, [], { refreshMs: 2000 })
   const realtime = useRealtime()
@@ -180,7 +175,6 @@ export function MonitorPage() {
   }
 
   async function savePointBasics(point: Point, config: { tag: string; name: string; unit?: string }) {
-    if (!canConfigure) return
     const tagError = point.kind === 'virtual' ? validatePointTag(config.tag) : undefined
     if (tagError) throw new Error(tagError)
     const nameError = validatePointName(config.name)
@@ -199,7 +193,7 @@ export function MonitorPage() {
   }
 
   async function forcePointWithDuration(point: Point, value: number | boolean | string, durationSeconds: number) {
-    if (!canOperate || !canForcePoint(point)) return
+    if (!canForcePoint(point)) return
     if (forceReleaseTimers.current[point.id]) {
       window.clearTimeout(forceReleaseTimers.current[point.id])
       delete forceReleaseTimers.current[point.id]
@@ -229,7 +223,7 @@ export function MonitorPage() {
   }
 
   async function releasePoint(point: Point) {
-    if (!canOperate || !canForcePoint(point)) return
+    if (!canForcePoint(point)) return
     if (forceReleaseTimers.current[point.id]) {
       window.clearTimeout(forceReleaseTimers.current[point.id])
       delete forceReleaseTimers.current[point.id]
@@ -240,7 +234,7 @@ export function MonitorPage() {
   }
 
   async function confirmForce() {
-    if (!selected || !canOperate) return
+    if (!selected) return
     try {
       const value = parseForceValue(selected, forceValue)
       const durationSeconds = parseForceDurationSeconds(forceDurationMinutes)
@@ -252,13 +246,11 @@ export function MonitorPage() {
   }
 
   function startEditName(point: Point) {
-    if (!canConfigure) return
     setEditingName(point.id)
     setEditingNameValue(point.name)
   }
 
   async function saveName(point: Point) {
-    if (!canConfigure) return
     const nameError = validatePointName(editingNameValue)
     if (nameError) {
       toast.push('error', nameError)
@@ -280,13 +272,11 @@ export function MonitorPage() {
   }
 
   function startEditUnit(point: Point) {
-    if (!canConfigure) return
     setEditingUnit(point.id)
     setEditingUnitValue(selectUnitValue(point.unit))
   }
 
   async function saveUnit(point: Point) {
-    if (!canConfigure) return
     try {
       await apiClient.updatePointConfig(point.id, { unit: editingUnitValue })
       toast.push('success', pick(`Đã cập nhật đơn vị ${point.id}`, `Updated unit for ${point.id}`))
@@ -303,12 +293,10 @@ export function MonitorPage() {
   }
 
   function startEditTrend(point: Point) {
-    if (!canConfigure) return
     setEditingTrend(point.id)
   }
 
   async function saveTrend(point: Point) {
-    if (!canConfigure) return
     const enabled = editingTrendEnabled[point.id] ?? true
     try {
       await apiClient.updatePointConfig(point.id, { trendEnabled: enabled })
@@ -325,7 +313,6 @@ export function MonitorPage() {
   }
 
   function toggleTrend(pointId: string) {
-    if (!canConfigure) return
     setEditingTrendEnabled((prev) => ({ ...prev, [pointId]: !prev[pointId] }))
   }
 
@@ -359,15 +346,13 @@ export function MonitorPage() {
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_334px]">
         <div className={cn('space-y-3', offline && 'stale')}>
-          <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onToggle={canOperate ? (point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) } : undefined} />
+          <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onToggle={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
           <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} />
-          <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={canOperate ? (point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) } : undefined} />
-          <AnalogSection title="VIRTUAL POINTS" rows={groups.Virtual} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={canOperate ? (point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) } : undefined} />
+          <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
+          <AnalogSection title="VIRTUAL POINTS" rows={groups.Virtual} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
         </div>
         {selected && <DetailPanel
           point={selected}
-          canOperate={canOperate}
-          canConfigure={canConfigure}
           note={note}
           setNote={setNote}
           editingName={editingName}
@@ -397,8 +382,6 @@ export function MonitorPage() {
         <PointDetailsModal
           key={modalPoint.id}
           point={modalPoint}
-          canOperate={canOperate}
-          canConfigure={canConfigure}
           conflictIds={nameConflicts.get(modalPoint.id)}
           onClose={() => setPointModalId(null)}
           onSave={savePointBasics}
@@ -407,7 +390,7 @@ export function MonitorPage() {
         />
       )}
 
-      <Modal open={canOperate && forceOpen} title={`${selected?.kind === 'virtual' ? 'Write' : 'Force'} ${selected?.id ?? ''}`} danger={selected?.kind !== 'virtual'} confirmLabel={selected?.kind === 'virtual' ? 'Write' : pick('Force output', 'Force output')} onConfirm={confirmForce} onClose={() => setForceOpen(false)}>
+      <Modal open={forceOpen} title={`${selected?.kind === 'virtual' ? 'Write' : 'Force'} ${selected?.id ?? ''}`} danger={selected?.kind !== 'virtual'} confirmLabel={selected?.kind === 'virtual' ? 'Write' : pick('Force output', 'Force output')} onConfirm={confirmForce} onClose={() => setForceOpen(false)}>
         <div className="space-y-4">
           <div className="flex gap-3 rounded-[var(--radius)] border border-[rgba(224,161,6,0.38)] bg-[rgba(224,161,6,0.08)] p-3 text-[var(--c-warn-fg)]">
             <ShieldAlert className="h-5 w-5 shrink-0" />
@@ -432,7 +415,7 @@ function StatCard({ label, value, detail, danger }: { label: string; value: numb
   )
 }
 
-function DigitalSection({ title, rows, selectedId, conflicts, onSelect, onOpenDetails, onToggle }: { title: string; rows: Point[]; selectedId?: string; conflicts: Map<string, string[]>; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle?: (point: Point) => void }) {
+function DigitalSection({ title, rows, selectedId, conflicts, onSelect, onOpenDetails, onToggle }: { title: string; rows: Point[]; selectedId?: string; conflicts: Map<string, string[]>; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void }) {
   const { pick } = useI18n()
   return (
     <SectionFrame title={`${title} (${rows.length})`}>
@@ -444,7 +427,7 @@ function DigitalSection({ title, rows, selectedId, conflicts, onSelect, onOpenDe
   )
 }
 
-function DigitalRow({ point, conflictIds, selected, onSelect, onOpenDetails, onToggle }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle?: (point: Point) => void }) {
+function DigitalRow({ point, conflictIds, selected, onSelect, onOpenDetails, onToggle }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onToggle: (point: Point) => void }) {
   const active = Boolean(point.value)
   const state = active ? 'on' : 'off'
   const stateFillColor = statusFill(state)
@@ -455,7 +438,7 @@ function DigitalRow({ point, conflictIds, selected, onSelect, onOpenDetails, onT
       <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
       <span className="inline-flex items-center gap-2 font-semibold" style={{ color: stateTextColor }}><Circle className="h-2.5 w-2.5 fill-current" style={{ color: stateFillColor }} />{active ? 'ON' : 'OFF'}</span>
       <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
-      <span onClick={onToggle ? (event) => { event.stopPropagation(); onToggle(point) } : undefined} className={cn('ml-auto flex h-5 w-9 items-center rounded-full border px-0.5 transition', onToggle && 'cursor-pointer', active ? 'justify-end border-[var(--c-good)] bg-[rgba(47,164,90,0.14)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface-2)]')} role={onToggle ? 'switch' : undefined} aria-checked={onToggle ? active : undefined} tabIndex={onToggle ? 0 : undefined}>
+      <span onClick={(event) => { event.stopPropagation(); onToggle(point) }} className={cn('ml-auto flex h-5 w-9 items-center rounded-full border px-0.5 transition', active ? 'justify-end border-[var(--c-good)] bg-[rgba(47,164,90,0.14)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface-2)]')} role="switch" aria-checked={active} tabIndex={0}>
         <span className={cn('h-3.5 w-3.5 rounded-full', active ? 'bg-[var(--c-good)]' : 'bg-[var(--c-off)]')} />
       </span>
     </button>
@@ -502,8 +485,6 @@ function SectionFrame({ title, children }: { title: string; children: React.Reac
 
 function PointDetailsModal({
   point,
-  canOperate,
-  canConfigure,
   conflictIds,
   onClose,
   onSave,
@@ -511,8 +492,6 @@ function PointDetailsModal({
   onRelease
 }: {
   point: Point
-  canOperate: boolean
-  canConfigure: boolean
   conflictIds?: string[]
   onClose: () => void
   onSave: (point: Point, config: { tag: string; name: string; unit?: string }) => Promise<void>
@@ -538,7 +517,6 @@ function PointDetailsModal({
   const nameInputRef = useRef<HTMLInputElement>(null)
 
   async function handleSave() {
-    if (!canConfigure) return
     const localError = point.kind === 'virtual' ? validatePointTag(tagValue) : undefined
     const localNameError = validatePointName(nameValue)
     if (localError) {
@@ -575,7 +553,6 @@ function PointDetailsModal({
   }
 
   async function handleForce() {
-    if (!canOperate) return
     try {
       setBusy('force')
       await onForce(point, parseForceValue(point, forceValue), parseForceDurationSeconds(forceDurationMinutes))
@@ -587,7 +564,6 @@ function PointDetailsModal({
   }
 
   async function handleRelease() {
-    if (!canOperate) return
     try {
       setBusy('release')
       await onRelease(point)
@@ -606,16 +582,16 @@ function PointDetailsModal({
             <div className="grid gap-3 md:grid-cols-2">
               <label className="block space-y-1">
                 <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">Tag</span>
-                <input readOnly={!canConfigure || point.kind !== 'virtual'} aria-invalid={Boolean(tagError)} aria-describedby={tagError ? `${point.id}-tag-error` : undefined} value={tagValue} onChange={(event) => setTagValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
+                <input readOnly={point.kind !== 'virtual'} aria-invalid={Boolean(tagError)} aria-describedby={tagError ? `${point.id}-tag-error` : undefined} value={tagValue} onChange={(event) => setTagValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
                 {tagError && <span id={`${point.id}-tag-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{tagError}</span>}
               </label>
               <label className="block space-y-1">
                 <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Point name', 'Point name')}</span>
-                <input ref={nameInputRef} readOnly={!canConfigure} data-point-field="name" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? `${point.id}-name-error` : undefined} value={nameValue} onChange={(event) => setNameValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
+                <input ref={nameInputRef} data-point-field="name" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? `${point.id}-name-error` : undefined} value={nameValue} onChange={(event) => setNameValue(event.target.value)} className="h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none focus:border-[var(--c-accent)]" />
                 {nameError && <span id={`${point.id}-name-error`} role="alert" className="block text-xs text-[var(--c-fault-fg)]">{nameError}</span>}
               </label>
             </div>
-            {canConfigure && <Button size="sm" variant="primary" icon={<Save className="h-4 w-4" />} loading={busy === 'save'} onClick={handleSave}>{pick('Save basics', 'Save basics')}</Button>}
+            <Button size="sm" variant="primary" icon={<Save className="h-4 w-4" />} loading={busy === 'save'} onClick={handleSave}>{pick('Save basics', 'Save basics')}</Button>
             <PointNameConflictNotice pointId={point.id} conflictIds={conflictIds} />
           </div>
 
@@ -646,7 +622,7 @@ function PointDetailsModal({
           <PointInfo label="Trend samples" value={point.trend?.length ?? 0} />
         </dl>
 
-        {canOperate && canForce && (
+        {canForce && (
           <section className="rounded-[var(--radius)] border border-[rgba(224,161,6,0.38)] bg-[rgba(224,161,6,0.08)] p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--c-warn-fg)]">
               <ShieldAlert className="h-4 w-4" />
@@ -691,8 +667,6 @@ function PointInfo({ label, value }: { label: string; value: React.ReactNode }) 
 
 function DetailPanel({
   point,
-  canOperate,
-  canConfigure,
   note,
   setNote,
   editingName,
@@ -717,8 +691,6 @@ function DetailPanel({
   conflictIds
 }: {
   point: Point
-  canOperate: boolean
-  canConfigure: boolean
   note: string
   setNote: (value: string) => void
   editingName: string | null
@@ -751,7 +723,7 @@ function DetailPanel({
   const valuePanelStyle = isBinary
     ? { borderColor: active ? 'rgba(47,164,90,0.48)' : 'var(--c-border)', backgroundColor: active ? 'rgba(47,164,90,0.12)' : 'var(--c-surface-2)' }
     : undefined
-  const canForce = canOperate && canForcePoint(point)
+  const canForce = canForcePoint(point)
   const groupText = `${point.kind} - ${kindLabel[point.kind]}`
   const history = [0, 1, 2, 3, 4].map((index) => ({ time: new Date(Date.now() - index * 7 * 60_000).toISOString(), value: index % 2 === 0 ? active : !active }))
   const isEditing = editingName === point.id
@@ -783,9 +755,9 @@ function DetailPanel({
               ) : (
                 <>
                   <div className="text-sm font-semibold">{point.name}</div>
-                  {canConfigure && <button onClick={onStartEdit} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Đổi tên', 'Rename')}>
+                  <button onClick={onStartEdit} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Đổi tên', 'Rename')}>
                     <Pencil className="h-4 w-4" />
-                  </button>}
+                  </button>
                 </>
               )}
             </div>
@@ -818,9 +790,9 @@ function DetailPanel({
                     <>
                       <span>|</span>
                       <span className="mono">{point.unit ?? '-'}</span>
-                      {canConfigure && <button onClick={onStartEditUnit} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Đổi đơn vị', 'Change unit')}>
+                      <button onClick={onStartEditUnit} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Đổi đơn vị', 'Change unit')}>
                         <Pencil className="h-3 w-3" />
-                      </button>}
+                      </button>
                     </>
                   )}
                 </>
@@ -847,16 +819,16 @@ function DetailPanel({
                 ) : (
                   <div className="flex items-center gap-2">
                     <span
-                      className={cn('flex h-5 w-9 items-center rounded-full border px-0.5 transition', canConfigure && 'cursor-pointer', trendEnabled ? 'justify-end border-[var(--c-good)] bg-[rgba(47,164,90,0.14)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface)]')}
-                      onClick={canConfigure ? () => onToggleTrend(point.id) : undefined}
-                      role={canConfigure ? 'switch' : undefined}
-                      aria-checked={canConfigure ? trendEnabled : undefined}
+                      className={cn('flex h-5 w-9 items-center rounded-full border px-0.5 transition cursor-pointer', trendEnabled ? 'justify-end border-[var(--c-good)] bg-[rgba(47,164,90,0.14)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface)]')}
+                      onClick={() => onToggleTrend(point.id)}
+                      role="switch"
+                      aria-checked={trendEnabled}
                     >
                       <span className={cn('h-3.5 w-3.5 rounded-full', trendEnabled ? 'bg-[var(--c-good)]' : 'bg-[var(--c-off)]')} />
                     </span>
-                    {canConfigure && <button onClick={onStartEditTrend} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Cài đặt trend', 'Trend settings')}>
+                    <button onClick={onStartEditTrend} className="text-[var(--c-accent)] hover:text-[var(--c-accent-2)]" title={pick('Cài đặt trend', 'Trend settings')}>
                       <Pencil className="h-3 w-3" />
-                    </button>}
+                    </button>
                   </div>
                 )}
               </div>

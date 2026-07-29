@@ -1,7 +1,5 @@
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
-import { useAuth } from '../auth/AuthProvider'
-import { can, permissions } from '../auth/permissions'
 import { ControllerDiagram } from '../components/ControllerDiagram'
 import { Panel } from '../components/Panel'
 import { useApi } from '../hooks/useApi'
@@ -9,8 +7,6 @@ import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 
 export function DiagramPage() {
-  const { session } = useAuth()
-  const canManageSettings = can(session?.role, permissions.settingsManage)
   const { t } = useI18n()
   const navigate = useNavigate()
   const realtime = useRealtime()
@@ -31,7 +27,7 @@ export function DiagramPage() {
             points={points}
             health={healthState.data ?? undefined}
             dataAgeLabel={dataAgeLabel}
-            onOpenNetwork={canManageSettings ? () => navigate('/settings/network') : undefined}
+            onOpenNetwork={() => navigate('/settings/network')}
           />
         </Panel>
       </div>

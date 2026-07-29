@@ -4,7 +4,6 @@ import { API_ORIGIN, AUTH_MODE, IS_DEMO } from '../config'
 import { setAuthHeaderProvider } from '../api/client'
 import { setHistoryAuthHeaderProvider } from '../api/history'
 import type { UserRole } from '../types'
-import { isUserRole } from './permissions'
 
 interface Session {
   username: string
@@ -67,14 +66,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       body: JSON.stringify({ username, password })
     })
     if (!response.ok) throw new Error('Đăng nhập thất bại')
-    const body = await response.json() as { token?: string; role?: unknown }
-    if (!isUserRole(body.role)) throw new Error('Login response contains an invalid role')
+    const body = await response.json() as { token?: string; role?: UserRole }
     if (body.token) {
       const provider = () => ({ Authorization: `Bearer ${body.token}` })
       setAuthHeaderProvider(provider)
       setHistoryAuthHeaderProvider(provider)
     }
-    setSession({ username, role: body.role, token: body.token })
+    setSession({ username, role: body.role ?? 'admin', token: body.token })
   }, [])
 
   const logout = useCallback(() => {
