@@ -68,7 +68,7 @@ type historianHistoryHTTPRequest struct {
 }
 
 // NewHistorianHistoryHTTPHandler creates the unified /history endpoint. The
-// optional middleware hook is intended for a.auth.Require(RoleViewer, ...).
+// optional middleware hook is intended for a.auth.RequirePermission(PermissionRead, ...).
 func NewHistorianHistoryHTTPHandler(query HistorianHistoryQueryer, middleware func(http.HandlerFunc) http.Handler) http.Handler {
 	base := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serveHistorianHistory(w, r, query)

@@ -120,8 +120,12 @@ jobs:
           retention-days: 7
 
   web-backend:
-    name: Go Web Backend
-    runs-on: ubuntu-22.04
+    name: Go Web Backend (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -131,10 +135,66 @@ jobs:
         with:
           go-version-file: 'web/backend/go.mod'
 
-      - name: Build Go backend
+      - name: Build and test Go backend
         run: |
           cd web/backend
           go build -v ./...
+          go mod verify
+          go vet ./...
+          go test -count=1 ./...
+
+      - name: Run Go race detector
+        if: runner.os == 'Linux'
+        run: |
+          cd web/backend
+          go test -race -count=1 ./...
+
+  web-backend-arm64:
+    name: Go Web Backend (linux/arm64 candidate)
+    runs-on: ubuntu-22.04
+    needs: web-backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'web/backend/go.mod'
+
+      - name: Cross-build linux/arm64 backend
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: arm64
+        run: |
+          mkdir -p build/deploy/web-rbac-ci
+          cd web/backend
+          go build -trimpath -o ../../build/deploy/web-rbac-ci/mkddc-web .
+
+      - name: Verify build metadata and checksum
+        shell: bash
+        run: |
+          artifact=build/deploy/web-rbac-ci/mkddc-web
+          metadata="$(go version -m "$artifact")"
+          printf '%s\n' "$metadata"
+          printf '%s\n' "$metadata" | grep -F $'\tbuild\tCGO_ENABLED=0'
+          printf '%s\n' "$metadata" | grep -F $'\tbuild\tGOARCH=arm64'
+          printf '%s\n' "$metadata" | grep -F $'\tbuild\tGOOS=linux'
+          printf '%s\n' "$metadata" | grep -F $'\tbuild\tvcs.modified=false'
+          printf '%s\n' "$metadata" | grep -F $'\tbuild\tvcs.revision='"$GITHUB_SHA"
+          sha256sum "$artifact" > "$artifact.sha256"
+          sha256sum --check "$artifact.sha256"
+
+      - name: Upload verified linux/arm64 candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkddc-web-linux-arm64-${{ github.sha }}
+          path: |
+            build/deploy/web-rbac-ci/mkddc-web
+            build/deploy/web-rbac-ci/mkddc-web.sha256
+          if-no-files-found: error
+          retention-days: 14
 
   web-frontend:
     name: React Web Frontend
@@ -150,6 +210,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: src/frontend/package-lock.json
 
+      - name: Set up Go for isolated RBAC E2E backend
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'web/backend/go.mod'
+
       - name: Install dependencies
         run: |
           cd src/frontend
@@ -158,7 +223,20 @@ jobs:
       - name: Build React frontend
         run: |
           cd src/frontend
+          npm run check:rbac-source
+          npm run lint
+          npm test
           npm run build
+
+      - name: Install Playwright Chromium
+        run: |
+          cd src/frontend
+          npx playwright install --with-deps chromium
+
+      - name: Run live four-account RBAC E2E
+        run: |
+          cd src/frontend
+          npm run test:e2e:rbac
 
   mcu-firmware:
     name: MCU Firmware

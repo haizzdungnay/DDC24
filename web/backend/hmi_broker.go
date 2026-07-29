@@ -17,10 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -200,27 +197,7 @@ func (b *HMIBroker) peerAllowed(uid uint32) bool {
 }
 
 func hmiPeerUID(conn net.Conn) (uint32, bool) {
-	sc, ok := conn.(syscall.Conn)
-	if !ok {
-		return 0, false
-	}
-	raw, err := sc.SyscallConn()
-	if err != nil {
-		return 0, false
-	}
-	var uid uint32
-	var controlErr error
-	if err := raw.Control(func(fd uintptr) {
-		cred, err := unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
-		if err != nil {
-			controlErr = err
-			return
-		}
-		uid = cred.Uid
-	}); err != nil || controlErr != nil {
-		return 0, false
-	}
-	return uid, true
+	return hmiPeerUIDPlatform(conn)
 }
 
 func (b *HMIBroker) serveConn(ctx context.Context, conn net.Conn, uid uint32) {
@@ -393,7 +370,7 @@ func (b *HMIBroker) authorizedAction(ctx context.Context, req hmiRequest, sessio
 		base.Result, base.ReasonCode, base.Point = "accepted", "OK", &point
 		return base
 	case "alarm_ack":
-		if !RoleAllows(session.role, RoleOperator) {
+		if !localHMIRoleAllows(session.role, RoleOperator) {
 			base.ReasonCode = "FORBIDDEN"
 			return base
 		}
@@ -436,7 +413,7 @@ func (b *HMIBroker) networkAction(ctx context.Context, req hmiRequest, session h
 }
 
 func (b *HMIBroker) controlAction(ctx context.Context, req hmiRequest, session hmiSession, base hmiResponse) hmiResponse {
-	if !RoleAllows(session.role, RoleOperator) {
+	if !localHMIRoleAllows(session.role, RoleOperator) {
 		base.ReasonCode = "FORBIDDEN"
 		return base
 	}
@@ -489,7 +466,7 @@ func (b *HMIBroker) controlAction(ctx context.Context, req hmiRequest, session h
 }
 
 func hmiPolicy(role Role) []hmiPolicyPoint {
-	if !RoleAllows(role, RoleOperator) {
+	if !localHMIRoleAllows(role, RoleOperator) {
 		return []hmiPolicyPoint{}
 	}
 	points := make([]hmiPolicyPoint, 0, kxNAO+kxNDO)
@@ -512,6 +489,24 @@ func policyPoint(id string) (hmiPolicyPoint, bool) {
 		}
 	}
 	return hmiPolicyPoint{}, false
+}
+
+// Web Engineer is intentionally not projected into the local-HMI role hierarchy.
+func localHMIRoleAllows(actual, required Role) bool {
+	return localHMIRoleRank(actual) >= localHMIRoleRank(required) && localHMIRoleRank(required) > 0
+}
+
+func localHMIRoleRank(role Role) int {
+	switch role {
+	case RoleAdmin:
+		return 3
+	case RoleOperator:
+		return 2
+	case RoleViewer:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func (b *HMIBroker) session(token string) (hmiSession, string) {

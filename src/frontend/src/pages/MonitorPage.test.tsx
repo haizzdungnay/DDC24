@@ -30,6 +30,9 @@ vi.mock('../hooks/useApi', () => ({
 vi.mock('../realtime', () => ({
   useRealtime: () => ({ allPoints: [], lastPointEventAt: undefined, connectionState: 'connected', forcePoint: vi.fn() })
 }))
+vi.mock('../auth/AuthProvider', () => ({
+  useAuth: () => ({ session: { username: 'admin', role: 'admin' } })
+}))
 
 const uiPoint: Point = {
   id: 'UI-01', tag: 'UI-01', name: 'Shared Room', kind: 'UI', value: 23, unit: 'degC', quality: 'good',

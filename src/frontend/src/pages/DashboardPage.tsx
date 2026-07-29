@@ -16,6 +16,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
+import { useAuth } from '../auth/AuthProvider'
+import { can, permissions } from '../auth/permissions'
 import { Button } from '../components/Button'
 import { ControllerDiagram } from '../components/ControllerDiagram'
 import { Modal } from '../components/Modal'
@@ -58,6 +60,8 @@ function writeDashboardTrendIds(ids: string[]) {
 }
 
 export function DashboardPage() {
+  const { session } = useAuth()
+  const canManageSettings = can(session?.role, permissions.settingsManage)
   const navigate = useNavigate()
   const health = useApi(apiClient.getHealth, [], { refreshMs: 1000 })
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
@@ -201,7 +205,7 @@ export function DashboardPage() {
             health={h ?? undefined}
             dataAgeLabel={dataAgeLabel}
             compact
-            onOpenNetwork={() => navigate('/settings/network')}
+            onOpenNetwork={canManageSettings ? () => navigate('/settings/network') : undefined}
           />
         </Panel>
         <Panel className="p-3" title={pick('XU HƯỚNG POINT', 'POINT TREND')} action={<div className="flex flex-wrap justify-end gap-2"><Button size="sm" variant="secondary" icon={<ListFilter className="h-4 w-4" />} onClick={() => setTrendPickerOpen(true)}>{pick('Điểm', 'Points')} {selectedTrendIds.length}/4</Button><Button size="sm" variant="secondary">{pick('Live', 'Live')}</Button><Button size="sm" variant="ghost" icon={<Maximize2 className="h-4 w-4" />} onClick={() => navigate('/trends')} title={pick('Mở rộng xu hướng', 'Expand trends')} /></div>}>

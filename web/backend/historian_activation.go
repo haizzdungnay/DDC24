@@ -168,7 +168,16 @@ func (c *HistorianActivationCoordinator) Authority(ctx context.Context) (Histori
 	var payload struct {
 		Revision uint64 `json:"revision"`
 	}
-	if readErr != nil || !equalBytes(digest[:], authority.ConfigSHA256) || json.Unmarshal(active, &payload) != nil || payload.Revision != authority.PolicyRevision {
+	policyValid := false
+	if readErr == nil && json.Unmarshal(active, &payload) == nil {
+		switch {
+		case payload.Revision == authority.PolicyRevision:
+			policyValid = equalBytes(digest[:], authority.ConfigSHA256)
+		case payload.Revision > authority.PolicyRevision:
+			policyValid = c.store.latestHistorianPolicyMirrorVerified(ctx, payload.Revision, digest[:])
+		}
+	}
+	if !policyValid {
 		authority.State = "degraded"
 		authority.WriterV2 = false
 		authority.QueryV2 = false
@@ -176,6 +185,17 @@ func (c *HistorianActivationCoordinator) Authority(ctx context.Context) (Histori
 		authority.LegacyWriterAllowed = false
 	}
 	return authority, nil
+}
+
+func (s *HistorianStore) latestHistorianPolicyMirrorVerified(ctx context.Context, revision uint64, digest []byte) bool {
+	if s == nil || s.db == nil || revision == 0 || len(digest) != sha256.Size {
+		return false
+	}
+	var stored []byte
+	var status string
+	var latest uint64
+	err := s.db.QueryRowContext(ctx, `SELECT config_sha256,mirror_status,(SELECT max(revision) FROM policy_revisions WHERE mirror_status='verified') FROM policy_revisions WHERE revision=?`, revision).Scan(&stored, &status, &latest)
+	return err == nil && status == "verified" && latest == revision && equalBytes(stored, digest)
 }
 
 // AdvanceStableUTC persists an externally reconciled UTC horizon. It is

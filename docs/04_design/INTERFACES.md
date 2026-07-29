@@ -2,7 +2,7 @@
 
 **ID:** IF-SPEC-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-28 (ACTION 6: Typed IR + artifact contract; runtime không còn thực thi source ST)
+**Cập nhật:** 2026-07-29 (tích hợp ACTION 6 Typed IR với hợp đồng Web RBAC bốn role và strict Network v1)
 
 ## Kinexus-IOP v2
 
@@ -193,14 +193,27 @@ thật.
 
 Nguồn thực thi: `web/backend/http.go` và validator/schema liên quan. Route groups hiện hành gồm auth/me/users; system status/network/config; points và WebSocket; alarms; commissioning; history/trends; schedules; alarm settings. Hồ sơ này không freeze danh sách route chi tiết; OpenAPI hoặc route tests, nếu phát hành, phải sinh/verify từ code.
 
-### Network API — implemented baseline versus target
+### Web RBAC bốn role — backend/FE/test code-local implemented; release pending
 
-`PUT /api/v1/network` chỉ lưu cấu hình dịch vụ BACnet, Wi-Fi và field hostname tương thích;
-các field Ethernet là compatibility shadow read-only và field hostname này không đổi hostname
-hệ điều hành. Mọi thay đổi Ethernet/DNS đi qua `GET /api/v1/network/transaction` và
-`POST /api/v1/network/transaction/{action}`. GET status cho session xác thực
-(`viewer|operator|admin`); POST mutation chỉ dành cho `admin`. Aggregate `GET /api/v1/network` vẫn phục vụ dữ liệu trang Network và
-không thay thế authority trạng thái kernel.
+Nguồn chuẩn máy đọc là `docs/02_design/interfaces/openapi.yaml` v1.11.0. Contract này chốt target của ADR-022; backend, FE, test và packaged `users.conf` đã triển khai bốn role, persisted `session_version` và exact operation mapping ở phạm vi code-local. Feature authorities, rollout/target và reviewer approval còn mở, nên `WEB-RBAC-001` chưa pass.
+
+| Role Web | Capability được cấp | Capability bị chặn rõ |
+|---|---|---|
+| `viewer` | Đọc monitoring/status/history/trends/export/schedule/alarm; đổi mật khẩu của chính mình; Display/language preference lưu local | Mọi business mutation |
+| `operator` | Toàn bộ Viewer; manual override/release, commissioning, alarm ACK/suppress/return; edit/validate/build program | Users, Settings/config, deploy/activate/rollback, database historian policy/maintenance |
+| `engineer` | Toàn bộ Operator; point metadata/virtual point, schedule/alarm policy, system/protocol/network Settings, Ethernet transaction, deploy/activate/rollback, OTA và system-log download | Xem/quản lý Users; `PUT /trends/config` và database historian policy/maintenance |
+| `admin` | Toàn bộ business capability | Self-delete và demote/xóa admin cuối cùng vẫn bị chặn bởi safety invariant |
+
+- `/users*` và `PUT /trends/config` yêu cầu đúng `admin`; `GET /trends/config`, history/trends/export và system-time status cho Viewer+.
+- Ethernet `validate/stage/apply/confirm/rollback` trên Web yêu cầu Engineer+; point/schedule/alarm/virtual-point mutation là configuration và cũng yêu cầu Engineer+.
+- Route phải dùng `RequirePermission` deny-by-default; `Require(Role)`/`RoleAllows` theo rank không phải authorization authority. Token thiếu/không hợp lệ/stale trả `401`; token hợp lệ nhưng thiếu capability trả `403`.
+- Backend/OpenAPI có exact inventory 61 protected operation. Bảy operation Graph/OTA/log/BACnet gắn `authority-pending`: middleware vẫn trả `401/403`, caller đủ capability nhận audited `501`; không được coi `501` là feature implementation pass.
+- JWT phải mang `session_version` và được đối chiếu ở mỗi request với snapshot user trong RAM được load từ store bền vững. User mutation phải atomic-write + reload/validate thành công trước khi publish snapshot/version mới; restart load lại version đã persist, còn request path không đọc disk. Đổi role/password increment version; xóa user vô hiệu account-wide ngay. Revoked-token map trong RAM chỉ còn phục vụ logout.
+- Đây là role Web/API, độc lập với role `Service`/policy của local HMI. Không suy diễn quyền giữa hai bề mặt.
+
+### Network API — authoritative Ethernet contract
+
+`PUT /api/v1/network` chỉ lưu cấu hình dịch vụ BACnet và Wi-Fi; hostname tương thích cùng các field Ethernet là shadow read-only. Mọi thay đổi Ethernet đi qua `GET /api/v1/network/transaction` và `POST /api/v1/network/transaction/{action}`, được Web adapter map sang `mkddc-netcfg` với Web RBAC Engineer/Admin. Aggregate `GET /api/v1/network` vẫn phục vụ dữ liệu trang Network và không thay thế authority trạng thái kernel.
 
 API transaction phân biệt ba nguồn trạng thái: `active` là trạng thái kernel hiện tại, `configured` là profile đã lưu trong NetworkManager, và `pending` là candidate của giao dịch đang chờ. Không được suy diễn active IP, carrier hoặc mode từ `network.conf` hay từ candidate đã lưu.
 

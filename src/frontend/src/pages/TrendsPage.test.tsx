@@ -93,10 +93,10 @@ describe('unified Trends presentation', () => {
     expect(historySourceForRange({ fromMs: response.fromMs, toMs: response.toMs })).toBe('database')
   })
 
-  it('formats Custom historian timestamps in UTC instead of browser-local time', () => {
+  it('formats historian timestamps in the authoritative controller timezone', () => {
     const timestamp = Date.parse('2026-07-20T03:04:05Z')
-    expect(formatTrendTime(timestamp, 'UTC')).toContain('03:04:05')
-    expect(formatTrendTime(timestamp, 'UTC')).not.toContain('10:04:05')
+    expect(formatTrendTime(timestamp, 'Asia/Ho_Chi_Minh')).toContain('10:04:05')
+    expect(formatTrendTime(timestamp, 'Asia/Ho_Chi_Minh')).not.toContain('03:04:05')
   })
 
   it.each([

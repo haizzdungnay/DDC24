@@ -42,11 +42,11 @@ export function AlarmRow({
         <div className="mt-1 truncate text-[var(--c-text-dim)]">{alarm.source} · {alarm.value || 'n/a'} · {alarm.detail}</div>
       </div>
       <div className="flex flex-wrap justify-end gap-2 max-lg:justify-start">
-        <Button size="sm" variant={canAck ? 'secondary' : 'ghost'} disabled={!canAck} onClick={() => onAck?.(alarm)}>
+        {onAck && <Button size="sm" variant={canAck ? 'secondary' : 'ghost'} disabled={!canAck} onClick={() => onAck(alarm)}>
           {alarm.status === 'acked' ? 'Acked' : alarm.status === 'cleared' ? 'Cleared' : alarm.status === 'shelved' ? 'Shelved' : 'Ack'}
-        </Button>
-        {canSuppress && <Button size="sm" variant="danger" onClick={() => onSuppress?.(alarm)}>Off</Button>}
-        {canReturn && <Button size="sm" variant="secondary" onClick={() => onReturn?.(alarm)}>Return</Button>}
+        </Button>}
+        {onSuppress && canSuppress && <Button size="sm" variant="danger" onClick={() => onSuppress(alarm)}>Off</Button>}
+        {onReturn && canReturn && <Button size="sm" variant="secondary" onClick={() => onReturn(alarm)}>Return</Button>}
       </div>
     </div>
   )

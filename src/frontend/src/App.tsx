@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useAuth } from './auth/AuthProvider'
+import { can, permissions, type Permission } from './auth/permissions'
 import { AppShell } from './components/AppShell'
 import { RealtimeProvider } from './realtime'
 import { AlarmSettingsPage } from './pages/AlarmSettingsPage'
@@ -9,7 +10,7 @@ import { AlarmHistoryPage, AlarmsPage } from './pages/AlarmsPage'
 import { CommissioningPage } from './pages/CommissioningPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DisplaySettingsPage } from './pages/DisplaySettingsPage'
-import { LoginPage } from './pages/LoginPage'
+import { LoginPage, loginReturnPath } from './pages/LoginPage'
 import { MonitorPage } from './pages/MonitorPage'
 import { NetworkPage } from './pages/NetworkPage'
 import { ProgrammingPage } from './pages/ProgrammingPage'
@@ -38,16 +39,28 @@ function ProtectedShell() {
   )
 }
 
-export function RequireAdmin({ children }: { children: ReactNode }) {
+export function RequirePermission({ permission, children }: { permission: Permission; children: ReactNode }) {
   const { session } = useAuth()
-  return session?.role === 'admin' ? children : <Navigate to="/" replace />
+  return can(session?.role, permission) ? children : <Navigate to="/" replace />
+}
+
+function SettingsIndex() {
+  const { session } = useAuth()
+  return <Navigate to={can(session?.role, permissions.settingsManage) ? '/settings/device' : '/settings/display'} replace />
+}
+
+function LoginRoute() {
+  const { isAuthenticated } = useAuth()
+  const location = useLocation()
+  return isAuthenticated
+    ? <Navigate to={loginReturnPath(location.state)} replace />
+    : <LoginPage />
 }
 
 export function App() {
-  const { isAuthenticated } = useAuth()
   return (
     <Routes>
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/login" element={<LoginRoute />} />
       <Route element={<ProtectedShell />}>
         <Route index element={<DashboardPage />} />
         <Route path="monitor" element={<MonitorPage />} />
@@ -57,24 +70,24 @@ export function App() {
         <Route path="me" element={<UserInfoPage />} />
         <Route path="help" element={<HelpPage />} />
 
-        <Route path="settings" element={<Navigate to="/settings/device" replace />} />
-        <Route path="settings/display" element={<DisplaySettingsPage />} />
-        <Route path="settings/users" element={<UsersPage />} />
-        <Route path="settings/network" element={<RequireAdmin><NetworkPage /></RequireAdmin>} />
-        <Route path="settings/time" element={<TimeSettingsPage />} />
-        <Route path="settings/device" element={<SettingsPage />} />
+        <Route path="settings" element={<SettingsIndex />} />
+        <Route path="settings/display" element={<RequirePermission permission={permissions.selfManage}><DisplaySettingsPage /></RequirePermission>} />
+        <Route path="settings/users" element={<RequirePermission permission={permissions.usersManage}><UsersPage /></RequirePermission>} />
+        <Route path="settings/network" element={<RequirePermission permission={permissions.settingsManage}><NetworkPage /></RequirePermission>} />
+        <Route path="settings/time" element={<RequirePermission permission={permissions.settingsManage}><TimeSettingsPage /></RequirePermission>} />
+        <Route path="settings/device" element={<RequirePermission permission={permissions.settingsManage}><SettingsPage /></RequirePermission>} />
 
-        <Route path="eng/scheduler" element={<SchedulerPage />} />
-        <Route path="eng/commissioning" element={<CommissioningPage />} />
+        <Route path="eng/scheduler" element={<RequirePermission permission={permissions.settingsManage}><SchedulerPage /></RequirePermission>} />
+        <Route path="eng/commissioning" element={<RequirePermission permission={permissions.operate}><CommissioningPage /></RequirePermission>} />
         <Route path="eng/programming" element={LEGACY_GRAPH_DEMO_ENABLED ? <ProgrammingPage /> : <Navigate to="/" replace />} />
-        <Route path="eng/inputs" element={<InputsPage />} />
-        <Route path="eng/outputs" element={<OutputsPage />} />
-        <Route path="eng/virtual-points" element={<VirtualPointsPage />} />
+        <Route path="eng/inputs" element={<RequirePermission permission={permissions.settingsManage}><InputsPage /></RequirePermission>} />
+        <Route path="eng/outputs" element={<RequirePermission permission={permissions.settingsManage}><OutputsPage /></RequirePermission>} />
+        <Route path="eng/virtual-points" element={<RequirePermission permission={permissions.settingsManage}><VirtualPointsPage /></RequirePermission>} />
         <Route path="eng/virtual-io" element={<Navigate to="/eng/virtual-points" replace />} />
-        <Route path="eng/user-parameters" element={<UserParametersPage />} />
+        <Route path="eng/user-parameters" element={<RequirePermission permission={permissions.settingsManage}><UserParametersPage /></RequirePermission>} />
         <Route path="eng/diagram" element={<DiagramPage />} />
-        <Route path="eng/aux" element={<AuxFunctionsPage />} />
-        <Route path="eng/alarm-settings" element={<AlarmSettingsPage />} />
+        <Route path="eng/aux" element={<RequirePermission permission={permissions.systemRelease}><AuxFunctionsPage /></RequirePermission>} />
+        <Route path="eng/alarm-settings" element={<RequirePermission permission={permissions.settingsManage}><AlarmSettingsPage /></RequirePermission>} />
 
         <Route path="users" element={<Navigate to="/settings/users" replace />} />
         <Route path="network" element={<Navigate to="/settings/network" replace />} />

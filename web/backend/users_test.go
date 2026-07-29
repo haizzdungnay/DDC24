@@ -46,6 +46,8 @@ func TestUsersCRUDAndPasswordFlow(t *testing.T) {
 
 	resp = serveAuth(t, handler, http.MethodPost, "/api/v1/me/change-password", `{"old_password":"op654321","new_password":"opabcdef"}`, opToken)
 	assertStatus(t, resp, http.StatusOK)
+	resp = serveAuth(t, handler, http.MethodGet, "/api/v1/me", ``, opToken)
+	assertStatus(t, resp, http.StatusUnauthorized)
 	_ = loginToken(t, handler, "op1", "opabcdef")
 
 	resp = serveAuth(t, handler, http.MethodDelete, "/api/v1/users/op1", ``, adminToken)
@@ -60,6 +62,16 @@ func TestUsersDeleteLastAdminReturnsConflict(t *testing.T) {
 	if err := app.auth.DeleteUser("admin", "other-admin"); !errors.Is(err, ErrLastAdmin) {
 		t.Fatalf("DeleteUser last admin err = %v; want ErrLastAdmin", err)
 	}
+}
+
+func TestUsersDemoteLastAdminReturnsConflictAndKeepsSession(t *testing.T) {
+	app, adminToken := newTestAppWithAdmin(t)
+	handler := app.Router()
+	resp := serveAuth(t, handler, http.MethodPut, "/api/v1/users/admin", `{"role":"engineer"}`, adminToken)
+	assertStatus(t, resp, http.StatusConflict)
+
+	resp = serveAuth(t, handler, http.MethodGet, "/api/v1/me", "", adminToken)
+	assertStatus(t, resp, http.StatusOK)
 }
 
 func TestUsersChangePasswordOldWrongReturnsUnauthorized(t *testing.T) {

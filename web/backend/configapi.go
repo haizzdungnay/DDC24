@@ -53,10 +53,6 @@ func (a *App) handleGetSystemConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cfg)
 }
 
-func (a *App) handlePutSystemConfig(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusMethodNotAllowed, "bulk config update unsupported; use /system/config/<group>")
-}
-
 func (a *App) handleGetConfigDevice(w http.ResponseWriter, r *http.Request) {
 	handleGetConfig(a, w, configGroupDevice, ConfigDevice{})
 }

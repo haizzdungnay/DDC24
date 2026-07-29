@@ -56,6 +56,20 @@ func (a *AuditLogger) Change(user, action, target, result, remote string) {
 		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(user, 32), sanitizeAudit(action, 32), sanitizeAudit(target, 64), sanitizeAudit(result, 32), sanitizeAudit(remote, 64))
 }
 
+func (a *AuditLogger) Authorization(principal *Principal, permission Permission, action, target, result, remote string) {
+	if a == nil || a.logger == nil {
+		return
+	}
+	username, role := "-", "-"
+	if principal != nil {
+		username, role = principal.Username, string(principal.Role)
+	}
+	a.logger.Printf("AUDIT authorization ts=%s actor=%s role=%s permission=%s action=%s target=%s result=%s remote=%s",
+		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(username, 32), sanitizeAudit(role, 16),
+		sanitizeAudit(string(permission), 32), sanitizeAudit(action, 16), sanitizeAudit(target, 128),
+		sanitizeAudit(result, 16), sanitizeAudit(remote, 64))
+}
+
 func (a *AuditLogger) HMI(user string, role Role, requestID, action, target, reason, result, reasonCode, remote string) {
 	if a == nil || a.logger == nil {
 		return

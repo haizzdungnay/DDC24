@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { JSX } from 'react'
 import { CalendarClock, Database, Settings2 } from 'lucide-react'
 import { Button } from './Button'
+import { can, permissions } from '../auth/permissions'
 import {
   PointLoggingDialog,
   pointLoggingErrorsFromApiError,
@@ -22,7 +23,7 @@ const statusStyle: Record<PointLoggingState, string> = {
   error: 'border-[rgba(213,32,42,0.38)] bg-[rgba(213,32,42,0.10)] text-[var(--c-fault-fg)]'
 }
 
-export function PointLoggingControl({ point, policy, role, serverNowUtc, loading = false, errors = [], onChange }: PointLoggingControlProps): JSX.Element {
+export function PointLoggingControl({ point, policy, role, canManagePolicy = can(role, permissions.databaseManage), serverNowUtc, loading = false, errors = [], onChange }: PointLoggingControlProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [localErrors, setLocalErrors] = useState<PointLoggingError[]>([])
@@ -66,7 +67,7 @@ export function PointLoggingControl({ point, policy, role, serverNowUtc, loading
       )}
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-[var(--c-border)] pt-3">
-        {role === 'admin' ? (
+        {canManagePolicy ? (
           <>
             <span className="text-xs text-[var(--c-text-dim)]">Admin policy control</span>
             <Button
@@ -89,6 +90,7 @@ export function PointLoggingControl({ point, policy, role, serverNowUtc, loading
         point={point}
         policy={policy}
         role={role}
+        canManagePolicy={canManagePolicy}
         serverNowUtc={serverNowUtc}
         loading={busy}
         errors={[...errors, ...localErrors]}

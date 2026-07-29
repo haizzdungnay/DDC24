@@ -261,6 +261,29 @@ func (c *HistorianTrendCache) Identities(pointIDs []string, fromUTCMS, toUTCMS i
 	return result
 }
 
+func (c *HistorianTrendCache) RemovePoint(pointID string) {
+	if c == nil {
+		return
+	}
+	pointID = canonicalHistoryPointID(pointID)
+	c.mu.Lock()
+	for key, rows := range c.rows {
+		if len(rows) == 0 || canonicalHistoryPointID(rows[0].PointID) != pointID {
+			continue
+		}
+		c.bytes -= uint64(len(rows)) * historianTrendCacheRowBytes
+		delete(c.rows, key)
+	}
+	for key, gaps := range c.gaps {
+		if len(gaps) == 0 || canonicalHistoryPointID(gaps[0].PointID) != pointID {
+			continue
+		}
+		c.bytes -= uint64(len(gaps)) * historianTrendCacheGapBytes
+		delete(c.gaps, key)
+	}
+	c.mu.Unlock()
+}
+
 func (c *HistorianTrendCache) upsertHotLocked(row HotSample) {
 	key := historianIdentityKey(row.PointID, row.Generation)
 	rows := c.rows[key]

@@ -68,6 +68,16 @@ func (r *HistorianRuntimeRegistry) Snapshot() []RuntimePoint {
 	return points
 }
 
+func (r *HistorianRuntimeRegistry) Remove(pointID string) {
+	if r == nil {
+		return
+	}
+	pointID = canonicalHistoryPointID(pointID)
+	r.mu.Lock()
+	delete(r.points, pointID)
+	r.mu.Unlock()
+}
+
 func collectHistorianDueSamples(ctx context.Context, reader historianSnapshotReader, policies []HistorianPolicy, policyRevision uint64, dueMonotonicNS uint64) ([]HistorianRawSample, []HistoryGap, error) {
 	if reader == nil || policyRevision == 0 {
 		return nil, nil, fmt.Errorf("invalid historian due cycle")

@@ -13,6 +13,17 @@ const inputClass = 'mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(
 const rfc3339WithZone = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
 const isRfc3339WithZone = (value: string) => rfc3339WithZone.test(value) && Number.isFinite(Date.parse(value))
 
+export function advanceRfc3339WithOffset(value: string, elapsedMs: number): string {
+  const offsetMatch = value.match(/(Z|([+-])(\d{2}):(\d{2}))$/)
+  const instantMs = Date.parse(value)
+  if (!offsetMatch || !Number.isFinite(instantMs)) return value
+  const offsetMinutes = offsetMatch[1] === 'Z'
+    ? 0
+    : (offsetMatch[2] === '-' ? -1 : 1) * (Number(offsetMatch[3]) * 60 + Number(offsetMatch[4]))
+  const shifted = new Date(instantMs + Math.max(0, elapsedMs) + offsetMinutes * 60_000).toISOString().slice(0, -1)
+  return shifted + offsetMatch[1]
+}
+
 export function TimeSettingsPage() {
   const { pick } = useI18n()
   const toast = useToast()
@@ -96,13 +107,26 @@ export function TimeSettingsPage() {
     }
   }
 
-  const displayedUtc = status ? new Date(new Date(status.nowUtc).getTime() + Date.now() - anchorMs).toISOString() : ''
+  const elapsedMs = Date.now() - anchorMs
+  const displayedUtc = status ? advanceRfc3339WithOffset(status.nowUtc, elapsedMs) : ''
+  const displayedLocal = status ? advanceRfc3339WithOffset(status.nowLocal, elapsedMs) : ''
   const dirty = Boolean(config && savedConfig && JSON.stringify(config) !== JSON.stringify(savedConfig))
   const update = (patch: Partial<TimeConfig>) => setConfig((current) => current ? { ...current, ...patch } : current)
 
   if (loading && !config) return <State title={pick('Đang tải cấu hình thời gian', 'Loading time settings')} />
   if (error && !config) return <State title={pick('Không tải được cấu hình thời gian', 'Could not load time settings')} detail={error} retry={() => void load()} />
   if (!config || !status) return null
+
+  // Preserve authoritative zones outside the curated list so the select never
+  // displays a different option from the value that will actually be saved.
+  const timezoneOptions = Array.from(new Set([
+    config.timezone,
+    status.timezone,
+    'Asia/Ho_Chi_Minh',
+    'UTC',
+    'Asia/Bangkok',
+    'Asia/Singapore'
+  ].filter(Boolean)))
 
   return (
     <div className="space-y-5">
@@ -122,8 +146,8 @@ export function TimeSettingsPage() {
           <div className="flex min-w-0 items-center gap-3">
             <Clock3 className="h-7 w-7 shrink-0 text-[var(--c-accent)]" />
             <div className="min-w-0">
-              <div className="mono break-all text-lg font-semibold sm:text-xl">{displayedUtc}</div>
-              <div className="mt-1 text-xs text-[var(--c-text-dim)]">{status.nowLocal} · {status.timezone}</div>
+              <div className="mono break-all text-lg font-semibold sm:text-xl">{displayedLocal}</div>
+              <div className="mt-1 text-xs text-[var(--c-text-dim)]">UTC {displayedUtc} · {status.timezone}</div>
             </div>
           </div>
           <StatusBadge state={status.synchronized ? 'online' : 'unknown'} label={status.mode === 'ntp' ? 'NTP ON' : 'MANUAL'} />
@@ -156,7 +180,7 @@ export function TimeSettingsPage() {
             <label className="block text-xs text-[var(--c-text-dim)]">
               Timezone
               <select className={inputClass} value={config.timezone} onChange={(event) => update({ timezone: event.target.value })}>
-                {['Asia/Ho_Chi_Minh', 'UTC', 'Asia/Bangkok', 'Asia/Singapore'].map((zone) => <option key={zone}>{zone}</option>)}
+                {timezoneOptions.map((zone) => <option key={zone}>{zone}</option>)}
               </select>
             </label>
             <label className="block text-xs text-[var(--c-text-dim)]">

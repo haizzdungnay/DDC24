@@ -1,6 +1,8 @@
 import { Box, Plus, Rocket, RotateCcw, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '../components/Button'
+import { useAuth } from '../auth/AuthProvider'
+import { can, permissions } from '../auth/permissions'
 import { Panel } from '../components/Panel'
 import { StatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
@@ -67,6 +69,9 @@ const severityClass = {
 }
 
 export function ProgrammingPage() {
+  const { session } = useAuth()
+  const canEdit = can(session?.role, permissions.programEdit)
+  const canActivate = can(session?.role, permissions.programActivate)
   const [text, setText] = useState(sampleText)
   const [result, setResult] = useState<GraphValidationResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -74,11 +79,13 @@ export function ProgrammingPage() {
   const { pick } = useI18n()
 
   function updateText(value: string) {
+    if (!canEdit) return
     setText(value)
     setResult(null)
   }
 
   function validate() {
+    if (!canEdit) return
     setLoading(true)
     const next = validateGraphLocal(text)
     setResult(next)
@@ -87,16 +94,18 @@ export function ProgrammingPage() {
   }
 
   function loadSample() {
+    if (!canEdit) return
     updateText(sampleText)
     toast.push('info', pick('Đã nạp sample graph hợp lệ', 'Valid sample graph loaded'))
   }
 
   function deployDemo() {
-    if (!result?.pass) return
+    if (!canActivate || !result?.pass) return
     toast.push('success', pick('Đã deploy (demo)', 'Deployed (demo)'))
   }
 
   function addNode(item: LibraryItem) {
+    if (!canEdit) return
     try {
       const graph = JSON.parse(text) as Partial<Graph>
       if (!isRecord(graph)) throw new Error(pick('graph.json phải là object', 'graph.json must be an object'))
@@ -137,7 +146,7 @@ export function ProgrammingPage() {
                     <div className="flex items-center gap-2 text-sm font-semibold"><Box className="h-4 w-4 text-[var(--c-accent)]" />{item.label}</div>
                     <div className="mt-1 text-xs text-[var(--c-text-dim)]">{item.detail}</div>
                   </div>
-                  <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => addNode(item)}>{pick('Thêm', 'Add')}</Button>
+                  {canEdit && <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => addNode(item)}>{pick('Thêm', 'Add')}</Button>}
                 </div>
               </div>
             ))}
@@ -149,14 +158,15 @@ export function ProgrammingPage() {
           subtitle={pick('Dán graph.json hoặc nạp sample hợp lệ để chạy 4 check Rev A. Không canvas kéo-thả, không IEC.', 'Paste graph.json or load a valid sample to run the four Rev A checks. No drag-and-drop canvas, no IEC.')}
           action={(
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} onClick={loadSample}>{pick('Nạp sample', 'Load sample')}</Button>
-              <Button size="sm" variant="primary" loading={loading} icon={<ShieldCheck className="h-4 w-4" />} onClick={validate}>Validate/Test</Button>
+              {canEdit && <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} onClick={loadSample}>{pick('Nạp sample', 'Load sample')}</Button>}
+              {canEdit && <Button size="sm" variant="primary" loading={loading} icon={<ShieldCheck className="h-4 w-4" />} onClick={validate}>Validate/Test</Button>}
             </div>
           )}
         >
           <textarea
             value={text}
             onChange={(event) => updateText(event.target.value)}
+            readOnly={!canEdit}
             className="mono min-h-[640px] w-full resize-y rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4 text-sm leading-6 text-[var(--c-text)] outline-none transition focus:border-[var(--c-accent)]"
             spellCheck={false}
           />
@@ -165,7 +175,7 @@ export function ProgrammingPage() {
         <Panel
           title={pick('Kết quả', 'Results')}
           subtitle={pick('Validator v1: input chưa nối, nhiều nguồn ghi output, AO limit, Modbus/sensor fallback.', 'Validator v1: unconnected input, multiple output writers, AO limits, Modbus/sensor fallback.')}
-          action={<Button variant="primary" icon={<Rocket className="h-4 w-4" />} disabled={!result?.pass} onClick={deployDemo}>{pick('Mô phỏng (demo)', 'Simulate (demo)')}</Button>}
+          action={canActivate ? <Button variant="primary" icon={<Rocket className="h-4 w-4" />} disabled={!result?.pass} onClick={deployDemo}>{pick('Mô phỏng (demo)', 'Simulate (demo)')}</Button> : undefined}
         >
           {!result && <p className="text-sm text-[var(--c-text-dim)]">{pick('Chưa chạy kiểm tra. Dán hoặc sửa graph rồi bấm Validate/Test.', 'No validation run yet. Paste or edit the graph, then click Validate/Test.')}</p>}
 
