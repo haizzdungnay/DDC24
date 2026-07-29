@@ -1,7 +1,7 @@
 ﻿openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.11.0"
+  version: "1.10.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -16,19 +16,10 @@ info:
     2026-07-25: legacy config endpoints no longer mutate Ethernet; candidate validation matches mkddc-netcfg.
     2026-07-25: protocol v1 reports administrative/carrier health separately and exposes the saved NetworkManager profile.
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
-    hostname read-only; capability authorization được ADR-022 mở rộng ở revision kế tiếp.
-    2026-07-27: approved target Web RBAC contract adds engineer and capability-based authorization.
-    2026-07-27: RBAC-BE-003 maps every protected backend route one-to-one with this contract;
-    feature authorities marked authority-pending return 501 after authorization until implemented.
+    hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-07-29"
-  note: "v1.11.0 tích hợp exact RBAC mapping với Network DNS/capability/management contract; target/HIL và rollout vẫn RED."
-x-rbac-contract:
-  status: backend-mapped
-  implementation: "RBAC-BE/FE/TEST complete code-local; feature authorities, target rollout and approval remain pending."
-  availability: "x-runtime-status=authority-pending operations return 501 for authorized callers and never report fake success."
-  roles: [viewer, operator, engineer, admin]
-  authorization: "RequirePermission deny-by-default; x-rbac lists allowed roles for each operation."
+  date: "2026-07-28"
+  note: "v1.10.0 khóa Network transaction DNS/capability/management contract; overall target/HIL gate vẫn RED."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -60,38 +51,16 @@ paths:
                 type: object
                 properties:
                   token: { type: string }
-                  role: { type: string, enum: [admin, engineer, operator, viewer] }
+                  role: { type: string, enum: [admin, operator, viewer] }
                   expires_in: { type: integer, example: 3600 }
         "401": { $ref: "#/components/responses/Error" }
   /auth/logout:
     post:
       summary: ÄÄƒng xuáº¥t, vÃ´ hiá»‡u token
-      x-rbac: [viewer, operator, engineer, admin]
       responses: { "200": { description: OK } }
-  /ws/monitor:
-    get:
-      summary: Monitor WebSocket upgrade
-      description: >
-        Upgrade to the implemented monitor WebSocket. Authentication uses the query token
-        because browser WebSocket clients cannot set an Authorization header. Force messages
-        are checked again against the operate capability inside the socket handler.
-      security:
-        - wsToken: []
-      x-rbac: [viewer, operator, engineer, admin]
-      x-websocket: { runtimeStatus: implemented }
-      parameters:
-        - name: token
-          in: query
-          required: true
-          schema: { type: string }
-      responses:
-        "101": { description: Switching Protocols }
-        "401": { $ref: "#/components/responses/Error" }
-        "403": { $ref: "#/components/responses/Error" }
   /points:
     get:
       summary: Danh sÃ¡ch táº¥t cáº£ I/O point + giÃ¡ trá»‹
-      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -103,7 +72,6 @@ paths:
   /points/{id}:
     get:
       summary: Äá»c 1 point
-      x-rbac: [viewer, operator, engineer, admin]
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       responses:
         "200":
@@ -114,7 +82,6 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
     put:
       summary: Ghi giÃ¡ trá»‹ point (role operator+; LUÃ”N vÃ o má»©c Local manual â€” client KHÃ”NG chá»n priority)
-      x-rbac: [operator, engineer, admin]
       description: >
         Contract Freeze 2026-06-11: REST khÃ´ng expose BACnet priority 1..16.
         Má»i lá»‡nh web Ä‘i vÃ o nguá»“n "Local manual" (má»©c 2 trong 6 má»©c cá»§a core â€”
@@ -144,11 +111,11 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
   /points/{id}/config:
     put:
-      summary: Update point tag/display metadata by canonical point ID (engineer+)
+      summary: Update point tag/display metadata by canonical point ID (admin)
       description: >
         Phase A accepts canonical point IDs only; tags are never path aliases. Validates
         the final controller-local UI/AO/DO/VP tag namespace before atomic file replace.
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       requestBody:
         required: true
@@ -171,7 +138,7 @@ paths:
       description: >
         Returns created backend-owned VP points only. Raw/uncreated AV/BV/MSV
         core slots are hidden from /points, Monitoring, Trends, and history.
-      x-rbac: [viewer, operator, engineer, admin]
+      x-rbac: [viewer, operator, admin]
       responses:
         "200":
           description: OK
@@ -182,9 +149,9 @@ paths:
                 items: { $ref: "#/components/schemas/VirtualPoint" }
         "403": { $ref: "#/components/responses/Error" }
     post:
-      summary: Create Virtual Point (engineer+)
+      summary: Create Virtual Point (admin)
       description: Missing id is allocated as the first free VP1..VP464.
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       requestBody:
         required: true
         content:
@@ -201,8 +168,8 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
   /virtual-points/{id}:
     put:
-      summary: Update Virtual Point (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Update Virtual Point (admin)
+      x-rbac: [admin]
       parameters: [ { $ref: "#/components/parameters/VirtualPointId" } ]
       requestBody:
         required: true
@@ -220,8 +187,8 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
     delete:
-      summary: Delete Virtual Point (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Delete Virtual Point (admin)
+      x-rbac: [admin]
       parameters: [ { $ref: "#/components/parameters/VirtualPointId" } ]
       responses:
         "200":
@@ -234,7 +201,6 @@ paths:
   /system/status:
     get:
       summary: Tráº¡ng thÃ¡i há»‡ thá»‘ng (CPU/RAM/uptime/IOP/version)
-      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -245,7 +211,7 @@ paths:
     get:
       summary: Dá»¯ liá»‡u trang Network (viewer+)
       description: Gá»™p network/device/bacnet/fieldbus config vÃ  tráº¡ng thÃ¡i poll tá»•ng tá»« core/iobus; khÃ´ng sinh slave demo.
-      x-rbac: [viewer, operator, engineer, admin]
+      x-rbac: [viewer, operator, admin]
       responses:
         "200":
           description: OK
@@ -254,9 +220,9 @@ paths:
               schema: { $ref: "#/components/schemas/NetworkPageData" }
         "403": { $ref: "#/components/responses/Error" }
     put:
-      summary: Cáº­p nháº­t cáº¥u hÃ¬nh northbound trang Network (engineer+)
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh northbound trang Network (admin)
       description: Chỉ ghi BACnet và Wi-Fi bằng replace nguyên tử trên từng file; Ethernet/DNS và compatibility service hostname là shadow chỉ đọc do authority/cấu hình hiện hữu sở hữu, endpoint này không đổi hostname quản trị của hệ điều hành.
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       x-ethernet-authority: mkddc-netcfg
       requestBody:
         required: true
@@ -273,14 +239,14 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
   /network/transaction:
     get:
-      summary: Đọc trạng thái giao dịch Ethernet authoritative (engineer+)
+      summary: Đọc trạng thái Ethernet/DNS authoritative (viewer+)
       description: >
         Chuyển action `status` tới `mkddc-netcfg`. `active` phản ánh trạng thái kernel hiện tại,
         `configured` phản ánh profile đã lưu trong NetworkManager, và `pending` phản ánh candidate
         của giao dịch đang chờ. `reasonCode` cấp response mô tả kết quả request/giao dịch;
         `active.reasonCode` độc lập và mô tả sức khỏe interface. `capabilities` công bố feature
         protocol v1; `management` trả stable hostname/mDNS read-only.
-      x-rbac: [engineer, admin]
+      x-rbac: [viewer, operator, admin]
       responses:
         "200":
           description: Trạng thái authoritative hiện tại
@@ -291,7 +257,7 @@ paths:
         "503": { $ref: "#/components/responses/Error" }
   /network/transaction/{action}:
     post:
-      summary: Thực hiện bước giao dịch Ethernet (engineer+)
+      summary: Thực hiện bước giao dịch Ethernet (admin)
       description: >
         Adapter strict/bounded tới `mkddc-netcfg`. `validate`/`stage` yêu cầu candidate;
         `apply`/`confirm`/`rollback` yêu cầu transactionId. Response `rejected` vẫn trả HTTP 200
@@ -300,7 +266,7 @@ paths:
          `dns` và chỉ accepted khi response validate/stage vẫn công bố capability, echo đúng pending
          DNS/candidate tương ứng; mỗi POST sau authorization ghi đúng một audit event không chứa
          candidate, DNS hoặc token, kể cả request sai shape/action.
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       parameters:
         - name: action
           in: path
@@ -328,7 +294,7 @@ paths:
       description: >
         Gá»­i lá»‡nh test DO/AO qua mkddc-core, vÃ o nguá»“n Local manual má»©c 2 nhÆ° PUT /points/{id}.
         DÃ¹ng cho mÃ n Commissioning; má»i lá»‡nh pháº£i audit log.
-      x-rbac: [operator, engineer, admin]
+      x-rbac: [operator, admin]
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       requestBody:
         required: true
@@ -346,9 +312,9 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
   /system/config:
     get:
-      summary: Äá»c toÃ n bá»™ cáº¥u hÃ¬nh hiá»‡n táº¡i (gá»™p) (engineer+)
+      summary: Äá»c toÃ n bá»™ cáº¥u hÃ¬nh hiá»‡n táº¡i (gá»™p) (admin)
       description: Tráº£ vá» object gá»™p cÃ¡c nhÃ³m (device, network, io, safe_state, virtual_points, bacnet, fieldbus, time).
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       responses:
         "200":
           description: OK
@@ -357,8 +323,8 @@ paths:
               schema: { $ref: "#/components/schemas/SystemConfig" }
   /system/config/device:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh device (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Äá»c cáº¥u hÃ¬nh device (admin)
+      x-rbac: [admin]
       responses:
         "200":
           description: OK
@@ -366,8 +332,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigDevice" }
     put:
-      summary: Cáº­p nháº­t cáº¥u hÃ¬nh device (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh device (admin)
+      x-rbac: [admin]
       requestBody:
         required: true
         content:
@@ -382,8 +348,8 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/network:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh network (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Äá»c cáº¥u hÃ¬nh network (admin)
+      x-rbac: [admin]
       responses:
         "200":
           description: OK
@@ -391,9 +357,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigNetwork" }
     put:
-      summary: Cáº­p nháº­t cáº¥u hÃ¬nh network (engineer+)
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh network (admin)
       description: Ethernet fields are read-only compatibility data; use `/network/transaction/{action}` for mutations.
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       x-ethernet-authority: mkddc-netcfg
       requestBody:
         required: true
@@ -409,8 +375,8 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/io:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh IO (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Äá»c cáº¥u hÃ¬nh IO (admin)
+      x-rbac: [admin]
       responses:
         "200":
           description: OK
@@ -418,8 +384,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigIO" }
     put:
-      summary: Cáº­p nháº­t cáº¥u hÃ¬nh IO (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh IO (admin)
+      x-rbac: [admin]
       requestBody:
         required: true
         content:
@@ -435,8 +401,8 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
   /system/config/safe-state:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh IO safe-state (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Äá»c cáº¥u hÃ¬nh IO safe-state (admin)
+      x-rbac: [admin]
       responses:
         "200":
           description: OK
@@ -444,8 +410,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigSafeState" }
     put:
-      summary: Cáº­p nháº­t cáº¥u hÃ¬nh IO safe-state (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh IO safe-state (admin)
+      x-rbac: [admin]
       requestBody:
         required: true
         content:
@@ -460,8 +426,8 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/virtual-points:
     get:
-      summary: Read Virtual Points config (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Read Virtual Points config (admin)
+      x-rbac: [admin]
       responses:
         "200":
           description: OK
@@ -469,9 +435,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigVirtualPoints" }
     put:
-      summary: Replace Virtual Points config (engineer+)
+      summary: Replace Virtual Points config (admin)
       description: Persists virtual_points.conf without expanding core SHM/BACnet object counts.
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       requestBody:
         required: true
         content:
@@ -487,8 +453,8 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
   /system/config/bacnet:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh BACnet/IP (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Äá»c cáº¥u hÃ¬nh BACnet/IP (admin)
+      x-rbac: [admin]
       responses:
         "200":
           description: OK
@@ -496,8 +462,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigBacnet" }
     put:
-      summary: Cáº­p nháº­t cáº¥u hÃ¬nh BACnet/IP (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh BACnet/IP (admin)
+      x-rbac: [admin]
       requestBody:
         required: true
         content:
@@ -512,8 +478,8 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/fieldbus:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh Fieldbus (Modbus RTU master) (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Äá»c cáº¥u hÃ¬nh Fieldbus (Modbus RTU master) (admin)
+      x-rbac: [admin]
       responses:
         "200":
           description: OK
@@ -521,8 +487,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigFieldbus" }
     put:
-      summary: Cáº­p nháº­t cáº¥u hÃ¬nh Fieldbus (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh Fieldbus (admin)
+      x-rbac: [admin]
       requestBody:
         required: true
         content:
@@ -537,8 +503,8 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /system/config/time:
     get:
-      summary: Äá»c cáº¥u hÃ¬nh Time (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Äá»c cáº¥u hÃ¬nh Time (admin)
+      x-rbac: [admin]
       responses:
         "200":
           description: OK
@@ -546,8 +512,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigTime" }
     put:
-      summary: Cáº­p nháº­t cáº¥u hÃ¬nh Time (engineer+)
-      x-rbac: [engineer, admin]
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh Time (admin)
+      x-rbac: [admin]
       requestBody:
         required: true
         content:
@@ -564,7 +530,7 @@ paths:
   /system/time/status:
     get:
       summary: Read controller clock, NTP and RTC status
-      x-rbac: [viewer, operator, engineer, admin]
+      x-rbac: [viewer, operator, admin]
       responses:
         "200":
           description: Current controller time status
@@ -597,7 +563,7 @@ paths:
               required: [username, role, password]
               properties:
                 username: { type: string, minLength: 3 }
-                role: { type: string, enum: [admin, engineer, operator, viewer] }
+                role: { type: string, enum: [admin, operator, viewer] }
                 password: { type: string, format: password, minLength: 6 }
       responses:
         "201":
@@ -624,7 +590,7 @@ paths:
               type: object
               required: [role]
               properties:
-                role: { type: string, enum: [admin, engineer, operator, viewer] }
+                role: { type: string, enum: [admin, operator, viewer] }
       responses:
         "200":
           description: OK
@@ -670,7 +636,7 @@ paths:
   /me:
     get:
       summary: Láº¥y thÃ´ng tin user Ä‘ang Ä‘Äƒng nháº­p (role viewer+)
-      x-rbac: [viewer, operator, engineer, admin]
+      x-rbac: [viewer, operator, admin]
       responses:
         "200":
           description: OK
@@ -680,7 +646,7 @@ paths:
   /me/change-password:
     post:
       summary: Äá»•i máº­t kháº©u cÃ¡ nhÃ¢n (role viewer+)
-      x-rbac: [viewer, operator, engineer, admin]
+      x-rbac: [viewer, operator, admin]
       requestBody:
         required: true
         content:
@@ -703,7 +669,7 @@ paths:
         [from,to); frontend never merges tiers. Trends presets explicitly request the bounded
         24-hour RAM presentation cache, while Custom explicitly requests SQLite/archive database
         history. Omitting source preserves the unified compatibility query. Point IDs are canonical only.
-      x-rbac: [viewer, operator, engineer, admin]
+      x-rbac: [viewer, operator, admin]
       parameters:
         - name: point
           in: query
@@ -747,7 +713,7 @@ paths:
   /history/export.csv:
     get:
       summary: Stream CSV from the same merged historian iterator (viewer+)
-      x-rbac: [viewer, operator, engineer, admin]
+      x-rbac: [viewer, operator, admin]
       parameters:
         - { name: point, in: query, required: true, schema: { type: string } }
         - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
@@ -772,7 +738,7 @@ paths:
   /trends/config:
     get:
       summary: Read per-point historian policy, state, capacity and server time (viewer+)
-      x-rbac: [viewer, operator, engineer, admin]
+      x-rbac: [viewer, operator, admin]
       responses:
         "200":
           description: OK
@@ -807,7 +773,7 @@ paths:
     get:
       summary: Read weekly/exception schedules (viewer+)
       description: Rev A has weekly repeating schedules and exception rows; no monthly mode.
-      x-rbac: [viewer, operator, engineer, admin]
+      x-rbac: [viewer, operator, admin]
       responses:
         "200":
           description: OK
@@ -819,9 +785,9 @@ paths:
                 items: { $ref: "#/components/schemas/ScheduleRow" }
         "403": { $ref: "#/components/responses/Error" }
     put:
-      summary: Update schedules (engineer+)
+      summary: Update schedules (admin)
       description: Persist `schedule.conf`, then apply by `sighup-core`; core executes schedule priority level 4.
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       requestBody:
         required: true
         content:
@@ -844,7 +810,7 @@ paths:
       description: >
         Returns `alarm_settings.conf` as the ADR-013 entity-list model. Legacy per-point rows are
         migrated by the Phase 2 backend before being returned.
-      x-rbac: [viewer, operator, engineer, admin]
+      x-rbac: [viewer, operator, admin]
       responses:
         "200":
           description: OK
@@ -856,14 +822,14 @@ paths:
                 items: { $ref: "#/components/schemas/AlarmSetting" }
         "403": { $ref: "#/components/responses/Error" }
     put:
-      summary: Replace alarm entity settings (engineer+)
+      summary: Replace alarm entity settings (admin)
       description: >
         Persist `alarm_settings.conf` using ADR-013 entity-list schema. Current web/backend stores
         the file; Phase 2/3 core work must add `alarm_settings.conf` boot/SIGHUP loading and
         per-source evaluation before this contract becomes runtime-active. At most 64 internal
         alarm entities are accepted, and at most 8 enabled entities may set `publishBacnet=true`
         because BACnet Event Enrollment capacity is 8.
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       requestBody:
         required: true
         content:
@@ -882,32 +848,19 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
   /ota/upload:
     post:
-      description: RBAC route mapped; OTA authority is not implemented and currently returns 501 after authorization.
-      summary: Upload gÃ³i firmware (engineer+)
-      x-rbac: [engineer, admin]
-      x-runtime-status: authority-pending
+      summary: Upload gÃ³i firmware (admin)
       requestBody:
         content:
           application/octet-stream:
             schema: { type: string, format: binary }
-      responses:
-        "202": { description: Accepted when OTA authority is implemented }
-        "501": { $ref: "#/components/responses/Error" }
+      responses: { "202": { description: Accepted } }
   /ota/apply:
     post:
-      description: RBAC route mapped; OTA authority is not implemented and currently returns 501 after authorization.
-      summary: KÃ­ch hoáº¡t OTA + reboot (engineer+)
-      x-rbac: [engineer, admin]
-      x-runtime-status: authority-pending
-      responses:
-        "202": { description: Accepted when OTA authority is implemented }
-        "501": { $ref: "#/components/responses/Error" }
+      summary: KÃ­ch hoáº¡t OTA + reboot (admin)
+      responses: { "202": { description: Accepted } }
   /ota/status:
     get:
-      description: RBAC route mapped; OTA authority is not implemented and currently returns 501 after authorization.
       summary: Tráº¡ng thÃ¡i + tiáº¿n Ä‘á»™ OTA
-      x-rbac: [engineer, admin]
-      x-runtime-status: authority-pending
       responses:
         "200":
           description: OK
@@ -918,33 +871,22 @@ paths:
                 properties:
                   state: { type: string, enum: [idle, downloading, verifying, applying, rebooting, success, failed, rolledback] }
                   progress: { type: integer, minimum: 0, maximum: 100 }
-        "501": { $ref: "#/components/responses/Error" }
   /logs/download:
     get:
-      description: RBAC route mapped; log-bundle authority is not implemented and currently returns 501 after authorization.
-      summary: Táº£i log (gzip, engineer+)
-      x-rbac: [engineer, admin]
-      x-runtime-status: authority-pending
+      summary: Táº£i log (gzip, admin)
       responses:
         "200":
           description: OK
           content:
             application/gzip:
               schema: { type: string, format: binary }
-        "501": { $ref: "#/components/responses/Error" }
   /bacnet/objects:
     get:
-      description: RBAC route mapped; BACnet object authority is not implemented and currently returns 501 after authorization.
       summary: Danh sÃ¡ch object BACnet
-      x-rbac: [viewer, operator, engineer, admin]
-      x-runtime-status: authority-pending
-      responses:
-        "200": { description: OK when BACnet object authority is implemented }
-        "501": { $ref: "#/components/responses/Error" }
+      responses: { "200": { description: OK } }
   /alarms:
     get:
       summary: Runtime alarm list
-      x-rbac: [viewer, operator, engineer, admin]
       description: >
         Runtime alarm rows derived from ADR-013 alarm entities and ADR-014 ack lifecycle.
         This is the visible current list, not full history: active unacked alarms,
@@ -960,7 +902,6 @@ paths:
   /alarms/{id}/ack:
     post:
       summary: Acknowledge alarm
-      x-rbac: [operator, engineer, admin]
       description: >
         Acknowledge one alarm entity id. If the alarm is active, status becomes acked until
         clear. If the condition already cleared but is latched unack, ack removes it from
@@ -987,7 +928,6 @@ paths:
   /alarms/{id}/suppress:
     post:
       summary: Suppress alarm
-      x-rbac: [operator, engineer, admin]
       description: >
         Hide an active or manually latched alarm for a selected duration, or permanently
         until core restart. Used by the Alarm log Off action.
@@ -1012,7 +952,6 @@ paths:
   /alarms/{id}/return:
     post:
       summary: Return acknowledged alarm to active
-      x-rbac: [operator, engineer, admin]
       description: >
         Undo acknowledge for a still-active alarm entity id. This is only valid while
         the underlying alarm condition remains true; unknown, cleared, or already-active ids return 404.
@@ -1032,7 +971,6 @@ paths:
   /alarm-history:
     get:
       summary: Persistent alarm history
-      x-rbac: [viewer, operator, engineer, admin]
       description: >
         Reads JSONL alarm history persisted on the device. Filters are combined with AND;
         comma-separated event values are OR-ed. `limit=all` returns every matching record.
@@ -1057,11 +995,9 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
   /graph/validate:
     post:
-      x-runtime-status: authority-pending
-      x-runtime-note: RBAC route mapped; graph authority is not implemented and currently returns 501 after authorization.
       summary: Validate graph.json (role operator+)
       description: Cháº¡y validator theo GRAPH_SCHEMA; khÃ´ng deploy, tráº£ pass=false kÃ¨m errors náº¿u fail.
-      x-rbac: [operator, engineer, admin]
+      x-rbac: [operator, admin]
       requestBody:
         required: true
         content:
@@ -1075,16 +1011,13 @@ paths:
               schema: { $ref: "#/components/schemas/GraphValidationResult" }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
-        "501": { $ref: "#/components/responses/Error" }
   /graph/deploy:
     post:
-      x-runtime-status: authority-pending
-      x-runtime-note: RBAC route mapped; graph authority is not implemented and currently returns 501 without changing graph/runtime state.
-      summary: Validate rá»“i deploy graph.json (role engineer+)
+      summary: Validate rá»“i deploy graph.json (role admin)
       description: >
         Validate graph.json, gá»­i core build plan vÃ  Ã¡p dá»¥ng atomically náº¿u pass. Náº¿u validate/build fail,
         giá»¯ graph cÅ© vÃ  tráº£ pass=false/deployed=false kÃ¨m errors.
-      x-rbac: [engineer, admin]
+      x-rbac: [admin]
       requestBody:
         required: true
         content:
@@ -1098,11 +1031,9 @@ paths:
               schema: { $ref: "#/components/schemas/GraphDeployResult" }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
-        "501": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
-    wsToken: { type: apiKey, in: query, name: token }
   parameters:
     PointId:
       name: id
@@ -1595,20 +1526,10 @@ components:
       required: [interface, link, adminUp, carrier, reasonCode, mode, ipv4, prefixLength, gateway, dnsServers]
       properties:
         interface: { type: string }
-        link:
-          type: string
-          enum: [up, down, unknown]
-          description: Effective link health; an administratively-up interface without carrier is down.
-        adminUp:
-          type: boolean
-          description: Whether the kernel administrative IFF_UP flag is set.
-        carrier:
-          type: boolean
-          description: Whether the kernel reports physical carrier for the interface.
-        reasonCode:
-          type: string
-          enum: [OK, INTERFACE_NOT_FOUND, KERNEL_STATE_UNAVAILABLE, ADMIN_DOWN, NO_CARRIER, NO_ACTIVE_ADDRESS]
-          description: Interface-health reason derived from current kernel state; independent of NetcfgResponse.reasonCode.
+        link: { type: string, enum: [up, down, unknown] }
+        adminUp: { type: boolean }
+        carrier: { type: boolean }
+        reasonCode: { type: string }
         mode: { type: string, enum: [static, dhcp, unknown] }
         ipv4: { type: string }
         prefixLength: { type: integer, minimum: 0, maximum: 32 }
@@ -1626,9 +1547,7 @@ components:
         version: { type: integer, enum: [1] }
         requestId: { type: string }
         result: { type: string, enum: [accepted, rejected] }
-        reasonCode:
-          type: string
-          description: Stable result code for the request or transaction transition; not interface health.
+        reasonCode: { type: string }
         message: { type: string }
         transactionId: { type: string }
         state: { type: string, enum: [idle, staged, applying, awaiting_confirmation, confirmed, rolling_back, rolled_back, failed] }
@@ -2244,4 +2163,4 @@ components:
       required: [username, role]
       properties:
         username: { type: string }
-        role: { type: string, enum: [admin, engineer, operator, viewer] }
+        role: { type: string, enum: [admin, operator, viewer] }

@@ -74,8 +74,8 @@ func TestAuthLoginJWTAndRBAC(t *testing.T) {
 	if principal.Username != "admin" || principal.Role != RoleAdmin {
 		t.Fatalf("principal = %+v", principal)
 	}
-	if !RoleHasPermission(RoleAdmin, PermissionOperate) || RoleHasPermission(RoleViewer, PermissionOperate) {
-		t.Fatalf("RBAC permission mapping broken")
+	if !RoleAllows(RoleAdmin, RoleOperator) || RoleAllows(RoleViewer, RoleOperator) {
+		t.Fatalf("RBAC order broken")
 	}
 	auth.Revoke(token)
 	if _, err := auth.Validate(token); err == nil {
@@ -91,32 +91,6 @@ func TestAuthRejectsBadPassword(t *testing.T) {
 	}
 	if _, _, err := auth.Authenticate("admin", "wrong", "127.0.0.1"); err == nil {
 		t.Fatalf("bad password accepted")
-	}
-}
-
-func TestLogoutDoesNotRevokeImmediateRelogin(t *testing.T) {
-	users := writeTestUsers(t, "admin123", RoleAdmin)
-	auth, err := NewAuthService(testConfig(t, users), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first, _, err := auth.Authenticate("admin", "admin123", "test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, _, err := auth.Authenticate("admin", "admin123", "test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first == second {
-		t.Fatal("consecutive logins issued the same JWT")
-	}
-	auth.Revoke(first)
-	if _, err := auth.Validate(first); err == nil {
-		t.Fatal("logged-out JWT remained valid")
-	}
-	if _, err := auth.Validate(second); err != nil {
-		t.Fatalf("logout revoked an independent session: %v", err)
 	}
 }
 

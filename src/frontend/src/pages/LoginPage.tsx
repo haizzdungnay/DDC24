@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { Eye, LockKeyhole, UserRound } from 'lucide-react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { DEVICE_DEFAULTS } from '../config'
 import { useI18n } from '../i18n'
@@ -9,10 +9,8 @@ import { StatusBadge } from '../components/StatusBadge'
 
 export function LoginPage() {
   const { login } = useAuth()
-  const location = useLocation()
   const navigate = useNavigate()
   const { t, pick } = useI18n()
-  const [username, setUsername] = useState('admin')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -22,8 +20,8 @@ export function LoginPage() {
     setLoading(true)
     setError(null)
     try {
-      await login(password, username.trim())
-      navigate(loginReturnPath(location.state), { replace: true })
+      await login(password)
+      navigate('/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
@@ -56,7 +54,7 @@ export function LoginPage() {
             {t('username')}
             <span className="mt-1 flex h-10 items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3">
               <UserRound className="h-4 w-4" aria-hidden="true" />
-              <input className="w-full bg-transparent text-sm outline-none" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" aria-label={t('username')} />
+              <input className="w-full bg-transparent text-sm outline-none" value="admin" readOnly aria-label={t('username')} />
             </span>
           </label>
           <label className="block text-xs text-[var(--c-text-dim)]">
@@ -75,7 +73,7 @@ export function LoginPage() {
           <Button className="w-full" variant="primary" type="submit" loading={loading}>{t('signIn')}</Button>
           <div className="grid grid-cols-2 gap-2">
             <Button type="button" variant="secondary" size="sm">SSO / AD</Button>
-            <Button type="button" variant="secondary" size="sm" onClick={() => void login('').then(() => navigate(loginReturnPath(location.state), { replace: true }))}>{t('guest')}</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => void login('').then(() => navigate('/'))}>{t('guest')}</Button>
           </div>
         </form>
         <p className="mt-5 rounded-[var(--radius)] border border-[rgba(224,161,6,0.38)] bg-[rgba(224,161,6,0.08)] p-3 text-xs text-[var(--c-warn-fg)]">
@@ -84,13 +82,4 @@ export function LoginPage() {
       </section>
     </main>
   )
-}
-
-export function loginReturnPath(state: unknown): string {
-  const from = state && typeof state === 'object' && 'from' in state
-    ? (state as { from?: unknown }).from
-    : undefined
-  return typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') && from !== '/login'
-    ? from
-    : '/'
 }

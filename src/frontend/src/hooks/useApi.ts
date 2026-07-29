@@ -11,13 +11,11 @@ export interface ApiState<T> {
 interface UseApiOptions {
   refreshMs?: number
   networkRetryMs?: number | false
-  enabled?: boolean
 }
 
 export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], options: UseApiOptions = {}): ApiState<T> {
-  const enabled = options.enabled !== false
   const [data, setData] = useState<T | null>(null)
-  const [loading, setLoading] = useState(enabled)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
   const isMounted = useRef(true)
   const requestSequence = useRef(0)
@@ -35,7 +33,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
   }, [])
 
   const fetchNow = useCallback(async (showLoading: boolean) => {
-    if (!isMounted.current || !enabled) return
+    if (!isMounted.current) return
     const requestId = ++requestSequence.current
     if (showLoading) {
       setLoading(true)
@@ -56,7 +54,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
         setLoading(false)
       }
     }
-  }, [enabled])
+  }, [])
 
   const refetch = useCallback(async () => {
     await fetchNow(true)
@@ -86,14 +84,8 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
 
   // Initial fetch
   useEffect(() => {
-    if (!enabled) {
-      requestSequence.current += 1
-      setLoading(false)
-      setError(null)
-      return
-    }
     void fetchNow(true)
-  }, [enabled, fetchNow])
+  }, [fetchNow])
 
   const networkRetryMs = options.networkRetryMs === false ? 0 : (options.networkRetryMs ?? 2000)
   useEffect(() => {
@@ -120,7 +112,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
 
   useEffect(() => {
     const refreshMs = options.refreshMs
-    if (!enabled || !refreshMs) return undefined
+    if (!refreshMs) return undefined
     let polling = false
 
     const poll = async () => {
@@ -137,7 +129,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: DependencyList = [], 
         window.clearInterval(timerId)
       }
     }
-  }, [enabled, fetchNow, options.refreshMs])
+  }, [fetchNow, options.refreshMs])
 
   return { data, loading, error, refetch }
 }

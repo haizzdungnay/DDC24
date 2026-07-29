@@ -157,7 +157,7 @@ func (a *App) handlePoint(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
 	principal := principalFromContext(r.Context())
-	if principal == nil || !principal.HasPermission(PermissionOperate) {
+	if principal == nil || !RoleAllows(principal.Role, RoleOperator) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}

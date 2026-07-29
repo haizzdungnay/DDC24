@@ -2,7 +2,7 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-29
+**Cập nhật:** 2026-07-24
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: EasySet parity thành ADR-013; raw SHM thành ADR-014.
 
@@ -28,7 +28,6 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-018 | SQLite block historian: backend-owned per-point database logging policy, hot/archive tiers, bounded migration/recovery and unified Trends authority. | Accepted |
 | ADR-019 | Independent global point tag/name namespaces, static references and generation-aware rename/delete behavior. | Accepted |
 | ADR-020 | Rev A.0 dùng Program Runtime do Mekong sở hữu (không runtime IEC bên ngoài), IEC 61131-3-aligned, phạm vi ngôn ngữ **ST + FBD** (LD/SFC hoãn, chưa vào release gate Rev A.0). Component graph 28-node cũ chỉ còn là legacy importer/nguồn vendor FB, không gọi là FBD. Không online change, không claim certified/compliant trong Rev A.0. C0 là phase kiểm soát; CTO phê duyệt `FW-SOM-ST-001` ngày 2026-07-24 để mở next action FW SOM trong `services/core`: chạy/test một chương trình ST tối thiểu trên SOM host runtime. FE/Web Backend/STM32/HIL/FBD đầy đủ vẫn chờ approval riêng. | Accepted — supersedes ADR-004; amended 2026-07-24 |
-| ADR-022 | Web RBAC dùng đúng bốn role `viewer`, `operator`, `engineer`, `admin` và authorize theo capability bằng `RequirePermission` deny-by-default. Viewer chỉ đọc, ngoài đổi mật khẩu cá nhân và Display/language local; Operator thêm runtime operation/commissioning/alarm action và edit/validate/build program nhưng không đổi Settings/config hoặc deploy; Engineer thêm Settings/config, network transaction, deploy/rollback, OTA/log nhưng không được xem/quản lý Users hay sửa database historian policy; Admin có toàn bộ business capability, vẫn chịu self-delete/last-admin invariant. Web RBAC độc lập với role/policy local HMI. JWT phải kiểm `session_version` lưu bền vững để role/password change và user deletion vô hiệu session account-wide ngay. | Accepted — `RBAC-BE/FE/TEST` code-local complete; rollout/approval pending |
 
 ## Diễn giải bắt buộc
 
@@ -41,4 +40,3 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 - Base SKU là 16 UI + 4 AO + 4 DO. True isolated DI chỉ là capability/SKU tùy chọn và phải có phê duyệt riêng.
 - MQTT cloud agent, OTA A/B, wiresheet canvas (drag-drop FBD/LD editor), BACnet MS/TP và BTL certification không thuộc baseline Rev A.0. **IEC 61131-3-aligned Program Runtime (ST + FBD, Mekong-owned, không claim certified) thuộc baseline Rev A.0 theo ADR-020 — không còn bị loại trừ.** LD và SFC vẫn hoãn (schema mở rộng được, nhưng không build trong Rev A.0).
 - IEC 60073, IEC 62682, IEC 62443, ISO 9241-210 và ISA-101 được dùng làm design/verification guidance theo scope; không được biến review tài liệu thành tuyên bố conformity/certification.
-- ADR-022 áp dụng cho Web/API. Role `Service` và policy `Service/Admin` của local HMI không được ánh xạ ngầm sang Web `engineer/admin`; mọi endpoint Web phải khai báo capability cụ thể, không chỉ so rank role.

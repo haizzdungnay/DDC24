@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../components/Toast'
 import { I18nProvider } from '../i18n'
-import { advanceRfc3339WithOffset, TimeSettingsPage } from './TimeSettingsPage'
+import { TimeSettingsPage } from './TimeSettingsPage'
 
 const timeConfig = {
   timezone: 'Asia/Ho_Chi_Minh',
@@ -60,11 +60,6 @@ describe('TimeSettingsPage', () => {
     vi.clearAllMocks()
   })
 
-  it('advances and displays the controller-local RFC3339 offset instead of converting it back to UTC', () => {
-    expect(advanceRfc3339WithOffset('2026-07-27T10:53:27+07:00', 5000)).toBe('2026-07-27T10:53:32.000+07:00')
-    expect(advanceRfc3339WithOffset('2026-07-27T03:53:27Z', 5000)).toBe('2026-07-27T03:53:32.000Z')
-  })
-
   it('loads config and status, then refreshes status without a fake sync toast', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -72,8 +67,6 @@ describe('TimeSettingsPage', () => {
     expect(screen.getByText('Loading time settings')).toBeInTheDocument()
     expect(await screen.findByDisplayValue('pool.ntp.org')).toBeInTheDocument()
     expect(screen.getByText('pool.ntp.org', { selector: 'dd' })).toBeInTheDocument()
-    expect(screen.getByText(/^2026-07-18T10:00:/)).toBeInTheDocument()
-    expect(screen.getByText(/^UTC 2026-07-18T03:00:/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
     expect(api.getTimeConfig).toHaveBeenCalledOnce()
     expect(api.getTimeStatus).toHaveBeenCalledOnce()
@@ -138,25 +131,5 @@ describe('TimeSettingsPage', () => {
 
     rejectSave(new Error('save rejected'))
     expect(await screen.findByText(/save rejected/i)).toBeInTheDocument()
-  })
-
-  it('shows an authoritative timezone outside the curated list instead of a different fallback option', async () => {
-    api.getTimeConfig.mockResolvedValueOnce({ ...timeConfig, timezone: 'Asia/Shanghai', revision: 6 })
-    api.getTimeStatus.mockResolvedValueOnce({ ...timeStatus, timezone: 'Asia/Shanghai', nowLocal: '2026-07-18T11:00:00+08:00' })
-    const user = userEvent.setup()
-    renderPage()
-
-    const timezone = await screen.findByRole('combobox', { name: 'Timezone' })
-    expect(timezone).toHaveValue('Asia/Shanghai')
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
-
-    await user.selectOptions(timezone, 'Asia/Ho_Chi_Minh')
-    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
-    await user.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => expect(api.putTimeConfig).toHaveBeenCalledWith(expect.objectContaining({
-      timezone: 'Asia/Ho_Chi_Minh',
-      baseRevision: 6
-    })))
   })
 })

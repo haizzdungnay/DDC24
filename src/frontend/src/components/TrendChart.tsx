@@ -17,7 +17,7 @@ interface TrendChartProps {
   series: TrendSeries[]
   height?: number
   rawUnit?: string
-  timeZone?: string
+  timeZone?: 'UTC' | 'local'
   showTable?: boolean
 }
 
@@ -28,14 +28,10 @@ function displayValue(value: string | number | null | undefined, kind?: TrendSer
   return String(value)
 }
 
-function trendTimeZoneOption(timeZone: string): Pick<Intl.DateTimeFormatOptions, 'timeZone'> {
-  return timeZone === 'local' ? {} : { timeZone }
-}
-
-export function formatTrendTime(value: number | string, timeZone = 'local'): string {
+export function formatTrendTime(value: number | string, timeZone: 'UTC' | 'local' = 'local'): string {
   const date = new Date(value)
   return Number.isFinite(date.getTime())
-    ? date.toLocaleString('vi-VN', { ...trendTimeZoneOption(timeZone), hour12: false })
+    ? date.toLocaleString('vi-VN', timeZone === 'UTC' ? { timeZone: 'UTC', hour12: false } : undefined)
     : String(value)
 }
 
@@ -45,7 +41,7 @@ function formatRaw(value: unknown, unit: string): string {
   return `${fixed} ${unit}`
 }
 
-function HistoryTooltip({ active, payload, label, series, rawUnit, timeZone }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string; timeZone: string }) {
+function HistoryTooltip({ active, payload, label, series, rawUnit, timeZone }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string; timeZone: 'UTC' | 'local' }) {
   if (!active || !payload?.length) return null
   return (
     <div className="rounded border border-[var(--c-border)] bg-[var(--c-surface)] p-2 text-xs shadow-lg">
@@ -66,7 +62,7 @@ export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'lo
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    ...trendTimeZoneOption(timeZone)
+    ...(timeZone === 'UTC' ? { timeZone: 'UTC' } : {})
   })
 
   return (
@@ -88,7 +84,7 @@ export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'lo
       {showTable && <div className="overflow-x-auto rounded border border-[var(--c-border)]">
         <table aria-label="Historical trend data" className="w-full border-collapse text-left text-xs">
           <caption className="sr-only">Historical values with quality, source, and storage tier</caption>
-          <thead className="bg-[var(--c-surface-2)]"><tr><th className="px-3 py-2">Time{timeZone === 'local' ? '' : ` (${timeZone})`}</th>{series.map((item) => <th key={item.key} className="px-3 py-2">{item.label}</th>)}{rawUnit && <th className="px-3 py-2">Raw</th>}</tr></thead>
+          <thead className="bg-[var(--c-surface-2)]"><tr><th className="px-3 py-2">Time{timeZone === 'UTC' ? ' (UTC)' : ''}</th>{series.map((item) => <th key={item.key} className="px-3 py-2">{item.label}</th>)}{rawUnit && <th className="px-3 py-2">Raw</th>}</tr></thead>
           <tbody>{data.slice(-5).map((row) => <tr key={String(row.__ts ?? row.time)} className="border-t border-[var(--c-border)]"><th className="whitespace-nowrap px-3 py-2 font-normal">{formatTrendTime(row.__ts ?? row.time, timeZone)}</th>{series.map((item) => { const value = row[item.key]; const quality = row[`${item.key}:quality`]; const source = row[`${item.key}:source`]; const tier = row[`${item.key}:tier`]; return <td key={item.key} className="px-3 py-2 align-top"><div>{displayValue(value, item.kind, item.stepped)}{item.unit ? ` ${item.unit}` : ''}</div><div className="text-[var(--c-text-dim)]">{quality ?? '—'} · {source ?? '—'} · {tier ?? '—'}</div></td> })}{rawUnit && <td className="whitespace-nowrap px-3 py-2 align-top"><div>{formatRaw(row.__raw, rawUnit)}</div></td>}</tr>)}</tbody>
         </table>
       </div>}

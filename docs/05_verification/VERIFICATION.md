@@ -2,8 +2,8 @@
 
 **ID:** VVP-001
 **Trạng thái:** Active — hardware gate RED; Program Runtime gate RED, FW SOM ST host
-execution opened by CTO for evidence collection (ADR-020, 2026-07-24); Web RBAC gate RED
-**Cập nhật:** 2026-07-29
+execution opened by CTO for evidence collection (ADR-020, 2026-07-24)
+**Cập nhật:** 2026-07-24
 
 ## Chiến lược
 
@@ -23,7 +23,6 @@ Không dùng số test pass lịch sử làm evidence hiện hành. Mỗi releas
 - Core: 28 node types, graph validation, scan/priority/safe-state và malformed config.
 - Iobus: IOP frame/CRC/timing/retry/fault, scaling, reliability, AO single conversion, SHM layout.
 - Web: Go tests, frontend build/lint, auth/role, config round-trip, points/history/alarm/schedule.
-- Web RBAC (ADR-022): bốn role `viewer/operator/engineer/admin`, capability deny-by-default, direct API/URL denial, account-wide stale-token invalidation, last-admin invariant, audit redaction và FE route/query gating.
 - HMI build: compile/test khi enabled; DRM/input/GPIO smoke trên target.
 - HMI authority: login/session expiry, policy query, setpoint/mode/override/release, effective source/priority/TTL, upstream ACK/reject/timeout, idempotency và audit.
 - HMI failure: broker/core/alarm authority loss phải chuyển mutation read-only, monitoring SHM tiếp tục và không blind replay; HMI không write SHM/hardware, signal process hoặc direct reboot.
@@ -58,42 +57,6 @@ chi tiết đầy đủ ở
 | G4 I/O/MCU | Typed I/O integration + STM32 target/HIL pass. | RED |
 | G5 Conformance | Normative trace matrix không open deviation trong claim scope. | RED |
 | G6 Approval | Engineering/QA/Product sign-off. | RED |
-
-## Web RBAC release gate — RED (ADR-022)
-
-Canonical docs/OpenAPI, backend `RBAC-BE-001/002/003`, frontend `RBAC-FE-001/002` và `RBAC-TEST-001` đã hoàn tất code-local. Exact API matrix và live-stack E2E bốn account đã pass trong môi trường cô lập; rollout/smoke target thật và independent security approval chưa đóng. Bảy route có authorization hoàn chỉnh nhưng business authority còn `501` được theo dõi riêng bằng `WEB-FEATURE-AUTH-001`; gate RBAC độc lập với cả feature availability và `HMI-RBAC-001`:
-
-| Finding | Hiện trạng | Evidence bắt buộc để đóng |
-|---|---|---|
-| WEB-RBAC-001 | **RED / Partial** — toàn bộ docs/BE/FE/TEST code-local và rollout tooling đã có evidence, gồm live JWT E2E bốn account; chưa claim target/release completion | Clean artifact provenance, target backup+migration+provision+full smoke+cleanup/rollback evidence và reviewer approval |
-| WEB-FEATURE-AUTH-001 | **RED / Separate** — BACnet objects, Graph validate/deploy, OTA upload/apply/status và log download có exact RBAC mapping + `401/403` evidence nhưng caller đủ quyền vẫn nhận audited `501` | Business/service authority, functional/safety tests và feature-specific target evidence; không dùng RBAC pass để claim feature available |
-
-Backend code-local evidence ngày 2026-07-27: focused RBAC/session/contract/migration tests pass; exact real-router matrix kiểm mọi 61 protected operation với unauthenticated `401`, missing-capability `403` và allowed role không bị authorization deny. OpenAPI v1.11.0 có 62 operation gồm login public và 61 protected operation khớp one-to-one; bảy authority-pending route giữ `401/403/501` + audit redaction. JWT có unique `jti`, regression chứng minh logout token A không revoke lần login B trong cùng giây. CLI rollout tạo backup mới bằng `O_EXCL`/fsync, migrate schema 2.0, bảo toàn account/role/bcrypt/session và rollback exact pre-migration bytes; fixture bốn account pass. Full `go test -race -count=1 ./...` pass native trên Ubuntu 24.04 WSL2 với Go 1.26.4/GCC 13.3.0, không có race finding; clean CI run vẫn cần cho provenance.
-
-Target-smoke tooling ngày 2026-07-27: `rbac-smoke-users-provision`/`cleanup` tạo bốn credential cryptographic offline sau migration, yêu cầu service dừng + canonical schema 2.0, ghi credential/receipt mới bằng `O_EXCL`/fsync/0600, và chỉ cleanup khi exact username/role/bcrypt/password/session ownership cùng SHA account gốc khớp. Provision→real-router full smoke→cleanup khôi phục store byte-for-byte; publish failure, running-service và tamper cases fail-closed. `rbac-target-smoke` kiểm unauthenticated `401`, login+`/me` exact role, negative Users/Settings/Database/Program/Release và positive read/Settings/Users. Tool chỉ gọi positive `501` trên read/validate an toàn, dùng role thiếu quyền chứng minh `403` trước Graph deploy/OTA mutation, và full mode kiểm stale token qua account tạm rồi cleanup. Success JSON không chứa username/password/JWT. Đây là tool readiness, chưa phải target execution evidence.
-
-Frontend code-local evidence ngày 2026-07-27: permission matrix exact cho bốn role và unknown-role fail-closed; route/nav/action/read-only guard; Network/Users hidden-query suppression; Engineer không sửa historian policy; Users CRUD API + `409` last-admin presentation và credential-safe rendering. Login cho phép chọn đúng username thay vì khóa `admin`; source guard cấm direct role/rank authorization ngoài permission module. Clean staged tree `npm test` pass 27 file/137 test; lint, typecheck/production build và source guard pass. Shared dirty worktree có thêm 9 test Network/Timezone ngoài phạm vi commit và không được dùng làm clean-scope provenance.
-
-Live-stack evidence cô lập ngày 2026-07-27: `npm run test:e2e:rbac` khởi động Go `App.Router()` với user store schema 2.0 tạm và Vite live/JWT trỏ đúng backend; 5/5 Playwright scenario pass cho missing/invalid session cùng Viewer/Operator/Engineer/Admin. Suite chứng minh direct URL redirect không phát hidden Users/Network query, direct API boundary `401/403`, allowed operation không bị authorization deny, Admin Users CRUD, exact-admin database boundary và stale JWT `401` sau đổi role. Đây là system E2E thật ở local fixture, chưa thay thế target deployment/smoke record.
-
-Full local regression cùng session: `go test -count=1 ./...`, native Linux `go test -race -count=1 ./...`, `go vet ./...`, `go build ./...`, `go mod verify`, FE unit/lint/build/source guard, Playwright 5/5 và `git diff --check` đều pass. Race evidence: [`WEB_RBAC_LINUX_RACE_2026-07-27.md`](../00_management/evidence/WEB_RBAC_LINUX_RACE_2026-07-27.md).
-
-Dependency residual ngày 2026-07-27: `npm audit --omit=dev --audit-level=high` báo 2 high entry quy về cùng `GHSA-qwww-vcr4-c8h2` trên React Router 7.18.1. Advisory nhắm RSC Action processing; FE hiện chỉ dùng client `BrowserRouter`, không có RSC/Actions. Registry hiện đề xuất downgrade 7.11.0 nhưng bản đó tái mở nhiều advisory XSS/open-redirect cũ, nên giữ 7.18.1 và không claim finding đã đóng; independent security approval phải đánh giá lại khi có bản upstream phù hợp.
-
-Read-only target preflight ngày 2026-07-27 xác nhận `orangepi5b`/aarch64 đang chạy `mkddc-web-pi.service` dưới `mkddc:mkddc`; `/data/config/users.conf` mode 0600 còn schema 1.0, một Admin và chưa có persisted `session_version`. Không deploy, stop/restart, login hay write target. Evidence: [`WEB_RBAC_TARGET_PREFLIGHT_2026-07-27.md`](../00_management/evidence/WEB_RBAC_TARGET_PREFLIGHT_2026-07-27.md). Owner đã cho phép maintenance/deploy; target gate chờ clean compatible artifact, offline migration/provision, full smoke/cleanup record và reviewer approval.
-
-Packaging preflight ngày 2026-07-27 cross-build backend `linux/arm64`, `CGO_ENABLED=0`, `-trimpath` và xác nhận SHA-256 `cce38479fa52a5a46e2dc0cc5059eb4c4c105ab48d0553b7f127e5a59285d593` cho artifact local 17.857.804 byte gồm hardened target-smoke CLI. Deterministic rebuild giữ nguyên hash; WSL xác nhận ELF tĩnh ARM aarch64 và `sha256sum --check` pass. `go version -m` khớp architecture/toolchain/dependency nhưng ghi `vcs.modified=true`, vì vậy artifact này không đủ điều kiện release. CI đã có job clean-checkout yêu cầu exact `GITHUB_SHA`, `vcs.modified=false`, verify SHA-256 rồi upload binary/checksum; YAML parse và extracted shell `bash -n` pass local, nhưng vẫn cần một CI run thành công trước release review. Evidence: [`WEB_RBAC_ARM64_CANDIDATE_2026-07-27.md`](../00_management/evidence/WEB_RBAC_ARM64_CANDIDATE_2026-07-27.md).
-
-Suite `WEB-RBAC-001` tối thiểu phải chứng minh:
-
-- Mọi operation trừ login có permission policy; direct API và URL navigation không bypass được UI gate; request không token/token sai hoặc stale trả `401`, token hợp lệ thiếu capability trả `403`.
-- Toàn bộ `/users*` và `PUT /trends/config` chỉ Admin; Engineer bị chặn Users/database historian mutation nhưng vẫn có capability Settings/network transaction và được authorization cho deploy/rollback, OTA, system log theo policy. Functional success của các route còn `501` thuộc `WEB-FEATURE-AUTH-001`.
-- Operator thực hiện được override/release, commissioning, alarm ACK/suppress/return và edit/validate/build; bị chặn mọi Settings/config và deploy/activate/rollback.
-- `PUT /schedules` và `PUT /alarm-settings` trả `403` cho Operator nhưng thành công cho Engineer/Admin; đây là configuration policy đã chốt, không được suy từ nhãn “vận hành”.
-- Viewer chỉ đọc; ngoại lệ đổi mật khẩu cá nhân và Display/language preference local không mở business mutation.
-- Route inventory chứng minh không registered route nào còn dùng `Require(Role)`/`RoleAllows`/`roleRank`; unknown role/permission fail-closed trước handler và side effect.
-- Concurrent `SetRole` demotion/`DeleteUser` admin cuối cùng và self-delete bị chặn ổn định bằng `409`; persist failure không publish candidate. Role/password change hoặc user deletion làm token cũ trả `401` ngay qua persisted `session_version`, kể cả sau restart, và request validation không đọc user file từ disk.
-- Audit ghi actor/action/result/denial nhưng redact password, JWT, firmware payload và secret; frontend không hardcode role rải rác, không để hidden/background query gọi endpoint bị cấm và không tự báo mutation thành công.
 
 ## Hardware release gate — RED
 

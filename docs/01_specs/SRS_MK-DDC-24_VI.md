@@ -1,6 +1,6 @@
 # SRS — MK-DDC-24 Software Requirements Specification
 
-> **Phiên bản:** 2.3 | 2026-07-27
+> **Phiên bản:** 2.1 | 2026-07-22
 > **Trạng thái:** Draft — Ver 1
 > **Tác giả:** KINEXUS Technologies — Software Team
 > **Chuẩn tham chiếu:** IEC 62443-4-1, BACnet ASHRAE 135, IEC 61131-3-aligned (roadmap Rev A.0, ADR-020, đang C0 — không phải Rev C, nhưng cũng chưa release/certified)
@@ -384,13 +384,11 @@ KinexusET là web IDE browser-based chạy trên chính thiết bị.
 
 | ID | Yêu cầu | Loại |
 |----|---------|------|
-| IDE-030 | PHẢI có authentication cho Web bằng đúng bốn local user role: `viewer`, `operator`, `engineer`, `admin` | MUST |
+| IDE-030 | PHẢI có authentication: local user account (admin / operator / viewer roles) | MUST |
 | IDE-031 | Session timeout: tự động logout sau 30 phút idle | MUST |
 | IDE-032 | Admin PHẢI có thể tạo/xóa/đổi mật khẩu tài khoản qua web UI | MUST |
-| IDE-033 | Tất cả action/denial (force I/O, alarm operation, upload/deploy program, config/user change) PHẢI được ghi audit log và redact password/token/secret/payload nhạy cảm | MUST |
+| IDE-033 | Tất cả action (force I/O, upload program, config change) PHẢI được ghi audit log | MUST |
 | IDE-034 | Web IDE PHẢI hỗ trợ HTTPS (TLS 1.3) trên port 8443; trong production build, HTTP 8080 PHẢI redirect tự động sang HTTPS 8443 | MUST |
-| IDE-035 | Web PHẢI authorize deny-by-default theo capability: Viewer chỉ đọc ngoài đổi mật khẩu cá nhân và Display/language local; Operator thêm runtime operation/commissioning/alarm action và edit/validate/build program nhưng không Settings/config hoặc deploy; Engineer thêm Settings/config/network/deploy/rollback/OTA/log nhưng không Users hoặc database historian mutation; Admin có toàn bộ business capability | MUST |
-| IDE-036 | JWT PHẢI đối chiếu `session_version` lưu bền vững mỗi request; đổi role/password hoặc xóa user phải vô hiệu token account-wide ngay, và hệ thống PHẢI chặn self-delete cùng demote/xóa admin cuối bằng `409` | MUST |
 
 ---
 
@@ -535,5 +533,5 @@ Ví dụ: 2026-05-28T14:23:01+07:00 ERROR E101 MCU_IOP MCU no response for 100ms
 ---
 
 **Document ID:** SRS-MK-DDC-24-VI
-**Revision:** 2.3 | 2026-07-27 — ADR-022 Web RBAC target: exact viewer/operator/engineer/admin capability matrix, deny-by-default authorization, persisted session invalidation and last-admin invariant · 2.2 | 2026-07-22 — selected limited-operator local HMI: five surfaces, whitelisted point commands, broker/core authority, TTL/release, fail-closed session and measurable usability/timing
+**Revision:** 2.2 | 2026-07-22 — selected limited-operator local HMI: five surfaces, whitelisted point commands, broker/core authority, TTL/release, fail-closed session and measurable usability/timing
 **Approved by:** Software Lead, CTO KINEXUS Technologies

@@ -87,22 +87,6 @@ func (c *HistorianRAMCache) Raw(pointID string, generation uint64, fromUTCMS, to
 	return out
 }
 
-func (c *HistorianRAMCache) RemovePoint(pointID string) {
-	if c == nil {
-		return
-	}
-	pointID = canonicalHistoryPointID(pointID)
-	c.mu.Lock()
-	for key, rows := range c.rows {
-		if len(rows) == 0 || canonicalHistoryPointID(rows[0].PointID) != pointID {
-			continue
-		}
-		c.bytes -= uint64(len(rows)) * historianRawSampleBytes
-		delete(c.rows, key)
-	}
-	c.mu.Unlock()
-}
-
 func foldHistorianHot(rows []HistorianRawSample, policyRevision uint64) (HotSample, error) {
 	if len(rows) == 0 || policyRevision == 0 {
 		return HotSample{}, fmt.Errorf("empty historian hot fold")

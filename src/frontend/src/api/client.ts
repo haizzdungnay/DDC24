@@ -30,7 +30,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigPutResult, type CreateUserInput, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserParamsConfig, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -1096,35 +1096,6 @@ export const apiClient = {
   async getMe(): Promise<CurrentUser> {
     if (IS_DEMO) return { username: 'demo', role: 'admin' }
     return requestJson<CurrentUser>('/me')
-  },
-
-  async getUsers(): Promise<UserAccount[]> {
-    return requestJson<UserAccount[]>('/users', { cache: 'no-store' })
-  },
-
-  async createUser(input: CreateUserInput): Promise<UserAccount> {
-    return requestJson<UserAccount>('/users', {
-      method: 'POST',
-      body: JSON.stringify(input)
-    })
-  },
-
-  async updateUserRole(username: string, role: UserRole): Promise<UserAccount> {
-    return requestJson<UserAccount>(`/users/${encodeURIComponent(username)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ role })
-    })
-  },
-
-  async resetUserPassword(username: string, newPassword: string): Promise<void> {
-    await requestJson(`/users/${encodeURIComponent(username)}/reset-password`, {
-      method: 'POST',
-      body: JSON.stringify({ new_password: newPassword })
-    })
-  },
-
-  async deleteUser(username: string): Promise<void> {
-    await requestJson(`/users/${encodeURIComponent(username)}`, { method: 'DELETE' })
   },
 
   async ackAlarm(id: string, choice?: AlarmDurationChoice): Promise<Alarm[]> {

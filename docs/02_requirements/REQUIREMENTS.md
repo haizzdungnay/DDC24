@@ -2,7 +2,7 @@
 
 **ID:** SYS-REQSET-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-27 (ADR-022: baseline Web RBAC bốn role và account-wide session invalidation)
+**Cập nhật:** 2026-07-23 (ADR-020: thêm SYS/SWR/IF/SAFE/NFR/FW-REQ-IEC/MCU cho Mekong Program Runtime ST+FBD)
 
 `Must` là bắt buộc cho Rev A.0. Mỗi yêu cầu cần bằng chứng trong [Verification](../05_verification/VERIFICATION.md) và ánh xạ tại [Traceability](../07_records/TRACEABILITY.md).
 
@@ -17,11 +17,10 @@
 | SWR-REQ-001 | Ba core service must phân tách core, iobus và web; lỗi presentation không được dừng control path. | process fault test |
 | SWR-REQ-002 | Graph scan, priority arbitration, interlock và safe-state must deterministic trong giới hạn test được phê duyệt. | timing + unit test |
 | SWR-REQ-003 | Config must được validate, ghi bền vững và round-trip không mất field có consumer. | API/config test |
-| SWR-REQ-004 | Mọi Web endpoint ngoài login must khai báo capability và dùng authorization deny-by-default; không được chỉ dựa vào rank role. Alarm, trend, schedule, user, commissioning và configuration endpoints must áp dụng ma trận ADR-022. | API/security test |
+| SWR-REQ-004 | Alarm, trend, schedule, user và commissioning endpoints must yêu cầu auth/role phù hợp. | API/security test |
 | SWR-REQ-005 | Network configuration must phân biệt desired/pending với active kernel state; không được báo applied/online chỉ từ file cấu hình hoặc field không rỗng. | unit + integration |
 | SWR-REQ-006 | Đổi Ethernet IPv4 must dùng transaction `stage/apply/confirm/rollback`, giữ last-known-good và tự rollback trong tối đa 120 s nếu không confirm hoặc health check thất bại. | fault + target network test |
 | SWR-REQ-007 | Đổi IP must không restart `mkddc-core`, không làm dừng IOP/UART scan và phải hot-rebind BACnet/IP rồi phát `I-Am`; Web và Modbus TCP phải phục hồi/reconnect theo interface mới. | multi-process + protocol test |
-| SWR-REQ-008 | Web/API must dùng đúng role `viewer`, `operator`, `engineer`, `admin`: Viewer chỉ đọc ngoài đổi mật khẩu cá nhân và Display/language local; Operator thêm runtime override/release, commissioning, alarm ACK/suppress/return và edit/validate/build program nhưng không đổi Settings/config hay deploy/activate/rollback; Engineer thêm Settings/config, network transaction, deploy/activate/rollback, OTA và system-log download nhưng không được xem/quản lý Users hoặc mutate database historian policy/maintenance; Admin có toàn bộ business capability, vẫn chịu self-delete/last-admin invariant. | capability-matrix API/E2E test |
 | SWR-REQ-IEC-001 | `libmkddc_iec` must parse, edit, build và execute **ST và FBD** bằng cùng semantic/type engine; LD/SFC không triển khai. | positive/negative suite ST + FBD + mixed-language project |
 | SWR-REQ-IEC-002 | Compiler must hỗ trợ POU `PROGRAM`/`FUNCTION`/`FUNCTION_BLOCK`, scope và typed interface. | POU conformance matrix; local/instance isolation |
 | SWR-REQ-IEC-003 | Compiler must triển khai data types/derived types và conversion đúng type system §C0.3. | boundary/overflow/invalid conversion tests |
@@ -30,7 +29,7 @@
 | SWR-REQ-IEC-006 | `mkddc-program-core` must verify package và atomically activate chỉ tại safe task boundary. | fault injection: reject/timeout/power loss giữ package cũ |
 | SWR-REQ-IEC-007 | Runtime must thực thi task/POU deterministically, đo cycle/WCET/overrun, không allocation trong scan. | static inspection + target timing test |
 | SWR-REQ-IEC-008 | FE must không báo validate/build/deploy thành công nếu chưa có authoritative Backend/Core result. | API/E2E denial, timeout, reject, rollback tests |
-| SWR-REQ-IEC-009 | Project edit/validate/build must yêu cầu Web Operator+; deploy/activation/rollback must yêu cầu Web Engineer+; mọi revision/build/activation/rollback must được capability-control và audit. | security/API test actor/hash/result/denial |
+| SWR-REQ-IEC-009 | Project revision, build, activation, rollback must RBAC-control và audit. | security/API test actor/hash/result/denial |
 | IF-REQ-001 | IOP must dùng 921600 baud, poll 2 ms, response timeout 3 ms, tối đa 3 retry và fault threshold 20 ms. | header assertion + HIL |
 | IF-REQ-002 | SHM consumers must dùng cùng magic/layout; đổi ABI must đổi magic và rebuild đồng bộ. | compile/layout test |
 | IF-REQ-003 | AO must đi qua ranh giới core/iobus bằng V hoặc mA hợp lệ và chỉ scale sang DAC một lần. | boundary test |
@@ -39,10 +38,9 @@
 | SAFE-REQ-001 | MCU must đưa output về safe behavior nếu không nhận poll hợp lệ trong 200 ms. | HIL fault injection |
 | SAFE-REQ-002 | Giá trị output NaN, infinity hoặc ngoài dải must bị từ chối trước khi publish/actuate. | negative test |
 | SAFE-REQ-IEC-001 | Program must không bypass Core priority, interlock, safety hoặc MCU independent safe timeout. | bypass review + process/UART fault injection + HIL |
-| SEC-REQ-001 | API must có authentication, capability authorization deny-by-default bằng `RequirePermission` và audit cho thay đổi cấu hình/runtime; route policy must không dựa riêng vào `Require(Role)`/`RoleAllows`. | security test |
+| SEC-REQ-001 | API must có authentication, role authorization và audit cho thay đổi cấu hình/force output. | security test |
 | SEC-REQ-002 | Secret must không được hard-code; production transport/config must dùng cơ chế bảo vệ được phê duyệt. | review + deployment test |
-| SEC-REQ-003 | Network mutation must audit old/new/actor/result và đi qua helper least-privilege; local HMI yêu cầu Service/Admin session, còn Web validate/stage/apply/confirm/rollback yêu cầu Engineer/Admin capability. HMI/Web must không có quyền chạy shell hoặc sửa trực tiếp OS network state. | security + deployment negative test |
-| SEC-REQ-004 | Mỗi user Web must có `session_version` lưu bền vững và JWT must đối chiếu version hiện hành ở mỗi request; đổi role/password phải increment version, xóa user phải vô hiệu session ngay, logout có thể tiếp tục dùng revoked-token map ngắn hạn. Xóa chính mình và demote/xóa admin cuối cùng phải bị chặn ổn định (`409`). | auth persistence + stale-token + last-admin concurrency test |
+| SEC-REQ-003 | Network mutation must audit old/new/actor/result và đi qua helper least-privilege; local HMI đặt flow trong surface Service nhưng mutation yêu cầu Admin, Web cho mọi session xác thực đọc authority state nhưng chỉ Admin được validate/stage/apply/confirm/rollback. HMI/Web must không có quyền chạy shell hoặc sửa trực tiếp OS network state. | security + deployment negative test |
 | NFR-REQ-001 | Restart từng service must không gây output không kiểm soát; trạng thái lỗi phải quan sát được. | resilience test |
 | NFR-REQ-002 | Build release must tái lập được và toàn bộ test bắt buộc phải pass trên target/toolchain được ghi nhận. | CI/release record |
 | NFR-REQ-IEC-001 | Program Runtime must tiếp tục active control khi FE/Web mất kết nối và recover không replay mutation. | multi-process fault test |

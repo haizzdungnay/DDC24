@@ -27,7 +27,7 @@ type monitorPointForcer interface {
 	ForcePoint(context.Context, string, any, bool) (PointDTO, error)
 }
 
-func (a *App) requireWSPermission(permission Permission, next http.HandlerFunc) http.Handler {
+func (a *App) requireWSAuth(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.URL.Query().Get("token")
 		if token == "" {
@@ -35,17 +35,7 @@ func (a *App) requireWSPermission(permission Permission, next http.HandlerFunc) 
 		}
 		principal, err := a.auth.Validate(token)
 		if err != nil {
-			if a.audit != nil {
-				a.audit.Authorization(nil, permission, r.Method, r.URL.Path, "unauthenticated", r.RemoteAddr)
-			}
 			writeError(w, http.StatusUnauthorized, "unauthorized")
-			return
-		}
-		if !principal.HasPermission(permission) {
-			if a.audit != nil {
-				a.audit.Authorization(principal, permission, r.Method, r.URL.Path, "denied", r.RemoteAddr)
-			}
-			writeError(w, http.StatusForbidden, "forbidden")
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey, principal)))
@@ -198,7 +188,7 @@ func (a *App) handleMonitorForce(ctx context.Context, conn *websocket.Conn, raw 
 	if principal == nil {
 		return false, writeWSError(ctx, conn, http.StatusUnauthorized, "unauthorized")
 	}
-	if !principal.HasPermission(PermissionOperate) {
+	if !RoleAllows(principal.Role, RoleOperator) {
 		return false, writeWSError(ctx, conn, http.StatusForbidden, "forbidden")
 	}
 	var req WSForceRequest

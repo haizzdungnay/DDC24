@@ -66,7 +66,7 @@ type HistorianPolicyService struct {
 	namespaceRevision func() (uint64, error)
 	committedBytes    []byte
 	mirrorCommitted   func(context.Context, []byte, uint64, uint64) error
-	writerActive      func(uint64) bool
+	writerActive      func() bool
 }
 
 func OpenHistorianPolicyService(path string, now func() time.Time, freeBytes func() (uint64, error)) (*HistorianPolicyService, error) {
@@ -320,75 +320,6 @@ func (s *HistorianPolicyService) Update(update HistorianConfigUpdate) (Historian
 	return result, nil
 }
 
-func (s *HistorianPolicyService) RemovePoint(ctx context.Context, pointID string) error {
-	if s == nil {
-		return nil
-	}
-	pointID = canonicalHistoryPointID(pointID)
-	if pointID == "" {
-		return fmt.Errorf("point id is required")
-	}
-	s.mu.Lock()
-	previous := s.file
-	previous.Points = append([]HistorianPolicy(nil), s.file.Points...)
-	previousBytes := append([]byte(nil), s.committedBytes...)
-	kept := make([]HistorianPolicy, 0, len(s.file.Points))
-	found := false
-	for _, policy := range s.file.Points {
-		if canonicalHistoryPointID(policy.PointID) == pointID {
-			found = true
-			continue
-		}
-		kept = append(kept, policy)
-	}
-	if !found {
-		s.mu.Unlock()
-		return nil
-	}
-	next := s.file
-	next.Revision++
-	next.Points = kept
-	data, err := marshalHistorianPolicyFile(next)
-	if err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	if err := writeConfigFileAtomic(s.path, data, 0o600); err != nil {
-		s.mu.Unlock()
-		return err
-	}
-	s.file = next
-	s.committedBytes = append([]byte(nil), data...)
-	mirror := s.mirrorCommitted
-	s.mu.Unlock()
-
-	if mirror == nil {
-		return nil
-	}
-	namespaceRevision, err := s.namespaceRevision()
-	if err == nil {
-		err = mirror(ctx, append([]byte(nil), data...), namespaceRevision, uint64(s.now().UTC().UnixMilli()))
-	}
-	if err == nil {
-		return nil
-	}
-	s.mu.Lock()
-	restoreErr := writeConfigFileAtomic(s.path, previousBytes, 0o600)
-	if restoreErr == nil {
-		s.file = previous
-		s.committedBytes = previousBytes
-	}
-	s.mu.Unlock()
-	if restoreErr != nil {
-		return fmt.Errorf("mirror historian policy after point purge: %v; restore policy: %w", err, restoreErr)
-	}
-	return fmt.Errorf("mirror historian policy after point purge: %w", err)
-}
-
 func (s *HistorianPolicyService) snapshotLocked(now time.Time, namespaceState string, namespaceRevision, free uint64, identities map[string]uint64) HistorianConfig {
 	points := make([]HistorianPolicy, 0, len(identities))
 	known := make(map[string]bool, len(points))
@@ -419,7 +350,7 @@ func (s *HistorianPolicyService) snapshotLocked(now time.Time, namespaceState st
 			points[i].State = "recording"
 			enabled++
 		}
-		if s.writerActive != nil && s.writerActive(s.file.Revision) {
+		if s.writerActive != nil && s.writerActive() {
 			points[i].Health = "healthy"
 			points[i].LastError = ""
 		} else {

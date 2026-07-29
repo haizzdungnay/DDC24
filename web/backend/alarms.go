@@ -45,7 +45,7 @@ func (a *App) currentAlarms(ctx context.Context) ([]AlarmDTO, bool) {
 // handleAckAlarm handles POST /api/v1/alarms/{id}/ack (RBAC operator+).
 func (a *App) handleAckAlarm(w http.ResponseWriter, r *http.Request) {
 	principal := principalFromContext(r.Context())
-	if principal == nil || !principal.HasPermission(PermissionOperate) {
+	if principal == nil || !RoleAllows(principal.Role, RoleOperator) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -101,7 +101,7 @@ func (a *App) handleAckAlarm(w http.ResponseWriter, r *http.Request) {
 // handleSuppressAlarm handles POST /api/v1/alarms/{id}/suppress (RBAC operator+).
 func (a *App) handleSuppressAlarm(w http.ResponseWriter, r *http.Request) {
 	principal := principalFromContext(r.Context())
-	if principal == nil || !principal.HasPermission(PermissionOperate) {
+	if principal == nil || !RoleAllows(principal.Role, RoleOperator) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -149,7 +149,7 @@ func (a *App) handleSuppressAlarm(w http.ResponseWriter, r *http.Request) {
 // handleReturnAlarm handles POST /api/v1/alarms/{id}/return (RBAC operator+).
 func (a *App) handleReturnAlarm(w http.ResponseWriter, r *http.Request) {
 	principal := principalFromContext(r.Context())
-	if principal == nil || !principal.HasPermission(PermissionOperate) {
+	if principal == nil || !RoleAllows(principal.Role, RoleOperator) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}

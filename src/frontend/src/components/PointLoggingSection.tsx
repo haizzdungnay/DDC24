@@ -1,5 +1,4 @@
 import { useAuth } from '../auth/AuthProvider'
-import { can, permissions } from '../auth/permissions'
 import { historianPolicyFor, useHistorianConfig } from '../hooks/useHistorianConfig'
 import { PointLoggingControl, type PointLoggingControlProps } from './PointLoggingControl'
 
@@ -11,7 +10,6 @@ export interface PointLoggingSectionProps {
 
 export function PointLoggingSection({ pointId, label, kind }: PointLoggingSectionProps) {
   const { session } = useAuth()
-  const canManagePolicy = can(session?.role, permissions.databaseManage)
   const historian = useHistorianConfig()
   const policy = historianPolicyFor(historian.data, pointId)
 
@@ -45,10 +43,9 @@ export function PointLoggingSection({ pointId, label, kind }: PointLoggingSectio
         point={{ id: pointId, label, kind }}
         policy={controlPolicy}
         role={session?.role ?? 'viewer'}
-        canManagePolicy={canManagePolicy}
         serverNowUtc={historian.data.serverNowUtc}
         loading={historian.loading}
-        onChange={canManagePolicy ? async (patch) => {
+        onChange={session?.role === 'admin' ? async (patch) => {
           await historian.savePoint(patch)
           await historian.refetch()
         } : undefined}

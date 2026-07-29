@@ -67,7 +67,7 @@ describe('PointLoggingSection integration', () => {
     }))
   })
 
-  it.each(['viewer', 'operator', 'engineer'] as const)('keeps %s read-only without issuing a PUT', async (role) => {
+  it.each(['viewer', 'operator'] as const)('keeps %s read-only without issuing a PUT', async (role) => {
     mocks.role = role
     mocks.getHistorianConfig.mockResolvedValue(config('DO-01'))
     render(<PointLoggingSection pointId="DO-01" label="Fan" kind="DO" />)

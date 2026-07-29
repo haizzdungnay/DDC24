@@ -1,25 +1,11 @@
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useApi } from './useApi'
 
 afterEach(cleanup)
 
 describe('useApi request ordering', () => {
-  it('does not request or poll while disabled', async () => {
-    const fetcher = vi.fn().mockResolvedValue('hidden')
-    const { result, rerender } = renderHook(
-      ({ enabled }) => useApi(fetcher, [], { enabled, refreshMs: 10 }),
-      { initialProps: { enabled: false } }
-    )
-
-    await act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 25)) })
-    expect(fetcher).not.toHaveBeenCalled()
-    expect(result.current.loading).toBe(false)
-
-    rerender({ enabled: true })
-    await waitFor(() => expect(fetcher).toHaveBeenCalled())
-  })
   it('does not let a stale response overwrite a newer dependency request', async () => {
     let resolveOld!: (value: string) => void
     let resolveNew!: (value: string) => void

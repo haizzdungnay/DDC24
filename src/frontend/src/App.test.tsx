@@ -2,11 +2,9 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { RequirePermission } from './App'
-import { permissions } from './auth/permissions'
-import { loginReturnPath } from './pages/LoginPage'
+import { RequireAdmin } from './App'
 
-const authMocks = vi.hoisted(() => ({ role: 'admin' as 'admin' | 'engineer' | 'operator' | 'viewer' }))
+const authMocks = vi.hoisted(() => ({ role: 'admin' as 'admin' | 'operator' | 'viewer' }))
 
 vi.mock('./auth/AuthProvider', () => ({
   useAuth: () => ({ session: { username: 'test', role: authMocks.role } })
@@ -15,39 +13,27 @@ vi.mock('./auth/AuthProvider', () => ({
 beforeEach(() => { authMocks.role = 'admin' })
 afterEach(cleanup)
 
-describe('RequirePermission', () => {
+describe('RequireAdmin', () => {
   function renderRoute() {
     return render(
       <MemoryRouter initialEntries={['/admin']}>
         <Routes>
           <Route path="/" element={<div>Dashboard</div>} />
-          <Route path="/admin" element={<RequirePermission permission={permissions.settingsManage}><div>Network settings</div></RequirePermission>} />
+          <Route path="/admin" element={<RequireAdmin><div>Network admin</div></RequireAdmin>} />
         </Routes>
       </MemoryRouter>
     )
   }
 
-  it.each(['admin', 'engineer'] as const)('renders settings content for %s', (role) => {
-    authMocks.role = role
+  it('renders admin content for an admin session', () => {
     renderRoute()
-    expect(screen.getByText('Network settings')).toBeInTheDocument()
+    expect(screen.getByText('Network admin')).toBeInTheDocument()
   })
 
-  it.each(['operator', 'viewer'] as const)('redirects %s from a settings route', (role) => {
-    authMocks.role = role
+  it('redirects a non-admin session', () => {
+    authMocks.role = 'viewer'
     renderRoute()
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
-    expect(screen.queryByText('Network settings')).not.toBeInTheDocument()
-  })
-})
-
-describe('loginReturnPath', () => {
-  it('restores a protected Network deep link after login', () => {
-    expect(loginReturnPath({ from: '/settings/network' })).toBe('/settings/network')
-  })
-
-  it('rejects external and recursive login destinations', () => {
-    expect(loginReturnPath({ from: '//example.com' })).toBe('/')
-    expect(loginReturnPath({ from: '/login' })).toBe('/')
+    expect(screen.queryByText('Network admin')).not.toBeInTheDocument()
   })
 })
