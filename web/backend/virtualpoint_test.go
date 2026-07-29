@@ -216,7 +216,7 @@ func TestVirtualPointDeleteRemovesItem(t *testing.T) {
 	}
 }
 
-func TestVirtualPointRecreateIncrementsPersistedGeneration(t *testing.T) {
+func TestVirtualPointRecreateStartsFreshGeneration(t *testing.T) {
 	app, token := newTestAppWithAdmin(t)
 	router := app.Router()
 
@@ -246,9 +246,9 @@ func TestVirtualPointRecreateIncrementsPersistedGeneration(t *testing.T) {
 		t.Fatalf("delete status = %d body=%s", deleteResponse.Code, deleteResponse.Body.String())
 	}
 
-	second := create("second")
-	if second.ID != "VP1" || second.Generation != 2 {
-		t.Fatalf("second = %+v, want VP1 generation 2", second)
+	second := create("vp1")
+	if second.ID != "VP1" || second.Generation != 1 || second.Tag != "VP1" {
+		t.Fatalf("second = %+v, want fresh VP1 generation 1 with reusable tag", second)
 	}
 
 	data, err := os.ReadFile(filepath.Join(app.cfg.ConfigDir, "point_namespace.conf"))
@@ -262,8 +262,8 @@ func TestVirtualPointRecreateIncrementsPersistedGeneration(t *testing.T) {
 	if err := json.Unmarshal(data, &namespace); err != nil {
 		t.Fatalf("parse point_namespace.conf: %v", err)
 	}
-	if namespace.Revision != 3 || namespace.Generations["VP1"] != 2 {
-		t.Fatalf("namespace = %+v, want revision 3 and VP1 generation 2", namespace)
+	if namespace.Revision != 3 || namespace.Generations["VP1"] != 1 {
+		t.Fatalf("namespace = %+v, want revision 3 and VP1 generation 1", namespace)
 	}
 }
 
@@ -296,7 +296,7 @@ func TestVirtualPointGenerationRecoversAfterNamespaceWriteFailure(t *testing.T) 
 	createResponse := httptest.NewRecorder()
 	app.Router().ServeHTTP(createResponse, createReq)
 	var recreated VirtualPoint
-	if err := json.Unmarshal(createResponse.Body.Bytes(), &recreated); err != nil || createResponse.Code != http.StatusCreated || recreated.Generation != 2 {
+	if err := json.Unmarshal(createResponse.Body.Bytes(), &recreated); err != nil || createResponse.Code != http.StatusCreated || recreated.Generation != 1 {
 		t.Fatalf("recreate status=%d point=%+v err=%v", createResponse.Code, recreated, err)
 	}
 }

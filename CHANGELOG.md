@@ -7,6 +7,13 @@
 ---
 
 ## [Unreleased]
+### Changed — Tích hợp chọn lọc Historian, Time và Virtual Point (2026-07-29)
+- backend(historian): nhận state-aware writer activation, policy mirror verification, cache/scheduler cleanup và durable point purge từ thay đổi đã duyệt; không lấy Network client/authority cũ.
+- backend(virtual-point): purge runtime ring, schedule, alarm source, historian/trend data và namespace generation khi xóa/tái sử dụng slot; bổ sung regression cho rollback, archive quarantine và dữ liệu liên quan.
+- time/frontend: persist `/etc/timezone`, mở systemd write boundary tương ứng, hiển thị đồng hồ theo authoritative timezone và dùng timezone thiết bị cho Trends; giữ same-origin/Network mới của baseline.
+- test(frontend): bổ sung `ResizeObserver` stub cho Dashboard trend picker để full suite không phụ thuộc timing mount của Recharts khi chạy song song dưới tải.
+- verification: Go full test, vet, build và module verify pass; FE 28 file/155 test, lint, production build và RBAC source guard pass; Playwright RBAC live 5/5 pass; OpenAPI 3.1.0/v1.11.0 parse pass với 45 path.
+
 ### Changed — Tích hợp baseline tái cấu trúc trên repo cá nhân (2026-07-29)
 - git(integration): dùng `origin/main` mới nhất của `Mekong-HCM/MK-DDC-24` làm nền, tích hợp có chọn lọc Web RBAC bốn role trên nhánh `codex/restructure-baseline`; không ghi đè `personal/main` của `haizzdungnay/DDC24`.
 - docs(contracts): hòa giải ADR-020/ADR-022, exact RBAC mapping và strict Network v1; giữ Network aggregate read cho session xác thực, còn transaction/status authoritative và mutation dành cho Engineer/Admin.

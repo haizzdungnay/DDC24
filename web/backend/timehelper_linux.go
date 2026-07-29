@@ -20,6 +20,7 @@ import (
 
 const chronySourcesPath = "/etc/chrony/sources.d/mkddc.sources"
 const defaultTimeHelperSocket = "/run/mkddc/time-helper.sock"
+const timezoneNamePath = "/etc/timezone"
 
 func timeHelperSocketPath() string {
 	if value := os.Getenv("TIME_HELPER_SOCK"); value != "" {
@@ -99,6 +100,9 @@ func runTimeHelper(encoded string) error {
 	}
 	if err := helperCommand(timedatectlPath, "set-timezone", cfg.Timezone); err != nil {
 		return err
+	}
+	if err := persistTimezoneName(timezoneNamePath, cfg.Timezone); err != nil {
+		return fmt.Errorf("persist timezone name: %w", err)
 	}
 	if cfg.NTPEnabled {
 		var content strings.Builder

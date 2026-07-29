@@ -115,6 +115,46 @@ func TestHistorianPolicyAtomicPatchPersistsAndRestarts(t *testing.T) {
 	}
 }
 
+func TestHistorianPolicyHealthUsesReadyMatchingScheduler(t *testing.T) {
+	now := time.Date(2026, 7, 27, 10, 0, 0, 0, time.UTC)
+	service, err := OpenHistorianPolicyService(filepath.Join(t.TempDir(), "historian.conf"), func() time.Time { return now }, func() (uint64, error) { return 8 << 30, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.identities = func() (map[string]uint64, string, error) {
+		return map[string]uint64{"UI-01": 1}, "valid", nil
+	}
+	if _, err := service.Update(HistorianConfigUpdate{BaseRevision: 0, Points: []HistorianPolicyPatch{{PointID: "UI-01", Generation: 1, DBLoggingEnabled: true, DBInterval: "5s"}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	app := &App{
+		historianV2Ready:      true,
+		historianShadow:       &HistorianShadowScheduler{policyRevision: 1},
+		historianRestartReady: true,
+	}
+	service.writerActive = app.historianWriterActive
+
+	config, err := service.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Points) != 1 || config.Points[0].Health != "healthy" || config.Points[0].LastError != "" {
+		t.Fatalf("ready shadow writer health=%+v", config.Points)
+	}
+
+	app.historianShadowMu.Lock()
+	app.historianShadow.policyRevision = 2
+	app.historianShadowMu.Unlock()
+	config, err = service.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Points[0].Health != "degraded" || config.Points[0].LastError != "historian writer not active" {
+		t.Fatalf("stale shadow writer health=%+v", config.Points[0])
+	}
+}
+
 func TestHistorianRetentionRevAMaximumsAreMonotonic(t *testing.T) {
 	want := map[string]int{
 		"1s": 30, "3s": 60, "5s": 90, "15s": 180, "30s": 365,

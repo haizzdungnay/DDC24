@@ -175,6 +175,42 @@ func (s *HistorianShadowScheduler) AttachTrendCache(cache *HistorianTrendCache) 
 	s.mu.Unlock()
 }
 
+func (s *HistorianShadowScheduler) RemovePoint(pointID string) {
+	if s == nil {
+		return
+	}
+	pointID = canonicalHistoryPointID(pointID)
+	s.mu.Lock()
+	kept := s.schedules[:0]
+	for _, schedule := range s.schedules {
+		if canonicalHistoryPointID(schedule.pointID) != pointID {
+			kept = append(kept, schedule)
+		}
+	}
+	s.schedules = kept
+	for key, rows := range s.pending {
+		if len(rows) > 0 && canonicalHistoryPointID(rows[0].PointID) == pointID {
+			delete(s.pending, key)
+		}
+	}
+	for key, gap := range s.pendingGaps {
+		if canonicalHistoryPointID(gap.PointID) == pointID {
+			delete(s.pendingGaps, key)
+		}
+	}
+	hot := s.pendingHot[:0]
+	for _, row := range s.pendingHot {
+		if canonicalHistoryPointID(row.PointID) != pointID {
+			hot = append(hot, row)
+		}
+	}
+	s.pendingHot = hot
+	s.cache.RemovePoint(pointID)
+	s.trendCache.RemovePoint(pointID)
+	s.publishSchedulesLocked()
+	s.mu.Unlock()
+}
+
 func (s *HistorianShadowScheduler) RunOnce(ctx context.Context, observedUTC time.Time, monotonicNS uint64) error {
 	if s == nil {
 		return nil

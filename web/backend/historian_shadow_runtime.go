@@ -24,6 +24,17 @@ func newHistorianShadowRuntime() *historianShadowRuntime {
 	return &historianShadowRuntime{cycles: make(chan historianCycle, historianDueQueueLimit), done: make(chan struct{}), overflow: map[string]HistorianDueRecord{}}
 }
 
+func (a *App) historianWriterActive(policyRevision uint64) bool {
+	if a == nil || !a.historianV2Ready || policyRevision == 0 {
+		return false
+	}
+	a.historianShadowMu.RLock()
+	defer a.historianShadowMu.RUnlock()
+	return a.historianShadow != nil &&
+		a.historianShadow.policyRevision == policyRevision &&
+		a.historianRestartReady
+}
+
 func (a *App) runHistorianShadowScheduler(ctx context.Context) {
 	runtime := newHistorianShadowRuntime()
 	a.historianShadowRuntime = runtime
