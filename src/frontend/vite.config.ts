@@ -37,6 +37,18 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
-    preview: { host: '0.0.0.0', port: 4173 }
+    preview: { host: '0.0.0.0', port: 4173 },
+    // F-23: môi trường test phải đi theo PROJECT, không theo lệnh gọi.
+    //
+    // Trước đây `environment: 'jsdom'` chỉ tồn tại dưới dạng cờ dòng lệnh trong
+    // script `test` của package.json. Bất kỳ đường chạy nào không đi qua đúng
+    // script đó — `npx vitest run`, test runner của IDE, `vitest --watch` gọi trực
+    // tiếp, hay một bước CI viết tay — đều chạy trong môi trường `node` và fail
+    // 93/133 với `ReferenceError: localStorage is not defined`, trông y như một
+    // suite đang đỏ.
+    test: {
+      environment: 'jsdom',
+      include: ['src/**/*.{test,spec}.{ts,tsx}']
+    }
   }
 })

@@ -7,6 +7,171 @@
 ---
 
 ## [Unreleased]
+### Fixed — FE + BE + CI + packaging: đóng 14/14 finding còn lại của review 2026-07-30 (2026-07-30)
+
+Phạm vi: `web/backend/` (Go), `src/frontend/` (TS/React), `.github/workflows/`,
+`packaging/`, `tools/`. Cùng với entry FW SOM bên dưới, **toàn bộ 23 finding của
+review đã được xử lý**.
+
+**Mức Cao — chức năng**
+- `F-01` `web/backend/auth.go` — `SetRole` nay có guard "last admin": hạ quyền
+  admin cuối cùng trả `ErrLastAdmin` (HTTP 409). Trước đây chỉ `DeleteUser` có
+  guard; một lần `PUT /api/v1/users/admin {"role":"viewer"}` làm hệ thống còn **0
+  admin**, từ đó mọi endpoint `RoleAdmin` — kể cả chính endpoint dùng để phục hồi —
+  trả 403 cho tất cả mọi người, chỉ sửa được bằng cách chỉnh tay `users.json` trên
+  thiết bị. `ErrLastAdmin` đổi câu chữ từ "cannot delete last admin" thành
+  **"cannot remove last admin"** vì giờ dùng cho cả hai đường.
+- `F-02` **file mới `web/backend/shm_reader.go`** — reader seqlock cho SHM. Backend
+  nay `mmap(PROT_READ, MAP_SHARED)` rồi áp đúng pattern mà `shared/mkddc_shm.h`
+  bắt buộc: đọc `seq` (atomic) → bỏ nếu LẺ → copy → đọc lại `seq` → so sánh →
+  kiểm `magic` → retry giới hạn 5 lần. Ba call site `os.ReadFile` trong
+  `core_client.go` (`ReadPoints`, `readIOStatus`, `readPLCStatus`) đi qua
+  `readIOShm()`/`readPLCShm()`; `os` không còn được import.
+  `validSHM` giữ lại nhưng có comment rõ nó **không đủ** và không được dùng thay.
+  Bổ sung thêm một lớp bảo vệ mà review không nêu: **so inode/device mỗi lần đọc**
+  — khi `mkddc-core` restart nó `shm_unlink` + tạo lại segment, mmap cũ vẫn trỏ
+  vào inode đã xoá và nội dung cũ VẪN có `magic` hợp lệ, nên không so inode thì
+  backend sẽ đọc mãi dữ liệu đóng băng của một segment đã chết.
+  `readIOStatus` thất bại nay trả `Status: "fault"` (fail-safe, khớp
+  `KX_IOP_FAULT` phía HMI).
+
+**Mức Cao — gate CI rỗng**
+- `F-12` `.github/workflows/build-and-test.yml` — job `web-backend` thêm
+  `go vet ./...` và `go test -race ./...`. Trước đó job chỉ có `go build`, nên
+  toàn bộ test BE (auth, RBAC, historian, đường SHM) chưa bao giờ chạy trên CI.
+- `F-13` job `web-frontend` thêm `npm run lint` và `npm test` **trước** bước
+  build. Trước đó chỉ `npm run build`, nên 133 vitest test và
+  `eslint --max-warnings=0` không chặn được regression hành vi nào.
+- `F-15` `.github/workflows/security.yml` — CodeQL đổi từ `languages: python`
+  (repo chỉ có 4 file `.py`) sang **matrix `c-cpp` × `go` × `javascript-typescript`**,
+  `fail-fast: false` để một ngôn ngữ đỏ không che ngôn ngữ khác. `c-cpp` build
+  tường minh bằng CMake (autobuild không biết cấu hình của dự án) với
+  `*_BUILD_TESTS=OFF` — chỉ soi target production; `go` và
+  `javascript-typescript` dùng autobuild.
+
+**Mức Trung bình**
+- `F-04` `src/frontend/src/auth/AuthProvider.tsx` — `logout()` gọi
+  `POST /api/v1/auth/logout` với `Authorization: Bearer <token>` (capture token
+  TRƯỚC khi xoá state), `keepalive: true` để request vẫn đi khi trang đóng ngay
+  sau đó. Fire-and-forget có chủ đích: state local bị xoá ngay và một lần thu hồi
+  thất bại không đảo ngược việc đã đăng xuất. Trước đây FE chỉ xoá state local nên
+  JWT vừa dùng còn hợp lệ tới hết TTL 1 giờ và toàn bộ cơ chế `revoked` phía BE là
+  code chết.
+- `F-06` `web/backend/auth.go` — thêm `pruneRevokedLocked()` gọi trong `Revoke()`:
+  quét và xoá mọi entry đã quá hạn. Map giờ bị chặn trên bởi số lần logout trong
+  một TTL (1 giờ) thay vì tích luỹ vô hạn. Chọn quét tại chỗ thay vì goroutine
+  prune riêng: map luôn nhỏ nên phép quét là O(kích thước thực tế) và không thêm
+  một vòng đời goroutine phải quản lý.
+- `F-07` `AuthProvider.tsx` — `role: body.role ?? 'admin'` → **`?? 'viewer'`** kèm
+  `console.warn`. Response login thiếu field `role` (BE cũ, đổi hợp đồng, hoặc
+  reverse proxy lọc field) trước đây cấp giao diện admin đầy đủ.
+- `F-19` `packaging/rotate-web-jwt-secret.sh` — secret **không còn đi qua `/tmp`**:
+  `openssl rand -hex 32 | sed 's/^/JWT_SECRET=/' | sudo install -m 0600 /dev/stdin`.
+  Không có file trung gian nào tồn tại, nên vừa hết cửa sổ đọc lén theo umask
+  (0644) vừa hết đường symlink attack qua đường dẫn cố định đoán được. Thêm
+  `umask 077` cho mọi bước ghi file về sau. Secret cũng không còn đặt vào biến
+  shell.
+
+**Mức Thấp**
+- `F-09` `src/frontend/src/hooks/useWebSocket.ts` — bọc `JSON.parse` trong
+  `onmessage` bằng try/catch. Một frame không phải JSON trước đây throw ra ngoài
+  event handler, không ai bắt, và mất cập nhật cho tới lần reconnect.
+- `F-10` `useWebSocket.ts` + `web/backend/ws.go` — JWT **ra khỏi query string**,
+  đi qua `Sec-WebSocket-Protocol`. Client gửi
+  `["mkddc.v1", "mkddc.token.<jwt>"]`; server offer **đúng một** subprotocol
+  `mkddc.v1` nên response chỉ echo phần tử đó và token không bao giờ xuất hiện
+  trong header trả về. `requireWSAuth` lấy token theo thứ tự: subprotocol →
+  `Authorization` header → query string. Query string được **giữ làm đường lỗi
+  thời** (kèm log `WARN ws_token_in_query`) để một SPA còn trong cache browser sau
+  khi nâng cấp thiết bị không mất kết nối; việc FE ngừng dùng nó đã đóng phần lộ
+  thông tin của finding (lịch sử browser + access log của proxy).
+- `F-11` `web/backend/ws.go` — `wsOriginPatterns` chỉ nối 6 pattern loopback khi
+  `CORS_ORIGIN` **rỗng**. Trước đây luôn nối, nên một trang tại
+  `http://localhost:<port>` vẫn qua được check Origin của WS dù đã cấu hình
+  allowlist production — phá vỡ đúng ý định mà `isAllowedOrigin` thực thi cho HTTP.
+  Semantics giờ khớp `isAllowedOrigin`: rỗng = dev, đã đặt = allowlist đóng.
+- `F-20` `packaging/rotate-web-jwt-secret.sh` — `rollback()` chuyển lên **trước
+  thay đổi đầu tiên** và gắn `trap 'rollback' EXIT INT TERM` (nhả trap khi đã xác
+  nhận thành công). Rollback nay phục hồi **cả env file**, và nếu trước khi chạy
+  không có env file thì xoá nó thay vì để lại secret mới trên đĩa. Trước đây
+  `rollback()` được định nghĩa SAU khi unit đã bị `sed` sửa và `daemon-reload` đã
+  chạy, không có trap, nên một thất bại trong khoảng đó thoát script mà không hoàn
+  tác gì; và nó chưa bao giờ phục hồi env file, nên hệ thống "đã rollback" vẫn
+  mang secret mới và mọi session đang hoạt động vẫn bị vô hiệu.
+- `F-23` `src/frontend/vite.config.ts` — khai báo
+  `test: { environment: 'jsdom', include: [...] }`. Trước đây `jsdom` chỉ tồn tại
+  dưới dạng cờ dòng lệnh trong script `test`, nên `npx vitest run` (hay test runner
+  của IDE, hay một bước CI viết tay) chạy trong môi trường `node` và fail 93/133
+  với `ReferenceError: localStorage is not defined` — trông y như một suite đang đỏ.
+
+**Test mới**
+- Go **+13 test** (350 → 363 case kể cả subtest): `users_test.go` 3 test cho F-01;
+  `auth_test.go` 1 test cho F-06; **file mới `shm_reader_test.go`** 6 test cho
+  F-02; **file mới `ws_test.go`** 3 test cho F-10 + F-11.
+- FE **+7 test** (133 → 140, 25 → 26 file): **file mới
+  `src/auth/AuthProvider.test.tsx`** 5 test cho F-04 + F-07; `useWebSocket.test.tsx`
+  2 test cho F-09 + F-10.
+- Shell **file mới `tools/test_rotate_jwt_secret.sh`** — harness hermetic 17 assert
+  cho F-19 + F-20, stub `sudo`/`systemctl`/`systemd-analyze`/`curl` vào PATH và
+  chạy chính script production (chỉ đổi 2 đường dẫn sang thư mục tạm). 4 case:
+  happy path, `systemd-analyze verify` fail *trước* restart, service không bao giờ
+  ready, và không có env file ban đầu rồi thất bại.
+
+**Verification — đo lại từ đầu trong phiên này, không dẫn số cũ**
+
+| Gate | Baseline `7ea3ac5` | Sau khi sửa |
+|------|--------------------|-------------|
+| `go build ./...` | rc=0 | rc=0 |
+| `go vet ./...` | rc=0, 0 finding | rc=0, 0 finding |
+| `go test ./...` | PASS, 350 case | **PASS, 363 case** |
+| `go test -race ./...` (như CI mới) | — | **PASS** (89,6 s) |
+| `tsc --noEmit` | 0 lỗi | 0 lỗi |
+| `npm test` | 133/133, 25 file | **140/140, 26 file** |
+| `npx vitest run` (không qua npm script) | **fail 93/133** (`localStorage is not defined`) | **140/140 PASS** |
+| `npm run lint` (`--max-warnings=0`) | 0 cảnh báo | 0 cảnh báo |
+| `npm run build` | PASS | PASS |
+| `tools/test_rotate_jwt_secret.sh` | *(chưa tồn tại)* — chạy trên script cũ: **11 PASS / 6 FAIL** | **17 PASS / 0 FAIL** |
+| ctest C++ (HMI ON) — kiểm không hồi quy | 702/702 | **729/729 PASS** |
+| YAML 2 workflow parse được | PASS | PASS |
+
+- **Chứng minh test bắt được lỗi cũ** (hoàn nguyên tạm từng hành vi rồi chạy lại):
+  Go — 4 test fail (`TestAuthRevokePrunesExpiredEntries`,
+  `TestUsersDemoteLastAdminReturnsConflictAndKeepsAdminAccess`,
+  `TestUsersDemoteAdminAllowedWhenAnotherAdminRemains`, 2 test `TestWSOriginPatterns*`);
+  FE — 5 test fail (F-04, F-07, F-09, F-10 và test URL cũ); shell — 6 assert fail.
+  Toàn bộ PASS trên code đã sửa.
+- **Bằng chứng định lượng cho F-02** (`TestReadFileSnapshotCanTearProvingSeqlockIsRequired`
+  so với `TestShmReadNeverObservesTornSnapshotUnderConcurrentWriter`, writer ghi 2
+  field phải luôn bằng nhau, cửa sổ ghi nới rộng, chạy 2 s mỗi bên):
+  đường cũ `os.ReadFile + validSHM` thấy **55.132/78.009 (71%) snapshot BỊ XÉ vẫn
+  qua được check magic**; reader seqlock mới **0/4.316 bị xé**. Đây là lỗi thật, đo
+  được, không phải suy đoán lý thuyết.
+- **Kiểm chứng F-19 độc lập**: `install -m 0600 /dev/stdin` dưới `umask 022` cho ra
+  file quyền **600** — đúng điều bản cũ không bảo đảm được trong cửa sổ giữa
+  redirect và `install`.
+
+**Ghi chú kỹ thuật**
+- `go test -race` **không** chứng minh được tính đúng đắn của seqlock: writer
+  trong test ghi qua một mmap riêng, nên race detector không thấy được aliasing
+  (và trong production writer là một *tiến trình* khác, hoàn toàn ngoài tầm của
+  nó). Bằng chứng là test bất biến "hai field luôn bằng nhau" ở trên.
+- `CoreClient` nay chứa `sync.Mutex` (trong `shmSegment`) nên không copy được theo
+  giá trị; `go vet` (copylocks) sạch, mọi call site đều dùng con trỏ. Thêm
+  `(*CoreClient).Close()` để nhả mmap.
+
+**Chưa làm — cần quyết định của bạn**
+- `continue-on-error: true` trên bước `analyze` của CodeQL **vẫn được giữ**. Review
+  đúng khi nói nó làm gate không chặn được PR, nhưng bước upload Code Scanning đòi
+  **GitHub Advanced Security**; trên repo chưa bật GHAS, bỏ cờ này làm job đỏ vì lý
+  do hạ tầng chứ không phải vì code có finding. Bỏ cờ là quyết định org/billing —
+  cần bạn xác nhận GHAS đã bật.
+- Bước "Generate Python pip SBOM" trong `security.yml` giữ nguyên (review nêu nó
+  như *bằng chứng* workflow kế thừa khuôn mẫu Python, không phải finding riêng).
+  Nếu muốn SBOM đúng cho dự án thì cần thêm nhánh Go module + npm lockfile — đề
+  xuất làm trong một thay đổi riêng.
+- Chỉ chạy trên x86-64 Linux / GCC 13 / Go 1.26.4 / Node 22; **chưa** chạy lại trên
+  aarch64 (Orange Pi 5B).
+
 ### Fixed — FW SOM: đóng 8/9 finding của review 2026-07-30 (WP1→WP4) (2026-07-30)
 
 Phạm vi: `services/hmi`, `services/iobus`, `services/netcfg`, `shared/mkddc_shm.h`,

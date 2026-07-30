@@ -151,6 +151,19 @@ jobs:
           cd web/backend
           go build -v ./...
 
+      # F-12: job này trước đây CHỈ có `go build`. Toàn bộ test BE (auth, RBAC,
+      # historian, đường SHM) chưa bao giờ được thực thi trên CI, nên một PR làm
+      # hỏng logic auth vẫn hiện check xanh miễn là code còn biên dịch được.
+      - name: Vet Go backend
+        run: |
+          cd web/backend
+          go vet ./...
+
+      - name: Test Go backend
+        run: |
+          cd web/backend
+          go test -race ./...
+
   web-frontend:
     name: React Web Frontend
     runs-on: ubuntu-22.04
@@ -169,6 +182,20 @@ jobs:
         run: |
           cd src/frontend
           npm ci
+
+      # F-13: job này trước đây CHỈ chạy `npm run build` (tsc --noEmit && vite
+      # build). 133 vitest test trên 25 file và `eslint --max-warnings=0` không
+      # chặn được gì — chỉ lỗi type và lỗi bundle mới bị bắt, còn mọi regression
+      # hành vi ở component/hook/AuthProvider/useWebSocket đều merge xanh.
+      - name: Lint React frontend
+        run: |
+          cd src/frontend
+          npm run lint
+
+      - name: Test React frontend
+        run: |
+          cd src/frontend
+          npm test
 
       - name: Build React frontend
         run: |
