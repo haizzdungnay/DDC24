@@ -49,20 +49,51 @@ bool ModbusTcp::open(const FieldbusConfig& cfg, uint16_t ext_offset)
 
         const std::string profile_path = find_profile_path(ts.profile);
         if (profile_path.empty()) {
-            std::fprintf(stderr, "WARN  modbus_tcp.profile_not_found slave=%s profile=%s\n",
+            std::fprintf(stderr, "ERROR modbus_tcp.profile_not_found slave=%s profile=%s"
+                         " — slave KHÔNG được poll (lỗi cấu hình)\n",
                          ts.name.c_str(), ts.profile.c_str());
+            conn.config_error = true;
         } else {
             load_device_profile(profile_path, &conn.profile);
         }
 
-        uint16_t pts = 0;
-        for (const auto& pp : conn.profile.points) pts += pp.count;
-        conn.ext_count = pts;
-        idx = static_cast<uint16_t>(idx + pts);
-        if (idx > KX_N_EXT) idx = KX_N_EXT;
+        if (!conn.config_error) {
+            /* F-17: đếm theo ĐIỂM LUẬN LÝ qua ext_slots_for_profile(), không
+             * theo số register (`pts += pp.count` cũ). */
+            const uint16_t need  = ext_slots_for_profile(conn.profile);
+            const uint16_t avail = (idx < KX_N_EXT) ? static_cast<uint16_t>(KX_N_EXT - idx) : 0u;
+            if (need == 0) {
+                std::fprintf(stderr, "ERROR modbus_tcp.profile_no_readable_points slave=%s"
+                             " profile=%s — slave KHÔNG được poll (lỗi cấu hình)\n",
+                             ts.name.c_str(), ts.profile.c_str());
+                conn.config_error = true;
+            } else if (need > avail) {
+                /* F-08: trước đây chỗ này chỉ clamp `if (idx > KX_N_EXT) idx =
+                 * KX_N_EXT;` — KHÔNG log và KHÔNG clamp conn.ext_count. Khi RTU
+                 * đã tiêu hết 64 slot, mọi TCP slave nhận ext_base=64, read_conn
+                 * gặp `ext_idx >= KX_N_EXT` ngay ở point đầu và thoát với
+                 * slave_ok=true → on_poll_ok → slave báo ONLINE và khỏe mạnh mà
+                 * không publish nổi một điểm nào. */
+                std::fprintf(stderr, "ERROR modbus_tcp.ext_slots_exhausted slave=%s host=%s:%u"
+                             " need=%u avail=%u capacity=%u"
+                             " — slave KHÔNG được poll (lỗi cấu hình)\n",
+                             ts.name.c_str(), ts.host.c_str(), ts.port,
+                             need, avail, static_cast<unsigned>(KX_N_EXT));
+                conn.config_error = true;
+            } else {
+                conn.ext_count = need;
+                idx = static_cast<uint16_t>(idx + need);
+            }
+        }
 
-        /* Attempt initial connect; failure is non-fatal (will retry in poll_once) */
-        if (!try_connect(conn)) {
+        if (conn.config_error) {
+            /* Fail-closed: không mở kết nối, không đặt trước slot nào. Slave giữ
+             * trạng thái offline (on_poll_ok không bao giờ được gọi) nên không
+             * bao giờ hiện "xanh" trên bảng điểm. */
+            conn.profile.points.clear();
+            conn.ext_count = 0;
+        } else if (!try_connect(conn)) {
+            /* Attempt initial connect; failure is non-fatal (will retry in poll_once) */
             conn.next_reconnect_ms = tcp_now_ms() + static_cast<uint64_t>(ts.reconnect_s) * 1000ull;
         }
 
@@ -164,7 +195,7 @@ void ModbusTcp::read_conn(TcpConn& conn, uint64_t now_ms, ExtCache& cache)
     bool slave_ok = true;
 
     for (const auto& pt : conn.profile.points) {
-        if (pt.fc != 1 && pt.fc != 2 && pt.fc != 3 && pt.fc != 4) continue;
+        if (ext_slots_for_point(pt) == 0) continue;   /* FC ghi không chiếm slot */
         if (ext_idx >= KX_N_EXT) break;
 
         uint16_t regs[125] = {};
@@ -195,16 +226,16 @@ void ModbusTcp::read_conn(TcpConn& conn, uint64_t now_ms, ExtCache& cache)
             if (pt.fc == 1 || pt.fc == 2) {
                 eng = bits[k] ? 1.0f : 0.0f;
             } else {
-                const bool is32 = (pt.type == PointType::Int32 ||
-                                   pt.type == PointType::Uint32 ||
-                                   pt.type == PointType::Float32);
+                const bool is32 = point_type_is_32bit(pt.type);
                 if (is32 && k + 1 >= pt.count) {
                     /* Misconfigured profile: 32-bit type at odd register boundary — skip.
-                     * Still consume the ext_idx slot so downstream points stay aligned. */
+                     * F-17: KHÔNG tiêu ext slot cho register lẻ này. Alignment
+                     * của các điểm sau được ext_slots_for_profile() bảo đảm (nó
+                     * cũng làm tròn xuống), nên tiêu một slot ở đây chỉ sinh
+                     * đúng một điểm rỗng name=""/quality=BAD lọt vào snapshot. */
                     std::fprintf(stderr, "WARN  modbus_tcp.odd_32bit slave=%s pt=%s k=%u count=%u"
                                  " — profile misconfigured, point skipped\n",
                                  conn.cfg.name.c_str(), pt.name.c_str(), k, pt.count);
-                    ext_idx++;
                     break;
                 }
                 const uint16_t cnt2 = is32 ? 2u : 1u;
@@ -235,6 +266,11 @@ void ModbusTcp::poll_once(uint64_t now_ms, ExtCache& cache,
     bool pushed = false;
 
     for (auto& conn : conns_) {
+        /* F-08 fail-closed: slave lỗi cấu hình không được kết nối và không bao
+         * giờ đi qua on_poll_ok, nên không bao giờ báo online. Log ERROR đã phát
+         * ở open() nêu rõ tên slave, số slot cần vs còn lại. */
+        if (conn.config_error) continue;
+
         /* Reconnect if disconnected and timer expired */
         if (!conn.connected) {
             if (now_ms >= conn.next_reconnect_ms) {

@@ -183,20 +183,24 @@ int main(int argc, char** argv)
         }
         if (now >= next_fast) {
             if (!shm.attached_io() || !shm.attached_plc()) shm.attach();
-            shm.read_all(&data);
-            const bool io_fault = data.iop_status == KX_IOP_FAULT;
+            const hmi::ReadStatus shm_status = shm.read_all(&data);
+            /* F-03: quyết định nằm trong io_fault_active/mcu_fault_active
+             * (shm_reader.hpp) để test chốt được đúng biểu thức main.cpp dùng. */
+            const bool io_fault = hmi::io_fault_active(shm_status, data);
             if (io_fault || io_fault_was_active)
                 alarms.update_condition("E001", io_fault, hmi::AlarmSeverity::FAULT,
                                         "IOP", "I/O communication fault");
             io_fault_was_active = io_fault;
-            const bool mcu_fault = data.fault_flags != 0;
+            const bool mcu_fault = hmi::mcu_fault_active(shm_status, data);
             if (mcu_fault || mcu_fault_was_active)
                 alarms.update_condition("E002", mcu_fault, hmi::AlarmSeverity::FAULT,
                                         "MCU", "MCU fault flags active");
             mcu_fault_was_active = mcu_fault;
             nav.on_data_update(data, point_db, locale);
             nav.tick_clock();
-            fault_banner.update(data.iop_status);
+            /* Banner và E001 dùng chung một quyết định — không thể lệch nhau. */
+            fault_banner.update(io_fault ? static_cast<uint8_t>(KX_IOP_FAULT)
+                                         : data.iop_status);
             notify.watchdog_kick();
             next_fast = now + 1000u;
         }

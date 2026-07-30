@@ -54,6 +54,9 @@ private:
         uint16_t      ext_count        = 0;
         bool          connected        = false;
         bool          offline_published = false;
+        /* F-08: thiếu profile / không có điểm đọc / hết ext slot. Slave không
+         * được kết nối và không bao giờ báo online. */
+        bool          config_error     = false;
         uint64_t      next_reconnect_ms = 0;
         TcpSlaveConfig cfg;
     };

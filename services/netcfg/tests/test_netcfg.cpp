@@ -969,4 +969,46 @@ TEST(NetcfgServer, RejectsOverlongSocketPathBeforeCreatingEndpoint)
     EXPECT_FALSE(std::filesystem::exists(socket_path));
 }
 
+/* ---- F-22: output bị cắt KHÔNG được biến thành "lệnh thất bại" ----
+ *
+ * Vòng đọc cũ dừng ngay khi result.size() >= 4096 rồi close(pipes[0]). Child
+ * đang ghi tiếp nhận SIGPIPE → WIFEXITED(status) false → run() trả FALSE cho một
+ * lệnh thực chất đã chạy đúng (exit 0). Trong service có cơ chế rollback
+ * fail-closed thì đây là tín hiệu "apply thất bại" giả.
+ *
+ * Script sinh ~200 KB để vượt hẳn dung lượng pipe (64 KB mặc định trên Linux):
+ * nếu output nhỏ hơn dung lượng pipe thì child ghi xong và exit trước khi parent
+ * đóng, SIGPIPE không xảy ra và test sẽ không phân biệt được hai hành vi. */
+class ExposedRunLinuxPlatform final : public netcfg::LinuxPlatform {
+public:
+    using netcfg::LinuxPlatform::run;
+};
+
+TEST(NetcfgLinuxPlatform, TruncatedCommandOutputStillReportsSuccess)
+{
+    const auto script = std::filesystem::temp_directory_path() /
+        ("mkddc_netcfg_bigout_" + std::to_string(::getpid()) + ".sh");
+    {
+        std::ofstream f(script);
+        f << "#!/bin/sh\n"
+             "line=$(printf 'a%.0s' $(seq 1 500))\n"
+             "i=0\n"
+             "while [ \"$i\" -lt 400 ]; do\n"
+             "  printf '%s\\n' \"$line\"\n"
+             "  i=$((i+1))\n"
+             "done\n"
+             "exit 0\n";
+    }
+    std::filesystem::permissions(script, std::filesystem::perms::owner_all);
+
+    ExposedRunLinuxPlatform platform;
+    std::string output;
+    const bool ok = platform.run({script.string()}, &output);
+    std::filesystem::remove(script);
+
+    EXPECT_TRUE(ok) << "lệnh exit 0 nhưng run() báo thất bại (child bị SIGPIPE)";
+    EXPECT_LE(output.size(), 4096u) << "phần vượt giới hạn phải bị bỏ";
+    EXPECT_GT(output.size(), 4000u) << "phải giữ được phần đầu của output";
+}
+
 } // namespace

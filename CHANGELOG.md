@@ -7,6 +7,189 @@
 ---
 
 ## [Unreleased]
+### Fixed — FW SOM: đóng 8/9 finding của review 2026-07-30 (WP1→WP4) (2026-07-30)
+
+Phạm vi: `services/hmi`, `services/iobus`, `services/netcfg`, `shared/mkddc_shm.h`,
+`.github/workflows/build-and-test.yml`. Không đổi hành vi ngoài phạm vi 9 finding.
+Không đổi hợp đồng binary: `kx_ext_point_t`, `kx_io_shm_t`, `kx_plc_shm_t`,
+`KX_SHM_MAGIC`, `KX_N_EXT` giữ nguyên.
+
+**WP1 (P0) — `F-03` annunciation an toàn của HMI + `F-14` đưa HMI vào gate CI**
+- `F-03` `services/hmi/data/shm_reader.{hpp,cpp}` + `main.cpp`: `read_all()` đổi
+  từ `bool` sang `ReadStatus{io_ok, plc_ok}` — trả trạng thái cho **cả hai** vùng
+  (trước đây bỏ hẳn giá trị trả về của `seqlock_read_plc`), và `main.cpp` **dùng**
+  giá trị đó. `read_all()` reset fail-safe `io_valid`/`plc_valid`/`iop_status`/
+  `fault_flags` **trước** khi đọc, nên một lần đọc trượt không thể để
+  `iop_status=NORMAL` của chu kỳ trước tiếp tục lái banner sự cố và alarm E001.
+  Các field *giá trị* (`ui_value`/`ai`/`ext`/`ts_ns`) **không** bị reset — chúng đã
+  được `age_ns` bảo vệ ở `screen_io.cpp`, xoá chúng chỉ làm màn hình nháy khi
+  trượt đúng một chu kỳ đọc.
+- Quyết định annunciation tách thành hai hàm thuần `hmi::io_fault_active()` /
+  `hmi::mcu_fault_active()` (`shm_reader.hpp`) làm **nguồn chân lý duy nhất** cho
+  banner + E001 + E002, nên test chốt được đúng biểu thức `main.cpp` dùng thay vì
+  copy lại nó. `fault_banner.update()` giờ dùng cùng quyết định với E001 → banner
+  và alarm không thể lệch nhau. E002 chỉ có nghĩa khi `io_ok` — không kích alarm
+  MCU bằng `fault_flags` của chu kỳ trước, cũng không bịa cờ lỗi.
+- `F-14` `.github/workflows/build-and-test.yml`: thêm leg matrix
+  **`modbus+bacnet+hmi`** với `-DMKDDC_ENABLE_HMI=ON` (thêm `hmi:` vào cả 4 leg
+  cũ ở giá trị `OFF`) + phụ thuộc `libdrm-dev libfreetype-dev pkg-config`. Trước
+  đó `mkddc-hmi` và 28 test của nó **chưa bao giờ** được CI biên dịch — đó là lý
+  do `F-03` tồn tại mà không gate nào bắt được.
+
+**WP2 (P1) — cụm ext index + device profile Modbus, sửa một lần**
+- `F-17` `services/iobus/fieldbus/device_profile.{hpp,cpp}`: thêm **hàm thuần**
+  `point_type_is_32bit()`, `ext_slots_for_point()`, `ext_slots_for_profile()` làm
+  nguồn chân lý duy nhất cho luật cấp phát slot ext. `modbus_master.cpp` (3 chỗ)
+  và `modbus_tcp.cpp` (2 chỗ) đều gọi chúng; luật "32-bit tiêu 2 register" giờ chỉ
+  còn tồn tại ở **một** chỗ trong codebase. Slot đếm theo **điểm luận lý**: FC
+  1/2 → `count`; FC 3/4 16-bit → `count`; FC 3/4 32-bit → `count/2`; **FC ghi
+  (5/6/15/16) → 0** (vòng đọc bỏ qua FC ghi nên đặt trước slot cho chúng chỉ sinh
+  slot rỗng). Trước đây `open()` đếm `pts += pp.count` (số register) → profile
+  32-bit đặt trước gấp đôi số slot cần, mất nửa dung lượng 64 slot và đẩy điểm
+  rỗng (`name=""`, `quality=BAD`) vào `push_snapshot`.
+- `F-16` `modbus_master.cpp`: bỏ `break` im lặng khi tràn `KX_N_EXT`. Mỗi slave
+  được xử lý **dứt điểm** bằng `continue` (slave sau vẫn được xét, một slave nhỏ
+  vẫn có thể vừa chỗ còn lại). Slave thiếu profile / không có điểm đọc / hết ext
+  slot bị đánh cờ `slave_config_error_` → log `ERROR` nêu rõ tên slave, addr, số
+  slot cần vs còn lại; `read_slave()` đi đường `on_poll_error` + `metrics.update
+  (ok=false)` + `mark_slave_offline` + alarm **E302**, nên **không bao giờ báo
+  online**. Trước đây các slave này có `slave_states_` nhưng `profiles_[i].points`
+  rỗng → `slave_ok` giữ `true` → ONLINE, error rate 0%, không alarm, không log.
+  Đường lỗi tự set `last_poll_ms` để tôn trọng `poll_interval` (không có I/O nào
+  để chặn nên nếu thiếu, vòng fieldbus sẽ spin ở mức 1 ms).
+- `F-08` `modbus_tcp.cpp`: bỏ clamp im lặng `if (idx > KX_N_EXT) idx = KX_N_EXT;`.
+  Conn hết slot / thiếu profile được đánh `config_error` → log `ERROR`,
+  `ext_count = 0`, **không mở kết nối** và bị `poll_once()` bỏ qua, nên không bao
+  giờ đi qua `on_poll_ok`. Trước đây mọi TCP slave nhận `ext_base = 64`,
+  `read_conn` thoát ở point đầu với `slave_ok` vẫn `true` → báo online và khỏe
+  mạnh mà không publish nổi một điểm nào.
+- `F-18` `device_profile.cpp`: **hiện thực** validation mà `device_profile.hpp`
+  đã hứa từ trước nhưng chưa có — type 32-bit trên FC 3/4 mà `count` không phải
+  **bội số của 2** → skip point + log `ERROR profile.odd_count_for_32bit`. Chốt
+  "bội số của 2" (không phải đúng bằng 2) để giữ khả năng đọc block nhiều điểm
+  32-bit liên tiếp mà cả hai vòng đọc đã hỗ trợ; tài liệu đã cập nhật cho khớp.
+  `modbus_master.cpp` xử lý register 32-bit ở biên lẻ **giống `modbus_tcp.cpp`**
+  (log + bỏ điểm) thay vì truyền `count=1` cho `decode_register` → trước đây
+  publish `0*scale + offset` với **`KX_Q_GOOD`**, tức một giá trị bịa mang nhãn
+  dữ liệu tốt. Cả hai transport giờ **không** tiêu ext slot cho register lẻ đó
+  (khớp phép làm tròn xuống của `ext_slots_for_point`) nên không sinh slot rỗng.
+- `F-21` `device_profile.cpp`: viết thẳng `pt->count > 2000` thay cho
+  `count * static_cast<int>(count > 0) > 2000` — nhân tử thứ hai là bool luôn
+  bằng 1 nên biểu thức cũ đúng do tình cờ. Ý định giữ nguyên (2000 =
+  `MODBUS_MAX_READ_BITS`, khớp buffer `bits[2000]`), có test chốt cả biên 2000/2001.
+
+**WP3 (P2) — `F-05` UART hangup**
+- `services/iobus/iop/iop_client.cpp`: `wait_response()` xử lý
+  `POLLHUP`/`POLLERR`/`POLLNVAL` (kernel báo bất kể `events` yêu cầu gì) và thoát
+  ngay với `NOT_OPEN` → đường reconnect; thêm xử lý `poll()` trả `< 0`
+  (`EINTR` → retry, còn lại → `NOT_OPEN`). Kiểm `POLLIN` **trước** để dữ liệu còn
+  tồn đọng được xả hết mới kết luận hangup.
+- `services/iobus/iop/iop_port.{hpp,cpp}`: thêm `IopPort::READ_EOF = -2` phân biệt
+  EOF với "chưa có dữ liệu". **Đính chính so với mô tả trong review**: trên tty
+  raw `VMIN=0/VTIME=0`, `::read()` trả `0` **cả** khi buffer rỗng **lẫn** khi peer
+  đóng — nó không trả `-1/EAGAIN` khi rỗng, nên không thể phân biệt chỉ bằng giá
+  trị trả về. Tín hiệu duy nhất là `poll()`: khi `::read()` trả 0 (buffer đã cạn),
+  `read()` probe bằng `poll(timeout=0)` và chỉ trả `READ_EOF` khi có
+  `POLLHUP|POLLERR|POLLNVAL`.
+- Semantics có chủ đích ở `transact()` **giữ nguyên**: EAGAIN kéo dài khi *ghi*
+  vẫn đi qua TIMEOUT → retry → FAULT → RECONNECT, không đổi thành `NOT_OPEN`.
+
+**WP4 (P3) — `F-22` `netcfg::LinuxPlatform::run`**
+- `services/netcfg/netcfg.cpp`: **đọc cạn pipe** rồi mới bỏ phần vượt 4096 byte.
+  Vòng cũ `break` ngay khi đạt giới hạn rồi `close(pipes[0])` → child đang ghi
+  nhận `SIGPIPE` → `WIFEXITED` false → `run()` trả `false` cho một lệnh thực chất
+  exit 0, tạo tín hiệu "apply thất bại" giả trong service có rollback fail-closed.
+
+**WP5 — `F-02`: phần việc của FW (lỗi thuộc BE)**
+- `shared/mkddc_shm.h`: bổ sung khối **HỢP ĐỒNG READER — BẮT BUỘC** nói rõ
+  `read()`/`pread()`/`os.ReadFile()` là **KHÔNG HỢP LỆ** dù có kiểm `magic` và độ
+  dài (writer không chạm `magic` trong lúc ghi nên check đó luôn pass), kèm trình
+  tự seqlock bắt buộc, hai hiện thực C++ làm hình mẫu, yêu cầu retry có giới hạn,
+  yêu cầu caller xử lý fail-safe khi retry hết lượt (dẫn `F-03`), và đường an toàn
+  sẵn có `ReadPointSnapshot` qua core. Đây chính là cái bẫy BE đã bước vào. Việc
+  sửa `web/backend/core_client.go` **thuộc team BE**, chưa làm ở đây.
+
+**Tài liệu cập nhật cho khớp hiện thực**
+- `services/iobus/fieldbus/device_profile.hpp` — hợp đồng validate nêu chính xác
+  "32-bit trên FC 3/4 cần `count` là bội số của 2" + đặc tả 3 hàm đếm slot.
+- `docs/02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md` — thêm §10.3.1
+  "Cấp phát ext slot — một slot = một ĐIỂM LUẬN LÝ": bảng slot theo FC/type, nguồn
+  chân lý duy nhất, và quy tắc fail-closed khi tràn dải.
+- `docs/03_implementation/26_MODBUS_IMPLEMENTATION_PLAN.md` — thay bullet
+  "`type` không khớp `count`" bằng luật chính xác đã hiện thực.
+
+**Verification — đo lại từ đầu trong phiên này, không dẫn số cũ**
+
+| Gate | Baseline `7ea3ac5` | Sau khi sửa |
+|------|--------------------|-------------|
+| ctest Release, MODBUS+BACNET+**HMI=ON** | 702/702 PASS | **729/729 PASS** (+27 test mới) |
+| ctest Release, MODBUS+BACNET, HMI=OFF | 674/674 PASS | **696/696 PASS** (+22) |
+| ASan Debug (MODBUS+HMI=ON), `detect_leaks=1` | — | **728/728 PASS**, rc=0, sạch |
+| UBSan Debug (MODBUS+HMI=ON), `-fno-sanitize-recover` | — | **728/728 PASS**, rc=0, sạch |
+| Cấu hình đúng như leg CI mới (`RelWithDebInfo`, `-Wall -Wextra -Werror`, BACNET+MODBUS+HMI=ON) | — | build rc=0, **729/729 PASS** |
+| Cảnh báo build | 2 (test-only) | **2**, đúng cùng nguồn `test_output_command.cpp:34`; **0 cảnh báo mới** |
+
+- **Chứng minh test bắt được lỗi cũ** (hoàn nguyên tạm từng hành vi rồi chạy lại):
+  3 test fail cho `F-03`; 7 test fail cho `F-17`/`F-16`/`F-08`/`F-18`; 2 test fail
+  cho `F-05`; 1 test fail cho `F-22`. Toàn bộ PASS trên code đã sửa.
+- **Tái hiện thủ công `F-03`** trên SHM **thật** (`/dev/shm/mkddc_io_shm` do
+  `mkddc-iobus` tạo, qua đúng đường `ShmReader::attach()` + `io_fault_active()`,
+  một tiến trình duy nhất tái dùng `DataCache` xuyên qua thời điểm sự cố): giết
+  `mkddc-iobus` rồi xoá `magic` (mô phỏng cửa sổ restart) — **code cũ**:
+  `io_ok=0` nhưng `io_valid=1`, `iop_status=0` → `io_fault=false`, banner **xanh**,
+  E001 **im lặng** ở cả 4 chu kỳ sau sự cố; **code đã sửa**: `io_valid=0`,
+  `iop_status=1` → `io_fault=TRUE`, banner **đỏ**, E001 **kích** ngay chu kỳ đầu.
+- **Tái hiện thủ công `F-05`** (peer PTY đóng sau khi request đã được ghi, đo
+  CPU-time so với wall-time của một lần `get_io`, `response_timeout_ms=500`):
+  **code cũ** `wall=500 ms, cpu=500 ms → 100% busy-spin` rồi trả `TIMEOUT`;
+  **code đã sửa** `wall=0,1 ms, cpu≈0 ms` và trả `NOT_OPEN` + log
+  `iop.port_eof`. Lặp 3 lần, kết quả nhất quán.
+
+**Đính chính đối với báo cáo review (nêu rõ theo yêu cầu mục 5 của fix request)**
+- `F-05` — **mức độ bị đánh giá cao hơn thực tế**. Báo cáo nói spin "lặp lại ở
+  **mỗi** chu kỳ poll 10 ms → chiếm một core suốt trạng thái RECONNECT". Đo ở mức
+  tiến trình (`mkddc-iobus` thật + PTY + `fake_mcu`, giết peer, lấy delta
+  `utime+stime` từ `/proc/<pid>/stat`) cho thấy **không có** CPU tăng cao kéo dài:
+  ~8–10 tick/4 s sau hangup, tương đương lúc link còn sống. Nguyên nhân: sau
+  hangup, `::write()` trên tty trả `EIO`, nên `transact()` trả `NOT_OPEN` **ngay
+  tại đường ghi** trước khi vào `wait_response`, và đường reconnect có backoff.
+  Busy-spin 100% một core **là thật** nhưng **bị chặn trên bởi đúng một deadline
+  của một transaction**, và chỉ xảy ra trong cửa sổ hẹp khi peer chết *sau* một
+  lần ghi thành công *trước* khi có response. Bản sửa vẫn đúng và cần thiết (phát
+  hiện hangup tức thì thay vì `TIMEOUT` sai + một deadline spin), nhưng xếp hạng
+  "cạnh tranh CPU liên tục với scan loop `SCHED_FIFO`" không tái hiện được.
+- `F-05` — **cách sửa như mô tả không đủ**. Đề xuất "`IopPort::read` trả một mã
+  riêng cho EOF" ngầm giả định `::read()` trả `-1/EAGAIN` khi rỗng. Đo thực tế
+  trên PTY Linux với tty raw `VMIN=0/VTIME=0`: rỗng → `read()==0, errno=0`; peer
+  đóng → cũng `read()==0`; và `poll()` báo `revents=0x19`
+  (`POLLIN|POLLHUP|POLLERR`). Nên phải dùng `poll()` để phân biệt, không thể dựa
+  vào giá trị trả về của `read()`. Đây cũng là lý do lỗi cũ *có* vào nhánh
+  `POLLIN` (POLLIN được set kèm POLLHUP) rồi spin, chứ không phải "không gọi
+  `read` nên không bao giờ thấy lỗi" như báo cáo viết.
+- `F-16` — **phạm vi rộng hơn mô tả**. Ngoài tràn `KX_N_EXT`, hai đường khác dẫn
+  tới **cùng** tình trạng "profile rỗng nhưng vẫn báo ONLINE": slave không tìm
+  thấy profile (`profile_not_found`), và profile load được nhưng không còn điểm
+  đọc nào sau validate. Cả ba đều được xử lý bằng cùng cờ `slave_config_error_`.
+- `F-17` — **`open()` còn đặt trước slot cho FC ghi**. Ngoài lỗi đếm theo
+  register, `pts += pp.count` cộng cả point FC 5/6/15/16 mà vòng đọc bỏ qua hoàn
+  toàn. `ext_slots_for_point()` trả 0 cho chúng.
+
+**Ngoài phạm vi — phát hiện thêm, ghi lại và KHÔNG sửa (theo yêu cầu mục 1)**
+- Đường suy ra write-FC trong `ModbusMaster::drain_ext_writes` (`pt.fc == 1` →
+  FC05, `pt.fc == 3` → FC06/16) là **code chết** với validator hiện tại:
+  `parse_point()` loại bỏ mọi point có `writable=true` mà `fc` không thuộc
+  {5,6,15,16}, nên `pt.writable` không bao giờ `true` cho một read FC. Nghĩa là
+  ext point hiện **không thể** ghi xuống slave qua đường `dirty`. Đây là mâu thuẫn
+  giữa validator và write bridge COR-011, không thuộc 9 finding nên không sửa —
+  cần một quyết định thiết kế (cho phép `writable` trên read FC, hay khai báo
+  point ghi riêng và ánh xạ) và áp gate DOC TRƯỚC CODE SAU.
+
+**Chưa làm**
+- `F-02` phần sửa `web/backend/core_client.go` — thuộc team BE.
+- Các finding FE/BE/CI/packaging khác (`F-01`, `F-04`, `F-06`, `F-07`, `F-09`…
+  `F-13`, `F-15`, `F-19`, `F-20`, `F-23`) không thuộc phạm vi văn bản này.
+- Chỉ chạy trên x86-64 Linux/GCC 13; **chưa** chạy lại trên aarch64 (Orange Pi 5B).
+
 ### Added — Yêu cầu fix & debug cho team FW SOM (2026-07-30)
 - `docs/07_records/reviews/KX-DDC24-FW-SOM-FIX-REQUEST-2026-07-30.md` — trích **9/23 finding thuộc FW SOM** từ báo cáo review cùng ngày, kèm prompt bàn giao tự chứa cho team FW: cơ chế lỗi, cách tái hiện/debug, tiêu chí hoàn thành và test cần thêm cho từng finding.
 - Phân loại: `F-03` + `F-14` (hmi + gate build) — **WP1/P0**; `F-17` + `F-16` + `F-08` + `F-18` + `F-21` (cụm ext index + device profile Modbus, một nguyên nhân gốc) — **WP2/P1**; `F-05` (POLLHUP + EOF/EAGAIN của IOP) — **WP3/P2**; `F-22` (`netcfg::run` cắt output) — **WP4/P3**; `F-02` — **WP5**, lỗi thuộc BE nhưng hợp đồng `shared/mkddc_shm.h` thuộc FW nên FW review + làm rõ tài liệu.

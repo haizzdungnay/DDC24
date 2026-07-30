@@ -17,6 +17,38 @@
  *
  * @note    Reader dùng pattern seqlock: đọc seq (chẵn) -> đọc data ->
  *          đọc lại seq; nếu lẻ hoặc đổi -> đọc lại. Reader KHÔNG block writer.
+ *
+ * @note    HỢP ĐỒNG READER — BẮT BUỘC (bổ sung 2026-07-30 sau finding F-02):
+ *
+ *          Reader PHẢI mmap() segment rồi áp pattern seqlock trên vùng đã map.
+ *          Đọc bằng read() / pread() / os.ReadFile() / ioutil.ReadFile() /
+ *          open()+fread() là **KHÔNG HỢP LỆ**, dù có kiểm `magic` và độ dài.
+ *
+ *          Vì sao: writer không hề chạm `magic` trong lúc ghi, nên check magic
+ *          LUÔN pass và không phát hiện được gì. Còn shmfs dùng chung page với
+ *          writer, nên một lần read() cả segment có thể trộn byte trước và sau
+ *          một lần update — snapshot bị XÉ, không nhất quán, mà không có bất kỳ
+ *          dấu hiệu nào để nhận ra. Chỉ có `seq` mới phát hiện điều đó, và `seq`
+ *          chỉ dùng được khi reader đọc trực tiếp bộ nhớ đã map (đọc seq trước,
+ *          đọc data, đọc LẠI seq trên cùng vùng map).
+ *
+ *          Đây chính là lỗi F-02: web/backend/core_client.go dùng os.ReadFile +
+ *          check magic/độ dài, snapshot bị xé đi thẳng ra WS monitor và được
+ *          historian ghi vào DB thành bản ghi lịch sử sai không thể phát hiện
+ *          về sau.
+ *
+ *          Hai hiện thực ĐÚNG dùng làm hình mẫu:
+ *            - C++: services/hmi/data/shm_reader.cpp  (seqlock_read_io/_plc)
+ *            - C++: services/iobus/fieldbus/modbus_master.cpp (drain_ext_writes)
+ *          Trình tự bắt buộc: đọc seq với acquire → bỏ nếu LẺ → memcpy toàn bộ
+ *          struct → đọc lại seq với acquire → nếu khác thì retry (có GIỚI HẠN
+ *          số lần) → chỉ coi dữ liệu hợp lệ khi hai lần đọc seq bằng nhau VÀ
+ *          magic đúng. Retry hết lượt = ĐỌC THẤT BẠI, và caller phải xử lý
+ *          fail-safe (xem F-03: giữ dữ liệu cũ để lái annunciation là lỗi an
+ *          toàn).
+ *
+ *          Consumer không muốn tự hiện thực seqlock thì dùng đường đi qua core
+ *          (ReadPointSnapshot qua web IPC) — core đã đọc nhất quán sẵn.
  */
 #ifndef MKDDC_SHM_H
 #define MKDDC_SHM_H

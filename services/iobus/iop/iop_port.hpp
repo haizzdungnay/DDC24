@@ -23,7 +23,16 @@ public:
     bool is_open() const { return fd_ >= 0; }
     int  fd() const { return fd_; }
 
-    /* Trả số byte; 0 nếu chưa có dữ liệu (EAGAIN); -1 lỗi thật. EINTR tự retry. */
+    /* Mã trả về đặc biệt của read(): peer đã đóng (EOF / hangup).
+     * PHẢI khác 0 (=chưa có dữ liệu, có thể có sau). Trước bản sửa 2026-07-30
+     * cả hai đều trả 0 nên caller không phân biệt được "chưa có dữ liệu" với
+     * "sẽ không bao giờ có dữ liệu nữa" (finding F-05). */
+    static constexpr ssize_t READ_EOF = -2;
+
+    /* Trả số byte (>0); 0 nếu chưa có dữ liệu; READ_EOF nếu peer đã đóng;
+     * -1 lỗi thật. EINTR tự retry.
+     * Lưu ý: tty raw với VMIN=0/VTIME=0 trả 0 cho cả "rỗng" và "EOF", nên hàm
+     * này dùng poll(timeout=0) để phân biệt — xem chi tiết trong .cpp. */
     ssize_t read(uint8_t* buf, size_t n);
 
     /* Ghi đủ n byte hoặc -1. EAGAIN → poll(POLLOUT) tối đa ~50ms rồi -1

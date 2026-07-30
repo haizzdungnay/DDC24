@@ -1,5 +1,6 @@
 #include "iop/iop_client.hpp"
 
+#include <cerrno>
 #include <cstdio>
 #include <ctime>
 
@@ -112,11 +113,46 @@ IopResult IopClient::wait_response(uint8_t sent_seq, uint8_t sent_cmd,
         struct pollfd pfd { port_.fd(), POLLIN, 0 };
         const int timeout_left_ms = static_cast<int>((deadline - t) / 1000000ull) + 1;
         const int pr = ::poll(&pfd, 1, timeout_left_ms);
+        if (pr < 0) {
+            if (errno == EINTR) continue;
+            std::fprintf(stderr, "ERROR iop.poll_fail errno=%d — reconnect\n", errno);
+            res.code = IopResult::NOT_OPEN;
+            return res;
+        }
         if (pr > 0 && (pfd.revents & POLLIN)) {
             uint8_t buf[512];
             const ssize_t r = port_.read(buf, sizeof(buf));
-            if (r > 0) parser_.feed(buf, static_cast<size_t>(r));
+            if (r > 0) {
+                parser_.feed(buf, static_cast<size_t>(r));
+                continue;                        /* xả parser trước khi chờ tiếp */
+            }
+            if (r == IopPort::READ_EOF) {
+                /* F-05: EOF khác "chưa có dữ liệu" — peer đã đóng thì chờ tới
+                 * hết deadline là vô nghĩa. */
+                std::fprintf(stderr, "ERROR iop.port_eof — peer đóng, reconnect\n");
+                res.code = IopResult::NOT_OPEN;
+                return res;
+            }
             if (r < 0) { res.code = IopResult::NOT_OPEN; return res; }
+            /* r == 0: POLLIN được báo nhưng buffer rỗng và link còn sống. Rơi
+             * xuống check POLLHUP dưới đây, rồi quay lại poll() với deadline còn
+             * lại — không spin vì poll() sẽ block cho tới khi có dữ liệu. */
+        }
+        /* F-05: poll() báo POLLHUP/POLLERR/POLLNVAL BẤT KỂ `events` yêu cầu gì.
+         * Trước đây chỉ xét POLLIN: khi USB-serial tới MCU bị rút (hoặc PTY của
+         * fake MCU chết) fd tty báo POLLHUP, poll() trả về NGAY với pr>0 nhưng
+         * nhánh POLLIN false nên read() không bao giờ được gọi → vòng for(;;)
+         * gọi lại poll() liền, SPIN không sleep tới hết deadline của transaction,
+         * nhân (max_retry+1) lần trong transact, và lặp lại ở MỖI chu kỳ poll
+         * 10ms → chiếm một core suốt trạng thái RECONNECT, cạnh tranh trực tiếp
+         * với scan loop SCHED_FIFO của core.
+         * Hangup phải được phát hiện TỨC THÌ, không lộ ra qua đường timeout.
+         * Kiểm POLLIN trước để dữ liệu còn trong buffer được xả hết đã. */
+        if (pr > 0 && (pfd.revents & (POLLHUP | POLLERR | POLLNVAL))) {
+            std::fprintf(stderr, "ERROR iop.port_hangup revents=0x%x — reconnect\n",
+                         static_cast<unsigned>(pfd.revents));
+            res.code = IopResult::NOT_OPEN;
+            return res;
         }
     }
 }

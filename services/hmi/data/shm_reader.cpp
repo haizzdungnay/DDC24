@@ -132,7 +132,7 @@ bool ShmReader::seqlock_read_plc(const volatile kx_plc_shm_t* s, DataCache* out)
     return false;
 }
 
-bool ShmReader::read_all(DataCache* out) const
+ReadStatus ShmReader::read_all(DataCache* out) const
 {
     /* Compute AGE */
     struct timespec now_ts{};
@@ -140,14 +140,32 @@ bool ShmReader::read_all(DataCache* out) const
     uint64_t now_ns = static_cast<uint64_t>(now_ts.tv_sec) * 1000000000ull
                     + static_cast<uint64_t>(now_ts.tv_nsec);
 
-    bool ok = false;
-    if (io_)  ok |= seqlock_read_io(io_, out);
-    if (plc_) seqlock_read_plc(plc_, out);
+    /* F-03 fail-safe: reset các field lái annunciation TRƯỚC khi đọc.
+     * DataCache được tái dùng qua từng chu kỳ ở main.cpp, nên nếu không reset ở
+     * đây thì một lần đọc thất bại (magic chưa set xong lúc iobus restart, hoặc
+     * 5 lần retry seqlock đều trượt) sẽ để iop_status=NORMAL của chu kỳ trước
+     * tiếp tục lái quyết định → banner xanh, E001 im lặng.
+     *
+     * fault_flags reset về 0 chứ không về "có lỗi": khi không đọc được thì ta
+     * KHÔNG biết cờ lỗi MCU, và kích E002 bằng dữ liệu bịa cũng sai như nuốt nó.
+     * E001 (mất liên lạc I/O) là alarm đúng cho tình huống này và nó luôn kích.
+     *
+     * Các field *giá trị* (ui_value/ai/ext/... và ts_ns) KHÔNG reset — chúng đã
+     * được age_ns bảo vệ ở screen_io.cpp, xoá chúng chỉ làm màn hình nháy dữ
+     * liệu khi trượt đúng một chu kỳ đọc. */
+    out->io_valid    = false;
+    out->plc_valid   = false;
+    out->iop_status  = KX_IOP_FAULT;
+    out->fault_flags = 0;
+
+    ReadStatus st;
+    if (io_)  st.io_ok  = seqlock_read_io(io_, out);
+    if (plc_) st.plc_ok = seqlock_read_plc(plc_, out);
 
     out->age_ns = (out->ts_ns > 0 && now_ns > out->ts_ns)
                   ? (now_ns - out->ts_ns)
                   : UINT64_MAX;
-    return ok;
+    return st;
 }
 
 /* ---- SysSnapshot ---- */

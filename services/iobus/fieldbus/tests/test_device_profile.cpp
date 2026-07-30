@@ -84,3 +84,144 @@ TEST_F(ProfileTest, FileNotFound)
     DeviceProfile prof;
     EXPECT_FALSE(load_device_profile("/tmp/nonexistent_profile.json", &prof));
 }
+
+/* ---- F-18: validation "32-bit ⇒ count là bội số của 2" ----
+ * Trước 2026-07-30 luật này chỉ tồn tại trong tài liệu (device_profile.hpp);
+ * biến is32bit chỉ được dùng cho check byte_order. Profile count lẻ đi qua
+ * loader trọn vẹn rồi RTU publish `0*scale+offset` với KX_Q_GOOD. */
+
+TEST_F(ProfileTest, Float32OddCountRejected)
+{
+    write_profile(R"({"points":[{"name":"x","fc":4,"addr":0,"count":1,
+                     "type":"float32","byte_order":"ABCD"}]})");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    EXPECT_EQ(prof.points.size(), 0u);
+}
+
+TEST_F(ProfileTest, Int32AndUint32OddCountRejected)
+{
+    write_profile(R"({"points":[
+        {"name":"a","fc":3,"addr":0,"count":3,"type":"int32","byte_order":"ABCD"},
+        {"name":"b","fc":4,"addr":10,"count":5,"type":"uint32","byte_order":"CDAB"}
+    ]})");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    EXPECT_EQ(prof.points.size(), 0u);
+}
+
+TEST_F(ProfileTest, Float32CountMultipleOfTwoAccepted)
+{
+    /* Chốt luật là BỘI SỐ của 2 (không phải đúng bằng 2) để giữ khả năng đọc
+     * block nhiều điểm 32-bit liên tiếp mà cả hai vòng đọc đã hỗ trợ. */
+    write_profile(R"({"points":[{"name":"x","fc":4,"addr":0,"count":6,
+                     "type":"float32","byte_order":"ABCD"}]})");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    ASSERT_EQ(prof.points.size(), 1u);
+    EXPECT_EQ(prof.points[0].count, 6u);
+    EXPECT_EQ(ext_slots_for_point(prof.points[0]), 3u);   /* 6 register = 3 điểm */
+}
+
+TEST_F(ProfileTest, Uint16OddCountStillAccepted)
+{
+    /* Luật chỉ áp cho 32-bit — 16-bit count lẻ là hợp lệ, không được vạ lây. */
+    write_profile(R"({"points":[{"name":"x","fc":3,"addr":0,"count":7,"type":"uint16"}]})");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    ASSERT_EQ(prof.points.size(), 1u);
+    EXPECT_EQ(ext_slots_for_point(prof.points[0]), 7u);
+}
+
+/* ---- F-21: giới hạn block coil ---- */
+
+TEST_F(ProfileTest, CoilBlockOverLimitRejected)
+{
+    write_profile(R"({"points":[{"name":"x","fc":1,"addr":0,"count":2001,"type":"bool"}]})");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    EXPECT_EQ(prof.points.size(), 0u);
+}
+
+TEST_F(ProfileTest, CoilBlockAtLimitAccepted)
+{
+    /* 2000 = MODBUS_MAX_READ_BITS, khớp buffer bits[2000] ở vòng đọc → hợp lệ.
+     * Chốt cả biên trên để lần sau ai viết lại biểu thức không âm thầm lệch 1. */
+    write_profile(R"({"points":[{"name":"x","fc":2,"addr":0,"count":2000,"type":"bool"}]})");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    ASSERT_EQ(prof.points.size(), 1u);
+    EXPECT_EQ(prof.points[0].count, 2000u);
+}
+
+/* ---- F-17: ext slot accounting là hàm thuần, test không cần libmodbus ---- */
+
+TEST(ExtSlotAccounting, WriteFunctionCodesConsumeNoSlot)
+{
+    for (const uint8_t fc : {5, 6, 15, 16}) {
+        ProfilePoint pt;
+        pt.fc = fc;
+        pt.count = 4;
+        pt.type = PointType::Uint16;
+        EXPECT_EQ(ext_slots_for_point(pt), 0u) << "fc=" << static_cast<int>(fc);
+    }
+}
+
+TEST(ExtSlotAccounting, CoilAndDiscreteInputUseOneSlotPerBit)
+{
+    ProfilePoint pt;
+    pt.fc = 1;
+    pt.count = 16;
+    pt.type = PointType::Bool;
+    EXPECT_EQ(ext_slots_for_point(pt), 16u);
+    pt.fc = 2;
+    EXPECT_EQ(ext_slots_for_point(pt), 16u);
+}
+
+TEST(ExtSlotAccounting, SixteenBitRegisterUsesOneSlotPerRegister)
+{
+    ProfilePoint pt;
+    pt.fc = 3;
+    pt.count = 5;
+    pt.type = PointType::Int16;
+    EXPECT_EQ(ext_slots_for_point(pt), 5u);
+}
+
+TEST(ExtSlotAccounting, ThirtyTwoBitRegisterUsesOneSlotPerTwoRegisters)
+{
+    /* Đây là lỗi gốc của F-17: open() đếm 2 (số register) trong khi vòng đọc
+     * tiêu 1 → đặt trước gấp đôi số slot cần. */
+    for (const PointType t : {PointType::Int32, PointType::Uint32, PointType::Float32}) {
+        ProfilePoint pt;
+        pt.fc = 4;
+        pt.count = 2;
+        pt.type = t;
+        EXPECT_EQ(ext_slots_for_point(pt), 1u);
+        pt.count = 8;
+        EXPECT_EQ(ext_slots_for_point(pt), 4u);
+        EXPECT_TRUE(point_type_is_32bit(t));
+    }
+}
+
+TEST(ExtSlotAccounting, OddThirtyTwoBitTailIsNotCounted)
+{
+    /* Loader đã chặn count lẻ; với ProfilePoint dựng thủ công thì register lẻ ở
+     * cuối bị vòng đọc log + bỏ và KHÔNG tiêu slot — phép làm tròn xuống ở đây
+     * phải khớp đúng điều đó. */
+    ProfilePoint pt;
+    pt.fc = 3;
+    pt.count = 5;
+    pt.type = PointType::Float32;
+    EXPECT_EQ(ext_slots_for_point(pt), 2u);
+}
+
+TEST(ExtSlotAccounting, ProfileTotalIsSumOverPoints)
+{
+    DeviceProfile prof;
+    ProfilePoint a;   a.fc = 4; a.count = 2; a.type = PointType::Float32;  /* 1 */
+    ProfilePoint b;   b.fc = 3; b.count = 3; b.type = PointType::Uint16;   /* 3 */
+    ProfilePoint c;   c.fc = 1; c.count = 4; c.type = PointType::Bool;     /* 4 */
+    ProfilePoint d;   d.fc = 6; d.count = 9; d.type = PointType::Uint16;   /* 0 */
+    prof.points = {a, b, c, d};
+    EXPECT_EQ(ext_slots_for_profile(prof), 8u);   /* lỗi cũ sẽ ra 2+3+4+9 = 18 */
+}

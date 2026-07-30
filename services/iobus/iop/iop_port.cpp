@@ -85,7 +85,24 @@ ssize_t IopPort::read(uint8_t* buf, size_t n)
     if (fd_ < 0) return -1;
     for (;;) {
         const ssize_t r = ::read(fd_, buf, n);
-        if (r >= 0) return r;
+        if (r > 0) return r;
+        if (r == 0) {
+            /* F-05 — ĐÍNH CHÍNH so với mô tả trong báo cáo review:
+             * trên tty cấu hình raw với VMIN=0/VTIME=0 (xem open() ở trên),
+             * ::read() trả 0 CẢ khi buffer rỗng lẫn khi peer đã đóng. Nó KHÔNG
+             * trả -1/EAGAIN khi rỗng. Nghĩa là không thể phân biệt EOF với
+             * "chưa có dữ liệu" chỉ bằng giá trị trả về của ::read().
+             *
+             * Tín hiệu phân biệt duy nhất là poll(): khi peer đóng, kernel báo
+             * POLLHUP|POLLERR (đo được: revents=0x19 trên PTY Linux). Vì ta chỉ
+             * tới đây khi ::read() đã cạn buffer, kiểm POLLHUP lúc này là đúng
+             * thời điểm — dữ liệu còn tồn đọng luôn được trả trước qua r > 0. */
+            struct pollfd probe { fd_, 0, 0 };
+            if (::poll(&probe, 1, 0) > 0 &&
+                (probe.revents & (POLLHUP | POLLERR | POLLNVAL)) != 0)
+                return READ_EOF;
+            return 0;                     /* rỗng nhưng link còn sống */
+        }
         if (errno == EINTR) continue;
         if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
         return -1;
