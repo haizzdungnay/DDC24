@@ -65,7 +65,7 @@ bool ModbusMaster::open(const FieldbusConfig& cfg)
     profiles_.resize(cfg.slaves.size());
     slave_ext_base_.resize(cfg.slaves.size(), 0);
     slave_ext_count_.resize(cfg.slaves.size(), 0);
-
+    slave_config_error_.assign(cfg.slaves.size(), 0);
 
     uint16_t ext_idx = 0;
     for (size_t i = 0; i < cfg.slaves.size(); i++) {
@@ -76,19 +76,51 @@ bool ModbusMaster::open(const FieldbusConfig& cfg)
         const std::string profile_path = find_profile_path(cfg.slaves[i].profile);
         if (profile_path.empty()) {
             std::fprintf(stderr, "ERROR modbus_master.profile_not_found slave=%s profile=%s"
-                         " — slave bỏ qua\n",
+                         " — slave KHÔNG được poll (lỗi cấu hình)\n",
                          cfg.slaves[i].name.c_str(), cfg.slaves[i].profile.c_str());
-        } else {
-            load_device_profile(profile_path, &profiles_[i]);
+            slave_config_error_[i] = 1;
+            continue;
+        }
+        load_device_profile(profile_path, &profiles_[i]);
+
+        /* F-17: đếm theo ĐIỂM LUẬN LÝ, không theo số register. Trước đây đây là
+         * `pts += pp.count` (số register) trong khi vòng đọc tiêu 1 slot cho mỗi
+         * 2 register của điểm 32-bit → đặt trước gấp đôi số slot cần. */
+        const uint16_t need = ext_slots_for_profile(profiles_[i]);
+        if (need == 0) {
+            /* Không có điểm đọc nào (profile rỗng, hoặc mọi điểm bị validate
+             * loại, hoặc chỉ có FC ghi). Cũng là lỗi cấu hình: nếu để nguyên thì
+             * read_slave chạy qua vòng points rỗng và báo slave ONLINE. */
+            std::fprintf(stderr, "ERROR modbus_master.profile_no_readable_points slave=%s"
+                         " profile=%s — slave KHÔNG được poll (lỗi cấu hình)\n",
+                         cfg.slaves[i].name.c_str(), cfg.slaves[i].profile.c_str());
+            slave_config_error_[i] = 1;
+            continue;
         }
 
-        /* Đếm số ext points cho slave này */
-        uint16_t pts = 0;
-        for (const auto& pp : profiles_[i].points)
-            pts += pp.count;
-        slave_ext_count_[i] = pts;
-        ext_idx = static_cast<uint16_t>(ext_idx + pts);
-        if (ext_idx > KX_N_EXT) { ext_idx = KX_N_EXT; break; }
+        const uint16_t avail = static_cast<uint16_t>(KX_N_EXT - ext_idx);
+        if (need > avail) {
+            /* F-16: tràn dải phải FAIL-CLOSED và ỒN ÀO.
+             * Trước đây chỗ này `break` im lặng: các slave còn lại không được
+             * load profile nên points rỗng, nhưng slave_states_ đã resize cho
+             * TOÀN BỘ slave → poll_once vẫn gọi read_slave, vòng points rỗng
+             * giữ slave_ok=true → on_poll_ok → slave báo ONLINE, error rate 0%,
+             * không alarm E302, và không một dòng log nào.
+             * Dùng `continue` chứ không `break`: xử lý dứt điểm từng slave, các
+             * slave sau vẫn được xét (một slave nhỏ vẫn có thể vừa chỗ còn lại)
+             * thay vì bị đẩy vào trạng thái nửa vời. */
+            std::fprintf(stderr, "ERROR modbus_master.ext_slots_exhausted slave=%s addr=%u"
+                         " need=%u avail=%u capacity=%u"
+                         " — slave KHÔNG được poll (lỗi cấu hình)\n",
+                         cfg.slaves[i].name.c_str(), cfg.slaves[i].addr,
+                         need, avail, static_cast<unsigned>(KX_N_EXT));
+            profiles_[i].points.clear();
+            slave_config_error_[i] = 1;
+            continue;
+        }
+
+        slave_ext_count_[i] = need;
+        ext_idx = static_cast<uint16_t>(ext_idx + need);
     }
 
     std::fprintf(stderr, "INFO  modbus_master.open RS-485 opened %s %u%c8%u slaves=%zu total_ext=%u\n",
@@ -147,11 +179,15 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm)
         uint16_t ext_idx = slave_ext_base_[si];
 
         for (const auto& pt : profiles_[si].points) {
-            /* Mirror read_slave(): only read FCs consume ext_idx slots */
-            if (pt.fc != 1 && pt.fc != 2 && pt.fc != 3 && pt.fc != 4) continue;
+            /* Mirror read_slave(): only read FCs consume ext_idx slots
+             * (ext_slots_for_point() áp đúng luật này) */
+            if (ext_slots_for_point(pt) == 0) continue;
 
+            const bool is32 = point_type_is_32bit(pt.type);
             for (uint16_t k = 0; k < pt.count; k++) {
                 if (ext_idx >= KX_N_EXT) break;
+                /* Khớp read_slave: register 32-bit lẻ ở cuối bị bỏ, không tiêu slot */
+                if (is32 && k + 1 >= pt.count) break;
 
                 if (pt.writable && ext_idx < snapshot.ext_count && snapshot.ext[ext_idx].dirty &&
                     (!has_last_written_[ext_idx] ||
@@ -161,9 +197,6 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm)
                     if (pt.fc == 1) {
                         wfc = 5;   /* coil → FC05 write single coil */
                     } else if (pt.fc == 3) {
-                        const bool is32 = (pt.type == PointType::Int32 ||
-                                           pt.type == PointType::Uint32 ||
-                                           pt.type == PointType::Float32);
                         wfc = is32 ? 16u : 6u;  /* 32-bit → FC16, 16-bit → FC06 */
                     }
                     /* fc==2 discrete inputs, fc==4 input registers: not writable */
@@ -184,8 +217,7 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm)
 
                 ext_idx++;
                 /* 32-bit types consume 2 registers per logical point */
-                if (pt.type == PointType::Int32 || pt.type == PointType::Uint32 ||
-                    pt.type == PointType::Float32) k++;
+                if (is32) k++;
             }
         }
     }
@@ -215,6 +247,27 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
     const SlaveConfig& sc = cfg_.slaves[slave_idx];
     const DeviceProfile& prof = profiles_[slave_idx];
     SlaveState& state = slave_states_[slave_idx];
+
+    /* F-16 fail-closed: slave thiếu profile / không có điểm đọc / hết ext slot
+     * KHÔNG được báo online. Không truy vấn nó, đi thẳng đường lỗi để
+     * error_rate = 100% và E302 kích — kỹ thuật viên hiện trường thấy ngay thay
+     * vì tình trạng "đèn xanh, bảng điểm trống, log im lặng". */
+    if (slave_idx < slave_config_error_.size() && slave_config_error_[slave_idx]) {
+        on_poll_error(&state);
+        /* on_poll_error KHÔNG cập nhật last_poll_ms (có chủ đích: lỗi comm thật
+         * được retry nhanh, bị chặn bởi timeout 300ms của libmodbus). Ở đây
+         * không có I/O nào để chặn nên phải tự tôn trọng poll_interval, nếu
+         * không vòng fieldbus sẽ spin ở mức 1ms. */
+        state.last_poll_ms = now_ms;
+        metrics.update(slave_idx, false, now_ms);
+        cache.mark_slave_offline(slave_ext_base_[slave_idx],
+                                 slave_ext_count_[slave_idx], sc.addr);
+        if (metrics.check_e302(slave_idx))
+            std::fprintf(stderr, "ALARM E302 modbus.slave_config_error slave=%s addr=%u"
+                         " — thiếu profile hoặc hết ext slot, slave không được poll\n",
+                         sc.name.c_str(), sc.addr);
+        return;
+    }
 
     modbus_set_slave(ctx, sc.addr);
 
@@ -264,13 +317,25 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
             if (pt.fc == 1 || pt.fc == 2) {
                 eng = bits[k] ? 1.0f : 0.0f;
             } else {
-                const uint16_t count_this = (k + 1 < pt.count) ? 2u : 1u;
-                eng = decode_register(regs + k, count_this,
+                const bool is32 = point_type_is_32bit(pt.type);
+                if (is32 && k + 1 >= pt.count) {
+                    /* F-18: điểm 32-bit ở biên register lẻ. Loader đã chặn count
+                     * lẻ từ 2026-07-30, đây là lưới an toàn cho ProfilePoint
+                     * dựng thủ công. Xử lý GIỐNG modbus_tcp: log + bỏ điểm,
+                     * KHÔNG tiêu ext slot.
+                     * Trước đây RTU truyền count_this=1 cho decode_register →
+                     * trả 0.0f, rồi `0*scale+offset` được publish với KX_Q_GOOD:
+                     * một giá trị BỊA mang nhãn dữ liệu tốt. */
+                    std::fprintf(stderr, "WARN  modbus.odd_32bit slave=%s pt=%s k=%u count=%u"
+                                 " — profile misconfigured, point skipped\n",
+                                 sc.name.c_str(), pt.name.c_str(), k, pt.count);
+                    break;
+                }
+                eng = decode_register(regs + k, is32 ? 2u : 1u,
                                        pt.type, pt.byte_order,
                                        pt.scale, pt.offset);
                 /* 32-bit điểm chiếm 2 registers, tăng k thêm 1 */
-                if (pt.type == PointType::Int32 || pt.type == PointType::Uint32 ||
-                    pt.type == PointType::Float32) k++;
+                if (is32) k++;
             }
 
             cache.set_point(ext_idx++, point_name, eng, KX_Q_GOOD,

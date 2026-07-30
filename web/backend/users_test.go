@@ -62,6 +62,53 @@ func TestUsersDeleteLastAdminReturnsConflict(t *testing.T) {
 	}
 }
 
+// F-01: hạ quyền admin CUỐI CÙNG làm hệ thống còn 0 admin → mọi endpoint
+// RoleAdmin (kể cả chính endpoint này) trả 403 cho tất cả mọi người, chỉ phục hồi
+// được bằng cách sửa tay users.json trên thiết bị. DeleteUser đã chặn từ trước;
+// SetRole thì chưa.
+func TestUsersDemoteLastAdminReturnsConflictAndKeepsAdminAccess(t *testing.T) {
+	app, adminToken := newTestAppWithAdmin(t)
+	handler := app.Router()
+
+	resp := serveAuth(t, handler, http.MethodPut, "/api/v1/users/admin", `{"role":"viewer"}`, adminToken)
+	assertStatus(t, resp, http.StatusConflict)
+
+	if err := app.auth.SetRole("admin", RoleViewer); !errors.Is(err, ErrLastAdmin) {
+		t.Fatalf("SetRole last admin -> viewer err = %v; want ErrLastAdmin", err)
+	}
+
+	// Quyền admin phải còn nguyên: đây là điều kiện để phục hồi được.
+	resp = serveAuth(t, handler, http.MethodGet, "/api/v1/users", ``, adminToken)
+	assertStatus(t, resp, http.StatusOK)
+}
+
+// Guard chỉ được chặn khi thật sự MẤT admin cuối cùng — không được vạ lây.
+func TestUsersDemoteAdminAllowedWhenAnotherAdminRemains(t *testing.T) {
+	app, adminToken := newTestAppWithAdmin(t)
+	handler := app.Router()
+
+	resp := serveAuth(t, handler, http.MethodPost, "/api/v1/users",
+		`{"username":"admin2","role":"admin","password":"admin2pass"}`, adminToken)
+	assertStatus(t, resp, http.StatusCreated)
+
+	// Còn admin2 → hạ quyền admin là hợp lệ
+	resp = serveAuth(t, handler, http.MethodPut, "/api/v1/users/admin", `{"role":"viewer"}`, adminToken)
+	assertStatus(t, resp, http.StatusOK)
+
+	// Nhưng giờ admin2 là admin cuối cùng → không hạ được nữa
+	admin2Token := loginToken(t, handler, "admin2", "admin2pass")
+	resp = serveAuth(t, handler, http.MethodPut, "/api/v1/users/admin2", `{"role":"operator"}`, admin2Token)
+	assertStatus(t, resp, http.StatusConflict)
+}
+
+// Đặt lại role admin→admin (không đổi) không được rơi vào guard.
+func TestUsersSetSameAdminRoleIsAllowed(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	if err := app.auth.SetRole("admin", RoleAdmin); err != nil {
+		t.Fatalf("SetRole admin -> admin err = %v; want nil", err)
+	}
+}
+
 func TestUsersChangePasswordOldWrongReturnsUnauthorized(t *testing.T) {
 	app, adminToken := newTestAppWithAdmin(t)
 	handler := app.Router()

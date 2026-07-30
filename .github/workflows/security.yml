@@ -107,26 +107,63 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # F-15: workflow này trước đây phân tích `languages: python` trên một repo chỉ
+  # có 4 file .py (2 script soak, 1 test IPC, 1 script kiểm tài liệu HW) — trong
+  # khi ~42k dòng C++ an toàn-quan trọng, ~21k dòng Go và ~97 file TS/TSX thì
+  # KHÔNG được phân tích. Đó là một gate rỗng tạo tín hiệu xanh sai lệch.
+  #
+  # Mỗi ngôn ngữ là một leg riêng để một ngôn ngữ fail không che mất ngôn ngữ
+  # khác. c-cpp cần build thật (autobuild không biết cấu hình CMake của dự án nên
+  # dựng tường minh); go và javascript-typescript dùng autobuild.
   codeql-scan:
-    name: CodeQL Analyze
-    runs-on: ubuntu-latest
+    name: CodeQL Analyze (${{ matrix.language }})
+    runs-on: ubuntu-22.04
     permissions:
       actions: read
       contents: read
       security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ c-cpp, go, javascript-typescript ]
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      - name: Install C/C++ build dependencies
+        if: matrix.language == 'c-cpp'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake g++ libsodium-dev libmodbus-dev
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
         with:
-          languages: python
-          # C/C++ is covered by repo/bacnet/.github/workflows/codeql-analysis.yml
+          languages: ${{ matrix.language }}
+
+      # Chỉ build target production: test target kéo theo gtest và không phải bề
+      # mặt cần soi. MKDDC_ENABLE_HMI để OFF vì LVGL/libdrm là phụ thuộc vendored
+      # ngoài phạm vi phân tích của dự án.
+      - name: Build C++ services for CodeQL
+        if: matrix.language == 'c-cpp'
+        run: |
+          cmake -S services -B build/codeql \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DMKDDC_ENABLE_MODBUS=ON \
+            -DCORE_BUILD_TESTS=OFF \
+            -DIOBUS_BUILD_TESTS=OFF \
+            -DNETCFG_BUILD_TESTS=OFF
+          cmake --build build/codeql --parallel "$(nproc)"
 
       - name: Autobuild
+        if: matrix.language != 'c-cpp'
         uses: github/codeql-action/autobuild@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
 
+      # continue-on-error VẪN CÒN có chủ đích: bước upload Code Scanning đòi
+      # GitHub Advanced Security, và trên repo chưa bật GHAS nó fail vì lý do hạ
+      # tầng chứ không phải vì code có finding. Bỏ cờ này là một quyết định
+      # org/billing — xem ghi chú trong CHANGELOG entry 2026-07-30.
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
-        continue-on-error: true  # Code Scanning requires GitHub Advanced Security
+        continue-on-error: true

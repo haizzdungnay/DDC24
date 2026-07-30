@@ -12,12 +12,31 @@ function toWsOrigin(origin: string): string {
   return origin.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
 }
 
-function wsEndpoint(token?: string): string {
+/** Subprotocol cố định mà server chọn và echo lại. */
+export const WS_SUBPROTOCOL = 'mkddc.v1'
+/** Prefix của subprotocol mang JWT. Server KHÔNG echo lại phần tử này. */
+export const WS_TOKEN_SUBPROTOCOL_PREFIX = 'mkddc.token.'
+
+function wsEndpoint(): string {
   const sameOrigin = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
   const configuredOrigin = WS_ORIGIN || API_ORIGIN
   const origin = configuredOrigin ? toWsOrigin(configuredOrigin) : sameOrigin
-  const endpoint = `${origin.replace(/\/$/, '')}/api/v1/ws/monitor`
-  return token ? `${endpoint}?token=${encodeURIComponent(token)}` : endpoint
+  return `${origin.replace(/\/$/, '')}/api/v1/ws/monitor`
+}
+
+/**
+ * F-10: token đi qua header `Sec-WebSocket-Protocol`, KHÔNG qua query string.
+ *
+ * `?token=<JWT>` nằm trong URL đầy đủ nên đi vào lịch sử browser và access log
+ * của mọi reverse proxy đứng trước — với TTL 1 giờ thì cửa sổ lạm dụng là thật.
+ * (`loggingMiddleware` của BE chỉ log `r.URL.Path` nên bản thân app không ghi ra,
+ * nhưng nó không kiểm soát được proxy.)
+ *
+ * Server offer đúng một subprotocol `mkddc.v1` nên response chỉ echo lại phần tử
+ * đó — token không bao giờ xuất hiện trong header trả về.
+ */
+function wsProtocols(token?: string): string[] {
+  return token ? [WS_SUBPROTOCOL, `${WS_TOKEN_SUBPROTOCOL_PREFIX}${token}`] : [WS_SUBPROTOCOL]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -46,7 +65,8 @@ export function useWebSocket() {
   const timeoutRef = useRef<number | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
   const demoReleaseTimersRef = useRef<Record<string, number>>({})
-  const url = useMemo(() => wsEndpoint(session?.token), [session?.token])
+  const url = useMemo(() => wsEndpoint(), [])
+  const protocols = useMemo(() => wsProtocols(session?.token), [session?.token])
 
   const publishPoints = useCallback((points: Point[]) => {
     const ts = nowIso()
@@ -112,7 +132,7 @@ export function useWebSocket() {
       if (current && (current.readyState === WebSocket.CONNECTING || current.readyState === WebSocket.OPEN)) return
       clearReconnectTimer()
       setConnectionState(retryMs.current === 1000 ? 'connecting' : 'reconnecting')
-      const socket = new WebSocket(url)
+      const socket = new WebSocket(url, protocols)
       socketRef.current = socket
 
       socket.onopen = () => {
@@ -122,7 +142,17 @@ export function useWebSocket() {
       }
 
       socket.onmessage = (event) => {
-        const parsed = JSON.parse(String(event.data)) as unknown
+        // F-09: `JSON.parse` chạy trần trong event handler. Một frame không phải
+        // JSON (proxy chèn, khung lỗi, sự cố phía server) sẽ throw ra ngoài
+        // handler — không ai bắt được, và mất luôn cập nhật cho tới lần reconnect.
+        // Hiện BE luôn ghi bằng wsjson nên xác suất thấp, nhưng handler đọc dữ
+        // liệu từ bên ngoài thì phải chống lỗi.
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(String(event.data))
+        } catch {
+          return
+        }
         const message = isRecord(parsed) ? parsed : {}
         const op = envelopeOp(message) || 'update'
         const ts = envelopeTs(message)
@@ -174,7 +204,7 @@ export function useWebSocket() {
       socketRef.current?.close()
       socketRef.current = null
     }
-  }, [publishPoints, url])
+  }, [protocols, publishPoints, url])
 
   useEffect(() => () => {
     Object.values(demoReleaseTimersRef.current).forEach((timerId) => window.clearTimeout(timerId))

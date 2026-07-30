@@ -35,19 +35,33 @@ jobs:
           - name: baseline
             bacnet: OFF
             modbus: OFF
+            hmi: OFF
             extra_packages: ""
           - name: modbus
             bacnet: OFF
             modbus: ON
+            hmi: OFF
             extra_packages: libmodbus-dev
           - name: bacnet
             bacnet: ON
             modbus: OFF
+            hmi: OFF
             extra_packages: ""
           - name: modbus+bacnet
             bacnet: ON
             modbus: ON
+            hmi: OFF
             extra_packages: libmodbus-dev
+          # F-14: trước leg này, mkddc-hmi CHƯA BAO GIỜ được CI biên dịch và 28
+          # test HMI chưa bao giờ chạy — vì MKDDC_ENABLE_HMI mặc định OFF và
+          # không leg nào bật nó. Đó là lý do F-03 (annunciation an toàn bị nuốt
+          # im lặng) tồn tại mà không có gate nào bắt được.
+          # Leg này phủ tổ hợp đầy đủ nhất: modbus + bacnet + hmi.
+          - name: modbus+bacnet+hmi
+            bacnet: ON
+            modbus: ON
+            hmi: ON
+            extra_packages: libmodbus-dev libdrm-dev libfreetype-dev pkg-config
 
     steps:
       - name: Checkout
@@ -72,6 +86,7 @@ jobs:
             -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror" \
             -DMKDDC_ENABLE_BACNET=${{ matrix.bacnet }} \
             -DMKDDC_ENABLE_MODBUS=${{ matrix.modbus }} \
+            -DMKDDC_ENABLE_HMI=${{ matrix.hmi }} \
             -G Ninja
 
       - name: Build
@@ -136,6 +151,19 @@ jobs:
           cd web/backend
           go build -v ./...
 
+      # F-12: job này trước đây CHỈ có `go build`. Toàn bộ test BE (auth, RBAC,
+      # historian, đường SHM) chưa bao giờ được thực thi trên CI, nên một PR làm
+      # hỏng logic auth vẫn hiện check xanh miễn là code còn biên dịch được.
+      - name: Vet Go backend
+        run: |
+          cd web/backend
+          go vet ./...
+
+      - name: Test Go backend
+        run: |
+          cd web/backend
+          go test -race ./...
+
   web-frontend:
     name: React Web Frontend
     runs-on: ubuntu-22.04
@@ -154,6 +182,20 @@ jobs:
         run: |
           cd src/frontend
           npm ci
+
+      # F-13: job này trước đây CHỈ chạy `npm run build` (tsc --noEmit && vite
+      # build). 133 vitest test trên 25 file và `eslint --max-warnings=0` không
+      # chặn được gì — chỉ lỗi type và lỗi bundle mới bị bắt, còn mọi regression
+      # hành vi ở component/hook/AuthProvider/useWebSocket đều merge xanh.
+      - name: Lint React frontend
+        run: |
+          cd src/frontend
+          npm run lint
+
+      - name: Test React frontend
+        run: |
+          cd src/frontend
+          npm test
 
       - name: Build React frontend
         run: |

@@ -7,10 +7,384 @@
 ---
 
 ## [Unreleased]
+### Fixed — FE + BE + CI + packaging: đóng 14/14 finding còn lại của review 2026-07-30 (2026-07-30)
+
+Phạm vi: `web/backend/` (Go), `src/frontend/` (TS/React), `.github/workflows/`,
+`packaging/`, `tools/`. Cùng với entry FW SOM bên dưới, **toàn bộ 23 finding của
+review đã được xử lý**.
+
+**Mức Cao — chức năng**
+- `F-01` `web/backend/auth.go` — `SetRole` nay có guard "last admin": hạ quyền
+  admin cuối cùng trả `ErrLastAdmin` (HTTP 409). Trước đây chỉ `DeleteUser` có
+  guard; một lần `PUT /api/v1/users/admin {"role":"viewer"}` làm hệ thống còn **0
+  admin**, từ đó mọi endpoint `RoleAdmin` — kể cả chính endpoint dùng để phục hồi —
+  trả 403 cho tất cả mọi người, chỉ sửa được bằng cách chỉnh tay `users.json` trên
+  thiết bị. `ErrLastAdmin` đổi câu chữ từ "cannot delete last admin" thành
+  **"cannot remove last admin"** vì giờ dùng cho cả hai đường.
+- `F-02` **file mới `web/backend/shm_reader.go`** — reader seqlock cho SHM. Backend
+  nay `mmap(PROT_READ, MAP_SHARED)` rồi áp đúng pattern mà `shared/mkddc_shm.h`
+  bắt buộc: đọc `seq` (atomic) → bỏ nếu LẺ → copy → đọc lại `seq` → so sánh →
+  kiểm `magic` → retry giới hạn 5 lần. Ba call site `os.ReadFile` trong
+  `core_client.go` (`ReadPoints`, `readIOStatus`, `readPLCStatus`) đi qua
+  `readIOShm()`/`readPLCShm()`; `os` không còn được import.
+  `validSHM` giữ lại nhưng có comment rõ nó **không đủ** và không được dùng thay.
+  Bổ sung thêm một lớp bảo vệ mà review không nêu: **so inode/device mỗi lần đọc**
+  — khi `mkddc-core` restart nó `shm_unlink` + tạo lại segment, mmap cũ vẫn trỏ
+  vào inode đã xoá và nội dung cũ VẪN có `magic` hợp lệ, nên không so inode thì
+  backend sẽ đọc mãi dữ liệu đóng băng của một segment đã chết.
+  `readIOStatus` thất bại nay trả `Status: "fault"` (fail-safe, khớp
+  `KX_IOP_FAULT` phía HMI).
+
+**Mức Cao — gate CI rỗng**
+- `F-12` `.github/workflows/build-and-test.yml` — job `web-backend` thêm
+  `go vet ./...` và `go test -race ./...`. Trước đó job chỉ có `go build`, nên
+  toàn bộ test BE (auth, RBAC, historian, đường SHM) chưa bao giờ chạy trên CI.
+- `F-13` job `web-frontend` thêm `npm run lint` và `npm test` **trước** bước
+  build. Trước đó chỉ `npm run build`, nên 133 vitest test và
+  `eslint --max-warnings=0` không chặn được regression hành vi nào.
+- `F-15` `.github/workflows/security.yml` — CodeQL đổi từ `languages: python`
+  (repo chỉ có 4 file `.py`) sang **matrix `c-cpp` × `go` × `javascript-typescript`**,
+  `fail-fast: false` để một ngôn ngữ đỏ không che ngôn ngữ khác. `c-cpp` build
+  tường minh bằng CMake (autobuild không biết cấu hình của dự án) với
+  `*_BUILD_TESTS=OFF` — chỉ soi target production; `go` và
+  `javascript-typescript` dùng autobuild.
+
+**Mức Trung bình**
+- `F-04` `src/frontend/src/auth/AuthProvider.tsx` — `logout()` gọi
+  `POST /api/v1/auth/logout` với `Authorization: Bearer <token>` (capture token
+  TRƯỚC khi xoá state), `keepalive: true` để request vẫn đi khi trang đóng ngay
+  sau đó. Fire-and-forget có chủ đích: state local bị xoá ngay và một lần thu hồi
+  thất bại không đảo ngược việc đã đăng xuất. Trước đây FE chỉ xoá state local nên
+  JWT vừa dùng còn hợp lệ tới hết TTL 1 giờ và toàn bộ cơ chế `revoked` phía BE là
+  code chết.
+- `F-06` `web/backend/auth.go` — thêm `pruneRevokedLocked()` gọi trong `Revoke()`:
+  quét và xoá mọi entry đã quá hạn. Map giờ bị chặn trên bởi số lần logout trong
+  một TTL (1 giờ) thay vì tích luỹ vô hạn. Chọn quét tại chỗ thay vì goroutine
+  prune riêng: map luôn nhỏ nên phép quét là O(kích thước thực tế) và không thêm
+  một vòng đời goroutine phải quản lý.
+- `F-07` `AuthProvider.tsx` — `role: body.role ?? 'admin'` → **`?? 'viewer'`** kèm
+  `console.warn`. Response login thiếu field `role` (BE cũ, đổi hợp đồng, hoặc
+  reverse proxy lọc field) trước đây cấp giao diện admin đầy đủ.
+- `F-19` `packaging/rotate-web-jwt-secret.sh` — secret **không còn đi qua `/tmp`**:
+  `openssl rand -hex 32 | sed 's/^/JWT_SECRET=/' | sudo install -m 0600 /dev/stdin`.
+  Không có file trung gian nào tồn tại, nên vừa hết cửa sổ đọc lén theo umask
+  (0644) vừa hết đường symlink attack qua đường dẫn cố định đoán được. Thêm
+  `umask 077` cho mọi bước ghi file về sau. Secret cũng không còn đặt vào biến
+  shell.
+
+**Mức Thấp**
+- `F-09` `src/frontend/src/hooks/useWebSocket.ts` — bọc `JSON.parse` trong
+  `onmessage` bằng try/catch. Một frame không phải JSON trước đây throw ra ngoài
+  event handler, không ai bắt, và mất cập nhật cho tới lần reconnect.
+- `F-10` `useWebSocket.ts` + `web/backend/ws.go` — JWT **ra khỏi query string**,
+  đi qua `Sec-WebSocket-Protocol`. Client gửi
+  `["mkddc.v1", "mkddc.token.<jwt>"]`; server offer **đúng một** subprotocol
+  `mkddc.v1` nên response chỉ echo phần tử đó và token không bao giờ xuất hiện
+  trong header trả về. `requireWSAuth` lấy token theo thứ tự: subprotocol →
+  `Authorization` header → query string. Query string được **giữ làm đường lỗi
+  thời** (kèm log `WARN ws_token_in_query`) để một SPA còn trong cache browser sau
+  khi nâng cấp thiết bị không mất kết nối; việc FE ngừng dùng nó đã đóng phần lộ
+  thông tin của finding (lịch sử browser + access log của proxy).
+- `F-11` `web/backend/ws.go` — `wsOriginPatterns` chỉ nối 6 pattern loopback khi
+  `CORS_ORIGIN` **rỗng**. Trước đây luôn nối, nên một trang tại
+  `http://localhost:<port>` vẫn qua được check Origin của WS dù đã cấu hình
+  allowlist production — phá vỡ đúng ý định mà `isAllowedOrigin` thực thi cho HTTP.
+  Semantics giờ khớp `isAllowedOrigin`: rỗng = dev, đã đặt = allowlist đóng.
+- `F-20` `packaging/rotate-web-jwt-secret.sh` — `rollback()` chuyển lên **trước
+  thay đổi đầu tiên** và gắn `trap 'rollback' EXIT INT TERM` (nhả trap khi đã xác
+  nhận thành công). Rollback nay phục hồi **cả env file**, và nếu trước khi chạy
+  không có env file thì xoá nó thay vì để lại secret mới trên đĩa. Trước đây
+  `rollback()` được định nghĩa SAU khi unit đã bị `sed` sửa và `daemon-reload` đã
+  chạy, không có trap, nên một thất bại trong khoảng đó thoát script mà không hoàn
+  tác gì; và nó chưa bao giờ phục hồi env file, nên hệ thống "đã rollback" vẫn
+  mang secret mới và mọi session đang hoạt động vẫn bị vô hiệu.
+- `F-23` `src/frontend/vite.config.ts` — khai báo
+  `test: { environment: 'jsdom', include: [...] }`. Trước đây `jsdom` chỉ tồn tại
+  dưới dạng cờ dòng lệnh trong script `test`, nên `npx vitest run` (hay test runner
+  của IDE, hay một bước CI viết tay) chạy trong môi trường `node` và fail 93/133
+  với `ReferenceError: localStorage is not defined` — trông y như một suite đang đỏ.
+
+**Test mới**
+- Go **+13 test** (350 → 363 case kể cả subtest): `users_test.go` 3 test cho F-01;
+  `auth_test.go` 1 test cho F-06; **file mới `shm_reader_test.go`** 6 test cho
+  F-02; **file mới `ws_test.go`** 3 test cho F-10 + F-11.
+- FE **+7 test** (133 → 140, 25 → 26 file): **file mới
+  `src/auth/AuthProvider.test.tsx`** 5 test cho F-04 + F-07; `useWebSocket.test.tsx`
+  2 test cho F-09 + F-10.
+- Shell **file mới `tools/test_rotate_jwt_secret.sh`** — harness hermetic 17 assert
+  cho F-19 + F-20, stub `sudo`/`systemctl`/`systemd-analyze`/`curl` vào PATH và
+  chạy chính script production (chỉ đổi 2 đường dẫn sang thư mục tạm). 4 case:
+  happy path, `systemd-analyze verify` fail *trước* restart, service không bao giờ
+  ready, và không có env file ban đầu rồi thất bại.
+
+**Verification — đo lại từ đầu trong phiên này, không dẫn số cũ**
+
+| Gate | Baseline `7ea3ac5` | Sau khi sửa |
+|------|--------------------|-------------|
+| `go build ./...` | rc=0 | rc=0 |
+| `go vet ./...` | rc=0, 0 finding | rc=0, 0 finding |
+| `go test ./...` | PASS, 350 case | **PASS, 363 case** |
+| `go test -race ./...` (như CI mới) | — | **PASS** (89,6 s) |
+| `tsc --noEmit` | 0 lỗi | 0 lỗi |
+| `npm test` | 133/133, 25 file | **140/140, 26 file** |
+| `npx vitest run` (không qua npm script) | **fail 93/133** (`localStorage is not defined`) | **140/140 PASS** |
+| `npm run lint` (`--max-warnings=0`) | 0 cảnh báo | 0 cảnh báo |
+| `npm run build` | PASS | PASS |
+| `tools/test_rotate_jwt_secret.sh` | *(chưa tồn tại)* — chạy trên script cũ: **11 PASS / 6 FAIL** | **17 PASS / 0 FAIL** |
+| ctest C++ (HMI ON) — kiểm không hồi quy | 702/702 | **729/729 PASS** |
+| YAML 2 workflow parse được | PASS | PASS |
+
+- **Chứng minh test bắt được lỗi cũ** (hoàn nguyên tạm từng hành vi rồi chạy lại):
+  Go — 4 test fail (`TestAuthRevokePrunesExpiredEntries`,
+  `TestUsersDemoteLastAdminReturnsConflictAndKeepsAdminAccess`,
+  `TestUsersDemoteAdminAllowedWhenAnotherAdminRemains`, 2 test `TestWSOriginPatterns*`);
+  FE — 5 test fail (F-04, F-07, F-09, F-10 và test URL cũ); shell — 6 assert fail.
+  Toàn bộ PASS trên code đã sửa.
+- **Bằng chứng định lượng cho F-02** (`TestReadFileSnapshotCanTearProvingSeqlockIsRequired`
+  so với `TestShmReadNeverObservesTornSnapshotUnderConcurrentWriter`, writer ghi 2
+  field phải luôn bằng nhau, cửa sổ ghi nới rộng, chạy 2 s mỗi bên):
+  đường cũ `os.ReadFile + validSHM` thấy **55.132/78.009 (71%) snapshot BỊ XÉ vẫn
+  qua được check magic**; reader seqlock mới **0/4.316 bị xé**. Đây là lỗi thật, đo
+  được, không phải suy đoán lý thuyết.
+- **Kiểm chứng F-19 độc lập**: `install -m 0600 /dev/stdin` dưới `umask 022` cho ra
+  file quyền **600** — đúng điều bản cũ không bảo đảm được trong cửa sổ giữa
+  redirect và `install`.
+
+**Ghi chú kỹ thuật**
+- `go test -race` **không** chứng minh được tính đúng đắn của seqlock: writer
+  trong test ghi qua một mmap riêng, nên race detector không thấy được aliasing
+  (và trong production writer là một *tiến trình* khác, hoàn toàn ngoài tầm của
+  nó). Bằng chứng là test bất biến "hai field luôn bằng nhau" ở trên.
+- `CoreClient` nay chứa `sync.Mutex` (trong `shmSegment`) nên không copy được theo
+  giá trị; `go vet` (copylocks) sạch, mọi call site đều dùng con trỏ. Thêm
+  `(*CoreClient).Close()` để nhả mmap.
+
+**Chưa làm — cần quyết định của bạn**
+- `continue-on-error: true` trên bước `analyze` của CodeQL **vẫn được giữ**. Review
+  đúng khi nói nó làm gate không chặn được PR, nhưng bước upload Code Scanning đòi
+  **GitHub Advanced Security**; trên repo chưa bật GHAS, bỏ cờ này làm job đỏ vì lý
+  do hạ tầng chứ không phải vì code có finding. Bỏ cờ là quyết định org/billing —
+  cần bạn xác nhận GHAS đã bật.
+- Bước "Generate Python pip SBOM" trong `security.yml` giữ nguyên (review nêu nó
+  như *bằng chứng* workflow kế thừa khuôn mẫu Python, không phải finding riêng).
+  Nếu muốn SBOM đúng cho dự án thì cần thêm nhánh Go module + npm lockfile — đề
+  xuất làm trong một thay đổi riêng.
+- Chỉ chạy trên x86-64 Linux / GCC 13 / Go 1.26.4 / Node 22; **chưa** chạy lại trên
+  aarch64 (Orange Pi 5B).
+
+### Fixed — FW SOM: đóng 8/9 finding của review 2026-07-30 (WP1→WP4) (2026-07-30)
+
+Phạm vi: `services/hmi`, `services/iobus`, `services/netcfg`, `shared/mkddc_shm.h`,
+`.github/workflows/build-and-test.yml`. Không đổi hành vi ngoài phạm vi 9 finding.
+Không đổi hợp đồng binary: `kx_ext_point_t`, `kx_io_shm_t`, `kx_plc_shm_t`,
+`KX_SHM_MAGIC`, `KX_N_EXT` giữ nguyên.
+
+**WP1 (P0) — `F-03` annunciation an toàn của HMI + `F-14` đưa HMI vào gate CI**
+- `F-03` `services/hmi/data/shm_reader.{hpp,cpp}` + `main.cpp`: `read_all()` đổi
+  từ `bool` sang `ReadStatus{io_ok, plc_ok}` — trả trạng thái cho **cả hai** vùng
+  (trước đây bỏ hẳn giá trị trả về của `seqlock_read_plc`), và `main.cpp` **dùng**
+  giá trị đó. `read_all()` reset fail-safe `io_valid`/`plc_valid`/`iop_status`/
+  `fault_flags` **trước** khi đọc, nên một lần đọc trượt không thể để
+  `iop_status=NORMAL` của chu kỳ trước tiếp tục lái banner sự cố và alarm E001.
+  Các field *giá trị* (`ui_value`/`ai`/`ext`/`ts_ns`) **không** bị reset — chúng đã
+  được `age_ns` bảo vệ ở `screen_io.cpp`, xoá chúng chỉ làm màn hình nháy khi
+  trượt đúng một chu kỳ đọc.
+- Quyết định annunciation tách thành hai hàm thuần `hmi::io_fault_active()` /
+  `hmi::mcu_fault_active()` (`shm_reader.hpp`) làm **nguồn chân lý duy nhất** cho
+  banner + E001 + E002, nên test chốt được đúng biểu thức `main.cpp` dùng thay vì
+  copy lại nó. `fault_banner.update()` giờ dùng cùng quyết định với E001 → banner
+  và alarm không thể lệch nhau. E002 chỉ có nghĩa khi `io_ok` — không kích alarm
+  MCU bằng `fault_flags` của chu kỳ trước, cũng không bịa cờ lỗi.
+- `F-14` `.github/workflows/build-and-test.yml`: thêm leg matrix
+  **`modbus+bacnet+hmi`** với `-DMKDDC_ENABLE_HMI=ON` (thêm `hmi:` vào cả 4 leg
+  cũ ở giá trị `OFF`) + phụ thuộc `libdrm-dev libfreetype-dev pkg-config`. Trước
+  đó `mkddc-hmi` và 28 test của nó **chưa bao giờ** được CI biên dịch — đó là lý
+  do `F-03` tồn tại mà không gate nào bắt được.
+
+**WP2 (P1) — cụm ext index + device profile Modbus, sửa một lần**
+- `F-17` `services/iobus/fieldbus/device_profile.{hpp,cpp}`: thêm **hàm thuần**
+  `point_type_is_32bit()`, `ext_slots_for_point()`, `ext_slots_for_profile()` làm
+  nguồn chân lý duy nhất cho luật cấp phát slot ext. `modbus_master.cpp` (3 chỗ)
+  và `modbus_tcp.cpp` (2 chỗ) đều gọi chúng; luật "32-bit tiêu 2 register" giờ chỉ
+  còn tồn tại ở **một** chỗ trong codebase. Slot đếm theo **điểm luận lý**: FC
+  1/2 → `count`; FC 3/4 16-bit → `count`; FC 3/4 32-bit → `count/2`; **FC ghi
+  (5/6/15/16) → 0** (vòng đọc bỏ qua FC ghi nên đặt trước slot cho chúng chỉ sinh
+  slot rỗng). Trước đây `open()` đếm `pts += pp.count` (số register) → profile
+  32-bit đặt trước gấp đôi số slot cần, mất nửa dung lượng 64 slot và đẩy điểm
+  rỗng (`name=""`, `quality=BAD`) vào `push_snapshot`.
+- `F-16` `modbus_master.cpp`: bỏ `break` im lặng khi tràn `KX_N_EXT`. Mỗi slave
+  được xử lý **dứt điểm** bằng `continue` (slave sau vẫn được xét, một slave nhỏ
+  vẫn có thể vừa chỗ còn lại). Slave thiếu profile / không có điểm đọc / hết ext
+  slot bị đánh cờ `slave_config_error_` → log `ERROR` nêu rõ tên slave, addr, số
+  slot cần vs còn lại; `read_slave()` đi đường `on_poll_error` + `metrics.update
+  (ok=false)` + `mark_slave_offline` + alarm **E302**, nên **không bao giờ báo
+  online**. Trước đây các slave này có `slave_states_` nhưng `profiles_[i].points`
+  rỗng → `slave_ok` giữ `true` → ONLINE, error rate 0%, không alarm, không log.
+  Đường lỗi tự set `last_poll_ms` để tôn trọng `poll_interval` (không có I/O nào
+  để chặn nên nếu thiếu, vòng fieldbus sẽ spin ở mức 1 ms).
+- `F-08` `modbus_tcp.cpp`: bỏ clamp im lặng `if (idx > KX_N_EXT) idx = KX_N_EXT;`.
+  Conn hết slot / thiếu profile được đánh `config_error` → log `ERROR`,
+  `ext_count = 0`, **không mở kết nối** và bị `poll_once()` bỏ qua, nên không bao
+  giờ đi qua `on_poll_ok`. Trước đây mọi TCP slave nhận `ext_base = 64`,
+  `read_conn` thoát ở point đầu với `slave_ok` vẫn `true` → báo online và khỏe
+  mạnh mà không publish nổi một điểm nào.
+- `F-18` `device_profile.cpp`: **hiện thực** validation mà `device_profile.hpp`
+  đã hứa từ trước nhưng chưa có — type 32-bit trên FC 3/4 mà `count` không phải
+  **bội số của 2** → skip point + log `ERROR profile.odd_count_for_32bit`. Chốt
+  "bội số của 2" (không phải đúng bằng 2) để giữ khả năng đọc block nhiều điểm
+  32-bit liên tiếp mà cả hai vòng đọc đã hỗ trợ; tài liệu đã cập nhật cho khớp.
+  `modbus_master.cpp` xử lý register 32-bit ở biên lẻ **giống `modbus_tcp.cpp`**
+  (log + bỏ điểm) thay vì truyền `count=1` cho `decode_register` → trước đây
+  publish `0*scale + offset` với **`KX_Q_GOOD`**, tức một giá trị bịa mang nhãn
+  dữ liệu tốt. Cả hai transport giờ **không** tiêu ext slot cho register lẻ đó
+  (khớp phép làm tròn xuống của `ext_slots_for_point`) nên không sinh slot rỗng.
+- `F-21` `device_profile.cpp`: viết thẳng `pt->count > 2000` thay cho
+  `count * static_cast<int>(count > 0) > 2000` — nhân tử thứ hai là bool luôn
+  bằng 1 nên biểu thức cũ đúng do tình cờ. Ý định giữ nguyên (2000 =
+  `MODBUS_MAX_READ_BITS`, khớp buffer `bits[2000]`), có test chốt cả biên 2000/2001.
+
+**WP3 (P2) — `F-05` UART hangup**
+- `services/iobus/iop/iop_client.cpp`: `wait_response()` xử lý
+  `POLLHUP`/`POLLERR`/`POLLNVAL` (kernel báo bất kể `events` yêu cầu gì) và thoát
+  ngay với `NOT_OPEN` → đường reconnect; thêm xử lý `poll()` trả `< 0`
+  (`EINTR` → retry, còn lại → `NOT_OPEN`). Kiểm `POLLIN` **trước** để dữ liệu còn
+  tồn đọng được xả hết mới kết luận hangup.
+- `services/iobus/iop/iop_port.{hpp,cpp}`: thêm `IopPort::READ_EOF = -2` phân biệt
+  EOF với "chưa có dữ liệu". **Đính chính so với mô tả trong review**: trên tty
+  raw `VMIN=0/VTIME=0`, `::read()` trả `0` **cả** khi buffer rỗng **lẫn** khi peer
+  đóng — nó không trả `-1/EAGAIN` khi rỗng, nên không thể phân biệt chỉ bằng giá
+  trị trả về. Tín hiệu duy nhất là `poll()`: khi `::read()` trả 0 (buffer đã cạn),
+  `read()` probe bằng `poll(timeout=0)` và chỉ trả `READ_EOF` khi có
+  `POLLHUP|POLLERR|POLLNVAL`.
+- Semantics có chủ đích ở `transact()` **giữ nguyên**: EAGAIN kéo dài khi *ghi*
+  vẫn đi qua TIMEOUT → retry → FAULT → RECONNECT, không đổi thành `NOT_OPEN`.
+
+**WP4 (P3) — `F-22` `netcfg::LinuxPlatform::run`**
+- `services/netcfg/netcfg.cpp`: **đọc cạn pipe** rồi mới bỏ phần vượt 4096 byte.
+  Vòng cũ `break` ngay khi đạt giới hạn rồi `close(pipes[0])` → child đang ghi
+  nhận `SIGPIPE` → `WIFEXITED` false → `run()` trả `false` cho một lệnh thực chất
+  exit 0, tạo tín hiệu "apply thất bại" giả trong service có rollback fail-closed.
+
+**WP5 — `F-02`: phần việc của FW (lỗi thuộc BE)**
+- `shared/mkddc_shm.h`: bổ sung khối **HỢP ĐỒNG READER — BẮT BUỘC** nói rõ
+  `read()`/`pread()`/`os.ReadFile()` là **KHÔNG HỢP LỆ** dù có kiểm `magic` và độ
+  dài (writer không chạm `magic` trong lúc ghi nên check đó luôn pass), kèm trình
+  tự seqlock bắt buộc, hai hiện thực C++ làm hình mẫu, yêu cầu retry có giới hạn,
+  yêu cầu caller xử lý fail-safe khi retry hết lượt (dẫn `F-03`), và đường an toàn
+  sẵn có `ReadPointSnapshot` qua core. Đây chính là cái bẫy BE đã bước vào. Việc
+  sửa `web/backend/core_client.go` **thuộc team BE**, chưa làm ở đây.
+
+**Tài liệu cập nhật cho khớp hiện thực**
+- `services/iobus/fieldbus/device_profile.hpp` — hợp đồng validate nêu chính xác
+  "32-bit trên FC 3/4 cần `count` là bội số của 2" + đặc tả 3 hàm đếm slot.
+- `docs/02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md` — thêm §10.3.1
+  "Cấp phát ext slot — một slot = một ĐIỂM LUẬN LÝ": bảng slot theo FC/type, nguồn
+  chân lý duy nhất, và quy tắc fail-closed khi tràn dải.
+- `docs/03_implementation/26_MODBUS_IMPLEMENTATION_PLAN.md` — thay bullet
+  "`type` không khớp `count`" bằng luật chính xác đã hiện thực.
+
+**Verification — đo lại từ đầu trong phiên này, không dẫn số cũ**
+
+| Gate | Baseline `7ea3ac5` | Sau khi sửa |
+|------|--------------------|-------------|
+| ctest Release, MODBUS+BACNET+**HMI=ON** | 702/702 PASS | **729/729 PASS** (+27 test mới) |
+| ctest Release, MODBUS+BACNET, HMI=OFF | 674/674 PASS | **696/696 PASS** (+22) |
+| ASan Debug (MODBUS+HMI=ON), `detect_leaks=1` | — | **728/728 PASS**, rc=0, sạch |
+| UBSan Debug (MODBUS+HMI=ON), `-fno-sanitize-recover` | — | **728/728 PASS**, rc=0, sạch |
+| Cấu hình đúng như leg CI mới (`RelWithDebInfo`, `-Wall -Wextra -Werror`, BACNET+MODBUS+HMI=ON) | — | build rc=0, **729/729 PASS** |
+| Cảnh báo build | 2 (test-only) | **2**, đúng cùng nguồn `test_output_command.cpp:34`; **0 cảnh báo mới** |
+
+- **Chứng minh test bắt được lỗi cũ** (hoàn nguyên tạm từng hành vi rồi chạy lại):
+  3 test fail cho `F-03`; 7 test fail cho `F-17`/`F-16`/`F-08`/`F-18`; 2 test fail
+  cho `F-05`; 1 test fail cho `F-22`. Toàn bộ PASS trên code đã sửa.
+- **Tái hiện thủ công `F-03`** trên SHM **thật** (`/dev/shm/mkddc_io_shm` do
+  `mkddc-iobus` tạo, qua đúng đường `ShmReader::attach()` + `io_fault_active()`,
+  một tiến trình duy nhất tái dùng `DataCache` xuyên qua thời điểm sự cố): giết
+  `mkddc-iobus` rồi xoá `magic` (mô phỏng cửa sổ restart) — **code cũ**:
+  `io_ok=0` nhưng `io_valid=1`, `iop_status=0` → `io_fault=false`, banner **xanh**,
+  E001 **im lặng** ở cả 4 chu kỳ sau sự cố; **code đã sửa**: `io_valid=0`,
+  `iop_status=1` → `io_fault=TRUE`, banner **đỏ**, E001 **kích** ngay chu kỳ đầu.
+- **Tái hiện thủ công `F-05`** (peer PTY đóng sau khi request đã được ghi, đo
+  CPU-time so với wall-time của một lần `get_io`, `response_timeout_ms=500`):
+  **code cũ** `wall=500 ms, cpu=500 ms → 100% busy-spin` rồi trả `TIMEOUT`;
+  **code đã sửa** `wall=0,1 ms, cpu≈0 ms` và trả `NOT_OPEN` + log
+  `iop.port_eof`. Lặp 3 lần, kết quả nhất quán.
+
+**Đính chính đối với báo cáo review (nêu rõ theo yêu cầu mục 5 của fix request)**
+- `F-05` — **mức độ bị đánh giá cao hơn thực tế**. Báo cáo nói spin "lặp lại ở
+  **mỗi** chu kỳ poll 10 ms → chiếm một core suốt trạng thái RECONNECT". Đo ở mức
+  tiến trình (`mkddc-iobus` thật + PTY + `fake_mcu`, giết peer, lấy delta
+  `utime+stime` từ `/proc/<pid>/stat`) cho thấy **không có** CPU tăng cao kéo dài:
+  ~8–10 tick/4 s sau hangup, tương đương lúc link còn sống. Nguyên nhân: sau
+  hangup, `::write()` trên tty trả `EIO`, nên `transact()` trả `NOT_OPEN` **ngay
+  tại đường ghi** trước khi vào `wait_response`, và đường reconnect có backoff.
+  Busy-spin 100% một core **là thật** nhưng **bị chặn trên bởi đúng một deadline
+  của một transaction**, và chỉ xảy ra trong cửa sổ hẹp khi peer chết *sau* một
+  lần ghi thành công *trước* khi có response. Bản sửa vẫn đúng và cần thiết (phát
+  hiện hangup tức thì thay vì `TIMEOUT` sai + một deadline spin), nhưng xếp hạng
+  "cạnh tranh CPU liên tục với scan loop `SCHED_FIFO`" không tái hiện được.
+- `F-05` — **cách sửa như mô tả không đủ**. Đề xuất "`IopPort::read` trả một mã
+  riêng cho EOF" ngầm giả định `::read()` trả `-1/EAGAIN` khi rỗng. Đo thực tế
+  trên PTY Linux với tty raw `VMIN=0/VTIME=0`: rỗng → `read()==0, errno=0`; peer
+  đóng → cũng `read()==0`; và `poll()` báo `revents=0x19`
+  (`POLLIN|POLLHUP|POLLERR`). Nên phải dùng `poll()` để phân biệt, không thể dựa
+  vào giá trị trả về của `read()`. Đây cũng là lý do lỗi cũ *có* vào nhánh
+  `POLLIN` (POLLIN được set kèm POLLHUP) rồi spin, chứ không phải "không gọi
+  `read` nên không bao giờ thấy lỗi" như báo cáo viết.
+- `F-16` — **phạm vi rộng hơn mô tả**. Ngoài tràn `KX_N_EXT`, hai đường khác dẫn
+  tới **cùng** tình trạng "profile rỗng nhưng vẫn báo ONLINE": slave không tìm
+  thấy profile (`profile_not_found`), và profile load được nhưng không còn điểm
+  đọc nào sau validate. Cả ba đều được xử lý bằng cùng cờ `slave_config_error_`.
+- `F-17` — **`open()` còn đặt trước slot cho FC ghi**. Ngoài lỗi đếm theo
+  register, `pts += pp.count` cộng cả point FC 5/6/15/16 mà vòng đọc bỏ qua hoàn
+  toàn. `ext_slots_for_point()` trả 0 cho chúng.
+
+**Ngoài phạm vi — phát hiện thêm, ghi lại và KHÔNG sửa (theo yêu cầu mục 1)**
+- Đường suy ra write-FC trong `ModbusMaster::drain_ext_writes` (`pt.fc == 1` →
+  FC05, `pt.fc == 3` → FC06/16) là **code chết** với validator hiện tại:
+  `parse_point()` loại bỏ mọi point có `writable=true` mà `fc` không thuộc
+  {5,6,15,16}, nên `pt.writable` không bao giờ `true` cho một read FC. Nghĩa là
+  ext point hiện **không thể** ghi xuống slave qua đường `dirty`. Đây là mâu thuẫn
+  giữa validator và write bridge COR-011, không thuộc 9 finding nên không sửa —
+  cần một quyết định thiết kế (cho phép `writable` trên read FC, hay khai báo
+  point ghi riêng và ánh xạ) và áp gate DOC TRƯỚC CODE SAU.
+
+**Chưa làm**
+- `F-02` phần sửa `web/backend/core_client.go` — thuộc team BE.
+- Các finding FE/BE/CI/packaging khác (`F-01`, `F-04`, `F-06`, `F-07`, `F-09`…
+  `F-13`, `F-15`, `F-19`, `F-20`, `F-23`) không thuộc phạm vi văn bản này.
+- Chỉ chạy trên x86-64 Linux/GCC 13; **chưa** chạy lại trên aarch64 (Orange Pi 5B).
+
+### Added — Yêu cầu fix & debug cho team FW SOM (2026-07-30)
+- `docs/07_records/reviews/KX-DDC24-FW-SOM-FIX-REQUEST-2026-07-30.md` — trích **9/23 finding thuộc FW SOM** từ báo cáo review cùng ngày, kèm prompt bàn giao tự chứa cho team FW: cơ chế lỗi, cách tái hiện/debug, tiêu chí hoàn thành và test cần thêm cho từng finding.
+- Phân loại: `F-03` + `F-14` (hmi + gate build) — **WP1/P0**; `F-17` + `F-16` + `F-08` + `F-18` + `F-21` (cụm ext index + device profile Modbus, một nguyên nhân gốc) — **WP2/P1**; `F-05` (POLLHUP + EOF/EAGAIN của IOP) — **WP3/P2**; `F-22` (`netcfg::run` cắt output) — **WP4/P3**; `F-02` — **WP5**, lỗi thuộc BE nhưng hợp đồng `shared/mkddc_shm.h` thuộc FW nên FW review + làm rõ tài liệu.
+- Ghi nhận: **`services/core` không có finding nào**; 6/9 finding tập trung ở `services/iobus/fieldbus`. Nguyên nhân gốc của WP2 là luật "32-bit tiêu 2 register" đang được viết lại **4 lần** ở 4 chỗ (`modbus_master.cpp:87-89,187-188,272-273`; `modbus_tcp.cpp:57-58,203`) nên chúng lệch nhau → yêu cầu tách thành một hàm thuần duy nhất, test được mà không cần libmodbus.
+- Baseline verification bàn giao kèm (đo tại `7ea3ac5`, team FW không được để tụt): ctest **702/702** với `MKDDC_ENABLE_MODBUS=ON MKDDC_ENABLE_BACNET=ON MKDDC_ENABLE_HMI=ON` (674/674 khi HMI OFF); bắt buộc chạy ASan + UBSan cho WP2/WP3; 2 cảnh báo `-Wstringop-overflow` từ `test_output_command.cpp:34` là false positive GCC 13 đã hạ mức có chủ ý — không sửa.
+
+### Added — Báo cáo review code FE + BE + FW SOM (2026-07-30, Rev 2 — hoàn chỉnh)
+- `docs/07_records/reviews/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md` — review tình trạng + **23 finding** trên `src/frontend`, `web/backend`, `services/{core,iobus,hmi,netcfg}`, `packaging/`, `tools/`, `.github/workflows/` tại mốc `7ea3ac5` (cây source giống hệt `7a5b72a`, chỉ khác `CHANGELOG.md`).
+- Rev 2 đóng toàn bộ giới hạn của Rev 1: đã build lại C++ và chạy lại mọi gate, đã review `services/netcfg` + `packaging/` + `tools/` + workflow CI, đã soi đường ext index của Modbus **RTU**.
+- Finding mức Cao — chức năng: `F-01` `SetRole` thiếu guard "last admin" → mất quyền admin vĩnh viễn (`web/backend/auth.go:174`); `F-02` BE đọc SHM bằng `os.ReadFile` không theo pattern seqlock mà `shared/mkddc_shm.h` bắt buộc → snapshot xé lọt vào WS monitor và historian (`web/backend/core_client.go:137`); `F-03` HMI tái dùng `DataCache` và bỏ giá trị trả về của `read_all` → banner sự cố + alarm E001/E002 chạy trên dữ liệu cũ khi iobus restart (`services/hmi/main.cpp:186`).
+- Finding mức Cao — **gate CI rỗng** (mới ở Rev 2): `F-12` job Go chỉ `go build`, **không chạy `go test`** (`build-and-test.yml:134`); `F-13` job FE chỉ `npm run build`, **không chạy `npm test` cũng không lint** → 133 vitest test không chặn được gì (`build-and-test.yml:158`); `F-14` **không leg matrix nào bật `MKDDC_ENABLE_HMI`** → `mkddc-hmi` và 28 test của nó chưa bao giờ được CI biên dịch (`services/CMakeLists.txt:47`), và F-03 nằm đúng trong service đó.
+- Finding mức Trung bình: `F-04` FE không gọi `POST /api/v1/auth/logout` nên đường thu hồi token của BE là code chết; `F-05` `wait_response` không xử lý `POLLHUP`/`POLLERR` + `IopPort::read` không phân biệt EOF với EAGAIN → spin chiếm CPU và không phát hiện được UART hangup; `F-16` Modbus RTU `break` khi tràn `KX_N_EXT` khiến slave còn lại bị loại khỏi poll nhưng vẫn báo ONLINE 0% lỗi (`modbus_master.cpp:91`); `F-17` cả RTU và TCP đếm slot ext theo **register** thay vì **điểm luận lý** → điểm 32-bit đặt trước gấp đôi, giảm nửa dung lượng `KX_N_EXT` và đẩy điểm rác chất lượng BAD vào snapshot; `F-18` validation "32-bit ⇒ count=2" mà `device_profile.hpp:50` hứa **chưa được hiện thực** → RTU publish giá trị bịa `0*scale+offset` với `KX_Q_GOOD`; `F-19` `rotate-web-jwt-secret.sh:14` ghi secret JWT ra `/tmp` đường dẫn cố định theo umask mặc định trước khi `install -m 0600` (đọc lén + symlink attack); `F-06` map `revoked` phình vô hạn; `F-07` role FE mặc định fail-open thành `admin`; `F-08` Modbus TCP báo slave online khi ext index tràn dải; `F-15` CodeQL phân tích `languages: python` trên repo C++/Go/TS (chỉ 4 file `.py`) + `continue-on-error` → gate rỗng, cùng bản chất với A-03.
+- Finding mức Thấp: `F-09` `JSON.parse` trong `onmessage` không bọc try/catch; `F-10` JWT nằm trong query string của URL WebSocket; `F-11` `wsOriginPatterns` luôn nối pattern localhost; `F-20` `rollback()` của script rotate JWT định nghĩa sau thay đổi đầu tiên, không có `trap`, và không phục hồi env file đã sao lưu; `F-21` biểu thức giới hạn block coil `count * (count > 0) > 2000` đúng do tình cờ (`device_profile.cpp:168`); `F-22` `netcfg::run` biến output bị cắt ở 4096 byte thành "lệnh thất bại" qua `SIGPIPE`; `F-23` môi trường jsdom của FE chỉ do flag npm script cấp, không có trong `vite.config.ts` → gọi `vitest` trực tiếp fail 93/133 giả.
+- Đã đối chiếu và **xác nhận đúng** (không phải finding): toàn bộ offset SHM trong `core_client.go` khớp từng byte với `shared/mkddc_shm.h` kể cả padding; `FrameParser::feed` chống overflow; `PointTable::valid` + `parse_point_name` chặn OOB trên đường web IPC; tham số `channel` của PULSE_COUNTER được validate ở loader; `io_scaling` và PID chặn chia 0; `ExtCache` clamp theo `KX_N_EXT`; `writeConfigFileAtomic` có fsync file + directory; `decode_register`/`encode_register` chặn mọi nhánh 32-bit bằng `count < 2` nên profile sai không gây OOB; `regs[125]`/`bits[2000]` khớp đúng giới hạn libmodbus và có loader chặn trước; **`netcfg` không có command injection** (`execv` + argv vector + đường dẫn tuyệt đối qua `access(X_OK)`, không qua shell); `drain_ext_writes` của Modbus RTU tuân thủ seqlock đúng; `packaging/install.sh` đặt quyền có chủ đích và hợp lý.
+- **Đính chính số liệu**: câu "build 0 lỗi 0 cảnh báo" ở entry 2026-07-29 chưa chính xác — còn 2 cảnh báo `-Wstringop-overflow` từ `services/iobus/tests/test_output_command.cpp:34`, là false positive đã biết của GCC 13 và đã được hạ mức có chủ ý **chỉ** cho target test (`core/CMakeLists.txt:80`, `iobus/CMakeLists.txt:143`); target production giữ nguyên `-Werror`. Câu chữ đúng phải là "0 error, 2 cảnh báo test-only đã biết".
+- **Đính chính ghi nhận nội bộ**: ghi nhận "CodeQL đã sửa `python` → `cpp` tại commit `2869a19`" là **sai** — commit đó không tồn tại trong repo và `security.yml:124` vẫn đang là `python` (xem `F-15`).
+- verification (đo lại độc lập từ đầu tại `7ea3ac5`, **không** lấy lại số cũ): C++ Release với `MKDDC_ENABLE_BACNET=ON MKDDC_ENABLE_MODBUS=ON` build rc=0 và **ctest 674/674 PASS** (9,90 s) — xác nhận độc lập con số kế thừa; thêm `-DMKDDC_ENABLE_HMI=ON` cho **702/702 PASS**; `go build ./...` PASS + `go vet ./...` PASS 0 finding + **`go test ./...` PASS** (`ok mkddc-web 16.672s`); FE `tsc --noEmit` PASS 0 lỗi + **`npm test` 133/133 PASS** (25 file) + `npm run lint` (`eslint --max-warnings=0`) PASS 0 cảnh báo. Chỉ chạy trên x86-64 Linux/GCC 13, chưa chạy lại trên aarch64.
+
 ### Removed — Hoàn tác PR #74 khỏi repo công ty (2026-07-29)
 - phạm vi/repository: hoàn tác toàn bộ baseline tái cấu trúc đã được merge nhầm vào `Mekong-HCM/MK-DDC-24:main`; không bổ sung tính năng hay thay đổi hành vi ngoài phạm vi PR #74.
 - luồng phát triển: giữ công việc tái cấu trúc trên fork cá nhân `haizzdungnay/DDC24` và dùng PR riêng khi cần đề xuất thay đổi cho repo công ty.
 - verification: `git diff --check` đạt; nội dung ngoài mục changelog này được đối chiếu với parent chính của merge PR #74 (`7a5b72a`).
+
+### Added — Bộ hồ sơ bàn giao auditor + báo cáo hiện trạng toàn dự án (2026-07-29)
+- Tạo `audit-handover-2026-07-29/` — **chỉ giữ cục bộ, đã thêm `/audit-handover-*/` vào `.gitignore`** vì toàn bộ nội dung là bản sao của `docs/` đã có trong repo; đẩy lên GitHub sẽ trùng lặp. Bản sao chụp 261 file tài liệu chốt tại commit `7a5b72a` trên `main`, chia 13 nhóm: spec sản phẩm, kiến trúc + 21 ADR, phần cứng (50 file), FW MCU, FW SOM, phần mềm SOM, Web BE/FE, interface/protocol, verification + evidence gốc, vận hành/deploy, governance/traceability, kế hoạch triển khai.
+- `00_BAO_CAO/BAO_CAO_HIEN_TRANG_VA_NEXT_ACTION.md` — báo cáo hiện trạng viết theo **source code thực tế**, không copy checklist tài liệu. Kèm 4 finding mới: `A-01` FW MCU chưa hiện thực (16 dòng skeleton ↔ 11 tài liệu thiết kế), `A-02` không có file thiết kế phần cứng máy đọc được (0 KiCad/gerber; `PWR_DESIGN` và `MFG_DATA_PACKAGE` tự đánh dấu BLOCKED), `A-03` job CI "MCU Firmware" tạo tín hiệu xanh sai lệch vì chỉ biên dịch skeleton, `A-04` ba workstream C0.2/C0.10/C0.11 có mã mà chưa có SPEC.
+- Cập nhật `B-07` từ CHẶN thành **đóng một phần**: Phase 7 (commit `5110492`, sau mốc review Rev 2.0 tại `5c39c61`) đã có ASan/UBSan + 2 fuzz harness > 8,2 triệu lần chạy; còn soak 24 h, TSan cho `mkddc-iobus`, fuzz nightly dài.
+- `00_BAO_CAO/SOURCE_INVENTORY.md` — inventory mã nguồn theo module/file/trách nhiệm; `00_BAO_CAO/MANIFEST.sha256` — checksum 260 file để auditor kiểm toàn vẹn.
+- Next action xếp theo đường găng thật: P0 gồm kernel `RT_GROUP_SCHED=n` (`F-13`), đo lại WCET/jitter, **khởi động hiện thực FW MCU** và **sinh schematic/PCB/BOM** — hai hạng mục cuối là đường găng dài nhất còn lại của dự án.
+- **Verification đo lại từ đầu tại `7a5b72a`** (không lấy lại số cũ): C++ `-Wall -Wextra -Werror` với `MKDDC_ENABLE_BACNET=ON MKDDC_ENABLE_MODBUS=ON` build 0 lỗi 0 cảnh báo và **ctest 674/674 PASS** (core 467 + iobus 165 + netcfg 42); cấu hình mặc định 671/671; `go build ./...` + `go test ./...` **0 FAIL**; FE `tsc --noEmit` sạch + vitest **133/133**; `nm -C mkddc-core` **0 symbol** compiler ST.
 
 ### Fixed — CI dependency and scoped Grype exception (2026-07-28)
 - build-and-test: cài `libsodium-dev` trong toàn bộ C++ matrix để các cấu hình dùng ST package integrity configure được nhất quán với sanitizer job.

@@ -66,6 +66,34 @@ static bool is_write_fc(uint8_t fc)
     return fc == 5 || fc == 6 || fc == 15 || fc == 16;
 }
 
+static bool is_read_fc(uint8_t fc)
+{
+    return fc == 1 || fc == 2 || fc == 3 || fc == 4;
+}
+
+/* ---- Ext slot accounting (F-17): nguồn chân lý duy nhất ---- */
+
+bool point_type_is_32bit(PointType t)
+{
+    return t == PointType::Int32 || t == PointType::Uint32 || t == PointType::Float32;
+}
+
+uint16_t ext_slots_for_point(const ProfilePoint& pt)
+{
+    if (!is_read_fc(pt.fc)) return 0;              /* FC ghi không chiếm slot */
+    if (pt.fc == 1 || pt.fc == 2) return pt.count; /* 1 bit = 1 điểm luận lý */
+    if (point_type_is_32bit(pt.type))
+        return static_cast<uint16_t>(pt.count / 2u);  /* 2 register = 1 điểm */
+    return pt.count;
+}
+
+uint16_t ext_slots_for_profile(const DeviceProfile& prof)
+{
+    uint32_t total = 0;
+    for (const auto& pt : prof.points) total += ext_slots_for_point(pt);
+    return (total > UINT16_MAX) ? UINT16_MAX : static_cast<uint16_t>(total);
+}
+
 static bool parse_point(const std::string& obj, ProfilePoint* pt)
 {
     double v = 0.0;
@@ -117,9 +145,22 @@ static bool parse_point(const std::string& obj, ProfilePoint* pt)
     }
 
     /* 32-bit types require count=2 registers (each FC03/04 register = 2 bytes) */
-    const bool is32bit = (pt->type == PointType::Int32 ||
-                          pt->type == PointType::Uint32 ||
-                          pt->type == PointType::Float32);
+    const bool is32bit = point_type_is_32bit(pt->type);
+
+    /* F-18: validation này đã được hứa ở device_profile.hpp nhưng trước
+     * 2026-07-30 KHÔNG được hiện thực — is32bit chỉ dùng cho check byte_order.
+     * Profile `{"type":"float32","count":1}` đi qua loader trọn vẹn, rồi RTU
+     * decode với count=1 → decode_register trả 0.0f và publish `0*scale+offset`
+     * với KX_Q_GOOD, tức một giá trị BỊA được đánh dấu là dữ liệu tốt.
+     *
+     * Chốt luật: bội số của 2 (không phải đúng bằng 2) để giữ khả năng đọc
+     * block nhiều điểm 32-bit liên tiếp mà cả hai vòng đọc đã hỗ trợ. */
+    if (is32bit && (pt->fc == 3 || pt->fc == 4) && (pt->count % 2u) != 0u) {
+        std::fprintf(stderr, "ERROR profile.odd_count_for_32bit name=%s count=%u"
+                     " — 32-bit cần count là bội số của 2 — skip\n",
+                     pt->name.c_str(), pt->count);
+        return false;
+    }
 
     /* byte_order bắt buộc cho 32-bit */
     pt->byte_order = ByteOrder::AB;
@@ -165,7 +206,11 @@ static bool parse_point(const std::string& obj, ProfilePoint* pt)
     }
 
     /* validate block size limits (plan 25 §4) */
-    if ((fc == 1 || fc == 2) && static_cast<int>(pt->count) * static_cast<int>(pt->count > 0) > 2000) {
+    /* F-21: biểu thức cũ là `count * (count > 0) > 2000` — nhân tử thứ hai là
+     * một bool luôn bằng 1 (count >= 1 đã bảo đảm ở trên), nên nó rút gọn thành
+     * đúng ý định `count > 2000`. Viết thẳng ra để không còn là bẫy.
+     * Giới hạn 2000 = MODBUS_MAX_READ_BITS, khớp buffer bits[2000] ở vòng đọc. */
+    if ((fc == 1 || fc == 2) && pt->count > 2000) {
         std::fprintf(stderr, "ERROR profile.coil_block_too_large name=%s count=%u — skip\n",
                      pt->name.c_str(), pt->count);
         return false;

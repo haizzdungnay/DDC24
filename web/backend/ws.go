@@ -17,7 +17,27 @@ const (
 	monitorUpdateInterval = 200 * time.Millisecond
 	monitorReadLimit      = 1 << 20
 	monitorWriteTimeout   = 5 * time.Second
+
+	// F-10: token đi qua Sec-WebSocket-Protocol thay vì query string.
+	// Server chỉ offer wsSubprotocol nên response echo lại đúng phần tử đó —
+	// token KHÔNG bao giờ xuất hiện trong header trả về.
+	wsSubprotocol            = "mkddc.v1"
+	wsTokenSubprotocolPrefix = "mkddc.token."
 )
+
+// wsTokenFromSubprotocols lấy JWT do client gửi kèm trong Sec-WebSocket-Protocol.
+// Trả "" nếu client không gửi (client cũ, hoặc dùng Authorization header).
+func wsTokenFromSubprotocols(r *http.Request) string {
+	for _, header := range r.Header.Values("Sec-WebSocket-Protocol") {
+		for _, item := range strings.Split(header, ",") {
+			item = strings.TrimSpace(item)
+			if rest, ok := strings.CutPrefix(item, wsTokenSubprotocolPrefix); ok && rest != "" {
+				return rest
+			}
+		}
+	}
+	return ""
+}
 
 type monitorPointReader interface {
 	ReadPoints(context.Context) ([]PointDTO, error)
@@ -29,9 +49,24 @@ type monitorPointForcer interface {
 
 func (a *App) requireWSAuth(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.URL.Query().Get("token")
+		// F-10: thứ tự ưu tiên — subprotocol (không bao giờ vào URL), rồi
+		// Authorization header, rồi query string.
+		//
+		// Query string được giữ làm đường LỖI THỜI để một SPA còn nằm trong cache
+		// browser sau khi nâng cấp thiết bị không bị mất kết nối; nó sinh log WARN
+		// để lộ ra client nào còn dùng. Bản thân việc FE ngừng dùng nó đã đóng
+		// phần lộ thông tin của finding (lịch sử browser + access log của proxy).
+		token := wsTokenFromSubprotocols(r)
 		if token == "" {
 			token = bearerToken(r)
+		}
+		if token == "" {
+			if fromQuery := r.URL.Query().Get("token"); fromQuery != "" {
+				token = fromQuery
+				if a.logger != nil {
+					a.logger.Printf("WARN ws_token_in_query remote=%s — đường lỗi thời, client nên gửi qua Sec-WebSocket-Protocol", r.RemoteAddr)
+				}
+			}
 		}
 		principal, err := a.auth.Validate(token)
 		if err != nil {
@@ -43,7 +78,13 @@ func (a *App) requireWSAuth(next http.HandlerFunc) http.Handler {
 }
 
 func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: wsOriginPatterns(a.cfg.CORSOrigin)})
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: wsOriginPatterns(a.cfg.CORSOrigin),
+		// Chỉ offer đúng subprotocol cố định: client gửi
+		// ["mkddc.v1", "mkddc.token.<jwt>"] và server chọn "mkddc.v1", nên phần tử
+		// mang token không bị echo lại vào response header (F-10).
+		Subprotocols: []string{wsSubprotocol},
+	})
 	if err != nil {
 		if a.logger != nil {
 			a.logger.Printf("WARN ws_accept err=%v remote=%s", err, r.RemoteAddr)
@@ -121,8 +162,18 @@ func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// wsOriginPatterns dựng danh sách Origin cho phép của WebSocket.
+//
+// F-11: trước đây hàm này LUÔN nối 6 pattern localhost, kể cả khi CORS_ORIGIN đã
+// được cấu hình tường minh cho triển khai production. Một trang tại
+// http://localhost:<bất kỳ port> trong browser của người vận hành vẫn qua được
+// check Origin của WS — phá vỡ đúng ý định "chỉ cho phép origin đã khai báo" mà
+// isAllowedOrigin (http.go) đang thực thi cho đường HTTP.
+//
+// Giữ khớp semantics với isAllowedOrigin: CORS_ORIGIN rỗng = chế độ dev, cho phép
+// loopback; CORS_ORIGIN đã đặt = allowlist đóng, KHÔNG nối thêm gì.
 func wsOriginPatterns(allowedOrigin string) []string {
-	patterns := []string{"localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*", "[::1]", "[::1]:*"}
+	patterns := make([]string, 0, 6)
 	for _, item := range strings.Split(allowedOrigin, ",") {
 		item = strings.TrimSpace(item)
 		if item == "" {
@@ -134,6 +185,9 @@ func wsOriginPatterns(allowedOrigin string) []string {
 			continue
 		}
 		patterns = append(patterns, parsed.Host)
+	}
+	if len(patterns) == 0 {
+		return []string{"localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*", "[::1]", "[::1]:*"}
 	}
 	return patterns
 }

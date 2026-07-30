@@ -60,8 +60,10 @@ var (
 	ErrInvalidUserInput   = errors.New("invalid user input")
 	ErrInvalidPassword    = errors.New("invalid password")
 	ErrInvalidOldPassword = errors.New("invalid old password")
-	ErrLastAdmin          = errors.New("cannot delete last admin")
-	ErrSelfDelete         = errors.New("cannot delete acting user")
+	// Dùng cho CẢ xoá và hạ quyền admin cuối cùng (F-01), nên câu chữ không nói
+	// riêng "delete". Đây là thông điệp trả về cho client qua writeUserError.
+	ErrLastAdmin  = errors.New("cannot remove last admin")
+	ErrSelfDelete = errors.New("cannot delete acting user")
 )
 
 type jwtClaims struct {
@@ -182,6 +184,14 @@ func (a *AuthService) SetRole(username string, role Role) error {
 	user, exists := a.users[username]
 	if !exists {
 		return ErrUserNotFound
+	}
+	// F-01: hạ quyền admin cuối cùng làm hệ thống còn 0 admin. Từ lúc đó MỌI
+	// endpoint RoleAdmin trả 403 cho tất cả mọi người — kể cả chính
+	// PUT /api/v1/users/{username} dùng để phục hồi — nên chỉ còn cách sửa tay
+	// users.json trên filesystem thiết bị. DeleteUser đã chặn trường hợp tương
+	// đương từ trước; SetRole thì chưa.
+	if user.Role == RoleAdmin && role != RoleAdmin && countAdmins(a.users) <= 1 {
+		return ErrLastAdmin
 	}
 	users := cloneUsers(a.users)
 	user.Role = role
@@ -336,7 +346,28 @@ func (a *AuthService) Revoke(rawToken string) {
 	}
 	a.mu.Lock()
 	a.revoked[rawToken] = exp
+	a.pruneRevokedLocked(time.Now())
 	a.mu.Unlock()
+}
+
+// pruneRevokedLocked xoá mọi entry đã quá hạn khỏi map revoked. Gọi với a.mu đã giữ.
+//
+// F-06: entry chỉ được xoá trong Validate() khi ĐÚNG token đó được trình lại sau
+// khi đã hết hạn — điều gần như không bao giờ xảy ra vì client đã bỏ token. Không
+// có prune định kỳ, nên một script health-check login+logout mỗi 30 giây trên
+// thiết bị nhúng chạy hàng tháng tích ~86k entry, mỗi entry giữ nguyên chuỗi JWT
+// (~200-300 byte) → hàng chục MB rò rỉ không thu hồi trên board RAM hạn chế.
+//
+// Quét toàn map thay vì dùng goroutine prune riêng: map bị chặn trên bởi số lần
+// logout trong một TTL (1 giờ), nên nó luôn nhỏ và phép quét là O(kích thước thực
+// tế) — không cần thêm một goroutine vòng đời phải quản lý. Sau khi F-04 được sửa
+// (FE thực sự gọi logout) thì đường này mới bắt đầu có lưu lượng thật.
+func (a *AuthService) pruneRevokedLocked(now time.Time) {
+	for token, exp := range a.revoked {
+		if !now.Before(exp) {
+			delete(a.revoked, token)
+		}
+	}
 }
 
 func (a *AuthService) Require(min Role, next http.HandlerFunc) http.Handler {

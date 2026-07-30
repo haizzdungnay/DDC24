@@ -72,14 +72,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthHeaderProvider(provider)
       setHistoryAuthHeaderProvider(provider)
     }
-    setSession({ username, role: body.role ?? 'admin', token: body.token })
+    // F-07: default phải là quyền THẤP NHẤT. `?? 'admin'` cũ khiến một response
+    // login thiếu field `role` (BE cũ, BE đổi hợp đồng, hoặc reverse proxy lọc
+    // bớt field) cấp cho user giao diện admin đầy đủ — thấy toàn bộ trang cấu
+    // hình hệ thống và quản lý user. Server vẫn chặn 403 nên không leo thang
+    // thật, nhưng đó là lộ thông tin cấu trúc + UX sai.
+    if (!body.role) {
+      console.warn('mkddc: response login thiếu field "role"; mặc định về quyền viewer')
+    }
+    setSession({ username, role: body.role ?? 'viewer', token: body.token })
   }, [])
 
   const logout = useCallback(() => {
+    const revokeToken = session?.token
+
+    // Xoá state local NGAY: người dùng phải được đăng xuất khỏi UI bất kể kết quả
+    // của lời gọi thu hồi phía server.
     setAuthHeaderProvider(() => ({}))
     setHistoryAuthHeaderProvider(() => ({}))
     setSession(null)
-  }, [])
+
+    // F-04: BE có đầy đủ đường thu hồi (POST /api/v1/auth/logout → handleLogout →
+    // AuthService.Revoke) nhưng FE trước đây không gọi bao giờ, nên JWT vừa dùng
+    // vẫn hợp lệ tới hết TTL 1 giờ và toàn bộ cơ chế `revoked` phía BE là code
+    // chết. Trên HMI web dùng chung ở phòng máy, ai lấy được token đó (lịch sử
+    // browser, log proxy, devtools) vẫn ghi/force được point ở quyền operator.
+    //
+    // Fire-and-forget có chủ đích: một lần thu hồi thất bại không được chặn hay
+    // đảo ngược việc đã đăng xuất. `keepalive` để request vẫn đi khi trang bị
+    // đóng/điều hướng ngay sau đó.
+    if (!revokeToken) return
+    void fetch(`${base}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      keepalive: true,
+      headers: { Authorization: `Bearer ${revokeToken}` }
+    }).catch(() => {
+      /* thu hồi là best-effort; token sẽ tự hết hạn theo TTL */
+    })
+  }, [session?.token])
 
   const value = useMemo<AuthContextValue>(() => ({
     session,

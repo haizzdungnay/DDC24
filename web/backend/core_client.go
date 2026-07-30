@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -35,6 +34,28 @@ type CoreClient struct {
 	SockPath string
 	IOShm    string
 	PLCShm   string
+
+	// F-02: hai segment SHM được mmap và đọc theo pattern seqlock mà
+	// shared/mkddc_shm.h bắt buộc (xem shm_reader.go). Attach là lazy nên struct
+	// literal `&CoreClient{IOShm: ..., PLCShm: ...}` vẫn dùng được như trước.
+	ioSeg  shmSegment
+	plcSeg shmSegment
+}
+
+// Close nhả mmap của hai segment SHM. An toàn khi gọi nhiều lần.
+func (c *CoreClient) Close() {
+	c.ioSeg.close()
+	c.plcSeg.close()
+}
+
+// readIOShm / readPLCShm là ĐƯỜNG DUY NHẤT được phép đọc SHM trong backend.
+// Không dùng os.ReadFile cho hai segment này — xem F-02 trong shm_reader.go.
+func (c *CoreClient) readIOShm() ([]byte, error) {
+	return c.ioSeg.read(c.IOShm, kxIOShmMinLen)
+}
+
+func (c *CoreClient) readPLCShm() ([]byte, error) {
+	return c.plcSeg.read(c.PLCShm, kxPlcShmMinLen)
 }
 
 type CoreStatus struct {
@@ -134,18 +155,12 @@ func (c *CoreClient) ReadPoints(ctx context.Context) ([]PointDTO, error) {
 		return nil, ctx.Err()
 	default:
 	}
-	plcData, err := os.ReadFile(c.PLCShm)
+	plcData, err := c.readPLCShm()
 	if err != nil {
 		return []PointDTO{}, nil
 	}
-	if !validSHM(plcData, kxPlcShmMinLen) {
-		return []PointDTO{}, nil
-	}
 	// Read io_shm for AI unit strings (best-effort; nil on failure = empty units)
-	var ioData []byte
-	if raw, err2 := os.ReadFile(c.IOShm); err2 == nil && validSHM(raw, kxIOShmMinLen) {
-		ioData = raw
-	}
+	ioData, _ := c.readIOShm()
 	return decodePoints(plcData, ioData), nil
 }
 
@@ -325,12 +340,11 @@ func (c *CoreClient) dialCore(ctx context.Context) (net.Conn, error) {
 }
 
 func (c *CoreClient) readIOStatus() (IOPStatus, error) {
-	data, err := os.ReadFile(c.IOShm)
+	data, err := c.readIOShm()
 	if err != nil {
+		// Fail-safe: không đọc được io_shm nghĩa là KHÔNG biết trạng thái IOP,
+		// và "fault" là mặc định an toàn (khớp KX_IOP_FAULT ở phía HMI).
 		return IOPStatus{Status: "fault"}, err
-	}
-	if !validSHM(data, kxIOShmMinLen) {
-		return IOPStatus{Status: "fault"}, fmt.Errorf("invalid io shm")
 	}
 	return IOPStatus{
 		Status:    mapIOPStatus(data[offIOPStatus]),
@@ -341,12 +355,9 @@ func (c *CoreClient) readIOStatus() (IOPStatus, error) {
 }
 
 func (c *CoreClient) readPLCStatus() (ScanStatus, error) {
-	data, err := os.ReadFile(c.PLCShm)
+	data, err := c.readPLCShm()
 	if err != nil {
 		return ScanStatus{}, err
-	}
-	if !validSHM(data, kxPlcShmMinLen) {
-		return ScanStatus{}, fmt.Errorf("invalid plc shm")
 	}
 	return ScanStatus{
 		Count:   binary.LittleEndian.Uint32(data[offPLCScanCount : offPLCScanCount+4]),
@@ -354,6 +365,10 @@ func (c *CoreClient) readPLCStatus() (ScanStatus, error) {
 	}, nil
 }
 
+// validSHM chỉ kiểm độ dài và magic — KHÔNG đủ để bảo đảm snapshot nhất quán
+// (đó chính là lỗi F-02). Giữ lại vì decodePoints và các đường xử lý buffer đã có
+// sẵn dùng nó như một sanity check trên buffer ĐÃ được seqlockCopy xác nhận.
+// Tuyệt đối không dùng nó thay cho shmSegment.read().
 func validSHM(data []byte, minLen int) bool {
 	return len(data) >= minLen && binary.LittleEndian.Uint32(data[0:4]) == kxShmMagic
 }

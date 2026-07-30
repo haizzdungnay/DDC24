@@ -7,8 +7,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -80,6 +82,49 @@ func TestAuthLoginJWTAndRBAC(t *testing.T) {
 	auth.Revoke(token)
 	if _, err := auth.Validate(token); err == nil {
 		t.Fatalf("revoked token accepted")
+	}
+}
+
+// F-06: entry trong map revoked chỉ được xoá trong Validate() khi ĐÚNG token đó
+// được trình lại sau khi đã hết hạn — điều gần như không bao giờ xảy ra vì client
+// đã bỏ token. Không có prune định kỳ, nên một health-check login+logout mỗi 30
+// giây chạy hàng tháng tích ~86k entry × ~200-300 byte JWT = hàng chục MB rò rỉ
+// không thu hồi trên board RAM hạn chế.
+func TestAuthRevokePrunesExpiredEntries(t *testing.T) {
+	users := writeTestUsers(t, "admin123", RoleAdmin)
+	auth, err := NewAuthService(testConfig(t, users), nil)
+	if err != nil {
+		t.Fatalf("NewAuthService: %v", err)
+	}
+
+	// Mô phỏng lịch sử logout đã tích lại: token đã hết hạn từ lâu, client không
+	// bao giờ trình lại nên Validate() không có cơ hội xoá.
+	auth.mu.Lock()
+	for i := 0; i < 500; i++ {
+		auth.revoked["token-het-han-"+strconv.Itoa(i)] = time.Now().Add(-time.Hour)
+	}
+	auth.mu.Unlock()
+
+	token, _, err := auth.Authenticate("admin", "admin123", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("Authenticate: %v", err)
+	}
+	auth.Revoke(token)
+
+	auth.mu.Lock()
+	size := len(auth.revoked)
+	_, freshKept := auth.revoked[token]
+	auth.mu.Unlock()
+
+	if size != 1 {
+		t.Fatalf("len(revoked) = %d; want 1 (500 entry hết hạn phải bị prune)", size)
+	}
+	if !freshKept {
+		t.Fatal("token vừa revoke bị prune mất — nó chưa hết hạn")
+	}
+	// Không được đánh đổi tính đúng đắn: token vừa revoke vẫn phải bị từ chối.
+	if _, err := auth.Validate(token); err == nil {
+		t.Fatal("token đã revoke vẫn được chấp nhận")
 	}
 }
 

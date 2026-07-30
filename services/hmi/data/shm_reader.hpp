@@ -78,6 +78,36 @@ struct SysSnapshot {
     char     last_fault[64]         = "NONE";
 };
 
+/* Kết quả một lần read_all(): trạng thái đọc của TỪNG vùng SHM.
+ *
+ * Vì sao cần struct thay vì một bool: đường annunciation (banner sự cố, alarm
+ * E001/E002) phải coi "không đọc được io" là CÓ SỰ CỐ, không phải "bình
+ * thường". Trước đây read_all() trả một bool duy nhất chỉ phản ánh vùng io và
+ * caller bỏ qua nó, nên một lần đọc thất bại làm DataCache giữ nguyên
+ * iop_status=NORMAL của chu kỳ trước → banner vẫn xanh, E001 im lặng
+ * (finding F-03, review 2026-07-30). */
+struct ReadStatus {
+    bool io_ok  = false;
+    bool plc_ok = false;
+};
+
+/* Quyết định annunciation an toàn — nguồn chân lý duy nhất cho banner sự cố,
+ * alarm E001 và E002. main.cpp gọi đúng hai hàm này; test chốt hành vi ở đây
+ * chứ không copy lại biểu thức, để test không thể "đúng" trong khi main sai.
+ *
+ * Nguyên tắc: KHÔNG ĐỌC ĐƯỢC = CÓ SỰ CỐ. */
+inline bool io_fault_active(const ReadStatus& st, const DataCache& d)
+{
+    return !st.io_ok || d.iop_status == KX_IOP_FAULT;
+}
+
+/* E002 chỉ có nghĩa khi io_shm đọc được: fault_flags của chu kỳ trước không
+ * được phép kích alarm MCU, và bịa ra cờ lỗi cũng sai như nuốt nó. */
+inline bool mcu_fault_active(const ReadStatus& st, const DataCache& d)
+{
+    return st.io_ok && d.fault_flags != 0;
+}
+
 /* Read-only consumer of both SHM segments. HMI never writes SHM. */
 class ShmReader {
 public:
@@ -90,8 +120,14 @@ public:
     bool attached_io()  const { return io_  != nullptr; }
     bool attached_plc() const { return plc_ != nullptr; }
 
-    /* Seqlock read into DataCache. Sets io_valid / plc_valid independently. */
-    bool read_all(DataCache* out) const;
+    /* Seqlock read into DataCache. Sets io_valid / plc_valid independently.
+     *
+     * Fail-safe: các field lái annunciation (iop_status, fault_flags) được reset
+     * về trạng thái "có sự cố" TRƯỚC khi đọc, nên một lần đọc thất bại không bao
+     * giờ để giá trị cũ tiếp tục lái quyết định. Các field *giá trị*
+     * (ui_value/ai/... và ts_ns) KHÔNG bị reset — chúng đã được age_ns bảo vệ ở
+     * screen_io, xoá chúng chỉ làm màn hình nháy khi trượt một chu kỳ đọc. */
+    ReadStatus read_all(DataCache* out) const;
 
     /* For unit tests: inject pre-allocated structs (no mmap). */
     void attach_external_io (const kx_io_shm_t*  p) { io_  = p; ext_io_  = true; }

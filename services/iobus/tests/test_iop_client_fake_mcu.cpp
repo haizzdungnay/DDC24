@@ -6,17 +6,20 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <thread>
 
 #include <fcntl.h>
 #include <poll.h>
+#include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
 
 #include "diagnostics/iobus_metrics.hpp"
 #include "iop/iop_client.hpp"
 #include "iop/iop_frame.hpp"
+#include "iop/iop_port.hpp"
 
 using namespace iobus;
 
@@ -30,6 +33,11 @@ public:
         int  skip_frames = 0;        /* bỏ trả lời N frame đầu (inject timeout) */
         uint8_t nack_cmd = 0;
         uint8_t nack_err = 0;
+        /* F-05: >0 → sau đúng N frame nhận được thì ĐÓNG master side của PTY mà
+         * không trả lời. Slave fd của IopClient sẽ báo POLLHUP. Phải đóng SAU
+         * khi request đã được ghi, nếu không write() gặp EIO và transact trả
+         * NOT_OPEN qua đường ghi, không đi vào wait_response. */
+        int  hangup_after_frames = 0;
     };
 
     bool start() { return start(Options()); }
@@ -84,6 +92,11 @@ private:
 
     void handle(const ParsedFrame& f)
     {
+        if (opt_.hangup_after_frames > 0 && --opt_.hangup_after_frames == 0) {
+            if (master_fd_ >= 0) { ::close(master_fd_); master_fd_ = -1; }
+            running_.store(false);
+            return;
+        }
         if (opt_.skip_frames > 0) { opt_.skip_frames--; return; }
 
         const uint8_t seq = opt_.seq_wrong ? static_cast<uint8_t>(f.seq + 1) : f.seq;
@@ -259,6 +272,94 @@ TEST(IopClientFakeMcu, NackSafeStateIsReported)
     EXPECT_EQ(r.code, IopResult::NACK);
     EXPECT_EQ(r.nack_err, ERR_SAFE_STATE);
     EXPECT_GE(metrics.nack_count.load(), 1u);
+}
+
+/* ---- F-05: UART hangup ---- */
+
+/* Peer đóng giữa lúc chờ response → PHẢI trả NOT_OPEN ngay, không spin tới hết
+ * deadline rồi trả TIMEOUT.
+ *
+ * Lỗi cũ: poll() báo POLLHUP (kernel báo cờ này bất kể `events` yêu cầu gì),
+ * poll() trả về NGAY với pr>0, nhưng wait_response chỉ xét `revents & POLLIN`
+ * nên không gọi read() → không bao giờ thấy lỗi → vòng for(;;) gọi lại poll()
+ * liền, spin không sleep tới hết deadline, nhân (max_retry+1) lần.
+ *
+ * Test đo bằng THỜI GIAN vì đó là cái phân biệt được hai hành vi: với cấu hình
+ * dưới đây, hành vi cũ mất >= 200ms × (max_retry+1) rồi TIMEOUT, hành vi đúng
+ * trả về trong vài ms. */
+TEST(IopClientFakeMcu, PeerHangupReturnsNotOpenImmediatelyInsteadOfSpinning)
+{
+    FakeMcuThread::Options opt;
+    opt.hangup_after_frames = 1;   /* đóng master ngay sau frame đầu, không reply */
+    FakeMcuThread mcu;
+    ASSERT_TRUE(mcu.start(opt));
+
+    IopClientConfig cfg;
+    cfg.baud = 0;
+    cfg.response_timeout_ms = 200;   /* deadline lớn để tách bạch hai hành vi */
+    cfg.handshake_timeout_ms = 200;
+
+    IobusMetrics metrics;
+    IopClient client(&metrics, cfg);
+    ASSERT_TRUE(client.open(mcu.slave_path()));
+
+    IopIoResp io;
+    const auto t0 = std::chrono::steady_clock::now();
+    const IopResult r = client.get_io(&io);
+    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - t0).count();
+
+    EXPECT_EQ(r.code, IopResult::NOT_OPEN);
+    EXPECT_LT(elapsed_ms, 150) << "hangup phải phát hiện tức thì, không qua timeout";
+    EXPECT_EQ(metrics.timeout_count.load(), 0u);
+}
+
+/* IopPort::read phân biệt EOF với "chưa có dữ liệu".
+ *
+ * ĐÍNH CHÍNH so với mô tả trong báo cáo review: trên tty raw VMIN=0/VTIME=0,
+ * ::read() trả 0 CẢ khi rỗng lẫn khi peer đóng — nó KHÔNG trả -1/EAGAIN khi
+ * rỗng. Nên phép phân biệt không thể dựa vào giá trị trả về của ::read(); tín
+ * hiệu duy nhất là POLLHUP/POLLERR từ poll(). Test này chốt cả hai chiều. */
+TEST(IopPortRead, DistinguishesEofFromNoDataAvailable)
+{
+    const int master = ::posix_openpt(O_RDWR | O_NOCTTY);
+    ASSERT_GE(master, 0);
+    ASSERT_EQ(::grantpt(master), 0);
+    ASSERT_EQ(::unlockpt(master), 0);
+    char name[128];
+    ASSERT_EQ(::ptsname_r(master, name, sizeof(name)), 0);
+    {
+        struct termios tio {};
+        tcgetattr(master, &tio);
+        cfmakeraw(&tio);
+        tcsetattr(master, TCSANOW, &tio);
+    }
+
+    IopPort port;
+    ASSERT_TRUE(port.open(name, 0));
+
+    uint8_t buf[64];
+    /* (1) link sống, buffer rỗng → 0, KHÔNG phải READ_EOF */
+    EXPECT_EQ(port.read(buf, sizeof(buf)), 0);
+
+    /* (2) có dữ liệu → > 0 */
+    ASSERT_EQ(::write(master, "hi", 2), 2);
+    ssize_t got = 0;
+    for (int i = 0; i < 100 && got == 0; i++) {
+        got = port.read(buf, sizeof(buf));
+        if (got == 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    EXPECT_EQ(got, 2);
+
+    /* (3) peer đóng → READ_EOF, không còn là 0 */
+    ::close(master);
+    ssize_t eof = 0;
+    for (int i = 0; i < 100; i++) {
+        eof = port.read(buf, sizeof(buf));
+        if (eof == IopPort::READ_EOF) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    EXPECT_EQ(eof, IopPort::READ_EOF);
 }
 
 TEST(IopClientFakeMcu, WriteFailsOnClosedPortReturnsNotOpen)

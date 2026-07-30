@@ -193,6 +193,43 @@ Field `kx_ext_point_t` (đã có trong `shared/mkddc_shm.h`):
 > `setpoint` và `dirty` trong snapshot gửi từ iobus→core là **không dùng** (core bỏ qua);
 > chúng chỉ có ý nghĩa khi đọc từ `plc_shm.ext[]` (core đã ghi vào đó).
 
+#### 10.3.1 Cấp phát ext slot — một slot = một ĐIỂM LUẬN LÝ
+
+*(Bổ sung Rev 1.3 — 2026-07-30, đóng finding F-17 của review
+`docs/07_records/reviews/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md`.)*
+
+Dải `ext[0..KX_N_EXT-1]` (64 slot) được cấp phát tuần tự: RTU slave trước, TCP
+slave sau (`ext_offset = ModbusMaster::total_ext_count()`). Một slot ứng với
+**một điểm luận lý**, KHÔNG phải một register:
+
+| FC | Slot tiêu thụ cho mỗi point |
+|----|------------------------------|
+| 1, 2 (coil / discrete input) | `count` (1 bit = 1 điểm) |
+| 3, 4 với type 16-bit (`int16`/`uint16`/`bool`) | `count` |
+| 3, 4 với type 32-bit (`int32`/`uint32`/`float32`) | `count / 2` (2 register = 1 điểm) |
+| 5, 6, 15, 16 (FC ghi) | `0` — vòng đọc bỏ qua FC ghi nên đặt trước slot cho chúng chỉ sinh slot rỗng |
+
+Luật này được hiện thực **một lần duy nhất** trong
+`services/iobus/fieldbus/device_profile.{hpp,cpp}`:
+
+```cpp
+bool     point_type_is_32bit(PointType t);
+uint16_t ext_slots_for_point(const ProfilePoint& pt);
+uint16_t ext_slots_for_profile(const DeviceProfile& prof);
+```
+
+Mọi chỗ cần biết số slot (`ModbusMaster::open`, `ModbusTcp::open`, các vòng đọc,
+`drain_ext_writes`) **phải** gọi các hàm này. Trước Rev 1.3, luật được viết lại
+bốn lần ở bốn chỗ và chúng lệch nhau: `open()` đếm theo số register nên profile
+32-bit đặt trước gấp đôi số slot cần → mất nửa dung lượng 64 slot và để lại slot
+rỗng (`name=""`, `quality=BAD`) lọt vào `push_snapshot` thành dòng vô danh trên
+bảng điểm web/HMI.
+
+**Tràn dải là FAIL-CLOSED**: slave không được cấp đủ slot (hoặc thiếu profile,
+hoặc profile không có điểm đọc nào) bị đánh **lỗi cấu hình** — log `ERROR` nêu rõ
+tên slave, số slot cần vs còn lại, KHÔNG được poll, và **không bao giờ báo
+online** (RTU đi đường `on_poll_error` + alarm E302; TCP không mở kết nối).
+
 ---
 
 ### 10.4 Core integration — đọc ext snapshot

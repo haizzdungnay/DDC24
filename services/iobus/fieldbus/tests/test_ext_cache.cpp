@@ -3,6 +3,7 @@
  * @brief MOD-009: ext cache set/get + mark_slave_offline.
  */
 #include <gtest/gtest.h>
+#include "device_profile.hpp"
 #include "ext_cache.hpp"
 
 using namespace iobus::fieldbus;
@@ -62,4 +63,40 @@ TEST(ExtCache, CountTracking)
     EXPECT_EQ(cache.count(), 1u);
     cache.set_point(3, "p3", 1.0f, KX_Q_GOOD, 1, true, false);
     EXPECT_EQ(cache.count(), 4u);
+}
+
+/* F-17: bố cục slot phải LIỀN MẠCH.
+ *
+ * count_ được nâng tới index cao nhất từng ghi, và push_snapshot gửi TOÀN BỘ
+ * [0, count) sang core. Một slot được đặt trước nhưng không bao giờ set_point sẽ
+ * giữ name="" + quality=BAD và hiện lên bảng điểm web/HMI thành một dòng vô danh
+ * — đúng triệu chứng cũ khi open() đếm slot theo số register: điểm float32
+ * count=2 đặt trước 2 slot nhưng chỉ dùng 1, để lại slot rỗng ở giữa. */
+TEST(ExtCache, NoEmptySlotWhenBasesComeFromLogicalPointCount)
+{
+    DeviceProfile meter;                 /* float32 count=2 → 1 điểm luận lý */
+    ProfilePoint kwh;
+    kwh.name = "kWh"; kwh.fc = 4; kwh.addr = 0; kwh.count = 2;
+    kwh.type = PointType::Float32; kwh.byte_order = ByteOrder::ABCD;
+    meter.points.push_back(kwh);
+
+    const uint16_t base_meter = 0;
+    const uint16_t base_plc   = ext_slots_for_profile(meter);
+    ASSERT_EQ(base_plc, 1u);             /* lỗi cũ: 2 → slot 1 bỏ trống */
+
+    ExtCache cache;
+    cache.set_point(base_meter, "meter.kWh[0]", 12.5f, KX_Q_GOOD, 1, true, false);
+    for (uint16_t i = 0; i < 3; i++) {
+        char name[24];
+        std::snprintf(name, sizeof(name), "plc.reg[%u]", i);
+        cache.set_point(static_cast<uint16_t>(base_plc + i), name,
+                        static_cast<float>(i), KX_Q_GOOD, 2, true, false);
+    }
+
+    ASSERT_EQ(cache.count(), 4u);
+    for (uint16_t i = 0; i < cache.count(); i++) {
+        EXPECT_STRNE(cache.point(i).name, "") << "slot " << i << " rỗng";
+        EXPECT_EQ(cache.point(i).quality, static_cast<uint8_t>(KX_Q_GOOD))
+            << "slot " << i;
+    }
 }

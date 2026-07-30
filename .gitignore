@@ -53,3 +53,7 @@ logs/*
 
 # Local backup of stale untracked files (manual cleanup)
 /.untracked_backup_2026-06-15/
+
+# Bộ hồ sơ bàn giao auditor — bản sao chụp tài liệu đã có sẵn trong docs/,
+# giữ cục bộ để gửi ra ngoài, không đẩy lên GitHub tránh trùng lặp nội dung.
+/audit-handover-*/

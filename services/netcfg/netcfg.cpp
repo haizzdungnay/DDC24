@@ -511,11 +511,26 @@ bool LinuxPlatform::run(const std::vector<std::string>& args, std::string* outpu
     ::close(pipes[1]);
     std::string result;
     std::array<char, 512> buffer {};
+    /* F-22: PHẢI đọc cạn pipe rồi mới bỏ phần vượt giới hạn.
+     * Vòng cũ dừng ngay khi result.size() >= 4096 (điều kiện `n > 0 &&
+     * result.size() < 4096` false → rơi xuống `else break`) rồi close(pipes[0]).
+     * Child đang ghi tiếp nhận SIGPIPE, nên WIFEXITED(status) false và run() trả
+     * FALSE cho một lệnh thực chất đã chạy đúng — biến một lần cắt output thành
+     * một lần "apply thất bại" giả, trong service có cơ chế rollback fail-closed. */
+    constexpr size_t kMaxOutput = 4096;
     for (;;) {
         const ssize_t n = ::read(pipes[0], buffer.data(), buffer.size());
-        if (n > 0 && result.size() < 4096) result.append(buffer.data(), static_cast<size_t>(n));
-        else if (n < 0 && errno == EINTR) continue;
-        else break;
+        if (n > 0) {
+            if (result.size() < kMaxOutput) {
+                const size_t room = kMaxOutput - result.size();
+                const size_t take = (static_cast<size_t>(n) < room) ? static_cast<size_t>(n) : room;
+                result.append(buffer.data(), take);
+            }
+            continue;   /* tiếp tục đọc để child không bị SIGPIPE, chỉ bỏ phần thừa */
+        }
+        if (n == 0) break;                       /* EOF: child đã đóng stdout */
+        if (errno == EINTR) continue;
+        break;                                   /* lỗi đọc thật */
     }
     ::close(pipes[0]);
     int status = 0;

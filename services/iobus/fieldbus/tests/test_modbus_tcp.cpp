@@ -201,6 +201,8 @@ TEST(ModbusTcp, DestructorSafe)
 #include <sys/socket.h>
 #include <thread>
 #include <atomic>
+#include <cerrno>
+#include <fcntl.h>
 
 TEST(ModbusTcp, TcpLoopbackReadRegisters)
 {
@@ -273,6 +275,100 @@ TEST(ModbusTcp, TcpLoopbackReadRegisters)
 
     server_thread.join();
     ::close(srv_fd);
+    ::unlink(prof_path.c_str());
+}
+
+/* ---- F-08: TCP slave hết ext slot phải fail-closed ----
+ * Lỗi cũ: open() chỉ clamp `if (idx > KX_N_EXT) idx = KX_N_EXT;` mà KHÔNG log và
+ * KHÔNG clamp conn.ext_count. Khi RTU đã tiêu hết 64 slot, mọi TCP slave nhận
+ * ext_base=64; read_conn gặp `ext_idx >= KX_N_EXT` ở point đầu tiên và thoát với
+ * slave_ok=true → on_poll_ok → slave báo ONLINE và khỏe mạnh mà không publish
+ * nổi một điểm nào.
+ *
+ * Test này quan sát điều đó ở chỗ đo được: slave lỗi cấu hình KHÔNG được mở kết
+ * nối nào cả (accept() phải trả EAGAIN), và không đẩy điểm nào vào cache. */
+TEST(ModbusTcp, SlaveWithoutExtCapacityIsNeitherConnectedNorPolled)
+{
+    const std::string prof_path =
+        "/tmp/mkddc_tcp_nocap_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream f(prof_path);
+        f << R"json({"profile_id":"nocap","points":[
+            {"name":"hreg","fc":3,"addr":0,"count":1,"type":"uint16"}
+        ]})json";
+    }
+
+    int srv_fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT_GE(srv_fd, 0);
+    int optval = 1;
+    ::setsockopt(srv_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+    struct sockaddr_in addr {};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0;
+    ASSERT_EQ(::bind(srv_fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)), 0);
+    ASSERT_EQ(::listen(srv_fd, 1), 0);
+    socklen_t addrlen = sizeof(addr);
+    ::getsockname(srv_fd, reinterpret_cast<struct sockaddr*>(&addr), &addrlen);
+    const int port = ntohs(addr.sin_port);
+
+    FieldbusConfig cfg;
+    TcpSlaveConfig ts;
+    ts.host       = "127.0.0.1";
+    ts.port       = static_cast<uint16_t>(port);
+    ts.unit       = 1;
+    ts.profile    = prof_path;
+    ts.name       = "nocap";
+    ts.timeout_ms = 500;
+    cfg.tcp_slaves.push_back(ts);
+
+    ModbusTcp tcp;
+    tcp.open(cfg, KX_N_EXT);           /* RTU đã tiêu hết toàn bộ 64 slot */
+    EXPECT_EQ(tcp.total_ext_count(), 0u);
+
+    /* Không có kết nối nào được thiết lập (lỗi cũ: try_connect vẫn chạy) */
+    const int flags = ::fcntl(srv_fd, F_GETFL, 0);
+    ::fcntl(srv_fd, F_SETFL, flags | O_NONBLOCK);
+    errno = 0;
+    const int accepted = ::accept(srv_fd, nullptr, nullptr);
+    EXPECT_LT(accepted, 0);
+    EXPECT_TRUE(errno == EAGAIN || errno == EWOULDBLOCK) << "errno=" << errno;
+    if (accepted >= 0) ::close(accepted);
+
+    ExtCache cache;
+    tcp.poll_once(1, cache, "/tmp/mkddc-no-fieldbus.sock");
+    EXPECT_EQ(cache.count(), 0u);
+
+    ::close(srv_fd);
+    ::unlink(prof_path.c_str());
+}
+
+/* F-17 phía TCP: điểm 32-bit đặt trước ĐÚNG số slot cần (1), không gấp đôi. */
+TEST(ModbusTcp, ThirtyTwoBitProfileReservesExactSlotCount)
+{
+    const std::string prof_path =
+        "/tmp/mkddc_tcp_f32_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream f(prof_path);
+        f << R"json({"profile_id":"f32","points":[
+            {"name":"kWh","fc":4,"addr":0,"count":2,"type":"float32","byte_order":"ABCD"},
+            {"name":"reg","fc":3,"addr":10,"count":3,"type":"uint16"}
+        ]})json";
+    }
+
+    FieldbusConfig cfg;
+    TcpSlaveConfig ts;
+    ts.host    = "127.0.0.1";
+    ts.port    = 9998;      /* không có listener — chỉ kiểm phép đếm slot */
+    ts.profile = prof_path;
+    ts.name    = "meter";
+    cfg.tcp_slaves.push_back(ts);
+
+    ModbusTcp tcp;
+    tcp.open(cfg, 0);
+    /* 1 (float32 count=2) + 3 (uint16 count=3) = 4; lỗi cũ cho 2+3 = 5 */
+    EXPECT_EQ(tcp.total_ext_count(), 4u);
+
     ::unlink(prof_path.c_str());
 }
 #endif

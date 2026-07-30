@@ -96,6 +96,11 @@ private:
     std::vector<DeviceProfile> profiles_;
     std::vector<uint16_t>     slave_ext_base_;   /* index vào ext_cache cho slave[i] */
     std::vector<uint16_t>     slave_ext_count_;  /* số ext points thực của slave[i] */
+    /* F-16: slave[i] không dùng được do lỗi cấu hình (thiếu profile, không có
+     * điểm đọc, hoặc hết ext slot). read_slave() đi đường lỗi cho nó thay vì
+     * chạy qua vòng points rỗng rồi báo ONLINE. uint8_t thay vì bool để tránh
+     * std::vector<bool> proxy-reference. */
+    std::vector<uint8_t>      slave_config_error_;
     std::vector<PendingWrite> pending_writes_;
     std::array<float, KX_N_EXT> last_written_{};
     std::array<bool, KX_N_EXT>  has_last_written_{};

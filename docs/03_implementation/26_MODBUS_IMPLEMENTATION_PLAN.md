@@ -101,7 +101,9 @@ Profile JSON tối thiểu:
 Validate fail-fast khi:
 - `fc` không thuộc 1/2/3/4/5/6/15/16.
 - `addr/count` ngoài 0..65535 hoặc block quá 125 register / 2000 coil.
-- `type` không khớp `count`.
+- `type` 32-bit (`int32`/`uint32`/`float32`) trên FC 3/4 mà `count` **không phải bội số của 2**
+  (mỗi điểm luận lý 32-bit = 2 register). Hiện thực 2026-07-30 — trước đó luật này
+  chỉ nằm trong tài liệu, xem finding F-18.
 - `byte_order` thiếu cho 32-bit.
 - `writable=true` nhưng FC không ghi được.
 
