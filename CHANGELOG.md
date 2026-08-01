@@ -7,6 +7,394 @@
 ---
 
 ## [Unreleased]
+### Fixed — Đính chính số liệu độ phủ test `netcfg` trong báo cáo tình trạng, và chốt số đo kiểm chứng cuối của cả loạt (2026-08-01, đợt 5)
+
+Phạm vi: `docs/07_records/reviews/KX-DDC24-SETTINGS-NETWORK-IMPLEMENTATION-STATUS-2026-07-31.md`
+(lên rev 1.1 — **chỉ tài liệu, không đổi code sản phẩm**).
+
+**Lỗi số liệu trong tài liệu có bảng phê duyệt.** Bản 1.0 ghi `netcfg_tests` chỉ có
+**11 test** và từ đó kết luận `LinuxPlatform` "chưa có test trực tiếp" ở `run`,
+`persist`, `read_interface_state`, `interface_has_address` (§2.3, §4.1, §5, §8, và
+bảng tóm tắt §1). Kiểm lại trên chính mã nguồn của commit đang rà soát:
+
+```
+git show 87a0ff0:services/netcfg/tests/test_netcfg.cpp | grep -cE '^TEST\('
+→ 37   (NetcfgEngine 17 · NetcfgLinuxPlatform 16 · NetcfgValidation 3 · NetcfgServer 1)
+```
+
+Nguyên nhân: lệnh xác minh ở §2.3 chạy `./build/services/netcfg/netcfg_tests` — một
+**binary cũ còn sót trong `build/`**, không phải bản dựng từ `87a0ff0`. Tức báo cáo đã
+đo một thứ khác với thứ nó đang rà soát. Đã sửa cả năm chỗ.
+
+Nhận định §4.1/§8 được viết lại cho đúng bản chất: độ phủ `LinuxPlatform` **không
+mỏng** — 16 test đã phủ persist DNS, đọc profile/kernel state, và sáu nhánh
+fail-closed của rollback. Hạn chế thật nằm ở chỗ khác: mọi test đều nạp sẵn output
+cho `run`, nên chúng chốt được logic dựng lệnh và xử lý kết quả, **chứ không chứng
+minh được `nmcli` thật hành xử như giả định**. Đúng loại lỗi mà F-14
+(`promote_secondaries = 0`) là ví dụ — chỉ lộ ra khi chạy trên phần cứng thật.
+
+Các phát hiện F-01…F-13 và khoảng trống G-01…G-06 **không thay đổi**: không phát hiện
+nào được rút ra từ con số 11.
+
+**Số đo kiểm chứng cuối, đo lại toàn bộ tại cây làm việc hiện tại (2026-08-01):**
+
+| Bộ | Kết quả |
+|---|---|
+| `ctest` (MODBUS+BACNET+HMI **ON**) | **743/743 PASS** |
+| `netcfg_tests` (chạy trực tiếp) | **53/53 PASS** |
+| Go `go vet ./...` + `go test ./... -count=1` | **PASS**, vet sạch |
+| vitest `src` | **152/152 PASS** (26 file) |
+| `npm run lint` (`--max-warnings=0`) | sạch |
+| `npm run build` | OK |
+| Playwright `e2e/network-qa.spec.ts` | **1/1 PASS** (gate CI mới của F-07) |
+
+Ghi chú đối chiếu: các entry đợt 1–2 nêu `ctest` 706/706 rồi 710/710 — đó là số đúng
+tại thời điểm viết từng đợt; 743 là số của cây hoàn chỉnh sau khi cộng dồn test mới
+của cả loạt. Không con số nào tụt xuống.
+
+### Fixed — Nút xác nhận quay vô hạn khi đổi IP, và giảm 5 lần tải poll của trang mạng (2026-07-31, đợt 4)
+
+Phạm vi: `src/frontend/src/api/client.ts`, `src/frontend/src/pages/NetworkPage.tsx`,
+test vitest và e2e tương ứng.
+
+**Lỗi: nút "Giữ thay đổi" quay mãi không dừng.** `fetch` **không tự hết giờ**. Ngay
+sau khi áp dụng địa chỉ mới, kết nối của trình duyệt tới địa chỉ CŨ có thể treo —
+không phản hồi mà cũng không báo lỗi. Khi đó `transactionBusy` kẹt ở `'confirm'`,
+spinner quay vô hạn, và nút "Hoàn tác ngay" bị khoá theo vì dùng chung
+`mutationLocked`. Người vận hành mất hết đường xử lý, chỉ còn ngồi chờ auto-rollback
+— đúng lúc họ cần bấm nhất.
+
+Sửa: mọi request qua `requestJson` nay có `AbortController` với trần **15 giây**, giữ
+nguyên `signal` của caller, và phân biệt rõ "thiết bị không phản hồi sau N giây" với
+lỗi mạng khác. Riêng `PUT /api/v1/network` được nới lên **120 giây** vì đường này
+khởi động lại dịch vụ field bus qua reload helper.
+
+**Hiệu năng: giảm ~5 lần tải ở trạng thái nghỉ.** Trang gọi **hai** endpoint mỗi
+giây, liên tục, kể cả khi không có gì xảy ra: mỗi vòng `GET /network` đọc 4 file cấu
+hình + SHM, còn `GET /network/transaction` mở socket sang `mkddc-netcfg` — vốn đơn
+luồng, nên chính việc poll dày cũng tự làm nó chậm thêm (xem số đo ở evidence §8c).
+
+Nay bám nhịp theo việc thật:
+
+| Dữ liệu | Trước | Sau |
+|---|---|---|
+| `GET /network` (BACnet/WiFi, slave) | 1 s | **5 s** — cấu hình đổi rất thưa |
+| `GET /network/transaction` khi rảnh | 1 s | **5 s** |
+| `GET /network/transaction` khi có giao dịch | 1 s | **1 s** (giữ nguyên cho đếm ngược 120 s) |
+
+Kiểm chứng: vitest **152/152**, lint sạch, Playwright `network-qa` **pass**, FE đã
+deploy lên Orange Pi. Board sau khi deploy: `state=confirmed`, **đúng một** địa chỉ
+`192.168.1.102/24` trên `end1` (bằng chứng F-14 đã đóng), `wlan0` nguyên vẹn.
+
+### Changed — Gom thanh nút trang mạng từ 5 xuống 2, giấu máy trạng thái khỏi người vận hành (2026-07-31, đợt 3)
+
+Phạm vi: `docs/04_uiux/KX-DDC24-UC-WEB-NETWORK-001_VI.md` (UC-WEB-NET-005 rev 1.1),
+`docs/04_uiux/KX-DDC24-UX-WEB-NETWORK-001_VI.md` (§4.4, §4.4b),
+`src/frontend/src/pages/NetworkPage.tsx`, test vitest và e2e tương ứng.
+Làm theo đúng thứ tự **doc trước, code sau**.
+
+**Vấn đề.** Trang phơi thẳng 5 nút mang đúng tên lệnh giao thức —
+`Validate / Stage / Apply / Confirm / Rollback` — ra mặt người vận hành. Đó là rò rỉ
+chi tiết hiện thực: người dùng phải tự học một máy trạng thái chỉ để đổi một địa chỉ IP.
+
+**Thay đổi.** Thanh nút còn **đúng hai**: **Kiểm tra** và **Lưu thay đổi**.
+`Lưu thay đổi` chạy `stage` rồi `apply` liên tiếp. `Confirm`/`Rollback` không còn là
+nút thường trực — chúng chuyển vào **hộp thoại tự bật** khi giao dịch vào cửa sổ 120
+giây, hiển thị địa chỉ **cũ → mới**, đồng hồ đếm ngược MM:SS và câu quan trọng nhất:
+*"Nếu mất kết nối, thiết bị tự quay lại cấu hình cũ sau MM:SS"*.
+
+**Cơ chế an toàn được GIẤU ĐI, không bị bỏ đi.** Vẫn nguyên vòng đời
+stage→apply→confirm, vẫn auto-rollback 120 giây, `Lưu thay đổi` vẫn bị khoá khi chưa
+có carrier / chưa vào bằng hostname ổn định / form không hợp lệ. Đây là pattern
+*commit-confirm* mà thiết bị mạng công nghiệp dùng cho đúng bài toán "đổi IP từ xa".
+Cố tình KHÔNG gom tiếp thành một nút "Lưu" duy nhất: bước xác nhận là thứ duy nhất
+phân biệt "đổi IP thành công" với "tự cắt đường vào thiết bị".
+
+Hộp thoại không đóng được bằng `Esc`/bấm ra ngoài — đóng nhầm sẽ để giao dịch treo
+tới lúc tự rollback mà người dùng không biết.
+
+**Một lỗi do chính test bắt được:** bản đầu của hộp thoại quên đưa `reconcileAfter`
+vào điều kiện khoá nút, nên sau một mutation có kết quả bất định thì `Giữ thay đổi`
+vẫn bấm được. Đã sửa dùng chung `mutationLocked`.
+
+Kiểm chứng: vitest **152/152** (28 cho NetworkPage), lint sạch, Playwright
+`network-qa` **pass**, deploy FE lên Orange Pi và xác minh `admin/admin123` cùng
+netcfg hoạt động bình thường.
+
+### Added — Tài liệu thiết kế Web cho trang mạng, đóng G-01/G-02/G-04 và mở finding F-14 (2026-07-31, đợt 2)
+
+Phạm vi: `docs/04_uiux/KX-DDC24-UX-WEB-NETWORK-001_VI.md` (mới),
+`docs/04_uiux/KX-DDC24-UC-WEB-NETWORK-001_VI.md`, `docs/04_uiux/README.md`,
+`docs/adr/ADR-017-*`, `docs/03_implementation/09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md`,
+`docs/07_records/TRACEABILITY.md`, `.github/workflows/build-and-test.yml`,
+`src/frontend/src/pages/LoginPage.tsx`, `src/frontend/e2e/network-qa.spec.ts`.
+
+Làm theo đúng thứ tự **doc trước, code sau** và quy trình ở `docs/00_governance/CONTROL.md`.
+
+**Tài liệu (đóng G-02):** lập UI/UX spec + wireframe đầu tiên cho Web — nguyên tắc
+bắt buộc (không suy diễn, tách bạch 4 tầng sự thật, thành công chỉ từ authority),
+bố cục, đặc tả từng khối, điều kiện bật/tắt nút, ràng buộc nhập liệu phản chiếu
+backend, quy tắc ngôn ngữ và WCAG 2.1 AA.
+
+**Ranh giới LAN ETH (ADR-017 §2.1):** chốt authority chỉ quản lý **đúng một**
+interface Ethernet theo `NETCFG_INTERFACE` (mặc định `end1`), và ghi tường minh
+rằng **`wlan0` cùng mọi interface Wi-Fi nằm ngoài phạm vi** — Wi-Fi là đường quản
+trị dự phòng để truy cập DDC khi Ethernet đang được cấu hình lại; nếu authority
+đụng vào thì một lần đổi IP hỏng sẽ cắt cả hai đường. Chốt mặc định nhà máy
+`eth.mode = "dhcp"`. Bỏ chữ "tabs" khỏi tiêu đề ADR-017 cho khớp nội dung (G-04).
+
+**Tài khoản gốc nhà máy:** ghi vào Web guide — `admin` / `admin123`, role admin,
+lưu bcrypt như mọi tài khoản; kèm ràng buộc không dùng cho tích hợp máy-máy và
+**bắt buộc đổi khi bàn giao site**.
+
+**Code:** sửa lỗi **mất deep link sau đăng nhập** — `ProtectedShell` vẫn truyền
+`state.from` nhưng `LoginPage` bỏ qua và luôn về `/`, nên mở link tới
+`/settings/network` xong đăng nhập là mất đích đến; nay quay lại đúng trang, có
+chặn open-redirect (chỉ nhận đường dẫn nội bộ một dấu `/`).
+
+**F-07 đã đóng:** `network-qa.spec.ts` được sửa cho khớp contract mới (fixture có
+`activeBacnetPort`/`firmware`/`serial`, gateway nhất quán subnet, `role=switch`,
+hộp thoại xác nhận) và **đã gắn vào CI**. Cố ý chỉ gate spec mạng:
+`point-names.spec.ts` còn 14 test hỏng **có sẵn** thuộc tính năng đặt tên điểm —
+đã kiểm chứng bằng cách stash toàn bộ thay đổi FE, lỗi giữ nguyên.
+
+**Deploy đợt 2:** build native aarch64 toàn bộ (`rc=0`, 0 lỗi) và deploy **cả
+`mkddc-core`** vốn còn là bản 30/07 ở đợt 1. `ctest` trên board trong namespace
+`/dev/shm` sạch: **706/706 passed**. `end1` đưa về **DHCP đúng mặc định nhà máy**
+qua chính transaction của authority; `wlan0` không bị chạm (vẫn `192.168.1.18`, giữ
+default route dự phòng metric 600). Xác minh `admin/admin123` đăng nhập được sau
+deploy. E2E trên board: **38/39**.
+
+**Đo bằng chứng netcfg single-thread:** status lúc rảnh ~0.34 s; trong lúc mutation
+có ARP preflight, một request lên 2.68 s rồi trở lại bình thường — **đều HTTP 200,
+không gây lỗi**. Không đủ cơ sở để refactor khoá của engine giao dịch an toàn; ghi
+nhận là giới hạn đã biết thay vì churn code.
+
+**F-14 (Cao) — ĐÃ SỬA, kiểm chứng trên phần cứng thật.** Đổi IPv4 tĩnh sang IPv4
+tĩnh **cùng subnet** rồi Confirm khiến interface **mất SẠCH địa chỉ IPv4**: thiết bị
+rớt khỏi mạng dù authority đã báo `confirmed`.
+
+Nguyên nhân: `apply` **cố ý** giữ địa chỉ cũ và chỉ thêm địa chỉ mới, để phiên quản
+trị không đứt trong cửa sổ 120 giây — thiết kế đúng. Nhưng khi hai địa chỉ cùng
+subnet, kernel gắn địa chỉ mới làm **secondary**, và với
+`net.ipv4.conf.<if>.promote_secondaries = 0` (mặc định trên board) thì lệnh xoá địa
+chỉ **primary** trong `confirm` kéo theo xoá luôn secondary cùng subnet. Chỉ nhánh
+static→static cùng subnet mới sai (DHCP→static và khác subnet đều đúng), nên lỗi ẩn
+rất lâu và chỉ lộ ra khi chạy thật trên phần cứng.
+
+Sửa: sau khi xoá địa chỉ cũ, `confirm` **khẳng định lại** địa chỉ candidate và
+**fail-closed** nếu không đặt lại được — thà báo lỗi để rollback còn hơn chốt
+`confirmed` trên một interface không có địa chỉ. Nhánh DHCP được loại trừ.
+
+Bốn test mới chốt đủ bốn nhánh chuyển đổi, fake mô phỏng đúng hành vi
+`promote_secondaries = 0` của kernel. `ctest` **710/710**; `netcfg_tests` trên board
+aarch64 **53/53**.
+
+Bằng chứng trên cùng board, cùng kịch bản — trước: sau confirm không còn dòng `inet`
+nào, `active.ipv4=''`; sau: còn đúng `192.168.50.161/24`, `active.ipv4` khớp,
+`reason=OK`. Chi tiết: `docs/07_records/test-evidence/fw-som/2026-07-31-network-page-board-e2e.md` §8b.
+
+**netcfg đơn luồng — không sửa, có chủ đích.** Đo được status ~0,34 s lúc rảnh và
+một lần 2,68 s trong lúc mutation, tất cả HTTP 200 không lỗi. Không đánh đổi rủi ro
+refactor khoá của engine có rollback fail-closed khi chưa có lỗi thực tế; ghi nhận
+là giới hạn đã biết (§8c).
+
+### Fixed — Đóng finding trang `settings/network` trên FE + BE + FW SOM, bỏ hoàn toàn số liệu giả (2026-07-31)
+
+Phạm vi: `shared/mkddc_shm.h`, `services/iobus/{main.cpp,io/io_cache.*}`,
+`services/netcfg/netcfg.cpp`, `web/backend/{networkapi,core_client,reload*,main}.go`,
+`web/backend/reloadhelper_linux.go` (mới), `packaging/systemd/mkddc-reload-helper.service` (mới),
+`src/frontend/src/{pages/NetworkPage.tsx,types.ts,App.tsx,components/NavRail.tsx,demo/simulator.ts}`.
+
+**Nguyên tắc xuyên suốt: trang này không còn suy diễn hay bịa số liệu.** Thiếu số
+đo thì hiển thị `—`/`unknown`, không quy về `0`/`online`.
+
+**FW SOM — nguồn số liệu thật (mới):**
+- `kx_io_shm_t` NỐI THÊM vào cuối (giữ nguyên magic, mọi offset cũ bất biến):
+  `bacnet_udp_port`, `bacnet_bound`, `fb_slave_count`, `fb_publish_seq` và
+  `fb_slave[32]` kiểu `kx_slave_metrics_t` (24 byte/slave). Segment 528 → 1304 byte;
+  reader cũ vẫn đọc đúng nhờ ngữ nghĩa min-length.
+- `mkddc-iobus` publish `FieldbusMetrics` per-slave mỗi chu kỳ poll và publish cờ
+  bind BACnet/IP THẬT sau `bip_init()`/`rebind()` — kể cả khi BACnet bị tắt, để
+  phân biệt "đã nói rõ là không bind" với "iobus cũ chưa ghi field này".
+
+**Ba lỗi FW SOM phát hiện khi chạy E2E trên phần cứng thật (chưa từng lộ ra ở host test):**
+- **Profile trùng tên khoá cứng thiết bị.** NetworkManager cho phép nhiều profile
+  cùng tên và board có 2 profile tên `end1`; netcfg truyền TÊN vào `nmcli` nên
+  `-g ipv4.method` trả `"manual\n\nmanual"` → `mode=unknown` → `configured=null` →
+  **mọi lần stage sau đó bị từ chối bằng `PREVIOUS_STATE_NOT_RESTORABLE`**, tức
+  không còn đổi được mạng qua giao diện cho tới khi có người vào SSH dọn profile.
+  Nay tra cứu bằng **UUID** (duy nhất) + đọc theo dòng đầu.
+- **Candidate DHCP sai schema làm hỏng cả trang.** `to_json(Candidate)` luôn phát
+  `ipv4`/`netmask`/`gateway` kể cả rỗng, trong khi schema v1 cấm ba field này khi
+  `mode=dhcp`. Sau khi stage DHCP, adapter Go từ chối response ⇒ **mọi lần đọc
+  status trả 502 và trang settings/network không dùng được**. Nay bỏ hẳn field rỗng.
+- **Không đổi được mỗi DNS.** `arping -D` chạy trên chính interface đang giữ địa chỉ
+  nên tự phát hiện mình là trùng ⇒ `DUPLICATE_ADDRESS`, chặn thao tác hợp lệ "giữ
+  IP, đổi DNS". Nay bỏ qua probe khi candidate trùng địa chỉ hiện hành của interface.
+
+**BE:**
+- **F-01** `applySystem` không còn là stub. Thêm privileged helper
+  `mkddc-web reload-helper-server` + unit systemd chạy root, socket 0660
+  `root:mkddc`, **allowlist cứng** (client không gửi được tên unit tuỳ ý; không có
+  `mkddc-core`, không đụng gì tới mạng). Chuỗi `reload system pending B7
+  (systemd/polkit)` lọt ra toast người vận hành được thay bằng thông điệp hành động
+  được; hạng mục "B7" vốn không tồn tại trong tài liệu nào nay đã có hiện thực.
+- **F-03/F-04/F-10** `networkSlavesFromConfig` dùng số đo per-slave THẬT, ghép theo
+  **địa chỉ Modbus** (ghép theo chỉ số sẽ gán nhầm sức khoẻ thiết bị này sang thiết
+  bị khác); `ErrorRate`/`LastPollMS`/`TotalPolls` thành con trỏ, `nil` = chưa đo.
+  `bmsLinkStatus` lấy từ cờ bind thật thay vì suy ra từ file config (vi phạm
+  ADR-017 §2.9 + tiêu chí nghiệm thu UC-HMI-016). Thêm `activeBacnetPort`,
+  `firmware`, `serial` (đọc device-tree; rỗng = chưa nạp, không bịa mã).
+- **F-06** RBAC thống nhất theo ADR-017 §2.7: bỏ `RequireAdmin` khỏi route và bỏ
+  điều kiện ẩn mục Network trong NavRail — viewer/operator đọc được, mutation vẫn
+  Admin-only ở cả backend lẫn trong trang. Trước đây nhánh chỉ-đọc ở backend, ở
+  component và bài unit test cho nó đều là **mã chết**.
+
+**FE:**
+- **F-02** `Poll health` từng KHÔNG BAO GIỜ hạ dưới 100% (backend chỉ phát
+  `online`/`degraded`, FE chỉ trừ `offline`) nên ô cảnh báo không bao giờ sáng; nay
+  tính theo tỉ lệ slave thực sự online, chưa đo thì hiện `—`.
+- **F-05** hiện lý do cho MỌI kết thúc bất thường (`failed`, `rolled_back`), không
+  chỉ `rejected` — đúng tình huống quan sát được trên board: badge đỏ FAILED không
+  một chữ giải thích.
+- **F-08** validate IPv4/netmask/gateway/DNS ngay trên client (phản chiếu đúng luật
+  backend), `aria-invalid` + lỗi inline, khoá Validate/Stage khi form sai.
+- **F-09** modal xác nhận hậu quả trước khi lưu BACnet/WiFi (thao tác này khởi động
+  lại field bus). **F-11** song ngữ hoá nhãn + 2 tiêu đề panel vốn trộn cứng VI/EN.
+  **F-12** countdown MM:SS + đối chiếu địa chỉ cũ→mới ngay trong thẻ giao dịch.
+  **F-13** `role="switch"` + `aria-checked` (WCAG 2.1 AA §4.1.2).
+
+**Kiểm chứng:** ctest **706/706**; Go **toàn bộ pass**; vitest **152/152** (28 test
+cho riêng NetworkPage). Deploy thật lên Orange Pi 5B (aarch64): `io_shm` 528→1304,
+`mkddc-reload-helper` active. **E2E trên phần cứng thật: 38/39 PASS** — gồm vòng đời
+Stage → Apply → Confirm với kernel nhận địa chỉ thật, rollback về last-known-good,
+DNS thủ công, RBAC viewer, và `activeBacnetPort` đổi 47808→47810 chứng minh F-01 đã
+áp dụng thật. Lần fail còn lại là do trạng thái sót giữa các kịch bản trong chính
+script E2E, không phải lỗi sản phẩm.
+
+**Tài liệu đóng kèm:** `docs/04_uiux/KX-DDC24-UC-WEB-NETWORK-001_VI.md` (G-01 — 10 use
+case Web đầu tiên của sản phẩm, kèm ma trận truy vết tới unit test và E2E phần cứng);
+`docs/06_operations/RUNBOOK_NETWORK_TRANSACTION_RECOVERY_VI.md` (G-06 — thủ tục khôi
+phục giao dịch kẹt/`failed`); `docs/07_records/test-evidence/fw-som/2026-07-31-network-page-board-e2e.md`
+(bằng chứng deploy + E2E); ADR-017 bỏ chữ "tabs" khỏi tiêu đề cho khớp nội dung (G-04).
+
+**Chưa đóng — F-07:** bộ `src/frontend/e2e/` vẫn chưa được gắn vào CI, vì khi chạy
+thử thì suite đã MỤC sẵn (`network-qa.spec.ts` không vào được `/settings/network`,
+`point-names.spec.ts` hỏng hàng loạt). Đã kiểm chứng bằng cách stash toàn bộ thay
+đổi FE của bản này — lỗi giữ nguyên ⇒ có sẵn, không phải hồi quy. Phải sửa suite
+trước rồi mới bật gate, thay vì thêm một job biết chắc đỏ.
+
+### Added — Báo cáo tình trạng triển khai trang `settings/network` xuyên suốt UI/UX · UC · FE · BE · FW SOM (2026-07-31)
+
+Phạm vi: `docs/07_records/reviews/KX-DDC24-SETTINGS-NETWORK-IMPLEMENTATION-STATUS-2026-07-31.md`
+(tài liệu mới, chỉ đọc mã nguồn — **không thay đổi code sản phẩm**). Rà soát tại
+nhánh `fix/review-2026-07-30-fe-be-fwsom` @ `87a0ff0`, trình bày theo ISO 9001:2015 /
+ISO/IEC/IEEE 12207 / 29148 / ISO 9241-11.
+
+Đối chiếu triển khai thực tế với ADR-017, `shared/netcfg_protocol_v1.schema.json`,
+Web Implementation Guide Rev 1.36 và bộ tài liệu UX/UC. Kết quả: **13 phát hiện
+(4 mức Cao) + 6 khoảng trống tài liệu**.
+
+**Kết luận hai nửa trang tách biệt rõ rệt:**
+- Panel ETHERNET (giao dịch an toàn) 🟢 đạt 9/10 quyết định ADR-017 §2, có bằng
+  chứng test ở cả ba lớp: auto-rollback deadline kép epoch+steady clock, journal
+  bền vững, idempotency theo `requestId`, khoá `Apply` theo hostname ổn định và
+  theo carrier, `reconcileAfter` khoá thao tác khi kết quả request bất định.
+- Panel NORTHBOUND/SOUTHBOUND 🔴 chưa đạt — đang trình bày **thông tin sai lệch**
+  chứ không chỉ thiếu thông tin.
+
+**4 phát hiện mức Cao:**
+- **F-01** `applySystem` trên Linux là stub trả `false` + `"reload system pending B7
+  (systemd/polkit)"` → lưu BACnet Device ID/port, tên thiết bị và WiFi **ghi được
+  file nhưng không bao giờ áp dụng**; chuỗi thuật ngữ nội bộ này lọt thẳng tới toast
+  người vận hành. Hạng mục "B7" **không tồn tại trong bất kỳ tài liệu nào**.
+- **F-02** `Poll health` về mặt cấu trúc **không bao giờ hạ dưới 100%**: backend chỉ
+  phát `online`/`degraded`, còn FE chỉ trừ `offline` → `warn` không bao giờ kích
+  hoạt; hai thẻ KPI cạnh nhau mâu thuẫn (`0/3 online` bên cạnh `Poll health 100%`).
+- **F-03** Telemetry per-slave Modbus là giả lập: `ErrorRate` cứng bằng 0, `PollState`
+  và `LastPollMs` là một giá trị toàn cục sao chép cho mọi dòng, nhưng UI trình bày
+  như số đo riêng từng thiết bị.
+- **F-04** `bmsLinkStatus()` suy diễn `online` chỉ từ ba trường trong file config khác
+  rỗng — vi phạm **ADR-017 §2.9** ("không báo success từ desired file") và tiêu chí
+  nghiệm thu **UC-HMI-016**; FE còn dùng làm fallback cho badge Ethernet ở header khi
+  authority mất kết nối.
+
+**6 khoảng trống tài liệu:** G-01 **không tồn tại họ `UC-WEB`** (kho chỉ có `UC-HMI`
+19 mục + `UC-LOCAL` 14 mục) — trang cấu hình rủi ro nhất không có use case phía Web;
+G-02 **không có wireframe/mockup nào cho Web** (phía HMI thì có); G-03 hạng mục B7
+không được tài liệu hoá; G-04 ADR-017 mang tiêu đề "tabs" nhưng thân ADR không định
+nghĩa tab và triển khai cũng không có tab; G-05 thiếu ma trận truy vết UC→FE→BE→FW→test;
+G-06 thiếu runbook khôi phục giao dịch `failed`.
+
+**Phát hiện khác:** F-05 trạng thái `failed` không hiển thị lý do (xác nhận bằng ảnh
+chụp thiết bị thật đang ở `FAILED` không kèm giải thích); F-06 mâu thuẫn RBAC —
+ADR-017 §2.7 và backend cho `viewer` đọc, component có nhánh chỉ-đọc **và có unit
+test**, nhưng router bọc `RequireAdmin` khiến toàn bộ nhánh này là mã chết; F-07 bộ
+e2e `network-qa.spec.ts` (258 dòng) **không được nối vào CI**; F-08…F-13 validate
+client, modal xác nhận, trường chết `Serial`/`Firmware`, song ngữ, countdown, a11y.
+
+**Bằng chứng kiểm thử đã chạy — toàn bộ PASS:** Go `-run 'Network|Netcfg'` 17/17 ·
+vitest `NetworkPage.test.tsx` 16/16 · `netcfg_tests` 11/11. Playwright không chạy.
+Ghi nhận trọng yếu: **cả 4 phát hiện mức Cao đều nằm trong vùng không có test**.
+
+**Khuyến nghị gate:** giữ **Network gate = RED** (thống nhất ADR-017 §3), bổ sung điều
+kiện đóng F-01…F-05 và có `UC-WEB` trước khi xem xét chuyển AMBER.
+
+### Added — Đánh giá sản phẩm & UI/UX Web UI: báo cáo audit độc lập 22 màn hình (2026-07-30)
+
+Phạm vi: `docs/07_records/reviews/KX-DDC24-UIUX-PRODUCT-AUDIT-2026-07-30.md` (tài
+liệu mới, chỉ đọc mã nguồn — **không thay đổi code sản phẩm**).
+
+Đánh giá với vai trò Senior PM + Lead UI/UX Designer độc lập, áp dụng Nielsen 10
+Usability Heuristics, ISO 9241-11, WCAG 2.2 AA và thực hành ISA-101 / ISA-18.2 cho
+HMI công nghiệp. Đọc toàn bộ 13.710 dòng UI trong `src/frontend/`.
+
+**Điểm sức khỏe sản phẩm: 3.5/10 — chưa sẵn sàng thương mại hóa.** 5 blocker:
+- Dashboard/Login/UserInfo **hiển thị dữ liệu thiết bị bịa đặt**: `DeviceStatusCard`
+  không nhận tham số nên luôn báo "ONLINE"; CPU/RAM/uptime có giá trị dự phòng giả
+  (`?? 23`, `?? 48`); MAC và thời gian hệ thống `23/05/2025 14:32:18` hardcode; 4
+  badge service ở Login gán cứng `online` và hiện **trước khi xác thực**.
+- `CommissioningPage` (43 dòng): nút "Test" **ép AO 50%/DO ON ra thiết bị vật lý
+  ngay, không có dialog xác nhận**; nhãn "Release" thực chất ghi 0/false chứ không
+  trả quyền về tự động; thiếu "Release All"; thiếu cả nhánh xử lý `state.error`.
+- RBAC đảo ngược ưu tiên: **chỉ `/settings/network` có `RequireAdmin`**, còn force
+  output / commissioning / cấu hình I/O đều không gate → `viewer` tác động được
+  thiết bị. Kèm `LoginPage` khóa cứng `value="admin" readOnly` nên **RBAC 4 vai trò
+  ở backend không dùng được qua Web UI**; 3 nút chết (SSO/AD, quên mật khẩu, ghi nhớ).
+- WCAG: **13/14 biến thể `StatusBadge` không đạt 4.5:1** (badge `ALARM` chỉ 3.74:1);
+  `--c-border` chỉ 1.64–1.90:1 (SC 1.4.11 cần 3.0); badge số cảnh báo trên TopBar
+  thiếu `text-white` nên còn 3.21:1 (NavRail đúng, 5.16:1); `.stale` với
+  `opacity:0.62` đẩy màu lỗi xuống 2.51:1 đúng lúc dữ liệu đã cũ; **không có theme
+  tối** (`color-scheme: light`, nền luminance 60–70% gây lóa trong phòng máy).
+- `/eng/programming` **redirect âm thầm về Dashboard trong mọi bản `live`**; và
+  `NavRail` là `hidden lg:flex` **không có hamburger/drawer** → mất toàn bộ
+  navigation dưới 1024px (tablet, panel HMI).
+
+**Localization:** 60 chuỗi tiếng Việt thiếu dấu (Alarms 21, Scheduler 17, Alarm
+Settings 14, Virtual Points 10, i18n 4); 13 chỗ hardcode `'vi-VN'` bỏ qua locale;
+`StatusBadge.labelMap` 25 nhãn tiếng Anh cố định; 35 khóa i18n bản `vi` còn nguyên
+tiếng Anh; thuật ngữ nội bộ lộ ra UI (`ADR-009`, `ADR-013`, `Phase 4`, "backend
+hook", "field wired", `TSx 3`).
+
+**Hiệu chỉnh 3 điểm trong brief** (ghi ở Phụ lục B để tránh sửa sai chỗ): lỗi
+`&amp;` **không tồn tại** trong mã hiện tại; `"Nguoi dung"` thực tế **viết đủ dấu**;
+và 44×44px là WCAG **SC 2.5.5 mức AAA**, không phải AA (AA là SC 2.5.8 = 24×24px).
+
+**Ghi nhận điểm mạnh:** `NetworkPage` (giao dịch Stage→Apply→Confirm→Rollback + khóa
+đường quản trị), `Modal.tsx` (focus trap + Escape + trả focus), `TimeSettingsPage`
+(validate RFC3339 + xác nhận nêu hậu quả), `InputsPage` (i18n nghiệp vụ đầy đủ dấu),
+`HelpPage` (song ngữ chuẩn).
+
+**Kế hoạch cải tiến:** ma trận Impact/Effort với 8 Quick Wins, 8 Major Projects, 12
+Fill-ins; lộ trình 4 sprint (3.5 → 9.0+). Mọi token màu đề xuất (theme tối 12 token,
+6 màu badge, viền) **đã kiểm chứng bằng công thức relative luminance của WCAG** —
+giá trị viền tối đầu tiên thử (`#3A4351`, 1.82:1) không đạt nên đã thay bằng
+`#606C7E` (3.41:1) và kiểm lại.
+
+Verification: `npx vitest --run --environment jsdom src` → **140 pass / 26 file**,
+0 fail (không có thay đổi code nên không có hồi quy).
+
 ### Fixed — FE + BE + CI + packaging: đóng 14/14 finding còn lại của review 2026-07-30 (2026-07-30)
 
 Phạm vi: `web/backend/` (Go), `src/frontend/` (TS/React), `.github/workflows/`,
