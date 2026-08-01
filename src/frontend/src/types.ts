@@ -60,6 +60,10 @@ export interface HealthResponse {
   firmware?: string
   deviceName?: string
   deviceIp?: string
+  deviceMac?: string
+  description?: string
+  location?: string
+  systemTime?: string
   bacnetDeviceId?: string
 }
 
@@ -492,6 +496,27 @@ export interface UserRow {
   fullName: string
   role: UserRole
   online: boolean
+}
+
+/** Khớp `ConfigDevice` trong web/backend/dto.go (`device.conf`). Xem WEB-UX-006. */
+export interface ConfigDevice {
+  deviceId: number
+  deviceName: string
+  description: string
+  location: string
+}
+
+/**
+ * Tài khoản như backend thực sự lưu (`UserDTO` trong web/backend/dto.go): chỉ có
+ * username và role.
+ *
+ * Khác hẳn `UserRow` ở trên — vốn là dữ liệu dựng cho bản demo và có thêm
+ * `fullName` với `online`, hai thứ backend KHÔNG lưu. Trang Người dùng của
+ * WEB-UX-011 phải dùng kiểu này để không hiển thị cột nào không có nguồn thật.
+ */
+export interface UserAccount {
+  username: string
+  role: UserRole
 }
 
 

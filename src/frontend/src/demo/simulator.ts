@@ -7,6 +7,7 @@ import type {
   DiInputConfig,
   DoConfig,
   CommissioningTestResult,
+  ConfigDevice,
   ConfigPutResult,
   Graph,
   GraphLink,
@@ -21,7 +22,9 @@ import type {
   TimeConfig,
   TimeConfigUpdate,
   TimeStatus,
+  UserAccount,
   UserParamsConfig,
+  UserRole,
   UserRow,
   VirtualPoint
 } from '../types'
@@ -170,6 +173,10 @@ export function getDemoHealth(): HealthResponse {
     firmware: 'v1.3.7',
     deviceName: 'DDC24-AC',
     deviceIp: '192.168.1.100',
+    deviceMac: '00:0D:18:24:AC:01',
+    description: 'DDC 24 điểm - HVAC System',
+    location: 'Tủ ĐK trung tâm - Tầng 1',
+    systemTime: new Date().toISOString(),
     bacnetDeviceId: '47808',
     services: {
       core: { status: 'ok', uptime_s: 604800, last_scan_ms: 8 },
@@ -431,6 +438,68 @@ export function getDemoUsers(): UserRow[] {
     { username: 'guest', fullName: 'Guest User', role: 'viewer', online: false },
     { username: 'maintenance', fullName: 'Maintenance', role: 'operator', online: true }
   ]
+}
+
+/* Khởi tạo LƯỜI, không đọc `DEVICE_DEFAULTS` ở mức module: `config` được nhiều
+   test mock từng phần, và một tham chiếu lúc import khiến các file đó nổ ngay ở
+   bước nạp module chứ không phải ở chỗ thật sự dùng tới. */
+let demoConfigDevice: ConfigDevice | null = null
+
+export function getDemoConfigDevice(): ConfigDevice {
+  demoConfigDevice ??= {
+    deviceId: 24,
+    deviceName: DEVICE_DEFAULTS.name,
+    description: 'DDC 24 điểm - HVAC System',
+    location: 'Tủ ĐK trung tâm - Tầng 1'
+  }
+  return { ...demoConfigDevice }
+}
+
+export function putDemoConfigDevice(config: ConfigDevice): ConfigPutResult {
+  demoConfigDevice = { ...config }
+  return { result: 'success', applied: true, reload: 'none', warnings: [] }
+}
+
+/* WEB-UX-011: bản demo cần một kho tài khoản CÓ TRẠNG THÁI để thao tác tạo/sửa/
+   xoá thấy được kết quả. `getDemoUsers()` ở trên trả mảng mới mỗi lần gọi nên
+   mọi thay đổi biến mất ngay lần render kế tiếp — đúng kiểu "nút bấm không làm
+   gì" mà plan 45 §3.1.3 cấm. Kho này cũng mô phỏng guard last-admin của backend
+   để hành vi hai chế độ không lệch nhau. */
+let demoUserAccounts: UserAccount[] = [
+  { username: 'admin', role: 'admin' },
+  { username: 'operator1', role: 'operator' },
+  { username: 'guest', role: 'viewer' }
+]
+
+function countDemoAdmins(): number {
+  return demoUserAccounts.filter((user) => user.role === 'admin').length
+}
+
+export function getDemoUserAccounts(): UserAccount[] {
+  return demoUserAccounts.map((user) => ({ ...user }))
+}
+
+export function createDemoUserAccount(username: string, role: UserRole): UserAccount {
+  const name = username.trim()
+  if (demoUserAccounts.some((user) => user.username === name)) throw new Error('Tên đăng nhập đã tồn tại')
+  const created = { username: name, role }
+  demoUserAccounts = [...demoUserAccounts, created]
+  return { ...created }
+}
+
+export function setDemoUserRole(username: string, role: UserRole): UserAccount {
+  const target = demoUserAccounts.find((user) => user.username === username)
+  if (!target) throw new Error('Không tìm thấy người dùng')
+  if (target.role === 'admin' && role !== 'admin' && countDemoAdmins() <= 1) throw new Error('Không thể hạ quyền admin cuối cùng')
+  demoUserAccounts = demoUserAccounts.map((user) => user.username === username ? { ...user, role } : user)
+  return { username, role }
+}
+
+export function deleteDemoUserAccount(username: string): void {
+  const target = demoUserAccounts.find((user) => user.username === username)
+  if (!target) throw new Error('Không tìm thấy người dùng')
+  if (target.role === 'admin' && countDemoAdmins() <= 1) throw new Error('Không thể xoá admin cuối cùng')
+  demoUserAccounts = demoUserAccounts.filter((user) => user.username !== username)
 }
 
 type GraphError = GraphValidationResult['errors'][number]

@@ -1,5 +1,6 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useState } from 'react'
 import { KeyRound, LogOut, ShieldCheck, UserRound } from 'lucide-react'
+import { apiClient } from '../api/client'
 import { useAuth } from '../auth/AuthProvider'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
@@ -12,28 +13,32 @@ export function UserInfoPage() {
   const { session, logout } = useAuth()
   const { pick } = useI18n()
   const toast = useToast()
-  const [loginAt] = useState(() => new Date())
-  const [countdown, setCountdown] = useState(15 * 60)
   const [openPassword, setOpenPassword] = useState(false)
-  const [passwordForm, setPasswordForm] = useState({ next: '', confirm: '' })
-
-  useEffect(() => {
-    const id = window.setInterval(() => setCountdown((value) => Math.max(0, value - 1)), 1000)
-    return () => window.clearInterval(id)
-  }, [])
+  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' })
+  const [savingPassword, setSavingPassword] = useState(false)
 
   const username = session?.username ?? 'guest'
   const role = session?.role ?? 'viewer'
   const initial = username.slice(0, 1).toUpperCase()
-  const countdownText = `${Math.floor(countdown / 60).toString().padStart(2, '0')}:${(countdown % 60).toString().padStart(2, '0')}`
   const roleSummary = {
     admin: pick('Toàn quyền: cấu hình, override, acknowledge alarm, deploy demo.', 'Full access: configuration, override, alarm acknowledge, demo deploy.'),
     operator: pick('Vận hành: override có kiểm soát và acknowledge alarm.', 'Operator access: controlled override and alarm acknowledge.'),
     viewer: pick('Chỉ xem: theo dõi dashboard, monitoring, alarm và trends.', 'Read-only access: dashboard, monitoring, alarms, and trends.')
   }
 
-  function submitPassword(event?: FormEvent) {
+  /* WEB-UX-003: hàm này trước đây validate xong rồi bắn thẳng
+     `toast.push('success', 'Đã đổi mật khẩu (demo)')` mà KHÔNG gọi API nào.
+     Người dùng đóng hộp thoại với niềm tin mật khẩu đã đổi; lần đăng nhập sau
+     mật khẩu cũ vẫn vào được, mật khẩu mới thì không — và nếu họ đổi vì nghi bị
+     lộ thì thông báo giả này chính là thứ giữ cửa mở.
+     Backend đã có `POST /api/v1/me/change-password` (users.go) đòi mật khẩu hiện
+     tại, nên form phải có thêm ô đó. */
+  async function submitPassword(event?: FormEvent) {
     event?.preventDefault()
+    if (!passwordForm.current) {
+      toast.push('warn', pick('Nhập mật khẩu hiện tại để xác nhận', 'Enter your current password to confirm'))
+      return
+    }
     if (passwordForm.next.length < 6) {
       toast.push('warn', pick('Mật khẩu mới cần tối thiểu 6 ký tự', 'New password must be at least 6 characters'))
       return
@@ -42,9 +47,17 @@ export function UserInfoPage() {
       toast.push('warn', pick('Mật khẩu xác nhận chưa khớp', 'Password confirmation does not match'))
       return
     }
-    setOpenPassword(false)
-    setPasswordForm({ next: '', confirm: '' })
-    toast.push('success', pick('Đã đổi mật khẩu (demo)', 'Password changed (demo)'))
+    setSavingPassword(true)
+    try {
+      await apiClient.changeMyPassword(passwordForm.current, passwordForm.next)
+      setOpenPassword(false)
+      setPasswordForm({ current: '', next: '', confirm: '' })
+      toast.push('success', pick('Đã đổi mật khẩu', 'Password changed'))
+    } catch (err) {
+      toast.push('error', err instanceof Error ? err.message : pick('Đổi mật khẩu thất bại', 'Password change failed'))
+    } finally {
+      setSavingPassword(false)
+    }
   }
 
   return (
@@ -84,24 +97,37 @@ export function UserInfoPage() {
         </Panel>
       </div>
 
+      {/* WEB-UX-003: ô "Phiên" trước đây có 4 giá trị, 3 trong số đó bịa.
+          - "IP demo" `192.168.1.42` và "Lần đăng nhập gần nhất"
+            `2026-06-15 17:25:04` gán cứng trong JSX. Đây là hai chỉ dấu an ninh
+            — người dùng nhìn chúng để phát hiện phiên lạ. Một giá trị bịa ở đây
+            không chỉ vô dụng, nó chủ động che dấu hiệu xâm nhập. Backend chưa
+            lưu lịch sử phiên (`GET /api/v1/me` chỉ trả username + role), nên gỡ
+            hẳn thay vì để `—` vĩnh viễn; thêm lại khi có audit phiên.
+          - "Auto-logout demo" đếm ngược từ 15:00 nhưng khi về 00:00 không có gì
+            xảy ra, và TTL thật của JWT là 1 giờ chứ không phải 15 phút. Một đồng
+            hồ đếm ngược sai và không dẫn tới hành động nào là lời hứa suông.
+          - "Đăng nhập lúc" lấy `new Date()` tại thời điểm MỞ TRANG, nên mỗi lần
+            vào lại trang là một mốc mới. Nay lấy `session.loginAt` thật. */}
       <Panel title={pick('Phiên', 'Session')}>
-        <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
-          <InfoCell label={pick('Đăng nhập lúc', 'Logged in at')} value={formatDateTime(loginAt.toISOString())} />
-          <InfoCell label="Auto-logout demo" value={countdownText} mono />
-          <InfoCell label="IP demo" value="192.168.1.42" mono />
-          <InfoCell label={pick('Lần đăng nhập gần nhất', 'Last login')} value="2026-06-15 17:25:04" />
+        <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+          <InfoCell label={pick('Đăng nhập lúc', 'Logged in at')} value={session ? formatDateTime(session.loginAt) : '—'} />
         </dl>
       </Panel>
 
-      <Modal open={openPassword} title={pick('Đổi mật khẩu', 'Change password')} confirmLabel={pick('Lưu', 'Save')} onConfirm={submitPassword} onClose={() => setOpenPassword(false)}>
-        <form className="space-y-3" onSubmit={submitPassword}>
+      <Modal open={openPassword} title={pick('Đổi mật khẩu', 'Change password')} confirmLabel={pick('Lưu', 'Save')} confirmLoading={savingPassword} onConfirm={() => { void submitPassword() }} onClose={() => setOpenPassword(false)}>
+        <form className="space-y-3" onSubmit={(event) => { void submitPassword(event) }}>
+          <label className="block text-xs text-[var(--c-text-dim)]">
+            {pick('Mật khẩu hiện tại', 'Current password')}
+            <input className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]" type="password" autoComplete="current-password" value={passwordForm.current} onChange={(event) => setPasswordForm((value) => ({ ...value, current: event.target.value }))} />
+          </label>
           <label className="block text-xs text-[var(--c-text-dim)]">
             {pick('Mật khẩu mới', 'New password')}
-            <input className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]" type="password" value={passwordForm.next} onChange={(event) => setPasswordForm((value) => ({ ...value, next: event.target.value }))} />
+            <input className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]" type="password" autoComplete="new-password" value={passwordForm.next} onChange={(event) => setPasswordForm((value) => ({ ...value, next: event.target.value }))} />
           </label>
           <label className="block text-xs text-[var(--c-text-dim)]">
             {pick('Xác nhận mật khẩu', 'Confirm password')}
-            <input className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]" type="password" value={passwordForm.confirm} onChange={(event) => setPasswordForm((value) => ({ ...value, confirm: event.target.value }))} />
+            <input className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]" type="password" autoComplete="new-password" value={passwordForm.confirm} onChange={(event) => setPasswordForm((value) => ({ ...value, confirm: event.target.value }))} />
           </label>
         </form>
       </Modal>

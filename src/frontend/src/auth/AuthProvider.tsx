@@ -8,6 +8,8 @@ import type { UserRole } from '../types'
 interface Session {
   username: string
   role: UserRole
+  /** ISO thời điểm phiên này được cấp. Xem WEB-UX-003. */
+  loginAt: string
   token?: string
   apiKey?: string
 }
@@ -50,12 +52,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (password: string, username = 'admin') => {
     if (IS_DEMO || AUTH_MODE === 'mock' || AUTH_MODE === 'none') {
-      setSession({ username, role: 'admin' })
+      setSession({ username, role: 'admin', loginAt: new Date().toISOString() })
       return
     }
 
     if (AUTH_MODE === 'apikey') {
-      setSession({ username, role: 'admin', apiKey: password })
+      setSession({ username, role: 'admin', apiKey: password, loginAt: new Date().toISOString() })
       return
     }
 
@@ -80,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!body.role) {
       console.warn('mkddc: response login thiếu field "role"; mặc định về quyền viewer')
     }
-    setSession({ username, role: body.role ?? 'viewer', token: body.token })
+    setSession({ username, role: body.role ?? 'viewer', token: body.token, loginAt: new Date().toISOString() })
   }, [])
 
   const logout = useCallback(() => {
