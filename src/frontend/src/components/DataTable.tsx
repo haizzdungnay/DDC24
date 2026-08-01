@@ -39,7 +39,7 @@ export function DataTable<T>({ rows, columns, getRowKey, loading, error, emptyTe
               <tr
                 key={getRowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={cn('border-b border-[var(--c-border)] transition last:border-0', onRowClick && 'cursor-pointer hover:bg-[rgba(42,92,138,0.08)]')}
+                className={cn('border-b border-[var(--c-border)] transition last:border-0', onRowClick && 'cursor-pointer hover:bg-[var(--c-accent-bg)]')}
               >
                 {columns.map((column) => <td key={column.key} className={cn('px-3 py-2 align-middle', column.className)}>{column.render(row)}</td>)}
               </tr>

@@ -17,7 +17,7 @@ export function PointLoggingSection({ pointId, label, kind }: PointLoggingSectio
     return <div role="status" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-4 text-sm text-[var(--c-text-dim)]">Loading database logging policy...</div>
   }
   if (historian.error && !historian.data) {
-    return <div role="alert" className="rounded-[var(--radius)] border border-[rgba(213,32,42,0.38)] bg-[rgba(213,32,42,0.08)] p-4 text-sm text-[var(--c-fault-fg)]">Database logging policy unavailable: {historian.error.message}</div>
+    return <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-4 text-sm text-[var(--c-fault-fg)]">Database logging policy unavailable: {historian.error.message}</div>
   }
   if (!policy || !historian.data) {
     return <div role="status" className="rounded-[var(--radius)] border border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">Database logging is not available for {pointId}.</div>

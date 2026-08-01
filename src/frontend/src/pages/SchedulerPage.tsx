@@ -188,7 +188,7 @@ export function SchedulerPage() {
                 />
               )}
               {viewMode === 'parameters' && <ParametersPanel row={selected} virtualPoints={virtualPoints} onChange={updateSelected} />}
-              {validation && <div className="rounded-[var(--radius)] border border-[rgba(232,181,0,0.45)] bg-[rgba(232,181,0,0.10)] p-3 text-sm text-[var(--c-warn-fg)]">{validation}</div>}
+              {validation && <div className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">{validation}</div>}
             </div>
           ) : (
             <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Them lich dau tien de cau hinh.', 'Add the first schedule to configure.')}</div>
@@ -545,11 +545,11 @@ function capabilityLabel(type: ScheduleType): string {
 function CapabilityBadge({ type }: { type: ScheduleType }) {
   const label = capabilityLabel(type)
   const tone = label === 'WIRED'
-    ? 'border-[rgba(47,164,90,0.45)] bg-[rgba(47,164,90,0.12)] text-[var(--c-good-fg)]'
+    ? 'border-[var(--c-good)] bg-[var(--c-good-bg)] text-[var(--c-good-fg)]'
     : label === 'OVERRIDE'
-      ? 'border-[rgba(232,181,0,0.48)] bg-[rgba(232,181,0,0.14)] text-[var(--c-warn-fg)]'
+      ? 'border-[var(--c-warn)] bg-[var(--c-warn-bg)] text-[var(--c-warn-fg)]'
       : label === 'VIRTUAL'
-        ? 'border-[rgba(42,92,138,0.45)] bg-[rgba(42,92,138,0.12)] text-[var(--c-accent)]'
+        ? 'border-[var(--c-accent)] bg-[var(--c-accent-bg)] text-[var(--c-accent)]'
         : 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]'
   return <span className={cn('inline-flex items-center rounded-[var(--radius)] border px-2 py-0.5 text-[10px] font-bold uppercase', tone)}>{label}</span>
 }

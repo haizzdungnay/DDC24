@@ -43,12 +43,16 @@ vi.mock('../api/client', () => ({
   }
 }))
 
+// WEB-UX-001 cần dựng được cả trường hợp KHÔNG có health, nên payload phải đổi
+// được giữa các test thay vì hằng số cứng trong factory.
+let healthPayload: Record<string, unknown> | null = { overall: 'ok', services: {} }
+
 vi.mock('../hooks/useApi', () => ({
   useApi: (fetcher: unknown) => {
     const data = fetcher === mocks.getPoints
       ? points
       : fetcher === mocks.getHealth
-        ? { overall: 'ok', services: {} }
+        ? healthPayload
         : []
     return { data, loading: false, error: null, refetch: mocks.refetch }
   }
@@ -65,8 +69,73 @@ vi.mock('../components/ControllerDiagram', () => ({
 beforeEach(() => {
   localStorage.clear()
   localStorage.setItem('mkddc-lang', 'en')
+  healthPayload = { overall: 'ok', services: {} }
 })
 afterEach(cleanup)
+
+function renderDashboard() {
+  return render(
+    <MemoryRouter>
+      <I18nProvider><DashboardPage /></I18nProvider>
+    </MemoryRouter>
+  )
+}
+
+/**
+ * WEB-UX-001 — trung thực dữ liệu.
+ *
+ * Các test dưới đây chặn đúng một loại hồi quy: đặt lại một giá trị dự phòng
+ * "trông hợp lý" khi API không trả dữ liệu. Bản cũ có `?? 23` (CPU), `?? 48`
+ * (RAM), một uptime 12 ngày dựng sẵn, MAC và giờ hệ thống gán cứng trong JSX, và
+ * `DeviceStatusCard()` không tham số nên luôn vẽ "ONLINE" màu xanh. Hậu quả:
+ * một board đã mất liên lạc vẫn hiển thị y hệt một board khoẻ mạnh.
+ */
+describe('Dashboard data honesty', () => {
+  it('shows a dash instead of invented metrics when health is unavailable', () => {
+    healthPayload = null
+    renderDashboard()
+
+    expect(screen.getByText('UNKNOWN')).toBeInTheDocument()
+    expect(screen.queryByText('ONLINE')).not.toBeInTheDocument()
+    // Không còn con số dự phòng nào của bản cũ.
+    expect(screen.queryByText('23%')).not.toBeInTheDocument()
+    expect(screen.queryByText('48%')).not.toBeInTheDocument()
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('No data').length).toBeGreaterThanOrEqual(3)
+
+    // MAC và giờ hệ thống gán cứng của bản cũ phải biến mất hoàn toàn.
+    expect(screen.queryByText('00:0D:18:24:AC:01')).not.toBeInTheDocument()
+    expect(screen.queryByText('23/05/2025 14:32:18')).not.toBeInTheDocument()
+  })
+
+  it('maps the real overall status onto the device card instead of always ONLINE', () => {
+    healthPayload = { overall: 'fault', services: {} }
+    renderDashboard()
+
+    expect(screen.getByText('FAULT')).toBeInTheDocument()
+    expect(screen.queryByText('ONLINE')).not.toBeInTheDocument()
+  })
+
+  it('renders device identity coming from the API', () => {
+    healthPayload = {
+      overall: 'ok',
+      services: {},
+      cpuPercent: 7.5,
+      deviceMac: 'AA:BB:CC:DD:EE:FF',
+      deviceIp: '10.0.0.9',
+      location: 'Panel B2',
+      description: 'AHU-2 loop'
+    }
+    renderDashboard()
+
+    expect(screen.getByText('AA:BB:CC:DD:EE:FF')).toBeInTheDocument()
+    // IP xuất hiện ở cả ô Ethernet lẫn bảng thông tin thiết bị.
+    expect(screen.getAllByText('10.0.0.9').length).toBeGreaterThan(0)
+    expect(screen.getByText('Panel B2')).toBeInTheDocument()
+    expect(screen.getByText('AHU-2 loop')).toBeInTheDocument()
+    expect(screen.getByText('8%')).toBeInTheDocument()
+  })
+})
 
 describe('Dashboard live trend point picker', () => {
   it('allows changing the displayed points while enforcing a maximum of four', async () => {

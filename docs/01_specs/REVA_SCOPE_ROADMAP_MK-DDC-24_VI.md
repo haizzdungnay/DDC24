@@ -49,6 +49,26 @@
 > kỹ sư vận hành không thể kiểm tra DDC khi không có laptop. Kéo vào Rev A.
 > Implementation guide: [08_MKDDC_HMI_IMPLEMENTATION_GUIDE](../03_implementation/08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md).
 
+> **Amendment 2026-08-01 — RBAC 3 vai trò kéo vào Rev A.0:**
+> Roadmap trước đây cắt "RBAC đầy đủ" sang Rev B với lý do Rev A.0 chỉ cần một
+> password web. Thực tế sản phẩm đã đi quá mốc đó từ lâu **ở một phía**: backend
+> đã hiện thực đủ ba vai trò `viewer` / `operator` / `admin` (`Role` trong
+> `web/backend/auth.go`), bọc `auth.Require(...)` trên từng endpoint, có đủ API
+> tạo/sửa/xoá tài khoản kèm guard last-admin và ghi audit. Nhưng frontend khoá
+> cứng ô tên đăng nhập thành `admin`, nên **không tài khoản nào trong số đó đăng
+> nhập được qua Web**.
+>
+> Hệ quả là trạng thái tệ hơn cả hai lựa chọn: toàn bộ công RBAC ở backend nằm
+> chết mà vẫn phải bảo trì, còn trên thực tế mọi người dùng Web đều thao tác
+> dưới quyền cao nhất — kể cả người chỉ vào xem. Với một thiết bị mà Web ghi
+> thẳng ra AO/DO, đó là rủi ro vận hành chứ không phải nợ tính năng.
+>
+> Quyết định: nối nốt phần frontend (plan 45, `WEB-UX-005` + `WEB-UX-009` +
+> `WEB-UX-011`) và ghi RBAC 3 vai trò vào baseline Rev A.0. Phạm vi đúng bằng
+> những gì backend đã có — **3 vai trò, không phải "RBAC đầy đủ"**. Những thứ
+> vẫn thuộc Rev B: nhóm quyền tuỳ biến, phân quyền theo từng point, SSO/AD, và
+> lịch sử phiên đăng nhập. Xem ADR-021.
+
 ## 3. Scope Rev A.0 — CẮT (đẩy Rev B/C)
 
 ```
@@ -57,7 +77,7 @@
 ✗ WeeklySchedule / HolidaySchedule               → Rev B
 ✗ Math nâng cao (Average/Min/Max/LowPass)         → Rev B
 ✗ StageControl / LeadLag / SequenceStep           → Rev B
-✗ RBAC đầy đủ (Rev A.0 chỉ 1 password web)        → Rev B
+✓ RBAC 3 vai trò trên Web (viewer/operator/admin)  → KÉO VÀO Rev A.0, xem Amendment 2026-08-01
 ✗ Audit log đầy đủ, component versioning          → Rev B
 ✗ MQTT/agent, cloud                               → Rev B+
 ✗ OTA update                                       → Rev B
@@ -135,7 +155,8 @@ chạy ổn định; minh họa chạy được ở `examples/`.
 ### Điểm chung (mọi demo)
 mất điện bật lại không mất config · backup/restore · BACnet interop (KHÔNG đặt mục tiêu BTL).
 
-Khác production: chưa soak 30 ngày, chưa BTL certified, chưa RBAC → đó là Rev A.1.
+Khác production: chưa soak 30 ngày, chưa BTL certified → đó là Rev A.1.
+(RBAC 3 vai trò đã vào Rev A.0 từ 2026-08-01, xem Amendment ở §2.)
 
 ## 7. Top rủi ro 90 ngày + cách chặn
 

@@ -22,9 +22,9 @@ type NetworkReconcile = {
 }
 
 const pollStateClass: Record<PollState, string> = {
-  online: 'bg-[rgba(47,164,90,0.10)]',
-  degraded: 'bg-[rgba(232,181,0,0.14)]',
-  offline: 'bg-[rgba(213,32,42,0.12)]',
+  online: 'bg-[var(--c-good-bg)]',
+  degraded: 'bg-[var(--c-warn-bg)]',
+  offline: 'bg-[var(--c-fault-bg)]',
   // 'unknown' cố ý KHÔNG tô màu trạng thái: chưa có số đo thì không được gợi ý
   // khoẻ hay hỏng.
   unknown: ''
@@ -329,14 +329,14 @@ export function NetworkPage() {
           <StateBlock state="loading" title={pick('Đang đọc trạng thái mạng thực', 'Loading authoritative network state')} />
         ) : transaction ? (
           <div className="space-y-5">
-            {transactionState.error && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[rgba(232,181,0,0.10)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">{pick('Mất kết nối authority; trạng thái bên dưới có thể đã cũ.', 'Authority disconnected; the state below may be stale.')}</div>}
-            {reconcileAfter && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[rgba(232,181,0,0.10)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">{pick('Kết quả request chưa xác định; thao tác mạng đang khóa cho tới khi authority trả trạng thái mới.', 'Request outcome is unknown; network actions stay locked until a fresh authority status is received.')}</div>}
-            {!managementPathReady && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[rgba(232,181,0,0.10)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
+            {transactionState.error && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">{pick('Mất kết nối authority; trạng thái bên dưới có thể đã cũ.', 'Authority disconnected; the state below may be stale.')}</div>}
+            {reconcileAfter && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">{pick('Kết quả request chưa xác định; thao tác mạng đang khóa cho tới khi authority trả trạng thái mới.', 'Request outcome is unknown; network actions stay locked until a fresh authority status is received.')}</div>}
+            {!managementPathReady && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
               {transaction.management?.stable && stableManagementUrl ? (
                 <>{pick('Mở giao diện bằng hostname ổn định trước khi Apply: ', 'Open the UI through the stable hostname before Apply: ')}<a className="mono underline" href={stableManagementUrl}>{stableManagementUrl}</a></>
               ) : pick('Hostname mDNS ổn định chưa sẵn sàng; Apply bị khóa để bảo toàn đường quản trị.', 'Stable mDNS hostname is not ready; Apply is locked to preserve the management path.')}
             </div>}
-            {!ethernetApplyReady && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[rgba(232,181,0,0.10)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
+            {!ethernetApplyReady && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
               {pick('Liên kết Ethernet chưa sẵn sàng; hãy cắm cáp Ethernet trước khi Apply.', 'Ethernet link is not ready; connect the Ethernet cable before Apply.')}
             </div>}
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -401,7 +401,7 @@ export function NetworkPage() {
                   {dnsSupported && <Field label={pick('Máy chủ DNS', 'DNS servers')} value={candidate.dns?.servers.join(', ') ?? ''} onChange={setCandidateDnsServers} mono error={candidateErrors.dns} disabled={transactionLocked || !canManageNetwork || candidate.dns?.mode !== 'manual'} />}
                 </div>
 
-                {transactionLocked && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[rgba(232,181,0,0.10)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">{pick('Form đang khóa theo pending candidate của giao dịch authoritative.', 'The form is locked to the authoritative pending candidate.')}</div>}
+                {transactionLocked && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">{pick('Form đang khóa theo pending candidate của giao dịch authoritative.', 'The form is locked to the authoritative pending candidate.')}</div>}
 
                 {/* CHỈ hai nút. `Stage`/`Apply` là tên lệnh giao thức, không phải
                     việc người vận hành cần biết — gộp vào "Lưu thay đổi".
@@ -773,7 +773,7 @@ function booleanState(value: boolean | undefined, whenTrue: string, whenFalse: s
 }
 
 function AuthorityCard({ title, tone, lines }: { title: string; tone: 'good' | 'warn' | 'neutral'; lines: Array<[string, string]> }) {
-  const toneClass = tone === 'good' ? 'border-[rgba(47,164,90,0.38)]' : tone === 'warn' ? 'border-[rgba(232,181,0,0.48)]' : 'border-[var(--c-border)]'
+  const toneClass = tone === 'good' ? 'border-[var(--c-good)]' : tone === 'warn' ? 'border-[var(--c-warn)]' : 'border-[var(--c-border)]'
   return (
     <div className={`rounded-[var(--radius)] border bg-[var(--c-surface-2)] p-4 ${toneClass}`}>
       <div className="text-xs font-semibold tracking-[0.12em] text-[var(--c-text-dim)]">{title}</div>

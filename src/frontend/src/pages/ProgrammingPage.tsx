@@ -62,8 +62,8 @@ const componentLibrary: LibraryItem[] = [
 const sampleText = JSON.stringify(sampleGraph, null, 2)
 
 const severityClass = {
-  error: 'border-[rgba(213,32,42,0.46)] bg-[rgba(213,32,42,0.10)] text-[var(--c-fault-fg)]',
-  warn: 'border-[rgba(232,181,0,0.46)] bg-[rgba(232,181,0,0.12)] text-[var(--c-warn-fg)]'
+  error: 'border-[var(--c-fault)] bg-[var(--c-fault-bg)] text-[var(--c-fault-fg)]',
+  warn: 'border-[var(--c-warn)] bg-[var(--c-warn-bg)] text-[var(--c-warn-fg)]'
 }
 
 export function ProgrammingPage() {
@@ -113,7 +113,7 @@ export function ProgrammingPage() {
 
   return (
     <div className="space-y-5">
-      <div role="status" className="rounded-[var(--radius)] border border-[rgba(232,181,0,0.46)] bg-[rgba(232,181,0,0.12)] px-4 py-3 text-sm text-[var(--c-warn-fg)]">
+      <div role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-4 py-3 text-sm text-[var(--c-warn-fg)]">
         {pick(
           'Legacy graph demo — chỉ mô phỏng cục bộ, không validate hoặc deploy tới thiết bị.',
           'Legacy graph demo — local simulation only; it does not validate or deploy to the device.'

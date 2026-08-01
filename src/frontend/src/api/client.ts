@@ -1,8 +1,14 @@
 import { API_ORIGIN, IS_DEMO } from '../config'
 import {
   ackDemoAlarm,
+  createDemoUserAccount,
+  deleteDemoUserAccount,
+  getDemoConfigDevice,
+  putDemoConfigDevice,
   forceDemoPoint,
   getAiInputConfigs,
+  getDemoUserAccounts,
+  setDemoUserRole,
   getAlarmSettings as getDemoAlarmSettings,
   getDemoAlarmHistory,
   getDemoAlarms,
@@ -30,7 +36,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserParamsConfig, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -383,7 +389,23 @@ function normalizeSystemStatus(raw: Record<string, unknown>): HealthResponse {
     uptimeS: numberFrom(raw.uptime_s ?? raw.uptimeS),
     firmware: stringFrom(versions.web ?? versions.core ?? versions.iobus),
     deviceIp: stringFrom(raw.deviceIp ?? raw.device_ip),
+    deviceMac: stringFrom(raw.deviceMac ?? raw.device_mac),
+    deviceName: stringFrom(raw.deviceName ?? raw.device_name),
+    description: stringFrom(raw.description),
+    location: stringFrom(raw.location),
+    systemTime: stringFrom(raw.systemTime ?? raw.system_time),
     services,
+  }
+}
+
+function normalizeUserAccount(raw: Record<string, unknown> | unknown): UserAccount {
+  const record = (raw ?? {}) as Record<string, unknown>
+  const role = String(record.role ?? '')
+  return {
+    username: String(record.username ?? ''),
+    // Cùng nguyên tắc fail-closed như F-07 ở AuthProvider: một role lạ hoặc thiếu
+    // phải rơi về quyền THẤP NHẤT, không được mặc định thành admin.
+    role: role === 'admin' || role === 'operator' ? role : 'viewer'
   }
 }
 
@@ -1127,9 +1149,84 @@ export const apiClient = {
     })
   },
 
+  /* WEB-UX-006: `GET/PUT /system/config/device` (RoleAdmin) đã có sẵn ở backend
+     từ lâu — `configapi.go` với `validateConfigDevice` kiểm cả `device_id` lẫn
+     độ dài `device_name`. Trang Thiết bị trước đây không gọi endpoint nào, chỉ
+     bắn toast "Đã lưu … (demo)". */
+  async getConfigDevice(): Promise<ConfigDevice> {
+    if (IS_DEMO) return getDemoConfigDevice()
+    const raw = await requestJson<Record<string, unknown>>('/system/config/device', { cache: 'no-store' })
+    return {
+      deviceId: typeof raw.device_id === 'number' ? raw.device_id : 0,
+      deviceName: String(raw.device_name ?? ''),
+      description: String(raw.description ?? ''),
+      location: String(raw.location ?? '')
+    }
+  },
+
+  async putConfigDevice(config: ConfigDevice): Promise<ConfigPutResult> {
+    if (IS_DEMO) return putDemoConfigDevice(config)
+    return requestJson<ConfigPutResult>('/system/config/device', {
+      method: 'PUT',
+      body: JSON.stringify({
+        device_id: config.deviceId,
+        device_name: config.deviceName,
+        description: config.description,
+        location: config.location
+      })
+    })
+  },
+
   async getMe(): Promise<CurrentUser> {
     if (IS_DEMO) return { username: 'demo', role: 'admin' }
     return requestJson<CurrentUser>('/me')
+  },
+
+  /* WEB-UX-003 / WEB-UX-011: các endpoint quản trị tài khoản đã tồn tại đầy đủ ở
+     backend (web/backend/users.go, đăng ký tại http.go:170-176) từ lâu nhưng
+     frontend chưa từng gọi tới. Trang Người dùng dựng bảng từ `getDemoUsers()`
+     kể cả ở bản live, và nút Đổi mật khẩu chỉ bắn toast. */
+  async changeMyPassword(oldPassword: string, newPassword: string): Promise<void> {
+    if (IS_DEMO) return
+    await requestJson('/me/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+    })
+  },
+
+  async listUsers(): Promise<UserAccount[]> {
+    if (IS_DEMO) return getDemoUserAccounts()
+    const raw = await requestJson<unknown>('/users', { cache: 'no-store' })
+    return Array.isArray(raw) ? raw.map(normalizeUserAccount) : []
+  },
+
+  async createUser(username: string, role: UserRole, password: string): Promise<UserAccount> {
+    if (IS_DEMO) return createDemoUserAccount(username, role)
+    return normalizeUserAccount(await requestJson<Record<string, unknown>>('/users', {
+      method: 'POST',
+      body: JSON.stringify({ username, role, password })
+    }))
+  },
+
+  async setUserRole(username: string, role: UserRole): Promise<UserAccount> {
+    if (IS_DEMO) return setDemoUserRole(username, role)
+    return normalizeUserAccount(await requestJson<Record<string, unknown>>(`/users/${encodeURIComponent(username)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role })
+    }))
+  },
+
+  async resetUserPassword(username: string, newPassword: string): Promise<void> {
+    if (IS_DEMO) return
+    await requestJson(`/users/${encodeURIComponent(username)}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password: newPassword })
+    })
+  },
+
+  async deleteUser(username: string): Promise<void> {
+    if (IS_DEMO) return deleteDemoUserAccount(username)
+    await requestJson(`/users/${encodeURIComponent(username)}`, { method: 'DELETE' })
   },
 
   async ackAlarm(id: string, choice?: AlarmDurationChoice): Promise<Alarm[]> {

@@ -38,7 +38,7 @@ const stateCopy: Record<HistoryPresentationState, StateCopy> = {
     title: 'History complete',
     detail: 'All requested history is available.',
     Icon: CheckCircle2,
-    className: 'border-[rgba(47,164,90,0.38)] bg-[rgba(47,164,90,0.08)]',
+    className: 'border-[var(--c-good)] bg-[var(--c-good-bg)]',
     labelClassName: 'text-[var(--c-good-fg)]',
   },
   partial: {
@@ -46,7 +46,7 @@ const stateCopy: Record<HistoryPresentationState, StateCopy> = {
     title: 'History is partial',
     detail: 'Available samples remain visible; missing intervals are not connected.',
     Icon: AlertTriangle,
-    className: 'border-[rgba(232,181,0,0.52)] bg-[rgba(232,181,0,0.10)]',
+    className: 'border-[var(--c-warn)] bg-[var(--c-warn-bg)]',
     labelClassName: 'text-[var(--c-warn-fg)]',
   },
   unavailable: {
@@ -54,7 +54,7 @@ const stateCopy: Record<HistoryPresentationState, StateCopy> = {
     title: 'History unavailable',
     detail: 'Historical data could not be loaded.',
     Icon: WifiOff,
-    className: 'border-[rgba(213,32,42,0.42)] bg-[rgba(213,32,42,0.08)]',
+    className: 'border-[var(--c-fault)] bg-[var(--c-fault-bg)]',
     labelClassName: 'text-[var(--c-fault-fg)]',
   },
   'no-history': {

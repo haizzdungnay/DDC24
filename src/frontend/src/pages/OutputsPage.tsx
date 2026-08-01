@@ -522,7 +522,7 @@ function AdvancedPanel({ output, onChange }: { output: OutputConfig; onChange: (
           <span className="font-mono text-[var(--c-text-dim)]">{registerFor(output.kind, output.channel, key)}</span>
           <span className="font-medium text-[var(--c-text)]">{fieldLabel(output.kind, key, t)}</span>
           {renderOutputField(output, key, onChange, false, t)}
-          <span className="rounded-[var(--radius)] border border-[rgba(31,122,74,0.35)] bg-[rgba(31,122,74,0.10)] px-2 py-1 text-center text-[10px] font-bold uppercase text-[var(--c-good-fg)]">
+          <span className="rounded-[var(--radius)] border border-[var(--c-good)] bg-[var(--c-good-bg)] px-2 py-1 text-center text-[10px] font-bold uppercase text-[var(--c-good-fg)]">
             wired
           </span>
         </div>
@@ -576,7 +576,7 @@ function FieldHeader({ label, wired }: { label: string; wired?: boolean }) {
   return (
     <span className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]">
       {label}
-      {wired && <span className="rounded-[var(--radius)] border border-[rgba(31,122,74,0.35)] px-2 py-0.5 text-[10px] uppercase text-[var(--c-good-fg)]">wired</span>}
+      {wired && <span className="rounded-[var(--radius)] border border-[var(--c-good)] px-2 py-0.5 text-[10px] uppercase text-[var(--c-good-fg)]">wired</span>}
     </span>
   )
 }

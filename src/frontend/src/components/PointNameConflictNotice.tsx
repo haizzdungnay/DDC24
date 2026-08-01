@@ -5,7 +5,7 @@ export function PointNameConflictNotice({ pointId, conflictIds }: { pointId: str
   return (
     <div
       role="alert"
-      className="flex items-start gap-3 rounded-[var(--radius)] border border-[rgba(224,161,6,0.38)] bg-[rgba(224,161,6,0.08)] p-3 text-sm text-[var(--c-warn-fg)]"
+      className="flex items-start gap-3 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]"
     >
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <span>

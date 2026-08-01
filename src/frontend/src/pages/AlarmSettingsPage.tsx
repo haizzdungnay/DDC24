@@ -298,7 +298,7 @@ function AlarmEditor({
   return (
     <div className="space-y-5">
       {issues.length > 0 && (
-        <div className="rounded-[var(--radius)] border border-[rgba(232,181,0,0.45)] bg-[rgba(232,181,0,0.12)] p-3 text-sm text-[var(--c-warn-fg)]">
+        <div className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
           {issues.map((issue) => <div key={issue.message}>{issue.message}</div>)}
         </div>
       )}

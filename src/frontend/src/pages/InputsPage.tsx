@@ -758,7 +758,7 @@ function FieldHeader({ label, wired }: { label: string; wired?: boolean }) {
 
 function ModeBadge({ wired }: { wired?: boolean }) {
   return (
-    <span className={cn('rounded-[var(--radius)] border px-2 py-0.5 text-center text-[10px] font-bold uppercase', wired ? 'border-[rgba(31,122,74,0.35)] bg-[rgba(31,122,74,0.10)] text-[var(--c-good-fg)]' : 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]')}>
+    <span className={cn('rounded-[var(--radius)] border px-2 py-0.5 text-center text-[10px] font-bold uppercase', wired ? 'border-[var(--c-good)] bg-[var(--c-good-bg)] text-[var(--c-good-fg)]' : 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]')}>
       {wired ? 'wired' : 'demo'}
     </span>
   )

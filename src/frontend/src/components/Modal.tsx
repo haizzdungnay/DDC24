@@ -10,7 +10,7 @@ const sizeClass = {
   xl: 'max-w-4xl'
 }
 
-export function Modal({ open, title, children, confirmLabel, cancelLabel, danger, size = 'md', returnFocusRef, onConfirm, onClose }: {
+export function Modal({ open, title, children, confirmLabel, cancelLabel, danger, size = 'md', returnFocusRef, confirmLoading, confirmDisabled, onConfirm, onClose }: {
   open: boolean
   title: string
   children: ReactNode
@@ -19,6 +19,12 @@ export function Modal({ open, title, children, confirmLabel, cancelLabel, danger
   danger?: boolean
   size?: keyof typeof sizeClass
   returnFocusRef?: RefObject<HTMLElement | null>
+  /* Hộp thoại xác nhận cho hành động tác động vật lý (WEB-UX-004) và cho đổi mật
+     khẩu (WEB-UX-003) đều gọi API. Không có trạng thái chờ ở nút xác nhận thì
+     người dùng bấm hai lần vì tưởng lần đầu trượt — với lệnh ghi ra AO/DO, lần
+     bấm thứ hai là một lệnh ghi thật nữa. */
+  confirmLoading?: boolean
+  confirmDisabled?: boolean
   onConfirm?: () => void
   onClose: () => void
 }) {
@@ -99,14 +105,14 @@ export function Modal({ open, title, children, confirmLabel, cancelLabel, danger
       >
         <div className="flex items-start justify-between gap-4">
           <h2 id="modal-title" className="text-lg font-semibold">{title}</h2>
-          <button className="rounded-[var(--radius)] p-1 text-[var(--c-text-dim)] hover:bg-[rgba(42,92,138,0.08)] hover:text-[var(--c-text)]" onClick={onClose} aria-label={pick('Đóng', 'Close')}>
+          <button className="rounded-[var(--radius)] p-1 text-[var(--c-text-dim)] hover:bg-[var(--c-accent-bg)] hover:text-[var(--c-text)]" onClick={onClose} aria-label={pick('Đóng', 'Close')}>
             <X className="h-5 w-5" />
           </button>
         </div>
         <div className="mt-4 text-sm text-[var(--c-text-dim)]">{children}</div>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>{cancelText}</Button>
-          {onConfirm && <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm}>{confirmText}</Button>}
+          {onConfirm && <Button variant={danger ? 'danger' : 'primary'} loading={confirmLoading} disabled={confirmDisabled} onClick={onConfirm}>{confirmText}</Button>}
         </div>
       </section>
     </div>

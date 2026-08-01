@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   BellRing,
   Check,
   ChevronRight,
@@ -11,6 +12,8 @@ import {
   Network,
   Router,
   Thermometer,
+  WifiOff,
+  XCircle,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
@@ -28,7 +31,7 @@ import { useApi } from '../hooks/useApi'
 import { useI18n } from '../i18n'
 import { useRealtime } from '../realtime'
 import type { Alarm, HealthResponse, HealthStatus, Point, TrendSample } from '../types'
-import { formatDateTime, formatUptime, isFreshIso, mergePointsById, metricStatusColor, metricStatusFill, pointDisplayTag, statusColor } from '../utils'
+import { formatDateTime, formatUptime, isFreshIso, mergePointsById, metricStatusColor, metricStatusFill, normalizeHealth, pointDisplayTag, statusColor } from '../utils'
 
 const dashboardTrendColors = ['var(--c-fault-fg)', 'var(--c-accent-2)', '#6E5A2E', 'var(--c-warn-fg)']
 const dashboardTrendSampleLimit = 60
@@ -143,8 +146,12 @@ export function DashboardPage() {
   const warning = alarmRows.filter((alarm) => alarm.severity === 'high' || alarm.severity === 'medium' || alarm.severity === 'low').length
   const alarmCount = alarmRows.length
   const dataAgeLabel = realtime.lastPointEventAt ? new Date(realtime.lastPointEventAt).toLocaleTimeString('vi-VN') : 'API'
-  const cpuPercent = h?.cpuPercent ?? 23
-  const cpuDetail = [formatPercent(cpuPercent), formatCpuClock(h?.cpuClockMhz)].filter(Boolean).join(' | ')
+  /* WEB-UX-001: các giá trị này trước đây có `?? 23` / `?? 48` / `?? <uptime>`.
+     Khi `/system/status` hỏng hoặc chưa trả về, dashboard vẫn vẽ đồng hồ CPU 23%
+     màu xanh — người trực ca đọc được một con số trông hoàn toàn bình thường từ
+     một thiết bị đã mất liên lạc. Không có dữ liệu thì phải hiện `—`. */
+  const cpuPercent = numberOrNull(h?.cpuPercent)
+  const cpuDetail = [cpuPercent === null ? '' : formatPercent(cpuPercent), formatCpuClock(h?.cpuClockMhz)].filter(Boolean).join(' | ')
 
   function toggleTrendPoint(id: string) {
     setSelectedTrendIds((current) => current.includes(id)
@@ -169,12 +176,12 @@ export function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <DeviceStatusCard />
+        <DeviceStatusCard health={h ?? null} />
         <AlarmStatusCard count={alarmCount} critical={critical} warning={warning} />
         <DialStatusCard icon={Cpu} label="CPU LOAD" value={cpuPercent} detail={cpuDetail} />
-        <DialStatusCard icon={MemoryStick} label={pick('BỘ NHỚ', 'MEMORY')} value={h?.ramPercent ?? 48} detail={ramDetail} />
+        <DialStatusCard icon={MemoryStick} label={pick('BỘ NHỚ', 'MEMORY')} value={numberOrNull(h?.ramPercent)} detail={ramDetail} />
         <TempStatusCard value={h?.tempC} />
-        <UptimeStatusCard value={h?.uptimeS ?? 12 * 86400 + 4 * 3600 + 32 * 60 + 18} />
+        <UptimeStatusCard value={numberOrNull(h?.uptimeS)} />
       </div>
 
       <Panel title={pick('TRẠNG THÁI TRUYỀN THÔNG', 'COMMUNICATION STATUS')} className="p-3">
@@ -238,16 +245,23 @@ export function DashboardPage() {
           </div>
         </Panel>
         <Panel title={pick('THÔNG TIN THIẾT BỊ', 'DEVICE INFORMATION')}>
+          {/* WEB-UX-001: MAC, giờ hệ thống, vị trí lắp đặt và mô tả trước đây gán
+              cứng ngay trong JSX — MAC `00:0D:18:24:AC:01` và mốc `23/05/2025
+              14:32:18` hiện y hệt nhau trên mọi thiết bị đã xuất xưởng. Ai đối
+              chiếu MAC để chắc mình đang mở đúng tủ sẽ nhận nhầm. Nay đọc từ
+              `/system/status`; thiếu field nào thì ô đó hiện `—`. Model và Serial
+              là hằng số của dòng sản phẩm trong `productInfo`, không phải dữ liệu
+              đo được, nên vẫn lấy từ `DEVICE_DEFAULTS`. */}
           <dl className="grid grid-cols-[140px_1fr] gap-y-3 text-sm">
-            <dt className="text-[var(--c-text-dim)]">{pick('Tên thiết bị', 'Device name')}</dt><dd>{h?.deviceName ?? DEVICE_DEFAULTS.name}</dd>
-            <dt className="text-[var(--c-text-dim)]">Model</dt><dd>DDC24-AC</dd>
-            <dt className="text-[var(--c-text-dim)]">Firmware</dt><dd>{h?.firmware ?? DEVICE_DEFAULTS.firmware} (Build 20250515)</dd>
-            <dt className="text-[var(--c-text-dim)]">Serial</dt><dd className="mono">{DEVICE_DEFAULTS.serial}</dd>
-            <dt className="text-[var(--c-text-dim)]">{pick('Địa chỉ IP', 'IP address')}</dt><dd className="mono">{h?.deviceIp ?? DEVICE_DEFAULTS.ip}</dd>
-            <dt className="text-[var(--c-text-dim)]">MAC Address</dt><dd className="mono">00:0D:18:24:AC:01</dd>
-            <dt className="text-[var(--c-text-dim)]">{pick('Thời gian hệ thống', 'System time')}</dt><dd>23/05/2025 14:32:18</dd>
-            <dt className="text-[var(--c-text-dim)]">{pick('Vị trí lắp đặt', 'Installation location')}</dt><dd>{pick('Tủ ĐK trung tâm - Tầng 1', 'Central control cabinet - Floor 1')}</dd>
-            <dt className="text-[var(--c-text-dim)]">{pick('Mô tả', 'Description')}</dt><dd>DDC 24 điểm - HVAC System</dd>
+            <dt className="text-[var(--c-text-dim)]">{pick('Tên thiết bị', 'Device name')}</dt><dd>{orDash(h?.deviceName ?? DEVICE_DEFAULTS.name)}</dd>
+            <dt className="text-[var(--c-text-dim)]">Model</dt><dd>{DEVICE_DEFAULTS.model}</dd>
+            <dt className="text-[var(--c-text-dim)]">Firmware</dt><dd>{orDash(h?.firmware)}</dd>
+            <dt className="text-[var(--c-text-dim)]">Serial</dt><dd className="mono">{orDash(DEVICE_DEFAULTS.serial)}</dd>
+            <dt className="text-[var(--c-text-dim)]">{pick('Địa chỉ IP', 'IP address')}</dt><dd className="mono">{orDash(h?.deviceIp)}</dd>
+            <dt className="text-[var(--c-text-dim)]">MAC Address</dt><dd className="mono">{orDash(h?.deviceMac)}</dd>
+            <dt className="text-[var(--c-text-dim)]">{pick('Thời gian hệ thống', 'System time')}</dt><dd>{orDash(h?.systemTime ? formatDateTime(h.systemTime) : undefined)}</dd>
+            <dt className="text-[var(--c-text-dim)]">{pick('Vị trí lắp đặt', 'Installation location')}</dt><dd>{orDash(h?.location)}</dd>
+            <dt className="text-[var(--c-text-dim)]">{pick('Mô tả', 'Description')}</dt><dd>{orDash(h?.description)}</dd>
           </dl>
         </Panel>
       </div>
@@ -263,6 +277,18 @@ function pointNumber(value: Point['value']) {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'boolean') return value ? 1 : 0
   return null
+}
+
+const EM_DASH = '—'
+
+/** Nguyên tắc §3.1.1 của plan 45: không có dữ liệu thì hiện `—`, không đoán. */
+function orDash(value: string | undefined | null): string {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text === '' ? EM_DASH : text
+}
+
+function numberOrNull(value: number | undefined | null): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
 function formatPercent(value: number) {
@@ -286,14 +312,37 @@ function makeTrendSample(points: Point[]) {
   return Object.keys(sample).length > 1 ? sample : null
 }
 
-function DeviceStatusCard() {
+/* WEB-UX-001: `DeviceStatusCard()` trước đây không nhận tham số nào và vẽ cứng
+   vòng tròn xanh "ONLINE". Nghĩa là ô "TRẠNG THÁI THIẾT BỊ" — ô to nhất, ở góc
+   trên cùng bên trái, thứ đầu tiên người ta nhìn — báo bình thường kể cả khi
+   `/system/status` trả `fault` hoặc không trả gì. Nay map `overall` thật, và
+   `unknown` (không có health) hiện màu xám chứ không phải xanh. */
+const deviceStatusVisual = {
+  ok: { icon: Check, fill: 'var(--c-good)', text: 'var(--c-good-fg)', label: 'ONLINE' },
+  degraded: { icon: AlertTriangle, fill: 'var(--c-warn)', text: 'var(--c-warn-fg)', label: 'DEGRADED' },
+  fault: { icon: XCircle, fill: 'var(--c-fault)', text: 'var(--c-fault-fg)', label: 'FAULT' },
+  unknown: { icon: WifiOff, fill: 'var(--c-off)', text: 'var(--c-text-dim)', label: 'UNKNOWN' }
+} as const
+
+function DeviceStatusCard({ health }: { health: HealthResponse | null }) {
   const { pick } = useI18n()
+  const raw = health ? normalizeHealth(health.overall) : 'unknown'
+  const state: keyof typeof deviceStatusVisual = raw === 'ok' || raw === 'degraded' || raw === 'fault' ? raw : 'unknown'
+  const visual = deviceStatusVisual[state]
+  const Glyph = visual.icon
+  const detail = state === 'ok'
+    ? pick('Thiết bị hoạt động bình thường', 'Device operating normally')
+    : state === 'degraded'
+      ? pick('Thiết bị suy giảm — xem mục Services', 'Device degraded — see Services')
+      : state === 'fault'
+        ? pick('Thiết bị lỗi — xem mục Services', 'Device fault — see Services')
+        : pick('Chưa đọc được trạng thái thiết bị', 'Device status unavailable')
   return (
     <StatusCard>
       <div className="flex items-center justify-between text-[11px] font-semibold uppercase text-[var(--c-text-dim)]"><span>{pick('TRẠNG THÁI THIẾT BỊ', 'DEVICE STATUS')}</span><ChevronRight className="h-4 w-4 text-[var(--c-accent)]" /></div>
       <div className="mt-6 flex items-center gap-5">
-        <div className="grid h-16 w-16 place-items-center rounded-full bg-[var(--c-surface-2)]"><div className="grid h-12 w-12 place-items-center rounded-full bg-[var(--c-good)]"><Check className="h-8 w-8 text-[var(--c-bg)]" /></div></div>
-        <div><div className="text-xl font-bold text-[var(--c-good-fg)]">ONLINE</div><div className="mt-1 text-xs text-[var(--c-text-dim)]">{pick('Thiết bị hoạt động\nbình thường', 'Device operating\nnormally').split('\n').map((line) => <span key={line}>{line}<br /></span>)}</div></div>
+        <div className="grid h-16 w-16 place-items-center rounded-full bg-[var(--c-surface-2)]"><div className="grid h-12 w-12 place-items-center rounded-full" style={{ background: visual.fill }}><Glyph className="h-8 w-8 text-[var(--c-bg)]" aria-hidden="true" /></div></div>
+        <div><div className="text-xl font-bold" style={{ color: visual.text }}>{visual.label}</div><div className="mt-1 text-xs text-[var(--c-text-dim)]">{detail}</div></div>
       </div>
     </StatusCard>
   )
@@ -311,11 +360,13 @@ function AlarmStatusCard({ count, critical, warning }: { count: number; critical
   )
 }
 
-function DialStatusCard({ icon: Icon, label, value, detail }: { icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; label: string; value: number; detail: string }) {
+function DialStatusCard({ icon: Icon, label, value, detail }: { icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; label: string; value: number | null; detail: string }) {
   const { pick } = useI18n()
-  const color = metricStatusColor(value, 70, 90)
-  const fillColor = metricStatusFill(value, 70, 90)
-  const stateLabel = value >= 90 ? pick('Cao', 'High') : value >= 70 ? pick('Cảnh báo', 'Warning') : pick('Bình thường', 'Normal')
+  const color = value === null ? 'var(--c-text-dim)' : metricStatusColor(value, 70, 90)
+  const fillColor = value === null ? 'var(--c-off)' : metricStatusFill(value, 70, 90)
+  const stateLabel = value === null
+    ? pick('Không có dữ liệu', 'No data')
+    : value >= 90 ? pick('Cao', 'High') : value >= 70 ? pick('Cảnh báo', 'Warning') : pick('Bình thường', 'Normal')
   return (
     <StatusCard>
       <div className="flex items-center justify-between text-[11px] font-semibold uppercase text-[var(--c-text-dim)]"><span>{label}</span><Icon className="h-4 w-4" style={{ color }} /></div>
@@ -342,21 +393,21 @@ function TempStatusCard({ value }: { value?: number }) {
   )
 }
 
-function UptimeStatusCard({ value }: { value: number }) {
+function UptimeStatusCard({ value }: { value: number | null }) {
   const { pick } = useI18n()
-  const color = value > 0 ? 'var(--c-good-fg)' : 'var(--c-warn-fg)'
+  const color = value === null ? 'var(--c-text-dim)' : value > 0 ? 'var(--c-good-fg)' : 'var(--c-warn-fg)'
   return (
     <StatusCard>
       <div className="flex items-center justify-between text-[11px] font-semibold uppercase text-[var(--c-text-dim)]"><span>UPTIME</span><Clock3 className="h-4 w-4" style={{ color }} /></div>
-      <div className="mt-6 flex items-center gap-3"><Clock3 className="h-10 w-10" style={{ color }} /><div className="mono text-lg font-bold" style={{ color }}>{formatUptime(value)}</div></div>
-      <div className="mt-4 text-xs font-semibold" style={{ color }}>{pick('Hoạt động liên tục', 'Continuous operation')}</div>
+      <div className="mt-6 flex items-center gap-3"><Clock3 className="h-10 w-10" style={{ color }} /><div className="mono text-lg font-bold" style={{ color }}>{value === null ? EM_DASH : formatUptime(value)}</div></div>
+      <div className="mt-4 text-xs font-semibold" style={{ color }}>{value === null ? pick('Không có dữ liệu', 'No data') : pick('Hoạt động liên tục', 'Continuous operation')}</div>
     </StatusCard>
   )
 }
 
-function MiniDial({ value, fillColor, textColor }: { value: number; fillColor: string; textColor: string }) {
-  const pct = Math.max(0, Math.min(100, value))
-  return <div className="grid h-20 w-20 place-items-center rounded-full" style={{ background: `conic-gradient(${fillColor} ${pct * 3.6}deg, rgba(74,79,85,0.16) 0deg)` }}><div className="grid h-14 w-14 place-items-center rounded-full bg-[var(--c-surface)]"><span className="mono text-xl font-bold" style={{ color: textColor }}>{Math.round(value)}%</span></div></div>
+function MiniDial({ value, fillColor, textColor }: { value: number | null; fillColor: string; textColor: string }) {
+  const pct = value === null ? 0 : Math.max(0, Math.min(100, value))
+  return <div className="grid h-20 w-20 place-items-center rounded-full" style={{ background: `conic-gradient(${fillColor} ${pct * 3.6}deg, rgba(74,79,85,0.16) 0deg)` }}><div className="grid h-14 w-14 place-items-center rounded-full bg-[var(--c-surface)]"><span className="mono text-xl font-bold" style={{ color: textColor }}>{value === null ? EM_DASH : `${Math.round(value)}%`}</span></div></div>
 }
 
 function CommTile({ icon: Icon, title, value, status = 'unknown' }: { icon: React.ComponentType<{ className?: string }>; title: string; value?: string; status?: HealthStatus }) {
@@ -408,7 +459,7 @@ function RecentEvents({ rows }: { rows: Alarm[] }) {
 
 function SeverityPill({ alarm }: { alarm: Alarm }) {
   const label = alarm.severity === 'critical' ? 'CRITICAL' : alarm.severity === 'high' ? 'WARNING' : 'INFO'
-  const cls = label === 'CRITICAL' ? 'border-[rgba(213,32,42,0.52)] bg-[rgba(213,32,42,0.10)] text-[var(--c-fault-fg)]' : label === 'WARNING' ? 'border-[rgba(232,181,0,0.60)] bg-[rgba(232,181,0,0.18)] text-[var(--c-warn-fg)]' : 'border-[rgba(42,92,138,0.42)] bg-[rgba(42,92,138,0.10)] text-[var(--c-info)]'
+  const cls = label === 'CRITICAL' ? 'border-[var(--c-fault)] bg-[var(--c-fault-bg)] text-[var(--c-fault-fg)]' : label === 'WARNING' ? 'border-[var(--c-warn)] bg-[var(--c-warn-bg)] text-[var(--c-warn-fg)]' : 'border-[var(--c-accent)] bg-[var(--c-accent-bg)] text-[var(--c-info)]'
   return <span className={`w-fit rounded-[var(--radius)] border px-2 py-1 text-[10px] font-bold ${cls}`}>{label}</span>
 }
 

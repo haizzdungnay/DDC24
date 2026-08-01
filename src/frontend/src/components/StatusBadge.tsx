@@ -44,15 +44,27 @@ function Icon({ state }: { state: BadgeState }) {
   return <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
 }
 
+/**
+ * Nền của badge — WEB-UX-008.
+ *
+ * Trước đây là 7 chuỗi `rgba()` viết tay, mỗi chuỗi lặp lại giá trị RGB của một
+ * token màu. Hai hệ quả: (1) đổi token thì nền badge không đổi theo, nên bảng
+ * màu tự lệch khỏi chính nó; (2) vì là màu tối phủ alpha lên nền xám, nền badge
+ * TỐI ĐI, kéo tụt tương phản của đúng dòng chữ nằm trên nó — 13/14 biến thể
+ * trượt 4.5:1.
+ *
+ * Nay trỏ vào các token `--c-*-bg`, vốn là màu đặc pha về phía trắng. Nền luôn
+ * sáng hơn chữ, và một lần sửa token là mọi badge đổi theo.
+ */
 function badgeBackground(state: BadgeState): string {
   const raw = String(state).toLowerCase()
-  if (raw === 'demo') return 'rgba(42,92,138,0.10)'
-  if (raw === 'normal' || raw === 'ok' || raw === 'good' || raw === 'online' || raw === 'on' || raw === 'live' || raw === 'connected') return 'rgba(47,164,90,0.12)'
-  if (raw === 'off' || raw === 'stopped' || raw === 'inactive' || raw === 'unknown' || raw === 'n/a') return 'rgba(107,114,128,0.12)'
-  if (raw === 'warn' || raw === 'warning' || raw === 'uncertain' || raw === 'stale' || raw === 'degraded') return 'rgba(232,181,0,0.20)'
-  if (raw === 'fault' || raw === 'bad' || raw === 'offline' || raw === 'disconnected' || raw === 'alarm') return 'rgba(213,32,42,0.12)'
-  if (raw === 'critical' || raw === 'safety') return 'rgba(176,23,156,0.12)'
-  if (raw === 'force' || raw === 'forced') return 'rgba(138,79,191,0.12)'
+  if (raw === 'demo') return 'var(--c-accent-bg)'
+  if (raw === 'normal' || raw === 'ok' || raw === 'good' || raw === 'online' || raw === 'on' || raw === 'live' || raw === 'connected') return 'var(--c-good-bg)'
+  if (raw === 'off' || raw === 'stopped' || raw === 'inactive' || raw === 'unknown' || raw === 'n/a') return 'var(--c-off-bg)'
+  if (raw === 'warn' || raw === 'warning' || raw === 'uncertain' || raw === 'stale' || raw === 'degraded') return 'var(--c-warn-bg)'
+  if (raw === 'fault' || raw === 'bad' || raw === 'offline' || raw === 'disconnected' || raw === 'alarm') return 'var(--c-fault-bg)'
+  if (raw === 'critical' || raw === 'safety') return 'var(--c-critical-bg)'
+  if (raw === 'force' || raw === 'forced') return 'var(--c-force-bg)'
   return 'var(--c-surface)'
 }
 
