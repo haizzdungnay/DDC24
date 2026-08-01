@@ -7,6 +7,31 @@
 ---
 
 ## [Unreleased]
+### Added — Quy tắc dự án: chuẩn hoá quy trình khi user nói "commit"/"merge" (2026-08-01)
+
+Phạm vi: `CLAUDE.md`, `AGENTS.md` (giữ hai file đồng bộ như quy ước sẵn có).
+
+Ghi thành quy tắc một quy trình vốn phải nhắc lại bằng miệng mỗi lần: khi user chỉ
+nói ngắn gọn "commit" / "merge" / "commit đi" / "merge đi" thì chạy **trọn chuỗi**
+cho toàn bộ thay đổi trong cây làm việc, không hỏi lại từng bước — kiểm chứng bằng
+số đo thật → cập nhật CHANGELOG → **commit tách theo nhóm logic** → push → tạo PR →
+merge → xoá nhánh remote.
+
+Hai điểm được chốt vì đã từng gây sót:
+
+- **Commit phải tách nhóm và viết chi tiết**, thân bài tiếng Việt theo mạch *triệu
+  chứng → nguyên nhân gốc → cách sửa* kèm `Refs:` mã finding. Mục tiêu: lịch sử git
+  tự nó là hồ sơ truy xuất được cho audit/chứng nhận, không phải một commit to
+  không đọc được.
+- **Ba cái bẫy đo kiểm** được ghi thẳng vào rule: `ctest` phải bật đủ 3 option
+  (mặc định `MKDDC_ENABLE_HMI=OFF` nên gate HMI dễ bị bỏ sót — đúng finding F-14 của
+  review 2026-07-30); `go test` phải có `-count=1` vì kết quả cache che được hồi quy;
+  và `npm test` chỉ quét `src/` **không** chạy `e2e/` — đúng lý do bộ e2e mục dần mà
+  không ai biết (F-07).
+
+Kèm quy định xử lý khi một bước bị chặn: làm hết các bước không bị chặn rồi nói rõ
+bước còn lại và cần gì để mở khoá, thay vì dừng ngang khi chưa commit xong.
+
 ### Fixed — Đính chính số liệu độ phủ test `netcfg` trong báo cáo tình trạng, và chốt số đo kiểm chứng cuối của cả loạt (2026-08-01, đợt 5)
 
 Phạm vi: `docs/07_records/reviews/KX-DDC24-SETTINGS-NETWORK-IMPLEMENTATION-STATUS-2026-07-31.md`
