@@ -162,14 +162,130 @@ Cố ý **rollback** chứ không confirm: confirm sẽ chốt một thay đổi
 trước có thể đã bỏ dở, tức script tự ý đổi cấu hình mạng theo một ý định không
 ai xác nhận.
 
+## 4bis. Nhóm mutation + RBAC trên board — 21 PASS / 3 FAIL
+
+Chạy `MUTATE=1 PROVISION_ACCOUNTS=1`, đổi địa chỉ IPv4 **thật** trên `end1`.
+Điều kiện an toàn §1 của evidence 31/07 được script tự kiểm trước mỗi lần chạy.
+
+### 4bis.1. UC-WEB-NET-005 — bản vá F-14 chạy đúng trên phần cứng thật
+
+```
+PASS  interface đã THÊM địa chỉ mới 192.168.1.113
+PASS  vẫn GIỮ địa chỉ cũ 192.168.1.102 trong cửa sổ chờ xác nhận
+PASS  confirm chốt giao dịch
+PASS  địa chỉ 192.168.1.113 còn nguyên sau confirm (F-14)
+PASS  địa chỉ cũ 192.168.1.102 đã được gỡ sau confirm
+PASS  authority báo active.ipv4=192.168.1.113
+```
+
+Đây là lần đầu F-14 được chứng minh **đầu-cuối trên board**: sự cố 31/07 là
+"đổi 192.168.50.150 → .161 rồi Confirm, interface mất SẠCH địa chỉ IPv4". Nay
+`apply` giữ cả hai địa chỉ trong cửa sổ 120 s (đường quản trị không đứt), và
+`confirm` gỡ đúng địa chỉ cũ, giữ đúng địa chỉ mới.
+
+### 4bis.2. Ba FAIL — cả ba là finding thật
+
+**N-01 — `mkddc-web` báo 503 cho một thao tác ĐÃ THÀNH CÔNG.**
+
+```
+FAIL  UC-WEB-NET-006 rollback — {"code":503,"error":"network configuration service unavailable"}
+PASS  UC-WEB-NET-006 rollback trả kernel về địa chỉ cũ 192.168.1.113
+```
+
+Hai dòng này mâu thuẫn nhau, và đó chính là finding. Log authority cùng thời điểm:
+
+```
+action=rollback result=accepted reason_code=EXPLICIT_ROLLBACK state=rolled_back
+```
+
+Nguyên nhân gốc: `web/backend/netcfg_client.go:232` đặt deadline **4 giây** cho
+cả một request tới authority. Đo trên board: `stage` mất 2,9 s, `apply` 0,5 s,
+còn `rollback` phát ngay sau `apply` vượt 4 s. `mkddc-web` bỏ cuộc và trả
+`errNetcfgUnavailable` → HTTP 503, trong khi `mkddc-netcfg` vẫn chạy tiếp và
+hoàn tất rollback bình thường.
+
+Hậu quả trên trang Mạng: người vận hành bấm "Hoàn tác ngay" và nhận thông báo
+"dịch vụ cấu hình mạng không khả dụng", dù việc hoàn tác đang diễn ra và sẽ
+thành công. Họ sẽ bấm lại, hoặc kết luận authority chết.
+
+Đây là mặt trái của đúng loại lỗi mà plan 45 vừa dọn khỏi UI: thay vì **báo
+thành công cho việc thất bại**, chỗ này **báo thất bại cho việc thành công**. Cả
+hai đều là nói dối người vận hành. Tái hiện được 2/3 lần chạy mutation.
+
+**N-02 — board có 2 profile NetworkManager trùng tên `end1`.**
+
+```
+end1  eced7d31-…  ACTIVE=yes  /etc/NetworkManager/system-connections/end1.nmconnection
+end1  4ece069b-…  ACTIVE=no   /etc/NetworkManager/system-connections/end1-4ece069b-….nmconnection
+```
+
+Đúng điều kiện gây lỗi §7.1 của evidence 31/07. `mkddc-netcfg` đã được vá để tra
+theo UUID nên nó vẫn chạy đúng — `configured` đọc được, mọi kịch bản khác PASS.
+Nhưng điều kiện rủi ro đang hiện diện trên board.
+
+`netcfg` **không** tạo profile NetworkManager (grep toàn bộ source: hai chỗ dùng
+`"add"` đều là `ip address add`), nên profile thứ hai đến từ thao tác tay bên
+ngoài. Đây là **vệ sinh cấu hình board**, không phải lỗi sản phẩm — nhưng phải
+dọn, và quy trình bringup nên có bước kiểm.
+
+Bài học kèm theo: chính hàm kiểm này ở bản đầu cũng tra theo TÊN và đọc ra
+`"no\n\nno"`. Cùng cái bẫy mà sản phẩm đã vá, công cụ kiểm thử mắc lại.
+
+**N-03 — địa chỉ đã `confirmed` không sống sót qua reboot.**
+
+Profile đang active có `connection.autoconnect: no`. Chuỗi lập luận:
+
+1. `apply()` đặt địa chỉ bằng `ip address add` — chỉ tồn tại trong runtime, mất
+   sau reboot.
+2. `persist()` ghi cấu hình vào profile bằng `nmcli connection modify` nhưng
+   **không bao giờ đặt `connection.autoconnect yes`** (không có chuỗi
+   `autoconnect` nào trong toàn bộ `services/netcfg/`).
+3. Với `autoconnect: no`, NetworkManager không kích hoạt profile lúc khởi động.
+4. `mkddc-netcfg` lúc khởi động chỉ mở socket (`netcfg.listen`), không đối chiếu
+   lại kernel với giao dịch đã `confirmed`.
+
+Hậu quả: mất điện bật lại → DDC lên mà cổng trường không có IP, trong khi
+authority vẫn báo `state=confirmed`. Một chuyến xe ra hiện trường.
+
+Trạng thái quan sát được lúc bắt đầu phiên đúng như dự đoán của chuỗi trên:
+journal ghi `confirmed` với `192.168.1.102`, profile lưu đúng địa chỉ đó, mà
+`end1` **không có địa chỉ IPv4 nào**.
+
+**Chưa kiểm bằng reboot thật.** Lập luận dựa trên đọc source + đọc cấu hình
+NetworkManager, không phải quan sát một lần khởi động lại. Muốn chốt thì phải
+reboot board — chưa làm vì đó là thao tác có rủi ro mất truy cập từ xa.
+
+### 4bis.3. Ba lỗi của chính script, phát hiện nhờ chạy thật
+
+Ngoài hai lỗi hợp đồng ở §4.1, ba lỗi nữa lộ ra ở nhóm mutation:
+
+| Lỗi | Vì sao sai |
+|---|---|
+| Khẳng định `active.ipv4 == want` NGAY sau `apply` | Sai hợp đồng: `apply` cố ý GIỮ địa chỉ cũ và THÊM địa chỉ mới; `active.ipv4` chỉ trả một giá trị nên vẫn là địa chỉ cũ. Đo được: apply trả về sau 0,5 s và interface mang đồng thời `.113` + `.151`. |
+| `>/dev/null` cho phản hồi của lệnh mutation | Khi confirm/rollback hỏng, script chỉ thấy state đứng yên và chẩn đoán sai thành "mất địa chỉ". Chính `>/dev/null` che mất HTTP 503 của N-01 suốt hai lần chạy đầu. |
+| Tra `connection.autoconnect` theo TÊN profile | Xem N-02. |
+
+Đã sửa cả ba. Kết quả sau khi sửa: **21 PASS / 3 FAIL**, ba FAIL còn lại đều là
+finding thật chứ không phải nhiễu của công cụ.
+
+### 4bis.4. Trạng thái board sau khi chạy
+
+Đã trả `end1` về `192.168.1.102/24` — đúng ý định ghi trong journal trước khi
+bắt đầu — qua chính API `stage/apply/confirm`, để journal không lệch với kernel.
+Default route trả lại cho `wlan0`. Tài khoản tạm `e2e-viewer` đã bị xoá.
+
+Ghi chú vận hành: trong lúc chạy, `end1` nhận địa chỉ cùng subnet với đường quản
+trị **kèm gateway**, nên nó giành default route (metric 100 < wlan0 600) và làm
+guard an toàn của script chặn lần chạy kế tiếp. Cổng trường không nên mang
+default route; hoặc phải nằm khác subnet với đường quản trị.
+
 ## 5. Khoảng trống còn lại — ghi rõ để không ai đọc nhầm
 
-- **UC-WEB-NET-003 (RBAC) chưa chạy** vì chưa có mật khẩu tài khoản `view1`.
-  Script **bỏ qua và ghi rõ là bỏ qua**, không báo PASS giả.
-- **Nhóm mutation (UC-005/006/007/008) chưa chạy** trên bản này. Chạy chúng đòi
-  `MUTATE=1` và điều kiện an toàn ở §1 của evidence 31/07: đường quản trị phải
-  đi lối khác interface bị đổi địa chỉ. Hiện đường quản trị đi qua `wlan0` còn
-  `NETCFG_INTERFACE=end1` nên điều kiện đó thoả — nhưng chưa thực hiện.
+- **UC-WEB-NET-007 (chỉ đổi DNS) và UC-WEB-NET-008 (DHCP) chưa chạy.** UC-008 là
+  kịch bản đã gây ra sự cố trạng thái sót hôm 31/07; trên LAN này một lease DHCP
+  sẽ đổi địa chỉ `end1` theo cách không đoán trước, nên tạm để ngoài. Cơ chế dọn
+  trạng thái nay đã được chứng minh nên có thể thêm hai kịch bản này sau.
+- **N-03 chưa được chốt bằng một lần reboot thật** — xem §4bis.2.
 - **Chưa kiểm bằng trình duyệt thật trên board.** Plan §8.3 đòi kiểm
   `WEB-UX-004`, `WEB-UX-005` và `WEB-UX-009` trong trình duyệt chứ không chỉ
   jsdom. Phần đã chứng minh trên board là backend + bundle đã cắt đúng
