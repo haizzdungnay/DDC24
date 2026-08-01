@@ -13,5 +13,11 @@ Tài liệu thiết kế giao diện người dùng theo ISA-101 HMI standard (A
 | [KX-DDC24-UC-HMI-001](KX-DDC24-UC-HMI-001_VI.md) | Five-surface limited-operator HMI use cases |
 | [KX-DDC24-UX-HMI-001](KX-DDC24-UX-HMI-001_VI.md) | UX design HMI local 320×240 |
 | [KX-DDC24-UX-SYSTEM-001](KX-DDC24-UX-SYSTEM-001_VI.md) | UX system-wide (form/JSON config) |
+| [KX-DDC24-UC-WEB-NETWORK-001](KX-DDC24-UC-WEB-NETWORK-001_VI.md) | Use case Web — Cài đặt → Mạng (10 UC + ma trận truy vết) |
+| [KX-DDC24-UX-WEB-NETWORK-001](KX-DDC24-UX-WEB-NETWORK-001_VI.md) | UI/UX spec + wireframe Web — Cài đặt → Mạng |
+
+> **Ghi chú 2026-07-31:** hai tài liệu Web ở trên được lập để đóng finding G-01/G-02
+> (trước đó kho chỉ có use case và wireframe cho HMI, **không có gì cho Web**, trong
+> khi `settings/network` là trang cấu hình rủi ro nhất của sản phẩm).
 
 **Quyết định:** ADR-016 trong [Decision Log](../00_governance/DECISIONS.md) · [ADR-009](../adr/ADR-009-isa101-hmi-and-nav-restructure.md) · [ADR-006](../adr/ADR-006-rev-a-ui-form-json.md)

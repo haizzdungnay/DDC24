@@ -1,6 +1,14 @@
-# ADR-017: Settings/Network tabs và contract trạng thái mạng
+# ADR-017: Settings/Network — contract trạng thái mạng
 
-> **Trạng thái:** Accepted | **Phiên bản:** 1.1 | **Ngày duyệt:** 2026-07-22 | **Cập nhật contract:** 2026-07-28 | **Owner:** Product Owner + SW Lead
+> **Trạng thái:** Accepted | **Phiên bản:** 1.2 | **Ngày duyệt:** 2026-07-22 | **Cập nhật contract:** 2026-07-31 | **Owner:** Product Owner + SW Lead
+
+> **Ghi chú sửa tiêu đề (2026-07-31, finding G-04):** tiêu đề cũ là
+> "Settings/Network **tabs** và contract trạng thái mạng", nhưng từ "tabs" chỉ xuất
+> hiện đúng một lần ở chính dòng tiêu đề — thân ADR không định nghĩa tab nào, và
+> hiện thực cũng không có tab (trang là một luồng cuộn với các panel). Bỏ chữ
+> "tabs" để tiêu đề khớp nội dung. Quyết định §2.9 vẫn giữ nguyên yêu cầu **hiển
+> thị tách bạch** ACTIVE/KERNEL · CONFIGURED · PENDING · EDITABLE DRAFT — đó là
+> yêu cầu về phân tách thông tin, không phải về widget tab.
 
 ## 1. Bối cảnh
 
@@ -19,6 +27,29 @@ chỉ mà không restart toàn bộ `mkddc-iobus`.
 1. `mkddc-netcfg` là authority duy nhất cho Ethernet IPv4 và DNS của profile
    NetworkManager. Helper chạy độc lập dưới systemd, dùng IPC local JSON v1 qua
    `/run/mkddc-netcfg/netcfg.sock`; Web và HMI không sửa trực tiếp trạng thái Linux.
+
+   **Ranh giới interface (bắt buộc, bổ sung 2026-07-31):** authority chỉ quản lý
+   **đúng một** interface Ethernet, khai báo bằng `NETCFG_INTERFACE` trong
+   `/etc/mkddc/netcfg.conf` (mặc định `end1`) và thực thi bằng allowlist trong
+   helper — request nhắm tới interface khác bị từ chối bằng `INTERFACE_NOT_ALLOWED`.
+
+   Cụ thể **KHÔNG thuộc phạm vi và không được authority chạm tới**:
+   - `wlan0` và mọi interface Wi-Fi. Wi-Fi là **đường quản trị dự phòng** để truy
+     cập DDC khi Ethernet đang được cấu hình lại hoặc mất liên lạc; nếu authority
+     đụng vào nó thì một lần đổi IP hỏng sẽ cắt luôn cả hai đường và bắt buộc phải
+     cử người tới hiện trường. Bật/tắt Wi-Fi ở `network.conf.wifi` là cấu hình
+     **dịch vụ**, không phải mutation mạng, và đi qua `PUT /api/v1/network`.
+   - `lo`, bridge, VLAN, bond, tunnel và mọi interface ảo.
+   - Route tĩnh, firewall, VLAN tagging.
+
+   Hệ quả vận hành: mọi quy trình đổi địa chỉ Ethernet phải giả định người vận hành
+   có thể đang truy cập qua Wi-Fi, và đường Wi-Fi đó phải còn nguyên trong suốt và
+   sau giao dịch.
+
+   **Mặc định nhà máy:** `network.conf.eth.mode = "dhcp"` (xem
+   [CONFIG_SCHEMA §2](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md)). Thiết
+   bị xuất xưởng nhận địa chỉ từ DHCP; chuyển sang IPv4 tĩnh là thao tác commissioning
+   có chủ đích, thực hiện qua transaction ở §2.5.
 2. Protocol v1 là strict, bounded và capability-discovered:
    - frame tối đa 8192 byte, line-delimited JSON, `version=1`, `requestId` tối đa 64 ký tự;
    - từ chối unknown field ở request, candidate và object `dns`, unknown action/version,
