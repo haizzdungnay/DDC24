@@ -95,14 +95,23 @@ transaction_state() {
 # board theo một ý định không ai xác nhận.
 # ─────────────────────────────────────────────────────────────────────────────
 reset_transaction() {
-  local state deadline
+  local state deadline txid
   state=$(transaction_state)
   case "$state" in
     idle|confirmed|rolled_back|failed|unreadable) return 0 ;;
   esac
 
-  log "dọn giao dịch netcfg đang ở '$state' → rollback"
-  api POST /network/transaction/rollback '{"version":1,"requestId":"qa-cleanup"}' >/dev/null 2>&1
+  # Hợp đồng body là `{transactionId?, candidate?}` và decoder ở backend bật
+  # `DisallowUnknownFields`, nên mọi field thừa làm cả request thành 400
+  # "invalid json". `rollback` bắt buộc có `transactionId` khớp
+  # ^[A-Za-z0-9_.:-]{1,64}$ và CẤM `candidate`.
+  txid=$(api GET /network/transaction | jq -r '.transactionId // ""')
+  if [ -z "$txid" ]; then
+    log "giao dịch ở '$state' nhưng không đọc được transactionId — không rollback mù"
+    return 0
+  fi
+  log "dọn giao dịch netcfg đang ở '$state' (tx=$txid) → rollback"
+  api POST /network/transaction/rollback "{\"transactionId\":\"$txid\"}" >/dev/null 2>&1
 
   deadline=$(( $(date +%s) + 150 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
@@ -177,7 +186,7 @@ uc_003_rbac() { # viewer đọc được, ghi thì 403
   fi
   local get_code stage_code put_code
   get_code=$(api_status GET /network/transaction '' "$VIEWER_TOKEN")
-  stage_code=$(api_status POST /network/transaction/stage '{"version":1,"requestId":"qa-rbac"}' "$VIEWER_TOKEN")
+  stage_code=$(api_status POST /network/transaction/stage "{\"candidate\":{\"interface\":\"$IFACE\",\"mode\":\"dhcp\"}}" "$VIEWER_TOKEN")
   put_code=$(api_status PUT /network '{}' "$VIEWER_TOKEN")
   [ "$get_code" = "200" ] && ok "$1 viewer GET=200" || bad "$1 viewer GET" "code=$get_code"
   [ "$stage_code" = "403" ] && ok "$1 viewer stage=403" || bad "$1 viewer stage" "code=$stage_code"
@@ -191,15 +200,24 @@ uc_004_validate_rejects_bad_candidates() {
     '{"interface":"IFACE","mode":"static","netmask":"255.255.255.0"}'
     '{"interface":"IFACE","mode":"dhcp","ipv4":"192.168.77.10"}'
   )
-  local i=0 candidate result
+  local i=0 candidate code body result
   for raw in "${bad_candidates[@]}"; do
     i=$((i+1))
     candidate=${raw//IFACE/$IFACE}
-    result=$(api POST /network/transaction/validate "{\"version\":1,\"requestId\":\"qa-val-$i\",\"candidate\":$candidate}" \
-             | jq -r '.result // "unreadable"')
+    body="{\"candidate\":$candidate}"
+    # Candidate sai bị chặn ở MỘT TRONG HAI tầng, và cả hai đều là "bị chặn":
+    #   - schema/semantic ở `mkddc-web` → HTTP 400 kèm danh sách lỗi field;
+    #   - luật của authority (`mkddc-netcfg`) → HTTP 200 với `result: rejected`.
+    # Chỉ chấp nhận một trong hai sẽ báo fail giả cho tầng còn lại.
+    code=$(api_status POST /network/transaction/validate "$body")
+    if [ "$code" = "400" ] || [ "$code" = "422" ]; then
+      ok "$1 candidate #$i bị chặn ở tầng schema (HTTP $code)"
+      continue
+    fi
+    result=$(api POST /network/transaction/validate "$body" | jq -r '.result // "unreadable"')
     [ "$result" = "rejected" ] \
-      && ok "$1 candidate #$i bị chặn" \
-      || bad "$1 candidate #$i" "authority trả result=$result cho candidate không hợp lệ"
+      && ok "$1 candidate #$i bị authority từ chối" \
+      || bad "$1 candidate #$i" "HTTP $code, result=$result — candidate không hợp lệ mà không bị chặn"
   done
 }
 
@@ -223,15 +241,18 @@ PY
   netmask=$(api GET /network/transaction | jq -r '.configured.netmask // "255.255.255.0"')
 
   staged=$(api POST /network/transaction/stage \
-    "{\"version\":1,\"requestId\":\"qa-006-stage\",\"candidate\":{\"interface\":\"$IFACE\",\"mode\":\"static\",\"ipv4\":\"$candidate\",\"netmask\":\"$netmask\",\"gateway\":\"$gw\"}}")
+    "{\"candidate\":{\"interface\":\"$IFACE\",\"mode\":\"static\",\"ipv4\":\"$candidate\",\"netmask\":\"$netmask\",\"gateway\":\"$gw\"}}")
   if [ "$(jq -r '.result' <<<"$staged")" != "accepted" ]; then
     bad "$1 stage" "$(jq -r '.reasonCode // "?"' <<<"$staged") — $staged"
     return
   fi
   ok "$1 stage được chấp nhận"
 
-  api POST /network/transaction/apply '{"version":1,"requestId":"qa-006-apply"}' >/dev/null
-  api POST /network/transaction/rollback '{"version":1,"requestId":"qa-006-rollback"}' >/dev/null
+  local txid
+  txid=$(jq -r '.transactionId // ""' <<<"$staged")
+  [ -n "$txid" ] || { bad "$1 apply" "stage không trả transactionId"; return; }
+  api POST /network/transaction/apply "{\"transactionId\":\"$txid\"}" >/dev/null
+  api POST /network/transaction/rollback "{\"transactionId\":\"$txid\"}" >/dev/null
   sleep 5
   after=$(api GET /network/transaction | jq -r '.active.ipv4 // ""')
 
