@@ -380,9 +380,12 @@ export interface ScheduleRow {
   value: number
 }
 
-export type LinkState = 'online' | 'offline'
+// 'unknown' KHÔNG phải giá trị trang trí: backend trả về đúng giá trị này khi
+// iobus chưa publish số đo thật. Suy nó thành online/offline chính là finding
+// F-03/F-04 mà bản 2026-07-31 đã sửa.
+export type LinkState = 'online' | 'offline' | 'unknown'
 export type ModbusProfile = 'EXT I/O' | 'Remote HMI' | 'Meter' | 'VFD'
-export type PollState = 'online' | 'offline' | 'degraded'
+export type PollState = 'online' | 'offline' | 'degraded' | 'unknown'
 
 export interface NetworkConfig {
   deviceName: string
@@ -395,6 +398,12 @@ export interface NetworkConfig {
   bacnetDeviceName: string
   bacnetPort: number
   bmsLink: LinkState
+  /** Cổng UDP BACnet đang bind THẬT; null khi authority chưa báo. */
+  activeBacnetPort: number | null
+  /** Phiên bản phần mềm đang chạy thật (F-10). */
+  firmware: string
+  /** Serial phần cứng; chuỗi rỗng = thiết bị chưa được nạp serial (F-10). */
+  serial: string
 }
 
 export interface ModbusSlave {
@@ -403,8 +412,15 @@ export interface ModbusSlave {
   profile: ModbusProfile
   baudRate: number
   pollState: PollState
-  errorRate: number
-  lastPollMs: number
+  /**
+   * Số đo THẬT per-slave do iobus đếm (F-03). `null` = chưa có số đo và giao
+   * diện phải hiển thị "—", tuyệt đối không hiển thị 0 — trước đây errorRate bị
+   * gán cứng 0 nên thanh lỗi luôn rỗng dù bus đang hỏng.
+   */
+  errorRate: number | null
+  lastPollMs: number | null
+  totalPolls: number | null
+  totalErrors: number | null
 }
 
 export interface NetworkData {

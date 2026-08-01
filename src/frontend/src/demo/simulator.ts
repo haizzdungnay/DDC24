@@ -408,14 +408,17 @@ export function getDemoNetwork(): NetworkData {
       bacnetDeviceId: DEVICE_DEFAULTS.bacnetDeviceId,
       bacnetDeviceName: DEVICE_DEFAULTS.name,
       bacnetPort: 47808,
-      bmsLink: 'online'
+      bmsLink: 'online',
+      activeBacnetPort: 47808,
+      firmware: DEVICE_DEFAULTS.firmware,
+      serial: DEVICE_DEFAULTS.serial
     },
     southbound: [
-      { address: 1, name: 'KINEXUS-EXT-IO-01', profile: 'EXT I/O', baudRate: 38400, pollState: 'online', errorRate: 0.2, lastPollMs: 18 },
-      { address: 5, name: 'REMOTE-HMI-Lobby', profile: 'Remote HMI', baudRate: 38400, pollState: 'online', errorRate: 0.5, lastPollMs: 24 },
-      { address: 12, name: 'PM-212 Energy Meter', profile: 'Meter', baudRate: 9600, pollState: 'degraded', errorRate: 3.8, lastPollMs: 75 },
-      { address: 21, name: 'VFD-SupplyFan-01', profile: 'VFD', baudRate: 19200, pollState: 'online', errorRate: 0.9, lastPollMs: 31 },
-      { address: 34, name: 'VFD-Exhaust-Standby', profile: 'VFD', baudRate: 19200, pollState: 'offline', errorRate: 100, lastPollMs: 0 }
+      { address: 1, name: 'KINEXUS-EXT-IO-01', profile: 'EXT I/O', baudRate: 38400, pollState: 'online', errorRate: 0.2, lastPollMs: 18, totalPolls: 5000, totalErrors: 10 },
+      { address: 5, name: 'REMOTE-HMI-Lobby', profile: 'Remote HMI', baudRate: 38400, pollState: 'online', errorRate: 0.5, lastPollMs: 24, totalPolls: 5000, totalErrors: 25 },
+      { address: 12, name: 'PM-212 Energy Meter', profile: 'Meter', baudRate: 9600, pollState: 'degraded', errorRate: 3.8, lastPollMs: 75, totalPolls: 5000, totalErrors: 190 },
+      { address: 21, name: 'VFD-SupplyFan-01', profile: 'VFD', baudRate: 19200, pollState: 'online', errorRate: 0.9, lastPollMs: 31, totalPolls: 5000, totalErrors: 45 },
+      { address: 34, name: 'VFD-Exhaust-Standby', profile: 'VFD', baudRate: 19200, pollState: 'offline', errorRate: 100, lastPollMs: null, totalPolls: 5000, totalErrors: 5000 }
     ]
   }
 }

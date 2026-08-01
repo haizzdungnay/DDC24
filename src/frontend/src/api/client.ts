@@ -107,7 +107,18 @@ function runDemoNetworkTransaction(action: NetcfgTransactionAction, payload: Net
   return demoNetcfgResponse ?? previous
 }
 
-type ApiRequestInit = RequestInit & { suppressAuthExpired?: boolean }
+type ApiRequestInit = RequestInit & { suppressAuthExpired?: boolean; timeoutMs?: number }
+
+/**
+ * Trần thời gian mặc định cho một request.
+ *
+ * Vì sao bắt buộc: `fetch` KHÔNG tự hết giờ. Trên trang mạng, ngay sau khi đổi địa
+ * chỉ IP thì kết nối tới địa chỉ cũ có thể treo — không phản hồi mà cũng không báo
+ * lỗi. Khi đó nút "Giữ thay đổi" quay vô hạn, nút "Hoàn tác ngay" bị khoá theo, và
+ * người vận hành không còn đường nào ngoài ngồi chờ auto-rollback. Hết giờ sớm và
+ * báo lỗi rõ ràng thì họ còn bấm lại được.
+ */
+const defaultRequestTimeoutMs = 15_000
 type PointConfigPatch = { name?: string; unit?: string; trendEnabled?: boolean }
 type AlarmDurationChoice = { permanent: boolean; durationS?: number }
 const scheduleTypes: ScheduleType[] = ['not_active', 'controller_operation_mode', 'control_loop_setpoint', 'analog_output_value', 'fan_state_value', 'digital_output_value', 'holiday_period']
@@ -176,12 +187,33 @@ function putDemoHistorianConfig(update: HistorianConfigUpdate): HistorianConfig 
 }
 
 export async function requestJson<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
-  const { suppressAuthExpired, ...fetchInit } = init
+  const { suppressAuthExpired, timeoutMs, ...fetchInit } = init
   const headers = new Headers(fetchInit.headers)
   for (const [key, value] of Object.entries(authHeaderProvider())) headers.set(key, value)
   if (fetchInit.body && !headers.has('content-type')) headers.set('content-type', 'application/json')
 
-  const response = await fetch(`${base}${path}`, { ...fetchInit, headers, credentials: 'include' })
+  const limitMs = timeoutMs ?? defaultRequestTimeoutMs
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), limitMs)
+  // Giữ nguyên signal của caller: huỷ từ caller vẫn phải huỷ được request.
+  if (fetchInit.signal) {
+    if (fetchInit.signal.aborted) controller.abort()
+    else fetchInit.signal.addEventListener('abort', () => controller.abort(), { once: true })
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`${base}${path}`, { ...fetchInit, headers, credentials: 'include', signal: controller.signal })
+  } catch (err) {
+    // Phân biệt "hết giờ" với lỗi mạng khác: người dùng cần biết thiết bị không trả
+    // lời chứ không phải trình duyệt gặp lỗi lạ.
+    if (err instanceof DOMException && err.name === 'AbortError' && !fetchInit.signal?.aborted) {
+      throw new ApiError(`Thiết bị không phản hồi sau ${Math.round(limitMs / 1000)} giây`, 0, [])
+    }
+    throw err
+  } finally {
+    window.clearTimeout(timer)
+  }
   if (!suppressAuthExpired && response.status === 401) {
     window.dispatchEvent(new CustomEvent('mkddc:auth-expired'))
   }
@@ -926,7 +958,9 @@ export const apiClient = {
 
   async saveNetwork(data: NetworkData): Promise<ConfigPutResult> {
     if (IS_DEMO) return { result: 'success', applied: true, reload: 'none', warnings: [] }
-    return requestJson<ConfigPutResult>('/network', { method: 'PUT', body: JSON.stringify(data) })
+    // Đường này khởi động lại dịch vụ field bus qua reload helper nên chậm hơn
+    // hẳn một request thường; 15 s mặc định là quá ngắn.
+    return requestJson<ConfigPutResult>('/network', { method: 'PUT', body: JSON.stringify(data), timeoutMs: 120_000 })
   },
 
   async getHistory(pointIds: string[], range: string): Promise<TrendSample[]> {

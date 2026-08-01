@@ -49,11 +49,15 @@ describe('shell user navigation', () => {
     expect(screen.queryByRole('link', { name: 'Programming' })).not.toBeInTheDocument()
   })
 
-  it('does not expose Network configuration to non-admin roles', () => {
+  // F-06: ADR-017 §2.7 cho viewer|operator ĐỌC trạng thái network authority, và
+  // backend đã cấp quyền đó cho GET từ trước. Ẩn hẳn mục này khiến cả quyền
+  // read-only ở backend lẫn nhánh chỉ-đọc trong NetworkPage thành mã chết.
+  // Mutation vẫn Admin-only ở cả hai phía nên vẫn an toàn.
+  it('exposes read-only Network status to non-admin roles', () => {
     authMocks.role = 'operator'
     renderNavigation(<NavRail alarmCount={0} device={null} />)
 
-    expect(screen.queryByRole('link', { name: 'Network' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Network' })).toHaveAttribute('href', '/settings/network')
   })
 
   it('shows Model and Firmware in two columns without Serial', () => {
