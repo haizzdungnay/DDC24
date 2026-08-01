@@ -13,7 +13,7 @@ import { AlarmHistoryPage, AlarmsPage } from './pages/AlarmsPage'
 import { CommissioningPage } from './pages/CommissioningPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DisplaySettingsPage } from './pages/DisplaySettingsPage'
-import { LoginPage } from './pages/LoginPage'
+import { LoginPage, safeReturnPath } from './pages/LoginPage'
 import { MonitorPage } from './pages/MonitorPage'
 import { NetworkPage } from './pages/NetworkPage'
 import { ProgrammingPage } from './pages/ProgrammingPage'
@@ -55,12 +55,35 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   return session?.role === 'admin' ? children : <Navigate to="/" replace />
 }
 
-export function App() {
+/**
+ * Route `/login`.
+ *
+ * Trước đây viết thẳng là
+ * `isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />`, và nó nuốt
+ * mất deep link: khi `login()` thành công, `setSession` làm route này render
+ * lại với `isAuthenticated = true`, và `<Navigate to="/">` chạy đua với lệnh
+ * `navigate(returnTo)` bên trong `LoginPage`. Trên trình duyệt thật ở board,
+ * `<Navigate to="/">` thắng — mở `/settings/users` khi chưa đăng nhập, đăng
+ * nhập xong lại rơi về Dashboard.
+ *
+ * Nghĩa là `safeReturnPath` và `state.from` của `ProtectedShell` — vốn thêm vào
+ * ngày 2026-07-31 đúng để giữ deep link — không có tác dụng ở đường này. Lỗi chỉ
+ * lộ ra khi chạy trình duyệt thật; test jsdom có timing khác nên không bắt được.
+ *
+ * Nay cả hai nhánh cùng đọc một nguồn: `state.from`.
+ */
+export function LoginRoute() {
   const { isAuthenticated } = useAuth()
+  const location = useLocation()
+  if (!isAuthenticated) return <LoginPage />
+  return <Navigate to={safeReturnPath((location.state as { from?: unknown } | null)?.from)} replace />
+}
+
+export function App() {
   const { pick } = useI18n()
   return (
     <Routes>
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/login" element={<LoginRoute />} />
       <Route element={<ProtectedShell />}>
         <Route index element={<DashboardPage />} />
         <Route path="monitor" element={<MonitorPage />} />

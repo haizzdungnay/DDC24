@@ -18,7 +18,7 @@ import { Button } from '../components/Button'
  * `//evil.example` hay `https://…` sẽ bị trình duyệt hiểu là host khác, biến
  * `state` do người khác dựng thành một open redirect.
  */
-function safeReturnPath(from: unknown): string {
+export function safeReturnPath(from: unknown): string {
   if (typeof from !== 'string') return '/'
   if (!from.startsWith('/') || from.startsWith('//')) return '/'
   if (from === '/login') return '/'

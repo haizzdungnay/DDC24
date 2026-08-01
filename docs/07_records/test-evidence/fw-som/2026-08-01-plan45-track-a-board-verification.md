@@ -279,6 +279,70 @@ trị **kèm gateway**, nên nó giành default route (metric 100 < wlan0 600) v
 guard an toàn của script chặn lần chạy kế tiếp. Cổng trường không nên mang
 default route; hoặc phải nằm khác subnet với đường quản trị.
 
+## 4ter. Kiểm bằng trình duyệt THẬT trên board (plan §8.3) — 8/8 PASS
+
+`src/frontend/e2e-board/board-ux.spec.ts` chạy Chromium thật, `baseURL` trỏ vào
+`mkddc-web` trên board qua SSH tunnel (`ssh -L 18081:127.0.0.1:8081`). **Không
+mock gì cả**: `dist/` đã cắt, JWT thật, RBAC thật.
+
+Vì sao phải làm riêng thay vì tin test jsdom: test jsdom chạy với `apiClient` bị
+mock, nên chúng chứng minh component xử lý đúng **dữ liệu mà chính test đưa
+vào** — không chứng minh bundle đã cắt nói chuyện đúng với backend thật, JWT
+thật mang đúng vai trò, hay backend thật chặn đúng.
+
+| Kiểm | Kết quả |
+|---|---|
+| `WEB-UX-009` admin + viewer đăng nhập được, `GET /me` trả đúng `role` | PASS |
+| `WEB-UX-005` viewer mở `/settings/users` → URL GIỮ NGUYÊN, hiện trang "Không đủ quyền", menu không bày Users/Device, vẫn còn Giám sát | PASS |
+| `WEB-UX-004` không nhập giá trị → không có hộp thoại; có giá trị → hộp thoại nêu đích danh AO-01 + 37% + hậu quả; **Huỷ → 0 lệnh ghi**; Xác nhận → `POST /commissioning/points/AO-01/test` với `{value:37}` đi thật | PASS |
+| `WEB-UX-001` Dashboard hiện MAC thật từ API, `—` cho ô chưa cấu hình, không còn MAC/giờ gán cứng | PASS |
+| `WEB-UX-012` đổi theme, giữ sau reload, token ghi thật lên `:root` | PASS |
+| `WEB-UX-010` viewport 390×844 → hamburger + drawer + Escape đóng | PASS |
+| `WEB-UX-011` bảng người dùng là tài khoản thật, không còn tên trong `getDemoUsers()` | PASS |
+| Phiên không sống sót qua reload — ghi nhận hành vi | PASS |
+
+Ảnh chụp màn hình: `src/frontend/board-evidence/01..07-*.png`.
+
+### 4ter.1. Bug tìm được nhờ chạy trình duyệt thật: deep link bị nuốt sau đăng nhập
+
+Triệu chứng: mở `/settings/users` khi chưa đăng nhập → bị đẩy về `/login` (đúng)
+→ đăng nhập → **rơi về Dashboard** thay vì `/settings/users`.
+
+Nguyên nhân gốc: route `/login` viết là
+
+```tsx
+<Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+```
+
+Khi `login()` thành công, `setSession` làm chính route này render lại với
+`isAuthenticated = true`, và `<Navigate to="/">` chạy đua với lệnh
+`navigate(returnTo)` bên trong `LoginPage`. Trên Chromium thật, `<Navigate to="/">`
+thắng.
+
+Nghĩa là toàn bộ cơ chế `state.from` của `ProtectedShell` cộng `safeReturnPath`
+— thêm vào ngày 2026-07-31 đúng để giữ deep link — **không có tác dụng ở đường
+phổ biến nhất**. Người vận hành mở link tới một trang cụ thể luôn phải tự bấm
+lại từ menu sau khi đăng nhập.
+
+Vì sao test jsdom không bắt được: timing của React trong jsdom khác trình duyệt
+thật, nên cuộc đua nghiêng về phía còn lại. Đây chính là loại lỗi mà plan §8.3
+yêu cầu kiểm trên board để tìm ra.
+
+Cách sửa: tách thành `LoginRoute` để cả hai nhánh cùng đọc một nguồn `state.from`.
+Chốt bằng hai test jsdom mới (giữ deep link nội bộ; chặn open redirect với
+`//evil.example`).
+
+### 4ter.2. Ghi nhận: phiên đăng nhập không sống sót qua reload
+
+`AuthProvider` giữ phiên trong state React và không ghi token vào
+`localStorage`/`sessionStorage`. Mọi lần F5, mọi deep link mở ở tab mới, đều bắt
+đăng nhập lại.
+
+Đây là lựa chọn an ninh hợp lý — token không nằm lại trên đĩa của một HMI dùng
+chung — nhưng có cái giá về vận hành, và **chưa thấy ghi ở tài liệu nào**. Đã
+thêm một test ghi nhận hành vi hiện tại, không khẳng định đúng sai: nếu ai đó
+đổi sang lưu token thì phải đổi test và giải trình lý do.
+
 ## 5. Khoảng trống còn lại — ghi rõ để không ai đọc nhầm
 
 - **UC-WEB-NET-007 (chỉ đổi DNS) và UC-WEB-NET-008 (DHCP) chưa chạy.** UC-008 là
