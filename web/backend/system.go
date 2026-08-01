@@ -49,6 +49,11 @@ type SystemStatus struct {
 	CPUClockMhzCamel *float64                 `json:"cpuClockMhz,omitempty"`
 	RAMPercentCamel  *float64                 `json:"ramPercent,omitempty"`
 	DeviceIP         string                   `json:"device_ip,omitempty"`
+	DeviceMAC        string                   `json:"device_mac,omitempty"`
+	DeviceName       string                   `json:"device_name,omitempty"`
+	Description      string                   `json:"description,omitempty"`
+	Location         string                   `json:"location,omitempty"`
+	SystemTime       string                   `json:"system_time,omitempty"`
 	Versions         VersionStatus            `json:"versions"`
 	IOP              IOPStatus                `json:"iop"`
 	Scan             ScanStatus               `json:"scan"`
@@ -70,6 +75,17 @@ func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		a.logger.Printf("WARN core_status degraded err=%v", err)
 	}
 
+	// WEB-UX-001: Dashboard trước đây gán cứng MAC, giờ hệ thống, vị trí lắp đặt
+	// và mô tả. Trên một thiết bị điều khiển, hiển thị định danh SAI tệ hơn hẳn
+	// không hiển thị: người vận hành đối chiếu MAC/vị trí để chắc chắn mình đang
+	// thao tác đúng tủ. Backend vì vậy phải cấp dữ liệu thật; khi không đọc được
+	// thì để trống (`omitempty`) để UI hiện `—` chứ không có gì để đoán.
+	device, err := readConfig(a, configGroupDevice, ConfigDevice{})
+	if err != nil {
+		a.logger.Printf("WARN device_config err=%v", err)
+	}
+
+	ip, mac := primaryInterface()
 	versions := core.Versions
 	versions.Web = a.cfg.WebVersion
 	status := SystemStatus{
@@ -87,7 +103,12 @@ func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 		CPUPercentCamel:  metrics.CPUPercent,
 		CPUClockMhzCamel: metrics.CPUClockMhz,
 		RAMPercentCamel:  metrics.RAMPercent,
-		DeviceIP:         primaryIPv4(),
+		DeviceIP:         ip,
+		DeviceMAC:        mac,
+		DeviceName:       strings.TrimSpace(device.DeviceName),
+		Description:      strings.TrimSpace(device.Description),
+		Location:         strings.TrimSpace(device.Location),
+		SystemTime:       time.Now().Format(time.RFC3339),
 		Versions:         versions,
 		IOP:              core.IOP,
 		Scan:             core.Scan,
@@ -95,10 +116,17 @@ func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
-func primaryIPv4() string {
+// primaryInterface trả về IPv4 và MAC của CÙNG một interface.
+//
+// Lấy hai giá trị trong một lần duyệt là có chủ đích: nếu tách thành hai hàm
+// duyệt độc lập thì trên board có nhiều interface (eth0 + wlan0 + docker0), IP
+// và MAC có thể rơi vào hai card khác nhau và Dashboard sẽ hiện một cặp định
+// danh không tồn tại — đúng loại "dữ liệu trông hợp lý nhưng sai" mà WEB-UX-001
+// phải loại bỏ.
+func primaryInterface() (string, string) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	for _, iface := range interfaces {
 		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
@@ -117,11 +145,11 @@ func primaryIPv4() string {
 				ip = typed.IP
 			}
 			if v4 := ip.To4(); v4 != nil {
-				return v4.String()
+				return v4.String(), strings.ToUpper(iface.HardwareAddr.String())
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
 func overallStatus(core CoreStatus) string {
