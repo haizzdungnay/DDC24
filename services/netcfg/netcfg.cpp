@@ -315,8 +315,19 @@ void from_json(const nlohmann::json& j, DnsConfig& value)
 
 void to_json(nlohmann::json& j, const Candidate& value)
 {
-    j = {{"interface", value.interface}, {"mode", value.mode}, {"ipv4", value.ipv4},
-         {"netmask", value.netmask}, {"gateway", value.gateway}};
+    /* BỎ HẲN field rỗng thay vì phát chuỗi "" .
+     *
+     * shared/netcfg_protocol_v1.schema.json quy định candidate ở mode "dhcp"
+     * KHÔNG được có ipv4/netmask/gateway. Bản cũ luôn phát cả ba, nên một
+     * transaction DHCP tạo ra `pending` kiểu {"mode":"dhcp","ipv4":"",...} —
+     * đúng thứ mà adapter Go từ chối. Hậu quả quan sát được trên board thật:
+     * sau khi stage DHCP, MỌI lần đọc status đều trả 502 và cả trang
+     * settings/network không dùng được nữa cho tới khi transaction được dọn.
+     * Field rỗng cũng không mang thông tin gì cho mode static. */
+    j = {{"interface", value.interface}, {"mode", value.mode}};
+    if (!value.ipv4.empty()) j["ipv4"] = value.ipv4;
+    if (!value.netmask.empty()) j["netmask"] = value.netmask;
+    if (!value.gateway.empty()) j["gateway"] = value.gateway;
     if (value.dns.has_value()) j["dns"] = *value.dns;
 }
 
@@ -539,14 +550,42 @@ bool LinuxPlatform::run(const std::vector<std::string>& args, std::string* outpu
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
+/* Lấy dòng đầu tiên khác rỗng của output nmcli.
+ *
+ * Bắt buộc cho mọi truy vấn `nmcli -g <thuộc-tính> connection show <X>`: nếu X là
+ * TÊN profile và có nhiều profile trùng tên, nmcli in ra một khối cho MỖI profile
+ * khớp. Khi đó `trim(output)` cho ra chuỗi kiểu "manual\n\nmanual" và mọi phép so
+ * sánh == "manual" đều sai. */
+static std::string first_line(const std::string& output)
+{
+    std::istringstream lines(output);
+    std::string line;
+    while (std::getline(lines, line)) {
+        line = trim(line);
+        if (!line.empty()) return line;
+    }
+    return {};
+}
+
 std::string LinuxPlatform::connection_name(const std::string& interface)
 {
+    /* Trả UUID chứ KHÔNG trả tên profile.
+     *
+     * NetworkManager cho phép nhiều profile trùng tên, và trên board thật đã xảy
+     * ra đúng chuyện đó: hai profile cùng tên "end1". Khi truyền tên vào
+     * `nmcli connection show`, nmcli khớp CẢ HAI và in hai khối, nên
+     * `ipv4.method` đọc ra "manual\n\nmanual" → không khớp "manual" → mode rơi về
+     * "unknown" → configured=null → mọi lần stage sau đó bị từ chối bằng
+     * PREVIOUS_STATE_NOT_RESTORABLE, tức thiết bị KHÔNG còn đổi được mạng qua
+     * giao diện cho tới khi có người vào SSH dọn profile trùng.
+     * UUID là định danh duy nhất nên loại bỏ hẳn lớp mơ hồ này. */
     const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
     std::string output;
-    if (nmcli.empty() || !run({nmcli, "-g", "GENERAL.CONNECTION", "device", "show", interface}, &output))
+    if (nmcli.empty() ||
+        !run({nmcli, "-g", "GENERAL.CON-UUID", "device", "show", interface}, &output))
         return {};
-    output = trim(output);
-    return output == "--" ? std::string{} : output;
+    const std::string uuid = first_line(output);
+    return uuid == "--" ? std::string{} : uuid;
 }
 
 std::string LinuxPlatform::configured_connection_name(const std::string& interface)
@@ -641,7 +680,8 @@ ActiveState LinuxPlatform::status(const std::string& requested_interface, std::s
     std::string mode;
     if (!connection.empty() && !nmcli.empty() &&
         run({nmcli, "-g", "ipv4.method", "connection", "show", connection}, &mode)) {
-        result.mode = trim(mode) == "auto" ? "dhcp" : (trim(mode) == "manual" ? "static" : "unknown");
+        const std::string method = first_line(mode);
+        result.mode = method == "auto" ? "dhcp" : (method == "manual" ? "static" : "unknown");
     }
     std::string dns_servers;
     if (!nmcli.empty() &&
@@ -669,7 +709,7 @@ Candidate LinuxPlatform::configured(const std::string& requested_interface)
         !run({nmcli, "-g", "ipv4.method", "connection", "show", connection}, &method))
         return result;
 
-    method = trim(method);
+    method = first_line(method);
     if (method == "auto") result.mode = "dhcp";
     else if (method == "manual") {
         result.mode = "static";
@@ -701,7 +741,7 @@ Candidate LinuxPlatform::configured(const std::string& requested_interface)
         std::string gateway;
         if (run({nmcli, "-g", "ipv4.gateway", "connection", "show", connection},
                 &gateway))
-            result.gateway = trim(gateway);
+            result.gateway = first_line(gateway);
     } else return result;
 
     std::string dns_output;
@@ -759,6 +799,20 @@ ManagementState LinuxPlatform::management()
 bool LinuxPlatform::preflight(const Candidate& candidate, std::string* reason)
 {
     if (candidate.mode == "dhcp") return true;
+
+    /* Địa chỉ mà CHÍNH interface này đang giữ không phải địa chỉ trùng.
+     *
+     * `arping -D` gửi probe ra đúng interface đang mang địa chỉ đó, nên nó tự
+     * phát hiện mình và báo DUPLICATE_ADDRESS. Hậu quả quan sát được trên board
+     * thật: không thể stage lại địa chỉ hiện hành, tức KHÔNG thể đổi mỗi DNS mà
+     * vẫn giữ nguyên IP — một thao tác hoàn toàn hợp lệ. */
+    InterfaceSnapshot snapshot;
+    if (read_interface_state(candidate.interface, &snapshot) && snapshot.present &&
+        !snapshot.ipv4.empty() && snapshot.ipv4 == candidate.ipv4) {
+        if (reason) *reason = "OK";
+        return true;
+    }
+
     const std::string arping = binary({"/usr/sbin/arping", "/usr/bin/arping"});
     if (arping.empty()) {
         if (reason) *reason = "PREFLIGHT_UNAVAILABLE";
@@ -871,6 +925,39 @@ bool LinuxPlatform::confirm(const Candidate& candidate, const ActiveState& previ
     }
     if (!previous.ipv4.empty() && previous.ipv4 != candidate.ipv4) {
         (void)run({ip, "address", "del", cidr(previous), "dev", candidate.interface}, &output);
+
+        /* F-14: gỡ địa chỉ PRIMARY có thể kéo theo cả địa chỉ SECONDARY cùng subnet.
+         *
+         * `apply` cố ý giữ địa chỉ cũ và chỉ THÊM địa chỉ mới, để phiên quản trị
+         * không đứt trong cửa sổ 120 giây chờ confirm. Khi địa chỉ mới nằm CÙNG
+         * subnet với địa chỉ cũ, kernel gắn nó làm secondary; và với
+         * `net.ipv4.conf.<if>.promote_secondaries = 0` (mặc định trên nhiều bản
+         * Linux, gồm board này) thì xoá primary sẽ xoá luôn mọi secondary cùng
+         * subnet.
+         *
+         * Hậu quả quan sát được trên Orange Pi 5B ngày 2026-07-31: đổi
+         * 192.168.50.150 → 192.168.50.161 rồi Confirm, interface mất SẠCH địa chỉ
+         * IPv4 — thiết bị rớt khỏi mạng dù authority đã báo `confirmed`. Trên site
+         * thật đây là một chuyến xe ra hiện trường.
+         *
+         * Vì vậy phải khẳng định lại địa chỉ candidate sau khi xoá, và fail-closed
+         * nếu không đặt lại được: thà báo lỗi để rollback còn hơn chốt `confirmed`
+         * trên một interface không có địa chỉ nào. */
+        /* Chỉ áp dụng cho static: ở chế độ DHCP, địa chỉ do lease quyết định nên
+         * candidate không mang ipv4 và không có gì để khẳng định lại. */
+        if (candidate.mode != "static" || candidate.ipv4.empty()) return true;
+        bool present = false;
+        if (!interface_has_address(candidate.interface, candidate.ipv4, &present)) {
+            if (reason) *reason = "ADDRESS_VERIFY_FAILED";
+            return false;
+        }
+        if (!present) {
+            (void)run({ip, "address", "add", cidr(candidate), "dev", candidate.interface}, &output);
+            if (!interface_has_address(candidate.interface, candidate.ipv4, &present) || !present) {
+                if (reason) *reason = "ADDRESS_LOST_AFTER_CLEANUP";
+                return false;
+            }
+        }
     }
     return true;
 }
