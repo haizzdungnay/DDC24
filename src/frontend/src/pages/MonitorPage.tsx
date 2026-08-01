@@ -1,6 +1,8 @@
 import { Circle, Pencil, Power, RefreshCw, RotateCcw, Save, Search, ShieldAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { POINT_UNIT_OPTIONS, aiUnitFromPointUnit, apiClient, pointUnitFromAiUnit } from '../api/client'
+import { useAuth } from '../auth/AuthProvider'
+import { roleAtLeast } from '../auth/roles'
 import { displayPointName, normalizePointName, normalizePointTag, pointNameConflicts, pointFieldErrors, validatePointName, validatePointTag } from '../api/pointTags'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
@@ -109,6 +111,28 @@ export function MonitorPage() {
   const realtime = useRealtime()
   const toast = useToast()
   const { pick } = useI18n()
+  /* WEB-UX-005: trang Giám sát để mở cho `viewer` (đây là màn hình theo dõi, chặn
+     cả trang sẽ lấy mất khả năng quan sát của ca trực chỉ-đọc), nhưng hai đường
+     GHI bên trong nó thì không. `PUT /points/{id}` là `RoleOperator` và
+     `PUT /points/{id}/config` là `RoleAdmin` ở backend; trước đây frontend không
+     kiểm gì cả nên viewer bấm được nút Force rồi nhận 403 thô. */
+  const { session } = useAuth()
+  const canForce = roleAtLeast(session?.role, 'operator')
+  const canEditPointConfig = roleAtLeast(session?.role, 'admin')
+
+  function denyForce() {
+    toast.push('warn', pick('Cần vai trò operator trở lên để ép giá trị output', 'Operator role or higher is required to force outputs'))
+  }
+
+  function requestForce(point: Point) {
+    if (!canForce) {
+      denyForce()
+      return
+    }
+    setSelectedId(point.id)
+    setForceValue(defaultForceValue(point))
+    setForceOpen(true)
+  }
   const [kind, setKind] = useState<PointKind | 'all'>('all')
   const [quality, setQuality] = useState<PointQuality | 'all'>('all')
   const [query, setQuery] = useState('')
@@ -175,6 +199,7 @@ export function MonitorPage() {
   }
 
   async function savePointBasics(point: Point, config: { tag: string; name: string; unit?: string }) {
+    if (!canEditPointConfig) throw new Error(pick('Cần vai trò admin để sửa cấu hình điểm', 'Admin role is required to edit point configuration'))
     const tagError = point.kind === 'virtual' ? validatePointTag(config.tag) : undefined
     if (tagError) throw new Error(tagError)
     const nameError = validatePointName(config.name)
@@ -194,6 +219,10 @@ export function MonitorPage() {
 
   async function forcePointWithDuration(point: Point, value: number | boolean | string, durationSeconds: number) {
     if (!canForcePoint(point)) return
+    if (!canForce) {
+      denyForce()
+      return
+    }
     if (forceReleaseTimers.current[point.id]) {
       window.clearTimeout(forceReleaseTimers.current[point.id])
       delete forceReleaseTimers.current[point.id]
@@ -224,6 +253,10 @@ export function MonitorPage() {
 
   async function releasePoint(point: Point) {
     if (!canForcePoint(point)) return
+    if (!canForce) {
+      denyForce()
+      return
+    }
     if (forceReleaseTimers.current[point.id]) {
       window.clearTimeout(forceReleaseTimers.current[point.id])
       delete forceReleaseTimers.current[point.id]
@@ -346,10 +379,10 @@ export function MonitorPage() {
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_334px]">
         <div className={cn('space-y-3', offline && 'stale')}>
-          <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onToggle={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
+          <DigitalSection title="DO - DIGITAL OUTPUT" rows={groups.DO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onToggle={requestForce} />
           <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} />
-          <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
-          <AnalogSection title="VIRTUAL POINTS" rows={groups.Virtual} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={(point) => { setSelectedId(point.id); setForceValue(defaultForceValue(point)); setForceOpen(true) }} />
+          <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={requestForce} />
+          <AnalogSection title="VIRTUAL POINTS" rows={groups.Virtual} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={requestForce} />
         </div>
         {selected && <DetailPanel
           point={selected}
@@ -363,7 +396,7 @@ export function MonitorPage() {
           setEditingUnitValue={setEditingUnitValue}
           editingTrend={editingTrend}
           editingTrendEnabled={editingTrendEnabled}
-          onForce={() => { setForceValue(defaultForceValue(selected)); setForceOpen(true) }}
+          onForce={() => requestForce(selected)}
           onStartEdit={() => startEditName(selected)}
           onSaveEdit={() => saveName(selected)}
           onCancelEdit={cancelEditName}
@@ -392,7 +425,7 @@ export function MonitorPage() {
 
       <Modal open={forceOpen} title={`${selected?.kind === 'virtual' ? 'Write' : 'Force'} ${selected?.id ?? ''}`} danger={selected?.kind !== 'virtual'} confirmLabel={selected?.kind === 'virtual' ? 'Write' : pick('Force output', 'Force output')} onConfirm={confirmForce} onClose={() => setForceOpen(false)}>
         <div className="space-y-4">
-          <div className="flex gap-3 rounded-[var(--radius)] border border-[rgba(224,161,6,0.38)] bg-[rgba(224,161,6,0.08)] p-3 text-[var(--c-warn-fg)]">
+          <div className="flex gap-3 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-[var(--c-warn-fg)]">
             <ShieldAlert className="h-5 w-5 shrink-0" />
             {pick('Force uses the duration below. Use only for commissioning or controlled troubleshooting.', 'Force uses the duration below. Use only for commissioning or controlled troubleshooting.')}
           </div>
@@ -433,12 +466,12 @@ function DigitalRow({ point, conflictIds, selected, onSelect, onOpenDetails, onT
   const stateFillColor = statusFill(state)
   const stateTextColor = statusColor(state)
   return (
-    <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_112px_128px_58px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
+    <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_112px_128px_58px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[var(--c-accent-bg)]', selected && 'bg-[var(--c-accent-bg)]')}>
       <span className="mono font-semibold">{pointDisplayTag(point)}</span>
       <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
       <span className="inline-flex items-center gap-2 font-semibold" style={{ color: stateTextColor }}><Circle className="h-2.5 w-2.5 fill-current" style={{ color: stateFillColor }} />{active ? 'ON' : 'OFF'}</span>
       <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
-      <span onClick={(event) => { event.stopPropagation(); onToggle(point) }} className={cn('ml-auto flex h-5 w-9 items-center rounded-full border px-0.5 transition', active ? 'justify-end border-[var(--c-good)] bg-[rgba(47,164,90,0.14)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface-2)]')} role="switch" aria-checked={active} tabIndex={0}>
+      <span onClick={(event) => { event.stopPropagation(); onToggle(point) }} className={cn('ml-auto flex h-5 w-9 items-center rounded-full border px-0.5 transition', active ? 'justify-end border-[var(--c-good)] bg-[var(--c-good-bg)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface-2)]')} role="switch" aria-checked={active} tabIndex={0}>
         <span className={cn('h-3.5 w-3.5 rounded-full', active ? 'bg-[var(--c-good)]' : 'bg-[var(--c-off)]')} />
       </span>
     </button>
@@ -462,7 +495,7 @@ function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onFo
   const trendBuffer = useTrendBuffer(point.id, point.value, point.trend)
   const statusText = point.quality === 'good' ? pick('Bình thường', 'Normal') : point.quality === 'uncertain' ? pick('Lỗi - HIGH', 'Fault - HIGH') : point.quality.toUpperCase()
   return (
-    <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[rgba(42,92,138,0.08)]', selected && 'bg-[rgba(42,92,138,0.12)]')}>
+    <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className={cn('grid w-full grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px] items-center border-b border-[var(--c-border)] px-3 py-2 text-left text-xs transition last:border-0 hover:bg-[var(--c-accent-bg)]', selected && 'bg-[var(--c-accent-bg)]')}>
       <span className="mono font-semibold">{pointDisplayTag(point)}</span>
       <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
       <span className="mono">{typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
@@ -623,7 +656,7 @@ function PointDetailsModal({
         </dl>
 
         {canForce && (
-          <section className="rounded-[var(--radius)] border border-[rgba(224,161,6,0.38)] bg-[rgba(224,161,6,0.08)] p-4">
+          <section className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--c-warn-fg)]">
               <ShieldAlert className="h-4 w-4" />
               {pick('Force output', 'Force output')}
@@ -721,7 +754,7 @@ function DetailPanel({
   const binaryState = active ? 'on' : 'off'
   const binaryTextColor = statusColor(binaryState)
   const valuePanelStyle = isBinary
-    ? { borderColor: active ? 'rgba(47,164,90,0.48)' : 'var(--c-border)', backgroundColor: active ? 'rgba(47,164,90,0.12)' : 'var(--c-surface-2)' }
+    ? { borderColor: active ? 'var(--c-good)' : 'var(--c-border)', backgroundColor: active ? 'var(--c-good-bg)' : 'var(--c-surface-2)' }
     : undefined
   const canForce = canForcePoint(point)
   const groupText = `${point.kind} - ${kindLabel[point.kind]}`
@@ -819,7 +852,7 @@ function DetailPanel({
                 ) : (
                   <div className="flex items-center gap-2">
                     <span
-                      className={cn('flex h-5 w-9 items-center rounded-full border px-0.5 transition cursor-pointer', trendEnabled ? 'justify-end border-[var(--c-good)] bg-[rgba(47,164,90,0.14)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface)]')}
+                      className={cn('flex h-5 w-9 items-center rounded-full border px-0.5 transition cursor-pointer', trendEnabled ? 'justify-end border-[var(--c-good)] bg-[var(--c-good-bg)]' : 'justify-start border-[var(--c-border)] bg-[var(--c-surface)]')}
                       onClick={() => onToggleTrend(point.id)}
                       role="switch"
                       aria-checked={trendEnabled}

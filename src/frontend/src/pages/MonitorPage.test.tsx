@@ -30,6 +30,11 @@ vi.mock('../hooks/useApi', () => ({
 vi.mock('../realtime', () => ({
   useRealtime: () => ({ allPoints: [], lastPointEventAt: undefined, connectionState: 'connected', forcePoint: vi.fn() })
 }))
+// WEB-UX-005: trang giờ đọc vai trò để khoá đường ghi. Test này kiểm phần sửa
+// metadata điểm nên cần vai trò admin.
+vi.mock('../auth/AuthProvider', () => ({
+  useAuth: () => ({ session: { username: 'admin', role: 'admin', loginAt: '2026-08-01T00:00:00Z' }, login: vi.fn(), logout: vi.fn(), isAuthenticated: true, getAuthHeader: () => ({}) })
+}))
 
 const uiPoint: Point = {
   id: 'UI-01', tag: 'UI-01', name: 'Shared Room', kind: 'UI', value: 23, unit: 'degC', quality: 'good',
