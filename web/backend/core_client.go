@@ -354,6 +354,64 @@ func (c *CoreClient) readIOStatus() (IOPStatus, error) {
 	}, nil
 }
 
+// SlaveTelemetry là số đo THẬT của một slave Modbus, do iobus đếm và publish.
+// Không có trường nào ở đây được suy diễn hay gán mặc định.
+type SlaveTelemetry struct {
+	Addr        uint8
+	Online      bool
+	TotalPolls  uint32
+	TotalErrors uint32
+	LastSeenMS  uint64
+}
+
+// FieldbusTelemetry gộp trạng thái bind BACnet/IP và số đo per-slave.
+// `Published=false` nghĩa là iobus chưa publish lần nào — caller PHẢI coi đó là
+// "không biết" chứ không được quy về 0 hay offline.
+type FieldbusTelemetry struct {
+	Published   bool
+	BacnetBound bool
+	BacnetPort  uint16
+	Slaves      []SlaveTelemetry
+}
+
+// ReadFieldbusTelemetry đọc khối telemetry nối thêm ở cuối io_shm.
+//
+// Trả lỗi khi iobus còn là bản cũ (segment 528 byte) hoặc không đọc được snapshot
+// nhất quán. Đó là lý do vì sao hàm này KHÔNG trả về zero-value "coi như offline":
+// finding F-03/F-04 chính là hậu quả của việc đoán trạng thái khi thiếu dữ liệu.
+func (c *CoreClient) ReadFieldbusTelemetry(ctx context.Context) (FieldbusTelemetry, error) {
+	select {
+	case <-ctx.Done():
+		return FieldbusTelemetry{}, ctx.Err()
+	default:
+	}
+	data, err := c.ioSeg.read(c.IOShm, kxIOShmFullLen)
+	if err != nil {
+		return FieldbusTelemetry{}, err
+	}
+	out := FieldbusTelemetry{
+		Published:   binary.LittleEndian.Uint32(data[offIOFbPublishSeq:offIOFbPublishSeq+4]) > 0,
+		BacnetBound: data[offIOBacnetBound] == 1,
+		BacnetPort:  binary.LittleEndian.Uint16(data[offIOBacnetPort : offIOBacnetPort+2]),
+	}
+	count := int(data[offIOFbSlaveCount])
+	if count > kxNFbSlave {
+		count = kxNFbSlave
+	}
+	out.Slaves = make([]SlaveTelemetry, 0, count)
+	for i := 0; i < count; i++ {
+		base := offIOFbSlaves + i*kxFbSlaveStride
+		out.Slaves = append(out.Slaves, SlaveTelemetry{
+			LastSeenMS:  binary.LittleEndian.Uint64(data[base+offFbLastSeen : base+offFbLastSeen+8]),
+			TotalPolls:  binary.LittleEndian.Uint32(data[base+offFbTotalPolls : base+offFbTotalPolls+4]),
+			TotalErrors: binary.LittleEndian.Uint32(data[base+offFbTotalErrors : base+offFbTotalErrors+4]),
+			Addr:        data[base+offFbAddr],
+			Online:      data[base+offFbOnline] == 1,
+		})
+	}
+	return out, nil
+}
+
 func (c *CoreClient) readPLCStatus() (ScanStatus, error) {
 	data, err := c.readPLCShm()
 	if err != nil {
@@ -558,6 +616,28 @@ const (
 	offIOCRCErrors  = 512
 	offIOTimeouts   = 516
 	offIOSeqErrors  = 520
+
+	// Telemetry northbound/southbound nối thêm 2026-07-31 (finding F-03/F-04).
+	// Offset được chốt hai chiều bằng static_assert trong
+	// services/iobus/tests/test_io_cache.cpp và ShmLayout test.
+	//
+	// kxIOShmMinLen GIỮ NGUYÊN 528: iobus cũ vẫn đọc được như trước. Khối mới chỉ
+	// được đọc khi segment dài đủ kxIOShmFullLen — segment ngắn hơn nghĩa là iobus
+	// chưa nâng cấp, và điều đó phải hiện ra là KHÔNG BIẾT chứ không phải 0/offline.
+	offIOBacnetPort   = 524
+	offIOBacnetBound  = 526
+	offIOFbSlaveCount = 527
+	offIOFbPublishSeq = 528
+	offIOFbSlaves     = 536
+	kxNFbSlave        = 32
+	kxFbSlaveStride   = 24
+	// kx_slave_metrics_t: last_seen_ms(8) + total_polls(4) + total_errors(4) + addr(1) + online(1) + pad(6)
+	offFbLastSeen    = 0
+	offFbTotalPolls  = 8
+	offFbTotalErrors = 12
+	offFbAddr        = 16
+	offFbOnline      = 17
+	kxIOShmFullLen   = offIOFbSlaves + kxNFbSlave*kxFbSlaveStride // 1304
 	kxIOShmMinLen   = 528
 )
 

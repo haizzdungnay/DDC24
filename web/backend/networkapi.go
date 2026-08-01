@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -25,17 +26,48 @@ type NetworkPageConfig struct {
 	BacnetDeviceID   string `json:"bacnetDeviceId"`
 	BacnetDeviceName string `json:"bacnetDeviceName"`
 	BacnetPort       int    `json:"bacnetPort"`
-	BMSLink          string `json:"bmsLink"`
+
+	// BMSLink là "online" | "offline" | "unknown".
+	//
+	// F-04: trước 2026-07-31 giá trị này được suy ra từ chỗ bip.enabled=true và
+	// ip/port trong FILE config khác rỗng, nên báo online cả khi bip_init() đã
+	// thất bại và BMS hoàn toàn không nói chuyện được. Nay nó đến từ cờ bind
+	// THẬT do iobus publish; iobus cũ không publish thì là "unknown", không đoán.
+	BMSLink string `json:"bmsLink"`
+	// ActiveBacnetPort là cổng UDP đang bind THẬT, có thể khác BacnetPort trong
+	// file khi cấu hình đã sửa nhưng chưa reload. nil = không biết.
+	ActiveBacnetPort *int `json:"activeBacnetPort"`
+
+	// F-10: hai trường trước đây bị gán cứng "N/A" ở frontend.
+	// Firmware là phiên bản web/API đang CHẠY; Serial là serial phần cứng đọc từ
+	// device-tree, rỗng nghĩa là thiết bị chưa được provision serial — và giao
+	// diện phải nói đúng như vậy chứ không bịa ra một mã.
+	Firmware string `json:"firmware"`
+	Serial   string `json:"serial"`
 }
 
 type NetworkSlave struct {
-	Address    int     `json:"address"`
-	Name       string  `json:"name"`
-	Profile    string  `json:"profile"`
-	BaudRate   int     `json:"baudRate"`
-	PollState  string  `json:"pollState"`
-	ErrorRate  float64 `json:"errorRate"`
-	LastPollMS int     `json:"lastPollMs"`
+	Address   int    `json:"address"`
+	Name      string `json:"name"`
+	Profile   string `json:"profile"`
+	BaudRate  int    `json:"baudRate"`
+	PollState string `json:"pollState"` // "online" | "offline" | "unknown"
+
+	// F-03: ba trường dưới đây từng bị gán cứng (ErrorRate=0) hoặc dùng CHUNG một
+	// giá trị toàn cục cho mọi slave, khiến một thiết bị hỏng giữa nhiều thiết bị
+	// là không thể nhìn thấy. Nay là số đo per-slave do iobus đếm.
+	// nil = chưa có số đo (iobus chưa publish hoặc chưa poll lần nào) — KHÔNG
+	// được hiển thị thành 0.
+	ErrorRate   *float64 `json:"errorRate"`
+	LastPollMS  *int     `json:"lastPollMs"`
+	TotalPolls  *uint32  `json:"totalPolls"`
+	TotalErrors *uint32  `json:"totalErrors"`
+}
+
+// FieldbusTelemetryReader tách riêng khỏi CoreStatusClient để các fake sẵn có
+// không phải hiện thực thêm; chỉ test mạng mới cần cung cấp.
+type FieldbusTelemetryReader interface {
+	ReadFieldbusTelemetry(ctx context.Context) (FieldbusTelemetry, error)
 }
 
 func (a *App) handleGetNetworkPage(w http.ResponseWriter, r *http.Request) {
@@ -105,15 +137,34 @@ func (a *App) readNetworkPage(r *http.Request) (NetworkPageData, error) {
 	if err != nil {
 		return NetworkPageData{}, err
 	}
-	core, err := a.core.ReadStatus(r.Context())
-	if err != nil {
+	if _, err := a.core.ReadStatus(r.Context()); err != nil {
 		a.logger.Printf("WARN network_page core_status err=%v", err)
 	}
-	north := networkPageConfigFromFiles(device, network, bacnet)
-	return NetworkPageData{Northbound: north, Southbound: networkSlavesFromConfig(fieldbus, core)}, nil
+	telemetry := a.readFieldbusTelemetry(r.Context())
+	north := networkPageConfigFromFiles(device, network, bacnet, telemetry, a.cfg.WebVersion)
+	return NetworkPageData{
+		Northbound: north,
+		Southbound: networkSlavesFromConfig(fieldbus, telemetry),
+	}, nil
 }
 
-func networkPageConfigFromFiles(device ConfigDevice, network ConfigNetwork, bacnet ConfigBacnet) NetworkPageConfig {
+// readFieldbusTelemetry trả nil khi không có số đo thật — đó là tín hiệu "không
+// biết" mà mọi hàm phía sau phải tôn trọng thay vì thay bằng giá trị mặc định.
+func (a *App) readFieldbusTelemetry(ctx context.Context) *FieldbusTelemetry {
+	reader, ok := a.core.(FieldbusTelemetryReader)
+	if !ok {
+		return nil
+	}
+	telemetry, err := reader.ReadFieldbusTelemetry(ctx)
+	if err != nil {
+		a.logger.Printf("WARN network_page fieldbus_telemetry err=%v", err)
+		return nil
+	}
+	return &telemetry
+}
+
+func networkPageConfigFromFiles(device ConfigDevice, network ConfigNetwork, bacnet ConfigBacnet,
+	telemetry *FieldbusTelemetry, webVersion string) NetworkPageConfig {
 	eth := network.Eth
 	wifi := network.Wifi
 	bip := bacnet.BIP
@@ -122,8 +173,7 @@ func networkPageConfigFromFiles(device ConfigDevice, network ConfigNetwork, bacn
 	if deviceName == "" {
 		deviceName = network.Hostname
 	}
-	port := intValue(bip, "udp_port")
-	return NetworkPageConfig{
+	cfg := NetworkPageConfig{
 		DeviceName:       deviceName,
 		IP:               ip,
 		DHCP:             strings.EqualFold(stringValue(eth, "mode"), "dhcp"),
@@ -132,20 +182,28 @@ func networkPageConfigFromFiles(device ConfigDevice, network ConfigNetwork, bacn
 		Gateway:          stringValue(eth, "gateway"),
 		BacnetDeviceID:   intString(device.DeviceID),
 		BacnetDeviceName: device.DeviceName,
-		BacnetPort:       port,
-		BMSLink:          bmsLinkStatus(ip, boolValue(bip, "enabled"), port),
+		BacnetPort:       intValue(bip, "udp_port"),
+		BMSLink:          bmsLinkStatus(telemetry),
+		Firmware:         webVersion,
+		Serial:           deviceSerial(),
 	}
+	if telemetry != nil && telemetry.BacnetBound {
+		port := int(telemetry.BacnetPort)
+		cfg.ActiveBacnetPort = &port
+	}
+	return cfg
 }
 
-func networkSlavesFromConfig(fieldbus ConfigFieldbus, core CoreStatus) []NetworkSlave {
+func networkSlavesFromConfig(fieldbus ConfigFieldbus, telemetry *FieldbusTelemetry) []NetworkSlave {
 	baud := intValue(fieldbus.RS485, "baud")
-	state := "degraded"
-	if core.IOP.Status == "normal" {
-		state = "online"
-	}
-	lastPoll := 0
-	if core.IOP.LastIORespMS != nil {
-		lastPoll = int(*core.IOP.LastIORespMS)
+	// Chỉ tra cứu theo địa chỉ Modbus: thứ tự trong file config và thứ tự slave
+	// trong iobus không bắt buộc trùng nhau, ghép theo chỉ số sẽ gán nhầm số đo
+	// của thiết bị này sang thiết bị khác.
+	measured := map[uint8]SlaveTelemetry{}
+	if telemetry != nil && telemetry.Published {
+		for _, slave := range telemetry.Slaves {
+			measured[slave.Addr] = slave
+		}
 	}
 	items := make([]NetworkSlave, 0, len(fieldbus.Slaves))
 	for _, slave := range fieldbus.Slaves {
@@ -153,15 +211,30 @@ func networkSlavesFromConfig(fieldbus ConfigFieldbus, core CoreStatus) []Network
 		if addr == 0 {
 			continue
 		}
-		items = append(items, NetworkSlave{
-			Address:    addr,
-			Name:       stringValue(slave, "name"),
-			Profile:    displayModbusProfile(stringValue(slave, "profile")),
-			BaudRate:   baud,
-			PollState:  state,
-			ErrorRate:  0,
-			LastPollMS: lastPoll,
-		})
+		item := NetworkSlave{
+			Address:   addr,
+			Name:      stringValue(slave, "name"),
+			Profile:   displayModbusProfile(stringValue(slave, "profile")),
+			BaudRate:  baud,
+			PollState: "unknown",
+		}
+		if metrics, ok := measured[uint8(addr)]; ok {
+			item.PollState = "offline"
+			if metrics.Online {
+				item.PollState = "online"
+			}
+			polls, errors := metrics.TotalPolls, metrics.TotalErrors
+			item.TotalPolls, item.TotalErrors = &polls, &errors
+			if polls > 0 {
+				rate := float64(errors) / float64(polls) * 100
+				item.ErrorRate = &rate
+			}
+			if metrics.LastSeenMS > 0 {
+				lastSeen := int(metrics.LastSeenMS)
+				item.LastPollMS = &lastSeen
+			}
+		}
+		items = append(items, item)
 	}
 	return items
 }
@@ -217,11 +290,43 @@ func (a *App) writeNetworkPageFiles(network ConfigNetwork, device ConfigDevice, 
 	return nil
 }
 
-func bmsLinkStatus(ip string, enabled bool, port int) string {
-	if enabled && ip != "" && port > 0 {
+// bmsLinkStatus KHÔNG được suy ra từ file cấu hình.
+//
+// F-04 / ADR-017 §2.9 ("không báo success từ desired file") và tiêu chí nghiệm
+// thu UC-HMI-016 ("không có `online` suy diễn từ field không rỗng"): trạng thái
+// này chỉ đến từ cờ bind THẬT do iobus publish sau bip_init()/rebind().
+// telemetry == nil nghĩa là iobus chưa nâng cấp hoặc io_shm không đọc được →
+// "unknown", tuyệt đối không quy về online/offline.
+func bmsLinkStatus(telemetry *FieldbusTelemetry) string {
+	if telemetry == nil {
+		return "unknown"
+	}
+	if telemetry.BacnetBound {
 		return "online"
 	}
 	return "offline"
+}
+
+// deviceSerial đọc serial phần cứng thật từ device-tree.
+//
+// F-10: giao diện từng gán cứng "N/A". Trả về chuỗi rỗng khi thiết bị chưa được
+// nạp serial (nhiều board Orange Pi không có node này) — frontend phải nói rõ là
+// "chưa cấu hình". Không dùng /etc/machine-id thay thế: đó là định danh cài đặt
+// hệ điều hành, đổi khi cài lại, không phải serial thiết bị.
+func deviceSerial() string {
+	for _, path := range []string{
+		"/proc/device-tree/serial-number",
+		"/sys/firmware/devicetree/base/serial-number",
+	} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if serial := strings.Trim(strings.TrimSpace(string(raw)), "\x00"); serial != "" {
+			return serial
+		}
+	}
+	return ""
 }
 
 func intString(value int) string {

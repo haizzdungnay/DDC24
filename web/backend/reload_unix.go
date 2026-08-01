@@ -78,7 +78,3 @@ func allDigits(value string) bool {
 	}
 	return true
 }
-
-func applySystem(target string) (bool, []string) {
-	return false, []string{fmt.Sprintf("reload %s pending B7 (systemd/polkit)", target)}
-}

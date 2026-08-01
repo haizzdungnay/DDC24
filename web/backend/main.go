@@ -193,6 +193,13 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) == 2 && os.Args[1] == "reload-helper-server" {
+		if err := runReloadHelperServer(); err != nil {
+			log.Printf("reload-helper-server: %v", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) >= 2 && os.Args[1] == "time-helper" {
 		if len(os.Args) != 3 {
 			log.Printf("time-helper: exactly one encoded request is required")
