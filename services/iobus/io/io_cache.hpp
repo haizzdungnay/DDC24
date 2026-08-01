@@ -34,6 +34,15 @@ public:
     /* Poll lỗi thoáng qua trước fault timeout: dữ liệu stale nhưng chưa mất liên lạc. */
     void mark_inputs_unreliable();
 
+    /* Publish telemetry per-slave fieldbus cho Web (finding F-03).
+     * `count` bị cắt xuống KX_N_FB_SLAVE; fb_publish_seq tăng mỗi lần gọi để
+     * consumer phân biệt "iobus chưa publish lần nào" với "đã publish, 0 slave". */
+    void write_fieldbus_metrics(const kx_slave_metrics_t* slaves, size_t count);
+
+    /* Publish trạng thái bind BACnet/IP THẬT (finding F-04).
+     * `bound` phải là kết quả bip_init()/rebind(), không phải cờ enabled trong config. */
+    void write_bacnet_bind(bool bound, uint16_t udp_port);
+
     const kx_io_shm_t* shm() const { return shm_; }
 
 private:

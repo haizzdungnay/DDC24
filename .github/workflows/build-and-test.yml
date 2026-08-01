@@ -202,6 +202,25 @@ jobs:
           cd src/frontend
           npm run build
 
+      # F-07: bộ e2e `src/frontend/e2e/` trước đây KHÔNG workflow nào chạy —
+      # `npm test` chỉ quét src/, còn e2e/ nằm ngoài — nên suite mục dần mà không
+      # ai biết. `network-qa.spec.ts` đã được sửa và gắn vào gate ở đây.
+      #
+      # CỐ Ý chỉ chạy spec mạng: `point-names.spec.ts` còn 14 test hỏng SẴN, thuộc
+      # tính năng đặt tên điểm (không liên quan trang mạng). Đã kiểm chứng bằng
+      # cách stash toàn bộ thay đổi FE của bản 2026-07-31 — lỗi giữ nguyên. Sửa
+      # nhóm đó là việc riêng; mở rộng gate sang cả thư mục e2e/ chỉ sau khi xong,
+      # chứ không thêm một job biết chắc đỏ.
+      - name: Install Playwright browser
+        run: |
+          cd src/frontend
+          npx playwright install --with-deps chrome
+
+      - name: E2E network page
+        run: |
+          cd src/frontend
+          npx playwright test e2e/network-qa.spec.ts
+
   mcu-firmware:
     name: MCU Firmware
     runs-on: ubuntu-22.04

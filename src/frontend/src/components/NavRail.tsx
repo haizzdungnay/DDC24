@@ -4,7 +4,6 @@ import { NavLink } from 'react-router-dom'
 import { useI18n } from '../i18n'
 import { PRODUCT_INFO } from '../productInfo'
 import { LEGACY_GRAPH_DEMO_ENABLED } from '../config'
-import { useAuth } from '../auth/AuthProvider'
 import type { HealthResponse } from '../types'
 import { cn } from '../utils'
 
@@ -51,7 +50,6 @@ type GroupId = typeof groups[number]['id']
 
 export function NavRail({ alarmCount, device }: { alarmCount: number; device: HealthResponse | null }) {
   const { t } = useI18n()
-  const { session } = useAuth()
   const [openGroups, setOpenGroups] = useState<Record<GroupId, boolean>>({ overview: true, settings: true, engineering: true })
   const [collapsed, setCollapsed] = useState(false)
   const deviceTitle = device?.deviceName ?? PRODUCT_INFO.name
@@ -99,9 +97,13 @@ export function NavRail({ alarmCount, device }: { alarmCount: number; device: He
               )}
               {isOpen && (
                 <div className={cn('mt-1 space-y-1', collapsed && 'mt-0')}>
+                  {/* Network hiển thị cho MỌI session hợp lệ: ADR-017 §2.7 cho
+                      viewer|operator đọc trạng thái authority, và trang tự khoá
+                      toàn bộ nút mutation khi role không phải admin. Ẩn hẳn mục
+                      này từng khiến cả nhánh chỉ-đọc ở backend lẫn ở component
+                      trở thành mã chết (finding F-06). */}
                   {group.items.filter((item) =>
-                    (item.key !== 'programming' || LEGACY_GRAPH_DEMO_ENABLED) &&
-                    (item.key !== 'network' || session?.role === 'admin')
+                    item.key !== 'programming' || LEGACY_GRAPH_DEMO_ENABLED
                   ).map((item) => {
                     const Icon = item.icon
                     return (

@@ -1,5 +1,6 @@
 #include "netcfg.hpp"
 
+#include <algorithm>
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -101,6 +102,10 @@ protected:
             if (output) *output = value;
             return true;
         };
+        /* Production nay hỏi CON-UUID (duy nhất) thay vì CONNECTION (có thể trùng
+         * tên) — xem LinuxPlatform::connection_name. */
+        if (args.size() >= 6 && args[1] == "-g" && args[2] == "GENERAL.CON-UUID")
+            return return_output(active_connection);
         if (args.size() >= 6 && args[1] == "-g" && args[2] == "GENERAL.CONNECTION")
             return return_output(active_connection);
         if (args.size() == 5 && args[1] == "-g" && args[2] == "UUID")
@@ -395,6 +400,305 @@ TEST(NetcfgLinuxPlatform, ConfiguredStaticProfileUsesFirstValidAddress)
     EXPECT_EQ(configured.ipv4, "192.168.10.25");
     EXPECT_EQ(configured.netmask, "255.255.255.0");
     EXPECT_EQ(configured.gateway, "192.168.10.1");
+}
+
+/* Hồi quy từ board thật 2026-07-31.
+ *
+ * Candidate DHCP KHÔNG được mang ipv4/netmask/gateway (schema v1). Bản cũ luôn
+ * phát cả ba dưới dạng chuỗi rỗng, nên sau khi stage một transaction DHCP thì
+ * `pending` sai schema và adapter Go từ chối: mọi lần đọc status trả 502 và cả
+ * trang settings/network hỏng cho tới khi transaction được dọn thủ công. */
+/* Hồi quy từ board thật 2026-07-31: giữ nguyên IP mà chỉ đổi DNS phải được phép.
+ * `arping -D` chạy trên chính interface đang mang địa chỉ đó sẽ tự phát hiện
+ * mình và báo DUPLICATE_ADDRESS, chặn một thao tác hợp lệ. */
+namespace {
+/* Mô phỏng ĐÚNG hành vi kernel Linux cho F-14.
+ *
+ * Với `net.ipv4.conf.<if>.promote_secondaries = 0` (mặc định trên board), xoá địa
+ * chỉ PRIMARY sẽ xoá luôn mọi địa chỉ SECONDARY cùng subnet. `apply` cố ý giữ địa
+ * chỉ cũ và chỉ thêm địa chỉ mới, nên khi hai địa chỉ cùng subnet thì `confirm`
+ * (vốn xoá địa chỉ cũ) làm interface mất SẠCH địa chỉ. */
+class PromoteSecondariesPlatform final : public netcfg::LinuxPlatform {
+public:
+    /* addresses[0] là primary; phần còn lại là secondary theo thứ tự thêm vào. */
+    std::vector<std::string> addresses;
+    bool kernel_purges_same_subnet_secondaries = true;
+    std::vector<std::vector<std::string>> commands;
+
+    static std::string subnet24(const std::string& ipv4) {
+        const size_t last = ipv4.rfind('.');
+        return last == std::string::npos ? ipv4 : ipv4.substr(0, last);
+    }
+
+protected:
+    bool run(const std::vector<std::string>& args, std::string*) override {
+        commands.push_back(args);
+        if (args.size() >= 5 && args[1] == "address" && args[2] == "del") {
+            const std::string victim = args[3].substr(0, args[3].find('/'));
+            const bool was_primary = !addresses.empty() && addresses.front() == victim;
+            const std::string net = subnet24(victim);
+            std::vector<std::string> kept;
+            for (const auto& a : addresses) {
+                if (a == victim) continue;
+                if (was_primary && kernel_purges_same_subnet_secondaries && subnet24(a) == net)
+                    continue;   /* kernel xoá kèm secondary cùng subnet */
+                kept.push_back(a);
+            }
+            addresses = kept;
+            return true;
+        }
+        if (args.size() >= 5 && args[1] == "address" && args[2] == "add") {
+            const std::string added = args[3].substr(0, args[3].find('/'));
+            if (std::find(addresses.begin(), addresses.end(), added) == addresses.end())
+                addresses.push_back(added);
+            return true;
+        }
+        return true;
+    }
+    std::string binary(const std::vector<std::string>& choices) override {
+        return choices.empty() ? std::string{} : choices.front();
+    }
+    bool persist(const netcfg::Candidate&, std::string* reason, bool) override {
+        if (reason) *reason = "OK";
+        return true;
+    }
+    bool interface_has_address(const std::string&, const std::string& ipv4,
+                               bool* present) const override {
+        if (!present) return false;
+        *present = std::find(addresses.begin(), addresses.end(), ipv4) != addresses.end();
+        return true;
+    }
+};
+
+netcfg::Candidate static_candidate(const std::string& ipv4)
+{
+    netcfg::Candidate c;
+    c.interface = "end1";
+    c.mode = "static";
+    c.ipv4 = ipv4;
+    c.netmask = "255.255.255.0";
+    return c;
+}
+
+netcfg::ActiveState active_at(const std::string& ipv4)
+{
+    netcfg::ActiveState a;
+    a.interface = "end1";
+    a.ipv4 = ipv4;
+    a.prefix_length = 24;
+    return a;
+}
+} // namespace
+
+/* F-14 — hồi quy từ board thật 2026-07-31.
+ * Đổi IPv4 tĩnh sang IPv4 tĩnh CÙNG subnet rồi Confirm khiến interface mất sạch
+ * địa chỉ; authority vẫn báo `confirmed` còn thiết bị thì rớt khỏi mạng. */
+TEST(NetcfgLinuxPlatform, ConfirmKeepsCandidateAddressWhenOldAndNewShareASubnet)
+{
+    PromoteSecondariesPlatform platform;
+    /* Trạng thái sau apply: địa chỉ cũ là primary, địa chỉ mới là secondary. */
+    platform.addresses = {"192.168.50.150", "192.168.50.161"};
+
+    std::string reason;
+    ASSERT_TRUE(platform.confirm(static_candidate("192.168.50.161"),
+                                 active_at("192.168.50.150"), &reason)) << reason;
+
+    ASSERT_EQ(platform.addresses.size(), 1u)
+        << "confirm phải để lại ĐÚNG một địa chỉ";
+    EXPECT_EQ(platform.addresses.front(), "192.168.50.161")
+        << "địa chỉ còn lại phải là candidate, không phải rỗng và không phải địa chỉ cũ";
+}
+
+/* Khác subnet: kernel không xoá kèm, nhưng kết quả cuối vẫn phải như nhau. */
+TEST(NetcfgLinuxPlatform, ConfirmKeepsCandidateAddressAcrossSubnets)
+{
+    PromoteSecondariesPlatform platform;
+    platform.addresses = {"192.168.50.150", "10.20.30.40"};
+
+    std::string reason;
+    ASSERT_TRUE(platform.confirm(static_candidate("10.20.30.40"),
+                                 active_at("192.168.50.150"), &reason)) << reason;
+
+    ASSERT_EQ(platform.addresses.size(), 1u);
+    EXPECT_EQ(platform.addresses.front(), "10.20.30.40");
+}
+
+/* DHCP: candidate không mang ipv4 nên không có gì để khẳng định lại — confirm
+ * vẫn phải thành công chứ không được fail-closed nhầm. */
+TEST(NetcfgLinuxPlatform, ConfirmSucceedsForDhcpWithoutCandidateAddress)
+{
+    PromoteSecondariesPlatform platform;
+    platform.addresses = {"192.168.50.150"};
+
+    netcfg::Candidate dhcp;
+    dhcp.interface = "end1";
+    dhcp.mode = "dhcp";
+
+    std::string reason;
+    EXPECT_TRUE(platform.confirm(dhcp, active_at("192.168.50.150"), &reason)) << reason;
+}
+
+/* Giữ nguyên địa chỉ (chỉ đổi DNS): không được xoá gì cả. */
+TEST(NetcfgLinuxPlatform, ConfirmWithUnchangedAddressTouchesNothing)
+{
+    PromoteSecondariesPlatform platform;
+    platform.addresses = {"192.168.50.150"};
+
+    std::string reason;
+    ASSERT_TRUE(platform.confirm(static_candidate("192.168.50.150"),
+                                 active_at("192.168.50.150"), &reason)) << reason;
+
+    ASSERT_EQ(platform.addresses.size(), 1u);
+    EXPECT_EQ(platform.addresses.front(), "192.168.50.150");
+    for (const auto& command : platform.commands)
+        for (const auto& arg : command)
+            EXPECT_NE(arg, "del") << "không được xoá địa chỉ khi địa chỉ không đổi";
+}
+
+namespace {
+/* KHÔNG override preflight — đây chính là hàm đang được kiểm.
+ * FakeStatusLinuxPlatform không dùng được vì nó ghi đè preflight thành luôn OK. */
+class PreflightProbePlatform final : public netcfg::LinuxPlatform {
+public:
+    netcfg::InterfaceSnapshot snapshot;
+    bool arping_says_duplicate = true;
+    std::vector<std::vector<std::string>> commands;
+
+protected:
+    bool read_interface_state(const std::string&, netcfg::InterfaceSnapshot* state) const override {
+        *state = snapshot;
+        return true;
+    }
+    bool run(const std::vector<std::string>& args, std::string*) override {
+        commands.push_back(args);
+        return !arping_says_duplicate;   /* run()==false ⇒ DUPLICATE_ADDRESS */
+    }
+    std::string binary(const std::vector<std::string>& choices) override {
+        return choices.empty() ? std::string{} : choices.front();
+    }
+};
+} // namespace
+
+TEST(NetcfgLinuxPlatform, RestagingTheAddressTheInterfaceAlreadyHoldsIsNotADuplicate)
+{
+    PreflightProbePlatform platform;
+    platform.snapshot = {true, true, true, "192.168.50.61", 24};
+    platform.arping_says_duplicate = true;   /* nếu có probe thì sẽ báo trùng */
+
+    netcfg::Candidate candidate;
+    candidate.interface = "end1";
+    candidate.mode = "static";
+    candidate.ipv4 = "192.168.50.61";
+    candidate.netmask = "255.255.255.0";
+
+    std::string reason;
+    EXPECT_TRUE(platform.preflight(candidate, &reason)) << "reason=" << reason;
+
+    for (const auto& command : platform.commands)
+        for (const auto& arg : command)
+            EXPECT_NE(arg, "-D") << "không được ARP-probe địa chỉ của chính mình";
+}
+
+/* Địa chỉ KHÁC thì vẫn phải probe và vẫn phải chặn khi trùng thật. */
+TEST(NetcfgLinuxPlatform, DifferentAddressStillRunsDuplicateDetection)
+{
+    PreflightProbePlatform platform;
+    platform.snapshot = {true, true, true, "192.168.50.61", 24};
+    platform.arping_says_duplicate = true;
+
+    netcfg::Candidate candidate;
+    candidate.interface = "end1";
+    candidate.mode = "static";
+    candidate.ipv4 = "192.168.50.99";
+    candidate.netmask = "255.255.255.0";
+
+    std::string reason;
+    EXPECT_FALSE(platform.preflight(candidate, &reason));
+    EXPECT_EQ(reason, "DUPLICATE_ADDRESS");
+}
+
+TEST(NetcfgSerialization, DhcpCandidateOmitsAddressFieldsPerSchema)
+{
+    netcfg::Candidate dhcp;
+    dhcp.interface = "end1";
+    dhcp.mode = "dhcp";
+
+    const nlohmann::json encoded = dhcp;
+
+    EXPECT_EQ(encoded.value("mode", ""), "dhcp");
+    EXPECT_FALSE(encoded.contains("ipv4")) << "schema cấm ipv4 khi mode=dhcp";
+    EXPECT_FALSE(encoded.contains("netmask")) << "schema cấm netmask khi mode=dhcp";
+    EXPECT_FALSE(encoded.contains("gateway")) << "schema cấm gateway khi mode=dhcp";
+}
+
+TEST(NetcfgSerialization, StaticCandidateKeepsAddressesAndDropsEmptyGateway)
+{
+    netcfg::Candidate stat;
+    stat.interface = "end1";
+    stat.mode = "static";
+    stat.ipv4 = "192.168.50.61";
+    stat.netmask = "255.255.255.0";
+    /* gateway để trống: profile hợp lệ, nhưng không được phát "" ra ngoài. */
+
+    const nlohmann::json encoded = stat;
+
+    EXPECT_EQ(encoded.value("ipv4", ""), "192.168.50.61");
+    EXPECT_EQ(encoded.value("netmask", ""), "255.255.255.0");
+    EXPECT_FALSE(encoded.contains("gateway")) << "gateway rỗng phải được bỏ hẳn";
+
+    /* Vòng round-trip phải giữ nguyên ngữ nghĩa. */
+    const auto decoded = encoded.get<netcfg::Candidate>();
+    EXPECT_EQ(decoded.ipv4, "192.168.50.61");
+    EXPECT_TRUE(decoded.gateway.empty());
+}
+
+/* Hồi quy từ board thật 2026-07-31.
+ *
+ * NetworkManager cho phép NHIỀU profile trùng tên, và trên Orange Pi đã có hai
+ * profile cùng tên "end1". Khi netcfg truyền TÊN vào `nmcli connection show`,
+ * nmcli khớp cả hai và in một khối cho mỗi profile, nên `-g ipv4.method` trả về
+ * "manual\n\nmanual". Code cũ so sánh nguyên chuỗi đó với "manual" nên luôn sai:
+ * mode rơi về "unknown", configured thành null, và MỌI lần stage sau đó bị từ
+ * chối bằng PREVIOUS_STATE_NOT_RESTORABLE — thiết bị không còn đổi được mạng qua
+ * giao diện cho tới khi có người vào SSH dọn profile trùng. */
+TEST(NetcfgLinuxPlatform, DuplicateProfileNamesDoNotBreakConfiguredReadback)
+{
+    FakeStatusLinuxPlatform platform;
+    platform.profile_uuid = "profile-uuid";
+    platform.profile_interface = "end1";
+    /* nmcli khớp 2 profile trùng tên → mỗi thuộc tính in thành nhiều khối. */
+    platform.profile_method = "manual\n\nmanual";
+    platform.profile_addresses = "192.168.50.61/24\n\n192.168.50.61/24";
+    platform.profile_gateway = "\n\n";
+
+    const auto configured = platform.configured("end1");
+
+    EXPECT_EQ(configured.mode, "static") << "output nhiều khối phải đọc theo dòng đầu";
+    EXPECT_EQ(configured.ipv4, "192.168.50.61");
+    EXPECT_EQ(configured.netmask, "255.255.255.0");
+
+    std::string reason;
+    EXPECT_TRUE(netcfg::validate_candidate(configured, &reason))
+        << "profile đọc lại phải hợp lệ, nếu không stage bị chặn vĩnh viễn: " << reason;
+}
+
+/* Định danh profile phải là UUID: tên profile không đảm bảo duy nhất. */
+TEST(NetcfgLinuxPlatform, ActiveProfileIsResolvedByUuidNotByName)
+{
+    FakeStatusLinuxPlatform platform;
+    platform.snapshot = {true, true, true, "192.168.50.61", 24};
+    platform.active_connection = "4ece069b-4afb-4aed-b1cb-f06ca0fd48b2";
+    platform.profile_method = "manual";
+
+    std::string reason;
+    const auto active = platform.status("end1", &reason);
+
+    EXPECT_EQ(active.mode, "static");
+    bool asked_for_uuid = false;
+    for (const auto& command : platform.commands)
+        for (const auto& arg : command)
+            if (arg == "GENERAL.CON-UUID") asked_for_uuid = true;
+    EXPECT_TRUE(asked_for_uuid) << "phải tra cứu profile theo UUID duy nhất";
 }
 
 TEST(NetcfgLinuxPlatform, StageRejectsUnrepresentableStaticHybridDnsProfile)

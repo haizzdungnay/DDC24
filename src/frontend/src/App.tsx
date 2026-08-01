@@ -60,7 +60,10 @@ export function App() {
         <Route path="settings" element={<Navigate to="/settings/device" replace />} />
         <Route path="settings/display" element={<DisplaySettingsPage />} />
         <Route path="settings/users" element={<UsersPage />} />
-        <Route path="settings/network" element={<RequireAdmin><NetworkPage /></RequireAdmin>} />
+        {/* F-06: KHÔNG bọc RequireAdmin. ADR-017 §2.7 cho viewer|operator đọc
+            trạng thái authority; mọi mutation vẫn Admin-only ở cả backend
+            (POST/PUT) lẫn trong trang (canManageNetwork). */}
+        <Route path="settings/network" element={<NetworkPage />} />
         <Route path="settings/time" element={<TimeSettingsPage />} />
         <Route path="settings/device" element={<SettingsPage />} />
 

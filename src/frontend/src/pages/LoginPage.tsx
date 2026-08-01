@@ -1,19 +1,40 @@
 import { FormEvent, useState } from 'react'
 import { Eye, LockKeyhole, UserRound } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { DEVICE_DEFAULTS } from '../config'
 import { useI18n } from '../i18n'
 import { Button } from '../components/Button'
 import { StatusBadge } from '../components/StatusBadge'
 
+/**
+ * Đích quay lại sau khi đăng nhập.
+ *
+ * `ProtectedShell` đã truyền `state.from` khi đẩy người dùng chưa xác thực sang
+ * trang đăng nhập, nhưng trước 2026-07-31 trang này bỏ qua nó và luôn về `/` —
+ * nghĩa là mọi deep link đều mất sau khi đăng nhập. Người vận hành mở link tới
+ * `/settings/network` phải tự bấm lại từ menu.
+ *
+ * Chỉ chấp nhận đường dẫn nội bộ bắt đầu bằng đúng một dấu `/`: chuỗi kiểu
+ * `//evil.example` hay `https://…` sẽ bị trình duyệt hiểu là host khác, biến
+ * `state` do người khác dựng thành một open redirect.
+ */
+function safeReturnPath(from: unknown): string {
+  if (typeof from !== 'string') return '/'
+  if (!from.startsWith('/') || from.startsWith('//')) return '/'
+  if (from === '/login') return '/'
+  return from
+}
+
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const { t, pick } = useI18n()
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const returnTo = safeReturnPath((location.state as { from?: unknown } | null)?.from)
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -21,7 +42,7 @@ export function LoginPage() {
     setError(null)
     try {
       await login(password)
-      navigate('/')
+      navigate(returnTo, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
@@ -73,7 +94,7 @@ export function LoginPage() {
           <Button className="w-full" variant="primary" type="submit" loading={loading}>{t('signIn')}</Button>
           <div className="grid grid-cols-2 gap-2">
             <Button type="button" variant="secondary" size="sm">SSO / AD</Button>
-            <Button type="button" variant="secondary" size="sm" onClick={() => void login('').then(() => navigate('/'))}>{t('guest')}</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => void login('').then(() => navigate(returnTo, { replace: true }))}>{t('guest')}</Button>
           </div>
         </form>
         <p className="mt-5 rounded-[var(--radius)] border border-[rgba(224,161,6,0.38)] bg-[rgba(224,161,6,0.08)] p-3 text-xs text-[var(--c-warn-fg)]">

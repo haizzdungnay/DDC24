@@ -8,6 +8,19 @@ const (
 	reloadNone         = "none"
 )
 
+// Cảnh báo trả về cho người VẬN HÀNH, không phải cho lập trình viên.
+//
+// F-01: chuỗi cũ là `reload system pending B7 (systemd/polkit)` — lọt thẳng vào
+// toast trên giao diện. Người dùng không biết "B7" là gì và không có hành động
+// nào để làm tiếp. Hai chuỗi dưới đây nói rõ chuyện gì đã xảy ra với cấu hình
+// của họ và bước tiếp theo là gì.
+const (
+	reloadHelperUnavailableWarning = "Đã lưu cấu hình, nhưng dịch vụ áp dụng thay đổi hiện không chạy. " +
+		"Cấu hình sẽ có hiệu lực sau khi khởi động lại thiết bị."
+	reloadHelperFailedWarning = "Đã lưu cấu hình, nhưng khởi động lại dịch vụ thất bại. " +
+		"Hãy kiểm tra nhật ký thiết bị trước khi thử lại."
+)
+
 func (a *App) dispatchReload(target string) (applied bool, warnings []string) {
 	switch target {
 	case reloadSIGHUPCore:

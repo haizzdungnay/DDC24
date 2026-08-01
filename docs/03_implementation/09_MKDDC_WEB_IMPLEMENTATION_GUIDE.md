@@ -283,6 +283,18 @@ System status (versions tách từng thành phần — Contract Freeze; nguồn 
 
 > Web validate input theo schema trước khi ghi; config IO → core/iobus reload (qua signal/IPC).
 
+**Tài khoản mặc định nhà máy (bổ sung 2026-07-31).** Ảnh build/deploy xuất xưởng kèm
+đúng một tài khoản gốc `admin` / `admin123`, role `admin`, lưu trong `users.conf`
+dưới dạng bcrypt như mọi tài khoản khác. Đây là tài khoản dùng để commissioning lần
+đầu và để nghiệm thu sau deploy.
+
+Ràng buộc đi kèm:
+- Không hard-code mật khẩu này ở bất kỳ đâu trong source ngoài bước tạo `users.conf`
+  lúc provisioning; xác thực vẫn đi qua đúng đường bcrypt.
+- Không dùng tài khoản gốc cho tích hợp máy-máy hay script tự động chạy dài hạn.
+- Quy trình bàn giao site **phải** đổi mật khẩu gốc và tạo tài khoản vận hành riêng
+  theo vai trò; giữ nguyên `admin123` sau bàn giao là finding an ninh.
+
 `network.conf.eth` chỉ là compatibility shadow và REST `PUT /api/v1/network` cũ vẫn được giữ
 cho tương thích BACnet/Wi-Fi/service config. Cả endpoint này và `PUT /api/v1/system/config/network` phải giữ
 nguyên `eth`; endpoint config từ chối payload cố thay đổi Ethernet/DNS. Luồng lưu BACnet/Wi-Fi

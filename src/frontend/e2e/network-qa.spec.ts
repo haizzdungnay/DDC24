@@ -1,16 +1,21 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { expect, test, type Page } from '@playwright/test'
 
+// Khớp contract sau 2026-07-31: `activeBacnetPort` là cổng đang bind THẬT (khác
+// `bacnetPort` trong file khi cấu hình đã sửa mà chưa reload), `firmware`/`serial`
+// thay cho hai ô từng gán cứng "N/A", và số đo per-slave có thể là null khi field
+// bus chưa đo được — null phải hiển thị "—", không phải 0.
 const networkData = {
   northbound: {
     deviceName: 'DDC-QA', ip: '10.10.10.5', dhcp: false, wifiEnabled: false,
     subnet: '255.255.255.0', gateway: '10.10.10.1', bacnetDeviceId: '1001',
-    bacnetDeviceName: 'DDC-QA', bacnetPort: 47808, bmsLink: 'online'
+    bacnetDeviceName: 'DDC-QA', bacnetPort: 47808, bmsLink: 'online',
+    activeBacnetPort: 47808, firmware: '9.9.9-qa', serial: ''
   },
   southbound: [
-    { address: 1, name: 'IO-01', profile: 'EXT I/O', baudRate: 9600, pollState: 'online', errorRate: 0, lastPollMs: 12 },
-    { address: 2, name: 'Remote HMI', profile: 'Remote HMI', baudRate: 19200, pollState: 'online', errorRate: 0.5, lastPollMs: 18 },
-    { address: 3, name: 'Meter-01', profile: 'Meter', baudRate: 38400, pollState: 'online', errorRate: 0, lastPollMs: 21 }
+    { address: 1, name: 'IO-01', profile: 'EXT I/O', baudRate: 9600, pollState: 'online', errorRate: 0, lastPollMs: 12, totalPolls: 500, totalErrors: 0 },
+    { address: 2, name: 'Remote HMI', profile: 'Remote HMI', baudRate: 19200, pollState: 'online', errorRate: 0.5, lastPollMs: 18, totalPolls: 400, totalErrors: 2 },
+    { address: 3, name: 'Meter-01', profile: 'Meter', baudRate: 38400, pollState: 'online', errorRate: 0, lastPollMs: 21, totalPolls: 300, totalErrors: 0 }
   ]
 }
 
@@ -148,8 +153,10 @@ test('Network D/E runtime QA with mocked mutations and authority recovery', asyn
   await expect(page.getByText('47808', { exact: true })).toBeVisible()
   await expect(page.getByText('3/3 online', { exact: true })).toBeVisible()
   await expect(page.getByText('100%', { exact: true })).toBeVisible()
-  await expect(page.getByText('NORTHBOUND - BACnet/IP lên BMS', { exact: true })).toBeVisible()
-  await expect(page.getByText('SOUTHBOUND - RS-485 Modbus RTU Master', { exact: true })).toBeVisible()
+  // Hai tiêu đề này trước đây là chuỗi trộn cứng VI/EN không qua pick() (finding
+  // F-11); nay đã song ngữ hoá nên assertion bám bản tiếng Anh của locale mặc định.
+  await expect(page.getByText('NORTHBOUND — BACnet/IP up to BMS', { exact: true })).toBeVisible()
+  await expect(page.getByText('SOUTHBOUND — RS-485 Modbus RTU master', { exact: true })).toBeVisible()
   await page.screenshot({ path: `${artifactDir}/network-summary.png`, fullPage: true })
 
   transaction = dhcpUnknownTransaction()
@@ -168,62 +175,71 @@ test('Network D/E runtime QA with mocked mutations and authority recovery', asyn
 
   transaction = staticTransaction()
   for (const label of ['ACTIVE / KERNEL', 'CONFIGURED PROFILE', 'PENDING CANDIDATE', 'TRANSACTION', 'EDITABLE DRAFT', 'idle']) await expect(page.getByText(label, { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Validate', exact: true })).toBeEnabled()
-  await expect(page.getByRole('button', { name: 'Stage', exact: true })).toBeEnabled()
-  await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Confirm', exact: true })).toBeDisabled()
+  // Thanh nút chỉ còn hai; tên lệnh giao thức không được lộ ra mặt người dùng.
+  await expect(page.getByRole('button', { name: 'Check', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeEnabled()
+  for (const gone of ['Stage', 'Apply', 'Confirm', 'Rollback']) {
+    await expect(page.getByRole('button', { name: gone, exact: true })).toHaveCount(0)
+  }
 
-  await page.getByRole('button', { name: 'Validate', exact: true }).click()
+  await page.getByRole('button', { name: 'Check', exact: true }).click()
   await expect.poll(() => mutationRequests.filter((entry) => entry.path.endsWith('/transaction/validate')).length).toBe(1)
   await expect(page.getByText('Candidate is valid', { exact: true })).toBeVisible()
 
   await page.getByRole('textbox', { name: 'IPv4' }).fill('10.20.30.40')
+  // F-08: từ 2026-07-31 client chặn ngay candidate không nhất quán. Đổi IPv4 sang
+  // subnet khác thì gateway cũ (10.10.10.1) trở thành ngoài subnet, nên phải sửa
+  // kèm — đúng như người vận hành thật phải làm.
+  await page.getByRole('textbox', { name: 'Gateway' }).fill('10.20.30.1')
   await page.getByRole('textbox', { name: 'DNS servers' }).fill('1.1.1.1, 8.8.8.8')
-  await page.getByRole('button', { name: 'Stage', exact: true }).click()
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click()
   await expect.poll(() => mutationRequests.filter((entry) => entry.path.endsWith('/transaction/stage')).length).toBe(1)
-  await expect(page.getByText('staged', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled()
-  await expect(page.getByRole('button', { name: 'Stage', exact: true })).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Validate', exact: true })).toBeDisabled()
+  // Không còn trạng thái 'staged' đứng yên: một lần bấm đi thẳng tới cửa sổ xác nhận.
+  // Một lần bấm chạy cả stage lẫn apply rồi hộp thoại xác nhận tự bật.
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Keep changes', exact: true })).toBeEnabled()
   await expect(page.getByRole('textbox', { name: 'IPv4' })).toBeDisabled()
   const stageRequest = mutationRequests.find((entry) => entry.path.endsWith('/transaction/stage'))
-  expect(stageRequest?.body).toMatchObject({ candidate: { interface: 'eth0', mode: 'static', ipv4: '10.20.30.40', netmask: '255.255.255.0', gateway: '10.10.10.1', dns: { mode: 'manual', servers: ['1.1.1.1', '8.8.8.8'] } } })
+  expect(stageRequest?.body).toMatchObject({ candidate: { interface: 'eth0', mode: 'static', ipv4: '10.20.30.40', netmask: '255.255.255.0', gateway: '10.20.30.1', dns: { mode: 'manual', servers: ['1.1.1.1', '8.8.8.8'] } } })
   await page.screenshot({ path: `${artifactDir}/network-staged.png`, fullPage: true })
 
-  await page.getByRole('button', { name: 'Apply', exact: true }).click()
   await expect.poll(() => mutationRequests.filter((entry) => entry.path.endsWith('/transaction/apply')).length).toBe(1)
-  await expect(page.getByText('awaiting confirmation', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Confirm', exact: true })).toBeEnabled()
-  await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled()
-  await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await page.getByRole('button', { name: 'Keep changes', exact: true }).click()
   await expect.poll(() => mutationRequests.filter((entry) => entry.path.endsWith('/transaction/confirm')).length).toBe(1)
   await expect(page.getByText('confirmed', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Confirm', exact: true })).toBeDisabled()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
 
   const deviceName = page.getByRole('textbox', { name: 'Device Name', exact: true })
   await deviceName.fill('DDC-QA-Canonical')
   await expect(page.getByText('confirmed', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'WiFi OFF', exact: true }).click()
+  // F-13: Toggle nay là role=switch + aria-checked (WCAG 2.1 AA §4.1.2), không
+  // còn là button trơn.
+  const wifi = page.getByRole('switch', { name: /WiFi/ })
+  await expect(wifi).toHaveAttribute('aria-checked', 'false')
+  await wifi.click()
+  await expect(wifi).toHaveAttribute('aria-checked', 'true')
   await page.getByRole('button', { name: 'Save BACnet/WiFi', exact: true }).click()
+  // F-09: lưu khởi động lại field bus nên phải xác nhận hậu quả trước.
+  await page.getByRole('button', { name: 'Save and apply', exact: true }).click()
   await expect.poll(() => mutationRequests.filter((entry) => entry.method === 'PUT' && entry.path.endsWith('/network')).length).toBe(1)
   const saveRequest = mutationRequests.find((entry) => entry.method === 'PUT' && entry.path.endsWith('/network'))
   expect(saveRequest?.body).toMatchObject({ northbound: { ip: '10.10.10.5', dhcp: false, subnet: '255.255.255.0', gateway: '10.10.10.1' } })
   await expect(deviceName).toHaveValue('DDC-QA-Canonical')
-  await expect(page.getByRole('button', { name: 'WiFi ON', exact: true })).toBeVisible()
+  await expect(page.getByRole('switch', { name: /WiFi/ })).toHaveAttribute('aria-checked', 'true')
   await page.screenshot({ path: `${artifactDir}/network-service-save.png`, fullPage: true })
 
   const draft = page.getByRole('textbox', { name: 'IPv4' })
   await draft.fill('10.55.55.55')
   authorityOnline = false
-  await expect(page.getByText('Authority disconnected; the state below may be stale.', { exact: true })).toBeVisible({ timeout: 4500 })
+  await expect(page.getByText('Authority disconnected; the state below may be stale.', { exact: true })).toBeVisible({ timeout: 12000 })
   await expect(draft).toHaveValue('10.55.55.55')
-  await expect(page.getByRole('button', { name: 'Validate', exact: true })).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Stage', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Check', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled()
   await page.screenshot({ path: `${artifactDir}/network-authority-outage.png`, fullPage: true })
 
   transaction = { ...transaction, requestId: 'qa-recovered', active: { ...transaction.active, link: 'down', carrier: false, reasonCode: 'NO_CARRIER', ipv4: '10.10.10.99' } }
   authorityOnline = true
-  await expect(page.getByText('ETH NO CARRIER', { exact: true })).toBeVisible({ timeout: 4500 })
+  await expect(page.getByText('ETH NO CARRIER', { exact: true })).toBeVisible({ timeout: 12000 })
   await expect(page.getByText('NO_CARRIER', { exact: true })).toBeVisible()
   await expect(page.getByText('Authority disconnected; the state below may be stale.', { exact: true })).toHaveCount(0)
   await expect(draft).toHaveValue('10.55.55.55')
