@@ -90,6 +90,24 @@ typedef enum {
  * INIT/HANDSHAKE/FAULT/RECONNECT→FAULT; SAFE_STATE→SAFE) */
 typedef enum { KX_IOP_NORMAL = 0, KX_IOP_FAULT = 1, KX_IOP_SAFE = 2 } kx_iop_status_t;
 
+/* ============ Telemetry per-slave fieldbus (Modbus RTU master) ============
+ * WRITER=iobus (fieldbus thread), READER=web. Ảnh chụp của FieldbusMetrics.
+ *
+ * uint64 đặt ĐẦU struct có chủ ý: giữ alignment 8 và làm layout xác định trên
+ * cả x86-64 lẫn aarch64, không phụ thuộc padding do trình biên dịch chèn.
+ * sizeof = 24 byte, không có padding ẩn.
+ */
+#define KX_N_FB_SLAVE  32   /* trần số slave publish được; vượt thì cắt và báo qua fb_slave_count */
+
+typedef struct {
+    uint64_t last_seen_ms;   /* mốc poll thành công gần nhất (CLOCK_MONOTONIC ms); 0 = chưa từng */
+    uint32_t total_polls;    /* tổng lượt poll kể từ khi iobus khởi động */
+    uint32_t total_errors;   /* tổng lượt lỗi; error rate = total_errors/total_polls */
+    uint8_t  addr;           /* địa chỉ Modbus 1..247 */
+    uint8_t  online;         /* 1 = slave đang online theo retry policy */
+    uint8_t  _pad[6];
+} kx_slave_metrics_t;
+
 /* ============ io_shm: iobus -> phần còn lại (giá trị đã scale) ============
  * Creator: mkddc-iobus (O_CREAT, init toàn bộ = default trước khi set magic).
  * Seqlock writer duy nhất: iobus. Ngoại lệ ownership: core là writer DUY NHẤT
@@ -121,6 +139,31 @@ typedef struct {
 
     /* metrics IOP (cho /system/status); default 0, reset khi iobus restart */
     uint32_t iop_rx, iop_crc_err, iop_timeout, iop_seq_err;
+
+    /* ---- Northbound/southbound telemetry (WRITER=iobus) ----
+     *
+     * Vì sao tồn tại: trước 2026-07-31, trang Web `settings/network` phải tự
+     * BỊA số liệu cho nửa dưới màn hình vì không có nguồn thật nào:
+     *   - `bmsLink` được suy ra từ chỗ 3 field trong file config khác rỗng, nên
+     *     báo "online" cả khi BACnet/IP chưa hề bind được socket (finding F-04);
+     *   - error rate mỗi slave bị gán cứng 0 và poll state là MỘT giá trị toàn
+     *     cục sao chép cho mọi dòng, nên một slave hỏng giữa nhiều slave là
+     *     không thể nhìn thấy (finding F-03).
+     * `FieldbusMetrics` (services/iobus/fieldbus/fieldbus_metrics.hpp) đã đếm
+     * đúng per-slave từ lâu nhưng chưa hề được publish ra khỏi iobus.
+     *
+     * NỐI VÀO CUỐI struct có chủ ý — KHÔNG đổi magic, đúng quy tắc đã ghi ở
+     * kx_plc_shm_t: mọi offset cũ giữ nguyên và consumer dùng ngữ nghĩa
+     * min-length (web/backend/core_client.go), nên binary CŨ đọc SHM MỚI vẫn
+     * đúng, và binary MỚI đọc SHM CŨ (528 byte) chỉ đơn giản là không thấy
+     * phần này — consumer PHẢI kiểm độ dài trước khi đọc và coi "không có dữ
+     * liệu" là KHÔNG BIẾT, tuyệt đối không quy thành 0/online.
+     */
+    uint16_t bacnet_udp_port;   /* cổng UDP BACnet/IP đang bind THẬT; 0 = chưa bind */
+    uint8_t  bacnet_bound;      /* 1 = bip_init() thành công và socket đang mở       */
+    uint8_t  fb_slave_count;    /* số phần tử hợp lệ trong fb_slave[]; 0 = chưa poll */
+    uint32_t fb_publish_seq;    /* tăng mỗi lần publish; 0 = iobus chưa publish lần nào */
+    kx_slave_metrics_t fb_slave[KX_N_FB_SLAVE];
 } kx_io_shm_t;
 
 /* ============ ext_shm: fieldbus (Modbus RTU master) -> hệ thống ============ */

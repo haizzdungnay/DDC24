@@ -192,4 +192,31 @@ void IoCache::mark_inputs_unreliable()
     KX_WRITE_END(shm_);
 }
 
+void IoCache::write_fieldbus_metrics(const kx_slave_metrics_t* slaves, size_t count)
+{
+    if (!shm_) return;
+    if (count > KX_N_FB_SLAVE) count = KX_N_FB_SLAVE;
+
+    KX_WRITE_BEGIN(shm_);
+    for (size_t i = 0; i < count; i++)
+        shm_->fb_slave[i] = slaves[i];
+    /* Xoá phần đuôi để reader không đọc lại số liệu của slave đã bị gỡ khỏi config. */
+    for (size_t i = count; i < KX_N_FB_SLAVE; i++)
+        shm_->fb_slave[i] = kx_slave_metrics_t{};
+    shm_->fb_slave_count = static_cast<uint8_t>(count);
+    /* Tăng SAU khi dữ liệu đã vào chỗ: seq==0 luôn có nghĩa "chưa publish lần nào". */
+    shm_->fb_publish_seq++;
+    if (shm_->fb_publish_seq == 0) shm_->fb_publish_seq = 1;   /* tránh quay vòng về 0 */
+    KX_WRITE_END(shm_);
+}
+
+void IoCache::write_bacnet_bind(bool bound, uint16_t udp_port)
+{
+    if (!shm_) return;
+    KX_WRITE_BEGIN(shm_);
+    shm_->bacnet_bound    = bound ? 1u : 0u;
+    shm_->bacnet_udp_port = bound ? udp_port : 0u;
+    KX_WRITE_END(shm_);
+}
+
 } // namespace iobus

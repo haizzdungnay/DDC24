@@ -185,6 +185,26 @@ void build_ui_units(const iobus::IobusConfig& cfg, char units[KX_N_UI][8],
     }
 }
 
+/* Chuyển FieldbusMetrics sang layout SHM rồi publish cho Web (finding F-03).
+ * Trước đây số liệu này chỉ sống trong iobus, nên trang Web phải bịa error rate
+ * = 0 và dùng chung một poll state cho mọi slave. */
+void publish_fieldbus_metrics(iobus::IoCache& cache,
+                              const iobus::fieldbus::FieldbusMetrics& metrics)
+{
+    kx_slave_metrics_t out[KX_N_FB_SLAVE] = {};
+    size_t count = metrics.size();
+    if (count > KX_N_FB_SLAVE) count = KX_N_FB_SLAVE;
+    for (size_t i = 0; i < count; i++) {
+        const auto& m = metrics.get(static_cast<uint8_t>(i));
+        out[i].last_seen_ms = m.last_seen_ms;
+        out[i].total_polls  = m.total_polls;
+        out[i].total_errors = m.total_errors;
+        out[i].addr         = m.addr;
+        out[i].online       = m.online ? 1u : 0u;
+    }
+    cache.write_fieldbus_metrics(out, count);
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -292,6 +312,7 @@ int main(int argc, char** argv)
                 }
                 if (modbus_tcp.has_slaves())
                     modbus_tcp.poll_once(poll_now, ext_cache, fieldbus_sock_path);
+                publish_fieldbus_metrics(cache, fieldbus_metrics);
                 uint32_t wait_ms = rtu_ok ? modbus.sleep_ms_until_next(now_ms()) : 1000u;
                 if (modbus_tcp.has_slaves()) {
                     const uint32_t tcp_wait = modbus_tcp.sleep_ms_until_next(now_ms());
@@ -315,6 +336,12 @@ int main(int argc, char** argv)
         cache.detach();
         return 1;
     }
+    /* Publish trạng thái bind ngay cả khi BACnet/IP bị tắt: Web phải phân biệt
+     * "iobus đã nói rõ là không bind" với "iobus cũ chưa hề ghi field này"
+     * (trường hợp sau nhận ra qua độ dài segment). BACnet tắt = BMS link down,
+     * đó là sự thật chứ không phải thiếu dữ liệu. */
+    if (!bacnet_cfg.bip.enabled)
+        cache.write_bacnet_bind(false, 0);
     if (bacnet_cfg.bip.enabled) {
         bacnet_objects.init(bacnet_cfg);
         const auto core_write = [&](const std::string& op, uint32_t idx, float value,
@@ -326,7 +353,12 @@ int main(int argc, char** argv)
                          cold ? 1u : 0u);
         };
         bacnet_server.init(bacnet_cfg, &bacnet_objects, core_write, reinit);
-        if (bacnet_server.start()) {
+        const bool bacnet_started = bacnet_server.start();
+        /* F-04: publish kết quả bind THẬT. Trước đây Web suy ra "BMS online" chỉ từ
+         * việc bip.enabled=true và file config có ip/port khác rỗng, nên báo online
+         * cả khi bip_init() đã thất bại. */
+        cache.write_bacnet_bind(bacnet_started, bacnet_cfg.bip.udp_port);
+        if (bacnet_started) {
             /* Push initial unit codes into bacnet-stack AI objects (thread not yet started) */
             {
                 char units[KX_N_UI][8];
@@ -352,7 +384,11 @@ int main(int argc, char** argv)
                             std::fprintf(stderr, "INFO  bacnet_server.address_change old=%s new=%s\n",
                                          address_signature.empty() ? "none" : address_signature.c_str(),
                                          current.empty() ? "none" : current.c_str());
-                            if (bacnet_server.rebind()) {
+                            const bool rebound = bacnet_server.rebind();
+                            /* Rebind hỏng thì socket không còn phục vụ BMS — Web phải
+                             * thấy điều đó thay vì giữ nguyên "online" cũ. */
+                            cache.write_bacnet_bind(rebound, bacnet_cfg.bip.udp_port);
+                            if (rebound) {
                                 bacnet_server.apply_ai_units();
                                 bacnet_server.apply_ao_config();
                                 address_signature = current;
