@@ -13,7 +13,7 @@ export function HelpPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
-        <div className="grid h-11 w-11 place-items-center rounded-[var(--radius)] bg-[var(--c-accent)] text-white"><CircleHelp className="h-6 w-6" aria-hidden="true" /></div>
+        <div className="grid h-11 w-11 place-items-center rounded-[var(--radius)] bg-[var(--c-accent)] text-[var(--c-on-accent)]"><CircleHelp className="h-6 w-6" aria-hidden="true" /></div>
         <div>
           <h1 className="text-2xl font-semibold">{pick('Trợ giúp', 'Help')}</h1>
           <p className="text-sm text-[var(--c-text-dim)]">{pick('Hướng dẫn nhanh và câu hỏi thường gặp', 'Quick guides and frequently asked questions')}</p>

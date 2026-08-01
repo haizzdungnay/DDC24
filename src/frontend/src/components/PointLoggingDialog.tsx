@@ -382,7 +382,7 @@ function StepMarker({ current }: { current: 1 | 2 }) {
   return (
     <div className="grid grid-cols-2 gap-2" aria-label={`Step ${current} of 2`}>
       {['Policy', 'Activation'].map((label, index) => (
-        <div key={label} className={`rounded-full px-3 py-1.5 text-center text-xs font-semibold ${current === index + 1 ? 'bg-[var(--c-accent)] text-white' : 'bg-[var(--c-surface-2)] text-[var(--c-text-dim)]'}`}>
+        <div key={label} className={`rounded-full px-3 py-1.5 text-center text-xs font-semibold ${current === index + 1 ? 'bg-[var(--c-accent)] text-[var(--c-on-accent)]' : 'bg-[var(--c-surface-2)] text-[var(--c-text-dim)]'}`}>
           {index + 1}. {label}
         </div>
       ))}
@@ -512,7 +512,7 @@ function LoggingErrorAlert({ error }: { error: PointLoggingError }) {
   }[error.kind]
   const Icon = error.kind === 'storage' ? Database : error.kind === 'conflict' ? CalendarClock : AlertTriangle
   return (
-    <div role="alert" className="flex gap-3 rounded-[var(--radius)] border border-[rgba(213,32,42,0.38)] bg-[rgba(213,32,42,0.09)] p-3 text-sm text-[var(--c-fault-fg)]">
+    <div role="alert" className="flex gap-3 rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">
       <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <span><strong className="block">{heading}</strong><span className="mt-0.5 block">{error.message}</span></span>
     </div>

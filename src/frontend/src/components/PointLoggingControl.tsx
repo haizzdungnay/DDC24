@@ -17,9 +17,9 @@ export interface PointLoggingControlProps extends Omit<PointLoggingDialogProps, 
 
 const statusStyle: Record<PointLoggingState, string> = {
   off: 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]',
-  scheduled: 'border-[rgba(42,92,138,0.38)] bg-[rgba(42,92,138,0.10)] text-[var(--c-accent)]',
-  recording: 'border-[rgba(47,164,90,0.38)] bg-[rgba(47,164,90,0.10)] text-[var(--c-good-fg)]',
-  error: 'border-[rgba(213,32,42,0.38)] bg-[rgba(213,32,42,0.10)] text-[var(--c-fault-fg)]'
+  scheduled: 'border-[var(--c-accent)] bg-[var(--c-accent-bg)] text-[var(--c-accent)]',
+  recording: 'border-[var(--c-good)] bg-[var(--c-good-bg)] text-[var(--c-good-fg)]',
+  error: 'border-[var(--c-fault)] bg-[var(--c-fault-bg)] text-[var(--c-fault-fg)]'
 }
 
 export function PointLoggingControl({ point, policy, role, serverNowUtc, loading = false, errors = [], onChange }: PointLoggingControlProps): JSX.Element {
