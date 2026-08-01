@@ -7,6 +7,217 @@
 ---
 
 ## [Unreleased]
+### Changed — Plan 45 Track A: Web UI/UX từ "bịa dữ liệu" sang trung thực và có gate quyền (2026-08-01)
+
+Thực thi `WEB-UX-001…012` + `QA-E2E-001` sau khi chủ dự án phê duyệt plan 45.
+Track B (`OPS-CD-001…005`, CI/CD self-hosted runner) **hoãn** theo quyết định
+cùng ngày.
+
+**Kiểm chứng (đo lại trong phiên, không dẫn số cũ):** vitest `294/294` ·
+eslint `0 warning` · `npm run build` OK · `go vet` sạch ·
+`go test ./... -count=1` pass · `ctest` với `MKDDC_ENABLE_MODBUS/BACNET/HMI=ON`
+**`743/743`** trong 239 s.
+
+#### Trung thực dữ liệu — không màn hình nào còn khẳng định thứ nó không biết
+
+- `WEB-UX-001` Dashboard bỏ toàn bộ giá trị dự phòng. `?? 23` (CPU), `?? 48`
+  (RAM) và một uptime 12 ngày dựng sẵn khiến một board đã mất liên lạc vẫn vẽ
+  đồng hồ màu xanh trông hoàn toàn bình thường. `DeviceStatusCard()` không nhận
+  tham số nên ô to nhất góc trên cùng luôn báo "ONLINE" kể cả khi `/system/status`
+  trả `fault`. Nay map `overall` thật, không có dữ liệu thì `—` và màu xám.
+- MAC `00:0D:18:24:AC:01` và giờ hệ thống `23/05/2025 14:32:18` từng gán cứng
+  trong JSX, tức hiện y hệt nhau trên mọi thiết bị đã xuất xưởng — ai đối chiếu
+  MAC để chắc mình mở đúng tủ sẽ nhận nhầm. Backend bổ sung `device_mac`,
+  `device_name`, `location`, `description`, `system_time` vào `/system/status`;
+  `primaryInterface()` lấy IP và MAC trong **cùng một lần duyệt** để hai giá trị
+  không rơi vào hai card khác nhau.
+- `WEB-UX-002` gỡ 4 badge `core/iobus/web/IOP` gán cứng `state="online"` ở trang
+  đăng nhập. Trang đó render trước xác thực, mà mọi endpoint trạng thái đều đòi
+  tối thiểu `viewer` — nên đó là khẳng định bịa 100%: kỹ thuật viên tới tủ vì mất
+  điều khiển, mở web lên vẫn thấy "tất cả online" trước cả khi kịp đăng nhập.
+- `WEB-UX-003` gỡ IP phiên `192.168.1.42` và "lần đăng nhập gần nhất"
+  `2026-06-15 17:25:04` gán cứng. Hai thứ đó là chỉ dấu an ninh — bịa chúng ra là
+  chủ động che dấu hiệu xâm nhập. Backend chưa lưu lịch sử phiên nên gỡ hẳn thay
+  vì để `—` vĩnh viễn.
+
+#### An toàn thao tác vật lý
+
+- `WEB-UX-004` viết lại `CommissioningPage`. Bản cũ dài 43 dòng và mỗi nút là một
+  lệnh ghi thẳng ra cơ cấu chấp hành, không xác nhận: `Test` gọi
+  `runCommissioningTest(point, 50)` — một cú click mở van 50% hoặc đóng
+  contactor, với con số 50 gán cứng người vận hành không chọn được. Nhãn
+  `Release` gọi cùng đường ghi với giá trị 0, tức "trả quyền" thực chất **đóng
+  van về 0%** chứ không trả điều khiển cho vòng lặp tự động. Nay: ô nhập giá trị
+  bắt buộc, hộp thoại nêu đích danh point/giá trị/hậu quả vật lý, `Trả về tự
+  động` dùng `PUT /points/{id}` với `release: true`, thêm `Trả tất cả về tự
+  động`, `refreshMs` để quan sát được phản hồi, và xử lý `state.error` (trước đây
+  API hỏng hiện ra y hệt "thiết bị không có output nào").
+- `WEB-UX-005` thêm `RequireRole` và bọc mọi route tác động vật lý.
+  `RequireAdmin` cũ có định nghĩa nhưng **không bọc route nào**, nên `viewer` vào
+  thẳng được trang chạy thử, ép output và quản lý người dùng. Gate mới theo thang
+  quyền (`roleAtLeast`) khớp `roleRank` của backend, và khi thiếu quyền thì hiện
+  trang giải thích thay vì `Navigate` im lặng về `/`. Ma trận route↔quyền ở
+  `src/frontend/src/auth/roles.ts` suy trực tiếp từ bảng route backend.
+  `MonitorPage` để mở cho `viewer` (là màn hình theo dõi) nhưng khoá hai đường
+  ghi bên trong.
+
+#### Không còn nút chết, không còn toast thành công giả
+
+- `WEB-UX-006` `SettingsPage` nối vào `GET/PUT /system/config/device` thật. Nút
+  Lưu cũ chỉ gọi `toast.push('success', 'Đã lưu … (demo)')` và không gửi request
+  nào — người vận hành đổi tên thiết bị, thấy thông báo xanh, rời trang, và không
+  có gì được lưu. Gỡ 4 thẻ "Mục phụ" không gắn `onClick`, gỡ hai ô chu kỳ không
+  có field tương ứng để lưu.
+- `WEB-UX-003` nút "Đổi mật khẩu" nối vào `POST /me/change-password` và thêm ô
+  mật khẩu hiện tại. Trước đó nó bắn toast thành công mà không gọi API — nếu
+  người dùng đổi mật khẩu vì nghi bị lộ thì thông báo giả đó chính là thứ giữ
+  cửa mở.
+- `WEB-UX-007` trang Lập trình hiện trang giải thích "thuộc Rev B" thay vì
+  `<Navigate to="/">` im lặng.
+- `WEB-UX-011` `UsersPage` (trước đây đúng 20 dòng, dựng bảng từ `getDemoUsers()`
+  **kể cả ở bản live**, nên trên board thật hiển thị 5 tài khoản không tồn tại
+  trong khi `users.conf` chỉ có `admin`) nay nối đủ list/tạo/đổi vai trò/đặt lại
+  mật khẩu/xoá, tôn trọng guard last-admin. Bỏ hai cột "Họ và tên" và "Trạng thái
+  online" vì backend không lưu — thà thiếu cột còn hơn một cột luôn sai.
+
+#### RBAC 3 vai trò dùng được qua Web
+
+- `WEB-UX-009` mở khoá ô tên đăng nhập (trước là `value="admin" readOnly`).
+  Backend đã có đủ ba vai trò với `auth.Require(...)` trên từng endpoint và API
+  quản trị tài khoản, nhưng **không tài khoản nào trong số đó đăng nhập được qua
+  Web** — toàn bộ công RBAC backend nằm chết, và mọi người dùng Web thao tác dưới
+  quyền cao nhất. `NavRail` lọc mục menu theo vai trò, dùng chung
+  `ROUTE_MIN_ROLE` với gate để hai bên không lệch. Biểu tượng con mắt nay bấm
+  được; nút `SSO / AD` bị gỡ (nút chết, đẩy sang Rev B).
+- **Đính chính:** plan 45 v1.0 ghi backend có "4 vai trò". Thực tế `Role` trong
+  `web/backend/auth.go` chỉ có **3**: `viewer`, `operator`, `admin`.
+
+#### Tương phản WCAG 2.2 AA và theme tối
+
+- `WEB-UX-008` + `WEB-UX-012` làm gộp: cả hai cùng viết lại bộ design token, tách
+  ra sẽ phải chạm cùng những file đó hai lần. Bộ cũ trượt diện rộng —
+  `--c-border` 1.64:1 (cần 3:1), `--c-warn` 1.18:1 khi làm chữ, 13/14 biến thể
+  `StatusBadge` dưới ngưỡng.
+- Nguyên nhân gốc của phần badge: nền được tô bằng `rgba()` của **màu tối phủ lên
+  nền xám**, làm nền tối đi và kéo tụt tương phản của chính dòng chữ trên nó. Nay
+  dùng token nền đặc `--c-*-bg`, thay ~50 chuỗi `rgba()` rải khắp components.
+- Token chuyển từ `styles.css` sang `src/theme/tokens.ts`, ghi lên `:root` bằng
+  `applyTheme()`. Lý do: test tương phản phải chạy trên token thật, mà `?raw` bị
+  plugin Tailwind nuốt còn `node:fs` kéo theo `@types/node`; đồng thời hai theme
+  dùng chung một kiểu nên thiếu token là lỗi biên dịch.
+- Thêm `--c-on-accent` / `--c-on-fault`: không thể gán cứng `text-white` vì ở
+  theme tối `--c-accent` phải sáng lên để đọc được trên nền tối, và khi đó chữ
+  trắng trên nó chỉ còn 3.03:1.
+- `src/theme/contrast.test.ts` tính tương phản bằng công thức WCAG 2.2 trên token
+  thật, cho **cả hai theme**: 4.5:1 cho token chữ, 3:1 cho token đồ hoạ, 14 biến
+  thể badge, và luật "nền badge phải lệch ra xa màu chữ chứ không xích lại gần".
+- `ThemeProvider` nhớ lựa chọn qua localStorage, bám `prefers-color-scheme` khi
+  người dùng chưa chọn, và **không** để hệ điều hành ghi đè lựa chọn rõ ràng.
+
+#### Navigation dùng được ngoài hiện trường
+
+- `WEB-UX-010` thêm `NavDrawer` cho màn hình dưới 1024px. `NavRail` là
+  `hidden … lg:flex` và trước đây không có gì thay thế: mở web trên điện thoại là
+  mất sạch điều hướng, chỉ còn cách gõ tay URL — với thiết bị mà kỹ thuật viên
+  thường xem qua điện thoại ngay tại tủ, đó là mất hẳn khả năng dùng ngoài hiện
+  trường. Bẫy focus + `Escape` theo đúng mẫu `Modal.tsx`, đóng ngay khi điều
+  hướng.
+
+#### QA và governance
+
+- `QA-E2E-001` thêm `tools/qa/network_board_e2e.sh`. Lần fail duy nhất của E2E
+  board hôm 31/07 (UC-WEB-NET-006) không phải lỗi sản phẩm mà là **trạng thái sót
+  giữa các kịch bản**: UC-008 để lại giao dịch netcfg chưa kết thúc nên `stage`
+  của UC-006 bị từ chối bằng `TRANSACTION_IN_PROGRESS`. Script có
+  `reset_transaction` chạy trước *và* sau mỗi kịch bản, cộng `trap` để một lần
+  Ctrl-C giữa chừng cũng không để lại giao dịch treo. Cố ý rollback chứ không
+  confirm — confirm sẽ chốt một thay đổi mà kịch bản trước bỏ dở. Có guard từ
+  chối chạy nhóm mutation nếu đường quản trị đi qua chính interface sắp đổi địa chỉ.
+- **ADR-021** (mới): RBAC 3 vai trò thuộc baseline Rev A.0.
+  `REVA_SCOPE_ROADMAP` §2/§3/§6 cập nhật theo. Vẫn thuộc Rev B: nhóm quyền tuỳ
+  biến, phân quyền theo point, SSO/AD, lịch sử phiên.
+- **ADR-022** được ghi vào `DECISIONS.md` ở trạng thái `Proposed` (WP2 xong, còn
+  WP1/3/4/5/6).
+
+### Added — Plan 45: dọn blocker Web UI/UX và hoàn tất CI/CD deploy (2026-08-01)
+
+Phạm vi: `docs/03_implementation/45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md` (mới,
+trạng thái **Draft — chờ phê duyệt**).
+
+Chủ dự án quyết hoãn FW MCU và làm nốt phần còn lại. Plan gom việc còn lại thành
+hai track chạy song song, không dùng chung người và không đụng cùng file: Track A
+Web UI/UX (`WEB-UX-001…012`, ≈21,5 ngày công) và Track B hoàn tất ADR-022
+(`OPS-CD-001…005` + `QA-E2E-001`, ≈4 ngày công).
+
+**Phạm vi được xác định bằng cách đọc lại code, không chép lại audit.** Audit UI/UX
+lập 30/07, sau đó PR #77 đã sửa một phần; rà lại ngày 01/08 cho thấy QW-4 (validate
+IP client) và 2/3 nút chết trang đăng nhập đã hết, và **toàn bộ F-01…F-23 của review
+code 30/07 đã đóng** — kiểm từng finding trong code chứ không dựa vào trạng thái
+ghi trong tài liệu. Những mục đó bị loại khỏi plan để không tính công cho việc đã xong.
+
+Ba điểm được nêu ra để chủ dự án quyết trước khi code, thay vì tự quyết trong lúc làm:
+
+- **Xung đột phạm vi RBAC.** `REVA_SCOPE_ROADMAP` §3 xếp "RBAC đầy đủ" vào Rev B,
+  nhưng backend **đã** hiện thực 4 vai trò còn frontend khoá cứng `admin` — sản phẩm
+  đã đi quá roadmap ở một đầu rồi dừng nửa chừng ở đầu kia. Làm nốt là hợp lý nhưng
+  phải sửa roadmap cho đúng governance, không làm lặng.
+- **Theme tối** được audit xếp vào điều kiện nghiệm thu không thể thương lượng nhưng
+  tốn 4 ngày và chạm mọi màn hình — hỏi lại xem đã có khách yêu cầu thật chưa.
+- **MP-4/MP-5 của audit** (canvas lập trình, lịch tuần kéo-thả) **không** đưa vào,
+  vì roadmap đã cắt cả hai sang Rev B; đưa vào là âm thầm mở rộng phạm vi Rev A.
+
+§7 ghi rõ điều plan **không** giải quyết: `fw/Core/Src/main.c` vẫn là 16 dòng
+skeleton, mọi kiểm chứng chạy trên `mkddc-fakemcu` + PTY, và **Milestone A của Rev A
+("lõi điều khiển chạy trên HW thật") vẫn không đạt được sau khi plan 45 hoàn thành**.
+Ghi vào plan để không ai đọc tiến độ UI rồi tưởng sản phẩm đã sẵn sàng.
+
+### Added — Deploy `main` (47edec7) xuống Orange Pi 5B + script deploy WP2 (2026-08-01)
+
+Phạm vi: `tools/deploy/deploy_board.sh` (mới), deploy thật lên board lab
+`orangepi5b` (aarch64, Debian Bookworm).
+
+**Bối cảnh.** Board đang chạy bản build tay ngày 31/07 dựng từ nhánh
+`fix/review-2026-07-30-fe-be-fwsom`; nhánh đó tới 01/08 mới merge vào `main` qua
+PR #77. Board vì vậy lệch với `main` và cần cắt lại từ nhánh chính thức.
+
+**Đã cắt** (commit `47edec74`): `mkddc-core`, `mkddc-iobus`, `mkddc-netcfg`,
+`mkddc-hmi`, `mkddc-st-compile`, `mkddc-st-validate` build native aarch64 trên
+chính board; `mkddc-web` cross-compile `CGO_ENABLED=0` và `dist/` build ở host.
+
+**Số đo kiểm chứng**
+
+| Bộ kiểm | Kết quả |
+|---|---|
+| `go vet ./...` + `go test ./... -count=1` (host) | pass |
+| `npm run build` (`tsc --noEmit` + vite) | pass |
+| `ctest` trên board, bật MODBUS+BACNET+HMI | 738/743 pass |
+| 5 test hỏng + 6 test skip, chạy lại trong mount namespace `/dev/shm` sạch | 17/17 pass |
+| Health check sau khi cắt | GET `/` = 200, `/api/v1/system/status` = 401, magic `io_shm`/`plc_shm` = `0x4B584404` |
+| Service sau 1 phút | 5/5 active, `NRestarts=0`, `end1`+`wlan0` nguyên trạng |
+
+5 test hỏng (`BacnetObjTable.*`, `StIntegration.*`) **không** phải hồi quy: chúng
+`ASSERT_TRUE(t.attach())` trên `/dev/shm/mkddc_{io,plc}_shm` vốn thuộc `mkddc:mkddc`
+mode `0644`, còn ctest chạy bằng user `orangepi` nên không mở được `O_RDWR` — đúng
+nguyên nhân đã ghi ở evidence 31/07.
+
+**Script `tools/deploy/deploy_board.sh`** hiện thực WP2 của
+[ADR-022](docs/adr/ADR-022-ci-cd-tu-dong-deploy-xuong-board.md): kiểm journal
+`netcfg-transaction.json` và huỷ deploy nếu còn giao dịch dở (§2.7) → backup →
+staging → dừng service theo thứ tự an toàn → hoán đổi → khởi động → health check →
+rollback tự động nếu fail; sinh `DEPLOY_MANIFEST.txt` (commit + SHA-256) và giữ 5
+backup gần nhất.
+
+**Một lỗi của chính script đã lộ ra và được vá ngay trong phiên.** Lần chạy đầu
+health check bắn một phát ngay sau `systemctl start` và nhận `000`
+(connection-refused) → script rollback. Nguyên nhân gốc: `mkddc-web` mất ~23 giây
+migrate historian rồi mới bind cổng 8081, nên "chưa bind" bị đọc nhầm thành "hỏng".
+Sửa bằng `wait_http()` chờ có hạn 90 giây trước khi kết luận.
+
+Sự cố đó đồng thời là **diễn tập rollback không hẹn trước (WP6)**: rollback khôi
+phục cả 6 binary + `mkddc-web` + `dist/` và SHA-256 sau khôi phục **khớp từng byte**
+với bản trước deploy, service trở lại active. Cơ chế an toàn của ADR-022 vì vậy đã
+được chứng minh trên phần cứng thật chứ không chỉ trên giấy.
+
 ### Added — Quy tắc dự án: chuẩn hoá quy trình khi user nói "commit"/"merge" (2026-08-01)
 
 Phạm vi: `CLAUDE.md`, `AGENTS.md` (giữ hai file đồng bộ như quy ước sẵn có).
