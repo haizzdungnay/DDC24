@@ -48,3 +48,15 @@ option(MKDDC_ENABLE_HMI "Build mkddc-hmi TFT local display service" OFF)
 if(MKDDC_ENABLE_HMI)
     add_subdirectory(hmi)
 endif()
+
+# Lớp giao thức của firmware MCU, kiểm trên host.
+#
+# `fw/src/iop/` là C thuần dùng chung `shared/iop_protocol.h` với phía SOM, và
+# không chạm HAL — nên nó chạy được trong cùng bộ ctest này. Đặt ở đây thay vì
+# một quy trình build riêng là có chủ đích: hợp đồng IOP có HAI phía, và cách
+# chắc chắn nhất để hai phía trôi khỏi nhau là để chúng ở hai cổng kiểm khác
+# nhau. Bo mạch chưa fab nên đây là phần firmware kiểm chứng được ngay.
+option(MKDDC_ENABLE_FW_HOSTCHECK "Build host-side tests for MCU firmware protocol layer" ON)
+if(MKDDC_ENABLE_FW_HOSTCHECK AND IOBUS_BUILD_TESTS)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../fw/hostcheck fw_hostcheck)
+endif()
