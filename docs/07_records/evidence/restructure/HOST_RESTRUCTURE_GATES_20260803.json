@@ -1,7 +1,7 @@
 {
   "evidence_id": "RST-HOST-GATES-20260803",
   "plan": "PLAN-ARCH-RESTRUCT-002",
-  "commit": "103b79faf3ebf06a7a311c5e9279f992869ade36-dirty",
+  "commit": "d5ec417f5b5a87d3636eeca031753313713bd811",
   "captured_at": "2026-08-03",
   "scope": "host architecture conformance, regression và release bundle",
   "repository_phase": "g4-modularized",
@@ -51,7 +51,7 @@
       "result": "PASS",
       "tests": 751,
       "failed": 0,
-      "ctest_duration_s": 2.98
+      "ctest_duration_s": 10.47
     },
     {
       "name": "cpp-asan",
@@ -79,13 +79,23 @@
     },
     {
       "name": "go-race",
-      "command": "scripts/verify-project.sh --component go --profile race",
+      "command": "go vet ./...; go test ./... -count=1; go test -race ./... -count=1",
       "result": "PASS",
-      "packages": [
-        "mkddc-web/cmd/mkddc-web",
-        "mkddc-web/internal/app"
+      "packages": 12,
+      "bounded_contexts": [
+        "auth",
+        "config",
+        "health",
+        "historian",
+        "hmi",
+        "modbusrtu",
+        "network",
+        "points",
+        "router",
+        "system"
       ],
-      "test_duration_s": 87.190
+      "test_duration_s": 88.494,
+      "non_race_app_duration_s": 21.477
     },
     {
       "name": "frontend",
@@ -94,10 +104,10 @@
       "test_files": 35,
       "tests": 299,
       "failed": 0,
-      "vitest_duration_s": 24.85,
+      "vitest_duration_s": 24.14,
       "lint_warnings": 0,
       "build_modules": 2223,
-      "vite_build_duration_s": 0.591
+      "vite_build_duration_s": 0.523
     },
     {
       "name": "frontend-network-e2e",
@@ -105,8 +115,29 @@
       "result": "PASS",
       "tests": 1,
       "failed": 0,
-      "duration_s": 22.8,
+      "duration_s": 23.1,
       "notes": "Mutation mạng dùng fixture intercept; Vite ghi WebSocket ECONNREFUSED vì backend thật không chạy."
+    },
+    {
+      "name": "frontend-chrome-devtools-runtime",
+      "command": "Chrome DevTools MCP snapshot/screenshot/Console/Network tại /settings/network",
+      "result": "PASS_WITH_LOW_ACCESSIBILITY_FINDING",
+      "desktop_viewport": "1440x1000",
+      "mobile_viewport": "390x844",
+      "console_errors": 0,
+      "console_warnings": 0,
+      "network_requests": 87,
+      "network_failures": 0,
+      "notes": "Chín form field thiếu id/name được ghi nhận mức accessibility low; xem CHROME_DEVTOOLS_RUNTIME_20260803.json."
+    },
+    {
+      "name": "frontend-npm-security-disposition",
+      "command": "npm audit --json và đối chiếu source/client-only RSC scope",
+      "result": "PASS_WITH_SCOPED_WAIVER",
+      "baseline_high_records": 4,
+      "post_change_high_records": 2,
+      "unique_unwaived_high_advisories": 0,
+      "notes": "Đã fix brace-expansion/postcss; GHSA-qwww-vcr4-c8h2 được waive đến 2026-10-25. npm audit vẫn trả exit 1; xem NPM_AUDIT_DISPOSITION_20260803.json."
     },
     {
       "name": "firmware-arm",
@@ -122,7 +153,7 @@
       "checksums": 5,
       "failed": 0,
       "artifact": "build/release",
-      "notes": "npm audit báo 4 lỗ hổng mức high có trước restructure; không bị che hoặc hạ mức."
+      "notes": "npm audit còn 2 record high cùng ánh xạ GHSA-qwww-vcr4-c8h2; unique unwaived high = 0 theo waiver client-only không dùng RSC, hạn 2026-10-25."
     },
     {
       "name": "script-syntax",
@@ -148,14 +179,22 @@
       "lưu log target có reviewer"
     ]
   },
-  "remaining_modularization": {
-    "result": "OPEN",
-    "notes": "Go đã có composition root cmd/mkddc-web và package main đúng boundary, nhưng bounded context auth/config/health/historian/modbusrtu vẫn chủ yếu nằm trong internal/app; RST-121..126 chưa được đánh dấu hoàn tất."
+  "go_bounded_contexts": {
+    "result": "PASS",
+    "tasks": [
+      "RST-121",
+      "RST-122",
+      "RST-123",
+      "RST-124",
+      "RST-125",
+      "RST-126"
+    ],
+    "notes": "Logic domain, persistence và adapter đã chuyển vào package có test trực tiếp; internal/app chỉ giữ HTTP handler, middleware và façade composition tương thích."
   },
   "claims_not_made": [
     "không claim target deployment hoặc rollback PASS",
     "không claim physical I/O HIL hoặc real RS485 ready",
     "không claim Programming production ready",
-    "không claim npm security gate GREEN"
+    "không claim npm audit trả exit 0; chỉ claim không còn advisory high chưa xử lý theo waiver có hạn"
   ]
 }

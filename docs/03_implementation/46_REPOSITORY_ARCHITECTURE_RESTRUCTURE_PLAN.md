@@ -1,8 +1,8 @@
 # Plan 46: Restructure kiến trúc repository theo bounded modules
 
 > **ID:** PLAN-ARCH-RESTRUCT-002
-> **Trạng thái:** In Progress — G0..G3 PASS; G4/G5 còn hạng mục mở
-> **Phiên bản:** 1.2
+> **Trạng thái:** In Progress — G0..G4 PASS; G5 bị chặn bởi target acceptance
+> **Phiên bản:** 1.3
 > **Ngày:** 2026-08-03
 > **Owner đề xuất:** Tech Lead + Dev SOM/Core/Iobus + Dev Web + DevOps/QA
 > **Nguồn kiến trúc:** [System Architecture](../03_architecture/SYSTEM.md),
@@ -77,8 +77,11 @@ apps/
       config/
       health/
       historian/
+      hmi/
       modbusrtu/
+      network/
       points/
+      router/
       system/
   web-ui/
     src/
@@ -552,6 +555,9 @@ IMPLEMENTATION_STARTED = YES
 SOURCE_PATHS_CHANGED = YES
 HOST_SOURCE_MIGRATION = PASS
 HOST_FULL_REGRESSION = PASS
+GO_BOUNDED_CONTEXTS = PASS
+NPM_UNWAIVED_HIGH_ADVISORIES = 0
+CHROME_DEVTOOLS_RUNTIME = PASS_WITH_LOW_ACCESSIBILITY_FINDING
 TARGET_INSTALL_ROLLBACK = NOT_RUN
 PLAN_CLOSED = NO
 ```
@@ -566,8 +572,8 @@ PLAN_CLOSED = NO
 | G1 | PASS | Root CMake, path module, verifier thống nhất và CI layout job đã dùng cây đích. |
 | G2 | PASS | `contracts/` là authority duy nhất; contract/dependency negative tests làm gate đỏ khi tạo bản sao hoặc import sai chiều. |
 | G3 | PASS trên host | Core, Iobus, netcfg, HMI, Web API, Web UI, STM32 và packaging đã chuyển vật lý; path cũ không còn tồn tại; binary/service/API/contract semantics giữ nguyên. |
-| G4 | PARTIAL | Core/Iobus có domain/application/ports/adapters/bootstrap và CMake boundary; React có app/features/shared cùng public barrel/lint guard; Go mới hoàn tất `cmd/mkddc-web` + `internal/app`, chưa tách xong `RST-121..126`. |
-| G5 | PARTIAL/BLOCKED | Compatibility shim đã bỏ, artifact đã cô lập, host regression và release checksum PASS. `RST-202` target install/startup/rollback chưa chạy vì không có target được duyệt; `RST-205` chưa được phép đóng. |
+| G4 | PASS | Core/Iobus có domain/application/ports/adapters/bootstrap và CMake boundary; React có app/features/shared cùng public barrel/lint guard. Go `RST-121..126` đã tách auth/audit, Point Catalog/config, Modbus RTU, historian, system/network/health/HMI và router thành package có test trực tiếp; `internal/app` chỉ giữ handler, middleware và façade composition cần tương thích. |
+| G5 | PARTIAL/BLOCKED | Compatibility shim đã bỏ, artifact đã cô lập, host regression, release checksum, npm security disposition và Chrome DevTools runtime đều có evidence. `RST-202` target install/startup/rollback chưa chạy vì không có target được duyệt; do đó `RST-205` chưa được phép đóng. |
 
 ### 12.2. Kiểm chứng host hiện hành
 
@@ -577,22 +583,36 @@ PLAN_CLOSED = NO
   Modbus+BACnet **718/718**, full Modbus+BACnet+HMI **751/751** PASS.
 - ASan và UBSan **709/709** PASS; fuzz smoke parser **917.841** lượt và loader
   **1.879.361** lượt trong 61 giây mỗi harness, không crash/sanitizer finding.
-- Go `vet` + `test -race -count=1`: PASS cho composition root và
-  `internal/app`.
+- Go `vet`, `test -count=1` và `test -race -count=1`: PASS cho **12 package**
+  gồm composition root, `internal/app` và các bounded context
+  `auth/config/health/historian/hmi/modbusrtu/network/points/router/system`;
+  package test chính chạy race trong **88,494 giây**.
 - React: Vitest **35 file, 299/299 test**, lint 0 warning, production build
-  **2.223 module** PASS; Playwright network **1/1 PASS**.
+  **2.223 module** PASS; Playwright network **1/1 PASS** trong 23,1 giây.
+- Chrome DevTools MCP: trang Network PASS ở desktop 1440×1000 và mobile
+  390×844; **0 Console error, 0 warning, 87/87 request thành công**. Ghi nhận
+  finding accessibility mức low: 9 form field thiếu `id`/`name`.
+- `npm audit`: từ 4 còn 2 record high cùng một advisory React Router RSC;
+  đã fix `brace-expansion` và `postcss`. Web UI client-only không dùng RSC nên
+  advisory còn lại có waiver hẹp, hạn 2026-10-25; unique unwaived high = **0**.
+  Không claim `npm audit` trả exit 0.
 - Firmware ARM build PASS; coordinated release builder và **5/5 SHA-256**
   PASS.
 - Bằng chứng chi tiết:
-  `docs/07_records/evidence/restructure/HOST_RESTRUCTURE_GATES_20260803.json`.
+  `docs/07_records/evidence/restructure/HOST_RESTRUCTURE_GATES_20260803.json`,
+  `CHROME_DEVTOOLS_RUNTIME_20260803.json` và
+  `NPM_AUDIT_DISPOSITION_20260803.json` trong cùng thư mục.
 
 ### 12.3. Hạng mục bắt buộc trước khi đóng plan
 
-1. Hoàn tất bounded context Go `RST-121..126`; không tạo package rỗng hoặc
-   façade giả chỉ để thỏa cây thư mục.
-2. Owner cung cấp target/board, định danh target, quyền cài service và cửa sổ
+1. Owner cung cấp target/board, định danh target, quyền cài service và cửa sổ
    rollback để chạy `RST-202`.
-3. Ghi log startup order, crash/restart, commit/checksum provenance và rollback
+2. Ghi log startup order, crash/restart, commit/checksum provenance và rollback
    từ target; host package test không thay bằng chứng này.
-4. Chạy closure review `RST-205`, xử lý/waive riêng 4 lỗ hổng npm mức high và
-   giữ các gate physical I/O HIL/real RS485/Programming ở trạng thái hiện hữu.
+3. Chạy closure review `RST-205` sau khi `RST-202` PASS và giữ các gate
+   physical I/O HIL/real RS485/Programming ở trạng thái hiện hữu.
+
+`RST-121..126`, npm security disposition và Chrome DevTools runtime đã hoàn
+tất trong phiên 2026-08-03; không còn là blocker đóng plan. Blocker duy nhất
+trong scope restructure là target install/startup/provenance/rollback được
+owner phê duyệt.
