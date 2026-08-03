@@ -1,0 +1,25 @@
+[Unit]
+Description=MK-DDC-24 Web/API
+After=network-online.target mkddc-core.service mkddc-iobus.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mkddc
+Group=mkddc
+WorkingDirectory=/opt/mkddc-web
+Environment=PORT=8081
+Environment=CONFIG_DIR=/data/config
+Environment=STATIC_DIR=/opt/mkddc-web/dist
+EnvironmentFile=-/etc/mkddc-web.env
+ExecStart=/opt/mkddc-web/mkddc-web
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/data/config /data/mkddc /run/mkddc
+
+[Install]
+WantedBy=multi-user.target
