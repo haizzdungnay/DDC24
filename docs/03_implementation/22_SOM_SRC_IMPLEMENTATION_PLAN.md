@@ -72,8 +72,8 @@ Không nằm trong scope file này:
 
 Dev 2 chỉ được code sau khi chốt 6 nguồn này:
 
-1. [shared/iop_protocol.h](../../shared/iop_protocol.h)
-2. [shared/mkddc_shm.h](../../shared/mkddc_shm.h)
+1. [contracts/iop/iop_protocol.h](../../contracts/iop/iop_protocol.h)
+2. [contracts/shm/mkddc_shm.h](../../contracts/shm/mkddc_shm.h)
 3. [16_CONTRACT_FREEZE.md](16_CONTRACT_FREEZE.md)
 4. [06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md)
 5. [07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md)

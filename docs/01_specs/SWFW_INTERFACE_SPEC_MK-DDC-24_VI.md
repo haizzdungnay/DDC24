@@ -6,9 +6,9 @@
 > **Trạng thái:** Superseded 2026-06-25 by ADR-010 and `shared/iop_protocol.h` v2.0; retained as IOP v1 history only
 > 📘 **Đọc cùng:** [README](README.md) — hướng dẫn + glossary · Đã đồng bộ **2026-05-30** (xem [REVIEW](DESIGN_READINESS_REVIEW_MK-DDC-24_VI.md))  
 > **Tác giả:** KINEXUS Technologies — System Architecture Team  
-> **Current authority:** [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md), [`shared/iop_protocol.h`](../../shared/iop_protocol.h), and `hardware-design/05_mcu_io/IOP_PROTOCOL.md`. Do not implement payload/timing tables in this v1 file.
+> **Current authority:** [ADR-010](../adr/ADR-010-iop-v2-poll-capability-map.md), [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h), and `hardware-design/05_mcu_io/IOP_PROTOCOL.md`. Do not implement payload/timing tables in this v1 file.
 > ⚠️ **Precedence (Contract Freeze):** giá trị thực thi — opcode, payload layout, enum, FAULT bit,
-> RESET reason, CRC, hằng số timing — lấy theo [`shared/iop_protocol.h`](../../shared/iop_protocol.h).
+> RESET reason, CRC, hằng số timing — lấy theo [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h).
 > Spec lệch header → **header thắng**, sửa spec theo. Xem [16_CONTRACT_FREEZE](../03_implementation/16_CONTRACT_FREEZE.md).
 
 **Tài liệu liên quan:**

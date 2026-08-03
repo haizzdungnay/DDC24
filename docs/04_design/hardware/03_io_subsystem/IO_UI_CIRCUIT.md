@@ -519,7 +519,7 @@ Rules:
 - CRC fail, sequence gap, ADC timeout, and DRDY timeout are explicit counters/status bits.
 
 See [IOP_PROTOCOL](../05_mcu_io/IOP_PROTOCOL.md) for the readable protocol design;
-`shared/iop_protocol.h` is the implementation authority.
+`contracts/iop/iop_protocol.h` is the implementation authority.
 
 ---
 

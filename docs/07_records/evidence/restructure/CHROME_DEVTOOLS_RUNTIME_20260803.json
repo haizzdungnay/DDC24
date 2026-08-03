@@ -1,0 +1,58 @@
+{
+  "evidence_id": "RST-CHROME-DEVTOOLS-20260803",
+  "plan": "PLAN-ARCH-RESTRUCT-002",
+  "captured_at": "2026-08-03",
+  "scope": "apps/web-ui runtime trên trang /settings/network",
+  "runtime": {
+    "url": "http://127.0.0.1:4174/settings/network",
+    "mode": "VITE_DDC_MODE=demo, VITE_AUTH_MODE=mock, VITE_HISTORIAN_V2_TRENDS=1",
+    "browser": "Chrome do Chrome DevTools MCP điều khiển trong isolated context",
+    "authentication": "mock admin; không dùng profile hoặc credential production"
+  },
+  "desktop": {
+    "viewport": "1440x1000",
+    "snapshot": "PASS - trang Network hiển thị Ethernet safe transaction, BACnet/IP và Modbus RTU",
+    "screenshot": "PASS - full-page screenshot được Chrome DevTools MCP chụp trong phiên",
+    "console_errors": 0,
+    "console_warnings": 0,
+    "network_requests": 87,
+    "network_failures": 0,
+    "network_statuses": [
+      200,
+      304
+    ]
+  },
+  "mobile": {
+    "viewport": "390x844, devicePixelRatio=1, mobile, touch",
+    "snapshot": "PASS - navigation thu gọn, các card/form/table xếp dọc và nội dung nghiệp vụ vẫn đọc được",
+    "screenshot": "PASS - full-page screenshot được Chrome DevTools MCP chụp trong phiên",
+    "console_errors": 0,
+    "console_warnings": 0,
+    "network_requests": 87,
+    "network_failures": 0,
+    "network_statuses": [
+      200,
+      304
+    ]
+  },
+  "findings": [
+    {
+      "severity": "low",
+      "source": "Chrome DevTools Issues",
+      "finding": "A form field element should have an id or name attribute",
+      "count": 9,
+      "disposition": "Ghi nhận accessibility debt hiện hữu; không có Console error/warn hoặc request thất bại và không thuộc thay đổi dependency/bounded-context của phiên này."
+    },
+    {
+      "severity": "info",
+      "source": "Chrome DevTools Network",
+      "finding": "Lần điều hướng trực tiếp đầu tiên có 3 request module ERR_NETWORK_CHANGED khi Vite vừa đổi dependency cache",
+      "disposition": "Reload sạch rồi đăng nhập lại; lần kiểm chứng cuối có 87/87 request thành công với status 200/304."
+    }
+  ],
+  "result": "PASS_WITH_LOW_ACCESSIBILITY_FINDING",
+  "limitations": [
+    "Screenshot được giữ trong transcript Chrome DevTools MCP; MCP từ chối ghi file ra workspace nên record này không dẫn path ảnh cục bộ.",
+    "Demo/mock runtime không thay cho target deployment, backend thật hoặc HIL."
+  ]
+}

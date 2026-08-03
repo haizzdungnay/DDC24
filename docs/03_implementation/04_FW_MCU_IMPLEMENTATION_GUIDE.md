@@ -8,7 +8,7 @@
 > **Nguồn-chuẩn:** [FW_DDD](../02_design/firmware/FW_DDD_MK-DDC-24_VI.md) ·
 > [FW_PINOUT_MASTER](../02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) ·
 > [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) ·
-> [`shared/iop_protocol.h`](../../shared/iop_protocol.h)
+> [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h)
 
 ---
 

@@ -2,9 +2,9 @@
 #
 # Compiles and tests the 4 main components of the DDC-24 controller:
 #   1. C++ SOM Services (mkddc-core, mkddc-iobus) and runs GoogleTest
-#   2. Go Web Backend (web/backend)
-#   3. React Web Frontend (src/frontend)
-#   4. STM32 MCU Firmware (fw)
+#   2. Go Web API
+#   3. React Web UI
+#   4. STM32 MCU Firmware
 #
 # References:
 #   - docs/03_implementation/10_TASK_CHECKLIST.md (SKEL-004, ACT-022)
@@ -25,6 +25,16 @@ permissions:
   contents: read
 
 jobs:
+  repository-layout:
+    name: Kiến trúc repository
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Kiểm authority, dependency và build artifact
+        run: scripts/verify-project.sh --component layout
+
   som-services:
     name: C++ SOM Services (${{ matrix.name }})
     runs-on: ubuntu-22.04
@@ -33,24 +43,16 @@ jobs:
       matrix:
         include:
           - name: baseline
-            bacnet: OFF
-            modbus: OFF
-            hmi: OFF
+            profile: baseline
             extra_packages: ""
           - name: modbus
-            bacnet: OFF
-            modbus: ON
-            hmi: OFF
+            profile: modbus
             extra_packages: libmodbus-dev
           - name: bacnet
-            bacnet: ON
-            modbus: OFF
-            hmi: OFF
+            profile: bacnet
             extra_packages: ""
           - name: modbus+bacnet
-            bacnet: ON
-            modbus: ON
-            hmi: OFF
+            profile: modbus-bacnet
             extra_packages: libmodbus-dev
           # F-14: trước leg này, mkddc-hmi CHƯA BAO GIỜ được CI biên dịch và 28
           # test HMI chưa bao giờ chạy — vì MKDDC_ENABLE_HMI mặc định OFF và
@@ -58,9 +60,7 @@ jobs:
           # im lặng) tồn tại mà không có gate nào bắt được.
           # Leg này phủ tổ hợp đầy đủ nhất: modbus + bacnet + hmi.
           - name: modbus+bacnet+hmi
-            bacnet: ON
-            modbus: ON
-            hmi: ON
+            profile: full
             extra_packages: libmodbus-dev libdrm-dev libfreetype-dev pkg-config
 
     steps:
@@ -79,32 +79,19 @@ jobs:
             ninja-build \
             ${{ matrix.extra_packages }}
 
-      - name: Configure (CMake)
-        run: |
-          cmake -S services -B build/services \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror" \
-            -DMKDDC_ENABLE_BACNET=${{ matrix.bacnet }} \
-            -DMKDDC_ENABLE_MODBUS=${{ matrix.modbus }} \
-            -DMKDDC_ENABLE_HMI=${{ matrix.hmi }} \
-            -G Ninja
-
-      - name: Build
-        run: cmake --build build/services --parallel
-
-      - name: Cleanup stale shared memory
-        run: rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm
+      - name: Build và test qua entrypoint chuẩn
+        run: scripts/verify-project.sh --component cpp --profile '${{ matrix.profile }}'
 
       - name: Kiểm bất biến — watchdog chỉ kick sau khi hoàn tất scan
         run: |
           # PROGRAM_TASK_SCHEDULER_SPEC §9: kick giữa scan biến watchdog
           # thành liveness check vô nghĩa — một step() treo vẫn kick đều.
           # Kick hợp lệ CHỈ nằm trong main.cpp (hook after_scan).
-          if grep -n 'WATCHDOG=1' services/core/graph/scan_loop.cpp; then
+          if grep -n 'WATCHDOG=1' apps/core/application/runtime/scan_loop.cpp; then
             echo 'LỖI: watchdog kick nằm trong scan loop'
             exit 1
           fi
-          test "$(grep -c 'WATCHDOG=1' services/core/main.cpp)" = "1" || {
+          test "$(grep -c 'WATCHDOG=1' apps/core/bootstrap/main.cpp)" = "1" || {
             echo 'LỖI: số điểm kick trong main.cpp phải đúng bằng 1'
             exit 1
           }
@@ -123,15 +110,12 @@ jobs:
           fi
           echo 'OK: mkddc-core không chứa symbol compiler'
 
-      - name: Run tests
-        run: ctest --test-dir build/services --output-on-failure --parallel 4
-
       - name: Upload test results (on failure)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.name }}
-          path: build/services/Testing/
+          path: build/verify/cpp-${{ matrix.profile }}/Testing/
           retention-days: 7
 
   web-backend:
@@ -144,25 +128,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: 'web/backend/go.mod'
+          go-version-file: 'apps/web-api/go.mod'
 
-      - name: Build Go backend
-        run: |
-          cd web/backend
-          go build -v ./...
-
-      # F-12: job này trước đây CHỈ có `go build`. Toàn bộ test BE (auth, RBAC,
-      # historian, đường SHM) chưa bao giờ được thực thi trên CI, nên một PR làm
-      # hỏng logic auth vẫn hiện check xanh miễn là code còn biên dịch được.
-      - name: Vet Go backend
-        run: |
-          cd web/backend
-          go vet ./...
-
-      - name: Test Go backend
-        run: |
-          cd web/backend
-          go test -race ./...
+      - name: Vet và test race Go Web API
+        run: scripts/verify-project.sh --component go --profile race
 
   web-frontend:
     name: React Web Frontend
@@ -176,33 +145,20 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: src/frontend/package-lock.json
+          cache-dependency-path: apps/web-ui/package-lock.json
 
       - name: Install dependencies
-        run: |
-          cd src/frontend
-          npm ci
+        working-directory: apps/web-ui
+        run: npm ci
 
       # F-13: job này trước đây CHỈ chạy `npm run build` (tsc --noEmit && vite
       # build). 133 vitest test trên 25 file và `eslint --max-warnings=0` không
       # chặn được gì — chỉ lỗi type và lỗi bundle mới bị bắt, còn mọi regression
       # hành vi ở component/hook/AuthProvider/useWebSocket đều merge xanh.
-      - name: Lint React frontend
-        run: |
-          cd src/frontend
-          npm run lint
+      - name: Test, lint và build React Web UI
+        run: scripts/verify-project.sh --component frontend
 
-      - name: Test React frontend
-        run: |
-          cd src/frontend
-          npm test
-
-      - name: Build React frontend
-        run: |
-          cd src/frontend
-          npm run build
-
-      # F-07: bộ e2e `src/frontend/e2e/` trước đây KHÔNG workflow nào chạy —
+      # F-07: bộ e2e `apps/web-ui/e2e/` trước đây KHÔNG workflow nào chạy —
       # `npm test` chỉ quét src/, còn e2e/ nằm ngoài — nên suite mục dần mà không
       # ai biết. `network-qa.spec.ts` đã được sửa và gắn vào gate ở đây.
       #
@@ -212,14 +168,11 @@ jobs:
       # nhóm đó là việc riêng; mở rộng gate sang cả thư mục e2e/ chỉ sau khi xong,
       # chứ không thêm một job biết chắc đỏ.
       - name: Install Playwright browser
-        run: |
-          cd src/frontend
-          npx playwright install --with-deps chrome
+        working-directory: apps/web-ui
+        run: npx playwright install --with-deps chrome
 
       - name: E2E network page
-        run: |
-          cd src/frontend
-          npx playwright test e2e/network-qa.spec.ts
+        run: scripts/verify-project.sh --component e2e
 
   mcu-firmware:
     name: MCU Firmware
@@ -234,9 +187,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi
 
       - name: Build Firmware
-        run: |
-          cd fw
-          make
+        run: scripts/verify-project.sh --component firmware
 
   sanitizers:
     name: ASan + UBSan
@@ -249,17 +200,15 @@ jobs:
         run: |
           # -Werror bắt lỗi compile-time; ASan bắt lỗi bộ nhớ lúc chạy. Loader IR
           # không kiểm biên sau khi load nên một lỗi ở đó là lỗi an toàn bộ nhớ.
-          cmake -S services -B build/asan -DCMAKE_BUILD_TYPE=Debug -DMKDDC_SANITIZE=address
+          cmake -S . -B build/asan -DCMAKE_BUILD_TYPE=Debug -DMKDDC_SANITIZE=address
           cmake --build build/asan --parallel $(nproc)
-          rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm
           ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build/asan --output-on-failure --parallel 4
       - name: UBSan
         run: |
           # -fno-sanitize-recover: UB phải làm test FAIL, không được chỉ in cảnh
           # báo rồi chạy tiếp — UB im lặng lọt qua CI tệ hơn không chạy UBSan.
-          cmake -S services -B build/ubsan -DCMAKE_BUILD_TYPE=Debug -DMKDDC_SANITIZE=undefined
+          cmake -S . -B build/ubsan -DCMAKE_BUILD_TYPE=Debug -DMKDDC_SANITIZE=undefined
           cmake --build build/ubsan --parallel $(nproc)
-          rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm
           ctest --test-dir build/ubsan --output-on-failure --parallel 4
 
   fuzz-smoke:
@@ -271,7 +220,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y cmake clang libsodium-dev
       - name: Build fuzz harness
         run: |
-          CXX=clang++ CC=clang cmake -S services -B build/fuzz -DCMAKE_BUILD_TYPE=Debug \
+          CXX=clang++ CC=clang cmake -S . -B build/fuzz -DCMAKE_BUILD_TYPE=Debug \
             -DMKDDC_BUILD_FUZZ=ON -DMKDDC_SANITIZE=address \
             -DCORE_BUILD_TESTS=OFF -DIOBUS_BUILD_TESTS=OFF
           cmake --build build/fuzz --target fuzz_st_parser fuzz_st_loader --parallel $(nproc)
@@ -280,7 +229,7 @@ jobs:
           # PR chạy smoke ngắn để bắt hồi quy rõ ràng; chiến dịch fuzz dài chạy
           # nightly. Corpus seed lấy từ sample thật để bắt đầu từ input hợp lệ.
           mkdir -p /tmp/cp /tmp/cl
-          cp services/core/st/samples/*.st /tmp/cp/ || true
-          cp services/core/st/samples/*.mkir /tmp/cl/ || true
+          cp apps/core/application/st/samples/*.st /tmp/cp/ || true
+          cp apps/core/application/st/samples/*.mkir /tmp/cl/ || true
           ./build/fuzz/core/fuzz_st_parser /tmp/cp -max_total_time=60 -rss_limit_mb=2048
           ./build/fuzz/core/fuzz_st_loader /tmp/cl -max_total_time=60 -rss_limit_mb=2048

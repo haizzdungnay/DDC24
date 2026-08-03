@@ -263,7 +263,7 @@ P0 Setup ─► P1 Skeleton ─► P2 I/O Path ─► P3 Protocols ─► P4 Con
 **Trace:** SW-BAC-001..008.
 
 ### T-BE-07 — REST API (BE)
-**INPUT:** [ ] [D-4 OpenAPI](../02_design/interfaces/openapi.yaml).
+**INPUT:** [ ] [D-4 OpenAPI](../../contracts/openapi/openapi.yaml).
 **Microtasks:**
 - [ ] FastAPI theo openapi.yaml: /auth, /points, /system, /alarms.
 - [ ] Đọc/ghi point qua shm + validate range.

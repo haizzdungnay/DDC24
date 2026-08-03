@@ -348,7 +348,7 @@ uc_005_apply_confirm_takes_effect() {
   txid=$(stage_apply "$1" "$want") || return
   ok "$1 stage+apply được chấp nhận (tx=$txid)"
 
-  # ── Hợp đồng của `apply`, đọc từ chính services/netcfg/netcfg.cpp ──
+  # ── Hợp đồng của `apply`, đọc từ chính apps/netcfg/netcfg.cpp ──
   # `apply` KHÔNG thay địa chỉ: nó GIỮ địa chỉ cũ và chỉ THÊM địa chỉ mới, để
   # phiên quản trị không đứt trong cửa sổ 120 giây chờ confirm. Vì vậy ngay sau
   # apply interface mang HAI địa chỉ, và `active.ipv4` — vốn chỉ trả một giá trị

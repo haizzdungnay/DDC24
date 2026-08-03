@@ -7,23 +7,84 @@
 ---
 
 ## [Unreleased]
+### Changed — Hoàn tất bounded context Go và host security disposition (2026-08-03)
+
+- Hoàn tất `RST-121..126`: tách auth/audit, Point Catalog/namespace/config,
+  Modbus RTU, historian store/query/lifecycle, system/network/health/HMI adapter
+  và router khỏi `internal/app` sang 10 package có test trực tiếp. Handler và
+  middleware public giữ nguyên REST/RBAC semantics qua façade composition.
+- Nâng dependency FE để vá `brace-expansion` và `postcss`, cập nhật React
+  Router lên 7.18.2 và toolchain ESLint/Vite tương thích. `npm audit` giảm từ
+  4 xuống 2 record high cùng advisory RSC; Web UI là SPA client-only không dùng
+  RSC nên áp dụng waiver hẹp đến 2026-10-25, unique unwaived high = 0.
+- Cập nhật gate C++ trong `AGENTS.md` dùng root CMake authority; path
+  `services/` đã bị xóa từ G3 và không được khôi phục bằng shim.
+- Đánh dấu G4 PASS trong Plan 46; G5 chỉ còn bị chặn bởi target/board được owner
+  duyệt để chạy install, startup, provenance và rollback.
+
+**Kiểm chứng trong phiên:** repository guard 7/7 PASS; C++ Release full option
+**751/751 PASS**; Go `vet`, `test -count=1` và `test -race -count=1` PASS trên
+12 package; FE Vitest **35 file, 299/299 PASS**, lint 0 warning, build **2.223
+module**; Playwright Network **1/1 PASS**. Chrome DevTools MCP desktop/mobile
+PASS với 0 Console error/warn và 87/87 request thành công; ghi nhận 9 form field
+thiếu `id`/`name` ở mức accessibility low. `npm audit` vẫn trả exit 1 cho hai
+record đã waive; không claim audit sạch hoặc target acceptance PASS.
+
+### Changed — Tái cấu trúc kiến trúc repository theo bounded modules (2026-08-03)
+
+- Thực thi `PLAN-ARCH-RESTRUCT-002`: chuyển source production từ các cây
+  `services`, `web/backend`, `src/frontend` và `fw` sang `apps/` cùng
+  `firmware/stm32`; chuyển CMake/packaging/systemd sang `platform/` nhưng giữ
+  nguyên tên binary, service topology, REST/WebSocket, SHM, IOP và config
+  semantics.
+- Thiết lập `contracts/` làm authority duy nhất cho IOP, SHM, config schema,
+  build info và OpenAPI; xóa forwarding layer sau khi inventory không còn
+  consumer. Artifact build mới chỉ được sinh dưới `build/`.
+- Tách Core và Iobus thành `domain/application/ports/adapters/bootstrap`, thêm
+  CMake target boundary và port snapshot/output/command sink; tách React thành
+  `app/features/shared` với public barrel và lint/negative guard chống import
+  sâu giữa feature.
+- Đưa Go composition root về `apps/web-api/cmd/mkddc-web`, còn production code
+  dưới `internal/app`; tại commit group di chuyển ban đầu, `RST-121..126` được
+  giữ mở thay vì tạo package façade rỗng. Các task này được hoàn tất ở mục
+  bounded context mới hơn phía trên.
+- Thêm root CMake, `scripts/verify-project.sh`, path manifest, architecture
+  conformance guard/negative tests, CI layout job, release path indirection và
+  evidence G0/host regression tại `docs/07_records/evidence/restructure/`.
+- Đồng bộ README, System, Software, Interfaces, Firmware, Verification,
+  Operations, Traceability và Plan 46 theo cây As-Built. Plan vẫn `In Progress`:
+  target install/startup/rollback chưa chạy do chưa có board/target được duyệt.
+- Gỡ 7 link giả trong implementation index tới các hồ sơ 35/36/37/38/40/41/43
+  không tồn tại; giữ tên mục và đánh dấu `Missing` thay vì tự tạo nội dung thay
+  owner.
+
+**Kiểm chứng trong phiên:** layout guard PASS; C++ matrix **709/709, 717/717,
+710/710, 718/718 và 751/751 PASS**; ASan/UBSan **709/709 PASS**; fuzz parser
+**917.841** lượt và loader **1.879.361** lượt không crash; Go `vet` +
+`test -race -count=1` PASS; FE Vitest **35 file, 299/299 test**, lint 0 warning,
+build **2.223 module** PASS;
+Playwright network **1/1 PASS**; firmware ARM và release bundle **5/5 SHA-256
+PASS**. `bash -n`/Python guard syntax PASS. Không claim target/rollback/HIL.
+Bốn record high của `npm audit` tại baseline này đã được xử lý/waive có hạn ở
+mục security disposition mới hơn phía trên.
+
 ### Verification — Gate trước commit và PR (2026-08-03)
 
 - C++ Release cấu hình đồng thời `MKDDC_ENABLE_MODBUS=ON`,
   `MKDDC_ENABLE_BACNET=ON`, `MKDDC_ENABLE_HMI=ON`: build PASS và CTest
-  **751/751 PASS** trong 10,21 giây. GCC 13 còn phát cảnh báo tối ưu hóa trong
-  fixture `test_output_command.cpp`, không phải lỗi build và không bị vô hiệu
-  hóa bằng cách hạ warning.
-- Go backend: `go vet ./...` PASS; `go test ./... -count=1` PASS trong
-  **22,028 giây**.
-- Frontend: Vitest **35 file, 299/299 PASS** trong 24,12 giây; ESLint PASS,
-  **0 warning**; TypeScript/Vite production build PASS với 2.217 module.
+  **751/751 PASS** trong 2,98 giây CTest. GCC 13 còn phát cảnh báo tối ưu hóa
+  trong fixture `test_output_command.cpp`; target test đã có waiver hẹp
+  `-Wno-error=stringop-overflow` từ trước và restructure không mở rộng waiver.
+- Go backend: `go vet ./...` PASS; `go test -race ./... -count=1` PASS,
+  package test chính chạy trong **87,190 giây**.
+- Frontend: Vitest **35 file, 299/299 PASS** trong 24,85 giây; ESLint PASS,
+  **0 warning**; TypeScript/Vite production build PASS với 2.223 module.
 - Playwright Chrome gate `e2e/network-qa.spec.ts`: **1/1 PASS** trong 22,8
   giây; API mutation được intercept theo fixture. Vite ghi nhận WebSocket proxy
   `ECONNREFUSED 127.0.0.1:8081` do backend thật không chạy trong test mock,
-  không làm giảm assertion nghiệp vụ. Chrome DevTools MCP đã cấu hình nhưng
-  tool chưa được expose trong phiên Codex hiện tại, nên dùng Playwright Chrome
-  làm browser fallback.
+  không làm giảm assertion nghiệp vụ. Tại lần gate ban đầu, Chrome DevTools MCP
+  chưa được expose; bằng chứng desktop/mobile thật đã được bổ sung trong mục
+  bounded context mới hơn phía trên sau khi tool hoạt động.
 - Firmware ARM Cortex-M0+: rebuild PASS bằng `arm-none-eabi-gcc 13.2.1`,
   `-Wall -Wextra -Werror`; linker chỉ phát cảnh báo syscall Newlib `nosys` chưa
   implement (`_close/_lseek/_read/_write`).

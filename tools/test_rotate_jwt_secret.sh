@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test hermetic cho packaging/rotate-web-jwt-secret.sh — không cần root, không
+# Test hermetic cho platform/packaging/rotate-web-jwt-secret.sh — không cần root, không
 # chạm hệ thống thật.
 #
 # Chốt hai finding của review 2026-07-30:
@@ -14,7 +14,7 @@
 set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-SCRIPT="$REPO/packaging/rotate-web-jwt-secret.sh"
+SCRIPT="$REPO/platform/packaging/rotate-web-jwt-secret.sh"
 [ -f "$SCRIPT" ] || { echo "không tìm thấy $SCRIPT"; exit 1; }
 
 pass=0

@@ -2,8 +2,8 @@
 
 > **Document ID:** HANDOFF-APICONTRACT-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-07-28
-> **Nguồn thực thi:** `services/core/st/st_control_api.hpp`
-> **Schema:** [`shared/st_program_control_v1.schema.json`](../../shared/st_program_control_v1.schema.json)
+> **Nguồn thực thi:** `apps/core/application/st/st_control_api.hpp`
+> **Schema:** [`contracts/config/st_program_control_v1.schema.json`](../../contracts/config/st_program_control_v1.schema.json)
 
 ## Bất biến — đọc trước
 

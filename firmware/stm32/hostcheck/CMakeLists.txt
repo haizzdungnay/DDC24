@@ -1,0 +1,35 @@
+# Test HOST cho lớp giao thức của firmware MCU.
+#
+# Firmware thật build bằng `firmware/stm32/Makefile` với arm-none-eabi. Nhưng `firmware/stm32/src/iop/`
+# là C thuần không chạm HAL, nên nó biên dịch được cho host và kiểm được bằng
+# chính `ctest` của dự án — cùng một bộ gate với SOM, chứ không phải một quy
+# trình riêng mà rồi sẽ có người quên chạy.
+#
+# Đây là phần firmware kiểm chứng được NGAY khi chưa có bo mạch: endian, độ dài
+# payload, CRC, quy tắc SEQ, luật NACK. Phần chạm thanh ghi phải chờ phần cứng.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    cmake_minimum_required(VERSION 3.16)
+    project(mkddc-fw-hostcheck C CXX)
+    enable_testing()
+    find_package(GTest REQUIRED)
+endif()
+
+add_executable(fw_iop_tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/test_iop_link.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/test_ddc24_runtime.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/iop/iop_link.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/app/ddc24_runtime.c)
+target_include_directories(fw_iop_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/iop
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/app
+    ${MKDDC_CONTRACT_IOP_DIR}
+    ${MKDDC_CONTRACT_CONFIG_DIR})
+# Cùng cách dò như `apps/iobus/CMakeLists.txt`: GTest tìm được ở hệ thống thì
+# dùng target có namespace, còn khi FetchContent kéo về thì chỉ có `gtest_main`.
+if(TARGET GTest::gtest_main)
+    target_link_libraries(fw_iop_tests PRIVATE GTest::gtest_main)
+else()
+    # `libgtest_main.a` của hệ thống không kéo theo `libgtest.a`, phải liệt kê cả hai.
+    target_link_libraries(fw_iop_tests PRIVATE gtest_main gtest)
+endif()
+add_test(NAME fw_iop_tests COMMAND fw_iop_tests)

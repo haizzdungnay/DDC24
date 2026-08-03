@@ -21,8 +21,8 @@ Không dùng một loại tài liệu để trả lời thay loại khác:
 | As-Built | Code, contract, binary/deployment và test/evidence đã kiểm chứng quy định source/hệ chạy hiện tại thực sự có gì. | Không tự sửa Product Spec hoặc tự đóng requirement/release gate. |
 
 Khi nội dung cùng lớp xung đột, áp dụng baseline `Active` mới hơn có decision
-tham chiếu rõ. Đối với fact đã triển khai, `shared/iop_protocol.h`,
-`shared/mkddc_shm.h`, schema/validator và code đã test là nguồn As-Built. Đối
+tham chiếu rõ. Đối với fact đã triển khai, `contracts/iop/iop_protocol.h`,
+`contracts/shm/mkddc_shm.h`, schema/validator và code đã test là nguồn As-Built. Đối
 với phạm vi cam kết, Product Spec và Product decision là nguồn chuẩn. Decision
 không được âm thầm mở rộng Product Spec; requirement/design phải trace ngược về
 Product Requirement.

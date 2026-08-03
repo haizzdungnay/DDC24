@@ -29,7 +29,7 @@
 Khi user chỉ nói ngắn gọn **"commit"**, **"merge"**, **"commit đi"**, **"merge đi"** — hiểu là **chạy trọn quy trình dưới đây cho toàn bộ thay đổi hiện có trong cây làm việc**, không hỏi lại từng bước:
 
 1. **Kiểm chứng trước khi commit**, ghi số đo thật (không dẫn lại số cũ):
-   - C++: `cmake -S services -B build/fw -DCMAKE_BUILD_TYPE=Release -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` rồi `ctest --test-dir build/fw` (**bật cả 3 option**, mặc định HMI là OFF nên dễ bỏ sót gate).
+   - C++: `cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON`, `cmake --build build/fw --parallel` rồi `ctest --test-dir build/fw --output-on-failure` (**bật cả 3 option**, mặc định HMI là OFF nên dễ bỏ sót gate). Root CMake là authority sau `PLAN-ARCH-RESTRUCT-002`; không dùng lại path `services/` đã xóa.
    - Go: `go vet ./...` + `go test ./... -count=1` (dùng `-count=1`, kết quả cache che được hồi quy).
    - FE: `npx vitest --run --environment jsdom src` + `npm run lint` + `npm run build`. Lưu ý `npm test` chỉ quét `src/`, **không** chạy `e2e/`.
    - E2E khi có đổi trang mạng: `npx playwright test e2e/network-qa.spec.ts`.

@@ -2,7 +2,7 @@
 
 **ID:** VVP-001
 **Trạng thái:** Active — hardware gate RED; Programming Rev A production gate RED
-**Cập nhật:** 2026-08-03 (thêm gate thiết kế/acceptance Modbus RTU Point)
+**Cập nhật:** 2026-08-03 (thêm gate architecture conformance sau repository restructure)
 
 ## Chiến lược
 
@@ -16,6 +16,20 @@
 | Release | package, security, hardware/manufacturing gates | signed checklist + artifact hashes |
 
 Không dùng số test pass lịch sử làm evidence hiện hành. Mỗi release record phải ghi commit, toolchain, target, command, result và artifact/evidence location.
+
+## Gate architecture conformance của repository
+
+Entrypoint chuẩn là `scripts/verify-project.sh`. Component `layout` kiểm manifest
+path, authority duy nhất trong `contracts/`, dependency Core/Iobus/firmware,
+CMake boundary target, React public feature API và việc cô lập artifact dưới
+`build/`; hai test negative chứng minh contract trùng hoặc import sai chiều làm
+gate đỏ. CI phải chạy gate này trước build/test sản phẩm.
+
+Sau migration ngày 2026-08-03, full host matrix, Go race, FE unit/lint/build,
+Playwright network, firmware ARM và release checksum đều PASS tại
+[`HOST_RESTRUCTURE_GATES_20260803.json`](../07_records/evidence/restructure/HOST_RESTRUCTURE_GATES_20260803.json).
+Đây không phải target evidence: installer, startup order, crash/restart và
+rollback trên board vẫn `NOT_RUN`, nên Plan 46 và release gate không được đóng.
 
 ## Ma trận kiểm tra bắt buộc
 

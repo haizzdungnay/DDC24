@@ -31,8 +31,8 @@ Key reasons:
 - LQFP64 is manufacturable and has enough pins after DI opto removal.
 
 > **Implementation status:** this section is target design. As of 2026-07-22,
-> `fw/Core/Src/main.c` contains only boot prints and an empty loop, while
-> `fw/mkddc-fw.ioc` contains no real peripheral/pin configuration. No statement in
+> `firmware/stm32/Core/Src/main.c` contains only boot prints and an empty loop, while
+> `firmware/stm32/mkddc-fw.ioc` contains no real peripheral/pin configuration. No statement in
 > this document is evidence that FreeRTOS, SPI/ADC, AO/DO, IOP or watchdog behavior
 > has been implemented or verified on target.
 
@@ -192,7 +192,7 @@ Minimum buffers:
 ## 6. IOP Protocol Summary
 
 The Rev A UI ADC transport is a binary frame defined in [IOP_PROTOCOL](IOP_PROTOCOL.md),
-but the implementation authority for frame constants/layout is `shared/iop_protocol.h`.
+but the implementation authority for frame constants/layout is `contracts/iop/iop_protocol.h`.
 
 Minimum UI ADC frame fields:
 
@@ -255,7 +255,7 @@ All outputs must enter safe state before firmware flashing, and firmware image C
 | Document | Required consistency |
 |----------|----------------------|
 | [UI circuit](../03_io_subsystem/IO_UI_CIRCUIT.md) | Pin mapping for UI mode latch, ADC devices and SPI3 configuration |
-| [IOP protocol](IOP_PROTOCOL.md) | Human-readable protocol design; `shared/iop_protocol.h` remains implementation authority |
+| [IOP protocol](IOP_PROTOCOL.md) | Human-readable protocol design; `contracts/iop/iop_protocol.h` remains implementation authority |
 | [ADC sampling](FW-ADC-SAMPLING.md) | ADC sample rate, acquisition/poll timing and fault handling |
 | [Carrier block](../02_carrier_board/CB_BLOCK_DIAGRAM.md) | Terminal-to-ADC signal chain and STM32 position |
 | [Schematic notes](../02_carrier_board/CB_SCHEMATIC_NOTES.md) | UI sheet rules, SPI3 routing and DRDY/EXTI |

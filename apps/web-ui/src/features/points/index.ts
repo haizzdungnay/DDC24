@@ -1,0 +1,6 @@
+export { CommissioningPage } from './CommissioningPage'
+export { InputsPage } from './InputsPage'
+export { MonitorPage } from './MonitorPage'
+export { OutputsPage } from './OutputsPage'
+export { UserParametersPage } from './UserParametersPage'
+export { VirtualPointsPage } from './VirtualIoPage'

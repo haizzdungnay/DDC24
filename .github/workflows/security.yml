@@ -148,7 +148,7 @@ jobs:
       - name: Build C++ services for CodeQL
         if: matrix.language == 'c-cpp'
         run: |
-          cmake -S services -B build/codeql \
+          cmake -S . -B build/codeql \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             -DMKDDC_ENABLE_MODBUS=ON \
             -DCORE_BUILD_TESTS=OFF \

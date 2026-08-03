@@ -2,7 +2,21 @@
 
 **ID:** ARCH-SYS-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-22
+**Cập nhật:** 2026-08-03
+
+## Ranh giới source As-Built
+
+- `apps/core`, `apps/iobus`, `apps/netcfg`, `apps/hmi`, `apps/web-api` và
+  `apps/web-ui` giữ ownership theo process; không app nào import source
+  implementation của app khác.
+- `contracts/iop`, `contracts/shm`, `contracts/config` và `contracts/openapi`
+  là authority duy nhất cho contract trong phạm vi migration.
+- `firmware/stm32` chỉ phụ thuộc IOP/config contract; không phụ thuộc SHM hoặc
+  Linux app.
+- `platform/cmake`, `platform/packaging` và `platform/systemd` chỉ build/deploy
+  artifact, không trở thành runtime dependency của domain.
+- Core và Iobus dùng target CMake theo `domain → application → adapters →
+  bootstrap`; guard repository và negative test chặn dependency ngược.
 
 ## Topology
 

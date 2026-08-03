@@ -102,5 +102,5 @@ KHÔNG BAO GIỜ: sửa 1 bên, "tạm hardcode", hay fork header.
 ```
 
 ---
-**Rev** 1.0 | 2026-06-11 · Header: [`iop_protocol.h`](../../shared/iop_protocol.h) ·
-[`mkddc_shm.h`](../../shared/mkddc_shm.h) · Quick start: [17_QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md)
+**Rev** 1.0 | 2026-06-11 · Header: [`iop_protocol.h`](../../contracts/iop/iop_protocol.h) ·
+[`mkddc_shm.h`](../../contracts/shm/mkddc_shm.h) · Quick start: [17_QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md)

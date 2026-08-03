@@ -11,7 +11,7 @@
 set -u
 cd "$(dirname "$0")/.."
 
-BUILD=services/build
+BUILD="${MKDDC_CPP_BUILD_ROOT:-build/release/cpp}"
 SOCK=/tmp/mkddc-core.sock
 PTY_A=/tmp/mkddc-iop-a
 PTY_B=/tmp/mkddc-iop-b
@@ -59,7 +59,7 @@ run) ;;
 *) die "lệnh lạ: $1 (run|do1..do4 0/1|kill-mcu|revive|stop)" ;;
 esac
 
-[ -x "$IOBUS" ] || die "chưa build: cmake -S services -B services/build && cmake --build services/build -j"
+[ -x "$IOBUS" ] || die "chưa build: platform/packaging/build-release.sh"
 mkdir -p "$LOGDIR"
 cmd_stop > /dev/null 2>&1
 sleep 0.5

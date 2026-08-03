@@ -11,7 +11,7 @@
 > matrix implemented/planned §5.2, action §5.3, recovery rule §5.4) · 1.1 | 2026-06-11
 > (Contract Freeze: chốt MVP Rev A, module API, build/systemd đầy đủ, seqlock reader mẫu)
 > **Owner:** Dev 2 (SOM)
-> **Nguồn-chuẩn CUỐI CÙNG:** [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) (SHM) — docs lệch
+> **Nguồn-chuẩn CUỐI CÙNG:** [`contracts/shm/mkddc_shm.h`](../../contracts/shm/mkddc_shm.h) (SHM) — docs lệch
 > header → **header thắng** ([16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)). Diễn giải:
 > [ADR-005](../adr/ADR-005-three-process-architecture.md) ·
 > [PRODUCT_DEFINITION §10,§13](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) ·

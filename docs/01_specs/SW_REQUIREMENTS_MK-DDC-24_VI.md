@@ -68,7 +68,7 @@ Security Service, OTA (`kinexus-ota`), cloud. Xem
 
 > ⚠️ **CONTRACT FREEZE (2026-06-11):** layout dưới đây là bản phác thảo cũ, **KHÔNG dùng
 > để code**. Struct chuẩn duy nhất là `kx_io_shm_t` trong
-> [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) (khác đáng kể: `ts_ns` thay
+> [`contracts/shm/mkddc_shm.h`](../../contracts/shm/mkddc_shm.h) (khác đáng kể: `ts_ns` thay
 > `timestamp_ms`, có `ui_quality[]/ui_unit[][]/di_state[]/di_counter[]/do_cmd[]/
 > do_feedback[]/metrics`, không có `ui_type[]/do_mask/safe_state_active`). Path runtime:
 > `/dev/shm/mkddc_io_shm`. Ownership/bảng field:

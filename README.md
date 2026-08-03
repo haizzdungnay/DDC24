@@ -17,4 +17,13 @@ MK-DDC-24 là bộ điều khiển tự động hóa biên BMS theo mô hình co
 - `mkddc-web`: REST API và giao diện cấu hình React.
 - `mkddc-hmi`: LVGL/DRM HMI tùy chọn, bật bằng `MKDDC_ENABLE_HMI`.
 
-Source code và shared headers là nguồn chuẩn cho hành vi đã triển khai; hồ sơ trong `docs/` kiểm soát yêu cầu, thiết kế, xác minh và release gate. Tài liệu trước đợt tái cấu trúc ngày 2026-07-22 nằm trong `archives/markdown-before-restructure-2026-07-22.tar.gz` và không còn là nguồn đang hiệu lực.
+Source production nằm trong `apps/`, firmware trong `firmware/stm32`, contract
+machine-readable duy nhất trong `contracts/`, còn CMake/packaging/systemd nằm
+trong `platform/`. Entrypoint kiểm chứng thống nhất là
+`scripts/verify-project.sh`; build artifact chỉ được tạo dưới `build/`.
+
+Source code và contract là nguồn chuẩn cho hành vi đã triển khai; hồ sơ trong
+`docs/` kiểm soát yêu cầu, thiết kế, xác minh và release gate. Tài liệu trước
+đợt tái cấu trúc ngày 2026-07-22 nằm trong
+`archives/markdown-before-restructure-2026-07-22.tar.gz` và không còn là nguồn
+đang hiệu lực.

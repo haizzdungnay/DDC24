@@ -3,7 +3,7 @@
 
 > **Document ID:** ICD-REST-MK-DDC-24-VI
 > **Phiên bản:** 1.5 | 2026-08-03 (Point Model canonical, Modbus RTU CRUD/diagnostics, I/O bundle atomic, health) · 1.4 | 2026-07-28 (ADR-017 Network DNS/capability/management contract) · 📘 [README](../../01_specs/README.md)
-> **Nguồn-chuẩn máy đọc:** [`openapi.yaml`](openapi.yaml) (OpenAPI 3.1) · **Trace:** `SW-API-001..010`, `SRS §6.4`, `SW_ARCH §6`
+> **Nguồn-chuẩn máy đọc:** [`contracts/openapi/openapi.yaml`](../../../contracts/openapi/openapi.yaml) (OpenAPI 3.1) · **Trace:** `SW-API-001..010`, `SRS §6.4`, `SW_ARCH §6`
 
 > File `.md` này giải thích cách dùng; **`openapi.yaml` là hợp đồng chính thức** (import vào Swagger/Postman, generate client).
 

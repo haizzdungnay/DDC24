@@ -4,8 +4,8 @@
 > **Document ID:** IMPL-IOBUS-MK-DDC-24-VI
 > **Phiên bản:** 1.4 | 2026-06-13 (liên kết S7 #5/#6: BACnet plan 24, Modbus plan 25) · 1.3 | 2026-06-12 (§10: unit file thật packaging/systemd/mkddc-iobus.service — SKEL-005; ghi chú iobus chưa handle SIGHUP) · 1.2 | 2026-06-11 (Contract Freeze: SHM path/ownership chốt, scaling table, startup table, build/systemd đầy đủ)
 > **Owner:** Dev 2 (SOM)
-> **Nguồn-chuẩn CUỐI CÙNG:** [`shared/iop_protocol.h`](../../shared/iop_protocol.h) (protocol) +
-> [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) (SHM layout/path/ownership) — docs lệch header
+> **Nguồn-chuẩn CUỐI CÙNG:** [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h) (protocol) +
+> [`contracts/shm/mkddc_shm.h`](../../contracts/shm/mkddc_shm.h) (SHM layout/path/ownership) — docs lệch header
 > → **header thắng** ([16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md)). Diễn giải:
 > [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) ·
 > [ADR-005](../adr/ADR-005-three-process-architecture.md) · [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md)
@@ -340,7 +340,7 @@ default built-in. Sensor/AO mode lấy thêm từ `/data/config/io_config.conf`;
 ## 5. Shared memory / core bridge
 
 **Chốt Rev A (Contract Freeze):** path duy nhất `/dev/shm/mkddc_io_shm`, struct `kx_io_shm_t`
-([`shared/mkddc_shm.h`](../../shared/mkddc_shm.h)), magic `KX_SHM_MAGIC=0x4B584401` (giữ nguyên
+([`contracts/shm/mkddc_shm.h`](../../contracts/shm/mkddc_shm.h)), magic `KX_SHM_MAGIC=0x4B584401` (giữ nguyên
 qua rename — KHÔNG đổi). **Creator = iobus** (`O_CREAT`, ftruncate đúng `sizeof(kx_io_shm_t)`,
 memset 0 + init default + set magic CUỐI CÙNG); core/web chỉ attach (retry tới khi magic đúng).
 Không có alias `/dev/shm/kinexus_*`.

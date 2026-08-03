@@ -22,7 +22,7 @@ development component host-only; nó không phải Programming interface product
 
 ## Kinexus-IOP v2
 
-Nguồn thực thi: `shared/iop_protocol.h`.
+Nguồn thực thi: `contracts/iop/iop_protocol.h`.
 
 | Contract | Giá trị hiện hành |
 |---|---|
@@ -41,7 +41,7 @@ Frame, enum, CRC và packed layout không được sao chép sang implementation
 
 ## Shared memory ABI
 
-Nguồn thực thi: `shared/mkddc_shm.h`.
+Nguồn thực thi: `contracts/shm/mkddc_shm.h`.
 
 - IO: `/dev/shm/mkddc_io_shm`; PLC: `/dev/shm/mkddc_plc_shm`.
 - Magic hiện hành: `0x4B584404`.
@@ -69,7 +69,7 @@ OpenAPI/source trước khi ADR-024 được Accepted. Programming I/O Mapping v
 
 **Ngoại lệ duy nhất — nối field vào CUỐI `kx_plc_shm_t`.** Consumer đọc PLC SHM
 bằng offset cứng và kiểm độ dài theo ngữ nghĩa **min-length**
-(`web/backend/core_client.go`: `len(data) < kxPlcShmMinLen`), nên nối thêm vào
+(`apps/web-api/internal/app/core_client.go`: `len(data) < kxPlcShmMinLen`), nên nối thêm vào
 cuối giữ nguyên mọi offset cũ và binary cũ vẫn đọc đúng — **không đổi magic**.
 Đổi thứ tự, kiểu hoặc kích thước field cũ vẫn là ABI change đầy đủ. Ràng buộc
 này được khoá bằng test `BacnetObjTableAbi.*` (đối chiếu trực tiếp các hằng
@@ -101,8 +101,8 @@ AO ở core/iobus boundary là giá trị vật lý V hoặc mA theo electrical 
 
 ## As-Built development component — ST validate gateway host-only
 
-Nguồn As-Built: `services/core/st/st_*.{hpp,cpp}`. Đây là contract của một
-component được test độc lập trên host trong cây `services/core`; không phải
+Nguồn As-Built: `apps/core/application/st/st_*.{hpp,cpp}`. Đây là contract của một
+component được test độc lập trên host trong cây `apps/core`; không phải
 contract Programming production, không gắn vào scan loop sản xuất và không có
 bằng chứng target/HIL. Tên service Programming trong tài liệu cũ không được dùng
 để suy ra process đã tồn tại. Nếu Backend gọi CLI này để validate, kết quả vẫn
@@ -144,7 +144,7 @@ Diagnostic code ổn định — xem `st_diagnostic.hpp` (`ST-LEX-*`, `ST-SYN-*`
 `ST-SEM-*`, `ST-LIM-*`, `ST-IOMAP-*`, `ST-CLI-*`); FE/BE map theo code, không
 parse `message` (tiếng Anh, có thể đổi câu chữ).
 
-**Giới hạn tài nguyên (M-01, nguồn thực thi `services/core/st/st_limits.hpp`).**
+**Giới hạn tài nguyên (M-01, nguồn thực thi `apps/core/application/st/st_limits.hpp`).**
 Parser tự kiểm mọi giới hạn dưới đây, không phụ thuộc caller đã kiểm hộ hay
 chưa. Vượt giới hạn luôn trả diagnostic có code ổn định — **không bao giờ
 segfault/abort/stdout rỗng**:
@@ -183,7 +183,7 @@ host chưa có `CASE`, vòng lặp, POU do người dùng định nghĩa, LD/SFC
 
 ## As-Built development component — Typed IR artifact host-only
 
-Nguồn thực thi: `services/core/st/st_ir.hpp`, đặc tả đầy đủ ở
+Nguồn thực thi: `apps/core/application/st/st_ir.hpp`, đặc tả đầy đủ ở
 [`TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md`](../02_design/software/TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md).
 
 **Trạng thái As-Built 2026-08-03:** source có loader/artifact component
@@ -234,7 +234,7 @@ RETAIN hay Online Monitor requirement.
 
 ## Web/API
 
-Nguồn thực thi: `web/backend/http.go` và validator/schema liên quan. Route groups hiện hành gồm auth/me/users; system status/network/config; points và WebSocket; alarms; commissioning; history/trends; schedules; alarm settings. Hồ sơ này không freeze danh sách route chi tiết; OpenAPI hoặc route tests, nếu phát hành, phải sinh/verify từ code.
+Nguồn thực thi: `apps/web-api/internal/app/http.go` và validator/schema liên quan. Route groups hiện hành gồm auth/me/users; system status/network/config; points và WebSocket; alarms; commissioning; history/trends; schedules; alarm settings. Hồ sơ này không freeze danh sách route chi tiết; OpenAPI hoặc route tests, nếu phát hành, phải sinh/verify từ code.
 
 ### Network API — implemented baseline versus target
 
@@ -253,7 +253,7 @@ Authority dùng line-delimited JSON version 1 qua `/run/mkddc-netcfg/netcfg.sock
 8192 byte, socket `0660` trong runtime directory riêng `root:mkddc 0750`; peer credential
 allowlist chỉ cho broker/service account đã phê duyệt. Protocol strict từ chối unknown field ở
 request, candidate và object `dns`, unknown version/action và payload sai theo action. Schema
-authority: `shared/netcfg_protocol_v1.schema.json`.
+authority: `contracts/config/netcfg_protocol_v1.schema.json`.
 
 Action allowlist:
 
@@ -323,7 +323,7 @@ Ràng buộc contract:
 - `requestId` và transaction transition phải idempotent; state transition sai trả stable reject, không silent retry;
 - DNS là một phần của cùng journal/confirm/rollback với IPv4; không có đường ghi DNS riêng;
 - management hostname chỉ đọc trong authority, không xuất hiện trong candidate; chỉ provision
-  bằng `packaging/configure-web-hostname.sh` sau preflight/backup;
+  bằng `platform/packaging/configure-web-hostname.sh` sau preflight/backup;
 - deadline dùng monotonic clock trong runtime và journal đủ dữ liệu để boot recovery; tối đa 120 s;
 - response/log không chứa credential; actor/role do broker audit, helper log peer UID + transaction ID + config hash;
 - HMI không kết nối socket này trực tiếp. Broker chỉ map mutation khi session role Admin và audit trước/sau; Service chỉ là surface.
@@ -340,7 +340,7 @@ Request gồm `version=1`, `requestId`, `action`, optional opaque `token`, `poin
 
 Response gồm cùng `requestId`, `result`, stable `reasonCode` và optional `point`; point chứa authoritative value/source priority và `overrideExpiresInS`. Duplicate `requestId` có cùng payload trả cached response; cùng ID khác payload bị reject `ID_CONFLICT`.
 
-Broker sở hữu authentication, role/policy validation và durable audit. Core sở hữu arbitration/interlock/safe-state/effective output và monotonic override TTL. HMI chỉ render response; local point DB không được dùng làm authorization source. Nếu broker/core không sẵn sàng trong deadline, mutation bị kết thúc bằng lỗi rõ và Control chuyển read-only, không blind replay. Không thay SHM layout cho contract này. Schema authority: `shared/hmi_protocol_v1.schema.json`.
+Broker sở hữu authentication, role/policy validation và durable audit. Core sở hữu arbitration/interlock/safe-state/effective output và monotonic override TTL. HMI chỉ render response; local point DB không được dùng làm authorization source. Nếu broker/core không sẵn sàng trong deadline, mutation bị kết thúc bằng lỗi rõ và Control chuyển read-only, không blind replay. Không thay SHM layout cho contract này. Schema authority: `contracts/config/hmi_protocol_v1.schema.json`.
 
 Network actions đã thuộc HMI protocol v1 và broker chỉ map chúng sang SOM network authority,
 không map sang core hay cho phép payload command tùy ý. `network_status` là read-only;

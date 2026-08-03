@@ -209,8 +209,8 @@ và tiếp tục read-only; không queue/replay lệnh mù.
 
 | Chủ đề | Nguồn-chuẩn |
 |--------|-------------|
-| **Giá trị protocol UART/IOP** (opcode/payload/fault/reason/CRC/timing) | [`shared/iop_protocol.h`](../../shared/iop_protocol.h) — **cuối cùng** |
-| **SHM layout/magic/path/ownership** | [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) — **cuối cùng** |
+| **Giá trị protocol UART/IOP** (opcode/payload/fault/reason/CRC/timing) | [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h) — **cuối cùng** |
+| **SHM layout/magic/path/ownership** | [`contracts/shm/mkddc_shm.h`](../../contracts/shm/mkddc_shm.h) — **cuối cùng** |
 | Giao thức UART/IOP (diễn giải, hành vi, timing chart) | [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) + [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) |
 | Kiến trúc service / process | [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md) + [ADR-005](../adr/ADR-005-three-process-architecture.md) + [Decision Log](../00_governance/DECISIONS.md) |
 | Firmware STM32 | [FW_DDD](../02_design/firmware/FW_DDD_MK-DDC-24_VI.md) |

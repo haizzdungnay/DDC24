@@ -48,7 +48,7 @@ IOP của dự án là UART raw:
 
 Nguồn-chuẩn:
 - [05_IOP_UART_IMPLEMENTATION_GUIDE.md](05_IOP_UART_IMPLEMENTATION_GUIDE.md) §1
-- [shared/iop_protocol.h](../../shared/iop_protocol.h)
+- [contracts/iop/iop_protocol.h](../../contracts/iop/iop_protocol.h)
 
 PTY do `socat` tạo ra đủ gần với cách mở `/dev/ttyS2` để test protocol/frame/timeout/retry/CRC.
 
@@ -253,4 +253,3 @@ Nếu chưa có `fake_mcu` thật trong repo, task kế tiếp là tạo `tools/
 ---
 
 **Rev** 1.0 | 2026-06-11
-

@@ -107,7 +107,7 @@ def main():
     args = parser.parse_args()
 
     # Paths
-    build_dir = "build/services"
+    build_dir = os.environ.get("MKDDC_CPP_BUILD_ROOT", "build/release/cpp")
     socat_bin = "socat"
     fake_mcu_bin = os.path.join(build_dir, "iobus/fake_mcu")
     iobus_bin = os.path.join(build_dir, "iobus/mkddc-iobus")

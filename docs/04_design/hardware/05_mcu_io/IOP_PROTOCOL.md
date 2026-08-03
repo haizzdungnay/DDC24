@@ -2,8 +2,8 @@
 
 > **Document:** IOP_PROTOCOL | Rev 2.1 | 2026-06-30
 > **Scope:** SOM ↔ MCU communication protocol for 16 UI Rev A hardware
-> **Status:** APPROVED — supersedes Rev 2.0-draft (2026-06-23). Governing reference: ADR-010 + `shared/iop_protocol.h`.
-> **Nguồn-chuẩn cuối cùng:** `shared/iop_protocol.h` — file này và ADR-010 là diễn giải.
+> **Status:** APPROVED — supersedes Rev 2.0-draft (2026-06-23). Governing reference: ADR-010 + `contracts/iop/iop_protocol.h`.
+> **Nguồn-chuẩn cuối cùng:** `contracts/iop/iop_protocol.h` — file này và ADR-010 là diễn giải.
 
 ---
 
@@ -18,7 +18,7 @@
 
 Không dùng push model. Không dùng dual protocol.
 
-Timing source of truth is `shared/iop_protocol.h`:
+Timing source of truth is `contracts/iop/iop_protocol.h`:
 
 | Constant | Value | Meaning |
 |---|---:|---|
@@ -81,7 +81,7 @@ offset  size  type       field          mô tả
 
 ### 4.1 Command registry
 
-This table mirrors `shared/iop_protocol.h`. A documentation change must not alter an opcode or length without changing the shared header, bumping IOP version, and updating ADR-010.
+This table mirrors `contracts/iop/iop_protocol.h`. A documentation change must not alter an opcode or length without changing the contract header, bumping IOP version, and updating ADR-010.
 
 | Opcode | Command | Direction | LEN | Successful response |
 |---:|---|---|---:|---|
@@ -219,5 +219,5 @@ GET_IO SEQ=1 hoàn chỉnh: AA 00 01 01 AC E1
 |-----|------|---------|
 | 1.0-draft | 2026-06-23 | Initial draft (push model, 86B frame) — SUPERSEDED |
 | 2.0-draft | 2026-06-23 | Rev A 16 UI frame — SUPERSEDED |
-| **2.0** | **2026-06-25** | **Approved: poll model, 74B IO_RESP, BOARD_CAP_MAP, v2 FAULT bits. Governing: ADR-010 + shared/iop_protocol.h** |
+| **2.0** | **2026-06-25** | **Approved: poll model, 74B IO_RESP, BOARD_CAP_MAP, v2 FAULT bits. Governing: ADR-010 + contracts/iop/iop_protocol.h** |
 | **2.1** | **2026-06-30** | **Documented the 2 ms timing constants and AO/DO/diagnostic command registry from the shared header.** |

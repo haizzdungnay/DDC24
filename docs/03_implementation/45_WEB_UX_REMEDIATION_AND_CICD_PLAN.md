@@ -56,7 +56,7 @@ Audit UI/UX lập ngày 30/07. Sau đó PR #77 đã merge và sửa một phần
 
 | Mục audit | Bằng chứng đọc lại hôm nay |
 |---|---|
-| QW-4 validate IP tại client | [NetworkPage.tsx:390-392](../../src/frontend/src/pages/NetworkPage.tsx#L390-L392) có `error`, `inputMode="decimal"`; `Field` tại [:806-820](../../src/frontend/src/pages/NetworkPage.tsx#L806-L820) có `aria-invalid` |
+| QW-4 validate IP tại client | [NetworkPage.tsx:390-392](../../apps/web-ui/src/features/network/NetworkPage.tsx#L390-L392) có `error`, `inputMode="decimal"`; `Field` tại [:806-820](../../apps/web-ui/src/features/network/NetworkPage.tsx#L806-L820) có `aria-invalid` |
 | 2/3 nút chết trang đăng nhập | `Quên mật khẩu?` và `Ghi nhớ đăng nhập` đã bị gỡ; chỉ còn `SSO / AD` |
 | Toàn bộ finding F-01…F-23 của [review code 30/07](../07_records/reviews/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md) | Đã kiểm từng cái trong code: guard last-admin, seqlock reader BE, prune map `revoked`, Modbus F-08/F-16/F-17/F-18 fail-closed, UART `POLLHUP` F-05, secret JWT không qua `/tmp` F-19, và 3 cổng CI rỗng F-12/F-13/F-14 đều đã có |
 
@@ -64,17 +64,17 @@ Audit UI/UX lập ngày 30/07. Sau đó PR #77 đã merge và sửa một phần
 
 | # | Vấn đề | Bằng chứng hôm nay |
 |---|---|---|
-| B1 | Dashboard bịa số liệu | [DashboardPage.tsx:146](../../src/frontend/src/pages/DashboardPage.tsx#L146) `?? 23` CPU · [:175](../../src/frontend/src/pages/DashboardPage.tsx#L175) `?? 48` RAM · [:247-248](../../src/frontend/src/pages/DashboardPage.tsx#L247-L248) MAC và giờ hệ thống `23/05/2025` hardcode · [:289](../../src/frontend/src/pages/DashboardPage.tsx#L289) `DeviceStatusCard()` không tham số → luôn "ONLINE" |
-| B1' | Login bịa trạng thái service | [LoginPage.tsx:62-65](../../src/frontend/src/pages/LoginPage.tsx#L62-L65) 4 badge gán cứng `state="online"`, hiển thị **trước khi xác thực** |
-| B1'' | Trang người dùng bịa thông tin phiên | [UserInfoPage.tsx:91-92](../../src/frontend/src/pages/UserInfoPage.tsx#L91-L92) IP và "lần đăng nhập gần nhất" hardcode |
-| B2 | Chạy thử tác động vật lý không xác nhận | [CommissioningPage.tsx:39](../../src/frontend/src/pages/CommissioningPage.tsx#L39) — cả trang 43 dòng, một click ghi 50% ra AO / ON ra DO; nhãn "Release" thực chất ghi 0 chứ không trả quyền tự động |
+| B1 | Dashboard bịa số liệu | [DashboardPage.tsx:146](../../apps/web-ui/src/features/dashboard/DashboardPage.tsx#L146) `?? 23` CPU · [:175](../../apps/web-ui/src/features/dashboard/DashboardPage.tsx#L175) `?? 48` RAM · [:247-248](../../apps/web-ui/src/features/dashboard/DashboardPage.tsx#L247-L248) MAC và giờ hệ thống `23/05/2025` hardcode · [:289](../../apps/web-ui/src/features/dashboard/DashboardPage.tsx#L289) `DeviceStatusCard()` không tham số → luôn "ONLINE" |
+| B1' | Login bịa trạng thái service | [LoginPage.tsx:62-65](../../apps/web-ui/src/features/auth/LoginPage.tsx#L62-L65) 4 badge gán cứng `state="online"`, hiển thị **trước khi xác thực** |
+| B1'' | Trang người dùng bịa thông tin phiên | [UserInfoPage.tsx:91-92](../../apps/web-ui/src/features/auth/UserInfoPage.tsx#L91-L92) IP và "lần đăng nhập gần nhất" hardcode |
+| B2 | Chạy thử tác động vật lý không xác nhận | [CommissioningPage.tsx:39](../../apps/web-ui/src/features/points/CommissioningPage.tsx#L39) — cả trang 43 dòng, một click ghi 50% ra AO / ON ra DO; nhãn "Release" thực chất ghi 0 chứ không trả quyền tự động |
 | B3a | Không gate quyền cho hành động vật lý | Chỉ `settings/network` có gate. `eng/commissioning`, `eng/outputs`, `monitor` — nơi ép output — không có |
-| B3b | Đăng nhập khoá cứng `admin` | [LoginPage.tsx:78](../../src/frontend/src/pages/LoginPage.tsx#L78) `value="admin" readOnly` → **RBAC 4 vai trò đã có ở backend không dùng được qua Web** |
-| B4a | Tương phản không đạt WCAG AA | `--c-border: #9AA0A6` (1.64:1 vs nền), `--c-warn: #E8B500` (1.18:1 nếu làm chữ) trong [styles.css:7,16](../../src/frontend/src/styles.css#L7) — 13/14 biến thể `StatusBadge` fail |
+| B3b | Đăng nhập khoá cứng `admin` | [LoginPage.tsx:78](../../apps/web-ui/src/features/auth/LoginPage.tsx#L78) `value="admin" readOnly` → **RBAC 4 vai trò đã có ở backend không dùng được qua Web** |
+| B4a | Tương phản không đạt WCAG AA | `--c-border: #9AA0A6` (1.64:1 vs nền), `--c-warn: #E8B500` (1.18:1 nếu làm chữ) trong [styles.css:7,16](../../apps/web-ui/src/shared/styles.css#L7) — 13/14 biến thể `StatusBadge` fail |
 | B4b | Không có theme tối | `styles.css` không có `prefers-color-scheme`, `data-theme` hay `.dark` |
-| B5a | Trang Lập trình redirect âm thầm | [App.tsx:72](../../src/frontend/src/App.tsx#L72) `LEGACY_GRAPH_DEMO_ENABLED ? <ProgrammingPage/> : <Navigate to="/" replace/>` — bấm vào menu thì về Dashboard, không một lời giải thích |
-| B5b | Mất hoàn toàn navigation dưới 1024px | [NavRail.tsx:66](../../src/frontend/src/components/NavRail.tsx#L66) `hidden … lg:flex`, không có drawer/hamburger thay thế trong `components/` |
-| B6 | Nút "Lưu" giả ở trang Thiết bị | [SettingsPage.tsx:38](../../src/frontend/src/pages/SettingsPage.tsx#L38) chỉ `toast.push('success', 'Đã lưu … (demo)')` — không gọi API |
+| B5a | Trang Lập trình redirect âm thầm | [App.tsx:72](../../apps/web-ui/src/app/App.tsx#L72) `LEGACY_GRAPH_DEMO_ENABLED ? <ProgrammingPage/> : <Navigate to="/" replace/>` — bấm vào menu thì về Dashboard, không một lời giải thích |
+| B5b | Mất hoàn toàn navigation dưới 1024px | [NavRail.tsx:66](../../apps/web-ui/src/shared/components/NavRail.tsx#L66) `hidden … lg:flex`, không có drawer/hamburger thay thế trong `components/` |
+| B6 | Nút "Lưu" giả ở trang Thiết bị | [SettingsPage.tsx:38](../../apps/web-ui/src/features/network/SettingsPage.tsx#L38) chỉ `toast.push('success', 'Đã lưu … (demo)')` — không gọi API |
 | B7 | Quản lý người dùng là vỏ rỗng | `UsersPage.tsx` đúng 20 dòng |
 | C1 | ADR-022 mới xong WP2 | WP1 (runner), WP3 (workflow), WP4 (health check), WP5 (artifact bằng chứng), WP6 (diễn tập rollback chính thức) còn mở; ADR vẫn ở trạng thái `Proposed` |
 | C2 | Script E2E mạng còn sót trạng thái | UC-WEB-NET-006 fail do UC-008 để lại giao dịch DHCP chưa kết thúc — lỗi của script, không phải sản phẩm ([evidence 31/07 §6](../07_records/test-evidence/fw-som/2026-07-31-network-page-board-e2e.md)) |
@@ -227,7 +227,7 @@ Audit đề xuất MP-4 (canvas lập trình dạng sơ đồ khối) và MP-5 (
 
 Chủ dự án đã quyết hoãn FW MCU ngày 2026-08-01. Ghi lại để không ai đọc plan này rồi tưởng sản phẩm đã sẵn sàng:
 
-- [fw/Core/Src/main.c](../../fw/Core/Src/main.c) hiện là **16 dòng** `printf` + `while(1){}`. Không HAL, không FreeRTOS, không driver ADS131M08/DAC8554, không khung frame IOP, không CRC.
+- [firmware/stm32/Core/Src/main.c](../../firmware/stm32/Core/Src/main.c) hiện là **16 dòng** `printf` + `while(1){}`. Không HAL, không FreeRTOS, không driver ADS131M08/DAC8554, không khung frame IOP, không CRC.
 - Mọi kiểm chứng trong plan này chạy trên `mkddc-fakemcu` + PTY. **Không có một điểm I/O vật lý nào được đọc hay ghi.**
 - Mốc **Milestone A của roadmap Rev A — "lõi điều khiển chạy trên HW thật" — vẫn không đạt được** sau khi plan 45 hoàn thành. Plan này làm sản phẩm *nghiệm thu được về mặt phần mềm*, không làm nó *chạy được trên phần cứng thật*.
 - Hai issue P2 vẫn treo và sẽ phải chốt khi khởi động FW: `IOP-Q-004` (AO safe-state 0V hay 4mA — 0mA là tín hiệu đứt dây ở phía BMS) và `IOP-Q-005` (SEQ wrap 255→0).

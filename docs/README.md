@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-03 (đăng ký design proposal Modbus RTU Point trước Programming)
+**Cập nhật:** 2026-08-03 (đồng bộ cây source As-Built sau repository restructure)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -29,6 +29,8 @@
 | [Modbus RTU Point Design Review Proposal](07_records/reviews/MODBUS_RTU_POINT_DESIGN_REVIEW_PROPOSAL.md) | báo cáo phương án, finding P0 và chín quyết định cần reviewer duyệt |
 | [Physical I/O HIL Report](07_records/reviews/PHYSICAL_IO_HIL_REPORT.md) | phân biệt firmware host evidence với HIL/safe-state vật lý chưa thực hiện |
 | [Deployment Provenance Report](07_records/reviews/DEPLOYMENT_PROVENANCE_REPORT.md) | build identity, release manifest, installer và sai khác target hiện hữu |
+| [Repository Architecture Restructure Plan](03_implementation/46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md) | trạng thái G0..G5, source migration, regression host và blocker target rollback |
+| [Repository Restructure Host Evidence](07_records/evidence/restructure/HOST_RESTRUCTURE_GATES_20260803.json) | số đo layout, C++ matrix, Go race, FE/E2E, firmware và release checksum sau migration |
 
 ## Detailed design corpus
 
@@ -58,4 +60,7 @@ dùng cho release.
 
 Archive lịch sử không phải nguồn chuẩn: `archives/markdown-before-restructure-2026-07-22.tar.gz`.
 
-Artifact hỗ trợ không phải Markdown được giữ tại `02_design/interfaces/openapi.yaml`, `07_records/evidence/` và `07_records/security/`; chúng không tự tạo thành bằng chứng release nếu chưa được review theo Verification.
+Artifact hỗ trợ không phải Markdown được giữ tại
+[`contracts/openapi/openapi.yaml`](../contracts/openapi/openapi.yaml),
+`07_records/evidence/` và `07_records/security/`; chúng không tự tạo thành bằng
+chứng release nếu chưa được review theo Verification.

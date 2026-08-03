@@ -54,7 +54,7 @@ Maximum retention Rev A là product contract deterministic: `1s=30d`, `3s=60d`, 
 
 - [Plan 42](../03_implementation/42_HISTORIAN_FE_PROTOTYPE_PLAN.md)
 - [Runtime model](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md)
-- [OpenAPI](../02_design/interfaces/openapi.yaml)
+- [OpenAPI](../../contracts/openapi/openapi.yaml)
 - [Config schema](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md)
 - [Task checklist](../03_implementation/11_TASK_CHECKLIST.md)
 
