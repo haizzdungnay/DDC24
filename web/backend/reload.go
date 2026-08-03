@@ -22,6 +22,9 @@ const (
 )
 
 func (a *App) dispatchReload(target string) (applied bool, warnings []string) {
+	if a != nil && a.reloadDispatcher != nil {
+		return a.reloadDispatcher(target)
+	}
 	switch target {
 	case reloadSIGHUPCore:
 		return sendSignalReload(a.cfg.CorePidPath, "mkddc-core")

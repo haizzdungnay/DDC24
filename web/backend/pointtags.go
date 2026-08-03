@@ -673,7 +673,8 @@ func clonePointIOConfig(cfg ConfigIO) ConfigIO {
 		}
 		return out
 	}
-	return ConfigIO{UI: cloneRows(cfg.UI), AO: cloneRows(cfg.AO), DO: cloneRows(cfg.DO)}
+	return ConfigIO{Revision: cfg.Revision, Checksum: cfg.Checksum,
+		UI: cloneRows(cfg.UI), AO: cloneRows(cfg.AO), DO: cloneRows(cfg.DO)}
 }
 
 func clonePointVirtualConfig(cfg ConfigVirtualPoints) ConfigVirtualPoints {

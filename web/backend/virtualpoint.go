@@ -212,6 +212,11 @@ func (a *App) handleDeleteVirtualPoint(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) writeVirtualPointsConfig(r *http.Request, cfg ConfigVirtualPoints, op string) error {
 	cfg = normalizeVirtualPointsConfig(cfg)
+	ioCfg, _ := readConfig(a, configGroupIO, ConfigIO{})
+	fieldbus, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+	if errs := validateUnifiedPointTags(ioCfg, cfg, fieldbus); len(errs) > 0 {
+		return fmt.Errorf("point tag conflict với Modbus RTU: %s", errs[0].Message)
+	}
 	current, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
 	if err != nil {
 		return err
@@ -603,22 +608,41 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 	if value == nil {
 		value = defaultVirtualPointValue(item.SignalType)
 	}
+	tag := fallbackPointTag(item.Tag, item.ID)
+	readWrite := "read"
+	if item.Writable {
+		readWrite = "read_write"
+	}
+	dataType := map[string]string{
+		virtualPointSignalBoolean: "bool", virtualPointSignalInteger: "int32",
+		virtualPointSignalFloat: "float32", virtualPointSignalString: "string",
+		virtualPointSignalDateTime: "datetime",
+	}[item.SignalType]
+	defaultValue := defaultVirtualPointValue(item.SignalType)
 	return PointDTO{
 		ID:            item.ID,
 		Channel:       item.Channel,
-		Tag:           fallbackPointTag(item.Tag, item.ID),
-		Name:          fallbackPointTag(item.Tag, item.ID),
+		Tag:           tag,
+		Name:          tag,
 		Kind:          "virtual",
 		Value:         value,
 		Unit:          item.Unit,
 		Quality:       "good",
-		Source:        "backend",
+		Source:        "virtual_point",
 		Priority:      "Virtual Point",
 		UpdatedAt:     item.UpdatedAt,
 		SignalType:    item.SignalType,
 		Writable:      item.Writable,
 		LogEnabled:    item.LogEnabled,
 		LogIntervalMs: item.LogIntervalMs,
+		PointID:       item.ID,
+		TagName:       tag,
+		DisplayName:   tag,
+		DataType:      dataType,
+		Timestamp:     item.UpdatedAt,
+		ReadWrite:     readWrite,
+		DefaultValue:  defaultValue,
+		SafeValue:     defaultValue,
 	}
 }
 

@@ -16,14 +16,18 @@ type ConfigNetwork struct {
 }
 
 type ConfigIO struct {
-	UI []map[string]any `json:"ui"`
-	AO []map[string]any `json:"ao"`
-	DO []map[string]any `json:"do"`
+	Revision uint64           `json:"revision,omitempty"`
+	Checksum string           `json:"checksum,omitempty"`
+	UI       []map[string]any `json:"ui"`
+	AO       []map[string]any `json:"ao"`
+	DO       []map[string]any `json:"do"`
 }
 
 type ConfigSafeState struct {
-	AO []map[string]any `json:"ao"`
-	DO []map[string]any `json:"do"`
+	Revision uint64           `json:"revision,omitempty"`
+	Checksum string           `json:"checksum,omitempty"`
+	AO       []map[string]any `json:"ao"`
+	DO       []map[string]any `json:"do"`
 }
 
 type ConfigBacnet struct {
@@ -31,9 +35,68 @@ type ConfigBacnet struct {
 }
 
 type ConfigFieldbus struct {
-	RS485         map[string]any   `json:"rs485"`
-	PollDefaultMs int              `json:"poll_default_ms"`
-	Slaves        []map[string]any `json:"slaves"`
+	RS485         map[string]any    `json:"rs485"`
+	PollDefaultMs int               `json:"poll_default_ms"`
+	Slaves        []map[string]any  `json:"slaves"`
+	TCPSlaves     []map[string]any  `json:"tcp_slaves,omitempty"`
+	Revision      uint64            `json:"revision,omitempty"`
+	Checksum      string            `json:"checksum,omitempty"`
+	Devices       []ModbusRTUDevice `json:"devices,omitempty"`
+	Points        []ModbusRTUPoint  `json:"points,omitempty"`
+}
+
+type ModbusRTUDevice struct {
+	DeviceID    string `json:"device_id"`
+	DisplayName string `json:"display_name"`
+	Enabled     bool   `json:"enabled"`
+	RS485Port   string `json:"rs485_port"`
+	Baud        int    `json:"baud"`
+	Parity      string `json:"parity"`
+	StopBit     int    `json:"stop_bit"`
+	SlaveID     int    `json:"slave_id"`
+	PollMS      int    `json:"poll_ms"`
+	TimeoutMS   int    `json:"timeout_ms"`
+	Retry       int    `json:"retry"`
+}
+
+type ModbusRTUPoint struct {
+	PointID      string  `json:"point_id"`
+	DeviceID     string  `json:"device_id"`
+	TagName      string  `json:"tag_name"`
+	DisplayName  string  `json:"display_name"`
+	RegisterType string  `json:"register_type"`
+	Address      int     `json:"address"`
+	DataType     string  `json:"data_type"`
+	ByteOrder    string  `json:"byte_order"`
+	WordOrder    string  `json:"word_order"`
+	Scale        float64 `json:"scale"`
+	Offset       float64 `json:"offset"`
+	Unit         string  `json:"unit"`
+	ReadWrite    string  `json:"read_write"`
+	DefaultValue any     `json:"default_value"`
+	SafeValue    any     `json:"safe_value"`
+	Enabled      bool    `json:"enabled"`
+}
+
+type ModbusRTUDiagnostics struct {
+	DeviceID          string `json:"device_id"`
+	SlaveID           int    `json:"slave_id"`
+	Online            bool   `json:"online"`
+	TotalPolls        uint32 `json:"total_polls"`
+	TotalErrors       uint32 `json:"total_errors"`
+	TimeoutErrors     uint32 `json:"timeout_errors"`
+	CRCErrors         uint32 `json:"crc_errors"`
+	RetryAttempts     uint32 `json:"retry_attempts"`
+	ConsecutiveErrors uint8  `json:"consecutive_errors"`
+	LastSeenMS        uint64 `json:"last_seen_ms"`
+}
+
+type ConfigIOBundle struct {
+	BaseRevision uint64          `json:"base_revision,omitempty"`
+	Revision     uint64          `json:"revision"`
+	Checksum     string          `json:"checksum"`
+	IO           ConfigIO        `json:"io"`
+	SafeState    ConfigSafeState `json:"safe_state"`
 }
 
 type ConfigTime struct {
@@ -112,6 +175,8 @@ type ConfigPutResult struct {
 	Applied  bool     `json:"applied"`
 	Reload   string   `json:"reload"`
 	Warnings []string `json:"warnings"`
+	Revision uint64   `json:"revision,omitempty"`
+	Checksum string   `json:"checksum,omitempty"`
 }
 type TrendSample map[string]any
 
@@ -293,8 +358,10 @@ type HistorianConfig struct {
 }
 
 type PointConfigPatch struct {
-	Tag  *string `json:"tag,omitempty"`
-	Name *string `json:"name,omitempty"`
+	Tag          *string `json:"tag,omitempty"`
+	Name         *string `json:"name,omitempty"`
+	Unit         *string `json:"unit,omitempty"`
+	TrendEnabled *bool   `json:"trendEnabled,omitempty"`
 }
 
 type PointDTO struct {
@@ -318,6 +385,14 @@ type PointDTO struct {
 	Writable           bool     `json:"writable,omitempty"`
 	LogEnabled         bool     `json:"logEnabled,omitempty"`
 	LogIntervalMs      *int     `json:"logIntervalMs,omitempty"`
+	PointID            string   `json:"point_id"`
+	TagName            string   `json:"tag_name"`
+	DisplayName        string   `json:"display_name"`
+	DataType           string   `json:"data_type"`
+	Timestamp          string   `json:"timestamp"`
+	ReadWrite          string   `json:"read_write"`
+	DefaultValue       any      `json:"default_value"`
+	SafeValue          any      `json:"safe_value"`
 }
 
 // AlarmDTO mirrors FE Alarm (types.ts).

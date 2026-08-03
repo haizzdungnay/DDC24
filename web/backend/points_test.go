@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -52,6 +53,33 @@ func TestHandlePointReturnsCreatedVirtualPoint(t *testing.T) {
 	}
 	if body := w.Body.String(); !containsAll(body, "VP1", `"tag":"room setpoint"`, `"name":"room setpoint"`, "22.5") || strings.Contains(body, "Room Setpoint") {
 		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestReadPointsReturnsCanonicalContractForPhysicalVirtualAndModbus(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	if err := os.WriteFile(filepath.Join(app.cfg.ConfigDir, "io_config.conf"), []byte(`{"ui":[{"ch":1,"tag":"supply air","name":"Supply air","display_unit":"degC"}],"ao":[],"do":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","tag":"occupied","signalType":"boolean","enabled":true,"writable":true,"value":true}]}`)
+	if err := os.WriteFile(filepath.Join(app.cfg.ConfigDir, "fieldbus.conf"), []byte(`{"devices":[],"points":[{"point_id":"MB-SAT","device_id":"ahu","tag_name":"ahu sat","display_name":"AHU supply air","register_type":"input_register","address":1,"data_type":"float32","byte_order":"big","word_order":"high_low","scale":1,"unit":"degC","read_write":"read","default_value":20,"safe_value":0,"enabled":true}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app.core = &pointsCore{points: []PointDTO{
+		{ID: "UI-01", Kind: "UI", Value: float32(22), Quality: "good", UpdatedAt: "2026-08-03T00:00:00Z"},
+		{ID: "MB-SAT", Kind: "modbus_rtu", Value: float32(21), Quality: "STALE", UpdatedAt: "2026-08-03T00:00:00Z"},
+	}}
+	points, err := app.ReadPoints(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(points) != 3 {
+		t.Fatalf("points = %+v", points)
+	}
+	for _, point := range points {
+		if point.PointID == "" || point.TagName == "" || point.DisplayName == "" || point.DataType == "" || point.Timestamp == "" || point.ReadWrite == "" || point.Source == "" || point.DefaultValue == nil || point.SafeValue == nil {
+			t.Fatalf("Point thiếu canonical field: %+v", point)
+		}
 	}
 }
 

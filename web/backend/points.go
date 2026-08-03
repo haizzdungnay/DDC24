@@ -79,7 +79,10 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 	if err != nil {
 		ioCfg = ConfigIO{}
 	}
-	metadata := map[string]struct{ tag, name string }{}
+	metadata := map[string]struct {
+		tag, name, unit string
+		trend           bool
+	}{}
 	addRows := func(rows []map[string]any, prefix string) {
 		for _, row := range rows {
 			channel, _, good := intField(row, "ch")
@@ -89,12 +92,34 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 			id := formatPointID(prefix, channel)
 			tag, _, _ := stringField(row, "tag")
 			name, _, _ := stringField(row, "name")
-			metadata[id] = struct{ tag, name string }{fallbackPointTag(tag, id), strings.TrimSpace(name)}
+			unit, _, _ := stringField(row, "display_unit")
+			trend, _, _ := boolField(row, "trend_enabled")
+			metadata[id] = struct {
+				tag, name, unit string
+				trend           bool
+			}{fallbackPointTag(tag, id), strings.TrimSpace(name), strings.TrimSpace(unit), trend}
 		}
 	}
 	addRows(ioCfg.UI, "UI")
 	addRows(ioCfg.AO, "AO")
 	addRows(ioCfg.DO, "DO")
+	fieldbus, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+	modbusMetadata := make(map[string]ModbusRTUPoint, len(fieldbus.Points))
+	for _, point := range fieldbus.Points {
+		modbusMetadata[point.PointID] = point
+	}
+	safeCfg, _ := readConfig(a, configGroupSafeState, ConfigSafeState{})
+	safeValues := map[string]any{}
+	for _, row := range safeCfg.AO {
+		if ch, _, good := intField(row, "ch"); good {
+			safeValues[formatPointID("AO", ch)] = row["safe"]
+		}
+	}
+	for _, row := range safeCfg.DO {
+		if ch, _, good := intField(row, "ch"); good {
+			safeValues[formatPointID("DO", ch)] = row["safe"]
+		}
+	}
 	out := make([]PointDTO, len(points))
 	for i, point := range points {
 		id := canonicalPointID(point.ID)
@@ -108,9 +133,65 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 			if meta.name != "" {
 				point.Name = meta.name
 			}
+			if meta.unit != "" {
+				point.Unit = meta.unit
+			}
+			point.LogEnabled = meta.trend
 		}
 		if point.Name == "" {
 			point.Name = id
+		}
+		if meta, ok := modbusMetadata[id]; ok {
+			point.Tag = meta.TagName
+			point.Name = meta.DisplayName
+			point.Unit = meta.Unit
+			point.DataType = meta.DataType
+			point.ReadWrite = meta.ReadWrite
+			point.DefaultValue = meta.DefaultValue
+			point.SafeValue = meta.SafeValue
+			point.Writable = meta.ReadWrite == "read_write"
+		}
+		point.PointID = point.ID
+		point.TagName = point.Tag
+		point.DisplayName = point.Name
+		if point.DataType == "" {
+			if _, ok := point.Value.(bool); ok {
+				point.DataType = "bool"
+			} else {
+				point.DataType = "float32"
+			}
+		}
+		point.Timestamp = point.UpdatedAt
+		if point.ReadWrite == "" {
+			if point.Writable || point.Kind == "AO" || point.Kind == "DO" || point.Kind == "virtual" {
+				point.ReadWrite = "read_write"
+			} else {
+				point.ReadWrite = "read"
+			}
+		}
+		if point.DefaultValue == nil {
+			if _, ok := point.Value.(bool); ok {
+				point.DefaultValue = false
+			} else {
+				point.DefaultValue = float64(0)
+			}
+		}
+		if point.SafeValue == nil {
+			if configured, ok := safeValues[id]; ok {
+				point.SafeValue = configured
+			} else if _, ok := point.Value.(bool); ok {
+				point.SafeValue = false
+			} else {
+				point.SafeValue = float64(0)
+			}
+		}
+		switch point.Kind {
+		case "modbus_rtu":
+			point.Source = "modbus_rtu"
+		case "virtual":
+			point.Source = "virtual_point"
+		default:
+			point.Source = "local_physical_io"
 		}
 		out[i] = point
 	}

@@ -267,6 +267,40 @@ func hasConfigErrorPath(errs []configValidationError, path string) bool {
 	return false
 }
 
+func TestIOBundleApplyFailureRestoresBothFiles(t *testing.T) {
+	app, token := newTestAppWithAdmin(t)
+	ioPath := filepath.Join(app.cfg.ConfigDir, "io_config.conf")
+	safePath := filepath.Join(app.cfg.ConfigDir, "io_safe_state.conf")
+	oldIO := []byte("{\"revision\":7,\"checksum\":\"old\",\"ui\":[],\"ao\":[],\"do\":[]}\n")
+	oldSafe := []byte("{\"revision\":7,\"checksum\":\"old\",\"ao\":[],\"do\":[]}\n")
+	if err := os.WriteFile(ioPath, oldIO, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(safePath, oldSafe, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	coreAttempts := 0
+	app.reloadDispatcher = func(target string) (bool, []string) {
+		if target == reloadSIGHUPCore {
+			coreAttempts++
+			if coreAttempts == 1 {
+				return false, []string{"core reload failed"}
+			}
+		}
+		return true, nil
+	}
+	body := `{"base_revision":7,"io":{"ui":[],"ao":[],"do":[]},"safe_state":{"ao":[],"do":[]}}`
+	w := modbusServeAuth(t, app, token, http.MethodPut, "/api/v1/system/config/io-bundle", body)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "đã phục hồi revision 7") {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	gotIO, _ := os.ReadFile(ioPath)
+	gotSafe, _ := os.ReadFile(safePath)
+	if string(gotIO) != string(oldIO) || string(gotSafe) != string(oldSafe) {
+		t.Fatalf("rollback không nguyên tử: io=%s safe=%s", gotIO, gotSafe)
+	}
+}
+
 func newTestAppWithAdmin(t *testing.T) (*App, string) {
 	t.Helper()
 	users := writeTestUsers(t, "admin123", RoleAdmin)

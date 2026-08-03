@@ -58,8 +58,8 @@ func (a *App) handlePutPointConfig(w http.ResponseWriter, r *http.Request) {
 		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
 		return
 	}
-	if patch.Tag == nil && patch.Name == nil {
-		writeValidationErrors(w, []configValidationError{{Path: "$", Message: "tag or name is required"}})
+	if patch.Tag == nil && patch.Name == nil && patch.Unit == nil && patch.TrendEnabled == nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: "tag, name, unit hoặc trendEnabled là bắt buộc"}})
 		return
 	}
 	if patch.Tag != nil && !strings.HasPrefix(id, "VP") {
@@ -86,6 +86,12 @@ func (a *App) handlePutPointConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if patch.Name != nil {
 			vpCfg.Items[index].Label = *patch.Name
+		}
+		if patch.Unit != nil {
+			vpCfg.Items[index].Unit = strings.TrimSpace(*patch.Unit)
+		}
+		if patch.TrendEnabled != nil {
+			vpCfg.Items[index].LogEnabled = *patch.TrendEnabled
 		}
 		if errs := append(validateConfigVirtualPoints(vpCfg), validateVirtualPointMetadata(vpCfg)...); len(errs) > 0 {
 			a.auditPointMetadataPatch(r, id, oldTag, oldName, patch, "rejected")
@@ -140,6 +146,12 @@ func (a *App) handlePutPointConfig(w http.ResponseWriter, r *http.Request) {
 	if patch.Name != nil {
 		next["name"] = strings.TrimSpace(*patch.Name)
 	}
+	if patch.Unit != nil {
+		next["display_unit"] = strings.TrimSpace(*patch.Unit)
+	}
+	if patch.TrendEnabled != nil {
+		next["trend_enabled"] = *patch.TrendEnabled
+	}
 	rows[index] = next
 	switch prefix {
 	case "UI":
@@ -160,9 +172,18 @@ func (a *App) handlePutPointConfig(w http.ResponseWriter, r *http.Request) {
 		writePointTagErrors(w, errs)
 		return
 	}
-	if _, err := a.writeConfigGroup(r, configGroupIO, ioCfg); err != nil {
+	safeCfg, safeErr := readConfig(a, configGroupSafeState, ConfigSafeState{})
+	if safeErr != nil {
+		writeError(w, http.StatusInternalServerError, safeErr.Error())
+		return
+	}
+	if _, applyErrs, err := a.applyIOBundle(r, ioCfg, safeCfg, beforeIO.Revision); len(applyErrs) > 0 || err != nil {
 		a.auditPointMetadataPatch(r, id, oldTag, oldName, patch, "rejected")
-		writeError(w, http.StatusInternalServerError, err.Error())
+		if len(applyErrs) > 0 {
+			writePointTagErrors(w, applyErrs)
+		} else {
+			writeError(w, http.StatusConflict, err.Error())
+		}
 		return
 	}
 	point := a.readPhysicalPointForConfig(r.Context(), id)
@@ -172,7 +193,7 @@ func (a *App) handlePutPointConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func pointMetadataPatchIsNameOnly(patch PointConfigPatch, oldTag string) bool {
-	if patch.Name == nil {
+	if patch.Name == nil || patch.Unit != nil || patch.TrendEnabled != nil {
 		return false
 	}
 	if patch.Tag == nil {
