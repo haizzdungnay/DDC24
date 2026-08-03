@@ -453,7 +453,7 @@ func TestHandleAckAlarmEmptyIDReturnsBadRequest(t *testing.T) {
 	core := &fakeAlarmCore{}
 	app, _ := newTestAppWithRole(t, RoleOperator, core)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/alarms//ack", nil)
-	req = req.WithContext(context.WithValue(req.Context(), principalContextKey, &Principal{Username: "op", Role: RoleOperator}))
+	req = req.WithContext(contextWithPrincipal(req.Context(), &Principal{Username: "op", Role: RoleOperator}))
 	w := httptest.NewRecorder()
 
 	app.handleAckAlarm(w, req)

@@ -1,15 +1,19 @@
-package app
+package historian
 
 import (
 	"context"
 	"fmt"
 	"sort"
 	"strings"
+
+	webPoints "mkddc-web/internal/points"
 )
 
 const (
-	historianQueryDefaultMaxPoints = 5000
-	historianTrendCacheRetentionMS = int64(24 * 60 * 60 * 1000)
+	QueryDefaultMaxPoints          = 5000
+	historianQueryDefaultMaxPoints = QueryDefaultMaxPoints
+	TrendCacheRetentionMS          = int64(24 * 60 * 60 * 1000)
+	historianTrendCacheRetentionMS = TrendCacheRetentionMS
 )
 
 type HistorianTier string
@@ -223,7 +227,7 @@ func validateHistorianQueryRequest(request HistorianQueryRequest) (HistorianQuer
 		if pointID == "" || strings.TrimSpace(pointID) != pointID || canonicalHistoryPointID(pointID) != pointID {
 			return request, historianQueryError("invalid_request", "point IDs must be canonical")
 		}
-		prefix, _, ok := parsePointID(pointID)
+		prefix, _, ok := webPoints.ParseID(pointID)
 		if !ok || (prefix != "UI" && prefix != "AO" && prefix != "DO" && prefix != "VP") {
 			return request, historianQueryError("invalid_request", "unsupported historian point ID")
 		}

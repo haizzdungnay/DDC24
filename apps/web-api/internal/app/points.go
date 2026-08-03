@@ -398,22 +398,3 @@ func validPointCommandValue(value any) bool {
 		return false
 	}
 }
-
-func (a *AuditLogger) PointForce(principal *Principal, id string, release bool, result string, remote string) {
-	if a == nil || a.logger == nil {
-		return
-	}
-	username := "-"
-	role := "-"
-	if principal != nil {
-		username = principal.Username
-		role = string(principal.Role)
-	}
-	op := "force"
-	if release {
-		op = "release"
-	}
-	a.logger.Printf("AUDIT point_force ts=%s user=%s role=%s point=%s op=%s result=%s remote=%s",
-		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(username, 32), sanitizeAudit(role, 16),
-		sanitizeAudit(id, 64), op, sanitizeAudit(result, 16), sanitizeAudit(remote, 64))
-}

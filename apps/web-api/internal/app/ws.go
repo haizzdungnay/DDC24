@@ -73,7 +73,7 @@ func (a *App) requireWSAuth(next http.HandlerFunc) http.Handler {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalContextKey, principal)))
+		next.ServeHTTP(w, r.WithContext(contextWithPrincipal(r.Context(), principal)))
 	})
 }
 

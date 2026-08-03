@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	webHMI "mkddc-web/internal/hmi"
 )
 
 const (
@@ -29,6 +30,8 @@ const (
 	hmiSessionIdle     = 15 * time.Minute
 	hmiOverrideMaxS    = 3600
 )
+
+const hmiAuditMaxBytes = webHMI.AuditMaxBytes
 
 type hmiCore interface {
 	CoreStatusClient
@@ -106,7 +109,7 @@ type HMIBroker struct {
 	netcfg   netcfgAuthority
 	logger   *log.Logger
 	audit    *AuditLogger
-	auditLog *hmiAuditStore
+	auditLog *webHMI.AuditStore
 	now      func() time.Time
 	listener net.Listener
 
@@ -124,7 +127,7 @@ func NewHMIBroker(cfg Config, auth *AuthService, core hmiCore, logger *log.Logge
 	}
 	return &HMIBroker{
 		cfg: cfg, auth: auth, core: core, netcfg: NewNetcfgClient(cfg.NetcfgSock), logger: logger, audit: audit,
-		auditLog: &hmiAuditStore{path: cfg.HMIAuditPath},
+		auditLog: webHMI.NewAuditStore(cfg.HMIAuditPath),
 		now:      time.Now, sessions: make(map[string]hmiSession),
 		loginRate: make(map[uint32]hmiLoginWindow), cache: make(map[string]hmiCachedResponse),
 		connSlots: make(chan struct{}, 8),
@@ -607,7 +610,7 @@ func (b *HMIBroker) appendAudit(session hmiSession, req hmiRequest, phase string
 		effective = resp.Point.Value
 		source = resp.Point.Priority
 	}
-	return b.auditLog.append(hmiAuditRecord{
+	return b.auditLog.Append(webHMI.AuditRecord{
 		Phase: phase, RequestID: req.RequestID, Actor: session.username, Role: session.role,
 		Action: req.Action, Target: mutationTarget(req), Value: req.Value, Effective: effective,
 		Source: source, Mode: req.Mode,

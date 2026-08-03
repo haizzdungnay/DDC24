@@ -1,4 +1,4 @@
-package app
+package network
 
 import (
 	"context"
@@ -57,7 +57,7 @@ func TestNetcfgClientUsesBoundedVersionedUnixProtocol(t *testing.T) {
 		resp.Active.Link != "down" || !resp.Active.AdminUp || resp.Active.Carrier ||
 		resp.Active.ReasonCode != "NO_CARRIER" || resp.Configured == nil ||
 		resp.Configured.Interface != "end1" || resp.Configured.Mode != "dhcp" ||
-		!hasNetcfgCapability(resp.Capabilities, "dns") || resp.Management == nil ||
+		!HasCapability(resp.Capabilities, "dns") || resp.Management == nil ||
 		resp.Management.MDNSName != "mkddc-24.local" || !resp.Management.Stable {
 		t.Fatalf("response = %+v", resp)
 	}
@@ -140,8 +140,8 @@ func TestNetcfgClientRejectsInvalidResponseSemantics(t *testing.T) {
 			}
 			test.mutate(response)
 			_, err := requestNetcfgTestResponse(t, response)
-			if !errors.Is(err, errNetcfgInvalidResponse) {
-				t.Fatalf("error = %v; want errNetcfgInvalidResponse", err)
+			if !errors.Is(err, ErrInvalidResponse) {
+				t.Fatalf("error = %v; want ErrInvalidResponse", err)
 			}
 		})
 	}

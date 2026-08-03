@@ -1,4 +1,4 @@
-package app
+package auth
 
 import (
 	"context"
@@ -34,6 +34,18 @@ type User struct {
 	Password string `json:"pw_bcrypt"`
 }
 
+type UserDTO struct {
+	Username string `json:"username"`
+	Role     Role   `json:"role"`
+}
+
+type Config struct {
+	JWTSecret  string
+	UsersConf  string
+	WriteFile  func(string, []byte, os.FileMode) error
+	WriteError func(http.ResponseWriter, int, string)
+}
+
 type usersFile struct {
 	SchemaVersion string `json:"_schema_version"`
 	Users         []User `json:"users"`
@@ -46,12 +58,14 @@ type Principal struct {
 }
 
 type AuthService struct {
-	secret    []byte
-	usersConf string
-	users     map[string]User
-	revoked   map[string]time.Time
-	mu        sync.Mutex
-	audit     *AuditLogger
+	secret     []byte
+	usersConf  string
+	users      map[string]User
+	revoked    map[string]time.Time
+	mu         sync.Mutex
+	audit      *AuditLogger
+	writeFile  func(string, []byte, os.FileMode) error
+	writeError func(http.ResponseWriter, int, string)
 }
 
 var (
@@ -72,21 +86,29 @@ type jwtClaims struct {
 }
 
 func NewAuthService(cfg Config, audit *AuditLogger) (*AuthService, error) {
+	if cfg.WriteFile == nil {
+		return nil, errors.New("auth config writer is required")
+	}
+	if cfg.WriteError == nil {
+		return nil, errors.New("auth error writer is required")
+	}
 	users, err := loadUsers(cfg.UsersConf)
 	if err != nil {
 		return nil, err
 	}
 	return &AuthService{
-		secret:    []byte(cfg.JWTSecret),
-		usersConf: cfg.UsersConf,
-		users:     users,
-		revoked:   make(map[string]time.Time),
-		audit:     audit,
+		secret:     []byte(cfg.JWTSecret),
+		usersConf:  cfg.UsersConf,
+		users:      users,
+		revoked:    make(map[string]time.Time),
+		audit:      audit,
+		writeFile:  cfg.WriteFile,
+		writeError: cfg.WriteError,
 	}, nil
 }
 
 func loadUsers(path string) (map[string]User, error) {
-	data, err := osReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("load users %s: %w", path, err)
 	}
@@ -292,7 +314,7 @@ func (a *AuthService) persistUsers(users map[string]User) error {
 		return fmt.Errorf("marshal users: %w", err)
 	}
 	data = append(data, '\n')
-	if err := writeConfigFileAtomic(a.usersConf, data, 0o600); err != nil {
+	if err := a.writeFile(a.usersConf, data, 0o600); err != nil {
 		return err
 	}
 	reloaded, err := loadUsers(a.usersConf)
@@ -372,14 +394,14 @@ func (a *AuthService) pruneRevokedLocked(now time.Time) {
 
 func (a *AuthService) Require(min Role, next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := bearerToken(r)
+		token := BearerToken(r)
 		principal, err := a.Validate(token)
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
+			a.writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		if !RoleAllows(principal.Role, min) {
-			writeError(w, http.StatusForbidden, "forbidden")
+			a.writeError(w, http.StatusForbidden, "forbidden")
 			return
 		}
 		ctx := context.WithValue(r.Context(), principalContextKey, principal)
@@ -387,7 +409,7 @@ func (a *AuthService) Require(min Role, next http.HandlerFunc) http.Handler {
 	})
 }
 
-func bearerToken(r *http.Request) string {
+func BearerToken(r *http.Request) string {
 	header := r.Header.Get("Authorization")
 	if !strings.HasPrefix(header, "Bearer ") {
 		return ""
@@ -395,9 +417,13 @@ func bearerToken(r *http.Request) string {
 	return strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
 }
 
-func principalFromContext(ctx context.Context) *Principal {
+func PrincipalFromContext(ctx context.Context) *Principal {
 	principal, _ := ctx.Value(principalContextKey).(*Principal)
 	return principal
+}
+
+func ContextWithPrincipal(ctx context.Context, principal *Principal) context.Context {
+	return context.WithValue(ctx, principalContextKey, principal)
 }
 
 func RoleAllows(actual, required Role) bool {
@@ -454,40 +480,4 @@ func roleRank(role Role) int {
 	default:
 		return 0
 	}
-}
-
-func osReadFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
-}
-
-type loginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var req loginRequest
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	if err := dec.Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
-		return
-	}
-	token, role, err := a.auth.Authenticate(req.Username, req.Password, r.RemoteAddr)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "invalid credentials")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"token":      token,
-		"role":       role,
-		"expires_in": 3600,
-	})
-}
-
-func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
-	principal := principalFromContext(r.Context())
-	if principal != nil {
-		a.auth.Revoke(principal.Token)
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"result": "ok"})
 }

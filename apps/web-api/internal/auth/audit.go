@@ -1,4 +1,4 @@
-package app
+package auth
 
 import (
 	"log"
@@ -66,7 +66,56 @@ func (a *AuditLogger) HMI(user string, role Role, requestID, action, target, rea
 		sanitizeAudit(reason, 80), sanitizeAudit(result, 16), sanitizeAudit(reasonCode, 32), sanitizeAudit(remote, 64))
 }
 
-func sanitizeAudit(value string, max int) string {
+func (a *AuditLogger) PointForce(principal *Principal, id string, release bool, result string, remote string) {
+	if a == nil || a.logger == nil {
+		return
+	}
+	username, role := principalIdentity(principal)
+	op := "force"
+	if release {
+		op = "release"
+	}
+	a.logger.Printf("AUDIT point_force ts=%s user=%s role=%s point=%s op=%s result=%s remote=%s",
+		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(username, 32), sanitizeAudit(role, 16),
+		sanitizeAudit(id, 64), op, sanitizeAudit(result, 16), sanitizeAudit(remote, 64))
+}
+
+func (a *AuditLogger) AlarmAck(principal *Principal, id string, result string, remote string) {
+	a.alarmAction("alarm_ack", principal, id, result, remote)
+}
+
+func (a *AuditLogger) AlarmSuppress(principal *Principal, id string, result string, remote string) {
+	a.alarmAction("alarm_suppress", principal, id, result, remote)
+}
+
+func (a *AuditLogger) alarmAction(action string, principal *Principal, id string, result string, remote string) {
+	if a == nil || a.logger == nil {
+		return
+	}
+	username, role := principalIdentity(principal)
+	a.logger.Printf("AUDIT %s ts=%s user=%s role=%s alarm=%s result=%s remote=%s",
+		action, time.Now().UTC().Format(time.RFC3339), sanitizeAudit(username, 32), sanitizeAudit(role, 16),
+		sanitizeAudit(id, 64), sanitizeAudit(result, 16), sanitizeAudit(remote, 64))
+}
+
+func (a *AuditLogger) CommissioningTest(principal *Principal, id string, result string, remote string) {
+	if a == nil || a.logger == nil {
+		return
+	}
+	username, role := principalIdentity(principal)
+	a.logger.Printf("AUDIT commissioning_test ts=%s user=%s role=%s point=%s result=%s remote=%s",
+		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(username, 32), sanitizeAudit(role, 16),
+		sanitizeAudit(id, 64), sanitizeAudit(result, 16), sanitizeAudit(remote, 64))
+}
+
+func principalIdentity(principal *Principal) (string, string) {
+	if principal == nil {
+		return "-", "-"
+	}
+	return principal.Username, string(principal.Role)
+}
+
+func SanitizeAudit(value string, max int) string {
 	var b strings.Builder
 	for _, r := range value {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '.' || r == '@' || r == '-' || r == ':' {
@@ -80,4 +129,8 @@ func sanitizeAudit(value string, max int) string {
 		return "-"
 	}
 	return b.String()
+}
+
+func sanitizeAudit(value string, max int) string {
+	return SanitizeAudit(value, max)
 }

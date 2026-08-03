@@ -5,14 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
+
+	webHealth "mkddc-web/internal/health"
+	webSystem "mkddc-web/internal/system"
 )
 
 type OSReader interface {
@@ -66,68 +67,25 @@ type ServiceHealth struct {
 	LastScanMS *uint64 `json:"last_scan_ms,omitempty"`
 }
 
-type HealthCheck struct {
-	Status string `json:"status"`
-	Detail string `json:"detail,omitempty"`
-}
-
-type HealthEndpointResponse struct {
-	Status  string                 `json:"status"`
-	Checks  map[string]HealthCheck `json:"checks"`
-	Version string                 `json:"version"`
-}
+type HealthCheck = webHealth.Check
+type HealthEndpointResponse = webHealth.Response
 
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	core, err := a.core.ReadStatus(r.Context())
-	checks := map[string]HealthCheck{"web": {Status: "ok"}}
 	coreProcessOK := core.CoreAvailable
 	iobusProcessOK := core.IobusPresent
 	if client, production := a.core.(*CoreClient); production {
 		coreProcessOK = processAlive(a.cfg.CorePidPath) && client.coreSocketReady(r.Context())
 		iobusProcessOK = processAlive(a.cfg.IobusPidPath)
 	}
-	checks["core"] = HealthCheck{Status: "fault", Detail: "process hoặc core socket không sẵn sàng"}
-	if coreProcessOK {
-		checks["core"] = HealthCheck{Status: "ok"}
-	}
-	checks["iobus"] = HealthCheck{Status: "fault", Detail: "process iobus không sẵn sàng"}
-	if iobusProcessOK {
-		checks["iobus"] = HealthCheck{Status: "ok"}
-	}
-	checks["io_shm"] = HealthCheck{Status: "fault"}
-	if core.IobusPresent {
-		checks["io_shm"] = HealthCheck{Status: "ok"}
-	}
-	checks["plc_shm"] = HealthCheck{Status: "fault"}
-	if core.CoreAvailable {
-		checks["plc_shm"] = HealthCheck{Status: "ok"}
-	}
-	checks["mcu_connection"] = HealthCheck{Status: "fault", Detail: "IOP không ở NORMAL"}
-	if core.IOP.Status == "normal" {
-		checks["mcu_connection"] = HealthCheck{Status: "ok"}
-	} else if core.IOP.Status == "safe" {
-		checks["mcu_connection"] = HealthCheck{Status: "degraded", Detail: "MCU đang ở safe-state"}
-	}
-	status := "ok"
-	for _, check := range checks {
-		if check.Status != "ok" {
-			status = "degraded"
-			break
-		}
-	}
 	if err != nil && a.logger != nil {
 		a.logger.Printf("WARN health degraded err=%v", err)
 	}
-	writeJSON(w, http.StatusOK, HealthEndpointResponse{Status: status, Checks: checks, Version: a.cfg.WebVersion})
+	writeJSON(w, http.StatusOK, webHealth.Evaluate(webHealth.Input{CoreProcessOK: coreProcessOK, IobusProcessOK: iobusProcessOK, CoreAvailable: core.CoreAvailable, IobusPresent: core.IobusPresent, IOPStatus: core.IOP.Status, Version: a.cfg.WebVersion}))
 }
 
 func processAlive(pidPath string) bool {
-	data, err := os.ReadFile(pidPath)
-	if err != nil {
-		return false
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	return err == nil && pid > 1 && syscall.Kill(pid, 0) == nil
+	return webSystem.ProcessAlive(pidPath)
 }
 
 func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
@@ -189,32 +147,7 @@ func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 // danh không tồn tại — đúng loại "dữ liệu trông hợp lý nhưng sai" mà WEB-UX-001
 // phải loại bỏ.
 func primaryInterface() (string, string) {
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return "", ""
-	}
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			var ip net.IP
-			switch typed := addr.(type) {
-			case *net.IPNet:
-				ip = typed.IP
-			case *net.IPAddr:
-				ip = typed.IP
-			}
-			if v4 := ip.To4(); v4 != nil {
-				return v4.String(), strings.ToUpper(iface.HardwareAddr.String())
-			}
-		}
-	}
-	return "", ""
+	return webSystem.PrimaryInterface()
 }
 
 func overallStatus(core CoreStatus) string {

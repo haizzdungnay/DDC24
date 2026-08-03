@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // handleCommissionTest handles POST /api/v1/commissioning/points/{id}/test (RBAC operator+).
@@ -75,19 +74,4 @@ func decodeCommissionTestBody(w http.ResponseWriter, r *http.Request) (any, erro
 	default:
 		return nil, fmt.Errorf("value must be number or bool")
 	}
-}
-
-func (a *AuditLogger) CommissioningTest(principal *Principal, id string, result string, remote string) {
-	if a == nil || a.logger == nil {
-		return
-	}
-	username := "-"
-	role := "-"
-	if principal != nil {
-		username = principal.Username
-		role = string(principal.Role)
-	}
-	a.logger.Printf("AUDIT commissioning_test ts=%s user=%s role=%s point=%s result=%s remote=%s",
-		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(username, 32), sanitizeAudit(role, 16),
-		sanitizeAudit(id, 64), sanitizeAudit(result, 16), sanitizeAudit(remote, 64))
 }

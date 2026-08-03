@@ -1,4 +1,4 @@
-package app
+package points
 
 import (
 	"encoding/json"
@@ -7,16 +7,21 @@ import (
 	"path/filepath"
 )
 
-const pointNamespaceFile = "point_namespace.conf"
-
-type pointNamespaceAuthority struct {
+type NamespaceAuthority struct {
 	Revision    uint64            `json:"revision"`
 	Generations map[string]uint64 `json:"generations"`
 }
 
-func (a *App) readPointNamespaceAuthority() (pointNamespaceAuthority, error) {
-	authority := pointNamespaceAuthority{Generations: map[string]uint64{}}
-	data, err := os.ReadFile(a.configPath(pointNamespaceFile))
+type FileWriter func(string, []byte, os.FileMode) error
+
+type NamespaceStore struct {
+	Path   string
+	Writer FileWriter
+}
+
+func (s NamespaceStore) Read() (NamespaceAuthority, error) {
+	authority := NamespaceAuthority{Generations: map[string]uint64{}}
+	data, err := os.ReadFile(s.Path)
 	if os.IsNotExist(err) {
 		return authority, nil
 	}
@@ -32,19 +37,17 @@ func (a *App) readPointNamespaceAuthority() (pointNamespaceAuthority, error) {
 	return authority, nil
 }
 
-func (a *App) writePointNamespaceAuthority(authority pointNamespaceAuthority) error {
+func (s NamespaceStore) Write(authority NamespaceAuthority) error {
+	if s.Writer == nil {
+		return fmt.Errorf("point namespace writer is required")
+	}
 	data, err := json.MarshalIndent(authority, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode point namespace: %w", err)
 	}
 	data = append(data, '\n')
-	path := a.configPath(pointNamespaceFile)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.Path), 0o755); err != nil {
 		return fmt.Errorf("prepare point namespace dir: %w", err)
 	}
-	writer := a.pointNamespaceWriter
-	if writer == nil {
-		writer = writeConfigFileAtomic
-	}
-	return writer(path, data, 0o644)
+	return s.Writer(s.Path, data, 0o644)
 }

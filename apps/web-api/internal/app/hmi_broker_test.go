@@ -354,7 +354,7 @@ func TestHMIBrokerAuditFailurePreventsCoreMutation(t *testing.T) {
 	core := &fakeHMICore{}
 	broker := newTestHMIBroker(t, RoleOperator, core, &bytes.Buffer{})
 	login := loginHMI(t, broker, "login-audit")
-	broker.auditLog.path = "/proc/mkddc-hmi-audit-denied.jsonl"
+	broker.auditLog.Path = "/proc/mkddc-hmi-audit-denied.jsonl"
 	resp := callHMI(t, broker, map[string]any{
 		"version": 1, "requestId": "override-audit", "action": "override", "token": login.Token,
 		"pointId": "DO-01", "value": 1, "ttlS": 300, "reason": "maintenance",

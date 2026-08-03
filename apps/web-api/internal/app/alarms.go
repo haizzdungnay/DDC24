@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // handleAlarms handles GET /api/v1/alarms.
@@ -304,34 +303,4 @@ type alarmActionError string
 
 func (e alarmActionError) Error() string {
 	return string(e)
-}
-
-func (a *AuditLogger) AlarmAck(principal *Principal, id string, result string, remote string) {
-	if a == nil || a.logger == nil {
-		return
-	}
-	username := "-"
-	role := "-"
-	if principal != nil {
-		username = principal.Username
-		role = string(principal.Role)
-	}
-	a.logger.Printf("AUDIT alarm_ack ts=%s user=%s role=%s alarm=%s result=%s remote=%s",
-		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(username, 32), sanitizeAudit(role, 16),
-		sanitizeAudit(id, 64), sanitizeAudit(result, 16), sanitizeAudit(remote, 64))
-}
-
-func (a *AuditLogger) AlarmSuppress(principal *Principal, id string, result string, remote string) {
-	if a == nil || a.logger == nil {
-		return
-	}
-	username := "-"
-	role := "-"
-	if principal != nil {
-		username = principal.Username
-		role = string(principal.Role)
-	}
-	a.logger.Printf("AUDIT alarm_suppress ts=%s user=%s role=%s alarm=%s result=%s remote=%s",
-		time.Now().UTC().Format(time.RFC3339), sanitizeAudit(username, 32), sanitizeAudit(role, 16),
-		sanitizeAudit(id, 64), sanitizeAudit(result, 16), sanitizeAudit(remote, 64))
 }

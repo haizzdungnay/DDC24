@@ -10,8 +10,8 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"unicode"
-	"unicode/utf8"
+
+	webPoints "mkddc-web/internal/points"
 )
 
 type pointNamespaceEntry struct {
@@ -35,60 +35,11 @@ type pointMigrationEntry struct {
 }
 
 func normalizePointTag(tag string) (string, string, error) {
-	start, end := 0, len(tag)
-	for start < end && tag[start] == ' ' {
-		start++
-	}
-	for end > start && tag[end-1] == ' ' {
-		end--
-	}
-	var b strings.Builder
-	space := false
-	for _, r := range tag[start:end] {
-		if r == ' ' {
-			space = b.Len() > 0
-			continue
-		}
-		if space {
-			b.WriteByte(' ')
-			space = false
-		}
-		if r > 0x7f || !(r >= 'A' && r <= 'Z') && !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && r != '_' && r != '.' && r != '-' {
-			return "", "", fmt.Errorf("must contain only ASCII letters, digits, spaces, _, ., or -")
-		}
-		b.WriteRune(r)
-	}
-	display := b.String()
-	if display == "" {
-		return "", "", fmt.Errorf("is required")
-	}
-	if len(display) > 64 {
-		return "", "", fmt.Errorf("must be at most 64 bytes")
-	}
-	if !isASCIILetterOrDigit(display[0]) {
-		return "", "", fmt.Errorf("must start with an ASCII letter or digit")
-	}
-	return display, strings.ToLower(display), nil
+	return webPoints.NormalizeTag(tag)
 }
 
 func normalizePointName(name string) (string, string, error) {
-	for _, r := range name {
-		if unicode.IsControl(r) {
-			return "", "", fmt.Errorf("must not contain control characters")
-		}
-	}
-	display := strings.Join(strings.Fields(name), " ")
-	if display == "" {
-		return "", "", fmt.Errorf("is required")
-	}
-	if utf8.RuneCountInString(display) > 64 {
-		return "", "", fmt.Errorf("must be at most 64 Unicode code points")
-	}
-	return display, strings.ToLower(display), nil
-}
-
-func isASCIILetterOrDigit(ch byte) bool {
-	return ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9'
+	return webPoints.NormalizeName(name)
 }
 
 func validatePointNamespace(ioCfg ConfigIO, vpCfg ConfigVirtualPoints) []configValidationError {
@@ -275,26 +226,19 @@ func validatePointTagNamespace(ioCfg ConfigIO, vpCfg ConfigVirtualPoints) []conf
 }
 
 func validatePointTagEntries(entries []pointNamespaceEntry) []configValidationError {
-	var errs []configValidationError
-	seen := make(map[string]pointNamespaceEntry, len(entries))
+	catalogEntries := make([]webPoints.Entry, 0, len(entries))
 	for _, entry := range entries {
-		display, key, err := normalizePointTag(entry.Tag)
-		if err != nil {
-			errs = append(errs, pointTagError(entry, "point_tag_invalid", err.Error(), pointNamespaceEntry{}))
-			continue
-		}
-		entry.Tag, entry.TagKey = display, key
-		if reserved, ok := reservedPointID(display); ok {
-			if reserved != entry.PointID || display != entry.PointID {
-				errs = append(errs, pointTagError(entry, "point_tag_reserved", "is reserved for point "+reserved, pointNamespaceEntry{PointID: reserved}))
-				continue
-			}
-		}
-		if previous, ok := seen[key]; ok && previous.PointID != entry.PointID {
-			errs = append(errs, pointTagError(entry, "point_tag_conflict", "must be unique", previous))
-			continue
-		}
-		seen[key] = entry
+		catalogEntries = append(catalogEntries, webPoints.Entry{PointID: entry.PointID, TagPath: entry.TagPath, Tag: entry.Tag})
+	}
+	catalogErrs := webPoints.ValidateTags(catalogEntries, reservedPointID)
+	errs := make([]configValidationError, 0, len(catalogErrs))
+	for _, err := range catalogErrs {
+		errs = append(errs, pointTagError(
+			pointNamespaceEntry{PointID: err.Entry.PointID, TagPath: err.Entry.TagPath, Tag: err.Entry.Tag},
+			err.Reason,
+			err.Message,
+			pointNamespaceEntry{PointID: err.Conflict.PointID, TagPath: err.Conflict.TagPath, Tag: err.Conflict.Tag},
+		))
 	}
 	return errs
 }

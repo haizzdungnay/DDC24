@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	webPoints "mkddc-web/internal/points"
 )
 
 func canonicalPointMetadataValue(field, value string) string {
@@ -203,36 +205,7 @@ func pointMetadataPatchIsNameOnly(patch PointConfigPatch, oldTag string) bool {
 }
 
 func canonicalPointConfigID(rawID string) (string, bool) {
-	id := strings.TrimSpace(rawID)
-	if id == "" {
-		return "", false
-	}
-	prefix, channel, ok := parsePointID(id)
-	if !ok {
-		return "", false
-	}
-	switch prefix {
-	case "UI":
-		if channel < 1 || channel > kxNUI {
-			return "", false
-		}
-		return formatPointID("UI", channel), id == formatPointID("UI", channel)
-	case "AO":
-		if channel < 1 || channel > kxNAO {
-			return "", false
-		}
-		return formatPointID("AO", channel), id == formatPointID("AO", channel)
-	case "DO":
-		if channel < 1 || channel > kxNDO {
-			return "", false
-		}
-		return formatPointID("DO", channel), id == formatPointID("DO", channel)
-	case "VP":
-		canonical := formatVirtualPointID(channel)
-		return canonical, validVirtualPointID(canonical) && id == canonical
-	default:
-		return "", false
-	}
+	return webPoints.CanonicalConfigID(rawID, webPoints.Limits{UI: kxNUI, AO: kxNAO, DO: kxNDO, VP: virtualPointTotalCapacity})
 }
 
 func configRowIndex(rows []map[string]any, channel int) int {

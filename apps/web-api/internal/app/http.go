@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	webRouter "mkddc-web/internal/router"
 )
 
 type statusRecorder struct {
@@ -125,77 +127,81 @@ func isAllowedOrigin(origin, configured string) bool {
 }
 
 func (a *App) Router() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", a.handleHealth)
-	mux.HandleFunc("GET /api/v1/health", a.handleHealth)
-	mux.HandleFunc("POST /api/v1/auth/login", a.handleLogin)
-	mux.Handle("POST /api/v1/auth/logout", a.auth.Require(RoleViewer, a.handleLogout))
-	mux.Handle("GET /api/v1/system/status", a.auth.Require(RoleViewer, a.handleSystemStatus))
-	mux.Handle("GET /api/v1/network", a.auth.Require(RoleViewer, a.handleGetNetworkPage))
-	mux.Handle("PUT /api/v1/network", a.auth.Require(RoleAdmin, a.handlePutNetworkPage))
-	mux.Handle("GET /api/v1/network/transaction", a.auth.Require(RoleViewer, a.handleGetNetworkTransaction))
-	mux.Handle("POST /api/v1/network/transaction/{action}", a.auth.Require(RoleAdmin, a.handlePostNetworkTransaction))
-	mux.Handle("GET /api/v1/points", a.auth.Require(RoleViewer, a.handlePoints))
-	mux.Handle("GET /api/v1/points/{id}", a.auth.Require(RoleViewer, a.handlePoint))
-	mux.Handle("PUT /api/v1/points/{id}", a.auth.Require(RoleOperator, a.handleForcePoint))
-	mux.Handle("PUT /api/v1/points/{id}/config", a.auth.Require(RoleAdmin, a.handlePutPointConfig))
-	mux.Handle("GET /api/v1/virtual-points", a.auth.Require(RoleViewer, a.handleListVirtualPoints))
-	mux.Handle("POST /api/v1/virtual-points", a.auth.Require(RoleAdmin, a.handleCreateVirtualPoint))
-	mux.Handle("PUT /api/v1/virtual-points/{id}", a.auth.Require(RoleAdmin, a.handleUpdateVirtualPoint))
-	mux.Handle("DELETE /api/v1/virtual-points/{id}", a.auth.Require(RoleAdmin, a.handleDeleteVirtualPoint))
-	mux.Handle("GET /api/v1/modbus/devices", a.auth.Require(RoleViewer, a.handleListModbusDevices))
-	mux.Handle("POST /api/v1/modbus/devices", a.auth.Require(RoleAdmin, a.handleCreateModbusDevice))
-	mux.Handle("PUT /api/v1/modbus/devices/{id}", a.auth.Require(RoleAdmin, a.handleUpdateModbusDevice))
-	mux.Handle("DELETE /api/v1/modbus/devices/{id}", a.auth.Require(RoleAdmin, a.handleDeleteModbusDevice))
-	mux.Handle("GET /api/v1/modbus/points", a.auth.Require(RoleViewer, a.handleListModbusPoints))
-	mux.Handle("POST /api/v1/modbus/points", a.auth.Require(RoleAdmin, a.handleCreateModbusPoint))
-	mux.Handle("PUT /api/v1/modbus/points/{id}", a.auth.Require(RoleAdmin, a.handleUpdateModbusPoint))
-	mux.Handle("DELETE /api/v1/modbus/points/{id}", a.auth.Require(RoleAdmin, a.handleDeleteModbusPoint))
-	mux.Handle("GET /api/v1/modbus/diagnostics", a.auth.Require(RoleViewer, a.handleModbusDiagnostics))
-	mux.Handle("GET /api/v1/ws/monitor", a.requireWSAuth(a.handleMonitorWS))
-	mux.Handle("GET /api/v1/alarms", a.auth.Require(RoleViewer, a.handleAlarms))
-	mux.Handle("GET /api/v1/alarm-history", a.auth.Require(RoleViewer, a.handleAlarmHistory))
-	mux.Handle("POST /api/v1/alarms/{id}/ack", a.auth.Require(RoleOperator, a.handleAckAlarm))
-	mux.Handle("POST /api/v1/alarms/{id}/suppress", a.auth.Require(RoleOperator, a.handleSuppressAlarm))
-	mux.Handle("POST /api/v1/alarms/{id}/return", a.auth.Require(RoleOperator, a.handleReturnAlarm))
-	mux.Handle("POST /api/v1/commissioning/points/{id}/test", a.auth.Require(RoleOperator, a.handleCommissionTest))
-	mux.Handle("GET /api/v1/system/config", a.auth.Require(RoleAdmin, a.handleGetSystemConfig))
-	mux.Handle("PUT /api/v1/system/config", a.auth.Require(RoleAdmin, a.handlePutSystemConfig))
-	mux.Handle("GET /api/v1/system/config/device", a.auth.Require(RoleAdmin, a.handleGetConfigDevice))
-	mux.Handle("PUT /api/v1/system/config/device", a.auth.Require(RoleAdmin, a.handlePutConfigDevice))
-	mux.Handle("GET /api/v1/system/config/network", a.auth.Require(RoleAdmin, a.handleGetConfigNetwork))
-	mux.Handle("PUT /api/v1/system/config/network", a.auth.Require(RoleAdmin, a.handlePutConfigNetwork))
-	mux.Handle("GET /api/v1/system/config/io", a.auth.Require(RoleAdmin, a.handleGetConfigIO))
-	mux.Handle("PUT /api/v1/system/config/io", a.auth.Require(RoleAdmin, a.handlePutConfigIO))
-	mux.Handle("GET /api/v1/system/config/safe-state", a.auth.Require(RoleAdmin, a.handleGetConfigSafeState))
-	mux.Handle("PUT /api/v1/system/config/safe-state", a.auth.Require(RoleAdmin, a.handlePutConfigSafeState))
-	mux.Handle("GET /api/v1/system/config/io-bundle", a.auth.Require(RoleAdmin, a.handleGetIOBundle))
-	mux.Handle("PUT /api/v1/system/config/io-bundle", a.auth.Require(RoleAdmin, a.handlePutIOBundle))
-	mux.Handle("GET /api/v1/system/config/virtual-points", a.auth.Require(RoleAdmin, a.handleGetConfigVirtualPoints))
-	mux.Handle("PUT /api/v1/system/config/virtual-points", a.auth.Require(RoleAdmin, a.handlePutConfigVirtualPoints))
-	mux.Handle("GET /api/v1/system/config/bacnet", a.auth.Require(RoleAdmin, a.handleGetConfigBacnet))
-	mux.Handle("PUT /api/v1/system/config/bacnet", a.auth.Require(RoleAdmin, a.handlePutConfigBacnet))
-	mux.Handle("GET /api/v1/system/config/fieldbus", a.auth.Require(RoleAdmin, a.handleGetConfigFieldbus))
-	mux.Handle("PUT /api/v1/system/config/fieldbus", a.auth.Require(RoleAdmin, a.handlePutConfigFieldbus))
-	mux.Handle("GET /api/v1/system/config/time", a.auth.Require(RoleAdmin, a.handleGetConfigTime))
-	mux.Handle("PUT /api/v1/system/config/time", a.auth.Require(RoleAdmin, a.handlePutConfigTime))
-	mux.Handle("GET /api/v1/system/time/status", a.auth.Require(RoleViewer, a.handleGetTimeStatus))
-	mux.Handle("GET /api/v1/users", a.auth.Require(RoleAdmin, a.handleListUsers))
-	mux.Handle("POST /api/v1/users", a.auth.Require(RoleAdmin, a.handleCreateUser))
-	mux.Handle("PUT /api/v1/users/{username}", a.auth.Require(RoleAdmin, a.handleUpdateUser))
-	mux.Handle("DELETE /api/v1/users/{username}", a.auth.Require(RoleAdmin, a.handleDeleteUser))
-	mux.Handle("POST /api/v1/users/{username}/reset-password", a.auth.Require(RoleAdmin, a.handleResetPassword))
-	mux.Handle("GET /api/v1/me", a.auth.Require(RoleViewer, a.handleGetMe))
-	mux.Handle("POST /api/v1/me/change-password", a.auth.Require(RoleViewer, a.handleChangePassword))
-	mux.Handle("GET /api/v1/history", a.auth.Require(RoleViewer, a.handleHistoryRoute))
-	mux.Handle("GET /api/v1/history/export.csv", a.auth.Require(RoleViewer, a.handleHistoryExport))
-	mux.Handle("GET /api/v1/trends/config", a.auth.Require(RoleViewer, a.handleGetTrendConfig))
-	mux.Handle("PUT /api/v1/trends/config", a.auth.Require(RoleAdmin, a.handlePutTrendConfig))
-	mux.Handle("GET /api/v1/schedules", a.auth.Require(RoleViewer, a.handleGetSchedules))
-	mux.Handle("PUT /api/v1/schedules", a.auth.Require(RoleAdmin, a.handlePutSchedules))
-	mux.Handle("GET /api/v1/alarm-settings", a.auth.Require(RoleViewer, a.handleGetAlarmSettings))
-	mux.Handle("PUT /api/v1/alarm-settings", a.auth.Require(RoleAdmin, a.handlePutAlarmSettings))
-	mux.HandleFunc("/", a.handleStatic)
+	routes := []webRouter.Route{
+		webRouter.PublicFunc("GET /health", a.handleHealth),
+		webRouter.PublicFunc("GET /api/v1/health", a.handleHealth),
+		webRouter.PublicFunc("POST /api/v1/auth/login", a.handleLogin),
+		webRouter.Protected("POST /api/v1/auth/logout", RoleViewer, a.handleLogout),
+		webRouter.Protected("GET /api/v1/system/status", RoleViewer, a.handleSystemStatus),
+		webRouter.Protected("GET /api/v1/network", RoleViewer, a.handleGetNetworkPage),
+		webRouter.Protected("PUT /api/v1/network", RoleAdmin, a.handlePutNetworkPage),
+		webRouter.Protected("GET /api/v1/network/transaction", RoleViewer, a.handleGetNetworkTransaction),
+		webRouter.Protected("POST /api/v1/network/transaction/{action}", RoleAdmin, a.handlePostNetworkTransaction),
+		webRouter.Protected("GET /api/v1/points", RoleViewer, a.handlePoints),
+		webRouter.Protected("GET /api/v1/points/{id}", RoleViewer, a.handlePoint),
+		webRouter.Protected("PUT /api/v1/points/{id}", RoleOperator, a.handleForcePoint),
+		webRouter.Protected("PUT /api/v1/points/{id}/config", RoleAdmin, a.handlePutPointConfig),
+		webRouter.Protected("GET /api/v1/virtual-points", RoleViewer, a.handleListVirtualPoints),
+		webRouter.Protected("POST /api/v1/virtual-points", RoleAdmin, a.handleCreateVirtualPoint),
+		webRouter.Protected("PUT /api/v1/virtual-points/{id}", RoleAdmin, a.handleUpdateVirtualPoint),
+		webRouter.Protected("DELETE /api/v1/virtual-points/{id}", RoleAdmin, a.handleDeleteVirtualPoint),
+		webRouter.Protected("GET /api/v1/modbus/devices", RoleViewer, a.handleListModbusDevices),
+		webRouter.Protected("POST /api/v1/modbus/devices", RoleAdmin, a.handleCreateModbusDevice),
+		webRouter.Protected("PUT /api/v1/modbus/devices/{id}", RoleAdmin, a.handleUpdateModbusDevice),
+		webRouter.Protected("DELETE /api/v1/modbus/devices/{id}", RoleAdmin, a.handleDeleteModbusDevice),
+		webRouter.Protected("GET /api/v1/modbus/points", RoleViewer, a.handleListModbusPoints),
+		webRouter.Protected("POST /api/v1/modbus/points", RoleAdmin, a.handleCreateModbusPoint),
+		webRouter.Protected("PUT /api/v1/modbus/points/{id}", RoleAdmin, a.handleUpdateModbusPoint),
+		webRouter.Protected("DELETE /api/v1/modbus/points/{id}", RoleAdmin, a.handleDeleteModbusPoint),
+		webRouter.Protected("GET /api/v1/modbus/diagnostics", RoleViewer, a.handleModbusDiagnostics),
+		webRouter.Public("GET /api/v1/ws/monitor", a.requireWSAuth(a.handleMonitorWS)),
+		webRouter.Protected("GET /api/v1/alarms", RoleViewer, a.handleAlarms),
+		webRouter.Protected("GET /api/v1/alarm-history", RoleViewer, a.handleAlarmHistory),
+		webRouter.Protected("POST /api/v1/alarms/{id}/ack", RoleOperator, a.handleAckAlarm),
+		webRouter.Protected("POST /api/v1/alarms/{id}/suppress", RoleOperator, a.handleSuppressAlarm),
+		webRouter.Protected("POST /api/v1/alarms/{id}/return", RoleOperator, a.handleReturnAlarm),
+		webRouter.Protected("POST /api/v1/commissioning/points/{id}/test", RoleOperator, a.handleCommissionTest),
+		webRouter.Protected("GET /api/v1/system/config", RoleAdmin, a.handleGetSystemConfig),
+		webRouter.Protected("PUT /api/v1/system/config", RoleAdmin, a.handlePutSystemConfig),
+		webRouter.Protected("GET /api/v1/system/config/device", RoleAdmin, a.handleGetConfigDevice),
+		webRouter.Protected("PUT /api/v1/system/config/device", RoleAdmin, a.handlePutConfigDevice),
+		webRouter.Protected("GET /api/v1/system/config/network", RoleAdmin, a.handleGetConfigNetwork),
+		webRouter.Protected("PUT /api/v1/system/config/network", RoleAdmin, a.handlePutConfigNetwork),
+		webRouter.Protected("GET /api/v1/system/config/io", RoleAdmin, a.handleGetConfigIO),
+		webRouter.Protected("PUT /api/v1/system/config/io", RoleAdmin, a.handlePutConfigIO),
+		webRouter.Protected("GET /api/v1/system/config/safe-state", RoleAdmin, a.handleGetConfigSafeState),
+		webRouter.Protected("PUT /api/v1/system/config/safe-state", RoleAdmin, a.handlePutConfigSafeState),
+		webRouter.Protected("GET /api/v1/system/config/io-bundle", RoleAdmin, a.handleGetIOBundle),
+		webRouter.Protected("PUT /api/v1/system/config/io-bundle", RoleAdmin, a.handlePutIOBundle),
+		webRouter.Protected("GET /api/v1/system/config/virtual-points", RoleAdmin, a.handleGetConfigVirtualPoints),
+		webRouter.Protected("PUT /api/v1/system/config/virtual-points", RoleAdmin, a.handlePutConfigVirtualPoints),
+		webRouter.Protected("GET /api/v1/system/config/bacnet", RoleAdmin, a.handleGetConfigBacnet),
+		webRouter.Protected("PUT /api/v1/system/config/bacnet", RoleAdmin, a.handlePutConfigBacnet),
+		webRouter.Protected("GET /api/v1/system/config/fieldbus", RoleAdmin, a.handleGetConfigFieldbus),
+		webRouter.Protected("PUT /api/v1/system/config/fieldbus", RoleAdmin, a.handlePutConfigFieldbus),
+		webRouter.Protected("GET /api/v1/system/config/time", RoleAdmin, a.handleGetConfigTime),
+		webRouter.Protected("PUT /api/v1/system/config/time", RoleAdmin, a.handlePutConfigTime),
+		webRouter.Protected("GET /api/v1/system/time/status", RoleViewer, a.handleGetTimeStatus),
+		webRouter.Protected("GET /api/v1/users", RoleAdmin, a.handleListUsers),
+		webRouter.Protected("POST /api/v1/users", RoleAdmin, a.handleCreateUser),
+		webRouter.Protected("PUT /api/v1/users/{username}", RoleAdmin, a.handleUpdateUser),
+		webRouter.Protected("DELETE /api/v1/users/{username}", RoleAdmin, a.handleDeleteUser),
+		webRouter.Protected("POST /api/v1/users/{username}/reset-password", RoleAdmin, a.handleResetPassword),
+		webRouter.Protected("GET /api/v1/me", RoleViewer, a.handleGetMe),
+		webRouter.Protected("POST /api/v1/me/change-password", RoleViewer, a.handleChangePassword),
+		webRouter.Protected("GET /api/v1/history", RoleViewer, a.handleHistoryRoute),
+		webRouter.Protected("GET /api/v1/history/export.csv", RoleViewer, a.handleHistoryExport),
+		webRouter.Protected("GET /api/v1/trends/config", RoleViewer, a.handleGetTrendConfig),
+		webRouter.Protected("PUT /api/v1/trends/config", RoleAdmin, a.handlePutTrendConfig),
+		webRouter.Protected("GET /api/v1/schedules", RoleViewer, a.handleGetSchedules),
+		webRouter.Protected("PUT /api/v1/schedules", RoleAdmin, a.handlePutSchedules),
+		webRouter.Protected("GET /api/v1/alarm-settings", RoleViewer, a.handleGetAlarmSettings),
+		webRouter.Protected("PUT /api/v1/alarm-settings", RoleAdmin, a.handlePutAlarmSettings),
+	}
+	mux, err := webRouter.New(a.auth, routes, http.HandlerFunc(a.handleStatic))
+	if err != nil {
+		panic(err)
+	}
 
 	var handler http.Handler = mux
 	handler = corsMiddleware(a.cfg.CORSOrigin, handler)

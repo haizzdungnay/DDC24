@@ -258,23 +258,13 @@ func (b *HistorianQueryStoreBackend) Identities(ctx context.Context, pointIDs []
 		}
 	}
 	if b.ram != nil {
-		b.ram.mu.RLock()
-		for _, rows := range b.ram.rows {
-			for _, row := range rows {
-				if err := ctx.Err(); err != nil {
-					b.ram.mu.RUnlock()
-					return nil, err
-				}
-				if row.ObservedUTCMS >= fromUTCMS && row.ObservedUTCMS < toUTCMS && (len(pointIDs) == 0 || historianQueryPointSelected(pointIDs, row.PointID)) {
-					ids[HistorianQueryIdentity{PointID: row.PointID, Generation: row.Generation}] = struct{}{}
-					if len(ids) > historianQueryStoreMaxIdentities {
-						b.ram.mu.RUnlock()
-						return nil, fmt.Errorf("historian identities: %w", ErrHistorianQueryReadLimit)
-					}
-				}
-			}
+		ramIDs, err := b.ram.Identities(ctx, pointIDs, fromUTCMS, toUTCMS, historianQueryStoreMaxIdentities-len(ids))
+		if err != nil {
+			return nil, fmt.Errorf("historian identities: %w", ErrHistorianQueryReadLimit)
 		}
-		b.ram.mu.RUnlock()
+		for _, identity := range ramIDs {
+			ids[identity] = struct{}{}
+		}
 	}
 	selectedArgs := make([]any, 0, len(pointIDs))
 	filter := ""
@@ -348,23 +338,13 @@ func (b *HistorianQueryStoreBackend) readRAMIdentity(ctx context.Context, identi
 	if b.ram == nil {
 		return nil, fmt.Errorf("historian RAM tier unavailable")
 	}
-	b.ram.mu.RLock()
-	rows := b.ram.rows[historianIdentityKey(identity.PointID, identity.Generation)]
-	result := make([]HistorianRawSample, 0, min(len(rows), b.maxRows+1))
-	for _, row := range rows {
-		if err := ctx.Err(); err != nil {
-			b.ram.mu.RUnlock()
-			return result, err
-		}
-		if row.ObservedUTCMS >= fromUTCMS && row.ObservedUTCMS < toUTCMS {
-			result = append(result, row)
-			if len(result) > b.maxRows {
-				b.ram.mu.RUnlock()
-				return result[:b.maxRows], fmt.Errorf("RAM: %w", ErrHistorianQueryReadLimit)
-			}
-		}
+	result, limited, err := b.ram.RawHalfOpen(ctx, identity.PointID, identity.Generation, fromUTCMS, toUTCMS, b.maxRows)
+	if err != nil {
+		return result, err
 	}
-	b.ram.mu.RUnlock()
+	if limited {
+		return result, fmt.Errorf("RAM: %w", ErrHistorianQueryReadLimit)
+	}
 	sort.SliceStable(result, func(i, j int) bool { return result[i].ObservedUTCMS < result[j].ObservedUTCMS })
 	return result, nil
 }
@@ -658,39 +638,10 @@ func (b *HistorianQueryStoreBackend) enforceReadBudget(read *HistorianTierRead) 
 }
 
 func (b *HistorianQueryStoreBackend) ramCoverage(identities []HistorianQueryIdentity) (int64, int64) {
-	if b.ram == nil || len(identities) == 0 {
+	if b.ram == nil {
 		return 0, 0
 	}
-	b.ram.mu.RLock()
-	defer b.ram.mu.RUnlock()
-	var coverageFrom, coverageTo int64
-	for index, identity := range identities {
-		rows := b.ram.rows[historianIdentityKey(identity.PointID, identity.Generation)]
-		if len(rows) == 0 {
-			return 0, 0
-		}
-		latest := rows[0]
-		for _, row := range rows[1:] {
-			if row.ObservedUTCMS > latest.ObservedUTCMS || (row.ObservedUTCMS == latest.ObservedUTCMS && row.IntervalMS < latest.IntervalMS) {
-				latest = row
-			}
-		}
-		from := latest.ObservedUTCMS - historianRAMRetentionMS
-		to := latest.ObservedUTCMS + latest.IntervalMS
-		if index == 0 || from > coverageFrom {
-			coverageFrom = from
-		}
-		if index == 0 || to < coverageTo {
-			coverageTo = to
-		}
-	}
-	if coverageFrom < 0 {
-		coverageFrom = 0
-	}
-	if coverageTo < coverageFrom {
-		return 0, 0
-	}
-	return coverageFrom, coverageTo
+	return b.ram.Coverage(identities)
 }
 
 func historianArchiveCoverage(frontiers []HistorianStorageFrontier) (int64, int64) {

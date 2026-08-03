@@ -1,4 +1,4 @@
-package app
+package config
 
 import (
 	"encoding/json"
@@ -8,21 +8,24 @@ import (
 	"path/filepath"
 )
 
-var ErrConfigMissing = errors.New("config missing")
+var ErrMissing = errors.New("config missing")
 
-func resolveConfigDir() string {
-	return getenv("CONFIG_DIR", "/data/config")
+func ResolveDir() string {
+	if value := os.Getenv("CONFIG_DIR"); value != "" {
+		return value
+	}
+	return "/data/config"
 }
 
-func writeConfigFileAtomic(path string, data []byte, perm os.FileMode) error {
-	return writeConfigFileAtomicWithDirectorySync(path, data, perm, false)
+func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
+	return writeFileAtomic(path, data, perm, false)
 }
 
-func writeConfigFileAtomicStrict(path string, data []byte, perm os.FileMode) error {
-	return writeConfigFileAtomicWithDirectorySync(path, data, perm, true)
+func WriteFileAtomicStrict(path string, data []byte, perm os.FileMode) error {
+	return writeFileAtomic(path, data, perm, true)
 }
 
-func writeConfigFileAtomicWithDirectorySync(path string, data []byte, perm os.FileMode, strict bool) error {
+func writeFileAtomic(path string, data []byte, perm os.FileMode, strict bool) error {
 	dir := filepath.Dir(path)
 	file, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*.tmp")
 	if err != nil {
@@ -59,7 +62,7 @@ func writeConfigFileAtomicWithDirectorySync(path string, data []byte, perm os.Fi
 	}
 	cleanup = false
 	if strict {
-		if err := syncDirectory(dir); err != nil {
+		if err := SyncDirectory(dir); err != nil {
 			return fmt.Errorf("fsync config directory %s: %w", dir, err)
 		}
 	} else if dirFile, err := os.Open(dir); err == nil {
@@ -69,15 +72,15 @@ func writeConfigFileAtomicWithDirectorySync(path string, data []byte, perm os.Fi
 	return nil
 }
 
-func readConfigJSON(path string, v any) error {
+func ReadJSON(path string, value any) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return ErrConfigMissing
+			return ErrMissing
 		}
 		return fmt.Errorf("read config %s: %w", path, err)
 	}
-	if err := json.Unmarshal(data, v); err != nil {
+	if err := json.Unmarshal(data, value); err != nil {
 		return fmt.Errorf("parse config %s: %w", path, err)
 	}
 	return nil

@@ -1,6 +1,10 @@
 package app
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	webModbus "mkddc-web/internal/modbusrtu"
+)
 
 type ConfigDevice struct {
 	DeviceID    int    `json:"device_id"`
@@ -34,62 +38,10 @@ type ConfigBacnet struct {
 	BIP map[string]any `json:"bip"`
 }
 
-type ConfigFieldbus struct {
-	RS485         map[string]any    `json:"rs485"`
-	PollDefaultMs int               `json:"poll_default_ms"`
-	Slaves        []map[string]any  `json:"slaves"`
-	TCPSlaves     []map[string]any  `json:"tcp_slaves,omitempty"`
-	Revision      uint64            `json:"revision,omitempty"`
-	Checksum      string            `json:"checksum,omitempty"`
-	Devices       []ModbusRTUDevice `json:"devices,omitempty"`
-	Points        []ModbusRTUPoint  `json:"points,omitempty"`
-}
-
-type ModbusRTUDevice struct {
-	DeviceID    string `json:"device_id"`
-	DisplayName string `json:"display_name"`
-	Enabled     bool   `json:"enabled"`
-	RS485Port   string `json:"rs485_port"`
-	Baud        int    `json:"baud"`
-	Parity      string `json:"parity"`
-	StopBit     int    `json:"stop_bit"`
-	SlaveID     int    `json:"slave_id"`
-	PollMS      int    `json:"poll_ms"`
-	TimeoutMS   int    `json:"timeout_ms"`
-	Retry       int    `json:"retry"`
-}
-
-type ModbusRTUPoint struct {
-	PointID      string  `json:"point_id"`
-	DeviceID     string  `json:"device_id"`
-	TagName      string  `json:"tag_name"`
-	DisplayName  string  `json:"display_name"`
-	RegisterType string  `json:"register_type"`
-	Address      int     `json:"address"`
-	DataType     string  `json:"data_type"`
-	ByteOrder    string  `json:"byte_order"`
-	WordOrder    string  `json:"word_order"`
-	Scale        float64 `json:"scale"`
-	Offset       float64 `json:"offset"`
-	Unit         string  `json:"unit"`
-	ReadWrite    string  `json:"read_write"`
-	DefaultValue any     `json:"default_value"`
-	SafeValue    any     `json:"safe_value"`
-	Enabled      bool    `json:"enabled"`
-}
-
-type ModbusRTUDiagnostics struct {
-	DeviceID          string `json:"device_id"`
-	SlaveID           int    `json:"slave_id"`
-	Online            bool   `json:"online"`
-	TotalPolls        uint32 `json:"total_polls"`
-	TotalErrors       uint32 `json:"total_errors"`
-	TimeoutErrors     uint32 `json:"timeout_errors"`
-	CRCErrors         uint32 `json:"crc_errors"`
-	RetryAttempts     uint32 `json:"retry_attempts"`
-	ConsecutiveErrors uint8  `json:"consecutive_errors"`
-	LastSeenMS        uint64 `json:"last_seen_ms"`
-}
+type ConfigFieldbus = webModbus.Config
+type ModbusRTUDevice = webModbus.Device
+type ModbusRTUPoint = webModbus.Point
+type ModbusRTUDiagnostics = webModbus.Diagnostics
 
 type ConfigIOBundle struct {
 	BaseRevision uint64          `json:"base_revision,omitempty"`
@@ -261,11 +213,6 @@ type AlarmSetting struct {
 }
 
 // AlarmSetting mirrors ADR-013/openapi.yaml alarm entity schema.
-
-type UserDTO struct {
-	Username string `json:"username"`
-	Role     Role   `json:"role"`
-}
 
 type CreateUserRequest struct {
 	Username string `json:"username"`

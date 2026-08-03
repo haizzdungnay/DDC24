@@ -1,4 +1,4 @@
-package app
+package network
 
 import (
 	"bufio"
@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -18,8 +19,11 @@ const (
 	netcfgMaxFrameBytes   = 8192
 )
 
-var errNetcfgUnavailable = errors.New("network configuration service unavailable")
-var errNetcfgInvalidResponse = errors.New("invalid network configuration service response")
+var ErrUnavailable = errors.New("network configuration service unavailable")
+var ErrInvalidResponse = errors.New("invalid network configuration service response")
+
+var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+var interfacePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,15}$`)
 
 type NetcfgDNS struct {
 	Mode    string   `json:"mode"`
@@ -199,7 +203,7 @@ type NetcfgResponse struct {
 	Management         *NetcfgManagement `json:"management,omitempty"`
 }
 
-type netcfgAuthority interface {
+type Authority interface {
 	Request(context.Context, string, string, string, *NetcfgCandidate) (NetcfgResponse, error)
 }
 
@@ -213,7 +217,7 @@ func NewNetcfgClient(socketPath string) *NetcfgClient {
 
 func (c *NetcfgClient) Request(ctx context.Context, requestID, action, transactionID string, candidate *NetcfgCandidate) (NetcfgResponse, error) {
 	if c == nil || c.socketPath == "" {
-		return NetcfgResponse{}, errNetcfgUnavailable
+		return NetcfgResponse{}, ErrUnavailable
 	}
 	req := struct {
 		Version       int              `json:"version"`
@@ -226,7 +230,7 @@ func (c *NetcfgClient) Request(ctx context.Context, requestID, action, transacti
 	dialer := net.Dialer{Timeout: 2 * time.Second}
 	conn, err := dialer.DialContext(ctx, "unix", c.socketPath)
 	if err != nil {
-		return NetcfgResponse{}, fmt.Errorf("%w: connect", errNetcfgUnavailable)
+		return NetcfgResponse{}, fmt.Errorf("%w: connect", ErrUnavailable)
 	}
 	defer conn.Close()
 	deadline := time.Now().Add(4 * time.Second)
@@ -235,25 +239,25 @@ func (c *NetcfgClient) Request(ctx context.Context, requestID, action, transacti
 	}
 	_ = conn.SetDeadline(deadline)
 	if err := json.NewEncoder(conn).Encode(req); err != nil {
-		return NetcfgResponse{}, fmt.Errorf("%w: write", errNetcfgUnavailable)
+		return NetcfgResponse{}, fmt.Errorf("%w: write", ErrUnavailable)
 	}
 
 	reader := bufio.NewReader(io.LimitReader(conn, netcfgMaxFrameBytes+1))
 	line, err := reader.ReadBytes('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
-		return NetcfgResponse{}, fmt.Errorf("%w: read", errNetcfgUnavailable)
+		return NetcfgResponse{}, fmt.Errorf("%w: read", ErrUnavailable)
 	}
 	if len(line) == 0 || len(line) > netcfgMaxFrameBytes {
-		return NetcfgResponse{}, fmt.Errorf("%w: invalid frame", errNetcfgUnavailable)
+		return NetcfgResponse{}, fmt.Errorf("%w: invalid frame", ErrUnavailable)
 	}
 	var resp NetcfgResponse
 	decoder := json.NewDecoder(bytes.NewReader(line))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&resp); err != nil {
-		return NetcfgResponse{}, fmt.Errorf("%w: decode", errNetcfgInvalidResponse)
+		return NetcfgResponse{}, fmt.Errorf("%w: decode", ErrInvalidResponse)
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) || !validNetcfgResponse(resp, requestID) {
-		return NetcfgResponse{}, errNetcfgInvalidResponse
+		return NetcfgResponse{}, ErrInvalidResponse
 	}
 	return resp, nil
 }
@@ -270,7 +274,7 @@ func validNetcfgResponse(response NetcfgResponse, requestID string) bool {
 	default:
 		return false
 	}
-	if response.RollbackRemainingS > 120 || (response.TransactionID != "" && !netcfgTokenPattern.MatchString(response.TransactionID)) {
+	if response.RollbackRemainingS > 120 || (response.TransactionID != "" && !tokenPattern.MatchString(response.TransactionID)) {
 		return false
 	}
 	if !hasExactNetcfgCapabilities(response.Capabilities) || response.Management == nil {
@@ -295,8 +299,21 @@ func hasExactNetcfgCapabilities(capabilities []string) bool {
 	return len(capabilities) == 2 && capabilities[0] == "dns" && capabilities[1] == "management-hostname"
 }
 
+func HasExactCapabilities(capabilities []string) bool {
+	return hasExactNetcfgCapabilities(capabilities)
+}
+
+func HasCapability(capabilities []string, expected string) bool {
+	for _, capability := range capabilities {
+		if capability == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func validNetcfgActive(active NetcfgActive) bool {
-	if active.Interface != "" && (!netcfgInterfacePattern.MatchString(active.Interface) || active.Interface == "lo") {
+	if active.Interface != "" && (!interfacePattern.MatchString(active.Interface) || active.Interface == "lo") {
 		return false
 	}
 	if active.Link != "up" && active.Link != "down" && active.Link != "unknown" {
@@ -323,7 +340,45 @@ func validNetcfgActive(active NetcfgActive) bool {
 }
 
 func validNetcfgResponseCandidate(candidate NetcfgCandidate) bool {
-	return len(validateNetcfgCandidate(candidate)) == 0
+	if !interfacePattern.MatchString(candidate.Interface) || candidate.Interface == "lo" {
+		return false
+	}
+	if candidate.Mode == "dhcp" {
+		return candidate.IPv4 == "" && candidate.Netmask == "" && candidate.Gateway == "" && validNetcfgDNS(candidate.Mode, candidate.DNS)
+	}
+	if candidate.Mode != "static" || !validNetcfgDNS(candidate.Mode, candidate.DNS) || !isCanonicalNetcfgIPv4(candidate.IPv4) || !isCanonicalNetcfgIPv4(candidate.Netmask) {
+		return false
+	}
+	ip := net.ParseIP(candidate.IPv4).To4()
+	maskBytes := net.ParseIP(candidate.Netmask).To4()
+	if ip == nil || maskBytes == nil {
+		return false
+	}
+	mask := net.IPMask(maskBytes)
+	ones, bits := mask.Size()
+	if bits != 32 || ones < 1 || ones > 30 {
+		return false
+	}
+	network := ip.Mask(mask)
+	host := uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
+	maskValue := uint32(mask[0])<<24 | uint32(mask[1])<<16 | uint32(mask[2])<<8 | uint32(mask[3])
+	hostPart := host & ^maskValue
+	if ip[0] == 0 || ip[0] == 127 || ip[0] >= 224 || hostPart == 0 || hostPart == ^maskValue {
+		return false
+	}
+	if candidate.Gateway == "" {
+		return true
+	}
+	if !isCanonicalNetcfgIPv4(candidate.Gateway) {
+		return false
+	}
+	gateway := net.ParseIP(candidate.Gateway).To4()
+	if gateway == nil || !gateway.Mask(mask).Equal(network) || gateway.Equal(ip) {
+		return false
+	}
+	gatewayValue := uint32(gateway[0])<<24 | uint32(gateway[1])<<16 | uint32(gateway[2])<<8 | uint32(gateway[3])
+	gatewayHost := gatewayValue & ^maskValue
+	return gatewayHost != 0 && gatewayHost != ^maskValue
 }
 
 func validNetcfgDNS(candidateMode string, dns *NetcfgDNS) bool {
@@ -357,6 +412,10 @@ func validCanonicalNetcfgIPv4List(values []string) bool {
 func isCanonicalNetcfgIPv4(value string) bool {
 	parsed := net.ParseIP(value)
 	return parsed != nil && parsed.To4() != nil && !strings.Contains(value, ":") && parsed.To4().String() == value
+}
+
+func IsCanonicalIPv4(value string) bool {
+	return isCanonicalNetcfgIPv4(value)
 }
 
 func decodeStrictNetcfgJSON(data []byte, dst any) error {

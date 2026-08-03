@@ -1,5 +1,5 @@
 //go:build windows
 
-package app
+package config
 
 func preserveExistingFileOwnership(string, string) error { return nil }

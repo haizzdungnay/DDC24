@@ -64,51 +64,6 @@ func (q *HistorianDueQueue) OverflowGap(createdAtUTCMS int64) (HistoryGap, bool)
 	return HistoryGap{}, false
 }
 
-type HistorianClockTracker struct {
-	anchored          bool
-	anchorUTCMS       int64
-	anchorMonotonicNS uint64
-	durableBucketMS   int64
-	suspended         bool
-}
-
-func NewHistorianClockTracker() *HistorianClockTracker { return &HistorianClockTracker{} }
-
-func (c *HistorianClockTracker) Observe(observedUTCMS int64, monotonicNS uint64) *HistoryGap {
-	if !c.anchored {
-		c.anchor(observedUTCMS, monotonicNS)
-		return nil
-	}
-	if monotonicNS < c.anchorMonotonicNS {
-		gap := &HistoryGap{FromUTCMS: observedUTCMS, ToUTCMS: c.anchorUTCMS, Reason: "clock", Detail: "monotonic_discontinuity", CreatedAtUTCMS: observedUTCMS}
-		c.anchor(observedUTCMS, monotonicNS)
-		return gap
-	}
-	elapsedMS := int64((monotonicNS - c.anchorMonotonicNS) / uint64(time.Millisecond))
-	expectedUTCMS := c.anchorUTCMS + elapsedMS
-	delta := observedUTCMS - expectedUTCMS
-	if delta > 2000 || delta < -2000 {
-		from, to := expectedUTCMS, observedUTCMS
-		if from > to {
-			from, to = to, from
-			c.suspended = observedUTCMS <= c.durableBucketMS
-		}
-		c.anchor(observedUTCMS, monotonicNS)
-		return &HistoryGap{FromUTCMS: from, ToUTCMS: to, Reason: "clock", Detail: "clock_discontinuity", CreatedAtUTCMS: observedUTCMS}
-	}
-	if c.suspended && observedUTCMS > c.durableBucketMS {
-		c.suspended = false
-		c.anchor(observedUTCMS, monotonicNS)
-	}
-	return nil
-}
-
-func (c *HistorianClockTracker) SetDurableBucket(bucketUTCMS int64) { c.durableBucketMS = bucketUTCMS }
-func (c *HistorianClockTracker) Suspended() bool                    { return c.suspended }
-func (c *HistorianClockTracker) anchor(utcMS int64, monotonicNS uint64) {
-	c.anchored, c.anchorUTCMS, c.anchorMonotonicNS = true, utcMS, monotonicNS
-}
-
 type historianSink interface {
 	InsertHotBatch(context.Context, []HotSample) error
 	InsertGap(context.Context, HistoryGap) error
@@ -255,7 +210,7 @@ func (s *HistorianShadowScheduler) RunOnce(ctx context.Context, observedUTC time
 		}
 	}
 	clockBefore := *s.clock
-	backwardJump := clockBefore.backwardJump(snapshotUTC.UnixMilli(), snapshot.CapturedMonotonicNs)
+	backwardJump := clockBefore.BackwardJump(snapshotUTC.UnixMilli(), snapshot.CapturedMonotonicNs)
 	if gap := s.clock.Observe(snapshotUTC.UnixMilli(), snapshot.CapturedMonotonicNs); gap != nil {
 		updates := append([]historianPointSchedule(nil), s.schedules...)
 		for i := range s.schedules {
@@ -475,14 +430,6 @@ func (s *HistorianShadowScheduler) applyDurableFrontiers(rows []HotSample) {
 			}
 		}
 	}
-}
-
-func (c *HistorianClockTracker) backwardJump(observedUTCMS int64, monotonicNS uint64) bool {
-	if c == nil || !c.anchored || monotonicNS < c.anchorMonotonicNS {
-		return false
-	}
-	elapsedMS := int64((monotonicNS - c.anchorMonotonicNS) / uint64(time.Millisecond))
-	return observedUTCMS < c.anchorUTCMS+elapsedMS-2000
 }
 
 func historianPolicyInterval(policies []HistorianPolicy, pointID string, generation uint64) string {
