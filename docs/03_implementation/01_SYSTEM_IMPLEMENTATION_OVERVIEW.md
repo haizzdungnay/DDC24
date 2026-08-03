@@ -105,8 +105,8 @@
 
 | Ranh giới | Cơ chế | Hợp đồng / file | Writer | Reader |
 |-----------|--------|-----------------|--------|--------|
-| MCU ↔ iobus | UART 921600 8N1 + IOP frame | [`shared/iop_protocol.h`](../../shared/iop_protocol.h) | cả hai | cả hai |
-| iobus → core (IO in) | POSIX SHM seqlock `/dev/shm/mkddc_io_shm` | `kx_io_shm_t` ([`shared/mkddc_shm.h`](../../shared/mkddc_shm.h)) | iobus | core |
+| MCU ↔ iobus | UART 921600 8N1 + IOP frame | [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h) | cả hai | cả hai |
+| iobus → core (IO in) | POSIX SHM seqlock `/dev/shm/mkddc_io_shm` | `kx_io_shm_t` ([`contracts/shm/mkddc_shm.h`](../../contracts/shm/mkddc_shm.h)) | iobus | core |
 | core → iobus (output) | cùng SHM, field `ao_setpoint[]`/`do_cmd[]` | `kx_io_shm_t` | core | iobus |
 | core → iobus (BACnet obj) | SHM `/dev/shm/mkddc_plc_shm` | `kx_plc_shm_t` | core | iobus (BACnet/IP) |
 | web ↔ core | Unix socket / REST-internal (command/setpoint + read) | (định nghĩa ở [07_CORE §IPC](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md)) | web→core (cmd), core→web (read) | |

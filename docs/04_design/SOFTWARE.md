@@ -2,7 +2,7 @@
 
 **ID:** SW-DES-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-03 (đăng ký thiết kế Modbus RTU Point để review)
+**Cập nhật:** 2026-08-03 (layout bounded modules As-Built)
 
 ## Ranh giới Programming Rev A
 
@@ -37,7 +37,7 @@ Mỗi service phải có failure boundary rõ, validate external input, log lỗ
 
 ## Component graph As-Built — legacy, không phải Programming Product Spec
 
-28 loại node được đăng ký trong `services/core/graph_runtime.cpp`:
+28 loại node được đăng ký trong `apps/core/domain/graph/graph_runtime.cpp`:
 
 `AI_Input`, `DI_Input`, `Setpoint`, `AND`, `OR`, `NOT`, `Compare_GT`, `Compare_LT`, `Scale`, `Limit`, `PID`, `AO_Output`, `DO_Output`, `ManualAuto`, `OnDelay`, `OffDelay`, `Interlock`, `RuntimeCounter`, `PulseCounter`, `SafeState`, `AlarmHigh`, `AlarmLow`, `AlarmDelay`, `Modbus_RTU_Read`, `Modbus_RTU_Write`, `Modbus_TCP_Read`, `BACnet_AV`, `BACnet_BV`.
 

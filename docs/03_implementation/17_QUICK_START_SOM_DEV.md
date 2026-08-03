@@ -23,8 +23,8 @@
 
 | File | Là gì |
 |------|-------|
-| [`shared/iop_protocol.h`](../../shared/iop_protocol.h) | Hợp đồng UART/IOP — **chuẩn cuối**, docs lệch nó là docs sai |
-| [`shared/mkddc_shm.h`](../../shared/mkddc_shm.h) | Hợp đồng SHM — **chuẩn cuối** layout/path/ownership |
+| [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h) | Hợp đồng UART/IOP — **chuẩn cuối**, docs lệch nó là docs sai |
+| [`contracts/shm/mkddc_shm.h`](../../contracts/shm/mkddc_shm.h) | Hợp đồng SHM — **chuẩn cuối** layout/path/ownership |
 | [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) | Bản chốt: FAULT bit, reset reason, CRC vector, rename policy |
 
 Đọc sâu theo việc: iobus → [05](05_IOP_UART_IMPLEMENTATION_GUIDE.md) + [06](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md);

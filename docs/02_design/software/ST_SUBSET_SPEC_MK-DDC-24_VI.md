@@ -313,7 +313,7 @@ hơn nhiều so với một fault dừng chu kỳ và chuyển safe-state.
 
 ## 8. Giới hạn tài nguyên
 
-Nguồn thực thi: [`services/core/st/st_limits.hpp`](../../../services/core/st/st_limits.hpp).
+Nguồn thực thi: [`apps/core/application/st/st_limits.hpp`](../../../apps/core/application/st/st_limits.hpp).
 
 | Giới hạn | Giá trị | Code khi vượt |
 |---|---|---|

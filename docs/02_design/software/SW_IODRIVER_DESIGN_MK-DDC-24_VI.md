@@ -9,7 +9,7 @@
 > ⚠️ **LEGACY / REFERENCE-ONLY (2026-06-11).** Vai trò "io-driver" trong file này đã được
 > gộp vào **`mkddc-iobus`** (ADR-005 + Contract Freeze). Khi code Rev A: dùng
 > [06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE](../../03_implementation/06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md)
-> + [`shared/mkddc_shm.h`](../../../shared/mkddc_shm.h) + [`shared/iop_protocol.h`](../../../shared/iop_protocol.h).
+> + [`contracts/shm/mkddc_shm.h`](../../../contracts/shm/mkddc_shm.h) + [`contracts/iop/iop_protocol.h`](../../../contracts/iop/iop_protocol.h).
 > File này lệch các nguồn đó → nguồn mới thắng (path SHM cũ `/dev/shm/kinexus_io_shm` đã đổi
 > thành `/dev/shm/mkddc_io_shm`; struct chuẩn là `kx_io_shm_t`, không phải `kinexus_io_shm_t`).
 

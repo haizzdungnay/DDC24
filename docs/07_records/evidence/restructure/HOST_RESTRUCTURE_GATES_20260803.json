@@ -1,0 +1,161 @@
+{
+  "evidence_id": "RST-HOST-GATES-20260803",
+  "plan": "PLAN-ARCH-RESTRUCT-002",
+  "commit": "103b79faf3ebf06a7a311c5e9279f992869ade36-dirty",
+  "captured_at": "2026-08-03",
+  "scope": "host architecture conformance, regression và release bundle",
+  "repository_phase": "g4-modularized",
+  "gates": [
+    {
+      "name": "repository-layout",
+      "command": "scripts/verify-project.sh --component layout",
+      "result": "PASS",
+      "checks": 7,
+      "notes": "Manifest, contract authority, dependency direction, CMake target boundary, frontend public API và artifact isolation đều đạt."
+    },
+    {
+      "name": "cpp-baseline",
+      "command": "scripts/verify-project.sh --component cpp --profile baseline",
+      "result": "PASS",
+      "tests": 709,
+      "failed": 0,
+      "ctest_duration_s": 2.91
+    },
+    {
+      "name": "cpp-modbus",
+      "command": "scripts/verify-project.sh --component cpp --profile modbus",
+      "result": "PASS",
+      "tests": 717,
+      "failed": 0,
+      "ctest_duration_s": 2.95
+    },
+    {
+      "name": "cpp-bacnet",
+      "command": "scripts/verify-project.sh --component cpp --profile bacnet",
+      "result": "PASS",
+      "tests": 710,
+      "failed": 0,
+      "ctest_duration_s": 2.81
+    },
+    {
+      "name": "cpp-modbus-bacnet",
+      "command": "scripts/verify-project.sh --component cpp --profile modbus-bacnet",
+      "result": "PASS",
+      "tests": 718,
+      "failed": 0,
+      "ctest_duration_s": 3.08
+    },
+    {
+      "name": "cpp-full-hmi",
+      "command": "scripts/verify-project.sh --component cpp --profile full",
+      "result": "PASS",
+      "tests": 751,
+      "failed": 0,
+      "ctest_duration_s": 2.98
+    },
+    {
+      "name": "cpp-asan",
+      "command": "Debug build MKDDC_SANITIZE=address; ASAN_OPTIONS=detect_leaks=1 ctest",
+      "result": "PASS",
+      "tests": 709,
+      "failed": 0,
+      "ctest_duration_s": 6.23
+    },
+    {
+      "name": "cpp-ubsan",
+      "command": "Debug build MKDDC_SANITIZE=undefined; ctest",
+      "result": "PASS",
+      "tests": 709,
+      "failed": 0,
+      "ctest_duration_s": 4.35
+    },
+    {
+      "name": "st-fuzz-smoke",
+      "command": "clang/libFuzzer parser và loader, 60 giây mỗi harness",
+      "result": "PASS",
+      "parser_runs": 917841,
+      "loader_runs": 1879361,
+      "duration_s_each": 61
+    },
+    {
+      "name": "go-race",
+      "command": "scripts/verify-project.sh --component go --profile race",
+      "result": "PASS",
+      "packages": [
+        "mkddc-web/cmd/mkddc-web",
+        "mkddc-web/internal/app"
+      ],
+      "test_duration_s": 87.190
+    },
+    {
+      "name": "frontend",
+      "command": "scripts/verify-project.sh --component frontend",
+      "result": "PASS",
+      "test_files": 35,
+      "tests": 299,
+      "failed": 0,
+      "vitest_duration_s": 24.85,
+      "lint_warnings": 0,
+      "build_modules": 2223,
+      "vite_build_duration_s": 0.591
+    },
+    {
+      "name": "frontend-network-e2e",
+      "command": "scripts/verify-project.sh --component e2e",
+      "result": "PASS",
+      "tests": 1,
+      "failed": 0,
+      "duration_s": 22.8,
+      "notes": "Mutation mạng dùng fixture intercept; Vite ghi WebSocket ECONNREFUSED vì backend thật không chạy."
+    },
+    {
+      "name": "firmware-arm",
+      "command": "scripts/verify-project.sh --component firmware và release builder",
+      "result": "PASS",
+      "artifact": "build/firmware/stm32/firmware.elf",
+      "notes": "Linker newlib nosys còn cảnh báo syscall _close/_lseek/_read/_write."
+    },
+    {
+      "name": "release-checksum",
+      "command": "scripts/verify-project.sh --component release",
+      "result": "PASS",
+      "checksums": 5,
+      "failed": 0,
+      "artifact": "build/release",
+      "notes": "npm audit báo 4 lỗ hổng mức high có trước restructure; không bị che hoặc hạ mức."
+    },
+    {
+      "name": "script-syntax",
+      "command": "bash -n cho verifier và packaging; py_compile cho architecture guards",
+      "result": "PASS"
+    },
+    {
+      "name": "controlled-doc-links",
+      "command": "kiểm link Markdown nội bộ cho 13 controlled docs bị tác động",
+      "result": "PASS",
+      "files": 13,
+      "notes": "Bảy mục index 35/36/37/38/40/41/43 không có file được giữ tên nhưng đánh dấu Missing, không còn tạo link giả. Audit/review lịch sử không bị rewrite."
+    }
+  ],
+  "target_acceptance": {
+    "result": "NOT_RUN",
+    "blocking_reason": "Phiên làm việc không có target/board được owner phê duyệt, định danh target, quyền cài systemd hoặc cửa sổ rollback.",
+    "required_to_close": [
+      "cài coordinated release bundle trên target được duyệt",
+      "xác minh startup order và crash/restart của service",
+      "đối chiếu binary với commit và SHA-256",
+      "diễn tập rollback artifact và config",
+      "lưu log target có reviewer"
+    ]
+  },
+  "remaining_modularization": {
+    "result": "OPEN",
+    "notes": "Go đã có composition root cmd/mkddc-web và package main đúng boundary, nhưng bounded context auth/config/health/historian/modbusrtu vẫn chủ yếu nằm trong internal/app; RST-121..126 chưa được đánh dấu hoàn tất."
+  },
+  "claims_not_made": [
+    "không claim target deployment hoặc rollback PASS",
+    "không claim physical I/O HIL hoặc real RS485 ready",
+    "không claim Programming production ready",
+    "không claim npm security gate GREEN"
+  ]
+}

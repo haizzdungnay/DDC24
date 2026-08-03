@@ -6,11 +6,11 @@
 
 Firmware STM32G0B1 sở hữu real-time I/O, ADC sampling, AO/DO actuation, Kinexus-IOP framing và independent safe timeout. Linux/SOM không truy cập trực tiếp ADS131M08; STM32 là SPI master duy nhất.
 
-> **Implementation reality 2026-08-03:** `fw/src/iop` và
-> `fw/src/app/ddc24_runtime.*` có parser/CRC, input sampling/output callback,
+> **Implementation reality 2026-08-03:** `firmware/stm32/src/iop` và
+> `firmware/stm32/src/app/ddc24_runtime.*` có parser/CRC, input sampling/output callback,
 > startup safe-state, communication watchdog 200 ms và fault diagnostics;
-> `fw/Core/Src/main.c` nối runtime qua weak HAL boundary. Host test và
-> Cortex-M0+ cross-build pass. `fw/mkddc-fw.ioc` vẫn chưa định nghĩa
+> `firmware/stm32/Core/Src/main.c` nối runtime qua weak HAL boundary. Host test và
+> Cortex-M0+ cross-build pass. `firmware/stm32/mkddc-fw.ioc` vẫn chưa định nghĩa
 > pin/peripheral production, weak HAL chưa bind STM32 BSP và chưa có physical
 > HIL. Vì vậy source baseline này không phải bằng chứng ADC/DAC/relay/UART thật
 > đã implemented hoặc safe/release-ready.
@@ -23,7 +23,7 @@ Firmware STM32G0B1 sở hữu real-time I/O, ADC sampling, AO/DO actuation, Kine
 - UI sampling dùng hai ADS131M08; AO dùng DAC8554; DO dùng relay outputs.
 - Base SKU không có 8 industrial DI; true isolated DI là option riêng.
 
-Contract thực thi nằm trong `shared/iop_protocol.h`; layout và hằng số trong tài liệu chi tiết phải được đối chiếu với header này trước khi dùng để implement hoặc release.
+Contract thực thi nằm trong `contracts/iop/iop_protocol.h`; layout và hằng số trong tài liệu chi tiết phải được đối chiếu với header này trước khi dùng để implement hoặc release.
 
 ## Khoảng trống bắt buộc trước integration
 

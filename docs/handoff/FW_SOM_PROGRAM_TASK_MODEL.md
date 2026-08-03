@@ -117,7 +117,7 @@ mặt manual/BACnet/safety — bất biến này là **cấu trúc**, không ph�
 
 ## Cấu hình
 
-Xem [`program_tasks.example.conf`](../../services/core/st/samples/program_tasks.example.conf).
+Xem [`program_tasks.example.conf`](../../apps/core/application/st/samples/program_tasks.example.conf).
 
 Ràng buộc **fail-fast lúc boot** (cấu hình sai **không** chạy với "phần hợp lệ",
 vì như vậy hệ chạy khác điều engineer nghĩ mà không ai biết):

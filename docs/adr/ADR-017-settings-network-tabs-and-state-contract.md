@@ -119,7 +119,7 @@ chỉ mà không restart toàn bộ `mkddc-iobus`.
 ## 5. Nguồn triển khai
 
 - [Interface contracts](../04_design/INTERFACES.md)
-- [OpenAPI](../02_design/interfaces/openapi.yaml)
+- [OpenAPI](../../contracts/openapi/openapi.yaml)
 - [Config schema](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md)
 - [SOM plan](../03_implementation/22_SOM_SRC_IMPLEMENTATION_PLAN.md)
 - [Web plan](../03_implementation/09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md)

@@ -2,7 +2,7 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-03 (ADR-023: Product Spec Programming Rev A)
+**Cập nhật:** 2026-08-03 (ADR-025: cấu trúc repository process-first)
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: EasySet parity thành ADR-013; raw SHM thành ADR-014.
 
@@ -27,11 +27,43 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-017 | Network commissioning dùng strict authority v1 trên SOM: Web/local HMI không sửa trực tiếp Linux network. Ethernet IPv4 + optional DNS đi qua capability-discovered transaction `validate/stage/apply/confirm/rollback`; management hostname chỉ đọc và provision bằng script. Web GET status cho session xác thực, POST mutation Admin-only; local HMI đặt flow trong surface Service nhưng mutation chỉ role Admin. Đổi IP không dừng local control; BACnet/IP hot-rebind. | Accepted |
 | ADR-018 | SQLite block historian: backend-owned per-point database logging policy, hot/archive tiers, bounded migration/recovery and unified Trends authority. | Accepted |
 | ADR-019 | Independent global point tag/name namespaces, static references and generation-aware rename/delete behavior. | Accepted |
-| ADR-021 | **RBAC 3 vai trò (`viewer`/`operator`/`admin`) thuộc baseline Rev A.0**, không còn hoãn sang Rev B. Backend đã hiện thực đủ ba vai trò với `auth.Require(...)` trên từng endpoint và API quản trị tài khoản kèm guard last-admin; frontend nối nốt phần còn thiếu ở plan 45. Ma trận route↔quyền tối thiểu của Web suy TRỰC TIẾP từ bảng route backend (`src/frontend/src/auth/roles.ts`), frontend không được nới lỏng hơn server. Vẫn thuộc Rev B: nhóm quyền tuỳ biến, phân quyền theo từng point, SSO/AD, lịch sử phiên đăng nhập. | Accepted 2026-08-01 |
+| ADR-021 | **RBAC 3 vai trò (`viewer`/`operator`/`admin`) thuộc baseline Rev A.0**, không còn hoãn sang Rev B. Backend đã hiện thực đủ ba vai trò với `auth.Require(...)` trên từng endpoint và API quản trị tài khoản kèm guard last-admin; frontend nối nốt phần còn thiếu ở plan 45. Ma trận route↔quyền tối thiểu của Web suy TRỰC TIẾP từ bảng route backend (`apps/web-ui/src/features/auth/roles.ts`), frontend không được nới lỏng hơn server. Vẫn thuộc Rev B: nhóm quyền tuỳ biến, phân quyền theo từng point, SSO/AD, lịch sử phiên đăng nhập. | Accepted 2026-08-01 |
 | ADR-022 | CI/CD tự động build và deploy xuống board qua self-hosted runner trên chính Orange Pi 5B; auto-deploy khi merge `main` có điều kiện board là lab/dev; atomic swap + health check + tự rollback; `mkddc-netcfg` không được restart mù khi còn giao dịch dở. | Proposed — WP2 xong, WP1/3/4/5/6 còn mở |
 | ADR-020 | Rev A dùng Program Runtime do Mekong sở hữu, phạm vi ngôn ngữ ST + FBD; LD/SFC và claim certified/compliant ngoài scope. Component graph 28-node là As-Built legacy, không gọi là FBD. Việc CTO từng mở ST host component chỉ cho phép thu evidence phát triển, không phải bằng chứng runtime production hoặc claim Programming implemented. Phạm vi Point/cycle và workflow tài liệu được ADR-023 sửa đổi/làm rõ. | Accepted — supersedes ADR-004; amended by ADR-023 |
 | ADR-023 | **Khóa Product Spec Programming DDC-24 Rev A:** chỉ Local Physical I/O, Virtual Point, Modbus RTU Point, ST, FBD và cycle time 1 s/5 s/30 s. Modbus TCP Point, BACnet/IP Point, LD, SFC, motion, safety PLC và online change ngoài scope Programming. Product Spec quy định sản phẩm phải làm gì; Requirement quy định nghĩa vụ từng layer; Programming Design chưa thực hiện; As-Built chỉ được kết luận từ source/evidence. Không dùng ST host unit test làm bằng chứng runtime production và không claim Programming đã implement. Các vấn đề chưa quyết định đi vào `PROGRAMMING_OPEN_DECISIONS.md`. | Accepted 2026-08-03 |
 | ADR-024 | **Thiết kế Modbus RTU Point trước Programming:** đề xuất mô hình Bus → Device → Point; hai bus logic độc lập; stable Point ID; typed value/timestamp/quality; atomic config apply có iobus ACK; reliable write result/readback và không blind replay. Chi tiết/9 quyết định review tại `DDD-SW-MBRTU-POINT-001`. Không thay đổi source hoặc đóng real-RS485 gate. | Proposed 2026-08-03 — chờ Product/System/Fieldbus/HW/QA review |
+| ADR-025 | **Repository áp dụng process-first + bounded modules:** source production thuộc `apps/{core,iobus,netcfg,hmi,web-api,web-ui}`, firmware thuộc `firmware/stm32`, contract canonical thuộc `contracts`, deployment/build helper thuộc `platform`; topology runtime, binary, service unit, API, ABI và config semantics giữ nguyên. | Accepted 2026-08-03 — owner yêu cầu bắt đầu triển khai Plan 46 |
+
+## ADR-025 — Process-first + bounded modules cho repository
+
+- **Trạng thái:** Accepted 2026-08-03.
+- **Phê duyệt:** owner/user chỉ thị triển khai
+  `PLAN-ARCH-RESTRUCT-002` ngày 2026-08-03; Tech Lead chịu trách nhiệm giữ gate.
+- **Bối cảnh:** source đang phân tán giữa `services`, `web`, `src/frontend`,
+  `fw`, `shared` và `packaging`; path cũ bị lặp trong CMake, CI, installer,
+  công cụ và tài liệu. Cấu trúc này che dependency direction và làm một path
+  move có blast radius lớn dù topology runtime đã rõ.
+- **Quyết định:** tổ chức source theo process owner trước, sau đó chia
+  `domain/application/ports/adapters/bootstrap` hoặc bounded package/feature
+  bên trong từng process. `contracts` là authority duy nhất cho IOP, SHM,
+  config schema và OpenAPI. `platform` chỉ giữ build/deployment metadata;
+  domain không phụ thuộc platform. Test xuyên process nằm dưới `tests`, còn
+  test đơn vị được phép ở gần module sở hữu.
+- **Compatibility:** giữ nguyên tên `mkddc-core`, `mkddc-iobus`, `mkddc-web`,
+  `mkddc-netcfg`, optional `mkddc-hmi`; giữ systemd unit, REST/WebSocket,
+  database/config filename, SHM layout/magic/version và IOP wire bytes. Header
+  forwarding ở `shared` chỉ là shim có thời hạn và không nhận contract mới.
+- **Hệ quả:** mọi build/CI/release consumer phải lấy path từ entrypoint hoặc
+  manifest tập trung; forbidden dependency và duplicate contract authority
+  phải làm verification thất bại. Restructure không chứng minh Programming,
+  real RS485, target HMI hoặc physical I/O HIL.
+- **Migration:** thực hiện tuần tự theo G0..G5 của
+  [`PLAN-ARCH-RESTRUCT-002`](../03_implementation/46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md);
+  chỉ move source sau baseline và build indirection; chỉ xóa shim khi inventory
+  xác nhận không còn consumer.
+- **Rollback:** revert theo task/nhóm path gần nhất; không đổi dữ liệu runtime,
+  schema hoặc package installed. Nếu path move buộc đổi public semantics hoặc
+  failure boundary, dừng migration và mở decision riêng.
 
 ## Diễn giải bắt buộc
 

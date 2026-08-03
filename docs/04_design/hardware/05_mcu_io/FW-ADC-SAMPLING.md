@@ -103,7 +103,7 @@ The MCU continues to answer valid polls with invalid bits set so CM3 can disting
 
 ## 7. SOM Poll / MCU Response Sequence
 
-Every 2 ms nominal, as controlled by `IOP_GET_IO_PERIOD_MS` in `shared/iop_protocol.h`:
+Every 2 ms nominal, as controlled by `IOP_GET_IO_PERIOD_MS` in `contracts/iop/iop_protocol.h`:
 
 1. SOM sends `CMD_GET_IO`; MCU does not push unsolicited frames.
 2. `iop_comm_task` copies the latest complete 1 ms acquisition buffer.

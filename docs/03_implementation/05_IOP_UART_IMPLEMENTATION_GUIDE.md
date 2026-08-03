@@ -5,7 +5,7 @@
 > **Phiên bản:** 2.0 | 2026-06-25 (IOP v2.0: IO_RESP 34B→74B, KX_N_UI 8→16, FAULT_FLAGS restructured, HANDSHAKE_RESP 6B→8B+BOARD_CAP_MAP — xem ADR-010)
 > **Trạng thái:** Active — IOP v2.0
 > **Owner:** Dev 1 (MCU slave) + Dev 2 (SOM master) — **CẢ HAI bắt buộc đọc**
-> **Nguồn-chuẩn CUỐI CÙNG:** [`shared/iop_protocol.h`](../../shared/iop_protocol.h) —
+> **Nguồn-chuẩn CUỐI CÙNG:** [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h) —
 > mọi giá trị (opcode, payload, enum, FAULT bit, RESET reason, hằng số) lấy theo header.
 > [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) và file này là
 > **diễn giải**: lệch header → **header thắng**, sửa docs theo

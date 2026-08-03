@@ -2,16 +2,15 @@
 
 **ID:** OPS-DEV-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-28
+**Cập nhật:** 2026-08-03
 
 ## Repository map
 
-- `services/core`: graph/control runtime.
-- `services/iobus`: IOP, I/O and field protocols.
-- `services/hmi`: optional LVGL HMI.
-- `web/backend`, `web/frontend`: API and Web UI.
-- `shared`: cross-process ABI/protocol headers.
-- `packaging`: install/service artifacts; verify actual contents before release.
+- `apps/core`, `apps/iobus`, `apps/netcfg`, `apps/hmi`: runtime SOM theo process.
+- `apps/web-api`, `apps/web-ui`: API và Web UI.
+- `firmware/stm32`: firmware MCU.
+- `contracts`: authority IOP, SHM, config schema và OpenAPI.
+- `platform/cmake`, `platform/packaging`, `platform/systemd`: build và deploy.
 - `tests` and service-local test folders: automated evidence sources.
 
 ## Build và test
@@ -19,12 +18,14 @@
 Luôn đọc build files hiện hành thay vì sao chép command cũ. Baseline workflow:
 
 ```bash
-cmake -S services -B build/services -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/services -j
-ctest --test-dir build/services --output-on-failure
-
-(cd web/backend && go test ./...)
-(cd web/frontend && npm ci && npm run build && npm run lint)
+scripts/verify-project.sh --component layout
+scripts/verify-project.sh --component cpp --profile full
+scripts/verify-project.sh --component go
+scripts/verify-project.sh --component frontend
+scripts/verify-project.sh --component e2e
+scripts/verify-project.sh --component firmware
+platform/packaging/build-release.sh
+sha256sum --check build/release/checksums.sha256
 ```
 
 HMI: thêm `-DMKDDC_ENABLE_HMI=ON` và xác minh dependency/target. BACnet: dùng option hiện có trong CMake và chạy protocol smoke phù hợp. Không coi build trên host là thay thế HIL/target test.
@@ -32,7 +33,7 @@ HMI: thêm `-DMKDDC_ENABLE_HMI=ON` và xác minh dependency/target. BACnet: dùn
 ## Configuration và deployment
 
 1. Backup config/data và ghi commit/artifact hash.
-2. Build cùng shared headers; ABI change yêu cầu deploy đồng bộ consumer.
+2. Build cùng contract trong `contracts/`; ABI change yêu cầu deploy đồng bộ consumer.
 3. Validate config trước restart; AO mode change cần restart phối hợp.
 4. Kiểm tra unit/package thực tế, dependency order và permissions.
 5. Smoke status, points, IOP heartbeat, output safe behavior và logs.
@@ -74,7 +75,7 @@ Luồng ADR-017 đã implement code-local:
 5. BACnet hot-rebind/phát `I-Am`; core/IOP/STM32 tiếp tục hoạt động.
 
 Management hostname trong authority là read-only. Chỉ provision/đổi stable origin bằng
-`packaging/configure-web-hostname.sh`; package có thể cài tool/template nhưng không tự apply
+`platform/packaging/configure-web-hostname.sh`; package có thể cài tool/template nhưng không tự apply
 hostname. Trước đổi IP target phải xác nhận unique mDNS/DNS resolution và có console hoặc
 management path dự phòng.
 

@@ -113,7 +113,7 @@
 |----|----------|-------------|:---:|:----------:|
 | KX-DDC24-IF-ICD-002 | Modbus RTU Master / Expansion Bus (D-2) | [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | 2.0 | Approved (Owner 2026-06-08) |
 | KX-DDC24-IF-ICD-003 | BACnet PICS/EPICS (D-3) | [BACNET_PICS_EPICS](../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
-| KX-DDC24-IF-ICD-004 | REST OpenAPI (D-4) | [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) + [openapi.yaml](../02_design/interfaces/openapi.yaml) | 1.3 / 1.6.0 | Approved (Owner amendment 2026-07-15) |
+| KX-DDC24-IF-ICD-004 | REST OpenAPI (D-4) | [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) + [openapi.yaml](../../contracts/openapi/openapi.yaml) | 1.3 / 1.6.0 | Approved (Owner amendment 2026-07-15) |
 | KX-DDC24-IF-ICD-005 | Config JSON Schema (D-5) | [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) | 1.9 | Approved (Owner amendment 2026-07-15) |
 | KX-DDC24-IF-ICD-006 | Graph Schema (graph.json) + deploy contract | [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) | 1.0 | Approved (Owner 2026-06-08) |
 
@@ -132,7 +132,7 @@
 | KX-DDC24-FW-DEVGUIDE-001 | [FW Developer Guide & Backlog](../05_devguides/KX-DDC24-FW-DEVGUIDE-001_VI.md) | 1.0 | Approved |
 | KX-DDC24-BE-DEVGUIDE-001 | [BE Developer Guide & Backlog](../05_devguides/KX-DDC24-BE-DEVGUIDE-001_VI.md) | 1.0 | **Needs Reconciliation** |
 | KX-DDC24-FE-DEVGUIDE-001 | [FE Developer Guide & Backlog](../05_devguides/KX-DDC24-FE-DEVGUIDE-001_VI.md) | 1.0 | **Needs Reconciliation** |
-| (code contract) | [`shared/iop_protocol.h`](../../shared/iop_protocol.h) · [`shared/kinexus_shm.h`](../../shared/kinexus_shm.h) | 1.1 / 1.0 | Active |
+| (code contract) | [`contracts/iop/iop_protocol.h`](../../contracts/iop/iop_protocol.h) · [`contracts/shm/kinexus_shm.h`](../../contracts/shm/kinexus_shm.h) | 1.1 / 1.0 | Active |
 
 ## 5. UI/UX (04_uiux) — `docs/04_uiux/`
 | ID | Tài liệu | Ver | Trạng thái |

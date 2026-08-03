@@ -9,7 +9,7 @@
 > **Không bao gồm:** Panel mạng của HMI cục bộ (đã có `UC-HMI-016…019`), cấu hình
 > WiFi credentials, VLAN, route tĩnh, firewall.
 > **Contract nền:** [ADR-017](../adr/ADR-017-settings-network-tabs-and-state-contract.md) ·
-> [`shared/netcfg_protocol_v1.schema.json`](../../shared/netcfg_protocol_v1.schema.json)
+> [`contracts/config/netcfg_protocol_v1.schema.json`](../../contracts/config/netcfg_protocol_v1.schema.json)
 > **Đặc tả trình bày:** [KX-DDC24-UX-WEB-NETWORK-001](KX-DDC24-UX-WEB-NETWORK-001_VI.md)
 
 ---

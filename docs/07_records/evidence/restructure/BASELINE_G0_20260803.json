@@ -1,0 +1,43 @@
+{
+  "evidence_id": "RST-G0-BASELINE-20260803",
+  "plan": "PLAN-ARCH-RESTRUCT-002",
+  "commit": "103b79faf3ebf06a7a311c5e9279f992869ade36",
+  "worktree": "dirty-before-restructure",
+  "captured_at": "2026-08-03T08:38:30Z",
+  "host": "linux-amd64",
+  "toolchains": {
+    "cmake": "3.28.3",
+    "cxx": "GCC 13.3.0",
+    "go": "go1.22.2 with module toolchain go1.26.4",
+    "node": "v24.18.1",
+    "npm": "11.16.0",
+    "playwright": "1.62.1",
+    "arm_none_eabi_gcc": "13.2.1"
+  },
+  "gates": [
+    {"name": "cpp-baseline", "command": "cmake/cmake-build/ctest; MODBUS=OFF BACNET=OFF HMI=OFF", "result": "PASS", "tests": 709, "failed": 0, "duration_s": 2.83, "artifact": "build/restructure-baseline-20260803/matrix-baseline"},
+    {"name": "cpp-modbus", "command": "cmake/cmake-build/ctest; MODBUS=ON BACNET=OFF HMI=OFF", "result": "PASS", "tests": 717, "failed": 0, "duration_s": 3.10, "artifact": "build/restructure-baseline-20260803/matrix-modbus"},
+    {"name": "cpp-bacnet", "command": "cmake/cmake-build/ctest; MODBUS=OFF BACNET=ON HMI=OFF", "result": "PASS", "tests": 710, "failed": 0, "duration_s": 2.76, "artifact": "build/restructure-baseline-20260803/matrix-bacnet"},
+    {"name": "cpp-modbus-bacnet", "command": "cmake/cmake-build/ctest; MODBUS=ON BACNET=ON HMI=OFF", "result": "PASS", "tests": 718, "failed": 0, "duration_s": 3.02, "artifact": "build/restructure-baseline-20260803/matrix-modbus-bacnet"},
+    {"name": "cpp-full-hmi", "command": "cmake/cmake-build/ctest; MODBUS=ON BACNET=ON HMI=ON", "result": "PASS", "tests": 751, "failed": 0, "duration_s": 3.01, "artifact": "build/restructure-baseline-20260803/cpp-make"},
+    {"name": "go-vet", "command": "go vet ./...", "result": "PASS", "duration_s": 0.244, "artifact": "web/backend"},
+    {"name": "go-test", "command": "go test ./... -count=1", "result": "PASS", "listed_top_level_tests": 382, "duration_s": 23.421, "artifact": "web/backend"},
+    {"name": "frontend-vitest", "command": "npx vitest --run --environment jsdom src", "result": "PASS", "test_files": 35, "tests": 299, "failed": 0, "duration_s": 24.43, "artifact": "src/frontend"},
+    {"name": "frontend-lint", "command": "npm run lint", "result": "PASS", "warnings": 0, "duration_s": 4.604, "artifact": "src/frontend"},
+    {"name": "frontend-build", "command": "npm run build", "result": "PASS", "modules": 2217, "duration_s": 9.267, "artifact": "src/frontend/dist"},
+    {"name": "frontend-network-e2e", "command": "npx playwright test e2e/network-qa.spec.ts", "result": "PASS", "tests": 1, "failed": 0, "duration_s": 23.676, "artifact": "src/frontend/node_modules/.cache/playwright-results"},
+    {"name": "firmware-arm", "command": "make -C fw", "result": "PASS", "duration_s": 0.195, "artifact": "fw/build/firmware.elf"},
+    {"name": "release", "command": "packaging/build-release.sh && sha256sum --check build/release/checksums.sha256", "result": "PASS", "checksums": 5, "failed": 0, "duration_s": 42.785, "artifact": "build/release"}
+  ],
+  "known_non_blocking_findings": [
+    "Ninja không được cài trên host; baseline dùng Unix Makefiles trong build directory mới.",
+    "GCC 13 phát cảnh báo tối ưu hóa trong fixture test_output_command.cpp nhưng build target hiện không nâng cảnh báo này thành lỗi.",
+    "newlib nosys phát cảnh báo _close/_lseek/_read/_write khi link firmware host artifact.",
+    "Playwright fixture không chạy backend thật nên Vite ghi WebSocket proxy ECONNREFUSED 127.0.0.1:8081.",
+    "npm audit báo 4 high severity vulnerabilities; security gate phải xử lý riêng, không bị che bởi restructure."
+  ],
+  "limitations": [
+    "Không phải target/HIL evidence.",
+    "Không chứng minh real RS485, physical I/O, DRM/touch target hoặc rollback trên board."
+  ]
+}

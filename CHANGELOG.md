@@ -7,23 +7,59 @@
 ---
 
 ## [Unreleased]
+### Changed — Tái cấu trúc kiến trúc repository theo bounded modules (2026-08-03)
+
+- Thực thi `PLAN-ARCH-RESTRUCT-002`: chuyển source production từ các cây
+  `services`, `web/backend`, `src/frontend` và `fw` sang `apps/` cùng
+  `firmware/stm32`; chuyển CMake/packaging/systemd sang `platform/` nhưng giữ
+  nguyên tên binary, service topology, REST/WebSocket, SHM, IOP và config
+  semantics.
+- Thiết lập `contracts/` làm authority duy nhất cho IOP, SHM, config schema,
+  build info và OpenAPI; xóa forwarding layer sau khi inventory không còn
+  consumer. Artifact build mới chỉ được sinh dưới `build/`.
+- Tách Core và Iobus thành `domain/application/ports/adapters/bootstrap`, thêm
+  CMake target boundary và port snapshot/output/command sink; tách React thành
+  `app/features/shared` với public barrel và lint/negative guard chống import
+  sâu giữa feature.
+- Đưa Go composition root về `apps/web-api/cmd/mkddc-web`, còn production code
+  dưới `internal/app`; ghi rõ `RST-121..126` vẫn mở thay vì tạo package façade
+  rỗng để giả hoàn tất bounded context.
+- Thêm root CMake, `scripts/verify-project.sh`, path manifest, architecture
+  conformance guard/negative tests, CI layout job, release path indirection và
+  evidence G0/host regression tại `docs/07_records/evidence/restructure/`.
+- Đồng bộ README, System, Software, Interfaces, Firmware, Verification,
+  Operations, Traceability và Plan 46 theo cây As-Built. Plan vẫn `In Progress`:
+  target install/startup/rollback chưa chạy do chưa có board/target được duyệt.
+- Gỡ 7 link giả trong implementation index tới các hồ sơ 35/36/37/38/40/41/43
+  không tồn tại; giữ tên mục và đánh dấu `Missing` thay vì tự tạo nội dung thay
+  owner.
+
+**Kiểm chứng trong phiên:** layout guard PASS; C++ matrix **709/709, 717/717,
+710/710, 718/718 và 751/751 PASS**; ASan/UBSan **709/709 PASS**; fuzz parser
+**917.841** lượt và loader **1.879.361** lượt không crash; Go `vet` +
+`test -race -count=1` PASS; FE Vitest **35 file, 299/299 test**, lint 0 warning,
+build **2.223 module** PASS;
+Playwright network **1/1 PASS**; firmware ARM và release bundle **5/5 SHA-256
+PASS**. `bash -n`/Python guard syntax PASS. Không claim target/rollback/HIL;
+`npm audit` vẫn báo 4 lỗ hổng mức high có trước restructure.
+
 ### Verification — Gate trước commit và PR (2026-08-03)
 
 - C++ Release cấu hình đồng thời `MKDDC_ENABLE_MODBUS=ON`,
   `MKDDC_ENABLE_BACNET=ON`, `MKDDC_ENABLE_HMI=ON`: build PASS và CTest
-  **751/751 PASS** trong 10,21 giây. GCC 13 còn phát cảnh báo tối ưu hóa trong
-  fixture `test_output_command.cpp`, không phải lỗi build và không bị vô hiệu
-  hóa bằng cách hạ warning.
-- Go backend: `go vet ./...` PASS; `go test ./... -count=1` PASS trong
-  **22,028 giây**.
-- Frontend: Vitest **35 file, 299/299 PASS** trong 24,12 giây; ESLint PASS,
-  **0 warning**; TypeScript/Vite production build PASS với 2.217 module.
+  **751/751 PASS** trong 2,98 giây CTest. GCC 13 còn phát cảnh báo tối ưu hóa
+  trong fixture `test_output_command.cpp`; target test đã có waiver hẹp
+  `-Wno-error=stringop-overflow` từ trước và restructure không mở rộng waiver.
+- Go backend: `go vet ./...` PASS; `go test -race ./... -count=1` PASS,
+  package test chính chạy trong **87,190 giây**.
+- Frontend: Vitest **35 file, 299/299 PASS** trong 24,85 giây; ESLint PASS,
+  **0 warning**; TypeScript/Vite production build PASS với 2.223 module.
 - Playwright Chrome gate `e2e/network-qa.spec.ts`: **1/1 PASS** trong 22,8
   giây; API mutation được intercept theo fixture. Vite ghi nhận WebSocket proxy
   `ECONNREFUSED 127.0.0.1:8081` do backend thật không chạy trong test mock,
-  không làm giảm assertion nghiệp vụ. Chrome DevTools MCP đã cấu hình nhưng
-  tool chưa được expose trong phiên Codex hiện tại, nên dùng Playwright Chrome
-  làm browser fallback.
+  không làm giảm assertion nghiệp vụ. Chrome DevTools MCP đã được cấu hình
+  nhưng tool không được expose trong phiên hiện tại; cần restart Codex để dùng,
+  nên không claim đã kiểm chứng bằng DevTools.
 - Firmware ARM Cortex-M0+: rebuild PASS bằng `arm-none-eabi-gcc 13.2.1`,
   `-Wall -Wextra -Werror`; linker chỉ phát cảnh báo syscall Newlib `nosys` chưa
   implement (`_close/_lseek/_read/_write`).
