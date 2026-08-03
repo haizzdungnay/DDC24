@@ -29,6 +29,7 @@ import { OutputsPage } from './pages/OutputsPage'
 import { UserParametersPage } from './pages/UserParametersPage'
 import { VirtualPointsPage } from './pages/VirtualIoPage'
 import { HelpPage } from './pages/HelpPage'
+import { ModbusRtuPage } from './pages/ModbusRtuPage'
 import { LEGACY_GRAPH_DEMO_ENABLED } from './config'
 
 function ProtectedShell() {
@@ -128,6 +129,7 @@ export function App() {
         <Route path="eng/inputs" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/inputs']}><InputsPage /></RequireRole>} />
         <Route path="eng/outputs" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/outputs']}><OutputsPage /></RequireRole>} />
         <Route path="eng/virtual-points" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/virtual-points']}><VirtualPointsPage /></RequireRole>} />
+        <Route path="eng/modbus-rtu" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/modbus-rtu']}><ModbusRtuPage /></RequireRole>} />
         <Route path="eng/virtual-io" element={<Navigate to="/eng/virtual-points" replace />} />
         <Route path="eng/user-parameters" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/user-parameters']}><UserParametersPage /></RequireRole>} />
         <Route path="eng/diagram" element={<DiagramPage />} />

@@ -17,10 +17,18 @@ namespace iobus::fieldbus {
  *   CDAB = BA, từng byte little-endian ("mid-big" endian)
  */
 
+static uint16_t swap_bytes(uint16_t value)
+{
+    return static_cast<uint16_t>((value >> 8) | (value << 8));
+}
+
 static uint32_t regs_to_u32(const uint16_t* regs, ByteOrder bo)
 {
-    const uint16_t hi = (bo == ByteOrder::AB || bo == ByteOrder::ABCD) ? regs[0] : regs[1];
-    const uint16_t lo = (bo == ByteOrder::AB || bo == ByteOrder::ABCD) ? regs[1] : regs[0];
+    const bool low_word_first = bo == ByteOrder::CDAB || bo == ByteOrder::DCBA || bo == ByteOrder::BA;
+    const bool little_bytes = bo == ByteOrder::BADC || bo == ByteOrder::DCBA;
+    uint16_t hi = low_word_first ? regs[1] : regs[0];
+    uint16_t lo = low_word_first ? regs[0] : regs[1];
+    if (little_bytes) { hi = swap_bytes(hi); lo = swap_bytes(lo); }
     return (static_cast<uint32_t>(hi) << 16) | lo;
 }
 
@@ -28,8 +36,12 @@ static void u32_to_regs(uint32_t u, ByteOrder bo, uint16_t* regs)
 {
     const uint16_t hi = static_cast<uint16_t>(u >> 16);
     const uint16_t lo = static_cast<uint16_t>(u & 0xFFFFu);
-    if (bo == ByteOrder::AB || bo == ByteOrder::ABCD) { regs[0] = hi; regs[1] = lo; }
-    else                                               { regs[0] = lo; regs[1] = hi; }
+    const bool low_word_first = bo == ByteOrder::CDAB || bo == ByteOrder::DCBA || bo == ByteOrder::BA;
+    const bool little_bytes = bo == ByteOrder::BADC || bo == ByteOrder::DCBA;
+    uint16_t out_hi = little_bytes ? swap_bytes(hi) : hi;
+    uint16_t out_lo = little_bytes ? swap_bytes(lo) : lo;
+    if (low_word_first) { regs[0] = out_lo; regs[1] = out_hi; }
+    else                { regs[0] = out_hi; regs[1] = out_lo; }
 }
 
 float decode_register(const uint16_t* regs, uint16_t count,
@@ -44,11 +56,12 @@ float decode_register(const uint16_t* regs, uint16_t count,
             break;
         case PointType::Int16:
             if (count < 1) return 0.0f;
-            raw = static_cast<float>(static_cast<int16_t>(regs[0]));
+            raw = static_cast<float>(static_cast<int16_t>(
+                byte_order == ByteOrder::BA ? swap_bytes(regs[0]) : regs[0]));
             break;
         case PointType::Uint16:
             if (count < 1) return 0.0f;
-            raw = static_cast<float>(regs[0]);
+            raw = static_cast<float>(byte_order == ByteOrder::BA ? swap_bytes(regs[0]) : regs[0]);
             break;
         case PointType::Int32: {
             if (count < 2) return 0.0f;
@@ -86,10 +99,12 @@ bool encode_register(float eng_value, uint16_t* regs, uint16_t count,
         case PointType::Int16:
             if (count < 1) return false;
             regs[0] = static_cast<uint16_t>(static_cast<int16_t>(raw));
+            if (byte_order == ByteOrder::BA) regs[0] = swap_bytes(regs[0]);
             return true;
         case PointType::Uint16:
             if (count < 1) return false;
             regs[0] = static_cast<uint16_t>(static_cast<uint32_t>(raw) & 0xFFFFu);
+            if (byte_order == ByteOrder::BA) regs[0] = swap_bytes(regs[0]);
             return true;
         case PointType::Int32: {
             if (count < 2) return false;

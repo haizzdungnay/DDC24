@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(mkddc-iobus CXX C)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/BuildProvenance.cmake)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options(-Wall -Wextra -Werror)
@@ -101,6 +102,7 @@ endif()
 
 add_executable(mkddc-iobus main.cpp)
 target_link_libraries(mkddc-iobus PRIVATE iobus_lib)
+mkddc_apply_provenance(mkddc-iobus)
 
 # ---- dev tools (06 §11: build chung CMakeLists iobus) ----
 add_executable(fake_mcu ${TOOLS_DIR}/fake_mcu/fake_mcu.cpp)

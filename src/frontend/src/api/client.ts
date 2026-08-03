@@ -36,7 +36,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -47,7 +47,8 @@ type AuthHeaderProvider = () => Record<string, string>
 let authHeaderProvider: AuthHeaderProvider = () => ({})
 
 const base = `${API_ORIGIN.replace(/\/$/, '')}/api/v1`
-const pointConfigOverridesKey = 'mkddc:point-config-overrides:v1'
+// Chỉ dùng cho simulator trong phiên hiện tại. Live metadata luôn do BE/Core sở hữu.
+const demoPointConfigOverrides: Record<string, PointConfigPatch> = {}
 let demoNetcfgResponse: NetcfgResponse | null = null
 
 function netmaskPrefix(netmask: string): number {
@@ -241,13 +242,7 @@ export async function requestJson<T>(path: string, init: ApiRequestInit = {}): P
 }
 
 function readPointConfigOverrides(): Record<string, PointConfigPatch> {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.localStorage.getItem(pointConfigOverridesKey)
-    return raw ? JSON.parse(raw) as Record<string, PointConfigPatch> : {}
-  } catch {
-    return {}
-  }
+  return demoPointConfigOverrides
 }
 
 function savePointConfigOverride(id: string, config: PointConfigPatch): PointConfigPatch & { id: string } {
@@ -258,7 +253,6 @@ function savePointConfigOverride(id: string, config: PointConfigPatch): PointCon
   if (Object.prototype.hasOwnProperty.call(config, 'unit')) next.unit = config.unit
   if (Object.prototype.hasOwnProperty.call(config, 'trendEnabled')) next.trendEnabled = config.trendEnabled
   overrides[id] = next
-  window.localStorage.setItem(pointConfigOverridesKey, JSON.stringify(overrides))
   return { id, ...next }
 }
 
@@ -1036,27 +1030,23 @@ export const apiClient = {
 
   async getOutputs(): Promise<OutputsConfig> {
     if (IS_DEMO) return getDemoOutputs()
-    const [io, safe] = await Promise.all([
-      requestJson<IoConfig>('/system/config/io'),
-      requestJson<SafeStateConfig>('/system/config/safe-state')
-    ])
-    return outputsFromConfig(completeIoConfig(io), safe)
+    const bundle = await requestJson<{ revision?: number; io?: IoConfig; safe_state?: SafeStateConfig }>('/system/config/io-bundle')
+    return outputsFromConfig(completeIoConfig(bundle.io ?? {}), bundle.safe_state ?? {})
   },
 
   async putOutputs(config: OutputsConfig): Promise<void> {
     putDemoOutputs(config)
     if (IS_DEMO) return
-    const [currentIo, currentSafe] = await Promise.all([
-      requestJson<IoConfig>('/system/config/io'),
-      requestJson<SafeStateConfig>('/system/config/safe-state')
-    ])
-    await requestJson('/system/config/io', {
+    const current = await requestJson<{ revision?: number; io?: IoConfig; safe_state?: SafeStateConfig }>('/system/config/io-bundle')
+    const currentIo = completeIoConfig(current.io ?? {})
+    const currentSafe = current.safe_state ?? {}
+    await requestJson('/system/config/io-bundle', {
       method: 'PUT',
-      body: JSON.stringify(mergeOutputsConfig(completeIoConfig(currentIo), config))
-    })
-    await requestJson('/system/config/safe-state', {
-      method: 'PUT',
-      body: JSON.stringify(mergeSafeState(currentSafe, config))
+      body: JSON.stringify({
+        base_revision: current.revision ?? 0,
+        io: mergeOutputsConfig(currentIo, config),
+        safe_state: mergeSafeState(currentSafe, config)
+      })
     })
   },
 
@@ -1270,13 +1260,49 @@ export const apiClient = {
       savePointConfigOverride(id, config)
       return updateDemoPointConfig(id, config)
     }
-    if (config.tag === undefined && config.name === undefined) {
-      return savePointConfigOverride(id, config)
-    }
     return requestJson<{ id: string; tag?: string; name?: string; unit?: string; trendEnabled?: boolean }>(`/points/${encodeURIComponent(id)}/config`, {
       method: 'PUT',
-      body: JSON.stringify({ tag: config.tag, name: config.name })
+      body: JSON.stringify(config)
     })
+  },
+
+  async getModbusDevices(): Promise<ModbusRTUDevice[]> {
+    if (IS_DEMO) return []
+    return requestJson<ModbusRTUDevice[]>('/modbus/devices', { cache: 'no-store' })
+  },
+  async createModbusDevice(device: ModbusRTUDevice): Promise<ModbusRTUDevice> {
+    if (IS_DEMO) return device
+    const response = await requestJson<{ device: ModbusRTUDevice }>('/modbus/devices', { method: 'POST', body: JSON.stringify(device) })
+    return response.device
+  },
+  async updateModbusDevice(device: ModbusRTUDevice): Promise<ModbusRTUDevice> {
+    if (IS_DEMO) return device
+    const response = await requestJson<{ device: ModbusRTUDevice }>(`/modbus/devices/${encodeURIComponent(device.device_id)}`, { method: 'PUT', body: JSON.stringify(device) })
+    return response.device
+  },
+  async deleteModbusDevice(id: string): Promise<void> {
+    if (!IS_DEMO) await requestJson(`/modbus/devices/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+  async getModbusPoints(): Promise<ModbusRTUPoint[]> {
+    if (IS_DEMO) return []
+    return requestJson<ModbusRTUPoint[]>('/modbus/points', { cache: 'no-store' })
+  },
+  async createModbusPoint(point: ModbusRTUPoint): Promise<ModbusRTUPoint> {
+    if (IS_DEMO) return point
+    const response = await requestJson<{ point: ModbusRTUPoint }>('/modbus/points', { method: 'POST', body: JSON.stringify(point) })
+    return response.point
+  },
+  async updateModbusPoint(point: ModbusRTUPoint): Promise<ModbusRTUPoint> {
+    if (IS_DEMO) return point
+    const response = await requestJson<{ point: ModbusRTUPoint }>(`/modbus/points/${encodeURIComponent(point.point_id)}`, { method: 'PUT', body: JSON.stringify(point) })
+    return response.point
+  },
+  async deleteModbusPoint(id: string): Promise<void> {
+    if (!IS_DEMO) await requestJson(`/modbus/points/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+  async getModbusDiagnostics(): Promise<ModbusRTUDiagnostics[]> {
+    if (IS_DEMO) return []
+    return requestJson<ModbusRTUDiagnostics[]>('/modbus/diagnostics', { cache: 'no-store' })
   },
 
   async runCommissioningTest(pointId: string, value: number | boolean): Promise<CommissioningTestResult> {

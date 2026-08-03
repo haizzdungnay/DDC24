@@ -10,6 +10,8 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <cerrno>
+#include <cmath>
 
 #ifdef MKDDC_ENABLE_MODBUS
 #include <modbus.h>
@@ -17,6 +19,18 @@
 
 namespace iobus::fieldbus {
 
+#ifdef MKDDC_ENABLE_MODBUS
+static void ext_point_name(char out[24], const SlaveConfig& slave,
+                           const ProfilePoint& point, uint16_t logical_index)
+{
+    if (ext_slots_for_point(point) == 1) {
+        std::snprintf(out, 24, "%s", point.name.c_str());
+    } else {
+        std::snprintf(out, 24, "%s.%s[%u]", slave.name.c_str(),
+                      point.name.c_str(), logical_index);
+    }
+}
+#endif
 
 ModbusMaster::~ModbusMaster()
 {
@@ -47,7 +61,7 @@ bool ModbusMaster::open(const FieldbusConfig& cfg)
         return false;
     }
 
-    /* Timeout 300ms/response (MODBUS_REGISTER_MAP §2) */
+    /* Giá trị từng slave được đặt lại ngay trước poll; 300 ms là mặc định bus. */
     modbus_set_response_timeout(ctx, 0, 300000);
     modbus_set_byte_timeout(ctx, 0, 50000);
 
@@ -253,16 +267,16 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
      * error_rate = 100% và E302 kích — kỹ thuật viên hiện trường thấy ngay thay
      * vì tình trạng "đèn xanh, bảng điểm trống, log im lặng". */
     if (slave_idx < slave_config_error_.size() && slave_config_error_[slave_idx]) {
-        on_poll_error(&state);
+        on_poll_error(&state, sc.retry);
         /* on_poll_error KHÔNG cập nhật last_poll_ms (có chủ đích: lỗi comm thật
          * được retry nhanh, bị chặn bởi timeout 300ms của libmodbus). Ở đây
          * không có I/O nào để chặn nên phải tự tôn trọng poll_interval, nếu
          * không vòng fieldbus sẽ spin ở mức 1ms. */
         state.last_poll_ms = now_ms;
-        metrics.update(slave_idx, false, now_ms);
+        metrics.update(slave_idx, false, now_ms, sc.retry);
         cache.mark_slave_offline(slave_ext_base_[slave_idx],
                                  slave_ext_count_[slave_idx], sc.addr);
-        if (metrics.check_e302(slave_idx))
+        if (metrics.check_e302(slave_idx, 1))
             std::fprintf(stderr, "ALARM E302 modbus.slave_config_error slave=%s addr=%u"
                          " — thiếu profile hoặc hết ext slot, slave không được poll\n",
                          sc.name.c_str(), sc.addr);
@@ -270,9 +284,34 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
     }
 
     modbus_set_slave(ctx, sc.addr);
+    modbus_set_response_timeout(ctx, sc.timeout_ms / 1000u,
+                                (sc.timeout_ms % 1000u) * 1000u);
 
     uint16_t ext_idx = slave_ext_base_[slave_idx];
     bool slave_ok = true;
+
+    /* Cấp danh tính slot trước lần I/O đầu tiên. Nhờ đó lần poll đầu bị lỗi vẫn
+     * publish đúng Point ID và OFFLINE/STALE, không trả một bảng ext rỗng. */
+    {
+        uint16_t init_idx = slave_ext_base_[slave_idx];
+        for (const auto& pt : prof.points) {
+            if (ext_slots_for_point(pt) == 0) continue;
+            const bool is32 = point_type_is_32bit(pt.type);
+            uint16_t logical = 0;
+            for (uint16_t k = 0; k < pt.count && init_idx < KX_N_EXT; k++) {
+                if (is32 && k + 1 >= pt.count) break;
+                if (cache.point(init_idx).name[0] == '\0') {
+                    char name[24];
+                    ext_point_name(name, sc, pt, logical);
+                    cache.set_point(init_idx, name, 0.0f, KX_Q_UNCERTAIN,
+                                    sc.addr, true, pt.writable);
+                }
+                init_idx++;
+                logical++;
+                if (is32) k++;
+            }
+        }
+    }
 
     for (const auto& pt : prof.points) {
         if (pt.fc != 1 && pt.fc != 2 && pt.fc != 3 && pt.fc != 4) continue;
@@ -294,15 +333,22 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
         if (rc < 0) {
             slave_ok = false;
             /* retry tracking trong on_poll_error */
-            const bool went_offline = on_poll_error(&state);
+            const bool went_offline = on_poll_error(&state, sc.retry);
+            if (errno == ETIMEDOUT) metrics.record_timeout(slave_idx);
+#ifdef EMBBADCRC
+            if (errno == EMBBADCRC) metrics.record_crc_error(slave_idx);
+#endif
             if (went_offline) {
                 std::fprintf(stderr, "WARN  modbus.slave_offline slave=%s addr=%u\n",
                              sc.name.c_str(), sc.addr);
             }
-            /* Đánh offline ext points */
-            cache.mark_slave_offline(slave_ext_base_[slave_idx],
-                                      slave_ext_count_[slave_idx],
-                                      sc.addr);
+            if (state.retry_count >= sc.retry) {
+                cache.mark_slave_offline(slave_ext_base_[slave_idx],
+                                         slave_ext_count_[slave_idx], sc.addr);
+            } else {
+                cache.mark_slave_stale(slave_ext_base_[slave_idx],
+                                       slave_ext_count_[slave_idx], sc.addr);
+            }
             break;
         }
 
@@ -310,8 +356,8 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
         for (uint16_t k = 0; k < pt.count; k++) {
             if (ext_idx >= KX_N_EXT) break;
             char point_name[24];
-            std::snprintf(point_name, sizeof(point_name), "%s.%s[%u]",
-                          sc.name.c_str(), pt.name.c_str(), k);
+            ext_point_name(point_name, sc, pt,
+                           point_type_is_32bit(pt.type) ? k / 2u : k);
 
             float eng = 0.0f;
             if (pt.fc == 1 || pt.fc == 2) {
@@ -338,20 +384,21 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
                 if (is32) k++;
             }
 
-            cache.set_point(ext_idx++, point_name, eng, KX_Q_GOOD,
+            const kx_quality_t quality = std::isfinite(eng) ? KX_Q_GOOD : KX_Q_BAD;
+            cache.set_point(ext_idx++, point_name, eng, quality,
                              sc.addr, true, pt.writable);
         }
     }
 
     if (slave_ok) {
         on_poll_ok(&state, now_ms);
-        metrics.update(slave_idx, true, now_ms);
+        metrics.update(slave_idx, true, now_ms, sc.retry);
         /* Reset alarms khi online trở lại */
         if (metrics.get(slave_idx).e302_triggered)
             metrics.reset_alarms(slave_idx);
     } else {
-        metrics.update(slave_idx, false, now_ms);
-        if (metrics.check_e302(slave_idx))
+        metrics.update(slave_idx, false, now_ms, sc.retry);
+        if (metrics.check_e302(slave_idx, sc.retry))
             std::fprintf(stderr, "ALARM E302 modbus.slave_offline slave=%s addr=%u\n",
                          sc.name.c_str(), sc.addr);
         if (metrics.check_e303(slave_idx))

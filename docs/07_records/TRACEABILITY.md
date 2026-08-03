@@ -2,47 +2,58 @@
 
 **ID:** TRACE-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-23 (ADR-020: thêm hàng cho SYS/SWR/IF/SAFE/NFR/FW-REQ-IEC/MCU, tất cả Planned — chưa có code C1–C10)
+**Cập nhật:** 2026-08-03 (thêm trace design/gate Modbus RTU Point)
 
 Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `Planned` không phải bằng chứng pass.
 
+Chuỗi normative riêng cho Programming Rev A nằm tại
+[Programming Traceability Matrix](PROGRAMMING_TRACEABILITY_MATRIX.md):
+Product Capability → Product Requirement → System Requirement → Verification
+Requirement. Programming Design chưa được thực hiện và không có implementation
+authority nào được gán trong lần đồng bộ này. ST host unit test không phải
+bằng chứng runtime production.
+
 | Requirement | Thiết kế / implementation authority | Verification | Trạng thái evidence |
 |---|---|---|---|
-| SYS-REQ-001 | `services/core`, [System](../03_architecture/SYSTEM.md) | service-loss/system scenario | Planned |
+| SYS-REQ-001 | `services/core`, `services/iobus`, `web/backend/system.go`, systemd units | service-loss/system scenario | Partial — health endpoint host test và target process restart pass; binary mới chưa deploy |
 | SYS-REQ-002 | shared capacities, `services/iobus`, [Hardware](../04_design/HARDWARE.md) | layout + physical I/O | Partial |
-| SYS-REQ-003 | `services/core/graph_runtime.cpp`, [Software](../04_design/SOFTWARE.md) | node registry/unit/integration | Implemented; release record required |
-| SYS-REQ-004 | `services/iobus` protocol adapters | BACnet/Modbus smoke + negative tests | Partial |
+| SYS-REQ-003 | `services/core/graph_runtime.cpp` là As-Built legacy; migration thuộc OD-PROG-013 | compatibility/scope inspection | As-Built exists; không phải Programming evidence |
+| SYS-REQ-004 | `services/iobus` protocol adapters; Modbus RTU Device/Point config từ Web | BACnet/Modbus smoke + negative tests | Partial — RTU simulator/path host pass; RS485 slave thật còn mở |
+| SYS-REQ-MBRTU-001 | [DDD-SW-MBRTU-POINT-001](../02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md) — In Review | VR-MBRTU-001, 004, 011 | RED — Product yêu cầu hai bus; HW/source hiện mới chứng minh một path/master |
 | SYS-REQ-005 | `services/hmi`, CMake option | enabled build + target smoke | Partial |
-| SYS-REQ-IEC-001 | ADR-020, `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`, C0/C1–C10 plans (chưa có code) | inspection + conformance test ST+FBD | Planned — C0 chưa hoàn thành |
+| SYS-REQ-PROG-001..003 | `PROD-PROG-001`, ADR-023, `REQUIREMENTS.md`; Programming Design chưa có | VR-PROG-001, VR-PROG-012, VR-PROG-013 | Documented; production evidence RED |
 | SWR-REQ-001 | service entrypoints/CMake/system units | process isolation test | Planned |
 | SWR-REQ-002 | core graph/priority/safety | timing + unit + fault test | Partial |
-| SWR-REQ-003 | web validators + iobus config consumer | round-trip/reload test | Partial |
+| SWR-REQ-003 | Web validators, atomic I/O bundle, Modbus profile writer và iobus config consumer | round-trip/reload/rollback test | Host implemented/tested; target power-cut và hardware apply còn mở |
 | SWR-REQ-004 | `web/backend/http.go` + auth middleware | API role/security tests | Partial |
 | SWR-REQ-005 | ADR-017, `services/netcfg`, Web adapter/FE, HMI broker/client | active/configured/pending/capability/management truth + negative UI/API tests | Code-local Web migration và target service/no-carrier negative path pass; real carrier/IP handoff/panel open |
 | SWR-REQ-006 | `mkddc-netcfg` transaction journal/coordinator | static/DHCP/DNS/confirm/120 s rollback + restart fault tests | Target-dummy static confirm, process recovery, explicit/automatic rollback pass; physical DHCP/DNS/reboot/power/disk fault open |
 | SWR-REQ-007 | netcfg + iobus BACnet address watcher + same-origin Web | multi-process continuity, BACnet `I-Am`, Web/Modbus reconnect | Target-dummy control continuity và live hot-rebind log pass; packet/Modbus/physical I/O/real-IP handoff evidence open |
+| SWR-REQ-MBRTU-001..009 | DDD-SW-MBRTU-POINT-001 — mô hình Bus/Device/Point, scheduler, quality, atomic apply, write result, diagnostics | VR-MBRTU-002..009 | Design In Review; As-Built host partial, contract v2/target/HIL RED |
 | NET-WEB-001 | Go netcfg adapter, OpenAPI, Network FE/E2E, [UC-WEB-NETWORK-001](../04_uiux/KX-DDC24-UC-WEB-NETWORK-001_VI.md), [UX-WEB-NETWORK-001](../04_uiux/KX-DDC24-UX-WEB-NETWORK-001_VI.md) | GET authenticated-read, POST Admin-only, strict DNS capability, authoritative UI/recovery | **Target E2E 2026-07-31 pass 38/39** trên phần cứng thật (stage/apply/confirm với kernel nhận địa chỉ, rollback last-known-good, DNS manual, RBAC viewer, reload thật) — [evidence](test-evidence/fw-som/2026-07-31-network-page-board-e2e.md). Browser reconnect sau đổi IP và packet capture vẫn open |
 | NET-WEB-002 | `services/iobus` fieldbus/BACnet telemetry → `kx_io_shm_t` (append-only) → `web/backend/networkapi.go` → `NetworkPage.tsx` | Trang mạng không suy diễn: thiếu số đo hiển thị `—`/`unknown`, `bmsLink` từ cờ bind thật, per-slave metrics ghép theo địa chỉ Modbus | Unit pass (ctest/Go/vitest); target pass với 0 slave cấu hình — cần site có slave RTU thật để nghiệm thu đầy đủ bảng southbound |
 | NET-WEB-003 | `web/backend/reloadhelper_linux.go` + `packaging/systemd/mkddc-reload-helper.service` | Lưu BACnet/WiFi phải có hiệu lực thật; allowlist unit; thông điệp lỗi dùng ngôn ngữ vận hành | Target pass 2026-07-31: `activeBacnetPort` 47808→47810 sau khi lưu |
-| SWR-REQ-IEC-001..009 | `libmkddc_iec`/`mkddc-program-service`/`mkddc-program-core` (chưa triển khai — C1+) | theo `KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md` mỗi slice | Planned — C0 chưa hoàn thành, C1–C10 blocked |
+| SWR-REQ-PROG-001..012 | Programming Design chưa thực hiện; không gán solution/process name | VR-PROG-002..012 theo ma trận Programming | Documented; production evidence RED |
 | IF-REQ-001 | `shared/iop_protocol.h`, [Firmware](../04_design/FIRMWARE.md) | assertions + HIL timing/fault | Partial |
-| IF-REQ-002 | `shared/mkddc_shm.h` + consumers | layout/magic tests | Implemented; release record required |
+| IF-REQ-002 | `shared/mkddc_shm.h` + consumers; append-only Modbus RTU diagnostics | layout/magic tests | Implemented; 751/751 host pass, target binary mới chưa deploy |
 | IF-REQ-003 | core/iobus AO path | physical-unit boundary regression + bench | Partial |
 | IF-REQ-004 | [Interfaces](../04_design/INTERFACES.md), `shared/netcfg_protocol_v1.schema.json` | cross-language strict fixtures + malformed/peer/state/DNS/capability tests | Contract/schema/clients code-local; target UID denial, socket permissions and allowlist pass; physical fault approval open |
-| IF-REQ-IEC-001 | `io_map.json` schema (chưa triển khai — C2) | mapping/round-trip/negative tests | Planned |
-| SAFE-REQ-001 | MCU IOP/watchdog implementation | disconnect HIL ≤200 ms | Missing release evidence |
+| IF-REQ-PROG-001..002 | Interface Design chưa thực hiện; As-Built `st_io_map` host chưa đủ scope | VR-PROG-003, VR-PROG-007..010 | Documented; production evidence RED |
+| IF-REQ-MBRTU-001..004 | DDD-SW-MBRTU-POINT-001 §9–12 — typed runtime v2, config/write IPC, REST/WS, zero-based address | VR-MBRTU-005..008, 010 | Design In Review; ABI/OpenAPI As-Built chưa conform |
+| SAFE-REQ-001 | `fw/src/app/ddc24_runtime.*` watchdog/startup safe-state, weak STM32 HAL boundary | disconnect HIL ≤200 ms | Source/host test pass; physical HIL và oscilloscope measurement còn thiếu |
 | SAFE-REQ-002 | core/iobus validators | NaN/infinity/range negative tests | Partial |
-| SAFE-REQ-IEC-001 | `mkddc-program-core` priority/interlock boundary (chưa triển khai — C3) | bypass review + fault injection + HIL | Planned |
 | SEC-REQ-001 | web auth/RBAC/audit paths | security/API test | Partial |
 | SEC-REQ-002 | deployment/config | secret/TLS review | Missing release evidence |
 | SEC-REQ-003 | ADR-017, netcfg UDS/systemd sandbox, Web/HMI adapter boundary | local-HMI/Web Admin mutation + authenticated Web read, peer/RBAC/audit/bypass tests | Target UID/interface denial và unit/socket boundary pass; Web/local-HMI isolation code-local pass; target security review open |
-| NFR-REQ-001 | service/SHM failure handling | restart/corruption scenarios | Planned |
-| NFR-REQ-002 | build/test/package pipeline | reproducible release record | Planned |
-| NFR-REQ-IEC-001 | `mkddc-program-core` (chưa triển khai — C3) | multi-process fault test | Planned |
+| SEC-REQ-MBRTU-001 | DDD-SW-MBRTU-POINT-001 §10/14, ADR-021 RBAC baseline | VR-MBRTU-008, 010 | Design In Review; CRUD RBAC partial, commissioning/write audit v2 chưa có |
+| NFR-REQ-001 | health endpoint, service PID/socket/SHM/MCU checks và systemd restart policy | restart/corruption scenarios | Partial — core/iobus/web SIGKILL recovery pass trên target cũ; SHM corruption và binary mới còn mở |
+| NFR-REQ-002 | build provenance C++/Go/firmware, release manifest và installer | reproducible release record | Host bundle/checksum pass; worktree dirty và target provenance chưa đóng |
+| NFR-REQ-MBRTU-001..003 | DDD-SW-MBRTU-POINT-001 §15–16 | VR-MBRTU-004, 011, 012 | RED — capacity/two-bus HIL/provenance target chưa đạt |
+| NFR-REQ-PROG-001..002 | Programming Design chưa thực hiện | VR-PROG-006, VR-PROG-012 | Documented; production evidence RED |
 | HW-REQ-001 | [hardware detail](../04_design/hardware/README.md) + schematic/BOM + iobus scaling | review + ADC/UI bench | Missing controlled evidence |
 | HW-REQ-002 | [Hardware](../04_design/HARDWARE.md) | hardware gate packages | Blocked / RED |
 | HW-REQ-003 | HMI source/target hardware | target integration | Partial |
-| FW-REQ-MCU-001..002 | `fw/` (skeleton, chưa triển khai) | host vectors + target protocol/HIL | Missing — firmware vẫn skeleton, độc lập gate với Program Runtime |
+| FW-REQ-MCU-001..002 | `fw/src/iop`, `fw/src/app/ddc24_runtime.*`, `fw/Core/Src/main.c` và ARM build | host vectors + target protocol/HIL | Source/host/ARM build có; weak HAL chưa bind BSP production, target protocol/HIL và safe-state vật lý còn thiếu |
 | HMI-REQ-001 | `services/hmi`, ADR-005/015/016, HMI service design | process-loss + authority review | Partial |
 | HMI-REQ-002 | shared SHM capacities, point DB, I/O screen | inventory/capability integration | Base config aligned; target evidence missing |
 | HMI-REQ-003 | alarm model + local broker/alarm authority contract | ACK/reject/timeout/audit scenarios | Host implemented/tested; target restart/history record pending |

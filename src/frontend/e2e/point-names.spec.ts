@@ -34,7 +34,8 @@ function virtualPoint(overrides: Partial<FixtureVirtualPoint> = {}): FixtureVirt
 
 async function login(page: Page) {
   await page.goto('/login')
-  await page.getByLabel('Password').fill('e2e')
+  await page.getByLabel('Username', { exact: true }).fill('admin')
+  await page.getByLabel('Password', { exact: true }).fill('e2e')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).not.toHaveURL(/\/login$/)
 }
@@ -74,14 +75,13 @@ async function openPointEditor(page: Page, kind: EditorKind): Promise<void> {
 }
 
 function displayNameField(page: Page, kind: EditorKind) {
-  return page.getByRole('textbox', { name: kind === 'VP' ? 'Display name' : 'Label' })
+  return page.getByRole('textbox', { name: 'Label' })
 }
 
 async function savePointEditor(page: Page, kind: EditorKind): Promise<void> {
   await page.getByRole('button', { name: 'Save', exact: true }).first().click()
-  if (kind !== 'UI') return
-  const dialog = page.getByRole('dialog', { name: 'Save UI config?' })
-  await dialog.getByRole('button', { name: 'OK' }).click()
+  const title = kind === 'UI' ? 'Save UI config?' : kind === 'VP' ? 'Save Virtual Point?' : 'Save Outputs config?'
+  await page.getByRole('dialog', { name: title }).getByRole('button', { name: 'OK' }).click()
 }
 
 function pointNamePath(kind: EditorKind): string {
@@ -168,7 +168,7 @@ test('shows disabled VP cross-kind conflict and preserves the draft after a stru
   await login(page)
   await openVirtualPoints(page)
 
-  const name = page.getByRole('textbox', { name: 'Display name' })
+  const name = page.getByRole('textbox', { name: 'Label' })
   const tag = page.getByRole('textbox', { name: 'Tag' })
   await expect(name).toHaveValue('Reserved by disabled VP')
   await expect(page.getByRole('checkbox', { name: 'Enabled' })).not.toBeChecked()
@@ -176,7 +176,7 @@ test('shows disabled VP cross-kind conflict and preserves the draft after a stru
 
   await tag.fill('UNSAVED_TECH_TAG')
   await name.fill('Occupied Draft')
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await savePointEditor(page, 'VP')
 
   await expect.poll(() => state.nameWrites.length).toBe(1)
   expect(state.nameWrites[0]).toEqual({ id: 'VP9', body: { name: 'Occupied Draft' } })
@@ -198,9 +198,9 @@ test('keeps canonical history identity through rename, delete, and recreate gene
   await openVirtualPoints(page)
 
   await expect(page.getByRole('region', { name: /Logging for Zone Temperature/ })).toContainText(/Generation\s*7/)
-  const name = page.getByRole('textbox', { name: 'Display name' })
+  const name = page.getByRole('textbox', { name: 'Label' })
   await name.fill('Renamed Zone Temperature')
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await savePointEditor(page, 'VP')
   await expect.poll(() => state.virtualPointWrites.length).toBe(1)
   expect(state.virtualPointWrites[0].id).toBe('VP1')
   await expect(name).toHaveValue('Renamed Zone Temperature')
@@ -215,10 +215,10 @@ test('keeps canonical history identity through rename, delete, and recreate gene
   await page.getByRole('button', { name: 'Add VP', exact: true }).click()
   const addDialog = page.getByRole('dialog', { name: 'Add Virtual Point' })
   await addDialog.getByRole('textbox', { name: 'Tag' }).fill('RECREATED_ZONE')
-  await addDialog.getByRole('textbox', { name: 'Display name' }).fill('Recreated Zone Temperature')
+  await addDialog.getByRole('textbox', { name: 'Label' }).fill('Recreated Zone Temperature')
   await addDialog.getByRole('button', { name: 'Create' }).click()
   await expect(page.getByRole('textbox', { name: 'Tag' })).toHaveValue('RECREATED_ZONE')
-  await expect(page.getByRole('textbox', { name: 'Display name' })).toHaveValue('Recreated Zone Temperature')
+  await expect(page.getByRole('textbox', { name: 'Label' })).toHaveValue('Recreated Zone Temperature')
   await expect(page.getByRole('region', { name: /Logging for Recreated Zone Temperature/ })).toContainText(/Generation\s*8/)
   expect(state.createdVirtualPoints).toHaveLength(1)
   expect(state.createdVirtualPoints[0]).toMatchObject({ id: 'VP1', generation: 8, tag: 'RECREATED_ZONE' })

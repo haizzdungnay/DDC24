@@ -336,3 +336,23 @@ TEST(ScanLoop, DetachesOnBadMagicAndRestoresOnReattach)
     EXPECT_TRUE(f.reader.attached());
     EXPECT_EQ(f.shm.do_cmd[0], 1);
 }
+
+TEST(PointTable, ModbusExtSnapshotIsAvailableWithRuntimeSourceAndQuality)
+{
+    PointTable table;
+    kx_ext_point_t ext[2]{};
+    ext[0].value = 21.5f;
+    ext[0].quality = KX_Q_GOOD;
+    ext[1].value = 7.0f;
+    ext[1].quality = KX_Q_UNCERTAIN;
+    table.update_ext(ext, 2);
+
+    const Point first = table.get({PointKind::EXT, 0});
+    const Point second = table.get({PointKind::EXT, 1});
+    EXPECT_FLOAT_EQ(first.value, 21.5f);
+    EXPECT_EQ(first.quality, KX_Q_GOOD);
+    EXPECT_EQ(first.source, PointSource::MODBUS_RTU);
+    EXPECT_GT(first.ts_ns, 0u);
+    EXPECT_EQ(second.quality, KX_Q_UNCERTAIN);
+    EXPECT_EQ(table.get({PointKind::EXT, 2}).quality, KX_Q_BAD);
+}

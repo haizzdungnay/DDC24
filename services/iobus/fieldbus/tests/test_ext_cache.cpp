@@ -47,6 +47,16 @@ TEST(ExtCache, MarkSlaveOffline)
     EXPECT_EQ(cache.point(1).online, 0u);
 }
 
+TEST(ExtCache, MarkSlaveStaleKeepsLastValueOnlineDuringRetryWindow)
+{
+    ExtCache cache;
+    cache.set_point(0, "MB-SAT", 21.5f, KX_Q_GOOD, 10, true, false);
+    cache.mark_slave_stale(0, 1, 10);
+    EXPECT_FLOAT_EQ(cache.point(0).value, 21.5f);
+    EXPECT_EQ(cache.point(0).online, 1u);
+    EXPECT_EQ(cache.point(0).quality, static_cast<uint8_t>(KX_Q_UNCERTAIN));
+}
+
 TEST(ExtCache, OutOfBoundsIgnored)
 {
     ExtCache cache;

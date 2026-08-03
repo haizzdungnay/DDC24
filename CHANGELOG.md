@@ -7,6 +7,199 @@
 ---
 
 ## [Unreleased]
+### Verification — Gate trước commit và PR (2026-08-03)
+
+- C++ Release cấu hình đồng thời `MKDDC_ENABLE_MODBUS=ON`,
+  `MKDDC_ENABLE_BACNET=ON`, `MKDDC_ENABLE_HMI=ON`: build PASS và CTest
+  **751/751 PASS** trong 10,21 giây. GCC 13 còn phát cảnh báo tối ưu hóa trong
+  fixture `test_output_command.cpp`, không phải lỗi build và không bị vô hiệu
+  hóa bằng cách hạ warning.
+- Go backend: `go vet ./...` PASS; `go test ./... -count=1` PASS trong
+  **22,028 giây**.
+- Frontend: Vitest **35 file, 299/299 PASS** trong 24,12 giây; ESLint PASS,
+  **0 warning**; TypeScript/Vite production build PASS với 2.217 module.
+- Playwright Chrome gate `e2e/network-qa.spec.ts`: **1/1 PASS** trong 22,8
+  giây; API mutation được intercept theo fixture. Vite ghi nhận WebSocket proxy
+  `ECONNREFUSED 127.0.0.1:8081` do backend thật không chạy trong test mock,
+  không làm giảm assertion nghiệp vụ. Chrome DevTools MCP đã cấu hình nhưng
+  tool chưa được expose trong phiên Codex hiện tại, nên dùng Playwright Chrome
+  làm browser fallback.
+- Firmware ARM Cortex-M0+: rebuild PASS bằng `arm-none-eabi-gcc 13.2.1`,
+  `-Wall -Wextra -Werror`; linker chỉ phát cảnh báo syscall Newlib `nosys` chưa
+  implement (`_close/_lseek/_read/_write`).
+- Release builder PASS cho core, iobus, netcfg, web, frontend và firmware;
+  **5/5 SHA-256 PASS**. `bash -n` PASS cho `build-release.sh` và `install.sh`.
+  `systemd-analyze verify` trên máy build không thể resolve binary đích
+  `/opt/mkddc-web/mkddc-web`; đây là đường dẫn chỉ tồn tại sau installer trên
+  target, không được dùng để claim target deployment.
+- `git diff --check` PASS. Không skip hoặc vô hiệu hóa test.
+
+### Added — Thiết kế Modbus RTU Point trước Programming (2026-08-03)
+
+- Thêm `DDD-SW-MBRTU-POINT-001` ở trạng thái `In Review`, đề xuất mô hình
+  `ModbusRTUBus → ModbusRTUDevice → ModbusRTUPoint`, hai bus độc lập, stable
+  Point ID, typed runtime value/timestamp/quality, scheduler, diagnostics,
+  REST/WebSocket, atomic apply có iobus ACK và reliable write result/readback.
+- Thêm `MODBUS_RTU_POINT_DESIGN_REVIEW_PROPOSAL.md`, nêu năm finding P0, chín
+  quyết định cần reviewer duyệt và ba gate Design → Conforming Source → Real
+  RS485 Acceptance. Hồ sơ không phải Implementation Plan và không sửa source.
+- Bổ sung requirement `SYS/SWR/IF/SEC/NFR-REQ-MBRTU-*`, verification
+  `VR-MBRTU-001..012` và traceability; đăng ký ADR-024 ở trạng thái `Proposed`,
+  giữ OD-PROG-007/008 `OPEN` cho tới khi được phê duyệt.
+- Ghi rõ xung đột P0: Product baseline yêu cầu hai Modbus RTU master, trong khi
+  hardware controlled draft/source hiện mới chứng minh một UART4/RS485 path và
+  một master. Không dùng device path giả định hoặc USB adapter lab để đóng gate.
+
+**Kiểm chứng trong phiên:** kiểm tra link Markdown nội bộ của các hồ sơ đã đổi,
+kiểm tra coverage ID requirement/verification/traceability, `git diff --check`.
+Không chạy build/test source vì thay đổi lần này chỉ là tài liệu thiết kế/review.
+
+**Kết luận:** `DESIGN_PROPOSAL_COMPLETE=YES`, `READY_FOR_DESIGN_REVIEW=YES`,
+`MODBUS_RTU_POINT_READY=NO`, `READY_TO_ENTER_PROGRAMMING_DESIGN=NO` cho tới khi
+ADR-024, source conforming, two-port hardware/HIL và target provenance đều đạt.
+
+### Added — Nền source DDC-24 trước Programming Design (2026-08-03)
+
+- Chuẩn hóa Point Model của Local Physical I/O, Virtual Point và Modbus RTU
+  Point với `point_id`, `tag_name`, `display_name`, `data_type`, `unit`,
+  `value`, `quality`, `timestamp`, `read_write`, `source`, `default_value` và
+  `safe_value`; BE/Core là source of truth, tag unique toàn namespace và Point
+  ID không đổi khi rename.
+- Hoàn thiện Modbus RTU Point path: Device/Point CRUD, RS485 serial settings,
+  bốn register type, data type/byte order/word order/scale/offset,
+  poll/timeout/retry, CRC diagnostics, GOOD/STALE/OFFLINE/BAD, persistence,
+  OpenAPI/BE, FE Device & Point Manager, Core EXT Point Table và point stream.
+- Thêm I/O bundle atomic cho `io_config.conf` + `io_safe_state.conf`: validate
+  trước, chung revision/SHA-256 checksum, rollback cả hai file nếu reload core
+  hoặc iobus lỗi. FE Outputs dùng một request bundle có `base_revision` thay vì
+  hai request tách rời.
+- Thêm firmware IOP runtime portable với UART feed, input sampling, DAC/relay
+  apply, startup safe-state, watchdog 200 ms và fault/CRC diagnostics. HAL đang
+  là weak boundary; chưa claim STM32 BSP/HIL production.
+- Thêm health endpoint cho web/core/iobus/SHM/MCU, kiểm process qua PID/socket;
+  thêm build provenance cho C++/Go/firmware, full release builder, checksum
+  manifest và installer cài core/iobus/netcfg/web/frontend cùng runtime
+  provenance trên target.
+- Thêm bốn record:
+  `DDC24_BASELINE_SRC_FIX_REPORT.md`,
+  `MODBUS_RTU_POINT_AS_BUILT_REPORT.md`, `PHYSICAL_IO_HIL_REPORT.md` và
+  `DEPLOYMENT_PROVENANCE_REPORT.md` dưới `docs/07_records/reviews/`.
+
+### Fixed — CI baseline GCC 11 và Playwright (2026-08-03)
+
+- Sửa GCC 11 `-Werror=dangling-else` và helper chỉ dùng khi bật Modbus; không
+  tắt warning, không skip test.
+- Sửa login locator dùng accessible label exact. Sau khi locator được mở khóa,
+  đồng bộ Playwright flow với confirmation modal thật của UI/Outputs/Virtual
+  Point và label `Label`; không hạ assertion nghiệp vụ.
+
+**Kiểm chứng đo lại trong phiên:** Ubuntu 22.04/GCC 11 **708/708 CTest PASS**;
+C++ Release bật đồng thời Modbus/BACnet/HMI **751/751 PASS**; `go vet ./...` và
+`go test ./... -count=1` PASS (22.105 s); FE Vitest **35 file, 299/299 PASS**,
+eslint 0 warning, TypeScript/Vite production build PASS; Playwright network +
+point-name + trends **21/21 PASS**; firmware host CTest PASS và ARM
+`arm-none-eabi-gcc -Wall -Wextra -Werror` build PASS; release bundle build và
+SHA-256 verification PASS. Simulator pseudo-TTY Modbus RTU PASS. Trên
+`SOM-DDC-24`, crash/restart core, iobus và web đều phục hồi active trong khoảng
+1.6–1.8 s.
+
+**Giới hạn:** chưa có Modbus RS485 slave thật; target vẫn dùng fake MCU và chưa
+có STM32/physical I/O HIL. Worktree chưa commit nên release được gắn
+`5eeb7b9bf95e0c7d7933766ae3bf62e7c6fdb90f-dirty` và không deploy lên target.
+Vì vậy Modbus RTU Point, Physical I/O và target provenance vẫn là gate mở;
+Programming không được implement trong thay đổi này.
+
+### Added — Tự động dùng Chrome DevTools MCP khi kiểm chứng FE (2026-08-03)
+
+- Thêm skill toàn cục `~/.codex/skills/inspect-fe-chrome-devtools` với implicit
+  invocation và dependency MCP `chrome-devtools`; workflow bao phủ xác định
+  URL, snapshot/screenshot, Console, Network, tương tác, responsive,
+  accessibility, performance và vòng kiểm chứng sau sửa.
+- Bổ sung rule dự án vào `AGENTS.md`: tự kích hoạt skill/MCP cho thay đổi hoặc
+  review FE có tác động visual/runtime, kiểm tra desktop/mobile khi liên quan,
+  không thay test tự động và không áp dụng cho HMI native LVGL/DRM.
+- Bật local memories trong `~/.codex/config.toml`, cho phép tạo và dùng memory;
+  thêm preference bền vững cho DDC-PROJECT vào memory summary/detail. Giữ
+  `disable_on_external_context = true` để nội dung từ MCP/web không tự được
+  đưa vào quá trình tạo memory.
+
+**Kiểm chứng trong phiên:** skill được tạo bằng `init_skill.py` và
+`quick_validate.py` báo `Skill is valid!`; `codex features list` báo
+`memories stable true`; `codex mcp get chrome-devtools` báo STDIO `enabled`;
+`git diff --check -- AGENTS.md CHANGELOG.md` sạch. Không chạy build/test sản
+phẩm vì thay đổi chỉ gồm cấu hình agent, skill, rule, memory và changelog.
+
+### Added — Cài đặt Chrome DevTools MCP cho Codex (2026-08-03)
+
+- Thêm MCP server toàn cục `chrome-devtools` vào `~/.codex/config.toml`, chạy
+  qua `npx -y chrome-devtools-mcp@latest` để Codex CLI, IDE extension và ứng
+  dụng Codex dùng chung khả năng điều khiển, kiểm tra Google Chrome.
+- Giữ cấu hình mặc định của dự án upstream; không bật remote debugging port,
+  không hạ Chrome sandbox và không thêm quyền truy cập đường dẫn không giới hạn.
+
+**Kiểm chứng trong phiên:** `codex mcp get chrome-devtools` và
+`codex mcp list` báo `enabled`; package resolve thành `chrome-devtools-mcp`
+`1.6.0`; Node.js `24.18.1`, Google Chrome `151.0.7922.71`; bắt tay MCP
+`initialize` PASS, `tools/list` trả về 29 tool và gọi thật `list_pages` PASS
+với trang `about:blank`.
+
+### Added — Đồng bộ Product Spec Programming DDC-24 Rev A (2026-08-03)
+
+- Thêm `docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md`, khóa phạm vi
+  Programming chỉ gồm Local Physical I/O, Virtual Point, Modbus RTU Point, ST,
+  FBD và cycle time 1 s/5 s/30 s; loại Modbus TCP Point, BACnet/IP Point, LD,
+  SFC, motion và safety PLC khỏi scope.
+- Thêm `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` với chuỗi đầy đủ
+  Product Capability → Product Requirement → System Requirement → Verification
+  Requirement; 12/12 capability và 14/14 product requirement đã có ánh xạ,
+  13/13 verification gate production vẫn RED.
+- Thêm `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` và
+  `docs/07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md`; ghi rõ quyết định
+  còn mở, xung đột tài liệu đã xử lý và kết luận readiness.
+- Đồng bộ `PRODUCT.md`, `REQUIREMENTS.md`, `SOFTWARE.md`, `INTERFACES.md`,
+  `VERIFICATION.md`, `TRACEABILITY.md`, `DECISIONS.md`, Document Hub và
+  `CONTROL.md`; chuẩn hóa Project, Program, Point, Variable, Modbus RTU Point,
+  I/O Mapping, Revision, Deployment, Activation, Rollback, RETAIN và Online
+  Monitor.
+- Phân tách Product Spec/Requirement/Design/As-Built; không tạo Programming
+  Design hoặc Implementation Plan, không sửa source và không claim Programming
+  đã implement. ST host unit test được ghi rõ chỉ là development evidence,
+  không phải bằng chứng runtime production.
+
+**Kiểm chứng trong phiên:** kiểm tra link Markdown nội bộ cho toàn bộ tài liệu
+đã đổi; kiểm tra trùng/thiếu ID Programming và coverage matrix bằng script
+read-only; `git diff --check` sạch. Không chạy build/test source vì thay đổi chỉ
+gồm tài liệu và user cấm sửa source.
+
+### Added — Audit as-built FE/BE/FW-SOM trước Planning Programming (2026-08-03)
+
+- Thêm `DDC24_FE_BE_FW_SOM_AS_BUILT_STATUS_AUDIT.md`, đối chiếu tài liệu kiểm
+  soát với source, deployment, process/service, API/SQLite, system journal, test
+  trực tiếp, Git history, issue và GitHub Actions tại commit
+  `5eeb7b9bf95e0c7d7933766ae3bf62e7c6fdb90f`.
+- Ghi rõ ranh giới hiện trạng: đường Web → Go → core → iobus → fake MCU đang
+  chạy trên Orange Pi 5B; STM32/physical I/O/HIL chưa có; ST runtime có
+  source/test nhưng `mkddc-core` production chưa khởi tạo `StScheduler`; FE/BE
+  chưa có vòng đời Programming end-to-end.
+- Đính kèm bốn ảnh audit UI chụp trong phiên ở `output/playwright/`: login live
+  trên SOM, dashboard demo desktop, trạng thái Programming unavailable và
+  dashboard mobile 390×844. Ảnh demo được gắn nhãn đúng, không dùng làm bằng
+  chứng dữ liệu live.
+- Kết luận audit: `PROGRAMMING_FOUNDATION_READY = NO`; liệt kê riêng blocker
+  trước Planning, việc xử lý song song và quyết định còn thiếu từ CTO/Product,
+  không chuyển thành thiết kế hoặc kế hoạch implement Programming.
+
+**Kiểm chứng đo lại trong phiên:** C++ Release bật đồng thời Modbus/BACnet/HMI
+`744/744` CTest PASS · `go vet ./...` + `go test ./... -count=1` PASS · FE
+Vitest `296/296` PASS · eslint 0 warning · production build PASS · firmware
+ARM cross-build PASS. Hai Playwright gate đang RED: network `0/1`, point-name
+`0/18`; tất cả dừng tại cùng locator `getByLabel('Password')` match cả input và
+nút `Show password`, chưa chạy assertion nghiệp vụ. GitHub Actions tại HEAD:
+Security Scan PASS, Build & Test FAIL do locator trên và GCC 11
+`-Werror=dangling-else` ở `fw/tests/test_iop_link.cpp:215`. Runtime SOM được đo
+lúc `2026-08-03T10:39:15+07:00`; DB SQLite read-only `quick_check=ok` cho cả ba
+file đã audit.
+
 ### Changed — Plan 45 Track A: Web UI/UX từ "bịa dữ liệu" sang trung thực và có gate quyền (2026-08-01)
 
 Thực thi `WEB-UX-001…012` + `QA-E2E-001` sau khi chủ dự án phê duyệt plan 45.

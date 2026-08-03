@@ -43,6 +43,16 @@ TEST(RegisterCodec, Float32CDAB)
                 1.0f, 1e-6f);
 }
 
+TEST(RegisterCodec, Float32BADCAndDCBA)
+{
+    /* 1.0f = bytes 3F 80 00 00. BADC đảo byte trong từng word; DCBA đảo cả
+     * byte lẫn word. Hai tổ hợp này đến từ cấu hình BE byte_order+word_order. */
+    uint16_t badc[] = {0x803F, 0x0000};
+    uint16_t dcba[] = {0x0000, 0x803F};
+    EXPECT_NEAR(decode_register(badc, 2, PointType::Float32, ByteOrder::BADC, 1.0f, 0.0f), 1.0f, 1e-6f);
+    EXPECT_NEAR(decode_register(dcba, 2, PointType::Float32, ByteOrder::DCBA, 1.0f, 0.0f), 1.0f, 1e-6f);
+}
+
 TEST(RegisterCodec, ScaleOffset)
 {
     uint16_t regs[] = {100};
@@ -60,6 +70,15 @@ TEST(RegisterCodec, EncodeDecodeRoundTrip)
     ASSERT_TRUE(encode_register(25.5f, regs, 2, PointType::Float32, ByteOrder::ABCD, 1.0f, 0.0f));
     const float back = decode_register(regs, 2, PointType::Float32, ByteOrder::ABCD, 1.0f, 0.0f);
     EXPECT_NEAR(back, 25.5f, 1e-4f);
+}
+
+TEST(RegisterCodec, EncodeDecodeRoundTripAllOrders)
+{
+    for (const auto order : {ByteOrder::ABCD, ByteOrder::CDAB, ByteOrder::BADC, ByteOrder::DCBA}) {
+        uint16_t regs[2] = {};
+        ASSERT_TRUE(encode_register(-17.25f, regs, 2, PointType::Float32, order, 0.5f, 3.0f));
+        EXPECT_NEAR(decode_register(regs, 2, PointType::Float32, order, 0.5f, 3.0f), -17.25f, 1e-4f);
+    }
 }
 
 TEST(RegisterCodec, InsufficientCountReturnsZero)

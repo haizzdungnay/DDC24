@@ -357,11 +357,15 @@ func (c *CoreClient) readIOStatus() (IOPStatus, error) {
 // SlaveTelemetry là số đo THẬT của một slave Modbus, do iobus đếm và publish.
 // Không có trường nào ở đây được suy diễn hay gán mặc định.
 type SlaveTelemetry struct {
-	Addr        uint8
-	Online      bool
-	TotalPolls  uint32
-	TotalErrors uint32
-	LastSeenMS  uint64
+	Addr              uint8
+	Online            bool
+	TotalPolls        uint32
+	TotalErrors       uint32
+	LastSeenMS        uint64
+	TimeoutErrors     uint32
+	CRCErrors         uint32
+	RetryAttempts     uint32
+	ConsecutiveErrors uint8
 }
 
 // FieldbusTelemetry gộp trạng thái bind BACnet/IP và số đo per-slave.
@@ -385,7 +389,7 @@ func (c *CoreClient) ReadFieldbusTelemetry(ctx context.Context) (FieldbusTelemet
 		return FieldbusTelemetry{}, ctx.Err()
 	default:
 	}
-	data, err := c.ioSeg.read(c.IOShm, kxIOShmFullLen)
+	data, err := c.ioSeg.read(c.IOShm, kxIOShmDiagLen)
 	if err != nil {
 		return FieldbusTelemetry{}, err
 	}
@@ -408,6 +412,12 @@ func (c *CoreClient) ReadFieldbusTelemetry(ctx context.Context) (FieldbusTelemet
 			Addr:        data[base+offFbAddr],
 			Online:      data[base+offFbOnline] == 1,
 		})
+		diagBase := offIOModbusDiag + i*kxModbusDiagStride
+		last := &out.Slaves[len(out.Slaves)-1]
+		last.TimeoutErrors = binary.LittleEndian.Uint32(data[diagBase : diagBase+4])
+		last.CRCErrors = binary.LittleEndian.Uint32(data[diagBase+4 : diagBase+8])
+		last.RetryAttempts = binary.LittleEndian.Uint32(data[diagBase+8 : diagBase+12])
+		last.ConsecutiveErrors = data[diagBase+12]
 	}
 	return out, nil
 }
@@ -583,13 +593,21 @@ const (
 	//   msv[8]  at offset 6096
 	//   ext[64] at offset 6704 (kx_ext_point_t=40b): 64*40=2560
 	//   scan_count at 9268; scan_overrun at 9272; sizeof(kx_plc_shm_t)=9280.
-	offAI  = 16
-	offBI  = offAI + kxNUI*kxPointSize
-	offAO  = offBI + kxNDI*kxPointSize
-	offBO  = offAO + kxNAO*kxPointSize
-	offAV  = offBO + kxNDO*kxPointSize
-	offBV  = offAV + kxNAV*kxPointSize
-	offMSV = offBV + kxNBV*kxPointSize
+	offAI          = 16
+	offBI          = offAI + kxNUI*kxPointSize
+	offAO          = offBI + kxNDI*kxPointSize
+	offBO          = offAO + kxNAO*kxPointSize
+	offAV          = offBO + kxNDO*kxPointSize
+	offBV          = offAV + kxNAV*kxPointSize
+	offMSV         = offBV + kxNBV*kxPointSize
+	offExt         = offMSV + kxNMSV*kxPointSize
+	kxExtPointSize = 40
+	offExtValue    = 24
+	offExtQuality  = 28
+	offExtSlave    = 29
+	offExtOnline   = 30
+	offExtWritable = 31
+	offExtCount    = offExt + 64*kxExtPointSize
 
 	// kx_point_t field offsets within a point (76 bytes):
 	offValue      = 0  // float32
@@ -632,13 +650,16 @@ const (
 	kxNFbSlave        = 32
 	kxFbSlaveStride   = 24
 	// kx_slave_metrics_t: last_seen_ms(8) + total_polls(4) + total_errors(4) + addr(1) + online(1) + pad(6)
-	offFbLastSeen    = 0
-	offFbTotalPolls  = 8
-	offFbTotalErrors = 12
-	offFbAddr        = 16
-	offFbOnline      = 17
-	kxIOShmFullLen   = offIOFbSlaves + kxNFbSlave*kxFbSlaveStride // 1304
-	kxIOShmMinLen   = 528
+	offFbLastSeen      = 0
+	offFbTotalPolls    = 8
+	offFbTotalErrors   = 12
+	offFbAddr          = 16
+	offFbOnline        = 17
+	kxIOShmFullLen     = offIOFbSlaves + kxNFbSlave*kxFbSlaveStride // 1304
+	offIOModbusDiag    = kxIOShmFullLen
+	kxModbusDiagStride = 16
+	kxIOShmDiagLen     = offIOModbusDiag + kxNFbSlave*kxModbusDiagStride // 1816
+	kxIOShmMinLen      = 528
 )
 
 // kx_quality_t ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ DTO quality string
@@ -735,7 +756,7 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 	if len(data) < kxPlcShmMinLen {
 		return nil
 	}
-	pts := make([]PointDTO, 0, kxNUI+kxNAO+kxNDO+kxNAV+kxNBV+kxNMSV)
+	pts := make([]PointDTO, 0, kxNUI+kxNAO+kxNDO+kxNAV+kxNBV+kxNMSV+64)
 
 	// UI[0..15]
 	for i := 0; i < kxNUI; i++ {
@@ -790,6 +811,41 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 	for i := 0; i < kxNMSV; i++ {
 		id := fmt.Sprintf("MSV%d", i+1)
 		pts = append(pts, decodePoint(data, offMSV+i*kxPointSize, id, id))
+	}
+	// Modbus RTU ext[] — Point ID do backend cấu hình và iobus giữ ổn định.
+	extCount := int(binary.LittleEndian.Uint16(data[offExtCount : offExtCount+2]))
+	if extCount > 64 {
+		extCount = 64
+	}
+	for i := 0; i < extCount; i++ {
+		base := offExt + i*kxExtPointSize
+		nameBytes := data[base : base+24]
+		end := 0
+		for end < len(nameBytes) && nameBytes[end] != 0 {
+			end++
+		}
+		id := string(nameBytes[:end])
+		if id == "" {
+			id = fmt.Sprintf("EXT-%02d", i+1)
+		}
+		value := math.Float32frombits(binary.LittleEndian.Uint32(data[base+offExtValue : base+offExtValue+4]))
+		online := data[base+offExtOnline] == 1
+		quality := "BAD"
+		if online {
+			switch data[base+offExtQuality] {
+			case 0:
+				quality = "GOOD"
+			case 1:
+				quality = "STALE"
+			}
+		} else if data[base+offExtQuality] == 1 {
+			quality = "STALE"
+		} else {
+			quality = "OFFLINE"
+		}
+		pts = append(pts, PointDTO{ID: id, Name: id, Kind: "modbus_rtu", Value: value,
+			Quality: quality, Source: "modbus_rtu", UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+			Fault: quality == "BAD" || quality == "OFFLINE", Writable: data[base+offExtWritable] == 1})
 	}
 	return pts
 }

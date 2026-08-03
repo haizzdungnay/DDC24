@@ -107,7 +107,8 @@ async function openTrends(page: Page): Promise<URL[]> {
   })
 
   await page.goto('/login')
-  await page.getByLabel('Password').fill('e2e')
+  await page.getByLabel('Username', { exact: true }).fill('admin')
+  await page.getByLabel('Password', { exact: true }).fill('e2e')
   await page.getByRole('button', { name: 'Sign in' }).click()
   const trendsLink = page.getByRole('link', { name: 'Trends' })
   if (await trendsLink.isVisible()) await trendsLink.click()

@@ -1,7 +1,7 @@
 ﻿openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.10.0"
+  version: "1.11.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -18,8 +18,8 @@ info:
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-07-28"
-  note: "v1.10.0 khóa Network transaction DNS/capability/management contract; overall target/HIL gate vẫn RED."
+  date: "2026-08-03"
+  note: "v1.11.0 bổ sung Point Model canonical, Modbus RTU CRUD/diagnostics, I/O bundle atomic và health baseline."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -198,6 +198,98 @@ paths:
               schema: { $ref: "#/components/schemas/ConfigPutResult" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /health:
+    get:
+      summary: Health baseline công khai cho installer/systemd
+      security: []
+      responses:
+        "200":
+          description: Luôn trả snapshot health; status=degraded khi một check lỗi.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthEndpoint" }
+  /modbus/devices:
+    get:
+      summary: Danh sách Modbus RTU Device (viewer+)
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModbusRTUDevice" } } } }
+    post:
+      summary: Tạo Modbus RTU Device và apply có rollback (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ModbusRTUDevice" } } }
+      responses:
+        "200": { description: Đã persist và restart iobus, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /modbus/devices/{id}:
+    put:
+      summary: Cập nhật Device; device_id không được đổi (admin)
+      x-rbac: [admin]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ModbusRTUDevice" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Xoá Device không còn Point tham chiếu (admin)
+      x-rbac: [admin]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /modbus/points:
+    get:
+      summary: Danh sách cấu hình Modbus RTU Point (viewer+)
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModbusRTUPoint" } } } }
+    post:
+      summary: Tạo Modbus RTU Point với Point ID ổn định và tag unique (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ModbusRTUPoint" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /modbus/points/{id}:
+    put:
+      summary: Cập nhật Point; point_id không đổi khi rename (admin)
+      x-rbac: [admin]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ModbusRTUPoint" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Xoá Modbus RTU Point (admin)
+      x-rbac: [admin]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /modbus/diagnostics:
+    get:
+      summary: Diagnostics poll/timeout/retry/CRC per slave (viewer+)
+      responses:
+        "200":
+          description: Telemetry thật do iobus publish qua SHM.
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModbusRTUDiagnostics" } } } }
+        "503": { $ref: "#/components/responses/Error" }
   /system/status:
     get:
       summary: Tráº¡ng thÃ¡i há»‡ thá»‘ng (CPU/RAM/uptime/IOP/version)
@@ -424,6 +516,22 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ConfigPutResult" }
         "400": { $ref: "#/components/responses/Error" }
+  /system/config/io-bundle:
+    get:
+      summary: Đọc I/O config + safe-state cùng revision/checksum (admin)
+      x-rbac: [admin]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ConfigIOBundle" } } } }
+    put:
+      summary: Validate và apply I/O config + safe-state nguyên tử (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ConfigIOBundle" } } }
+      responses:
+        "200": { description: Đã apply cả hai file, content: { application/json: { schema: { $ref: "#/components/schemas/ConfigPutResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /system/config/virtual-points:
     get:
       summary: Read Virtual Points config (admin)
@@ -1118,7 +1226,7 @@ components:
             characters and compares Unicode-lower keys in a namespace independent from PointTag.
     Point:
       type: object
-      required: [id, tag, name, kind, value, quality, source, updatedAt]
+      required: [id, tag, name, kind, value, quality, source, updatedAt, point_id, tag_name, display_name, data_type, timestamp, read_write, default_value, safe_value]
       properties:
         id: { type: string, example: "UI-01", description: "Stable canonical runtime identity." }
         tag: { $ref: "#/components/schemas/PointTag" }
@@ -1130,14 +1238,14 @@ components:
           description: >
             Display name; separate from technical tag and globally unique within the independent
             UI/AO/DO/VP display-name namespace after backend canonicalization.
-        kind: { type: string, enum: [UI, AO, DO, virtual] }
+        kind: { type: string, enum: [UI, AO, DO, virtual, modbus_rtu] }
         value:
           allOf:
             - $ref: "#/components/schemas/PointCommandValue"
           example: 23.5
         unit: { type: string, example: "Â°C" }
-        quality: { type: string, enum: [good, uncertain, bad] }
-        source: { type: string, example: "backend" }
+        quality: { type: string, enum: [good, uncertain, bad, stale, offline, GOOD, STALE, OFFLINE, BAD] }
+        source: { type: string, enum: [local_physical_io, virtual_point, modbus_rtu] }
         updatedAt: { type: string, format: date-time }
         sensorType: { type: string, example: "NTC10k" }
         raw: { type: number }
@@ -1149,6 +1257,14 @@ components:
         writable: { type: boolean, description: "Only writable=true VP may be written through PUT /points/{id}." }
         logEnabled: { type: boolean }
         logIntervalMs: { type: integer, enum: [1000, 100, 10] }
+        point_id: { type: string, description: "Canonical Point ID ổn định; alias tương thích của id." }
+        tag_name: { $ref: "#/components/schemas/PointTag" }
+        display_name: { type: string, minLength: 1, maxLength: 64 }
+        data_type: { type: string }
+        timestamp: { type: string, format: date-time }
+        read_write: { type: string, enum: [read, read_write] }
+        default_value: { $ref: "#/components/schemas/PointCommandValue" }
+        safe_value: { $ref: "#/components/schemas/PointCommandValue" }
     VirtualPointValue:
       oneOf:
         - type: number
@@ -1619,6 +1735,8 @@ components:
         UI/AO/DO technical tags share one controller-local namespace with every VP.
         DO rows are authoring metadata only; safe values remain in ConfigSafeState.do.
       properties:
+        revision: { type: integer, format: int64, minimum: 0 }
+        checksum: { type: string, pattern: "^[0-9a-f]{64}$" }
         ui: { type: array, items: { $ref: "#/components/schemas/ConfigPointMetadata" } }
         ao: { type: array, items: { $ref: "#/components/schemas/ConfigPointMetadata" } }
         do: { type: array, items: { $ref: "#/components/schemas/ConfigPointMetadata" } }
@@ -1637,8 +1755,19 @@ components:
     ConfigSafeState:
       type: object
       properties:
+        revision: { type: integer, format: int64, minimum: 0 }
+        checksum: { type: string, pattern: "^[0-9a-f]{64}$" }
         ao: { type: array, items: { type: object, additionalProperties: true } }
         do: { type: array, items: { type: object, additionalProperties: true } }
+    ConfigIOBundle:
+      type: object
+      required: [io, safe_state]
+      properties:
+        base_revision: { type: integer, format: int64, minimum: 0 }
+        revision: { type: integer, format: int64, readOnly: true }
+        checksum: { type: string, readOnly: true }
+        io: { $ref: "#/components/schemas/ConfigIO" }
+        safe_state: { $ref: "#/components/schemas/ConfigSafeState" }
     ConfigBacnet:
       type: object
       properties:
@@ -1649,6 +1778,81 @@ components:
         rs485: { type: object, additionalProperties: true }
         poll_default_ms: { type: integer }
         slaves: { type: array, items: { type: object, additionalProperties: true } }
+        revision: { type: integer, format: int64, minimum: 0 }
+        checksum: { type: string, pattern: "^[0-9a-f]{64}$" }
+        devices: { type: array, items: { $ref: "#/components/schemas/ModbusRTUDevice" } }
+        points: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/ModbusRTUPoint" } }
+    ModbusRTUDevice:
+      type: object
+      required: [device_id, display_name, enabled, rs485_port, baud, parity, stop_bit, slave_id, poll_ms, timeout_ms, retry]
+      properties:
+        device_id: { type: string, pattern: "^[A-Za-z][A-Za-z0-9_-]{0,22}$" }
+        display_name: { type: string, minLength: 1, maxLength: 64 }
+        enabled: { type: boolean }
+        rs485_port: { type: string, minLength: 1, maxLength: 128 }
+        baud: { type: integer, minimum: 1200, maximum: 115200 }
+        parity: { type: string, enum: [N, E, O] }
+        stop_bit: { type: integer, enum: [1, 2] }
+        slave_id: { type: integer, minimum: 1, maximum: 247 }
+        poll_ms: { type: integer, minimum: 10, maximum: 60000 }
+        timeout_ms: { type: integer, minimum: 20, maximum: 10000 }
+        retry: { type: integer, minimum: 1, maximum: 10 }
+    ModbusRTUPoint:
+      type: object
+      required: [point_id, device_id, tag_name, display_name, register_type, address, data_type, byte_order, word_order, scale, offset, unit, read_write, default_value, safe_value, enabled]
+      properties:
+        point_id: { type: string, pattern: "^[A-Za-z][A-Za-z0-9_-]{0,22}$", description: "Ổn định khi đổi tag/display name." }
+        device_id: { type: string }
+        tag_name: { $ref: "#/components/schemas/PointTag" }
+        display_name: { type: string, minLength: 1, maxLength: 64 }
+        register_type: { type: string, enum: [coil, discrete_input, input_register, holding_register] }
+        address: { type: integer, minimum: 0, maximum: 65535 }
+        data_type: { type: string, enum: [bool, int16, uint16, int32, uint32, float32] }
+        byte_order: { type: string, enum: [big, little] }
+        word_order: { type: string, enum: [high_low, low_high] }
+        scale: { type: number, not: { const: 0 } }
+        offset: { type: number }
+        unit: { type: string }
+        read_write: { type: string, enum: [read, read_write] }
+        default_value: { $ref: "#/components/schemas/PointCommandValue" }
+        safe_value: { $ref: "#/components/schemas/PointCommandValue" }
+        enabled: { type: boolean }
+    ModbusRTUDiagnostics:
+      type: object
+      required: [device_id, slave_id, online, total_polls, total_errors, timeout_errors, crc_errors, retry_attempts, consecutive_errors, last_seen_ms]
+      properties:
+        device_id: { type: string }
+        slave_id: { type: integer }
+        online: { type: boolean }
+        total_polls: { type: integer }
+        total_errors: { type: integer }
+        timeout_errors: { type: integer }
+        crc_errors: { type: integer }
+        retry_attempts: { type: integer }
+        consecutive_errors: { type: integer }
+        last_seen_ms: { type: integer, format: int64 }
+    ModbusMutationResult:
+      type: object
+      required: [apply]
+      properties:
+        device: { $ref: "#/components/schemas/ModbusRTUDevice" }
+        point: { $ref: "#/components/schemas/ModbusRTUPoint" }
+        apply: { $ref: "#/components/schemas/ConfigPutResult" }
+    HealthEndpoint:
+      type: object
+      required: [status, checks, version]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        version: { type: string }
+        checks:
+          type: object
+          required: [web, core, iobus, io_shm, plc_shm, mcu_connection]
+          additionalProperties:
+            type: object
+            required: [status]
+            properties:
+              status: { type: string, enum: [ok, degraded, fault] }
+              detail: { type: string }
     ConfigTime:
       type: object
       required: [timezone, ntp_enabled, ntp_servers, system_time, revision]
@@ -2156,8 +2360,10 @@ components:
       properties:
         result: { type: string, enum: [success, failed, accepted, rejected] }
         applied: { type: boolean }
-        reload: { type: string, enum: [sighup-core, sighup-iobus, restart-iobus, system, none] }
+        reload: { type: string, enum: [sighup-core, sighup-iobus, sighup-iobus+sighup-core, restart-iobus, system, none] }
         warnings: { type: array, items: { type: string } }
+        revision: { type: integer, format: int64 }
+        checksum: { type: string }
     User:
       type: object
       required: [username, role]

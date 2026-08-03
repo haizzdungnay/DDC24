@@ -2,11 +2,17 @@
 
 **ID:** PROD-BASE-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-23 (ADR-020: Runtime đổi từ "chỉ component graph" sang "Mekong-owned Program Runtime, IEC 61131-3-aligned ST+FBD"; xem dòng Runtime và mục Ngoài phạm vi)
+**Cập nhật:** 2026-08-03 (ADR-023: khóa Product Spec Programming Rev A)
 
 ## Định vị
 
-MK-DDC-24 là BMS Edge Automation Controller với Program Runtime do Mekong sở hữu (IEC 61131-3-aligned, ST + FBD theo ADR-020), hoạt động local-first trên Debian Linux. Thiết bị thực thi logic điều khiển tại chỗ, tích hợp I/O và giao thức BMS, đồng thời cung cấp Web UI và HMI cục bộ tùy chọn. HVAC là use case đầu tiên, không giới hạn định vị sản phẩm. Không dùng nhãn "certified"/"compliant" cho tới khi có evidence theo release gate riêng.
+MK-DDC-24 là BMS Edge Automation Controller hoạt động local-first trên Debian
+Linux. Baseline sản phẩm cam kết một Programming capability do Mekong sở hữu
+theo [Product Spec Programming Rev A](DDC24_PROGRAMMING_PRODUCT_SPEC.md), nhưng
+cam kết này không phải tuyên bố source hiện tại đã implement Program Runtime.
+Thiết bị tích hợp I/O và giao thức BMS, đồng thời cung cấp Web UI và HMI cục bộ
+tùy chọn. HVAC là use case đầu tiên, không giới hạn định vị sản phẩm. Không dùng
+nhãn `certified`/`compliant` cho tới khi có evidence theo release gate riêng.
 
 ## Baseline Rev A.0
 
@@ -17,7 +23,8 @@ MK-DDC-24 là BMS Edge Automation Controller với Program Runtime do Mekong s�
 | UI modes | 0–10 V, 4–20 mA, NTC 10k/20k/configurable, auxiliary dry contact |
 | AO | 4 kênh qua DAC8554, command vật lý V/mA |
 | Network | Ethernet; BACnet/IP; Modbus TCP; 2 × Modbus RTU |
-| Runtime | Mekong-owned Program Runtime, IEC 61131-3-aligned, ngôn ngữ ST + FBD (ADR-020); priority và safe-state. Component graph 28 loại node cũ giữ vai trò legacy importer/nguồn vendor FB, không phải engine chính. |
+| Programming | Product scope Rev A chỉ gồm Local Physical I/O, Virtual Point, Modbus RTU Point, ST, FBD và cycle time 1 s/5 s/30 s. Revision/Deployment/Activation/Rollback, RETAIN và Online Monitor tuân theo `PROD-PROG-001`. Trạng thái implementation: chưa được xác nhận. |
+| Runtime As-Built | Component graph 28 loại node là hiện trạng legacy. Quan hệ migration sang Programming chưa được quyết định; không gọi graph này là FBD và không dùng nó làm bằng chứng Programming. |
 | Configuration | REST API + React Web UI, form/JSON |
 | Local display | HMI LVGL/DRM feature-gated, MIPI DSI + FT5436 touch + 6 nút GPIO; limited operator HMI theo ADR-016 |
 
@@ -29,13 +36,34 @@ MK-DDC-24 là BMS Edge Automation Controller với Program Runtime do Mekong s�
 - protocol integration và safe output behavior;
 - HMI cục bộ khi SKU/build bật tính năng: xem trạng thái/I/O/alarm/service, vận hành giới hạn các point được whitelist qua authority/core; phục hồi/cấu hình Ethernet IPv4 cơ bản nằm trong surface Service nhưng network mutation yêu cầu role Admin theo ADR-017.
 
-## Ngoài phạm vi Rev A.0
+## Phạm vi Programming Rev A
 
-- LD, SFC, online change, PLCopen/IEC certification claim ("certified"/"compliant") và drag-drop wiresheet canvas (ADR-020 giới hạn Rev A.0 còn lại ST + FBD, build+atomic activation, không claim certification);
+- Product Spec chủ quản: [PROD-PROG-001](DDC24_PROGRAMMING_PRODUCT_SPEC.md).
+- Point source duy nhất: Local Physical I/O, Virtual Point và Modbus RTU Point.
+- Ngôn ngữ duy nhất: ST và FBD.
+- Cycle time duy nhất: 1 s, 5 s và 30 s.
+- Modbus TCP/BACnet IP trong dòng `Network` là capability giao tiếp toàn sản
+  phẩm, không phải Programming Point Rev A.
+- Product Spec quy định sản phẩm phải làm gì; requirement quy định nghĩa vụ của
+  từng layer; Programming Design chưa được thực hiện; As-Built phải lấy từ
+  source/evidence và không được suy ra từ Product Spec.
+
+## Ngoài phạm vi Programming Rev A
+
+- Modbus TCP Point và BACnet/IP Point;
+- LD, SFC, motion, safety PLC, online change và PLCopen/IEC certification claim
+  (`certified`/`compliant`);
+- chi tiết Programming Design và Implementation Plan;
+
+## Ngoài phạm vi sản phẩm Rev A khác
+
 - MQTT/cloud agent và OTA A/B production workflow;
 - BACnet MS/TP, Modbus slave và BTL certification;
 - true isolated DI trong base SKU;
 - full Web HMI/SCADA, engineering graph, schedule editor, alarm configuration, user administration, Wi-Fi credential, routing/VLAN/firewall hoặc cấu hình protocol trên màn local 2.4 inch;
 - mọi claim EMC/safety/manufacturing chưa có evidence trong release gate.
 
-Roadmap không phải cam kết release. Thêm capability chỉ hợp lệ khi có decision, requirement, thiết kế, verification và cập nhật traceability.
+Roadmap không phải cam kết release. Thêm capability chỉ hợp lệ khi có Product
+decision, Product Requirement, System Requirement, Verification Requirement và
+cập nhật traceability. Việc có source hoặc host unit test không tự thêm Product
+Capability.

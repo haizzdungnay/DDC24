@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -54,6 +56,7 @@ type App struct {
 	virtualPointRuntime    *HistorianRuntimeRegistry
 	pointMigrationWriter   func(string, []byte, os.FileMode) error
 	pointNamespaceWriter   func(string, []byte, os.FileMode) error
+	reloadDispatcher       func(string) (bool, []string)
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
@@ -165,6 +168,10 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Printf("version=%s git_commit=%s build_time=%s toolchain=%s runtime=%s\n", buildVersion, buildGitCommit, buildTime, buildToolchain, runtime.Version())
+		return
+	}
 	if len(os.Args) >= 2 && os.Args[1] == "historian-rollback-package" {
 		if err := runHistorianRollbackPackageCommand(os.Args[2:], os.Stdout); err != nil {
 			log.Printf("historian-rollback-package: %v", err)

@@ -7,6 +7,7 @@ Tài liệu chi tiết được phục hồi nguyên văn. [Software Baseline](.
 
 ## Runtime và service design
 
+- [Modbus RTU Point detailed design](DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md) — **In Review 2026-08-03**; proposal production trước Programming, supersede các mô tả RTU Point recovered nếu được phê duyệt
 - [Software detailed design](SW_DDD_MK-DDC-24_VI.md)
 - [Runtime execution model](SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md)
 - [Component library](SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md)

@@ -28,7 +28,7 @@ void on_poll_ok(SlaveState* s, uint64_t now_ms);
 
 /* Báo cáo poll lỗi → tăng retry.
  * Trả true nếu vừa chuyển sang offline (retry >= 2 → offline). */
-bool on_poll_error(SlaveState* s);
+bool on_poll_error(SlaveState* s, uint8_t max_retry = 2);
 
 /* Error rate trong khoảng [0..1] = total_errors / total_polls (0 khi total=0). */
 float error_rate(const SlaveState& s);

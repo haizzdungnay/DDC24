@@ -210,6 +210,17 @@ void IoCache::write_fieldbus_metrics(const kx_slave_metrics_t* slaves, size_t co
     KX_WRITE_END(shm_);
 }
 
+void IoCache::write_modbus_diagnostics(const kx_modbus_diag_t* diagnostics, size_t count)
+{
+    if (!shm_) return;
+    if (count > KX_N_FB_SLAVE) count = KX_N_FB_SLAVE;
+    KX_WRITE_BEGIN(shm_);
+    for (size_t i = 0; i < count; i++) shm_->modbus_diag[i] = diagnostics[i];
+    for (size_t i = count; i < KX_N_FB_SLAVE; i++)
+        shm_->modbus_diag[i] = kx_modbus_diag_t{};
+    KX_WRITE_END(shm_);
+}
+
 void IoCache::write_bacnet_bind(bool bound, uint16_t udp_port)
 {
     if (!shm_) return;

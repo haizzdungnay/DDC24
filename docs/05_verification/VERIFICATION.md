@@ -1,9 +1,8 @@
 # Verification and Release Gates
 
 **ID:** VVP-001
-**Trạng thái:** Active — hardware gate RED; Program Runtime gate RED, FW SOM ST host
-execution opened by CTO for evidence collection (ADR-020, 2026-07-24)
-**Cập nhật:** 2026-07-24
+**Trạng thái:** Active — hardware gate RED; Programming Rev A production gate RED
+**Cập nhật:** 2026-08-03 (thêm gate thiết kế/acceptance Modbus RTU Point)
 
 ## Chiến lược
 
@@ -27,36 +26,80 @@ Không dùng số test pass lịch sử làm evidence hiện hành. Mỗi releas
 - HMI authority: login/session expiry, policy query, setpoint/mode/override/release, effective source/priority/TTL, upstream ACK/reject/timeout, idempotency và audit.
 - HMI failure: broker/core/alarm authority loss phải chuyển mutation read-only, monitoring SHM tiếp tục và không blind replay; HMI không write SHM/hardware, signal process hoặc direct reboot.
 - HMI usability: five-surface scenario trên panel thật với Viewer/Operator/Admin session; Service là surface, không phải role. Kiểm body ≥14 px, action ≥40×40 px hoặc hard-key equivalent, glove/light, alarm flood, stale/lost data, localization và wake-event suppression.
-- Protocol: BACnet/IP discovery/read/write/reliability và Modbus RTU/TCP mapping/error paths.
+- Protocol product-wide: BACnet/IP discovery/read/write/reliability và Modbus
+  RTU/TCP mapping/error paths. Modbus TCP/BACnet/IP không phải Programming Point
+  Rev A.
 - System: stop/restart từng service, corrupt/stale SHM, loss of UART/network, MCU 200 ms safe timeout.
 - Network commissioning: active ≠ desired, static/DHCP validation, duplicate IP, staged
   apply, confirm, 120 s auto/manual rollback, helper/host restart recovery, least
   privilege, Web reconnect, BACnet hot-rebind/`I-Am`, Modbus TCP retry và continuous
   core/IOP/STM32 trace.
-- Program Runtime (ADR-020, ST+FBD): parser/semantic ST+FBD, POU/type conformance,
-  standard/vendor FB golden vectors, deterministic task execution/WCET/overrun,
-  artifact/activation/rollback fault injection, I/O binding/quality negative tests,
-  FE authoritative state (không tự báo build/deploy thành công), RBAC/audit cho toàn bộ
-  vòng đời. Không test layer nào cho LD/SFC (ngoài scope Rev A.0).
+- Programming Rev A: kiểm chứng đúng scope Local Physical I/O, Virtual Point,
+  Modbus RTU Point, ST, FBD và cycle 1 s/5 s/30 s theo các `VR-PROG-*` bên dưới.
+  Negative scope test phải từ chối Modbus TCP Point, BACnet/IP Point, LD, SFC,
+  motion và safety PLC.
 
-## Program Runtime release gate — RED; FW SOM ST host execution opened (ADR-020)
+## Programming Rev A — Verification Requirement
 
-CTO/Project Engineering Owner đã mở next action FW SOM ST host execution ngày
-2026-07-24 để tạo implementation/evidence đầu tiên trong `services/core`. Release gate
-vẫn RED cho tới khi PR có kết quả build/CTest và evidence thật. Không được release/claim
-`IEC 61131-3 compliant`, `conformant` hoặc `certified` cho tới khi các gate dưới đóng —
-chi tiết đầy đủ ở
-[`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md) §14:
+| ID | Verification Requirement | Phương pháp và acceptance tối thiểu | Gate hiện tại |
+|---|---|---|---|
+| VR-PROG-001 | Xác nhận scope Product/Requirement. | Inspection Product Spec, requirement và UI/API capability: chỉ đúng ba Point category, ST/FBD và ba cycle time; không có claim implementation/certification. | RED — docs pass, production chưa có |
+| VR-PROG-002 | Xác nhận Project/Program/Revision. | Tạo, sửa, đóng/mở Project; nhiều Program theo capacity đã duyệt; Revision bất biến, identity và actor truy nguyên được; round-trip không mất dữ liệu. | RED |
+| VR-PROG-003 | Xác nhận Point/Variable/I/O Mapping. | Positive/negative integration trên production path cho Local Physical I/O, Virtual Point và Modbus RTU Point; reject sai type/direction/access/quality và mọi Point category ngoài scope. | RED |
+| VR-PROG-004 | Xác nhận ST production. | Program ST phải đi end-to-end từ Revision tới runtime production target, dùng I/O Mapping được phê duyệt và cho output/monitor đúng golden scenario. Host parser/unit test chỉ là supporting evidence. | RED |
+| VR-PROG-005 | Xác nhận FBD production. | Program FBD phải đi end-to-end trên cùng production target/semantic, gồm lỗi block/connection/type và golden scenario tương đương ST. | RED |
+| VR-PROG-006 | Xác nhận cycle time. | Đo trên production target cho 1 s/5 s/30 s, ghi jitter/WCET/overrun/fault với tải và acceptance limit được phê duyệt; reject mọi cycle khác. | RED |
+| VR-PROG-007 | Xác nhận Revision và Deployment. | Artifact/Revision identity nhất quán, validate-before-deploy, authority ACK/reject/timeout và UI không false-success; power/process fault không tạo Revision active mơ hồ. | RED |
+| VR-PROG-008 | Xác nhận Activation và Rollback. | Activation chỉ tại cyclic boundary; reject/corrupt/timeout/power-loss giữ Revision cũ; Rollback về known-compatible Revision và báo authoritative result. | RED |
+| VR-PROG-009 | Xác nhận RETAIN. | Target restart/power scenarios theo policy đã duyệt; đúng value/type/Revision compatibility, non-RETAIN không nhận dữ liệu cũ, corrupt state fail rõ. | RED |
+| VR-PROG-010 | Xác nhận Online Monitor. | So sánh live runtime với UI/API cho Revision, Program, Variable, Point, timestamp và quality; stale/unavailable đúng; mất client không ảnh hưởng control; không có implicit write/force. | RED |
+| VR-PROG-011 | Xác nhận RBAC/audit. | Positive/negative theo từng lifecycle action; audit actor/action/Revision/time/result; bypass/replay/idempotency/timeout test. | RED |
+| VR-PROG-012 | Xác nhận local continuity và fault behavior. | Mất/restart FE, Web, authority phụ; runtime fault, Point bad quality và overrun; không uncontrolled output, blind replay hoặc false-success. | RED |
+| VR-PROG-013 | Xác nhận loại trừ scope. | Negative test trên UI/API/import/runtime từ chối LD, SFC, Modbus TCP Point, BACnet/IP Point, motion và safety PLC; không label hỗ trợ. | RED |
 
-| Gate | Điều kiện đóng | Hiện tại |
-|---|---|---|
-| G0 Scope/ADR | Product + ADR + requirements phê duyệt ST+FBD trong Rev A.0. | **GREEN** — ADR-020 Accepted; `PRODUCT.md`/`SOFTWARE.md`/`DECISIONS.md`/`REQUIREMENTS.md`/`VERIFICATION.md`/`TRACEABILITY.md` cập nhật 2026-07-23; toàn bộ 31 document conflict đóng (`KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md`) |
-| G1 PSE | FE/Backend hỗ trợ project, ST+FBD, build/deploy thật. | RED |
-| G2 Compiler | Type/POU/library/IR feature matrix pass. | RED — next action phải cung cấp ST subset/typed execution evidence đầu tiên |
-| G3 Runtime | Deterministic task execution, activation, retain, fault behavior pass. | RED — next action phải chạy một ST program thật trên SOM host runtime |
-| G4 I/O/MCU | Typed I/O integration + STM32 target/HIL pass. | RED |
-| G5 Conformance | Normative trace matrix không open deviation trong claim scope. | RED |
-| G6 Approval | Engineering/QA/Product sign-off. | RED |
+## Programming production release gate — RED
+
+Product Spec và chuỗi traceability đã được documented, nhưng không gate
+production nào được đóng bởi nhiệm vụ tài liệu này. Không được release hoặc
+claim Programming đã implement, cũng không được claim `IEC 61131-3 compliant`,
+`conformant` hoặc `certified`.
+
+Host unit test cho ST parser/semantic, CLI, typed artifact, I/O-map component,
+cyclic component hoặc trace ring chỉ chứng minh component development ở host.
+Chúng không chứng minh production service, target scheduling, Local Physical
+I/O/Virtual Point/Modbus RTU Point end-to-end, FBD, RETAIN, Deployment,
+Activation, Rollback hoặc Online Monitor. Vì vậy chúng không được dùng để đóng
+`VR-PROG-004`, `VR-PROG-006`, `VR-PROG-008` hay bất kỳ runtime production gate
+nào.
+
+Mỗi evidence production phải ghi commit, target identity, production process/
+service, Revision/artifact identity, command/scenario, raw log/measurement,
+acceptance limit, result và reviewer. Trạng thái chi tiết được truy tại
+[Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md).
+
+## Modbus RTU Point — Verification Requirement
+
+Design source: [DDD-SW-MBRTU-POINT-001](../02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md).
+Design đang `In Review`; bảng này định nghĩa gate, không tuyên bố test đã pass.
+
+| ID | Verification Requirement | Acceptance tối thiểu | Gate hiện tại |
+|---|---|---|---|
+| VR-MBRTU-001 | Scope/hardware topology | Inspection Product/HW/Platform chứng minh đúng hai path RS485 production và role master-only; không dùng adapter lab thay thế. | RED — HW draft mới có một path UART4 |
+| VR-MBRTU-002 | Bus/Device/Point config | Positive/negative cho hai bus, serial consistency, slave uniqueness, CRUD, import/export, stable ID/tag namespace và capacity; round-trip không mất field. | RED — host path hiện hữu chưa theo bus model v2 |
+| VR-MBRTU-003 | Register codec | Golden vectors mọi register/data type/byte-word order/scale/offset/min-max; reject overlap, overflow, NaN/infinity, odd 32-bit. | PARTIAL — host codec pass, target chưa có |
+| VR-MBRTU-004 | Scheduler và isolation | Hai bus đồng thời, 16 device/bus, admission/load/deadline, retry/offline probe; một bus lỗi không chặn bus kia/IOP/core. | RED |
+| VR-MBRTU-005 | Quality/timestamp | Fake-clock + target fault chứng minh GOOD→STALE→OFFLINE, BAD/reason, recovery, producer timestamp/sample age; không false-GOOD. | RED — contract hiện tại thiếu bốn trạng thái/timestamp producer |
+| VR-MBRTU-006 | Typed runtime/Point Catalog | Cross-language ABI/version/sequence/generation; uint32 không mất chính xác; stable point_id không swap sau reorder/reboot; REST/WS đúng source/revision. | RED |
+| VR-MBRTU-007 | Atomic config apply | Crash/power fault ở từng bước stage/apply/ACK/commit; stale revision/idempotency; chỉ old hoặc new revision active, rollback last-known-good. | RED — restart hiện tại không phải applied ACK |
+| VR-MBRTU-008 | Write path | Coil/Holding 16/32-bit, RBAC/type/range/quality/revision, exception/timeout/readback/idempotency/queue-full; zero false-success và zero blind replay. | RED |
+| VR-MBRTU-009 | Diagnostics/health | Bus/device/point counter/reason/latency/sample age/config revision/boot ID khớp fault đã inject; missing telemetry là unknown. | PARTIAL — host có một phần counter per slave |
+| VR-MBRTU-010 | RBAC/audit/API/FE | Viewer/Operator/Admin positive/negative; operation correlation; FE candidate/apply/result/reconnect; không localStorage authority hoặc arbitrary FC. | PARTIAL — CRUD RBAC host có, transaction v2 chưa có |
+| VR-MBRTU-011 | Real RS485/HIL/recovery | Chạy `MBRTU-HIL-01..12`: hai cổng, mọi serial mode, bốn register type, write/readback, CRC/timeout/wiring fault, crash, reboot/power-cycle và 24 h soak. | RED — chưa có slave RS485 thật |
+| VR-MBRTU-012 | Provenance/deployment | Commit sạch; artifact/config/ABI version/checksum/toolchain truy được trên target; coordinated install/rollback và mismatch fail rõ. | RED — binary mới chưa deploy |
+
+`MODBUS_RTU_POINT_READY = YES` chỉ khi VR-MBRTU-001..012 đều PASS bằng evidence
+hiện hành được review. CTest/Go/FE/simulator pass không được dùng để thay thế
+VR-MBRTU-001, 004, 011 hoặc 012.
 
 ## Hardware release gate — RED
 
@@ -124,4 +167,4 @@ Evidence packages tối thiểu: `PWR-5V`, `PWR-3V3`, `PWR-SURGE`, `AO-COMP`, `E
 
 ## Release decision
 
-Release chỉ `GO` khi requirement bắt buộc có trace, automated suites pass, target/HIL evidence hợp lệ, security/deployment checks hoàn tất và mọi gate P0/RED được đóng hoặc có waiver được phê duyệt. Network không được claim GREEN từ host/mock/dummy-interface evidence: physical Ethernet DHCP/static/DNS, reboot/power-loss/disk fault, stable-hostname IP handoff, BACnet packet capture, Modbus reconnect, physical control continuity và connected-panel HMI vẫn mở. Hiện tại hardware/manufacturing status là `NO-GO`; Program Runtime release status là `NO-GO`.
+Release chỉ `GO` khi requirement bắt buộc có trace, automated suites pass, target/HIL evidence hợp lệ, security/deployment checks hoàn tất và mọi gate P0/RED được đóng hoặc có waiver được phê duyệt. Network không được claim GREEN từ host/mock/dummy-interface evidence: physical Ethernet DHCP/static/DNS, reboot/power-loss/disk fault, stable-hostname IP handoff, BACnet packet capture, Modbus reconnect, physical control continuity và connected-panel HMI vẫn mở. Hiện tại hardware/manufacturing status là `NO-GO`; Programming Rev A production status là `NO-GO`.

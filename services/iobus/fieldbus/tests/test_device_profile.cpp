@@ -57,6 +57,19 @@ TEST_F(ProfileTest, WritableBadFcRejected)
     EXPECT_EQ(prof.points.size(), 0u);
 }
 
+TEST_F(ProfileTest, WritableCoilAndHoldingRegisterAccepted)
+{
+    write_profile(R"({"points":[
+      {"name":"relay","fc":1,"addr":0,"count":1,"type":"bool","writable":true},
+      {"name":"setpoint","fc":3,"addr":10,"count":1,"type":"uint16","writable":true}
+    ]})");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    ASSERT_EQ(prof.points.size(), 2u);
+    EXPECT_TRUE(prof.points[0].writable);
+    EXPECT_TRUE(prof.points[1].writable);
+}
+
 TEST_F(ProfileTest, Float32MissingByteOrderRejected)
 {
     write_profile(R"({"points":[{"name":"x","fc":4,"addr":0,"count":2,"type":"float32"}]})");

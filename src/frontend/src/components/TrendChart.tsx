@@ -6,7 +6,7 @@ export interface TrendSeries {
   label: string
   color: string
   unit?: string
-  kind?: 'UI' | 'AI' | 'DI' | 'AO' | 'DO' | 'VP'
+  kind?: 'UI' | 'AI' | 'DI' | 'AO' | 'DO' | 'VP' | 'modbus_rtu'
   pointId?: string
   generation?: number
   stepped?: boolean

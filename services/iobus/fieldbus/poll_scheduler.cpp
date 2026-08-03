@@ -6,8 +6,6 @@
 
 namespace iobus::fieldbus {
 
-static constexpr uint8_t MAX_RETRY = 2;
-
 bool is_due(const SlaveState& s, uint64_t now_ms)
 {
     if (s.last_poll_ms == 0) return true;   /* belum pernah poll */
@@ -22,15 +20,17 @@ void on_poll_ok(SlaveState* s, uint64_t now_ms)
     s->total_polls++;
 }
 
-bool on_poll_error(SlaveState* s)
+bool on_poll_error(SlaveState* s, uint8_t max_retry)
 {
+    if (max_retry == 0) max_retry = 1;
     s->retry_count++;
     s->total_polls++;
     s->total_errors++;
-    if (s->retry_count >= MAX_RETRY && s->online) {
+    if (s->retry_count >= max_retry && s->online) {
         s->online = false;
         return true;   /* vừa chuyển offline */
     }
+    if (s->retry_count >= max_retry) s->online = false;
     return false;
 }
 

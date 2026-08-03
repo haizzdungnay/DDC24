@@ -7,11 +7,21 @@
 #
 # Đây là phần firmware kiểm chứng được NGAY khi chưa có bo mạch: endian, độ dài
 # payload, CRC, quy tắc SEQ, luật NACK. Phần chạm thanh ghi phải chờ phần cứng.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    cmake_minimum_required(VERSION 3.16)
+    project(mkddc-fw-hostcheck C CXX)
+    enable_testing()
+    find_package(GTest REQUIRED)
+endif()
+
 add_executable(fw_iop_tests
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/test_iop_link.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/iop/iop_link.c)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/test_ddc24_runtime.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/iop/iop_link.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/app/ddc24_runtime.c)
 target_include_directories(fw_iop_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/iop
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/app
     ${CMAKE_CURRENT_SOURCE_DIR}/../../shared)
 # Cùng cách dò như `services/iobus/CMakeLists.txt`: GTest tìm được ở hệ thống thì
 # dùng target có namespace, còn khi FetchContent kéo về thì chỉ có `gtest_main`.

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -63,6 +64,70 @@ type ServiceHealth struct {
 	Status     string  `json:"status"`
 	UptimeS    *uint64 `json:"uptime_s,omitempty"`
 	LastScanMS *uint64 `json:"last_scan_ms,omitempty"`
+}
+
+type HealthCheck struct {
+	Status string `json:"status"`
+	Detail string `json:"detail,omitempty"`
+}
+
+type HealthEndpointResponse struct {
+	Status  string                 `json:"status"`
+	Checks  map[string]HealthCheck `json:"checks"`
+	Version string                 `json:"version"`
+}
+
+func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
+	core, err := a.core.ReadStatus(r.Context())
+	checks := map[string]HealthCheck{"web": {Status: "ok"}}
+	coreProcessOK := core.CoreAvailable
+	iobusProcessOK := core.IobusPresent
+	if client, production := a.core.(*CoreClient); production {
+		coreProcessOK = processAlive(a.cfg.CorePidPath) && client.coreSocketReady(r.Context())
+		iobusProcessOK = processAlive(a.cfg.IobusPidPath)
+	}
+	checks["core"] = HealthCheck{Status: "fault", Detail: "process hoặc core socket không sẵn sàng"}
+	if coreProcessOK {
+		checks["core"] = HealthCheck{Status: "ok"}
+	}
+	checks["iobus"] = HealthCheck{Status: "fault", Detail: "process iobus không sẵn sàng"}
+	if iobusProcessOK {
+		checks["iobus"] = HealthCheck{Status: "ok"}
+	}
+	checks["io_shm"] = HealthCheck{Status: "fault"}
+	if core.IobusPresent {
+		checks["io_shm"] = HealthCheck{Status: "ok"}
+	}
+	checks["plc_shm"] = HealthCheck{Status: "fault"}
+	if core.CoreAvailable {
+		checks["plc_shm"] = HealthCheck{Status: "ok"}
+	}
+	checks["mcu_connection"] = HealthCheck{Status: "fault", Detail: "IOP không ở NORMAL"}
+	if core.IOP.Status == "normal" {
+		checks["mcu_connection"] = HealthCheck{Status: "ok"}
+	} else if core.IOP.Status == "safe" {
+		checks["mcu_connection"] = HealthCheck{Status: "degraded", Detail: "MCU đang ở safe-state"}
+	}
+	status := "ok"
+	for _, check := range checks {
+		if check.Status != "ok" {
+			status = "degraded"
+			break
+		}
+	}
+	if err != nil && a.logger != nil {
+		a.logger.Printf("WARN health degraded err=%v", err)
+	}
+	writeJSON(w, http.StatusOK, HealthEndpointResponse{Status: status, Checks: checks, Version: a.cfg.WebVersion})
+}
+
+func processAlive(pidPath string) bool {
+	data, err := os.ReadFile(pidPath)
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	return err == nil && pid > 1 && syscall.Kill(pid, 0) == nil
 }
 
 func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {

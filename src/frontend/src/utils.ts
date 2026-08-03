@@ -59,7 +59,7 @@ export function isVisibleUniversalInput(point: Point, maxChannel = VISIBLE_UI_CH
 
 export function normalizeQuality(value: unknown): PointQuality {
   const raw = String(value ?? 'good').toLowerCase()
-  if (raw === 'uncertain' || raw === 'bad' || raw === 'stale') return raw
+  if (raw === 'uncertain' || raw === 'bad' || raw === 'stale' || raw === 'offline') return raw
   return 'good'
 }
 

@@ -1,5 +1,5 @@
-export type PointKind = 'UI' | 'AI' | 'DI' | 'AO' | 'DO' | 'virtual'
-export type PointQuality = 'good' | 'uncertain' | 'bad' | 'stale'
+export type PointKind = 'UI' | 'AI' | 'DI' | 'AO' | 'DO' | 'virtual' | 'modbus_rtu'
+export type PointQuality = 'good' | 'uncertain' | 'bad' | 'stale' | 'offline'
 export type HealthStatus = 'ok' | 'degraded' | 'fault' | 'unknown' | 'n/a'
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
 export type DdcMode = 'demo' | 'live'
@@ -29,6 +29,60 @@ export interface Point {
   trend?: number[]
   /** Backend may surface this while legacy duplicate names are being repaired. */
   namespaceState?: string
+  pointId?: string
+  tagName?: string
+  displayName?: string
+  dataType?: string
+  timestamp?: string
+  readWrite?: 'read' | 'read_write'
+  defaultValue?: number | boolean | string | null
+  safeValue?: number | boolean | string | null
+}
+
+export interface ModbusRTUDevice {
+  device_id: string
+  display_name: string
+  enabled: boolean
+  rs485_port: string
+  baud: number
+  parity: 'N' | 'E' | 'O'
+  stop_bit: 1 | 2
+  slave_id: number
+  poll_ms: number
+  timeout_ms: number
+  retry: number
+}
+
+export interface ModbusRTUPoint {
+  point_id: string
+  device_id: string
+  tag_name: string
+  display_name: string
+  register_type: 'coil' | 'discrete_input' | 'input_register' | 'holding_register'
+  address: number
+  data_type: 'bool' | 'int16' | 'uint16' | 'int32' | 'uint32' | 'float32'
+  byte_order: 'big' | 'little'
+  word_order: 'high_low' | 'low_high'
+  scale: number
+  offset: number
+  unit: string
+  read_write: 'read' | 'read_write'
+  default_value: number | boolean
+  safe_value: number | boolean
+  enabled: boolean
+}
+
+export interface ModbusRTUDiagnostics {
+  device_id: string
+  slave_id: number
+  online: boolean
+  total_polls: number
+  total_errors: number
+  timeout_errors: number
+  crc_errors: number
+  retry_attempts: number
+  consecutive_errors: number
+  last_seen_ms: number
 }
 
 export interface IoChannel {
@@ -169,8 +223,10 @@ export type AlarmEntity = AlarmSetting
 export interface ConfigPutResult {
   result: 'success' | 'failed' | 'accepted' | 'rejected'
   applied: boolean
-  reload: 'sighup-core' | 'sighup-iobus' | 'restart-iobus' | 'system' | 'none'
+  reload: 'sighup-core' | 'sighup-iobus' | 'sighup-iobus+sighup-core' | 'restart-iobus' | 'system' | 'none'
   warnings?: string[]
+  revision?: number
+  checksum?: string
 }
 
 export interface TimeConfig {

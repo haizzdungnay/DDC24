@@ -20,4 +20,16 @@ describe('point normalizer output namespace', () => {
     expect(canonicalOutputPointId('AO-19')).toBe('AO-03')
     expect(canonicalOutputPointId('DO-21')).toBe('DO-01')
   })
+
+  it('preserves canonical Modbus RTU metadata and OFFLINE quality', () => {
+    const point = normalizePoint({
+      point_id: 'MB-AHU-SAT', tag_name: 'ahu1 sat', display_name: 'Supply air',
+      kind: 'modbus_rtu', value: 21.5, quality: 'OFFLINE', fault: true,
+      source: 'modbus_rtu', data_type: 'float32', read_write: 'read'
+    })
+    expect(point).toMatchObject({
+      id: 'MB-AHU-SAT', tag: 'ahu1 sat', name: 'Supply air', kind: 'modbus_rtu',
+      quality: 'offline', source: 'modbus_rtu', dataType: 'float32', readWrite: 'read'
+    })
+  })
 })

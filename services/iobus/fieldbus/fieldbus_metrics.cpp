@@ -18,15 +18,17 @@ void FieldbusMetrics::init(const std::vector<std::string>& names,
     }
 }
 
-void FieldbusMetrics::update(uint8_t idx, bool ok, uint64_t now_ms)
+void FieldbusMetrics::update(uint8_t idx, bool ok, uint64_t now_ms, uint8_t retry_limit)
 {
     if (idx >= metrics_.size()) return;
     SlaveMetrics& m = metrics_[idx];
     m.total_polls++;
     if (!ok) {
         m.total_errors++;
+        m.retry_attempts++;
         if (m.consecutive_errors < 255) m.consecutive_errors++;
-        if (m.consecutive_errors >= 2) m.online = false;
+        if (retry_limit == 0) retry_limit = 1;
+        if (m.consecutive_errors >= retry_limit) m.online = false;
     } else {
         m.online = true;
         m.consecutive_errors = 0;
@@ -34,11 +36,22 @@ void FieldbusMetrics::update(uint8_t idx, bool ok, uint64_t now_ms)
     }
 }
 
-bool FieldbusMetrics::check_e302(uint8_t idx)
+void FieldbusMetrics::record_timeout(uint8_t idx)
+{
+    if (idx < metrics_.size()) metrics_[idx].timeout_errors++;
+}
+
+void FieldbusMetrics::record_crc_error(uint8_t idx)
+{
+    if (idx < metrics_.size()) metrics_[idx].crc_errors++;
+}
+
+bool FieldbusMetrics::check_e302(uint8_t idx, uint8_t retry_limit)
 {
     if (idx >= metrics_.size()) return false;
     SlaveMetrics& m = metrics_[idx];
-    if (!m.online && !m.e302_triggered) {
+    if (retry_limit == 0) retry_limit = 1;
+    if (!m.online && m.consecutive_errors >= retry_limit && !m.e302_triggered) {
         m.e302_triggered = true;
         return true;
     }

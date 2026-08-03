@@ -15,6 +15,11 @@ ENABLE=1
 [ -x "$BUILD/iobus/mkddc-iobus" ] || { echo "ERROR: chưa build $BUILD/iobus/mkddc-iobus" >&2; exit 1; }
 [ -x "$BUILD/core/mkddc-core" ]   || { echo "ERROR: chưa build $BUILD/core/mkddc-core" >&2; exit 1; }
 [ -x "$BUILD/netcfg/mkddc-netcfg" ] || { echo "ERROR: chưa build $BUILD/netcfg/mkddc-netcfg" >&2; exit 1; }
+[ -x build/web/mkddc-web ] || { echo "ERROR: chưa build build/web/mkddc-web (chạy packaging/build-release.sh)" >&2; exit 1; }
+[ -f src/frontend/dist/index.html ] || { echo "ERROR: chưa build frontend dist" >&2; exit 1; }
+[ -f build/release/provenance.json ] || { echo "ERROR: thiếu provenance.json" >&2; exit 1; }
+[ -f build/release/checksums.sha256 ] || { echo "ERROR: thiếu checksums.sha256" >&2; exit 1; }
+sha256sum --check build/release/checksums.sha256
 
 # user/group service (idempotent); user mkddc thuộc dialout để mở UART
 getent group mkddc >/dev/null || groupadd --system mkddc
@@ -27,6 +32,7 @@ done
 
 # /data/config: web ghi, service đọc (CONFIG_SCHEMA D-5)
 install -d -m 0775 -o mkddc -g mkddc /data/config
+install -d -m 0775 -o mkddc -g mkddc /data/config/profiles
 # /data/mkddc: persist state.snap cho RuntimeCounter/PulseCounter (COR-010, GAP-08)
 install -d -m 0755 -o mkddc -g mkddc /data/mkddc
 install -d -m 0755 /etc/mkddc
@@ -35,10 +41,25 @@ install -d -m 0755 /etc/mkddc
 install -m 0755 "$BUILD/iobus/mkddc-iobus" /usr/sbin/mkddc-iobus
 install -m 0755 "$BUILD/core/mkddc-core"   /usr/sbin/mkddc-core
 install -m 0755 "$BUILD/netcfg/mkddc-netcfg" /usr/sbin/mkddc-netcfg
+install -d -m 0755 /opt/mkddc-web
+install -m 0755 build/web/mkddc-web /opt/mkddc-web/mkddc-web
+install -d -m 0755 /opt/mkddc-web/dist
+cp -a src/frontend/dist/. /opt/mkddc-web/dist/
 install -m 0644 packaging/systemd/mkddc-iobus.service /etc/systemd/system/
 install -m 0644 packaging/systemd/mkddc-core.service  /etc/systemd/system/
 install -m 0644 packaging/systemd/mkddc-netcfg.service /etc/systemd/system/
+install -m 0644 packaging/systemd/mkddc-web-pi.service /etc/systemd/system/
 install -d -m 0755 /usr/libexec/mkddc /usr/share/mkddc/avahi
+install -m 0644 build/release/provenance.json /usr/share/mkddc/provenance.json
+install -m 0644 build/release/checksums.sha256 /usr/share/mkddc/checksums.sha256
+{
+    /usr/sbin/mkddc-core --version
+    /usr/sbin/mkddc-iobus --version
+    /usr/sbin/mkddc-netcfg --version
+    /opt/mkddc-web/mkddc-web --version
+} > /usr/share/mkddc/runtime-build-info.txt
+sha256sum /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
+    /opt/mkddc-web/mkddc-web > /usr/share/mkddc/runtime-checksums.sha256
 install -m 0755 packaging/configure-web-hostname.sh /usr/libexec/mkddc/configure-web-hostname
 install -m 0644 packaging/avahi/mkddc-web.service /usr/share/mkddc/avahi/mkddc-web.service
 if [ -e /etc/systemd/system/mkddc-web-pi.service ]; then
@@ -59,9 +80,9 @@ fi
 
 systemctl daemon-reload
 if [ "$ENABLE" -eq 1 ]; then
-    systemctl enable --now mkddc-iobus mkddc-core mkddc-netcfg
+    systemctl enable --now mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi
     [ "$HMI_INSTALLED" -eq 0 ] || systemctl enable --now mkddc-hmi
-    systemctl --no-pager status mkddc-iobus mkddc-core mkddc-netcfg || true
+    systemctl --no-pager status mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi || true
 else
-    echo "OK: đã install, chưa enable (chạy: systemctl enable --now mkddc-iobus mkddc-core mkddc-netcfg)"
+    echo "OK: đã install, chưa enable (chạy: systemctl enable --now mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi)"
 fi

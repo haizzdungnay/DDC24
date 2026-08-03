@@ -12,7 +12,9 @@ TEST(ShmLayout, IoShmV4OffsetsMatchWebAndTools)
     EXPECT_EQ(offsetof(kx_io_shm_t, ui_raw_unit), static_cast<std::size_t>(304));
     EXPECT_EQ(offsetof(kx_io_shm_t, iop_status), static_cast<std::size_t>(502));
     EXPECT_EQ(offsetof(kx_io_shm_t, iop_rx), static_cast<std::size_t>(508));
-    EXPECT_EQ(sizeof(kx_io_shm_t), static_cast<std::size_t>(1304));
+    EXPECT_EQ(offsetof(kx_io_shm_t, modbus_diag), static_cast<std::size_t>(1304));
+    EXPECT_EQ(sizeof(kx_modbus_diag_t), static_cast<std::size_t>(16));
+    EXPECT_EQ(sizeof(kx_io_shm_t), static_cast<std::size_t>(1816));
 }
 
 /* Telemetry northbound/southbound nối thêm 2026-07-31 (finding F-03/F-04).

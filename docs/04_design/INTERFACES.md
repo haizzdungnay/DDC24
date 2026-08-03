@@ -2,7 +2,23 @@
 
 **ID:** IF-SPEC-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-28 (ACTION 6: Typed IR + artifact contract; runtime không còn thực thi source ST)
+**Cập nhật:** 2026-08-03 (đăng ký interface proposal Modbus RTU Point v2)
+
+## Programming Rev A — trạng thái interface
+
+Product authority là
+[Product Spec Programming Rev A](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md).
+Programming chỉ nhận Local Physical I/O, Virtual Point và Modbus RTU Point;
+ngôn ngữ chỉ gồm ST/FBD; cycle time chỉ gồm 1 s/5 s/30 s. Modbus TCP và
+BACnet/IP trong các interface product-wide bên dưới không phải Programming
+Point Rev A.
+
+Hai interface requirement đang có hiệu lực là `IF-REQ-PROG-001` cho I/O Mapping
+và `IF-REQ-PROG-002` cho Revision/Deployment/Activation/Rollback/Online Monitor.
+Shape API, schema, IPC, package và process allocation cho chúng chưa được thiết
+kế trong nhiệm vụ này. Nội dung ST/IR bên dưới được giữ như As-Built của
+development component host-only; nó không phải Programming interface production
+được phê duyệt và không chứng minh Programming đã implement.
 
 ## Kinexus-IOP v2
 
@@ -34,6 +50,22 @@ Nguồn thực thi: `shared/mkddc_shm.h`.
 - Writer dùng sequencing contract; reader phải phát hiện inconsistent snapshot.
 
 Mọi thay đổi field, alignment hoặc semantic unit là ABI change: đổi magic, cập nhật tất cả consumer và layout tests, rebuild/deploy đồng bộ.
+
+### Modbus RTU Point runtime/config proposal v2 — In Review
+
+Contract hiện hành `kx_ext_point_t` là As-Built v1: identity 24 byte, `float`
+value, quality ba mức và không mang sample timestamp/config revision. Nó chưa
+đáp ứng `IF-REQ-MBRTU-001..004` hoặc phần Modbus của `IF-REQ-PROG-001`.
+
+[DDD-SW-MBRTU-POINT-001](../02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md)
+đề xuất version/magic mới với stable `point_id`, typed `double` value,
+GOOD/STALE/OFFLINE/BAD + reason, producer timestamp, sequence/generation và
+config revision/checksum. Config/write dùng reliable correlated IPC; telemetry
+snapshot có sequence. Address canonical là protocol data address zero-based.
+
+Proposal đang `In Review`; không reinterpret ABI v1 và không sửa machine-readable
+OpenAPI/source trước khi ADR-024 được Accepted. Programming I/O Mapping vẫn chưa
+được thiết kế đầy đủ; chỉ source-side Point Catalog contract được đưa ra review.
 
 **Ngoại lệ duy nhất — nối field vào CUỐI `kx_plc_shm_t`.** Consumer đọc PLC SHM
 bằng offset cứng và kiểm độ dài theo ngữ nghĩa **min-length**
@@ -67,12 +99,15 @@ không nói lên trạng thái cuối cùng.
 
 AO ở core/iobus boundary là giá trị vật lý V hoặc mA theo electrical mode đã được MCU acknowledge. BACnet/config engineering range được convert đúng một lần trước boundary. Non-finite/out-of-range bị reject.
 
-## FW SOM IEC programming — validate gateway (host-only, no target/HIL evidence)
+## As-Built development component — ST validate gateway host-only
 
-Nguồn thực thi: `services/core/st/st_*.{hpp,cpp}`. Đây là contract của một component
-đọc lập test trong `services/core` (`mkddc-core`) — KHÔNG phải
-`mkddc-program-service`/`mkddc-program-core` (ADR-020, chưa triển khai, C1+).
-Không gắn vào scan loop sản xuất; BE gọi component này như 1 CLI riêng.
+Nguồn As-Built: `services/core/st/st_*.{hpp,cpp}`. Đây là contract của một
+component được test độc lập trên host trong cây `services/core`; không phải
+contract Programming production, không gắn vào scan loop sản xuất và không có
+bằng chứng target/HIL. Tên service Programming trong tài liệu cũ không được dùng
+để suy ra process đã tồn tại. Nếu Backend gọi CLI này để validate, kết quả vẫn
+chỉ là validation component, không phải Deployment, Activation hoặc runtime
+Program production.
 
 **CLI:** `mkddc-st-validate --source <path>` — argv cố định, source luôn qua
 file path (không bao giờ đưa source text vào argv/shell), input đọc tối đa
@@ -138,21 +173,24 @@ Bảo đảm bắt buộc của CLI với mọi input, kể cả đối kháng: 
 Verify bằng `st/tests/test_st_limits.cpp` và nhóm test đối kháng trong
 `st/tests/test_st_validate_cli.cpp` (fork+execv binary thật).
 
-**Ngôn ngữ ST hỗ trợ:** đặc tả normative đầy đủ ở
+**Subset ST của component As-Built:** mô tả chi tiết ở
 [`ST_SUBSET_SPEC_MK-DDC-24_VI.md`](../02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md)
 (kiểu `BOOL`/`INT`/`REAL`/`TIME`, số học đầy đủ + `MOD`, `XOR`, `ELSIF`, chú
 thích, `VAR`/`VAR RETAIN`, 10 hàm chuẩn, Function Block `TON`/`TOF`/`R_TRIG`/
-`F_TRIG`). Chưa có: `CASE`, vòng lặp, POU do người dùng định nghĩa, LD/SFC.
+`F_TRIG`). Đây không phải tập data type/library Product đã phê duyệt cho
+Programming Rev A; phần đó còn mở tại OD-PROG-002 và OD-PROG-005. Component
+host chưa có `CASE`, vòng lặp, POU do người dùng định nghĩa, LD/SFC.
 
-## FW SOM — Typed IR artifact contract
+## As-Built development component — Typed IR artifact host-only
 
 Nguồn thực thi: `services/core/st/st_ir.hpp`, đặc tả đầy đủ ở
 [`TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md`](../02_design/software/TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md).
 
-**Thay đổi kiến trúc 2026-07-28:** `mkddc-core` **không còn thực thi source
-ST**. BE compile source thành artifact `MKDDCIR1` rồi gửi artifact xuống;
-runtime chỉ nạp artifact đã verify. Đây là ranh giới tin cậy duy nhất giữa
-"cái BE gửi" và "cái runtime chạy".
+**Trạng thái As-Built 2026-08-03:** source có loader/artifact component
+`MKDDCIR1` được test trên host. `mkddc-core` production chưa được chứng minh đã
+nạp và thực thi artifact này trong control path thật; Backend chưa được chứng
+minh đã hoàn tất vòng đời Project/Revision/Deployment. Vì vậy mô tả dưới đây
+chỉ là contract component hiện hữu, không phải quyết định Programming Design.
 
 | Hạng mục | Giá trị |
 |---|---|
@@ -170,24 +208,29 @@ trước đó đã có chương trình chạy. Bất biến "không có parser t
 `mkddc-core`" được bảo đảm ở mức **link** (`st_compiler_lib` tách khỏi
 `core_lib`) và kiểm lại bằng symbol check trong CI.
 
-**io_map validation** (`st_io_map.hpp`, chưa có file `io_map.json`/CRUD
-thật — đó là việc của BE khi có storage layer, xem C2): mỗi biến
+**io_map validation component** (`st_io_map.hpp`, chưa có file
+`io_map.json`/CRUD production): mỗi biến
 `VAR_INPUT`/`VAR_OUTPUT` phải có đúng 1 binding; `direction` phải khớp
 input/output khai báo; `type` phải khớp; `point_id` phải đúng dạng
-`PREFIX-NN` với `PREFIX ∈ {UI,DI,AO,DO}` (physical point — `AV/BV/MSV`
-binding chưa thuộc phạm vi này); range (nếu có) chỉ áp dụng cho `REAL`,
+`PREFIX-NN` với `PREFIX ∈ {UI,DI,AO,DO}` (physical point); range (nếu có) chỉ áp dụng cho `REAL`,
 `range_min < range_max`. Trả về TẤT CẢ lỗi tìm thấy trong 1 lần gọi (khác
 parser/semantic fail-fast), vì io_map thường có nhiều dòng độc lập.
 
-**Cyclic runtime + trace** (`st_cyclic_runtime.hpp`, `st_trace.hpp`, host-only
-— chưa nối `mkddc-iobus`/STM32 thật, xem C9): activation request áp dụng
+Component này chưa bao phủ Virtual Point hoặc Modbus RTU Point nên không đáp
+ứng `IF-REQ-PROG-001`. DI cũng không phải Local Physical I/O baseline nếu phần
+cứng/SKU không công bố capability. Không được mở rộng allowlist bằng Modbus TCP
+hoặc BACnet/IP để lấp khoảng trống.
+
+**Cyclic runtime + trace component** (`st_cyclic_runtime.hpp`, `st_trace.hpp`,
+host-only — chưa nối production `mkddc-iobus`/STM32): activation request áp dụng
 CHỈ tại đầu cycle kế tiếp (không giữa lúc execute() đang chạy), fail thì
 package cũ tiếp tục. Metric quan sát được: `cycle_count`, `overrun_count`
 (exec vượt budget), `exec_fault_count`, `last_exec_ns`, `max_exec_ns`.
 `StTraceEvent` kind: `VALIDATE_RESULT`, `ACTIVATION_RESULT`, `RUNTIME_FAULT`,
 `OVERRUN`, `ROLLBACK` — giữ trong `StTraceLog` (bounded ring buffer, in
-process, chưa persist) tới khi `mkddc-program-service` có audit storage
-thật.
+process, chưa persist). Cycle component host không chứng minh cycle time 1 s,
+5 s hoặc 30 s trên production target, cũng không đóng Activation/Rollback,
+RETAIN hay Online Monitor requirement.
 
 ## Web/API
 

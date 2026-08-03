@@ -136,9 +136,18 @@ func (a *App) handlePutConfigIO(w http.ResponseWriter, r *http.Request) {
 		writePointTagErrors(w, errs)
 		return
 	}
-	result, err := a.writeConfigGroup(r, configGroupIO, cfg)
+	safeCfg, err := readConfig(a, configGroupSafeState, ConfigSafeState{})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	result, applyErrs, err := a.applyIOBundle(r, cfg, safeCfg, beforeIO.Revision)
+	if len(applyErrs) > 0 {
+		writePointTagErrors(w, applyErrs)
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -149,7 +158,28 @@ func (a *App) handleGetConfigSafeState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handlePutConfigSafeState(w http.ResponseWriter, r *http.Request) {
-	handlePutConfig(a, w, r, configGroupSafeState, validateConfigSafeState)
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
+	var safeCfg ConfigSafeState
+	if err := decodeConfigBody(w, r, &safeCfg); err != nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
+		return
+	}
+	ioCfg, err := readConfig(a, configGroupIO, ConfigIO{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	result, errs, err := a.applyIOBundle(r, ioCfg, safeCfg, ioCfg.Revision)
+	if len(errs) > 0 {
+		writePointTagErrors(w, errs)
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (a *App) handleGetConfigVirtualPoints(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +235,42 @@ func (a *App) handleGetConfigFieldbus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handlePutConfigFieldbus(w http.ResponseWriter, r *http.Request) {
-	handlePutConfig(a, w, r, configGroupFieldbus, validateConfigFieldbus)
+	var cfg ConfigFieldbus
+	if err := decodeConfigBody(w, r, &cfg); err != nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
+		return
+	}
+	errs := validateConfigFieldbus(cfg)
+	if len(cfg.Devices) > 0 || len(cfg.Points) > 0 {
+		errs = append(errs, validateModbusRTUConfig(a, cfg)...)
+	}
+	if len(errs) > 0 {
+		writeValidationErrors(w, errs)
+		return
+	}
+	if len(cfg.Devices) > 0 || len(cfg.Points) > 0 {
+		a.pointConfigMu.Lock()
+		defer a.pointConfigMu.Unlock()
+		current, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+		cfg.Revision = current.Revision
+		result, err := a.applyModbusConfig(r, cfg)
+		if err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+	handlePutConfigValue(a, w, r, configGroupFieldbus, cfg)
+}
+
+func handlePutConfigValue(a *App, w http.ResponseWriter, r *http.Request, group configAPIGroup, cfg any) {
+	result, err := a.writeConfigGroup(r, group, cfg)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (a *App) handleGetConfigTime(w http.ResponseWriter, r *http.Request) {

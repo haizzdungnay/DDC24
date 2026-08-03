@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(mkddc-netcfg CXX)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/BuildProvenance.cmake)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -14,13 +15,14 @@ if(NOT nlohmann_json_FOUND)
 endif()
 
 add_library(netcfg_lib STATIC netcfg.cpp)
-target_include_directories(netcfg_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(netcfg_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../../shared)
 target_link_libraries(netcfg_lib PUBLIC nlohmann_json::nlohmann_json pthread)
 target_compile_options(netcfg_lib PRIVATE -Wall -Wextra -Werror)
 
 add_executable(mkddc-netcfg main.cpp)
 target_link_libraries(mkddc-netcfg PRIVATE netcfg_lib)
 target_compile_options(mkddc-netcfg PRIVATE -Wall -Wextra -Werror)
+mkddc_apply_provenance(mkddc-netcfg)
 install(TARGETS mkddc-netcfg DESTINATION sbin)
 
 option(NETCFG_BUILD_TESTS "Build mkddc-netcfg tests" ON)

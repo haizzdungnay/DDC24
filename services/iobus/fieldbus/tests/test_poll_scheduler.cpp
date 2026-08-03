@@ -39,6 +39,16 @@ TEST(PollScheduler, RetryBeforeOffline)
     EXPECT_FALSE(s.online);
 }
 
+TEST(PollScheduler, PerDeviceRetryThreshold)
+{
+    SlaveState s;
+    s.online = true;
+    EXPECT_FALSE(on_poll_error(&s, 3));
+    EXPECT_FALSE(on_poll_error(&s, 3));
+    EXPECT_TRUE(on_poll_error(&s, 3));
+    EXPECT_FALSE(s.online);
+}
+
 TEST(PollScheduler, RecoveryAfterOffline)
 {
     SlaveState s;

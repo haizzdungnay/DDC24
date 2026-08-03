@@ -1,16 +1,19 @@
 # Firmware Design Baseline
 
 **ID:** FW-DES-001
-**Trạng thái:** Target design — implementation skeleton only
-**Cập nhật:** 2026-07-22
+**Trạng thái:** Target design — protocol/runtime baseline có source; BSP/HIL còn mở
+**Cập nhật:** 2026-08-03
 
 Firmware STM32G0B1 sở hữu real-time I/O, ADC sampling, AO/DO actuation, Kinexus-IOP framing và independent safe timeout. Linux/SOM không truy cập trực tiếp ADS131M08; STM32 là SPI master duy nhất.
 
-> **Implementation reality 2026-07-22:** `fw/Makefile` chỉ build
-> `fw/Core/Src/main.c`; file này in thông báo boot rồi chạy vòng lặp rỗng.
-> `fw/mkddc-fw.ioc` chưa định nghĩa pin/peripheral CubeMX. Vì vậy các mục dưới
-> đây là contract mục tiêu cần implement; chưa có MCU binary/HIL evidence để gọi là
-> implemented, safe hoặc release-ready.
+> **Implementation reality 2026-08-03:** `fw/src/iop` và
+> `fw/src/app/ddc24_runtime.*` có parser/CRC, input sampling/output callback,
+> startup safe-state, communication watchdog 200 ms và fault diagnostics;
+> `fw/Core/Src/main.c` nối runtime qua weak HAL boundary. Host test và
+> Cortex-M0+ cross-build pass. `fw/mkddc-fw.ioc` vẫn chưa định nghĩa
+> pin/peripheral production, weak HAL chưa bind STM32 BSP và chưa có physical
+> HIL. Vì vậy source baseline này không phải bằng chứng ADC/DAC/relay/UART thật
+> đã implemented hoặc safe/release-ready.
 
 ## Baseline hiện hành
 
@@ -25,9 +28,9 @@ Contract thực thi nằm trong `shared/iop_protocol.h`; layout và hằng số 
 ## Khoảng trống bắt buộc trước integration
 
 - Tạo CubeMX/pinout thật khớp schematic đã review.
-- Implement IOP v2 parser/serializer/CRC/handshake/capability và exact frame tests.
-- Implement hai ADS131M08, UI mode latch, DAC8554, relay drive/feedback và diagnostics.
-- Implement watchdog + 200 ms communication safe timeout bằng target-side fault injection.
+- Bind IOP UART runtime vào STM32 BSP/pin/peripheral thật và kiểm handshake/capability trên target.
+- Implement/bind hai ADS131M08, UI mode latch, DAC8554, relay drive/feedback và diagnostics vào HAL production.
+- Xác nhận watchdog + 200 ms communication safe timeout bằng target-side fault injection và đo output vật lý.
 - Ghi toolchain, image hash, target revision và HIL logs vào release record.
 
 ## Tài liệu chi tiết

@@ -2,7 +2,7 @@
 ## D-4 (đi kèm `openapi.yaml`)
 
 > **Document ID:** ICD-REST-MK-DDC-24-VI
-> **Phiên bản:** 1.4 | 2026-07-28 (ADR-017 Network DNS/capability/management contract) · 1.3 | 2026-07-15 (per-point historian scheduling + global display-name uniqueness) · 1.2 | 2026-07-15 (global point-tag Phase A theo ADR-019) · 1.1 | 2026-06-13 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.5 | 2026-08-03 (Point Model canonical, Modbus RTU CRUD/diagnostics, I/O bundle atomic, health) · 1.4 | 2026-07-28 (ADR-017 Network DNS/capability/management contract) · 📘 [README](../../01_specs/README.md)
 > **Nguồn-chuẩn máy đọc:** [`openapi.yaml`](openapi.yaml) (OpenAPI 3.1) · **Trace:** `SW-API-001..010`, `SRS §6.4`, `SW_ARCH §6`
 
 > File `.md` này giải thích cách dùng; **`openapi.yaml` là hợp đồng chính thức** (import vào Swagger/Postman, generate client).
@@ -52,7 +52,14 @@ curl -k -X PUT https://<ip>:8443/api/v1/points/AO1 \
 | GET/POST | /virtual-points | bearer viewer/admin | list/create VP; create validate global tag namespace |
 | PUT/DELETE | /virtual-points/{id} | bearer admin | update/delete VP bằng canonical ID |
 | GET/PUT | /system/config/io | bearer admin | UI/AO/DO metadata; validate tag cùng VP |
+| GET/PUT | /system/config/io-bundle | bearer admin | validate/apply I/O + safe-state cùng revision/checksum; lỗi thì rollback cả hai |
 | GET/PUT | /system/config/virtual-points | bearer admin | replace VP config; validate tag/name cùng physical points |
+| GET/POST | /modbus/devices | bearer viewer/admin | list/create Modbus RTU Device; RS485, baud, parity, stop bit, slave ID, poll/timeout/retry |
+| PUT/DELETE | /modbus/devices/{id} | bearer admin | update/delete Device; ID ổn định |
+| GET/POST | /modbus/points | bearer viewer/admin | list/create Modbus RTU Point; tag unique xuyên namespace |
+| PUT/DELETE | /modbus/points/{id} | bearer admin | update/delete Point; rename không đổi Point ID |
+| GET | /modbus/diagnostics | bearer viewer+ | telemetry poll/timeout/retry/CRC thật từ iobus SHM |
+| GET | /health | — | health web/core/iobus/io_shm/plc_shm/MCU connection |
 | GET/PUT | /trends/config | bearer viewer/admin | viewer đọc trạng thái; admin atomic-update per-point DB logging policy, interval và start UTC |
 | GET | /history | bearer viewer+ | unified UTC range query; backend merge RAM/hot 48h/archive, trả quality/source/tier/gap |
 | GET | /system/status | bearer | CPU/RAM/IOP/ver |

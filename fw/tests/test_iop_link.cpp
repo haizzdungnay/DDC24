@@ -212,7 +212,9 @@ TEST(IopLinkRoundTrip, EveryCommandInTheContractSurvivesBuildThenParse)
             << "round-trip hỏng ở CMD 0x" << std::hex << int(cmd);
         EXPECT_EQ(frame.cmd, cmd);
         EXPECT_EQ(frame.len, static_cast<uint16_t>(len));
-        if (len > 0) EXPECT_EQ(0, std::memcmp(frame.payload, payload.data(), payload.size()));
+        if (len > 0) {
+            EXPECT_EQ(0, std::memcmp(frame.payload, payload.data(), payload.size()));
+        }
     }
 }
 

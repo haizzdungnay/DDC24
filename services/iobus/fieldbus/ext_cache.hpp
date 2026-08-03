@@ -28,6 +28,9 @@ public:
      * start_idx..start_idx+count-1: range điểm thuộc slave đó trong cache. */
     void mark_slave_offline(uint16_t start_idx, uint16_t count, uint8_t slave_addr);
 
+    /* Giữ last-known-value trong cửa sổ retry nhưng đánh STALE/UNCERTAIN. */
+    void mark_slave_stale(uint16_t start_idx, uint16_t count, uint8_t slave_addr);
+
     /* Gửi snapshot datagram tới /run/mkddc/fieldbus.sock (SOCK_DGRAM, sendto).
      * sock_path: đường dẫn socket (không cần connect, sendto once-per-push).
      * Trả false nếu send fail (log + continue — drop acceptable). */

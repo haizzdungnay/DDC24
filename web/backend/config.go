@@ -7,6 +7,12 @@ import (
 )
 
 const webVersion = "0.1.0-be-b6c"
+
+var buildVersion = webVersion
+var buildGitCommit = "unknown"
+var buildTime = "unknown"
+var buildToolchain = "unknown"
+
 const defaultAlarmSettingsConf = "/data/config/alarm_settings.conf"
 const defaultAlarmHistoryFile = "/data/config/alarm_history.jsonl"
 
@@ -56,7 +62,7 @@ func LoadConfig() (Config, error) {
 		AlarmHistoryPath: getenv("ALARM_HISTORY_FILE", defaultAlarmHistoryFile),
 		StaticDir:        getenv("STATIC_DIR", "dist"),
 		CORSOrigin:       os.Getenv("CORS_ORIGIN"),
-		WebVersion:       getenv("WEB_VERSION", webVersion),
+		WebVersion:       getenv("WEB_VERSION", buildVersion),
 	}
 	if cfg.JWTSecret == "" {
 		return Config{}, errors.New("JWT_SECRET is required")

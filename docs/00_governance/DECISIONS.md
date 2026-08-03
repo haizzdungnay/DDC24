@@ -2,7 +2,7 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-07-24
+**Cập nhật:** 2026-08-03 (ADR-023: Product Spec Programming Rev A)
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: EasySet parity thành ADR-013; raw SHM thành ADR-014.
 
@@ -13,7 +13,7 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-003 | Protection/EMC được thiết kế theo ranh giới terminal và phải có evidence trước release. | Accepted |
 | ADR-004 | Rev A dùng component graph runtime, không dùng IEC 61131-3/FBD/ST runtime. | Superseded by ADR-020 |
 | ADR-005 | Kiến trúc là ba core processes; HMI là dịch vụ thứ tư feature-gated, không làm thay đổi core control path. | Amended |
-| ADR-006 | Web cấu hình bằng form/JSON; wiresheet canvas (drag-drop) hoãn sau Rev A. Không còn hàm ý loại ngôn ngữ IEC-aligned ST/FBD khỏi Rev A — xem ADR-020. | Accepted, ghi chú theo ADR-020 |
+| ADR-006 | Form/JSON vẫn là baseline cho cấu hình product-wide ngoài Programming. Câu “wiresheet canvas hoãn sau Rev A” không áp dụng để loại FBD khỏi Product Spec; trải nghiệm authoring FBD chờ quyết định OD-PROG-006 và Programming Design. | Amended by ADR-023 |
 | ADR-007 | Backend web dùng Go; control và I/O path dùng C/C++. | Accepted |
 | ADR-008 | Sản phẩm là BMS Edge Automation Controller; HVAC là use case đầu, với 28 loại component Rev A. | Accepted |
 | ADR-009 | HMI áp dụng phân cấp hiển thị/alarms theo ISA-101 ở mức design guidance, không tuyên bố chứng nhận. | Accepted |
@@ -29,7 +29,9 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-019 | Independent global point tag/name namespaces, static references and generation-aware rename/delete behavior. | Accepted |
 | ADR-021 | **RBAC 3 vai trò (`viewer`/`operator`/`admin`) thuộc baseline Rev A.0**, không còn hoãn sang Rev B. Backend đã hiện thực đủ ba vai trò với `auth.Require(...)` trên từng endpoint và API quản trị tài khoản kèm guard last-admin; frontend nối nốt phần còn thiếu ở plan 45. Ma trận route↔quyền tối thiểu của Web suy TRỰC TIẾP từ bảng route backend (`src/frontend/src/auth/roles.ts`), frontend không được nới lỏng hơn server. Vẫn thuộc Rev B: nhóm quyền tuỳ biến, phân quyền theo từng point, SSO/AD, lịch sử phiên đăng nhập. | Accepted 2026-08-01 |
 | ADR-022 | CI/CD tự động build và deploy xuống board qua self-hosted runner trên chính Orange Pi 5B; auto-deploy khi merge `main` có điều kiện board là lab/dev; atomic swap + health check + tự rollback; `mkddc-netcfg` không được restart mù khi còn giao dịch dở. | Proposed — WP2 xong, WP1/3/4/5/6 còn mở |
-| ADR-020 | Rev A.0 dùng Program Runtime do Mekong sở hữu (không runtime IEC bên ngoài), IEC 61131-3-aligned, phạm vi ngôn ngữ **ST + FBD** (LD/SFC hoãn, chưa vào release gate Rev A.0). Component graph 28-node cũ chỉ còn là legacy importer/nguồn vendor FB, không gọi là FBD. Không online change, không claim certified/compliant trong Rev A.0. C0 là phase kiểm soát; CTO phê duyệt `FW-SOM-ST-001` ngày 2026-07-24 để mở next action FW SOM trong `services/core`: chạy/test một chương trình ST tối thiểu trên SOM host runtime. FE/Web Backend/STM32/HIL/FBD đầy đủ vẫn chờ approval riêng. | Accepted — supersedes ADR-004; amended 2026-07-24 |
+| ADR-020 | Rev A dùng Program Runtime do Mekong sở hữu, phạm vi ngôn ngữ ST + FBD; LD/SFC và claim certified/compliant ngoài scope. Component graph 28-node là As-Built legacy, không gọi là FBD. Việc CTO từng mở ST host component chỉ cho phép thu evidence phát triển, không phải bằng chứng runtime production hoặc claim Programming implemented. Phạm vi Point/cycle và workflow tài liệu được ADR-023 sửa đổi/làm rõ. | Accepted — supersedes ADR-004; amended by ADR-023 |
+| ADR-023 | **Khóa Product Spec Programming DDC-24 Rev A:** chỉ Local Physical I/O, Virtual Point, Modbus RTU Point, ST, FBD và cycle time 1 s/5 s/30 s. Modbus TCP Point, BACnet/IP Point, LD, SFC, motion, safety PLC và online change ngoài scope Programming. Product Spec quy định sản phẩm phải làm gì; Requirement quy định nghĩa vụ từng layer; Programming Design chưa thực hiện; As-Built chỉ được kết luận từ source/evidence. Không dùng ST host unit test làm bằng chứng runtime production và không claim Programming đã implement. Các vấn đề chưa quyết định đi vào `PROGRAMMING_OPEN_DECISIONS.md`. | Accepted 2026-08-03 |
+| ADR-024 | **Thiết kế Modbus RTU Point trước Programming:** đề xuất mô hình Bus → Device → Point; hai bus logic độc lập; stable Point ID; typed value/timestamp/quality; atomic config apply có iobus ACK; reliable write result/readback và không blind replay. Chi tiết/9 quyết định review tại `DDD-SW-MBRTU-POINT-001`. Không thay đổi source hoặc đóng real-RS485 gate. | Proposed 2026-08-03 — chờ Product/System/Fieldbus/HW/QA review |
 
 ## Diễn giải bắt buộc
 
@@ -40,5 +42,11 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 - SOM network authority là helper/daemon least-privilege, không phải core process thứ tư và không nằm trong control path. `mkddc-hmi` chỉ gọi broker; `mkddc-web` chỉ làm auth/audit/adapter; chỉ network authority được activate cấu hình Linux.
 - Năm surface local là `Home`, `Points`, `Control`, `Alarms`, `Service`. Communication/System được giữ dưới Home/Service; không mất diagnostics khi bỏ hai tab riêng.
 - Base SKU là 16 UI + 4 AO + 4 DO. True isolated DI chỉ là capability/SKU tùy chọn và phải có phê duyệt riêng.
-- MQTT cloud agent, OTA A/B, wiresheet canvas (drag-drop FBD/LD editor), BACnet MS/TP và BTL certification không thuộc baseline Rev A.0. **IEC 61131-3-aligned Program Runtime (ST + FBD, Mekong-owned, không claim certified) thuộc baseline Rev A.0 theo ADR-020 — không còn bị loại trừ.** LD và SFC vẫn hoãn (schema mở rộng được, nhưng không build trong Rev A.0).
+- MQTT cloud agent, OTA A/B, BACnet MS/TP và BTL certification không thuộc baseline Rev A. **ST và FBD thuộc Product Spec Programming Rev A; cơ chế authoring FBD chưa được quyết định trong nhiệm vụ này.** LD, SFC, Modbus TCP Point, BACnet/IP Point, motion và safety PLC nằm ngoài scope Programming Rev A.
+- Modbus TCP và BACnet/IP vẫn có thể là giao tiếp product-wide theo `SYS-REQ-004`; chúng không được expose như Programming Point nếu Product Spec chưa đổi.
+- ADR-024 ở trạng thái Proposed không phải authority để claim source conform hoặc
+  Modbus RTU Point ready. Product ghi hai RTU master nhưng hardware controlled
+  draft hiện mới mô tả một UART4/transceiver/connector; xung đột này phải được
+  đóng bằng hardware/platform evidence hoặc Product decision, không bằng path
+  `/dev/ttyS*` giả định.
 - IEC 60073, IEC 62682, IEC 62443, ISO 9241-210 và ISA-101 được dùng làm design/verification guidance theo scope; không được biến review tài liệu thành tuyên bố conformity/certification.

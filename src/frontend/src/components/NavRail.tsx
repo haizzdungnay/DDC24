@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Activity, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, PanelLeft, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, TestTube2, Users, X, Zap } from 'lucide-react'
+import { Bell, CalendarDays, Activity, Cable, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, PanelLeft, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, TestTube2, Users, X, Zap } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
@@ -41,6 +41,7 @@ const groups = [
       { to: '/eng/inputs', key: 'inputs', icon: Activity },
       { to: '/eng/outputs', key: 'outputs', icon: Zap },
       { to: '/eng/virtual-points', key: 'virtual-points', icon: SlidersHorizontal },
+      { to: '/eng/modbus-rtu', key: 'modbus-rtu', icon: Cable },
       // { to: '/eng/user-parameters', key: 'user-parameters', icon: ListChecks },
       // { to: '/eng/aux', key: 'aux', icon: Settings },
       { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell }

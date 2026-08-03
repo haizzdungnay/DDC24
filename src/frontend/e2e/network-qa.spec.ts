@@ -140,8 +140,9 @@ test('Network D/E runtime QA with mocked mutations and authority recovery', asyn
   })
 
   await page.goto('/settings/network', { waitUntil: 'domcontentloaded' })
-  const password = page.getByLabel('Password')
+  const password = page.getByLabel('Password', { exact: true })
   if (await password.isVisible()) {
+    await page.getByLabel('Username', { exact: true }).fill('admin')
     await password.fill('qa-e2e')
     await page.getByRole('button', { name: 'Sign In', exact: true }).click()
     await expect(page).toHaveURL(/\/settings\/network$/)
