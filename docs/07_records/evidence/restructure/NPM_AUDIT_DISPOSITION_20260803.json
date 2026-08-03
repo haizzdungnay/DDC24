@@ -1,0 +1,52 @@
+{
+  "record_id": "RST-205-NPM-20260803",
+  "date": "2026-08-03",
+  "scope": "apps/web-ui",
+  "baseline": {
+    "high": 4,
+    "packages": [
+      "brace-expansion@5.0.7",
+      "postcss@8.5.15",
+      "react-router@7.18.1",
+      "react-router-dom@7.18.1"
+    ]
+  },
+  "fixed": [
+    {
+      "package": "brace-expansion",
+      "from": "5.0.7",
+      "to": "5.0.9",
+      "advisory": "GHSA-mh99-v99m-4gvg",
+      "disposition": "fixed"
+    },
+    {
+      "package": "postcss",
+      "from": "8.5.15",
+      "to": "8.5.25",
+      "advisory": "GHSA-r28c-9q8g-f849",
+      "disposition": "fixed"
+    }
+  ],
+  "waiver": {
+    "advisory": "GHSA-qwww-vcr4-c8h2",
+    "reported_package_records": [
+      "react-router@7.18.2",
+      "react-router-dom@7.18.2"
+    ],
+    "disposition": "not_applicable_scoped_waiver",
+    "reason": "Advisory chỉ áp dụng React Server Components mode; Web UI là client-only SPA dùng BrowserRouter và không import RSC, ServerRouter, HydratedRouter, createRoutesStub, action hoặc server action.",
+    "controls": [
+      ".grype.yaml chỉ ignore đúng advisory và đúng react-router@7.18.2",
+      "mọi finding high/critical khác tiếp tục làm security scan thất bại",
+      "không downgrade 7.11.0 vì phiên bản đó còn nhiều advisory high đã biết"
+    ],
+    "owner": "Frontend Lead + Security Owner",
+    "expires_on": "2026-10-25",
+    "exit_condition": "Nâng lên phiên bản React Router không còn advisory hoặc chuyển kiến trúc có RSC thì đánh giá lại trước merge"
+  },
+  "post_change": {
+    "npm_audit_high_records": 2,
+    "unique_unwaived_high_advisories": 0,
+    "notes": "Hai record npm còn lại cùng ánh xạ tới một advisory đã waive theo phạm vi; npm audit không hỗ trợ file ignore nên vẫn trả exit 1."
+  }
+}
