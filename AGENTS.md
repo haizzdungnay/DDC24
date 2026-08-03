@@ -6,6 +6,24 @@
 - Keep FE local changes as the source of truth; do not overwrite unrelated local FE work.
 - Luôn trả lời bằng tiếng Việt và viết tài liệu (docs, changelog, báo cáo, review) bằng tiếng Việt. Hạn chế tối đa tiếng Anh trong nội dung rule và skill của agent; chỉ giữ nguyên tiếng Anh cho thuật ngữ kỹ thuật/tên riêng không có bản dịch tương đương rõ ràng (ví dụ: BACnet, Modbus, CRC, endian, watchdog, tên biến/hàm/API trong code).
 
+## Kiểm chứng frontend bằng Chrome DevTools MCP
+
+- Tự dùng skill `$inspect-fe-chrome-devtools` và MCP `chrome-devtools` khi công
+  việc liên quan review UI/UX, thay đổi giao diện hoặc hành vi React/Vite,
+  responsive, accessibility, lỗi tương tác, tích hợp FE–BE, Console/Network,
+  hiệu năng hoặc lỗi chỉ xuất hiện lúc chạy trên trình duyệt.
+- Sau thay đổi FE có thể ảnh hưởng giao diện hoặc runtime, mở đúng luồng trên
+  trình duyệt thật và kiểm tra tối thiểu snapshot/screenshot, Console error và
+  Network request thất bại. Với thay đổi layout, kiểm tra cả desktop và mobile.
+- Chrome DevTools MCP là bằng chứng bổ sung, không thay cho Vitest, lint, build
+  hoặc Playwright E2E. Không bắt buộc dùng cho thay đổi chỉ gồm type/test/docs
+  không ảnh hưởng runtime; nếu bỏ qua thì nêu lý do trong bàn giao.
+- Không áp dụng workflow trình duyệt cho HMI native LVGL/DRM. Không dùng profile
+  Chrome cá nhân, thông tin đăng nhập hoặc dữ liệu nhạy cảm nếu user chưa cho
+  phép; không đưa token/cookie/header bí mật vào báo cáo.
+- Nếu MCP chưa có trong phiên, kiểm tra `codex mcp get chrome-devtools`, báo rõ
+  cần restart Codex và không được claim đã kiểm chứng bằng trình duyệt.
+
 ## Quy trình khi user nói "commit" hoặc "merge"
 
 Khi user chỉ nói ngắn gọn **"commit"**, **"merge"**, **"commit đi"**, **"merge đi"** — hiểu là **chạy trọn quy trình dưới đây cho toàn bộ thay đổi hiện có trong cây làm việc**, không hỏi lại từng bước:
