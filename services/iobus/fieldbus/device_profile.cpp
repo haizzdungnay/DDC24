@@ -61,11 +61,6 @@ static bool jget_bool(const std::string& s, const char* key, bool* out)
     return false;
 }
 
-static bool is_write_fc(uint8_t fc)
-{
-    return fc == 5 || fc == 6 || fc == 15 || fc == 16;
-}
-
 static bool is_read_fc(uint8_t fc)
 {
     return fc == 1 || fc == 2 || fc == 3 || fc == 4;
@@ -168,7 +163,9 @@ static bool parse_point(const std::string& obj, ProfilePoint* pt)
         if      (s == "AB")   pt->byte_order = ByteOrder::AB;
         else if (s == "BA")   pt->byte_order = ByteOrder::BA;
         else if (s == "ABCD") pt->byte_order = ByteOrder::ABCD;
+        else if (s == "BADC") pt->byte_order = ByteOrder::BADC;
         else if (s == "CDAB") pt->byte_order = ByteOrder::CDAB;
+        else if (s == "DCBA") pt->byte_order = ByteOrder::DCBA;
     } else if (is32bit) {
         std::fprintf(stderr, "ERROR profile.missing_byte_order name=%s type=%s — skip\n",
                      pt->name.c_str(), s.c_str());
@@ -181,8 +178,11 @@ static bool parse_point(const std::string& obj, ProfilePoint* pt)
     bool wb = false;
     if (jget_bool(obj, "writable", &wb)) {
         pt->writable = wb;
-        if (wb && !is_write_fc(fc)) {
-            std::fprintf(stderr, "ERROR profile.writable_non_write_fc name=%s fc=%u — skip\n",
+        /* Một Point read/write vẫn được poll bằng FC01/FC03; đường ghi runtime
+         * suy ra FC05/06/16. Luật cũ làm Coil/Holding Register read/write
+         * không thể cấu hình dù drain_ext_writes() đã hỗ trợ chúng. */
+        if (wb && fc != 1 && fc != 3) {
+            std::fprintf(stderr, "ERROR profile.writable_readonly_fc name=%s fc=%u — skip\n",
                          pt->name.c_str(), fc);
             return false;
         }

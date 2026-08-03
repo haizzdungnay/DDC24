@@ -13,7 +13,7 @@
 namespace iobus::fieldbus {
 
 enum class PointType { Bool, Int16, Uint16, Int32, Uint32, Float32 };
-enum class ByteOrder { AB, BA, ABCD, CDAB };
+enum class ByteOrder { AB, BA, ABCD, BADC, CDAB, DCBA };
 
 struct ProfilePoint {
     std::string name;
@@ -81,7 +81,8 @@ uint16_t ext_slots_for_profile(const DeviceProfile& prof);
  *  - type 32-bit (int32/uint32/float32) trên FC 3/4 cần count là BỘI SỐ CỦA 2
  *    (mỗi điểm luận lý = 2 register); count lẻ → skip
  *  - byte_order thiếu cho 32-bit → skip
- *  - writable=true nhưng FC không ghi → skip
+ *  - writable=true chỉ hợp lệ với FC01 (Coil) hoặc FC03 (Holding Register);
+ *    FC02/04 là read-only, FC05/06/15/16 là lệnh ghi và không tạo Point đọc
  * Profile lỗi nặng (không có points sau validate) → warn + continue (service không crash).
  */
 bool load_device_profile(const std::string& path, DeviceProfile* out);

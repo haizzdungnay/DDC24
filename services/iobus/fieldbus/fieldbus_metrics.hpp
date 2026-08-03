@@ -19,6 +19,9 @@ struct SlaveMetrics {
     bool        e303_triggered  = false;   /* error rate alarm đã gửi */
     uint32_t    total_polls     = 0;
     uint32_t    total_errors    = 0;
+    uint32_t    timeout_errors  = 0;
+    uint32_t    crc_errors      = 0;
+    uint32_t    retry_attempts  = 0;
     uint8_t     consecutive_errors = 0;
     uint64_t    last_seen_ms    = 0;
 
@@ -33,11 +36,13 @@ public:
     void init(const std::vector<std::string>& slave_names,
               const std::vector<uint8_t>& slave_addrs);
 
-    void update(uint8_t slave_idx, bool ok, uint64_t now_ms);
+    void update(uint8_t slave_idx, bool ok, uint64_t now_ms, uint8_t retry_limit = 2);
+    void record_timeout(uint8_t slave_idx);
+    void record_crc_error(uint8_t slave_idx);
 
     /* E302: slave offline (retry >= 2 → offline).
      * Trả true NẾU cần gửi alarm (lần đầu offline). */
-    bool check_e302(uint8_t slave_idx);
+    bool check_e302(uint8_t slave_idx, uint8_t retry_limit = 2);
 
     /* E303: bus error rate > 10%.
      * Trả true NẾU cần gửi alarm (lần đầu vượt ngưỡng). */

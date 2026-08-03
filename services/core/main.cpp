@@ -24,6 +24,7 @@
 #include "schedule/schedule_runtime.hpp"
 #include "graph/scan_loop.hpp"
 #include "graph/state_snapshot.hpp"
+#include "build_info.h"
 
 namespace {
 
@@ -79,7 +80,8 @@ int main(int argc, char** argv)
 
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
-        if (a == "--log-level" && i + 1 < argc) { ++i; /* Rev A: log level cố định */ }
+        if (a == "--version") { std::printf("version=%s git_commit=%s build_time=%s toolchain=%s\n", MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN); return 0; }
+        else if (a == "--log-level" && i + 1 < argc) { ++i; /* Rev A: log level cố định */ }
         else if (a == "--sock" && i + 1 < argc) sock_path = argv[++i];
         else if (a == "--fieldbus-sock" && i + 1 < argc) fieldbus_sock_path = argv[++i];
         else if (a == "--graph" && i + 1 < argc) graph_path = argv[++i];
@@ -106,7 +108,8 @@ int main(int argc, char** argv)
     }
 
     /* scan_ms log SAU khi chốt với graph.json (tránh log giá trị không dùng) */
-    std::fprintf(stderr, "INFO  core.start version=1.0.0 pid=%d\n", getpid());
+    std::fprintf(stderr, "INFO  core.start version=%s git_commit=%s build_time=%s toolchain=%s pid=%d\n",
+                 MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN, getpid());
 
     /* RT + mlockall. Đo lại trạng thái THẬT sau khi cố đặt, thay vì tin vào
      * mã trả về: trên hệ có CONFIG_RT_GROUP_SCHED + cgroup v2, systemd có thể

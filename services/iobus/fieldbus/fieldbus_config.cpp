@@ -110,6 +110,10 @@ static bool parse_slave(const std::string& obj, uint32_t default_poll_ms, SlaveC
     sl->poll_ms = default_poll_ms;
     if (jget_int(obj, "poll_ms", &v) && v > 0)
         sl->poll_ms = static_cast<uint32_t>(v);
+    if (jget_int(obj, "timeout_ms", &v) && v >= 20 && v <= 10000)
+        sl->timeout_ms = static_cast<uint32_t>(v);
+    if (jget_int(obj, "retry", &v) && v >= 1 && v <= 10)
+        sl->retry = static_cast<uint8_t>(v);
     return true;
 }
 

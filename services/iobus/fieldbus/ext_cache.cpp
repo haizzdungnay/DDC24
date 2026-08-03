@@ -48,6 +48,15 @@ void ExtCache::mark_slave_offline(uint16_t start_idx, uint16_t count,
     }
 }
 
+void ExtCache::mark_slave_stale(uint16_t start_idx, uint16_t count,
+                                uint8_t /*slave_addr*/)
+{
+    for (uint16_t i = start_idx; i < start_idx + count && i < KX_N_EXT; i++) {
+        points_[i].online  = 1;
+        points_[i].quality = KX_Q_UNCERTAIN;
+    }
+}
+
 bool ExtCache::push_snapshot(const std::string& sock_path)
 {
     /* Lazy-create sendto socket một lần */

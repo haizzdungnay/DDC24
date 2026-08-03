@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(mkddc-core CXX)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/BuildProvenance.cmake)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options(-Wall -Wextra -Werror)
@@ -41,6 +42,7 @@ target_link_libraries(st_compiler_lib PUBLIC core_lib)
 
 add_executable(mkddc-core main.cpp)
 target_link_libraries(mkddc-core PRIVATE core_lib)
+mkddc_apply_provenance(mkddc-core)
 
 # FW-SOM-IEC-002 item 2: validate gateway CLI cho BE gọi (fixed argv, source
 # luôn qua file path, không shell-eval — xem st/st_validate_main.cpp).

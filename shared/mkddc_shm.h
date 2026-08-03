@@ -108,6 +108,15 @@ typedef struct {
     uint8_t  _pad[6];
 } kx_slave_metrics_t;
 
+/* Chẩn đoán Modbus RTU nối thêm, giữ nguyên toàn bộ offset/stride cũ. */
+typedef struct {
+    uint32_t timeout_errors;
+    uint32_t crc_errors;
+    uint32_t retry_attempts;
+    uint8_t  consecutive_errors;
+    uint8_t  _pad[3];
+} kx_modbus_diag_t;
+
 /* ============ io_shm: iobus -> phần còn lại (giá trị đã scale) ============
  * Creator: mkddc-iobus (O_CREAT, init toàn bộ = default trước khi set magic).
  * Seqlock writer duy nhất: iobus. Ngoại lệ ownership: core là writer DUY NHẤT
@@ -164,6 +173,7 @@ typedef struct {
     uint8_t  fb_slave_count;    /* số phần tử hợp lệ trong fb_slave[]; 0 = chưa poll */
     uint32_t fb_publish_seq;    /* tăng mỗi lần publish; 0 = iobus chưa publish lần nào */
     kx_slave_metrics_t fb_slave[KX_N_FB_SLAVE];
+    kx_modbus_diag_t modbus_diag[KX_N_FB_SLAVE]; /* timeout/retry/CRC per slave */
 } kx_io_shm_t;
 
 /* ============ ext_shm: fieldbus (Modbus RTU master) -> hệ thống ============ */

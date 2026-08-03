@@ -38,6 +38,7 @@ public:
      * `count` bị cắt xuống KX_N_FB_SLAVE; fb_publish_seq tăng mỗi lần gọi để
      * consumer phân biệt "iobus chưa publish lần nào" với "đã publish, 0 slave". */
     void write_fieldbus_metrics(const kx_slave_metrics_t* slaves, size_t count);
+    void write_modbus_diagnostics(const kx_modbus_diag_t* diagnostics, size_t count);
 
     /* Publish trạng thái bind BACnet/IP THẬT (finding F-04).
      * `bound` phải là kết quả bip_init()/rebind(), không phải cờ enabled trong config. */

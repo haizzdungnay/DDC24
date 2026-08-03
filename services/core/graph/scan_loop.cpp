@@ -20,6 +20,7 @@ static const char* point_source_name(PointSource source)
     case PointSource::WEB: return "manual";
     case PointSource::BACNET: return "bacnet";
     case PointSource::SCHEDULE: return "schedule";
+    case PointSource::MODBUS_RTU: return "modbus_rtu";
     case PointSource::DEFAULT: return "default";
     }
     return "unknown";
@@ -69,8 +70,11 @@ void ScanLoop::step()
      * Chỉ copy khi shm tồn tại và ext_count > 0. */
     {
         const kx_plc_shm_t* shm = d_.bacnet->shm();
-        if (shm && shm->ext_count > 0)
-            d_.graph->feed_ext_snapshot(shm->ext, shm->ext_count);
+        if (shm) {
+            d_.table->update_ext(shm->ext, shm->ext_count);
+            if (shm->ext_count > 0)
+                d_.graph->feed_ext_snapshot(shm->ext, shm->ext_count);
+        }
     }
 
     /* 4. Read web/BACnet command queue.

@@ -43,6 +43,7 @@
 #include "platform/realtime.hpp"
 #include "platform/network_address.hpp"
 #include "platform/systemd_notify.hpp"
+#include "build_info.h"
 
 namespace {
 
@@ -192,6 +193,7 @@ void publish_fieldbus_metrics(iobus::IoCache& cache,
                               const iobus::fieldbus::FieldbusMetrics& metrics)
 {
     kx_slave_metrics_t out[KX_N_FB_SLAVE] = {};
+    kx_modbus_diag_t diagnostics[KX_N_FB_SLAVE] = {};
     size_t count = metrics.size();
     if (count > KX_N_FB_SLAVE) count = KX_N_FB_SLAVE;
     for (size_t i = 0; i < count; i++) {
@@ -201,8 +203,13 @@ void publish_fieldbus_metrics(iobus::IoCache& cache,
         out[i].total_errors = m.total_errors;
         out[i].addr         = m.addr;
         out[i].online       = m.online ? 1u : 0u;
+        diagnostics[i].timeout_errors = m.timeout_errors;
+        diagnostics[i].crc_errors = m.crc_errors;
+        diagnostics[i].retry_attempts = m.retry_attempts;
+        diagnostics[i].consecutive_errors = m.consecutive_errors;
     }
     cache.write_fieldbus_metrics(out, count);
+    cache.write_modbus_diagnostics(diagnostics, count);
 }
 
 } // namespace
@@ -225,7 +232,8 @@ int main(int argc, char** argv)
 
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
-        if (a == "--config" && i + 1 < argc)         { config_path = argv[++i]; config_from_cli = true; }
+        if (a == "--version") { std::printf("version=%s git_commit=%s build_time=%s toolchain=%s\n", MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN); return 0; }
+        else if (a == "--config" && i + 1 < argc)         { config_path = argv[++i]; config_from_cli = true; }
         else if (a == "--uart" && i + 1 < argc)      { uart_override = argv[++i]; }
         else if (a == "--log-level" && i + 1 < argc) { log_level_override = argv[++i]; }
         else if (a == "--fieldbus-config" && i + 1 < argc) { fieldbus_config_path = argv[++i]; fieldbus_config_from_cli = true; }
@@ -239,7 +247,8 @@ int main(int argc, char** argv)
         }
     }
 
-    std::fprintf(stderr, "INFO  iobus.start version=1.1.0 pid=%d\n", getpid());
+    std::fprintf(stderr, "INFO  iobus.start version=%s git_commit=%s build_time=%s toolchain=%s pid=%d\n",
+                 MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN, getpid());
 
     /* 1. Load config — JSON hỏng → fail-fast exit(1) */
     IobusConfig cfg;

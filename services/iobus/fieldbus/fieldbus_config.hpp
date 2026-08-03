@@ -17,6 +17,8 @@ struct SlaveConfig {
     std::string profile;          /* profile ID (tìm trong /usr/share hoặc /data/config) */
     std::string name;             /* tên slave, dùng làm prefix ext point name */
     uint32_t    poll_ms = 1000;
+    uint32_t    timeout_ms = 300;  /* response timeout riêng từng thiết bị */
+    uint8_t     retry = 2;         /* số lỗi liên tiếp trước khi OFFLINE */
 };
 
 struct TcpSlaveConfig {

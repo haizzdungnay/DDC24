@@ -31,7 +31,9 @@ static_assert(offsetof(kx_io_shm_t, fb_slave_count) == 527, "web io_shm slave co
 static_assert(offsetof(kx_io_shm_t, fb_publish_seq) == 528, "web io_shm publish seq offset changed");
 static_assert(offsetof(kx_io_shm_t, fb_slave) == 536, "web io_shm slave array offset changed");
 static_assert(sizeof(kx_slave_metrics_t) == 24, "web slave metrics stride changed");
-static_assert(sizeof(kx_io_shm_t) == 1304, "web io_shm size changed");
+static_assert(offsetof(kx_io_shm_t, modbus_diag) == 1304, "web Modbus diag offset changed");
+static_assert(sizeof(kx_modbus_diag_t) == 16, "web Modbus diag stride changed");
+static_assert(sizeof(kx_io_shm_t) == 1816, "web io_shm size changed");
 
 namespace {
 

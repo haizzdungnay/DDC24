@@ -7,6 +7,7 @@
 #include <thread>
 
 #include <pthread.h>
+#include "build_info.h"
 
 int main(int argc, char** argv)
 {
@@ -16,7 +17,8 @@ int main(int argc, char** argv)
     std::string interface;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
-        if (arg == "--socket" && i + 1 < argc) socket_path = argv[++i];
+        if (arg == "--version") { std::printf("version=%s git_commit=%s build_time=%s toolchain=%s\n", MKDDC_BUILD_VERSION, MKDDC_GIT_COMMIT, MKDDC_BUILD_TIME, MKDDC_TOOLCHAIN); return 0; }
+        else if (arg == "--socket" && i + 1 < argc) socket_path = argv[++i];
         else if (arg == "--journal" && i + 1 < argc) journal_path = argv[++i];
         else if (arg == "--allowed-user" && i + 1 < argc) allowed_user = argv[++i];
         else if (arg == "--interface" && i + 1 < argc) interface = argv[++i];

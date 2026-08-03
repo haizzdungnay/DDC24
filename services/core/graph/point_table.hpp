@@ -13,9 +13,9 @@
 
 namespace core {
 
-enum class PointKind : uint8_t { AI, BI, AO, BO, AV, BV, MSV };
+enum class PointKind : uint8_t { AI, BI, AO, BO, AV, BV, MSV, EXT };
 
-enum class PointSource : uint8_t { IO, GRAPH, WEB, BACNET, SCHEDULE, DEFAULT };
+enum class PointSource : uint8_t { IO, GRAPH, WEB, BACNET, SCHEDULE, MODBUS_RTU, DEFAULT };
 
 struct PointId {
     PointKind kind;
@@ -33,6 +33,9 @@ class PointTable {
 public:
     /* AI/BI/DO_fb/AO_fb từ snapshot (07 §3) */
     void update_inputs(const IoSnapshot& io);
+
+    /* Đồng bộ Modbus RTU Point từ snapshot đã được core nhận và xác thực. */
+    void update_ext(const kx_ext_point_t* points, uint16_t count);
 
     Point get(PointId id) const;
 
@@ -60,6 +63,7 @@ private:
     Point av_[KX_N_AV];
     Point bv_[KX_N_BV];
     Point msv_[KX_N_MSV];
+    Point ext_[KX_N_EXT];
 
     Point*       slot(PointId id);
     const Point* slot(PointId id) const;

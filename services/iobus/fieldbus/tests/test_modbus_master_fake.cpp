@@ -22,6 +22,31 @@
 
 using namespace iobus::fieldbus;
 
+TEST(FieldbusConfig, ParsesRtuPollTimeoutRetryAndSerialSettings)
+{
+    const std::string path = "/tmp/mkddc_fieldbus_rtu_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream out(path);
+        out << R"json({
+          "rs485":{"device":"/dev/ttyS3","baud":38400,"parity":"E","stop":2},
+          "poll_default_ms":5000,
+          "slaves":[{"addr":7,"profile":"ahu-1","name":"ahu-1","poll_ms":1000,"timeout_ms":450,"retry":4}]
+        })json";
+    }
+    FieldbusConfig cfg;
+    ASSERT_TRUE(load_fieldbus_config(path, true, &cfg));
+    ::unlink(path.c_str());
+    ASSERT_EQ(cfg.slaves.size(), 1u);
+    EXPECT_EQ(cfg.rs485.device, "/dev/ttyS3");
+    EXPECT_EQ(cfg.rs485.baud, 38400u);
+    EXPECT_EQ(cfg.rs485.parity, 'E');
+    EXPECT_EQ(cfg.rs485.stop, 2u);
+    EXPECT_EQ(cfg.slaves[0].addr, 7u);
+    EXPECT_EQ(cfg.slaves[0].poll_ms, 1000u);
+    EXPECT_EQ(cfg.slaves[0].timeout_ms, 450u);
+    EXPECT_EQ(cfg.slaves[0].retry, 4u);
+}
+
 TEST(ModbusMaster, OpenWithoutModbusEnabled)
 {
     ModbusMaster master;

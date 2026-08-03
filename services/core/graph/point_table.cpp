@@ -21,6 +21,7 @@ bool PointTable::valid(PointId id)
     case PointKind::AV:  return id.idx >= 0 && id.idx < KX_N_AV;
     case PointKind::BV:  return id.idx >= 0 && id.idx < KX_N_BV;
     case PointKind::MSV: return id.idx >= 0 && id.idx < KX_N_MSV;
+    case PointKind::EXT: return id.idx >= 0 && id.idx < KX_N_EXT;
     }
     return false;
 }
@@ -36,8 +37,25 @@ Point* PointTable::slot(PointId id)
     case PointKind::AV:  return &av_[id.idx];
     case PointKind::BV:  return &bv_[id.idx];
     case PointKind::MSV: return &msv_[id.idx];
+    case PointKind::EXT: return &ext_[id.idx];
     }
     return nullptr;
+}
+
+void PointTable::update_ext(const kx_ext_point_t* points, uint16_t count)
+{
+    const uint64_t t = now_ns();
+    const uint16_t valid_count = count < KX_N_EXT ? count : KX_N_EXT;
+    for (uint16_t i = 0; i < valid_count; i++) {
+        ext_[i].value = points[i].value;
+        ext_[i].quality = static_cast<kx_quality_t>(points[i].quality);
+        ext_[i].ts_ns = t;
+        ext_[i].source = PointSource::MODBUS_RTU;
+    }
+    for (uint16_t i = valid_count; i < KX_N_EXT; i++) {
+        ext_[i].quality = KX_Q_BAD;
+        ext_[i].source = PointSource::MODBUS_RTU;
+    }
 }
 
 const Point* PointTable::slot(PointId id) const
