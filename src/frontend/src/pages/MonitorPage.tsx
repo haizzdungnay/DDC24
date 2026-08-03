@@ -42,7 +42,8 @@ const kindLabel: Record<PointKind, string> = {
   DO: 'DIGITAL OUTPUT',
   AI: 'LEGACY UNIVERSAL INPUT',
   AO: 'ANALOG OUTPUT',
-  virtual: 'VIRTUAL'
+  virtual: 'VIRTUAL',
+  modbus_rtu: 'MODBUS RTU'
 }
 
 function visibleMonitorPoints(points: Point[], virtualPoints: VirtualPoint[]): Point[] {

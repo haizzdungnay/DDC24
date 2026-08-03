@@ -53,6 +53,7 @@ export const ROUTE_MIN_ROLE: Record<string, UserRole> = {
   '/eng/outputs': 'operator',
   '/eng/inputs': 'admin',
   '/eng/virtual-points': 'admin',
+  '/eng/modbus-rtu': 'admin',
   '/eng/alarm-settings': 'admin',
   '/eng/scheduler': 'admin',
   '/eng/user-parameters': 'admin',

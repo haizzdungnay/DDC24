@@ -63,6 +63,7 @@ function pointKind(raw: Record<string, unknown>, rawId: string, channel?: number
   const idPrefix = rawId.trim().match(/^([A-Z]+)[-_]?\d+$/i)?.[1]
   if (idPrefix && ['VP', 'AV', 'BV', 'MSV'].includes(idPrefix.toUpperCase())) return 'virtual'
   const direct = normalizeKind(rawKind ?? idPrefix ?? rawId.split(/[-_.]/)[0])
+  if (String(rawKind).toLowerCase() === 'modbus_rtu') return 'modbus_rtu'
   if (direct !== 'virtual') return direct
 
   const text = String(rawKind ?? rawId).toLowerCase()
@@ -104,11 +105,13 @@ function pointValue(raw: Record<string, unknown>): Point['value'] {
 }
 
 function pointQuality(raw: Record<string, unknown>): Point['quality'] {
-  if (raw.online === false || raw.fault === true) return 'bad'
   const value = raw.quality ?? raw.q ?? raw.status
   const text = String(value ?? '').toLowerCase()
-  if (['offline', 'fault', 'failed', 'error', 'bad'].includes(text)) return 'bad'
+  if (text === 'offline') return 'offline'
+  if (raw.fault === true) return 'bad'
+  if (['fault', 'failed', 'error', 'bad'].includes(text)) return 'bad'
   if (['timeout', 'stale'].includes(text)) return 'stale'
+  if (raw.online === false) return 'offline'
   return normalizeQuality(value)
 }
 
@@ -122,8 +125,8 @@ export function normalizePoint(raw: Record<string, unknown>): Point {
   const rawUnit = raw.rawUnit ?? raw.raw_unit
   return {
     id,
-    tag: String(raw.tag ?? id),
-    name: displayPointName(raw.name ?? raw.label, id),
+    tag: String(raw.tag_name ?? raw.tag ?? id),
+    name: displayPointName(raw.display_name ?? raw.name ?? raw.label, id),
     kind,
     value,
     unit: raw.unit ? String(raw.unit) : undefined,
@@ -140,6 +143,14 @@ export function normalizePoint(raw: Record<string, unknown>): Point {
     writable: typeof raw.writable === 'boolean' ? raw.writable : undefined,
     logEnabled: typeof raw.logEnabled === 'boolean' ? raw.logEnabled : typeof raw.log_enabled === 'boolean' ? raw.log_enabled : undefined,
     logIntervalMs: numberFrom(raw.logIntervalMs ?? raw.log_interval_ms),
-    namespaceState: raw.namespaceState ? String(raw.namespaceState) : raw.namespace_state ? String(raw.namespace_state) : undefined
+    namespaceState: raw.namespaceState ? String(raw.namespaceState) : raw.namespace_state ? String(raw.namespace_state) : undefined,
+    pointId: String(raw.point_id ?? id),
+    tagName: String(raw.tag_name ?? raw.tag ?? id),
+    displayName: String(raw.display_name ?? raw.name ?? id),
+    dataType: raw.data_type ? String(raw.data_type) : undefined,
+    timestamp: raw.timestamp ? String(raw.timestamp) : undefined,
+    readWrite: raw.read_write === 'read_write' ? 'read_write' : 'read',
+    defaultValue: (raw.default_value as Point['defaultValue']) ?? null,
+    safeValue: (raw.safe_value as Point['safeValue']) ?? null
   }
 }

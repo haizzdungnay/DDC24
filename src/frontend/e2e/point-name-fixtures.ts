@@ -99,6 +99,18 @@ export async function installPointNameApiFixture(page: Page, state: PointNameFix
       applyIoNames(state, body)
       return fulfill(route, 200, {})
     }
+    if (pathname === '/api/v1/system/config/io-bundle' && method === 'GET') {
+      return fulfill(route, 200, { revision: 1, checksum: 'e2e', io: ioConfig(state), safe_state: safeStateConfig(state) })
+    }
+    if (pathname === '/api/v1/system/config/io-bundle' && method === 'PUT') {
+      const bundle = readJson(route)
+      const body = typeof bundle.io === 'object' && bundle.io !== null ? bundle.io as Record<string, unknown> : {}
+      state.ioWrites.push({ body })
+      const conflict = ioNameConflict(state, body)
+      if (conflict) return fulfillNameConflict(route, state, conflict)
+      applyIoNames(state, body)
+      return fulfill(route, 200, { result: 'success', applied: true, reload: 'sighup-iobus+sighup-core', revision: 2, checksum: 'e2e-next' })
+    }
     if (pathname === '/api/v1/system/config/safe-state' && method === 'GET') {
       return fulfill(route, 200, safeStateConfig(state))
     }
