@@ -11,7 +11,7 @@
 set -u
 cd "$(dirname "$0")/.."
 
-BUILD=build/services
+BUILD="${MKDDC_CPP_BUILD_ROOT:-build/release/cpp}"
 LOGDIR="$(pwd)/logs/reload-e2e"
 SOCK=/tmp/mkddc-reload-core.sock
 PTY_A=/tmp/mkddc-reload-a
@@ -59,7 +59,7 @@ print(s.recv(256).decode().strip())
 EOF
 }
 
-[ -x "$BUILD/iobus/mkddc-iobus" ] || fail "chưa build (cmake --build build/services)"
+[ -x "$BUILD/iobus/mkddc-iobus" ] || fail "chưa build (platform/packaging/build-release.sh)"
 mkdir -p "$LOGDIR"
 rm -f "$LOGDIR"/*.log
 

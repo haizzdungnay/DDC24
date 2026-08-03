@@ -19,7 +19,9 @@ import sys
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SHM_DUMP = os.path.join(ROOT, "build/services/iobus/shm_dump_io")
+SHM_DUMP = os.environ.get(
+    "MKDDC_SHM_DUMP", os.path.join(ROOT, "build/release/cpp/iobus/shm_dump_io")
+)
 
 results = []   # (name, ok, detail)
 log_f = None

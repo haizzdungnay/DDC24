@@ -138,9 +138,9 @@ def main() -> int:
         str(counts),
     )
 
-    protocol_header = text(ROOT / "shared/iop_protocol.h")
+    protocol_header = text(ROOT / "contracts/iop/iop_protocol.h")
     match = re.search(r"#define\s+IOP_GET_IO_PERIOD_MS\s+(\d+)u", protocol_header)
-    checks.check(match is not None and match.group(1) == "2", "shared IOP header defines 2ms GET_IO period")
+    checks.check(match is not None and match.group(1) == "2", "contract IOP authority defines 2ms GET_IO period")
 
     timing_paths = [
         HW / "05_mcu_io/IOP_PROTOCOL.md",

@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "decision": "ADR-025",
+  "plan": "PLAN-ARCH-RESTRUCT-002",
+  "phase": "g4-modularized",
+  "captured_at": "2026-08-03T08:38:30Z",
+  "baseline_commit": "103b79faf3ebf06a7a311c5e9279f992869ade36",
+  "baseline_worktree_dirty": true,
+  "migration": [
+    {"owner": "core", "from": "services/core", "to": "apps/core"},
+    {"owner": "iobus", "from": "services/iobus", "to": "apps/iobus"},
+    {"owner": "netcfg", "from": "services/netcfg", "to": "apps/netcfg"},
+    {"owner": "hmi", "from": "services/hmi", "to": "apps/hmi"},
+    {"owner": "web-api", "from": "web/backend", "to": "apps/web-api"},
+    {"owner": "web-ui", "from": "src/frontend", "to": "apps/web-ui"},
+    {"owner": "stm32", "from": "fw", "to": "firmware/stm32"},
+    {"owner": "packaging", "from": "packaging", "to": "platform/packaging"},
+    {"owner": "cmake", "from": "services/cmake", "to": "platform/cmake"}
+  ],
+  "contracts": [
+    {"name": "iop-v2", "from": "shared/iop_protocol.h", "to": "contracts/iop/iop_protocol.h", "compatibility": null},
+    {"name": "io-plc-shm", "from": "shared/mkddc_shm.h", "to": "contracts/shm/mkddc_shm.h", "compatibility": null},
+    {"name": "kinexus-shm", "from": "shared/kinexus_shm.h", "to": "contracts/shm/kinexus_shm.h", "compatibility": null},
+    {"name": "build-info", "from": "shared/build_info.h", "to": "contracts/config/build_info.h", "compatibility": null},
+    {"name": "hmi-ipc-v1", "from": "shared/hmi_protocol_v1.schema.json", "to": "contracts/config/hmi_protocol_v1.schema.json", "compatibility": null},
+    {"name": "netcfg-ipc-v1", "from": "shared/netcfg_protocol_v1.schema.json", "to": "contracts/config/netcfg_protocol_v1.schema.json", "compatibility": null},
+    {"name": "program-control-v1", "from": "shared/st_program_control_v1.schema.json", "to": "contracts/config/st_program_control_v1.schema.json", "compatibility": null},
+    {"name": "openapi-v1", "from": "docs/02_design/interfaces/openapi.yaml", "to": "contracts/openapi/openapi.yaml", "compatibility": null}
+  ],
+  "build_entrypoints": {
+    "cmake": "CMakeLists.txt",
+    "verification": "scripts/verify-project.sh",
+    "release": "platform/packaging/build-release.sh",
+    "installer": "platform/packaging/install.sh",
+    "systemd": "platform/systemd",
+    "go_module": "apps/web-api/go.mod",
+    "npm_package": "apps/web-ui/package.json",
+    "firmware_makefile": "firmware/stm32/Makefile"
+  },
+  "artifacts": [
+    {"name": "mkddc-core", "kind": "binary", "install": "/usr/sbin/mkddc-core", "unit": "mkddc-core.service"},
+    {"name": "mkddc-iobus", "kind": "binary", "install": "/usr/sbin/mkddc-iobus", "unit": "mkddc-iobus.service"},
+    {"name": "mkddc-netcfg", "kind": "binary", "install": "/usr/sbin/mkddc-netcfg", "unit": "mkddc-netcfg.service"},
+    {"name": "mkddc-web", "kind": "binary", "install": "/opt/mkddc-web/mkddc-web", "unit": "mkddc-web-pi.service"},
+    {"name": "mkddc-hmi", "kind": "optional-binary", "install": "/usr/sbin/mkddc-hmi", "unit": "mkddc-hmi.service"},
+    {"name": "firmware.elf", "kind": "firmware", "install": null, "unit": null},
+    {"name": "web-ui-dist", "kind": "static-assets", "install": "/opt/mkddc-web/dist", "unit": "mkddc-web-pi.service"}
+  ],
+  "systemd_units": [
+    "mkddc-core.service",
+    "mkddc-iobus.service",
+    "mkddc-netcfg.service",
+    "mkddc-web-pi.service",
+    "mkddc-hmi.service",
+    "mkddc-fakemcu.service",
+    "mkddc-pty.service",
+    "mkddc-reload-helper.service",
+    "mkddc-time-helper.service"
+  ],
+  "runtime_contracts": {
+    "api_prefix": "/api/v1",
+    "config_root": "/data/config",
+    "state_root": "/data/mkddc",
+    "system_config_root": "/etc/mkddc",
+    "io_shm": "/mkddc_io_shm",
+    "plc_shm": "/mkddc_plc_shm"
+  },
+  "reference_surfaces": [
+    "CMakeLists.txt",
+    ".github/workflows",
+    "scripts",
+    "platform/packaging",
+    "tools",
+    "docs",
+    "README.md",
+    ".vscode"
+  ]
+}

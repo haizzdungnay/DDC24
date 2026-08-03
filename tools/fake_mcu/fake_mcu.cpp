@@ -1,7 +1,7 @@
 /**
  * @file  fake_mcu.cpp
  * @brief Emulator MCU slave IOP qua PTY/UART — contract 05 §11 (ADR-010 v2).
- *        Self-contained: chỉ phụ thuộc shared/iop_protocol.h (không link iobus_lib).
+ *        Self-contained: chỉ phụ thuộc contracts/iop/iop_protocol.h (không link iobus_lib).
  *
  * Hành vi:
  *   HANDSHAKE   → HANDSHAKE_RESP (version/status cấu hình được)
@@ -68,7 +68,7 @@ uint64_t now_ns()
     return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
 }
 
-/* Mirror Rev A analog front-end constants from services/iobus/io/io_scaling.hpp.
+/* Mirror Rev A analog front-end constants from apps/iobus/io/io_scaling.hpp.
  * fake_mcu emits ADC raw, so 0-10V/4-20mA simulation must pass through
  * divider/shunt instead of treating ADC full-scale as field full-scale. */
 constexpr double SIM_S24_FS = 8388607.0;

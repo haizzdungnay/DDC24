@@ -11,7 +11,7 @@
 set -u
 cd "$(dirname "$0")/.."
 
-BUILD=build/services
+BUILD="${MKDDC_CPP_BUILD_ROOT:-build/release/cpp}"
 LOGDIR="$(pwd)/logs/safety-e2e"   # log trong codebase (logs/ gitignored)
 SOCK=/tmp/mkddc-e2e-core.sock
 PTY_A=/tmp/mkddc-e2e-a
@@ -31,7 +31,7 @@ trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-[ -x "$BUILD/iobus/mkddc-iobus" ] || fail "chưa build (cmake --build build/services)"
+[ -x "$BUILD/iobus/mkddc-iobus" ] || fail "chưa build (platform/packaging/build-release.sh)"
 mkdir -p "$LOGDIR"
 rm -f "$LOGDIR"/*.log
 cleanup
@@ -56,7 +56,7 @@ resp = s.recv(256).decode()
 assert '"accepted"' in resp, resp
 EOF
 sleep 2.5
-./build/services/iobus/shm_dump_io --json | python3 -c "
+"$BUILD/iobus/shm_dump_io" --json | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 assert d['do_feedback'][0] == 1, 'DO1 feedback chưa lên: %s' % d['do_feedback']
@@ -78,12 +78,13 @@ echo "[layer1] PASS — MCU safe sau ${L1_MS}ms idle (spec >200ms, budget ≤500
 
 # chờ recovery đầy đủ (iobus FAULT→reconnect→handshake; manual DO1 còn mức 2 → relay đóng lại)
 echo "[recovery] chờ hệ tự hồi sau khi iobus tỉnh lại..."
-python3 - <<'EOF' || fail "recovery sau lớp 1 không hoàn tất trong 20s"
+MKDDC_SHM_DUMP="$BUILD/iobus/shm_dump_io" python3 - <<'EOF' || fail "recovery sau lớp 1 không hoàn tất trong 20s"
 import json, subprocess, time
+import os
 deadline = time.monotonic() + 20
 while time.monotonic() < deadline:
     try:
-        d = json.loads(subprocess.run(["./build/services/iobus/shm_dump_io", "--json"],
+        d = json.loads(subprocess.run([os.environ["MKDDC_SHM_DUMP"], "--json"],
                                       capture_output=True, text=True).stdout)
         if d["iop_status"] == "NORMAL" and d["do_feedback"][0] == 1:
             print("[recovery] OK — NORMAL + DO1 tự đóng lại")
@@ -97,13 +98,13 @@ EOF
 
 # ===================== LỚP 2 + 3: iobus ≤100ms+retry, core ≤1 scan =====================
 echo "[layer2+3] kill fake_mcu → đo iop_status đổi (lớp 2) và do_cmd về 0 (lớp 3)"
-python3 - "$SCAN_MS" <<'EOF' || fail "lớp 2/3"
-import json, subprocess, sys, time
+MKDDC_SHM_DUMP="$BUILD/iobus/shm_dump_io" python3 - "$SCAN_MS" <<'EOF' || fail "lớp 2/3"
+import json, os, subprocess, sys, time
 
 scan_ms = int(sys.argv[1])
 
 def shm():
-    out = subprocess.run(["./build/services/iobus/shm_dump_io", "--json"],
+    out = subprocess.run([os.environ["MKDDC_SHM_DUMP"], "--json"],
                          capture_output=True, text=True).stdout
     return json.loads(out)
 

@@ -1,0 +1,6 @@
+export { AuxFunctionsPage } from './AuxFunctionsPage'
+export { DashboardPage } from './DashboardPage'
+export { DiagramPage } from './DiagramPage'
+export { HelpPage } from './HelpPage'
+export { ProgrammingPage } from './ProgrammingPage'
+export { UnavailableFeaturePage } from './UnavailableFeaturePage'

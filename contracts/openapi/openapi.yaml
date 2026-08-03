@@ -1,0 +1,2372 @@
+﻿openapi: 3.1.0
+info:
+  title: MK-DDC-24 REST API
+  version: "1.11.0"
+  description: >
+    REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
+    Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
+    BE-B0 2026-06-17: bá»• sung commissioning test, graph validate/deploy; WebSocket
+    monitor chuáº©n á»Ÿ /api/v1/ws/monitor Ä‘Æ°á»£c tham chiáº¿u báº±ng x-websocket.
+    BE-B5 2026-06-18: Má»Ÿ contract chi tiáº¿t cho cáº¥u hÃ¬nh (/system/config/*) vÃ  users CRUD, password self-service.
+    2026-06-18: thÃªm aggregate /network cho trang Network.
+    2026-07-15: thÃªm per-point historian policy/start scheduling, unified UTC history query vÃ  global display-name uniqueness.
+    2026-07-22: thÃªm explicit historian source routing cho Trends cache 24h vÃ  Custom database.
+    2026-07-20: thÃªm retentionDays theo interval, maxRetentionDays vÃ  retentionMaxDaysByInterval cho historian policy.
+    2026-07-24: thêm Web adapter authoritative cho giao dịch Ethernet validate/stage/apply/confirm/rollback.
+    2026-07-25: legacy config endpoints no longer mutate Ethernet; candidate validation matches mkddc-netcfg.
+    2026-07-25: protocol v1 reports administrative/carrier health separately and exposes the saved NetworkManager profile.
+    2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
+    hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
+x-revision:
+  date: "2026-08-03"
+  note: "v1.11.0 bổ sung Point Model canonical, Modbus RTU CRUD/diagnostics, I/O bundle atomic và health baseline."
+servers:
+  - url: https://{device_ip}:8443/api/v1
+    variables:
+      device_ip:
+        default: 192.168.1.50
+security:
+  - bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      summary: ÄÄƒng nháº­p, tráº£ JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  role: { type: string, enum: [admin, operator, viewer] }
+                  expires_in: { type: integer, example: 3600 }
+        "401": { $ref: "#/components/responses/Error" }
+  /auth/logout:
+    post:
+      summary: ÄÄƒng xuáº¥t, vÃ´ hiá»‡u token
+      responses: { "200": { description: OK } }
+  /points:
+    get:
+      summary: Danh sÃ¡ch táº¥t cáº£ I/O point + giÃ¡ trá»‹
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Point" }
+  /points/{id}:
+    get:
+      summary: Äá»c 1 point
+      parameters: [ { $ref: "#/components/parameters/PointId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Point" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Ghi giÃ¡ trá»‹ point (role operator+; LUÃ”N vÃ o má»©c Local manual â€” client KHÃ”NG chá»n priority)
+      description: >
+        Contract Freeze 2026-06-11: REST khÃ´ng expose BACnet priority 1..16.
+        Má»i lá»‡nh web Ä‘i vÃ o nguá»“n "Local manual" (má»©c 2 trong 6 má»©c cá»§a core â€”
+        PRODUCT_DEFINITION Â§13). BACnet client dÃ¹ng priority array riÃªng qua BACnet/IP
+        (káº¿t quáº£ vÃ o má»©c 3). Gá»­i release=true Ä‘á»ƒ nháº£ manual (relinquish má»©c 2).
+      parameters: [ { $ref: "#/components/parameters/PointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  allOf:
+                    - $ref: "#/components/schemas/PointCommandValue"
+                  description: "Báº¯t buá»™c trá»« khi release=true"
+                release: { type: boolean, default: false, description: "true = nháº£ manual override" }
+      responses:
+        "200":
+          description: Káº¿t quáº£ Ã¡p lá»‡nh tá»« core (ghi audit log)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Point"
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /points/{id}/config:
+    put:
+      summary: Update point tag/display metadata by canonical point ID (admin)
+      description: >
+        Phase A accepts canonical point IDs only; tags are never path aliases. Validates
+        the final controller-local UI/AO/DO/VP tag namespace before atomic file replace.
+      x-rbac: [admin]
+      parameters: [ { $ref: "#/components/parameters/PointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PointConfigPatch" }
+      responses:
+        "200":
+          description: Updated point metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Point" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /virtual-points:
+    get:
+      summary: List Virtual Points (viewer+)
+      description: >
+        Returns created backend-owned VP points only. Raw/uncreated AV/BV/MSV
+        core slots are hidden from /points, Monitoring, Trends, and history.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VirtualPoint" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Create Virtual Point (admin)
+      description: Missing id is allocated as the first free VP1..VP464.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VirtualPoint" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualPoint" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /virtual-points/{id}:
+    put:
+      summary: Update Virtual Point (admin)
+      x-rbac: [admin]
+      parameters: [ { $ref: "#/components/parameters/VirtualPointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VirtualPoint" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualPoint" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Delete Virtual Point (admin)
+      x-rbac: [admin]
+      parameters: [ { $ref: "#/components/parameters/VirtualPointId" } ]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /health:
+    get:
+      summary: Health baseline công khai cho installer/systemd
+      security: []
+      responses:
+        "200":
+          description: Luôn trả snapshot health; status=degraded khi một check lỗi.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthEndpoint" }
+  /modbus/devices:
+    get:
+      summary: Danh sách Modbus RTU Device (viewer+)
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModbusRTUDevice" } } } }
+    post:
+      summary: Tạo Modbus RTU Device và apply có rollback (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ModbusRTUDevice" } } }
+      responses:
+        "200": { description: Đã persist và restart iobus, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /modbus/devices/{id}:
+    put:
+      summary: Cập nhật Device; device_id không được đổi (admin)
+      x-rbac: [admin]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ModbusRTUDevice" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Xoá Device không còn Point tham chiếu (admin)
+      x-rbac: [admin]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /modbus/points:
+    get:
+      summary: Danh sách cấu hình Modbus RTU Point (viewer+)
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModbusRTUPoint" } } } }
+    post:
+      summary: Tạo Modbus RTU Point với Point ID ổn định và tag unique (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ModbusRTUPoint" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /modbus/points/{id}:
+    put:
+      summary: Cập nhật Point; point_id không đổi khi rename (admin)
+      x-rbac: [admin]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ModbusRTUPoint" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Xoá Modbus RTU Point (admin)
+      x-rbac: [admin]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /modbus/diagnostics:
+    get:
+      summary: Diagnostics poll/timeout/retry/CRC per slave (viewer+)
+      responses:
+        "200":
+          description: Telemetry thật do iobus publish qua SHM.
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModbusRTUDiagnostics" } } } }
+        "503": { $ref: "#/components/responses/Error" }
+  /system/status:
+    get:
+      summary: Tráº¡ng thÃ¡i há»‡ thá»‘ng (CPU/RAM/uptime/IOP/version)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemStatus" }
+  /network:
+    get:
+      summary: Dá»¯ liá»‡u trang Network (viewer+)
+      description: Gá»™p network/device/bacnet/fieldbus config vÃ  tráº¡ng thÃ¡i poll tá»•ng tá»« core/iobus; khÃ´ng sinh slave demo.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkPageData" }
+        "403": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh northbound trang Network (admin)
+      description: Chỉ ghi BACnet và Wi-Fi bằng replace nguyên tử trên từng file; Ethernet/DNS và compatibility service hostname là shadow chỉ đọc do authority/cấu hình hiện hữu sở hữu, endpoint này không đổi hostname quản trị của hệ điều hành.
+      x-rbac: [admin]
+      x-ethernet-authority: mkddc-netcfg
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NetworkPageData" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /network/transaction:
+    get:
+      summary: Đọc trạng thái Ethernet/DNS authoritative (viewer+)
+      description: >
+        Chuyển action `status` tới `mkddc-netcfg`. `active` phản ánh trạng thái kernel hiện tại,
+        `configured` phản ánh profile đã lưu trong NetworkManager, và `pending` phản ánh candidate
+        của giao dịch đang chờ. `reasonCode` cấp response mô tả kết quả request/giao dịch;
+        `active.reasonCode` độc lập và mô tả sức khỏe interface. `capabilities` công bố feature
+        protocol v1; `management` trả stable hostname/mDNS read-only.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: Trạng thái authoritative hiện tại
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetcfgResponse" }
+        "403": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /network/transaction/{action}:
+    post:
+      summary: Thực hiện bước giao dịch Ethernet (admin)
+      description: >
+        Adapter strict/bounded tới `mkddc-netcfg`. `validate`/`stage` yêu cầu candidate;
+        `apply`/`confirm`/`rollback` yêu cầu transactionId. Response `rejected` vẫn trả HTTP 200
+        để giữ đầy đủ reasonCode/state authoritative; lỗi adapter/socket hoặc authority response
+         không hợp đồng trả 502/503. DNS mutation chỉ được gửi sau status-preflight có capability
+         `dns` và chỉ accepted khi response validate/stage vẫn công bố capability, echo đúng pending
+         DNS/candidate tương ứng; mỗi POST sau authorization ghi đúng một audit event không chứa
+         candidate, DNS hoặc token, kể cả request sai shape/action.
+      x-rbac: [admin]
+      parameters:
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, enum: [validate, stage, apply, confirm, rollback] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NetcfgTransactionRequest" }
+      responses:
+        "200":
+          description: Kết quả authoritative, accepted hoặc rejected
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetcfgResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /commissioning/points/{id}/test:
+    post:
+      summary: Test commissioning má»™t point (role operator+)
+      description: >
+        Gá»­i lá»‡nh test DO/AO qua mkddc-core, vÃ o nguá»“n Local manual má»©c 2 nhÆ° PUT /points/{id}.
+        DÃ¹ng cho mÃ n Commissioning; má»i lá»‡nh pháº£i audit log.
+      x-rbac: [operator, admin]
+      parameters: [ { $ref: "#/components/parameters/PointId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CommissioningTestRequest" }
+      responses:
+        "200":
+          description: Káº¿t quáº£ test tá»« core, schema khá»›p CommissioningTestResult cá»§a FE
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommissioningTestResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /system/config:
+    get:
+      summary: Äá»c toÃ n bá»™ cáº¥u hÃ¬nh hiá»‡n táº¡i (gá»™p) (admin)
+      description: Tráº£ vá» object gá»™p cÃ¡c nhÃ³m (device, network, io, safe_state, virtual_points, bacnet, fieldbus, time).
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemConfig" }
+  /system/config/device:
+    get:
+      summary: Äá»c cáº¥u hÃ¬nh device (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigDevice" }
+    put:
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh device (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigDevice" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/network:
+    get:
+      summary: Äá»c cáº¥u hÃ¬nh network (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigNetwork" }
+    put:
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh network (admin)
+      description: Ethernet fields are read-only compatibility data; use `/network/transaction/{action}` for mutations.
+      x-rbac: [admin]
+      x-ethernet-authority: mkddc-netcfg
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigNetwork" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/io:
+    get:
+      summary: Äá»c cáº¥u hÃ¬nh IO (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigIO" }
+    put:
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh IO (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigIO" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /system/config/safe-state:
+    get:
+      summary: Äá»c cáº¥u hÃ¬nh IO safe-state (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigSafeState" }
+    put:
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh IO safe-state (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigSafeState" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/io-bundle:
+    get:
+      summary: Đọc I/O config + safe-state cùng revision/checksum (admin)
+      x-rbac: [admin]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ConfigIOBundle" } } } }
+    put:
+      summary: Validate và apply I/O config + safe-state nguyên tử (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ConfigIOBundle" } } }
+      responses:
+        "200": { description: Đã apply cả hai file, content: { application/json: { schema: { $ref: "#/components/schemas/ConfigPutResult" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /system/config/virtual-points:
+    get:
+      summary: Read Virtual Points config (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigVirtualPoints" }
+    put:
+      summary: Replace Virtual Points config (admin)
+      description: Persists virtual_points.conf without expanding core SHM/BACnet object counts.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigVirtualPoints" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /system/config/bacnet:
+    get:
+      summary: Äá»c cáº¥u hÃ¬nh BACnet/IP (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigBacnet" }
+    put:
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh BACnet/IP (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigBacnet" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/fieldbus:
+    get:
+      summary: Äá»c cáº¥u hÃ¬nh Fieldbus (Modbus RTU master) (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigFieldbus" }
+    put:
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh Fieldbus (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigFieldbus" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /system/config/time:
+    get:
+      summary: Äá»c cáº¥u hÃ¬nh Time (admin)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigTime" }
+    put:
+      summary: Cáº­p nháº­t cáº¥u hÃ¬nh Time (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigTimeUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /system/time/status:
+    get:
+      summary: Read controller clock, NTP and RTC status
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: Current controller time status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TimeStatus" }
+        "503": { $ref: "#/components/responses/Error" }
+  /users:
+    get:
+      summary: Danh sÃ¡ch user (admin)
+      description: KhÃ´ng tráº£ vá» máº­t kháº©u (pw_bcrypt)
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+    post:
+      summary: Táº¡o user (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, role, password]
+              properties:
+                username: { type: string, minLength: 3 }
+                role: { type: string, enum: [admin, operator, viewer] }
+                password: { type: string, format: password, minLength: 6 }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /users/{username}:
+    put:
+      summary: Äá»•i role user (admin)
+      x-rbac: [admin]
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string, enum: [admin, operator, viewer] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: XÃ³a user (admin)
+      x-rbac: [admin]
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: No Content }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { description: "Lá»—i náº¿u lÃ  admin cuá»‘i cÃ¹ng hoáº·c lÃ  chÃ­nh mÃ¬nh" }
+  /users/{username}/reset-password:
+    post:
+      summary: Reset máº­t kháº©u user (admin)
+      x-rbac: [admin]
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                new_password: { type: string, format: password, minLength: 6 }
+      responses:
+        "200": { description: OK }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /me:
+    get:
+      summary: Láº¥y thÃ´ng tin user Ä‘ang Ä‘Äƒng nháº­p (role viewer+)
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+  /me/change-password:
+    post:
+      summary: Äá»•i máº­t kháº©u cÃ¡ nhÃ¢n (role viewer+)
+      x-rbac: [viewer, operator, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_password, new_password]
+              properties:
+                old_password: { type: string, format: password }
+                new_password: { type: string, format: password, minLength: 6 }
+      responses:
+        "200": { description: OK }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { description: "Máº­t kháº©u cÅ© khÃ´ng Ä‘Ãºng" }
+  /history:
+    get:
+      summary: Unified historian query by point and explicit UTC range (viewer+)
+      description: >
+        Backend merges RAM tail, 48-hour hot SQLite and archive tiers. Bounds are half-open
+        [from,to); frontend never merges tiers. Trends presets explicitly request the bounded
+        24-hour RAM presentation cache, while Custom explicitly requests SQLite/archive database
+        history. Omitting source preserves the unified compatibility query. Point IDs are canonical only.
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - name: point
+          in: query
+          required: true
+          description: One to eight comma-separated canonical point IDs.
+          schema:
+            type: string
+            example: "UI-01,AO-01,DO-01,VP2"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time, example: "2026-07-14T00:00:00Z" }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time, example: "2026-07-15T00:00:00Z" }
+        - name: resolution
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/HistorianInterval"
+        - name: maxPoints
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 5000, default: 5000 }
+        - name: source
+          in: query
+          required: false
+          description: "`cache` is limited to 24 hours; `database` excludes RAM/cache tiers."
+          schema: { type: string, enum: [cache, database] }
+      responses:
+        "200":
+          description: Complete or partial merged history. Partial results set complete=false and include gaps.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistoryResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /history/export.csv:
+    get:
+      summary: Stream CSV from the same merged historian iterator (viewer+)
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: point, in: query, required: true, schema: { type: string } }
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: resolution, in: query, required: false, schema: { $ref: "#/components/schemas/HistorianInterval" } }
+        - { name: maxPoints, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 5000, default: 5000 } }
+        - { name: source, in: query, required: false, schema: { type: string, enum: [cache, database] } }
+      responses:
+        "200":
+          description: >
+            Streamed merged history CSV. Comment header rows begin with `#` and carry
+            from/to/complete/tiersUsed; gap rows use `# gap,...`. Data columns are
+            pointId,generation,time,value,min,max,sum,count,quality,source,tier and use
+            RFC 4180 escaping. Data, metadata and gaps come from the same iterator as JSON.
+          content:
+            text/csv:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /trends/config:
+    get:
+      summary: Read per-point historian policy, state, capacity and server time (viewer+)
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistorianConfig" }
+        "403": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Atomically update per-point database historian policies (admin)
+      description: >
+        Validates the whole batch including base revision, point generation, namespace,
+        interval, selected retentionDays (1..the interval maximum), future start, capacity and
+        free-space. Failure leaves the prior revision active. Invalid retention returns the
+        structured `historian_retention_invalid` error code.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HistorianConfigUpdate" }
+      responses:
+        "200":
+          description: Updated policy snapshot.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistorianConfig" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "507": { $ref: "#/components/responses/Error" }
+  /schedules:
+    get:
+      summary: Read weekly/exception schedules (viewer+)
+      description: Rev A has weekly repeating schedules and exception rows; no monthly mode.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 64
+                items: { $ref: "#/components/schemas/ScheduleRow" }
+        "403": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Update schedules (admin)
+      description: Persist `schedule.conf`, then apply by `sighup-core`; core executes schedule priority level 4.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 64
+              items: { $ref: "#/components/schemas/ScheduleRow" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /alarm-settings:
+    get:
+      summary: Read alarm entity settings (viewer+)
+      description: >
+        Returns `alarm_settings.conf` as the ADR-013 entity-list model. Legacy per-point rows are
+        migrated by the Phase 2 backend before being returned.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 64
+                items: { $ref: "#/components/schemas/AlarmSetting" }
+        "403": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Replace alarm entity settings (admin)
+      description: >
+        Persist `alarm_settings.conf` using ADR-013 entity-list schema. Current web/backend stores
+        the file; Phase 2/3 core work must add `alarm_settings.conf` boot/SIGHUP loading and
+        per-source evaluation before this contract becomes runtime-active. At most 64 internal
+        alarm entities are accepted, and at most 8 enabled entities may set `publishBacnet=true`
+        because BACnet Event Enrollment capacity is 8.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 64
+              items: { $ref: "#/components/schemas/AlarmSetting" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /ota/upload:
+    post:
+      summary: Upload gÃ³i firmware (admin)
+      requestBody:
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses: { "202": { description: Accepted } }
+  /ota/apply:
+    post:
+      summary: KÃ­ch hoáº¡t OTA + reboot (admin)
+      responses: { "202": { description: Accepted } }
+  /ota/status:
+    get:
+      summary: Tráº¡ng thÃ¡i + tiáº¿n Ä‘á»™ OTA
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  state: { type: string, enum: [idle, downloading, verifying, applying, rebooting, success, failed, rolledback] }
+                  progress: { type: integer, minimum: 0, maximum: 100 }
+  /logs/download:
+    get:
+      summary: Táº£i log (gzip, admin)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/gzip:
+              schema: { type: string, format: binary }
+  /bacnet/objects:
+    get:
+      summary: Danh sÃ¡ch object BACnet
+      responses: { "200": { description: OK } }
+  /alarms:
+    get:
+      summary: Runtime alarm list
+      description: >
+        Runtime alarm rows derived from ADR-013 alarm entities and ADR-014 ack lifecycle.
+        This is the visible current list, not full history: active unacked alarms,
+        active acked alarms, cleared-but-unacknowledged latched alarms, and future shelved alarms.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmEvent" }
+  /alarms/{id}/ack:
+    post:
+      summary: Acknowledge alarm
+      description: >
+        Acknowledge one alarm entity id. If the alarm is active, status becomes acked until
+        clear. If the condition already cleared but is latched unack, ack removes it from
+        the visible list. Optional duration payload makes ack expire later; no body keeps
+        the legacy permanent ack behavior. Unknown or already-normal ids return 404.
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlarmActionRequest" }
+      responses:
+        "200":
+          description: Current visible alarm list after ack.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmEvent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /alarms/{id}/suppress:
+    post:
+      summary: Suppress alarm
+      description: >
+        Hide an active or manually latched alarm for a selected duration, or permanently
+        until core restart. Used by the Alarm log Off action.
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlarmActionRequest" }
+      responses:
+        "200":
+          description: Current visible alarm list after suppress.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmEvent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /alarms/{id}/return:
+    post:
+      summary: Return acknowledged alarm to active
+      description: >
+        Undo acknowledge for a still-active alarm entity id. This is only valid while
+        the underlying alarm condition remains true; unknown, cleared, or already-active ids return 404.
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200":
+          description: Current visible alarm list after return.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmEvent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /alarm-history:
+    get:
+      summary: Persistent alarm history
+      description: >
+        Reads JSONL alarm history persisted on the device. Filters are combined with AND;
+        comma-separated event values are OR-ed. `limit=all` returns every matching record.
+      parameters:
+        - { name: limit, in: query, schema: { type: string, default: "20" } }
+        - { name: text, in: query, schema: { type: string } }
+        - { name: alarm, in: query, schema: { type: string } }
+        - { name: name, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: event, in: query, schema: { type: string }, description: "Comma-separated started,acked,returned,ended,setting_created,setting_changed,setting_deleted." }
+        - { name: severity, in: query, schema: { type: string, enum: [critical, high, medium, low, info] } }
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Matching persistent alarm history records.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AlarmHistoryEvent" }
+        "400": { $ref: "#/components/responses/Error" }
+  /graph/validate:
+    post:
+      summary: Validate graph.json (role operator+)
+      description: Cháº¡y validator theo GRAPH_SCHEMA; khÃ´ng deploy, tráº£ pass=false kÃ¨m errors náº¿u fail.
+      x-rbac: [operator, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Graph" }
+      responses:
+        "200":
+          description: Káº¿t quáº£ validate, schema khá»›p GraphValidationResult cá»§a FE
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GraphValidationResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /graph/deploy:
+    post:
+      summary: Validate rá»“i deploy graph.json (role admin)
+      description: >
+        Validate graph.json, gá»­i core build plan vÃ  Ã¡p dá»¥ng atomically náº¿u pass. Náº¿u validate/build fail,
+        giá»¯ graph cÅ© vÃ  tráº£ pass=false/deployed=false kÃ¨m errors.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Graph" }
+      responses:
+        "200":
+          description: Káº¿t quáº£ deploy hoáº·c lá»—i validate/build
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GraphDeployResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    PointId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, example: "UI1" }
+    VirtualPointId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^(VP|AV)[-_]?0*([1-9]|[1-9][0-9]|[1-3][0-9]{2}|4[0-5][0-9]|46[0-4])$"
+        example: "VP1"
+  responses:
+    Error:
+      description: Lá»—i
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error, code]
+            properties:
+              error: { type: string }
+              code: { type: integer }
+              request_id: { type: string }
+              details:
+                type: array
+                items: { $ref: "#/components/schemas/ValidationDetail" }
+  schemas:
+    ValidationDetail:
+      type: object
+      required: [path, reason]
+      properties:
+        path: { type: string, example: "items[2].tag" }
+        reason:
+          type: string
+          enum:
+            - point_tag_invalid
+            - point_tag_reserved
+            - point_tag_conflict
+            - point_name_invalid
+            - point_name_conflict
+            - point_namespace_conflicted
+            - point_channel_conflict
+            - config_conflict
+            - historian_policy_invalid
+            - historian_interval_invalid
+            - historian_retention_invalid
+            - historian_start_in_past
+            - historian_generation_conflict
+            - historian_capacity_exceeded
+            - historian_storage_unavailable
+            - resolution_unavailable
+            - historian_unavailable
+        message: { type: string }
+        pointId: { type: string, example: "VP3" }
+        conflictPointId: { type: string, example: "UI-01" }
+        conflictPath: { type: string, example: "ui[0].tag" }
+        tag: { type: string, example: "fan 1" }
+        name: { type: string, example: "Virtual Point" }
+    PointTag:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: "^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$"
+      description: >
+        Canonical display technical tag. Backend trims/collapses ASCII spaces and compares
+        ASCII-lower keys across UI/AO/DO/all VP including disabled VP. Canonical ID families
+        are reserved for their owning point.
+    PointConfigPatch:
+      type: object
+      minProperties: 1
+      properties:
+        tag: { $ref: "#/components/schemas/PointTag" }
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Canonical display name/label. Backend trims/collapses whitespace, rejects control
+            characters and compares Unicode-lower keys in a namespace independent from PointTag.
+    Point:
+      type: object
+      required: [id, tag, name, kind, value, quality, source, updatedAt, point_id, tag_name, display_name, data_type, timestamp, read_write, default_value, safe_value]
+      properties:
+        id: { type: string, example: "UI-01", description: "Stable canonical runtime identity." }
+        tag: { $ref: "#/components/schemas/PointTag" }
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: "Room temperature"
+          description: >
+            Display name; separate from technical tag and globally unique within the independent
+            UI/AO/DO/VP display-name namespace after backend canonicalization.
+        kind: { type: string, enum: [UI, AO, DO, virtual, modbus_rtu] }
+        value:
+          allOf:
+            - $ref: "#/components/schemas/PointCommandValue"
+          example: 23.5
+        unit: { type: string, example: "Â°C" }
+        quality: { type: string, enum: [good, uncertain, bad, stale, offline, GOOD, STALE, OFFLINE, BAD] }
+        source: { type: string, enum: [local_physical_io, virtual_point, modbus_rtu] }
+        updatedAt: { type: string, format: date-time }
+        sensorType: { type: string, example: "NTC10k" }
+        raw: { type: number }
+        rawUnit: { type: string }
+        priority: { type: string }
+        fault: { type: boolean }
+        forced: { type: boolean }
+        signalType: { type: string, enum: [boolean, integer, float, string, datetime] }
+        writable: { type: boolean, description: "Only writable=true VP may be written through PUT /points/{id}." }
+        logEnabled: { type: boolean }
+        logIntervalMs: { type: integer, enum: [1000, 100, 10] }
+        point_id: { type: string, description: "Canonical Point ID ổn định; alias tương thích của id." }
+        tag_name: { $ref: "#/components/schemas/PointTag" }
+        display_name: { type: string, minLength: 1, maxLength: 64 }
+        data_type: { type: string }
+        timestamp: { type: string, format: date-time }
+        read_write: { type: string, enum: [read, read_write] }
+        default_value: { $ref: "#/components/schemas/PointCommandValue" }
+        safe_value: { $ref: "#/components/schemas/PointCommandValue" }
+    VirtualPointValue:
+      oneOf:
+        - type: number
+        - type: boolean
+        - type: string
+    VirtualPoint:
+      type: object
+      required: [tag, label, signalType, enabled, writable, logEnabled]
+      description: >
+        Backend-owned Virtual Point. Total capacity is 464 VP: 256 non-logged,
+        128 logged at 1s, 64 logged at 100ms, and 16 diagnostic 10ms ring-buffer
+        channels. String/datetime VP cannot be logged or charted.
+      properties:
+        id:
+          type: string
+          pattern: "^(VP|AV)[-_]?0*([1-9]|[1-9][0-9]|[1-3][0-9]{2}|4[0-5][0-9]|46[0-4])$"
+          example: "VP1"
+        tag: { $ref: "#/components/schemas/PointTag" }
+        label:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Display label; separate from technical tag and globally unique in the independent
+            UI/AO/DO/VP display-name namespace.
+        signalType: { type: string, enum: [boolean, integer, float, string, datetime] }
+        enabled: { type: boolean, default: true }
+        writable: { type: boolean, default: true }
+        logEnabled: { type: boolean, default: false }
+        logIntervalMs: { type: integer, enum: [1000, 100, 10], nullable: true }
+        retentionS: { type: integer, minimum: 0, description: "Max: 30d at 1s, 7d at 100ms, 1h at 10ms." }
+        value: { $ref: "#/components/schemas/VirtualPointValue" }
+        unit: { type: string, enum: ["", percent, degC, Pa, ppm], description: "Selected from the EasySet u4 Units list." }
+        displayMin: { type: number, minimum: -50, maximum: 205, default: 0, description: "EasySet-style u1 Display Min metadata." }
+        displayMax: { type: number, minimum: -50, maximum: 205, default: 100, description: "EasySet-style u2 Display Max metadata." }
+        rangeMultiplier: { type: integer, minimum: 0, maximum: 5, default: 0, description: "EasySet-style u3 Range Multiplier metadata." }
+        filterSamples: { type: integer, minimum: 0, maximum: 100, default: 3, description: "EasySet-style u5 Filter Samples metadata." }
+        sensorCal: { type: number, minimum: -12.7, maximum: 12.8, default: 0, description: "EasySet-style u6 Sensor Calibration metadata." }
+        mathFunction: { type: integer, minimum: 0, maximum: 3, default: 0, description: "EasySet-style u7 Math Function metadata." }
+        note: { type: string }
+    SystemStatus:
+      type: object
+      properties:
+        cpu_percent: { type: number }
+        ram_percent: { type: number }
+        uptime_s: { type: integer }
+        versions:
+          type: object
+          description: TÃ¡ch version tá»«ng thÃ nh pháº§n (Contract Freeze 2026-06-11)
+          properties:
+            mcu_fw: { type: string, example: "1.0", description: "Tá»« HANDSHAKE_RESP/DIAG (iobus Ä‘á»c)" }
+            iobus: { type: string, example: "1.2.0" }
+            core: { type: string, example: "1.1.0" }
+            web: { type: string, example: "1.0.0" }
+        iop:
+          type: object
+          description: Nguá»“n = mkddc-iobus (Ä‘á»c tá»« kx_io_shm metrics)
+          properties:
+            status: { type: string, enum: [normal, fault, safe] }
+            crc_errors: { type: integer }
+            timeouts: { type: integer }
+            seq_errors: { type: integer }
+            last_io_resp_ms: { type: integer }
+        scan:
+          type: object
+          description: Nguá»“n = mkddc-core (Ä‘á»c tá»« kx_plc_shm)
+          properties:
+            count: { type: integer }
+            overrun: { type: integer }
+    PointCommandValue:
+      oneOf:
+        - type: integer
+        - type: number
+        - type: boolean
+        - type: string
+          format: date-time
+        - type: string
+    CommissioningTestRequest:
+      type: object
+      required: [value]
+      properties:
+        value: { $ref: "#/components/schemas/PointCommandValue" }
+    CommissioningTestResult:
+      type: object
+      required: [result, pointId, message]
+      properties:
+        result: { type: string, enum: [passed, failed, running] }
+        pointId: { type: string, example: "DO1" }
+        appliedValue: { $ref: "#/components/schemas/PointCommandValue" }
+        message: { type: string, example: "Test accepted" }
+        scanMs: { type: number, example: 12 }
+    GraphValidationError:
+      type: object
+      required: [path, message, severity]
+      properties:
+        path: { type: string, example: "nodes[3].params.limit_hi" }
+        message: { type: string }
+        severity: { type: string, enum: [error, warn] }
+    GraphValidationResult:
+      type: object
+      required: [pass, errors]
+      properties:
+        pass: { type: boolean }
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/GraphValidationError" }
+    GraphDeployResult:
+      type: object
+      required: [pass, deployed, errors]
+      properties:
+        pass: { type: boolean, description: "Káº¿t quáº£ validate trÆ°á»›c deploy" }
+        deployed: { type: boolean, description: "true náº¿u graph má»›i Ä‘Ã£ Ã¡p dá»¥ng atomically" }
+        message: { type: string }
+        activeRev:
+          oneOf:
+            - type: integer
+            - type: string
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/GraphValidationError" }
+    GraphPort:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [float, bool, int, string] }
+    GraphPortRef:
+      oneOf:
+        - type: string
+        - $ref: "#/components/schemas/GraphPort"
+    GraphNode:
+      type: object
+      required: [id, type]
+      additionalProperties: true
+      properties:
+        id: { type: string, pattern: "^[a-z][a-z0-9_]{0,31}$" }
+        type: { type: string }
+        ports:
+          type: object
+          properties:
+            inputs:
+              type: array
+              items: { $ref: "#/components/schemas/GraphPortRef" }
+            outputs:
+              type: array
+              items: { $ref: "#/components/schemas/GraphPortRef" }
+        inputs:
+          type: array
+          items: { $ref: "#/components/schemas/GraphPortRef" }
+        outputs:
+          type: array
+          items: { $ref: "#/components/schemas/GraphPortRef" }
+        params: { type: object, additionalProperties: true }
+        config: { type: object, additionalProperties: true }
+        limit:
+          type: object
+          additionalProperties: true
+          properties:
+            min: { type: number }
+            max: { type: number }
+            limit_lo: { type: number }
+            limit_hi: { type: number }
+        fallback: {}
+        safeState: {}
+        safe_state: {}
+        power_on: { type: object, additionalProperties: true }
+    GraphLink:
+      type: object
+      required: [from, to]
+      properties:
+        from: { type: string, example: "pid1.out" }
+        to: { type: string, example: "ao1.in" }
+    GraphIoPoint:
+      type: object
+      required: [node]
+      additionalProperties: true
+      properties:
+        node: { type: string }
+        channel: { type: integer }
+        sensor: { type: string }
+        unit: { type: string }
+        mode: { type: string }
+        limit_lo: { type: number }
+        limit_hi: { type: number }
+        fallback: {}
+        safeState: {}
+        safe_state: {}
+    GraphModbusPoint:
+      type: object
+      required: [node]
+      additionalProperties: true
+      properties:
+        node: { type: string }
+        fc: { type: integer }
+        addr: { type: integer }
+        type: { type: string }
+        scale: { type: number }
+        fallback: {}
+        safeState: {}
+        safe_state: {}
+    GraphModbusDevice:
+      type: object
+      additionalProperties: true
+      properties:
+        bus: { type: integer }
+        baud: { type: integer }
+        slave: { type: integer }
+        host: { type: string }
+        unit: { type: integer }
+        poll_ms: { type: integer }
+        points:
+          type: array
+          items: { $ref: "#/components/schemas/GraphModbusPoint" }
+    Graph:
+      type: object
+      required: [schema_version, device, io_map, nodes, links]
+      properties:
+        schema_version: { type: string, example: "1.0" }
+        device:
+          type: object
+          required: [bacnet_device_id, name, scan_ms]
+          properties:
+            bacnet_device_id:
+              oneOf:
+                - type: integer
+                - type: string
+            name: { type: string }
+            scan_ms: { type: integer, minimum: 500 }
+        io_map:
+          type: object
+          properties:
+            ai:
+              type: array
+              items: { $ref: "#/components/schemas/GraphIoPoint" }
+            ao:
+              type: array
+              items: { $ref: "#/components/schemas/GraphIoPoint" }
+            di:
+              type: array
+              items: { $ref: "#/components/schemas/GraphIoPoint" }
+            do:
+              type: array
+              items: { $ref: "#/components/schemas/GraphIoPoint" }
+        modbus:
+          type: object
+          properties:
+            rtu:
+              type: array
+              items: { $ref: "#/components/schemas/GraphModbusDevice" }
+            tcp:
+              type: array
+              items: { $ref: "#/components/schemas/GraphModbusDevice" }
+        nodes:
+          type: array
+          items: { $ref: "#/components/schemas/GraphNode" }
+        links:
+          type: array
+          items: { $ref: "#/components/schemas/GraphLink" }
+        meta: { type: object, additionalProperties: true }
+    SystemConfig:
+      type: object
+      properties:
+        device: { $ref: "#/components/schemas/ConfigDevice" }
+        network: { $ref: "#/components/schemas/ConfigNetwork" }
+        io: { $ref: "#/components/schemas/ConfigIO" }
+        safe_state: { $ref: "#/components/schemas/ConfigSafeState" }
+        virtual_points: { $ref: "#/components/schemas/ConfigVirtualPoints" }
+        bacnet: { $ref: "#/components/schemas/ConfigBacnet" }
+        fieldbus: { $ref: "#/components/schemas/ConfigFieldbus" }
+        time: { $ref: "#/components/schemas/ConfigTime" }
+    NetworkPageData:
+      type: object
+      required: [northbound, southbound]
+      properties:
+        northbound: { $ref: "#/components/schemas/NetworkPageConfig" }
+        southbound:
+          type: array
+          items: { $ref: "#/components/schemas/NetworkSlave" }
+    NetworkPageConfig:
+      type: object
+      required: [deviceName, ip, dhcp, wifiEnabled, subnet, gateway, bacnetDeviceId, bacnetDeviceName, bacnetPort, bmsLink]
+      properties:
+        deviceName: { type: string }
+        ip: { type: string, format: ipv4, readOnly: true }
+        dhcp: { type: boolean, readOnly: true }
+        wifiEnabled: { type: boolean }
+        subnet: { type: string, format: ipv4, readOnly: true }
+        gateway: { type: string, format: ipv4, readOnly: true }
+        bacnetDeviceId: { type: string }
+        bacnetDeviceName: { type: string }
+        bacnetPort: { type: integer, minimum: 1, maximum: 65535 }
+        bmsLink: { type: string, enum: [online, offline], readOnly: true }
+    NetworkSlave:
+      type: object
+      required: [address, name, profile, baudRate, pollState, errorRate, lastPollMs]
+      properties:
+        address: { type: integer, minimum: 1, maximum: 247 }
+        name: { type: string }
+        profile: { type: string }
+        baudRate: { type: integer }
+        pollState: { type: string, enum: [online, degraded, offline] }
+        errorRate: { type: number }
+        lastPollMs: { type: integer }
+    NetcfgTransactionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        transactionId: { type: string, pattern: "^[A-Za-z0-9_.:-]{1,64}$" }
+        candidate: { $ref: "#/components/schemas/NetcfgCandidate" }
+    NetcfgCandidate:
+      type: object
+      additionalProperties: false
+      required: [interface, mode]
+      properties:
+        interface:
+          type: string
+          pattern: "^[A-Za-z0-9_.-]{1,15}$"
+          not: { enum: [lo] }
+        mode: { type: string, enum: [static, dhcp] }
+        ipv4: { type: string, format: ipv4, maxLength: 15, description: "Required usable host address for static mode; forbidden for DHCP." }
+        netmask: { type: string, format: ipv4, maxLength: 15, description: "Static mode requires a contiguous prefix length 1..30; forbidden for DHCP." }
+        gateway: { type: string, format: ipv4, maxLength: 15, description: "Optional usable address in the candidate subnet for static mode; forbidden for DHCP." }
+        dns:
+          $ref: "#/components/schemas/NetcfgDns"
+          description: Omitted to preserve the current profile DNS; included DNS is committed and rolled back with the same transaction.
+      allOf:
+        - if:
+            properties: { mode: { const: static } }
+            required: [mode]
+          then:
+            required: [ipv4, netmask]
+        - if:
+            properties: { mode: { const: dhcp } }
+            required: [mode]
+          then:
+            not:
+              anyOf:
+                - required: [ipv4]
+                - required: [netmask]
+                - required: [gateway]
+        - if:
+            properties:
+              dns:
+                properties: { mode: { const: auto } }
+                required: [mode]
+            required: [dns]
+          then:
+            properties: { mode: { const: dhcp } }
+    NetcfgDns:
+      type: object
+      additionalProperties: false
+      required: [mode, servers]
+      properties:
+        mode: { type: string, enum: [auto, manual] }
+        servers:
+          type: array
+          items: { type: string, format: ipv4 }
+          uniqueItems: true
+          maxItems: 4
+      allOf:
+        - if:
+            properties: { mode: { const: auto } }
+            required: [mode]
+          then:
+            properties: { servers: { maxItems: 0 } }
+        - if:
+            properties: { mode: { const: manual } }
+            required: [mode]
+          then:
+            properties: { servers: { minItems: 1, maxItems: 4 } }
+    NetcfgActive:
+      type: object
+      additionalProperties: false
+      description: Current kernel-observed interface state; this is not the saved NetworkManager profile.
+      required: [interface, link, adminUp, carrier, reasonCode, mode, ipv4, prefixLength, gateway, dnsServers]
+      properties:
+        interface: { type: string }
+        link: { type: string, enum: [up, down, unknown] }
+        adminUp: { type: boolean }
+        carrier: { type: boolean }
+        reasonCode: { type: string }
+        mode: { type: string, enum: [static, dhcp, unknown] }
+        ipv4: { type: string }
+        prefixLength: { type: integer, minimum: 0, maximum: 32 }
+        gateway: { type: string }
+        dnsServers:
+          type: array
+          items: { type: string, format: ipv4 }
+          uniqueItems: true
+          maxItems: 4
+    NetcfgResponse:
+      type: object
+      additionalProperties: false
+      required: [version, requestId, result, reasonCode, state, capabilities, management]
+      properties:
+        version: { type: integer, enum: [1] }
+        requestId: { type: string }
+        result: { type: string, enum: [accepted, rejected] }
+        reasonCode: { type: string }
+        message: { type: string }
+        transactionId: { type: string }
+        state: { type: string, enum: [idle, staged, applying, awaiting_confirmation, confirmed, rolling_back, rolled_back, failed] }
+        rollbackRemainingS: { type: integer, minimum: 0, maximum: 120 }
+        active:
+          $ref: "#/components/schemas/NetcfgActive"
+          description: Current kernel-observed state and interface health.
+        configured:
+          $ref: "#/components/schemas/NetcfgCandidate"
+          description: Saved NetworkManager connection profile; omitted when no readable profile exists.
+        pending:
+          $ref: "#/components/schemas/NetcfgCandidate"
+          description: Candidate held by an active transaction; omitted when no transaction candidate exists.
+        capabilities:
+          type: array
+          description: Exact protocol-v1 capability allowlist; clients must preflight before optional mutation.
+          prefixItems:
+            - { const: dns }
+            - { const: management-hostname }
+          minItems: 2
+          maxItems: 2
+        management: { $ref: "#/components/schemas/NetcfgManagement" }
+    NetcfgManagement:
+      type: object
+      additionalProperties: false
+      description: Read-only stable management origin; never accepted in a transaction candidate.
+      required: [hostname, mdnsName, stable]
+      properties:
+        hostname: { type: string, readOnly: true }
+        mdnsName: { type: string, readOnly: true }
+        stable: { type: boolean, readOnly: true }
+    ConfigDevice:
+      type: object
+      required: [device_id, device_name]
+      properties:
+        device_id: { type: integer }
+        device_name: { type: string }
+        description: { type: string }
+        location: { type: string }
+    ConfigNetwork:
+      type: object
+      properties:
+        eth:
+          type: object
+          readOnly: true
+          description: Compatibility shadow only; Ethernet mutation is owned by mkddc-netcfg transactions.
+          additionalProperties: true
+        wifi: { type: object, additionalProperties: true }
+        hostname:
+          type: string
+          description: Compatibility service field only; does not mutate the OS management hostname or NetcfgManagement.
+    ConfigPointMetadata:
+      type: object
+      required: [ch, tag]
+      additionalProperties: true
+      properties:
+        ch: { type: integer, minimum: 1 }
+        tag: { $ref: "#/components/schemas/PointTag" }
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Canonical display name/label. Backend trims/collapses whitespace, rejects control
+            characters and compares Unicode-lower keys in a namespace independent from PointTag.
+    ConfigIO:
+      type: object
+      description: >
+        UI/AO/DO technical tags share one controller-local namespace with every VP.
+        DO rows are authoring metadata only; safe values remain in ConfigSafeState.do.
+      properties:
+        revision: { type: integer, format: int64, minimum: 0 }
+        checksum: { type: string, pattern: "^[0-9a-f]{64}$" }
+        ui: { type: array, items: { $ref: "#/components/schemas/ConfigPointMetadata" } }
+        ao: { type: array, items: { $ref: "#/components/schemas/ConfigPointMetadata" } }
+        do: { type: array, items: { $ref: "#/components/schemas/ConfigPointMetadata" } }
+    ConfigVirtualPoints:
+      type: object
+      description: >
+        Virtual Point capacity tiers: logEnabled=false <=256; logIntervalMs=1000
+        <=128; logIntervalMs=100 <=64; logIntervalMs=10 <=16 diagnostic
+        ring/non-permanent channels. logIntervalMs is required when
+        logEnabled=true; string/datetime VP cannot be logged.
+      properties:
+        items:
+          type: array
+          maxItems: 464
+          items: { $ref: "#/components/schemas/VirtualPoint" }
+    ConfigSafeState:
+      type: object
+      properties:
+        revision: { type: integer, format: int64, minimum: 0 }
+        checksum: { type: string, pattern: "^[0-9a-f]{64}$" }
+        ao: { type: array, items: { type: object, additionalProperties: true } }
+        do: { type: array, items: { type: object, additionalProperties: true } }
+    ConfigIOBundle:
+      type: object
+      required: [io, safe_state]
+      properties:
+        base_revision: { type: integer, format: int64, minimum: 0 }
+        revision: { type: integer, format: int64, readOnly: true }
+        checksum: { type: string, readOnly: true }
+        io: { $ref: "#/components/schemas/ConfigIO" }
+        safe_state: { $ref: "#/components/schemas/ConfigSafeState" }
+    ConfigBacnet:
+      type: object
+      properties:
+        bip: { type: object, additionalProperties: true }
+    ConfigFieldbus:
+      type: object
+      properties:
+        rs485: { type: object, additionalProperties: true }
+        poll_default_ms: { type: integer }
+        slaves: { type: array, items: { type: object, additionalProperties: true } }
+        revision: { type: integer, format: int64, minimum: 0 }
+        checksum: { type: string, pattern: "^[0-9a-f]{64}$" }
+        devices: { type: array, items: { $ref: "#/components/schemas/ModbusRTUDevice" } }
+        points: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/ModbusRTUPoint" } }
+    ModbusRTUDevice:
+      type: object
+      required: [device_id, display_name, enabled, rs485_port, baud, parity, stop_bit, slave_id, poll_ms, timeout_ms, retry]
+      properties:
+        device_id: { type: string, pattern: "^[A-Za-z][A-Za-z0-9_-]{0,22}$" }
+        display_name: { type: string, minLength: 1, maxLength: 64 }
+        enabled: { type: boolean }
+        rs485_port: { type: string, minLength: 1, maxLength: 128 }
+        baud: { type: integer, minimum: 1200, maximum: 115200 }
+        parity: { type: string, enum: [N, E, O] }
+        stop_bit: { type: integer, enum: [1, 2] }
+        slave_id: { type: integer, minimum: 1, maximum: 247 }
+        poll_ms: { type: integer, minimum: 10, maximum: 60000 }
+        timeout_ms: { type: integer, minimum: 20, maximum: 10000 }
+        retry: { type: integer, minimum: 1, maximum: 10 }
+    ModbusRTUPoint:
+      type: object
+      required: [point_id, device_id, tag_name, display_name, register_type, address, data_type, byte_order, word_order, scale, offset, unit, read_write, default_value, safe_value, enabled]
+      properties:
+        point_id: { type: string, pattern: "^[A-Za-z][A-Za-z0-9_-]{0,22}$", description: "Ổn định khi đổi tag/display name." }
+        device_id: { type: string }
+        tag_name: { $ref: "#/components/schemas/PointTag" }
+        display_name: { type: string, minLength: 1, maxLength: 64 }
+        register_type: { type: string, enum: [coil, discrete_input, input_register, holding_register] }
+        address: { type: integer, minimum: 0, maximum: 65535 }
+        data_type: { type: string, enum: [bool, int16, uint16, int32, uint32, float32] }
+        byte_order: { type: string, enum: [big, little] }
+        word_order: { type: string, enum: [high_low, low_high] }
+        scale: { type: number, not: { const: 0 } }
+        offset: { type: number }
+        unit: { type: string }
+        read_write: { type: string, enum: [read, read_write] }
+        default_value: { $ref: "#/components/schemas/PointCommandValue" }
+        safe_value: { $ref: "#/components/schemas/PointCommandValue" }
+        enabled: { type: boolean }
+    ModbusRTUDiagnostics:
+      type: object
+      required: [device_id, slave_id, online, total_polls, total_errors, timeout_errors, crc_errors, retry_attempts, consecutive_errors, last_seen_ms]
+      properties:
+        device_id: { type: string }
+        slave_id: { type: integer }
+        online: { type: boolean }
+        total_polls: { type: integer }
+        total_errors: { type: integer }
+        timeout_errors: { type: integer }
+        crc_errors: { type: integer }
+        retry_attempts: { type: integer }
+        consecutive_errors: { type: integer }
+        last_seen_ms: { type: integer, format: int64 }
+    ModbusMutationResult:
+      type: object
+      required: [apply]
+      properties:
+        device: { $ref: "#/components/schemas/ModbusRTUDevice" }
+        point: { $ref: "#/components/schemas/ModbusRTUPoint" }
+        apply: { $ref: "#/components/schemas/ConfigPutResult" }
+    HealthEndpoint:
+      type: object
+      required: [status, checks, version]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        version: { type: string }
+        checks:
+          type: object
+          required: [web, core, iobus, io_shm, plc_shm, mcu_connection]
+          additionalProperties:
+            type: object
+            required: [status]
+            properties:
+              status: { type: string, enum: [ok, degraded, fault] }
+              detail: { type: string }
+    ConfigTime:
+      type: object
+      required: [timezone, ntp_enabled, ntp_servers, system_time, revision]
+      properties:
+        timezone: { type: string }
+        ntp_enabled: { type: boolean }
+        ntp_servers: { type: array, items: { type: string } }
+        system_time: { type: string, format: date-time, description: "Cho phÃ©p set giá» thá»§ cÃ´ng" }
+        revision: { type: integer, format: int64, minimum: 1 }
+    ConfigTimeUpdate:
+      type: object
+      additionalProperties: false
+      required: [timezone, ntp_enabled, ntp_servers, system_time, baseRevision, operationId]
+      properties:
+        timezone: { type: string, maxLength: 64 }
+        ntp_enabled: { type: boolean }
+        ntp_servers:
+          type: array
+          maxItems: 4
+          items: { type: string, maxLength: 253 }
+        system_time: { type: string, description: "One-shot RFC3339 instant with offset; empty when NTP is enabled" }
+        baseRevision: { type: integer, format: int64, minimum: 1 }
+        operationId: { type: string, minLength: 1, maxLength: 64 }
+    TimeStatus:
+      type: object
+      required: [nowUtc, nowLocal, timezone, mode, synchronized, rtcPresent, health, warnings]
+      properties:
+        nowUtc: { type: string, format: date-time }
+        nowLocal: { type: string, format: date-time }
+        timezone: { type: string }
+        mode: { type: string, enum: [ntp, manual] }
+        synchronized: { type: boolean }
+        source: { type: [string, "null"] }
+        offsetMs: { type: [number, "null"] }
+        lastSyncUtc: { type: [string, "null"], format: date-time }
+        rtcPresent: { type: boolean }
+        rtcUtc: { type: [string, "null"], format: date-time }
+        health: { type: string, enum: [healthy, degraded, fault, unknown] }
+        warnings: { type: array, items: { type: string } }
+    HistorianInterval:
+      type: string
+      enum: [auto, 1s, 3s, 5s, 15s, 30s, 1m, 3m, 5m, 15m, 30m, 60m]
+      description: >
+        `auto` is query-only. Policy updates use the eleven explicit intervals. UI may label
+        60m as 1h; config/wire canonical remains 60m.
+    HistorianPolicyState:
+      type: string
+      enum: [off, scheduled, recording]
+      description: Derived from dbLoggingEnabled, startAtUtc and serverNowUtc; never persisted separately.
+    HistorianPolicy:
+      type: object
+      required:
+        - pointId
+        - generation
+        - dbLoggingEnabled
+        - dbInterval
+        - retentionDays
+        - maxRetentionDays
+        - hotCacheEnabled
+        - hotCacheHours
+        - startAtUtc
+        - state
+        - health
+      properties:
+        pointId: { type: string, example: "VP2" }
+        generation: { type: integer, minimum: 1 }
+        dbLoggingEnabled: { type: boolean }
+        dbInterval:
+          allOf: [ { $ref: "#/components/schemas/HistorianInterval" } ]
+          description: Explicit value only; auto is invalid for policy updates.
+        retentionDays:
+          type: integer
+          minimum: 1
+          description: Selected rolling window in days; must not exceed maxRetentionDays. Omitted patch values preserve the current selection or default to the interval maximum.
+        maxRetentionDays:
+          type: integer
+          minimum: 1
+          readOnly: true
+          description: Product cap for this point's selected dbInterval.
+        hotCacheEnabled: { type: boolean, default: true }
+        hotCacheHours: { type: integer, minimum: 1, default: 48 }
+        startAtUtc:
+          type: string
+          format: date-time
+          description: Concrete backend-authoritative UTC start persisted after commit.
+        state: { $ref: "#/components/schemas/HistorianPolicyState" }
+        health: { type: string, enum: [healthy, degraded, error] }
+        lastError: { type: string, description: "Latest historian health error; empty or omitted while healthy." }
+        lastSampleUtc: { type: string, format: date-time }
+        nextBoundaryUtc: { type: string, format: date-time }
+    HistorianPolicyPatch:
+      type: object
+      required: [pointId, generation, dbLoggingEnabled]
+      properties:
+        pointId: { type: string, example: "VP2" }
+        generation: { type: integer, minimum: 1 }
+        dbLoggingEnabled: { type: boolean }
+        dbInterval:
+          type: string
+          enum: [1s, 3s, 5s, 15s, 30s, 1m, 3m, 5m, 15m, 30m, 60m]
+        retentionDays:
+          type: integer
+          minimum: 1
+          description: Optional rolling window in days; backend rejects values above the interval maximum with historian_retention_invalid.
+        startAtUtc:
+          type: [string, "null"]
+          format: date-time
+          description: Null means start now using backend server time; explicit value must be future UTC Z.
+    HistorianCapacity:
+      type: object
+      required: [enabledPoints, reservedBytes, budgetBytes, freeBytes, requiredFreeBytes]
+      properties:
+        enabledPoints: { type: integer, minimum: 0 }
+        reservedBytes: { type: integer, minimum: 0 }
+        budgetBytes: { type: integer, minimum: 0 }
+        freeBytes: { type: integer, minimum: 0 }
+        requiredFreeBytes: { type: integer, minimum: 0 }
+    HistorianConfig:
+      type: object
+      required: [revision, serverNowUtc, points, capacity, namespaceRevision, retentionMaxDaysByInterval]
+      properties:
+        revision: { type: integer, minimum: 0 }
+        serverNowUtc: { type: string, format: date-time }
+        points:
+          type: array
+          items: { $ref: "#/components/schemas/HistorianPolicy" }
+        capacity: { $ref: "#/components/schemas/HistorianCapacity" }
+        namespaceState: { type: string, enum: [valid, conflicted] }
+        namespaceRevision: { type: integer, minimum: 0 }
+        retentionMaxDaysByInterval:
+          type: object
+          readOnly: true
+          description: Rev A maximum rolling retention by canonical interval.
+          additionalProperties: { type: integer, minimum: 1 }
+          example: { "1s": 30, "3s": 60, "5s": 90, "15s": 180, "30s": 365, "1m": 730, "3m": 1095, "5m": 1460, "15m": 1825, "30m": 2555, "60m": 3650 }
+    HistorianConfigUpdate:
+      type: object
+      required: [baseRevision, baseNamespaceRevision, points]
+      properties:
+        baseRevision: { type: integer, minimum: 0 }
+        baseNamespaceRevision: { type: integer, minimum: 0 }
+        points:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/HistorianPolicyPatch" }
+    HistorySample:
+      type: object
+      required: [time, value, quality, source, tier, generation]
+      properties:
+        time: { type: string, format: date-time }
+        value: { type: number }
+        min: { type: number }
+        max: { type: number }
+        sum: { type: number }
+        count: { type: integer, minimum: 1 }
+        quality: { type: string, enum: [GOOD, UNCERTAIN, BAD] }
+        source: { type: string }
+        tier: { type: string, enum: [cache, ram, hot, archive] }
+        generation: { type: integer, minimum: 1 }
+    HistorySeries:
+      type: object
+      required: [pointId, generation, effectiveResolution, samples]
+      properties:
+        pointId: { type: string }
+        generation: { type: integer, minimum: 1 }
+        effectiveResolution: { $ref: "#/components/schemas/HistorianInterval" }
+        samples:
+          type: array
+          items: { $ref: "#/components/schemas/HistorySample" }
+    HistoryGap:
+      type: object
+      required: [pointId, generation, fromUtc, toUtc, reason]
+      properties:
+        pointId: { type: string }
+        generation: { type: integer, minimum: 1 }
+        fromUtc: { type: string, format: date-time }
+        toUtc: { type: string, format: date-time }
+        reason:
+          type: string
+          enum: [not_enabled, before_start, restart, runtime, queue, clock, sqlite, migration, disk]
+        detail: { type: string }
+    HistoryResponse:
+      type: object
+      required: [from, to, complete, series, gaps, tiersUsed]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        complete: { type: boolean }
+        series:
+          type: array
+          items: { $ref: "#/components/schemas/HistorySeries" }
+        gaps:
+          type: array
+          items: { $ref: "#/components/schemas/HistoryGap" }
+        tiersUsed:
+          type: array
+          uniqueItems: true
+          items: { type: string, enum: [cache, ram, hot, archive] }
+    ScheduleTarget:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [AO, DO, VP]
+        channel:
+          type: integer
+          minimum: 1
+          description: AO/DO 1..4; VP 1..464 only for created enabled writable integer/float Virtual Points.
+        pointId:
+          type: string
+          example: "AO-01"
+    ScheduleRow:
+      type: object
+      required: [id, label, enabled, scheduleType]
+      description: >
+        EasySet-style time schedule. Core executes AO/DO targets.
+        Backend executes created writable integer/float VP targets,
+        including controller_operation_mode.
+        `holiday_period` is an all-day MM-DD override that suppresses normal weekly schedules while active.
+      properties:
+        id:
+          type: string
+          pattern: "^SCH-[A-Za-z0-9_-]+$"
+          maxLength: 64
+          example: "SCH-001"
+        label:
+          type: string
+          maxLength: 80
+          example: "Time Schedule 1"
+        notes:
+          type: string
+          maxLength: 1024
+        enabled: { type: boolean }
+        scheduleType:
+          type: string
+          enum:
+            - not_active
+            - controller_operation_mode
+            - control_loop_setpoint
+            - analog_output_value
+            - fan_state_value
+            - digital_output_value
+            - holiday_period
+        timeOfDay:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          deprecated: true
+          description: Legacy alias for startTime during migration.
+          example: "07:00"
+        startTime:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          example: "07:00"
+        endTime:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          example: "18:00"
+        startDate:
+          type: string
+          pattern: "^(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          example: "01-01"
+        endDate:
+          type: string
+          pattern: "^(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          example: "01-01"
+        weekdays:
+          type: array
+          items:
+            type: string
+            enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+          example: [monday, tuesday, wednesday, thursday, friday]
+        target:
+          $ref: "#/components/schemas/ScheduleTarget"
+        value:
+          type: number
+          description: >
+            controller_operation_mode targets a created writable integer/float VP with value 0..2;
+            analog_output_value targets AO or created writable integer/float VP with 0..100 percent;
+            DO/fan targets DO with 0 or 1; control_loop_setpoint targets created writable
+            integer/float VP with a finite numeric value.
+      oneOf:
+        - title: Stored-only inactive row
+          properties:
+            scheduleType:
+              type: string
+              enum: [not_active]
+        - title: Holiday override row
+          required: [startDate, endDate]
+          properties:
+            scheduleType:
+              type: string
+              enum: [holiday_period]
+        - title: Executable schedule row
+          required: [startTime, endTime, weekdays, target, value]
+          properties:
+            scheduleType:
+              type: string
+              enum:
+                - controller_operation_mode
+                - control_loop_setpoint
+                - analog_output_value
+                - fan_state_value
+                - digital_output_value
+            weekdays:
+              type: array
+              minItems: 1
+    AlarmSetting:
+      type: object
+      required: [id, label, enabled, alarmType, sources, priority, delayS, params]
+      description: >
+        ADR-013 alarm entity config. Multi-source semantics are per-source evaluation with entity
+        state = OR. ACTIVE alarm types are 0, 1, and 3; types 2 and 4..7 are documented for
+        EasySet parity but must stay disabled until core hooks land.
+      properties:
+        id:
+          type: string
+          pattern: "^ALM-[A-Za-z0-9_-]+$"
+          maxLength: 64
+          example: "ALM-001"
+        label: { type: string, example: "Room temperature" }
+        enabled: { type: boolean }
+        alarmType: { $ref: "#/components/schemas/AlarmType" }
+        sources:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: { $ref: "#/components/schemas/AlarmSourceRef" }
+        delayS:
+          type: number
+          minimum: 0
+          description: Delay before asserting the alarm; maps to AlarmDelay on ACTIVE graph paths.
+        priority:
+          type: string
+          enum: [low, medium, high, critical, flexible]
+          description: "`flexible` maps severity from params.severityRules."
+        clearMode:
+          type: string
+          enum: [auto, manual]
+          default: auto
+          description: "`manual` keeps a returned-to-normal alarm visible until /alarms/{id}/suppress."
+        publishBacnet:
+          type: boolean
+          default: false
+          description: At most 8 enabled alarm entities may publish through BACnet Event Enrollment.
+        notificationClass:
+          type: integer
+          minimum: 1
+          maximum: 4
+          description: BACnet Notification Class when publishBacnet=true.
+        params:
+          oneOf:
+            - { $ref: "#/components/schemas/AlarmDisabledParams" }
+            - { $ref: "#/components/schemas/AlarmThresholdParams" }
+            - { $ref: "#/components/schemas/AlarmSetpointDeviationParams" }
+            - { $ref: "#/components/schemas/AlarmRuntimeParams" }
+            - { $ref: "#/components/schemas/AlarmSuperviseStateParams" }
+            - { $ref: "#/components/schemas/AlarmSuperviseAnalogParams" }
+            - { $ref: "#/components/schemas/AlarmPiSequenceParams" }
+    AlarmType:
+      type: integer
+      enum: [0, 1, 2, 3, 4, 5, 6, 7]
+      description: >
+        0 disabled (ACTIVE no-op), 1 high_low_input (ACTIVE: AlarmHigh/AlarmLow+AlarmDelay),
+        2 setpoint_deviation (DEFERRED), 3 runtime_hours (ACTIVE: RuntimeCounter.alarm),
+        4 fan_state_supervision (DEFERRED), 5 digital_output_supervision (DEFERRED),
+        6 analog_output_supervision (DEFERRED), 7 pi_sequence_supervision (DEFERRED).
+    AlarmSourceRef:
+      type: object
+      required: [kind, channel, pointId]
+      properties:
+        kind: { type: string, enum: [UI, AO, DO, VP] }
+        channel:
+          type: integer
+          minimum: 1
+          maximum: 464
+          description: UI 1..16, AO 1..4, DO 1..4; VP 1..464 must reference a created enabled integer/float Virtual Point.
+        pointId:
+          type: string
+          pattern: "^((UI|AO|DO)-[0-9]{2}|(VP|AV)-?[0-9]{1,3})$"
+          description: UI/AO/DO use their own point id; VP references a created Virtual Point; AV is accepted as a legacy alias.
+          example: "UI-01"
+    AlarmDisabledParams:
+      type: object
+      maxProperties: 0
+      description: alarmType=0.
+    AlarmThresholdParams:
+      type: object
+      required: [hh, h, l, ll]
+      description: alarmType=1. Backend enforces hh >= h >= l >= ll when enabled.
+      properties:
+        hh: { type: number }
+        h: { type: number }
+        l: { type: number }
+        ll: { type: number }
+        hysteresis: { type: number, minimum: 0 }
+        severityRules:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmSeverityRule" }
+    AlarmSetpointDeviationParams:
+      type: object
+      required: [setpoint, deviationHigh, deviationLow]
+      description: alarmType=2, DEFERRED until core deviation hook exists.
+      properties:
+        setpoint: { type: number }
+        deviationHigh: { type: number, minimum: 0 }
+        deviationLow: { type: number, minimum: 0 }
+    AlarmRuntimeParams:
+      type: object
+      required: [runtimeHours]
+      description: alarmType=3. Maps to RuntimeCounter maint_hours.
+      properties:
+        runtimeHours: { type: number, minimum: 0 }
+        severityRules:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmSeverityRule" }
+    AlarmSeverityRule:
+      type: object
+      required: [severity, op, value]
+      properties:
+        severity: { type: string, enum: [critical, high, medium, low, info] }
+        op: { type: string, enum: [">=", "<="] }
+        value: { type: number }
+    AlarmSuperviseStateParams:
+      type: object
+      required: [expectedState]
+      description: alarmType=4 or 5, DEFERRED until DO/fan supervision hook exists.
+      properties:
+        expectedState: { type: boolean }
+    AlarmSuperviseAnalogParams:
+      type: object
+      required: [expectedValue, tolerance]
+      description: alarmType=6, DEFERRED until AO supervision hook exists.
+      properties:
+        expectedValue: { type: number }
+        tolerance: { type: number, minimum: 0 }
+    AlarmPiSequenceParams:
+      type: object
+      required: [sequence]
+      description: alarmType=7, DEFERRED until PI sequence supervision hook exists.
+      properties:
+        sequence:
+          type: string
+          maxLength: 64
+    AlarmEvent:
+      type: object
+      description: >
+        Visible runtime alarm row from ADR-014. `status=active` means condition true and not acked;
+        `acked` means condition true and acknowledged; `unack` means condition cleared before
+        acknowledgement and remains latched; `shelved` is reserved for a future phase.
+      required: [id, time, severity, status, message, source, value, detail]
+      properties:
+        id: { type: string, description: "Alarm entity id used by /alarms/{id}/ack.", example: "ALM-001" }
+        time: { type: string, format: date-time, description: "Occurrence first-active timestamp from core wall clock." }
+        severity: { type: string, enum: [critical, high, medium, low, info], description: "Mapped from alarm priority; info is reserved for non-entity system alarms." }
+        status: { type: string, enum: [active, unack, acked, cleared, shelved] }
+        message: { type: string, description: "Display label, normally the alarm entity label." }
+        source: { type: string, description: "Display source from the core alarm event." }
+        value: { type: string, description: "Trigger/source value formatted for display." }
+        triggerLevel: { type: string, enum: [HH, H, L, LL, RUNTIME], description: "Threshold bucket that tripped the alarm, if known." }
+        threshold: { type: string, description: "Threshold value formatted for display, paired with triggerLevel." }
+        detail: { type: string, description: "Human-readable condition detail derived by web from core protocol fields." }
+        active: { type: boolean, description: "True while the underlying condition is still present, including acked active alarms." }
+        returnable: { type: boolean, description: "True when this row is known by core and an acked active alarm can be returned to active; false for history-only fallback rows." }
+    AlarmActionRequest:
+      description: >
+        Duration choice for alarm ack/suppress actions. Use either permanent=true or
+        durationS > 0. Empty ack body is treated as permanent for legacy clients.
+      oneOf:
+        - type: object
+          required: [permanent]
+          additionalProperties: false
+          properties:
+            permanent: { type: boolean, enum: [true] }
+        - type: object
+          required: [durationS]
+          additionalProperties: false
+          properties:
+            durationS: { type: number, minimum: 1 }
+            permanent: { type: boolean, enum: [false] }
+    AlarmHistoryEvent:
+      type: object
+      required: [eventId, time, event]
+      properties:
+        eventId: { type: string }
+        time: { type: string, format: date-time }
+        event: { type: string, enum: [started, acked, returned, ended, setting_created, setting_changed, setting_deleted] }
+        alarmId: { type: string }
+        user: { type: string }
+        severity: { type: string, enum: [critical, high, medium, low, info] }
+        status: { type: string }
+        message: { type: string }
+        source: { type: string }
+        value: { type: string }
+        detail: { type: string }
+        triggerLevel: { type: string, enum: [HH, H, L, LL, RUNTIME] }
+        threshold: { type: string }
+        active: { type: boolean }
+        before: { $ref: "#/components/schemas/AlarmSetting" }
+        after: { $ref: "#/components/schemas/AlarmSetting" }
+    ConfigPutResult:
+      type: object
+      required: [result, applied, reload]
+      description: "Ãnh xáº¡ SIGHUP/Restart: safe-state->sighup-core; device & io->sighup-iobus; bacnet & fieldbus->restart-iobus; network & time->system; (users->none, xá»­ lÃ½ riÃªng á»Ÿ /users)."
+      properties:
+        result: { type: string, enum: [success, failed, accepted, rejected] }
+        applied: { type: boolean }
+        reload: { type: string, enum: [sighup-core, sighup-iobus, sighup-iobus+sighup-core, restart-iobus, system, none] }
+        warnings: { type: array, items: { type: string } }
+        revision: { type: integer, format: int64 }
+        checksum: { type: string }
+    User:
+      type: object
+      required: [username, role]
+      properties:
+        username: { type: string }
+        role: { type: string, enum: [admin, operator, viewer] }

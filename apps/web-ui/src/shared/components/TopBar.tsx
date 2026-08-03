@@ -1,0 +1,77 @@
+import { Bell, ChevronDown, CircleHelp, LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../../features/auth'
+import { IS_DEMO } from '../config'
+import { useI18n } from '../i18n'
+import { useTheme } from '../theme/ThemeProvider'
+import type { ConnectionState, CurrentUser } from '../types'
+import { Button } from './Button'
+import { StatusBadge } from './StatusBadge'
+
+export function TopBar({ connectionState, alarmCount, currentUser, onOpenNav }: { connectionState: ConnectionState; alarmCount: number; currentUser: CurrentUser | null; onOpenNav?: () => void }) {
+  const [now, setNow] = useState(new Date())
+  const { logout } = useAuth()
+  const { lang, locale, setLang, t, pick } = useI18n()
+  const { theme, toggleTheme } = useTheme()
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const online = connectionState === 'connected'
+  return (
+    <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-2 border-b border-[var(--c-border)] bg-[var(--c-surface)] px-3 sm:gap-4 sm:px-5">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        {/* WEB-UX-010: dưới 1024px `NavRail` bị ẩn (`hidden … lg:flex`) và trước
+            đây không có gì thay thế — mở web trên điện thoại là mất sạch điều
+            hướng, chỉ còn cách gõ tay URL. Nút này mở ngăn kéo thay thế. */}
+        {onOpenNav && (
+          <button
+            type="button"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] lg:hidden"
+            onClick={onOpenNav}
+            aria-label={pick('Mở điều hướng', 'Open navigation')}
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
+          </button>
+        )}
+        <div className="hidden h-9 w-px bg-[var(--c-border)] lg:block" />
+        <StatusBadge state={online ? 'online' : 'offline'} label={`${t('system')}: ${online ? t('online') : t('offline')}`} />
+        <span className="hidden sm:inline-flex"><StatusBadge state={IS_DEMO ? 'demo' : 'live'} label={IS_DEMO ? t('demo') : t('live')} /></span>
+      </div>
+      <div className="flex shrink-0 items-center gap-1 sm:gap-3">
+        <div className="hidden border-r border-[var(--c-border)] pr-6 text-right md:block">
+          <div className="mono text-sm font-semibold">{now.toLocaleTimeString(locale, { hour12: false })}</div>
+          <div className="text-xs text-[var(--c-text-dim)]">{now.toLocaleDateString(locale)}</div>
+        </div>
+        <Link to="/alarms" className="relative grid h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)]" aria-label={pick("Cảnh báo", "Alarms")}>
+          <Bell className="h-5 w-5" aria-hidden="true" />
+          {alarmCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[var(--c-fault)] px-1 text-[10px] font-bold text-[var(--c-on-fault)]">{alarmCount}</span>}
+        </Link>
+        <Link to="/help" className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Trợ giúp", "Help")}><CircleHelp className="h-5 w-5" /></Link>
+        <Link to="/me" className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Người dùng", "User")}><UserRound className="h-5 w-5" /></Link>
+        <div className="hidden min-w-[132px] md:block">
+          <div className="text-sm font-semibold">{currentUser?.username ?? 'N/A'}</div>
+          <div className="text-xs text-[var(--c-text-dim)]">{currentUser?.role ?? 'N/A'}</div>
+        </div>
+        {/* WEB-UX-012: đổi theme sáng/tối. Phòng máy tối mà màn hình sáng thì
+            chói suốt ca đêm; đây là điều kiện nghiệm thu của audit UI/UX, không
+            phải tuỳ chọn trang trí. Lựa chọn được ghi nhớ qua localStorage. */}
+        <button
+          className="grid h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)]"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? pick('Chuyển sang giao diện sáng', 'Switch to light theme') : pick('Chuyển sang giao diện tối', 'Switch to dark theme')}
+          title={theme === 'dark' ? pick('Giao diện sáng', 'Light theme') : pick('Giao diện tối', 'Dark theme')}
+        >
+          {theme === 'dark' ? <Sun className="h-5 w-5" aria-hidden="true" /> : <Moon className="h-5 w-5" aria-hidden="true" />}
+        </button>
+        <button className="flex h-10 items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-2 text-xs font-semibold sm:px-3" onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')} aria-label={pick("Đổi ngôn ngữ", "Toggle language")}>
+          {lang.toUpperCase()} <ChevronDown className="h-4 w-4" />
+        </button>
+        <Button variant="ghost" size="sm" icon={<LogOut className="h-4 w-4" />} onClick={logout}><span className="hidden sm:inline">{t('logout')}</span></Button>
+      </div>
+    </header>
+  )
+}
