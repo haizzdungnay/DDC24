@@ -7,6 +7,37 @@
 ---
 
 ## [Unreleased]
+### Added — Nghiệm thu `RST-202` trên board: DONE (2026-08-04)
+
+- Chạy lại toàn bộ nghiệm thu target tại commit `3f4c536`, version `0.2.1`, sau
+  khi sửa bốn khiếm khuyết. Cả năm tiêu chí PASS: `TARGET_INSTALL`,
+  `TARGET_PROVENANCE`, `TARGET_STARTUP_ORDER`, `TARGET_CRASH_RESTART`,
+  `TARGET_ROLLBACK`. `RST-202` chuyển DONE; Plan 46 còn `RST-205` closure review.
+- **Startup order** — `sudo systemctl reboot` thật, board lên lại sau 36 giây.
+  Thứ tự đúng dependency: pty → fakemcu → iobus (13:35:06.226) → core
+  (13:35:06.268) → web (13:35:08.145). 0 unit `mkddc` failed; `mkddc-hmi` giữ
+  `inactive/disabled` qua reboot.
+- **Crash/restart** — SIGKILL `mkddc-iobus`/`mkddc-core`/`mkddc-web-pi`, cả ba
+  tự phục hồi với `NRestarts 0 → 1` và PID mới; IOP `ack=ok` trở lại.
+- **ROLLBACK-001** — rollback trước đây là thao tác tay không có snapshot tự
+  động, chính là nguyên nhân `/usr/sbin` tích tụ 7 bản sao ad-hoc. Nay
+  `install.sh` tự chụp bản đang chạy vào `/var/backups/mkddc/<version>-<ts>/`
+  kèm symlink `previous` trước khi ghi đè, và thêm
+  `platform/packaging/rollback.sh` (hỗ trợ `--list`, mặc định về `previous`, tự
+  chụp bản hiện tại trước khi lùi, restart đúng thứ tự, sinh lại
+  `runtime-build-info`, và fail nếu còn service giữ inode `(deleted)`).
+  `rollback.sh` cũng áp dụng kiểm tra giao dịch netcfg theo ADR-022 §7.
+
+**Kiểm chứng trong phiên:** `ctest` native aarch64 **với service production đang
+chạy**: **751/751 PASS** (trước khi sửa `TEST-ISO-001` là 746/751). `install.sh`
+exit 0, PID đổi toàn bộ, không service nào giữ inode `(deleted)`,
+`sha256sum --check` runtime khớp 4/4. `rollback.sh` exit 0, đưa version từ
+`0.2.0-rollbacktest` về `0.2.1` với `runtime-build-info` khớp bản gốc.
+**Giới hạn:** bài rollback dùng hai bộ artifact cùng commit chỉ khác nhãn version
+nên diễn tập cơ chế chứ không phải rollback tương thích qua hai commit; toàn bộ
+là lab evidence trên board fake MCU không panel, không đóng gate physical I/O
+HIL, real RS485 hay Programming.
+
 ### Fixed — Sửa 4 khiếm khuyết install/test phát hiện khi deploy board (2026-08-04)
 
 - **INSTALL-001** — `install.sh` dùng `systemctl enable --now` nên không restart

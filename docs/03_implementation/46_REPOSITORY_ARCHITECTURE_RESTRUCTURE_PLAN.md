@@ -561,9 +561,10 @@ CHROME_DEVTOOLS_RUNTIME = PASS_WITH_LOW_ACCESSIBILITY_FINDING
 TARGET_NATIVE_BUILD = PASS
 TARGET_INSTALL = PASS
 TARGET_PROVENANCE = PASS
-TARGET_STARTUP_ORDER = NOT_RUN
-TARGET_CRASH_RESTART = NOT_RUN
-TARGET_ROLLBACK = NOT_RUN
+TARGET_STARTUP_ORDER = PASS
+TARGET_CRASH_RESTART = PASS
+TARGET_ROLLBACK = PASS
+RST_202 = DONE
 PLAN_CLOSED = NO
 ```
 
@@ -578,7 +579,7 @@ PLAN_CLOSED = NO
 | G2 | PASS | `contracts/` là authority duy nhất; contract/dependency negative tests làm gate đỏ khi tạo bản sao hoặc import sai chiều. |
 | G3 | PASS trên host | Core, Iobus, netcfg, HMI, Web API, Web UI, STM32 và packaging đã chuyển vật lý; path cũ không còn tồn tại; binary/service/API/contract semantics giữ nguyên. |
 | G4 | PASS | Core/Iobus có domain/application/ports/adapters/bootstrap và CMake boundary; React có app/features/shared cùng public barrel/lint guard. Go `RST-121..126` đã tách auth/audit, Point Catalog/config, Modbus RTU, historian, system/network/health/HMI và router thành package có test trực tiếp; `internal/app` chỉ giữ handler, middleware và façade composition cần tương thích. |
-| G5 | PARTIAL/BLOCKED | Compatibility shim đã bỏ, artifact đã cô lập, host regression, release checksum, npm security disposition và Chrome DevTools runtime đều có evidence. `RST-202` target install/startup/rollback chưa chạy vì không có target được duyệt; do đó `RST-205` chưa được phép đóng. |
+| G5 | PARTIAL | Compatibility shim đã bỏ, artifact đã cô lập, host regression, release checksum, npm security disposition và Chrome DevTools runtime đều có evidence. **`RST-202` DONE ngày 2026-08-04**: install, provenance, startup order sau reboot thật, crash/restart và diễn tập rollback đều PASS trên board lab (§12.6). Còn lại `RST-205` closure review. |
 
 ### 12.2. Kiểm chứng host hiện hành
 
@@ -673,6 +674,34 @@ Bốn khiếm khuyết phát hiện, mới vá tay trên board và **chưa sửa
 
 Ghi chú ABI: `mkddc_io_shm` đổi 1304 → 1816 byte giữa hai bản, nên iobus và core
 bắt buộc restart đồng bộ.
+
+### 12.6. Nghiệm thu `RST-202` ngày 2026-08-04 — DONE
+
+Bốn khiếm khuyết trên đã được sửa trong repo (`cb1303c`, `43b4cdb`) và bổ sung
+`ROLLBACK-001`: rollback trước đây là thao tác tay không có snapshot tự động,
+nay `install.sh` tự chụp bản đang chạy vào `/var/backups/mkddc/<version>-<ts>/`
+kèm symlink `previous`, và thêm [`platform/packaging/rollback.sh`](../../platform/packaging/rollback.sh)
+để rollback lặp lại được. Sau khi sửa, chạy lại toàn bộ nghiệm thu tại commit
+`3f4c536`, version `0.2.1`:
+
+| Tiêu chí | Kết quả |
+|---|---|
+| `TARGET_INSTALL` | **PASS** — checksum verify 5/5; PID đổi toàn bộ; không service nào giữ inode `(deleted)`; HMI giữ nguyên `disabled` |
+| `TARGET_PROVENANCE` | **PASS** — `0.2.1`/`3f4c536`/`dirty=false`; `sha256sum --check` runtime khớp 4/4 |
+| `TARGET_STARTUP_ORDER` | **PASS** — `sudo systemctl reboot` thật, board lên lại sau 36 s; thứ tự pty → fakemcu → iobus (13:35:06.226) → core (13:35:06.268) → web (13:35:08.145); 0 unit mkddc failed |
+| `TARGET_CRASH_RESTART` | **PASS** — SIGKILL iobus/core/web, cả ba tự phục hồi, `NRestarts 0 → 1`, IOP `ack=ok` trở lại |
+| `TARGET_ROLLBACK` | **PASS** — `rollback.sh` không tham số tự về `previous`, tự chụp bản hiện tại trước, khôi phục 6 binary, restart đúng thứ tự, `version=0.2.1`, exit 0 |
+
+`ctest` native aarch64 **với service production đang chạy**: **751/751 PASS**
+(trước khi sửa `TEST-ISO-001` là 746/751).
+
+Giới hạn phải ghi rõ: bài rollback dùng hai bộ artifact **cùng commit**, chỉ khác
+nhãn version, nên nó diễn tập **cơ chế** đổi artifact + restart + provenance phản
+ánh đúng bản đang chạy, **không phải** rollback tương thích qua hai commit khác
+nhau. Toàn bộ vẫn là lab evidence trên board fake MCU không panel; không đóng gate
+physical I/O HIL, real RS485 hay bất kỳ gate Programming nào.
+
+Bằng chứng: [`TARGET_RST202_20260804.json`](../07_records/evidence/restructure/TARGET_RST202_20260804.json).
 
 Về đường build: board là aarch64 nên `build-release.sh` chạy native trực tiếp
 trên target theo ADR-022 — đây là đường dùng cho `RST-202`. Đã bổ sung
