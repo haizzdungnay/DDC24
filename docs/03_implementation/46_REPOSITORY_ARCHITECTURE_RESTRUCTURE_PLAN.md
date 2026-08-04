@@ -558,7 +558,12 @@ HOST_FULL_REGRESSION = PASS
 GO_BOUNDED_CONTEXTS = PASS
 NPM_UNWAIVED_HIGH_ADVISORIES = 0
 CHROME_DEVTOOLS_RUNTIME = PASS_WITH_LOW_ACCESSIBILITY_FINDING
-TARGET_INSTALL_ROLLBACK = NOT_RUN
+TARGET_NATIVE_BUILD = PASS
+TARGET_INSTALL = PASS
+TARGET_PROVENANCE = PASS
+TARGET_STARTUP_ORDER = NOT_RUN
+TARGET_CRASH_RESTART = NOT_RUN
+TARGET_ROLLBACK = NOT_RUN
 PLAN_CLOSED = NO
 ```
 
@@ -620,14 +625,15 @@ thay đổi gì trên target. Quy trình thực hiện nằm tại
 
 Bốn dữ kiện quyết định trạng thái `RST-202`:
 
-1. **Target chạy build trước restructure.** `/usr/sbin/mkddc-{core,iobus,fake-mcu}`
-   mốc 2026-07-28, `mkddc-web` cùng ngày, `mkddc-hmi` 2026-07-22. Cây `apps/`
-   chưa từng được cài lên target, đúng với `TARGET_INSTALL_ROLLBACK = NOT_RUN`.
+1. **Target chạy build trước restructure.** `/usr/sbin/mkddc-{core,iobus,netcfg,hmi}`
+   và `/opt/mkddc-web/mkddc-web` mốc 2026-08-01 15:24:05; `mkddc-fake-mcu` mốc
+   2026-07-30 19:38:14. Cây `apps/` chưa từng được cài lên target, đúng với
+   `TARGET_INSTALL_ROLLBACK = NOT_RUN`.
 2. **Gate provenance sẽ trượt nếu chạy ngay.** `/usr/share/mkddc/` chỉ có
    `avahi/`; thiếu `provenance.json`, `checksums.sha256`, `runtime-build-info.txt`
    và `runtime-checksums.sha256`. Nguyên nhân không phải lỗi script: logic sinh
    các file này mới vào repo ở commit `9c6dc9b` ngày 2026-08-03, sau lần cài cuối
-   ngày 2026-07-28. `build-release.sh` và `install.sh` hiện đã đủ để đóng gate
+   ngày 2026-08-01. `build-release.sh` và `install.sh` hiện đã đủ để đóng gate
    này ở lần cài tới.
 3. **Rollback đang là thao tác tay.** `/usr/sbin` chứa 7 bản sao ad-hoc
    (`.bad-*`, `.bak-*`, `.bak.*`, `.prev-*` từ 2026-07-03 đến 2026-07-18). Đây là
@@ -636,6 +642,37 @@ Bốn dữ kiện quyết định trạng thái `RST-202`:
 4. **Layout cài đặt không nhất quán.** core/iobus/netcfg ở `/usr/sbin`, web ở
    `/opt/mkddc-web/`; ngoài ra còn bản chết `/usr/local/bin/mkddc-{core,iobus,fakemcu}`
    mốc 2026-07-01/02 không unit nào tham chiếu.
+
+### 12.5. Kết quả build và deploy ngày 2026-08-04
+
+Đã chạy build native aarch64 và deploy lên board tại commit `13fdc60`. Bằng
+chứng: [`TARGET_RST202_20260804.json`](../07_records/evidence/restructure/TARGET_RST202_20260804.json);
+phân tích đầy đủ tại
+[Board Deploy Report](../07_records/reviews/BOARD_DEPLOY_REPORT_2026-08-04.md).
+
+- `build-release.sh` native trên board: **BUILD_OK**, version 0.2.0,
+  `dirty=false`; 4 binary C++/Go đều `ELF 64-bit ARM aarch64`, 5/5 checksum.
+- `install.sh`: checksum verify PASS; provenance đã có trên target và cả 4
+  binary báo đúng commit `13fdc60`.
+- Runtime xác minh: `iop.state HANDSHAKE -> NORMAL_POLL`, `set_do/set_ao ack=ok`,
+  SHM tạo lại, web API cổng 8081 trả 200 cho client thật.
+- `ctest` native aarch64: **746/751** trong 14,70 s.
+
+`TARGET_INSTALL` và `TARGET_PROVENANCE` PASS. `TARGET_STARTUP_ORDER`,
+`TARGET_CRASH_RESTART` và `TARGET_ROLLBACK` vẫn `NOT_RUN` vì chưa có cửa sổ
+reboot; `RST-202` **chưa đóng**.
+
+Bốn khiếm khuyết phát hiện, mới vá tay trên board và **chưa sửa trong repo**:
+
+| ID | Nội dung |
+|---|---|
+| INSTALL-001 | `install.sh` dùng `systemctl enable --now` nên không restart service đang chạy; sau khi cài "thành công", `readlink /proc/<pid>/exe` trả `(deleted)` và PID không đổi — vẫn chạy code cũ. Đây là false-success. |
+| INSTALL-002 | `install.sh` không cài `fake_mcu`, khiến board lab lệch phiên bản giữa iobus mới và fake MCU cũ dù hai bên nói cùng giao thức IOP. |
+| INSTALL-003 | `install.sh` bật `mkddc-hmi` chỉ vì binary tồn tại, ghi đè trạng thái `disabled` và gây vòng lặp restart trên board không có panel. |
+| TEST-ISO-001 | Test dùng tên SHM cố định nên trùng với service production trên cùng máy; 5 test đỏ vì `shm_open errno=13`. Ảnh hưởng trực tiếp kế hoạch chạy CI runner trên board theo ADR-022. |
+
+Ghi chú ABI: `mkddc_io_shm` đổi 1304 → 1816 byte giữa hai bản, nên iobus và core
+bắt buộc restart đồng bộ.
 
 Về đường build: board là aarch64 nên `build-release.sh` chạy native trực tiếp
 trên target theo ADR-022 — đây là đường dùng cho `RST-202`. Đã bổ sung
