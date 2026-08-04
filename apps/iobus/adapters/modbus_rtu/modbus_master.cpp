@@ -303,8 +303,17 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
                 if (cache.point(init_idx).name[0] == '\0') {
                     char name[24];
                     ext_point_name(name, sc, pt, logical);
-                    cache.set_point(init_idx, name, 0.0f, KX_Q_UNCERTAIN,
-                                    sc.addr, true, pt.writable);
+                    /* D-10: điểm CHƯA TỪNG có mẫu phải là BAD + offline, không
+                     * phải UNCERTAIN + online.
+                     *
+                     * Bản cũ dùng (UNCERTAIN, online=true) và BE map cặp đó thành
+                     * STALE, nên trước lần đọc thành công đầu tiên giao diện hiện
+                     * "0" với nhãn "dữ liệu cũ". Với một điểm nhiệt độ, 0 là giá
+                     * trị hợp lý về mặt vật lý — người dùng không có cách nào biết
+                     * đó là số bịa. Cặp (BAD, offline) được map thành OFFLINE,
+                     * tức "chưa/không có dữ liệu", đúng sự thật. */
+                    cache.set_point(init_idx, name, 0.0f, KX_Q_BAD,
+                                    sc.addr, false, pt.writable);
                 }
                 init_idx++;
                 logical++;

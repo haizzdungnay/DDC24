@@ -33,6 +33,10 @@ struct SlaveMetrics {
      * của tôi đã không tới thiết bị". */
     uint32_t    write_dropped   = 0;
     uint8_t     consecutive_errors = 0;
+    /* D-12: cửa sổ trượt cho E303. Tách khỏi total_* vì tỷ lệ tích luỹ từ lúc
+     * khởi động không phản ánh được tình trạng bus hiện tại. */
+    uint32_t    window_polls    = 0;
+    uint32_t    window_errors   = 0;
     uint64_t    last_seen_ms    = 0;
 
     float error_rate() const {

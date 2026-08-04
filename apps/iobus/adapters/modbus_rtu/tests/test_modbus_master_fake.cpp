@@ -152,24 +152,53 @@ TEST(ModbusMaster, Rs485DeviceFromConfigNotHardcoded)
 }
 TEST(FieldbusMetrics, E303BusErrorRateAlarm)
 {
+    /* D-12: E303 đánh giá theo CỬA SỔ TRƯỢT 20 lượt poll, không theo tỷ lệ tích
+     * luỹ từ lúc khởi động. Chưa đủ một cửa sổ thì chưa kết luận. */
     FieldbusMetrics metrics;
     metrics.init({"slave1"}, {1});
 
-    /* 8 successes → error_rate = 0% — no alarm */
-    for (int i = 0; i < 8; i++) metrics.update(0, true, static_cast<uint64_t>(i) * 100);
+    for (int i = 0; i < 18; i++) metrics.update(0, true, static_cast<uint64_t>(i) * 100);
+    EXPECT_FALSE(metrics.check_e303(0));   /* mới 18/20 lượt — chưa đủ cửa sổ */
+
+    /* Thêm 2 lỗi ⇒ đủ 20 lượt, tỷ lệ 2/20 = 10%, KHÔNG vượt ngưỡng >10%. */
+    metrics.update(0, false, 1900);
+    metrics.update(0, false, 2000);
     EXPECT_FALSE(metrics.check_e303(0));
 
-    /* +2 errors → 2/10 = 20% > 10% threshold → first trigger = true */
-    metrics.update(0, false, 900);
-    metrics.update(0, false, 1000);
-
+    /* Cửa sổ mới toàn lỗi ⇒ vượt ngưỡng, báo đúng một lần. */
+    for (int i = 0; i < 20; i++) metrics.update(0, false, 2100 + static_cast<uint64_t>(i) * 100);
     EXPECT_TRUE(metrics.check_e303(0));
     EXPECT_TRUE(metrics.get(0).e303_triggered);
-    EXPECT_FALSE(metrics.check_e303(0));  /* no double-trigger */
+    EXPECT_FALSE(metrics.check_e303(0));   /* chưa đủ cửa sổ kế — không báo lặp */
 
-    /* reset_alarms clears flag */
     metrics.reset_alarms(0);
     EXPECT_FALSE(metrics.get(0).e303_triggered);
+}
+
+/* D-12: khiếm khuyết chính của bản cũ là E303 latch VĨNH VIỄN.
+ *
+ * `e303_triggered` chỉ được xoá trong reset_alarms(), mà reset_alarms() chỉ được
+ * gọi khi e302 đang bật. Một slave lỗi nhiều nhưng chưa bao giờ OFFLINE sẽ giữ cờ
+ * mãi mãi và không bao giờ báo lại lần sau. Thêm nữa tỷ lệ tích luỹ khiến bus đã
+ * tốt trở lại vẫn bị tính là xấu rất lâu. */
+TEST(FieldbusMetrics, E303ReArmsAfterCleanWindowWithoutOfflineReset)
+{
+    FieldbusMetrics metrics;
+    metrics.init({"slave1"}, {1});
+
+    /* Cửa sổ 1: toàn lỗi ⇒ báo. */
+    for (int i = 0; i < 20; i++) metrics.update(0, false, static_cast<uint64_t>(i) * 100);
+    EXPECT_TRUE(metrics.check_e303(0));
+
+    /* Cửa sổ 2: bus tốt hoàn toàn ⇒ KHÔNG báo, và cờ được gỡ dù chưa hề có
+     * reset_alarms() nào được gọi (slave này không đi qua trạng thái OFFLINE). */
+    for (int i = 0; i < 20; i++) metrics.update(0, true, 2000 + static_cast<uint64_t>(i) * 100);
+    EXPECT_FALSE(metrics.check_e303(0));
+    EXPECT_FALSE(metrics.get(0).e303_triggered);
+
+    /* Cửa sổ 3: xấu trở lại ⇒ phải báo LẠI. Bản cũ im lặng vĩnh viễn ở đây. */
+    for (int i = 0; i < 20; i++) metrics.update(0, false, 4000 + static_cast<uint64_t>(i) * 100);
+    EXPECT_TRUE(metrics.check_e303(0));
 }
 
 #ifdef MKDDC_ENABLE_MODBUS
