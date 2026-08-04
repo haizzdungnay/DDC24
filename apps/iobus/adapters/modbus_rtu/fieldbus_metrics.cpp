@@ -46,6 +46,16 @@ void FieldbusMetrics::record_crc_error(uint8_t idx)
     if (idx < metrics_.size()) metrics_[idx].crc_errors++;
 }
 
+void FieldbusMetrics::record_write_failed(uint8_t idx)
+{
+    if (idx < metrics_.size()) metrics_[idx].write_failed++;
+}
+
+void FieldbusMetrics::record_write_dropped(uint8_t idx)
+{
+    if (idx < metrics_.size()) metrics_[idx].write_dropped++;
+}
+
 bool FieldbusMetrics::check_e302(uint8_t idx, uint8_t retry_limit)
 {
     if (idx >= metrics_.size()) return false;

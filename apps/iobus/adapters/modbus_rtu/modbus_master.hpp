@@ -23,6 +23,16 @@
 
 namespace iobus::fieldbus {
 
+/* Số lần phát một lệnh ghi trước khi bỏ hẳn (D-03).
+ * Chọn 3: đủ để vượt qua nhiễu thoáng qua, đủ ngắn để không giữ lệnh cũ qua một
+ * sự cố mất điện thiết bị. */
+constexpr uint8_t kMaxWriteAttempts = 3;
+
+/* Tuổi tối đa của một lệnh ghi chưa gửi được, tính từ lúc enqueue.
+ * Chọn 30 s: dài hơn vài chu kỳ poll chậm nhất thường dùng (10 s), ngắn hơn
+ * nhiều so với thời gian một thiết bị bị cắt điện rồi cấp lại. */
+constexpr uint64_t kWriteTtlMs = 30000;
+
 struct PendingWrite {
     uint16_t ext_idx;       /* index trong ext_cache */
     uint8_t  slave_addr;
@@ -34,6 +44,13 @@ struct PendingWrite {
     float    scale;
     float    offset;
     bool     submitted = false;
+    /* D-03: trước bản sửa 2026-08-04, write lỗi được `continue` mà không đánh
+     * submitted nên nằm lại hàng đợi VÔ THỜI HẠN và được thử lại ở mọi vòng poll.
+     * Hệ quả thực tế: setpoint đặt lúc 09:00 cho một thiết bị đang mất điện sẽ
+     * tự động được ghi lúc 14:00 khi thiết bị có điện trở lại — đúng hành vi
+     * "blind replay after reconnect" mà thiết kế cấm. */
+    uint8_t  attempts    = 0;   /* số lần đã phát xuống dây */
+    uint64_t enqueued_ms = 0;   /* monotonic ms lúc vào hàng đợi; 0 = chưa đặt */
 };
 
 class ModbusMaster {
@@ -70,8 +87,9 @@ public:
      * COR-011 write bridge: đọc dirty flags từ plc_shm, enqueue PendingWrite cho
      * mỗi ext slot writable đang dirty. Gọi từ fieldbus_thread trước poll_once().
      * Chỉ iterate RTU slaves — TCP writes xử lý riêng.
+     * now_ms dùng làm mốc tính TTL của request (D-03).
      */
-    void drain_ext_writes(const kx_plc_shm_t* shm);
+    void drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms);
 
     /* Tính số ms nên sleep trước khi poll_once() kế.
      * 0 = có slave đến hạn ngay. */
@@ -88,7 +106,7 @@ private:
     void read_slave(uint8_t slave_idx, uint64_t now_ms,
                     ExtCache& cache, FieldbusMetrics& metrics);
     void write_slave(uint8_t slave_idx, FieldbusMetrics& metrics);
-    void flush_pending(uint8_t slave_idx);
+    void flush_pending(uint8_t slave_idx, uint64_t now_ms, FieldbusMetrics& metrics);
 
     void* ctx_ = nullptr;   /* modbus_t* — void* để compile mà không cần libmodbus header */
 

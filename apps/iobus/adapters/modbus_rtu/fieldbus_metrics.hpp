@@ -22,6 +22,13 @@ struct SlaveMetrics {
     uint32_t    timeout_errors  = 0;
     uint32_t    crc_errors      = 0;
     uint32_t    retry_attempts  = 0;
+    /* D-03: lệnh ghi thất bại ở một lần phát (còn có thể thử lại). */
+    uint32_t    write_failed    = 0;
+    /* D-03: lệnh ghi bị BỎ HẲN — hết lượt thử, quá hạn TTL, hoặc giá trị không
+     * encode được. Khác write_failed: một lệnh có thể fail nhiều lần rồi mới bị
+     * dropped đúng một lần. Người vận hành cần thấy con số này vì nó là "lệnh
+     * của tôi đã không tới thiết bị". */
+    uint32_t    write_dropped   = 0;
     uint8_t     consecutive_errors = 0;
     uint64_t    last_seen_ms    = 0;
 
@@ -39,6 +46,10 @@ public:
     void update(uint8_t slave_idx, bool ok, uint64_t now_ms, uint8_t retry_limit = 2);
     void record_timeout(uint8_t slave_idx);
     void record_crc_error(uint8_t slave_idx);
+    /* D-03: một lần phát lệnh ghi thất bại (vẫn có thể còn lượt thử). */
+    void record_write_failed(uint8_t slave_idx);
+    /* D-03: lệnh ghi bị bỏ hẳn, sẽ KHÔNG được phát lại. */
+    void record_write_dropped(uint8_t slave_idx);
 
     /* E302: slave offline (retry >= 2 → offline).
      * Trả true NẾU cần gửi alarm (lần đầu offline). */

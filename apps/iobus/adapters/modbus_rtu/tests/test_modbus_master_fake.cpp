@@ -399,4 +399,127 @@ TEST(ModbusMaster, RtuPtyReadWriteAndTimeout)
     ::close(pty_master);
     ::unlink(profile_path.c_str());
 }
+
+/* ---- D-03: vòng đời lệnh ghi (sửa 2026-08-04) ----
+ *
+ * Trước bản sửa, `flush_pending` gặp lỗi ghi thì `continue` mà KHÔNG đánh
+ * submitted, nên request nằm lại `pending_writes_` vô thời hạn và được phát lại
+ * ở mọi vòng poll. Kịch bản hỏng ngoài hiện trường: kỹ thuật viên đặt setpoint
+ * lúc 09:00 cho một VFD đang mất điện; 14:00 thiết bị có điện lại và nhận ngay
+ * lệnh cũ dù không ai ra lệnh lại.
+ *
+ * PTY không có ai trả lời ở đầu master ⇒ mọi write đều timeout, đúng môi trường
+ * để kiểm tra giới hạn số lần thử. */
+
+namespace {
+/* Cấu hình một slave trên PTY câm, timeout ngắn để test chạy nhanh. */
+struct SilentPtyMaster {
+    PtyRtu      pty;
+    std::string profile_path;
+    ModbusMaster master;
+
+    void start(const std::string& tag)
+    {
+        pty.open_pair();
+        ASSERT_FALSE(pty.slave_dev.empty());
+        profile_path = write_tmp_profile(tag,
+            R"json({"points":[{"name":"sp","fc":3,"addr":0,"count":1,"type":"uint16","writable":true}]})json");
+        FieldbusConfig cfg;
+        cfg.rs485.device = pty.slave_dev;
+        cfg.rs485.baud   = 19200;
+        /* addr, profile, name, poll_ms, timeout_ms, retry */
+        cfg.slaves.push_back({1, profile_path, "vfd", 10, 20, 2});
+        ASSERT_TRUE(master.open(cfg));
+    }
+    ~SilentPtyMaster()
+    {
+        master.close();
+        if (!profile_path.empty()) ::unlink(profile_path.c_str());
+    }
+};
+
+PendingWrite make_write(float value)
+{
+    PendingWrite w{};
+    w.slave_addr = 1;
+    w.fc         = 6;
+    w.reg_addr   = 0;
+    w.value      = value;
+    w.type       = PointType::Uint16;
+    w.byte_order = ByteOrder::AB;
+    w.scale      = 1.0f;
+    w.offset     = 0.0f;
+    return w;
+}
+} // namespace
+
+TEST(ModbusMasterWriteLifecycle, WriteIsDroppedAfterMaxAttempts)
+{
+    SilentPtyMaster h;
+    h.start("wr_attempts");
+
+    ExtCache cache;
+    FieldbusMetrics metrics;
+    PendingWrite w = make_write(1234.0f);
+    w.enqueued_ms = 1000;
+    h.master.enqueue_write(w);
+
+    /* Mỗi vòng poll phát tối đa một lần; sau kMaxWriteAttempts phải bị bỏ hẳn. */
+    uint64_t now = 1000;
+    for (int i = 0; i < kMaxWriteAttempts; ++i) {
+        h.master.poll_once(now, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+        now += 100;
+    }
+    EXPECT_EQ(metrics.get(0).write_dropped, 1u);
+    const uint32_t failed_after_drop = metrics.get(0).write_failed;
+    EXPECT_GE(failed_after_drop, 1u);
+
+    /* Sau khi bị bỏ, các vòng poll tiếp theo KHÔNG được phát lại lệnh đó nữa. */
+    for (int i = 0; i < 3; ++i) {
+        h.master.poll_once(now, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+        now += 100;
+    }
+    EXPECT_EQ(metrics.get(0).write_failed, failed_after_drop);
+    EXPECT_EQ(metrics.get(0).write_dropped, 1u);
+}
+
+/* Lệnh quá hạn phải bị bỏ mà KHÔNG phát một byte nào xuống dây — đây là chỗ chặn
+ * kịch bản "thiết bị có điện lại sau nhiều giờ và nhận luôn lệnh cũ". */
+TEST(ModbusMasterWriteLifecycle, ExpiredWriteIsDroppedWithoutTransmitting)
+{
+    SilentPtyMaster h;
+    h.start("wr_ttl");
+
+    ExtCache cache;
+    FieldbusMetrics metrics;
+    PendingWrite w = make_write(50.0f);
+    w.enqueued_ms = 1000;
+    h.master.enqueue_write(w);
+
+    /* now vượt TTL ⇒ bỏ ngay, không tính là một lần phát thất bại. */
+    h.master.poll_once(1000 + kWriteTtlMs + 1, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+
+    EXPECT_EQ(metrics.get(0).write_dropped, 1u);
+    EXPECT_EQ(metrics.get(0).write_failed, 0u);
+}
+
+/* D-01 nối với D-03: giá trị không encode được phải bị bỏ và ĐẾM được, thay vì
+ * biến mất im lặng như trước. */
+TEST(ModbusMasterWriteLifecycle, UnencodableWriteIsDroppedAndCounted)
+{
+    SilentPtyMaster h;
+    h.start("wr_encode");
+
+    ExtCache cache;
+    FieldbusMetrics metrics;
+    PendingWrite w = make_write(70000.0f);   /* ngoài dải uint16 */
+    w.enqueued_ms = 1000;
+    h.master.enqueue_write(w);
+
+    h.master.poll_once(1000, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+
+    EXPECT_EQ(metrics.get(0).write_dropped, 1u);
+    EXPECT_EQ(metrics.get(0).write_failed, 0u);
+}
+
 #endif

@@ -313,7 +313,7 @@ int main(int argc, char** argv)
                 if (rtu_ok) {
                     /* COR-011: bridge write setpoints from core before poll */
                     const kx_plc_shm_t* rtu_plc_shm = try_attach_plc_shm();
-                    modbus.drain_ext_writes(rtu_plc_shm);
+                    modbus.drain_ext_writes(rtu_plc_shm, poll_now);
                     if (rtu_plc_shm)
                         ::munmap(const_cast<kx_plc_shm_t*>(rtu_plc_shm),
                                  sizeof(kx_plc_shm_t));
