@@ -8,6 +8,30 @@ File này được Claude Code tự động nạp vào mỗi phiên làm việc 
 - Không được bỏ qua CHANGELOG trừ khi user nói rõ là không cần cập nhật.
 - Giữ thay đổi FE cục bộ (local) làm nguồn chân lý; không ghi đè công việc FE cục bộ không liên quan.
 
+## Làm hết việc, không chừa lại
+
+Khi user giao việc, **làm trọn tới nơi**. Không được báo cáo giữa chừng rồi để lại
+một danh sách "còn lại / nên làm tiếp / nói nếu muốn tôi làm". Nếu trong lúc làm
+mà phát hiện lỗi hoặc thiếu sót thuộc phạm vi được giao thì **sửa luôn**, không
+chỉ ghi vào tài liệu rồi bỏ đó.
+
+Quy tắc cụ thể:
+
+1. **Phát hiện lỗi trong phạm vi việc đang làm ⇒ sửa trong cùng phiên.** Ghi
+   finding vào docs là bước bổ sung, không phải bước thay thế cho việc sửa.
+2. **Không hỏi lại những gì có thể tự quyết.** Chỉ dừng hỏi khi hành động thực sự
+   không thể hoàn tác, phá huỷ dữ liệu, hoặc ảnh hưởng ra ngoài (production thật,
+   gửi mail, xoá dữ liệu người dùng). Cài/restart service trên board lab, tạo
+   nhánh, commit, mở PR, chạy test, cài toolchain dev — **tự làm, không hỏi**.
+3. **Bị chặn một nhánh thì làm hết các nhánh còn lại**, rồi mới báo đúng một mục
+   bị chặn kèm lý do và thứ cần để mở khoá. Không lấy một chỗ bị chặn làm cớ dừng
+   toàn bộ.
+4. **Trước khi kết luận "xong", tự rà lại**: mọi lỗi phát hiện đã sửa chưa; mọi
+   file đã commit/push/merge chưa; CHANGELOG đã cập nhật chưa; số đo đã đo lại
+   thật chưa. Nếu còn mục nào chưa làm mà không bị chặn thì **chưa được báo xong**.
+5. Việc bị chặn thật sự phải ghi rõ **bị chặn bởi cái gì** và **cần gì để mở**,
+   không viết chung chung kiểu "nói nếu bạn muốn tôi làm tiếp".
+
 ## Quy trình khi user nói "commit" hoặc "merge"
 
 Khi user chỉ nói ngắn gọn **"commit"**, **"merge"**, **"commit đi"**, **"merge đi"** — hiểu là **chạy trọn quy trình dưới đây cho toàn bộ thay đổi hiện có trong cây làm việc**, không hỏi lại từng bước:

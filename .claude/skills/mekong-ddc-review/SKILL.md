@@ -8,6 +8,20 @@ allowed-tools: Read Grep Glob Bash(git *) Bash(find *) Bash(ls *) Bash(cat *) Ba
 
 Luôn trả lời bằng tiếng Việt.
 
+## Nguyên tắc: review xong phải sửa, không chừa việc
+
+Skill này chỉ có quyền đọc, nên bản thân nó không sửa được. Nhưng review **không
+phải là điểm dừng**. Sau khi có kết quả review, nếu lỗi nằm trong phạm vi việc
+user đã giao thì **thoát skill và sửa ngay trong cùng phiên**, rồi chạy lại test
+và cập nhật CHANGELOG.
+
+- Ghi finding vào docs là bước bổ sung, **không thay thế** việc sửa.
+- Không kết thúc bằng một danh sách "nên làm tiếp" cho những thứ chính mình sửa
+  được.
+- Mục "Việc cần làm tiếp" bên dưới chỉ được chứa việc **thật sự ngoài phạm vi**
+  hoặc **bị chặn**, và mỗi mục phải ghi rõ bị chặn bởi cái gì, cần gì để mở khoá.
+  Nếu không có mục nào như vậy thì ghi "không có".
+
 Bối cảnh:
 - DDC/IoT phải ưu tiên ổn định công nghiệp.
 - Phần cứng chưa xong thì không ép firmware MCU thật.
@@ -80,5 +94,9 @@ Sai lệch docs/spec/ADR.
 ## Test bắt buộc
 Test bắt buộc phải bổ sung/chạy lại.
 
+## Đã sửa trong phiên
+Lỗi thuộc phạm vi được giao và đã sửa xong, kèm test đã chạy lại.
+
 ## Việc cần làm tiếp
-Việc giao cho DEV/QA/PM.
+Chỉ ghi việc thật sự ngoài phạm vi hoặc bị chặn; mỗi mục nêu rõ **bị chặn bởi cái
+gì** và **cần gì để mở khoá**. Không có thì ghi "không có".

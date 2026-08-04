@@ -7,6 +7,22 @@
 ---
 
 ## [Unreleased]
+### Changed — Quy tắc "làm hết việc, không chừa lại" (2026-08-04)
+
+- Thêm mục **"Làm hết việc, không chừa lại"** vào `CLAUDE.md` và `AGENTS.md`:
+  lỗi phát hiện trong phạm vi việc được giao phải sửa ngay trong cùng phiên; ghi
+  finding vào docs là bước bổ sung chứ không thay thế việc sửa; chỉ dừng hỏi khi
+  hành động không thể hoàn tác, phá huỷ dữ liệu hoặc ảnh hưởng ra ngoài; bị chặn
+  một nhánh thì làm hết các nhánh còn lại rồi báo đúng mục bị chặn kèm điều kiện
+  mở khoá.
+- Cập nhật skill `mekong-ddc-review`: thêm nguyên tắc review xong phải sửa, đổi
+  mục output thành "Đã sửa trong phiên" + "Việc cần làm tiếp" với ràng buộc chỉ
+  ghi việc thật sự ngoài phạm vi hoặc bị chặn.
+
+**Lý do:** trong phiên deploy board cùng ngày, bốn khiếm khuyết `INSTALL-001..003`
+và `TEST-ISO-001` chỉ được ghi vào tài liệu rồi bàn giao lại cho user thay vì sửa
+luôn. Quy tắc này chặn lặp lại kiểu bàn giao đó.
+
 ### Added — Build native aarch64 và deploy FW SOM + fake MCU lên board (2026-08-04)
 
 - Build `build-release.sh` native trên Orange Pi 5B tại commit `13fdc60`:
