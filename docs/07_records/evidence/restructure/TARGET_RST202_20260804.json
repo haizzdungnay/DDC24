@@ -113,18 +113,80 @@
     ],
     "note": "Chay bang root thi 2 test BacnetObjTable pass, 3 test StIntegration van hong; chua lay duoc chi tiet phan con lai."
   },
+  "acceptance_run_2": {
+    "note": "Chay lai sau khi sua 4 khiem khuyet, tai commit 3f4c536, version 0.2.1",
+    "ctest_native_aarch64_with_services_running": { "total": 751, "passed": 751, "failed": 0, "duration_s": 14.50 },
+    "install": {
+      "command": "sudo platform/packaging/install.sh",
+      "exit": 0,
+      "pids_before": { "mkddc-iobus": 422645, "mkddc-core": 422651, "mkddc-web-pi": 422658, "mkddc-fakemcu": 422637, "mkddc-netcfg": 284670 },
+      "pids_after": { "mkddc-iobus": 433848, "mkddc-core": 433852, "mkddc-web-pi": 433856, "mkddc-fakemcu": 433844, "mkddc-netcfg": 433865 },
+      "exe_deleted_after": false,
+      "hmi_state_preserved": "inactive/disabled"
+    },
+    "startup_order": {
+      "method": "sudo systemctl reboot",
+      "boot_time": "2026-08-04 13:34:53",
+      "ssh_back_after_s": 36,
+      "sequence": [
+        "13:35:02.565 mkddc-pty started",
+        "13:35:02.573 mkddc-fakemcu started",
+        "13:35:02.580 mkddc-iobus starting",
+        "13:35:06.226 mkddc-iobus started",
+        "13:35:06.268 mkddc-core starting",
+        "13:35:08.000 mkddc-core started",
+        "13:35:08.145 mkddc-web-pi started"
+      ],
+      "verdict": "dung dependency: SHM producer (iobus) san sang truoc core; web sau cung",
+      "mkddc_units_failed": 0,
+      "unrelated_os_units_failed": ["smartmontools", "systemd-binfmt", "usbdevice"]
+    },
+    "crash_restart": {
+      "method": "systemctl kill -s SIGKILL, cho 12 s",
+      "results": [
+        { "unit": "mkddc-iobus", "pid_before": 929, "pid_after": 2979, "nrestarts": "0 -> 1", "active_after": true },
+        { "unit": "mkddc-core", "pid_before": 1410, "pid_after": 2993, "nrestarts": "0 -> 1", "active_after": true },
+        { "unit": "mkddc-web-pi", "pid_before": 1595, "pid_after": 3007, "nrestarts": "0 -> 1", "active_after": true }
+      ],
+      "iop_recovered": true
+    },
+    "provenance_after_reboot": {
+      "version": "0.2.1",
+      "git_commit": "3f4c536e4d0fd1c1b0533ae88a77d96cc1aa5334",
+      "dirty": false,
+      "runtime_checksums_check": "OK 4/4"
+    },
+    "rollback": {
+      "method": "install.sh tu chup snapshot truoc khi ghi de, sau do platform/packaging/rollback.sh",
+      "limitation": "Hai bo artifact cung commit 3f4c536, chi khac nhan version. Bai nay dien tap CO CHE doi artifact + restart + provenance phan anh dung ban dang chay, KHONG phai rollback tuong thich qua commit khac nhau.",
+      "steps": [
+        "Cai 0.2.0-rollbacktest; install.sh tu chup 0.2.1 vao /var/backups/mkddc/0.2.1-20260804-134053 va tro symlink previous",
+        "Chay rollback.sh khong tham so; script tu chup ban hien tai vao pre-rollback-0.2.0-rollbacktest-20260804-134106",
+        "Khoi phuc 6 binary + provenance/checksums, restart theo thu tu, sinh lai runtime-build-info"
+      ],
+      "pids_before": { "mkddc-iobus": 5036, "mkddc-core": 5040 },
+      "pids_after": { "mkddc-iobus": 5256, "mkddc-core": 5259 },
+      "version_after": "0.2.1",
+      "runtime_build_info_after": "version=0.2.1 build_time=2026-08-04T06:29:39Z",
+      "exit": 0,
+      "runtime_checksums_check": "OK",
+      "repeatable_script": "platform/packaging/rollback.sh"
+    }
+  },
   "rst202_criteria": {
     "TARGET_INSTALL": "PASS",
     "TARGET_PROVENANCE": "PASS",
-    "TARGET_STARTUP_ORDER": "NOT_RUN",
-    "TARGET_CRASH_RESTART": "NOT_RUN",
-    "TARGET_ROLLBACK": "NOT_RUN"
+    "TARGET_STARTUP_ORDER": "PASS",
+    "TARGET_CRASH_RESTART": "PASS",
+    "TARGET_ROLLBACK": "PASS"
   },
-  "rst202_closed": false,
+  "rst202_closed": true,
+  "rst202_closure_note": "Dat ca 5 tieu chi tren board lab. Van la lab evidence tren board fake MCU khong panel; khong dong gate physical I/O HIL, real RS485 hay Programming.",
   "open_defects": [
-    { "id": "INSTALL-001", "summary": "install.sh khong restart service dang chay, tao false-success", "fixed_in_repo": false },
-    { "id": "INSTALL-002", "summary": "install.sh khong cai fake_mcu, gay lech phien ban tren board lab", "fixed_in_repo": false },
-    { "id": "INSTALL-003", "summary": "install.sh bat mkddc-hmi chi vi binary ton tai, ghi de trang thai disabled", "fixed_in_repo": false },
-    { "id": "TEST-ISO-001", "summary": "test dung ten SHM co dinh, trung voi service production tren cung may", "fixed_in_repo": false }
+    { "id": "INSTALL-001", "summary": "install.sh khong restart service dang chay, tao false-success", "fixed_in_repo": true, "fix_commit": "cb1303c" },
+    { "id": "INSTALL-002", "summary": "install.sh khong cai fake_mcu, gay lech phien ban tren board lab", "fixed_in_repo": true, "fix_commit": "cb1303c" },
+    { "id": "INSTALL-003", "summary": "install.sh bat mkddc-hmi chi vi binary ton tai, ghi de trang thai disabled", "fixed_in_repo": true, "fix_commit": "cb1303c" },
+    { "id": "TEST-ISO-001", "summary": "test dung ten SHM co dinh, trung voi service production; attach() memset nen co the xoa sach SHM dang song", "fixed_in_repo": true, "fix_commit": "43b4cdb" },
+    { "id": "ROLLBACK-001", "summary": "rollback truoc day la thao tac tay, khong co snapshot tu dong va khong co script", "fixed_in_repo": true, "fix_note": "install.sh tu snapshot + them platform/packaging/rollback.sh" }
   ]
 }
