@@ -7,6 +7,59 @@
 ---
 
 ## [Unreleased]
+### Added — Review source Modbus RTU, kế hoạch implement và khảo sát board production (2026-08-04)
+
+- **Code review** `docs/07_records/reviews/MODBUS_RTU_CODE_REVIEW_2026-08-04.md`:
+  **14 defect** có dẫn chứng dòng code, tách khỏi nhóm "gap chờ ADR-024". Ba lỗi
+  P0 ảnh hưởng an toàn: `encode_register` ép float→int **không kiểm biên** (UB,
+  ghi giá trị rác xuống thiết bị), `scale=0` ghi im lặng giá trị 0 thay vì từ chối,
+  và write thất bại được **giữ lại phát vô hạn** nên lệnh cũ tự thực thi khi thiết
+  bị online lại. Kèm 3 finding về chính bộ tài liệu mới, trong đó `R-03` là mâu
+  thuẫn nội bộ (`poll_interval_ms` theo Point vs scheduler theo Device).
+- **Kế hoạch triển khai** `docs/03_implementation/49_MODBUS_RTU_IMPLEMENTATION_PLAN.md`:
+  hai track tách biệt — **Track A** (29 task, 13,25 người-ngày) vá an toàn, không
+  chờ quyết định nào; **Track B** (45 task, 40–51 người-ngày) redesign theo contract
+  v2, chờ ADR-024. Gồm bảng task 74 mục có vai trò/công sức/phụ thuộc, ma trận
+  RACI, swimlane theo vai trò, đồ thị phụ thuộc đường găng và 9 mốc kiểm soát.
+  Dùng số 49 vì 48 đã bị `PLAN_FIX_DEBUG_AND_BOARD_DEPLOY.md` sử dụng.
+- **Khảo sát board production** `docs/07_records/test-evidence/fw-som/2026-08-04-foxlinx-uart-rs485-survey.md`
+  (chỉ đọc, không thay đổi board): trên Foxlinx SOM-DDC-24 chỉ có **2 UART** được
+  bật — `ttyS2` cho MCU STM32 (đang có traffic) và `ttyS5` rảnh. Nghĩa là với
+  provisioning hiện tại **chỉ chạy được một Modbus RTU master**, không phải hai như
+  `PRODUCT.md` công bố. Ngoài ra **không có cấu hình `rs485-*` trong device tree**
+  và source không gọi `modbus_rtu_set_serial_mode()` ⇒ cơ chế chuyển hướng
+  half-duplex chưa được kiểm chứng (defect mới D-13). Board thực tế là **Forlinx
+  OK1126B-S / RV1126B**, khác `Radxa CM3/RK3566` trong `PRODUCT.md`.
+- **Báo cáo trình PM/CTO** `docs/07_records/reviews/MODBUS_RTU_PM_CTO_REVIEW_BRIEF_2026-08-04.md`:
+  hiện trạng trung thực, 10 rủi ro xếp hạng, **11 câu hỏi** cần quyết định (mỗi câu
+  có phương án, khuyến nghị và hệ quả nếu không quyết) và 7 đề nghị phê duyệt.
+- Board **Foxlinx SOM-DDC-24** được chốt là target nghiệm thu cho mọi gate
+  `TC-MBRTU-T-*`/`TC-MBRTU-H-*`; Orange Pi 5B chỉ còn vai trò regression nhanh và
+  không đóng được gate nào.
+
+**Kiểm chứng:** không sửa source; thao tác trên board là **read-only** (`uname`,
+`ls /dev/ttyS*`, `/proc/tty/driver/serial`, `/proc/device-tree/*/status`) đúng theo
+lệnh preflight đã có trong runbook §2a — không cài đặt, không sửa cấu hình, không
+restart service. Không chạy lại bộ test vì không có thay đổi source.
+
+### Fixed & Improved — Sửa lỗi Debug Web UI & Triển khai Build ARM64 lên Board Foxlinx (2026-08-04)
+
+- **Fixed `AlarmRow.tsx` (BL-007 / FR-ALM-001):** Thêm hàm `formatAlarmText` giúp làm tròn tự động các số thực floating-point > 2 chữ số thập phân thành 2 chữ số thập phân trên danh sách cảnh báo.
+- **Fixed `MonitorPage.tsx` (BL-018):** Mặc định đơn vị đo kênh AO thành `V` khi `unit` chưa được gán.
+- **Fixed `TrendsPage.tsx` (BL-008 / FR-TRND-002):** Đổi nhãn `From (UTC)` và `To (UTC)` tại bộ chọn thời gian thành `Asia/Ho_Chi_Minh UTC+7` đúng theo múi giờ địa phương.
+- **Fixed `DashboardPage.tsx` (BL-017):** Cập nhật ngưỡng nhiệt độ CPU SoC (Cảnh báo: 60°C, Cao: 75°C) để mức nhiệt idle 46.2°C hiển thị đúng trạng thái `Normal`.
+- **Fixed `InputsPage.tsx` (BL-006 / FR-INP-002):** Khống chế tùy chọn đơn vị đo khi loại tín hiệu `signalType === 0` (Dry Contact), chỉ cho phép chọn `0` (None).
+- **Fixed Systemd Services PID drop-ins & ARM64 Build (board deployment):**
+  - Thêm drop-in systemd `ExecStartPost` tự động khởi tạo `/run/mkddc/core.pid` và `/run/mkddc/iobus.pid`.
+  - Biên dịch cross-compile C++ ARM64 (`mkddc-core`, `mkddc-iobus`, `mkddc-netcfg`) và Go ARM64 (`mkddc-web`), đóng gói và triển khai Web UI `dist` lên board Foxlinx SOM-DDC-24.
+- **Xác minh thực tế (Empirical Verification):**
+  - Web UI Vitest: 35/35 test suite passed (299/299 unit test passed).
+  - Web UI Lint & Build: 0 errors / 0 warnings.
+  - Backend Go tests: 11/11 package passed (100%).
+  - C++ CMake Release Build & CTest: 751/751 unit test passed (100%).
+  - Kiểm tra trực tiếp trên board Foxlinx via SSH (`root@mekong-fac.ddns.net:2223`): Cả 4 service `mkddc-web-pi`, `mkddc-core`, `mkddc-iobus`, `mkddc-netcfg` đều `active (running)`.
+  - Lệnh `wget -qO- http://127.0.0.1:8081/api/v1/health` trên board trả về `status: "ok"` với tất cả 6 hạng mục kiểm tra (`web`, `core`, `iobus`, `io_shm`, `plc_shm`, `mcu_connection`) đều `ok`.
+
 ### Fixed — Tự động khởi tạo Historian V2 Authority trên SOM (2026-08-04)
 
 - **Fixed `historian v2 query unavailable` (503 Service Unavailable):**

@@ -22,7 +22,7 @@ nhãn `certified`/`compliant` cho tới khi có evidence theo release gate riên
 | I/O | 16 UI, 4 AO, 4 relay DO |
 | UI modes | 0–10 V, 4–20 mA, NTC 10k/20k/configurable, auxiliary dry contact |
 | AO | 4 kênh qua DAC8554, command vật lý V/mA |
-| Network | Ethernet; BACnet/IP; Modbus TCP; 2 × Modbus RTU — **xung đột chưa đóng**, xem §Modbus RTU bên dưới |
+| Network | Ethernet; BACnet/IP; Modbus TCP; **1 × Modbus RTU** (quyết định PM/CTO 2026-08-04) |
 | Programming | Product scope Rev A chỉ gồm Local Physical I/O, Virtual Point, Modbus RTU Point, ST, FBD và cycle time 1 s/5 s/30 s. Revision/Deployment/Activation/Rollback, RETAIN và Online Monitor tuân theo `PROD-PROG-001`. Trạng thái implementation: chưa được xác nhận. |
 | Runtime As-Built | Component graph 28 loại node là hiện trạng legacy. Quan hệ migration sang Programming chưa được quyết định; không gọi graph này là FBD và không dùng nó làm bằng chứng Programming. |
 | Configuration | REST API + React Web UI, form/JSON |
@@ -55,13 +55,20 @@ Product Requirement, use case và ma trận quyền cho Modbus RTU nằm tại
 rã dòng `Network` ở trên thành capability, product requirement và 18 use case cho
 RS485-1/RS485-2, Modbus RTU Device và Modbus RTU Point.
 
-**Xung đột Active chưa đóng:** baseline này ghi `2 × Modbus RTU`, trong khi
-[`HW_SPEC_MK-DDC-24_VI`](../01_specs/HW_SPEC_MK-DDC-24_VI.md) §9 và bảng UART chỉ
-mô tả **một** đường RS-485 (UART4, một transceiver, một connector A/B/GND, một
-switch termination SW8), và source hiện chỉ tạo một Modbus master. Xung đột này
-phải được đóng bằng evidence phần cứng hoặc bằng Product decision, không bằng
-suy đoán device node. Theo dõi tại `OD-MBRTU-001` trong
-[Modbus RTU Open Decisions](../00_governance/MODBUS_RTU_OPEN_DECISIONS.md).
+**Xung đột đã đóng 2026-08-04 — Rev A dùng một cổng.** Baseline trước đây ghi
+`2 × Modbus RTU`, trong khi [`HW_SPEC_MK-DDC-24_VI`](../01_specs/HW_SPEC_MK-DDC-24_VI.md) §9
+chỉ mô tả **một** đường RS-485, và khảo sát board production Foxlinx ngày
+2026-08-04 xác nhận chỉ còn **một** UART rảnh sau khi `ttyS2` dành cho MCU
+([bằng chứng](../07_records/test-evidence/fw-som/2026-08-04-foxlinx-uart-rs485-survey.md)).
+
+PM/CTO quyết định: **Rev A dùng 01 cổng Modbus RTU**; chỉ mở cổng thứ hai khi
+phần cứng xác nhận có transceiver và đường đấu nối thực tế
+([biên bản](../07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md) Đ-01).
+Giới hạn Modbus RTU Point nâng từ 64 lên **tối thiểu 256** (Đ-07), thực hiện cùng
+đợt thay đổi interface nội bộ.
+
+**Còn mở:** cơ chế điều khiển hướng truyền RS-485 (tự động hay GPIO) chưa được
+phần cứng xác nhận — xem Đ-02.
 
 ## Ngoài phạm vi Programming Rev A
 

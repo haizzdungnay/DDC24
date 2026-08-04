@@ -2,8 +2,16 @@
 
 **ID:** OD-MBRTU-SET-001
 **Trạng thái:** Active (danh mục vấn đề mở, không phải Design)
-**Ngày:** 2026-08-04
+**Ngày:** 2026-08-04 (cập nhật cùng ngày sau phê duyệt PM/CTO)
 **Chủ quản:** Project Engineering
+
+> **CẬP NHẬT 2026-08-04 — 8 quyết định đã được ký.** Xem
+> [Biên bản phê duyệt](../07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md).
+> Trạng thái mới: `OD-MBRTU-001` **CLOSED (1 cổng)** · `-002` **không áp dụng Rev A** ·
+> `-009` **CLOSED (3 role)** · `-011` **CLOSED (≥256 Point)** · `-012` **CLOSED (CSV+JSON)** ·
+> `-015` **CLOSED (chấp thuận đổi ABI)** · `-EXT-02` **CLOSED (đồng ý cấp thiết bị)**.
+> Còn mở và **chặn Track B**: `OD-MBRTU-EXT-01` (chỉ định owner) và cơ chế điều
+> khiển hướng RS-485 (`G-D`, giao Hardware Lead).
 **Đọc cùng:** [ADR-024](DECISIONS.md), [DDD-SW-MBRTU-POINT-001 §18](../02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md)
 
 > Tài liệu này liệt kê **quyết định còn thiếu authority**. Nó không tự quyết định
