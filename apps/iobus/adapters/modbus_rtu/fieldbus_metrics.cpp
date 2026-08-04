@@ -25,7 +25,12 @@ void FieldbusMetrics::update(uint8_t idx, bool ok, uint64_t now_ms, uint8_t retr
     m.total_polls++;
     if (!ok) {
         m.total_errors++;
-        m.retry_attempts++;
+        /* D-06: KHÔNG tăng retry_attempts ở đây. Trước bản sửa 2026-08-04 nó
+         * được tăng đúng một lần cho mỗi lỗi nên luôn bằng total_errors, khiến
+         * bảng chẩn đoán có hai cột "Lỗi" và "Retry" không bao giờ khác nhau —
+         * vô dụng cho việc khoanh vùng, và gây hiểu nhầm rằng hệ thống đang thử
+         * lại (thực tế lúc đó không hề có retry). Nay retry_attempts do
+         * record_retry() đếm, mỗi lần phát lại thật một lần. */
         if (m.consecutive_errors < 255) m.consecutive_errors++;
         if (retry_limit == 0) retry_limit = 1;
         if (m.consecutive_errors >= retry_limit) m.online = false;
@@ -44,6 +49,11 @@ void FieldbusMetrics::record_timeout(uint8_t idx)
 void FieldbusMetrics::record_crc_error(uint8_t idx)
 {
     if (idx < metrics_.size()) metrics_[idx].crc_errors++;
+}
+
+void FieldbusMetrics::record_retry(uint8_t idx)
+{
+    if (idx < metrics_.size()) metrics_[idx].retry_attempts++;
 }
 
 void FieldbusMetrics::record_write_failed(uint8_t idx)

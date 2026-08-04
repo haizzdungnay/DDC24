@@ -272,8 +272,8 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
     if (slave_idx < slave_config_error_.size() && slave_config_error_[slave_idx]) {
         /* on_poll_error nay tự cập nhật last_poll_ms (D-04), nên nhánh
          * config-error không cần tự set nữa. */
-        on_poll_error(&state, sc.retry, now_ms);
-        metrics.update(slave_idx, false, now_ms, sc.retry);
+        on_poll_error(&state, sc.offline_after_errors, now_ms);
+        metrics.update(slave_idx, false, now_ms, sc.offline_after_errors);
         cache.mark_slave_offline(slave_ext_base_[slave_idx],
                                  slave_ext_count_[slave_idx], sc.addr);
         if (metrics.check_e302(slave_idx, 1))
@@ -321,29 +321,49 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
         uint8_t  bits[2000] = {};
         int rc = -1;
 
-        if (pt.fc == 1)
-            rc = modbus_read_bits(ctx, pt.addr, pt.count, bits);
-        else if (pt.fc == 2)
-            rc = modbus_read_input_bits(ctx, pt.addr, pt.count, bits);
-        else if (pt.fc == 3)
-            rc = modbus_read_registers(ctx, pt.addr, pt.count, regs);
-        else if (pt.fc == 4)
-            rc = modbus_read_input_registers(ctx, pt.addr, pt.count, regs);
+        /* D-05: phát lại THẬT khi giao dịch lỗi.
+         *
+         * `sc.retry` là số lần phát LẠI, nên tổng số lần phát là retry + 1.
+         * Nhiễu thoáng qua trên RS-485 là chuyện thường ngày ở công trình; không
+         * có bước này thì mọi khung hỏng đơn lẻ đều làm cả block rơi STALE. */
+        const int max_attempts = static_cast<int>(sc.retry) + 1;
+        for (int attempt = 1; attempt <= max_attempts; ++attempt) {
+            if (pt.fc == 1)
+                rc = modbus_read_bits(ctx, pt.addr, pt.count, bits);
+            else if (pt.fc == 2)
+                rc = modbus_read_input_bits(ctx, pt.addr, pt.count, bits);
+            else if (pt.fc == 3)
+                rc = modbus_read_registers(ctx, pt.addr, pt.count, regs);
+            else if (pt.fc == 4)
+                rc = modbus_read_input_registers(ctx, pt.addr, pt.count, regs);
 
-        if (rc < 0) {
-            slave_ok = false;
-            /* retry tracking trong on_poll_error; now_ms để slave chết chuyển
-             * sang nhịp probe chậm thay vì chiếm dây mỗi vòng (D-04). */
-            const bool went_offline = on_poll_error(&state, sc.retry, now_ms);
+            if (rc >= 0) break;
+
+            /* Đếm lỗi giao thức theo TỪNG lần phát: một lượt poll timeout 3 lần
+             * là ba lần chờ hết giờ trên dây, không phải một. */
             if (errno == ETIMEDOUT) metrics.record_timeout(slave_idx);
 #ifdef EMBBADCRC
             if (errno == EMBBADCRC) metrics.record_crc_error(slave_idx);
 #endif
+            if (attempt < max_attempts) {
+                /* D-06: retry_attempts nay đếm số lần PHÁT LẠI thật. Trước đây
+                 * nó được tăng một lần cho mỗi lỗi trong metrics.update() nên
+                 * luôn bằng total_errors, khiến hai cột trên bảng chẩn đoán
+                 * không bao giờ khác nhau. */
+                metrics.record_retry(slave_idx);
+            }
+        }
+
+        if (rc < 0) {
+            slave_ok = false;
+            /* Hết lượt phát lại ⇒ tính là MỘT lượt poll thất bại.
+             * now_ms để slave chết chuyển sang nhịp probe chậm (D-04). */
+            const bool went_offline = on_poll_error(&state, sc.offline_after_errors, now_ms);
             if (went_offline) {
                 std::fprintf(stderr, "WARN  modbus.slave_offline slave=%s addr=%u\n",
                              sc.name.c_str(), sc.addr);
             }
-            if (state.retry_count >= sc.retry) {
+            if (state.retry_count >= sc.offline_after_errors) {
                 cache.mark_slave_offline(slave_ext_base_[slave_idx],
                                          slave_ext_count_[slave_idx], sc.addr);
             } else {
@@ -393,13 +413,13 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
 
     if (slave_ok) {
         on_poll_ok(&state, now_ms);
-        metrics.update(slave_idx, true, now_ms, sc.retry);
+        metrics.update(slave_idx, true, now_ms, sc.offline_after_errors);
         /* Reset alarms khi online trở lại */
         if (metrics.get(slave_idx).e302_triggered)
             metrics.reset_alarms(slave_idx);
     } else {
-        metrics.update(slave_idx, false, now_ms, sc.retry);
-        if (metrics.check_e302(slave_idx, sc.retry))
+        metrics.update(slave_idx, false, now_ms, sc.offline_after_errors);
+        if (metrics.check_e302(slave_idx, sc.offline_after_errors))
             std::fprintf(stderr, "ALARM E302 modbus.slave_offline slave=%s addr=%u\n",
                          sc.name.c_str(), sc.addr);
         if (metrics.check_e303(slave_idx))

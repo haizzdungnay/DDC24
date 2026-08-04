@@ -21,6 +21,9 @@ struct SlaveMetrics {
     uint32_t    total_errors    = 0;
     uint32_t    timeout_errors  = 0;
     uint32_t    crc_errors      = 0;
+    /* D-06: số lần PHÁT LẠI thật (khác total_errors — một lượt poll thất bại có
+     * thể gồm nhiều lần phát lại, và một lần phát lại thành công thì lượt poll
+     * đó KHÔNG tính là lỗi). */
     uint32_t    retry_attempts  = 0;
     /* D-03: lệnh ghi thất bại ở một lần phát (còn có thể thử lại). */
     uint32_t    write_failed    = 0;
@@ -46,6 +49,9 @@ public:
     void update(uint8_t slave_idx, bool ok, uint64_t now_ms, uint8_t retry_limit = 2);
     void record_timeout(uint8_t slave_idx);
     void record_crc_error(uint8_t slave_idx);
+    /* D-06: một lần PHÁT LẠI thật một giao dịch bị lỗi. Tách khỏi total_errors
+     * để hai cột trên bảng chẩn đoán mang thông tin khác nhau. */
+    void record_retry(uint8_t slave_idx);
     /* D-03: một lần phát lệnh ghi thất bại (vẫn có thể còn lượt thử). */
     void record_write_failed(uint8_t slave_idx);
     /* D-03: lệnh ghi bị bỏ hẳn, sẽ KHÔNG được phát lại. */

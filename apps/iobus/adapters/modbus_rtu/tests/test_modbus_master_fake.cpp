@@ -44,7 +44,48 @@ TEST(FieldbusConfig, ParsesRtuPollTimeoutRetryAndSerialSettings)
     EXPECT_EQ(cfg.slaves[0].addr, 7u);
     EXPECT_EQ(cfg.slaves[0].poll_ms, 1000u);
     EXPECT_EQ(cfg.slaves[0].timeout_ms, 450u);
-    EXPECT_EQ(cfg.slaves[0].retry, 4u);
+    /* D-05: `retry` nay là số lần PHÁT LẠI một giao dịch, bị clamp về 3.
+     * Trước 2026-08-04 nó mang nghĩa "số lỗi liên tiếp trước khi OFFLINE" và
+     * nhận tới 10 — nhưng khi đó không hề có lần phát lại nào. Với ngữ nghĩa
+     * mới, 10 lần phát lại × timeout 300 ms là 3 giây chiếm dây cho một block. */
+    EXPECT_EQ(cfg.slaves[0].retry, 3u);
+    /* Không khai báo ⇒ giữ ngưỡng OFFLINE mặc định như hành vi cũ. */
+    EXPECT_EQ(cfg.slaves[0].offline_after_errors, 2u);
+}
+
+/* D-05: hai tham số phải tách bạch và nhận được độc lập. */
+TEST(FieldbusConfig, RetryAndOfflineThresholdAreSeparateFields)
+{
+    const std::string path = "/tmp/mkddc_fieldbus_split_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream out(path);
+        out << R"json({
+          "rs485":{"device":"/dev/ttyS3","offline_probe_ms":12000},
+          "slaves":[{"addr":3,"profile":"p","name":"vfd","retry":1,"offline_after_errors":5}]
+        })json";
+    }
+    FieldbusConfig cfg;
+    ASSERT_TRUE(load_fieldbus_config(path, true, &cfg));
+    ::unlink(path.c_str());
+    ASSERT_EQ(cfg.slaves.size(), 1u);
+    EXPECT_EQ(cfg.slaves[0].retry, 1u);
+    EXPECT_EQ(cfg.slaves[0].offline_after_errors, 5u);
+    EXPECT_EQ(cfg.rs485.offline_probe_ms, 12000u);
+}
+
+/* offline_probe_ms phải bị clamp vào 1..60 s. */
+TEST(FieldbusConfig, OfflineProbeIsClamped)
+{
+    const std::string path = "/tmp/mkddc_fieldbus_probe_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream out(path);
+        out << R"json({"rs485":{"device":"/dev/ttyS3","offline_probe_ms":50},
+                       "slaves":[{"addr":1,"profile":"p","name":"a"}]})json";
+    }
+    FieldbusConfig cfg;
+    ASSERT_TRUE(load_fieldbus_config(path, true, &cfg));
+    ::unlink(path.c_str());
+    EXPECT_EQ(cfg.rs485.offline_probe_ms, 1000u);
 }
 
 TEST(ModbusMaster, OpenWithoutModbusEnabled)
