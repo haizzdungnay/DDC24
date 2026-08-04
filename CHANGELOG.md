@@ -7,6 +7,43 @@
 ---
 
 ## [Unreleased]
+### Added — Build native aarch64 và deploy FW SOM + fake MCU lên board (2026-08-04)
+
+- Build `build-release.sh` native trên Orange Pi 5B tại commit `13fdc60`:
+  **BUILD_OK**, version 0.2.0, `dirty=false`. Bốn binary C++ và Go đều
+  `ELF 64-bit ARM aarch64`; `firmware.elf` ARM 32-bit; web-ui dist 1.6 MB;
+  5/5 checksum ghi trong `build/release/checksums.sha256`.
+- Deploy bằng `install.sh` (checksum verify PASS) rồi restart theo thứ tự
+  fakemcu → iobus → core → web. Xác minh runtime: `iop.state HANDSHAKE ->
+  NORMAL_POLL`, `output.set_do/set_ao ack=ok`, SHM tạo lại, web API cổng
+  **8081** trả 200 cho client thật. Provenance trên target truy được về commit
+  `13fdc60` với cả 4 binary báo cùng version/commit.
+- Cài toolchain còn thiếu trên board: Go 1.26.5, Node 24.15.0 + npm 11.12.1,
+  `gcc-arm-none-eabi` 12.2.1 kèm `libnewlib-arm-none-eabi`.
+- **Ba khiếm khuyết của `install.sh` được phát hiện, mới vá tay trên board, chưa
+  sửa trong repo:** (1) script không restart service đang chạy nên sau khi cài
+  "thành công" các tiến trình vẫn giữ inode cũ — `readlink /proc/<pid>/exe` trả
+  `(deleted)` và PID không đổi so với baseline, tức vẫn chạy code cũ; (2) script
+  không cài `fake_mcu` nên board lab lệch phiên bản giữa iobus mới và fake MCU
+  cũ; (3) script bật `mkddc-hmi` chỉ vì binary tồn tại, ghi đè trạng thái
+  `disabled` trước đó và gây vòng lặp restart trên board không có panel
+  (`HMI DRM no connected connector`).
+- Ghi nhận `mkddc_io_shm` đổi kích thước 1304 → 1816 byte giữa hai bản, nên
+  iobus và core bắt buộc restart đồng bộ.
+- Báo cáo đầy đủ tại
+  `docs/07_records/reviews/BOARD_DEPLOY_REPORT_2026-08-04.md`.
+- **Đính chính:** mốc thời gian binary target trong Plan 46 §12.4, Runbook 47 và
+  entry trước ghi 2026-07-28 là **sai** do đọc nhầm cột `ls -la`. Số đúng đo bằng
+  `stat`: core/iobus/netcfg/hmi/web 2026-08-01 15:24:05, fake-mcu 2026-07-30
+  19:38:14. Kết luận không đổi vì cả hai mốc đều trước restructure 2026-08-03.
+
+**Kiểm chứng trong phiên:** `ctest` native aarch64 **746/751 PASS** trong 14,70 s.
+5 test hỏng đều do `shm_open errno=13` (EACCES) vì `/dev/shm/mkddc_plc_shm` thuộc
+`mkddc:mkddc` mode 644 còn test chạy dưới user `orangepi` — lỗi cô lập test, không
+phải hồi quy aarch64; đáng lưu ý vì ADR-022 dự tính chạy CI runner ngay trên board.
+`RST-202` chưa đóng: `TARGET_INSTALL` và `TARGET_PROVENANCE` PASS, còn
+`TARGET_STARTUP_ORDER`, `TARGET_CRASH_RESTART`, `TARGET_ROLLBACK` là `NOT_RUN`.
+
 ### Added — Chuẩn bị nghiệm thu target `RST-202` cho Plan 46 (2026-08-04)
 
 - Khảo sát read-only board lab `SOM-DDC-24` (`orangepi5b`, aarch64, 8 unit
@@ -17,7 +54,7 @@
   giữa `/usr/sbin` và `/opt/mkddc-web` kèm bản chết ở `/usr/local/bin`.
 - Xác định nguyên nhân thiếu provenance không phải lỗi script: logic sinh
   `provenance.json`/`runtime-build-info.txt` mới vào repo ở `9c6dc9b`
-  (2026-08-03), sau lần cài target cuối ngày 2026-07-28. `build-release.sh` và
+  (2026-08-03), sau lần cài target cuối ngày 2026-08-01. `build-release.sh` và
   `install.sh` hiện đã đủ để đóng gate này ở lần cài tới.
 - Thêm `platform/cmake/toolchain-aarch64-linux-gnu.cmake` làm đường build phụ
   cho máy phát triển x86_64, kèm yêu cầu sysroot ghi ngay trong file. Đường

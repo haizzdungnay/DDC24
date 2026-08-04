@@ -24,7 +24,7 @@ Khảo sát read-only qua SSH `SOM-DDC-24` (`orangepi5b`, aarch64, uptime 3 ngà
 
 | Hạng mục | Đo được | Ý nghĩa cho `RST-202` |
 |---|---|---|
-| Binary đang chạy | `/usr/sbin/mkddc-core`, `mkddc-iobus`, `mkddc-fake-mcu` mốc **2026-07-28 16:20**; `mkddc-web` 14:17; `mkddc-netcfg` 15:14; `mkddc-hmi` 2026-07-22 | Target chạy build **trước** restructure (2026-08-03). Cây `apps/` chưa từng được cài lên target. |
+| Binary đang chạy | `/usr/sbin/mkddc-{core,iobus,netcfg,hmi}` và `/opt/mkddc-web/mkddc-web` mốc **2026-08-01 15:24:05**; `mkddc-fake-mcu` **2026-07-30 19:38:14** | Target chạy build **trước** restructure (2026-08-03). Cây `apps/` chưa từng được cài lên target. |
 | Provenance | `/usr/share/mkddc/` chỉ có `avahi/`; thiếu `provenance.json`, `checksums.sha256`, `runtime-build-info.txt`, `runtime-checksums.sha256` | Gate "truy binary về commit/checksum" hiện **không đóng được**. Logic sinh các file này mới vào repo ở `9c6dc9b` (2026-08-03), sau lần cài cuối. |
 | Rollback | `/usr/sbin` có 7 bản sao thủ công: `.bad-20260708-170126`, `.bak-20260708-155445`, `.bak.20260717_144250`, `.bak.20260718_124545`, `.prev-20260703112137`, `.prev-20260703112209`, `.prev-20260703120642` | Rollback hiện là thao tác tay không quy trình. `RST-202` phải thay bằng rollback có diễn tập. |
 | Layout cài đặt | core/iobus/netcfg ở `/usr/sbin`; web ở `/opt/mkddc-web/`; còn bản chết `/usr/local/bin/mkddc-{core,iobus,fakemcu}` mốc 2026-07-01/02 không unit nào dùng | Bản `/usr/local/bin` gây nhầm khi chẩn đoán; cần xử lý có chủ đích, không xóa kèm trong bước install. |
