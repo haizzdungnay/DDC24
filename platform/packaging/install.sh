@@ -57,6 +57,26 @@ install -d -m 0755 -o mkddc -g mkddc /data/mkddc
 install -d -m 0755 /etc/mkddc
 [ -e /etc/mkddc/netcfg.conf ] || install -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/netcfg.conf" /etc/mkddc/netcfg.conf
 
+# Chụp bản đang cài trước khi ghi đè, để rollback là thao tác có quy trình thay vì
+# ứng biến. Trước đây không có bước này nên /usr/sbin tích tụ các bản sao tay kiểu
+# mkddc-core.bak-*/.prev-*, và rollback phụ thuộc trí nhớ người trực.
+if [ -x /usr/sbin/mkddc-core ]; then
+    prev_ver=unknown
+    [ -f /usr/share/mkddc/provenance.json ] && \
+        prev_ver="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+                    /usr/share/mkddc/provenance.json | head -1)"
+    [ -n "$prev_ver" ] || prev_ver=unknown
+    SNAP="/var/backups/mkddc/${prev_ver}-$(date +%Y%m%d-%H%M%S)"
+    install -d -m 0755 "$SNAP"
+    for f in /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
+             /usr/sbin/mkddc-fake-mcu /usr/sbin/mkddc-hmi /opt/mkddc-web/mkddc-web \
+             /usr/share/mkddc/provenance.json /usr/share/mkddc/checksums.sha256; do
+        [ -e "$f" ] && cp -a "$f" "$SNAP/" || true
+    done
+    ln -sfn "$SNAP" /var/backups/mkddc/previous
+    echo "INFO: đã chụp bản đang chạy ($prev_ver) vào $SNAP"
+fi
+
 install -m 0755 "$BUILD/iobus/mkddc-iobus" /usr/sbin/mkddc-iobus
 install -m 0755 "$BUILD/core/mkddc-core"   /usr/sbin/mkddc-core
 install -m 0755 "$BUILD/netcfg/mkddc-netcfg" /usr/sbin/mkddc-netcfg
