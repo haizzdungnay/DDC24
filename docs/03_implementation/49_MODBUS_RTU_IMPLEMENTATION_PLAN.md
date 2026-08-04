@@ -2,8 +2,10 @@
 
 > **Document ID:** PLAN-MBRTU-IMPL-001
 > **Phiên bản:** 0.2 | 2026-08-04
-> **Trạng thái:** **DRAFT — chờ PM/CTO phê duyệt.** Không task nào được bắt đầu
-> trước khi §2 (cổng vào) đóng.
+> **Trạng thái:** **Track A APPROVED và ĐANG TRIỂN KHAI** (PM/CTO 2026-08-04);
+> Track B `CONDITIONAL`, chưa được bắt đầu. Xem
+> [Biên bản phê duyệt](../07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md)
+> và tiến độ ở §10.
 > **Owner đề xuất:** Fieldbus Lead (FW-SOM) · SOM Backend Lead (BE) · FE Lead (FE)
 > **Target:** board production **Foxlinx SOM-DDC-24** (`SOM-DDC-24-foxlinx`, MCU
 > STM32 thật) là nơi nghiệm thu; board lab Orange Pi 5B chỉ dùng cho regression
@@ -581,9 +583,62 @@ M2 trở đi phụ thuộc Q-01/Q-02.
 [ ] MODBUS_RTU_POINT_READY = YES
 ```
 
+## 10. Tiến độ thực hiện
+
+**Cập nhật:** 2026-08-04 · **Nhánh:** `feat/modbus-rtu-track-a`
+
+### 10.1 Track A — 12/14 defect đã đóng bằng source + test
+
+| Nhóm | Task | Trạng thái | Defect đóng | Commit |
+|---|---|---|---|---|
+| A0 | MBR-A001 khảo sát UART/DT board production | ✅ XONG | — | `05c6b0c` |
+| A0 | MBR-A002/A003 đọc schematic, xác minh chân A/B | ⏳ **CHỜ HARDWARE** | — | — |
+| A0 | MBR-A004 deploy baseline lên Foxlinx | ⏳ chờ cửa sổ bảo trì | — | — |
+| A0 | MBR-A005 bật `rs485-*` / xác nhận auto-direction | ⏳ phụ thuộc A002 | — | — |
+| A1 | MBR-A101..A104 chặn encode ngoài dải, `scale=0` | ✅ XONG | D-01, D-02 | `1e3e2bc` |
+| A2 | MBR-A201..A204 vòng đời write, chấm dứt replay | ✅ XONG | D-03 | `a6fba4c` |
+| A3 | MBR-A301..A304 lịch poll, offline probe, EDF | ✅ XONG | D-04 | `c4036dd` |
+| A4 | MBR-A401..A403 retry thật, tách ngưỡng offline | ✅ XONG | D-05, D-06 | `0f0fe71` |
+| A5 | MBR-A501..A506 FE quality/xác nhận xoá/viewer/ttyS3 | ✅ XONG | D-07, D-08, D-14 | `dfef8ab` |
+| A6 | MBR-A601..A603 offsetof, E303 cửa sổ trượt, point chưa init | ✅ XONG | D-10, D-11, D-12 | `9168cba` |
+
+**Còn lại của Track A:** `D-09` (mỗi CRUD restart iobus) và `D-13` (không set chế
+độ RS-485) — cả hai **có chủ đích** không nằm trong Track A: D-09 gắn với
+transaction apply của Track B (MBR-B212), D-13 chờ Hardware trả lời Q-10.
+
+### 10.2 Số đo kiểm chứng (host, 2026-08-04)
+
+| Gate | Kết quả |
+|---|---|
+| `ctest --test-dir build/fw` (Modbus+BACnet+HMI ON) | **769/769 PASS** (trước Track A: 759) |
+| `go vet ./...` + `go test ./... -count=1` | **PASS**, 11 package có test đều `ok` |
+| `npx vitest --run --environment jsdom src` | **304/304 PASS**, 35 file (trước: 3 FAIL) |
+| `npm run lint` | **PASS**, 0 warning |
+| `npm run build` | **PASS** |
+
+Test mới thêm trong Track A: **19** (8 encode guard, 3 vòng đời write, 4 offline
+probe, 3 config retry/probe, 1 E303 re-arm) cộng 4 test FE Modbus và 1 test
+round-trip giờ địa phương.
+
+### 10.3 Chưa làm — nghiệm thu trên board
+
+Năm kịch bản `T-A1..T-A5` ở cổng ra §3 **chưa chạy**: cần cửa sổ bảo trì trên
+Foxlinx vì board có MCU STM32 thật, restart `mkddc-iobus` là gián đoạn IOP thật.
+Cho tới khi đó, Track A **chưa được coi là đóng** — mọi số đo ở §10.2 là host.
+
+### 10.4 Việc ngoài phạm vi đã xử lý cùng phiên
+
+`TrendsPage`: nhãn bộ chọn thời gian đã đổi sang giờ địa phương (BL-008) nhưng
+phần tính toán vẫn dùng UTC, làm người dùng UTC+7 truy vấn lệch 7 tiếng. Đã sửa
+phần tính toán cho khớp nhãn và cho nhãn lấy tên múi giờ thật của trình duyệt
+(`b67580c`). Cùng dạng lỗi "nhãn nói một đằng, code làm một nẻo" với D-05.
+
+---
+
 ## Revision history
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 0.1 | 2026-08-04 | Tạo plan hai track; Track A không chờ quyết định, Track B sau cổng ADR-024 |
 | 0.2 | 2026-08-04 | Đổi số 48→49 (48 đã bị `PLAN_FIX_DEBUG_AND_BOARD_DEPLOY.md` dùng); thêm bảng task 74 mục, ma trận RACI, swimlane và đồ thị phụ thuộc; bổ sung nhóm A0 khảo sát phần cứng; chốt board Foxlinx là target nghiệm thu; **sửa lỗi cộng: Track B là 40–51 ngày, bản 0.1 ghi sai 34–45** |
+| 0.3 | 2026-08-04 | Track A được PM/CTO duyệt và triển khai: 6/6 nhóm code xong, 12/14 defect đóng, 769/769 ctest · 304/304 vitest · Go PASS. Thêm §10 tiến độ. Chốt một mức ước lượng duy nhất (Track A 13,25 người-ngày) theo yêu cầu PM |

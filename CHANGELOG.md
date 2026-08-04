@@ -7,6 +7,68 @@
 ---
 
 ## [Unreleased]
+### Fixed — Modbus RTU Track A: đóng 12/14 defect an toàn và vận hành (2026-08-04)
+
+PM/CTO duyệt Track A ngày 2026-08-04 ([biên bản](docs/07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md)).
+Sáu nhóm task đã hoàn tất trên nhánh `feat/modbus-rtu-track-a`.
+
+**Ba lỗi P0 ảnh hưởng thiết bị hiện trường:**
+
+- `encode_register` ép `float` sang integral **không kiểm dải** — undefined
+  behavior, ghi giá trị rác xuống VFD qua FC06/FC16 khi logic điều khiển tính ra
+  giá trị ngoài dải, NaN hoặc ±Inf. Nay fail-closed và không chạm vào buffer khi
+  từ chối. `scale=0` từng ghi im lặng số 0 rồi báo thành công; validator profile
+  cũng chặn `scale` không hợp lệ.
+- Lệnh ghi thất bại **nằm lại hàng đợi vô thời hạn** và được phát lại ở mọi vòng
+  poll: setpoint đặt lúc 09:00 cho thiết bị mất điện sẽ tự thực thi lúc 14:00 khi
+  có điện lại. Nay giới hạn 3 lần phát và TTL 30 s; lệnh quá hạn bị bỏ **trước
+  khi** phát nên không có byte nào lên dây.
+- Thiết bị chết **bỏ đói thiết bị đang sống**: `on_poll_error` không cập nhật
+  `last_poll_ms` nên slave chết chiếm dây trọn `timeout_ms` mỗi vòng. Nay có
+  `offline_probe_ms` (mặc định 5 s) và scheduler phục vụ theo deadline sớm nhất.
+
+**Lệch nhãn/hành vi:**
+
+- "Retry" trên giao diện **không tạo ra một lần thử lại nào** — trường này thực
+  chất là ngưỡng OFFLINE. Theo quyết định Đ-05, nay `read_slave` phát lại thật
+  block bị lỗi, `offline_after_errors` tách riêng, `retry` clamp 0..3.
+- Cột "Retry" và "Lỗi" trong bảng chẩn đoán luôn bằng nhau; nay `retry_attempts`
+  đếm số lần phát lại thật.
+- FE tự bịa quality (`online ? GOOD : consecutive_errors ? OFFLINE : STALE`) và
+  mặc định `BAD` khi thiếu telemetry; nay thiếu dữ liệu hiện `—`, thiết bị chưa
+  poll lần nào hiện "Chưa liên lạc lần nào".
+
+**Vận hành và quyền:**
+
+- Xoá Device/Point nay có dialog xác nhận nêu đích danh đối tượng và số Point bị
+  ảnh hưởng.
+- Trang Modbus hạ min-role xuống `viewer` (Đ-04) — trước đây Viewer không giám
+  sát được, trái `PR-MBRTU-001`; control thay đổi cấu hình bị disable cho vai trò
+  không phải admin.
+- Bỏ mặc định `/dev/ttyS3` (không tồn tại trên board production Foxlinx).
+- Điểm chưa có mẫu publish `(BAD, offline)` thay vì `(UNCERTAIN, online)` nên
+  không còn hiện "0" kèm nhãn "dữ liệu cũ".
+- E303 chuyển sang cửa sổ trượt 20 lượt, hết latch vĩnh viễn; `push_snapshot`
+  dùng `offsetof` + `static_assert` thay cho cộng tay kích thước header.
+
+**Còn lại có chủ đích:** `D-09` (mỗi CRUD restart iobus) thuộc Track B; `D-13`
+(chưa set chế độ RS-485) chờ Hardware trả lời Q-10.
+
+**Kiểm chứng:** `ctest` full option **769/769 PASS** (trước Track A: 759) ·
+`go vet` + `go test ./... -count=1` **PASS** 11 package · `vitest` **304/304 PASS**
+35 file · `npm run lint` sạch · `npm run build` PASS. Thêm 19 test C++ và 5 test FE.
+**Chưa nghiệm thu trên board** — 5 kịch bản `T-A1..T-A5` cần cửa sổ bảo trì trên
+Foxlinx vì board có MCU STM32 thật.
+
+### Fixed — Trends: bộ chọn khoảng thời gian dùng đúng giờ địa phương (2026-08-04)
+
+Nhãn đã đổi sang giờ địa phương theo BL-008 nhưng phần tính toán vẫn dùng UTC
+(`toISOString()` để hiển thị, `Date.parse(v+'Z')` để đọc), nên người dùng ở UTC+7
+gõ 14:00 sẽ truy vấn 21:00 giờ Việt Nam — lệch 7 tiếng, không có dấu hiệu nào
+trên giao diện. Đã sửa phần tính toán cho khớp nhãn thay vì lùi nhãn về UTC; nhãn
+lấy tên múi giờ thật của trình duyệt nên không thể nói sai khi máy chạy ở múi giờ
+khác. Thêm test round-trip khoá bất biến hiển thị ↔ đọc lại.
+
 ### Added — Review source Modbus RTU, kế hoạch implement và khảo sát board production (2026-08-04)
 
 - **Code review** `docs/07_records/reviews/MODBUS_RTU_CODE_REVIEW_2026-08-04.md`:
