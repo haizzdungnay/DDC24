@@ -7,6 +7,43 @@
 ---
 
 ## [Unreleased]
+### Fixed — Sửa 4 khiếm khuyết install/test phát hiện khi deploy board (2026-08-04)
+
+- **INSTALL-001** — `install.sh` dùng `systemctl enable --now` nên không restart
+  service đang chạy: sau khi cài "thành công", tiến trình vẫn giữ inode đã bị
+  thay (`readlink /proc/<pid>/exe` trả `(deleted)`) và tiếp tục chạy code cũ.
+  Nay tách `enable` khỏi `restart`, restart tường minh theo thứ tự pty → fakemcu
+  → iobus → core → web-pi → netcfg, và **kiểm tra sau khi restart**: nếu còn
+  service nào giữ inode `(deleted)` thì script thoát khác 0 thay vì báo thành
+  công. iobus và core phải restart cùng nhau vì dùng chung SHM.
+- **INSTALL-002** — `install.sh` không cài `fake_mcu` khiến board lab lệch phiên
+  bản giữa iobus mới và fake MCU cũ dù hai bên nói cùng giao thức IOP. Nay cài
+  `fake_mcu` cùng unit `mkddc-fakemcu`/`mkddc-pty` khi có cờ `--with-fake-mcu`
+  hoặc khi unit đã tồn tại sẵn trên máy; không bao giờ tự đưa fake MCU lên board
+  có MCU thật.
+- **INSTALL-003** — `install.sh` bật `mkddc-hmi` chỉ vì binary tồn tại, ghi đè
+  trạng thái `disabled` và gây vòng lặp restart trên board không panel
+  (`HMI DRM no connected connector`). Nay đọc trạng thái enable trước khi cài và
+  giữ nguyên; HMI đang tắt thì chỉ cài file kèm hướng dẫn bật thủ công.
+- **ADR-022 §7** — bổ sung kiểm tra bắt buộc `/data/mkddc/netcfg-transaction.json`
+  ở **đầu** script: còn giao dịch `staged`/`applying`/`awaiting_confirmation` thì
+  huỷ deploy trước khi ghi bất kỳ file nào, thay vì restart mù giữa cửa sổ
+  rollback 120 giây.
+- **TEST-ISO-001** — `BacnetObjTable::attach()` mở PLC SHM bằng `O_CREAT|O_RDWR`
+  rồi `memset` toàn bộ segment. Do dùng đúng tên contract, test chạy trên máy có
+  service production sẽ **xoá sạch SHM đang sống**; trên board lab thì 5 test đỏ
+  vì `EACCES` (segment thuộc user `mkddc`). Nay hỗ trợ biến môi trường
+  `MKDDC_SHM_PLC_NAME` để cô lập, và CMake đặt
+  `MKDDC_SHM_PLC_NAME=/mkddc_plc_shm_coretest` cho `core_tests`. Đây là điều kiện
+  tiên quyết để chạy CI runner ngay trên board theo ADR-022. Sửa luôn log
+  `plc_shm.attached` vốn in hằng số thay vì tên segment thật đang dùng.
+
+**Kiểm chứng trong phiên:** host x86_64 `ctest` **751/751 PASS** (10,31 s), SHM
+test tách riêng thành `/dev/shm/mkddc_plc_shm_coretest`. Trên board aarch64
+**với service production đang chạy**: `ctest` **751/751 PASS** (14,50 s), so với
+**746/751** trước khi sửa. Guard checksum của `install.sh` được xác nhận hoạt
+động: nó từ chối cài khi binary đã rebuild mà `checksums.sha256` còn cũ.
+
 ### Changed — Quy tắc "làm hết việc, không chừa lại" (2026-08-04)
 
 - Thêm mục **"Làm hết việc, không chừa lại"** vào `CLAUDE.md` và `AGENTS.md`:
