@@ -31,6 +31,11 @@ Playwright network, firmware ARM và release checksum đều PASS tại
 Đây không phải target evidence: installer, startup order, crash/restart và
 rollback trên board vẫn `NOT_RUN`, nên Plan 46 và release gate không được đóng.
 
+Bộ host matrix này cũng không phải Programming evidence. Số ctest trong đó có
+chứa host unit test của ST/IR/cyclic component; theo ADR-023 chúng chỉ là
+As-Built development evidence và không được dùng để đổi bất kỳ `VR-PROG-*` hoặc
+`VR-MBRTU-001/004/011/012` sang `PASS`.
+
 ## Ma trận kiểm tra bắt buộc
 
 - Core: 28 node types, graph validation, scan/priority/safe-state và malformed config.
