@@ -112,6 +112,12 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 				if reconcileErr := app.historianActivation.Reconcile(context.Background()); reconcileErr != nil && !errors.Is(reconcileErr, ErrHistorianActivationPending) {
 					logger.Printf("WARN historian_v2 activation reconciliation failed err=%v", reconcileErr)
 				}
+				if authority, authorityErr := app.historianActivation.Authority(context.Background()); authorityErr == nil && authority.State == "legacy" {
+					policyBytes, _ := historian.committedMirrorSnapshot()
+					if bootstrapErr := app.historianActivation.AutoBootstrapSingleNode(context.Background(), policyBytes); bootstrapErr != nil {
+						logger.Printf("WARN historian_v2 auto-bootstrap failed err=%v", bootstrapErr)
+					}
+				}
 				if authority, authorityErr := app.historianActivation.Authority(context.Background()); authorityErr != nil {
 					logger.Printf("WARN historian_v2 activation authority unavailable err=%v", authorityErr)
 				} else {
