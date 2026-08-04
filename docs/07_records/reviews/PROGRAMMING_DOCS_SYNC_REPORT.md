@@ -2,7 +2,7 @@
 
 **ID:** REVIEW-PROG-DOCSYNC-001
 **Trạng thái:** Complete
-**Ngày:** 2026-08-03
+**Ngày:** 2026-08-03; tái kiểm chứng 2026-08-04 tại HEAD `6ba7e3c`
 **Loại công việc:** Documentation-only; không sửa source; không lập Implementation Plan
 
 ## 1. Kết quả điều hành
@@ -65,7 +65,31 @@ chúng không phải bằng chứng runtime production.
    hợp lệ.
 4. Chưa có Programming Design được phê duyệt; đây là chủ ý của nhiệm vụ.
 
-## 6. Kết luận
+## 6. Tái kiểm chứng sau repository restructure
+
+Bộ đồng bộ này được viết tại PR #79 (2026-08-03 14:56). Sau đó PR #80
+(`PLAN-ARCH-RESTRUCT-002`, 17:38–18:39) đã đổi cây source sang `apps/`,
+`contracts/`, `firmware/` và `platform/`. Vì kết luận ở mục 7 phụ thuộc vào
+tham chiếu As-Built, hồ sơ được kiểm lại tại HEAD `6ba7e3c`:
+
+| Kiểm tra | Cách đo | Kết quả |
+|---|---|---|
+| Tham chiếu source trong hồ sơ Programming | Liệt kê path `apps/*`, `contracts/*` rồi kiểm tồn tại | 14/14 path tồn tại; không còn path `services/`, `web/`, `src/frontend`, `fw/` |
+| Link markdown nội bộ | Resolve toàn bộ link tương đối của 13 tài liệu Programming | 0 link hỏng |
+| Không gian ID Programming | Đối chiếu ID định nghĩa với ID xuất hiện trong ma trận | PC 12, PR 14, SYS-REQ 3, SWR-REQ 12, IF-REQ 2, NFR-REQ 2, VR 13, OD 15; 0 gap, 0 ID thiếu ánh xạ |
+| Dependency Modbus RTU Point | Đối chiếu ID `*-MBRTU-*` do ma trận trích dẫn với REQUIREMENTS/VERIFICATION | SYS 1, SWR 9, IF 4, SEC 1, NFR 3, VR 12; 0 gap |
+| Mâu thuẫn scope | Quét toàn bộ `docs/` tìm câu coi Modbus TCP/BACnet là Programming Point hoặc coi LD/SFC là đã hỗ trợ | 0 kết quả |
+| Claim implementation | Quét câu khẳng định Programming đã implement/hoàn thành | 0 kết quả khẳng định; các lần khớp đều là câu cấm |
+
+Một chỗ được siết thêm trong lần kiểm này: mục gate architecture conformance
+của `VERIFICATION.md` ghi host matrix PASS sau migration. Số ctest đó có chứa
+host unit test ST/IR/cyclic component, nên đã bổ sung câu loại trừ tường minh
+rằng bộ số này không đóng được `VR-PROG-*` hay các gate real-hardware của
+`VR-MBRTU-*`.
+
+Kết luận: restructure không làm mất đồng bộ. Ba kết luận ở mục 7 giữ nguyên.
+
+## 7. Kết luận
 
 ```text
 PRODUCT_SPEC_DOCUMENTED = YES

@@ -7,6 +7,28 @@
 ---
 
 ## [Unreleased]
+### Changed — Tái kiểm chứng đồng bộ docs Programming sau restructure (2026-08-04)
+
+- Kiểm lại bộ hồ sơ Programming Rev A tại HEAD `6ba7e3c` vì PR #80
+  (`PLAN-ARCH-RESTRUCT-002`) đổi cây source sau khi PR #79 lập Product Spec.
+  Kết quả: 14/14 tham chiếu source đã trỏ đúng `apps/`/`contracts/`, 0 link
+  markdown hỏng, 0 gap trong không gian ID và 0 mâu thuẫn scope.
+- Bổ sung câu loại trừ tường minh trong mục gate architecture conformance của
+  `docs/05_verification/VERIFICATION.md`: host matrix sau migration có chứa
+  unit test ST/IR/cyclic component nên không được dùng để đóng `VR-PROG-*` hay
+  gate real-hardware `VR-MBRTU-001/004/011/012`.
+- Ghi mục tái kiểm chứng vào
+  `docs/07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md`; ba kết luận
+  `PRODUCT_SPEC_DOCUMENTED=YES`, `DOCS_SYNCHRONIZED=YES`,
+  `READY_FOR_PROGRAMMING_DESIGN=NO` giữ nguyên.
+
+**Kiểm chứng trong phiên:** docs-only, không sửa source nên không chạy lại bộ
+test sản phẩm. Đo bằng script kiểm link/ID trên 13 tài liệu Programming: 0 link
+hỏng; PC 12, PR 14, SYS-REQ 3, SWR-REQ 12, IF-REQ 2, NFR-REQ 2, VR 13, OD 15
+đều có ánh xạ đầy đủ trong ma trận; dependency `*-MBRTU-*` (SYS 1, SWR 9, IF 4,
+SEC 1, NFR 3, VR 12) không có gap. Không tạo Programming Design hoặc
+Implementation Plan.
+
 ### Changed — Hoàn tất bounded context Go và host security disposition (2026-08-03)
 
 - Hoàn tất `RST-121..126`: tách auth/audit, Point Catalog/namespace/config,
