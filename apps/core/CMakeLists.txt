@@ -164,7 +164,15 @@ if(CORE_BUILD_TESTS)
     target_link_libraries(core_tests PRIVATE gtest_main)
   endif()
   include(GoogleTest)
-  gtest_discover_tests(core_tests)
+  # Cô lập PLC SHM của test khỏi segment production.
+  #
+  # `BacnetObjTable::attach()` mở bằng O_CREAT|O_RDWR rồi memset toàn bộ segment.
+  # Nếu test dùng đúng tên contract thì chạy test trên máy đang có service sẽ xoá
+  # sạch SHM đang sống — và trên board lab thì test đỏ hàng loạt vì EACCES do
+  # segment thuộc user `mkddc`. Đặt tên riêng cho test để hai bên không đụng nhau;
+  # điều kiện tiên quyết để chạy CI runner ngay trên board theo ADR-022.
+  gtest_discover_tests(core_tests
+      PROPERTIES ENVIRONMENT "MKDDC_SHM_PLC_NAME=/mkddc_plc_shm_coretest")
 endif()
 
 # ---- Fuzz harness (Phase 7 / VG-03) ----
