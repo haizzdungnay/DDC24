@@ -7,6 +7,34 @@
 ---
 
 ## [Unreleased]
+### Changed — `RST-205` closure review: đóng Plan 46 (2026-08-04)
+
+- Chạy closure review đối chiếu toàn bộ task `RST-001..205`, ADR-025,
+  traceability, changelog, target evidence và rollback tại commit `9d90f66`.
+  Mười tiêu chí hoàn tất ở §9 của Plan 46 đều đạt; **không có waiver** và không
+  còn source hoặc path shim nào.
+- Xác nhận cây As-Built: `services/`, `web/`, `src/frontend/`, `fw/`, `shared/`,
+  `packaging/` đều không còn; `contracts/` là authority duy nhất cho SHM và IOP;
+  Go `package main` chỉ còn trong `cmd/mkddc-web`; repository guard enforce
+  dependency direction tự động.
+- Năm khiếm khuyết do nghiệm thu target làm lộ (`INSTALL-001..003`,
+  `TEST-ISO-001`, `ROLLBACK-001`) đã sửa hết trong repo; `OPEN_DEFECTS = 0`.
+- Plan 46 chuyển **Closed**; hồ sơ tại
+  `docs/07_records/reviews/RST205_CLOSURE_REVIEW_2026-08-04.md`.
+- Ghi rõ gap **không** bị plan này làm xanh: physical I/O HIL, real RS485
+  (`VR-MBRTU-001/004/011/012` vẫn RED), phần cứng HMI panel, và toàn bộ gate
+  Programming Rev A. Bài rollback mới diễn tập cơ chế ở cùng commit, chưa phải
+  rollback tương thích cross-commit. Mọi target evidence là lab evidence trên
+  board dev Orange Pi 5B, không phải carrier board production.
+
+**Kiểm chứng trong phiên:** `scripts/verify-project.sh --component all` exit
+**0** — C++ full (Modbus+BACnet+HMI) **751/751 PASS**; Go **12 package** với 11
+package có test đều `ok`; FE Vitest **35 file, 299/299 PASS** và build **2 223
+module** trong 536 ms; Playwright network **1/1 PASS** 23,1 s; firmware STM32 ARM
+build PASS với `arm-none-eabi-gcc` 13.2.1; repository layout guard **PASS** 7
+check. `ctest` native aarch64 trên board với service production đang chạy:
+**751/751 PASS**.
+
 ### Added — Nghiệm thu `RST-202` trên board: DONE (2026-08-04)
 
 - Chạy lại toàn bộ nghiệm thu target tại commit `3f4c536`, version `0.2.1`, sau
