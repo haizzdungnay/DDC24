@@ -52,6 +52,7 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | 41 — hồ sơ chưa được phục hồi | Settings/Network test plan | Missing — không tạo link giả |
 | [42](42_HISTORIAN_FE_PROTOTYPE_PLAN.md) | SQLite historian, shared point logging, unified Trends | Approved — implementation open |
 | 43 — hồ sơ chưa được phục hồi | Independent point tag/name namespaces + Programming alias | Missing — không tạo link giả |
-| [46](46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md) | Restructure repository theo process-first + bounded modules; host source migration/regression đã đạt, còn Go bounded context và target rollback | In Progress — G0..G3 PASS; G4/G5 còn hạng mục mở |
+| [46](46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md) | Restructure repository theo process-first + bounded modules; host source migration/regression và Go bounded context đã đạt, còn target install/rollback | In Progress — G0..G4 PASS; G5 bị chặn bởi `RST-202` |
+| [47](47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md) | Runbook nghiệm thu target `RST-202`: build native trên board, install, startup order, crash/restart, provenance và diễn tập rollback | Draft — chờ owner cấp target window |
 
 **Archived:** [S7 Hardening Code Review](../review/2026-06-13-s7-hardening-review.md)

@@ -612,6 +612,40 @@ PLAN_CLOSED = NO
 3. Chạy closure review `RST-205` sau khi `RST-202` PASS và giữ các gate
    physical I/O HIL/real RS485/Programming ở trạng thái hiện hữu.
 
+### 12.4. Khảo sát target ngày 2026-08-04 và chuẩn bị `RST-202`
+
+Board lab `SOM-DDC-24` (`orangepi5b`, aarch64) đã được khảo sát read-only; không
+thay đổi gì trên target. Quy trình thực hiện nằm tại
+[Runbook 47](47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md).
+
+Bốn dữ kiện quyết định trạng thái `RST-202`:
+
+1. **Target chạy build trước restructure.** `/usr/sbin/mkddc-{core,iobus,fake-mcu}`
+   mốc 2026-07-28, `mkddc-web` cùng ngày, `mkddc-hmi` 2026-07-22. Cây `apps/`
+   chưa từng được cài lên target, đúng với `TARGET_INSTALL_ROLLBACK = NOT_RUN`.
+2. **Gate provenance sẽ trượt nếu chạy ngay.** `/usr/share/mkddc/` chỉ có
+   `avahi/`; thiếu `provenance.json`, `checksums.sha256`, `runtime-build-info.txt`
+   và `runtime-checksums.sha256`. Nguyên nhân không phải lỗi script: logic sinh
+   các file này mới vào repo ở commit `9c6dc9b` ngày 2026-08-03, sau lần cài cuối
+   ngày 2026-07-28. `build-release.sh` và `install.sh` hiện đã đủ để đóng gate
+   này ở lần cài tới.
+3. **Rollback đang là thao tác tay.** `/usr/sbin` chứa 7 bản sao ad-hoc
+   (`.bad-*`, `.bak-*`, `.bak.*`, `.prev-*` từ 2026-07-03 đến 2026-07-18). Đây là
+   thứ `RST-202` phải thay bằng rollback có diễn tập; việc dọn chúng là task
+   riêng, không gộp vào bước install.
+4. **Layout cài đặt không nhất quán.** core/iobus/netcfg ở `/usr/sbin`, web ở
+   `/opt/mkddc-web/`; ngoài ra còn bản chết `/usr/local/bin/mkddc-{core,iobus,fakemcu}`
+   mốc 2026-07-01/02 không unit nào tham chiếu.
+
+Về đường build: board là aarch64 nên `build-release.sh` chạy native trực tiếp
+trên target theo ADR-022 — đây là đường dùng cho `RST-202`. Đã bổ sung
+[`platform/cmake/toolchain-aarch64-linux-gnu.cmake`](../../platform/cmake/toolchain-aarch64-linux-gnu.cmake)
+làm đường phụ cho máy phát triển x86_64; toolchain đã kiểm chứng sinh đúng ELF
+`ARM aarch64`, nhưng build đầy đủ trên máy hiện tại **chưa chạy được** vì thiếu
+thư viện arm64 của bên thứ ba (`ld: cannot find -lmodbus`). Yêu cầu sysroot được
+ghi trong chính toolchain file; việc bật multiarch arm64 cần quyền sudo và chưa
+được thực hiện.
+
 `RST-121..126`, npm security disposition và Chrome DevTools runtime đã hoàn
 tất trong phiên 2026-08-03; không còn là blocker đóng plan. Blocker duy nhất
 trong scope restructure là target install/startup/provenance/rollback được

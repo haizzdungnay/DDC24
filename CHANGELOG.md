@@ -7,6 +7,33 @@
 ---
 
 ## [Unreleased]
+### Added — Chuẩn bị nghiệm thu target `RST-202` cho Plan 46 (2026-08-04)
+
+- Khảo sát read-only board lab `SOM-DDC-24` (`orangepi5b`, aarch64, 8 unit
+  `active`); không thay đổi gì trên target. Bốn dữ kiện quyết định trạng thái
+  `RST-202`: target vẫn chạy binary mốc 2026-07-22/28 tức **trước** restructure;
+  `/usr/share/mkddc/` thiếu toàn bộ file provenance nên gate commit/checksum
+  chưa đóng được; `/usr/sbin` có 7 bản sao rollback ad-hoc; layout cài đặt lệch
+  giữa `/usr/sbin` và `/opt/mkddc-web` kèm bản chết ở `/usr/local/bin`.
+- Xác định nguyên nhân thiếu provenance không phải lỗi script: logic sinh
+  `provenance.json`/`runtime-build-info.txt` mới vào repo ở `9c6dc9b`
+  (2026-08-03), sau lần cài target cuối ngày 2026-07-28. `build-release.sh` và
+  `install.sh` hiện đã đủ để đóng gate này ở lần cài tới.
+- Thêm `platform/cmake/toolchain-aarch64-linux-gnu.cmake` làm đường build phụ
+  cho máy phát triển x86_64, kèm yêu cầu sysroot ghi ngay trong file. Đường
+  chính cho `RST-202` vẫn là build native trên board theo ADR-022.
+- Thêm `docs/03_implementation/47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md`: điều
+  kiện tiên quyết, hai đường build, trình tự install/startup/crash/provenance/
+  rollback, evidence phải ghi và năm tiêu chí đóng `RST-202`.
+- Cập nhật Plan 46 §12.4, `docs/03_implementation/README.md` (sửa trạng thái 46
+  từ "G0..G3" thành "G0..G4 PASS; G5 bị chặn bởi `RST-202`") và `docs/README.md`.
+
+**Kiểm chứng trong phiên:** toolchain aarch64 đã kiểm chứng bằng project tối
+thiểu — `file` trả `ELF 64-bit LSB pie executable, ARM aarch64`. Cross-build đầy
+đủ **FAIL** trên máy hiện tại: `ld: cannot find -lmodbus` do host chưa bật
+multiarch arm64; đã ghi yêu cầu sysroot thay vì bật ngầm. Không sửa source sản
+phẩm, không chạm board, không claim target evidence.
+
 ### Changed — Tái kiểm chứng đồng bộ docs Programming sau restructure (2026-08-04)
 
 - Kiểm lại bộ hồ sơ Programming Rev A tại HEAD `6ba7e3c` vì PR #80
