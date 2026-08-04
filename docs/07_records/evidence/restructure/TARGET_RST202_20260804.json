@@ -1,0 +1,130 @@
+{
+  "evidence_id": "TARGET-RST202-20260804",
+  "plan": "PLAN-ARCH-RESTRUCT-002",
+  "task": "RST-202",
+  "runbook": "docs/03_implementation/47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md",
+  "captured_at": "2026-08-04",
+  "scope": "build native aarch64 + install + runtime verification tren board lab",
+  "limitations": [
+    "Board lab chay fake MCU, khong co MCU that va khong co panel HMI; day la lab evidence, khong phai production acceptance.",
+    "Khong dong gate physical I/O HIL, real RS485 hay bat ky gate Programming nao."
+  ],
+  "target": {
+    "alias": "SOM-DDC-24",
+    "hostname": "orangepi5b",
+    "arch": "aarch64",
+    "os": "Debian 12 bookworm",
+    "board": "Orange Pi 5B"
+  },
+  "build": {
+    "commit": "13fdc6045ec51c18e7fbe6cb0959e6800ff4bf62",
+    "version": "0.2.0",
+    "dirty": false,
+    "build_time": "2026-08-04T03:02:55Z",
+    "command": "MKDDC_RELEASE_VERSION=0.2.0 platform/packaging/build-release.sh",
+    "mode": "native aarch64 tren chinh board",
+    "result": "BUILD_OK",
+    "toolchain": {
+      "cxx": "g++ (Debian 12.2.0-14) 12.2.0",
+      "go": "go1.26.5 linux/arm64",
+      "node": "v24.15.0",
+      "npm": "11.12.1",
+      "arm_none_eabi": "12.2.1 20221205"
+    },
+    "artifacts": [
+      { "path": "build/release/cpp/core/mkddc-core", "arch": "ELF 64-bit ARM aarch64", "sha256_prefix": "845b41aecbab" },
+      { "path": "build/release/cpp/iobus/mkddc-iobus", "arch": "ELF 64-bit ARM aarch64", "sha256_prefix": "5d9c2dc204a6" },
+      { "path": "build/release/cpp/netcfg/mkddc-netcfg", "arch": "ELF 64-bit ARM aarch64", "sha256_prefix": "87ce4300a5ca" },
+      { "path": "build/release/cpp/iobus/fake_mcu", "arch": "ELF 64-bit ARM aarch64", "sha256_prefix": "59c3e5ef9230" },
+      { "path": "build/release/cpp/hmi/mkddc-hmi", "arch": "ELF 64-bit ARM aarch64", "sha256_prefix": null },
+      { "path": "build/release/web/mkddc-web", "arch": "ELF 64-bit ARM aarch64", "sha256_prefix": "44c4e3f3a2a5" },
+      { "path": "build/firmware/stm32/firmware.elf", "arch": "ELF 32-bit ARM Cortex-M0+", "sha256_prefix": "98f1f51749ce" },
+      { "path": "build/web-ui/dist", "size": "1.6M" }
+    ]
+  },
+  "baseline_before_install": {
+    "binaries": {
+      "/usr/sbin/mkddc-core": { "mtime": "2026-08-01 15:24:05", "size": 619648, "sha256_prefix": "8c6d603c6e2b" },
+      "/usr/sbin/mkddc-iobus": { "mtime": "2026-08-01 15:24:05", "size": 3512672, "sha256_prefix": "a1b3b16695b6" },
+      "/usr/sbin/mkddc-netcfg": { "mtime": "2026-08-01 15:24:05", "size": 503368 },
+      "/usr/sbin/mkddc-hmi": { "mtime": "2026-08-01 15:24:05", "size": 1332440 },
+      "/opt/mkddc-web/mkddc-web": { "mtime": "2026-08-01 15:24:05", "size": 11796642 },
+      "/usr/sbin/mkddc-fake-mcu": { "mtime": "2026-07-30 19:38:14", "size": 173824, "sha256_prefix": "70e90e37487c" }
+    },
+    "main_pids": { "mkddc-core": 364084, "mkddc-iobus": 364599, "mkddc-netcfg": 284670, "mkddc-web-pi": 364260 },
+    "provenance_present": false,
+    "note": "/usr/share/mkddc chi co avahi/; thieu provenance.json, checksums.sha256, runtime-build-info.txt, runtime-checksums.sha256"
+  },
+  "install": {
+    "command": "sudo platform/packaging/install.sh",
+    "checksum_verify": "PASS 5/5",
+    "result": "PASS",
+    "post_install_pids_unchanged": true,
+    "post_install_exe_deleted": true,
+    "note": "install.sh dung 'systemctl enable --now' nen khong restart service dang chay; tien trinh van giu inode cu"
+  },
+  "remediation_applied_on_board": [
+    "Cai libnewlib-arm-none-eabi de firmware build duoc (nosys.specs).",
+    "Cai tay build/release/cpp/iobus/fake_mcu -> /usr/sbin/mkddc-fake-mcu vi install.sh khong cai fake_mcu.",
+    "Restart theo thu tu fakemcu -> iobus -> core -> web de thuc su chay binary moi.",
+    "systemctl disable --now mkddc-hmi de tra ve trang thai truoc khi cai; board khong co panel."
+  ],
+  "runtime_verification": {
+    "main_pids_after_restart": { "mkddc-fakemcu": 422637, "mkddc-iobus": 422645, "mkddc-core": 422651, "mkddc-web-pi": 422658, "mkddc-netcfg": 284670 },
+    "exe_symlink_clean": true,
+    "deployed_sha_matches_built": { "mkddc-core": "845b41aecbab", "mkddc-iobus": "5d9c2dc204a6", "mkddc-fake-mcu": "59c3e5ef9230" },
+    "shm_recreated_at": "2026-08-04 11:42",
+    "shm_io_size_change": { "before": 1304, "after": 1816, "note": "layout doi giua hai ban, bat buoc restart dong bo iobus va core" },
+    "iop_link": "HANDSHAKE -> NORMAL_POLL",
+    "io_commands": ["output.set_do mask=0x0F value=0x0A ack=ok", "output.set_ao raw=[0,0,0,0] ack=ok"],
+    "web_api": { "port": 8081, "observed": ["GET /api/v1/system/status 200", "GET /api/v1/alarms 200", "GET /api/v1/network 200"], "client": "192.168.1.45" },
+    "service_state_final": {
+      "mkddc-core": "active/enabled",
+      "mkddc-iobus": "active/enabled",
+      "mkddc-netcfg": "active/enabled",
+      "mkddc-web-pi": "active/enabled",
+      "mkddc-fakemcu": "active/enabled",
+      "mkddc-pty": "active/enabled",
+      "mkddc-hmi": "inactive/disabled"
+    }
+  },
+  "provenance_after_install": {
+    "path": "/usr/share/mkddc/provenance.json",
+    "version": "0.2.0",
+    "git_commit": "13fdc6045ec51c18e7fbe6cb0959e6800ff4bf62",
+    "dirty": false,
+    "build_time": "2026-08-04T03:02:55Z",
+    "runtime_build_info_all_binaries_match_commit": true
+  },
+  "ctest_native_aarch64": {
+    "command": "ctest --test-dir build/release/cpp --output-on-failure",
+    "total": 751,
+    "passed": 746,
+    "failed": 5,
+    "duration_s": 14.70,
+    "root_cause": "shm_open errno=13 (EACCES): /dev/shm/mkddc_plc_shm thuoc mkddc:mkddc mode 644, test chay duoi user orangepi",
+    "classification": "loi co lap test, khong phai hoi quy aarch64",
+    "failed_tests": [
+      "BacnetObjTable.PublishesRtHealthSoDegradationIsObservable",
+      "BacnetObjTable.DegradedRtIsVisibleInShm",
+      "StIntegration.ScanLoopWithoutStSchedulerBehavesAsBefore",
+      "StIntegration.ScanLoopRunsStProgramAndRoutesThroughArbitration",
+      "StIntegration.ScanLoopStepDoesNotAllocateWithStProgram"
+    ],
+    "note": "Chay bang root thi 2 test BacnetObjTable pass, 3 test StIntegration van hong; chua lay duoc chi tiet phan con lai."
+  },
+  "rst202_criteria": {
+    "TARGET_INSTALL": "PASS",
+    "TARGET_PROVENANCE": "PASS",
+    "TARGET_STARTUP_ORDER": "NOT_RUN",
+    "TARGET_CRASH_RESTART": "NOT_RUN",
+    "TARGET_ROLLBACK": "NOT_RUN"
+  },
+  "rst202_closed": false,
+  "open_defects": [
+    { "id": "INSTALL-001", "summary": "install.sh khong restart service dang chay, tao false-success", "fixed_in_repo": false },
+    { "id": "INSTALL-002", "summary": "install.sh khong cai fake_mcu, gay lech phien ban tren board lab", "fixed_in_repo": false },
+    { "id": "INSTALL-003", "summary": "install.sh bat mkddc-hmi chi vi binary ton tai, ghi de trang thai disabled", "fixed_in_repo": false },
+    { "id": "TEST-ISO-001", "summary": "test dung ten SHM co dinh, trung voi service production tren cung may", "fixed_in_repo": false }
+  ]
+}
