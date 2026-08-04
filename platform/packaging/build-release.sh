@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-MKDDC_REPOSITORY_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+MKDDC_REPOSITORY_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "$0")/../.." && pwd))"
 export MKDDC_REPOSITORY_ROOT
 # shellcheck source=repository-paths.sh
 source "$MKDDC_REPOSITORY_ROOT/platform/packaging/repository-paths.sh"
