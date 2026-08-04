@@ -7,6 +7,7 @@
 #include "modbus_master.hpp"
 #include "register_codec.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -84,6 +85,7 @@ bool ModbusMaster::open(const FieldbusConfig& cfg)
     uint16_t ext_idx = 0;
     for (size_t i = 0; i < cfg.slaves.size(); i++) {
         slave_states_[i].poll_interval_ms = cfg.slaves[i].poll_ms;
+        slave_states_[i].offline_probe_ms = cfg.rs485.offline_probe_ms;
         slave_states_[i].online = false;
         slave_ext_base_[i] = ext_idx;
 
@@ -268,12 +270,9 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
      * error_rate = 100% và E302 kích — kỹ thuật viên hiện trường thấy ngay thay
      * vì tình trạng "đèn xanh, bảng điểm trống, log im lặng". */
     if (slave_idx < slave_config_error_.size() && slave_config_error_[slave_idx]) {
-        on_poll_error(&state, sc.retry);
-        /* on_poll_error KHÔNG cập nhật last_poll_ms (có chủ đích: lỗi comm thật
-         * được retry nhanh, bị chặn bởi timeout 300ms của libmodbus). Ở đây
-         * không có I/O nào để chặn nên phải tự tôn trọng poll_interval, nếu
-         * không vòng fieldbus sẽ spin ở mức 1ms. */
-        state.last_poll_ms = now_ms;
+        /* on_poll_error nay tự cập nhật last_poll_ms (D-04), nên nhánh
+         * config-error không cần tự set nữa. */
+        on_poll_error(&state, sc.retry, now_ms);
         metrics.update(slave_idx, false, now_ms, sc.retry);
         cache.mark_slave_offline(slave_ext_base_[slave_idx],
                                  slave_ext_count_[slave_idx], sc.addr);
@@ -333,8 +332,9 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
 
         if (rc < 0) {
             slave_ok = false;
-            /* retry tracking trong on_poll_error */
-            const bool went_offline = on_poll_error(&state, sc.retry);
+            /* retry tracking trong on_poll_error; now_ms để slave chết chuyển
+             * sang nhịp probe chậm thay vì chiếm dây mỗi vòng (D-04). */
+            const bool went_offline = on_poll_error(&state, sc.retry, now_ms);
             if (errno == ETIMEDOUT) metrics.record_timeout(slave_idx);
 #ifdef EMBBADCRC
             if (errno == EMBBADCRC) metrics.record_crc_error(slave_idx);
@@ -515,10 +515,33 @@ void ModbusMaster::poll_once(uint64_t now_ms, ExtCache& cache,
         }
         metrics.init(names, addrs);
     }
+    /* D-04: phục vụ theo deadline sớm nhất thay vì theo thứ tự index.
+     *
+     * Vòng lặp cũ duyệt slave[0..n) theo index nên slave index thấp luôn được ưu
+     * tiên: một slave chậm ở đầu danh sách đẩy lùi mọi slave sau nó. Sắp theo
+     * "quá hạn nhiều nhất trước" cho hành vi công bằng, và với các slave cùng
+     * mức quá hạn thì giữ nguyên thứ tự index (ổn định, dễ đoán).
+     *
+     * Danh sách nhỏ (≤ vài chục slave) nên sort mỗi vòng là không đáng kể so với
+     * một transaction Modbus. */
+    struct DueSlave { uint64_t overdue; size_t idx; };
+    std::vector<DueSlave> due;
+    due.reserve(slave_states_.size());
     for (size_t i = 0; i < slave_states_.size(); i++) {
         if (!is_due(slave_states_[i], now_ms)) continue;
-        read_slave(static_cast<uint8_t>(i), now_ms, cache, metrics);
-        flush_pending(static_cast<uint8_t>(i), now_ms, metrics);
+        const uint64_t last = slave_states_[i].last_poll_ms;
+        /* Chưa từng poll hoặc clock nhảy lùi ⇒ ưu tiên cao nhất. */
+        const uint64_t overdue = (last == 0 || now_ms < last)
+                                     ? UINT64_MAX
+                                     : (now_ms - last);
+        due.push_back({overdue, i});
+    }
+    std::stable_sort(due.begin(), due.end(),
+                     [](const DueSlave& a, const DueSlave& b) { return a.overdue > b.overdue; });
+
+    for (const auto& d : due) {
+        read_slave(static_cast<uint8_t>(d.idx), now_ms, cache, metrics);
+        flush_pending(static_cast<uint8_t>(d.idx), now_ms, metrics);
     }
     /* Push snapshot sau mỗi vòng poll (SW_FIELDBUS_DESIGN §10) */
     cache.push_snapshot(fieldbus_sock_path);

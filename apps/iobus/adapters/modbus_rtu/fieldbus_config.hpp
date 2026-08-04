@@ -37,6 +37,9 @@ struct Rs485Config {
     uint32_t    baud   = 19200;
     char        parity = 'N';     /* N / E / O */
     uint8_t     stop   = 1;
+    /* D-04: chu kỳ thử lại slave đang OFFLINE, dùng chung cho cả bus.
+     * Thuộc bus chứ không thuộc device: nó bảo vệ băng thông của SỢI DÂY. */
+    uint32_t    offline_probe_ms = 5000;
 };
 
 struct FieldbusConfig {

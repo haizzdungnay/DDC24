@@ -464,11 +464,21 @@ TEST(ModbusMasterWriteLifecycle, WriteIsDroppedAfterMaxAttempts)
     w.enqueued_ms = 1000;
     h.master.enqueue_write(w);
 
-    /* Mỗi vòng poll phát tối đa một lần; sau kMaxWriteAttempts phải bị bỏ hẳn. */
+    /* Mỗi vòng poll phát tối đa một lần; sau kMaxWriteAttempts phải bị bỏ hẳn.
+     *
+     * Bước thời gian phải lớn hơn offline_probe_ms: sau vài lỗi liên tiếp slave
+     * chuyển OFFLINE và scheduler hạ nhịp xuống probe chậm (D-04), nên nhịp
+     * 100 ms sẽ không còn tới hạn. Đây là tương tác có chủ đích giữa A2 và A3.
+     *
+     * TTL không được vượt: bước nhỏ hơn kWriteTtlMs để lệnh bị bỏ vì HẾT LƯỢT
+     * THỬ chứ không phải vì quá hạn — hai nhánh đó có test riêng. */
+    static_assert(kDefaultOfflineProbeMs < kWriteTtlMs,
+                  "bước thời gian của test phải vừa đủ vượt probe mà chưa chạm TTL");
+    const uint64_t step = kDefaultOfflineProbeMs + 100;
     uint64_t now = 1000;
     for (int i = 0; i < kMaxWriteAttempts; ++i) {
         h.master.poll_once(now, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
-        now += 100;
+        now += step;
     }
     EXPECT_EQ(metrics.get(0).write_dropped, 1u);
     const uint32_t failed_after_drop = metrics.get(0).write_failed;
@@ -477,7 +487,7 @@ TEST(ModbusMasterWriteLifecycle, WriteIsDroppedAfterMaxAttempts)
     /* Sau khi bị bỏ, các vòng poll tiếp theo KHÔNG được phát lại lệnh đó nữa. */
     for (int i = 0; i < 3; ++i) {
         h.master.poll_once(now, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
-        now += 100;
+        now += step;
     }
     EXPECT_EQ(metrics.get(0).write_failed, failed_after_drop);
     EXPECT_EQ(metrics.get(0).write_dropped, 1u);

@@ -153,6 +153,14 @@ bool load_fieldbus_config(const std::string& path, bool path_from_cli,
             out->rs485.parity = static_cast<char>(parity[0]);
         if (jget_int(rs485_obj, "stop", &v) && (v == 1 || v == 2))
             out->rs485.stop = static_cast<uint8_t>(v);
+        /* D-04: nhịp thử lại slave OFFLINE. Clamp 1..60 s — dưới 1 s thì slave
+         * chết vẫn chiếm dây đáng kể, trên 60 s thì thiết bị hồi phục quá lâu
+         * mới được phát hiện. */
+        if (jget_int(rs485_obj, "offline_probe_ms", &v)) {
+            if (v < 1000)       v = 1000;
+            else if (v > 60000) v = 60000;
+            out->rs485.offline_probe_ms = static_cast<uint32_t>(v);
+        }
     }
 
     /* rs485.device bắt buộc khi có RTU slaves */
