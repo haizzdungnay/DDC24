@@ -9,6 +9,14 @@
 và [báo cáo phương án](MODBUS_RTU_POINT_DESIGN_REVIEW_PROPOSAL.md). Proposal
 không thay đổi các kết luận As-Built bên dưới.
 
+**Cập nhật 2026-08-04:** bộ tài liệu thiết kế đã được phân rã theo layer và audit
+As-Built được mở rộng sang FE/BE/API/UI-UX. Danh sách gap đầy đủ (P0/P1/P2) và
+các mâu thuẫn tài liệu đã xử lý nằm tại
+[Modbus RTU Docs Sync Report](MODBUS_RTU_DOCS_SYNC_REPORT.md). Báo cáo này vẫn
+đúng ở phạm vi ban đầu; nó **không** bao phủ các gap FE/BE mới phát hiện
+(suy diễn quality ở FE, xoá không xác nhận, thiếu commissioning/import-export,
+apply bằng restart service).
+
 ## Chuỗi As-Built
 
 ```text

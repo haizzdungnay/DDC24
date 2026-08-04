@@ -1,6 +1,22 @@
 # Service Design — Fieldbus module in `mkddc-iobus` (SW)
 ## Modbus RTU Master / Expansion Field Bus — code-ready
 
+> ## ⚠ SUPERSEDED một phần — 2026-08-04
+>
+> Tài liệu này mô tả thiết kế service fieldbus **As-Built v1** và được giữ để truy
+> nguyên. Các phát biểu sau **không còn** là authority:
+>
+> | Phát biểu trong tài liệu này | Thay bằng |
+> |---|---|
+> | Fieldbus ghi trực tiếp vào shared memory (§2) | [DDD-FW-MBRTU-001 §7](MODBUS_RTU_FW_SOM_DESIGN.md) — iobus publish snapshot qua `fieldbus.sock`, core sở hữu Point Table |
+> | Một bus RS-485 / một master | [DDD-FW-MBRTU-001 §2–3](MODBUS_RTU_FW_SOM_DESIGN.md) — hai BusWorker độc lập (chờ `OD-MBRTU-001`) |
+> | Quality theo mô hình cũ, alarm E302/E303 là contract chất lượng | [DDD-DM-MBRTU-001 §6](MODBUS_RTU_DATA_MODEL.md) — GOOD/STALE/OFFLINE/BAD/CONFIG_ERROR + reason code |
+> | Ghi xuống slave từ "PLC/BMS đặt giá trị" | [DDD-FW-MBRTU-001 §8](MODBUS_RTU_FW_SOM_DESIGN.md) — write request/result qua core arbitration, không blind replay |
+> | `profile` là mô hình cấu hình do người dùng viết | [DDD-DM-MBRTU-001 §7.1](MODBUS_RTU_DATA_MODEL.md) — profile là artifact **dẫn xuất** do BE sinh |
+>
+> Bộ tài liệu thay thế đang `In Review`. Cho tới khi ADR-024 Accepted, cả hai bên
+> đều không được dùng để claim implementation.
+
 > **Document ID:** DDD-SWSVC-FIELDBUS-MK-DDC-24-VI · **Rev** 1.2 | 2026-06-16 (close FB-Q-001/Q-002; thêm §9 ext IPC API) · 1.1 | 2026-06-13 (mkddc-iobus module; implementation plan 25) · 1.0 | 2026-05-30
 > 📘 [README](../../01_specs/README.md) · **Trace:** `SW-MOD-001..011`, `RTU-001..008` · ICD: [D-2](../interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) · Config: [D-5 §5b](../interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md)
 

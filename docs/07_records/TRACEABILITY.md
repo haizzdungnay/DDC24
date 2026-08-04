@@ -2,9 +2,13 @@
 
 **ID:** TRACE-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-03 (thêm trace design/gate Modbus RTU Point)
+**Cập nhật:** 2026-08-04 (thêm trace cho `SWR-REQ-MBRTU-010/011` và `NFR-REQ-MBRTU-004`)
 
 Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `Planned` không phải bằng chứng pass.
+
+Chuỗi truy vết đầy đủ riêng cho Modbus RTU (Capability → Product Requirement →
+Use Case → Requirement → Design → VR → Test → Source As-Built) nằm tại
+[Modbus RTU Traceability Matrix](MODBUS_RTU_TRACEABILITY_MATRIX.md).
 
 Chuỗi normative riêng cho Programming Rev A nằm tại
 [Programming Traceability Matrix](PROGRAMMING_TRACEABILITY_MATRIX.md):
@@ -29,7 +33,9 @@ bằng chứng runtime production.
 | SWR-REQ-005 | ADR-017, `apps/netcfg`, Web adapter/FE, HMI broker/client | active/configured/pending/capability/management truth + negative UI/API tests | Code-local Web migration và target service/no-carrier negative path pass; real carrier/IP handoff/panel open |
 | SWR-REQ-006 | `mkddc-netcfg` transaction journal/coordinator | static/DHCP/DNS/confirm/120 s rollback + restart fault tests | Target-dummy static confirm, process recovery, explicit/automatic rollback pass; physical DHCP/DNS/reboot/power/disk fault open |
 | SWR-REQ-007 | netcfg + iobus BACnet address watcher + same-origin Web | multi-process continuity, BACnet `I-Am`, Web/Modbus reconnect | Target-dummy control continuity và live hot-rebind log pass; packet/Modbus/physical I/O/real-IP handoff evidence open |
-| SWR-REQ-MBRTU-001..009 | DDD-SW-MBRTU-POINT-001 — mô hình Bus/Device/Point, scheduler, quality, atomic apply, write result, diagnostics | VR-MBRTU-002..009 | Design In Review; As-Built host partial, contract v2/target/HIL RED |
+| SWR-REQ-MBRTU-001..009 | DDD-SW-MBRTU-POINT-001 + [DDD-DM-MBRTU-001](MODBUS_RTU_TRACEABILITY_MATRIX.md) — mô hình Bus/Device/Point, scheduler, quality, atomic apply, write result, diagnostics | VR-MBRTU-002..009 | Design In Review; As-Built host partial, contract v2/target/HIL RED |
+| SWR-REQ-MBRTU-010..011 | [DDD-BE-MBRTU-001 §6](../02_design/software/MODBUS_RTU_BE_DESIGN.md), [UX-WEB-MBRTU-001 §3.4/§5](../04_uiux/MODBUS_RTU_UI_UX_DESIGN.md) | VR-MBRTU-013 | RED — không có endpoint commissioning/import-export và không có page Mapping |
+| NFR-REQ-MBRTU-004 | [DDD-FE-MBRTU-001 §5.1](../02_design/software/MODBUS_RTU_FE_DESIGN.md), [DDD-BE-MBRTU-001 §5](../02_design/software/MODBUS_RTU_BE_DESIGN.md), [DDD-FW-MBRTU-001 §11](../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md) | VR-MBRTU-014 | RED — toàn bộ số là PROPOSED, chưa đo trên target |
 | NET-WEB-001 | Go netcfg adapter, OpenAPI, Network FE/E2E, [UC-WEB-NETWORK-001](../04_uiux/KX-DDC24-UC-WEB-NETWORK-001_VI.md), [UX-WEB-NETWORK-001](../04_uiux/KX-DDC24-UX-WEB-NETWORK-001_VI.md) | GET authenticated-read, POST Admin-only, strict DNS capability, authoritative UI/recovery | **Target E2E 2026-07-31 pass 38/39** trên phần cứng thật (stage/apply/confirm với kernel nhận địa chỉ, rollback last-known-good, DNS manual, RBAC viewer, reload thật) — [evidence](test-evidence/fw-som/2026-07-31-network-page-board-e2e.md). Browser reconnect sau đổi IP và packet capture vẫn open |
 | NET-WEB-002 | `apps/iobus` fieldbus/BACnet telemetry → `kx_io_shm_t` (append-only) → `apps/web-api/internal/app/networkapi.go` → `NetworkPage.tsx` | Trang mạng không suy diễn: thiếu số đo hiển thị `—`/`unknown`, `bmsLink` từ cờ bind thật, per-slave metrics ghép theo địa chỉ Modbus | Unit pass (ctest/Go/vitest); target pass với 0 slave cấu hình — cần site có slave RTU thật để nghiệm thu đầy đủ bảng southbound |
 | NET-WEB-003 | `apps/web-api/internal/app/reloadhelper_linux.go` + `platform/systemd/mkddc-reload-helper.service` | Lưu BACnet/WiFi phải có hiệu lực thật; allowlist unit; thông điệp lỗi dùng ngôn ngữ vận hành | Target pass 2026-07-31: `activeBacnetPort` 47808→47810 sau khi lưu |

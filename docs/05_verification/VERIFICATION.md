@@ -2,7 +2,7 @@
 
 **ID:** VVP-001
 **Trạng thái:** Active — hardware gate RED; Programming Rev A production gate RED
-**Cập nhật:** 2026-08-03 (thêm gate architecture conformance sau repository restructure)
+**Cập nhật:** 2026-08-04 (thêm `VR-MBRTU-013/014` và test specification Modbus RTU)
 
 ## Chiến lược
 
@@ -115,10 +115,16 @@ Design đang `In Review`; bảng này định nghĩa gate, không tuyên bố te
 | VR-MBRTU-010 | RBAC/audit/API/FE | Viewer/Operator/Admin positive/negative; operation correlation; FE candidate/apply/result/reconnect; không localStorage authority hoặc arbitrary FC. | PARTIAL — CRUD RBAC host có, transaction v2 chưa có |
 | VR-MBRTU-011 | Real RS485/HIL/recovery | Chạy `MBRTU-HIL-01..12`: hai cổng, mọi serial mode, bốn register type, write/readback, CRC/timeout/wiring fault, crash, reboot/power-cycle và 24 h soak. | RED — chưa có slave RS485 thật |
 | VR-MBRTU-012 | Provenance/deployment | Commit sạch; artifact/config/ABI version/checksum/toolchain truy được trên target; coordinated install/rollback và mismatch fail rõ. | RED — binary mới chưa deploy |
+| VR-MBRTU-013 | Commissioning và import/export | Test connection, test read, test write trả kết quả giao tiếp thật có audit và không tạo revision; import/export round-trip không mất field, một dòng lỗi làm cả file bị từ chối. | RED — không có endpoint commissioning/import/export |
+| VR-MBRTU-014 | Ngân sách vận hành và mapping gate | Đo refresh cadence, write rate limit, CPU/RAM fieldbus trên target, bus utilization và ngưỡng cảnh báo quá tải; mapping không hợp lệ bị chặn tại điểm lưu. | RED — mọi số hiện là PROPOSED |
 
-`MODBUS_RTU_POINT_READY = YES` chỉ khi VR-MBRTU-001..012 đều PASS bằng evidence
+`MODBUS_RTU_POINT_READY = YES` chỉ khi VR-MBRTU-001..014 đều PASS bằng evidence
 hiện hành được review. CTest/Go/FE/simulator pass không được dùng để thay thế
 VR-MBRTU-001, 004, 011 hoặc 012.
+
+Test specification chi tiết (6 tầng, `TC-MBRTU-U/I/S/T/H/P-xx`) nằm tại
+[VVP-MBRTU-001](MODBUS_RTU_VERIFICATION_PLAN.md). Tài liệu đó đang `In Review`,
+định nghĩa gate và **không** tuyên bố test đã pass.
 
 ## Hardware release gate — RED
 

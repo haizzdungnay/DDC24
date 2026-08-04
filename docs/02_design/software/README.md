@@ -8,6 +8,10 @@ Tài liệu chi tiết được phục hồi nguyên văn. [Software Baseline](.
 ## Runtime và service design
 
 - [Modbus RTU Point detailed design](DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md) — **In Review 2026-08-03**; proposal production trước Programming, supersede các mô tả RTU Point recovered nếu được phê duyệt
+- [Modbus RTU data model](MODBUS_RTU_DATA_MODEL.md) — **In Review 2026-08-04**; mô hình canonical Bus/Device/Point, là nguồn chân lý duy nhất cho FE/BE/FW-SOM
+- [Modbus RTU FE design](MODBUS_RTU_FE_DESIGN.md) — **In Review 2026-08-04**
+- [Modbus RTU BE design](MODBUS_RTU_BE_DESIGN.md) — **In Review 2026-08-04**
+- [Modbus RTU FW-SOM design](MODBUS_RTU_FW_SOM_DESIGN.md) — **In Review 2026-08-04**
 - [Software detailed design](SW_DDD_MK-DDC-24_VI.md)
 - [Runtime execution model](SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md)
 - [Component library](SW_COMPONENT_LIBRARY_MK-DDC-24_VI.md)

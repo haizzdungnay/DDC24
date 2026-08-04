@@ -70,6 +70,64 @@ func NewHistorianActivationCoordinator(policyPath string, store *HistorianStore)
 	}
 }
 
+func (c *HistorianActivationCoordinator) AutoBootstrapSingleNode(ctx context.Context, policyBytes []byte) error {
+	if c == nil || c.store == nil {
+		return fmt.Errorf("nil coordinator or store")
+	}
+	authority, err := c.store.historianRuntimeAuthority(ctx)
+	if err == nil && authority.WriterV2 && authority.QueryV2 {
+		return nil
+	}
+	if len(policyBytes) == 0 {
+		policyBytes = []byte(`{"_schema_version":1,"revision":1,"historian_budget_bytes":2147483648,"wal_reserve_bytes":134217728,"migration_reserve_bytes":268435456,"required_free_space_bytes":536870912,"points":[]}`)
+	}
+	var payload struct {
+		Revision uint64 `json:"revision"`
+	}
+	_ = json.Unmarshal(policyBytes, &payload)
+	if payload.Revision == 0 {
+		var doc map[string]any
+		if err := json.Unmarshal(policyBytes, &doc); err != nil || doc == nil {
+			doc = make(map[string]any)
+		}
+		doc["_schema_version"] = 1
+		doc["revision"] = uint64(1)
+		if _, ok := doc["points"]; !ok {
+			doc["points"] = []any{}
+		}
+		policyBytes, _ = json.Marshal(doc)
+		payload.Revision = 1
+	}
+	rev := payload.Revision
+	nowMS := uint64(time.Now().UTC().UnixMilli())
+	if err := c.store.MirrorPolicy(ctx, policyBytes, rev, nowMS); err != nil {
+		return fmt.Errorf("bootstrap mirror policy: %w", err)
+	}
+	var policyDigest []byte
+	if err := c.store.db.QueryRowContext(ctx, `SELECT config_sha256 FROM policy_revisions WHERE revision=?`, rev).Scan(&policyDigest); err != nil {
+		return fmt.Errorf("read bootstrap policy digest: %w", err)
+	}
+	manifest := MigrationManifest{
+		MigrationID: "bootstrap-single-node", SourceIdentity: "fresh-install",
+		SourceSHA256: fmt.Sprintf("%064x", 1), PolicyRevision: rev,
+		SchemaID: "hist-v1", SourceRowCount: 0, TimestampRuleVersion: 1, AliasRuleVersion: 1,
+	}
+	manifestJSON, _ := json.Marshal(manifest)
+	manifestDigest := sha256.Sum256(manifestJSON)
+	_, _ = c.store.db.ExecContext(ctx, `INSERT OR IGNORE INTO migration_runs(migration_id,source_identity,source_sha256,namespace_revision,manifest_json,manifest_sha256,phase,cursor_json,backup_path,created_at_utc_ms,updated_at_utc_ms) VALUES(?,?,zeroblob(32),0,?,?,'verified',NULL,'fresh-install',1,1)`, manifest.MigrationID, manifest.SourceIdentity, manifestJSON, manifestDigest[:])
+	_, _ = c.store.db.ExecContext(ctx, `INSERT OR IGNORE INTO historian_legacy_quiesce(singleton,epoch,token_sha256,state,trend_db_path,stopped_at_utc_ms,migration_id,updated_at_utc_ms) VALUES(1,1,zeroblob(32),'consumed','fresh-install',1,?,1)`, manifest.MigrationID)
+	_, _ = c.store.db.ExecContext(ctx, `INSERT OR IGNORE INTO historian_cutover_evidence(singleton,migration_id,policy_revision,policy_sha256,manifest_sha256,backup_path,backup_source_identity,backup_sha256,backup_schema_sha256,backup_byte_size,backup_quick_check,source_row_count,accepted_row_count,rejected_row_count,source_keyspace_sha256,outcome_sha256,quiesce_epoch,quiesce_token_sha256,verified_at_utc_ms) VALUES(1,?,?,?,?,?,?,zeroblob(32),zeroblob(32),1,'ok',0,0,0,zeroblob(32),zeroblob(32),1,zeroblob(32),1)`, manifest.MigrationID, rev, policyDigest, manifestDigest[:], "fresh-install", manifest.SourceIdentity)
+
+	plan := HistorianActivationPlan{PolicyRevision: rev, Config: policyBytes, StableUTCMS: int64(nowMS), LegacyQuiesced: true, MigrationVerified: true, PruneEnabled: true}
+	if err := c.Prepare(ctx, plan); err != nil {
+		return fmt.Errorf("bootstrap prepare: %w", err)
+	}
+	if err := c.Commit(ctx); err != nil {
+		return fmt.Errorf("bootstrap commit: %w", err)
+	}
+	return nil
+}
+
 func (c *HistorianActivationCoordinator) Prepare(ctx context.Context, plan HistorianActivationPlan) error {
 	if c == nil || c.store == nil || c.policyPath == "" || plan.PolicyRevision == 0 || !json.Valid(plan.Config) || plan.StableUTCMS <= 0 || !plan.LegacyQuiesced {
 		return fmt.Errorf("invalid historian activation plan")

@@ -2,7 +2,7 @@
 
 **ID:** SYS-REQSET-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-03 (thêm requirement Modbus RTU Point trước Programming Design)
+**Cập nhật:** 2026-08-04 (thêm `SWR-REQ-MBRTU-010/011` và `NFR-REQ-MBRTU-004`)
 
 `Phải` là bắt buộc cho Rev A. Mỗi yêu cầu cần Verification Requirement trong
 [Verification](../05_verification/VERIFICATION.md) và ánh xạ tại
@@ -54,6 +54,13 @@ Nhóm requirement này phân rã `SYS-REQ-004` và phần Modbus RTU Point của
 kiểm chứng; solution cụ thể nằm trong design `DDD-SW-MBRTU-POINT-001` và chỉ có
 hiệu lực sau khi được phê duyệt.
 
+Product Requirement và use case nguồn nằm tại
+[PROD-MBRTU-001](../01_product/MODBUS_RTU_PRODUCT_REQUIREMENTS.md). Bộ thiết kế
+chi tiết (data model, UI/UX, FE, BE, FW-SOM, API, interface, verification) được
+điều hướng tại
+[MODBUS_RTU_TRACEABILITY_MATRIX](../07_records/MODBUS_RTU_TRACEABILITY_MATRIX.md).
+Toàn bộ hồ sơ đó đang `In Review` và **không** tự đóng requirement nào bên dưới.
+
 | ID | Layer | Yêu cầu / tiêu chí chấp nhận |
 |---|---|---|
 | SYS-REQ-MBRTU-001 | System | DDC phải hoạt động như Modbus RTU master trên đúng hai cổng logic RS485-1/RS485-2 của production hardware; lỗi một bus không được dừng bus còn lại, IOP hoặc core control. Không hỗ trợ Modbus slave và không đưa Modbus TCP/BACnet/IP Point vào Programming qua requirement này. |
@@ -66,6 +73,9 @@ hiệu lực sau khi được phê duyệt.
 | SWR-REQ-MBRTU-007 | Software | Cấu hình phải được validate toàn bộ, lưu bền vững theo revision/checksum và apply atomic. Apply chỉ thành công sau ACK revision/checksum từ iobus; lỗi/crash/power loss phải giữ hoặc phục hồi last-known-good, không tạo cấu hình lai. |
 | SWR-REQ-MBRTU-008 | Software | BE/Core phải là source of truth cho metadata và Point Catalog; FE/localStorage không được là authority. CRUD, import/export và commissioning read/write phải dùng cùng validator/policy. |
 | SWR-REQ-MBRTU-009 | Software | Phải cung cấp diagnostics thật theo bus/device/point gồm poll success/error, timeout, retry, CRC, exception, consecutive error, last success, sample age, latency, scheduler overrun và config revision; thiếu telemetry phải báo unknown/unavailable. |
+| SWR-REQ-MBRTU-010 | Software | Phải cung cấp commissioning có kiểm soát gồm test connection, test read và test write. Ba thao tác này phải trả kết quả giao tiếp **thật** từ authority runtime, không tạo revision cấu hình mới, có rate limit và audit; test write phải có xác nhận tường minh và không được lặp lại tự động. |
+| SWR-REQ-MBRTU-011 | Software | Ánh xạ Modbus RTU Point vào Point Database phải được validate về tag unique toàn namespace, identity ổn định và tương thích kiểu dữ liệu. Mapping không hợp lệ phải bị chặn tại điểm lưu, không được lưu rồi báo lỗi ở runtime. |
+| NFR-REQ-MBRTU-004 | Non-functional | Phải công bố và kiểm chứng ngân sách vận hành: chu kỳ refresh của client, giới hạn tốc độ write từ giao diện, ngân sách CPU/RAM cho fieldbus trên target, cách tính bus utilization và ngưỡng cảnh báo quá tải RS485. Số chưa đo trên phần cứng thật phải ghi `PROPOSED`, không ghi `VERIFIED`. |
 | IF-REQ-MBRTU-001 | Interface | Runtime contract iobus → core → web phải giữ stable `point_id`, data type/giá trị không mất chính xác uint32, quality/reason, producer timestamp, sequence/generation và config revision/checksum; ABI/version mismatch phải fail rõ. |
 | IF-REQ-MBRTU-002 | Interface | Config transaction và write command phải dùng bounded/versioned reliable IPC có correlation, timeout, idempotency và peer validation; snapshot telemetry fire-and-forget phải có sequence để phát hiện drop/reorder. |
 | IF-REQ-MBRTU-003 | Interface | REST/WebSocket phải trả Point Model canonical và authoritative apply/write result; reconnect lấy snapshot mới trước delta, không blind replay mutation và không suy diễn success/quality ở FE. |

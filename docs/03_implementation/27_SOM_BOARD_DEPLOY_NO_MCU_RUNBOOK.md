@@ -1,20 +1,48 @@
-# 27 — SOM Board Deploy Runbook (No MCU)
-## MK-DDC-24 — Build/deploy lên board SOM khi chưa có MCU
+# 27 — SOM Board Deploy Runbook
+## MK-DDC-24 — Build/deploy lên board SOM (lab và production)
 
-> **Document ID:** IMPL-SOM-DEPLOY-NOMCU-MK-DDC-24-VI
-> **Phiên bản:** 1.10 | 2026-07-28
-> **Trạng thái:** Active — SOP cho team build/deploy SOM-only
+> **Document ID:** IMPL-SOM-DEPLOY-MK-DDC-24-VI
+> **Phiên bản:** 1.11 | 2026-08-04
+> **Trạng thái:** Active — SOP cho team build/deploy SOM
 > **Owner:** Dev 2 + DevOps/QA
-> **Scope:** board SOM truy cập qua SSH, chưa có MCU STM32; deploy/test `mkddc-iobus`, `mkddc-core`, `mkddc-netcfg`, `mkddc-web`, frontend cùng-origin, fake MCU và cài hostname provisioning tool/template. Install không tự apply hostname.
-> **Không scope:** MCU firmware thật, relay/AO/DI/UI vật lý và thay đổi IP production khi chưa có cửa sổ commissioning/HIL được phê duyệt.
+> **Scope:** board SOM truy cập qua SSH; deploy/test `mkddc-iobus`, `mkddc-core`, `mkddc-netcfg`, `mkddc-web`, frontend cùng-origin, fake MCU (lab) hoặc MCU thật (production) và cài hostname provisioning tool/template. Install không tự apply hostname.
+> **Không scope:** thay đổi IP production khi chưa có cửa sổ commissioning/HIL được phê duyệt.
 
 ---
 
-## 1. Thông tin board thực tế (đã verify 2026-06-13)
+## 1. Thông tin board thực tế
+
+### 1a. Board chính — Foxlinx SOM-DDC-24 (production, có MCU STM32)
+
+| Hạng mục | Giá trị |
+|---|---|
+| Board | Foxlinx SOM-DDC-24 |
+| Vai trò | **Board chính dự án** — production target, có MCU STM32 thật |
+| CPU | aarch64 |
+| SSH | `root@mekong-fac.ddns.net:2223` (alias `SOM-DDC-24-foxlinx`) |
+| MCU | STM32 thật, UART `/dev/ttyS2`, kết nối qua ADUM1201 |
+| Fake MCU | Không dùng — MCU thật có mặt |
+
+> **Lưu ý bảo mật:** Board chính hiện dùng user `root` với password. Cần chuyển sang
+> key-based auth và tạo user hạn quyền cho deploy thường xuyên. Xem §2a.
+
+**Quyết định đã chốt:**
+
+| Hạng mục | Quyết định |
+|---|---|
+| SSH auth | Password auth tạm (`admin123`); **ưu tiên chuyển key-based** khi chuẩn hóa |
+| MCU | MCU STM32 thật — không cần fake MCU stack |
+| Install | `packaging/install.sh` (production, không `--no-enable`) hoặc `--no-enable` cho lần đầu |
+| UART | `/dev/ttyS2` @ 921600 baud, qua ADUM1201 isolation |
+
+---
+
+### 1b. Board lab — Orange Pi 5B (lab/dev, chạy fake MCU)
 
 | Hạng mục | Giá trị |
 |---|---|
 | Board | Orange Pi 5B |
+| Vai trò | **Board lab** — phát triển/test không MCU |
 | CPU | Rockchip RK3588, aarch64 |
 | OS | Orange Pi 1.0.8 Bookworm (Debian 12) |
 | Kernel | 6.1.43-rockchip-rk3588 |
@@ -34,6 +62,69 @@
 ---
 
 ## 2. SSH setup (một lần mỗi thành viên)
+
+### 2a. Board chính — Foxlinx SOM-DDC-24-foxlinx (port 2223)
+
+**Config trên máy dev** (`~/.ssh/config`):
+
+```sshconfig
+Host SOM-DDC-24-foxlinx
+  HostName mekong-fac.ddns.net
+  User root
+  Port 2223
+  StrictHostKeyChecking no
+  UserKnownHostsFile=/dev/null
+```
+
+> **Password:** `admin123` — nhập khi SSH hỏi. **Không** gõ password vào command line.
+>
+> **Khuyến nghị hardening cho production:**
+> 1. Tạo user deploy riêng (không dùng root trực tiếp cho deploy hàng ngày)
+> 2. Chuyển sang key-based auth sau khi ổn định
+> 3. Bật `StrictHostKeyChecking accept-new` sau lần kết nối đầu
+
+**Verify:**
+
+```bash
+ssh SOM-DDC-24-foxlinx "echo OK && uname -a"
+# → OK + thông tin kernel (aarch64)
+```
+
+**Chuẩn bị trước khi deploy lên board chính:**
+
+```bash
+# 1. Kiểm tra kết nối SSH
+ssh SOM-DDC-24-foxlinx "echo OK && uname -a && date -Is"
+
+# 2. Ghi nhận môi trường board
+ssh SOM-DDC-24-foxlinx "hostnamectl && cat /etc/os-release | head -5 && df -h / /data"
+
+# 3. Kiểm tra MCU UART
+ssh SOM-DDC-24-foxlinx "ls -l /dev/ttyS2 && stty -F /dev/ttyS2"
+
+# 4. Kiểm tra service hiện tại (nếu đã từng deploy)
+ssh SOM-DDC-24-foxlinx 'systemctl list-units "mkddc*" --no-legend 2>/dev/null || echo "Chưa có service mkddc"'
+
+# 5. Backup config/data nếu có
+ssh SOM-DDC-24-foxlinx "test -d /data/config && tar -czf /tmp/config-backup-$(date +%Y%m%dT%H%M%S).tar.gz /data/config /data/mkddc 2>/dev/null && echo 'Backup OK' || echo 'Chưa có data cần backup'"
+```
+
+**Windows PowerShell:**
+
+```powershell
+# Verify kết nối
+ssh -p 2223 root@mekong-fac.ddns.net "echo OK && uname -a"
+# Nhập password: admin123
+```
+
+> ⚠️ **Board chính có MCU thật.** Khi deploy, các service sẽ tương tác với MCU STM32
+> qua UART `/dev/ttyS2`. Không cần fake MCU stack (§7b). Các bước §3–§6 áp dụng như
+> bình thường, bỏ qua drop-in `nomcu.conf` và `nofifo.conf` (trừ khi kernel không hỗ
+> trợ RT). Sau install, chuyển thẳng sang §8 (production với MCU).
+
+---
+
+### 2b. Board lab — Orange Pi 5B SOM-DDC-24 (port 2222)
 
 **Config trên máy dev** (`~/.ssh/config`):
 
@@ -867,6 +958,7 @@ Không qua checklist này thì không báo "SOM deploy ready".
 ---
 
 **Rev**
+1.11 | 2026-08-04 — bổ sung board chính Foxlinx SOM-DDC-24-foxlinx (port 2223, user root, có MCU STM32 thật) vào §1a và §2a; phân biệt rõ board chính (production) và board lab (Orange Pi); thêm quy trình chuẩn bị/preflight trước khi deploy lên board chính
 1.10 | 2026-07-28 — ghi nhận dummy transaction/hostname test pass và teardown về `end1`/`idle`; thêm cleanup host route Windows bằng PowerShell Administrator
 1.9 | 2026-07-28 — thêm test rig `dummy0` tạm thời không cần cáp, baseline/candidate, evidence, giới hạn mô phỏng và cleanup một lệnh về `end1`
 1.8 | 2026-07-28 — chốt helper sau refinement strict legacy snapshot, deploy lại trên Orange Pi; cập nhật SHA cuối và backup lần hai

@@ -4,7 +4,7 @@
 #   platform/packaging/build-release.sh
 #   sudo platform/packaging/install.sh [--no-enable]
 set -eu
-MKDDC_REPOSITORY_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+MKDDC_REPOSITORY_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "$0")/../.." && pwd))"
 export MKDDC_REPOSITORY_ROOT
 # shellcheck source=repository-paths.sh
 . "$MKDDC_REPOSITORY_ROOT/platform/packaging/repository-paths.sh"
@@ -41,12 +41,54 @@ fi
 sha256sum --check build/release/checksums.sha256
 
 # user/group service (idempotent); user mkddc thuộc dialout để mở UART
-getent group mkddc >/dev/null || groupadd --system mkddc
-getent passwd mkddc >/dev/null || \
-    useradd --system --gid mkddc --groups dialout --no-create-home \
-            --shell /usr/sbin/nologin mkddc
+has_group() {
+    if command -v getent >/dev/null 2>&1; then
+        getent group "$1" >/dev/null 2>&1
+    else
+        grep -qE "^${1}:" /etc/group 2>/dev/null
+    fi
+}
+has_user() {
+    if command -v getent >/dev/null 2>&1; then
+        getent passwd "$1" >/dev/null 2>&1
+    else
+        grep -qE "^${1}:" /etc/passwd 2>/dev/null
+    fi
+}
+
+if ! has_group mkddc; then
+    if command -v groupadd >/dev/null 2>&1; then
+        groupadd --system mkddc
+    elif command -v addgroup >/dev/null 2>&1; then
+        addgroup -S mkddc 2>/dev/null || addgroup mkddc
+    fi
+fi
+
+if ! has_user mkddc; then
+    if command -v useradd >/dev/null 2>&1; then
+        useradd --system --gid mkddc --groups dialout --no-create-home \
+                --shell /usr/sbin/nologin mkddc
+    elif command -v adduser >/dev/null 2>&1; then
+        adduser -S -G mkddc -s /bin/false -D -H mkddc 2>/dev/null || adduser -D -G mkddc mkddc
+    fi
+fi
+
+if has_group dialout; then
+    if command -v usermod >/dev/null 2>&1; then
+        usermod -a -G dialout mkddc 2>/dev/null || true
+    elif command -v addgroup >/dev/null 2>&1; then
+        addgroup mkddc dialout 2>/dev/null || true
+    fi
+fi
+
 for group in video input; do
-    getent group "$group" >/dev/null && usermod -a -G "$group" mkddc
+    if has_group "$group"; then
+        if command -v usermod >/dev/null 2>&1; then
+            usermod -a -G "$group" mkddc 2>/dev/null || true
+        elif command -v addgroup >/dev/null 2>&1; then
+            addgroup mkddc "$group" 2>/dev/null || true
+        fi
+    fi
 done
 
 # /data/config: web ghi, service đọc (CONFIG_SCHEMA D-5)
@@ -56,6 +98,14 @@ install -d -m 0775 -o mkddc -g mkddc /data/config/profiles
 install -d -m 0755 -o mkddc -g mkddc /data/mkddc
 install -d -m 0755 /etc/mkddc
 [ -e /etc/mkddc/netcfg.conf ] || install -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/netcfg.conf" /etc/mkddc/netcfg.conf
+[ -e /data/config/io_config.conf ] || install -m 0644 -o mkddc -g mkddc "$MKDDC_PACKAGING_SOURCE_REL/io_config.conf" /data/config/io_config.conf
+[ -e /data/config/users.conf ] || install -m 0644 -o mkddc -g mkddc "$MKDDC_PACKAGING_SOURCE_REL/users.conf" /data/config/users.conf
+if [ ! -s /etc/mkddc-web.env ]; then
+    sec="$(head -c 32 /dev/urandom | tr -dc 'a-f0-9' | head -c 64 2>/dev/null || echo "mkddc-secret-$(date +%s)")"
+    printf 'JWT_SECRET=%s\n' "$sec" > /etc/mkddc-web.env
+    chmod 0600 /etc/mkddc-web.env
+    chown root:root /etc/mkddc-web.env
+fi
 
 # Chụp bản đang cài trước khi ghi đè, để rollback là thao tác có quy trình thay vì
 # ứng biến. Trước đây không có bước này nên /usr/sbin tích tụ các bản sao tay kiểu
@@ -75,6 +125,11 @@ if [ -x /usr/sbin/mkddc-core ]; then
     done
     ln -sfn "$SNAP" /var/backups/mkddc/previous
     echo "INFO: đã chụp bản đang chạy ($prev_ver) vào $SNAP"
+fi
+
+# Cài đặt shared libraries phụ trợ (nếu có trong gói release)
+if [ -d build/release/lib ]; then
+    cp -a build/release/lib/* /usr/lib/ 2>/dev/null || true
 fi
 
 install -m 0755 "$BUILD/iobus/mkddc-iobus" /usr/sbin/mkddc-iobus
@@ -137,16 +192,12 @@ fi
 systemctl daemon-reload
 if [ "$ENABLE" -eq 1 ]; then
     systemctl enable mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi >/dev/null
-    [ "$FAKE_MCU_INSTALLED" -eq 0 ] || systemctl enable mkddc-pty mkddc-fakemcu >/dev/null
-
-    # `enable --now` KHÔNG restart service đang chạy: tiến trình cũ giữ nguyên
-    # inode đã bị thay, nên sau khi cài "thành công" hệ vẫn chạy code cũ
-    # (`readlink /proc/<pid>/exe` trả `(deleted)`). Phải restart tường minh.
-    #
-    # Thứ tự bắt buộc: nguồn dữ liệu trước, tiêu thụ sau. iobus và core dùng
-    # chung SHM nên layout đổi giữa hai bản sẽ gây ABI mismatch nếu restart lẻ.
     if [ "$FAKE_MCU_INSTALLED" -eq 1 ]; then
-        systemctl restart mkddc-pty
+        if command -v socat >/dev/null 2>&1; then
+            systemctl enable mkddc-pty >/dev/null 2>&1 || true
+            systemctl restart mkddc-pty >/dev/null 2>&1 || true
+        fi
+        systemctl enable mkddc-fakemcu >/dev/null 2>&1 || true
         systemctl restart mkddc-fakemcu
     fi
     systemctl restart mkddc-iobus

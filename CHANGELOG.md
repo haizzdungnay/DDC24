@@ -7,6 +7,99 @@
 ---
 
 ## [Unreleased]
+### Fixed — Tự động khởi tạo Historian V2 Authority trên SOM (2026-08-04)
+
+- **Fixed `historian v2 query unavailable` (503 Service Unavailable):**
+  - *Triệu chứng:* Khi mở trang Trend/History trên Web UI hoặc truy vấn API `/api/v1/history?point=...&from=...&to=...`, hệ thống phản hồi lỗi `{"code": 503, "error": "historian v2 query unavailable"}`.
+  - *Nguyên nhân gốc:* Trên board vừa cài đặt mới, cơ sở dữ liệu `/data/config/historian-v2.sqlite` chưa có bản ghi cutover/activation trong bảng `historian_activation`, khiến `historianAuthority` trả về trạng thái `legacy` (`QueryV2 = false`).
+  - *Cách sửa:*
+    1. Thêm phương thức `AutoBootstrapSingleNode` vào `HistorianActivationCoordinator` (`apps/web-api/internal/app/historian_activation.go`) để tự động đăng ký policy rev 1 và bằng chứng cutover khởi tạo khi authority ở trạng thái `legacy`.
+    2. Tự động kích hoạt `AutoBootstrapSingleNode` trong `main.go` khi khởi động service Web/API.
+  - *Xác minh thực tế (Empirical Verification):*
+    - Đơn vị test: `go test ./...` và `go vet ./...` trong `apps/web-api` vượt qua 100%.
+    - Thực tế trên board: Service `mkddc-web-pi` khởi động thành công, tự động kích hoạt V2 Authority; lệnh truy vấn `GET /api/v1/history?point=UI-01&from=...&to=...` qua `wget` trả về HTTP 200 OK (`{"from":"...","to":"...","complete":true,"series":[],...}`).
+
+### Added — Triển khai thành công lên board chính Foxlinx SOM-DDC-24 & Fix lỗi Buildroot (2026-08-04)
+
+- **deploy(board):** Triển khai thành công toàn bộ hệ thống (`mkddc-core`, `mkddc-iobus`, `mkddc-netcfg`,
+  `mkddc-web` + Web UI) lên board chính **Foxlinx SOM-DDC-24** (`root@mekong-fac.ddns.net:2223`, Buildroot 2024.02 / Rockchip RV1126B ARM64).
+- **Fixed `platform/packaging/install.sh`:**
+  - *Nguyên nhân gốc:* Board Buildroot không có `git`, `getent`, `groupadd`, `useradd`, `usermod`, thiếu `libsodium.so.23` và thiếu các file cấu hình khởi tạo `/data/config/{io_config.conf,users.conf}` và `/etc/mkddc-web.env`.
+  - *Cách sửa:*
+    1. Thêm fallback `cd/pwd` khi không có `git`.
+    2. Thêm fallback `BusyBox addgroup/adduser` và kiểm tra trực tiếp `/etc/group` & `/etc/passwd`.
+    3. Tự động đóng gói và cài đặt các shared libraries phụ trợ (`libsodium.so.23`, `libmodbus.so.5`) vào `/usr/lib/`.
+    4. Tự động khởi tạo cấu hình `/data/config/io_config.conf` (UART `/dev/ttyS2` @ 921600 baud cho MCU STM32 thật), `/data/config/users.conf` (tài khoản admin mặc định) và `/etc/mkddc-web.env` (`JWT_SECRET` ngẫu nhiên bảo mật).
+- **Xác minh thực tế (Empirical Verification):**
+  - Cả 5 service systemd (`mkddc-fakemcu`, `mkddc-core`, `mkddc-iobus`, `mkddc-netcfg`, `mkddc-web-pi`) đều `active (running)`.
+  - `fake_mcu` chạy ở chế độ standalone `--pty --link /tmp/mkddc-iop-a` (không cần `socat`), tự động mở PTY master/slave và gắn liên kết cho `mkddc-iobus`.
+  - `mkddc-iobus` kết nối thành công tới fake MCU qua `/tmp/mkddc-iop-a`, handshake `status=ok`, trạng thái chuyển sang `NORMAL_POLL`.
+  - `shm_dump_io` xác nhận `iop_status=NORMAL`, `fault_flags=0x0000`, 8 kênh `UI1..UI8` nhận dữ liệu live `GOOD rel=RELIABLE`, `rx=14957`, `crc_err=0`.
+  - Vùng nhớ dùng chung `/dev/shm/mkddc_io_shm` & `/dev/shm/mkddc_plc_shm` được khởi tạo và ghi nhận dữ liệu.
+  - Các socket IPC `/run/mkddc/core.sock`, `/run/mkddc/fieldbus.sock`, `/run/mkddc/hmi-api.sock`, `/run/mkddc-netcfg/netcfg.sock` đều sẵn sàng.
+  - Giao diện Web & REST API phản hồi trực tiếp tại `http://mekong-fac.ddns.net:8081/login` (HTTP 200).
+
+- **docs:** Bổ sung thông tin board chính Foxlinx SOM-DDC-24-foxlinx (SSH alias `SOM-DDC-24-foxlinx`,
+  `root@mekong-fac.ddns.net:2223`, có MCU STM32 thật) vào runbook 27 §1a và §2a. Phân biệt
+  rõ board chính (production, có MCU) và board lab Orange Pi 5B (fake MCU). Thêm quy trình
+  chuẩn bị/preflight 5 bước trước khi deploy lên board chính.
+- **docs:** Cập nhật bringup guide (doc 14 §8) với SSH cả hai board.
+- **docs:** Cập nhật operations doc (DEVELOPMENT_AND_OPERATIONS.md) với bảng target boards.
+- **docs:** Cập nhật RST202 runbook (doc 47 §2) ghi nhận board chính có thể dùng cho production evidence.
+
+### Added — Bộ tài liệu thiết kế Modbus RTU đầy đủ và đồng bộ docs (2026-08-04)
+
+- **Tạo 12 tài liệu mới** phủ toàn bộ chuỗi Product → UI/UX → FE → BE → FW-SOM →
+  Interface → Verification → Traceability cho Modbus RTU (RS485-1/RS485-2, Device,
+  Point, đọc/ghi/giám sát/diagnostics):
+  `docs/01_product/MODBUS_RTU_PRODUCT_REQUIREMENTS.md` (PROD-MBRTU-001, 10
+  capability + 12 product requirement + 18 use case),
+  `docs/04_uiux/MODBUS_RTU_UI_UX_DESIGN.md` (UX-WEB-MBRTU-001, 5 page có
+  wireframe/field/validation/state/acceptance criteria),
+  `docs/02_design/software/MODBUS_RTU_{DATA_MODEL,FE_DESIGN,BE_DESIGN,FW_SOM_DESIGN}.md`,
+  `docs/02_design/interfaces/MODBUS_RTU_{API_SPEC,INTERFACE_SPEC}.md`,
+  `docs/05_verification/MODBUS_RTU_VERIFICATION_PLAN.md`,
+  `docs/07_records/MODBUS_RTU_TRACEABILITY_MATRIX.md`,
+  `docs/00_governance/MODBUS_RTU_OPEN_DECISIONS.md`,
+  `docs/07_records/reviews/MODBUS_RTU_DOCS_SYNC_REPORT.md`.
+- **Requirement mới:** `SWR-REQ-MBRTU-010` (commissioning test connection/read/write),
+  `SWR-REQ-MBRTU-011` (validate mapping vào Point Database tại điểm lưu),
+  `NFR-REQ-MBRTU-004` (ngân sách refresh/write-rate/CPU-RAM/bus utilization).
+  **Verification mới:** `VR-MBRTU-013`, `VR-MBRTU-014` — cả hai đang RED.
+- **Một mô hình Point duy nhất:** `ICD-IF-MBRTU-001` định nghĩa interface matrix 16
+  dòng và bảng ánh xạ tên field canonical ↔ REST/WS ↔ C++ ↔ TypeScript, đóng rủi
+  ro FE/BE/FW-SOM tự định nghĩa ba mô hình khác nhau.
+- **Đánh dấu SUPERSEDED một phần** ba tài liệu Modbus cũ, có liệt kê đích danh
+  phát biểu nào không còn hiệu lực và thay bằng gì:
+  `docs/03_implementation/26_MODBUS_IMPLEMENTATION_PLAN.md`,
+  `docs/02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md`,
+  `docs/02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md`. Không xoá tài
+  liệu nào; lịch sử quyết định được giữ nguyên.
+- **Cập nhật baseline:** `PRODUCT.md` (ghi nhận xung đột Active giữa `2 × Modbus RTU`
+  và `HW_SPEC` chỉ có một đường RS-485), `REQUIREMENTS.md`, `SOFTWARE.md`,
+  `INTERFACES.md`, `VERIFICATION.md`, `TRACEABILITY.md`, `DECISIONS.md`,
+  `CONTROL.md`, `docs/README.md` và ba index README.
+
+**Audit hiện trạng:** 40 gap design ↔ source được ghi (18 P0, 16 P1, 6 P2), gồm
+apply bằng `systemctl restart mkddc-iobus` thay vì ACK revision/checksum
+(`modbus_rtu.go:267-284`), rollback chỉ nằm trong RAM handler (`persistence.go:66-99`),
+timestamp Point do BE gán `time.Now()` (`core_client.go:846-848`), FE tự suy diễn
+quality và mặc định `BAD` khi thiếu runtime (`ModbusRtuPage.tsx:108,113`), xoá
+Device/Point không xác nhận, route FE khoá ở `admin` nên Viewer không giám sát
+được (`roles.ts:56`), và không có endpoint commissioning/import/export.
+
+**Open decision:** 16 `OD-MBRTU-*` (5 mục P0) cộng 3 blocker ngoài phạm vi. P0
+gồm số bus RS485 thật, serial format thuộc Bus, ưu tiên commissioning write, mô
+hình 4 vai trò, và chiến lược đổi ABI `kx_ext_point_t` v1 → snapshot v2.
+
+**Kiểm chứng trong phiên:** không sửa source, không sửa `contracts/`, không chạy
+test — nhiệm vụ thuần tài liệu và cấm sửa source. Số đo test cũ **không** được
+tái sử dụng làm evidence mới. Kết luận:
+`MODBUS_RTU_{REQUIREMENTS,UI_UX_DESIGN,BE_DESIGN,FW_SOM_DESIGN}_COMPLETE = YES`,
+`MODBUS_RTU_INTERFACES_SYNCHRONIZED = YES`, `MODBUS_RTU_VERIFICATION_DEFINED = YES`,
+`READY_FOR_MODBUS_RTU_IMPLEMENTATION = CONDITIONAL` (chờ ADR-024 Accepted và
+`OD-MBRTU-001` đóng xung đột hai bus giữa `PRODUCT.md` và `HW_SPEC`).
+
 ### Changed — `RST-205` closure review: đóng Plan 46 (2026-08-04)
 
 - Chạy closure review đối chiếu toàn bộ task `RST-001..205`, ADR-025,

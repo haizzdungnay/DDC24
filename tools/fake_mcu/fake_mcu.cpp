@@ -278,7 +278,7 @@ int open_uart(const std::string& dev)
     return fd;
 }
 
-int open_pty()
+int open_pty(const std::string& link_path = "")
 {
     const int fd = posix_openpt(O_RDWR | O_NOCTTY);
     if (fd < 0) { std::perror("posix_openpt"); return -1; }
@@ -290,6 +290,14 @@ int open_pty()
     cfmakeraw(&tio);
     tcsetattr(fd, TCSANOW, &tio);
     std::printf("pty: %s\n", name);
+    if (!link_path.empty()) {
+        ::unlink(link_path.c_str());
+        if (::symlink(name, link_path.c_str()) != 0) {
+            std::perror("symlink");
+        } else {
+            std::printf("pty link created: %s -> %s\n", link_path.c_str(), name);
+        }
+    }
     std::fflush(stdout);
     return fd;
 }
@@ -322,6 +330,7 @@ uint8_t err_from_name(const std::string& s)
 int main(int argc, char** argv)
 {
     std::string uart;
+    std::string pty_link;
     bool use_pty = false;
     Inject inj;
     bool verbose = false;
@@ -329,6 +338,7 @@ int main(int argc, char** argv)
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
         if (a == "--pty") use_pty = true;
+        else if (a == "--link" && i + 1 < argc) { use_pty = true; pty_link = argv[++i]; }
         else if (a == "--uart" && i + 1 < argc) uart = argv[++i];
         else if (a == "--crc-error" && i + 1 < argc) inj.crc_error_rate = std::atof(argv[++i]);
         else if (a == "--timeout" && i + 1 < argc) inj.timeout_frames = std::atoi(argv[++i]);
@@ -370,7 +380,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    const int fd = use_pty ? open_pty() : open_uart(uart);
+    const int fd = use_pty ? open_pty(pty_link) : open_uart(uart);
     if (fd < 0) return 1;
 
     McuState st;

@@ -2,7 +2,7 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-03 (ADR-025: cấu trúc repository process-first)
+**Cập nhật:** 2026-08-04 (đăng ký `MODBUS_RTU_OPEN_DECISIONS` cho ADR-024)
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: EasySet parity thành ADR-013; raw SHM thành ADR-014.
 
@@ -81,4 +81,11 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
   draft hiện mới mô tả một UART4/transceiver/connector; xung đột này phải được
   đóng bằng hardware/platform evidence hoặc Product decision, không bằng path
   `/dev/ttyS*` giả định.
+- Từ 2026-08-04, mọi vấn đề Modbus RTU còn thiếu authority được theo dõi tập
+  trung tại [Modbus RTU Open Decisions](MODBUS_RTU_OPEN_DECISIONS.md)
+  (`OD-MBRTU-001..016` cùng ba blocker ngoài phạm vi). Tập `DR-MBRTU-001..009`
+  trong review proposal ngày 2026-08-03 được ánh xạ vào tập đó; ba mục đã được
+  hợp nhất vào requirement Active và không còn là open decision. Đóng một
+  `OD-MBRTU-*` yêu cầu một mục trong log này hoặc một ADR mới, có ngày và người
+  ký — trao đổi miệng không đóng được quyết định.
 - IEC 60073, IEC 62682, IEC 62443, ISO 9241-210 và ISA-101 được dùng làm design/verification guidance theo scope; không được biến review tài liệu thành tuyên bố conformity/certification.

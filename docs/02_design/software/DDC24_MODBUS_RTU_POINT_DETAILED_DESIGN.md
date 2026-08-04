@@ -11,6 +11,18 @@
 **As-Built đối chiếu:**
 [DDC24-MODBUS-RTU-POINT-AS-BUILT-2026-08-03](../../07_records/reviews/MODBUS_RTU_POINT_AS_BUILT_REPORT.md)
 
+**Phân rã theo layer (In Review 2026-08-04):** tài liệu này vẫn là design authority
+tổng. Chi tiết từng layer nằm tại [Data Model](MODBUS_RTU_DATA_MODEL.md) ·
+[UI/UX](../../04_uiux/MODBUS_RTU_UI_UX_DESIGN.md) · [FE](MODBUS_RTU_FE_DESIGN.md) ·
+[BE](MODBUS_RTU_BE_DESIGN.md) · [FW-SOM](MODBUS_RTU_FW_SOM_DESIGN.md) ·
+[API](../interfaces/MODBUS_RTU_API_SPEC.md) ·
+[Interface](../interfaces/MODBUS_RTU_INTERFACE_SPEC.md) ·
+[Verification](../../05_verification/MODBUS_RTU_VERIFICATION_PLAN.md) ·
+[Traceability](../../07_records/MODBUS_RTU_TRACEABILITY_MATRIX.md) ·
+[Open Decisions](../../00_governance/MODBUS_RTU_OPEN_DECISIONS.md).
+Khi có xung đột giữa tài liệu này và một tài liệu layer, **tài liệu này thắng**
+cho tới khi cả bộ được duyệt cùng nhau.
+
 ## 1. Mục đích và ranh giới
 
 Tài liệu này đề xuất thiết kế production cho **Modbus RTU Point** trước khi mở

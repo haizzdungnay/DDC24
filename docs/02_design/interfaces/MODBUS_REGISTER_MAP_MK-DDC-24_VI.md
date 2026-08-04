@@ -3,7 +3,23 @@
 
 > **Document ID:** ICD-MODBUS-MK-DDC-24-VI
 > **Phiên bản:** 2.0 | 2026-05-30
-> **Trạng thái:** Approved (Owner 2026-06-08)
+> **Trạng thái:** **SUPERSEDED MỘT PHẦN 2026-08-04** (trước đó: Approved Owner 2026-06-08)
+
+> ## ⚠ SUPERSEDED một phần — 2026-08-04
+>
+> Vai trò **DDC là Modbus RTU master** ở §1 vẫn còn hiệu lực. Các phát biểu sau
+> **không còn** là authority và được thay bằng bộ tài liệu mới:
+>
+> | Phát biểu trong tài liệu này | Thay bằng |
+> |---|---|
+> | Một bus RS-485 duy nhất | [DDD-DM-MBRTU-001 §3](../software/MODBUS_RTU_DATA_MODEL.md) — hai bus logic `rs485-1`/`rs485-2` (chờ `OD-MBRTU-001`) |
+> | Mô hình dữ liệu điểm và ext cache | [DDD-DM-MBRTU-001 §5](../software/MODBUS_RTU_DATA_MODEL.md) — mô hình canonical Bus → Device → Point |
+> | Contract runtime ext | [ICD-IF-MBRTU-001 §5](MODBUS_RTU_INTERFACE_SPEC.md) — `ExtSnapshot v2` |
+> | Mọi mô tả về REST/cấu hình Modbus | [ICD-API-MBRTU-001](MODBUS_RTU_API_SPEC.md) |
+>
+> Tài liệu được giữ nguyên để bảo toàn lịch sử quyết định (ARCH-R010). Bộ tài
+> liệu thay thế đang `In Review`; cho tới khi ADR-024 được Accepted, **không**
+> tài liệu nào trong hai bên được dùng để claim implementation.
 > 📘 [README](../../01_specs/README.md) · Trace: `RTU-001..008`, `SW-MOD-001..011` · Triển khai: [SW_FIELDBUS_DESIGN](../software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md)
 
 > ⚠ **THAY ĐỔI LỚN (2026-05-30, ARCH-R010):** Phiên bản 1.0 của tài liệu này mô tả DDC là **Modbus slave** phục vụ BMS — **đã huỷ**. Đúng mô hình: **DDC là Modbus RTU MASTER** trên RS-485, đi **poll thiết bị phụ** (downstream). Northbound lên BMS dùng BACnet/IP + MQTT + REST (xem [D-3](BACNET_PICS_EPICS_MK-DDC-24_VI.md), [D-4](REST_API_OPENAPI_MK-DDC-24_VI.md)).

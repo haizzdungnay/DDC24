@@ -22,6 +22,13 @@ production acceptance của thiết bị có MCU thật.
 
 Khảo sát read-only qua SSH `SOM-DDC-24` (`orangepi5b`, aarch64, uptime 3 ngày):
 
+> **Lưu ý:** Ngoài board lab Orange Pi 5B, dự án có **board chính Foxlinx SOM-DDC-24**
+> (SSH alias `SOM-DDC-24-foxlinx`, port 2223, user `root`) với MCU STM32 thật. Khi chạy
+> `RST-202` trên board chính, kết quả là **production evidence** (không chỉ lab evidence).
+> Xem [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK §1a](27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) để biết
+> thông tin SSH và quy trình chuẩn bị.
+
+
 | Hạng mục | Đo được | Ý nghĩa cho `RST-202` |
 |---|---|---|
 | Binary đang chạy | `/usr/sbin/mkddc-{core,iobus,netcfg,hmi}` và `/opt/mkddc-web/mkddc-web` mốc **2026-08-01 15:24:05**; `mkddc-fake-mcu` **2026-07-30 19:38:14** | Target chạy build **trước** restructure (2026-08-03). Cây `apps/` chưa từng được cài lên target. |

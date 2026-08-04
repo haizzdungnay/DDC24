@@ -2,15 +2,13 @@
 # Chỉ enable cùng với mkddc-pty + mkddc-iobus drop-in nomcu.conf
 [Unit]
 Description=MK-DDC-24 fake MCU — lab/no-MCU only
-After=mkddc-pty.service
-BindsTo=mkddc-pty.service
 Before=mkddc-iobus.service
 
 [Service]
 Type=simple
 User=mkddc
 Group=mkddc
-ExecStart=/usr/local/bin/mkddc-fakemcu --uart /tmp/mkddc-iop-b
+ExecStart=/usr/sbin/mkddc-fake-mcu --pty --link /tmp/mkddc-iop-a
 Restart=on-failure
 RestartSec=1
 
