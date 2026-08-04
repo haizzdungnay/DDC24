@@ -1,9 +1,9 @@
 # Plan 46: Restructure kiến trúc repository theo bounded modules
 
 > **ID:** PLAN-ARCH-RESTRUCT-002
-> **Trạng thái:** In Progress — G0..G4 PASS; G5 bị chặn bởi target acceptance
-> **Phiên bản:** 1.3
-> **Ngày:** 2026-08-03
+> **Trạng thái:** **Closed** — G0..G5 PASS; `RST-205` closure review 2026-08-04
+> **Phiên bản:** 1.4
+> **Ngày:** 2026-08-04
 > **Owner đề xuất:** Tech Lead + Dev SOM/Core/Iobus + Dev Web + DevOps/QA
 > **Nguồn kiến trúc:** [System Architecture](../03_architecture/SYSTEM.md),
 > [Software Design](../04_design/SOFTWARE.md),
@@ -565,7 +565,9 @@ TARGET_STARTUP_ORDER = PASS
 TARGET_CRASH_RESTART = PASS
 TARGET_ROLLBACK = PASS
 RST_202 = DONE
-PLAN_CLOSED = NO
+RST_205 = DONE
+OPEN_DEFECTS = 0
+PLAN_CLOSED = YES
 ```
 
 ## 12. Trạng thái thực thi ngày 2026-08-03
@@ -579,7 +581,7 @@ PLAN_CLOSED = NO
 | G2 | PASS | `contracts/` là authority duy nhất; contract/dependency negative tests làm gate đỏ khi tạo bản sao hoặc import sai chiều. |
 | G3 | PASS trên host | Core, Iobus, netcfg, HMI, Web API, Web UI, STM32 và packaging đã chuyển vật lý; path cũ không còn tồn tại; binary/service/API/contract semantics giữ nguyên. |
 | G4 | PASS | Core/Iobus có domain/application/ports/adapters/bootstrap và CMake boundary; React có app/features/shared cùng public barrel/lint guard. Go `RST-121..126` đã tách auth/audit, Point Catalog/config, Modbus RTU, historian, system/network/health/HMI và router thành package có test trực tiếp; `internal/app` chỉ giữ handler, middleware và façade composition cần tương thích. |
-| G5 | PARTIAL | Compatibility shim đã bỏ, artifact đã cô lập, host regression, release checksum, npm security disposition và Chrome DevTools runtime đều có evidence. **`RST-202` DONE ngày 2026-08-04**: install, provenance, startup order sau reboot thật, crash/restart và diễn tập rollback đều PASS trên board lab (§12.6). Còn lại `RST-205` closure review. |
+| G5 | PASS | Compatibility shim đã bỏ, artifact đã cô lập, host regression, release checksum, npm security disposition và Chrome DevTools runtime đều có evidence. **`RST-202` DONE ngày 2026-08-04**: install, provenance, startup order sau reboot thật, crash/restart và diễn tập rollback đều PASS trên board lab (§12.6). **`RST-205` DONE cùng ngày** — xem §12.7 và [Closure Review](../07_records/reviews/RST205_CLOSURE_REVIEW_2026-08-04.md). |
 
 ### 12.2. Kiểm chứng host hiện hành
 
@@ -715,4 +717,40 @@ ghi trong chính toolchain file; việc bật multiarch arm64 cần quyền sudo
 `RST-121..126`, npm security disposition và Chrome DevTools runtime đã hoàn
 tất trong phiên 2026-08-03; không còn là blocker đóng plan. Blocker duy nhất
 trong scope restructure là target install/startup/provenance/rollback được
-owner phê duyệt.
+owner phê duyệt. Blocker đó đã được gỡ ngày 2026-08-04 — xem §12.6 và §12.7.
+
+### 12.7. `RST-205` closure review ngày 2026-08-04 — Plan đóng
+
+Owner cấp phép reboot ngày 2026-08-04, `RST-202` hoàn tất, closure review đã
+chạy. Hồ sơ đầy đủ:
+[RST-205 Closure Review](../07_records/reviews/RST205_CLOSURE_REVIEW_2026-08-04.md).
+
+Đối chiếu tại commit `9d90f66`, `scripts/verify-project.sh --component all` exit
+**0**:
+
+| Gate | Kết quả |
+|---|---|
+| C++ full (Modbus + BACnet + HMI) | **751/751 PASS** |
+| Go | **12 package** — 11 package có test đều `ok` |
+| FE Vitest | **35 file, 299/299 PASS**; build **2 223 module** |
+| Playwright E2E network | **1/1 PASS**, 23,1 s |
+| Firmware STM32 ARM | `firmware.elf` PASS, `arm-none-eabi-gcc` 13.2.1 |
+| Repository layout guard | **PASS**, 7 check |
+| `ctest` native aarch64 trên board, service đang chạy | **751/751 PASS** |
+
+Mười tiêu chí §9 đều đạt: không còn `services/`, `web/`, `src/frontend/`, `fw/`,
+`shared/`, `packaging/`; tên binary và failure boundary giữ nguyên; `contracts`
+là authority duy nhất; Go `package main` chỉ còn trong `cmd/mkddc-web`; guard
+enforce dependency direction tự động. **Không có waiver và không còn shim.**
+
+Năm khiếm khuyết do nghiệm thu target làm lộ ra — `INSTALL-001..003`,
+`TEST-ISO-001`, `ROLLBACK-001` — đã sửa hết trong repo (`cb1303c`, `43b4cdb`,
+PR #85); `OPEN_DEFECTS = 0`.
+
+Gap giữ nguyên, không bị plan này làm xanh: physical I/O HIL, real RS485
+(`VR-MBRTU-001/004/011/012` vẫn RED), HMI panel phần cứng, và toàn bộ gate
+Programming Rev A. Bài rollback mới diễn tập cơ chế ở cùng commit, chưa phải
+rollback tương thích cross-commit. Mọi target evidence là lab evidence trên board
+dev Orange Pi 5B, không phải carrier board production.
+
+`PLAN_CLOSED = YES`.
