@@ -16,7 +16,7 @@ import { useI18n } from '../../shared/i18n'
 import { useRealtime } from '../../shared/realtime'
 import type { Point, TrendSample, VirtualPoint } from '../../shared/types'
 import { canonicalOutputPointId, canonicalVirtualPointId, cn, isFreshIso, mergePointsById, pointDisplayTag } from '../../shared/utils'
-import { filterTrendPoints, filterTrendSamplesByRange, parseTrendCustomRange, utcDateTimeInputValue, type TrendCustomRange, type TrendFilterKind } from './trendsFilters'
+import { filterTrendPoints, filterTrendSamplesByRange, parseTrendCustomRange, localDateTimeInputValue, localTimeZoneLabel, type TrendCustomRange, type TrendFilterKind } from './trendsFilters'
 
 interface TrendRow {
   id: string
@@ -140,8 +140,8 @@ export function TrendsPage() {
   const [pickerQuery, setPickerQuery] = useState('')
   const [pickerKinds, setPickerKinds] = useState<TrendFilterKind[]>(trendFilterKinds)
   const [pickerDraft, setPickerDraft] = useState<string[]>([])
-  const [customFrom, setCustomFrom] = useState(() => utcDateTimeInputValue(new Date(Date.now() - 30 * 60_000)))
-  const [customTo, setCustomTo] = useState(() => utcDateTimeInputValue(new Date()))
+  const [customFrom, setCustomFrom] = useState(() => localDateTimeInputValue(new Date(Date.now() - 30 * 60_000)))
+  const [customTo, setCustomTo] = useState(() => localDateTimeInputValue(new Date()))
   const [customRange, setCustomRange] = useState<TrendCustomRange | null>(null)
   const [customError, setCustomError] = useState<string | null>(null)
   const analogPanelRef = useRef<HTMLDivElement>(null)
@@ -175,7 +175,7 @@ export function TrendsPage() {
   const historyPresentation = historyPresentationState(historyState.data, historyState.error)
   const currentRange = rangeOptions.find((item) => item.minutes === rangeMinutes)
   const rangeLabel = customRange
-    ? pick('Tùy chỉnh (UTC)', 'Custom (UTC)')
+    ? pick('Tùy chỉnh (giờ địa phương)', 'Custom (local time)')
     : currentRange ? pick(currentRange.labelVi, currentRange.labelEn) : pick(`${rangeMinutes} phút`, `${rangeMinutes} min`)
   const databaseSeriesIds = useMemo(() => new Set((historyState.data?.series ?? []).map((item) => item.pointId)), [historyState.data?.series])
   const customPointsWithoutHistory = customRange && historyState.data
@@ -316,9 +316,9 @@ export function TrendsPage() {
             </div>
           </div>
           <div className="mb-4 grid gap-3 rounded-[var(--radius)] border border-[var(--c-border)] p-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-            <label className="text-xs">From (UTC)<input type="datetime-local" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} className="mt-1 block h-9 w-full rounded border border-[var(--c-border)] bg-transparent px-2" /></label>
-            <label className="text-xs">To (UTC)<input type="datetime-local" value={customTo} onChange={(event) => setCustomTo(event.target.value)} className="mt-1 block h-9 w-full rounded border border-[var(--c-border)] bg-transparent px-2" /></label>
-            <Button size="sm" onClick={applyCustomRange}>Apply custom</Button>
+            <label className="text-xs">{pick(`Từ (giờ địa phương ${localTimeZoneLabel()})`, `From (local time ${localTimeZoneLabel()})`)}<input type="datetime-local" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} className="mt-1 block h-9 w-full rounded border border-[var(--c-border)] bg-transparent px-2" /></label>
+            <label className="text-xs">{pick(`Đến (giờ địa phương ${localTimeZoneLabel()})`, `To (local time ${localTimeZoneLabel()})`)}<input type="datetime-local" value={customTo} onChange={(event) => setCustomTo(event.target.value)} className="mt-1 block h-9 w-full rounded border border-[var(--c-border)] bg-transparent px-2" /></label>
+            <Button size="sm" onClick={applyCustomRange}>{pick('Áp dụng tùy chọn', 'Apply custom')}</Button>
             {customError && <span role="alert" className="text-xs text-[var(--c-fault-fg)] md:col-span-3">{customError}</span>}
           </div>
           {historyPresentation && <HistoryStateBanner state={historyPresentation.state} gaps={historyPresentation.gaps} detail={historyPresentation.detail ?? (!HISTORIAN_V2_TRENDS_ENABLED ? pick('Legacy query vẫn authoritative; unified Trends chờ activation/cutover marker.', 'Legacy query remains authoritative; unified Trends awaits the activation/cutover marker.') : undefined)} onRetry={historyPresentation.state === 'unavailable' ? () => { void historyState.refetch() } : undefined} />}
