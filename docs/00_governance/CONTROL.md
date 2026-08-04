@@ -3,7 +3,7 @@
 **ID:** DOC-CTRL-001
 **Trạng thái:** Active
 **Chủ quản:** Project Engineering
-**Cập nhật:** 2026-08-03 (đăng ký hồ sơ thiết kế/review Modbus RTU Point)
+**Cập nhật:** 2026-08-04 (đăng ký 12 hồ sơ Modbus RTU và ba tài liệu SUPERSEDED một phần)
 
 ## Mục tiêu
 
@@ -72,6 +72,34 @@ authority cho Product Spec mới cho tới khi được reconcile và phê duy�
 ADR-024 và `DDD-SW-MBRTU-POINT-001` đang `Proposed/In Review`. Chúng không đổi
 trạng thái Programming Design tổng thể, không chứng minh implementation và
 không cho phép đóng `MODBUS_RTU_POINT_READY` trước real-RS485/HIL/provenance.
+
+### Register Modbus RTU (đồng bộ 2026-08-04)
+
+| Hồ sơ | Lớp/trách nhiệm | Trạng thái |
+|---|---|---|
+| [Modbus RTU Product Requirements](../01_product/MODBUS_RTU_PRODUCT_REQUIREMENTS.md) | Product Spec chủ đề: capability, product requirement, 18 use case | In Review |
+| [Modbus RTU Data Model](../02_design/software/MODBUS_RTU_DATA_MODEL.md) | Design — mô hình canonical Bus/Device/Point (nguồn chân lý duy nhất) | In Review |
+| [Modbus RTU UI/UX Design](../04_uiux/MODBUS_RTU_UI_UX_DESIGN.md) | Design — năm page Web, wireframe, validation, quyền | In Review |
+| [Modbus RTU FE Design](../02_design/software/MODBUS_RTU_FE_DESIGN.md) | Design — feature structure, state model, candidate lifecycle | In Review |
+| [Modbus RTU BE Design](../02_design/software/MODBUS_RTU_BE_DESIGN.md) | Design — transaction, validator, admission, commissioning, RBAC/audit | In Review |
+| [Modbus RTU FW-SOM Design](../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md) | Design — ownership, scheduler, codec, quality, write path, reload | In Review |
+| [Modbus RTU API Spec](../02_design/interfaces/MODBUS_RTU_API_SPEC.md) | Interface — REST/WebSocket đề xuất, mã lỗi, idempotency | In Review |
+| [Modbus RTU Interface Spec](../02_design/interfaces/MODBUS_RTU_INTERFACE_SPEC.md) | Interface — luồng end-to-end, interface matrix, contract v2 | In Review |
+| [Modbus RTU Verification Plan](../05_verification/MODBUS_RTU_VERIFICATION_PLAN.md) | Verification — test specification 6 tầng | In Review |
+| [Modbus RTU Traceability Matrix](../07_records/MODBUS_RTU_TRACEABILITY_MATRIX.md) | Record — chuỗi truy vết đầy đủ | Active |
+| [Modbus RTU Open Decisions](MODBUS_RTU_OPEN_DECISIONS.md) | Governance — vấn đề chưa quyết định; không phải Design | Active |
+| [Modbus RTU Docs Sync Report](../07_records/reviews/MODBUS_RTU_DOCS_SYNC_REPORT.md) | Record — audit, mâu thuẫn đã xử lý, gap và kết luận gate | Active |
+
+Chín hồ sơ `In Review` ở trên **không** phải baseline. Chúng chỉ trở thành
+`Active` sau khi ADR-024 được Accepted và các reviewer Product, System/Software
+Architect, Fieldbus, HW/Platform, Security/Safety, QA ký. Việc tồn tại của chúng
+không cho phép sửa source, không cho phép sửa `contracts/openapi/openapi.yaml`
+hoặc `contracts/shm/mkddc_shm.h`, và không đóng bất kỳ `VR-MBRTU-*` nào.
+
+Ba tài liệu Modbus cũ đã được đánh **SUPERSEDED một phần** trong cùng lần đồng bộ:
+`26_MODBUS_IMPLEMENTATION_PLAN.md`, `SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md` và
+`MODBUS_REGISTER_MAP_MK-DDC-24_VI.md`. Chúng được giữ nguyên để bảo toàn lịch sử
+quyết định; mỗi tài liệu ghi rõ phát biểu nào không còn hiệu lực.
 
 ## Lưu trữ và phục hồi
 

@@ -40,6 +40,16 @@ HMI: thêm `-DMKDDC_ENABLE_HMI=ON` và xác minh dependency/target. BACnet: dùn
 
 Không mặc định rằng HMI đã nằm trong package chính; xác minh service unit và artifact của build được phát hành.
 
+### Target boards
+
+| Board | Vai trò | SSH alias | Host / Port | User | Auth |
+|---|---|---|---|---|---|
+| Foxlinx SOM-DDC-24 | **Production** (MCU STM32 thật) | `SOM-DDC-24-foxlinx` | `mekong-fac.ddns.net:2223` | `root` | Password (`admin123`) |
+| Orange Pi 5B | **Lab** (fake MCU) | `SOM-DDC-24` | `mekong-fac.ddns.net:2222` | `orangepi` | Key-based |
+
+Deploy lên board chính dùng `ssh SOM-DDC-24-foxlinx`. Quy trình chi tiết: [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK §2a](03_implementation/27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md).
+
+
 ## Chẩn đoán
 
 - I/O stale: kiểm tra UART/IOP heartbeat, response timing, retry/fault và MCU state.

@@ -15,6 +15,7 @@ Tài liệu thiết kế giao diện người dùng theo ISA-101 HMI standard (A
 | [KX-DDC24-UX-SYSTEM-001](KX-DDC24-UX-SYSTEM-001_VI.md) | UX system-wide (form/JSON config) |
 | [KX-DDC24-UC-WEB-NETWORK-001](KX-DDC24-UC-WEB-NETWORK-001_VI.md) | Use case Web — Cài đặt → Mạng (10 UC + ma trận truy vết) |
 | [KX-DDC24-UX-WEB-NETWORK-001](KX-DDC24-UX-WEB-NETWORK-001_VI.md) | UI/UX spec + wireframe Web — Cài đặt → Mạng |
+| [MODBUS_RTU_UI_UX_DESIGN](MODBUS_RTU_UI_UX_DESIGN.md) | UI/UX spec + wireframe Web — Modbus RTU (Overview, Devices, Points, Mapping, Diagnostics); **In Review 2026-08-04** |
 
 > **Ghi chú 2026-07-31:** hai tài liệu Web ở trên được lập để đóng finding G-01/G-02
 > (trước đó kho chỉ có use case và wireframe cho HMI, **không có gì cho Web**, trong

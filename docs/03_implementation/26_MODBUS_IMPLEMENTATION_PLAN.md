@@ -1,6 +1,23 @@
 # 26 — Modbus Implementation Plan (S7 #6)
 ## MK-DDC-24 — Modbus RTU master + device profile + ext cache
 
+> ## ⚠ SUPERSEDED một phần — 2026-08-04
+>
+> Plan này mô tả việc đã làm cho **As-Built v1** và được giữ để truy nguyên. Các
+> phát biểu sau **không còn** là target thiết kế:
+>
+> | Phát biểu trong tài liệu này | Thay bằng |
+> |---|---|
+> | §1 "RTU master một bus" | hai bus logic — [DDD-FW-MBRTU-001 §2](../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md), chờ `OD-MBRTU-001` |
+> | §3 ext contract `float` / quality 3 mức / `setpoint`+`dirty` — ghi "gap CLOSED" | đó là As-Built v1, **không** phải target; target là `ExtSnapshot v2` tại [ICD-IF-MBRTU-001 §5](../02_design/interfaces/MODBUS_RTU_INTERFACE_SPEC.md) |
+> | §1 "Core/BACnet/Web set ext write request" | write phải qua core arbitration với request/result — [DDD-FW-MBRTU-001 §8](../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md) |
+> | §7 TC-10-09 "đổi baud yêu cầu restart rõ log" | reload tại ranh giới transaction có ACK — [DDD-BE-MBRTU-001 §3](../02_design/software/MODBUS_RTU_BE_DESIGN.md) |
+> | §5 cây file `services/iobus/fieldbus/` | path hiện hành `apps/iobus/adapters/modbus_rtu/` sau ADR-025 |
+>
+> Test plan mở rộng và phân tầng evidence nằm tại
+> [VVP-MBRTU-001](../05_verification/MODBUS_RTU_VERIFICATION_PLAN.md). Plan này
+> **không** được dùng làm căn cứ mở implementation mới cho Modbus RTU.
+
 > **Document ID:** IMPL-MODBUS-PLAN-MK-DDC-24-VI
 > **Phiên bản:** 1.5 | 2026-06-22
 > **Trạng thái:** IN PROGRESS — MOD-012 native libmodbus + PTY read/write/timeout PASS, runtime worker và CI matrix đã implement; cross/board/physical evidence còn mở. Xem [31_PROTOCOL_LIB_INTEGRATION_PLAN §4](31_PROTOCOL_LIB_INTEGRATION_PLAN.md)

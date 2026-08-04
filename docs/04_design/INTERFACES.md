@@ -2,7 +2,7 @@
 
 **ID:** IF-SPEC-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-03 (đăng ký interface proposal Modbus RTU Point v2)
+**Cập nhật:** 2026-08-04 (đăng ký `ICD-IF-MBRTU-001` và `ICD-API-MBRTU-001`)
 
 ## Programming Rev A — trạng thái interface
 
@@ -66,6 +66,22 @@ snapshot có sequence. Address canonical là protocol data address zero-based.
 Proposal đang `In Review`; không reinterpret ABI v1 và không sửa machine-readable
 OpenAPI/source trước khi ADR-024 được Accepted. Programming I/O Mapping vẫn chưa
 được thiết kế đầy đủ; chỉ source-side Point Catalog contract được đưa ra review.
+
+Từ 2026-08-04, chi tiết interface Modbus RTU được tách thành hai hồ sơ chủ quản,
+cùng trạng thái `In Review`:
+
+- [ICD-IF-MBRTU-001](../02_design/interfaces/MODBUS_RTU_INTERFACE_SPEC.md) — luồng
+  end-to-end hai chiều, **interface matrix 16 dòng** (producer/consumer/interface/
+  data/frequency/timeout/error handling), contract `ExtSnapshot v2`, yêu cầu
+  reliable IPC cho config/write, và bảng ánh xạ tên field giữa canonical ↔ REST/WS
+  ↔ C++ ↔ TypeScript.
+- [ICD-API-MBRTU-001](../02_design/interfaces/MODBUS_RTU_API_SPEC.md) — 25 REST
+  endpoint đề xuất cộng WebSocket, mã lỗi ổn định, optimistic concurrency và
+  idempotency.
+
+Hai hồ sơ này **không** thay đổi `contracts/openapi/openapi.yaml` (As-Built
+v1.11.0, 9 route Modbus) và **không** thay đổi `contracts/shm/mkddc_shm.h`. Sai
+khác giữa đề xuất và As-Built được liệt kê trong chính hai hồ sơ đó.
 
 **Ngoại lệ duy nhất — nối field vào CUỐI `kx_plc_shm_t`.** Consumer đọc PLC SHM
 bằng offset cứng và kiểm độ dài theo ngữ nghĩa **min-length**

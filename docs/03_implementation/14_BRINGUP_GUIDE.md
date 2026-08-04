@@ -87,10 +87,17 @@
 ## 8. Boot SOM
 
 ```
-- Cấp nguồn SOM (Radxa CM3), chờ Debian boot.
-- SSH: ssh -p 2222 mkddc@<ip>   (key-only).
-✅ Đạt khi: ssh vào được, df/free bình thường.
+- Cấp nguồn SOM, chờ Debian boot.
+
+Board chính (Foxlinx SOM-DDC-24, có MCU thật):
+  SSH: ssh SOM-DDC-24-foxlinx    (root@mekong-fac.ddns.net:2223, password: admin123)
+
+Board lab (Orange Pi 5B, fake MCU):
+  SSH: ssh SOM-DDC-24             (orangepi@mekong-fac.ddns.net:2222, key-only)
+
+✅ Đạt khi: ssh vào được, df/free bình thường, /dev/ttyS2 tồn tại (board chính).
 ```
+
 
 ## 9. Start mkddc-iobus
 

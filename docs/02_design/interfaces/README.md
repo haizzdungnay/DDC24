@@ -12,7 +12,9 @@ Các tài liệu interface được phục hồi nguyên văn. [Interface Baseli
 | [GRAPH_SCHEMA](GRAPH_SCHEMA_MK-DDC-24_VI.md) | Graph/component JSON schema |
 | [REST_API_OPENAPI](REST_API_OPENAPI_MK-DDC-24_VI.md) | REST API spec, historian policy/query + point namespace errors |
 | [contracts/openapi/openapi.yaml](../../../contracts/openapi/openapi.yaml) | REST API OpenAPI 3.1 v1.6.0 (machine-readable) |
-| [MODBUS_REGISTER_MAP](MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | Modbus register map |
+| [MODBUS_REGISTER_MAP](MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) | Modbus register map — **SUPERSEDED một phần 2026-08-04** (xem banner trong file) |
+| [MODBUS_RTU_API_SPEC](MODBUS_RTU_API_SPEC.md) | REST/WebSocket API Modbus RTU đề xuất — **In Review 2026-08-04** |
+| [MODBUS_RTU_INTERFACE_SPEC](MODBUS_RTU_INTERFACE_SPEC.md) | Luồng end-to-end, interface matrix và contract runtime v2 — **In Review 2026-08-04** |
 | [BACNET_PICS_EPICS](BACNET_PICS_EPICS_MK-DDC-24_VI.md) | BACnet PICS/EPICS |
 | [SWFW_INTERFACE_SPEC](../../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) | SOM/MCU interface specification |
 

@@ -2,7 +2,7 @@
 
 **ID:** SW-DES-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-03 (layout bounded modules As-Built)
+**Cập nhật:** 2026-08-04 (đăng ký bộ thiết kế chi tiết Modbus RTU theo layer)
 
 ## Ranh giới Programming Rev A
 
@@ -79,6 +79,29 @@ tự truy cập register/slot hoặc mở thêm Modbus TCP/BACnet Point.
 P0 review blocker: Product baseline yêu cầu hai Modbus RTU master nhưng hardware
 controlled draft/source hiện chỉ chứng minh một RS485 path/master. Phải chốt
 ADR-024 và hai production capability trước khi thiết kế được Active.
+
+### Bộ thiết kế chi tiết Modbus RTU — In Review 2026-08-04
+
+`DDD-SW-MBRTU-POINT-001` vẫn là design authority tổng. Bộ tài liệu dưới đây phân
+rã nó theo layer và đóng các phần trước đây chưa có tài liệu thiết kế:
+
+| Tài liệu | Nội dung |
+|---|---|
+| [DDD-DM-MBRTU-001](../02_design/software/MODBUS_RTU_DATA_MODEL.md) | mô hình canonical Bus/Device/Point, quality 5 trạng thái, persistence/revision/migration, import/export |
+| [DDD-FE-MBRTU-001](../02_design/software/MODBUS_RTU_FE_DESIGN.md) | cấu trúc feature, state model ba nguồn, vòng đời candidate, ràng buộc chống suy diễn |
+| [DDD-BE-MBRTU-001](../02_design/software/MODBUS_RTU_BE_DESIGN.md) | giao dịch cấu hình, validator, admission control tải bus, commissioning proxy, RBAC/audit |
+| [DDD-FW-MBRTU-001](../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md) | ownership iobus/core, thread model, scheduler hai bus, codec, write path, reload tại ranh giới an toàn |
+| [UX-WEB-MBRTU-001](../04_uiux/MODBUS_RTU_UI_UX_DESIGN.md) | năm page Web, wireframe, validation, state, ma trận quyền |
+
+Toàn bộ đang `In Review`, chưa thay đổi As-Built và không cho phép claim
+`MODBUS_RTU_POINT_READY`. Danh sách sai khác design ↔ source được ghi trong từng
+tài liệu và tổng hợp tại
+[Modbus RTU Docs Sync Report](../07_records/reviews/MODBUS_RTU_DOCS_SYNC_REPORT.md).
+
+**Ràng buộc kiến trúc bắt buộc:** FE, BE và FW-SOM không được định nghĩa ba mô
+hình Modbus Point khác nhau. Mô hình canonical là `DDD-DM-MBRTU-001`; mọi biểu
+diễn khác là phép chiếu tường minh theo
+[ICD-IF-MBRTU-001 §7](../02_design/interfaces/MODBUS_RTU_INTERFACE_SPEC.md).
 
 ## HMI
 
