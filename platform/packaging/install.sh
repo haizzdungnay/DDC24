@@ -12,9 +12,25 @@ cd "$MKDDC_REPOSITORY_ROOT"
 
 BUILD="$MKDDC_CPP_BUILD_REL"
 ENABLE=1
-[ "${1:-}" = "--no-enable" ] && ENABLE=0
+WITH_FAKE_MCU=0
+for arg in "$@"; do
+    case "$arg" in
+        --no-enable)     ENABLE=0 ;;
+        --with-fake-mcu) WITH_FAKE_MCU=1 ;;
+        *) echo "ERROR: tham số không hợp lệ '$arg' (dùng --no-enable, --with-fake-mcu)" >&2; exit 1 ;;
+    esac
+done
 
 [ "$(id -u)" -eq 0 ] || { echo "ERROR: cần root (sudo)" >&2; exit 1; }
+
+# ADR-022 §7: không được chạm mkddc-netcfg khi còn giao dịch mạng dở dang.
+# Kiểm tra TRƯỚC khi ghi bất kỳ file nào để huỷ deploy sạch, không để nửa vời.
+NETCFG_JOURNAL=/data/mkddc/netcfg-transaction.json
+if [ -f "$NETCFG_JOURNAL" ] && grep -qE '"state"[[:space:]]*:[[:space:]]*"(staged|applying|awaiting_confirmation)"' "$NETCFG_JOURNAL" 2>/dev/null; then
+    echo "ERROR: mkddc-netcfg còn giao dịch mạng chưa kết thúc ($NETCFG_JOURNAL)." >&2
+    echo "       Huỷ deploy theo ADR-022 §7. Chờ giao dịch confirm hoặc rollback xong rồi chạy lại." >&2
+    exit 1
+fi
 [ -x "$BUILD/iobus/mkddc-iobus" ] || { echo "ERROR: chưa build $BUILD/iobus/mkddc-iobus" >&2; exit 1; }
 [ -x "$BUILD/core/mkddc-core" ]   || { echo "ERROR: chưa build $BUILD/core/mkddc-core" >&2; exit 1; }
 [ -x "$BUILD/netcfg/mkddc-netcfg" ] || { echo "ERROR: chưa build $BUILD/netcfg/mkddc-netcfg" >&2; exit 1; }
@@ -71,7 +87,24 @@ if [ -e /etc/systemd/system/mkddc-web-pi.service ]; then
         /etc/systemd/system/mkddc-web-pi.service.d/netcfg.conf
 fi
 
+# fake MCU chỉ dành cho board lab/no-MCU. Cài khi được yêu cầu tường minh, hoặc
+# khi unit đã có sẵn trên máy (tức board này vốn đang chạy cấu hình lab). Không
+# bao giờ tự đưa fake MCU lên board có MCU thật.
+FAKE_MCU_INSTALLED=0
+if [ -x "$BUILD/iobus/fake_mcu" ] && \
+   { [ "$WITH_FAKE_MCU" -eq 1 ] || [ -e /etc/systemd/system/mkddc-fakemcu.service ]; }; then
+    install -m 0755 "$BUILD/iobus/fake_mcu" /usr/sbin/mkddc-fake-mcu
+    install -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-fakemcu.service" /etc/systemd/system/
+    install -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-pty.service" /etc/systemd/system/
+    FAKE_MCU_INSTALLED=1
+fi
+
 HMI_INSTALLED=0
+# Giữ nguyên trạng thái enable/disable sẵn có của HMI. Trước đây script bật HMI
+# chỉ vì binary tồn tại, làm board không có panel rơi vào vòng lặp restart
+# (`HMI DRM no connected connector`).
+HMI_WAS_ENABLED=0
+systemctl is-enabled mkddc-hmi >/dev/null 2>&1 && HMI_WAS_ENABLED=1
 if [ -x "$BUILD/hmi/mkddc-hmi" ]; then
     install -m 0755 "$BUILD/hmi/mkddc-hmi" /usr/sbin/mkddc-hmi
     install -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-hmi.service" /etc/systemd/system/
@@ -83,8 +116,47 @@ fi
 
 systemctl daemon-reload
 if [ "$ENABLE" -eq 1 ]; then
-    systemctl enable --now mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi
-    [ "$HMI_INSTALLED" -eq 0 ] || systemctl enable --now mkddc-hmi
+    systemctl enable mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi >/dev/null
+    [ "$FAKE_MCU_INSTALLED" -eq 0 ] || systemctl enable mkddc-pty mkddc-fakemcu >/dev/null
+
+    # `enable --now` KHÔNG restart service đang chạy: tiến trình cũ giữ nguyên
+    # inode đã bị thay, nên sau khi cài "thành công" hệ vẫn chạy code cũ
+    # (`readlink /proc/<pid>/exe` trả `(deleted)`). Phải restart tường minh.
+    #
+    # Thứ tự bắt buộc: nguồn dữ liệu trước, tiêu thụ sau. iobus và core dùng
+    # chung SHM nên layout đổi giữa hai bản sẽ gây ABI mismatch nếu restart lẻ.
+    if [ "$FAKE_MCU_INSTALLED" -eq 1 ]; then
+        systemctl restart mkddc-pty
+        systemctl restart mkddc-fakemcu
+    fi
+    systemctl restart mkddc-iobus
+    systemctl restart mkddc-core
+    systemctl restart mkddc-web-pi
+
+    # netcfg đã qua kiểm tra journal ở đầu script nên restart được an toàn.
+    systemctl restart mkddc-netcfg
+
+    if [ "$HMI_INSTALLED" -eq 1 ]; then
+        if [ "$HMI_WAS_ENABLED" -eq 1 ]; then
+            systemctl restart mkddc-hmi
+        else
+            echo "INFO: mkddc-hmi đã cài nhưng giữ nguyên trạng thái disabled."
+            echo "      Bật thủ công khi board có panel: systemctl enable --now mkddc-hmi"
+        fi
+    fi
+
+    # Xác minh tiến trình thực sự chạy binary mới, không còn giữ inode đã xoá.
+    stale=0
+    for unit in mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi; do
+        pid="$(systemctl show "$unit" -p MainPID --value)"
+        [ -n "$pid" ] && [ "$pid" != "0" ] || continue
+        if readlink "/proc/$pid/exe" 2>/dev/null | grep -q '(deleted)'; then
+            echo "ERROR: $unit (pid $pid) vẫn chạy binary cũ đã bị thay." >&2
+            stale=1
+        fi
+    done
+    [ "$stale" -eq 0 ] || { echo "ERROR: install chưa hoàn tất — có service chạy code cũ." >&2; exit 1; }
+
     systemctl --no-pager status mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi || true
 else
     echo "OK: đã install, chưa enable (chạy: systemctl enable --now mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi)"

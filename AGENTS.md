@@ -6,6 +6,26 @@
 - Keep FE local changes as the source of truth; do not overwrite unrelated local FE work.
 - Luôn trả lời bằng tiếng Việt và viết tài liệu (docs, changelog, báo cáo, review) bằng tiếng Việt. Hạn chế tối đa tiếng Anh trong nội dung rule và skill của agent; chỉ giữ nguyên tiếng Anh cho thuật ngữ kỹ thuật/tên riêng không có bản dịch tương đương rõ ràng (ví dụ: BACnet, Modbus, CRC, endian, watchdog, tên biến/hàm/API trong code).
 
+## Làm hết việc, không chừa lại
+
+Khi user giao việc, **làm trọn tới nơi**. Không được báo cáo giữa chừng rồi để lại
+một danh sách "còn lại / nên làm tiếp / nói nếu muốn tôi làm". Nếu trong lúc làm
+mà phát hiện lỗi hoặc thiếu sót thuộc phạm vi được giao thì **sửa luôn**, không
+chỉ ghi vào tài liệu rồi bỏ đó.
+
+1. **Phát hiện lỗi trong phạm vi việc đang làm ⇒ sửa trong cùng phiên.** Ghi
+   finding vào docs là bước bổ sung, không phải bước thay thế cho việc sửa.
+2. **Không hỏi lại những gì có thể tự quyết.** Chỉ dừng hỏi khi hành động thực sự
+   không thể hoàn tác, phá huỷ dữ liệu, hoặc ảnh hưởng ra ngoài (production thật,
+   gửi mail, xoá dữ liệu người dùng). Cài/restart service trên board lab, tạo
+   nhánh, commit, mở PR, chạy test, cài toolchain dev — **tự làm, không hỏi**.
+3. **Bị chặn một nhánh thì làm hết các nhánh còn lại**, rồi mới báo đúng một mục
+   bị chặn kèm lý do và thứ cần để mở khoá.
+4. **Trước khi kết luận "xong", tự rà lại**: mọi lỗi phát hiện đã sửa chưa; mọi
+   file đã commit/push/merge chưa; CHANGELOG đã cập nhật chưa; số đo đã đo lại
+   thật chưa. Còn mục nào chưa làm mà không bị chặn thì **chưa được báo xong**.
+5. Việc bị chặn thật sự phải ghi rõ **bị chặn bởi cái gì** và **cần gì để mở**.
+
 ## Kiểm chứng frontend bằng Chrome DevTools MCP
 
 - Tự dùng skill `$inspect-fe-chrome-devtools` và MCP `chrome-devtools` khi công

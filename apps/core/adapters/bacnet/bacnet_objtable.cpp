@@ -6,6 +6,7 @@
 
 #include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 
@@ -18,9 +19,20 @@
 
 namespace core {
 
+/* Tên segment PLC SHM.
+ *
+ * Mặc định là contract runtime `KX_SHM_PLC_PATH`. Biến môi trường
+ * `MKDDC_SHM_PLC_NAME` cho phép ghi đè để **cô lập test**: `attach()` mở bằng
+ * `O_CREAT|O_RDWR` rồi `memset` toàn bộ segment, nên test chạy trên máy đang có
+ * service production sẽ xoá sạch SHM đang sống nếu dùng chung tên. Trước đây
+ * test chỉ "may mắn" không phá được vì chạy dưới user khác và bị EACCES.
+ *
+ * Production không đặt biến này; systemd unit không truyền nó xuống service.
+ */
 static const char* plc_shm_name()
 {
-    const char* p = KX_SHM_PLC_PATH;
+    const char* p = std::getenv("MKDDC_SHM_PLC_NAME");
+    if (p == nullptr || *p == '\0') p = KX_SHM_PLC_PATH;
     const char* base = std::strrchr(p, '/');
     return base ? base : p;
 }
@@ -60,7 +72,7 @@ bool BacnetObjTable::attach()
     /* magic set CUỐI cùng — reader thấy magic hợp lệ chỉ khi memset xong */
     __atomic_store_n(&shm_->magic, KX_SHM_MAGIC, __ATOMIC_RELEASE);
     std::fprintf(stderr, "INFO  plc_shm.attached path=%s size=%zu\n",
-                 KX_SHM_PLC_PATH, sizeof(kx_plc_shm_t));
+                 plc_shm_name(), sizeof(kx_plc_shm_t));
     return true;
 }
 
