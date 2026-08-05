@@ -73,35 +73,29 @@ ADR-024 và `DDD-SW-MBRTU-POINT-001` đang `Proposed/In Review`. Chúng không �
 trạng thái Programming Design tổng thể, không chứng minh implementation và
 không cho phép đóng `MODBUS_RTU_POINT_READY` trước real-RS485/HIL/provenance.
 
-### Register Modbus RTU (đồng bộ lần 2: 2026-08-05)
+### Register Modbus RTU (đồng bộ lần 2 & phê duyệt Active: 2026-08-05)
 
 | Hồ sơ | Lớp/trách nhiệm | Trạng thái |
 |---|---|---|
-| [Modbus RTU Product Requirements](../01_product/MODBUS_RTU_PRODUCT_REQUIREMENTS.md) | Product Spec chủ đề: capability, product requirement, 18 use case | In Review **0.2** |
-| [Modbus RTU Data Model](../02_design/software/MODBUS_RTU_DATA_MODEL.md) | Design — mô hình canonical Bus/Device/Point (nguồn chân lý duy nhất) | In Review **0.2** |
-| [Modbus RTU UI/UX Design](../04_uiux/MODBUS_RTU_UI_UX_DESIGN.md) | Design — năm page Web, wireframe, validation, quyền | In Review **0.2** |
-| [Modbus RTU FE Design](../02_design/software/MODBUS_RTU_FE_DESIGN.md) | Design — feature structure, state model, candidate lifecycle | In Review **0.2** |
-| [Modbus RTU BE Design](../02_design/software/MODBUS_RTU_BE_DESIGN.md) | Design — transaction, validator, admission, commissioning, RBAC/audit | In Review **0.2** |
-| [Modbus RTU FW-SOM Design](../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md) | Design — ownership, scheduler, codec, quality, write path, reload | In Review **0.2** |
-| [Modbus RTU API Spec](../02_design/interfaces/MODBUS_RTU_API_SPEC.md) | Interface — REST/WebSocket đề xuất, mã lỗi, idempotency | In Review **0.2** |
-| [Modbus RTU Interface Spec](../02_design/interfaces/MODBUS_RTU_INTERFACE_SPEC.md) | Interface — luồng end-to-end, interface matrix, contract v2 | In Review **0.2** |
-| [Modbus RTU Verification Plan](../05_verification/MODBUS_RTU_VERIFICATION_PLAN.md) | Verification — test specification 6 tầng | In Review **0.2** |
+| [Modbus RTU Product Requirements](../01_product/MODBUS_RTU_PRODUCT_REQUIREMENTS.md) | Product Spec chủ đề: capability, product requirement, 18 use case | **Active 0.2** (2026-08-05) |
+| [Modbus RTU Data Model](../02_design/software/MODBUS_RTU_DATA_MODEL.md) | Design — mô hình canonical Bus/Device/Point (nguồn chân lý duy nhất) | **Active 0.2** (2026-08-05) |
+| [Modbus RTU UI/UX Design](../04_uiux/MODBUS_RTU_UI_UX_DESIGN.md) | Design — năm page Web, wireframe, validation, quyền | **Active 0.2** (2026-08-05) |
+| [Modbus RTU FE Design](../02_design/software/MODBUS_RTU_FE_DESIGN.md) | Design — feature structure, state model, candidate lifecycle | **Active 0.2** (2026-08-05) |
+| [Modbus RTU BE Design](../02_design/software/MODBUS_RTU_BE_DESIGN.md) | Design — transaction, validator, admission, commissioning, RBAC/audit | **Active 0.2** (2026-08-05) |
+| [Modbus RTU FW-SOM Design](../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md) | Design — ownership, scheduler, codec, quality, write path, reload | **Active 0.2** (2026-08-05) |
+| [Modbus RTU API Spec](../02_design/interfaces/MODBUS_RTU_API_SPEC.md) | Interface — REST/WebSocket đặc tả, mã lỗi, idempotency | **Active 0.2** (2026-08-05) |
+| [Modbus RTU Interface Spec](../02_design/interfaces/MODBUS_RTU_INTERFACE_SPEC.md) | Interface — luồng end-to-end, interface matrix, contract v2 | **Active 0.2** (2026-08-05) |
+| [Modbus RTU Verification Plan](../05_verification/MODBUS_RTU_VERIFICATION_PLAN.md) | Verification — test specification 6 tầng | **Active 0.2** (2026-08-05) |
 | [Modbus RTU Traceability Matrix](../07_records/MODBUS_RTU_TRACEABILITY_MATRIX.md) | Record — chuỗi truy vết đầy đủ | Active **1.1** |
 | [Modbus RTU Open Decisions](MODBUS_RTU_OPEN_DECISIONS.md) | Governance — vấn đề chưa quyết định; không phải Design | Active **1.1** |
 | [Modbus RTU Docs Sync Report](../07_records/reviews/MODBUS_RTU_DOCS_SYNC_REPORT.md) | Record — audit, mâu thuẫn đã xử lý, gap và kết luận gate | Active **2.0** |
-| [Biên bản phê duyệt Modbus RTU 2026-08-04](../07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md) | Record — 11 quyết định PM/CTO đã ký (Đ-01..Đ-11); **authority** để đóng `OD-MBRTU-*` | Active |
-| [Plan 49 — Modbus RTU Implementation](../03_implementation/49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | Implementation plan hai track; Track A approved và đang triển khai | Active |
+| [Biên bản phê duyệt Modbus RTU 2026-08-04](../07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md) | Record — 11 quyết định PM/CTO đã ký (Đ-01..Đ-11); authority Track A | Active |
+| [Tờ trình phê duyệt Modbus RTU 2026-08-05](../07_records/reviews/MODBUS_RTU_APPROVAL_REQUEST_2026-08-05.md) | Record — 7 quyết định PM/CTO/Architect đã ký; ADR-024 Accepted & Track B Approved | Active |
+| [Plan 49 — Modbus RTU Implementation](../03_implementation/49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | Implementation plan hai track; **Track A + Track B APPROVED** | Active |
 
-Chín hồ sơ `In Review` ở trên **không** phải baseline. Chúng chỉ trở thành
-`Active` sau khi ADR-024 được Accepted và các reviewer Product, System/Software
-Architect, Fieldbus, HW/Platform, Security/Safety, QA ký. Việc tồn tại của chúng
-không cho phép sửa `contracts/openapi/openapi.yaml` hoặc `contracts/shm/mkddc_shm.h`,
-và không đóng bất kỳ `VR-MBRTU-*` nào.
+Chín hồ sơ thiết kế Modbus RTU nêu trên đã được chuyển sang trạng thái **Active** theo Tờ trình phê duyệt ngày 2026-08-05 (`DDC24-MBRTU-REQ-APPROVE-2026-08-05`), đồng thời ADR-024 đã chuyển sang **Accepted**.
 
-**Ngoại lệ có authority đối với source (từ 2026-08-04):** biên bản phê duyệt PM/CTO
-cho phép triển khai **Track A** của Plan 49 — nhóm vá an toàn không đụng contract.
-Track A đã được thực hiện trên nhánh `feat/modbus-rtu-track-a`. Điều này **không**
-mở rộng sang Track B, vốn vẫn `CONDITIONAL` và cần ADR-024 Accepted.
+**Cho phép triển khai Track B:** Ban Dự án chính thức khởi động Track B theo Plan 49. Epics B1–B5 bắt đầu ngay sau khi đồng bộ OpenAPI và tài liệu. Epic B6 (Nghiệm thu phần cứng) yêu cầu đấu nối vật lý đồng hồ điện, biến tần và kết nối RS485 thật với xác nhận RS485 direction control từ Hardware Lead.
 
 Ba tài liệu Modbus cũ đã được đánh **SUPERSEDED một phần** trong cùng lần đồng bộ:
 `26_MODBUS_IMPLEMENTATION_PLAN.md`, `SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md` và

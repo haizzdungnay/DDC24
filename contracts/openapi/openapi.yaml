@@ -1,4 +1,4 @@
-﻿openapi: 3.1.0
+openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
   version: "1.11.0"
@@ -1796,7 +1796,24 @@ components:
         slave_id: { type: integer, minimum: 1, maximum: 247 }
         poll_ms: { type: integer, minimum: 10, maximum: 60000 }
         timeout_ms: { type: integer, minimum: 20, maximum: 10000 }
-        retry: { type: integer, minimum: 1, maximum: 10 }
+        retry:
+          type: integer
+          minimum: 0
+          maximum: 5
+          default: 1
+          description: "Số lần phát lại (retry attempts) một giao dịch Modbus khi bị lỗi timeout hoặc CRC trước khi đánh dấu lượt poll thất bại."
+        offline_after_errors:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 2
+          description: "Số lượt poll thất bại liên tiếp trước khi chuyển trạng thái kết nối Device sang OFFLINE."
+        offline_probe_ms:
+          type: integer
+          minimum: 1000
+          maximum: 60000
+          default: 5000
+          description: "Chu kỳ phát gói tin thăm dò (probe) khi Device đang ở trạng thái OFFLINE."
     ModbusRTUPoint:
       type: object
       required: [point_id, device_id, tag_name, display_name, register_type, address, data_type, byte_order, word_order, scale, offset, unit, read_write, default_value, safe_value, enabled]

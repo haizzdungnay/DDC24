@@ -591,8 +591,8 @@ const (
 	//   av[32]  at offset 2448
 	//   bv[16]  at offset 4880
 	//   msv[8]  at offset 6096
-	//   ext[64] at offset 6704 (kx_ext_point_t=40b): 64*40=2560
-	//   scan_count at 9268; scan_overrun at 9272; sizeof(kx_plc_shm_t)=9280.
+	//   ext[256] at offset 6704 (kx_ext_point_t=40b): 256*40=10240
+	//   scan_count at 16948; scan_overrun at 16952; sizeof(kx_plc_shm_t)=16960.
 	offAI          = 16
 	offBI          = offAI + kxNUI*kxPointSize
 	offAO          = offBI + kxNDI*kxPointSize
@@ -607,11 +607,11 @@ const (
 	offExtSlave    = 29
 	offExtOnline   = 30
 	offExtWritable = 31
-	offExtCount    = offExt + 64*kxExtPointSize
+	offExtCount    = offExt + 256*kxExtPointSize
 
 	// kx_point_t field offsets within a point (76 bytes):
 	offValue      = 0  // float32
-	offPriority   = 4  // float32[16] ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â not read for now
+	offPriority   = 4  // float32[16] — not read for now
 	offRelinquish = 68 // float32
 	offQuality    = 72 // uint8
 	offReliab     = 73 // uint8
@@ -756,7 +756,7 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 	if len(data) < kxPlcShmMinLen {
 		return nil
 	}
-	pts := make([]PointDTO, 0, kxNUI+kxNAO+kxNDO+kxNAV+kxNBV+kxNMSV+64)
+	pts := make([]PointDTO, 0, kxNUI+kxNAO+kxNDO+kxNAV+kxNBV+kxNMSV+256)
 
 	// UI[0..15]
 	for i := 0; i < kxNUI; i++ {
@@ -814,8 +814,8 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 	}
 	// Modbus RTU ext[] — Point ID do backend cấu hình và iobus giữ ổn định.
 	extCount := int(binary.LittleEndian.Uint16(data[offExtCount : offExtCount+2]))
-	if extCount > 64 {
-		extCount = 64
+	if extCount > 256 {
+		extCount = 256
 	}
 	for i := 0; i < extCount; i++ {
 		base := offExt + i*kxExtPointSize

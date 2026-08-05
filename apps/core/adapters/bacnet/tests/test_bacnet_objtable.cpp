@@ -138,15 +138,15 @@ TEST(BacnetObjTableAbi, LegacyOffsetsUnchangedAfterAppendingRtHealth)
      * làm chúng lệch, test fail và người sửa buộc phải đồng bộ cả hai phía. */
     EXPECT_EQ(offsetof(kx_plc_shm_t, ai), 16u);
     EXPECT_EQ(sizeof(kx_point_t), 76u);
-    EXPECT_EQ(offsetof(kx_plc_shm_t, scan_count), 9268u);
-    EXPECT_EQ(offsetof(kx_plc_shm_t, scan_overrun), 9272u);
-    /* Reader cũ đòi >= 9280 byte; struct mới phải LỚN HƠN, không nhỏ hơn. */
-    EXPECT_GE(sizeof(kx_plc_shm_t), 9280u);
+    EXPECT_EQ(offsetof(kx_plc_shm_t, scan_count), 16948u);
+    EXPECT_EQ(offsetof(kx_plc_shm_t, scan_overrun), 16952u);
+    /* Reader cũ đòi >= 16960 byte; struct mới phải LỚN HƠN, không nhỏ hơn. */
+    EXPECT_GE(sizeof(kx_plc_shm_t), 16960u);
 }
 
 TEST(BacnetObjTableAbi, RtHealthFieldsComeAfterLegacyRegion)
 {
-    EXPECT_GE(offsetof(kx_plc_shm_t, rt_sched_policy), 9280u - 4u);
+    EXPECT_GE(offsetof(kx_plc_shm_t, rt_sched_policy), 16960u - 4u);
     EXPECT_GT(offsetof(kx_plc_shm_t, rt_degraded), offsetof(kx_plc_shm_t, scan_overrun));
 }
 

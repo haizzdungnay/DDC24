@@ -2,8 +2,8 @@
 
 **ID:** DDD-FW-MBRTU-001
 **Phiên bản:** 0.2
-**Trạng thái:** In Review
-**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
+**Trạng thái:** Active (Phê duyệt 2026-08-05 theo Tờ trình `DDC24-MBRTU-REQ-APPROVE-2026-08-05`)
+**Ngày:** 2026-08-05
 **Chủ quản đề xuất:** Fieldbus Lead + Core Lead
 **Phạm vi:** `mkddc-iobus` và `mkddc-core` trên SOM. **Không** liên quan STM32/IOP.
 **Quyết định đã ký áp dụng:** Đ-01 (1 bus Rev A), Đ-05 (retry thật), Đ-07 (≥256 Point)
@@ -38,8 +38,8 @@ vào Point Table; nó publish snapshot và core nạp vào Point Table ở ranh 
 ```text
 mkddc-iobus (một process)
 ├── thread: iop_main         SCHED_FIFO   chu kỳ 2 ms   — KHÔNG bị Modbus chạm vào
-├── thread: fieldbus_rs485_1 SCHED_OTHER  event-driven  — BusWorker 1   ← Rev A chỉ có worker này
-│   (fieldbus_rs485_2)                                  — BusWorker 2   ← chỉ dựng khi HW có cổng thứ hai
+├── thread: fieldbus_rs485_1 SCHED_OTHER  event-driven  — BusWorker 1 (/dev/rs485-1 -> /dev/ttyS5)
+├── thread: fieldbus_rs485_2 SCHED_OTHER  event-driven  — BusWorker 2 (/dev/rs485-2 -> /dev/ttyS1)
 ├── thread: bacnet           SCHED_OTHER                — ngoài phạm vi
 └── thread: control          SCHED_OTHER                — nhận config/write qua UDS
 
@@ -47,11 +47,11 @@ mkddc-core (một process)
 └── thread: scan_loop        SCHED_FIFO   chu kỳ cấu hình — nạp ext snapshot ở đầu scan
 ```
 
-**Rev A dựng đúng một BusWorker (Đ-01).** Kiến trúc vẫn là *n* worker vì việc tách
-`BusWorker` khỏi `ModbusMaster` (`MBR-B101`) là điều kiện để thêm cổng thứ hai mà
-không phải đổi ABI lần nữa; nhưng **không được viết code hai-bus trước khi Hardware
-Lead đóng `G-B1`**. As-Built hiện là một `ModbusMaster` chạy trong `fieldbus_thread`
-— khớp Rev A về hành vi, khác về cấu trúc.
+**Cấu hình 2 Bus RS485 phần cứng trên Foxlinx SOM-DDC-24:**
+- **Bus 1 (`bus_id = 1`):** Đường link cứng `/dev/rs485-1` → `/dev/ttyS5` (Main RS485 Port).
+- **Bus 2 (`bus_id = 2`):** Đường link cứng `/dev/rs485-2` → `/dev/ttyS1` (Expansion RS485 Port trên Header P16 UART1 M1).
+
+Mỗi `BusWorker` chạy trên một thread riêng biệt với ngữ cảnh `libmodbus` độc lập, sở hữu hàng đợi EDF và bộ đếm diagnostics riêng, đảm bảo nếu Bus 2 bị lỗi đường dây thì Bus 1 vẫn hoạt động bình thường ở chu kỳ polling cấu hình.
 
 Bất biến:
 

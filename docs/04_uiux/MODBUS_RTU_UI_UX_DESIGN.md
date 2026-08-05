@@ -2,8 +2,8 @@
 
 **ID:** UX-WEB-MBRTU-001
 **Phiên bản:** 0.2
-**Trạng thái:** In Review
-**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
+**Trạng thái:** Active (Phê duyệt 2026-08-05 theo Tờ trình `DDC24-MBRTU-REQ-APPROVE-2026-08-05`)
+**Ngày:** 2026-08-05
 **Chủ quản đề xuất:** UX Lead + Product Owner
 **Quyết định đã ký áp dụng:** Đ-01, Đ-04, Đ-05, Đ-06
 **Đối chiếu source tại:** `feat/modbus-rtu-track-a` / `eade4e5`
@@ -79,9 +79,7 @@ vào thẻ bus hoặc dòng sự kiện để nhảy sang Devices/Diagnostics đ
 
 ### 2.1 Layout
 
-**Rev A hiển thị đúng một thẻ bus (Đ-01).** Danh sách thẻ được render từ
-`GET /modbus/buses`; UI **không** hardcode số thẻ. Khi phần cứng có cổng thứ hai,
-trang tự có thẻ thứ hai mà không cần sửa layout.
+**Trang Overview hiển thị 02 thẻ bus RS485 vật lý.** Danh sách thẻ được render động từ `GET /modbus/buses` với 2 cổng: `RS485-1` (`/dev/rs485-1` → `ttyS5`) và `RS485-2` (`/dev/rs485-2` → `ttyS1`).
 
 ```text
 ┌ Modbus RTU · Tổng quan ─────────────────────────────── [Làm mới] [Tự động ⟳ 5s] ┐
@@ -91,19 +89,19 @@ trang tự có thẻ thứ hai mà không cần sửa layout.
 │ │      12      │ │    9     │ │    2     │ │      1       │                     │
 │ └──────────────┘ └──────────┘ └──────────┘ └──────────────┘                     │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│ ┌ RS485-1 ───────────────────────┐                                              │
-│ │ ● OPEN  19200 8N1              │   (Rev A: chỉ một bus. Thẻ thứ hai chỉ        │
-│ │ Device 12 (9 online)           │    xuất hiện khi manifest khai báo có cổng.)  │
-│ │ Poll latency  p50 24 ms        │                                              │
-│ │               p95 61 ms        │                                              │
-│ │ Timeout 12 · CRC 0             │                                              │
-│ │ Bus utilization  38 % (ước tính)│                                             │
-│ │ [Xem thiết bị]                  │                                             │
-│ └────────────────────────────────┘                                              │
+│ ┌ RS485-1 (Main Port) ──────────────┐ ┌ RS485-2 (Expansion Port) ─────────┐     │
+│ │ ● OPEN  9600 8N1 (/dev/rs485-1)   │ │ ● OPEN  9600 8N1 (/dev/rs485-2)   │     │
+│ │ Device 8 (7 online)               │ │ Device 4 (2 online)               │     │
+│ │ Poll latency  p50 24 ms           │ │ Poll latency  p50 18 ms           │     │
+│ │               p95 61 ms           │ │               p95 45 ms           │     │
+│ │ Timeout 12 · CRC 0                │ │ Timeout 2 · CRC 1                 │     │
+│ │ Bus utilization  38 % (ước tính)   │ │ Bus utilization  15 % (ước tính)   │     │
+│ │ [Xem thiết bị]                    │ │ [Xem thiết bị]                    │     │
+│ └───────────────────────────────────┘ └───────────────────────────────────┘     │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │ Sự kiện giao tiếp gần đây                                    [Xem tất cả →]     │
 │ 10:41:02  RS485-1  MTR-01   OFFLINE → ONLINE                                    │
-│ 10:38:55  RS485-1  VFD-03   TIMEOUT (3 liên tiếp)                               │
+│ 10:38:55  RS485-2  VFD-01   TIMEOUT (3 liên tiếp)                               │
 │ 10:31:10  RS485-1  —        PORT_DOWN: không mở được cổng                       │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```

@@ -8,28 +8,30 @@ import (
 )
 
 type Config struct {
-	RS485         map[string]any   `json:"rs485"`
-	PollDefaultMs int              `json:"poll_default_ms"`
-	Slaves        []map[string]any `json:"slaves"`
-	TCPSlaves     []map[string]any `json:"tcp_slaves,omitempty"`
-	Revision      uint64           `json:"revision,omitempty"`
-	Checksum      string           `json:"checksum,omitempty"`
-	Devices       []Device         `json:"devices,omitempty"`
-	Points        []Point          `json:"points,omitempty"`
+	RS485          map[string]any   `json:"rs485"`
+	PollDefaultMs  int              `json:"poll_default_ms"`
+	OfflineProbeMs int              `json:"offline_probe_ms,omitempty"`
+	Slaves         []map[string]any `json:"slaves"`
+	TCPSlaves      []map[string]any `json:"tcp_slaves,omitempty"`
+	Revision       uint64           `json:"revision,omitempty"`
+	Checksum       string           `json:"checksum,omitempty"`
+	Devices        []Device         `json:"devices,omitempty"`
+	Points         []Point          `json:"points,omitempty"`
 }
 
 type Device struct {
-	DeviceID    string `json:"device_id"`
-	DisplayName string `json:"display_name"`
-	Enabled     bool   `json:"enabled"`
-	RS485Port   string `json:"rs485_port"`
-	Baud        int    `json:"baud"`
-	Parity      string `json:"parity"`
-	StopBit     int    `json:"stop_bit"`
-	SlaveID     int    `json:"slave_id"`
-	PollMS      int    `json:"poll_ms"`
-	TimeoutMS   int    `json:"timeout_ms"`
-	Retry       int    `json:"retry"`
+	DeviceID           string `json:"device_id"`
+	DisplayName        string `json:"display_name"`
+	Enabled            bool   `json:"enabled"`
+	RS485Port          string `json:"rs485_port"`
+	Baud               int    `json:"baud"`
+	Parity             string `json:"parity"`
+	StopBit            int    `json:"stop_bit"`
+	SlaveID            int    `json:"slave_id"`
+	PollMS             int    `json:"poll_ms"`
+	TimeoutMS          int    `json:"timeout_ms"`
+	Retry              int    `json:"retry"`
+	OfflineAfterErrors int    `json:"offline_after_errors,omitempty"`
 }
 
 type Point struct {
@@ -86,6 +88,9 @@ func NormalizeDevice(device Device) Device {
 	if device.TimeoutMS == 0 {
 		device.TimeoutMS = 300
 	}
+	if device.OfflineAfterErrors == 0 {
+		device.OfflineAfterErrors = 2
+	}
 	// D-05: KHÔNG normalize 0 thành 2. Với ngữ nghĩa mới, retry=0 là lựa chọn
 	// hợp lệ và có ý nghĩa: "không phát lại, báo lỗi ngay" — phù hợp cho thiết bị
 	// nhạy với lệnh lặp. Việc âm thầm đổi 0 thành 2 làm người dùng không thể tắt
@@ -131,6 +136,9 @@ func ValidStableID(value string) bool {
 func Validate(cfg Config, externalTagOwners map[string]string) []ValidationError {
 	var errs []ValidationError
 	add := func(path, message string) { errs = append(errs, ValidationError{Path: path, Message: message}) }
+	if cfg.OfflineProbeMs < 0 || (cfg.OfflineProbeMs > 0 && (cfg.OfflineProbeMs < 1000 || cfg.OfflineProbeMs > 60000)) {
+		add("offline_probe_ms", "phải trong 1000..60000 ms")
+	}
 	devices := make(map[string]Device, len(cfg.Devices))
 	slaves := map[int]string{}
 	var bus *Device
@@ -255,8 +263,8 @@ func Validate(cfg Config, externalTagOwners map[string]string) []ValidationError
 			add(base+".read_write", "chỉ Coil/Holding Register được ghi")
 		}
 	}
-	if len(cfg.Points) > 64 {
-		add("points", "vượt KX_N_EXT=64")
+	if len(cfg.Points) > 256 {
+		add("points", "vượt KX_N_EXT=256")
 	}
 	return errs
 }

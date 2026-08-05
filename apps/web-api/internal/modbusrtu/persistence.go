@@ -49,10 +49,17 @@ func (p Persister) Apply(cfg, previous Config) (ApplyResult, error) {
 		if cfg.RS485 == nil {
 			cfg.RS485 = map[string]any{"device": device.RS485Port, "baud": device.Baud, "parity": device.Parity, "stop": device.StopBit}
 		}
-		cfg.Slaves = append(cfg.Slaves, map[string]any{
+		if cfg.OfflineProbeMs > 0 {
+			cfg.RS485["offline_probe_ms"] = cfg.OfflineProbeMs
+		}
+		slaveMap := map[string]any{
 			"addr": device.SlaveID, "profile": filepath.Join(p.ConfigDir, "profiles", device.DeviceID+".json"),
 			"name": device.DeviceID, "poll_ms": device.PollMS, "timeout_ms": device.TimeoutMS, "retry": device.Retry,
-		})
+		}
+		if device.OfflineAfterErrors > 0 {
+			slaveMap["offline_after_errors"] = device.OfflineAfterErrors
+		}
+		cfg.Slaves = append(cfg.Slaves, slaveMap)
 	}
 	checksumBytes, _ := json.Marshal(cfg)
 	sum := sha256.Sum256(checksumBytes)

@@ -203,51 +203,173 @@ write(gpio_fd, "0", 1);  // DE low = receive
 
 ---
 
-## 5. Cấu hình phần mềm MK-DDC-24
+## 5. Phương án Link cứng Device Node (Symlinks cho 2 Cổng RS485)
 
-### 5.1 File `io_config.conf`
+Để đảm bảo phần mềm `mkddc-iobus` và `mkddc-web-api` truy cập ổn định, độc lập với chỉ số bus phần cứng của Linux kernel, dự án áp dụng **Phương án Link Cứng (Symbolic Links Canonical)**:
 
-```conf
-# RS485 cổng 1 (hiện tại):
-[fieldbus.modbus_rtu.0]
-uart_device = /dev/ttyS5
-baud = 9600
-parity = none
-data_bits = 8
-stop_bits = 1
+- **Bus 1 (RS485 #1):** `/dev/rs485-1` → trỏ tới `/dev/ttyS5` (`serial@21150000`)
+- **Bus 2 (RS485 #2):** `/dev/rs485-2` → trỏ tới `/dev/ttyS1` (`serial@21160000`, UART1 M1 Header P16)
 
-# RS485 cổng 2 (khi bật ttyS1):
-[fieldbus.modbus_rtu.1]
-uart_device = /dev/ttyS1
-baud = 9600
-parity = none
-data_bits = 8
-stop_bits = 1
+```text
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │ SYSTEM HARDWARE DEVICE NODES                  CANONICAL SOFTWARE LINKS  │
+ │                                                                         │
+ │  /dev/ttyS5 (serial@21150000, RS485 #1)  ◄──────  /dev/rs485-1          │
+ │  /dev/ttyS1 (serial@21160000, RS485 #2)  ◄──────  /dev/rs485-2          │
+ └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 5.2 Kiểm tra giao tiếp cơ bản (không cần slave)
+### 5.1 Cấu hình udev rules (`/etc/udev/rules.d/99-rs485.rules`)
+
+Trên Buildroot / Linux hệ thống, tạo file quy tắc udev:
+
+```ini
+# /etc/udev/rules.d/99-rs485.rules
+# Tự động tạo symlink cố định cho 2 cổng RS485 khi khởi động
+KERNEL=="ttyS5", SYMLINK+="rs485-1", MODE="0666", GROUP="dialout"
+KERNEL=="ttyS1", SYMLINK+="rs485-2", MODE="0666", GROUP="dialout"
+```
+
+### 5.2 Boot Startup Script (`/etc/init.d/S05-rs485-symlinks.sh`)
+
+Đối với môi trường Buildroot chưa có daemon udev đầy đủ, tạo script khởi động tại `/etc/init.d/S05-rs485-symlinks.sh`:
 
 ```bash
-# Gửi dữ liệu test (trên board):
-stty -F /dev/ttyS1 9600 cs8 -parenb -cstopb raw
-echo "HELLO RS485" > /dev/ttyS1
+#!/bin/sh
+# S05-rs485-symlinks.sh — Tạo link cứng cố định cho 2 cổng RS485 trên Foxlinx SOM-DDC-24
 
-# Đọc dữ liệu (trên board, terminal khác):
-cat /dev/ttyS1
+case "$1" in
+  start)
+    echo "Creating RS485 device symlinks..."
+    [ -e /dev/ttyS5 ] && ln -sf /dev/ttyS5 /dev/rs485-1
+    [ -e /dev/ttyS1 ] && ln -sf /dev/ttyS1 /dev/rs485-2
+    chmod 666 /dev/ttyS5 /dev/ttyS1 2>/dev/null || true
+    echo "RS485 symlinks created: /dev/rs485-1 -> /dev/ttyS5, /dev/rs485-2 -> /dev/ttyS1"
+    ;;
+  stop)
+    rm -f /dev/rs485-1 /dev/rs485-2
+    ;;
+  restart|reload)
+    $0 stop
+    $0 start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac
 
-# Nếu nối loopback (TX → RX), sẽ thấy "HELLO RS485" in ra.
+exit 0
+```
+
+Phân quyền thực thi: `chmod +x /etc/init.d/S05-rs485-symlinks.sh`
+
+---
+
+## 6. Setup FW-SOM cho 2 Cổng RS485 (Multi-Bus Engine Setup)
+
+### 6.1 Cấu hình Cấu trúc `fieldbus.conf` (/etc/ddc24/fieldbus.conf)
+
+Phần mềm `mkddc-iobus` và `mkddc-web-api` sử dụng cấu hình canonical 2 bus RS485:
+
+```json
+{
+  "version": 1,
+  "config_revision": 2,
+  "buses": [
+    {
+      "bus_id": 1,
+      "name": "RS485-1 (Main Bus)",
+      "enabled": true,
+      "port": "/dev/rs485-1",
+      "baud_rate": 9600,
+      "data_bits": 8,
+      "parity": "N",
+      "stop_bits": 1,
+      "direction_control": "auto",
+      "offline_probe_ms": 5000
+    },
+    {
+      "bus_id": 2,
+      "name": "RS485-2 (Expansion Bus)",
+      "enabled": true,
+      "port": "/dev/rs485-2",
+      "baud_rate": 9600,
+      "data_bits": 8,
+      "parity": "N",
+      "stop_bits": 1,
+      "direction_control": "rts",
+      "offline_probe_ms": 5000
+    }
+  ],
+  "devices": [
+    {
+      "device_id": "METER_01",
+      "bus_id": 1,
+      "slave_id": 1,
+      "enabled": true,
+      "poll_interval_ms": 1000,
+      "timeout_ms": 500,
+      "retry_attempts": 1,
+      "offline_after_errors": 2
+    },
+    {
+      "device_id": "VFD_01",
+      "bus_id": 2,
+      "slave_id": 2,
+      "enabled": true,
+      "poll_interval_ms": 500,
+      "timeout_ms": 300,
+      "retry_attempts": 1,
+      "offline_after_errors": 2
+    }
+  ]
+}
+```
+
+### 6.2 Mô hình Khởi chạy FW-SOM Multi-Worker (`mkddc-iobus`)
+
+Trong C++ runtime của `mkddc-iobus`:
+
+1. **Khởi tạo Thread Worker riêng biệt:**
+   - Mỗi cổng RS485 được quản lý bởi một đối tượng `BusWorker(bus_id)` chạy trên 01 OS Thread độc lập.
+   - `Worker #1`: Khởi tạo `libmodbus` context kết nối `/dev/rs485-1` (Bus 1).
+   - `Worker #2`: Khởi tạo `libmodbus` context kết nối `/dev/rs485-2` (Bus 2).
+2. **Lập lịch EDF Độc lập (Independent Earliest Deadline First):**
+   - Hai BusWorker hoạt động song song không gây block nghẽn lẫn nhau. Nếu Bus 2 bị đứt dây/chết slave, Bus 1 vẫn polling bình thường ở tốc độ 1000ms.
+3. **Tổng hợp Snapshot Datagram:**
+   - Kết quả đọc dữ liệu từ cả 2 bus được nạp vào bộ nhớ Shared Memory `plc_shm.ext[]` và đóng gói thành 1 Datagram Snapshot chung gửi sang `mkddc-core` qua Unix Domain Socket.
+
+### 6.3 Kiểm tra Giao tiếp Cơ bản 2 Cổng (Loopback Test)
+
+```bash
+# Kiểm tra sự tồn tại của 2 link cứng:
+ls -la /dev/rs485-1 /dev/rs485-2
+# Output:
+# lrwxrwxrwx 1 root root 10 Aug  5 15:00 /dev/rs485-1 -> /dev/ttyS5
+# lrwxrwxrwx 1 root root 10 Aug  5 15:00 /dev/rs485-2 -> /dev/ttyS1
+
+# Test Cổng 1 (/dev/rs485-1):
+stty -F /dev/rs485-1 9600 cs8 -parenb -cstopb raw
+echo "TEST RS485 BUS 1" > /dev/rs485-1
+
+# Test Cổng 2 (/dev/rs485-2):
+stty -F /dev/rs485-2 9600 cs8 -parenb -cstopb raw
+echo "TEST RS485 BUS 2" > /dev/rs485-2
 ```
 
 ---
 
-## 6. Checklist kiểm chứng RS485
+## 7. Checklist kiểm chứng RS485 (2 Cổng S1 & S5)
 
-- [ ] Device Tree đã sửa, DTB đã nạp, reboot xong
-- [ ] `/dev/ttyS1` xuất hiện trong `/dev/`
-- [ ] `cat /proc/device-tree/serial@21160000/status` trả về `okay`
-- [ ] `stty -F /dev/ttyS1` chạy không lỗi
-- [ ] Loopback test (nối TXD → RXD trên module) gửi/nhận OK
-- [ ] Đấu nối slave Modbus RTU thật, poll register thành công
+- [ ] Device Tree đã sửa (bật `uart1` M1 & `uart5`), DTB đã nạp, reboot xong
+- [ ] `/dev/ttyS5` và `/dev/ttyS1` đều xuất hiện trong `/dev/`
+- [ ] Link cứng `/dev/rs485-1` và `/dev/rs485-2` tự động tạo đúng sau khi boot
+- [ ] `stty -F /dev/rs485-1` và `stty -F /dev/rs485-2` chạy không lỗi
+- [ ] Loopback test (nối TXD → RXD trên từng module) gửi/nhận OK cho cả 2 cổng
+- [ ] Đấu nối slave Modbus RTU thật trên từng cổng, poll register độc lập thành công
+- [ ] `mkddc-iobus` khởi chạy 2 `BusWorker` đồng thời mà không bị tranh chấp tài nguyên
+- [ ] Stress test: gửi liên tục trên cả 2 bus cùng lúc, đo tỷ lệ lỗi CRC/timeout độc lập
 - [ ] Đo oscilloscope dạng sóng trên bus A/B (nếu dùng auto-direction)
 - [ ] Chạy `mkddc-modbus-rtu` với config mới, service khởi động OK
 - [ ] Stress test: gửi liên tục 1000 request, đo tỷ lệ lỗi CRC/timeout
