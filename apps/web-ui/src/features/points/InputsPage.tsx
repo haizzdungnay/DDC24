@@ -8,6 +8,7 @@ import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { PointNameConflictNotice } from '../../shared/components/PointNameConflictNotice'
 import { PointLoggingSection } from '../../shared/components/PointLoggingSection'
+import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { TrendChart } from '../../shared/components/TrendChart'
 import { getDemoPoints } from '../../shared/demo/simulator'
@@ -34,6 +35,11 @@ export function InputsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('summary')
   const [wizardIndex, setWizardIndex] = useState(0)
   const [loading, setLoading] = useState(true)
+  /* FE-DATA-02 (review FE 2026-08-05): trước đây lỗi tải chỉ đi ra toast rồi
+   * biến mất, còn trang thì hiện danh sách kênh rỗng — không phân biệt được
+   * "chưa cấu hình kênh nào" với "không đọc được cấu hình". */
+  const [loadError, setLoadError] = useState<Error | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [overviewOpen, setOverviewOpen] = useState(false)
@@ -57,10 +63,14 @@ export function InputsPage() {
     setLoading(true)
     apiClient.getAiInputs()
       .then((items) => {
-        if (active) setConfigs(items)
+        if (!active) return
+        setConfigs(items)
+        setLoadError(null)
       })
       .catch((error) => {
-        if (active) toast.push('error', `${t('error')}: ${error instanceof Error ? error.message : String(error)}`)
+        if (!active) return
+        setLoadError(error instanceof Error ? error : new Error(String(error)))
+        toast.push('error', `${t('error')}: ${error instanceof Error ? error.message : String(error)}`)
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -68,7 +78,7 @@ export function InputsPage() {
     return () => {
       active = false
     }
-  }, [t, toast])
+  }, [reloadToken, t, toast])
 
   useEffect(() => {
     const first = errorFocusPath ?? Object.keys(tagErrors)[0]
@@ -161,6 +171,18 @@ export function InputsPage() {
 
   function saveConfigs(nextConfigs = configs) {
     void persistConfigs(nextConfigs)
+  }
+
+  // FE-DATA-02: chỉ chặn khi KHÔNG có gì trong tay; hỏng giữa chừng vẫn giữ bảng.
+  if (loadError && configs.length === 0) {
+    return (
+      <StateBlock
+        state="error"
+        title={pick('Không tải được cấu hình ngõ vào', 'Could not load input configuration')}
+        detail={loadError.message}
+        onRetry={() => setReloadToken((token) => token + 1)}
+      />
+    )
   }
 
   return (

@@ -42,7 +42,18 @@ type Config struct {
 }
 
 func LoadConfig() (Config, error) {
-	port := getenv("PORT", "8080")
+	// 8081 là cổng của mkddc-web ở MỌI nơi khác trong dự án: `Environment=PORT=8081`
+	// của `platform/systemd/mkddc-web-pi.service`, health check trong
+	// `tools/deploy/deploy_board.sh`, `BASE` mặc định của `tools/qa/network_board_e2e.sh`,
+	// tunnel trong `apps/web-ui/playwright.board.config.ts`, và `VITE_PROXY_TARGET`
+	// mặc định trong `apps/web-ui/vite.config.ts`.
+	//
+	// Mặc định cũ 8080 chỉ tồn tại ở đây, nên `go run ./cmd/mkddc-web` không set
+	// PORT sẽ nghe 8080 trong khi vite dev proxy gõ 8081 — mọi endpoint 502 và
+	// người chạy tưởng frontend hỏng. Xem
+	// `docs/07_records/reviews/FE_PAGES_ERROR_REVIEW_2026-08-05.md` §6.
+	// Board không bị ảnh hưởng: systemd vẫn set PORT tường minh.
+	port := getenv("PORT", "8081")
 	cfg := Config{
 		Addr:             ":" + port,
 		Port:             port,

@@ -209,3 +209,36 @@ describe('normalizeVirtualPoint', () => {
     expect(normalized.label).toBe('VP1')
   })
 })
+
+/* FE-DATA-02 (review FE 2026-08-05): khi `/virtual-points` trả 502, trang này
+ * từng hiện "chưa có VP" — trong khi VP có thể đang tồn tại đầy đủ. */
+describe('VirtualPointsPage — authority không trả lời', () => {
+  beforeEach(() => {
+    localStorage.setItem('mkddc-lang', 'en')
+    hookState.points = []
+    api.getVirtualPoints.mockRejectedValue(new Error('502 Bad Gateway'))
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  it('báo lỗi kèm Retry thay vì danh sách VP rỗng', async () => {
+    renderPage()
+    expect(await screen.findByText('Could not load virtual points')).toBeInTheDocument()
+    // Toast cũng in nguyên message nên có hai nút hiển thị cùng chuỗi này.
+    expect(screen.getAllByText('502 Bad Gateway').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+    expect(screen.queryByText('Created VP')).not.toBeInTheDocument()
+  })
+
+  it('Retry gọi lại API và trả về trang bình thường khi authority sống lại', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Could not load virtual points')
+    api.getVirtualPoints.mockResolvedValue([virtualPoint()])
+    await user.click(screen.getByRole('button', { name: /retry/i }))
+    expect(await screen.findByText('Created VP')).toBeInTheDocument()
+  })
+})

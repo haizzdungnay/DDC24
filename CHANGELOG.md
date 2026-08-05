@@ -7,6 +7,45 @@
 ---
 
 ## [Unreleased]
+### Fixed — Sửa 10 finding từ review FE "lỗi hết mấy cái page" (2026-08-05)
+
+- **Nhóm A — MBR-B301: Tách `ModbusRtuPage` monolith thành page riêng (FE-MB-01/02/03/04/05/06):**
+  - Tách `PointsPage` và `DiagnosticsPage` ra khỏi `ModbusRtuPage` monolith; nối `DevicesPage` (đã viết xong nhưng chưa nối route) vào route `devices` trong `App.tsx`. Xoá `ModbusRtuPage.tsx` monolith cùng test cũ.
+  - Bỏ `<h1>` lặp hai lần: chỉ giữ một `<h1>` duy nhất trong `ModbusRtuLayout`, ba page con chỉ dùng `<h2>` trở xuống (FE-MB-02).
+  - Bỏ padding lồng 3 lớp (`p-5` + `p-4 md:p-6` + `p-4 md:p-6`) và `<main>` lồng `<main>` — cả hai đã thuộc `AppShell` (FE-MB-03).
+  - Export 4 page (`OverviewPage`, `DevicesPage`, `PointsPage`, `DiagnosticsPage`) qua `features/modbus-rtu/index.ts`.
+  - Deep link `?status=OFFLINE` từ KPI card Overview giờ hoạt động đúng: `DevicesPage` đọc `location.search` (FE-MB-04).
+- **Nhóm C — FE-DATA-01: `/monitor` báo lỗi thay vì hiện "100% NORMAL" khi API chết:**
+  - `MonitorPage` giờ kiểm tra `pointsState.error`; khi chưa có dữ liệu lần nào mà API lỗi → hiển thị `StateBlock` lỗi kèm nút Retry. Khi đã có dữ liệu cũ mà poll hỏng → giữ số đo gần nhất, hiển thị dải cảnh báo "authority unreachable". Thẻ stat "100% NORMAL" / "0% FAULT" giờ hiện `—` khi `analogTotal === 0` thay vì tính phần trăm trên mẫu số rỗng.
+- **Nhóm C — FE-DATA-02: Áp `StateBlock` lỗi cho 5 trang còn lại:**
+  - `InputsPage`, `OutputsPage`, `VirtualIoPage`, `SchedulerPage`, `AlarmSettingsPage` giờ phân biệt được "chưa cấu hình" với "không đọc được"; lỗi tải → `StateBlock` kèm nút Retry thay vì "No data" im lặng.
+- **Nhóm D — Thống nhất cổng proxy dev:**
+  - Backend `config.go` sửa mặc định `PORT` từ `8080` sang `8081`, khớp với `VITE_PROXY_TARGET` mặc định `127.0.0.1:8081` và `mkddc-web-pi.service`. `go run` local không cần set `PORT` cũng hoạt động.
+  - `vite.config.ts` thêm comment giải thích tại sao proxy phải là 8081.
+- **Test mới bịt khoảng trống:**
+  - `ModbusRtuLayout.test.tsx`: 10 test cases render layout + outlet qua router, chốt "đúng 1 `<h1>`", "mỗi tab nội dung riêng", "đúng 1 tab active", "viewer thấy cảnh báo chỉ-đọc".
+  - `DevicesPage.test.tsx`, `PointsPage.test.tsx`, `DiagnosticsPage.test.tsx`: test riêng cho từng page.
+  - `MonitorPage.states.test.tsx`: test guard lỗi / loading cho trang giám sát.
+  - `AlarmSettingsPage.loadstate.test.tsx`, `SchedulerPage.loadstate.test.tsx`: test guard FE-DATA-02.
+  - `InputsPage.test.tsx`, `OutputsPage.test.tsx`, `VirtualIoPage.test.tsx`: cập nhật test guard FE-DATA-02.
+- **Kết quả Kiểm chứng (đo trong phiên, không dẫn số cũ):**
+  - `npx tsc --noEmit` 0 lỗi; `npm run lint` 0 warning; `npx vitest --run --environment jsdom src` **346/346 PASS** (42 file, 24,26 s); `npm run build` thành công.
+
+### Added — Record: Review FE toàn bộ 27 route, truy nguyên "lỗi hết mấy cái page" (2026-08-05)
+
+- **Tài liệu mới (`docs/07_records/reviews/FE_PAGES_ERROR_REVIEW_2026-08-05.md`):** record as-built, không đổi Product Spec và không đóng gate nào.
+- **Phương pháp:** crawl thật bằng Chrome (Playwright) qua đủ 27 route đăng ký trong `apps/web-ui/src/app/App.tsx`, chạy hai lần — `VITE_DDC_MODE=demo` để tách lỗi code FE, và `VITE_DDC_MODE=live` không có backend để mô phỏng authority chết. Ghi lại `pageerror`, console error/warning, request failed và mọi HTTP ≥ 400.
+- **Kết luận:** không trang nào crash bằng JavaScript (0 pageerror, 0 console error trên cả 27 route ở demo mode). Triệu chứng đến từ 4 nhóm nguyên nhân độc lập, 10 finding:
+  - **Nhóm A — hồi quy của sprint 2026-08-05 (`MBR-B301` mới xong 2/5 page):** 3 route `devices`/`points`/`diagnostics` cùng trỏ về `ModbusRtuPage` monolith nên 3 tab hiển thị y hệt nhau (cùng 1278 ký tự body); H1 lặp 2 lần (`Modbus RTU Management` + `Modbus RTU Device & Point Manager`); padding lồng 3 lớp và `<main>` lồng `<main>`; deep link `?status=OFFLINE` từ KPI card Overview không có tác dụng vì trang đích không đọc `location.search`; `pages/DevicesPage.tsx` đã viết xong (399 dòng) nhưng chưa export/chưa nối route nên đang là dead code.
+  - **Nhóm B — phiên đăng nhập:** `AuthProvider` giữ session bằng React state, không persist ⇒ F5 hoặc deep link ở tab mới đưa **cả 27 route** về `/login` (đã ghi nhận là lựa chọn an ninh có chủ ý ở record 2026-08-01 §4ter.2, không phải hồi quy). Cộng hưởng với việc **bất kỳ** 401 nào cũng phát `mkddc:auth-expired` và xoá phiên toàn app; JWT TTL 1 giờ và không có đường refresh.
+  - **Nhóm C — khi authority chết:** 7 trang báo lỗi đúng bằng `StateBlock` kèm nút Retry; nhưng `/monitor` **không đọc `pointsState.error`** và hiển thị "0 point / 0% FAULT / **100% NORMAL**" khi mọi API trả 502 — trình bày "không đọc được" thành "mọi thứ bình thường", cùng họ lỗi an toàn vận hành với D-07; 5 trang khác (`/eng/inputs`, `/eng/outputs`, `/eng/virtual-points`, `/eng/scheduler`, `/eng/alarm-settings`) hiện "No data" thay vì báo lỗi.
+  - **Nhóm D — môi trường dev:** proxy Vite mặc định `127.0.0.1:8081` (`vite.config.ts:10`) lệch cổng mặc định của backend `PORT=8080` (`config.go:45`); chỉ khớp trên board vì `mkddc-web-pi.service` ép `PORT=8081`. Chạy dev local không set `PORT` ⇒ mọi endpoint 502.
+- **Khoảng trống test đã chỉ rõ:** `ModbusRtuPage.test.tsx` và `OverviewPage.test.tsx` đều render component thẳng, không đi qua `ModbusRtuLayout` + `<Outlet />`, nên H1 lặp / padding lồng / 3 tab trùng nội dung đều vô hình với suite.
+- **Kết quả Kiểm chứng (đo lại trong phiên, không dẫn số cũ):**
+  - **Frontend:** `npx tsc --noEmit` 0 lỗi; `npm run lint` 0 warning; `npx vitest --run --environment jsdom src` **306/306 PASS** (36 file, 24,08 s).
+  - **Crawl demo (27 route):** 0 pageerror, 0 console error.
+  - **Crawl live không backend (27 route):** 0 pageerror; 502 toàn bộ endpoint như mong đợi.
+
 ### Added — Hoàn thành Triển khai Landing Page & Sub-navigation Layout cho Modbus RTU (2026-08-05)
 
 - **Frontend Web UI (`apps/web-ui/src/`):**

@@ -8,6 +8,7 @@ import { Button } from '../../shared/components/Button'
 import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { PointNameConflictNotice } from '../../shared/components/PointNameConflictNotice'
+import { StateBlock } from '../../shared/components/StateBlock'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useToast } from '../../shared/components/Toast'
 import { useApi } from '../../shared/hooks/useApi'
@@ -178,6 +179,7 @@ export function MonitorPage() {
     Virtual: filtered.filter((point) => point.kind === 'virtual')
   }), [filtered])
 
+  const analogPoints = points.filter((point) => point.kind === 'UI' || point.kind === 'AO' || point.kind === 'virtual')
   const stats = {
     total: points.length,
     ui: points.filter((point) => point.kind === 'UI').length,
@@ -185,7 +187,8 @@ export function MonitorPage() {
     ao: points.filter((point) => point.kind === 'AO').length,
     virtual: points.filter((point) => point.kind === 'virtual').length,
     on: points.filter((point) => Boolean(point.value)).length,
-    analogGood: points.filter((point) => (point.kind === 'UI' || point.kind === 'AO' || point.kind === 'virtual') && point.quality === 'good').length,
+    analogTotal: analogPoints.length,
+    analogGood: analogPoints.filter((point) => point.quality === 'good').length,
     abnormal: points.filter((point) => point.quality !== 'good').length
   }
 
@@ -350,6 +353,30 @@ export function MonitorPage() {
     setEditingTrendEnabled((prev) => ({ ...prev, [pointId]: !prev[pointId] }))
   }
 
+  /* FE-DATA-01 (review FE 2026-08-05): khi authority chết, trang này từng render
+   * đầy đủ với "0 điểm / 0% lỗi / 100% bình thường". Trên một màn hình giám sát
+   * DDC, trình bày "không đọc được" thành "mọi thứ bình thường" là lỗi an toàn
+   * vận hành — cùng họ với D-07 đã sửa cho Modbus.
+   *
+   * `pointsState.data` chỉ khác `null` sau lần đọc thành công ĐẦU TIÊN, nên hai
+   * guard dưới đây chỉ chặn lúc chưa có gì trong tay; hỏng giữa chừng thì giữ số
+   * đo cũ và cảnh báo bằng dải bên dưới, không xoá màn hình của ca trực. */
+  if (pointsState.loading && !pointsState.data && !realtime.allPoints.length) {
+    return <StateBlock state="loading" title={pick('Đang tải điểm I/O', 'Loading I/O points')} />
+  }
+  if (pointsState.error && !pointsState.data && !realtime.allPoints.length) {
+    return (
+      <StateBlock
+        state="error"
+        title={pick('Không tải được điểm I/O', 'Could not load I/O points')}
+        detail={pointsState.error.message}
+        onRetry={pointsState.refetch}
+      />
+    )
+  }
+
+  const pollDegraded = Boolean(pointsState.error)
+
   return (
     <div className="space-y-3">
       <div>
@@ -357,11 +384,22 @@ export function MonitorPage() {
         <p className="text-xs text-[var(--c-text-dim)]">{pick('Giám sát trạng thái điểm I/O', 'Monitor I/O point states')}</p>
       </div>
 
+      {pollDegraded && (
+        <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
+          {pick(
+            `Mất kết nối authority; số đo bên dưới là lần đọc gần nhất, không phải trạng thái hiện tại (${pointsState.error?.message}).`,
+            `Authority unreachable; the figures below are the last successful read, not the current state (${pointsState.error?.message}).`
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         <StatCard label={pick('Tổng số điểm', 'Total points')} value={stats.total} detail={`UI ${stats.ui} | DO ${stats.do} | AO ${stats.ao}`} />
         <StatCard label={pick('Điểm ON', 'ON points')} value={stats.on} detail={`${Math.round((stats.on / Math.max(1, stats.total)) * 100)}%`} />
-        <StatCard label={pick('Điểm UI/AO bình thường', 'Normal UI/AO points')} value={stats.analogGood} detail="100%" />
-        <StatCard label={pick('Điểm lỗi / mất tín hiệu', 'Fault / signal-loss points')} value={stats.abnormal} detail={`${Math.round((stats.abnormal / Math.max(1, stats.total)) * 100)}%`} danger />
+        {/* `detail` từng gán cứng "100%" nên thẻ này luôn khẳng định mọi điểm
+            analog bình thường, kể cả khi không đọc được điểm nào. */}
+        <StatCard label={pick('Điểm UI/AO bình thường', 'Normal UI/AO points')} value={stats.analogGood} detail={stats.analogTotal ? `${Math.round((stats.analogGood / stats.analogTotal) * 100)}%` : '—'} />
+        <StatCard label={pick('Điểm lỗi / mất tín hiệu', 'Fault / signal-loss points')} value={stats.abnormal} detail={stats.total ? `${Math.round((stats.abnormal / stats.total) * 100)}%` : '—'} danger />
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_180px_1fr_132px]">

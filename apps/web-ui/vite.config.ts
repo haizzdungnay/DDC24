@@ -7,6 +7,10 @@ export default defineConfig(({ mode }) => {
   if (mode === 'production' && (env.VITE_API_ORIGIN || env.VITE_WS_ORIGIN)) {
     throw new Error('Production FE must use same-origin API/WebSocket paths; remove VITE_API_ORIGIN and VITE_WS_ORIGIN')
   }
+  // 8081 phải khớp mặc định `PORT` của mkddc-web (`apps/web-api/internal/app/config.go`).
+  // Hai giá trị này từng lệch nhau (proxy 8081 / backend 8080), nên `go run` local
+  // mà không set PORT làm mọi endpoint trả 502 và người chạy tưởng frontend hỏng —
+  // xem `docs/07_records/reviews/FE_PAGES_ERROR_REVIEW_2026-08-05.md` §6.
   const target = env.VITE_PROXY_TARGET || 'http://127.0.0.1:8081'
   const wsTarget = target.replace(/^http/, 'ws')
 

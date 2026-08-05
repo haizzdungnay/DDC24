@@ -5,6 +5,7 @@ import { apiClient } from '../../shared/api/client'
 import { Button } from '../../shared/components/Button'
 import { Panel } from '../../shared/components/Panel'
 import { StatusBadge } from '../../shared/components/StatusBadge'
+import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { useI18n } from '../../shared/i18n'
 import type { ActiveAlarmType, AlarmPriority, AlarmSetting, AlarmSource, AlarmSourceKind, AlarmType, DeferredAlarmType, SeverityRule, VirtualPoint } from '../../shared/types'
@@ -174,6 +175,21 @@ export function AlarmSettingsPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  /* FE-DATA-02 (review FE 2026-08-05): `loadError` trước đây chỉ hiện thành một
+   * badge "LOAD ERROR" nằm dưới đáy panel trạng thái, còn danh sách alarm thì
+   * hiện "No data" — người dùng đọc trang từ trên xuống sẽ kết luận thiết bị
+   * không có alarm nào, chứ không phải là không đọc được cấu hình alarm. */
+  if (loadError && rows.length === 0) {
+    return (
+      <StateBlock
+        state="error"
+        title={pick('Không tải được cấu hình cảnh báo', 'Could not load alarm settings')}
+        detail={loadError}
+        onRetry={() => { void reloadSettings() }}
+      />
+    )
   }
 
   return (

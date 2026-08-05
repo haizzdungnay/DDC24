@@ -16,7 +16,7 @@ import {
   ProgrammingPage,
   UnavailableFeaturePage
 } from '../features/dashboard'
-import { ModbusRtuLayout, OverviewPage, ModbusRtuPage } from '../features/modbus-rtu'
+import { DevicesPage, DiagnosticsPage, ModbusRtuLayout, OverviewPage, PointsPage } from '../features/modbus-rtu'
 import { DisplaySettingsPage, NetworkPage, SettingsPage, TimeSettingsPage } from '../features/network'
 import { AlarmHistoryPage, AlarmSettingsPage, AlarmsPage, SchedulerPage, TrendsPage } from '../features/operations'
 import { CommissioningPage, InputsPage, MonitorPage, OutputsPage, UserParametersPage, VirtualPointsPage } from '../features/points'
@@ -123,12 +123,16 @@ export function App() {
         <Route path="eng/inputs" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/inputs']}><InputsPage /></RequireRole>} />
         <Route path="eng/outputs" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/outputs']}><OutputsPage /></RequireRole>} />
         <Route path="eng/virtual-points" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/virtual-points']}><VirtualPointsPage /></RequireRole>} />
+        {/* MBR-B301: mỗi tab một page riêng. Trước 2026-08-05 cả ba route
+            `devices`/`points`/`diagnostics` cùng trỏ về `ModbusRtuPage` monolith
+            nên ba tab hiển thị y hệt nhau và tiêu đề H1 lặp hai lần — xem
+            `docs/07_records/reviews/FE_PAGES_ERROR_REVIEW_2026-08-05.md` FE-MB-01. */}
         <Route path="eng/modbus-rtu" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/modbus-rtu']}><ModbusRtuLayout /></RequireRole>}>
           <Route index element={<OverviewPage />} />
           <Route path="overview" element={<OverviewPage />} />
-          <Route path="devices" element={<ModbusRtuPage />} />
-          <Route path="points" element={<ModbusRtuPage />} />
-          <Route path="diagnostics" element={<ModbusRtuPage />} />
+          <Route path="devices" element={<DevicesPage />} />
+          <Route path="points" element={<PointsPage />} />
+          <Route path="diagnostics" element={<DiagnosticsPage />} />
         </Route>
         <Route path="eng/virtual-io" element={<Navigate to="/eng/virtual-points" replace />} />
         <Route path="eng/user-parameters" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/user-parameters']}><UserParametersPage /></RequireRole>} />

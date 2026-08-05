@@ -99,3 +99,36 @@ describe('OutputsPage point metadata recovery', () => {
     expect(screen.queryByRole('dialog', { name: 'Save Outputs config?' })).not.toBeInTheDocument()
   })
 })
+
+/* FE-DATA-02 (review FE 2026-08-05): khi `/system/config/io-bundle` trả 502,
+ * trang này từng render tiêu đề + danh sách kênh rỗng kèm nhãn "No data". */
+describe('OutputsPage — authority không trả lời', () => {
+  beforeEach(() => {
+    localStorage.setItem('mkddc-lang', 'en')
+    hookState.points = []
+    hookState.virtualPoints = []
+    api.getOutputs.mockRejectedValue(new Error('502 Bad Gateway'))
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  it('báo lỗi kèm Retry thay vì danh sách output rỗng', async () => {
+    renderPage()
+    expect(await screen.findByText('Could not load output configuration')).toBeInTheDocument()
+    expect(screen.getByText('502 Bad Gateway')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+    expect(screen.queryByText('Output Channels')).not.toBeInTheDocument()
+  })
+
+  it('Retry gọi lại API và trả về trang bình thường khi authority sống lại', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Could not load output configuration')
+    api.getOutputs.mockResolvedValue(outputConfig)
+    await user.click(screen.getByRole('button', { name: /retry/i }))
+    expect(await screen.findByText('Output Channels')).toBeInTheDocument()
+  })
+})

@@ -8,6 +8,7 @@ import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { PointNameConflictNotice } from '../../shared/components/PointNameConflictNotice'
 import { PointLoggingSection } from '../../shared/components/PointLoggingSection'
+import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { TrendChart } from '../../shared/components/TrendChart'
 import { useApi } from '../../shared/hooks/useApi'
@@ -41,6 +42,11 @@ export function VirtualPointsPage() {
   const [mode, setMode] = useState<ViewMode>('summary')
   const [wizardIndex, setWizardIndex] = useState(0)
   const [loading, setLoading] = useState(true)
+  /* FE-DATA-02 (review FE 2026-08-05): lỗi tải trước đây chỉ đi ra toast rồi
+   * biến mất, còn trang thì hiện "chưa có VP" — trong khi VP có thể đang tồn
+   * tại đầy đủ mà chỉ là không đọc được. */
+  const [loadError, setLoadError] = useState<Error | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
   const [saving, setSaving] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [overviewOpen, setOverviewOpen] = useState(false)
@@ -68,11 +74,16 @@ export function VirtualPointsPage() {
         setServerItems(normalized)
         setItems(normalized)
         setSelectedId((current) => current || normalized[0]?.id || '')
+        setLoadError(null)
       })
-      .catch((error) => active && toast.push('error', error instanceof Error ? error.message : String(error)))
+      .catch((error) => {
+        if (!active) return
+        setLoadError(error instanceof Error ? error : new Error(String(error)))
+        toast.push('error', error instanceof Error ? error.message : String(error))
+      })
       .finally(() => active && setLoading(false))
     return () => { active = false }
-  }, [toast])
+  }, [reloadToken, toast])
 
   useEffect(() => {
     const first = errorFocusPath ?? Object.keys(tagErrors)[0]
@@ -228,6 +239,18 @@ export function VirtualPointsPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  // FE-DATA-02: chỉ chặn khi KHÔNG có gì trong tay; hỏng giữa chừng vẫn giữ bảng.
+  if (loadError && serverItems.length === 0) {
+    return (
+      <StateBlock
+        state="error"
+        title={pick('Không tải được danh sách Virtual Point', 'Could not load virtual points')}
+        detail={loadError.message}
+        onRetry={() => setReloadToken((token) => token + 1)}
+      />
+    )
   }
 
   return (

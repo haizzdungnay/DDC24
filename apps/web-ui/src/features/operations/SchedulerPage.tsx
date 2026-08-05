@@ -5,6 +5,7 @@ import { apiClient } from '../../shared/api/client'
 import { Button } from '../../shared/components/Button'
 import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
+import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { useI18n } from '../../shared/i18n'
 import type { ScheduleRow, ScheduleTarget, ScheduleType, VirtualPoint } from '../../shared/types'
@@ -36,6 +37,10 @@ export function SchedulerPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('summary')
   const [wizardIndex, setWizardIndex] = useState(0)
   const [loading, setLoading] = useState(true)
+  /* FE-DATA-02 (review FE 2026-08-05): lỗi tải trước đây chỉ đi ra toast rồi
+   * biến mất, còn trang thì hiện "No data" — không phân biệt được "chưa có lịch
+   * nào" với "không đọc được lịch". */
+  const [loadError, setLoadError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [virtualPoints, setVirtualPoints] = useState<VirtualPoint[]>([])
@@ -53,7 +58,9 @@ export function SchedulerPage() {
       setVirtualPoints(virtualItems)
       setRows(items.map((item) => normalizeSchedulePatch(item, virtualItems)))
       setSelectedId((current) => items.some((item) => item.id === current) ? current : items[0]?.id ?? '')
+      setLoadError(null)
     } catch (error) {
+      setLoadError(error instanceof Error ? error : new Error(String(error)))
       toast.push('error', `${t('error')}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setLoading(false)
@@ -111,6 +118,18 @@ export function SchedulerPage() {
     const next = normalizeSchedulePatch({ ...selected, ...patch }, virtualPoints)
     setRows((current) => current.map((row) => row.id === selected.id ? next : row))
     if (patch.id !== undefined) setSelectedId(next.id)
+  }
+
+  // FE-DATA-02: chỉ chặn khi KHÔNG có gì trong tay; hỏng giữa chừng vẫn giữ bảng.
+  if (loadError && rows.length === 0) {
+    return (
+      <StateBlock
+        state="error"
+        title={pick('Không tải được lịch vận hành', 'Could not load schedules')}
+        detail={loadError.message}
+        onRetry={() => { void reloadSchedules() }}
+      />
+    )
   }
 
   return (

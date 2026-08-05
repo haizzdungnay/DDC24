@@ -1,3 +1,5 @@
 export { ModbusRtuLayout } from './ModbusRtuLayout'
-export { ModbusRtuPage } from './ModbusRtuPage'
 export { OverviewPage } from './pages/OverviewPage'
+export { DevicesPage } from './pages/DevicesPage'
+export { PointsPage } from './pages/PointsPage'
+export { DiagnosticsPage } from './pages/DiagnosticsPage'

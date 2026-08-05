@@ -116,3 +116,36 @@ describe('InputsPage point metadata fields', () => {
     expect(api.putAiInputs).not.toHaveBeenCalled()
   })
 })
+
+/* FE-DATA-02 (review FE 2026-08-05): khi `/system/config/io` trả 502, trang này
+ * từng render tiêu đề + danh sách kênh rỗng kèm nhãn "No data", nên không phân
+ * biệt được "chưa cấu hình kênh nào" với "không đọc được cấu hình". */
+describe('InputsPage — authority không trả lời', () => {
+  beforeEach(() => {
+    localStorage.setItem('mkddc-lang', 'en')
+    hookState.points = []
+    api.getAiInputs.mockRejectedValue(new Error('502 Bad Gateway'))
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  it('báo lỗi kèm Retry thay vì danh sách kênh rỗng', async () => {
+    renderPage()
+    expect(await screen.findByText('Could not load input configuration')).toBeInTheDocument()
+    expect(screen.getByText('502 Bad Gateway')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+    expect(screen.queryByText('UI Channels')).not.toBeInTheDocument()
+  })
+
+  it('Retry gọi lại API và trả về trang bình thường khi authority sống lại', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Could not load input configuration')
+    api.getAiInputs.mockResolvedValue([input])
+    await user.click(screen.getByRole('button', { name: /retry/i }))
+    expect(await screen.findByText('UI Channels')).toBeInTheDocument()
+  })
+})
