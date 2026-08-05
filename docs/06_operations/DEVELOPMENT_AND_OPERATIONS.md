@@ -40,14 +40,19 @@ HMI: thêm `-DMKDDC_ENABLE_HMI=ON` và xác minh dependency/target. BACnet: dùn
 
 Không mặc định rằng HMI đã nằm trong package chính; xác minh service unit và artifact của build được phát hành.
 
-### Target boards
+### Target board
 
 | Board | Vai trò | SSH alias | Host / Port | User | Auth |
 |---|---|---|---|---|---|
 | Foxlinx SOM-DDC-24 | **Production** (MCU STM32 thật) | `SOM-DDC-24-foxlinx` | `mekong-fac.ddns.net:2223` | `root` | Password (`admin123`) |
-| Orange Pi 5B | **Lab** (fake MCU) | `SOM-DDC-24` | `mekong-fac.ddns.net:2222` | `orangepi` | Key-based |
 
-Deploy lên board chính dùng `ssh SOM-DDC-24-foxlinx`. Quy trình chi tiết: [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK §2a](03_implementation/27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md).
+> ⚠️ **Orange Pi 5B không còn sử dụng** (từ 2026-08-05). Mọi tham chiếu tới SSH alias
+> `SOM-DDC-24` (port 2222), user `orangepi`, hoặc lệnh `apt`/`dpkg` trong các tài liệu cũ
+> đều là di sản của board lab đã ngưng. Chỉ deploy lên `SOM-DDC-24-foxlinx`.
+
+Deploy lên board dùng `ssh SOM-DDC-24-foxlinx`. Quy trình chi tiết:
+- [Foxlinx Deploy Checklist](../08_hardware/foxlinx-som-ddc24/FOXLINX_DEPLOY_CHECKLIST.md) (mới, ưu tiên)
+- [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK §2a](03_implementation/27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) (legacy, có phần Orange Pi đã deprecated)
 
 
 ## Chẩn đoán
@@ -70,11 +75,13 @@ Local HMI đặt flow trong surface Service nhưng network mutation chỉ cho
 role Admin. Protocol v1 strict từ chối unknown field; DNS optional là preserve/auto/manual và
 được journal/rollback cùng IPv4.
 
-Orange Pi service evidence 2026-07-22 đã xác nhận transaction, process recovery,
-120 s rollback và control continuity trên interface dummy tách khỏi management.
-Đổi IP production trên `end1` vẫn chỉ được chạy trong commissioning có local/console
-fallback và backup NetworkManager cho tới khi physical Ethernet HIL được duyệt. Không
-restart `mkddc-iobus` chỉ để nhận IP mới; BACnet datalink tự rebind theo address change.
+~~Orange Pi service evidence 2026-07-22 đã xác nhận transaction, process recovery,
+120 s rollback và control continuity trên interface dummy tách khỏi management.~~
+*(Board Orange Pi 5B đã ngưng sử dụng từ 2026-08-05; evidence trên cần được tái kiểm chứng
+trên board Foxlinx production.)*
+Đổi IP production trên interface Ethernet (`eth0` trên Foxlinx) vẫn chỉ được chạy trong
+commissioning có local/console fallback. Không restart `mkddc-iobus` chỉ để nhận IP mới;
+BACnet datalink tự rebind theo address change.
 
 Luồng ADR-017 đã implement code-local:
 
@@ -89,7 +96,8 @@ Management hostname trong authority là read-only. Chỉ provision/đổi stable
 hostname. Trước đổi IP target phải xác nhận unique mDNS/DNS resolution và có console hoặc
 management path dự phòng.
 
-Config mặc định Orange Pi dùng `/etc/mkddc/netcfg.conf` với `NETCFG_INTERFACE=end1`;
+Config mặc định trên Foxlinx dùng `/etc/mkddc/netcfg.conf` với `NETCFG_INTERFACE=eth0`
+(trước đây Orange Pi dùng `end1`, đã deprecated);
 journal ở `/data/mkddc/netcfg-transaction.json`, socket đặc quyền ở
 `/run/mkddc-netcfg/netcfg.sock`. Directory riêng này là `root:mkddc 0750`; socket là
 `root:mkddc 0660`, nên restart core/iobus không được đổi ownership hoặc mode của nó.

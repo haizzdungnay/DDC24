@@ -28,10 +28,10 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-018 | SQLite block historian: backend-owned per-point database logging policy, hot/archive tiers, bounded migration/recovery and unified Trends authority. | Accepted |
 | ADR-019 | Independent global point tag/name namespaces, static references and generation-aware rename/delete behavior. | Accepted |
 | ADR-021 | **RBAC 3 vai trò (`viewer`/`operator`/`admin`) thuộc baseline Rev A.0**, không còn hoãn sang Rev B. Backend đã hiện thực đủ ba vai trò với `auth.Require(...)` trên từng endpoint và API quản trị tài khoản kèm guard last-admin; frontend nối nốt phần còn thiếu ở plan 45. Ma trận route↔quyền tối thiểu của Web suy TRỰC TIẾP từ bảng route backend (`apps/web-ui/src/features/auth/roles.ts`), frontend không được nới lỏng hơn server. Vẫn thuộc Rev B: nhóm quyền tuỳ biến, phân quyền theo từng point, SSO/AD, lịch sử phiên đăng nhập. | Accepted 2026-08-01 |
-| ADR-022 | CI/CD tự động build và deploy xuống board qua self-hosted runner trên chính Orange Pi 5B; auto-deploy khi merge `main` có điều kiện board là lab/dev; atomic swap + health check + tự rollback; `mkddc-netcfg` không được restart mù khi còn giao dịch dở. | Proposed — WP2 xong, WP1/3/4/5/6 còn mở |
+| ADR-022 | CI/CD tự động build và deploy xuống board qua self-hosted runner (trước đây trên Orange Pi 5B, board này đã ngưng sử dụng từ 2026-08-05, chuyển runner sang Foxlinx hoặc CI host); auto-deploy khi merge `main` có điều kiện board là lab/dev; atomic swap + health check + tự rollback; `mkddc-netcfg` không được restart mù khi còn giao dịch dở. | Proposed — WP2 xong, WP1/3/4/5/6 còn mở (Orange Pi 5B deprecated) |
 | ADR-020 | Rev A dùng Program Runtime do Mekong sở hữu, phạm vi ngôn ngữ ST + FBD; LD/SFC và claim certified/compliant ngoài scope. Component graph 28-node là As-Built legacy, không gọi là FBD. Việc CTO từng mở ST host component chỉ cho phép thu evidence phát triển, không phải bằng chứng runtime production hoặc claim Programming implemented. Phạm vi Point/cycle và workflow tài liệu được ADR-023 sửa đổi/làm rõ. | Accepted — supersedes ADR-004; amended by ADR-023 |
 | ADR-023 | **Khóa Product Spec Programming DDC-24 Rev A:** chỉ Local Physical I/O, Virtual Point, Modbus RTU Point, ST, FBD và cycle time 1 s/5 s/30 s. Modbus TCP Point, BACnet/IP Point, LD, SFC, motion, safety PLC và online change ngoài scope Programming. Product Spec quy định sản phẩm phải làm gì; Requirement quy định nghĩa vụ từng layer; Programming Design chưa thực hiện; As-Built chỉ được kết luận từ source/evidence. Không dùng ST host unit test làm bằng chứng runtime production và không claim Programming đã implement. Các vấn đề chưa quyết định đi vào `PROGRAMMING_OPEN_DECISIONS.md`. | Accepted 2026-08-03 |
-| ADR-024 | **Thiết kế Modbus RTU Point trước Programming:** đề xuất mô hình Bus → Device → Point; hai bus logic độc lập; stable Point ID; typed value/timestamp/quality; atomic config apply có iobus ACK; reliable write result/readback và không blind replay. Chi tiết/9 quyết định review tại `DDD-SW-MBRTU-POINT-001`. Không thay đổi source hoặc đóng real-RS485 gate. | Proposed 2026-08-03 — chờ Product/System/Fieldbus/HW/QA review |
+| ADR-024 | **Thiết kế Modbus RTU Point trước Programming:** mô hình Bus → Device → Point; stable Point ID; typed value/timestamp/quality; atomic config apply có iobus ACK; reliable write result/readback và không blind replay. Chi tiết tại `DDD-SW-MBRTU-POINT-001`. **Sửa đổi 2026-08-04 theo phê duyệt PM/CTO:** Rev A dùng **01 bus** (không phải hai); capacity Point nâng **64 → ≥256**; giữ 3 role `viewer/operator/admin`; retry là thử lại giao dịch thật; bắt buộc có test connection / read test / write test / import CSV / export CSV+JSON. | Proposed 2026-08-03 — **Track A approved 2026-08-04**; ADR còn `Proposed` tới khi HW đóng Q-01/Q-10 |
 | ADR-025 | **Repository áp dụng process-first + bounded modules:** source production thuộc `apps/{core,iobus,netcfg,hmi,web-api,web-ui}`, firmware thuộc `firmware/stm32`, contract canonical thuộc `contracts`, deployment/build helper thuộc `platform`; topology runtime, binary, service unit, API, ABI và config semantics giữ nguyên. | Accepted 2026-08-03 — owner yêu cầu bắt đầu triển khai Plan 46 |
 
 ## ADR-025 — Process-first + bounded modules cho repository
@@ -81,6 +81,14 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
   draft hiện mới mô tả một UART4/transceiver/connector; xung đột này phải được
   đóng bằng hardware/platform evidence hoặc Product decision, không bằng path
   `/dev/ttyS*` giả định.
+- **Phê duyệt PM/CTO ngày 2026-08-04** đóng 8 quyết định Modbus RTU và cho phép
+  triển khai Track A (vá an toàn). Track B ở trạng thái `CONDITIONAL`, chỉ bắt
+  đầu sau khi Hardware xác nhận số transceiver RS-485 và cơ chế điều khiển hướng
+  truyền, tài liệu được đồng bộ, và PM chỉ định Fieldbus Lead + QA/HIL Lead.
+  Chi tiết 11 quyết định tại
+  [Biên bản phê duyệt](../07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md).
+  Quyết định có ảnh hưởng rộng nhất: **Rev A dùng một cổng Modbus RTU**, và
+  **capacity Point nâng từ 64 lên tối thiểu 256** cùng đợt đổi ABI.
 - Từ 2026-08-04, mọi vấn đề Modbus RTU còn thiếu authority được theo dõi tập
   trung tại [Modbus RTU Open Decisions](MODBUS_RTU_OPEN_DECISIONS.md)
   (`OD-MBRTU-001..016` cùng ba blocker ngoài phạm vi). Tập `DR-MBRTU-001..009`

@@ -500,7 +500,7 @@ function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onFo
       <span className="mono font-semibold">{pointDisplayTag(point)}</span>
       <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
       <span className="mono">{typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
-      <span className="mono text-[var(--c-text-dim)]">{point.unit ?? '-'}</span>
+      <span className="mono text-[var(--c-text-dim)]">{point.unit ?? (point.kind === 'AO' ? 'V' : '-')}</span>
       <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: statusFill(point.quality) }} />{statusText}</span>
       <span onClick={(event) => { if (onForce) { event.stopPropagation(); onForce(point) } }}><Sparkline values={trendBuffer.length > 0 ? trendBuffer : [pointNumber(point)]} color={point.quality === 'good' ? 'var(--c-accent-2)' : point.quality === 'bad' ? 'var(--c-fault-fg)' : 'var(--c-warn-fg)'} /></span>
       <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>

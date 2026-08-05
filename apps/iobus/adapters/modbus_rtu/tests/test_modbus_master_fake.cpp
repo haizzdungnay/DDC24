@@ -44,7 +44,48 @@ TEST(FieldbusConfig, ParsesRtuPollTimeoutRetryAndSerialSettings)
     EXPECT_EQ(cfg.slaves[0].addr, 7u);
     EXPECT_EQ(cfg.slaves[0].poll_ms, 1000u);
     EXPECT_EQ(cfg.slaves[0].timeout_ms, 450u);
-    EXPECT_EQ(cfg.slaves[0].retry, 4u);
+    /* D-05: `retry` nay là số lần PHÁT LẠI một giao dịch, bị clamp về 3.
+     * Trước 2026-08-04 nó mang nghĩa "số lỗi liên tiếp trước khi OFFLINE" và
+     * nhận tới 10 — nhưng khi đó không hề có lần phát lại nào. Với ngữ nghĩa
+     * mới, 10 lần phát lại × timeout 300 ms là 3 giây chiếm dây cho một block. */
+    EXPECT_EQ(cfg.slaves[0].retry, 3u);
+    /* Không khai báo ⇒ giữ ngưỡng OFFLINE mặc định như hành vi cũ. */
+    EXPECT_EQ(cfg.slaves[0].offline_after_errors, 2u);
+}
+
+/* D-05: hai tham số phải tách bạch và nhận được độc lập. */
+TEST(FieldbusConfig, RetryAndOfflineThresholdAreSeparateFields)
+{
+    const std::string path = "/tmp/mkddc_fieldbus_split_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream out(path);
+        out << R"json({
+          "rs485":{"device":"/dev/ttyS3","offline_probe_ms":12000},
+          "slaves":[{"addr":3,"profile":"p","name":"vfd","retry":1,"offline_after_errors":5}]
+        })json";
+    }
+    FieldbusConfig cfg;
+    ASSERT_TRUE(load_fieldbus_config(path, true, &cfg));
+    ::unlink(path.c_str());
+    ASSERT_EQ(cfg.slaves.size(), 1u);
+    EXPECT_EQ(cfg.slaves[0].retry, 1u);
+    EXPECT_EQ(cfg.slaves[0].offline_after_errors, 5u);
+    EXPECT_EQ(cfg.rs485.offline_probe_ms, 12000u);
+}
+
+/* offline_probe_ms phải bị clamp vào 1..60 s. */
+TEST(FieldbusConfig, OfflineProbeIsClamped)
+{
+    const std::string path = "/tmp/mkddc_fieldbus_probe_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream out(path);
+        out << R"json({"rs485":{"device":"/dev/ttyS3","offline_probe_ms":50},
+                       "slaves":[{"addr":1,"profile":"p","name":"a"}]})json";
+    }
+    FieldbusConfig cfg;
+    ASSERT_TRUE(load_fieldbus_config(path, true, &cfg));
+    ::unlink(path.c_str());
+    EXPECT_EQ(cfg.rs485.offline_probe_ms, 1000u);
 }
 
 TEST(ModbusMaster, OpenWithoutModbusEnabled)
@@ -111,24 +152,53 @@ TEST(ModbusMaster, Rs485DeviceFromConfigNotHardcoded)
 }
 TEST(FieldbusMetrics, E303BusErrorRateAlarm)
 {
+    /* D-12: E303 đánh giá theo CỬA SỔ TRƯỢT 20 lượt poll, không theo tỷ lệ tích
+     * luỹ từ lúc khởi động. Chưa đủ một cửa sổ thì chưa kết luận. */
     FieldbusMetrics metrics;
     metrics.init({"slave1"}, {1});
 
-    /* 8 successes → error_rate = 0% — no alarm */
-    for (int i = 0; i < 8; i++) metrics.update(0, true, static_cast<uint64_t>(i) * 100);
+    for (int i = 0; i < 18; i++) metrics.update(0, true, static_cast<uint64_t>(i) * 100);
+    EXPECT_FALSE(metrics.check_e303(0));   /* mới 18/20 lượt — chưa đủ cửa sổ */
+
+    /* Thêm 2 lỗi ⇒ đủ 20 lượt, tỷ lệ 2/20 = 10%, KHÔNG vượt ngưỡng >10%. */
+    metrics.update(0, false, 1900);
+    metrics.update(0, false, 2000);
     EXPECT_FALSE(metrics.check_e303(0));
 
-    /* +2 errors → 2/10 = 20% > 10% threshold → first trigger = true */
-    metrics.update(0, false, 900);
-    metrics.update(0, false, 1000);
-
+    /* Cửa sổ mới toàn lỗi ⇒ vượt ngưỡng, báo đúng một lần. */
+    for (int i = 0; i < 20; i++) metrics.update(0, false, 2100 + static_cast<uint64_t>(i) * 100);
     EXPECT_TRUE(metrics.check_e303(0));
     EXPECT_TRUE(metrics.get(0).e303_triggered);
-    EXPECT_FALSE(metrics.check_e303(0));  /* no double-trigger */
+    EXPECT_FALSE(metrics.check_e303(0));   /* chưa đủ cửa sổ kế — không báo lặp */
 
-    /* reset_alarms clears flag */
     metrics.reset_alarms(0);
     EXPECT_FALSE(metrics.get(0).e303_triggered);
+}
+
+/* D-12: khiếm khuyết chính của bản cũ là E303 latch VĨNH VIỄN.
+ *
+ * `e303_triggered` chỉ được xoá trong reset_alarms(), mà reset_alarms() chỉ được
+ * gọi khi e302 đang bật. Một slave lỗi nhiều nhưng chưa bao giờ OFFLINE sẽ giữ cờ
+ * mãi mãi và không bao giờ báo lại lần sau. Thêm nữa tỷ lệ tích luỹ khiến bus đã
+ * tốt trở lại vẫn bị tính là xấu rất lâu. */
+TEST(FieldbusMetrics, E303ReArmsAfterCleanWindowWithoutOfflineReset)
+{
+    FieldbusMetrics metrics;
+    metrics.init({"slave1"}, {1});
+
+    /* Cửa sổ 1: toàn lỗi ⇒ báo. */
+    for (int i = 0; i < 20; i++) metrics.update(0, false, static_cast<uint64_t>(i) * 100);
+    EXPECT_TRUE(metrics.check_e303(0));
+
+    /* Cửa sổ 2: bus tốt hoàn toàn ⇒ KHÔNG báo, và cờ được gỡ dù chưa hề có
+     * reset_alarms() nào được gọi (slave này không đi qua trạng thái OFFLINE). */
+    for (int i = 0; i < 20; i++) metrics.update(0, true, 2000 + static_cast<uint64_t>(i) * 100);
+    EXPECT_FALSE(metrics.check_e303(0));
+    EXPECT_FALSE(metrics.get(0).e303_triggered);
+
+    /* Cửa sổ 3: xấu trở lại ⇒ phải báo LẠI. Bản cũ im lặng vĩnh viễn ở đây. */
+    for (int i = 0; i < 20; i++) metrics.update(0, false, 4000 + static_cast<uint64_t>(i) * 100);
+    EXPECT_TRUE(metrics.check_e303(0));
 }
 
 #ifdef MKDDC_ENABLE_MODBUS
@@ -399,4 +469,137 @@ TEST(ModbusMaster, RtuPtyReadWriteAndTimeout)
     ::close(pty_master);
     ::unlink(profile_path.c_str());
 }
+
+/* ---- D-03: vòng đời lệnh ghi (sửa 2026-08-04) ----
+ *
+ * Trước bản sửa, `flush_pending` gặp lỗi ghi thì `continue` mà KHÔNG đánh
+ * submitted, nên request nằm lại `pending_writes_` vô thời hạn và được phát lại
+ * ở mọi vòng poll. Kịch bản hỏng ngoài hiện trường: kỹ thuật viên đặt setpoint
+ * lúc 09:00 cho một VFD đang mất điện; 14:00 thiết bị có điện lại và nhận ngay
+ * lệnh cũ dù không ai ra lệnh lại.
+ *
+ * PTY không có ai trả lời ở đầu master ⇒ mọi write đều timeout, đúng môi trường
+ * để kiểm tra giới hạn số lần thử. */
+
+namespace {
+/* Cấu hình một slave trên PTY câm, timeout ngắn để test chạy nhanh. */
+struct SilentPtyMaster {
+    PtyRtu      pty;
+    std::string profile_path;
+    ModbusMaster master;
+
+    void start(const std::string& tag)
+    {
+        pty.open_pair();
+        ASSERT_FALSE(pty.slave_dev.empty());
+        profile_path = write_tmp_profile(tag,
+            R"json({"points":[{"name":"sp","fc":3,"addr":0,"count":1,"type":"uint16","writable":true}]})json");
+        FieldbusConfig cfg;
+        cfg.rs485.device = pty.slave_dev;
+        cfg.rs485.baud   = 19200;
+        /* addr, profile, name, poll_ms, timeout_ms, retry */
+        cfg.slaves.push_back({1, profile_path, "vfd", 10, 20, 2});
+        ASSERT_TRUE(master.open(cfg));
+    }
+    ~SilentPtyMaster()
+    {
+        master.close();
+        if (!profile_path.empty()) ::unlink(profile_path.c_str());
+    }
+};
+
+PendingWrite make_write(float value)
+{
+    PendingWrite w{};
+    w.slave_addr = 1;
+    w.fc         = 6;
+    w.reg_addr   = 0;
+    w.value      = value;
+    w.type       = PointType::Uint16;
+    w.byte_order = ByteOrder::AB;
+    w.scale      = 1.0f;
+    w.offset     = 0.0f;
+    return w;
+}
+} // namespace
+
+TEST(ModbusMasterWriteLifecycle, WriteIsDroppedAfterMaxAttempts)
+{
+    SilentPtyMaster h;
+    h.start("wr_attempts");
+
+    ExtCache cache;
+    FieldbusMetrics metrics;
+    PendingWrite w = make_write(1234.0f);
+    w.enqueued_ms = 1000;
+    h.master.enqueue_write(w);
+
+    /* Mỗi vòng poll phát tối đa một lần; sau kMaxWriteAttempts phải bị bỏ hẳn.
+     *
+     * Bước thời gian phải lớn hơn offline_probe_ms: sau vài lỗi liên tiếp slave
+     * chuyển OFFLINE và scheduler hạ nhịp xuống probe chậm (D-04), nên nhịp
+     * 100 ms sẽ không còn tới hạn. Đây là tương tác có chủ đích giữa A2 và A3.
+     *
+     * TTL không được vượt: bước nhỏ hơn kWriteTtlMs để lệnh bị bỏ vì HẾT LƯỢT
+     * THỬ chứ không phải vì quá hạn — hai nhánh đó có test riêng. */
+    static_assert(kDefaultOfflineProbeMs < kWriteTtlMs,
+                  "bước thời gian của test phải vừa đủ vượt probe mà chưa chạm TTL");
+    const uint64_t step = kDefaultOfflineProbeMs + 100;
+    uint64_t now = 1000;
+    for (int i = 0; i < kMaxWriteAttempts; ++i) {
+        h.master.poll_once(now, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+        now += step;
+    }
+    EXPECT_EQ(metrics.get(0).write_dropped, 1u);
+    const uint32_t failed_after_drop = metrics.get(0).write_failed;
+    EXPECT_GE(failed_after_drop, 1u);
+
+    /* Sau khi bị bỏ, các vòng poll tiếp theo KHÔNG được phát lại lệnh đó nữa. */
+    for (int i = 0; i < 3; ++i) {
+        h.master.poll_once(now, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+        now += step;
+    }
+    EXPECT_EQ(metrics.get(0).write_failed, failed_after_drop);
+    EXPECT_EQ(metrics.get(0).write_dropped, 1u);
+}
+
+/* Lệnh quá hạn phải bị bỏ mà KHÔNG phát một byte nào xuống dây — đây là chỗ chặn
+ * kịch bản "thiết bị có điện lại sau nhiều giờ và nhận luôn lệnh cũ". */
+TEST(ModbusMasterWriteLifecycle, ExpiredWriteIsDroppedWithoutTransmitting)
+{
+    SilentPtyMaster h;
+    h.start("wr_ttl");
+
+    ExtCache cache;
+    FieldbusMetrics metrics;
+    PendingWrite w = make_write(50.0f);
+    w.enqueued_ms = 1000;
+    h.master.enqueue_write(w);
+
+    /* now vượt TTL ⇒ bỏ ngay, không tính là một lần phát thất bại. */
+    h.master.poll_once(1000 + kWriteTtlMs + 1, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+
+    EXPECT_EQ(metrics.get(0).write_dropped, 1u);
+    EXPECT_EQ(metrics.get(0).write_failed, 0u);
+}
+
+/* D-01 nối với D-03: giá trị không encode được phải bị bỏ và ĐẾM được, thay vì
+ * biến mất im lặng như trước. */
+TEST(ModbusMasterWriteLifecycle, UnencodableWriteIsDroppedAndCounted)
+{
+    SilentPtyMaster h;
+    h.start("wr_encode");
+
+    ExtCache cache;
+    FieldbusMetrics metrics;
+    PendingWrite w = make_write(70000.0f);   /* ngoài dải uint16 */
+    w.enqueued_ms = 1000;
+    h.master.enqueue_write(w);
+
+    h.master.poll_once(1000, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+
+    EXPECT_EQ(metrics.get(0).write_dropped, 1u);
+    EXPECT_EQ(metrics.get(0).write_failed, 0u);
+}
+
 #endif

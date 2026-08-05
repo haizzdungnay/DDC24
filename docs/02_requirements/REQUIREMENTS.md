@@ -63,7 +63,7 @@ Toàn bộ hồ sơ đó đang `In Review` và **không** tự đóng requiremen
 
 | ID | Layer | Yêu cầu / tiêu chí chấp nhận |
 |---|---|---|
-| SYS-REQ-MBRTU-001 | System | DDC phải hoạt động như Modbus RTU master trên đúng hai cổng logic RS485-1/RS485-2 của production hardware; lỗi một bus không được dừng bus còn lại, IOP hoặc core control. Không hỗ trợ Modbus slave và không đưa Modbus TCP/BACnet/IP Point vào Programming qua requirement này. |
+| SYS-REQ-MBRTU-001 | System | DDC phải hoạt động như Modbus RTU master trên **01 cổng RS485 của production hardware** (quyết định Đ-01 ngày 2026-08-04); lỗi bus không được dừng IOP hoặc core control. Kiến trúc phải giữ khái niệm `bus_id` để mở cổng thứ hai sau này mà không phải đổi ABI lần nữa. Không hỗ trợ Modbus slave và không đưa Modbus TCP/BACnet/IP Point vào Programming qua requirement này. |
 | SWR-REQ-MBRTU-001 | Software | Hệ thống phải có mô hình Bus → Device → Point với identity ổn định. Point phải có `point_id`, `tag_name`, `display_name`, `data_type`, `unit`, `value`, `quality`, `timestamp`, `read_write`, `source`, `default_value`, `safe_value` và device reference; tag unique toàn Local/Virtual/Modbus RTU, rename không đổi Point ID. |
 | SWR-REQ-MBRTU-002 | Software | Cấu hình phải hỗ trợ chọn RS485-1/2, baud/parity/stop bit, slave ID 1..247, poll/timeout/retry/stale/offline policy; serial format phải nhất quán trên một bus và slave ID unique trong bus. |
 | SWR-REQ-MBRTU-003 | Software | Point phải hỗ trợ Coil, Discrete Input, Input Register, Holding Register; bool/int16/uint16/int32/uint32/float32; byte order, word order, scale, offset và optional engineering min/max; mapping overlap hoặc không biểu diễn được phải bị từ chối. |
@@ -81,7 +81,7 @@ Toàn bộ hồ sơ đó đang `In Review` và **không** tự đóng requiremen
 | IF-REQ-MBRTU-003 | Interface | REST/WebSocket phải trả Point Model canonical và authoritative apply/write result; reconnect lấy snapshot mới trước delta, không blind replay mutation và không suy diễn success/quality ở FE. |
 | IF-REQ-MBRTU-004 | Interface | Address lưu trữ/API phải dùng Modbus protocol data address zero-based; UI nếu hiển thị 0xxxx/1xxxx/3xxxx/4xxxx phải chỉ là reference notation, không đổi canonical address. |
 | SEC-REQ-MBRTU-001 | Security | Viewer chỉ đọc; Operator được commissioning read; Admin mới được sửa/apply/rollback/import/export và commissioning write. Mọi mutation/write phải audit actor, target Point/revision, correlation, time và result; không có arbitrary function-code endpoint. |
-| NFR-REQ-MBRTU-001 | Non-functional | Rev A phải support/verify 16 device mỗi bus, tối đa 32 tổng và 64 Modbus RTU Point tổng; vượt capacity phải reject rõ, không truncate hoặc báo online giả. |
+| NFR-REQ-MBRTU-001 | Non-functional | Rev A phải support/verify tối thiểu 16 device trên bus và **tối thiểu 256 Modbus RTU Point tổng** (quyết định Đ-07 ngày 2026-08-04, nâng từ 64); vượt capacity phải reject rõ, không truncate hoặc báo online giả. Việc nâng capacity phải đi kèm đo lại kích thước snapshot IPC và thời gian copy mỗi vòng scan trên target. |
 | NFR-REQ-MBRTU-002 | Non-functional | Production acceptance phải chạy trên hai RS485 transceiver/cổng thật, với slave thật hoặc thiết bị kiểm thử độc lập, gồm CRC/timeout/mất dây/reboot/power-cycle/crash/soak; simulator/host chỉ là supporting evidence. |
 | NFR-REQ-MBRTU-003 | Non-functional | Binary/config đang chạy phải truy được version, Git commit, build time, checksum, toolchain và active config revision/checksum; deployment contract/ABI phải được nâng cấp đồng bộ và rollback được. |
 

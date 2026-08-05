@@ -1,10 +1,12 @@
 # Modbus RTU — End-to-End Interface Specification DDC-24 Rev A
 
 **ID:** ICD-IF-MBRTU-001
-**Phiên bản:** 0.1
+**Phiên bản:** 0.2
 **Trạng thái:** In Review
-**Ngày:** 2026-08-04
+**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
 **Chủ quản đề xuất:** System/Software Architect
+**Quyết định đã ký áp dụng:** Đ-01, Đ-03, Đ-05
+**Đối chiếu source tại:** `feat/modbus-rtu-track-a` / `eade4e5`
 **Trace:** `IF-REQ-MBRTU-001..004`, `SYS-REQ-MBRTU-001`,
 [DDD-DM-MBRTU-001](../software/MODBUS_RTU_DATA_MODEL.md),
 [ICD-API-MBRTU-001](MODBUS_RTU_API_SPEC.md)
@@ -36,18 +38,21 @@
                                               └───────┬──────────────┬───────┘
                                      3. ACK{applied_revision, checksum, bus_open}
                                                       │              │
-                                            ┌─────────▼──┐   ┌───────▼─────┐
-                                            │ BusWorker  │   │ BusWorker   │
-                                            │ RS485-1    │   │ RS485-2     │
-                                            └─────┬──────┘   └──────┬──────┘
+                                            ┌─────────▼──┐   ┌ ─ ─ ─ ─▼─ ─ ─┐
+                                            │ BusWorker  │     BusWorker
+                                            │ RS485-1    │   │ RS485-2      │
+                                            └─────┬──────┘    ─ ─ ─ ─┬─ ─ ─
                                         4. serial open + poll schedule
                                                   ▼                 ▼
-                                            ┌──────────┐      ┌──────────┐
-                                            │ RS-485 A │      │ RS-485 B │
-                                            └────┬─────┘      └────┬─────┘
+                                            ┌──────────┐      ┌ ─ ─ ─ ─ ─┐
+                                            │ RS-485 A │        RS-485 B
+                                            └────┬─────┘      └ ─ ─ ─┬─ ─┘
                                                  ▼                 ▼
-                                          Modbus slave 1..16  Modbus slave 1..16
+                                          Modbus slave 1..16   (chưa tồn tại ở Rev A)
 ```
+
+> Nét liền = **Rev A hiện thực**. Nét đứt = **chỉ là chỗ mở rộng**, không được viết
+> code trước khi Hardware Lead đóng `G-B1` (Đ-01, Đ-02).
 
 Chỉ khi bước 3 trả ACK khớp checksum thì `mkddc-web` mới chuyển active sang revision
 mới. Restart service **không** phải ACK.
@@ -116,9 +121,22 @@ Nguồn logic nội bộ (graph/schedule) đi vào cùng điểm `PriorityResolv
 | I-13 | mkddc-web | FE | REST `GET /modbus/*` | config, device, point, mapping, diagnostics, overview | polling 5 s (cấu hình được) | 10 s | 503 `TELEMETRY_UNAVAILABLE` ⇒ FE hiện `unknown` |
 | I-14 | mkddc-web | FE | WebSocket `/api/v1/ws/monitor` | point event có `sequence`, `config_revision` | đẩy khi đổi | ping 30 s | reconnect ⇒ FE lấy snapshot mới trước delta |
 | I-15 | mkddc-web | audit sink | log/audit store | actor, action, target, old/new, correlation | mỗi mutation/write | — | ghi thất bại ⇒ mutation vẫn phải fail-closed nếu là write |
-| I-16 | platform manifest | mkddc-web, mkddc-iobus | file read-only | capability RS485-1/RS485-2 → device node | lúc start | — | thiếu capability ⇒ bus `unavailable`, không đoán path |
+| I-16 | platform manifest | mkddc-web, mkddc-iobus | file read-only | capability bus → device node (Rev A: 1 mục) | lúc start | — | thiếu capability ⇒ bus `unavailable`, **không đoán path**. Đây là interface đóng D-14: FE từng mặc định `/dev/ttyS3` — cổng **không tồn tại** trên board Foxlinx — tạo cấu hình lưu được nhưng không chạy được, lỗi chỉ lộ ở tầng iobus |
 
 Không có interface nào cho phép FE, HMI hoặc BACnet ghi thẳng xuống iobus.
+
+**Trạng thái As-Built của I-07 (RS-485 ↔ slave) sau Track A.** Hàng I-07 nay đúng
+với source ở hai điểm trước đây sai:
+
+- `timeout_ms` là timeout **mỗi lần phát**, và một lượt poll phát tối đa
+  `1 + retry_count` lần (Đ-05) — trước Track A không có lần phát lại nào.
+- "hết retry ⇒ nhường bus" nay có thật: `on_poll_error()` cập nhật `last_poll_ms`
+  nên slave lỗi không được phục vụ lại ngay ở vòng kế, và slave OFFLINE chuyển sang
+  `offline_probe_ms`.
+
+⚠️ **Chưa đúng:** cột "Error handling" của I-07 giả định điều khiển hướng half-duplex
+đã được thiết lập. Source **không gọi** `modbus_rtu_set_serial_mode()` và device tree
+board production không có cấu hình `rs485-*` — xem `G-D`/Đ-02, gap F-IF-10.
 
 ## 5. Contract runtime `ExtSnapshot v2`
 
@@ -147,7 +165,7 @@ change đầy đủ: magic mới, version mới, static assertion mới, rebuild
 |---|---|---|
 | `point_id` | `char[24]` | NUL-terminated; **identity duy nhất** |
 | `device_id` | `char[24]` | |
-| `bus_id` | `uint8` | `1` = RS485-1, `2` = RS485-2 |
+| `bus_id` | `uint8` | `1` = RS485-1. Rev A chỉ phát sinh giá trị `1` (Đ-01); **giữ trường** để mở bus thứ hai không phải đổi ABI lần nữa |
 | `data_type` | `uint8` | enum khớp data model |
 | `value` | `double` | engineering value sau scale/offset |
 | `raw_value` | `int64` | raw trước scale (phục vụ commissioning/diagnostics) |
@@ -238,20 +256,26 @@ canonical ↔ OpenAPI ↔ TypeScript ↔ struct C++, và fail khi lệch.
 
 ## 9. Sai khác so với interface As-Built
 
-| ID | Đặc tả | As-Built | Mức |
+**Đối chiếu lại tại `eade4e5` (2026-08-05).** Track A **không** đổi contract theo
+thiết kế, nên phần lớn gap giữ nguyên; hai mục đổi trạng thái và hai mục mới.
+
+| ID | Đặc tả | As-Built tại `eade4e5` | Mức |
 |---|---|---|---|
 | F-IF-01 | `ExtSnapshot v2` typed + sequence + revision | v1: `magic`, `points[64]` với `float`, quality 3 mức, không timestamp | P0 |
 | F-IF-02 | write qua stream reliable có result | `plc_shm.ext[].dirty/setpoint`, không kênh kết quả | P0 |
-| F-IF-03 | config apply qua UDS có ACK | `systemctl restart mkddc-iobus` | P0 |
-| F-IF-04 | commissioning IPC | không tồn tại | P0 |
-| F-IF-05 | `bus_id` trong mọi contract | không có khái niệm bus trong contract | P0 |
-| F-IF-06 | một tên field xuyên bốn lớp | `read_write` vs `access_mode`; `name` ext vs `point_id` | P1 |
+| F-IF-03 | config apply qua UDS có ACK | `systemctl restart mkddc-iobus` (D-09) | P0 |
+| F-IF-04 | commissioning IPC | không tồn tại | P0 — **bắt buộc theo Đ-06** |
+| F-IF-05 | `bus_id` trong mọi contract | không có khái niệm bus trong contract | **P1** (hạ từ P0) — Rev A một bus nên thiếu `bus_id` **không gây sai dữ liệu**; nhưng phải thêm **cùng đợt** đổi ABI, nếu không sẽ tốn một lần đổi ABI nữa (Đ-03 chỉ chấp thuận một lần) |
+| F-IF-06 | một tên field xuyên bốn lớp | `read_write` (Go/TS) vs `access_mode` (thiết kế); `name` ext vs `point_id` | P1 |
 | F-IF-07 | test cross-language so khớp field | không có | P1 |
 | F-IF-08 | timestamp của producer | BE gán `time.Now()` | P0 |
-| F-IF-09 | capability manifest cho cổng | FE nhập `/dev/ttyS3` tự do, BE chỉ kiểm độ dài ≤128 | P0 |
+| F-IF-09 | capability manifest cho cổng | ◐ **đóng một phần**: FE **đã bỏ** mặc định `/dev/ttyS3` không tồn tại và bắt người dùng nhập (D-14 ✅), nhưng vẫn là **chuỗi tự do** — chưa có manifest, BE vẫn chỉ kiểm độ dài ≤128 | **P1** (hạ từ P0) |
+| **F-IF-10** | `direction_control` half-duplex được thiết lập tường minh | source **không gọi** `modbus_rtu_set_serial_mode()`; device tree Foxlinx không có `rs485-*`; đang ngầm giả định transceiver auto-direction | **P0 mới** — chặn bởi Đ-02/`G-D`, tương ứng D-13 |
+| **F-IF-11** | OpenAPI mô tả đúng ngữ nghĩa `retry` sau Đ-05 | `contracts/openapi/openapi.yaml` v1.11.0 giữ mô tả cũ trong khi FW/BE/FE đã đổi | **P1 mới** — mâu thuẫn giữa hai tài liệu Active; xem `OD-MBRTU-018` |
 
 ## Revision history
 
 | Phiên bản | Ngày | Trạng thái | Thay đổi |
 |---|---|---|---|
 | 0.1 | 2026-08-04 | In Review | Tạo interface spec end-to-end: hai luồng, interface matrix 16 dòng, contract v2, phép chiếu Point và gap As-Built |
+| 0.2 | 2026-08-05 | In Review | Đối chiếu lại với `eade4e5`. **Thay thế:** (a) I-16 mô tả manifest cho một bus và ghi rõ nó đóng D-14; (b) §5.2 `bus_id` chỉ phát sinh giá trị `1` ở Rev A, giữ trường (Đ-01); (c) §4 thêm ghi chú trạng thái As-Built của I-07 sau Đ-05; (d) §9 hạ F-IF-05 và F-IF-09 xuống P1 (F-IF-09 đóng một phần nhờ D-14), thêm **F-IF-10** (chưa set chế độ RS-485) và **F-IF-11** (OpenAPI lệch ngữ nghĩa `retry`) |

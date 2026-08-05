@@ -37,12 +37,16 @@
 
 ---
 
-### 1b. Board lab — Orange Pi 5B (lab/dev, chạy fake MCU)
+### 1b. Board lab — Orange Pi 5B (DEPRECATED - NGƯNG SỬ DỤNG TỪ 2026-08-05)
+
+> [!WARNING]
+> **TÀI LIỆU DI SẢN (DEPRECATED):** Bo mạch **Orange Pi 5B (alias `SOM-DDC-24`, port 2222, Debian 12)** đã chính thức **ngưng sử dụng từ 2026-08-05**.
+> Toàn bộ quy trình deploy, build và vận hành hiện tại chuyển sang **Foxlinx SOM-DDC-24 (`SOM-DDC-24-foxlinx`, port 2223, Buildroot)**. Vui lòng tham khảo bộ tài liệu chuẩn mới tại [docs/08_hardware/foxlinx-som-ddc24/](../08_hardware/foxlinx-som-ddc24/README.md) và [FOXLINX_DEPLOY_CHECKLIST.md](../08_hardware/foxlinx-som-ddc24/FOXLINX_DEPLOY_CHECKLIST.md).
 
 | Hạng mục | Giá trị |
 |---|---|
-| Board | Orange Pi 5B |
-| Vai trò | **Board lab** — phát triển/test không MCU |
+| Board | Orange Pi 5B (DEPRECATED) |
+| Vai trò | **Di sản (Deprecated)** — Đã thay thế bằng Foxlinx SOM-DDC-24 |
 | CPU | Rockchip RK3588, aarch64 |
 | OS | Orange Pi 1.0.8 Bookworm (Debian 12) |
 | Kernel | 6.1.43-rockchip-rk3588 |

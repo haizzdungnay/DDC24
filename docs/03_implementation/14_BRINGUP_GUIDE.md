@@ -87,15 +87,14 @@
 ## 8. Boot SOM
 
 ```
-- Cấp nguồn SOM, chờ Debian boot.
+- Cấp nguồn SOM, chờ Buildroot boot.
 
-Board chính (Foxlinx SOM-DDC-24, có MCU thật):
+Board production (Foxlinx SOM-DDC-24, có MCU thật):
   SSH: ssh SOM-DDC-24-foxlinx    (root@mekong-fac.ddns.net:2223, password: admin123)
 
-Board lab (Orange Pi 5B, fake MCU):
-  SSH: ssh SOM-DDC-24             (orangepi@mekong-fac.ddns.net:2222, key-only)
+⚠️ Orange Pi 5B (alias SOM-DDC-24, port 2222) đã ngưng sử dụng từ 2026-08-05.
 
-✅ Đạt khi: ssh vào được, df/free bình thường, /dev/ttyS2 tồn tại (board chính).
+✅ Đạt khi: ssh vào được, df/free bình thường, /dev/ttyS2 tồn tại.
 ```
 
 

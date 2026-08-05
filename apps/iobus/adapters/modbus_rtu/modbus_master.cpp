@@ -7,6 +7,7 @@
 #include "modbus_master.hpp"
 #include "register_codec.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -84,6 +85,7 @@ bool ModbusMaster::open(const FieldbusConfig& cfg)
     uint16_t ext_idx = 0;
     for (size_t i = 0; i < cfg.slaves.size(); i++) {
         slave_states_[i].poll_interval_ms = cfg.slaves[i].poll_ms;
+        slave_states_[i].offline_probe_ms = cfg.rs485.offline_probe_ms;
         slave_states_[i].online = false;
         slave_ext_base_[i] = ext_idx;
 
@@ -167,10 +169,10 @@ void ModbusMaster::enqueue_write(const PendingWrite& w)
     pending_writes_.push_back(w);
 }
 
-void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm)
+void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
 {
 #ifndef MKDDC_ENABLE_MODBUS
-    (void)shm;
+    (void)shm; (void)now_ms;
 #else
     if (!shm || !ctx_) return;
 
@@ -225,6 +227,7 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm)
                         w.byte_order = pt.byte_order;
                         w.scale      = pt.scale;
                         w.offset     = pt.offset;
+                        w.enqueued_ms = now_ms;
                         enqueue_write(w);
                     }
                 }
@@ -267,13 +270,10 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
      * error_rate = 100% và E302 kích — kỹ thuật viên hiện trường thấy ngay thay
      * vì tình trạng "đèn xanh, bảng điểm trống, log im lặng". */
     if (slave_idx < slave_config_error_.size() && slave_config_error_[slave_idx]) {
-        on_poll_error(&state, sc.retry);
-        /* on_poll_error KHÔNG cập nhật last_poll_ms (có chủ đích: lỗi comm thật
-         * được retry nhanh, bị chặn bởi timeout 300ms của libmodbus). Ở đây
-         * không có I/O nào để chặn nên phải tự tôn trọng poll_interval, nếu
-         * không vòng fieldbus sẽ spin ở mức 1ms. */
-        state.last_poll_ms = now_ms;
-        metrics.update(slave_idx, false, now_ms, sc.retry);
+        /* on_poll_error nay tự cập nhật last_poll_ms (D-04), nên nhánh
+         * config-error không cần tự set nữa. */
+        on_poll_error(&state, sc.offline_after_errors, now_ms);
+        metrics.update(slave_idx, false, now_ms, sc.offline_after_errors);
         cache.mark_slave_offline(slave_ext_base_[slave_idx],
                                  slave_ext_count_[slave_idx], sc.addr);
         if (metrics.check_e302(slave_idx, 1))
@@ -303,8 +303,17 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
                 if (cache.point(init_idx).name[0] == '\0') {
                     char name[24];
                     ext_point_name(name, sc, pt, logical);
-                    cache.set_point(init_idx, name, 0.0f, KX_Q_UNCERTAIN,
-                                    sc.addr, true, pt.writable);
+                    /* D-10: điểm CHƯA TỪNG có mẫu phải là BAD + offline, không
+                     * phải UNCERTAIN + online.
+                     *
+                     * Bản cũ dùng (UNCERTAIN, online=true) và BE map cặp đó thành
+                     * STALE, nên trước lần đọc thành công đầu tiên giao diện hiện
+                     * "0" với nhãn "dữ liệu cũ". Với một điểm nhiệt độ, 0 là giá
+                     * trị hợp lý về mặt vật lý — người dùng không có cách nào biết
+                     * đó là số bịa. Cặp (BAD, offline) được map thành OFFLINE,
+                     * tức "chưa/không có dữ liệu", đúng sự thật. */
+                    cache.set_point(init_idx, name, 0.0f, KX_Q_BAD,
+                                    sc.addr, false, pt.writable);
                 }
                 init_idx++;
                 logical++;
@@ -321,28 +330,49 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
         uint8_t  bits[2000] = {};
         int rc = -1;
 
-        if (pt.fc == 1)
-            rc = modbus_read_bits(ctx, pt.addr, pt.count, bits);
-        else if (pt.fc == 2)
-            rc = modbus_read_input_bits(ctx, pt.addr, pt.count, bits);
-        else if (pt.fc == 3)
-            rc = modbus_read_registers(ctx, pt.addr, pt.count, regs);
-        else if (pt.fc == 4)
-            rc = modbus_read_input_registers(ctx, pt.addr, pt.count, regs);
+        /* D-05: phát lại THẬT khi giao dịch lỗi.
+         *
+         * `sc.retry` là số lần phát LẠI, nên tổng số lần phát là retry + 1.
+         * Nhiễu thoáng qua trên RS-485 là chuyện thường ngày ở công trình; không
+         * có bước này thì mọi khung hỏng đơn lẻ đều làm cả block rơi STALE. */
+        const int max_attempts = static_cast<int>(sc.retry) + 1;
+        for (int attempt = 1; attempt <= max_attempts; ++attempt) {
+            if (pt.fc == 1)
+                rc = modbus_read_bits(ctx, pt.addr, pt.count, bits);
+            else if (pt.fc == 2)
+                rc = modbus_read_input_bits(ctx, pt.addr, pt.count, bits);
+            else if (pt.fc == 3)
+                rc = modbus_read_registers(ctx, pt.addr, pt.count, regs);
+            else if (pt.fc == 4)
+                rc = modbus_read_input_registers(ctx, pt.addr, pt.count, regs);
 
-        if (rc < 0) {
-            slave_ok = false;
-            /* retry tracking trong on_poll_error */
-            const bool went_offline = on_poll_error(&state, sc.retry);
+            if (rc >= 0) break;
+
+            /* Đếm lỗi giao thức theo TỪNG lần phát: một lượt poll timeout 3 lần
+             * là ba lần chờ hết giờ trên dây, không phải một. */
             if (errno == ETIMEDOUT) metrics.record_timeout(slave_idx);
 #ifdef EMBBADCRC
             if (errno == EMBBADCRC) metrics.record_crc_error(slave_idx);
 #endif
+            if (attempt < max_attempts) {
+                /* D-06: retry_attempts nay đếm số lần PHÁT LẠI thật. Trước đây
+                 * nó được tăng một lần cho mỗi lỗi trong metrics.update() nên
+                 * luôn bằng total_errors, khiến hai cột trên bảng chẩn đoán
+                 * không bao giờ khác nhau. */
+                metrics.record_retry(slave_idx);
+            }
+        }
+
+        if (rc < 0) {
+            slave_ok = false;
+            /* Hết lượt phát lại ⇒ tính là MỘT lượt poll thất bại.
+             * now_ms để slave chết chuyển sang nhịp probe chậm (D-04). */
+            const bool went_offline = on_poll_error(&state, sc.offline_after_errors, now_ms);
             if (went_offline) {
                 std::fprintf(stderr, "WARN  modbus.slave_offline slave=%s addr=%u\n",
                              sc.name.c_str(), sc.addr);
             }
-            if (state.retry_count >= sc.retry) {
+            if (state.retry_count >= sc.offline_after_errors) {
                 cache.mark_slave_offline(slave_ext_base_[slave_idx],
                                          slave_ext_count_[slave_idx], sc.addr);
             } else {
@@ -392,13 +422,13 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
 
     if (slave_ok) {
         on_poll_ok(&state, now_ms);
-        metrics.update(slave_idx, true, now_ms, sc.retry);
+        metrics.update(slave_idx, true, now_ms, sc.offline_after_errors);
         /* Reset alarms khi online trở lại */
         if (metrics.get(slave_idx).e302_triggered)
             metrics.reset_alarms(slave_idx);
     } else {
-        metrics.update(slave_idx, false, now_ms, sc.retry);
-        if (metrics.check_e302(slave_idx, sc.retry))
+        metrics.update(slave_idx, false, now_ms, sc.offline_after_errors);
+        if (metrics.check_e302(slave_idx, sc.offline_after_errors))
             std::fprintf(stderr, "ALARM E302 modbus.slave_offline slave=%s addr=%u\n",
                          sc.name.c_str(), sc.addr);
         if (metrics.check_e303(slave_idx))
@@ -408,10 +438,10 @@ void ModbusMaster::read_slave(uint8_t slave_idx, uint64_t now_ms,
 #endif
 }
 
-void ModbusMaster::flush_pending(uint8_t slave_idx)
+void ModbusMaster::flush_pending(uint8_t slave_idx, uint64_t now_ms, FieldbusMetrics& metrics)
 {
 #ifndef MKDDC_ENABLE_MODBUS
-    (void)slave_idx;
+    (void)slave_idx; (void)now_ms; (void)metrics;
 #else
     modbus_t* ctx = static_cast<modbus_t*>(ctx_);
     const SlaveConfig& sc = cfg_.slaves[slave_idx];
@@ -419,6 +449,25 @@ void ModbusMaster::flush_pending(uint8_t slave_idx)
 
     for (auto& w : pending_writes_) {
         if (w.slave_addr != sc.addr || w.submitted) continue;
+
+        /* D-03: mốc TTL. drain_ext_writes() đã đặt; đường enqueue trực tiếp
+         * (test, hoặc caller tương lai) có thể chưa, nên stamp ở lần gặp đầu. */
+        if (w.enqueued_ms == 0) w.enqueued_ms = now_ms;
+
+        /* D-03: quá hạn ⇒ bỏ hẳn, KHÔNG phát xuống dây. Đây là chỗ chặn kịch bản
+         * "thiết bị mất điện lúc 09:00, có điện lại lúc 14:00 và nhận luôn lệnh
+         * cũ". Lệnh cũ phải chết cùng ngữ cảnh sinh ra nó. */
+        if (now_ms >= w.enqueued_ms && (now_ms - w.enqueued_ms) > kWriteTtlMs) {
+            std::fprintf(stderr, "ERROR modbus.write_dropped_expired slave=%s addr=%u fc=%u"
+                         " reg=%u value=%g age_ms=%llu — lệnh quá hạn, KHÔNG ghi\n",
+                         sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
+                         static_cast<double>(w.value),
+                         static_cast<unsigned long long>(now_ms - w.enqueued_ms));
+            metrics.record_write_dropped(slave_idx);
+            w.submitted = true;
+            continue;
+        }
+
         uint16_t regs[2] = {};
         uint8_t  coil = 0;
         int rc = -1;
@@ -429,6 +478,14 @@ void ModbusMaster::flush_pending(uint8_t slave_idx)
             else /* fc==15 */    rc = modbus_write_bits(ctx, w.reg_addr, 1, &coil);
         } else if (w.fc == 6 || w.fc == 16) {
             if (!encode_register(w.value, regs, 2, w.type, w.byte_order, w.scale, w.offset)) {
+                /* D-01: giá trị không encode được (ngoài dải, NaN, scale=0).
+                 * Bỏ request và nói rõ lý do — im lặng ở đây từng là cách một
+                 * setpoint sai biến mất mà không ai biết. */
+                std::fprintf(stderr, "ERROR modbus.write_rejected_encode slave=%s addr=%u fc=%u"
+                             " reg=%u value=%g — giá trị không biểu diễn được, KHÔNG ghi\n",
+                             sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
+                             static_cast<double>(w.value));
+                metrics.record_write_dropped(slave_idx);
                 w.submitted = true;
                 continue;
             }
@@ -436,10 +493,24 @@ void ModbusMaster::flush_pending(uint8_t slave_idx)
             else /* fc==16 */    rc = modbus_write_registers(ctx, w.reg_addr, 2, regs);
         }
 
+        w.attempts++;
+
         if (rc < 0) {
-            std::fprintf(stderr, "WARN  modbus.write_fail slave=%s fc=%u addr=%u err=%s\n",
-                         sc.name.c_str(), w.fc, w.reg_addr, modbus_strerror(errno));
-            continue;  /* retain request for the next due poll */
+            metrics.record_write_failed(slave_idx);
+            /* D-03: hết lượt thử ⇒ bỏ hẳn thay vì giữ lại vô thời hạn. */
+            if (w.attempts >= kMaxWriteAttempts) {
+                std::fprintf(stderr, "ERROR modbus.write_dropped_attempts slave=%s addr=%u fc=%u"
+                             " reg=%u value=%g attempts=%u err=%s — bỏ lệnh, KHÔNG giữ lại\n",
+                             sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
+                             static_cast<double>(w.value), w.attempts, modbus_strerror(errno));
+                metrics.record_write_dropped(slave_idx);
+                w.submitted = true;
+            } else {
+                std::fprintf(stderr, "WARN  modbus.write_fail slave=%s fc=%u addr=%u attempt=%u/%u err=%s\n",
+                             sc.name.c_str(), w.fc, w.reg_addr, w.attempts,
+                             kMaxWriteAttempts, modbus_strerror(errno));
+            }
+            continue;
         }
         if (w.ext_idx < KX_N_EXT) {
             last_written_[w.ext_idx] = w.value;
@@ -473,10 +544,33 @@ void ModbusMaster::poll_once(uint64_t now_ms, ExtCache& cache,
         }
         metrics.init(names, addrs);
     }
+    /* D-04: phục vụ theo deadline sớm nhất thay vì theo thứ tự index.
+     *
+     * Vòng lặp cũ duyệt slave[0..n) theo index nên slave index thấp luôn được ưu
+     * tiên: một slave chậm ở đầu danh sách đẩy lùi mọi slave sau nó. Sắp theo
+     * "quá hạn nhiều nhất trước" cho hành vi công bằng, và với các slave cùng
+     * mức quá hạn thì giữ nguyên thứ tự index (ổn định, dễ đoán).
+     *
+     * Danh sách nhỏ (≤ vài chục slave) nên sort mỗi vòng là không đáng kể so với
+     * một transaction Modbus. */
+    struct DueSlave { uint64_t overdue; size_t idx; };
+    std::vector<DueSlave> due;
+    due.reserve(slave_states_.size());
     for (size_t i = 0; i < slave_states_.size(); i++) {
         if (!is_due(slave_states_[i], now_ms)) continue;
-        read_slave(static_cast<uint8_t>(i), now_ms, cache, metrics);
-        flush_pending(static_cast<uint8_t>(i));
+        const uint64_t last = slave_states_[i].last_poll_ms;
+        /* Chưa từng poll hoặc clock nhảy lùi ⇒ ưu tiên cao nhất. */
+        const uint64_t overdue = (last == 0 || now_ms < last)
+                                     ? UINT64_MAX
+                                     : (now_ms - last);
+        due.push_back({overdue, i});
+    }
+    std::stable_sort(due.begin(), due.end(),
+                     [](const DueSlave& a, const DueSlave& b) { return a.overdue > b.overdue; });
+
+    for (const auto& d : due) {
+        read_slave(static_cast<uint8_t>(d.idx), now_ms, cache, metrics);
+        flush_pending(static_cast<uint8_t>(d.idx), now_ms, metrics);
     }
     /* Push snapshot sau mỗi vòng poll (SW_FIELDBUS_DESIGN §10) */
     cache.push_snapshot(fieldbus_sock_path);
@@ -484,8 +578,7 @@ void ModbusMaster::poll_once(uint64_t now_ms, ExtCache& cache,
 
 void ModbusMaster::write_slave(uint8_t slave_idx, FieldbusMetrics& metrics)
 {
-    flush_pending(slave_idx);
-    (void)metrics;
+    flush_pending(slave_idx, 0, metrics);
 }
 
 } // namespace iobus::fieldbus

@@ -4,6 +4,7 @@
  */
 #include "register_codec.hpp"
 
+#include <cmath>
 #include <cstring>
 
 namespace iobus::fieldbus {
@@ -86,11 +87,37 @@ float decode_register(const uint16_t* regs, uint16_t count,
     return raw * scale + offset;
 }
 
+/* D-01: kiểm dải TRƯỚC khi ép float → integral.
+ *
+ * So sánh bằng double để biên không bị làm tròn khi lên float: (float)INT32_MAX
+ * là 2147483648.0f, lớn hơn INT32_MAX thật, nên so sánh ở float sẽ cho lọt đúng
+ * giá trị nằm ngoài dải. Dùng `<=`/`>=` trên double giữ đúng ngữ nghĩa "biểu
+ * diễn được trong kiểu đích".
+ *
+ * Làm tròn nearest, ties away from zero — khớp luật đã ghi trong
+ * DDD-DM-MBRTU-001 §5.3 và DDD-FW-MBRTU-001 §5. */
+static bool raw_to_integral(float raw, double lo, double hi, double* out)
+{
+    if (!std::isfinite(raw)) return false;
+    const double rounded = std::round(static_cast<double>(raw));
+    if (rounded < lo || rounded > hi) return false;
+    *out = rounded;
+    return true;
+}
+
 bool encode_register(float eng_value, uint16_t* regs, uint16_t count,
                      PointType type, ByteOrder byte_order,
                      float scale, float offset)
 {
-    const float raw = (scale != 0.0f) ? (eng_value - offset) / scale : 0.0f;
+    /* D-02: scale=0 trước đây cho raw=0 rồi return true → ghi im lặng số 0
+     * xuống coil/holding register. Với nhiều thiết bị, 0 nghĩa là "tắt". */
+    if (!std::isfinite(scale) || scale == 0.0f) return false;
+    if (!std::isfinite(offset) || !std::isfinite(eng_value)) return false;
+
+    const float raw = (eng_value - offset) / scale;
+    if (!std::isfinite(raw)) return false;
+
+    double v = 0.0;
     switch (type) {
         case PointType::Bool:
             if (count < 1) return false;
@@ -98,23 +125,27 @@ bool encode_register(float eng_value, uint16_t* regs, uint16_t count,
             return true;
         case PointType::Int16:
             if (count < 1) return false;
-            regs[0] = static_cast<uint16_t>(static_cast<int16_t>(raw));
+            if (!raw_to_integral(raw, -32768.0, 32767.0, &v)) return false;
+            regs[0] = static_cast<uint16_t>(static_cast<int16_t>(v));
             if (byte_order == ByteOrder::BA) regs[0] = swap_bytes(regs[0]);
             return true;
         case PointType::Uint16:
             if (count < 1) return false;
-            regs[0] = static_cast<uint16_t>(static_cast<uint32_t>(raw) & 0xFFFFu);
+            if (!raw_to_integral(raw, 0.0, 65535.0, &v)) return false;
+            regs[0] = static_cast<uint16_t>(static_cast<uint32_t>(v));
             if (byte_order == ByteOrder::BA) regs[0] = swap_bytes(regs[0]);
             return true;
         case PointType::Int32: {
             if (count < 2) return false;
-            const uint32_t u = static_cast<uint32_t>(static_cast<int32_t>(raw));
+            if (!raw_to_integral(raw, -2147483648.0, 2147483647.0, &v)) return false;
+            const uint32_t u = static_cast<uint32_t>(static_cast<int32_t>(v));
             u32_to_regs(u, byte_order, regs);
             return true;
         }
         case PointType::Uint32: {
             if (count < 2) return false;
-            u32_to_regs(static_cast<uint32_t>(raw), byte_order, regs);
+            if (!raw_to_integral(raw, 0.0, 4294967295.0, &v)) return false;
+            u32_to_regs(static_cast<uint32_t>(v), byte_order, regs);
             return true;
         }
         case PointType::Float32: {

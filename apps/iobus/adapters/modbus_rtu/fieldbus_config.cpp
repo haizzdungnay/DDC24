@@ -112,8 +112,22 @@ static bool parse_slave(const std::string& obj, uint32_t default_poll_ms, SlaveC
         sl->poll_ms = static_cast<uint32_t>(v);
     if (jget_int(obj, "timeout_ms", &v) && v >= 20 && v <= 10000)
         sl->timeout_ms = static_cast<uint32_t>(v);
-    if (jget_int(obj, "retry", &v) && v >= 1 && v <= 10)
+    /* D-05: `retry` nay là SỐ LẦN PHÁT LẠI một giao dịch (0..3). Giá trị cũ tới
+     * 10 vẫn nhận được nhưng bị clamp: 10 lần phát lại × timeout 300 ms = 3 giây
+     * chiếm dây cho MỘT block, không chấp nhận được trên bus dùng chung. */
+    if (jget_int(obj, "retry", &v) && v >= 0) {
+        if (v > 3) {
+            std::fprintf(stderr, "WARN  fieldbus_config.retry_clamped slave=%s value=%lld → 3"
+                         " — retry là số lần phát lại một giao dịch, không phải ngưỡng offline\n",
+                         sl->name.c_str(), static_cast<long long>(v));
+            v = 3;
+        }
         sl->retry = static_cast<uint8_t>(v);
+    }
+    /* Ngưỡng OFFLINE tách riêng (D-05). Mặc định 2 lượt poll thất bại liên tiếp,
+     * giữ đúng hành vi cũ cho cấu hình chưa khai báo trường này. */
+    if (jget_int(obj, "offline_after_errors", &v) && v >= 1 && v <= 10)
+        sl->offline_after_errors = static_cast<uint8_t>(v);
     return true;
 }
 
@@ -153,6 +167,14 @@ bool load_fieldbus_config(const std::string& path, bool path_from_cli,
             out->rs485.parity = static_cast<char>(parity[0]);
         if (jget_int(rs485_obj, "stop", &v) && (v == 1 || v == 2))
             out->rs485.stop = static_cast<uint8_t>(v);
+        /* D-04: nhịp thử lại slave OFFLINE. Clamp 1..60 s — dưới 1 s thì slave
+         * chết vẫn chiếm dây đáng kể, trên 60 s thì thiết bị hồi phục quá lâu
+         * mới được phát hiện. */
+        if (jget_int(rs485_obj, "offline_probe_ms", &v)) {
+            if (v < 1000)       v = 1000;
+            else if (v > 60000) v = 60000;
+            out->rs485.offline_probe_ms = static_cast<uint32_t>(v);
+        }
     }
 
     /* rs485.device bắt buộc khi có RTU slaves */

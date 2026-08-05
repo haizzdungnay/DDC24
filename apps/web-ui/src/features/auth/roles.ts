@@ -53,7 +53,13 @@ export const ROUTE_MIN_ROLE: Record<string, UserRole> = {
   '/eng/outputs': 'operator',
   '/eng/inputs': 'admin',
   '/eng/virtual-points': 'admin',
-  '/eng/modbus-rtu': 'admin',
+  /* Đ-04 (PM/CTO 2026-08-04): Viewer PHẢI giám sát được Modbus RTU.
+   * Khoá cả trang ở 'admin' làm người vận hành không xem được thiết bị và điểm
+   * dữ liệu, trái yêu cầu sản phẩm PR-MBRTU-001. Backend đã bảo vệ đúng chỗ:
+   * GET /modbus/* là viewer, mọi mutation là admin — nên hạ route xuống viewer
+   * KHÔNG nới lỏng hơn server. Các control thay đổi cấu hình bị disable trong
+   * trang cho vai trò không phải admin. */
+  '/eng/modbus-rtu': 'viewer',
   '/eng/alarm-settings': 'admin',
   '/eng/scheduler': 'admin',
   '/eng/user-parameters': 'admin',

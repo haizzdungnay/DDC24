@@ -1,10 +1,12 @@
 # Modbus RTU — Verification Plan DDC-24 Rev A
 
 **ID:** VVP-MBRTU-001
-**Phiên bản:** 0.1
+**Phiên bản:** 0.2
 **Trạng thái:** In Review
-**Ngày:** 2026-08-04
+**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
 **Chủ quản đề xuất:** QA/Verification Lead
+**Quyết định đã ký áp dụng:** Đ-01 (1 bus), Đ-04 (3 vai trò), Đ-07 (≥256 Point), Đ-08 (cấp thiết bị thật)
+**Đối chiếu source tại:** `feat/modbus-rtu-track-a` / `eade4e5`
 **Trace:** `VR-MBRTU-001..014` trong [VERIFICATION.md](VERIFICATION.md)
 **Design nguồn:** [DDD-SW-MBRTU-POINT-001](../02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md),
 [DDD-DM-MBRTU-001](../02_design/software/MODBUS_RTU_DATA_MODEL.md),
@@ -21,7 +23,7 @@
 | Unit | `TC-MBRTU-U-xx` | host, không I/O thật | logic thuần: codec, validator, state machine, scheduler | phần cứng, timing thật, tích hợp |
 | Integration | `TC-MBRTU-I-xx` | host, nhiều process/module thật | hợp đồng giữa module, transaction, RBAC, IPC | dây RS-485, timing target |
 | Simulator | `TC-MBRTU-S-xx` | host + PTY/Modbus simulator | giao thức đầu-cuối, fault injection lặp lại được | transceiver, nhiễu, termination, half-duplex thật |
-| Target SOM | `TC-MBRTU-T-xx` | Orange Pi/CM3 chạy service production | deploy, systemd, tài nguyên, khởi động lại | slave thật nếu chưa nối |
+| Target SOM | `TC-MBRTU-T-xx` | **Foxlinx SOM-DDC-24** là board nghiệm thu; Orange Pi 5B chỉ regression nhanh. ⚠️ Foxlinx **đang chạy fake MCU**, không phải STM32 thật — mọi phép đo jitter IOP phải ghi rõ điều này | deploy, systemd, tài nguyên, khởi động lại, đúng kiến trúc aarch64 | slave RS-485 thật; hành vi với MCU thật |
 | Physical RS485 | `TC-MBRTU-H-xx` | target + transceiver + slave thật | dây, CRC vật lý, timing, wiring fault | môi trường lắp đặt cuối |
 | Production acceptance | `TC-MBRTU-P-xx` | release candidate + hồ sơ | sẵn sàng phát hành | — |
 
@@ -41,7 +43,7 @@ Không được dùng `TC-MBRTU-U/I/S` để chuyển `VR-MBRTU-001/004/011/012`
 | TC-MBRTU-U-07 | Duplicate slave ID | trùng trong cùng bus ⇒ `SLAVE_ID_DUPLICATE`; trùng khác bus ⇒ hợp lệ | `SWR-REQ-MBRTU-002` |
 | TC-MBRTU-U-08 | Invalid register / overlap | 5 trường hợp bảng data model §5.5 | `SWR-REQ-MBRTU-003` |
 | TC-MBRTU-U-09 | Tag namespace | trùng với Local I/O, Virtual Point và trong nội bộ Modbus ⇒ `TAG_DUPLICATE` | `SWR-REQ-MBRTU-001` |
-| TC-MBRTU-U-10 | Capacity | > 16 device/bus, > 32 device, > 64 point ⇒ `CAPACITY_EXCEEDED`, không truncate | `NFR-REQ-MBRTU-001` |
+| TC-MBRTU-U-10 | Capacity | > 16 device/bus và vượt giới hạn Point hiện hành ⇒ `CAPACITY_EXCEEDED`, không truncate. **Giới hạn mục tiêu ≥256 Point (Đ-07); As-Built còn 64** — test phải đọc hằng số, không hardcode | `NFR-REQ-MBRTU-001` |
 | TC-MBRTU-U-11 | Admission tải bus | > 70 % ⇒ reject; 50–70 % ⇒ warning; txn + retry không vừa `poll_ms` ⇒ reject | `SWR-REQ-MBRTU-004` |
 | TC-MBRTU-U-12 | Scheduler EDF | không đói device khi 1 device timeout liên tục; deadline mới tính từ `now` | `SWR-REQ-MBRTU-004` |
 | TC-MBRTU-U-13 | Retry/offline probe | hết retry ⇒ nhường bus ngay; OFFLINE ⇒ nhịp `offline_probe_ms` | `SWR-REQ-MBRTU-004` |
@@ -68,7 +70,7 @@ Không được dùng `TC-MBRTU-U/I/S` để chuyển `VR-MBRTU-001/004/011/012`
 | TC-MBRTU-I-09 | Crash points | kill giữa `begin`/`stage`/`ACK`/`commit`; sau restart chỉ có N hoặc N+1, không lai | `SWR-REQ-MBRTU-007` |
 | TC-MBRTU-I-10 | Idempotency | cùng `operation_id` không apply hai lần; khác payload ⇒ `ID_CONFLICT` | `IF-REQ-MBRTU-002` |
 | TC-MBRTU-I-11 | Optimistic concurrency | `base_revision` cũ ⇒ 409, không ghi file | `SWR-REQ-MBRTU-007` |
-| TC-MBRTU-I-12 | RBAC | ma trận BE design §7.1 đầy đủ positive/negative cho 4 vai trò | `SEC-REQ-MBRTU-001` |
+| TC-MBRTU-I-12 | RBAC | ma trận BE design §7.1 đầy đủ positive/negative cho **3 vai trò** (Đ-04: viewer/operator/admin) | `SEC-REQ-MBRTU-001` |
 | TC-MBRTU-I-13 | Read/write permission | Viewer không read-test; Operator không write-test; Admin được cả hai | `SEC-REQ-MBRTU-001` |
 | TC-MBRTU-I-14 | Audit | mỗi mutation/write có actor, target, old/new, correlation, result | `SEC-REQ-MBRTU-001` |
 | TC-MBRTU-I-15 | Write path — reject | read-only, quality ≠ GOOD, ngoài `min/max`, revision cũ, queue đầy đều bị từ chối đúng mã | `SWR-REQ-MBRTU-006` |
@@ -99,9 +101,9 @@ FC01/02/03/04/05/06/16, exception response và fault injection.
 | TC-MBRTU-S-07 | Sai baud/parity | khung rác ⇒ CRC/timeout, không sinh giá trị sai kiểu GOOD | `SWR-REQ-MBRTU-005` |
 | TC-MBRTU-S-08 | Sai slave ID | không phản hồi ⇒ OFFLINE có reason đúng | `SWR-REQ-MBRTU-005` |
 | TC-MBRTU-S-09 | Nhiều slave | 16 slave mô phỏng, không starvation, đo poll duration | `SWR-REQ-MBRTU-004` |
-| TC-MBRTU-S-10 | Hai bus mô phỏng | bus A lỗi không chặn bus B | `SYS-REQ-MBRTU-001` |
+| TC-MBRTU-S-10 | Hai bus mô phỏng | ⏸ **HOÃN** theo Đ-01 (Rev A một bus). Kích hoạt lại khi Hardware xác nhận cổng thứ hai (`G-B1`) | `SYS-REQ-MBRTU-001` |
 | TC-MBRTU-S-11 | Commissioning | test-connection/read/write trả kết quả thật của simulator | `PR-MBRTU-003`, `PR-MBRTU-005` |
-| TC-MBRTU-S-12 | Stress | 32 device × 64 point ở poll nhỏ nhất được duyệt, 1 h, không crash, không rò bộ nhớ | `NFR-REQ-MBRTU-001` |
+| TC-MBRTU-S-12 | Stress | 16 device × giới hạn Point hiện hành ở poll nhỏ nhất được duyệt, 1 h, không crash, không rò bộ nhớ. Sau Đ-07 phải chạy lại ở 256 Point và **đo kích thước datagram + thời gian copy snapshot** | `NFR-REQ-MBRTU-001` |
 
 Simulator **phải được ghi nhãn rõ ràng là không phải production evidence** trong
 mọi report. Không dùng kết quả simulator để tuyên bố hỗ trợ thiết bị thật.
@@ -111,7 +113,7 @@ mọi report. Không dùng kết quả simulator để tuyên bố hỗ trợ th
 | ID | Mục tiêu | Pass criteria | Trace |
 |---|---|---|---|
 | TC-MBRTU-T-01 | Deploy | binary/config trên target truy được commit/toolchain/checksum | `NFR-REQ-MBRTU-003` |
-| TC-MBRTU-T-02 | Bus capability | `rs485-1`/`rs485-2` resolve từ manifest, không path đoán | `SYS-REQ-MBRTU-001` |
+| TC-MBRTU-T-02 | Bus capability | bus resolve từ manifest, **không đoán path**. Rev A: đúng 1 bus. Case âm bắt buộc: cấu hình trỏ cổng không tồn tại (ví dụ `/dev/ttyS3` trên Foxlinx) phải bị từ chối ở tầng cấu hình, không im lặng hỏng ở iobus (D-14) | `SYS-REQ-MBRTU-001` |
 | TC-MBRTU-T-03 | Service restart | `systemctl restart mkddc-iobus` ⇒ phục hồi, không write phát lại | `SWR-REQ-MBRTU-006` |
 | TC-MBRTU-T-04 | Reboot | sau reboot, cấu hình đúng revision, service tự start, quality khởi tạo đúng | `NFR-REQ-MBRTU-002` |
 | TC-MBRTU-T-05 | Cách ly lỗi | kill iobus ⇒ core/web tiếp tục; kill web ⇒ poll tiếp tục | `PR-MBRTU-011` |
@@ -131,6 +133,13 @@ và bổ sung ba kịch bản mới do đề bài yêu cầu:
 | TC-MBRTU-H-13 | Test connection / read test / write test trên slave thật | kết quả khớp phép đo độc lập (đồng hồ/analyzer); write có readback đúng |
 | TC-MBRTU-H-14 | Import/export trên target với slave thật | round-trip giữ nguyên hành vi đọc/ghi sau khi import |
 | TC-MBRTU-H-15 | Termination/bias và độ dài dây | test ở cấu hình dây ngắn và dây dài nhất công bố, có/không termination; ghi lại tỷ lệ CRC error |
+| **TC-MBRTU-H-16** | **Điều khiển hướng RS-485 half-duplex** | xác minh transceiver đổi hướng đúng: không mất byte đầu của response, không collision khi master vừa phát xong. Bắt buộc vì source **không gọi** `modbus_rtu_set_serial_mode()` và device tree không có `rs485-*` — giả định auto-direction **chưa được kiểm chứng** (Đ-02/`G-D`, F-IF-10) |
+
+`TC-MBRTU-H-06` (hai bus đồng thời) ⏸ **HOÃN** theo Đ-01, cùng lý do với
+`TC-MBRTU-S-10`.
+
+Thiết bị nghiệm thu đã được duyệt cấp theo Đ-08 (tối thiểu một đồng hồ điện và một
+biến tần Modbus RTU); `OD-MBRTU-EXT-02` CLOSED. Gate `G-C` chỉ còn chờ thiết bị về.
 
 Mỗi record HIL phải ghi: hardware revision, sơ đồ đấu dây, termination/bias, model
 và firmware của slave, binary identity, config revision/checksum, thiết bị đo,
@@ -142,7 +151,7 @@ SHA-256 của artifact.
 | ID | Mục tiêu | Acceptance |
 |---|---|---|
 | TC-MBRTU-P-01 | Toàn bộ `VR-MBRTU-001..014` có evidence được review | không mục nào RED, không waiver không ký |
-| TC-MBRTU-P-02 | Soak 24 h ở tải được duyệt trên hai bus thật | 0 crash, 0 đổi identity Point, 0 write không kiểm soát, thống kê poll kèm raw log |
+| TC-MBRTU-P-02 | Soak 24 h ở tải được duyệt trên bus thật (Rev A: 1 bus) | 0 crash, 0 đổi identity Point, 0 write không kiểm soát, thống kê poll kèm raw log |
 | TC-MBRTU-P-03 | Reboot × 10 và cắt nguồn × 10 | cấu hình và Point identity giữ nguyên; không cấu hình lai |
 | TC-MBRTU-P-04 | Security review | không có endpoint arbitrary FC; RBAC/audit đầy đủ; không secret trong export |
 | TC-MBRTU-P-05 | Provenance release | version/commit/build time/checksum/toolchain truy được trên target |
@@ -168,8 +177,12 @@ SHA-256 của artifact.
 
 ## 9. Điều kiện vào và ra
 
-**Điều kiện vào (entry):** ADR-024 Accepted; `OD-MBRTU-001` được quyết định; bộ
-tài liệu thiết kế Modbus RTU ở trạng thái Active; source đã conform contract v2.
+**Điều kiện vào (entry) cho tầng Target/HIL/Acceptance:** ADR-024 Accepted; bộ tài
+liệu thiết kế Modbus RTU ở trạng thái Active; source đã conform contract v2.
+`OD-MBRTU-001` **đã đóng** bằng Đ-01 nên không còn là điều kiện chặn.
+
+Các tầng Unit/Integration/Simulator **không** bị chặn bởi các điều kiện trên và đã
+chạy được trong Track A — xem §10.
 
 **Điều kiện ra (exit) để `MODBUS_RTU_POINT_READY = YES`:** mọi `VR-MBRTU-001..014`
 PASS bằng evidence hiện hành có review; không waiver chưa ký; commit sạch; target
@@ -179,16 +192,83 @@ provenance truy được.
 
 ```text
 MODBUS_RTU_TEST_SPEC_DEFINED   = YES
-MODBUS_RTU_UNIT_TEST           = PARTIAL   (codec/profile/scheduler host đã có; validator v2 chưa)
+MODBUS_RTU_UNIT_TEST           = PARTIAL   (codec/scheduler/write-lifecycle/metrics đã có; validator v2 chưa)
 MODBUS_RTU_INTEGRATION_TEST    = PARTIAL   (CRUD/rollback Go đã có; transaction v2 chưa)
-MODBUS_RTU_SIMULATOR_TEST      = PARTIAL   (PTY read/write/timeout đã có; exception/CRC/2 bus chưa)
-MODBUS_RTU_TARGET_TEST         = NO
-MODBUS_RTU_PHYSICAL_RS485_TEST = NO
+MODBUS_RTU_SIMULATOR_TEST      = PARTIAL   (PTY read/write/timeout đã có; exception code/CRC chưa)
+MODBUS_RTU_TARGET_TEST         = PARTIAL   (Track A T-A1..T-A5 PASS trên Foxlinx 2026-08-05,
+                                            nhưng fake MCU + không có fieldbus.conf ⇒ code Modbus
+                                            chưa chạy dòng nào ở trạng thái vận hành)
+MODBUS_RTU_PHYSICAL_RS485_TEST = NO        (chưa có slave RS485 thật đấu vào)
 MODBUS_RTU_ACCEPTANCE_TEST     = NO
 ```
+
+### 10.1 Số đo host của Track A (2026-08-04, commit `eade4e5`)
+
+| Gate | Kết quả | Trước Track A |
+|---|---|---|
+| `ctest --test-dir build/fw` (Modbus+BACnet+HMI ON) | 769/769 PASS | 759 |
+| `go vet ./...` + `go test ./... -count=1` | PASS, 11 package `ok` | — |
+| `npx vitest --run --environment jsdom src` | 304/304 PASS, 35 file | 3 FAIL |
+| `npm run lint` / `npm run build` | PASS / PASS | — |
+
+**Số đo này chứng minh cái gì:** logic đã sửa của D-01..D-08, D-10..D-12, D-14
+hoạt động đúng trên host.
+
+**Số đo này KHÔNG chứng minh cái gì** — và không được trích dẫn như thể có:
+
+- không đóng bất kỳ `VR-MBRTU-*` nào cần bằng chứng target hoặc HIL;
+- không nói gì về jitter IOP với MCU thật, về dây RS-485, về half-duplex direction;
+- không phải bằng chứng cho `TC-MBRTU-T-*`, `TC-MBRTU-H-*`, `TC-MBRTU-P-*`.
+
+### 10.2 Nghiệm thu Track A trên board — ĐÃ CHẠY 2026-08-05, PASS WITH LIMITS
+
+Năm kịch bản cổng ra của Track A (Plan 49 §3) đã chạy trên board Foxlinx
+(`SOM-DDC-24-foxlinx`, Forlinx OK1126B-S / RV1126B, Linux 6.1.141 aarch64) tại
+commit `eade4e5`. Evidence:
+[EVID-MBRTU-TRACKA-FOXLINX-2026-08-05](../07_records/test-evidence/fw-som/2026-08-05-foxlinx-track-a-acceptance.md).
+
+| ID | Kịch bản | Kết quả |
+|---|---|---|
+| T-A1 | ghi giá trị ngoài dải bị TỪ CHỐI, không byte nào lên dây | **PASS** |
+| T-A2 | slave chết không làm slave tốt trượt deadline | **PASS** |
+| T-A3 | UI không hiện `BAD`/`0` khi mất telemetry | **PARTIAL** — producer + API PASS trên board; FE chưa kiểm trên browser |
+| T-A4 | jitter IOP không hồi quy so với baseline | **PASS** — binary mới 15,36–15,65 µs vs cũ 18,15–20,10 µs, cùng điều kiện |
+| T-A5 | restart `mkddc-iobus`: không write cũ nào được phát lại | **PASS** |
+
+`iobus_tests` aarch64 chạy **trên chính board trong lúc service production đang
+chạy**: 208 PASS / 6 SKIP / 0 FAIL; sáu skip đều là `IoCache.*` (cần độc quyền SHM
+production). Riêng nhóm Track A: 23/23 PASS. Sau deploy: 0 ERROR, `NRestarts=0`.
+
+**Giới hạn bắt buộc đọc cùng kết quả — không được trích dẫn tách rời:**
+
+1. Board chạy **fake MCU** (`mkddc-fakemcu.service`), **không** phải STM32 thật.
+   Điều này làm điều kiện "cửa sổ bảo trì" biến mất, nhưng cũng làm `T-A4` **không**
+   phải phép đo với MCU thật như câu chữ gốc của cổng ra yêu cầu.
+2. Board **không có `fieldbus.conf`** và **không có thiết bị RS-485 nào đấu vào**,
+   nên fieldbus thread không được tạo và code Modbus **không chạy dòng nào** ở
+   trạng thái vận hành. Hồ sơ chứng minh code đúng trên kiến trúc/kernel/libmodbus
+   của target — **không** chứng minh giao tiếp RS-485 vật lý.
+3. `T-A2` vẫn đo gián tiếp qua log vì chưa có counter `deadline_miss`/`poll_duration`
+   (F-FW-17).
+
+```text
+TRACK_A_BOARD_ACCEPTANCE = PASS WITH LIMITS
+VR-MBRTU-011 (real RS485/HIL) = RED    ← không đổi
+```
+
+**Track A đóng được phần "code đúng trên target"; KHÔNG đóng bất kỳ gate HIL nào.**
+
+### 10.3 Kịch bản còn thiếu cho hai gap end-to-end mới
+
+`F-BE-19`/`F-BE-20` (tham số `offline_after_errors`, `offline_probe_ms` không có
+đường ghi từ BE) hiện **không có test nào bắt được**, vì mỗi tầng test đúng phần của
+mình: test C++ đặt struct trực tiếp, test Go kiểm validator chứ không kiểm nội dung
+file sinh ra. Bổ sung `TB-MBRTU-17` (BE design §10) — kiểm nội dung `fieldbus.conf`
+sau apply, không chỉ kiểm HTTP status.
 
 ## Revision history
 
 | Phiên bản | Ngày | Trạng thái | Thay đổi |
 |---|---|---|---|
 | 0.1 | 2026-08-04 | In Review | Tạo test specification 6 tầng, 60+ test case và ma trận VR |
+| 0.2 | 2026-08-05 | In Review | Áp dụng Đ-01/Đ-04/Đ-07/Đ-08 và đối chiếu với `eade4e5`. **Thay thế:** (a) §1 board nghiệm thu là Foxlinx (MCU thật), Orange Pi chỉ regression; (b) `TC-MBRTU-S-10` và `TC-MBRTU-H-06` (hai bus) chuyển **HOÃN** theo Đ-01; (c) `TC-MBRTU-U-10`/`S-12` capacity theo Đ-07 ≥256 và bắt buộc đo lại datagram/copy time; (d) `TC-MBRTU-I-12` bốn vai trò → **ba** (Đ-04); (e) `TC-MBRTU-T-02` thêm case âm cổng không tồn tại (D-14); (f) `TC-MBRTU-P-02` một bus; (g) thêm **TC-MBRTU-H-16** kiểm điều khiển hướng RS-485 (Đ-02); (h) §9 bỏ `OD-MBRTU-001` khỏi entry condition (đã đóng); (i) §10 thêm 10.1 số đo host Track A kèm giới hạn hiệu lực, 10.2 kết quả nghiệm thu board Foxlinx 2026-08-05 (`PASS WITH LIMITS`) kèm ba giới hạn bắt buộc đọc kèm, 10.3 kịch bản còn thiếu cho F-BE-19/20; `MODBUS_RTU_TARGET_TEST` chuyển `NO → PARTIAL` |

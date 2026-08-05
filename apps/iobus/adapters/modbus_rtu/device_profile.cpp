@@ -4,6 +4,7 @@
  */
 #include "device_profile.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -174,6 +175,21 @@ static bool parse_point(const std::string& obj, ProfilePoint* pt)
 
     if (jget_num(obj, "scale", &v))  pt->scale  = static_cast<float>(v);
     if (jget_num(obj, "offset", &v)) pt->offset = static_cast<float>(v);
+
+    /* D-02: scale=0 làm phép quy đổi ghi (eng - offset)/scale vô nghĩa. BE đã
+     * chặn ở validator của nó, nhưng profile viết tay trong /data/config/profiles
+     * là đường hợp lệ theo find_profile_path() và trước đây đi lọt: điểm sẽ được
+     * ghi xuống thiết bị với giá trị 0. Chặn tại đây để nguồn nào cũng bị kiểm. */
+    if (!std::isfinite(pt->scale) || pt->scale == 0.0f) {
+        std::fprintf(stderr, "ERROR profile.invalid_scale name=%s scale=%g — skip\n",
+                     pt->name.c_str(), static_cast<double>(pt->scale));
+        return false;
+    }
+    if (!std::isfinite(pt->offset)) {
+        std::fprintf(stderr, "ERROR profile.invalid_offset name=%s offset=%g — skip\n",
+                     pt->name.c_str(), static_cast<double>(pt->offset));
+        return false;
+    }
 
     bool wb = false;
     if (jget_bool(obj, "writable", &wb)) {

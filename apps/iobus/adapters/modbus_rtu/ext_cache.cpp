@@ -5,6 +5,7 @@
 #include "ext_cache.hpp"
 
 #include <cerrno>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 
@@ -68,6 +69,12 @@ bool ExtCache::push_snapshot(const std::string& sock_path)
         }
     }
 
+    /* Header phải nằm ngay trước mảng points thì phép tính `total` ở dưới mới
+     * đúng; khoá lại bằng static_assert để đổi layout là fail lúc biên dịch. */
+    static_assert(offsetof(kx_ext_snapshot_msg_t, points) ==
+                      sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t),
+                  "layout header kx_ext_snapshot_msg_t đã đổi — cập nhật consumer đồng bộ");
+
     kx_ext_snapshot_msg_t msg;
     msg.magic = KX_EXT_SNAP_MAGIC;
     msg.count = count_;
@@ -79,9 +86,12 @@ bool ExtCache::push_snapshot(const std::string& sock_path)
     addr.sun_family = AF_UNIX;
     std::strncpy(addr.sun_path, sock_path.c_str(), sizeof(addr.sun_path) - 1);
 
+    /* D-11: lấy offset của `points` từ chính struct thay vì cộng tay kích thước
+     * ba field header. Cách cũ đúng chỉ vì header 8 byte không sinh padding
+     * trước mảng; thêm một field vào header là receiver đọc lệch mà không test
+     * nào bắt được. Đây đúng loại giả định layout viết tay đã gây ra finding F-17. */
     const ssize_t total = static_cast<ssize_t>(
-        sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t) +
-        count_ * sizeof(kx_ext_point_t));
+        offsetof(kx_ext_snapshot_msg_t, points) + count_ * sizeof(kx_ext_point_t));
     const ssize_t n = ::sendto(sock_fd_, &msg, static_cast<size_t>(total),
                                MSG_DONTWAIT,
                                reinterpret_cast<struct sockaddr*>(&addr),

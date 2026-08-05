@@ -86,9 +86,10 @@ func NormalizeDevice(device Device) Device {
 	if device.TimeoutMS == 0 {
 		device.TimeoutMS = 300
 	}
-	if device.Retry == 0 {
-		device.Retry = 2
-	}
+	// D-05: KHÔNG normalize 0 thành 2. Với ngữ nghĩa mới, retry=0 là lựa chọn
+	// hợp lệ và có ý nghĩa: "không phát lại, báo lỗi ngay" — phù hợp cho thiết bị
+	// nhạy với lệnh lặp. Việc âm thầm đổi 0 thành 2 làm người dùng không thể tắt
+	// retry.
 	return device
 }
 
@@ -173,8 +174,15 @@ func Validate(cfg Config, externalTagOwners map[string]string) []ValidationError
 		if device.TimeoutMS < 20 || device.TimeoutMS > 10000 {
 			add(base+".timeout_ms", "phải trong 20..10000 ms")
 		}
-		if device.Retry < 1 || device.Retry > 10 {
-			add(base+".retry", "phải trong 1..10")
+		// D-05 (Đ-05, PM/CTO 2026-08-04): `retry` là SỐ LẦN PHÁT LẠI một giao dịch
+		// Modbus bị lỗi, không phải ngưỡng chuyển OFFLINE. Trước đây trường này
+		// nhận 1..10 và mang nghĩa ngưỡng offline, trong khi runtime KHÔNG hề phát
+		// lại lần nào — người dùng đặt retry=3 tin rằng hệ thống chịu được nhiễu
+		// thoáng qua nhưng thực tế mọi lỗi đơn lẻ đều làm điểm rơi STALE.
+		// Giới hạn 3: 3 lần phát lại × timeout 300 ms đã là ~1,2 s chiếm dây cho
+		// một block trên bus dùng chung.
+		if device.Retry < 0 || device.Retry > 3 {
+			add(base+".retry", "phải trong 0..3 (số lần phát lại một giao dịch)")
 		}
 		if device.Enabled {
 			if bus == nil {

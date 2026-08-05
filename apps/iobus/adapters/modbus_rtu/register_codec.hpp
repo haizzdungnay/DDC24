@@ -25,7 +25,20 @@ float decode_register(const uint16_t* regs, uint16_t count,
 /**
  * Encode float engineering → register buffer (cho FC05/06/15/16).
  * regs: output buffer, count: số register cần điền.
- * Trả false nếu type không hỗ trợ ghi hoặc count không đủ.
+ *
+ * FAIL-CLOSED (D-01/D-02, sửa 2026-08-04). Trả false — KHÔNG ghi gì vào regs —
+ * khi bất kỳ điều kiện nào sau đây đúng:
+ *   - count không đủ cho type;
+ *   - scale bằng 0 hoặc không hữu hạn (trước đây tính raw=0 rồi trả TRUE, tức
+ *     ghi im lặng giá trị 0 xuống thiết bị hiện trường);
+ *   - eng_value hoặc raw sau quy đổi là NaN/±Inf;
+ *   - raw nằm ngoài dải biểu diễn được của kiểu đích.
+ *
+ * Vì sao phải kiểm dải: `static_cast<int16_t>(raw)` với raw là float ngoài dải
+ * int16 là UNDEFINED BEHAVIOR theo [conv.fpint]/1. Đường vào thực tế là
+ * plc_shm.ext[i].setpoint do node graph ghi, không có clamp ở bất kỳ tầng nào,
+ * nên một lỗi công thức trong logic điều khiển sẽ ghi giá trị rác xuống
+ * VFD/thiết bị thật qua FC06/FC16.
  */
 bool encode_register(float eng_value, uint16_t* regs, uint16_t count,
                      PointType type, ByteOrder byte_order,

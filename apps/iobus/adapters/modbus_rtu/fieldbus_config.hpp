@@ -18,7 +18,18 @@ struct SlaveConfig {
     std::string name;             /* tên slave, dùng làm prefix ext point name */
     uint32_t    poll_ms = 1000;
     uint32_t    timeout_ms = 300;  /* response timeout riêng từng thiết bị */
-    uint8_t     retry = 2;         /* số lỗi liên tiếp trước khi OFFLINE */
+    /* D-05: SỐ LẦN PHÁT LẠI một giao dịch Modbus bị lỗi, trong cùng lượt poll.
+     *
+     * Trước bản sửa 2026-08-04 trường này mang nghĩa "số lỗi liên tiếp trước khi
+     * OFFLINE" trong khi UI/API vẫn gọi nó là "Retry", và thực tế KHÔNG có một
+     * lần phát lại nào — read_slave() gặp lỗi là break luôn, libmodbus cũng
+     * không tự retry. Người vận hành đặt retry=3 tin rằng hệ thống chịu được
+     * nhiễu thoáng qua, nhưng mọi lỗi đơn lẻ đều làm điểm dữ liệu rơi STALE.
+     * Quyết định Đ-05 (PM/CTO 2026-08-04): làm đúng như nhãn. */
+    uint8_t     retry = 2;
+    /* Ngưỡng OFFLINE, tách khỏi retry (D-05). Đếm theo LƯỢT POLL thất bại liên
+     * tiếp — mỗi lượt đã bao gồm đủ số lần phát lại ở trên. */
+    uint8_t     offline_after_errors = 2;
 };
 
 struct TcpSlaveConfig {
@@ -37,6 +48,9 @@ struct Rs485Config {
     uint32_t    baud   = 19200;
     char        parity = 'N';     /* N / E / O */
     uint8_t     stop   = 1;
+    /* D-04: chu kỳ thử lại slave đang OFFLINE, dùng chung cho cả bus.
+     * Thuộc bus chứ không thuộc device: nó bảo vệ băng thông của SỢI DÂY. */
+    uint32_t    offline_probe_ms = 5000;
 };
 
 struct FieldbusConfig {
