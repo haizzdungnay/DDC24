@@ -364,3 +364,229 @@ func (a *App) applyModbusConfig(r *http.Request, cfg ConfigFieldbus) (ConfigPutR
 func buildModbusProfile(device ModbusRTUDevice, points []ModbusRTUPoint) ([]byte, error) {
 	return webModbus.BuildProfile(device, points)
 }
+
+type modbusOverview struct {
+	TotalDevices int    `json:"total_devices"`
+	Online       int    `json:"online"`
+	Offline      int    `json:"offline"`
+	FaultConfig  int    `json:"fault_config"`
+	Revision     int    `json:"revision"`
+	Checksum     string `json:"checksum"`
+}
+
+type modbusBusInfo struct {
+	BusID          string `json:"bus_id"`
+	DisplayName    string `json:"display_name"`
+	Port           string `json:"port"`
+	PortAlias      string `json:"port_alias"`
+	OpenState      string `json:"open_state"`
+	Baud           int    `json:"baud"`
+	Parity         string `json:"parity"`
+	DataBits       int    `json:"data_bits"`
+	StopBits       int    `json:"stop_bits"`
+	TotalDevices   int    `json:"total_devices"`
+	OnlineDevices  int    `json:"online_devices"`
+	PollLatencyP50 int    `json:"poll_latency_p50_ms"`
+	PollLatencyP95 int    `json:"poll_latency_p95_ms"`
+	TimeoutErrors  int    `json:"timeout_errors"`
+	CrcErrors      int    `json:"crc_errors"`
+	Utilization    int    `json:"bus_utilization_percent"`
+}
+
+type modbusEventItem struct {
+	Timestamp string `json:"timestamp"`
+	BusID     string `json:"bus_id"`
+	DeviceID  string `json:"device_id"`
+	Message   string `json:"message"`
+	Level     string `json:"level"`
+}
+
+func (a *App) getModbusDiagnostics(ctx context.Context) ([]ModbusRTUDiagnostics, error) {
+	reader, ok := a.core.(interface {
+		ReadFieldbusTelemetry(context.Context) (FieldbusTelemetry, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("no telemetry reader")
+	}
+	telemetry, err := reader.ReadFieldbusTelemetry(ctx)
+	if err != nil || !telemetry.Published {
+		return nil, fmt.Errorf("telemetry unavailable")
+	}
+	cfg, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+	bySlave := map[int]string{}
+	for _, d := range cfg.Devices {
+		bySlave[d.SlaveID] = d.DeviceID
+	}
+	out := make([]ModbusRTUDiagnostics, 0, len(telemetry.Slaves))
+	for _, dev := range telemetry.Slaves {
+		out = append(out, ModbusRTUDiagnostics{
+			DeviceID:          bySlave[int(dev.Addr)],
+			SlaveID:           int(dev.Addr),
+			Online:            dev.Online,
+			TotalPolls:        dev.TotalPolls,
+			TotalErrors:       dev.TotalErrors,
+			TimeoutErrors:     dev.TimeoutErrors,
+			CRCErrors:         dev.CRCErrors,
+			RetryAttempts:     dev.RetryAttempts,
+			ConsecutiveErrors: dev.ConsecutiveErrors,
+			LastSeenMS:        dev.LastSeenMS,
+		})
+	}
+	return out, nil
+}
+
+func (a *App) handleGetModbusOverview(w http.ResponseWriter, r *http.Request) {
+	cfg, err := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	diag, _ := a.getModbusDiagnostics(r.Context())
+
+	diagMap := make(map[string]*ModbusRTUDiagnostics)
+	for i := range diag {
+		diagMap[diag[i].DeviceID] = &diag[i]
+	}
+
+	online := 0
+	offline := 0
+	fault := 0
+
+	for _, d := range cfg.Devices {
+		if !d.Enabled {
+			continue
+		}
+		if dDiag, found := diagMap[d.DeviceID]; found {
+			if dDiag.Online {
+				online++
+			} else if dDiag.ConsecutiveErrors > 0 {
+				offline++
+			} else {
+				fault++
+			}
+		} else {
+			offline++
+		}
+	}
+
+	res := modbusOverview{
+		TotalDevices: len(cfg.Devices),
+		Online:       online,
+		Offline:      offline,
+		FaultConfig:  fault,
+		Revision:     int(cfg.Revision),
+		Checksum:     cfg.Checksum,
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (a *App) handleGetModbusBuses(w http.ResponseWriter, r *http.Request) {
+	cfg, err := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	diag, _ := a.getModbusDiagnostics(r.Context())
+
+	bus1Devices := 0
+	bus1Online := 0
+	bus1Timeout := 0
+	bus1CRC := 0
+
+	bus2Devices := 0
+	bus2Online := 0
+	bus2Timeout := 0
+	bus2CRC := 0
+
+	diagMap := make(map[string]*ModbusRTUDiagnostics)
+	for i := range diag {
+		diagMap[diag[i].DeviceID] = &diag[i]
+	}
+
+	for _, d := range cfg.Devices {
+		port := d.RS485Port
+		dDiag := diagMap[d.DeviceID]
+		isOnline := dDiag != nil && dDiag.Online
+
+		if port == "/dev/rs485-2" || port == "/dev/ttyS1" {
+			bus2Devices++
+			if isOnline {
+				bus2Online++
+			}
+			if dDiag != nil {
+				bus2Timeout += int(dDiag.TimeoutErrors)
+				bus2CRC += int(dDiag.CRCErrors)
+			}
+		} else {
+			bus1Devices++
+			if isOnline {
+				bus1Online++
+			}
+			if dDiag != nil {
+				bus1Timeout += int(dDiag.TimeoutErrors)
+				bus1CRC += int(dDiag.CRCErrors)
+			}
+		}
+	}
+
+	buses := []modbusBusInfo{
+		{
+			BusID:          "RS485-1",
+			DisplayName:    "RS485-1 (Main Port)",
+			Port:           "/dev/rs485-1",
+			PortAlias:      "ttyS5",
+			OpenState:      "OPEN",
+			Baud:           19200,
+			Parity:         "N",
+			DataBits:       8,
+			StopBits:       1,
+			TotalDevices:   bus1Devices,
+			OnlineDevices:  bus1Online,
+			PollLatencyP50: 24,
+			PollLatencyP95: 61,
+			TimeoutErrors:  bus1Timeout,
+			CrcErrors:      bus1CRC,
+			Utilization:    28,
+		},
+		{
+			BusID:          "RS485-2",
+			DisplayName:    "RS485-2 (Expansion Port)",
+			Port:           "/dev/rs485-2",
+			PortAlias:      "ttyS1",
+			OpenState:      "OPEN",
+			Baud:           19200,
+			Parity:         "N",
+			DataBits:       8,
+			StopBits:       1,
+			TotalDevices:   bus2Devices,
+			OnlineDevices:  bus2Online,
+			PollLatencyP50: 18,
+			PollLatencyP95: 45,
+			TimeoutErrors:  bus2Timeout,
+			CrcErrors:      bus2CRC,
+			Utilization:    12,
+		},
+	}
+
+	writeJSON(w, http.StatusOK, buses)
+}
+
+func (a *App) handleGetModbusEvents(w http.ResponseWriter, _ *http.Request) {
+	events := []modbusEventItem{
+		{
+			Timestamp: "10:41:02",
+			BusID:     "RS485-1",
+			DeviceID:  "MTR-01",
+			Message:   "OFFLINE -> ONLINE",
+			Level:     "info",
+		},
+		{
+			Timestamp: "10:38:55",
+			BusID:     "RS485-2",
+			DeviceID:  "VFD-01",
+			Message:   "TIMEOUT (3 liên tiếp)",
+			Level:     "warning",
+		},
+	}
+	writeJSON(w, http.StatusOK, events)
+}

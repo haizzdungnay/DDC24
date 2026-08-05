@@ -16,7 +16,7 @@ import {
   ProgrammingPage,
   UnavailableFeaturePage
 } from '../features/dashboard'
-import { ModbusRtuPage } from '../features/modbus-rtu'
+import { ModbusRtuLayout, OverviewPage, ModbusRtuPage } from '../features/modbus-rtu'
 import { DisplaySettingsPage, NetworkPage, SettingsPage, TimeSettingsPage } from '../features/network'
 import { AlarmHistoryPage, AlarmSettingsPage, AlarmsPage, SchedulerPage, TrendsPage } from '../features/operations'
 import { CommissioningPage, InputsPage, MonitorPage, OutputsPage, UserParametersPage, VirtualPointsPage } from '../features/points'
@@ -123,7 +123,13 @@ export function App() {
         <Route path="eng/inputs" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/inputs']}><InputsPage /></RequireRole>} />
         <Route path="eng/outputs" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/outputs']}><OutputsPage /></RequireRole>} />
         <Route path="eng/virtual-points" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/virtual-points']}><VirtualPointsPage /></RequireRole>} />
-        <Route path="eng/modbus-rtu" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/modbus-rtu']}><ModbusRtuPage /></RequireRole>} />
+        <Route path="eng/modbus-rtu" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/modbus-rtu']}><ModbusRtuLayout /></RequireRole>}>
+          <Route index element={<OverviewPage />} />
+          <Route path="overview" element={<OverviewPage />} />
+          <Route path="devices" element={<ModbusRtuPage />} />
+          <Route path="points" element={<ModbusRtuPage />} />
+          <Route path="diagnostics" element={<ModbusRtuPage />} />
+        </Route>
         <Route path="eng/virtual-io" element={<Navigate to="/eng/virtual-points" replace />} />
         <Route path="eng/user-parameters" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/user-parameters']}><UserParametersPage /></RequireRole>} />
         <Route path="eng/diagram" element={<DiagramPage />} />

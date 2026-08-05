@@ -79,12 +79,11 @@ describe('ModbusRtuPage', () => {
     render(<ModbusRtuPage />)
     await screen.findByText('MB-AHU-SAT')
     await user.type(screen.getByRole('textbox', { name: 'Tên thiết bị' }), 'New meter')
-    /* D-14: form không còn mặc định /dev/ttyS3 (không tồn tại trên board thật),
-     * nên người dùng phải nhập cổng. */
-    await user.type(screen.getByRole('textbox', { name: 'RS485 port' }), '/dev/ttyS5')
+    /* D-14: form chọn cổng hợp lệ (/dev/rs485-1 hoặc /dev/rs485-2). */
+    await user.selectOptions(screen.getByRole('combobox', { name: 'RS485 port' }), '/dev/rs485-1')
     await user.click(screen.getByRole('button', { name: 'Thêm thiết bị' }))
     expect(api.createModbusDevice).toHaveBeenCalledWith(expect.objectContaining({
-      display_name: 'New meter', rs485_port: '/dev/ttyS5', baud: 19200,
+      display_name: 'New meter', rs485_port: '/dev/rs485-1', baud: 19200,
       parity: 'N', stop_bit: 1, slave_id: 1, poll_ms: 1000, timeout_ms: 300, retry: 2
     }))
   })
