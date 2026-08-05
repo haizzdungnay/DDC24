@@ -130,10 +130,17 @@ void ScanLoop::step()
                 manual_do_user_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.user : std::string();
             }
         } else {
-            /* AV/BV/MSV: ghi thẳng point table (không phải output vật lý);
+            /* AV/BV/MSV/EXT: ghi thẳng point table (không phải output vật lý);
              * release GIỮ value, chỉ nhả source — KHÔNG ghi cmd.value */
             if (cmd.is_write) ok = d_.table->set_virtual(cmd.point, cmd.value, PointSource::WEB);
             else              ok = d_.table->release_virtual(cmd.point);
+            if (cmd.point.kind == PointKind::EXT && cmd.is_write && ok && d_.bacnet && d_.bacnet->shm()) {
+                kx_plc_shm_t* shm = d_.bacnet->shm();
+                if (cmd.point.idx >= 0 && cmd.point.idx < KX_N_EXT) {
+                    shm->ext[cmd.point.idx].setpoint = cmd.value;
+                    shm->ext[cmd.point.idx].dirty = 1;
+                }
+            }
         }
         pending_.push_back({cmd, ok});
     }

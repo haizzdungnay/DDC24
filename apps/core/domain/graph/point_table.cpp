@@ -101,7 +101,7 @@ Point PointTable::get(PointId id) const
 
 bool PointTable::set_virtual(PointId id, float v, PointSource src)
 {
-    if (id.kind != PointKind::AV && id.kind != PointKind::BV && id.kind != PointKind::MSV)
+    if (id.kind != PointKind::AV && id.kind != PointKind::BV && id.kind != PointKind::MSV && id.kind != PointKind::EXT)
         return false;   /* AO/BO/AI/BI không có đường ghi trực tiếp */
     Point* p = slot(id);
     if (!p) return false;
@@ -114,7 +114,7 @@ bool PointTable::set_virtual(PointId id, float v, PointSource src)
 
 bool PointTable::release_virtual(PointId id)
 {
-    if (id.kind != PointKind::AV && id.kind != PointKind::BV && id.kind != PointKind::MSV)
+    if (id.kind != PointKind::AV && id.kind != PointKind::BV && id.kind != PointKind::MSV && id.kind != PointKind::EXT)
         return false;
     Point* p = slot(id);
     if (!p) return false;

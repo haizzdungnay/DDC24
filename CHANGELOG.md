@@ -7,6 +7,22 @@
 ---
 
 ## [Unreleased]
+### Added — Hoàn thành Triển khai Sprint 2 (Epic B3) Modbus RTU End-to-End Write Path (`F-FW-06`) (2026-08-05)
+
+- **C++ Core Engine (`apps/core/adapters/ipc/web_ipc.cpp`, `point_table.cpp`, `scan_loop.cpp`):**
+  - Cập nhật `parse_point_name()` hỗ trợ nhận dạng prefix `EXT` và `MB` (ví dụ `EXT1`..`EXT256`), cho phép gửi lệnh ghi `op: "write"` tới các Modbus RTU Point qua Unix Domain Socket IPC.
+  - Cập nhật `PointTable::set_virtual()` và `release_virtual()` hỗ trợ `PointKind::EXT`.
+  - Cập nhật `ScanLoop::scan()` tự động ghi nhận `setpoint` và bật cờ `dirty = 1` trong `plc_shm.ext[]` cho `mkddc-iobus` đọc và thực thi lệnh ghi xuống thiết bị Modbus RTU.
+  - Thêm C++ unit test `WebIpc.ExtPointWriteCommandAccepted` trong `test_web_ipc.cpp` xác minh lệnh ghi `EXT1` trả về `accepted`, cập nhật `setpoint` và bật cờ `dirty = 1` thành công.
+- **Go Backend (`apps/web-api/internal/app/`):**
+  - Bổ sung HTTP endpoint `POST /api/v1/modbus/write-test` (`handleModbusWriteTest`) yêu cầu quyền `Admin` (Đ-04).
+  - Kiểm tra tính hợp lệ của `PointID` trong `fieldbus.conf` và quyền `read_write` trước khi kích hoạt lệnh ghi xuống IPC Core Client.
+  - Thêm unit test Go `modbus_write_test.go` xác minh cơ chế RBAC (Operator nhận HTTP 403) và báo lỗi hợp lệ cho Point không tồn tại hoặc read-only.
+- **Kết quả Kiểm chứng Gate:**
+  - **C++:** `734/734 PASS` (100% suite).
+  - **Go:** `11/11 package PASS` (100%).
+  - **Frontend:** `304/304 PASS` (100% Vitest), ESLint 0 warning, `npm run build` thành công.
+
 ### Added — Hoàn thành Triển khai Sprint 1 (Epics B1 & B2) Modbus RTU (2026-08-05)
 
 - **Epic B1 — Đấu nối Tham số Offline End-to-End (`F-BE-19` / `F-BE-20`):**

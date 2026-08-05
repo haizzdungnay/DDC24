@@ -154,6 +154,7 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("PUT /api/v1/modbus/points/{id}", RoleAdmin, a.handleUpdateModbusPoint),
 		webRouter.Protected("DELETE /api/v1/modbus/points/{id}", RoleAdmin, a.handleDeleteModbusPoint),
 		webRouter.Protected("GET /api/v1/modbus/diagnostics", RoleViewer, a.handleModbusDiagnostics),
+		webRouter.Protected("POST /api/v1/modbus/write-test", RoleAdmin, a.handleModbusWriteTest),
 		webRouter.Public("GET /api/v1/ws/monitor", a.requireWSAuth(a.handleMonitorWS)),
 		webRouter.Protected("GET /api/v1/alarms", RoleViewer, a.handleAlarms),
 		webRouter.Protected("GET /api/v1/alarm-history", RoleViewer, a.handleAlarmHistory),

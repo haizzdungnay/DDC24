@@ -183,6 +183,84 @@ func (a *App) handleDeleteModbusPoint(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type ModbusWriteTestRequest struct {
+	PointID string  `json:"point_id"`
+	Value   float64 `json:"value"`
+}
+
+type ModbusWriteTestResponse struct {
+	PointID      string  `json:"point_id"`
+	AppliedValue float64 `json:"applied_value"`
+	Status       string  `json:"status"`
+	Message      string  `json:"message,omitempty"`
+}
+
+func (a *App) handleModbusWriteTest(w http.ResponseWriter, r *http.Request) {
+	principal := principalFromContext(r.Context())
+	if principal == nil || principal.Role != RoleAdmin {
+		writeError(w, http.StatusForbidden, "chỉ vai trò Admin được thực hiện ghi thử Modbus RTU")
+		return
+	}
+
+	var req ModbusWriteTestRequest
+	if err := decodeConfigBody(w, r, &req); err != nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
+		return
+	}
+	req.PointID = strings.TrimSpace(req.PointID)
+	if req.PointID == "" {
+		writeValidationErrors(w, []configValidationError{{Path: "point_id", Message: "bắt buộc"}})
+		return
+	}
+
+	cfg, err := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var foundPoint *ModbusRTUPoint
+	for i := range cfg.Points {
+		if strings.EqualFold(cfg.Points[i].PointID, req.PointID) {
+			foundPoint = &cfg.Points[i]
+			break
+		}
+	}
+	if foundPoint == nil {
+		writeValidationErrors(w, []configValidationError{{Path: "point_id", Message: "không tồn tại trong cấu hình Modbus RTU"}})
+		return
+	}
+	if foundPoint.ReadWrite != "read_write" {
+		writeValidationErrors(w, []configValidationError{{Path: "point_id", Message: "chỉ Point có quyền read_write mới được ghi"}})
+		return
+	}
+
+	writer, ok := a.core.(interface {
+		WritePoint(context.Context, string, any, uint32, bool, string) (PointDTO, error)
+	})
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "lỗi ghi thử: core client không hỗ trợ WritePoint")
+		return
+	}
+
+	pointDTO, err := writer.WritePoint(r.Context(), foundPoint.PointID, req.Value, 0, false, principal.Username)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, fmt.Sprintf("lỗi ghi thử xuống iobus/core: %v", err))
+		return
+	}
+
+	user := principal.Username
+	a.audit.Change(user, "modbus.write-test", foundPoint.PointID, "success", r.RemoteAddr)
+
+	val, _ := pointFloat(pointDTO.Value)
+	writeJSON(w, http.StatusOK, ModbusWriteTestResponse{
+		PointID:      foundPoint.PointID,
+		AppliedValue: float64(val),
+		Status:       "success",
+		Message:      "lệnh ghi thử đã được gửi thành công xuống iobus",
+	})
+}
+
 func (a *App) mutateModbusConfig(w http.ResponseWriter, r *http.Request,
 	mutation func(*ConfigFieldbus) (modbusMutationResponse, []configValidationError)) {
 	a.pointConfigMu.Lock()

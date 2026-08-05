@@ -1094,3 +1094,22 @@ TEST(ScanLoop, PendingCommandBuffersDoNotReallocateAcrossSteadyLoad)
             << "cùng tải 1 lệnh/scan -> capacity KHÔNG được tăng lại ở lần lặp " << i;
     }
 }
+
+TEST(WebIpc, ExtPointWriteCommandAccepted)
+{
+    Fixture f;
+    f.bacnet.attach();
+    ASSERT_TRUE(f.web.open(f.sock_path));
+    Client c;
+    ASSERT_TRUE(c.connect(f.sock_path));
+
+    c.send_line(R"({"id":200,"op":"write","point":"EXT1","value":100.5,"source":"manual","user":"admin"})");
+    usleep(50000);
+    f.scan();
+    const std::string resp = c.recv_line();
+    EXPECT_NE(resp.find("accepted"), std::string::npos) << "EXT1 write command must be accepted: " << resp;
+    if (f.bacnet.shm()) {
+        EXPECT_FLOAT_EQ(f.bacnet.shm()->ext[0].setpoint, 100.5f);
+        EXPECT_EQ(f.bacnet.shm()->ext[0].dirty, 1u);
+    }
+}

@@ -616,9 +616,9 @@ const (
 	offQuality    = 72 // uint8
 	offReliab     = 73 // uint8
 
-	offPLCScanCount   = 9268
-	offPLCScanOverrun = 9272
-	kxPlcShmMinLen    = 9280
+	offPLCScanCount   = 16948
+	offPLCScanOverrun = 16952
+	kxPlcShmMinLen    = 16960
 
 	// kx_io_shm_t v4 offsets used by web:
 	//   header16 + ui_value[16]*4 + ui_raw[16]*4 + ui_quality[16]

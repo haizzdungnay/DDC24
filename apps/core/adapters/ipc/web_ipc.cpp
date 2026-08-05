@@ -78,6 +78,7 @@ bool parse_point_name(const std::string& name, PointId* out)
     else if (kind == "AV") out->kind = PointKind::AV;
     else if (kind == "BV") out->kind = PointKind::BV;
     else if (kind == "MSV") out->kind = PointKind::MSV;
+    else if (kind == "EXT" || kind == "MB") out->kind = PointKind::EXT;
     else return false;
     return PointTable::valid(*out);
 }
