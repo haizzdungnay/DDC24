@@ -22,11 +22,10 @@ production acceptance của thiết bị có MCU thật.
 
 Khảo sát read-only qua SSH `SOM-DDC-24` (`orangepi5b`, aarch64, uptime 3 ngày):
 
-> **Lưu ý:** Ngoài board lab Orange Pi 5B, dự án có **board chính Foxlinx SOM-DDC-24**
-> (SSH alias `SOM-DDC-24-foxlinx`, port 2223, user `root`) với MCU STM32 thật. Khi chạy
-> `RST-202` trên board chính, kết quả là **production evidence** (không chỉ lab evidence).
-> Xem [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK §1a](27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) để biết
-> thông tin SSH và quy trình chuẩn bị.
+> **Lưu ý:** Bo mạch lab Orange Pi 5B đã **ngưng sử dụng từ 2026-08-05**. Target duy nhất hiện tại của dự án là **board Foxlinx SOM-DDC-24**
+> (SSH alias `SOM-DDC-24-foxlinx`, port 2223, user `root`, MCU STM32 thật). Mọi nghiệm thu target
+> từ thời điểm này đều thực hiện trên board Foxlinx.
+> Xem [FOXLINX_DEPLOY_CHECKLIST.md](../08_hardware/foxlinx-som-ddc24/FOXLINX_DEPLOY_CHECKLIST.md) và [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK §1a](27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md).
 
 
 | Hạng mục | Đo được | Ý nghĩa cho `RST-202` |

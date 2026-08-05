@@ -50,6 +50,10 @@
 | [RST-202 Target Acceptance Runbook](03_implementation/47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md) | quy trình install/startup/provenance/rollback trên board để đóng blocker cuối của Plan 46 |
 | [Repository Restructure Host Evidence](07_records/evidence/restructure/HOST_RESTRUCTURE_GATES_20260803.json) | số đo layout, C++ matrix, Go race, FE/E2E, firmware và release checksum sau migration |
 
+## Hardware platform
+
+- [Foxlinx SOM-DDC-24 — Tài liệu kit phần cứng](08_hardware/foxlinx-som-ddc24/README.md) — spec, pinout, UART/RS485, deploy checklist, known issues
+
 ## Detailed design corpus
 
 - [Hardware detailed design](04_design/hardware/README.md)

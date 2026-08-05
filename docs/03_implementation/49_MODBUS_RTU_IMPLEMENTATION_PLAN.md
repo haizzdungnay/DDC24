@@ -8,8 +8,8 @@
 > và tiến độ ở §10.
 > **Owner đề xuất:** Fieldbus Lead (FW-SOM) · SOM Backend Lead (BE) · FE Lead (FE)
 > **Target:** board production **Foxlinx SOM-DDC-24** (`SOM-DDC-24-foxlinx`, MCU
-> STM32 thật) là nơi nghiệm thu; board lab Orange Pi 5B chỉ dùng cho regression
-> nhanh. Xem §4.
+> STM32 thật) là target duy nhất cho nghiệm thu và regression (Orange Pi 5B đã ngưng sử dụng từ 2026-08-05).
+> Xem §4.
 > **Đọc cùng:** [Code Review 2026-08-04](../07_records/reviews/MODBUS_RTU_CODE_REVIEW_2026-08-04.md) ·
 > [Khảo sát UART board production](../07_records/test-evidence/fw-som/2026-08-04-foxlinx-uart-rs485-survey.md) ·
 > [Docs Sync Report](../07_records/reviews/MODBUS_RTU_DOCS_SYNC_REPORT.md) ·
@@ -74,12 +74,10 @@ Khảo sát read-only trên `SOM-DDC-24-foxlinx`
 
 | Board | Vai trò trong plan này | Dùng cho |
 |---|---|---|
-| **Foxlinx SOM-DDC-24** (`SOM-DDC-24-foxlinx`, port 2223, MCU STM32 thật) | **Board nghiệm thu chính** | Toàn bộ `TC-MBRTU-T-*` và `TC-MBRTU-H-*`; đo tài nguyên; kiểm tra không chặn IOP với MCU thật; nghiệm thu RS-485 vật lý |
-| **Orange Pi 5B** (`SOM-DDC-24`, port 2222, fake MCU) | Board regression nhanh | Smoke test sau mỗi task; kiểm thử tình huống fake MCU; **không** dùng để đóng gate nào |
+| **Foxlinx SOM-DDC-24** (`SOM-DDC-24-foxlinx`, port 2223, MCU STM32 thật) | **Board nghiệm thu & regression duy nhất** | Toàn bộ `TC-MBRTU-T-*` và `TC-MBRTU-H-*`; đo tài nguyên; kiểm tra không chặn IOP với MCU thật; nghiệm thu RS-485 vật lý |
+| ~~Orange Pi 5B~~ | **NGƯNG SỬ DỤNG (Deprecated)** | Đã ngưng sử dụng từ 2026-08-05. Mọi test/smoke hiện tại chạy trực tiếp trên Foxlinx. |
 
-**Quy tắc:** mọi gate có chữ "target" hoặc "HIL" chỉ được đóng bằng evidence trên
-**Foxlinx**. Kết quả trên Orange Pi là supporting evidence, phải ghi rõ board trong
-mọi record.
+**Quy tắc:** Mọi gate có chữ "target" hoặc "HIL" chỉ được đóng bằng evidence trên **Foxlinx**.
 
 **Lưu ý vận hành khi deploy lên Foxlinx:**
 
@@ -563,7 +561,7 @@ M2 trở đi phụ thuộc Q-01/Q-02.
 | Ước lượng lệch do chưa có Fieldbus Lead | Trung bình | Ước lượng là **khoảng**, chốt lại sau khi có owner (`OD-MBRTU-EXT-01`) |
 | Restart iobus trong lúc vận hành (D-09) còn tồn tại suốt Track A | Trung bình | Ghi vào runbook: không sửa cấu hình Modbus trong giờ vận hành cho tới khi B212 xong |
 
-## 7. Definition of Done
+## 9. Definition of Done
 
 **Track A:**
 
@@ -657,7 +655,26 @@ kiến trúc/kernel/libmodbus của target, **không** chứng minh RS-485 vật
 TRACK_A_BOARD_ACCEPTANCE = PASS WITH LIMITS
 ```
 
-### 10.4 Việc ngoài phạm vi đã xử lý cùng phiên
+### 10.4 Gap mới phát hiện khi đồng bộ tài liệu 2026-08-05
+
+Ba khiếm khuyết dưới đây **không** nằm trong danh sách D-01..D-14 ban đầu; chúng
+lộ ra khi đối chiếu từng tầng source với nhau trong phiên đồng bộ tài liệu. Không
+mục nào gây sai hành vi mặc định, nên **không** cần bổ sung vào Track A; cả ba
+thuộc Track B.
+
+| Mã | Nội dung | Vì sao không test nào bắt được |
+|---|---|---|
+| `F-BE-19` | `offline_after_errors` — iobus **đọc được** từ `fieldbus.conf` nhưng `Persister.Apply` **không bao giờ ghi** ⇒ luôn ở mặc định `2`, không có đường cấu hình | test C++ đặt struct trực tiếp; test Go kiểm validator chứ không kiểm nội dung file sinh ra |
+| `F-BE-20` | `offline_probe_ms` — như trên, luôn ở mặc định 5000 ms | như trên |
+| `F-API-14` | `contracts/openapi/openapi.yaml` vẫn mô tả `retry` theo ngữ nghĩa **cũ** sau khi Đ-05 đã đổi ở FW/BE/FE | không có test so khớp contract ↔ hành vi |
+
+Bổ sung `TB-MBRTU-17` (BE design §10) để bịt lớp lỗi này: kiểm **nội dung
+`fieldbus.conf` sau apply**, không chỉ kiểm HTTP status.
+
+`F-API-14` được nâng thành `OD-MBRTU-018` vì nó là mâu thuẫn giữa hai tài liệu
+Active và **chặn** gate `MODBUS_RTU_INTERFACES_SYNCHRONIZED`.
+
+### 10.5 Việc ngoài phạm vi đã xử lý cùng phiên
 
 `TrendsPage`: nhãn bộ chọn thời gian đã đổi sang giờ địa phương (BL-008) nhưng
 phần tính toán vẫn dùng UTC, làm người dùng UTC+7 truy vấn lệch 7 tiếng. Đã sửa
@@ -672,4 +689,5 @@ phần tính toán cho khớp nhãn và cho nhãn lấy tên múi giờ thật c
 |---|---|---|
 | 0.1 | 2026-08-04 | Tạo plan hai track; Track A không chờ quyết định, Track B sau cổng ADR-024 |
 | 0.2 | 2026-08-04 | Đổi số 48→49 (48 đã bị `PLAN_FIX_DEBUG_AND_BOARD_DEPLOY.md` dùng); thêm bảng task 74 mục, ma trận RACI, swimlane và đồ thị phụ thuộc; bổ sung nhóm A0 khảo sát phần cứng; chốt board Foxlinx là target nghiệm thu; **sửa lỗi cộng: Track B là 40–51 ngày, bản 0.1 ghi sai 34–45** |
+| 0.4 | 2026-08-05 | Sửa lỗi đánh số mục: mục "Definition of Done" bị đánh trùng số 7 với "Sơ đồ tiến độ", nay là §9 (§9 trước đó bị bỏ trống). Bổ sung §10.4 các gap mới phát hiện khi đồng bộ tài liệu ngày 2026-08-05 |
 | 0.3 | 2026-08-04 | Track A được PM/CTO duyệt và triển khai: 6/6 nhóm code xong, 12/14 defect đóng, 769/769 ctest · 304/304 vitest · Go PASS. Thêm §10 tiến độ. Chốt một mức ước lượng duy nhất (Track A 13,25 người-ngày) theo yêu cầu PM |
