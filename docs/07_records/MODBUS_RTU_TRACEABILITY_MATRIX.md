@@ -29,11 +29,11 @@ System/Software/Interface Requirement → Design → Verification Requirement �
 
 | Requirement | Design authority | VR | Test chính | Trạng thái evidence |
 |---|---|---|---|---|
-| SYS-REQ-MBRTU-001 | DDD-SW-MBRTU-POINT-001 §3–4; DDD-FW-MBRTU-001 §1–3 | VR-MBRTU-001, 004, 011 | TC-MBRTU-T-02, H-01 (H-06 hoãn) | **PARTIAL** — `OD-MBRTU-001` CLOSED (Đ-01: 1 bus) nên As-Built một master **khớp** Rev A; còn chờ evidence target/HIL |
-| SWR-REQ-MBRTU-001 (mô hình/identity) | DDD-DM-MBRTU-001 §3–5 | VR-MBRTU-002, 006 | TC-MBRTU-U-09, U-18, I-02, I-20 | Design In Review; As-Built giữ được `point_id` khi profile do BE sinh |
+| SYS-REQ-MBRTU-001 | DDD-SW-MBRTU-POINT-001 §3–4; DDD-FW-MBRTU-001 §1–3 | VR-MBRTU-001, 004, 011 | TC-MBRTU-T-02, H-01, S-10 | **PARTIAL** — `OD-MBRTU-001` CLOSED (02 bus RS485: `/dev/rs485-1` → `ttyS5`, `/dev/rs485-2` → `ttyS1`); 2 BusWorker threads; chờ evidence target/HIL |
+| SWR-REQ-MBRTU-001 (mô hình/identity) | DDD-DM-MBRTU-001 §3–5 | VR-MBRTU-002, 006 | TC-MBRTU-U-09, U-18, I-02, I-20 | Design Active; As-Built giữ được `point_id` khi profile do BE sinh |
 | SWR-REQ-MBRTU-002 (cấu hình bus/serial/slave) | DDD-DM-MBRTU-001 §3–4; DDD-BE-MBRTU-001 §4 | VR-MBRTU-002 | TC-MBRTU-U-06, U-07, I-01 | **PARTIAL** — validator có; `retry` nay đúng ngữ nghĩa Đ-05. Thiếu đường ghi `offline_after_errors`/`offline_probe_ms` (F-BE-19/20) |
 | SWR-REQ-MBRTU-003 (register/codec) | DDD-FW-MBRTU-001 §5; DDD-DM-MBRTU-001 §5.2, §5.5 | VR-MBRTU-003 | TC-MBRTU-U-01..05, U-08, H-03 | **PARTIAL** — codec host pass, **encode nay fail-closed** (D-01/D-02, 8 test âm tính); `bit_index`/`min-max`/evidence target chưa có |
-| SWR-REQ-MBRTU-004 (scheduler/isolation) | DDD-FW-MBRTU-001 §4; DDD-BE-MBRTU-001 §5 | VR-MBRTU-004 | TC-MBRTU-U-11..13, S-09, T-07 (S-10/H-06 hoãn) | **PARTIAL** (nâng từ RED) — EDF + offline probe + retry thật đã có và có test (D-04/D-05); thiếu admission control và counter `deadline_miss`/`poll_duration` (F-FW-17) |
+| SWR-REQ-MBRTU-004 (scheduler/isolation) | DDD-FW-MBRTU-001 §4; DDD-BE-MBRTU-001 §5 | VR-MBRTU-004 | TC-MBRTU-U-11..13, S-09, S-10, T-07 | **PARTIAL** — EDF + offline probe + retry thật đã có; kịch bản S-10 (2 bus song song) đã kích hoạt |
 | SWR-REQ-MBRTU-005 (quality/timestamp) | DDD-DM-MBRTU-001 §6; DDD-FW-MBRTU-001 §6 | VR-MBRTU-005 | TC-MBRTU-U-14, U-15, S-03..08, H-05 | **RED** — quality 3 mức, timestamp do BE gán |
 | SWR-REQ-MBRTU-006 (write path) | DDD-FW-MBRTU-001 §8; ICD-API-MBRTU-001 §6.2 | VR-MBRTU-008 | TC-MBRTU-I-15..17, S-02, H-04 | **RED** — `dirty/setpoint` không có result. **Đã cải thiện:** hết replay vô hạn trong một process (D-03) và encode fail-closed (D-01/D-02); vẫn hở ở nhánh restart iobus (F-FW-07) |
 | SWR-REQ-MBRTU-007 (atomic config) | DDD-BE-MBRTU-001 §3 | VR-MBRTU-007 | TC-MBRTU-I-05..11, T-08, H-09 | **RED** — apply = restart service |

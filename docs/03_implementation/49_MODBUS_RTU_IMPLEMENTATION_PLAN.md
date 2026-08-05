@@ -1,21 +1,19 @@
 # 49 — Modbus RTU Implementation Plan (FE + BE + FW-SOM)
 
 > **Document ID:** PLAN-MBRTU-IMPL-001
-> **Phiên bản:** 0.2 | 2026-08-04
-> **Trạng thái:** **Track A APPROVED và ĐANG TRIỂN KHAI** (PM/CTO 2026-08-04);
-> Track B `CONDITIONAL`, chưa được bắt đầu. Xem
-> [Biên bản phê duyệt](../07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md)
-> và tiến độ ở §10.
-> **Owner đề xuất:** Fieldbus Lead (FW-SOM) · SOM Backend Lead (BE) · FE Lead (FE)
+> **Phiên bản:** 0.3 | 2026-08-05
+> **Trạng thái:** **Track A HOÀN THÀNH** (Nghiệm thu board Foxlinx 2026-08-05);
+> **Track B APPROVED và CHÍNH THỨC KHỞI ĐỘNG** theo Tờ trình `DDC24-MBRTU-REQ-APPROVE-2026-08-05` (PM/CTO/Architect phê duyệt 2026-08-05).
+> Xem [Biên bản phê duyệt Tờ trình](../07_records/reviews/MODBUS_RTU_APPROVAL_REQUEST_2026-08-05.md) và tiến độ ở §10.
+> **Owner đề xuất:** Fieldbus Lead (FW-SOM) · SOM Backend Lead (BE) · FE Lead (FE) · QA/HIL Lead
 > **Target:** board production **Foxlinx SOM-DDC-24** (`SOM-DDC-24-foxlinx`, MCU
 > STM32 thật) là target duy nhất cho nghiệm thu và regression (Orange Pi 5B đã ngưng sử dụng từ 2026-08-05).
 > Xem §4.
-> **Đọc cùng:** [Code Review 2026-08-04](../07_records/reviews/MODBUS_RTU_CODE_REVIEW_2026-08-04.md) ·
+> **Đọc cùng:** [Tờ trình Phê duyệt 2026-08-05](../07_records/reviews/MODBUS_RTU_APPROVAL_REQUEST_2026-08-05.md) ·
+> [Code Review 2026-08-04](../07_records/reviews/MODBUS_RTU_CODE_REVIEW_2026-08-04.md) ·
 > [Khảo sát UART board production](../07_records/test-evidence/fw-som/2026-08-04-foxlinx-uart-rs485-survey.md) ·
 > [Docs Sync Report](../07_records/reviews/MODBUS_RTU_DOCS_SYNC_REPORT.md) ·
 > [Open Decisions](../00_governance/MODBUS_RTU_OPEN_DECISIONS.md)
->
-> **Số hiệu 48 đã bị `PLAN_FIX_DEBUG_AND_BOARD_DEPLOY.md` sử dụng**; plan này dùng 49.
 
 ---
 
@@ -25,30 +23,32 @@ Phát hiện quan trọng nhất của lần review: **không phải mọi việ
 ADR-024.** Có một nhóm defect đang gây rủi ro thật trên board, sửa được mà không
 đụng tới contract, không đổi ABI và không cần quyết định Product.
 
-| Track | Nội dung | Điều kiện bắt đầu | Đổi contract? |
-|---|---|---|---|
-| **Track A — Vá an toàn** | 8 defect ở review §2 | **Không chờ gì cả** — chỉ cần PM duyệt plan này | Không |
-| **Track B — Contract v2** | Redesign theo bộ thiết kế mới | ADR-024 Accepted + 5 OD P0 được ký | Có, ABI + REST |
-
-Track A không tạo nợ kỹ thuật cho Track B: mọi thứ sửa ở Track A đều nằm trong
-phần logic mà Track B giữ lại (codec, scheduler, metrics, FE presentation).
-
-**Không làm Track B trước Track A.** Lý do: Track B mất 6–9 tuần; để board chạy
-với D-01/D-03 suốt thời gian đó là không chấp nhận được.
+| Track | Nội dung | Điều kiện bắt đầu | Đổi contract? | Trạng thái |
+|---|---|---|---|---|
+| **Track A — Vá an toàn** | 8 defect ở review §2 | PM duyệt plan này | Không | ✅ **HOÀN THÀNH 2026-08-05** |
+| **Track B — Contract v2** | Redesign theo bộ thiết kế mới | ADR-024 Accepted + 5 OD P0 được ký | Có, ABI + REST | ✅ **APPROVED 2026-08-05 (Đang triển khai)** |
 
 ---
 
 ## 2. Cổng vào (Entry gate)
 
-| Cổng | Điều kiện | Chặn track nào |
-|---|---|---|
+| Cổng | Điều kiện | Chặn track nào | Trạng thái |
+|---|---|---|---|
 | G-A | PM duyệt Plan 49 | Track A | ✅ **ĐÓNG 2026-08-04** |
-| G-B1 | `OD-MBRTU-001` quyết định số bus RS485 thật | Track B toàn bộ |
-| G-B2 | ADR-024 `Proposed → Accepted` | Track B toàn bộ |
-| G-B3 | `OD-MBRTU-002/005/009/015` được ký | Track B giai đoạn tương ứng |
-| G-B4 | `OD-MBRTU-016` (quality 5 mức), `R-03` (poll theo Point) đóng | B2, B3 |
-| G-C | Có slave RS485 thật + thiết bị đo (`OD-MBRTU-EXT-02`) | Giai đoạn nghiệm thu |
-| G-D | Xác định cơ chế điều khiển hướng RS-485 (auto / RTS / GPIO) | B101, B403 |
+| G-B1 | `OD-MBRTU-001` quyết định số bus RS485 thật | Track B toàn bộ | ✅ **ĐÓNG 2026-08-04 (Đ-01: 1 Bus)** |
+| G-B2 | ADR-024 `Proposed → Accepted` | Track B toàn bộ | ✅ **ĐÓNG 2026-08-05 (ADR-024 Accepted)** |
+| G-B3 | `OD-MBRTU-002..015/018` được ký | Track B | ✅ **ĐÓNG 2026-08-05 (Đ-02..Đ-07 & OD-018)** |
+| G-B4 | `OD-MBRTU-016` (quality 5 mức), `R-03` (poll theo Point) đóng | B2, B3 | ⏳ OPEN |
+| G-C | Có slave RS485 thật + thiết bị đo (`OD-MBRTU-EXT-02`) | Giai đoạn nghiệm thu B6 | ⏳ OPEN (Cho B6) |
+| G-D | Xác định cơ chế điều khiển hướng RS-485 (auto / RTS / GPIO) | B101, B403, B6 | ⏳ OPEN (Cho B6) |
+
+### 2.2 Ràng buộc phê duyệt bắt buộc cho Track B (Phê duyệt 2026-08-05)
+
+1. **Phân công Lead (Đ-09):** PM phải chỉ định chính thức Fieldbus Lead và QA/HIL Lead trước khi bắt đầu Sprint 1 của Track B.
+2. **Xác nhận Direction Control (Đ-02):** Hardware Lead phải xác nhận chính thức cơ chế điều khiển hướng RS-485 (Auto-direction, RTS hay GPIO) kèm sơ đồ chân và timing. **Không được đóng Epic B6 trước khi nội dung này được xác nhận.**
+3. **Thứ tự triển khai:** Epics B1–B5 bắt đầu ngay sau khi hoàn tất đồng bộ 9 tài liệu Active và `openapi.yaml`.
+4. **Điều kiện Nghiệm thu:** Epic B6 chỉ nghiệm thu khi có đồng hồ điện, biến tần và kết nối RS485 thật.
+5. **Điều kiện Phê duyệt Production:** Chỉ được tuyên bố `MODBUS_RTU_PRODUCTION_READY = YES` sau khi hoàn thành HIL, kiểm thử thiết bị thật, xác nhận direction control và có QA sign-off.
 
 `OD-MBRTU-001` là cổng cứng nhất: **không viết một dòng code hai-bus nào trước
 khi biết phần cứng có mấy đường RS485.**

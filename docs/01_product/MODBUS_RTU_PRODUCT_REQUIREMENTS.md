@@ -2,10 +2,10 @@
 
 **ID:** PROD-MBRTU-001
 **Phiên bản:** 0.2
-**Trạng thái:** In Review
-**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
+**Trạng thái:** Active (Phê duyệt 2026-08-05 theo Tờ trình `DDC24-MBRTU-REQ-APPROVE-2026-08-05`)
+**Ngày:** 2026-08-05
 **Chủ quản đề xuất:** Product Owner + System Engineering / Fieldbus
-**Decision package:** ADR-024 — `Proposed`
+**Decision package:** ADR-024 — `Accepted` (2026-08-05)
 **Quyết định đã ký áp dụng vào bản này:** Đ-01, Đ-04, Đ-06, Đ-07
 ([biên bản PM/CTO 2026-08-04](../07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md))
 **Trace ngược:** [PRODUCT.md](PRODUCT.md) `SYS-REQ-004`, ADR-023
@@ -77,7 +77,7 @@ Không vai trò nào được cấp raw arbitrary-function-code hoặc mở cổ
 
 | ID | Capability | Ghi chú phạm vi |
 |---|---|---|
-| PC-MBRTU-01 | DDC là Modbus RTU **master** trên bus RS485. **Rev A: 01 bus** (Đ-01). Mô hình dữ liệu và contract giữ `bus_id` để mở bus thứ hai mà không đổi ABI | không hỗ trợ slave northbound |
+| PC-MBRTU-01 | DDC là Modbus RTU **master** trên **02 bus RS485 vật lý**: RS485-1 (`/dev/rs485-1` → `ttyS5`) và RS485-2 (`/dev/rs485-2` → `ttyS1`, UART1 M1 Header P16). | Không hỗ trợ slave northbound |
 | PC-MBRTU-02 | Quản lý vòng đời Modbus RTU Device (xem/thêm/sửa/xoá/enable/disable) | |
 | PC-MBRTU-03 | Quản lý vòng đời Modbus RTU Point kèm import/export | |
 | PC-MBRTU-04 | Ánh xạ Modbus RTU Point vào Point Database DDC-24 | dùng namespace tag/point ID chung |

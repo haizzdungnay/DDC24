@@ -2,8 +2,8 @@
 
 **ID:** DDD-BE-MBRTU-001
 **Phiên bản:** 0.2
-**Trạng thái:** In Review
-**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
+**Trạng thái:** Active (Phê duyệt 2026-08-05 theo Tờ trình `DDC24-MBRTU-REQ-APPROVE-2026-08-05`)
+**Ngày:** 2026-08-05
 **Chủ quản đề xuất:** SOM Backend Lead
 **Quyết định đã ký áp dụng:** Đ-01, Đ-04, Đ-05, Đ-06, Đ-07
 **Đối chiếu source tại:** `feat/modbus-rtu-track-a` / `eade4e5`

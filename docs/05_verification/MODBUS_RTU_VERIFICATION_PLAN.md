@@ -2,8 +2,8 @@
 
 **ID:** VVP-MBRTU-001
 **Phiên bản:** 0.2
-**Trạng thái:** In Review
-**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
+**Trạng thái:** Active (Phê duyệt 2026-08-05 theo Tờ trình `DDC24-MBRTU-REQ-APPROVE-2026-08-05`)
+**Ngày:** 2026-08-05
 **Chủ quản đề xuất:** QA/Verification Lead
 **Quyết định đã ký áp dụng:** Đ-01 (1 bus), Đ-04 (3 vai trò), Đ-07 (≥256 Point), Đ-08 (cấp thiết bị thật)
 **Đối chiếu source tại:** `feat/modbus-rtu-track-a` / `eade4e5`
@@ -101,7 +101,7 @@ FC01/02/03/04/05/06/16, exception response và fault injection.
 | TC-MBRTU-S-07 | Sai baud/parity | khung rác ⇒ CRC/timeout, không sinh giá trị sai kiểu GOOD | `SWR-REQ-MBRTU-005` |
 | TC-MBRTU-S-08 | Sai slave ID | không phản hồi ⇒ OFFLINE có reason đúng | `SWR-REQ-MBRTU-005` |
 | TC-MBRTU-S-09 | Nhiều slave | 16 slave mô phỏng, không starvation, đo poll duration | `SWR-REQ-MBRTU-004` |
-| TC-MBRTU-S-10 | Hai bus mô phỏng | ⏸ **HOÃN** theo Đ-01 (Rev A một bus). Kích hoạt lại khi Hardware xác nhận cổng thứ hai (`G-B1`) | `SYS-REQ-MBRTU-001` |
+| TC-MBRTU-S-10 | Hai bus mô phỏng | ✅ **KÍCH HOẠT**: Mô phỏng 2 bus RS485 song song (`/dev/rs485-1` và `/dev/rs485-2`), kiểm thử 2 BusWorker độc lập không starvation | `SYS-REQ-MBRTU-001` |
 | TC-MBRTU-S-11 | Commissioning | test-connection/read/write trả kết quả thật của simulator | `PR-MBRTU-003`, `PR-MBRTU-005` |
 | TC-MBRTU-S-12 | Stress | 16 device × giới hạn Point hiện hành ở poll nhỏ nhất được duyệt, 1 h, không crash, không rò bộ nhớ. Sau Đ-07 phải chạy lại ở 256 Point và **đo kích thước datagram + thời gian copy snapshot** | `NFR-REQ-MBRTU-001` |
 
@@ -113,7 +113,7 @@ mọi report. Không dùng kết quả simulator để tuyên bố hỗ trợ th
 | ID | Mục tiêu | Pass criteria | Trace |
 |---|---|---|---|
 | TC-MBRTU-T-01 | Deploy | binary/config trên target truy được commit/toolchain/checksum | `NFR-REQ-MBRTU-003` |
-| TC-MBRTU-T-02 | Bus capability | bus resolve từ manifest, **không đoán path**. Rev A: đúng 1 bus. Case âm bắt buộc: cấu hình trỏ cổng không tồn tại (ví dụ `/dev/ttyS3` trên Foxlinx) phải bị từ chối ở tầng cấu hình, không im lặng hỏng ở iobus (D-14) | `SYS-REQ-MBRTU-001` |
+| TC-MBRTU-T-02 | Bus capability | Bus resolve từ manifest và link cứng (`/dev/rs485-1` → `ttyS5`, `/dev/rs485-2` → `ttyS1`). Case âm bắt buộc: cấu hình trỏ cổng không tồn tại (ví dụ `/dev/ttyS3` trên Foxlinx) phải bị từ chối ở tầng cấu hình | `SYS-REQ-MBRTU-001` |
 | TC-MBRTU-T-03 | Service restart | `systemctl restart mkddc-iobus` ⇒ phục hồi, không write phát lại | `SWR-REQ-MBRTU-006` |
 | TC-MBRTU-T-04 | Reboot | sau reboot, cấu hình đúng revision, service tự start, quality khởi tạo đúng | `NFR-REQ-MBRTU-002` |
 | TC-MBRTU-T-05 | Cách ly lỗi | kill iobus ⇒ core/web tiếp tục; kill web ⇒ poll tiếp tục | `PR-MBRTU-011` |

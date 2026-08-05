@@ -2,8 +2,8 @@
 
 **ID:** DDD-DM-MBRTU-001
 **Phiên bản:** 0.2
-**Trạng thái:** In Review
-**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
+**Trạng thái:** Active (Phê duyệt 2026-08-05 theo Tờ trình `DDC24-MBRTU-REQ-APPROVE-2026-08-05`)
+**Ngày:** 2026-08-05
 **Design authority chủ quản:** [DDD-SW-MBRTU-POINT-001](DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md)
 **Quyết định đã ký áp dụng:** Đ-01 (1 bus Rev A), Đ-05 (ngữ nghĩa retry), Đ-07 (≥256 Point)
 **Trace:** `SWR-REQ-MBRTU-001..003`, `SWR-REQ-MBRTU-007..008`, `IF-REQ-MBRTU-001`, `IF-REQ-MBRTU-004`
@@ -16,20 +16,14 @@
 ## 1. Ba entity và quan hệ
 
 ```text
-ModbusRTUBus                            — resource cố định của thiết bị
-  │   Rev A: đúng 1 instance (bus_id = rs485-1). Đ-01.
-  │   Kiểu vẫn là enum mở rộng được — thêm bus thứ hai KHÔNG đổi ABI.
+ModbusRTUBus                            — resource phần cứng của thiết bị
+  │   02 bus instances: bus_id = 1 (/dev/rs485-1 -> ttyS5), bus_id = 2 (/dev/rs485-2 -> ttyS1).
   └─ 1..n ModbusRTUDevice               — một slave trên đúng một bus
        └─ 1..n ModbusRTUPoint           — một điểm luận lý trên device
                 └─ 0..1 PointMapping    — ánh xạ vào Point Database DDC-24
 ```
 
-> **Vì sao giữ entity Bus khi Rev A chỉ có một bus.** Bỏ Bus và nhét serial format
-> vào Device sẽ làm việc thêm cổng thứ hai trở thành một lần đổi ABI nữa — chính
-> điều mà Đ-03 chấp thuận *một lần duy nhất*. Giữ Bus cũng là chỗ đặt đúng cho
-> `offline_probe_ms`: nó bảo vệ băng thông của **sợi dây**, không thuộc về device
-> nào. Ràng buộc Rev A: mọi validator phải từ chối `bus_id` không có trong
-> capability manifest, thay vì chấp nhận rồi hỏng ở tầng iobus.
+> **Cấu hình 2 Bus RS485 vật lý:** Cổng 1 (`/dev/rs485-1` → `/dev/ttyS5`) và Cổng 2 (`/dev/rs485-2` → `/dev/ttyS1` trên Header P16 UART1 M1). Mỗi Bus có cấu hình serial format (`baud_rate`, `parity`, `stop_bits`, `direction_control`) và tham số `offline_probe_ms` riêng. Ràng buộc: mọi validator từ chối `bus_id` không có trong capability manifest (`bus_id != 1 && bus_id != 2`).
 
 Ràng buộc quan hệ:
 
