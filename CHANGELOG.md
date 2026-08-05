@@ -7,6 +7,20 @@
 ---
 
 ## [Unreleased]
+### Added — Hoàn thành Triển khai Sprint 3 (Epic B4) Modbus RTU Frontend UI & Test Write Modal (2026-08-05)
+
+- **Frontend Web UI (`apps/web-ui/src/`):**
+  - **API Client (`shared/api/client.ts`):** Bổ sung phương thức `writeModbusTest(pointId, value)` kết nối endpoint REST API `POST /api/v1/modbus/write-test`.
+  - **Modbus RTU Page (`features/modbus-rtu/ModbusRtuPage.tsx`):**
+    - Bổ sung nút **"Ghi thử"** trong bảng quản lý Modbus RTU Point dành riêng cho các Point có quyền `read_write` khi tài khoản ở vai trò Admin (Đ-04).
+    - Thêm **Test Write Modal** yêu cầu người dùng xác nhận giá trị cần ghi trước khi phát lệnh xuống iobus/Core.
+    - Hiển thị phản hồi trạng thái ghi thực tế và cập nhật lại dữ liệu telemetry.
+  - **Unit Tests (`features/modbus-rtu/ModbusRtuPage.test.tsx`):** Thêm test case xác minh luồng click nút Ghi thử, mở dialog xác nhận và gửi lệnh thành công qua `writeModbusTest`.
+- **Kết quả Kiểm chứng Gate:**
+  - **C++:** `734/734 PASS` (100% suite).
+  - **Go:** `11/11 package PASS` (100%).
+  - **Frontend:** `305/305 PASS` (100% Vitest, 35 Files), ESLint 0 warning, `npm run build` thành công.
+
 ### Added — Hoàn thành Triển khai Sprint 2 (Epic B3) Modbus RTU End-to-End Write Path (`F-FW-06`) (2026-08-05)
 
 - **C++ Core Engine (`apps/core/adapters/ipc/web_ipc.cpp`, `point_table.cpp`, `scan_loop.cpp`):**
