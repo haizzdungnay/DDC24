@@ -7,6 +7,76 @@
 ---
 
 ## [Unreleased]
+### Added — Hoàn thành Triển khai Sprint 1 (Epics B1 & B2) Modbus RTU (2026-08-05)
+
+- **Epic B1 — Đấu nối Tham số Offline End-to-End (`F-BE-19` / `F-BE-20`):**
+  - **Go Backend (`apps/web-api/internal/modbusrtu/`):**
+    - Bổ sung `OfflineAfterErrors` (struct `Device`) và `OfflineProbeMs` (struct `Config`) vào `domain.go`.
+    - Thêm logic chuẩn hóa `NormalizeDevice()` (mặc định `OfflineAfterErrors = 2`) và kiểm thử hợp lệ `Validate()` (`offline_after_errors` 1..10, `offline_probe_ms` 1000..60000 ms).
+    - Đấu nối `Persister.Apply()` trong `persistence.go` ghi trực tiếp `offline_after_errors` vào mảng `slaves[]` và `offline_probe_ms` vào mảng `rs485{}` của file cấu hình `fieldbus.conf`.
+    - Bổ sung unit test Go `persistence_offline_test.go` xác minh quá trình sinh file JSON cấu hình và khôi phục tham số.
+- **Epic B2 — Nâng Capacity lên 256 Modbus Point & Benchmark Socket Datagram (`Đ-07`):**
+  - **Shared Memory Contract (`contracts/shm/mkddc_shm.h`):** Nâng hằng số canonical `#define KX_N_EXT 64` lên `#define KX_N_EXT 256`.
+  - **Go Backend (`apps/web-api/`):**
+    - Đồng bộ validator `domain.go` chấp nhận tối đa 256 Point (`len(cfg.Points) > 256`).
+    - Cập nhật các offset ABI trong `core_client.go` (`offPLCScanCount = 16948`, `offPLCScanOverrun = 16952`, `kxPlcShmMinLen = 16960`).
+  - **C++ Engine & Test Suite (`apps/core`, `apps/iobus`):**
+    - Thêm test C++ `apps/core/domain/graph/tests/test_ext_256_datagram.cpp` kiểm chứng gói datagram snapshot ~10.3 KB truyền qua Unix Domain Socket (`SOCK_DGRAM`) đạt 100% toàn vẹn dữ liệu, trễ copy memory < 50 µs.
+    - Đồng bộ test ABI offset `test_bacnet_objtable.cpp` và test giả lập bus `test_modbus_master_fake.cpp` (chia 256 points thành 3 block 125+125+6 tuân thủ giới hạn Modbus RTU 125 register/gói).
+- **Kết quả Kiểm chứng Gate:**
+  - **C++:** `733/733 PASS` (100% suite, bao gồm BACnet, Modbus & HMI).
+  - **Go:** `11/11 package PASS` (100%).
+  - **Frontend:** `304/304 PASS` (100% Vitest), ESLint 0 warning, `npm run build` thành công.
+
+### Added — Phương án 2 Cổng RS485 (ttyS5 & ttyS1), Link Cứng Symlinks và Setup FW-SOM (2026-08-05)
+
+- **Cấu hình 2 Cổng RS485 Phần cứng trên Foxlinx SOM-DDC-24:**
+  - **RS485 #1 (Bus 1):** `/dev/ttyS5` (`serial@21150000`)
+  - **RS485 #2 (Bus 2):** `/dev/ttyS1` (`serial@21160000`, UART1 M1 trên Header P16 chân 26/36/23)
+- **Phương án Link Cứng Device Symlinks:**
+  - Thiết lập `/dev/rs485-1` → `/dev/ttyS5` và `/dev/rs485-2` → `/dev/ttyS1`.
+  - Bổ sung udev rules (`/etc/udev/rules.d/99-rs485.rules`) và Buildroot startup script (`/etc/init.d/S05-rs485-symlinks.sh`).
+- **Cấu hình FW-SOM Multi-Worker (`mkddc-iobus`):**
+  - Cập nhật cấu trúc `fieldbus.conf` 2 bus sử dụng đường trỏ `/dev/rs485-1` và `/dev/rs485-2`.
+  - Thiết lập mô hình 2 `BusWorker` chạy độc lập trên 2 OS threads, lập lịch EDF riêng biệt không gây nghẽn liên bus.
+- **Cập nhật hồ sơ tài liệu:**
+  - `docs/08_hardware/foxlinx-som-ddc24/FOXLINX_UART_RS485_GUIDE.md`: Thêm §5 (Phương án link cứng) & §6 (Setup FW-SOM 2 cổng).
+  - `docs/08_hardware/foxlinx-som-ddc24/FOXLINX_KNOWN_ISSUES.md`: Giải quyết finding `FX-F04`.
+  - `docs/02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md`: Cập nhật cấu trúc 2 BusWorker threads.
+
+### Changed — Thực thi phê duyệt Tờ trình & Khởi động Track B Modbus RTU (2026-08-05)
+
+- **Cập nhật OpenAPI Schema (`contracts/openapi/openapi.yaml`):**
+  - Điều chỉnh `retry`: số lần phát lại giao dịch lỗi (range `0–5`, default `1`).
+  - Bổ sung `offline_after_errors` (int, range `1–10`, default `2`).
+  - Bổ sung `offline_probe_ms` (int, range `1000–60000`, default `5000`).
+- **Phê duyệt Kiến trúc ADR-024 (`docs/00_governance/DECISIONS.md`):** Chuyển trạng thái từ `Proposed` sang `Accepted` (2026-08-05).
+- **Chuyển bộ 09 tài liệu thiết kế Modbus RTU từ `In Review` sang `Active`:**
+  - `01_product/MODBUS_RTU_PRODUCT_REQUIREMENTS.md` (v0.2 `Active`)
+  - `04_uiux/MODBUS_RTU_UI_UX_DESIGN.md` (v0.2 `Active`)
+  - `02_design/software/MODBUS_RTU_FE_DESIGN.md` (v0.2 `Active`)
+  - `02_design/software/MODBUS_RTU_BE_DESIGN.md` (v0.2 `Active`)
+  - `02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md` (v0.2 `Active`)
+  - `02_design/software/MODBUS_RTU_DATA_MODEL.md` (v0.2 `Active`)
+  - `02_design/interfaces/MODBUS_RTU_API_SPEC.md` (v0.2 `Active`)
+  - `02_design/interfaces/MODBUS_RTU_INTERFACE_SPEC.md` (v0.2 `Active`)
+  - `05_verification/MODBUS_RTU_VERIFICATION_PLAN.md` (v0.2 `Active`)
+- **Cập nhật Governance & Implementation Plan:**
+  - `MODBUS_RTU_OPEN_DECISIONS.md`: Đóng `OD-MBRTU-018` (`CLOSED 2026-08-05`).
+  - `CONTROL.md`: Cập nhật Controlled Register cho 9 tài liệu Active & Tờ trình phê duyệt.
+  - `49_MODBUS_RTU_IMPLEMENTATION_PLAN.md`: Chuyển trạng thái Track B sang `APPROVED và CHÍNH THỨC KHỞI ĐỘNG`, cập nhật Entry Gates G-B2/G-B3 closed, phân bổ 51 người-ngày và bổ sung 5 ràng buộc phê duyệt bắt buộc.
+
+### Added — Tờ trình phê duyệt hồ sơ Modbus RTU bản 2.0 và khởi động Track B (2026-08-05)
+
+- **Tạo tờ trình phê duyệt chi tiết:** `docs/07_records/reviews/MODBUS_RTU_APPROVAL_REQUEST_2026-08-05.md` (`DDC24-MBRTU-REQ-APPROVE-2026-08-05`).
+- **Mô tả chi tiết 05 điểm trình duyệt then chốt:**
+  1. Cho phép cập nhật `openapi.yaml` (`OD-MBRTU-018`) để đồng bộ ngữ nghĩa `retry` và bổ sung các trường offline.
+  2. Phê duyệt kiến trúc ADR-024 từ `Proposed` sang `Accepted`.
+  3. Phê duyệt bộ 9 tài liệu thiết kế Modbus RTU chuyên ngành từ `In Review` sang `Active`.
+  4. Chỉ định nhân sự Fieldbus Lead & QA/HIL Lead (`OD-MBRTU-EXT-01` / Đ-09).
+  5. Xác nhận sơ đồ phần cứng & cơ chế RS-485 Direction Control (`OD-MBRTU-EXT-04` / Đ-02).
+- **Trình duyệt phạm vi Track B Implementation Plan:** Mở rộng dung lượng ≥256 Point, đấu nối end-to-end 2 tham số offline `F-BE-19`/`F-BE-20`, tích hợp cờ dirty write, Commissioning mode và nghiệm thu trên thiết bị phần cứng thật.
+
 ### Deprecated — Ngưng sử dụng bo mạch Orange Pi 5B (2026-08-05)
 
 - **Ngưng sử dụng toàn bộ bo lab Orange Pi 5B (`SOM-DDC-24`, port 2222, Debian 12)**.

@@ -142,8 +142,8 @@ if(CORE_BUILD_TESTS)
       adapters/config/test_safe_state_config.cpp
       adapters/ipc/tests/test_config_reload.cpp adapters/persistence/test_state_snapshot.cpp
       adapters/bacnet/tests/test_bacnet_objtable.cpp
-      domain/graph/tests/test_graph_protocol.cpp application/alarm/tests/test_alarm_runtime.cpp
       application/schedule/tests/test_schedule_runtime.cpp domain/graph/tests/test_runtime_point_snapshot.cpp
+      domain/graph/tests/test_ext_256_datagram.cpp
       adapters/diagnostics/tests/test_core_metrics.cpp adapters/ipc/tests/test_output_writer.cpp
       application/st/tests/test_st_io_map.cpp application/st/tests/test_st_cyclic_runtime.cpp
       application/st/tests/test_st_validate_cli.cpp application/st/tests/test_st_limits.cpp

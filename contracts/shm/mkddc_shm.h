@@ -67,7 +67,7 @@
 #define KX_N_AV   32
 #define KX_N_BV   16
 #define KX_N_MSV  8
-#define KX_N_EXT  64   /* điểm thiết bị phụ (Modbus RTU master) */
+#define KX_N_EXT  256  /* điểm thiết bị phụ (Modbus RTU master) */
 
 /* Chất lượng điểm */
 typedef enum { KX_Q_GOOD = 0, KX_Q_UNCERTAIN = 1, KX_Q_BAD = 2 } kx_quality_t;

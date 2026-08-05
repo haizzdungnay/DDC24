@@ -272,9 +272,13 @@ TEST(ModbusMaster, SlaveWithoutExtCapacityIsNotReportedOnline)
     pty.open_pair();
     ASSERT_FALSE(pty.slave_dev.empty());
 
-    /* slave0 chiếm trọn KX_N_EXT=64 slot; slave1 và slave2 không còn chỗ. */
+    /* slave0 chiếm trọn KX_N_EXT=256 slot (3 blocks: 125+125+6); slave1 và slave2 không còn chỗ. */
     const std::string p_full = write_tmp_profile("full",
-        R"json({"points":[{"name":"blk","fc":3,"addr":0,"count":64,"type":"uint16"}]})json");
+        R"json({"points":[
+            {"name":"b1","fc":3,"addr":0,"count":125,"type":"uint16"},
+            {"name":"b2","fc":3,"addr":125,"count":125,"type":"uint16"},
+            {"name":"b3","fc":3,"addr":250,"count":6,"type":"uint16"}
+        ]})json");
     const std::string p_over = write_tmp_profile("over",
         R"json({"points":[{"name":"reg","fc":3,"addr":0,"count":1,"type":"uint16"}]})json");
 
@@ -287,20 +291,20 @@ TEST(ModbusMaster, SlaveWithoutExtCapacityIsNotReportedOnline)
 
     ModbusMaster master;
     ASSERT_TRUE(master.open(cfg));
-    EXPECT_EQ(master.total_ext_count(), 64u);
+    EXPECT_EQ(master.total_ext_count(), static_cast<uint16_t>(KX_N_EXT));
 
     modbus_t* slave = modbus_new_rtu(pty.slave_dev.c_str(), 19200, 'N', 8, 1);
     ASSERT_NE(slave, nullptr);
     modbus_set_slave(slave, 1);
     modbus_set_socket(slave, pty.master_fd);
-    modbus_mapping_t* mapping = modbus_mapping_new(128, 128, 128, 128);
+    modbus_mapping_t* mapping = modbus_mapping_new(300, 300, 300, 300);
     ASSERT_NE(mapping, nullptr);
     mapping->tab_registers[0] = 777;
 
     std::atomic<int> served{0};
     std::thread server([&]() {
         uint8_t request[MODBUS_RTU_MAX_ADU_LENGTH] = {};
-        while (served.load() < 1) {
+        while (served.load() < 3) {
             const int n = modbus_receive(slave, request);
             if (n <= 0) break;
             if (modbus_reply(slave, request, n, mapping) < 0) break;
@@ -314,7 +318,7 @@ TEST(ModbusMaster, SlaveWithoutExtCapacityIsNotReportedOnline)
     server.join();
 
     /* slave0 poll thật và online */
-    EXPECT_EQ(served.load(), 1);
+    EXPECT_EQ(served.load(), 3);
     EXPECT_TRUE(metrics.get(0).online);
     EXPECT_FLOAT_EQ(cache.point(0).value, 777.0f);
 
