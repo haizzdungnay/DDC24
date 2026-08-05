@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({
   getModbusDevices: vi.fn(), getModbusPoints: vi.fn(), getModbusDiagnostics: vi.fn(),
   getPoints: vi.fn(), createModbusDevice: vi.fn(), updateModbusDevice: vi.fn(),
   deleteModbusDevice: vi.fn(), createModbusPoint: vi.fn(), updateModbusPoint: vi.fn(),
-  deleteModbusPoint: vi.fn()
+  deleteModbusPoint: vi.fn(), writeModbusTest: vi.fn()
 }))
 
 vi.mock('../../shared/api/client', () => ({ apiClient: api }))
@@ -31,17 +31,36 @@ describe('ModbusRtuPage', () => {
   beforeEach(() => {
     auth.role = 'admin'
     api.getModbusDevices.mockResolvedValue([{ device_id: 'ahu-1', display_name: 'AHU 1', enabled: true, rs485_port: '/dev/ttyS5', baud: 19200, parity: 'E', stop_bit: 1, slave_id: 7, poll_ms: 1000, timeout_ms: 300, retry: 2 }])
-    api.getModbusPoints.mockResolvedValue([{ point_id: 'MB-AHU-SAT', device_id: 'ahu-1', tag_name: 'ahu1 sat', display_name: 'Supply air', register_type: 'input_register', address: 100, data_type: 'float32', byte_order: 'little', word_order: 'low_high', scale: 0.1, offset: -10, unit: 'degC', read_write: 'read', default_value: 20, safe_value: 0, enabled: true }])
+    api.getModbusPoints.mockResolvedValue([
+      { point_id: 'MB-AHU-SAT', device_id: 'ahu-1', tag_name: 'ahu1 sat', display_name: 'Supply air', register_type: 'input_register', address: 100, data_type: 'float32', byte_order: 'little', word_order: 'low_high', scale: 0.1, offset: -10, unit: 'degC', read_write: 'read', default_value: 20, safe_value: 0, enabled: true },
+      { point_id: 'MB-AHU-SP', device_id: 'ahu-1', tag_name: 'ahu1 sp', display_name: 'Setpoint', register_type: 'holding_register', address: 102, data_type: 'float32', byte_order: 'big', word_order: 'high_low', scale: 1, offset: 0, unit: 'degC', read_write: 'read_write', default_value: 22.5, safe_value: 0, enabled: true }
+    ])
     api.getModbusDiagnostics.mockResolvedValue([{ device_id: 'ahu-1', slave_id: 7, online: false, total_polls: 10, total_errors: 2, timeout_errors: 1, crc_errors: 1, retry_attempts: 2, consecutive_errors: 2, last_seen_ms: 123 }])
     api.getPoints.mockResolvedValue([{ id: 'MB-AHU-SAT', tag: 'ahu1 sat', name: 'Supply air', kind: 'modbus_rtu', value: 21.5, quality: 'offline', source: 'modbus_rtu', updatedAt: '2026-08-03T00:00:00Z' }])
     api.createModbusDevice.mockResolvedValue({})
     api.deleteModbusDevice.mockResolvedValue(undefined)
     api.deleteModbusPoint.mockResolvedValue(undefined)
+    api.writeModbusTest.mockResolvedValue({ point_id: 'MB-AHU-SP', applied_value: 22.5, status: 'success' })
   })
 
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+  })
+
+  it('hiển thị nút Ghi thử cho Point read_write và thực thi lệnh ghi sau xác nhận', async () => {
+    const user = userEvent.setup()
+    render(<ModbusRtuPage />)
+    expect(await screen.findByText('MB-AHU-SP')).toBeInTheDocument()
+    const writeBtn = screen.getByRole('button', { name: 'Ghi thử' })
+    expect(writeBtn).toBeInTheDocument()
+
+    await user.click(writeBtn)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('Ghi thử Modbus RTU Point')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Xác nhận Ghi' }))
+    expect(api.writeModbusTest).toHaveBeenCalledWith('MB-AHU-SP', 22.5)
   })
 
   it('hiển thị cấu hình, quality runtime và diagnostics từ backend', async () => {

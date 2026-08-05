@@ -57,6 +57,8 @@ export function ModbusRtuPage() {
    * mất cấu hình vừa gián đoạn I/O. */
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [writingPoint, setWritingPoint] = useState<{ point_id: string; label: string; value: number } | null>(null)
+  const [testWriting, setTestWriting] = useState(false)
   /* Đ-04: Viewer/Operator xem được, chỉ Admin sửa cấu hình. FE disable control
    * để không mời người dùng vào thao tác chắc chắn bị server từ chối 403; server
    * vẫn là nơi quyết định cuối. */
@@ -77,6 +79,21 @@ export function ModbusRtuPage() {
       setStatus(error instanceof Error ? error.message : 'Không thể xoá')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function confirmTestWrite() {
+    if (!writingPoint) return
+    setTestWriting(true)
+    try {
+      const res = await apiClient.writeModbusTest(writingPoint.point_id, Number(writingPoint.value))
+      setWritingPoint(null)
+      await reload()
+      setStatus(`Ghi thử ${writingPoint.label} thành công (giá trị ghi nhận: ${res.applied_value}).`)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Không thể thực hiện ghi thử')
+    } finally {
+      setTestWriting(false)
     }
   }
 
@@ -160,7 +177,7 @@ export function ModbusRtuPage() {
           <label className="flex h-10 items-center gap-2"><input type="checkbox" checked={point.enabled} onChange={(e) => setPoint({ ...point, enabled: e.target.checked })} /> Enabled</label>
           <div className="flex gap-2"><button className={buttonClass} type="submit" disabled={!canEdit} title={readOnlyHint}>{editingPoint ? 'Cập nhật' : 'Thêm Point'}</button>{editingPoint && <button className={buttonClass} type="button" onClick={() => { setPoint({ ...emptyPoint, device_id: devices[0]?.device_id ?? '' }); setEditingPoint(false) }}>Huỷ</button>}</div>
         </form>
-        <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-[var(--c-border)]"><th>Point ID / Tag</th><th>Tên</th><th>Register</th><th>Kiểu / endian</th><th>Scale + offset</th><th>Quality</th><th>R/W</th><th /></tr></thead><tbody>{points.map((row) => <tr key={row.point_id} className="border-b border-[var(--c-border)]"><td>{row.point_id}<br/><span className="text-[var(--c-text-dim)]">{row.tag_name}</span></td><td>{row.display_name}</td><td>{row.register_type} @{row.address}</td><td>{row.data_type} · {row.byte_order}/{row.word_order}</td><td>{row.scale}x + {row.offset} {row.unit}</td><td>{runtimeQuality[row.point_id]?.toUpperCase() ?? NO_DATA}</td><td>{row.read_write}</td><td className="space-x-2 py-2"><button className={buttonClass} disabled={!canEdit} title={readOnlyHint} onClick={() => { setPoint(row); setEditingPoint(true) }}>Sửa</button><button className={buttonClass} disabled={!canEdit} title={readOnlyHint} onClick={() => setPendingDelete({ kind: 'point', id: row.point_id, label: `${row.tag_name} (${row.point_id})` })}>Xoá</button></td></tr>)}</tbody></table></div>
+        <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-[var(--c-border)]"><th>Point ID / Tag</th><th>Tên</th><th>Register</th><th>Kiểu / endian</th><th>Scale + offset</th><th>Quality</th><th>R/W</th><th /></tr></thead><tbody>{points.map((row) => <tr key={row.point_id} className="border-b border-[var(--c-border)]"><td>{row.point_id}<br/><span className="text-[var(--c-text-dim)]">{row.tag_name}</span></td><td>{row.display_name}</td><td>{row.register_type} @{row.address}</td><td>{row.data_type} · {row.byte_order}/{row.word_order}</td><td>{row.scale}x + {row.offset} {row.unit}</td><td>{runtimeQuality[row.point_id]?.toUpperCase() ?? NO_DATA}</td><td>{row.read_write}</td><td className="space-x-2 py-2"><button className={buttonClass} disabled={!canEdit} title={readOnlyHint} onClick={() => { setPoint(row); setEditingPoint(true) }}>Sửa</button>{row.read_write === 'read_write' && <button className={buttonClass} disabled={!canEdit} title={readOnlyHint} onClick={() => setWritingPoint({ point_id: row.point_id, label: `${row.display_name} (${row.point_id})`, value: Number(row.default_value ?? 0) })}>Ghi thử</button>}<button className={buttonClass} disabled={!canEdit} title={readOnlyHint} onClick={() => setPendingDelete({ kind: 'point', id: row.point_id, label: `${row.tag_name} (${row.point_id})` })}>Xoá</button></td></tr>)}</tbody></table></div>
       </section>
 
       <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">
@@ -188,6 +205,36 @@ export function ModbusRtuPage() {
               <button className={buttonClass} type="button" onClick={() => setPendingDelete(null)} disabled={deleting}>Huỷ</button>
               <button className={buttonClass} type="button" onClick={confirmDelete} disabled={deleting}>
                 {deleting ? 'Đang xoá…' : 'Xoá'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {writingPoint && (
+        <div role="dialog" aria-modal="true" aria-labelledby="mb-write-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-5">
+            <h3 id="mb-write-title" className="text-lg font-semibold text-[var(--c-text)]">
+              Ghi thử Modbus RTU Point
+            </h3>
+            <p className="mt-2 text-sm text-[var(--c-text)]">{writingPoint.label}</p>
+            <div className="mt-4 space-y-2">
+              <label className="block text-xs font-semibold text-[var(--c-text-dim)]">Giá trị cần ghi</label>
+              <input
+                type="number"
+                step="any"
+                className={inputClass + ' w-full'}
+                value={writingPoint.value}
+                onChange={(e) => setWritingPoint({ ...writingPoint, value: Number(e.target.value) })}
+              />
+            </div>
+            <p className="mt-3 text-xs text-[var(--c-text-dim)]">
+              Lệnh sẽ được gửi xuống Core/iobus và đặt cờ dirty để ghi trực tiếp xuống thiết bị Modbus RTU.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button className={buttonClass} type="button" onClick={() => setWritingPoint(null)} disabled={testWriting}>Huỷ</button>
+              <button className={buttonClass} type="button" onClick={confirmTestWrite} disabled={testWriting}>
+                {testWriting ? 'Đang ghi…' : 'Xác nhận Ghi'}
               </button>
             </div>
           </div>

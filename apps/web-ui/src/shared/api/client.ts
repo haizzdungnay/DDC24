@@ -1304,6 +1304,13 @@ export const apiClient = {
     if (IS_DEMO) return []
     return requestJson<ModbusRTUDiagnostics[]>('/modbus/diagnostics', { cache: 'no-store' })
   },
+  async writeModbusTest(pointId: string, value: number): Promise<{ point_id: string; applied_value: number; status: string; message?: string }> {
+    if (IS_DEMO) return { point_id: pointId, applied_value: value, status: 'success', message: 'Demo mode' }
+    return requestJson<{ point_id: string; applied_value: number; status: string; message?: string }>('/modbus/write-test', {
+      method: 'POST',
+      body: JSON.stringify({ point_id: pointId, value }),
+    })
+  },
 
   async runCommissioningTest(pointId: string, value: number | boolean): Promise<CommissioningTestResult> {
     if (IS_DEMO) return runDemoCommissioning(pointId, value)
