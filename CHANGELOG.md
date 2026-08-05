@@ -7,6 +7,39 @@
 ---
 
 ## [Unreleased]
+### Added — Nghiệm thu Track A trên board production Foxlinx (2026-08-05)
+
+Board xác nhận đang chạy **fake MCU**, nên restart `mkddc-iobus` không gián đoạn
+I/O thật và năm kịch bản `T-A1..T-A5` đã chạy được.
+
+- **Cross-build aarch64** cho `mkddc-iobus` và `iobus_tests`. Hai trở ngại đã xử
+  lý và ghi lại để lần sau không mất thời gian: `gtest_discover_tests` chạy binary
+  aarch64 trên host x86 rồi **xoá** file vừa link (giải: `PRE_TEST` discovery
+  mode); board có `GLIBCXX_3.4.30` còn toolchain sinh mã cần `3.4.32` (giải:
+  `-static-libstdc++ -static-libgcc`).
+- **`iobus_tests` chạy trên chính board, trong lúc service production đang chạy:
+  208 PASS / 6 SKIP / 0 FAIL.** Sáu skip đều là `IoCache.*` vì cần độc quyền SHM
+  production. Nhóm Track A: **23/23 PASS** — đóng T-A1 (ghi ngoài dải bị từ chối),
+  T-A2 (slave chết không bỏ đói slave tốt), T-A5 (restart không phát lại write cũ).
+- **T-A4 không hồi quy jitter IOP.** So với baseline 18 giờ là không công bằng
+  (board rảnh `loadavg 0.04` so với 1.15–1.38 khi nghiệm thu), nên đã làm A/B: cài
+  lại binary cũ trong cùng giai đoạn, cùng mức nhiễu. Kết quả: binary mới
+  **15,36–15,65 µs** (overrun +10…+12/phút), binary cũ **18,15–20,10 µs** (+8…+17).
+  Ghi rõ đây là "không hồi quy", **không** phải "cải thiện nhờ Track A" — code
+  Modbus không chạy dòng nào trên board vì thiếu `fieldbus.conf`.
+- **T-A3 PARTIAL:** producer không publish telemetry Modbus giả (log
+  `fieldbus_config.file_missing`, fieldbus thread không được tạo — process chỉ có
+  2 thread) và API trả 401 đúng; phần giao diện chưa kiểm trên browser vì cần
+  phiên đăng nhập.
+- Sau deploy: **0 ERROR**, `NRestarts=0`, IOP lên đúng
+  `INIT → OPEN_UART → HANDSHAKE → NORMAL_POLL`, `mkddc-core`/`web-pi`/`netcfg`/
+  `fakemcu` đều active. Board để lại với binary Track A; bản cũ giữ tại
+  `/root/backup/` để rollback một lệnh.
+
+**Không đóng gate nào của phần cứng:** board chạy fake MCU, không có thiết bị
+RS-485 nào được đấu vào, `fieldbus.conf` vẫn không tồn tại. `VR-MBRTU-011` giữ RED.
+Evidence: `docs/07_records/test-evidence/fw-som/2026-08-05-foxlinx-track-a-acceptance.md`.
+
 ### Fixed — Modbus RTU Track A: đóng 12/14 defect an toàn và vận hành (2026-08-04)
 
 PM/CTO duyệt Track A ngày 2026-08-04 ([biên bản](docs/07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md)).

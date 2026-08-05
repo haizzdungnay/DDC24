@@ -620,11 +620,42 @@ Test mới thêm trong Track A: **19** (8 encode guard, 3 vòng đời write, 4 
 probe, 3 config retry/probe, 1 E303 re-arm) cộng 4 test FE Modbus và 1 test
 round-trip giờ địa phương.
 
-### 10.3 Chưa làm — nghiệm thu trên board
+### 10.3 Nghiệm thu trên board Foxlinx — ĐÃ CHẠY 2026-08-05
 
-Năm kịch bản `T-A1..T-A5` ở cổng ra §3 **chưa chạy**: cần cửa sổ bảo trì trên
-Foxlinx vì board có MCU STM32 thật, restart `mkddc-iobus` là gián đoạn IOP thật.
-Cho tới khi đó, Track A **chưa được coi là đóng** — mọi số đo ở §10.2 là host.
+Board xác nhận đang chạy **fake MCU** (`mkddc-fakemcu` active, IOP mở
+`/tmp/mkddc-iop-a`), nên restart `mkddc-iobus` không gián đoạn I/O thật và cửa sổ
+bảo trì không còn là điều kiện chặn.
+
+| Kịch bản | Kết quả | Cách kiểm chứng |
+|---|---|---|
+| T-A1 ghi ngoài dải bị từ chối | **PASS** | `iobus_tests` aarch64 chạy trên chính board |
+| T-A2 slave chết không bỏ đói slave tốt | **PASS** | như trên |
+| T-A3 thiếu telemetry không bị bịa | **PARTIAL** | producer + API PASS trên board; FE chưa kiểm trên browser |
+| T-A4 không hồi quy jitter IOP | **PASS** | A/B binary mới vs cũ trong cùng điều kiện |
+| T-A5 restart không phát lại write cũ | **PASS** | `ModbusMasterWriteLifecycle.*` trên board |
+
+Số đo chính:
+
+- `iobus_tests` aarch64 trên board, **trong lúc service production đang chạy**:
+  **208 PASS / 6 SKIP / 0 FAIL**. Sáu skip đều là `IoCache.*` (cần độc quyền SHM
+  production), không kịch bản Track A nào bị skip. Riêng nhóm Track A: **23/23 PASS**.
+- Jitter IOP A/B cùng điều kiện: binary mới **15,36–15,65 µs** (overrun +10…+12/phút)
+  so với binary cũ **18,15–20,10 µs** (+8…+17). Không hồi quy.
+- Sau deploy: **0 ERROR**, `NRestarts=0`, IOP lên đúng
+  `INIT → OPEN_UART → HANDSHAKE → NORMAL_POLL`, bốn service còn lại vẫn active.
+
+Chi tiết, giới hạn và số liệu thô:
+[evidence 2026-08-05](../07_records/test-evidence/fw-som/2026-08-05-foxlinx-track-a-acceptance.md).
+
+**Giới hạn phải đọc cùng kết quả:** board chạy fake MCU và **không có
+`fieldbus.conf`**, nên fieldbus thread không được tạo và code Modbus không chạy
+dòng nào ở trạng thái hiện tại. Hồ sơ chứng minh code đúng trên
+kiến trúc/kernel/libmodbus của target, **không** chứng minh RS-485 vật lý.
+`VR-MBRTU-011` vẫn RED.
+
+```text
+TRACK_A_BOARD_ACCEPTANCE = PASS WITH LIMITS
+```
 
 ### 10.4 Việc ngoài phạm vi đã xử lý cùng phiên
 
