@@ -7,6 +7,42 @@
 ---
 
 ## [Unreleased]
+### Deprecated — Ngưng sử dụng bo mạch Orange Pi 5B (2026-08-05)
+
+- **Ngưng sử dụng toàn bộ bo lab Orange Pi 5B (`SOM-DDC-24`, port 2222, Debian 12)**.
+  Target phần cứng duy nhất hiện tại của dự án là **Foxlinx SOM-DDC-24 (`SOM-DDC-24-foxlinx`, port 2223, Buildroot 2024.02)**.
+- **Rà soát & dọn dẹp tài liệu docs:**
+  - `DEVELOPMENT_AND_OPERATIONS.md`: Xóa Orange Pi 5B khỏi bảng target board, đổi interface mặc định `end1` → `eth0`, chuyển SSH alias chuẩn `SOM-DDC-24-foxlinx`.
+  - `14_BRINGUP_GUIDE.md`: Gắn cảnh báo deprecated cho section Orange Pi 5B.
+  - `27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md`: Gắn banner `[!WARNING]` deprecated cho section 1b Orange Pi, trỏ sang `FOXLINX_DEPLOY_CHECKLIST.md`.
+  - `47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md` & `49_MODBUS_RTU_IMPLEMENTATION_PLAN.md`: Cập nhật ghi chú Foxlinx là target duy nhất cho nghiệm thu và regression.
+  - `VERIFICATION.md` & `DECISIONS.md` (ADR-022): Cập nhật trạng thái di sản cho các bằng chứng/plan chạy trên Orange Pi 5B cũ.
+
+### Added — Bộ tài liệu kit phần cứng Foxlinx SOM-DDC-24 (2026-08-05)
+
+Tạo mới thư mục `docs/08_hardware/foxlinx-som-ddc24/` gồm 5 tài liệu + README
+index, dựa trên khảo sát SSH live board, bảng Pin Mux SoM nhà sản xuất, sơ đồ
+mạch Header GPIO P16 và datasheet Forlinx.
+
+- **FOXLINX_SOM_DDC24_SPEC.md** — thẻ spec kit: SoC RV1126B, Quad Cortex-A53
+  @1.3 GHz, 2 GB RAM, 16 GB eMMC, NPU 3.0 TOPS, Buildroot 2024.02, Linux
+  6.1.141. Bảng so sánh Foxlinx vs Radxa CM3 (baseline cũ trong HW_SPEC).
+- **FOXLINX_PINOUT_MAP.md** — sơ đồ chân Header P16 40-pin, bảng UART Mux 8
+  cổng (kết luận UART1 M1 là lựa chọn duy nhất cho RS485 #2 trên P16), I2C/SPI/
+  CAN, GPIO trống/đã dùng.
+- **FOXLINX_UART_RS485_GUIDE.md** — đề xuất ttyS1 M1 (chân 26/36/23) cho RS485
+  #2, quy trình sửa Device Tree, 3 phương án direction control, config
+  `io_config.conf`, checklist kiểm chứng 9 mục.
+- **FOXLINX_DEPLOY_CHECKLIST.md** — bảng khác biệt Foxlinx vs Orange Pi (OS,
+  user, MCU, package manager), pre-flight/backup, cross-compile, transfer,
+  smoke test 10 mục, rollback.
+- **FOXLINX_KNOWN_ISSUES.md** — 9 finding (FX-F01..F09): mâu thuẫn SoM
+  HW_SPEC (F01), RS485 direction control chưa cấu hình (F02), touch FT5436
+  không phát hiện (F07, mới), NPU 3.0 TOPS khả dụng (F08, mới), 2× CAN FD
+  disabled (F09, mới).
+- Cập nhật `docs/README.md` — thêm section Hardware platform.
+
+
 ### Added — Nghiệm thu Track A trên board production Foxlinx (2026-08-05)
 
 Board xác nhận đang chạy **fake MCU**, nên restart `mkddc-iobus` không gián đoạn
