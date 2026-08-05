@@ -7,6 +7,22 @@
 ---
 
 ## [Unreleased]
+### Added — Hoàn thành Triển khai Landing Page & Sub-navigation Layout cho Modbus RTU (2026-08-05)
+
+- **Frontend Web UI (`apps/web-ui/src/`):**
+  - **Modbus RTU Layout (`features/modbus-rtu/ModbusRtuLayout.tsx`):** Xây dựng khung giao diện với Sub-navigation tabs (`Overview`, `Devices`, `Points`, `Diagnostics`) và tích hợp `ConfigStateBanner`.
+  - **Overview Landing Page (`features/modbus-rtu/pages/OverviewPage.tsx`):** Triển khai chi tiết Landing Page theo đặc tả `MODBUS_RTU_UI_UX_DESIGN.md §2`:
+    - 4 KPI cards (`Tổng Device`, `Online`, `Offline`, `Fault`) hỗ trợ điều hướng trực tiếp theo trạng thái lọc.
+    - 2 Bus cards đại diện cho 2 cổng RS485 vật lý (`/dev/rs485-1` - `ttyS5` và `/dev/rs485-2` - `ttyS1`) hiển thị độ trễ poll p50/p95, đếm lỗi Timeout/CRC và Bus utilization (ước tính).
+    - Bảng Sự kiện giao tiếp gần đây với format giờ địa phương.
+    - Nút Làm mới và Auto-refresh 5s tự động tạm dừng khi ẩn tab browser.
+  - **Unit Tests (`OverviewPage.test.tsx`):** Bổ sung unit test xác minh render đầy đủ KPI, Bus Cards và Event feed.
+- **Go Backend (`apps/web-api/internal/app/`):** Bổ sung REST handlers `GET /api/v1/modbus/overview`, `GET /api/v1/modbus/buses`, `GET /api/v1/modbus/events` trả dữ liệu tổng quan cho Landing Page.
+- **Kết quả Kiểm chứng Gate:**
+  - **C++:** `734/734 PASS` (100% suite).
+  - **Go:** `11/11 package PASS` (100%).
+  - **Frontend:** `306/306 PASS` (100% Vitest, 36 Files), ESLint 0 warning, `npm run build` thành công.
+
 ### Added — Hoàn thành Triển khai Sprint 3 (Epic B4) Modbus RTU Frontend UI & Test Write Modal (2026-08-05)
 
 - **Frontend Web UI (`apps/web-ui/src/`):**

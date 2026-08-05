@@ -36,7 +36,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusBusInfo, type ModbusEventItem, type ModbusOverview, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -1303,6 +1303,18 @@ export const apiClient = {
   async getModbusDiagnostics(): Promise<ModbusRTUDiagnostics[]> {
     if (IS_DEMO) return []
     return requestJson<ModbusRTUDiagnostics[]>('/modbus/diagnostics', { cache: 'no-store' })
+  },
+  async getModbusOverview(): Promise<ModbusOverview> {
+    if (IS_DEMO) return { total_devices: 0, online: 0, offline: 0, fault_config: 0, revision: 1, checksum: 'demo' }
+    return requestJson<ModbusOverview>('/modbus/overview', { cache: 'no-store' })
+  },
+  async getModbusBuses(): Promise<ModbusBusInfo[]> {
+    if (IS_DEMO) return []
+    return requestJson<ModbusBusInfo[]>('/modbus/buses', { cache: 'no-store' })
+  },
+  async getModbusEvents(): Promise<ModbusEventItem[]> {
+    if (IS_DEMO) return []
+    return requestJson<ModbusEventItem[]>('/modbus/events', { cache: 'no-store' })
   },
   async writeModbusTest(pointId: string, value: number): Promise<{ point_id: string; applied_value: number; status: string; message?: string }> {
     if (IS_DEMO) return { point_id: pointId, applied_value: value, status: 'success', message: 'Demo mode' }

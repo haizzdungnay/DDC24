@@ -51,6 +51,8 @@ export interface ModbusRTUDevice {
   poll_ms: number
   timeout_ms: number
   retry: number
+  offline_after_errors?: number
+  offline_probe_ms?: number
 }
 
 export interface ModbusRTUPoint {
@@ -83,6 +85,42 @@ export interface ModbusRTUDiagnostics {
   retry_attempts: number
   consecutive_errors: number
   last_seen_ms: number
+}
+
+export interface ModbusOverview {
+  total_devices: number
+  online: number
+  offline: number
+  fault_config: number
+  revision: number
+  checksum: string
+}
+
+export interface ModbusBusInfo {
+  bus_id: string
+  display_name: string
+  port: string
+  port_alias: string
+  open_state: string
+  baud: number
+  parity: string
+  data_bits: number
+  stop_bits: number
+  total_devices: number
+  online_devices: number
+  poll_latency_p50_ms: number
+  poll_latency_p95_ms: number
+  timeout_errors: number
+  crc_errors: number
+  bus_utilization_percent: number
+}
+
+export interface ModbusEventItem {
+  timestamp: string
+  bus_id: string
+  device_id: string
+  message: string
+  level: string
 }
 
 export interface IoChannel {
