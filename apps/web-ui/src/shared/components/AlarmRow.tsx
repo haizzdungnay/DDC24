@@ -4,9 +4,18 @@ import { formatDateTime } from '../utils'
 import { Button } from './Button'
 import { StatusBadge } from './StatusBadge'
 
+function formatAlarmText(str?: string): string {
+  if (!str) return ''
+  return str.replace(/\b(\d+\.\d{3,})\b/g, (match) => {
+    const num = Number(match)
+    return Number.isFinite(num) ? num.toFixed(2) : match
+  })
+}
+
 function triggerText(alarm: Alarm): string {
   if (!alarm.triggerLevel) return ''
-  return alarm.threshold ? `${alarm.triggerLevel} ${alarm.threshold}` : alarm.triggerLevel
+  const formattedThreshold = alarm.threshold ? formatAlarmText(String(alarm.threshold)) : ''
+  return formattedThreshold ? `${alarm.triggerLevel} ${formattedThreshold}` : alarm.triggerLevel
 }
 
 export function AlarmRow({
@@ -32,14 +41,14 @@ export function AlarmRow({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2 font-semibold">
           <BellRing className="h-4 w-4 text-[var(--c-accent)]" />
-          <span className="min-w-0 truncate">{alarm.message}</span>
+          <span className="min-w-0 truncate">{formatAlarmText(alarm.message)}</span>
           {trigger && (
             <span className="mono shrink-0 rounded border border-[var(--c-warn)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--c-warn-fg)]" title="Triggered threshold">
               TRIP {trigger}
             </span>
           )}
         </div>
-        <div className="mt-1 truncate text-[var(--c-text-dim)]">{alarm.source} · {alarm.value || 'n/a'} · {alarm.detail}</div>
+        <div className="mt-1 truncate text-[var(--c-text-dim)]">{alarm.source} · {formatAlarmText(alarm.value) || 'n/a'} · {formatAlarmText(alarm.detail)}</div>
       </div>
       <div className="flex flex-wrap justify-end gap-2 max-lg:justify-start">
         <Button size="sm" variant={canAck ? 'secondary' : 'ghost'} disabled={!canAck} onClick={() => onAck?.(alarm)}>

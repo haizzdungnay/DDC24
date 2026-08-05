@@ -615,7 +615,7 @@ function AdvancedPanel({ config, onChange }: { config: AiInputConfig; onChange: 
     { register: 'u1', name: t('displayMinLabel'), wired: true, control: <SmallNumberInput value={config.displayMin} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} /> },
     { register: 'u2', name: t('displayMaxLabel'), wired: true, control: <SmallNumberInput value={config.displayMax} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} /> },
     { register: 'u3', name: t('rangeMultiplierLabel'), wired: true, control: <RangeMultiplierSelect value={config.rangeMultiplier} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} /> },
-    { register: 'u4', name: t('unitsLabel'), wired: true, control: <UnitSelect value={config.unit} onChange={(unit) => onChange({ unit })} /> },
+    { register: 'u4', name: t('unitsLabel'), wired: true, control: <UnitSelect value={config.unit} signalType={config.signalType} onChange={(unit) => onChange({ unit })} /> },
     { register: 'u5', name: t('filterSamplesLabel'), wired: true, control: <SmallNumberInput value={config.filterSamples} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} /> },
     { register: 'u6', name: t('sensorCalibrationLabel'), wired: true, control: <SmallNumberInput value={config.sensorCal} min={-12.7} max={12.8} step={0.1} onChange={(sensorCal) => onChange({ sensorCal })} /> },
     { register: 'u7', name: t('mathFunctionLabel'), wired: true, control: <MathFunctionSelect value={config.mathFunction} onChange={(mathFunction) => onChange({ mathFunction })} /> }
@@ -662,12 +662,12 @@ function AnalogSignalModeField({ value, onChange }: { value: boolean; onChange: 
   )
 }
 
-function UnitField({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+function UnitField({ value, onChange, signalType }: { value: number; onChange: (value: number) => void; signalType?: AiSignalType }) {
   const { t } = useI18n()
   return (
     <div className="space-y-3">
       <FieldHeader label={t('unitsLabel')} wired />
-      <UnitSelect value={value} onChange={onChange} />
+      <UnitSelect value={value} signalType={signalType} onChange={onChange} />
     </div>
   )
 }
@@ -720,11 +720,12 @@ function AnalogSignalModeSelect({ value, onChange }: { value: boolean; onChange:
   )
 }
 
-function UnitSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+function UnitSelect({ value, onChange, signalType }: { value: number; onChange: (value: number) => void; signalType?: AiSignalType }) {
   const { t } = useI18n()
+  const availableUnits = signalType === 0 ? [0] : unitOptions
   return (
     <select className={controlClass()} value={value} onChange={(event) => onChange(Number(event.target.value))}>
-      {unitOptions.map((option) => <option key={option} value={option}>{unitLabel(option, t)}</option>)}
+      {availableUnits.map((option) => <option key={option} value={option}>{unitLabel(option, t)}</option>)}
     </select>
   )
 }

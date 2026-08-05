@@ -380,10 +380,10 @@ function DialStatusCard({ icon: Icon, label, value, detail }: { icon: React.Comp
 function TempStatusCard({ value }: { value?: number }) {
   const { pick } = useI18n()
   const numericValue = typeof value === 'number' ? value : null
-  const color = numericValue === null ? 'var(--c-text-dim)' : metricStatusColor(numericValue, 50, 65)
+  const color = numericValue === null ? 'var(--c-text-dim)' : metricStatusColor(numericValue, 60, 75)
   const stateLabel = numericValue === null
     ? pick('Không có dữ liệu', 'No data')
-    : numericValue >= 65 ? pick('Cao', 'High') : numericValue >= 50 ? pick('Cảnh báo', 'Warning') : pick('Bình thường', 'Normal')
+    : numericValue >= 75 ? pick('Cao', 'High') : numericValue >= 60 ? pick('Cảnh báo', 'Warning') : pick('Bình thường', 'Normal')
   return (
     <StatusCard>
       <div className="flex items-center justify-between text-[11px] font-semibold uppercase text-[var(--c-text-dim)]"><span>{pick('NHIỆT ĐỘ', 'TEMPERATURE')}</span><Thermometer className="h-4 w-4" style={{ color }} /></div>
