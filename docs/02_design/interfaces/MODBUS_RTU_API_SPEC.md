@@ -1,9 +1,11 @@
 # Modbus RTU — REST/WebSocket API Specification DDC-24 Rev A
 
 **ID:** ICD-API-MBRTU-001
-**Phiên bản:** 0.1
+**Phiên bản:** 0.2
 **Trạng thái:** In Review
-**Ngày:** 2026-08-04
+**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
+**Quyết định đã ký áp dụng:** Đ-01, Đ-04, Đ-05, Đ-06
+**Đối chiếu source tại:** `feat/modbus-rtu-track-a` / `eade4e5`
 **Base path:** `/api/v1`
 **Xác thực:** JWT Bearer (WebSocket dùng token trong subprotocol)
 **Trace:** `IF-REQ-MBRTU-003`, `IF-REQ-MBRTU-004`, `SEC-REQ-MBRTU-001`,
@@ -23,7 +25,7 @@
 | 4 | `DELETE /modbus/config/candidate` | admin | có | huỷ candidate |
 | 5 | `POST /modbus/config/apply` | admin | qua `operation_id` | apply và chờ ACK từ iobus |
 | 6 | `POST /modbus/config/rollback` | admin | qua `operation_id` | về last-known-good |
-| 7 | `GET /modbus/buses` | viewer | có | trạng thái hai bus + capability |
+| 7 | `GET /modbus/buses` | viewer | có | **capability manifest** + trạng thái từng bus. Rev A trả đúng 1 phần tử (Đ-01); FE dùng để chỉ hiển thị cổng có thật (D-14) |
 | 8 | `GET /modbus/devices` | viewer | có | danh sách device + runtime status |
 | 9 | `POST /modbus/devices` | admin | qua `operation_id` | tạo device vào candidate |
 | 10 | `PUT /modbus/devices/{id}` | admin | qua `operation_id` | sửa device trong candidate |
@@ -387,23 +389,53 @@ Buffer vòng, tối thiểu 200 sự kiện, không persist qua restart (ghi rõ
 
 ## 8. Sai khác so với OpenAPI/route As-Built
 
-| ID | Đặc tả | As-Built (`http.go:148-156`, `openapi.yaml` v1.11.0) | Mức |
+**Đối chiếu lại tại `eade4e5` (2026-08-05).** As-Built vẫn là **đúng 9 route**
+(`http.go`), không thay đổi trong Track A — Track A không đụng contract theo thiết kế.
+
+Chín route As-Built và quyền thật của chúng:
+
+| Method + Path | Quyền As-Built |
+|---|---|
+| `GET /api/v1/modbus/devices` | `RoleViewer` |
+| `POST /api/v1/modbus/devices` | `RoleAdmin` |
+| `PUT /api/v1/modbus/devices/{id}` | `RoleAdmin` |
+| `DELETE /api/v1/modbus/devices/{id}` | `RoleAdmin` |
+| `GET /api/v1/modbus/points` | `RoleViewer` |
+| `POST /api/v1/modbus/points` | `RoleAdmin` |
+| `PUT /api/v1/modbus/points/{id}` | `RoleAdmin` |
+| `DELETE /api/v1/modbus/points/{id}` | `RoleAdmin` |
+| `GET /api/v1/modbus/diagnostics` | `RoleViewer` |
+
+Ma trận quyền này **khớp Đ-04** cho phần CRUD và đọc. Phần còn thiếu là nhóm
+`operator` (test connection, đọc thử) vì các endpoint đó chưa tồn tại.
+
+| ID | Đặc tả | As-Built tại `eade4e5` | Mức |
 |---|---|---|---|
-| F-API-01 | 25 REST endpoint | 9 endpoint | P0 |
-| F-API-02 | CRUD ghi candidate | CRUD ghi active + restart iobus, trả `ModbusMutationResult.apply` | P0 |
+| F-API-01 | 26 REST/WS endpoint | 9 endpoint | P0 |
+| F-API-02 | CRUD ghi candidate | CRUD ghi active + restart iobus, trả `modbusMutationResponse.apply` | P0 |
 | F-API-03 | `If-Match`/`base_revision` | không có | P0 |
 | F-API-04 | `X-Operation-Id` idempotency | không có | P0 |
 | F-API-05 | mã lỗi ổn định + `details[].path/code` | `writeValidationErrors` có `path`/`message`, không có `code` chuẩn hoá | P1 |
 | F-API-06 | `GET /modbus/config` với apply_state | chỉ `GET /system/config/fieldbus` (admin) | P1 |
-| F-API-07 | commissioning read/write/test-connection | không có | P0 |
-| F-API-08 | import/export | không có | P1 |
-| F-API-09 | overview/events/buses/mapping | không có | P1 |
+| F-API-07 | commissioning read/write/test-connection | không có | P0 — **bắt buộc theo Đ-06** |
+| F-API-08 | import/export | không có | P1 — **bắt buộc theo Đ-06** (import CSV; export CSV + JSON) |
+| F-API-09 | overview/events/buses/mapping | không có | P1. `GET /modbus/buses` giữ nguyên trong spec dù Rev A một bus: nó là nơi FE lấy **capability manifest** để không mời người dùng chọn cổng không tồn tại (D-14) |
 | F-API-10 | diagnostics có `bus_id`, `null=unknown`, boot id | diagnostics phẳng theo slave, `uint32`, không boot id, không bus | P1 |
 | F-API-11 | point runtime có `sample_age_ms`, `config_revision`, `quality_reason` | `PointDTO` có `quality` 4 chuỗi, `UpdatedAt` là giờ đọc SHM của BE | P0 |
 | F-API-12 | WS message có `sequence` + `config_revision` | point stream hiện không mang hai field này | P1 |
+| **F-API-13** | Device response mang `offline_after_errors` và Bus mang `offline_probe_ms` | hai field **không có** trong `ModbusRTUDevice`/response, dù iobus đã đọc được từ file | **P1 mới** — cặp với F-BE-19/F-BE-20 |
+| **F-API-14** | `retry` được mô tả đúng là **số lần phát lại** `0..3` | contract chưa cập nhật mô tả; `openapi.yaml` v1.11.0 vẫn mang ngữ nghĩa cũ | **P1 mới** — Đ-05 đã đổi ngữ nghĩa ở code và UI nhưng **chưa** ở contract machine-readable |
+
+> **F-API-14 đáng chú ý.** Track A đã sửa ngữ nghĩa `retry` ở FW (`fieldbus_config.hpp`),
+> BE (`domain.go`) và FE (tooltip "Số lần phát lại"), nhưng `contracts/openapi/openapi.yaml`
+> **không được sửa** vì `INTERFACES.md` cấm đụng contract machine-readable trước khi
+> ADR-024 Accepted. Kết quả: contract hiện mô tả sai hành vi thật. Đây là mâu thuẫn
+> có thật giữa hai tài liệu Active và được ghi vào `OD-MBRTU-018` — nó **chặn**
+> `MODBUS_RTU_INTERFACES_SYNCHRONIZED = YES`.
 
 ## Revision history
 
 | Phiên bản | Ngày | Trạng thái | Thay đổi |
 |---|---|---|---|
 | 0.1 | 2026-08-04 | In Review | Tạo API spec 25 REST endpoint + WS, mã lỗi ổn định, idempotency và gap OpenAPI |
+| 0.2 | 2026-08-05 | In Review | Đối chiếu lại với `eade4e5`. **Thay thế:** (a) §1 endpoint 7 `GET /modbus/buses` đổi mô tả "trạng thái hai bus" → capability manifest, Rev A một bus (Đ-01); (b) §8 liệt kê đầy đủ 9 route As-Built kèm quyền thật và đối chiếu với Đ-04; (c) thêm **F-API-13** (thiếu `offline_after_errors`/`offline_probe_ms` trong contract) và **F-API-14** (OpenAPI mô tả sai ngữ nghĩa `retry` sau Đ-05) |

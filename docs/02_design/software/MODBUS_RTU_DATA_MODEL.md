@@ -1,10 +1,11 @@
 # Modbus RTU — Data Model DDC-24 Rev A
 
 **ID:** DDD-DM-MBRTU-001
-**Phiên bản:** 0.1
+**Phiên bản:** 0.2
 **Trạng thái:** In Review
-**Ngày:** 2026-08-04
+**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
 **Design authority chủ quản:** [DDD-SW-MBRTU-POINT-001](DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md)
+**Quyết định đã ký áp dụng:** Đ-01 (1 bus Rev A), Đ-05 (ngữ nghĩa retry), Đ-07 (≥256 Point)
 **Trace:** `SWR-REQ-MBRTU-001..003`, `SWR-REQ-MBRTU-007..008`, `IF-REQ-MBRTU-001`, `IF-REQ-MBRTU-004`
 
 > Tài liệu này là **mô hình dữ liệu canonical duy nhất** cho Modbus RTU. FE, BE
@@ -15,11 +16,20 @@
 ## 1. Ba entity và quan hệ
 
 ```text
-ModbusRTUBus (rs485-1, rs485-2)         — resource cố định của thiết bị
+ModbusRTUBus                            — resource cố định của thiết bị
+  │   Rev A: đúng 1 instance (bus_id = rs485-1). Đ-01.
+  │   Kiểu vẫn là enum mở rộng được — thêm bus thứ hai KHÔNG đổi ABI.
   └─ 1..n ModbusRTUDevice               — một slave trên đúng một bus
        └─ 1..n ModbusRTUPoint           — một điểm luận lý trên device
                 └─ 0..1 PointMapping    — ánh xạ vào Point Database DDC-24
 ```
+
+> **Vì sao giữ entity Bus khi Rev A chỉ có một bus.** Bỏ Bus và nhét serial format
+> vào Device sẽ làm việc thêm cổng thứ hai trở thành một lần đổi ABI nữa — chính
+> điều mà Đ-03 chấp thuận *một lần duy nhất*. Giữ Bus cũng là chỗ đặt đúng cho
+> `offline_probe_ms`: nó bảo vệ băng thông của **sợi dây**, không thuộc về device
+> nào. Ràng buộc Rev A: mọi validator phải từ chối `bus_id` không có trong
+> capability manifest, thay vì chấp nhận rồi hỏng ở tầng iobus.
 
 Ràng buộc quan hệ:
 
@@ -48,21 +58,24 @@ trong §3–§5. FE không được suy diễn `quality` từ `online` hoặc `c
 
 | Field | Kiểu | Bắt buộc | Default | Validation |
 |---|---|---|---|---|
-| `bus_id` | enum `rs485-1` \| `rs485-2` | có | — | bất biến, do hệ thống định nghĩa; không phải `/dev/tty*` |
-| `label` | string ≤32 | không | `"RS485-1"` / `"RS485-2"` | hiển thị |
+| `bus_id` | enum; **Rev A chỉ nhận `rs485-1`** | có | `rs485-1` | bất biến, do hệ thống định nghĩa; không phải `/dev/tty*`. Giá trị ngoài capability manifest ⇒ `VALIDATION_FAILED`, không im lặng chấp nhận |
+| `label` | string ≤32 | không | `"RS485-1"` | hiển thị |
 | `enabled` | bool | có | `false` | bus disabled thì mọi device trên bus không được poll |
 | `port_ref` | enum capability | có | từ manifest | phải nằm trong allowlist capability manifest |
 | `baud_rate` | enum 9600/19200/38400/57600/115200 | có | `19200` | chung cho toàn bus |
 | `data_bits` | int | có | `8` | **cố định 8**, không cho UI sửa (Modbus RTU) |
 | `parity` | enum `N`/`E`/`O` | có | `N` | chung cho toàn bus |
 | `stop_bits` | enum 1/2 | có | `1` | `N` nên đi với `2`; cảnh báo nếu `N`+`1` |
-| `offline_probe_ms` | int 1000..60000 | không | `5000` | chu kỳ thử lại device OFFLINE |
+| `offline_probe_ms` | int 1000..60000 | không | `5000` | chu kỳ thử lại device OFFLINE. **As-Built ✅** — `Rs485Config::offline_probe_ms`, đóng D-04 |
 | `inter_frame_policy` | enum `auto`/`fixed_ms` | không | `auto` | `auto` = 3.5 ký tự theo baud |
+| `direction_control` | enum `auto`/`rts`/`gpio` | có | **chưa xác định** | ⚠️ **CÒN MỞ (Đ-02/`G-D`)** — source chưa gọi `modbus_rtu_set_serial_mode()`, device tree Foxlinx không có cấu hình `rs485-*`. Không được ghi `auto` như sự thật đã kiểm chứng cho tới khi Hardware Lead xác nhận transceiver |
 | `open_state` | enum `open`/`closed`/`unavailable` | runtime | — | read-only, từ iobus |
 | `last_error` | string ≤128 | runtime | `null` | read-only |
 
-Hai bus **không được** map tới cùng device node. USB-RS485 chỉ hợp lệ trong lab
-profile có provenance riêng và phải bị từ chối ở production profile.
+**Rev A có đúng một instance Bus** (Đ-01). Luật "hai bus không được map tới cùng
+device node" vẫn giữ trong validator vì nó là luật của mô hình, không phải của số
+lượng instance — nhưng ở Rev A nó không thể bị vi phạm. USB-RS485 chỉ hợp lệ trong
+lab profile có provenance riêng và phải bị từ chối ở production profile.
 
 ## 4. `MODBUS_RTU_DEVICE`
 
@@ -71,15 +84,16 @@ profile có provenance riêng và phải bị từ chối ở production profile
 | `device_id` | string 1..23 ASCII | có | server-generated | bất biến; `^[A-Za-z][A-Za-z0-9_-]{0,22}$`; unique toàn hệ (so sánh case-insensitive) |
 | `name` (`display_name`) | UTF-8 1..64 | có | — | NFC normalize; không cho chuỗi rỗng sau trim |
 | `enabled` | bool | có | `true` | device disabled không được scheduler nhận |
-| `rs485_port` (`bus_id`) | enum `rs485-1`/`rs485-2` | có | `rs485-1` | phải là bus tồn tại |
-| `slave_id` | int 1..247 | có | — | **unique trong cùng bus**; trùng ở hai bus khác nhau là hợp lệ |
+| `rs485_port` (`bus_id`) | enum, Rev A chỉ `rs485-1` | có | `rs485-1` | phải là bus tồn tại trong capability manifest |
+| `slave_id` | int 1..247 | có | — | **unique trong cùng bus**; trùng ở hai bus khác nhau là hợp lệ. Ở Rev A một bus ⇒ tương đương unique toàn hệ, nên As-Built (`domain.go`, unique toàn cục) **đúng cho Rev A** và chỉ sai khi mở bus thứ hai — xem `F-BE-08` |
 | `baud_rate` | enum | dẫn xuất | kế thừa Bus | **read-only ở API v2**; ghi khác giá trị Bus → `VALIDATION_FAILED` |
 | `data_bits` | int | dẫn xuất | `8` | read-only |
 | `parity` | enum | dẫn xuất | kế thừa Bus | read-only ở API v2 |
 | `stop_bits` | int | dẫn xuất | kế thừa Bus | read-only ở API v2 |
 | `poll_interval_ms` | int 100..60000 | có | `1000` | deadline poll khi ONLINE |
-| `timeout_ms` | int 20..5000 | có | `300` | timeout mỗi attempt |
-| `retry_count` | int 0..3 | có | `2` | số retry sau attempt đầu |
+| `timeout_ms` | int 20..5000 | có | `300` | timeout **mỗi lần phát**, không phải mỗi lượt poll |
+| `retry_count` | int 0..3 | có | `2` | **số lần PHÁT LẠI một giao dịch Modbus bị lỗi** trong cùng lượt poll (Đ-05). `0` là giá trị hợp lệ và có nghĩa: "không phát lại, báo lỗi ngay". Validator **không được** âm thầm đổi `0` thành `2`. Chi phí xấu nhất một lượt poll = `(1 + retry_count) × timeout_ms` |
+| `offline_after_errors` | int 1..10 | có | `2` | **số LƯỢT POLL thất bại liên tiếp** trước khi chuyển OFFLINE. Tách hẳn khỏi `retry_count` (Đ-05); mỗi lượt đã bao gồm đủ số lần phát lại |
 | `stale_after_ms` | int | có | `poll×3` | phải `≥ poll_interval_ms + timeout_ms` |
 | `offline_after_ms` | int | có | `poll×6` | phải `> stale_after_ms` |
 | `verify_write` | bool | không | `true` | readback sau write khi register đọc được |
@@ -142,6 +156,22 @@ Công thức: đọc `engineering = raw × scale + offset`; ghi
 `raw = (engineering − offset) / scale`, kiểm range **trước** khi encode.
 `min_value`/`max_value` áp dụng cho **engineering value** và là điều kiện chặn
 write; vi phạm khi đọc chuyển quality `BAD` với reason `OUT_OF_RANGE`.
+
+**Luật fail-closed khi encode (bắt buộc, đã có trong As-Built).** `encode_register`
+phải trả `false` và **không ghi byte nào** vào buffer khi bất kỳ điều kiện nào đúng:
+`count` không đủ cho kiểu · `scale == 0` hoặc không hữu hạn · `eng_value` hoặc `raw`
+là NaN/±Inf · `raw` ngoài dải biểu diễn được của kiểu đích.
+
+> Vì sao luật này ở tầng data model chứ không chỉ ở FW: `static_cast<int16_t>(raw)`
+> với `raw` là float ngoài dải int16 là **undefined behavior** theo [conv.fpint]/1.
+> Đường vào thực tế là `plc_shm.ext[i].setpoint` do node graph ghi và **không có
+> clamp ở bất kỳ tầng nào phía trên**, nên một lỗi công thức trong logic điều khiển
+> sẽ ghi giá trị rác xuống VFD thật qua FC06/FC16. Trước bản sửa 2026-08-04,
+> `scale = 0` còn khiến hàm tính `raw = 0` rồi trả `true` — tức **ghi im lặng giá
+> trị 0 xuống thiết bị hiện trường**.
+>
+> **As-Built ✅** — `register_codec.cpp`/`.hpp` (D-01, D-02 đóng, commit `1e3e2bc`),
+> `device_profile.cpp` từ chối point có `scale` không hợp lệ.
 
 ### 5.4 Runtime (read-only, không persist)
 
@@ -267,7 +297,10 @@ Quy tắc:
 - Số thực dùng dấu chấm thập phân, không dùng dấu phân cách hàng nghìn.
 - Export bổ sung header comment `# revision=<n> checksum=<sha256> exported_at=<UTC>`
   ở dòng đầu; import bỏ qua mọi dòng bắt đầu bằng `#`.
-- File > 1 MiB hoặc > 64 dòng dữ liệu bị từ chối (`CAPACITY_EXCEEDED`).
+- File > 1 MiB hoặc vượt capacity Point hiện hành bị từ chối (`CAPACITY_EXCEEDED`).
+  Capacity Rev A theo Đ-07 là **≥ 256 Point** (nâng từ 64). As-Built hiện vẫn chặn
+  ở 64 (`domain.go`: `len(cfg.Points) > 64` ⇒ "vượt KX_N_EXT=64"); việc nâng phải
+  đi cùng đợt đổi `KX_N_EXT` trong contract SHM — xem gap `G-DM-12`.
 - Export **không** chứa runtime value/quality/timestamp và không chứa secret.
 
 JSON export (`?format=json`) trả nguyên khối `{bus[], devices[], points[], revision, checksum}`
@@ -275,22 +308,36 @@ và là định dạng duy nhất round-trip được cả Bus và Device.
 
 ## 9. Gap giữa mô hình này và source hiện tại
 
-| ID | Mô hình canonical | As-Built hiện tại | Mức |
+**Đối chiếu lại tại `feat/modbus-rtu-track-a` / `eade4e5` (2026-08-05), sau Track A.**
+`✅ ĐÓNG` = source đã khớp mô hình và có test. `◐` = đóng một phần.
+
+| ID | Mô hình canonical | As-Built tại `eade4e5` | Mức |
 |---|---|---|---|
-| G-DM-01 | Bus là entity riêng, hai bus độc lập | `Rs485Config` đơn, một `ModbusMaster`, một `rs485.device` | P0 |
-| G-DM-02 | quality năm trạng thái + reason | `kx_quality_t` ba mức, không reason | P0 |
-| G-DM-03 | `timestamp` của sample do producer cấp | BE gán `time.Now()` khi đọc SHM (`core_client.go`) | P0 |
-| G-DM-04 | `value` typed, không mất chính xác uint32 | `kx_ext_point_t.value` là `float` | P0 |
-| G-DM-05 | canonical JSON + checksum ổn định | checksum tính trên `json.Marshal` của struct có map không thứ tự | P1 |
-| G-DM-06 | `bit_index`, `min_value`, `max_value`, `poll_interval_ms` theo Point | không tồn tại trong `modbusrtu.Point` | P1 |
-| G-DM-07 | candidate/LKG/journal riêng | chỉ có snapshot in-memory và restore sau restart lỗi | P0 |
-| G-DM-08 | serial format thuộc Bus | thuộc Device, hợp lệ hoá bằng luật "mọi device enabled phải giống nhau" | P1 |
+| G-DM-01 | Bus là entity riêng | `Rs485Config` đơn, một `ModbusMaster`, một `rs485.device` | **P2** (hạ từ P0) — Đ-01 chốt Rev A một bus, nên As-Built *đủ dùng*; gap còn lại chỉ là "Bus chưa là entity trong API/BE". Nâng lại P0 khi mở bus thứ hai |
+| G-DM-02 | quality năm trạng thái + reason | `kx_quality_t` ba mức, không reason | P0 — Track B `MBR-B103` |
+| G-DM-03 | `timestamp` của sample do producer cấp | BE gán `time.Now()` khi đọc SHM (`core_client.go`) | P0 — Track B `MBR-B103` |
+| G-DM-04 | `value` typed, không mất chính xác uint32 | `kx_ext_point_t.value` là `float` | P0 — Track B `MBR-B001` |
+| G-DM-05 | canonical JSON + checksum ổn định | checksum tính trên `json.Marshal` của struct có map không thứ tự | P1 — Track B `MBR-B206` |
+| G-DM-06 | `bit_index`, `min_value`, `max_value`, `poll_interval_ms` theo Point | không tồn tại trong `modbusrtu.Point` | P1 — Track B `MBR-B109` |
+| G-DM-07 | candidate/LKG/journal riêng | chỉ có snapshot in-memory và restore sau restart lỗi | P0 — Track B `MBR-B203`/`B204` |
+| G-DM-08 | serial format thuộc Bus | thuộc Device, hợp lệ hoá bằng luật "mọi device enabled phải giống nhau" (`domain.go`) | P2 (hạ từ P1) — với một bus, luật này cho kết quả tương đương; Track B `MBR-B202` |
 | G-DM-09 | `point_id` là identity runtime | đúng khi profile do BE sinh (1 slot/point); profile viết tay `count>1` đổi tên thành `<slave>.<point>[i]` | P1 |
-| G-DM-10 | import/export CSV/JSON | không tồn tại endpoint | P1 |
-| G-DM-11 | `connection_status` sáu trạng thái theo device | diagnostics chỉ có `online` + `consecutive_errors`, ghép theo địa chỉ slave | P1 |
+| G-DM-10 | import/export CSV/JSON | không tồn tại endpoint | P1 — **bắt buộc theo Đ-06**, Track B `MBR-B209` |
+| G-DM-11 | `connection_status` sáu trạng thái theo device | ◐ diagnostics có `online` + `consecutive_errors` + `total_polls`; FE đã phân biệt được "chưa liên lạc lần nào" với "mất liên lạc" (D-07 đóng) nhưng enum sáu trạng thái vẫn chưa do authority cấp | P1 — Track B `MBR-B210` |
+| **G-DM-12** | capacity ≥ 256 Point (Đ-07) | `domain.go` chặn ở 64, `KX_N_EXT = 64` | P0 **mới** — Track B, cùng đợt đổi ABI. Phải đo lại kích thước datagram (~2,6 KB → ~10,3 KB) và thời gian copy mỗi vòng scan trên target |
+| **G-DM-13** | `direction_control` của Bus phải xác định | không tồn tại; source không gọi `modbus_rtu_set_serial_mode()` | P0 **mới** — chặn bởi Đ-02/`G-D` (Hardware Lead) |
+
+### 9.1 Đã đóng trong Track A (không còn là gap)
+
+| ID cũ | Nội dung | Bằng chứng |
+|---|---|---|
+| G-DM-14 (D-01/D-02) | `scale ≠ 0`, encode fail-closed, không UB khi ép kiểu | `register_codec.cpp`, `device_profile.cpp`, 8 test mới — `1e3e2bc` |
+| G-DM-15 (D-04) | `offline_probe_ms` thuộc Bus, device chết không bỏ đói device sống | `fieldbus_config.hpp`, `poll_scheduler.cpp` — `c4036dd` |
+| G-DM-16 (D-05) | `retry_count` là số lần phát lại; ngưỡng OFFLINE là field riêng | `fieldbus_config.hpp`, `domain.go` — `0f0fe71` |
 
 ## Revision history
 
 | Phiên bản | Ngày | Trạng thái | Thay đổi |
 |---|---|---|---|
 | 0.1 | 2026-08-04 | In Review | Tạo data model canonical Bus/Device/Point, quality năm trạng thái, import/export và gap As-Built |
+| 0.2 | 2026-08-05 | In Review | Áp dụng Đ-01/Đ-05/Đ-07 và đối chiếu lại với `eade4e5`. **Thay thế:** (a) "hai bus độc lập" → Rev A một instance, giữ entity Bus và `bus_id` (Đ-01); (b) `retry_count` từ "số retry sau attempt đầu" → định nghĩa Đ-05 kèm field mới `offline_after_errors`; (c) thêm `direction_control` vào Bus, đánh dấu còn mở; (d) capacity import từ 64 → theo Đ-07 ≥256; (e) thêm luật fail-closed khi encode vào §5.3; (f) §9 đối chiếu lại toàn bộ: hạ G-DM-01/G-DM-08 xuống P2, thêm G-DM-12/G-DM-13, tách §9.1 ba gap đã đóng bằng Track A |

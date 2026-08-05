@@ -2,7 +2,7 @@
 
 **ID:** IF-SPEC-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-04 (đăng ký `ICD-IF-MBRTU-001` và `ICD-API-MBRTU-001`)
+**Cập nhật:** 2026-08-05 (đồng bộ hai ICD Modbus RTU lên bản 0.2; ghi nhận lệch ngữ nghĩa `retry` trong OpenAPI)
 
 ## Programming Rev A — trạng thái interface
 
@@ -82,6 +82,18 @@ cùng trạng thái `In Review`:
 Hai hồ sơ này **không** thay đổi `contracts/openapi/openapi.yaml` (As-Built
 v1.11.0, 9 route Modbus) và **không** thay đổi `contracts/shm/mkddc_shm.h`. Sai
 khác giữa đề xuất và As-Built được liệt kê trong chính hai hồ sơ đó.
+
+**Lệch contract cần xử lý (2026-08-05).** Quyết định Đ-05 đã đổi ngữ nghĩa trường
+`retry` từ "ngưỡng chuyển OFFLINE" thành "số lần phát lại một giao dịch" và việc
+này **đã được thực hiện trong FW, BE và FE**. `contracts/openapi/openapi.yaml` vẫn
+giữ mô tả cũ vì ràng buộc "không sửa contract machine-readable trước khi ADR-024
+Accepted" ở trên. Kết quả là contract hiện **mô tả sai hành vi thật**.
+
+Đây là mâu thuẫn giữa hai tài liệu Active, được theo dõi tại `OD-MBRTU-018` và
+**chặn** gate `MODBUS_RTU_INTERFACES_SYNCHRONIZED`. Khuyến nghị: cho phép một ngoại
+lệ có phạm vi — sửa *mô tả* và *range* của riêng trường `retry` để contract khớp
+quyết định đã ký, giữ nguyên lệnh cấm với mọi thay đổi cấu trúc khác. Quyết định
+thuộc Architect + Product, không thuộc tài liệu này.
 
 **Ngoại lệ duy nhất — nối field vào CUỐI `kx_plc_shm_t`.** Consumer đọc PLC SHM
 bằng offset cứng và kiểm độ dài theo ngữ nghĩa **min-length**

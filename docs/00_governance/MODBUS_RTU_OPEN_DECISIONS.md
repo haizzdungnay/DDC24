@@ -23,46 +23,50 @@
 
 | ID | Vấn đề | Ảnh hưởng nếu chưa quyết | Owner cần ký | Khuyến nghị kỹ thuật | Liên quan | Trạng thái |
 |---|---|---|---|---|---|---|
-| OD-MBRTU-001 | **Hai bus RS485 hay một?** Product baseline ghi `2 × Modbus RTU`; `HW_SPEC` mới mô tả một UART4, một transceiver, một connector A/B/GND và một switch termination SW8; source có một `ModbusMaster`. | Toàn bộ thiết kế Bus, capacity, scheduler, UI chọn bus và `VR-MBRTU-001` treo. Người dùng có thể cấu hình Point trên bus không tồn tại. | Product + HW + Platform | Giữ hai bus trong Product và **bắt HW chứng minh hai đường production**; nếu HW không làm được, đổi Product xuống một bus qua decision chính thức. Không đóng gate bằng USB-RS485. | DR-MBRTU-001; `PROD-MBRTU-001` §6 | **OPEN — P0** |
-| OD-MBRTU-002 | **Serial format thuộc Bus hay Device?** | FE/BE/data model không thống nhất; hiện BE lưu ở Device và ép "mọi device enabled phải giống nhau". | System + Fieldbus | Đặt ở Bus, Device kế thừa read-only; giữ field trên response Device để không vỡ UI. | DR-MBRTU-002; data model §4 | **OPEN — P0** |
+| OD-MBRTU-001 | **Hai bus RS485 hay một?** Product baseline ghi `2 × Modbus RTU`; `HW_SPEC` mới mô tả một UART4, một transceiver, một connector A/B/GND và một switch termination SW8; source có một `ModbusMaster`. | Toàn bộ thiết kế Bus, capacity, scheduler, UI chọn bus và `VR-MBRTU-001` treo. Người dùng có thể cấu hình Point trên bus không tồn tại. | Product + HW + Platform | Giữ hai bus trong Product và **bắt HW chứng minh hai đường production**; nếu HW không làm được, đổi Product xuống một bus qua decision chính thức. Không đóng gate bằng USB-RS485. | DR-MBRTU-001; `PROD-MBRTU-001` §6 | **CLOSED 2026-08-04 — Đ-01** ([biên bản](../07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md)): Rev A **01 cổng**; giữ `bus_id` trong contract để mở cổng thứ hai không phải đổi ABI lần nữa |
+| OD-MBRTU-002 | **Serial format thuộc Bus hay Device?** | FE/BE/data model không thống nhất; hiện BE lưu ở Device và ép "mọi device enabled phải giống nhau". | System + Fieldbus | Đặt ở Bus, Device kế thừa read-only; giữ field trên response Device để không vỡ UI. | DR-MBRTU-002; data model §4 | **KHÔNG ÁP DỤNG ở Rev A 2026-08-04 — Đ-01.** Với một bus, hai phương án cho kết quả như nhau. Mở lại khi có bus thứ hai; thiết kế đã chốt hướng serial-thuộc-Bus để không phải quyết lại |
 | OD-MBRTU-003 | **Có hỗ trợ `bit_index` (trích bit trong register) không?** | Thiếu thì không map được thanh ghi trạng thái dạng bit-field, rất phổ biến ở VFD/meter. Có thì phải mở rộng codec, luật overlap và profile schema. | Product + Fieldbus | Hỗ trợ ở Rev A: chi phí thấp, giá trị thực tế cao; luật overlap đã được định nghĩa ở data model §5.5. | data model §5.2 | **OPEN — P1** |
 | OD-MBRTU-004 | **Có cho phép alias (hai Point cùng register, khác tag)?** | Chưa quyết ⇒ validator phải reject cứng, có thể chặn use case hợp lệ (một register dùng cho hai mục đích hiển thị). | Fieldbus + Product | Rev A **không** hỗ trợ alias; reject overlap. Mở ở Rev B nếu có nhu cầu thật. | data model §5.5 | **OPEN — P2** |
 | OD-MBRTU-005 | **Mức ưu tiên của commissioning write so với logic điều khiển.** | Không rõ ⇒ ghi thử có thể bị logic ghi đè ngay chu kỳ sau, hoặc ngược lại ghi thử chiếm quyền quá lâu. | Controls + Safety + Product | Commissioning write dùng mức `manual` có TTL ngắn (ví dụ 60 s) rồi tự nhả; hiển thị rõ TTL trên UI. | FW design §8.1 | **OPEN — P0** |
 | OD-MBRTU-006 | **Ngưỡng tải bus (70 % reject / 50 % warning) và cách tính `t_turnaround`.** | Số hiện là PROPOSED, chưa đo. Đặt sai ⇒ hoặc chặn cấu hình hợp lệ, hoặc cho qua cấu hình trượt deadline. | Performance + QA + Fieldbus | Giữ 70/50 làm giá trị khởi điểm, **bắt buộc** đo lại trên phần cứng thật ở `TC-MBRTU-H-15` rồi chốt. | BE design §5 | **OPEN — P1** |
 | OD-MBRTU-007 | **Chu kỳ refresh FE và giới hạn write rate.** | Refresh quá dày làm tăng tải BE/core; quá thưa làm commissioning khó. Write rate không giới hạn là rủi ro an toàn. | Product + BE + UX | Refresh mặc định 5 s (2/5/15/tắt); write test 2 req/phút/người dùng; read test 5 req/phút. Đo lại khi có target evidence. | UX §6, BE design §6 | **OPEN — P1** |
 | OD-MBRTU-008 | **Có cho phép reset counter diagnostics từ UI không?** | Chưa quyết ⇒ counter chỉ reset khi restart, khó dùng khi commissioning lặp. Nếu cho phép thì mất tính liên tục của bằng chứng. | QA + Ops + Product | **Không** cho reset; thay vào đó hiển thị `producer_boot_id` + `counters_since` và cho phép FE tính delta theo mốc người dùng chọn. | UX §6.2 | **OPEN — P2** |
-| OD-MBRTU-009 | **Mô hình bốn vai trò (Viewer/Operator/Engineer/Admin) vs ba vai trò hiện hành (ADR-021).** | Đề bài yêu cầu bốn; hệ thống có ba. Hiện `Engineer` bị gộp vào `admin`, và FE khoá cả trang Modbus ở `admin` nên Viewer **không giám sát được** — trái `PR-MBRTU-001`. | Product + Security | Bước 1 (làm ngay được): hạ route FE xuống `viewer` cho các trang đọc, giữ mutation ở `admin`. Bước 2: quyết định có thêm vai trò `engineer` vào ADR-021 hay không. | ADR-021; UX §1.1, §7 | **OPEN — P0** |
+| OD-MBRTU-009 | **Mô hình bốn vai trò (Viewer/Operator/Engineer/Admin) vs ba vai trò hiện hành (ADR-021).** | Đề bài yêu cầu bốn; hệ thống có ba. Hiện `Engineer` bị gộp vào `admin`, và FE khoá cả trang Modbus ở `admin` nên Viewer **không giám sát được** — trái `PR-MBRTU-001`. | Product + Security | Bước 1 (làm ngay được): hạ route FE xuống `viewer` cho các trang đọc, giữ mutation ở `admin`. Bước 2: quyết định có thêm vai trò `engineer` vào ADR-021 hay không. | ADR-021; UX §1.1, §7 | **CLOSED 2026-08-04 — Đ-04:** giữ **ba** vai trò, không thêm `engineer`; quyền cấu hình và quyền ghi register **cùng thuộc Admin**. Bước 1 (hạ route FE xuống `viewer`) **đã làm** — D-07, commit `dfef8ab` |
 | OD-MBRTU-010 | **Tên field: `read_write` hay `access_mode`.** | Ba lớp đang dùng tên khác nhau; đổi tên là breaking change API. | API + FE + Fieldbus | Dùng `access_mode` cho contract v2, giữ `read_write` là alias deprecated trong một vòng version, rồi bỏ. | interface spec §7.1 | **OPEN — P1** |
-| OD-MBRTU-011 | **Capacity 64 Point là ràng buộc vĩnh viễn hay tạm thời?** | `KX_N_EXT = 64` là hằng số ABI. Nâng lên là ABI change và tăng RAM/thời gian scan. | Product + Performance | Giữ 64 ở Rev A; nếu Product cần cao hơn thì phải có sizing, đo memory/timing và contract version mới — **không** truncate im lặng. | FW design §11 | **OPEN — P1** |
-| OD-MBRTU-012 | **Định dạng import/export chuẩn: CSV, JSON hay cả hai.** | Chưa quyết ⇒ khách hàng/đối tác không có định dạng trao đổi ổn định. | Product + BE | CSV cho Point (dễ dùng Excel tại hiện trường) + JSON cho toàn bộ cấu hình (round-trip đầy đủ). Cả hai đều đi qua candidate. | data model §8 | **OPEN — P2** |
+| OD-MBRTU-011 | **Capacity 64 Point là ràng buộc vĩnh viễn hay tạm thời?** | `KX_N_EXT = 64` là hằng số ABI. Nâng lên là ABI change và tăng RAM/thời gian scan. | Product + Performance | Giữ 64 ở Rev A; nếu Product cần cao hơn thì phải có sizing, đo memory/timing và contract version mới — **không** truncate im lặng. | FW design §11 | **CLOSED 2026-08-04 — Đ-07:** nâng lên **tối thiểu 256 Point**, thực hiện cùng đợt đổi interface nội bộ. As-Built còn 64 ⇒ gap `G-DM-12`/`F-FW-20`/`F-BE-21` |
+| OD-MBRTU-012 | **Định dạng import/export chuẩn: CSV, JSON hay cả hai.** | Chưa quyết ⇒ khách hàng/đối tác không có định dạng trao đổi ổn định. | Product + BE | CSV cho Point (dễ dùng Excel tại hiện trường) + JSON cho toàn bộ cấu hình (round-trip đầy đủ). Cả hai đều đi qua candidate. | data model §8 | **CLOSED 2026-08-04 — Đ-06:** bắt buộc có **cả hai** — import CSV, export CSV **và** JSON |
 | OD-MBRTU-013 | **Xoá Device có Point: chặn hay cascade có xác nhận.** | Hiện chặn cứng. Với device nhiều Point, người dùng phải xoá thủ công từng Point. | Product + UX | Giữ chặn mặc định, bổ sung `cascade=true` tường minh kèm hộp thoại liệt kê Point. | API spec §1 | **OPEN — P2** |
 | OD-MBRTU-014 | **Modbus RTU Point có được expose ra BACnet không, và nếu có thì object type/instance do ai cấp.** | Profile hiện có `expose_bacnet`/`bacnet_object_type`/`bacnet_instance` nhưng BE không sinh các field này ⇒ tính năng tồn tại trong iobus mà không có đường cấu hình. | Product + Fieldbus + BACnet | Rev A: **không** expose qua đường Modbus profile; nếu cần thì đi qua cấu hình BACnet object riêng để tránh hai nguồn cấp instance. | `device_profile.hpp`; `persistence.go BuildProfile` | **OPEN — P1** |
-| OD-MBRTU-015 | **Thay ABI `kx_ext_point_t` v1 → snapshot v2: chiến lược triển khai.** | Đây là ABI change đồng bộ ba binary. Không có kế hoạch ⇒ nguy cơ deploy lệch làm mất dữ liệu Point. | Core + Fieldbus + Web + DevOps | Magic mới + `schema_version`, reject mismatch có thông điệp rõ, deploy đồng bộ trong một package, và test negative mismatch bắt buộc. | DR-MBRTU-005; interface spec §5.3 | **OPEN — P0** |
+| OD-MBRTU-015 | **Thay ABI `kx_ext_point_t` v1 → snapshot v2: chiến lược triển khai.** | Đây là ABI change đồng bộ ba binary. Không có kế hoạch ⇒ nguy cơ deploy lệch làm mất dữ liệu Point. | Core + Fieldbus + Web + DevOps | Magic mới + `schema_version`, reject mismatch có thông điệp rõ, deploy đồng bộ trong một package, và test negative mismatch bắt buộc. | DR-MBRTU-005; interface spec §5.3 | **CLOSED 2026-08-04 — Đ-03:** chấp thuận thay đổi giao diện dữ liệu nội bộ Core–IOBus–Web; ba service phải nâng cấp và đóng gói **cùng phiên bản**. Bắt buộc có kịch bản nghiệm thu deploy lệch version |
 
 ## 2. Ánh xạ `DR-MBRTU-*` → `OD-MBRTU-*`
 
 | DR (2026-08-03) | OD tương ứng | Ghi chú |
 |---|---|---|
-| DR-MBRTU-001 hai bus | OD-MBRTU-001 | không đổi nội dung |
-| DR-MBRTU-002 tách Bus khỏi Device | OD-MBRTU-002 | |
+| DR-MBRTU-001 hai bus | OD-MBRTU-001 | **CLOSED** bằng Đ-01: Rev A một bus |
+| DR-MBRTU-002 tách Bus khỏi Device | OD-MBRTU-002 | không áp dụng ở Rev A (một bus) |
 | DR-MBRTU-003 address zero-based | **đã hợp nhất vào requirement** `IF-REQ-MBRTU-004` (Active) | không còn là open decision; chỉ chờ source conform |
 | DR-MBRTU-004 quality/timestamp | **đã hợp nhất vào** `SWR-REQ-MBRTU-005` (Active); mở rộng `CONFIG_ERROR` là mới | phần mở rộng nằm ở OD-MBRTU-016 dưới đây |
-| DR-MBRTU-005 typed IPC v2 | OD-MBRTU-015 | |
+| DR-MBRTU-005 typed IPC v2 | OD-MBRTU-015 | **CLOSED** bằng Đ-03: chấp thuận đổi ABI một lần |
 | DR-MBRTU-006 atomic apply có ACK | **đã hợp nhất vào** `SWR-REQ-MBRTU-007` (Active) | chờ implementation |
 | DR-MBRTU-007 write result/readback | **đã hợp nhất vào** `SWR-REQ-MBRTU-006` (Active); ưu tiên commissioning là mới | phần mới ở OD-MBRTU-005 |
-| DR-MBRTU-008 capacity | OD-MBRTU-011 | |
-| DR-MBRTU-009 RBAC commissioning | OD-MBRTU-009 | mở rộng thành câu hỏi 4 vai trò |
+| DR-MBRTU-008 capacity | OD-MBRTU-011 | **CLOSED** bằng Đ-07: nâng lên ≥256 Point |
+| DR-MBRTU-009 RBAC commissioning | OD-MBRTU-009 | **CLOSED** bằng Đ-04: giữ 3 vai trò |
 
 | ID | Vấn đề | Owner | Khuyến nghị | Trạng thái |
 |---|---|---|---|---|
 | OD-MBRTU-016 | Có thêm `CONFIG_ERROR` vào tập quality (thành 5 trạng thái) không, hay giữ 4 và phân biệt bằng `quality_reason`? | Product + Core + Fieldbus | Thêm `CONFIG_ERROR` vào quality: người vận hành cần phân biệt "thiết bị trả sai" với "cấu hình sai" ngay trên bảng Point, không phải mở tooltip. | **OPEN — P1** |
+| OD-MBRTU-017 | **Export danh sách Point là quyền `viewer` hay `admin`?** Đ-04 xếp "Import/Export" vào cột Admin. Nhưng export không phải mutation và chỉ trả đúng dữ liệu mà `viewer` đã đọc được qua `GET /modbus/points`. | Product + Security | Để `GET .../export` ở `viewer` (nhất quán với dữ liệu đã lộ) và giữ `POST .../import` ở `admin`. Nếu Product muốn siết theo đúng chữ trong Đ-04 thì đổi sang `admin` — cần ghi rõ vì nó **thắt chặt** hơn hành vi đọc hiện có. | **OPEN — P2** (mới 2026-08-05) |
+| OD-MBRTU-018 | **Contract machine-readable đang mô tả sai ngữ nghĩa `retry`.** Đ-05 đã đổi `retry` thành "số lần phát lại" ở FW/BE/FE, nhưng `contracts/openapi/openapi.yaml` v1.11.0 giữ mô tả cũ vì `INTERFACES.md` cấm sửa contract trước khi ADR-024 Accepted. | Architect + BE + Product | Cho phép một **ngoại lệ có phạm vi**: sửa *mô tả* và *range* của trường `retry` trong OpenAPI ngay, không chờ ADR-024, vì đây là sửa cho contract khớp hành vi đã ký, không phải thêm tính năng. Giữ nguyên lệnh cấm với mọi thay đổi cấu trúc khác. | **OPEN — P1** (mới 2026-08-05) — **chặn `MODBUS_RTU_INTERFACES_SYNCHRONIZED`** |
+| OD-MBRTU-019 | **`offline_after_errors` và `offline_probe_ms` có được đưa ra UI/API không, hay là hằng số nội bộ?** Hiện iobus đọc được từ `fieldbus.conf` nhưng BE không bao giờ ghi ⇒ đứt end-to-end (`F-BE-19`/`F-BE-20`). | Product + Fieldbus + BE | Đưa ra API: `offline_after_errors` thuộc Device, `offline_probe_ms` thuộc Bus. Nếu Product quyết định giữ là hằng số nội bộ thì phải **bỏ** khỏi parser để không tạo ảo giác cấu hình được. Không chấp nhận giữ nguyên trạng. | **OPEN — P1** (mới 2026-08-05) |
 
 ## 3. Quyết định thiếu authority ngoài phạm vi Modbus nhưng chặn Modbus
 
 | ID | Vấn đề | Nguồn |
 |---|---|---|
-| OD-MBRTU-EXT-01 | Không có owner được chỉ định tên cho Fieldbus Lead, QA/HIL Lead và HW/Platform Lead ⇒ không ai ký được `OD-MBRTU-001` và các gate HIL. | Audit as-built §9.4 |
-| OD-MBRTU-EXT-02 | Không có phòng lab/thiết bị RS485 và slave thật được cấp cho dự án ⇒ `VR-MBRTU-011` không thể chạy dù thiết kế xong. | Audit as-built §7 |
+| OD-MBRTU-EXT-01 | Không có owner được chỉ định tên cho Fieldbus Lead và QA/HIL Lead ⇒ không ai ký được các gate HIL. **CÒN MỞ — chặn Track B** (Đ-09 giao PM chỉ định trước khi bắt đầu Track B). | Audit as-built §9.4 |
+| **OD-MBRTU-EXT-04** | **Cơ chế điều khiển hướng RS-485 (`G-D` / Đ-02).** Hardware Lead phải xác nhận transceiver là auto-direction hay cần GPIO/RTS, kèm **số chân và schematic**. Source không gọi `modbus_rtu_set_serial_mode()` và device tree Foxlinx không có cấu hình `rs485-*` ⇒ đang chạy trên một giả định chưa kiểm chứng. **CÒN MỞ — chặn `MBR-B101`, `MBR-B403` và `TC-MBRTU-H-16`.** | Khảo sát UART Foxlinx 2026-08-04; Đ-02 |
+| OD-MBRTU-EXT-02 | ~~Không có thiết bị RS485/slave thật~~ → **CLOSED 2026-08-04 — Đ-08:** duyệt mua tối thiểu một đồng hồ điện và một biến tần Modbus RTU. `G-C` nay chỉ chờ thiết bị về. | Audit as-built §7 |
 | OD-MBRTU-EXT-03 | ADR-022 (CI/CD deployment provenance) còn `Proposed` ⇒ `VR-MBRTU-012` không có cơ chế đóng. | DECISIONS.md |
 
 ## 4. Quy tắc đóng quyết định
@@ -82,3 +86,13 @@
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-08-04 | Tạo danh mục 16 open decision Modbus RTU + 3 blocker ngoài phạm vi; ánh xạ DR-MBRTU-001..009 |
+| 1.1 | 2026-08-05 | Đóng đúng theo quy tắc §4.3 (đổi Trạng thái, **không xoá dòng**): `OD-MBRTU-001` (Đ-01), `-009` (Đ-04), `-011` (Đ-07), `-012` (Đ-06), `-015` (Đ-03), `-EXT-02` (Đ-08); `-002` chuyển "không áp dụng ở Rev A". Cập nhật §2 ánh xạ DR tương ứng. **Thêm mới:** `OD-MBRTU-017` (mức quyền của export), `OD-MBRTU-018` (OpenAPI mô tả sai ngữ nghĩa `retry` sau Đ-05 — chặn gate interface), `OD-MBRTU-019` (hai tham số offline đứt end-to-end), `OD-MBRTU-EXT-04` (cơ chế điều hướng RS-485, tách khỏi EXT-01 vì owner khác và chặn khác) |
+
+## 5. Trạng thái tổng hợp sau 2026-08-05
+
+| Nhóm | Số lượng | ID |
+|---|---:|---|
+| Đã đóng bằng quyết định có ký | 6 | `-001`, `-009`, `-011`, `-012`, `-015`, `-EXT-02` |
+| Không áp dụng ở Rev A | 1 | `-002` |
+| Còn mở — chặn gate | 3 | `-018` (interface sync), `-EXT-01` (Track B), `-EXT-04` (HIL + `MBR-B101`) |
+| Còn mở — không chặn gate hiện tại | 12 | `-003`..`-008`, `-010`, `-013`, `-014`, `-016`, `-017`, `-019`, `-EXT-03` |

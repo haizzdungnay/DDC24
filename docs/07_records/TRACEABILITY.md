@@ -2,7 +2,7 @@
 
 **ID:** TRACE-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-04 (thêm trace cho `SWR-REQ-MBRTU-010/011` và `NFR-REQ-MBRTU-004`)
+**Cập nhật:** 2026-08-05 (đồng bộ trạng thái Modbus RTU sau Track A và quyết định PM/CTO)
 
 Ma trận chỉ ra vị trí thiết kế/code và loại evidence cần thu. `Planned` không phải bằng chứng pass.
 
@@ -23,7 +23,7 @@ bằng chứng runtime production.
 | SYS-REQ-002 | contract capacities, `apps/iobus`, [Hardware](../04_design/HARDWARE.md) | layout + physical I/O | Partial |
 | SYS-REQ-003 | `apps/core/domain/graph/graph_runtime.cpp` là As-Built legacy; migration thuộc OD-PROG-013 | compatibility/scope inspection | As-Built exists; không phải Programming evidence |
 | SYS-REQ-004 | `apps/iobus` protocol adapters; Modbus RTU Device/Point config từ Web | BACnet/Modbus smoke + negative tests | Partial — RTU simulator/path host pass; RS485 slave thật còn mở |
-| SYS-REQ-MBRTU-001 | [DDD-SW-MBRTU-POINT-001](../02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md) — In Review | VR-MBRTU-001, 004, 011 | RED — Product yêu cầu hai bus; HW/source hiện mới chứng minh một path/master |
+| SYS-REQ-MBRTU-001 | [DDD-SW-MBRTU-POINT-001](../02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md) — In Review | VR-MBRTU-001, 004, 011 | PARTIAL — Đ-01 chốt **một bus** nên Product/HW/source đã khớp; còn chờ schematic điều hướng RS-485 (`OD-MBRTU-EXT-04`) và evidence target/HIL |
 | SYS-REQ-005 | `apps/hmi`, CMake option | enabled build + target smoke | Partial |
 | SYS-REQ-PROG-001..003 | `PROD-PROG-001`, ADR-023, `REQUIREMENTS.md`; Programming Design chưa có | VR-PROG-001, VR-PROG-012, VR-PROG-013 | Documented; production evidence RED |
 | SWR-REQ-001 | service entrypoints/CMake/system units | process isolation test | Planned |
@@ -33,7 +33,7 @@ bằng chứng runtime production.
 | SWR-REQ-005 | ADR-017, `apps/netcfg`, Web adapter/FE, HMI broker/client | active/configured/pending/capability/management truth + negative UI/API tests | Code-local Web migration và target service/no-carrier negative path pass; real carrier/IP handoff/panel open |
 | SWR-REQ-006 | `mkddc-netcfg` transaction journal/coordinator | static/DHCP/DNS/confirm/120 s rollback + restart fault tests | Target-dummy static confirm, process recovery, explicit/automatic rollback pass; physical DHCP/DNS/reboot/power/disk fault open |
 | SWR-REQ-007 | netcfg + iobus BACnet address watcher + same-origin Web | multi-process continuity, BACnet `I-Am`, Web/Modbus reconnect | Target-dummy control continuity và live hot-rebind log pass; packet/Modbus/physical I/O/real-IP handoff evidence open |
-| SWR-REQ-MBRTU-001..009 | DDD-SW-MBRTU-POINT-001 + [DDD-DM-MBRTU-001](MODBUS_RTU_TRACEABILITY_MATRIX.md) — mô hình Bus/Device/Point, scheduler, quality, atomic apply, write result, diagnostics | VR-MBRTU-002..009 | Design In Review; As-Built host partial, contract v2/target/HIL RED |
+| SWR-REQ-MBRTU-001..009 | DDD-SW-MBRTU-POINT-001 + [DDD-DM-MBRTU-001](MODBUS_RTU_TRACEABILITY_MATRIX.md) — mô hình Bus/Device/Point, scheduler, quality, atomic apply, write result, diagnostics | VR-MBRTU-002..009 | Design In Review bản 0.2; Track A đã đóng phần codec fail-closed, vòng đời write và lịch poll (`SWR-REQ-MBRTU-003/004/006` cải thiện); contract v2/target/HIL vẫn RED |
 | SWR-REQ-MBRTU-010..011 | [DDD-BE-MBRTU-001 §6](../02_design/software/MODBUS_RTU_BE_DESIGN.md), [UX-WEB-MBRTU-001 §3.4/§5](../04_uiux/MODBUS_RTU_UI_UX_DESIGN.md) | VR-MBRTU-013 | RED — không có endpoint commissioning/import-export và không có page Mapping |
 | NFR-REQ-MBRTU-004 | [DDD-FE-MBRTU-001 §5.1](../02_design/software/MODBUS_RTU_FE_DESIGN.md), [DDD-BE-MBRTU-001 §5](../02_design/software/MODBUS_RTU_BE_DESIGN.md), [DDD-FW-MBRTU-001 §11](../02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md) | VR-MBRTU-014 | RED — toàn bộ số là PROPOSED, chưa đo trên target |
 | NET-WEB-001 | Go netcfg adapter, OpenAPI, Network FE/E2E, [UC-WEB-NETWORK-001](../04_uiux/KX-DDC24-UC-WEB-NETWORK-001_VI.md), [UX-WEB-NETWORK-001](../04_uiux/KX-DDC24-UX-WEB-NETWORK-001_VI.md) | GET authenticated-read, POST Admin-only, strict DNS capability, authoritative UI/recovery | **Target E2E 2026-07-31 pass 38/39** trên phần cứng thật (stage/apply/confirm với kernel nhận địa chỉ, rollback last-known-good, DNS manual, RBAC viewer, reload thật) — [evidence](test-evidence/fw-som/2026-07-31-network-page-board-e2e.md). Browser reconnect sau đổi IP và packet capture vẫn open |
@@ -54,7 +54,7 @@ bằng chứng runtime production.
 | SEC-REQ-MBRTU-001 | DDD-SW-MBRTU-POINT-001 §10/14, ADR-021 RBAC baseline | VR-MBRTU-008, 010 | Design In Review; CRUD RBAC partial, commissioning/write audit v2 chưa có |
 | NFR-REQ-001 | health endpoint, service PID/socket/SHM/MCU checks và systemd restart policy | restart/corruption scenarios | Partial — core/iobus/web SIGKILL recovery pass trên target cũ; SHM corruption và binary mới còn mở |
 | NFR-REQ-002 | build provenance C++/Go/firmware, release manifest và installer | reproducible release record | Host bundle/checksum pass; worktree dirty và target provenance chưa đóng |
-| NFR-REQ-MBRTU-001..003 | DDD-SW-MBRTU-POINT-001 §15–16 | VR-MBRTU-004, 011, 012 | RED — capacity/two-bus HIL/provenance target chưa đạt |
+| NFR-REQ-MBRTU-001..003 | DDD-SW-MBRTU-POINT-001 §15–16 | VR-MBRTU-004, 011, 012 | RED — Đ-07 nâng capacity lên ≥256 (As-Built còn 64); HIL một bus chờ thiết bị (Đ-08); provenance target chưa đạt |
 | NFR-REQ-PROG-001..002 | Programming Design chưa thực hiện | VR-PROG-006, VR-PROG-012 | Documented; production evidence RED |
 | HW-REQ-001 | [hardware detail](../04_design/hardware/README.md) + schematic/BOM + iobus scaling | review + ADC/UI bench | Missing controlled evidence |
 | HW-REQ-002 | [Hardware](../04_design/HARDWARE.md) | hardware gate packages | Blocked / RED |

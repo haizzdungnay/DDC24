@@ -1,10 +1,12 @@
 # Modbus RTU — UI/UX Design (Web) DDC-24 Rev A
 
 **ID:** UX-WEB-MBRTU-001
-**Phiên bản:** 0.1
+**Phiên bản:** 0.2
 **Trạng thái:** In Review
-**Ngày:** 2026-08-04
+**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
 **Chủ quản đề xuất:** UX Lead + Product Owner
+**Quyết định đã ký áp dụng:** Đ-01, Đ-04, Đ-05, Đ-06
+**Đối chiếu source tại:** `feat/modbus-rtu-track-a` / `eade4e5`
 **Trace ngược:** [PROD-MBRTU-001](../01_product/MODBUS_RTU_PRODUCT_REQUIREMENTS.md) `UC-MBRTU-001..018`
 **Trace xuôi:** [DDD-FE-MBRTU-001](../02_design/software/MODBUS_RTU_FE_DESIGN.md),
 [ICD-API-MBRTU-001](../02_design/interfaces/MODBUS_RTU_API_SPEC.md)
@@ -37,11 +39,19 @@ Engineering
     └── Diagnostics     /eng/modbus-rtu/diagnostics
 ```
 
-Hiện tại menu chỉ có một mục `/eng/modbus-rtu` với route min-role `admin`. Thiết kế
-này tách năm route và **hạ min-role xuống `viewer`** cho Overview/Devices/Points/
-Diagnostics; mutation vẫn do server chặn. Lý do: Viewer phải giám sát được theo
-`PR-MBRTU-001`/`PR-MBRTU-007`, nhưng hiện Viewer không vào được trang. Đây là gap
-`G-UX-01` và cần `OD-MBRTU-009`.
+Thiết kế này tách năm route với min-role `viewer` cho Overview/Devices/Points/
+Diagnostics; mutation vẫn do server chặn.
+
+**`G-UX-01` đã ĐÓNG (D-07, commit `dfef8ab`).** Route `/eng/modbus-rtu` nay ở mức
+`viewer`, và trang disable từng control mutation kèm lý do quyền
+("Chỉ vai trò Admin được thay đổi cấu hình Modbus RTU") thay vì chặn cả trang.
+`OD-MBRTU-009` cũng đã đóng bằng Đ-04 (ba vai trò). Phần **còn lại** của gap là việc
+tách một trang thành **năm** route — thuộc Track B `MBR-B301`.
+
+> Nguyên tắc đằng sau: chặn cả trang ở `admin` làm Viewer không giám sát được, vi
+> phạm `PR-MBRTU-001`/`PR-MBRTU-007`. Nhưng cũng không được để control bật rồi mới
+> báo 403 — FE disable là để **không mời người dùng vào thao tác chắc chắn bị từ
+> chối**; server vẫn là nơi quyết định cuối.
 
 ### 1.2 Banner trạng thái cấu hình (dùng lại ở cả năm page)
 
@@ -64,10 +74,14 @@ Diagnostics; mutation vẫn do server chặn. Lý do: Viewer phải giám sát �
 
 **User role:** Viewer trở lên (chỉ đọc).
 
-**Workflow:** vào trang → đọc 4 KPI → nhìn hai thẻ bus → nếu có bất thường thì bấm
+**Workflow:** vào trang → đọc 4 KPI → nhìn thẻ bus → nếu có bất thường thì bấm
 vào thẻ bus hoặc dòng sự kiện để nhảy sang Devices/Diagnostics đã lọc sẵn.
 
 ### 2.1 Layout
+
+**Rev A hiển thị đúng một thẻ bus (Đ-01).** Danh sách thẻ được render từ
+`GET /modbus/buses`; UI **không** hardcode số thẻ. Khi phần cứng có cổng thứ hai,
+trang tự có thẻ thứ hai mà không cần sửa layout.
 
 ```text
 ┌ Modbus RTU · Tổng quan ─────────────────────────────── [Làm mới] [Tự động ⟳ 5s] ┐
@@ -77,20 +91,20 @@ vào thẻ bus hoặc dòng sự kiện để nhảy sang Devices/Diagnostics đ
 │ │      12      │ │    9     │ │    2     │ │      1       │                     │
 │ └──────────────┘ └──────────┘ └──────────┘ └──────────────┘                     │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│ ┌ RS485-1 ───────────────────────┐ ┌ RS485-2 ───────────────────────┐          │
-│ │ ● OPEN  19200 8N1              │ │ ○ UNAVAILABLE                  │          │
-│ │ Device 8 (7 online)            │ │ Device 4 (2 online)            │          │
-│ │ Poll latency  p50 24 ms        │ │ Poll latency  —                │          │
-│ │               p95 61 ms        │ │               —                │          │
-│ │ Timeout 12 · CRC 0             │ │ Timeout — · CRC —              │          │
-│ │ Bus utilization  38 % (ước tính)│ │ —                              │          │
-│ │ [Xem thiết bị]                  │ │ ⚠ Cổng chưa có capability      │          │
-│ └────────────────────────────────┘ └────────────────────────────────┘          │
+│ ┌ RS485-1 ───────────────────────┐                                              │
+│ │ ● OPEN  19200 8N1              │   (Rev A: chỉ một bus. Thẻ thứ hai chỉ        │
+│ │ Device 12 (9 online)           │    xuất hiện khi manifest khai báo có cổng.)  │
+│ │ Poll latency  p50 24 ms        │                                              │
+│ │               p95 61 ms        │                                              │
+│ │ Timeout 12 · CRC 0             │                                              │
+│ │ Bus utilization  38 % (ước tính)│                                             │
+│ │ [Xem thiết bị]                  │                                             │
+│ └────────────────────────────────┘                                              │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │ Sự kiện giao tiếp gần đây                                    [Xem tất cả →]     │
 │ 10:41:02  RS485-1  MTR-01   OFFLINE → ONLINE                                    │
 │ 10:38:55  RS485-1  VFD-03   TIMEOUT (3 liên tiếp)                               │
-│ 10:31:10  RS485-2  —        PORT_DOWN: không mở được cổng                       │
+│ 10:31:10  RS485-1  —        PORT_DOWN: không mở được cổng                       │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -99,8 +113,12 @@ vào thẻ bus hoặc dòng sự kiện để nhảy sang Devices/Diagnostics đ
 | Component | Field | Nguồn | Định dạng |
 |---|---|---|---|
 | KPI card ×4 | tổng/online/offline/fault | `GET /modbus/overview` | số nguyên; `—` nếu thiếu |
-| Bus card ×2 | `bus_id`, `open_state`, serial, số device, latency p50/p95, timeout, CRC, utilization | `GET /modbus/overview` | latency ms 0 chữ số thập phân; utilization % có nhãn `(ước tính)` |
+| Bus card ×N (Rev A: N=1) | `bus_id`, `open_state`, serial, số device, latency p50/p95, timeout, CRC, utilization | `GET /modbus/buses` + `GET /modbus/overview` | latency ms 0 chữ số thập phân; utilization % có nhãn `(ước tính)` |
 | Event feed | thời gian, bus, device, sự kiện | `GET /modbus/events?limit=10` | thời gian local, tooltip UTC |
+
+> **Thời gian luôn là giờ địa phương của trình duyệt, và nhãn phải nói đúng điều đó.**
+> Cùng lớp lỗi với `TrendsPage` (`b67580c`): nhãn hứa giờ địa phương nhưng phần tính
+> toán dùng UTC, làm người dùng UTC+7 đọc lệch 7 tiếng.
 
 `Bus utilization` **luôn** kèm chữ `(ước tính)` vì là giá trị tính toán từ baud và
 kích thước frame, không phải đo trên dây.
@@ -110,7 +128,7 @@ kích thước frame, không phải đo trên dây.
 | State | Thể hiện |
 |---|---|
 | Loading | skeleton cho 4 KPI + 2 bus card; không hiện `0` |
-| Empty | "Chưa cấu hình Modbus RTU Device nào." + nút `Thêm thiết bị` (Engineer+) |
+| Empty | "Chưa cấu hình Modbus RTU Device nào." + nút `Thêm thiết bị` (Admin) |
 | Error | banner đỏ + mã lỗi + `Thử lại`; giữ dữ liệu cũ kèm nhãn `dữ liệu lúc HH:mm` |
 | Offline (mất telemetry) | mọi số đo → `—`, bus card viền xám, dòng `iobus chưa publish telemetry` |
 
@@ -128,9 +146,10 @@ kích thước frame, không phải đo trên dây.
 
 **Mục tiêu:** quản lý vòng đời Device và tham số bus/serial.
 
-**User role:** xem = Viewer; thêm/sửa/xoá/enable/apply = Engineer; test connection = Operator.
+**User role (Đ-04, ba vai trò):** xem = Viewer; **thêm/sửa/xoá/enable/apply/import/
+export = Admin**; test connection = Operator.
 
-**Workflow:** chọn bus (tab) → xem danh sách → `Thêm`/`Sửa` mở drawer form →
+**Workflow:** xem danh sách → `Thêm`/`Sửa` mở drawer form →
 `Lưu vào candidate` → banner báo có thay đổi → `Test kết nối` (tuỳ chọn) →
 `Apply cấu hình` → chờ ACK → danh sách cập nhật `connection_status`.
 
@@ -139,14 +158,14 @@ kích thước frame, không phải đo trên dây.
 ```text
 ┌ Modbus RTU · Thiết bị ──────────────────── [+ Thêm thiết bị] [Import] [Export] ┐
 │ [Banner trạng thái cấu hình]                                                   │
-│ ( Tất cả | RS485-1 | RS485-2 )     Lọc: [trạng thái ▾] [tìm tên/slave…]        │
+│ Bus: RS485-1 (cổng duy nhất)       Lọc: [trạng thái ▾] [tìm tên/slave…]        │
 ├────────────────────────────────────────────────────────────────────────────────┤
-│ □ │ Tên          │ Bus     │ Slave │ Serial   │ Poll/TO/Retry │ Trạng thái │ ⋯ │
-│ □ │ MTR-01       │ RS485-1 │   1   │ 19200 8N1│ 1000/300/2    │ ● ONLINE   │ ⋯ │
-│ □ │ VFD-03       │ RS485-1 │   3   │ 19200 8N1│ 1000/300/2    │ ◐ DEGRADED │ ⋯ │
-│ □ │ PM-07        │ RS485-2 │   7   │ 9600 8E1 │ 2000/500/1    │ ○ OFFLINE  │ ⋯ │
-│ □ │ TEST-09      │ RS485-2 │   9   │ 9600 8E1 │ 1000/300/2    │ ⊘ DISABLED │ ⋯ │
-│ □ │ BAD-11       │ RS485-1 │  11   │ —        │ —             │ ▲ CONFIG   │ ⋯ │
+│ □ │ Tên          │ Bus     │ Slave │ Serial   │ Poll/TO/Phát lại│ Trạng thái │ ⋯│
+│ □ │ MTR-01       │ RS485-1 │   1   │ 19200 8N1│ 1000/300/2      │ ● ONLINE   │ ⋯│
+│ □ │ VFD-03       │ RS485-1 │   3   │ 19200 8N1│ 1000/300/2      │ ◐ DEGRADED │ ⋯│
+│ □ │ PM-07        │ RS485-1 │   7   │ 19200 8N1│ 2000/500/1      │ ○ OFFLINE  │ ⋯│
+│ □ │ TEST-09      │ RS485-1 │   9   │ 19200 8N1│ 1000/300/2      │ ⊘ DISABLED │ ⋯│
+│ □ │ BAD-11       │ RS485-1 │  11   │ —        │ —               │ ▲ CONFIG   │ ⋯│
 ├────────────────────────────────────────────────────────────────────────────────┤
 │ Đã chọn 2  [Enable] [Disable] [Xoá]                        1–5 / 12   ◀ 1 2 ▶ │
 └────────────────────────────────────────────────────────────────────────────────┘
@@ -155,7 +174,7 @@ Drawer "Sửa thiết bị MTR-01"
 ┌──────────────────────────────────────────────────────────┐
 │ Device ID  MTR-01            (không đổi được)             │
 │ Tên hiển thị   [Đồng hồ điện tầng 1        ]              │
-│ Bus            (•) RS485-1   ( ) RS485-2                  │
+│ Bus            RS485-1  (cổng duy nhất trên phần cứng này)│
 │ Slave ID       [1    ]  1..247, unique trong bus          │
 │ ── Tham số serial (thuộc bus, áp dụng cho mọi thiết bị) ──│
 │ Baud [19200 ▾] Data bit [8] (cố định) Parity [N ▾]        │
@@ -163,7 +182,9 @@ Drawer "Sửa thiết bị MTR-01"
 │ ⓘ Đổi tham số serial ảnh hưởng toàn bộ thiết bị trên      │
 │   RS485-1 (8 thiết bị).                                   │
 │ ── Chu kỳ ────────────────────────────────────────────────│
-│ Poll interval [1000] ms   Timeout [300] ms  Retry [2]     │
+│ Poll interval [1000] ms   Timeout [300] ms                │
+│ Số lần phát lại [2]  (0–3, mỗi giao dịch lỗi)             │
+│ Chuyển OFFLINE sau [2] lượt poll lỗi liên tiếp            │
 │ Stale sau [3000] ms       Offline sau [6000] ms           │
 │ [x] Enabled     [x] Readback sau khi ghi                  │
 │                                                           │
@@ -171,18 +192,30 @@ Drawer "Sửa thiết bị MTR-01"
 └──────────────────────────────────────────────────────────┘
 ```
 
+> **Nhãn "Retry" cũ bị cấm dùng lại.** Trước Đ-05, UI gọi trường này là "Retry"
+> trong khi runtime dùng nó làm ngưỡng OFFLINE và **không phát lại lần nào**. Nhãn
+> mới phải nói đúng việc: "Số lần phát lại" và "Chuyển OFFLINE sau N lượt poll lỗi"
+> là **hai trường khác nhau**. Cột bảng cũng đổi `Poll/TO/Retry` → `Poll/TO/Phát lại`.
+>
+> **As-Built ◐:** FE đã đổi nhãn và tooltip cho `retry` (0–3, "Số lần phát lại một
+> giao dịch Modbus bị lỗi… 0 = không phát lại") nhưng **chưa có** ô nhập
+> `offline_after_errors` — trường này hiện không cấu hình được end-to-end
+> (`F-BE-19`). Gap `G-UX-11`.
+
 ### 3.2 Field và validation (client-side, phản chiếu server)
 
 | Field | Ràng buộc UI | Thông báo lỗi |
 |---|---|---|
 | `display_name` | 1..64, trim | "Tên thiết bị không được để trống." |
-| `bus_id` | radio 2 lựa chọn; bus `unavailable` bị disable kèm tooltip | "RS485-2 chưa có capability trên phần cứng này." |
+| `bus_id` | render từ `GET /modbus/buses`; **một lựa chọn ⇒ hiển thị read-only**; bus `unavailable` bị disable kèm tooltip | "Cổng này chưa có capability trên phần cứng này." |
+| `rs485_port` | **chỉ chọn từ danh sách capability**, không nhập tự do | "Cổng phải nằm trong danh sách cổng có thật." — đóng D-14, cấm mặc định `/dev/ttyS3` |
 | `slave_id` | số nguyên 1..247; kiểm trùng trong cùng bus ngay khi nhập | "Slave ID 3 đã được VFD-03 dùng trên RS485-1." |
 | `baud/parity/stop` | select; đổi giá trị hiện cảnh báo phạm vi bus | "Thay đổi này áp dụng cho 8 thiết bị trên RS485-1." |
 | `data_bits` | luôn `8`, disabled | tooltip "Modbus RTU cố định 8 data bit." |
 | `poll_interval_ms` | 100..60000 | "Poll interval phải trong 100–60000 ms." |
 | `timeout_ms` | 20..5000 và `< poll_interval_ms` | "Timeout phải nhỏ hơn poll interval." |
-| `retry_count` | 0..3 | "Retry phải trong 0–3." |
+| `retry_count` | 0..3; nhãn **"Số lần phát lại"**, `0` hợp lệ | "Số lần phát lại phải trong 0–3. Đặt 0 nghĩa là không phát lại, báo lỗi ngay." |
+| `offline_after_errors` | 1..10; nhãn **"Chuyển OFFLINE sau N lượt poll lỗi"** | "Phải trong 1–10 lượt." |
 | `stale_after_ms` | `≥ poll + timeout` | "Stale phải ≥ poll + timeout (1300 ms)." |
 | `offline_after_ms` | `> stale_after_ms` | "Offline phải lớn hơn stale." |
 
@@ -239,7 +272,7 @@ tra dây, slave ID, baud"), `CRC_ERROR` ("khung lỗi — kiểm tra nhiễu/ter
 
 **Mục tiêu:** khai báo register map và quan sát giá trị thật của từng Point.
 
-**User role:** xem = Viewer; CRUD/import/export = Engineer; read test = Operator; write test = Admin.
+**User role (Đ-04):** xem = Viewer; CRUD/import/export = **Admin**; read test = Operator; write test = Admin.
 
 **Workflow:** chọn Device (dropdown/tab) → xem bảng Point → `Thêm Point` hoặc `Sửa`
 → `Lưu vào candidate` → `Apply` → quan sát cột Value/Quality/Timestamp cập nhật.
@@ -358,7 +391,7 @@ không dùng một câu chung.
 
 **Mục tiêu:** xác nhận Modbus RTU Point đã vào Point Database DDC-24 đúng và không xung đột.
 
-**User role:** xem = Viewer; sửa mapping = Engineer.
+**User role (Đ-04):** xem = Viewer; sửa mapping = **Admin**.
 
 **Workflow:** vào trang → xem trạng thái mapping của mọi Point → sửa tag/DDC Point ID
 ở các dòng cảnh báo → `Kiểm tra lại` → `Lưu vào candidate` → `Apply`.
@@ -414,7 +447,7 @@ minh của `PR-MBRTU-010`: không cho lưu mapping không hợp lệ.
 
 ```text
 ┌ Modbus RTU · Chẩn đoán ────────────── [Làm mới] [Tự động ⟳ 5s] [Xuất CSV] ┐
-│ Bus: ( Tất cả | RS485-1 | RS485-2 )                                        │
+│ Bus: RS485-1 (cổng duy nhất ở Rev A — bộ lọc hiện khi có ≥2 bus)           │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ ┌ RS485-1 ────────────────────────────────────────────────────────────────┐│
 │ │ open · 19200 8N1 · tx 128 430 · rx 128 002 · CRC 0 · timeout 12         ││
@@ -467,19 +500,35 @@ counter đã bị reset do restart hay không, và mọi so sánh đều sai.
 
 ## 7. Ma trận quyền theo hành động
 
-| Hành động | Viewer | Operator | Engineer | Admin |
-|---|:--:|:--:|:--:|:--:|
-| Xem Overview/Devices/Points/Mapping/Diagnostics | ✔ | ✔ | ✔ | ✔ |
-| Test kết nối | ✖ | ✔ | ✔ | ✔ |
-| Đọc thử register | ✖ | ✔ | ✔ | ✔ |
-| Thêm/sửa/xoá Device, Point | ✖ | ✖ | ✔ | ✔ |
-| Enable/Disable | ✖ | ✖ | ✔ | ✔ |
-| Import/Export | ✖ | ✖ | ✔ | ✔ |
-| Apply/Rollback cấu hình | ✖ | ✖ | ✔ | ✔ |
-| Ghi thử register | ✖ | ✖ | ✖ | ✔ |
+**Ba vai trò theo Đ-04** — vai trò `Engineer` của bản 0.1 đã bị bỏ, quyền của nó
+gộp vào `Admin`:
 
-UI **ẩn hoặc disable** control ngoài quyền và luôn kèm lý do; server vẫn là nơi
+| Hành động | Viewer | Operator | Admin |
+|---|:--:|:--:|:--:|
+| Xem Overview/Devices/Points/Mapping/Diagnostics | ✔ | ✔ | ✔ |
+| Test kết nối | ✖ | ✔ | ✔ |
+| Đọc thử register | ✖ | ✔ | ✔ |
+| Thêm/sửa/xoá Device, Point | ✖ | ✖ | ✔ |
+| Enable/Disable | ✖ | ✖ | ✔ |
+| Import/Export | ✖ | ✖ | ✔ |
+| Apply/Rollback cấu hình | ✖ | ✖ | ✔ |
+| Ghi thử register | ✖ | ✖ | ✔ |
+
+UI **disable** (không ẩn) control ngoài quyền và luôn kèm lý do; server vẫn là nơi
 quyết định cuối. FE không được nới lỏng hơn server (ADR-021).
+
+> Chọn **disable kèm lý do** thay vì **ẩn**: người vận hành cần biết chức năng tồn
+> tại và mình thiếu quyền gì, thay vì tưởng sản phẩm không có chức năng đó.
+> **As-Built ✅** — `ModbusRtuPage.tsx` disable mọi nút mutation với
+> `title="Chỉ vai trò Admin được thay đổi cấu hình Modbus RTU."` và hiện banner
+> "Chế độ chỉ xem" cho Viewer/Operator.
+>
+> ⚠️ **Lưu ý sai lệch với Đ-04:** As-Built dùng một cờ duy nhất
+> `canEdit = roleAtLeast(session?.role, 'admin')`, nên **Operator hiện bị đối xử như
+> Viewer**. Đúng theo Đ-04 thì Operator phải làm được test kết nối và đọc thử —
+> nhưng hai chức năng đó **chưa tồn tại** (`G-UX-05`), nên hiện chưa có hành vi sai,
+> chỉ là quyền Operator chưa có gì để thực thi. Khi làm `MBR-B307` phải thêm cờ
+> `canCommission` riêng, không tái dùng `canEdit`.
 
 ## 8. Accessibility và responsive
 
@@ -492,21 +541,41 @@ quyết định cuối. FE không được nới lỏng hơn server (ADR-021).
 
 ## 9. Gap so với FE hiện tại
 
-| ID | Thiết kế | FE As-Built | Mức |
+**Đối chiếu lại tại `eade4e5` (2026-08-05), sau Track A nhóm A5.**
+
+### 9.1 Gap còn lại
+
+| ID | Thiết kế | FE As-Built tại `eade4e5` | Mức |
 |---|---|---|---|
-| G-UX-01 | 5 page, Viewer đọc được | 1 page, route min-role `admin` | P0 |
-| G-UX-02 | Candidate/Apply tách bạch | mỗi CRUD tự apply + restart iobus | P0 |
+| G-UX-01 | 5 page riêng | ◐ **đóng phần quyền**: route nay `viewer`, control mutation disable kèm lý do (D-07 ✅). Còn lại: vẫn là **1 page** thay vì 5 route | **P1** (hạ từ P0) |
+| G-UX-02 | Candidate/Apply tách bạch | mỗi CRUD tự apply + restart iobus (D-09) | P0 |
 | G-UX-03 | Overview + bus card | không có | P1 |
 | G-UX-04 | Mapping page với chặn lưu khi lỗi | không có | P1 |
-| G-UX-05 | Test connection / read test / write test | không có | P0 |
-| G-UX-06 | Import/Export CSV/JSON | không có | P1 |
-| G-UX-07 | Loading/empty/error/offline riêng cho từng vùng | chỉ một dòng `status` chung | P1 |
-| G-UX-08 | Quality từ authority, 5 trạng thái | bảng diagnostics suy diễn `online ? GOOD : consecutive_errors ? OFFLINE : STALE` | P0 |
-| G-UX-09 | Xác nhận trước khi xoá | `Xoá` gọi API ngay, không xác nhận | P0 |
+| G-UX-05 | Test connection / read test / write test | không có | P0 — **bắt buộc theo Đ-06** |
+| G-UX-06 | Import/Export CSV/JSON | không có | P1 — **bắt buộc theo Đ-06** |
+| G-UX-07 | Loading/empty/error/offline riêng cho từng vùng | chỉ một dòng `status` chung; bảng diagnostics có empty state riêng | P1 |
 | G-UX-10 | Address kèm nhãn zero-based | hiện `@{address}` không có convention | P2 |
+| **G-UX-11** | Ô nhập `offline_after_errors` trong drawer Device | **không có** — trường không cấu hình được end-to-end | **P1 mới** — cặp với `F-BE-19` |
+| **G-UX-12** | Cổng RS485 chọn từ capability manifest | ◐ đã bỏ mặc định `/dev/ttyS3` (D-14 ✅) nhưng vẫn là **ô text tự do** | **P1 mới** |
+| **G-UX-13** | Operator có quyền riêng cho commissioning | FE chỉ có `canEdit` (admin); Operator bị đối xử như Viewer | **P2 mới** — chưa gây sai vì `G-UX-05` chưa làm |
+
+### 9.2 Đã đóng bằng Track A
+
+| ID | Thiết kế | Bằng chứng FE | Defect |
+|---|---|---|---|
+| G-UX-08 | Quality/trạng thái đến từ authority, không suy diễn | `deviceLinkLabel()` chỉ mô tả **tình trạng liên lạc** từ đúng field diagnostics; phân biệt "Chưa liên lạc lần nào" (`total_polls === 0`) với "Mất liên lạc"; quality Point lấy từ `runtimeQuality`, thiếu ⇒ `—` chứ không `BAD` | D-07 (`dfef8ab`) |
+| G-UX-09 | Xác nhận trước khi xoá | dialog `role="dialog" aria-modal`, nêu đích danh đối tượng, cảnh báo số Point còn lại, và nói rõ "thao tác này áp dụng cấu hình mới vào iobus ngay lập tức" | D-08 (`dfef8ab`) |
+| — | Không mặc định cổng serial không tồn tại | `emptyDevice.rs485_port = ''` kèm comment giải thích board Foxlinx chỉ có `ttyS2`/`ttyS5` | D-14 (`dfef8ab`) |
+
+> **Vì sao G-UX-08 quan trọng hơn vẻ ngoài của nó.** Biểu thức cũ
+> `row.online ? 'GOOD' : row.consecutive_errors ? 'OFFLINE' : 'STALE'` sai hai lần:
+> thiết bị online nhưng Point lỗi decode vẫn hiện GOOD; và thiết bị **chưa từng
+> được poll** hiện STALE — tức "dữ liệu cũ", trong khi sự thật là "chưa có dữ liệu
+> nào". Một trang chẩn đoán nói sai về chính nó thì tệ hơn một trang không có.
 
 ## Revision history
 
 | Phiên bản | Ngày | Trạng thái | Thay đổi |
 |---|---|---|---|
 | 0.1 | 2026-08-04 | In Review | Tạo UI/UX spec 5 page, wireframe, validation, state, quyền và gap FE |
+| 0.2 | 2026-08-05 | In Review | Đồng bộ Đ-01/Đ-04/Đ-05/Đ-06 và đối chiếu lại với `eade4e5`. **Thay thế:** (a) §1.1 `G-UX-01` phần quyền đã đóng; (b) §2 Overview render thẻ bus từ `GET /modbus/buses`, Rev A một thẻ, bỏ wireframe hai bus; (c) §3 Device Manager bỏ tab/radio chọn RS485-1/RS485-2, đổi nhãn `Retry` → "Số lần phát lại" và thêm trường "Chuyển OFFLINE sau N lượt" (Đ-05); (d) §3.2 thêm ràng buộc `rs485_port` chọn từ capability, `retry_count` cho phép 0; (e) §6.1 bỏ bộ lọc hai bus; (f) §7 ma trận quyền bốn vai trò → **ba** vai trò (Đ-04) kèm cảnh báo Operator hiện bị gộp vào Viewer ở FE; (g) §9 tách 9.1/9.2: đóng G-UX-08/G-UX-09, hạ G-UX-01 xuống P1, thêm G-UX-11/12/13 |

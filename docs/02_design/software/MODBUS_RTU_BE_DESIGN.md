@@ -1,10 +1,12 @@
 # Modbus RTU — Backend Design DDC-24 Rev A
 
 **ID:** DDD-BE-MBRTU-001
-**Phiên bản:** 0.1
+**Phiên bản:** 0.2
 **Trạng thái:** In Review
-**Ngày:** 2026-08-04
+**Ngày:** 2026-08-05 (bản 0.1: 2026-08-04)
 **Chủ quản đề xuất:** SOM Backend Lead
+**Quyết định đã ký áp dụng:** Đ-01, Đ-04, Đ-05, Đ-06, Đ-07
+**Đối chiếu source tại:** `feat/modbus-rtu-track-a` / `eade4e5`
 **Trace ngược:** [DDD-DM-MBRTU-001](MODBUS_RTU_DATA_MODEL.md),
 `SWR-REQ-MBRTU-006..009`, `SEC-REQ-MBRTU-001`
 **Trace xuôi:** [ICD-API-MBRTU-001](../interfaces/MODBUS_RTU_API_SPEC.md),
@@ -186,15 +188,24 @@ Nguyên tắc:
 
 ### 7.1 RBAC
 
+Theo Đ-04 (**ba** vai trò, `OD-MBRTU-009` CLOSED — không có `engineer`):
+
 | Endpoint nhóm | Quyền tối thiểu |
 |---|---|
 | `GET /modbus/*` (config, devices, points, diagnostics, overview, events, export) | `viewer` |
 | `POST /modbus/devices/{id}/test-connection`, `POST /modbus/commission/read` | `operator` |
-| `PUT/POST/DELETE` cấu hình, `apply`, `rollback`, `import` | `admin` (vai trò Engineer chưa tồn tại — `OD-MBRTU-009`) |
+| `PUT/POST/DELETE` cấu hình, `apply`, `rollback`, `import` | `admin` |
 | `POST /modbus/commission/write` | `admin` |
 
-Hiện `GET /modbus/*` As-Built đã là `viewer` ở tầng API nhưng FE chặn ở
-`admin`; thiết kế yêu cầu hai tầng khớp nhau.
+**Export ở mức `viewer` là có chủ ý và cần được review lại:** Đ-04 xếp Import/Export
+vào cột Admin. Bảng trên để `GET .../export` ở `viewer` vì nó không phải mutation và
+chỉ trả đúng dữ liệu mà `viewer` đã đọc được qua `GET /modbus/points`. Nếu Product
+muốn siết đúng chữ trong Đ-04 thì đổi thành `admin` — ghi thành `OD-MBRTU-017`.
+
+**As-Built ✅ (D-07/Đ-04):** `GET /modbus/*` là `RoleViewer` ở tầng API
+(`http.go`) và FE **đã** hạ route xuống viewer, disable control mutation kèm lý do
+quyền thay vì chặn cả trang. Hai tầng nay khớp nhau. Mutation vẫn là `RoleAdmin` ở
+server — FE chỉ làm việc "không mời người dùng vào thao tác chắc chắn bị 403".
 
 ### 7.2 Audit
 
@@ -232,26 +243,44 @@ diagnostics, không có state riêng, không cache quá 1 s.
 
 ## 9. Sai khác so với BE hiện tại
 
-| ID | Thiết kế | As-Built | Mức | Bằng chứng |
+**Đối chiếu lại tại `eade4e5` (2026-08-05), sau Track A.**
+
+### 9.1 Gap còn lại
+
+| ID | Thiết kế | As-Built tại `eade4e5` | Mức | Bằng chứng |
 |---|---|---|---|---|
-| F-BE-01 | apply = ACK revision/checksum từ iobus | apply = `systemctl restart mkddc-iobus` trả `applied=true` | P0 | `modbus_rtu.go:267-284`, `reloadhelper_linux.go:43` |
-| F-BE-02 | candidate riêng, apply một lần | mỗi CRUD tự ghi file + restart iobus | P0 | `mutateModbusConfig()` gọi `applyModbusConfig()` mỗi lần |
-| F-BE-03 | journal + LKG + reconcile sau crash | snapshot trong RAM của handler, restore best-effort | P0 | `persistence.go:66-99` — `snapshots` là biến local, mất khi process chết |
-| F-BE-04 | temp→fsync→rename→fsync(dir) | `writeConfigFileAtomic` (chưa xác nhận fsync thư mục) | P1 | cần kiểm tra riêng |
+| F-BE-01 | apply = ACK revision/checksum từ iobus | apply = `systemctl restart mkddc-iobus` trả `applied=true` | P0 | `modbus_rtu.go` `applyModbusConfig()`, `reloadhelper_linux.go` |
+| F-BE-02 | candidate riêng, apply một lần | mỗi CRUD tự ghi file + restart iobus (D-09) | P0 | `mutateModbusConfig()` gọi `applyModbusConfig()` mỗi lần |
+| F-BE-03 | journal + LKG + reconcile sau crash | snapshot trong RAM của handler, restore best-effort | P0 | `persistence.go` — `snapshots` là biến local, mất khi process chết |
+| F-BE-04 | temp→fsync→rename→fsync(dir) | `WriteFileAtomic`; có `SyncDirectory` riêng nhưng `Persister.Apply` **không gọi** | P1 | `config_facade.go`, `persistence.go` |
 | F-BE-05 | idempotency `operation_id` | không có | P0 | không có tham số nào trong handler |
 | F-BE-06 | optimistic concurrency `base_revision` | không có; `pointConfigMu` chỉ chặn trong một process | P0 | `mutateModbusConfig()` |
-| F-BE-07 | Bus là entity; hai bus | `RS485` map sinh từ **device enabled đầu tiên**, một bus | P0 | `persistence.go:49-51` |
-| F-BE-08 | slave ID unique **trong bus** | unique **toàn cục** (`slaves map[int]string`) | P1 | `domain.go:165-169` |
-| F-BE-09 | checksum trên canonical JSON | `json.Marshal(cfg)` với `map[string]any` → thứ tự key phụ thuộc runtime | P1 | `persistence.go:57-59` |
-| F-BE-10 | commissioning read/write/test-connection | không có endpoint | P0 | `http.go:148-156` chỉ 9 route |
-| F-BE-11 | import/export | không có endpoint | P1 | như trên |
+| F-BE-07 | Bus là entity | `RS485` map sinh từ **device enabled đầu tiên** | **P2** (hạ từ P0) | `persistence.go`. Với Rev A một bus (Đ-01), hành vi **đúng**; validator đã bắt buộc mọi device enabled dùng chung port/baud/parity/stop. Nợ cấu trúc cho `MBR-B202` |
+| F-BE-08 | slave ID unique **trong bus** | unique **toàn cục** (`slaves map[int]string`) | **P2** (hạ từ P1) | `domain.go`. Tương đương ở Rev A một bus; nâng lại khi mở bus thứ hai |
+| F-BE-09 | checksum trên canonical JSON | `json.Marshal(cfg)` với `map[string]any` → thứ tự key phụ thuộc runtime | P1 | `persistence.go` |
+| F-BE-10 | commissioning read/write/test-connection | không có endpoint | P0 | `http.go` chỉ 9 route. **Bắt buộc theo Đ-06** |
+| F-BE-11 | import/export | không có endpoint | P1 | như trên. **Bắt buộc theo Đ-06** (CSV import, CSV+JSON export) |
 | F-BE-12 | enable/disable là thao tác riêng có audit | chỉ là field trong PUT device | P2 | |
 | F-BE-13 | admission control tải bus | không có | P1 | `Validate()` không tính tải |
-| F-BE-14 | diagnostics ghép theo `(bus, slave)` | ghép theo `slave_id` toàn cục | P1 | `modbus_rtu.go:115-118` |
-| F-BE-15 | `timestamp` từ producer | `time.Now()` khi BE đọc SHM | P0 | `core_client.go:846-848` |
-| F-BE-16 | validation `retry 0..3` | `retry 1..10` và normalize `0 → 2` | P2 | `domain.go:89-91`, `176-178` |
-| F-BE-17 | `poll_interval_ms` 100..60000 | `10..60000` | P2 | `domain.go:170-172` |
-| F-BE-18 | audit có old/new value và correlation | `a.audit.Change(user, "config.modbus-rtu", file, "success", addr)` — không có target/giá trị | P1 | `modbus_rtu.go:282` |
+| F-BE-14 | diagnostics ghép theo `(bus, slave)` | ghép theo `slave_id` toàn cục | **P2** (hạ từ P1) | `modbus_rtu.go` `handleModbusDiagnostics()`. Đúng ở Rev A một bus |
+| F-BE-15 | `timestamp` từ producer | `time.Now()` khi BE đọc SHM | P0 | `core_client.go` |
+| F-BE-17 | `poll_interval_ms` 100..60000 | `10..60000` | P2 | `domain.go`. Poll 10 ms là không thực hiện được trên RTU 19200 baud |
+| F-BE-18 | audit có old/new value và correlation | `a.audit.Change(user, "config.modbus-rtu", file, "success", addr)` — không có target/giá trị | P1 | `modbus_rtu.go` |
+| **F-BE-19** | `offline_after_errors` cấu hình được từ UI/API | ⚠️ **đứt end-to-end**: `fieldbus_config.cpp` **có** đọc `offline_after_errors` từ `fieldbus.conf`, nhưng `Persister.Apply` **không bao giờ ghi** field này vào map `slaves`. Tham số luôn nằm ở mặc định `2` và không có đường cấu hình | **P1 mới** | `persistence.go` (map `slaves` chỉ có `addr/profile/name/poll_ms/timeout_ms/retry`) vs `fieldbus_config.cpp` |
+| **F-BE-20** | `offline_probe_ms` cấu hình được từ UI/API | ⚠️ **đứt end-to-end** như trên: iobus đọc `rs485.offline_probe_ms`, BE chỉ ghi `device/baud/parity/stop`. Luôn ở mặc định 5000 ms | **P1 mới** | `persistence.go` vs `fieldbus_config.cpp` |
+| **F-BE-21** | capacity Point ≥ 256 (Đ-07) | `domain.go` chặn cứng ở 64 kèm thông điệp "vượt KX_N_EXT=64" | **P0 mới** | `domain.go` |
+
+> **F-BE-19/F-BE-20 là dạng lỗi đáng chú ý:** Track A đã thêm hai tham số điều khiển
+> hành vi bus vào FW và vào file cấu hình, nhưng **không có ai ghi chúng ra file**.
+> Đây đúng là hạng mục "có source nhưng chưa nối end-to-end" — nguy hiểm vì đọc code
+> iobus sẽ tưởng tham số đã cấu hình được. Chúng **không** làm sai hành vi mặc định,
+> nên không phải defect an toàn, nhưng chặn việc chỉnh chính sách offline theo hiện trường.
+
+### 9.2 Đã đóng — không còn là gap
+
+| ID | Thiết kế | Bằng chứng As-Built | Defect |
+|---|---|---|---|
+| F-BE-16 | validation `retry 0..3`, **không** normalize `0 → 2` | `domain.go`: `device.Retry < 0 \|\| device.Retry > 3` ⇒ lỗi; `NormalizeDevice` bỏ hẳn nhánh ép `0 → 2`, có comment nêu rõ `retry=0` là lựa chọn hợp lệ | D-05 (`0f0fe71`) |
 
 ## 10. Test BE bắt buộc
 
@@ -272,9 +301,13 @@ diagnostics, không có state riêng, không cache quá 1 s.
 | TB-MBRTU-13 | integration | audit chứa actor/target/old/new/correlation cho `commission.write` |
 | TB-MBRTU-14 | integration | diagnostics thiếu telemetry ⇒ `unknown`, không `0` |
 | TB-MBRTU-15 | integration | write test bị từ chối đúng cho từng lý do ở §6 |
+| **TB-MBRTU-16** | unit | `retry` chấp nhận `0..3`; `retry=0` **không** bị normalize thành `2`; `retry=4` bị từ chối | ✅ đã có phần dương/âm trong `domain_test.go`/`modbus_rtu_test.go` — cần bổ sung case `retry=0` giữ nguyên |
+| **TB-MBRTU-17** | integration | `offline_after_errors` và `offline_probe_ms` đặt từ API phải xuất hiện trong `fieldbus.conf` và có hiệu lực ở iobus | ❌ chưa có — phủ F-BE-19/F-BE-20 |
+| **TB-MBRTU-18** | unit | capacity Point theo Đ-07 (≥256): vượt ⇒ `CAPACITY_EXCEEDED` với con số đúng, không hardcode 64 | ❌ chưa có — phủ F-BE-21 |
 
 ## Revision history
 
 | Phiên bản | Ngày | Trạng thái | Thay đổi |
 |---|---|---|---|
 | 0.1 | 2026-08-04 | In Review | Tạo BE design: transaction, validator, admission, commissioning, RBAC/audit và 18 gap As-Built |
+| 0.2 | 2026-08-05 | In Review | Đối chiếu lại với `eade4e5`. **Thay thế:** (a) §7.1 bỏ chú thích "vai trò Engineer chưa tồn tại" — Đ-04 chốt ba vai trò, và ghi nhận FE/API nay khớp nhau ở mức `viewer` (D-07 đóng); (b) §9 tách 9.1/9.2: hạ F-BE-07/08/14 xuống P2 do Đ-01 một bus, đóng F-BE-16 (retry 0..3), thêm **F-BE-19/F-BE-20** (đứt end-to-end `offline_after_errors`/`offline_probe_ms`) và **F-BE-21** (capacity 64 vs Đ-07); (c) §10 thêm TB-MBRTU-16..18; (d) nêu `OD-MBRTU-017` về mức quyền của export |
