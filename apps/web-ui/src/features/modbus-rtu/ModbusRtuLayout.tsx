@@ -8,6 +8,7 @@ const OVERVIEW_PATH = '/eng/modbus-rtu'
 
 const tabs = [
   { label: 'Tổng quan', path: OVERVIEW_PATH },
+  { label: 'Cổng RS-485', path: '/eng/modbus-rtu/ports' },
   { label: 'Thiết bị', path: '/eng/modbus-rtu/devices' },
   { label: 'Points', path: '/eng/modbus-rtu/points' },
   { label: 'Mapping', path: '/eng/modbus-rtu/mapping' },

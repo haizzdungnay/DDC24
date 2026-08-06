@@ -156,6 +156,7 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("GET /api/v1/modbus/diagnostics", RoleViewer, a.handleModbusDiagnostics),
 		webRouter.Protected("GET /api/v1/modbus/overview", RoleViewer, a.handleGetModbusOverview),
 		webRouter.Protected("GET /api/v1/modbus/buses", RoleViewer, a.handleGetModbusBuses),
+		webRouter.Protected("PUT /api/v1/modbus/buses/{bus_id}", RoleAdmin, a.handleUpdateModbusBus),
 		webRouter.Protected("GET /api/v1/modbus/events", RoleViewer, a.handleGetModbusEvents),
 		webRouter.Protected("POST /api/v1/modbus/write-test", RoleAdmin, a.handleModbusWriteTest),
 		// MBR-B210 — nhóm endpoint contract v2.

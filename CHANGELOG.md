@@ -7,6 +7,130 @@
 ---
 
 ## [Unreleased]
+### Changed — Hai cổng RS-485 là sự thật sản phẩm; cấu hình cổng có trang riêng (2026-08-06)
+
+Chốt theo chỉ đạo: **dự án có 2 cổng RS-485** (`rs485-1` → `ttyS5`, `rs485-2` →
+`ttyS1`), cả hai auto-direction (không DE/RE). Tài liệu nào nói khác là sai và
+đã sửa; source nào sai cũng đã sửa.
+
+#### Tài liệu tự mâu thuẫn — đã dựng lại authority
+
+`CONFIG_SCHEMA §5b` là nguồn chuẩn cho định dạng `fieldbus.conf`, nhưng nó
+**không hề mô tả `buses[]`** trong khi khối đó đã tồn tại trong file thật từ
+Track B. Không có authority để đối chiếu, nên BE và iobus mỗi bên tự đặt tên
+khoá và cả hai đều pass test của chính mình. §5b nay mô tả đầy đủ `buses[]`,
+`rs485{}` (khối tương thích, chỉ đọc), `slaves[]` (khối phái sinh, chỉ đọc), kèm
+phát biểu rằng **sửa §5b trước, sửa code hai phía sau**.
+
+Ba tài liệu còn nói "một bus" đã sửa:
+
+| Tài liệu | Trước | Sau |
+|---|---|---|
+| `MODBUS_RTU_DATA_MODEL §3` | "Rev A chỉ nhận `rs485-1`", "Rev A có đúng một instance Bus (Đ-01)" — **mâu thuẫn với chính §1** của nó (đã ghi 2 bus) | 2 bus; luật "hai bus không được trỏ cùng device node" nay là luật **có thể bị vi phạm** nên validator phải cưỡng chế |
+| `MODBUS_RTU_FW_SOM_DESIGN §11` | `Bus logic \| 1 \| CHỐT bằng Đ-01` | `Bus logic \| 2`; `F-FW-01` đóng; `TW-MBRTU-09` hết hoãn |
+| `MODBUS_RTU_OPEN_DECISIONS §1` | `OD-MBRTU-001` **CLOSED (1 cổng)** trong khi bảng §2 của cùng file ghi **"02 bus"** | CLOSED (2 cổng); `OD-MBRTU-002` chuyển từ "không áp dụng" sang **CLOSED** |
+
+Bốn tên field đưa về đúng thứ đang chạy: `label`→`display_name`,
+`port_ref`→`port`, `baud_rate`→`baud`, `direction_control`→`direction`.
+`inter_frame_policy` bỏ khỏi Rev A (libmodbus tự áp 3.5 ký tự; giữ một nút không
+kiểm chứng được thì tệ hơn không có nút) và `direction: gpio` bỏ (không có chân
+DE/RE nào để điều khiển).
+
+#### `stop_bit` → `stop_bits` — chính code tự mâu thuẫn
+
+Endpoint `/modbus/buses` trả `stop_bits` còn endpoint cấu hình dùng `stop_bit`.
+Hai tên cho cùng một thứ trong cùng một API. Nay thống nhất `stop_bits` ở BE, FE
+và OpenAPI; **bên đọc** vẫn nhận `stop_bit` (tên BE cũ) và `stop` (tên iobus) vì
+file trên các bo đã triển khai còn dùng chúng — bỏ qua tên cũ thì cổng lặng lẽ
+về 1 stop bit, sai khung truyền mà không có dòng lỗi nào.
+
+#### `PUT /modbus/buses/{bus_id}` — endpoint chưa từng tồn tại
+
+`OD-MBRTU-002` đặt tham số serial ở Bus và cho Device kế thừa read-only, nhưng
+**không có đường nào sửa được Bus**: API chỉ có `GET /modbus/buses`. Hệ quả là
+giao diện vẫn bắt người dùng nhập baud/parity/stop ở từng Thiết bị, nhập xong
+mới bị validator từ chối, và không có chỗ nào sửa cho đúng.
+
+Bốn trường **không nhận từ client**: `bus_id`, `port`, `data_bits`, `direction`
+— sự thật phần cứng, không phải lựa chọn cấu hình. Cho sửa `port` tự do nghĩa là
+cho phép trỏ hai bus vào cùng một device node.
+
+#### Trang "Cổng RS-485" và Thiết bị hết cho sửa khung truyền
+
+- Trang mới `/eng/modbus-rtu/ports`: mỗi cổng một thẻ, một form, **một nút áp
+  riêng**. Hai sợi dây là hai miền vật lý tách biệt; gộp một lần áp sẽ buộc
+  người vận hành đụng vào dây đang chạy tốt khi họ chỉ muốn sửa dây kia.
+- Cảnh báo trước khi áp nếu cổng đang có thiết bị — đổi khung truyền ảnh hưởng
+  **mọi** thiết bị trên dây; nói trước, không để người vận hành phát hiện bằng
+  cách mất liên lạc hàng loạt.
+- Form Thiết bị **bỏ hẳn** ô nhập baud/parity/stop, thay bằng dòng chỉ đọc
+  "khung truyền kế thừa từ …" kèm link tới trang Cổng.
+- `ApplyBusInheritance()` ép tham số serial của Device bằng của Bus lúc áp cấu
+  hình. Trước đây quan hệ "kế thừa" chỉ được phát biểu trong tài liệu và
+  validator, **không có chỗ nào thực sự đồng bộ**, nên đổi baud của cổng xong
+  bảng Thiết bị vẫn hiện baud cũ.
+
+#### Khung lỗi hết nuốt lý do
+
+Backend trả `{"error":"validation failed","details":[{path,message}]}` và
+`apiClient` đã parse `details` vào `ApiError`, nhưng mọi trang Modbus chỉ hiện
+`error.message`. Người dùng nhận đúng hai chữ **"validation failed"** và phải
+đoán từng ô. Quan sát thật trên bo: nhập `device_id = "2"` bị từ chối, lý do
+thật (`device_id` phải bắt đầu bằng chữ) nằm trong `details[0]` và bị vứt đi.
+`describeApiError()` nay ghép từng trường sai vào thông báo.
+
+#### Kênh điều khiển bị chính trạng thái nó phải sửa khoá lại
+
+Phát hiện khi kiểm chứng trang Cổng trên bo: bấm áp cấu hình trả
+
+```
+409 — "dịch vụ áp dụng thay đổi hiện không chạy"
+```
+
+`main.cpp` gác kênh điều khiển bằng `rtu_configured` (= "đã có ít nhất một
+slave"), trong khi **chú thích ngay bên trên nói ngược lại**: *"Mở kể cả khi
+chưa có bus nào lên được — commissioning và apply_config phải dùng được để SỬA
+tình trạng đó."*
+
+Nghịch lý: một hệ thống mới tinh (0 thiết bị) không có kênh điều khiển, nên mọi
+thay đổi cấu hình rơi về phương án dự phòng — khởi động lại `mkddc-iobus`, cắt
+luôn IOP 100 Hz. Đường duy nhất để thoát khỏi trạng thái "chưa cấu hình" bị
+chính trạng thái đó khoá. Nay kênh mở vô điều kiện.
+
+#### Kiểm chứng đầu-cuối trên bo Foxlinx
+
+```
+PUT /modbus/buses/rs485-1  {baud:38400, parity:E, stop_bits:2}
+  → 200, reload=control, revision=14        (trước khi vá: 409)
+iobus: fieldbus_config.bus id=1 name=Day tang 1 38400E82 probe=8000ms
+       bus_worker.open bus=1 38400E82        ← áp qua kênh điều khiển, KHÔNG restart
+
+POST /modbus/devices {baud:9600 …}          ← cố tình gửi baud sai
+  → thiết bị nhận 38400 E2 của CỔNG, không phải 9600 N1 đã gửi
+
+PUT /modbus/buses/rs485-1  {baud:19200, parity:N, stop_bits:1}
+  → thiết bị TỰ đi theo: 19200 N1
+
+POST /modbus/devices {device_id:"2"}
+  → 400 kèm details[0]: "devices[0].device_id: phải dài 1..23 ký tự ASCII
+     và bắt đầu bằng chữ"                    ← trước đây chỉ hiện "validation failed"
+```
+
+Soi 24 trang bằng Chromium thật trỏ vào bo: **0 trang trắng**, trang Cổng RS-485
+render đủ nội dung. Hai dòng 503 còn lại là `/modbus/diagnostics` — đúng thiết
+kế D-07 và đã có khung giải thích trên cả hai trang.
+
+| Gate | Kết quả |
+|---|---|
+| `ctest --test-dir build/fw` | **785/785 PASS** |
+| `go vet` + `go test ./... -count=1` | **vet sạch, 11/11 package** |
+| `npx vitest --run --environment jsdom src` | **410/410 PASS**, 50 file (trước: 400/49) |
+| `npm run lint` / `npm run build` | **PASS**, 0 warning |
+
+> **Còn chặn:** `ttyS1` đang `status = "disabled"` trong device tree
+> (`serial@21160000`), nên `/dev/rs485-2` chưa tồn tại trên bo. Toàn bộ đường
+> phần mềm cho cổng 2 đã sẵn sàng; bật nó cần sửa DTB trong partition `boot`.
+
 ### Fixed — BE và iobus bất đồng về `buses[]` trong `fieldbus.conf` (2026-08-06)
 
 **Triệu chứng.** Trên bo Foxlinx, mọi tab Modbus RTU hiện một dải đỏ và không

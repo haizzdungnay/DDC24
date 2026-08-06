@@ -14,7 +14,7 @@ func TestModbusWriteTestEndpoint_RBACAndValidation(t *testing.T) {
 	// Seed fieldbus.conf with 1 read-only point and 1 read_write point
 	fieldbusJSON := `{
 		"devices": [
-			{"device_id": "MTR1", "enabled": true, "rs485_port": "/dev/rs485-1", "baud": 19200, "parity": "N", "stop_bit": 1, "slave_id": 1, "poll_ms": 1000, "timeout_ms": 300}
+			{"device_id": "MTR1", "enabled": true, "rs485_port": "/dev/rs485-1", "baud": 19200, "parity": "N", "stop_bits": 1, "slave_id": 1, "poll_ms": 1000, "timeout_ms": 300}
 		],
 		"points": [
 			{"point_id": "MB_VOLT", "device_id": "MTR1", "tag_name": "mb_volt", "display_name": "Voltage", "register_type": "holding_register", "address": 100, "data_type": "float32", "byte_order": "big", "word_order": "high_low", "scale": 1, "read_write": "read", "enabled": true},

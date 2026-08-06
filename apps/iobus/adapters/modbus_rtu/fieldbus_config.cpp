@@ -219,7 +219,12 @@ static bool parse_bus(const std::string& obj, BusConfig* bus)
     std::string parity;
     if (jget_str(obj, "parity", &parity) && !parity.empty())
         bus->parity = static_cast<char>(parity[0]);
-    if ((jget_int(obj, "stop", &v) || jget_int(obj, "stop_bit", &v)) && (v == 1 || v == 2))
+    /* `stop_bits` là tên chuẩn (CONFIG_SCHEMA §5b). `stop_bit` là tên BE dùng
+     * tới 2026-08-06 và `stop` là tên rút gọn của iobus — cả hai còn nằm trong
+     * file trên các bo đã triển khai. Bỏ qua tên cũ thì cổng lặng lẽ về 1 stop
+     * bit: sai khung truyền mà không có dòng lỗi nào. */
+    if ((jget_int(obj, "stop_bits", &v) || jget_int(obj, "stop_bit", &v) ||
+         jget_int(obj, "stop", &v)) && (v == 1 || v == 2))
         bus->stop = static_cast<uint8_t>(v);
     if (jget_int(obj, "offline_probe_ms", &v)) {
         if (v < 1000)       v = 1000;

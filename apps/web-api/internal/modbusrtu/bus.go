@@ -22,7 +22,7 @@ type Bus struct {
 	Port           string   `json:"port"`
 	Baud           int      `json:"baud"`
 	Parity         string   `json:"parity"`
-	StopBit        int      `json:"stop_bit"`
+	StopBit        int      `json:"stop_bits"`
 	DataBits       int      `json:"data_bits"`
 	OfflineProbeMs int      `json:"offline_probe_ms"`
 	Enabled        FlexBool `json:"enabled"`
@@ -62,10 +62,15 @@ func (b *Bus) UnmarshalJSON(data []byte) error {
 	*b = Bus(canonical)
 
 	var legacy struct {
-		ID     *int    `json:"id"`
-		Device *string `json:"device"`
-		Name   *string `json:"name"`
-		Stop   *int    `json:"stop"`
+		ID *int `json:"id"`
+		// `stop` là tên của iobus; `stop_bit` là tên BE dùng tới 2026-08-06,
+		// trước khi CONFIG_SCHEMA §5b chốt `stop_bits` cho cả hai phía. File
+		// trên các bo đã triển khai còn dùng cả hai, và một bản nâng cấp làm
+		// cổng im lặng quay về 1 stop bit thì tệ hơn lỗi nó đi sửa.
+		Stop    *int    `json:"stop"`
+		StopBit *int    `json:"stop_bit"`
+		Device  *string `json:"device"`
+		Name    *string `json:"name"`
 	}
 	if err := json.Unmarshal(data, &legacy); err != nil {
 		// Bộ rút gọn sai kiểu không được làm hỏng cả bus: bộ chuẩn đã đọc xong.
@@ -79,6 +84,9 @@ func (b *Bus) UnmarshalJSON(data []byte) error {
 	}
 	if b.DisplayName == "" && legacy.Name != nil {
 		b.DisplayName = *legacy.Name
+	}
+	if b.StopBit == 0 && legacy.StopBit != nil {
+		b.StopBit = *legacy.StopBit
 	}
 	if b.StopBit == 0 && legacy.Stop != nil {
 		b.StopBit = *legacy.Stop
@@ -203,6 +211,59 @@ func MigrateBuses(cfg Config) ([]Bus, []string) {
 		out = append(out, *byPort[port])
 	}
 	return out, warnings
+}
+
+// ApplyBusInheritance ép tham số serial của Device bằng tham số của Bus nó thuộc về.
+//
+// `OD-MBRTU-002` (CLOSED): serial format thuộc **dây**, Device chỉ kế thừa. Bản
+// trước phát biểu điều đó trong tài liệu và trong validator, nhưng KHÔNG có chỗ
+// nào thực sự đồng bộ hai bên — `devices[].baud` cứ giữ nguyên giá trị người
+// dùng gõ lúc tạo. Hệ quả: đổi baud của cổng thì bảng Thiết bị vẫn hiện baud cũ,
+// và người vận hành đọc được một con số không đúng với thứ đang chạy trên dây.
+//
+// Ép ở đây thay vì từ chối ở validator là có chủ ý: người dùng không còn nhập
+// các trường này nữa (giao diện Thiết bị hiển thị read-only), nên một giá trị
+// lệch là dữ liệu cũ, không phải ý định. Từ chối sẽ chặn họ ở một trường họ
+// không sửa được.
+func ApplyBusInheritance(cfg *Config) {
+	if cfg == nil || len(cfg.Buses) == 0 {
+		return
+	}
+	byID := make(map[string]Bus, len(cfg.Buses))
+	for _, bus := range cfg.Buses {
+		byID[bus.BusID] = bus
+	}
+	for i := range cfg.Devices {
+		busID := cfg.Devices[i].BusID
+		if busID == "" {
+			busID = busIDForPort(cfg.Devices[i].RS485Port)
+		}
+		bus, ok := byID[busID]
+		if !ok {
+			continue // validator sẽ báo tham chiếu bus sai; không bịa giá trị ở đây
+		}
+		cfg.Devices[i].BusID = bus.BusID
+		cfg.Devices[i].RS485Port = bus.Port
+		cfg.Devices[i].Baud = bus.Baud
+		cfg.Devices[i].Parity = bus.Parity
+		cfg.Devices[i].StopBit = bus.StopBit
+	}
+}
+
+// PortForBusID trả đường dẫn thiết bị chuẩn của một bus.
+//
+// Ánh xạ `bus_id` ↔ cổng là **sự thật phần cứng**, không phải lựa chọn của người
+// dùng: cho sửa `port` tự do nghĩa là cho phép trỏ hai bus vào cùng một device
+// node, hoặc trỏ `rs485-1` sang cổng của `rs485-2`. Cả hai đều tạo ra cấu hình
+// nhìn hợp lệ mà chạy sai dây.
+func PortForBusID(busID string) string {
+	switch strings.ToLower(strings.TrimSpace(busID)) {
+	case "rs485-1":
+		return "/dev/rs485-1"
+	case "rs485-2":
+		return "/dev/rs485-2"
+	}
+	return ""
 }
 
 // busIDForPort suy ra bus_id từ đường dẫn cổng đã chuẩn hoá.

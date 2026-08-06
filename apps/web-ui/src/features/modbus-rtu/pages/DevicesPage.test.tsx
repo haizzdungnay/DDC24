@@ -1,15 +1,15 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { UserRole } from '../../../shared/types'
+import { ApiError, type UserRole } from '../../../shared/types'
 import { DevicesPage } from './DevicesPage'
 
 const api = vi.hoisted(() => ({
   getModbusDevices: vi.fn(), getModbusPoints: vi.fn(), getModbusDiagnostics: vi.fn(),
   createModbusDevice: vi.fn(), updateModbusDevice: vi.fn(), deleteModbusDevice: vi.fn(),
-  testModbusConnection: vi.fn()
+  testModbusConnection: vi.fn(), getModbusBuses: vi.fn()
 }))
 
 vi.mock('../../../shared/api/client', () => ({ apiClient: api }))
@@ -39,8 +39,8 @@ describe('DevicesPage', () => {
   beforeEach(() => {
     auth.role = 'admin'
     api.getModbusDevices.mockResolvedValue([
-      { device_id: 'ahu-1', display_name: 'AHU 1', enabled: true, rs485_port: '/dev/rs485-1', baud: 19200, parity: 'E', stop_bit: 1, slave_id: 7, poll_ms: 1000, timeout_ms: 300, retry: 2 },
-      { device_id: 'meter-2', display_name: 'Meter 2', enabled: true, rs485_port: '/dev/rs485-2', baud: 9600, parity: 'N', stop_bit: 1, slave_id: 9, poll_ms: 2000, timeout_ms: 300, retry: 1 }
+      { device_id: 'ahu-1', display_name: 'AHU 1', enabled: true, rs485_port: '/dev/rs485-1', baud: 19200, parity: 'E', stop_bits: 1, slave_id: 7, poll_ms: 1000, timeout_ms: 300, retry: 2 },
+      { device_id: 'meter-2', display_name: 'Meter 2', enabled: true, rs485_port: '/dev/rs485-2', baud: 9600, parity: 'N', stop_bits: 1, slave_id: 9, poll_ms: 2000, timeout_ms: 300, retry: 1 }
     ])
     api.getModbusPoints.mockResolvedValue([
       { point_id: 'MB-AHU-SAT', device_id: 'ahu-1', tag_name: 'ahu1 sat', display_name: 'Supply air', register_type: 'input_register', address: 100, data_type: 'float32', byte_order: 'little', word_order: 'low_high', scale: 0.1, offset: -10, unit: 'degC', read_write: 'read', default_value: 20, safe_value: 0, enabled: true }
@@ -48,6 +48,13 @@ describe('DevicesPage', () => {
     api.getModbusDiagnostics.mockResolvedValue([
       { device_id: 'ahu-1', slave_id: 7, online: false, total_polls: 10, total_errors: 2, timeout_errors: 1, crc_errors: 1, retry_attempts: 2, consecutive_errors: 2, last_seen_ms: 123 },
       { device_id: 'meter-2', slave_id: 9, online: true, total_polls: 50, total_errors: 0, timeout_errors: 0, crc_errors: 0, retry_attempts: 0, consecutive_errors: 0, last_seen_ms: 10 }
+    ])
+    api.getModbusBuses.mockResolvedValue([
+      { bus_id: 'rs485-1', display_name: 'RS485-1', port: '/dev/rs485-1', port_alias: 'ttyS5',
+        open_state: 'RUNNING', baud: 19200, parity: 'N', data_bits: 8, stop_bits: 1,
+        offline_probe_ms: 5000, enabled: true, total_devices: 1, online_devices: 0,
+        poll_latency_p50_ms: null, poll_latency_p95_ms: null, bus_utilization_percent: null,
+        timeout_errors: 0, crc_errors: 0 }
     ])
     api.createModbusDevice.mockResolvedValue({})
     api.deleteModbusDevice.mockResolvedValue(undefined)
@@ -68,8 +75,50 @@ describe('DevicesPage', () => {
     await user.click(screen.getByRole('button', { name: 'Thêm thiết bị mới' }))
     expect(api.createModbusDevice).toHaveBeenCalledWith(expect.objectContaining({
       display_name: 'New meter', rs485_port: '/dev/rs485-1', baud: 19200,
-      parity: 'N', stop_bit: 1, slave_id: 1, poll_ms: 1000, timeout_ms: 300, retry: 2
+      parity: 'N', stop_bits: 1, slave_id: 1, poll_ms: 1000, timeout_ms: 300, retry: 2
     }))
+  })
+
+  /* OD-MBRTU-002 (CLOSED): tham số serial thuộc về DÂY, không thuộc thiết bị.
+   *
+   * Bản trước có ô nhập baud/parity/stop ngay trong form Thiết bị — tức mô hình
+   * dữ liệu nói một đằng, validator cưỡng chế điều đó, còn giao diện thì mời
+   * người dùng nhập một nẻo rồi từ chối sau khi họ bấm lưu, mà không có chỗ nào
+   * sửa cho đúng. Test này khoá lại: những ô đó KHÔNG được quay lại. */
+  it('form Thiết bị không có ô nhập khung truyền', async () => {
+    renderAt()
+    await screen.findByText('ahu-1')
+    expect(screen.queryByRole('spinbutton', { name: 'Baud' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Parity' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Stop bit' })).not.toBeInTheDocument()
+  })
+
+  it('hiện khung truyền kế thừa từ cổng và chỉ đường tới nơi sửa được', async () => {
+    renderAt()
+    await screen.findByText('ahu-1')
+    const inherited = screen.getByTestId('device-serial-inherited')
+    expect(inherited).toHaveTextContent('19200 N81')
+    expect(within(inherited).getByRole('link', { name: /Cổng RS-485/ }))
+      .toHaveAttribute('href', '/eng/modbus-rtu/ports')
+  })
+
+  /* Backend trả `details[]` chỉ đúng trường sai; hiện mỗi "validation failed"
+   * thì người dùng phải đoán từng ô. Đúng tình huống gặp trên bo 2026-08-06. */
+  it('hiện chi tiết trường sai khi lưu thất bại', async () => {
+    const user = userEvent.setup()
+    api.createModbusDevice.mockRejectedValue(
+      new ApiError('validation failed', 400, [
+        { path: 'devices[0].device_id', message: 'phải dài 1..23 ký tự ASCII và bắt đầu bằng chữ' }
+      ])
+    )
+    renderAt()
+    await screen.findByText('ahu-1')
+    await user.type(screen.getByRole('textbox', { name: 'Tên thiết bị' }), 'X')
+    await user.click(screen.getByRole('button', { name: 'Thêm thiết bị mới' }))
+
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('devices[0].device_id')
+    expect(status).toHaveTextContent('bắt đầu bằng chữ')
   })
 
   /* FE-MB-04: KPI card "Offline" ở Overview điều hướng kèm `?status=OFFLINE`.

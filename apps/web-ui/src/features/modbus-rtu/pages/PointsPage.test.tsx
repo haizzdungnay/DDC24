@@ -38,7 +38,7 @@ describe('PointsPage', () => {
   beforeEach(() => {
     auth.role = 'admin'
     api.getModbusDevices.mockResolvedValue([
-      { device_id: 'ahu-1', display_name: 'AHU 1', enabled: true, rs485_port: '/dev/rs485-1', baud: 19200, parity: 'E', stop_bit: 1, slave_id: 7, poll_ms: 1000, timeout_ms: 300, retry: 2 }
+      { device_id: 'ahu-1', display_name: 'AHU 1', enabled: true, rs485_port: '/dev/rs485-1', baud: 19200, parity: 'E', stop_bits: 1, slave_id: 7, poll_ms: 1000, timeout_ms: 300, retry: 2 }
     ])
     api.getModbusPoints.mockResolvedValue([
       { point_id: 'MB-AHU-SAT', device_id: 'ahu-1', tag_name: 'ahu1 sat', display_name: 'Supply air', register_type: 'input_register', address: 100, data_type: 'float32', byte_order: 'little', word_order: 'low_high', scale: 0.1, offset: -10, unit: 'degC', read_write: 'read', default_value: 20, safe_value: 0, enabled: true },

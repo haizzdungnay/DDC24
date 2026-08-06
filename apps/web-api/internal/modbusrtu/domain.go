@@ -1,6 +1,9 @@
 package modbusrtu
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // Config là nội dung fieldbus.conf.
 //
@@ -29,15 +32,42 @@ type Device struct {
 	RS485Port          string   `json:"rs485_port"`
 	Baud               int      `json:"baud"`
 	Parity             string   `json:"parity"`
-	StopBit            int      `json:"stop_bit"`
+	StopBit            int      `json:"stop_bits"`
 	SlaveID            int      `json:"slave_id"`
 	PollMS             int      `json:"poll_ms"`
 	TimeoutMS          int      `json:"timeout_ms"`
 	Retry              int      `json:"retry"`
 	OfflineAfterErrors int      `json:"offline_after_errors,omitempty"`
-	// MBR-B202: Device thuộc về một Bus. `rs485_port`/`baud`/`parity`/`stop_bit`
-	// vẫn có trong response để không vỡ UI cũ, nhưng là KẾ THỪA read-only từ Bus.
+	// MBR-B202 / OD-MBRTU-002 (CLOSED): Device thuộc về một Bus.
+	// `rs485_port`/`baud`/`parity`/`stop_bits` vẫn có trong response để UI hiển
+	// thị, nhưng là KẾ THỪA READ-ONLY từ Bus — giao diện Thiết bị không được cho
+	// sửa chúng (DATA_MODEL §4).
 	BusID string `json:"bus_id,omitempty"`
+}
+
+// UnmarshalJSON nhận `stop_bit` (tên BE dùng tới 2026-08-06) ngoài `stop_bits`.
+//
+// CONFIG_SCHEMA §5b chốt `stop_bits` cho cả hai phía, nhưng file trên các bo đã
+// triển khai còn ghi `stop_bit`. Bỏ qua tên cũ thì trường về 0, `NormalizeDevice`
+// điền mặc định 1, và một thiết bị cấu hình 2 stop bit lặng lẽ chạy sai khung
+// truyền — sai kiểu không báo lỗi, chỉ hỏng dữ liệu trên dây.
+func (d *Device) UnmarshalJSON(data []byte) error {
+	type alias Device
+	var canonical alias
+	if err := json.Unmarshal(data, &canonical); err != nil {
+		return err
+	}
+	*d = Device(canonical)
+	if d.StopBit != 0 {
+		return nil
+	}
+	var legacy struct {
+		StopBit *int `json:"stop_bit"`
+	}
+	if err := json.Unmarshal(data, &legacy); err == nil && legacy.StopBit != nil {
+		d.StopBit = *legacy.StopBit
+	}
+	return nil
 }
 
 type Point struct {
