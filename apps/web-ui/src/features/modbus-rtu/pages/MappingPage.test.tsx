@@ -81,4 +81,13 @@ describe('MappingPage', () => {
     render(<MappingPage />)
     expect(await screen.findByText('Chưa có Point nào trong bản nháp.')).toBeInTheDocument()
   })
+
+  /* HỒI QUY: backend trả `null` cho rows/errors/load khi chưa có dữ liệu. */
+  it('không nổ khi backend trả rows/errors/load = null', async () => {
+    api.getModbusMapping.mockResolvedValue({
+      rows: null, errors: null, load: null
+    } as never)
+    render(<MappingPage />)
+    expect(await screen.findByText('Chưa có Point nào trong bản nháp.')).toBeInTheDocument()
+  })
 })

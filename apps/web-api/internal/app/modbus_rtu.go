@@ -25,6 +25,10 @@ func (a *App) handleListModbusDevices(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// Danh sách rỗng phải là `[]`, không phải `null` — cùng lý do như Diff().
+	if cfg.Devices == nil {
+		cfg.Devices = []ModbusRTUDevice{}
+	}
 	writeJSON(w, http.StatusOK, cfg.Devices)
 }
 
@@ -96,6 +100,9 @@ func (a *App) handleListModbusPoints(w http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if cfg.Points == nil {
+		cfg.Points = []ModbusRTUPoint{}
 	}
 	writeJSON(w, http.StatusOK, cfg.Points)
 }

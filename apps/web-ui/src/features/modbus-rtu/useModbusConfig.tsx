@@ -79,11 +79,13 @@ export function ModbusConfigProvider({ children }: { children: ReactNode }) {
         apiClient.getModbusPorts()
       ])
       setDraftState({
-        buses: candidate.config.buses ?? [],
-        devices: candidate.config.devices ?? [],
-        points: candidate.config.points ?? []
+        buses: candidate.config?.buses ?? [],
+        devices: candidate.config?.devices ?? [],
+        points: candidate.config?.points ?? []
       })
-      setState(nextState)
+      // `diff` null từ backend là hợp lệ về mặt JSON nhưng gây nổ ở mọi chỗ
+      // dùng `.length`/`.map`. Chuẩn hoá NGAY tại biên vào.
+      setState({ ...nextState, diff: nextState.diff ?? [] })
       setPorts(portList)
       setError('')
     } catch (err) {
@@ -113,7 +115,7 @@ export function ModbusConfigProvider({ children }: { children: ReactNode }) {
         devices: draft.devices,
         points: draft.points
       })
-      setState((current) => (current ? { ...current, state: result.state, diff: result.diff } : current))
+      setState((current) => (current ? { ...current, state: result.state, diff: result.diff ?? [] } : current))
       setFieldErrors({})
       setStatus('Đã lưu bản nháp. Thay đổi CHƯA xuống thiết bị — bấm “Áp dụng” để phát.')
       return true

@@ -30,6 +30,7 @@ export function DevicesPage() {
   /* MBR-B307/B208: kiểm tra kết nối là lệnh CHẠM DÂY thật, không phải một phép
    * suy diễn từ telemetry cũ. Kết quả giữ riêng từng thiết bị để kỹ thuật viên
    * so được "vừa thử xong" với "trạng thái poll định kỳ". */
+  const [telemetryError, setTelemetryError] = useState('')
   const [probing, setProbing] = useState<string | null>(null)
   const [probeResults, setProbeResults] = useState<Record<string, ModbusProbeResult>>({})
 
@@ -68,10 +69,15 @@ export function DevicesPage() {
     ])
     setDevices(nextDevices)
     setPoints(nextPoints)
+    /* D-07: mất telemetry KHÔNG được nuốt im lặng. Bản trước `catch {}` rồi để
+     * cột "Liên lạc" hiện "—" mà không nói vì sao — người vận hành không phân
+     * biệt được "thiết bị im" với "không đọc được authority". */
     try {
       setDiagnostics(await apiClient.getModbusDiagnostics())
-    } catch {
+      setTelemetryError('')
+    } catch (error) {
       setDiagnostics([])
+      setTelemetryError(error instanceof Error ? error.message : 'không đọc được telemetry')
     }
   }
 
@@ -139,6 +145,14 @@ export function DevicesPage() {
       {status && (
         <div role="status" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm">
           {status}
+        </div>
+      )}
+
+      {telemetryError && (
+        <div role="note" data-testid="telemetry-warning"
+          className="rounded-[var(--radius)] border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-[var(--c-text)]">
+          Cột “Liên lạc” hiện “—” vì không đọc được telemetry: {telemetryError}. Đó là
+          <strong> chưa biết</strong>, không phải thiết bị đang offline.
         </div>
       )}
 
