@@ -153,10 +153,67 @@ ERROR trong 1 phút: 0
 jitter: avg 17,91 µs, overruns 1/30001
 ```
 
+## 8. Bổ sung phiên chiều 2026-08-06 — đóng `G-D` và reboot ×10
+
+### 8.1 `G-D` / `OD-MBRTU-EXT-04` — CLOSED
+
+Hardware owner xác nhận: cổng RS-485 của Foxlinx SOM-DDC-24 **chỉ có TX và RX,
+KHÔNG có DE/RE** ⇒ transceiver tự đảo hướng (auto-direction).
+
+Đo bằng `TIOCGRS485` trên board TRƯỚC khi vá cho thấy driver mặc định có
+`rts_on_send=1` — tức hành vi đang do mặc định của driver quyết định, không phải
+do phần mềm. Sau khi thêm `buses[].direction` và `apply_direction_mode()`:
+
+```text
+INFO  bus_worker.rs485_direction bus=1 mode=auto driver_enabled=0 rts_on_send=0 delay_before_ms=0 delay_after_ms=0
+INFO  bus_worker.open bus=1 device=/dev/rs485-1 19200N81 slaves=1 ext=[0..1)
+```
+
+Chế độ `auto` **tắt tường minh** `SER_RS485_ENABLED` thay vì "không làm gì": một
+cấu hình còn sót sẽ khiến driver kéo RTS trên bo không có chân DE/RE.
+
+### 8.2 `TC-MBRTU-T-05` reboot ×10 — PASS 10/10, sau khi bịt một lỗi thật
+
+**Lần chạy đầu: FAIL 10/10.** Mỗi vòng sau reboot:
+
+```text
+ERROR bus_worker.connect_fail bus=1 device=/dev/rs485-1 err=No such file or directory
+```
+
+**Nguyên nhân gốc:** `/dev` là devtmpfs, dựng lại ở mỗi lần khởi động, nên
+symlink `/dev/rs485-1` tạo bằng `ln -s` biến mất. Trên board **không hề tồn tại**
+`/etc/udev/rules.d/99-rs485.rules` lẫn `/etc/init.d/S05-rs485-symlinks.sh` — trái
+với ghi nhận trong CHANGELOG 2026-08-05 rằng cả hai đã được thiết lập.
+
+**Điều nguy hiểm nhất không phải là bus không lên, mà là KHÔNG CÓ TÍN HIỆU NÀO
+BÁO ĐIỀU ĐÓ:** service vẫn `active`, `NRestarts=0`, IOP vẫn `NORMAL_POLL`. Nhìn
+từ systemd thì hệ thống khoẻ mạnh, trong khi Modbus đã chết hẳn.
+
+Phần mềm xử lý đúng phần của nó: `PORT_ERROR` → backoff → thử lại, và IOP không
+bị ảnh hưởng. Cái thiếu là **provisioning**.
+
+**Cách sửa:** `platform/udev/99-mkddc-rs485.rules` (mới) ánh xạ `ttyS5 → rs485-1`
+và `ttyS1 → rs485-2`, cài tự động trong `tools/deploy/deploy_board.sh`.
+
+**Kết quả sau khi vá:**
+
+```text
+=== KẾT QUẢ: PASS=10 FAIL=0 ===
+mỗi vòng: active active active | shm=3568/23104 | iop=1 | bus=1 | dir=1 | fberr=0
+```
+
+Mỗi vòng kiểm 6 điều kiện: 3 service active, SHM đúng kích thước ABI v5, IOP tới
+`NORMAL_POLL`, `bus_worker.open` thành công, `rs485_direction` đúng chế độ, và 0
+dòng ERROR của fieldbus.
+
+> **Phần chưa làm được của `MBR-B404`:** cắt/cấp nguồn ×10 cần thao tác vật lý;
+> soak 24 h phụ thuộc `MBR-B403` (chưa có thiết bị thật).
+
 ---
 
 ## Revision history
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.1 | 2026-08-06 | Thêm §8: đóng `G-D` (auto-direction, xác nhận bởi Hardware owner) và `TC-MBRTU-T-05` reboot ×10 PASS 10/10 sau khi bịt lỗi symlink mất qua reboot |
 | 1.0 | 2026-08-06 | Tạo hồ sơ nghiệm thu Track B: 4 gate host, deploy ABI v5, 12 kịch bản trên board, 1 lỗi phát hiện và sửa tại chỗ |

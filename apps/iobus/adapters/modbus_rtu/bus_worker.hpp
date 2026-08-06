@@ -201,6 +201,9 @@ private:
     bool errno_is_port_failure(int err) const;
     /* Thực thi các probe đang chờ — CHỈ gọi từ thread worker. */
     void service_probes();
+    /* G-D: áp chế độ điều hướng RS-485 lên fd của cổng vừa mở, rồi đọc lại
+     * trạng thái THẬT của driver và ghi log. */
+    void apply_direction_mode(int fd);
     ProbeResult run_probe_locked(uint8_t slave_addr, uint8_t fc, uint16_t addr,
                                  uint16_t count, uint32_t timeout_ms);
 

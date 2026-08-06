@@ -592,9 +592,10 @@ M2 trở đi phụ thuộc Q-01/Q-02.
 | Nhóm | Task | Trạng thái | Defect đóng | Commit |
 |---|---|---|---|---|
 | A0 | MBR-A001 khảo sát UART/DT board production | ✅ XONG | — | `05c6b0c` |
-| A0 | MBR-A002/A003 đọc schematic, xác minh chân A/B | ⏳ **CHỜ HARDWARE** | — | — |
-| A0 | MBR-A004 deploy baseline lên Foxlinx | ⏳ chờ cửa sổ bảo trì | — | — |
-| A0 | MBR-A005 bật `rs485-*` / xác nhận auto-direction | ⏳ phụ thuộc A002 | — | — |
+| A0 | MBR-A002 cơ chế điều hướng RS-485 | ✅ **XONG 2026-08-06** — Hardware owner xác nhận cổng chỉ có **TX/RX, KHÔNG có DE/RE** ⇒ transceiver auto-direction. Đóng `G-D`/`OD-MBRTU-EXT-04` | — | — |
+| A0 | MBR-A003 xác minh `ttyS5` ra chân A/B connector | ⏳ **CHỜ ĐO VẬT LÝ** — cần đồng hồ/loopback tại tủ | — | — |
+| A0 | MBR-A004 deploy baseline lên Foxlinx | ⚠️ **XONG MỘT PHẦN** — đã deploy và đo jitter trước/sau (2026-08-06). Mệnh đề "với **MCU thật**" KHÔNG kiểm được: board đang chạy `mkddc-fakemcu` | — | — |
+| A0 | MBR-A005 xác nhận auto-direction | ✅ **XONG 2026-08-06** — chế độ nay là cấu hình tường minh `buses[].direction` (mặc định `auto`), driver được đọc lại và ghi log lúc mở cổng | — | — |
 | A1 | MBR-A101..A104 chặn encode ngoài dải, `scale=0` | ✅ XONG | D-01, D-02 | `1e3e2bc` |
 | A2 | MBR-A201..A204 vòng đời write, chấm dứt replay | ✅ XONG | D-03 | `a6fba4c` |
 | A3 | MBR-A301..A304 lịch poll, offline probe, EDF | ✅ XONG | D-04 | `c4036dd` |
@@ -724,11 +725,11 @@ phần tính toán cho khớp nhãn và cho nhãn lấy tên múi giờ thật c
 | B3 | MBR-B301 tách feature thành 5 page + layout + tab | ✅ XONG (thêm trang Mapping) |
 | B3 | MBR-B302 `useModbusConfig` 3 nguồn state + `ConfigStateBanner` | ✅ XONG |
 | B3 | MBR-B303 vòng đời candidate + khoá mutation khi `APPLYING` | ✅ XONG |
-| B3 | MBR-B304 `RegisterPreview` | ✅ XONG |
+| B3 | MBR-B304 `RegisterPreview` | ✅ XONG **2026-08-06** — xem §10.6.4 (bản 0.5 đánh dấu xong khi component đã có nhưng CHƯA gắn vào trang) |
 | B3 | MBR-B305 Overview + BusCard + event feed **số thật** | ✅ XONG |
 | B3 | MBR-B306 Mapping page, chặn lưu khi còn lỗi | ✅ XONG |
 | B3 | MBR-B307 test connection / read test / write test | ✅ XONG |
-| B3 | MBR-B308 import preview + export | ✅ XONG |
+| B3 | MBR-B308 import preview + export | ✅ XONG **2026-08-06** — xem §10.6.4 (lý do như B304) |
 | B3 | MBR-B309 diagnostics đầy đủ field, `—` khi thiếu | ✅ XONG |
 | B3 | MBR-B310 `useModbusRuntime` qua WS | ⏳ **CHƯA** — polling 5 s đang dùng; WS delta là tối ưu, không chặn chức năng |
 | B3 | MBR-B311 bộ test TF-MBRTU | ✅ XONG (+69 test FE) |
@@ -773,6 +774,51 @@ TRACK_B_BOARD_ACCEPTANCE    = PASS WITH LIMITS
 MODBUS_RTU_PRODUCTION_READY = NO   (G-C, G-D còn mở)
 ```
 
+#### 10.6.4 Đính chính bản 0.5 và kết quả bổ sung 2026-08-06
+
+**Đính chính.** Bản 0.5 đánh dấu `MBR-B304` (RegisterPreview) và `MBR-B308`
+(import/export) là ✅ XONG. Kiểm lại source cho thấy **component và endpoint đã
+có và có test, nhưng chưa được gắn vào `PointsPage`** — lệnh sửa trang bị đứt
+giữa chừng và không ai phát hiện vì test unit chỉ kiểm component đứng riêng.
+Đã tích hợp thật trong bản 0.6 và xác minh bằng `grep` trên chính file trang.
+
+Bài học đưa vào quy trình: một task chỉ được đánh ✅ khi **đường đi từ giao diện
+tới chức năng** được kiểm, không phải khi component tồn tại.
+
+**`G-D` đã đóng.** Hardware owner xác nhận 2026-08-06: cổng RS-485 của Foxlinx
+SOM-DDC-24 **chỉ có TX và RX, không có DE/RE** ⇒ transceiver tự đảo hướng, đúng
+lớp MAX13487E mà `HW-DES-03-RS485` §1 nêu làm baseline.
+
+Thay đổi source tương ứng — điều nguy hiểm trước đây không phải chọn sai chế độ
+mà là **không chọn gì cả**:
+
+- `buses[].direction` (`auto` | `rts`), mặc định `auto`.
+- `BusWorker::apply_direction_mode()` áp chế độ qua `TIOCSRS485` rồi **đọc lại
+  trạng thái thật của driver và ghi log**.
+- Chế độ `auto` **tắt tường minh** `SER_RS485_ENABLED` thay vì "không làm gì":
+  một cấu hình còn sót từ device tree sẽ khiến driver kéo RTS trên bo không có DE/RE.
+
+Bằng chứng trên board:
+
+```text
+INFO  bus_worker.rs485_direction bus=1 mode=auto driver_enabled=0 rts_on_send=0
+INFO  bus_worker.open bus=1 device=/dev/rs485-1 19200N81 slaves=1 ext=[0..1)
+```
+
+Đo trước đó bằng `TIOCGRS485` cho thấy driver mặc định có `rts_on_send=1`; sau
+bản vá nó về 0 — tức chế độ nay do phần mềm quyết định, không phải do mặc định
+của driver.
+
+**Việc CÒN LẠI sau bản 0.6:**
+
+| Mục | Vì sao chưa xong |
+|---|---|
+| `MBR-A003` | Cần **đo vật lý** tại tủ (đồng hồ hoặc loopback) để xác nhận `ttyS5` ra đúng chân A/B của connector. Không thay thế được bằng phần mềm. |
+| `MBR-B403` | Cần **thiết bị Modbus RTU thật** (đồng hồ điện, biến tần). `G-C` còn mở. |
+| `MBR-B404` (phần cắt nguồn) | Cần **thao tác vật lý** cắt/cấp nguồn. Phần reboot ×10 đã chạy — xem §10.6.5. |
+| `MBR-A004` (mệnh đề "MCU thật") | Board đang chạy `mkddc-fakemcu`. Cần lắp MCU STM32 thật. |
+| Bus 2 `/dev/rs485-2` | `ttyS1` **chưa enable** trong device tree — việc của Hardware/Platform. |
+
 ---
 
 ## Revision history
@@ -782,5 +828,6 @@ MODBUS_RTU_PRODUCTION_READY = NO   (G-C, G-D còn mở)
 | 0.1 | 2026-08-04 | Tạo plan hai track; Track A không chờ quyết định, Track B sau cổng ADR-024 |
 | 0.2 | 2026-08-04 | Đổi số 48→49 (48 đã bị `PLAN_FIX_DEBUG_AND_BOARD_DEPLOY.md` dùng); thêm bảng task 74 mục, ma trận RACI, swimlane và đồ thị phụ thuộc; bổ sung nhóm A0 khảo sát phần cứng; chốt board Foxlinx là target nghiệm thu; **sửa lỗi cộng: Track B là 40–51 ngày, bản 0.1 ghi sai 34–45** |
 | 0.4 | 2026-08-05 | Sửa lỗi đánh số mục: mục "Definition of Done" bị đánh trùng số 7 với "Sơ đồ tiến độ", nay là §9 (§9 trước đó bị bỏ trống). Bổ sung §10.4 các gap mới phát hiện khi đồng bộ tài liệu ngày 2026-08-05 |
+| 0.6 | 2026-08-06 | Đóng `G-D`/`MBR-A002`/`MBR-A005` (auto-direction, xác nhận bởi Hardware owner) + `MBR-B310` (WS runtime). **Đính chính** B304/B308 của bản 0.5. Thêm §10.6.4 |
 | 0.5 | 2026-08-06 | Track B phần phần mềm hoàn thành: B0–B3 + B401/B402. Thêm §10.6 trạng thái từng task, số đo 4 gate, và danh sách việc còn chặn bởi `G-C`/`G-D`/device tree |
 | 0.3 | 2026-08-04 | Track A được PM/CTO duyệt và triển khai: 6/6 nhóm code xong, 12/14 defect đóng, 769/769 ctest · 304/304 vitest · Go PASS. Thêm §10 tiến độ. Chốt một mức ước lượng duy nhất (Track A 13,25 người-ngày) theo yêu cầu PM |

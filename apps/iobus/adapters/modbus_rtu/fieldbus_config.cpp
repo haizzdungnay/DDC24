@@ -161,6 +161,23 @@ static bool parse_bus(const std::string& obj, BusConfig* bus)
     }
     if (jget_int(obj, "enabled", &v))
         bus->enabled = (v != 0);
+    /* G-D: cơ chế điều hướng. Vắng ⇒ Auto (phần cứng đã xác nhận không có DE/RE). */
+    std::string direction;
+    if (jget_str(obj, "direction", &direction)) {
+        if (direction == "rts") {
+            bus->direction = Rs485Direction::Rts;
+        } else if (direction == "auto") {
+            bus->direction = Rs485Direction::Auto;
+        } else {
+            std::fprintf(stderr, "WARN  fieldbus_config.unknown_direction bus=%u value=%s"
+                         " — chỉ nhận \"auto\" hoặc \"rts\"; dùng auto\n",
+                         bus->id, direction.c_str());
+        }
+    }
+    if (jget_int(obj, "rts_delay_before_us", &v) && v >= 0 && v <= 100000)
+        bus->rts_delay_before_us = static_cast<uint32_t>(v);
+    if (jget_int(obj, "rts_delay_after_us", &v) && v >= 0 && v <= 100000)
+        bus->rts_delay_after_us = static_cast<uint32_t>(v);
     return true;
 }
 
@@ -197,6 +214,7 @@ void normalize_buses(FieldbusConfig* cfg)
         bus.parity           = cfg->rs485.parity;
         bus.stop             = cfg->rs485.stop;
         bus.offline_probe_ms = cfg->rs485.offline_probe_ms;
+        bus.direction        = Rs485Direction::Auto;
         cfg->buses.push_back(bus);
     }
     if (cfg->buses.empty()) return;

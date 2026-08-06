@@ -7,6 +7,78 @@
 ---
 
 ## [Unreleased]
+### Added — Đóng G-D (auto-direction), WS runtime, và bịt lỗi symlink RS-485 mất sau reboot (2026-08-06)
+
+#### `G-D` / `OD-MBRTU-EXT-04` — CLOSED
+
+Hardware owner xác nhận: cổng RS-485 của Foxlinx SOM-DDC-24 **chỉ có TX và RX,
+KHÔNG có DE/RE** ⇒ transceiver tự đảo hướng.
+
+Điều nguy hiểm trước đây không phải chọn sai chế độ mà là **không chọn gì cả**:
+source không gọi `modbus_rtu_set_serial_mode()`, device tree không có `rs485-*`,
+nên hành vi phụ thuộc mặc định của driver và không ai phát biểu điều đó ở đâu.
+Đo `TIOCGRS485` trên board cho thấy driver mặc định có `rts_on_send=1`.
+
+- `buses[].direction` (`auto` | `rts`), mặc định `auto`.
+- `BusWorker::apply_direction_mode()` áp qua `TIOCSRS485`, **tắt tường minh**
+  `SER_RS485_ENABLED` ở chế độ auto (một cấu hình còn sót sẽ khiến driver kéo RTS
+  trên bo không có chân DE/RE), rồi **đọc lại trạng thái thật của driver và ghi log**.
+- Bằng chứng trên board:
+  `bus_worker.rs485_direction bus=1 mode=auto driver_enabled=0 rts_on_send=0`.
+
+Đóng `MBR-A002` và `MBR-A005`.
+
+#### `MBR-B310` — runtime qua WebSocket
+
+`useModbusRuntime` thay việc poll `getPoints()` mỗi 5 giây. Điểm khó nhất được
+xử lý đúng: **khi kết nối lại phải lấy ảnh đầy đủ TRƯỚC khi tin cập nhật tiếp
+theo** — trong lúc đứt, giá trị có thể đã đổi nhiều lần, và áp delta lên nền cũ
+cho ra bảng trộn giữa hai thời điểm, sai mà trông vẫn hợp lý. Khi không live,
+trang nói rõ số đang hiển thị là lần đọc trước.
+
+### Fixed — Cổng RS-485 mất tên sau mỗi lần khởi động lại (2026-08-06)
+
+Bài kiểm reboot ×10 (`TC-MBRTU-T-05`) **FAIL 10/10** ở lần chạy đầu:
+
+```
+ERROR bus_worker.connect_fail bus=1 device=/dev/rs485-1 err=No such file or directory
+```
+
+**Nguyên nhân gốc:** `/dev` là devtmpfs, dựng lại ở mỗi lần khởi động, nên symlink
+`/dev/rs485-1` tạo bằng `ln -s` biến mất. Trên board **không hề tồn tại**
+`/etc/udev/rules.d/99-rs485.rules` lẫn `/etc/init.d/S05-rs485-symlinks.sh` — trái
+với ghi nhận trong CHANGELOG 2026-08-05 rằng cả hai đã được thiết lập.
+
+**Điều nguy hiểm nhất không phải bus không lên, mà là không có tín hiệu nào báo
+điều đó:** service vẫn `active`, `NRestarts=0`, IOP vẫn `NORMAL_POLL`. Nhìn từ
+systemd thì hệ thống khoẻ mạnh trong khi Modbus đã chết hẳn.
+
+- **`platform/udev/99-mkddc-rs485.rules`** (mới): `ttyS5 → rs485-1`, `ttyS1 → rs485-2`.
+- **`tools/deploy/deploy_board.sh`**: cài quy tắc udev và `udevadm trigger` như
+  một bước của deploy; thiếu file thì cảnh báo rõ thay vì im lặng.
+- Kết quả sau khi vá: reboot ×10 **PASS 10/10**, mỗi vòng kiểm 6 điều kiện.
+
+### Fixed — Đính chính: MBR-B304 và MBR-B308 chưa từng được gắn vào trang Points (2026-08-06)
+
+Bản plan 0.5 đánh dấu `RegisterPreview` (B304) và import/export (B308) là XONG.
+Kiểm lại source cho thấy **component và endpoint đã có và có test, nhưng
+`PointsPage` không hề dùng chúng** — lệnh sửa trang bị đứt giữa chừng và không ai
+phát hiện vì test unit chỉ kiểm component đứng riêng.
+
+Đã tích hợp thật và xác minh trên chính file trang. Bài học đưa vào plan §10.6.4:
+một task chỉ được đánh ✅ khi **đường đi từ giao diện tới chức năng** được kiểm,
+không phải khi component tồn tại.
+
+#### Kiểm chứng
+
+| Gate | Kết quả |
+|---|---|
+| `ctest --test-dir build/fw` | **781/781 PASS** (trước: 777) |
+| `go vet` + `go test ./... -count=1` | **vet sạch, 11/11 package** |
+| `npx vitest --run --environment jsdom src` | **400/400 PASS**, 49 file |
+| `npm run lint` / `npm run build` | **PASS**, 0 warning |
+| Board — reboot ×10 | **PASS 10/10** |
+
 ### Fixed — Trang trắng toàn nhánh Modbus RTU trên board (FE-BOARD-01) (2026-08-06)
 
 Sau khi deploy Track B lên Foxlinx, mở `/eng/modbus-rtu` cho **màn hình đen hoàn

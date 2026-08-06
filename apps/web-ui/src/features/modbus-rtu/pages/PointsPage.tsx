@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth, roleAtLeast } from '../../auth'
 import { apiClient } from '../../../shared/api/client'
-import type { ModbusRTUDevice, ModbusRTUPoint, PointQuality } from '../../../shared/types'
+import type { ModbusImportError, ModbusRTUDevice, ModbusRTUPoint } from '../../../shared/types'
 import { NO_DATA, READ_ONLY_HINT, buttonClass, emptyPoint, inputClass } from '../shared'
+import { RegisterPreview } from '../components/RegisterPreview'
+import { useModbusRuntime } from '../useModbusRuntime'
 
 type PendingDelete = { id: string; label: string }
 type PendingWrite = { point_id: string; label: string; value: number }
@@ -21,7 +23,10 @@ type PendingWrite = { point_id: string; label: string; value: number }
 export function PointsPage() {
   const [devices, setDevices] = useState<ModbusRTUDevice[]>([])
   const [points, setPoints] = useState<ModbusRTUPoint[]>([])
-  const [runtimeQuality, setRuntimeQuality] = useState<Record<string, PointQuality>>({})
+  /* MBR-B310: giá trị runtime đến từ WebSocket, không còn poll 5 s một lần.
+   * Hook tự lấy ảnh đầy đủ khi kết nối lại — trộn delta lên nền cũ sẽ cho ra
+   * bảng nửa mới nửa cũ, sai mà trông vẫn hợp lý. */
+  const runtime = useModbusRuntime()
   const [point, setPoint] = useState<ModbusRTUPoint>(emptyPoint)
   const [editingPoint, setEditingPoint] = useState(false)
   const [status, setStatus] = useState('')
@@ -32,6 +37,7 @@ export function PointsPage() {
   const [deleting, setDeleting] = useState(false)
   const [writingPoint, setWritingPoint] = useState<PendingWrite | null>(null)
   const [testWriting, setTestWriting] = useState(false)
+  const [importErrors, setImportErrors] = useState<ModbusImportError[]>([])
 
   /* Đ-04: Viewer/Operator xem được, chỉ Admin sửa cấu hình. FE disable control
    * để không mời người dùng vào thao tác chắc chắn bị server từ chối 403; server
@@ -46,14 +52,6 @@ export function PointsPage() {
     setDevices(nextDevices)
     setPoints(nextPoints)
     setPoint((current) => (current.device_id || !nextDevices[0] ? current : { ...current, device_id: nextDevices[0].device_id }))
-    /* D-07: thiếu telemetry KHÔNG được hiển thị thành BAD. Lỗi ở đây chỉ có
-     * nghĩa "FE chưa lấy được", nên bảng phải hiện — chứ không phải báo động. */
-    try {
-      const live = await apiClient.getPoints()
-      setRuntimeQuality(Object.fromEntries(live.filter((item) => item.kind === 'modbus_rtu').map((item) => [item.id, item.quality])))
-    } catch {
-      setRuntimeQuality({})
-    }
   }
 
   useEffect(() => {
@@ -105,6 +103,40 @@ export function PointsPage() {
     }
   }
 
+  async function downloadExport(format: 'csv' | 'json') {
+    try {
+      const content = await apiClient.exportModbusConfig(format)
+      const blob = new Blob([content], { type: format === 'csv' ? 'text/csv' : 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = format === 'csv' ? 'modbus-points.csv' : 'modbus-config.json'
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setStatus(`Đã xuất ${format.toUpperCase()}.`)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Không xuất được cấu hình')
+    }
+  }
+
+  async function importFile(file: File) {
+    setImportErrors([])
+    const format: 'csv' | 'json' = file.name.toLowerCase().endsWith('.json') ? 'json' : 'csv'
+    try {
+      const content = await file.text()
+      const result = await apiClient.importModbusConfig(format, content)
+      if (result.result !== 'staged') {
+        setImportErrors(result.errors ?? [{ message: 'File bị từ chối' }])
+        setStatus('File nhập bị từ chối — không dòng nào được nạp.')
+        return
+      }
+      setStatus(`Đã nạp ${result.point_count ?? 0} Point vào bản nháp. Bấm “Áp dụng” ở băng trạng thái để phát xuống thiết bị.`)
+      await reload()
+    } catch (error) {
+      setImportErrors([{ message: error instanceof Error ? error.message : 'Không đọc được file' }])
+    }
+  }
+
   return (
     <div className="space-y-5">
       <header>
@@ -117,6 +149,24 @@ export function PointsPage() {
       {status && (
         <div role="status" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm">
           {status}
+        </div>
+      )}
+
+      {/* Số cũ mà không nói là cũ thì tệ hơn không hiện gì: người vận hành sẽ
+          quyết định dựa trên một giá trị không còn đúng. */}
+      {!runtime.live && runtime.staleReason && (
+        <div role="note" data-testid="runtime-stale"
+          className="rounded-[var(--radius)] border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-[var(--c-text)]">
+          Cột “Quality” không phải số trực tiếp: {runtime.staleReason}.
+        </div>
+      )}
+
+      {/* Số cũ mà không nói là cũ thì tệ hơn không hiện gì: người vận hành sẽ
+          quyết định dựa trên một giá trị không còn đúng. */}
+      {!runtime.live && runtime.staleReason && (
+        <div role="note" data-testid="runtime-stale"
+          className="rounded-[var(--radius)] border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-[var(--c-text)]">
+          Cột “Quality” không phải số trực tiếp: {runtime.staleReason}.
         </div>
       )}
 
@@ -179,6 +229,55 @@ export function PointsPage() {
             )}
           </div>
         </form>
+
+        {/* MBR-B304: khai báo sai kiểu hoặc sai thứ tự word KHÔNG gây lỗi lúc
+            lưu — nó chỉ làm số đọc ra sai theo cách trông rất hợp lý. Bản xem
+            trước đưa dấu chân register và phép quy đổi lên màn hình TRƯỚC khi apply. */}
+        <div className="mt-4">
+          <RegisterPreview point={point} siblings={points}
+            selfPointId={editingPoint ? point.point_id : undefined} />
+        </div>
+      </section>
+
+      {/* MBR-B308: import đi vào BẢN NHÁP và là all-or-nothing — một dòng sai là
+          cả file bị từ chối, kèm số dòng để sửa đúng chỗ. */}
+      <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">
+        <h3 className="text-base font-semibold text-[var(--c-text)]">Nhập / Xuất danh sách Point</h3>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button type="button" className={buttonClass + ' text-xs h-9'}
+            onClick={() => void downloadExport('csv')}>Xuất CSV</button>
+          <button type="button" className={buttonClass + ' text-xs h-9'}
+            onClick={() => void downloadExport('json')}>Xuất JSON</button>
+          <label className={buttonClass + ' text-xs h-9 inline-flex cursor-pointer items-center'}>
+            Nhập file…
+            <input type="file" accept=".csv,.json,text/csv,application/json" className="hidden"
+              data-testid="import-input" disabled={!canEdit}
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) void importFile(file)
+                event.target.value = ''
+              }} />
+          </label>
+          <span className="text-xs text-[var(--c-text-dim)]">
+            File nhập vào bản nháp; bấm “Áp dụng” ở băng trạng thái để phát xuống thiết bị.
+          </span>
+        </div>
+        {importErrors.length > 0 && (
+          <div role="alert" data-testid="import-errors"
+            className="mt-3 rounded-[var(--radius)] border border-[var(--c-danger,#c00)]/40 bg-red-500/5 p-3 text-xs">
+            <p className="font-semibold text-[var(--c-danger,#c00)]">
+              File bị từ chối TOÀN BỘ — không dòng nào được nạp.
+            </p>
+            <ul className="mt-2 space-y-1 font-mono">
+              {importErrors.map((issue, index) => (
+                <li key={index}>
+                  {issue.line ? `Dòng ${issue.line}` : 'File'}
+                  {issue.column ? ` · cột ${issue.column}` : ''}: {issue.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">
@@ -207,7 +306,9 @@ export function PointsPage() {
                   <td className="py-3 text-xs">{row.data_type} · {row.byte_order}/{row.word_order}</td>
                   <td className="py-3 text-xs">{row.scale}x + {row.offset} {row.unit}</td>
                   {/* D-07: chưa lấy được telemetry thì hiện "—", KHÔNG suy ra BAD. */}
-                  <td className="py-3 text-xs font-semibold">{runtimeQuality[row.point_id]?.toUpperCase() ?? NO_DATA}</td>
+                  <td className="py-3 text-xs font-semibold" data-testid={`quality-${row.point_id}`}>
+                    {runtime.points[row.point_id]?.quality ?? NO_DATA}
+                  </td>
                   <td className="py-3 text-xs">{row.read_write}</td>
                   <td className="py-3 text-right space-x-2">
                     <button
