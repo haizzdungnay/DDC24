@@ -1,9 +1,11 @@
 # 49 — Modbus RTU Implementation Plan (FE + BE + FW-SOM)
 
 > **Document ID:** PLAN-MBRTU-IMPL-001
-> **Phiên bản:** 0.3 | 2026-08-05
+> **Phiên bản:** 0.5 | 2026-08-06
 > **Trạng thái:** **Track A HOÀN THÀNH** (Nghiệm thu board Foxlinx 2026-08-05);
-> **Track B APPROVED và CHÍNH THỨC KHỞI ĐỘNG** theo Tờ trình `DDC24-MBRTU-REQ-APPROVE-2026-08-05` (PM/CTO/Architect phê duyệt 2026-08-05).
+> **Track B — phần phần mềm HOÀN THÀNH 2026-08-06** (B0–B3 + nghiệm thu simulator/target).
+> Còn treo phần phụ thuộc phần cứng: `G-C` (slave RS-485 thật) và `G-D` (điều khiển
+> hướng RS-485) — xem §10.6.
 > Xem [Biên bản phê duyệt Tờ trình](../07_records/reviews/MODBUS_RTU_APPROVAL_REQUEST_2026-08-05.md) và tiến độ ở §10.
 > **Owner đề xuất:** Fieldbus Lead (FW-SOM) · SOM Backend Lead (BE) · FE Lead (FE) · QA/HIL Lead
 > **Target:** board production **Foxlinx SOM-DDC-24** (`SOM-DDC-24-foxlinx`, MCU
@@ -26,7 +28,7 @@ ADR-024.** Có một nhóm defect đang gây rủi ro thật trên board, sửa 
 | Track | Nội dung | Điều kiện bắt đầu | Đổi contract? | Trạng thái |
 |---|---|---|---|---|
 | **Track A — Vá an toàn** | 8 defect ở review §2 | PM duyệt plan này | Không | ✅ **HOÀN THÀNH 2026-08-05** |
-| **Track B — Contract v2** | Redesign theo bộ thiết kế mới | ADR-024 Accepted + 5 OD P0 được ký | Có, ABI + REST | ✅ **APPROVED 2026-08-05 (Đang triển khai)** |
+| **Track B — Contract v2** | Redesign theo bộ thiết kế mới | ADR-024 Accepted + 5 OD P0 được ký | Có, ABI + REST | ✅ **B0–B3 XONG 2026-08-06**; B4 phần HIL chờ `G-C`/`G-D` |
 
 ---
 
@@ -681,6 +683,96 @@ phần tính toán vẫn dùng UTC, làm người dùng UTC+7 truy vấn lệch 
 phần tính toán cho khớp nhãn và cho nhãn lấy tên múi giờ thật của trình duyệt
 (`b67580c`). Cùng dạng lỗi "nhãn nói một đằng, code làm một nẻo" với D-05.
 
+### 10.6 Track B — kết quả triển khai 2026-08-06
+
+**Nhánh:** `feat/modbus-rtu-track-b-contract-v2` ·
+**Evidence:** [Nghiệm thu board 2026-08-06](../07_records/test-evidence/fw-som/2026-08-06-foxlinx-track-b-acceptance.md)
+
+#### 10.6.1 Trạng thái từng task
+
+| Nhóm | Task | Trạng thái |
+|---|---|---|
+| B0 | MBR-B001 `kx_ext_snapshot_v2_t` (magic `EXT\2`, double + quality 5 mức + reason + timestamp + provenance) | ✅ XONG |
+| B0 | MBR-B002 schema IPC control `contracts/config/modbus_control_v1.schema.json` | ✅ XONG |
+| B0 | MBR-B003 `openapi.yaml` 1.11.0 → 1.12.0, +13 endpoint | ✅ XONG |
+| B0 | MBR-B004 test cross-language Go ↔ OpenAPI ↔ C++ ↔ manifest | ✅ XONG |
+| B0 | MBR-B005 `static_assert` layout + test từ chối snapshot v1 | ✅ XONG |
+| B1 | MBR-B101 tách `BusWorker`, một worker/một bus/một thread | ✅ XONG |
+| B1 | MBR-B102 vòng đời worker + backoff `PORT_ERROR` 1/2/5/10/30 s | ✅ XONG |
+| B1 | MBR-B103 quality 5 mức + 10 reason + timestamp sample thật | ✅ XONG |
+| B1 | MBR-B104 publish snapshot v2 có `sequence`/`generation`/`revision` | ✅ XONG |
+| B1 | MBR-B105 kênh control UDS stream + `SO_PEERCRED` + trần frame | ✅ XONG |
+| B1 | MBR-B106 reload tại ranh giới transaction, lỗi ⇒ giữ generation cũ | ✅ XONG |
+| B1 | MBR-B107 write request/result + readback + hàng đợi bounded | ✅ XONG |
+| B1 | MBR-B108 commissioning test-connection / read ad-hoc | ✅ XONG |
+| B1 | MBR-B109 gộp block đọc liền kề | ✅ XONG (`bit_index` ở validator; codec để Rev sau) |
+| B1 | MBR-B110 counter uint64 + `producer_boot_id` + `counters_since` | ✅ XONG |
+| B1 | MBR-B111 bộ test TW-MBRTU | ✅ XONG (+43 test C++) |
+| B2 | MBR-B201 tách `validate.go` thuần + 11 mã lỗi ổn định | ✅ XONG |
+| B2 | MBR-B202 Bus thành entity, serial thuộc Bus | ✅ XONG |
+| B2 | MBR-B203 candidate store bền vững + diff + `operation_id` | ✅ XONG |
+| B2 | MBR-B204 transaction apply stage→journal→ACK→commit + reconcile | ✅ XONG |
+| B2 | MBR-B205 `base_revision`/`If-Match` | ✅ XONG |
+| B2 | MBR-B206 canonical JSON + checksum ổn định | ✅ XONG |
+| B2 | MBR-B207 admission control tải bus | ✅ XONG (ngưỡng 50/70 vẫn PROPOSED — `OD-MBRTU-006`) |
+| B2 | MBR-B208 commissioning proxy + rate limit + audit | ✅ XONG |
+| B2 | MBR-B209 import/export CSV + JSON all-or-nothing | ✅ XONG |
+| B2 | MBR-B210 nhóm endpoint mới | ✅ XONG |
+| B2 | MBR-B211 allowlist `rs485_port` theo capability manifest | ✅ XONG |
+| B2 | MBR-B212 bỏ `restart-iobus` khỏi đường CRUD | ✅ XONG |
+| B2 | MBR-B213 bộ test TB-MBRTU | ✅ XONG (+27 test Go) |
+| B3 | MBR-B301 tách feature thành 5 page + layout + tab | ✅ XONG (thêm trang Mapping) |
+| B3 | MBR-B302 `useModbusConfig` 3 nguồn state + `ConfigStateBanner` | ✅ XONG |
+| B3 | MBR-B303 vòng đời candidate + khoá mutation khi `APPLYING` | ✅ XONG |
+| B3 | MBR-B304 `RegisterPreview` | ✅ XONG |
+| B3 | MBR-B305 Overview + BusCard + event feed **số thật** | ✅ XONG |
+| B3 | MBR-B306 Mapping page, chặn lưu khi còn lỗi | ✅ XONG |
+| B3 | MBR-B307 test connection / read test / write test | ✅ XONG |
+| B3 | MBR-B308 import preview + export | ✅ XONG |
+| B3 | MBR-B309 diagnostics đầy đủ field, `—` khi thiếu | ✅ XONG |
+| B3 | MBR-B310 `useModbusRuntime` qua WS | ⏳ **CHƯA** — polling 5 s đang dùng; WS delta là tối ưu, không chặn chức năng |
+| B3 | MBR-B311 bộ test TF-MBRTU | ✅ XONG (+69 test FE) |
+| B4 | MBR-B401/B402 nghiệm thu simulator + target | ✅ XONG (§10.6.2) |
+| B4 | MBR-B403 `TC-MBRTU-H-*` với slave RS485 thật | ⛔ **CHẶN bởi `G-C`** |
+| B4 | MBR-B404 soak 24 h + reboot ×10 + cắt nguồn ×10 | ⛔ **CHẶN bởi `G-C`** |
+| B4 | MBR-B405 cập nhật VERIFICATION/TRACEABILITY | ⏳ sau B403/B404 |
+
+#### 10.6.2 Số đo kiểm chứng
+
+| Gate | Kết quả |
+|---|---|
+| `ctest --test-dir build/fw` (Modbus+BACnet+HMI ON) | **777/777 PASS** (trước Track B: 734) |
+| `go vet ./...` + `go test ./... -count=1` | **vet sạch, 11/11 package `ok`** |
+| `npx vitest --run --environment jsdom src` | **375/375 PASS**, 45 file (trước: 306) |
+| `npm run lint` + `npm run build` | **PASS**, 0 warning |
+| Board Foxlinx — `iobus_tests` aarch64 | **248 PASS / 6 SKIP / 0 FAIL** |
+| Board Foxlinx — jitter IOP | avg **17,91 µs**, overruns **1/30001** (baseline 15,28–17,83 µs, ~5027) |
+
+> **Lệnh build đã lỗi thời trong CLAUDE.md/AGENTS.md:** `cmake -S services` không
+> còn đúng sau restructure plan 46 — thư mục `services/` đã bị gỡ, phải dùng `-S .`.
+
+#### 10.6.3 Việc CÒN LẠI và thứ đang chặn
+
+| Mục | Chặn bởi | Cần gì để mở |
+|---|---|---|
+| MBR-B403, MBR-B404 (HIL, soak) | `G-C` | Đồng hồ điện + biến tần Modbus RTU thật đã duyệt mua (Đ-08) về tới nơi |
+| Xác nhận điều khiển hướng RS-485 | `G-D` / `OD-MBRTU-EXT-04` | Hardware Lead xác nhận transceiver auto-direction hay cần GPIO/RTS, kèm sơ đồ chân |
+| Bus 2 (`/dev/rs485-2`) | Device tree | `ttyS1` **chưa enable** trên board; cần bật UART1 M1 Header P16 — việc của Hardware/Platform |
+| MBR-B310 (WS delta) | — | Không bị chặn; là tối ưu băng thông, xếp sau HIL |
+| `OD-MBRTU-006` ngưỡng tải bus | Đo thật | Chốt sau `TC-MBRTU-H-15` |
+
+**Phát hiện quan trọng:** CHANGELOG 2026-08-05 ghi đã thiết lập symlink
+`/dev/rs485-1 → ttyS5` và `/dev/rs485-2 → ttyS1`, nhưng khảo sát board ngày
+2026-08-06 cho thấy **không symlink nào tồn tại** và `ttyS1` **không được enable**
+trong device tree. Phiên này đã tạo `/dev/rs485-1` (thật, đã dùng nghiệm thu);
+`/dev/rs485-2` không tạo được vì thiết bị nền không tồn tại.
+
+```text
+TRACK_B_SOFTWARE            = DONE
+TRACK_B_BOARD_ACCEPTANCE    = PASS WITH LIMITS
+MODBUS_RTU_PRODUCTION_READY = NO   (G-C, G-D còn mở)
+```
+
 ---
 
 ## Revision history
@@ -690,4 +782,5 @@ phần tính toán cho khớp nhãn và cho nhãn lấy tên múi giờ thật c
 | 0.1 | 2026-08-04 | Tạo plan hai track; Track A không chờ quyết định, Track B sau cổng ADR-024 |
 | 0.2 | 2026-08-04 | Đổi số 48→49 (48 đã bị `PLAN_FIX_DEBUG_AND_BOARD_DEPLOY.md` dùng); thêm bảng task 74 mục, ma trận RACI, swimlane và đồ thị phụ thuộc; bổ sung nhóm A0 khảo sát phần cứng; chốt board Foxlinx là target nghiệm thu; **sửa lỗi cộng: Track B là 40–51 ngày, bản 0.1 ghi sai 34–45** |
 | 0.4 | 2026-08-05 | Sửa lỗi đánh số mục: mục "Definition of Done" bị đánh trùng số 7 với "Sơ đồ tiến độ", nay là §9 (§9 trước đó bị bỏ trống). Bổ sung §10.4 các gap mới phát hiện khi đồng bộ tài liệu ngày 2026-08-05 |
+| 0.5 | 2026-08-06 | Track B phần phần mềm hoàn thành: B0–B3 + B401/B402. Thêm §10.6 trạng thái từng task, số đo 4 gate, và danh sách việc còn chặn bởi `G-C`/`G-D`/device tree |
 | 0.3 | 2026-08-04 | Track A được PM/CTO duyệt và triển khai: 6/6 nhóm code xong, 12/14 defect đóng, 769/769 ctest · 304/304 vitest · Go PASS. Thêm §10 tiến độ. Chốt một mức ước lượng duy nhất (Track A 13,25 người-ngày) theo yêu cầu PM |

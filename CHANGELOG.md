@@ -7,6 +7,107 @@
 ---
 
 ## [Unreleased]
+### Added — Track B Modbus RTU: contract v2, BusWorker đa bus, transaction apply, 5 trang FE (2026-08-06)
+
+Triển khai trọn Track B của `docs/03_implementation/49_MODBUS_RTU_IMPLEMENTATION_PLAN.md`
+(MBR-B001..B311). Nghiệm thu trên board Foxlinx SOM-DDC-24:
+`docs/07_records/test-evidence/fw-som/2026-08-06-foxlinx-track-b-acceptance.md`.
+
+#### B0 — Contract v2 (`contracts/`) — ABI change đồng bộ 3 binary theo Đ-03
+
+- **`contracts/shm/mkddc_shm.h`** — `KX_SHM_MAGIC` v4 → **v5** (`0x4B584405`):
+  - `kx_ext_point_t` 40 → 64 byte: `value`/`setpoint` từ `float` sang **`double`**
+    (float32 mất chính xác nguyên với mọi giá trị > 16.777.216 — thanh ghi uint32
+    của công-tơ kWh vượt ngưỡng này sau vài tháng và bị làm tròn im lặng), thêm
+    `quality_reason`, `exception_code`, `bus_id`, `sample_utc_ms`, `sample_mono_ns`.
+  - `kx_ext_quality_t` **5 mức** (`GOOD/STALE/BAD/OFFLINE/CONFIG_ERROR`) và
+    `kx_ext_quality_reason_t` **10 mã** theo DATA_MODEL §6.2/§6.3.
+  - `kx_ext_snapshot_v2_t` (magic `EXT\2`) mang `schema_version`, `sequence`,
+    `generation`, `config_revision`, `config_checksum`, `producer_boot_id`.
+  - `kx_slave_metrics_t`/`kx_modbus_diag_t` counter lên **uint64** (uint32 tràn sau
+    ~2,7 năm ở nhịp poll thực tế), thêm `kx_bus_metrics_t` cho số đo từng dây.
+- **`contracts/config/modbus_control_v1.schema.json`** (mới) — hợp đồng IPC kênh
+  điều khiển: `status`/`apply_config`/`write`/`test_connection`/`read_test`.
+- **`contracts/openapi/openapi.yaml`** 1.11.0 → **1.12.0** — thêm `ModbusBus`,
+  `ModbusBusRuntime`, `ModbusConfigState`, `ModbusApplyResult`, `ModbusQuality`…
+  và 13 endpoint mới.
+- **Test cross-language** (`contract_sync_test.go`) so khớp field Go ↔ OpenAPI ↔
+  enum C++ ↔ manifest cổng — bịt đúng lớp lỗi đã tạo ra `F-API-14`/OD-MBRTU-018.
+
+#### B1 — FW-SOM (`apps/iobus/`)
+
+- **`bus_worker.{hpp,cpp}`** (mới) — **một BusWorker cho một dây, một thread**.
+  Trước đây hai bus dùng chung một `modbus_t*` và một vòng lặp, nên một slave chết
+  ở bus 2 giữ dây của bus 1 trọn `timeout_ms`.
+  - Vòng đời `CLOSED→OPENING→RUNNING→PORT_ERROR→DRAINING→SWAPPING`, backoff
+    1/2/5/10/30 s; phân biệt lỗi **cổng** (ENODEV/EIO) với lỗi **thiết bị** (timeout).
+  - Quality 5 mức + reason; mẫu hỏng **không** ghi đè giá trị/timestamp tốt cuối cùng.
+  - Gộp block đọc liền kề (MBR-B109), chỉ gộp khi dải **liền nhau tuyệt đối**.
+  - Hàng đợi ghi **có trần** (64) + `WriteResult` có `request_id`/deadline/readback.
+- **`control_channel.{hpp,cpp}`** (mới) — UDS `SOCK_STREAM` tại
+  `/run/mkddc/modbus-control.sock`, kiểm `SO_PEERCRED`, trần frame 64 KiB.
+- **`ModbusMaster::apply_config`** — nạp lại cấu hình tại **ranh giới giữa hai
+  transaction**; hỏng ⇒ giữ generation cũ và rollback, không tự restart.
+- `fieldbus.conf` nhận `buses[]` + `slaves[].bus_id`, migrate từ `rs485{}` cũ.
+
+#### B2 — Backend Go (`apps/web-api/`)
+
+- **`validate.go`** (mới) — validator **thuần** + 11 mã lỗi ổn định
+  (`PORT_NOT_AVAILABLE`, `ADDRESS_OVERLAP`, `BUS_OVERLOADED`…). FE không còn phải
+  so khớp câu tiếng Việt.
+- **`bus.go`** — Bus thành entity; tham số serial thuộc Bus, Device kế thừa read-only.
+- **`portcaps.go`** — allowlist cổng theo capability manifest. Bỏ chuỗi tự do: bản
+  trước nhận mọi đường dẫn ≤128 byte nên cấu hình trỏ vào cổng không tồn tại lưu
+  được, checksum hợp lệ, revision tăng, và chỉ hỏng ở tầng iobus (D-14).
+- **`candidate.go` + `journal.go`** — bản nháp **bền vững** + diff theo trường +
+  idempotency `operation_id`; transaction `stage → journal → gửi iobus → ACK →
+  commit` kèm `Reconcile()` sau crash.
+- **`canonical.go`** — checksum trên canonical JSON của nguồn chân lý, bỏ
+  `map[string]any` không xác định thứ tự.
+- **`importexport.go`** — CSV + JSON, import **all-or-nothing** kèm số dòng lỗi.
+- **`control_client.go`** — thay `dispatchReload(reloadRestartIobus)` khỏi đường
+  CRUD (D-09/MBR-B212): restart iobus cắt luôn IOP 100 Hz chỉ vì sửa tên một Point.
+- Commissioning proxy + rate limit (5 lệnh đọc/phút/người dùng) + audit đầy đủ.
+- **Bỏ dữ liệu bịa**: `/modbus/events` không còn 2 sự kiện viết cứng; `/modbus/buses`
+  không còn hằng số p50=24/p95=61/util=28 — mọi con số nay từ `kx_bus_metrics_t`,
+  thiếu là `null`.
+
+#### B3 — Frontend (`apps/web-ui/`)
+
+- Trang **Mapping** (thứ 5) — bảng Point → register, lỗi validate chặn apply, tải bus.
+- `useModbusConfig` — **ba nguồn state tách bạch**: bản nháp đang gõ / bản nháp đã
+  lưu / thứ iobus THẬT SỰ đang chạy.
+- `ConfigStateBanner` — bỏ chuỗi viết cứng "Đồng bộ thành công" và `rev ?? 1`;
+  không liên lạc được iobus ⇒ hiện "không rõ", lệch revision ⇒ hiện "LỆCH".
+- `RegisterPreview` — dấu chân register, cảnh báo chồng vùng, quy đổi mẫu.
+- Diagnostics thêm `write_failed`/`write_dropped`/`exception`/`bus_id`; trường vắng
+  hiện "—" chứ không hiện 0.
+- Devices: nút **Thử kết nối** gọi commissioning thật; Points: import/export.
+
+#### Sửa lỗi phát hiện khi nghiệm thu trên board
+
+- **`utilization_pct_x100` báo 0 %** trong khi `latency_p50 = 300 ms`. Cửa sổ đo
+  chốt ở nhịp 100 ms, ngắn hơn cả chu kỳ probe 5 s, nên phần lớn cửa sổ có
+  `busy = 0`. Đổi sang **trung bình trượt 8 ô × 2 s**; đo lại trên board cho
+  10,44 → 12,85 % ổn định, khớp duty cycle lý thuyết ~12 %.
+- **`gtest_discover_tests` làm đứt cross-build aarch64** vì nó chạy binary target
+  trên máy build x86_64. Chuyển sang `add_test` khi `CMAKE_CROSSCOMPILING`.
+
+#### Kết quả kiểm chứng
+
+| Gate | Kết quả |
+|---|---|
+| `ctest --test-dir build/fw` (Modbus+BACnet+HMI ON) | **777/777 PASS** (trước: 734) |
+| `go vet ./...` + `go test ./... -count=1` | **vet sạch, 11/11 package `ok`** |
+| `npx vitest --run --environment jsdom src` | **375/375 PASS**, 45 file (trước: 306) |
+| `npm run lint` / `npm run build` | **PASS**, 0 warning / build OK |
+| Board Foxlinx — `iobus_tests` aarch64 | **248 PASS / 6 SKIP / 0 FAIL** |
+| Board Foxlinx — jitter IOP | avg **17,91 µs**, overruns **1/30001** (baseline: 15,28–17,83 µs, ~5027) |
+
+> **Giới hạn:** chưa có slave RS-485 thật (`G-C` OPEN) và cơ chế điều khiển hướng
+> RS-485 chưa được xác nhận (`G-D` OPEN). `/dev/rs485-2` bị chặn: `ttyS1` chưa
+> enable trong device tree. `MODBUS_RTU_PRODUCTION_READY = NO`.
+
 ### Fixed — Hậu kiểm review FE bằng trình duyệt + vá spec E2E đỏ âm thầm (FE-E2E-01) (2026-08-05)
 
 - **`e2e/trends.spec.ts` — FE-E2E-01, đỏ từ `b67580c` mà không ai biết:**
