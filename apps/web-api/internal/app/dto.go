@@ -340,6 +340,15 @@ type PointDTO struct {
 	ReadWrite          string   `json:"read_write"`
 	DefaultValue       any      `json:"default_value"`
 	SafeValue          any      `json:"safe_value"`
+
+	// MBR-B103/B309: chi tiết chẩn đoán của Point Modbus RTU. Tất cả đến TỪ
+	// producer; FE hiển thị nguyên văn và hiện `unknown` khi thiếu, tuyệt đối
+	// không suy diễn (D-07).
+	QualityReason string `json:"quality_reason,omitempty"`
+	BusID         uint8  `json:"bus_id,omitempty"`
+	SlaveAddr     uint8  `json:"slave_addr,omitempty"`
+	ExceptionCode uint8  `json:"exception_code,omitempty"`
+	Online        bool   `json:"online,omitempty"`
 }
 
 // AlarmDTO mirrors FE Alarm (types.ts).

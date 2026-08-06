@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	kxShmMagic    = 0x4B584404
+	kxShmMagic    = 0x4B584405
 	defaultIOShm  = "/dev/shm/mkddc_io_shm"
 	defaultPLCShm = "/dev/shm/mkddc_plc_shm"
 )
@@ -358,14 +358,37 @@ func (c *CoreClient) readIOStatus() (IOPStatus, error) {
 // Không có trường nào ở đây được suy diễn hay gán mặc định.
 type SlaveTelemetry struct {
 	Addr              uint8
+	BusID             uint8
 	Online            bool
-	TotalPolls        uint32
-	TotalErrors       uint32
+	TotalPolls        uint64
+	TotalErrors       uint64
 	LastSeenMS        uint64
-	TimeoutErrors     uint32
-	CRCErrors         uint32
-	RetryAttempts     uint32
+	TimeoutErrors     uint64
+	CRCErrors         uint64
+	RetryAttempts     uint64
+	WriteFailed       uint64
+	WriteDropped      uint64
 	ConsecutiveErrors uint8
+	LastException     uint8
+}
+
+// BusTelemetry là số đo THẬT của một sợi dây RS-485, do BusWorker ghi.
+// Không có nó, tầng API phải bịa p50/p95/utilization (MBR-B305).
+type BusTelemetry struct {
+	ID                 uint8
+	Name               string
+	Device             string
+	State              string
+	Baud               uint32
+	Parity             string
+	StopBits           uint8
+	TotalTransactions  uint64
+	TotalErrors        uint64
+	PortReopens        uint64
+	LatencyP50US       uint32
+	LatencyP95US       uint32
+	LatencyMaxUS       uint32
+	UtilizationPctX100 uint16
 }
 
 // FieldbusTelemetry gộp trạng thái bind BACnet/IP và số đo per-slave.
@@ -376,6 +399,11 @@ type FieldbusTelemetry struct {
 	BacnetBound bool
 	BacnetPort  uint16
 	Slaves      []SlaveTelemetry
+	Buses       []BusTelemetry
+	// MBR-B110: consumer PHẢI so ProducerBootID giữa hai lần đọc trước khi tính
+	// delta counter. Lệch ⇒ iobus đã restart và delta cũ vô nghĩa.
+	ProducerBootID  uint64
+	CountersSinceMS uint64
 }
 
 // ReadFieldbusTelemetry đọc khối telemetry nối thêm ở cuối io_shm.
@@ -389,14 +417,16 @@ func (c *CoreClient) ReadFieldbusTelemetry(ctx context.Context) (FieldbusTelemet
 		return FieldbusTelemetry{}, ctx.Err()
 	default:
 	}
-	data, err := c.ioSeg.read(c.IOShm, kxIOShmDiagLen)
+	data, err := c.ioSeg.read(c.IOShm, kxIOShmBusLen)
 	if err != nil {
 		return FieldbusTelemetry{}, err
 	}
 	out := FieldbusTelemetry{
-		Published:   binary.LittleEndian.Uint32(data[offIOFbPublishSeq:offIOFbPublishSeq+4]) > 0,
-		BacnetBound: data[offIOBacnetBound] == 1,
-		BacnetPort:  binary.LittleEndian.Uint16(data[offIOBacnetPort : offIOBacnetPort+2]),
+		Published:       binary.LittleEndian.Uint32(data[offIOFbPublishSeq:offIOFbPublishSeq+4]) > 0,
+		BacnetBound:     data[offIOBacnetBound] == 1,
+		BacnetPort:      binary.LittleEndian.Uint16(data[offIOBacnetPort : offIOBacnetPort+2]),
+		ProducerBootID:  binary.LittleEndian.Uint64(data[offIOProducerBootID : offIOProducerBootID+8]),
+		CountersSinceMS: binary.LittleEndian.Uint64(data[offIOCountersSince : offIOCountersSince+8]),
 	}
 	count := int(data[offIOFbSlaveCount])
 	if count > kxNFbSlave {
@@ -405,21 +435,59 @@ func (c *CoreClient) ReadFieldbusTelemetry(ctx context.Context) (FieldbusTelemet
 	out.Slaves = make([]SlaveTelemetry, 0, count)
 	for i := 0; i < count; i++ {
 		base := offIOFbSlaves + i*kxFbSlaveStride
-		out.Slaves = append(out.Slaves, SlaveTelemetry{
-			LastSeenMS:  binary.LittleEndian.Uint64(data[base+offFbLastSeen : base+offFbLastSeen+8]),
-			TotalPolls:  binary.LittleEndian.Uint32(data[base+offFbTotalPolls : base+offFbTotalPolls+4]),
-			TotalErrors: binary.LittleEndian.Uint32(data[base+offFbTotalErrors : base+offFbTotalErrors+4]),
-			Addr:        data[base+offFbAddr],
-			Online:      data[base+offFbOnline] == 1,
-		})
 		diagBase := offIOModbusDiag + i*kxModbusDiagStride
-		last := &out.Slaves[len(out.Slaves)-1]
-		last.TimeoutErrors = binary.LittleEndian.Uint32(data[diagBase : diagBase+4])
-		last.CRCErrors = binary.LittleEndian.Uint32(data[diagBase+4 : diagBase+8])
-		last.RetryAttempts = binary.LittleEndian.Uint32(data[diagBase+8 : diagBase+12])
-		last.ConsecutiveErrors = data[diagBase+12]
+		out.Slaves = append(out.Slaves, SlaveTelemetry{
+			LastSeenMS:        binary.LittleEndian.Uint64(data[base+offFbLastSeen : base+offFbLastSeen+8]),
+			TotalPolls:        binary.LittleEndian.Uint64(data[base+offFbTotalPolls : base+offFbTotalPolls+8]),
+			TotalErrors:       binary.LittleEndian.Uint64(data[base+offFbTotalErrors : base+offFbTotalErrors+8]),
+			Addr:              data[base+offFbAddr],
+			Online:            data[base+offFbOnline] == 1,
+			BusID:             data[base+offFbBusID],
+			TimeoutErrors:     binary.LittleEndian.Uint64(data[diagBase+offDiagTimeout : diagBase+offDiagTimeout+8]),
+			CRCErrors:         binary.LittleEndian.Uint64(data[diagBase+offDiagCRC : diagBase+offDiagCRC+8]),
+			RetryAttempts:     binary.LittleEndian.Uint64(data[diagBase+offDiagRetry : diagBase+offDiagRetry+8]),
+			WriteFailed:       binary.LittleEndian.Uint64(data[diagBase+offDiagWriteFailed : diagBase+offDiagWriteFailed+8]),
+			WriteDropped:      binary.LittleEndian.Uint64(data[diagBase+offDiagWriteDropped : diagBase+offDiagWriteDropped+8]),
+			ConsecutiveErrors: data[diagBase+offDiagConsecutive],
+			LastException:     data[diagBase+offDiagLastExc],
+		})
+	}
+
+	busCount := int(data[offIOFbBusCount])
+	if busCount > kxNFbBus {
+		busCount = kxNFbBus
+	}
+	out.Buses = make([]BusTelemetry, 0, busCount)
+	for i := 0; i < busCount; i++ {
+		base := offIOFbBus + i*kxBusStride
+		out.Buses = append(out.Buses, BusTelemetry{
+			ID:                 data[base+offBusID],
+			Name:               cString(data[base+offBusName : base+offBusName+16]),
+			Device:             cString(data[base+offBusDevice : base+offBusDevice+32]),
+			State:              cString(data[base+offBusState : base+offBusState+16]),
+			Baud:               binary.LittleEndian.Uint32(data[base+offBusBaud : base+offBusBaud+4]),
+			Parity:             string(data[base+offBusParity]),
+			StopBits:           data[base+offBusStopBits],
+			TotalTransactions:  binary.LittleEndian.Uint64(data[base+offBusTotalTx : base+offBusTotalTx+8]),
+			TotalErrors:        binary.LittleEndian.Uint64(data[base+offBusTotalErrors : base+offBusTotalErrors+8]),
+			PortReopens:        binary.LittleEndian.Uint64(data[base+offBusPortReopens : base+offBusPortReopens+8]),
+			LatencyP50US:       binary.LittleEndian.Uint32(data[base+offBusLatencyP50 : base+offBusLatencyP50+4]),
+			LatencyP95US:       binary.LittleEndian.Uint32(data[base+offBusLatencyP95 : base+offBusLatencyP95+4]),
+			LatencyMaxUS:       binary.LittleEndian.Uint32(data[base+offBusLatencyMax : base+offBusLatencyMax+4]),
+			UtilizationPctX100: binary.LittleEndian.Uint16(data[base+offBusUtilX100 : base+offBusUtilX100+2]),
+		})
 	}
 	return out, nil
+}
+
+// cString cắt chuỗi C cố định độ dài tại NUL đầu tiên.
+func cString(raw []byte) string {
+	for i, b := range raw {
+		if b == 0 {
+			return string(raw[:i])
+		}
+	}
+	return string(raw)
 }
 
 func (c *CoreClient) readPLCStatus() (ScanStatus, error) {
@@ -591,23 +659,33 @@ const (
 	//   av[32]  at offset 2448
 	//   bv[16]  at offset 4880
 	//   msv[8]  at offset 6096
-	//   ext[256] at offset 6704 (kx_ext_point_t=40b): 256*40=10240
-	//   scan_count at 16948; scan_overrun at 16952; sizeof(kx_plc_shm_t)=16960.
-	offAI          = 16
-	offBI          = offAI + kxNUI*kxPointSize
-	offAO          = offBI + kxNDI*kxPointSize
-	offBO          = offAO + kxNAO*kxPointSize
-	offAV          = offBO + kxNDO*kxPointSize
-	offBV          = offAV + kxNAV*kxPointSize
-	offMSV         = offBV + kxNBV*kxPointSize
-	offExt         = offMSV + kxNMSV*kxPointSize
-	kxExtPointSize = 40
-	offExtValue    = 24
-	offExtQuality  = 28
-	offExtSlave    = 29
-	offExtOnline   = 30
-	offExtWritable = 31
-	offExtCount    = offExt + 256*kxExtPointSize
+	//   ext[256] at offset 6704 (kx_ext_point_t=64b, contract v2): 256*64=16384
+	//   scan_count at 23092; scan_overrun at 23096; sizeof(kx_plc_shm_t)=23104.
+	//
+	// MBR-B001/Đ-03: kx_ext_point_t đổi từ 40 lên 64 byte (value/setpoint sang
+	// double, thêm quality_reason/exception_code/bus_id và mốc sample). Magic
+	// lên v5 nên binary cũ FAIL RÕ thay vì đọc lệch trường trong im lặng.
+	offAI               = 16
+	offBI               = offAI + kxNUI*kxPointSize
+	offAO               = offBI + kxNDI*kxPointSize
+	offBO               = offAO + kxNAO*kxPointSize
+	offAV               = offBO + kxNDO*kxPointSize
+	offBV               = offAV + kxNAV*kxPointSize
+	offMSV              = offBV + kxNBV*kxPointSize
+	offExt              = offMSV + kxNMSV*kxPointSize
+	kxExtPointSize      = 64
+	offExtValue         = 24 // float64
+	offExtSetpoint      = 32 // float64
+	offExtSampleUTCMS   = 40 // int64
+	offExtSampleMonoNS  = 48 // int64
+	offExtQuality       = 56
+	offExtQualityReason = 57
+	offExtException     = 58
+	offExtSlave         = 59
+	offExtBusID         = 60
+	offExtOnline        = 61
+	offExtWritable      = 62
+	offExtCount         = offExt + 256*kxExtPointSize
 
 	// kx_point_t field offsets within a point (76 bytes):
 	offValue      = 0  // float32
@@ -616,9 +694,9 @@ const (
 	offQuality    = 72 // uint8
 	offReliab     = 73 // uint8
 
-	offPLCScanCount   = 16948
-	offPLCScanOverrun = 16952
-	kxPlcShmMinLen    = 16960
+	offPLCScanCount   = 23092
+	offPLCScanOverrun = 23096
+	kxPlcShmMinLen    = 23104
 
 	// kx_io_shm_t v4 offsets used by web:
 	//   header16 + ui_value[16]*4 + ui_raw[16]*4 + ui_quality[16]
@@ -648,21 +726,110 @@ const (
 	offIOFbPublishSeq = 528
 	offIOFbSlaves     = 536
 	kxNFbSlave        = 32
-	kxFbSlaveStride   = 24
-	// kx_slave_metrics_t: last_seen_ms(8) + total_polls(4) + total_errors(4) + addr(1) + online(1) + pad(6)
+	// MBR-B110: counter lên uint64 nên stride 24 → 32. uint32 tràn sau ~2,7 năm
+	// ở nhịp poll thực tế, và khi tràn thì mọi phép delta của FE/historian cho ra
+	// số âm khổng lồ hoặc "vừa reset" — cả hai đều sai.
+	kxFbSlaveStride = 32
+	// kx_slave_metrics_t: last_seen_ms(8) + total_polls(8) + total_errors(8) + addr(1) + online(1) + bus_id(1) + pad(5)
 	offFbLastSeen      = 0
 	offFbTotalPolls    = 8
-	offFbTotalErrors   = 12
-	offFbAddr          = 16
-	offFbOnline        = 17
-	kxIOShmFullLen     = offIOFbSlaves + kxNFbSlave*kxFbSlaveStride // 1304
+	offFbTotalErrors   = 16
+	offFbAddr          = 24
+	offFbOnline        = 25
+	offFbBusID         = 26
+	kxIOShmFullLen     = offIOFbSlaves + kxNFbSlave*kxFbSlaveStride // 1560
 	offIOModbusDiag    = kxIOShmFullLen
-	kxModbusDiagStride = 16
-	kxIOShmDiagLen     = offIOModbusDiag + kxNFbSlave*kxModbusDiagStride // 1816
-	kxIOShmMinLen      = 528
+	kxModbusDiagStride = 48
+	// kx_modbus_diag_t: timeout(8) + crc(8) + retry(8) + write_failed(8) + write_dropped(8)
+	//                   + consecutive(1) + last_exception(1) + pad(6)
+	offDiagTimeout      = 0
+	offDiagCRC          = 8
+	offDiagRetry        = 16
+	offDiagWriteFailed  = 24
+	offDiagWriteDropped = 32
+	offDiagConsecutive  = 40
+	offDiagLastExc      = 41
+	kxIOShmDiagLen      = offIOModbusDiag + kxNFbSlave*kxModbusDiagStride // 3096
+
+	// MBR-B305: bus metrics đo THẬT. Trước khi có khối này, handler Go phải điền
+	// hằng số cho p50/p95/utilization và trang Overview hiển thị số không do
+	// thiết bị nào sinh ra — đúng lỗi mà D-07 đã cấm ở tầng FE.
+	offIOProducerBootID = 3096
+	offIOCountersSince  = 3104
+	offIOFbBusCount     = 3112
+	offIOFbBus          = 3120
+	kxNFbBus            = 4
+	kxBusStride         = 112
+	offBusTotalTx       = 0
+	offBusTotalErrors   = 8
+	offBusPortReopens   = 16
+	offBusLatencyP50    = 24
+	offBusLatencyP95    = 28
+	offBusLatencyMax    = 32
+	offBusBaud          = 36
+	offBusUtilX100      = 40
+	offBusID            = 42
+	offBusParity        = 43
+	offBusStopBits      = 44
+	offBusName          = 48
+	offBusDevice        = 64
+	offBusState         = 96
+	kxIOShmBusLen       = offIOFbBus + kxNFbBus*kxBusStride // 3568
+
+	kxIOShmMinLen = 528
 )
 
 // kx_quality_t ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ DTO quality string
+// kx_ext_quality_t → chuỗi cho API. Năm mức, không gộp (DATA_MODEL §6.2):
+// người vận hành phải phân biệt "thiết bị trả dữ liệu sai" (BAD) với "cấu hình
+// sai nên chưa từng hỏi thiết bị" (CONFIG_ERROR) ngay trên bảng Point.
+func mapExtQuality(raw uint8) string {
+	switch raw {
+	case 0:
+		return "GOOD"
+	case 1:
+		return "STALE"
+	case 2:
+		return "BAD"
+	case 3:
+		return "OFFLINE"
+	case 4:
+		return "CONFIG_ERROR"
+	}
+	// Giá trị lạ = producer mới hơn consumer. Trả "UNKNOWN" chứ không đoán bừa
+	// về GOOD — đoán ở đây là bịa trạng thái thiết bị hiện trường.
+	return "UNKNOWN"
+}
+
+// kx_ext_quality_reason_t → chuỗi cho API.
+func mapExtQualityReason(raw uint8) string {
+	switch raw {
+	case 0:
+		return ""
+	case 1:
+		return "NOT_INITIALIZED"
+	case 2:
+		return "CONFIG_ERROR"
+	case 3:
+		return "DECODE_ERROR"
+	case 4:
+		return "OUT_OF_RANGE"
+	case 5:
+		return "TIMEOUT"
+	case 6:
+		return "CRC_ERROR"
+	case 7:
+		return "PORT_DOWN"
+	case 8:
+		return "DEVICE_EXCEPTION"
+	case 9:
+		return "WRITE_FAILED"
+	case 10:
+		return "BUS_OVERLOAD"
+	}
+	return "UNKNOWN"
+}
+
 func mapQuality(raw uint8) string {
 	switch raw {
 	case 0:
@@ -828,24 +995,34 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 		if id == "" {
 			id = fmt.Sprintf("EXT-%02d", i+1)
 		}
-		value := math.Float32frombits(binary.LittleEndian.Uint32(data[base+offExtValue : base+offExtValue+4]))
+		value := math.Float64frombits(binary.LittleEndian.Uint64(data[base+offExtValue : base+offExtValue+8]))
 		online := data[base+offExtOnline] == 1
-		quality := "BAD"
-		if online {
-			switch data[base+offExtQuality] {
-			case 0:
-				quality = "GOOD"
-			case 1:
-				quality = "STALE"
-			}
-		} else if data[base+offExtQuality] == 1 {
-			quality = "STALE"
-		} else {
-			quality = "OFFLINE"
+
+		// D-07 / MBR-B103: quality đến TỪ producer, không suy diễn ở đây.
+		//
+		// Bản trước phải ghép `online` với quality 3 mức để đoán ra OFFLINE/STALE,
+		// và phép đoán đó sai ở hai chỗ: điểm CHƯA TỪNG có mẫu bị gán "OFFLINE"
+		// (nghe như mất liên lạc, thật ra là chưa khai báo xong), còn lỗi cấu
+		// hình không phân biệt được với lỗi thiết bị. Contract v2 chở đủ 5 mức
+		// nên tầng này chỉ còn việc dịch tên.
+		quality := mapExtQuality(data[base+offExtQuality])
+		reason := mapExtQualityReason(data[base+offExtQualityReason])
+
+		// Mốc hiển thị là thời điểm SAMPLE thật, không phải "lúc web đọc SHM".
+		// Dùng time.Now() ở đây làm mọi điểm trông như vừa cập nhật kể cả khi
+		// thiết bị đã im lặng nhiều giờ.
+		updatedAt := time.Now().UTC().Format(time.RFC3339Nano)
+		sampleUTCMS := int64(binary.LittleEndian.Uint64(data[base+offExtSampleUTCMS : base+offExtSampleUTCMS+8]))
+		if sampleUTCMS > 0 {
+			updatedAt = time.UnixMilli(sampleUTCMS).UTC().Format(time.RFC3339Nano)
 		}
+
 		pts = append(pts, PointDTO{ID: id, Name: id, Kind: "modbus_rtu", Value: value,
-			Quality: quality, Source: "modbus_rtu", UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
-			Fault: quality == "BAD" || quality == "OFFLINE", Writable: data[base+offExtWritable] == 1})
+			Quality: quality, QualityReason: reason, Source: "modbus_rtu", UpdatedAt: updatedAt,
+			Fault:    quality == "BAD" || quality == "OFFLINE" || quality == "CONFIG_ERROR",
+			Writable: data[base+offExtWritable] == 1,
+			BusID:    data[base+offExtBusID], SlaveAddr: data[base+offExtSlave],
+			ExceptionCode: data[base+offExtException], Online: online})
 	}
 	return pts
 }

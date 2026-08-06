@@ -30,10 +30,18 @@ static_assert(offsetof(kx_io_shm_t, bacnet_bound) == 526, "web io_shm bacnet bou
 static_assert(offsetof(kx_io_shm_t, fb_slave_count) == 527, "web io_shm slave count offset changed");
 static_assert(offsetof(kx_io_shm_t, fb_publish_seq) == 528, "web io_shm publish seq offset changed");
 static_assert(offsetof(kx_io_shm_t, fb_slave) == 536, "web io_shm slave array offset changed");
-static_assert(sizeof(kx_slave_metrics_t) == 24, "web slave metrics stride changed");
-static_assert(offsetof(kx_io_shm_t, modbus_diag) == 1304, "web Modbus diag offset changed");
-static_assert(sizeof(kx_modbus_diag_t) == 16, "web Modbus diag stride changed");
-static_assert(sizeof(kx_io_shm_t) == 1816, "web io_shm size changed");
+/* MBR-B110: counter lên uint64 nên stride của hai struct telemetry đổi, và
+ * MBR-B305 nối thêm mảng bus metrics vào cuối. Đây là ABI change có chủ đích,
+ * đi cùng magic v5 — số dưới đây phải khớp hằng số trong core_client.go. */
+static_assert(sizeof(kx_slave_metrics_t) == 32, "web slave metrics stride changed");
+static_assert(offsetof(kx_io_shm_t, modbus_diag) == 1560, "web Modbus diag offset changed");
+static_assert(sizeof(kx_modbus_diag_t) == 48, "web Modbus diag stride changed");
+static_assert(offsetof(kx_io_shm_t, producer_boot_id) == 3096, "web producer boot id offset changed");
+static_assert(offsetof(kx_io_shm_t, counters_since_ms) == 3104, "web counters_since offset changed");
+static_assert(offsetof(kx_io_shm_t, fb_bus_count) == 3112, "web bus count offset changed");
+static_assert(offsetof(kx_io_shm_t, fb_bus) == 3120, "web bus array offset changed");
+static_assert(sizeof(kx_bus_metrics_t) == 112, "web bus metrics stride changed");
+static_assert(sizeof(kx_io_shm_t) == 3568, "web io_shm size changed");
 
 namespace {
 
@@ -123,9 +131,9 @@ TEST(IoCache, FieldbusMetricsRoundTripTruncatesAndClearsRemovedSlaves)
     ASSERT_TRUE(cache.attach());
 
     kx_slave_metrics_t in[3] = {};
-    in[0] = {1234u, 100u, 7u, 11u, 1u, {}};
-    in[1] = {2345u, 200u, 0u, 12u, 1u, {}};
-    in[2] = {3456u, 50u, 50u, 13u, 0u, {}};
+    in[0] = {1234u, 100u, 7u, 11u, 1u, 1u, {}};
+    in[1] = {2345u, 200u, 0u, 12u, 1u, 1u, {}};
+    in[2] = {3456u, 50u, 50u, 13u, 0u, 2u, {}};
     cache.write_fieldbus_metrics(in, 3);
 
     ASSERT_EQ(cache.shm()->fb_slave_count, 3u);

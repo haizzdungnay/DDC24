@@ -22,6 +22,25 @@
 
 using namespace iobus::fieldbus;
 
+namespace {
+/* SlaveConfig có thêm `bus_id` (MBR-B101) nên khởi tạo bằng danh sách ngoặc
+ * theo vị trí không còn đọc được. Helper đặt tên rõ từng tham số. */
+SlaveConfig make_slave(uint8_t addr, const std::string& profile, const std::string& name,
+                       uint32_t poll_ms, uint32_t timeout_ms = 300, uint8_t retry = 2,
+                       uint8_t bus_id = 1)
+{
+    SlaveConfig sl;
+    sl.addr       = addr;
+    sl.bus_id     = bus_id;
+    sl.profile    = profile;
+    sl.name       = name;
+    sl.poll_ms    = poll_ms;
+    sl.timeout_ms = timeout_ms;
+    sl.retry      = retry;
+    return sl;
+}
+} // namespace
+
 TEST(FieldbusConfig, ParsesRtuPollTimeoutRetryAndSerialSettings)
 {
     const std::string path = "/tmp/mkddc_fieldbus_rtu_" + std::to_string(::getpid()) + ".json";
@@ -113,7 +132,7 @@ TEST(ModbusMaster, SleepMsWithNoSlaves)
     EXPECT_EQ(master.sleep_ms_until_next(0), 1000u);
 }
 
-TEST(ModbusMaster, EnqueueWriteNocrash)
+TEST(ModbusMaster, SubmitWriteWithoutBusIsRejectedNotCrash)
 {
     ModbusMaster master;
     PendingWrite w;
@@ -126,7 +145,7 @@ TEST(ModbusMaster, EnqueueWriteNocrash)
     w.byte_order = ByteOrder::AB;
     w.scale      = 1.0f;
     w.offset     = 0.0f;
-    master.enqueue_write(w);   /* không crash khi không có ctx */
+    master.submit_write(w);   /* không crash khi không có worker nào */
 }
 
 TEST(ModbusMaster, PollOnceNoopWhenClosed)
@@ -250,8 +269,8 @@ TEST(ModbusMaster, ThirtyTwoBitProfileReservesExactSlotCount)
     FieldbusConfig cfg;
     cfg.rs485.device = pty.slave_dev;
     cfg.rs485.baud   = 19200;
-    cfg.slaves.push_back({1, p32, "meter", 1000});
-    cfg.slaves.push_back({2, p16, "plc", 1000});
+    cfg.slaves.push_back(make_slave(1, p32, "meter", 1000));
+    cfg.slaves.push_back(make_slave(2, p16, "plc", 1000));
 
     ModbusMaster master;
     ASSERT_TRUE(master.open(cfg));
@@ -285,9 +304,9 @@ TEST(ModbusMaster, SlaveWithoutExtCapacityIsNotReportedOnline)
     FieldbusConfig cfg;
     cfg.rs485.device = pty.slave_dev;
     cfg.rs485.baud   = 19200;
-    cfg.slaves.push_back({1, p_full, "full",  1000});
-    cfg.slaves.push_back({2, p_over, "over1", 1000});
-    cfg.slaves.push_back({3, p_over, "over2", 1000});
+    cfg.slaves.push_back(make_slave(1, p_full, "full", 1000));
+    cfg.slaves.push_back(make_slave(2, p_over, "over1", 1000));
+    cfg.slaves.push_back(make_slave(3, p_over, "over2", 1000));
 
     ModbusMaster master;
     ASSERT_TRUE(master.open(cfg));
@@ -320,7 +339,7 @@ TEST(ModbusMaster, SlaveWithoutExtCapacityIsNotReportedOnline)
     /* slave0 poll thật và online */
     EXPECT_EQ(served.load(), 3);
     EXPECT_TRUE(metrics.get(0).online);
-    EXPECT_FLOAT_EQ(cache.point(0).value, 777.0f);
+    EXPECT_DOUBLE_EQ(cache.sample(0).value, 777.0);
 
     /* slave1/slave2 KHÔNG online, error rate 100%, E302 đã kích */
     for (uint8_t idx : {1, 2}) {
@@ -348,7 +367,7 @@ TEST(ModbusMaster, SlaveWithMissingProfileIsNotReportedOnline)
     FieldbusConfig cfg;
     cfg.rs485.device = pty.slave_dev;
     cfg.rs485.baud   = 19200;
-    cfg.slaves.push_back({9, "/tmp/mkddc_profile_does_not_exist.json", "ghost", 1000});
+    cfg.slaves.push_back(make_slave(9, "/tmp/mkddc_profile_does_not_exist.json", "ghost", 1000));
 
     ModbusMaster master;
     ASSERT_TRUE(master.open(cfg));
@@ -376,7 +395,7 @@ TEST(ModbusMaster, ConfigErrorSlaveRespectsPollIntervalInsteadOfSpinning)
     FieldbusConfig cfg;
     cfg.rs485.device = pty.slave_dev;
     cfg.rs485.baud   = 19200;
-    cfg.slaves.push_back({9, "/tmp/mkddc_profile_does_not_exist.json", "ghost", 1000});
+    cfg.slaves.push_back(make_slave(9, "/tmp/mkddc_profile_does_not_exist.json", "ghost", 1000));
 
     ModbusMaster master;
     ASSERT_TRUE(master.open(cfg));
@@ -415,7 +434,7 @@ TEST(ModbusMaster, RtuPtyReadWriteAndTimeout)
     FieldbusConfig cfg;
     cfg.rs485.device = pty_slave;
     cfg.rs485.baud = 19200;
-    cfg.slaves.push_back({1, profile_path, "fake", 1});
+    cfg.slaves.push_back(make_slave(1, profile_path, "fake", 1));
 
     ModbusMaster master;
     ASSERT_TRUE(master.open(cfg));
@@ -433,8 +452,8 @@ TEST(ModbusMaster, RtuPtyReadWriteAndTimeout)
     FieldbusMetrics metrics;
     master.poll_once(1, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
     EXPECT_EQ(cache.count(), 1u);
-    EXPECT_FLOAT_EQ(cache.point(0).value, 1234.0f);
-    EXPECT_EQ(cache.point(0).quality, KX_Q_GOOD);
+    EXPECT_DOUBLE_EQ(cache.sample(0).value, 1234.0);
+    EXPECT_EQ(cache.sample(0).quality, KX_EXTQ_GOOD);
 
     PendingWrite coil{};
     coil.slave_addr = 1;
@@ -444,7 +463,7 @@ TEST(ModbusMaster, RtuPtyReadWriteAndTimeout)
     coil.type = PointType::Bool;
     coil.byte_order = ByteOrder::AB;
     coil.scale = 1.0f;
-    master.enqueue_write(coil);
+    master.submit_write(coil);
 
     PendingWrite reg{};
     reg.slave_addr = 1;
@@ -454,7 +473,7 @@ TEST(ModbusMaster, RtuPtyReadWriteAndTimeout)
     reg.type = PointType::Uint16;
     reg.byte_order = ByteOrder::AB;
     reg.scale = 1.0f;
-    master.enqueue_write(reg);
+    master.submit_write(reg);
     master.poll_once(2, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
 
     server.join();
@@ -464,7 +483,9 @@ TEST(ModbusMaster, RtuPtyReadWriteAndTimeout)
 
     master.poll_once(3, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
     master.poll_once(4, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
-    EXPECT_EQ(cache.point(0).quality, KX_Q_BAD);
+    /* Hai lượt poll thất bại liên tiếp ⇒ OFFLINE (không phải BAD): thiết bị
+     * không trả lời là mất liên lạc, khác hẳn "trả lời nhưng dữ liệu hỏng". */
+    EXPECT_EQ(cache.sample(0).quality, KX_EXTQ_OFFLINE);
     EXPECT_TRUE(metrics.get(0).e302_triggered);
 
     master.close();
@@ -502,7 +523,7 @@ struct SilentPtyMaster {
         cfg.rs485.device = pty.slave_dev;
         cfg.rs485.baud   = 19200;
         /* addr, profile, name, poll_ms, timeout_ms, retry */
-        cfg.slaves.push_back({1, profile_path, "vfd", 10, 20, 2});
+        cfg.slaves.push_back(make_slave(1, profile_path, "vfd", 10, 20, 2));
         ASSERT_TRUE(master.open(cfg));
     }
     ~SilentPtyMaster()
@@ -536,7 +557,7 @@ TEST(ModbusMasterWriteLifecycle, WriteIsDroppedAfterMaxAttempts)
     FieldbusMetrics metrics;
     PendingWrite w = make_write(1234.0f);
     w.enqueued_ms = 1000;
-    h.master.enqueue_write(w);
+    h.master.submit_write(w);
 
     /* Mỗi vòng poll phát tối đa một lần; sau kMaxWriteAttempts phải bị bỏ hẳn.
      *
@@ -555,7 +576,7 @@ TEST(ModbusMasterWriteLifecycle, WriteIsDroppedAfterMaxAttempts)
         now += step;
     }
     EXPECT_EQ(metrics.get(0).write_dropped, 1u);
-    const uint32_t failed_after_drop = metrics.get(0).write_failed;
+    const uint64_t failed_after_drop = metrics.get(0).write_failed;
     EXPECT_GE(failed_after_drop, 1u);
 
     /* Sau khi bị bỏ, các vòng poll tiếp theo KHÔNG được phát lại lệnh đó nữa. */
@@ -578,7 +599,7 @@ TEST(ModbusMasterWriteLifecycle, ExpiredWriteIsDroppedWithoutTransmitting)
     FieldbusMetrics metrics;
     PendingWrite w = make_write(50.0f);
     w.enqueued_ms = 1000;
-    h.master.enqueue_write(w);
+    h.master.submit_write(w);
 
     /* now vượt TTL ⇒ bỏ ngay, không tính là một lần phát thất bại. */
     h.master.poll_once(1000 + kWriteTtlMs + 1, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
@@ -598,7 +619,7 @@ TEST(ModbusMasterWriteLifecycle, UnencodableWriteIsDroppedAndCounted)
     FieldbusMetrics metrics;
     PendingWrite w = make_write(70000.0f);   /* ngoài dải uint16 */
     w.enqueued_ms = 1000;
-    h.master.enqueue_write(w);
+    h.master.submit_write(w);
 
     h.master.poll_once(1000, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
 

@@ -60,8 +60,27 @@ public:
     const kx_plc_shm_t* shm() const { return shm_; }
     kx_plc_shm_t*       shm()       { return shm_; }
 
+    /* MBR-B104: provenance của snapshot gần nhất, cho /system/status và FE.
+     * `generation`/`config_revision` trả lời "iobus đang chạy cấu hình nào",
+     * câu hỏi mà trước v2 không ai đáp được ngoài cách đoán. */
+    struct ExtProvenance {
+        uint64_t sequence        = 0;
+        uint64_t generation      = 0;
+        uint64_t config_revision = 0;
+        uint64_t gap_count       = 0;   /* số lần phát hiện đứt sequence */
+    };
+    ExtProvenance ext_provenance() const
+    {
+        return ExtProvenance{last_seq_, last_generation_, last_revision_, seq_gaps_};
+    }
+
 private:
     RtHealth rt_;
+
+    uint64_t last_seq_        = 0;
+    uint64_t last_generation_ = 0;
+    uint64_t last_revision_   = 0;
+    uint64_t seq_gaps_        = 0;
 
     kx_plc_shm_t* shm_ = nullptr;
 };

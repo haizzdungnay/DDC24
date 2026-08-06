@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	webModbus "mkddc-web/internal/modbusrtu"
 )
@@ -300,22 +302,7 @@ func validStableModbusID(value string) bool {
 }
 
 func validateModbusRTUConfig(a *App, cfg ConfigFieldbus) []configValidationError {
-	tagOwners := map[string]string{}
-	ioCfg, _ := readConfig(a, configGroupIO, ConfigIO{})
-	vpCfg, _ := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
-	entries, _ := pointNamespaceEntries(ioCfg, vpCfg)
-	for _, entry := range entries {
-		_, key, err := normalizePointTag(entry.Tag)
-		if err == nil {
-			tagOwners[key] = entry.PointID
-		}
-	}
-	domainErrs := webModbus.Validate(cfg, tagOwners)
-	errs := make([]configValidationError, 0, len(domainErrs))
-	for _, err := range domainErrs {
-		addConfigErr(&errs, err.Path, err.Message)
-	}
-	return errs
+	return a.validateModbusCandidate(cfg)
 }
 
 func validateUnifiedPointTags(ioCfg ConfigIO, vpCfg ConfigVirtualPoints, fieldbus ConfigFieldbus) []configValidationError {
@@ -342,55 +329,88 @@ func validateUnifiedPointTags(ioCfg ConfigIO, vpCfg ConfigVirtualPoints, fieldbu
 	return errs
 }
 
+// applyModbusConfig ghi cấu hình rồi báo iobus nạp lại.
+//
+// MBR-B212 / D-09: đường nạp lại KHÔNG còn mặc định là restart mkddc-iobus.
+// Restart cắt luôn IOP 100 Hz — mọi I/O vật lý của tủ ngừng vài giây chỉ vì ai
+// đó sửa tên một Point. Đường chính nay là kênh điều khiển UDS, áp cấu hình
+// tại ranh giới giữa hai transaction Modbus. `Reload` chỉ còn là dự phòng cho
+// iobus bản cũ chưa có kênh điều khiển, và khi dùng thì warnings nói rõ.
 func (a *App) applyModbusConfig(r *http.Request, cfg ConfigFieldbus) (ConfigPutResult, error) {
 	previous, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+	user := principalName(r)
 	result, err := (webModbus.Persister{
 		ConfigDir:  a.cfg.ConfigDir,
 		ConfigPath: a.configPath(configGroupFieldbus.file),
 		WriteFile:  writeConfigFileAtomic,
 		Reload:     func() (bool, []string) { return a.dispatchReload(reloadRestartIobus) },
+		Control:    a.modbusControl(),
+		Journal:    a.modbusJournal(),
+		Actor:      user,
 	}).Apply(cfg, previous)
 	if err != nil {
 		return ConfigPutResult{}, err
 	}
-	user := "-"
-	if principal := principalFromContext(r.Context()); principal != nil {
-		user = principal.Username
+	reloadMode := result.ReloadMode
+	if reloadMode == "" {
+		reloadMode = reloadRestartIobus
 	}
 	a.audit.Change(user, "config.modbus-rtu", configGroupFieldbus.file, "success", r.RemoteAddr)
-	return ConfigPutResult{Result: "success", Applied: true, Reload: reloadRestartIobus, Warnings: result.Warnings, Revision: result.Config.Revision, Checksum: result.Config.Checksum}, nil
+	return ConfigPutResult{Result: "success", Applied: true, Reload: reloadMode,
+		Warnings: result.Warnings, Revision: result.Config.Revision,
+		Checksum: result.Config.Checksum}, nil
 }
 
 func buildModbusProfile(device ModbusRTUDevice, points []ModbusRTUPoint) ([]byte, error) {
 	return webModbus.BuildProfile(device, points)
 }
 
+// ---------------------------------------------------------------------------
+// Overview / Bus / Event — MBR-B305.
+//
+// Bản trước điền p50/p95/utilization và cả danh sách sự kiện bằng HẰNG SỐ VIẾT
+// CỨNG trong handler. Trang Overview vì thế hiển thị "24 ms / 61 ms / 28 %" và
+// hai dòng sự kiện có sẵn kể cả khi không có một thiết bị nào được đấu. Đó đúng
+// là lỗi D-07 ("không suy diễn, không bịa") chỉ bị đẩy xuống một tầng: người
+// vận hành không có cách nào phân biệt số thật với số trang trí.
+//
+// Nay mọi con số đến từ `kx_bus_metrics_t` do BusWorker đo, và thiếu dữ liệu
+// được trả về là `null` để FE hiện "—".
+// ---------------------------------------------------------------------------
+
 type modbusOverview struct {
 	TotalDevices int    `json:"total_devices"`
 	Online       int    `json:"online"`
 	Offline      int    `json:"offline"`
 	FaultConfig  int    `json:"fault_config"`
+	Initializing int    `json:"initializing"`
 	Revision     int    `json:"revision"`
 	Checksum     string `json:"checksum"`
+	// TelemetryAvailable=false nghĩa là iobus chưa publish lần nào. Mọi con số
+	// runtime ở trên phải được FE hiểu là KHÔNG BIẾT, không phải 0.
+	TelemetryAvailable bool `json:"telemetry_available"`
 }
 
 type modbusBusInfo struct {
-	BusID          string `json:"bus_id"`
-	DisplayName    string `json:"display_name"`
-	Port           string `json:"port"`
-	PortAlias      string `json:"port_alias"`
-	OpenState      string `json:"open_state"`
-	Baud           int    `json:"baud"`
-	Parity         string `json:"parity"`
-	DataBits       int    `json:"data_bits"`
-	StopBits       int    `json:"stop_bits"`
-	TotalDevices   int    `json:"total_devices"`
-	OnlineDevices  int    `json:"online_devices"`
-	PollLatencyP50 int    `json:"poll_latency_p50_ms"`
-	PollLatencyP95 int    `json:"poll_latency_p95_ms"`
-	TimeoutErrors  int    `json:"timeout_errors"`
-	CrcErrors      int    `json:"crc_errors"`
-	Utilization    int    `json:"bus_utilization_percent"`
+	BusID         string `json:"bus_id"`
+	DisplayName   string `json:"display_name"`
+	Port          string `json:"port"`
+	PortAlias     string `json:"port_alias"`
+	OpenState     string `json:"open_state"`
+	Baud          int    `json:"baud"`
+	Parity        string `json:"parity"`
+	DataBits      int    `json:"data_bits"`
+	StopBits      int    `json:"stop_bits"`
+	TotalDevices  int    `json:"total_devices"`
+	OnlineDevices int    `json:"online_devices"`
+	// Con trỏ: nil = iobus chưa đo được. FE hiện "—" thay vì 0.
+	PollLatencyP50 *int     `json:"poll_latency_p50_ms"`
+	PollLatencyP95 *int     `json:"poll_latency_p95_ms"`
+	TimeoutErrors  uint64   `json:"timeout_errors"`
+	CrcErrors      uint64   `json:"crc_errors"`
+	PortReopens    uint64   `json:"port_reopens"`
+	Utilization    *float64 `json:"bus_utilization_percent"`
+	EstimatedLoad  float64  `json:"estimated_load_percent"`
 }
 
 type modbusEventItem struct {
@@ -419,20 +439,40 @@ func (a *App) getModbusDiagnostics(ctx context.Context) ([]ModbusRTUDiagnostics,
 	}
 	out := make([]ModbusRTUDiagnostics, 0, len(telemetry.Slaves))
 	for _, dev := range telemetry.Slaves {
-		out = append(out, ModbusRTUDiagnostics{
-			DeviceID:          bySlave[int(dev.Addr)],
-			SlaveID:           int(dev.Addr),
-			Online:            dev.Online,
-			TotalPolls:        dev.TotalPolls,
-			TotalErrors:       dev.TotalErrors,
-			TimeoutErrors:     dev.TimeoutErrors,
-			CRCErrors:         dev.CRCErrors,
-			RetryAttempts:     dev.RetryAttempts,
-			ConsecutiveErrors: dev.ConsecutiveErrors,
-			LastSeenMS:        dev.LastSeenMS,
-		})
+		out = append(out, modbusDiagnosticsFrom(dev, bySlave[int(dev.Addr)]))
 	}
 	return out, nil
+}
+
+func modbusDiagnosticsFrom(dev SlaveTelemetry, deviceID string) ModbusRTUDiagnostics {
+	return ModbusRTUDiagnostics{
+		DeviceID:          deviceID,
+		SlaveID:           int(dev.Addr),
+		BusID:             dev.BusID,
+		Online:            dev.Online,
+		TotalPolls:        dev.TotalPolls,
+		TotalErrors:       dev.TotalErrors,
+		TimeoutErrors:     dev.TimeoutErrors,
+		CRCErrors:         dev.CRCErrors,
+		RetryAttempts:     dev.RetryAttempts,
+		WriteFailed:       dev.WriteFailed,
+		WriteDropped:      dev.WriteDropped,
+		ConsecutiveErrors: dev.ConsecutiveErrors,
+		LastException:     dev.LastException,
+		LastSeenMS:        dev.LastSeenMS,
+	}
+}
+
+// publishedFieldbusTelemetry trả telemetry kèm cờ khả dụng.
+//
+// `Published=false` nghĩa là iobus CHƯA publish lần nào; caller phải coi đó là
+// "không biết" chứ không được quy về 0 hay offline (finding F-03/F-04).
+func (a *App) publishedFieldbusTelemetry(ctx context.Context) (FieldbusTelemetry, bool) {
+	telemetry := a.readFieldbusTelemetry(ctx)
+	if telemetry == nil || !telemetry.Published {
+		return FieldbusTelemetry{}, false
+	}
+	return *telemetry, true
 }
 
 func (a *App) handleGetModbusOverview(w http.ResponseWriter, r *http.Request) {
@@ -441,41 +481,43 @@ func (a *App) handleGetModbusOverview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	diag, _ := a.getModbusDiagnostics(r.Context())
-
-	diagMap := make(map[string]*ModbusRTUDiagnostics)
-	for i := range diag {
-		diagMap[diag[i].DeviceID] = &diag[i]
-	}
-
-	online := 0
-	offline := 0
-	fault := 0
-
-	for _, d := range cfg.Devices {
-		if !d.Enabled {
-			continue
-		}
-		if dDiag, found := diagMap[d.DeviceID]; found {
-			if dDiag.Online {
-				online++
-			} else if dDiag.ConsecutiveErrors > 0 {
-				offline++
-			} else {
-				fault++
-			}
-		} else {
-			offline++
-		}
+	telemetry, available := a.publishedFieldbusTelemetry(r.Context())
+	bySlave := map[int]SlaveTelemetry{}
+	for _, item := range telemetry.Slaves {
+		bySlave[int(item.Addr)] = item
 	}
 
 	res := modbusOverview{
-		TotalDevices: len(cfg.Devices),
-		Online:       online,
-		Offline:      offline,
-		FaultConfig:  fault,
-		Revision:     int(cfg.Revision),
-		Checksum:     cfg.Checksum,
+		TotalDevices:       len(cfg.Devices),
+		Revision:           int(cfg.Revision),
+		Checksum:           cfg.Checksum,
+		TelemetryAvailable: available,
+	}
+	for _, device := range cfg.Devices {
+		if !device.Enabled {
+			continue
+		}
+		metric, seen := bySlave[device.SlaveID]
+		switch {
+		case !available || !seen:
+			// Chưa có telemetry ⇒ "đang khởi tạo", KHÔNG phải offline. Gọi một
+			// thiết bị là offline khi chưa từng hỏi nó là bịa trạng thái.
+			res.Initializing++
+		case metric.Online:
+			res.Online++
+		case metric.TotalPolls == 0:
+			res.Initializing++
+		default:
+			res.Offline++
+		}
+	}
+	// Lỗi cấu hình đếm từ validator, không suy từ telemetry.
+	for _, verr := range a.validateModbusCandidate(cfg) {
+		if verr.Reason == webModbus.CodePortNotAvailable ||
+			verr.Reason == webModbus.CodeBusOverloaded ||
+			verr.Reason == webModbus.CodeAddressOverlap {
+			res.FaultConfig++
+		}
 	}
 	writeJSON(w, http.StatusOK, res)
 }
@@ -486,107 +528,155 @@ func (a *App) handleGetModbusBuses(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	diag, _ := a.getModbusDiagnostics(r.Context())
+	buses, _ := webModbus.MigrateBuses(cfg)
+	telemetry, available := a.publishedFieldbusTelemetry(r.Context())
 
-	bus1Devices := 0
-	bus1Online := 0
-	bus1Timeout := 0
-	bus1CRC := 0
-
-	bus2Devices := 0
-	bus2Online := 0
-	bus2Timeout := 0
-	bus2CRC := 0
-
-	diagMap := make(map[string]*ModbusRTUDiagnostics)
-	for i := range diag {
-		diagMap[diag[i].DeviceID] = &diag[i]
+	measuredByID := map[int]BusTelemetry{}
+	for _, bus := range telemetry.Buses {
+		measuredByID[int(bus.ID)] = bus
+	}
+	slaveByAddr := map[int]SlaveTelemetry{}
+	for _, item := range telemetry.Slaves {
+		slaveByAddr[int(item.Addr)] = item
+	}
+	manifest, _ := webModbus.LoadCapabilityManifest(a.cfg.PortCapabilityPath)
+	aliasByPort := map[string]string{}
+	for _, port := range manifest.Ports {
+		aliasByPort[port.Port] = port.Alias
+	}
+	loadByBus := map[string]float64{}
+	for _, load := range webModbus.EstimateBusLoad(cfg, a.modbusValidateOptions()) {
+		loadByBus[load.BusID] = load.EstimatedPct
 	}
 
-	for _, d := range cfg.Devices {
-		port := d.RS485Port
-		dDiag := diagMap[d.DeviceID]
-		isOnline := dDiag != nil && dDiag.Online
-
-		if port == "/dev/rs485-2" || port == "/dev/ttyS1" {
-			bus2Devices++
-			if isOnline {
-				bus2Online++
+	out := make([]modbusBusInfo, 0, len(buses))
+	for _, bus := range buses {
+		info := modbusBusInfo{
+			BusID: bus.BusID, DisplayName: bus.DisplayName, Port: bus.Port,
+			PortAlias: aliasByPort[bus.Port], Baud: bus.Baud, Parity: bus.Parity,
+			DataBits: bus.DataBits, StopBits: bus.StopBit,
+			OpenState:     "UNKNOWN",
+			EstimatedLoad: loadByBus[bus.BusID],
+		}
+		for _, device := range cfg.Devices {
+			if modbusDeviceBus(device) != bus.BusID || !device.Enabled {
+				continue
 			}
-			if dDiag != nil {
-				bus2Timeout += int(dDiag.TimeoutErrors)
-				bus2CRC += int(dDiag.CRCErrors)
-			}
-		} else {
-			bus1Devices++
-			if isOnline {
-				bus1Online++
-			}
-			if dDiag != nil {
-				bus1Timeout += int(dDiag.TimeoutErrors)
-				bus1CRC += int(dDiag.CRCErrors)
+			info.TotalDevices++
+			if metric, seen := slaveByAddr[device.SlaveID]; seen && metric.Online {
+				info.OnlineDevices++
 			}
 		}
+		if measured, seen := measuredByID[bus.NumericID()]; seen && available {
+			info.OpenState = measured.State
+			p50 := int(measured.LatencyP50US / 1000)
+			p95 := int(measured.LatencyP95US / 1000)
+			info.PollLatencyP50 = &p50
+			info.PollLatencyP95 = &p95
+			util := float64(measured.UtilizationPctX100) / 100.0
+			info.Utilization = &util
+			info.TimeoutErrors = measured.TotalErrors
+			info.CrcErrors = 0
+			info.PortReopens = measured.PortReopens
+		}
+		// Lỗi timeout/CRC gộp theo slave để khớp bảng chẩn đoán.
+		for _, device := range cfg.Devices {
+			if modbusDeviceBus(device) != bus.BusID {
+				continue
+			}
+			if metric, seen := slaveByAddr[device.SlaveID]; seen {
+				info.TimeoutErrors += metric.TimeoutErrors
+				info.CrcErrors += metric.CRCErrors
+			}
+		}
+		out = append(out, info)
 	}
-
-	buses := []modbusBusInfo{
-		{
-			BusID:          "RS485-1",
-			DisplayName:    "RS485-1 (Main Port)",
-			Port:           "/dev/rs485-1",
-			PortAlias:      "ttyS5",
-			OpenState:      "OPEN",
-			Baud:           19200,
-			Parity:         "N",
-			DataBits:       8,
-			StopBits:       1,
-			TotalDevices:   bus1Devices,
-			OnlineDevices:  bus1Online,
-			PollLatencyP50: 24,
-			PollLatencyP95: 61,
-			TimeoutErrors:  bus1Timeout,
-			CrcErrors:      bus1CRC,
-			Utilization:    28,
-		},
-		{
-			BusID:          "RS485-2",
-			DisplayName:    "RS485-2 (Expansion Port)",
-			Port:           "/dev/rs485-2",
-			PortAlias:      "ttyS1",
-			OpenState:      "OPEN",
-			Baud:           19200,
-			Parity:         "N",
-			DataBits:       8,
-			StopBits:       1,
-			TotalDevices:   bus2Devices,
-			OnlineDevices:  bus2Online,
-			PollLatencyP50: 18,
-			PollLatencyP95: 45,
-			TimeoutErrors:  bus2Timeout,
-			CrcErrors:      bus2CRC,
-			Utilization:    12,
-		},
-	}
-
-	writeJSON(w, http.StatusOK, buses)
+	writeJSON(w, http.StatusOK, out)
 }
 
-func (a *App) handleGetModbusEvents(w http.ResponseWriter, _ *http.Request) {
-	events := []modbusEventItem{
-		{
-			Timestamp: "10:41:02",
-			BusID:     "RS485-1",
-			DeviceID:  "MTR-01",
-			Message:   "OFFLINE -> ONLINE",
-			Level:     "info",
-		},
-		{
-			Timestamp: "10:38:55",
-			BusID:     "RS485-2",
-			DeviceID:  "VFD-01",
-			Message:   "TIMEOUT (3 liên tiếp)",
-			Level:     "warning",
-		},
+// handleGetModbusEvents trả các CHUYỂN TRẠNG THÁI đã quan sát được.
+//
+// Không còn danh sách viết cứng: mỗi mục ở đây tương ứng một lần BE đọc
+// telemetry và thấy trạng thái liên lạc của một thiết bị đổi. Chưa quan sát
+// được lần đổi nào ⇒ danh sách RỖNG, và FE hiện "chưa có sự kiện".
+func (a *App) handleGetModbusEvents(w http.ResponseWriter, r *http.Request) {
+	a.recordModbusEvents(r.Context())
+	writeJSON(w, http.StatusOK, a.modbusEvents.snapshot())
+}
+
+// modbusEventLog là vòng đệm sự kiện quan sát được.
+type modbusEventLog struct {
+	mu     sync.Mutex
+	items  []modbusEventItem
+	states map[string]string
+}
+
+const modbusEventCapacity = 50
+
+func (l *modbusEventLog) observe(deviceID, busID, state string, at time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.states == nil {
+		l.states = map[string]string{}
 	}
-	writeJSON(w, http.StatusOK, events)
+	previous, seen := l.states[deviceID]
+	l.states[deviceID] = state
+	if !seen || previous == state {
+		return
+	}
+	level := "info"
+	if state != "ONLINE" {
+		level = "warning"
+	}
+	l.items = append(l.items, modbusEventItem{
+		Timestamp: at.UTC().Format(time.RFC3339),
+		BusID:     busID,
+		DeviceID:  deviceID,
+		Message:   previous + " -> " + state,
+		Level:     level,
+	})
+	if len(l.items) > modbusEventCapacity {
+		l.items = l.items[len(l.items)-modbusEventCapacity:]
+	}
+}
+
+func (l *modbusEventLog) snapshot() []modbusEventItem {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]modbusEventItem, 0, len(l.items))
+	for i := len(l.items) - 1; i >= 0; i-- {
+		out = append(out, l.items[i])
+	}
+	return out
+}
+
+func (a *App) recordModbusEvents(ctx context.Context) {
+	telemetry, available := a.publishedFieldbusTelemetry(ctx)
+	if !available {
+		return
+	}
+	cfg, err := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+	if err != nil {
+		return
+	}
+	byAddr := map[int]SlaveTelemetry{}
+	for _, item := range telemetry.Slaves {
+		byAddr[int(item.Addr)] = item
+	}
+	now := time.Now()
+	for _, device := range cfg.Devices {
+		metric, seen := byAddr[device.SlaveID]
+		state := "INITIALIZING"
+		switch {
+		case !seen:
+			state = "INITIALIZING"
+		case metric.Online:
+			state = "ONLINE"
+		case metric.TotalPolls == 0:
+			state = "INITIALIZING"
+		default:
+			state = "OFFLINE"
+		}
+		a.modbusEvents.observe(device.DeviceID, modbusDeviceBus(device), state, now)
+	}
 }

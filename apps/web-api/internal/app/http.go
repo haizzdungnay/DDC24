@@ -158,6 +158,23 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("GET /api/v1/modbus/buses", RoleViewer, a.handleGetModbusBuses),
 		webRouter.Protected("GET /api/v1/modbus/events", RoleViewer, a.handleGetModbusEvents),
 		webRouter.Protected("POST /api/v1/modbus/write-test", RoleAdmin, a.handleModbusWriteTest),
+		// MBR-B210 — nhóm endpoint contract v2.
+		// Đọc ở `viewer` (PR-MBRTU-001: người giám sát phải xem được), mutation
+		// ở `admin` (Đ-04). Export là ĐỌC nên cũng ở viewer: nó chỉ trả đúng dữ
+		// liệu mà GET /modbus/points đã lộ (OD-MBRTU-017).
+		webRouter.Protected("GET /api/v1/modbus/config/state", RoleViewer, a.handleModbusConfigState),
+		webRouter.Protected("GET /api/v1/modbus/config/candidate", RoleViewer, a.handleGetModbusCandidate),
+		webRouter.Protected("PUT /api/v1/modbus/config/candidate", RoleAdmin, a.handlePutModbusCandidate),
+		webRouter.Protected("DELETE /api/v1/modbus/config/candidate", RoleAdmin, a.handleDeleteModbusCandidate),
+		webRouter.Protected("GET /api/v1/modbus/config/diff", RoleViewer, a.handleModbusConfigDiff),
+		webRouter.Protected("POST /api/v1/modbus/config/apply", RoleAdmin, a.handleApplyModbusConfig),
+		webRouter.Protected("GET /api/v1/modbus/mapping", RoleViewer, a.handleModbusMapping),
+		webRouter.Protected("GET /api/v1/modbus/ports", RoleViewer, a.handleModbusPorts),
+		webRouter.Protected("GET /api/v1/modbus/export", RoleViewer, a.handleModbusExport),
+		webRouter.Protected("POST /api/v1/modbus/import", RoleAdmin, a.handleModbusImport),
+		webRouter.Protected("PUT /api/v1/modbus/devices/{id}/enabled", RoleAdmin, a.handleModbusDeviceEnabled),
+		webRouter.Protected("POST /api/v1/modbus/devices/{id}/test-connection", RoleOperator, a.handleModbusTestConnection),
+		webRouter.Protected("POST /api/v1/modbus/read-test", RoleOperator, a.handleModbusReadTest),
 		webRouter.Public("GET /api/v1/ws/monitor", a.requireWSAuth(a.handleMonitorWS)),
 		webRouter.Protected("GET /api/v1/alarms", RoleViewer, a.handleAlarms),
 		webRouter.Protected("GET /api/v1/alarm-history", RoleViewer, a.handleAlarmHistory),

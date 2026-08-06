@@ -15,15 +15,63 @@ func TestDecodePointsPublishesModbusIdentityAndQuality(t *testing.T) {
 	binary.LittleEndian.PutUint32(data[0:4], kxShmMagic)
 	binary.LittleEndian.PutUint16(data[offExtCount:offExtCount+2], 1)
 	copy(data[offExt:offExt+24], []byte("MB-AHU-SAT"))
-	binary.LittleEndian.PutUint32(data[offExt+offExtValue:offExt+offExtValue+4], math.Float32bits(21.5))
-	data[offExt+offExtQuality] = 1
+	binary.LittleEndian.PutUint64(data[offExt+offExtValue:offExt+offExtValue+8], math.Float64bits(21.5))
+	data[offExt+offExtQuality] = 1 // STALE
+	data[offExt+offExtQualityReason] = 5
 	data[offExt+offExtOnline] = 1
 	data[offExt+offExtWritable] = 1
+	data[offExt+offExtBusID] = 2
+	data[offExt+offExtSlave] = 7
+	binary.LittleEndian.PutUint64(data[offExt+offExtSampleUTCMS:offExt+offExtSampleUTCMS+8], 1700000000000)
 
 	points := decodePoints(data, nil)
 	got := points[len(points)-1]
-	if got.ID != "MB-AHU-SAT" || got.Kind != "modbus_rtu" || got.Quality != "STALE" || !got.Writable || got.Value != float32(21.5) {
+	if got.ID != "MB-AHU-SAT" || got.Kind != "modbus_rtu" || got.Quality != "STALE" || !got.Writable {
 		t.Fatalf("Modbus Point = %+v", got)
+	}
+	if got.Value != float64(21.5) {
+		t.Fatalf("value phải là float64 sau contract v2: %+v", got.Value)
+	}
+	// MBR-B103: reason/bus/slave đến TỪ producer; FE không phải suy diễn nữa.
+	if got.QualityReason != "TIMEOUT" || got.BusID != 2 || got.SlaveAddr != 7 {
+		t.Fatalf("thiếu trường chẩn đoán từ producer: %+v", got)
+	}
+	// Mốc hiển thị phải là thời điểm SAMPLE, không phải "lúc web đọc SHM".
+	if got.UpdatedAt != "2023-11-14T22:13:20Z" {
+		t.Fatalf("updatedAt phải lấy từ sample_utc_ms: %q", got.UpdatedAt)
+	}
+}
+
+// MBR-B001: giá trị nguyên vượt 2^24 phải giữ nguyên. Với ABI float32 cũ,
+// 4294967295 (uint32 max của công-tơ kWh) bị làm tròn thành 4294967296.
+func TestDecodePointsKeepsIntegerPrecisionAboveFloatMantissa(t *testing.T) {
+	data := make([]byte, kxPlcShmMinLen)
+	binary.LittleEndian.PutUint32(data[0:4], kxShmMagic)
+	binary.LittleEndian.PutUint16(data[offExtCount:offExtCount+2], 1)
+	copy(data[offExt:offExt+24], []byte("MB-KWH"))
+	binary.LittleEndian.PutUint64(data[offExt+offExtValue:offExt+offExtValue+8], math.Float64bits(4294967295))
+	data[offExt+offExtOnline] = 1
+
+	got := decodePoints(data, nil)
+	last := got[len(got)-1]
+	if last.Value != float64(4294967295) {
+		t.Fatalf("mất chính xác số nguyên lớn: %v", last.Value)
+	}
+}
+
+// Quality lạ (producer mới hơn consumer) phải thành UNKNOWN, không được đoán
+// về GOOD — đoán ở đây là bịa trạng thái thiết bị hiện trường.
+func TestDecodePointsReportsUnknownForUnrecognisedQuality(t *testing.T) {
+	data := make([]byte, kxPlcShmMinLen)
+	binary.LittleEndian.PutUint32(data[0:4], kxShmMagic)
+	binary.LittleEndian.PutUint16(data[offExtCount:offExtCount+2], 1)
+	copy(data[offExt:offExt+24], []byte("MB-FUTURE"))
+	data[offExt+offExtQuality] = 99
+
+	got := decodePoints(data, nil)
+	last := got[len(got)-1]
+	if last.Quality != "UNKNOWN" {
+		t.Fatalf("quality lạ phải là UNKNOWN, nhận %q", last.Quality)
 	}
 }
 

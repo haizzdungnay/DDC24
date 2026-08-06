@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAuth, roleAtLeast } from '../auth'
 import { ConfigStateBanner } from './components/ConfigStateBanner'
+import { ModbusConfigProvider } from './useModbusConfig'
 import { READ_ONLY_HINT } from './shared'
 
 const OVERVIEW_PATH = '/eng/modbus-rtu'
@@ -9,6 +10,7 @@ const tabs = [
   { label: 'Tổng quan', path: OVERVIEW_PATH },
   { label: 'Thiết bị', path: '/eng/modbus-rtu/devices' },
   { label: 'Points', path: '/eng/modbus-rtu/points' },
+  { label: 'Mapping', path: '/eng/modbus-rtu/mapping' },
   { label: 'Diagnostics', path: '/eng/modbus-rtu/diagnostics' }
 ]
 
@@ -34,6 +36,10 @@ export function ModbusRtuLayout() {
   const currentPath = location.pathname.replace(/\/$/, '') || location.pathname
 
   return (
+    /* MBR-B302: provider bọc CẢ banner lẫn các page con, nên "bản nháp đang
+     * soạn" là một trạng thái duy nhất cho toàn feature. Nếu mỗi page tự giữ
+     * bản nháp riêng, chuyển tab sẽ mất thay đổi chưa lưu mà không báo gì. */
+    <ModbusConfigProvider>
     <div className="space-y-5">
       <header className="space-y-3">
         <div>
@@ -85,5 +91,6 @@ export function ModbusRtuLayout() {
         <Outlet />
       </div>
     </div>
+    </ModbusConfigProvider>
   )
 }

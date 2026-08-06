@@ -62,4 +62,40 @@ describe('DiagnosticsPage', () => {
     expect(alert).toHaveTextContent('502 Bad Gateway')
     expect(screen.queryByText('Chưa có telemetry Modbus RTU từ iobus.')).not.toBeInTheDocument()
   })
+
+  /* TF-MBRTU-07 (MBR-B309): bảng chẩn đoán phải chở ĐỦ trường của contract v2.
+   * `write_dropped` là con số quan trọng nhất với người vận hành — nó nghĩa là
+   * "lệnh của tôi đã KHÔNG tới thiết bị" — và bản trước không có cột nào cho nó. */
+  it('hiện counter ghi và mã exception của contract v2', async () => {
+    api.getModbusDiagnostics.mockResolvedValue([
+      {
+        device_id: 'ahu-1', slave_id: 7, bus_id: 2, online: true,
+        total_polls: 100, total_errors: 3, timeout_errors: 2, crc_errors: 1,
+        retry_attempts: 5, write_failed: 4, write_dropped: 1, last_exception: 2,
+        consecutive_errors: 0, last_seen_ms: 999
+      }
+    ])
+    render(<DiagnosticsPage />)
+
+    expect(await screen.findByTestId('write-failed-7')).toHaveTextContent('4')
+    expect(screen.getByTestId('write-dropped-7')).toHaveTextContent('1')
+    expect(screen.getByTestId('exception-7')).toHaveTextContent('0x02')
+    // bus_id phải hiện được: với hai dây, "slave 7" một mình là không đủ định danh.
+    expect(screen.getByText('2 / 7')).toBeInTheDocument()
+  })
+
+  /* Trường vắng là CHƯA BIẾT, không phải 0. iobus bản cũ không gửi các counter
+   * này; hiện 0 sẽ khiến người vận hành kết luận "không có lệnh ghi nào hỏng". */
+  it('hiện "—" cho counter mà telemetry chưa cung cấp', async () => {
+    api.getModbusDiagnostics.mockResolvedValue([
+      {
+        device_id: 'ahu-1', slave_id: 7, online: true, total_polls: 10, total_errors: 0,
+        timeout_errors: 0, crc_errors: 0, retry_attempts: 0, consecutive_errors: 0, last_seen_ms: 1
+      }
+    ])
+    render(<DiagnosticsPage />)
+    expect(await screen.findByTestId('write-failed-7')).toHaveTextContent('—')
+    expect(screen.getByTestId('write-dropped-7')).toHaveTextContent('—')
+    expect(screen.getByTestId('exception-7')).toHaveTextContent('—')
+  })
 })

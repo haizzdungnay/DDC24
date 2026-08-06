@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth, roleAtLeast } from '../../auth'
 import { apiClient } from '../../../shared/api/client'
-import type { ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../../shared/types'
+import type { ModbusProbeResult, ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../../shared/types'
 import { READ_ONLY_HINT, buttonClass, deviceLinkLabel, emptyDevice, inputClass } from '../shared'
 
 type PendingDelete = { id: string; label: string; extra?: number }
@@ -27,9 +27,35 @@ export function DevicesPage() {
   const [status, setStatus] = useState('')
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [deleting, setDeleting] = useState(false)
+  /* MBR-B307/B208: kiểm tra kết nối là lệnh CHẠM DÂY thật, không phải một phép
+   * suy diễn từ telemetry cũ. Kết quả giữ riêng từng thiết bị để kỹ thuật viên
+   * so được "vừa thử xong" với "trạng thái poll định kỳ". */
+  const [probing, setProbing] = useState<string | null>(null)
+  const [probeResults, setProbeResults] = useState<Record<string, ModbusProbeResult>>({})
+
+  async function testConnection(deviceId: string) {
+    setProbing(deviceId)
+    try {
+      const result = await apiClient.testModbusConnection(deviceId)
+      setProbeResults((current) => ({ ...current, [deviceId]: result }))
+    } catch (error) {
+      setProbeResults((current) => ({
+        ...current,
+        [deviceId]: {
+          result: 'fail',
+          reason: error instanceof Error ? error.message : 'không gọi được commissioning'
+        }
+      }))
+    } finally {
+      setProbing(null)
+    }
+  }
 
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin')
+  /* Đ-04: chạm thiết bị hiện trường là quyền Operator trở lên; đổi cấu hình vẫn
+   * là Admin. Hai quyền khác nhau vì hai hậu quả khác nhau. */
+  const canCommission = roleAtLeast(session?.role, 'operator')
   const readOnlyHint = canEdit ? undefined : READ_ONLY_HINT
 
   const queryParams = new URLSearchParams(location.search)
@@ -280,6 +306,7 @@ export function DevicesPage() {
                 <th className="py-2">Poll / Timeout / Phát lại</th>
                 <th className="py-2">Offline Params</th>
                 <th className="py-2">Liên lạc</th>
+                <th className="py-2">Thử kết nối</th>
                 <th className="py-2">Trạng thái</th>
                 <th className="py-2 text-right">Thao tác</th>
               </tr>
@@ -314,6 +341,24 @@ export function DevicesPage() {
                         />
                         {deviceLinkLabel(diag)}
                       </span>
+                    </td>
+                    <td className="py-3 text-xs">
+                      <button
+                        className={buttonClass + ' text-xs h-8 px-3'}
+                        type="button"
+                        disabled={!canCommission || probing === row.device_id}
+                        title={canCommission ? undefined : 'Cần vai trò Operator hoặc Admin để chạm thiết bị'}
+                        onClick={() => void testConnection(row.device_id)}
+                      >
+                        {probing === row.device_id ? 'Đang thử…' : 'Thử kết nối'}
+                      </button>
+                      {probeResults[row.device_id] && (
+                        <div className="mt-1 text-[11px]" data-testid={`probe-${row.device_id}`}>
+                          {probeResults[row.device_id].result === 'ok'
+                            ? `Trả lời sau ${probeResults[row.device_id].elapsed_us ?? '—'} µs`
+                            : `Không trả lời: ${probeResults[row.device_id].reason ?? '—'}`}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 text-xs">
                       {row.enabled ? (

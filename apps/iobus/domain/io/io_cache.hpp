@@ -39,6 +39,10 @@ public:
      * consumer phân biệt "iobus chưa publish lần nào" với "đã publish, 0 slave". */
     void write_fieldbus_metrics(const kx_slave_metrics_t* slaves, size_t count);
     void write_modbus_diagnostics(const kx_modbus_diag_t* diagnostics, size_t count);
+    /* MBR-B305: số liệu đo THẬT của từng bus RS-485 + danh tính counter.
+     * Không có nó, tầng API phải bịa p50/p95/utilization. */
+    void write_bus_metrics(const kx_bus_metrics_t* buses, size_t count,
+                           uint64_t producer_boot_id, uint64_t counters_since_ms);
 
     /* Publish trạng thái bind BACnet/IP THẬT (finding F-04).
      * `bound` phải là kết quả bip_init()/rebind(), không phải cờ enabled trong config. */

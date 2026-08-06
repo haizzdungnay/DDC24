@@ -39,10 +39,34 @@ export interface Point {
   safeValue?: number | boolean | string | null
 }
 
+/** MBR-B202 — một sợi dây RS-485. Tham số serial thuộc BUS, không thuộc thiết bị:
+ *  hai thiết bị trên cùng dây không thể chạy hai baud khác nhau. */
+export interface ModbusBus {
+  bus_id: string
+  display_name: string
+  port: string
+  baud: number
+  parity: 'N' | 'E' | 'O'
+  stop_bit: 1 | 2
+  data_bits: number
+  offline_probe_ms: number
+  enabled: boolean
+}
+
+/** MBR-B211 — cổng board thật sự có. FE dựng dropdown từ đây thay vì để người
+ *  dùng gõ tay một đường dẫn không tồn tại (D-14: `/dev/ttyS3`). */
+export interface ModbusPortCapability {
+  port: string
+  alias?: string
+  description?: string
+  max_baud?: number
+}
+
 export interface ModbusRTUDevice {
   device_id: string
   display_name: string
   enabled: boolean
+  bus_id?: string
   rs485_port: string
   baud: number
   parity: 'N' | 'E' | 'O'
@@ -72,18 +96,30 @@ export interface ModbusRTUPoint {
   default_value: number | boolean
   safe_value: number | boolean
   enabled: boolean
+  /** OD-MBRTU-003 — trích một bit trong register (bool trên Holding/Input). */
+  bit_index?: number | null
+  min_value?: number | null
+  max_value?: number | null
 }
+
+/** DATA_MODEL §6.2 — năm mức. `UNKNOWN` xuất hiện khi producer mới hơn
+ *  consumer; tuyệt đối không được đoán về GOOD. */
+export type ModbusQuality = 'GOOD' | 'STALE' | 'BAD' | 'OFFLINE' | 'CONFIG_ERROR' | 'UNKNOWN'
 
 export interface ModbusRTUDiagnostics {
   device_id: string
   slave_id: number
+  bus_id?: number
   online: boolean
   total_polls: number
   total_errors: number
   timeout_errors: number
   crc_errors: number
   retry_attempts: number
+  write_failed?: number
+  write_dropped?: number
   consecutive_errors: number
+  last_exception?: number
   last_seen_ms: number
 }
 
@@ -91,9 +127,13 @@ export interface ModbusOverview {
   total_devices: number
   online: number
   offline: number
+  initializing?: number
   fault_config: number
   revision: number
   checksum: string
+  /** false ⇒ iobus chưa publish lần nào; mọi con số runtime phải hiểu là
+   *  KHÔNG BIẾT, không phải 0. */
+  telemetry_available: boolean
 }
 
 export interface ModbusBusInfo {
@@ -108,11 +148,117 @@ export interface ModbusBusInfo {
   stop_bits: number
   total_devices: number
   online_devices: number
-  poll_latency_p50_ms: number
-  poll_latency_p95_ms: number
+  /** `null` = iobus chưa đo được. Hiện "—", KHÔNG hiện 0 (D-07). */
+  poll_latency_p50_ms: number | null
+  poll_latency_p95_ms: number | null
+  bus_utilization_percent: number | null
+  estimated_load_percent?: number
   timeout_errors: number
   crc_errors: number
-  bus_utilization_percent: number
+  port_reopens?: number
+}
+
+/** MBR-B302/B303 — ba nguồn state tách bạch: cấu hình đang chạy, bản nháp, và
+ *  thứ iobus THẬT SỰ đang chạy. */
+export type ModbusConfigLifecycle = 'CLEAN' | 'DIRTY' | 'APPLYING' | 'FAILED'
+
+export interface ModbusDiffEntry {
+  kind: 'bus' | 'device' | 'point'
+  action: 'added' | 'removed' | 'modified'
+  id: string
+  field?: string
+  before?: string
+  after?: string
+}
+
+export interface ModbusRunningSnapshot {
+  generation?: number
+  config_revision?: number
+  ext_count?: number
+  in_sync?: boolean
+  reachable: boolean
+}
+
+export interface ModbusConfigState {
+  state: ModbusConfigLifecycle
+  active_revision: number
+  active_checksum?: string
+  base_revision?: number
+  checksum?: string
+  updated_at?: string
+  updated_by?: string
+  last_error?: string
+  diff: ModbusDiffEntry[]
+  running_on_iobus?: ModbusRunningSnapshot
+}
+
+export interface ModbusCandidate {
+  config: {
+    buses?: ModbusBus[]
+    devices?: ModbusRTUDevice[]
+    points?: ModbusRTUPoint[]
+    revision?: number
+  }
+  base_revision: number
+  checksum?: string
+  state?: ModbusConfigLifecycle
+  updated_at?: string
+  updated_by?: string
+}
+
+export interface ModbusMappingRow {
+  point_id: string
+  tag_name: string
+  device_id: string
+  bus_id: string
+  slave_id: number
+  register_type: string
+  address: number
+  registers: number
+  data_type: string
+  read_write: string
+  enabled: boolean
+}
+
+export interface ModbusBusLoad {
+  bus_id: string
+  port: string
+  baud: number
+  device_count: number
+  point_count: number
+  estimated_percent: number
+  warn_percent: number
+  reject_percent: number
+}
+
+export interface ModbusMappingResponse {
+  rows: ModbusMappingRow[]
+  errors: ApiValidationDetail[]
+  load: ModbusBusLoad[]
+}
+
+export interface ModbusProbeResult {
+  result: 'ok' | 'fail'
+  value?: number
+  reason?: string
+  exception_code?: number
+  elapsed_us?: number
+}
+
+export interface ModbusApplyResult {
+  result: string
+  revision: number
+  checksum?: string
+  generation?: number
+  reload_mode?: 'control' | 'service_restart'
+  idempotent?: boolean
+  warnings?: string[]
+}
+
+export interface ModbusImportError {
+  line?: number
+  column?: string
+  message: string
 }
 
 export interface ModbusEventItem {

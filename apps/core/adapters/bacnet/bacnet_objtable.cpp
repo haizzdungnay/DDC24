@@ -5,6 +5,7 @@
 #include "bacnet/bacnet_objtable.hpp"
 
 #include <cerrno>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -153,24 +154,80 @@ void BacnetObjTable::publish(const PointTable& table,
 void BacnetObjTable::read_ext(int sockfd)
 {
     if (!shm_ || sockfd < 0) return;
-    kx_ext_snapshot_msg_t msg;
+    kx_ext_snapshot_v2_t msg{};
     const ssize_t n = ::recv(sockfd, &msg, sizeof(msg), MSG_DONTWAIT);
-    if (n < static_cast<ssize_t>(sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t)))
+    if (n < static_cast<ssize_t>(offsetof(kx_ext_snapshot_v2_t, samples)))
         return;
-    if (msg.magic != KX_EXT_SNAP_MAGIC) {
-        std::fprintf(stderr, "WARN  ext_snap.bad_magic got=0x%08x\n", msg.magic);
+
+    /* MBR-B005 / Đ-03: từ chối RÕ RÀNG thay vì đọc theo layout đoán được.
+     * Kịch bản thật: nâng cấp iobus nhưng core còn bản cũ (hoặc ngược lại).
+     * Nếu ở đây "cố đọc tạm", mỗi phần tử lệch 16 byte và core publish giá trị
+     * của Point khác với nhãn GOOD — sai lặng lẽ, không ai phát hiện. */
+    if (msg.magic != KX_EXT_SNAP_V2_MAGIC) {
+        if (msg.magic == KX_EXT_SNAP_MAGIC) {
+            std::fprintf(stderr,
+                         "ERROR ext_snap.version_mismatch producer=v1 consumer=v2"
+                         " — iobus và core lệch phiên bản, TỪ CHỐI snapshot."
+                         " Hai service phải deploy cùng gói (Đ-03)\n");
+        } else {
+            std::fprintf(stderr, "WARN  ext_snap.bad_magic got=0x%08x\n", msg.magic);
+        }
         return;
     }
+    if (msg.schema_version != KX_EXT_SNAP_SCHEMA_VER) {
+        std::fprintf(stderr,
+                     "ERROR ext_snap.schema_mismatch got=%u want=%u — TỪ CHỐI snapshot\n",
+                     msg.schema_version, static_cast<unsigned>(KX_EXT_SNAP_SCHEMA_VER));
+        return;
+    }
+
+    /* Phát hiện mất/đảo datagram. Không sửa được gì ở đây, nhưng im lặng thì
+     * người vận hành không bao giờ biết bus đang rớt gói. */
+    if (last_seq_ != 0 && msg.sequence != last_seq_ + 1) {
+        seq_gaps_++;
+        std::fprintf(stderr, "WARN  ext_snap.sequence_gap prev=%llu got=%llu\n",
+                     static_cast<unsigned long long>(last_seq_),
+                     static_cast<unsigned long long>(msg.sequence));
+    }
+    last_seq_      = msg.sequence;
+    last_revision_ = msg.config_revision;
+
+    /* Generation đổi ⇒ ánh xạ slot cũ VÔ HIỆU. Không được trộn nửa ảnh cũ với
+     * nửa ảnh mới: slot 5 của generation N và của generation N+1 có thể là hai
+     * Point khác nhau hoàn toàn. */
+    const bool generation_changed = (last_generation_ != 0 && msg.generation != last_generation_);
+    if (generation_changed) {
+        std::fprintf(stderr, "INFO  ext_snap.generation_swap prev=%llu got=%llu revision=%llu\n",
+                     static_cast<unsigned long long>(last_generation_),
+                     static_cast<unsigned long long>(msg.generation),
+                     static_cast<unsigned long long>(msg.config_revision));
+    }
+    last_generation_ = msg.generation;
+
     const uint16_t cnt = (msg.count < KX_N_EXT) ? msg.count : static_cast<uint16_t>(KX_N_EXT);
     KX_WRITE_BEGIN(shm_);
+    if (generation_changed) {
+        /* Slot ngoài dải mới phải trở về "chưa khởi tạo", không giữ giá trị của
+         * Point đã bị xoá khỏi cấu hình. */
+        for (uint16_t i = cnt; i < KX_N_EXT; i++) {
+            shm_->ext[i] = kx_ext_point_t{};
+            shm_->ext[i].quality        = KX_EXTQ_BAD;
+            shm_->ext[i].quality_reason = KX_EXTR_NOT_INITIALIZED;
+        }
+    }
     shm_->ext_count = cnt;
     for (uint16_t i = 0; i < cnt; i++) {
-        shm_->ext[i].value      = msg.points[i].value;
-        shm_->ext[i].quality    = msg.points[i].quality;
-        shm_->ext[i].online     = msg.points[i].online;
-        shm_->ext[i].slave_addr = msg.points[i].slave_addr;
-        shm_->ext[i].writable   = msg.points[i].writable;
-        std::memcpy(shm_->ext[i].name, msg.points[i].name, 24);
+        shm_->ext[i].value          = msg.samples[i].value;
+        shm_->ext[i].quality        = msg.samples[i].quality;
+        shm_->ext[i].quality_reason = msg.samples[i].quality_reason;
+        shm_->ext[i].exception_code = msg.samples[i].exception_code;
+        shm_->ext[i].online         = msg.samples[i].online;
+        shm_->ext[i].slave_addr     = msg.samples[i].slave_addr;
+        shm_->ext[i].bus_id         = msg.samples[i].bus_id;
+        shm_->ext[i].writable       = msg.samples[i].writable;
+        shm_->ext[i].sample_utc_ms  = msg.samples[i].sample_utc_ms;
+        shm_->ext[i].sample_mono_ns = msg.samples[i].sample_mono_ns;
+        std::memcpy(shm_->ext[i].name, msg.samples[i].point_id, 24);
         /* setpoint/dirty GIỮ NGUYÊN — core là writer duy nhất của 2 field này */
     }
     KX_WRITE_END(shm_);

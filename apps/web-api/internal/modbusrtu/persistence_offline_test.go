@@ -158,12 +158,12 @@ func TestValidateConfig_256Points(t *testing.T) {
 	errs = Validate(cfg, nil)
 	foundLimitError := false
 	for _, e := range errs {
-		if e.Path == "points" && e.Message == "vượt KX_N_EXT=256" {
+		if e.Path == "points" && e.Code == CodeCapacityExceeded {
 			foundLimitError = true
 			break
 		}
 	}
 	if !foundLimitError {
-		t.Errorf("expected error 'vượt KX_N_EXT=256' for 257 points, but got: %v", errs)
+		t.Errorf("expected CAPACITY_EXCEEDED for 257 points, but got: %v", errs)
 	}
 }

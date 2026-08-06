@@ -16,7 +16,7 @@ import {
   ProgrammingPage,
   UnavailableFeaturePage
 } from '../features/dashboard'
-import { DevicesPage, DiagnosticsPage, ModbusRtuLayout, OverviewPage, PointsPage } from '../features/modbus-rtu'
+import { DevicesPage, DiagnosticsPage, MappingPage, ModbusRtuLayout, OverviewPage, PointsPage } from '../features/modbus-rtu'
 import { DisplaySettingsPage, NetworkPage, SettingsPage, TimeSettingsPage } from '../features/network'
 import { AlarmHistoryPage, AlarmSettingsPage, AlarmsPage, SchedulerPage, TrendsPage } from '../features/operations'
 import { CommissioningPage, InputsPage, MonitorPage, OutputsPage, UserParametersPage, VirtualPointsPage } from '../features/points'
@@ -132,6 +132,7 @@ export function App() {
           <Route path="overview" element={<OverviewPage />} />
           <Route path="devices" element={<DevicesPage />} />
           <Route path="points" element={<PointsPage />} />
+          <Route path="mapping" element={<MappingPage />} />
           <Route path="diagnostics" element={<DiagnosticsPage />} />
         </Route>
         <Route path="eng/virtual-io" element={<Navigate to="/eng/virtual-points" replace />} />

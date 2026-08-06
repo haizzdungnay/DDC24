@@ -1,9 +1,15 @@
 /**
  * @file  modbus_master.hpp
- * @brief MOD-006/007: Modbus RTU master — read FC01/02/03/04, write FC05/06/15/16.
- *        Chạy priority thường (KHÔNG SCHED_FIFO — tránh chặn IOP 100Hz).
- *        rs485.device từ fieldbus.conf — KHÔNG hardcode path trong code (plan 25 §1).
- *        libmodbus API guarded by MKDDC_ENABLE_MODBUS; logic compile unconditionally.
+ * @brief MOD-006/007 + MBR-B101: điều phối các BusWorker Modbus RTU.
+ *
+ * `ModbusMaster` KHÔNG còn tự phát lệnh xuống dây. Nó chỉ:
+ *   - chia slave theo `bus_id` và cấp phát dải ext slot toàn cục,
+ *   - dựng một `BusWorker` cho mỗi bus và (tuỳ chế độ) một thread cho mỗi worker,
+ *   - dịch cờ `dirty` trong plc_shm thành `PendingWrite` gửi đúng worker,
+ *   - publish snapshot v2 ở MỘT chỗ duy nhất.
+ *
+ * Chạy priority thường (KHÔNG SCHED_FIFO — tránh chặn IOP 100 Hz).
+ * Đường dẫn cổng lấy từ fieldbus.conf — KHÔNG hardcode trong code (plan 25 §1).
  */
 #ifndef IOBUS_MODBUS_MASTER_HPP
 #define IOBUS_MODBUS_MASTER_HPP
@@ -11,9 +17,12 @@
 #include <atomic>
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
+#include "bus_worker.hpp"
 #include "device_profile.hpp"
 #include "ext_cache.hpp"
 #include "fieldbus_config.hpp"
@@ -23,106 +32,106 @@
 
 namespace iobus::fieldbus {
 
-/* Số lần phát một lệnh ghi trước khi bỏ hẳn (D-03).
- * Chọn 3: đủ để vượt qua nhiễu thoáng qua, đủ ngắn để không giữ lệnh cũ qua một
- * sự cố mất điện thiết bị. */
-constexpr uint8_t kMaxWriteAttempts = 3;
-
-/* Tuổi tối đa của một lệnh ghi chưa gửi được, tính từ lúc enqueue.
- * Chọn 30 s: dài hơn vài chu kỳ poll chậm nhất thường dùng (10 s), ngắn hơn
- * nhiều so với thời gian một thiết bị bị cắt điện rồi cấp lại. */
-constexpr uint64_t kWriteTtlMs = 30000;
-
-struct PendingWrite {
-    uint16_t ext_idx;       /* index trong ext_cache */
-    uint8_t  slave_addr;
-    uint8_t  fc;
-    uint16_t reg_addr;
-    float    value;
-    PointType type;
-    ByteOrder byte_order;
-    float    scale;
-    float    offset;
-    bool     submitted = false;
-    /* D-03: trước bản sửa 2026-08-04, write lỗi được `continue` mà không đánh
-     * submitted nên nằm lại hàng đợi VÔ THỜI HẠN và được thử lại ở mọi vòng poll.
-     * Hệ quả thực tế: setpoint đặt lúc 09:00 cho một thiết bị đang mất điện sẽ
-     * tự động được ghi lúc 14:00 khi thiết bị có điện trở lại — đúng hành vi
-     * "blind replay after reconnect" mà thiết kế cấm. */
-    uint8_t  attempts    = 0;   /* số lần đã phát xuống dây */
-    uint64_t enqueued_ms = 0;   /* monotonic ms lúc vào hàng đợi; 0 = chưa đặt */
-};
-
 class ModbusMaster {
 public:
     ~ModbusMaster();
 
     /**
-     * Init libmodbus context từ fieldbus.conf.
-     * rs485.device từ config — KHÔNG hardcode. Priority thường.
-     * Trả false nếu MKDDC_ENABLE_MODBUS=OFF hoặc open/config fail.
+     * Dựng worker từ fieldbus.conf và mở cổng của từng bus.
+     * Trả true nếu **ít nhất một** bus mở được: một bus hỏng không được kéo
+     * theo bus còn lại (FW_SOM_DESIGN §10 "cổng không tồn tại ⇒ bus PORT_ERROR
+     * + backoff; bus còn lại vẫn chạy").
      */
+    bool open(const FieldbusConfig& cfg, ExtCache& cache, FieldbusMetrics& metrics);
+    /* Overload giữ chữ ký cũ cho test dùng ExtCache/metrics nội bộ. */
     bool open(const FieldbusConfig& cfg);
     void close();
-    bool is_open() const { return ctx_ != nullptr; }
+    bool is_open() const;
 
     /**
-     * Chạy 1 iteration poll loop:
-     *  - Với mỗi slave đến hạn: read blocks → decode → ext_cache.set_point()
-     *  - Sau khi read: flush pending_writes cho slave đó
-     *  - Kiểm tra E302/E303 qua metrics
-     * Sau khi tất cả slaves: ext_cache.push_snapshot(fieldbus_sock_path).
-     * Gọi từ fieldbus thread (priority thường).
+     * Chạy 1 iteration cho MỌI worker rồi publish snapshot. Dùng ở chế độ
+     * đơn luồng (test, và fallback khi chỉ có một bus).
      */
     void poll_once(uint64_t now_ms, ExtCache& cache, FieldbusMetrics& metrics,
                    const std::string& fieldbus_sock_path);
 
-    /**
-     * Thêm write request từ core (qua plc_shm.ext[i].dirty).
-     * Sẽ được flush trong poll_once() của vòng kế.
-     */
-    void enqueue_write(const PendingWrite& w);
+    /* MBR-B101: một thread cho mỗi bus. Publisher vẫn là caller (main), nên
+     * chỉ có một nguồn phát snapshot. */
+    void start_workers(ExtCache& cache, FieldbusMetrics& metrics);
+    void stop_workers();
+    bool workers_running() const { return !threads_.empty(); }
+
+    /* Publish snapshot v2 + chốt cửa sổ latency của từng bus. */
+    void publish(ExtCache& cache, FieldbusMetrics& metrics,
+                 const std::string& fieldbus_sock_path, uint64_t window_us);
 
     /**
      * COR-011 write bridge: đọc dirty flags từ plc_shm, enqueue PendingWrite cho
-     * mỗi ext slot writable đang dirty. Gọi từ fieldbus_thread trước poll_once().
-     * Chỉ iterate RTU slaves — TCP writes xử lý riêng.
+     * mỗi ext slot writable đang dirty, gửi tới worker của đúng bus.
      * now_ms dùng làm mốc tính TTL của request (D-03).
      */
     void drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms);
 
-    /* Tính số ms nên sleep trước khi poll_once() kế.
-     * 0 = có slave đến hạn ngay. */
+    /* Đưa một lệnh ghi có danh tính request vào đúng bus (MBR-B107).
+     * Trả false nếu không tìm được slave hoặc hàng đợi đầy. */
+    bool submit_write(const PendingWrite& w);
+    void set_write_result_sink(const WriteResultSink& sink);
+
+    /* Tính số ms nên sleep trước khi poll_once() kế. 0 = có slave đến hạn ngay. */
     uint32_t sleep_ms_until_next(uint64_t now_ms) const;
 
     /* Tổng số ext slots đã cấp phát cho RTU slaves — TCP offset bắt đầu từ đây. */
-    uint16_t total_ext_count() const {
-        if (slave_ext_base_.empty()) return 0;
-        const size_t last = slave_ext_base_.size() - 1;
-        return static_cast<uint16_t>(slave_ext_base_[last] + slave_ext_count_[last]);
-    }
+    uint16_t total_ext_count() const { return ext_cursor_; }
+
+    size_t bus_count() const { return workers_.size(); }
+    const BusWorker& bus(size_t i) const { return *workers_[i]; }
+    BusWorker* bus_by_id(uint8_t id);
+
+    /* Provenance publish ra snapshot (MBR-B104). */
+    const SnapshotProvenance& provenance() const { return prov_; }
+
+    /**
+     * MBR-B106: nạp lại cấu hình tại ranh giới GIỮA hai transaction.
+     *
+     * Trình tự bắt buộc (FW_SOM_DESIGN §9): parse+validate → dừng worker ở
+     * ranh giới an toàn → dựng generation G+1 → mở lại cổng → ACK.
+     * Bất kỳ bước nào hỏng ⇒ **giữ nguyên generation cũ đang chạy** và trả
+     * false kèm lý do. iobus KHÔNG tự restart để áp cấu hình: restart làm gián
+     * đoạn cả IOP, và đó chính là D-09 mà B212 phải loại bỏ.
+     *
+     * `expected_revision` = 0 nghĩa là "lấy revision ghi trong file".
+     */
+    bool apply_config(const std::string& config_path, uint64_t expected_revision,
+                      const std::string& expected_checksum, ExtCache& cache,
+                      FieldbusMetrics& metrics, std::string* reason,
+                      uint64_t* applied_revision, uint64_t* generation);
+
+    /* Nạp danh sách slave/bus vào một FieldbusMetrics rỗng. `poll_once` gọi
+     * lại khi thấy metrics chưa khớp cấu hình: caller (và test) truyền đối
+     * tượng metrics của riêng mình, và một metrics rỗng làm `get(idx)` chạm
+     * ngoài vector. */
+    void init_metrics(FieldbusMetrics& metrics) const;
 
 private:
-    void read_slave(uint8_t slave_idx, uint64_t now_ms,
-                    ExtCache& cache, FieldbusMetrics& metrics);
-    void write_slave(uint8_t slave_idx, FieldbusMetrics& metrics);
-    void flush_pending(uint8_t slave_idx, uint64_t now_ms, FieldbusMetrics& metrics);
+    void bind_workers(const FieldbusConfig& cfg, ExtCache& cache, FieldbusMetrics& metrics);
 
-    void* ctx_ = nullptr;   /* modbus_t* — void* để compile mà không cần libmodbus header */
-
-    std::vector<SlaveState>   slave_states_;
-    std::vector<DeviceProfile> profiles_;
-    std::vector<uint16_t>     slave_ext_base_;   /* index vào ext_cache cho slave[i] */
-    std::vector<uint16_t>     slave_ext_count_;  /* số ext points thực của slave[i] */
-    /* F-16: slave[i] không dùng được do lỗi cấu hình (thiếu profile, không có
-     * điểm đọc, hoặc hết ext slot). read_slave() đi đường lỗi cho nó thay vì
-     * chạy qua vòng points rỗng rồi báo ONLINE. uint8_t thay vì bool để tránh
-     * std::vector<bool> proxy-reference. */
-    std::vector<uint8_t>      slave_config_error_;
-    std::vector<PendingWrite> pending_writes_;
+    /* unique_ptr vì BusWorker giữ fd và chạy trong thread — địa chỉ phải ổn định
+     * khi vector realloc. */
+    std::vector<std::unique_ptr<BusWorker>> workers_;
+    std::vector<std::thread> threads_;
+    std::atomic<bool>        stop_flag_{false};
+    uint16_t                 ext_cursor_ = 0;
+    FieldbusConfig           cfg_;
+    SnapshotProvenance       prov_{};
+    WriteResultSink          result_sink_;
+    /* Dedup setpoint: chỉ ghi khi giá trị THẬT SỰ đổi so với lần ghi trước.
+     * Không có bước này, một node logic giữ nguyên setpoint sẽ phát lệnh ghi ở
+     * mọi vòng poll và chiếm trọn băng thông dây. */
     std::array<float, KX_N_EXT> last_written_{};
     std::array<bool, KX_N_EXT>  has_last_written_{};
-    FieldbusConfig            cfg_;
+    /* ExtCache/metrics nội bộ cho overload open(cfg) một tham số (test cũ). */
+    std::unique_ptr<ExtCache>       owned_cache_;
+    std::unique_ptr<FieldbusMetrics> owned_metrics_;
 };
 
 } // namespace iobus::fieldbus
