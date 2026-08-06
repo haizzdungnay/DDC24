@@ -7,6 +7,21 @@
 ---
 
 ## [Unreleased]
+### Fixed — Hậu kiểm review FE bằng trình duyệt + vá spec E2E đỏ âm thầm (FE-E2E-01) (2026-08-05)
+
+- **`e2e/trends.spec.ts` — FE-E2E-01, đỏ từ `b67580c` mà không ai biết:**
+  - **Triệu chứng:** `npx playwright test` fail ở `routes every preset to cache and Custom to database for UI/AO/DO/VP`, timeout khi chờ `getByLabel('From (UTC)')`.
+  - **Nguyên nhân gốc:** `b67580c` ("bộ chọn khoảng Trends dùng đúng giờ địa phương như nhãn đã hứa") đổi nhãn `TrendsPage` sang `From (local time <TZ>)` nhưng spec không được cập nhật theo — `git log` cho thấy spec dừng ở `259d160`, trước `b67580c`. Không ai phát hiện vì **`npm test` chỉ quét `src/`, không chạy `e2e/`**, đúng cái bẫy đã ghi trong review §7.
+  - **Cách sửa:** khớp nhãn bằng regex `/^From \(local time/` thay vì hằng chuỗi — hằng `Asia/Saigon` sẽ hỏng ngay trên runner CI đặt UTC.
+- **Thay spec crawl không có khẳng định bằng spec hồi quy thật:**
+  - Xoá `e2e/__crawl.spec.ts` (kết thúc bằng `expect(true).toBe(true)` — tốn ~45 s CI mà không bao giờ fail được, cho cảm giác an toàn giả).
+  - Thêm `e2e/fe-pages-health.spec.ts`: 6 test chốt bằng trình duyệt thật những gì suite unit không thấy được — đúng 1 `<h1>` trên mỗi tab Modbus RTU, mỗi tab render nội dung riêng và tự đánh dấu đang mở, deep link `?status=OFFLINE` được trang đích nhận, 13 trang đọc dữ liệu phải báo lỗi khi authority 502, `/monitor` không được khẳng định "100% bình thường", và không route nào phát sinh `pageerror`.
+- **Tài liệu (`docs/07_records/reviews/FE_PAGES_ERROR_REVIEW_2026-08-05.md` → v1.2):** thêm §7bis hậu kiểm — bảng đối chiếu trước/sau cho nhóm A (H1 từ 2 → 1 trên 3 tab; ba tab hết trùng nội dung) và nhóm C (`/monitor` từ "100% NORMAL" → `Could not load I/O points`; 5 trang từ "No data" → `StateBlock` + Retry).
+- **Kết quả Kiểm chứng (đo trong phiên, không dẫn số cũ):**
+  - `npx tsc --noEmit` 0 lỗi; `npm run lint` 0 warning; `npx vitest --run --environment jsdom src` **346/346 PASS** (42 file); `npm run build` thành công.
+  - `npx playwright test` **27/27 PASS** (55,5 s) — trước bản sửa là 26 pass / 1 fail.
+  - Crawl lại 27 route bằng Chrome ở cả `demo` và `live` (không backend): **0 `pageerror`**.
+
 ### Fixed — Sửa 10 finding từ review FE "lỗi hết mấy cái page" (2026-08-05)
 
 - **Nhóm A — MBR-B301: Tách `ModbusRtuPage` monolith thành page riêng (FE-MB-01/02/03/04/05/06):**
