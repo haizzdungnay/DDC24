@@ -163,7 +163,12 @@ type DiffEntry struct {
 // xuống thiết bị hiện trường cần biết chính xác cái gì đổi, không phải một dấu
 // chấm than trên nút Apply.
 func Diff(active, candidate Config) []DiffEntry {
-	var out []DiffEntry
+	// Khởi tạo slice RỖNG chứ không để nil: `encoding/json` tuần tự hoá nil
+	// slice thành `null`, và `null` buộc mọi consumer phải xử lý HAI hình dạng
+	// cho cùng một sự thật "không có thay đổi nào". Một client quên nhánh null
+	// sẽ nổ ngay ở `.length` — đúng lỗi làm trắng toàn bộ trang Modbus RTU
+	// trên board ngày 2026-08-06.
+	out := []DiffEntry{}
 
 	activeBuses := indexBuses(active.Buses)
 	candBuses := indexBuses(candidate.Buses)
