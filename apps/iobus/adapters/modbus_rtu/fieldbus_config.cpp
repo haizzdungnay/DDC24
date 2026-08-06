@@ -48,6 +48,35 @@ static bool jget_int(const std::string& s, const char* key, long* out)
     return true;
 }
 
+/* Đọc một trường boolean.
+ *
+ * Bản trước dùng `jget_int` cho `enabled`, và `strtol("true")` không ăn chữ nên
+ * hàm trả về false — tức là GIÁ TRỊ TRONG FILE BỊ BỎ QUA và trường giữ nguyên
+ * mặc định. Vì mặc định của `enabled` là `true`, `"enabled": true` chạy đúng
+ * một cách tình cờ, còn `"enabled": false` thì **bị nuốt lặng lẽ**: giao diện
+ * báo bus đã tắt trong khi iobus vẫn tiếp tục phát lên dây. Đó là kiểu hỏng tệ
+ * nhất — không có triệu chứng nào cho tới khi ai đó cầm đồng hồ đo.
+ *
+ * Nhận cả `true`/`false` (dạng chuẩn, do BE Go ghi ra) lẫn `1`/`0` (dạng người
+ * ta hay gõ tay khi sửa file trên bo). */
+static bool jget_bool(const std::string& s, const char* key, bool* out)
+{
+    const std::string pat = std::string("\"") + key + "\"";
+    size_t p = s.find(pat);
+    if (p == std::string::npos) return false;
+    p = s.find(':', p + pat.size());
+    if (p == std::string::npos) return false;
+    ++p;
+    while (p < s.size() && (s[p] == ' ' || s[p] == '\t' || s[p] == '\n' || s[p] == '\r')) ++p;
+    if (s.compare(p, 4, "true") == 0)  { *out = true;  return true; }
+    if (s.compare(p, 5, "false") == 0) { *out = false; return true; }
+    char* ep = nullptr;
+    const long v = std::strtol(s.c_str() + p, &ep, 10);
+    if (ep == s.c_str() + p) return false;
+    *out = (v != 0);
+    return true;
+}
+
 /* Trích nội dung object/array theo key bằng cách đếm braces */
 static bool jget_obj(const std::string& s, const char* key, std::string* out)
 {
@@ -135,32 +164,69 @@ static bool parse_slave(const std::string& obj, uint32_t default_poll_ms, SlaveC
     return true;
 }
 
-/* Parse một phần tử của buses[] (MBR-B101). */
+/* Suy số hiệu bus từ chuỗi định danh kiểu "rs485-1" ⇒ 1.
+ *
+ * BE dùng chuỗi làm khoá vì nó là VAI TRÒ trong sản phẩm, còn `slaves[].bus_id`
+ * trong file lại là số. Quy ước lấy cụm chữ số sau dấu `-` cuối cùng, giống
+ * hệt `Bus.NumericID()` bên Go. Không parse được ⇒ 0 và bus bị từ chối; đoán
+ * bừa số 1 sẽ dồn toàn bộ thiết bị của mọi dây lên một dây. */
+static uint8_t bus_id_from_name(const std::string& name)
+{
+    const size_t dash = name.find_last_of('-');
+    const size_t start = (dash == std::string::npos) ? 0 : dash + 1;
+    if (start >= name.size()) return 0;
+    long n = 0;
+    for (size_t i = start; i < name.size(); ++i) {
+        if (name[i] < '0' || name[i] > '9') return 0;
+        n = n * 10 + (name[i] - '0');
+        if (n > 255) return 0;
+    }
+    return (n >= 1 && n <= 255) ? static_cast<uint8_t>(n) : 0;
+}
+
+/* Parse một phần tử của buses[] (MBR-B101).
+ *
+ * NHẬN HAI BỘ TÊN KHOÁ. Nguồn ghi file này là BE Go, và BE đặt tên trường theo
+ * mô hình dữ liệu của nó (`bus_id`/`port`/`display_name`/`stop_bit`) chứ không
+ * theo tên rút gọn mà iobus dùng nội bộ (`id`/`device`/`name`/`stop`). Bản
+ * trước chỉ đọc bộ tên rút gọn, nên MỌI bus do giao diện web tạo ra đều bị
+ * `parse_bus` trả về false và bị loại — `buses[]` rỗng, iobus rơi về khối
+ * `rs485{}` cũ và chỉ chạy được đúng một dây. Bus 2 không bao giờ lên, mà cũng
+ * không có thông báo nào nói vì sao.
+ *
+ * Test C++ không bắt được vì chúng tự viết file bằng đúng bộ tên rút gọn của
+ * iobus; không có test nào chạy trên file DO BE SINH RA. Nay đã có (Go:
+ * `TestBuildFieldbusBlocksGiuVungTuVungIobusDoc`). */
 static bool parse_bus(const std::string& obj, BusConfig* bus)
 {
     long v = 0;
-    if (jget_int(obj, "id", &v) && v >= 1 && v <= 255)
+    std::string bus_id_str;
+    if (jget_int(obj, "id", &v) && v >= 1 && v <= 255) {
         bus->id = static_cast<uint8_t>(v);
-    else
+    } else if (jget_str(obj, "bus_id", &bus_id_str) && bus_id_from_name(bus_id_str) != 0) {
+        bus->id = bus_id_from_name(bus_id_str);
+    } else {
         return false;   /* id bắt buộc — slave tham chiếu theo id */
-    if (!jget_str(obj, "device", &bus->device) || bus->device.empty())
+    }
+    if ((!jget_str(obj, "device", &bus->device) || bus->device.empty()) &&
+        (!jget_str(obj, "port", &bus->device) || bus->device.empty()))
         return false;   /* device bắt buộc */
-    jget_str(obj, "name", &bus->name);
+    if (!jget_str(obj, "name", &bus->name) || bus->name.empty())
+        jget_str(obj, "display_name", &bus->name);
     if (bus->name.empty()) bus->name = "RS485-" + std::to_string(bus->id);
     if (jget_int(obj, "baud", &v) && v > 0)
         bus->baud = static_cast<uint32_t>(v);
     std::string parity;
     if (jget_str(obj, "parity", &parity) && !parity.empty())
         bus->parity = static_cast<char>(parity[0]);
-    if (jget_int(obj, "stop", &v) && (v == 1 || v == 2))
+    if ((jget_int(obj, "stop", &v) || jget_int(obj, "stop_bit", &v)) && (v == 1 || v == 2))
         bus->stop = static_cast<uint8_t>(v);
     if (jget_int(obj, "offline_probe_ms", &v)) {
         if (v < 1000)       v = 1000;
         else if (v > 60000) v = 60000;
         bus->offline_probe_ms = static_cast<uint32_t>(v);
     }
-    if (jget_int(obj, "enabled", &v))
-        bus->enabled = (v != 0);
+    jget_bool(obj, "enabled", &bus->enabled);
     /* G-D: cơ chế điều hướng. Vắng ⇒ Auto (phần cứng đã xác nhận không có DE/RE). */
     std::string direction;
     if (jget_str(obj, "direction", &direction)) {
