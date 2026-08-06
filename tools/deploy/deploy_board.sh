@@ -52,6 +52,23 @@ sudo -n install -m 0755 "$BUILD/hmi/mkddc-hmi"              "$TMP/mkddc-hmi"
 sudo -n install -m 0755 "$STAGE/mkddc-web"                  "$TMP/mkddc-web"
 [ -d "$STAGE/dist" ] || die "thiếu $STAGE/dist"
 
+# --- 2b. Quy tắc udev cho cổng RS-485 ---
+#
+# `/dev` là devtmpfs, dựng lại ở MỖI lần khởi động, nên symlink tạo bằng tay
+# biến mất sau reboot. Hậu quả quan sát được trên Foxlinx 2026-08-06: iobus lặp
+# `bus_worker.connect_fail ... No such file or directory` vô hạn trong khi service
+# vẫn `active` và `NRestarts=0` — tức KHÔNG có tín hiệu nào ở tầng systemd cho
+# thấy Modbus đã chết. Cài quy tắc udev là cách duy nhất để tên cổng bền qua boot.
+RS485_RULES="$SRC/platform/udev/99-mkddc-rs485.rules"
+if [ -f "$RS485_RULES" ]; then
+  log "Cài quy tắc udev RS-485"
+  sudo -n install -m 0644 "$RS485_RULES" /etc/udev/rules.d/99-mkddc-rs485.rules
+  sudo -n udevadm control --reload-rules || true
+  sudo -n udevadm trigger --subsystem-match=tty || true
+else
+  log "CẢNH BÁO: thiếu $RS485_RULES — cổng RS-485 sẽ KHÔNG có tên ổn định sau reboot"
+fi
+
 # --- 3. Dừng service theo thứ tự an toàn ---
 log "Dừng service: ${UNITS_STOP[*]}"
 for u in "${UNITS_STOP[@]}"; do sudo -n systemctl stop "$u" || true; done

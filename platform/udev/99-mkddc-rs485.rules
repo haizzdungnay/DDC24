@@ -1,0 +1,37 @@
+# MK-DDC-24 — tên ổn định cho cổng RS-485 (Modbus RTU master)
+#
+# VÌ SAO CẦN FILE NÀY
+#
+# `fieldbus.conf` trỏ vào `/dev/rs485-1` chứ không phải `/dev/ttyS5`. Đó là lựa
+# chọn có chủ đích: số hiệu `ttyS*` phụ thuộc thứ tự enable trong device tree và
+# đổi khi đổi bo, còn `rs485-1` là VAI TRÒ trong sản phẩm.
+#
+# Nhưng `/dev` là devtmpfs — nó được dựng lại từ đầu ở MỖI lần khởi động. Một
+# symlink tạo bằng tay (`ln -s`) biến mất sau reboot, và hậu quả quan sát được
+# trên board Foxlinx ngày 2026-08-06 là:
+#
+#   ERROR bus_worker.connect_fail bus=1 device=/dev/rs485-1 err=No such file or directory
+#
+# lặp lại mãi mãi. Dịch vụ vẫn `active`, IOP vẫn chạy, `NRestarts=0` — nghĩa là
+# **không có tín hiệu nào ở tầng systemd cho thấy Modbus đã chết**. Bus chỉ im
+# lặng không bao giờ lên. Đó là lý do bài kiểm reboot ×10 tồn tại, và nó đã bắt
+# được đúng lỗi này (10/10 vòng FAIL trước khi có file này).
+#
+# CÁCH ÁNH XẠ (Foxlinx SOM-DDC-24 / Forlinx OK1126B-S, RV1126B)
+#
+#   /dev/rs485-1  ->  ttyS5   serial@21150000   — cổng RS-485 chính
+#   /dev/rs485-2  ->  ttyS1   serial@21160000   — UART1 M1, Header P16 chân 26/36/23
+#
+# `ttyS2` là UART của MCU IOP — TUYỆT ĐỐI không ánh xạ sang rs485-*.
+#
+# Dòng cho `rs485-2` để sẵn nhưng sẽ không khớp cho tới khi `ttyS1` được enable
+# trong device tree. udev bỏ qua rule không khớp, nên để sẵn là an toàn và giúp
+# bus 2 tự có tên đúng ngay khi phần cứng sẵn sàng.
+#
+# Điều khiển hướng half-duplex: phần cứng chỉ có TX/RX, KHÔNG có DE/RE
+# (Hardware owner xác nhận 2026-08-06) ⇒ transceiver auto-direction. KHÔNG đặt
+# thuộc tính `rs485-*` ở đây; chế độ do `fieldbus.conf` (`buses[].direction`)
+# quyết định và iobus ghi ra log lúc mở cổng.
+
+SUBSYSTEM=="tty", KERNEL=="ttyS5", SYMLINK+="rs485-1", GROUP="dialout", MODE="0660"
+SUBSYSTEM=="tty", KERNEL=="ttyS1", SYMLINK+="rs485-2", GROUP="dialout", MODE="0660"
