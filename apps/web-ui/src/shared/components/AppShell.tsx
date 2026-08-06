@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../features/auth'
 import { apiClient } from '../api/client'
@@ -8,8 +8,10 @@ import { useRealtime } from '../realtime'
 import { useI18n } from '../i18n'
 import { NavDrawer, NavRail } from './NavRail'
 import { TopBar } from './TopBar'
+import { RouteErrorBoundary } from './RouteErrorBoundary'
 
 export function AppShell() {
+  const location = useLocation()
   const { connectionState } = useRealtime()
   const { session } = useAuth()
   const { t } = useI18n()
@@ -40,7 +42,12 @@ export function AppShell() {
             </div>
           )}
           <main className="p-5">
-            <Outlet />
+            {/* Một trang lỗi không được làm trắng cả ứng dụng. `resetKey` là
+                đường dẫn hiện tại, nên chuyển sang trang khác sẽ tự thử render
+                lại thay vì kẹt ở màn hình lỗi. */}
+            <RouteErrorBoundary resetKey={location.pathname} label={location.pathname}>
+              <Outlet />
+            </RouteErrorBoundary>
           </main>
         </div>
       </div>

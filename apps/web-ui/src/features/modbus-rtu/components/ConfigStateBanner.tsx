@@ -22,7 +22,13 @@ export function ConfigStateBanner() {
 
   const running = state?.running_on_iobus
   const dirty = lifecycle === 'DIRTY' || lifecycle === 'FAILED'
-  const changeCount = state?.diff.length ?? 0
+  /* `diff` PHẢI được chắn riêng, không dựa vào `state?.` — optional chaining
+   * chỉ chắn `state`, còn `state.diff` vẫn có thể là `null`. Backend Go tuần tự
+   * hoá nil slice thành `null`, nên `state?.diff.length` nổ TypeError ngay
+   * trong lúc render; và vì banner nằm ở layout, React unmount CẢ cây và mọi
+   * tab Modbus RTU thành trang trắng (sự cố board 2026-08-06). */
+  const diff = state?.diff ?? []
+  const changeCount = diff.length
 
   const tone =
     lifecycle === 'FAILED' ? 'border-red-500/50 bg-red-500/5'
@@ -104,7 +110,7 @@ export function ConfigStateBanner() {
             Xem {changeCount} thay đổi sẽ được phát xuống thiết bị
           </summary>
           <ul className="mt-2 space-y-1 font-mono text-[11px]">
-            {state?.diff.map((entry, index) => (
+            {diff.map((entry, index) => (
               <li key={`${entry.kind}-${entry.id}-${entry.field ?? index}`}>
                 [{entry.kind}] {entry.id}
                 {entry.action === 'modified' && entry.field

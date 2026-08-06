@@ -171,4 +171,16 @@ describe('DevicesPage', () => {
     const buttons = await screen.findAllByRole('button', { name: 'Thử kết nối' })
     expect(buttons[0]).toBeDisabled()
   })
+
+  /* D-07 (phát hiện khi soi giao diện trên board 2026-08-06): trang nuốt im
+   * lặng lỗi 503 của `/modbus/diagnostics`, nên cột "Liên lạc" hiện "—" mà
+   * không nói vì sao. Người vận hành không phân biệt được "thiết bị im" với
+   * "không đọc được authority". */
+  it('nói rõ khi không đọc được telemetry thay vì chỉ hiện dấu gạch', async () => {
+    api.getModbusDiagnostics.mockRejectedValue(new Error('iobus chưa publish telemetry Modbus RTU'))
+    renderAt()
+    const note = await screen.findByTestId('telemetry-warning')
+    expect(note).toHaveTextContent('iobus chưa publish telemetry Modbus RTU')
+    expect(note).toHaveTextContent('chưa biết')
+  })
 })

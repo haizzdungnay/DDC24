@@ -135,4 +135,32 @@ describe('ConfigStateBanner', () => {
     expect(screen.queryByTestId('apply-config')).not.toBeInTheDocument()
     expect(screen.queryByText('Lưu nháp')).not.toBeInTheDocument()
   })
+
+  /* HỒI QUY — sự cố trang trắng trên board 2026-08-06.
+   *
+   * Backend Go tuần tự hoá nil slice thành `null`, nên `/modbus/config/state`
+   * trả `"diff": null` khi chưa có thay đổi nào. Bản lỗi viết
+   * `state?.diff.length` — optional chaining chỉ chắn `state`, không chắn
+   * `diff` — nên ném TypeError ngay trong lúc render. Vì banner nằm ở layout,
+   * React unmount CẢ cây và mọi tab Modbus RTU thành trang đen hoàn toàn.
+   */
+  it('không nổ khi backend trả diff = null', async () => {
+    api.getModbusConfigState.mockResolvedValue({
+      state: 'CLEAN',
+      active_revision: 0,
+      diff: null as unknown as [],
+      running_on_iobus: { reachable: false }
+    })
+    renderBanner()
+    expect(await screen.findByTestId('config-lifecycle')).toHaveTextContent('Không có thay đổi chờ áp dụng')
+  })
+
+  it('không nổ khi backend thiếu hẳn trường diff', async () => {
+    api.getModbusConfigState.mockResolvedValue({
+      state: 'CLEAN', active_revision: 3
+    } as never)
+    renderBanner()
+    expect(await screen.findByTestId('config-lifecycle')).toBeInTheDocument()
+    expect(screen.getByTestId('active-revision')).toHaveTextContent('3')
+  })
 })

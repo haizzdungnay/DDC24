@@ -243,6 +243,17 @@ export async function requestJson<T>(path: string, init: ApiRequestInit = {}): P
 
 /** Như `requestJson` nhưng trả `Response` thô — dùng cho export CSV/JSON, nơi
  *  nội dung không phải JSON và phải giữ nguyên byte để người dùng tải về. */
+/** Chuẩn hoá danh sách trả về từ backend.
+ *
+ * Go tuần tự hoá nil slice thành `null`, nên một endpoint "không có bản ghi
+ * nào" trả `null` chứ không phải `[]`. Mọi `.map`/`.filter`/`.length` phía FE
+ * sẽ nổ TypeError, và vì React unmount cả cây khi có exception chưa bắt, hậu
+ * quả là TRANG TRẮNG chứ không phải một bảng rỗng (sự cố board 2026-08-06).
+ * Chắn ở đúng một chỗ — biên vào — thay vì rải `?? []` khắp component. */
+function asList<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : []
+}
+
 export async function requestRaw(path: string, init: ApiRequestInit = {}): Promise<Response> {
   const { suppressAuthExpired, timeoutMs, ...fetchInit } = init
   const headers = new Headers(fetchInit.headers)
@@ -1295,7 +1306,7 @@ export const apiClient = {
 
   async getModbusDevices(): Promise<ModbusRTUDevice[]> {
     if (IS_DEMO) return []
-    return requestJson<ModbusRTUDevice[]>('/modbus/devices', { cache: 'no-store' })
+    return asList(await requestJson<ModbusRTUDevice[] | null>('/modbus/devices', { cache: 'no-store' }))
   },
   async createModbusDevice(device: ModbusRTUDevice): Promise<ModbusRTUDevice> {
     if (IS_DEMO) return device
@@ -1312,7 +1323,7 @@ export const apiClient = {
   },
   async getModbusPoints(): Promise<ModbusRTUPoint[]> {
     if (IS_DEMO) return []
-    return requestJson<ModbusRTUPoint[]>('/modbus/points', { cache: 'no-store' })
+    return asList(await requestJson<ModbusRTUPoint[] | null>('/modbus/points', { cache: 'no-store' }))
   },
   async createModbusPoint(point: ModbusRTUPoint): Promise<ModbusRTUPoint> {
     if (IS_DEMO) return point
@@ -1329,7 +1340,7 @@ export const apiClient = {
   },
   async getModbusDiagnostics(): Promise<ModbusRTUDiagnostics[]> {
     if (IS_DEMO) return []
-    return requestJson<ModbusRTUDiagnostics[]>('/modbus/diagnostics', { cache: 'no-store' })
+    return asList(await requestJson<ModbusRTUDiagnostics[] | null>('/modbus/diagnostics', { cache: 'no-store' }))
   },
   async getModbusOverview(): Promise<ModbusOverview> {
     // Demo mode phải nói rõ là KHÔNG có telemetry. Trả `revision: 1` như bản cũ
@@ -1342,11 +1353,11 @@ export const apiClient = {
   },
   async getModbusBuses(): Promise<ModbusBusInfo[]> {
     if (IS_DEMO) return []
-    return requestJson<ModbusBusInfo[]>('/modbus/buses', { cache: 'no-store' })
+    return asList(await requestJson<ModbusBusInfo[] | null>('/modbus/buses', { cache: 'no-store' }))
   },
   async getModbusEvents(): Promise<ModbusEventItem[]> {
     if (IS_DEMO) return []
-    return requestJson<ModbusEventItem[]>('/modbus/events', { cache: 'no-store' })
+    return asList(await requestJson<ModbusEventItem[] | null>('/modbus/events', { cache: 'no-store' }))
   },
   async writeModbusTest(pointId: string, value: number): Promise<{ point_id: string; applied_value: number; status: string; message?: string }> {
     if (IS_DEMO) return { point_id: pointId, applied_value: value, status: 'success', message: 'Demo mode' }
@@ -1359,7 +1370,8 @@ export const apiClient = {
   // ---- Contract v2: vòng đời cấu hình + commissioning + import/export ----
   async getModbusConfigState(): Promise<ModbusConfigState> {
     if (IS_DEMO) return { state: 'CLEAN', active_revision: 0, diff: [], running_on_iobus: { reachable: false } }
-    return requestJson<ModbusConfigState>('/modbus/config/state', { cache: 'no-store' })
+    const state = await requestJson<ModbusConfigState>('/modbus/config/state', { cache: 'no-store' })
+    return { ...state, diff: asList(state.diff) }
   },
   async getModbusCandidate(): Promise<ModbusCandidate> {
     if (IS_DEMO) return { config: { buses: [], devices: [], points: [] }, base_revision: 0 }
@@ -1392,11 +1404,12 @@ export const apiClient = {
   },
   async getModbusMapping(): Promise<ModbusMappingResponse> {
     if (IS_DEMO) return { rows: [], errors: [], load: [] }
-    return requestJson<ModbusMappingResponse>('/modbus/mapping', { cache: 'no-store' })
+    const mapping = await requestJson<ModbusMappingResponse>('/modbus/mapping', { cache: 'no-store' })
+    return { rows: asList(mapping.rows), errors: asList(mapping.errors), load: asList(mapping.load) }
   },
   async getModbusPorts(): Promise<ModbusPortCapability[]> {
     if (IS_DEMO) return []
-    return requestJson<ModbusPortCapability[]>('/modbus/ports', { cache: 'no-store' })
+    return asList(await requestJson<ModbusPortCapability[] | null>('/modbus/ports', { cache: 'no-store' }))
   },
   async testModbusConnection(deviceId: string): Promise<ModbusProbeResult> {
     if (IS_DEMO) return { result: 'fail', reason: 'demo mode' }

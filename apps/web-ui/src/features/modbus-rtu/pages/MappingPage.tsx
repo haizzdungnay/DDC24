@@ -33,17 +33,22 @@ export function MappingPage() {
     void loadData()
   }, [])
 
-  const rows = useMemo(() => {
-    if (!mapping) return []
-    return busFilter ? mapping.rows.filter((row) => row.bus_id === busFilter) : mapping.rows
-  }, [busFilter, mapping])
+  /* Mọi trường danh sách đều chắn `?? []`: backend Go tuần tự hoá nil slice
+   * thành `null`, và một `.filter`/`.map` trên null làm trắng cả trang. */
+  const allRows = useMemo(() => mapping?.rows ?? [], [mapping])
+
+  const rows = useMemo(
+    () => (busFilter ? allRows.filter((row) => row.bus_id === busFilter) : allRows),
+    [allRows, busFilter]
+  )
 
   const buses = useMemo(
-    () => Array.from(new Set((mapping?.rows ?? []).map((row) => row.bus_id))).sort(),
-    [mapping]
+    () => Array.from(new Set(allRows.map((row) => row.bus_id))).sort(),
+    [allRows]
   )
 
   const blockingErrors = mapping?.errors ?? []
+  const busLoads = mapping?.load ?? []
 
   return (
     <div className="space-y-5">
@@ -100,9 +105,9 @@ export function MappingPage() {
         </section>
       )}
 
-      {mapping && mapping.load.length > 0 && (
+      {busLoads.length > 0 && (
         <section className="grid gap-3 md:grid-cols-2">
-          {mapping.load.map((load) => {
+          {busLoads.map((load) => {
             const over = load.estimated_percent > load.reject_percent
             const warn = !over && load.estimated_percent > load.warn_percent
             return (
