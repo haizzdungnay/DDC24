@@ -17,6 +17,8 @@
 
 #ifdef MKDDC_ENABLE_MODBUS
 #include <modbus.h>
+#include <linux/serial.h>
+#include <sys/ioctl.h>
 #endif
 
 namespace iobus::fieldbus {
@@ -271,10 +273,80 @@ bool BusWorker::open_port()
     ctx_ = static_cast<void*>(ctx);
     state_ = BusState::RUNNING;
     backoff_step_ = 0;
+    apply_direction_mode(modbus_get_socket(ctx));
     std::fprintf(stderr, "INFO  bus_worker.open bus=%u device=%s %u%c8%u slaves=%zu ext=[%u..%u)\n",
                  bus_.id, bus_.device.c_str(), bus_.baud, bus_.parity, bus_.stop,
                  slaves_.size(), ext_base_, static_cast<unsigned>(ext_base_ + ext_span_));
     return true;
+#endif
+}
+
+/* G-D / OD-MBRTU-EXT-04 — điều khiển hướng truyền half-duplex.
+ *
+ * Bản trước KHÔNG gọi gì cả và device tree không có `rs485-*`, nên hệ thống
+ * chạy trên một giả định KHÔNG AI PHÁT BIỂU: "transceiver tự đảo hướng". Giả
+ * định im lặng có hai vấn đề — không kiểm chứng được, và khi lắp một bo khác có
+ * DE/RE thì không có đường nào để đổi.
+ *
+ * Nay hành vi là một LỰA CHỌN TƯỜNG MINH trong config, và trạng thái THẬT của
+ * driver được đọc lại rồi in ra log. Kỹ thuật viên đọc journal là biết ngay bus
+ * đang chạy chế độ nào, thay vì phải suy từ việc source không gọi hàm nào.
+ *
+ * Phần cứng Foxlinx SOM-DDC-24 (Hardware owner xác nhận 2026-08-06): chỉ có
+ * TX/RX, không có DE/RE ⇒ Auto là đúng, và BẬT nhầm chế độ RTS ở đây sẽ khiến
+ * driver giữ RTS cho một chân không nối đi đâu cả. */
+void BusWorker::apply_direction_mode(int fd)
+{
+#ifdef MKDDC_ENABLE_MODBUS
+    if (fd < 0) return;
+
+    struct serial_rs485 current {};
+    const bool readable = ::ioctl(fd, TIOCGRS485, &current) == 0;
+    if (!readable) {
+        /* Driver không hỗ trợ ioctl ⇒ chỉ auto-direction mới chạy được. Nếu
+         * config lại đòi RTS thì đó là cấu hình không thực thi được, phải nói ra. */
+        if (bus_.direction == Rs485Direction::Rts) {
+            std::fprintf(stderr, "ERROR bus_worker.rs485_rts_unsupported bus=%u device=%s"
+                         " — driver không có TIOCSRS485; KHÔNG thể điều khiển hướng bằng RTS\n",
+                         bus_.id, bus_.device.c_str());
+        } else {
+            std::fprintf(stderr, "INFO  bus_worker.rs485_direction bus=%u mode=auto"
+                         " (driver không hỗ trợ TIOCGRS485 — dựa hoàn toàn vào transceiver)\n",
+                         bus_.id);
+        }
+        return;
+    }
+
+    struct serial_rs485 wanted = current;
+    if (bus_.direction == Rs485Direction::Rts) {
+        wanted.flags |= SER_RS485_ENABLED | SER_RS485_RTS_ON_SEND;
+        wanted.flags &= ~static_cast<unsigned int>(SER_RS485_RTS_AFTER_SEND);
+        wanted.delay_rts_before_send = bus_.rts_delay_before_us / 1000u;
+        wanted.delay_rts_after_send  = bus_.rts_delay_after_us / 1000u;
+    } else {
+        /* Auto: TẮT tường minh chế độ RS-485 của driver. Không phải "không làm
+         * gì" — một cấu hình còn sót từ lần chạy trước hoặc từ device tree sẽ
+         * khiến driver kéo RTS trên bo không có DE/RE. */
+        wanted.flags &= ~static_cast<unsigned int>(SER_RS485_ENABLED);
+    }
+
+    if (::ioctl(fd, TIOCSRS485, &wanted) != 0) {
+        std::fprintf(stderr, "WARN  bus_worker.rs485_set_fail bus=%u mode=%s errno=%d"
+                     " — giữ nguyên cấu hình driver\n",
+                     bus_.id, bus_.direction == Rs485Direction::Rts ? "rts" : "auto", errno);
+    }
+
+    struct serial_rs485 readback {};
+    if (::ioctl(fd, TIOCGRS485, &readback) == 0) {
+        std::fprintf(stderr, "INFO  bus_worker.rs485_direction bus=%u mode=%s driver_enabled=%d"
+                     " rts_on_send=%d delay_before_ms=%u delay_after_ms=%u\n",
+                     bus_.id, bus_.direction == Rs485Direction::Rts ? "rts" : "auto",
+                     (readback.flags & SER_RS485_ENABLED) ? 1 : 0,
+                     (readback.flags & SER_RS485_RTS_ON_SEND) ? 1 : 0,
+                     readback.delay_rts_before_send, readback.delay_rts_after_send);
+    }
+#else
+    (void)fd;
 #endif
 }
 

@@ -436,3 +436,76 @@ TEST(BusMetricsUtilization, SurvivesProbeIntervalLongerThanOneSlot)
     EXPECT_GT(pct_x100, 500u) << "utilization rơi về gần 0 dù dây bận 12%: " << pct_x100;
     EXPECT_LT(pct_x100, 2500u) << "utilization báo quá cao: " << pct_x100;
 }
+
+/* ===================== G-D — điều khiển hướng RS-485 =====================
+ *
+ * Phần cứng Foxlinx SOM-DDC-24 (Hardware owner xác nhận 2026-08-06): cổng RS-485
+ * chỉ có TX và RX, KHÔNG có DE/RE ⇒ transceiver tự đảo hướng.
+ *
+ * Điều nguy hiểm ở bản trước không phải là chọn sai chế độ, mà là KHÔNG CHỌN GÌ
+ * CẢ: source không gọi `modbus_rtu_set_serial_mode()`, device tree không có
+ * `rs485-*`, nên hành vi phụ thuộc hoàn toàn vào mặc định của driver và không ai
+ * phát biểu điều đó ở đâu. Bộ test dưới đây khoá lại việc chế độ là một LỰA CHỌN
+ * TƯỜNG MINH, mặc định khớp phần cứng thật.
+ */
+
+TEST(Rs485Direction, MacDinhLaAutoVeDungPhanCungFoxlinx)
+{
+    BusConfig bus;
+    EXPECT_EQ(bus.direction, Rs485Direction::Auto)
+        << "bo Foxlinx không có DE/RE; bật RTS mặc định sẽ kéo một chân không nối đi đâu";
+    EXPECT_EQ(bus.rts_delay_before_us, 0u);
+    EXPECT_EQ(bus.rts_delay_after_us, 0u);
+}
+
+TEST(Rs485Direction, DocDuocCheDoTuFieldbusConf)
+{
+    const std::string path = "/tmp/mkddc_fb_dir_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream out(path);
+        out << R"json({
+          "buses":[
+            {"id":1,"device":"/dev/rs485-1","direction":"rts",
+             "rts_delay_before_us":150,"rts_delay_after_us":250},
+            {"id":2,"device":"/dev/rs485-2","direction":"auto"}
+          ],
+          "slaves":[{"addr":1,"bus_id":1,"profile":"p","name":"a"}]
+        })json";
+    }
+    FieldbusConfig cfg;
+    ASSERT_TRUE(load_fieldbus_config(path, true, &cfg));
+    ::unlink(path.c_str());
+    ASSERT_EQ(cfg.buses.size(), 2u);
+    EXPECT_EQ(cfg.buses[0].direction, Rs485Direction::Rts);
+    EXPECT_EQ(cfg.buses[0].rts_delay_before_us, 150u);
+    EXPECT_EQ(cfg.buses[0].rts_delay_after_us, 250u);
+    EXPECT_EQ(cfg.buses[1].direction, Rs485Direction::Auto);
+}
+
+/* Giá trị lạ phải rơi về `auto` KÈM CẢNH BÁO, không được im lặng bật RTS: bật
+ * nhầm RTS trên bo auto-direction làm driver giữ RTS suốt lượt phát. */
+TEST(Rs485Direction, GiaTriLaRoiVeAutoChuKhongBatRts)
+{
+    const std::string path = "/tmp/mkddc_fb_dirbad_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream out(path);
+        out << R"json({"buses":[{"id":1,"device":"/dev/rs485-1","direction":"gpio-pc7"}],
+                       "slaves":[{"addr":1,"bus_id":1,"profile":"p","name":"a"}]})json";
+    }
+    FieldbusConfig cfg;
+    ASSERT_TRUE(load_fieldbus_config(path, true, &cfg));
+    ::unlink(path.c_str());
+    ASSERT_EQ(cfg.buses.size(), 1u);
+    EXPECT_EQ(cfg.buses[0].direction, Rs485Direction::Auto);
+}
+
+/* Cấu hình một-bus cũ (`rs485{}`, không có `buses[]`) phải migrate sang Auto —
+ * đúng hành vi nó vốn có, nay được phát biểu ra thay vì ngầm định. */
+TEST(Rs485Direction, MigrationTuCauHinhCuGiuNguyenHanhViAuto)
+{
+    FieldbusConfig cfg;
+    cfg.rs485.device = "/dev/rs485-1";
+    normalize_buses(&cfg);
+    ASSERT_EQ(cfg.buses.size(), 1u);
+    EXPECT_EQ(cfg.buses[0].direction, Rs485Direction::Auto);
+}

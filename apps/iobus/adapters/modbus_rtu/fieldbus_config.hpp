@@ -63,6 +63,22 @@ struct Rs485Config {
  * thuộc thiết bị (OD-MBRTU-002): hai thiết bị trên cùng dây không thể chạy hai
  * baud khác nhau, nên để baud ở Device là mời người dùng lưu một cấu hình
  * không thể thực thi. */
+/* Cơ chế điều khiển hướng truyền half-duplex trên RS-485 (G-D / OD-MBRTU-EXT-04).
+ *
+ * Phần cứng Foxlinx SOM-DDC-24 xác nhận 2026-08-06 (Hardware owner): **chỉ có
+ * TX và RX, KHÔNG có DE/RE** ⇒ transceiver tự đảo hướng (auto-direction, đúng
+ * lớp MAX13487E mà HW-DES-03-RS485 §1 nêu làm baseline).
+ *
+ * Vì sao vẫn phải có enum thay vì hardcode: trước bản này source KHÔNG gọi
+ * `modbus_rtu_set_serial_mode()` và device tree không có `rs485-*`, nên hệ
+ * thống chạy trên một GIẢ ĐỊNH KHÔNG AI PHÁT BIỂU. Giả định im lặng thì không
+ * kiểm chứng được và không đổi được khi lắp bo khác. Nay nó là một lựa chọn
+ * tường minh, ghi trong config, in ra log lúc khởi động. */
+enum class Rs485Direction : uint8_t {
+    Auto = 0,   /* transceiver tự đảo hướng — KHÔNG đụng TIOCSRS485 */
+    Rts  = 1,   /* driver kéo RTS làm DE (bo có DE/RE nối vào RTS)   */
+};
+
 struct BusConfig {
     uint8_t     id = 1;           /* 1-based, khớp SlaveConfig::bus_id */
     std::string name;             /* nhãn hiển thị, ví dụ "RS485-1" */
@@ -74,6 +90,12 @@ struct BusConfig {
      * Thuộc bus chứ không thuộc device: nó bảo vệ băng thông của SỢI DÂY. */
     uint32_t    offline_probe_ms = 5000;
     bool        enabled = true;
+    /* Mặc định Auto: khớp phần cứng đã xác nhận. Đổi sang Rts CHỈ khi bo thật
+     * sự có chân DE/RE nối vào RTS — bật nhầm trên bo auto-direction làm driver
+     * giữ RTS và có thể chặn đường truyền. */
+    Rs485Direction direction = Rs485Direction::Auto;
+    uint32_t    rts_delay_before_us = 0;
+    uint32_t    rts_delay_after_us  = 0;
 };
 
 struct FieldbusConfig {
