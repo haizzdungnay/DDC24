@@ -37,7 +37,7 @@ func ExportPointsCSV(w io.Writer, points []Point) error {
 			p.PointID, p.DeviceID, p.TagName, p.DisplayName, p.RegisterType,
 			strconv.Itoa(p.Address), p.DataType, p.ByteOrder, p.WordOrder,
 			formatFloat(p.Scale), formatFloat(p.Offset), p.Unit, p.ReadWrite,
-			formatAny(p.DefaultValue), formatAny(p.SafeValue), strconv.FormatBool(p.Enabled),
+			formatAny(p.DefaultValue), formatAny(p.SafeValue), strconv.FormatBool(bool(p.Enabled)),
 			formatIntPtr(p.BitIndex), formatFloatPtr(p.MinValue), formatFloatPtr(p.MaxValue),
 		}
 		if err := writer.Write(row); err != nil {
@@ -145,7 +145,7 @@ func ImportPointsCSV(r io.Reader) ([]Point, []ImportError) {
 			if err != nil {
 				errs = append(errs, ImportError{Line: line, Column: "enabled", Message: "phải là true/false"})
 			} else {
-				point.Enabled = value
+				point.Enabled = FlexBool(value)
 			}
 		}
 		if raw := get(row, "bit_index"); raw != "" {

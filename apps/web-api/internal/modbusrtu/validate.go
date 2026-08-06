@@ -135,6 +135,18 @@ func validateBuses(cfg Config, opts ValidateOptions, add addFunc) map[string]Bus
 		if bus.OfflineProbeMs < 1000 || bus.OfflineProbeMs > 60000 {
 			add(base+".offline_probe_ms", CodeOutOfRange, "phải trong 1000..60000 ms")
 		}
+		// iobus mở cổng bằng `modbus_new_rtu(..., 8, stop)` — 8 bit dữ liệu là
+		// giá trị viết cứng. Nhận một giá trị khác rồi vẫn hiện nó trên trang
+		// Tổng quan là để giao diện NÓI SAI về thứ đang chạy trên dây.
+		if bus.DataBits != 8 {
+			add(base+".data_bits", CodeUnsupported, "iobus chỉ hỗ trợ 8 bit dữ liệu")
+		}
+		// G-D: chỉ hai chế độ. Giá trị lạ được iobus bỏ qua kèm cảnh báo, nhưng
+		// từ chối ngay tại đây thì người dùng biết mình gõ sai thay vì tưởng đã
+		// đặt được một chế độ không tồn tại.
+		if bus.Direction != "" && bus.Direction != "auto" && bus.Direction != "rts" {
+			add(base+".direction", CodeUnsupported, `phải là "auto" hoặc "rts"`)
+		}
 		out[bus.BusID] = bus
 	}
 	return out
