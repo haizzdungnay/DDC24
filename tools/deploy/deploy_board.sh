@@ -123,7 +123,13 @@ health() {
     [ "$sz" -gt 0 ] || { echo "  FAIL $s rỗng"; ok=1; }
     local magic; magic=$(sudo -n od -An -tx4 -N4 "$s" | tr -d ' \n')
     echo "  $s size=$sz magic=0x$magic"
-    [ "$magic" = "4b584404" ] || [ "$magic" = "0444584b" ] || echo "  WARN magic bất thường: 0x$magic"
+    # Magic ABI hiện hành là v5 (0x4B584405). Giữ v4 trong danh sách chấp nhận
+    # để lần deploy đầu tiên sau nâng cấp — lúc SHM cũ chưa bị xoá — không báo
+    # động giả. Giá trị đảo byte là do `od` trên máy little-endian.
+    case "$magic" in
+      4b584405|0544584b|4b584404|0444584b) : ;;
+      *) echo "  WARN magic bất thường: 0x$magic" ;;
+    esac
   done
   return $ok
 }
