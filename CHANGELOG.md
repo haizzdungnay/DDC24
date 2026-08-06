@@ -7,6 +7,42 @@
 ---
 
 ## [Unreleased]
+### Fixed — Deploy xong người đang mở trang vẫn chạy bản cũ (2026-08-06)
+
+**Triệu chứng.** Sau khi deploy bản có trang "Cổng RS-485", người dùng mở tab
+đang có sẵn và **không thấy tab mới**. Máy chủ phục vụ đúng bản mới, log sạch,
+soi bằng Playwright cũng thấy đúng — chỉ trình duyệt thật là sai.
+
+**Nguyên nhân gốc.** `handleStatic` không đặt `Cache-Control` gì cả, nên trình
+duyệt tự suy từ `Last-Modified` (heuristic caching) và giữ `index.html` lại. Mà
+`index.html` chính là thứ trỏ vào bundle, nên giữ nó nghĩa là **giữ luôn cả bản
+build cũ**.
+
+Kiểu hỏng này đặc biệt khó chịu vì **mọi cách kiểm tra tự động đều báo đúng**:
+`curl` và Playwright tải mới mỗi lần nên không bao giờ gặp. Người dùng không có
+tín hiệu nào cho biết mình đang xem bản cũ, nên kết luận tự nhiên là "tính năng
+không có" — và người triển khai thì thấy nó chạy.
+
+**Luật mới:**
+
+| Loại | `Cache-Control` | Lý do |
+|---|---|---|
+| `index.html` + mọi `.html` | `no-cache` | Không phải "cấm cache" mà là "phải hỏi lại trước khi dùng". File ~1 KB nên chi phí không đáng kể, đổi lại deploy có hiệu lực ngay |
+| `assets/*` | `public, max-age=31536000, immutable` | Tên đã chứa hash nội dung (`index-DnwvEcoc.js`); nội dung đổi ⇒ tên đổi, nên bản cũ không bao giờ bị phục vụ nhầm |
+| Còn lại | `public, max-age=300, must-revalidate` | Không có hash trong tên ⇒ **không** được `immutable`, nếu không đổi favicon sẽ không có đường cập nhật |
+
+Đường dẫn SPA không khớp file nào vẫn trả `index.html`, nên nó mang header của
+HTML chứ không phải header suy từ phần mở rộng trong URL.
+
+**Kiểm chứng trên bo:**
+
+```
+GET /                          → Cache-Control: no-cache
+GET /eng/modbus-rtu/ports      → Cache-Control: no-cache          (SPA fallback)
+GET /assets/index-DnwvEcoc.js  → public, max-age=31536000, immutable
+GET /mk-ddc-24-front-panel.png → public, max-age=300, must-revalidate
+```
+
 ### Changed — Hai cổng RS-485 là sự thật sản phẩm; cấu hình cổng có trang riêng (2026-08-06)
 
 Chốt theo chỉ đạo: **dự án có 2 cổng RS-485** (`rs485-1` → `ttyS5`, `rs485-2` →

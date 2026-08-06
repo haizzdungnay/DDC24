@@ -254,8 +254,47 @@ func (a *App) handleStatic(w http.ResponseWriter, r *http.Request) {
 	}
 	target := filepath.Join(dir, filepath.FromSlash(name))
 	if info, err := os.Stat(target); err == nil && !info.IsDir() {
+		setStaticCacheHeaders(w, name)
 		http.ServeFile(w, r, target)
 		return
 	}
+	// Mọi đường dẫn không khớp file đều rơi về index.html (SPA), nên nó phải
+	// mang header của HTML chứ không phải của đường dẫn được yêu cầu.
+	setStaticCacheHeaders(w, "index.html")
 	http.ServeFile(w, r, index)
+}
+
+// setStaticCacheHeaders quyết định trình duyệt được giữ file tĩnh bao lâu.
+//
+// VÌ SAO CẦN
+//
+// Bản trước không đặt `Cache-Control` gì cả, nên trình duyệt tự suy từ
+// `Last-Modified` (heuristic caching) và giữ `index.html` lại. Hậu quả quan sát
+// được trên bo Foxlinx 2026-08-06: sau khi deploy bản có trang "Cổng RS-485",
+// người dùng mở tab đang có sẵn và **không thấy tab mới**, vì trình duyệt vẫn
+// nạp `index.html` cũ trỏ vào bundle cũ.
+//
+// Đây là kiểu hỏng tệ: máy chủ phục vụ đúng bản mới, log không có gì bất
+// thường, kiểm bằng công cụ tự động (tải mới mỗi lần) cũng thấy đúng — chỉ
+// người dùng thật là thấy sai. Không có tín hiệu nào cho họ biết mình đang xem
+// bản cũ, nên kết luận tự nhiên là "tính năng không có".
+//
+// LUẬT
+//
+//   - `index.html` và mọi HTML: `no-cache`. Không phải "không cache" mà là
+//     "phải hỏi lại máy chủ trước khi dùng"; file ~1 KB nên chi phí không đáng
+//     kể, đổi lại deploy có hiệu lực ngay.
+//   - `assets/*`: tên đã chứa hash nội dung (`index-DnwvEcoc.js`). Nội dung đổi
+//     ⇒ tên đổi, nên bản cũ không bao giờ bị phục vụ nhầm. Cache một năm +
+//     `immutable` để trình duyệt khỏi hỏi lại.
+//   - Còn lại (favicon, ảnh…): cache ngắn, có `must-revalidate`.
+func setStaticCacheHeaders(w http.ResponseWriter, name string) {
+	switch {
+	case strings.HasSuffix(name, ".html"):
+		w.Header().Set("Cache-Control", "no-cache")
+	case strings.HasPrefix(name, "assets/"):
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	default:
+		w.Header().Set("Cache-Control", "public, max-age=300, must-revalidate")
+	}
 }
