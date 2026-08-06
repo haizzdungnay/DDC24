@@ -120,3 +120,42 @@ describe('MonitorPage — trạng thái khi authority không trả lời', () =>
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 })
+
+/* FE-MON-01 (board thật 2026-08-06): `/points` trả 200 kèm mảng RỖNG là trạng
+ * thái khác hẳn "API chết", nên guard lỗi không bắt được. Trên DDC-24-TANG-1 nó
+ * cho ra bốn bảng trống không một dòng chữ, trong khi Dashboard cùng lúc vẽ
+ * 29 I/O — người trực không có cách nào biết bên nào đúng. */
+describe('MonitorPage — authority trả lời nhưng không có điểm nào', () => {
+  beforeEach(() => {
+    localStorage.setItem('mkddc-lang', 'en')
+    pointsState.data = []
+    pointsState.loading = false
+    pointsState.error = null
+    pointsState.refetch = vi.fn()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  it('nói rõ là authority không trả điểm nào, thay vì để bảng rỗng im lặng', () => {
+    renderPage()
+    expect(screen.getByRole('status')).toHaveTextContent('reported no I/O points')
+  })
+
+  it('có điểm thì không hiện cảnh báo đó', () => {
+    pointsState.data = [goodPoint]
+    renderPage()
+    expect(screen.queryByText(/reported no I\/O points/)).not.toBeInTheDocument()
+  })
+
+  /* Khi API hỏng thì đã có guard lỗi riêng; không được hiện cả hai thông điệp. */
+  it('API hỏng thì hiện lỗi chứ không hiện cảnh báo "không có điểm"', () => {
+    pointsState.data = null
+    pointsState.error = new Error('502 Bad Gateway')
+    renderPage()
+    expect(screen.getByText('Could not load I/O points')).toBeInTheDocument()
+    expect(screen.queryByText(/reported no I\/O points/)).not.toBeInTheDocument()
+  })
+})

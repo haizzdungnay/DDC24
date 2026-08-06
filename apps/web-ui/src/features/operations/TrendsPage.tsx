@@ -149,6 +149,20 @@ export function TrendsPage() {
   const [analogPanelHeight, setAnalogPanelHeight] = useState<number | null>(null)
 
   const selectedPoints = useMemo(() => analogPoints.filter((point) => selectedIds.includes(point.id)), [analogPoints, selectedIds])
+  /* FE-TR-01 (board thật 2026-08-06): panel "Series" và biểu đồ đọc HAI nguồn
+   * khác nhau — panel lọc `selectedIds` qua `analogPoints` (tức `/points`), còn
+   * truy vấn historian dùng thẳng `selectedIds`. Trên DDC-24-TANG-1, `/points`
+   * trả rỗng trong khi historian vẫn còn DO-01..DO-04 với 4185 mẫu, nên trang
+   * đồng thời nói "Chưa chọn điểm trend" VÀ vẽ 4 series, liệt kê chúng ở bảng
+   * thống kê là ON. Người dùng không xoá được (không có thẻ series) mà cũng
+   * không thêm được (picker rỗng) — trang tự mâu thuẫn và không thao tác được.
+   *
+   * Nay panel dựng từ chính `selectedIds`: id nào không resolve được thành Point
+   * vẫn có thẻ riêng kèm nút gỡ, và trang nói rõ vì sao. */
+  const unresolvedSelectedIds = useMemo(
+    () => selectedIds.filter((id) => !analogPoints.some((point) => point.id === id)),
+    [analogPoints, selectedIds]
+  )
   const selectedSignature = selectedIds.join(',')
   const historyState = useApi(async () => {
     const request = buildTrendHistoryRequest(selectedIds, rangeMinutes, customRange)
@@ -300,8 +314,31 @@ export function TrendsPage() {
           <Panel title="Series" className="flex h-full min-h-0 flex-col overflow-hidden" action={<Button ref={addTrendButtonRef} size="sm" variant="primary" icon={<Plus className="h-4 w-4" />} onClick={openPicker}>{pick('Thêm trend', 'Add trend')}</Button>}>
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
               {selectedPoints.map((point, index) => <SeriesCard key={point.id} point={point} color={colors[index % colors.length]} onRemove={() => togglePoint(point.id)} />)}
-              {!selectedPoints.length && <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Chưa chọn điểm trend.', 'No trend points selected.')}</div>}
+              {/* FE-TR-01: id đã chọn nhưng `/points` không trả về vẫn phải hiện,
+                  vì historian vẫn vẽ nó lên biểu đồ. Ẩn đi là để trang tự mâu thuẫn. */}
+              {unresolvedSelectedIds.map((id) => (
+                <div key={id} className="rounded-[var(--radius)] border border-dashed border-[var(--c-warn-fg,var(--c-border))] bg-[var(--c-surface)] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold">{id}</div>
+                      <div className="mt-1 text-xs text-[var(--c-warn-fg,var(--c-text-dim))]">
+                        {pick('Không còn trong danh sách điểm của authority', 'No longer in the authority point list')}
+                      </div>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={() => togglePoint(id)}>{pick('Gỡ', 'Remove')}</Button>
+                  </div>
+                </div>
+              ))}
+              {!selectedIds.length && <div className="rounded-[var(--radius)] border border-dashed border-[var(--c-border)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Chưa chọn điểm trend.', 'No trend points selected.')}</div>}
             </div>
+            {unresolvedSelectedIds.length > 0 && (
+              <div role="status" className="mt-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2 text-xs text-[var(--c-text-dim)]">
+                {pick(
+                  `${unresolvedSelectedIds.length} điểm đang vẽ nhưng không có trong /points. Biểu đồ dưới đây là lịch sử cũ, không phải điểm đang chạy.`,
+                  `${unresolvedSelectedIds.length} plotted series are missing from /points. The chart below is stored history, not a running point.`
+                )}
+              </div>
+            )}
           </Panel>
         </div>
 
@@ -319,6 +356,17 @@ export function TrendsPage() {
             <label className="text-xs">{pick(`Từ (giờ địa phương ${localTimeZoneLabel()})`, `From (local time ${localTimeZoneLabel()})`)}<input type="datetime-local" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} className="mt-1 block h-9 w-full rounded border border-[var(--c-border)] bg-transparent px-2" /></label>
             <label className="text-xs">{pick(`Đến (giờ địa phương ${localTimeZoneLabel()})`, `To (local time ${localTimeZoneLabel()})`)}<input type="datetime-local" value={customTo} onChange={(event) => setCustomTo(event.target.value)} className="mt-1 block h-9 w-full rounded border border-[var(--c-border)] bg-transparent px-2" /></label>
             <Button size="sm" onClick={applyCustomRange}>{pick('Áp dụng tùy chọn', 'Apply custom')}</Button>
+            {/* FE-TR-02: ô chọn nhận GIỜ ĐỊA PHƯƠNG (b67580c) còn biểu đồ và bảng
+                bên dưới hiển thị UTC. Hai mốc lệch nhau đúng bằng offset của máy, và
+                trước đây không chỗ nào nói ra — người dùng gõ 09:27 rồi thấy bảng ghi
+                02:55 và tưởng dữ liệu sai. Giữ nguyên UTC ở phần hiển thị (quyết định
+                đã có, xem TrendsPage.test.tsx) nhưng phải nói rõ ngay tại chỗ nhập. */}
+            <span className="text-xs text-[var(--c-text-dim)] md:col-span-3">
+              {pick(
+                `Ô chọn dùng giờ địa phương (${localTimeZoneLabel()}); biểu đồ và bảng bên dưới hiển thị theo UTC.`,
+                `The pickers take local time (${localTimeZoneLabel()}); the chart and table below are shown in UTC.`
+              )}
+            </span>
             {customError && <span role="alert" className="text-xs text-[var(--c-fault-fg)] md:col-span-3">{customError}</span>}
           </div>
           {historyPresentation && <HistoryStateBanner state={historyPresentation.state} gaps={historyPresentation.gaps} detail={historyPresentation.detail ?? (!HISTORIAN_V2_TRENDS_ENABLED ? pick('Legacy query vẫn authoritative; unified Trends chờ activation/cutover marker.', 'Legacy query remains authoritative; unified Trends awaits the activation/cutover marker.') : undefined)} onRetry={historyPresentation.state === 'unavailable' ? () => { void historyState.refetch() } : undefined} />}
