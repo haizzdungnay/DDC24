@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.11.0"
+  version: "1.12.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -289,6 +289,151 @@ paths:
         "200":
           description: Telemetry thật do iobus publish qua SHM.
           content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModbusRTUDiagnostics" } } } }
+        "503": { $ref: "#/components/responses/Error" }
+  /modbus/ports:
+    get:
+      summary: Cổng RS-485 board thật sự có (viewer+) — MBR-B211
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModbusPortCapability" } } } } }
+  /modbus/buses:
+    get:
+      summary: Trạng thái và số đo thật của từng bus RS-485 (viewer+)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModbusBusRuntime" } } } } }
+  /modbus/overview:
+    get:
+      summary: Tổng quan thiết bị Modbus RTU (viewer+)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusOverview" } } } }
+  /modbus/events:
+    get:
+      summary: Sự kiện chuyển trạng thái liên lạc đã QUAN SÁT được (viewer+)
+      description: >
+        Danh sách rỗng khi chưa quan sát được lần đổi trạng thái nào. Không có
+        dữ liệu mẫu: bản trước trả về hai sự kiện viết cứng kể cả khi không có
+        thiết bị nào được đấu.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    timestamp: { type: string, format: date-time }
+                    bus_id: { type: string }
+                    device_id: { type: string }
+                    message: { type: string }
+                    level: { type: string, enum: [info, warning] }
+  /modbus/mapping:
+    get:
+      summary: Bảng ánh xạ Point → register kèm lỗi validate (viewer+)
+      responses:
+        "200": { description: OK }
+  /modbus/config/state:
+    get:
+      summary: Trạng thái vòng đời cấu hình (viewer+)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusConfigState" } } } }
+  /modbus/config/candidate:
+    get:
+      summary: Bản nháp cấu hình đang soạn (viewer+)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusCandidate" } } } }
+    put:
+      summary: Lưu bản nháp — KHÔNG chạm tới thiết bị (admin)
+      x-rbac: [admin]
+      parameters:
+        - name: If-Match
+          in: header
+          required: false
+          schema: { type: string }
+          description: "MBR-B205 — revision cấu hình đang chạy mà client tin là đúng. Lệch ⇒ 412."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                base_revision: { type: integer, format: int64 }
+                buses: { type: array, items: { $ref: "#/components/schemas/ModbusBus" } }
+                devices: { type: array, items: { $ref: "#/components/schemas/ModbusRTUDevice" } }
+                points: { type: array, items: { $ref: "#/components/schemas/ModbusRTUPoint" } }
+                operation_id: { type: string }
+      responses:
+        "200": { description: Đã lưu nháp }
+        "400": { $ref: "#/components/responses/Error" }
+        "412": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Bỏ bản nháp (admin)
+      x-rbac: [admin]
+      responses:
+        "200": { description: OK }
+  /modbus/config/diff:
+    get:
+      summary: Khác biệt giữa cấu hình đang chạy và bản nháp (viewer+)
+      responses:
+        "200": { description: OK }
+  /modbus/config/apply:
+    post:
+      summary: Áp bản nháp qua transaction stage→journal→ACK→commit (admin)
+      x-rbac: [admin]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                base_revision: { type: integer, format: int64 }
+                operation_id:
+                  type: string
+                  description: "Idempotency ≥15 phút. Thiếu nó, một lần client thử lại sẽ apply hai lần và đẩy revision thêm một bậc."
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusApplyResult" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        "412": { $ref: "#/components/responses/Error" }
+  /modbus/export:
+    get:
+      summary: Xuất cấu hình CSV hoặc JSON (viewer+) — Đ-06
+      parameters: [ { name: format, in: query, schema: { type: string, enum: [csv, json], default: json } } ]
+      responses:
+        "200": { description: OK }
+  /modbus/import:
+    post:
+      summary: Nạp cấu hình vào BẢN NHÁP, all-or-nothing (admin) — Đ-06
+      x-rbac: [admin]
+      parameters: [ { name: format, in: query, schema: { type: string, enum: [csv, json] } } ]
+      responses:
+        "200": { description: Đã nạp vào bản nháp }
+        "400": { description: "Bị từ chối TOÀN BỘ; body chứa danh sách lỗi kèm số dòng." }
+  /modbus/devices/{id}/enabled:
+    put:
+      summary: Bật/tắt thiết bị qua bản nháp (admin)
+      x-rbac: [admin]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: OK }
+        "400": { $ref: "#/components/responses/Error" }
+  /modbus/devices/{id}/test-connection:
+    post:
+      summary: Kiểm tra thiết bị có trả lời không (operator+) — MBR-B208
+      x-rbac: [operator, admin]
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusProbeResult" } } } }
+        "429": { description: "Vượt giới hạn 5 lệnh/phút — lệnh commissioning chiếm băng thông bus." }
+        "503": { $ref: "#/components/responses/Error" }
+  /modbus/read-test:
+    post:
+      summary: Đọc thử một register phục vụ commissioning (operator+)
+      x-rbac: [operator, admin]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusProbeResult" } } } }
+        "429": { description: "Vượt giới hạn tần suất." }
         "503": { $ref: "#/components/responses/Error" }
   /system/status:
     get:
@@ -1782,6 +1927,39 @@ components:
         checksum: { type: string, pattern: "^[0-9a-f]{64}$" }
         devices: { type: array, items: { $ref: "#/components/schemas/ModbusRTUDevice" } }
         points: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/ModbusRTUPoint" } }
+    ModbusBus:
+      type: object
+      description: >
+        MBR-B202 / OD-MBRTU-002 — một sợi dây RS-485. Tham số serial thuộc về
+        DÂY, không thuộc thiết bị: hai thiết bị trên cùng dây không thể chạy hai
+        baud khác nhau, nên để baud ở Device là mời người dùng lưu một cấu hình
+        không thể thực thi.
+      required: [bus_id, port, baud, parity, stop_bit, enabled]
+      properties:
+        bus_id: { type: string, pattern: "^rs485-[0-9]{1,3}$" }
+        display_name: { type: string, maxLength: 32 }
+        port:
+          type: string
+          description: >
+            MBR-B211 — phải nằm trong capability manifest của board
+            (GET /modbus/ports). Chuỗi tự do đã bị bỏ: bản trước nhận mọi đường
+            dẫn ≤128 byte nên một cấu hình trỏ vào cổng không tồn tại lưu được,
+            checksum hợp lệ, revision tăng, và chỉ hỏng ở tầng iobus (D-14).
+          enum: ["/dev/rs485-1", "/dev/rs485-2"]
+        baud: { type: integer, minimum: 1200, maximum: 115200 }
+        parity: { type: string, enum: [N, E, O] }
+        stop_bit: { type: integer, enum: [1, 2] }
+        data_bits: { type: integer, enum: [8] }
+        offline_probe_ms: { type: integer, minimum: 1000, maximum: 60000, default: 5000 }
+        enabled: { type: boolean }
+    ModbusPortCapability:
+      type: object
+      required: [port]
+      properties:
+        port: { type: string }
+        alias: { type: string, description: "Tên thiết bị thật, ví dụ ttyS5." }
+        description: { type: string }
+        max_baud: { type: integer }
     ModbusRTUDevice:
       type: object
       required: [device_id, display_name, enabled, rs485_port, baud, parity, stop_bit, slave_id, poll_ms, timeout_ms, retry]
@@ -1789,7 +1967,10 @@ components:
         device_id: { type: string, pattern: "^[A-Za-z][A-Za-z0-9_-]{0,22}$" }
         display_name: { type: string, minLength: 1, maxLength: 64 }
         enabled: { type: boolean }
-        rs485_port: { type: string, minLength: 1, maxLength: 128 }
+        bus_id:
+          type: string
+          description: "Bus mà thiết bị thuộc về. Tham số serial dưới đây KẾ THỪA read-only từ Bus."
+        rs485_port: { type: string, minLength: 1, maxLength: 128, readOnly: true }
         baud: { type: integer, minimum: 1200, maximum: 115200 }
         parity: { type: string, enum: [N, E, O] }
         stop_bit: { type: integer, enum: [1, 2] }
@@ -1834,20 +2015,157 @@ components:
         default_value: { $ref: "#/components/schemas/PointCommandValue" }
         safe_value: { $ref: "#/components/schemas/PointCommandValue" }
         enabled: { type: boolean }
+        bit_index:
+          type: integer
+          minimum: 0
+          maximum: 15
+          nullable: true
+          description: "OD-MBRTU-003 — trích một bit trong register. Chỉ dùng với data_type=bool trên Holding/Input Register."
+        min_value: { type: number, nullable: true, description: "Biên kỹ thuật; mẫu ngoài biên bị đánh BAD/OUT_OF_RANGE." }
+        max_value: { type: number, nullable: true }
+    ModbusQuality:
+      type: string
+      description: >
+        DATA_MODEL §6.2 — năm mức. CONFIG_ERROR tách khỏi BAD vì người vận hành
+        phải phân biệt "thiết bị trả dữ liệu sai" với "cấu hình sai nên chưa
+        từng hỏi thiết bị". UNKNOWN xuất hiện khi producer mới hơn consumer —
+        không được đoán về GOOD.
+      enum: [GOOD, STALE, BAD, OFFLINE, CONFIG_ERROR, UNKNOWN]
+    ModbusQualityReason:
+      type: string
+      description: "DATA_MODEL §6.3 — 10 mã lý do."
+      enum: [NOT_INITIALIZED, CONFIG_ERROR, DECODE_ERROR, OUT_OF_RANGE, TIMEOUT, CRC_ERROR, PORT_DOWN, DEVICE_EXCEPTION, WRITE_FAILED, BUS_OVERLOAD, UNKNOWN]
     ModbusRTUDiagnostics:
       type: object
       required: [device_id, slave_id, online, total_polls, total_errors, timeout_errors, crc_errors, retry_attempts, consecutive_errors, last_seen_ms]
       properties:
         device_id: { type: string }
         slave_id: { type: integer }
+        bus_id: { type: integer }
         online: { type: boolean }
-        total_polls: { type: integer }
-        total_errors: { type: integer }
-        timeout_errors: { type: integer }
-        crc_errors: { type: integer }
-        retry_attempts: { type: integer }
+        total_polls: { type: integer, format: int64, description: "MBR-B110 — uint64; uint32 tràn sau ~2,7 năm ở nhịp poll thực tế." }
+        total_errors: { type: integer, format: int64 }
+        timeout_errors: { type: integer, format: int64 }
+        crc_errors: { type: integer, format: int64 }
+        retry_attempts: { type: integer, format: int64, description: "Số lần PHÁT LẠI thật (D-06) — khác total_errors." }
+        write_failed: { type: integer, format: int64 }
+        write_dropped: { type: integer, format: int64, description: "Lệnh ghi bị bỏ HẲN: hết lượt thử, quá hạn, hoặc không encode được." }
         consecutive_errors: { type: integer }
+        last_exception: { type: integer, minimum: 0, maximum: 11 }
         last_seen_ms: { type: integer, format: int64 }
+    ModbusBusRuntime:
+      type: object
+      description: >
+        MBR-B305 — số đo THẬT của một sợi dây, do BusWorker đếm. Trường latency
+        và utilization là NULLABLE có chủ đích: null nghĩa là iobus chưa đo được,
+        và FE phải hiện "—" thay vì 0. Bản trước điền hằng số viết cứng nên giao
+        diện hiển thị số không do thiết bị nào sinh ra.
+      required: [bus_id, port, open_state]
+      properties:
+        bus_id: { type: string }
+        display_name: { type: string }
+        port: { type: string }
+        port_alias: { type: string }
+        open_state:
+          type: string
+          enum: [UNKNOWN, CLOSED, OPENING, RUNNING, PORT_ERROR, DRAINING, SWAPPING, CONFIG_ERROR]
+        baud: { type: integer }
+        parity: { type: string }
+        data_bits: { type: integer }
+        stop_bits: { type: integer }
+        total_devices: { type: integer }
+        online_devices: { type: integer }
+        poll_latency_p50_ms: { type: integer, nullable: true }
+        poll_latency_p95_ms: { type: integer, nullable: true }
+        bus_utilization_percent: { type: number, nullable: true }
+        estimated_load_percent: { type: number, description: "Ước lượng từ cấu hình (MBR-B207), khác số đo thật ở trên." }
+        timeout_errors: { type: integer, format: int64 }
+        crc_errors: { type: integer, format: int64 }
+        port_reopens: { type: integer, format: int64 }
+    ModbusOverview:
+      type: object
+      required: [total_devices, online, offline, fault_config, telemetry_available]
+      properties:
+        total_devices: { type: integer }
+        online: { type: integer }
+        offline: { type: integer }
+        initializing: { type: integer, description: "Chưa từng poll — KHÔNG phải offline." }
+        fault_config: { type: integer }
+        revision: { type: integer }
+        checksum: { type: string }
+        telemetry_available:
+          type: boolean
+          description: "false ⇒ iobus chưa publish lần nào; mọi con số runtime phải hiểu là KHÔNG BIẾT, không phải 0."
+    ModbusConfigState:
+      type: object
+      required: [state, active_revision, diff]
+      properties:
+        state: { type: string, enum: [CLEAN, DIRTY, APPLYING, FAILED] }
+        active_revision: { type: integer, format: int64 }
+        active_checksum: { type: string }
+        base_revision: { type: integer, format: int64 }
+        checksum: { type: string }
+        updated_at: { type: string, format: date-time }
+        updated_by: { type: string }
+        last_error: { type: string }
+        diff: { type: array, items: { $ref: "#/components/schemas/ModbusDiffEntry" } }
+        running_on_iobus: { $ref: "#/components/schemas/ModbusRunningSnapshot" }
+    ModbusRunningSnapshot:
+      type: object
+      required: [reachable]
+      properties:
+        generation: { type: integer, format: int64 }
+        config_revision: { type: integer, format: int64 }
+        ext_count: { type: integer }
+        in_sync: { type: boolean }
+        reachable:
+          type: boolean
+          description: "false ⇒ không liên lạc được iobus. UI phải hiện 'không rõ', không được hiện 'đã đồng bộ'."
+    ModbusDiffEntry:
+      type: object
+      required: [kind, action, id]
+      properties:
+        kind: { type: string, enum: [bus, device, point] }
+        action: { type: string, enum: [added, removed, modified] }
+        id: { type: string }
+        field: { type: string }
+        before: { type: string }
+        after: { type: string }
+    ModbusCandidate:
+      type: object
+      properties:
+        config: { type: object }
+        base_revision: { type: integer, format: int64 }
+        checksum: { type: string }
+        state: { type: string, enum: [CLEAN, DIRTY, APPLYING, FAILED] }
+        updated_at: { type: string, format: date-time }
+        updated_by: { type: string }
+    ModbusApplyResult:
+      type: object
+      required: [result, revision]
+      properties:
+        result: { type: string, enum: [success] }
+        revision: { type: integer, format: int64 }
+        checksum: { type: string }
+        generation: { type: integer, format: int64 }
+        reload_mode:
+          type: string
+          enum: [control, service_restart]
+          description: >
+            MBR-B212 — `control` là đường chính (áp tại ranh giới giữa hai
+            transaction Modbus, KHÔNG gián đoạn IOP). `service_restart` là dự
+            phòng cho iobus bản cũ và CÓ gián đoạn I/O; khi đó warnings nói rõ.
+        idempotent: { type: boolean }
+        warnings: { type: array, items: { type: string } }
+    ModbusProbeResult:
+      type: object
+      required: [result]
+      properties:
+        result: { type: string, enum: [ok, fail] }
+        value: { type: number }
+        reason: { type: string }
+        exception_code: { type: integer, minimum: 0, maximum: 11 }
+        elapsed_us: { type: integer }
     ModbusMutationResult:
       type: object
       required: [apply]

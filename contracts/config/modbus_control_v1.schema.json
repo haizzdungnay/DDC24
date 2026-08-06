@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mekong-hcm.vn/contracts/config/modbus_control_v1.schema.json",
+  "title": "MK-DDC-24 — Kênh điều khiển fieldbus Modbus RTU (IPC v1)",
+  "description": "Hợp đồng JSON một dòng giữa mkddc-web (client) và mkddc-iobus (server) trên UNIX SOCK_STREAM tại /run/mkddc/modbus-control.sock. MBR-B002. Mỗi request là MỘT dòng JSON kết thúc bằng '\\n'; mỗi response cũng vậy, tương ứng 1-1 theo thứ tự. Frame vượt 65536 byte bị từ chối và kết nối bị đóng. Server kiểm SO_PEERCRED và chỉ phục vụ uid 0 hoặc uid của chính tiến trình iobus.",
+  "x-rationale": {
+    "vi_sao_stream": "ApplyConfig phải BIẾT CHẮC iobus đã nhận và đã áp dụng. Datagram mất gói là im lặng, và một lệnh apply mất gói mà BE tưởng thành công sẽ để BE và iobus chạy hai cấu hình khác nhau (OD-MBRTU-015 / Đ-03).",
+    "vi_sao_tach_khoi_snapshot": "Đường snapshot là dữ liệu chảy liên tục, mất một gói là chấp nhận được vì gói sau bù ngay. Đường điều khiển là mệnh lệnh, mất một gói là sai trạng thái. Hai ngữ nghĩa khác nhau nên hai socket khác nhau.",
+    "vi_sao_khong_bao_applied_som": "FW_SOM_DESIGN §8.2: chỉ được báo `applied` khi slave ĐÃ trả lời. Lệnh vừa vào hàng đợi là `accepted`. Timeout là `timeout`, không phải applied."
+  },
+  "type": "object",
+  "required": ["op"],
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": ["status", "apply_config", "write", "test_connection", "read_test"]
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/StatusRequest" },
+    { "$ref": "#/$defs/ApplyConfigRequest" },
+    { "$ref": "#/$defs/WriteRequest" },
+    { "$ref": "#/$defs/ProbeRequest" }
+  ],
+  "$defs": {
+    "StatusRequest": {
+      "title": "status — hỏi trạng thái runtime",
+      "type": "object",
+      "required": ["op"],
+      "properties": { "op": { "const": "status" } },
+      "additionalProperties": false
+    },
+    "StatusResponse": {
+      "type": "object",
+      "required": ["result", "generation", "config_revision", "producer_boot_id", "buses"],
+      "properties": {
+        "result": { "const": "ok" },
+        "generation": {
+          "type": "integer", "minimum": 0,
+          "description": "Tăng mỗi lần iobus SWAP sang cấu hình mới. Consumer thấy generation lạ phải coi toàn bộ ánh xạ slot cũ là vô hiệu."
+        },
+        "config_revision": {
+          "type": "integer", "minimum": 0,
+          "description": "Revision cấu hình iobus ĐANG chạy. Đây là con số duy nhất trả lời được câu hỏi 'iobus có đang chạy đúng thứ tôi vừa apply không'."
+        },
+        "producer_boot_id": {
+          "type": "integer", "minimum": 0,
+          "description": "Đổi mỗi lần iobus khởi động lại. Consumer PHẢI so nó giữa hai lần đọc trước khi tính delta counter; thiếu bước này, một lần restart bị đọc thành 'ai đó vừa reset counter bằng tay' (OD-MBRTU-008)."
+        },
+        "counters_since_ms": { "type": "integer", "minimum": 0 },
+        "ext_count": { "type": "integer", "minimum": 0 },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "buses": { "type": "array", "items": { "$ref": "#/$defs/BusStatus" } }
+      },
+      "additionalProperties": false
+    },
+    "BusStatus": {
+      "type": "object",
+      "required": ["id", "state"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 1, "maximum": 255 },
+        "name": { "type": "string", "maxLength": 15 },
+        "device": { "type": "string", "maxLength": 31 },
+        "state": {
+          "type": "string",
+          "enum": ["CLOSED", "OPENING", "RUNNING", "PORT_ERROR", "DRAINING", "SWAPPING", "CONFIG_ERROR"],
+          "description": "Vòng đời BusWorker theo FW_SOM_DESIGN §3."
+        },
+        "latency_p50_us": { "type": "integer", "minimum": 0 },
+        "latency_p95_us": { "type": "integer", "minimum": 0 },
+        "utilization_pct_x100": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "timeout_errors": { "type": "integer", "minimum": 0 },
+        "crc_errors": { "type": "integer", "minimum": 0 },
+        "port_reopens": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+
+    "ApplyConfigRequest": {
+      "title": "apply_config — nạp cấu hình tại ranh giới giữa hai transaction",
+      "type": "object",
+      "required": ["op"],
+      "properties": {
+        "op": { "const": "apply_config" },
+        "revision": {
+          "type": "integer", "minimum": 0,
+          "description": "Revision mà client MONG ĐỢI đọc được trong file. 0 = không kiểm. Lệch ⇒ REJECT với reason=revision_mismatch, để tránh ACK trả về một revision mà BE không hề gửi."
+        },
+        "checksum": {
+          "type": "string", "maxLength": 64,
+          "description": "SHA-256 hex của canonical JSON. iobus so TIỀN TỐ (snapshot chỉ chở 23 ký tự đầu)."
+        },
+        "path": {
+          "type": "string", "maxLength": 255,
+          "description": "Đường dẫn fieldbus.conf. Rỗng ⇒ dùng đường dẫn iobus đã được cấu hình lúc khởi động."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ApplyConfigResponse": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["result", "applied_revision", "generation"],
+          "properties": {
+            "result": { "const": "ack" },
+            "applied_revision": { "type": "integer", "minimum": 0 },
+            "generation": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["result", "reason"],
+          "properties": {
+            "result": { "const": "reject" },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "config_parse_error", "config_not_loaded", "revision_mismatch",
+                "checksum_mismatch", "no_bus_configured", "no_port_could_be_opened"
+              ],
+              "description": "REJECT ⇒ iobus GIỮ NGUYÊN generation cũ đang chạy và KHÔNG tự restart (FW_SOM_DESIGN §9)."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "WriteRequest": {
+      "title": "write — lệnh ghi có danh tính",
+      "type": "object",
+      "required": ["op", "request_id", "slave_addr"],
+      "properties": {
+        "op": { "const": "write" },
+        "request_id": {
+          "type": "string", "minLength": 1, "maxLength": 64,
+          "description": "Bắt buộc. Không có nó thì không ai nhận được kết quả, và lệnh trở thành một write mồ côi xuống thiết bị hiện trường."
+        },
+        "bus_id": { "type": "integer", "minimum": 0, "maximum": 255, "default": 0 },
+        "slave_addr": { "type": "integer", "minimum": 1, "maximum": 247 },
+        "fc": { "type": "integer", "enum": [5, 6, 15, 16], "default": 6 },
+        "address": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "value": { "type": "number" },
+        "deadline_ms": {
+          "type": "integer", "minimum": 0, "maximum": 60000, "default": 0,
+          "description": "Quá hạn ⇒ lệnh bị BỎ mà không phát byte nào xuống dây. Đây là chỗ chặn kịch bản 'thiết bị mất điện lúc 09:00, có điện lại lúc 14:00 và nhận luôn lệnh cũ' (D-03)."
+        },
+        "readback": {
+          "type": "boolean", "default": false,
+          "description": "Đọc lại sau khi ghi. Xác nhận thiết bị THẬT SỰ giữ giá trị chứ không chỉ ACK rồi bỏ qua — nhiều VFD làm vậy khi tham số bị khoá."
+        }
+      },
+      "additionalProperties": false
+    },
+    "WriteResponse": {
+      "type": "object",
+      "required": ["result"],
+      "properties": {
+        "result": {
+          "type": "string",
+          "enum": ["accepted", "rejected"],
+          "description": "`accepted` = đã vào hàng đợi. TUYỆT ĐỐI không trả `applied` ở đây: chưa ai biết slave có nhận hay không."
+        },
+        "request_id": { "type": "string" },
+        "reason": {
+          "type": "string",
+          "enum": ["write_queue_full", "queue_full_or_slave_not_found", "superseded_by_newer_setpoint"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "WriteResult": {
+      "title": "Kết quả cuối cùng của một lệnh ghi",
+      "type": "object",
+      "required": ["request_id", "status"],
+      "properties": {
+        "request_id": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["accepted", "applied", "rejected", "timeout"],
+          "description": "`applied` CHỈ khi slave đã trả lời cho lệnh ghi. Hết giờ là `timeout`, không phải applied (FW_SOM_DESIGN §8.2)."
+        },
+        "reason": { "type": "string" },
+        "exception_code": {
+          "type": "integer", "minimum": 0, "maximum": 11,
+          "description": "Mã exception Modbus gốc 0x01..0x0B; 0 = không có."
+        },
+        "readback_value": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+
+    "ProbeRequest": {
+      "title": "test_connection / read_test — commissioning ad-hoc",
+      "type": "object",
+      "required": ["op", "slave_addr"],
+      "properties": {
+        "op": { "type": "string", "enum": ["test_connection", "read_test"] },
+        "bus_id": { "type": "integer", "minimum": 0, "maximum": 255, "default": 0 },
+        "slave_addr": { "type": "integer", "minimum": 1, "maximum": 247 },
+        "fc": { "type": "integer", "enum": [1, 2, 3, 4], "default": 3 },
+        "address": { "type": "integer", "minimum": 0, "maximum": 65535, "default": 0 },
+        "count": { "type": "integer", "minimum": 1, "maximum": 125, "default": 1 },
+        "timeout_ms": { "type": "integer", "minimum": 20, "maximum": 10000, "default": 500 }
+      },
+      "additionalProperties": false
+    },
+    "ProbeResponse": {
+      "type": "object",
+      "required": ["result"],
+      "properties": {
+        "result": { "type": "string", "enum": ["ok", "fail"] },
+        "value": { "type": "number" },
+        "reason": { "type": "string" },
+        "exception_code": { "type": "integer", "minimum": 0, "maximum": 11 },
+        "elapsed_us": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+
+    "ErrorResponse": {
+      "type": "object",
+      "required": ["result", "code", "reason"],
+      "properties": {
+        "result": { "const": "error" },
+        "code": {
+          "type": "string",
+          "enum": ["bad_request", "unknown_op", "unsupported", "frame_too_large"]
+        },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

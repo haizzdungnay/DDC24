@@ -58,7 +58,11 @@
 /* Path runtime Rev A — KHÔNG có alias, KHÔNG còn /dev/shm/kinexus_* */
 #define KX_SHM_IO_PATH    "/dev/shm/mkddc_io_shm"
 #define KX_SHM_PLC_PATH   "/dev/shm/mkddc_plc_shm"
-#define KX_SHM_MAGIC      0x4B584404u   /* "KXD\4" v4: UI raw live data + kx_reliability_t/ui_reliability[] */
+/* v5 (MBR-B001, Đ-03): kx_ext_point_t đổi sang typed double + quality 5 mức +
+ * quality_reason + sample timestamp. Đây là ABI change THẬT — stride của
+ * plc_shm.ext[] đổi từ 40 lên 64 byte nên MỌI offset sau ext[] dịch chỗ.
+ * Magic phải đổi để binary cũ FAIL RÕ thay vì đọc lệch trường trong im lặng. */
+#define KX_SHM_MAGIC      0x4B584405u   /* "KXD\5" v5: ext point v2 (double + quality 5 mức + timestamp) */
 
 #define KX_N_UI   16   /* v2: Rev A 16 UI analog (ADR-010) */
 #define KX_N_DI   8    /* reserved: DI optional SKU; base SKU stays 0 in SHM */
@@ -98,24 +102,59 @@ typedef enum { KX_IOP_NORMAL = 0, KX_IOP_FAULT = 1, KX_IOP_SAFE = 2 } kx_iop_sta
  * sizeof = 24 byte, không có padding ẩn.
  */
 #define KX_N_FB_SLAVE  32   /* trần số slave publish được; vượt thì cắt và báo qua fb_slave_count */
+#define KX_N_FB_BUS    4    /* trần số bus RS-485 publish được (Rev A dùng 2)   */
 
+/* MBR-B110: counter là uint64. uint32 tràn sau ~4,29 tỷ lượt; một bus poll
+ * 10 slave ở 200 ms sinh 50 lượt/s ⇒ tràn sau ~2,7 năm, ngắn hơn tuổi thọ một
+ * tủ điều khiển. Khi tràn, counter tụt về 0 và mọi phép delta của FE/historian
+ * cho ra số âm khổng lồ hoặc "vừa reset" — cả hai đều sai. */
 typedef struct {
     uint64_t last_seen_ms;   /* mốc poll thành công gần nhất (CLOCK_MONOTONIC ms); 0 = chưa từng */
-    uint32_t total_polls;    /* tổng lượt poll kể từ khi iobus khởi động */
-    uint32_t total_errors;   /* tổng lượt lỗi; error rate = total_errors/total_polls */
+    uint64_t total_polls;    /* tổng lượt poll kể từ khi iobus khởi động */
+    uint64_t total_errors;   /* tổng lượt lỗi; error rate = total_errors/total_polls */
     uint8_t  addr;           /* địa chỉ Modbus 1..247 */
     uint8_t  online;         /* 1 = slave đang online theo retry policy */
-    uint8_t  _pad[6];
+    uint8_t  bus_id;         /* bus vật lý 1..N; 0 = chưa xác định */
+    uint8_t  _pad[5];
 } kx_slave_metrics_t;
 
-/* Chẩn đoán Modbus RTU nối thêm, giữ nguyên toàn bộ offset/stride cũ. */
 typedef struct {
-    uint32_t timeout_errors;
-    uint32_t crc_errors;
-    uint32_t retry_attempts;
+    uint64_t timeout_errors;
+    uint64_t crc_errors;
+    uint64_t retry_attempts;
+    uint64_t write_failed;
+    uint64_t write_dropped;
     uint8_t  consecutive_errors;
-    uint8_t  _pad[3];
+    uint8_t  last_exception;  /* mã exception Modbus gần nhất; 0 = chưa gặp */
+    uint8_t  _pad[6];
 } kx_modbus_diag_t;
+
+/* MBR-B305: số liệu THẬT của một sợi dây, đo bởi BusWorker.
+ *
+ * Trước bản này trang Overview lấy p50/p95/utilization từ hằng số viết cứng
+ * trong handler Go — giao diện hiển thị số không do thiết bị nào sinh ra. Đó
+ * đúng loại lỗi mà D-07 đã cấm ở tầng FE, chỉ là bị đẩy xuống một tầng.
+ *
+ * `state` là chuỗi ngắn (CLOSED/OPENING/RUNNING/PORT_ERROR/DRAINING/SWAPPING/
+ * CONFIG_ERROR) chứ không phải enum số: consumer đọc thẳng ra UI mà không cần
+ * bảng tra đồng bộ giữa ba ngôn ngữ. */
+typedef struct {
+    uint64_t total_transactions;
+    uint64_t total_errors;
+    uint64_t port_reopens;
+    uint32_t latency_p50_us;
+    uint32_t latency_p95_us;
+    uint32_t latency_max_us;
+    uint32_t baud;
+    uint16_t utilization_pct_x100;  /* 0..10000 = 0..100,00 % */
+    uint8_t  id;                    /* 1-based; 0 = slot chưa dùng */
+    char     parity;
+    uint8_t  stop_bits;
+    uint8_t  _pad[3];
+    char     name[16];
+    char     device[32];
+    char     state[16];
+} kx_bus_metrics_t;
 
 /* ============ io_shm: iobus -> phần còn lại (giá trị đã scale) ============
  * Creator: mkddc-iobus (O_CREAT, init toàn bộ = default trước khi set magic).
@@ -174,18 +213,81 @@ typedef struct {
     uint32_t fb_publish_seq;    /* tăng mỗi lần publish; 0 = iobus chưa publish lần nào */
     kx_slave_metrics_t fb_slave[KX_N_FB_SLAVE];
     kx_modbus_diag_t modbus_diag[KX_N_FB_SLAVE]; /* timeout/retry/CRC per slave */
+
+    /* ---- MBR-B110/B305: bus metrics + danh tính counter (WRITER=iobus) ----
+     *
+     * `producer_boot_id` đổi mỗi lần iobus khởi động lại. Consumer PHẢI so nó
+     * giữa hai lần đọc trước khi tính delta: thiếu bước này, một lần restart
+     * bị đọc thành "ai đó vừa reset counter bằng tay" (OD-MBRTU-008). */
+    uint64_t producer_boot_id;
+    uint64_t counters_since_ms;   /* mốc CLOCK_MONOTONIC ms counter bắt đầu đếm */
+    uint8_t  fb_bus_count;        /* số phần tử hợp lệ trong fb_bus[] */
+    uint8_t  _fb_bus_pad[7];
+    kx_bus_metrics_t fb_bus[KX_N_FB_BUS];
 } kx_io_shm_t;
 
-/* ============ ext_shm: fieldbus (Modbus RTU master) -> hệ thống ============ */
+/* ============ ext_shm: fieldbus (Modbus RTU master) -> hệ thống ============
+ *
+ * CONTRACT v2 (MBR-B001, Đ-03 phê duyệt 2026-08-04). Ba thay đổi có chủ ý so
+ * với v1, mỗi thay đổi vá một lỗi quan sát được chứ không phải làm đẹp:
+ *
+ * 1. `value`/`setpoint` từ `float` sang `double`. float32 có 24 bit mantissa
+ *    nên MẤT CHÍNH XÁC NGUYÊN với mọi giá trị > 16.777.216. Thanh ghi
+ *    uint32 của đồng hồ điện (kWh tích luỹ) vượt ngưỡng này sau vài tháng
+ *    vận hành, và khi vượt thì số đọc bị làm tròn tới bội của 2 rồi 4 rồi 8 —
+ *    một sai số câm, không có cờ lỗi nào, và historian ghi thẳng vào DB.
+ * 2. `quality` mở rộng từ 3 lên 5 mức (`kx_ext_quality_t`). v1 gộp "chưa từng
+ *    có mẫu", "thiết bị trả sai" và "cấu hình sai" vào cùng một `BAD`, nên
+ *    người vận hành không phân biệt được lỗi đấu dây với lỗi khai báo.
+ * 3. Thêm `sample_utc_ms`/`sample_mono_ns`: v1 không có mốc thời gian của
+ *    MẪU, chỉ có `ts_ns` của cả snapshot, nên không tính được tuổi mẫu từng
+ *    điểm và không phân biệt được STALE với GOOD.
+ *
+ * Đây là ABI change có kiểm soát: `KX_SHM_MAGIC` lên v5 và mọi consumer đọc
+ * plc_shm phải nâng cùng gói (Đ-03). Consumer thấy magic cũ PHẢI từ chối, tuyệt
+ * đối không "đọc tạm" theo layout đoán được.
+ */
+
+/* Quality của Point Modbus RTU — 5 mức, theo DATA_MODEL §6.2 (OD-MBRTU-016).
+ * Giá trị 0/1/2 trùng số với kx_quality_t để đường map cũ (UNCERTAIN→STALE)
+ * không đổi nghĩa khi nâng cấp; 3/4 là mức mới. */
+typedef enum {
+    KX_EXTQ_GOOD         = 0,  /* sample decode hợp lệ, còn trong hạn tươi     */
+    KX_EXTQ_STALE        = 1,  /* mẫu quá hạn nhưng chưa tới ngưỡng offline    */
+    KX_EXTQ_BAD          = 2,  /* decode lỗi / non-finite / exception response */
+    KX_EXTQ_OFFLINE      = 3,  /* mất liên lạc thiết bị hoặc cổng down         */
+    KX_EXTQ_CONFIG_ERROR = 4,  /* cấu hình không thực thi được — fail-closed   */
+} kx_ext_quality_t;
+
+/* Lý do quality khác GOOD — 10 mã theo DATA_MODEL §6.3. */
+typedef enum {
+    KX_EXTR_NONE             = 0,
+    KX_EXTR_NOT_INITIALIZED  = 1,  /* chưa từng có mẫu thành công              */
+    KX_EXTR_CONFIG_ERROR     = 2,  /* thiếu profile, hết slot, bus không mở    */
+    KX_EXTR_DECODE_ERROR     = 3,  /* codec trả non-finite hoặc kiểu sai       */
+    KX_EXTR_OUT_OF_RANGE     = 4,  /* ngoài min/max khai báo                   */
+    KX_EXTR_TIMEOUT          = 5,
+    KX_EXTR_CRC_ERROR        = 6,
+    KX_EXTR_PORT_DOWN        = 7,  /* cổng serial lỗi (ENODEV/EIO)             */
+    KX_EXTR_DEVICE_EXCEPTION = 8,  /* slave trả exception; xem exception_code  */
+    KX_EXTR_WRITE_FAILED     = 9,
+    KX_EXTR_BUS_OVERLOAD     = 10,
+} kx_ext_quality_reason_t;
+
 typedef struct {
-    char     name[24];              /* tên điểm (vd "EXT-1.DI0")           */
-    float    value;
-    uint8_t  quality;               /* kx_quality_t                       */
+    char     name[24];              /* point_id ổn định (v1 gọi là "name")     */
+    double   value;                 /* engineering value sau scale/offset       */
+    double   setpoint;              /* PLC/BMS đặt -> fieldbus ghi xuống        */
+    int64_t  sample_utc_ms;         /* mốc SAMPLE thành công gần nhất; 0=chưa   */
+    int64_t  sample_mono_ns;        /* cùng mốc trên CLOCK_MONOTONIC; 0=chưa    */
+    uint8_t  quality;               /* kx_ext_quality_t                        */
+    uint8_t  quality_reason;        /* kx_ext_quality_reason_t                 */
+    uint8_t  exception_code;        /* Modbus exception 0x01..0x0B; 0 = không   */
     uint8_t  slave_addr;
-    uint8_t  online;                /* slave online?                      */
+    uint8_t  bus_id;                /* 1..N bus vật lý; 0 = chưa xác định       */
+    uint8_t  online;                /* slave online?                            */
     uint8_t  writable;
-    float    setpoint;              /* PLC/BMS đặt -> fieldbus ghi xuống   */
-    uint8_t  dirty;                 /* có setpoint cần ghi                 */
+    uint8_t  dirty;                 /* có setpoint cần ghi                      */
 } kx_ext_point_t;
 
 /* ============ plc_shm: core -> iobus(BACnet)/web (object table) ============
@@ -252,7 +354,7 @@ typedef struct {
  * Thêm vào mkddc_shm.h (Rev 2026-06-17) vì cả iobus lẫn core đều phải dùng struct này.
  * Xem: SW_FIELDBUS_DESIGN §10, plan 25 §3.
  */
-#define KX_EXT_SNAP_MAGIC  0x45585401u   /* "EXT\1" */
+#define KX_EXT_SNAP_MAGIC  0x45585401u   /* "EXT\1" — v1, KHÔNG còn được phát  */
 
 typedef struct {
     uint32_t magic;                      /* = KX_EXT_SNAP_MAGIC khi hợp lệ     */
@@ -260,5 +362,57 @@ typedef struct {
     uint16_t _pad;
     kx_ext_point_t points[KX_N_EXT];    /* snapshot tại thời điểm poll xong    */
 } kx_ext_snapshot_msg_t;
+
+/* ============ Snapshot v2 (MBR-B001) — iobus fieldbus → core ============
+ *
+ * v1 chỉ mang `magic + count + points[]`. Consumer vì thế KHÔNG trả lời được
+ * ba câu hỏi mà vận hành thật luôn cần:
+ *
+ *   - "Tôi có mất datagram nào không?"  → không có `sequence`.
+ *   - "Ảnh này thuộc cấu hình nào?"     → không có `generation`/`config_revision`,
+ *     nên sau một lần apply, slot index có thể đã đổi ý nghĩa mà consumer vẫn
+ *     dùng ảnh cũ và gán giá trị của Point A cho Point B.
+ *   - "Producer có vừa restart không?"  → không có `producer_boot_id`, nên
+ *     counter tụt về 0 bị đọc thành "hệ thống vừa được reset thủ công".
+ *
+ * `sequence` đơn điệu tăng theo tiến trình producer; đứt quãng = mất gói.
+ * `generation` tăng mỗi lần iobus SWAP sang cấu hình mới; consumer thấy
+ * generation lạ phải coi toàn bộ slot mapping cũ là vô hiệu.
+ * `config_revision`/`config_checksum` trỏ về đúng bản cấu hình BE đã apply,
+ * cho phép FE nói "iobus đang chạy revision N" thay vì đoán.
+ */
+#define KX_EXT_SNAP_V2_MAGIC   0x45585402u   /* "EXT\2" */
+#define KX_EXT_SNAP_SCHEMA_VER 2u
+/* 23 hex đầu của SHA-256 + NUL. Đủ để phát hiện lệch cấu hình (2^92 tổ hợp),
+ * không cần chở trọn 64 ký tự qua mỗi datagram. */
+#define KX_EXT_CHECKSUM_LEN    24
+
+typedef struct {
+    char     point_id[24];          /* định danh ổn định xuyên generation      */
+    double   value;
+    int64_t  sample_mono_ns;        /* mốc sample thành công; 0 = chưa có mẫu  */
+    int64_t  sample_utc_ms;
+    uint8_t  quality;               /* kx_ext_quality_t                        */
+    uint8_t  quality_reason;        /* kx_ext_quality_reason_t                 */
+    uint8_t  exception_code;        /* Modbus exception gốc; 0 = không          */
+    uint8_t  slave_addr;
+    uint8_t  bus_id;                /* 1..N; 0 = chưa xác định                 */
+    uint8_t  online;
+    uint8_t  writable;
+    uint8_t  _pad;
+} kx_ext_sample_v2_t;
+
+typedef struct {
+    uint32_t magic;                 /* = KX_EXT_SNAP_V2_MAGIC                  */
+    uint16_t schema_version;        /* = KX_EXT_SNAP_SCHEMA_VER; lệch ⇒ REJECT */
+    uint16_t count;                 /* số phần tử hợp lệ trong samples[]        */
+    uint64_t sequence;              /* đơn điệu tăng; đứt ⇒ mất datagram        */
+    uint64_t generation;            /* generation cấu hình đang chạy            */
+    uint64_t config_revision;       /* revision BE đã apply                     */
+    uint64_t producer_boot_id;      /* đổi mỗi lần iobus khởi động lại          */
+    uint64_t publish_mono_ns;       /* mốc publish của chính snapshot này        */
+    char     config_checksum[KX_EXT_CHECKSUM_LEN];
+    kx_ext_sample_v2_t samples[KX_N_EXT];
+} kx_ext_snapshot_v2_t;
 
 #endif /* MKDDC_SHM_H */
