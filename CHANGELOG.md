@@ -127,9 +127,14 @@ kế D-07 và đã có khung giải thích trên cả hai trang.
 | `npx vitest --run --environment jsdom src` | **410/410 PASS**, 50 file (trước: 400/49) |
 | `npm run lint` / `npm run build` | **PASS**, 0 warning |
 
-> **Còn chặn:** `ttyS1` đang `status = "disabled"` trong device tree
-> (`serial@21160000`), nên `/dev/rs485-2` chưa tồn tại trên bo. Toàn bộ đường
-> phần mềm cho cổng 2 đã sẵn sàng; bật nó cần sửa DTB trong partition `boot`.
+> **Còn chặn — cổng 2:** `ttyS1` đang `status = "disabled"` trong device tree
+> (`serial@21160000`), nên `/dev/rs485-2` chưa tồn tại. Toàn bộ đường phần mềm
+> đã sẵn sàng và **pin mux cũng đã có sẵn** (`pinctrl-0` + nhóm `uart1m0/m1` đều
+> khai báo đủ) — thiếu đúng một thuộc tính `status`. Nhưng DTB nằm trong FIT
+> image ở partition `boot`, và nạp lại nó trên bo chỉ truy cập được qua SSH có
+> rủi ro không boot mà không có console để cứu. Phân tích, hai đường đi và các
+> câu hỏi còn lại cho chủ sở hữu phần cứng:
+> `docs/08_hardware/foxlinx-som-ddc24/ENABLE_TTYS1_RS485_2.md`.
 
 ### Fixed — BE và iobus bất đồng về `buses[]` trong `fieldbus.conf` (2026-08-06)
 
