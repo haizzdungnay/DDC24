@@ -23,7 +23,14 @@ ModbusRTUBus                            — resource phần cứng của thiết
                 └─ 0..1 PointMapping    — ánh xạ vào Point Database DDC-24
 ```
 
-> **Cấu hình 2 Bus RS485 vật lý:** Cổng 1 (`/dev/rs485-1` → `/dev/ttyS5`) và Cổng 2 (`/dev/rs485-2` → `/dev/ttyS1` trên Header P16 UART1 M1). Mỗi Bus có cấu hình serial format (`baud_rate`, `parity`, `stop_bits`, `direction_control`) và tham số `offline_probe_ms` riêng. Ràng buộc: mọi validator từ chối `bus_id` không có trong capability manifest (`bus_id != 1 && bus_id != 2`).
+> **Cấu hình 2 Bus RS485 vật lý:** Cổng 1 (`/dev/rs485-1` → `ttyS5`) và Cổng 2
+> (`/dev/rs485-2` → `ttyS1`, UART1 M1 trên Header P16). Mỗi Bus có serial format
+> riêng (`baud`, `parity`, `stop_bits`) và `offline_probe_ms` riêng — người dùng
+> cấu hình **từng cổng độc lập** ở trang Cổng RS-485, và Device **kế thừa
+> read-only** từ cổng nó thuộc về. Ràng buộc: validator từ chối `bus_id` không có
+> trong capability manifest, và từ chối hai bus trỏ cùng một device node.
+>
+> Cả hai cổng đều auto-direction (không DE/RE) — xem `direction` ở §3.
 
 Ràng buộc quan hệ:
 
@@ -50,26 +57,45 @@ trong §3–§5. FE không được suy diễn `quality` từ `online` hoặc `c
 
 ## 3. `MODBUS_RTU_BUS`
 
+Tên field dưới đây là tên **trên API và trong `fieldbus.conf`** — cùng một bộ
+tên, không dịch qua lại. Định dạng file là [CONFIG_SCHEMA §5b](../interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md#5b-fieldbusconf--rs-485-modbus-rtu-master-thiết-bị-phụ),
+và §5b là nguồn chuẩn khi có bất đồng.
+
 | Field | Kiểu | Bắt buộc | Default | Validation |
 |---|---|---|---|---|
-| `bus_id` | enum; **Rev A chỉ nhận `rs485-1`** | có | `rs485-1` | bất biến, do hệ thống định nghĩa; không phải `/dev/tty*`. Giá trị ngoài capability manifest ⇒ `VALIDATION_FAILED`, không im lặng chấp nhận |
-| `label` | string ≤32 | không | `"RS485-1"` | hiển thị |
-| `enabled` | bool | có | `false` | bus disabled thì mọi device trên bus không được poll |
-| `port_ref` | enum capability | có | từ manifest | phải nằm trong allowlist capability manifest |
-| `baud_rate` | enum 9600/19200/38400/57600/115200 | có | `19200` | chung cho toàn bus |
-| `data_bits` | int | có | `8` | **cố định 8**, không cho UI sửa (Modbus RTU) |
-| `parity` | enum `N`/`E`/`O` | có | `N` | chung cho toàn bus |
-| `stop_bits` | enum 1/2 | có | `1` | `N` nên đi với `2`; cảnh báo nếu `N`+`1` |
-| `offline_probe_ms` | int 1000..60000 | không | `5000` | chu kỳ thử lại device OFFLINE. **As-Built ✅** — `Rs485Config::offline_probe_ms`, đóng D-04 |
-| `inter_frame_policy` | enum `auto`/`fixed_ms` | không | `auto` | `auto` = 3.5 ký tự theo baud |
-| `direction_control` | enum `auto`/`rts`/`gpio` | có | **chưa xác định** | ⚠️ **CÒN MỞ (Đ-02/`G-D`)** — source chưa gọi `modbus_rtu_set_serial_mode()`, device tree Foxlinx không có cấu hình `rs485-*`. Không được ghi `auto` như sự thật đã kiểm chứng cho tới khi Hardware Lead xác nhận transceiver |
-| `open_state` | enum `open`/`closed`/`unavailable` | runtime | — | read-only, từ iobus |
+| `bus_id` | enum `rs485-1` \| `rs485-2` | có | `rs485-1` | bất biến, do hệ thống định nghĩa; không phải `/dev/tty*`. Ngoài capability manifest ⇒ `VALIDATION_FAILED`, không im lặng chấp nhận. Cụm số cuối là số hiệu mà `slaves[].bus_id` tham chiếu |
+| `display_name` | string ≤32 | không | viết hoa `bus_id` | hiển thị |
+| `enabled` | bool | không | `true` | bus disabled thì mọi device trên bus không được poll. Bên đọc nhận cả `1`/`0`; bên ghi luôn xuất `true`/`false` |
+| `port` | enum capability | có | từ manifest | phải nằm trong allowlist capability manifest. Dùng tên ổn định `/dev/rs485-*` (udev), **không** dùng `ttyS*` trực tiếp |
+| `baud` | enum 9600/19200/38400/57600/115200 | có | `19200` | chung cho toàn bus |
+| `data_bits` | int | không | `8` | **cố định 8**, không cho UI sửa. iobus viết cứng 8 trong `modbus_new_rtu()`; validator từ chối giá trị khác |
+| `parity` | enum `N`/`E`/`O` | không | `N` | chung cho toàn bus |
+| `stop_bits` | enum 1/2 | không | `1` | `N` nên đi với `2`; cảnh báo nếu `N`+`1` |
+| `offline_probe_ms` | int 1000..60000 | không | `5000` | chu kỳ thử lại device OFFLINE. **As-Built ✅**, đóng D-04 |
+| `direction` | enum `auto` \| `rts` | không | `auto` | **`G-D` CLOSED 2026-08-06** — Hardware owner xác nhận cổng RS-485 chỉ có TX/RX, **không có DE/RE** ⇒ transceiver tự đảo hướng. `BusWorker::apply_direction_mode()` tắt tường minh `SER_RS485_ENABLED` ở chế độ auto rồi đọc lại driver và ghi log. Chỉ đặt `rts` nếu bo thật sự nối DE/RE vào RTS |
+| `rts_delay_before_us` / `rts_delay_after_us` | int 0..100000 | không | `0` | chỉ có tác dụng khi `direction: "rts"` |
+| `open_state` | enum runtime | runtime | — | read-only, từ iobus |
 | `last_error` | string ≤128 | runtime | `null` | read-only |
 
-**Rev A có đúng một instance Bus** (Đ-01). Luật "hai bus không được map tới cùng
-device node" vẫn giữ trong validator vì nó là luật của mô hình, không phải của số
-lượng instance — nhưng ở Rev A nó không thể bị vi phạm. USB-RS485 chỉ hợp lệ trong
-lab profile có provenance riêng và phải bị từ chối ở production profile.
+**Hệ thống có đúng hai instance Bus: `rs485-1` và `rs485-2`.** Luật "hai bus
+không được map tới cùng device node" là luật thật và **có thể bị vi phạm** với
+hai cổng, nên validator phải cưỡng chế nó. USB-RS485 chỉ hợp lệ trong lab profile
+có provenance riêng và phải bị từ chối ở production profile.
+
+> **Đính chính 2026-08-06.** Bản trước ghi *"Rev A chỉ nhận `rs485-1`"* và *"Rev
+> A có đúng một instance Bus (Đ-01)"*, mâu thuẫn với chính §1 của tài liệu này
+> (đã ghi 2 bus). Sản phẩm có **2 cổng RS-485**; `Đ-01` bị thay thế bởi
+> `OD-MBRTU-001` (CLOSED 2026-08-05). Ba tên field cũng được đưa về đúng thứ
+> đang chạy trên dây và trên API: `label` → `display_name`, `port_ref` → `port`,
+> `baud_rate` → `baud`, `direction_control` → `direction`.
+>
+> `inter_frame_policy` bị **bỏ khỏi Rev A**: libmodbus tự áp khoảng lặng 3.5 ký
+> tự theo baud, và ta không có đường đo để chứng minh một giá trị `fixed_ms` do
+> người dùng đặt là đúng. Giữ một nút bấm không kiểm chứng được thì tệ hơn không
+> có nút.
+>
+> `direction_control: gpio` cũng bị bỏ: phần cứng không có DE/RE nên không tồn
+> tại chân GPIO nào để điều khiển.
 
 ## 4. `MODBUS_RTU_DEVICE`
 
@@ -78,12 +104,12 @@ lab profile có provenance riêng và phải bị từ chối ở production pro
 | `device_id` | string 1..23 ASCII | có | server-generated | bất biến; `^[A-Za-z][A-Za-z0-9_-]{0,22}$`; unique toàn hệ (so sánh case-insensitive) |
 | `name` (`display_name`) | UTF-8 1..64 | có | — | NFC normalize; không cho chuỗi rỗng sau trim |
 | `enabled` | bool | có | `true` | device disabled không được scheduler nhận |
-| `rs485_port` (`bus_id`) | enum, Rev A chỉ `rs485-1` | có | `rs485-1` | phải là bus tồn tại trong capability manifest |
-| `slave_id` | int 1..247 | có | — | **unique trong cùng bus**; trùng ở hai bus khác nhau là hợp lệ. Ở Rev A một bus ⇒ tương đương unique toàn hệ, nên As-Built (`domain.go`, unique toàn cục) **đúng cho Rev A** và chỉ sai khi mở bus thứ hai — xem `F-BE-08` |
-| `baud_rate` | enum | dẫn xuất | kế thừa Bus | **read-only ở API v2**; ghi khác giá trị Bus → `VALIDATION_FAILED` |
+| `rs485_port` (`bus_id`) | enum `rs485-1` \| `rs485-2` | có | `rs485-1` | phải là bus tồn tại trong capability manifest |
+| `slave_id` | int 1..247 | có | — | **unique trong cùng bus**; trùng ở hai bus khác nhau là **hợp lệ** và phải được chấp nhận. Với hai cổng, luật này có hiệu lực thật — validator kiểm theo `(bus_id, slave_id)`, không phải toàn cục (`F-BE-08` đã đóng) |
+| `baud` | enum | dẫn xuất | kế thừa Bus | **read-only**; ghi khác giá trị Bus → `VALIDATION_FAILED`. Giao diện Thiết bị **không được** cho sửa — xem ghi chú dưới bảng |
 | `data_bits` | int | dẫn xuất | `8` | read-only |
-| `parity` | enum | dẫn xuất | kế thừa Bus | read-only ở API v2 |
-| `stop_bits` | int | dẫn xuất | kế thừa Bus | read-only ở API v2 |
+| `parity` | enum | dẫn xuất | kế thừa Bus | read-only |
+| `stop_bits` | int | dẫn xuất | kế thừa Bus | read-only |
 | `poll_interval_ms` | int 100..60000 | có | `1000` | deadline poll khi ONLINE |
 | `timeout_ms` | int 20..5000 | có | `300` | timeout **mỗi lần phát**, không phải mỗi lượt poll |
 | `retry_count` | int 0..3 | có | `2` | **số lần PHÁT LẠI một giao dịch Modbus bị lỗi** trong cùng lượt poll (Đ-05). `0` là giá trị hợp lệ và có nghĩa: "không phát lại, báo lỗi ngay". Validator **không được** âm thầm đổi `0` thành `2`. Chi phí xấu nhất một lượt poll = `(1 + retry_count) × timeout_ms` |
@@ -101,7 +127,23 @@ lab profile có provenance riêng và phải bị từ chối ở production pro
 một dây RS-485 vật lý chỉ có một cấu hình khung; cho phép hai device cùng bus khai
 báo khác nhau tạo cấu hình không thể thực thi. Đề bài liệt kê chúng ở Device nên
 API vẫn **trả về** các field này trên Device (dạng dẫn xuất, read-only) để UI hiển
-thị nguyên vẹn. Quyết định cần duyệt: `OD-MBRTU-002`.
+thị nguyên vẹn. `OD-MBRTU-002` **CLOSED** — Bus là entity, Device kế thừa.
+
+> **Trả về ≠ cho sửa.** Từ 2026-08-06 điều này được phát biểu thành ràng buộc
+> giao diện, vì bản triển khai trước đã hiểu sai đúng chỗ này: form "Thêm thiết
+> bị mới" có **ô nhập** baud, parity và stop bit cho từng thiết bị. Tức là mô
+> hình dữ liệu nói tham số serial thuộc về dây, validator cưỡng chế điều đó, còn
+> giao diện thì vẫn mời người dùng nhập chúng ở thiết bị rồi từ chối sau khi họ
+> bấm lưu.
+>
+> Bắt buộc:
+>
+> - Trang **Thiết bị** hiển thị `baud`/`parity`/`stop_bits`/`data_bits` ở dạng
+>   **chỉ đọc**, kèm chỉ dẫn tới cổng đang chi phối chúng.
+> - Trang **Cổng RS-485** là nơi duy nhất sửa được các tham số đó, và sửa **độc
+>   lập từng cổng**.
+> - Thay đổi tham số của một cổng ảnh hưởng **mọi** thiết bị trên cổng đó; giao
+>   diện phải nói rõ điều này trước khi áp.
 
 ## 5. `MODBUS_RTU_POINT`
 

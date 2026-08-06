@@ -426,31 +426,111 @@ Legacy `AV` IDs are accepted as aliases and normalized to `VP`.
 > Thêm `bind_interface` 2026-06-17: bắt buộc chỉ rõ interface theo yêu cầu security (plan 24 §1).
 
 ## 5b. `fieldbus.conf` — RS-485 Modbus RTU **master** (thiết bị phụ)
+
+> **§5b LÀ NGUỒN CHUẨN DUY NHẤT CHO ĐỊNH DẠNG FILE NÀY.** File có hai bên chạm
+> vào — `mkddc-web` **ghi**, `mkddc-iobus` **đọc** — nên nó là một *hợp đồng*,
+> không phải chi tiết triển khai của bên nào. Bất kỳ trường nào một bên ghi mà
+> §5b không mô tả đều là nợ kỹ thuật, và bên còn lại sẽ sớm hay muộn hiểu khác.
+>
+> Đó không phải cảnh báo lý thuyết. Từ 2026-08-05 tới 2026-08-06, `buses[]` tồn
+> tại trong file thật trên bo nhưng **không được mô tả ở đây**. Hai bên tự đặt
+> tên khoá: BE ghi `bus_id`/`port`/`stop_bits`, iobus đọc `id`/`device`/`stop`.
+> Không giá trị nào cả hai cùng chấp nhận. Mỗi bên đều có test và đều xanh, vì
+> mỗi bên tự dựng file thử bằng đúng bộ tên của mình. Hậu quả trên bo: mọi bus
+> tạo từ giao diện đều bị iobus loại **im lặng**, và mọi thao tác cấu hình từ
+> giao diện bị BE từ chối bằng một lỗi trỏ vào trường người dùng không đụng tới.
+>
+> Khi sửa file này, sửa §5b **trước**, rồi mới sửa code hai phía theo nó.
+
 ```json
 {
-  "rs485": { "device": "/dev/ttyS3", "baud": 19200, "parity": "N", "stop": 1 },
+  "revision": 12,
+  "checksum": "1e95dea8c4bc…",
+
+  "buses": [
+    { "bus_id": "rs485-1", "display_name": "RS485-1", "port": "/dev/rs485-1",
+      "baud": 19200, "parity": "N", "stop_bits": 1, "data_bits": 8,
+      "offline_probe_ms": 5000, "enabled": true, "direction": "auto" },
+    { "bus_id": "rs485-2", "display_name": "RS485-2", "port": "/dev/rs485-2",
+      "baud": 9600, "parity": "E", "stop_bits": 1, "data_bits": 8,
+      "offline_probe_ms": 5000, "enabled": true, "direction": "auto" }
+  ],
+
+  "rs485": { "device": "/dev/rs485-1", "baud": 19200, "parity": "N", "stop": 1 },
   "poll_default_ms": 1000,
+
   "slaves": [
-    { "addr": 10, "profile": "kinexus-io-ext-8di8do", "poll_ms": 500,  "name": "EXT-1" },
-    { "addr": 11, "profile": "kinexus-remote-hmi",     "poll_ms": 1000, "name": "HMI-2" },
-    { "addr": 20, "profile": "generic-power-meter",    "poll_ms": 2000, "name": "Meter-A" }
-  ]
+    { "addr": 10, "bus_id": 1, "profile": "/data/config/profiles/EXT-1.json",
+      "name": "EXT-1", "poll_ms": 500, "timeout_ms": 300, "retry": 1,
+      "offline_after_errors": 2 },
+    { "addr": 20, "bus_id": 2, "profile": "/data/config/profiles/Meter-A.json",
+      "name": "Meter-A", "poll_ms": 2000, "timeout_ms": 500, "retry": 1,
+      "offline_after_errors": 3 }
+  ],
+
+  "devices": [ … ], "points": [ … ]
 }
 ```
+
+### 5b.1 `buses[]` — MỘT SỢI DÂY RS-485
+
+**Hai cổng, chốt cứng.** MK-DDC-24 có **2 cổng RS-485 vật lý**: `rs485-1` (UART
+`ttyS5`) và `rs485-2` (UART `ttyS1`, UART1 M1 trên header P16). Tài liệu nào còn
+nói "Rev A có đúng một bus" là **đã lạc hậu** — xem `OD-MBRTU-001` và §5b.4.
+
+Tham số serial thuộc về **dây**, không thuộc thiết bị: hai thiết bị trên cùng
+một dây không thể chạy hai baud khác nhau. Đặt baud ở Device là mời người dùng
+lưu một cấu hình không thể thực thi.
+
 | Field | Bắt buộc | Mặc định | Ý nghĩa |
 |-------|----------|----------|---------|
-| `rs485.device` | ✅ | — | Đường dẫn serial port RS-485 (vd `/dev/ttyS3`, `/dev/ttyUSB0`). **Bắt buộc** — không hardcode trong code. |
-| `rs485.baud` | ✅ | — | Baud rate: 9600/19200/38400/57600/115200 |
-| `rs485.parity` | không | `"N"` | `"N"` / `"E"` / `"O"` |
-| `rs485.stop` | không | 1 | 1 hoặc 2 stop bits |
-| `poll_default_ms` | không | 1000 | Poll interval mặc định cho slave không khai báo `poll_ms` |
-| `slaves[].addr` | ✅ | — | Địa chỉ Modbus slave (1–247) |
-| `slaves[].profile` | ✅ | — | Profile ID (tìm trong `/usr/share/kinexus/profiles/` hoặc `/data/config/profiles/`) |
-| `slaves[].poll_ms` | không | `poll_default_ms` | Poll interval riêng cho slave này |
-| `slaves[].name` | ✅ | — | Tên slave; dùng làm prefix trong ext point name (`EXT-<name>.<point>`) |
+| `bus_id` | ✅ | — | `"rs485-1"` hoặc `"rs485-2"`. Là **vai trò trong sản phẩm**, không phải `/dev/tty*`. Cụm số cuối là số hiệu bus mà `slaves[].bus_id` tham chiếu (`"rs485-2"` → `2`). Không suy được số ⇒ **loại cả bus**, không đoán là 1 |
+| `display_name` | không | viết hoa `bus_id` | Nhãn hiển thị, ≤32 ký tự |
+| `port` | ✅ | — | Đường dẫn thiết bị. Phải nằm trong capability manifest của board (`GET /modbus/ports`). Dùng tên ổn định `/dev/rs485-*` do udev tạo, **không** dùng `ttyS*` trực tiếp: số hiệu `ttyS*` đổi theo thứ tự enable trong device tree |
+| `baud` | ✅ | `19200` | 9600 / 19200 / 38400 / 57600 / 115200 |
+| `parity` | không | `"N"` | `"N"` / `"E"` / `"O"` |
+| `stop_bits` | không | `1` | 1 hoặc 2 |
+| `data_bits` | không | `8` | **Cố định 8.** iobus mở cổng bằng `modbus_new_rtu(…, 8, stop)`; 8 là viết cứng. Validator từ chối giá trị khác — nhận rồi vẫn hiển thị nó là để giao diện nói sai về khung truyền đang chạy trên dây |
+| `offline_probe_ms` | không | `5000` | 1000..60000. Chu kỳ thử lại device đang OFFLINE. Thuộc **bus** vì nó bảo vệ băng thông của sợi dây (D-04) |
+| `enabled` | không | `true` | Kiểu **boolean**. `false` ⇒ không poll thiết bị nào trên dây này. Bên đọc chấp nhận cả `1`/`0`; bên ghi **luôn** xuất `true`/`false` |
+| `direction` | không | `"auto"` | `"auto"` \| `"rts"`. Phần cứng MK-DDC-24 **chỉ có TX/RX, không có DE/RE** ⇒ luôn `auto`. Chỉ đặt `rts` nếu bo thật sự nối DE/RE vào RTS; bật nhầm làm driver giữ RTS suốt lượt phát và có thể chặn đường truyền |
+| `rts_delay_before_us` / `rts_delay_after_us` | không | `0` | 0..100000. Chỉ có tác dụng khi `direction: "rts"` |
 
-> `profile` trỏ tới template register-map (xem [D-2 §3](MODBUS_REGISTER_MAP_MK-DDC-24_VI.md)). Thêm slave = thêm 1 phần tử; đổi baud hoặc device cần restart `mkddc-iobus`.
-> Field `device` thêm 2026-06-17: bắt buộc chỉ rõ serial port để không hardcode trong code (plan 25 §4 gap closed).
+### 5b.2 `rs485{}` — khối tương thích, **chỉ đọc**
+
+`mkddc-web` sinh khối này từ bus **enabled đầu tiên**. Nó tồn tại để một
+`mkddc-iobus` chưa nâng cấp (chỉ hiểu một bus) vẫn mở được cổng thay vì im lặng
+không poll gì. **Không sửa tay khối này** — lần "Áp dụng" kế tiếp sẽ ghi đè.
+Bản iobus hiện hành ưu tiên `buses[]` và chỉ dùng `rs485{}` khi `buses[]` vắng.
+
+### 5b.3 `slaves[]` — khối phái sinh, **chỉ đọc**
+
+`mkddc-web` sinh từ `devices[]` (nguồn chân lý). Sửa tay ở đây sẽ mất khi áp
+cấu hình lần sau.
+
+| Field | Bắt buộc | Mặc định | Ý nghĩa |
+|-------|----------|----------|---------|
+| `addr` | ✅ | — | Địa chỉ Modbus slave (1–247), **duy nhất trong cùng một bus** |
+| `bus_id` | không | `1` | **Số hiệu** bus (1 hoặc 2) — khác kiểu với `buses[].bus_id` là chuỗi. Vắng ⇒ 1, giữ cấu hình một-bus cũ chạy nguyên |
+| `profile` | ✅ | — | Đường dẫn register-map JSON (xem [D-2 §3](MODBUS_REGISTER_MAP_MK-DDC-24_VI.md)) |
+| `name` | ✅ | — | Prefix trong tên ext point (`EXT-<name>.<point>`) |
+| `poll_ms` | không | `poll_default_ms` | Chu kỳ poll riêng |
+| `timeout_ms` | không | `300` | 20..10000 |
+| `retry` | không | `1` | **Số lần PHÁT LẠI một giao dịch**, 0..3 (D-05). Không phải ngưỡng offline |
+| `offline_after_errors` | không | `2` | 1..10 lượt poll hỏng liên tiếp thì chuyển OFFLINE |
+
+### 5b.4 Nạp lại cấu hình
+
+Đường chính là **kênh điều khiển** `/run/mkddc/modbus-control.sock`
+(`apply_config`), áp tại ranh giới giữa hai giao dịch Modbus. Restart
+`mkddc-iobus` chỉ là phương án dự phòng và **phải nói rõ trong warnings**:
+restart cắt luôn IOP 100 Hz, tức mọi I/O vật lý của tủ ngừng vài giây chỉ vì ai
+đó đổi tên một Point (D-09 / MBR-B212).
+
+> **Lịch sử.** Trước 2026-08-06 mục này chỉ mô tả `rs485{}` + `slaves[]` một
+> bus. `buses[]`, `devices[]`, `points[]`, `revision`, `checksum` đã có trong
+> file thật từ Track B nhưng không được mô tả ở đây — chính khoảng trống đó để
+> BE và iobus trôi khỏi nhau mà không test nào bắt được.
 
 ## 5c. `time.conf` — timezone, NTP và system time
 

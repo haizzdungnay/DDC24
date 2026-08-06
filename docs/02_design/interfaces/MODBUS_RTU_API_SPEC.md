@@ -123,6 +123,44 @@ apply. Chỉ endpoint 5 mới apply. Đây là khác biệt lớn nhất so vớ
 `apply_state.state ∈ {idle, staging, applying, unknown, failed}`.
 `iobus_config_in_sync=false` là tín hiệu bắt buộc FE phải hiển thị cảnh báo.
 
+### 3.1b `PUT /modbus/buses/{bus_id}` — cấu hình MỘT cổng RS-485
+
+`MBR-B213`. Sản phẩm có **hai cổng** (`rs485-1` → `ttyS5`, `rs485-2` → `ttyS1`),
+cấu hình **độc lập**, áp **riêng từng cổng**.
+
+Request:
+
+```json
+{ "display_name": "Dây tầng 1", "baud": 38400, "parity": "E",
+  "stop_bits": 1, "offline_probe_ms": 5000, "enabled": true }
+```
+
+Response `200`:
+
+```json
+{ "bus": { "bus_id": "rs485-1", "port": "/dev/rs485-1", "baud": 38400, … },
+  "apply": { "result": "success", "applied": true, "reload": "control", "revision": 14 } }
+```
+
+**Bốn trường KHÔNG nhận từ client** — chúng là sự thật phần cứng, không phải
+lựa chọn cấu hình:
+
+| Trường | Vì sao |
+|---|---|
+| `bus_id` | định danh cổng, bất biến; lấy từ đường dẫn |
+| `port` | ánh xạ `bus_id` ↔ device node do phần cứng quyết định. Cho sửa tự do nghĩa là cho phép trỏ hai bus vào cùng một node — cấu hình nhìn hợp lệ mà chạy sai dây |
+| `data_bits` | iobus mở cổng bằng `modbus_new_rtu(…, 8, stop)`; 8 là viết cứng |
+| `direction` | phần cứng chỉ có TX/RX, không có DE/RE (`G-D` CLOSED). Một nút đổi được nó chỉ tạo cơ hội tự bắn vào chân mình |
+
+Trường vắng mặt **giữ nguyên** giá trị cũ (BE dùng con trỏ để phân biệt "không
+gửi" với "gửi 0"; gộp hai thứ đó lại sẽ biến một PATCH thiếu trường thành lệnh
+đặt `baud = 0`).
+
+Áp dụng vẫn **atomic toàn cấu hình** như mọi thay đổi Modbus khác — "riêng từng
+cổng" là ở mức thao tác người dùng, không phải phá vỡ transaction. Đổi tham số
+một cổng sẽ **đồng bộ xuống mọi Device trên cổng đó** (`OD-MBRTU-002`: Device kế
+thừa read-only), nên giao diện phải cảnh báo trước khi áp nếu cổng đang có thiết bị.
+
 ### 3.2 `PUT /modbus/config/candidate`
 
 Request:
@@ -131,7 +169,7 @@ Request:
 {
   "base_revision": 42,
   "operation_id": "1b2f…",
-  "buses":   [ { "bus_id": "rs485-1", "enabled": true, "baud_rate": 19200, "parity": "N", "stop_bits": 1, "offline_probe_ms": 5000 } ],
+  "buses":   [ { "bus_id": "rs485-1", "enabled": true, "baud": 19200, "parity": "N", "stop_bits": 1, "data_bits": 8, "offline_probe_ms": 5000 } ],
   "devices": [ … ],
   "points":  [ … ]
 }

@@ -6,7 +6,8 @@
 **Ngày:** 2026-08-05
 **Chủ quản đề xuất:** Fieldbus Lead + Core Lead
 **Phạm vi:** `mkddc-iobus` và `mkddc-core` trên SOM. **Không** liên quan STM32/IOP.
-**Quyết định đã ký áp dụng:** Đ-01 (1 bus Rev A), Đ-05 (retry thật), Đ-07 (≥256 Point)
+**Quyết định đã ký áp dụng:** Đ-05 (retry thật), Đ-07 (≥256 Point).
+> **Đ-01 (1 bus) ĐÃ BỊ THAY THẾ** bởi `OD-MBRTU-001` (CLOSED 2026-08-05): sản phẩm có **2 cổng RS-485** — `rs485-1`→`ttyS5`, `rs485-2`→`ttyS1`
 **Đối chiếu source tại:** `feat/modbus-rtu-track-a` / `eade4e5`
 **Trace:** `SYS-REQ-MBRTU-001`, `SWR-REQ-MBRTU-004..006`, `SWR-REQ-MBRTU-009`,
 `IF-REQ-MBRTU-001..002`, [DDD-DM-MBRTU-001](MODBUS_RTU_DATA_MODEL.md)
@@ -19,7 +20,7 @@
 
 | Trách nhiệm | Owner | Lý do |
 |---|---|---|
-| Mở/đóng cổng serial RS485 (Rev A: 1 cổng) | `mkddc-iobus` | duy nhất được chạm phần cứng serial |
+| Mở/đóng cổng serial RS485 (**2 cổng**: `rs485-1`, `rs485-2`) | `mkddc-iobus` | duy nhất được chạm phần cứng serial |
 | Poll scheduler, transaction Modbus, retry | `mkddc-iobus` | cần bám monotonic clock và trạng thái dây |
 | Codec register ↔ engineering | `mkddc-iobus` | ở gần dữ liệu thô nhất, tránh truyền raw đi xa |
 | `quality`, `quality_reason`, sample timestamp | `mkddc-iobus` | chỉ producer biết mẫu có thật hay không |
@@ -324,9 +325,9 @@ generation**; identity xuyên generation luôn là `point_id`.
 
 | Hạng mục | Giá trị Rev A | Trạng thái |
 |---|---:|---|
-| Bus logic | **1** | **CHỐT** bằng Đ-01; `OD-MBRTU-001` CLOSED |
+| Bus logic | **2** | **CHỐT** bằng `OD-MBRTU-001` (CLOSED 2026-08-05) — `rs485-1`→`ttyS5`, `rs485-2`→`ttyS1`. Thay thế Đ-01 (1 bus) |
 | Device / bus | 16 | PROPOSED |
-| Device tổng | 16 (một bus) | PROPOSED |
+| Device tổng | 32 (16 × 2 bus) | PROPOSED |
 | Modbus RTU Point tổng | **≥ 256** (mục tiêu Đ-07) | PROPOSED — **As-Built vẫn là 64** (`KX_N_EXT = 64`). Nâng phải cùng đợt đổi ABI |
 | Pending write toàn hệ | 64 | PROPOSED — chưa cưỡng chế trong source (F-FW-18) |
 | Read block | 125 register / 2000 bit | ràng buộc protocol |
@@ -365,7 +366,7 @@ capacity (do file bị sửa tay) phải `CONFIG_ERROR` fail-closed, không trun
 
 | ID | Thiết kế | As-Built tại `eade4e5` | Mức | Bằng chứng |
 |---|---|---|---|---|
-| F-FW-01 | `BusWorker` tách khỏi `ModbusMaster` | 1 `ModbusMaster`, 1 `modbus_t*`, 1 `rs485.device` | **P2** (hạ từ P0) | Đ-01 chốt 1 bus ⇒ As-Built **đúng hành vi** Rev A; còn lại là nợ cấu trúc cho `MBR-B101` |
+| F-FW-01 | `BusWorker` tách khỏi `ModbusMaster` | **ĐÃ ĐÓNG** — mỗi bus một `BusWorker` trên thread riêng, `modbus_t*` riêng | — | `MBR-B101` triển khai; hai bus là yêu cầu sản phẩm, không còn là nợ cấu trúc |
 | F-FW-02 | quality 5 mức + reason | `kx_quality_t{GOOD,UNCERTAIN,BAD}` + cờ `online` | P0 | `contracts/shm/mkddc_shm.h` |
 | F-FW-03 | sample có timestamp producer | `kx_ext_point_t` không có trường timestamp | P0 | `mkddc_shm.h` |
 | F-FW-04 | value typed (double) | `float value` | P0 | như trên |
@@ -416,7 +417,7 @@ Cột **Hiện trạng** đối chiếu với test thật trong repo tại `eade
 | TW-MBRTU-06 | unit | timestamp không đổi khi chỉ quality xấu đi | ❌ chưa có — cần F-FW-03 |
 | TW-MBRTU-07 | unit | gộp block: không xuyên gap, tôn trọng 125/2000 | ❌ chưa có — `MBR-B109` |
 | TW-MBRTU-08 | unit | hàng đợi ghi đầy ⇒ `QUEUE_FULL`; coalesce trả `SUPERSEDED` | ❌ chưa có — F-FW-18 |
-| TW-MBRTU-09 | integration | bus 1 hỏng không chặn bus 2 và không chặn IOP | ⏸ **hoãn** — Rev A một bus (Đ-01). Phần "không chặn IOP" chuyển sang T-A4 trên board |
+| TW-MBRTU-09 | integration | bus 1 hỏng không chặn bus 2 và không chặn IOP | ✅ `test_bus_worker.cpp` — một cổng mở được, một cổng chết, worker còn lại vẫn poll. Phần "không chặn IOP" kiểm trên board (T-A4) |
 | TW-MBRTU-10 | integration | apply generation mới tại ranh giới transaction, ACK đúng revision/checksum | ❌ chưa có — `MBR-B106` |
 | TW-MBRTU-11 | integration | apply lỗi ⇒ giữ generation cũ đang chạy | ❌ chưa có — `MBR-B106` |
 | TW-MBRTU-12 | integration | `PORT_DOWN` ⇒ mọi Point trên bus `OFFLINE`, không giữ GOOD | ◐ một phần: `SlaveWithMissingProfileIsNotReportedOnline`, `SlaveWithoutExtCapacityIsNotReportedOnline` phủ nhánh CONFIG_ERROR fail-closed |

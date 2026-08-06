@@ -7,7 +7,7 @@
 
 > **CẬP NHẬT 2026-08-04 — 8 quyết định đã được ký.** Xem
 > [Biên bản phê duyệt](../07_records/reviews/MODBUS_RTU_APPROVAL_RECORD_2026-08-04.md).
-> Trạng thái mới: `OD-MBRTU-001` **CLOSED (1 cổng)** · `-002` **không áp dụng Rev A** ·
+> Trạng thái mới: `OD-MBRTU-001` **CLOSED (2 cổng — `ttyS5` + `ttyS1`)** · `-002` **CLOSED (serial thuộc Bus)** ·
 > `-009` **CLOSED (3 role)** · `-011` **CLOSED (≥256 Point)** · `-012` **CLOSED (CSV+JSON)** ·
 > `-015` **CLOSED (chấp thuận đổi ABI)** · `-EXT-02` **CLOSED (đồng ý cấp thiết bị)**.
 > Còn mở và **chặn Track B**: `OD-MBRTU-EXT-01` (chỉ định owner).
@@ -25,7 +25,7 @@
 | ID | Vấn đề | Ảnh hưởng nếu chưa quyết | Owner cần ký | Khuyến nghị kỹ thuật | Liên quan | Trạng thái |
 |---|---|---|---|---|---|---|
 | OD-MBRTU-001 | **Hai bus RS485 hay một?** Product baseline ghi `2 × Modbus RTU`; `HW_SPEC` mới mô tả ttyS5 (RS485-1) và ttyS1 (RS485-2, UART1 M1 Header P16 chân 26/36/23). | Product + HW + Platform | Cấu hình 2 bus RS485 vật lý: RS485-1 (`/dev/rs485-1` → `ttyS5`) và RS485-2 (`/dev/rs485-2` → `ttyS1`). Link cứng device symlink + FW-SOM multi-worker. | DR-MBRTU-001; `PROD-MBRTU-001` §6 | **CLOSED 2026-08-05:** Hỗ trợ **02 bus RS485 vật lý** (`ttyS5` & `ttyS1`) qua link cứng `/dev/rs485-1` và `/dev/rs485-2` kèm 2 `BusWorker` threads |
-| OD-MBRTU-002 | **Serial format thuộc Bus hay Device?** | FE/BE/data model không thống nhất; hiện BE lưu ở Device và ép "mọi device enabled phải giống nhau". | System + Fieldbus | Đặt ở Bus, Device kế thừa read-only; giữ field trên response Device để không vỡ UI. | DR-MBRTU-002; data model §4 | **KHÔNG ÁP DỤNG ở Rev A 2026-08-04 — Đ-01.** Với một bus, hai phương án cho kết quả như nhau. Mở lại khi có bus thứ hai; thiết kế đã chốt hướng serial-thuộc-Bus để không phải quyết lại |
+| OD-MBRTU-002 | **Serial format thuộc Bus hay Device?** | FE/BE/data model không thống nhất; hiện BE lưu ở Device và ép "mọi device enabled phải giống nhau". | System + Fieldbus | Đặt ở Bus, Device kế thừa read-only; giữ field trên response Device để không vỡ UI. | DR-MBRTU-002; data model §4 | **CLOSED 2026-08-06:** serial thuộc **Bus**, Device kế thừa **read-only**; response Device vẫn trả các field ở dạng dẫn xuất. Lý do mở lại: `OD-MBRTU-001` chốt 2 bus, nên "hai phương án cho kết quả như nhau" không còn đúng. Kèm ràng buộc giao diện: chỉ trang Cổng RS-485 sửa được tham số serial, form Thiết bị hiển thị read-only |
 | OD-MBRTU-003 | **Có hỗ trợ `bit_index` (trích bit trong register) không?** | Thiếu thì không map được thanh ghi trạng thái dạng bit-field, rất phổ biến ở VFD/meter. Có thì phải mở rộng codec, luật overlap và profile schema. | Product + Fieldbus | Hỗ trợ ở Rev A: chi phí thấp, giá trị thực tế cao; luật overlap đã được định nghĩa ở data model §5.5. | data model §5.2 | **OPEN — P1** |
 | OD-MBRTU-004 | **Có cho phép alias (hai Point cùng register, khác tag)?** | Chưa quyết ⇒ validator phải reject cứng, có thể chặn use case hợp lệ (một register dùng cho hai mục đích hiển thị). | Fieldbus + Product | Rev A **không** hỗ trợ alias; reject overlap. Mở ở Rev B nếu có nhu cầu thật. | data model §5.5 | **OPEN — P2** |
 | OD-MBRTU-005 | **Mức ưu tiên của commissioning write so với logic điều khiển.** | Không rõ ⇒ ghi thử có thể bị logic ghi đè ngay chu kỳ sau, hoặc ngược lại ghi thử chiếm quyền quá lâu. | Controls + Safety + Product | Commissioning write dùng mức `manual` có TTL ngắn (ví dụ 60 s) rồi tự nhả; hiển thị rõ TTL trên UI. | FW design §8.1 | **OPEN — P0** |
@@ -44,8 +44,8 @@
 
 | DR (2026-08-03) | OD tương ứng | Ghi chú |
 |---|---|---|
-| DR-MBRTU-001 hai bus | OD-MBRTU-001 | **CLOSED** bằng Đ-01: Rev A một bus |
-| DR-MBRTU-002 tách Bus khỏi Device | OD-MBRTU-002 | không áp dụng ở Rev A (một bus) |
+| DR-MBRTU-001 hai bus | OD-MBRTU-001 | **CLOSED 2026-08-05: 2 bus** (`rs485-1`→`ttyS5`, `rs485-2`→`ttyS1`). Đ-01 (một bus) đã bị thay thế |
+| DR-MBRTU-002 tách Bus khỏi Device | OD-MBRTU-002 | **CLOSED 2026-08-06:** serial thuộc Bus, Device kế thừa read-only. Với hai bus, hai phương án KHÔNG còn cho kết quả như nhau |
 | DR-MBRTU-003 address zero-based | **đã hợp nhất vào requirement** `IF-REQ-MBRTU-004` (Active) | không còn là open decision; chỉ chờ source conform |
 | DR-MBRTU-004 quality/timestamp | **đã hợp nhất vào** `SWR-REQ-MBRTU-005` (Active); mở rộng `CONFIG_ERROR` là mới | phần mở rộng nằm ở OD-MBRTU-016 dưới đây |
 | DR-MBRTU-005 typed IPC v2 | OD-MBRTU-015 | **CLOSED** bằng Đ-03: chấp thuận đổi ABI một lần |
@@ -87,6 +87,7 @@
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-08-04 | Tạo danh mục 16 open decision Modbus RTU + 3 blocker ngoài phạm vi; ánh xạ DR-MBRTU-001..009 |
+| 1.3 | 2026-08-06 | Sửa mâu thuẫn nội tại: §1 ghi `OD-MBRTU-001` "CLOSED (1 cổng)" trong khi bảng §2 ghi "02 bus". **Sự thật sản phẩm: 2 cổng RS-485** (`ttyS5` + `ttyS1`) — Đ-01 (một bus) bị thay thế. Đóng `OD-MBRTU-002` (serial thuộc Bus, Device kế thừa read-only) vì với hai bus nó không còn là quyết định trung tính |
 | 1.2 | 2026-08-06 | Đóng `OD-MBRTU-EXT-04` (`G-D`): Hardware owner xác nhận cổng RS-485 chỉ có TX/RX, không có DE/RE ⇒ transceiver auto-direction. Cơ chế điều hướng nay là cấu hình tường minh trong `fieldbus.conf` và trạng thái driver được ghi log lúc khởi động |
 | 1.1 | 2026-08-05 | Đóng đúng theo quy tắc §4.3 (đổi Trạng thái, **không xoá dòng**): `OD-MBRTU-001` (Đ-01), `-009` (Đ-04), `-011` (Đ-07), `-012` (Đ-06), `-015` (Đ-03), `-EXT-02` (Đ-08); `-002` chuyển "không áp dụng ở Rev A". Cập nhật §2 ánh xạ DR tương ứng. **Thêm mới:** `OD-MBRTU-017` (mức quyền của export), `OD-MBRTU-018` (OpenAPI mô tả sai ngữ nghĩa `retry` sau Đ-05 — chặn gate interface), `OD-MBRTU-019` (hai tham số offline đứt end-to-end), `OD-MBRTU-EXT-04` (cơ chế điều hướng RS-485, tách khỏi EXT-01 vì owner khác và chặn khác) |
 
