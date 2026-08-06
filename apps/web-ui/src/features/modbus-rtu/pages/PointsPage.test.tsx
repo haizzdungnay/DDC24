@@ -13,6 +13,14 @@ const api = vi.hoisted(() => ({
 
 vi.mock('../../../shared/api/client', () => ({ apiClient: api }))
 
+/* `PointsPage` dùng `useModbusRuntime` → `useRealtime`, mà provider được gắn ở
+ * `App.tsx` bọc toàn ứng dụng. Test render trang CÔ LẬP nên phải cấp thay. Giữ
+ * hook production nghiêm ngặt (ném lỗi khi thiếu provider) là có chủ đích: quên
+ * bọc provider là lỗi wiring thật, không nên bị che. */
+vi.mock('../../../shared/realtime', () => ({
+  useRealtime: () => ({ connectionState: 'connected', allPoints: [] })
+}))
+
 /* Đ-04: trang này mở cho Viewer đọc, nên test phải cấp được vai trò. */
 const auth = vi.hoisted(() => ({ role: 'admin' as UserRole }))
 vi.mock('../../auth', async (importOriginal) => {
