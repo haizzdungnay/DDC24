@@ -5,6 +5,9 @@
  *        libmodbus API guarded by MKDDC_ENABLE_MODBUS; logic no-ops khi disabled.
  */
 #include "modbus_tcp.hpp"
+#include "fieldbus_time.hpp"
+
+#include <cmath>
 #include "register_codec.hpp"
 
 #include <cerrno>
@@ -245,8 +248,15 @@ void ModbusTcp::read_conn(TcpConn& conn, uint64_t now_ms, ExtCache& cache)
                 if (is32) k++;
             }
 
-            cache.set_point(ext_idx++, pt_name, eng, KX_Q_GOOD,
-                             conn.cfg.unit, true, pt.writable);
+            /* Snapshot v2: mẫu TCP cũng phải mang quality 5 mức + mốc thời
+             * gian thật, nếu không thì một nửa bảng điểm có tuổi mẫu và nửa kia
+             * không — FE lại phải đoán, đúng thứ D-07 đã cấm. */
+            const kx_ext_quality_t q = std::isfinite(eng) ? KX_EXTQ_GOOD : KX_EXTQ_BAD;
+            const kx_ext_quality_reason_t r =
+                std::isfinite(eng) ? KX_EXTR_NONE : KX_EXTR_DECODE_ERROR;
+            cache.set_sample(ext_idx++, pt_name, static_cast<double>(eng), q, r,
+                             conn.cfg.unit, 0u, true, pt.writable,
+                             utc_ms(), monotonic_ns());
         }
     }
 

@@ -221,6 +221,21 @@ void IoCache::write_modbus_diagnostics(const kx_modbus_diag_t* diagnostics, size
     KX_WRITE_END(shm_);
 }
 
+void IoCache::write_bus_metrics(const kx_bus_metrics_t* buses, size_t count,
+                                uint64_t producer_boot_id, uint64_t counters_since_ms)
+{
+    if (!shm_) return;
+    if (count > KX_N_FB_BUS) count = KX_N_FB_BUS;
+    KX_WRITE_BEGIN(shm_);
+    for (size_t i = 0; i < count; i++) shm_->fb_bus[i] = buses[i];
+    /* Xoá phần đuôi: bus bị gỡ khỏi config không được để lại số liệu cũ. */
+    for (size_t i = count; i < KX_N_FB_BUS; i++) shm_->fb_bus[i] = kx_bus_metrics_t{};
+    shm_->fb_bus_count      = static_cast<uint8_t>(count);
+    shm_->producer_boot_id  = producer_boot_id;
+    shm_->counters_since_ms = counters_since_ms;
+    KX_WRITE_END(shm_);
+}
+
 void IoCache::write_bacnet_bind(bool bound, uint16_t udp_port)
 {
     if (!shm_) return;

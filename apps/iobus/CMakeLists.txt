@@ -74,6 +74,8 @@ set(MODBUS_SOURCES
     adapters/modbus_rtu/poll_scheduler.cpp
     adapters/modbus_rtu/ext_cache.cpp
     adapters/modbus_rtu/fieldbus_metrics.cpp
+    adapters/modbus_rtu/bus_worker.cpp
+    adapters/modbus_rtu/control_channel.cpp
     adapters/modbus_rtu/modbus_master.cpp
     adapters/modbus_rtu/modbus_tcp.cpp)
 
@@ -192,6 +194,8 @@ if(IOBUS_BUILD_TESTS)
       adapters/modbus_rtu/tests/test_register_codec.cpp
       adapters/modbus_rtu/tests/test_poll_scheduler.cpp
       adapters/modbus_rtu/tests/test_ext_cache.cpp
+      adapters/modbus_rtu/tests/test_bus_worker.cpp
+      adapters/modbus_rtu/tests/test_control_channel.cpp
       adapters/modbus_rtu/tests/test_modbus_master_fake.cpp
       adapters/modbus_rtu/tests/test_modbus_tcp.cpp)
   target_link_libraries(iobus_tests PRIVATE iobus_lib)
@@ -203,5 +207,13 @@ if(IOBUS_BUILD_TESTS)
     target_link_libraries(iobus_tests PRIVATE gtest_main)
   endif()
   include(GoogleTest)
-  gtest_discover_tests(iobus_tests)
+  # `gtest_discover_tests` CHẠY binary ngay sau khi link để liệt kê test. Khi
+  # cross-compile cho aarch64 trên máy build x86_64, binary đó không chạy được
+  # và build đứt ở bước post-link — dù chính binary lại là thứ ta cần mang lên
+  # board. Ở chế độ cross, đăng ký một test gộp và để board tự chạy.
+  if(CMAKE_CROSSCOMPILING)
+    add_test(NAME iobus_tests COMMAND iobus_tests)
+  else()
+    gtest_discover_tests(iobus_tests)
+  endif()
 endif()

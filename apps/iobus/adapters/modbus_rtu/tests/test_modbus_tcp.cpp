@@ -270,8 +270,8 @@ TEST(ModbusTcp, TcpLoopbackReadRegisters)
     tcp.poll_once(1, cache, "/tmp/mkddc-no-fieldbus.sock");
 
     EXPECT_EQ(cache.count(), 1u);
-    EXPECT_FLOAT_EQ(cache.point(0).value, 5678.0f);
-    EXPECT_EQ(cache.point(0).quality, KX_Q_GOOD);
+    EXPECT_DOUBLE_EQ(cache.sample(0).value, 5678.0);
+    EXPECT_EQ(cache.sample(0).quality, KX_EXTQ_GOOD);
 
     server_thread.join();
     ::close(srv_fd);

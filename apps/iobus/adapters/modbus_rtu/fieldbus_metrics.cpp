@@ -4,6 +4,8 @@
  */
 #include "fieldbus_metrics.hpp"
 
+#include <algorithm>
+
 namespace iobus::fieldbus {
 
 static constexpr float E303_THRESHOLD = 0.10f;   /* 10% error rate */
@@ -12,14 +14,115 @@ static constexpr float E303_THRESHOLD = 0.10f;   /* 10% error rate */
  * chu kỳ poll thường dùng. */
 static constexpr uint32_t E303_WINDOW = 20;
 
+/* Số mẫu latency giữ cho một bus. 128 giao dịch ở nhịp poll thường dùng phủ
+ * khoảng vài chục giây — đủ để p95 phản ánh tình trạng HIỆN TẠI của dây chứ
+ * không phải trung bình từ lúc khởi động. */
+static constexpr size_t kLatencyWindow = 128;
+
 void FieldbusMetrics::init(const std::vector<std::string>& names,
                             const std::vector<uint8_t>& addrs)
+{
+    init(names, addrs, {});
+}
+
+void FieldbusMetrics::init(const std::vector<std::string>& names,
+                            const std::vector<uint8_t>& addrs,
+                            const std::vector<uint8_t>& bus_ids)
 {
     metrics_.resize(names.size());
     for (size_t i = 0; i < names.size(); i++) {
         metrics_[i].name = names[i];
         metrics_[i].addr = addrs[i];
+        metrics_[i].bus_id = (i < bus_ids.size()) ? bus_ids[i] : 1u;
     }
+}
+
+BusMetrics* FieldbusMetrics::find_bus(uint8_t bus_id)
+{
+    for (auto& b : buses_)
+        if (b.id == bus_id) return &b;
+    return nullptr;
+}
+
+void FieldbusMetrics::record_bus_transaction(uint8_t bus_id, uint32_t elapsed_us, bool ok)
+{
+    BusMetrics* bus = find_bus(bus_id);
+    if (!bus) return;
+    bus->total_transactions++;
+    if (!ok) bus->total_errors++;
+    bus->busy_us_window += elapsed_us;
+    if (elapsed_us > bus->latency_max_us) bus->latency_max_us = elapsed_us;
+
+    if (latency_window_.size() < buses_.size()) latency_window_.resize(buses_.size());
+    for (size_t i = 0; i < buses_.size(); i++) {
+        if (buses_[i].id != bus_id) continue;
+        auto& window = latency_window_[i];
+        if (window.size() >= kLatencyWindow) window.erase(window.begin());
+        window.push_back(elapsed_us);
+        break;
+    }
+}
+
+void FieldbusMetrics::set_bus_state(uint8_t bus_id, const char* state)
+{
+    if (BusMetrics* bus = find_bus(bus_id)) bus->state = state;
+}
+
+void FieldbusMetrics::record_bus_reopen(uint8_t bus_id)
+{
+    if (BusMetrics* bus = find_bus(bus_id)) bus->port_reopens++;
+}
+
+void FieldbusMetrics::roll_bus_window(uint8_t bus_id, uint64_t window_us)
+{
+    if (latency_window_.size() < buses_.size()) latency_window_.resize(buses_.size());
+    for (size_t i = 0; i < buses_.size(); i++) {
+        if (buses_[i].id != bus_id) continue;
+        BusMetrics& bus = buses_[i];
+        std::vector<uint32_t> sorted = latency_window_[i];
+        if (!sorted.empty()) {
+            std::sort(sorted.begin(), sorted.end());
+            bus.latency_p50_us = sorted[sorted.size() / 2];
+            /* p95 theo "nearest rank": chỉ số ceil(0.95·N) − 1. Với N nhỏ, cách
+             * này trả về phần tử có thật thay vì một số nội suy không tồn tại. */
+            const size_t rank = (sorted.size() * 95 + 99) / 100;
+            bus.latency_p95_us = sorted[(rank == 0 ? 1 : rank) - 1];
+        }
+        /* Utilization = thời gian THẬT SỰ chiếm dây / thời gian trôi qua.
+         * Không ước lượng từ baud và số điểm: con số ước lượng không phát hiện
+         * được một slave chết ngốn trọn timeout mỗi vòng.
+         *
+         * Chỉ chốt khi đã tích luỹ đủ một cửa sổ. Chốt ở mỗi nhịp publish
+         * (100 ms) cho ra 0 % hoặc 100 % chứ không phải tỷ lệ thật, vì một
+         * transaction có thể dài hơn cả nhịp publish. */
+        bus.window_elapsed_us += window_us;
+        if (bus.window_elapsed_us >= kUtilizationSlotUs) {
+            /* Chốt một ô rồi cộng vào tổng chạy; bớt dần phần cũ để tổng luôn
+             * đại diện cho khoảng kUtilizationSlots × kUtilizationSlotUs gần
+             * nhất. Dùng phép bớt tỷ lệ thay vì giữ mảng ô: cùng hiệu ứng cửa
+             * sổ trượt mà không cần thêm bộ nhớ cho mỗi bus. */
+            if (bus.util_elapsed_sum_us >= kUtilizationSlotUs * kUtilizationSlots) {
+                bus.util_busy_sum_us -= bus.util_busy_sum_us / kUtilizationSlots;
+                bus.util_elapsed_sum_us -= bus.util_elapsed_sum_us / kUtilizationSlots;
+            }
+            bus.util_busy_sum_us += bus.busy_us_window;
+            bus.util_elapsed_sum_us += bus.window_elapsed_us;
+            if (bus.util_elapsed_sum_us > 0) {
+                const uint64_t pct_x100 =
+                    (bus.util_busy_sum_us * 10000ull) / bus.util_elapsed_sum_us;
+                bus.utilization_pct_x100 =
+                    static_cast<uint16_t>(pct_x100 > 10000 ? 10000 : pct_x100);
+            }
+            bus.busy_us_window    = 0;
+            bus.window_elapsed_us = 0;
+        }
+        break;
+    }
+}
+
+void FieldbusMetrics::record_exception(uint8_t slave_idx, uint8_t exception_code)
+{
+    if (slave_idx < metrics_.size()) metrics_[slave_idx].last_exception = exception_code;
 }
 
 void FieldbusMetrics::update(uint8_t idx, bool ok, uint64_t now_ms, uint8_t retry_limit)

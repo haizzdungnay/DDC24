@@ -34,6 +34,8 @@
 #include "modbus_rtu/ext_cache.hpp"
 #include "modbus_rtu/fieldbus_config.hpp"
 #include "modbus_rtu/fieldbus_metrics.hpp"
+#include "modbus_rtu/control_channel.hpp"
+#include "modbus_rtu/bus_worker.hpp"
 #include "modbus_rtu/modbus_master.hpp"
 #include "modbus_rtu/modbus_tcp.hpp"
 #include "bacnet/bacnet_config.hpp"
@@ -203,13 +205,43 @@ void publish_fieldbus_metrics(iobus::IoCache& cache,
         out[i].total_errors = m.total_errors;
         out[i].addr         = m.addr;
         out[i].online       = m.online ? 1u : 0u;
+        out[i].bus_id       = m.bus_id;
         diagnostics[i].timeout_errors = m.timeout_errors;
         diagnostics[i].crc_errors = m.crc_errors;
         diagnostics[i].retry_attempts = m.retry_attempts;
+        diagnostics[i].write_failed = m.write_failed;
+        diagnostics[i].write_dropped = m.write_dropped;
         diagnostics[i].consecutive_errors = m.consecutive_errors;
+        diagnostics[i].last_exception = m.last_exception;
     }
     cache.write_fieldbus_metrics(out, count);
     cache.write_modbus_diagnostics(diagnostics, count);
+
+    /* MBR-B305: bus metrics đo thật. Trước bản này chúng không tồn tại, nên
+     * handler Go phải điền hằng số và trang Overview hiển thị số không do thiết
+     * bị nào sinh ra. */
+    kx_bus_metrics_t buses[KX_N_FB_BUS] = {};
+    size_t bus_count = metrics.bus_count();
+    if (bus_count > KX_N_FB_BUS) bus_count = KX_N_FB_BUS;
+    for (size_t i = 0; i < bus_count; i++) {
+        const auto& b = metrics.bus(i);
+        buses[i].total_transactions   = b.total_transactions;
+        buses[i].total_errors         = b.total_errors;
+        buses[i].port_reopens         = b.port_reopens;
+        buses[i].latency_p50_us       = b.latency_p50_us;
+        buses[i].latency_p95_us       = b.latency_p95_us;
+        buses[i].latency_max_us       = b.latency_max_us;
+        buses[i].baud                 = b.baud;
+        buses[i].utilization_pct_x100 = b.utilization_pct_x100;
+        buses[i].id                   = b.id;
+        buses[i].parity               = b.parity;
+        buses[i].stop_bits            = b.stop;
+        std::strncpy(buses[i].name, b.name.c_str(), sizeof(buses[i].name) - 1);
+        std::strncpy(buses[i].device, b.device.c_str(), sizeof(buses[i].device) - 1);
+        std::strncpy(buses[i].state, b.state.c_str(), sizeof(buses[i].state) - 1);
+    }
+    cache.write_bus_metrics(buses, bus_count, metrics.producer_boot_id(),
+                            metrics.counters_since_ms());
 }
 
 } // namespace
@@ -224,6 +256,9 @@ int main(int argc, char** argv)
     std::string log_level_override;
     std::string fieldbus_config_path = "/data/config/fieldbus.conf";
     std::string fieldbus_sock_path = "/run/mkddc/fieldbus.sock";
+    /* MBR-B105: kênh điều khiển tách khỏi đường snapshot — một bên là dữ liệu
+     * chảy liên tục (datagram, mất được), một bên là mệnh lệnh (stream, phải ACK). */
+    std::string fieldbus_control_sock_path = "/run/mkddc/modbus-control.sock";
     bool fieldbus_config_from_cli = false;
     std::string device_config_path = "/data/config/device.conf";
     std::string bacnet_config_path = "/data/config/bacnet.conf";
@@ -238,11 +273,12 @@ int main(int argc, char** argv)
         else if (a == "--log-level" && i + 1 < argc) { log_level_override = argv[++i]; }
         else if (a == "--fieldbus-config" && i + 1 < argc) { fieldbus_config_path = argv[++i]; fieldbus_config_from_cli = true; }
         else if (a == "--fieldbus-sock" && i + 1 < argc) { fieldbus_sock_path = argv[++i]; }
+        else if (a == "--fieldbus-control-sock" && i + 1 < argc) { fieldbus_control_sock_path = argv[++i]; }
         else if (a == "--device-config" && i + 1 < argc) { device_config_path = argv[++i]; bacnet_config_from_cli = true; }
         else if (a == "--bacnet-config" && i + 1 < argc) { bacnet_config_path = argv[++i]; bacnet_config_from_cli = true; }
         else if (a == "--core-sock" && i + 1 < argc) { core_sock_path = argv[++i]; }
         else if (a == "--help") {
-            std::printf("usage: mkddc-iobus [--config FILE] [--uart DEV] [--log-level LVL] [--fieldbus-config FILE] [--fieldbus-sock PATH] [--device-config FILE] [--bacnet-config FILE] [--core-sock PATH]\n");
+            std::printf("usage: mkddc-iobus [--config FILE] [--uart DEV] [--log-level LVL] [--fieldbus-config FILE] [--fieldbus-sock PATH] [--fieldbus-control-sock PATH] [--device-config FILE] [--bacnet-config FILE] [--core-sock PATH]\n");
             return 0;
         }
     }
@@ -300,36 +336,144 @@ int main(int argc, char** argv)
         cache.detach();
         return 1;
     }
+    /* MBR-B110: danh tính tiến trình producer. Counter tụt về 0 sau restart là
+     * bình thường; thiếu boot_id thì consumer đọc nó thành "ai đó vừa reset
+     * counter bằng tay" và kết luận sai về lịch sử lỗi. */
+    fieldbus_metrics.set_producer_identity(
+        (static_cast<uint64_t>(::getpid()) << 32) ^ static_cast<uint64_t>(::time(nullptr)),
+        now_ms());
+
+    /* MBR-B101: mỗi bus RS-485 một BusWorker trên một thread riêng. Thread ở
+     * đây (fieldbus_thread) KHÔNG còn phát lệnh xuống dây; nó là publisher +
+     * cầu nối write từ core, nên một bus bị chặn không giữ được nó lại. */
     const bool rtu_ok = fieldbus_cfg.loaded && !fieldbus_cfg.slaves.empty()
-                        && modbus.open(fieldbus_cfg);
+                        && modbus.open(fieldbus_cfg, ext_cache, fieldbus_metrics);
+    const bool rtu_configured = fieldbus_cfg.loaded && !fieldbus_cfg.slaves.empty();
     if (fieldbus_cfg.loaded && !fieldbus_cfg.tcp_slaves.empty()) {
         const uint16_t tcp_offset = modbus.total_ext_count();
         modbus_tcp.open(fieldbus_cfg, tcp_offset);
     }
-    if (rtu_ok || modbus_tcp.has_slaves()) {
+
+    /* MBR-B105: kênh điều khiển UDS. Mở kể cả khi chưa có bus nào lên được —
+     * commissioning và apply_config phải dùng được để SỬA tình trạng đó. */
+    fieldbus::ControlChannel fieldbus_control;
+    if (rtu_configured) {
+        fieldbus::ControlHandlers handlers;
+        handlers.status_fields = [&]() {
+            char buf[512];
+            std::string buses;
+            for (size_t i = 0; i < fieldbus_metrics.bus_count(); i++) {
+                const auto& bus = fieldbus_metrics.bus(i);
+                char one[256];
+                std::snprintf(one, sizeof(one),
+                              "%s{\"id\":%u,\"name\":\"%s\",\"device\":\"%s\","
+                              "\"state\":\"%s\",\"latency_p50_us\":%u,\"latency_p95_us\":%u,"
+                              "\"utilization_pct_x100\":%u,\"timeout_errors\":%llu,"
+                              "\"crc_errors\":%llu,\"port_reopens\":%llu}",
+                              buses.empty() ? "" : ",", bus.id,
+                              fieldbus::json_escape(bus.name).c_str(),
+                              fieldbus::json_escape(bus.device).c_str(),
+                              fieldbus::json_escape(bus.state).c_str(),
+                              bus.latency_p50_us, bus.latency_p95_us,
+                              bus.utilization_pct_x100,
+                              static_cast<unsigned long long>(bus.timeout_errors),
+                              static_cast<unsigned long long>(bus.crc_errors),
+                              static_cast<unsigned long long>(bus.port_reopens));
+                buses += one;
+            }
+            std::snprintf(buf, sizeof(buf),
+                          "\"generation\":%llu,\"config_revision\":%llu,"
+                          "\"producer_boot_id\":%llu,\"counters_since_ms\":%llu,"
+                          "\"ext_count\":%u,\"sequence\":%llu",
+                          static_cast<unsigned long long>(modbus.provenance().generation),
+                          static_cast<unsigned long long>(modbus.provenance().config_revision),
+                          static_cast<unsigned long long>(fieldbus_metrics.producer_boot_id()),
+                          static_cast<unsigned long long>(fieldbus_metrics.counters_since_ms()),
+                          ext_cache.count(),
+                          static_cast<unsigned long long>(ext_cache.sequence()));
+            return std::string(buf) + ",\"buses\":[" + buses + "]";
+        };
+        handlers.apply_config = [&](uint64_t revision, const std::string& checksum,
+                                    const std::string& path, std::string* reason,
+                                    uint64_t* applied, uint64_t* generation) {
+            const std::string target = path.empty() ? fieldbus_config_path : path;
+            return modbus.apply_config(target, revision, checksum, ext_cache,
+                                       fieldbus_metrics, reason, applied, generation);
+        };
+        handlers.submit_write = [&](const fieldbus::ControlWriteRequest& req,
+                                    std::string* reason) {
+            fieldbus::PendingWrite w{};
+            w.slave_addr  = req.slave_addr;
+            w.fc          = req.fc;
+            w.reg_addr    = req.reg_addr;
+            w.value       = static_cast<float>(req.value);
+            w.type        = fieldbus::PointType::Uint16;
+            w.byte_order  = fieldbus::ByteOrder::AB;
+            w.scale       = 1.0f;
+            w.offset      = 0.0f;
+            w.ext_idx     = KX_N_EXT;   /* commissioning write không gắn slot nào */
+            w.request_id  = req.request_id;
+            w.enqueued_ms = now_ms();
+            w.deadline_ms = req.deadline_ms ? now_ms() + req.deadline_ms : 0;
+            w.readback    = req.readback;
+            if (!modbus.submit_write(w)) {
+                if (reason) *reason = "queue_full_or_slave_not_found";
+                return false;
+            }
+            return true;
+        };
+        handlers.probe_read = [&](uint8_t bus_id, uint8_t slave, uint8_t fc, uint16_t addr,
+                                  uint16_t count, uint32_t timeout_ms) {
+            fieldbus::ControlProbeResult out;
+            fieldbus::BusWorker* worker =
+                bus_id ? modbus.bus_by_id(bus_id)
+                       : (modbus.bus_count() ? modbus.bus_by_id(modbus.bus(0).bus_id()) : nullptr);
+            if (!worker) {
+                out.reason = "bus_not_found";
+                return out;
+            }
+            const auto probe = worker->probe_read(slave, fc, addr, count, timeout_ms);
+            out.ok             = probe.ok;
+            out.reason         = probe.reason;
+            out.value          = probe.value;
+            out.exception_code = probe.exception_code;
+            out.elapsed_us     = probe.elapsed_us;
+            return out;
+        };
+        if (!fieldbus_control.start(fieldbus_control_sock_path, handlers)) {
+            /* Không mở được kênh điều khiển KHÔNG được làm chết service: I/O
+             * hiện trường vẫn phải chạy. Web sẽ thấy commissioning không khả
+             * dụng và báo rõ, thay vì cả tủ mất điều khiển. */
+            std::fprintf(stderr, "WARN  iobus.control_channel_unavailable path=%s\n",
+                         fieldbus_control_sock_path.c_str());
+        }
+    }
+
+    if (rtu_ok || rtu_configured || modbus_tcp.has_slaves()) {
+        if (rtu_configured) modbus.start_workers(ext_cache, fieldbus_metrics);
         fieldbus_thread = std::thread([&]() {
+            uint64_t last_publish_ms = now_ms();
             while (!g_shutdown.load()) {
                 const uint64_t poll_now = now_ms();
-                if (rtu_ok) {
+                if (rtu_configured) {
                     /* COR-011: bridge write setpoints from core before poll */
                     const kx_plc_shm_t* rtu_plc_shm = try_attach_plc_shm();
                     modbus.drain_ext_writes(rtu_plc_shm, poll_now);
                     if (rtu_plc_shm)
                         ::munmap(const_cast<kx_plc_shm_t*>(rtu_plc_shm),
                                  sizeof(kx_plc_shm_t));
-                    modbus.poll_once(poll_now, ext_cache, fieldbus_metrics, fieldbus_sock_path);
                 }
                 if (modbus_tcp.has_slaves())
                     modbus_tcp.poll_once(poll_now, ext_cache, fieldbus_sock_path);
-                publish_fieldbus_metrics(cache, fieldbus_metrics);
-                uint32_t wait_ms = rtu_ok ? modbus.sleep_ms_until_next(now_ms()) : 1000u;
-                if (modbus_tcp.has_slaves()) {
-                    const uint32_t tcp_wait = modbus_tcp.sleep_ms_until_next(now_ms());
-                    if (tcp_wait < wait_ms) wait_ms = tcp_wait;
+                if (rtu_configured) {
+                    const uint64_t window_us = (poll_now - last_publish_ms) * 1000ull;
+                    modbus.publish(ext_cache, fieldbus_metrics, fieldbus_sock_path, window_us);
+                    last_publish_ms = poll_now;
                 }
-                if (wait_ms == 0) wait_ms = 1;
-                if (wait_ms > 100) wait_ms = 100;
-                std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
+                publish_fieldbus_metrics(cache, fieldbus_metrics);
+                /* Nhịp publish cố định 100 ms: worker chạy độc lập nên nhịp này
+                 * không còn phụ thuộc deadline của slave nào. */
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
         });
     }
@@ -342,6 +486,8 @@ int main(int argc, char** argv)
                                     bacnet_config_from_cli, &bacnet_cfg)) {
         g_shutdown.store(true);
         if (fieldbus_thread.joinable()) fieldbus_thread.join();
+        modbus.stop_workers();
+        fieldbus_control.stop();
         cache.detach();
         return 1;
     }
@@ -812,6 +958,9 @@ int main(int argc, char** argv)
     if (fieldbus_thread.joinable()) fieldbus_thread.join();
     if (bacnet_thread.joinable()) bacnet_thread.join();
     bacnet_server.stop();
+    /* Dừng kênh điều khiển TRƯỚC khi đóng bus: không nhận lệnh mới trong lúc
+     * worker đang drain (FW_SOM_DESIGN §10). */
+    fieldbus_control.stop();
     modbus.close();
     client.close();
     cache.detach();

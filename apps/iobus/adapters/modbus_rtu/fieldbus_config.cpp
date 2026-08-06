@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <sstream>
 
 namespace iobus::fieldbus {
@@ -128,7 +129,83 @@ static bool parse_slave(const std::string& obj, uint32_t default_poll_ms, SlaveC
      * giữ đúng hành vi cũ cho cấu hình chưa khai báo trường này. */
     if (jget_int(obj, "offline_after_errors", &v) && v >= 1 && v <= 10)
         sl->offline_after_errors = static_cast<uint8_t>(v);
+    /* MBR-B101: bus_id vắng ⇒ 1. Cấu hình một-bus cũ chạy y nguyên. */
+    if (jget_int(obj, "bus_id", &v) && v >= 1 && v <= 255)
+        sl->bus_id = static_cast<uint8_t>(v);
     return true;
+}
+
+/* Parse một phần tử của buses[] (MBR-B101). */
+static bool parse_bus(const std::string& obj, BusConfig* bus)
+{
+    long v = 0;
+    if (jget_int(obj, "id", &v) && v >= 1 && v <= 255)
+        bus->id = static_cast<uint8_t>(v);
+    else
+        return false;   /* id bắt buộc — slave tham chiếu theo id */
+    if (!jget_str(obj, "device", &bus->device) || bus->device.empty())
+        return false;   /* device bắt buộc */
+    jget_str(obj, "name", &bus->name);
+    if (bus->name.empty()) bus->name = "RS485-" + std::to_string(bus->id);
+    if (jget_int(obj, "baud", &v) && v > 0)
+        bus->baud = static_cast<uint32_t>(v);
+    std::string parity;
+    if (jget_str(obj, "parity", &parity) && !parity.empty())
+        bus->parity = static_cast<char>(parity[0]);
+    if (jget_int(obj, "stop", &v) && (v == 1 || v == 2))
+        bus->stop = static_cast<uint8_t>(v);
+    if (jget_int(obj, "offline_probe_ms", &v)) {
+        if (v < 1000)       v = 1000;
+        else if (v > 60000) v = 60000;
+        bus->offline_probe_ms = static_cast<uint32_t>(v);
+    }
+    if (jget_int(obj, "enabled", &v))
+        bus->enabled = (v != 0);
+    return true;
+}
+
+/* Duyệt các object `{...}` trong một chuỗi mảng JSON. */
+static void for_each_json_object(const std::string& arr,
+                                 const std::function<void(const std::string&)>& fn)
+{
+    size_t p = 0;
+    while (p < arr.size()) {
+        const size_t ob = arr.find('{', p);
+        if (ob == std::string::npos) break;
+        int depth = 0;
+        size_t end = ob;
+        for (size_t k = ob; k < arr.size(); ++k) {
+            if (arr[k] == '{') ++depth;
+            else if (arr[k] == '}') { if (--depth == 0) { end = k; break; } }
+            else if (arr[k] == '"') { while (++k < arr.size() && arr[k] != '"') { if (arr[k] == '\\') ++k; } }
+        }
+        fn(arr.substr(ob, end - ob + 1));
+        p = end + 1;
+    }
+}
+
+void normalize_buses(FieldbusConfig* cfg)
+{
+    /* Migration cấu hình một-bus: `rs485{}` không có `buses[]` ⇒ dựng bus id 1.
+     * Giữ nguyên hành vi cho mọi file đã provision trước 2026-08-05. */
+    if (cfg->buses.empty() && !cfg->rs485.device.empty()) {
+        BusConfig bus;
+        bus.id               = 1;
+        bus.name             = "RS485-1";
+        bus.device           = cfg->rs485.device;
+        bus.baud             = cfg->rs485.baud;
+        bus.parity           = cfg->rs485.parity;
+        bus.stop             = cfg->rs485.stop;
+        bus.offline_probe_ms = cfg->rs485.offline_probe_ms;
+        cfg->buses.push_back(bus);
+    }
+    if (cfg->buses.empty()) return;
+    for (auto& slave : cfg->slaves) {
+        if (cfg->bus(slave.bus_id) != nullptr) continue;
+        std::fprintf(stderr, "WARN  fieldbus_config.slave_bus_fallback slave=%s bus_id=%u → %u\n",
+                     slave.name.c_str(), slave.bus_id, cfg->buses[0].id);
+        slave.bus_id = cfg->buses[0].id;
+    }
 }
 
 bool load_fieldbus_config(const std::string& path, bool path_from_cli,
@@ -177,28 +254,40 @@ bool load_fieldbus_config(const std::string& path, bool path_from_cli,
         }
     }
 
-    /* rs485.device bắt buộc khi có RTU slaves */
-
     long v = 0;
     if (jget_int(json, "poll_default_ms", &v) && v > 0)
         out->poll_default_ms = static_cast<uint32_t>(v);
 
+    /* Provenance từ BE (MBR-B104). Vắng ⇒ 0 = "không biết", KHÔNG phải 1. */
+    if (jget_int(json, "revision", &v) && v > 0)
+        out->revision = static_cast<uint64_t>(v);
+    jget_str(json, "checksum", &out->checksum);
+
+    /* MBR-B101: buses[] là dạng chuẩn từ contract v2. */
+    std::string buses_arr;
+    if (jget_obj(json, "buses", &buses_arr)) {
+        for_each_json_object(buses_arr, [&](const std::string& obj) {
+            BusConfig bus;
+            if (parse_bus(obj, &bus)) {
+                for (const auto& existing : out->buses) {
+                    if (existing.id == bus.id) {
+                        std::fprintf(stderr, "WARN  fieldbus_config.duplicate_bus_id id=%u"
+                                     " — bỏ qua phần tử sau\n", bus.id);
+                        return;
+                    }
+                }
+                out->buses.push_back(bus);
+            } else {
+                std::fprintf(stderr, "WARN  fieldbus_config.bus_parse_error — thiếu id/device;"
+                             " bỏ qua phần tử buses\n");
+            }
+        });
+    }
+
     /* slaves array */
     std::string slaves_arr;
     if (jget_obj(json, "slaves", &slaves_arr)) {
-        /* iterate over { } objects trong array */
-        size_t p = 0;
-        while (p < slaves_arr.size()) {
-            const size_t ob = slaves_arr.find('{', p);
-            if (ob == std::string::npos) break;
-            int depth = 0;
-            size_t end = ob;
-            for (size_t k = ob; k < slaves_arr.size(); ++k) {
-                if (slaves_arr[k] == '{') ++depth;
-                else if (slaves_arr[k] == '}') { if (--depth == 0) { end = k; break; } }
-                else if (slaves_arr[k] == '"') { while (++k < slaves_arr.size() && slaves_arr[k] != '"') { if (slaves_arr[k] == '\\') ++k; } }
-            }
-            const std::string obj = slaves_arr.substr(ob, end - ob + 1);
+        for_each_json_object(slaves_arr, [&](const std::string& obj) {
             SlaveConfig sl;
             if (parse_slave(obj, out->poll_default_ms, &sl)) {
                 out->slaves.push_back(sl);
@@ -206,32 +295,31 @@ bool load_fieldbus_config(const std::string& path, bool path_from_cli,
                 std::fprintf(stderr, "WARN  fieldbus_config.slave_parse_error — thiếu addr/profile/name"
                              " trong phần tử slaves; bỏ qua\n");
             }
-            p = end + 1;
-        }
+        });
     }
 
-    /* rs485.device bắt buộc nếu có RTU slaves */
-    if (!out->slaves.empty() && out->rs485.device.empty()) {
-        std::fprintf(stderr, "ERROR fieldbus_config.rs485_device_missing — bắt buộc đặt"
+    normalize_buses(out);
+
+    /* Phải có ít nhất một bus khi có RTU slaves. Fail-fast: một slave trỏ vào
+     * bus không tồn tại thì không có cách nào poll nó, và im lặng ở đây tạo ra
+     * đúng tình trạng "đèn xanh, bảng điểm trống" mà F-16 đã phải sửa. */
+    if (!out->slaves.empty() && out->buses.empty()) {
+        std::fprintf(stderr, "ERROR fieldbus_config.no_bus — bắt buộc khai báo buses[] hoặc"
                      " rs485.device trong fieldbus.conf khi có RTU slaves\n");
         return false;
+    }
+    for (const auto& sl : out->slaves) {
+        if (out->bus(sl.bus_id) == nullptr) {
+            std::fprintf(stderr, "ERROR fieldbus_config.slave_bus_not_found slave=%s bus_id=%u"
+                         " — slave trỏ vào bus không khai báo\n", sl.name.c_str(), sl.bus_id);
+            return false;
+        }
     }
 
     /* tcp_slaves array */
     std::string tcp_arr;
     if (jget_obj(json, "tcp_slaves", &tcp_arr)) {
-        size_t p = 0;
-        while (p < tcp_arr.size()) {
-            const size_t ob = tcp_arr.find('{', p);
-            if (ob == std::string::npos) break;
-            int depth = 0;
-            size_t end = ob;
-            for (size_t k = ob; k < tcp_arr.size(); ++k) {
-                if (tcp_arr[k] == '{') ++depth;
-                else if (tcp_arr[k] == '}') { if (--depth == 0) { end = k; break; } }
-                else if (tcp_arr[k] == '"') { while (++k < tcp_arr.size() && tcp_arr[k] != '"') { if (tcp_arr[k] == '\\') ++k; } }
-            }
-            const std::string obj = tcp_arr.substr(ob, end - ob + 1);
+        for_each_json_object(tcp_arr, [&](const std::string& obj) {
             TcpSlaveConfig ts;
             if (parse_tcp_slave(obj, out->poll_default_ms, &ts)) {
                 out->tcp_slaves.push_back(ts);
@@ -239,15 +327,20 @@ bool load_fieldbus_config(const std::string& path, bool path_from_cli,
                 std::fprintf(stderr, "WARN  fieldbus_config.tcp_slave_parse_error — thiếu"
                              " host/profile/name; bỏ qua phần tử\n");
             }
-            p = end + 1;
-        }
+        });
     }
 
     out->loaded = true;
-    std::fprintf(stderr, "INFO  fieldbus_config.loaded path=%s device=%s baud=%u slaves=%zu"
-                 " tcp_slaves=%zu\n",
-                 path.c_str(), out->rs485.device.c_str(), out->rs485.baud,
-                 out->slaves.size(), out->tcp_slaves.size());
+    std::fprintf(stderr, "INFO  fieldbus_config.loaded path=%s buses=%zu slaves=%zu"
+                 " tcp_slaves=%zu revision=%llu\n",
+                 path.c_str(), out->buses.size(), out->slaves.size(),
+                 out->tcp_slaves.size(), static_cast<unsigned long long>(out->revision));
+    for (const auto& bus : out->buses) {
+        std::fprintf(stderr, "INFO  fieldbus_config.bus id=%u name=%s device=%s %u%c8%u"
+                     " probe=%ums enabled=%d\n",
+                     bus.id, bus.name.c_str(), bus.device.c_str(), bus.baud, bus.parity,
+                     bus.stop, bus.offline_probe_ms, bus.enabled ? 1 : 0);
+    }
     return true;
 }
 
