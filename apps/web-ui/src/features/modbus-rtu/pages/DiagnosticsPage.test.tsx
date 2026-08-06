@@ -13,7 +13,7 @@ vi.mock('../../../shared/api/client', () => ({ apiClient: api }))
 describe('DiagnosticsPage', () => {
   beforeEach(() => {
     api.getModbusDevices.mockResolvedValue([
-      { device_id: 'ahu-1', display_name: 'AHU 1', enabled: true, rs485_port: '/dev/rs485-1', baud: 19200, parity: 'E', stop_bit: 1, slave_id: 7, poll_ms: 1000, timeout_ms: 300, retry: 2 }
+      { device_id: 'ahu-1', display_name: 'AHU 1', enabled: true, rs485_port: '/dev/rs485-1', baud: 19200, parity: 'E', stop_bits: 1, slave_id: 7, poll_ms: 1000, timeout_ms: 300, retry: 2 }
     ])
     api.getModbusDiagnostics.mockResolvedValue([
       { device_id: 'ahu-1', slave_id: 7, online: false, total_polls: 10, total_errors: 2, timeout_errors: 1, crc_errors: 1, retry_attempts: 2, consecutive_errors: 2, last_seen_ms: 123 }

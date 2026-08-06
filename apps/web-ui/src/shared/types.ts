@@ -47,10 +47,24 @@ export interface ModbusBus {
   port: string
   baud: number
   parity: 'N' | 'E' | 'O'
-  stop_bit: 1 | 2
+  stop_bits: 1 | 2
   data_bits: number
   offline_probe_ms: number
   enabled: boolean
+  /** G-D: phần cứng chỉ có TX/RX ⇒ luôn `auto`. Không có giao diện đổi. */
+  direction?: 'auto' | 'rts'
+}
+
+/** Thân của `PUT /modbus/buses/{bus_id}`. Chỉ những trường người dùng được sửa:
+ *  `bus_id`/`port`/`data_bits`/`direction` là sự thật phần cứng, không nhận từ
+ *  client. */
+export interface ModbusBusConfigInput {
+  display_name?: string
+  baud?: number
+  parity?: 'N' | 'E' | 'O'
+  stop_bits?: 1 | 2
+  offline_probe_ms?: number
+  enabled?: boolean
 }
 
 /** MBR-B211 — cổng board thật sự có. FE dựng dropdown từ đây thay vì để người
@@ -70,7 +84,8 @@ export interface ModbusRTUDevice {
   rs485_port: string
   baud: number
   parity: 'N' | 'E' | 'O'
-  stop_bit: 1 | 2
+  /** Kế thừa READ-ONLY từ Bus (OD-MBRTU-002). Giao diện Thiết bị chỉ hiển thị. */
+  stop_bits: 1 | 2
   slave_id: number
   poll_ms: number
   timeout_ms: number
@@ -146,6 +161,9 @@ export interface ModbusBusInfo {
   parity: string
   data_bits: number
   stop_bits: number
+  /** Cấu hình đang lưu — dùng để nạp form trang Cổng RS-485. */
+  offline_probe_ms?: number
+  enabled?: boolean
   total_devices: number
   online_devices: number
   /** `null` = iobus chưa đo được. Hiện "—", KHÔNG hiện 0 (D-07). */

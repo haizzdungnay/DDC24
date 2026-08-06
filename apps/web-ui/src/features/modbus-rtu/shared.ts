@@ -1,3 +1,4 @@
+import { ApiError } from '../../shared/types'
 import type { ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../shared/types'
 
 /* Phần dùng chung của 4 page Modbus RTU sau khi tách `ModbusRtuPage` monolith
@@ -10,7 +11,7 @@ import type { ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../.
 // cấu hình lưu được nhưng không chạy được, và lỗi chỉ lộ ở tầng iobus.
 export const emptyDevice: ModbusRTUDevice = {
   device_id: '', display_name: '', enabled: true, rs485_port: '/dev/rs485-1', baud: 19200,
-  parity: 'N', stop_bit: 1, slave_id: 1, poll_ms: 1000, timeout_ms: 300, retry: 2,
+  parity: 'N', stop_bits: 1, slave_id: 1, poll_ms: 1000, timeout_ms: 300, retry: 2,
   offline_after_errors: 2, offline_probe_ms: 10000
 }
 
@@ -27,6 +28,33 @@ export const buttonClass = 'h-10 rounded-[var(--radius)] border border-[var(--c-
 export const NO_DATA = '—'
 
 export const READ_ONLY_HINT = 'Chỉ vai trò Admin được thay đổi cấu hình Modbus RTU.'
+
+/** Mô tả lỗi API kèm TỪNG trường sai, thay vì chỉ câu tóm tắt.
+ *
+ * Backend trả `{"error":"validation failed","details":[{path,message,reason}]}`
+ * và `apiClient` đã parse `details` vào `ApiError`. Nhưng mọi page Modbus RTU
+ * chỉ hiện `error.message`, nên người dùng nhận đúng hai chữ **"validation
+ * failed"** và không có cách nào biết ô nào sai — phải đoán từng ô.
+ *
+ * Quan sát thật trên bo 2026-08-06: người dùng nhập `device_id = "2"`, bị từ
+ * chối, và trên màn hình không có gì ngoài "validation failed". Lý do thật —
+ * `device_id` phải bắt đầu bằng chữ — nằm trong `details[0]` và bị vứt đi.
+ *
+ * Từ chối mà không nói vì sao thì tệ hơn từ chối: người dùng không còn đường
+ * tự sửa, kể cả khi lỗi rất nhỏ.
+ */
+export function describeApiError(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) {
+    return error instanceof Error ? error.message : fallback
+  }
+  if (error.details.length === 0) return error.message || fallback
+  const parts = error.details.map((detail) => {
+    const field = detail.path || '(không rõ trường)'
+    const reason = detail.message || detail.reason || 'không hợp lệ'
+    return `${field}: ${reason}`
+  })
+  return `${error.message} — ${parts.join('; ')}`
+}
 
 /* D-07: trạng thái giao tiếp của thiết bị phải đến TỪ authority, không được suy
  * diễn ở tầng trình bày.

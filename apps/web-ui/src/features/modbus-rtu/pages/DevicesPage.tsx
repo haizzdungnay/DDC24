@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth, roleAtLeast } from '../../auth'
 import { apiClient } from '../../../shared/api/client'
-import type { ModbusProbeResult, ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../../shared/types'
-import { READ_ONLY_HINT, buttonClass, deviceLinkLabel, emptyDevice, inputClass } from '../shared'
+import type { ModbusBusInfo, ModbusProbeResult, ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../../shared/types'
+import { READ_ONLY_HINT, buttonClass, describeApiError, deviceLinkLabel, emptyDevice, inputClass } from '../shared'
 
 type PendingDelete = { id: string; label: string; extra?: number }
 
@@ -22,6 +22,7 @@ export function DevicesPage() {
   const [devices, setDevices] = useState<ModbusRTUDevice[]>([])
   const [points, setPoints] = useState<ModbusRTUPoint[]>([])
   const [diagnostics, setDiagnostics] = useState<ModbusRTUDiagnostics[]>([])
+  const [buses, setBuses] = useState<ModbusBusInfo[]>([])
   const [device, setDevice] = useState<ModbusRTUDevice>(emptyDevice)
   const [editingDevice, setEditingDevice] = useState(false)
   const [status, setStatus] = useState('')
@@ -63,12 +64,14 @@ export function DevicesPage() {
   const filterStatus = queryParams.get('status')
 
   async function reload() {
-    const [nextDevices, nextPoints] = await Promise.all([
+    const [nextDevices, nextPoints, nextBuses] = await Promise.all([
       apiClient.getModbusDevices(),
-      apiClient.getModbusPoints()
+      apiClient.getModbusPoints(),
+      apiClient.getModbusBuses()
     ])
     setDevices(nextDevices)
     setPoints(nextPoints)
+    setBuses(nextBuses)
     /* D-07: mất telemetry KHÔNG được nuốt im lặng. Bản trước `catch {}` rồi để
      * cột "Liên lạc" hiện "—" mà không nói vì sao — người vận hành không phân
      * biệt được "thiết bị im" với "không đọc được authority". */
@@ -96,7 +99,7 @@ export function DevicesPage() {
       await reload()
       setStatus('Đã áp dụng Device Manager vào iobus.')
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Không thể lưu thiết bị')
+      setStatus(describeApiError(error, 'Không thể lưu thiết bị'))
     }
   }
 
@@ -109,13 +112,17 @@ export function DevicesPage() {
       await reload()
       setStatus(`Đã xoá ${pendingDelete.label}.`)
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Không thể xoá')
+      setStatus(describeApiError(error, 'Không thể xoá'))
     } finally {
       setDeleting(false)
     }
   }
 
   const diagMap = Object.fromEntries(diagnostics.map((d) => [d.device_id, d]))
+  /* Khung truyền hiển thị trong form là của CỔNG đang chọn, không phải giá trị
+   * lưu trên thiết bị: sau khi đổi tham số cổng, giá trị cũ trên thiết bị chỉ là
+   * dữ liệu chờ được đồng bộ, không phải thứ đang chạy trên dây. */
+  const selectedBus = buses.find((bus) => bus.port === device.rs485_port)
 
   const filteredDevices = filterStatus
     ? devices.filter((d) => {
@@ -187,33 +194,23 @@ export function DevicesPage() {
             <option value="/dev/rs485-1">RS485-1 (/dev/rs485-1)</option>
             <option value="/dev/rs485-2">RS485-2 (/dev/rs485-2)</option>
           </select>
-          <input
-            required
-            type="number"
-            className={inputClass}
-            aria-label="Baud"
-            value={device.baud}
-            onChange={(e) => setDevice({ ...device, baud: Number(e.target.value) })}
-          />
-          <select
-            className={inputClass}
-            aria-label="Parity"
-            value={device.parity}
-            onChange={(e) => setDevice({ ...device, parity: e.target.value as ModbusRTUDevice['parity'] })}
+          {/* OD-MBRTU-002 (CLOSED): tham số serial thuộc về DÂY, không thuộc
+              thiết bị. Bản trước có ô nhập baud/parity/stop ở đây — tức mô hình
+              dữ liệu nói một đằng còn giao diện mời người dùng nhập một nẻo, rồi
+              từ chối sau khi họ bấm lưu. Nay chỉ hiển thị giá trị kế thừa và chỉ
+              đường tới nơi sửa được. */}
+          <div
+            data-testid="device-serial-inherited"
+            className="flex h-10 items-center rounded-[var(--radius)] border border-dashed border-[var(--c-border)] px-3 text-sm text-[var(--c-text-muted)] sm:col-span-3"
           >
-            <option>N</option>
-            <option>E</option>
-            <option>O</option>
-          </select>
-          <select
-            className={inputClass}
-            aria-label="Stop bit"
-            value={device.stop_bit}
-            onChange={(e) => setDevice({ ...device, stop_bit: Number(e.target.value) as 1 | 2 })}
-          >
-            <option value={1}>1 stop bit</option>
-            <option value={2}>2 stop bit</option>
-          </select>
+            {selectedBus
+              ? `Khung truyền kế thừa từ ${selectedBus.display_name || selectedBus.bus_id}: ${selectedBus.baud} ${selectedBus.parity}${selectedBus.data_bits}${selectedBus.stop_bits}`
+              : 'Khung truyền kế thừa từ cổng đã chọn'}
+            {' · '}
+            <Link className="ml-1 underline" to="/eng/modbus-rtu/ports">
+              Sửa ở trang Cổng RS-485
+            </Link>
+          </div>
           <input
             required
             type="number"
@@ -333,7 +330,7 @@ export function DevicesPage() {
                     <td className="py-3 font-mono text-xs font-bold text-[var(--c-text)]">{row.device_id}</td>
                     <td className="py-3 font-semibold text-[var(--c-text)]">{row.display_name}</td>
                     <td className="py-3 text-xs text-[var(--c-text-dim)]">
-                      {row.rs485_port} · {row.baud} {row.parity}8{row.stop_bit}
+                      {row.rs485_port} · {row.baud} {row.parity}8{row.stop_bits}
                     </td>
                     <td className="py-3 text-xs font-mono">{row.slave_id}</td>
                     <td className="py-3 text-xs font-mono">
