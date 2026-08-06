@@ -349,6 +349,21 @@ int main(int argc, char** argv)
     const bool rtu_ok = fieldbus_cfg.loaded && !fieldbus_cfg.slaves.empty()
                         && modbus.open(fieldbus_cfg, ext_cache, fieldbus_metrics);
     const bool rtu_configured = fieldbus_cfg.loaded && !fieldbus_cfg.slaves.empty();
+    /* Kênh điều khiển phải mở KỂ CẢ khi chưa có thiết bị nào.
+     *
+     * Bản trước gác nó bằng `rtu_configured` — tức "đã có ít nhất một slave" —
+     * trong khi chú thích ngay dưới lại nói ngược lại. Hậu quả là một hệ thống
+     * mới tinh (0 thiết bị) không có kênh điều khiển, nên MỌI thay đổi cấu hình
+     * đều rơi về phương án dự phòng: khởi động lại `mkddc-iobus`, cắt luôn IOP
+     * 100 Hz. Người dùng thấy đúng câu này khi bấm áp cấu hình cổng:
+     *
+     *   409 — "dịch vụ áp dụng thay đổi hiện không chạy"
+     *
+     * Nghịch lý: đường duy nhất để THOÁT khỏi trạng thái "chưa có thiết bị" lại
+     * bị chính trạng thái đó khoá. Commissioning và apply_config tồn tại để SỬA
+     * tình trạng chưa cấu hình, nên chúng không được phụ thuộc vào việc đã cấu
+     * hình xong hay chưa. */
+    const bool control_channel_wanted = true;
     if (fieldbus_cfg.loaded && !fieldbus_cfg.tcp_slaves.empty()) {
         const uint16_t tcp_offset = modbus.total_ext_count();
         modbus_tcp.open(fieldbus_cfg, tcp_offset);
@@ -357,7 +372,7 @@ int main(int argc, char** argv)
     /* MBR-B105: kênh điều khiển UDS. Mở kể cả khi chưa có bus nào lên được —
      * commissioning và apply_config phải dùng được để SỬA tình trạng đó. */
     fieldbus::ControlChannel fieldbus_control;
-    if (rtu_configured) {
+    if (control_channel_wanted) {
         fieldbus::ControlHandlers handlers;
         handlers.status_fields = [&]() {
             char buf[512];

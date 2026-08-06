@@ -79,7 +79,46 @@ Backend trả `{"error":"validation failed","details":[{path,message}]}` và
 thật (`device_id` phải bắt đầu bằng chữ) nằm trong `details[0]` và bị vứt đi.
 `describeApiError()` nay ghép từng trường sai vào thông báo.
 
-#### Kiểm chứng
+#### Kênh điều khiển bị chính trạng thái nó phải sửa khoá lại
+
+Phát hiện khi kiểm chứng trang Cổng trên bo: bấm áp cấu hình trả
+
+```
+409 — "dịch vụ áp dụng thay đổi hiện không chạy"
+```
+
+`main.cpp` gác kênh điều khiển bằng `rtu_configured` (= "đã có ít nhất một
+slave"), trong khi **chú thích ngay bên trên nói ngược lại**: *"Mở kể cả khi
+chưa có bus nào lên được — commissioning và apply_config phải dùng được để SỬA
+tình trạng đó."*
+
+Nghịch lý: một hệ thống mới tinh (0 thiết bị) không có kênh điều khiển, nên mọi
+thay đổi cấu hình rơi về phương án dự phòng — khởi động lại `mkddc-iobus`, cắt
+luôn IOP 100 Hz. Đường duy nhất để thoát khỏi trạng thái "chưa cấu hình" bị
+chính trạng thái đó khoá. Nay kênh mở vô điều kiện.
+
+#### Kiểm chứng đầu-cuối trên bo Foxlinx
+
+```
+PUT /modbus/buses/rs485-1  {baud:38400, parity:E, stop_bits:2}
+  → 200, reload=control, revision=14        (trước khi vá: 409)
+iobus: fieldbus_config.bus id=1 name=Day tang 1 38400E82 probe=8000ms
+       bus_worker.open bus=1 38400E82        ← áp qua kênh điều khiển, KHÔNG restart
+
+POST /modbus/devices {baud:9600 …}          ← cố tình gửi baud sai
+  → thiết bị nhận 38400 E2 của CỔNG, không phải 9600 N1 đã gửi
+
+PUT /modbus/buses/rs485-1  {baud:19200, parity:N, stop_bits:1}
+  → thiết bị TỰ đi theo: 19200 N1
+
+POST /modbus/devices {device_id:"2"}
+  → 400 kèm details[0]: "devices[0].device_id: phải dài 1..23 ký tự ASCII
+     và bắt đầu bằng chữ"                    ← trước đây chỉ hiện "validation failed"
+```
+
+Soi 24 trang bằng Chromium thật trỏ vào bo: **0 trang trắng**, trang Cổng RS-485
+render đủ nội dung. Hai dòng 503 còn lại là `/modbus/diagnostics` — đúng thiết
+kế D-07 và đã có khung giải thích trên cả hai trang.
 
 | Gate | Kết quả |
 |---|---|

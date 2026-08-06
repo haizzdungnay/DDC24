@@ -47,6 +47,7 @@ const ROUTES: Array<{ path: string; label: string }> = [
   { path: '/alarms', label: 'Cảnh báo' },
   { path: '/eng/modbus-rtu', label: 'Modbus RTU · Tổng quan' },
   { path: '/eng/modbus-rtu/overview', label: 'Modbus RTU · Tổng quan (alias)' },
+  { path: '/eng/modbus-rtu/ports', label: 'Modbus RTU · Cổng RS-485' },
   { path: '/eng/modbus-rtu/devices', label: 'Modbus RTU · Thiết bị' },
   { path: '/eng/modbus-rtu/points', label: 'Modbus RTU · Points' },
   { path: '/eng/modbus-rtu/mapping', label: 'Modbus RTU · Mapping' },
