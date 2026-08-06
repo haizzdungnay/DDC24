@@ -434,7 +434,7 @@ func (a *App) handleModbusMapping(w http.ResponseWriter, _ *http.Request) {
 			PointID: point.PointID, TagName: point.TagName, DeviceID: point.DeviceID,
 			BusID: modbusDeviceBus(device), SlaveID: device.SlaveID,
 			RegisterType: point.RegisterType, Address: point.Address, Registers: registers,
-			DataType: point.DataType, ReadWrite: point.ReadWrite, Enabled: point.Enabled,
+			DataType: point.DataType, ReadWrite: point.ReadWrite, Enabled: bool(point.Enabled),
 		})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
@@ -752,7 +752,7 @@ func (a *App) handleModbusDeviceEnabled(w http.ResponseWriter, r *http.Request) 
 	found := false
 	for i := range candidate.Config.Devices {
 		if strings.EqualFold(candidate.Config.Devices[i].DeviceID, id) {
-			candidate.Config.Devices[i].Enabled = req.Enabled
+			candidate.Config.Devices[i].Enabled = webModbus.FlexBool(req.Enabled)
 			found = true
 			break
 		}

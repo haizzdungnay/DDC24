@@ -509,3 +509,113 @@ TEST(Rs485Direction, MigrationTuCauHinhCuGiuNguyenHanhViAuto)
     ASSERT_EQ(cfg.buses.size(), 1u);
     EXPECT_EQ(cfg.buses[0].direction, Rs485Direction::Auto);
 }
+
+/* ---- Hợp đồng với file DO BE GHI RA (sự cố bo Foxlinx 2026-08-06) ---- */
+
+/* Đây là nội dung `buses[]` đúng như BE Go ghi xuống `/data/config/fieldbus.conf`:
+ * `bus_id`/`port`/`display_name`/`stop_bit`, KHÔNG phải `id`/`device`/`name`/`stop`.
+ *
+ * Bản trước `parse_bus` chỉ đọc bộ tên rút gọn và coi `id` + `device` là bắt
+ * buộc, nên mọi bus tạo từ giao diện web đều bị LOẠI. `buses[]` rỗng, iobus rơi
+ * về khối `rs485{}` cũ và chỉ chạy được một dây — bus 2 không bao giờ lên, mà
+ * không có thông báo nào nói vì sao.
+ *
+ * Test cũ không bắt được vì chúng tự viết file bằng đúng bộ tên của iobus. */
+TEST(FieldbusConfigContract, DocDuocBusTheoTuVungMaBackendThucSuGhi)
+{
+    const std::string path = "/tmp/mkddc_fb_be_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream out(path);
+        out << R"json({
+          "buses":[
+            {"bus_id":"rs485-1","display_name":"Dây tầng 1","port":"/dev/rs485-1",
+             "baud":38400,"parity":"E","stop_bit":2,"data_bits":8,
+             "offline_probe_ms":7000,"enabled":true},
+            {"bus_id":"rs485-2","display_name":"Dây tầng 2","port":"/dev/rs485-2",
+             "baud":19200,"parity":"N","stop_bit":1,"data_bits":8,
+             "offline_probe_ms":5000,"enabled":false}
+          ],
+          "slaves":[{"addr":1,"bus_id":1,"profile":"p","name":"a"}]
+        })json";
+    }
+    FieldbusConfig cfg;
+    ASSERT_TRUE(load_fieldbus_config(path, true, &cfg));
+    ::unlink(path.c_str());
+
+    ASSERT_EQ(cfg.buses.size(), 2u) << "bus do giao diện web tạo bị loại sạch";
+    EXPECT_EQ(cfg.buses[0].id, 1u) << "số hiệu phải suy được từ \"rs485-1\"";
+    EXPECT_EQ(cfg.buses[0].device, "/dev/rs485-1");
+    EXPECT_EQ(cfg.buses[0].name, "Dây tầng 1");
+    EXPECT_EQ(cfg.buses[0].baud, 38400u);
+    EXPECT_EQ(cfg.buses[0].parity, 'E');
+    EXPECT_EQ(cfg.buses[0].stop, 2u) << "stop_bit của BE bị bỏ qua ⇒ cổng mở sai khung";
+    EXPECT_EQ(cfg.buses[0].offline_probe_ms, 7000u);
+    EXPECT_TRUE(cfg.buses[0].enabled);
+
+    EXPECT_EQ(cfg.buses[1].id, 2u);
+    EXPECT_FALSE(cfg.buses[1].enabled)
+        << "enabled:false bị nuốt ⇒ iobus vẫn phát lên dây mà giao diện báo đã tắt";
+}
+
+/* `enabled` phải đọc được cả hai dạng. Dạng số là thứ người ta gõ khi sửa file
+ * trên bo (và là dạng DUY NHẤT bản cũ hiểu); dạng boolean là thứ BE ghi ra. */
+TEST(FieldbusConfigContract, EnabledDocDuocCaDangSoLanBoolean)
+{
+    struct Case { const char* literal; bool expected; };
+    const Case cases[] = {
+        {"true", true}, {"false", false}, {"1", true}, {"0", false},
+    };
+    for (const auto& c : cases) {
+        const std::string path = "/tmp/mkddc_fb_en_" + std::to_string(::getpid()) + ".json";
+        {
+            std::ofstream out(path);
+            out << R"json({"buses":[{"bus_id":"rs485-1","port":"/dev/rs485-1","enabled":)json"
+                << c.literal << R"json(}],
+                 "slaves":[{"addr":1,"bus_id":1,"profile":"p","name":"a"}]})json";
+        }
+        FieldbusConfig cfg;
+        ASSERT_TRUE(load_fieldbus_config(path, true, &cfg)) << c.literal;
+        ::unlink(path.c_str());
+        ASSERT_EQ(cfg.buses.size(), 1u) << c.literal;
+        EXPECT_EQ(cfg.buses[0].enabled, c.expected)
+            << "enabled=" << c.literal << " bị hiểu sai";
+    }
+}
+
+/* Bộ tên rút gọn vẫn phải chạy: file cũ trên các bo đã triển khai dùng nó, và
+ * một bản nâng cấp làm chết cấu hình đang chạy thì tệ hơn lỗi nó đi sửa. */
+TEST(FieldbusConfigContract, TuVungRutGonCuVanDocDuoc)
+{
+    const std::string path = "/tmp/mkddc_fb_old_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream out(path);
+        out << R"json({"buses":[{"id":2,"device":"/dev/rs485-2","name":"Cũ","stop":2}],
+                       "slaves":[{"addr":1,"bus_id":2,"profile":"p","name":"a"}]})json";
+    }
+    FieldbusConfig cfg;
+    ASSERT_TRUE(load_fieldbus_config(path, true, &cfg));
+    ::unlink(path.c_str());
+    ASSERT_EQ(cfg.buses.size(), 1u);
+    EXPECT_EQ(cfg.buses[0].id, 2u);
+    EXPECT_EQ(cfg.buses[0].device, "/dev/rs485-2");
+    EXPECT_EQ(cfg.buses[0].name, "Cũ");
+    EXPECT_EQ(cfg.buses[0].stop, 2u);
+}
+
+/* `bus_id` không suy ra được số hiệu ⇒ loại bus, KHÔNG đoán là 1. Đoán bừa sẽ
+ * dồn thiết bị của mọi dây lên cùng một dây và nhìn bề ngoài vẫn "chạy". */
+TEST(FieldbusConfigContract, BusIdKhongSuyDuocSoHieuThiBiLoai)
+{
+    const std::string path = "/tmp/mkddc_fb_bad_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream out(path);
+        out << R"json({"buses":[{"bus_id":"rs485-main","port":"/dev/rs485-1"},
+                                {"bus_id":"rs485-2","port":"/dev/rs485-2"}],
+                       "slaves":[{"addr":1,"bus_id":2,"profile":"p","name":"a"}]})json";
+    }
+    FieldbusConfig cfg;
+    ASSERT_TRUE(load_fieldbus_config(path, true, &cfg));
+    ::unlink(path.c_str());
+    ASSERT_EQ(cfg.buses.size(), 1u);
+    EXPECT_EQ(cfg.buses[0].id, 2u);
+}

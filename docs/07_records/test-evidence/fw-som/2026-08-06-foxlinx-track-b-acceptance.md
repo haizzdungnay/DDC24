@@ -211,9 +211,86 @@ dòng ERROR của fieldbus.
 
 ---
 
+## 9. `FE-BOARD-02` — BE và iobus bất đồng về `buses[]` (NGHIÊM TRỌNG, đã sửa)
+
+**Phát hiện thế nào:** người dùng báo dải đỏ trên mọi tab Modbus RTU và không
+thêm được thiết bị. Không phải lỗi giao diện — là hợp đồng file cấu hình.
+
+```
+parse config /data/config/fieldbus.conf: json: cannot unmarshal number
+into Go struct field Bus.buses.enabled of type bool
+```
+
+**Nguyên nhân gốc.** `fieldbus.conf` do BE ghi và iobus đọc, nhưng Track B dựng
+hai phía độc lập nên mỗi bên tự đặt tên khoá cho `buses[]`: BE dùng
+`bus_id`/`port`/`display_name`/`stop_bit`, iobus dùng `id`/`device`/`name`/`stop`
+và đọc `enabled` bằng `strtol` (chỉ nhận số). **Không có giá trị nào cả hai cùng
+chấp nhận.**
+
+**Vì sao nguy hiểm hơn vẻ ngoài của nó.** Thông báo lỗi đỏ chỉ là nửa dễ thấy.
+Nửa còn lại hoàn toàn im lặng:
+
+| Chiều | Hậu quả | Có triệu chứng không? |
+|---|---|---|
+| BE ghi → iobus đọc | `parse_bus` loại sạch bus vì thiếu `id`/`device`; iobus rơi về khối `rs485{}` cũ, chỉ chạy 1 dây, bus 2 không bao giờ lên | **Không.** service `active`, `NRestarts=0` |
+| iobus/sửa tay → BE đọc | Nạp thành công nhưng `bus_id` rỗng ⇒ validator chặn **mọi** thao tác, kể cả `POST /modbus/devices` | Có, nhưng chỉ ra `buses[0].bus_id` — chỗ người dùng không hề đụng |
+| `"enabled": false` | `strtol("true")` không ăn chữ ⇒ iobus giữ mặc định `true`; giao diện báo bus đã tắt còn iobus **vẫn phát lên dây** | **Không.** Chỉ đo bằng đồng hồ mới thấy |
+| Bất kỳ lần "Áp dụng" nào | `direction` không có trong struct Go nên bị **xoá khỏi file** sau vòng unmarshal → marshal, đưa cổng về mặc định driver | **Không.** Xoá đúng thứ `G-D` vừa thiết lập |
+
+**Vì sao test không bắt được.** Cả hai phía đều có test và đều xanh — mỗi bên tự
+dựng file thử bằng **đúng bộ tên của mình**. Không có test nào chạy trên file do
+phía kia sinh ra, mà đó mới là chỗ hợp đồng nằm.
+
+**Cách sửa.** Nới lỏng ở đầu đọc, giữ nghiêm ở đầu ghi, **cả hai phía**: iobus
+`parse_bus` nhận cả hai bộ tên + `jget_bool` (`true`/`false`/`1`/`0`); BE
+`Bus.UnmarshalJSON` nhận bộ rút gọn khi bộ chuẩn vắng (bộ chuẩn luôn thắng),
+`FlexBool` cho `enabled`, `Bus` giữ `direction`/`rts_delay_*`, `MigrateBuses`
+chuẩn hoá cả nhánh đã có `buses[]`. Chiều ghi vẫn chỉ xuất bộ tên chuẩn.
+
+**Test khoá hợp đồng** (thứ đã thiếu): `fieldbus_contract_test.go` đọc **mã nguồn
+C++ thật** để biết `parse_bus` đọc khoá nào, rồi đối chiếu với khoá do đường ghi
+thật của BE sinh ra. Đã xác nhận test **FAIL trên mã nguồn cũ** trước khi sửa:
+
+```
+BE ghi khoá "bus_id" vào buses[] nhưng parse_bus của iobus không đọc khoá này
+BE ghi khoá "port" … / "display_name" … / "stop_bit" …
+```
+
+**Kiểm chứng đầu-cuối trên board:**
+
+```text
+POST /api/v1/modbus/devices          → HTTP 200  (trước: HTTP 400)
+                                       reload=control, revision=12
+fieldbus.conf do BE ghi lại          → "bus_id":"rs485-1", "port":"/dev/rs485-1",
+                                       "stop_bit":1, "enabled":true,
+                                       "direction":"auto"   ← giữ nguyên
+iobus đọc chính file đó              → fieldbus_config.loaded buses=1 revision=12
+                                       bus id=1 name=RS485-1 device=/dev/rs485-1
+                                       19200N81 probe=5000ms enabled=1
+                                       bus_worker.rs485_direction mode=auto
+                                       bus_worker.open bus=1
+GET /api/v1/modbus/buses             → open_state=RUNNING, data_bits=8, stop_bits=1
+                                       (trước: bus_id="", data_bits=0, stop_bits=0)
+```
+
+Soi lại 23 trang bằng Chromium thật trỏ vào board: **0 trang trắng, 0 lỗi JS,
+0 lỗi HTTP** (lần trước còn 1 lỗi 503 `/modbus/diagnostics` do board chưa có
+`fieldbus.conf`; nay đã có nên telemetry publish bình thường).
+
+| Gate | Kết quả |
+|---|---|
+| `ctest --test-dir build/fw` | **785/785 PASS** (trước: 781) |
+| `go vet ./...` + `go test ./... -count=1` | **vet sạch, 11/11 package** |
+| `npx vitest --run --environment jsdom src` | **400/400 PASS**, 49 file |
+| `npm run lint` / `npm run build` | **PASS**, 0 warning |
+| Soi 23 trang trên board | **0 trắng / 0 lỗi JS / 0 lỗi HTTP** |
+
+---
+
 ## Revision history
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.2 | 2026-08-06 | Thêm §9: `FE-BOARD-02` — BE và iobus bất đồng từ vựng `buses[]` trong `fieldbus.conf`; sửa cả hai phía, thêm test khoá hợp đồng đọc mã nguồn C++, kiểm chứng đầu-cuối trên board |
 | 1.1 | 2026-08-06 | Thêm §8: đóng `G-D` (auto-direction, xác nhận bởi Hardware owner) và `TC-MBRTU-T-05` reboot ×10 PASS 10/10 sau khi bịt lỗi symlink mất qua reboot |
 | 1.0 | 2026-08-06 | Tạo hồ sơ nghiệm thu Track B: 4 gate host, deploy ABI v5, 12 kịch bản trên board, 1 lỗi phát hiện và sửa tại chỗ |

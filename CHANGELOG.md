@@ -7,6 +7,92 @@
 ---
 
 ## [Unreleased]
+### Fixed — BE và iobus bất đồng về `buses[]` trong `fieldbus.conf` (2026-08-06)
+
+**Triệu chứng.** Trên bo Foxlinx, mọi tab Modbus RTU hiện một dải đỏ và không
+thêm được thiết bị nào:
+
+```
+parse config /data/config/fieldbus.conf: json: cannot unmarshal number
+into Go struct field Bus.buses.enabled of type bool
+```
+
+**Nguyên nhân gốc — hai bên đọc cùng một file bằng hai từ vựng khác nhau.**
+`fieldbus.conf` do BE ghi và iobus đọc, nhưng Track B dựng hai phía độc lập nên
+mỗi bên tự đặt tên khoá cho `buses[]`:
+
+| Ý nghĩa | BE (Go) ghi | iobus (C++) đọc |
+|---|---|---|
+| định danh bus | `bus_id` (`"rs485-1"`) | `id` (số) — **bắt buộc** |
+| cổng serial | `port` | `device` — **bắt buộc** |
+| tên hiển thị | `display_name` | `name` |
+| stop bit | `stop_bit` | `stop` |
+| bật/tắt | `enabled` kiểu **boolean** | `enabled` đọc bằng `strtol` ⇒ chỉ nhận **số** |
+
+Không tồn tại giá trị nào cả hai phía cùng chấp nhận. Hệ quả theo từng chiều:
+
+- **File do BE ghi → iobus:** `parse_bus` coi `id` và `device` là bắt buộc nên
+  **loại sạch mọi bus tạo từ giao diện web**. `buses[]` rỗng, iobus lặng lẽ rơi
+  về khối `rs485{}` cũ và chỉ chạy được một dây — bus 2 không bao giờ lên, mà
+  cũng không có thông báo nào nói vì sao.
+- **File do iobus/người sửa tay ghi → BE:** nạp *thành công* nhưng ra toàn
+  trường rỗng, rồi validator chặn **mọi** thao tác cấu hình bằng
+  `buses[0].bus_id: bắt buộc` — kể cả `POST /modbus/devices`, vốn không đụng gì
+  tới bus. Không có đường sửa từ giao diện, vì chính giao diện cũng đi qua
+  validator đó.
+- **`enabled`:** `strtol("true")` không ăn chữ nên iobus **bỏ qua giá trị trong
+  file** và giữ mặc định `true`. `"enabled": true` chạy đúng một cách tình cờ,
+  còn **`"enabled": false` bị nuốt lặng lẽ** — giao diện báo bus đã tắt trong khi
+  iobus vẫn phát lên dây. Đây là nửa nguy hiểm nhất của lỗi: không có triệu
+  chứng nào cho tới khi có người cầm đồng hồ đo.
+
+**Vì sao test không bắt được.** Cả hai phía đều có test và đều xanh: mỗi bên tự
+dựng file thử bằng đúng bộ tên của mình. Không có test nào chạy trên file **do
+phía kia sinh ra** — mà đó mới là chỗ hợp đồng nằm.
+
+**Cách sửa** — nới lỏng ở đầu đọc, giữ nghiêm ở đầu ghi, áp dụng cho **cả hai
+phía**:
+
+- iobus `parse_bus` nhận cả hai bộ tên; thêm `jget_bool` đọc được `true`/`false`
+  lẫn `1`/`0`; suy số hiệu từ `"rs485-N"` theo đúng quy ước `Bus.NumericID()`
+  bên Go, và **loại bus nếu không suy được** thay vì đoán là 1 (đoán bừa sẽ dồn
+  thiết bị của mọi dây lên cùng một dây mà nhìn bề ngoài vẫn "chạy").
+- BE `Bus.UnmarshalJSON` nhận bộ tên rút gọn khi bộ chuẩn vắng mặt; bộ chuẩn
+  luôn thắng khi cả hai cùng có. `FlexBool` đọc `enabled` ở dạng số/chuỗi nhưng
+  **ghi ra vẫn luôn là boolean chuẩn JSON**.
+- `MigrateBuses` chuẩn hoá cả nhánh đã có `buses[]`; trước đó một file viết theo
+  bộ rút gọn đi thẳng ra API với `data_bits: 0`, `stop_bits: 0` và giao diện hiện
+  khung truyền `19200N00` — một khung không tồn tại.
+- `Bus` giữ `direction`/`rts_delay_*`: cấu hình đi qua vòng unmarshal → marshal
+  nên trường không khai ở struct sẽ **biến mất khỏi file** sau lần "Áp dụng" đầu
+  tiên. Trước bản này, mọi thao tác cấu hình từ web đều lặng lẽ xoá `direction`
+  của bus, đưa cổng về mặc định driver — đúng thứ `G-D` vừa bỏ công loại trừ.
+- Validator từ chối `data_bits ≠ 8` (iobus mở cổng bằng `modbus_new_rtu(…, 8,
+  stop)`, 8 là viết cứng) và `direction` ngoài `auto`/`rts`.
+
+**Test khoá hợp đồng** (thứ đã thiếu và để lọt lỗi này): `fieldbus_contract_test.go`
+đọc **mã nguồn C++ thật** để biết `parse_bus` đọc những khoá nào, rồi đối chiếu
+với khoá mà đường ghi thật của BE sinh ra — mọi khoá phải hoặc được iobus đọc,
+hoặc nằm trong danh sách miễn trừ có lý do. Đã xác nhận test **FAIL trên mã
+nguồn cũ** (`bus_id`, `port`, `display_name`, `stop_bit` đều báo lỗi) trước khi
+sửa. Phía C++ thêm `FieldbusConfigContract.*` nạp file viết theo đúng từ vựng BE.
+
+**Kiểm chứng đầu-cuối trên bo Foxlinx:** `POST /modbus/devices` trả `200`
+(`reload: control`, revision 12) ở chính nơi trước đó trả `400`; BE ghi lại
+`fieldbus.conf` theo từ vựng của mình **kèm `"direction": "auto"` được giữ
+nguyên**; iobus đọc file đó ra `buses=1`,
+`bus id=1 name=RS485-1 device=/dev/rs485-1 19200N81 enabled=1`, mở cổng và áp
+đúng chế độ auto. Soi lại 23 trang bằng Chromium thật: **0 trang trắng, 0 lỗi
+JS, 0 lỗi HTTP**.
+
+### Fixed — Deploy script cảnh báo nhầm magic SHM sau khi lên ABI v5 (2026-08-06)
+
+`deploy_board.sh` còn so magic với `0x4B584404` (v4) trong khi ABI hiện hành là
+`0x4B584405`, nên mọi lần deploy đều in "magic bất thường" — một cảnh báo sai
+lặp lại đều đặn, đúng loại nhiễu làm người vận hành quen bỏ qua cảnh báo thật.
+Nay nhận cả v5 lẫn v4 (v4 để lần deploy đầu sau nâng cấp, khi SHM cũ chưa bị xoá,
+không báo động giả).
+
 ### Added — Đóng G-D (auto-direction), WS runtime, và bịt lỗi symlink RS-485 mất sau reboot (2026-08-06)
 
 #### `G-D` / `OD-MBRTU-EXT-04` — CLOSED

@@ -1952,6 +1952,27 @@ components:
         data_bits: { type: integer, enum: [8] }
         offline_probe_ms: { type: integer, minimum: 1000, maximum: 60000, default: 5000 }
         enabled: { type: boolean }
+        direction:
+          type: string
+          enum: [auto, rts]
+          default: auto
+          description: >
+            G-D — cơ chế đảo hướng half-duplex. `auto` (mặc định) hợp với
+            transceiver tự đảo hướng: phần cứng Foxlinx SOM-DDC-24 chỉ có TX/RX,
+            không có DE/RE. Chỉ đặt `rts` khi bo THẬT SỰ nối DE/RE vào RTS — bật
+            nhầm trên bo auto-direction làm driver giữ RTS suốt lượt phát và có
+            thể chặn đường truyền. Không có giao diện cấu hình; trường có mặt ở
+            đây để cấu hình đi qua vòng đọc–ghi của BE mà không bị xoá mất.
+        rts_delay_before_us:
+          type: integer
+          minimum: 0
+          maximum: 100000
+          description: "Chỉ có tác dụng khi direction=rts."
+        rts_delay_after_us:
+          type: integer
+          minimum: 0
+          maximum: 100000
+          description: "Chỉ có tác dụng khi direction=rts."
     ModbusPortCapability:
       type: object
       required: [port]

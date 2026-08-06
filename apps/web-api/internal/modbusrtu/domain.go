@@ -23,40 +23,40 @@ type Config struct {
 }
 
 type Device struct {
-	DeviceID           string `json:"device_id"`
-	DisplayName        string `json:"display_name"`
-	Enabled            bool   `json:"enabled"`
-	RS485Port          string `json:"rs485_port"`
-	Baud               int    `json:"baud"`
-	Parity             string `json:"parity"`
-	StopBit            int    `json:"stop_bit"`
-	SlaveID            int    `json:"slave_id"`
-	PollMS             int    `json:"poll_ms"`
-	TimeoutMS          int    `json:"timeout_ms"`
-	Retry              int    `json:"retry"`
-	OfflineAfterErrors int    `json:"offline_after_errors,omitempty"`
+	DeviceID           string   `json:"device_id"`
+	DisplayName        string   `json:"display_name"`
+	Enabled            FlexBool `json:"enabled"`
+	RS485Port          string   `json:"rs485_port"`
+	Baud               int      `json:"baud"`
+	Parity             string   `json:"parity"`
+	StopBit            int      `json:"stop_bit"`
+	SlaveID            int      `json:"slave_id"`
+	PollMS             int      `json:"poll_ms"`
+	TimeoutMS          int      `json:"timeout_ms"`
+	Retry              int      `json:"retry"`
+	OfflineAfterErrors int      `json:"offline_after_errors,omitempty"`
 	// MBR-B202: Device thuộc về một Bus. `rs485_port`/`baud`/`parity`/`stop_bit`
 	// vẫn có trong response để không vỡ UI cũ, nhưng là KẾ THỪA read-only từ Bus.
 	BusID string `json:"bus_id,omitempty"`
 }
 
 type Point struct {
-	PointID      string  `json:"point_id"`
-	DeviceID     string  `json:"device_id"`
-	TagName      string  `json:"tag_name"`
-	DisplayName  string  `json:"display_name"`
-	RegisterType string  `json:"register_type"`
-	Address      int     `json:"address"`
-	DataType     string  `json:"data_type"`
-	ByteOrder    string  `json:"byte_order"`
-	WordOrder    string  `json:"word_order"`
-	Scale        float64 `json:"scale"`
-	Offset       float64 `json:"offset"`
-	Unit         string  `json:"unit"`
-	ReadWrite    string  `json:"read_write"`
-	DefaultValue any     `json:"default_value"`
-	SafeValue    any     `json:"safe_value"`
-	Enabled      bool    `json:"enabled"`
+	PointID      string   `json:"point_id"`
+	DeviceID     string   `json:"device_id"`
+	TagName      string   `json:"tag_name"`
+	DisplayName  string   `json:"display_name"`
+	RegisterType string   `json:"register_type"`
+	Address      int      `json:"address"`
+	DataType     string   `json:"data_type"`
+	ByteOrder    string   `json:"byte_order"`
+	WordOrder    string   `json:"word_order"`
+	Scale        float64  `json:"scale"`
+	Offset       float64  `json:"offset"`
+	Unit         string   `json:"unit"`
+	ReadWrite    string   `json:"read_write"`
+	DefaultValue any      `json:"default_value"`
+	SafeValue    any      `json:"safe_value"`
+	Enabled      FlexBool `json:"enabled"`
 	// DATA_MODEL §5.2/§5.5 — tuỳ chọn, nil = không khai báo.
 	// `min_value`/`max_value` là biên KỸ THUẬT của điểm: mẫu ngoài biên bị đánh
 	// BAD/OUT_OF_RANGE thay vì publish một số vô lý với nhãn GOOD.

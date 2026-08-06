@@ -1,6 +1,10 @@
 package modbusrtu
 
-import "strings"
+import (
+	"encoding/json"
+	"strconv"
+	"strings"
+)
 
 // Bus là MỘT SỢI DÂY RS-485 (MBR-B202 / OD-MBRTU-002).
 //
@@ -13,15 +17,73 @@ import "strings"
 // Với Bus là entity, câu hỏi "bus này chạy baud bao nhiêu" có đúng một câu trả
 // lời, và Device chỉ còn kế thừa read-only.
 type Bus struct {
-	BusID          string `json:"bus_id"`
-	DisplayName    string `json:"display_name"`
-	Port           string `json:"port"`
-	Baud           int    `json:"baud"`
-	Parity         string `json:"parity"`
-	StopBit        int    `json:"stop_bit"`
-	DataBits       int    `json:"data_bits"`
-	OfflineProbeMs int    `json:"offline_probe_ms"`
-	Enabled        bool   `json:"enabled"`
+	BusID          string   `json:"bus_id"`
+	DisplayName    string   `json:"display_name"`
+	Port           string   `json:"port"`
+	Baud           int      `json:"baud"`
+	Parity         string   `json:"parity"`
+	StopBit        int      `json:"stop_bit"`
+	DataBits       int      `json:"data_bits"`
+	OfflineProbeMs int      `json:"offline_probe_ms"`
+	Enabled        FlexBool `json:"enabled"`
+	// G-D: cơ chế điều hướng half-duplex. BE không dựng giao diện cho ba trường
+	// này, nhưng PHẢI mang chúng qua: `fieldbus.conf` được unmarshal vào struct
+	// rồi marshal lại, nên trường nào không có mặt ở đây sẽ BIẾN MẤT khỏi file
+	// sau lần "Áp dụng" đầu tiên. Trước bản này, mọi thao tác cấu hình từ web
+	// đều lặng lẽ xoá `direction` của bus, đưa cổng về mặc định của driver.
+	Direction        string `json:"direction,omitempty"`
+	RtsDelayBeforeUs int    `json:"rts_delay_before_us,omitempty"`
+	RtsDelayAfterUs  int    `json:"rts_delay_after_us,omitempty"`
+}
+
+// UnmarshalJSON đọc được CẢ HAI bộ tên khoá của `buses[]`.
+//
+// `fieldbus.conf` có hai bên ghi: BE dùng `bus_id`/`port`/`display_name`/
+// `stop_bit`, còn iobus (và người sửa file bằng tay trên bo) dùng bộ rút gọn
+// `id`/`device`/`name`/`stop`. Bản trước BE chỉ hiểu bộ của chính nó, nên một
+// file viết theo bộ kia được nạp THÀNH CÔNG nhưng ra toàn trường rỗng —
+// `bus_id` là "" — và validator chặn ở bước sau với thông báo:
+//
+//	buses[0].bus_id: bắt buộc
+//
+// Người dùng thấy điều đó khi bấm "Thêm thiết bị mới": thao tác bị từ chối vì
+// một trường thuộc về BUS mà giao diện thiết bị không hề đụng tới, và không có
+// cách nào sửa từ giao diện. Nạp được nhưng rỗng còn khó lần ra hơn là nạp lỗi.
+//
+// Nới lỏng ở đầu đọc, giữ nghiêm ở đầu ghi: `MarshalJSON` mặc định vẫn chỉ xuất
+// bộ tên chuẩn, nên file ghi ra không bao giờ lẫn hai bộ.
+func (b *Bus) UnmarshalJSON(data []byte) error {
+	// alias cắt vòng đệ quy: nếu không, json gọi lại chính hàm này.
+	type alias Bus
+	var canonical alias
+	if err := json.Unmarshal(data, &canonical); err != nil {
+		return err
+	}
+	*b = Bus(canonical)
+
+	var legacy struct {
+		ID     *int    `json:"id"`
+		Device *string `json:"device"`
+		Name   *string `json:"name"`
+		Stop   *int    `json:"stop"`
+	}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		// Bộ rút gọn sai kiểu không được làm hỏng cả bus: bộ chuẩn đã đọc xong.
+		return nil
+	}
+	if b.BusID == "" && legacy.ID != nil && *legacy.ID >= 1 && *legacy.ID <= 255 {
+		b.BusID = "rs485-" + strconv.Itoa(*legacy.ID)
+	}
+	if b.Port == "" && legacy.Device != nil {
+		b.Port = *legacy.Device
+	}
+	if b.DisplayName == "" && legacy.Name != nil {
+		b.DisplayName = *legacy.Name
+	}
+	if b.StopBit == 0 && legacy.Stop != nil {
+		b.StopBit = *legacy.Stop
+	}
+	return nil
 }
 
 // NumericID trả về id 1-based mà FW-SOM dùng trong `buses[].id` và
@@ -51,6 +113,7 @@ func NormalizeBus(bus Bus) Bus {
 	bus.DisplayName = strings.TrimSpace(bus.DisplayName)
 	bus.Port = strings.TrimSpace(bus.Port)
 	bus.Parity = strings.ToUpper(strings.TrimSpace(bus.Parity))
+	bus.Direction = strings.ToLower(strings.TrimSpace(bus.Direction))
 	if bus.Baud == 0 {
 		bus.Baud = 19200
 	}
@@ -91,7 +154,16 @@ func DefaultBuses() []Bus {
 // trị nào đã được chọn và giá trị nào bị bỏ.
 func MigrateBuses(cfg Config) ([]Bus, []string) {
 	if len(cfg.Buses) > 0 {
-		return cfg.Buses, nil
+		// Chuẩn hoá cả nhánh "đã có buses[]". Bỏ qua bước này thì một file viết
+		// theo bộ tên rút gọn của iobus đi thẳng ra API với `data_bits: 0` và
+		// `stop_bits: 0` — giao diện hiện "19200N00", một khung truyền không tồn
+		// tại. Mọi đường đọc buses[] đều đi qua đây, nên đây là chỗ duy nhất cần
+		// điền mặc định.
+		out := make([]Bus, 0, len(cfg.Buses))
+		for _, bus := range cfg.Buses {
+			out = append(out, NormalizeBus(bus))
+		}
+		return out, nil
 	}
 	var warnings []string
 	byPort := map[string]*Bus{}
