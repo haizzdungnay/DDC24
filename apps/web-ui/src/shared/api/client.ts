@@ -36,7 +36,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusBusInfo, type ModbusEventItem, type ModbusOverview, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -239,6 +239,33 @@ export async function requestJson<T>(path: string, init: ApiRequestInit = {}): P
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
+}
+
+/** Như `requestJson` nhưng trả `Response` thô — dùng cho export CSV/JSON, nơi
+ *  nội dung không phải JSON và phải giữ nguyên byte để người dùng tải về. */
+export async function requestRaw(path: string, init: ApiRequestInit = {}): Promise<Response> {
+  const { suppressAuthExpired, timeoutMs, ...fetchInit } = init
+  const headers = new Headers(fetchInit.headers)
+  for (const [key, value] of Object.entries(authHeaderProvider())) headers.set(key, value)
+  const limitMs = timeoutMs ?? defaultRequestTimeoutMs
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), limitMs)
+  let response: Response
+  try {
+    response = await fetch(`${base}${path}`, {
+      ...fetchInit, headers, credentials: 'include', signal: controller.signal
+    })
+  } finally {
+    window.clearTimeout(timer)
+  }
+  if (!suppressAuthExpired && response.status === 401) {
+    window.dispatchEvent(new CustomEvent('mkddc:auth-expired'))
+  }
+  if (!response.ok) {
+    const body = await response.text().catch(() => '')
+    throw new ApiError(body || `${response.status} ${response.statusText}`, response.status, [])
+  }
+  return response
 }
 
 function readPointConfigOverrides(): Record<string, PointConfigPatch> {
@@ -1305,7 +1332,12 @@ export const apiClient = {
     return requestJson<ModbusRTUDiagnostics[]>('/modbus/diagnostics', { cache: 'no-store' })
   },
   async getModbusOverview(): Promise<ModbusOverview> {
-    if (IS_DEMO) return { total_devices: 0, online: 0, offline: 0, fault_config: 0, revision: 1, checksum: 'demo' }
+    // Demo mode phải nói rõ là KHÔNG có telemetry. Trả `revision: 1` như bản cũ
+    // làm giao diện hiện một revision không tồn tại và trông y hệt hệ thống thật.
+    if (IS_DEMO) {
+      return { total_devices: 0, online: 0, offline: 0, initializing: 0, fault_config: 0,
+        revision: 0, checksum: '', telemetry_available: false }
+    }
     return requestJson<ModbusOverview>('/modbus/overview', { cache: 'no-store' })
   },
   async getModbusBuses(): Promise<ModbusBusInfo[]> {
@@ -1322,6 +1354,86 @@ export const apiClient = {
       method: 'POST',
       body: JSON.stringify({ point_id: pointId, value }),
     })
+  },
+
+  // ---- Contract v2: vòng đời cấu hình + commissioning + import/export ----
+  async getModbusConfigState(): Promise<ModbusConfigState> {
+    if (IS_DEMO) return { state: 'CLEAN', active_revision: 0, diff: [], running_on_iobus: { reachable: false } }
+    return requestJson<ModbusConfigState>('/modbus/config/state', { cache: 'no-store' })
+  },
+  async getModbusCandidate(): Promise<ModbusCandidate> {
+    if (IS_DEMO) return { config: { buses: [], devices: [], points: [] }, base_revision: 0 }
+    return requestJson<ModbusCandidate>('/modbus/config/candidate', { cache: 'no-store' })
+  },
+  async saveModbusCandidate(payload: {
+    base_revision: number
+    buses: ModbusBus[]
+    devices: ModbusRTUDevice[]
+    points: ModbusRTUPoint[]
+    operation_id?: string
+  }): Promise<{ result: string; state: ModbusConfigLifecycle; diff: ModbusDiffEntry[] }> {
+    if (IS_DEMO) return { result: 'saved', state: 'DIRTY', diff: [] }
+    return requestJson('/modbus/config/candidate', {
+      method: 'PUT',
+      // MBR-B205: gửi kèm If-Match để server từ chối khi có người khác vừa apply.
+      headers: { 'If-Match': String(payload.base_revision) },
+      body: JSON.stringify(payload)
+    })
+  },
+  async discardModbusCandidate(): Promise<void> {
+    if (!IS_DEMO) await requestJson('/modbus/config/candidate', { method: 'DELETE' })
+  },
+  async applyModbusConfig(payload: { base_revision: number; operation_id: string }): Promise<ModbusApplyResult> {
+    if (IS_DEMO) return { result: 'success', revision: payload.base_revision + 1 }
+    return requestJson<ModbusApplyResult>('/modbus/config/apply', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  },
+  async getModbusMapping(): Promise<ModbusMappingResponse> {
+    if (IS_DEMO) return { rows: [], errors: [], load: [] }
+    return requestJson<ModbusMappingResponse>('/modbus/mapping', { cache: 'no-store' })
+  },
+  async getModbusPorts(): Promise<ModbusPortCapability[]> {
+    if (IS_DEMO) return []
+    return requestJson<ModbusPortCapability[]>('/modbus/ports', { cache: 'no-store' })
+  },
+  async testModbusConnection(deviceId: string): Promise<ModbusProbeResult> {
+    if (IS_DEMO) return { result: 'fail', reason: 'demo mode' }
+    return requestJson<ModbusProbeResult>(`/modbus/devices/${encodeURIComponent(deviceId)}/test-connection`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    })
+  },
+  async readModbusTest(payload: {
+    bus_id: string
+    slave_id: number
+    fc: number
+    address: number
+    count: number
+    timeout_ms?: number
+  }): Promise<ModbusProbeResult> {
+    if (IS_DEMO) return { result: 'fail', reason: 'demo mode' }
+    return requestJson<ModbusProbeResult>('/modbus/read-test', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  },
+  async exportModbusConfig(format: 'csv' | 'json'): Promise<string> {
+    if (IS_DEMO) return ''
+    const response = await requestRaw(`/modbus/export?format=${format}`, { cache: 'no-store' })
+    return response.text()
+  },
+  async importModbusConfig(format: 'csv' | 'json', content: string): Promise<{
+    result: string
+    state?: ModbusConfigLifecycle
+    point_count?: number
+    device_count?: number
+    diff?: ModbusDiffEntry[]
+    errors?: ModbusImportError[]
+  }> {
+    if (IS_DEMO) return { result: 'rejected', errors: [{ message: 'Demo mode' }] }
+    return requestJson('/modbus/import?format=' + format, { method: 'POST', body: content })
   },
 
   async runCommissioningTest(pointId: string, value: number | boolean): Promise<CommissioningTestResult> {

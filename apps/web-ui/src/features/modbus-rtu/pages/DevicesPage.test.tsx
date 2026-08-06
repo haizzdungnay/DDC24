@@ -8,7 +8,8 @@ import { DevicesPage } from './DevicesPage'
 
 const api = vi.hoisted(() => ({
   getModbusDevices: vi.fn(), getModbusPoints: vi.fn(), getModbusDiagnostics: vi.fn(),
-  createModbusDevice: vi.fn(), updateModbusDevice: vi.fn(), deleteModbusDevice: vi.fn()
+  createModbusDevice: vi.fn(), updateModbusDevice: vi.fn(), deleteModbusDevice: vi.fn(),
+  testModbusConnection: vi.fn()
 }))
 
 vi.mock('../../../shared/api/client', () => ({ apiClient: api }))
@@ -136,5 +137,38 @@ describe('DevicesPage', () => {
     for (const button of screen.getAllByRole('button', { name: 'Sửa' })) {
       expect(button).toBeDisabled()
     }
+  })
+
+  /* TF-MBRTU-08 (MBR-B307/B208): "Thử kết nối" là lệnh CHẠM DÂY thật, khác hẳn
+   * cột "Liên lạc" vốn phản ánh telemetry của vòng poll định kỳ. Không có nút
+   * này, kỹ thuật viên đứng cạnh tủ phải chờ trọn một chu kỳ poll để biết dây
+   * vừa đấu đã thông chưa. */
+  it('gọi commissioning thật khi bấm Thử kết nối và hiện thời gian phản hồi', async () => {
+    api.testModbusConnection.mockResolvedValue({ result: 'ok', value: 1234, elapsed_us: 4200 })
+    renderAt()
+
+    const buttons = await screen.findAllByRole('button', { name: 'Thử kết nối' })
+    await userEvent.click(buttons[0])
+
+    expect(api.testModbusConnection).toHaveBeenCalledWith('ahu-1')
+    expect(await screen.findByTestId('probe-ahu-1')).toHaveTextContent('4200 µs')
+  })
+
+  it('nói rõ thiết bị không trả lời thay vì im lặng', async () => {
+    api.testModbusConnection.mockResolvedValue({ result: 'fail', reason: 'Connection timed out' })
+    renderAt()
+
+    const buttons = await screen.findAllByRole('button', { name: 'Thử kết nối' })
+    await userEvent.click(buttons[0])
+    expect(await screen.findByTestId('probe-ahu-1')).toHaveTextContent('Không trả lời: Connection timed out')
+  })
+
+  /* Đ-04: chạm thiết bị hiện trường cần Operator trở lên. Viewer thấy nút
+   * nhưng bị khoá — mời họ bấm rồi trả 403 là thiết kế tệ hơn. */
+  it('khoá nút Thử kết nối với vai trò viewer', async () => {
+    auth.role = 'viewer'
+    renderAt()
+    const buttons = await screen.findAllByRole('button', { name: 'Thử kết nối' })
+    expect(buttons[0]).toBeDisabled()
   })
 })

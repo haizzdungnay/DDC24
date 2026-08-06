@@ -92,12 +92,15 @@ export function DiagnosticsPage() {
             <thead>
               <tr className="border-b border-[var(--c-border)] text-xs text-[var(--c-text-dim)]">
                 <th className="py-2">Thiết bị</th>
-                <th className="py-2">Slave</th>
+                <th className="py-2">Bus / Slave</th>
                 <th className="py-2">Liên lạc</th>
                 <th className="py-2">Poll / lỗi</th>
                 <th className="py-2">Timeout</th>
                 <th className="py-2">CRC</th>
-                <th className="py-2">Phát lại</th>
+                <th className="py-2" title="Số lần PHÁT LẠI thật một giao dịch lỗi — khác hẳn cột Lỗi">Phát lại</th>
+                <th className="py-2" title="Lệnh ghi thất bại ở một lần phát (còn có thể thử lại)">Ghi lỗi</th>
+                <th className="py-2" title="Lệnh ghi bị BỎ HẲN: hết lượt thử, quá hạn, hoặc giá trị không encode được">Ghi bị bỏ</th>
+                <th className="py-2" title="Mã exception Modbus gần nhất do slave trả về (0x01..0x0B)">Exception</th>
                 <th className="py-2">Lỗi liên tiếp</th>
               </tr>
             </thead>
@@ -105,12 +108,28 @@ export function DiagnosticsPage() {
               {diagnostics.map((row) => (
                 <tr key={row.slave_id} className="border-t border-[var(--c-border)]">
                   <td className="py-3 text-[var(--c-text)]">{deviceNames[row.device_id] ?? row.device_id ?? NO_DATA}</td>
-                  <td className="py-3 font-mono text-xs">{row.slave_id}</td>
+                  <td className="py-3 font-mono text-xs">{row.bus_id ?? NO_DATA} / {row.slave_id}</td>
                   <td className="py-3 text-xs">{deviceLinkLabel(row)}</td>
                   <td className="py-3 font-mono text-xs">{row.total_polls} / {row.total_errors}</td>
                   <td className="py-3 font-mono text-xs">{row.timeout_errors}</td>
                   <td className="py-3 font-mono text-xs">{row.crc_errors}</td>
                   <td className="py-3 font-mono text-xs">{row.retry_attempts}</td>
+                  {/* MBR-B309: trường chưa có trong telemetry hiện "—", KHÔNG
+                      hiện 0. "Chưa biết" và "bằng 0" là hai kết luận khác nhau
+                      về thiết bị hiện trường. */}
+                  <td className="py-3 font-mono text-xs" data-testid={`write-failed-${row.slave_id}`}>
+                    {row.write_failed ?? NO_DATA}
+                  </td>
+                  <td className="py-3 font-mono text-xs" data-testid={`write-dropped-${row.slave_id}`}>
+                    {row.write_dropped ?? NO_DATA}
+                  </td>
+                  <td className="py-3 font-mono text-xs" data-testid={`exception-${row.slave_id}`}>
+                    {row.last_exception === undefined
+                      ? NO_DATA
+                      : row.last_exception === 0
+                        ? '—'
+                        : `0x${row.last_exception.toString(16).padStart(2, '0')}`}
+                  </td>
                   <td className="py-3 font-mono text-xs">{row.consecutive_errors}</td>
                 </tr>
               ))}
