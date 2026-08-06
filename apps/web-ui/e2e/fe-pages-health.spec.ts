@@ -114,6 +114,19 @@ test.describe('Sức khoẻ trang FE (review 2026-08-05)', () => {
     }
   })
 
+  /* FE-DIAG-01: `/eng/diagram` không có guard lỗi nên nó vẫn vẽ sơ đồ khi
+   * authority chết — và trước bản sửa, sơ đồ đó lấp chỗ trống bằng số của
+   * simulator ("29 I/O | 5 Modbus | 2 WARN", BACnet 192.168.1.100). */
+  test('/eng/diagram không mượn số của simulator khi authority không trả point', async ({ page }) => {
+    await navigate(page, '/eng/diagram')
+    const diagram = page.getByRole('img', { name: /front-panel I\/O diagram/i })
+    await expect(diagram).toContainText('0 I/O')
+    await expect(diagram).toContainText('— Modbus')
+    await expect(diagram).toContainText('— WARN | — FAULT')
+    await expect(diagram).not.toContainText('192.168.1.100')
+    await expect(page.getByText(/returned no I\/O points/i)).toBeVisible()
+  })
+
   test('/monitor không khẳng định 100% bình thường khi không đọc được điểm nào', async ({ page }) => {
     await navigate(page, '/monitor')
     const main = page.locator('main').first()
