@@ -1,14 +1,54 @@
 # MK-DDC-24 — fake MCU process (lab only, không dùng production)
-# Chỉ enable cùng với mkddc-pty + mkddc-iobus drop-in nomcu.conf
+#
+# KHÔNG enable cùng `mkddc-pty.service`. Hai unit LOẠI TRỪ NHAU: ở chế độ
+# `--pty --link` dưới đây, fake MCU tự tạo cặp PTY và giữ đầu master, nên socat
+# của `mkddc-pty` là thừa — và tệ hơn, `ExecStartPre` của nó chạy
+#
+#   /bin/rm -f /tmp/mkddc-iop-a /tmp/mkddc-iop-b
+#
+# tức XOÁ ĐÚNG liên kết mà fake MCU vừa tạo. Trên bo Foxlinx 2026-08-06, cả hai
+# cùng enable theo hướng dẫn cũ ở runbook 27: `mkddc-pty` xoá liên kết rồi tự
+# chết vì thiếu socat (`status=203/EXEC`), còn iobus thì đã kịp mở fd nên vẫn
+# chạy bình thường — hỏng chỉ lộ ra ở lần iobus khởi động lại kế tiếp, có thể
+# nhiều ngày sau, lúc không ai còn nối được hai sự kiện với nhau.
+#
+# HAI CÁCH HỎNG ĐÃ QUAN SÁT ĐƯỢC TRÊN BO FOXLINX (2026-08-06), cùng một dạng:
+# liên kết PTY vắng mặt, và KHÔNG có tín hiệu nào ở tầng systemd cho thấy điều
+# đó — `mkddc-fakemcu` vẫn `active (running)`, `mkddc-iobus` vẫn `active`,
+# `NRestarts=0`. Dấu vết duy nhất là một dòng lặp trong journal:
+#
+#   ERROR iop.open_fail dev=/tmp/mkddc-iop-a errno=2 (No such file or directory)
+#
+# 1. ĐUA LÚC KHỞI ĐỘNG. `Type=simple` nên systemd coi dịch vụ đã "lên" ngay khi
+#    fork, TRƯỚC khi `open_pty()` kịp tạo symlink. `Requires=`/`After=` bên
+#    iobus vì thế không bảo đảm được điều người đọc tưởng nó bảo đảm.
+#    `ExecStartPost` dưới đây chờ liên kết xuất hiện thật rồi mới báo lên.
+#
+# 2. KHỞI ĐỘNG LẠI RIÊNG IOBUS. `mkddc-fake-mcu` chỉ gọi `open_pty()` một lần
+#    lúc khởi động; nó không dựng lại liên kết về sau. Nếu liên kết mất trong
+#    lúc chạy, tiến trình đang giữ sẵn fd nên KHÔNG hỏng gì — hệ thống chạy
+#    bình thường cho tới lần iobus khởi động lại kế tiếp, có thể là nhiều ngày
+#    sau, và lúc đó không ai còn nối được hai sự kiện với nhau. Trong phiên
+#    2026-08-06, một lần deploy đã để IOP chết 15 phút theo đúng kiểu này.
+#    `PartOf=` buộc fake MCU khởi động lại cùng iobus, nên liên kết luôn được
+#    dựng lại trước khi iobus mở.
+#
+# Chỉ ảnh hưởng bo lab. Với MCU thật, iobus mở thẳng node UART của kernel nên
+# không có liên kết nào để mất.
 [Unit]
 Description=MK-DDC-24 fake MCU — lab/no-MCU only
 Before=mkddc-iobus.service
+PartOf=mkddc-iobus.service
+Conflicts=mkddc-pty.service
 
 [Service]
 Type=simple
 User=mkddc
 Group=mkddc
 ExecStart=/usr/sbin/mkddc-fake-mcu --pty --link /tmp/mkddc-iop-a
+# Chưa có liên kết thì dịch vụ CHƯA lên. 5 s là quá đủ cho một lần openpty;
+# thất bại ở đây báo hỏng ngay lúc boot thay vì để iobus quay vòng lỗi im lặng.
+ExecStartPost=/bin/sh -c 'i=0; while [ $i -lt 50 ]; do [ -e /tmp/mkddc-iop-a ] && exit 0; i=$((i+1)); sleep 0.1; done; echo "fake MCU không tạo được /tmp/mkddc-iop-a" >&2; exit 1'
 Restart=on-failure
 RestartSec=1
 

@@ -85,6 +85,44 @@ nguyên**; iobus đọc file đó ra `buses=1`,
 đúng chế độ auto. Soi lại 23 trang bằng Chromium thật: **0 trang trắng, 0 lỗi
 JS, 0 lỗi HTTP**.
 
+### Fixed — `mkddc-pty` xoá liên kết PTY của fake MCU ở mỗi lần boot (lab, 2026-08-06)
+
+**Triệu chứng.** Sau khi khởi động lại riêng `mkddc-iobus`, IOP chết hẳn:
+
+```
+ERROR iop.open_fail dev=/tmp/mkddc-iop-a errno=2 (No such file or directory)
+```
+
+lặp mãi, trong khi `mkddc-fakemcu` và `mkddc-iobus` đều `active` và
+`NRestarts=0`. Một lần deploy trong phiên này đã để IOP chết 15 phút theo đúng
+kiểu đó mà không có dấu hiệu nào ở tầng systemd.
+
+**Nguyên nhân gốc.** Runbook 27 hướng dẫn enable **cả** `mkddc-pty` lẫn
+`mkddc-fakemcu`. Hai unit đó **loại trừ nhau**: `mkddc-fakemcu` chạy
+`--pty --link`, tức tự tạo cặp PTY và giữ đầu master, nên socat của `mkddc-pty`
+không còn việc gì — nhưng `ExecStartPre` của nó vẫn chạy
+`/bin/rm -f /tmp/mkddc-iop-a /tmp/mkddc-iop-b`, **xoá đúng liên kết mà fake MCU
+vừa tạo**, rồi tự chết vì trên bo không có socat (`status=203/EXEC`).
+
+**Vì sao không ai thấy suốt thời gian dài.** iobus đã kịp `open()` trước khi
+liên kết bị xoá, và một fd đang mở không quan tâm tên file còn hay mất. Hệ
+thống chạy hoàn toàn bình thường — cho tới **lần iobus khởi động lại kế tiếp**,
+có thể nhiều ngày sau, lúc không ai còn nối được hai sự kiện với nhau.
+
+**Cách sửa.** `Conflicts=` hai chiều giữa `mkddc-fakemcu` và `mkddc-pty` để
+systemd chặn việc cả hai cùng chạy; `PartOf=mkddc-iobus.service` để fake MCU
+khởi động lại cùng iobus (liên kết luôn được dựng lại trước khi iobus mở);
+`ExecStartPost` chờ liên kết xuất hiện thật rồi mới báo dịch vụ đã lên, đóng
+nốt khe đua của `Type=simple`. Runbook 27 bỏ `mkddc-pty` khỏi các bước setup
+kèm đính chính giải thích.
+
+**Kiểm chứng:** reboot ×3 — `link=/dev/pts/0`, `iop_ok=1`, `iop_fail=0`,
+`pty=inactive` cả 3 vòng; và xoá liên kết bằng tay rồi restart **riêng** iobus
+thì IOP vẫn về `NORMAL_POLL`.
+
+> Chỉ ảnh hưởng bo lab dùng fake MCU. Với MCU thật, iobus mở thẳng node UART của
+> kernel nên không có liên kết nào để mất.
+
 ### Fixed — Deploy script cảnh báo nhầm magic SHM sau khi lên ABI v5 (2026-08-06)
 
 `deploy_board.sh` còn so magic với `0x4B584404` (v4) trong khi ABI hiện hành là

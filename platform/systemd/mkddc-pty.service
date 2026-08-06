@@ -1,9 +1,22 @@
 # MK-DDC-24 — virtual PTY pair cho fake MCU (lab only, không dùng production)
 # socat tạo 2 PTY symlink /tmp/mkddc-iop-a <-> /tmp/mkddc-iop-b
 # mkddc-iobus dùng đầu A, mkddc-fakemcu dùng đầu B
+#
+# CHỈ dùng khi fake MCU chạy ở chế độ NỐI VÀO một PTY có sẵn (`--uart
+# /tmp/mkddc-iop-b`). LOẠI TRỪ NHAU với `mkddc-fakemcu.service` bản hiện hành,
+# vốn chạy `--pty --link` và TỰ tạo cặp PTY.
+#
+# Bật cả hai là hỏng: `ExecStartPre` dưới đây xoá `/tmp/mkddc-iop-a`, đúng liên
+# kết mà fake MCU vừa tạo. Trên bo Foxlinx 2026-08-06 điều này đã xảy ra ở MỖI
+# lần boot mà không ai thấy — unit này chết ngay sau đó vì thiếu socat
+# (`status=203/EXEC`), còn iobus đã kịp mở fd nên vẫn chạy. IOP chỉ thật sự chết
+# ở lần iobus khởi động lại kế tiếp. `Conflicts=` bên mkddc-fakemcu nay chặn
+# việc cả hai cùng chạy, nhưng đừng enable unit này trừ khi bạn CHỦ Ý dùng chế
+# độ socat.
 [Unit]
 Description=MK-DDC-24 virtual PTY pair (socat) — lab/no-MCU only
 Before=mkddc-fakemcu.service
+Conflicts=mkddc-fakemcu.service
 
 [Service]
 Type=exec
