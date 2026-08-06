@@ -760,14 +760,35 @@ echo \$E.tar.gz"
 
 > **Đây là cách dùng cho lab thường xuyên.** Sau khi setup một lần, board tự khởi động đầy đủ sau mỗi lần bật nguồn.
 
-### Kiến trúc 4 service
+### Kiến trúc 3 service
+
+> **ĐÍNH CHÍNH 2026-08-06 — bỏ `mkddc-pty`.** Bản trước của mục này hướng dẫn
+> enable **cả** `mkddc-pty` lẫn `mkddc-fakemcu`. Hai unit đó **loại trừ nhau**.
+> `mkddc-fakemcu` chạy `--pty --link`, tức TỰ tạo cặp PTY và giữ đầu master —
+> socat không còn việc gì để làm. Tệ hơn, `mkddc-pty` có
+> `ExecStartPre=/bin/rm -f /tmp/mkddc-iop-a /tmp/mkddc-iop-b`, **xoá đúng liên
+> kết mà fake MCU vừa tạo**.
+>
+> Trên bo Foxlinx điều này xảy ra ở **mỗi lần boot** mà không ai thấy:
+> `mkddc-pty` xoá liên kết rồi tự chết vì thiếu socat (`status=203/EXEC`), còn
+> iobus đã kịp mở fd nên vẫn chạy bình thường. IOP chỉ thật sự chết ở **lần
+> iobus khởi động lại kế tiếp** — có thể nhiều ngày sau, lúc không ai còn nối
+> được hai sự kiện với nhau. Triệu chứng duy nhất:
+>
+> ```
+> ERROR iop.open_fail dev=/tmp/mkddc-iop-a errno=2 (No such file or directory)
+> ```
+>
+> trong khi cả hai service vẫn `active` và `NRestarts=0`.
+>
+> Nay `mkddc-fakemcu` khai `Conflicts=mkddc-pty.service` nên systemd chặn việc
+> cả hai cùng chạy. Chỉ enable `mkddc-pty` nếu bạn **chủ ý** dùng chế độ socat
+> với `fake_mcu --uart /tmp/mkddc-iop-b`.
 
 ```
-mkddc-pty      socat tạo PTY pair /tmp/mkddc-iop-a ↔ /tmp/mkddc-iop-b
+mkddc-fakemcu  fake_mcu tự tạo PTY pair, giữ master, symlink slave → /tmp/mkddc-iop-a
      ↓
-mkddc-fakemcu  fake_mcu bám PTY B (/tmp/mkddc-iop-b)
-     ↓
-mkddc-iobus    dùng PTY A (--uart /tmp/mkddc-iop-a) thay /dev/ttyS2
+mkddc-iobus    dùng /tmp/mkddc-iop-a (--uart) thay /dev/ttyS2
      ↓
 mkddc-core     scan 1s, IPC tại /run/mkddc/core.sock
 ```
@@ -780,8 +801,7 @@ ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && \
   # 1. Install fake_mcu binary
   sudo install -m 0755 build/services/iobus/fake_mcu /usr/local/bin/mkddc-fakemcu && \
 
-  # 2. Install 2 service file mới
-  sudo install -m 0644 packaging/systemd/mkddc-pty.service /etc/systemd/system/ && \
+  # 2. Install service file (KHÔNG cài mkddc-pty — xem đính chính ở trên)
   sudo install -m 0644 packaging/systemd/mkddc-fakemcu.service /etc/systemd/system/ && \
 
   # 3. Drop-in override: iobus dùng PTY thay UART thật
@@ -796,7 +816,7 @@ ssh SOM-DDC-24 "cd ~/work/DDC-PROJECT && \
 
   # 5. Reload + enable tất cả
   sudo systemctl daemon-reload && \
-  sudo systemctl enable --now mkddc-pty mkddc-fakemcu mkddc-iobus mkddc-core"
+  sudo systemctl enable --now mkddc-fakemcu mkddc-iobus mkddc-core"
 ```
 
 ### Verify sau setup (hoặc sau reboot)
@@ -812,7 +832,7 @@ ssh SOM-DDC-24 "systemd-analyze verify \
 ```
 
 ```bash
-ssh SOM-DDC-24 "systemctl is-active mkddc-pty mkddc-fakemcu mkddc-iobus mkddc-core"
+ssh SOM-DDC-24 "systemctl is-active mkddc-fakemcu mkddc-iobus mkddc-core"
 # active active active active
 
 ssh SOM-DDC-24 "~/work/DDC-PROJECT/build/services/iobus/shm_dump_io | head -3"
@@ -823,7 +843,7 @@ ssh SOM-DDC-24 "~/work/DDC-PROJECT/build/services/iobus/shm_dump_io | head -3"
 
 ```bash
 # Tất cả 4 service cùng lúc
-ssh SOM-DDC-24 "journalctl -u mkddc-pty -u mkddc-fakemcu -u mkddc-iobus -u mkddc-core -f"
+ssh SOM-DDC-24 "journalctl -u mkddc-fakemcu -u mkddc-iobus -u mkddc-core -f"
 
 # Một service cụ thể
 ssh SOM-DDC-24 "journalctl -u mkddc-core -f"
