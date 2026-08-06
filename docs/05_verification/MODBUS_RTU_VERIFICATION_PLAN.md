@@ -258,6 +258,34 @@ VR-MBRTU-011 (real RS485/HIL) = RED    ← không đổi
 
 **Track A đóng được phần "code đúng trên target"; KHÔNG đóng bất kỳ gate HIL nào.**
 
+### 10.2b Trạng thái gate sau Track B — cập nhật 2026-08-06
+
+Bằng chứng: [nghiệm thu Track B 2026-08-06](../07_records/test-evidence/fw-som/2026-08-06-foxlinx-track-b-acceptance.md)
+và [soi giao diện từng trang](../07_records/reviews/FE_BOARD_PAGE_AUDIT_2026-08-06.md).
+
+| Gate | Trạng thái | Căn cứ |
+|---|---|---|
+| `VR-MBRTU-002` (config) | **GREEN** | Validator thuần + 11 mã lỗi ổn định; candidate/apply/If-Match có test BE; apply chạy thật trên board (`revision=11`) |
+| `VR-MBRTU-004` (scheduler/isolation) | **AMBER** | Cách ly hai bus có test (`BusWorkerIsolation.*`) và EDF chạy trên target; **thiếu** đo trên hai dây vật lý vì `ttyS1` chưa enable |
+| `VR-MBRTU-005` (quality/timestamp) | **AMBER** | Quality 5 mức + reason + mốc sample có trong contract v2 và test; **thiếu** mẫu từ thiết bị thật |
+| `VR-MBRTU-007` (atomic apply) | **GREEN** | stage→journal→ACK→commit + reconcile; ACK thật từ iobus qua UDS trên board |
+| `VR-MBRTU-009` (diagnostics) | **AMBER** | Counter uint64 + `producer_boot_id` + bus metrics đo thật (p50/p95/utilization); **thiếu** số từ thiết bị thật |
+| `VR-MBRTU-010` (RBAC/API/FE) | **GREEN** | 23 trang soi bằng Chromium thật trên board với JWT + RBAC thật, 0 lỗi |
+| `VR-MBRTU-011` (real RS485/HIL) | **RED** | Chưa có slave RS-485 thật. `G-C` còn mở |
+| `VR-MBRTU-012` (provenance) | **GREEN** | `sequence`/`generation`/`config_revision`/`producer_boot_id` chạy thật; reboot ×10 giữ nguyên |
+| `VR-MBRTU-013` (commissioning/import-export) | **AMBER** | Commissioning chạm dây thật (timeout đúng 300 ms qua ttyS5); import/export all-or-nothing có test; **thiếu** phản hồi từ thiết bị thật |
+| `VR-MBRTU-014` (capacity/performance) | **AMBER** | 256 Point trong contract, latency/utilization đo thật; **thiếu** tải thật với nhiều slave |
+
+**Đóng thêm ngoài bảng:** `G-D` / `OD-MBRTU-EXT-04` — phần cứng chỉ có TX/RX,
+không có DE/RE ⇒ auto-direction (Hardware owner xác nhận 2026-08-06). Cơ chế nay
+là cấu hình tường minh và trạng thái driver được ghi log lúc mở cổng.
+
+**Kịch bản `TC-MBRTU-T-05` (reboot recovery) — PASS 10/10 ngày 2026-08-06**, sau
+khi bài kiểm này phát hiện và bịt một lỗi triển khai thật: symlink `/dev/rs485-1`
+tạo bằng tay biến mất sau mỗi reboot (devtmpfs), nên bus không bao giờ lên lại
+trong khi service vẫn `active` và `NRestarts=0`. Đã bổ sung
+`platform/udev/99-mkddc-rs485.rules` và cài trong `deploy_board.sh`.
+
 ### 10.3 Kịch bản còn thiếu cho hai gap end-to-end mới
 
 `F-BE-19`/`F-BE-20` (tham số `offline_after_errors`, `offline_probe_ms` không có

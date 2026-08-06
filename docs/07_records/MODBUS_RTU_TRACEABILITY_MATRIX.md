@@ -2,8 +2,8 @@
 
 **ID:** TRACE-MBRTU-001
 **Trạng thái:** Active (ma trận truy vết; không phải bằng chứng pass)
-**Ngày:** 2026-08-05 (bản 1.0: 2026-08-04)
-**Đối chiếu source tại:** `feat/modbus-rtu-track-a` / `eade4e5`
+**Ngày:** 2026-08-06 (bản 1.0: 2026-08-04; 1.1: 2026-08-05)
+**Đối chiếu source tại:** `main` sau Track B (contract v2, BusWorker đa bus, candidate/apply)
 **Chuỗi normative:** Product Capability → Product Requirement → Use Case →
 System/Software/Interface Requirement → Design → Verification Requirement → Test → Evidence
 
@@ -123,3 +123,26 @@ release record; một câu mô tả không thay thế log, số đo hoặc appro
 |---|---|---|
 | 1.0 | 2026-08-04 | Tạo ma trận truy vết Modbus RTU đầy đủ 6 lớp |
 | 1.1 | 2026-08-05 | Đối chiếu lại với `eade4e5` sau Track A và áp dụng Đ-01/Đ-04/Đ-05/Đ-07/Đ-08. Nâng `SYS-REQ-MBRTU-001` và `SWR-REQ-MBRTU-004` từ RED lên PARTIAL (quyết định một bus + scheduler/retry đã sửa); hạ `NFR-REQ-MBRTU-001` xuống RED (Đ-07 nâng capacity lên ≥256 trong khi As-Built còn 64); cập nhật §4 As-Built cho SYS-001, SWR-004, SEC-001, NFR-001; §3 đổi vai trò Engineer → Admin |
+
+## Phụ lục — Bằng chứng Track B (2026-08-06)
+
+Bảng dưới nối **yêu cầu → nơi hiện thực → bằng chứng đã chạy**. Chỉ liệt kê thứ
+đã có evidence; mục còn chờ phần cứng ghi rõ là chờ.
+
+| Yêu cầu | Hiện thực | Bằng chứng |
+|---|---|---|
+| `SWR-REQ-MBRTU-005` quality/timestamp | `contracts/shm/mkddc_shm.h` (`kx_ext_quality_t` 5 mức, 10 reason, `sample_utc_ms`/`sample_mono_ns`) | `ShmLayoutV2.*`, `ExtCache.*` — 61/61 PASS trên board aarch64 |
+| `SWR-REQ-MBRTU-007` atomic apply | `internal/modbusrtu/{candidate,journal}.go`, `Persister.Apply` | `TestModbusApplyPromotesCandidate*`, ACK thật `applied_revision=11` từ iobus |
+| `SWR-REQ-MBRTU-006` write path | `bus_worker.cpp` (`PendingWrite`, `WriteResult`, hàng đợi bounded) | `BusWorkerWriteQueue.*`, `ModbusMasterWriteLifecycle.*` |
+| `SYS-REQ-MBRTU-001` hai bus | `bus_worker.{hpp,cpp}`, `buses[]` trong `fieldbus.conf` | `BusWorkerIsolation.DeadPortOnOneBusDoesNotStopTheOther`; **bus 2 chờ `ttyS1` enable** |
+| `IF-REQ-MBRTU-002` provenance | `kx_ext_snapshot_v2_t` | `status` trên board: `generation`, `config_revision=11`, `producer_boot_id`, `sequence` |
+| `SEC-REQ-MBRTU-001` RBAC commissioning | `modbus_config_api.go` (rate limit + audit), `control_channel.cpp` (`SO_PEERCRED`) | `TestModbusReadTestIsRateLimitedPerUser`; probe thật qua UDS trên board |
+| `G-D` điều hướng RS-485 | `buses[].direction`, `BusWorker::apply_direction_mode()` | `bus_worker.rs485_direction bus=1 mode=auto driver_enabled=0 rts_on_send=0` |
+| Reboot recovery | `platform/udev/99-mkddc-rs485.rules` + `deploy_board.sh` | Reboot ×10 **PASS 10/10** (trước khi có udev rule: FAIL 10/10) |
+| `VR-MBRTU-011` HIL | — | **CHỜ `G-C`** — chưa có slave RS-485 thật |
+
+### Revision history
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.2 | 2026-08-06 | Thêm phụ lục bằng chứng Track B; đối chiếu source chuyển sang `main` sau Track B |

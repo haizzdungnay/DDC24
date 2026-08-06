@@ -10,8 +10,9 @@
 > Trạng thái mới: `OD-MBRTU-001` **CLOSED (1 cổng)** · `-002` **không áp dụng Rev A** ·
 > `-009` **CLOSED (3 role)** · `-011` **CLOSED (≥256 Point)** · `-012` **CLOSED (CSV+JSON)** ·
 > `-015` **CLOSED (chấp thuận đổi ABI)** · `-EXT-02` **CLOSED (đồng ý cấp thiết bị)**.
-> Còn mở và **chặn Track B**: `OD-MBRTU-EXT-01` (chỉ định owner) và cơ chế điều
-> khiển hướng RS-485 (`G-D`, giao Hardware Lead).
+> Còn mở và **chặn Track B**: `OD-MBRTU-EXT-01` (chỉ định owner).
+> `G-D` / `OD-MBRTU-EXT-04` (điều khiển hướng RS-485) **đã CLOSED 2026-08-06**:
+> phần cứng chỉ có TX/RX, không có DE/RE ⇒ auto-direction.
 **Đọc cùng:** [ADR-024](DECISIONS.md), [DDD-SW-MBRTU-POINT-001 §18](../02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md)
 
 > Tài liệu này liệt kê **quyết định còn thiếu authority**. Nó không tự quyết định
@@ -65,7 +66,7 @@
 | ID | Vấn đề | Nguồn |
 |---|---|---|
 | OD-MBRTU-EXT-01 | Không có owner được chỉ định tên cho Fieldbus Lead và QA/HIL Lead ⇒ không ai ký được các gate HIL. **CÒN MỞ — chặn Track B** (Đ-09 giao PM chỉ định trước khi bắt đầu Track B). | Audit as-built §9.4 |
-| **OD-MBRTU-EXT-04** | **Cơ chế điều khiển hướng RS-485 (`G-D` / Đ-02).** Hardware Lead phải xác nhận transceiver là auto-direction hay cần GPIO/RTS, kèm **số chân và schematic**. Source không gọi `modbus_rtu_set_serial_mode()` và device tree Foxlinx không có cấu hình `rs485-*` ⇒ đang chạy trên một giả định chưa kiểm chứng. **CÒN MỞ — chặn `MBR-B101`, `MBR-B403` và `TC-MBRTU-H-16`.** | Khảo sát UART Foxlinx 2026-08-04; Đ-02 |
+| **OD-MBRTU-EXT-04** | **Cơ chế điều khiển hướng RS-485 (`G-D` / Đ-02).** Hardware Lead phải xác nhận transceiver là auto-direction hay cần GPIO/RTS, kèm **số chân và schematic**. Source không gọi `modbus_rtu_set_serial_mode()` và device tree Foxlinx không có cấu hình `rs485-*` ⇒ đang chạy trên một giả định chưa kiểm chứng. **CLOSED 2026-08-06 — Hardware owner xác nhận: cổng RS-485 chỉ có TX và RX, KHÔNG có DE/RE ⇒ transceiver AUTO-DIRECTION** (đúng lớp MAX13487E mà `HW-DES-03-RS485` §1 nêu làm baseline). Source nay có `buses[].direction` (`auto`|`rts`, mặc định `auto`); `BusWorker::apply_direction_mode()` áp qua `TIOCSRS485`, **tắt tường minh** `SER_RS485_ENABLED` ở chế độ auto, rồi đọc lại trạng thái driver và ghi log. Bằng chứng trên board: `bus_worker.rs485_direction bus=1 mode=auto driver_enabled=0 rts_on_send=0`. Không còn chặn `MBR-B101`. **`MBR-B403`/`TC-MBRTU-H-16` vẫn chờ `G-C` (thiết bị thật).** | Khảo sát UART Foxlinx 2026-08-04; Đ-02; xác nhận Hardware owner 2026-08-06 |
 | OD-MBRTU-EXT-02 | ~~Không có thiết bị RS485/slave thật~~ → **CLOSED 2026-08-04 — Đ-08:** duyệt mua tối thiểu một đồng hồ điện và một biến tần Modbus RTU. `G-C` nay chỉ chờ thiết bị về. | Audit as-built §7 |
 | OD-MBRTU-EXT-03 | ADR-022 (CI/CD deployment provenance) còn `Proposed` ⇒ `VR-MBRTU-012` không có cơ chế đóng. | DECISIONS.md |
 
@@ -86,6 +87,7 @@
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-08-04 | Tạo danh mục 16 open decision Modbus RTU + 3 blocker ngoài phạm vi; ánh xạ DR-MBRTU-001..009 |
+| 1.2 | 2026-08-06 | Đóng `OD-MBRTU-EXT-04` (`G-D`): Hardware owner xác nhận cổng RS-485 chỉ có TX/RX, không có DE/RE ⇒ transceiver auto-direction. Cơ chế điều hướng nay là cấu hình tường minh trong `fieldbus.conf` và trạng thái driver được ghi log lúc khởi động |
 | 1.1 | 2026-08-05 | Đóng đúng theo quy tắc §4.3 (đổi Trạng thái, **không xoá dòng**): `OD-MBRTU-001` (Đ-01), `-009` (Đ-04), `-011` (Đ-07), `-012` (Đ-06), `-015` (Đ-03), `-EXT-02` (Đ-08); `-002` chuyển "không áp dụng ở Rev A". Cập nhật §2 ánh xạ DR tương ứng. **Thêm mới:** `OD-MBRTU-017` (mức quyền của export), `OD-MBRTU-018` (OpenAPI mô tả sai ngữ nghĩa `retry` sau Đ-05 — chặn gate interface), `OD-MBRTU-019` (hai tham số offline đứt end-to-end), `OD-MBRTU-EXT-04` (cơ chế điều hướng RS-485, tách khỏi EXT-01 vì owner khác và chặn khác) |
 
 ## 5. Trạng thái tổng hợp sau 2026-08-05
