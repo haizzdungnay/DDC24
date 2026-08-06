@@ -1,14 +1,17 @@
 package modbusrtu
 
-import (
-	"fmt"
-	"strings"
+import "strings"
 
-	"mkddc-web/internal/points"
-)
-
+// Config là nội dung fieldbus.conf.
+//
+// MBR-B206: `rs485`/`slaves`/`tcp_slaves` là các khối SINH RA cho iobus, giữ
+// kiểu map vì chúng phản chiếu schema của FW. Nguồn chân lý cấu hình là
+// `buses`/`devices`/`points` — các struct có kiểu chặt. Checksum tính trên
+// canonical JSON của phần nguồn chân lý, KHÔNG tính trên map (thứ tự key của
+// map Go không xác định nên checksum đổi giữa hai lần chạy dù cấu hình y hệt).
 type Config struct {
 	RS485          map[string]any   `json:"rs485"`
+	Buses          []Bus            `json:"buses,omitempty"`
 	PollDefaultMs  int              `json:"poll_default_ms"`
 	OfflineProbeMs int              `json:"offline_probe_ms,omitempty"`
 	Slaves         []map[string]any `json:"slaves"`
@@ -32,6 +35,9 @@ type Device struct {
 	TimeoutMS          int    `json:"timeout_ms"`
 	Retry              int    `json:"retry"`
 	OfflineAfterErrors int    `json:"offline_after_errors,omitempty"`
+	// MBR-B202: Device thuộc về một Bus. `rs485_port`/`baud`/`parity`/`stop_bit`
+	// vẫn có trong response để không vỡ UI cũ, nhưng là KẾ THỪA read-only từ Bus.
+	BusID string `json:"bus_id,omitempty"`
 }
 
 type Point struct {
@@ -51,24 +57,31 @@ type Point struct {
 	DefaultValue any     `json:"default_value"`
 	SafeValue    any     `json:"safe_value"`
 	Enabled      bool    `json:"enabled"`
+	// DATA_MODEL §5.2/§5.5 — tuỳ chọn, nil = không khai báo.
+	// `min_value`/`max_value` là biên KỸ THUẬT của điểm: mẫu ngoài biên bị đánh
+	// BAD/OUT_OF_RANGE thay vì publish một số vô lý với nhãn GOOD.
+	MinValue *float64 `json:"min_value,omitempty"`
+	MaxValue *float64 `json:"max_value,omitempty"`
+	BitIndex *int     `json:"bit_index,omitempty"`
 }
 
+// MBR-B110: counter là uint64 xuyên suốt. uint32 tràn sau ~2,7 năm ở nhịp poll
+// thực tế, và khi tràn thì FE/historian tính delta ra số âm khổng lồ.
 type Diagnostics struct {
 	DeviceID          string `json:"device_id"`
 	SlaveID           int    `json:"slave_id"`
+	BusID             uint8  `json:"bus_id"`
 	Online            bool   `json:"online"`
-	TotalPolls        uint32 `json:"total_polls"`
-	TotalErrors       uint32 `json:"total_errors"`
-	TimeoutErrors     uint32 `json:"timeout_errors"`
-	CRCErrors         uint32 `json:"crc_errors"`
-	RetryAttempts     uint32 `json:"retry_attempts"`
+	TotalPolls        uint64 `json:"total_polls"`
+	TotalErrors       uint64 `json:"total_errors"`
+	TimeoutErrors     uint64 `json:"timeout_errors"`
+	CRCErrors         uint64 `json:"crc_errors"`
+	RetryAttempts     uint64 `json:"retry_attempts"`
+	WriteFailed       uint64 `json:"write_failed"`
+	WriteDropped      uint64 `json:"write_dropped"`
 	ConsecutiveErrors uint8  `json:"consecutive_errors"`
+	LastException     uint8  `json:"last_exception"`
 	LastSeenMS        uint64 `json:"last_seen_ms"`
-}
-
-type ValidationError struct {
-	Path    string
-	Message string
 }
 
 func NormalizeDevice(device Device) Device {
@@ -131,142 +144,6 @@ func ValidStableID(value string) bool {
 		}
 	}
 	return true
-}
-
-func Validate(cfg Config, externalTagOwners map[string]string) []ValidationError {
-	var errs []ValidationError
-	add := func(path, message string) { errs = append(errs, ValidationError{Path: path, Message: message}) }
-	if cfg.OfflineProbeMs < 0 || (cfg.OfflineProbeMs > 0 && (cfg.OfflineProbeMs < 1000 || cfg.OfflineProbeMs > 60000)) {
-		add("offline_probe_ms", "phải trong 1000..60000 ms")
-	}
-	devices := make(map[string]Device, len(cfg.Devices))
-	slaves := map[int]string{}
-	var bus *Device
-	for i, raw := range cfg.Devices {
-		device := NormalizeDevice(raw)
-		base := fmt.Sprintf("devices[%d]", i)
-		if !ValidStableID(device.DeviceID) {
-			add(base+".device_id", "phải dài 1..23 ký tự ASCII và bắt đầu bằng chữ")
-		}
-		key := strings.ToLower(device.DeviceID)
-		if _, exists := devices[key]; exists {
-			add(base+".device_id", "phải unique")
-		}
-		devices[key] = device
-		if _, _, err := points.NormalizeName(device.DisplayName); err != nil {
-			add(base+".display_name", err.Error())
-		}
-		if device.RS485Port == "" || len(device.RS485Port) > 128 {
-			add(base+".rs485_port", "bắt buộc và dài tối đa 128 byte")
-		}
-		if device.Baud < 1200 || device.Baud > 115200 {
-			add(base+".baud", "phải trong 1200..115200")
-		}
-		if device.Parity != "N" && device.Parity != "E" && device.Parity != "O" {
-			add(base+".parity", "phải là N, E hoặc O")
-		}
-		if device.StopBit != 1 && device.StopBit != 2 {
-			add(base+".stop_bit", "phải là 1 hoặc 2")
-		}
-		if device.SlaveID < 1 || device.SlaveID > 247 {
-			add(base+".slave_id", "phải trong 1..247")
-		}
-		if previous, exists := slaves[device.SlaveID]; exists {
-			add(base+".slave_id", "trùng với "+previous)
-		} else {
-			slaves[device.SlaveID] = device.DeviceID
-		}
-		if device.PollMS < 10 || device.PollMS > 60000 {
-			add(base+".poll_ms", "phải trong 10..60000 ms")
-		}
-		if device.TimeoutMS < 20 || device.TimeoutMS > 10000 {
-			add(base+".timeout_ms", "phải trong 20..10000 ms")
-		}
-		// D-05 (Đ-05, PM/CTO 2026-08-04): `retry` là SỐ LẦN PHÁT LẠI một giao dịch
-		// Modbus bị lỗi, không phải ngưỡng chuyển OFFLINE. Trước đây trường này
-		// nhận 1..10 và mang nghĩa ngưỡng offline, trong khi runtime KHÔNG hề phát
-		// lại lần nào — người dùng đặt retry=3 tin rằng hệ thống chịu được nhiễu
-		// thoáng qua nhưng thực tế mọi lỗi đơn lẻ đều làm điểm rơi STALE.
-		// Giới hạn 3: 3 lần phát lại × timeout 300 ms đã là ~1,2 s chiếm dây cho
-		// một block trên bus dùng chung.
-		if device.Retry < 0 || device.Retry > 3 {
-			add(base+".retry", "phải trong 0..3 (số lần phát lại một giao dịch)")
-		}
-		if device.Enabled {
-			if bus == nil {
-				copy := device
-				bus = &copy
-			} else if bus.RS485Port != device.RS485Port || bus.Baud != device.Baud || bus.Parity != device.Parity || bus.StopBit != device.StopBit {
-				add(base, "mọi thiết bị enabled trên cùng master phải dùng chung RS485 port/baud/parity/stop bit")
-			}
-		}
-	}
-	tagOwners := make(map[string]string, len(externalTagOwners)+len(cfg.Points))
-	for key, owner := range externalTagOwners {
-		tagOwners[key] = owner
-	}
-	pointIDs := map[string]string{}
-	for i, raw := range cfg.Points {
-		point := NormalizePoint(raw)
-		base := fmt.Sprintf("points[%d]", i)
-		if !ValidStableID(point.PointID) {
-			add(base+".point_id", "phải dài 1..23 ký tự ASCII, bắt đầu bằng chữ và không đổi khi rename")
-		}
-		idKey := strings.ToLower(point.PointID)
-		if owner, exists := pointIDs[idKey]; exists {
-			add(base+".point_id", "trùng với "+owner)
-		} else {
-			pointIDs[idKey] = point.PointID
-		}
-		if _, exists := devices[strings.ToLower(point.DeviceID)]; !exists {
-			add(base+".device_id", "không tham chiếu thiết bị tồn tại")
-		}
-		if _, key, err := points.NormalizeTag(point.TagName); err != nil {
-			add(base+".tag_name", err.Error())
-		} else if owner, exists := tagOwners[key]; exists {
-			add(base+".tag_name", "phải unique; đang thuộc "+owner)
-		} else {
-			tagOwners[key] = point.PointID
-		}
-		if _, _, err := points.NormalizeName(point.DisplayName); err != nil {
-			add(base+".display_name", err.Error())
-		}
-		switch point.RegisterType {
-		case "coil", "discrete_input", "input_register", "holding_register":
-		default:
-			add(base+".register_type", "không được hỗ trợ")
-		}
-		if point.Address < 0 || point.Address > 65535 {
-			add(base+".address", "phải trong 0..65535")
-		}
-		switch point.DataType {
-		case "bool", "int16", "uint16", "int32", "uint32", "float32":
-		default:
-			add(base+".data_type", "không được hỗ trợ")
-		}
-		if (point.RegisterType == "coil" || point.RegisterType == "discrete_input") && point.DataType != "bool" {
-			add(base+".data_type", "Coil/Discrete Input phải dùng bool")
-		}
-		if point.ByteOrder != "big" && point.ByteOrder != "little" {
-			add(base+".byte_order", "phải là big hoặc little")
-		}
-		if point.WordOrder != "high_low" && point.WordOrder != "low_high" {
-			add(base+".word_order", "phải là high_low hoặc low_high")
-		}
-		if point.Scale == 0 {
-			add(base+".scale", "không được bằng 0")
-		}
-		if point.ReadWrite != "read" && point.ReadWrite != "read_write" {
-			add(base+".read_write", "phải là read hoặc read_write")
-		}
-		if point.ReadWrite == "read_write" && point.RegisterType != "coil" && point.RegisterType != "holding_register" {
-			add(base+".read_write", "chỉ Coil/Holding Register được ghi")
-		}
-	}
-	if len(cfg.Points) > 256 {
-		add("points", "vượt KX_N_EXT=256")
-	}
-	return errs
 }
 
 func isLetter(ch byte) bool { return ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z' }

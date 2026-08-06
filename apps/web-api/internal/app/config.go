@@ -39,6 +39,12 @@ type Config struct {
 	StaticDir               string
 	CORSOrigin              string
 	WebVersion              string
+	// MBR-B105/B212: kênh điều khiển fieldbus của iobus. Rỗng ⇒ BE quay về
+	// phương án restart service (có gián đoạn I/O) và nói rõ trong warnings.
+	IobusControlSock string
+	// MBR-B211: manifest cổng serial của board. Thiếu file ⇒ dùng mặc định
+	// Foxlinx hai cổng.
+	PortCapabilityPath string
 }
 
 func LoadConfig() (Config, error) {
@@ -55,25 +61,27 @@ func LoadConfig() (Config, error) {
 	// Board không bị ảnh hưởng: systemd vẫn set PORT tường minh.
 	port := getenv("PORT", "8081")
 	cfg := Config{
-		Addr:             ":" + port,
-		Port:             port,
-		JWTSecret:        os.Getenv("JWT_SECRET"),
-		UsersConf:        getenv("USERS_CONF", defaultUsersConf()),
-		ConfigDir:        resolveConfigDir(),
-		CorePidPath:      getenv("CORE_PID", "/run/mkddc/core.pid"),
-		IobusPidPath:     getenv("IOBUS_PID", "/run/mkddc/iobus.pid"),
-		CoreSock:         getenv("CORE_SOCK", "/run/mkddc/core.sock"),
-		HMISock:          getenv("HMI_SOCK", "/run/mkddc/hmi-api.sock"),
-		NetcfgSock:       getenv("NETCFG_SOCK", "/run/mkddc-netcfg/netcfg.sock"),
-		HMIAllowedUID:    os.Getenv("HMI_ALLOWED_UID"),
-		HMIAuditPath:     getenv("HMI_AUDIT_FILE", "/data/config/hmi_audit.jsonl"),
-		TrendDBPath:      getenv("TREND_DB", defaultTrendDBPath),
-		ScheduleConfPath: getenv("SCHEDULE_CONF", filepath.Join(resolveConfigDir(), "schedule.conf")),
-		AlarmConfPath:    getenv("ALARM_SETTINGS_CONF", defaultAlarmSettingsConf),
-		AlarmHistoryPath: getenv("ALARM_HISTORY_FILE", defaultAlarmHistoryFile),
-		StaticDir:        getenv("STATIC_DIR", "dist"),
-		CORSOrigin:       os.Getenv("CORS_ORIGIN"),
-		WebVersion:       getenv("WEB_VERSION", buildVersion),
+		Addr:               ":" + port,
+		Port:               port,
+		JWTSecret:          os.Getenv("JWT_SECRET"),
+		UsersConf:          getenv("USERS_CONF", defaultUsersConf()),
+		ConfigDir:          resolveConfigDir(),
+		CorePidPath:        getenv("CORE_PID", "/run/mkddc/core.pid"),
+		IobusPidPath:       getenv("IOBUS_PID", "/run/mkddc/iobus.pid"),
+		CoreSock:           getenv("CORE_SOCK", "/run/mkddc/core.sock"),
+		HMISock:            getenv("HMI_SOCK", "/run/mkddc/hmi-api.sock"),
+		NetcfgSock:         getenv("NETCFG_SOCK", "/run/mkddc-netcfg/netcfg.sock"),
+		HMIAllowedUID:      os.Getenv("HMI_ALLOWED_UID"),
+		HMIAuditPath:       getenv("HMI_AUDIT_FILE", "/data/config/hmi_audit.jsonl"),
+		TrendDBPath:        getenv("TREND_DB", defaultTrendDBPath),
+		IobusControlSock:   getenv("IOBUS_CONTROL_SOCK", "/run/mkddc/modbus-control.sock"),
+		PortCapabilityPath: getenv("PORT_CAPABILITY_MANIFEST", filepath.Join(resolveConfigDir(), "port-capabilities.json")),
+		ScheduleConfPath:   getenv("SCHEDULE_CONF", filepath.Join(resolveConfigDir(), "schedule.conf")),
+		AlarmConfPath:      getenv("ALARM_SETTINGS_CONF", defaultAlarmSettingsConf),
+		AlarmHistoryPath:   getenv("ALARM_HISTORY_FILE", defaultAlarmHistoryFile),
+		StaticDir:          getenv("STATIC_DIR", "dist"),
+		CORSOrigin:         os.Getenv("CORS_ORIGIN"),
+		WebVersion:         getenv("WEB_VERSION", buildVersion),
 	}
 	if cfg.JWTSecret == "" {
 		return Config{}, errors.New("JWT_SECRET is required")

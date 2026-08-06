@@ -60,8 +60,8 @@ type NetworkSlave struct {
 	// được hiển thị thành 0.
 	ErrorRate   *float64 `json:"errorRate"`
 	LastPollMS  *int     `json:"lastPollMs"`
-	TotalPolls  *uint32  `json:"totalPolls"`
-	TotalErrors *uint32  `json:"totalErrors"`
+	TotalPolls  *uint64  `json:"totalPolls"`
+	TotalErrors *uint64  `json:"totalErrors"`
 }
 
 // FieldbusTelemetryReader tách riêng khỏi CoreStatusClient để các fake sẵn có

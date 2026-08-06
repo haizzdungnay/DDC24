@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	webModbus "mkddc-web/internal/modbusrtu"
 	"net"
 	"net/http"
 	"os"
@@ -57,6 +58,11 @@ type App struct {
 	pointMigrationWriter   func(string, []byte, os.FileMode) error
 	pointNamespaceWriter   func(string, []byte, os.FileMode) error
 	reloadDispatcher       func(string) (bool, []string)
+	// Modbus RTU v2 (MBR-B203/B208/B305)
+	modbusOnce       sync.Once
+	modbusCandidates *webModbus.CandidateStore
+	modbusEvents     modbusEventLog
+	commissionLimit  commissionLimiter
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
