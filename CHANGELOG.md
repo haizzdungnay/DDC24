@@ -7,6 +7,49 @@
 ---
 
 ## [Unreleased]
+### Fixed — Form Thiết bị không đọc được và danh sách không lọc được (2026-08-06)
+
+**Người dùng báo:** *"ko có name cho các trường để điền thì người dùng sẽ ko
+hiểu, ko có filter thì cũng không lọc được."* Cả hai đều đúng.
+
+#### Sáu con số trần
+
+Form chỉ dùng `placeholder` + `aria-label`. Nhưng **placeholder biến mất ngay khi
+ô có giá trị**, mà mọi ô số đều có sẵn giá trị mặc định — nên hàng thứ hai của
+form hiện đúng `1 · 1000 · 300 · 2 · 2`, năm con số không biết là gì.
+`aria-label` thì chỉ trình đọc màn hình và test nhìn thấy, người dùng thì không.
+
+Nay mỗi ô có **nhãn nằm ngoài ô** (không mất khi gõ) kèm `title` giải thích cho
+những trường dễ hiểu nhầm — ví dụ *"Số lần phát lại"* nói rõ đây **không** phải
+ngưỡng chuyển Offline, và `0` là giá trị hợp lệ có nghĩa "báo lỗi ngay".
+
+#### Không có bộ lọc
+
+Trang chỉ lọc được bằng cách điều hướng kèm `?status=` từ KPI card ở Overview.
+Đứng tại trang thì không lọc được, và **khi đã bị lọc rồi cũng không có cách nào
+bỏ** — deep link đưa người dùng vào một trạng thái không có đường ra.
+
+Thêm bộ lọc thật: tìm theo ID/tên/slave, lọc theo cổng, lọc theo trạng thái liên
+lạc, kèm bộ đếm `n/N thiết bị` và nút **Bỏ lọc**. Bộ lọc sống trong URL nên deep
+link từ Overview **hiện lên control** thay vì lọc ngầm.
+
+Trạng thái *"Chưa liên lạc lần nào"* tách riêng khỏi *"Mất liên lạc"* — gộp hai
+thứ đó là nói thiết bị đã hỏng trong khi ta chưa hỏi nó lần nào (D-07).
+
+#### Một ô ma và một con số bịa
+
+`offline_probe_ms` có ô nhập trong form Thiết bị, nhưng **backend không có trường
+đó trên Device** — nó thuộc về **Bus** (D-04: chu kỳ dò lại bảo vệ băng thông của
+sợi dây, không của một thiết bị). Người dùng gõ vào rồi giá trị bị bỏ lặng lẽ.
+
+Tệ hơn, cột "Offline Params" trong bảng hiện `probe: {row.offline_probe_ms ?? 10000}ms`
+— vì máy chủ không bao giờ trả trường đó, cột này **luôn hiện `10000ms`** bất kể
+cấu hình thật. Nay ô nhập bị bỏ (sửa ở trang Cổng RS-485), và cột lấy đúng giá
+trị của cổng, hiện `—` khi chưa đọc được thay vì bịa một con số.
+
+**Kiểm chứng:** vitest **416/416** (trước 410), lint 0 warning; soi trên bo:
+24 trang, **0 trắng, 0 pageError**, trang Thiết bị 1306 → 1669 ký tự.
+
 ### Fixed — Deploy xong người đang mở trang vẫn chạy bản cũ (2026-08-06)
 
 **Triệu chứng.** Sau khi deploy bản có trang "Cổng RS-485", người dùng mở tab

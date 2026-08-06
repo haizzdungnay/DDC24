@@ -128,7 +128,72 @@ describe('DevicesPage', () => {
     renderAt('?status=OFFLINE')
     expect(await screen.findByText('ahu-1')).toBeInTheDocument()
     expect(screen.queryByText('meter-2')).not.toBeInTheDocument()
-    expect(screen.getByText('Đang lọc: OFFLINE')).toBeInTheDocument()
+    /* Deep link phải HIỆN LÊN control, không chỉ lọc ngầm: người dùng cần thấy
+     * cái gì đang lọc và bỏ được nó. */
+    expect(screen.getByLabelText('Lọc theo trạng thái')).toHaveValue('OFFLINE')
+    expect(screen.getByTestId('device-count')).toHaveTextContent('1/2 thiết bị')
+  })
+
+  it('lọc theo cổng RS-485', async () => {
+    const user = userEvent.setup()
+    renderAt()
+    await screen.findByText('ahu-1')
+    await user.selectOptions(screen.getByLabelText('Lọc theo cổng'), '/dev/rs485-2')
+    expect(screen.getByText('meter-2')).toBeInTheDocument()
+    expect(screen.queryByText('ahu-1')).not.toBeInTheDocument()
+  })
+
+  it('tìm theo ID, tên hoặc slave ID', async () => {
+    const user = userEvent.setup()
+    renderAt()
+    await screen.findByText('ahu-1')
+    await user.type(screen.getByLabelText('Tìm thiết bị'), 'Meter')
+    expect(screen.getByText('meter-2')).toBeInTheDocument()
+    expect(screen.queryByText('ahu-1')).not.toBeInTheDocument()
+  })
+
+  /* Bị lọc mà không bỏ được là kẹt: deep link từ Overview đưa người dùng vào
+   * trạng thái lọc, nên phải có đường ra ngay trên trang. */
+  it('bỏ lọc trả về danh sách đầy đủ', async () => {
+    const user = userEvent.setup()
+    renderAt('?status=OFFLINE')
+    await screen.findByText('ahu-1')
+    expect(screen.queryByText('meter-2')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Bỏ lọc' }))
+    expect(screen.getByText('meter-2')).toBeInTheDocument()
+    expect(screen.getByTestId('device-count')).toHaveTextContent('2 thiết bị')
+  })
+
+  /* D-07: "chưa liên lạc lần nào" KHÔNG phải "mất liên lạc". Gộp hai thứ đó là
+   * nói thiết bị đã hỏng trong khi ta chưa hỏi nó lần nào. */
+  it('tách "chưa liên lạc lần nào" khỏi "mất liên lạc"', async () => {
+    api.getModbusDiagnostics.mockResolvedValue([
+      { device_id: 'ahu-1', slave_id: 7, online: false, total_polls: 0, total_errors: 0, timeout_errors: 0, crc_errors: 0, retry_attempts: 0, consecutive_errors: 0, last_seen_ms: 0 },
+      { device_id: 'meter-2', slave_id: 9, online: false, total_polls: 9, total_errors: 9, timeout_errors: 9, crc_errors: 0, retry_attempts: 0, consecutive_errors: 3, last_seen_ms: 5 }
+    ])
+    renderAt('?status=NEVER')
+    expect(await screen.findByText('ahu-1')).toBeInTheDocument()
+    expect(screen.queryByText('meter-2')).not.toBeInTheDocument()
+  })
+
+  /* Mọi ô nhập phải có nhãn NHÌN THẤY ĐƯỢC. Placeholder biến mất ngay khi ô có
+   * giá trị, mà mọi ô số ở đây đều có sẵn mặc định — người dùng chỉ thấy một
+   * hàng số trần. */
+  it('mọi ô số trong form đều có nhãn hiển thị', async () => {
+    renderAt()
+    await screen.findByText('ahu-1')
+    for (const caption of ['Slave ID', 'Chu kỳ poll (ms)', 'Timeout (ms)',
+                           'Số lần phát lại', 'Lỗi liên tiếp ⇒ Offline']) {
+      expect(screen.getByText(caption)).toBeInTheDocument()
+    }
+  })
+
+  /* `offline_probe_ms` thuộc về BUS. Backend không có trường đó trên Device nên
+   * ô nhập cũ là ô ma: gõ vào rồi bị bỏ lặng lẽ. */
+  it('form không còn ô chu kỳ dò lại Offline (thuộc về cổng)', async () => {
+    renderAt()
+    await screen.findByText('ahu-1')
+    expect(screen.queryByLabelText('Chu kỳ thử lại Offline ms')).not.toBeInTheDocument()
   })
 
   it('lọc theo ?status=ONLINE', async () => {
