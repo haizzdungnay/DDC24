@@ -18,6 +18,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -59,7 +60,7 @@ public:
      * chỉ có một nguồn phát snapshot. */
     void start_workers(ExtCache& cache, FieldbusMetrics& metrics);
     void stop_workers();
-    bool workers_running() const { return !threads_.empty(); }
+    bool workers_running() const;
 
     /* Publish snapshot v2 + chốt cửa sổ latency của từng bus. */
     void publish(ExtCache& cache, FieldbusMetrics& metrics,
@@ -83,7 +84,7 @@ public:
     /* Tổng số ext slots đã cấp phát cho RTU slaves — TCP offset bắt đầu từ đây. */
     uint16_t total_ext_count() const { return ext_cursor_; }
 
-    size_t bus_count() const { return workers_.size(); }
+    size_t bus_count() const;
     const BusWorker& bus(size_t i) const { return *workers_[i]; }
     BusWorker* bus_by_id(uint8_t id);
 
@@ -114,6 +115,17 @@ public:
 
 private:
     void bind_workers(const FieldbusConfig& cfg, ExtCache& cache, FieldbusMetrics& metrics);
+    /* Biến thể KHÔNG tự khoá, dùng bên trong khi `workers_mu_` đã được giữ.
+     * `apply_config` phải dừng rồi dựng lại worker trong CÙNG một vùng khoá:
+     * tách ra hai lần khoá sẽ để lộ khoảnh khắc `workers_` rỗng cho luồng
+     * publish nhìn thấy, và nó sẽ báo "không có bus nào" giữa lúc áp cấu hình. */
+    void start_workers_locked(ExtCache& cache, FieldbusMetrics& metrics);
+    void stop_workers_locked();
+
+    /* Bảo vệ `workers_`/`threads_` giữa luồng publish (đọc mỗi 100 ms) và luồng
+     * kênh điều khiển (`apply_config` thay cả tập worker). Không có nó,
+     * `bind_workers` hoán đổi vector trong khi publish đang duyệt nó. */
+    mutable std::mutex workers_mu_;
 
     /* unique_ptr vì BusWorker giữ fd và chạy trong thread — địa chỉ phải ổn định
      * khi vector realloc. */

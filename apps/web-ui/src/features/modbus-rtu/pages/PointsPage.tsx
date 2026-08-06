@@ -3,6 +3,7 @@ import { useAuth, roleAtLeast } from '../../auth'
 import { apiClient } from '../../../shared/api/client'
 import type { ModbusImportError, ModbusRTUDevice, ModbusRTUPoint } from '../../../shared/types'
 import { NO_DATA, READ_ONLY_HINT, buttonClass, emptyPoint, inputClass } from '../shared'
+import { Field } from '../components/Field'
 import { RegisterPreview } from '../components/RegisterPreview'
 import { useModbusRuntime } from '../useModbusRuntime'
 
@@ -175,40 +176,70 @@ export function PointsPage() {
           {editingPoint ? `Sửa Point: ${point.display_name} (${point.point_id})` : 'Thêm Point mới'}
         </h3>
         <form className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" onSubmit={savePoint}>
-          <input className={inputClass} aria-label="Point ID" placeholder="Point ID (ổn định)" value={point.point_id} disabled={editingPoint} onChange={(e) => setPoint({ ...point, point_id: e.target.value })} />
-          <select required className={inputClass} aria-label="Thiết bị" value={point.device_id} onChange={(e) => setPoint({ ...point, device_id: e.target.value })}>
+          <Field label="Point ID" hint="Định danh ổn định của Point. Để trống thì hệ thống tự sinh.">
+            <input className={inputClass} aria-label="Point ID" placeholder="Point ID (ổn định)" value={point.point_id} disabled={editingPoint} onChange={(e) => setPoint({ ...point, point_id: e.target.value })} />
+          </Field>
+          <Field label="Thiết bị" hint="Point này đọc từ thiết bị nào.">
+            <select required className={inputClass} aria-label="Thiết bị" value={point.device_id} onChange={(e) => setPoint({ ...point, device_id: e.target.value })}>
             <option value="">Chọn thiết bị</option>
             {devices.map((row) => <option key={row.device_id} value={row.device_id}>{row.display_name}</option>)}
-          </select>
-          <input required className={inputClass} aria-label="Tag name" placeholder="Tag name unique" value={point.tag_name} onChange={(e) => setPoint({ ...point, tag_name: e.target.value })} />
-          <input required className={inputClass} aria-label="Display name" placeholder="Display name" value={point.display_name} onChange={(e) => setPoint({ ...point, display_name: e.target.value })} />
-          <select className={inputClass} aria-label="Register type" value={point.register_type} onChange={(e) => setPoint({ ...point, register_type: e.target.value as ModbusRTUPoint['register_type'] })}>
+            </select>
+          </Field>
+          <Field label="Tag name" hint="Tên duy nhất toàn hệ, dùng để tham chiếu Point trong logic và BACnet.">
+            <input required className={inputClass} aria-label="Tag name" placeholder="Tag name unique" value={point.tag_name} onChange={(e) => setPoint({ ...point, tag_name: e.target.value })} />
+          </Field>
+          <Field label="Tên hiển thị" hint="Tên cho người vận hành đọc.">
+            <input required className={inputClass} aria-label="Display name" placeholder="Display name" value={point.display_name} onChange={(e) => setPoint({ ...point, display_name: e.target.value })} />
+          </Field>
+          <Field label="Loại thanh ghi" hint="coil / discrete input / holding register / input register.">
+            <select className={inputClass} aria-label="Register type" value={point.register_type} onChange={(e) => setPoint({ ...point, register_type: e.target.value as ModbusRTUPoint['register_type'] })}>
             <option value="coil">Coil</option>
             <option value="discrete_input">Discrete Input</option>
             <option value="input_register">Input Register</option>
             <option value="holding_register">Holding Register</option>
-          </select>
-          <input type="number" min={0} max={65535} className={inputClass} aria-label="Address" value={point.address} onChange={(e) => setPoint({ ...point, address: Number(e.target.value) })} />
-          <select className={inputClass} aria-label="Data type" value={point.data_type} onChange={(e) => setPoint({ ...point, data_type: e.target.value as ModbusRTUPoint['data_type'] })}>
+            </select>
+          </Field>
+          <Field label="Địa chỉ thanh ghi" hint="Địa chỉ 0-based, 0–65535. Nhiều tài liệu thiết bị đánh số từ 1 — trừ đi 1 khi nhập.">
+            <input type="number" min={0} max={65535} className={inputClass} aria-label="Address" value={point.address} onChange={(e) => setPoint({ ...point, address: Number(e.target.value) })} />
+          </Field>
+          <Field label="Kiểu dữ liệu" hint="Quyết định Point chiếm 1 hay 2 thanh ghi.">
+            <select className={inputClass} aria-label="Data type" value={point.data_type} onChange={(e) => setPoint({ ...point, data_type: e.target.value as ModbusRTUPoint['data_type'] })}>
             {['bool', 'int16', 'uint16', 'int32', 'uint32', 'float32'].map((value) => <option key={value}>{value}</option>)}
-          </select>
-          <select className={inputClass} aria-label="Byte order" value={point.byte_order} onChange={(e) => setPoint({ ...point, byte_order: e.target.value as ModbusRTUPoint['byte_order'] })}>
+            </select>
+          </Field>
+          <Field label="Thứ tự byte" hint="Big-endian là mặc định của Modbus. Sai thứ tự cho ra số vô lý mà không có lỗi nào.">
+            <select className={inputClass} aria-label="Byte order" value={point.byte_order} onChange={(e) => setPoint({ ...point, byte_order: e.target.value as ModbusRTUPoint['byte_order'] })}>
             <option value="big">Big-endian byte</option>
             <option value="little">Little-endian byte</option>
-          </select>
-          <select className={inputClass} aria-label="Word order" value={point.word_order} onChange={(e) => setPoint({ ...point, word_order: e.target.value as ModbusRTUPoint['word_order'] })}>
+            </select>
+          </Field>
+          <Field label="Thứ tự word" hint="Chỉ có tác dụng với kiểu 32-bit (2 thanh ghi).">
+            <select className={inputClass} aria-label="Word order" value={point.word_order} onChange={(e) => setPoint({ ...point, word_order: e.target.value as ModbusRTUPoint['word_order'] })}>
             <option value="high_low">High word → Low word</option>
             <option value="low_high">Low word → High word</option>
-          </select>
-          <input type="number" step="any" className={inputClass} aria-label="Scale" placeholder="Scale" value={point.scale} onChange={(e) => setPoint({ ...point, scale: Number(e.target.value) })} />
-          <input type="number" step="any" className={inputClass} aria-label="Offset" placeholder="Offset" value={point.offset} onChange={(e) => setPoint({ ...point, offset: Number(e.target.value) })} />
-          <input className={inputClass} aria-label="Unit" placeholder="Unit" value={point.unit} onChange={(e) => setPoint({ ...point, unit: e.target.value })} />
-          <select className={inputClass} aria-label="Read write" value={point.read_write} onChange={(e) => setPoint({ ...point, read_write: e.target.value as ModbusRTUPoint['read_write'] })}>
+            </select>
+          </Field>
+          <Field label="Hệ số nhân" hint="Giá trị quy đổi = thô × hệ số + bù. Hệ số 0 bị từ chối.">
+            <input type="number" step="any" className={inputClass} aria-label="Scale" placeholder="Scale" value={point.scale} onChange={(e) => setPoint({ ...point, scale: Number(e.target.value) })} />
+          </Field>
+          <Field label="Bù (offset)" hint="Cộng vào sau khi nhân hệ số.">
+            <input type="number" step="any" className={inputClass} aria-label="Offset" placeholder="Offset" value={point.offset} onChange={(e) => setPoint({ ...point, offset: Number(e.target.value) })} />
+          </Field>
+          <Field label="Đơn vị" hint="Đơn vị kỹ thuật hiển thị, ví dụ kWh, degC.">
+            <input className={inputClass} aria-label="Unit" placeholder="Unit" value={point.unit} onChange={(e) => setPoint({ ...point, unit: e.target.value })} />
+          </Field>
+          <Field label="Quyền đọc/ghi" hint="Read = chỉ đọc; Read/Write cho phép ghi xuống thiết bị.">
+            <select className={inputClass} aria-label="Read write" value={point.read_write} onChange={(e) => setPoint({ ...point, read_write: e.target.value as ModbusRTUPoint['read_write'] })}>
             <option value="read">Read</option>
             <option value="read_write">Read/Write</option>
-          </select>
-          <input type="number" step="any" className={inputClass} aria-label="Default value" placeholder="Default value" value={Number(point.default_value)} onChange={(e) => setPoint({ ...point, default_value: Number(e.target.value) })} />
-          <input type="number" step="any" className={inputClass} aria-label="Safe value" placeholder="Safe value" value={Number(point.safe_value)} onChange={(e) => setPoint({ ...point, safe_value: Number(e.target.value) })} />
+            </select>
+          </Field>
+          <Field label="Giá trị mặc định" hint="Dùng khi chưa có mẫu nào.">
+            <input type="number" step="any" className={inputClass} aria-label="Default value" placeholder="Default value" value={Number(point.default_value)} onChange={(e) => setPoint({ ...point, default_value: Number(e.target.value) })} />
+          </Field>
+          <Field label="Giá trị an toàn" hint="Giá trị đưa về khi vào trạng thái an toàn.">
+            <input type="number" step="any" className={inputClass} aria-label="Safe value" placeholder="Safe value" value={Number(point.safe_value)} onChange={(e) => setPoint({ ...point, safe_value: Number(e.target.value) })} />
+          </Field>
           <label className="flex h-10 items-center gap-2 text-xs font-semibold text-[var(--c-text)]">
             <input type="checkbox" checked={point.enabled} onChange={(e) => setPoint({ ...point, enabled: e.target.checked })} />
             Kích hoạt (Enabled)

@@ -128,4 +128,19 @@ describe('PointsPage', () => {
     expect(screen.getByRole('button', { name: 'Ghi thử' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Thêm Point' })).toBeDisabled()
   })
+
+  /* Mọi ô trong form Point phải có nhãn NHÌN THẤY ĐƯỢC. Placeholder biến mất
+   * ngay khi ô có giá trị, mà các ô số đều có sẵn mặc định — người dùng chỉ
+   * thấy `0 · uint16 · 1 · 0 · 0` và không biết ô nào là gì. */
+  it('mọi ô trong form Point đều có nhãn hiển thị', async () => {
+    render(<PointsPage />)
+    await screen.findByText('MB-AHU-SAT')
+    for (const caption of ['Point ID', 'Thiết bị', 'Tag name', 'Tên hiển thị',
+                           'Loại thanh ghi', 'Địa chỉ thanh ghi', 'Kiểu dữ liệu',
+                           'Thứ tự byte', 'Thứ tự word', 'Hệ số nhân',
+                           'Bù (offset)', 'Đơn vị', 'Quyền đọc/ghi',
+                           'Giá trị mặc định', 'Giá trị an toàn']) {
+      expect(screen.getByText(caption)).toBeInTheDocument()
+    }
+  })
 })

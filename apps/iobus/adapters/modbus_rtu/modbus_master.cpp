@@ -138,6 +138,7 @@ void ModbusMaster::set_write_result_sink(const WriteResultSink& sink)
 void ModbusMaster::poll_once(uint64_t now_ms, ExtCache& cache, FieldbusMetrics& metrics,
                              const std::string& fieldbus_sock_path)
 {
+    std::lock_guard<std::mutex> lock(workers_mu_);
     /* Caller có thể truyền một metrics khác với metrics dùng lúc open() — đường
      * đi của test và của main. Metrics rỗng làm mọi `get(idx)` chạm ngoài
      * vector, nên đồng bộ trước khi worker chạm vào. */
@@ -148,6 +149,12 @@ void ModbusMaster::poll_once(uint64_t now_ms, ExtCache& cache, FieldbusMetrics& 
 }
 
 void ModbusMaster::start_workers(ExtCache& cache, FieldbusMetrics& metrics)
+{
+    std::lock_guard<std::mutex> lock(workers_mu_);
+    start_workers_locked(cache, metrics);
+}
+
+void ModbusMaster::start_workers_locked(ExtCache& cache, FieldbusMetrics& metrics)
 {
     if (!threads_.empty()) return;
     stop_flag_.store(false, std::memory_order_relaxed);
@@ -162,6 +169,12 @@ void ModbusMaster::start_workers(ExtCache& cache, FieldbusMetrics& metrics)
 
 void ModbusMaster::stop_workers()
 {
+    std::lock_guard<std::mutex> lock(workers_mu_);
+    stop_workers_locked();
+}
+
+void ModbusMaster::stop_workers_locked()
+{
     if (threads_.empty()) return;
     stop_flag_.store(true, std::memory_order_relaxed);
     for (auto& thread : threads_)
@@ -169,9 +182,22 @@ void ModbusMaster::stop_workers()
     threads_.clear();
 }
 
+bool ModbusMaster::workers_running() const
+{
+    std::lock_guard<std::mutex> lock(workers_mu_);
+    return !threads_.empty();
+}
+
+size_t ModbusMaster::bus_count() const
+{
+    std::lock_guard<std::mutex> lock(workers_mu_);
+    return workers_.size();
+}
+
 void ModbusMaster::publish(ExtCache& cache, FieldbusMetrics& metrics,
                            const std::string& fieldbus_sock_path, uint64_t window_us)
 {
+    std::lock_guard<std::mutex> lock(workers_mu_);
     for (auto& worker : workers_) {
         metrics.set_bus_state(worker->bus_id(), bus_state_name(worker->state()));
         metrics.roll_bus_window(worker->bus_id(), window_us);
@@ -181,6 +207,10 @@ void ModbusMaster::publish(ExtCache& cache, FieldbusMetrics& metrics,
 
 bool ModbusMaster::submit_write(const PendingWrite& w)
 {
+    /* Giữ khoá suốt cả tìm-worker lẫn enqueue: `apply_config` có thể thay tập
+     * worker giữa hai bước đó, và khi ấy con trỏ trả về đã trỏ vào worker vừa
+     * bị huỷ. */
+    std::lock_guard<std::mutex> lock(workers_mu_);
     for (const auto& slave : cfg_.slaves) {
         if (slave.addr != w.slave_addr) continue;
         BusWorker* worker = bus_by_id(slave.bus_id);
@@ -194,6 +224,7 @@ bool ModbusMaster::submit_write(const PendingWrite& w)
 
 void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
 {
+    std::lock_guard<std::mutex> lock(workers_mu_);
     if (!shm || workers_.empty()) return;
 
     kx_plc_shm_t snapshot{};
@@ -300,8 +331,12 @@ bool ModbusMaster::apply_config(const std::string& config_path, uint64_t expecte
     /* Ranh giới an toàn = GIỮA hai transaction Modbus, không phải giữa hai byte.
      * stop_workers() join từng thread, và mỗi thread chỉ thoát sau khi kết thúc
      * vòng poll đang chạy — đúng định nghĩa ranh giới đó. */
+    /* Cả quá trình dừng → dựng lại → mở cổng → chạy lại nằm TRONG MỘT vùng
+     * khoá. Nếu tách ra, luồng publish sẽ nhìn thấy khoảnh khắc `workers_` rỗng
+     * ở giữa và báo "không có bus nào" ngay lúc đang áp cấu hình. */
+    std::lock_guard<std::mutex> lock(workers_mu_);
     const uint64_t previous_generation = prov_.generation;
-    stop_workers();
+    stop_workers_locked();
     for (auto& worker : workers_) worker->close_port();
 
     const FieldbusConfig rollback = cfg_;
@@ -322,11 +357,11 @@ bool ModbusMaster::apply_config(const std::string& config_path, uint64_t expecte
         prov_.generation = previous_generation;
         cache.set_provenance(prov_);
         for (auto& worker : workers_) worker->open_port();
-        start_workers(cache, metrics);
+        start_workers_locked(cache, metrics);
         return fail("no_port_could_be_opened");
     }
 
-    start_workers(cache, metrics);
+    start_workers_locked(cache, metrics);
     if (applied_revision) *applied_revision = cfg_.revision;
     if (generation)       *generation       = prov_.generation;
     std::fprintf(stderr, "INFO  modbus_master.apply_ack revision=%llu generation=%llu buses=%zu"

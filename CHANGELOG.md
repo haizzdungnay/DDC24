@@ -7,6 +7,68 @@
 ---
 
 ## [Unreleased]
+### Fixed — iobus poll bình thường nhưng không ai publish telemetry (2026-08-06)
+
+**Triệu chứng.** Trang Diagnostics báo `iobus chưa publish telemetry Modbus RTU`
+trong khi bo đã có 2 thiết bị, iobus đang chạy, và log có
+`bus_worker.open bus=1 … slaves=2`.
+
+**Nguyên nhân gốc.** `main.cpp` gác **cả luồng publish** bằng
+`rtu_ok || rtu_configured` — hai cờ tính **một lần lúc khởi động** từ file cấu
+hình có mặt khi đó. Khởi động với 0 thiết bị ⇒ luồng **không bao giờ được tạo**.
+Sau đó người dùng thêm thiết bị qua kênh điều khiển: `apply_config` dựng worker,
+mở cổng thật, iobus **poll bình thường** — nhưng không có ai gọi
+`publish_fieldbus_metrics`, nên `fb_publish_seq` mãi bằng 0.
+
+Nhìn từ ngoài thì Modbus "không chạy", trong khi thực tế nó chạy và **chỉ mỗi
+đường báo cáo là chết**. Cùng một lớp lỗi với kênh điều khiển đã sửa cùng ngày:
+một cờ lúc khởi động đóng băng khả năng của hệ thống vốn được thiết kế để cấu
+hình lại lúc đang chạy.
+
+Luồng publish nay chạy vô điều kiện; các nhánh bên trong hỏi **trạng thái thật**
+(`modbus.bus_count()`) thay vì đọc lại ảnh chụp lúc khởi động. Khi chưa có bus,
+nó publish `count = 0` — câu trả lời đúng là *"biết rồi, và không có gì"*, khác
+hẳn *"chưa biết"* (D-07).
+
+**Kèm theo: một data race sẵn có.** Luồng publish đọc `workers_` mỗi 100 ms
+trong khi `apply_config` (luồng kênh điều khiển) thay cả tập worker, và
+`ModbusMaster` **không có mutex nào**. Mở khoá luồng publish mà không sửa chỗ
+này chỉ làm cửa sổ race rộng ra. Thêm `workers_mu_`; `apply_config` giữ khoá
+suốt cả dừng → dựng lại → mở cổng → chạy lại, vì tách ra sẽ để lộ khoảnh khắc
+`workers_` rỗng cho luồng publish nhìn thấy và báo "không có bus nào" ngay giữa
+lúc áp cấu hình.
+
+**Hai lỗi nữa trong năm dòng của handler Diagnostics:**
+
+- `BusID` **không được gán** từ telemetry ⇒ cột "Bus / Slave" luôn hiện bus `0`.
+- Tra thiết bị **chỉ theo `slave_id`**. Với hai cổng, `slave_id = 1` trên
+  `rs485-1` và trên `rs485-2` là hai thiết bị khác nhau **hoàn toàn hợp lệ** —
+  validator đã cho phép. Tra theo mỗi địa chỉ thì chúng đè lên nhau và bảng gán
+  số đo của dây này cho thiết bị của dây kia: sai mà trông vẫn hợp lý, khiến
+  người vận hành đi tìm lỗi ở nhầm tủ. Nay khoá tra cứu là `(bus, slave)`.
+
+**Kiểm chứng trên bo:**
+
+```
+GET /modbus/diagnostics → 200   (trước: 503)
+  bus=1 slave=1 device=mbdev-73fa68e7 online=false polls=502 errs=502
+  bus=1 slave=2 device=mbdev-c150d49f online=false polls=502 errs=502
+GET /modbus/overview → telemetry_available: true, offline: 2
+```
+
+Hai thiết bị báo **OFFLINE** với số đo thật — đúng hành vi mong đợi khi cấu hình
+thiết bị mà trên dây chưa có gì trả lời.
+
+### Fixed — Form Points thiếu nhãn (2026-08-06)
+
+Cùng lỗi đã sửa cho form Thiết bị: 15 ô của form Point chỉ có `placeholder` +
+`aria-label`, nên người dùng thấy `0 · uint16 · Big-endian · 1 · 0 · 0` mà không
+biết ô nào là gì. Nay mỗi ô có nhãn nhìn thấy được, kèm tooltip cho những trường
+dễ sai — **địa chỉ 0-based** (nhiều tài liệu thiết bị đánh số từ 1), **thứ tự
+byte** (sai thì ra số vô lý mà không có lỗi nào), **hệ số nhân** (0 bị từ chối).
+
+`Field` tách thành component dùng chung để hai trang không trôi khỏi nhau.
+
 ### Fixed — Form Thiết bị không đọc được và danh sách không lọc được (2026-08-06)
 
 **Người dùng báo:** *"ko có name cho các trường để điền thì người dùng sẽ ko

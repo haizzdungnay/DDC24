@@ -122,13 +122,35 @@ func (a *App) handleModbusDiagnostics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
-	bySlave := map[int]string{}
+	// Khoá tra cứu là (bus, slave), KHÔNG phải slave.
+	//
+	// Với hai cổng RS-485, `slave_id = 1` trên rs485-1 và `slave_id = 1` trên
+	// rs485-2 là hai thiết bị KHÁC NHAU hoàn toàn hợp lệ — validator đã chấp
+	// nhận điều đó (unique theo từng bus). Tra theo mỗi địa chỉ thì hai thiết bị
+	// đè lên nhau và bảng chẩn đoán gán số đo của dây này cho thiết bị của dây
+	// kia: sai mà trông vẫn hợp lý, và người vận hành sẽ đi tìm lỗi ở nhầm tủ.
+	type slaveKey struct {
+		bus   int
+		slave int
+	}
+	byBusSlave := map[slaveKey]string{}
 	for _, device := range cfg.Devices {
-		bySlave[device.SlaveID] = device.DeviceID
+		busID := device.BusID
+		if busID == "" {
+			busID = webModbus.BusIDForPort(device.RS485Port)
+		}
+		byBusSlave[slaveKey{bus: webModbus.Bus{BusID: busID}.NumericID(), slave: device.SlaveID}] = device.DeviceID
 	}
 	out := make([]ModbusRTUDiagnostics, 0, len(telemetry.Slaves))
 	for _, item := range telemetry.Slaves {
-		out = append(out, ModbusRTUDiagnostics{DeviceID: bySlave[int(item.Addr)], SlaveID: int(item.Addr), Online: item.Online,
+		deviceID := byBusSlave[slaveKey{bus: int(item.BusID), slave: int(item.Addr)}]
+		if deviceID == "" {
+			// Cấu hình một-bus cũ không khai `bus_id`; đừng để bảng trống chỉ vì
+			// thiếu một trường mà bus 1 là mặc định hiển nhiên.
+			deviceID = byBusSlave[slaveKey{bus: 1, slave: int(item.Addr)}]
+		}
+		out = append(out, ModbusRTUDiagnostics{DeviceID: deviceID, SlaveID: int(item.Addr),
+			BusID: item.BusID, Online: item.Online,
 			TotalPolls: item.TotalPolls, TotalErrors: item.TotalErrors, TimeoutErrors: item.TimeoutErrors,
 			CRCErrors: item.CRCErrors, RetryAttempts: item.RetryAttempts, ConsecutiveErrors: item.ConsecutiveErrors, LastSeenMS: item.LastSeenMS})
 	}

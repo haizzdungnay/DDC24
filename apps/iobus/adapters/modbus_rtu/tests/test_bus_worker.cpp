@@ -619,3 +619,63 @@ TEST(FieldbusConfigContract, BusIdKhongSuyDuocSoHieuThiBiLoai)
     ASSERT_EQ(cfg.buses.size(), 1u);
     EXPECT_EQ(cfg.buses[0].id, 2u);
 }
+
+/* ---- Cấu hình lại lúc đang chạy (sự cố bo Foxlinx 2026-08-06) ---- */
+
+/* iobus khởi động với cấu hình RỖNG rồi được thêm thiết bị qua kênh điều khiển.
+ *
+ * Bản trước, `main.cpp` gác luồng publish bằng một cờ tính MỘT LẦN lúc khởi
+ * động. Khởi động với 0 thiết bị ⇒ luồng không bao giờ được tạo; sau đó
+ * `apply_config` dựng worker và mở cổng thật, iobus poll bình thường — nhưng
+ * không ai publish, nên Web mãi báo "iobus chưa publish telemetry".
+ *
+ * Nhìn từ ngoài thì Modbus "không chạy", trong khi thực tế chỉ mỗi đường báo
+ * cáo là chết. Test này khoá điều kiện mà `main.cpp` nay dựa vào: sau khi áp
+ * cấu hình có slave, `bus_count()` phải > 0 để luồng publish biết có việc. */
+TEST(RuntimeReconfigure, ApplyConfigTuCauHinhRongLamBusCountLonHonKhong)
+{
+    const std::string prof = write_profile("runtime_reconf",
+        R"json({"points":[{"name":"r","fc":3,"addr":0,"count":1,"type":"uint16"}]})json");
+
+    /* Cổng phải MỞ ĐƯỢC thật: `apply_config` từ chối cấu hình không mở được cổng
+     * nào (và từ chối đó là hành vi đúng — xem BusWorkerIsolation). */
+    const int pty_master = ::posix_openpt(O_RDWR | O_NOCTTY);
+    ASSERT_GE(pty_master, 0);
+    ASSERT_EQ(::grantpt(pty_master), 0);
+    ASSERT_EQ(::unlockpt(pty_master), 0);
+    const char* pty_slave = ::ptsname(pty_master);
+    ASSERT_NE(pty_slave, nullptr);
+
+    const std::string path = "/tmp/mkddc_fb_rt_" + std::to_string(::getpid()) + ".json";
+    {
+        std::ofstream out(path);
+        out << R"json({"revision":1,"buses":[{"bus_id":"rs485-1","port":")json"
+            << pty_slave << R"json("}],
+                 "slaves":[{"addr":1,"bus_id":1,"profile":")json"
+            << prof << R"json(","name":"a"}]})json";
+    }
+
+    ExtCache cache;
+    FieldbusMetrics metrics;
+    ModbusMaster master;
+
+    /* Khởi động với cấu hình KHÔNG có slave nào — đúng trạng thái bo sau khi
+     * người dùng xoá hết thiết bị. */
+    FieldbusConfig empty;
+    empty.loaded = true;
+    normalize_buses(&empty);
+    EXPECT_EQ(master.bus_count(), 0u) << "cấu hình rỗng thì chưa có bus nào";
+
+    std::string reason;
+    uint64_t applied = 0, generation = 0;
+    const bool ok = master.apply_config(path, 1, "", cache, metrics,
+                                        &reason, &applied, &generation);
+    ::unlink(path.c_str());
+
+    ASSERT_TRUE(ok) << "apply_config bị từ chối: " << reason;
+    EXPECT_GT(master.bus_count(), 0u)
+        << "sau khi áp cấu hình có slave, luồng publish phải thấy có bus — "
+           "nếu không, iobus poll mà Web mãi báo 'chưa publish telemetry'";
+    master.stop_workers();
+    ::close(pty_master);
+}

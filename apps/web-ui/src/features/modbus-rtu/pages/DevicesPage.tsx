@@ -3,42 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth, roleAtLeast } from '../../auth'
 import { apiClient } from '../../../shared/api/client'
 import type { ModbusBusInfo, ModbusProbeResult, ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../../shared/types'
+import { Field } from '../components/Field'
 import { NO_DATA, READ_ONLY_HINT, buttonClass, describeApiError, deviceLinkLabel, emptyDevice, inputClass } from '../shared'
 
 type PendingDelete = { id: string; label: string; extra?: number }
-
-/**
- * Ô nhập có NHÃN NHÌN THẤY ĐƯỢC.
- *
- * Bản trước chỉ dùng `placeholder` + `aria-label`. Nhưng placeholder **biến mất
- * ngay khi ô có giá trị**, và mọi ô số ở đây đều có sẵn giá trị mặc định — nên
- * người dùng nhìn vào hàng thứ hai của form chỉ thấy `1 · 1000 · 300 · 2 · 2`,
- * sáu con số trần không biết là gì. `aria-label` thì chỉ trình đọc màn hình và
- * test nhìn thấy.
- *
- * Nhãn nằm ngoài ô nên KHÔNG mất khi gõ, và `title` mang phần giải thích dài
- * cho những trường dễ hiểu nhầm (`retry` không phải ngưỡng offline).
- */
-function Field({
-  label,
-  hint,
-  className,
-  children
-}: {
-  label: string
-  hint?: string
-  className?: string
-  children: React.ReactNode
-}) {
-  return (
-    <label className={`flex flex-col gap-1 ${className ?? ''}`} title={hint}>
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)]">
-        {label}
-      </span>
-      {children}
-    </label>
-  )
-}
 
 /**
  * Tab "Thiết bị" của Modbus RTU — MBR-B301.
