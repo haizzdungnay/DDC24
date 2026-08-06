@@ -238,6 +238,66 @@ Lưu ý bẫy đã biết: `npm test` chỉ quét `src/`, **không** chạy `e2e
 
 ---
 
+## 7bis. Hậu kiểm bằng trình duyệt sau bản sửa
+
+Crawl lại đúng 27 route bằng Chrome sau khi sửa (cùng phương pháp §2). Bảng dưới
+là bằng chứng đối chiếu trước/sau, không phải suy luận từ code:
+
+**Nhóm A — Modbus RTU (demo mode):**
+
+| Route | H1 trước | H1 sau | H2 riêng của tab (sau) |
+|---|---|---|---|
+| `/eng/modbus-rtu` | 1 | **1** | `Modbus RTU · Tổng quan` |
+| `/eng/modbus-rtu/overview` | 1 | **1** | `Modbus RTU · Tổng quan` |
+| `/eng/modbus-rtu/devices` | 2 | **1** | `Modbus RTU · Quản lý Thiết bị (Devices)` |
+| `/eng/modbus-rtu/points` | 2 | **1** | `Modbus RTU · Quản lý Point` |
+| `/eng/modbus-rtu/diagnostics` | 2 | **1** | `Modbus RTU · Diagnostics` |
+
+Ba tab từng trả về cùng 1278 ký tự body nay có tiêu đề mục khác nhau.
+
+**Nhóm C — live mode, không backend, mọi endpoint 502:**
+
+| Route | Trước | Sau |
+|---|---|---|
+| `/monitor` | "0 điểm · 0% FAULT · **100% NORMAL**" | `Could not load I/O points — 502 — Retry` |
+| `/eng/inputs` | "No data" | `Could not load input configuration — Retry` |
+| `/eng/outputs` | "No data" | `Could not load output configuration — Retry` |
+| `/eng/virtual-points` | "No data" | `Could not load virtual points — Retry` |
+| `/eng/scheduler` | "No data" | `Could not load schedules — Retry` |
+| `/eng/alarm-settings` | "No data" | `Could not load alarm settings — Retry` |
+
+Bảy trang vốn đã đúng (§5) giữ nguyên hành vi. **0 `pageerror` trên cả 27 route**
+ở cả hai chế độ.
+
+### FE-E2E-01 — `e2e/trends.spec.ts` đỏ âm thầm từ `b67580c` (phát hiện khi hậu kiểm)
+
+Chạy `npx playwright test` (toàn bộ `e2e/`, không chỉ spec mới) thì
+`trends.spec.ts` **fail**: nó tìm `getByLabel('From (UTC)')` trong khi
+[TrendsPage.tsx:319-320](../../../apps/web-ui/src/features/operations/TrendsPage.tsx#L319-L320)
+đã đổi nhãn sang `From (local time <TZ>)` tại `b67580c`
+("bộ chọn khoảng Trends dùng đúng giờ địa phương như nhãn đã hứa"). Spec chưa từng
+được cập nhật theo — `git log` cho thấy nó dừng ở `259d160`, trước `b67580c`.
+
+Không ai phát hiện vì đúng cái bẫy đã ghi ở §7: **`npm test` chỉ quét `src/`**, nên
+`e2e/` không chạy trong vòng lặp thường ngày. Đây là lý do một spec có thể đỏ hàng
+tuần mà mọi báo cáo vẫn ghi "gate xanh".
+
+Đã sửa bằng cách khớp nhãn theo regex (`/^From \(local time/`) thay vì hằng chuỗi —
+hằng `Asia/Saigon` sẽ hỏng ngay trên runner CI đặt UTC.
+
+**Số đo sau bản sửa:**
+
+| Bộ | Lệnh | Kết quả |
+|---|---|---|
+| FE typecheck | `npx tsc --noEmit` | 0 lỗi |
+| FE lint | `npm run lint` | 0 warning |
+| FE unit | `npx vitest --run --environment jsdom src` | **346/346 pass**, 42 file |
+| FE build | `npm run build` | thành công |
+| FE E2E | `npx playwright test` | **27/27 pass**, 55,5 s |
+| Go | `go vet ./...` + `go test ./... -count=1` | 11/11 gói pass (đo trên worktree sạch tại `4dff747`; cây làm việc chính đang có WIP Track B chưa build được của phiên khác) |
+
+---
+
 ## 8. Thứ tự đề xuất xử lý
 
 | Ưu tiên | Mã | Việc | Ghi chú |
@@ -264,4 +324,5 @@ trước khi code (gate DOC TRƯỚC CODE SAU).
 |---|---|---|
 | 1.0 | 2026-08-05 | Bản đầu. Crawl 27 route ở hai chế độ demo/live; 4 nhóm nguyên nhân; 10 finding; khoảng trống test của `MBR-B301`. |
 | 1.1 | 2026-08-05 | Sửa xong: nhóm A (tách `PointsPage`+`DiagnosticsPage`, nối `DevicesPage`, bỏ H1 lặp/padding lồng/`<main>` lồng), FE-DATA-01 (`/monitor` báo lỗi thay "100% NORMAL"), FE-DATA-02 (5 trang áp `StateBlock`), nhóm D (port 8081). Thêm 40 test. Kiểm chứng: `tsc` 0 lỗi, `lint` 0 warning, **346/346 PASS** (42 file), `build` OK. Nhóm B (FE-AUTH-02) là quyết định sản phẩm, chưa sửa — cần chốt trước khi code. |
+| 1.2 | 2026-08-05 | Thêm §7bis hậu kiểm bằng trình duyệt: bảng đối chiếu trước/sau cho nhóm A và nhóm C, 0 `pageerror` trên 27 route ở cả hai chế độ. Thay spec crawl `__crawl.spec.ts` (chỉ `expect(true).toBe(true)`) bằng `e2e/fe-pages-health.spec.ts` có khẳng định thật. Thêm **FE-E2E-01**: `e2e/trends.spec.ts` đỏ âm thầm từ `b67580c` do nhãn đổi sang giờ địa phương — đã sửa, `npx playwright test` **27/27 pass**. |
 
