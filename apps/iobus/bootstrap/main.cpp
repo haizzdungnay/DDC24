@@ -346,9 +346,12 @@ int main(int argc, char** argv)
     /* MBR-B101: mỗi bus RS-485 một BusWorker trên một thread riêng. Thread ở
      * đây (fieldbus_thread) KHÔNG còn phát lệnh xuống dây; nó là publisher +
      * cầu nối write từ core, nên một bus bị chặn không giữ được nó lại. */
-    const bool rtu_ok = fieldbus_cfg.loaded && !fieldbus_cfg.slaves.empty()
-                        && modbus.open(fieldbus_cfg, ext_cache, fieldbus_metrics);
     const bool rtu_configured = fieldbus_cfg.loaded && !fieldbus_cfg.slaves.empty();
+    /* Mở cổng ngay khi khởi động nếu cấu hình đã có slave. Kết quả KHÔNG được
+     * giữ lại làm cờ điều kiện cho phần sau: cấu hình có thể đổi lúc đang chạy
+     * qua kênh điều khiển, nên mọi quyết định về sau phải hỏi trạng thái thật
+     * (`modbus.bus_count()`), không đọc lại một ảnh chụp lúc khởi động. */
+    if (rtu_configured) modbus.open(fieldbus_cfg, ext_cache, fieldbus_metrics);
     /* Kênh điều khiển phải mở KỂ CẢ khi chưa có thiết bị nào.
      *
      * Bản trước gác nó bằng `rtu_configured` — tức "đã có ít nhất một slave" —
@@ -464,13 +467,34 @@ int main(int argc, char** argv)
         }
     }
 
-    if (rtu_ok || rtu_configured || modbus_tcp.has_slaves()) {
+    /* Luồng publish fieldbus chạy VÔ ĐIỀU KIỆN.
+     *
+     * Bản trước gác cả luồng này bằng `rtu_ok || rtu_configured`, hai cờ tính
+     * MỘT LẦN lúc khởi động từ file cấu hình có mặt khi đó. Khởi động với 0
+     * thiết bị ⇒ luồng KHÔNG BAO GIỜ được tạo. Sau đó người dùng thêm thiết bị
+     * qua kênh điều khiển: `apply_config` dựng worker và mở cổng thật (log có
+     * `bus_worker.open ... slaves=2`), iobus POLL BÌNH THƯỜNG — nhưng không có
+     * ai publish, nên `fb_publish_seq` mãi bằng 0 và Web báo:
+     *
+     *   503 — "iobus chưa publish telemetry Modbus RTU"
+     *
+     * Nhìn từ ngoài thì Modbus "không chạy", trong khi thực tế nó chạy và chỉ
+     * mỗi đường báo cáo là chết. Cùng một lớp lỗi với kênh điều khiển: một cờ
+     * lúc khởi động đóng băng khả năng của hệ thống vốn được thiết kế để cấu
+     * hình lại lúc đang chạy.
+     *
+     * Các nhánh bên trong nay hỏi TRẠNG THÁI THẬT (`modbus.bus_count()`) thay
+     * vì đọc lại cờ cũ. `publish_fieldbus_metrics` chạy kể cả khi chưa có bus
+     * nào: khi đó nó publish count = 0, và đó là câu trả lời ĐÚNG — "biết rồi,
+     * và không có gì" khác hẳn "chưa biết" (D-07). */
+    {
         if (rtu_configured) modbus.start_workers(ext_cache, fieldbus_metrics);
         fieldbus_thread = std::thread([&]() {
             uint64_t last_publish_ms = now_ms();
             while (!g_shutdown.load()) {
                 const uint64_t poll_now = now_ms();
-                if (rtu_configured) {
+                const bool rtu_live = modbus.bus_count() > 0;
+                if (rtu_live) {
                     /* COR-011: bridge write setpoints from core before poll */
                     const kx_plc_shm_t* rtu_plc_shm = try_attach_plc_shm();
                     modbus.drain_ext_writes(rtu_plc_shm, poll_now);
@@ -480,7 +504,7 @@ int main(int argc, char** argv)
                 }
                 if (modbus_tcp.has_slaves())
                     modbus_tcp.poll_once(poll_now, ext_cache, fieldbus_sock_path);
-                if (rtu_configured) {
+                if (rtu_live) {
                     const uint64_t window_us = (poll_now - last_publish_ms) * 1000ull;
                     modbus.publish(ext_cache, fieldbus_metrics, fieldbus_sock_path, window_us);
                     last_publish_ms = poll_now;

@@ -266,6 +266,9 @@ func PortForBusID(busID string) string {
 	return ""
 }
 
+// BusIDForPort suy ra bus_id từ đường dẫn cổng đã chuẩn hoá.
+func BusIDForPort(port string) string { return busIDForPort(port) }
+
 // busIDForPort suy ra bus_id từ đường dẫn cổng đã chuẩn hoá.
 func busIDForPort(port string) string {
 	switch port {
