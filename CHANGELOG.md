@@ -7,6 +7,50 @@
 ---
 
 ## [Unreleased]
+### Fixed — Trang trắng toàn nhánh Modbus RTU trên board (FE-BOARD-01) (2026-08-06)
+
+Sau khi deploy Track B lên Foxlinx, mở `/eng/modbus-rtu` cho **màn hình đen hoàn
+toàn** — không tiêu đề, không menu, không một dòng chữ. Cả 5 tab Modbus RTU đều
+như vậy.
+
+**Nguyên nhân gốc — ba tầng cùng góp phần:**
+
+1. Go tuần tự hoá nil slice thành `null`, nên `/modbus/config/state` trả
+   `"diff": null` khi chưa có thay đổi nào, thay vì `[]`.
+2. `ConfigStateBanner` viết `state?.diff.length` — optional chaining chỉ chắn
+   `state`, KHÔNG chắn `state.diff` — nên ném `TypeError` ngay lúc render.
+3. Ứng dụng không có `ErrorBoundary` nào, nên React unmount **toàn bộ cây**. Vì
+   banner nằm ở `ModbusRtuLayout`, cả 5 tab con chết theo.
+
+**Cách sửa (cả ba tầng, để một lỗi tương tự sau này không tái diễn hậu quả này):**
+
+- `internal/modbusrtu/candidate.go` — `Diff()` trả slice rỗng, không phải nil.
+  `internal/app/modbus_rtu.go` — `/modbus/devices` và `/modbus/points` trả `[]`.
+- `shared/api/client.ts` — thêm `asList()` chuẩn hoá `null → []` cho mọi endpoint
+  danh sách Modbus. Chắn ở **một chỗ** (biên vào) thay vì rải `?? []` khắp component.
+- `ConfigStateBanner.tsx`, `MappingPage.tsx` — chắn `diff`/`rows`/`errors`/`load`
+  tường minh.
+- `shared/components/RouteErrorBoundary.tsx` (mới) — bọc `<Outlet />` ở `AppShell`.
+  Một trang lỗi từ nay chỉ hỏng **trang đó**, giữ nguyên menu và hiện thông điệp
+  lỗi gốc. Với tủ điều khiển đang vận hành, "màn hình trống" là tình huống tệ
+  nhất vì không phân biệt được phần mềm hỏng với mất điện.
+- `pages/DevicesPage.tsx` — thôi `catch {}` nuốt im lặng lỗi 503 của
+  `/modbus/diagnostics`; nói rõ cột "Liên lạc" hiện `—` vì **chưa biết**, không
+  phải vì thiết bị offline (D-07).
+
+**Kiểm chứng trên board thật** (Chromium qua SSH tunnel, JWT + RBAC thật, không mock):
+23 trang × 2 chế độ điều hướng = **46/46 bản ghi, 0 trang trắng, 0 exception**
+(trước khi vá: 6/23 trang trắng). Báo cáo từng trang:
+`docs/07_records/reviews/FE_BOARD_PAGE_AUDIT_2026-08-06.md`.
+
+- **Bộ kiểm mới** `apps/web-ui/e2e-board/board-page-audit.spec.ts`: đi qua mọi
+  route, thu console error / exception / request hỏng / nội dung render, xuất
+  JSON để dựng báo cáo. Không dùng `networkidle` vì ứng dụng tự làm mới 5 s một
+  lần nên mạng không bao giờ idle.
+- **Test hồi quy**: `diff: null`, thiếu hẳn trường `diff`, `rows/errors/load: null`,
+  3 test `RouteErrorBoundary`, 1 test cảnh báo telemetry ở trang Thiết bị.
+- Gate: ctest **777/777**, Go **11/11 package**, vitest **394/394**, lint 0 warning.
+
 ### Added — Track B Modbus RTU: contract v2, BusWorker đa bus, transaction apply, 5 trang FE (2026-08-06)
 
 Triển khai trọn Track B của `docs/03_implementation/49_MODBUS_RTU_IMPLEMENTATION_PLAN.md`
