@@ -376,6 +376,12 @@ export function MonitorPage() {
   }
 
   const pollDegraded = Boolean(pointsState.error)
+  /* FE-MON-01 (board thật 2026-08-06): `/points` trả 200 kèm mảng RỖNG là một
+   * trạng thái khác hẳn "API chết" — guard lỗi phía trên không bắt được nó. Trên
+   * DDC-24-TANG-1 nó cho ra bốn bảng trống không một dòng chữ, trong khi Dashboard
+   * cùng lúc vẽ 29 I/O; người trực không có cách nào biết bên nào đúng.
+   * Bảng rỗng phải tự nói ra là nó rỗng vì authority không trả điểm nào. */
+  const authorityReturnedNoPoints = !pollDegraded && Boolean(pointsState.data) && points.length === 0
 
   return (
     <div className="space-y-3">
@@ -389,6 +395,15 @@ export function MonitorPage() {
           {pick(
             `Mất kết nối authority; số đo bên dưới là lần đọc gần nhất, không phải trạng thái hiện tại (${pointsState.error?.message}).`,
             `Authority unreachable; the figures below are the last successful read, not the current state (${pointsState.error?.message}).`
+          )}
+        </div>
+      )}
+
+      {authorityReturnedNoPoints && (
+        <div role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
+          {pick(
+            'Authority trả lời bình thường nhưng không có điểm I/O nào. Kiểm tra dịch vụ core/iobus và bảng điểm trước khi tin vào các số 0 bên dưới.',
+            'The authority responded normally but reported no I/O points. Check the core/iobus services and the point table before trusting the zeros below.'
           )}
         </div>
       )}

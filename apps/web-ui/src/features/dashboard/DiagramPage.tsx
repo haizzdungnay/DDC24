@@ -12,6 +12,10 @@ export function DiagramPage() {
   const realtime = useRealtime()
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const healthState = useApi(apiClient.getHealth, [], { refreshMs: 1000 })
+  /* FE-DIAG-01: sơ đồ cần dữ liệu mạng THẬT. Trước đây nó tự gọi `getDemoNetwork()`
+   * bên trong nên số slave Modbus và địa chỉ BACnet là của simulator kể cả trên
+   * board. */
+  const networkState = useApi(apiClient.getNetwork, [], { refreshMs: 5000 })
   const points = realtime.allPoints.length ? realtime.allPoints : pointsState.data ?? []
   const dataAgeLabel = realtime.lastEventAt ? new Date(realtime.lastEventAt).toLocaleTimeString('vi-VN') : 'API'
 
@@ -26,6 +30,7 @@ export function DiagramPage() {
           <ControllerDiagram
             points={points}
             health={healthState.data ?? undefined}
+            network={networkState.data ?? undefined}
             dataAgeLabel={dataAgeLabel}
             onOpenNetwork={() => navigate('/settings/network')}
           />

@@ -7,6 +7,26 @@
 ---
 
 ## [Unreleased]
+### Fixed — Giao diện không được bịa dữ liệu simulator trên board thật (4 finding từ DDC-24-TANG-1) (2026-08-06)
+
+Bốn ảnh chụp trình duyệt trên board `192.168.1.110` cho thấy ba trang nói ba chuyện khác nhau về cùng một thiết bị: Dashboard vẽ `29 I/O | 5 Modbus | 2 WARN`, Monitor I/O báo `TOTAL POINTS 0`, hộp thoại Add trend báo `No matching points.` Trang **sai** lại là trang trông thuyết phục nhất.
+
+- **FE-DIAG-01 — `ControllerDiagram` lấp chỗ trống bằng dữ liệu simulator (nặng nhất):**
+  - **Triệu chứng:** trên board, sơ đồ ghi `29 I/O | 5 Modbus | 2 WARN | 0 FAULT`, `UI 16 | AO 4 | DO 4`, `RS485 / Modbus 5 dev | 1 deg | 1 offline` và `BACnet 192.168.1.100 | ID 47808` — trong khi `/points` trả 0 điểm và thiết bị thật ở `192.168.1.110`. LED RS485 xanh dù chưa hỏi được authority.
+  - **Nguyên nhân gốc:** `const displayPoints = points.length ? points : getDemoPoints()` (fallback im lặng) và `const network = getDemoNetwork()` — dòng thứ hai **không có điều kiện**, nên danh sách slave Modbus và địa chỉ BACnet là dữ liệu bịa trong **mọi** build, kể cả live. Cùng họ lỗi với `FE-DATA-01` và `D-07`: trình bày "không có dữ liệu" thành một con số trông bình thường.
+  - **Cách sửa:** simulator chỉ dùng khi `IS_DEMO`. Thêm prop `network?: NetworkData`; `DashboardPage` và `DiagramPage` gọi `GET /network` thật và truyền xuống. Thiếu dữ liệu ở live ⇒ hiện `—` (`— Modbus`, `— WARN | — FAULT`, `BACnet — | ID —`) kèm cảnh báo *"Authority chưa trả điểm I/O nào — sơ đồ dưới đây không phản ánh thiết bị thật."* `networkColor()` không còn trả xanh cho trạng thái không xác định.
+- **FE-TR-01 — Trends tự mâu thuẫn và kẹt cứng:**
+  - **Triệu chứng:** panel Series ghi "No trend points selected." trong khi biểu đồ và bảng thống kê vẫn hiện DO-01…DO-04 (4185 mẫu, Visible = ON); người dùng không xoá được (không có thẻ series) mà cũng không thêm được (picker rỗng).
+  - **Nguyên nhân gốc:** panel lọc `selectedIds` qua `/points`, còn truy vấn historian dùng thẳng `selectedIds` đọc từ `localStorage`. `/points` rỗng + historian còn dữ liệu ⇒ hai nguồn nói ngược nhau.
+  - **Cách sửa:** panel dựng từ chính `selectedIds`; id không resolve được vẫn có thẻ riêng ghi *"Không còn trong danh sách điểm của authority"* kèm nút Gỡ, cộng dòng giải thích biểu đồ là lịch sử cũ.
+- **FE-TR-02 — hai hệ quy chiếu thời gian trên cùng một panel:** ô chọn ghi `From (local time Asia/Bangkok)` giá trị `09:27` còn bảng ngay dưới ghi `Time (UTC)` giá trị `02:55`, lệch 7 giờ và không chỗ nào nói ra (do `b67580c` chỉ đổi ô chọn). Giữ nguyên UTC ở phần hiển thị — quyết định đã chốt bằng `TrendsPage.test.tsx:96` — nhưng thêm dòng nói rõ ngay tại chỗ nhập.
+- **FE-MON-01 — Monitor im lặng khi authority trả 0 điểm:** `/points` trả 200 kèm mảng rỗng là trạng thái khác hẳn "API chết" nên guard lỗi của `FE-DATA-01` không bắt được; board cho ra bốn bảng trống không một dòng chữ. Nay nói thẳng *"Authority trả lời bình thường nhưng không có điểm I/O nào…"*.
+- **Test mới chốt cả bốn:** `ControllerDiagram.test.tsx` (5 test, gồm nhánh demo vẫn phải dùng được), `TrendsPage.orphanSeries.test.tsx` (4 test), `MonitorPage.states.test.tsx` (+3 test), và một test E2E khẳng định `/eng/diagram` không mượn số simulator khi authority không trả point.
+- **Ngoài phạm vi FE — đã ghi để xử lý riêng:** `/points` trả rỗng trong khi `core` báo `DEGRADED` và historian vẫn còn 4185 mẫu ⇒ bảng điểm của Core biến mất lúc chạy; cần log `mkddc-core` trên board. Board cũng đang chạy build **trước** PR #93/#94 nên cần deploy lại.
+- **Tài liệu mới:** `docs/07_records/reviews/FE_BOARD_UI_REVIEW_2026-08-06.md` (record as-built).
+- **Kết quả Kiểm chứng (đo trong phiên, không dẫn số cũ):**
+  - `npx tsc --noEmit` 0 lỗi; `npm run lint` 0 warning; `npx vitest --run --environment jsdom src` **358/358 PASS** (44 file); `npm run build` thành công; `npx playwright test` **28/28 PASS**.
+
 ### Fixed — Hậu kiểm review FE bằng trình duyệt + vá spec E2E đỏ âm thầm (FE-E2E-01) (2026-08-05)
 
 - **`e2e/trends.spec.ts` — FE-E2E-01, đỏ từ `b67580c` mà không ai biết:**
