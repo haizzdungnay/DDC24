@@ -56,8 +56,13 @@ test('routes every preset to cache and Custom to database for UI/AO/DO/VP', asyn
     await expectNewHistory(page, requests, requestCount, (url) => hasAllPoints(url) && url.searchParams.get('source') === 'cache')
   }
 
-  await page.getByLabel('From (UTC)').fill('2026-07-21T00:00')
-  await page.getByLabel('To (UTC)').fill('2026-07-21T01:00')
+  /* Nhãn đã đổi từ "From (UTC)" sang "From (local time <TZ>)" ở b67580c
+   * ("bộ chọn khoảng Trends dùng đúng giờ địa phương như nhãn đã hứa") nhưng spec
+   * này không được cập nhật theo, nên nó đỏ âm thầm từ đó: `npm test` chỉ quét
+   * `src/`, KHÔNG chạy `e2e/`. Khớp bằng regex để không phụ thuộc múi giờ của máy
+   * chạy test — hằng "Asia/Saigon" sẽ hỏng ngay trên runner CI đặt UTC. */
+  await page.getByLabel(/^From \(local time/).fill('2026-07-21T00:00')
+  await page.getByLabel(/^To \(local time/).fill('2026-07-21T01:00')
   requestCount = requests.length
   await page.getByRole('button', { name: 'Apply custom' }).click()
   await expectNewHistory(page, requests, requestCount, (url) => hasAllPoints(url) && url.searchParams.get('source') === 'database')
