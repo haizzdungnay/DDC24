@@ -65,6 +65,10 @@ export function DashboardPage() {
   const health = useApi(apiClient.getHealth, [], { refreshMs: 1000 })
   const pointsState = useApi(apiClient.getPoints, [], { refreshMs: 1000 })
   const alarms = useApi(apiClient.getAlarms, [], { refreshMs: 1000 })
+  /* FE-DIAG-01: `ControllerDiagram` trước đây tự gọi `getDemoNetwork()` bên
+   * trong, nên số slave Modbus và địa chỉ BACnet trên sơ đồ là của simulator kể
+   * cả khi chạy trên board thật. Nay dữ liệu mạng phải đi từ authority xuống. */
+  const networkState = useApi(apiClient.getNetwork, [], { refreshMs: 5000 })
   const realtime = useRealtime()
   const { pick } = useI18n()
   const polledPoints = pointsState.data ?? emptyPoints
@@ -206,6 +210,7 @@ export function DashboardPage() {
           <ControllerDiagram
             points={points}
             health={h ?? undefined}
+            network={networkState.data ?? undefined}
             dataAgeLabel={dataAgeLabel}
             compact
             onOpenNetwork={() => navigate('/settings/network')}

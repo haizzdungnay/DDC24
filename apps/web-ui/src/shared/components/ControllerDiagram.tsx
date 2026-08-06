@@ -1,7 +1,8 @@
 import { useMemo, useState, type MouseEvent } from 'react'
+import { IS_DEMO } from '../config'
 import { getDemoNetwork, getDemoPoints } from '../demo/simulator'
 import { useI18n } from '../i18n'
-import type { HealthResponse, IoChannel, Point, PointKind, PollState } from '../types'
+import type { HealthResponse, IoChannel, NetworkData, Point, PointKind, PollState } from '../types'
 import { cn } from '../utils'
 import { Modal } from './Modal'
 
@@ -13,11 +14,19 @@ type TooltipPosition = { x: number; y: number }
 type ControllerDiagramProps = {
   points: Point[]
   health?: HealthResponse
+  /**
+   * Dữ liệu mạng THẬT từ authority (`GET /network`). Bắt buộc ở chế độ live —
+   * xem khối chú thích trong `ControllerDiagram` về FE-DIAG-01. Bỏ trống ở live
+   * ⇒ sơ đồ hiện `—` chứ KHÔNG mượn số của simulator.
+   */
+  network?: NetworkData
   dataAgeLabel?: string
   compact?: boolean
   className?: string
   onOpenNetwork?: () => void
 }
+
+const NO_DATA = '—'
 
 const SVG_WIDTH = 1160
 const SVG_HEIGHT = 600
@@ -61,9 +70,12 @@ function qualityColor(state: QualityState): string {
   return 'var(--c-online, var(--c-good))'
 }
 
-function networkColor(state?: PollState | 'online' | 'offline'): string {
+function networkColor(state?: PollState | 'online' | 'offline' | 'unknown'): string {
   if (state === 'offline') return 'var(--c-fault)'
   if (state === 'degraded') return 'var(--c-warn)'
+  /* FE-DIAG-01: "chưa biết" KHÔNG được tô xanh. Xanh ở đây là một khẳng định
+   * ("đã hỏi authority và đường truyền đang tốt"), không phải màu mặc định. */
+  if (!state || state === 'unknown') return 'var(--c-text-dim)'
   return 'var(--c-online, var(--c-good))'
 }
 
@@ -138,17 +150,37 @@ function pointTooltipPosition(event: MouseEvent<SVGGElement>): TooltipPosition {
   }
 }
 
-export function ControllerDiagram({ points, health, dataAgeLabel = 'API', compact = false, className, onOpenNetwork }: ControllerDiagramProps) {
+export function ControllerDiagram({ points, health, network: networkProp, dataAgeLabel = 'API', compact = false, className, onOpenNetwork }: ControllerDiagramProps) {
   const { pick, t } = useI18n()
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null)
   const [hoveredPointId, setHoveredPointId] = useState<string | null>(null)
   const [tooltipPos, setTooltipPos] = useState<TooltipPosition>({ x: 0, y: 0 })
 
-  const displayPoints = points.length ? points : getDemoPoints()
+  /* FE-DIAG-01 (board thật 2026-08-06): hai dòng dưới đây từng là
+   *
+   *   const displayPoints = points.length ? points : getDemoPoints()
+   *   const network = getDemoNetwork()
+   *
+   * Hệ quả trên board DDC-24-TANG-1 khi `/points` trả rỗng: Dashboard vẽ
+   * "29 I/O | 5 Modbus | 2 WARN | 0 FAULT", I/O Summary ghi "UI 16 | AO 4 | DO 4"
+   * và "RS485 / Modbus 5 dev | 1 deg | 1 offline", còn BACnet ghi 192.168.1.100
+   * trong khi thiết bị thật ở 192.168.1.110 — TOÀN BỘ là số của simulator, hiển
+   * thị y như số đo thật. Cùng lúc đó trang Giám sát báo 0 point. Dòng
+   * `getDemoNetwork()` thậm chí không có điều kiện: danh sách slave Modbus là
+   * dữ liệu bịa trong MỌI build, kể cả live.
+   *
+   * Đây là cùng họ lỗi với FE-DATA-01 và D-07: trình bày "không có dữ liệu"
+   * thành một con số trông bình thường. Trên DDC, đó là lỗi an toàn vận hành.
+   *
+   * Nay: simulator chỉ được dùng khi build đúng là bản demo; ở live, thiếu dữ
+   * liệu thì sơ đồ nói thiếu. */
+  const displayPoints = points.length ? points : IS_DEMO ? getDemoPoints() : []
   const channels = [...displayPoints]
     .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }))
     .map(channelFromPoint)
-  const network = getDemoNetwork()
+  const network: NetworkData | null = networkProp ?? (IS_DEMO ? getDemoNetwork() : null)
+  const northbound = network?.northbound
+  const hasPoints = displayPoints.length > 0
   const pointById = useMemo(() => new Map(displayPoints.map((point) => [point.id, point])), [displayPoints])
   const channelsByKind = useMemo(() => {
     const byKind = new Map<PointKind, IoChannel[]>()
@@ -159,10 +191,14 @@ export function ControllerDiagram({ points, health, dataAgeLabel = 'API', compac
   const ui = channelsByKind.get('UI') ?? []
   const ao = channelsByKind.get('AO') ?? []
   const doChannels = channelsByKind.get('DO') ?? []
-  const southbound = network.southbound ?? []
+  const southbound = network?.southbound ?? []
   const degradedCount = southbound.filter((device) => device.pollState === 'degraded').length
   const offlineCount = southbound.filter((device) => device.pollState === 'offline').length
-  const rs485State: PollState = offlineCount > 0 ? 'offline' : degradedCount > 0 ? 'degraded' : 'online'
+  /* Chưa đọc được `/network` thì LED RS485 phải là "không biết", không được mặc
+   * định xanh — xanh ở đây nghĩa là "đã hỏi và bus đang tốt". */
+  const rs485State: PollState | 'unknown' = !network
+    ? 'unknown'
+    : offlineCount > 0 ? 'offline' : degradedCount > 0 ? 'degraded' : 'online'
   const totalFaults = displayPoints.filter((point) => qualityState(point) === 'bad').length
   const totalWarnings = displayPoints.filter((point) => qualityState(point) === 'uncertain').length
   const selectedPoint = selectedPointId ? pointById.get(selectedPointId) : undefined
@@ -335,8 +371,15 @@ export function ControllerDiagram({ points, health, dataAgeLabel = 'API', compac
             MK-DDC-24
           </text>
           <text x={DEVICE_X + 108} y={28} fontSize="10" fill="var(--c-text-dim)">
-            {channels.length} I/O | {southbound.length} Modbus | {totalWarnings} WARN | {totalFaults} FAULT | {dataAgeLabel}
+            {channels.length} I/O | {network ? `${southbound.length} Modbus` : `${NO_DATA} Modbus`} | {hasPoints ? `${totalWarnings} WARN | ${totalFaults} FAULT` : `${NO_DATA} WARN | ${NO_DATA} FAULT`} | {dataAgeLabel}
           </text>
+          {/* FE-DIAG-01: nói thẳng khi authority chưa trả point, thay vì để sơ đồ
+              trống trông như một thiết bị không đấu dây nào. */}
+          {!hasPoints && (
+            <text x={DEVICE_X + 108} y={42} fontSize="10" fontWeight="700" fill="var(--c-warn-fg, var(--c-warn))">
+              {pick('Authority chưa trả điểm I/O nào — sơ đồ dưới đây không phản ánh thiết bị thật.', 'The authority returned no I/O points — the diagram below does not reflect the device.')}
+            </text>
+          )}
 
           <rect x={DEVICE_X} y={DEVICE_Y} width={DEVICE_W} height={DEVICE_H} rx={8} fill="var(--c-surface)" stroke="var(--c-line-strong)" strokeWidth="2" />
           <rect x={DEVICE_X + 10} y={DEVICE_Y + 10} width={DEVICE_W - 20} height={DEVICE_H - 20} rx={4} fill="none" stroke="var(--c-border)" />
@@ -380,11 +423,17 @@ export function ControllerDiagram({ points, health, dataAgeLabel = 'API', compac
           <text x={692} y={378} fontSize="11" fill="var(--c-text)">
             System {totalFaults > 0 ? 'FAULT' : totalWarnings > 0 ? 'WARN' : 'NORMAL'}
           </text>
-          <circle cx={676} cy={393} r={5} fill={networkColor(network.northbound.bmsLink)} />
-          <text x={692} y={397} fontSize="11" fill="var(--c-text)">BACnet {network.northbound.ip || 'DHCP'} | ID {network.northbound.bacnetDeviceId || 'N/A'}</text>
+          <circle cx={676} cy={393} r={5} fill={networkColor(northbound ? northbound.bmsLink : 'unknown')} />
+          <text x={692} y={397} fontSize="11" fill="var(--c-text)">
+            {northbound
+              ? `BACnet ${northbound.ip || 'DHCP'} | ID ${northbound.bacnetDeviceId || 'N/A'}`
+              : `BACnet ${NO_DATA} | ID ${NO_DATA}`}
+          </text>
           <circle cx={676} cy={412} r={5} fill={networkColor(rs485State)} />
           <text x={692} y={416} fontSize="11" fill="var(--c-text)">
-            {t('rs485')} / {t('modbus')} {southbound.length} dev | {degradedCount} deg | {offlineCount} offline
+            {network
+              ? `${t('rs485')} / ${t('modbus')} ${southbound.length} dev | ${degradedCount} deg | ${offlineCount} offline`
+              : `${t('rs485')} / ${t('modbus')} ${NO_DATA}`}
           </text>
           <text x={84} y={468} fontSize="10" fill="var(--c-text-dim)">
             I=ON/signal | O=OFF | !=no signal | ?=warning
