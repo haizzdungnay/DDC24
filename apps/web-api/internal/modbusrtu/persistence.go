@@ -64,6 +64,10 @@ func (p Persister) Apply(cfg, previous Config) (ApplyResult, error) {
 		buses[i] = NormalizeBus(buses[i])
 	}
 	cfg.Buses = buses
+	// Sau khi bus đã chuẩn hoá: đồng bộ tham số serial xuống Device. Phải nằm
+	// TRƯỚC checksum, nếu không hai cấu hình giống hệt nhau về ý nghĩa lại cho
+	// hai checksum khác nhau chỉ vì device còn giữ baud cũ.
+	ApplyBusInheritance(&cfg)
 
 	cfg.Revision = previous.Revision + 1
 	// MBR-B206: checksum tính trên canonical form của NGUỒN CHÂN LÝ, trước khi

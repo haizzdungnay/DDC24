@@ -136,7 +136,7 @@ func TestKhoaBatBuocCuaIobusLuonCoTrongFileBeGhi(t *testing.T) {
 // driver — đúng thứ G-D đã bỏ công loại trừ.
 func TestApDungCauHinhKhongXoaChieuDieuHuongCuaBus(t *testing.T) {
 	onDisk := []byte(`{"buses":[{"bus_id":"rs485-1","port":"/dev/rs485-1","baud":19200,
-	  "parity":"N","stop_bit":1,"data_bits":8,"offline_probe_ms":5000,"enabled":true,
+	  "parity":"N","stop_bits":1,"data_bits":8,"offline_probe_ms":5000,"enabled":true,
 	  "direction":"rts","rts_delay_before_us":150,"rts_delay_after_us":250}]}`)
 
 	var cfg Config
@@ -160,6 +160,77 @@ func TestApDungCauHinhKhongXoaChieuDieuHuongCuaBus(t *testing.T) {
 	if back.Buses[0].RtsDelayBeforeUs != 150 || back.Buses[0].RtsDelayAfterUs != 250 {
 		t.Errorf("độ trễ RTS bị mất: before=%d after=%d",
 			back.Buses[0].RtsDelayBeforeUs, back.Buses[0].RtsDelayAfterUs)
+	}
+}
+
+// `OD-MBRTU-002` (CLOSED): serial format thuộc DÂY, Device kế thừa.
+//
+// Bản trước phát biểu điều đó ở tài liệu và validator nhưng không có chỗ nào
+// đồng bộ thật, nên đổi baud của cổng xong bảng Thiết bị vẫn hiện baud cũ —
+// người vận hành đọc một con số không đúng với thứ đang chạy trên dây.
+func TestDoiThamSoCuaCongThiMoiThietBiTrenCongDiTheo(t *testing.T) {
+	cfg := Config{
+		Buses: []Bus{NormalizeBus(Bus{BusID: "rs485-2", Port: "/dev/rs485-2",
+			Baud: 38400, Parity: "E", StopBit: 2, Enabled: true})},
+		Devices: []Device{
+			// Giá trị cũ, còn sót từ lúc form Thiết bị cho nhập tay.
+			{DeviceID: "mtr-1", BusID: "rs485-2", RS485Port: "/dev/rs485-2",
+				Baud: 9600, Parity: "N", StopBit: 1},
+		},
+	}
+	ApplyBusInheritance(&cfg)
+
+	device := cfg.Devices[0]
+	if device.Baud != 38400 || device.Parity != "E" || device.StopBit != 2 {
+		t.Errorf("thiết bị không kế thừa tham số của cổng: baud=%d parity=%q stop_bits=%d",
+			device.Baud, device.Parity, device.StopBit)
+	}
+}
+
+// Thiết bị trỏ tới bus không tồn tại thì KHÔNG được bịa giá trị: validator phải
+// còn thấy tham chiếu sai để báo, thay vì nhận một cấu hình đã bị lấp liếm.
+func TestBusKhongTonTaiThiKhongBiaThamSoChoThietBi(t *testing.T) {
+	cfg := Config{
+		Buses:   []Bus{NormalizeBus(Bus{BusID: "rs485-1", Port: "/dev/rs485-1", Baud: 19200})},
+		Devices: []Device{{DeviceID: "x", BusID: "rs485-9", Baud: 9600}},
+	}
+	ApplyBusInheritance(&cfg)
+	if cfg.Devices[0].Baud != 9600 {
+		t.Errorf("đã ghi đè tham số của thiết bị trỏ tới bus không tồn tại: %d", cfg.Devices[0].Baud)
+	}
+}
+
+// Ánh xạ bus_id ↔ device node là sự thật phần cứng, không phải lựa chọn: cho
+// sửa tự do nghĩa là cho phép trỏ hai bus vào cùng một node.
+func TestBusIdChiAnhXaToiDungMotCongPhanCung(t *testing.T) {
+	cases := map[string]string{
+		"rs485-1": "/dev/rs485-1",
+		"rs485-2": "/dev/rs485-2",
+		"RS485-2": "/dev/rs485-2",
+		"rs485-9": "",
+		"":        "",
+	}
+	for busID, want := range cases {
+		if got := PortForBusID(busID); got != want {
+			t.Errorf("PortForBusID(%q) = %q, chờ %q", busID, got, want)
+		}
+	}
+}
+
+// Tên cũ `stop_bit` còn nằm trong file trên các bo đã triển khai. Bỏ qua nó thì
+// cổng lặng lẽ về 1 stop bit — sai khung truyền mà không có dòng lỗi nào.
+func TestDocDuocTenCuStopBit(t *testing.T) {
+	var cfg Config
+	raw := []byte(`{"buses":[{"bus_id":"rs485-1","port":"/dev/rs485-1","stop_bit":2}],
+	  "devices":[{"device_id":"d1","bus_id":"rs485-1","stop_bit":2}]}`)
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Buses[0].StopBit != 2 {
+		t.Errorf("bus stop_bit cũ bị bỏ qua: %d", cfg.Buses[0].StopBit)
+	}
+	if cfg.Devices[0].StopBit != 2 {
+		t.Errorf("device stop_bit cũ bị bỏ qua: %d", cfg.Devices[0].StopBit)
 	}
 }
 
@@ -211,7 +282,7 @@ func TestDocDuocBusVietTheoTuVungRutGonCuaIobus(t *testing.T) {
 // là thứ BE ghi ra, nên nó phản ánh thao tác gần nhất của người dùng.
 func TestTuVungChuanThangTuVungRutGonKhiCaHaiCungCo(t *testing.T) {
 	var cfg Config
-	raw := []byte(`{"buses":[{"bus_id":"rs485-1","port":"/dev/rs485-1","stop_bit":1,
+	raw := []byte(`{"buses":[{"bus_id":"rs485-1","port":"/dev/rs485-1","stop_bits":1,
 	  "id":2,"device":"/dev/rs485-2","stop":2}]}`)
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		t.Fatal(err)

@@ -19,7 +19,7 @@ func TestModbusRTUCRUDPersistsProfileAndKeepsPointIDOnRename(t *testing.T) {
 		return true, nil
 	}
 
-	deviceBody := `{"device_id":"ahu-1","display_name":"AHU 1","enabled":false,"rs485_port":"/dev/rs485-1","baud":19200,"parity":"E","stop_bit":1,"slave_id":7,"poll_ms":1000,"timeout_ms":300,"retry":2}`
+	deviceBody := `{"device_id":"ahu-1","display_name":"AHU 1","enabled":false,"rs485_port":"/dev/rs485-1","baud":19200,"parity":"E","stop_bits":1,"slave_id":7,"poll_ms":1000,"timeout_ms":300,"retry":2}`
 	w := modbusServeAuth(t, app, token, http.MethodPost, "/api/v1/modbus/devices", deviceBody)
 	if w.Code != http.StatusOK {
 		t.Fatalf("create device status=%d body=%s", w.Code, w.Body.String())
@@ -85,7 +85,7 @@ func TestModbusRTURejectsTagOwnedByVirtualPoint(t *testing.T) {
 	app, token := newTestAppWithAdmin(t)
 	app.reloadDispatcher = func(string) (bool, []string) { return true, nil }
 	writeVirtualPointsSeed(t, app, `{"items":[{"id":"VP1","tag":"occupied","label":"Occupied","signalType":"boolean","enabled":true,"writable":true,"value":false}]}`)
-	device := `{"device_id":"rtu-1","display_name":"RTU 1","enabled":false,"rs485_port":"/dev/rs485-1","baud":9600,"parity":"N","stop_bit":1,"slave_id":1,"poll_ms":1000,"timeout_ms":300,"retry":2}`
+	device := `{"device_id":"rtu-1","display_name":"RTU 1","enabled":false,"rs485_port":"/dev/rs485-1","baud":9600,"parity":"N","stop_bits":1,"slave_id":1,"poll_ms":1000,"timeout_ms":300,"retry":2}`
 	if w := modbusServeAuth(t, app, token, http.MethodPost, "/api/v1/modbus/devices", device); w.Code != http.StatusOK {
 		t.Fatalf("create device status=%d body=%s", w.Code, w.Body.String())
 	}

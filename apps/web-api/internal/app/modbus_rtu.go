@@ -14,6 +14,7 @@ import (
 var errModbusApply = webModbus.ErrApply
 
 type modbusMutationResponse struct {
+	Bus    *webModbus.Bus   `json:"bus,omitempty"`
 	Device *ModbusRTUDevice `json:"device,omitempty"`
 	Point  *ModbusRTUPoint  `json:"point,omitempty"`
 	Apply  ConfigPutResult  `json:"apply"`
@@ -399,17 +400,20 @@ type modbusOverview struct {
 }
 
 type modbusBusInfo struct {
-	BusID         string `json:"bus_id"`
-	DisplayName   string `json:"display_name"`
-	Port          string `json:"port"`
-	PortAlias     string `json:"port_alias"`
-	OpenState     string `json:"open_state"`
-	Baud          int    `json:"baud"`
-	Parity        string `json:"parity"`
-	DataBits      int    `json:"data_bits"`
-	StopBits      int    `json:"stop_bits"`
-	TotalDevices  int    `json:"total_devices"`
-	OnlineDevices int    `json:"online_devices"`
+	BusID       string `json:"bus_id"`
+	DisplayName string `json:"display_name"`
+	Port        string `json:"port"`
+	PortAlias   string `json:"port_alias"`
+	OpenState   string `json:"open_state"`
+	Baud        int    `json:"baud"`
+	Parity      string `json:"parity"`
+	DataBits    int    `json:"data_bits"`
+	StopBits    int    `json:"stop_bits"`
+	// Cấu hình đang lưu — trang Cổng RS-485 nạp form từ đây thay vì đoán mặc định.
+	OfflineProbeMs int  `json:"offline_probe_ms"`
+	Enabled        bool `json:"enabled"`
+	TotalDevices   int  `json:"total_devices"`
+	OnlineDevices  int  `json:"online_devices"`
 	// Con trỏ: nil = iobus chưa đo được. FE hiện "—" thay vì 0.
 	PollLatencyP50 *int     `json:"poll_latency_p50_ms"`
 	PollLatencyP95 *int     `json:"poll_latency_p95_ms"`
@@ -562,6 +566,7 @@ func (a *App) handleGetModbusBuses(w http.ResponseWriter, r *http.Request) {
 			BusID: bus.BusID, DisplayName: bus.DisplayName, Port: bus.Port,
 			PortAlias: aliasByPort[bus.Port], Baud: bus.Baud, Parity: bus.Parity,
 			DataBits: bus.DataBits, StopBits: bus.StopBit,
+			OfflineProbeMs: bus.OfflineProbeMs, Enabled: bool(bus.Enabled),
 			OpenState:     "UNKNOWN",
 			EstimatedLoad: loadByBus[bus.BusID],
 		}
@@ -686,4 +691,98 @@ func (a *App) recordModbusEvents(ctx context.Context) {
 		}
 		a.modbusEvents.observe(device.DeviceID, modbusDeviceBus(device), state, now)
 	}
+}
+
+// handleUpdateModbusBus — cấu hình MỘT cổng RS-485 và áp ngay cho riêng cổng đó.
+//
+// Trước bản này KHÔNG có đường nào sửa được Bus từ giao diện: chỉ có
+// `GET /modbus/buses`. Mô hình dữ liệu khai Bus là chủ sở hữu tham số serial,
+// validator cưỡng chế điều đó, còn giao diện thì vẫn mời người dùng nhập
+// baud/parity/stop ở từng Thiết bị — nhập xong mới bị từ chối, và không có chỗ
+// nào sửa cho đúng. Endpoint này đóng khoảng trống đó.
+//
+// Ba trường CỐ TÌNH không nhận từ client:
+//
+//   - `bus_id`  — định danh cổng, bất biến; lấy từ đường dẫn.
+//   - `port`    — ánh xạ bus_id ↔ device node là sự thật phần cứng. Cho sửa tự
+//     do nghĩa là cho phép trỏ hai bus vào cùng một node.
+//   - `data_bits` — iobus viết cứng 8 trong `modbus_new_rtu()`.
+//
+// `direction` cũng không nhận: phần cứng MK-DDC-24 chỉ có TX/RX, không có DE/RE
+// (`G-D` CLOSED). Một nút bấm đổi được nó chỉ tạo cơ hội tự bắn vào chân mình.
+func (a *App) handleUpdateModbusBus(w http.ResponseWriter, r *http.Request) {
+	busID := strings.ToLower(strings.TrimSpace(r.PathValue("bus_id")))
+	port := webModbus.PortForBusID(busID)
+	if port == "" {
+		writeValidationErrors(w, []configValidationError{{
+			Path: "bus_id", Message: "chỉ nhận rs485-1 hoặc rs485-2",
+			Reason: webModbus.CodeNotFound}})
+		return
+	}
+
+	// Con trỏ để phân biệt "không gửi trường này" với "gửi giá trị 0". Gộp hai
+	// thứ đó lại sẽ biến một PATCH thiếu trường thành lệnh đặt baud = 0.
+	var req struct {
+		DisplayName    *string `json:"display_name"`
+		Baud           *int    `json:"baud"`
+		Parity         *string `json:"parity"`
+		StopBits       *int    `json:"stop_bits"`
+		OfflineProbeMS *int    `json:"offline_probe_ms"`
+		Enabled        *bool   `json:"enabled"`
+	}
+	if err := decodeConfigBody(w, r, &req); err != nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
+		return
+	}
+
+	a.mutateModbusConfig(w, r, func(cfg *ConfigFieldbus) (modbusMutationResponse, []configValidationError) {
+		if len(cfg.Buses) == 0 {
+			buses, _ := webModbus.MigrateBuses(*cfg)
+			cfg.Buses = buses
+		}
+		index := -1
+		for i := range cfg.Buses {
+			if strings.EqualFold(cfg.Buses[i].BusID, busID) {
+				index = i
+				break
+			}
+		}
+		if index < 0 {
+			// Cổng có trong phần cứng nhưng chưa có trong cấu hình: tạo mới thay
+			// vì báo lỗi. Bắt người dùng "thêm cổng" cho một cổng hàn sẵn trên bo
+			// là bắt họ khai báo một sự thật vật lý.
+			cfg.Buses = append(cfg.Buses, webModbus.NormalizeBus(webModbus.Bus{
+				BusID: busID, Port: port, Enabled: true,
+			}))
+			index = len(cfg.Buses) - 1
+		}
+		bus := cfg.Buses[index]
+		bus.BusID = busID
+		bus.Port = port
+		bus.DataBits = 8
+		if req.DisplayName != nil {
+			bus.DisplayName = *req.DisplayName
+		}
+		if req.Baud != nil {
+			bus.Baud = *req.Baud
+		}
+		if req.Parity != nil {
+			bus.Parity = *req.Parity
+		}
+		if req.StopBits != nil {
+			bus.StopBit = *req.StopBits
+		}
+		if req.OfflineProbeMS != nil {
+			bus.OfflineProbeMs = *req.OfflineProbeMS
+		}
+		if req.Enabled != nil {
+			bus.Enabled = webModbus.FlexBool(*req.Enabled)
+		}
+		cfg.Buses[index] = webModbus.NormalizeBus(bus)
+		// Đổi tham số của dây thì mọi thiết bị trên dây đó phải đi theo ngay —
+		// nếu không, bảng Thiết bị hiện baud cũ trong khi cổng đã chạy baud mới.
+		webModbus.ApplyBusInheritance(cfg)
+		result := cfg.Buses[index]
+		return modbusMutationResponse{Bus: &result}, nil
+	})
 }

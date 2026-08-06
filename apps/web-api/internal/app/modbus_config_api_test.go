@@ -17,8 +17,8 @@ import (
 // all-or-nothing, rate limit commissioning, và việc API không còn bịa số.
 
 const (
-	testBusRS4851 = `{"bus_id":"rs485-1","display_name":"RS485-1","port":"/dev/rs485-1","baud":19200,"parity":"N","stop_bit":1,"data_bits":8,"offline_probe_ms":5000,"enabled":true}`
-	testDeviceA   = `{"device_id":"mtr-1","display_name":"Meter 1","enabled":true,"bus_id":"rs485-1","rs485_port":"/dev/rs485-1","baud":19200,"parity":"N","stop_bit":1,"slave_id":3,"poll_ms":1000,"timeout_ms":300,"retry":1,"offline_after_errors":2}`
+	testBusRS4851 = `{"bus_id":"rs485-1","display_name":"RS485-1","port":"/dev/rs485-1","baud":19200,"parity":"N","stop_bits":1,"data_bits":8,"offline_probe_ms":5000,"enabled":true}`
+	testDeviceA   = `{"device_id":"mtr-1","display_name":"Meter 1","enabled":true,"bus_id":"rs485-1","rs485_port":"/dev/rs485-1","baud":19200,"parity":"N","stop_bits":1,"slave_id":3,"poll_ms":1000,"timeout_ms":300,"retry":1,"offline_after_errors":2}`
 	testPointA    = `{"point_id":"MB-KWH","device_id":"mtr-1","tag_name":"meter kwh","display_name":"Meter kWh","register_type":"holding_register","address":0,"data_type":"uint32","byte_order":"big","word_order":"high_low","scale":1,"offset":0,"unit":"kWh","read_write":"read","enabled":true}`
 )
 

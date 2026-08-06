@@ -241,7 +241,7 @@ func busFields(b Bus) map[string]string {
 		"port":             b.Port,
 		"baud":             fmt.Sprint(b.Baud),
 		"parity":           b.Parity,
-		"stop_bit":         fmt.Sprint(b.StopBit),
+		"stop_bits":        fmt.Sprint(b.StopBit),
 		"offline_probe_ms": fmt.Sprint(b.OfflineProbeMs),
 		"enabled":          fmt.Sprint(b.Enabled),
 	}
