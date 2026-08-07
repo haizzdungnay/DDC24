@@ -53,6 +53,10 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [42](42_HISTORIAN_FE_PROTOTYPE_PLAN.md) | SQLite historian, shared point logging, unified Trends | Approved — implementation open |
 | 43 — hồ sơ chưa được phục hồi | Independent point tag/name namespaces + Programming alias | Missing — không tạo link giả |
 | [46](46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN.md) | Restructure repository theo process-first + bounded modules; source migration, bounded context, nghiệm thu target và rollback đều hoàn tất | **Closed** — G0..G5 PASS; `RST-205` closure review 2026-08-04 |
+| [44](44_TIME_DATE_IEC61131_3_READINESS_PLAN.md) | Time/Date production slice và IEC 61131-3 readiness | In progress — TIME-002/004/005 xong local; gate board/recovery/Rev C còn mở |
+| [45](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) | Dọn blocker Web UI/UX + CI/CD tự động deploy | Approved — Track A xong 2026-08-01; Track B hoãn |
 | [47](47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md) | Runbook nghiệm thu target `RST-202`: build native trên board, install, startup order, crash/restart, provenance và diễn tập rollback | Draft — chờ owner cấp target window |
+| [49](49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | Modbus RTU FE + BE + FW-SOM | Track A + Track B (phần mềm) xong 2026-08-06; treo `G-C`/`G-D` phụ thuộc phần cứng |
+| [50](50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) | Scheduler Engine v3.1 — bỏ mô hình thanh ghi `TSx`, chuyển sang Schedule Object (5 pha · 78 task · 63 người-ngày) | **DRAFT — chờ phê duyệt**; P0 là cổng chặn cứng, 6 quyết định treo |
 
 **Archived:** [S7 Hardening Code Review](../review/2026-06-13-s7-hardening-review.md)
