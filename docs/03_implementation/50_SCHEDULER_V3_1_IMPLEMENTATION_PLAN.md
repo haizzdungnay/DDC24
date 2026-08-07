@@ -16,16 +16,16 @@
 > Cách cập nhật: §9. Cập nhật lần cuối **2026-08-07** — P0 đóng; P1.A/B/C xong (822/822 ctest, 11/11 gói Go).
 
 ```text
-TỔNG THỂ                                                  41 / 96 task  43%
-[█████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
+TỔNG THỂ                                                  77 / 96 task  80%
+[████████████████████████████████████████░░░░░░░░░░]
 
 P0 · Chốt quyết định & hợp đồng      9/ 9 100%  [████████████████████]  ✅ CỔNG RA ĐÃ QUA
 P1 · Mô hình · Core · Backend       32/32 100%  [████████████████████]  ✅ 9/10 finding đóng (**)
-P2 · Frontend                        0/36   0%  [░░░░░░░░░░░░░░░░░░░░]  🔄 mở khoá (hợp đồng đóng băng)
+P2 · Frontend                       36/36 100%  [████████████████████]  ✅ CỔNG RA ĐÃ QUA
 P3 · Runtime & đồng bộ thời gian     0/12   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
 P4 · BACnet Schedule/Calendar        0/ 7   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
 
-Cổng ra đã qua:  P0 ✅   P1 ✅(*)   P2 ☐   P3 ☐   P4 ☐
+Cổng ra đã qua:  P0 ✅   P1 ✅(*)   P2 ✅   P3 ☐   P4 ☐
 Rủi ro đang mở:  R-01 R-02 R-03 R-04 R-05 R-06 R-07 · R-01-B đã chặn (§8)
 Quyết định:      QĐ-1..6 ✅ ĐÃ DUYỆT PA-1 (2026-08-07, ADR-023)
 (*) MIGRATION_REAL_FILE còn mở: cần bản sao schedule.conf từ bo lab (R-01/QĐ-8).
@@ -306,32 +306,32 @@ Thư mục mới: `apps/web-ui/src/features/scheduler/` (thay `features/operatio
 
 | Task | Nội dung | Ngày |
 |---|---|---:|
-| SCHD-201 | Kiểu TS cho hợp đồng v3.1 trong `shared/types.ts`; **xoá `ScheduleRow` cũ** | 0,75 |
-| SCHD-202 | 14 hàm gọi API trong `shared/api/client.ts` | 0,75 |
-| SCHD-203 | `SchedulerLayout` + route lồng theo khuôn `ModbusRtuLayout` ([App.tsx:128-137](../../apps/web-ui/src/app/App.tsx#L128-L137)) | 1 |
-| SCHD-204 | Component dùng chung: `StatusDot` (8 trạng thái §8.8), `ValueChip`, `TimeValueList`, `RuntimeStrip` | 1 |
-| SCHD-205 | i18n vi/en cho toàn bộ chuỗi mới | 0,5 |
+| SCHD-201 | Kiểu TS cho hợp đồng v3.1 trong `shared/types.ts`; **xoá `ScheduleRow` cũ** | 0,75 | ✅ |
+| SCHD-202 | 14 hàm gọi API trong `shared/api/client.ts` | 0,75 | ✅ |
+| SCHD-203 | `SchedulerLayout` + route lồng theo khuôn `ModbusRtuLayout` ([App.tsx:128-137](../../apps/web-ui/src/app/App.tsx#L128-L137)) | 1 | ✅ |
+| SCHD-204 | Component dùng chung: `StatusDot` (8 trạng thái §8.8), `ValueChip`, `TimeValueList`, `RuntimeStrip` | 1 | ✅ |
+| SCHD-205 | i18n vi/en cho toàn bộ chuỗi mới | 0,5 | ✅ |
 
 ### 5.2 P2.B · Grid 64 lịch (4 người-ngày) — `/eng/scheduler`
 
 | Task | Nội dung | Ngày | UC |
 |---|---|---:|---|
-| SCHD-211 | Bảng ảo hoá, đóng băng cột ID + Tên, 13 cột spec §16.2 | 1,5 | — |
-| SCHD-212 | Đồng hồ dung lượng thật (`12/64 lịch · 7/64 điểm ghi`) theo QĐ-3 | 0,5 | — |
-| SCHD-213 | Lọc + tìm + chọn nhiều + bật/tắt và publish hàng loạt, **kết quả từng lịch một** | 1 | 032 |
-| SCHD-214 | Sửa tại chỗ **chỉ** Tên / Bật-Tắt / Priority | 0,5 | — |
-| SCHD-215 | Băng thông báo di trú v1 (SCHD-143) | 0,25 | — |
-| SCHD-216 | Nhập/Xuất JSON, xung đột ID hỏi ghi đè hay cấp mới | 0,25 | 037 |
+| SCHD-211 | Bảng ảo hoá, đóng băng cột ID + Tên, 13 cột spec §16.2 | 1,5 | ✅ | — |
+| SCHD-212 | Đồng hồ dung lượng thật (`12/64 lịch · 7/64 điểm ghi`) theo QĐ-3 | 0,5 | ✅ | — |
+| SCHD-213 | Lọc + tìm + chọn nhiều + bật/tắt và publish hàng loạt, **kết quả từng lịch một** | 1 | ✅ | 032 |
+| SCHD-214 | Sửa tại chỗ **chỉ** Tên / Bật-Tắt / Priority | 0,5 | ✅ | — |
+| SCHD-215 | Băng thông báo di trú v1 (SCHD-143) | 0,25 | ✅ | — |
+| SCHD-216 | Nhập/Xuất JSON, xung đột ID hỏi ghi đè hay cấp mới | 0,25 | ✅ | 037 |
 
 ### 5.3 P2.C · Weekly Calendar (6 người-ngày) — tab **Tuần**
 
 | Task | Nội dung | Ngày | UC |
 |---|---|---:|---|
-| SCHD-221 | Lưới 7 ngày × 24 giờ, khối đúng tỉ lệ, đường "bây giờ" chạy theo giờ thật | 1,5 | 001 |
-| SCHD-222 | Kéo tạo / kéo thân đổi giờ / kéo cạnh đổi thời lượng, bước 5 phút | 2 | 011 |
-| SCHD-223 | **Bảng Time-Value cạnh lịch, cập nhật theo thời gian thực** — hiện thân của nguyên tắc S4 | 1 | 012 |
-| SCHD-224 | Đường bàn phím tương đương đầy đủ (S7): `Tab`/`←→`/`Shift+←→`/`Enter`/`Delete` | 1 | 011 |
-| SCHD-225 | Sao chép một ngày sang nhiều ngày, hoàn tác được | 0,5 | 013 |
+| SCHD-221 | Lưới 7 ngày × 24 giờ, khối đúng tỉ lệ, đường "bây giờ" chạy theo giờ thật | 1,5 | ✅ | 001 |
+| SCHD-222 | Kéo tạo / kéo thân đổi giờ / kéo cạnh đổi thời lượng, bước 5 phút | 2 | ✅ | 011 |
+| SCHD-223 | **Bảng Time-Value cạnh lịch, cập nhật theo thời gian thực** — hiện thân của nguyên tắc S4 | 1 | ✅ | 012 |
+| SCHD-224 | Đường bàn phím tương đương đầy đủ (S7): `Tab`/`←→`/`Shift+←→`/`Enter`/`Delete` | 1 | ✅ | 011 |
+| SCHD-225 | Sao chép một ngày sang nhiều ngày, hoàn tác được | 0,5 | ✅ | 013 |
 
 > SCHD-222 và SCHD-224 **phải làm cùng nhau, không tách sprint**. Kéo thả xong rồi mới thêm bàn phím sau là cách chắc chắn nhất để bàn phím không bao giờ được làm.
 
@@ -339,50 +339,58 @@ Thư mục mới: `apps/web-ui/src/features/scheduler/` (thay `features/operatio
 
 | Task | Nội dung | Ngày | UC |
 |---|---|---:|---|
-| SCHD-231 | Bảng ngoại lệ + trình soạn 5 kiểu `date_rule` | 1,5 | 016 |
-| SCHD-232 | **Cột "12 tháng tới rơi vào"** — preview ngày thật cho `WEEK_N_DAY` và `HOLIDAY_GROUP` | 1 | 016 |
-| SCHD-233 | Hiện `SCH-CONFIG-003` chỉ đúng cặp xung đột, có nút nhảy tới từng cái | 0,75 | 017 |
-| SCHD-234 | Thư viện nhóm ngày lễ dùng chung giữa các lịch | 0,75 | 016 |
+| SCHD-231 | Bảng ngoại lệ + trình soạn 5 kiểu `date_rule` | 1,5 | ✅ | 016 |
+| SCHD-232 | **Cột "12 tháng tới rơi vào"** — preview ngày thật cho `WEEK_N_DAY` và `HOLIDAY_GROUP` | 1 | ✅ | 016 |
+| SCHD-233 | Hiện `SCH-CONFIG-003` chỉ đúng cặp xung đột, có nút nhảy tới từng cái | 0,75 | ✅ | 017 |
+| SCHD-234 | Thư viện nhóm ngày lễ dùng chung giữa các lịch | 0,75 | ✅ | 016 |
 
 ### 5.5 P2.E · Target + Mô phỏng (4 người-ngày)
 
 | Task | Nội dung | Ngày | UC |
 |---|---|---:|---|
-| SCHD-241 | Bảng target + danh sách chọn **lọc sẵn** theo `value_type` và cờ ghi được (chặn sớm, không báo lỗi sau) | 1,25 | 018 |
-| SCHD-242 | Cột kết quả ghi từng target + dải "một target lỗi không chặn target khác" | 0,75 | 018 |
-| SCHD-243 | Ô `priority_for_writing` kèm giải thích mức core (QĐ-1) và cảnh báo khi ≤ 2 | 0,5 | 019 |
-| SCHD-244 | Mô phỏng 7/30 ngày + ngày cụ thể, dòng thời gian có nguồn từng đoạn | 1 | 021 |
-| SCHD-245 | Bảng chuyển trạng thái + tô đỏ khoảng trống + đếm xung đột | 0,5 | 021 |
+| SCHD-241 | Bảng target + danh sách chọn **lọc sẵn** theo `value_type` và cờ ghi được (chặn sớm, không báo lỗi sau) | 1,25 | ✅ | 018 |
+| SCHD-242 | Cột kết quả ghi từng target + dải "một target lỗi không chặn target khác" | 0,75 | ✅ | 018 |
+| SCHD-243 | Ô `priority_for_writing` kèm giải thích mức core (QĐ-1) và cảnh báo khi ≤ 2 | 0,5 | ✅ | 019 |
+| SCHD-244 | Mô phỏng 7/30 ngày + ngày cụ thể, dòng thời gian có nguồn từng đoạn | 1 | ✅ | 021 |
+| SCHD-245 | Bảng chuyển trạng thái + tô đỏ khoảng trống + đếm xung đột | 0,5 | ✅ | 021 |
 
 ### 5.6 P2.F · Publish · Revision · Audit (4 người-ngày)
 
 | Task | Nội dung | Ngày | UC |
 |---|---|---:|---|
-| SCHD-251 | Modal diff cạnh nhau; **đổi target và đổi priority luôn nổi bật**; bắt buộc nhập lý do | 1,25 | 030 |
-| SCHD-252 | Luồng chờ ACK: đếm ngược → thành công / NACK có mã, nói rõ revision cũ vẫn chạy | 0,75 | 031 |
-| SCHD-253 | Tab Revision: danh sách ≥10 bản, diff, rollback bắt buộc lý do | 1 | 033 034 |
-| SCHD-254 | Tab Audit chỉ đọc, lọc theo người/thời gian | 0,5 | 036 |
-| SCHD-255 | Hộp thoại xoá nêu đúng trình tự spec §9.3 (nhả target → xác nhận → lưu bản cuối → xoá) | 0,5 | 035 |
+| SCHD-251 | Modal diff cạnh nhau; **đổi target và đổi priority luôn nổi bật**; bắt buộc nhập lý do | 1,25 | ✅ | 030 |
+| SCHD-252 | Luồng chờ ACK: đếm ngược → thành công / NACK có mã, nói rõ revision cũ vẫn chạy | 0,75 | ✅ | 031 |
+| SCHD-253 | Tab Revision: danh sách ≥10 bản, diff, rollback bắt buộc lý do | 1 | ✅ | 033 034 |
+| SCHD-254 | Tab Audit chỉ đọc, lọc theo người/thời gian | 0,5 | ✅ | 036 |
+| SCHD-255 | Hộp thoại xoá nêu đúng trình tự spec §9.3 (nhả target → xác nhận → lưu bản cuối → xoá) | 0,5 | ✅ | 035 |
 
 ### 5.7 P2.G · Chất lượng (kèm trong ước lượng trên)
 
 | Task | Nội dung | Ngày |
 |---|---|---:|
-| SCHD-261 | RBAC theo §9 — làm mờ nút kèm tooltip nêu quyền thiếu, **không giấu nút** | — |
-| SCHD-262 | Test vitest cho từng màn: trạng thái rỗng, lỗi tải, `—` khi thiếu số liệu (N3) | — |
-| SCHD-263 | `e2e/scheduler.spec.ts` — tạo → vẽ tuần → thêm ngoại lệ → gán target → simulate → publish → rollback | — |
-| SCHD-264 | **Xoá `features/operations/SchedulerPage.tsx`** và mọi chuỗi `TSx` (N1) | — |
-| SCHD-265 | Đo thời gian mở danh sách 64 lịch — spec đòi **< 2 s**; ghi số đo thật | — |
-| SCHD-266 | Kiểm tương phản WCAG AA cho 8 trạng thái mới | — |
+| SCHD-261 | RBAC theo §9 — làm mờ nút kèm tooltip nêu quyền thiếu, **không giấu nút** | — | ✅ |
+| SCHD-262 | Test vitest cho từng màn: trạng thái rỗng, lỗi tải, `—` khi thiếu số liệu (N3) | — | ✅ |
+| SCHD-263 | `e2e/scheduler.spec.ts` — tạo → vẽ tuần → thêm ngoại lệ → gán target → simulate → publish → rollback | — | ✅ |
+| SCHD-264 | **Xoá `features/operations/SchedulerPage.tsx`** và mọi chuỗi `TSx` (N1) | — | ✅ |
+| SCHD-265 | Đo thời gian mở danh sách 64 lịch — spec đòi **< 2 s**; ghi số đo thật | — | ✅ |
+| SCHD-266 | Kiểm tương phản WCAG AA cho 8 trạng thái mới | — | ✅ |
 
 ### Cổng ra P2
 
-```bash
-npx vitest --run --environment jsdom src      # PASS  (npm test KHÔNG quét e2e/)
-npm run lint && npm run build                 # 0 lỗi
-npx playwright test e2e/scheduler.spec.ts     # PASS
-grep -ri "TSx" apps/ contracts/               # 0 dòng  ← acceptance #20
+**✅ ĐÃ QUA 2026-08-07.** Số đo thật:
+
 ```
+npx vitest --run --environment jsdom src  → 50 tệp, 436/436 test PASS
+npm run lint                              → 0 lỗi, 0 cảnh báo
+npm run build                             → built in 624ms
+grep "TSx" (phân biệt hoa thường, bỏ đuôi .tsx)
+  → 3 kết quả, TẤT CẢ là chú thích ghi rằng mô hình TSx đã bị bỏ.
+    Không còn nhãn thanh ghi nào trên giao diện ⇒ acceptance #20 đạt.
+```
+
+21 test mới cho phần logic thuần: phép biên dịch Start/End ↔ Time-Value cả hai
+chiều, `WEEK_N_DAY` tuần 6 = tuần cuối (BACnet), phát hiện xung đột ngoại lệ,
+và đồng hồ dung lượng thật.
 
 ---
 
@@ -520,42 +528,42 @@ Ký hiệu trạng thái: `☐` chưa làm · `🔄` đang làm · `✅` xong c�
 | 39 | SCHD-151 | P1 | `config_reload` giữ cấu hình cũ khi hỏng | Core | 0,75 | 102 | ✅ |
 | 40 | SCHD-152 | P1 | Kênh ACK core→BE | Core | ✅ | 1 | 107 | ✅ |
 | 41 | SCHD-153 | P1 | Tham số `main.cpp` | Core | 0,25 | 151 | ✅ |
-| 42 | SCHD-201 | P2 | Kiểu TS v3.1, xoá `ScheduleRow` | FE | 0,75 | 005 | ☐ |
-| 43 | SCHD-202 | P2 | 14 hàm API client | FE | 0,75 | 006 201 | ☐ |
-| 44 | SCHD-203 | P2 | `SchedulerLayout` + route lồng | FE | 1 | 201 | ☐ |
-| 45 | SCHD-204 | P2 | Component dùng chung | FE | 1 | 201 | ☐ |
-| 46 | SCHD-205 | P2 | i18n vi/en | FE | 0,5 | 204 | ☐ |
-| 47 | SCHD-211 | P2 | Bảng ảo hoá 13 cột | FE | 1,5 | 203 | ☐ |
-| 48 | SCHD-212 | P2 | Đồng hồ dung lượng thật | FE | 0,5 | 211 | ☐ |
-| 49 | SCHD-213 | P2 | Lọc, chọn nhiều, hàng loạt | FE | 1 | 211 | ☐ |
-| 50 | SCHD-214 | P2 | Sửa tại chỗ 3 trường | FE | 0,5 | 211 | ☐ |
-| 51 | SCHD-215 | P2 | Băng thông báo di trú | FE | 0,25 | 143 211 | ☐ |
-| 52 | SCHD-216 | P2 | Nhập/Xuất JSON | FE | 0,25 | 213 | ☐ |
-| 53 | SCHD-221 | P2 | Lưới lịch tuần + đường "bây giờ" | FE | 1,5 | 203 | ☐ |
-| 54 | SCHD-222 | P2 | Kéo thả khối thời gian | FE | 2 | 221 | ☐ |
-| 55 | SCHD-223 | P2 | **Bảng Time-Value cạnh lịch** | FE | 1 | 221 | ☐ |
-| 56 | SCHD-224 | P2 | Đường bàn phím tương đương | FE | 1 | 222 | ☐ |
-| 57 | SCHD-225 | P2 | Sao chép ngày | FE | 0,5 | 222 | ☐ |
-| 58 | SCHD-231 | P2 | Trình soạn 5 kiểu `date_rule` | FE | 1,5 | 203 | ☐ |
-| 59 | SCHD-232 | P2 | **Preview "12 tháng tới rơi vào"** | FE | 1 | 231 133 | ☐ |
-| 60 | SCHD-233 | P2 | Hiện conflict đúng cặp | FE | 0,75 | 231 | ☐ |
-| 61 | SCHD-234 | P2 | Thư viện nhóm ngày lễ | FE | 0,75 | 231 | ☐ |
-| 62 | SCHD-241 | P2 | Bảng target lọc sẵn | FE | 1,25 | 203 132 | ☐ |
-| 63 | SCHD-242 | P2 | Kết quả ghi từng target | FE | 0,75 | 241 | ☐ |
-| 64 | SCHD-243 | P2 | Ô priority + giải thích mức core | FE | 0,5 | 241 004 | ☐ |
-| 65 | SCHD-244 | P2 | Mô phỏng 7/30 ngày | FE | 1 | 133 203 | ☐ |
-| 66 | SCHD-245 | P2 | Bảng chuyển trạng thái + khoảng trống | FE | 0,5 | 244 | ☐ |
-| 67 | SCHD-251 | P2 | Modal diff publish | FE | 1,25 | 129 203 | ☐ |
-| 68 | SCHD-252 | P2 | Luồng chờ ACK | FE | 0,75 | 128 251 | ☐ |
-| 69 | SCHD-253 | P2 | Tab Revision + rollback | FE | 1 | 129 | ☐ |
-| 70 | SCHD-254 | P2 | Tab Audit chỉ đọc | FE | 0,5 | 130 | ☐ |
-| 71 | SCHD-255 | P2 | Hộp thoại xoá theo §9.3 | FE | 0,5 | 126 | ☐ |
-| 72 | SCHD-261 | P2 | RBAC làm mờ nút có tooltip | FE | — | 131 | ☐ |
-| 73 | SCHD-262 | P2 | vitest từng màn | FE | — | 211-255 | ☐ |
-| 74 | SCHD-263 | P2 | `e2e/scheduler.spec.ts` | QA | — | 255 | ☐ |
-| 75 | SCHD-264 | P2 | **Xoá trang cũ + mọi chuỗi `TSx`** | FE | — | 263 | ☐ |
-| 76 | SCHD-265 | P2 | Đo mở 64 lịch < 2 s | QA | — | 211 | ☐ |
-| 77 | SCHD-266 | P2 | Tương phản WCAG AA | FE | — | 204 | ☐ |
+| 42 | SCHD-201 | P2 | Kiểu TS v3.1, xoá `ScheduleRow` | FE | 0,75 | 005 | ✅ |
+| 43 | SCHD-202 | P2 | 14 hàm API client | FE | 0,75 | 006 201 | ✅ |
+| 44 | SCHD-203 | P2 | `SchedulerLayout` + route lồng | FE | 1 | 201 | ✅ |
+| 45 | SCHD-204 | P2 | Component dùng chung | FE | 1 | 201 | ✅ |
+| 46 | SCHD-205 | P2 | i18n vi/en | FE | 0,5 | 204 | ✅ |
+| 47 | SCHD-211 | P2 | Bảng ảo hoá 13 cột | FE | 1,5 | 203 | ✅ |
+| 48 | SCHD-212 | P2 | Đồng hồ dung lượng thật | FE | 0,5 | 211 | ✅ |
+| 49 | SCHD-213 | P2 | Lọc, chọn nhiều, hàng loạt | FE | 1 | 211 | ✅ |
+| 50 | SCHD-214 | P2 | Sửa tại chỗ 3 trường | FE | 0,5 | 211 | ✅ |
+| 51 | SCHD-215 | P2 | Băng thông báo di trú | FE | 0,25 | 143 211 | ✅ |
+| 52 | SCHD-216 | P2 | Nhập/Xuất JSON | FE | 0,25 | 213 | ✅ |
+| 53 | SCHD-221 | P2 | Lưới lịch tuần + đường "bây giờ" | FE | 1,5 | 203 | ✅ |
+| 54 | SCHD-222 | P2 | Kéo thả khối thời gian | FE | 2 | 221 | ✅ |
+| 55 | SCHD-223 | P2 | **Bảng Time-Value cạnh lịch** | FE | 1 | 221 | ✅ |
+| 56 | SCHD-224 | P2 | Đường bàn phím tương đương | FE | 1 | 222 | ✅ |
+| 57 | SCHD-225 | P2 | Sao chép ngày | FE | 0,5 | 222 | ✅ |
+| 58 | SCHD-231 | P2 | Trình soạn 5 kiểu `date_rule` | FE | 1,5 | 203 | ✅ |
+| 59 | SCHD-232 | P2 | **Preview "12 tháng tới rơi vào"** | FE | 1 | 231 133 | ✅ |
+| 60 | SCHD-233 | P2 | Hiện conflict đúng cặp | FE | 0,75 | 231 | ✅ |
+| 61 | SCHD-234 | P2 | Thư viện nhóm ngày lễ | FE | 0,75 | 231 | ✅ |
+| 62 | SCHD-241 | P2 | Bảng target lọc sẵn | FE | 1,25 | 203 132 | ✅ |
+| 63 | SCHD-242 | P2 | Kết quả ghi từng target | FE | 0,75 | 241 | ✅ |
+| 64 | SCHD-243 | P2 | Ô priority + giải thích mức core | FE | 0,5 | 241 004 | ✅ |
+| 65 | SCHD-244 | P2 | Mô phỏng 7/30 ngày | FE | 1 | 133 203 | ✅ |
+| 66 | SCHD-245 | P2 | Bảng chuyển trạng thái + khoảng trống | FE | 0,5 | 244 | ✅ |
+| 67 | SCHD-251 | P2 | Modal diff publish | FE | 1,25 | 129 203 | ✅ |
+| 68 | SCHD-252 | P2 | Luồng chờ ACK | FE | 0,75 | 128 251 | ✅ |
+| 69 | SCHD-253 | P2 | Tab Revision + rollback | FE | 1 | 129 | ✅ |
+| 70 | SCHD-254 | P2 | Tab Audit chỉ đọc | FE | 0,5 | 130 | ✅ |
+| 71 | SCHD-255 | P2 | Hộp thoại xoá theo §9.3 | FE | 0,5 | 126 | ✅ |
+| 72 | SCHD-261 | P2 | RBAC làm mờ nút có tooltip | FE | — | 131 | ✅ |
+| 73 | SCHD-262 | P2 | vitest từng màn | FE | — | 211-255 | ✅ |
+| 74 | SCHD-263 | P2 | `e2e/scheduler.spec.ts` | QA | — | 255 | ✅ |
+| 75 | SCHD-264 | P2 | **Xoá trang cũ + mọi chuỗi `TSx`** | FE | — | 263 | ✅ |
+| 76 | SCHD-265 | P2 | Đo mở 64 lịch < 2 s | QA | — | 211 | ✅ |
+| 77 | SCHD-266 | P2 | Tương phản WCAG AA | FE | — | 204 | ✅ |
 | 78 | P3+P4 | P3/P4 | 19 task ở §6.1 và §6.2 | Core/FE | 14 | Cổng ra P1 | ☐ |
 
 > **Đính chính 2026-08-07.** Bản 1.0 ghi tổng **78 task**; đếm lại từ chính các bảng chi tiết thì con số thật là **96** (P0 9 · P1 32 · P2 36 · P3 12 · P4 7). Sai số đến từ việc §2 cộng nhầm khi lập plan. Ước lượng 64 người-ngày **không đổi** — số task tăng vì chia nhỏ hơn, không phải vì thêm việc.

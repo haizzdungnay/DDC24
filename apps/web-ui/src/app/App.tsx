@@ -18,7 +18,8 @@ import {
 } from '../features/dashboard'
 import { DevicesPage, DiagnosticsPage, MappingPage, ModbusRtuLayout, OverviewPage, PointsPage, PortsPage } from '../features/modbus-rtu'
 import { DisplaySettingsPage, NetworkPage, SettingsPage, TimeSettingsPage } from '../features/network'
-import { AlarmHistoryPage, AlarmSettingsPage, AlarmsPage, SchedulerPage, TrendsPage } from '../features/operations'
+import { AlarmHistoryPage, AlarmSettingsPage, AlarmsPage, TrendsPage } from '../features/operations'
+import { ScheduleEditorPage, SchedulerGridPage, SchedulerLayout, SchedulerRuntimePage } from '../features/scheduler'
 import { CommissioningPage, InputsPage, MonitorPage, OutputsPage, UserParametersPage, VirtualPointsPage } from '../features/points'
 import { AppShell } from '../shared/components/AppShell'
 import { RequireRole } from '../shared/components/RequireRole'
@@ -103,7 +104,14 @@ export function App() {
         <Route path="settings/time" element={<RequireRole role={ROUTE_MIN_ROLE['/settings/time']}><TimeSettingsPage /></RequireRole>} />
         <Route path="settings/device" element={<RequireRole role={ROUTE_MIN_ROLE['/settings/device']}><SettingsPage /></RequireRole>} />
 
-        <Route path="eng/scheduler" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/scheduler']}><SchedulerPage /></RequireRole>} />
+        {/* Scheduler Engine v3.1 — 3 route + Editor 6 tab, theo khuôn
+            ModbusRtuLayout. Dựng 11 route rời như đặc tả §17 liệt kê sẽ làm
+            người dùng mất dấu bối cảnh giữa "lịch nào" và "màn nào". */}
+        <Route path="eng/scheduler" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/scheduler']}><SchedulerLayout /></RequireRole>}>
+          <Route index element={<SchedulerGridPage />} />
+          <Route path="runtime" element={<SchedulerRuntimePage />} />
+          <Route path=":id" element={<ScheduleEditorPage />} />
+        </Route>
         <Route path="eng/commissioning" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/commissioning']}><CommissioningPage /></RequireRole>} />
         {/* WEB-UX-007: thay `<Navigate to="/" replace />` im lặng bằng lời giải
             thích. Bấm vào menu rồi bị đá về Dashboard không kèm lý do là cách

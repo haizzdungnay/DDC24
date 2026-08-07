@@ -17,14 +17,12 @@ import {
   getDemoNetwork,
   getDemoOutputs,
   getDemoPoints,
-  getDemoSchedule,
   getDemoTimeConfig,
   getDemoTimeStatus,
   getDemoVirtualPoints,
   getUserParams as getDemoUserParams,
   deleteDemoVirtualPoint,
   putDemoAiInputs,
-  putDemoSchedule,
   putDemoTimeConfig,
   putAlarmSettings as putDemoAlarmSettings,
   putDemoOutputs,
@@ -36,7 +34,7 @@ import {
   updateDemoPointConfig,
   validateGraphLocal
 } from '../demo/simulator'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleRow, type ScheduleTarget, type ScheduleType, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
+import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmSetting, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type GraphValidationResult, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusRTUPoint, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -128,7 +126,6 @@ type ApiRequestInit = RequestInit & { suppressAuthExpired?: boolean; timeoutMs?:
 const defaultRequestTimeoutMs = 15_000
 type PointConfigPatch = { name?: string; unit?: string; trendEnabled?: boolean }
 type AlarmDurationChoice = { permanent: boolean; durationS?: number }
-const scheduleTypes: ScheduleType[] = ['not_active', 'controller_operation_mode', 'control_loop_setpoint', 'analog_output_value', 'fan_state_value', 'digital_output_value', 'holiday_period']
 
 export const POINT_UNIT_OPTIONS = [
   { value: '', label: '0 = No units shown' },
@@ -509,54 +506,7 @@ function normalizeTrendSample(raw: Record<string, unknown>): TrendSample {
   return sample
 }
 
-function normalizeSchedule(raw: Record<string, unknown>, index: number): ScheduleRow {
-  const scheduleType = scheduleTypes.includes(raw.scheduleType as ScheduleType) ? raw.scheduleType as ScheduleType : scheduleTypes.includes(raw.schedule_type as ScheduleType) ? raw.schedule_type as ScheduleType : 'not_active'
-  const weekdays = Array.isArray(raw.weekdays) ? raw.weekdays.map(String) : []
-  const startTime = String(raw.startTime ?? raw.start_time ?? raw.timeOfDay ?? raw.time_of_day ?? '08:00')
-  return {
-    id: String(raw.id ?? `SCH-${String(index + 1).padStart(3, '0')}`),
-    label: String(raw.label ?? raw.name ?? ''),
-    notes: stringFrom(raw.notes ?? raw.note),
-    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : false,
-    scheduleType,
-    timeOfDay: startTime,
-    startTime,
-    endTime: String(raw.endTime ?? raw.end_time ?? '17:00'),
-    startDate: stringFrom(raw.startDate ?? raw.start_date) || '01-01',
-    endDate: stringFrom(raw.endDate ?? raw.end_date) || '01-01',
-    weekdays,
-    target: normalizeScheduleTarget(raw.target),
-    value: numberFrom(raw.value) ?? 0
-  }
-}
 
-function normalizeScheduleTarget(value: unknown): ScheduleTarget | undefined {
-  if (typeof value === 'string') return scheduleTargetFromPointId(value)
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
-  const raw = value as Record<string, unknown>
-  const kind = stringFrom(raw.kind)
-  const normalizedKind = kind === 'AV' ? 'VP' : kind
-  if (normalizedKind !== 'AO' && normalizedKind !== 'DO' && normalizedKind !== 'VP' && normalizedKind !== 'HOL') return undefined
-  const pointId = stringFrom(raw.pointId ?? raw.point_id)
-  const parsed = pointId ? scheduleTargetFromPointId(pointId) : undefined
-  const channel = numberFrom(raw.channel) ?? (parsed?.kind === normalizedKind ? parsed.channel : undefined)
-  return { kind: normalizedKind, ...(channel !== undefined ? { channel } : {}), ...(pointId ? { pointId: canonicalScheduleTargetPointId(normalizedKind, pointId) } : {}) }
-}
-
-function scheduleTargetFromPointId(pointId: string): ScheduleTarget | undefined {
-  const match = pointId.match(/^([A-Z]+)-?(\d+)$/)
-  if (!match) return undefined
-  const kind = match[1] === 'FAN' ? 'DO' : match[1] === 'AV' ? 'VP' : match[1]
-  const channel = Number(match[2])
-  if (kind !== 'AO' && kind !== 'DO' && kind !== 'VP' && kind !== 'HOL') return undefined
-  return { kind, channel, pointId: kind === 'VP' ? `VP${channel}` : `${kind}-${String(channel).padStart(2, '0')}` }
-}
-
-function canonicalScheduleTargetPointId(kind: ScheduleTarget['kind'], pointId: string): string {
-  if (kind !== 'VP') return pointId
-  const parsed = scheduleTargetFromPointId(pointId)
-  return parsed?.kind === 'VP' && parsed.channel !== undefined ? `VP${parsed.channel}` : pointId
-}
 
 function normalizeTrendPointKey(key: string): string {
   const match = key.trim().match(/^([A-Z]+)[-_]?(\d+)$/i)
@@ -1135,22 +1085,81 @@ export const apiClient = {
     putDemoUserParams(config)
   },
 
-  async getSchedules(): Promise<ScheduleRow[]> {
-    if (IS_DEMO) return getDemoSchedule()
-    const raw = await requestJson<Array<Record<string, unknown>>>('/schedules')
-    return raw.map(normalizeSchedule)
+  /* ── Scheduler Engine v3.1 — 14 endpoint đặc tả §15 ──────────────────
+   * Không có lớp "normalize" ở đây: hợp đồng đã đóng băng bằng JSON Schema
+   * (contracts/config/schedule_v3_1.schema.json) và backend luôn trả đúng
+   * hình dạng đó. Lớp normalize của mô hình cũ tồn tại vì hợp đồng cũ lỏng —
+   * giữ lại sẽ che mất lỗi hợp đồng thay vì phơi ra.
+   */
+  async getSchedules(): Promise<ScheduleObject[]> {
+    return requestJson<ScheduleObject[]>('/schedules')
   },
 
-  async putSchedules(rows: ScheduleRow[]): Promise<ConfigPutResult> {
-    if (IS_DEMO) {
-      putDemoSchedule(rows)
-      return { result: 'success', applied: true, reload: 'none', warnings: [] }
-    }
-    return requestJson<ConfigPutResult>('/schedules', {
-      method: 'PUT',
-      body: JSON.stringify(rows)
+  async getSchedule(id: string): Promise<ScheduleObject> {
+    return requestJson<ScheduleObject>(`/schedules/${encodeURIComponent(id)}`)
+  },
+
+  async createSchedule(body: ScheduleObject): Promise<ScheduleObject> {
+    return requestJson<ScheduleObject>('/schedules', { method: 'POST', body: JSON.stringify(body) })
+  },
+
+  async updateSchedule(id: string, body: ScheduleObject): Promise<ScheduleObject> {
+    return requestJson<ScheduleObject>(`/schedules/${encodeURIComponent(id)}`, {
+      method: 'PUT', body: JSON.stringify(body)
     })
   },
+
+  async deleteSchedule(id: string): Promise<void> {
+    await requestRaw(`/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+
+  async validateSchedule(id: string): Promise<ScheduleValidationResult> {
+    return requestJson<ScheduleValidationResult>(`/schedules/${encodeURIComponent(id)}/validate`, {
+      method: 'POST'
+    })
+  },
+
+  async simulateSchedule(id: string, body: ScheduleSimulateRequest): Promise<ScheduleSimulateResult> {
+    return requestJson<ScheduleSimulateResult>(`/schedules/${encodeURIComponent(id)}/simulate`, {
+      method: 'POST', body: JSON.stringify(body)
+    })
+  },
+
+  async publishSchedule(id: string, body: SchedulePublishRequest): Promise<SchedulePublishResult> {
+    return requestJson<SchedulePublishResult>(`/schedules/${encodeURIComponent(id)}/publish`, {
+      method: 'POST', body: JSON.stringify(body),
+      // Backend chờ ACK tới 5 s và thử lại có trần; timeout mặc định của client
+      // ngắn hơn sẽ cắt ngang và làm người dùng tưởng publish hỏng.
+      timeoutMs: 30_000
+    })
+  },
+
+  async enableSchedule(id: string): Promise<ScheduleObject> {
+    return requestJson<ScheduleObject>(`/schedules/${encodeURIComponent(id)}/enable`, { method: 'POST' })
+  },
+
+  async disableSchedule(id: string): Promise<ScheduleObject> {
+    return requestJson<ScheduleObject>(`/schedules/${encodeURIComponent(id)}/disable`, { method: 'POST' })
+  },
+
+  async getScheduleRevisions(id: string): Promise<ScheduleRevisionInfo[]> {
+    return requestJson<ScheduleRevisionInfo[]>(`/schedules/${encodeURIComponent(id)}/revisions`)
+  },
+
+  async rollbackSchedule(id: string, targetRevision: number, reason: string): Promise<ScheduleObject> {
+    return requestJson<ScheduleObject>(`/schedules/${encodeURIComponent(id)}/rollback`, {
+      method: 'POST', body: JSON.stringify({ target_revision: targetRevision, reason })
+    })
+  },
+
+  async getScheduleRuntime(id: string): Promise<ScheduleRuntimeState> {
+    return requestJson<ScheduleRuntimeState>(`/schedules/${encodeURIComponent(id)}/runtime`)
+  },
+
+  async getScheduleAudit(id: string): Promise<ScheduleAuditEntry[]> {
+    return requestJson<ScheduleAuditEntry[]>(`/schedules/${encodeURIComponent(id)}/audit`)
+  },
+
 
   async getAlarms(): Promise<Alarm[]> {
     if (IS_DEMO) return getDemoAlarms()

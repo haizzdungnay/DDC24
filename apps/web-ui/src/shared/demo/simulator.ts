@@ -16,7 +16,6 @@ import type {
   IoChannel,
   NetworkData,
   Point,
-  ScheduleRow,
   OutputsConfig,
   TrendSample,
   TimeConfig,
@@ -389,19 +388,6 @@ export function getTrendSamples(pointIds: string[] = ['UI-01', 'UI-02', 'UI-03',
   })
 }
 
-let demoSchedules: ScheduleRow[] = [
-  { id: 'SCH-001', label: 'Occupied mode', notes: 'Weekday morning startup.', enabled: true, scheduleType: 'controller_operation_mode', timeOfDay: '06:00', startTime: '06:00', endTime: '18:00', weekdays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'], target: { kind: 'VP', channel: 3, pointId: 'VP3' }, value: 1 },
-  { id: 'SCH-002', label: 'Supply fan night off', notes: '', enabled: true, scheduleType: 'fan_state_value', timeOfDay: '18:00', startTime: '18:00', endTime: '23:00', weekdays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'], target: { kind: 'DO', channel: 1, pointId: 'DO-01' }, value: 0 },
-  { id: 'SCH-003', label: 'Cooling setpoint', notes: 'Weekend relaxed setpoint.', enabled: false, scheduleType: 'control_loop_setpoint', timeOfDay: '09:00', startTime: '09:00', endTime: '17:00', weekdays: ['saturday', 'sunday'], target: { kind: 'VP', channel: 1, pointId: 'VP1' }, value: 26 }
-]
-
-export function getDemoSchedule(): ScheduleRow[] {
-  return demoSchedules.map((row) => ({ ...row, weekdays: [...row.weekdays], target: row.target ? { ...row.target } : undefined }))
-}
-
-export function putDemoSchedule(rows: ScheduleRow[]): void {
-  demoSchedules = rows.map((row) => ({ ...row, weekdays: [...row.weekdays], target: row.target ? { ...row.target } : undefined }))
-}
 
 export function getDemoNetwork(): NetworkData {
   return {

@@ -609,37 +609,215 @@ export interface HistorianConfigUpdate {
   points: HistorianPolicyPatch[]
 }
 
-export type ScheduleType =
-  | 'not_active'
-  | 'controller_operation_mode'
-  | 'control_loop_setpoint'
-  | 'analog_output_value'
-  | 'fan_state_value'
-  | 'digital_output_value'
-  | 'holiday_period'
+/* ── Scheduler Engine v3.1 ────────────────────────────────────────────────
+ * Authority máy-đọc: contracts/config/schedule_v3_1.schema.json (FROZEN 2026-08-07).
+ * Mô hình thanh ghi TSx cũ đã bị loại bỏ hoàn toàn (đặc tả §23).
+ *
+ * Nguyên tắc S2: cấu hình là Ý ĐỊNH của người dùng, `runtime` là SỰ THẬT do
+ * controller trả về. Không component nào được tự tính giá trị hiệu lực.
+ */
 
-export type ScheduleTargetKind = 'AO' | 'DO' | 'VP' | 'HOL'
+export type ScheduleValueType = 'BINARY' | 'BOOLEAN' | 'REAL' | 'UNSIGNED' | 'ENUMERATED'
 
-export interface ScheduleTarget {
-  kind: ScheduleTargetKind
-  channel?: number
-  pointId?: string
+export type ScheduleStatus =
+  | 'DRAFT' | 'VALIDATED' | 'PUBLISHED' | 'ACTIVE'
+  | 'INACTIVE' | 'DISABLED' | 'ERROR' | 'OUT_OF_SYNC'
+
+export type ScheduleValueSource = 'WEEKLY' | 'EXCEPTION' | 'DEFAULT'
+
+export type SchedulePointKind = 'AO' | 'DO' | 'AV' | 'BV' | 'MSV' | 'EXT'
+
+export type ScheduleDateRuleType =
+  | 'DATE' | 'DATE_RANGE' | 'WEEK_N_DAY' | 'CALENDAR_REFERENCE' | 'HOLIDAY_GROUP'
+
+/** Giá trị lịch: BINARY dùng chuỗi ACTIVE/INACTIVE, BOOLEAN dùng bool, còn lại là số. */
+export type ScheduleValue = string | boolean | number
+
+export interface ScheduleTimeValue {
+  /** HH:mm:ss theo timezone của lịch. */
+  time: string
+  value: ScheduleValue
 }
 
-export interface ScheduleRow {
-  id: string
-  label: string
-  notes?: string
+/** Luôn đủ bảy ngày, kể cả ngày rỗng (đặc tả §6.1). */
+export interface ScheduleWeekly {
+  MON: ScheduleTimeValue[]
+  TUE: ScheduleTimeValue[]
+  WED: ScheduleTimeValue[]
+  THU: ScheduleTimeValue[]
+  FRI: ScheduleTimeValue[]
+  SAT: ScheduleTimeValue[]
+  SUN: ScheduleTimeValue[]
+}
+
+export type ScheduleDayKey = keyof ScheduleWeekly
+
+export interface ScheduleDateRule {
+  type: ScheduleDateRuleType
+  date?: string
+  start_date?: string
+  end_date?: string
+  /** 1..12 = tháng cụ thể; 0 = mọi tháng. */
+  month?: number
+  /** 1..5 = tuần thứ N; 6 = tuần CUỐI (quy ước BACnet), không phải tuần thứ sáu. */
+  week_of_month?: number
+  /** 1 = Thứ Hai … 7 = Chủ nhật (ISO-8601). */
+  day_of_week?: number
+  calendar_id?: string
+  group_id?: string
+}
+
+export interface ScheduleException {
+  exception_id: string
+  name: string
+  date_rule: ScheduleDateRule
+  /** 1..16, chỉ phân xử giữa các ngoại lệ. KHÔNG phải priority_for_writing. */
+  event_priority: number
+  time_values: ScheduleTimeValue[]
+}
+
+export interface ScheduleTargetObject {
+  target_id: string
+  target_type: 'INTERNAL_POINT' | 'BACNET_OBJECT'
+  point_kind?: SchedulePointKind
+  channel?: number
+  point_id?: string
+  device_id?: string
+  device_instance?: number
+  object_type?: string
+  object_instance?: number
+  property_identifier?: string
+  array_index?: number | null
+}
+
+export interface ScheduleEffectivePeriod {
+  start_date: string | null
+  /** null = KHÔNG CÓ ngày kết thúc; giao diện phải nói bằng chữ. */
+  end_date: string | null
+}
+
+export interface ScheduleTargetRuntime {
+  target_id: string
+  write_result: 'OK' | 'FAILED' | 'TIMEOUT' | 'SKIPPED' | null
+  written_value: ScheduleValue | null
+  actual_value: ScheduleValue | null
+  /** Nguồn priority cao hơn đang giữ điểm — trả lời "lịch bật mà sao thiết bị không chạy". */
+  overridden_by: 'FIRE_SAFETY' | 'LOCAL_MANUAL' | 'BACNET' | 'LOCAL_LOGIC' | null
+  error_code: string | null
+  last_write_at: string | null
+}
+
+/** SỰ THẬT của controller. Thiếu trường nào thì hiển thị gạch ngang, KHÔNG bịa 0. */
+export interface ScheduleRuntimeState {
+  effective_value: ScheduleValue | null
+  value_source: ScheduleValueSource | null
+  source_exception_id: string | null
+  next_transition_at: string | null
+  applied_revision: number | null
+  last_evaluated_at: string | null
+  error_code: string | null
+  targets: ScheduleTargetRuntime[]
+}
+
+export interface ScheduleObject {
+  schema_version: string
+  schedule_id: string
+  schedule_name: string
+  description?: string
   enabled: boolean
-  scheduleType: ScheduleType
-  timeOfDay?: string
-  startTime: string
-  endTime: string
-  startDate?: string
-  endDate?: string
-  weekdays: string[]
-  target?: ScheduleTarget
-  value: number
+  status: ScheduleStatus
+  timezone: string
+  effective_period: ScheduleEffectivePeriod
+  value_type: ScheduleValueType
+  /** 1..16 — phân xử GIỮA CÁC LỊCH cùng ghi một điểm (ADR-023 QĐ-1). */
+  priority_for_writing: number
+  /** Dẫn xuất, chỉ đọc: mức thật trên bộ phân xử 6 mức mà MỌI lịch dùng chung. */
+  core_priority_level: number
+  schedule_default: { value: ScheduleValue }
+  weekly_schedule: ScheduleWeekly
+  exception_schedule: ScheduleException[]
+  target_objects: ScheduleTargetObject[]
+  bacnet_object?: { object_type: string; object_instance: number; exposed: boolean }
+  revision: number
+  migrated_from_v1?: boolean
+  runtime?: ScheduleRuntimeState | null
+  created_at?: string
+  created_by?: string
+  updated_at?: string
+  updated_by?: string
+}
+
+export interface ScheduleValidationFinding {
+  code: string
+  path: string
+  message: string
+  severity?: 'error' | 'warning'
+}
+
+export interface ScheduleValidationResult {
+  valid: boolean
+  status?: ScheduleStatus
+  findings: ScheduleValidationFinding[]
+}
+
+export interface SchedulePublishRequest {
+  revision: number
+  reason: string
+  correlation_id?: string
+}
+
+export interface SchedulePublishResult {
+  result: 'ACCEPTED' | 'REJECTED' | 'TIMEOUT'
+  revision: number
+  correlation_id?: string
+  error_code: string | null
+  error_message: string | null
+  applied_at: string | null
+  attempts?: number
+}
+
+export interface ScheduleRevisionInfo {
+  revision: number
+  created_at: string
+  created_by: string
+  reason?: string
+  published: boolean
+  rollback_of: number | null
+}
+
+export interface ScheduleSimulateRequest {
+  range: '7_DAYS' | '30_DAYS' | 'SPECIFIC_DAY'
+  start_date?: string
+}
+
+export interface ScheduleSimulateTransition {
+  at: string
+  source: ScheduleValueSource
+  source_exception_id: string | null
+  value: ScheduleValue
+  target_ids: string[]
+  priority_for_writing: number
+}
+
+export interface ScheduleSimulateResult {
+  transitions: ScheduleSimulateTransition[]
+  conflicts: ScheduleValidationFinding[]
+  gaps: { from: string; to: string }[]
+}
+
+export interface ScheduleAuditEntry {
+  at: string
+  actor: string
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'VALIDATE' | 'PUBLISH' | 'ENABLE' | 'DISABLE' | 'ROLLBACK' | 'MIGRATE'
+  schedule_id: string
+  revision_before: number | null
+  revision_after: number | null
+  reason?: string
+  changes?: string
+  controller_id?: string
+  result?: string
+  error_code: string | null
+  source_ip?: string
 }
 
 // 'unknown' KHÔNG phải giá trị trang trí: backend trả về đúng giá trị này khi

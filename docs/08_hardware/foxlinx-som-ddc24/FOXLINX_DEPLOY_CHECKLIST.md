@@ -125,42 +125,54 @@ scp -r build/release/ SOM-DDC-24-foxlinx:/tmp/mkddc-release/
 
 ```bash
 ssh SOM-DDC-24-foxlinx "
-  cd /tmp/mkddc-release
-  # Dừng services trước:
-  systemctl stop mkddc-core mkddc-iobus mkddc-webapi mkddc-modbus-rtu 2>/dev/null || true
+  # Dừng services trước (tên unit THẬT trên bo là mkddc-web-pi):
+  systemctl stop mkddc-web-pi mkddc-core
 
-  # Copy binary:
-  cp -f bin/* /usr/local/bin/
-  chmod +x /usr/local/bin/mkddc-*
+  # Giữ bản cũ ngay cạnh bản mới để rollback trong một lệnh:
+  cp -f /usr/sbin/mkddc-core /usr/sbin/mkddc-core.prev
+  cp -f /opt/mkddc-web/mkddc-web /opt/mkddc-web/mkddc-web.prev
 
-  # Copy systemd units:
-  cp -f systemd/*.service /etc/systemd/system/
-  systemctl daemon-reload
+  # Cài binary — đường dẫn THẬT trên bo:
+  install -m 0755 /tmp/mkddc-core          /usr/sbin/mkddc-core
+  install -m 0755 /tmp/mkddc-schedule-sim  /usr/sbin/mkddc-schedule-sim
+  install -m 0755 /tmp/mkddc-web           /opt/mkddc-web/mkddc-web
 
-  # Copy web UI static:
-  mkdir -p /usr/local/share/mkddc-webui
-  cp -rf web-ui/* /usr/local/share/mkddc-webui/
-
-  # Copy config mẫu (chỉ lần đầu, không overwrite):
-  cp -n config/* /data/config/ 2>/dev/null || true
+  # Web UI static:
+  # rsync -a dist/ root@…:/opt/mkddc-web/dist/
 
   echo 'Install done'
 "
 ```
 
+> [!IMPORTANT]
+> **Đính chính 2026-08-07.** Bản trước của mục này ghi `/usr/local/bin`, `mkddc-webapi`,
+> `/usr/local/share/mkddc-webui` và cổng 8080 — **không mục nào đúng với bo thật**. Ai làm theo
+> sẽ cài binary vào chỗ systemd không chạy tới, và tưởng deploy thành công. Bố cục thật:
+>
+> | Thành phần | Đường dẫn thật | Ghi chú |
+> |---|---|---|
+> | `mkddc-core`, `mkddc-iobus`, `mkddc-netcfg`, `mkddc-schedule-sim` | `/usr/sbin/` | |
+> | `mkddc-web` | `/opt/mkddc-web/mkddc-web` | unit tên **`mkddc-web-pi.service`** |
+> | Web UI static | `/opt/mkddc-web/dist/` | `STATIC_DIR` trong environ |
+> | Cấu hình | `/data/config/` | `CONFIG_DIR` trong environ |
+> | Cổng HTTP | **8081** | không phải 8080 |
+>
+> Kiểm nhanh trước khi tin bất cứ đường dẫn nào:
+> `grep -h ExecStart /etc/systemd/system/mkddc-*.service` và
+> `tr '\0' '\n' < /proc/$(pgrep -f mkddc-web | head -1)/environ | grep DIR`.
+
 ### 4.3 Khởi động services
 
 ```bash
 ssh SOM-DDC-24-foxlinx "
-  systemctl start mkddc-iobus
-  sleep 2
   systemctl start mkddc-core
-  sleep 1
-  systemctl start mkddc-webapi
-  systemctl start mkddc-modbus-rtu 2>/dev/null || true
+  sleep 2
+  systemctl start mkddc-web-pi
+  sleep 3
 
   echo '=== Service status ==='
-  systemctl status mkddc-iobus mkddc-core mkddc-webapi --no-pager -l | head -30
+  systemctl is-active mkddc-core mkddc-web-pi mkddc-iobus mkddc-netcfg
+  /usr/sbin/mkddc-core --version | head -1
 "
 ```
 
@@ -170,8 +182,9 @@ ssh SOM-DDC-24-foxlinx "
 
 | # | Mục kiểm tra | Lệnh | Kỳ vọng |
 |---|---|---|---|
-| 1 | **Service status** | `systemctl is-active mkddc-core mkddc-iobus mkddc-webapi` | Tất cả `active` |
+| 1 | **Service status** | `systemctl is-active mkddc-core mkddc-iobus mkddc-web-pi` | Tất cả `active` |
 | 2 | **IOP heartbeat** | `journalctl -u mkddc-iobus --since '1min ago' \| grep -c HEARTBEAT` | > 0 |
+| 2b | **Health tổng** | `wget -qO- http://127.0.0.1:8081/api/v1/health` | `"status":"ok"`; bo **không có `curl`**, dùng `wget` |
 | 3 | **SHM magic** | `xxd /dev/shm/mkddc_io_shm \| head -1` | Magic `01 44 58 4b` (LE) |
 | 4 | **Web UI** | `curl -s http://localhost:8080/ \| head -5` | HTML response |
 | 5 | **API health** | `curl -s http://localhost:8080/api/v1/health` | `{"status":"ok"}` |
