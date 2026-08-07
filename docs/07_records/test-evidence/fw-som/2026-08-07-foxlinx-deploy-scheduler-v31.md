@@ -434,6 +434,33 @@ Khởi động lại trên tệp v3.1: 0 dòng schedule.migrate — không di tr
 
 `ctest` **849/849** · `vitest` **436/436** · Go **11/11 gói** · `go vet` sạch.
 
+### Kiểm lại lần cuối trên binary đã merge — cách ly, không đụng `/data/config`
+
+Bo nay chạy `mkddc-web` dựng từ commit merge `ee040f8` (`vcs.modified=false`), sha256
+`0df97384…`. Lưu ý: **không so được sha256 giữa hai lần dựng** nếu cây làm việc khác trạng
+thái — Go nhúng `vcs.revision` và `vcs.modified` vào binary, nên bản dựng lúc cây còn bẩn
+khác bản dựng từ cây sạch dù mã nguồn y hệt. Muốn đối chiếu thì đọc
+`go version -m <binary>`, đừng đối chiếu hash.
+
+Để kiểm di trú trên **chính binary đang chạy** mà không đụng cấu hình thật, chạy nó trong hộp
+cát: `CONFIG_DIR=/tmp/migsandbox PORT=18099 JWT_SECRET=<khoá dùng một lần>`. Không đọc và
+không dùng khoá thật của bo.
+
+```
+2 lịch v1 → 2 Schedule Object · .v1.bak 424 byte
+SCH-777  ENUMERATED  status=DRAFT  enabled=false  migrated_from_v1=true
+SCH-778  REAL        status=DRAFT  enabled=false  migrated_from_v1=true
+```
+
+Hai hàng này cố ý chọn đúng hai ca mà MIG-02 từng làm hợp đồng từ chối: `ENUMERATED`, và
+`REAL` có setpoint **tròn số** (75). Hộp cát đã xoá; `/data/config/schedule.conf` giữ nguyên
+sha256 `d146ea7e…`.
+
+Bẫy gặp phải khi dựng hộp cát, ghi lại cho lần sau: thiếu `JWT_SECRET` thì tiến trình thoát
+ngay ở bước nạp cấu hình — **trước** điểm di trú — và log chỉ có đúng một dòng
+`config: JWT_SECRET is required`. Nhìn thoáng qua rất giống "di trú không chạy", dễ chẩn
+đoán nhầm thành một lỗi thứ hai.
+
 ---
 
 ## 7. Rollback nếu cần
