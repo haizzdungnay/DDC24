@@ -9,6 +9,7 @@ package app
 // lớp vận chuyển, hợp đồng này không đổi.
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -80,16 +81,15 @@ func strPtr(s string) *string { return &s }
 // ── GET /api/v1/schedules ─────────────────────────────────────────────────
 
 func (a *App) handleGetSchedules(w http.ResponseWriter, r *http.Request) {
-	list, notes, err := a.loadSchedulesWithNotes(r.Context())
+	list, _, err := a.loadSchedulesWithNotes(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeScheduleLoadError(w, err)
 		return
 	}
 	a.attachScheduleRuntime(list)
-	if len(notes) > 0 {
-		// Băng thông báo di trú: người dùng phải review trước khi publish lại.
-		w.Header().Set("X-Schedule-Migration", strings.Join(notes, " | "))
-	}
+	// P1-09: không nhét thông báo tiếng Việt vào HTTP header (header chỉ an
+	// toàn với ASCII). Giao diện nhận biết qua cờ `migrated_from_v1` trên từng
+	// lịch — trường vốn đã có trong hợp đồng cho đúng việc này.
 	writeJSON(w, http.StatusOK, list)
 }
 
@@ -109,7 +109,7 @@ func (a *App) handleCreateSchedule(w http.ResponseWriter, r *http.Request) {
 
 	list, _, err := a.loadSchedulesWithNotes(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeScheduleLoadError(w, err)
 		return
 	}
 	if len(list) >= maxSchedules {
@@ -135,7 +135,7 @@ func (a *App) handleCreateSchedule(w http.ResponseWriter, r *http.Request) {
 	incoming.Runtime = nil
 	incoming.CreatedAt, incoming.CreatedBy = now, actor
 	incoming.UpdatedAt, incoming.UpdatedBy = now, actor
-	normalizeSchedules([]ScheduleObject{incoming})
+	normalizeSchedule(&incoming)
 
 	if findings := validateScheduleObject(&incoming); scheduleFindingsHaveError(findings) {
 		writeScheduleFindings(w, findings)
@@ -181,7 +181,7 @@ func (a *App) handleUpdateSchedule(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	list, _, err := a.loadSchedulesWithNotes(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeScheduleLoadError(w, err)
 		return
 	}
 	idx, ok := findSchedule(list, id)
@@ -217,7 +217,7 @@ func (a *App) handleUpdateSchedule(w http.ResponseWriter, r *http.Request) {
 	incoming.UpdatedAt, incoming.UpdatedBy = nowRFC3339(), actor
 	// Sửa nội dung thì bản đang chạy trên controller không còn khớp nữa.
 	incoming.Status = scheduleStatusDraft
-	normalizeSchedules([]ScheduleObject{incoming})
+	normalizeSchedule(&incoming)
 
 	if findings := validateScheduleObject(&incoming); scheduleFindingsHaveError(findings) {
 		writeScheduleFindings(w, findings)
@@ -247,7 +247,7 @@ func (a *App) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	list, _, err := a.loadSchedulesWithNotes(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeScheduleLoadError(w, err)
 		return
 	}
 	idx, ok := findSchedule(list, id)
@@ -268,7 +268,11 @@ func (a *App) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	_ = a.removeScheduleState(id)
+	// QĐ-9: chuyển lịch sử sang vùng lưu trữ, KHÔNG xoá. Audit của một lịch đã
+	// biến mất đúng là thứ auditor cần nhất.
+	if err := a.archiveScheduleState(id, time.Now()); err != nil && a.logger != nil {
+		a.logger.Printf("WARN schedule.archive id=%s err=%v", id, err)
+	}
 	if applied, _ := a.dispatchReload(reloadSIGHUPCore); !applied {
 		// Đã xoá khỏi cấu hình nhưng controller vẫn đang chạy bản cũ. 204 ở đây
 		// là nói dối; 500 cũng sai vì việc ghi ĐÃ xong. 202 mô tả đúng: đã nhận,
@@ -293,7 +297,7 @@ func (a *App) handleValidateSchedule(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	list, _, err := a.loadSchedulesWithNotes(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeScheduleLoadError(w, err)
 		return
 	}
 	idx, ok := findSchedule(list, id)
@@ -339,7 +343,43 @@ const schedulePublishAttempts = 3
 // appliedCorrelations chống áp dụng lặp cùng một (schedule_id, correlation_id).
 // Đặc tả §14.4 đòi controller idempotent; ở kiến trúc Rev A thì backend là nơi
 // duy nhất phát lệnh nên nó giữ trách nhiệm này.
-var appliedCorrelations = map[string]SchedulePublishResult{}
+//
+// P1-08: có TTL và trần. Không có thì map lớn dần theo mỗi lần publish và
+// không bao giờ nhỏ lại — một tiến trình chạy nhiều tháng trên bo sẽ tích luỹ.
+const (
+	scheduleCorrelationTTL = 24 * time.Hour
+	scheduleCorrelationMax = 512
+)
+
+type scheduleCorrelationEntry struct {
+	result SchedulePublishResult
+	at     time.Time
+}
+
+var appliedCorrelations = map[string]scheduleCorrelationEntry{}
+
+// rememberCorrelation lưu kết quả và dọn bản quá hạn. Gọi khi đang giữ
+// scheduleMutex.
+func rememberCorrelation(key string, result SchedulePublishResult, now time.Time) {
+	for k, v := range appliedCorrelations {
+		if now.Sub(v.at) > scheduleCorrelationTTL {
+			delete(appliedCorrelations, k)
+		}
+	}
+	if len(appliedCorrelations) >= scheduleCorrelationMax {
+		// Quá trần thì bỏ bản cũ nhất. Mất một khoá chống-lặp đã 24 giờ tuổi ít
+		// hại hơn để bộ nhớ phình vô hạn.
+		var oldestKey string
+		var oldest time.Time
+		for k, v := range appliedCorrelations {
+			if oldestKey == "" || v.at.Before(oldest) {
+				oldestKey, oldest = k, v.at
+			}
+		}
+		delete(appliedCorrelations, oldestKey)
+	}
+	appliedCorrelations[key] = scheduleCorrelationEntry{result: result, at: now}
+}
 
 func (a *App) handlePublishSchedule(w http.ResponseWriter, r *http.Request) {
 	if !a.requireSchedulePermission(w, r, permSchedulePublish) {
@@ -364,7 +404,7 @@ func (a *App) handlePublishSchedule(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	list, _, err := a.loadSchedulesWithNotes(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeScheduleLoadError(w, err)
 		return
 	}
 	idx, ok := findSchedule(list, id)
@@ -378,7 +418,7 @@ func (a *App) handlePublishSchedule(w http.ResponseWriter, r *http.Request) {
 		key := id + "|" + req.CorrelationID
 		if prev, seen := appliedCorrelations[key]; seen {
 			// Gửi lại cùng correlation_id KHÔNG được áp dụng lần hai.
-			writeJSON(w, http.StatusOK, prev)
+			writeJSON(w, http.StatusOK, prev.result)
 			return
 		}
 	}
@@ -414,7 +454,12 @@ func (a *App) handlePublishSchedule(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if attempt < schedulePublishAttempts {
+			// P1-07: NHẢ khoá trước khi ngủ. Ngủ trong vùng khoá làm mọi
+			// endpoint lịch khác đứng chờ — publish hàng loạt 10 lịch khi
+			// controller không phản hồi sẽ khoá cả trang hơn 30 giây.
+			scheduleMutex.Unlock()
 			time.Sleep(schedulePublishTimeout / time.Duration(schedulePublishAttempts))
+			scheduleMutex.Lock()
 		}
 	}
 
@@ -437,7 +482,7 @@ func (a *App) handlePublishSchedule(w http.ResponseWriter, r *http.Request) {
 	result.Result = "ACCEPTED"
 	result.AppliedAt = strPtr(nowRFC3339())
 	if req.CorrelationID != "" {
-		appliedCorrelations[id+"|"+req.CorrelationID] = result
+		rememberCorrelation(id+"|"+req.CorrelationID, result, time.Now())
 	}
 	published := list[idx]
 	_ = a.appendScheduleRevision(published, scheduleActor(r), req.Reason, nil)
@@ -463,7 +508,7 @@ func (a *App) setScheduleEnabled(w http.ResponseWriter, r *http.Request, enabled
 	id := r.PathValue("id")
 	list, _, err := a.loadSchedulesWithNotes(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeScheduleLoadError(w, err)
 		return
 	}
 	idx, ok := findSchedule(list, id)
@@ -545,7 +590,7 @@ func (a *App) handleRollbackSchedule(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	list, _, err := a.loadSchedulesWithNotes(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeScheduleLoadError(w, err)
 		return
 	}
 	idx, ok := findSchedule(list, id)
@@ -572,7 +617,7 @@ func (a *App) handleRollbackSchedule(w http.ResponseWriter, r *http.Request) {
 	restored.Runtime = nil
 	restored.CreatedAt, restored.CreatedBy = current.CreatedAt, current.CreatedBy
 	restored.UpdatedAt, restored.UpdatedBy = nowRFC3339(), scheduleActor(r)
-	normalizeSchedules([]ScheduleObject{restored})
+	normalizeSchedule(&restored)
 
 	list[idx] = restored
 	if err := a.writeScheduleFile(list, nil); err != nil {
@@ -633,6 +678,19 @@ func (a *App) mustLoadSchedule(w http.ResponseWriter, r *http.Request) ([]Schedu
 		return nil, ScheduleObject{}, false
 	}
 	return list, list[idx], true
+}
+
+// writeScheduleLoadError phân biệt "tệp còn định dạng cũ" với lỗi đọc thật.
+// Định dạng cũ không phải lỗi máy chủ — nó là một bước quản trị chưa chạy, và
+// người dùng cần biết chính xác điều đó.
+func writeScheduleLoadError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errScheduleLegacyFormat) {
+		writeError(w, http.StatusConflict,
+			"schedule.conf còn ở định dạng cũ và chưa được di trú; di trú chạy lúc khởi động "+
+				"dịch vụ, hãy khởi động lại mkddc-web rồi kiểm tra lại các lịch")
+		return
+	}
+	writeError(w, http.StatusInternalServerError, err.Error())
 }
 
 func writeScheduleFindings(w http.ResponseWriter, findings []ScheduleValidationFinding) {

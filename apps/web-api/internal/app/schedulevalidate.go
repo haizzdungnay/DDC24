@@ -58,8 +58,19 @@ func (f *scheduleFindings) warn(code, path, message string) {
 	})
 }
 
-// validateScheduleObject kiểm một Schedule Object độc lập.
+// validateScheduleObject kiểm một Schedule Object độc lập, lấy "hôm nay" từ
+// đồng hồ hệ thống. Dùng ở đường HTTP.
 func validateScheduleObject(s *ScheduleObject) []ScheduleValidationFinding {
+	return validateScheduleObjectAt(s, time.Now().UTC())
+}
+
+// validateScheduleObjectAt nhận mốc thời gian tường minh.
+//
+// P1-10: phát hiện xung đột ngoại lệ `WEEK_N_DAY` phải liệt kê ngày thật trong
+// 12 tháng tới, nên nó phụ thuộc "hôm nay". Bản đầu gọi `time.Now()` ở tầng
+// sâu, khiến cùng một cấu hình có thể cho kết quả validate khác nhau tuỳ thời
+// điểm chạy — và test không thể khẳng định điều gì ổn định.
+func validateScheduleObjectAt(s *ScheduleObject, now time.Time) []ScheduleValidationFinding {
 	f := &scheduleFindings{}
 
 	if s.SchemaVersion != scheduleSchemaVersion {
@@ -93,7 +104,7 @@ func validateScheduleObject(s *ScheduleObject) []ScheduleValidationFinding {
 	validateScheduleDefault(f, s)
 	validateScheduleEffectivePeriod(f, s)
 	validateScheduleWeekly(f, s)
-	validateScheduleExceptions(f, s)
+	validateScheduleExceptions(f, s, now)
 	validateScheduleTargets(f, s)
 
 	return f.items
@@ -161,7 +172,7 @@ func validateScheduleTimeValues(f *scheduleFindings, base string, events []Sched
 	}
 }
 
-func validateScheduleExceptions(f *scheduleFindings, s *ScheduleObject) {
+func validateScheduleExceptions(f *scheduleFindings, s *ScheduleObject, now time.Time) {
 	if len(s.ExceptionSchedule) > maxScheduleExceptions {
 		f.add(errSchedExceptionConflit, "$.exception_schedule",
 			fmt.Sprintf("tối đa %d ngoại lệ", maxScheduleExceptions))
@@ -190,7 +201,7 @@ func validateScheduleExceptions(f *scheduleFindings, s *ScheduleObject) {
 		validateScheduleTimeValues(f, base+".time_values", ex.TimeValues, s.ValueType)
 		validateScheduleDateRule(f, base+".date_rule", ex.DateRule)
 	}
-	detectScheduleExceptionConflicts(f, s)
+	detectScheduleExceptionConflicts(f, s, now)
 }
 
 func validateScheduleDateRule(f *scheduleFindings, base string, rule ScheduleDateRule) {
@@ -242,14 +253,14 @@ func validateScheduleDateRule(f *scheduleFindings, base string, rule ScheduleDat
 // Chỉ so được các quy tắc suy ra ngày trực tiếp (DATE, DATE_RANGE, WEEK_N_DAY).
 // CALENDAR_REFERENCE và HOLIDAY_GROUP phụ thuộc dữ liệu ngoài nên runtime phát
 // hiện, không phải lớp validate này.
-func detectScheduleExceptionConflicts(f *scheduleFindings, s *ScheduleObject) {
+func detectScheduleExceptionConflicts(f *scheduleFindings, s *ScheduleObject, now time.Time) {
 	for i := 0; i < len(s.ExceptionSchedule); i++ {
 		for j := i + 1; j < len(s.ExceptionSchedule); j++ {
 			a, b := s.ExceptionSchedule[i], s.ExceptionSchedule[j]
 			if a.EventPriority != b.EventPriority {
 				continue
 			}
-			if day, overlap := scheduleRulesOverlap(a.DateRule, b.DateRule); overlap {
+			if day, overlap := scheduleRulesOverlap(a.DateRule, b.DateRule, now); overlap {
 				f.add(errSchedExceptionConflit,
 					fmt.Sprintf("$.exception_schedule[%d].event_priority", j),
 					fmt.Sprintf("%s và %s cùng rơi vào %s và cùng event_priority = %d; "+
@@ -260,9 +271,9 @@ func detectScheduleExceptionConflicts(f *scheduleFindings, s *ScheduleObject) {
 	}
 }
 
-func scheduleRulesOverlap(a, b ScheduleDateRule) (string, bool) {
-	da, oka := scheduleRuleDates(a)
-	db, okb := scheduleRuleDates(b)
+func scheduleRulesOverlap(a, b ScheduleDateRule, now time.Time) (string, bool) {
+	da, oka := scheduleRuleDatesFrom(a, now)
+	db, okb := scheduleRuleDatesFrom(b, now)
 	if !oka || !okb {
 		return "", false
 	}
@@ -276,13 +287,6 @@ func scheduleRulesOverlap(a, b ScheduleDateRule) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-// scheduleRuleDates liệt kê ngày thật của một quy tắc trong 12 tháng tới. Đây
-// cũng chính là dữ liệu giao diện dùng cho cột "12 tháng tới rơi vào" —
-// WEEK_N_DAY con người không tính nhẩm được.
-func scheduleRuleDates(rule ScheduleDateRule) ([]string, bool) {
-	return scheduleRuleDatesFrom(rule, time.Now().UTC())
 }
 
 func scheduleRuleDatesFrom(rule ScheduleDateRule, from time.Time) ([]string, bool) {
@@ -494,6 +498,10 @@ func scheduleValueTypeHint(valueType string) string {
 // báo khi nhiều lịch cùng ghi một điểm (hợp lệ nhưng người dùng cần biết vì
 // runtime sẽ phân xử bằng priority_for_writing).
 func validateScheduleCollection(list []ScheduleObject) []ScheduleValidationFinding {
+	return validateScheduleCollectionAt(list, time.Now().UTC())
+}
+
+func validateScheduleCollectionAt(list []ScheduleObject, now time.Time) []ScheduleValidationFinding {
 	f := &scheduleFindings{}
 	if len(list) > maxSchedules {
 		f.add(errSchedBadWeekly, "$", fmt.Sprintf("tối đa %d lịch trên một controller", maxSchedules))
@@ -509,7 +517,7 @@ func validateScheduleCollection(list []ScheduleObject) []ScheduleValidationFindi
 		} else {
 			seen[s.ScheduleID] = i
 		}
-		for _, finding := range validateScheduleObject(s) {
+		for _, finding := range validateScheduleObjectAt(s, now) {
 			finding.Path = fmt.Sprintf("$[%d]%s", i, strings.TrimPrefix(finding.Path, "$"))
 			f.items = append(f.items, finding)
 		}

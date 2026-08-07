@@ -30,6 +30,13 @@ import (
 
 var errScheduleNotFound = errors.New("schedule not found")
 
+// errScheduleLegacyFormat báo tệp còn ở định dạng cũ và CHƯA được di trú.
+//
+// P1-06: bản đầu di trú ngay bên trong hàm nạp, nên một `GET` của vai trò
+// `viewer` — vai trò chỉ-đọc — làm backend ghi tệp cấu hình. Nay di trú là một
+// bước KHỞI ĐỘNG tường minh (MigrateSchedulesOnStartup); đường đọc chỉ đọc.
+var errScheduleLegacyFormat = errors.New("schedule.conf còn ở định dạng cũ, chưa di trú")
+
 // scheduleMutex tuần tự hoá đọc-sửa-ghi. Hai request PUT song song trên cùng
 // tệp là cách chắc chắn để mất một bản chỉnh sửa.
 var scheduleMutex sync.Mutex
@@ -91,27 +98,7 @@ func (a *App) loadSchedulesWithNotes(ctx context.Context) ([]ScheduleObject, []s
 	}
 
 	if isScheduleV1Payload(data) {
-		now := time.Now().UTC().Format(time.RFC3339)
-		migrated, notes, mErr := migrateSchedulesV1(data, now)
-		if mErr != nil {
-			return nil, nil, mErr
-		}
-		// Giữ bản cũ TRƯỚC khi ghi đè. Nếu bước sao lưu hỏng thì dừng — thà
-		// không di trú còn hơn di trú mà mất đường lùi.
-		backup := path + ".v1.bak"
-		if _, statErr := os.Stat(backup); errors.Is(statErr, os.ErrNotExist) {
-			if wErr := writeConfigFileAtomic(backup, data, 0o600); wErr != nil {
-				return nil, nil, fmt.Errorf("sao lưu %s: %w", backup, wErr)
-			}
-		}
-		if wErr := a.writeScheduleFile(migrated, nil); wErr != nil {
-			return nil, nil, wErr
-		}
-		notes = append([]string{fmt.Sprintf(
-			"%d lịch đã chuyển từ định dạng cũ sang v3.1; bản cũ giữ tại %s. "+
-				"Hãy kiểm tra rồi publish lại — mọi lịch đang ở trạng thái DRAFT và đang tắt.",
-			len(migrated), filepath.Base(backup))}, notes...)
-		return migrated, notes, nil
+		return nil, nil, errScheduleLegacyFormat
 	}
 
 	list, groups, err := decodeScheduleFile(data)
@@ -143,39 +130,97 @@ func decodeScheduleFile(data []byte) ([]ScheduleObject, []scheduleHolidayGroup, 
 // `null` trong JSON trả về cho frontend là một nguồn lỗi không cần thiết.
 func normalizeSchedules(list []ScheduleObject) {
 	for i := range list {
-		s := &list[i]
-		if s.SchemaVersion == "" {
-			s.SchemaVersion = scheduleSchemaVersion
-		}
-		if s.Timezone == "" {
-			s.Timezone = "Asia/Ho_Chi_Minh"
-		}
-		if s.Status == "" {
-			s.Status = scheduleStatusDraft
-		}
-		if s.PriorityForWriting == 0 {
-			s.PriorityForWriting = 16
-		}
-		// Dẫn xuất, luôn ghi đè: client không được tự đặt.
-		s.CorePriorityLevel = scheduleCorePriorityLevel
-		if s.ExceptionSchedule == nil {
-			s.ExceptionSchedule = []ScheduleException{}
-		}
-		if s.TargetObjects == nil {
-			s.TargetObjects = []ScheduleTargetObject{}
-		}
-		for _, d := range s.WeeklySchedule.Days() {
-			if *d.Events == nil {
-				*d.Events = []ScheduleTimeValue{}
-			}
-		}
-		for j := range s.TargetObjects {
-			t := &s.TargetObjects[j]
-			if t.TargetType == "INTERNAL_POINT" && t.Channel != nil && t.PointID == "" {
-				t.PointID = formatSchedulePointID(t.PointKind, *t.Channel)
-			}
+		normalizeSchedule(&list[i])
+	}
+}
+
+// normalizeSchedule chuẩn hoá MỘT lịch tại chỗ.
+//
+// P1-05: bản đầu chỉ có dạng nhận slice, và nơi gọi dùng
+// `normalizeSchedules([]ScheduleObject{obj})` — chuẩn hoá trên một BẢN SAO. Sửa
+// phần tử của slice thì dội về (dùng chung mảng nền) nhưng gán slice header mới
+// thì mất, nên `POST` trả `null` cho ngày rỗng còn `GET` trả `[]`.
+func normalizeSchedule(s *ScheduleObject) {
+	if s.SchemaVersion == "" {
+		s.SchemaVersion = scheduleSchemaVersion
+	}
+	if s.Timezone == "" {
+		s.Timezone = "Asia/Ho_Chi_Minh"
+	}
+	if s.Status == "" {
+		s.Status = scheduleStatusDraft
+	}
+	if s.PriorityForWriting == 0 {
+		s.PriorityForWriting = 16
+	}
+	// Dẫn xuất, luôn ghi đè: client không được tự đặt.
+	s.CorePriorityLevel = scheduleCorePriorityLevel
+	if s.ExceptionSchedule == nil {
+		s.ExceptionSchedule = []ScheduleException{}
+	}
+	if s.TargetObjects == nil {
+		s.TargetObjects = []ScheduleTargetObject{}
+	}
+	for _, d := range s.WeeklySchedule.Days() {
+		if *d.Events == nil {
+			*d.Events = []ScheduleTimeValue{}
 		}
 	}
+	for j := range s.TargetObjects {
+		t := &s.TargetObjects[j]
+		if t.TargetType == "INTERNAL_POINT" && t.Channel != nil && t.PointID == "" {
+			t.PointID = formatSchedulePointID(t.PointKind, *t.Channel)
+		}
+	}
+}
+
+// MigrateSchedulesOnStartup di trú schedule.conf nếu nó còn ở định dạng cũ.
+//
+// Gọi MỘT lần lúc khởi động, trước khi phục vụ request. Ghi tệp là tác dụng phụ
+// của một bước quản trị tường minh, không phải của một câu `GET` (P1-06).
+// Trả danh sách ghi chú để log — thông báo cho người dùng đi qua cờ
+// `migrated_from_v1` trên từng lịch, không qua HTTP header (P1-09).
+func (a *App) MigrateSchedulesOnStartup(ctx context.Context) ([]string, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	scheduleMutex.Lock()
+	defer scheduleMutex.Unlock()
+
+	path := a.schedulePath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("đọc %s: %w", path, err)
+	}
+	if !isScheduleV1Payload(data) {
+		return nil, nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	migrated, notes, mErr := migrateSchedulesV1(data, now)
+	if mErr != nil {
+		return nil, mErr
+	}
+	// Giữ bản cũ TRƯỚC khi ghi đè. Sao lưu hỏng thì dừng — thà không di trú còn
+	// hơn di trú mà mất đường lùi.
+	backup := path + ".v1.bak"
+	if _, statErr := os.Stat(backup); errors.Is(statErr, os.ErrNotExist) {
+		if wErr := writeConfigFileAtomic(backup, data, 0o600); wErr != nil {
+			return nil, fmt.Errorf("sao lưu %s: %w", backup, wErr)
+		}
+	}
+	if wErr := a.writeScheduleFile(migrated, nil); wErr != nil {
+		return nil, wErr
+	}
+	return append([]string{fmt.Sprintf(
+		"%d lịch đã chuyển từ định dạng cũ sang v3.1; bản cũ giữ tại %s. "+
+			"Mọi lịch đang ở DRAFT và đang tắt — hãy kiểm tra rồi publish lại.",
+		len(migrated), filepath.Base(backup))}, notes...), nil
 }
 
 // ── Ghi ───────────────────────────────────────────────────────────────────
@@ -370,9 +415,60 @@ func (a *App) listScheduleAudit(id string) ([]ScheduleAuditEntry, error) {
 	return out, nil
 }
 
-// removeScheduleState xoá lịch sử của một lịch đã bị xoá hẳn.
-func (a *App) removeScheduleState(id string) error {
-	return os.RemoveAll(a.scheduleRevisionDir(id))
+// archiveScheduleState chuyển lịch sử của một lịch đã xoá sang vùng lưu trữ
+// riêng (QĐ-9, PM/CTO duyệt 2026-08-07).
+//
+// KHÔNG xoá audit.jsonl, revisions.json hay bản ghi DELETE cuối cùng. Đặc tả
+// §20 cấm xoá audit, và nhật ký của một lịch đã biến mất đúng là thứ auditor
+// cần nhất — bản đầu của module này ghi dòng audit cuối rồi xoá luôn thư mục
+// chứa nó (finding P1-01).
+func (a *App) archiveScheduleState(id string, when time.Time) error {
+	src := a.scheduleRevisionDir(id)
+	if _, err := os.Stat(src); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	archiveRoot := filepath.Join(a.scheduleStateDir(), "_deleted")
+	if err := os.MkdirAll(archiveRoot, 0o700); err != nil {
+		return fmt.Errorf("tạo vùng lưu trữ audit: %w", err)
+	}
+	dst := filepath.Join(archiveRoot, fmt.Sprintf("%s-%s", id, when.UTC().Format("20060102T150405Z")))
+	if err := os.Rename(src, dst); err != nil {
+		return fmt.Errorf("lưu trữ lịch sử %s: %w", id, err)
+	}
+	return nil
+}
+
+// listArchivedScheduleAudit đọc audit của các lịch ĐÃ XOÁ mang cùng ID. Không
+// có hàm nào xoá được chúng — đó là chủ ý.
+func (a *App) listArchivedScheduleAudit(id string) ([]ScheduleAuditEntry, error) {
+	archiveRoot := filepath.Join(a.scheduleStateDir(), "_deleted")
+	entries, err := os.ReadDir(archiveRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []ScheduleAuditEntry{}, nil
+		}
+		return nil, err
+	}
+	out := []ScheduleAuditEntry{}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), id+"-") {
+			continue
+		}
+		data, readErr := os.ReadFile(filepath.Join(archiveRoot, e.Name(), "audit.jsonl"))
+		if readErr != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			var entry ScheduleAuditEntry
+			if json.Unmarshal([]byte(line), &entry) == nil {
+				out = append(out, entry)
+			}
+		}
+	}
+	return out, nil
 }
 
 // ── Tiện ích ──────────────────────────────────────────────────────────────

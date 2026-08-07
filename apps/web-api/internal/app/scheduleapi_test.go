@@ -529,6 +529,17 @@ func TestScheduleMigratesLegacyConfigAndKeepsBackup(t *testing.T) {
 		t.Fatalf("ghi cấu hình cũ: %v", err)
 	}
 
+	// P1-06: GET KHÔNG được tự di trú. Trước khi chạy bước khởi động, đường
+	// đọc phải báo 409 chứ không lặng lẽ ghi tệp.
+	pre := doScheduleRequest(t, app, http.MethodGet, "/api/v1/schedules", "", token)
+	if pre.Code != http.StatusConflict {
+		t.Fatalf("GET trên tệp định dạng cũ = %d, mong 409 (GET không được ghi tệp)", pre.Code)
+	}
+
+	if _, err := app.MigrateSchedulesOnStartup(t.Context()); err != nil {
+		t.Fatalf("di trú: %v", err)
+	}
+
 	w := doScheduleRequest(t, app, http.MethodGet, "/api/v1/schedules", "", token)
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET = %d body=%s", w.Code, w.Body.String())
@@ -584,17 +595,21 @@ func TestScheduleMigratesLegacyConfigAndKeepsBackup(t *testing.T) {
 }
 
 func TestScheduleMigrationIsIdempotent(t *testing.T) {
-	// Đọc lần hai không được di trú lại và không được ghi đè bản .bak.
-	app, token := newScheduleTestApp(t)
+	// Chạy lần hai không được di trú lại và không được ghi đè bản .bak.
+	app, _ := newScheduleTestApp(t)
 	legacy := `[{"id":"SCH-001","label":"X","enabled":true,"scheduleType":"digital_output_value",
 	  "startTime":"08:00","endTime":"17:00","weekdays":["monday"],
 	  "target":{"kind":"DO","channel":1},"value":1}]`
 	if err := os.WriteFile(app.cfg.ScheduleConfPath, []byte(legacy), 0o600); err != nil {
 		t.Fatalf("ghi: %v", err)
 	}
-	doScheduleRequest(t, app, http.MethodGet, "/api/v1/schedules", "", token)
+	if _, err := app.MigrateSchedulesOnStartup(t.Context()); err != nil {
+		t.Fatalf("di trú lần một: %v", err)
+	}
 	first, _ := os.ReadFile(app.cfg.ScheduleConfPath)
-	doScheduleRequest(t, app, http.MethodGet, "/api/v1/schedules", "", token)
+	if _, err := app.MigrateSchedulesOnStartup(t.Context()); err != nil {
+		t.Fatalf("di trú lần hai: %v", err)
+	}
 	second, _ := os.ReadFile(app.cfg.ScheduleConfPath)
 	if string(first) != string(second) {
 		t.Fatal("lần đọc thứ hai làm đổi tệp — di trú không idempotent")
@@ -705,5 +720,125 @@ func TestScheduleNextTransitionEmptyWhenNone(t *testing.T) {
 	now := mustParseTime(t, "2026-08-14T10:00:00Z")
 	if got := nextTransitionTimestamp(-1, "UTC", now); got != "" {
 		t.Fatalf("không có lần chuyển thì phải rỗng để UI hiện gạch ngang, nhận %s", got)
+	}
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Finding review P1 — mỗi finding một test khẳng định nó đã đóng
+// ══════════════════════════════════════════════════════════════════════════
+
+// P1-01 + QĐ-9: xoá lịch KHÔNG được xoá nhật ký audit.
+func TestScheduleDeleteArchivesAuditInsteadOfErasingIt(t *testing.T) {
+	app, token := newScheduleTestApp(t)
+	created := createSchedule(t, app, token, "SCH-001", nil)
+	body := scheduleJSON("SCH-001", map[string]any{"schedule_name": "B", "revision": created.Revision})
+	doScheduleRequest(t, app, http.MethodPut, "/api/v1/schedules/SCH-001", body, token)
+
+	w := doScheduleRequest(t, app, http.MethodDelete, "/api/v1/schedules/SCH-001", "", token)
+	if w.Code != http.StatusNoContent && w.Code != http.StatusAccepted {
+		t.Fatalf("DELETE = %d body=%s", w.Code, w.Body.String())
+	}
+
+	archived, err := app.listArchivedScheduleAudit("SCH-001")
+	if err != nil {
+		t.Fatalf("đọc audit đã lưu trữ: %v", err)
+	}
+	actions := map[string]bool{}
+	for _, e := range archived {
+		actions[e.Action] = true
+	}
+	if !actions["CREATE"] || !actions["UPDATE"] || !actions["DELETE"] {
+		t.Fatalf("audit của lịch đã xoá phải còn đủ CREATE/UPDATE/DELETE, có: %v", actions)
+	}
+}
+
+// P1-05: POST và GET phải trả cùng một hình dạng.
+func TestScheduleCreateResponseIsNormalizedLikeRead(t *testing.T) {
+	app, token := newScheduleTestApp(t)
+	body := scheduleJSON("SCH-001", map[string]any{
+		"weekly_schedule": map[string]any{
+			"MON": []any{map[string]any{"time": "08:00:00", "value": "ACTIVE"}},
+			"TUE": nil, "WED": nil, "THU": nil, "FRI": nil, "SAT": nil, "SUN": nil,
+		},
+	})
+	w := doScheduleRequest(t, app, http.MethodPost, "/api/v1/schedules", body, token)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST = %d body=%s", w.Code, w.Body.String())
+	}
+	var posted ScheduleObject
+	_ = json.Unmarshal(w.Body.Bytes(), &posted)
+	if posted.WeeklySchedule.Tue == nil {
+		t.Fatal("POST trả null cho ngày rỗng; GET trả [] — frontend nhận hai hình dạng khác nhau")
+	}
+}
+
+// P1-08: bộ nhớ chống-lặp phải có TTL và trần.
+func TestScheduleCorrelationCacheIsBounded(t *testing.T) {
+	appliedCorrelations = map[string]scheduleCorrelationEntry{}
+	now := mustParseTime(t, "2026-08-07T00:00:00Z")
+
+	// Bản quá hạn bị dọn.
+	rememberCorrelation("cũ", SchedulePublishResult{}, now.Add(-48*time.Hour))
+	rememberCorrelation("mới", SchedulePublishResult{}, now)
+	if _, still := appliedCorrelations["cũ"]; still {
+		t.Fatal("bản quá 24 giờ phải bị dọn")
+	}
+
+	// Không vượt trần.
+	for i := 0; i < scheduleCorrelationMax+50; i++ {
+		rememberCorrelation(fmt.Sprintf("k%d", i), SchedulePublishResult{}, now.Add(time.Duration(i)*time.Second))
+	}
+	if len(appliedCorrelations) > scheduleCorrelationMax {
+		t.Fatalf("map = %d phần tử, trần là %d", len(appliedCorrelations), scheduleCorrelationMax)
+	}
+}
+
+// P1-09: không được nhét chuỗi phi-ASCII vào HTTP header.
+func TestScheduleResponseHeadersAreAscii(t *testing.T) {
+	app, token := newScheduleTestApp(t)
+	createSchedule(t, app, token, "SCH-001", nil)
+	w := doScheduleRequest(t, app, http.MethodGet, "/api/v1/schedules", "", token)
+	for name, values := range w.Header() {
+		for _, v := range values {
+			for _, r := range v {
+				if r > 127 {
+					t.Fatalf("header %s chứa ký tự phi-ASCII %q — trình duyệt sẽ giải mã sai", name, v)
+				}
+			}
+		}
+	}
+}
+
+// P1-10: cùng một cấu hình phải cho cùng một kết quả validate, bất kể chạy lúc nào.
+func TestScheduleValidationIsDeterministic(t *testing.T) {
+	month, week, dow := 0, 1, 1
+	obj := ScheduleObject{
+		SchemaVersion: scheduleSchemaVersion, ScheduleID: "SCH-001", ScheduleName: "X",
+		Timezone: "UTC", ValueType: "BINARY", PriorityForWriting: 16,
+		ScheduleDefault: ScheduleValue{Value: "INACTIVE"},
+		ExceptionSchedule: []ScheduleException{
+			{ExceptionID: "EXC-A", Name: "A", EventPriority: 5,
+				DateRule:   ScheduleDateRule{Type: "WEEK_N_DAY", Month: &month, WeekOfMonth: &week, DayOfWeek: &dow},
+				TimeValues: []ScheduleTimeValue{{Time: "00:00:00", Value: "ACTIVE"}}},
+			{ExceptionID: "EXC-B", Name: "B", EventPriority: 5,
+				DateRule:   ScheduleDateRule{Type: "WEEK_N_DAY", Month: &month, WeekOfMonth: &week, DayOfWeek: &dow},
+				TimeValues: []ScheduleTimeValue{{Time: "00:00:00", Value: "INACTIVE"}}},
+		},
+	}
+	normalizeSchedule(&obj)
+
+	a := validateScheduleObjectAt(&obj, mustParseTime(t, "2026-01-15T00:00:00Z"))
+	b := validateScheduleObjectAt(&obj, mustParseTime(t, "2027-11-03T00:00:00Z"))
+	if len(a) != len(b) {
+		t.Fatalf("cùng cấu hình cho số finding khác nhau theo thời điểm: %d vs %d", len(a), len(b))
+	}
+	found := false
+	for _, f := range a {
+		if f.Code == errSchedExceptionConflit {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("hai ngoại lệ WEEK_N_DAY giống hệt nhau cùng priority phải báo SCH-CONFIG-003")
 	}
 }
