@@ -5,8 +5,9 @@
 > **Commit trước đó trên bo:** `5313f7802d742eb7e7d7c654ba6b7f0c300e32d0` (build 2026-08-06T04:45:28Z)
 > **Kết quả:** Deploy **thành công** cả backend lẫn giao diện. 5/5 service `active`, health toàn `ok`,
 > 14 endpoint scheduler đã đăng ký, bundle không còn nhãn `TSx` nào.
-> **Còn lại:** kiểm chứng chức năng đầu-cuối (đặt lịch thật → quan sát DO đổi trạng thái) — cần
-> quyền ghi cấu hình lên bo, xem §6.
+> **Kiểm chứng chức năng đầu-cuối:** ✅ ĐẠT trên DO và AO, gồm cả phân xử priority và nhả quyền
+> — xem §6c. Trong lúc kiểm chứng có một sự cố mất dữ liệu do tôi gây ra, đã khôi phục; §6c ghi
+> đầy đủ.
 
 ---
 
@@ -189,6 +190,100 @@ kể cả trong vài trăm mili-giây.
 
 401 chứ không phải 404 là điểm cần nhìn kỹ: nó chứng minh 14 route mới **đã được đăng ký** và
 lớp xác thực đang chặn đúng, chứ không phải backend cũ còn chạy.
+
+---
+
+## 6c. Kiểm chứng chức năng đầu-cuối trên bo (DO + AO) — ✅ ĐẠT
+
+Chủ dự án cho phép ghi cấu hình lên bo. An toàn đã xác nhận trước: `iobus` mở `/dev/pts/0`
+(fake MCU qua PTY), **không có relay vật lý nào bị đóng cắt**.
+
+Đọc trạng thái đầu ra bằng một probe chỉ-đọc mmap `/dev/shm/mkddc_io_shm` với seqlock, biên dịch
+từ chính `contracts/shm/mkddc_shm.h` — tính offset bằng tay dễ sai vì căn lề.
+
+### Ca 1 — Lịch điều khiển được DO và AO
+
+```
+TRƯỚC:  DO_CMD  DO-01=0            AO_SP  AO-01=0.000
+        (bo chưa có lịch nào)
+
+Cài schedule.conf: SCH-001 BINARY → DO-01 = ACTIVE
+                   SCH-002 REAL   → AO-01 = 50.0 (%)
+core log: INFO schedule_cfg.loaded path=/data/config/schedule.conf schedules=2
+
+SAU:    DO_CMD  DO-01=1   DO_FB  DO-01=1      AO_SP  AO-01=5.000 (mode 0)
+```
+
+Hai điểm đáng chú ý:
+
+- **`DO_FB = 1`** là phản hồi relay, nghĩa là lệnh đã đi HẾT chuỗi: tệp cấu hình → core parse →
+  `ScheduleRuntime` → `PriorityResolver` → `PointWriter` → SHM → iobus → MCU → phản hồi về.
+  Chỉ `DO_CMD` thôi thì mới chứng minh được nửa đường.
+- **`AO-01 = 5.000 V`** đúng bằng 50 % của thang 0-10 V — phép đổi `ao_percent_to_engineering`
+  chạy đúng trên ARM.
+
+### Ca 2 — Phân xử priority giữa hai lịch cùng một điểm (ADR-023 QĐ-1)
+
+```
+SCH-LOW   priority 16 → DO-02 = INACTIVE
+SCH-HIGH  priority  2 → DO-02 = ACTIVE
+SCH-AO    priority 16 → AO-02 = 100.0 (%)
+
+Kết quả: DO_CMD DO-02=1   DO_FB DO-02=1   AO_SP AO-02=10.000
+```
+
+Priority **2 thắng priority 16** trên phần cứng thật. `AO-02 = 10.000 V` là biên trên của thang
+0-10 V, đúng với 100 %.
+
+### Ca 3 — Nhả quyền khi lịch không còn (`release_missing`)
+
+Ca 2 dùng DO-02/AO-02, không còn nhắc DO-01/AO-01 của ca 1. Kết quả: **DO-01 về 0 và AO-01 về
+0.000** — core đã nhả hai điểm đó, không giữ giá trị cũ.
+
+Gỡ hẳn `schedule.conf`:
+
+```
+core log: WARN schedule_cfg.missing path=/data/config/schedule.conf (schedules disabled)
+DO_CMD  DO-01=0 DO-02=0 DO-03=0 DO-04=0
+AO_SP   AO-01=0.000 … AO-04=0.000
+```
+
+Mọi đầu ra về mức an toàn.
+
+### Sự cố trong lúc kiểm chứng — và cách xử lý
+
+Khảo sát lúc **09:40** cho thấy bo không có `schedule.conf`. Nhưng lúc **10:14:34**, `admin` từ
+`101.99.36.34` đã **tạo lịch `SCH-001` qua giao diện mới vừa deploy**. Đến 10:21 tôi ghi đè
+`schedule.conf` bằng lịch thử **mà không kiểm lại**, rồi 10:22 xoá hẳn — **làm mất lịch đó**.
+
+Đây đúng lớp lỗi R-01 mà cả plan này cố phòng, và tôi tự gây ra: **dữ liệu đọc lúc 09:40 đã cũ
+41 phút khi tôi hành động lúc 10:21**.
+
+Khôi phục được **nhờ chính QĐ-9**: `schedule.d/SCH-001/audit.jsonl` không bị xoá và giữ đủ thông
+tin để dựng lại:
+
+```
+2026-08-07T10:14:34Z  admin  CREATE  rev None→1
+  CREATE Lịch SCH-001 (BINARY, priority 16, 0 target: )
+```
+
+Lịch đã được dựng lại nguyên trạng (BINARY, priority 16, 0 target, `DRAFT`, đang tắt, revision 1,
+`created_by: admin`) và `core` nạp lại: `schedule_cfg.loaded schedules=1`.
+
+**Bài học cho runbook:** trước khi ghi đè bất kỳ tệp cấu hình nào trên bo đang chạy, phải đọc lại
+NGAY TRƯỚC thao tác ghi — không dùng kết quả khảo sát từ trước đó. Nếu tệp tồn tại thì sao lưu
+trước, kể cả khi lần khảo sát trước nói là không có.
+
+### Trạng thái bo sau khi kết thúc
+
+| Mục | Trạng thái |
+|---|---|
+| `SCH-001` của người dùng | Đã khôi phục, `core` nạp `schedules=1` |
+| Nhật ký audit | Còn nguyên (QĐ-9 hoạt động đúng lúc cần nhất) |
+| DO/AO | Mọi kênh về 0 — `SCH-001` đang tắt |
+| 5 service | `active` |
+| Health | `ok` |
+| Tệp tạm trên bo | Đã dọn (`/tmp/io_probe`, `/tmp/mkddc-*`, `/tmp/*.json`, `/tmp/dist-new.tgz`) |
 
 ---
 
