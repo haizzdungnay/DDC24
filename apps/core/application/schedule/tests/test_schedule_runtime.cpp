@@ -7,6 +7,7 @@
  */
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdio>
 #include <fstream>
 #include <string>
@@ -126,6 +127,13 @@ struct Fixture {
 bool do_on(PriorityResolver& r, int ch)
 {
     return r.resolve().do_valid[ch] && r.resolve().dout[ch] != 0;
+}
+
+/* `do_valid` LUÔN true vì mức 6 Default luôn active (priority_resolver.cpp:8).
+ * Muốn biết lịch có đang giữ lệnh hay không thì phải hỏi mức nào đang thắng. */
+bool schedule_holds_do(PriorityResolver& r, int ch)
+{
+    return r.winning_do_level(ch) == PRIO_SCHEDULE;
 }
 
 } // namespace
@@ -403,7 +411,7 @@ TEST(ScheduleV31EffectivePeriod, OutsideRangeIsInactive)
 
     f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.table, f.resolver);   /* sau end */
     EXPECT_FALSE(f.runtime.state_of("SCH-001")->active);
-    EXPECT_FALSE(f.resolver.resolve().do_valid[0]) << "ngoài khoảng hiệu lực thì không giữ lệnh";
+    EXPECT_FALSE(schedule_holds_do(f.resolver, 0)) << "ngoài khoảng hiệu lực thì không giữ lệnh";
 
     f.runtime.evaluate_at(at(2026, 6, 1, 10, 0), f.io, f.table, f.resolver);    /* đúng biên start */
     EXPECT_TRUE(f.runtime.state_of("SCH-001")->active);
@@ -439,7 +447,7 @@ TEST(ScheduleV31EffectivePeriod, DisabledScheduleReleasesTarget)
         R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"DO","channel":1}])",
         "BINARY", R"({"value":"INACTIVE"})", 16, R"({"start_date":null,"end_date":null})", false)})));
     f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.table, f.resolver);
-    EXPECT_FALSE(f.resolver.resolve().do_valid[0]);
+    EXPECT_FALSE(schedule_holds_do(f.resolver, 0)) << "tắt lịch phải relinquish, không giữ giá trị cuối";
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -550,6 +558,7 @@ TEST(ScheduleV31Target, AnalogPercentIsConvertedByAoMode)
         R"({"MON":[{"time":"00:00:00","value":50.0}],"TUE":[],"WED":[],"THU":[],"FRI":[],"SAT":[],"SUN":[]})";
     Fixture f;
     f.io.ao_mode[0] = 0;   /* 0-10 V */
+    f.resolver.set_ao_modes(f.io.ao_mode);   /* scan_loop.cpp:59 làm đúng bước này */
     ASSERT_TRUE(f.load(config({schedule_json(
         "SCH-001", weekly_on, "[]",
         R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"AO","channel":1}])",
@@ -559,6 +568,7 @@ TEST(ScheduleV31Target, AnalogPercentIsConvertedByAoMode)
     EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 5.0f) << "50% của 0-10V là 5V";
 
     f.io.ao_mode[0] = 1;   /* 4-20 mA */
+    f.resolver.set_ao_modes(f.io.ao_mode);
     f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.table, f.resolver);
     EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 12.0f) << "50% của 4-20mA là 12mA";
 }
@@ -568,12 +578,12 @@ TEST(ScheduleV31Target, ReleasesTargetWhenNoLongerClaimed)
     Fixture f;
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_mon_only())})));
     f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.table, f.resolver);
-    ASSERT_TRUE(f.resolver.resolve().do_valid[0]);
+    ASSERT_TRUE(schedule_holds_do(f.resolver, 0));
 
     /* Đổi sang lịch không còn target nào ⇒ phải nhả. */
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_mon_only(), "[]", "[]")})));
     f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.table, f.resolver);
-    EXPECT_FALSE(f.resolver.resolve().do_valid[0]);
+    EXPECT_FALSE(schedule_holds_do(f.resolver, 0));
 }
 
 TEST(ScheduleV31Target, MultiStateValueWritesMsv)

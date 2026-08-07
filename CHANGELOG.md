@@ -7,6 +7,55 @@
 ---
 
 ## [Unreleased]
+### Changed — Scheduler v3.1 P1.A: viết lại `ScheduleRuntime` theo mô hình Schedule Object (2026-08-07)
+
+**Phạm vi.** `apps/core/application/schedule/schedule_runtime.{hpp,cpp}` (viết lại) ·
+`apps/core/application/schedule/tests/test_schedule_runtime.cpp` (viết lại) · Plan 50.
+Task `SCHD-101..111`.
+
+**Triệu chứng.** Mô hình cũ là một hàng phẳng: một khoảng giờ, một giá trị, một target. Ba
+hành vi của nó không dùng được cho v3.1: `holiday_period` khi active **tắt toàn bộ mọi lịch
+khác**; xung đột hai lịch cùng target giải quyết bằng quy tắc "khoảng vừa bắt đầu thì thắng"
+mà người dùng không nhìn thấy và không điều khiển được; và một ngày chỉ có đúng một lần
+chuyển trạng thái nên không diễn đạt nổi ca làm việc có nghỉ trưa.
+
+**Cách sửa.** Mô hình mới: `ScheduleObject` mang `weekly` 7 ngày × N cặp Time-Value,
+`exceptions` riêng của từng lịch với 5 kiểu `date_rule`, `schedule_default`,
+`effective_period` và danh sách target. Thứ tự đánh giá đúng đặc tả §7.3: exception hợp lệ →
+lịch tuần → mặc định.
+
+Bốn điểm đáng ghi lại:
+
+1. **Ngoại lệ chỉ ghi đè lịch chứa nó.** Cờ `holiday_active` tắt-toàn-cục đã bị gỡ. Có test
+   khẳng định lịch B không bị ảnh hưởng bởi ngoại lệ của lịch A.
+2. **Phân xử `priority_for_writing` 1..16 nằm trong `ScheduleRuntime`** (ADR-023 QĐ-1); chỉ
+   lịch thắng đi xuống `PRIO_SCHEDULE`. Lịch thua được đánh dấu `written = false` trong
+   `ScheduleState` để giao diện hiển thị được — thua âm thầm là cách để một lỗi cấu hình sống
+   sót qua commissioning rồi nổ ngoài hiện trường.
+3. **Giá trị hiệu lực lùi được qua nửa đêm.** Bật T2 08:00 mà không tắt thì sang T3 vẫn bật;
+   mốc gần nhất trước hiện tại có thể nằm ở ngày trước, không rơi về mặc định.
+4. **`WEEK_N_DAY` dùng đúng quy ước BACnet:** `week_of_month = 6` là tuần **cuối cùng**, không
+   phải tuần thứ sáu. `HOLIDAY_GROUP` chưa nạp nhóm thì trả false chứ không đoán — đoán ở đây
+   là ra lệnh nhầm cho thiết bị.
+
+**Kiểm chứng (số đo thật).**
+
+```
+ctest --test-dir build/fw (MODBUS+BACNET+HMI ON) → 822/822 passed, 0 failed (13,16 s)
+core_tests --gtest_filter='ScheduleV31*'          → 50/50 passed
+[PERF] 64 lịch × 16 target = 1024 lệnh ghi: 0,120 ms/vòng
+       ngưỡng đặc tả §21 là 100 ms ⇒ dư 833 lần
+```
+
+19 trong 50 ca là **cấu hình sai phải bị từ chối** (thiếu `schedule_default`, weekly thiếu
+ngày, trùng thời điểm, priority ngoài dải, target sai kiểu, trùng ID, `schema_version` sai,
+quá 64 lịch, quá 32 target, `BACNET_OBJECT` chưa hỗ trợ ở P1…). Với một lớp đưa lệnh ra quạt
+và van, việc nó từ chối đúng quan trọng ngang việc nó chạy đúng.
+
+**Ghi chú kiểm thử.** Bốn assertion đầu tiên viết sai theo cách đáng nhớ: dùng
+`resolve().do_valid[ch]` để kiểm "lịch có đang giữ lệnh không". Cờ đó **luôn true** vì mức 6
+Default luôn active (`priority_resolver.cpp:8`). Cách hỏi đúng là `winning_do_level(ch)`.
+
 ### Added — Scheduler v3.1 P0: PM/CTO duyệt + đóng băng hợp đồng dữ liệu (2026-08-07)
 
 **Phạm vi.** `docs/adr/ADR-023-*.md` (mới) · `contracts/config/schedule_v3_1.schema.json` (mới) ·

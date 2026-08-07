@@ -13,14 +13,14 @@
 
 ## 0. Bảng tiến độ — cập nhật mỗi phiên làm việc
 
-> Cách cập nhật: §9. Cập nhật lần cuối **2026-08-07** — P0 đóng, hợp đồng dữ liệu đã đóng băng.
+> Cách cập nhật: §9. Cập nhật lần cuối **2026-08-07** — P0 đóng; P1.A (core runtime) xong, 822/822 ctest.
 
 ```text
-TỔNG THỂ                                                   9 / 78 task  12%
-[██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
+TỔNG THỂ                                                  20 / 78 task  26%
+[█████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
 
 P0 · Chốt quyết định & hợp đồng      9/ 9 100%  [████████████████████]  ✅ CỔNG RA ĐÃ QUA
-P1 · Mô hình · Core · Backend        0/24   0%  [░░░░░░░░░░░░░░░░░░░░]  🔄 mở khoá
+P1 · Mô hình · Core · Backend       11/24  46%  [█████████░░░░░░░░░░░]  🔄 P1.A xong
 P2 · Frontend                        0/26   0%  [░░░░░░░░░░░░░░░░░░░░]  🔄 mở khoá (hợp đồng đóng băng)
 P3 · Runtime & đồng bộ thời gian     0/12   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
 P4 · BACnet Schedule/Calendar        0/ 7   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
@@ -198,17 +198,32 @@ File: [`apps/core/application/schedule/schedule_runtime.{hpp,cpp}`](../../apps/c
 
 | Task | Nội dung | Ngày | Đóng gap |
 |---|---|---:|---|
-| SCHD-101 | Kiểu dữ liệu mới: `ScheduleObject`, `TimeValue`, `WeeklySchedule[7]`, `ExceptionEntry`, `EffectivePeriod`, `ValueType`. Giữ `ScheduleTarget` nhưng cho **danh sách** | 1,5 | G-01 G-05 G-06 |
-| SCHD-102 | Parser JSON v3.1 trong `load_schedule_config` — thay toàn bộ nhánh `parse_schedule` cũ; mọi lỗi kèm mã spec §11 | 1,5 | G-01 |
-| SCHD-103 | `evaluate_weekly()` — tìm cặp Time-Value **gần nhất trước thời điểm hiện tại** trong ngày, lùi sang ngày trước nếu ngày nay chưa có event | 1,5 | G-01 |
-| SCHD-104 | `evaluate_exception()` — 5 kiểu `date_rule`; chọn theo `event_priority`; **bằng priority ⇒ trả conflict `SCH-CONFIG-003`, không tự chọn** | 2 | G-02 |
-| SCHD-105 | `schedule_default` khi không event nào hiệu lực; `effective_period` chặn ngoài khoảng ⇒ `INACTIVE` | 0,75 | G-03 G-04 |
-| SCHD-106 | Bỏ hoàn toàn `holiday_active` tắt-toàn-cục ở [:459-482](../../apps/core/application/schedule/schedule_runtime.cpp#L459-L482) | 0,25 | G-02 |
-| SCHD-107 | Ghi ra **danh sách target**; một target lỗi không dừng vòng lặp (N5); lưu `write_result` từng target | 1 | G-06 |
-| SCHD-108 | **Phân xử `priority_for_writing` 1..16 bên trong lớp scheduler** — nhiều lịch cùng target thì lịch priority nhỏ hơn thắng; chỉ người thắng được đưa xuống `PRIO_SCHEDULE` (mức 4) của resolver. Phơi `core_priority_level` ra snapshot. Theo ADR-023 | 1,5 | G-07 |
-| SCHD-109 | `next_transition_at` — tính thời điểm chuyển trạng thái kế tiếp (spec §10.1 bước 10) | 0,75 | G-01 |
-| SCHD-110 | Test: 7 ngày × nhiều event, exception 5 kiểu, conflict, default, effective period, target hỏng, next transition. **Tối thiểu 40 case** | 2 | tất cả |
-| SCHD-111 | Benchmark 64 lịch × 32 target — spec đòi **< 100 ms**. Ghi số đo thật vào `docs/07_records/test-evidence/` | 0,5 | G-20 |
+| SCHD-101 | Kiểu dữ liệu mới: `ScheduleObject`, `TimeValue`, `WeeklySchedule[7]`, `ExceptionEntry`, `EffectivePeriod`, `ValueType`. Giữ `ScheduleTarget` nhưng cho **danh sách** | 1,5 | G-01 G-05 G-06 | ✅ |
+| SCHD-102 | Parser JSON v3.1 trong `load_schedule_config` — thay toàn bộ nhánh `parse_schedule` cũ; mọi lỗi kèm mã spec §11 | 1,5 | G-01 | ✅ |
+| SCHD-103 | `evaluate_weekly()` — tìm cặp Time-Value **gần nhất trước thời điểm hiện tại** trong ngày, lùi sang ngày trước nếu ngày nay chưa có event | 1,5 | G-01 | ✅ |
+| SCHD-104 | `evaluate_exception()` — 5 kiểu `date_rule`; chọn theo `event_priority`; **bằng priority ⇒ trả conflict `SCH-CONFIG-003`, không tự chọn** | 2 | G-02 | ✅ |
+| SCHD-105 | `schedule_default` khi không event nào hiệu lực; `effective_period` chặn ngoài khoảng ⇒ `INACTIVE` | 0,75 | G-03 G-04 | ✅ |
+| SCHD-106 | Bỏ hoàn toàn `holiday_active` tắt-toàn-cục ở [:459-482](../../apps/core/application/schedule/schedule_runtime.cpp#L459-L482) | 0,25 | G-02 | ✅ |
+| SCHD-107 | Ghi ra **danh sách target**; một target lỗi không dừng vòng lặp (N5); lưu `write_result` từng target | 1 | G-06 | ✅ |
+| SCHD-108 | **Phân xử `priority_for_writing` 1..16 bên trong lớp scheduler** — nhiều lịch cùng target thì lịch priority nhỏ hơn thắng; chỉ người thắng được đưa xuống `PRIO_SCHEDULE` (mức 4) của resolver. Phơi `core_priority_level` ra snapshot. Theo ADR-023 | 1,5 | G-07 | ✅ |
+| SCHD-109 | `next_transition_at` — tính thời điểm chuyển trạng thái kế tiếp (spec §10.1 bước 10) | 0,75 | G-01 | ✅ |
+| SCHD-110 | Test: 7 ngày × nhiều event, exception 5 kiểu, conflict, default, effective period, target hỏng, next transition. **Tối thiểu 40 case** | 2 | tất cả | ✅ |
+| SCHD-111 | Benchmark 64 lịch × 32 target — spec đòi **< 100 ms**. Ghi số đo thật vào `docs/07_records/test-evidence/` | 0,5 | G-20 | ✅ |
+
+**P1.A ✅ XONG 2026-08-07.** Số đo thật:
+
+```
+cmake -S . -B build/fw -DCMAKE_BUILD_TYPE=Release \
+      -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON
+ctest --test-dir build/fw   → 822/822 passed, 0 failed  (13,16 s)
+core_tests --gtest_filter='ScheduleV31*'  → 50/50 passed
+[PERF] 64 lịch × 16 target = 1024 lệnh ghi: 0,120 ms/vòng
+       ngưỡng đặc tả §21 là 100 ms ⇒ dư 833 lần
+```
+
+Trong 50 ca có **19 ca cấu hình sai phải bị TỪ CHỐI** — phần kiểm chứng thật nằm
+ở đó, vì một lớp đưa lệnh ra quạt và van thì việc nó từ chối đúng quan trọng
+ngang việc nó chạy đúng.
 
 > SCHD-104 là task khó nhất pha này. `WEEK_N_DAY` (ví dụ "thứ Hai đầu tiên của tháng") và `CALENDAR_REFERENCE` là hai kiểu dễ viết sai âm thầm — sai thì lịch nổ vào ngày không ai ngờ, và không có test thì không ai biết cho tới khi nó xảy ra ngoài hiện trường.
 
@@ -454,17 +469,17 @@ Ký hiệu trạng thái: `☐` chưa làm · `🔄` đang làm · `✅` xong c�
 | 7 | SCHD-007 | P0 | Tài liệu UC chuẩn | Docs | 0,25 | 003 | ☐ |
 | 8 | SCHD-008 | P0 | Tài liệu UX chuẩn | Docs | 0,25 | 003 | ☐ |
 | 9 | SCHD-009 | P0 | DECISIONS + TRACEABILITY | Docs | 0,25 | 004 | ☐ |
-| 10 | SCHD-101 | P1 | Kiểu dữ liệu core v3.1 | Core | 1,5 | 005 | ☐ |
-| 11 | SCHD-102 | P1 | Parser JSON v3.1 | Core | 1,5 | 101 | ☐ |
-| 12 | SCHD-103 | P1 | `evaluate_weekly` | Core | 1,5 | 102 | ☐ |
-| 13 | SCHD-104 | P1 | `evaluate_exception` 5 kiểu | Core | 2 | 103 | ☐ |
-| 14 | SCHD-105 | P1 | Default + effective period | Core | 0,75 | 104 | ☐ |
-| 15 | SCHD-106 | P1 | Bỏ holiday tắt-toàn-cục | Core | 0,25 | 104 | ☐ |
-| 16 | SCHD-107 | P1 | Ghi nhiều target + kết quả riêng | Core | 1 | 105 | ☐ |
-| 17 | SCHD-108 | P1 | Phân xử priority 1..16 trong lớp scheduler | Core | 1,5 | 004 107 | ☐ |
-| 18 | SCHD-109 | P1 | `next_transition_at` | Core | 0,75 | 105 | ☐ |
-| 19 | SCHD-110 | P1 | Test core ≥40 case | Core | 2 | 101-109 | ☐ |
-| 20 | SCHD-111 | P1 | Benchmark <100 ms | Core | 0,5 | 110 | ☐ |
+| 10 | SCHD-101 | P1 | Kiểu dữ liệu core v3.1 | Core | 1,5 | 005 | ✅ |
+| 11 | SCHD-102 | P1 | Parser JSON v3.1 | Core | 1,5 | 101 | ✅ |
+| 12 | SCHD-103 | P1 | `evaluate_weekly` | Core | 1,5 | 102 | ✅ |
+| 13 | SCHD-104 | P1 | `evaluate_exception` 5 kiểu | Core | 2 | 103 | ✅ |
+| 14 | SCHD-105 | P1 | Default + effective period | Core | 0,75 | 104 | ✅ |
+| 15 | SCHD-106 | P1 | Bỏ holiday tắt-toàn-cục | Core | 0,25 | 104 | ✅ |
+| 16 | SCHD-107 | P1 | Ghi nhiều target + kết quả riêng | Core | 1 | 105 | ✅ |
+| 17 | SCHD-108 | P1 | Phân xử priority 1..16 trong lớp scheduler | Core | 1,5 | 004 107 | ✅ |
+| 18 | SCHD-109 | P1 | `next_transition_at` | Core | 0,75 | 105 | ✅ |
+| 19 | SCHD-110 | P1 | Test core ≥40 case | Core | 2 | 101-109 | ✅ |
+| 20 | SCHD-111 | P1 | Benchmark <100 ms | Core | 0,5 | 110 | ✅ |
 | 21 | SCHD-121 | P1 | DTO Go v3.1 | BE | 1 | 005 | ☐ |
 | 22 | SCHD-122 | P1 | Store + thư mục revision | BE | 1,5 | 121 | ☐ |
 | 23 | SCHD-123 | P1 | Bộ đếm revision + khoá lạc quan | BE | 1 | 122 | ☐ |
