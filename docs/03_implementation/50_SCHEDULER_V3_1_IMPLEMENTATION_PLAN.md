@@ -20,17 +20,18 @@ TỔNG THỂ                                                  41 / 96 task  43%
 [█████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
 
 P0 · Chốt quyết định & hợp đồng      9/ 9 100%  [████████████████████]  ✅ CỔNG RA ĐÃ QUA
-P1 · Mô hình · Core · Backend       32/32 100%  [████████████████████]  ⛔ REVIEW: 10 finding (**)
+P1 · Mô hình · Core · Backend       32/32 100%  [████████████████████]  ✅ 9/10 finding đóng (**)
 P2 · Frontend                        0/36   0%  [░░░░░░░░░░░░░░░░░░░░]  🔄 mở khoá (hợp đồng đóng băng)
 P3 · Runtime & đồng bộ thời gian     0/12   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
 P4 · BACnet Schedule/Calendar        0/ 7   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
 
-Cổng ra đã qua:  P0 ✅   P1 ⛔ chưa merge   P2 ☐   P3 ☐   P4 ☐
+Cổng ra đã qua:  P0 ✅   P1 ✅(*)   P2 ☐   P3 ☐   P4 ☐
 Rủi ro đang mở:  R-01 R-02 R-03 R-04 R-05 R-06 R-07   (§8)
 Quyết định:      QĐ-1..6 ✅ ĐÃ DUYỆT PA-1 (2026-08-07, ADR-023)
-(*) Di trú CHƯA chạy trên schedule.conf thật của bo lab — cần cửa sổ truy cập bo (R-01)
-(**) Review P1 2026-08-07: 3 finding Cao chặn merge; QĐ-7/8/9 chờ PM/CTO. Xem
-     docs/07_records/reviews/SCHEDULER_V3_1_P1_REVIEW_2026-08-07.md
+(*) MIGRATION_REAL_FILE còn mở: cần bản sao schedule.conf từ bo lab (R-01/QĐ-8).
+    Công cụ đối chiếu đã sẵn: MKDDC_REAL_SCHEDULE_CONF=<tệp> go test -run TestMigrationAgainstRealBoardConfig
+(**) QĐ-7/8/9 ĐÃ DUYỆT 2026-08-07. 9/10 finding đóng. Xem
+     docs/07_records/reviews/SCHEDULER_V3_1_P1_EXIT_REVIEW_2026-08-07.md
 ```
 
 ### 0.1 Burn-up theo tuần
@@ -434,9 +435,9 @@ Object map hiện chỉ có AI/BI/AO/BO/AV/BV/MSV + Device ([bacnet_objects.hpp:
 | QĐ-4 | BACnet Schedule Object khi nào | **PA-1** — P4; **không chặn P1–P3**; không dùng mốc BTL làm gate | SCHD-005 401 | ✅ |
 | QĐ-5 | 6 vai trò vs 3 vai trò + 4 quyền | **PA-1** — 3 vai trò + `schedule.publish/rollback/delete/priority` | SCHD-131 261 | ✅ |
 | QĐ-6 | Di trú `schedule.conf` đang chạy | **PA-1** — tự chuyển, giữ `.bak`, **không xoá bản cũ**, bắt buộc review trước khi activate | SCHD-141..144 | ✅ |
-| **QĐ-7** | Target `EXT` (Modbus): nối đường ghi hay gỡ khỏi hợp đồng Rev A | Đề xuất **PA-2 gỡ** — không kiểm chứng đầu-cuối được khi plan 49 còn treo `G-C`/`G-D` | P1-02 | ☐ |
-| **QĐ-8** | Cửa sổ truy cập bo lab để kiểm chứng di trú (R-01) | Lấy bản sao `schedule.conf` về dev, không đụng bo đang chạy | R-01 | ☐ |
-| **QĐ-9** | Giữ audit của lịch **đã xoá** bao lâu, ở đâu | Đề xuất **giữ vĩnh viễn** trong `schedule.d/_deleted/` | P1-01 | ☐ |
+| **QĐ-7** | Target `EXT` (Modbus) | **PA-1 DUYỆT** — giữ `EXT`, hoàn thiện đường ghi qua **đường ghi dùng chung** (`PointWriter`), cấm nguồn tự ghi SHM. `EXT_PHYSICAL_VERIFIED = NO` tới khi plan 49 đóng HIL RS-485 | P1-02 | ✅ |
+| **QĐ-8** | Kiểm chứng di trú trên tệp thật (R-01) | **DUYỆT** — lấy bản sao về dev, đối chiếu 100%, không đụng bo. Công cụ xong, **chờ tệp** | R-01 | 🔄 |
+| **QĐ-9** | Audit của lịch **đã xoá** | **PA-1 DUYỆT** — lưu trữ lâu dài tại `schedule.d/_deleted/<id>-<ts>/`, không xoá audit/revision/bản ghi DELETE | P1-01 | ✅ |
 
 **Hai câu hỏi kèm theo — đã trả lời.** *C-1:* có định hướng gateway/multi-controller nhưng **không thuộc Scheduler Rev A**. *C-2:* **không dùng mốc BTL để chặn P1–P3**; P4 vẫn phải chuẩn bị đúng model Schedule/Calendar và PICS.
 

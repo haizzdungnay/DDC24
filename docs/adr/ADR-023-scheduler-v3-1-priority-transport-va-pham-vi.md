@@ -2,7 +2,7 @@
 
 - Date: 2026-08-07
 - Owner: PM + CTO (phê duyệt), Nhóm Phần mềm MK-DDC-24 (đề xuất)
-- Status: **Accepted** — PM/CTO duyệt toàn bộ 6 quyết định theo phương án PA-1 ngày 2026-08-07
+- Status: **Accepted** — PM/CTO duyệt 6 quyết định gốc ngày 2026-08-07; **bổ sung QĐ-7/8/9 cùng ngày** sau review P1 (xem §Bổ sung)
 - Related: [Tờ trình phê duyệt](../07_records/reviews/SCHEDULER_V3_1_APPROVAL_REQUEST_2026-08-07.md) ·
   [Plan 50](../03_implementation/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) ·
   [Proposal UI/UX/UC](../04_uiux/KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md) ·
@@ -174,6 +174,82 @@ mô hình mới.
 
 ---
 
+---
+
+## Bổ sung 2026-08-07 — QĐ-7, QĐ-8, QĐ-9 (sau review P1)
+
+Review P1 phát hiện 10 finding; ba trong số đó cần quyết định kiến trúc. PM/CTO duyệt cùng ngày.
+Chi tiết: [Review P1](../07_records/reviews/SCHEDULER_V3_1_P1_REVIEW_2026-08-07.md) ·
+[P1_EXIT_REVIEW](../07_records/reviews/SCHEDULER_V3_1_P1_EXIT_REVIEW_2026-08-07.md).
+
+### QĐ-7 — Giữ target `EXT`, hoàn thiện đường ghi qua **đường ghi dùng chung**
+
+Nhóm kỹ thuật đề xuất gỡ `EXT` khỏi hợp đồng Rev A. **CTO bác đề xuất đó**: Modbus RTU Point là
+capability đã xác định cho DDC-24, không được rút.
+
+Yêu cầu kiến trúc kèm theo — và đây mới là phần quan trọng:
+
+```
+Nguồn điều khiển (Lịch · Web/lệnh tay · Logic)
+        │
+        ▼
+   PointWriter          ← đường ghi DÙNG CHUNG, một chỗ duy nhất
+        │
+        ├──► PointTable                    (mọi point ảo)
+        └──► plc_shm.ext[idx].setpoint
+             plc_shm.ext[idx].dirty = 1    (chỉ EXT)
+                    │
+                    ▼
+                 IOBus ──► Modbus RTU Device
+```
+
+**Cấm `ScheduleRuntime` tự ghi thẳng SHM bằng một đường riêng.** Phải dùng chung đường ghi với
+mọi nguồn điều khiển khác để giữ arbitration, validation và diagnostics nhất quán.
+
+Hiện thực: `apps/core/domain/graph/point_writer.{hpp,cpp}`. `ScheduleRuntime::evaluate()` đổi
+tham số từ `PointTable&` sang `PointWriter&`, nên một nguồn mới quên đi qua đường chung sẽ
+**không biên dịch được** — bắt lỗi lúc build thay vì lúc thiết bị không chạy.
+
+Trạng thái chỉ được ghi:
+
+```text
+EXT_IMPLEMENTED       = YES
+EXT_PHYSICAL_VERIFIED = NO
+```
+
+cho tới khi plan 49 hoàn thành HIL RS-485 thật (`G-C`, `G-D`). Không tài liệu nào được viết như
+thể lập lịch cho điểm Modbus đã chạy trên thiết bị thật.
+
+### QĐ-8 — Kiểm chứng di trú trên `schedule.conf` **thật** của bo lab
+
+Lấy **bản sao** từ bo, chạy di trú trong môi trường dev, **đối chiếu 100% lịch trước/sau**.
+Không thay đổi trực tiếp cấu hình trên bo đang chạy.
+
+Công cụ: `TestMigrationAgainstRealBoardConfig` (chỉ đọc tệp được trỏ tới; mọi thao tác ghi diễn
+ra trong thư mục tạm).
+
+```bash
+MKDDC_REAL_SCHEDULE_CONF=/đường/dẫn/schedule.conf \
+  go test ./internal/app/ -run TestMigrationAgainstRealBoardConfig -v
+```
+
+Không đặt biến môi trường thì test **SKIP** — và **SKIP không phải PASS**. Rủi ro R-01 chỉ được
+coi là đóng khi lệnh trên chạy thật với tệp của bo.
+
+### QĐ-9 — Audit của Schedule đã xoá: lưu trữ lâu dài
+
+Chuyển sang vùng lưu trữ riêng, **không xoá**:
+
+```text
+schedule.d/_deleted/<schedule-id>-<timestamp>/
+```
+
+Không được xoá `audit.jsonl`, lịch sử revision, hay bản ghi `DELETE` cuối cùng. Hiện thực:
+`archiveScheduleState()` — dùng `os.Rename`, và trong toàn module **không còn hàm nào xoá được
+audit**.
+
+---
+
 ## Trạng thái các cổng sau ADR này
 
 ```text
@@ -184,6 +260,9 @@ P0_START                = IMMEDIATE
 MQTT_REV_A              = OUT_OF_SCOPE
 BACNET_SCHEDULE         = P4
 PHYSICAL_IO_VERIFIED    = NO   ← không được tuyên bố production-ready khi cờ này còn NO
+EXT_IMPLEMENTED         = YES  (QĐ-7)
+EXT_PHYSICAL_VERIFIED   = NO   (QĐ-7 — chờ plan 49 G-C/G-D)
+MIGRATION_REAL_FILE     = BLOCKED  (QĐ-8 — chờ bản sao schedule.conf từ bo lab)
 ```
 
 ## Ba nguyên tắc PM/CTO yêu cầu giữ đúng

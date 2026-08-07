@@ -7,6 +7,48 @@
 ---
 
 ## [Unreleased]
+### Fixed — Đóng 9/10 finding review P1 Scheduler v3.1 (2026-08-07)
+
+**Phạm vi.** Core: `point_writer.{hpp,cpp}` (mới) · `schedule_runtime.{hpp,cpp}` · `scan_loop.cpp` ·
+test core. Backend: `schedulestore.go` · `scheduleapi.go` · `schedulevalidate.go` · `main.go` ·
+2 tệp test. Deploy: `tools/deploy/deploy_board.sh`. Tài liệu: `P1_EXIT_REVIEW` (mới), Plan 50.
+
+**Căn cứ.** PM/CTO duyệt 2026-08-07: QĐ-7 `PA_1_APPROVED` (giữ `EXT`, hoàn thiện đường ghi),
+QĐ-8 `APPROVED`, QĐ-9 `PA_1_APPROVED`.
+
+**P1-02 — đường ghi dùng chung, đúng kiến trúc CTO yêu cầu.** Thêm `PointWriter`: mọi nguồn ghi
+point ảo và điểm mở rộng đi qua **một chỗ duy nhất**, chỗ đó lo cả `PointTable` lẫn
+`plc_shm.ext[].setpoint`/`dirty`. `ScheduleRuntime::evaluate()` **không còn nhận `PointTable`** —
+chữ ký đổi sang `PointWriter&`, nên một nguồn mới quên đi qua đường chung thì **không biên dịch
+được**, bắt lỗi lúc build thay vì lúc thiết bị không chạy. `scan_loop` bỏ đoạn ghi `ext[]` cục bộ
+của nhánh lệnh tay; chính đoạn đó từng là nơi duy nhất làm đủ hai bước, và đó là lý do lỗi tồn tại.
+
+**P1-01 + QĐ-9.** Xoá lịch nay **đổi tên** thư mục sang `schedule.d/_deleted/<id>-<ts>/`. Không
+còn hàm nào xoá được audit — đó là chủ ý, không phải thiếu sót.
+
+**P1-06.** Di trú tách khỏi đường đọc thành `MigrateSchedulesOnStartup()` gọi lúc khởi động.
+`GET` gặp định dạng cũ trả **409 có giải thích** thay vì lặng lẽ ghi tệp dưới quyền `viewer`.
+
+**Bảy finding còn lại** đóng kèm test: `next_transition` xét ngoại lệ ngày tương lai; `POST`/`GET`
+cùng hình dạng; nhả khoá trước khi ngủ; TTL 24 giờ + trần 512 cho `appliedCorrelations`; bỏ header
+phi-ASCII (dùng cờ `migrated_from_v1` sẵn có); validate nhận mốc thời gian tường minh; binary
+`mkddc-schedule-sim` vào `deploy_board.sh`.
+
+**Kiểm chứng (số đo thật).**
+
+```
+ctest --test-dir build/fw              → 828/828 passed, 0 failed (13,78 s)  [+6 test ranh giới]
+core_tests --gtest_filter='ScheduleV31*' → 56/56 passed
+[PERF] 64 lịch × 16 target              → 0,133 ms/vòng (ngưỡng §21: 100 ms)
+go vet ./... && go test ./... -count=1  → 11/11 gói PASS (internal/app 28,0 s)
+bash -n tools/deploy/deploy_board.sh    → sạch
+```
+
+**Còn mở — nói rõ:** `MIGRATION_REAL_FILE`. Công cụ đối chiếu 100% đã dựng xong và chạy đúng trên
+tệp giống cấu hình bo, nhưng **chưa chạy với `schedule.conf` thật** — môi trường này không có
+đường tới bo. Không đặt `MKDDC_REAL_SCHEDULE_CONF` thì test **SKIP**, và SKIP không phải PASS.
+`EXT_PHYSICAL_VERIFIED = NO` giữ nguyên tới khi plan 49 đóng `G-C`/`G-D`.
+
 ### Fixed — Review P1 Scheduler v3.1: 10 finding, P1 CHƯA merge (2026-08-07)
 
 **Phạm vi.** Tài liệu: `docs/07_records/reviews/SCHEDULER_V3_1_P1_REVIEW_2026-08-07.md` (mới) +
