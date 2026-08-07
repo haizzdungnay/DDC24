@@ -1,7 +1,7 @@
 # Evidence — Deploy Scheduler v3.1 lên Foxlinx SOM-DDC-24
 
 > **Ngày:** 2026-08-07 · **Bo:** `SOM-DDC-24-foxlinx` (`OK1126B-buildroot`, aarch64, kernel 6.1.141)
-> **Commit deploy:** `7d128952e4be587b64e2315e700c492fe7fcfe46` (nhánh `feat/scheduler-v3.1`)
+> **Commit deploy:** `7d12895` (P1+P2) → `5ba8318` (P3+P4, bản cuối đang chạy)
 > **Commit trước đó trên bo:** `5313f7802d742eb7e7d7c654ba6b7f0c300e32d0` (build 2026-08-06T04:45:28Z)
 > **Kết quả:** Deploy **thành công** cả backend lẫn giao diện. 5/5 service `active`, health toàn `ok`,
 > 14 endpoint scheduler đã đăng ký, bundle không còn nhãn `TSx` nào.
@@ -284,6 +284,42 @@ trước, kể cả khi lần khảo sát trước nói là không có.
 | 5 service | `active` |
 | Health | `ok` |
 | Tệp tạm trên bo | Đã dọn (`/tmp/io_probe`, `/tmp/mkddc-*`, `/tmp/*.json`, `/tmp/dist-new.tgz`) |
+
+---
+
+## 6d. Deploy P3 + P4 và kiểm chứng bản vá múi giờ — ✅ ĐẠT
+
+Commit `5ba8318`, build `2026-08-07T10:39:25Z`. Deploy `mkddc-core` + `mkddc-schedule-sim` +
+`mkddc-web`. 5/5 service `active`, health `ok`.
+
+**Áp dụng bài học ở §6c:** đọc lại `schedule.conf` **ngay trước** khi đụng, không dùng khảo sát
+cũ. Kết quả: tệp đã đổi thành `{"schedules": []}` — có người xoá `SCH-001` qua giao diện sau khi
+tôi khôi phục. Đã sao lưu thành `schedule.conf.bak-20260807T104005Z` trước mọi thao tác.
+
+### Phép thử phân biệt được — chứng minh bản vá múi giờ
+
+Mô phỏng chỉ chứng minh engine, không chứng minh đường chuyển đổi lúc chạy. Nên dựng một phép
+thử mà **hai bản mã cho hai kết quả khác nhau**:
+
+```
+Bo chạy TZ = UTC.  Lúc thử: 17:41 giờ VN = 10:41 UTC.
+Lịch khai báo Asia/Ho_Chi_Minh, cửa sổ 17:00–18:00 giờ VN.
+
+  mã CŨ (dùng TZ tiến trình = UTC) → so với 10:41, NGOÀI cửa sổ → DO-01 = 0
+  mã MỚI (dùng múi giờ của lịch)   → so với 17:41, TRONG cửa sổ → DO-01 = 1
+
+Kết quả thật:  DO_CMD DO-01=1   DO_FB DO-01=1
+```
+
+`DO-01 = 1` ⇒ bản vá đúng. Nếu bản cũ còn chạy thì kết quả phải là 0.
+
+Đây là lỗi **đang có thật** trên bo trước bản vá: mọi lịch cấu hình theo giờ Việt Nam sẽ chạy
+lệch **7 tiếng**, và không có gì trên giao diện cho thấy điều đó.
+
+### Dọn dẹp
+
+`schedule.conf` khôi phục từ bản sao lưu (`schedules=0`), mọi tệp tạm đã xoá, 5/5 service
+`active`, health `ok`. Bo về đúng trạng thái trước khi kiểm chứng.
 
 ---
 
