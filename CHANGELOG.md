@@ -7,6 +7,37 @@
 ---
 
 ## [Unreleased]
+### Added — Deploy Scheduler v3.1 lên Foxlinx SOM-DDC-24 (2026-08-07)
+
+**Phạm vi.** `docs/07_records/test-evidence/fw-som/2026-08-07-foxlinx-deploy-scheduler-v31.md`
+(mới) + P1_EXIT_REVIEW §1/§4.3.
+
+**Đính chính quan trọng.** Bản trước của P1_EXIT_REVIEW kết luận "bo không tới được". **Kết luận
+đó sai**: tôi chỉ thử alias `SOM-DDC-24` (cổng 2222) mà bỏ sót `SOM-DDC-24-foxlinx` (**cổng
+2223**) — cả hai đều nằm trong `~/.ssh/config`. Cổng 2223 kết nối bình thường.
+
+**Khảo sát trả lời luôn cổng `MIGRATION_REAL_FILE`.** `find / -name "schedule*.conf*"` trên bo
+trả **0 kết quả**; `CONFIG_DIR=/data/config` đã xác nhận đúng bằng `/proc/<pid>/environ` của tiến
+trình đang chạy. **Bo chưa từng có lịch nào được cấu hình**, nên R-01 (mất cấu hình khi nâng cấp)
+**vô hiệu trên bo này** — không phải "chưa kiểm được" mà là "không có gì để kiểm". Cổng chuyển
+từ `BLOCKED` sang **`N/A`**.
+
+**Deploy.** Cross-compile aarch64 (`mkddc-core` 675 KB · `mkddc-schedule-sim` 239 KB ·
+`mkddc-web` 18 MB static), chạy thử trong `/tmp` **trước khi** thay bản production, rồi cài.
+Kết quả: 5/5 service `active`, health toàn `ok` kể cả `mcu_connection`, `/data/config` **không
+đổi**. Backup 10 MB + bản binary cũ giữ cạnh bản mới để rollback một lệnh.
+
+`mkddc-schedule-sim` chạy trên ARM cho **kết quả khớp từng mốc** với chạy trên host x86 —
+điều kiện để "mô phỏng dùng chung engine với controller" có ý nghĩa thật.
+
+**Phát hiện thêm cho runbook:** `FOXLINX_DEPLOY_CHECKLIST.md` §4.2 ghi `/usr/local/bin`,
+`mkddc-webapi`, cổng 8080. Bo thật dùng `/usr/sbin`, `/opt/mkddc-web/mkddc-web`, service
+`mkddc-web-pi`, cổng **8081**. Checklist cần cập nhật.
+
+**Chưa làm:** kiểm chứng chức năng đầu-cuối (đặt lịch thật → quan sát DO-01 đổi trạng thái).
+Đã xác nhận an toàn (`iobus` mở `/dev/pts/0` = fake MCU, không có relay vật lý), nhưng bước này
+**ghi cấu hình vào bo đang chạy** nên chờ chủ dự án cho phép.
+
 ### Fixed — R-01-B: di trú đổi hành vi ngoài khoảng giờ, đã chặn (2026-08-07)
 
 **Phạm vi.** `apps/web-api/internal/app/schedulemigrate.go` ·

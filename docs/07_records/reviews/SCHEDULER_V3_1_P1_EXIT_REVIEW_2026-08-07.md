@@ -4,7 +4,7 @@
 > **Ngày:** 2026-08-07 | **Nhánh:** `feat/scheduler-v3.1`
 > **Căn cứ:** Phê duyệt PM/CTO 2026-08-07 — QĐ-7 `PA_1_APPROVED` · QĐ-8 `APPROVED` · QĐ-9 `PA_1_APPROVED`
 > **Đầu vào:** [Review P1](SCHEDULER_V3_1_P1_REVIEW_2026-08-07.md) — 10 finding
-> **Kết luận:** **9/10 finding đóng.** Cổng `MIGRATION_REAL_FILE` còn mở — chờ bản sao `schedule.conf` từ bo lab.
+> **Kết luận:** **9/10 finding đóng**; cổng `MIGRATION_REAL_FILE` chuyển thành **`N/A`** — bo lab không có `schedule.conf` nào (§4.3). Đã **deploy lên Foxlinx**, 5/5 service `active`, health toàn `ok`.
 
 ---
 
@@ -17,7 +17,9 @@ GO_TESTS                  = PASS   11/11 gói (internal/app 27,8 s)
 API_CONTRACT              = PASS   14 endpoint, 0 ref treo
 DEPLOY_PACKAGING          = PASS   mkddc-schedule-sim đã vào deploy_board.sh
 EXT_INTEGRATION_TEST      = PASS   3 test bắc qua ranh giới core↔SHM
-MIGRATION_REAL_FILE       = BLOCKED  ← cần tệp từ bo lab (QĐ-8)
+MIGRATION_REAL_FILE       = N/A      ← bo KHÔNG có schedule.conf nào (khảo sát 07/08, §4.3)
+BOARD_DEPLOY              = PASS     commit 7d12895 trên Foxlinx, 5/5 service active, health ok
+BOARD_FUNCTIONAL_TEST     = PENDING  ← cần quyền ghi cấu hình lên bo
 
 EXT_IMPLEMENTED           = YES
 EXT_PHYSICAL_VERIFIED     = NO     ← theo đúng chỉ đạo CTO, tới khi plan 49 đóng HIL RS-485
@@ -127,6 +129,31 @@ báo này**:
 vi âm thầm) — thứ nguy hiểm hơn vì không ai đi tìm — nay đã được chặn bằng ba lớp: mọi lịch tắt
 sau di trú, cảnh báo in ra, và test khoá hành vi lại để nó không đổi âm thầm về sau.
 
+### 4.3 Đã lên được bo — và cổng này **không còn hiện vật để kiểm**
+
+Bản đầu của tài liệu này kết luận bo không tới được. **Kết luận đó sai** vì tôi chỉ thử
+`SOM-DDC-24` (cổng 2222) mà bỏ sót `SOM-DDC-24-foxlinx` (**cổng 2223**) — cả hai đều nằm trong
+`~/.ssh/config`, ngay trước mắt. Cổng 2223 kết nối bình thường.
+
+Khảo sát chỉ đọc lúc 2026-08-07T09:40:39Z trên bo Foxlinx:
+
+```
+CONFIG_DIR của mkddc-web đang chạy = /data/config   (đọc từ /proc/<pid>/environ)
+find / -name "schedule*.conf*"     → 0 kết quả
+find / -type d -name "schedule.d"  → 0 kết quả
+```
+
+**Bo chưa từng có lịch nào được cấu hình.** Vậy:
+
+- **R-01 vô hiệu trên bo này** — không có cấu hình lịch nào để mất khi nâng cấp. Không phải
+  "chưa kiểm được" mà là "không có gì để kiểm".
+- **QĐ-8 không còn hiện vật:** thứ quyết định yêu cầu — một `schedule.conf` định dạng cũ đang
+  vận hành — không tồn tại. Cổng chuyển từ `BLOCKED` sang **`N/A`**.
+
+Câu hỏi duy nhất còn lại cho PM ở §6.
+
+Chi tiết: [Evidence deploy 07/08](../test-evidence/fw-som/2026-08-07-foxlinx-deploy-scheduler-v31.md).
+
 ### 4.2 Công cụ đối chiếu dữ liệu
 
 QĐ-8 duyệt cách làm: lấy **bản sao** `schedule.conf` từ bo lab, chạy di trú trong môi trường dev,
@@ -159,15 +186,8 @@ Bản sao lưu: schedule.conf.v1.bak (659 byte, khớp bit-với-bit tệp gốc
 Không đặt biến môi trường thì test **SKIP** — và **SKIP không phải PASS**. R-01 chỉ đóng khi
 lệnh trên chạy thật với tệp của bo.
 
-> **Cần PM:** ai lấy giúp bản sao `/data/config/schedule.conf` từ bo lab. Chỉ cần một thao tác
-> đọc, không cần dừng dịch vụ, không cần cửa sổ bảo trì:
->
-> ```bash
-> ssh SOM-DDC-24 'cat /data/config/schedule.conf' > schedule.conf.bo
-> ```
->
-> Bo hiện không tới được từ máy phát triển (§4.0) — cần người ở cùng mạng nhà máy, hoặc bật lại
-> bo lab.
+> **Công cụ vẫn giữ nguyên giá trị** cho bất kỳ bo nào *có* cấu hình cũ. Bo lab thì không có
+> (§4.3), nên nó chưa từng chạy với dữ liệu thật — và sẽ SKIP cho tới khi gặp một bo như vậy.
 
 ---
 
