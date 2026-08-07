@@ -7,6 +7,34 @@
 ---
 
 ## [Unreleased]
+### Added — Phương án thiết kế UI/UX/UC cho Scheduler Engine v3.1 (2026-08-07)
+
+**Phạm vi.** Tài liệu, chưa động vào code.
+`docs/04_uiux/KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md` (mới) +
+`docs/04_uiux/README.md` (thêm mục lục).
+
+**Bối cảnh.** `docs/CHUONG_YEU_CAU/scheduler.md` đặc tả Scheduler Engine v3.1 theo
+mô hình BACnet Schedule Object và tuyên bố **loại bỏ hoàn toàn cơ chế thanh ghi
+`TSx`**. Mã nguồn hiện tại không chỉ dùng mô hình TSx mà còn phơi nó ra giao diện:
+chế độ `Parameters` của `SchedulerPage.tsx` hiển thị đúng 12 dòng nhãn `TSx 0`…`TSx 11`.
+
+**Nội dung.** Đối chiếu spec với mã nguồn thật tại `5fef0b9` trên cả ba tầng
+(`SchedulerPage.tsx` 756 dòng · `scheduleapi.go`+`schedulestore.go`+`dto.go` ·
+`schedule_runtime.cpp` 527 dòng), ghi nhận 20 khoảng cách — trong đó có ba điểm
+buộc phải quyết định trước khi code: core chỉ có **6 mức priority** (`PRIO_SCHEDULE=4`
+cố định) trong khi spec đòi 1..16; **không có MQTT ở bất kỳ đâu trong repo** trong khi
+spec §14 lấy MQTT làm transport chính; và `holiday_period` hiện **tắt toàn bộ mọi lịch**
+khi active, trái với mô hình exception-thuộc-từng-Schedule-Object của spec.
+
+Tài liệu đề xuất: hợp đồng dữ liệu v3.1 (tách khối `runtime` khỏi cấu hình để không
+lặp lại lớp lỗi FE-DIAG-01), 26 use case `UC-WEB-SCH-*`, kiến trúc thông tin 4 route +
+tab con theo khuôn `ModbusRtuLayout` đã dùng trong dự án, wireframe 7 màn hình, bảng
+ánh xạ 6 vai trò của spec về 3 vai trò thật + 4 quyền thao tác riêng, và lộ trình 5 pha.
+
+**Trạng thái.** DRAFT — chờ review theo gate "DOC TRƯỚC CODE SAU" (`CLAUDE.md`).
+Sáu quyết định ở §4 cần chốt trước khi tách thành `UC-WEB-SCHEDULER-001` và
+`UX-WEB-SCHEDULER-001` rồi vào code.
+
 ### Fixed — iobus poll bình thường nhưng không ai publish telemetry (2026-08-06)
 
 **Triệu chứng.** Trang Diagnostics báo `iobus chưa publish telemetry Modbus RTU`
