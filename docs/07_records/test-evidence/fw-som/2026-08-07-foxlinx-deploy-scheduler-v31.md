@@ -3,8 +3,10 @@
 > **Ngày:** 2026-08-07 · **Bo:** `SOM-DDC-24-foxlinx` (`OK1126B-buildroot`, aarch64, kernel 6.1.141)
 > **Commit deploy:** `7d128952e4be587b64e2315e700c492fe7fcfe46` (nhánh `feat/scheduler-v3.1`)
 > **Commit trước đó trên bo:** `5313f7802d742eb7e7d7c654ba6b7f0c300e32d0` (build 2026-08-06T04:45:28Z)
-> **Kết quả:** Deploy **thành công**, 5/5 service `active`, health toàn `ok`.
-> **Còn lại:** kiểm chứng chức năng scheduler đầu-cuối — cần quyền ghi cấu hình lên bo, xem §6.
+> **Kết quả:** Deploy **thành công** cả backend lẫn giao diện. 5/5 service `active`, health toàn `ok`,
+> 14 endpoint scheduler đã đăng ký, bundle không còn nhãn `TSx` nào.
+> **Còn lại:** kiểm chứng chức năng đầu-cuối (đặt lịch thật → quan sát DO đổi trạng thái) — cần
+> quyền ghi cấu hình lên bo, xem §6.
 
 ---
 
@@ -160,12 +162,43 @@ Tương tự, kiểm chứng qua REST API cần tài khoản web admin của bo 
 
 ---
 
+## 6b. Deploy P2 — giao diện (cùng ngày, lần thứ hai)
+
+Sau khi P2 đóng cổng ra trên máy dev (436/436 test · lint 0 · build 624 ms), đẩy tiếp giao diện:
+
+```
+tar -czf dist-new.tgz -C build/web-ui/dist .     (824 KB nén, 1,7 MB giải nén)
+→ /opt/mkddc-web/dist.new  → hoán đổi nguyên thư mục → /opt/mkddc-web/dist
+   (giữ bản cũ thành dist.old + dist.prev)
+systemctl restart mkddc-web-pi
+```
+
+Hoán đổi **nguyên thư mục** thay vì copy đè: không bao giờ để `dist` ở trạng thái nửa cũ nửa mới,
+kể cả trong vài trăm mili-giây.
+
+**Kiểm chứng trên bo:**
+
+| Mục | Kết quả |
+|---|---|
+| `mkddc-web-pi` | `active` |
+| Health | `status: ok`, cả 6 check |
+| `GET /` | HTTP 200 |
+| 5 endpoint scheduler chưa auth | **401** (không phải 404 — route đã đăng ký đúng) |
+| Bundle có mã v3.1 | có `schedule_id` / `weekly_schedule` trong `index-*.js` |
+| Bundle còn nhãn `TSx` | **0** ⇒ acceptance #20 của đặc tả đạt trên bo thật |
+
+401 chứ không phải 404 là điểm cần nhìn kỹ: nó chứng minh 14 route mới **đã được đăng ký** và
+lớp xác thực đang chặn đúng, chứ không phải backend cũ còn chạy.
+
+---
+
 ## 7. Rollback nếu cần
 
 ```bash
 systemctl stop mkddc-web-pi mkddc-core
 cp -f /usr/sbin/mkddc-core.prev /usr/sbin/mkddc-core
 cp -f /opt/mkddc-web/mkddc-web.prev /opt/mkddc-web/mkddc-web
+rm -rf /opt/mkddc-web/dist && mv /opt/mkddc-web/dist.old /opt/mkddc-web/dist
 rm -f /usr/sbin/mkddc-schedule-sim
 systemctl start mkddc-core && systemctl start mkddc-web-pi
 # đối chiếu: sha256sum phải khớp d7e94d7c… và ba72ee82…
