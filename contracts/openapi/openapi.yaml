@@ -1067,8 +1067,11 @@ paths:
         "507": { $ref: "#/components/responses/Error" }
   /schedules:
     get:
-      summary: Read weekly/exception schedules (viewer+)
-      description: Rev A has weekly repeating schedules and exception rows; no monthly mode.
+      summary: List Schedule Objects (viewer+)
+      description: >
+        Scheduler Engine v3.1 (ADR-023). Each item is a Schedule Object holding weekly schedule,
+        exception schedule, schedule default, effective period and target list. The `runtime` block
+        is read-only controller truth and is never accepted on write.
       x-rbac: [viewer, operator, admin]
       responses:
         "200":
@@ -1078,28 +1081,256 @@ paths:
               schema:
                 type: array
                 maxItems: 64
-                items: { $ref: "#/components/schemas/ScheduleRow" }
+                items: { $ref: "#/components/schemas/ScheduleObject" }
         "403": { $ref: "#/components/responses/Error" }
-    put:
-      summary: Update schedules (admin)
-      description: Persist `schedule.conf`, then apply by `sighup-core`; core executes schedule priority level 4.
+    post:
+      summary: Create a Schedule Object (admin)
+      description: Created in `DRAFT`. `revision` starts at 1. Does not reach the controller until published.
       x-rbac: [admin]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: array
-              maxItems: 64
-              items: { $ref: "#/components/schemas/ScheduleRow" }
+            schema: { $ref: "#/components/schemas/ScheduleObject" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleObject" }
+        "400": { $ref: "#/components/responses/ScheduleValidationError" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /schedules/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+    get:
+      summary: Read one Schedule Object (viewer+)
+      x-rbac: [viewer, operator, admin]
       responses:
         "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ConfigPutResult" }
+              schema: { $ref: "#/components/schemas/ScheduleObject" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Update a Schedule Object (admin)
+      description: >
+        Optimistic locking on `revision`. A stale `revision` is rejected with `SCH-VERSION-001`
+        instead of silently overwriting a newer edit. Changing `priority_for_writing` additionally
+        requires the `schedule.priority` permission.
+      x-rbac: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScheduleObject" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleObject" }
+        "400": { $ref: "#/components/responses/ScheduleValidationError" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Delete a Schedule Object (admin + schedule.delete)
+      description: >
+        Spec §9.3 order is mandatory: relinquish every target, confirm no command is still held at
+        the schedule priority, store the final revision in the audit log, and only then remove the
+        object. Requires the `schedule.delete` permission.
+      x-rbac: [admin]
+      x-permission: schedule.delete
+      responses:
+        "204": { description: Deleted }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /schedules/{id}/validate:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+    post:
+      summary: Validate configuration (admin)
+      description: >
+        Returns every finding with a spec §11 error code and a JSON path, so the UI can jump
+        straight to the offending field. On success the status moves `DRAFT` to `VALIDATED`.
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleValidationResult" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /schedules/{id}/simulate:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+    post:
+      summary: Simulate the schedule (viewer+)
+      description: >
+        Runs the CONTROLLER evaluation engine, not a reimplementation. Reimplementing the algorithm
+        in the backend would be correct only until the two copies drift, and nobody would notice
+        the day they did.
+      x-rbac: [viewer, operator, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScheduleSimulateRequest" }
+      responses:
+        "200":
+          description: Simulation timeline
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleSimulateResult" }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /schedules/{id}/publish:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+    post:
+      summary: Publish to the controller (admin + schedule.publish)
+      description: >
+        Only a valid schedule may be published. The backend waits for an ACK/NACK with a timeout and
+        a bounded retry, and the controller applies at most once per `(schedule_id, revision)`.
+        A failed publish leaves the running revision untouched (spec §13.2).
+        MQTT is out of scope for Rev A (ADR-023 QD-2); the same semantics run over the internal
+        transport, so this contract does not change when MQTT is added.
+      x-rbac: [admin]
+      x-permission: schedule.publish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SchedulePublishRequest" }
+      responses:
+        "200":
+          description: Controller ACK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SchedulePublishResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "504":
+          description: ACK timeout; the running revision is unchanged.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SchedulePublishResult" }
+  /schedules/{id}/enable:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+    post:
+      summary: Enable the schedule (operator+)
+      x-rbac: [operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleObject" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /schedules/{id}/disable:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+    post:
+      summary: Disable the schedule (operator+)
+      description: >
+        Disabling is not merely "stop evaluating". Spec §9.2 requires the runtime to relinquish at
+        the priority in use and to NOT hold the last commanded value. The response reports the
+        relinquish outcome per target.
+      x-rbac: [operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleObject" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /schedules/{id}/revisions:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+    get:
+      summary: List revisions (viewer+)
+      description: At least the 10 most recent revisions are retained (spec §13.3).
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ScheduleRevision" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /schedules/{id}/rollback:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+    post:
+      summary: Roll back to an earlier revision (admin + schedule.rollback)
+      description: >
+        A rollback creates a NEW revision; it never rewrites history. A reason is mandatory and is
+        recorded in the audit log.
+      x-rbac: [admin]
+      x-permission: schedule.rollback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScheduleRollbackRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleObject" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /schedules/{id}/runtime:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+    get:
+      summary: Read runtime state (viewer+)
+      description: >
+        Controller truth only. Any field the controller has not reported is `null`, and the UI must
+        render it as an em dash rather than substituting `0` or `OK`.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleRuntimeState" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /schedules/{id}/audit:
+    parameters:
+      - $ref: "#/components/parameters/ScheduleId"
+    get:
+      summary: Read the audit trail (viewer+)
+      description: Append-only. No role may edit or delete audit entries (spec §20).
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ScheduleAuditEntry" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /alarm-settings:
     get:
       summary: Read alarm entity settings (viewer+)
@@ -1331,6 +1562,12 @@ components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
   parameters:
+    ScheduleId:
+      name: id
+      in: path
+      required: true
+      description: Schedule Object identifier, SCH-001 .. SCH-064 by convention.
+      schema: { type: string, pattern: "^SCH-[A-Za-z0-9_-]{1,60}$", example: "SCH-001" }
     PointId:
       name: id
       in: path
@@ -1345,6 +1582,13 @@ components:
         pattern: "^(VP|AV)[-_]?0*([1-9]|[1-9][0-9]|[1-3][0-9]{2}|4[0-5][0-9]|46[0-4])$"
         example: "VP1"
   responses:
+    ScheduleValidationError:
+      description: >
+        Configuration rejected. Every finding carries a spec §11 error code and a JSON path so the
+        UI can jump straight to the offending field instead of showing a wall of text.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ScheduleValidationResult" }
     Error:
       description: Lá»—i
       content:
@@ -2464,115 +2708,453 @@ components:
           type: array
           uniqueItems: true
           items: { type: string, enum: [cache, ram, hot, archive] }
+    ScheduleValue:
+      description: >
+        Must match the owning object's `value_type`: BINARY uses ACTIVE/INACTIVE, BOOLEAN uses
+        true/false, REAL uses a finite number, UNSIGNED and ENUMERATED use a non-negative integer.
+      oneOf:
+        - type: string
+          enum: [ACTIVE, INACTIVE]
+        - type: boolean
+        - type: number
+        - type: integer
+          minimum: 0
+    ScheduleTimeValue:
+      type: object
+      required: [time, value]
+      properties:
+        time:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$"
+          example: "08:00:00"
+        value: { $ref: "#/components/schemas/ScheduleValue" }
+    ScheduleWeekly:
+      type: object
+      required: [MON, TUE, WED, THU, FRI, SAT, SUN]
+      description: Always all seven days, empty days included (spec §6.1).
+      additionalProperties: false
+      properties:
+        MON: { $ref: "#/components/schemas/ScheduleDay" }
+        TUE: { $ref: "#/components/schemas/ScheduleDay" }
+        WED: { $ref: "#/components/schemas/ScheduleDay" }
+        THU: { $ref: "#/components/schemas/ScheduleDay" }
+        FRI: { $ref: "#/components/schemas/ScheduleDay" }
+        SAT: { $ref: "#/components/schemas/ScheduleDay" }
+        SUN: { $ref: "#/components/schemas/ScheduleDay" }
+    ScheduleDay:
+      type: array
+      maxItems: 24
+      description: >
+        Sorted ascending by time. Two events at the same instant in one day is `SCH-CONFIG-002`.
+        A day may contain several transitions, for example a lunch break.
+      items: { $ref: "#/components/schemas/ScheduleTimeValue" }
+    ScheduleDateRule:
+      type: object
+      required: [type]
+      description: >
+        `WEEK_N_DAY` and `HOLIDAY_GROUP` cannot be evaluated in a person's head, so the UI must
+        preview the concrete dates they resolve to over the next 12 months.
+      properties:
+        type:
+          type: string
+          enum: [DATE, DATE_RANGE, WEEK_N_DAY, CALENDAR_REFERENCE, HOLIDAY_GROUP]
+        date:
+          type: string
+          pattern: "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+        start_date:
+          type: string
+          pattern: "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+        end_date:
+          type: string
+          pattern: "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+        month:
+          type: integer
+          minimum: 0
+          maximum: 12
+          description: 1..12 a specific month; 0 means every month.
+        week_of_month:
+          type: integer
+          minimum: 1
+          maximum: 6
+          description: 1..5 the Nth week; 6 means the LAST week (BACnet convention).
+        day_of_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: 1 = Monday .. 7 = Sunday (ISO-8601).
+        calendar_id:
+          type: string
+          pattern: "^CAL-[A-Za-z0-9_-]{1,60}$"
+        group_id:
+          type: string
+          pattern: "^HG-[A-Za-z0-9_-]{1,60}$"
+    ScheduleException:
+      type: object
+      required: [exception_id, name, date_rule, event_priority, time_values]
+      properties:
+        exception_id:
+          type: string
+          pattern: "^EXC-[A-Za-z0-9_-]{1,60}$"
+        name: { type: string, minLength: 1, maxLength: 64 }
+        date_rule: { $ref: "#/components/schemas/ScheduleDateRule" }
+        event_priority:
+          type: integer
+          minimum: 1
+          maximum: 16
+          description: >
+            Resolves several exceptions effective on the same day WITHIN one Schedule Object.
+            This is NOT `priority_for_writing`. Equal priorities report `SCH-CONFIG-003`; the
+            system never picks by creation time (spec §7.3).
+        time_values:
+          type: array
+          minItems: 1
+          maxItems: 24
+          items: { $ref: "#/components/schemas/ScheduleTimeValue" }
     ScheduleTarget:
       type: object
-      required: [kind]
+      required: [target_id, target_type]
+      description: >
+        Up to 32 targets per schedule (ADR-023 QD-3). The board has 64 internal writable points
+        plus 256 Modbus points, so the UI must show the real capacity rather than the ceiling.
       properties:
-        kind:
+        target_id:
           type: string
-          enum: [AO, DO, VP]
+          pattern: "^TGT-[A-Za-z0-9_-]{1,60}$"
+        target_type:
+          type: string
+          enum: [INTERNAL_POINT, BACNET_OBJECT]
+        point_kind:
+          type: string
+          enum: [AO, DO, AV, BV, MSV, EXT]
+          description: >
+            INTERNAL_POINT only. AO/DO go through the priority resolver; AV/BV/MSV write the point
+            table; EXT is a Modbus RTU point. A kind incompatible with `value_type` is
+            `SCH-TARGET-003`.
         channel:
           type: integer
           minimum: 1
-          description: AO/DO 1..4; VP 1..464 only for created enabled writable integer/float Virtual Points.
-        pointId:
+          maximum: 256
+          description: 1-based. Per-kind ceilings AO<=4, DO<=4, AV<=32, BV<=16, MSV<=8, EXT<=256.
+        point_id:
           type: string
-          example: "AO-01"
-    ScheduleRow:
+          maxLength: 32
+          example: "DO-01"
+        device_id: { type: string, maxLength: 64 }
+        device_instance: { type: integer, minimum: 0, maximum: 4194302 }
+        object_type:
+          type: string
+          enum: [ANALOG_OUTPUT, ANALOG_VALUE, BINARY_OUTPUT, BINARY_VALUE, MULTI_STATE_OUTPUT, MULTI_STATE_VALUE]
+        object_instance: { type: integer, minimum: 0, maximum: 4194302 }
+        property_identifier: { type: string, default: PRESENT_VALUE }
+        array_index: { type: integer, minimum: 0, nullable: true }
+    ScheduleErrorCode:
+      type: string
+      nullable: true
+      description: The 14 spec §11 codes. Every user-facing error carries one.
+      enum:
+        - SCH-CONFIG-001
+        - SCH-CONFIG-002
+        - SCH-CONFIG-003
+        - SCH-TARGET-001
+        - SCH-TARGET-002
+        - SCH-TARGET-003
+        - SCH-TIME-001
+        - SCH-TIME-002
+        - SCH-WRITE-001
+        - SCH-WRITE-002
+        - SCH-RUNTIME-001
+        - SCH-VERSION-001
+        - SCH-PUBLISH-001
+        - SCH-ROLLBACK-001
+    ScheduleTargetRuntime:
       type: object
-      required: [id, label, enabled, scheduleType]
-      description: >
-        EasySet-style time schedule. Core executes AO/DO targets.
-        Backend executes created writable integer/float VP targets,
-        including controller_operation_mode.
-        `holiday_period` is an all-day MM-DD override that suppresses normal weekly schedules while active.
+      required: [target_id]
+      readOnly: true
+      description: Write results are stored per target; one failing target never stops the others.
       properties:
-        id:
+        target_id: { type: string }
+        write_result:
           type: string
-          pattern: "^SCH-[A-Za-z0-9_-]+$"
+          nullable: true
+          enum: [OK, FAILED, TIMEOUT, SKIPPED]
+        written_value: { nullable: true }
+        actual_value:
+          nullable: true
+          description: Real value on the point. Differing from `written_value` usually means a higher priority source is holding it.
+        overridden_by:
+          type: string
+          nullable: true
+          enum: [FIRE_SAFETY, LOCAL_MANUAL, BACNET, LOCAL_LOGIC]
+          description: >
+            The winning non-schedule source on the priority resolver. This is the field that answers
+            "the schedule is on, so why is the equipment not running".
+        error_code: { $ref: "#/components/schemas/ScheduleErrorCode" }
+        last_write_at: { type: string, format: date-time, nullable: true }
+    ScheduleRuntimeState:
+      type: object
+      readOnly: true
+      description: >
+        Controller truth, never written by a client and never computed in the browser. Configuration
+        is intent; this block is fact. Mixing the two is exactly the FE-DIAG-01 defect class.
+      properties:
+        effective_value: { nullable: true }
+        value_source:
+          type: string
+          nullable: true
+          enum: [WEEKLY, EXCEPTION, DEFAULT]
+        source_exception_id: { type: string, nullable: true }
+        next_transition_at: { type: string, format: date-time, nullable: true }
+        applied_revision:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Revision the controller is running. Differing from the object's `revision` means `OUT_OF_SYNC`.
+        last_evaluated_at: { type: string, format: date-time, nullable: true }
+        error_code: { $ref: "#/components/schemas/ScheduleErrorCode" }
+        targets:
+          type: array
+          items: { $ref: "#/components/schemas/ScheduleTargetRuntime" }
+    ScheduleObject:
+      type: object
+      required:
+        - schema_version
+        - schedule_id
+        - schedule_name
+        - enabled
+        - status
+        - timezone
+        - effective_period
+        - value_type
+        - priority_for_writing
+        - schedule_default
+        - weekly_schedule
+        - exception_schedule
+        - target_objects
+        - revision
+      description: >
+        Scheduler Engine v3.1 Schedule Object; replaces the register-based model entirely
+        (spec §23). Authoritative machine-readable contract:
+        `contracts/config/schedule_v3_1.schema.json` (frozen 2026-08-07).
+      properties:
+        schema_version:
+          type: string
+          enum: ["3.1"]
+        schedule_id:
+          type: string
+          pattern: "^SCH-[A-Za-z0-9_-]{1,60}$"
           maxLength: 64
           example: "SCH-001"
-        label:
-          type: string
-          maxLength: 80
-          example: "Time Schedule 1"
-        notes:
-          type: string
-          maxLength: 1024
+        schedule_name: { type: string, minLength: 1, maxLength: 64 }
+        description: { type: string, maxLength: 1024 }
         enabled: { type: boolean }
-        scheduleType:
+        status:
           type: string
-          enum:
-            - not_active
-            - controller_operation_mode
-            - control_loop_setpoint
-            - analog_output_value
-            - fan_state_value
-            - digital_output_value
-            - holiday_period
-        timeOfDay:
+          enum: [DRAFT, VALIDATED, PUBLISHED, ACTIVE, INACTIVE, DISABLED, ERROR, OUT_OF_SYNC]
+        timezone:
           type: string
-          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
-          deprecated: true
-          description: Legacy alias for startTime during migration.
-          example: "07:00"
-        startTime:
+          default: Asia/Ho_Chi_Minh
+          description: IANA name. Evaluation uses this zone, not the process TZ. Invalid is `SCH-TIME-001`.
+        effective_period:
+          type: object
+          required: [start_date, end_date]
+          properties:
+            start_date:
+              type: string
+              nullable: true
+              pattern: "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+            end_date:
+              type: string
+              nullable: true
+              pattern: "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+              description: null means NO END DATE; the UI must say so in words.
+        value_type:
           type: string
-          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
-          example: "07:00"
-        endTime:
-          type: string
-          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
-          example: "18:00"
-        startDate:
-          type: string
-          pattern: "^(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
-          example: "01-01"
-        endDate:
-          type: string
-          pattern: "^(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
-          example: "01-01"
-        weekdays:
-          type: array
-          items:
-            type: string
-            enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
-          example: [monday, tuesday, wednesday, thursday, friday]
-        target:
-          $ref: "#/components/schemas/ScheduleTarget"
-        value:
-          type: number
+          enum: [BINARY, BOOLEAN, REAL, UNSIGNED, ENUMERATED]
+          description: One Schedule Object uses exactly one value type (spec §2.1); locked once a target exists.
+        priority_for_writing:
+          type: integer
+          minimum: 1
+          maximum: 16
+          default: 16
           description: >
-            controller_operation_mode targets a created writable integer/float VP with value 0..2;
-            analog_output_value targets AO or created writable integer/float VP with 0..100 percent;
-            DO/fan targets DO with 0 or 1; control_loop_setpoint targets created writable
-            integer/float VP with a finite numeric value.
-      oneOf:
-        - title: Stored-only inactive row
+            Arbitrates BETWEEN SCHEDULES writing the same point (ADR-023 QD-1). It is not a
+            resolver level; see `core_priority_level`.
+        core_priority_level:
+          type: integer
+          enum: [4]
+          readOnly: true
+          description: >
+            Derived. The real level on the controller's 6-level priority resolver that every
+            schedule shares. The UI must show it next to `priority_for_writing` so an operator can
+            see why a priority-1 schedule still loses to a local manual command at level 2.
+        schedule_default:
+          $ref: "#/components/schemas/ScheduleValue"
+        weekly_schedule: { $ref: "#/components/schemas/ScheduleWeekly" }
+        exception_schedule:
+          type: array
+          maxItems: 32
+          items: { $ref: "#/components/schemas/ScheduleException" }
+        target_objects:
+          type: array
+          maxItems: 32
+          items: { $ref: "#/components/schemas/ScheduleTarget" }
+        bacnet_object:
+          type: object
+          description: Identity is minted from P1 to avoid a second data migration, but is only exposed on BACnet at P4 (ADR-023 QD-4).
           properties:
-            scheduleType:
-              type: string
-              enum: [not_active]
-        - title: Holiday override row
-          required: [startDate, endDate]
-          properties:
-            scheduleType:
-              type: string
-              enum: [holiday_period]
-        - title: Executable schedule row
-          required: [startTime, endTime, weekdays, target, value]
-          properties:
-            scheduleType:
-              type: string
-              enum:
-                - controller_operation_mode
-                - control_loop_setpoint
-                - analog_output_value
-                - fan_state_value
-                - digital_output_value
-            weekdays:
-              type: array
-              minItems: 1
+            object_type: { type: string, enum: [SCHEDULE] }
+            object_instance: { type: integer, minimum: 0, maximum: 4194302 }
+            exposed: { type: boolean, default: false, readOnly: true }
+        revision:
+          type: integer
+          minimum: 0
+          description: Increments on every update. Publishing an older revision is `SCH-VERSION-001`.
+        migrated_from_v1:
+          type: boolean
+          default: false
+          readOnly: true
+          description: Set by the backend converter (ADR-023 QD-6). The UI shows a banner until the user reviews and republishes.
+        runtime: { $ref: "#/components/schemas/ScheduleRuntimeState" }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string, maxLength: 64 }
+        updated_at: { type: string, format: date-time }
+        updated_by: { type: string, maxLength: 64 }
+    ScheduleValidationFinding:
+      type: object
+      required: [code, path, message]
+      properties:
+        code: { $ref: "#/components/schemas/ScheduleErrorCode" }
+        path:
+          type: string
+          description: JSON path of the offending field, so the UI can jump to it.
+          example: "$.weekly_schedule.MON[1].time"
+        message: { type: string }
+        severity: { type: string, enum: [error, warning] }
+    ScheduleValidationResult:
+      type: object
+      required: [valid, findings]
+      properties:
+        valid: { type: boolean }
+        status:
+          type: string
+          enum: [DRAFT, VALIDATED, ERROR]
+        findings:
+          type: array
+          items: { $ref: "#/components/schemas/ScheduleValidationFinding" }
+    ScheduleSimulateRequest:
+      type: object
+      required: [range]
+      properties:
+        range:
+          type: string
+          enum: [7_DAYS, 30_DAYS, SPECIFIC_DAY]
+        start_date:
+          type: string
+          pattern: "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+          description: Defaults to today in the schedule's timezone.
+    ScheduleSimulateTransition:
+      type: object
+      required: [at, source, value]
+      properties:
+        at: { type: string, format: date-time }
+        source:
+          type: string
+          enum: [WEEKLY, EXCEPTION, DEFAULT]
+        source_exception_id: { type: string, nullable: true }
+        value: { $ref: "#/components/schemas/ScheduleValue" }
+        target_ids:
+          type: array
+          items: { type: string }
+        priority_for_writing: { type: integer, minimum: 1, maximum: 16 }
+    ScheduleSimulateResult:
+      type: object
+      required: [transitions, conflicts, gaps]
+      description: Produced by the controller evaluation engine, not a backend reimplementation.
+      properties:
+        transitions:
+          type: array
+          items: { $ref: "#/components/schemas/ScheduleSimulateTransition" }
+        conflicts:
+          type: array
+          items: { $ref: "#/components/schemas/ScheduleValidationFinding" }
+        gaps:
+          type: array
+          description: Windows with no effective value; each is a configuration smell worth showing in red.
+          items:
+            type: object
+            properties:
+              from: { type: string, format: date-time }
+              to: { type: string, format: date-time }
+    SchedulePublishRequest:
+      type: object
+      required: [revision, reason]
+      properties:
+        revision:
+          type: integer
+          minimum: 0
+          description: Revision the client believes it is publishing. A mismatch is `SCH-VERSION-001`.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Mandatory; stored in the audit trail.
+        correlation_id:
+          type: string
+          description: Client-supplied idempotency key. Replaying the same key never applies twice.
+    SchedulePublishResult:
+      type: object
+      required: [result, revision]
+      properties:
+        result:
+          type: string
+          enum: [ACCEPTED, REJECTED, TIMEOUT]
+        revision:
+          type: integer
+          description: Revision now running on the controller. On REJECTED or TIMEOUT this is the PREVIOUS revision, unchanged.
+        correlation_id: { type: string }
+        error_code: { $ref: "#/components/schemas/ScheduleErrorCode" }
+        error_message: { type: string, nullable: true }
+        applied_at: { type: string, format: date-time, nullable: true }
+        attempts: { type: integer, minimum: 1 }
+    ScheduleRevision:
+      type: object
+      required: [revision, created_at, created_by]
+      properties:
+        revision: { type: integer, minimum: 0 }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        reason: { type: string }
+        published: { type: boolean }
+        rollback_of: { type: integer, nullable: true }
+    ScheduleRollbackRequest:
+      type: object
+      required: [target_revision, reason]
+      properties:
+        target_revision: { type: integer, minimum: 0 }
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Mandatory. A rollback creates a NEW revision and never rewrites history.
+    ScheduleAuditEntry:
+      type: object
+      required: [at, actor, action, schedule_id]
+      description: Append-only; spec §20 forbids editing or deleting entries.
+      properties:
+        at: { type: string, format: date-time }
+        actor: { type: string }
+        action:
+          type: string
+          enum: [CREATE, UPDATE, DELETE, VALIDATE, PUBLISH, ENABLE, DISABLE, ROLLBACK, MIGRATE]
+        schedule_id: { type: string }
+        revision_before: { type: integer, nullable: true }
+        revision_after: { type: integer, nullable: true }
+        reason: { type: string }
+        changes: { type: string, description: Human-readable summary of what changed. }
+        controller_id: { type: string }
+        result: { type: string, enum: [success, failed] }
+        error_code: { $ref: "#/components/schemas/ScheduleErrorCode" }
+        source_ip: { type: string }
     AlarmSetting:
       type: object
       required: [id, label, enabled, alarmType, sources, priority, delayS, params]
