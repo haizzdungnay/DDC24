@@ -7,6 +7,93 @@
 ---
 
 ## [Unreleased]
+### Added — Scheduler v3.1 P0: PM/CTO duyệt + đóng băng hợp đồng dữ liệu (2026-08-07)
+
+**Phạm vi.** `docs/adr/ADR-023-*.md` (mới) · `contracts/config/schedule_v3_1.schema.json` (mới) ·
+`contracts/config/examples/schedule_v3_1.example.json` (mới) · `contracts/openapi/openapi.yaml` ·
+`docs/04_uiux/KX-DDC24-{UC,UX}-WEB-SCHEDULER-001_VI.md` (mới) ·
+`docs/00_governance/DECISIONS.md` · Plan 50 · mục lục 04_uiux.
+
+**Bối cảnh.** PM/CTO duyệt toàn bộ 6 quyết định theo phương án PA-1 ngày 2026-08-07. P0 của
+Plan 50 (`SCHD-001..009`) đóng, cổng chặn cứng mở khoá cho P1 và P2.
+
+**Quyết định có ảnh hưởng rộng nhất — ADR-023.** `priority_for_writing` 1..16 được **phân xử
+bên trong `ScheduleRuntime`**; chỉ lịch thắng đi xuống `PRIO_SCHEDULE` (mức 4) của
+`PriorityResolver` 6 mức. Không mở rộng resolver, **không chạm đường Fire/Safety**, không phải
+chạy lại chứng minh an toàn. Hệ quả có chủ ý và phải nói rõ trên giao diện: lịch đặt priority 1
+vẫn không thắng được lệnh tay tại chỗ (mức 2) — một lịch tự động không nên đè được lệnh của kỹ
+thuật viên đang đứng trước tủ điện.
+
+**Hợp đồng dữ liệu đóng băng.** `schedule_v3_1.schema.json` là authority máy-đọc: Schedule Object
+với `weekly_schedule` 7 ngày × N cặp Time-Value, `exception_schedule` 5 kiểu `date_rule`,
+`schedule_default`, `effective_period`, danh sách target và khối `runtime` **readOnly tách khỏi
+cấu hình** — cấu hình là ý định, runtime là sự thật; trộn hai thứ chính là lớp lỗi FE-DIAG-01.
+
+**Kiểm chứng (số đo thật, không dẫn lại).**
+
+```
+ajv validate --spec=draft2020 --strict=false
+  mẫu hợp lệ → valid
+  10 ca sai (priority 17 · thiếu schedule_default · weekly thiếu CN · giờ sai
+  HH:mm:ss · schedule_id sai pattern · week_of_month 9 · target point_kind AI ·
+  client tự đặt core_priority_level · schema_version sai · trường lạ)
+                → 10/10 BỊ CHẶN
+openapi.yaml  → 14 endpoint /schedules*, 0 ref treo, ScheduleRow đã gỡ
+```
+
+Một schema chỉ có giá trị khi nó **từ chối** đúng thứ, nên bộ 10 ca sai là phần kiểm chứng thật,
+không phải mẫu hợp lệ.
+
+### Added — Tờ trình phê duyệt Scheduler v3.1 gửi PM/CTO (2026-08-07)
+
+**Phạm vi.** Tài liệu, chưa động vào code.
+`docs/07_records/reviews/SCHEDULER_V3_1_APPROVAL_REQUEST_2026-08-07.md` (mới) +
+tham chiếu chéo trong Plan 50 §7.
+
+**Nội dung.** Tờ trình **tự chứa** — người duyệt không cần mở tài liệu nào khác. Mỗi
+quyết định trong sáu quyết định trình bày: hiện trạng mã nguồn thật, mâu thuẫn với đặc
+tả, hai phương án loại trừ nhau, chi phí bằng người-ngày, và hệ quả nếu chọn khác đề
+xuất. Kèm hai câu hỏi cần CTO trả lời (lộ trình gateway đa controller ảnh hưởng QĐ-2;
+mốc nộp BTL ảnh hưởng QĐ-4 và thứ tự pha), bảng phân bổ nguồn lực, mục "nếu không phê
+duyệt hoặc trì hoãn", và bảng ký duyệt.
+
+**Luận điểm trung tâm.** Đặc tả v3.1 được viết cho một *gateway đa controller*;
+MK-DDC-24 là một *DDC đơn*. Ba chỗ đặc tả giả định sai thực tế kỹ thuật: ưu tiên ghi 16
+mức trên bộ phân xử 6 mức có ràng buộc an toàn; MQTT cho hai tiến trình chạy cùng một
+bo; và 2048 lệnh ghi trên phần cứng có 64 điểm ghi nội bộ. Duyệt trọn sáu đề xuất tiết
+kiệm ước tính 22–30 người-ngày và tránh phải chứng minh lại đường an toàn.
+
+**Sửa kèm trong Plan 50.** `SCHD-108` đổi từ "ánh xạ priority" sang **"phân xử 1..16
+bên trong lớp scheduler, chỉ đưa người thắng xuống mức 4"** — ánh xạ phẳng làm mất khả
+năng phân xử giữa hai lịch khác priority cùng ghi một điểm, còn phân xử nội bộ giữ đủ
+ngữ nghĩa 16 mức mà không chạm bộ phân xử an toàn. Ước lượng task 0,5 → 1,5 ngày; tổng
+plan 63 → **64 người-ngày** (đã đồng bộ mọi chỗ ghi số).
+
+### Added — Plan 50: lộ trình triển khai Scheduler Engine v3.1 (2026-08-07)
+
+**Phạm vi.** Tài liệu, chưa động vào code.
+`docs/03_implementation/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md` (mới) +
+`docs/03_implementation/README.md` (thêm mục lục).
+
+**Nội dung.** Chuyển phương án thiết kế UI/UX/UC thành lộ trình thực thi: **5 pha ·
+78 task · 63 người-ngày**, mỗi task có mã `SCHD-*`, owner, ước lượng, phụ thuộc và
+file đích. Kèm bảng tiến độ dạng thanh cập nhật theo phiên, bảng burn-up 11 tuần,
+biểu đồ Gantt và sơ đồ phụ thuộc (mermaid), bảng tổng hợp toàn bộ task, cổng ra từng
+pha kèm **lệnh kiểm chứng thật**, 6 quyết định chặn và 7 rủi ro có task ứng phó.
+
+**Ba ràng buộc thứ tự đáng lưu ý.** `SCHD-005` (JSON Schema v3.1) là điểm đóng băng
+hợp đồng — mọi thứ phía sau treo vào nó. `SCHD-125` (mock server) tồn tại chỉ để FE
+vào việc trước khi backend xong, giữ hai pha chạy song song thay vì nối tiếp.
+`SCHD-133` bắt buộc mô phỏng gọi **đúng mã đánh giá của core** thay vì cài lại trong
+Go — cài lại là tự nói dối, sẽ đúng cho tới ngày hai bản lệch nhau và ngày đó không
+ai biết.
+
+**Sửa kèm.** Mục lục `docs/03_implementation/README.md` thiếu ba plan đã tồn tại
+(44, 45, 49) — đã bổ sung cùng dòng của plan 50.
+
+**Trạng thái.** DRAFT — chờ phê duyệt. P0 là cổng chặn cứng: không task nào của P1
+được bắt đầu trước khi 6 quyết định ở §7 có câu trả lời.
+
 ### Added — Phương án thiết kế UI/UX/UC cho Scheduler Engine v3.1 (2026-08-07)
 
 **Phạm vi.** Tài liệu, chưa động vào code.

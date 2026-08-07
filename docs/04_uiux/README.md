@@ -16,7 +16,9 @@ Tài liệu thiết kế giao diện người dùng theo ISA-101 HMI standard (A
 | [KX-DDC24-UC-WEB-NETWORK-001](KX-DDC24-UC-WEB-NETWORK-001_VI.md) | Use case Web — Cài đặt → Mạng (10 UC + ma trận truy vết) |
 | [KX-DDC24-UX-WEB-NETWORK-001](KX-DDC24-UX-WEB-NETWORK-001_VI.md) | UI/UX spec + wireframe Web — Cài đặt → Mạng |
 | [MODBUS_RTU_UI_UX_DESIGN](MODBUS_RTU_UI_UX_DESIGN.md) | UI/UX spec + wireframe Web — Modbus RTU (Overview, Devices, Points, Mapping, Diagnostics); **In Review 2026-08-04** |
-| [KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001](KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md) | **DRAFT — chờ review 2026-08-07.** Phương án UI/UX/UC cho Scheduler Engine v3.1 (bỏ mô hình thanh ghi `TSx`): 20 khoảng cách spec↔mã nguồn, 6 quyết định cần chốt, 26 use case, kiến trúc thông tin 4 route + tab, wireframe 7 màn hình |
+| [KX-DDC24-UC-WEB-SCHEDULER-001](KX-DDC24-UC-WEB-SCHEDULER-001_VI.md) | Use case Web — Lịch vận hành (26 UC + ma trận truy vết 20 acceptance) |
+| [KX-DDC24-UX-WEB-SCHEDULER-001](KX-DDC24-UX-WEB-SCHEDULER-001_VI.md) | UI/UX spec + wireframe Web — Lịch vận hành (4 route + 6 tab, 7 màn hình) |
+| [KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001](KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md) | **Superseded 2026-08-07** bởi hai tài liệu trên sau khi PM/CTO duyệt ADR-023. Giữ làm hồ sơ phân tích 20 khoảng cách. |
 
 > **Ghi chú 2026-07-31:** hai tài liệu Web ở trên được lập để đóng finding G-01/G-02
 > (trước đó kho chỉ có use case và wireframe cho HMI, **không có gì cho Web**, trong
