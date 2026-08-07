@@ -120,6 +120,13 @@ target_link_libraries(mkddc-st-validate PRIVATE st_compiler_lib)
 add_executable(mkddc-st-compile application/st/st_compile_main.cpp)
 target_link_libraries(mkddc-st-compile PRIVATE st_compiler_lib)
 
+# SCHD-133: mô phỏng lịch bằng ĐÚNG engine của controller. Backend gọi binary
+# này thay vì cài lại thuật toán đánh giá trong Go — bản cài lại sẽ đúng cho tới
+# ngày nó lệch khỏi bản C++, và ngày đó không ai biết.
+add_executable(mkddc-schedule-sim application/schedule/schedule_sim_main.cpp)
+target_link_libraries(mkddc-schedule-sim PRIVATE core_lib)
+mkddc_apply_provenance(mkddc-schedule-sim)
+
 option(CORE_BUILD_TESTS "Build core unit tests" ON)
 if(CORE_BUILD_TESTS)
   target_compile_definitions(core_adapters PUBLIC CORE_BUILD_TESTS=1)

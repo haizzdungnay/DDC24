@@ -190,7 +190,13 @@ void ScanLoop::step()
         last_io_, out, *d_.resolver, d_.safe->active()));
 
     for (const WebCommand& cmd : pending_alarm_) {
-        if (cmd.kind == WebCommandKind::AlarmList) {
+        if (cmd.kind == WebCommandKind::ScheduleState) {
+            /* Trạng thái runtime là sự thật của controller. Không có
+             * ScheduleRuntime thì trả danh sách rỗng, KHÔNG bịa. */
+            const std::vector<ScheduleState> states =
+                d_.schedules ? d_.schedules->states() : std::vector<ScheduleState>{};
+            d_.web->respond_schedule_state(cmd, states);
+        } else if (cmd.kind == WebCommandKind::AlarmList) {
             const std::vector<AlarmState> states =
                 d_.alarms ? d_.alarms->active_states() : std::vector<AlarmState>{};
             d_.web->respond_alarm_list(cmd, states);

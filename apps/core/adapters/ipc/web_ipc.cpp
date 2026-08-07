@@ -487,6 +487,50 @@ void WebIpc::respond_alarm_list(const WebCommand& cmd, const std::vector<AlarmSt
     audit(cmd, "accepted", "alarm", 0.0f);
 }
 
+namespace {
+const char* value_source_name(ValueSource src)
+{
+    switch (src) {
+    case ValueSource::Weekly:    return "WEEKLY";
+    case ValueSource::Exception: return "EXCEPTION";
+    case ValueSource::Default:   return "DEFAULT";
+    case ValueSource::None:      return "";
+    }
+    return "";
+}
+} // namespace
+
+void WebIpc::respond_schedule_state(const WebCommand& cmd, const std::vector<ScheduleState>& states)
+{
+    std::string json = "{\"id\":" + std::to_string(cmd.id) +
+                       ",\"result\":\"accepted\",\"schedules\":[";
+    for (std::size_t i = 0; i < states.size(); i++) {
+        const ScheduleState& st = states[i];
+        if (i != 0) json += ',';
+        json += "{\"scheduleId\":\"" + json_escape(st.schedule_id) + "\"";
+        json += ",\"active\":" + std::string(st.active ? "true" : "false");
+        json += ",\"effectiveValue\":" + std::to_string(st.effective_value);
+        json += ",\"valueSource\":\"" + std::string(value_source_name(st.source)) + "\"";
+        json += ",\"sourceExceptionId\":\"" + json_escape(st.source_exception_id) + "\"";
+        json += ",\"nextTransitionWeekSecond\":" + std::to_string(st.next_transition_week_second);
+        json += ",\"errorCode\":\"" + std::string(schedule_error_code(st.error)) + "\"";
+        json += ",\"targets\":[";
+        for (std::size_t t = 0; t < st.targets.size(); t++) {
+            const TargetResult& tr = st.targets[t];
+            if (t != 0) json += ',';
+            json += "{\"targetId\":\"" + json_escape(tr.target_id) + "\"";
+            json += ",\"written\":" + std::string(tr.written ? "true" : "false");
+            json += ",\"writtenValue\":" + std::to_string(tr.written_value);
+            json += ",\"errorCode\":\"" + std::string(schedule_error_code(tr.error)) + "\"";
+            json += ",\"overriddenBy\":\"" + std::string(tr.override_source) + "\"";
+            json += "}";
+        }
+        json += "]}";
+    }
+    json += "]}";
+    respond_command(cmd, json);
+}
+
 void WebIpc::respond_alarm_ack_accepted(const WebCommand& cmd)
 {
     const std::string json = "{\"id\":" + std::to_string(cmd.id) +
@@ -569,6 +613,11 @@ void WebIpc::handle_line(Client& client, const std::string& line,
         } else {
             queue_response(client, cached->second.response + "\n");
         }
+        return;
+    }
+    if (op == "schedule_state") {
+        cmd.kind = WebCommandKind::ScheduleState;
+        out->push_back(cmd);
         return;
     }
     if (op == "alarm_list" || op == "alarm_ack" ||

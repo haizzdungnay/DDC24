@@ -483,6 +483,20 @@ float ao_percent_to_engineering(double percent, uint8_t mode)
     return static_cast<float>(percent / 10.0);
 }
 
+/* Tên nguồn theo hợp đồng schedule_v3_1.schema.json (LOCAL_MANUAL…), KHÁC tên
+ * dùng cho log của prio_source_name ("manual"). Trộn hai bộ tên là cách để
+ * frontend nhận một enum không khớp schema. */
+const char* override_source_name(int level)
+{
+    switch (level) {
+    case PRIO_FIRE_SAFETY:  return "FIRE_SAFETY";
+    case PRIO_LOCAL_MANUAL: return "LOCAL_MANUAL";
+    case PRIO_BACNET:       return "BACNET";
+    case PRIO_LOCAL_LOGIC:  return "LOCAL_LOGIC";
+    default:                return "";
+    }
+}
+
 std::string target_key(PointKind kind, int idx)
 {
     return std::to_string(static_cast<int>(kind)) + ":" + std::to_string(idx);
@@ -886,6 +900,16 @@ void ScheduleRuntime::evaluate_at(const CivilTime& now, const IoSnapshot& io, Po
         tr.written_value = c.value;
         /* Một target ghi lỗi KHÔNG được ngăn các target khác (đặc tả §11). */
         if (!ok) tr.error = ScheduleError::WriteFailed;
+
+        /* Ghi được vào resolver chưa chắc đã tới đầu ra: một nguồn priority cao
+         * hơn (safety, lệnh tay, BACnet) có thể đang giữ kênh. Không nói ra thì
+         * người vận hành thấy "lịch đang bật" mà thiết bị đứng im. */
+        tr.override_source = "";
+        if (tr.kind == PointKind::AO || tr.kind == PointKind::BO) {
+            const int winner = tr.kind == PointKind::AO ? resolver.winning_ao_level(tr.idx)
+                                                        : resolver.winning_do_level(tr.idx);
+            if (winner != PRIO_SCHEDULE) tr.override_source = override_source_name(winner);
+        }
     }
 
     release_missing(active, table, resolver);

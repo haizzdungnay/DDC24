@@ -21,6 +21,7 @@
 #include "alarm/alarm_runtime.hpp"
 #include "graph/point_table.hpp"
 #include "graph/runtime_point_snapshot.hpp"
+#include "schedule/schedule_runtime.hpp"
 
 namespace core {
 
@@ -30,6 +31,7 @@ enum class WebCommandKind {
     AlarmAck,
     AlarmSuppress,
     AlarmReturn,
+    ScheduleState,   /* SCHD-152: BE hỏi trạng thái runtime của lịch */
 };
 
 struct WebCommand {
@@ -89,6 +91,9 @@ public:
     void respond_alarm_ack_accepted(const WebCommand& cmd);
     void respond_alarm_suppress_accepted(const WebCommand& cmd);
     void respond_alarm_return_accepted(const WebCommand& cmd);
+    /* SCHD-152: trả trạng thái runtime CỦA CONTROLLER cho backend. Đây là
+     * "sự thật"; cấu hình mà backend giữ chỉ là "ý định". */
+    void respond_schedule_state(const WebCommand& cmd, const std::vector<ScheduleState>& states);
     void publish_point_snapshot(const RuntimePointSnapshot& snapshot);
 
 #ifdef CORE_BUILD_TESTS

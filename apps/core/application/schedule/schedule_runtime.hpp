@@ -155,6 +155,11 @@ struct TargetResult {
     bool written = false;       /* false = lịch này thua ở bước phân xử */
     double written_value = 0.0;
     ScheduleError error = ScheduleError::None;
+    /* Nguồn ĐANG THẮNG trên PriorityResolver khi nguồn đó không phải schedule
+     * (FIRE_SAFETY / LOCAL_MANUAL / BACNET / LOCAL_LOGIC). Rỗng = lệnh lịch
+     * đang tới được đầu ra. Đây là trường trả lời câu hỏi tốn nhiều thời gian
+     * hiện trường nhất: "lịch bật rồi mà sao thiết bị không chạy". */
+    const char* override_source = "";
 };
 
 struct ScheduleState {

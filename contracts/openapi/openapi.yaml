@@ -1146,7 +1146,19 @@ paths:
       x-rbac: [admin]
       x-permission: schedule.delete
       responses:
-        "204": { description: Deleted }
+        "204": { description: Deleted and the controller reloaded. }
+        "202":
+          description: >
+            Removed from the stored configuration, but the controller has not reloaded yet, so the
+            old schedule is still running. 204 would claim completion that has not happened.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: { type: string, enum: [PENDING_CONTROLLER] }
+                  scheduleId: { type: string }
+                  message: { type: string }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
