@@ -10,7 +10,7 @@ TS=$(date -u +%Y%m%d-%H%M%S)
 BACKUP=/opt/mkddc-backups/$TS
 COMMIT="${1:-unknown}"
 
-SBIN_BINS=(mkddc-core mkddc-iobus mkddc-netcfg mkddc-hmi mkddc-st-compile mkddc-st-validate)
+SBIN_BINS=(mkddc-core mkddc-iobus mkddc-netcfg mkddc-hmi mkddc-st-compile mkddc-st-validate mkddc-schedule-sim)
 UNITS_STOP=(mkddc-web-pi mkddc-reload-helper mkddc-core mkddc-iobus mkddc-netcfg)
 UNITS_START=(mkddc-netcfg mkddc-iobus mkddc-core mkddc-reload-helper mkddc-web-pi)
 
@@ -46,6 +46,10 @@ sudo -n mkdir -p "$TMP"
 sudo -n install -m 0755 "$BUILD/core/mkddc-core"            "$TMP/mkddc-core"
 sudo -n install -m 0755 "$BUILD/core/mkddc-st-compile"      "$TMP/mkddc-st-compile"
 sudo -n install -m 0755 "$BUILD/core/mkddc-st-validate"     "$TMP/mkddc-st-validate"
+# P1-03: mô phỏng lịch dùng CHUNG engine với controller, nên nó là một binary
+# riêng phải có mặt trên bo. Thiếu nó thì POST /schedules/{id}/simulate trả 503
+# vĩnh viễn — backend cố tình không tự tính thay.
+sudo -n install -m 0755 "$BUILD/core/mkddc-schedule-sim"    "$TMP/mkddc-schedule-sim"
 sudo -n install -m 0755 "$BUILD/iobus/mkddc-iobus"          "$TMP/mkddc-iobus"
 sudo -n install -m 0755 "$BUILD/netcfg/mkddc-netcfg"        "$TMP/mkddc-netcfg"
 sudo -n install -m 0755 "$BUILD/hmi/mkddc-hmi"              "$TMP/mkddc-hmi"
@@ -162,6 +166,7 @@ log "Bằng chứng"
   echo "sha256:"
   sha256sum /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
             /usr/sbin/mkddc-hmi /usr/sbin/mkddc-st-compile /usr/sbin/mkddc-st-validate \
+            /usr/sbin/mkddc-schedule-sim \
             /opt/mkddc-web/mkddc-web
 } | sudo -n tee "$BACKUP/DEPLOY_MANIFEST.txt"
 
