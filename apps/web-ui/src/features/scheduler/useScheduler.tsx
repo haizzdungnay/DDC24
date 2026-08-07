@@ -34,7 +34,19 @@ export function SchedulerProvider({ children }: { children: ReactNode }) {
   const [legacyFormat, setLegacyFormat] = useState(false)
   const mounted = useRef(true)
 
-  useEffect(() => () => { mounted.current = false }, [])
+  /* PHẢI đặt lại `true` khi mount, không chỉ đặt `false` khi unmount.
+   *
+   * `React.StrictMode` chạy effect hai lần ở chế độ dev: mount → unmount →
+   * mount. Bản đầu chỉ có cleanup, nên sau lần unmount giả lập thì
+   * `mounted.current` mắc kẹt ở `false` và MỌI cập nhật state sau đó bị bỏ
+   * qua — trang đứng ở "Đang tải…" vĩnh viễn dù request đã trả 502.
+   *
+   * Không phải chuyện riêng của StrictMode: bất kỳ lần remount nào của
+   * provider cũng làm hỏng nó theo cùng cách. */
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   const reload = useCallback(async () => {
     setLoading(true)

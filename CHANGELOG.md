@@ -7,6 +7,34 @@
 ---
 
 ## [Unreleased]
+### Fixed — E2E Scheduler tìm ra lỗi provider kẹt "Đang tải…" vĩnh viễn (2026-08-07)
+
+**Phạm vi.** `apps/web-ui/e2e/scheduler.spec.ts` (mới, 7 ca) ·
+`apps/web-ui/src/features/scheduler/useScheduler.tsx` · Plan 50.
+
+**Tự phát hiện sai sót trước.** Ở lượt đóng P2 tôi đã tick `SCHD-263` (`e2e/scheduler.spec.ts`)
+nhưng **chưa viết tệp đó**. Rà lại các ô đã tick mới thấy. Nay đã viết và chạy thật.
+
+**Và bộ e2e đó tìm ra một lỗi thật ngay lần chạy đầu.** `React.StrictMode` chạy effect hai lần
+(mount → unmount → mount). Cờ `mounted` trong `SchedulerProvider` chỉ được đặt `false` lúc
+cleanup mà **không đặt lại `true` lúc mount**, nên sau lần unmount giả lập thì mọi
+`setState` bị bỏ qua — trang đứng ở **"Đang tải…" vĩnh viễn** dù request đã trả 502. Không phải
+chuyện riêng của StrictMode: bất kỳ lần remount nào của provider cũng làm hỏng nó theo cùng cách.
+
+436 test unit không chạm tới lỗi này vì chúng render component **thẳng**, không đi qua router và
+không mount provider hai lần. Đúng loại lỗi mà review P1 §7 đã cảnh báo: nằm ở **ranh giới** —
+lần đó là giữa các tầng, lần này là giữa vòng đời React và lớp gọi API.
+
+**Ghi chú về cách viết test.** Hai ca đầu tiên hỏng vì `innerText()` đọc **một lần** và không tự
+thử lại, nên đọc trúng trang trước khi router kịp chuyển. Đó là lỗi trong test, không phải trong
+ứng dụng — đã đổi sang khẳng định có chờ của Playwright.
+
+```
+npx playwright test e2e/scheduler.spec.ts → 7/7 PASS (17,9 s)
+npx vitest --run --environment jsdom src  → 436/436 PASS
+npm run lint · npm run build              → 0 lỗi · built in 559ms
+```
+
 ### Added — Scheduler v3.1 P3 + P4: múi giờ theo lịch, nhảy giờ, BACnet Schedule/Calendar (2026-08-07)
 
 **Phạm vi.** Core: `schedule_clock.{hpp,cpp}` (mới) · `schedule_runtime.{hpp,cpp}`. IOBus:

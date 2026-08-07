@@ -382,16 +382,26 @@ Thư mục mới: `apps/web-ui/src/features/scheduler/` (thay `features/operatio
 
 ```
 npx vitest --run --environment jsdom src  → 50 tệp, 436/436 test PASS
+npx playwright test e2e/scheduler.spec.ts → 7/7 PASS
 npm run lint                              → 0 lỗi, 0 cảnh báo
-npm run build                             → built in 624ms
+npm run build                             → built in 559ms
 grep "TSx" (phân biệt hoa thường, bỏ đuôi .tsx)
   → 3 kết quả, TẤT CẢ là chú thích ghi rằng mô hình TSx đã bị bỏ.
     Không còn nhãn thanh ghi nào trên giao diện ⇒ acceptance #20 đạt.
 ```
 
-21 test mới cho phần logic thuần: phép biên dịch Start/End ↔ Time-Value cả hai
-chiều, `WEEK_N_DAY` tuần 6 = tuần cuối (BACnet), phát hiện xung đột ngoại lệ,
-và đồng hồ dung lượng thật.
+21 test unit cho phần logic thuần (phép biên dịch Start/End ↔ Time-Value cả hai chiều,
+`WEEK_N_DAY` tuần 6 = tuần cuối theo BACnet, phát hiện xung đột ngoại lệ, đồng hồ dung lượng
+thật) và **7 test e2e** đi qua router thật.
+
+**Bộ e2e đã tìm ra một lỗi thật mà 436 test unit không chạm tới.** `React.StrictMode` chạy effect
+hai lần (mount → unmount → mount); cờ `mounted` trong `SchedulerProvider` chỉ được đặt `false`
+lúc cleanup mà không đặt lại `true` lúc mount, nên sau lần unmount giả lập thì **mọi cập nhật
+state bị bỏ qua** và trang đứng ở "Đang tải…" vĩnh viễn dù request đã trả 502. Không phải chuyện
+riêng của StrictMode: bất kỳ lần remount nào của provider cũng làm hỏng nó theo cùng cách.
+
+Đây đúng loại lỗi mà §7 của review P1 nói tới — nằm ở **ranh giới** giữa vòng đời React và lớp
+gọi API, nơi test render component thẳng không bao giờ đi qua.
 
 ---
 
