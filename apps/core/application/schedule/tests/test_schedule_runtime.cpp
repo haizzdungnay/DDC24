@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "graph/clock_snapshot.hpp"
+#include "graph/point_writer.hpp"
 #include "schedule/schedule_runtime.hpp"
 
 using namespace core;
@@ -116,6 +117,10 @@ struct Fixture {
     PointTable table;
     PriorityResolver resolver;
     ScheduleRuntime runtime;
+    /* SHM giả để kiểm được nhánh EXT: ghi điểm Modbus phải đặt setpoint + dirty,
+     * không chỉ cập nhật point table (P1-02). */
+    kx_plc_shm_t shm{};
+    PointWriter writer{table, &shm};
 
     bool load(const std::string& json)
     {
@@ -165,7 +170,7 @@ TEST(ScheduleV31Weekly, MultipleTransitionsInOneDay)
         {23, 59, false, "sau tan ca"},
     };
     for (const Case& c : cases) {
-        f.runtime.evaluate_at(at(2026, 8, 10, c.hour, c.minute), f.io, f.table, f.resolver);
+        f.runtime.evaluate_at(at(2026, 8, 10, c.hour, c.minute), f.io, f.writer, f.resolver);
         EXPECT_EQ(do_on(f.resolver, 0), c.on) << c.why << " lúc " << c.hour << ":" << c.minute;
     }
 }
@@ -180,7 +185,7 @@ TEST(ScheduleV31Weekly, CarriesLastEventAcrossMidnight)
     Fixture f;
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly)})));
 
-    f.runtime.evaluate_at(at(2026, 8, 11, 3, 0), f.io, f.table, f.resolver);   /* Thứ Ba 03:00 */
+    f.runtime.evaluate_at(at(2026, 8, 11, 3, 0), f.io, f.writer, f.resolver);   /* Thứ Ba 03:00 */
     EXPECT_TRUE(do_on(f.resolver, 0));
     EXPECT_EQ(f.runtime.state_of("SCH-001")->source, ValueSource::Weekly);
 }
@@ -193,7 +198,7 @@ TEST(ScheduleV31Weekly, FallsBackToDefaultWhenNoEventEverFired)
         R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"DO","channel":1}])",
         "BINARY", R"({"value":"ACTIVE"})")})));
 
-    f.runtime.evaluate_at(at(2026, 8, 10, 9, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 9, 0), f.io, f.writer, f.resolver);
     const ScheduleState* st = f.runtime.state_of("SCH-001");
     ASSERT_NE(st, nullptr);
     EXPECT_EQ(st->source, ValueSource::Default);
@@ -207,7 +212,7 @@ TEST(ScheduleV31Weekly, SortsUnorderedTimeValues)
         R"("TUE":[],"WED":[],"THU":[],"FRI":[],"SAT":[],"SUN":[]})";
     Fixture f;
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly)})));
-    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.writer, f.resolver);
     EXPECT_TRUE(do_on(f.resolver, 0));
 }
 
@@ -215,7 +220,7 @@ TEST(ScheduleV31Weekly, ComputesNextTransition)
 {
     Fixture f;
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_mon_only())})));
-    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.writer, f.resolver);
     const ScheduleState* st = f.runtime.state_of("SCH-001");
     ASSERT_NE(st, nullptr);
     /* Thứ Hai là ngày 0 của tuần; 18:00 = 64800 giây. */
@@ -239,7 +244,7 @@ TEST(ScheduleV31Exception, DateRuleOverridesWeekly)
     Fixture f;
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly, exceptions)})));
 
-    f.runtime.evaluate_at(at(2026, 9, 2, 10, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 9, 2, 10, 0), f.io, f.writer, f.resolver);
     EXPECT_FALSE(do_on(f.resolver, 0)) << "ngoại lệ phải ghi đè lịch tuần";
     const ScheduleState* st = f.runtime.state_of("SCH-001");
     EXPECT_EQ(st->source, ValueSource::Exception);
@@ -247,7 +252,7 @@ TEST(ScheduleV31Exception, DateRuleOverridesWeekly)
 
     /* Hôm sau không còn ngoại lệ — nhưng weekly THU rỗng nên giá trị hiệu lực
      * là mốc cuối cùng còn lại của T4, tức vẫn ACTIVE. */
-    f.runtime.evaluate_at(at(2026, 9, 3, 10, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 9, 3, 10, 0), f.io, f.writer, f.resolver);
     EXPECT_EQ(f.runtime.state_of("SCH-001")->source, ValueSource::Weekly);
 }
 
@@ -265,7 +270,7 @@ TEST(ScheduleV31Exception, DateRangeRule)
         {2, 13, false}, {2, 14, true}, {2, 17, true}, {2, 20, true}, {2, 21, false},
     };
     for (const Case& c : cases) {
-        f.runtime.evaluate_at(at(2026, c.month, c.day, 12, 0), f.io, f.table, f.resolver);
+        f.runtime.evaluate_at(at(2026, c.month, c.day, 12, 0), f.io, f.writer, f.resolver);
         EXPECT_EQ(f.runtime.state_of("SCH-001")->source == ValueSource::Exception, c.inside)
             << "ngày " << c.day << "/" << c.month;
     }
@@ -290,7 +295,7 @@ TEST(ScheduleV31Exception, WeekNDayFirstMondayOfMonth)
         {11, 2, true, "T2 đầu tiên của tháng 11"},
     };
     for (const Case& c : cases) {
-        f.runtime.evaluate_at(at(2026, c.month, c.day, 12, 0), f.io, f.table, f.resolver);
+        f.runtime.evaluate_at(at(2026, c.month, c.day, 12, 0), f.io, f.writer, f.resolver);
         EXPECT_EQ(f.runtime.state_of("SCH-001")->source == ValueSource::Exception, c.match) << c.why;
     }
 }
@@ -306,9 +311,9 @@ TEST(ScheduleV31Exception, WeekNDayLastWeekUsesBacnetConvention)
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_empty(), exceptions)})));
 
     /* Tháng 8/2026 có 31 ngày; các Thứ Sáu: 7, 14, 21, 28 → cuối cùng là 28. */
-    f.runtime.evaluate_at(at(2026, 8, 28, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 28, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_EQ(f.runtime.state_of("SCH-001")->source, ValueSource::Exception);
-    f.runtime.evaluate_at(at(2026, 8, 21, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 21, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_NE(f.runtime.state_of("SCH-001")->source, ValueSource::Exception);
 }
 
@@ -322,14 +327,14 @@ TEST(ScheduleV31Exception, HolidayGroupNeedsLoadedGroup)
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_empty(), exceptions)})));
 
     /* Chưa nạp nhóm ⇒ KHÔNG khớp. Đoán bừa ở đây là ra lệnh nhầm cho thiết bị. */
-    f.runtime.evaluate_at(at(2026, 12, 24, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 12, 24, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_NE(f.runtime.state_of("SCH-001")->source, ValueSource::Exception);
 
     HolidayGroup g;
     g.id = "HG-CTY";
     g.dates.push_back(CivilDate{2026, 12, 24});
     f.runtime.set_holiday_groups({g});
-    f.runtime.evaluate_at(at(2026, 12, 24, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 12, 24, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_EQ(f.runtime.state_of("SCH-001")->source, ValueSource::Exception);
 }
 
@@ -345,7 +350,7 @@ TEST(ScheduleV31Exception, HigherEventPriorityWins)
     Fixture f;
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_empty(), exceptions)})));
 
-    f.runtime.evaluate_at(at(2026, 9, 2, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 9, 2, 12, 0), f.io, f.writer, f.resolver);
     const ScheduleState* st = f.runtime.state_of("SCH-001");
     EXPECT_EQ(st->source_exception_id, "EXC-HIGH");
     EXPECT_FALSE(do_on(f.resolver, 0));
@@ -367,7 +372,7 @@ TEST(ScheduleV31Exception, EqualEventPriorityReportsConflict)
     Fixture f;
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_empty(), exceptions)})));
 
-    f.runtime.evaluate_at(at(2026, 9, 2, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 9, 2, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_EQ(f.runtime.state_of("SCH-001")->error, ScheduleError::ConfigExceptionConflict);
     EXPECT_STREQ(schedule_error_code(ScheduleError::ConfigExceptionConflict), "SCH-CONFIG-003");
 }
@@ -391,7 +396,7 @@ TEST(ScheduleV31Exception, ExceptionDoesNotAffectOtherSchedules)
                       R"([{"target_id":"TGT-002","target_type":"INTERNAL_POINT","point_kind":"DO","channel":2}])")
     })));
 
-    f.runtime.evaluate_at(at(2026, 9, 2, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 9, 2, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_FALSE(do_on(f.resolver, 0)) << "SCH-001 bị ngoại lệ của chính nó tắt";
     EXPECT_TRUE(do_on(f.resolver, 1)) << "SCH-002 KHÔNG được ảnh hưởng bởi ngoại lệ của lịch khác";
 }
@@ -409,11 +414,11 @@ TEST(ScheduleV31EffectivePeriod, OutsideRangeIsInactive)
         "BINARY", R"({"value":"INACTIVE"})", 16,
         R"({"start_date":"2026-06-01","end_date":"2026-07-31"})")})));
 
-    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.table, f.resolver);   /* sau end */
+    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.writer, f.resolver);   /* sau end */
     EXPECT_FALSE(f.runtime.state_of("SCH-001")->active);
     EXPECT_FALSE(schedule_holds_do(f.resolver, 0)) << "ngoài khoảng hiệu lực thì không giữ lệnh";
 
-    f.runtime.evaluate_at(at(2026, 6, 1, 10, 0), f.io, f.table, f.resolver);    /* đúng biên start */
+    f.runtime.evaluate_at(at(2026, 6, 1, 10, 0), f.io, f.writer, f.resolver);    /* đúng biên start */
     EXPECT_TRUE(f.runtime.state_of("SCH-001")->active);
 }
 
@@ -437,7 +442,7 @@ TEST(ScheduleV31EffectivePeriod, DisabledScheduleReleasesTarget)
 {
     Fixture f;
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_mon_only())})));
-    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.writer, f.resolver);
     ASSERT_TRUE(do_on(f.resolver, 0));
 
     /* Nạp lại cùng lịch nhưng enabled=false — đặc tả §9.2 đòi relinquish, không
@@ -446,7 +451,7 @@ TEST(ScheduleV31EffectivePeriod, DisabledScheduleReleasesTarget)
         "SCH-001", weekly_mon_only(), "[]",
         R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"DO","channel":1}])",
         "BINARY", R"({"value":"INACTIVE"})", 16, R"({"start_date":null,"end_date":null})", false)})));
-    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.writer, f.resolver);
     EXPECT_FALSE(schedule_holds_do(f.resolver, 0)) << "tắt lịch phải relinquish, không giữ giá trị cuối";
 }
 
@@ -469,7 +474,7 @@ TEST(ScheduleV31Priority, LowerNumberWinsSameTarget)
         schedule_json("SCH-HIGH", weekly_off, "[]", same_target, "BINARY", R"({"value":"INACTIVE"})", 2)
     })));
 
-    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_FALSE(do_on(f.resolver, 0)) << "priority 2 phải thắng priority 16";
 
     /* Lịch thua phải THẤY ĐƯỢC là nó thua — không im lặng. */
@@ -495,7 +500,7 @@ TEST(ScheduleV31Priority, DifferentTargetsDoNotCompete)
                       R"([{"target_id":"TGT-002","target_type":"INTERNAL_POINT","point_kind":"DO","channel":2}])",
                       "BINARY", R"({"value":"INACTIVE"})", 1)
     })));
-    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_TRUE(do_on(f.resolver, 0));
     EXPECT_TRUE(do_on(f.resolver, 1));
 }
@@ -514,7 +519,7 @@ TEST(ScheduleV31Priority, ScheduleAlwaysSitsAtCoreLevelFour)
         "BINARY", R"({"value":"INACTIVE"})", 1)})));
 
     f.resolver.set_do(PRIO_LOCAL_MANUAL, 0, false);
-    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_FALSE(do_on(f.resolver, 0)) << "lệnh tay mức 2 phải thắng mọi lịch";
     EXPECT_EQ(f.resolver.winning_do_level(0), PRIO_LOCAL_MANUAL);
 
@@ -538,7 +543,7 @@ TEST(ScheduleV31Target, WritesEveryTargetInList)
     Fixture f;
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_on, "[]", targets)})));
 
-    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_TRUE(do_on(f.resolver, 0));
     EXPECT_TRUE(do_on(f.resolver, 1));
     EXPECT_FLOAT_EQ(f.table.get({PointKind::BV, 2}).value, 1.0f);
@@ -564,12 +569,12 @@ TEST(ScheduleV31Target, AnalogPercentIsConvertedByAoMode)
         R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"AO","channel":1}])",
         "REAL", R"({"value":0.0})")})));
 
-    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 5.0f) << "50% của 0-10V là 5V";
 
     f.io.ao_mode[0] = 1;   /* 4-20 mA */
     f.resolver.set_ao_modes(f.io.ao_mode);
-    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_FLOAT_EQ(f.resolver.resolve().ao[0], 12.0f) << "50% của 4-20mA là 12mA";
 }
 
@@ -577,12 +582,12 @@ TEST(ScheduleV31Target, ReleasesTargetWhenNoLongerClaimed)
 {
     Fixture f;
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_mon_only())})));
-    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.writer, f.resolver);
     ASSERT_TRUE(schedule_holds_do(f.resolver, 0));
 
     /* Đổi sang lịch không còn target nào ⇒ phải nhả. */
     ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_mon_only(), "[]", "[]")})));
-    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.writer, f.resolver);
     EXPECT_FALSE(schedule_holds_do(f.resolver, 0));
 }
 
@@ -595,7 +600,7 @@ TEST(ScheduleV31Target, MultiStateValueWritesMsv)
         "SCH-001", weekly, "[]",
         R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"MSV","channel":1}])",
         "ENUMERATED", R"({"value":0})")})));
-    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_FLOAT_EQ(f.table.get({PointKind::MSV, 0}).value, 2.0f);
 }
 
@@ -806,7 +811,7 @@ TEST(ScheduleV31Reload, AcceptsWrapperObjectWithHolidayGroups)
 
     Fixture f;
     ASSERT_TRUE(f.load(wrapper));
-    f.runtime.evaluate_at(at(2026, 12, 24, 12, 0), f.io, f.table, f.resolver);
+    f.runtime.evaluate_at(at(2026, 12, 24, 12, 0), f.io, f.writer, f.resolver);
     EXPECT_EQ(f.runtime.state_of("SCH-001")->source, ValueSource::Exception);
 }
 
@@ -902,7 +907,7 @@ TEST(ScheduleV31Performance, SixtyFourSchedulesUnder100ms)
     const auto begin = std::chrono::steady_clock::now();
     constexpr int kRounds = 100;
     for (int i = 0; i < kRounds; i++) {
-        f.runtime.evaluate_at(at(2026, 8, 10, 14, 0), f.io, f.table, f.resolver);
+        f.runtime.evaluate_at(at(2026, 8, 10, 14, 0), f.io, f.writer, f.resolver);
     }
     const auto elapsed = std::chrono::steady_clock::now() - begin;
     const double per_round_ms =
@@ -911,4 +916,113 @@ TEST(ScheduleV31Performance, SixtyFourSchedulesUnder100ms)
     std::printf("[PERF] 64 lịch × 16 target: %.3f ms/vòng (ngưỡng đặc tả §21: 100 ms)\n",
                 per_round_ms);
     EXPECT_LT(per_round_ms, 100.0);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 10. Finding review P1 — test BẮC QUA RANH GIỚI giữa các tầng
+ *
+ * Ba finding mức Cao của review 2026-08-07 đều lọt qua 822 test cũ vì test
+ * nào cũng nằm gọn trong MỘT tầng. Nhóm dưới đây kiểm đúng chỗ nối.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* P1-02: lệnh lịch cho điểm EXT phải tới được thiết bị, không chỉ vào point
+ * table. Iobus chỉ đẩy xuống bus khi thấy cờ dirty. */
+TEST(ScheduleV31ExtWritePath, ScheduleWriteReachesModbusSetpointAndDirty)
+{
+    const std::string weekly =
+        R"({"MON":[{"time":"00:00:00","value":42.5}],"TUE":[],"WED":[],"THU":[],"FRI":[],"SAT":[],"SUN":[]})";
+    Fixture f;
+    ASSERT_TRUE(f.load(config({schedule_json(
+        "SCH-001", weekly, "[]",
+        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"EXT","channel":7}])",
+        "REAL", R"({"value":0.0})")})));
+
+    ASSERT_EQ(f.shm.ext[6].dirty, 0) << "chưa đánh giá thì chưa có lệnh nào";
+
+    f.runtime.evaluate_at(at(2026, 8, 10, 12, 0), f.io, f.writer, f.resolver);
+
+    EXPECT_FLOAT_EQ(f.table.get({PointKind::EXT, 6}).value, 42.5f) << "point table phải cập nhật";
+    EXPECT_FLOAT_EQ(f.shm.ext[6].setpoint, 42.5f) << "setpoint phải xuống SHM cho iobus";
+    EXPECT_EQ(f.shm.ext[6].dirty, 1) << "thiếu cờ dirty thì iobus không đẩy xuống thiết bị";
+
+    const ScheduleState* st = f.runtime.state_of("SCH-001");
+    ASSERT_NE(st, nullptr);
+    ASSERT_EQ(st->targets.size(), 1u);
+    EXPECT_TRUE(st->targets[0].written);
+    EXPECT_EQ(st->targets[0].error, ScheduleError::None);
+}
+
+/* Không có SHM (chưa attach) thì ghi EXT phải BÁO LỖI, không được im lặng báo
+ * thành công — đây chính là kiểu sai mà finding P1-02 mô tả. */
+TEST(ScheduleV31ExtWritePath, ReportsFailureWhenShmUnavailable)
+{
+    PointTable table;
+    PointWriter writer_without_shm(table, nullptr);
+    EXPECT_FALSE(writer_without_shm.can_write_ext());
+    EXPECT_FALSE(writer_without_shm.write({PointKind::EXT, 0}, 1.0f, PointSource::SCHEDULE))
+        << "không có SHM thì phải trả false, không được báo đã ghi";
+    /* Point ảo thường vẫn ghi được vì chúng không cần SHM. */
+    EXPECT_TRUE(writer_without_shm.write({PointKind::AV, 0}, 1.0f, PointSource::SCHEDULE));
+}
+
+/* Nhả quyền KHÔNG được đặt dirty: nhả quyền không phải là ra thêm một lệnh
+ * xuống thiết bị. */
+TEST(ScheduleV31ExtWritePath, ReleaseDoesNotCommandTheDevice)
+{
+    PointTable table;
+    kx_plc_shm_t shm{};
+    PointWriter writer(table, &shm);
+    ASSERT_TRUE(writer.write({PointKind::EXT, 3}, 10.0f, PointSource::SCHEDULE));
+    shm.ext[3].dirty = 0;   /* giả lập iobus đã tiêu thụ lệnh */
+
+    ASSERT_TRUE(writer.release({PointKind::EXT, 3}));
+    EXPECT_EQ(shm.ext[3].dirty, 0) << "nhả quyền không được sinh lệnh mới";
+    EXPECT_FLOAT_EQ(table.get({PointKind::EXT, 3}).value, 10.0f) << "release GIỮ value";
+    EXPECT_EQ(table.get({PointKind::EXT, 3}).source, PointSource::DEFAULT);
+}
+
+/* P1-04: lần chuyển kế tiếp nằm ở một ngày ngoại lệ TƯƠNG LAI. Bản đầu trả -1
+ * ("không có lần chuyển nào") nên giao diện hiện gạch ngang. */
+TEST(ScheduleV31NextTransition, FindsExceptionOnAFutureDay)
+{
+    const std::string exceptions =
+        R"([{"exception_id":"EXC-D1","name":"ngay 1","date_rule":{"type":"DATE","date":"2026-08-10"},)"
+        R"("event_priority":1,"time_values":[{"time":"06:00:00","value":"ACTIVE"}]},)"
+        R"({"exception_id":"EXC-D2","name":"ngay 2","date_rule":{"type":"DATE","date":"2026-08-11"},)"
+        R"("event_priority":1,"time_values":[{"time":"09:00:00","value":"INACTIVE"}]}])";
+    Fixture f;
+    ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_empty(), exceptions)})));
+
+    /* Thứ Hai 10/08 lúc 07:00: mốc 06:00 hôm nay đã qua, lịch tuần rỗng, nên
+     * lần chuyển kế tiếp là ngoại lệ của Thứ Ba lúc 09:00. */
+    f.runtime.evaluate_at(at(2026, 8, 10, 7, 0), f.io, f.writer, f.resolver);
+    const ScheduleState* st = f.runtime.state_of("SCH-001");
+    ASSERT_NE(st, nullptr);
+    EXPECT_EQ(st->next_transition_week_second, 1 * 24 * 3600 + 9 * 3600)
+        << "Thứ Ba 09:00 = 118800 giây kể từ đầu tuần";
+}
+
+TEST(ScheduleV31NextTransition, PrefersHigherPriorityExceptionOnFutureDay)
+{
+    const std::string exceptions =
+        R"([{"exception_id":"EXC-LOW","name":"thap","date_rule":{"type":"DATE","date":"2026-08-11"},)"
+        R"("event_priority":9,"time_values":[{"time":"05:00:00","value":"ACTIVE"}]},)"
+        R"({"exception_id":"EXC-HIGH","name":"cao","date_rule":{"type":"DATE","date":"2026-08-11"},)"
+        R"("event_priority":1,"time_values":[{"time":"11:00:00","value":"ACTIVE"}]}])";
+    Fixture f;
+    ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_empty(), exceptions)})));
+
+    f.runtime.evaluate_at(at(2026, 8, 10, 7, 0), f.io, f.writer, f.resolver);
+    EXPECT_EQ(f.runtime.state_of("SCH-001")->next_transition_week_second,
+              1 * 24 * 3600 + 11 * 3600)
+        << "phải theo ngoại lệ priority 1, không phải ngoại lệ priority 9";
+}
+
+TEST(ScheduleV31NextTransition, StillMinusOneWhenNothingScheduled)
+{
+    Fixture f;
+    ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_empty())})));
+    f.runtime.evaluate_at(at(2026, 8, 10, 7, 0), f.io, f.writer, f.resolver);
+    EXPECT_EQ(f.runtime.state_of("SCH-001")->next_transition_week_second, -1)
+        << "thật sự không có lần chuyển nào thì -1 mới đúng";
 }

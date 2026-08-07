@@ -26,6 +26,7 @@
 
 #include "graph/clock_snapshot.hpp"
 #include "graph/point_table.hpp"
+#include "graph/point_writer.hpp"
 #include "ports/io_snapshot.hpp"
 #include "priority/priority_resolver.hpp"
 
@@ -182,10 +183,13 @@ public:
     void configure(std::vector<ScheduleObject> schedules);
     void set_holiday_groups(std::vector<HolidayGroup> groups) { groups_ = std::move(groups); }
 
-    void evaluate(const IoSnapshot& io, PointTable& table, PriorityResolver& resolver);
-    void evaluate(const ClockSnapshot& clock, const IoSnapshot& io, PointTable& table,
+    /* Ghi qua PointWriter — đường ghi dùng chung với mọi nguồn khác (P1-02).
+     * KHÔNG nhận PointTable trực tiếp nữa: nhận nó là mở lại đúng cái cửa đã
+     * làm lệnh lịch cho điểm EXT chết lặng. */
+    void evaluate(const IoSnapshot& io, PointWriter& writer, PriorityResolver& resolver);
+    void evaluate(const ClockSnapshot& clock, const IoSnapshot& io, PointWriter& writer,
                   PriorityResolver& resolver);
-    void evaluate_at(const CivilTime& now, const IoSnapshot& io, PointTable& table,
+    void evaluate_at(const CivilTime& now, const IoSnapshot& io, PointWriter& writer,
                      PriorityResolver& resolver);
 
     std::size_t schedule_count() const { return schedules_.size(); }
@@ -207,8 +211,13 @@ private:
     std::vector<ScheduleState> states_;
     std::vector<AppliedTarget> applied_;
 
-    void release_missing(const std::vector<AppliedTarget>& active, PointTable& table,
+    void release_missing(const std::vector<AppliedTarget>& active, PointWriter& writer,
                          PriorityResolver& resolver);
+
+    /* Ngoại lệ thắng của ngày cách hôm nay `ahead` ngày — dùng khi tính lần
+     * chuyển trạng thái kế tiếp (P1-04). */
+    const ExceptionEntry* exception_for_offset(const ScheduleObject& s, const CivilTime& now,
+                                               int ahead) const;
 };
 
 bool load_schedule_config(const std::string& path, bool must_exist,

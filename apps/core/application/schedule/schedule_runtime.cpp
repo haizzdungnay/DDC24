@@ -740,6 +740,32 @@ const ScheduleState* ScheduleRuntime::state_of(const std::string& schedule_id) c
     return nullptr;
 }
 
+/* Ngoại lệ thắng của ngày cách hôm nay `ahead` ngày (P1-04). Dùng đúng quy tắc
+ * phân xử của hôm nay: event_priority nhỏ hơn thắng. */
+const ExceptionEntry* ScheduleRuntime::exception_for_offset(const ScheduleObject& s,
+                                                            const CivilTime& now, int ahead) const
+{
+    CivilTime future = now;
+    for (int i = 0; i < ahead; i++) {
+        future.day++;
+        if (future.day > days_in_month(future.year, future.month)) {
+            future.day = 1;
+            future.month++;
+            if (future.month > 12) { future.month = 1; future.year++; }
+        }
+    }
+    future.weekday = day_of_week_iso(future.year, future.month, future.day) - 1;
+    future.second_of_day = 0;
+
+    const ExceptionEntry* best = nullptr;
+    for (const ExceptionEntry& e : s.exceptions) {
+        if (e.time_values.empty()) continue;
+        if (!date_rule_matches(e.date_rule, future, groups_)) continue;
+        if (!best || e.event_priority < best->event_priority) best = &e;
+    }
+    return best;
+}
+
 ScheduleState ScheduleRuntime::evaluate_schedule(const ScheduleObject& s, const CivilTime& now) const
 {
     ScheduleState st;
@@ -793,14 +819,25 @@ ScheduleState ScheduleRuntime::evaluate_schedule(const ScheduleObject& s, const 
         }
     }
 
-    /* Lần chuyển trạng thái kế tiếp — quét tối đa 8 ngày tới, gồm cả ngoại lệ
-     * đang áp dụng hôm nay. Kết quả tính bằng giây kể từ đầu tuần hiện tại. */
+    /* Lần chuyển trạng thái kế tiếp — quét tối đa 8 ngày tới.
+     *
+     * P1-04: bản đầu chỉ tra ngoại lệ cho HÔM NAY, các ngày sau luôn đọc lịch
+     * tuần. Với một lịch tuần rỗng và ngoại lệ vào ngày mai, nó trả -1 nghĩa là
+     * "không có lần chuyển nào" trong khi thực tế có — giao diện hiện gạch
+     * ngang lúc hệ thống sắp làm việc. Nay mỗi ngày phía trước đều được hỏi
+     * xem có ngoại lệ nào áp dụng không, đúng thứ tự exception → weekly. */
     st.next_transition_week_second = -1;
     for (int ahead = 0; ahead < 8 && st.next_transition_week_second < 0; ahead++) {
         const int day = (now.weekday + ahead) % 7;
         const int floor_sec = (ahead == 0) ? now.second_of_day : -1;
+
         const std::vector<TimeValue>* list = &s.weekly[day];
-        if (ahead == 0 && winner) list = &winner->time_values;
+        if (ahead == 0) {
+            if (winner) list = &winner->time_values;
+        } else if (const ExceptionEntry* future = exception_for_offset(s, now, ahead)) {
+            list = &future->time_values;
+        }
+
         for (const TimeValue& tv : *list) {
             if (tv.second_of_day <= floor_sec) continue;
             st.next_transition_week_second = (now.weekday + ahead) * kDaySeconds + tv.second_of_day;
@@ -819,18 +856,18 @@ ScheduleState ScheduleRuntime::evaluate_schedule(const ScheduleObject& s, const 
     return st;
 }
 
-void ScheduleRuntime::evaluate(const IoSnapshot& io, PointTable& table, PriorityResolver& resolver)
+void ScheduleRuntime::evaluate(const IoSnapshot& io, PointWriter& writer, PriorityResolver& resolver)
 {
-    evaluate(capture_clock_snapshot(), io, table, resolver);
+    evaluate(capture_clock_snapshot(), io, writer, resolver);
 }
 
-void ScheduleRuntime::evaluate(const ClockSnapshot& clock, const IoSnapshot& io, PointTable& table,
+void ScheduleRuntime::evaluate(const ClockSnapshot& clock, const IoSnapshot& io, PointWriter& writer,
                                PriorityResolver& resolver)
 {
-    evaluate_at(civil_from_tm(clock.civil_time), io, table, resolver);
+    evaluate_at(civil_from_tm(clock.civil_time), io, writer, resolver);
 }
 
-void ScheduleRuntime::evaluate_at(const CivilTime& now, const IoSnapshot& io, PointTable& table,
+void ScheduleRuntime::evaluate_at(const CivilTime& now, const IoSnapshot& io, PointWriter& writer,
                                   PriorityResolver& resolver)
 {
     states_.clear();
@@ -893,8 +930,10 @@ void ScheduleRuntime::evaluate_at(const CivilTime& now, const IoSnapshot& io, Po
         } else if (tr.kind == PointKind::BO) {
             ok = resolver.set_do(PRIO_SCHEDULE, tr.idx, c.value != 0.0);
         } else {
-            ok = table.set_virtual({tr.kind, tr.idx}, static_cast<float>(c.value),
-                                   PointSource::SCHEDULE);
+            /* Point ảo và điểm mở rộng đi qua đường ghi dùng chung; với EXT nó
+             * đặt cả setpoint + dirty để iobus đẩy xuống thiết bị. */
+            ok = writer.write({tr.kind, tr.idx}, static_cast<float>(c.value),
+                              PointSource::SCHEDULE);
         }
         tr.written = ok;
         tr.written_value = c.value;
@@ -912,11 +951,11 @@ void ScheduleRuntime::evaluate_at(const CivilTime& now, const IoSnapshot& io, Po
         }
     }
 
-    release_missing(active, table, resolver);
+    release_missing(active, writer, resolver);
     applied_ = std::move(active);
 }
 
-void ScheduleRuntime::release_missing(const std::vector<AppliedTarget>& active, PointTable& table,
+void ScheduleRuntime::release_missing(const std::vector<AppliedTarget>& active, PointWriter& writer,
                                       PriorityResolver& resolver)
 {
     for (const AppliedTarget& old : applied_) {
@@ -933,7 +972,7 @@ void ScheduleRuntime::release_missing(const std::vector<AppliedTarget>& active, 
         } else if (old.kind == PointKind::BO) {
             resolver.release_do(PRIO_SCHEDULE, old.idx);
         } else {
-            table.release_virtual({old.kind, old.idx});
+            writer.release({old.kind, old.idx});
         }
     }
 }

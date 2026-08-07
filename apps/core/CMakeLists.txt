@@ -43,6 +43,7 @@ target_link_libraries(core_build_settings INTERFACE
 
 add_library(core_domain STATIC
     domain/graph/point_table.cpp
+    domain/graph/point_writer.cpp
     domain/graph/point_quality.cpp
     domain/graph/graph_runtime.cpp
     domain/graph/runtime_point_snapshot.cpp

@@ -1,5 +1,7 @@
 #include "runtime/scan_loop.hpp"
 
+#include "graph/point_writer.hpp"
+
 #include <cstdio>
 #include <ctime>
 
@@ -130,23 +132,22 @@ void ScanLoop::step()
                 manual_do_user_[cmd.point.idx] = cmd.ttl_s > 0 ? cmd.user : std::string();
             }
         } else {
-            /* AV/BV/MSV/EXT: ghi thẳng point table (không phải output vật lý);
-             * release GIỮ value, chỉ nhả source — KHÔNG ghi cmd.value */
-            if (cmd.is_write) ok = d_.table->set_virtual(cmd.point, cmd.value, PointSource::WEB);
-            else              ok = d_.table->release_virtual(cmd.point);
-            if (cmd.point.kind == PointKind::EXT && cmd.is_write && ok && d_.bacnet && d_.bacnet->shm()) {
-                kx_plc_shm_t* shm = d_.bacnet->shm();
-                if (cmd.point.idx >= 0 && cmd.point.idx < KX_N_EXT) {
-                    shm->ext[cmd.point.idx].setpoint = cmd.value;
-                    shm->ext[cmd.point.idx].dirty = 1;
-                }
-            }
+            /* AV/BV/MSV/EXT: qua đường ghi dùng chung (P1-02). EXT được
+             * PointWriter đặt luôn setpoint + dirty, nên ở đây không còn bước
+             * riêng nào cho Modbus — trước kia bước đó chỉ có ở nhánh này và
+             * ScheduleRuntime thiếu nó.
+             * release GIỮ value, chỉ nhả source — KHÔNG ghi cmd.value. */
+            PointWriter writer(*d_.table, d_.bacnet ? d_.bacnet->shm() : nullptr);
+            if (cmd.is_write) ok = writer.write(cmd.point, cmd.value, PointSource::WEB);
+            else              ok = writer.release(cmd.point);
         }
         pending_.push_back({cmd, ok});
     }
 
-    if (d_.schedules)
-        d_.schedules->evaluate(clock, last_io_, *d_.table, *d_.resolver);
+    if (d_.schedules) {
+        PointWriter schedule_writer(*d_.table, d_.bacnet ? d_.bacnet->shm() : nullptr);
+        d_.schedules->evaluate(clock, last_io_, schedule_writer, *d_.resolver);
+    }
 
     /* 5. Execute graph */
     d_.graph->execute(*d_.table, *d_.resolver);
