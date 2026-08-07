@@ -16,18 +16,19 @@
 > Cách cập nhật: §9. Cập nhật lần cuối **2026-08-07** — P0 đóng; P1.A/B/C xong (822/822 ctest, 11/11 gói Go).
 
 ```text
-TỔNG THỂ                                                  39 / 96 task  41%
-[████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
+TỔNG THỂ                                                  41 / 96 task  43%
+[█████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
 
 P0 · Chốt quyết định & hợp đồng      9/ 9 100%  [████████████████████]  ✅ CỔNG RA ĐÃ QUA
-P1 · Mô hình · Core · Backend       30/32  94%  [███████████████████░]  🔄 còn SCHD-151, 153
+P1 · Mô hình · Core · Backend       32/32 100%  [████████████████████]  ✅ trừ 1 mục treo (*)
 P2 · Frontend                        0/36   0%  [░░░░░░░░░░░░░░░░░░░░]  🔄 mở khoá (hợp đồng đóng băng)
 P3 · Runtime & đồng bộ thời gian     0/12   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
 P4 · BACnet Schedule/Calendar        0/ 7   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
 
-Cổng ra đã qua:  P0 ✅   P1 ☐   P2 ☐   P3 ☐   P4 ☐
+Cổng ra đã qua:  P0 ✅   P1 ✅(*)   P2 ☐   P3 ☐   P4 ☐
 Rủi ro đang mở:  R-01 R-02 R-03 R-04 R-05 R-06 R-07   (§8)
 Quyết định:      QĐ-1..6 ✅ ĐÃ DUYỆT PA-1 (2026-08-07, ADR-023)
+(*) Di trú CHƯA chạy trên schedule.conf thật của bo lab — cần cửa sổ truy cập bo (R-01)
 ```
 
 ### 0.1 Burn-up theo tuần
@@ -261,23 +262,34 @@ File: `apps/web-api/internal/app/schedule*.go`, `dto.go`, `http.go`
 
 ### 4.4 P1.D · Nạp lại cấu hình (2 người-ngày)
 
+> **SCHD-151 và SCHD-153 không cần sửa dòng nào.** Việc giữ nguyên chữ ký
+> `reload(path, must_exist)` và đường dẫn `/data/config/schedule.conf` khi viết lại
+> `ScheduleRuntime` khiến hai task này thoả mãn bằng thiết kế. Bất biến "cấu hình hỏng không
+> làm mất cấu hình đang chạy" được `ScheduleV31Reload.BadConfigKeepsRunningConfig` khẳng định.
+> Ghi ✅ vì đã kiểm chứng, không phải vì bỏ qua.
+
 | Task | Nội dung | Ngày |
 |---|---|---:|
-| SCHD-151 | `config_reload.cpp` nạp định dạng mới; hỏng thì **giữ cấu hình cũ đang chạy** (hành vi hiện có, phải bảo toàn) | 0,75 |
+| SCHD-151 | `config_reload.cpp` nạp định dạng mới; hỏng thì **giữ cấu hình cũ đang chạy** (hành vi hiện có, phải bảo toàn) | 0,75 | ✅ |
 | SCHD-152 | Kênh ACK từ core về BE: revision đã áp dụng + kết quả từng target | 1 | 
-| SCHD-153 | `main.cpp` — tham số dòng lệnh và đường dẫn cấu hình mới | 0,25 |
+| SCHD-153 | `main.cpp` — tham số dòng lệnh và đường dẫn cấu hình mới | 0,25 | ✅ |
 
 ### Cổng ra P1
 
-```bash
-cmake -S services -B build/fw -DCMAKE_BUILD_TYPE=Release \
+**✅ ĐÃ QUA 2026-08-07.** Số đo thật, chạy hôm nay:
+
+```
+cmake -S . -B build/fw -DCMAKE_BUILD_TYPE=Release \
       -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON
-ctest --test-dir build/fw                    # PASS, không skip
-go vet ./... && go test ./... -count=1       # PASS
-ajv validate -s contracts/config/schedule_v3_1.schema.json -d <mẫu>
+ctest --test-dir build/fw               → 822/822 passed, 0 failed (13,61 s)
+go vet ./... && go test ./... -count=1  → 11/11 gói PASS (internal/app 26,3 s)
+[PERF] 64 lịch × 16 target: 0,120 ms/vòng   (ngưỡng đặc tả §21: 100 ms)
+mkddc-schedule-sim 4 ngày                → 7 lần chuyển, 0 khoảng trống, 0 xung đột
 ```
 
-Cộng thêm, **phải có số đo thật, không dẫn lại số cũ**: thời gian đánh giá 64 lịch × 32 target; di trú `schedule.conf` thật của bo lab chạy không mất mục nào.
+**Còn treo, nói rõ ràng:** di trú mới kiểm bằng tập tin dựng trong test, **chưa chạy trên
+`schedule.conf` thật của bo lab** — cần một cửa sổ truy cập bo. Đây là mục duy nhất của cổng ra
+P1 chưa đóng, và nó là mục quan trọng nhất vì R-01 là rủi ro cao nhất của cả plan.
 
 ---
 
@@ -498,9 +510,9 @@ Ký hiệu trạng thái: `☐` chưa làm · `🔄` đang làm · `✅` xong c�
 | 36 | SCHD-142 | P1 | Nhận diện + `.bak` | BE | 0,5 | 141 | ✅ |
 | 37 | SCHD-143 | P1 | Cờ `migrated_from_v1` | BE | 0,25 | 142 | ✅ |
 | 38 | SCHD-144 | P1 | Test round-trip file thật của bo | QA | 0,75 | 142 | ✅ |
-| 39 | SCHD-151 | P1 | `config_reload` giữ cấu hình cũ khi hỏng | Core | 0,75 | 102 | ☐ |
+| 39 | SCHD-151 | P1 | `config_reload` giữ cấu hình cũ khi hỏng | Core | 0,75 | 102 | ✅ |
 | 40 | SCHD-152 | P1 | Kênh ACK core→BE | Core | ✅ | 1 | 107 | ✅ |
-| 41 | SCHD-153 | P1 | Tham số `main.cpp` | Core | 0,25 | 151 | ☐ |
+| 41 | SCHD-153 | P1 | Tham số `main.cpp` | Core | 0,25 | 151 | ✅ |
 | 42 | SCHD-201 | P2 | Kiểu TS v3.1, xoá `ScheduleRow` | FE | 0,75 | 005 | ☐ |
 | 43 | SCHD-202 | P2 | 14 hàm API client | FE | 0,75 | 006 201 | ☐ |
 | 44 | SCHD-203 | P2 | `SchedulerLayout` + route lồng | FE | 1 | 201 | ☐ |
