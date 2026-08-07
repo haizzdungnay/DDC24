@@ -141,13 +141,12 @@
       "required": ["value"],
       "properties": {
         "value": {
-          "oneOf": [
+          "anyOf": [
             { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
             { "type": "boolean" },
-            { "type": "number" },
-            { "type": "integer", "minimum": 0 }
+            { "type": "number" }
           ],
-          "description": "Kiểu phải khớp value_type của Schedule Object: BINARY ⇒ \"ACTIVE\"|\"INACTIVE\"; BOOLEAN ⇒ true|false; REAL ⇒ number hữu hạn; UNSIGNED ⇒ integer ≥ 0; ENUMERATED ⇒ integer ≥ 0. Không khớp ⇒ SCH-CONFIG-002."
+          "description": "Kiểu phải khớp value_type của Schedule Object: BINARY ⇒ \"ACTIVE\"|\"INACTIVE\"; BOOLEAN ⇒ true|false; REAL ⇒ number hữu hạn; UNSIGNED ⇒ integer ≥ 0; ENUMERATED ⇒ integer ≥ 0. Không khớp ⇒ SCH-CONFIG-002. PHẢI là anyOf, KHÔNG được đổi lại thành oneOf: $defs này không nhìn thấy value_type nên chỉ kiểm được kiểu JSON, mà số nguyên không âm khớp cả nhánh number lẫn nhánh integer ⇒ oneOf loại sạch mọi lịch ENUMERATED/UNSIGNED và mọi lịch REAL có setpoint tròn số. Luật chéo theo value_type do validator Go giữ (schedulevalidate.go scheduleValueMatchesType), nơi phát mã SCH-CONFIG-002. Errata ADR-023 ngày 2026-08-07."
         }
       }
     },
@@ -204,11 +203,10 @@
           "description": "HH:mm:ss theo giờ dân dụng của timezone thuộc Schedule Object."
         },
         "value": {
-          "oneOf": [
+          "anyOf": [
             { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
             { "type": "boolean" },
-            { "type": "number" },
-            { "type": "integer", "minimum": 0 }
+            { "type": "number" }
           ]
         }
       }
@@ -405,11 +403,10 @@
       "additionalProperties": false,
       "properties": {
         "effective_value": {
-          "oneOf": [
+          "anyOf": [
             { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
             { "type": "boolean" },
             { "type": "number" },
-            { "type": "integer" },
             { "type": "null" }
           ]
         },
