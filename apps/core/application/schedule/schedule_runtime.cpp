@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "json_min.hpp"
+#include "schedule/schedule_clock.hpp"
 
 namespace core {
 
@@ -864,7 +865,67 @@ void ScheduleRuntime::evaluate(const IoSnapshot& io, PointWriter& writer, Priori
 void ScheduleRuntime::evaluate(const ClockSnapshot& clock, const IoSnapshot& io, PointWriter& writer,
                                PriorityResolver& resolver)
 {
-    evaluate_at(civil_from_tm(clock.civil_time), io, writer, resolver);
+    const int64_t utc_epoch_s = clock.utc_epoch_ms / 1000;
+
+    /* SCHD-303: hai đồng hồ trôi khác nhau ⇒ realtime vừa bị dịch (NTP sửa
+     * giờ, người dùng đổi giờ, hoặc RTC đọc lại sau khởi động). Ghi lại để
+     * người vận hành giải thích được vì sao lịch vừa đổi trạng thái đột ngột.
+     * Không cần ép tính lại: vòng quét vốn đánh giá lại mỗi lần, và mô hình
+     * này tính GIÁ TRỊ ĐANG HIỆU LỰC chứ không phát lại chuỗi sự kiện. */
+    const TimeJumpDetector::Result jump = jump_detector_.observe(clock.monotonic_ns, clock.utc_epoch_ms);
+    if (jump.jumped) {
+        std::fprintf(stderr, "WARN  schedule.time_jump delta_s=%lld (đánh giá lại toàn bộ lịch)\n",
+                     static_cast<long long>(jump.delta_s));
+    }
+
+    /* SCHD-306 / SCH-TIME-002: đồng hồ chưa được đặt thì mọi ngày giờ tính ra
+     * đều vô nghĩa. KHÔNG giữ lệnh nào — nhả hết để nguồn ưu tiên thấp hơn
+     * điều khiển. Ra lệnh theo một cái đồng hồ sai còn tệ hơn không ra lệnh. */
+    if (!system_clock_synced(utc_epoch_s)) {
+        std::fprintf(stderr, "ERROR schedule.clock_not_synced SCH-TIME-002 epoch_s=%lld\n",
+                     static_cast<long long>(utc_epoch_s));
+        states_.clear();
+        states_.reserve(schedules_.size());
+        for (const ScheduleObject& s : schedules_) {
+            ScheduleState st;
+            st.schedule_id = s.id;
+            st.active = false;
+            st.error = ScheduleError::TimeNotSynced;
+            states_.push_back(std::move(st));
+        }
+        release_missing({}, writer, resolver);
+        applied_.clear();
+        return;
+    }
+
+    evaluate_zoned(utc_epoch_s, io, writer, resolver);
+}
+
+/* SCHD-301/302: mỗi lịch được đổi sang giờ dân dụng của MÚI GIỜ CỦA CHÍNH NÓ.
+ * Trước bản này mọi lịch dùng TZ của tiến trình, nên trên một bo chạy UTC thì
+ * lịch khai báo Asia/Ho_Chi_Minh chạy lệch 7 tiếng mà không có dấu hiệu nào. */
+void ScheduleRuntime::evaluate_zoned(int64_t utc_epoch_s, const IoSnapshot& io,
+                                     PointWriter& writer, PriorityResolver& resolver)
+{
+    states_.clear();
+    states_.reserve(schedules_.size());
+    for (const ScheduleObject& s : schedules_) {
+        CivilTime now;
+        if (!civil_time_in_zone(s.timezone, utc_epoch_s, &now)) {
+            /* Múi giờ sai KHÔNG được lặng lẽ rơi về UTC — đó là cách biến một
+             * lỗi cấu hình nhìn thấy được thành một lệch giờ âm thầm. */
+            std::fprintf(stderr, "ERROR schedule.bad_timezone SCH-TIME-001 id=%s tz=%s\n",
+                         s.id.c_str(), s.timezone.c_str());
+            ScheduleState st;
+            st.schedule_id = s.id;
+            st.active = false;
+            st.error = ScheduleError::TimeBadTimezone;
+            states_.push_back(std::move(st));
+            continue;
+        }
+        states_.push_back(evaluate_schedule(s, now));
+    }
+    apply_states(io, writer, resolver);
 }
 
 void ScheduleRuntime::evaluate_at(const CivilTime& now, const IoSnapshot& io, PointWriter& writer,
@@ -875,7 +936,15 @@ void ScheduleRuntime::evaluate_at(const CivilTime& now, const IoSnapshot& io, Po
     for (const ScheduleObject& s : schedules_) {
         states_.push_back(evaluate_schedule(s, now));
     }
+    apply_states(io, writer, resolver);
+}
 
+/* Phân xử priority giữa các lịch rồi ghi ra target. Tách riêng để cả đường
+ * evaluate_at (một múi giờ) lẫn evaluate_zoned (mỗi lịch một múi giờ) dùng
+ * chung — hai bản sao của bước phân xử là hai chỗ để lệch nhau. */
+void ScheduleRuntime::apply_states(const IoSnapshot& io, PointWriter& writer,
+                                   PriorityResolver& resolver)
+{
     /* ── Phân xử priority_for_writing 1..16 GIỮA CÁC LỊCH (ADR-023 QĐ-1) ──
      * Nhiều lịch cùng ghi một điểm: priority nhỏ hơn thắng; bằng nhau thì lịch
      * có mốc bắt đầu muộn hơn thắng; vẫn bằng thì lịch đứng sau thắng và ghi

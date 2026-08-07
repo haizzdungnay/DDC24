@@ -26,7 +26,7 @@ MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/
 | DS-COVU-B | COV unsolicited | ✅ (cho AI/AO/BI/BO/AV/BV/MSV) |
 | AE-N-I-B | Alarm/Event Notification-Internal | ✅ (Notification Class) |
 | AE-ACK-B | Alarm Acknowledge | ✅ |
-| SCHED-I-B | Scheduling-Internal | ✅ (Schedule object) |
+| SCHED-I-B | Scheduling-Internal | ✅ (Schedule object 64 cái, **chỉ đọc** — xem §4) |
 | T-VMT-I-B | Trend Viewing (internal buffer) | ✅ (Trend Log) |
 | DM-DDB-B | Dynamic Device Binding (Who-Is/I-Am) | ✅ |
 | DM-DOB-B | Dynamic Object Binding (Who-Has/I-Have) | ✅ |
@@ -46,10 +46,29 @@ MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/
 | Binary Value (BV) | 16 | biến PLC | Present_Value | ✅ |
 | Multi-state Value (MSV) | 8 | enum PLC | Present_Value | ✅ |
 | Trend Log | 8 | — | config | — |
-| Schedule | 8 | — | ✅ | — |
-| Calendar | 2 | — | ✅ | — |
+| Schedule | **64** | Scheduler Engine v3.1 | **❌ chỉ đọc** | — |
+| Calendar | **16** | Nhóm ngày lễ | **❌ chỉ đọc** | — |
 | Notification Class | 4 | — | ✅ | — |
 | Event Enrollment | 8 | — | ✅ | — |
+
+> **Cập nhật 2026-08-07 (Plan 50 P4, ADR-023 QĐ-4).** Hai dòng Schedule/Calendar trước đây khai
+> **8 và 2 đối tượng, đều writable** — cả ba con số đều không khớp bản đã hiện thực, và với hồ sơ
+> chứng nhận thì khai sai nguy hiểm hơn khai thiếu.
+>
+> Số thật: **Schedule 64** (bằng trần của Scheduler Engine) và **Calendar 16**.
+>
+> **Cả hai CHỈ ĐỌC.** Đây là lựa chọn có chủ ý, không phải hạn chế kỹ thuật: đặc tả §13 bắt mọi
+> thay đổi lịch phải đi qua validate → preview → publish → ACK, có `revision` và nhật ký audit.
+> Cho một BMS ngoài ghi thẳng `Weekly_Schedule` qua BACnet là bỏ qua toàn bộ chuỗi đó và biến
+> nhật ký audit thành thứ không giải thích được. `WriteProperty` trả `WRITE_ACCESS_DENIED` (40)
+> kèm lý do, chứ không nhận rồi lặng lẽ bỏ.
+>
+> `Present_Value` và `Priority_For_Writing` vẫn phản ánh trạng thái thật do controller báo, nên
+> BMS **giám sát** được đầy đủ — chỉ không **sửa** được qua BACnet.
+>
+> Hệ quả cho BTL: bài kiểm ghi Schedule sẽ trả `WRITE_ACCESS_DENIED`. Đây là hành vi hợp lệ theo
+> ASHRAE 135 cho đối tượng chỉ đọc, nhưng **phải khai đúng trong PICS** — nếu PICS nói writable
+> mà thiết bị từ chối thì đó là sai lệch PICS, lỗi nặng hơn nhiều.
 
 ### 4.1 Thuộc tính bắt buộc mỗi loại
 

@@ -55,6 +55,7 @@ target_link_libraries(core_domain PUBLIC core_build_settings)
 add_library(core_application STATIC
     application/alarm/alarm_runtime.cpp
     application/schedule/schedule_runtime.cpp
+    application/schedule/schedule_clock.cpp
     application/st/st_program.cpp
     application/st/st_runtime.cpp
     application/st/st_artifact.cpp

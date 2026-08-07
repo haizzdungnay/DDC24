@@ -17,6 +17,7 @@
 
 #include "graph/clock_snapshot.hpp"
 #include "graph/point_writer.hpp"
+#include "schedule/schedule_clock.hpp"
 #include "schedule/schedule_runtime.hpp"
 
 using namespace core;
@@ -1092,4 +1093,187 @@ TEST(ScheduleV31MigrationSemantics, DisablingRestoresOldOutOfHoursBehaviour)
     f.resolver.set_do(PRIO_LOCAL_LOGIC, 0, true);
     EXPECT_TRUE(do_on(f.resolver, 0)) << "tắt lịch ⇒ logic mức 5 điều khiển lại được";
     EXPECT_EQ(f.resolver.winning_do_level(0), PRIO_LOCAL_LOGIC);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 12. P3 — Múi giờ, DST, nhảy giờ, đồng hồ chưa đồng bộ (SCHD-301..306)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+TEST(ScheduleV31Clock, ConvertsUtcToScheduleTimezone)
+{
+    /* Bo Foxlinx chạy Etc/UTC nhưng lịch khai báo Asia/Ho_Chi_Minh (UTC+7).
+     * Trước SCHD-301, lịch đặt 08:00 giờ Việt Nam chạy lúc 08:00 UTC tức 15:00
+     * giờ Việt Nam — lệch 7 tiếng và không có dấu hiệu nào. */
+    CivilTime vn;
+    /* 2026-08-07T01:00:00Z = 08:00 cùng ngày ở Việt Nam. */
+    ASSERT_TRUE(civil_time_in_zone("Asia/Ho_Chi_Minh", 1786064400, &vn));
+    EXPECT_EQ(vn.year, 2026);
+    EXPECT_EQ(vn.month, 8);
+    EXPECT_EQ(vn.day, 7);
+    EXPECT_EQ(vn.second_of_day, 8 * 3600) << "phải là 08:00 giờ Việt Nam";
+
+    CivilTime utc;
+    ASSERT_TRUE(civil_time_in_zone("UTC", 1786064400, &utc));
+    EXPECT_EQ(utc.second_of_day, 1 * 3600) << "cùng mốc đó là 01:00 UTC";
+}
+
+TEST(ScheduleV31Clock, AppliesDaylightSavingFromSystemDatabase)
+{
+    /* Cùng một múi giờ, hai thời điểm hai bên ranh giới DST phải cho offset
+     * khác nhau. Dùng cơ sở dữ liệu của hệ thống chứ không tự cài bảng offset —
+     * bảng tự cài sẽ sai vào ngày một quốc gia đổi quy tắc. */
+    CivilTime winter, summer;
+    /* 2026-01-15T12:00:00Z và 2026-07-15T12:00:00Z ở Berlin (CET/CEST). */
+    if (!civil_time_in_zone("Europe/Berlin", 1768478400, &winter)) {
+        GTEST_SKIP() << "hệ thống không có múi giờ Europe/Berlin";
+    }
+    ASSERT_TRUE(civil_time_in_zone("Europe/Berlin", 1784116800, &summer));
+    EXPECT_EQ(winter.second_of_day, 13 * 3600) << "mùa đông UTC+1";
+    EXPECT_EQ(summer.second_of_day, 14 * 3600) << "mùa hè UTC+2 (DST)";
+}
+
+TEST(ScheduleV31Clock, RejectsUnknownTimezoneInsteadOfFallingBackToUtc)
+{
+    CivilTime out;
+    EXPECT_FALSE(civil_time_in_zone("Mars/Olympus_Mons", 1786064400, &out));
+    EXPECT_FALSE(civil_time_in_zone("", 1786064400, &out));
+    /* Chặn đường thoát khỏi thư mục zoneinfo. */
+    EXPECT_FALSE(civil_time_in_zone("../../etc/passwd", 1786064400, &out));
+    EXPECT_FALSE(civil_time_in_zone("/etc/passwd", 1786064400, &out));
+}
+
+TEST(ScheduleV31Clock, DetectsClockNotSynced)
+{
+    EXPECT_FALSE(system_clock_synced(0)) << "1970 = RTC chưa được đặt";
+    EXPECT_FALSE(system_clock_synced(1'500'000'000)) << "2017, trước mốc 2020";
+    EXPECT_TRUE(system_clock_synced(1'786'064'400)) << "2026";
+}
+
+TEST(ScheduleV31Clock, DetectsForwardAndBackwardTimeJumps)
+{
+    TimeJumpDetector d(5);
+    /* Lần đầu chỉ ghi nhận mốc, chưa kết luận được gì. */
+    EXPECT_FALSE(d.observe(1'000'000'000ull, 1'000'000).jumped);
+
+    /* Trôi bình thường: cả hai đồng hồ cùng tiến 1 giây. */
+    EXPECT_FALSE(d.observe(2'000'000'000ull, 1'001'000).jumped);
+
+    /* NTP kéo giờ TIẾN 60 giây trong khi monotonic chỉ tiến 1 giây. */
+    const auto forward = d.observe(3'000'000'000ull, 1'062'000);
+    EXPECT_TRUE(forward.jumped);
+    EXPECT_EQ(forward.delta_s, 60);
+
+    /* Giờ nhảy LÙI 30 giây trong khi monotonic vẫn tiến 1 giây, nên độ lệch
+     * giữa hai đồng hồ là -31 chứ không phải -30. */
+    const auto backward = d.observe(4'000'000'000ull, 1'032'000);
+    EXPECT_TRUE(backward.jumped);
+    EXPECT_EQ(backward.delta_s, -31);
+}
+
+TEST(ScheduleV31Clock, UnsyncedClockReleasesTargetsInsteadOfCommanding)
+{
+    /* SCH-TIME-002: ra lệnh theo một cái đồng hồ sai còn tệ hơn không ra lệnh.
+     * Nhả hết để nguồn ưu tiên thấp hơn điều khiển. */
+    const std::string weekly_on =
+        R"({"MON":[{"time":"00:00:00","value":"ACTIVE"}],"TUE":[{"time":"00:00:00","value":"ACTIVE"}],)"
+        R"("WED":[{"time":"00:00:00","value":"ACTIVE"}],"THU":[{"time":"00:00:00","value":"ACTIVE"}],)"
+        R"("FRI":[{"time":"00:00:00","value":"ACTIVE"}],"SAT":[{"time":"00:00:00","value":"ACTIVE"}],)"
+        R"("SUN":[{"time":"00:00:00","value":"ACTIVE"}]})";
+    Fixture f;
+    ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly_on)})));
+
+    ClockSnapshot bad{};
+    bad.monotonic_ns = 1'000'000'000ull;
+    bad.utc_epoch_ms = 0;                    /* 1970 — RTC hết pin */
+    f.runtime.evaluate(bad, f.io, f.writer, f.resolver);
+
+    EXPECT_FALSE(schedule_holds_do(f.resolver, 0)) << "đồng hồ sai thì không được giữ lệnh";
+    const ScheduleState* st = f.runtime.state_of("SCH-001");
+    ASSERT_NE(st, nullptr);
+    EXPECT_FALSE(st->active);
+    EXPECT_EQ(st->error, ScheduleError::TimeNotSynced);
+    EXPECT_STREQ(schedule_error_code(st->error), "SCH-TIME-002");
+}
+
+TEST(ScheduleV31Clock, BadTimezoneMarksScheduleWithoutAffectingOthers)
+{
+    const std::string weekly_on =
+        R"({"MON":[{"time":"00:00:00","value":"ACTIVE"}],"TUE":[{"time":"00:00:00","value":"ACTIVE"}],)"
+        R"("WED":[{"time":"00:00:00","value":"ACTIVE"}],"THU":[{"time":"00:00:00","value":"ACTIVE"}],)"
+        R"("FRI":[{"time":"00:00:00","value":"ACTIVE"}],"SAT":[{"time":"00:00:00","value":"ACTIVE"}],)"
+        R"("SUN":[{"time":"00:00:00","value":"ACTIVE"}]})";
+    /* SCH-BAD có múi giờ sai; SCH-OK bình thường. Một lịch hỏng KHÔNG được kéo
+     * theo lịch khác — cùng nguyên tắc với "một target lỗi không chặn target
+     * khác". */
+    std::string bad = schedule_json("SCH-BAD", weekly_on);
+    bad.replace(bad.find("Asia/Ho_Chi_Minh"), 16, "Mars/Olympus_Mons");
+    const std::string ok = schedule_json(
+        "SCH-OK", weekly_on, "[]",
+        R"([{"target_id":"TGT-002","target_type":"INTERNAL_POINT","point_kind":"DO","channel":2}])");
+
+    Fixture f;
+    ASSERT_TRUE(f.load(config({bad, ok})));
+
+    ClockSnapshot now{};
+    now.monotonic_ns = 1'000'000'000ull;
+    now.utc_epoch_ms = 1'786'064'400'000ll;   /* 2026-08-07T01:00:00Z */
+    f.runtime.evaluate(now, f.io, f.writer, f.resolver);
+
+    EXPECT_EQ(f.runtime.state_of("SCH-BAD")->error, ScheduleError::TimeBadTimezone);
+    EXPECT_FALSE(schedule_holds_do(f.resolver, 0));
+    EXPECT_TRUE(do_on(f.resolver, 1)) << "lịch có múi giờ hợp lệ vẫn phải chạy";
+}
+
+TEST(ScheduleV31Clock, ScheduleFiresAtLocalTimeNotProcessTime)
+{
+    /* Kiểm chứng trực tiếp lỗi mà SCHD-301 sinh ra để sửa: lịch bật lúc 08:00
+     * giờ Việt Nam. Ở mốc 01:00Z (= 08:00 VN) phải BẬT; ở mốc 08:00Z
+     * (= 15:00 VN) vẫn bật vì đã qua mốc; nhưng ở 00:00Z (= 07:00 VN) thì CHƯA. */
+    const std::string weekly =
+        R"({"MON":[],"TUE":[],"WED":[],"THU":[],)"
+        R"("FRI":[{"time":"08:00:00","value":"ACTIVE"},{"time":"17:00:00","value":"INACTIVE"}],)"
+        R"("SAT":[],"SUN":[]})";
+    Fixture f;
+    ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly)})));
+
+    /* 2026-08-07 là Thứ Sáu. */
+    ClockSnapshot before{};
+    before.monotonic_ns = 1'000'000'000ull;
+    before.utc_epoch_ms = 1'786'060'800'000ll;   /* 00:00Z = 07:00 VN */
+    f.runtime.evaluate(before, f.io, f.writer, f.resolver);
+    EXPECT_FALSE(do_on(f.resolver, 0)) << "07:00 giờ VN thì chưa tới giờ bật";
+
+    ClockSnapshot at_start{};
+    at_start.monotonic_ns = 2'000'000'000ull;
+    at_start.utc_epoch_ms = 1'786'064'400'000ll; /* 01:00Z = 08:00 VN */
+    f.runtime.evaluate(at_start, f.io, f.writer, f.resolver);
+    EXPECT_TRUE(do_on(f.resolver, 0)) << "08:00 giờ VN là đúng giờ bật";
+}
+
+TEST(ScheduleV31Clock, PowerRecoveryComputesCurrentValueWithoutReplayingEvents)
+{
+    /* Đặc tả §10.4: sau khi khởi động lại, tính GIÁ TRỊ ĐANG CÓ HIỆU LỰC, không
+     * phát lại toàn bộ event đã bỏ lỡ. Mô hình này vốn tính theo mức chứ không
+     * theo chuỗi sự kiện, nên tính chất đó là bản chất — test khoá nó lại. */
+    const std::string weekly =
+        R"({"MON":[],"TUE":[],"WED":[],"THU":[],)"
+        R"("FRI":[{"time":"08:00:00","value":"ACTIVE"},{"time":"12:00:00","value":"INACTIVE"},)"
+        R"({"time":"13:00:00","value":"ACTIVE"},{"time":"17:00:00","value":"INACTIVE"}],)"
+        R"("SAT":[],"SUN":[]})";
+
+    /* Runtime "vừa khởi động lại" lúc 14:00 giờ VN — đã bỏ lỡ 3 mốc trong ngày. */
+    Fixture fresh;
+    ASSERT_TRUE(fresh.load(config({schedule_json("SCH-001", weekly)})));
+    ClockSnapshot afternoon{};
+    afternoon.monotonic_ns = 1'000'000'000ull;
+    afternoon.utc_epoch_ms = 1'786'086'900'000ll;   /* 07:15Z = 14:15 VN */
+    fresh.runtime.evaluate(afternoon, fresh.io, fresh.writer, fresh.resolver);
+
+    EXPECT_TRUE(do_on(fresh.resolver, 0)) << "14:15 VN nằm trong ca chiều ⇒ BẬT ngay lần đánh giá đầu";
+    const ScheduleState* st = fresh.runtime.state_of("SCH-001");
+    ASSERT_NE(st, nullptr);
+    EXPECT_EQ(st->source, ValueSource::Weekly);
+    ASSERT_EQ(st->targets.size(), 1u);
+    /* Chỉ MỘT lệnh ghi, không phải bốn lệnh phát lại các mốc đã qua. */
+    EXPECT_TRUE(st->targets[0].written);
 }

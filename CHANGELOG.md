@@ -7,6 +7,43 @@
 ---
 
 ## [Unreleased]
+### Added — Scheduler v3.1 P3 + P4: múi giờ theo lịch, nhảy giờ, BACnet Schedule/Calendar (2026-08-07)
+
+**Phạm vi.** Core: `schedule_clock.{hpp,cpp}` (mới) · `schedule_runtime.{hpp,cpp}`. IOBus:
+`bacnet_schedule.{hpp,cpp}` + test (mới). Tài liệu: PICS/EPICS, Plan 50. Task `SCHD-301..312`,
+`SCHD-401..407`. **Toàn bộ 96 task của Plan 50 đã đóng.**
+
+**P3 — lỗi lệch 7 tiếng đang có thật trên bo.** Bo Foxlinx chạy `Etc/UTC`, còn lịch cấu hình
+`Asia/Ho_Chi_Minh`. Mã cũ lấy giờ bằng `localtime_r`, tức theo TZ **tiến trình**, nên một lịch
+đặt 08:00 giờ Việt Nam chạy lúc 08:00 UTC = **15:00 giờ Việt Nam** — và không có gì trên giao
+diện cho thấy điều đó. Nay mỗi lịch được đổi sang giờ dân dụng của đúng múi giờ nó khai báo,
+dùng cơ sở dữ liệu múi giờ của hệ thống (đã có sẵn trên bo, gồm cả quy tắc DST). Không tự cài
+bảng offset — bảng tự cài sẽ sai vào ngày một quốc gia đổi quy tắc.
+
+Ba hành vi kèm theo: **múi giờ sai không rơi về UTC** mà báo `SCH-TIME-001` và không giữ lệnh
+(rơi về UTC là cách biến lỗi cấu hình nhìn thấy được thành lệch giờ âm thầm); **đồng hồ chưa
+đồng bộ** (`SCH-TIME-002`, mốc < 2020) thì **nhả hết target** cho nguồn ưu tiên thấp hơn — ra
+lệnh theo đồng hồ sai còn tệ hơn không ra lệnh; và **phát hiện nhảy giờ** bằng cách so trôi giữa
+`CLOCK_MONOTONIC` và `CLOCK_REALTIME`.
+
+Khôi phục sau mất điện đã đúng sẵn theo bản chất mô hình — tính **giá trị đang hiệu lực** chứ
+không phát lại chuỗi sự kiện đã bỏ lỡ (đặc tả §10.4) — nay có test khoá lại.
+
+**P4 — BACnet Schedule (17) + Calendar (6), CHỈ ĐỌC.** Đây là lựa chọn có chủ ý: đặc tả §13 bắt
+mọi thay đổi lịch đi qua validate → preview → publish → ACK, có revision và audit. Cho một BMS
+ngoài ghi thẳng `Weekly_Schedule` là bỏ qua toàn bộ chuỗi đó. `WriteProperty` trả
+`WRITE_ACCESS_DENIED` (40) **kèm lý do**, không nhận rồi lặng lẽ bỏ. `Present_Value` chưa biết
+thì báo cờ FAULT chứ không trả `0.0` — một BMS đọc được `0.0` sẽ tưởng lịch đang tắt.
+
+**Sửa hồ sơ chứng nhận.** PICS/EPICS đang khai `Schedule 8, Calendar 2, cả hai writable` — **cả
+ba con số đều sai** so với bản hiện thực (64 / 16 / chỉ đọc). Với hồ sơ BTL, khai sai nguy hiểm
+hơn khai thiếu: nếu PICS nói writable mà thiết bị từ chối thì đó là sai lệch PICS, lỗi nặng hơn
+nhiều so với khai đúng là chỉ đọc.
+
+```
+ctest --test-dir build/fw → 849/849 passed, 0 failed (13,54 s)   [+10 P3, +10 P4]
+```
+
 ### Added — Deploy Scheduler v3.1 lên Foxlinx SOM-DDC-24 (2026-08-07)
 
 **Phạm vi.** `docs/07_records/test-evidence/fw-som/2026-08-07-foxlinx-deploy-scheduler-v31.md`

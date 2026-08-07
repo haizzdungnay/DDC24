@@ -61,6 +61,7 @@ set(BACNET_SOURCES
     adapters/bacnet/bacnet_config.cpp
     adapters/bacnet/bacnet_priority.cpp
     adapters/bacnet/bacnet_cov.cpp
+    adapters/bacnet/bacnet_schedule.cpp
     adapters/bacnet/bacnet_reliability.cpp
     adapters/bacnet/bacnet_alarm.cpp
     adapters/bacnet/bacnet_objects.cpp
@@ -190,6 +191,7 @@ if(IOBUS_BUILD_TESTS)
       adapters/bacnet/tests/test_bacnet_reliability.cpp
       adapters/bacnet/tests/test_bacnet_object_map.cpp
       adapters/bacnet/tests/test_bacnet_cov.cpp
+      adapters/bacnet/tests/test_bacnet_schedule.cpp
       adapters/modbus_rtu/tests/test_device_profile.cpp
       adapters/modbus_rtu/tests/test_register_codec.cpp
       adapters/modbus_rtu/tests/test_poll_scheduler.cpp

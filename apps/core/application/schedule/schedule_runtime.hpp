@@ -29,6 +29,7 @@
 #include "graph/point_writer.hpp"
 #include "ports/io_snapshot.hpp"
 #include "priority/priority_resolver.hpp"
+#include "schedule/schedule_clock.hpp"
 
 namespace core {
 
@@ -56,17 +57,6 @@ enum class ValueType { Binary, Boolean, Real, Unsigned, Enumerated };
 /* Mọi giá trị lưu dạng double; ValueType quyết định cách diễn giải và cách
  * kiểm hợp lệ. BINARY: ACTIVE=1, INACTIVE=0. */
 bool value_valid_for_type(ValueType t, double v);
-
-/* ── Thời gian dân dụng theo timezone của lịch ─────────────────────────── */
-struct CivilTime {
-    int year = 1970;
-    int month = 1;          /* 1..12 */
-    int day = 1;            /* 1..31 */
-    int weekday = 0;        /* 0=Thứ Hai … 6=Chủ nhật */
-    int second_of_day = 0;  /* 0..86399 */
-};
-
-CivilTime civil_from_tm(const std::tm& tm);
 
 /* ── Lịch tuần ─────────────────────────────────────────────────────────── */
 struct TimeValue {
@@ -187,8 +177,12 @@ public:
      * KHÔNG nhận PointTable trực tiếp nữa: nhận nó là mở lại đúng cái cửa đã
      * làm lệnh lịch cho điểm EXT chết lặng. */
     void evaluate(const IoSnapshot& io, PointWriter& writer, PriorityResolver& resolver);
+    /* Đánh giá theo đồng hồ hệ thống. MỖI LỊCH được đổi sang giờ dân dụng của
+     * múi giờ mà chính nó khai báo (SCHD-301) — không dùng TZ của tiến trình. */
     void evaluate(const ClockSnapshot& clock, const IoSnapshot& io, PointWriter& writer,
                   PriorityResolver& resolver);
+    /* Đánh giá với MỘT mốc giờ dân dụng cho mọi lịch. Dùng cho test và cho mô
+     * phỏng, nơi múi giờ đã được nơi gọi xử lý. */
     void evaluate_at(const CivilTime& now, const IoSnapshot& io, PointWriter& writer,
                      PriorityResolver& resolver);
 
@@ -208,8 +202,13 @@ private:
 
     std::vector<ScheduleObject> schedules_;
     std::vector<HolidayGroup> groups_;
+    TimeJumpDetector jump_detector_;
     std::vector<ScheduleState> states_;
     std::vector<AppliedTarget> applied_;
+
+    void evaluate_zoned(int64_t utc_epoch_s, const IoSnapshot& io, PointWriter& writer,
+                        PriorityResolver& resolver);
+    void apply_states(const IoSnapshot& io, PointWriter& writer, PriorityResolver& resolver);
 
     void release_missing(const std::vector<AppliedTarget>& active, PointWriter& writer,
                          PriorityResolver& resolver);

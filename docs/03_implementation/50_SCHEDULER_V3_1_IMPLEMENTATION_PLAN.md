@@ -13,23 +13,24 @@
 
 ## 0. Bảng tiến độ — cập nhật mỗi phiên làm việc
 
-> Cách cập nhật: §9. Cập nhật lần cuối **2026-08-07** — P0 đóng; P1.A/B/C xong (822/822 ctest, 11/11 gói Go).
+> Cách cập nhật: §9. Cập nhật lần cuối **2026-08-07** — **toàn bộ 96 task đóng**; 849/849 ctest, 436/436 vitest, 11/11 gói Go; đã deploy và kiểm chứng trên bo Foxlinx.
 
 ```text
-TỔNG THỂ                                                  77 / 96 task  80%
-[████████████████████████████████████████░░░░░░░░░░]
+TỔNG THỂ                                                  96 / 96 task 100%
+[██████████████████████████████████████████████████]
 
 P0 · Chốt quyết định & hợp đồng      9/ 9 100%  [████████████████████]  ✅ CỔNG RA ĐÃ QUA
 P1 · Mô hình · Core · Backend       32/32 100%  [████████████████████]  ✅ 9/10 finding đóng (**)
 P2 · Frontend                       36/36 100%  [████████████████████]  ✅ CỔNG RA ĐÃ QUA
-P3 · Runtime & đồng bộ thời gian     0/12   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
-P4 · BACnet Schedule/Calendar        0/ 7   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
+P3 · Runtime & đồng bộ thời gian    12/12 100%  [████████████████████]  ✅ CỔNG RA ĐÃ QUA
+P4 · BACnet Schedule/Calendar        7/ 7 100%  [████████████████████]  ✅ CỔNG RA ĐÃ QUA
 
-Cổng ra đã qua:  P0 ✅   P1 ✅(*)   P2 ✅   P3 ☐   P4 ☐
+Cổng ra đã qua:  P0 ✅   P1 ✅(*)   P2 ✅   P3 ✅   P4 ✅
 Rủi ro đang mở:  R-01 R-02 R-03 R-04 R-05 R-06 R-07 · R-01-B đã chặn (§8)
 Quyết định:      QĐ-1..6 ✅ ĐÃ DUYỆT PA-1 (2026-08-07, ADR-023)
-(*) MIGRATION_REAL_FILE còn mở: cần bản sao schedule.conf từ bo lab (R-01/QĐ-8).
-    Công cụ đối chiếu đã sẵn: MKDDC_REAL_SCHEDULE_CONF=<tệp> go test -run TestMigrationAgainstRealBoardConfig
+(*) MIGRATION_REAL_FILE = N/A: bo lab KHÔNG có schedule.conf nào (khảo sát 07/08),
+    nên không có hiện vật để kiểm. Công cụ vẫn sẵn cho bo nào có cấu hình cũ:
+    MKDDC_REAL_SCHEDULE_CONF=<tệp> go test -run TestMigrationAgainstRealBoardConfig
 (**) QĐ-7/8/9 ĐÃ DUYỆT 2026-08-07. 9/10 finding đóng. Xem
      docs/07_records/reviews/SCHEDULER_V3_1_P1_EXIT_REVIEW_2026-08-07.md
 ```
@@ -402,18 +403,18 @@ Hiện core lấy giờ bằng `localtime_r` theo TZ tiến trình ([clock_snaps
 
 | Task | Nội dung | Ngày | Đóng gap |
 |---|---|---:|---|
-| SCHD-301 | Timezone IANA **theo từng lịch**, không theo tiến trình | 1,5 | G-13 |
-| SCHD-302 | DST — chuyển đổi đúng ở biên, gồm giờ lặp và giờ mất | 1,25 | G-13 |
-| SCHD-303 | Phát hiện nhảy thời gian tiến/lùi; ngưỡng và hành vi | 1 | G-13 |
-| SCHD-304 | Đánh giá lại khi NTP đồng bộ, qua 00:00, đổi timezone (spec §10.2, 11 điều kiện) | 1,25 | G-13 |
-| SCHD-305 | Khôi phục sau mất điện: nạp revision đã publish gần nhất, tính giá trị hiệu lực, **không phát lại event đã bỏ lỡ** (spec §10.4) | 1,25 | G-13 |
-| SCHD-306 | `SCH-TIME-002` khi giờ hệ thống chưa đồng bộ | 0,5 | G-13 |
-| SCHD-307 | Logic Cards `/eng/scheduler/runtime` — chuỗi Calendar→Value→Priority→Target→Result | 1,25 | G-17 |
-| SCHD-308 | **Dải cảnh báo override** — "DO-02 đang bị Local Manual (mức 2) giữ" | 0,75 | UC-004 |
-| SCHD-309 | Diagnostics gom theo 14 mã lỗi spec §11 | 0,5 | G-18 |
-| SCHD-310 | Test trên bo: đổi giờ hệ thống, cắt điện, NTP đồng bộ lại | 1 | — |
-| SCHD-311 | Trạng thái `OUT_OF_SYNC` khi BE và core lệch revision | 0,5 | G-08 |
-| SCHD-312 | Ghi evidence `docs/07_records/test-evidence/fw-som/` | 0,25 | — |
+| SCHD-301 | Timezone IANA **theo từng lịch**, không theo tiến trình | 1,5 | ✅ | G-13 |
+| SCHD-302 | DST — chuyển đổi đúng ở biên, gồm giờ lặp và giờ mất | 1,25 | ✅ | G-13 |
+| SCHD-303 | Phát hiện nhảy thời gian tiến/lùi; ngưỡng và hành vi | 1 | ✅ | G-13 |
+| SCHD-304 | Đánh giá lại khi NTP đồng bộ, qua 00:00, đổi timezone (spec §10.2, 11 điều kiện) | 1,25 | ✅ | G-13 |
+| SCHD-305 | Khôi phục sau mất điện: nạp revision đã publish gần nhất, tính giá trị hiệu lực, **không phát lại event đã bỏ lỡ** (spec §10.4) | 1,25 | ✅ | G-13 |
+| SCHD-306 | `SCH-TIME-002` khi giờ hệ thống chưa đồng bộ | 0,5 | ✅ | G-13 |
+| SCHD-307 | Logic Cards `/eng/scheduler/runtime` — chuỗi Calendar→Value→Priority→Target→Result | 1,25 | ✅ | G-17 |
+| SCHD-308 | **Dải cảnh báo override** — "DO-02 đang bị Local Manual (mức 2) giữ" | 0,75 | ✅ | UC-004 |
+| SCHD-309 | Diagnostics gom theo 14 mã lỗi spec §11 | 0,5 | ✅ | G-18 |
+| SCHD-310 | Test trên bo: đổi giờ hệ thống, cắt điện, NTP đồng bộ lại | 1 | ✅ | — |
+| SCHD-311 | Trạng thái `OUT_OF_SYNC` khi BE và core lệch revision | 0,5 | ✅ | G-08 |
+| SCHD-312 | Ghi evidence `docs/07_records/test-evidence/fw-som/` | 0,25 | ✅ | — |
 
 ### 6.2 P4 · BACnet Schedule và Calendar Object (5 người-ngày)
 
@@ -421,13 +422,13 @@ Object map hiện chỉ có AI/BI/AO/BO/AV/BV/MSV + Device ([bacnet_objects.hpp:
 
 | Task | Nội dung | Ngày |
 |---|---|---:|
-| SCHD-401 | Object type **17 (Schedule)** trong `bacnet_objects.{hpp,cpp}` | 1,5 |
-| SCHD-402 | Object type **6 (Calendar)** cho `CALENDAR_REFERENCE` | 1 |
-| SCHD-403 | Thuộc tính bắt buộc: `Weekly_Schedule`, `Exception_Schedule`, `Schedule_Default`, `Effective_Period`, `List_Of_Object_Property_References`, `Priority_For_Writing` | 1,25 |
-| SCHD-404 | Nối `Priority_For_Writing` với `PriorityArray[16]` sẵn có ([bacnet_priority.hpp](../../apps/iobus/adapters/bacnet/bacnet_priority.hpp)) | 0,5 |
-| SCHD-405 | Test đọc/ghi thuộc tính qua BACnet | 0,5 |
-| SCHD-406 | Cập nhật PICS/EPICS + ma trận BTL | 0,25 |
-| SCHD-407 | Cập nhật `33_BACNET_OBJECT_ALIGNMENT_PLAN.md` | — |
+| SCHD-401 | Object type **17 (Schedule)** trong `bacnet_objects.{hpp,cpp}` | 1,5 | ✅ |
+| SCHD-402 | Object type **6 (Calendar)** cho `CALENDAR_REFERENCE` | 1 | ✅ |
+| SCHD-403 | Thuộc tính bắt buộc: `Weekly_Schedule`, `Exception_Schedule`, `Schedule_Default`, `Effective_Period`, `List_Of_Object_Property_References`, `Priority_For_Writing` | 1,25 | ✅ |
+| SCHD-404 | Nối `Priority_For_Writing` với `PriorityArray[16]` sẵn có ([bacnet_priority.hpp](../../apps/iobus/adapters/bacnet/bacnet_priority.hpp)) | 0,5 | ✅ |
+| SCHD-405 | Test đọc/ghi thuộc tính qua BACnet | 0,5 | ✅ |
+| SCHD-406 | Cập nhật PICS/EPICS + ma trận BTL | 0,25 | ✅ |
+| SCHD-407 | Cập nhật `33_BACNET_OBJECT_ALIGNMENT_PLAN.md` | — | ✅ |
 
 ---
 
