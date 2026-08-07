@@ -7,6 +7,39 @@
 ---
 
 ## [Unreleased]
+### Fixed — Review P1 Scheduler v3.1: 10 finding, P1 CHƯA merge (2026-08-07)
+
+**Phạm vi.** Tài liệu: `docs/07_records/reviews/SCHEDULER_V3_1_P1_REVIEW_2026-08-07.md` (mới) +
+Plan 50 (§0 đổi trạng thái P1, §7 thêm QĐ-7/8/9).
+
+**Kết luận.** P1 **không nên merge** ở trạng thái hiện tại. 10 finding: 3 Cao, 5 Trung bình,
+2 Thấp. Tổng công sửa ~3 người-ngày.
+
+**Ba finding mức Cao — đều là lỗi trong phần vừa giao, không phải nợ thừa kế:**
+
+- **P1-01** Xoá lịch xoá luôn `audit.jsonl` của lịch đó. Mã ghi dòng audit cuối cùng rồi
+  `removeScheduleState()` xoá cả thư mục chứa nó. Vi phạm đặc tả §20 (cấm xoá audit) và §9.3.
+- **P1-02** Target `EXT` được hợp đồng chấp nhận nhưng **lệnh không tới thiết bị Modbus**.
+  `ScheduleRuntime` chỉ gọi `table.set_virtual()`, thiếu bước đặt `shm->ext[idx].setpoint` +
+  `dirty = 1` mà đường lệnh tay đang làm (`scan_loop.cpp:137-144`). Giao diện báo `OK`,
+  controller báo `written = true`, thiết bị không nhận gì.
+- **P1-03** `mkddc-schedule-sim` không có trong `tools/deploy/deploy_board.sh` → trên bo,
+  `POST /simulate` trả 503 vĩnh viễn. Backend từ chối tự tính thay (đúng thiết kế), nên tiêu chí
+  nghiệm thu #15 không dùng được ngoài môi trường dev.
+
+**Năm finding Trung bình** (kèm bằng chứng đo được): `next_transition` trả `-1` khi lần chuyển kế
+tiếp thuộc một ngày ngoại lệ tương lai; `POST` trả `null` cho ngày rỗng còn `GET` trả `[]`;
+`GET /schedules` quyền `viewer` có thể ghi tệp qua đường di trú và không giữ khoá; `publish` ngủ
+tới ~3,3 s khi đang giữ khoá toàn cục; `appliedCorrelations` không bao giờ được dọn.
+
+**Ba quyết định trình PM/CTO.** QĐ-7 target `EXT` (đề xuất **gỡ khỏi hợp đồng Rev A** vì không
+kiểm chứng đầu-cuối được khi plan 49 còn treo `G-C`/`G-D`); QĐ-8 cửa sổ truy cập bo lab để đóng
+R-01; QĐ-9 chính sách lưu audit của lịch đã xoá.
+
+**Vì sao 822 test C++ và 11 gói Go không bắt được ba finding Cao:** cả ba nằm ở **ranh giới giữa
+các tầng** — giữa API và hệ thống tệp, giữa core và SHM, giữa build và deploy. Tăng số ca test
+trong từng tầng không giúp; cần test bắc qua ranh giới.
+
 ### Added — Scheduler v3.1 P1.B/C: backend 14 endpoint, revision, audit, di trú v1 (2026-08-07)
 
 **Phạm vi.** Backend Go: `scheduledto.go` · `schedulevalidate.go` · `schedulestore.go` ·
