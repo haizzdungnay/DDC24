@@ -1,0 +1,141 @@
+[
+  {
+    "schema_version": "3.1",
+    "schedule_id": "SCH-001",
+    "schedule_name": "HVAC Văn phòng — giờ hành chính",
+    "description": "Lịch vận hành điều hòa khu vực văn phòng",
+    "enabled": true,
+    "status": "PUBLISHED",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "effective_period": {
+      "start_date": "2026-01-01",
+      "end_date": null
+    },
+    "value_type": "BINARY",
+    "priority_for_writing": 16,
+    "core_priority_level": 4,
+    "schedule_default": {
+      "value": "INACTIVE"
+    },
+    "weekly_schedule": {
+      "MON": [
+        {
+          "time": "08:00:00",
+          "value": "ACTIVE"
+        },
+        {
+          "time": "12:00:00",
+          "value": "INACTIVE"
+        },
+        {
+          "time": "13:00:00",
+          "value": "ACTIVE"
+        },
+        {
+          "time": "18:00:00",
+          "value": "INACTIVE"
+        }
+      ],
+      "TUE": [
+        {
+          "time": "08:00:00",
+          "value": "ACTIVE"
+        },
+        {
+          "time": "18:00:00",
+          "value": "INACTIVE"
+        }
+      ],
+      "WED": [],
+      "THU": [],
+      "FRI": [],
+      "SAT": [],
+      "SUN": []
+    },
+    "exception_schedule": [
+      {
+        "exception_id": "EXC-001",
+        "name": "Quốc khánh",
+        "date_rule": {
+          "type": "DATE",
+          "date": "2026-09-02"
+        },
+        "event_priority": 1,
+        "time_values": [
+          {
+            "time": "00:00:00",
+            "value": "INACTIVE"
+          }
+        ]
+      },
+      {
+        "exception_id": "EXC-002",
+        "name": "Bảo trì thứ Hai đầu tháng",
+        "date_rule": {
+          "type": "WEEK_N_DAY",
+          "month": 0,
+          "week_of_month": 1,
+          "day_of_week": 1
+        },
+        "event_priority": 5,
+        "time_values": [
+          {
+            "time": "06:00:00",
+            "value": "ACTIVE"
+          }
+        ]
+      }
+    ],
+    "target_objects": [
+      {
+        "target_id": "TGT-001",
+        "target_type": "INTERNAL_POINT",
+        "point_kind": "DO",
+        "channel": 1,
+        "point_id": "DO-01"
+      },
+      {
+        "target_id": "TGT-002",
+        "target_type": "INTERNAL_POINT",
+        "point_kind": "BV",
+        "channel": 3
+      }
+    ],
+    "bacnet_object": {
+      "object_type": "SCHEDULE",
+      "object_instance": 1,
+      "exposed": false
+    },
+    "revision": 5,
+    "runtime": {
+      "effective_value": "ACTIVE",
+      "value_source": "WEEKLY",
+      "source_exception_id": null,
+      "next_transition_at": "2026-08-07T18:00:00+07:00",
+      "applied_revision": 5,
+      "error_code": null,
+      "targets": [
+        {
+          "target_id": "TGT-001",
+          "write_result": "OK",
+          "written_value": "ACTIVE",
+          "actual_value": "ACTIVE",
+          "overridden_by": null,
+          "error_code": null
+        },
+        {
+          "target_id": "TGT-002",
+          "write_result": "TIMEOUT",
+          "written_value": "ACTIVE",
+          "actual_value": null,
+          "overridden_by": "LOCAL_MANUAL",
+          "error_code": "SCH-WRITE-002"
+        }
+      ]
+    },
+    "created_at": "2026-08-06T10:00:00+07:00",
+    "created_by": "admin",
+    "updated_at": "2026-08-06T10:00:00+07:00",
+    "updated_by": "admin"
+  }
+]

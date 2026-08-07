@@ -1,0 +1,484 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mekong-hcm.vn/contracts/config/schedule_v3_1.schema.json",
+  "title": "MK-DDC-24 — Scheduler Engine v3.1 (Schedule Object)",
+  "description": "Hợp đồng dữ liệu lịch vận hành, thay thế hoàn toàn mô hình thanh ghi TSx. Một tệp cấu hình là MỘT mảng Schedule Object, tối đa 64 phần tử, lưu tại /data/config/schedule.conf. Cùng lược đồ này được dùng cho REST /api/v1/schedules và cho tệp cấu hình mà mkddc-core nạp. Nguồn: docs/CHUONG_YEU_CAU/scheduler.md v3.1 + ADR-023 (PM/CTO duyệt 2026-08-07).",
+  "x-status": "FROZEN 2026-08-07 (SCHD-005). Đổi lược đồ này phải qua ADR mới.",
+  "x-rationale": {
+    "vi_sao_weekly_la_time_value": "Đặc tả §2.3: người dùng thao tác theo Start/End nhưng backend lưu Time-Value. Một ngày có thể chứa nhiều lần chuyển trạng thái (nghỉ trưa), mà cặp start/end đơn không diễn đạt được. Frontend biên dịch Start/End thành cặp Time-Value và PHẢI hiển thị kết quả biên dịch cho người dùng thấy.",
+    "vi_sao_exception_thuoc_tung_lich": "Mô hình cũ để holiday_period thành một loại lịch riêng và khi active thì TẮT TOÀN BỘ mọi lịch khác (schedule_runtime.cpp:459-482). Một lịch ngày lễ cấu hình nhầm làm chết cả hệ thống. Đặc tả §7 yêu cầu exception thuộc từng Schedule Object và chỉ ghi đè lịch chứa nó.",
+    "vi_sao_priority_1_16_ma_core_co_6_muc": "ADR-023 QĐ-1: ScheduleRuntime tự phân xử 1..16 giữa các lịch cùng ghi một điểm, chỉ lịch thắng đi xuống PRIO_SCHEDULE (mức 4) của PriorityResolver 6 mức. Không mở rộng resolver, không chạm đường Fire/Safety. Hệ quả có chủ ý: lịch priority 1 vẫn không thắng được lệnh tay tại chỗ (mức 2).",
+    "vi_sao_runtime_tach_khoi_cau_hinh": "Cấu hình là Ý ĐỊNH của người dùng; runtime là SỰ THẬT do controller trả về. Trộn hai thứ vào một khối chính là lớp lỗi FE-DIAG-01 (review 2026-08-06) khiến giao diện hiển thị dữ liệu simulator như dữ liệu thật. Khối runtime là readOnly và KHÔNG BAO GIỜ được ghi từ client.",
+    "vi_sao_khong_co_mqtt": "ADR-023 QĐ-2: Backend và Controller chạy cùng một bo, nói chuyện qua SHM + Unix socket. MQTT ngoài phạm vi Rev A. Nhưng ngữ nghĩa mà đặc tả §14 đòi — revision, correlation_id, ACK/NACK, timeout, retry, chống áp dụng lặp — là BẮT BUỘC trên transport nội bộ."
+  },
+
+  "type": "array",
+  "maxItems": 64,
+  "items": { "$ref": "#/$defs/ScheduleObject" },
+
+  "$defs": {
+
+    "ScheduleObject": {
+      "title": "Schedule Object",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "schedule_id",
+        "schedule_name",
+        "enabled",
+        "status",
+        "timezone",
+        "effective_period",
+        "value_type",
+        "priority_for_writing",
+        "schedule_default",
+        "weekly_schedule",
+        "exception_schedule",
+        "target_objects",
+        "revision"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "3.1",
+          "description": "Bản của lược đồ này. Giá trị khác ⇒ backend từ chối nạp và giữ cấu hình đang chạy."
+        },
+        "schedule_id": {
+          "type": "string",
+          "pattern": "^SCH-[A-Za-z0-9_-]{1,60}$",
+          "maxLength": 64,
+          "description": "Mã duy nhất trong một controller. Quy ước cấp phát: SCH-001 … SCH-064."
+        },
+        "schedule_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Tên người dùng đọc. Đặc tả §5 giới hạn 64 ký tự."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Mô tả mục đích của lịch."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Tắt lịch KHÔNG chỉ là ngừng đánh giá: runtime phải relinquish tại priority đang dùng và không giữ giá trị điều khiển cuối cùng (đặc tả §9.2)."
+        },
+        "status": { "$ref": "#/$defs/ScheduleStatus" },
+        "timezone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "default": "Asia/Ho_Chi_Minh",
+          "description": "Tên IANA. Đánh giá theo giờ dân dụng của MÚI GIỜ NÀY, không theo TZ của tiến trình. Múi giờ không hợp lệ ⇒ SCH-TIME-001."
+        },
+        "effective_period": { "$ref": "#/$defs/EffectivePeriod" },
+        "value_type": { "$ref": "#/$defs/ValueType" },
+        "priority_for_writing": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "default": 16,
+          "description": "1 = cao nhất, 16 = lịch vận hành thông thường. Phân xử GIỮA CÁC LỊCH cùng ghi một điểm (ADR-023 QĐ-1). KHÔNG phải mức của PriorityResolver — xem core_priority_level."
+        },
+        "core_priority_level": {
+          "type": "integer",
+          "const": 4,
+          "readOnly": true,
+          "description": "DẪN XUẤT, chỉ đọc. Mức thật trên PriorityResolver 6 mức của controller mà mọi lịch dùng chung. Giao diện PHẢI hiển thị trường này cạnh priority_for_writing để người vận hành hiểu vì sao một lệnh priority 1 vẫn thua lệnh tay tại chỗ (mức 2)."
+        },
+        "schedule_default": {
+          "$ref": "#/$defs/ScheduleValue",
+          "description": "Giá trị khi không event nào hiệu lực. BẮT BUỘC — thiếu ⇒ SCH-CONFIG-001."
+        },
+        "weekly_schedule": { "$ref": "#/$defs/WeeklySchedule" },
+        "exception_schedule": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/ExceptionEntry" },
+          "description": "Ghi đè lịch tuần khi ngày khớp. Thứ tự tính: Exception → Weekly → Default (đặc tả §7.3)."
+        },
+        "target_objects": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/TargetObject" },
+          "description": "Trần 32 theo đặc tả (ADR-023 QĐ-3). Bo chỉ có 64 điểm ghi nội bộ + 256 điểm Modbus — giao diện BẮT BUỘC hiển thị dung lượng thật và cảnh báo khi gần/vượt."
+        },
+        "bacnet_object": { "$ref": "#/$defs/BacnetObjectRef" },
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Tăng sau mỗi lần cập nhật. Publish một revision cũ hơn revision đang chạy ⇒ SCH-VERSION-001."
+        },
+        "migrated_from_v1": {
+          "type": "boolean",
+          "default": false,
+          "description": "true khi bản ghi này sinh ra từ bộ chuyển đổi định dạng cũ (ADR-023 QĐ-6). Giao diện hiện băng thông báo bắt buộc cho tới khi người dùng review và publish lại. Backend đặt cờ này, client KHÔNG được tự đặt."
+        },
+        "runtime": { "$ref": "#/$defs/ScheduleRuntimeState" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "created_by": { "type": "string", "maxLength": 64 },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "updated_by": { "type": "string", "maxLength": 64 }
+      }
+    },
+
+    "ScheduleStatus": {
+      "type": "string",
+      "enum": ["DRAFT", "VALIDATED", "PUBLISHED", "ACTIVE", "INACTIVE", "DISABLED", "ERROR", "OUT_OF_SYNC"],
+      "description": "DRAFT đang sửa · VALIDATED đã kiểm hợp lệ · PUBLISHED đã gửi xuống controller · ACTIVE đang chạy và có hiệu lực · INACTIVE ngoài effective_period hoặc chưa có event · DISABLED người dùng tắt · ERROR lỗi cấu hình hoặc runtime · OUT_OF_SYNC backend và controller khác revision."
+    },
+
+    "ValueType": {
+      "type": "string",
+      "enum": ["BINARY", "BOOLEAN", "REAL", "UNSIGNED", "ENUMERATED"],
+      "description": "MỘT Schedule Object chỉ dùng MỘT kiểu giá trị (đặc tả §2.1). Vừa bật thiết bị vừa đặt nhiệt độ ⇒ phải tạo hai lịch. Khoá lại sau khi đã gán target đầu tiên."
+    },
+
+    "ScheduleValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value"],
+      "properties": {
+        "value": {
+          "oneOf": [
+            { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+            { "type": "boolean" },
+            { "type": "number" },
+            { "type": "integer", "minimum": 0 }
+          ],
+          "description": "Kiểu phải khớp value_type của Schedule Object: BINARY ⇒ \"ACTIVE\"|\"INACTIVE\"; BOOLEAN ⇒ true|false; REAL ⇒ number hữu hạn; UNSIGNED ⇒ integer ≥ 0; ENUMERATED ⇒ integer ≥ 0. Không khớp ⇒ SCH-CONFIG-002."
+        }
+      }
+    },
+
+    "EffectivePeriod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_date", "end_date"],
+      "properties": {
+        "start_date": {
+          "type": ["string", "null"],
+          "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+          "description": "null = không có ngày bắt đầu."
+        },
+        "end_date": {
+          "type": ["string", "null"],
+          "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$",
+          "description": "null = KHÔNG CÓ NGÀY KẾT THÚC. Giao diện phải nói bằng chữ, không để ô trống mập mờ."
+        }
+      }
+    },
+
+    "WeeklySchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+      "description": "LUÔN đủ bảy ngày, kể cả ngày rỗng (đặc tả §6.1).",
+      "properties": {
+        "MON": { "$ref": "#/$defs/DaySchedule" },
+        "TUE": { "$ref": "#/$defs/DaySchedule" },
+        "WED": { "$ref": "#/$defs/DaySchedule" },
+        "THU": { "$ref": "#/$defs/DaySchedule" },
+        "FRI": { "$ref": "#/$defs/DaySchedule" },
+        "SAT": { "$ref": "#/$defs/DaySchedule" },
+        "SUN": { "$ref": "#/$defs/DaySchedule" }
+      }
+    },
+
+    "DaySchedule": {
+      "type": "array",
+      "maxItems": 24,
+      "items": { "$ref": "#/$defs/TimeValue" },
+      "description": "Sắp xếp tăng dần theo thời gian. Hai event cùng thời điểm trong một ngày ⇒ SCH-CONFIG-002. Một ngày được phép có nhiều lần chuyển trạng thái (đặc tả §6.2)."
+    },
+
+    "TimeValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["time", "value"],
+      "properties": {
+        "time": {
+          "type": "string",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
+          "description": "HH:mm:ss theo giờ dân dụng của timezone thuộc Schedule Object."
+        },
+        "value": {
+          "oneOf": [
+            { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+            { "type": "boolean" },
+            { "type": "number" },
+            { "type": "integer", "minimum": 0 }
+          ]
+        }
+      }
+    },
+
+    "ExceptionEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exception_id", "name", "date_rule", "event_priority", "time_values"],
+      "properties": {
+        "exception_id": { "type": "string", "pattern": "^EXC-[A-Za-z0-9_-]{1,60}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "date_rule": { "$ref": "#/$defs/DateRule" },
+        "event_priority": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "description": "CHỈ dùng để giải quyết nhiều exception CÙNG HIỆU LỰC trong một Schedule Object. KHÔNG phải priority_for_writing. Bằng priority ⇒ báo SCH-CONFIG-003; hệ thống KHÔNG tự chọn theo thời gian tạo (đặc tả §7.3)."
+        },
+        "time_values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": { "$ref": "#/$defs/TimeValue" }
+        }
+      }
+    },
+
+    "DateRule": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        { "$ref": "#/$defs/DateRuleDate" },
+        { "$ref": "#/$defs/DateRuleDateRange" },
+        { "$ref": "#/$defs/DateRuleWeekNDay" },
+        { "$ref": "#/$defs/DateRuleCalendarRef" },
+        { "$ref": "#/$defs/DateRuleHolidayGroup" }
+      ]
+    },
+
+    "DateRuleDate": {
+      "title": "DATE — một ngày cụ thể",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "date"],
+      "properties": {
+        "type": { "const": "DATE" },
+        "date": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$" }
+      }
+    },
+
+    "DateRuleDateRange": {
+      "title": "DATE_RANGE — khoảng ngày, bao gồm hai đầu",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "start_date", "end_date"],
+      "properties": {
+        "type": { "const": "DATE_RANGE" },
+        "start_date": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$" },
+        "end_date": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$" }
+      }
+    },
+
+    "DateRuleWeekNDay": {
+      "title": "WEEK_N_DAY — ví dụ thứ Hai đầu tiên của tháng",
+      "description": "Con người KHÔNG tính nhẩm được quy tắc này. Giao diện BẮT BUỘC hiển thị trước danh sách ngày thật rơi vào trong 12 tháng tới, nếu không người dùng sẽ publish một quy tắc mà không biết nó nổ vào ngày nào.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "month", "week_of_month", "day_of_week"],
+      "properties": {
+        "type": { "const": "WEEK_N_DAY" },
+        "month": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 12,
+          "description": "1..12 = tháng cụ thể; 0 = mọi tháng."
+        },
+        "week_of_month": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6,
+          "description": "1..5 = tuần thứ N trong tháng; 6 = tuần CUỐI CÙNG (theo quy ước BACnet)."
+        },
+        "day_of_week": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7,
+          "description": "1 = Thứ Hai … 7 = Chủ nhật (ISO-8601)."
+        }
+      }
+    },
+
+    "DateRuleCalendarRef": {
+      "title": "CALENDAR_REFERENCE — tham chiếu Calendar Object",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "calendar_id"],
+      "properties": {
+        "type": { "const": "CALENDAR_REFERENCE" },
+        "calendar_id": { "type": "string", "pattern": "^CAL-[A-Za-z0-9_-]{1,60}$" }
+      }
+    },
+
+    "DateRuleHolidayGroup": {
+      "title": "HOLIDAY_GROUP — nhóm ngày lễ dùng chung giữa các lịch",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "group_id"],
+      "properties": {
+        "type": { "const": "HOLIDAY_GROUP" },
+        "group_id": { "type": "string", "pattern": "^HG-[A-Za-z0-9_-]{1,60}$" }
+      }
+    },
+
+    "TargetObject": {
+      "type": "object",
+      "required": ["target_id", "target_type"],
+      "oneOf": [
+        { "$ref": "#/$defs/TargetInternalPoint" },
+        { "$ref": "#/$defs/TargetBacnetObject" }
+      ]
+    },
+
+    "TargetInternalPoint": {
+      "title": "INTERNAL_POINT — điểm nội bộ của controller (dạng mặc định trên MK-DDC-24)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_id", "target_type", "point_kind", "channel"],
+      "properties": {
+        "target_id": { "type": "string", "pattern": "^TGT-[A-Za-z0-9_-]{1,60}$" },
+        "target_type": { "const": "INTERNAL_POINT" },
+        "point_kind": {
+          "type": "string",
+          "enum": ["AO", "DO", "AV", "BV", "MSV", "EXT"],
+          "description": "AO/DO đi qua PriorityResolver; AV/BV/MSV ghi thẳng PointTable; EXT là điểm Modbus RTU. Kiểu phải tương thích value_type — không ⇒ SCH-TARGET-003."
+        },
+        "channel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256,
+          "description": "1-based. Trần theo kind: AO≤4, DO≤4, AV≤32, BV≤16, MSV≤8, EXT≤256 (mkddc_shm.h). Vượt ⇒ SCH-TARGET-001."
+        },
+        "point_id": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Dẫn xuất từ point_kind + channel (ví dụ DO-01). Nếu client gửi thì phải khớp, không khớp ⇒ từ chối."
+        }
+      }
+    },
+
+    "TargetBacnetObject": {
+      "title": "BACNET_OBJECT — đối tượng BACnet ngoài (P4, ADR-023 QĐ-4)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_id", "target_type", "device_instance", "object_type", "object_instance", "property_identifier"],
+      "properties": {
+        "target_id": { "type": "string", "pattern": "^TGT-[A-Za-z0-9_-]{1,60}$" },
+        "target_type": { "const": "BACNET_OBJECT" },
+        "device_id": { "type": "string", "maxLength": 64 },
+        "device_instance": { "type": "integer", "minimum": 0, "maximum": 4194302 },
+        "object_type": {
+          "type": "string",
+          "enum": ["ANALOG_OUTPUT", "ANALOG_VALUE", "BINARY_OUTPUT", "BINARY_VALUE", "MULTI_STATE_OUTPUT", "MULTI_STATE_VALUE"]
+        },
+        "object_instance": { "type": "integer", "minimum": 0, "maximum": 4194302 },
+        "property_identifier": { "type": "string", "default": "PRESENT_VALUE" },
+        "array_index": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+
+    "BacnetObjectRef": {
+      "title": "Định danh Schedule Object trên BACnet",
+      "description": "Sinh từ P1 để KHÔNG phải di trú dữ liệu lần hai, nhưng chỉ được phơi ra BACnet ở P4 (ADR-023 QĐ-4). Giao diện hiển thị chỉ đọc kèm nhãn 'chưa phơi ra BACnet' cho tới khi P4 xong.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["object_type", "object_instance"],
+      "properties": {
+        "object_type": { "const": "SCHEDULE" },
+        "object_instance": { "type": "integer", "minimum": 0, "maximum": 4194302 },
+        "exposed": {
+          "type": "boolean",
+          "default": false,
+          "readOnly": true,
+          "description": "false cho tới khi P4 hiện thực object type 17."
+        }
+      }
+    },
+
+    "ScheduleRuntimeState": {
+      "title": "Trạng thái runtime — CHỈ ĐỌC, do controller trả về",
+      "description": "KHÔNG BAO GIỜ được ghi từ client và KHÔNG BAO GIỜ được tính ở frontend. Thiếu trường nào thì giao diện hiển thị '—', tuyệt đối không thay bằng 0 hay OK (nguyên tắc N3 của Plan 50).",
+      "type": "object",
+      "readOnly": true,
+      "additionalProperties": false,
+      "properties": {
+        "effective_value": {
+          "oneOf": [
+            { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+            { "type": "boolean" },
+            { "type": "number" },
+            { "type": "integer" },
+            { "type": "null" }
+          ]
+        },
+        "value_source": {
+          "type": ["string", "null"],
+          "enum": ["WEEKLY", "EXCEPTION", "DEFAULT", null],
+          "description": "Nguồn của giá trị đang hiệu lực. null = controller chưa báo."
+        },
+        "source_exception_id": { "type": ["string", "null"] },
+        "next_transition_at": { "type": ["string", "null"], "format": "date-time" },
+        "applied_revision": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Revision controller ĐANG chạy. Khác revision của Schedule Object ⇒ status = OUT_OF_SYNC."
+        },
+        "last_evaluated_at": { "type": ["string", "null"], "format": "date-time" },
+        "error_code": { "$ref": "#/$defs/ErrorCode" },
+        "targets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TargetRuntimeState" }
+        }
+      }
+    },
+
+    "TargetRuntimeState": {
+      "description": "Kết quả ghi lưu RIÊNG cho từng target (đặc tả §8.2). Một target lỗi KHÔNG được ngăn các target khác tiếp tục thực hiện.",
+      "type": "object",
+      "readOnly": true,
+      "additionalProperties": false,
+      "required": ["target_id"],
+      "properties": {
+        "target_id": { "type": "string" },
+        "write_result": {
+          "type": ["string", "null"],
+          "enum": ["OK", "FAILED", "TIMEOUT", "SKIPPED", null]
+        },
+        "written_value": {
+          "oneOf": [
+            { "type": "string" }, { "type": "boolean" }, { "type": "number" }, { "type": "null" }
+          ]
+        },
+        "actual_value": {
+          "oneOf": [
+            { "type": "string" }, { "type": "boolean" }, { "type": "number" }, { "type": "null" }
+          ],
+          "description": "Giá trị THẬT đang có trên điểm đích. Khác written_value ⇒ nhiều khả năng đang bị nguồn priority cao hơn ghi đè."
+        },
+        "overridden_by": {
+          "type": ["string", "null"],
+          "enum": ["FIRE_SAFETY", "LOCAL_MANUAL", "BACNET", "LOCAL_LOGIC", null],
+          "description": "Tên nguồn đang thắng trên PriorityResolver khi nguồn đó KHÔNG phải schedule. Đây là trường trả lời câu hỏi tốn nhiều thời gian hiện trường nhất: 'lịch bật rồi mà sao thiết bị không chạy'."
+        },
+        "error_code": { "$ref": "#/$defs/ErrorCode" },
+        "last_write_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+
+    "ErrorCode": {
+      "type": ["string", "null"],
+      "enum": [
+        "SCH-CONFIG-001", "SCH-CONFIG-002", "SCH-CONFIG-003",
+        "SCH-TARGET-001", "SCH-TARGET-002", "SCH-TARGET-003",
+        "SCH-TIME-001", "SCH-TIME-002",
+        "SCH-WRITE-001", "SCH-WRITE-002",
+        "SCH-RUNTIME-001", "SCH-VERSION-001",
+        "SCH-PUBLISH-001", "SCH-ROLLBACK-001",
+        null
+      ],
+      "description": "14 mã lỗi của đặc tả §11. Mọi thông báo lỗi trên giao diện PHẢI mang một trong các mã này và bấm được để nhảy tới ô sai (nguyên tắc N4)."
+    }
+  }
+}

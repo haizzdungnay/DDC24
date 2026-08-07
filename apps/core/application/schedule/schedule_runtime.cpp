@@ -1,5 +1,6 @@
 #include "schedule/schedule_runtime.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -18,8 +19,9 @@ namespace core {
 namespace {
 
 constexpr std::size_t kMaxSchedules = 64;
-constexpr int kDayMinutes = 24 * 60;
-constexpr int kWeekMinutes = 7 * 24 * 60;
+constexpr std::size_t kMaxTargets = 32;
+constexpr std::size_t kMaxExceptions = 32;
+constexpr int kDaySeconds = 24 * 60 * 60;
 
 int read_file(const std::string& path, std::string* out)
 {
@@ -33,323 +35,446 @@ int read_file(const std::string& path, std::string* out)
     return 0;
 }
 
-bool as_int(const json::Value* value, int* out)
+bool as_int(const json::Value* v, int* out)
 {
-    if (!value || !value->is_num()) return false;
-    const double raw = value->num;
-    if (!std::isfinite(raw) ||
-        raw < static_cast<double>(std::numeric_limits<int>::min()) ||
-        raw > static_cast<double>(std::numeric_limits<int>::max())) {
-        return false;
-    }
+    if (!v || !v->is_num()) return false;
+    const double raw = v->num;
+    if (!std::isfinite(raw) || raw < -2147483648.0 || raw > 2147483647.0) return false;
     const int parsed = static_cast<int>(raw);
     if (raw != static_cast<double>(parsed)) return false;
     *out = parsed;
     return true;
 }
 
-bool as_number(const json::Value* value, double* out)
+bool as_u64(const json::Value* v, uint64_t* out)
 {
-    if (!value || !value->is_num() || !std::isfinite(value->num)) return false;
-    *out = value->num;
+    int tmp = 0;
+    if (!as_int(v, &tmp) || tmp < 0) return false;
+    *out = static_cast<uint64_t>(tmp);
     return true;
 }
 
-bool as_string(const json::Value* value, std::string* out)
+bool as_string(const json::Value* v, std::string* out)
 {
-    if (!value || !value->is_str()) return false;
-    *out = value->str;
+    if (!v || !v->is_str()) return false;
+    *out = v->str;
     return true;
 }
 
-bool as_bool(const json::Value* value, bool* out)
+bool as_bool(const json::Value* v, bool* out)
 {
-    if (!value || !value->is_bool()) return false;
-    *out = value->b;
+    if (!v || !v->is_bool()) return false;
+    *out = v->b;
     return true;
 }
 
-bool parse_time(const std::string& value, int* out)
+/* "HH:mm:ss" → giây trong ngày. */
+bool parse_time(const std::string& s, int* out)
 {
-    if (value.size() != 5 || value[2] != ':') return false;
-    const int hour = (value[0] - '0') * 10 + (value[1] - '0');
-    const int minute = (value[3] - '0') * 10 + (value[4] - '0');
-    if (value[0] < '0' || value[0] > '9' || value[1] < '0' || value[1] > '9' ||
-        value[3] < '0' || value[3] > '9' || value[4] < '0' || value[4] > '9' ||
-        hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-        return false;
+    if (s.size() != 8 || s[2] != ':' || s[5] != ':') return false;
+    for (int i : {0, 1, 3, 4, 6, 7}) {
+        if (s[i] < '0' || s[i] > '9') return false;
     }
-    *out = hour * 60 + minute;
+    const int h = (s[0] - '0') * 10 + (s[1] - '0');
+    const int m = (s[3] - '0') * 10 + (s[4] - '0');
+    const int sec = (s[6] - '0') * 10 + (s[7] - '0');
+    if (h > 23 || m > 59 || sec > 59) return false;
+    *out = h * 3600 + m * 60 + sec;
     return true;
 }
 
-bool parse_date(const std::string& value, int* out)
+/* "YYYY-MM-DD" → CivilDate. */
+bool parse_date(const std::string& s, CivilDate* out)
 {
-    if (value.size() != 5 || value[2] != '-') return false;
-    if (value[0] < '0' || value[0] > '9' || value[1] < '0' || value[1] > '9' ||
-        value[3] < '0' || value[3] > '9' || value[4] < '0' || value[4] > '9') {
-        return false;
+    if (s.size() != 10 || s[4] != '-' || s[7] != '-') return false;
+    for (int i : {0, 1, 2, 3, 5, 6, 8, 9}) {
+        if (s[i] < '0' || s[i] > '9') return false;
     }
-    const int month = (value[0] - '0') * 10 + (value[1] - '0');
-    const int day = (value[3] - '0') * 10 + (value[4] - '0');
-    static const int month_days[12] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    if (month < 1 || month > 12 || day < 1 || day > month_days[month - 1]) return false;
-    int ordinal = day;
-    for (int i = 0; i < month - 1; i++) ordinal += month_days[i];
-    *out = ordinal;
+    const int y = (s[0] - '0') * 1000 + (s[1] - '0') * 100 + (s[2] - '0') * 10 + (s[3] - '0');
+    const int mo = (s[5] - '0') * 10 + (s[6] - '0');
+    const int d = (s[8] - '0') * 10 + (s[9] - '0');
+    if (y < 1970 || mo < 1 || mo > 12 || d < 1 || d > days_in_month(y, mo)) return false;
+    *out = CivilDate{y, mo, d};
     return true;
 }
 
-bool parse_weekday(const std::string& value, int* out)
+bool parse_value_type(const std::string& s, ValueType* out)
 {
-    if (value == "monday")    { *out = 0; return true; }
-    if (value == "tuesday")   { *out = 1; return true; }
-    if (value == "wednesday") { *out = 2; return true; }
-    if (value == "thursday")  { *out = 3; return true; }
-    if (value == "friday")    { *out = 4; return true; }
-    if (value == "saturday")  { *out = 5; return true; }
-    if (value == "sunday")    { *out = 6; return true; }
+    if (s == "BINARY")     { *out = ValueType::Binary; return true; }
+    if (s == "BOOLEAN")    { *out = ValueType::Boolean; return true; }
+    if (s == "REAL")       { *out = ValueType::Real; return true; }
+    if (s == "UNSIGNED")   { *out = ValueType::Unsigned; return true; }
+    if (s == "ENUMERATED") { *out = ValueType::Enumerated; return true; }
     return false;
 }
 
-bool parse_type(const std::string& value, ScheduleType* out)
+/* Giá trị JSON → double theo value_type. Chuỗi ACTIVE/INACTIVE chỉ hợp lệ với
+ * BINARY; bool chỉ hợp lệ với BOOLEAN. Sai kiểu là SCH-CONFIG-002. */
+bool parse_value(const json::Value* v, ValueType t, double* out)
 {
-    if (value == "not_active") { *out = ScheduleType::NotActive; return true; }
-    if (value == "controller_operation_mode") {
-        *out = ScheduleType::ControllerOperationMode; return true;
+    if (!v) return false;
+    switch (t) {
+    case ValueType::Binary:
+        if (!v->is_str()) return false;
+        if (v->str == "ACTIVE")   { *out = 1.0; return true; }
+        if (v->str == "INACTIVE") { *out = 0.0; return true; }
+        return false;
+    case ValueType::Boolean:
+        if (!v->is_bool()) return false;
+        *out = v->b ? 1.0 : 0.0;
+        return true;
+    case ValueType::Real:
+        if (!v->is_num() || !std::isfinite(v->num)) return false;
+        *out = v->num;
+        return true;
+    case ValueType::Unsigned:
+    case ValueType::Enumerated: {
+        int tmp = 0;
+        if (!as_int(v, &tmp) || tmp < 0) return false;
+        *out = static_cast<double>(tmp);
+        return true;
     }
-    if (value == "control_loop_setpoint") { *out = ScheduleType::ControlLoopSetpoint; return true; }
-    if (value == "analog_output_value") { *out = ScheduleType::AnalogOutputValue; return true; }
-    if (value == "fan_state_value") { *out = ScheduleType::FanStateValue; return true; }
-    if (value == "digital_output_value") { *out = ScheduleType::DigitalOutputValue; return true; }
-    if (value == "holiday_period") { *out = ScheduleType::HolidayPeriod; return true; }
+    }
     return false;
 }
 
-std::string point_id(const char* kind, int channel)
+bool parse_point_kind(const std::string& s, PointKind* kind, int* max_channel)
 {
-    return std::string(kind) + "-" + (channel < 10 ? "0" : "") + std::to_string(channel);
+    if (s == "AO")  { *kind = PointKind::AO;  *max_channel = KX_N_AO;  return true; }
+    if (s == "DO")  { *kind = PointKind::BO;  *max_channel = KX_N_DO;  return true; }
+    if (s == "AV")  { *kind = PointKind::AV;  *max_channel = KX_N_AV;  return true; }
+    if (s == "BV")  { *kind = PointKind::BV;  *max_channel = KX_N_BV;  return true; }
+    if (s == "MSV") { *kind = PointKind::MSV; *max_channel = KX_N_MSV; return true; }
+    if (s == "EXT") { *kind = PointKind::EXT; *max_channel = KX_N_EXT; return true; }
+    return false;
 }
 
-bool parse_target(const json::Value* value, ScheduleType type, ScheduleTarget* out)
+const char* point_kind_name(PointKind k)
 {
-    if (type == ScheduleType::ControllerOperationMode) {
-        out->kind = PointKind::MSV;
-        out->idx = 0;
-        out->point_id = point_id("MSV", 1);
-        if (!value) return true;
+    switch (k) {
+    case PointKind::AO:  return "AO";
+    case PointKind::BO:  return "DO";
+    case PointKind::AV:  return "AV";
+    case PointKind::BV:  return "BV";
+    case PointKind::MSV: return "MSV";
+    case PointKind::EXT: return "EXT";
+    default: return "?";
     }
-    if (!value || !value->is_obj()) {
+}
+
+std::string format_point_id(PointKind k, int channel)
+{
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%s-%02d", point_kind_name(k), channel);
+    return std::string(buf);
+}
+
+/* Kiểu điểm có chứa nổi value_type không (SCH-TARGET-003).
+ * BV/DO là nhị phân; AV/AO/EXT là liên tục; MSV là đa trạng thái. */
+bool target_kind_matches_value_type(PointKind k, ValueType t)
+{
+    switch (t) {
+    case ValueType::Binary:
+    case ValueType::Boolean:
+        return k == PointKind::BO || k == PointKind::BV;
+    case ValueType::Real:
+        return k == PointKind::AO || k == PointKind::AV || k == PointKind::EXT;
+    case ValueType::Unsigned:
+    case ValueType::Enumerated:
+        return k == PointKind::MSV || k == PointKind::AV || k == PointKind::EXT;
+    }
+    return false;
+}
+
+bool parse_time_values(const json::Value* arr, ValueType t, std::vector<TimeValue>* out,
+                       const char* ctx)
+{
+    if (!arr || !arr->is_arr()) {
+        std::fprintf(stderr, "ERROR schedule_cfg.bad_time_values ctx=%s\n", ctx);
+        return false;
+    }
+    out->clear();
+    for (const auto& item : arr->arr) {
+        std::string time_str;
+        TimeValue tv;
+        if (!as_string(item->get("time"), &time_str) ||
+            !parse_time(time_str, &tv.second_of_day) ||
+            !parse_value(item->get("value"), t, &tv.value)) {
+            std::fprintf(stderr, "ERROR schedule_cfg.bad_time_value ctx=%s\n", ctx);
+            return false;
+        }
+        out->push_back(tv);
+    }
+    /* Đặc tả §6.2: tự sắp xếp tăng dần; hai event cùng thời điểm là
+     * SCH-CONFIG-002 chứ không phải thứ để đoán ý người dùng. */
+    std::sort(out->begin(), out->end(),
+              [](const TimeValue& a, const TimeValue& b) { return a.second_of_day < b.second_of_day; });
+    for (std::size_t i = 1; i < out->size(); i++) {
+        if (out->at(i).second_of_day == out->at(i - 1).second_of_day) {
+            std::fprintf(stderr, "ERROR schedule_cfg.duplicate_time ctx=%s sec=%d\n",
+                         ctx, out->at(i).second_of_day);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool parse_date_rule(const json::Value* v, DateRule* out)
+{
+    std::string type;
+    if (!v || !v->is_obj() || !as_string(v->get("type"), &type)) return false;
+
+    if (type == "DATE") {
+        std::string s;
+        out->type = DateRuleType::Date;
+        return as_string(v->get("date"), &s) && parse_date(s, &out->date);
+    }
+    if (type == "DATE_RANGE") {
+        std::string a, b;
+        out->type = DateRuleType::DateRange;
+        return as_string(v->get("start_date"), &a) && parse_date(a, &out->start_date) &&
+               as_string(v->get("end_date"), &b) && parse_date(b, &out->end_date);
+    }
+    if (type == "WEEK_N_DAY") {
+        out->type = DateRuleType::WeekNDay;
+        if (!as_int(v->get("month"), &out->month) ||
+            !as_int(v->get("week_of_month"), &out->week_of_month) ||
+            !as_int(v->get("day_of_week"), &out->day_of_week)) {
+            return false;
+        }
+        return out->month >= 0 && out->month <= 12 &&
+               out->week_of_month >= 1 && out->week_of_month <= 6 &&
+               out->day_of_week >= 1 && out->day_of_week <= 7;
+    }
+    if (type == "CALENDAR_REFERENCE") {
+        out->type = DateRuleType::CalendarReference;
+        return as_string(v->get("calendar_id"), &out->ref_id);
+    }
+    if (type == "HOLIDAY_GROUP") {
+        out->type = DateRuleType::HolidayGroup;
+        return as_string(v->get("group_id"), &out->ref_id);
+    }
+    return false;
+}
+
+bool parse_target(const json::Value* v, ValueType value_type, ScheduleTarget* out)
+{
+    std::string target_type;
+    if (!v || !v->is_obj() || !as_string(v->get("target_id"), &out->id) ||
+        !as_string(v->get("target_type"), &target_type)) {
         std::fprintf(stderr, "ERROR schedule_cfg.bad_target\n");
         return false;
     }
-
-    std::string kind;
-    int channel = 0;
-    std::string pid;
-    if (!as_string(value->get("kind"), &kind) || !as_int(value->get("channel"), &channel)) {
-        std::fprintf(stderr, "ERROR schedule_cfg.bad_target_fields\n");
+    if (target_type != "INTERNAL_POINT") {
+        /* BACNET_OBJECT thuộc P4 (ADR-023 QĐ-4). Nhận diện được nhưng chưa
+         * ghi được — từ chối thẳng thay vì im lặng bỏ qua. */
+        std::fprintf(stderr, "ERROR schedule_cfg.target_type_unsupported type=%s (P4)\n",
+                     target_type.c_str());
         return false;
     }
-    if (const json::Value* p = value->get("pointId")) {
-        if (!as_string(p, &pid)) return false;
-    }
 
+    std::string kind_str;
+    int channel = 0;
     int max_channel = 0;
-    if (kind == "AO") {
-        out->kind = PointKind::AO;
-        max_channel = KX_N_AO;
-    } else if (kind == "DO") {
-        out->kind = PointKind::BO;
-        max_channel = KX_N_DO;
-    } else if (kind == "AV") {
-        out->kind = PointKind::AV;
-        max_channel = KX_N_AV;
-    } else if (kind == "BV") {
-        out->kind = PointKind::BV;
-        max_channel = KX_N_BV;
-    } else if (kind == "MSV") {
-        out->kind = PointKind::MSV;
-        max_channel = KX_N_MSV;
-    } else {
-        std::fprintf(stderr, "ERROR schedule_cfg.bad_target_kind kind=%s\n", kind.c_str());
+    if (!as_string(v->get("point_kind"), &kind_str) || !as_int(v->get("channel"), &channel) ||
+        !parse_point_kind(kind_str, &out->kind, &max_channel)) {
+        std::fprintf(stderr, "ERROR schedule_cfg.bad_target_fields id=%s\n", out->id.c_str());
         return false;
     }
     if (channel < 1 || channel > max_channel) {
-        std::fprintf(stderr, "ERROR schedule_cfg.bad_target_channel kind=%s ch=%d\n",
-                     kind.c_str(), channel);
+        std::fprintf(stderr, "ERROR schedule_cfg.bad_target_channel SCH-TARGET-001 kind=%s ch=%d max=%d\n",
+                     kind_str.c_str(), channel, max_channel);
         return false;
     }
-    const std::string expected_pid = point_id(kind.c_str(), channel);
-    if (!pid.empty() && pid != expected_pid) {
-        std::fprintf(stderr, "ERROR schedule_cfg.bad_target_point_id pointId=%s expected=%s\n",
-                     pid.c_str(), expected_pid.c_str());
+    if (!target_kind_matches_value_type(out->kind, value_type)) {
+        std::fprintf(stderr, "ERROR schedule_cfg.target_type_mismatch SCH-TARGET-003 kind=%s\n",
+                     kind_str.c_str());
         return false;
     }
     out->idx = channel - 1;
-    out->point_id = expected_pid;
-    return true;
-}
+    out->point_id = format_point_id(out->kind, channel);
 
-bool executable_type(ScheduleType type)
-{
-    return type != ScheduleType::NotActive && type != ScheduleType::HolidayPeriod;
-}
-
-bool valid_target_for_type(ScheduleType type, const ScheduleTarget& target)
-{
-    if (type == ScheduleType::ControllerOperationMode) {
-        return target.kind == PointKind::MSV && target.idx == 0;
-    }
-    if (type == ScheduleType::ControlLoopSetpoint) return target.kind == PointKind::AV;
-    if (type == ScheduleType::AnalogOutputValue) {
-        return target.kind == PointKind::AO ||
-               (target.kind == PointKind::AV && target.idx >= 16);
-    }
-    if (type == ScheduleType::FanStateValue || type == ScheduleType::DigitalOutputValue) {
-        return target.kind == PointKind::BO ||
-               (target.kind == PointKind::BV && target.idx >= 8);
+    std::string declared;
+    if (as_string(v->get("point_id"), &declared) && declared != out->point_id) {
+        std::fprintf(stderr, "ERROR schedule_cfg.bad_target_point_id got=%s expected=%s\n",
+                     declared.c_str(), out->point_id.c_str());
+        return false;
     }
     return true;
 }
 
-bool valid_value_for_type(ScheduleType type, double value)
-{
-    if (!std::isfinite(value)) return false;
-    if (type == ScheduleType::ControllerOperationMode) return value == 0.0 || value == 1.0 || value == 2.0;
-    if (type == ScheduleType::AnalogOutputValue) return value >= 0.0 && value <= 100.0;
-    if (type == ScheduleType::FanStateValue || type == ScheduleType::DigitalOutputValue) {
-        return value == 0.0 || value == 1.0;
-    }
-    return true;
-}
+const char* kWeekdayKeys[7] = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"};
 
-bool parse_schedule(const json::Value& row, ScheduleConfig* out)
+bool parse_schedule(const json::Value& row, ScheduleObject* out)
 {
     if (!row.is_obj()) {
         std::fprintf(stderr, "ERROR schedule_cfg.bad_row\n");
         return false;
     }
-    std::string type;
-    std::string start_time;
-    std::string end_time;
-    std::string start_date;
-    std::string end_date;
-    if (!as_string(row.get("id"), &out->id) || out->id.empty() ||
-        !as_string(row.get("label"), &out->label) || out->label.empty() ||
+
+    std::string schema_version;
+    if (!as_string(row.get("schema_version"), &schema_version) || schema_version != "3.1") {
+        std::fprintf(stderr, "ERROR schedule_cfg.bad_schema_version got=%s want=3.1\n",
+                     schema_version.c_str());
+        return false;
+    }
+    std::string value_type_str;
+    if (!as_string(row.get("schedule_id"), &out->id) || out->id.empty() ||
+        !as_string(row.get("schedule_name"), &out->name) || out->name.empty() ||
         !as_bool(row.get("enabled"), &out->enabled) ||
-        !as_string(row.get("scheduleType"), &type) ||
-        !parse_type(type, &out->type)) {
-        std::fprintf(stderr, "ERROR schedule_cfg.bad_required\n");
+        !as_string(row.get("value_type"), &value_type_str) ||
+        !parse_value_type(value_type_str, &out->value_type)) {
+        std::fprintf(stderr, "ERROR schedule_cfg.bad_required id=%s\n", out->id.c_str());
         return false;
     }
-
-    if (out->type == ScheduleType::HolidayPeriod) {
-        if (!as_string(row.get("startDate"), &start_date) ||
-            !as_string(row.get("endDate"), &end_date) ||
-            !parse_date(start_date, &out->start_date) ||
-            !parse_date(end_date, &out->end_date)) {
-            std::fprintf(stderr, "ERROR schedule_cfg.bad_holiday_date id=%s\n", out->id.c_str());
+    if (const json::Value* tz = row.get("timezone")) {
+        if (!as_string(tz, &out->timezone) || out->timezone.empty()) {
+            std::fprintf(stderr, "ERROR schedule_cfg.bad_timezone SCH-TIME-001 id=%s\n", out->id.c_str());
             return false;
         }
-        return true;
     }
-    if (!executable_type(out->type)) return true;
-
-    if (!as_string(row.get("startTime"), &start_time) &&
-        !as_string(row.get("timeOfDay"), &start_time)) {
-        std::fprintf(stderr, "ERROR schedule_cfg.bad_time_or_value id=%s\n", out->id.c_str());
+    if (!as_int(row.get("priority_for_writing"), &out->priority_for_writing) ||
+        out->priority_for_writing < 1 || out->priority_for_writing > 16) {
+        std::fprintf(stderr, "ERROR schedule_cfg.bad_priority id=%s\n", out->id.c_str());
         return false;
     }
-    if (!as_string(row.get("endTime"), &end_time) ||
-        !parse_time(start_time, &out->start_minute) ||
-        !parse_time(end_time, &out->end_minute) ||
-        out->start_minute == out->end_minute ||
-        !as_number(row.get("value"), &out->value)) {
-        std::fprintf(stderr, "ERROR schedule_cfg.bad_time_or_value id=%s\n", out->id.c_str());
-        return false;
-    }
-    if (!parse_target(row.get("target"), out->type, &out->target) ||
-        !valid_target_for_type(out->type, out->target) ||
-        !valid_value_for_type(out->type, out->value)) {
-        std::fprintf(stderr, "ERROR schedule_cfg.bad_target_or_value id=%s\n", out->id.c_str());
+    if (!as_u64(row.get("revision"), &out->revision)) {
+        std::fprintf(stderr, "ERROR schedule_cfg.bad_revision id=%s\n", out->id.c_str());
         return false;
     }
 
-    const json::Value* weekdays = row.get("weekdays");
-    if (!weekdays || !weekdays->is_arr() || weekdays->arr.empty()) {
-        std::fprintf(stderr, "ERROR schedule_cfg.bad_weekdays id=%s\n", out->id.c_str());
+    /* schedule_default BẮT BUỘC — thiếu là SCH-CONFIG-001. */
+    const json::Value* def = row.get("schedule_default");
+    if (!def || !def->is_obj() || !parse_value(def->get("value"), out->value_type, &out->schedule_default)) {
+        std::fprintf(stderr, "ERROR schedule_cfg.missing_default SCH-CONFIG-001 id=%s\n", out->id.c_str());
         return false;
     }
-    for (const auto& day : weekdays->arr) {
-        std::string raw;
-        int index = 0;
-        if (!as_string(day.get(), &raw) || !parse_weekday(raw, &index)) {
-            std::fprintf(stderr, "ERROR schedule_cfg.bad_weekday id=%s\n", out->id.c_str());
+
+    const json::Value* ep = row.get("effective_period");
+    if (!ep || !ep->is_obj()) {
+        std::fprintf(stderr, "ERROR schedule_cfg.missing_effective_period id=%s\n", out->id.c_str());
+        return false;
+    }
+    std::string sd;
+    if (as_string(ep->get("start_date"), &sd) && !parse_date(sd, &out->effective_period.start)) {
+        std::fprintf(stderr, "ERROR schedule_cfg.bad_effective_start id=%s\n", out->id.c_str());
+        return false;
+    }
+    std::string ed;
+    if (as_string(ep->get("end_date"), &ed) && !parse_date(ed, &out->effective_period.end)) {
+        std::fprintf(stderr, "ERROR schedule_cfg.bad_effective_end id=%s\n", out->id.c_str());
+        return false;
+    }
+
+    /* weekly_schedule LUÔN đủ bảy ngày (đặc tả §6.1). */
+    const json::Value* weekly = row.get("weekly_schedule");
+    if (!weekly || !weekly->is_obj()) {
+        std::fprintf(stderr, "ERROR schedule_cfg.missing_weekly SCH-CONFIG-002 id=%s\n", out->id.c_str());
+        return false;
+    }
+    for (int d = 0; d < 7; d++) {
+        const json::Value* day = weekly->get(kWeekdayKeys[d]);
+        if (!day) {
+            std::fprintf(stderr, "ERROR schedule_cfg.weekly_missing_day SCH-CONFIG-002 id=%s day=%s\n",
+                         out->id.c_str(), kWeekdayKeys[d]);
             return false;
         }
-        out->weekdays[index] = true;
+        if (!parse_time_values(day, out->value_type, &out->weekly[d], kWeekdayKeys[d])) return false;
+    }
+
+    const json::Value* exceptions = row.get("exception_schedule");
+    if (!exceptions || !exceptions->is_arr()) {
+        std::fprintf(stderr, "ERROR schedule_cfg.missing_exceptions id=%s\n", out->id.c_str());
+        return false;
+    }
+    if (exceptions->arr.size() > kMaxExceptions) {
+        std::fprintf(stderr, "ERROR schedule_cfg.too_many_exceptions id=%s n=%zu\n",
+                     out->id.c_str(), exceptions->arr.size());
+        return false;
+    }
+    std::set<std::string> exception_ids;
+    for (const auto& e : exceptions->arr) {
+        ExceptionEntry entry;
+        if (!e->is_obj() || !as_string(e->get("exception_id"), &entry.id) ||
+            !as_string(e->get("name"), &entry.name) ||
+            !parse_date_rule(e->get("date_rule"), &entry.date_rule) ||
+            !as_int(e->get("event_priority"), &entry.event_priority) ||
+            entry.event_priority < 1 || entry.event_priority > 16 ||
+            !parse_time_values(e->get("time_values"), out->value_type, &entry.time_values,
+                               entry.id.c_str()) ||
+            entry.time_values.empty()) {
+            std::fprintf(stderr, "ERROR schedule_cfg.bad_exception id=%s exc=%s\n",
+                         out->id.c_str(), entry.id.c_str());
+            return false;
+        }
+        if (!exception_ids.insert(entry.id).second) {
+            std::fprintf(stderr, "ERROR schedule_cfg.dup_exception_id SCH-CONFIG-003 id=%s exc=%s\n",
+                         out->id.c_str(), entry.id.c_str());
+            return false;
+        }
+        out->exceptions.push_back(std::move(entry));
+    }
+
+    const json::Value* targets = row.get("target_objects");
+    if (!targets || !targets->is_arr()) {
+        std::fprintf(stderr, "ERROR schedule_cfg.missing_targets id=%s\n", out->id.c_str());
+        return false;
+    }
+    if (targets->arr.size() > kMaxTargets) {
+        std::fprintf(stderr, "ERROR schedule_cfg.too_many_targets id=%s n=%zu max=%zu\n",
+                     out->id.c_str(), targets->arr.size(), kMaxTargets);
+        return false;
+    }
+    std::set<std::string> target_keys;
+    for (const auto& t : targets->arr) {
+        ScheduleTarget target;
+        if (!parse_target(t.get(), out->value_type, &target)) return false;
+        const std::string key = std::to_string(static_cast<int>(target.kind)) + ":" +
+                                std::to_string(target.idx);
+        if (!target_keys.insert(key).second) {
+            std::fprintf(stderr, "ERROR schedule_cfg.dup_target id=%s point=%s\n",
+                         out->id.c_str(), target.point_id.c_str());
+            return false;
+        }
+        out->targets.push_back(std::move(target));
     }
     return true;
 }
 
-int week_minute(const std::tm& tm)
+bool parse_holiday_groups(const json::Value* v, std::vector<HolidayGroup>* out)
 {
-    const int monday_based = (tm.tm_wday + 6) % 7;
-    return monday_based * 24 * 60 + tm.tm_hour * 60 + tm.tm_min;
-}
-
-ScheduleDate schedule_date(const std::tm& tm)
-{
-    return ScheduleDate{tm.tm_mon + 1, tm.tm_mday};
-}
-
-int date_ordinal(ScheduleDate date)
-{
-    static const int month_days[12] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    if (date.month < 1 || date.month > 12) return 0;
-    if (date.day < 1 || date.day > month_days[date.month - 1]) return 0;
-    int ordinal = date.day;
-    for (int i = 0; i < date.month - 1; i++) ordinal += month_days[i];
-    return ordinal;
-}
-
-bool ordinal_in_range(int value, int start, int end)
-{
-    if (start <= 0 || end <= 0 || value <= 0) return false;
-    if (start <= end) return value >= start && value <= end;
-    return value >= start || value <= end;
-}
-
-bool interval_active(const ScheduleConfig& schedule, int week_minute, int* age)
-{
-    week_minute %= kWeekMinutes;
-    if (week_minute < 0) week_minute += kWeekMinutes;
-    for (int day = 0; day < 7; day++) {
-        if (!schedule.weekdays[day]) continue;
-        const int start = day * kDayMinutes + schedule.start_minute;
-        int end = day * kDayMinutes + schedule.end_minute;
-        if (end <= start) end += kDayMinutes;
-        for (int offset = 0; offset <= kWeekMinutes; offset += kWeekMinutes) {
-            const int now = week_minute + offset;
-            if (now >= start && now < end) {
-                *age = now - start;
-                return true;
+    if (!v || !v->is_arr()) return true;   /* không có nhóm nào là hợp lệ */
+    for (const auto& g : v->arr) {
+        HolidayGroup group;
+        if (!g->is_obj() || !as_string(g->get("group_id"), &group.id)) return false;
+        const json::Value* dates = g->get("dates");
+        if (dates && dates->is_arr()) {
+            for (const auto& d : dates->arr) {
+                std::string s;
+                CivilDate parsed;
+                if (!as_string(d.get(), &s) || !parse_date(s, &parsed)) return false;
+                group.dates.push_back(parsed);
             }
         }
+        out->push_back(std::move(group));
     }
-    return false;
+    return true;
 }
 
-struct Winner {
-    ScheduleConfig schedule;
-    int age = kWeekMinutes + 1;
-    std::size_t order = 0;
-};
-
-std::string target_key(const ScheduleTarget& target)
+/* Giá trị có hiệu lực tại `second_of_day` trong một danh sách Time-Value đã sắp
+ * xếp: mốc GẦN NHẤT TRƯỚC hoặc BẰNG thời điểm hiện tại. Trả false nếu ngày này
+ * chưa có mốc nào tới lượt. */
+bool value_at(const std::vector<TimeValue>& list, int second_of_day, double* out, int* start_sec)
 {
-    return std::to_string(static_cast<int>(target.kind)) + ":" + std::to_string(target.idx);
+    const TimeValue* best = nullptr;
+    for (const TimeValue& tv : list) {
+        if (tv.second_of_day > second_of_day) break;
+        best = &tv;
+    }
+    if (!best) return false;
+    *out = best->value;
+    if (start_sec) *start_sec = best->second_of_day;
+    return true;
 }
 
 float ao_percent_to_engineering(double percent, uint8_t mode)
@@ -358,17 +483,160 @@ float ao_percent_to_engineering(double percent, uint8_t mode)
     return static_cast<float>(percent / 10.0);
 }
 
+std::string target_key(PointKind kind, int idx)
+{
+    return std::to_string(static_cast<int>(kind)) + ":" + std::to_string(idx);
+}
+
 } // namespace
 
+/* ── Hàm phơi ra ngoài ─────────────────────────────────────────────────── */
+
+const char* schedule_error_code(ScheduleError e)
+{
+    switch (e) {
+    case ScheduleError::None:                    return "";
+    case ScheduleError::ConfigMissingDefault:    return "SCH-CONFIG-001";
+    case ScheduleError::ConfigBadWeekly:         return "SCH-CONFIG-002";
+    case ScheduleError::ConfigExceptionConflict: return "SCH-CONFIG-003";
+    case ScheduleError::TargetNotFound:          return "SCH-TARGET-001";
+    case ScheduleError::TargetNotWritable:       return "SCH-TARGET-002";
+    case ScheduleError::TargetTypeMismatch:      return "SCH-TARGET-003";
+    case ScheduleError::TimeBadTimezone:         return "SCH-TIME-001";
+    case ScheduleError::TimeNotSynced:           return "SCH-TIME-002";
+    case ScheduleError::WriteFailed:             return "SCH-WRITE-001";
+    case ScheduleError::WriteTimeout:            return "SCH-WRITE-002";
+    case ScheduleError::RuntimeDown:             return "SCH-RUNTIME-001";
+    }
+    return "";
+}
+
+bool value_valid_for_type(ValueType t, double v)
+{
+    if (!std::isfinite(v)) return false;
+    switch (t) {
+    case ValueType::Binary:
+    case ValueType::Boolean:
+        return v == 0.0 || v == 1.0;
+    case ValueType::Real:
+        return true;
+    case ValueType::Unsigned:
+    case ValueType::Enumerated:
+        return v >= 0.0 && std::trunc(v) == v;
+    }
+    return false;
+}
+
+int days_in_month(int year, int month)
+{
+    static const int base[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (month < 1 || month > 12) return 0;
+    if (month == 2) {
+        const bool leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+        return leap ? 29 : 28;
+    }
+    return base[month - 1];
+}
+
+/* Sakamoto — trả 1=Thứ Hai … 7=Chủ nhật (ISO-8601). */
+int day_of_week_iso(int year, int month, int day)
+{
+    static const int t[12] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+    int y = year;
+    if (month < 3) y -= 1;
+    const int sunday_based = (y + y / 4 - y / 100 + y / 400 + t[month - 1] + day) % 7;
+    return sunday_based == 0 ? 7 : sunday_based;
+}
+
+CivilTime civil_from_tm(const std::tm& tm)
+{
+    CivilTime out;
+    out.year = tm.tm_year + 1900;
+    out.month = tm.tm_mon + 1;
+    out.day = tm.tm_mday;
+    out.weekday = (tm.tm_wday + 6) % 7;   /* tm_wday 0=CN → 0=Thứ Hai */
+    out.second_of_day = tm.tm_hour * 3600 + tm.tm_min * 60 + tm.tm_sec;
+    return out;
+}
+
+static long date_ordinal(int year, int month, int day)
+{
+    /* Số ngày kể từ 1970-01-01, đủ để so sánh thứ tự. */
+    long days = 0;
+    for (int y = 1970; y < year; y++) {
+        days += ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)) ? 366 : 365;
+    }
+    for (int m = 1; m < month; m++) days += days_in_month(year, m);
+    return days + day - 1;
+}
+
+bool effective_period_contains(const EffectivePeriod& p, const CivilTime& now)
+{
+    const long today = date_ordinal(now.year, now.month, now.day);
+    if (p.start.valid() && today < date_ordinal(p.start.year, p.start.month, p.start.day)) {
+        return false;
+    }
+    if (p.end.valid() && today > date_ordinal(p.end.year, p.end.month, p.end.day)) {
+        return false;
+    }
+    return true;   /* end không hợp lệ = KHÔNG CÓ ngày kết thúc */
+}
+
+bool date_rule_matches(const DateRule& rule, const CivilTime& now,
+                       const std::vector<HolidayGroup>& groups)
+{
+    switch (rule.type) {
+    case DateRuleType::Date:
+        return rule.date.valid() && rule.date.year == now.year &&
+               rule.date.month == now.month && rule.date.day == now.day;
+
+    case DateRuleType::DateRange: {
+        if (!rule.start_date.valid() || !rule.end_date.valid()) return false;
+        const long today = date_ordinal(now.year, now.month, now.day);
+        const long from = date_ordinal(rule.start_date.year, rule.start_date.month, rule.start_date.day);
+        const long to = date_ordinal(rule.end_date.year, rule.end_date.month, rule.end_date.day);
+        return today >= from && today <= to;
+    }
+
+    case DateRuleType::WeekNDay: {
+        if (rule.month != 0 && rule.month != now.month) return false;
+        if (day_of_week_iso(now.year, now.month, now.day) != rule.day_of_week) return false;
+        /* week_of_month 6 = tuần CUỐI (quy ước BACnet): ngày này là lần xuất
+         * hiện cuối cùng của thứ đó trong tháng. */
+        if (rule.week_of_month == 6) {
+            return now.day + 7 > days_in_month(now.year, now.month);
+        }
+        const int occurrence = (now.day - 1) / 7 + 1;
+        return occurrence == rule.week_of_month;
+    }
+
+    case DateRuleType::CalendarReference:
+    case DateRuleType::HolidayGroup: {
+        /* Chưa nạp nhóm thì trả false — không đoán. */
+        for (const HolidayGroup& g : groups) {
+            if (g.id != rule.ref_id) continue;
+            for (const CivilDate& d : g.dates) {
+                if (d.year == now.year && d.month == now.month && d.day == now.day) return true;
+            }
+            return false;
+        }
+        return false;
+    }
+    }
+    return false;
+}
+
 bool load_schedule_config(const std::string& path, bool must_exist,
-                          std::vector<ScheduleConfig>* out)
+                          std::vector<ScheduleObject>* out,
+                          std::vector<HolidayGroup>* groups)
 {
     out->clear();
+    if (groups) groups->clear();
+
     std::string src;
     const int rerr = read_file(path, &src);
     if (rerr == ENOENT && !must_exist) {
-        std::fprintf(stderr, "WARN  schedule_cfg.missing path=%s (schedules disabled)\n",
-                     path.c_str());
+        std::fprintf(stderr, "WARN  schedule_cfg.missing path=%s (schedules disabled)\n", path.c_str());
         return true;
     }
     if (rerr != 0) {
@@ -379,20 +647,34 @@ bool load_schedule_config(const std::string& path, bool must_exist,
 
     std::string err;
     const json::ValuePtr root = json::Parser::parse(src, &err);
-    if (!root || !root->is_arr()) {
-        std::fprintf(stderr, "ERROR schedule_cfg.bad_json path=%s (%s)\n",
-                     path.c_str(), err.c_str());
+    if (!root) {
+        std::fprintf(stderr, "ERROR schedule_cfg.bad_json path=%s (%s)\n", path.c_str(), err.c_str());
         return false;
     }
-    if (root->arr.size() > kMaxSchedules) {
+
+    /* Hai hình dạng được chấp nhận: mảng thuần (hợp đồng v3.1), hoặc object bọc
+     * {schedules:[…], holiday_groups:[…]} khi cần khai báo nhóm ngày lễ. */
+    const json::Value* list = root.get();
+    if (root->is_obj()) {
+        list = root->get("schedules");
+        if (groups && !parse_holiday_groups(root->get("holiday_groups"), groups)) {
+            std::fprintf(stderr, "ERROR schedule_cfg.bad_holiday_groups path=%s\n", path.c_str());
+            return false;
+        }
+    }
+    if (!list || !list->is_arr()) {
+        std::fprintf(stderr, "ERROR schedule_cfg.not_an_array path=%s\n", path.c_str());
+        return false;
+    }
+    if (list->arr.size() > kMaxSchedules) {
         std::fprintf(stderr, "ERROR schedule_cfg.too_many count=%zu max=%zu\n",
-                     root->arr.size(), kMaxSchedules);
+                     list->arr.size(), kMaxSchedules);
         return false;
     }
 
     std::set<std::string> seen_ids;
-    for (const auto& row : root->arr) {
-        ScheduleConfig parsed;
+    for (const auto& row : list->arr) {
+        ScheduleObject parsed;
         if (!parse_schedule(*row, &parsed)) return false;
         if (!seen_ids.insert(parsed.id).second) {
             std::fprintf(stderr, "ERROR schedule_cfg.dup_id id=%s\n", parsed.id.c_str());
@@ -400,83 +682,184 @@ bool load_schedule_config(const std::string& path, bool must_exist,
         }
         out->push_back(std::move(parsed));
     }
-    std::fprintf(stderr, "INFO  schedule_cfg.loaded path=%s schedules=%zu\n",
-                 path.c_str(), out->size());
+    std::fprintf(stderr, "INFO  schedule_cfg.loaded path=%s schedules=%zu\n", path.c_str(), out->size());
     return true;
 }
 
+/* ── ScheduleRuntime ───────────────────────────────────────────────────── */
+
 bool ScheduleRuntime::load(const std::string& path, bool must_exist)
 {
-    std::vector<ScheduleConfig> cfg;
-    if (!load_schedule_config(path, must_exist, &cfg)) return false;
+    std::vector<ScheduleObject> cfg;
+    std::vector<HolidayGroup> groups;
+    if (!load_schedule_config(path, must_exist, &cfg, &groups)) return false;
+    groups_ = std::move(groups);
     configure(std::move(cfg));
     return true;
 }
 
 bool ScheduleRuntime::reload(const std::string& path, bool must_exist)
 {
-    std::vector<ScheduleConfig> cfg;
-    if (!load_schedule_config(path, must_exist, &cfg)) {
+    std::vector<ScheduleObject> cfg;
+    std::vector<HolidayGroup> groups;
+    if (!load_schedule_config(path, must_exist, &cfg, &groups)) {
+        /* Cấu hình hỏng KHÔNG được làm mất cấu hình đang chạy. */
         std::fprintf(stderr, "WARN  schedule.reload_keep_old path=%s\n", path.c_str());
         return false;
     }
+    groups_ = std::move(groups);
     configure(std::move(cfg));
     return true;
 }
 
-void ScheduleRuntime::configure(std::vector<ScheduleConfig> schedules)
+void ScheduleRuntime::configure(std::vector<ScheduleObject> schedules)
 {
     schedules_ = std::move(schedules);
+    states_.clear();
 }
 
-void ScheduleRuntime::evaluate(const IoSnapshot& io, PointTable& table,
-                               PriorityResolver& resolver)
+const ScheduleState* ScheduleRuntime::state_of(const std::string& schedule_id) const
 {
-    evaluate(capture_clock_snapshot(), io, table, resolver);
+    for (const ScheduleState& s : states_) {
+        if (s.schedule_id == schedule_id) return &s;
+    }
+    return nullptr;
 }
 
-void ScheduleRuntime::evaluate(const ClockSnapshot& clock, const IoSnapshot& io,
-                               PointTable& table, PriorityResolver& resolver)
+ScheduleState ScheduleRuntime::evaluate_schedule(const ScheduleObject& s, const CivilTime& now) const
 {
-    evaluate_at(week_minute(clock.civil_time), schedule_date(clock.civil_time),
-                io, table, resolver);
-}
+    ScheduleState st;
+    st.schedule_id = s.id;
 
-void ScheduleRuntime::evaluate_week_minute(int week_minute, const IoSnapshot& io,
-                                           PointTable& table, PriorityResolver& resolver)
-{
-    evaluate_at(week_minute, schedule_date(capture_clock_snapshot().civil_time),
-                io, table, resolver);
-}
+    if (!s.enabled || !effective_period_contains(s.effective_period, now)) {
+        st.active = false;
+        st.source = ValueSource::None;
+        return st;
+    }
+    st.active = true;
 
-void ScheduleRuntime::evaluate_at(int week_minute, ScheduleDate date, const IoSnapshot& io,
-                                  PointTable& table, PriorityResolver& resolver)
-{
-    week_minute %= kWeekMinutes;
-    if (week_minute < 0) week_minute += kWeekMinutes;
-    const int today = date_ordinal(date);
+    /* 1. Ngoại lệ — đặc tả §7.3: exception hợp lệ → weekly → default. */
+    const ExceptionEntry* winner = nullptr;
+    bool conflict = false;
+    for (const ExceptionEntry& e : s.exceptions) {
+        if (!date_rule_matches(e.date_rule, now, groups_)) continue;
+        if (!winner) {
+            winner = &e;
+        } else if (e.event_priority < winner->event_priority) {
+            winner = &e;
+            conflict = false;
+        } else if (e.event_priority == winner->event_priority) {
+            /* Bằng priority ⇒ báo xung đột. KHÔNG tự chọn theo thứ tự khai báo
+             * hay thời gian tạo (đặc tả §7.3 mục 3). */
+            conflict = true;
+        }
+    }
+    if (conflict) st.error = ScheduleError::ConfigExceptionConflict;
 
-    bool holiday_active = false;
-    for (const ScheduleConfig& schedule : schedules_) {
-        if (!schedule.enabled || schedule.type != ScheduleType::HolidayPeriod) continue;
-        if (ordinal_in_range(today, schedule.start_date, schedule.end_date)) {
-            holiday_active = true;
+    int start_sec = -1;
+    if (winner && value_at(winner->time_values, now.second_of_day, &st.effective_value, &start_sec)) {
+        st.source = ValueSource::Exception;
+        st.source_exception_id = winner->id;
+    } else {
+        /* 2. Lịch tuần — mốc gần nhất trước hoặc bằng bây giờ; chưa tới mốc nào
+         * hôm nay thì lùi tối đa 7 ngày để lấy mốc cuối cùng còn hiệu lực. */
+        bool found = false;
+        for (int back = 0; back < 7 && !found; back++) {
+            const int day = ((now.weekday - back) % 7 + 7) % 7;
+            const int cutoff = (back == 0) ? now.second_of_day : kDaySeconds - 1;
+            if (value_at(s.weekly[day], cutoff, &st.effective_value, &start_sec)) {
+                st.source = ValueSource::Weekly;
+                found = true;
+            }
+        }
+        if (!found) {
+            /* 3. Mặc định. */
+            st.effective_value = s.schedule_default;
+            st.source = ValueSource::Default;
+        }
+    }
+
+    /* Lần chuyển trạng thái kế tiếp — quét tối đa 8 ngày tới, gồm cả ngoại lệ
+     * đang áp dụng hôm nay. Kết quả tính bằng giây kể từ đầu tuần hiện tại. */
+    st.next_transition_week_second = -1;
+    for (int ahead = 0; ahead < 8 && st.next_transition_week_second < 0; ahead++) {
+        const int day = (now.weekday + ahead) % 7;
+        const int floor_sec = (ahead == 0) ? now.second_of_day : -1;
+        const std::vector<TimeValue>* list = &s.weekly[day];
+        if (ahead == 0 && winner) list = &winner->time_values;
+        for (const TimeValue& tv : *list) {
+            if (tv.second_of_day <= floor_sec) continue;
+            st.next_transition_week_second = (now.weekday + ahead) * kDaySeconds + tv.second_of_day;
             break;
         }
     }
 
-    std::map<std::string, Winner> winners;
-    if (!holiday_active) {
-        for (std::size_t order = 0; order < schedules_.size(); order++) {
-            const ScheduleConfig& schedule = schedules_[order];
-            if (!schedule.enabled || !executable_type(schedule.type)) continue;
-            int age = 0;
-            if (!interval_active(schedule, week_minute, &age)) continue;
-            const std::string key = target_key(schedule.target);
+    for (const ScheduleTarget& t : s.targets) {
+        TargetResult r;
+        r.target_id = t.id;
+        r.kind = t.kind;
+        r.idx = t.idx;
+        r.written_value = st.effective_value;
+        st.targets.push_back(r);
+    }
+    return st;
+}
+
+void ScheduleRuntime::evaluate(const IoSnapshot& io, PointTable& table, PriorityResolver& resolver)
+{
+    evaluate(capture_clock_snapshot(), io, table, resolver);
+}
+
+void ScheduleRuntime::evaluate(const ClockSnapshot& clock, const IoSnapshot& io, PointTable& table,
+                               PriorityResolver& resolver)
+{
+    evaluate_at(civil_from_tm(clock.civil_time), io, table, resolver);
+}
+
+void ScheduleRuntime::evaluate_at(const CivilTime& now, const IoSnapshot& io, PointTable& table,
+                                  PriorityResolver& resolver)
+{
+    states_.clear();
+    states_.reserve(schedules_.size());
+    for (const ScheduleObject& s : schedules_) {
+        states_.push_back(evaluate_schedule(s, now));
+    }
+
+    /* ── Phân xử priority_for_writing 1..16 GIỮA CÁC LỊCH (ADR-023 QĐ-1) ──
+     * Nhiều lịch cùng ghi một điểm: priority nhỏ hơn thắng; bằng nhau thì lịch
+     * có mốc bắt đầu muộn hơn thắng; vẫn bằng thì lịch đứng sau thắng và ghi
+     * cảnh báo. Chỉ NGƯỜI THẮNG mới đi xuống PRIO_SCHEDULE của resolver. */
+    struct Claim {
+        std::size_t schedule_index = 0;
+        std::size_t target_index = 0;
+        int priority = 16;
+        int next_transition = -1;
+        double value = 0.0;
+    };
+    std::map<std::string, Claim> winners;
+
+    for (std::size_t si = 0; si < schedules_.size(); si++) {
+        const ScheduleState& st = states_[si];
+        if (!st.active) continue;
+        for (std::size_t ti = 0; ti < st.targets.size(); ti++) {
+            const TargetResult& tr = st.targets[ti];
+            const std::string key = target_key(tr.kind, tr.idx);
+            Claim claim{si, ti, schedules_[si].priority_for_writing,
+                        st.next_transition_week_second, st.effective_value};
             const auto it = winners.find(key);
-            if (it == winners.end() || age < it->second.age ||
-                (age == it->second.age && order > it->second.order)) {
-                winners[key] = Winner{schedule, age, order};
+            if (it == winners.end()) {
+                winners[key] = claim;
+                continue;
+            }
+            const Claim& cur = it->second;
+            const bool better = claim.priority < cur.priority ||
+                                (claim.priority == cur.priority && si > cur.schedule_index);
+            if (better) {
+                /* Lịch thua vẫn phải thấy được là nó thua, không im lặng. */
+                states_[cur.schedule_index].targets[cur.target_index].written = false;
+                winners[key] = claim;
+            } else {
+                states_[si].targets[ti].written = false;
             }
         }
     }
@@ -484,20 +867,27 @@ void ScheduleRuntime::evaluate_at(int week_minute, ScheduleDate date, const IoSn
     std::vector<AppliedTarget> active;
     active.reserve(winners.size());
     for (const auto& item : winners) {
-        const ScheduleConfig& schedule = item.second.schedule;
-        const ScheduleTarget& target = schedule.target;
-        active.push_back({target.kind, target.idx});
-        if (target.kind == PointKind::AO) {
-            const uint8_t mode = target.idx >= 0 && target.idx < KX_N_AO ? io.ao_mode[target.idx] : 0;
-            resolver.set_ao(PRIO_SCHEDULE, target.idx,
-                            ao_percent_to_engineering(schedule.value, mode));
-        } else if (target.kind == PointKind::BO) {
-            resolver.set_do(PRIO_SCHEDULE, target.idx, schedule.value != 0.0);
+        const Claim& c = item.second;
+        ScheduleState& st = states_[c.schedule_index];
+        TargetResult& tr = st.targets[c.target_index];
+
+        active.push_back({tr.kind, tr.idx});
+        bool ok = true;
+        if (tr.kind == PointKind::AO) {
+            const uint8_t mode = (tr.idx >= 0 && tr.idx < KX_N_AO) ? io.ao_mode[tr.idx] : 0;
+            ok = resolver.set_ao(PRIO_SCHEDULE, tr.idx, ao_percent_to_engineering(c.value, mode));
+        } else if (tr.kind == PointKind::BO) {
+            ok = resolver.set_do(PRIO_SCHEDULE, tr.idx, c.value != 0.0);
         } else {
-            table.set_virtual({target.kind, target.idx},
-                              static_cast<float>(schedule.value), PointSource::SCHEDULE);
+            ok = table.set_virtual({tr.kind, tr.idx}, static_cast<float>(c.value),
+                                   PointSource::SCHEDULE);
         }
+        tr.written = ok;
+        tr.written_value = c.value;
+        /* Một target ghi lỗi KHÔNG được ngăn các target khác (đặc tả §11). */
+        if (!ok) tr.error = ScheduleError::WriteFailed;
     }
+
     release_missing(active, table, resolver);
     applied_ = std::move(active);
 }

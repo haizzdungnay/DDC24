@@ -97,3 +97,19 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
   `OD-MBRTU-*` yêu cầu một mục trong log này hoặc một ADR mới, có ngày và người
   ký — trao đổi miệng không đóng được quyết định.
 - IEC 60073, IEC 62682, IEC 62443, ISO 9241-210 và ISA-101 được dùng làm design/verification guidance theo scope; không được biến review tài liệu thành tuyên bố conformity/certification.
+- **Phê duyệt PM/CTO ngày 2026-08-07** đóng 6 quyết định kiến trúc Scheduler
+  Engine v3.1 theo phương án PA-1 và cho phép triển khai
+  [Plan 50](../03_implementation/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md)
+  (5 pha / 78 task / 64 người-ngày). Chi tiết tại
+  [ADR-023](../adr/ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md) và
+  [Tờ trình](../07_records/reviews/SCHEDULER_V3_1_APPROVAL_REQUEST_2026-08-07.md).
+  Ba quyết định có ảnh hưởng rộng nhất: **priority ghi 1..16 được phân xử bên
+  trong `ScheduleRuntime`**, chỉ lịch thắng đi xuống `PRIO_SCHEDULE` — không mở
+  rộng `PriorityResolver` 6 mức và **không chạm đường Fire/Safety**; **MQTT ngoài
+  phạm vi Rev A** nhưng ngữ nghĩa revision/correlation/ACK-NACK/timeout/retry/
+  chống-lặp là bắt buộc trên transport nội bộ; và **BACnet Schedule Object (17) +
+  Calendar (6) làm ở P4**, không được chặn P1–P3, không dùng mốc BTL làm gate.
+- Ba nguyên tắc PM/CTO yêu cầu giữ đúng khi thực thi Plan 50: đóng băng data
+  contract trước khi code P1; simulation dùng **chung** evaluation engine với
+  controller (cấm cài lại thuật toán trong Go); và không tuyên bố
+  production-ready khi chưa có kiểm chứng I/O vật lý.
