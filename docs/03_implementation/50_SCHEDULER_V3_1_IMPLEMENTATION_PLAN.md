@@ -28,9 +28,10 @@ P4 · BACnet Schedule/Calendar        7/ 7 100%  [██████████
 Cổng ra đã qua:  P0 ✅   P1 ✅(*)   P2 ✅   P3 ✅   P4 ✅
 Rủi ro đang mở:  R-01 R-02 R-03 R-04 R-05 R-06 R-07 · R-01-B đã chặn (§8)
 Quyết định:      QĐ-1..6 ✅ ĐÃ DUYỆT PA-1 (2026-08-07, ADR-023)
-(*) MIGRATION_REAL_FILE = N/A: bo lab KHÔNG có schedule.conf nào (khảo sát 07/08),
-    nên không có hiện vật để kiểm. Công cụ vẫn sẵn cho bo nào có cấu hình cũ:
-    MKDDC_REAL_SCHEDULE_CONF=<tệp> go test -run TestMigrationAgainstRealBoardConfig
+(*) MIGRATION_REAL_FILE = ĐẠT (2026-08-07, kiểm trên bo Foxlinx bằng chính binary
+    của bo). Kết luận "N/A" trước đó SAI: không có cấu hình khách hàng thật không
+    có nghĩa là không kiểm được đường di trú. Bài kiểm đã tìm ra 2 lỗi CHẶN mà
+    822 test trong tầng không thấy — xem §0.4.
 (**) QĐ-7/8/9 ĐÃ DUYỆT 2026-08-07. 9/10 finding đóng. Xem
      docs/07_records/reviews/SCHEDULER_V3_1_P1_EXIT_REVIEW_2026-08-07.md
 ```
@@ -120,6 +121,24 @@ flowchart LR
     style GATE2 fill:#bbf7d0,stroke:#15803d
     style GATE3 fill:#bbf7d0,stroke:#15803d
 ```
+
+### 0.4 Hai lỗi CHẶN tìm ra khi kiểm di trú trên bo (2026-08-07)
+
+Cả hai đều **không** làm hỏng build, **không** làm hỏng runtime, và **không** có test nào
+trong 822 test bắt được. Cả hai chỉ lộ ra khi đem hệ thống thật chạy trên phần cứng thật.
+
+| Mã | Lỗi | Vì sao test không thấy | Cách sửa | Guard mới |
+|----|-----|------------------------|----------|-----------|
+| **MIG-01** | `MigrateSchedulesOnStartup` **không ai gọi**. Bo có `schedule.conf` cũ kẹt HTTP 409 vĩnh viễn, không có đường di trú nào khác. | 9 test di trú đều gọi **thẳng** hàm đó, nên chúng xanh trong khi tính năng không tồn tại với người dùng. Lỗi nằm ở ranh giới gói `app` ↔ điểm vào `Main()`. | Nối lời gọi vào `Main()`, **trước** `ListenAndServe` — chạy sau thì một `PUT` lọt vào giữa sẽ ghi đè tệp v1 trước khi kịp đọc để di trú. | `TestMigrateSchedulesIsWiredIntoStartup` đọc AST của `main.go`, khẳng định lời gọi tồn tại **và** đứng trước `ListenAndServe`. |
+| **MIG-02** | Hợp đồng đóng băng từ chối chính dữ liệu hợp lệ: `$defs/ScheduleValue.value` dùng `oneOf` với đồng thời nhánh `number` và `integer, minimum 0`. Số nguyên không âm khớp **cả hai**, mà `oneOf` đòi khớp **đúng một** ⇒ loại sạch mọi lịch `ENUMERATED`/`UNSIGNED` và mọi lịch `REAL` có setpoint tròn số (75, 0). Hỏng ở 3 chỗ. | Hợp đồng được đóng băng ở P0 và **không có một test nào chạm tới nó**. Nó chỉ được kiểm thủ công một lần, với vài mẫu `BINARY` — đúng những mẫu không kích hoạt lỗi. | `oneOf` → `anyOf`, bỏ nhánh `integer` thừa. Luật chéo theo `value_type` vốn đã do `scheduleValueMatchesType` giữ — JSON Schema không nhìn thấy `value_type` nên không thể giữ luật đó. | `TestScheduleSchemaOneOfBranchesAreDisjoint` chặn nhánh chồng lấn; `TestScheduleSchemaAcceptsEveryValueType` kiểm đủ 5 `value_type`, đối chứng hai chiều với validator Go. |
+
+Hai lỗi này là bằng chứng thứ tư cho bài học ở §8: **mọi lỗi nặng của plan này đều nằm ở
+ranh giới**. Tăng số test trong một tầng không bao giờ chạm tới chúng.
+
+Điểm về phương pháp, đắt hơn cả hai lỗi: kết luận `MIGRATION_REAL_FILE = N/A` là **sai**.
+"Bo chưa từng có cấu hình cũ" chỉ nói rằng không có *hiện vật khách hàng*; nó không nói gì
+về việc *đường di trú có chạy được không*. Dựng một tệp v1 tổng hợp phủ cả 7 `scheduleType`
+rồi chạy trên chính binary của bo mất 20 phút và tìm ra hai lỗi chặn.
 
 ---
 

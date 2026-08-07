@@ -261,6 +261,24 @@ func Main() {
 		}
 	}()
 
+	/* Di trú lịch v1 → v3.1 CHẠY TRƯỚC khi mở cổng nghe.
+	 *
+	 * Nếu chạy sau, có một cửa sổ thời gian mà API đã nhận request trong khi
+	 * schedule.conf còn định dạng cũ: `GET /schedules` trả 409, và tệ hơn là
+	 * một `PUT` lọt vào giữa chừng sẽ ghi đè tệp v1 trước khi nó kịp được
+	 * đọc để di trú — mất sạch lịch cũ mà không có gì báo.
+	 *
+	 * Lỗi được phát hiện khi kiểm trên bo Foxlinx 2026-08-07: hàm này đã viết
+	 * xong và có test, nhưng KHÔNG AI GỌI, nên bo có cấu hình cũ kẹt 409 vĩnh
+	 * viễn. Test gọi thẳng `MigrateSchedulesOnStartup` nên không thấy. */
+	if notes, err := app.MigrateSchedulesOnStartup(ctx); err != nil {
+		logger.Printf("ERROR schedule.migrate.failed err=%v", err)
+	} else {
+		for _, n := range notes {
+			logger.Printf("INFO schedule.migrate %s", n)
+		}
+	}
+
 	go func() {
 		logger.Printf("INFO listen addr=%s core_sock=%s users_conf=%s trend_db=%s", cfg.Addr, cfg.CoreSock, cfg.UsersConf, cfg.TrendDBPath)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

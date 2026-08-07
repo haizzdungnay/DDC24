@@ -7,6 +7,94 @@
 ---
 
 ## [Unreleased]
+### Fixed — Di trú lịch v1→v3.1 không chạy, và hợp đồng đóng băng từ chối dữ liệu hợp lệ (2026-08-07)
+
+**Phạm vi.** `apps/web-api/internal/app/main.go` · `contracts/config/schedule_v3_1.schema.json` ·
+hai tệp test mới (`schedulewiring_test.go`, `schedulecontract_test.go`) · ADR-023 (errata E-1, E-2) ·
+plan 50 §0.4 · hồ sơ bằng chứng §1 (sửa kết luận) và §6e (mới).
+
+Hai lỗi tìm ra khi đóng cổng `MIGRATION_REAL_FILE` (QĐ-8) bằng cách chạy một tệp v1 tổng hợp phủ
+cả 7 `scheduleType` trên **chính binary aarch64 của bo Foxlinx**. Cả hai đều không làm hỏng build,
+không làm hỏng runtime, và không có test nào trong 822 test bắt được.
+
+**MIG-01 — `MigrateSchedulesOnStartup` không ai gọi.** Hàm di trú viết xong và có 9 test, nhưng
+lời gọi từ `Main()` chưa bao giờ được nối: một lệnh thay thế văn bản không khớp anchor đã im lặng
+không làm gì. Triệu chứng trên bo: cài cấu hình v1, khởi động lại dịch vụ, **không một dòng log
+`schedule.migrate` nào** và tệp vẫn nguyên định dạng cũ. Hệ quả nếu lọt ra hiện trường: mọi bo có
+cấu hình cũ kẹt HTTP 409 vĩnh viễn, không có đường di trú nào khác. Nguyên nhân test không thấy:
+cả 9 test đều gọi **thẳng** hàm đó, nên chúng xanh trong khi tính năng không tồn tại với người
+dùng — lỗi nằm ở ranh giới gói `app` ↔ điểm vào `Main()`. Sửa: nối vào `Main()` **trước**
+`ListenAndServe`; chạy sau thì một `PUT` lọt vào giữa sẽ ghi đè tệp v1 trước khi kịp đọc để di
+trú. Guard: `TestMigrateSchedulesIsWiredIntoStartup` đọc AST của `main.go`, khoá cả sự tồn tại
+lẫn thứ tự, đã kiểm gãy khi gỡ lời gọi ra.
+
+**MIG-02 — hợp đồng đóng băng loại chính dữ liệu hợp lệ.** `$defs/ScheduleValue.value` dùng
+`oneOf` với đồng thời nhánh `{"type":"number"}` và `{"type":"integer","minimum":0}`. Mọi số nguyên
+không âm khớp **cả hai**, mà `oneOf` đòi khớp **đúng một** ⇒ loại sạch mọi lịch
+`ENUMERATED`/`UNSIGNED` và mọi lịch `REAL` có setpoint tròn số (75, 0) — đúng những giá trị mà
+`description` của chính trường đó nói là hợp lệ. Hỏng ở 3 chỗ (thêm
+`ScheduleRuntimeState.effective_value`). Nguyên nhân gốc: hợp đồng đóng băng ở P0 mà **không có
+một test nào chạm tới nó**, chỉ kiểm thủ công một lần với vài mẫu `BINARY`. Sửa: `oneOf` →
+`anyOf`, bỏ nhánh `integer` thừa; luật chéo theo `value_type` vốn đã do `scheduleValueMatchesType`
+giữ và JSON Schema không nhìn thấy `value_type` nên không thể giữ luật đó. Không ngữ nghĩa nào bị
+mở rộng hay thu hẹp — ghi làm errata ADR-023 E-1, không mở ADR mới. Guard:
+`TestScheduleSchemaOneOfBranchesAreDisjoint` (đã kiểm gãy trên schema cũ) và
+`TestScheduleSchemaAcceptsEveryValueType` đối chứng hai chiều schema ↔ validator Go.
+
+**Sửa một kết luận sai.** `MIGRATION_REAL_FILE = N/A` ghi trước đó là sai lập luận: nó lẫn giữa
+"bo không có hiện vật khách hàng" với "không kiểm được đường di trú". Cổng nay **ĐẠT** (ADR-023
+errata E-2). Bo đã khôi phục về đúng trạng thái ban đầu, `schedule.conf` khớp sha256
+`d146ea7e…`, `schedule.d/` gồm `SCH-001` + `_deleted` giữ nguyên audit, 3/3 service `active`.
+
+**Số đo kiểm chứng.** C++ **849/849** (`-DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON
+-DMKDDC_ENABLE_HMI=ON`) · Go **vet sạch + 11/11 gói** · FE unit **436/436, 50 file**.
+
+### Added — Rà soát as-built vs spec toàn hệ FW SOM / FW MCU / BE / FE (2026-08-07)
+
+**Phạm vi.** `docs/review/2026-08-07-as-built-vs-spec-audit.md` (mới). Đọc source thực tế tại
+HEAD `630a20c` và chạy lại toàn bộ test, không dẫn lại số cũ.
+
+**Số đo kiểm chứng.** C++ **849/849 pass** (`-DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON
+-DMKDDC_ENABLE_HMI=ON`) · Go **vet sạch + 11/11 package pass** · FE unit **436/436 pass, 50 file**.
+
+**Một số đo giả đã bị loại trong phiên.** Lần chạy đầu dùng lại build dir cũ có
+`CMAKE_HOME_DIRECTORY=.../services` — cây nguồn đã đổi tên thành `apps/`. Configure và build đều
+hỏng, nhưng `ctest` vẫn chạy binary cũ và báo "744/744 pass". Phải cấu hình lại từ thư mục sạch
+mới ra số thật. `CLAUDE.md`/`AGENTS.md` còn ghi `cmake -S services -B build/fw` là nguồn của bẫy
+này (F-00).
+
+**11 finding.** Hai mục chặn: FW MCU chỉ có tầng giao thức IOP, toàn bộ HAL là stub weak trả
+`false` — bo đang chạy fake MCU qua PTY nên chưa có bằng chứng I/O vật lý nào (F-03); và 6.606
+dòng ST runtime không được `main.cpp` nối vào, `ScanLoop::Deps::st_sched` mãi là `nullptr` (F-04).
+
+Ba khối mức Cao đều cùng một dạng — **code đã viết xong nhưng không nằm trên đường chạy**:
+BACnet không đẩy giá trị runtime vào AO/BO/AV/BV/MSV nên AV/BV/MSV luôn đọc ra 0 và AO/BO không
+phản ánh graph logic (F-01); COV và Confirmed-Event-Notification chỉ là `fprintf`/`(void)tgt`,
+không đăng ký handler SubscribeCOV, `bacnet_schedule.cpp` là code chết (F-02); graph deploy +
+Validator v1 — hạng mục **GIỮ** của Rev A.0 — không có ở BE, validator duy nhất chạy trong
+browser ở demo mode và còn dùng tên type sai (`UI_Input`/`Modbus_Read` thay vì
+`AI_Input`/`Modbus_RTU_Read`) nên graph nó báo hợp lệ vẫn bị core từ chối (F-05).
+
+**Lệch hợp đồng.** OpenAPI khai báo 76 path, code hiện thực 71: 7 path không có handler
+(`/graph/deploy`, `/graph/validate`, `/bacnet/objects`, `/logs/download`, `/ota/*`), 2 handler
+không khai báo (`/modbus/write-test`, `/ws/monitor`) — F-07.
+
+**Lệch theo chiều ngược lại.** `REVA_SCOPE §3` vẫn ghi WeeklySchedule/HolidaySchedule là Rev B
+trong khi Scheduler v3.1 đã merge và deploy lên bo; historian/trend cũng không có trong danh sách
+GIỮ của Rev A.0 nhưng đã chạy thật — tài liệu phạm vi đi sau sản phẩm (F-06).
+
+**Đối chiếu audit 2026-08-03.** G-01 (fake MCU) và G-02/03/04 (ST không wired) **vẫn nguyên**.
+G-07 (CI đỏ) đã đóng: CI nay gọi `scripts/verify-project.sh`, chạy thật ctest/go test/vitest/
+lint/build/playwright chứ không còn gate rỗng.
+
+**Đã sửa trong cùng phiên (F-00).** `CLAUDE.md` §"Quy trình khi user nói commit/merge" nay dùng
+`cmake --fresh -S . -B build/fw` + `cmake --build` + `ctest --output-on-failure`, khớp `AGENTS.md`
+(vốn đã đúng), kèm cảnh báo đọc exit code của cả configure lẫn build. Các finding còn lại là công
+việc triển khai sản phẩm, không thuộc phạm vi phiên rà soát này.
+
+Refs: `docs/review/2026-08-07-as-built-vs-spec-audit.md`,
+`docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md`, `DDC24_FE_BE_FW_SOM_AS_BUILT_STATUS_AUDIT.md`
+
 ### Fixed — E2E Scheduler tìm ra lỗi provider kẹt "Đang tải…" vĩnh viễn (2026-08-07)
 
 **Phạm vi.** `apps/web-ui/e2e/scheduler.spec.ts` (mới, 7 ca) ·

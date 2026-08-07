@@ -37,6 +37,12 @@ có cấu hình lịch nào để mất. Không phải "chưa kiểm được", 
 **Hệ quả cho QĐ-8:** hiện vật mà quyết định yêu cầu — một `schedule.conf` định dạng cũ đang vận
 hành — **không tồn tại**. Xem §6 về việc cần PM xác nhận có bo nào khác đã giao hay không.
 
+> **SỬA KẾT LUẬN (2026-08-07T11:30Z).** Đoạn trên đúng về *dữ kiện* nhưng sai về *kết luận
+> rút ra*. Từ "không có hiện vật khách hàng" tôi đã kết luận `MIGRATION_REAL_FILE = N/A`;
+> hai mệnh đề đó không tương đương. Thứ QĐ-8 và R-01 thật sự lo là **đường di trú có chạy
+> trên bo không** — câu hỏi đó kiểm được, bằng một tệp v1 tổng hợp chạy trên chính binary
+> của bo. Bài kiểm đó tìm ra 2 lỗi CHẶN. Xem **§6e**, nay mới là câu trả lời cho cổng này.
+
 ---
 
 ## 2. Backup trước khi đụng
@@ -320,6 +326,113 @@ lệch **7 tiếng**, và không có gì trên giao diện cho thấy điều đ
 
 `schedule.conf` khôi phục từ bản sao lưu (`schedules=0`), mọi tệp tạm đã xoá, 5/5 service
 `active`, health `ok`. Bo về đúng trạng thái trước khi kiểm chứng.
+
+---
+
+## 6e. Kiểm chứng đường di trú v1 → v3.1 trên bo — ✅ ĐẠT, tìm ra 2 lỗi CHẶN
+
+Đóng cổng `MIGRATION_REAL_FILE` (QĐ-8). Thực hiện 2026-08-07T11:08Z → 11:30Z.
+
+### Phương pháp
+
+Không có `schedule.conf` khách hàng, nên dựng một tệp v1 tổng hợp **phủ cả 7 giá trị
+`scheduleType`** của định dạng cũ — mỗi giá trị ít nhất một hàng, kể cả các ca dễ bị bỏ sót:
+
+| `scheduleType` | Hàng | Vì sao có mặt |
+|---|---|---|
+| `fan_state_value` | SCH-001 | ca thường gặp nhất |
+| `digital_output_value` | SCH-002 | → `BINARY` |
+| `analog_output_value` | SCH-003 | → `REAL`, setpoint **75** (số tròn) |
+| `control_loop_setpoint` | SCH-004 | → `REAL`, setpoint **24.5** (số lẻ) |
+| `controller_operation_mode` | SCH-005 | → `ENUMERATED` |
+| `not_active` | SCH-010 | hàng vô hiệu — dễ bị bỏ rơi khi di trú |
+| `holiday_period` ×2 | Tết `02-14`→`02-20`, Quốc khánh `09-02` | khoảng ngày + ngày đơn |
+
+Tệp (8 hàng, sha256 `65995a23…`) được cài lên `/data/config/schedule.conf` và chạy bằng
+**chính binary aarch64 của bo**, không phải bản dựng trên máy dev. Cấu hình thật của người
+dùng sao lưu trước ở `/data/mkddc-backups/pre-migration-test-20260807T110826Z.tar.gz`.
+
+### Lỗi CHẶN 1 — `MigrateSchedulesOnStartup` không ai gọi
+
+Khởi động lại `mkddc-web-pi`: **không một dòng log `schedule.migrate` nào**, tệp vẫn nguyên
+định dạng v1, không có `.v1.bak`. Nguyên nhân: hàm di trú viết xong, có 9 test, nhưng lời
+gọi từ `Main()` chưa bao giờ được nối — một lệnh thay thế văn bản không khớp anchor đã im
+lặng không làm gì và không ai kiểm lại.
+
+Hệ quả nếu lọt ra hiện trường: mọi bo có cấu hình cũ kẹt HTTP 409 vĩnh viễn, **không có
+đường di trú nào khác** — API từ chối đọc, mà cũng không có gì chuyển đổi tệp.
+
+Sửa: nối vào `Main()` **trước** `ListenAndServe`. Thứ tự này bắt buộc — chạy sau thì có một
+cửa sổ mà một `PUT` lọt vào sẽ ghi đè tệp v1 trước khi nó kịp được đọc để di trú, mất sạch
+lịch cũ mà không có gì báo. Guard: `TestMigrateSchedulesIsWiredIntoStartup` đọc AST của
+`main.go`, khoá cả sự tồn tại lẫn thứ tự. Đã kiểm test này **gãy** khi gỡ lời gọi ra.
+
+### Kết quả sau khi sửa
+
+```
+INFO schedule.migrate 6 lịch đã chuyển từ định dạng cũ sang v3.1; bản cũ giữ tại
+     schedule.conf.v1.bak. Mọi lịch đang ở DRAFT và đang tắt — hãy kiểm tra rồi publish lại.
+INFO schedule.migrate SCH-010 là hàng not_active của định dạng cũ — đã chuyển thành lịch
+     DRAFT đang tắt
+INFO schedule.migrate 2 khoảng ngày lễ của định dạng cũ đã thành ngoại lệ event_priority=1
+     trên 6 lịch; trước đây chúng tắt TOÀN BỘ hệ thống lịch, nay chỉ ghi đè từng lịch
+INFO schedule.migrate LƯU Ý HÀNH VI: mô hình cũ nhả quyền điều khiển ngoài khoảng giờ, mô
+     hình v3.1 giữ điểm ở giá trị mặc định suốt ngày. […] Mọi lịch đang TẮT nên chưa có gì
+     thay đổi cho tới khi bạn bật.
+```
+
+Đối chiếu 100% trước/sau (8 hàng v1 → 6 Schedule Object, 2 hàng `holiday_period` thành ngoại lệ):
+
+| Khẳng định | Kết quả |
+|---|---|
+| `enabled=false` + `status=DRAFT` + `migrated_from_v1=true` + `core_priority_level=4` trên **cả 6** | ĐẠT |
+| Mỗi ngày có cấu hình sinh **đúng 2** mốc Time-Value, khớp `startTime`/`endTime`; ngày không cấu hình rỗng | ĐẠT |
+| 2 khoảng ngày lễ → ngoại lệ `event_priority=1` trên **cả 6** lịch | ĐẠT |
+| `value_type` suy đúng: BINARY×3, REAL×2, ENUMERATED×1; target giữ nguyên | ĐẠT |
+| `.v1.bak` khớp **bit-với-bit** tệp gốc (1749 byte) | ĐẠT |
+| Cảnh báo R-01-B có mặt trong log | ĐẠT |
+| Chạy lại trên tệp đã v3.1 ⇒ **không** di trú lần hai | ĐẠT |
+
+Công cụ đối chiếu của QĐ-8 chạy trên chính hiện vật `.v1.bak` lấy về từ bo:
+`MKDDC_REAL_SCHEDULE_CONF=<tệp> go test -run TestMigrationAgainstRealBoardConfig` → PASS.
+
+### Lỗi CHẶN 2 — hợp đồng đóng băng từ chối chính dữ liệu hợp lệ
+
+Đem 6 lịch bo vừa sinh ra kiểm với `contracts/config/schedule_v3_1.schema.json`: **invalid**.
+
+`$defs/ScheduleValue.value` dùng `oneOf` với đồng thời nhánh `{"type":"number"}` và
+`{"type":"integer","minimum":0}`. Mọi số nguyên không âm khớp **cả hai**, mà `oneOf` đòi khớp
+**đúng một** ⇒ hợp đồng loại sạch mọi lịch `ENUMERATED`/`UNSIGNED` và mọi lịch `REAL` có
+setpoint tròn số (75, 0) — đúng những giá trị mà phần `description` của chính trường đó nói
+là hợp lệ. Hỏng ở 3 chỗ: `ScheduleValue`, `TimeValue`, `ScheduleRuntimeState.effective_value`.
+
+Lỗi này **không** làm hỏng build và **không** làm hỏng runtime: luật kiểu thật do
+`scheduleValueMatchesType` trong Go giữ, nên hệ thống vẫn chạy đúng. Nó chỉ hiện ra khi có
+người thật sự đem hợp đồng ra kiểm dữ liệu thật — và trong suốt P0→P4 **chưa từng có test nào
+chạm tới tệp schema đó**. Đây là lý do gốc, không phải bản thân `oneOf`.
+
+Sửa: `oneOf` → `anyOf`, bỏ nhánh `integer` thừa (ADR-023 errata E-1). Kiểm lại 6 lịch của bo:
+**valid**. Guard mới: `TestScheduleSchemaOneOfBranchesAreDisjoint` (đã kiểm gãy trên schema cũ)
+và `TestScheduleSchemaAcceptsEveryValueType` đối chứng hai chiều schema ↔ validator Go.
+
+### Khôi phục — bo về đúng trạng thái ban đầu
+
+Chỉ khôi phục các tệp thuộc lịch, **không** bung cả gói: gói còn chứa `historian-v2.sqlite`
+và `fieldbus.journal` đã thay đổi từ lúc sao lưu, bung cả gói sẽ quay ngược trạng thái không
+liên quan.
+
+```
+sha256 /data/config/schedule.conf = d146ea7e901ae925652f9e94b271dd25504b731ddfb89dff6b443806aeb0e023
+  → khớp chính xác bản trước khi kiểm
+schedule.d/ = SCH-001 + _deleted (audit giữ nguyên) · schedule.conf.v1.bak đã xoá
+SCH-001 revision 4, status VALIDATED — đúng như người dùng để lại
+mkddc-web-pi · mkddc-core · mkddc-iobus = active
+Khởi động lại trên tệp v3.1: 0 dòng schedule.migrate — không di trú nhầm lần hai
+```
+
+### Số đo sau khi sửa cả 2 lỗi
+
+`ctest` **849/849** · `vitest` **436/436** · Go **11/11 gói** · `go vet` sạch.
 
 ---
 
