@@ -262,8 +262,49 @@ BACNET_SCHEDULE         = P4
 PHYSICAL_IO_VERIFIED    = NO   ← không được tuyên bố production-ready khi cờ này còn NO
 EXT_IMPLEMENTED         = YES  (QĐ-7)
 EXT_PHYSICAL_VERIFIED   = NO   (QĐ-7 — chờ plan 49 G-C/G-D)
-MIGRATION_REAL_FILE     = BLOCKED  (QĐ-8 — chờ bản sao schedule.conf từ bo lab)
+MIGRATION_REAL_FILE     = ĐẠT  (QĐ-8 — kiểm trên bo Foxlinx 2026-08-07, xem errata E-2)
 ```
+
+## Errata — 2026-08-07
+
+Hai sửa đổi sau **không** thay đổi quyết định nào của ADR này. Chúng khôi phục đúng ý định
+vốn đã ghi trong chính tài liệu, nên ghi làm errata thay vì mở ADR mới. Nếu ai đó thấy cần
+đọc khác đi thì đó mới là việc của một ADR mới.
+
+### E-1 — `$defs/ScheduleValue.value` và `TimeValue.value`: `oneOf` → `anyOf`
+
+Hợp đồng đóng băng `contracts/config/schedule_v3_1.schema.json` dùng `oneOf` với đồng thời
+nhánh `{"type":"number"}` và `{"type":"integer","minimum":0}`. Mọi số nguyên không âm khớp
+**cả hai** nhánh, mà `oneOf` đòi khớp **đúng một**, nên hợp đồng từ chối toàn bộ lịch
+`ENUMERATED`/`UNSIGNED` và mọi lịch `REAL` có setpoint tròn số — đúng những giá trị mà phần
+`description` của chính trường đó tuyên bố là hợp lệ. Hỏng ở 3 chỗ (thêm
+`ScheduleRuntimeState.effective_value`).
+
+Sửa: `anyOf`, bỏ nhánh `integer` thừa. Luật chéo theo `value_type` **không thể** biểu diễn ở
+`$defs` này vì nó không nhìn thấy `value_type`; luật đó vốn đã do `scheduleValueMatchesType`
+trong `apps/web-api/internal/app/schedulevalidate.go` giữ, và đó cũng là nơi phát mã lỗi
+`SCH-CONFIG-002`. Không có ngữ nghĩa nào bị mở rộng hay thu hẹp.
+
+Vì sao lọt: hợp đồng được đóng băng ở P0 mà **không có một test nào chạm tới nó** — chỉ kiểm
+thủ công một lần với vài mẫu `BINARY`. Nay đã có
+`TestScheduleSchemaOneOfBranchesAreDisjoint` và `TestScheduleSchemaAcceptsEveryValueType`.
+
+### E-2 — QĐ-8 đã đóng, và cách đóng nó khác với dự kiến
+
+QĐ-8 dự kiến lấy `schedule.conf` **thật của khách hàng** từ bo lab. Bo lab chưa từng có cấu
+hình định dạng cũ, nên hiện vật đó không tồn tại. Kết luận `MIGRATION_REAL_FILE = N/A` rút ra
+từ đó là **sai lập luận**: nó lẫn giữa "không có hiện vật khách hàng" với "không kiểm được
+đường di trú".
+
+Cách đóng thật sự: dựng một tệp v1 tổng hợp phủ **cả 7 giá trị `scheduleType`** của định dạng
+cũ (kể cả `not_active` và hai khoảng `holiday_period`), cài lên bo, khởi động lại dịch vụ, và
+đối chiếu 100% đầu ra bằng chính binary aarch64 của bo. Điều này giữ nguyên tinh thần QĐ-8 —
+kiểm trên môi trường thật, không sửa cấu hình đang chạy: cấu hình gốc được sao lưu trước và
+khôi phục sau, đối chiếu khớp sha256.
+
+Bài kiểm tìm ra 2 lỗi CHẶN (MIG-01: di trú không ai gọi; MIG-02 = E-1 ở trên). Chi tiết ở
+`docs/03_implementation/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md` §0.4 và
+`docs/07_records/test-evidence/fw-som/2026-08-07-foxlinx-deploy-scheduler-v31.md` §6e.
 
 ## Ba nguyên tắc PM/CTO yêu cầu giữ đúng
 
