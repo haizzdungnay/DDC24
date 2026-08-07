@@ -16,19 +16,19 @@ import (
 
 // scheduleRowV1 là hình dạng cũ: một khoảng giờ, một giá trị, một target.
 type scheduleRowV1 struct {
-	ID           string           `json:"id"`
-	Label        string           `json:"label"`
-	Notes        string           `json:"notes,omitempty"`
-	Enabled      bool             `json:"enabled"`
-	ScheduleType string           `json:"scheduleType"`
-	TimeOfDay    string           `json:"timeOfDay,omitempty"`
-	StartTime    string           `json:"startTime,omitempty"`
-	EndTime      string           `json:"endTime,omitempty"`
-	StartDate    string           `json:"startDate,omitempty"`
-	EndDate      string           `json:"endDate,omitempty"`
-	Weekdays     []string         `json:"weekdays"`
+	ID           string            `json:"id"`
+	Label        string            `json:"label"`
+	Notes        string            `json:"notes,omitempty"`
+	Enabled      bool              `json:"enabled"`
+	ScheduleType string            `json:"scheduleType"`
+	TimeOfDay    string            `json:"timeOfDay,omitempty"`
+	StartTime    string            `json:"startTime,omitempty"`
+	EndTime      string            `json:"endTime,omitempty"`
+	StartDate    string            `json:"startDate,omitempty"`
+	EndDate      string            `json:"endDate,omitempty"`
+	Weekdays     []string          `json:"weekdays"`
 	Target       *scheduleTargetV1 `json:"target,omitempty"`
-	Value        *float64         `json:"value,omitempty"`
+	Value        *float64          `json:"value,omitempty"`
 }
 
 type scheduleTargetV1 struct {
@@ -132,6 +132,23 @@ func migrateSchedulesV1(data []byte, now string) ([]ScheduleObject, []string, er
 		}
 	}
 
+	if len(out) > 0 {
+		// R-01-B: khác biệt ngữ nghĩa quan trọng nhất của đợt di trú, và nó
+		// KHÔNG nhìn thấy được khi chỉ so cấu hình trước/sau.
+		//
+		// Mô hình cũ NHẢ QUYỀN ngoài khoảng giờ (release_ao/release_do), nên
+		// mức 4 tắt và logic nội bộ mức 5 điều khiển được điểm đó. Mô hình v3.1
+		// luôn ghi một giá trị — weekly hoặc schedule_default — nên mức 4 GIỮ
+		// điểm suốt ngày và chặn mức 5.
+		//
+		// Đặc tả §10.1 bước 6 cố ý như vậy, nên đây không phải lỗi. Nhưng nếu
+		// một điểm đang được cả lịch lẫn logic ST điều khiển thì hành vi sau
+		// nâng cấp SẼ KHÁC. Người dùng phải biết trước khi bật lại lịch.
+		notes = append(notes, "LƯU Ý HÀNH VI: mô hình cũ nhả quyền điều khiển ngoài "+
+			"khoảng giờ, mô hình v3.1 giữ điểm ở giá trị mặc định suốt ngày. Điểm nào "+
+			"đang được cả lịch lẫn logic nội bộ điều khiển sẽ đổi hành vi sau khi bật "+
+			"lại lịch. Mọi lịch đang TẮT nên chưa có gì thay đổi cho tới khi bạn bật.")
+	}
 	return out, notes, nil
 }
 

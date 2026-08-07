@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -139,8 +140,16 @@ func TestMigrationAgainstRealBoardConfig(t *testing.T) {
 		t.Error("bản sao lưu KHÁC tệp gốc — đường lùi không dùng được")
 	}
 
+	// R-01-B phải luôn được nêu: mô hình cũ nhả quyền ngoài giờ, v3.1 giữ điểm.
+	warned := false
 	for _, n := range notes {
 		t.Logf("GHI CHÚ: %s", n)
+		if strings.Contains(n, "LƯU Ý HÀNH VI") {
+			warned = true
+		}
+	}
+	if len(after) > 0 && !warned {
+		t.Error("thiếu cảnh báo khác biệt hành vi ngoài khoảng giờ (R-01-B)")
 	}
 	t.Logf("Bản sao lưu: %s (%d byte, khớp bit-với-bit tệp gốc)",
 		filepath.Base(app.cfg.ScheduleConfPath+".v1.bak"), len(backup))

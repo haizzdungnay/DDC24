@@ -7,6 +7,42 @@
 ---
 
 ## [Unreleased]
+### Fixed — R-01-B: di trú đổi hành vi ngoài khoảng giờ, đã chặn (2026-08-07)
+
+**Phạm vi.** `apps/web-api/internal/app/schedulemigrate.go` ·
+`apps/core/application/schedule/tests/test_schedule_runtime.cpp` ·
+`schedulemigrate_realfile_test.go` · P1_EXIT_REVIEW §4 · Plan 50 §8.
+
+**Bối cảnh.** Cổng `MIGRATION_REAL_FILE` cần bản sao `schedule.conf` từ bo lab. Đã thử bốn
+đường và **xác nhận bo không tới được** từ máy phát triển: SSH alias `SOM-DDC-24` timeout; bốn
+IP bo từng dùng không ping được; quét cổng 22 toàn dải `192.168.1.0/24` chỉ thấy chính máy này;
+không có bản chụp `schedule.conf` nào trong `archives/`, `audit-handover/`, `docs/`, `logs/`.
+
+**Phát hiện thay thế.** Không lấy được tệp nên tôi đối chiếu **ngữ nghĩa** mô hình cũ với mô
+hình mới thay vì đối chiếu dữ liệu — và việc đó lộ ra một khác biệt hành vi mà **so cấu hình
+trước/sau không nhìn thấy được**, tức là dù có tệp thật thì bài kiểm tra dữ liệu cũng bỏ lọt.
+
+Mô hình cũ **nhả quyền** ngoài khoảng giờ (`release_ao`/`release_do`), nên mức 4 tắt và logic
+nội bộ mức 5 điều khiển được điểm đó. Mô hình v3.1 luôn ghi một giá trị — weekly hoặc
+`schedule_default` — nên mức 4 **giữ điểm suốt ngày và chặn mức 5**. Đặc tả §10.1 bước 6 cố ý
+như vậy nên **không phải lỗi**, nhưng với một điểm dùng chung giữa lịch và logic ST thì hành vi
+sau nâng cấp sẽ khác — đúng kịch bản thường gặp ở công trình.
+
+**Đã chặn bằng ba lớp:** mọi lịch ở trạng thái **tắt** sau di trú nên chưa gì thay đổi cho tới
+khi người dùng chủ động bật; bộ di trú **in cảnh báo** nêu rõ khác biệt; và hai test khoá hành
+vi lại để nó không đổi âm thầm về sau. Harness đối chiếu tệp thật nay **fail nếu thiếu cảnh
+báo**. Test thứ hai cũng chỉ ra đường thoát: tắt lịch thì mức 4 nhả ra, logic mức 5 điều khiển
+lại được.
+
+```
+ctest --test-dir build/fw              → 830/830 passed, 0 failed (13,48 s)
+core_tests --gtest_filter='ScheduleV31*' → 58/58 passed
+go vet ./... && go test ./... -count=1  → 11/11 gói PASS (internal/app 27,8 s)
+```
+
+**`MIGRATION_REAL_FILE` vẫn mở.** Cần người ở cùng mạng nhà máy chạy giúp
+`ssh SOM-DDC-24 'cat /data/config/schedule.conf' > schedule.conf.bo`, hoặc bật lại bo lab.
+
 ### Fixed — Đóng 9/10 finding review P1 Scheduler v3.1 (2026-08-07)
 
 **Phạm vi.** Core: `point_writer.{hpp,cpp}` (mới) · `schedule_runtime.{hpp,cpp}` · `scan_loop.cpp` ·

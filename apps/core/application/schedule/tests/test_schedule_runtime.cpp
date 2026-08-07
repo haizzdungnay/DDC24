@@ -1026,3 +1026,70 @@ TEST(ScheduleV31NextTransition, StillMinusOneWhenNothingScheduled)
     EXPECT_EQ(f.runtime.state_of("SCH-001")->next_transition_week_second, -1)
         << "thật sự không có lần chuyển nào thì -1 mới đúng";
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 11. Khác biệt ngữ nghĩa khi DI TRÚ từ mô hình cũ (R-01)
+ *
+ * Mô hình cũ NHẢ QUYỀN ngoài khoảng giờ (release_ao/release_do), nên mức 4 tắt
+ * và logic nội bộ mức 5 điều khiển được điểm đó. Mô hình v3.1 luôn ghi một giá
+ * trị — weekly hoặc schedule_default — nên mức 4 GIỮ điểm suốt ngày.
+ *
+ * Đây là thay đổi hành vi THẬT sau khi nâng cấp, và đặc tả §10.1 bước 6 cố ý
+ * như vậy. Test này chốt lại hành vi để nó không đổi âm thầm, và là căn cứ cho
+ * cảnh báo mà bộ di trú in ra.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+TEST(ScheduleV31MigrationSemantics, ScheduleHoldsTargetOutsideHoursUnlikeOldModel)
+{
+    /* Đúng hình dạng mà bộ di trú sinh ra từ một hàng v1
+     * startTime=08:00 endTime=17:00 weekdays=[MON] target=DO-01 value=1. */
+    const std::string weekly =
+        R"({"MON":[{"time":"08:00:00","value":"ACTIVE"},{"time":"17:00:00","value":"INACTIVE"}],)"
+        R"("TUE":[],"WED":[],"THU":[],"FRI":[],"SAT":[],"SUN":[]})";
+    Fixture f;
+    ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly)})));
+
+    /* Trong giờ: lịch giữ điểm — giống hệt mô hình cũ. */
+    f.runtime.evaluate_at(at(2026, 8, 10, 10, 0), f.io, f.writer, f.resolver);
+    EXPECT_TRUE(do_on(f.resolver, 0));
+    EXPECT_EQ(f.resolver.winning_do_level(0), PRIO_SCHEDULE);
+
+    /* NGOÀI giờ: mô hình cũ nhả quyền (mức 4 tắt, logic mức 5 vào được).
+     * Mô hình v3.1 giữ điểm ở mức 4 với giá trị mặc định. */
+    f.runtime.evaluate_at(at(2026, 8, 10, 20, 0), f.io, f.writer, f.resolver);
+    EXPECT_FALSE(do_on(f.resolver, 0)) << "giá trị là INACTIVE";
+    EXPECT_EQ(f.resolver.winning_do_level(0), PRIO_SCHEDULE)
+        << "v3.1 GIỮ điểm ngoài giờ; mô hình cũ nhả ra cho mức 5";
+
+    /* Hệ quả cụ thể: logic nội bộ mức 5 KHÔNG còn điều khiển được điểm này
+     * ngoài giờ lịch, trong khi trước khi nâng cấp thì có. */
+    f.resolver.set_do(PRIO_LOCAL_LOGIC, 0, true);
+    f.runtime.evaluate_at(at(2026, 8, 10, 20, 0), f.io, f.writer, f.resolver);
+    EXPECT_FALSE(do_on(f.resolver, 0))
+        << "lịch ở mức 4 chặn logic mức 5 — đây là thay đổi hành vi sau di trú";
+    EXPECT_EQ(f.resolver.winning_do_level(0), PRIO_SCHEDULE);
+}
+
+TEST(ScheduleV31MigrationSemantics, DisablingRestoresOldOutOfHoursBehaviour)
+{
+    /* Cách khôi phục hành vi cũ khi người dùng cần: tắt lịch thì mức 4 nhả ra,
+     * logic mức 5 điều khiển lại được. Bộ di trú đặt enabled=false chính vì
+     * vậy — nâng cấp xong không lịch nào tự chiếm điểm. */
+    const std::string weekly =
+        R"({"MON":[{"time":"08:00:00","value":"ACTIVE"},{"time":"17:00:00","value":"INACTIVE"}],)"
+        R"("TUE":[],"WED":[],"THU":[],"FRI":[],"SAT":[],"SUN":[]})";
+    Fixture f;
+    ASSERT_TRUE(f.load(config({schedule_json("SCH-001", weekly)})));
+    f.runtime.evaluate_at(at(2026, 8, 10, 20, 0), f.io, f.writer, f.resolver);
+    ASSERT_EQ(f.resolver.winning_do_level(0), PRIO_SCHEDULE);
+
+    ASSERT_TRUE(f.load(config({schedule_json(
+        "SCH-001", weekly, "[]",
+        R"([{"target_id":"TGT-001","target_type":"INTERNAL_POINT","point_kind":"DO","channel":1}])",
+        "BINARY", R"({"value":"INACTIVE"})", 16, R"({"start_date":null,"end_date":null})", false)})));
+    f.runtime.evaluate_at(at(2026, 8, 10, 20, 0), f.io, f.writer, f.resolver);
+
+    f.resolver.set_do(PRIO_LOCAL_LOGIC, 0, true);
+    EXPECT_TRUE(do_on(f.resolver, 0)) << "tắt lịch ⇒ logic mức 5 điều khiển lại được";
+    EXPECT_EQ(f.resolver.winning_do_level(0), PRIO_LOCAL_LOGIC);
+}

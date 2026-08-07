@@ -26,7 +26,7 @@ P3 · Runtime & đồng bộ thời gian     0/12   0%  [░░░░░░░�
 P4 · BACnet Schedule/Calendar        0/ 7   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
 
 Cổng ra đã qua:  P0 ✅   P1 ✅(*)   P2 ☐   P3 ☐   P4 ☐
-Rủi ro đang mở:  R-01 R-02 R-03 R-04 R-05 R-06 R-07   (§8)
+Rủi ro đang mở:  R-01 R-02 R-03 R-04 R-05 R-06 R-07 · R-01-B đã chặn (§8)
 Quyết định:      QĐ-1..6 ✅ ĐÃ DUYỆT PA-1 (2026-08-07, ADR-023)
 (*) MIGRATION_REAL_FILE còn mở: cần bản sao schedule.conf từ bo lab (R-01/QĐ-8).
     Công cụ đối chiếu đã sẵn: MKDDC_REAL_SCHEDULE_CONF=<tệp> go test -run TestMigrationAgainstRealBoardConfig
@@ -449,7 +449,8 @@ Object map hiện chỉ có AI/BI/AO/BO/AV/BV/MSV + Device ([bacnet_objects.hpp:
 
 | Mã | Rủi ro | Mức | Ứng phó | Task |
 |---|---|---|---|---|
-| R-01 | Mất cấu hình đang chạy trên bo khi di trú | **Cao** | Chuyển tự động + `.bak` + test bằng file thật của bo | SCHD-141..144 |
+| R-01 | Mất cấu hình đang chạy trên bo khi di trú | **Cao** | Chuyển tự động + `.bak` + test bằng file thật của bo. **Còn mở**: bo không tới được từ máy dev (P1_EXIT_REVIEW §4.0) | SCHD-141..144 |
+| R-01-B | **Đổi hành vi âm thầm sau di trú**: mô hình cũ nhả quyền ngoài khoảng giờ, v3.1 giữ điểm ở giá trị mặc định nên chặn logic mức 5 | **Cao** | **Đã chặn 3 lớp**: mọi lịch tắt sau di trú · cảnh báo in ra trong ghi chú di trú · 2 test khoá hành vi (`ScheduleV31MigrationSemantics`) | P1_EXIT_REVIEW §4.1 |
 | R-02 | Mô phỏng lệch với runtime thật | **Cao** | Gọi đúng mã core, cấm cài lại trong Go | SCHD-133 |
 | R-03 | `evaluate_exception` sai âm thầm với `WEEK_N_DAY` | **Cao** | ≥40 case test, có preview 12 tháng ở FE để người dùng tự thấy | SCHD-104 232 |
 | R-04 | Priority 16 không có chỗ dựa vật lý → hứa suông | Trung bình | ADR-023 + giao diện nói thật mức core | SCHD-004 108 243 |
