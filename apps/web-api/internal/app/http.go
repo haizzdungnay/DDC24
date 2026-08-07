@@ -215,8 +215,23 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("GET /api/v1/history/export.csv", RoleViewer, a.handleHistoryExport),
 		webRouter.Protected("GET /api/v1/trends/config", RoleViewer, a.handleGetTrendConfig),
 		webRouter.Protected("PUT /api/v1/trends/config", RoleAdmin, a.handlePutTrendConfig),
+		// Scheduler Engine v3.1 — 14 endpoint đặc tả §15. Bốn thao tác nguy
+		// hiểm (publish/rollback/delete/priority) còn qua một lớp quyền riêng
+		// bên trong handler (ADR-023 QĐ-5), vai trò ở đây chỉ là cửa đầu tiên.
 		webRouter.Protected("GET /api/v1/schedules", RoleViewer, a.handleGetSchedules),
-		webRouter.Protected("PUT /api/v1/schedules", RoleAdmin, a.handlePutSchedules),
+		webRouter.Protected("POST /api/v1/schedules", RoleAdmin, a.handleCreateSchedule),
+		webRouter.Protected("GET /api/v1/schedules/{id}", RoleViewer, a.handleGetSchedule),
+		webRouter.Protected("PUT /api/v1/schedules/{id}", RoleAdmin, a.handleUpdateSchedule),
+		webRouter.Protected("DELETE /api/v1/schedules/{id}", RoleAdmin, a.handleDeleteSchedule),
+		webRouter.Protected("POST /api/v1/schedules/{id}/validate", RoleAdmin, a.handleValidateSchedule),
+		webRouter.Protected("POST /api/v1/schedules/{id}/simulate", RoleViewer, a.handleSimulateSchedule),
+		webRouter.Protected("POST /api/v1/schedules/{id}/publish", RoleAdmin, a.handlePublishSchedule),
+		webRouter.Protected("POST /api/v1/schedules/{id}/enable", RoleOperator, a.handleEnableSchedule),
+		webRouter.Protected("POST /api/v1/schedules/{id}/disable", RoleOperator, a.handleDisableSchedule),
+		webRouter.Protected("GET /api/v1/schedules/{id}/revisions", RoleViewer, a.handleGetScheduleRevisions),
+		webRouter.Protected("POST /api/v1/schedules/{id}/rollback", RoleAdmin, a.handleRollbackSchedule),
+		webRouter.Protected("GET /api/v1/schedules/{id}/runtime", RoleViewer, a.handleGetScheduleRuntime),
+		webRouter.Protected("GET /api/v1/schedules/{id}/audit", RoleViewer, a.handleGetScheduleAudit),
 		webRouter.Protected("GET /api/v1/alarm-settings", RoleViewer, a.handleGetAlarmSettings),
 		webRouter.Protected("PUT /api/v1/alarm-settings", RoleAdmin, a.handlePutAlarmSettings),
 	}

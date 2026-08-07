@@ -298,7 +298,6 @@ func (a *App) StartSampler(ctx context.Context) {
 				a.runHistorianShadowScheduler(historianCtx)
 			}()
 		}
-		a.StartVirtualPointScheduler(ctx)
 		a.StartAlarmHistory(ctx)
 	}
 }

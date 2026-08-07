@@ -658,3 +658,14 @@ func defaultVirtualPointValue(signalType string) any {
 		return float64(0)
 	}
 }
+
+// normalizeVirtualPointKind: "AV" là tên cũ của điểm ảo, chuẩn hoá về "VP".
+// Trước 2026-08-07 hàm này nằm trong scheduleapi.go; module lịch không còn dùng
+// nó (core v3.1 ghi thẳng AV/BV/MSV), nhưng cấu hình cảnh báo thì vẫn.
+func normalizeVirtualPointKind(kind string) string {
+	kind = strings.ToUpper(strings.TrimSpace(kind))
+	if kind == "AV" {
+		return "VP"
+	}
+	return kind
+}

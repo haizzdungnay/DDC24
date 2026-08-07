@@ -99,6 +99,51 @@ type webIPCResponse struct {
 	SnapshotObservedAtUTC string           `json:"snapshotObservedAtUtc,omitempty"`
 	CapturedMonotonicNs   uint64           `json:"capturedMonotonicNs,omitempty"`
 	Points                []RuntimePoint   `json:"points,omitempty"`
+	Schedules             []coreScheduleState `json:"schedules,omitempty"`
+}
+
+// coreScheduleState là trạng thái runtime lịch do controller trả về
+// (SCHD-152). Đây là SỰ THẬT; cấu hình backend giữ chỉ là ý định.
+type coreScheduleState struct {
+	ScheduleID              string                   `json:"scheduleId"`
+	Active                  bool                     `json:"active"`
+	EffectiveValue          float64                  `json:"effectiveValue"`
+	ValueSource             string                   `json:"valueSource"`
+	SourceExceptionID       string                   `json:"sourceExceptionId"`
+	NextTransitionWeekSecond int                     `json:"nextTransitionWeekSecond"`
+	ErrorCode               string                   `json:"errorCode"`
+	Targets                 []coreScheduleTargetState `json:"targets"`
+}
+
+type coreScheduleTargetState struct {
+	TargetID     string  `json:"targetId"`
+	Written      bool    `json:"written"`
+	WrittenValue float64 `json:"writtenValue"`
+	ErrorCode    string  `json:"errorCode"`
+	OverriddenBy string  `json:"overriddenBy"`
+}
+
+// ReadScheduleStates hỏi controller trạng thái runtime của mọi lịch.
+// Core không trả lời ⇒ trả errCoreUnavailable, và backend hiển thị gạch ngang
+// chứ KHÔNG tự tính giá trị hiệu lực ở phía mình.
+func (c *CoreClient) ReadScheduleStates(ctx context.Context) ([]coreScheduleState, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	resp, err := c.sendWebIPC(ctx, map[string]any{
+		"id":   atomic.AddUint64(&webCommandID, 1),
+		"op":   "schedule_state",
+		"user": "web",
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.Result == "rejected" {
+		return nil, fmt.Errorf("core rejected schedule_state: %s", resp.Error)
+	}
+	return resp.Schedules, nil
 }
 
 type coreAlarmState struct {

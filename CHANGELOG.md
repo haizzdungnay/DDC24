@@ -7,6 +7,49 @@
 ---
 
 ## [Unreleased]
+### Added — Scheduler v3.1 P1.B/C: backend 14 endpoint, revision, audit, di trú v1 (2026-08-07)
+
+**Phạm vi.** Backend Go: `scheduledto.go` · `schedulevalidate.go` · `schedulestore.go` ·
+`scheduleapi.go` · `schedulemigrate.go` · `scheduleruntime.go` · `schedulesimulate.go` ·
+`scheduleapi_test.go` (tất cả mới hoặc viết lại) · `http.go` · `core_client.go` ·
+`virtualpoint.go`. Core: `mkddc-schedule-sim` (mới), op `schedule_state` trong `web_ipc`,
+trường `override_source`. Task `SCHD-121..134, 141..144, 152`.
+
+**Bốn quyết định đáng ghi lại.**
+
+1. **Mô phỏng gọi binary `mkddc-schedule-sim`, không cài lại thuật toán trong Go.** Đây là
+   yêu cầu PM/CTO khi duyệt Plan 50. Thiếu binary thì endpoint trả **503 kèm giải thích**,
+   tuyệt đối không rơi về bản tính trong Go — một bản cài lại sẽ đúng cho tới ngày nó lệch
+   khỏi controller, và ngày đó không ai biết.
+2. **Xoá `virtualpoint_scheduler.go`.** Backend từng tự chạy lịch cho điểm ảo vì mô hình cũ
+   không cho core làm việc đó. Core v3.1 ghi thẳng AV/BV/MSV/EXT, nên giữ lại là **hai nơi
+   cùng ghi một điểm** — đúng loại tranh chấp không ai gỡ nổi khi nó xảy ra ngoài hiện trường.
+3. **Thêm `override_source` xuyên từ core lên API.** Khi lệnh lịch ghi được vào resolver
+   nhưng một nguồn cao hơn (safety, lệnh tay, BACnet) đang giữ kênh, trường này nói ra. Đây
+   là câu trả lời cho "lịch bật rồi mà sao thiết bị không chạy".
+4. **`enable`/`disable` khi controller chưa nạp lại trả 200 với `status = OUT_OF_SYNC`**, và
+   `delete` trả **202**. Bản đầu trả 500 — sai bản chất, vì cấu hình *đã* được ghi; 204/200 im
+   lặng cũng sai vì controller vẫn chạy bản cũ. `OUT_OF_SYNC` là trạng thái có sẵn trong hợp
+   đồng mô tả đúng tình huống đó.
+
+**Di trú v1 → v3.1** (ADR-023 QĐ-6): nhận diện theo `scheduleType`/`schema_version` chứ không
+đoán; giữ `schedule.conf.v1.bak` và **không xoá**; mọi lịch về `DRAFT` + `enabled=false` để bắt
+người dùng review. Một khoảng `startTime→endTime` cũ thành **hai** cặp Time-Value — mốc thứ hai
+trả về giá trị mặc định, thiếu nó thì giá trị dính lại qua đêm. `holiday_period` cũ (vốn tắt
+toàn cục) thành exception `event_priority = 1` gắn vào từng lịch.
+
+**Kiểm chứng (số đo thật).**
+
+```
+go vet ./... && go test ./... -count=1  → 11/11 gói PASS (internal/app 26,3 s)
+ctest --test-dir build/fw               → 822/822 passed, 0 failed
+mkddc-schedule-sim (lịch có nghỉ trưa + ngoại lệ, 4 ngày)
+  → 7 lần chuyển · 0 khoảng trống · 0 xung đột, nguồn từng đoạn đúng WEEKLY/EXCEPTION/DEFAULT
+```
+
+**Đính chính Plan 50.** Bản 1.0 ghi tổng **78 task**; đếm lại từ chính các bảng chi tiết thì con
+số thật là **96** (P0 9 · P1 32 · P2 36 · P3 12 · P4 7). Ước lượng 64 người-ngày không đổi.
+
 ### Changed — Scheduler v3.1 P1.A: viết lại `ScheduleRuntime` theo mô hình Schedule Object (2026-08-07)
 
 **Phạm vi.** `apps/core/application/schedule/schedule_runtime.{hpp,cpp}` (viết lại) ·

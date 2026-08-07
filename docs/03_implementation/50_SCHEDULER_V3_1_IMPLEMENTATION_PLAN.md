@@ -6,22 +6,22 @@
 > **Nguồn yêu cầu:** [`docs/CHUONG_YEU_CAU/scheduler.md`](../CHUONG_YEU_CAU/scheduler.md) — Product Spec v3.1
 > **Thiết kế nền:** [UIUX-UC-WEB-SCHEDULER-PROPOSAL-001](../04_uiux/KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md) (20 khoảng cách · 6 quyết định · 26 use case · wireframe)
 > **Baseline mã nguồn:** commit `5fef0b9`, nhánh `main`
-> **Tổng khối lượng:** **64 người-ngày** / **78 task** / 5 pha
+> **Tổng khối lượng:** **64 người-ngày** / **96 task** / 5 pha
 > **Ngoài phạm vi:** panel lịch trên HMI cục bộ 320×240; triển khai broker MQTT thật (xem QĐ-2); chứng nhận BTL (chỉ chuẩn bị đối tượng ở P4).
 
 ---
 
 ## 0. Bảng tiến độ — cập nhật mỗi phiên làm việc
 
-> Cách cập nhật: §9. Cập nhật lần cuối **2026-08-07** — P0 đóng; P1.A (core runtime) xong, 822/822 ctest.
+> Cách cập nhật: §9. Cập nhật lần cuối **2026-08-07** — P0 đóng; P1.A/B/C xong (822/822 ctest, 11/11 gói Go).
 
 ```text
-TỔNG THỂ                                                  20 / 78 task  26%
-[█████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
+TỔNG THỂ                                                  39 / 96 task  41%
+[████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
 
 P0 · Chốt quyết định & hợp đồng      9/ 9 100%  [████████████████████]  ✅ CỔNG RA ĐÃ QUA
-P1 · Mô hình · Core · Backend       11/24  46%  [█████████░░░░░░░░░░░]  🔄 P1.A xong
-P2 · Frontend                        0/26   0%  [░░░░░░░░░░░░░░░░░░░░]  🔄 mở khoá (hợp đồng đóng băng)
+P1 · Mô hình · Core · Backend       30/32  94%  [███████████████████░]  🔄 còn SCHD-151, 153
+P2 · Frontend                        0/36   0%  [░░░░░░░░░░░░░░░░░░░░]  🔄 mở khoá (hợp đồng đóng băng)
 P3 · Runtime & đồng bộ thời gian     0/12   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
 P4 · BACnet Schedule/Calendar        0/ 7   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P1 chặn
 
@@ -150,11 +150,11 @@ Thay mô hình lịch một-khoảng-một-giá-trị hiện tại bằng mô h�
 | Pha | Tên | Task | Người-ngày | Điều kiện vào | Điều kiện ra |
 |---|---|---:|---:|---|---|
 | **P0** | Chốt quyết định & hợp đồng | 9 | 4 | Proposal đã đọc | 6 quyết định có câu trả lời + schema đóng băng |
-| **P1** | Mô hình · Core · Backend | 24 | 25 | P0 xong | ctest xanh · 14 endpoint · di trú chạy được trên bo |
-| **P2** | Frontend | 26 | 21 | Hợp đồng đóng băng (SCHD-005) | vitest + e2e xanh · `grep TSx` = 0 · mở 64 lịch < 2 s |
+| **P1** | Mô hình · Core · Backend | 32 | 25 | P0 xong | ctest xanh · 14 endpoint · di trú chạy được trên bo |
+| **P2** | Frontend | 36 | 21 | Hợp đồng đóng băng (SCHD-005) | vitest + e2e xanh · `grep TSx` = 0 · mở 64 lịch < 2 s |
 | **P3** | Runtime & đồng bộ thời gian | 12 | 9 | P1 xong | Test đổi giờ / mất điện / NTP trên bo |
 | **P4** | BACnet Schedule/Calendar | 7 | 5 | P1 xong | Object 17 + 6 đọc được qua BACnet · PICS cập nhật |
-| | **Tổng** | **78** | **64** | | |
+| | **Tổng** | **96** | **64** | | |
 
 ---
 
@@ -233,20 +233,20 @@ File: `apps/web-api/internal/app/schedule*.go`, `dto.go`, `http.go`
 
 | Task | Nội dung | Ngày | Đóng gap |
 |---|---|---:|---|
-| SCHD-121 | DTO v3.1 thay `ScheduleRow` ở [dto.go:142-162](../../apps/web-api/internal/app/dto.go#L142-L162) | 1 | G-01 |
-| SCHD-122 | `schedulestore.go` — lưu theo từng lịch + thư mục revision; giữ **≥10 bản gần nhất** | 1,5 | G-09 |
-| SCHD-123 | Bộ đếm `revision` + khoá lạc quan; publish revision cũ hơn ⇒ `SCH-VERSION-001` | 1 | G-09 |
-| SCHD-124 | Máy trạng thái `DRAFT→VALIDATED→PUBLISHED→ACTIVE/INACTIVE` + `DISABLED`/`ERROR`/`OUT_OF_SYNC` | 1 | G-08 |
-| SCHD-125 | **Mock server** phục vụ hợp đồng v3.1 để FE vào việc sớm (`tools/mock/scheduler/`) | 0,5 | mở khoá P2 |
-| SCHD-126 | 8 endpoint CRUD + enable/disable: `GET/POST/GET{id}/PUT{id}/DELETE{id}/enable/disable/runtime` | 2 | G-11 |
-| SCHD-127 | `POST /validate` — trả danh sách lỗi có mã spec §11 kèm JSON path | 1 | G-11 N4 |
-| SCHD-128 | `POST /publish` — ACK/NACK, timeout 5 s, retry có trần, idempotent theo `correlation_id`; **hỏng thì revision đang chạy không đổi** (N6) | 1,5 | G-11 G-12 |
-| SCHD-129 | `GET /revisions` + `POST /rollback` (bắt buộc lý do) + diff hai revision | 1 | G-09 |
-| SCHD-130 | `GET /audit` — audit theo từng lịch, đủ 10 trường spec §20, thay dòng gộp ở [scheduleapi.go:69](../../apps/web-api/internal/app/scheduleapi.go#L69) | 0,75 | G-14 |
-| SCHD-131 | Bốn quyền `schedule.publish/rollback/delete/priority` + gate 403 | 0,75 | G-15 |
-| SCHD-132 | Kiểm tra target: tồn tại, ghi được, đúng `value_type`, không trùng → `SCH-TARGET-001/002/003` | 1 | G-06 |
-| SCHD-133 | `POST /simulate` — **gọi đúng mã đánh giá của core** qua thư viện dùng chung, không cài lại trong Go | 1,5 | G-10 |
-| SCHD-134 | Test Go cho toàn bộ: 14 endpoint, phân quyền, revision, publish hỏng, simulate | 2 | tất cả |
+| SCHD-121 | DTO v3.1 thay `ScheduleRow` ở [dto.go:142-162](../../apps/web-api/internal/app/dto.go#L142-L162) | 1 | G-01 | ✅ |
+| SCHD-122 | `schedulestore.go` — lưu theo từng lịch + thư mục revision; giữ **≥10 bản gần nhất** | 1,5 | G-09 | ✅ |
+| SCHD-123 | Bộ đếm `revision` + khoá lạc quan; publish revision cũ hơn ⇒ `SCH-VERSION-001` | 1 | G-09 | ✅ |
+| SCHD-124 | Máy trạng thái `DRAFT→VALIDATED→PUBLISHED→ACTIVE/INACTIVE` + `DISABLED`/`ERROR`/`OUT_OF_SYNC` | 1 | G-08 | ✅ |
+| SCHD-125 | **Mock server** phục vụ hợp đồng v3.1 để FE vào việc sớm (`tools/mock/scheduler/`) | 0,5 | mở khoá P2 | ✅ |
+| SCHD-126 | 8 endpoint CRUD + enable/disable: `GET/POST/GET{id}/PUT{id}/DELETE{id}/enable/disable/runtime` | 2 | G-11 | ✅ |
+| SCHD-127 | `POST /validate` — trả danh sách lỗi có mã spec §11 kèm JSON path | 1 | G-11 N4 | ✅ |
+| SCHD-128 | `POST /publish` — ACK/NACK, timeout 5 s, retry có trần, idempotent theo `correlation_id`; **hỏng thì revision đang chạy không đổi** (N6) | 1,5 | G-11 G-12 | ✅ |
+| SCHD-129 | `GET /revisions` + `POST /rollback` (bắt buộc lý do) + diff hai revision | 1 | G-09 | ✅ |
+| SCHD-130 | `GET /audit` — audit theo từng lịch, đủ 10 trường spec §20, thay dòng gộp ở [scheduleapi.go:69](../../apps/web-api/internal/app/scheduleapi.go#L69) | 0,75 | G-14 | ✅ |
+| SCHD-131 | Bốn quyền `schedule.publish/rollback/delete/priority` + gate 403 | 0,75 | G-15 | ✅ |
+| SCHD-132 | Kiểm tra target: tồn tại, ghi được, đúng `value_type`, không trùng → `SCH-TARGET-001/002/003` | 1 | G-06 | ✅ |
+| SCHD-133 | `POST /simulate` — **gọi đúng mã đánh giá của core** qua thư viện dùng chung, không cài lại trong Go | 1,5 | G-10 | ✅ |
+| SCHD-134 | Test Go cho toàn bộ: 14 endpoint, phân quyền, revision, publish hỏng, simulate | 2 | tất cả | ✅ |
 
 > SCHD-133 quyết định chất lượng của cả tính năng mô phỏng. Cài lại thuật toán đánh giá trong Go là tự nói dối: nó đúng cho tới ngày hai bản lệch nhau, và ngày đó không ai biết. Cách làm: build `schedule_runtime` thành thư viện tĩnh với vỏ C, gọi qua cgo — hoặc chạy `mkddc-core --simulate` như một tiến trình con nếu cgo bị loại.
 
@@ -254,10 +254,10 @@ File: `apps/web-api/internal/app/schedule*.go`, `dto.go`, `http.go`
 
 | Task | Nội dung | Ngày | Đóng gap |
 |---|---|---:|---|
-| SCHD-141 | Bộ chuyển đổi v1→v3.1: mỗi `ScheduleRow` → 1 Schedule Object với `weekly_schedule` gồm 2 cặp Time-Value (`startTime:value`, `endTime:default`) | 1,5 | QĐ-6 |
-| SCHD-142 | Nhận diện định dạng lúc nạp; ghi bản v3.1; **giữ bản cũ thành `schedule.conf.v1.bak`** | 0,5 | R-01 |
-| SCHD-143 | Cờ `migrated_from_v1` để FE hiện băng thông báo bắt buộc xác nhận | 0,25 | R-01 |
-| SCHD-144 | Test round-trip trên `schedule.conf` **thật lấy từ bo lab**, không phải file bịa | 0,75 | R-01 |
+| SCHD-141 | Bộ chuyển đổi v1→v3.1: mỗi `ScheduleRow` → 1 Schedule Object với `weekly_schedule` gồm 2 cặp Time-Value (`startTime:value`, `endTime:default`) | 1,5 | QĐ-6 | ✅ |
+| SCHD-142 | Nhận diện định dạng lúc nạp; ghi bản v3.1; **giữ bản cũ thành `schedule.conf.v1.bak`** | 0,5 | R-01 | ✅ |
+| SCHD-143 | Cờ `migrated_from_v1` để FE hiện băng thông báo bắt buộc xác nhận | 0,25 | R-01 | ✅ |
+| SCHD-144 | Test round-trip trên `schedule.conf` **thật lấy từ bo lab**, không phải file bịa | 0,75 | R-01 | ✅ |
 
 ### 4.4 P1.D · Nạp lại cấu hình (2 người-ngày)
 
@@ -480,26 +480,26 @@ Ký hiệu trạng thái: `☐` chưa làm · `🔄` đang làm · `✅` xong c�
 | 18 | SCHD-109 | P1 | `next_transition_at` | Core | 0,75 | 105 | ✅ |
 | 19 | SCHD-110 | P1 | Test core ≥40 case | Core | 2 | 101-109 | ✅ |
 | 20 | SCHD-111 | P1 | Benchmark <100 ms | Core | 0,5 | 110 | ✅ |
-| 21 | SCHD-121 | P1 | DTO Go v3.1 | BE | 1 | 005 | ☐ |
-| 22 | SCHD-122 | P1 | Store + thư mục revision | BE | 1,5 | 121 | ☐ |
-| 23 | SCHD-123 | P1 | Bộ đếm revision + khoá lạc quan | BE | 1 | 122 | ☐ |
-| 24 | SCHD-124 | P1 | Máy trạng thái 8 trạng thái | BE | 1 | 123 | ☐ |
-| 25 | SCHD-125 | P1 | **Mock server (mở khoá FE)** | BE | 0,5 | 121 | ☐ |
-| 26 | SCHD-126 | P1 | 8 endpoint CRUD | BE | 2 | 124 | ☐ |
-| 27 | SCHD-127 | P1 | `POST /validate` | BE | 1 | 126 | ☐ |
-| 28 | SCHD-128 | P1 | `POST /publish` + ACK | BE | 1,5 | 126 152 | ☐ |
-| 29 | SCHD-129 | P1 | Revisions + rollback + diff | BE | 1 | 123 | ☐ |
-| 30 | SCHD-130 | P1 | Audit theo từng lịch | BE | 0,75 | 126 | ☐ |
-| 31 | SCHD-131 | P1 | 4 quyền thao tác | BE | 0,75 | 126 | ☐ |
-| 32 | SCHD-132 | P1 | Kiểm tra target | BE | 1 | 127 | ☐ |
-| 33 | SCHD-133 | P1 | `POST /simulate` dùng mã core | BE | 1,5 | 110 | ☐ |
-| 34 | SCHD-134 | P1 | Test Go toàn bộ | BE | 2 | 126-133 | ☐ |
-| 35 | SCHD-141 | P1 | Bộ chuyển đổi v1→v3.1 | BE | 1,5 | 121 | ☐ |
-| 36 | SCHD-142 | P1 | Nhận diện + `.bak` | BE | 0,5 | 141 | ☐ |
-| 37 | SCHD-143 | P1 | Cờ `migrated_from_v1` | BE | 0,25 | 142 | ☐ |
-| 38 | SCHD-144 | P1 | Test round-trip file thật của bo | QA | 0,75 | 142 | ☐ |
+| 21 | SCHD-121 | P1 | DTO Go v3.1 | BE | 1 | 005 | ✅ |
+| 22 | SCHD-122 | P1 | Store + thư mục revision | BE | 1,5 | 121 | ✅ |
+| 23 | SCHD-123 | P1 | Bộ đếm revision + khoá lạc quan | BE | 1 | 122 | ✅ |
+| 24 | SCHD-124 | P1 | Máy trạng thái 8 trạng thái | BE | 1 | 123 | ✅ |
+| 25 | SCHD-125 | P1 | **Mock server (mở khoá FE)** | BE | 0,5 | 121 | ✅ |
+| 26 | SCHD-126 | P1 | 8 endpoint CRUD | BE | 2 | 124 | ✅ |
+| 27 | SCHD-127 | P1 | `POST /validate` | BE | 1 | 126 | ✅ |
+| 28 | SCHD-128 | P1 | `POST /publish` + ACK | BE | 1,5 | 126 152 | ✅ |
+| 29 | SCHD-129 | P1 | Revisions + rollback + diff | BE | 1 | 123 | ✅ |
+| 30 | SCHD-130 | P1 | Audit theo từng lịch | BE | 0,75 | 126 | ✅ |
+| 31 | SCHD-131 | P1 | 4 quyền thao tác | BE | 0,75 | 126 | ✅ |
+| 32 | SCHD-132 | P1 | Kiểm tra target | BE | 1 | 127 | ✅ |
+| 33 | SCHD-133 | P1 | `POST /simulate` dùng mã core | BE | 1,5 | 110 | ✅ |
+| 34 | SCHD-134 | P1 | Test Go toàn bộ | BE | 2 | 126-133 | ✅ |
+| 35 | SCHD-141 | P1 | Bộ chuyển đổi v1→v3.1 | BE | 1,5 | 121 | ✅ |
+| 36 | SCHD-142 | P1 | Nhận diện + `.bak` | BE | 0,5 | 141 | ✅ |
+| 37 | SCHD-143 | P1 | Cờ `migrated_from_v1` | BE | 0,25 | 142 | ✅ |
+| 38 | SCHD-144 | P1 | Test round-trip file thật của bo | QA | 0,75 | 142 | ✅ |
 | 39 | SCHD-151 | P1 | `config_reload` giữ cấu hình cũ khi hỏng | Core | 0,75 | 102 | ☐ |
-| 40 | SCHD-152 | P1 | Kênh ACK core→BE | Core | 1 | 107 | ☐ |
+| 40 | SCHD-152 | P1 | Kênh ACK core→BE | Core | ✅ | 1 | 107 | ✅ |
 | 41 | SCHD-153 | P1 | Tham số `main.cpp` | Core | 0,25 | 151 | ☐ |
 | 42 | SCHD-201 | P2 | Kiểu TS v3.1, xoá `ScheduleRow` | FE | 0,75 | 005 | ☐ |
 | 43 | SCHD-202 | P2 | 14 hàm API client | FE | 0,75 | 006 201 | ☐ |
@@ -539,6 +539,8 @@ Ký hiệu trạng thái: `☐` chưa làm · `🔄` đang làm · `✅` xong c�
 | 77 | SCHD-266 | P2 | Tương phản WCAG AA | FE | — | 204 | ☐ |
 | 78 | P3+P4 | P3/P4 | 19 task ở §6.1 và §6.2 | Core/FE | 14 | Cổng ra P1 | ☐ |
 
+> **Đính chính 2026-08-07.** Bản 1.0 ghi tổng **78 task**; đếm lại từ chính các bảng chi tiết thì con số thật là **96** (P0 9 · P1 32 · P2 36 · P3 12 · P4 7). Sai số đến từ việc §2 cộng nhầm khi lập plan. Ước lượng 64 người-ngày **không đổi** — số task tăng vì chia nhỏ hơn, không phải vì thêm việc.
+
 > Dòng 78 gộp 19 task của P3/P4 để bảng này đọc được trên một màn hình; danh sách đầy đủ ở §6. Bộ đếm ở §0 tính đủ 78.
 
 ---
@@ -558,4 +560,5 @@ Ký hiệu trạng thái: `☐` chưa làm · `🔄` đang làm · `✅` xong c�
 
 | Phiên bản | Ngày | Người | Nội dung |
 |---|---|---|---|
+| 1.1 | 2026-08-07 | Claude Code | Đính chính tổng task 78 → **96** (đếm lại từ bảng chi tiết); P0 + P1.A/B/C đóng |
 | 1.0 | 2026-08-07 | Claude Code | Bản đầu: 5 pha, 78 task, 64 người-ngày, Gantt + DAG + bảng burn-up, 6 quyết định chặn, 7 rủi ro |
