@@ -181,3 +181,38 @@ func requestNetcfgTestResponse(t *testing.T, response map[string]any) (NetcfgRes
 	}()
 	return NewNetcfgClient(path).Request(context.Background(), "strict-response", "status", "", nil)
 }
+
+// Payload NGUYÊN VĂN mà mkddc-netcfg trên bo Foxlinx SOM-DDC-24 (OK1126B,
+// buildroot + systemd-networkd, không có NetworkManager) trả về sau khi sửa
+// backend cấu hình, ngày 2026-08-08.
+//
+// Vì sao cần test này: `validNetcfgResponse` từ chối CẢ response khi bất kỳ
+// mảnh nào sai hợp đồng, và khi đó `/api/v1/network/transaction` trả 502 —
+// nghĩa là toàn bộ trang /settings/network chết, chứ không suy giảm cục bộ.
+// Hai điểm ở payload này từng là nguồn nghi ngờ: hostname có CHỮ HOA
+// (`OK1126B-buildroot`) và `configured` đọc ra từ file .network của
+// systemd-networkd chứ không phải từ profile NetworkManager.
+func TestNetcfgClientAcceptsFoxlinxNetworkdAuthorityResponse(t *testing.T) {
+	const board = `{"active":{"adminUp":true,"carrier":true,"dnsServers":["114.114.114.114"],` +
+		`"gateway":"","interface":"eth0","ipv4":"192.168.1.110","link":"up","mode":"static",` +
+		`"prefixLength":24,"reasonCode":"OK"},"capabilities":["dns","management-hostname"],` +
+		`"configured":{"dns":{"mode":"manual","servers":["114.114.114.114"]},"interface":"eth0",` +
+		`"ipv4":"192.168.1.110","mode":"static","netmask":"255.255.255.0"},` +
+		`"management":{"hostname":"OK1126B-buildroot","mdnsName":"ok1126b-buildroot.local","stable":true},` +
+		`"reasonCode":"OK","requestId":"strict-response","result":"accepted","state":"idle","version":1}`
+
+	var response map[string]any
+	if err := json.Unmarshal([]byte(board), &response); err != nil {
+		t.Fatal(err)
+	}
+	got, err := requestNetcfgTestResponse(t, response)
+	if err != nil {
+		t.Fatalf("adapter từ chối response thật của bo: %v", err)
+	}
+	if got.Management == nil || !got.Management.Stable {
+		t.Fatalf("management.stable phải giữ nguyên true, nhận %+v", got.Management)
+	}
+	if got.Configured == nil || got.Configured.IPv4 != "192.168.1.110" {
+		t.Fatalf("configured phải đi qua nguyên vẹn, nhận %+v", got.Configured)
+	}
+}
