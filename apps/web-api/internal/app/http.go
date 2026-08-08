@@ -165,6 +165,11 @@ func (a *App) Router() http.Handler {
 		webRouter.PublicFunc("POST /api/v1/auth/login", a.handleLogin),
 		webRouter.Protected("POST /api/v1/auth/logout", RoleViewer, a.handleLogout),
 		webRouter.Protected("GET /api/v1/system/status", RoleViewer, a.handleSystemStatus),
+		// PA3-D02/D03: read model duy nhất của Landing và nhật ký vận hành.
+		// Cả hai ở `viewer`: quan sát không phải là đặc quyền, và mọi mutation
+		// vẫn nằm ở các endpoint riêng có role cao hơn.
+		webRouter.Protected("GET /api/v1/overview", RoleViewer, a.handleOverview),
+		webRouter.Protected("GET /api/v1/activity", RoleViewer, a.handleGetActivity),
 		webRouter.Protected("GET /api/v1/network", RoleViewer, a.handleGetNetworkPage),
 		webRouter.Protected("PUT /api/v1/network", RoleAdmin, a.handlePutNetworkPage),
 		webRouter.Protected("GET /api/v1/network/transaction", RoleViewer, a.handleGetNetworkTransaction),

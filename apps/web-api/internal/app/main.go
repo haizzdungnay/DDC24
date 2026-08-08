@@ -54,6 +54,8 @@ type App struct {
 	alarmHistory           *AlarmHistoryStore
 	alarmTracker           *AlarmHistoryTracker
 	pointConfigMu          sync.Mutex
+	activity               *ActivityStore
+	overrides              *OverrideRegistry
 	virtualPointRuntime    *HistorianRuntimeRegistry
 	pointMigrationWriter   func(string, []byte, os.FileMode) error
 	pointNamespaceWriter   func(string, []byte, os.FileMode) error
@@ -82,6 +84,12 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	}
 	app := &App{cfg: cfg, logger: logger, audit: audit, auth: auth, core: core, netcfg: NewNetcfgClient(cfg.NetcfgSock), os: osReader, time: NewSystemTimeService(), virtualPointRuntime: NewHistorianRuntimeRegistry(), historianAuthority: HistorianRuntimeAuthority{State: "legacy", LegacyWriterAllowed: true}, legacyState: "stopped"}
 	app.pointNamespaceWriter = writeConfigFileAtomic
+	app.overrides = NewOverrideRegistry()
+	// PA3-103/104: audit hiện hữu chảy thẳng vào kho Activity. Gắn sink NGAY
+	// sau khi tạo store để không có cửa sổ nào mà một lệnh đã được ghi journal
+	// nhưng lại vắng mặt trên Landing.
+	app.activity = NewActivityStore(app.activityPath())
+	audit.SetSink(app.activity)
 	if err := app.migrateLegacyPointConfig(); err != nil {
 		return nil, err
 	}
