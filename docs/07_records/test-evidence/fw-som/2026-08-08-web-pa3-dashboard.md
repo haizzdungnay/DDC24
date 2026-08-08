@@ -13,14 +13,20 @@
 
 | Thành phần | Đường dẫn trên bo | sha256 |
 |---|---|---|
-| `mkddc-web` (Go, linux/arm64, `-trimpath`) | `/opt/mkddc-web/mkddc-web` | `6eaae22846d59c7d806a1caf2990665665c20ef9bac9303600bfa1bbdc37f3fe` |
-| `index.html` | `/opt/mkddc-web/dist/index.html` | `f3046977bc5704e977e44fe5751a60e04f4cdbe015d1170248b9216afaceb342` |
-| `assets/index-tvvLeiCx.js` | `/opt/mkddc-web/dist/assets/` | `22d2705aaefc97f094bdf80cc66a1e688be7b2e77b3faa2b9b67e4ff8f477f89` |
-| `assets/index-BxLfE0y6.css` | `/opt/mkddc-web/dist/assets/` | `89f135558ae62582dbb93a3590ab7e5c42d9cc49fc0fe073aa6dfe7da39f21bd` |
-| `assets/charts-CPCXRkdl.js` | `/opt/mkddc-web/dist/assets/` | `73f55e64475950466df7711806e941ad18aaed2c54de31eab5b0865d0eaf3e53` |
-| `assets/react-BXR3e1DW.js` | `/opt/mkddc-web/dist/assets/` | `f8d633b1df975451fbd31510f5a874ef5118d1fd334c65b92541a98195527ffa` |
-| `assets/icons-WzM2jeCc.js` | `/opt/mkddc-web/dist/assets/` | `a9857b5bf5e3dbc592bb22db5655100f74bc93695cfa2ff536863fcadac50940` |
+| `mkddc-web` (Go, linux/arm64, `-trimpath`) | `/opt/mkddc-web/mkddc-web` | `a5bcc5f53837c9ce4a95a273e15ecfbea6f203bc32dd6cfcfa54953a447655e1` |
+| `index.html` | `/opt/mkddc-web/dist/index.html` | `2fc9407fd19d6a6d42308fecc22e9b2ea540ae2a8f2340c016d94a27561c6d28` |
+| `assets/index-DepLspUa.js` | `/opt/mkddc-web/dist/assets/` | `106f12882999f5910a69c94709808641943e0d71dabb004aaee618f5a3b23002` |
+| `assets/index-Jb_Tx-HS.css` | `/opt/mkddc-web/dist/assets/` | `c33fd9e5bf924bb4598b41c7978d3bbf8a6f20c8313fcd6df20891e10bc93c3a` |
+| `assets/charts-Oxq7tOJF.js` | `/opt/mkddc-web/dist/assets/` | `fa8878d5510d42668b9df2c1a558fcb781c8567b901fa74fd5e2319ff1f423c9` |
+| `assets/react-DuAxsn9O.js` | `/opt/mkddc-web/dist/assets/` | `6aa0e0458e325b4ece9f3df95904e147c13ddd4a347420ab954edcae8b684eeb` |
+| `assets/icons-DrcBxPTA.js` | `/opt/mkddc-web/dist/assets/` | `93ad9f63095a2867e1d1a96665c80b817576e717168a59bf5b945fd7b8d1b478` |
 | `favicon.svg` | `/opt/mkddc-web/dist/favicon.svg` | `929bf5a37773f355ca5a76ee1ae4e300fb17aa74f5b27aa4d95630827945db76` |
+
+> Bảng trên là **gói cuối** (slice hai, gồm command palette, Activity page,
+> Modbus hierarchy, Trends min–max/CSV, Commissioning prerequisite, Network
+> diff). Gói slice một — `mkddc-web` `6eaae228…37f3fe`, bundle
+> `index-tvvLeiCx.js` — nằm tại `/data/releases/20260808T162128/` và chính là
+> bản dùng cho diễn tập rollback ở §6.
 
 Checksum trên bo **khớp từng byte** với artefact build tại máy dev. Backup bản
 trước tại `/data/releases/20260808T145935/` (binary + `dist.tar.gz` + config);
@@ -43,7 +49,7 @@ Số đo đo lại tại thời điểm deploy, không dẫn lại số cũ.
 | FE unit | `npx vitest --run --environment jsdom src` | **465/465 PASS** (52 file) |
 | FE lint | `npm run lint` (`--max-warnings=0`) | sạch |
 | FE build | `npm run build` | PASS |
-| E2E | `npx playwright test` (toàn bộ) | **43/43 PASS** (55 s) |
+| E2E | `npx playwright test` (toàn bộ) | **55/55 PASS** (55 s) — gồm `pa3-dashboard.spec.ts` và `pa3-a11y.spec.ts` |
 
 Cả `configure` lẫn `build` của CMake đều đọc exit code (`=0`) trước khi chạy
 `ctest` — bẫy "build dir cũ trỏ `services/`" ghi trong CLAUDE.md.
@@ -130,22 +136,64 @@ AUDIT point_override … point=AO-01 ttl_s=0   remaining_s=0   result=accepted r
 |---|---|---|---|
 | PA3-N01 | P1 | `PointDTO.UpdatedAt` do `decodePoint()` đóng dấu bằng `time.Now()` lúc ĐỌC, vì PLC SHM không mang timestamp cho từng point. Hệ quả: `lastDataAt` của `/overview` luôn "vừa xong", kể cả khi một kênh đã đứng yên. | Sửa triệt để phải đổi hợp đồng `contracts/shm/mkddc_shm.h` để Core publish thời điểm lấy mẫu, rồi deploy lại Core — ngoài phạm vi một đợt web. Phía FE đã ngừng bịa timestamp (PA3-F04 đóng): khi backend trả rỗng/không hợp lệ thì UI hiện `—`. |
 | PA3-N02 | P2 | Ngay sau `release`, `GET /points/{id}` có thể trả `value` của lần quét trước trong khi `raw` đã về 0 (quan sát ở bước 5 §3.3). | Lệch một chu kỳ quét giữa PLC SHM và phản hồi `query`; là độ trễ hiển thị, không phải giá trị bịa. Cần chốt xem có nên phục vụ giá trị từ `query` cho point vừa ghi hay không. |
-| PA3-N03 | P2 | Hierarchy Modbus Bus→Device→Point mới ở mức deep-link (Attention → tab Thiết bị đã lọc). Cây phân cấp đầy đủ theo UX-DES §14 chưa dựng. | PA3-505; workspace Modbus hiện có 6 tab đang hoạt động, việc tái cấu trúc thành cây là thay đổi lớn nên tách khỏi đợt này. |
+| ~~PA3-N03~~ | — | **ĐÃ ĐÓNG 2026-08-08.** Cây Bus→Device→Point đã dựng (`HierarchyTree.tsx`), có trên tab Tổng quan của workspace Modbus; tham số serial ở cấp bus, device không có telemetry hiện `unknown`. | — |
 | PA3-N04 | P2 | Ma trận quyền không nghiệm thu được ở tầng E2E: `VITE_AUTH_MODE=mock` cấp `role:'admin'` cho mọi lần đăng nhập. | Đã phủ ở tầng khác: `RequireRole.test.tsx` (bảng route khớp backend), unit test nút disable, và `TestViewerCannotOverride` phía Go — nơi role là thật. Muốn E2E thật thì phải chạy Playwright với backend thật + tài khoản thật. |
 
 ---
 
-## 5. Rollback
+## 5. Accessibility (PA3-603)
 
-Chưa cần dùng. Quy trình đã sẵn sàng và đã kiểm chứng đường dẫn:
+Kiểm bằng hai tầng, mỗi tầng đúng việc của nó:
+
+| Hạng mục | Cách kiểm | Kết quả |
+|---|---|---|
+| Tương phản màu | `src/shared/theme/contrast.test.ts` — tính tỉ số WCAG trên từng cặp token, cả hai theme | PASS (trong 465 test) |
+| Landmark (`main`/`banner`/`navigation` có nhãn) | `e2e/pa3-a11y.spec.ts` trên 6 trang | PASS |
+| Đúng một `<h1>` mỗi trang | `e2e/pa3-a11y.spec.ts` | PASS **sau khi sửa** — xem dưới |
+| Nhãn của select/input | `e2e/pa3-a11y.spec.ts` quét DOM Monitor | PASS |
+| Bẫy tiêu điểm + trả tiêu điểm của ngăn kéo | `e2e/pa3-a11y.spec.ts` | PASS |
+| Skip link là điểm dừng Tab đầu tiên | `e2e/pa3-a11y.spec.ts` | PASS |
+| Tiêu điểm nhìn thấy được | `e2e/pa3-a11y.spec.ts` đọc computed style | PASS |
+
+**Hai lỗi bộ kiểm này tìm ra và đã sửa cùng phiên:** `/monitor` và `/alarms`
+trả về một `StateBlock` trần ở trạng thái loading/lỗi, làm trang **mất `<h1>`**.
+Người dùng trình đọc màn hình nghe thấy một thông báo lỗi mà không biết mình
+đang ở trang nào. Cả hai nay giữ tiêu đề trang trong mọi trạng thái.
+
+Đo màu bằng ảnh chụp trình duyệt CỐ Ý không dùng: nó chậm, dễ vỡ vì
+antialiasing, và token mới là nguồn thật của bảng màu.
+
+## 6. Diễn tập rollback (PA3-606)
+
+Chạy thật trên bo, không phải mô tả quy trình.
+
+| Bước | Kết quả đo được |
+|---|---|
+| Bản đang chạy trước rollback | `mkddc-web` `a5bcc5f5…7655e1`, `index.html` `2fc9407f…1c6d28` |
+| `systemctl stop` → khôi phục backup → `systemctl start` | **4 302 ms** |
+| Trạng thái dịch vụ sau rollback | `mkddc-core`/`mkddc-iobus`/`mkddc-web-pi`/`mkddc-netcfg` đều `active` |
+| Binary sau rollback | `6eaae228…37f3fe` — đúng bản backup |
+| Bundle đang phục vụ | `assets/index-tvvLeiCx.js` — đúng bản cũ, không phải bản mới còn kẹt cache |
+| `GET /api/v1/health` | `{"status":"ok", …}` |
+| `GET /api/v1/overview` | trả `schemaVersion:1` bình thường |
+| Kho Activity | `retained: 25` — **dữ liệu vận hành không mất khi đổi binary** |
+
+Sau đó tiến lại bản mới và xác nhận `a5bcc5f5…7655e1` +
+`assets/index-DepLspUa.js`, bốn dịch vụ `active`, `journalctl -p err` trống.
+
+Điểm đáng ghi: kho Activity nằm ở `/data/config/activity.jsonl`, tách khỏi
+`/opt/mkddc-web`, nên cả deploy lẫn rollback đều không đụng tới nó. Đây là điều
+kiện để nhật ký vận hành dùng được làm bằng chứng — một kho bị xoá mỗi lần
+nâng cấp thì không.
+
+Lệnh rollback:
 
 ```bash
 BACKUP=/data/releases/$(cat /data/releases/LATEST_BACKUP)
 systemctl stop mkddc-web-pi
 install -m 0755 $BACKUP/mkddc-web /opt/mkddc-web/mkddc-web
-rm -rf /opt/mkddc-web/dist && tar -xzf $BACKUP/dist.tar.gz -C /opt/mkddc-web
+rm -rf /opt/mkddc-web/dist && mkdir -p /opt/mkddc-web/dist
+tar -xzf $BACKUP/dist.tar.gz -C /tmp && cp -a /tmp/dist/. /opt/mkddc-web/dist/
 systemctl start mkddc-web-pi
 wget -qO- http://127.0.0.1:8081/api/v1/health
 ```
-
-Bản `dist` cũ cũng còn nguyên tại `/opt/mkddc-web/dist.old` để so sánh nhanh.
