@@ -6,6 +6,7 @@ import { ToastProvider } from '../../shared/components/Toast'
 import { I18nProvider } from '../../shared/i18n'
 import type { Point, VirtualPoint } from '../../shared/types'
 import { MonitorPage } from './MonitorPage'
+import { MemoryRouter } from 'react-router-dom'
 
 const api = vi.hoisted(() => ({
   getPoints: vi.fn(),
@@ -46,7 +47,7 @@ const uiPoint: Point = {
 }
 
 function renderPage() {
-  return render(<I18nProvider><ToastProvider><MonitorPage /></ToastProvider></I18nProvider>)
+  return render(<MemoryRouter><I18nProvider><ToastProvider><MonitorPage /></ToastProvider></I18nProvider></MemoryRouter>)
 }
 
 describe('MonitorPage point metadata recovery', () => {

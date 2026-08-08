@@ -4,16 +4,28 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
 import { IS_DEMO } from '../config'
 import { useI18n } from '../i18n'
+import { useOptionalOverview } from '../overview/OverviewProvider'
 import { useTheme } from '../theme/ThemeProvider'
 import type { ConnectionState, CurrentUser } from '../types'
+import { formatDataAge } from '../utils'
 import { Button } from './Button'
 import { StatusBadge } from './StatusBadge'
+import { HealthChip, SeverityBadge } from './pa3/StateAtoms'
 
+/**
+ * TopBar — PA3-203 / UX-DES §2.2.
+ *
+ * Bên trái: định danh thiết bị và kết nối. Bên phải: trạng thái tổng, tuổi dữ
+ * liệu, cảnh báo theo mức, giờ, người dùng.
+ *
+ * KHÔNG đặt badge CPU/RAM/process ở đây (§2.2 nói thẳng). Chúng ở Diagnostics.
+ */
 export function TopBar({ connectionState, alarmCount, currentUser, onOpenNav }: { connectionState: ConnectionState; alarmCount: number; currentUser: CurrentUser | null; onOpenNav?: () => void }) {
   const [now, setNow] = useState(new Date())
   const { logout } = useAuth()
   const { lang, locale, setLang, t, pick } = useI18n()
   const { theme, toggleTheme } = useTheme()
+  const overview = useOptionalOverview()
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 1000)
@@ -21,6 +33,8 @@ export function TopBar({ connectionState, alarmCount, currentUser, onOpenNav }: 
   }, [])
 
   const online = connectionState === 'connected'
+  const snapshot = overview?.data ?? null
+  const deviceName = snapshot?.controller.deviceName?.trim()
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-2 border-b border-[var(--c-border)] bg-[var(--c-surface)] px-3 sm:gap-4 sm:px-5">
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -38,9 +52,28 @@ export function TopBar({ connectionState, alarmCount, currentUser, onOpenNav }: 
           </button>
         )}
         <div className="hidden h-9 w-px bg-[var(--c-border)] lg:block" />
+        {deviceName && <span className="hidden min-w-0 truncate text-sm font-semibold lg:inline" title={deviceName}>{deviceName}</span>}
         <StatusBadge state={online ? 'online' : 'offline'} label={`${t('system')}: ${online ? t('online') : t('offline')}`} />
         <span className="hidden sm:inline-flex"><StatusBadge state={IS_DEMO ? 'demo' : 'live'} label={IS_DEMO ? t('demo') : t('live')} /></span>
+        {snapshot && (
+          <>
+            <span className="hidden md:inline-flex"><HealthChip state={snapshot.overallState} /></span>
+            {/* Tuổi dữ liệu là số đo an toàn, không phải trang trí: người trực
+                phải biết mình đang nhìn dữ liệu bao nhiêu giây tuổi. `—` khi
+                không point nào có mốc thời gian thật (PA3-F04). */}
+            <span className="mono hidden text-xs text-[var(--c-text-dim)] lg:inline" title={pick('Tuổi dữ liệu mới nhất', 'Age of the newest data')}>
+              {pick('Dữ liệu', 'Data')} {formatDataAge(snapshot.lastDataAt)}
+            </span>
+          </>
+        )}
       </div>
+      {snapshot && (
+        <div className="hidden shrink-0 items-center gap-1.5 xl:flex">
+          {snapshot.alarms.critical > 0 && <SeverityBadge severity="critical" count={snapshot.alarms.critical} />}
+          {snapshot.alarms.high > 0 && <SeverityBadge severity="high" count={snapshot.alarms.high} />}
+          {snapshot.alarms.medium > 0 && <SeverityBadge severity="medium" count={snapshot.alarms.medium} />}
+        </div>
+      )}
       <div className="flex shrink-0 items-center gap-1 sm:gap-3">
         <div className="hidden border-r border-[var(--c-border)] pr-6 text-right md:block">
           <div className="mono text-sm font-semibold">{now.toLocaleTimeString(locale, { hour12: false })}</div>

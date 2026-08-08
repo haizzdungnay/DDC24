@@ -26,7 +26,8 @@ export interface ModbusRuntimeEntry {
   value: number | boolean | string | undefined
   quality: ModbusQuality
   qualityReason?: string
-  updatedAt: string
+  /** `undefined` = producer không cấp mốc thời gian (PA3-F04). */
+  updatedAt?: string
   writable: boolean
 }
 
@@ -63,7 +64,7 @@ function indexModbusPoints(points: Point[]): Record<string, ModbusRuntimeEntry> 
     out[point.id] = {
       value: point.value,
       quality: toModbusQuality(point.quality as unknown as string),
-      qualityReason: (point as { quality_reason?: string }).quality_reason,
+      qualityReason: point.qualityReason,
       updatedAt: point.updatedAt,
       writable: Boolean(point.writable)
     }

@@ -11,6 +11,7 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useToast } from '../../shared/components/Toast'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
+import { roleAtLeast, useAuth } from '../auth'
 import type { Alarm, AlarmHistoryEntry, AlarmHistoryQuery, AlarmSetting } from '../../shared/types'
 import { formatDateTime } from '../../shared/utils'
 
@@ -28,6 +29,11 @@ export function AlarmsPage() {
   const state = useApi(apiClient.getAlarms, [], { refreshMs: 2000 })
   const toast = useToast()
   const { pick } = useI18n()
+  /* PA3-F10: `viewer` quan sát được cả trang nhưng KHÔNG hành động được.
+     Backend đã chặn (`POST /alarms/{id}/ack|suppress|return` là `RoleOperator`);
+     đây chỉ là để giao diện nói ra điều đó trước khi người dùng bấm. */
+  const { session } = useAuth()
+  const canActOnAlarms = roleAtLeast(session?.role, 'operator')
   const [filter, setFilter] = useState<AlarmFilter>('all')
   const [query, setQuery] = useState('')
   const [dialog, setDialog] = useState<AlarmActionDialog>(null)
@@ -109,6 +115,7 @@ export function AlarmsPage() {
             <AlarmRow
               key={alarm.id}
               alarm={alarm}
+              canAct={canActOnAlarms}
               onAck={(item) => setDialog({ action: 'ack', alarm: item })}
               onSuppress={(item) => setDialog({ action: 'off', alarm: item })}
               onReturn={returnAlarm}

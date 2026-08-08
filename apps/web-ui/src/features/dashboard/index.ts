@@ -1,5 +1,6 @@
 export { AuxFunctionsPage } from './AuxFunctionsPage'
 export { DashboardPage } from './DashboardPage'
+export { DiagnosticsPage as SystemDiagnosticsPage } from './DiagnosticsPage'
 export { DiagramPage } from './DiagramPage'
 export { HelpPage } from './HelpPage'
 export { ProgrammingPage } from './ProgrammingPage'

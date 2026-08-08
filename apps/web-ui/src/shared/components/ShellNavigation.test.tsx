@@ -95,13 +95,17 @@ describe('sidebar reflects the signed-in role', () => {
     authMocks.role = 'viewer'
     renderNavigation(<NavRail alarmCount={0} device={null} />)
 
-    for (const label of ['Users', 'Device', 'Time/Date', 'Scheduler', 'Alarm settings', 'Inputs Config', 'Virtual Points']) {
+    for (const label of ['Users', 'Device', 'Time/Date', 'Alarm settings', 'Inputs Config', 'Virtual Points']) {
       expect(screen.queryByRole('link', { name: label }), `viewer vẫn thấy "${label}"`).not.toBeInTheDocument()
     }
     // Nhưng vẫn giữ toàn bộ màn hình theo dõi chỉ-đọc.
     expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Monitoring' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Network' })).toBeInTheDocument()
+    // PA3-206: Chẩn đoán là trang quan sát, viewer phải vào được.
+    expect(screen.getByRole('link', { name: 'Diagnostics' })).toBeInTheDocument()
+    // PA3-F09: Scheduler mở cho viewer đọc/simulate; nút sửa khoá trong trang.
+    expect(screen.getByRole('link', { name: 'Scheduler' })).toBeInTheDocument()
   })
 
   it('gives an operator the write destinations but not the admin ones', () => {

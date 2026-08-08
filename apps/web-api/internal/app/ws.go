@@ -47,6 +47,13 @@ type monitorPointForcer interface {
 	ForcePoint(context.Context, string, any, bool) (PointDTO, error)
 }
 
+// monitorPointTTLForcer là đường ghi có TTL do Core cưỡng chế. Nếu core client
+// không hiện thực nó, WS từ chối lệnh có `expire_s` thay vì tự dựng hẹn giờ —
+// xem chú thích của `handleMonitorForce`.
+type monitorPointTTLForcer interface {
+	ForcePointTTL(ctx context.Context, id string, value any, release bool, ttlS uint32, user string) (PointDTO, error)
+}
+
 func (a *App) requireWSAuth(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// F-10: thứ tự ưu tiên — subprotocol (không bao giờ vào URL), rồi
@@ -109,7 +116,6 @@ func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 	subscribed := false
 	lastFingerprint := ""
 	lastReadErr := ""
-	expirations := map[string]time.Time{}
 
 	for {
 		select {
@@ -129,7 +135,7 @@ func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 				cancel()
 				return
 			}
-			resetFingerprint, err := a.handleMonitorWSMessage(ctx, conn, raw, canForce, forcer, &subscription, &subscribed, expirations)
+			resetFingerprint, err := a.handleMonitorWSMessage(ctx, conn, raw, canForce, forcer, &subscription, &subscribed)
 			if err != nil {
 				cancel()
 				return
@@ -138,17 +144,15 @@ func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 				lastFingerprint = ""
 				lastReadErr = ""
 			}
-		case now := <-ticker.C:
+		case <-ticker.C:
 			// Kiểm lại phiên mỗi nhịp, không chỉ lúc có lệnh: một socket đang
 			// mở im lặng vẫn phải rụng khi người dùng logout hoặc token hết hạn.
 			if !a.wsSessionStillValid(ctx, conn, r) {
 				cancel()
 				return
 			}
-			if err := a.flushExpiredForces(ctx, conn, forcer, canForce, expirations, now); err != nil {
-				cancel()
-				return
-			}
+			// Không còn `flushExpiredForces` ở đây: TTL do Core sở hữu
+			// (PA3-107). Vòng lặp này chỉ đọc và phát trạng thái.
 			if !subscribed {
 				continue
 			}
@@ -254,7 +258,7 @@ func readMonitorWS(ctx context.Context, conn *websocket.Conn, rawMessages chan<-
 	}
 }
 
-func (a *App) handleMonitorWSMessage(ctx context.Context, conn *websocket.Conn, raw json.RawMessage, canForce bool, forcer monitorPointForcer, subscription *SubscribePoints, subscribed *bool, expirations map[string]time.Time) (bool, error) {
+func (a *App) handleMonitorWSMessage(ctx context.Context, conn *websocket.Conn, raw json.RawMessage, canForce bool, forcer monitorPointForcer, subscription *SubscribePoints, subscribed *bool) (bool, error) {
 	var base struct {
 		Op WSOp `json:"op"`
 	}
@@ -275,13 +279,26 @@ func (a *App) handleMonitorWSMessage(ctx context.Context, conn *websocket.Conn, 
 		*subscribed = true
 		return true, nil
 	case WSOpForce:
-		return a.handleMonitorForce(ctx, conn, raw, forcer, canForce, expirations)
+		return a.handleMonitorForce(ctx, conn, raw, forcer, canForce)
 	default:
 		return false, writeWSError(ctx, conn, http.StatusBadRequest, "unknown op")
 	}
 }
 
-func (a *App) handleMonitorForce(ctx context.Context, conn *websocket.Conn, raw json.RawMessage, forcer monitorPointForcer, canForce bool, expirations map[string]time.Time) (bool, error) {
+// handleMonitorForce chuyển lệnh ép tay qua WebSocket xuống Core.
+//
+// PA3-107 — VÌ SAO KHÔNG CÒN HẸN GIỜ Ở ĐÂY
+//
+// Bản trước giữ `expirations map[string]time.Time` gắn với MỘT kết nối
+// WebSocket rồi tự gửi lệnh release khi tới hạn. Nghĩa là thời hạn an toàn của
+// một output vật lý phụ thuộc vào việc cái socket đó còn sống: rớt Wi-Fi, đóng
+// laptop, hay chỉ cần `mkddc-web` restart là hẹn giờ biến mất và output ở lại
+// trạng thái ép tay không có gì nhả.
+//
+// Nay `expire_s` được chuyển nguyên vẹn thành `ttlS` xuống Core; `scan_loop`
+// giữ `manual_ao_expiry_ns_`/`manual_do_expiry_ns_` và tự `release_*` khi hết
+// hạn, kể cả khi không còn client nào kết nối.
+func (a *App) handleMonitorForce(ctx context.Context, conn *websocket.Conn, raw json.RawMessage, forcer monitorPointForcer, canForce bool) (bool, error) {
 	principal := principalFromContext(ctx)
 	if principal == nil {
 		return false, writeWSError(ctx, conn, http.StatusUnauthorized, "unauthorized")
@@ -300,7 +317,7 @@ func (a *App) handleMonitorForce(ctx context.Context, conn *websocket.Conn, raw 
 	if len(req.Value) == 0 || string(req.Value) == "null" {
 		return false, writeWSError(ctx, conn, http.StatusBadRequest, "missing force value")
 	}
-	if req.ExpireS != nil && *req.ExpireS < 0 {
+	if req.ExpireS != nil && (*req.ExpireS < 0 || *req.ExpireS > maxOverrideTTLS) {
 		return false, writeWSError(ctx, conn, http.StatusBadRequest, "invalid expire_s")
 	}
 
@@ -318,7 +335,7 @@ func (a *App) handleMonitorForce(ctx context.Context, conn *websocket.Conn, raw 
 		if err != nil {
 			return false, writeWSError(ctx, conn, http.StatusConflict, err.Error())
 		}
-		delete(expirations, item.ID)
+		a.audit.PointForce(principal, item.ID, false, "accepted", "websocket")
 		return true, writeWSJSON(ctx, conn, WSUpdateMessage{
 			Op:     WSOpUpdate,
 			TS:     time.Now().Format(time.RFC3339Nano),
@@ -331,23 +348,50 @@ func (a *App) handleMonitorForce(ctx context.Context, conn *websocket.Conn, raw 
 	if !canForce {
 		return false, writeWSError(ctx, conn, http.StatusServiceUnavailable, "core force unavailable")
 	}
-	point, err := forcer.ForcePoint(ctx, req.ID, value, false)
+	ttlS := uint32(0)
+	if req.ExpireS != nil && *req.ExpireS > 0 {
+		ttlS = uint32(*req.ExpireS)
+	}
+	point, err := a.forceViaWS(ctx, forcer, req.ID, value, ttlS, principal)
 	if err != nil {
+		if errors.Is(err, errPointTTLUnsupported) {
+			return false, writeWSError(ctx, conn, http.StatusBadRequest, "core không cưỡng chế được expire_s; bỏ trống để ép không thời hạn")
+		}
 		return false, writeWSError(ctx, conn, http.StatusBadGateway, err.Error())
 	}
 	if point.Fault && strings.Contains(point.Source, "core_unavailable") {
 		return false, writeWSError(ctx, conn, http.StatusServiceUnavailable, "core unavailable")
 	}
-	if req.ExpireS != nil && *req.ExpireS > 0 {
-		expirations[req.ID] = time.Now().Add(time.Duration(*req.ExpireS) * time.Second)
-	} else {
-		delete(expirations, req.ID)
+	remaining := uint32(0)
+	if point.OverrideExpiresInS != nil {
+		remaining = *point.OverrideExpiresInS
+	}
+	a.audit.PointForce(principal, req.ID, false, "accepted", "websocket")
+	if ttlS > 0 {
+		reason := "core_ttl"
+		if remaining == 0 {
+			reason = "core_ttl_not_reported"
+		}
+		a.overrides.Note(req.ID, principal.Username, ttlS, remaining, point.Priority)
+		a.audit.PointOverride(principal, req.ID, ttlS, remaining, "accepted", reason, "", "websocket")
 	}
 	return true, writeWSJSON(ctx, conn, WSUpdateMessage{
 		Op:     WSOpUpdate,
 		TS:     time.Now().Format(time.RFC3339Nano),
 		Points: []PointDTO{point},
 	})
+}
+
+var errPointTTLUnsupported = errors.New("core does not enforce override ttl")
+
+func (a *App) forceViaWS(ctx context.Context, forcer monitorPointForcer, id string, value any, ttlS uint32, principal *Principal) (PointDTO, error) {
+	if ttlForcer, ok := forcer.(monitorPointTTLForcer); ok {
+		return ttlForcer.ForcePointTTL(ctx, id, value, false, ttlS, principalUsername(principal))
+	}
+	if ttlS > 0 {
+		return PointDTO{}, errPointTTLUnsupported
+	}
+	return forcer.ForcePoint(ctx, id, value, false)
 }
 
 func normalizeSubscribePoints(points SubscribePoints) (SubscribePoints, error) {
@@ -423,28 +467,6 @@ func fingerprintPoints(points []PointDTO) (string, error) {
 		return "", err
 	}
 	return string(data), nil
-}
-
-func (a *App) flushExpiredForces(ctx context.Context, conn *websocket.Conn, forcer monitorPointForcer, canForce bool, expirations map[string]time.Time, now time.Time) error {
-	if len(expirations) == 0 {
-		return nil
-	}
-	for id, expiresAt := range expirations {
-		if now.Before(expiresAt) {
-			continue
-		}
-		delete(expirations, id)
-		if !canForce {
-			return writeWSError(ctx, conn, http.StatusServiceUnavailable, "core force unavailable")
-		}
-		if _, err := forcer.ForcePoint(ctx, id, nil, true); err != nil {
-			return writeWSError(ctx, conn, http.StatusBadGateway, err.Error())
-		}
-		if err := writeWSJSON(ctx, conn, WSForceExpiredMessage{Op: WSOpForceExpired, ID: id}); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func writeWSError(ctx context.Context, conn *websocket.Conn, code int, msg string) error {

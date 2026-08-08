@@ -3,7 +3,7 @@ import { IS_DEMO } from '../config'
 import { getDemoNetwork, getDemoPoints } from '../demo/simulator'
 import { useI18n } from '../i18n'
 import type { HealthResponse, IoChannel, NetworkData, Point, PointKind, PollState } from '../types'
-import { cn } from '../utils'
+import { cn, formatDateTime } from '../utils'
 import { Modal } from './Modal'
 
 type QualityState = 'good' | 'uncertain' | 'bad' | 'off'
@@ -491,7 +491,7 @@ export function ControllerDiagram({ points, health, network: networkProp, dataAg
             <span className="text-[var(--c-text-dim)]">{pick('Priority', 'Priority')}</span>
             <span className="text-[var(--c-text)]">{selectedPoint.priority ?? 'Auto'}</span>
             <span className="text-[var(--c-text-dim)]">{pick('Updated', 'Updated')}</span>
-            <span className="mono text-[var(--c-text)]">{new Date(selectedPoint.updatedAt).toLocaleString('vi-VN')}</span>
+            <span className="mono text-[var(--c-text)]">{formatDateTime(selectedPoint.updatedAt)}</span>
           </div>
         )}
       </Modal>

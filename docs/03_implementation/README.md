@@ -58,5 +58,6 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [47](47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md) | Runbook nghiệm thu target `RST-202`: build native trên board, install, startup order, crash/restart, provenance và diễn tập rollback | Draft — chờ owner cấp target window |
 | [49](49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | Modbus RTU FE + BE + FW-SOM | Track A + Track B (phần mềm) xong 2026-08-06; treo `G-C`/`G-D` phụ thuộc phần cứng |
 | [50](50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) | Scheduler Engine v3.1 — bỏ mô hình thanh ghi `TSx`, chuyển sang Schedule Object (5 pha · 78 task · 63 người-ngày) | **DRAFT — chờ phê duyệt**; P0 là cổng chặn cứng, 6 quyết định treo |
+| [52](52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md) | Dashboard và Web UX PA3 — data truth, shell, 12 use case, kiểm chứng trình duyệt và deploy Foxlinx (7 pha · 50 task · 56 người-ngày · mục tiêu 9 tuần) | **DRAFT — chờ duyệt G0**; phân tích source/runtime xong, chưa triển khai PA3 |
 
 **Archived:** [S7 Hardening Code Review](../review/2026-06-13-s7-hardening-review.md)

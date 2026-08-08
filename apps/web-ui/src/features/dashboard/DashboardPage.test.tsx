@@ -1,174 +1,195 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../shared/i18n'
+import type { ActivityPage, OverviewResponse, Point } from '../../shared/types'
 import { DashboardPage } from './DashboardPage'
 
+/**
+ * PA3-308 — nghiệm thu Landing.
+ *
+ * Bộ test này chốt đúng những gì bản Dashboard cũ làm sai và không được quay
+ * lại: debug metric trên trang chủ, `RS485-2` không có thật, giá trị `0` cho
+ * point offline, và trạng thái "ổn" khi thật ra không đọc được gì.
+ */
+
 const mocks = vi.hoisted(() => ({
-  getHealth: vi.fn(),
   getPoints: vi.fn(),
-  getAlarms: vi.fn(),
+  fetchActivity: vi.fn(),
   refetch: vi.fn()
 }))
 
-const uiPoints = Array.from({ length: 4 }, (_, index) => {
-  const number = String(index + 1).padStart(2, '0')
-  return {
-    id: `UI-${number}`,
-    tag: `UI-${number}`,
-    name: `Sensor ${number}`,
-    kind: 'UI' as const,
-    value: 20 + index,
-    unit: 'degC',
-    quality: 'good' as const,
-    source: 'test',
-    updatedAt: '2026-07-23T08:00:00Z'
-  }
-})
-
-const points = [
-  ...uiPoints,
-  { ...uiPoints[0], id: 'AO-01', tag: 'AO-01', name: 'Valve command', kind: 'AO' as const, value: 42, unit: '%' },
-  { ...uiPoints[0], id: 'DO-01', tag: 'DO-01', name: 'Supply fan', kind: 'DO' as const, value: true, unit: undefined },
-  { ...uiPoints[0], id: 'VP1', tag: 'Calculated load', name: 'Calculated load', kind: 'virtual' as const, value: 68, unit: '%' }
+const points: Point[] = [
+  { id: 'UI-01', tag: 'UI-01', name: 'Nhiệt độ phòng', kind: 'UI', value: 23.6, unit: '°C', quality: 'good', source: 'local_physical_io', updatedAt: '2026-08-08T03:00:00Z' },
+  { id: 'UI-02', tag: 'UI-02', name: 'Áp suất bơm', kind: 'UI', value: 2.41, unit: 'bar', quality: 'good', source: 'local_physical_io', updatedAt: '2026-08-08T03:00:00Z' },
+  { id: 'UI-03', tag: 'UI-03', name: 'Cảm biến mất tín hiệu', kind: 'UI', value: undefined, quality: 'offline', source: 'local_physical_io' },
+  { id: 'AO-01', tag: 'AO-01', name: 'Van cấp', kind: 'AO', value: 42, unit: '%', quality: 'good', source: 'local_physical_io', updatedAt: '2026-08-08T03:00:00Z', forced: true, overrideExpiresInS: 272 }
 ]
 
-vi.mock('../../shared/api/client', () => ({
-  apiClient: {
-    getHealth: mocks.getHealth,
-    getPoints: mocks.getPoints,
-    getAlarms: mocks.getAlarms
-  }
-}))
+let overviewState: {
+  data: OverviewResponse | null
+  status: 'loading' | 'ready' | 'error' | 'incompatible'
+  error: Error | null
+  receivedAt: number | null
+  refresh: () => Promise<void>
+}
 
-// WEB-UX-001 cần dựng được cả trường hợp KHÔNG có health, nên payload phải đổi
-// được giữa các test thay vì hằng số cứng trong factory.
-let healthPayload: Record<string, unknown> | null = { overall: 'ok', services: {} }
+function baseOverview(): OverviewResponse {
+  return {
+    schemaVersion: 1,
+    generatedAt: '2026-08-08T03:00:05Z',
+    controller: { deviceName: 'DDC24-TANG-1', location: 'Panel B2', firmware: '1.0', webVersion: 'test', ip: '10.0.0.9', mac: 'AA:BB:CC:DD:EE:FF', systemTime: '2026-08-08T10:00:05+07:00', uptimeS: 4200 },
+    connected: true,
+    lastDataAt: '2026-08-08T03:00:00Z',
+    overallState: 'degraded',
+    overallReasonCode: 'high_alarm_active',
+    alarms: { critical: 0, high: 1, medium: 1, low: 0, info: 0, unacked: 1, total: 2 },
+    points: {
+      total: 4, good: 3, uncertain: 0, bad: 0, stale: 0, offline: 1, forced: 1,
+      groups: [
+        { kind: 'UI', total: 3, good: 2, uncertain: 0, bad: 0, stale: 0, offline: 1, forced: 0 },
+        { kind: 'AO', total: 1, good: 1, uncertain: 0, bad: 0, stale: 0, offline: 0, forced: 1 }
+      ]
+    },
+    health: [
+      { domain: 'controller', state: 'good', reasonCode: 'ok', source: 'core_shm', observedAt: '2026-08-08T03:00:05Z', link: '/diagnostics' },
+      { domain: 'local_io', state: 'degraded', reasonCode: 'stale_points', source: 'plc_shm', observedAt: '2026-08-08T03:00:05Z', detail: '1 điểm stale/offline' },
+      { domain: 'modbus', state: 'unknown', reasonCode: 'not_configured', source: 'iobus_telemetry', observedAt: '2026-08-08T03:00:05Z' },
+      { domain: 'network', state: 'good', reasonCode: 'ok', source: 'kernel_interfaces', observedAt: '2026-08-08T03:00:05Z', detail: '10.0.0.9' },
+      { domain: 'historian', state: 'unknown', reasonCode: 'no_logged_points', source: 'historian_policy', observedAt: '2026-08-08T03:00:05Z' }
+    ],
+    attention: [
+      { id: 'alarm:A1', severity: 'high', category: 'alarm', title: 'Pump-02 communication failure', detail: 'Bus 1 · Slave 12', targetType: 'alarm', targetId: 'A1', observedAt: '2026-08-08T03:00:00Z' },
+      { id: 'point:UI-03', severity: 'medium', category: 'quality', title: 'UI-03 — STALE', detail: 'UI-03', targetType: 'point', targetId: 'UI-03' }
+    ],
+    capabilities: { digitalInputs: 0, universalInputs: 16, analogOutputs: 4, digitalOutputs: 4, modbusRtuBuses: 0, bacnetIpEnabled: false },
+    degraded: []
+  }
+}
+
+vi.mock('../../shared/api/client', () => ({ apiClient: { getPoints: mocks.getPoints } }))
+vi.mock('../../shared/api/overview', () => ({ fetchActivity: mocks.fetchActivity }))
 
 vi.mock('../../shared/hooks/useApi', () => ({
   useApi: (fetcher: unknown) => {
-    const data = fetcher === mocks.getPoints
-      ? points
-      : fetcher === mocks.getHealth
-        ? healthPayload
-        : []
-    return { data, loading: false, error: null, refetch: mocks.refetch }
+    if (fetcher === mocks.getPoints) return { data: points, loading: false, error: null, refetch: mocks.refetch }
+    const activity: ActivityPage = { schemaVersion: 1, generatedAt: '2026-08-08T03:00:05Z', items: [], nextCursor: null, retained: 0, capacity: 100 }
+    return { data: activity, loading: false, error: null, refetch: mocks.refetch }
   }
 }))
 
-vi.mock('../../shared/realtime', () => ({
-  useRealtime: () => ({ allPoints: [], lastPointEventAt: null })
-}))
-
-vi.mock('../../shared/components/ControllerDiagram', () => ({
-  ControllerDiagram: () => <div>Controller diagram</div>
-}))
+vi.mock('../../shared/realtime', () => ({ useRealtime: () => ({ allPoints: [], lastPointEventAt: null }) }))
+vi.mock('../auth', () => ({ useAuth: () => ({ session: { username: 'op1', role: 'operator' } }) }))
+vi.mock('../../shared/overview/OverviewProvider', () => ({ useOverview: () => overviewState }))
 
 beforeEach(() => {
   localStorage.clear()
-  localStorage.setItem('mkddc-lang', 'en')
-  healthPayload = { overall: 'ok', services: {} }
+  localStorage.setItem('mkddc-lang', 'vi')
+  overviewState = { data: baseOverview(), status: 'ready', error: null, receivedAt: Date.now(), refresh: vi.fn(async () => {}) }
 })
 afterEach(cleanup)
 
 function renderDashboard() {
-  return render(
-    <MemoryRouter>
-      <I18nProvider><DashboardPage /></I18nProvider>
-    </MemoryRouter>
-  )
+  return render(<MemoryRouter><I18nProvider><DashboardPage /></I18nProvider></MemoryRouter>)
 }
 
-/**
- * WEB-UX-001 — trung thực dữ liệu.
- *
- * Các test dưới đây chặn đúng một loại hồi quy: đặt lại một giá trị dự phòng
- * "trông hợp lý" khi API không trả dữ liệu. Bản cũ có `?? 23` (CPU), `?? 48`
- * (RAM), một uptime 12 ngày dựng sẵn, MAC và giờ hệ thống gán cứng trong JSX, và
- * `DeviceStatusCard()` không tham số nên luôn vẽ "ONLINE" màu xanh. Hậu quả:
- * một board đã mất liên lạc vẫn hiển thị y hệt một board khoẻ mạnh.
- */
-describe('Dashboard data honesty', () => {
-  it('shows a dash instead of invented metrics when health is unavailable', () => {
-    healthPayload = null
+describe('Landing PA3 — thông tin vận hành thay cho debug', () => {
+  it('không còn CPU/RAM/nhiệt độ/uptime/service/RS485-2 trên trang chủ', () => {
     renderDashboard()
-
-    expect(screen.getByText('UNKNOWN')).toBeInTheDocument()
-    expect(screen.queryByText('ONLINE')).not.toBeInTheDocument()
-    // Không còn con số dự phòng nào của bản cũ.
-    expect(screen.queryByText('23%')).not.toBeInTheDocument()
-    expect(screen.queryByText('48%')).not.toBeInTheDocument()
-    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('No data').length).toBeGreaterThanOrEqual(3)
-
-    // MAC và giờ hệ thống gán cứng của bản cũ phải biến mất hoàn toàn.
-    expect(screen.queryByText('00:0D:18:24:AC:01')).not.toBeInTheDocument()
-    expect(screen.queryByText('23/05/2025 14:32:18')).not.toBeInTheDocument()
+    // PA3-F01: sáu ô debug từng chiếm nửa trên của Landing.
+    expect(screen.queryByText(/CPU/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/BỘ NHỚ|MEMORY/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/UPTIME/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^SERVICES$/i)).not.toBeInTheDocument()
+    // PA3-F02: Rev A không có cổng RS-485 thứ hai.
+    expect(screen.queryByText(/RS485-2/i)).not.toBeInTheDocument()
   })
 
-  it('maps the real overall status onto the device card instead of always ONLINE', () => {
-    healthPayload = { overall: 'fault', services: {} }
+  it('hiện trạng thái tổng, tuổi dữ liệu và số cảnh báo theo mức', () => {
     renderDashboard()
-
-    expect(screen.getByText('FAULT')).toBeInTheDocument()
-    expect(screen.queryByText('ONLINE')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'DDC24-TANG-1' })).toBeInTheDocument()
+    expect(screen.getAllByText('DEGRADED').length).toBeGreaterThan(0)
+    expect(screen.getByText('HIGH 1')).toBeInTheDocument()
+    expect(screen.getByText('MEDIUM 1')).toBeInTheDocument()
+    expect(screen.getByText('CRITICAL 0')).toBeInTheDocument()
   })
 
-  it('renders device identity coming from the API', () => {
-    healthPayload = {
-      overall: 'ok',
-      services: {},
-      cpuPercent: 7.5,
-      deviceMac: 'AA:BB:CC:DD:EE:FF',
-      deviceIp: '10.0.0.9',
-      location: 'Panel B2',
-      description: 'AHU-2 loop'
-    }
+  it('mỗi ô Health Strip nói ra nguồn dữ liệu và giữ UNKNOWN tách khỏi GOOD', () => {
     renderDashboard()
+    const strip = screen.getByRole('region', { name: 'Sức khoẻ phân hệ' })
+    expect(within(strip).getByText('Bộ điều khiển')).toBeInTheDocument()
+    expect(within(strip).getAllByText('UNKNOWN').length).toBe(2) // modbus + historian
+    expect(within(strip).getByText(/core_shm/)).toBeInTheDocument()
+  })
 
-    expect(screen.getByText('AA:BB:CC:DD:EE:FF')).toBeInTheDocument()
-    // IP xuất hiện ở cả ô Ethernet lẫn bảng thông tin thiết bị.
-    expect(screen.getAllByText('10.0.0.9').length).toBeGreaterThan(0)
-    expect(screen.getByText('Panel B2')).toBeInTheDocument()
-    expect(screen.getByText('AHU-2 loop')).toBeInTheDocument()
-    expect(screen.getByText('8%')).toBeInTheDocument()
+  it('Attention xếp theo mức và mỗi dòng drill-down về đúng đối tượng', () => {
+    renderDashboard()
+    const links = screen.getAllByRole('link', { name: /Xem chi tiết/ })
+    expect(links[0]).toHaveAttribute('href', '/alarms?alarm=A1')
+    expect(links[1]).toHaveAttribute('href', '/monitor?point=UI-03')
+  })
+
+  it('Operating Summary không có hàng DI trên base SKU', () => {
+    renderDashboard()
+    expect(screen.getByRole('link', { name: 'UI' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'DI' })).not.toBeInTheDocument()
+  })
+
+  it('fail closed khi thiết bị trả schemaVersion lạ', () => {
+    overviewState = { data: null, status: 'incompatible', error: new Error('Overview schemaVersion 99'), receivedAt: null, refresh: vi.fn(async () => {}) }
+    renderDashboard()
+    expect(screen.getByText(/lệch phiên bản dữ liệu/i)).toBeInTheDocument()
+    // Không được vẽ tổng quan bằng dữ liệu đoán.
+    expect(screen.queryByRole('region', { name: 'Sức khoẻ phân hệ' })).not.toBeInTheDocument()
+  })
+
+  it('hiện — thay vì giờ hiện tại khi không point nào có mốc thời gian thật', () => {
+    const overview = baseOverview()
+    overview.lastDataAt = null
+    overviewState = { data: overview, status: 'ready', error: null, receivedAt: Date.now(), refresh: vi.fn(async () => {}) }
+    renderDashboard()
+    const label = screen.getByText('Dữ liệu mới nhất').parentElement
+    expect(label).toHaveTextContent('—')
   })
 })
 
-describe('Dashboard live trend point picker', () => {
-  it('allows changing the displayed points while enforcing a maximum of four', async () => {
+describe('My Workspace', () => {
+  it('ghim theo namespace controller + người dùng và hiện — cho point offline', async () => {
     const user = userEvent.setup()
-    const view = render(
-      <MemoryRouter>
-        <I18nProvider><DashboardPage /></I18nProvider>
-      </MemoryRouter>
-    )
+    renderDashboard()
 
-    await user.click(await screen.findByRole('button', { name: 'Points 4/4' }))
-    expect(screen.getByRole('heading', { name: 'POINT TREND' })).toBeInTheDocument()
-    const analogOutput = screen.getByRole('checkbox', { name: /AO-01/ })
-    expect(analogOutput).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: /Quản lý ghim/ }))
+    await user.click(screen.getByRole('checkbox', { name: /UI-03/ }))
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('mkddc:v1:workspace:DDC24-TANG-1:op1') ?? '[]')).toEqual(['UI-03']))
+    await user.click(screen.getByRole('button', { name: 'Xong' }))
 
-    await user.click(screen.getByRole('checkbox', { name: /UI-01/ }))
-    expect(analogOutput).toBeEnabled()
-    await user.click(analogOutput)
+    // §8: point offline hiện `—`, KHÔNG hiện `0`.
+    const tile = screen.getByRole('link', { name: /Cảm biến mất tín hiệu/ })
+    expect(within(tile).getByText('—')).toBeInTheDocument()
+    expect(within(tile).queryByText('0')).not.toBeInTheDocument()
+    expect(within(tile).getByText('OFFLINE')).toBeInTheDocument()
+  })
 
-    expect(screen.getByText('4/4')).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: /DO-01/ })).toBeDisabled()
-    expect(screen.getByRole('checkbox', { name: /VP1/ })).toBeDisabled()
+  it('nói ra khi ghim trỏ tới đối tượng không còn tồn tại', () => {
+    localStorage.setItem('mkddc:v1:workspace:DDC24-TANG-1:op1', JSON.stringify(['UI-99']))
+    renderDashboard()
+    expect(screen.getByText(/không còn trong cấu hình hiện tại/i)).toBeInTheDocument()
+  })
+})
 
-    await waitFor(() => expect(JSON.parse(localStorage.getItem('mkddc:dashboard-trend-points:v1') ?? '[]')).toEqual(['UI-02', 'UI-03', 'UI-04', 'AO-01']))
-    view.unmount()
-
-    render(
-      <MemoryRouter>
-        <I18nProvider><DashboardPage /></I18nProvider>
-      </MemoryRouter>
-    )
-    await user.click(await screen.findByRole('button', { name: 'Points 4/4' }))
-    expect(screen.getByRole('checkbox', { name: /UI-01/ })).not.toBeChecked()
-    expect(screen.getByRole('checkbox', { name: /AO-01/ })).toBeChecked()
+describe('Trend preview', () => {
+  it('chỉ đề xuất point có số đo và nhớ lựa chọn', async () => {
+    const user = userEvent.setup()
+    renderDashboard()
+    await user.click(screen.getByRole('button', { name: /Điểm 0\/4/ }))
+    // UI-03 chưa có số đo (`value === undefined`) nên KHÔNG được đề xuất: vẽ nó
+    // lên biểu đồ đồng nghĩa với vẽ một đường 0 không ai đo được (REV-FE-04).
+    expect(screen.queryByRole('checkbox', { name: /UI-03/ })).not.toBeInTheDocument()
+    for (const id of ['UI-01', 'UI-02', 'AO-01']) {
+      await user.click(screen.getByRole('checkbox', { name: new RegExp(id) }))
+    }
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('mkddc:v1:landing-trend-points') ?? '[]')).toEqual(['UI-01', 'UI-02', 'AO-01']))
   })
 })

@@ -42,6 +42,7 @@
 | [Modbus RTU Docs Sync Report](07_records/reviews/MODBUS_RTU_DOCS_SYNC_REPORT.md) | record đồng bộ 2026-08-04: mâu thuẫn đã xử lý, gap và kết luận gate |
 | [Modbus RTU Code Review](07_records/reviews/MODBUS_RTU_CODE_REVIEW_2026-08-04.md) | 14 defect source có dẫn chứng dòng code, tách khỏi gap thiết kế |
 | [Modbus RTU Implementation Plan](03_implementation/49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | Plan 49: Track A vá an toàn + Track B contract v2; bảng task, RACI, swimlane, mốc |
+| [Dashboard và Web UX PA3 Implementation Plan](03_implementation/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md) | Plan 52: data truth → shell → Dashboard → 12 use case → kiểm chứng và deploy Foxlinx |
 | [Modbus RTU — Báo cáo PM/CTO](07_records/reviews/MODBUS_RTU_PM_CTO_REVIEW_BRIEF_2026-08-04.md) | 10 rủi ro, 11 câu hỏi cần quyết định, 7 đề nghị phê duyệt |
 | [Khảo sát UART/RS485 board production](07_records/test-evidence/fw-som/2026-08-04-foxlinx-uart-rs485-survey.md) | bằng chứng read-only trên Foxlinx: 2 UART bật, không có cấu hình RS-485 trong DT |
 | [Physical I/O HIL Report](07_records/reviews/PHYSICAL_IO_HIL_REPORT.md) | phân biệt firmware host evidence với HIL/safe-state vật lý chưa thực hiện |

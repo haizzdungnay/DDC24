@@ -14,6 +14,7 @@ import {
   DiagramPage,
   HelpPage,
   ProgrammingPage,
+  SystemDiagnosticsPage,
   UnavailableFeaturePage
 } from '../features/dashboard'
 import { DevicesPage, DiagnosticsPage, MappingPage, ModbusRtuLayout, OverviewPage, PointsPage, PortsPage } from '../features/modbus-rtu'
@@ -24,6 +25,7 @@ import { CommissioningPage, InputsPage, MonitorPage, OutputsPage, UserParameters
 import { AppShell } from '../shared/components/AppShell'
 import { RequireRole } from '../shared/components/RequireRole'
 import { useI18n } from '../shared/i18n'
+import { OverviewProvider } from '../shared/overview/OverviewProvider'
 import { RealtimeProvider } from '../shared/realtime'
 import { LEGACY_GRAPH_DEMO_ENABLED } from '../shared/config'
 
@@ -31,9 +33,14 @@ function ProtectedShell() {
   const { isAuthenticated } = useAuth()
   const location = useLocation()
   if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  /* PA3-205: `OverviewProvider` bọc NGOÀI shell vì cả TopBar lẫn Landing đều
+     đọc cùng một snapshot. Đặt nó bên trong Dashboard sẽ đưa ta về đúng lỗi
+     PA3-F12: hai vùng của một màn hình poll riêng và nói hai điều khác nhau. */
   return (
     <RealtimeProvider>
-      <AppShell />
+      <OverviewProvider>
+        <AppShell />
+      </OverviewProvider>
     </RealtimeProvider>
   )
 }
@@ -86,6 +93,11 @@ export function App() {
         <Route path="alarms" element={<AlarmsPage />} />
         <Route path="alarms/history" element={<AlarmHistoryPage />} />
         <Route path="trends" element={<TrendsPage />} />
+        {/* PA3-206/F13: Diagnostics là trang THẬT, mở cho `viewer`. Trước đây
+            `SystemHealthPage` chỉ re-export Dashboard, nên không có nơi nào
+            chứa CPU/RAM/service ngoài chính trang chủ. */}
+        <Route path="diagnostics" element={<SystemDiagnosticsPage />} />
+        <Route path="eng/diagnostics" element={<Navigate to="/diagnostics" replace />} />
         <Route path="me" element={<UserInfoPage />} />
         <Route path="help" element={<HelpPage />} />
 

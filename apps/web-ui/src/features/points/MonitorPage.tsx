@@ -1,6 +1,9 @@
 import { Circle, Pencil, Power, RefreshCw, RotateCcw, Save, Search, ShieldAlert, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { POINT_UNIT_OPTIONS, aiUnitFromPointUnit, apiClient, pointUnitFromAiUnit } from '../../shared/api/client'
+import { createHistoryClient, type HistorySample } from '../../shared/api/history'
+import { ForcedBadge, QualityBadge } from '../../shared/components/pa3/StateAtoms'
 import { useAuth } from '../auth'
 import { roleAtLeast } from '../auth'
 import { displayPointName, normalizePointName, normalizePointTag, pointNameConflicts, pointFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
@@ -15,10 +18,31 @@ import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import { useRealtime } from '../../shared/realtime'
 import type { Point, PointKind, PointQuality, VirtualPoint } from '../../shared/types'
-import { canonicalVirtualPointId, cn, formatDateTime, formatTime, formatValue, isFreshIso, mergePointsById, pointDisplayTag, pointNumber, statusColor, statusFill } from '../../shared/utils'
+import { NO_DATA, canonicalVirtualPointId, cn, formatCountdown, formatDateTime, formatTime, formatValue, isFreshIso, mergePointsById, pointDisplayTag, pointNumber, statusColor, statusFill } from '../../shared/utils'
 
 const MAX_TREND_POINTS = 18
 const REALTIME_STALE_MS = 2500
+const historyClient = createHistoryClient()
+
+/**
+ * Bộ lọc trạng thái vận hành — UX-REQ §9.3 / UC-02.
+ *
+ * Đây là các câu hỏi người trực thật sự hỏi ("cái gì đang bị ép tay?", "cái gì
+ * mất liên lạc?"), không phải một trường dữ liệu đơn lẻ, nên gom thành một bộ
+ * chọn thay vì năm hộp kiểm rời.
+ */
+type MonitorStateFilter = 'all' | 'forced' | 'fault' | 'offline' | 'writable' | 'logging'
+
+function matchesStateFilter(point: Point, filter: MonitorStateFilter): boolean {
+  switch (filter) {
+    case 'forced': return point.forced === true
+    case 'fault': return point.fault === true || point.quality === 'bad'
+    case 'offline': return point.quality === 'offline' || point.online === false
+    case 'writable': return point.writable === true || point.kind === 'AO' || point.kind === 'DO'
+    case 'logging': return point.logEnabled === true
+    default: return true
+  }
+}
 
 // Hook to maintain a rolling buffer of trend values for a point
 function useTrendBuffer(pointId: string, value: number | boolean | string | undefined, trend: number[] | undefined): number[] {
@@ -135,22 +159,38 @@ export function MonitorPage() {
     setForceValue(defaultForceValue(point))
     setForceOpen(true)
   }
-  const [kind, setKind] = useState<PointKind | 'all'>('all')
-  const [quality, setQuality] = useState<PointQuality | 'all'>('all')
-  const [query, setQuery] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  /* PA3-402: bộ lọc và ô tìm kiếm nằm TRONG URL.
+   *
+   * Trước đây chúng chỉ là `useState`, nên F5 hay Back là mất sạch ngữ cảnh, và
+   * không có cách nào gửi cho đồng nghiệp một đường dẫn tới "các point Modbus
+   * đang offline" — thứ mà Attention trên Landing cần trỏ tới. */
+  const [searchParams, setSearchParams] = useSearchParams()
+  const kind = (searchParams.get('kind') as PointKind | 'all' | null) ?? 'all'
+  const quality = (searchParams.get('quality') as PointQuality | 'all' | null) ?? 'all'
+  const query = searchParams.get('q') ?? ''
+  const stateFilter = (searchParams.get('state') as MonitorStateFilter | null) ?? 'all'
+  const deepLinkedPoint = searchParams.get('point')
+
+  function setFilter(key: 'kind' | 'quality' | 'q' | 'state' | 'point', value: string) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (!value || value === 'all') next.delete(key)
+      else next.set(key, value)
+      return next
+    }, { replace: true })
+  }
+
+  const [selectedId, setSelectedId] = useState<string | null>(deepLinkedPoint)
   const [forceOpen, setForceOpen] = useState(false)
   const [forceValue, setForceValue] = useState('1')
   const [forceDurationMinutes, setForceDurationMinutes] = useState('10')
   const [pointModalId, setPointModalId] = useState<string | null>(null)
-  const [note, setNote] = useState('')
   const [editingName, setEditingName] = useState<string | null>(null)
   const [editingNameValue, setEditingNameValue] = useState('')
   const [editingUnit, setEditingUnit] = useState<string | null>(null)
   const [editingUnitValue, setEditingUnitValue] = useState('')
   const [editingTrend, setEditingTrend] = useState<string | null>(null)
   const [editingTrendEnabled, setEditingTrendEnabled] = useState<Record<string, boolean>>({})
-  const forceReleaseTimers = useRef<Record<string, number>>({})
 
   const polledPoints = pointsState.data ?? []
   const rawPoints = realtime.allPoints.length && isFreshIso(realtime.lastPointEventAt, REALTIME_STALE_MS)
@@ -168,9 +208,10 @@ export function MonitorPage() {
   const filtered = useMemo(() => points.filter((point) => {
     const matchesKind = kind === 'all' || point.kind === kind
     const matchesQuality = quality === 'all' || point.quality === quality
-    const haystack = `${point.id} ${point.tag} ${point.name}`.toLowerCase()
-    return matchesKind && matchesQuality && haystack.includes(query.toLowerCase())
-  }).sort((a, b) => a.id.localeCompare(b.id)), [kind, points, quality, query])
+    // §9.2: tìm theo id, tag, tên hiển thị và nguồn.
+    const haystack = `${point.id} ${point.tag} ${point.name} ${point.source}`.toLowerCase()
+    return matchesKind && matchesQuality && matchesStateFilter(point, stateFilter) && haystack.includes(query.toLowerCase())
+  }).sort((a, b) => a.id.localeCompare(b.id)), [kind, points, quality, query, stateFilter])
 
   const groups = useMemo(() => ({
     UI: filtered.filter((point) => point.kind === 'UI'),
@@ -191,11 +232,6 @@ export function MonitorPage() {
     analogGood: analogPoints.filter((point) => point.quality === 'good').length,
     abnormal: points.filter((point) => point.quality !== 'good').length
   }
-
-  useEffect(() => () => {
-    Object.values(forceReleaseTimers.current).forEach((timerId) => window.clearTimeout(timerId))
-    forceReleaseTimers.current = {}
-  }, [])
 
   function openPointModal(point: Point) {
     setSelectedId(point.id)
@@ -221,37 +257,40 @@ export function MonitorPage() {
     await pointsState.refetch()
   }
 
+  /**
+   * Ép giá trị một point với thời hạn do CORE cưỡng chế.
+   *
+   * PA3-F05 — bản trước có `forceReleaseTimers.current[point.id] =
+   * window.setTimeout(...)`: thời hạn của một lệnh ghi xuống output vật lý nằm
+   * trong tab trình duyệt. Đóng tab, ngủ máy, hay chỉ cần chuyển trang là hẹn
+   * giờ biến mất và output ở lại trạng thái ép tay không có gì nhả.
+   *
+   * Nay `durationSeconds` đi thẳng xuống Core (`ttlS` qua REST, `expire_s` qua
+   * WS); `scan_loop` giữ hạn và tự `release_ao/do`. Frontend chỉ hiển thị
+   * đồng hồ đếm ngược mà Core báo về.
+   */
   async function forcePointWithDuration(point: Point, value: number | boolean | string, durationSeconds: number) {
     if (!canForcePoint(point)) return
     if (!canForce) {
       denyForce()
       return
     }
-    if (forceReleaseTimers.current[point.id]) {
-      window.clearTimeout(forceReleaseTimers.current[point.id])
-      delete forceReleaseTimers.current[point.id]
-    }
     if (point.kind === 'virtual') {
+      // VP đi đường ghi cấu hình, Core không giữ TTL cho nó — nên KHÔNG gửi
+      // ttlS và cũng không giả lập thời hạn ở đây (UX-DES §11).
       await apiClient.forcePoint(point.id, value)
-      toast.push('success', pick(`Wrote ${pointDisplayTag(point)}`, `Wrote ${pointDisplayTag(point)}`))
+      toast.push('success', pick(`Đã ghi ${pointDisplayTag(point)}`, `Wrote ${pointDisplayTag(point)}`))
       await pointsState.refetch()
       return
     }
     if (realtime.forcePoint(point.id, value as number | boolean, durationSeconds)) {
-      toast.push('success', pick(`Force sent to ${pointDisplayTag(point)}`, `Force sent to ${pointDisplayTag(point)}`))
+      toast.push('success', pick(`Đã gửi lệnh ép ${pointDisplayTag(point)}`, `Force sent to ${pointDisplayTag(point)}`))
       window.setTimeout(() => void pointsState.refetch(), 250)
       window.setTimeout(() => void pointsState.refetch(), 1000)
       return
     }
-    await apiClient.forcePoint(point.id, value)
-    forceReleaseTimers.current[point.id] = window.setTimeout(() => {
-      void apiClient.forcePoint(point.id, value, true)
-        .then(() => pointsState.refetch())
-        .finally(() => {
-          delete forceReleaseTimers.current[point.id]
-        })
-    }, durationSeconds * 1000)
-    toast.push('success', pick(`Force sent to ${pointDisplayTag(point)}`, `Force sent to ${pointDisplayTag(point)}`))
+    await apiClient.forcePoint(point.id, value, false, durationSeconds)
+    toast.push('success', pick(`Đã gửi lệnh ép ${pointDisplayTag(point)}`, `Force sent to ${pointDisplayTag(point)}`))
     await pointsState.refetch()
   }
 
@@ -261,12 +300,8 @@ export function MonitorPage() {
       denyForce()
       return
     }
-    if (forceReleaseTimers.current[point.id]) {
-      window.clearTimeout(forceReleaseTimers.current[point.id])
-      delete forceReleaseTimers.current[point.id]
-    }
     await apiClient.forcePoint(point.id, point.value as number | boolean, true)
-    toast.push('success', pick(`Released ${pointDisplayTag(point)}`, `Released ${pointDisplayTag(point)}`))
+    toast.push('success', pick(`Đã nhả lệnh ép ${pointDisplayTag(point)}`, `Released ${pointDisplayTag(point)}`))
     await pointsState.refetch()
   }
 
@@ -417,15 +452,23 @@ export function MonitorPage() {
         <StatCard label={pick('Điểm lỗi / mất tín hiệu', 'Fault / signal-loss points')} value={stats.abnormal} detail={stats.total ? `${Math.round((stats.abnormal / stats.total) * 100)}%` : '—'} danger />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_180px_1fr_132px]">
-        <select value={kind} onChange={(event) => setKind(event.target.value as PointKind | 'all')} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
-          <option value="all">{pick('Nhóm I/O - Tất cả', 'I/O group - All')}</option><option value="UI">UI</option><option value="DO">DO</option><option value="AO">AO</option><option value="virtual">{pick('Ảo', 'Virtual')}</option>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[170px_170px_190px_1fr_132px]">
+        <select aria-label={pick('Lọc theo nhóm I/O', 'Filter by I/O group')} value={kind} onChange={(event) => setFilter('kind', event.target.value)} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
+          <option value="all">{pick('Nhóm I/O - Tất cả', 'I/O group - All')}</option><option value="UI">UI</option><option value="DO">DO</option><option value="AO">AO</option><option value="virtual">{pick('Ảo', 'Virtual')}</option><option value="modbus_rtu">Modbus RTU</option>
         </select>
-        <select value={quality} onChange={(event) => setQuality(event.target.value as PointQuality | 'all')} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
-          <option value="all">{pick('Trạng thái - Tất cả', 'Status - All')}</option><option value="good">Good</option><option value="uncertain">Uncertain</option><option value="bad">Bad</option><option value="stale">Stale</option>
+        <select aria-label={pick('Lọc theo chất lượng', 'Filter by quality')} value={quality} onChange={(event) => setFilter('quality', event.target.value)} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
+          <option value="all">{pick('Chất lượng - Tất cả', 'Quality - All')}</option><option value="good">Good</option><option value="uncertain">Uncertain</option><option value="bad">Bad</option><option value="stale">Stale</option><option value="offline">Offline</option>
+        </select>
+        <select aria-label={pick('Lọc theo trạng thái vận hành', 'Filter by operating state')} value={stateFilter} onChange={(event) => setFilter('state', event.target.value)} className="h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-sm">
+          <option value="all">{pick('Trạng thái - Tất cả', 'State - All')}</option>
+          <option value="forced">{pick('Đang ép tay', 'Forced')}</option>
+          <option value="fault">{pick('Đang lỗi', 'Fault')}</option>
+          <option value="offline">{pick('Mất liên lạc', 'Offline')}</option>
+          <option value="writable">{pick('Ghi được', 'Writable')}</option>
+          <option value="logging">{pick('Đang ghi lịch sử', 'Logging')}</option>
         </select>
         <label className="flex h-10 items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder={pick('Tìm kiếm điểm...', 'Search points...')} />
+          <input value={query} onChange={(event) => setFilter('q', event.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder={pick('Tìm theo id, tag, tên, nguồn...', 'Search id, tag, name, source...')} />
           <Search className="h-4 w-4 text-[var(--c-text-dim)]" />
         </label>
         <Button icon={<RefreshCw className="h-4 w-4" />} onClick={pointsState.refetch}>{pick('Làm mới', 'Refresh')}</Button>
@@ -440,8 +483,7 @@ export function MonitorPage() {
         </div>
         {selected && <DetailPanel
           point={selected}
-          note={note}
-          setNote={setNote}
+          canMutate={canForce}
           editingName={editingName}
           editingNameValue={editingNameValue}
           setEditingNameValue={setEditingNameValue}
@@ -477,15 +519,58 @@ export function MonitorPage() {
         />
       )}
 
-      <Modal open={forceOpen} title={`${selected?.kind === 'virtual' ? 'Write' : 'Force'} ${selected?.id ?? ''}`} danger={selected?.kind !== 'virtual'} confirmLabel={selected?.kind === 'virtual' ? 'Write' : pick('Force output', 'Force output')} onConfirm={confirmForce} onClose={() => setForceOpen(false)}>
-        <div className="space-y-4">
-          <div className="flex gap-3 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-[var(--c-warn-fg)]">
-            <ShieldAlert className="h-5 w-5 shrink-0" />
-            {pick('Force uses the duration below. Use only for commissioning or controlled troubleshooting.', 'Force uses the duration below. Use only for commissioning or controlled troubleshooting.')}
+      {/* Hộp thoại xác nhận ép tay — UX-DES §11 và UX-REQ §12.
+          Phải nói rõ ĐỐI TƯỢNG, giá trị hiện tại, giá trị mới, nguồn đang giữ
+          quyền và ai đang thực hiện. Không có bộ chọn priority: mọi lệnh từ
+          web đều là Local Manual mức 2 (UC-04). */}
+      <Modal
+        open={forceOpen}
+        title={selected ? `${selected.kind === 'virtual' ? pick('Ghi giá trị', 'Write value') : pick('Ép tay', 'Manual override')} — ${pointDisplayTag(selected)}` : ''}
+        danger={selected?.kind !== 'virtual'}
+        confirmLabel={selected?.kind === 'virtual' ? pick('Ghi giá trị', 'Write value') : pick('Áp dụng ép tay', 'Apply override')}
+        onConfirm={confirmForce}
+        onClose={() => setForceOpen(false)}
+      >
+        {selected && (
+          <div className="space-y-4">
+            <div className="flex gap-3 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-[var(--c-warn-fg)]">
+              <ShieldAlert className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span>
+                {selected.kind === 'virtual'
+                  ? pick('Ghi trực tiếp vào điểm ảo. Không có thời hạn tự nhả cho loại điểm này.', 'Writes directly to the virtual point. There is no automatic release for this point type.')
+                  : pick('Lệnh này tạo override Local Manual và do bộ điều khiển tự nhả khi hết thời hạn, kể cả khi bạn đóng trình duyệt.', 'This creates a Local Manual override released by the controller when the duration expires, even if you close the browser.')}
+              </span>
+            </div>
+
+            <dl className="grid grid-cols-[130px_1fr] gap-y-2 text-sm">
+              <dt className="text-[var(--c-text-dim)]">{pick('Đối tượng', 'Object')}</dt>
+              <dd className="font-semibold">{pointDisplayTag(selected)} — {selected.name}</dd>
+              <dt className="text-[var(--c-text-dim)]">{pick('Giá trị hiện tại', 'Current value')}</dt>
+              <dd className="mono">{formatValue(selected.value, selected.unit)}</dd>
+              <dt className="text-[var(--c-text-dim)]">{pick('Nguồn đang giữ', 'Current owner')}</dt>
+              <dd>{selected.priority ?? NO_DATA}</dd>
+              <dt className="text-[var(--c-text-dim)]">{pick('Người thực hiện', 'Actor')}</dt>
+              <dd>{session?.username ?? NO_DATA} · {session?.role ?? NO_DATA}</dd>
+            </dl>
+
+            <label className="block text-sm">
+              {pick('Giá trị mới', 'New value')}
+              <input value={forceValue} onChange={(event) => setForceValue(event.target.value)} className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3" />
+            </label>
+            {selected.kind !== 'virtual' && (
+              <label className="block text-sm">
+                {pick('Thời hạn (phút) — do bộ điều khiển cưỡng chế', 'Duration (minutes) — enforced by the controller')}
+                <input type="number" min="1" max="1440" step="1" value={forceDurationMinutes} onChange={(event) => setForceDurationMinutes(event.target.value)} className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3" />
+              </label>
+            )}
+            {selected.forced && (
+              <p className="rounded-[var(--radius)] border border-[var(--c-force)] bg-[var(--c-force-bg)] px-3 py-2 text-xs text-[var(--c-force)]">
+                {pick('Điểm này ĐANG bị ép tay', 'This point is ALREADY under manual override')}
+                {selected.overrideExpiresInS ? ` · ${pick('còn', 'remaining')} ${formatCountdown(selected.overrideExpiresInS)}` : ''}
+              </p>
+            )}
           </div>
-          <label className="block text-sm">{pick('Giá trị Force', 'Force value')}<input value={forceValue} onChange={(event) => setForceValue(event.target.value)} className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3" /></label>
-          {selected?.kind !== 'virtual' && <label className="block text-sm">{pick('Force duration (minutes)', 'Force duration (minutes)')}<input type="number" min="1" step="1" value={forceDurationMinutes} onChange={(event) => setForceDurationMinutes(event.target.value)} className="mono mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3" /></label>}
-        </div>
+        )}
       </Modal>
     </div>
   )
@@ -761,8 +846,7 @@ function PointInfo({ label, value }: { label: string; value: React.ReactNode }) 
 
 function DetailPanel({
   point,
-  note,
-  setNote,
+  canMutate,
   editingName,
   editingNameValue,
   setEditingNameValue,
@@ -785,8 +869,7 @@ function DetailPanel({
   conflictIds
 }: {
   point: Point
-  note: string
-  setNote: (value: string) => void
+  canMutate: boolean
   editingName: string | null
   editingNameValue: string
   setEditingNameValue: (value: string) => void
@@ -819,7 +902,6 @@ function DetailPanel({
     : undefined
   const canForce = canForcePoint(point)
   const groupText = `${point.kind} - ${kindLabel[point.kind]}`
-  const history = [0, 1, 2, 3, 4].map((index) => ({ time: new Date(Date.now() - index * 7 * 60_000).toISOString(), value: index % 2 === 0 ? active : !active }))
   const isEditing = editingName === point.id
   const isEditingUnit = editingUnit === point.id
   const isEditingTrend = editingTrend === point.id
@@ -893,15 +975,49 @@ function DetailPanel({
               )}
             </div>
           </div>
+          {/* PA3-F06/F07 — bốn dòng bịa dữ liệu đã bị xoá khỏi khối này:
+              `Kiểu tín hiệu` mặc định `Dry Contact` khi backend không nói gì,
+              `Bộ đếm kích hoạt` gán cứng `15` cho MỌI point, mô tả riêng cho
+              `UI-05`, và `Trạng thái logic` ép `Boolean(value)` lên cả point
+              analog nên một cảm biến 23.6 °C hiện "logic 1 / Kích hoạt".
+
+              Nay: thiếu dữ liệu thì hiện `—`, và trạng thái nhị phân chỉ hiện
+              với point THỰC SỰ nhị phân. */}
           <dl className="grid grid-cols-[118px_1fr] gap-y-3 text-xs">
             <dt className="text-[var(--c-text-dim)]">{pick('Nhóm I/O', 'I/O group')}</dt><dd>{groupText}</dd>
-            <dt className="text-[var(--c-text-dim)]">{pick('Kiểu tín hiệu', 'Signal type')}</dt><dd>{point.sensorType ?? 'Dry Contact'}</dd>
-            <dt className="text-[var(--c-text-dim)]">{pick('Trạng thái hiện tại', 'Current status')}</dt><dd className="font-semibold" style={isBinary ? { color: binaryTextColor } : undefined}>{active ? pick('ON (Kích hoạt)', 'ON (Active)') : 'OFF'}</dd>
-            <dt className="text-[var(--c-text-dim)]">{pick('Trạng thái logic', 'Logic state')}</dt><dd>{active ? 1 : 0}</dd>
-            <dt className="text-[var(--c-text-dim)]">{pick('Thời gian thay đổi', 'Changed at')}</dt><dd className="mono">{formatDateTime(point.updatedAt)}</dd>
+            <dt className="text-[var(--c-text-dim)]">{pick('Kiểu tín hiệu', 'Signal type')}</dt><dd>{point.signalType ?? point.sensorType ?? NO_DATA}</dd>
+            <dt className="text-[var(--c-text-dim)]">{pick('Chất lượng', 'Quality')}</dt>
+            <dd><QualityBadge quality={point.quality} reason={point.qualityReason} /></dd>
+            {isBinary && (
+              <>
+                <dt className="text-[var(--c-text-dim)]">{pick('Trạng thái hiện tại', 'Current status')}</dt>
+                <dd className="font-semibold" style={{ color: binaryTextColor }}>{active ? pick('ON (Kích hoạt)', 'ON (Active)') : 'OFF'}</dd>
+              </>
+            )}
+            {!isBinary && (
+              <>
+                <dt className="text-[var(--c-text-dim)]">{pick('Giá trị kỹ thuật', 'Engineering value')}</dt>
+                <dd className="mono font-semibold">{formatValue(point.value, point.unit)}</dd>
+              </>
+            )}
+            {point.raw !== undefined && (
+              <>
+                <dt className="text-[var(--c-text-dim)]">{pick('Giá trị thô', 'Raw value')}</dt>
+                <dd className="mono">{formatValue(point.raw, point.rawUnit)}</dd>
+              </>
+            )}
+            <dt className="text-[var(--c-text-dim)]">{pick('Nguồn', 'Source')}</dt><dd>{point.source || NO_DATA}</dd>
+            <dt className="text-[var(--c-text-dim)]">{pick('Nguồn ưu tiên', 'Priority owner')}</dt><dd>{point.priority ?? NO_DATA}</dd>
             <dt className="text-[var(--c-text-dim)]">{pick('Thời gian cập nhật', 'Updated at')}</dt><dd className="mono">{formatDateTime(point.updatedAt)}</dd>
-            <dt className="text-[var(--c-text-dim)]">{pick('Bộ đếm kích hoạt', 'Activation count')}</dt><dd>15</dd>
-            <dt className="text-[var(--c-text-dim)]">{pick('Mô tả', 'Description')}</dt><dd>{point.id === 'UI-05' ? pick('Ngõ vào universal dạng tiếp điểm', 'Universal input dry contact') : point.name}</dd>
+            {point.kind === 'modbus_rtu' && (
+              <>
+                <dt className="text-[var(--c-text-dim)]">Bus / Slave</dt>
+                <dd className="mono">{point.busId !== undefined ? `Bus ${point.busId} · Slave ${point.slaveAddr ?? NO_DATA}` : NO_DATA}</dd>
+                <dt className="text-[var(--c-text-dim)]">{pick('Kết nối', 'Online')}</dt>
+                <dd>{point.online === undefined ? NO_DATA : point.online ? pick('Có', 'Yes') : pick('Không', 'No')}</dd>
+              </>
+            )}
+            <dt className="text-[var(--c-text-dim)]">{pick('Mô tả', 'Description')}</dt><dd>{point.name || NO_DATA}</dd>
             {isAnalog && (
               <div className="col-span-2 flex items-center justify-between rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2">
                 <span className="text-xs text-[var(--c-text-dim)]">{pick('Hiển thị trend', 'Show trend')}</span>
@@ -928,27 +1044,110 @@ function DetailPanel({
               </div>
             )}
           </dl>
-          <StatusBadge state={point.forced ? 'force' : point.quality} />
-          {canForce && <Button className="w-full" variant={point.kind === 'virtual' ? 'primary' : 'danger'} onClick={onForce}>{point.kind === 'virtual' ? 'Write value' : 'Force output'}</Button>}
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge state={point.quality} />
+            {point.forced && <ForcedBadge remainingLabel={formatCountdown(point.overrideExpiresInS)} />}
+          </div>
+          {canForce && (
+            <div className="space-y-2">
+              <Button
+                className="w-full"
+                variant={point.kind === 'virtual' ? 'primary' : 'danger'}
+                disabled={!canMutate}
+                onClick={onForce}
+              >
+                {point.kind === 'virtual' ? pick('Ghi giá trị', 'Write value') : pick('Ép giá trị', 'Force output')}
+              </Button>
+              {/* UX-REQ §10: thiếu quyền thì KHOÁ nút và nói ra quyền cần có.
+                  Bày một nút bấm được rồi trả 403 là để người dùng tự phát
+                  hiện giới hạn bằng cách va vào nó. */}
+              {!canMutate && (
+                <p className="text-xs text-[var(--c-text-dim)]">
+                  {pick('Cần vai trò operator trở lên để điều khiển điểm này.', 'Operator role or higher is required to command this point.')}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </Panel>
 
-      <Panel title={pick('Lịch sử trạng thái', 'Status history')}>
-        <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)]">
-          <div className="grid grid-cols-[1fr_86px] bg-[var(--c-surface-2)] px-3 py-2 text-[10px] uppercase text-[var(--c-text-dim)]"><span>{pick('Thời gian', 'Time')}</span><span>{pick('Trạng thái', 'Status')}</span></div>
-          {history.map((item) => {
-            const itemState = item.value ? 'on' : 'off'
-            return <div key={item.time} className="grid grid-cols-[1fr_86px] border-t border-[var(--c-border)] px-3 py-2 text-xs"><span className="mono">{formatDateTime(item.time)}</span><span className="font-semibold" style={{ color: statusColor(itemState) }}>{item.value ? 'ON' : 'OFF'} ●</span></div>
-          })}
-        </div>
-        <button className="mt-3 text-xs font-semibold text-[var(--c-accent)]">{pick('Xem thêm lịch sử', 'View more history')} →</button>
-      </Panel>
-
-      <Panel title={pick('Ghi chú', 'Notes')}>
-        <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={pick('Nhập ghi chú...', 'Enter notes...')} className="min-h-[84px] w-full resize-none rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3 text-sm outline-none" />
-        <Button className="mt-3 w-full" variant="primary" icon={<Save className="h-4 w-4" />}>{pick('Lưu ghi chú', 'Save note')}</Button>
-      </Panel>
+      <PointHistoryPanel point={point} />
     </div>
+  )
+}
+
+/**
+ * Lịch sử THẬT của một point — PA3-403.
+ *
+ * Thay cho khối cũ dựng 5 dòng bằng `[0,1,2,3,4].map(...)` với giá trị luân
+ * phiên ON/OFF và mốc thời gian cách nhau đúng 7 phút. Trông như dữ liệu vận
+ * hành, nhưng không có dòng nào đến từ thiết bị — người đọc không có cách nào
+ * phân biệt (PA3-F06).
+ *
+ * Nay đọc historian thật. Point chưa bật ghi lịch sử thì nói rõ là chưa bật,
+ * chứ không bịa ra một chuỗi mẫu.
+ */
+function PointHistoryPanel({ point }: { point: Point }) {
+  const { pick } = useI18n()
+  const [state, setState] = useState<{ status: 'loading' | 'ready' | 'error' | 'disabled'; rows: HistorySample[]; message?: string }>({ status: 'loading', rows: [] })
+
+  useEffect(() => {
+    let cancelled = false
+    if (point.logEnabled === false) {
+      setState({ status: 'disabled', rows: [] })
+      return () => { cancelled = true }
+    }
+    setState({ status: 'loading', rows: [] })
+    const to = new Date()
+    const from = new Date(to.getTime() - 60 * 60 * 1000)
+    historyClient
+      .query({ pointIds: [point.id], from, to, resolution: '1m', maxPoints: 60 })
+      .then((response) => {
+        if (cancelled) return
+        const samples = response.series.find((series) => series.pointId === point.id)?.samples ?? []
+        setState({ status: 'ready', rows: samples.slice(-12).reverse() })
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setState({ status: 'error', rows: [], message: error instanceof Error ? error.message : String(error) })
+      })
+    return () => { cancelled = true }
+  }, [point.id, point.logEnabled])
+
+  return (
+    <Panel title={pick('Lịch sử 60 phút', 'Last 60 minutes')}>
+      {state.status === 'loading' && <StateBlock state="loading" title={pick('Đang đọc lịch sử', 'Loading history')} />}
+      {state.status === 'disabled' && (
+        <StateBlock
+          state="empty"
+          title={pick('Điểm này chưa bật ghi lịch sử', 'History logging is off for this point')}
+          detail={pick('Bật ghi lịch sử trong cấu hình điểm để có dữ liệu ở đây.', 'Enable logging in the point configuration to collect data here.')}
+        />
+      )}
+      {state.status === 'error' && (
+        <StateBlock state="error" title={pick('Không đọc được lịch sử', 'History unavailable')} detail={state.message} />
+      )}
+      {state.status === 'ready' && state.rows.length === 0 && (
+        <StateBlock state="empty" title={pick('Không có mẫu nào trong 60 phút qua', 'No samples in the last 60 minutes')} />
+      )}
+      {state.status === 'ready' && state.rows.length > 0 && (
+        <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)]">
+          <div className="grid grid-cols-[1fr_88px_78px] bg-[var(--c-surface-2)] px-3 py-2 text-[10px] uppercase text-[var(--c-text-dim)]">
+            <span>{pick('Thời gian', 'Time')}</span><span>{pick('Giá trị', 'Value')}</span><span>{pick('Chất lượng', 'Quality')}</span>
+          </div>
+          {state.rows.map((sample) => (
+            <div key={sample.timeMs} className="grid grid-cols-[1fr_88px_78px] border-t border-[var(--c-border)] px-3 py-2 text-xs">
+              <span className="mono">{formatDateTime(sample.time)}</span>
+              <span className="mono">{formatValue(sample.value, point.unit)}</span>
+              <span className="font-semibold" style={{ color: statusColor(sample.quality.toLowerCase() as PointQuality) }}>{sample.quality}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <Link to={`/trends?points=${encodeURIComponent(point.id)}`} className="mt-3 inline-block text-xs font-semibold text-[var(--c-accent)]">
+        {pick('Mở trong Trends', 'Open in Trends')} →
+      </Link>
+    </Panel>
   )
 }
 

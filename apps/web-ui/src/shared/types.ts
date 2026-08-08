@@ -20,9 +20,24 @@ export interface Point {
   quality: PointQuality
   source: string
   priority?: string
-  updatedAt: string
+  /** `undefined` = producer KHÔNG cấp mốc thời gian.
+   *
+   *  PA3-F04: bản trước điền `nowIso()` vào chỗ này, nên một point không ai
+   *  biết cập nhật lúc nào lại hiện "vừa xong" — chính xác là kiểu dối trá mà
+   *  người trực ca không có cách nào phát hiện. Nơi hiển thị phải ra `—`. */
+  updatedAt?: string
   fault?: boolean
   forced?: boolean
+  /** Số giây còn lại của lệnh ép tay, do Core cấp (PA3-107).
+   *  `undefined` = không có lệnh có thời hạn, KHÔNG phải "hết hạn". */
+  overrideExpiresInS?: number
+  /** Lý do chất lượng do producer nói ra; UI hiển thị nguyên văn (D-07). */
+  qualityReason?: string
+  busId?: number
+  slaveAddr?: number
+  exceptionCode?: number
+  /** `undefined` = producer không báo trạng thái kết nối, khác hẳn `false`. */
+  online?: boolean
   sensorType?: string
   signalType?: VirtualPointSignalType | string
   writable?: boolean
@@ -328,6 +343,145 @@ export interface HealthResponse {
 export interface CurrentUser {
   username: string
   role: UserRole
+}
+
+/* ── PA3 Overview read model ─────────────────────────────────────────────────
+ *
+ * Một snapshot duy nhất cho Landing (PA3-D02). `schemaVersion` là hợp đồng:
+ * thấy version lạ thì UI fail-closed, không đoán default — guardrail §10.3.
+ */
+
+export const OVERVIEW_SCHEMA_VERSION = 1
+export const ACTIVITY_SCHEMA_VERSION = 1
+
+/** Năm trạng thái phân biệt được. `unknown` KHÔNG phải `good`. */
+export type OverviewHealthState = 'good' | 'degraded' | 'fault' | 'offline' | 'unknown'
+export type AttentionSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info'
+export type AttentionCategory = 'alarm' | 'communication' | 'quality' | 'forced'
+export type AttentionTargetType = 'point' | 'alarm' | 'modbus_device' | 'bus' | 'subsystem'
+
+export interface OverviewController {
+  deviceName?: string
+  location?: string
+  firmware?: string
+  webVersion?: string
+  ip?: string
+  mac?: string
+  systemTime?: string
+  uptimeS?: number
+}
+
+export interface OverviewDomainHealth {
+  domain: string
+  state: OverviewHealthState
+  reasonCode: string
+  source: string
+  observedAt: string
+  detail?: string
+  link?: string
+}
+
+export interface OverviewAlarmCounts {
+  critical: number
+  high: number
+  medium: number
+  low: number
+  info: number
+  unacked: number
+  total: number
+}
+
+export interface OverviewPointGroup {
+  kind: string
+  total: number
+  good: number
+  uncertain: number
+  bad: number
+  stale: number
+  offline: number
+  forced: number
+}
+
+export interface OverviewPointSummary {
+  total: number
+  good: number
+  uncertain: number
+  bad: number
+  stale: number
+  offline: number
+  forced: number
+  groups: OverviewPointGroup[]
+}
+
+export interface OverviewAttentionItem {
+  id: string
+  severity: AttentionSeverity
+  category: AttentionCategory
+  title: string
+  detail?: string
+  targetType: AttentionTargetType
+  targetId: string
+  observedAt?: string
+}
+
+export interface OverviewCapabilities {
+  digitalInputs: number
+  universalInputs: number
+  analogOutputs: number
+  digitalOutputs: number
+  modbusRtuBuses: number
+  bacnetIpEnabled: boolean
+}
+
+export interface OverviewResponse {
+  schemaVersion: number
+  generatedAt: string
+  controller: OverviewController
+  connected: boolean
+  /** `null` = không point nào có timestamp thật. KHÔNG được thay bằng giờ hiện tại. */
+  lastDataAt: string | null
+  overallState: OverviewHealthState
+  overallReasonCode: string
+  alarms: OverviewAlarmCounts
+  points: OverviewPointSummary
+  health: OverviewDomainHealth[]
+  attention: OverviewAttentionItem[]
+  capabilities: OverviewCapabilities
+  degraded: string[]
+}
+
+export type ActivityKind = 'user' | 'system'
+
+export interface ActivityEvent {
+  id: number
+  time: string
+  kind: ActivityKind
+  actor: string
+  role?: string
+  action: string
+  objectType?: string
+  objectId?: string
+  outcome: string
+  reasonCode?: string
+  correlationId?: string
+  detail?: string
+}
+
+export interface ActivityPage {
+  schemaVersion: number
+  generatedAt: string
+  items: ActivityEvent[]
+  nextCursor: number | null
+  retained: number
+  capacity: number
+}
+
+export interface ActivityQuery {
+  limit?: number
+  before?: number
+  kind?: ActivityKind
+  action?: string
+  objectId?: string
 }
 
 export interface Envelope<TPayload = unknown> {

@@ -38,7 +38,7 @@ export function roleLabel(role: UserRole): string {
  * | `/eng/inputs`            | admin     | `PUT /points/{id}/config` → `RoleAdmin`           |
  * | `/eng/virtual-points`    | admin     | `POST/PUT/DELETE /virtual-points` → `RoleAdmin`   |
  * | `/eng/alarm-settings`    | admin     | `PUT /alarm-settings` → `RoleAdmin`               |
- * | `/eng/scheduler`         | admin     | `PUT /schedules` → `RoleAdmin`                    |
+ * | `/eng/scheduler`         | viewer    | `GET /schedules`, `POST /schedules/{id}/simulate` → `RoleViewer` |
  * | `/eng/user-parameters`   | admin     | `PUT /system/config/*` → `RoleAdmin`              |
  * | `/settings/time`         | admin     | `PUT /system/config/time` → `RoleAdmin`           |
  * | `/settings/device`       | admin     | `GET/PUT /system/config/device` → `RoleAdmin`     |
@@ -61,7 +61,18 @@ export const ROUTE_MIN_ROLE: Record<string, UserRole> = {
    * trang cho vai trò không phải admin. */
   '/eng/modbus-rtu': 'viewer',
   '/eng/alarm-settings': 'admin',
-  '/eng/scheduler': 'admin',
+  /* PA3-F09: route này từng ép `admin`, trong khi backend cho `viewer` đọc
+   * (`GET /schedules`, `GET /schedules/{id}/runtime`, `GET .../audit`) và cho
+   * `operator` bật/tắt (`POST .../enable`, `.../disable`).
+   *
+   * Hệ quả của bản cũ: người trực ca không xem được lịch nào đang chạy — đúng
+   * thông tin cần nhất khi một thiết bị chạy ngoài mong đợi — và operator không
+   * dừng được một lịch dù server cho phép. Frontend siết chặt hơn server ở đây
+   * không làm hệ thống an toàn hơn, chỉ làm nó không dùng được.
+   *
+   * Mutation cấu hình (tạo/sửa/publish/rollback) vẫn khoá theo role BÊN TRONG
+   * trang, và backend vẫn là nơi chặn cuối cùng. */
+  '/eng/scheduler': 'viewer',
   '/eng/user-parameters': 'admin',
   '/settings/time': 'admin',
   '/settings/device': 'admin',

@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Activity, Cable, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, PanelLeft, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, TestTube2, Users, X, Zap } from 'lucide-react'
+import { Bell, CalendarDays, Activity, Cable, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, PanelLeft, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Stethoscope, TestTube2, Users, X, Zap } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
@@ -9,6 +9,14 @@ import { LEGACY_GRAPH_DEMO_ENABLED } from '../config'
 import type { HealthResponse, UserRole } from '../types'
 import { cn } from '../utils'
 
+/**
+ * Bốn nhóm điều hướng theo UX-DES §3 và IA của UX-REQ §6.
+ *
+ * Thay đổi so với bản trước: `Cài đặt` (trộn hiển thị, người dùng, mạng, thời
+ * gian, thiết bị) tách thành `Vận hành` và `Hệ thống`, và `Chẩn đoán` xuất hiện
+ * như một mục THẬT trong nhóm Kỹ thuật. Trước đây không có mục nào dẫn tới
+ * trang chẩn đoán vì trang đó không tồn tại — nó chính là Dashboard (PA3-F13).
+ */
 const groups = [
   {
     id: 'overview',
@@ -21,30 +29,35 @@ const groups = [
     ]
   },
   {
-    id: 'settings',
-    titleKey: 'settings',
+    id: 'operation',
+    titleKey: 'operation',
     items: [
-      { to: '/settings/display', key: 'display', icon: Gauge },
-      { to: '/settings/users', key: 'users', icon: Users },
-      { to: '/settings/network', key: 'network', icon: Network },
-      { to: '/settings/time', key: 'time', icon: Clock3 },
-      { to: '/settings/device', key: 'device', icon: Settings }
+      { to: '/eng/scheduler', key: 'scheduler', icon: CalendarDays },
+      { to: '/eng/commissioning', key: 'commissioning', icon: TestTube2 }
     ]
   },
   {
     id: 'engineering',
     titleKey: 'engineering',
     items: [
-      { to: '/eng/scheduler', key: 'scheduler', icon: CalendarDays },
-      { to: '/eng/commissioning', key: 'commissioning', icon: TestTube2 },
-      { to: '/eng/programming', key: 'programming', icon: ShieldCheck },
       { to: '/eng/inputs', key: 'inputs', icon: Activity },
       { to: '/eng/outputs', key: 'outputs', icon: Zap },
       { to: '/eng/virtual-points', key: 'virtual-points', icon: SlidersHorizontal },
       { to: '/eng/modbus-rtu', key: 'modbus-rtu', icon: Cable },
-      // { to: '/eng/user-parameters', key: 'user-parameters', icon: ListChecks },
-      // { to: '/eng/aux', key: 'aux', icon: Settings },
-      { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell }
+      { to: '/eng/alarm-settings', key: 'alarm-settings', icon: Bell },
+      { to: '/diagnostics', key: 'diagnostics', icon: Stethoscope },
+      { to: '/eng/programming', key: 'programming', icon: ShieldCheck }
+    ]
+  },
+  {
+    id: 'system',
+    titleKey: 'system',
+    items: [
+      { to: '/settings/network', key: 'network', icon: Network },
+      { to: '/settings/device', key: 'device', icon: Settings },
+      { to: '/settings/time', key: 'time', icon: Clock3 },
+      { to: '/settings/users', key: 'users', icon: Users },
+      { to: '/settings/display', key: 'display', icon: Gauge }
     ]
   }
 ] as const
@@ -79,7 +92,7 @@ function NavGroups({ alarmCount, collapsed, role, onNavigate }: {
   onNavigate?: () => void
 }) {
   const { t } = useI18n()
-  const [openGroups, setOpenGroups] = useState<Record<GroupId, boolean>>({ overview: true, settings: true, engineering: true })
+  const [openGroups, setOpenGroups] = useState<Record<GroupId, boolean>>({ overview: true, operation: true, engineering: true, system: true })
 
   function toggleGroup(id: GroupId) {
     setOpenGroups((current) => ({ ...current, [id]: !current[id] }))

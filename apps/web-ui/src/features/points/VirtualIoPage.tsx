@@ -14,7 +14,7 @@ import { TrendChart } from '../../shared/components/TrendChart'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import type { Point, TrendSample, VirtualPoint, VirtualPointSignalType } from '../../shared/types'
-import { cn, formatValue, pointNumber } from '../../shared/utils'
+import { cn, formatTime, formatValue, pointNumber } from '../../shared/utils'
 
 type ViewMode = 'summary' | 'wizard' | 'advanced'
 type WizardStep = 'signal' | 'min' | 'max' | 'range' | 'unit' | 'filter' | 'cal' | 'math'
@@ -416,7 +416,10 @@ function useVpTrend(pointId: string, point?: Point): { data: VpTrendSample[]; re
     const value = pointNumber(point)
     // Chưa có số đo thì bỏ qua mẫu thay vì ghi 0 (REV-FE-04).
     if (value === null) return
-    const time = new Date(point.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    // PA3-F04: không có mốc thời gian của producer thì KHÔNG đặt mẫu này
+    // lên trục thời gian bằng giờ máy trạm — biểu đồ sẽ nói dối về độ tươi.
+    if (!point.updatedAt) return
+    const time = formatTime(point.updatedAt)
     setBuffers((current) => {
       const existing = current[pointId] ?? []
       const last = existing[existing.length - 1]

@@ -19,9 +19,21 @@ type pointForcer interface {
 	ForcePoint(context.Context, string, any, bool) (PointDTO, error)
 }
 
+// pointTTLForcer là đường ghi có thời hạn do Core sở hữu. Tách khỏi
+// `pointForcer` để một core client cũ (hoặc stub trong test) vẫn dùng được
+// đường không TTL thay vì panic.
+type pointTTLForcer interface {
+	ForcePointTTL(ctx context.Context, id string, value any, release bool, ttlS uint32, user string) (PointDTO, error)
+}
+
+// maxOverrideTTLS khớp trần của Core (`web_ipc.cpp`: 1..86400). Kiểm ở đây để
+// người dùng nhận lỗi 400 có nghĩa thay vì `rejected: bad_ttl` từ IPC.
+const maxOverrideTTLS = 86400
+
 type forcePointBody struct {
 	value   any
 	release bool
+	ttlS    uint32
 }
 
 func (a *App) handlePoints(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +63,40 @@ func (a *App) ReadPoints(ctx context.Context) ([]PointDTO, error) {
 	} else {
 		points = []PointDTO{}
 	}
-	return a.overlayPointMetadata(a.overlayVirtualPoints(points)), err
+	return a.overlayOverrideState(ctx, a.overlayPointMetadata(a.overlayVirtualPoints(points))), err
+}
+
+// overlayOverrideState dán trạng thái ép tay do Core sở hữu lên danh sách point.
+//
+// PLC SHM không mang cờ forced hay TTL còn lại — nó chỉ có value/quality. Trước
+// PA3, hệ quả là giao diện KHÔNG BAO GIỜ biết một output đang bị ép, trừ đúng
+// lúc nó vừa gửi lệnh xong. Nay web-api hỏi Core bằng op `query` (không
+// mutation) cho các point đang theo dõi, nên mở tab mới hay reload vẫn thấy
+// đúng đồng hồ đếm ngược.
+func (a *App) overlayOverrideState(ctx context.Context, points []PointDTO) []PointDTO {
+	if a.overrides == nil {
+		return points
+	}
+	if querier, ok := a.core.(overrideQuerier); ok {
+		a.overrides.Refresh(ctx, querier)
+	}
+	snapshot := a.overrides.Snapshot()
+	if len(snapshot) == 0 {
+		return points
+	}
+	for i := range points {
+		state, ok := snapshot[canonicalPointID(points[i].ID)]
+		if !ok {
+			continue
+		}
+		remaining := state.RemainingS
+		points[i].Forced = true
+		points[i].OverrideExpiresInS = &remaining
+		if state.ActiveSource != "" {
+			points[i].Priority = state.ActiveSource
+		}
+	}
+	return points
 }
 
 // overlayVirtualPoints makes backend-created VP points the only visible
@@ -246,11 +291,61 @@ func (a *App) handlePoint(w http.ResponseWriter, r *http.Request) {
 	for _, point := range points {
 		if canonicalPointID(point.ID) == targetID {
 			projected := a.overlayPointMetadata([]PointDTO{point})
-			writeJSON(w, http.StatusOK, projected[0])
+			writeJSON(w, http.StatusOK, a.withAuthoritativeOverride(r.Context(), projected[0]))
 			return
 		}
 	}
 	writeError(w, http.StatusNotFound, "point not found")
+}
+
+// withAuthoritativeOverride hỏi thẳng Core trạng thái ép tay của MỘT point.
+//
+// Đường này chỉ chạy ở màn chi tiết, nơi người dùng sắp bấm nút — chi phí một
+// vòng IPC là xứng đáng để con số "còn 04:32" là của Core chứ không phải của
+// bộ nhớ web-api. Reload trình duyệt hay restart web-api đều đi qua đây.
+func (a *App) withAuthoritativeOverride(ctx context.Context, point PointDTO) PointDTO {
+	if !commandablePointID(point.ID) {
+		return point
+	}
+	// Bước 1 — dán trạng thái đã biết. Đây là thứ giữ được câu trả lời khi Core
+	// im lặng ở bước 2: "không hỏi được" KHÔNG phải "đã nhả".
+	if snapshot := a.overrides.Snapshot(); snapshot != nil {
+		if state, ok := snapshot[canonicalPointID(point.ID)]; ok {
+			remaining := state.RemainingS
+			point.Forced = true
+			point.OverrideExpiresInS = &remaining
+			if state.ActiveSource != "" {
+				point.Priority = state.ActiveSource
+			}
+		}
+	}
+	querier, ok := a.core.(overrideQuerier)
+	if !ok {
+		return point
+	}
+	authoritative, err := querier.QueryPoint(ctx, point.ID, "web")
+	if err != nil {
+		return point
+	}
+	remaining := uint32(0)
+	if authoritative.OverrideExpiresInS != nil {
+		remaining = *authoritative.OverrideExpiresInS
+	}
+	if authoritative.Priority != "" {
+		point.Priority = authoritative.Priority
+	}
+	if remaining > 0 {
+		point.Forced = true
+		point.OverrideExpiresInS = &remaining
+		a.overrides.Note(point.ID, "-", remaining, remaining, authoritative.Priority)
+		return point
+	}
+	point.OverrideExpiresInS = nil
+	point.Forced = strings.EqualFold(authoritative.Priority, "manual") || strings.EqualFold(authoritative.Priority, "local_manual")
+	if !point.Forced {
+		a.overrides.Forget(point.ID)
+	}
+	return point
 }
 
 func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
@@ -270,6 +365,12 @@ func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if item, ok := a.findVirtualPoint(id); ok {
+		if body.ttlS > 0 {
+			// Không giả lập thời hạn cho thứ backend không cưỡng chế được:
+			// VP đi đường ghi cấu hình, Core không giữ TTL cho nó.
+			writeError(w, http.StatusBadRequest, "virtual point không hỗ trợ ttlS")
+			return
+		}
 		point, err := a.writeVirtualPointValue(r, item.ID, body.value, body.release)
 		if err != nil {
 			a.audit.PointForce(principal, id, body.release, "rejected", r.RemoteAddr)
@@ -285,15 +386,15 @@ func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "point not found")
 		return
 	}
-	forcer, ok := a.core.(pointForcer)
-	if !ok {
-		a.audit.PointForce(principal, id, body.release, "unsupported", r.RemoteAddr)
-		writeError(w, http.StatusConflict, "point force unsupported")
-		return
-	}
-	point, err := forcer.ForcePoint(r.Context(), id, body.value, body.release)
+	point, err := a.commandCorePoint(r.Context(), id, body, principal)
 	if err != nil {
+		if err == errPointCommandUnsupported {
+			a.audit.PointForce(principal, id, body.release, "unsupported", r.RemoteAddr)
+			writeError(w, http.StatusConflict, "point force unsupported")
+			return
+		}
 		a.audit.PointForce(principal, id, body.release, "rejected", r.RemoteAddr)
+		a.audit.PointOverride(principal, id, body.ttlS, 0, "rejected", "core_rejected", "", r.RemoteAddr)
 		writeError(w, http.StatusConflict, "point force rejected")
 		return
 	}
@@ -302,8 +403,50 @@ func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
 		result = "degraded"
 	}
 	a.audit.PointForce(principal, id, body.release, result, r.RemoteAddr)
+	remaining := uint32(0)
+	if point.OverrideExpiresInS != nil {
+		remaining = *point.OverrideExpiresInS
+	}
+	if body.release {
+		a.overrides.Forget(id)
+		a.audit.PointOverride(principal, id, 0, 0, result, "released", "", r.RemoteAddr)
+	} else if body.ttlS > 0 {
+		a.overrides.Note(id, principalUsername(principal), body.ttlS, remaining, point.Priority)
+		reason := "core_ttl"
+		if remaining == 0 {
+			// Core chấp nhận lệnh nhưng không báo TTL còn lại. Nói ra trong
+			// audit thay vì để giao diện đếm ngược một con số không ai cưỡng chế.
+			reason = "core_ttl_not_reported"
+		}
+		a.audit.PointOverride(principal, id, body.ttlS, remaining, result, reason, "", r.RemoteAddr)
+	}
 	projected := a.overlayPointMetadata([]PointDTO{point})
 	writeJSON(w, http.StatusOK, projected[0])
+}
+
+var errPointCommandUnsupported = fmt.Errorf("point command unsupported")
+
+func principalUsername(principal *Principal) string {
+	if principal == nil {
+		return "-"
+	}
+	return principal.Username
+}
+
+// commandCorePoint chọn đường ghi có TTL khi core client hỗ trợ, và rơi về
+// đường cũ khi không. Không bao giờ tự dựng hẹn giờ thay thế.
+func (a *App) commandCorePoint(ctx context.Context, id string, body forcePointBody, principal *Principal) (PointDTO, error) {
+	if ttlForcer, ok := a.core.(pointTTLForcer); ok {
+		return ttlForcer.ForcePointTTL(ctx, id, body.value, body.release, body.ttlS, principalUsername(principal))
+	}
+	forcer, ok := a.core.(pointForcer)
+	if !ok {
+		return PointDTO{}, errPointCommandUnsupported
+	}
+	if body.ttlS > 0 {
+		return PointDTO{}, fmt.Errorf("core không hỗ trợ ttlS")
+	}
+	return forcer.ForcePoint(ctx, id, body.value, body.release)
 }
 
 func decodeForcePointBody(w http.ResponseWriter, r *http.Request) (forcePointBody, error) {
@@ -317,12 +460,13 @@ func decodeForcePointBody(w http.ResponseWriter, r *http.Request) (forcePointBod
 		return forcePointBody{}, fmt.Errorf("invalid json")
 	}
 	for key := range raw {
-		if key != "value" && key != "release" {
+		if key != "value" && key != "release" && key != "ttlS" {
 			return forcePointBody{}, fmt.Errorf("unknown field %q", key)
 		}
 	}
 	releaseRaw, hasRelease := raw["release"]
 	valueRaw, hasValue := raw["value"]
+	ttlRaw, hasTTL := raw["ttlS"]
 	if hasRelease {
 		var release bool
 		if err := json.Unmarshal(releaseRaw, &release); err != nil {
@@ -331,6 +475,9 @@ func decodeForcePointBody(w http.ResponseWriter, r *http.Request) (forcePointBod
 		if release {
 			if hasValue {
 				return forcePointBody{}, fmt.Errorf("release cannot include value")
+			}
+			if hasTTL {
+				return forcePointBody{}, fmt.Errorf("release cannot include ttlS")
 			}
 			return forcePointBody{release: true}, nil
 		}
@@ -347,7 +494,18 @@ func decodeForcePointBody(w http.ResponseWriter, r *http.Request) (forcePointBod
 	if !validPointCommandValue(value) {
 		return forcePointBody{}, fmt.Errorf("value must be number or boolean")
 	}
-	return forcePointBody{value: value}, nil
+	body := forcePointBody{value: value}
+	if hasTTL {
+		var ttl int64
+		if err := json.Unmarshal(ttlRaw, &ttl); err != nil {
+			return forcePointBody{}, fmt.Errorf("invalid ttlS")
+		}
+		if ttl < 1 || ttl > maxOverrideTTLS {
+			return forcePointBody{}, fmt.Errorf("ttlS must be between 1 and %d seconds", maxOverrideTTLS)
+		}
+		body.ttlS = uint32(ttl)
+	}
+	return body, nil
 }
 
 func (a *App) findVirtualPoint(id string) (VirtualPoint, bool) {

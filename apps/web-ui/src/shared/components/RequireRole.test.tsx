@@ -81,9 +81,20 @@ describe('ROUTE_MIN_ROLE mirrors the backend route table', () => {
   })
 
   it('requires admin for configuration and account routes', () => {
-    for (const route of ['/eng/inputs', '/eng/virtual-points', '/eng/alarm-settings', '/eng/scheduler', '/settings/time', '/settings/device', '/settings/users']) {
+    for (const route of ['/eng/inputs', '/eng/virtual-points', '/eng/alarm-settings', '/settings/time', '/settings/device', '/settings/users']) {
       expect(ROUTE_MIN_ROLE[route]).toBe('admin')
     }
+  })
+
+  /* PA3-F09 — Scheduler KHÔNG còn admin-only ở tầng route.
+   *
+   * Backend cho `viewer` đọc (`GET /schedules`, `.../runtime`, `.../audit`,
+   * `POST .../simulate`) và cho `operator` bật/tắt (`POST .../enable|disable`).
+   * Frontend siết chặt hơn server ở đây không làm hệ thống an toàn hơn — nó chỉ
+   * lấy mất của ca trực đúng thông tin cần nhất khi thiết bị chạy ngoài mong
+   * đợi: lịch nào đang chạy. Mutation cấu hình vẫn khoá theo role trong trang. */
+  it('opens the scheduler to viewers because the backend does', () => {
+    expect(ROUTE_MIN_ROLE['/eng/scheduler']).toBe('viewer')
   })
 
   it('leaves read-only monitoring routes ungated', () => {
