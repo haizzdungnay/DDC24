@@ -7,6 +7,26 @@
 ---
 
 ## [Unreleased]
+### Added — Hồ sơ đầu vào cho đội thiết kế lại UX, đọc thẳng từ source (2026-08-08)
+
+**Phạm vi.** `docs/04_uiux/UX_REDESIGN_INPUT_BRIEF_2026-08-08.md` (UX-INPUT-001).
+
+**Vì sao có tài liệu này.** Đội thiết kế UX cần một bản mô tả **as-built**, không phải mô tả
+theo spec — vì hai thứ đó đã lệch nhau. Toàn bộ số liệu đọc trực tiếp từ mã nguồn tại `18bd295`
+(`contracts/shm/mkddc_shm.h`, `apps/web-api/internal/app/http.go`, `apps/web-ui/src/app/App.tsx`),
+không trích lại tài liệu cũ. Nội dung gồm 8 application domain, thang 3 role
+(`viewer < operator < admin`, **không** phải 4), ma trận quyền theo hành động và theo route,
+16 UI + 4 AO + 4 DO (0 DI trên base SKU) với 9 signal type, 5 cấp severity alarm và 8 alarm type
+(3 loại đang chạy), danh sách đầy đủ 99 route as-built, cây điều hướng, và cấu trúc `PointDTO`.
+
+**Điểm quan trọng nhất là những chỗ nó nói KHÔNG.** Tài liệu chỉ đích danh các endpoint có trong
+`contracts/openapi/openapi.yaml` nhưng **chưa được cài trong backend Go** (OTA, tải log, danh sách
+object BACnet, graph validate/deploy) để không ai thiết kế màn hình cho chúng như thể đã có; nêu
+6 ràng buộc bắt buộc rút ra từ finding thật (không bịa dữ liệu — `FE-DIAG-01`; không hằng số viết
+cứng thay số đo — `MBR-B305`; FE không nới lỏng hơn BE; `index.html` phải `no-cache`; tiếng Việt
+là ngôn ngữ chính; nút mutation `disable` theo role thay vì ẩn trang); và kết thúc bằng 3 câu hỏi
+ngược cần chốt trước khi vẽ.
+
 ### Fixed — Trang `/settings/network` chết trên bo Foxlinx: 6 nguyên nhân độc lập (2026-08-08)
 
 **Phạm vi.** `apps/netcfg` (C++), `apps/web-ui/src/features/network` (React/TS),
