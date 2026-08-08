@@ -7,6 +7,122 @@
 ---
 
 ## [Unreleased]
+### Fixed — Đóng 15 finding rà soát BE + FE 2026-08-06 và dọn thư mục hồ sơ rà soát (2026-08-08)
+
+**Phạm vi.** `apps/web-api` (Go), `apps/web-ui` (React/TS), `platform/systemd`,
+`platform/packaging`, `contracts/openapi/openapi.yaml`, `docs/07_records/reviews/**`,
+`docs/03_implementation/51_BE_FE_FINDINGS_REMEDIATION_PLAN.md`, `docs/README.md`,
+`docs/00_governance/CONTROL.md`, `docs/adr/README.md`.
+
+**Vì sao có thay đổi này.** Báo cáo `REV-CODE-BE-FE-2026-08-06` liệt kê 15 finding và ghi rõ
+"chưa sửa cái nào". Đối chiếu lại từng finding với mã nguồn tại `18bd295`: **14 cái còn nguyên**,
+một cái (`REV-BE-05`) mất hiệu lực vì Scheduler v3.1 đã xoá `virtualpoint_scheduler.go` ở
+`a583263` và engine C++ thay thế cố ý không dừng khi một target ghi lỗi. Cả 15 đều nằm ngoài
+vùng phủ của bộ test đang xanh — đó mới là vấn đề gốc, nên mỗi bản vá đi kèm test **đi qua
+endpoint thật**, không dựng lại logic trong chính test.
+
+**Ba lỗi chặn phát hành.**
+
+- `REV-BE-01` — `PUT /api/v1/system/config/fieldbus` với body `{}` rơi xuống `writeConfigGroup`,
+  marshal struct zero-value đè thẳng lên `fieldbus.conf`: mất toàn bộ `buses[]`/`devices[]`/
+  `points[]`, không journal, không rollback, `revision` về 0, rồi iobus restart lên cấu hình
+  rỗng. Nay **mọi** lần ghi đi qua `webModbus.Persister`; thiếu khoá `devices`/`points`/`buses`
+  trong body không còn được hiểu là "xoá hết" — muốn xoá phải gửi mảng rỗng tường minh.
+- `REV-BE-02` — `requireWSAuth` xác thực đúng một lần lúc bắt tay, nên socket đang mở vẫn giữ
+  quyền `op:"force"` ghi xuống AO/DO/VP sau khi người dùng logout hoặc token hết hạn: cơ chế thu
+  hồi phiên bị vô hiệu đúng trên kênh duy nhất thật sự ghi xuống thiết bị. Thêm
+  `wsSessionStillValid` kiểm lại phiên trước mỗi lệnh **và** mỗi nhịp tick, đóng socket bằng
+  `StatusPolicyViolation` kèm khung 401 để FE hiện được lý do.
+- `REV-PLT-01` — `CORS_ORIGIN` không được đặt ở bất kỳ đường triển khai nào, nên nhánh allowlist
+  đóng là mã chết còn bo production chạy bằng allowlist của chế độ dev. Nay rỗng = **chỉ
+  same-origin** (fail-closed, nguyên tắc N5); nhánh loopback chỉ mở bằng `CORS_ALLOW_LOOPBACK`
+  tường minh; `mkddc-web-pi.service` và `install.sh` ghi sẵn chỗ cấu hình; log `cors_mode=` lúc
+  khởi động để rủi ro "quên đặt giá trị" thành một dòng `journalctl` thay vì nửa giờ dò tìm.
+  Giao diện trên bo không bị ảnh hưởng vì được chính `mkddc-web` phục vụ same-origin.
+
+**Hợp nhất đường giải bus** (`REV-BE-03`, `REV-BE-04`, `REV-BE-09`). Bốn call site tra telemetry
+theo mỗi `slave_id`, bỏ qua `bus_id` — hai thiết bị ở `slave_id = 1` trên hai dây khác nhau
+(cấu hình hợp lệ) đè lên nhau, KPI đếm thiết bị chết thành đang chạy và sự kiện ONLINE→OFFLINE
+mang nhầm `device_id`. Đây đúng lỗi đã sửa riêng ở `handleModbusDiagnostics` (`b39652c`) mà
+không lan sang chỗ khác. Thêm `modbus_bus_index.go` làm **đường tra cứu duy nhất** khoá
+`(bus, slave)`; cả 5 call site chuyển sang dùng nó. `busIDForPort` thôi im lặng dồn cổng lạ về
+`rs485-1` (trả `""`, validator từ chối kèm mã lỗi), và `modbusDeviceBus` thôi giữ bảng ánh xạ
+riêng — hai nửa của cùng một phép giải bus nay chỉ còn một nguồn.
+
+**Trung thực dữ liệu** (`REV-BE-07`, `REV-BE-10`, `REV-FE-01`, `REV-FE-04`).
+
+- `CoreClient.ReadPoints` nuốt mọi lỗi đọc SHM và trả `[]PointDTO{}, nil`, làm "core chết"
+  trông giống hệt "thiết bị không có point nào": `GET /api/v1/points` đáp 200 với `[]` và giao
+  diện hiện bảng rỗng kèm huy hiệu kết nối màu khoẻ. Nay trả lỗi thật và endpoint đáp **503**.
+- `/modbus/buses` gán `TotalErrors` của cả dây vào `timeout_errors`, xoá trắng `crc_errors`, rồi
+  cộng thêm số đo từng slave lên trên — một dây có nhiều nhất 100 lỗi báo ra 170. Timeout/CRC nay
+  chỉ gộp từ số đo theo slave; tổng của dây đi riêng ở trường mới `total_errors`.
+- FE: `open` và `closed` cùng map sang `true`, nên tiếp điểm **đang mở** hiện thành ON/đã cấp
+  điện — trái với chính `DoSafeState = 'open' | 'closed'` của dự án. `open` chuyển sang danh sách
+  falsy.
+- FE: `pointValue` trả literal `0` khi point không mang giá trị nào, nên point Modbus chưa từng
+  được poll hiện "0 °C / 0 %" như số đo thật và `appendLiveTrendSample` ghi số 0 đó vào đuôi
+  biểu đồ live. Nay trả `undefined`; `Point['value']` mở rộng kiểu; `pointNumber` trả `null`;
+  `formatValue` hiện `—`; ba biểu đồ live (Inputs/Outputs/VirtualIo) và sparkline Monitor bỏ qua
+  mẫu chưa đo. Số `0` **đo được** vẫn giữ nguyên là `0`.
+
+**Bốn finding còn lại.** `handleModbusWriteTest` nay gọi `commissionLimit.allow("write:"+user, 2,
+time.Minute)` đúng như `OD-MBRTU-007` mô tả — trước đó bộ giới hạn được viết ra nhưng chưa có call
+site nào cho nhánh ghi (`REV-BE-06`). `overlayPointMetadata` chỉ **điền** `Source` khi còn trống,
+không ghi đè `core`/`core_unavailable`/`rejected:…` do core cấp, giữ lại hợp đồng mà `ws.go` đang
+dựa vào (`REV-BE-08`). `OutputsPage` bỏ `selectedId` khỏi deps của effect nạp, nên đổi kênh không
+còn nạp lại và không còn âm thầm vứt bỏ chỉnh sửa chưa lưu (`REV-FE-02`). Nhánh `AUTH_MODE=apikey`
+bị **gỡ bỏ**: nó gửi header `X-API-Key` mà toàn bộ `apps/web-api` không có tham chiếu nào, nên mọi
+request trả 401 và người dùng bị đá về trang đăng nhập không kèm giải thích (`REV-FE-03`).
+
+**Dọn thư mục `docs/07_records/reviews/`.** Thư mục có 34 tài liệu và **không có chỉ mục nào** —
+đó là lý do finding đã đóng nằm lẫn với finding còn mở suốt nhiều tuần.
+
+- Thêm `README.md`: trạng thái từng record đã đối chiếu mã nguồn, bảng ánh xạ đường dẫn
+  trước/sau `PLAN-ARCH-RESTRUCT-002`, và quy tắc thêm hồ sơ mới.
+- Tách **12 hồ sơ lịch sử** sang `archive/` kèm `README.md` nêu lý do lưu trữ và tài liệu thay
+  thế của từng cái: cụm Program Runtime/IEC 61131-3 (7 file, đều có trước ADR-023 và đã bị
+  Document Control tuyên bố không phải authority), rà soát 2026-07-30 (23/23 finding đã xử lý,
+  mọi path trỏ vào cây source đã xoá), audit UI/UX 2026-07-30, báo cáo trang `settings/network`
+  2026-07-31, và báo cáo deploy HMI 2026-07-22. Không xoá file nào; mỗi file được gắn banner
+  "HỒ SƠ LỊCH SỬ" và đường phục hồi ghi trong `archive/README.md`.
+- Sửa **link hỏng**: `07_records/reviews/**` nay còn **0 link hỏng**. Gồm link `file:///home/chuong/…`
+  tuyệt đối theo máy người lập trong tờ trình Modbus RTU, sai độ sâu trong review Scheduler P1,
+  schema `netcfg` đã chuyển sang `contracts/config/`, và các link trỏ file source đã bị xoá
+  (`ModbusRtuPage.tsx`, `virtualpoint_scheduler.go`, cụm `src/frontend/`) — gỡ thành mã inline,
+  giữ nguyên đường dẫn làm chứng cứ. Ngoài phạm vi: `docs/adr/README.md` (ADR-015/016 chỉ tồn
+  tại trong Decision Log, bổ sung ADR-022/023 vào index), `DEVELOPMENT_AND_OPERATIONS.md`,
+  `KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md`.
+- Gắn banner cho `KX-DDC24-QA-REGISTER-001_VI.md`: register này còn **23 liên kết chết** tới tài
+  liệu không tồn tại trong corpus hiện tại; register điều hành là Document Hub + Document Control.
+
+**Cập nhật hồ sơ.** `CODE_REVIEW_BE_FE_2026-08-06.md` bản 2.0 có §0 ghi trạng thái đóng của từng
+finding và lý do chọn phương án cho QĐ-1/QĐ-2/QĐ-3 của Plan 51. Plan 51 lên 1.1: 26/35 task, ghi
+rõ **sai lệch với nguyên tắc N1** (không có bằng chứng test đỏ trước bản vá) và bốn mục còn nợ.
+`openapi.yaml` thêm `total_errors` cho `ModbusBus`.
+
+**Còn nợ (chưa làm, không bị chặn bởi thay đổi này).** Kiểm chứng trên bo Foxlinx cho cổng ra
+P1/P2/P3 của Plan 51; FIX-206 (kiểm tra tĩnh chặn call site tra telemetry mới); FIX-406 phần
+`DATA_MODEL`/`CONFIG_SCHEMA`; toàn bộ P5. QĐ-1 và QĐ-3 đã cài theo phương án khuyến nghị nhưng
+**chưa có xác nhận thành văn của CTO/PO**.
+
+**Kiểm chứng** (chạy lại 2026-08-08, không dẫn số cũ):
+
+| Gate | Kết quả |
+|---|---|
+| `cmake --build build/fw --parallel` (MODBUS+BACNET+HMI ON) | thành công |
+| `ctest --test-dir build/fw --output-on-failure` | **849/849 PASS**, 14,60 s |
+| `go vet ./...` | sạch |
+| `go test ./... -count=1` | **11/11 package `ok`** |
+| `npx vitest --run --environment jsdom src` | **446/446 PASS**, 51 file |
+| `npm run lint` | 0 warning |
+| `npm run build` | thành công |
+| Kiểm link toàn bộ `docs/` | 0 link hỏng ngoài `KX-DDC24-QA-REGISTER-001_VI.md` (đã gắn banner) |
+
+**Ghi chú build.** `cmake --fresh` một mình **không đủ** khi thư mục `build/fw` cũ có cache ABI
+compiler hỏng — configure vẫn báo `CMAKE_CXX_COMPILER not set, after EnableLanguage`. Phải
+`rm -rf build/fw` rồi configure lại.
+
 ### Fixed — Di trú lịch v1→v3.1 không chạy, và hợp đồng đóng băng từ chối dữ liệu hợp lệ (2026-08-07)
 
 **Phạm vi.** `apps/web-api/internal/app/main.go` · `contracts/config/schedule_v3_1.schema.json` ·

@@ -1,5 +1,10 @@
 # Báo cáo review code: FE + BE + FW SOM — 2026-07-30
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 - Phạm vi: `src/frontend/` (FE), `web/backend/` (BE Go), `services/core` + `services/iobus` + `services/hmi` + `services/netcfg` + `shared/mkddc_shm.h` (FW SOM), `packaging/`, `tools/`, `.github/workflows/` (gate CI).
 - Mốc code: nhánh `main` tại `7ea3ac5`, cộng thay đổi chưa commit trong working tree.
 - Kiểu review: đọc code theo luồng dữ liệu + chạy lại toàn bộ gate build/test để xác nhận độc lập.

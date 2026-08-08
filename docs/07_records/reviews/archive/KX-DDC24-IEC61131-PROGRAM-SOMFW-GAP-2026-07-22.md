@@ -1,5 +1,10 @@
 # Báo cáo đánh giá Program và FW SOM theo IEC 61131-3
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 **Document ID:** KX-DDC24-REV-IEC61131-001  
 **Loại hồ sơ:** Review record / gap assessment  
 **Trạng thái:** Open — không đủ cơ sở tuyên bố conformity  
@@ -9,7 +14,7 @@
 **Chuẩn mục tiêu dùng để sàng lọc:** IEC 61131-3:2025, Edition 4.0
 
 > **Cập nhật 2026-07-23:** cùng ngày với báo cáo này, một corrective design
-> ([`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md))
+> ([`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md))
 > được viết theo hướng **ngược lại** khuyến nghị ở §8.1 dưới đây — bắt buộc IEC 61131-3
 > ngay trong Rev A.0 thay vì hoãn sang Rev C. Directive làm căn cứ cho tài liệu đó chưa
 > có decision record truy vết được trong `DECISIONS.md`. Đây là mâu thuẫn governance mở

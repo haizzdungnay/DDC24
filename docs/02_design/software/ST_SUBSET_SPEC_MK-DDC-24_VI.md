@@ -3,7 +3,7 @@
 > **Document ID:** SW-ST-SUBSET-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-07-28
 > **Workstream:** C0.4 (MS-02) — đóng workstream `C0.4` của
-> [`KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md`](../../07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md)
+> [`KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md`](../../07_records/reviews/archive/KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md)
 > **Trạng thái:** Active — normative cho `services/core/st/`
 > **Nguồn quyết định:** ADR-020 (amended 2026-07-24), quyết định phạm vi ngôn ngữ 2026-07-28
 > **Tài liệu liên quan:** [`TYPED_IR_ARTIFACT_SPEC`](TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md) (C0.6),

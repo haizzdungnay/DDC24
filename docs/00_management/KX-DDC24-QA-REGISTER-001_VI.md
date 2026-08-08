@@ -1,6 +1,17 @@
 # Master Document Register — MK-DDC-24
 ## Danh mục kiểm soát toàn bộ tài liệu
 
+> **⚠ Register này đã lỗi thời — kiểm 2026-08-08.** 23 liên kết trong tài liệu trỏ
+> tới file **không tồn tại** trong corpus hiện tại: `CANONICAL_DECISIONS.md`, cụm
+> `05_devguides/`, cụm `hardware-design/` ở gốc repo, `KX-DDC24-QA-DOCCTRL/ISOGAP/
+> TRACE/SYS-ARCH-001_VI.md`, và ba ADR rời `ADR-015/016/019` (chỉ tồn tại dưới dạng
+> dòng trong [Decision Log](../00_governance/DECISIONS.md)). Nguyên nhân: các đợt
+> hợp nhất tài liệu và `PLAN-ARCH-RESTRUCT-002` diễn ra sau bản 1.4 (2026-07-15).
+>
+> **Register điều hành hiện hành là [Document Hub](../README.md) +
+> [Document Control](../00_governance/CONTROL.md).** Dùng file này chỉ để truy
+> nguyên lịch sử, cho tới khi nó được dựng lại từ cây tài liệu thật.
+
 > **Document ID:** KX-DDC24-QA-REGISTER-001
 > **Phiên bản:** 1.4 | 2026-07-15 · **Trạng thái:** In-Review · **Owner:** QA/PMO
 > **Phê duyệt 2026-06-08 (Owner):** các tài liệu KHÔNG có banner RECONCILE/SUPERSEDED → `Approved (Owner 2026-06-08)`

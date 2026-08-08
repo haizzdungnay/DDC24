@@ -1,9 +1,14 @@
 # Document Conflict Report — ADR-020 (Mekong-Owned IEC-Aligned Program Runtime)
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 **Document ID:** KX-DDC24-PROGRAM-RUNTIME-CONFLICT-REPORT-001
 **Trạng thái:** **Closed — 31/31 conflict đã sửa 2026-07-23.** `CONFLICT_REMAINING = 0`.
 **Ngày tạo:** 2026-07-23 · **Ngày đóng:** 2026-07-23
-**Nguồn quyết định:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
+**Nguồn quyết định:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
 **Phương pháp:** repo-wide grep (case-insensitive) cho `IEC 61131`, `PLCopen`,
 `wiresheet`, `component graph/component-based` (khi claim là engine chính), `FBD/ST/LD/
 SFC` (context ngôn ngữ PLC), `Rev C` (khung hoãn IEC), `online change`, `graph.json` (khi

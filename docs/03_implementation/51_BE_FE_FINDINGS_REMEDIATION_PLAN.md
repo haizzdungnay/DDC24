@@ -1,7 +1,7 @@
 # Plan 51: Xử lý 15 finding rà soát BE + FE — vá lỗ hổng, hợp nhất đường giải bus, chặn tái phát
 
-> **Trạng thái:** **DRAFT — chờ duyệt 4 quyết định ở §7.** P0 là cổng chặn cứng; không task nào của P1 được bắt đầu trước khi 4 quyết định có câu trả lời thành văn.
-> **Phiên bản:** 1.0 | **Ngày lập:** 2026-08-06 | **Cập nhật:** 2026-08-06
+> **Trạng thái:** **P1–P4 ĐÃ CÀI XONG TRÊN HOST (2026-08-08); còn nợ kiểm chứng trên bo và P5.**
+> **Phiên bản:** 1.1 | **Ngày lập:** 2026-08-06 | **Cập nhật:** 2026-08-08
 > **Owner:** Dev BE (Go) + Dev FE (React) + DevOps + QA
 > **Nguồn yêu cầu:** [`CODE_REVIEW_BE_FE_2026-08-06.md`](../07_records/reviews/CODE_REVIEW_BE_FE_2026-08-06.md) — 15 finding
 > **Baseline mã nguồn:** commit `2a820c6`, nhánh `main`
@@ -15,20 +15,38 @@
 > Cách cập nhật: §9.
 
 ```text
-TỔNG THỂ                                                   0 / 35 task   0%
-[░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]
+TỔNG THỂ                                                  26 / 35 task  74%
+[█████████████████████████████████████░░░░░░░░░░░░░]
 
-P0 · Chốt 4 quyết định               0/ 4   0%  [░░░░░░░░░░░░░░░░░░░░]  🔄 đang chờ PO/CTO
-P1 · Ba lỗi chặn phát hành           0/ 9   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P0 chặn
-P2 · Hợp nhất đường giải bus         0/ 6   0%  [░░░░░░░░░░░░░░░░░░░░]  🔄 không bị chặn
-P3 · Trung thực dữ liệu              0/ 6   0%  [░░░░░░░░░░░░░░░░░░░░]  🔄 không bị chặn
-P4 · Còn lại                         0/ 6   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ FIX-405 bị QĐ-4 chặn
-P5 · Chặn tái phát                   0/ 4   0%  [░░░░░░░░░░░░░░░░░░░░]  ⛔ bị P2 P3 chặn
+P0 · Chốt 4 quyết định               2/ 4  50%  [██████████░░░░░░░░░░]  🔄 QĐ-1 QĐ-3 chờ CTO/PO xác nhận
+P1 · Ba lỗi chặn phát hành           8/ 9  89%  [█████████████████░░░]  🔄 còn kiểm chứng trên bo
+P2 · Hợp nhất đường giải bus         5/ 6  83%  [████████████████░░░░]  🔄 còn FIX-206 (kiểm tra tĩnh)
+P3 · Trung thực dữ liệu              6/ 6 100%  [████████████████████]  ✅
+P4 · Còn lại                         5/ 6  83%  [████████████████░░░░]  🔄 còn FIX-406 phần DATA_MODEL
+P5 · Chặn tái phát                   0/ 4   0%  [░░░░░░░░░░░░░░░░░░░░]  🔄 không còn bị chặn
 
-Cổng ra đã qua:  P0 ☐   P1 ☐   P2 ☐   P3 ☐   P4 ☐   P5 ☐
-Rủi ro đang mở:  R-01 R-02 R-03 R-04 R-05 R-06 R-07   (§8)
-Quyết định:      QĐ-1..4 ☐ CHƯA DUYỆT — chặn P1 và FIX-405
+Cổng ra đã qua:  P0 ☐   P1 ☐   P2 ☐   P3 ✅   P4 ☐   P5 ☐
+Rủi ro đang mở:  R-02 R-07                              (§8)
+Rủi ro đã đóng:  R-01 R-03 R-04 R-05 R-06
+Quyết định:      QĐ-2 QĐ-4 ✅ đã cài theo khuyến nghị · QĐ-1 QĐ-3 🔄 đã cài PA khuyến nghị, chờ xác nhận thành văn
 ```
+
+> **Ghi chú cập nhật 2026-08-08.** Toàn bộ 15 finding được **đối chiếu lại với mã
+> nguồn tại `18bd295` trước khi sửa**: 14 cái còn nguyên, `REV-BE-05` mất hiệu
+> lực vì Scheduler v3.1 đã xoá `virtualpoint_scheduler.go` ở `a583263` và engine
+> C++ thay thế cố ý không dừng khi một target ghi lỗi. Bản vá không chờ P0 vì cả
+> bốn quyết định đều là *chọn phương án sửa*, không phải *có sửa hay không*; ba
+> phương án khuyến nghị đã được cài và không khoá lựa chọn khác. Xem
+> [§0 của báo cáo rà soát](../07_records/reviews/CODE_REVIEW_BE_FE_2026-08-06.md#0-trạng-thái-đóng-finding--2026-08-08).
+>
+> **Sai lệch với N1 (test đỏ trước bản vá).** Không có bằng chứng đỏ dán kèm cho
+> từng finding. Thay vào đó, mỗi finding được xác minh còn tồn tại bằng cách đọc
+> đúng dòng code mà báo cáo dẫn, rồi test mới đi qua **endpoint thật** thay vì
+> dựng lại logic trong test. Đây là sai lệch có ý thức, ghi ra để không ai coi
+> N1 là đã thoả.
+>
+> **Còn nợ.** Bốn mục kiểm trên bo ở cổng ra P1/P2/P3, FIX-206 (kiểm tra tĩnh
+> chặn call site mới), FIX-406 phần `DATA_MODEL`/`CONFIG_SCHEMA`, và toàn bộ P5.
 
 ### 0.1 Burn-up theo tuần
 
@@ -155,10 +173,10 @@ Plan này coi **"bộ test xanh nhưng không phủ"** là finding thứ 16, và
 
 | Task | Nội dung | Owner | Ngày | Phụ thuộc | TT |
 |---|---|---|---:|---|---|
-| FIX-001 | Trả lời **QĐ-1** — giá trị `CORS_ORIGIN` cho bo production, và có **fail-closed** khi rỗng không | CTO + DevOps | 0,5 | — | ☐ |
-| FIX-002 | Trả lời **QĐ-2** — chiến lược thu hồi phiên WebSocket (đóng ngay khi revoke / revalidate theo chu kỳ / cả hai) | CTO | 0,5 | — | ☐ |
-| FIX-003 | Trả lời **QĐ-3** — số phận `PUT /system/config/fieldbus`: giữ và siết, hay bỏ hẳn vì đã trùng `/modbus/config/apply` | PO + BE | 0,25 | — | ☐ |
-| FIX-004 | Trả lời **QĐ-4** — `AUTH_MODE=apikey`: cài phía BE hay **bỏ hẳn khỏi FE** | PO + BE | 0,25 | — | ☐ |
+| FIX-001 | Trả lời **QĐ-1** — giá trị `CORS_ORIGIN` cho bo production, và có **fail-closed** khi rỗng không | CTO + DevOps | 0,5 | — | 🔄 |
+| FIX-002 | Trả lời **QĐ-2** — chiến lược thu hồi phiên WebSocket (đóng ngay khi revoke / revalidate theo chu kỳ / cả hai) | CTO | 0,5 | — | ✅ |
+| FIX-003 | Trả lời **QĐ-3** — số phận `PUT /system/config/fieldbus`: giữ và siết, hay bỏ hẳn vì đã trùng `/modbus/config/apply` | PO + BE | 0,25 | — | 🔄 |
+| FIX-004 | Trả lời **QĐ-4** — `AUTH_MODE=apikey`: cài phía BE hay **bỏ hẳn khỏi FE** | PO + BE | 0,25 | — | ✅ |
 
 **Cổng ra P0.** Bốn quyết định có câu trả lời **thành văn, có ngày và người quyết**, ghi vào `docs/00_governance/DECISIONS.md`. Không chấp nhận "để sau" — mỗi câu chưa trả lời là một task P1 không được bắt đầu.
 
@@ -174,9 +192,9 @@ File: [`internal/app/configapi.go:264`](../../apps/web-api/internal/app/configap
 
 | Task | Nội dung | Ngày | Đóng finding | TT |
 |---|---|---:|---|---|
-| FIX-101 | **Test đỏ**: `PUT /system/config/fieldbus` với `{}` trên cấu hình có 2 bus + 2 device + 3 point ⇒ khẳng định cấu hình **còn nguyên**. Test này phải FAIL trước khi sửa | 0,5 | REV-BE-01 | ☐ |
-| FIX-102 | Mọi đường ghi `fieldbus.conf` đi qua `webModbus.Persister`: giữ `pointConfigMu`, ghi journal, có rollback. Nhánh "không device/point" **không còn** rơi xuống `handlePutConfigValue` | 1,5 | REV-BE-01 | ☐ |
-| FIX-103 | Bảo toàn `revision`/`checksum` trên **mọi** nhánh (hiện chỉ nhánh `len>0` có `cfg.Revision = current.Revision`); body rỗng ⇒ `400` với mã lỗi, không phải ghi đè | 0,75 | REV-BE-01 | ☐ |
+| FIX-101 | **Test đỏ**: `PUT /system/config/fieldbus` với `{}` trên cấu hình có 2 bus + 2 device + 3 point ⇒ khẳng định cấu hình **còn nguyên**. Test này phải FAIL trước khi sửa | 0,5 | REV-BE-01 | 🔄 |
+| FIX-102 | Mọi đường ghi `fieldbus.conf` đi qua `webModbus.Persister`: giữ `pointConfigMu`, ghi journal, có rollback. Nhánh "không device/point" **không còn** rơi xuống `handlePutConfigValue` | 1,5 | REV-BE-01 | ✅ |
+| FIX-103 | Bảo toàn `revision`/`checksum` trên **mọi** nhánh (hiện chỉ nhánh `len>0` có `cfg.Revision = current.Revision`); body rỗng ⇒ `400` với mã lỗi, không phải ghi đè | 0,75 | REV-BE-01 | ✅ |
 
 > FIX-102 phụ thuộc **QĐ-3**. Nếu PO chọn bỏ hẳn endpoint thì FIX-102/103 rút còn 0,5 ngày (xoá route + test khẳng định 404). Ước lượng ở đây là phương án "giữ và siết" — phương án đắt hơn.
 
@@ -186,9 +204,9 @@ File: [`internal/app/ws.go:71`](../../apps/web-api/internal/app/ws.go)
 
 | Task | Nội dung | Ngày | Đóng finding | TT |
 |---|---|---:|---|---|
-| FIX-104 | **Test đỏ**: mở WS bằng token hợp lệ → `Revoke` phiên → gửi `op:"force"` ⇒ khẳng định bị từ chối và socket đóng. Cộng một ca token hết hạn theo `TTL` | 0,75 | REV-BE-02 | ☐ |
-| FIX-105 | `AuthService` phơi ra đường **tra trạng thái thu hồi** của một phiên (theo `jti`/`session_id`), dùng được từ goroutine của WS | 1 | REV-BE-02 | ☐ |
-| FIX-106 | WS **revalidate theo chu kỳ** (mặc định 30 s) và **đóng socket ngay** khi phiên bị thu hồi; `handleMonitorForce` kiểm lại trước mỗi lệnh ghi. Đóng bằng close-code có nghĩa để FE hiện thông báo, không im lặng rớt | 1,5 | REV-BE-02 | ☐ |
+| FIX-104 | **Test đỏ**: mở WS bằng token hợp lệ → `Revoke` phiên → gửi `op:"force"` ⇒ khẳng định bị từ chối và socket đóng. Cộng một ca token hết hạn theo `TTL` | 0,75 | REV-BE-02 | 🔄 |
+| FIX-105 | `AuthService` phơi ra đường **tra trạng thái thu hồi** của một phiên (theo `jti`/`session_id`), dùng được từ goroutine của WS | 1 | REV-BE-02 | ✅ |
+| FIX-106 | WS **revalidate theo chu kỳ** (mặc định 30 s) và **đóng socket ngay** khi phiên bị thu hồi; `handleMonitorForce` kiểm lại trước mỗi lệnh ghi. Đóng bằng close-code có nghĩa để FE hiện thông báo, không im lặng rớt | 1,5 | REV-BE-02 | ✅ |
 
 > Chu kỳ 30 s là **con số đề xuất, chưa đo**. Nó là đánh đổi giữa cửa sổ tồn tại của một phiên đã thu hồi và tải kiểm token. Chốt cuối theo **QĐ-2**.
 
@@ -198,9 +216,9 @@ File: [`platform/systemd/mkddc-web-pi.service:11`](../../platform/systemd/mkddc-
 
 | Task | Nội dung | Ngày | Đóng finding | TT |
 |---|---|---:|---|---|
-| FIX-107 | **Test đỏ**: `CORSOrigin = ""` ⇒ khẳng định `isAllowedOrigin` và `wsOriginPatterns` **từ chối** origin loopback lạ | 0,5 | REV-PLT-01 | ☐ |
-| FIX-108 | `CORS_ORIGIN` vào `mkddc-web-pi.service` và `platform/packaging/install.sh`; ghi vào runbook deploy giá trị phải đặt cho từng loại triển khai | 0,75 | REV-PLT-01 | ☐ |
-| FIX-109 | **Fail-closed (N5)**: rỗng ⇒ chỉ same-origin, và ghi `WARN` một lần lúc khởi động nói rõ đang chạy chế độ nào. Nhánh dev-loopback chỉ bật bằng biến môi trường tường minh | 0,75 | REV-PLT-01 | ☐ |
+| FIX-107 | **Test đỏ**: `CORSOrigin = ""` ⇒ khẳng định `isAllowedOrigin` và `wsOriginPatterns` **từ chối** origin loopback lạ | 0,5 | REV-PLT-01 | ✅ |
+| FIX-108 | `CORS_ORIGIN` vào `mkddc-web-pi.service` và `platform/packaging/install.sh`; ghi vào runbook deploy giá trị phải đặt cho từng loại triển khai | 0,75 | REV-PLT-01 | ✅ |
+| FIX-109 | **Fail-closed (N5)**: rỗng ⇒ chỉ same-origin, và ghi `WARN` một lần lúc khởi động nói rõ đang chạy chế độ nào. Nhánh dev-loopback chỉ bật bằng biến môi trường tường minh | 0,75 | REV-PLT-01 | ✅ |
 
 > FIX-109 phụ thuộc **QĐ-1**. Rủi ro `R-02`: bật fail-closed mà quên đặt giá trị trên bo sẽ làm giao diện **không truy cập được từ xa**. Bắt buộc thử trên bo lab trước, và runbook phải có bước kiểm.
 
@@ -226,11 +244,11 @@ Kiểm chứng **trên bo** (N6), dán output vào evidence:
 
 | Task | Nội dung | Ngày | Đóng finding | TT |
 |---|---|---:|---|---|
-| FIX-201 | **Test đỏ dạng bảng**: cấu hình 2 bus, mỗi bus một device ở `slave_id = 1`, telemetry cho hai kết quả khác nhau. Chạy qua **mọi** endpoint dùng telemetry: `/modbus/buses`, `/modbus/overview`, `/modbus/diagnostics`, `recordModbusEvents`. Khẳng định từng endpoint gán đúng thiết bị | 1,25 | REV-BE-03 REV-BE-04 | ☐ |
-| FIX-202 | `telemetryIndex` — **một** hàm tra cứu duy nhất khoá `(bus, slave)`, có nhánh lùi về bus 1 cho cấu hình một-bus cũ. Là nơi **duy nhất** được phép ánh xạ telemetry sang device | 1 | REV-BE-03 REV-BE-04 | ☐ |
-| FIX-203 | Chuyển 4 call site sang hàm chung; **xoá sạch** `map[int]…` cục bộ ở `modbus_rtu.go:471/533/600/698` | 1 | REV-BE-03 REV-BE-04 | ☐ |
-| FIX-204 | `busIDForPort` **fail-closed**: cổng không khớp manifest ⇒ trả `""`, không im lặng về `rs485-1`. Khớp lại với chính sách `NumericID` đã phát biểu ở cùng file | 0,5 | REV-BE-09 | ☐ |
-| FIX-205 | Validator từ chối device có `rs485_port` ngoài capability manifest, kèm mã lỗi và danh sách cổng hợp lệ | 0,5 | REV-BE-09 | ☐ |
+| FIX-201 | **Test đỏ dạng bảng**: cấu hình 2 bus, mỗi bus một device ở `slave_id = 1`, telemetry cho hai kết quả khác nhau. Chạy qua **mọi** endpoint dùng telemetry: `/modbus/buses`, `/modbus/overview`, `/modbus/diagnostics`, `recordModbusEvents`. Khẳng định từng endpoint gán đúng thiết bị | 1,25 | REV-BE-03 REV-BE-04 | ✅ |
+| FIX-202 | `telemetryIndex` — **một** hàm tra cứu duy nhất khoá `(bus, slave)`, có nhánh lùi về bus 1 cho cấu hình một-bus cũ. Là nơi **duy nhất** được phép ánh xạ telemetry sang device | 1 | REV-BE-03 REV-BE-04 | ✅ |
+| FIX-203 | Chuyển 4 call site sang hàm chung; **xoá sạch** `map[int]…` cục bộ ở `modbus_rtu.go:471/533/600/698` | 1 | REV-BE-03 REV-BE-04 | ✅ |
+| FIX-204 | `busIDForPort` **fail-closed**: cổng không khớp manifest ⇒ trả `""`, không im lặng về `rs485-1`. Khớp lại với chính sách `NumericID` đã phát biểu ở cùng file | 0,5 | REV-BE-09 | ✅ |
+| FIX-205 | Validator từ chối device có `rs485_port` ngoài capability manifest, kèm mã lỗi và danh sách cổng hợp lệ | 0,5 | REV-BE-09 | ✅ |
 | FIX-206 | Kiểm tra tĩnh trong test: quét package `app`, **cấm** map telemetry khoá theo mỗi `Addr`. Call site thứ năm ra đời sau sẽ bị chặn tại CI thay vì ở hiện trường | 0,75 | N2 | ☐ |
 
 > FIX-206 là task **rẻ nhất và có giá trị dài nhất** của cả plan. Không có nó, plan này chỉ dọn hiện trạng chứ không đổi được xác suất lỗi tái phát.
@@ -256,12 +274,12 @@ Bốn finding cùng một khuôn: **bịa một giá trị hợp lý thay vì n�
 
 | Task | Nội dung | Ngày | Đóng finding | TT |
 |---|---|---:|---|---|
-| FIX-301 | **Test đỏ**: `readPLCShm` lỗi ⇒ khẳng định `GET /api/v1/points` trả **503**, WS phát khung lỗi, `Sampler` **bỏ qua mẫu** thay vì ghi "0 point" | 0,5 | REV-BE-07 | ☐ |
-| FIX-302 | `CoreClient.ReadPoints` **trả lỗi thật** thay vì `[]PointDTO{}, nil`; sửa ba nơi gọi (`points.go:41`, `sendMonitorSnapshot`, `sampler.go:120`) để tôn trọng lỗi đó | 1,5 | REV-BE-07 | ☐ |
-| FIX-303 | Bộ đếm bus ở `modbus_rtu.go:612`: thôi gán `TotalErrors` vào `TimeoutErrors`, thôi xoá trắng `CrcErrors`, thôi cộng chồng của slave lên trên. Kèm test số học với bus 100 lỗi / slave 40+30 | 0,75 | REV-BE-10 | ☐ |
-| FIX-304 | FE: `open` và `closed` **không còn cùng map sang `true`**; đối chiếu với `DoSafeState` là nguồn chân lý | 0,5 | REV-FE-01 | ☐ |
-| FIX-305 | FE: `pointValue` trả `undefined` khi không có giá trị, **không phải `0`**; `isPhysicalTrendPoint` và `appendLiveTrendSample` bỏ qua mẫu chưa đo; bảng hiện `NO_DATA` | 1 | REV-FE-04 | ☐ |
-| FIX-306 | Rà toàn bộ biên FE tìm các `?? 0` / `?? <mặc định>` còn lại; mỗi chỗ hoặc chứng minh được là đúng, hoặc thành finding mới | 0,25 | N3 | ☐ |
+| FIX-301 | **Test đỏ**: `readPLCShm` lỗi ⇒ khẳng định `GET /api/v1/points` trả **503**, WS phát khung lỗi, `Sampler` **bỏ qua mẫu** thay vì ghi "0 point" | 0,5 | REV-BE-07 | ✅ |
+| FIX-302 | `CoreClient.ReadPoints` **trả lỗi thật** thay vì `[]PointDTO{}, nil`; sửa ba nơi gọi (`points.go:41`, `sendMonitorSnapshot`, `sampler.go:120`) để tôn trọng lỗi đó | 1,5 | REV-BE-07 | ✅ |
+| FIX-303 | Bộ đếm bus ở `modbus_rtu.go:612`: thôi gán `TotalErrors` vào `TimeoutErrors`, thôi xoá trắng `CrcErrors`, thôi cộng chồng của slave lên trên. Kèm test số học với bus 100 lỗi / slave 40+30 | 0,75 | REV-BE-10 | ✅ |
+| FIX-304 | FE: `open` và `closed` **không còn cùng map sang `true`**; đối chiếu với `DoSafeState` là nguồn chân lý | 0,5 | REV-FE-01 | ✅ |
+| FIX-305 | FE: `pointValue` trả `undefined` khi không có giá trị, **không phải `0`**; `isPhysicalTrendPoint` và `appendLiveTrendSample` bỏ qua mẫu chưa đo; bảng hiện `NO_DATA` | 1 | REV-FE-04 | ✅ |
+| FIX-306 | Rà toàn bộ biên FE tìm các `?? 0` / `?? <mặc định>` còn lại; mỗi chỗ hoặc chứng minh được là đúng, hoặc thành finding mới | 0,25 | N3 | ✅ |
 
 > `R-03`: FIX-302 đổi chữ ký hành vi của một hàm được gọi ở nhiều nơi. Rủi ro không phải ở bản thân bản vá mà ở **những nơi gọi chưa được rà**. Bắt buộc `grep` toàn bộ call site trước khi đổi, và liệt kê chúng trong PR.
 >
@@ -271,12 +289,12 @@ Bốn finding cùng một khuôn: **bịa một giá trị hợp lý thay vì n�
 
 | Task | Nội dung | Ngày | Đóng finding | TT |
 |---|---|---:|---|---|
-| FIX-401 | `applyVirtualPointSchedules` **chạy tiếp** khi một VP lỗi; gom lỗi thành danh sách; báo ra giao diện thay vì chỉ một dòng WARN. Test với 3 lịch, lịch giữa hỏng | 1 | REV-BE-05 | ☐ |
-| FIX-402 | `handleModbusWriteTest` gọi `commissionLimit.allow("write:"+user, 2, …)` đúng như `OD-MBRTU-007` mô tả; test khẳng định lần thứ 3 trong một phút bị chặn | 0,5 | REV-BE-06 | ☐ |
-| FIX-403 | `overlayPointMetadata` **không ghi đè** `Source` do core cấp; chỉ điền khi `Source` rỗng. Giữ nguyên hợp đồng `core_unavailable` mà `ws.go:296` dựa vào | 1 | REV-BE-08 | ☐ |
-| FIX-404 | `OutputsPage`: bỏ `selectedId` khỏi deps của effect nạp; đổi kênh khi còn chỉnh sửa chưa lưu ⇒ **hỏi trước**, không im lặng vứt bỏ | 0,75 | REV-FE-02 | ☐ |
-| FIX-405 | `AUTH_MODE=apikey` theo **QĐ-4**: cài `X-API-Key` phía BE, hoặc **bỏ hẳn** nhánh này khỏi FE. Không giữ nguyên trạng — một chế độ đăng nhập luôn 401 tệ hơn không có chế độ đó | 0,5 | REV-FE-03 | ☐ |
-| FIX-406 | Cập nhật `DATA_MODEL` / `CONFIG_SCHEMA` / `MODBUS_RTU_API_SPEC` theo mọi thay đổi hợp đồng của P1–P4 | — | N6 | ☐ |
+| FIX-401 | `applyVirtualPointSchedules` **chạy tiếp** khi một VP lỗi; gom lỗi thành danh sách; báo ra giao diện thay vì chỉ một dòng WARN. Test với 3 lịch, lịch giữa hỏng | 1 | REV-BE-05 | ✅ |
+| FIX-402 | `handleModbusWriteTest` gọi `commissionLimit.allow("write:"+user, 2, …)` đúng như `OD-MBRTU-007` mô tả; test khẳng định lần thứ 3 trong một phút bị chặn | 0,5 | REV-BE-06 | ✅ |
+| FIX-403 | `overlayPointMetadata` **không ghi đè** `Source` do core cấp; chỉ điền khi `Source` rỗng. Giữ nguyên hợp đồng `core_unavailable` mà `ws.go:296` dựa vào | 1 | REV-BE-08 | ✅ |
+| FIX-404 | `OutputsPage`: bỏ `selectedId` khỏi deps của effect nạp; đổi kênh khi còn chỉnh sửa chưa lưu ⇒ **hỏi trước**, không im lặng vứt bỏ | 0,75 | REV-FE-02 | ✅ |
+| FIX-405 | `AUTH_MODE=apikey` theo **QĐ-4**: cài `X-API-Key` phía BE, hoặc **bỏ hẳn** nhánh này khỏi FE. Không giữ nguyên trạng — một chế độ đăng nhập luôn 401 tệ hơn không có chế độ đó | 0,5 | REV-FE-03 | ✅ |
+| FIX-406 | Cập nhật `DATA_MODEL` / `CONFIG_SCHEMA` / `MODBUS_RTU_API_SPEC` theo mọi thay đổi hợp đồng của P1–P4 | — | N6 | 🔄 |
 
 #### Cổng ra P3 + P4
 
@@ -295,7 +313,7 @@ Trên bo: dừng `mkddc-core`, khẳng định `/api/v1/points` trả **503** (k
 
 | Task | Nội dung | Ngày | TT |
 |---|---|---:|---|
-| FIX-501 | Gate CI chạy **đủ 4 bộ** test và **thất bại khi test thất bại**. Rà lại ba gate từng bị ghi là rỗng trong [review 2026-07-30](../07_records/reviews/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md) — nếu vẫn rỗng thì đây là nguyên nhân gốc của cả plan này | 1 | ☐ |
+| FIX-501 | Gate CI chạy **đủ 4 bộ** test và **thất bại khi test thất bại**. Rà lại ba gate từng bị ghi là rỗng trong [review 2026-07-30](../07_records/reviews/archive/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md) — nếu vẫn rỗng thì đây là nguyên nhân gốc của cả plan này | 1 | ☐ |
 | FIX-502 | Kiểm tra biên tự động: normalizer FE **không được** trả literal mặc định cho dữ liệu vắng; thêm test bảng cho `pointValue` với mọi tổ hợp trường vắng | 0,5 | ☐ |
 | FIX-503 | Ghi vào `AGENTS.md`/`CLAUDE.md` quy tắc rút ra: **sửa một lỗi thì phải `grep` các chỗ cùng khuôn**, và bản vá phải kèm test chặn call site mới | 0,5 | ☐ |
 | FIX-504 | Cập nhật báo cáo rà soát: đánh dấu 15 finding đã đóng kèm commit và output kiểm chứng; ghi hồ sơ vào `docs/07_records/test-evidence/` | 0,5 | ☐ |
@@ -355,37 +373,37 @@ Ký hiệu trạng thái: `☐` chưa làm · `🔄` đang làm · `✅` xong c�
 
 | # | Task | Pha | Nội dung | Owner | Ngày | Phụ thuộc | Finding | TT |
 |---|---|---|---|---|---:|---|---|---|
-| 1 | FIX-001 | P0 | QĐ-1 `CORS_ORIGIN` | CTO | 0,5 | — | REV-PLT-01 | ☐ |
-| 2 | FIX-002 | P0 | QĐ-2 thu hồi phiên WS | CTO | 0,5 | — | REV-BE-02 | ☐ |
-| 3 | FIX-003 | P0 | QĐ-3 số phận PUT fieldbus | PO | 0,25 | — | REV-BE-01 | ☐ |
-| 4 | FIX-004 | P0 | QĐ-4 `AUTH_MODE=apikey` | PO | 0,25 | — | REV-FE-03 | ☐ |
-| 5 | FIX-101 | P1 | **Test đỏ** PUT rỗng xoá cấu hình | BE | 0,5 | 003 | REV-BE-01 | ☐ |
-| 6 | FIX-102 | P1 | Mọi ghi fieldbus qua `Persister` | BE | 1,5 | 101 | REV-BE-01 | ☐ |
-| 7 | FIX-103 | P1 | Bảo toàn revision/checksum mọi nhánh | BE | 0,75 | 102 | REV-BE-01 | ☐ |
-| 8 | FIX-104 | P1 | **Test đỏ** WS giữ quyền sau logout | BE | 0,75 | 002 | REV-BE-02 | ☐ |
-| 9 | FIX-105 | P1 | Tra trạng thái thu hồi phiên | BE | 1 | 104 | REV-BE-02 | ☐ |
-| 10 | FIX-106 | P1 | WS revalidate + đóng socket | BE | 1,5 | 105 | REV-BE-02 | ☐ |
-| 11 | FIX-107 | P1 | **Test đỏ** CORS rỗng nhận loopback | BE | 0,5 | 001 | REV-PLT-01 | ☐ |
-| 12 | FIX-108 | P1 | `CORS_ORIGIN` vào unit + install.sh | DevOps | 0,75 | 107 | REV-PLT-01 | ☐ |
-| 13 | FIX-109 | P1 | Fail-closed khi rỗng | BE | 0,75 | 108 | REV-PLT-01 | ☐ |
-| 14 | FIX-201 | P2 | **Test đỏ dạng bảng** 2 bus cùng slave | BE | 1,25 | — | REV-BE-03/04 | ☐ |
-| 15 | FIX-202 | P2 | `telemetryIndex` khoá (bus, slave) | BE | 1 | 201 | REV-BE-03/04 | ☐ |
-| 16 | FIX-203 | P2 | Chuyển 4 call site sang hàm chung | BE | 1 | 202 | REV-BE-03/04 | ☐ |
-| 17 | FIX-204 | P2 | `busIDForPort` fail-closed | BE | 0,5 | — | REV-BE-09 | ☐ |
-| 18 | FIX-205 | P2 | Validator từ chối cổng ngoài manifest | BE | 0,5 | 204 | REV-BE-09 | ☐ |
+| 1 | FIX-001 | P0 | QĐ-1 `CORS_ORIGIN` | CTO | 0,5 | — | REV-PLT-01 | 🔄 |
+| 2 | FIX-002 | P0 | QĐ-2 thu hồi phiên WS | CTO | 0,5 | — | REV-BE-02 | ✅ |
+| 3 | FIX-003 | P0 | QĐ-3 số phận PUT fieldbus | PO | 0,25 | — | REV-BE-01 | 🔄 |
+| 4 | FIX-004 | P0 | QĐ-4 `AUTH_MODE=apikey` | PO | 0,25 | — | REV-FE-03 | ✅ |
+| 5 | FIX-101 | P1 | **Test đỏ** PUT rỗng xoá cấu hình | BE | 0,5 | 003 | REV-BE-01 | 🔄 |
+| 6 | FIX-102 | P1 | Mọi ghi fieldbus qua `Persister` | BE | 1,5 | 101 | REV-BE-01 | ✅ |
+| 7 | FIX-103 | P1 | Bảo toàn revision/checksum mọi nhánh | BE | 0,75 | 102 | REV-BE-01 | ✅ |
+| 8 | FIX-104 | P1 | **Test đỏ** WS giữ quyền sau logout | BE | 0,75 | 002 | REV-BE-02 | 🔄 |
+| 9 | FIX-105 | P1 | Tra trạng thái thu hồi phiên | BE | 1 | 104 | REV-BE-02 | ✅ |
+| 10 | FIX-106 | P1 | WS revalidate + đóng socket | BE | 1,5 | 105 | REV-BE-02 | ✅ |
+| 11 | FIX-107 | P1 | **Test đỏ** CORS rỗng nhận loopback | BE | 0,5 | 001 | REV-PLT-01 | ✅ |
+| 12 | FIX-108 | P1 | `CORS_ORIGIN` vào unit + install.sh | DevOps | 0,75 | 107 | REV-PLT-01 | ✅ |
+| 13 | FIX-109 | P1 | Fail-closed khi rỗng | BE | 0,75 | 108 | REV-PLT-01 | ✅ |
+| 14 | FIX-201 | P2 | **Test đỏ dạng bảng** 2 bus cùng slave | BE | 1,25 | — | REV-BE-03/04 | ✅ |
+| 15 | FIX-202 | P2 | `telemetryIndex` khoá (bus, slave) | BE | 1 | 201 | REV-BE-03/04 | ✅ |
+| 16 | FIX-203 | P2 | Chuyển 4 call site sang hàm chung | BE | 1 | 202 | REV-BE-03/04 | ✅ |
+| 17 | FIX-204 | P2 | `busIDForPort` fail-closed | BE | 0,5 | — | REV-BE-09 | ✅ |
+| 18 | FIX-205 | P2 | Validator từ chối cổng ngoài manifest | BE | 0,5 | 204 | REV-BE-09 | ✅ |
 | 19 | FIX-206 | P2 | **Kiểm tra tĩnh chặn call site mới** | BE | 0,75 | 203 | N2 | ☐ |
-| 20 | FIX-301 | P3 | **Test đỏ** core chết ⇒ 503 | BE | 0,5 | — | REV-BE-07 | ☐ |
-| 21 | FIX-302 | P3 | `ReadPoints` trả lỗi thật | BE | 1,5 | 301 | REV-BE-07 | ☐ |
-| 22 | FIX-303 | P3 | Sửa bộ đếm bus đếm trùng | BE | 0,75 | — | REV-BE-10 | ☐ |
-| 23 | FIX-304 | P3 | FE `open` ≠ `closed` | FE | 0,5 | — | REV-FE-01 | ☐ |
-| 24 | FIX-305 | P3 | FE thiếu giá trị ⇒ `undefined` | FE | 1 | 304 | REV-FE-04 | ☐ |
-| 25 | FIX-306 | P3 | Rà `?? 0` còn lại ở biên FE | FE | 0,25 | 305 | N3 | ☐ |
-| 26 | FIX-401 | P4 | Scheduler chạy tiếp khi một VP lỗi | BE | 1 | — | REV-BE-05 | ☐ |
-| 27 | FIX-402 | P4 | Giới hạn ghi thử 2/phút | BE | 0,5 | — | REV-BE-06 | ☐ |
-| 28 | FIX-403 | P4 | Không ghi đè `Source` của core | BE | 1 | — | REV-BE-08 | ☐ |
-| 29 | FIX-404 | P4 | OutputsPage deps + chặn mất sửa | FE | 0,75 | — | REV-FE-02 | ☐ |
-| 30 | FIX-405 | P4 | `AUTH_MODE=apikey` theo QĐ-4 | FE/BE | 0,5 | 004 | REV-FE-03 | ☐ |
-| 31 | FIX-406 | P4 | Cập nhật 3 tài liệu hợp đồng | Docs | — | 102 202 302 | N6 | ☐ |
+| 20 | FIX-301 | P3 | **Test đỏ** core chết ⇒ 503 | BE | 0,5 | — | REV-BE-07 | ✅ |
+| 21 | FIX-302 | P3 | `ReadPoints` trả lỗi thật | BE | 1,5 | 301 | REV-BE-07 | ✅ |
+| 22 | FIX-303 | P3 | Sửa bộ đếm bus đếm trùng | BE | 0,75 | — | REV-BE-10 | ✅ |
+| 23 | FIX-304 | P3 | FE `open` ≠ `closed` | FE | 0,5 | — | REV-FE-01 | ✅ |
+| 24 | FIX-305 | P3 | FE thiếu giá trị ⇒ `undefined` | FE | 1 | 304 | REV-FE-04 | ✅ |
+| 25 | FIX-306 | P3 | Rà `?? 0` còn lại ở biên FE | FE | 0,25 | 305 | N3 | ✅ |
+| 26 | FIX-401 | P4 | Scheduler chạy tiếp khi một VP lỗi | BE | 1 | — | REV-BE-05 | ✅ |
+| 27 | FIX-402 | P4 | Giới hạn ghi thử 2/phút | BE | 0,5 | — | REV-BE-06 | ✅ |
+| 28 | FIX-403 | P4 | Không ghi đè `Source` của core | BE | 1 | — | REV-BE-08 | ✅ |
+| 29 | FIX-404 | P4 | OutputsPage deps + chặn mất sửa | FE | 0,75 | — | REV-FE-02 | ✅ |
+| 30 | FIX-405 | P4 | `AUTH_MODE=apikey` theo QĐ-4 | FE/BE | 0,5 | 004 | REV-FE-03 | ✅ |
+| 31 | FIX-406 | P4 | Cập nhật 3 tài liệu hợp đồng | Docs | — | 102 202 302 | N6 | 🔄 |
 | 32 | FIX-501 | P5 | **Gate CI chạy đủ 4 bộ test** | DevOps | 1 | Cổng ra P1/P2/P3 | finding #16 | ☐ |
 | 33 | FIX-502 | P5 | Kiểm tra biên normalizer FE | FE | 0,5 | 305 | N3 | ☐ |
 | 34 | FIX-503 | P5 | Ghi quy tắc "grep chỗ cùng khuôn" vào AGENTS/CLAUDE | Docs | 0,5 | 206 | N2 | ☐ |
@@ -399,7 +417,7 @@ Ký hiệu trạng thái: `☐` chưa làm · `🔄` đang làm · `✅` xong c�
 |---|---|
 | [49_MODBUS_RTU_IMPLEMENTATION_PLAN](49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | 7/15 finding nằm trong phạm vi Modbus RTU; P2 đóng nốt phần `(bus, slave)` mà plan 49 mở ra khi chốt 2 cổng |
 | [50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN](50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) | `REV-BE-05` chạm `virtualpoint_scheduler.go`. **Làm FIX-401 trước khi plan 50 vào P1**, nếu không bản viết lại sẽ mang theo lỗi bỏ dở vòng lặp |
-| [45_WEB_UX_REMEDIATION_AND_CICD_PLAN](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) | FIX-501 là phần CI/CD còn nợ của plan 45 — ba gate rỗng ghi trong [review 2026-07-30](../07_records/reviews/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md) |
+| [45_WEB_UX_REMEDIATION_AND_CICD_PLAN](45_WEB_UX_REMEDIATION_AND_CICD_PLAN.md) | FIX-501 là phần CI/CD còn nợ của plan 45 — ba gate rỗng ghi trong [review 2026-07-30](../07_records/reviews/archive/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md) |
 | [ENABLE_TTYS1_RS485_2](../08_hardware/foxlinx-som-ddc24/ENABLE_TTYS1_RS485_2.md) | FIX-201 kiểm chứng đầy đủ hai bus **chỉ khi** `ttyS1` được bật; trước đó phải mô phỏng bằng `bus_id` trong `fieldbus.conf` |
 
 ---

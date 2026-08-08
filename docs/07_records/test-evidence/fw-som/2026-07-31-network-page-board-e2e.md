@@ -3,7 +3,7 @@
 > **Ngày:** 2026-07-31
 > **Target:** Orange Pi 5B, `aarch64`, Debian Bookworm, hostname `orangepi5b`
 > **Nội dung:** đóng finding F-01…F-13 của
-> `docs/07_records/reviews/KX-DDC24-SETTINGS-NETWORK-IMPLEMENTATION-STATUS-2026-07-31.md`
+> `docs/07_records/reviews/archive/KX-DDC24-SETTINGS-NETWORK-IMPLEMENTATION-STATUS-2026-07-31.md`
 > **Chế độ board:** lab / no-MCU (`mkddc-fakemcu` + `mkddc-pty` active)
 > **Use case tham chiếu:** [KX-DDC24-UC-WEB-NETWORK-001_VI](../../../04_uiux/KX-DDC24-UC-WEB-NETWORK-001_VI.md)
 

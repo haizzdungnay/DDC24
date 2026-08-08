@@ -74,7 +74,7 @@ Người dùng bấm tab thấy giao diện đứng yên ⇒ kết luận "trang
 `ModbusRtuLayout` render `<h1>Modbus RTU Management</h1>`
 ([ModbusRtuLayout.tsx:24](../../../apps/web-ui/src/features/modbus-rtu/ModbusRtuLayout.tsx#L24)),
 `ModbusRtuPage` render thêm `<h1>Modbus RTU Device & Point Manager</h1>`
-([ModbusRtuPage.tsx:136](../../../apps/web-ui/src/features/modbus-rtu/ModbusRtuPage.tsx#L136)).
+(`ModbusRtuPage.tsx:136`).
 Crawl xác nhận `h1: ["Modbus RTU Management","Modbus RTU Device & Point Manager"]`.
 
 Hai H1 trong một document là lỗi cấu trúc tài liệu, và với người dùng là hai tiêu đề
@@ -84,7 +84,7 @@ chồng nhau — dấu hiệu trực quan rõ nhất của "trang bị lỗi".
 
 - `AppShell` bọc `<main className="p-5">` ([AppShell.tsx:42](../../../apps/web-ui/src/shared/components/AppShell.tsx#L42))
 - `ModbusRtuLayout` thêm `p-4 md:p-6` và mở thêm một `<main>` nữa ([ModbusRtuLayout.tsx:21,64](../../../apps/web-ui/src/features/modbus-rtu/ModbusRtuLayout.tsx#L64))
-- `ModbusRtuPage` thêm `p-4 md:p-6` lần thứ ba ([ModbusRtuPage.tsx:134](../../../apps/web-ui/src/features/modbus-rtu/ModbusRtuPage.tsx#L134))
+- `ModbusRtuPage` thêm `p-4 md:p-6` lần thứ ba (`ModbusRtuPage.tsx:134`)
 
 Kết quả: nội dung 3 tab thụt vào sâu bất thường so với tab Tổng quan. `<main>` lồng
 `<main>` cũng phá landmark navigation của screen reader.
@@ -116,7 +116,7 @@ Hiện có: layout ✔, tab ✔, `OverviewPage` ✔, `DevicesPage` (viết rồi
 
 ### Vì sao 306 test không bắt được nhóm A
 
-[ModbusRtuPage.test.tsx](../../../apps/web-ui/src/features/modbus-rtu/ModbusRtuPage.test.tsx#L6)
+`ModbusRtuPage.test.tsx`
 render thẳng `<ModbusRtuPage />`, không đi qua router và không đi qua
 `ModbusRtuLayout`. [OverviewPage.test.tsx](../../../apps/web-ui/src/features/modbus-rtu/pages/OverviewPage.test.tsx#L5)
 cũng render thẳng `<OverviewPage />` trong `BrowserRouter` trần.

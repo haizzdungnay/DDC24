@@ -1,5 +1,10 @@
 # Implementation Plan C1–C10 — Mekong Program Runtime (ST + FBD)
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 **Document ID:** KX-DDC24-PROGRAM-RUNTIME-IMPLPLAN-001
 **Trạng thái:** Partially opened — CTO approved FW SOM ST host execution slice
 (2026-07-24), slice đã có evidence thật (PR #54, #55, #57); FE/Web Backend/STM32/HIL/FBD đầy
@@ -7,8 +12,8 @@
 mở thật (xem §0.1)
 **Ngày tạo:** 2026-07-23
 **Chủ quản:** Project Engineering (Phạm Đình Chương — Project Engineering Owner / CTO)
-**Nguồn quyết định:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
-**Tài liệu song song:** [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md),
+**Nguồn quyết định:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
+**Tài liệu song song:** [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md),
 [`KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md`](KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md)
 
 ## 0. Cách đọc tài liệu này

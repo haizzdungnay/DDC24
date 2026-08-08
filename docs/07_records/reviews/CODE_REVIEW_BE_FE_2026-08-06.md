@@ -2,9 +2,69 @@
 
 > **ID:** REV-CODE-BE-FE-2026-08-06
 > **Phạm vi:** `apps/web-api` (Go) và `apps/web-ui` (React/TS), kèm `platform/systemd`
-> **Mốc mã nguồn:** `main` tại `5fef0b9`
+> **Mốc mã nguồn khi rà:** `main` tại `5fef0b9`
 > **Người rà:** Claude Opus 5 (`/code-review`)
-> **Kết quả:** **15 finding** — 3 nghiêm trọng, 6 cao, 6 trung bình. **Chưa sửa cái nào.**
+> **Kết quả khi rà:** **15 finding** — 3 nghiêm trọng, 6 cao, 6 trung bình.
+
+> ## ✅ ĐÃ ĐÓNG — 2026-08-08
+>
+> Toàn bộ 15 finding đã được đối chiếu lại với mã nguồn tại `18bd295` và xử lý:
+> **14 finding sửa trong source**, **1 finding (`REV-BE-05`) mất hiệu lực** vì
+> đường code mà nó mô tả đã bị Scheduler v3.1 xoá bỏ.
+>
+> | Kiểm chứng | Kết quả |
+> |---|---|
+> | `go vet ./...` | sạch |
+> | `go test ./... -count=1` | **11/11 package `ok`** |
+> | `npx vitest --run --environment jsdom src` | **446/446 PASS**, 51 file |
+> | `npm run lint` · `npm run build` | 0 warning · build OK |
+> | `ctest --test-dir build/fw` | **849/849 PASS** |
+>
+> Chi tiết trạng thái từng finding ở [§0](#0-trạng-thái-đóng-finding--2026-08-08).
+> Kế hoạch xử lý gốc: [Plan 51](../../03_implementation/51_BE_FE_FINDINGS_REMEDIATION_PLAN.md).
+
+---
+
+## 0. Trạng thái đóng finding — 2026-08-08
+
+Đối chiếu lại toàn bộ 15 finding với mã nguồn tại `18bd295` trước khi sửa: **14
+cái còn nguyên trong code**, không cái nào tự biến mất theo thời gian.
+
+| Finding | Trạng thái | Cách đóng |
+|---|---|---|
+| `REV-BE-01` | **Đã sửa** | Mọi lần ghi `fieldbus.conf` đi qua `webModbus.Persister`; nhánh rơi xuống `handlePutConfigValue` bị gỡ. Thiếu khoá `devices`/`points`/`buses` trong body không còn được hiểu là "xoá hết" — muốn xoá phải gửi mảng rỗng tường minh |
+| `REV-BE-02` | **Đã sửa** | `wsSessionStillValid` kiểm lại phiên trước mỗi lệnh **và** mỗi nhịp tick; phiên bị thu hồi ⇒ phát khung 401 rồi đóng socket bằng `StatusPolicyViolation` |
+| `REV-PLT-01` | **Đã sửa** | `CORS_ORIGIN` rỗng nay = **chỉ same-origin** (N5 fail-closed). Nhánh loopback chỉ mở bằng `CORS_ALLOW_LOOPBACK` tường minh; unit + `install.sh` ghi sẵn chỗ cấu hình; log `cors_mode=` lúc khởi động |
+| `REV-BE-03` `REV-BE-04` | **Đã sửa** | Một đường tra cứu duy nhất khoá `(bus, slave)` trong `modbus_bus_index.go`; **cả 5** call site telemetry chuyển sang dùng nó, xoá sạch `map[int]…` cục bộ |
+| `REV-BE-05` | **Hết hiệu lực** | `applyVirtualPointSchedules` và cả file `virtualpoint_scheduler.go` đã bị xoá ở commit `a583263` (Scheduler v3.1). Engine thay thế là `ScheduleRuntime` C++, và `apply_states` **cố ý** không dừng khi một target ghi lỗi (`schedule_runtime.cpp`, đặc tả §11) — đúng hành vi mà finding yêu cầu |
+| `REV-BE-06` | **Đã sửa** | `handleModbusWriteTest` gọi `commissionLimit.allow("write:"+user, 2, time.Minute)` đúng như `OD-MBRTU-007`; lần thứ 3 trong một phút trả 429 |
+| `REV-BE-07` | **Đã sửa** | `CoreClient.ReadPoints` trả lỗi thật thay vì `[]PointDTO{}, nil`; `GET /api/v1/points` trả **503**. Đã rà toàn bộ 6 nơi gọi — cả 6 vốn đã xử lý `err != nil` đúng, chỉ hàm này là chưa nói ra |
+| `REV-BE-08` | **Đã sửa** | `overlayPointMetadata` chỉ **điền** `Source` khi còn trống; `core` / `core_unavailable` / `rejected:…` do core cấp được giữ nguyên, hợp đồng `ws.go` không còn bị phá |
+| `REV-BE-09` | **Đã sửa** | `busIDForPort` trả `""` cho cổng lạ, khớp lại chính sách `NumericID`; validator từ chối kèm mã lỗi; `modbusDeviceBus` thôi có bảng ánh xạ riêng và uỷ quyền về một nguồn |
+| `REV-BE-10` | **Đã sửa** | Thôi gán `TotalErrors` của dây vào `timeout_errors` và thôi xoá trắng `crc_errors`; timeout/CRC chỉ gộp từ số đo theo slave, tổng của dây đi riêng ở trường mới `total_errors` (đã thêm vào `openapi.yaml`) |
+| `REV-FE-01` | **Đã sửa** | `open` chuyển sang danh sách falsy (tiếp điểm hở = OFF), `closed` ở truthy — khớp `DoSafeState` |
+| `REV-FE-02` | **Đã sửa** | `selectedId` ra khỏi deps của effect nạp, thay bằng `selectedIdRef`; đổi kênh không còn nạp lại và không còn vứt bỏ chỉnh sửa chưa lưu |
+| `REV-FE-03` | **Đã sửa** | Nhánh `AUTH_MODE=apikey` bị **gỡ bỏ** (khuyến nghị PA-1 của QĐ-4): trường `apiKey` và header `X-API-Key` không còn; chọn chế độ này nay báo lỗi rõ ràng thay vì dựng phiên "admin" rồi 401 im lặng |
+| `REV-FE-04` | **Đã sửa** | `pointValue` trả `undefined` thay vì `0`; `Point['value']` mở rộng kiểu; `pointNumber` trả `null`; `formatValue` hiện `—`; ba biểu đồ live (Inputs/Outputs/VirtualIo) và sparkline Monitor **bỏ qua** mẫu chưa đo |
+
+**Về ba quyết định QĐ-1/QĐ-2/QĐ-3 của Plan 51.** Bản vá chọn phương án ít rủi ro
+nhất và **không** khoá lựa chọn sau này:
+
+- **QĐ-1 (CORS)** — làm theo khuyến nghị PA-1 (fail-closed). An toàn cho bo đang
+  chạy vì giao diện được chính `mkddc-web` phục vụ **same-origin**, mà trình
+  duyệt không áp CORS cho same-origin và `websocket.Accept` luôn nhận
+  `Origin.Host == r.Host`. Rủi ro `R-02` chỉ hiện thực khi FE chạy ở origin
+  khác; runbook và unit đã ghi sẵn chỗ đặt `CORS_ORIGIN`.
+- **QĐ-2 (thu hồi phiên WS)** — cài PA-2 (revalidate theo chu kỳ) nhưng chu kỳ là
+  **mỗi nhịp tick**, không phải 30 s, nên cửa sổ tồn tại của một phiên đã thu hồi
+  nhỏ hơn nhiều so với phương án được đề xuất. PA-3 (đẩy thông báo ngay khi
+  `Revoke`) vẫn làm chồng lên được nếu CTO muốn.
+- **QĐ-3 (số phận `PUT /system/config/fieldbus`)** — chọn PA-2 (giữ và siết).
+  Bỏ hẳn endpoint là thay đổi phá vỡ hợp đồng API; siết lại thì không, và không
+  cản trở việc bỏ nó sau này nếu PO quyết vậy.
+
+Kiểm chứng còn thiếu: **chưa chạy trên bo** (N6 của Plan 51). Bốn mục kiểm trên
+board ở §4.1 và §5.2 của Plan 51 vẫn mở.
 
 ---
 
@@ -149,7 +209,7 @@ quả mà khoá `(bus, slave)` ở dòng 128–140 sinh ra để ngăn.
 
 ### `REV-BE-05` — Lịch vận hành bỏ dở một tập ngẫu nhiên khi gặp lỗi đầu tiên
 
-**File:** [`internal/app/virtualpoint_scheduler.go:66`](../../../apps/web-api/internal/app/virtualpoint_scheduler.go)
+**File:** ``internal/app/virtualpoint_scheduler.go:66``
 
 `applyVirtualPointSchedules` **`return` ngay** ở lỗi ghi đầu tiên.
 
@@ -327,3 +387,4 @@ telemetry — nếu không, call site thứ năm ra đời sau sẽ lặp lại 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-08-06 | Tạo báo cáo: rà BE + FE theo module tại `5fef0b9`; 15 finding (3 nghiêm trọng, 6 cao, 6 trung bình); xác minh trực tiếp mã nguồn cho ba finding nghiêm trọng; ghi nhận cả 15 đều nằm ngoài vùng phủ của bộ test đang xanh |
+| 2.0 | 2026-08-08 | Đóng finding: đối chiếu lại cả 15 finding với mã nguồn tại `18bd295` (14 còn nguyên, `REV-BE-05` mất hiệu lực do Scheduler v3.1 xoá `virtualpoint_scheduler.go`); sửa 14 finding trong source kèm test đi qua endpoint thật; ghi lý do chọn phương án cho QĐ-1/2/3; số đo: go 11/11 · vitest 446/446 · ctest 849/849 |

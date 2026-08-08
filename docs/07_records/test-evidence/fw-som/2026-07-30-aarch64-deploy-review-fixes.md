@@ -3,7 +3,7 @@
 > **Ngày:** 2026-07-30
 > **Target:** Orange Pi 5B, `Linux 6.1.43-rockchip-rk3588 aarch64`, 8 core, 8 GB RAM, Debian Bookworm
 > **Source:** nhánh `fix/review-2026-07-30-fe-be-fwsom`, commit `87a0ff0`
-> **Nội dung deploy:** toàn bộ 23 finding của `docs/07_records/reviews/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md`
+> **Nội dung deploy:** toàn bộ 23 finding của `docs/07_records/reviews/archive/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md`
 > **Chế độ board:** lab / no-MCU (`mkddc-fakemcu` + `mkddc-pty` active) — **không có tải thực**
 > **Runbook tham chiếu:** `2026-07-28-aarch64-build-deploy.md` §4.1 và bài học §4.2
 

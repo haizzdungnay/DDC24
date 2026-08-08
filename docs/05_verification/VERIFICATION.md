@@ -175,7 +175,7 @@ khóa strict unknown-field handling, exact capability `dns|management-hostname`,
 transaction và management hostname read-only. GET transaction status dùng permission `read`;
 POST mutation chỉ Admin. Code-local pass không đóng physical HIL; gate vẫn RED.
 
-Target evidence: [KX-DDC24 HMI–FW SOM deployment record](../07_records/reviews/KX-DDC24-HMI-FWSOM-DEPLOY-2026-07-22.md).
+Target evidence: [KX-DDC24 HMI–FW SOM deployment record](../07_records/reviews/archive/KX-DDC24-HMI-FWSOM-DEPLOY-2026-07-22.md).
 
 | Finding | Hiện trạng | Evidence cần để đóng |
 |---|---|---|

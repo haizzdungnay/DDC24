@@ -1,5 +1,10 @@
 # BÁO CÁO ĐÁNH GIÁ SẢN PHẨM & THIẾT KẾ — WEB UI MK-DDC-24
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 | Hạng mục | Nội dung |
 |---|---|
 | Mã tài liệu | KX-DDC24-UIUX-PRODUCT-AUDIT-2026-07-30 |
@@ -48,13 +53,13 @@ Chấm điểm theo ba trục của ISO 9241-11:
 
 | Vị trí | Hành vi | Hệ quả |
 |---|---|---|
-| [DashboardPage.tsx:289-299](src/frontend/src/pages/DashboardPage.tsx#L289-L299) | `DeviceStatusCard()` **không nhận tham số nào**, luôn render vòng tròn xanh + chữ "ONLINE" + "Thiết bị hoạt động bình thường" | Thiết bị đã mất kết nối / lỗi vẫn báo "bình thường" |
-| [DashboardPage.tsx:146](src/frontend/src/pages/DashboardPage.tsx#L146) | `cpuPercent = h?.cpuPercent ?? 23` | API health lỗi → **bịa 23% CPU** |
-| [DashboardPage.tsx:175](src/frontend/src/pages/DashboardPage.tsx#L175) | `h?.ramPercent ?? 48` | Bịa 48% RAM |
-| [DashboardPage.tsx:177](src/frontend/src/pages/DashboardPage.tsx#L177) | `h?.uptimeS ?? 12*86400+4*3600+...` | Bịa uptime "12 ngày 04:32:18" |
-| [DashboardPage.tsx:247-248](src/frontend/src/pages/DashboardPage.tsx#L247-L248) | MAC `00:0D:18:24:AC:01` và **thời gian hệ thống `23/05/2025 14:32:18` hardcode cứng** | Vận hành viên đọc được thời gian đóng băng từ 2025 |
-| [LoginPage.tsx:41-44](src/frontend/src/pages/LoginPage.tsx#L41-L44) | 4 badge `core / iobus / web / IOP` gán cứng `state="online"` | Báo toàn bộ service khỏe **trước khi xác thực**, không hề gọi API |
-| [UserInfoPage.tsx:91-92](src/frontend/src/pages/UserInfoPage.tsx#L91-L92) | IP `192.168.1.42` và "Lần đăng nhập gần nhất `2026-06-15 17:25:04`" hardcode | Thông tin phiên giả |
+| `DashboardPage.tsx:289-299` | `DeviceStatusCard()` **không nhận tham số nào**, luôn render vòng tròn xanh + chữ "ONLINE" + "Thiết bị hoạt động bình thường" | Thiết bị đã mất kết nối / lỗi vẫn báo "bình thường" |
+| `DashboardPage.tsx:146` | `cpuPercent = h?.cpuPercent ?? 23` | API health lỗi → **bịa 23% CPU** |
+| `DashboardPage.tsx:175` | `h?.ramPercent ?? 48` | Bịa 48% RAM |
+| `DashboardPage.tsx:177` | `h?.uptimeS ?? 12*86400+4*3600+...` | Bịa uptime "12 ngày 04:32:18" |
+| `DashboardPage.tsx:247-248` | MAC `00:0D:18:24:AC:01` và **thời gian hệ thống `23/05/2025 14:32:18` hardcode cứng** | Vận hành viên đọc được thời gian đóng băng từ 2025 |
+| `LoginPage.tsx:41-44` | 4 badge `core / iobus / web / IOP` gán cứng `state="online"` | Báo toàn bộ service khỏe **trước khi xác thực**, không hề gọi API |
+| `UserInfoPage.tsx:91-92` | IP `192.168.1.42` và "Lần đăng nhập gần nhất `2026-06-15 17:25:04`" hardcode | Thông tin phiên giả |
 
 **Vi phạm:** Nielsen #1 (Visibility of system status — hiển thị trạng thái *sai* còn tệ hơn không hiển thị); ISA-101 (nguyên tắc "chỉ trình bày dữ liệu có nguồn xác thực"); ISO 9241-11 trục Trust.
 
@@ -64,7 +69,7 @@ Chấm điểm theo ba trục của ISO 9241-11:
 
 #### 🔴 BLOCKER #2 — Nút "Test" trong Chạy thử tác động vật lý ngay, KHÔNG có xác nhận
 
-[CommissioningPage.tsx:39](src/frontend/src/pages/CommissioningPage.tsx#L39) — toàn trang chỉ có 43 dòng:
+`CommissioningPage.tsx:39` — toàn trang chỉ có 43 dòng:
 
 ```tsx
 <Button ... onClick={() => test(point, point.kind === 'DO' ? true : 50)}>Test</Button>
@@ -93,9 +98,9 @@ Thêm nữa, `useApi(apiClient.getPoints, [])` không có `refreshMs` → sau kh
 
 Trong khi đó **không có gate** cho: `eng/commissioning` (tác động vật lý ra output), `eng/outputs` (manual force), `monitor` (force point), `eng/inputs`, `eng/virtual-points`, `eng/alarm-settings`, `eng/scheduler`, `settings/users`, `settings/time`.
 
-Nghịch lý: cấu hình *ghi log* được gate theo admin ([PointLoggingDialog.tsx:108](src/frontend/src/components/PointLoggingDialog.tsx#L108)), còn **ép output vật lý thì bất kỳ role nào — kể cả `viewer` — đều làm được**.
+Nghịch lý: cấu hình *ghi log* được gate theo admin (`PointLoggingDialog.tsx:108`), còn **ép output vật lý thì bất kỳ role nào — kể cả `viewer` — đều làm được**.
 
-**3b. Trang đăng nhập khóa cứng username.** [LoginPage.tsx:57](src/frontend/src/pages/LoginPage.tsx#L57):
+**3b. Trang đăng nhập khóa cứng username.** `LoginPage.tsx:57`:
 
 ```tsx
 <input ... value="admin" readOnly aria-label={t('username')} />
@@ -103,7 +108,7 @@ Nghịch lý: cấu hình *ghi log* được gate theo admin ([PointLoggingDialo
 
 Hàm `login(password)` chỉ nhận mật khẩu. Hệ quả: **hệ thống RBAC 4 vai trò ở backend hoàn toàn không thể sử dụng qua Web UI** — không ai ngoài `admin` đăng nhập được. Đây vừa là blocker chức năng, vừa triệt tiêu giá trị của toàn bộ công việc RBAC đã làm.
 
-**3c. Ba nút "chết" trên trang đăng nhập.** `SSO / AD` ([LoginPage.tsx:75](src/frontend/src/pages/LoginPage.tsx#L75)), `Quên mật khẩu?` (dòng 70), checkbox `Ghi nhớ đăng nhập` (dòng 69) — đều không có `onClick`/`onChange`. Icon `Eye` (dòng 65) trông như nút hiện mật khẩu nhưng là `aria-hidden` trang trí. Bốn affordance lừa dối trên màn hình đầu tiên khách hàng nhìn thấy → phá hủy ấn tượng chất lượng ngay giây thứ nhất.
+**3c. Ba nút "chết" trên trang đăng nhập.** `SSO / AD` (`LoginPage.tsx:75`), `Quên mật khẩu?` (dòng 70), checkbox `Ghi nhớ đăng nhập` (dòng 69) — đều không có `onClick`/`onChange`. Icon `Eye` (dòng 65) trông như nút hiện mật khẩu nhưng là `aria-hidden` trang trí. Bốn affordance lừa dối trên màn hình đầu tiên khách hàng nhìn thấy → phá hủy ấn tượng chất lượng ngay giây thứ nhất.
 
 ---
 
@@ -131,19 +136,19 @@ Toàn bộ số liệu dưới đây tính từ token thật, nền badge đã b
 |---|---|---|---|
 | `--c-border` `#9AA0A6` — viền **mọi** input/select/panel | vs `--c-bg` | **1.64** ❌ | Toàn bộ trường nhập liệu không nhìn rõ ranh giới |
 | `--c-border` | vs `--c-surface` | **1.90** ❌ | |
-| Viền chip `TRIP` dùng `--c-warn` `#E8B500` | vs surface | **1.37** ❌ | [AlarmRow.tsx:37](src/frontend/src/components/AlarmRow.tsx#L37) |
+| Viền chip `TRIP` dùng `--c-warn` `#E8B500` | vs surface | **1.37** ❌ | `AlarmRow.tsx:37` |
 | `--c-warn` `#E8B500` nếu dùng làm chữ | vs bg | **1.18** ❌ | Màu cảnh báo gần như vô hình trên nền sáng |
 
 **Bảng C — Lỗi kỹ thuật cụ thể — badge số cảnh báo trên TopBar thiếu màu chữ:**
 
-[TopBar.tsx:36](src/frontend/src/components/TopBar.tsx#L36) không set `text-white` (khác với [NavRail.tsx:121](src/frontend/src/components/NavRail.tsx#L121) có set):
+`TopBar.tsx:36` không set `text-white` (khác với `NavRail.tsx:121` có set):
 
 | Thành phần | Tổ hợp | Tương phản |
 |---|---|---|
 | NavRail badge (đúng) | `#FFFFFF` trên `#D5202A` | 5.16 ✅ |
 | **TopBar badge (lỗi)** | kế thừa `--c-text` `#1C1F23` trên `#D5202A` | **3.21** ❌ |
 
-**Bảng D — Class `.stale` phá hỏng tương phản đúng lúc nguy hiểm nhất.** [styles.css:57](src/frontend/src/styles.css#L57) đặt `opacity: 0.62`. Khi dữ liệu đã stale (tức là lúc vận hành viên *cần đọc kỹ nhất*):
+**Bảng D — Class `.stale` phá hỏng tương phản đúng lúc nguy hiểm nhất.** `styles.css:57` đặt `opacity: 0.62`. Khi dữ liệu đã stale (tức là lúc vận hành viên *cần đọc kỹ nhất*):
 
 | Nội dung | Sau khi giảm opacity | Tương phản |
 |---|---|---|
@@ -152,7 +157,7 @@ Toàn bộ số liệu dưới đây tính từ token thật, nền badge đã b
 | `--c-fault` | `#D6676E` | **2.51** ❌ |
 | `--c-warn` | `#E2C354` | **1.24** ❌ |
 
-**Bảng E — Không có theme tối.** [styles.css:26](src/frontend/src/styles.css#L26) khai báo `color-scheme: light` và **không có bất kỳ khối `@media (prefers-color-scheme: dark)` hay `[data-theme]` nào**. Trang Hiển thị chỉ *mô tả* theme, không cho đổi ([DisplaySettingsPage.tsx:57-65](src/frontend/src/pages/DisplaySettingsPage.tsx#L57-L65) — panel "Theme" là văn bản tĩnh, ghi "Level B hybrid cố định theo ADR-009").
+**Bảng E — Không có theme tối.** `styles.css:26` khai báo `color-scheme: light` và **không có bất kỳ khối `@media (prefers-color-scheme: dark)` hay `[data-theme]` nào**. Trang Hiển thị chỉ *mô tả* theme, không cho đổi (`DisplaySettingsPage.tsx:57-65` — panel "Theme" là văn bản tĩnh, ghi "Level B hybrid cố định theo ADR-009").
 
 Độ chói nền hiện tại: `--c-bg` = **60.0%**, `--c-surface` = **70.5%**. Trong phòng máy/tủ điều khiển tối, màn hình 70% luminance gây lóa, mất khả năng thích nghi tối (dark adaptation) của mắt và mỏi mắt nghiêm trọng trong ca trực 8-12 giờ. Đây là yêu cầu bắt buộc của ISA-101 cho môi trường control room.
 
@@ -168,9 +173,9 @@ Toàn bộ số liệu dưới đây tính từ token thật, nền badge đã b
 
 > **Hiệu chỉnh tiêu chuẩn (quan trọng cho tính chính xác của báo cáo):** Ngưỡng 44×44px mà brief nêu **không phải** WCAG 2.2 mức AA. Chính xác là: WCAG 2.2 **SC 2.5.8 Target Size (Minimum), mức AA = 24×24px**; còn **44×44px là SC 2.5.5 Target Size (Enhanced), mức AAA**. 44×44px cũng là khuyến nghị của Apple HIG và là con số phù hợp với HMI cảm ứng công nghiệp (vận hành có thể đeo găng tay). Báo cáo này giữ mục tiêu 44×44px nhưng ghi rõ đó là mức **AAA / thực hành tốt HMI**, không phải nghĩa vụ AA — để tránh bên phát triển bị dẫn dắt sai khi lập kế hoạch tuân thủ.
 
-**Bảng G — Cỡ chữ.** `text-[9px]`: 1 lần; `text-[10px]`: 19 lần; `text-[11px]`: 12 lần; `text-xs` (12px): 231 lần. Đáng chú ý: **số lượng cảnh báo đang hoạt động** được render ở `text-[9px]` khi sidebar thu gọn ([NavRail.tsx:122](src/frontend/src/components/NavRail.tsx#L122)) — chữ 9px cho thông tin quan trọng nhất của HMI.
+**Bảng G — Cỡ chữ.** `text-[9px]`: 1 lần; `text-[10px]`: 19 lần; `text-[11px]`: 12 lần; `text-xs` (12px): 231 lần. Đáng chú ý: **số lượng cảnh báo đang hoạt động** được render ở `text-[9px]` khi sidebar thu gọn (`NavRail.tsx:122`) — chữ 9px cho thông tin quan trọng nhất của HMI.
 
-**Bảng H — Màu ngữ nghĩa bị tái sử dụng làm màu chuỗi dữ liệu.** [TrendsPage.tsx:39](src/frontend/src/pages/TrendsPage.tsx#L39):
+**Bảng H — Màu ngữ nghĩa bị tái sử dụng làm màu chuỗi dữ liệu.** `TrendsPage.tsx:39`:
 
 ```tsx
 const colors = ['#2A5C8A', 'var(--c-warn-fg)', '#6E5A2E', '#8A4FBF', '#5B6066', 'var(--c-fault-fg)', '#B0179C', 'var(--c-off)']
@@ -182,19 +187,19 @@ Chuỗi trend thứ 2 mang màu **cảnh báo**, thứ 6 mang màu **lỗi**, th
 
 #### 🔴 BLOCKER #5 — Trang Lập trình tự redirect âm thầm; mất hoàn toàn navigation dưới 1024px
 
-**5a. Redirect âm thầm không giải thích.** [App.tsx:66](src/frontend/src/App.tsx#L66):
+**5a. Redirect âm thầm không giải thích.** `App.tsx:66`:
 
 ```tsx
 <Route path="eng/programming" element={LEGACY_GRAPH_DEMO_ENABLED ? <ProgrammingPage /> : <Navigate to="/" replace />} />
 ```
 
-Với [config.ts:6-9](src/frontend/src/config.ts#L6-L9), `LEGACY_GRAPH_DEMO_ENABLED` chỉ `true` khi **đồng thời** ở chế độ `demo` **và** cờ `VITE_ENABLE_LEGACY_GRAPH_DEMO === '1'`. Nghĩa là **trong mọi bản build `live` (bản giao khách), truy cập `/eng/programming` sẽ bị đẩy về Dashboard mà không một dòng thông báo nào**. Người dùng bookmark link, hoặc làm theo tài liệu hướng dẫn, sẽ thấy trang "nhảy" về trang chủ và không hiểu vì sao. Vi phạm Nielsen #1 (Visibility) và #9 (Help users recognize, diagnose, recover from errors).
+Với `config.ts:6-9`, `LEGACY_GRAPH_DEMO_ENABLED` chỉ `true` khi **đồng thời** ở chế độ `demo` **và** cờ `VITE_ENABLE_LEGACY_GRAPH_DEMO === '1'`. Nghĩa là **trong mọi bản build `live` (bản giao khách), truy cập `/eng/programming` sẽ bị đẩy về Dashboard mà không một dòng thông báo nào**. Người dùng bookmark link, hoặc làm theo tài liệu hướng dẫn, sẽ thấy trang "nhảy" về trang chủ và không hiểu vì sao. Vi phạm Nielsen #1 (Visibility) và #9 (Help users recognize, diagnose, recover from errors).
 
 Route `/validator` (dòng 79) cũng redirect tương tự, hai lớp chồng nhau.
 
-**5b. Bản thân trang Lập trình không phải công cụ lập trình.** [ProgrammingPage.tsx](src/frontend/src/pages/ProgrammingPage.tsx) là **danh sách thư viện + JSON mẫu hardcode** (`sampleGraph` với `name: 'AHU01_DDC'`, `author: 'demo'`). Không có canvas, không có nối dây trực quan, và **grep toàn bộ mã nguồn không tìm thấy `draggable`/`onDrag`/`DragEvent` ở bất kỳ đâu** — không hề có kéo-thả trong toàn sản phẩm. Nhãn khối là identifier nội bộ thô: `UI_Input`, `AO_Output`, `Modbus_Read`, `OnDelay`, `OffDelay`, `AlarmDelay`, `RuntimeCounter`, `PulseCounter` — tiếng Anh 100%, mô tả cũng tiếng Anh ("Boolean AND.", "Safety permissive gate.").
+**5b. Bản thân trang Lập trình không phải công cụ lập trình.** `ProgrammingPage.tsx` là **danh sách thư viện + JSON mẫu hardcode** (`sampleGraph` với `name: 'AHU01_DDC'`, `author: 'demo'`). Không có canvas, không có nối dây trực quan, và **grep toàn bộ mã nguồn không tìm thấy `draggable`/`onDrag`/`DragEvent` ở bất kỳ đâu** — không hề có kéo-thả trong toàn sản phẩm. Nhãn khối là identifier nội bộ thô: `UI_Input`, `AO_Output`, `Modbus_Read`, `OnDelay`, `OffDelay`, `AlarmDelay`, `RuntimeCounter`, `PulseCounter` — tiếng Anh 100%, mô tả cũng tiếng Anh ("Boolean AND.", "Safety permissive gate.").
 
-**5c. Mất toàn bộ navigation trên tablet.** [NavRail.tsx:67-70](src/frontend/src/components/NavRail.tsx#L67-L70) khai báo `hidden ... lg:flex`, và [AppShell.tsx](src/frontend/src/components/AppShell.tsx) **không có hamburger, không có drawer, không có nav thay thế nào**. Grep `lg:hidden|md:hidden|drawer|MobileNav` trong `components/` trả về **rỗng**.
+**5c. Mất toàn bộ navigation trên tablet.** `NavRail.tsx:67-70` khai báo `hidden ... lg:flex`, và `AppShell.tsx` **không có hamburger, không có drawer, không có nav thay thế nào**. Grep `lg:hidden|md:hidden|drawer|MobileNav` trong `components/` trả về **rỗng**.
 
 → Dưới 1024px (toàn bộ tablet dọc, panel HMI 7-10", điện thoại), người dùng **chỉ còn 3 icon trên TopBar** (Cảnh báo / Trợ giúp / Người dùng) và **không có cách nào tới 14 trang còn lại**. Với sản phẩm HMI công nghiệp thường vận hành trên tablet gắn tủ, đây là lỗi chặn triển khai.
 
@@ -233,7 +238,7 @@ Route `/validator` (dòng 79) cũng redirect tương tự, hai lớp chồng nha
 | L4 | `Quên mật khẩu?` không có `onClick` (dòng 70) | Nielsen #1 |
 | L5 | Checkbox `Ghi nhớ đăng nhập` không có state/`onChange` (dòng 69) | Nielsen #1 |
 | L6 | Icon `Eye` trông như nút hiện mật khẩu nhưng là `aria-hidden` trang trí (dòng 65) | Affordance lừa dối |
-| L7 | **Không có bộ đổi ngôn ngữ trên trang này**, mà mặc định i18n là `'en'` ([i18n.tsx:399](src/frontend/src/i18n.tsx#L399)) → vận hành viên Việt Nam mở lần đầu thấy **"Welcome Back"** và không có cách nào chuyển sang tiếng Việt trước khi đăng nhập | Nielsen #2, #7 |
+| L7 | **Không có bộ đổi ngôn ngữ trên trang này**, mà mặc định i18n là `'en'` (`i18n.tsx:399`) → vận hành viên Việt Nam mở lần đầu thấy **"Welcome Back"** và không có cách nào chuyển sang tiếng Việt trước khi đăng nhập | Nielsen #2, #7 |
 | L8 | Lộ Model / IP / BACnet ID / Firmware **khi chưa xác thực** (dòng 46-51) | Information disclosure |
 | L9 | Thiếu `autoComplete`, không báo Caps Lock, không phản hồi số lần sai/khóa tài khoản | ISO 9241-11 Satisfaction |
 | L10 | Banner dùng màu thô `rgba(224,161,6,...)` thay vì token `--c-warn` (dòng 79) | Nhất quán hệ thống |
@@ -289,7 +294,7 @@ Route `/validator` (dòng 79) cũng redirect tương tự, hai lớp chồng nha
 
 | # | Vấn đề | Vi phạm |
 |---|---|---|
-| M1 | **Click vào biểu đồ Sparkline mở dialog Force** — [dòng 471](src/frontend/src/pages/MonitorPage.tsx#L471): `<span onClick={... onForce(point)}>` bọc quanh Sparkline. Một đồ thị trông như thành phần chỉ-đọc lại là cò súng mở lệnh ép output | Nielsen #5; **WCAG 2.1.1** (span không tiếp cận được bằng bàn phím), **4.1.2** (không có role/name) |
+| M1 | **Click vào biểu đồ Sparkline mở dialog Force** — `dòng 471`: `<span onClick={... onForce(point)}>` bọc quanh Sparkline. Một đồ thị trông như thành phần chỉ-đọc lại là cò súng mở lệnh ép output | Nielsen #5; **WCAG 2.1.1** (span không tiếp cận được bằng bàn phím), **4.1.2** (không có role/name) |
 | M2 | Ô nhập giá trị Force là `<input>` text trơn, **không `min`/`max`/`step` theo dải kỹ thuật của điểm**, không hiện đơn vị; chỉ validate khi submit và ném lỗi tiếng Anh (`'Force value must be a number'`, dòng 92) | Nielsen #5 |
 | M3 | Modal Force không nêu **hậu quả vật lý** (thiết bị nào sẽ chuyển động), không hiện thời điểm hết hạn force | ISA-101 Manual Override |
 | M4 | Không có gate quyền — `viewer` ép được output (xem Blocker #3) | Bảo mật |
@@ -316,13 +321,13 @@ Route `/validator` (dòng 79) cũng redirect tương tự, hai lớp chồng nha
 
 | # | Vấn đề | Vi phạm |
 |---|---|---|
-| A1 | **Nhãn nút "Off" để chặn cảnh báo** ([AlarmRow.tsx:48](src/frontend/src/components/AlarmRow.tsx#L48)) — trong ngữ cảnh DDC, "Off" đọc thành "tắt thiết bị", thực tế là suppress cảnh báo. Nhầm lẫn cực nguy hiểm | Nielsen #2 |
+| A1 | **Nhãn nút "Off" để chặn cảnh báo** (`AlarmRow.tsx:48`) — trong ngữ cảnh DDC, "Off" đọc thành "tắt thiết bị", thực tế là suppress cảnh báo. Nhầm lẫn cực nguy hiểm | Nielsen #2 |
 | A2 | **Không sắp xếp được danh sách** theo thời gian/mức độ; `historyRows` chỉ `[...history].reverse()` (dòng 162) | **ISA-18.2** yêu cầu sắp theo priority |
 | A3 | **Không có âm báo/annunciation** cho cảnh báo mới ở bất kỳ đâu trong sản phẩm | ISA-18.2 |
 | A4 | **Không có `aria-live`** cho cảnh báo mới → người dùng screen reader và cả người đang xem trang khác không được thông báo | WCAG 4.1.3 |
 | A5 | **Không có acknowledge hàng loạt** — 50 cảnh báo phải ack 50 lần, mỗi lần qua một dialog | ISO 9241-11 Efficiency |
 | A6 | `limit: 'all'` ở chế độ full (dòng 250) **không phân trang** → có thể render hàng chục nghìn dòng, treo trình duyệt nhúng | Efficiency |
-| A7 | Mức độ bị gộp mất thông tin: critical và high **cùng** hiện badge `fault`; low và info **cùng** hiện badge `ok` → **cảnh báo `INFO` hiện badge MÀU XANH**, trong HMI công nghiệp xanh nghĩa là bình thường (dòng 321, và [AlarmRow.tsx:23](src/frontend/src/components/AlarmRow.tsx#L23)) | Nielsen #4, ISA-18.2 |
+| A7 | Mức độ bị gộp mất thông tin: critical và high **cùng** hiện badge `fault`; low và info **cùng** hiện badge `ok` → **cảnh báo `INFO` hiện badge MÀU XANH**, trong HMI công nghiệp xanh nghĩa là bình thường (dòng 321, và `AlarmRow.tsx:23`) | Nielsen #4, ISA-18.2 |
 | A8 | 7 checkbox sự kiện phơi thẳng **enum snake_case của database**: `setting_created`, `setting_changed`, `setting_deleted` (dòng 20) | Nielsen #2 |
 | A9 | Không xuất được CSV/Excel lịch sử cảnh báo | Nghiệp vụ nghiệm thu |
 | A10 | 5 nút icon-only thiếu `aria-label` (dòng 105, 143, 186, 190, 217) | WCAG 4.1.2 |
@@ -333,7 +338,7 @@ Route `/validator` (dòng 79) cũng redirect tương tự, hai lớp chồng nha
 
 | # | Vấn đề | Vi phạm |
 |---|---|---|
-| A13 | **Không có focus trap, không xử lý `Escape`, không trả focus** — trong khi [Modal.tsx](src/frontend/src/components/Modal.tsx) đã làm đủ cả ba | WCAG 2.1.2, 2.4.3; Nielsen #4 |
+| A13 | **Không có focus trap, không xử lý `Escape`, không trả focus** — trong khi `Modal.tsx` đã làm đủ cả ba | WCAG 2.1.2, 2.4.3; Nielsen #4 |
 | A14 | **100% hardcode tiếng Anh**: "Ack alarm"/"Off alarm", "Duration", "Minutes", "Cancel", `1m`…`20m`, `Permanent`, `Custom` | Localization |
 | A15 | Mặc định chọn sẵn **suppress 5 phút** (`useState('300')`), không hiển thị thời điểm hết hiệu lực tương ứng | Nielsen #5 |
 | A16 | `min={1}` nhưng **không có `max`** → có thể nhập 999999 phút (≈ 2 năm) chặn cảnh báo | Nielsen #5 |
@@ -667,7 +672,7 @@ Thêm nhãn hardcode: `Raw output`, `Digital`, `AO`, `DO`.
 
 | Chuỗi nguyên văn trong mã | Vấn đề |
 |---|---|
-| `'Cau hinh canh bao'` ([i18n.tsx:175](src/frontend/src/i18n.tsx#L175)) | Thiếu dấu — **đúng như brief nêu** |
+| `'Cau hinh canh bao'` (`i18n.tsx:175`) | Thiếu dấu — **đúng như brief nêu** |
 | `'ADR-013 alarm entities, multi-source, luu qua backend API'` (dòng 176) | Thiếu dấu + mã nội bộ + từ vựng dev |
 | `'Da luu cau hinh canh bao'` (dòng 178) | Thiếu dấu |
 | `'Khong luu duoc cau hinh canh bao'` (dòng 179) | Thiếu dấu |
@@ -689,8 +694,8 @@ Brief liệt kê 17 màn hình. Kiểm tra `App.tsx` cho thấy **22 route hoạ
 | **Thông tin người dùng** | `/me` | Hoạt động, có trong TopBar | **3 giá trị bịa**: `Auto-logout demo` đếm ngược 15:00 không gắn với hạn JWT thật; `IP demo` = `192.168.1.42` hardcode; `Lần đăng nhập gần nhất` = `2026-06-15 17:25:04` hardcode. Đổi mật khẩu **không yêu cầu mật khẩu hiện tại** (lỗ hổng nếu phiên bị chiếm) và chỉ tối thiểu 6 ký tự. Nhãn chứa từ "demo" ở cả 2 ngôn ngữ |
 | **Trợ giúp** | `/help` | Hoạt động, có trong TopBar | **Màn hình được địa phương hóa tốt nhất**: song ngữ đầy đủ, `aria-hidden` đúng cho icon trang trí, phân cấp `h1`/`h2`/`h3` chuẩn. Nhược: FAQ tĩnh, không tìm kiếm được; icon `ExternalLink` gợi ý có link nhưng chỉ là trang trí |
 | **Sơ đồ điều khiển** | `/eng/diagram` | Hoạt động, **không có trong sidebar** — chỉ tới được qua nút "Open" ở Dashboard | **Không kiểm tra độ tươi dữ liệu**: `realtime.allPoints.length ? realtime.allPoints : ...` (dòng 15) thiếu `isFreshIso` mà Dashboard/Monitor đều có → hiển thị dữ liệu WebSocket cũ vô thời hạn sau khi mất kết nối, **không đánh dấu stale**. Nguy hiểm trên sơ đồ dùng để chạy thử. `toLocaleTimeString('vi-VN')` hardcode |
-| **Tham số người dùng** | `/eng/user-parameters` | Route sống, **link sidebar bị comment** ([NavRail.tsx:43](src/frontend/src/components/NavRail.tsx#L43)) | Trang mồ côi. **30 tham số `upParam00`–`upParam29` để nguyên tiếng Anh ở bản `vi`** (`'Enable access to setpoints'`, `'Temperatures in Fahrenheit'`, `'Enable Wink Always'`…) — 35 khóa i18n không dịch. Subtitle `'Mock - chưa nối backend'` **đã lạc hậu**: trang thực tế gọi `getUserParams`/`putUserParams` thật (dòng 95, 124) → thông tin sai cho người dùng |
-| **Hàm phụ trợ** | `/eng/aux` | Route sống, **link sidebar bị comment** ([NavRail.tsx:44](src/frontend/src/components/NavRail.tsx#L44)) | Trang mồ côi, **không có `apiClient` nào** → thuần mock. Nút icon-only thiếu `aria-label` (dòng 255) |
+| **Tham số người dùng** | `/eng/user-parameters` | Route sống, **link sidebar bị comment** (`NavRail.tsx:43`) | Trang mồ côi. **30 tham số `upParam00`–`upParam29` để nguyên tiếng Anh ở bản `vi`** (`'Enable access to setpoints'`, `'Temperatures in Fahrenheit'`, `'Enable Wink Always'`…) — 35 khóa i18n không dịch. Subtitle `'Mock - chưa nối backend'` **đã lạc hậu**: trang thực tế gọi `getUserParams`/`putUserParams` thật (dòng 95, 124) → thông tin sai cho người dùng |
+| **Hàm phụ trợ** | `/eng/aux` | Route sống, **link sidebar bị comment** (`NavRail.tsx:44`) | Trang mồ côi, **không có `apiClient` nào** → thuần mock. Nút icon-only thiếu `aria-label` (dòng 255) |
 
 **Vấn đề sản phẩm:** ba trang (`user-parameters`, `aux`, `diagram`) truy cập được bằng URL nhưng không có đường dẫn từ menu. Đây là bề mặt sản phẩm không được quản lý: hoặc phải hoàn thiện và đưa vào menu, hoặc phải chặn route và trả thông báo rõ ràng — chứ không để lơ lửng.
 
@@ -700,18 +705,18 @@ Brief liệt kê 17 màn hình. Kiểm tra `App.tsx` cho thấy **22 route hoạ
 
 | # | Vấn đề | Chi tiết | Vi phạm |
 |---|---|---|---|
-| G1 | **`t()` không có fallback** | [i18n.tsx:404](src/frontend/src/i18n.tsx#L404): `t: (key) => copy[lang][key]` — thiếu khóa sẽ render `undefined` ra UI thay vì lùi về khóa hoặc ngôn ngữ khác | Robustness |
-| G2 | **Ngôn ngữ mặc định là `'en'`** | [i18n.tsx:399](src/frontend/src/i18n.tsx#L399) — sản phẩm cho thị trường Việt Nam mặc định tiếng Anh | Localization |
-| G3 | **`<html lang="vi">` cứng** | [index.html:2](src/frontend/index.html#L2) không đồng bộ với ngôn ngữ đang chọn (mặc định lại là `en`) → screen reader đọc sai ngữ điệu | **WCAG 3.1.1 / 3.1.2** |
+| G1 | **`t()` không có fallback** | `i18n.tsx:404`: `t: (key) => copy[lang][key]` — thiếu khóa sẽ render `undefined` ra UI thay vì lùi về khóa hoặc ngôn ngữ khác | Robustness |
+| G2 | **Ngôn ngữ mặc định là `'en'`** | `i18n.tsx:399` — sản phẩm cho thị trường Việt Nam mặc định tiếng Anh | Localization |
+| G3 | **`<html lang="vi">` cứng** | `index.html:2` không đồng bộ với ngôn ngữ đang chọn (mặc định lại là `en`) → screen reader đọc sai ngữ điệu | **WCAG 3.1.1 / 3.1.2** |
 | G4 | **13 chỗ hardcode `'vi-VN'`** | Trong `utils.ts` (dòng 128, 134 — dùng toàn app), `DashboardPage`, `DiagramPage`, `InputsPage`, `OutputsPage`, `VirtualIoPage`, `TrendChart`, `ControllerDiagram`. Chế độ English vẫn ra định dạng ngày giờ Việt Nam | Localization |
 | G5 | **`StatusBadge.labelMap` hardcode tiếng Anh** | 25 nhãn (`NORMAL`, `FAULT`, `FORCED`, `OFFLINE`, `DEGRADED`…) không bao giờ dịch, xuất hiện trên **mọi** màn hình | Localization |
 | G6 | **`PointLoggingSection` không có i18n** | `'Loading database logging policy...'`, `'Database logging policy unavailable:'`, `'Database logging is not available for X.'` hardcode tiếng Anh | Localization |
 | G7 | **`Modal` dùng ID tĩnh** | `aria-labelledby="modal-title"` (dòng 94, 101) — hai modal cùng lúc sẽ trùng ID | WCAG 4.1.1 |
 | G8 | **Backdrop click đóng modal không cảnh báo** | `onMouseDown={onClose}` (dòng 89) → mất dữ liệu form đang nhập | Nielsen #5 |
-| G9 | **Nút Đăng xuất là `variant="ghost"` cạnh nút đổi ngôn ngữ** | [TopBar.tsx:47](src/frontend/src/components/TopBar.tsx#L47) — không xác nhận, affordance thấp nhất (`text-dim`), sát nút toggle ngôn ngữ → dễ bấm nhầm, mất phiên kỹ thuật đang làm. Trong khi cùng hành động đó ở `UserInfoPage` lại là `variant="danger"` | Nielsen #4, #5 |
-| G10 | **Toggle ngôn ngữ có `ChevronDown` nhưng không phải dropdown** | [TopBar.tsx:44-46](src/frontend/src/components/TopBar.tsx#L44-L46) — mũi tên xuống gợi ý menu, thực tế là toggle 2 trạng thái | Affordance sai |
+| G9 | **Nút Đăng xuất là `variant="ghost"` cạnh nút đổi ngôn ngữ** | `TopBar.tsx:47` — không xác nhận, affordance thấp nhất (`text-dim`), sát nút toggle ngôn ngữ → dễ bấm nhầm, mất phiên kỹ thuật đang làm. Trong khi cùng hành động đó ở `UserInfoPage` lại là `variant="danger"` | Nielsen #4, #5 |
+| G10 | **Toggle ngôn ngữ có `ChevronDown` nhưng không phải dropdown** | `TopBar.tsx:44-46` — mũi tên xuống gợi ý menu, thực tế là toggle 2 trạng thái | Affordance sai |
 | G11 | **Không có breadcrumb / tiêu đề ngữ cảnh** | Kết hợp với việc mất sidebar dưới 1024px → người dùng không biết mình đang ở đâu | Nielsen #1 |
-| G12 | **Tên tiếp cận của link cảnh báo bị nối số** | Test khẳng định accessible name là `'Alarm2'` ([ShellNavigation.test.tsx:71](src/frontend/src/components/ShellNavigation.test.tsx#L71)) — screen reader đọc "Alarm 2" mơ hồ, nên là "Cảnh báo, 2 đang hoạt động" | WCAG 1.3.1, 4.1.2 |
+| G12 | **Tên tiếp cận của link cảnh báo bị nối số** | Test khẳng định accessible name là `'Alarm2'` (`ShellNavigation.test.tsx:71`) — screen reader đọc "Alarm 2" mơ hồ, nên là "Cảnh báo, 2 đang hoạt động" | WCAG 1.3.1, 4.1.2 |
 | G13 | **Không có skip-link tới nội dung chính** | Người dùng bàn phím phải Tab qua toàn bộ 17 mục sidebar mỗi trang | WCAG 2.4.1 |
 | G14 | **Không có xử lý hết hạn phiên** | Không thấy cơ chế cảnh báo trước khi JWT hết hạn hay tự làm mới → người dùng có thể mất dữ liệu đang nhập | Nielsen #5 |
 
@@ -809,7 +814,7 @@ Nội dung bắt buộc của dialog:
 #### QW-3. Chuẩn hóa 60 chuỗi tiếng Việt thiếu dấu + gỡ thuật ngữ nội bộ
 **Giải quyết lỗi brief nêu · Ước lượng: 1.5 ngày**
 
-**Chẩn đoán chính xác nguyên nhân.** Đây **không phải lỗi font**. Font stack `Inter, Roboto, ui-sans-serif, system-ui…` ([styles.css:27](src/frontend/src/styles.css#L27)) hiển thị đầy đủ dấu tiếng Việt bình thường, và `<meta charset="UTF-8">` đã đúng. **Nguyên nhân thật: chuỗi trong mã nguồn được viết bằng ASCII không dấu.** Vì vậy đây là lỗi dữ liệu văn bản, sửa bằng cách sửa chuỗi — không cần đổi font hay encoding.
+**Chẩn đoán chính xác nguyên nhân.** Đây **không phải lỗi font**. Font stack `Inter, Roboto, ui-sans-serif, system-ui…` (`styles.css:27`) hiển thị đầy đủ dấu tiếng Việt bình thường, và `<meta charset="UTF-8">` đã đúng. **Nguyên nhân thật: chuỗi trong mã nguồn được viết bằng ASCII không dấu.** Vì vậy đây là lỗi dữ liệu văn bản, sửa bằng cách sửa chuỗi — không cần đổi font hay encoding.
 
 **Danh sách 60 chuỗi** (đã liệt kê tại 2.4, 2.11, 2.16, 2.17). Phân bổ: `AlarmsPage` 21 · `SchedulerPage` 17 · `AlarmSettingsPage` 14 · `VirtualIoPage` 10 · `i18n.tsx` 4.
 
@@ -842,13 +847,13 @@ Bảng mẫu chuyển đổi:
 
 **Sửa 3 khiếm khuyết nền tảng đi kèm:**
 1. `t()` thêm fallback: `copy[lang][key] ?? copy.vi[key] ?? key`.
-2. Ngôn ngữ mặc định `'en'` → `'vi'` ([i18n.tsx:399](src/frontend/src/i18n.tsx#L399)).
+2. Ngôn ngữ mặc định `'en'` → `'vi'` (`i18n.tsx:399`).
 3. Đồng bộ `document.documentElement.lang` với ngôn ngữ đang chọn (WCAG 3.1.1) — thêm `useEffect` trong `I18nProvider`, và sửa `index.html` thành `lang="vi"` khớp mặc định mới.
 4. Thay 13 chỗ `'vi-VN'` cứng bằng `locale` từ `useI18n()`; `utils.ts` nhận `locale` làm tham số.
 5. Dịch `StatusBadge.labelMap` (25 nhãn) và `PointLoggingSection` (3 chuỗi).
 
 > **Lưu ý về hai điểm brief nêu chưa khớp thực tế** — cần ghi rõ để tránh sửa sai chỗ:
-> - **Lỗi `&amp;`**: grep toàn bộ `src/` và `web/` cho `&amp;`, `&nbsp;`, `&lt;`, `&gt;`, `&quot;` → **không có kết quả**. Lỗi này không tồn tại trong mã hiện tại. Chỗ duy nhất dùng HTML entity là `&deg;C` ([DashboardPage.tsx:339](src/frontend/src/pages/DashboardPage.tsx#L339)) và JSX **render đúng thành `°C`** — không phải lỗi, chỉ nên đổi sang `°` trực tiếp cho nhất quán (đã đưa vào FI-7).
+> - **Lỗi `&amp;`**: grep toàn bộ `src/` và `web/` cho `&amp;`, `&nbsp;`, `&lt;`, `&gt;`, `&quot;` → **không có kết quả**. Lỗi này không tồn tại trong mã hiện tại. Chỗ duy nhất dùng HTML entity là `&deg;C` (`DashboardPage.tsx:339`) và JSX **render đúng thành `°C`** — không phải lỗi, chỉ nên đổi sang `°` trực tiếp cho nhất quán (đã đưa vào FI-7).
 > - **`"Nguoi dung"`**: chuỗi này viết **đúng đủ dấu** trong mã (`'Người dùng'`). Lỗi thiếu dấu là có thật nhưng nằm ở 60 chuỗi khác đã liệt kê.
 
 ---
@@ -920,11 +925,11 @@ Các giá trị dưới đây **đã được kiểm chứng bằng công thức
 
 → Giải pháp: đổi viền của **thành phần tương tác** (input, select, button, checkbox, table header) sang `--c-line-strong`; giữ `--c-border` chỉ cho đường phân cách trang trí (không thuộc phạm vi 1.4.11).
 
-**c) Sửa badge số cảnh báo TopBar:** thêm `text-white` vào [TopBar.tsx:36](src/frontend/src/components/TopBar.tsx#L36) → 3.21 → **5.16** ✅ (khớp NavRail).
+**c) Sửa badge số cảnh báo TopBar:** thêm `text-white` vào `TopBar.tsx:36` → 3.21 → **5.16** ✅ (khớp NavRail).
 
-**d) Sửa `.stale`:** bỏ `opacity: 0.62` ([styles.css:57](src/frontend/src/styles.css#L57)). Thay bằng chỉ báo **không phá tương phản**: viền gạch đứt 2px `--c-warn-fg` + badge `STALE` + icon đồng hồ. Dữ liệu stale phải *dễ đọc hơn*, không mờ đi.
+**d) Sửa `.stale`:** bỏ `opacity: 0.62` (`styles.css:57`). Thay bằng chỉ báo **không phá tương phản**: viền gạch đứt 2px `--c-warn-fg` + badge `STALE` + icon đồng hồ. Dữ liệu stale phải *dễ đọc hơn*, không mờ đi.
 
-**e) Bỏ dùng màu ngữ nghĩa cho chuỗi trend** ([TrendsPage.tsx:39](src/frontend/src/pages/TrendsPage.tsx#L39)): thay bằng bảng màu định tính trung tính, không trùng đỏ/vàng/tím-force; bổ sung kiểu nét (liền/đứt/chấm) để phân biệt không chỉ bằng màu (WCAG 1.4.1).
+**e) Bỏ dùng màu ngữ nghĩa cho chuỗi trend** (`TrendsPage.tsx:39`): thay bằng bảng màu định tính trung tính, không trùng đỏ/vàng/tím-force; bổ sung kiểu nét (liền/đứt/chấm) để phân biệt không chỉ bằng màu (WCAG 1.4.1).
 
 ---
 
@@ -942,9 +947,9 @@ Vị trí chính xác đã xác định: `AlarmSettingsPage` (9: dòng 187, 190,
 
 | Vị trí | Hiện tại | Đề xuất | Lý do |
 |---|---|---|---|
-| [AlarmRow.tsx:48](src/frontend/src/components/AlarmRow.tsx#L48) | `Off` | **`Tạm ẩn`** / `Suppress` | "Off" bị hiểu là tắt thiết bị |
+| `AlarmRow.tsx:48` | `Off` | **`Tạm ẩn`** / `Suppress` | "Off" bị hiểu là tắt thiết bị |
 | `AlarmDurationDialog` | `Off alarm` | **`Tạm ẩn cảnh báo`** | Như trên |
-| [CommissioningPage.tsx:39](src/frontend/src/pages/CommissioningPage.tsx#L39) | `Release` (ghi 0/false) | **Tách thành 2 nút:** `Ghi 0%` và **`Trả về tự động`** (gọi API release override thật) | Nhầm lẫn giữa "ghi giá trị 0" và "trả quyền cho chương trình" có thể để thiết bị bị ép tắt |
+| `CommissioningPage.tsx:39` | `Release` (ghi 0/false) | **Tách thành 2 nút:** `Ghi 0%` và **`Trả về tự động`** (gọi API release override thật) | Nhầm lẫn giữa "ghi giá trị 0" và "trả quyền cho chương trình" có thể để thiết bị bị ép tắt |
 | `AlarmRow` | `Ack`/`Acked`/`Cleared`/`Shelved` | `Xác nhận`/`Đã xác nhận`/`Đã hết`/`Đang tạm ẩn` | Đang hardcode tiếng Anh |
 | `SeverityPill` + `AlarmRow` | `info` → badge **xanh** | Badge **xám/xanh dương**, không bao giờ xanh lá | Xanh lá = bình thường trong HMI công nghiệp |
 | Dashboard | 2 hệ phân loại mức độ xung đột | Thống nhất **một** thang 5 mức: critical / high / medium / low / info, dùng chung cả app | Nielsen #4 |

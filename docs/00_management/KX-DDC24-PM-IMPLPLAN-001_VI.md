@@ -71,7 +71,7 @@ certified/compliant IEC. (Xem REVA_SCOPE §3.)
 > Editor **gồm ST Text Editor và FBD Graphical Editor** (Mekong-owned, IEC 61131-3-aligned,
 > roadmap — đang C0, chưa release). Không gọi chung là "canvas": **ST là text editor**,
 > chỉ **FBD mới là canvas/graphical**. Chi tiết:
-> [`KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`](../07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md)
+> [`KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`](../07_records/reviews/archive/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md)
 > (C5 = ST editor, C7 = FBD editor).
 
 ---
@@ -343,7 +343,7 @@ chung chung, xem C5/C7 ở Implementation Plan C1–C10. LD/SFC editor hoãn.*
 > ⚠️ **2026-07-23:** task này chỉ là UI cho **legacy component graph** (28 node cũ, vai
 > trò importer theo ADR-020 §7.5). Đây **không phải** ST Text Editor / FBD Graphical
 > Editor của Program Runtime — hai editor đó là task riêng (C5, C7) tại
-> [`KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`](../07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md),
+> [`KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`](../07_records/reviews/archive/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md),
 > blocked cho tới khi C0 duyệt. Drag-drop wiresheet canvas cho graph legacy vẫn hoãn
 > (ADR-006).
 
