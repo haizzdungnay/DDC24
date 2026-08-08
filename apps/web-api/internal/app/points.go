@@ -26,8 +26,15 @@ type forcePointBody struct {
 
 func (a *App) handlePoints(w http.ResponseWriter, r *http.Request) {
 	points, err := a.ReadPoints(r.Context())
-	if err != nil && a.logger != nil {
-		a.logger.Printf("WARN points_read degraded err=%v", err)
+	if err != nil {
+		// Đọc core hỏng thì nói ra bằng 503, không đáp 200 kèm danh sách rỗng:
+		// một bảng point rỗng cạnh huy hiệu kết nối màu khoẻ là câu trả lời sai
+		// nguy hiểm hơn một lỗi ồn ào (REV-BE-07).
+		if a.logger != nil {
+			a.logger.Printf("WARN points_read unavailable err=%v", err)
+		}
+		writeError(w, http.StatusServiceUnavailable, "không đọc được point từ core: "+err.Error())
+		return
 	}
 	writeJSON(w, http.StatusOK, points)
 }
@@ -185,13 +192,23 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 				point.SafeValue = float64(0)
 			}
 		}
-		switch point.Kind {
-		case "modbus_rtu":
-			point.Source = "modbus_rtu"
-		case "virtual":
-			point.Source = "virtual_point"
-		default:
-			point.Source = "local_physical_io"
+		// `Source` chỉ được ĐIỀN khi còn trống, không được ghi đè.
+		//
+		// `handleForcePoint` gọi `forcer.ForcePoint` — hàm đó đặt `Source` thành
+		// "core" / "core_unavailable" / "rejected:…" để nói giá trị này đến từ
+		// đâu — rồi đưa kết quả qua đây. Ghi đè theo mỗi `Kind` xoá sạch thông
+		// tin đó: FE không bao giờ biết một giá trị là lệnh ép tay hay đến từ
+		// một core đang suy giảm, và hợp đồng `strings.Contains(point.Source,
+		// "core_unavailable")` mà `ws.go` đang dựa vào bị phá (REV-BE-08).
+		if point.Source == "" {
+			switch point.Kind {
+			case "modbus_rtu":
+				point.Source = "modbus_rtu"
+			case "virtual":
+				point.Source = "virtual_point"
+			default:
+				point.Source = "local_physical_io"
+			}
 		}
 		out[i] = point
 	}
