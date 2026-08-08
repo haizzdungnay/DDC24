@@ -157,6 +157,25 @@ Bo được để lại ở trạng thái `confirmed`, cấu hình `eth0 = 192.1
 active và configured. Sau reboot, systemd-networkd áp dụng đúng profile này; `wlan0`
 giữ nguyên default route.
 
+## 6b. Vòng hai — phản hồi khi vận hành thật (2026-08-08, sau deploy)
+
+Người dùng mở trang trên bo và nêu bốn điểm. Ba điểm là yêu cầu thay đổi giao diện,
+một điểm là hiểu nhầm do bundle cũ còn trong trình duyệt.
+
+| Điểm | Xử lý |
+|---|---|
+| Bỏ thẻ **MANAGEMENT HOST** và **TRANSACTION** | Đã bỏ. Hàng thẻ còn 3: ACTIVE/KERNEL, CONFIGURED PROFILE, PENDING CANDIDATE. Mã giao dịch (`net-1786…-3`) không hành động được, badge "CONFIRMED" không nói thêm gì. Thông tin an toàn duy nhất còn cần — đếm ngược 120 giây + Giữ/Hoàn tác — vẫn nằm ở hộp thoại tự bật. **Kết thúc bất thường không được im lặng**, nên lý do thất bại chuyển lên thành banner đỏ ở đầu panel, chỗ dễ thấy hơn cả thẻ cũ. |
+| Bỏ dòng "Open the UI through the stable hostname… `http://ok1126b-buildroot.local:8082/…`" | Đã bỏ. Đường truy cập của người dùng đi qua DDNS/WAN nên `.local` không phân giải được — mời họ mở một URL không dùng được là lời khuyên sai. Banner CHẶN (khi phiên đi qua chính địa chỉ sắp đổi) vẫn còn, vì đó là rủi ro thật. |
+| `Interface` là ô gõ tay | Đã đổi thành `<select>`, danh sách dựng từ chính authority (`active`/`configured`/`pending` + candidate đang soạn). Engine từ chối mọi tên khác bằng `INTERFACE_NOT_ALLOWED`, nên ô gõ tự do chỉ dẫn người dùng vào một lỗi phải đi hết một vòng server mới biết. Thiết bị có `eth1`, `eth2`… thì danh sách tự dài ra. |
+| "Check xong không Save được" | **Không phải lỗi ở bản mới — trình duyệt còn giữ bundle cũ.** Ở bản cũ, `managementPathReady = hostnameGuardSupported && stableOriginInUse`; truy cập qua DDNS thì `stableOriginInUse=false` ⇒ nút Lưu **luôn** disabled. Chính bản cũ cũng phát ra đúng chuỗi "Open the UI through the stable hostname before Apply:" mà người dùng trích — chuỗi đó không còn tồn tại trong mã nguồn mới. Đã kiểm: `index.html` phục vụ với `Cache-Control: no-cache`, tài sản băm bất biến, **không có service worker**, nên chỉ cần tải lại trang là lấy bundle mới. |
+
+Bundle vòng hai: `assets/index-MeoicxEA.js`, sha256 `0c82f616…16b8` — trên bo trùng khớp
+bản build cục bộ; `grep "MANAGEMENT HOST"` và `grep "TRANSACTION"` trong bundle đều cho 0.
+
+Số đo vòng hai: vitest **448/448** · lint 0 warning · build OK ·
+`npx playwright test e2e/network-qa.spec.ts` **1 passed** (spec đã cập nhật: khẳng định
+hai thẻ đã biến mất, và tín hiệu xác nhận nay là toast + hộp thoại đóng thay vì badge).
+
 ## 7. Còn treo
 
 - Chưa chụp được ảnh giao diện sau khi sửa: không có mật khẩu tài khoản Web của bo

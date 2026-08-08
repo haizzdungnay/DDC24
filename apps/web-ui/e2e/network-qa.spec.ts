@@ -175,7 +175,13 @@ test('Network D/E runtime QA with mocked mutations and authority recovery', asyn
   await page.screenshot({ path: `${artifactDir}/network-dhcp.png`, fullPage: true })
 
   transaction = staticTransaction()
-  for (const label of ['ACTIVE / KERNEL', 'CONFIGURED PROFILE', 'PENDING CANDIDATE', 'TRANSACTION', 'EDITABLE DRAFT', 'idle']) await expect(page.getByText(label, { exact: true })).toBeVisible()
+  for (const label of ['ACTIVE / KERNEL', 'CONFIGURED PROFILE', 'PENDING CANDIDATE', 'EDITABLE DRAFT']) await expect(page.getByText(label, { exact: true })).toBeVisible()
+  // Thẻ MANAGEMENT HOST và TRANSACTION đã bỏ: mã giao dịch không hành động được,
+  // còn hostname quản trị chỉ gây nhiễu khi truy cập không đi qua mDNS. Thông tin
+  // an toàn duy nhất còn cần — cửa sổ 120 giây — nằm ở hộp thoại xác nhận.
+  for (const gone of ['TRANSACTION', 'MANAGEMENT HOST']) {
+    await expect(page.getByText(gone, { exact: true })).toHaveCount(0)
+  }
   // Thanh nút chỉ còn hai; tên lệnh giao thức không được lộ ra mặt người dùng.
   await expect(page.getByRole('button', { name: 'Check', exact: true })).toBeEnabled()
   await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeEnabled()
@@ -207,12 +213,15 @@ test('Network D/E runtime QA with mocked mutations and authority recovery', asyn
   await expect.poll(() => mutationRequests.filter((entry) => entry.path.endsWith('/transaction/apply')).length).toBe(1)
   await page.getByRole('button', { name: 'Keep changes', exact: true }).click()
   await expect.poll(() => mutationRequests.filter((entry) => entry.path.endsWith('/transaction/confirm')).length).toBe(1)
-  await expect(page.getByText('confirmed', { exact: true })).toBeVisible()
+  // Badge trạng thái của thẻ GIAO DỊCH đã bỏ; tín hiệu cho người vận hành nay là
+  // toast và việc hộp thoại đóng lại.
+  await expect(page.getByText('Network configuration confirmed', { exact: true })).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
   const deviceName = page.getByRole('textbox', { name: 'Device Name', exact: true })
   await deviceName.fill('DDC-QA-Canonical')
-  await expect(page.getByText('confirmed', { exact: true })).toBeVisible()
+  // Giao dịch đã kết thúc và không hồi sinh khi sửa các trường không liên quan.
+  await expect(page.getByText('No pending candidate', { exact: true })).toBeVisible()
   // F-13: Toggle nay là role=switch + aria-checked (WCAG 2.1 AA §4.1.2), không
   // còn là button trơn.
   const wifi = page.getByRole('switch', { name: /WiFi/ })

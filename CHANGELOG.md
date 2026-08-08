@@ -82,6 +82,34 @@ rollback trả về đúng `.110`, `ip route` không đổi suốt quá trình, 
 **Sửa kèm.** `FOXLINX_DEPLOY_CHECKLIST.md` ghi sai đường toolchain cross
 (`platform/cmake/aarch64-linux-gnu.cmake` → `toolchain-aarch64-linux-gnu.cmake`).
 
+### Changed — Gọn lại trang mạng theo phản hồi vận hành trên bo (2026-08-08)
+
+**Phạm vi.** `apps/web-ui/src/features/network/NetworkPage.tsx` + test, `apps/web-ui/e2e/network-qa.spec.ts`.
+
+- **Bỏ thẻ MANAGEMENT HOST và TRANSACTION.** Mã giao dịch (`net-1786…-3`) không hành động
+  được và badge trạng thái không nói thêm gì cho người vận hành; hàng thẻ còn 3 cái thật sự
+  đọc để ra quyết định. Đếm ngược 120 giây và hai nút Giữ/Hoàn tác vẫn nằm nguyên ở hộp thoại
+  tự bật. Đổi lại, **kết thúc bất thường không còn bị chôn trong một thẻ**: lý do thất bại nay
+  là banner đỏ ở đầu panel — vị trí dễ thấy hơn hẳn chỗ cũ.
+- **Bỏ lời mời mở giao diện bằng hostname mDNS.** Khi truy cập qua DDNS/WAN thì `.local` không
+  phân giải được, nên câu "Open the UI through the stable hostname: http://…local:8082" là lời
+  khuyên sai dẫn người dùng tới một URL chết. Banner CHẶN cho trường hợp phiên đi qua chính
+  địa chỉ sắp đổi vẫn giữ nguyên — đó là rủi ro thật.
+- **`Interface` đổi từ ô gõ tự do sang `<select>`**, danh sách dựng từ chính những interface
+  authority công bố. Engine từ chối mọi tên khác bằng `INTERFACE_NOT_ALLOWED`, nên ô gõ tay chỉ
+  dẫn người dùng vào một lỗi phải đi hết một vòng server mới biết; và khi thiết bị có `eth1`,
+  `eth2`… danh sách tự dài ra chứ không phải sửa giao diện.
+
+**Ghi chú chẩn đoán.** Báo cáo kèm theo "Check xong không Save được" **không phải lỗi của bản
+mới** mà là bundle cũ còn trong trình duyệt: ở bản cũ `managementPathReady` đòi origin trùng
+hostname mDNS nên nút Lưu luôn disabled khi vào qua DDNS. Đã kiểm chứng `index.html` phục vụ
+với `Cache-Control: no-cache`, tài sản băm bất biến và **không có service worker**, nên tải lại
+trang là đủ.
+
+**Kiểm chứng.** vitest **448/448** · lint 0 warning · build OK · e2e network-qa **1 passed**
+(spec cập nhật: khẳng định hai thẻ đã biến mất; tín hiệu xác nhận nay là toast + hộp thoại đóng).
+Đã deploy bundle `index-MeoicxEA.js` lên bo, sha256 trùng khớp bản build cục bộ.
+
 ### Fixed — Đóng 15 finding rà soát BE + FE 2026-08-06 và dọn thư mục hồ sơ rà soát (2026-08-08)
 
 **Phạm vi.** `apps/web-api` (Go), `apps/web-ui` (React/TS), `platform/systemd`,

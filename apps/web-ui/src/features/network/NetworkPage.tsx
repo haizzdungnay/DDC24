@@ -304,9 +304,8 @@ export function NetworkPage() {
       : `ETH ${(activeNetwork?.link ?? ethernetState).toUpperCase()}`
   const transactionLocked = Boolean(transaction && isActiveTransactionState(transaction.state))
   const dnsSupported = Boolean(transaction?.capabilities?.includes('dns'))
-  const hostnameGuardSupported = Boolean(transaction?.capabilities?.includes('management-hostname'))
   const stableManagementUrl = managementUrl(transaction?.management)
-  const stableOriginInUse = managementOriginMatches(transaction?.management)
+  const interfaceChoices = authorityInterfaces(transaction, candidate)
   // Cổng bảo toàn đường quản trị.
   //
   // Mục đích thật của cổng này (ADR-017 §1) là không cắt mất phiên quản trị khi
@@ -374,49 +373,24 @@ export function NetworkPage() {
                 ? <>{pick('Hãy mở lại bằng ', 'Reopen through ')}<a className="mono underline" href={stableManagementUrl}>{stableManagementUrl}</a></>
                 : pick('Hãy mở lại qua một đường khác (Wi-Fi hoặc hostname) trước khi lưu.', 'Reopen through another path (Wi-Fi or a hostname) before saving.')}
             </div>}
-            {/* Không chặn: chỉ nói trước cho người vận hành biết cách quay lại sau
-                khi địa chỉ đổi. Trước đây đây là một cổng khoá cứng. */}
-            {!managementPathAtRisk && !stableOriginInUse && <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2 text-xs text-[var(--c-text-dim)]">
-              {hostnameGuardSupported && transaction.management?.stable && stableManagementUrl
-                ? <>{pick('Sau khi đổi địa chỉ, nếu mất kết nối hãy mở lại bằng ', 'If you lose the connection after the change, reopen through ')}<a className="mono underline" href={stableManagementUrl}>{stableManagementUrl}</a></>
-                : pick('Thiết bị chưa công bố hostname mDNS ổn định; sau khi đổi địa chỉ bạn phải tự kết nối lại bằng địa chỉ mới.', 'The device publishes no stable mDNS hostname; after the change you must reconnect using the new address yourself.')}
-            </div>}
             {interfaceMissing ? <div className="rounded-[var(--radius)] border border-[var(--c-fault-fg)] bg-[var(--c-fault-bg)] px-3 py-2 text-xs text-[var(--c-fault-fg)]">
               {pick(`Thiết bị không có interface "${activeNetwork?.interface}". Kiểm tra NETCFG_INTERFACE trong /etc/mkddc/netcfg.conf rồi khởi động lại mkddc-netcfg.`, `The device has no interface "${activeNetwork?.interface}". Check NETCFG_INTERFACE in /etc/mkddc/netcfg.conf and restart mkddc-netcfg.`)}
             </div> : !ethernetApplyReady && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
               {pick('Liên kết Ethernet chưa sẵn sàng; hãy cắm cáp Ethernet trước khi Apply.', 'Ethernet link is not ready; connect the Ethernet cable before Apply.')}
             </div>}
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {/* Thẻ GIAO DỊCH thường trực đã bỏ: mã giao dịch và badge "đã xác nhận"
+                không nói gì cho người vận hành, còn cửa sổ 120 giây đã có hộp thoại
+                tự bật lo. Nhưng KẾT THÚC BẤT THƯỜNG thì không được im lặng — nó
+                chuyển lên thành banner ở đây, chỗ dễ thấy hơn cả thẻ cũ. */}
+            {transactionFailureReason(transaction) && <div className="rounded-[var(--radius)] border border-[var(--c-fault-fg)] bg-[var(--c-fault-bg)] px-3 py-2 text-xs text-[var(--c-fault-fg)]" aria-live="polite">
+              <div className="font-semibold">{pick('Giao dịch mạng thất bại', 'Network transaction failed')}</div>
+              <div className="mt-1">{transactionFailureReason(transaction)}</div>
+              <div className="mt-1 text-[var(--c-text-dim)]">{pick('Sửa lại cấu hình rồi lưu lại; xem nhật ký thiết bị nếu lặp lại.', 'Adjust the settings and save again; check device logs if this repeats.')}</div>
+            </div>}
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <AuthorityCard title="ACTIVE / KERNEL" tone={activeTone(transaction)} lines={activeLines(transaction)} />
               <AuthorityCard title="CONFIGURED PROFILE" tone="neutral" lines={configuredLines(transaction)} />
               <AuthorityCard title="PENDING CANDIDATE" tone={transaction.pending ? 'warn' : 'neutral'} lines={pendingLines(transaction)} />
-              <AuthorityCard title="MANAGEMENT HOST" tone={stableOriginInUse ? 'good' : 'warn'} lines={managementLines(transaction)} />
-              <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-4">
-                <div className="text-xs font-semibold tracking-[0.12em] text-[var(--c-text-dim)]">{pick('GIAO DỊCH', 'TRANSACTION')}</div>
-                <div className="mt-3 flex flex-wrap items-center gap-2" aria-live="polite">
-                  <TransactionState response={transaction} pick={pick} />
-                  {/* F-12: countdown ở dạng MM:SS như đặc tả panel HMI, không phải
-                      số giây thô. Mất mạng là sự cố phải cử người tới hiện trường
-                      nên thời gian còn lại phải đọc được ngay. */}
-                  {(transaction.state === 'applying' || transaction.state === 'awaiting_confirmation') && <span className="mono text-lg font-bold text-[var(--c-warn-fg)]">{formatCountdown(transaction.rollbackRemainingS ?? 0)}</span>}
-                </div>
-                <div className="mono mt-3 break-all text-xs text-[var(--c-text-dim)]">{transaction.transactionId ?? pick('không có giao dịch', 'no active transaction')}</div>
-                {/* F-12: đối chiếu old→new ngay trong thẻ giao dịch. Trước đây kỹ
-                    thuật viên phải tự so hai thẻ ACTIVE và PENDING cách nhau. */}
-                {transaction.pending && <div className="mt-3 space-y-1 border-t border-[var(--c-border)] pt-3 text-xs">
-                  <div className="flex items-center justify-between gap-3"><span className="text-[var(--c-text-dim)]">{pick('Địa chỉ cũ', 'Old address')}</span><span className="mono font-semibold">{activeAddress(transaction.active?.ipv4 ?? '', transaction.active?.prefixLength ?? 0)}</span></div>
-                  <div className="flex items-center justify-between gap-3"><span className="text-[var(--c-text-dim)]">{pick('Địa chỉ mới', 'New address')}</span><span className="mono font-semibold text-[var(--c-warn-fg)]">{candidateAddressLabel(transaction.pending)}</span></div>
-                </div>}
-                {/* F-05: lý do phải hiện với MỌI kết thúc bất thường. Điều kiện cũ
-                    chỉ bắt `result === 'rejected'`, nên một giao dịch kết thúc ở
-                    state 'failed' với result 'accepted' (apply xong nhưng health
-                    check hỏng rồi rollback lỗi) hiển thị badge đỏ FAILED mà không
-                    một chữ giải thích — đúng những gì quan sát được trên board. */}
-                {transactionFailureReason(transaction) && <div className="mt-3 text-xs text-[var(--c-fault-fg)]">
-                  {transactionFailureReason(transaction)}
-                  <div className="mt-1 text-[var(--c-text-dim)]">{pick('Sửa lại candidate rồi Stage giao dịch mới; xem nhật ký thiết bị nếu lặp lại.', 'Adjust the candidate and stage a new transaction; check device logs if this repeats.')}</div>
-                </div>}
-              </div>
             </div>
 
             {candidate ? (
@@ -426,7 +400,18 @@ export function NetworkPage() {
                   <p className="mt-1 text-xs text-[var(--c-text-dim)]">{pick('Candidate có thể chỉnh sửa; không phải bản sao realtime của ACTIVE / KERNEL.', 'Editable candidate; this is not a realtime mirror of ACTIVE / KERNEL.')}</p>
                 </div>
                 <div className="grid gap-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4 md:grid-cols-2 xl:grid-cols-4">
-                  <Field label="Interface" value={candidate.interface} onChange={(value) => setCandidateField('interface', value)} mono disabled={transactionLocked || !canManageNetwork} />
+                  {/* Interface là DANH SÁCH, không phải ô gõ tự do.
+                      Authority chỉ nhận đúng những interface nó công bố — gõ tên
+                      khác chỉ nhận về INTERFACE_NOT_ALLOWED sau một vòng đi
+                      server, mà thông điệp đó không nói được là gõ sai chỗ nào.
+                      Danh sách lấy từ chính authority nên khi thiết bị có eth1,
+                      eth2… nó tự dài ra, không phải sửa giao diện. */}
+                  <label className="block text-sm text-[var(--c-text)]">
+                    Interface
+                    <select value={candidate.interface} onChange={(event) => setCandidateField('interface', event.target.value)} className={`${inputClass} mono`} disabled={transactionLocked || !canManageNetwork || interfaceChoices.length <= 1}>
+                      {interfaceChoices.map((name) => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </label>
                   <label className="block text-sm text-[var(--c-text)]">
                     {pick('Chế độ', 'Mode')}
                     <select value={candidate.mode} onChange={(event) => setCandidateMode(event.target.value as NetcfgCandidate['mode'])} className={inputClass} disabled={transactionLocked || !canManageNetwork}>
@@ -791,15 +776,22 @@ function pendingLines(response: NetcfgResponse): Array<[string, string]> {
   return response.pending ? candidateLines(response.pending) : [['State', 'No pending candidate']]
 }
 
-function managementLines(response: NetcfgResponse): Array<[string, string]> {
-  const management = response.management
-  if (!management) return [['State', 'Authority does not report hostname']]
-  return [
-    ['Hostname', management.hostname || '—'],
-    ['mDNS', management.mdnsName || '—'],
-    ['Stable', management.stable ? 'ready' : 'not ready'],
-    ['Current origin', window.location.host]
-  ]
+/**
+ * Những interface mà authority thực sự nhận.
+ *
+ * Engine của mkddc-netcfg từ chối mọi candidate có `interface` khác cái nó được
+ * cấu hình (`INTERFACE_NOT_ALLOWED`), nên tập hợp này là toàn bộ lựa chọn hợp lệ.
+ * Gộp cả interface của candidate đang soạn để một bản nháp do người dùng tự tạo
+ * không bị rơi ra khỏi danh sách và biến `<select>` thành rỗng.
+ */
+function authorityInterfaces(response: NetcfgResponse | null, candidate: NetcfgCandidate | null): string[] {
+  const names = [
+    response?.active?.interface,
+    response?.configured?.interface,
+    response?.pending?.interface,
+    candidate?.interface
+  ].filter((name): name is string => Boolean(name))
+  return [...new Set(names)].sort()
 }
 
 function candidateLines(candidate: NetcfgCandidate): Array<[string, string]> {
@@ -814,11 +806,6 @@ function candidateLines(candidate: NetcfgCandidate): Array<[string, string]> {
 
 function currentOriginHost(): string {
   return window.location.hostname.toLowerCase().replace(/\.$/, '')
-}
-
-function managementOriginMatches(management: NetcfgResponse['management']): boolean {
-  if (!management?.stable || !management.mdnsName) return false
-  return currentOriginHost() === management.mdnsName.toLowerCase().replace(/\.$/, '')
 }
 
 function managementUrl(management: NetcfgResponse['management']): string | null {
@@ -846,25 +833,6 @@ function AuthorityCard({ title, tone, lines }: { title: string; tone: 'good' | '
       </div>
     </div>
   )
-}
-
-const transactionStateLabels: Record<NetcfgResponse['state'], [string, string]> = {
-  idle: ['nhàn rỗi', 'idle'],
-  staged: ['đã chuẩn bị', 'staged'],
-  applying: ['đang áp dụng', 'applying'],
-  awaiting_confirmation: ['chờ xác nhận', 'awaiting confirmation'],
-  confirmed: ['đã xác nhận', 'confirmed'],
-  rolling_back: ['đang hoàn tác', 'rolling back'],
-  rolled_back: ['đã hoàn tác', 'rolled back'],
-  failed: ['thất bại', 'failed']
-}
-
-function TransactionState({ response, pick }: { response: NetcfgResponse; pick: (vi: string, en: string) => string }) {
-  const warning = response.state === 'staged' || response.state === 'applying' || response.state === 'awaiting_confirmation'
-  const failed = response.result === 'rejected' || response.state === 'failed'
-  const className = failed ? 'border-[var(--c-fault-fg)] text-[var(--c-fault-fg)]' : warning ? 'border-[var(--c-warn-fg)] text-[var(--c-warn-fg)]' : 'border-[var(--c-good-fg)] text-[var(--c-good-fg)]'
-  const label = transactionStateLabels[response.state]
-  return <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase ${className}`}>{label ? pick(label[0], label[1]) : response.state.replace(/_/g, ' ')}</span>
 }
 
 function Field({ label, value, onChange, mono, disabled, error, inputMode }: { label: string; value: string; onChange: (value: string) => void; mono?: boolean; disabled?: boolean; error?: string; inputMode?: 'decimal' | 'numeric' }) {
