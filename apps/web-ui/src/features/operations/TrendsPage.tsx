@@ -1,7 +1,7 @@
-import { Check, Clock3, Plus, RotateCcw, Search } from 'lucide-react'
+import { Check, Clock3, Download, Plus, RotateCcw, Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiClient } from '../../shared/api/client'
-import { historyClient, historyPresetDurationMs, historySeriesKey, type HistoryPresetRange, type HistoryQuery, type HistoryResponse } from '../../shared/api/history'
+import { historyClient, historyCsvUrl, historyPresetDurationMs, historySeriesKey, type HistoryPresetRange, type HistoryQuery, type HistoryResponse } from '../../shared/api/history'
 import { HISTORIAN_V2_TRENDS_ENABLED } from '../../shared/config'
 import { Button } from '../../shared/components/Button'
 import { DataTable, Column } from '../../shared/components/DataTable'
@@ -10,7 +10,7 @@ import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { StateBlock } from '../../shared/components/StateBlock'
 import { StatusBadge } from '../../shared/components/StatusBadge'
-import { TrendChart, type TrendSeries } from '../../shared/components/TrendChart'
+import { TrendChart, hasMinMaxBand, trendBandKey, type TrendSeries } from '../../shared/components/TrendChart'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import { useRealtime } from '../../shared/realtime'
@@ -147,6 +147,7 @@ export function TrendsPage() {
   const analogPanelRef = useRef<HTMLDivElement>(null)
   const addTrendButtonRef = useRef<HTMLButtonElement>(null)
   const [analogPanelHeight, setAnalogPanelHeight] = useState<number | null>(null)
+  const [showBand, setShowBand] = useState(false)
 
   const selectedPoints = useMemo(() => analogPoints.filter((point) => selectedIds.includes(point.id)), [analogPoints, selectedIds])
   /* FE-TR-01 (board thật 2026-08-06): panel "Series" và biểu đồ đọc HAI nguồn
@@ -192,6 +193,20 @@ export function TrendsPage() {
     ? pick('Tùy chỉnh (giờ địa phương)', 'Custom (local time)')
     : currentRange ? pick(currentRange.labelVi, currentRange.labelEn) : pick(`${rangeMinutes} phút`, `${rangeMinutes} min`)
   const databaseSeriesIds = useMemo(() => new Set((historyState.data?.series ?? []).map((item) => item.pointId)), [historyState.data?.series])
+  /* Dải min–max chỉ khả dụng khi backend trả mẫu aggregate. Tính từ chính dữ
+     liệu đang vẽ chứ không đoán theo khoảng thời gian: cùng một preset có thể
+     ra độ phân giải khác nhau tuỳ lượng dữ liệu còn lưu. */
+  const bandAvailable = useMemo(() => hasMinMaxBand(chartSamples, series), [chartSamples, series])
+  useEffect(() => {
+    if (!bandAvailable && showBand) setShowBand(false)
+  }, [bandAvailable, showBand])
+  /* Link xuất CSV trỏ đúng khoảng đang xem, dùng cùng bộ tham số với truy vấn
+     biểu đồ — người dùng tải về đúng thứ họ đang nhìn, không phải một khoảng
+     mặc định nào khác. */
+  const csvHref = useMemo(() => {
+    if (!selectedIds.length) return null
+    return historyCsvUrl(buildTrendHistoryRequest(selectedIds, rangeMinutes, customRange).query)
+  }, [customRange, rangeMinutes, selectedIds])
   const customPointsWithoutHistory = customRange && historyState.data
     ? selectedPoints.filter((point) => !databaseSeriesIds.has(point.id))
     : []
@@ -343,7 +358,39 @@ export function TrendsPage() {
         </div>
 
         <div ref={analogPanelRef}>
-          <Panel title={`${pick('Xu hướng analog', 'Analog trend')} - ${rangeLabel}`} action={<div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={resetAuto}>Auto</Button></div>}>
+          <Panel
+            title={`${pick('Xu hướng analog', 'Analog trend')} - ${rangeLabel}`}
+            action={
+              <div className="flex flex-wrap gap-2">
+                {/* Dải min–max chỉ bật được khi dữ liệu THẬT SỰ có nó. Ở độ phân
+                    giải 1 giây mỗi mẫu là một điểm đo (min = max), nên nút bị
+                    khoá kèm lý do thay vì bật ra một dải trùng khít đường chính
+                    và làm người đọc tưởng đã thấy biên độ (UX-DES §13). */}
+                <Button
+                  size="sm"
+                  variant={showBand ? 'primary' : 'secondary'}
+                  disabled={!bandAvailable}
+                  title={bandAvailable ? undefined : pick('Khoảng thời gian này trả mẫu từng điểm, không có min/max để dựng dải', 'This range returns per-sample points; there is no min/max to band')}
+                  onClick={() => setShowBand((value) => !value)}
+                >
+                  {pick('Dải min–max', 'Min–max band')}
+                </Button>
+                {/* Export là action THỨ CẤP (§13): không chiếm chỗ của thao tác
+                    đọc, và chỉ mở được khi có series để xuất. */}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<Download className="h-4 w-4" />}
+                  disabled={!csvHref}
+                  title={csvHref ? undefined : pick('Chọn ít nhất một điểm để xuất', 'Select at least one point to export')}
+                  onClick={() => { if (csvHref) window.open(csvHref, '_blank', 'noopener') }}
+                >
+                  {pick('Xuất CSV', 'Export CSV')}
+                </Button>
+                <Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={resetAuto}>Auto</Button>
+              </div>
+            }
+          >
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2">
               {rangeOptions.map((item) => <Button key={item.minutes} size="sm" variant={!customRange && rangeMinutes === item.minutes ? 'primary' : 'secondary'} icon={<Clock3 className="h-4 w-4" />} onClick={() => applyQuickRange(item.minutes)}>{pick(item.labelVi, item.labelEn)}</Button>)}
@@ -382,7 +429,7 @@ export function TrendsPage() {
                 : historyState.error
                   ? <StateBlock state="error" title={pick('Không tải được historian', 'Could not load historian')} detail={historyState.error.message} />
                 : series.length && chartSamples.length > 1
-                ? <TrendChart data={chartSamples} series={series} height={360} timeZone="UTC" />
+                ? <TrendChart data={chartSamples} series={series} height={360} timeZone="UTC" showBand={showBand} />
                 : <StateBlock state="empty" title={series.length ? pick('Không có mẫu trong khoảng đã chọn', 'No history in the selected range') : pick('Chọn ít nhất một điểm trend', 'Select at least one trend point')} detail={series.length ? pick('Backend không trả sample khả dụng; gap evidence ở banner phía trên.', 'The backend returned no available samples; see the gap evidence above.') : undefined} />}
           </Panel>
         </div>
@@ -528,10 +575,18 @@ export function buildHistoryChartModel(response: HistoryResponse | null, points:
     if (!key) continue
     for (const sample of item.samples) {
       const row = rowAt(sample.timeMs)
-      row[key] = sample.quality === 'BAD' ? null : sample.value
+      const bad = sample.quality === 'BAD'
+      row[key] = bad ? null : sample.value
       row[`${key}:quality`] = sample.quality
       row[`${key}:source`] = sample.source
       row[`${key}:tier`] = sample.tier
+      /* Dải min–max chỉ có nghĩa khi mẫu là AGGREGATE (min khác max): nó cho
+         thấy biên độ dao động bên trong một ô thời gian đã bị gộp, thứ mà
+         đường trung bình che mất. Mẫu 1 giây có min = max = value nên bỏ qua,
+         không vẽ một dải trùng khít đường chính (UX-DES §13). */
+      if (!bad && typeof sample.min === 'number' && typeof sample.max === 'number' && sample.min !== sample.max) {
+        row[trendBandKey(key)] = [sample.min, sample.max]
+      }
     }
   }
   for (const gap of response.gaps) {
@@ -543,6 +598,10 @@ export function buildHistoryChartModel(response: HistoryResponse | null, points:
       row[`${key}:quality`] = 'GAP'
       row[`${key}:source`] = gap.reason
       row[`${key}:tier`] = '—'
+      // Gap phải đứt CẢ dải min–max, không chỉ đứt đường trung bình. Một dải
+      // tô liền qua khoảng không có dữ liệu là khẳng định đã đo được biên độ ở
+      // đó.
+      row[trendBandKey(key)] = null
     }
   }
   return { samples: [...rows.values()].sort((left, right) => Number(left.__ts) - Number(right.__ts)), series }

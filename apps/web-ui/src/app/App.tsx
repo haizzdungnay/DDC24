@@ -9,6 +9,7 @@ import {
   useAuth
 } from '../features/auth'
 import {
+  ActivityPage,
   AuxFunctionsPage,
   DashboardPage,
   DiagramPage,
@@ -97,6 +98,10 @@ export function App() {
             `SystemHealthPage` chỉ re-export Dashboard, nên không có nơi nào
             chứa CPU/RAM/service ngoài chính trang chủ. */}
         <Route path="diagnostics" element={<SystemDiagnosticsPage />} />
+        {/* PA3-406: đích của deep link "xem vết audit" từ Point Detail và từ
+            bảng hoạt động trên Landing. Viewer đọc được — audit là bằng chứng
+            vận hành, không phải đặc quyền quản trị. */}
+        <Route path="activity" element={<ActivityPage />} />
         <Route path="eng/diagnostics" element={<Navigate to="/diagnostics" replace />} />
         <Route path="me" element={<UserInfoPage />} />
         <Route path="help" element={<HelpPage />} />

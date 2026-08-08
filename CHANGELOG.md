@@ -7,6 +7,62 @@
 ---
 
 ## [Unreleased]
+### Added — Web PA3 slice 2: đóng nốt 15 task, hoàn tất 50/50 (2026-08-08)
+
+**Phạm vi.** Phần còn lại của `52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md`:
+P0 tài liệu, các use case P5 còn thiếu, a11y và diễn tập rollback.
+
+**Tài liệu (P0).**
+- `docs/02_requirements/UX_REQ_PA3_WEB.md` — chốt từ vựng dùng chung (5 mức
+  quality, 5 trạng thái health, 5 severity, 3 role, nghĩa của `ttlS`/release) và
+  chuyển 12 use case thành **56 requirement có ID**, mỗi cái kèm cột kiểm chứng.
+  Kèm wireflow desktop/mobile và bảng nội dung tiếng Việt chuẩn.
+- `contracts/openapi/openapi.yaml` — thêm `GET /overview`, `GET /activity`,
+  trường `ttlS` của `PUT /points/{id}` và `Point.overrideExpiresInS`.
+- `docs/05_verification/UX_PA3_TRACEABILITY.md` — ma trận
+  requirement → source → test → bằng chứng cho cả 56 requirement.
+
+**Giao diện.**
+- Command palette `Ctrl/⌘+K` (danh sách đích là hằng số, lọc theo `ROUTE_MIN_ROLE`,
+  gõ không dấu vẫn ra kết quả có dấu), breadcrumb cho trang có chiều sâu, và
+  **skip link** — thanh bên có hơn 20 liên kết, không có đường nhảy qua thì người
+  dùng bàn phím phải Tab hơn 20 lần trên mọi trang.
+- Trang `/activity`: nhật ký vận hành có phân trang, lọc theo kind/action/objectId
+  trong URL. Point Detail và Commissioning deep link thẳng vào đây, nên câu hỏi
+  "ai vừa ép cái này" không còn phải trả lời bằng `journalctl` trên bo.
+- Trends: dải min–max cho mẫu aggregate (khoá kèm lý do khi dữ liệu không có
+  min/max thay vì vẽ một dải trùng khít đường chính), gap đứt **cả dải lẫn
+  đường**, và export CSV đúng khoảng đang xem.
+- Modbus: cây Bus → Device → Point. Tham số serial hiện ở cấp bus, không lặp ở
+  device — hai thiết bị trên cùng sợi dây không thể chạy hai baud khác nhau.
+  Thiếu telemetry ⇒ device `unknown`, KHÔNG phải `offline`.
+- Commissioning: bốn điều kiện tiên quyết kiểm trước khi mở nút ghi, trạng thái
+  đang chạy, và kết quả GIỮ trên màn hình thay vì một toast biến mất sau vài giây.
+- Network: bảng khác biệt bản nháp ↔ cấu hình đang chạy, và **địa chỉ truy cập
+  mới** hiện ngay trong hộp thoại xác nhận — trước đây người dùng bấm "Giữ thay
+  đổi" rồi mất đường vào và phải đoán URL.
+
+**Fixed — hai trang mất `<h1>` ở trạng thái lỗi.** `/monitor` và `/alarms` trả về
+một `StateBlock` trần khi API hỏng, nên trang không còn tiêu đề: người dùng trình
+đọc màn hình nghe thấy thông báo lỗi mà không biết mình đang ở trang nào. Lỗi do
+chính bộ kiểm a11y mới (`e2e/pa3-a11y.spec.ts`) tìm ra.
+
+**Kiểm chứng.** CTest `860/860`; `go vet` sạch + `go test ./... -count=1` `11/11`
+gói; Vitest `465/465`; lint sạch; build PASS; Playwright **`55/55`** (thêm
+`pa3-a11y.spec.ts`: landmark, một H1 mỗi trang, nhãn control, bẫy tiêu điểm,
+skip link, focus nhìn thấy được).
+
+**Diễn tập rollback trên bo (PA3-606).** Rollback thật về bản trước mất
+**4 302 ms**; bốn dịch vụ `active`, `/api/v1/health` OK, bundle phục vụ đúng bản
+cũ, và kho Activity giữ nguyên `retained: 25` — nhật ký vận hành nằm ở
+`/data/config/`, tách khỏi `/opt/mkddc-web`, nên deploy và rollback không đụng
+tới nó. Sau đó tiến lại bản mới (`mkddc-web` `a5bcc5f5…7655e1`, bundle
+`index-DepLspUa.js`), `journalctl -p err` trống.
+
+**Tracker plan 52: 50/50 HOÀN TẤT, G0–G6 đạt.** Finding `PA3-N03` (hierarchy
+Modbus) đã đóng. Vẫn mở: `PA3-N01` (PLC SHM chưa mang mốc lấy mẫu — cần đổi hợp
+đồng SHM và deploy lại Core), `PA3-N02`, `PA3-N04`.
+
 ### Added — Web PA3: read model Overview, kho Activity, Dashboard operation-first và Diagnostics (2026-08-08)
 
 **Phạm vi.** Triển khai `docs/03_implementation/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md`

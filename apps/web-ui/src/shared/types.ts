@@ -711,7 +711,9 @@ export interface Graph {
 
 export interface TrendSample {
   time: string
-  [series: string]: string | number | null
+  /** Cặp `[min, max]` cho dải aggregate (khoá `<series>::band`) là lý do duy
+   *  nhất có `number[]` ở đây; recharts đọc thẳng tuple này để vẽ vùng. */
+  [series: string]: string | number | number[] | null
 }
 
 export type HistorianInterval = '1s' | '3s' | '5s' | '15s' | '30s' | '1m' | '3m' | '5m' | '15m' | '30m' | '60m'

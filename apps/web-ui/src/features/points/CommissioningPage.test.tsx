@@ -6,6 +6,7 @@ import { I18nProvider } from '../../shared/i18n'
 import { ToastProvider } from '../../shared/components/Toast'
 import type { Point, UserRole } from '../../shared/types'
 import { CommissioningPage } from './CommissioningPage'
+import { MemoryRouter } from 'react-router-dom'
 
 const mocks = vi.hoisted(() => ({
   getPoints: vi.fn(),
@@ -58,7 +59,7 @@ beforeEach(() => {
 afterEach(cleanup)
 
 function renderPage() {
-  return render(<I18nProvider><ToastProvider><CommissioningPage /></ToastProvider></I18nProvider>)
+  return render(<MemoryRouter><I18nProvider><ToastProvider><CommissioningPage /></ToastProvider></I18nProvider></MemoryRouter>)
 }
 
 /**

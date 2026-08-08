@@ -9,7 +9,7 @@ import { useToast } from '../../shared/components/Toast'
 import { useApi } from '../../shared/hooks/useApi'
 import { useAuth } from '../auth'
 import { useI18n } from '../../shared/i18n'
-import type { ModbusSlave, NetcfgCandidate, NetcfgResponse, NetcfgTransactionAction, NetworkConfig, PollState } from '../../shared/types'
+import type { ModbusSlave, NetcfgActive, NetcfgCandidate, NetcfgResponse, NetcfgTransactionAction, NetworkConfig, PollState } from '../../shared/types'
 
 const inputClass = 'mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none transition focus:border-[var(--c-accent)] disabled:cursor-not-allowed disabled:opacity-50'
 
@@ -435,6 +435,14 @@ export function NetworkPage() {
 
                 {transactionLocked && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">{pick('Form đang khóa theo pending candidate của giao dịch authoritative.', 'The form is locked to the authoritative pending candidate.')}</div>}
 
+                {/* PA3-506 — trạng thái chưa lưu và bảng khác biệt.
+                    Trước đây form không nói gì về việc nó đã bị sửa: người dùng
+                    gõ một octet rồi chuyển tab, quay lại thấy giá trị lạ mà
+                    không biết đó là bản nháp của mình hay là cấu hình đang chạy.
+                    Và ở màn hình mạng, "sẽ đổi gì" là thứ phải đọc được TRƯỚC
+                    khi bấm, vì bấm sai là mất đường vào thiết bị. */}
+                <NetworkCandidateDiff active={activeNetwork} candidate={candidate} pick={pick} />
+
                 {/* CHỈ hai nút. `Stage`/`Apply` là tên lệnh giao thức, không phải
                     việc người vận hành cần biết — gộp vào "Lưu thay đổi".
                     `Confirm`/`Rollback` chuyển vào hộp thoại ở cuối trang, chỉ hiện
@@ -524,6 +532,22 @@ export function NetworkPage() {
             <div className="flex items-center justify-between gap-3"><span className="text-[var(--c-text-dim)]">{pick('Cũ', 'Old')}</span><span className="mono font-semibold">{activeAddress(transaction.active?.ipv4 ?? '', transaction.active?.prefixLength ?? 0)}</span></div>
             <div className="flex items-center justify-between gap-3"><span className="text-[var(--c-text-dim)]">{pick('Mới', 'New')}</span><span className="mono font-semibold text-[var(--c-warn-fg)]">{transaction.pending ? candidateAddressLabel(transaction.pending) : '—'}</span></div>
           </div>
+          {/* PA3-506 — hướng dẫn kết nối lại.
+              Đổi IP xong, trang hiện tại vẫn mở qua địa chỉ CŨ. Nếu không nói ra
+              địa chỉ mới ngay tại đây, người dùng bấm "Giữ thay đổi" rồi mất
+              đường vào và phải đoán URL — hoặc tệ hơn, chờ hết 120 giây và bị
+              rollback dù thay đổi hoàn toàn đúng. */}
+          {transaction.pending?.ipv4 && transaction.pending.ipv4 !== transaction.active?.ipv4 && (
+            <div className="mt-4 rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-accent-bg)] p-3 text-sm">
+              <div className="font-semibold text-[var(--c-accent)]">{pick('Địa chỉ truy cập sau khi giữ thay đổi', 'Address to use after keeping the change')}</div>
+              <div className="mono mt-1 break-all text-[var(--c-text)]">
+                {`${window.location.protocol}//${transaction.pending.ipv4}${window.location.port ? `:${window.location.port}` : ''}`}
+              </div>
+              <div className="mt-1 text-xs text-[var(--c-text-dim)]">
+                {pick('Mở địa chỉ này ở tab mới TRƯỚC khi bấm Giữ thay đổi để chắc chắn còn đường vào.', 'Open this address in a new tab BEFORE keeping the change, to be sure you still have a way in.')}
+              </div>
+            </div>
+          )}
           <p className="mt-4 text-sm font-semibold">{pick('Bạn vẫn xem được trang này?', 'Can you still see this page?')}</p>
           <p className="mt-1 text-sm text-[var(--c-text-dim)]" aria-live="polite">
             {pick('Nếu mất kết nối, thiết bị tự quay lại cấu hình cũ sau ', 'If you lose connection, the device rolls back automatically in ')}
@@ -548,6 +572,81 @@ export function NetworkPage() {
         onCancel={() => setConfirmSave(false)}
         onConfirm={saveServiceConfig}
       />}
+    </div>
+  )
+}
+
+/** Đổi prefix length của kernel (`/24`) sang subnet mask mà form dùng
+ *  (`255.255.255.0`). Trả `''` khi prefix nằm ngoài dải hợp lệ — thà không so
+ *  sánh còn hơn báo một khác biệt do chính phép quy đổi bịa ra. */
+function prefixLengthToNetmask(prefix: number | undefined): string {
+  if (typeof prefix !== 'number' || prefix < 0 || prefix > 32) return ''
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
+  return [24, 16, 8, 0].map((shift) => (mask >>> shift) & 0xff).join('.')
+}
+
+/** Bảng khác biệt giữa cấu hình đang chạy và bản nháp — PA3-506.
+ *
+ *  Không có khác biệt thì KHÔNG hiện gì: một bảng trống với toàn dấu "=" chỉ
+ *  làm loãng màn hình. Có khác biệt thì nêu từng trường, giá trị cũ và giá trị
+ *  mới — đủ để người vận hành đọc lại trước khi bấm, không phải so bằng mắt
+ *  giữa hai vùng cách nhau nửa trang.
+ */
+function NetworkCandidateDiff({ active, candidate, pick }: {
+  active: NetcfgActive | null | undefined
+  candidate: NetcfgCandidate
+  pick: (vi: string, en: string) => string
+}) {
+  if (!active) return null
+  const rows: Array<{ label: string; from: string; to: string }> = []
+  const add = (label: string, from: unknown, to: unknown) => {
+    const fromText = from === undefined || from === null || from === '' ? '—' : String(from)
+    const toText = to === undefined || to === null || to === '' ? '—' : String(to)
+    if (fromText !== toText) rows.push({ label, from: fromText, to: toText })
+  }
+  add(pick('Chế độ', 'Mode'), active.mode, candidate.mode)
+  add(pick('Giao diện', 'Interface'), active.interface, candidate.interface)
+  // Ở chế độ DHCP, địa chỉ do máy chủ cấp nên so sánh từng octet là vô nghĩa.
+  if (candidate.mode === 'static') {
+    add('IPv4', active.ipv4, candidate.ipv4)
+    // Authority báo prefix length, form nhập subnet mask — so cùng một dạng để
+    // không báo "thay đổi" cho hai cách viết của cùng một giá trị.
+    add(pick('Subnet mask', 'Subnet mask'), prefixLengthToNetmask(active.prefixLength), candidate.netmask)
+    add('Gateway', active.gateway, candidate.gateway)
+  }
+  add('DNS', active.dnsServers?.join(', '), candidate.dns?.mode === 'manual' ? candidate.dns.servers.join(', ') : candidate.dns?.mode)
+
+  if (rows.length === 0) {
+    return (
+      <p className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2 text-xs text-[var(--c-text-dim)]">
+        {pick('Bản nháp trùng với cấu hình đang chạy — không có gì để lưu.', 'The draft matches the running configuration — nothing to save.')}
+      </p>
+    )
+  }
+
+  return (
+    <div className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3">
+      <div className="mb-2 text-xs font-bold uppercase text-[var(--c-warn-fg)]">
+        {pick(`${rows.length} thay đổi chưa lưu`, `${rows.length} unsaved change(s)`)}
+      </div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-left text-[10px] uppercase text-[var(--c-text-dim)]">
+            <th className="py-1 pr-3">{pick('Trường', 'Field')}</th>
+            <th className="py-1 pr-3">{pick('Đang chạy', 'Running')}</th>
+            <th className="py-1">{pick('Sẽ đổi thành', 'Will become')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label} className="border-t border-[var(--c-warn)]">
+              <td className="py-1 pr-3 font-semibold">{row.label}</td>
+              <td className="mono py-1 pr-3 text-[var(--c-text-dim)]">{row.from}</td>
+              <td className="mono py-1 font-semibold text-[var(--c-warn-fg)]">{row.to}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

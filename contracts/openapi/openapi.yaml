@@ -58,6 +58,53 @@ paths:
     post:
       summary: ÄÄƒng xuáº¥t, vÃ´ hiá»‡u token
       responses: { "200": { description: OK } }
+  /overview:
+    get:
+      summary: Read model duy nhat cua Landing PA3 (role viewer)
+      description: >
+        PA3-D02. Mot snapshot tong hop tu cac authority dang co, thay cho viec
+        frontend tu ghep /system/status + /points + /alarms.
+        `schemaVersion` la hop dong: client thay version la phai FAIL CLOSED,
+        khong duoc doan field con thieu roi ve mot Landing trong binh thuong.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Overview" }
+        "401": { $ref: "#/components/responses/Error" }
+  /activity:
+    get:
+      summary: Nhat ky hoat dong da chuan hoa (role viewer)
+      description: >
+        PA3-D03. Kho ben vung co retention theo dung luong; moi vet audit deu di
+        qua sanitize nen khong chua password/token. Sap xep moi nhat truoc.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: before
+          in: query
+          description: Con tro phan trang — chi tra su kien co id NHO HON gia tri nay.
+          schema: { type: integer, minimum: 1 }
+        - name: kind
+          in: query
+          schema: { type: string, enum: [user, system] }
+        - name: action
+          in: query
+          description: Loc theo chuoi con cua ten hanh dong, vi du point_override.
+          schema: { type: string }
+        - name: objectId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActivityPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /points:
     get:
       summary: Danh sÃ¡ch táº¥t cáº£ I/O point + giÃ¡ trá»‹
@@ -100,6 +147,18 @@ paths:
                     - $ref: "#/components/schemas/PointCommandValue"
                   description: "Báº¯t buá»™c trá»« khi release=true"
                 release: { type: boolean, default: false, description: "true = nháº£ manual override" }
+                ttlS:
+                  type: integer
+                  minimum: 1
+                  maximum: 86400
+                  description: >
+                    PA3-107. Thoi han override tinh bang giay, do CORE cuong che
+                    (scan_loop giu manual_ao_expiry_ns_/manual_do_expiry_ns_ va tu
+                    release khi het han). Khong duoc dat kem release=true. Bo trong
+                    nghia la ep khong thoi han, KHONG phai het han ngay.
+                    Web-api va frontend KHONG duoc tu hen gio: mot timer trong tab
+                    trinh duyet hay gan voi mot WebSocket se bien mat khi dong tab
+                    hoac restart dich vu, va output o lai trang thai ep tay.
       responses:
         "200":
           description: Káº¿t quáº£ Ã¡p lá»‡nh tá»« core (ghi audit log)
@@ -1668,10 +1727,157 @@ components:
           description: >
             Canonical display name/label. Backend trims/collapses whitespace, rejects control
             characters and compares Unicode-lower keys in a namespace independent from PointTag.
+    Overview:
+      type: object
+      required: [schemaVersion, generatedAt, controller, connected, lastDataAt, overallState, overallReasonCode, alarms, points, health, attention, capabilities, degraded]
+      properties:
+        schemaVersion: { type: integer, example: 1, description: "Client fail closed khi khong khop." }
+        generatedAt: { type: string, format: date-time }
+        controller:
+          type: object
+          properties:
+            deviceName: { type: string }
+            location: { type: string }
+            firmware: { type: string }
+            webVersion: { type: string }
+            ip: { type: string }
+            mac: { type: string }
+            systemTime: { type: string, format: date-time }
+            uptimeS: { type: integer }
+        connected: { type: boolean }
+        lastDataAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            null = KHONG point nao co moc thoi gian hop le. Tuyet doi khong thay
+            bang gio hien tai (PA3-F04).
+        overallState: { type: string, enum: [good, degraded, fault, offline, unknown] }
+        overallReasonCode: { type: string }
+        alarms:
+          type: object
+          required: [critical, high, medium, low, info, unacked, total]
+          properties:
+            critical: { type: integer }
+            high: { type: integer }
+            medium: { type: integer }
+            low: { type: integer }
+            info: { type: integer }
+            unacked: { type: integer }
+            total: { type: integer }
+        points:
+          type: object
+          required: [total, good, uncertain, bad, stale, offline, forced, groups]
+          properties:
+            total: { type: integer }
+            good: { type: integer }
+            uncertain: { type: integer }
+            bad: { type: integer }
+            stale: { type: integer }
+            offline: { type: integer }
+            forced: { type: integer }
+            groups:
+              type: array
+              description: "Chi co nhom THUC SU co point. Base SKU Rev A khong co nhom DI."
+              items:
+                type: object
+                properties:
+                  kind: { type: string, example: UI }
+                  total: { type: integer }
+                  good: { type: integer }
+                  uncertain: { type: integer }
+                  bad: { type: integer }
+                  stale: { type: integer }
+                  offline: { type: integer }
+                  forced: { type: integer }
+        health:
+          type: array
+          items:
+            type: object
+            required: [domain, state, reasonCode, source, observedAt]
+            properties:
+              domain: { type: string, enum: [controller, local_io, modbus, network, historian] }
+              state: { type: string, enum: [good, degraded, fault, offline, unknown] }
+              reasonCode: { type: string }
+              source: { type: string, description: "Nguon do that, vi du plc_shm hay iobus_telemetry." }
+              observedAt: { type: string, format: date-time }
+              detail: { type: string }
+              link: { type: string, description: "Goi y dieu huong; client PHAI kiem qua allowlist route." }
+        attention:
+          type: array
+          items:
+            type: object
+            required: [id, severity, category, title, targetType, targetId]
+            properties:
+              id: { type: string }
+              severity: { type: string, enum: [critical, high, medium, low, info] }
+              category: { type: string, enum: [alarm, communication, quality, forced] }
+              title: { type: string }
+              detail: { type: string }
+              targetType:
+                type: string
+                enum: [point, alarm, modbus_device, bus, subsystem]
+                description: >
+                  PA3-D06. Backend KHONG tra URL; client tu dung duong di tu cap
+                  (targetType, targetId) de du lieu khong dieu khien duoc bang dinh tuyen.
+              targetId: { type: string }
+              observedAt: { type: string, format: date-time }
+        capabilities:
+          type: object
+          description: "Nang luc THAT cua SKU; giao dien chi dung o cho phan cung co that."
+          properties:
+            digitalInputs: { type: integer, example: 0, description: "Rev A base SKU khong co DI cong nghiep rieng." }
+            universalInputs: { type: integer, example: 16 }
+            analogOutputs: { type: integer, example: 4 }
+            digitalOutputs: { type: integer, example: 4 }
+            modbusRtuBuses: { type: integer }
+            bacnetIpEnabled: { type: boolean }
+        degraded:
+          type: array
+          items: { type: string }
+          description: "Ten cac nguon du lieu doc khong day du trong snapshot nay."
+    ActivityPage:
+      type: object
+      required: [schemaVersion, generatedAt, items, nextCursor, retained, capacity]
+      properties:
+        schemaVersion: { type: integer, example: 1 }
+        generatedAt: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ActivityEvent" }
+        nextCursor:
+          type: integer
+          nullable: true
+          description: "Truyen lai qua tham so before de lay trang cu hon."
+        retained: { type: integer }
+        capacity: { type: integer }
+    ActivityEvent:
+      type: object
+      required: [id, time, kind, actor, action, outcome]
+      properties:
+        id: { type: integer }
+        time: { type: string, format: date-time }
+        kind: { type: string, enum: [user, system] }
+        actor: { type: string }
+        role: { type: string }
+        action: { type: string, example: point_override }
+        objectType: { type: string }
+        objectId: { type: string }
+        outcome: { type: string, example: accepted }
+        reasonCode: { type: string }
+        correlationId: { type: string }
+        detail: { type: string, description: "Da sanitize; khong bao gio chua secret." }
     Point:
       type: object
       required: [id, tag, name, kind, value, quality, source, updatedAt, point_id, tag_name, display_name, data_type, timestamp, read_write, default_value, safe_value]
       properties:
+        overrideExpiresInS:
+          type: integer
+          minimum: 1
+          description: >
+            So giay con lai cua lenh ep tay, DO CORE bao ve qua
+            remaining_ttl_s. Vang mat nghia la khong co lenh co thoi han.
+            Frontend hien thi nguyen van, khong tu dem.
         id: { type: string, example: "UI-01", description: "Stable canonical runtime identity." }
         tag: { $ref: "#/components/schemas/PointTag" }
         name:

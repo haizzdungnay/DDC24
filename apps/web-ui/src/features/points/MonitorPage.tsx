@@ -396,17 +396,28 @@ export function MonitorPage() {
    * `pointsState.data` chỉ khác `null` sau lần đọc thành công ĐẦU TIÊN, nên hai
    * guard dưới đây chỉ chặn lúc chưa có gì trong tay; hỏng giữa chừng thì giữ số
    * đo cũ và cảnh báo bằng dải bên dưới, không xoá màn hình của ca trực. */
+  /* Trạng thái tải/lỗi vẫn GIỮ tiêu đề trang (PA3-603 / WCAG 2.4.6).
+     Trả về một `StateBlock` trần làm trang mất `<h1>`: người dùng trình đọc màn
+     hình nghe thấy một thông báo lỗi mà không biết mình đang ở trang nào. */
   if (pointsState.loading && !pointsState.data && !realtime.allPoints.length) {
-    return <StateBlock state="loading" title={pick('Đang tải điểm I/O', 'Loading I/O points')} />
+    return (
+      <div className="space-y-3">
+        <MonitorHeading />
+        <StateBlock state="loading" title={pick('Đang tải điểm I/O', 'Loading I/O points')} />
+      </div>
+    )
   }
   if (pointsState.error && !pointsState.data && !realtime.allPoints.length) {
     return (
-      <StateBlock
-        state="error"
-        title={pick('Không tải được điểm I/O', 'Could not load I/O points')}
-        detail={pointsState.error.message}
-        onRetry={pointsState.refetch}
-      />
+      <div className="space-y-3">
+        <MonitorHeading />
+        <StateBlock
+          state="error"
+          title={pick('Không tải được điểm I/O', 'Could not load I/O points')}
+          detail={pointsState.error.message}
+          onRetry={pointsState.refetch}
+        />
+      </div>
     )
   }
 
@@ -420,10 +431,7 @@ export function MonitorPage() {
 
   return (
     <div className="space-y-3">
-      <div>
-        <h1 className="text-xl font-semibold leading-tight">Monitor I/O</h1>
-        <p className="text-xs text-[var(--c-text-dim)]">{pick('Giám sát trạng thái điểm I/O', 'Monitor I/O point states')}</p>
-      </div>
+      <MonitorHeading />
 
       {pollDegraded && (
         <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
@@ -572,6 +580,17 @@ export function MonitorPage() {
           </div>
         )}
       </Modal>
+    </div>
+  )
+}
+
+/** Tiêu đề trang, dùng chung cho cả trạng thái bình thường lẫn loading/lỗi. */
+function MonitorHeading() {
+  const { pick } = useI18n()
+  return (
+    <div>
+      <h1 className="text-xl font-semibold leading-tight">Monitor I/O</h1>
+      <p className="text-xs text-[var(--c-text-dim)]">{pick('Giám sát trạng thái điểm I/O', 'Monitor I/O point states')}</p>
     </div>
   )
 }
@@ -1048,6 +1067,15 @@ function DetailPanel({
             <StatusBadge state={point.quality} />
             {point.forced && <ForcedBadge remainingLabel={formatCountdown(point.overrideExpiresInS)} />}
           </div>
+          {/* PA3-406: mọi lệnh ghi xuống điểm này đều để lại vết trong kho
+              Activity. Không có đường dẫn tới đó thì câu hỏi "ai vừa ép cái
+              này" lại phải trả lời bằng journalctl trên bo. */}
+          <Link
+            to={`/activity?objectId=${encodeURIComponent(point.id)}`}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--c-accent)]"
+          >
+            {pick('Xem vết audit của điểm này', 'View audit trail for this point')} →
+          </Link>
           {canForce && (
             <div className="space-y-2">
               <Button
