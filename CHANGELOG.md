@@ -7,6 +7,81 @@
 ---
 
 ## [Unreleased]
+### Fixed — Trang `/settings/network` chết trên bo Foxlinx: 6 nguyên nhân độc lập (2026-08-08)
+
+**Phạm vi.** `apps/netcfg` (C++), `apps/web-ui/src/features/network` (React/TS),
+`apps/web-api/internal/network` (test hồi quy), `platform/systemd/mkddc-netcfg.service`,
+`platform/packaging/netcfg.conf`, `platform/packaging/install.sh`,
+`docs/07_records/test-evidence/fw-som/2026-08-08-foxlinx-settings-network-fix.md`,
+`docs/08_hardware/foxlinx-som-ddc24/FOXLINX_DEPLOY_CHECKLIST.md`.
+
+**Triệu chứng.** Trên bo `SOM-DDC-24-foxlinx` (`OK1126B-buildroot`), trang `/settings/network`
+hiện thẻ ACTIVE/KERNEL toàn đỏ với `INTERFACE_NOT_FOUND`, "No configured profile",
+"No editable network candidate", hai banner vàng, và nút **Lưu thay đổi khoá vĩnh viễn**.
+Trang không sai — nó hiển thị trung thực một authority đã chết vì sáu nguyên nhân xếp chồng.
+
+**Hai lỗi chặn ở tầng nền tảng.**
+
+- **NC-02 — `mkddc-netcfg` gắn cứng vào NetworkManager, bo không hề có NetworkManager.**
+  `configured/persist/apply/rollback` chạy hoàn toàn bằng `nmcli`. Bo buildroot này dùng
+  **systemd-networkd**, nên `configured()` luôn trả `mode="unknown"` ⇒ Engine bỏ hẳn khoá
+  `configured` khỏi response ⇒ giao diện rơi vào ngõ cụt "no editable candidate"; và mọi
+  `stage` sẽ chết ở `PREVIOUS_STATE_NOT_RESTORABLE`, `persist` ở `NETWORKMANAGER_UNAVAILABLE`.
+  Tức trang này **không bao giờ** đổi được IP trên bo đó. Nay `LinuxPlatform` tự dò backend:
+  `configured` đọc file `.network` đang hiệu lực qua `networkctl status`; `persist` ghi
+  `/etc/systemd/network/05-mkddc-<if>.network` (tiền tố `05-` sắp trước file `10-*` của nhà
+  sản xuất nên thắng mà không phải sửa file gốc, và `[Match]` được **kế thừa nguyên vẹn** để
+  không nới rộng phạm vi khớp); `apply`/`rollback` dùng `networkctl reload` + `reconfigure`.
+  `persist` bắt buộc `networkctl reload` ngay sau khi ghi — thiếu bước này thì `networkctl`
+  vẫn báo file CŨ đang hiệu lực, `configured()` đọc sai sau confirm và giao dịch kế tiếp lưu
+  last-known-good sai, tức rollback đưa thiết bị về một địa chỉ không còn đúng.
+- **NC-06 — `/data/mkddc` mode `0755 mkddc:mkddc` làm `stage` không ghi nổi journal.**
+  `mkddc-netcfg` chạy `User=root Group=mkddc` với `CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW`
+  — **không có `CAP_DAC_OVERRIDE`**, nên uid 0 vẫn phải tuân thủ DAC như người dùng thường và
+  chỉ có `r-x` trên thư mục của mình. Mọi `stage` trả `JOURNAL_WRITE_FAILED`: cơ chế giao dịch
+  chết ngay bước đầu tiên. `install.sh` nay tạo thư mục `0775`. Chứng minh bằng thí nghiệm
+  phân biệt được trong cùng sandbox: `0755` → `Permission denied`, `0775` → ghi được.
+
+**Bốn lỗi còn lại.**
+
+- **NC-01** — `NETCFG_INTERFACE=end1` (tên của Orange Pi 5B) trong khi Foxlinx đặt tên Ethernet
+  là `eth0`. `mkddc-netcfg` nay giải tên **một lần lúc khởi động** (không phải trong `status()`:
+  Engine dùng tên này làm phạm vi cho phép của giao dịch, nên status trả `eth0` mà Engine giữ
+  `end1` sẽ khiến candidate bị chính authority từ chối bằng `INTERFACE_NOT_ALLOWED`), rơi về
+  NIC **có dây** đang hiện diện khi tên khai báo vắng mặt và ghi cảnh báo vào journal.
+  `netcfg.conf` mặc định đổi sang `eth0`.
+- **NC-03** — `valid_management_hostname()` chỉ nhận `[a-z0-9-]`, nên hostname thật của bo
+  `OK1126B-buildroot` bị xếp là không ổn định (`stable=false`) và giao diện hiện banner
+  "Stable mDNS hostname is not ready". Hostname **không phân biệt hoa thường** (RFC 1123 §2.1,
+  RFC 6762 §16); `mdnsName` nay công bố dạng chữ thường để client so khớp bằng một phép so sánh
+  chuỗi thẳng.
+- **NC-04** — FE đòi `location.hostname === management.mdnsName` mới cho Apply. Vào bằng IP LAN,
+  DDNS hay reverse proxy đều không bao giờ khớp ⇒ **thiết bị không cấu hình được từ xa**, dù
+  ADR-017 §1 chỉ yêu cầu đường quản trị (ví dụ Wi-Fi) còn nguyên. Nay chỉ chặn đúng trường hợp
+  **chứng minh được** là nguy hiểm: trình duyệt đang nói chuyện qua chính địa chỉ IPv4 sắp bị
+  đổi. Các trường hợp khác chỉ cảnh báo — cơ chế an toàn thật vẫn nguyên vẹn: `apply` giữ địa
+  chỉ cũ và thiết bị tự hoàn tác sau 120 giây nếu không ai xác nhận.
+- **NC-05** — khi authority không có `configured` và `active.mode` là unknown, trang không có
+  lối nào để cấu hình thiết bị. Nay admin bấm "Tự soạn cấu hình mạng" để mở một candidate rỗng;
+  giao diện vẫn **không suy diễn** mode — mode là do người chọn.
+
+Thêm một lớp chống hỏng toàn cục: `Engine::response` chỉ phát `configured` khi candidate đó
+hợp lệ theo hợp đồng. Adapter Go từ chối **cả** response khi một mảnh sai (ví dụ profile hệ điều
+hành có gateway khác subnet), và khi đó `/api/v1/network/transaction` trả 502 — nghĩa là toàn bộ
+trang chết chứ không suy giảm cục bộ.
+
+**Kiểm chứng.** ctest **860/860** (bật cả 3 option; trước: 849, +11 test netcfg mới) ·
+`go vet` sạch + `go test ./... -count=1` toàn bộ `ok` · vitest **446/446** · `npm run lint`
+0 warning · `npm run build` OK · `npx playwright test e2e/network-qa.spec.ts` **1 passed**.
+Trên bo Foxlinx: đã chạy **giao dịch thật** `stage → apply → confirm` và `stage → apply →
+rollback` trên `eth0` — apply giữ được cả địa chỉ cũ lẫn mới (`.110` + `.111 secondary`),
+rollback trả về đúng `.110`, `ip route` không đổi suốt quá trình, 5/5 service `active`,
+`/api/v1/health` 6/6 ok. Chi tiết ở
+`docs/07_records/test-evidence/fw-som/2026-08-08-foxlinx-settings-network-fix.md`.
+
+**Sửa kèm.** `FOXLINX_DEPLOY_CHECKLIST.md` ghi sai đường toolchain cross
+(`platform/cmake/aarch64-linux-gnu.cmake` → `toolchain-aarch64-linux-gnu.cmake`).
+
 ### Fixed — Đóng 15 finding rà soát BE + FE 2026-08-06 và dọn thư mục hồ sơ rà soát (2026-08-08)
 
 **Phạm vi.** `apps/web-api` (Go), `apps/web-ui` (React/TS), `platform/systemd`,
@@ -122,6 +197,49 @@ P1/P2/P3 của Plan 51; FIX-206 (kiểm tra tĩnh chặn call site tra telemetry
 **Ghi chú build.** `cmake --fresh` một mình **không đủ** khi thư mục `build/fw` cũ có cache ABI
 compiler hỏng — configure vẫn báo `CMAKE_CXX_COMPILER not set, after EnableLanguage`. Phải
 `rm -rf build/fw` rồi configure lại.
+
+### Added — Hồ sơ đầu vào cho đội thiết kế lại UX (2026-08-08)
+
+**Phạm vi.** `docs/04_uiux/UX_REDESIGN_INPUT_BRIEF_2026-08-08.md` (mới, mã `UX-INPUT-001`).
+
+Đội UX yêu cầu 8 nhóm thông tin để thiết kế lại kiến trúc UX. Tài liệu trả lời cả 8 nhóm bằng
+số liệu **đọc trực tiếp từ source tại `18bd295`**, không trích lại tài liệu cũ — vì nhiều tài
+liệu trong `docs/01_specs/` đã stale so với as-built.
+
+**Ba điểm nắn lại giả định sai trong yêu cầu gốc:**
+
+- **Role.** Yêu cầu giả định 4 role (Operator/Technician/Engineer/Admin). Backend chỉ có **3**:
+  `viewer` < `operator` < `admin` (`auth.go` `roleRank`, mirror `features/auth/roles.ts`). Tài
+  liệu đưa bảng ánh xạ 4→3 để dùng được ngay, và ghi rõ nếu cần 4 role tách bạch thì đó là thay
+  đổi hợp đồng backend chứ không phải thay đổi giao diện.
+- **I/O.** Yêu cầu hỏi "số AI/AO/DI/DO/UI/UO". As-built là **16 UI + 4 AO + 4 DO**, và **0 DI**
+  trên base SKU: `KX_N_DI = 8` trong `contracts/shm/mkddc_shm.h` là slot dành sẵn, ADR-010 nói rõ
+  Rev A không lắp DI công nghiệp riêng. Không có UO.
+- **Alarm.** Yêu cầu hỏi "3 cấp hay 4 cấp Priority". Thực tế là **5 cấp severity**
+  (`critical|high|medium|low|info`) và **5 giá trị priority** khi cấu hình, trong đó `flexible`
+  suy severity từ `severityRules` theo độ lớn vi phạm.
+
+**Phát hiện đáng kể — `openapi.yaml` không phải as-built.** Kiểm bằng grep toàn bộ
+`apps/web-api/internal/` (loại file test): 7 endpoint có trong spec nhưng **chưa cài trong code
+Go** — `/ota/upload`, `/ota/apply`, `/ota/status`, `/logs/download`, `/bacnet/objects`,
+`/graph/validate`, `/graph/deploy`. Hệ quả nếu không nói ra: đội UX thiết kế màn hình OTA và
+màn tải log cho tính năng không tồn tại. Tài liệu vì vậy liệt kê đầy đủ **99 route thật** trích
+từ `http.go` làm nguồn chân lý, và ghi thẳng rằng **không có** endpoint restart service hay
+reboot thiết bị.
+
+**Các ràng buộc thiết kế được ghi lại kèm lý do lịch sử**, để bản thiết kế mới không lặp lại
+finding cũ: luật D-07 cấm FE suy diễn dữ liệu (finding `FE-DIAG-01` — `ControllerDiagram` bịa
+dữ liệu simulator ở chế độ live); cấm hằng số viết cứng thay số đo (MBR-B305 — Overview từng
+hiển thị p50/p95 từ hằng số trong handler Go); Contract Freeze 2026-06-11 cấm REST expose BACnet
+priority 1..16 nên UI **không** được có priority selector 16 mức; và `index.html` phải `no-cache`
+(sự cố bo Foxlinx 2026-08-06 — người dùng không thấy tính năng mới vì trình duyệt giữ bản cũ).
+
+Tài liệu đóng lại bằng 3 câu hỏi cần PM chốt trước khi vẽ: số role, cách thể hiện 5 alarm type
+đang `deferred` (backend từ chối lưu nếu bật), và phạm vi của `/eng/programming` (ST/FBD đang ở
+C0, trang đang bị cờ `LEGACY_GRAPH_DEMO_ENABLED` tắt).
+
+**Kiểm chứng.** Chỉ thêm tài liệu, không đổi code — không chạy bộ test. Mọi số liệu trích dẫn kèm
+đường dẫn tệp và số dòng để kiểm ngược.
 
 ### Fixed — Di trú lịch v1→v3.1 không chạy, và hợp đồng đóng băng từ chối dữ liệu hợp lệ (2026-08-07)
 

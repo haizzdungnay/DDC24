@@ -77,7 +77,7 @@ echo "Deploy commit: $(cat /tmp/deploy-commit.txt)"
 # Từ root dự án:
 cmake --fresh -S . -B build/fw-aarch64 \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_TOOLCHAIN_FILE=platform/cmake/aarch64-linux-gnu.cmake \
+  -DCMAKE_TOOLCHAIN_FILE=platform/cmake/toolchain-aarch64-linux-gnu.cmake \
   -DMKDDC_ENABLE_MODBUS=ON \
   -DMKDDC_ENABLE_BACNET=ON \
   -DMKDDC_ENABLE_HMI=ON
