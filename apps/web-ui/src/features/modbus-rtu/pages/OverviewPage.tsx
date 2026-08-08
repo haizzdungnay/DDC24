@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../../../shared/api/client'
-import type { ModbusBusInfo, ModbusEventItem, ModbusOverview } from '../../../shared/types'
+import type { ModbusBusInfo, ModbusEventItem, ModbusOverview, ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../../../shared/types'
+import { HierarchyTree } from '../components/HierarchyTree'
 
 const NO_DATA = '—'
 
@@ -31,6 +32,9 @@ export function OverviewPage() {
   const [overview, setOverview] = useState<ModbusOverview | null>(null)
   const [buses, setBuses] = useState<ModbusBusInfo[]>([])
   const [events, setEvents] = useState<ModbusEventItem[]>([])
+  const [devices, setDevices] = useState<ModbusRTUDevice[]>([])
+  const [points, setPoints] = useState<ModbusRTUPoint[]>([])
+  const [diagnostics, setDiagnostics] = useState<ModbusRTUDiagnostics[]>([])
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string>('')
@@ -39,14 +43,27 @@ export function OverviewPage() {
   async function loadData() {
     try {
       setErrorStatus('')
-      const [ovData, busData, evData] = await Promise.all([
+      /* PA3-505: cây Bus→Device→Point cần cả bốn nguồn. Chẩn đoán có thể vắng
+         khi iobus chưa publish telemetry — khi đó cây hiện `unknown` cho device
+         chứ KHÔNG hiện offline, nên lỗi đọc telemetry không được làm hỏng cả
+         trang. */
+      const [ovData, busData, evData, deviceData, pointData] = await Promise.all([
         apiClient.getModbusOverview(),
         apiClient.getModbusBuses(),
-        apiClient.getModbusEvents()
+        apiClient.getModbusEvents(),
+        apiClient.getModbusDevices(),
+        apiClient.getModbusPoints()
       ])
       setOverview(ovData)
       setBuses(busData)
       setEvents(evData)
+      setDevices(deviceData)
+      setPoints(pointData)
+      try {
+        setDiagnostics(await apiClient.getModbusDiagnostics())
+      } catch {
+        setDiagnostics([])
+      }
       setLastRefreshedAt(new Date().toLocaleTimeString())
     } catch (err) {
       setErrorStatus(err instanceof Error ? err.message : 'Không tải được dữ liệu Modbus Overview')
@@ -308,6 +325,26 @@ export function OverviewPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* PA3-505 / UX-DES §14 — cây phân cấp Bus → Device → Point.
+          Sáu tab phẳng của workspace đều đúng về nội dung nhưng không tab nào
+          trả lời được câu hỏi cấu trúc mà kỹ thuật viên hỏi khi đứng trước tủ:
+          sợi dây này có những thiết bị nào, thiết bị kia đọc thanh ghi nào. */}
+      <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-bold text-[var(--c-text)]">Cấu trúc Bus → Thiết bị → Point</h3>
+          <span className="text-xs text-[var(--c-text-dim)]">
+            Tham số serial (baud/parity/stop bits) thuộc bus, không thuộc thiết bị.
+          </span>
+        </div>
+        <HierarchyTree
+          buses={buses}
+          devices={devices}
+          points={points}
+          diagnostics={diagnostics}
+          telemetryAvailable={Boolean(overview?.telemetry_available)}
+        />
       </div>
     </div>
   )

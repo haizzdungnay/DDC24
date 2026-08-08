@@ -7,7 +7,11 @@ import { OverviewPage } from './OverviewPage'
 const api = vi.hoisted(() => ({
   getModbusOverview: vi.fn(),
   getModbusBuses: vi.fn(),
-  getModbusEvents: vi.fn()
+  getModbusEvents: vi.fn(),
+  // PA3-505: trang nay còn dựng cây Bus → Device → Point nên cần ba nguồn này.
+  getModbusDevices: vi.fn(),
+  getModbusPoints: vi.fn(),
+  getModbusDiagnostics: vi.fn()
 }))
 
 vi.mock('../../../shared/api/client', () => ({ apiClient: api }))
@@ -22,6 +26,9 @@ function renderPage() {
 
 describe('OverviewPage', () => {
   beforeEach(() => {
+    api.getModbusDevices.mockResolvedValue([])
+    api.getModbusPoints.mockResolvedValue([])
+    api.getModbusDiagnostics.mockResolvedValue([])
     api.getModbusOverview.mockResolvedValue({
       total_devices: 12,
       online: 9,
@@ -94,8 +101,12 @@ describe('OverviewPage', () => {
     expect(screen.getByTestId('kpi-offline')).toHaveTextContent('2')
     expect(screen.getByTestId('kpi-fault')).toHaveTextContent('1')
 
-    expect(screen.getByText('RS485-1 (Main Port)')).toBeInTheDocument()
-    expect(screen.getByText('RS485-2 (Expansion Port)')).toBeInTheDocument()
+    /* Tên bus nay xuất hiện ở HAI nơi trên cùng trang: thẻ KPI của bus và
+       gốc cây Bus→Device→Point (PA3-505). Đó là chủ ý, nên khẳng định phải
+       nói rõ mình đang kiểm chỗ nào thay vì đòi duy nhất một kết quả. */
+    expect(screen.getAllByText('RS485-1 (Main Port)').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('RS485-2 (Expansion Port)').length).toBeGreaterThan(0)
+    expect(screen.getByRole('tree', { name: /Bus/ })).toBeInTheDocument()
     expect(screen.getByText('OFFLINE -> ONLINE')).toBeInTheDocument()
 
     expect(screen.getByTestId('p50-rs485-1')).toHaveTextContent('24 ms')
