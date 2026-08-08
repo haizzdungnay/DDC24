@@ -5,6 +5,7 @@ import { ToastProvider } from '../../shared/components/Toast'
 import { I18nProvider } from '../../shared/i18n'
 import type { Point } from '../../shared/types'
 import { MonitorPage } from './MonitorPage'
+import { MemoryRouter } from 'react-router-dom'
 
 const api = vi.hoisted(() => ({
   getPoints: vi.fn(),
@@ -53,7 +54,7 @@ const badPoint: Point = { ...goodPoint, id: 'UI-02', tag: 'UI-02', name: 'Duct',
 const secondGoodPoint: Point = { ...goodPoint, id: 'UI-03', tag: 'UI-03', name: 'Return' }
 
 function renderPage() {
-  return render(<I18nProvider><ToastProvider><MonitorPage /></ToastProvider></I18nProvider>)
+  return render(<MemoryRouter><I18nProvider><ToastProvider><MonitorPage /></ToastProvider></I18nProvider></MemoryRouter>)
 }
 
 /* FE-DATA-01 (review FE 2026-08-05). Khi mọi endpoint trả 502, trang này từng
