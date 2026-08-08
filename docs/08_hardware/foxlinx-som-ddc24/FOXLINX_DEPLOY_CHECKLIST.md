@@ -97,7 +97,7 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../../build/fw-aarch64/web-api
 ```bash
 cd apps/web-ui
 npm run build
-# Output: dist/ → sẽ copy lên board
+# Output: ../../build/web-ui/dist/ → sẽ copy lên board
 ```
 
 ### 3.4 Đóng gói release
@@ -138,7 +138,7 @@ ssh SOM-DDC-24-foxlinx "
   install -m 0755 /tmp/mkddc-web           /opt/mkddc-web/mkddc-web
 
   # Web UI static:
-  # rsync -a dist/ root@…:/opt/mkddc-web/dist/
+  # rsync -a build/web-ui/dist/ root@…:/opt/mkddc-web/dist/
 
   echo 'Install done'
 "
@@ -186,10 +186,10 @@ ssh SOM-DDC-24-foxlinx "
 | 2 | **IOP heartbeat** | `journalctl -u mkddc-iobus --since '1min ago' \| grep -c HEARTBEAT` | > 0 |
 | 2b | **Health tổng** | `wget -qO- http://127.0.0.1:8081/api/v1/health` | `"status":"ok"`; bo **không có `curl`**, dùng `wget` |
 | 3 | **SHM magic** | `xxd /dev/shm/mkddc_io_shm \| head -1` | Magic `01 44 58 4b` (LE) |
-| 4 | **Web UI** | `curl -s http://localhost:8080/ \| head -5` | HTML response |
-| 5 | **API health** | `curl -s http://localhost:8080/api/v1/health` | `{"status":"ok"}` |
+| 4 | **Web UI** | `wget -qO- http://127.0.0.1:8081/ \| head -5` | HTML response |
+| 5 | **API health** | `wget -qO- http://127.0.0.1:8081/api/v1/health` | `{"status":"ok"}` |
 | 6 | **BACnet** | `journalctl -u mkddc-core \| grep -i bacnet \| tail -5` | Không có ERROR liên tục |
-| 7 | **Modbus RTU** | `journalctl -u mkddc-modbus-rtu \| tail -10` | Service chạy, không crash loop |
+| 7 | **Modbus RTU** | `journalctl -u mkddc-iobus --since '5min ago' \| grep -i modbus \| tail -10` | IOBus không crash loop hoặc báo lỗi Modbus liên tục |
 | 8 | **Log errors** | `journalctl --since '5min ago' -p err` | Không có lỗi nghiêm trọng mới |
 | 9 | **Disk usage** | `df -h / \| awk 'NR==2{print $5}'` | < 80% |
 | 10 | **Temperature** | `cat /sys/class/thermal/thermal_zone0/temp` | < 70000 (70 °C) |
@@ -203,7 +203,7 @@ ssh SOM-DDC-24-foxlinx "
 ```bash
 ssh SOM-DDC-24-foxlinx "
   # Dừng services lỗi:
-  systemctl stop mkddc-core mkddc-iobus mkddc-webapi 2>/dev/null
+  systemctl stop mkddc-core mkddc-iobus mkddc-web-pi 2>/dev/null
 
   # Khôi phục backup:
   LATEST=\$(ls -t /tmp/backup-*.tar.gz 2>/dev/null | head -1)
@@ -215,7 +215,7 @@ ssh SOM-DDC-24-foxlinx "
   fi
 
   systemctl daemon-reload
-  systemctl start mkddc-iobus mkddc-core mkddc-webapi
+  systemctl start mkddc-iobus mkddc-core mkddc-web-pi
 "
 ```
 

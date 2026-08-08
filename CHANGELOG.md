@@ -7,6 +7,110 @@
 ---
 
 ## [Unreleased]
+### Added — Web PA3: read model Overview, kho Activity, Dashboard operation-first và Diagnostics (2026-08-08)
+
+**Phạm vi.** Triển khai `docs/03_implementation/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md`
+pha P1–P6 cho `apps/web-api` và `apps/web-ui`, kèm deploy lên bo Foxlinx.
+
+**Backend.**
+- Thêm `GET /api/v1/overview` (RoleViewer) — read model versioned duy nhất của Landing:
+  controller identity, connectivity, `lastDataAt`, overall state theo thứ tự ưu tiên
+  authority → alarm critical/high → chất lượng điểm, 5 mức severity, point summary theo
+  nhóm, health 5 domain có `reasonCode`/`source`/`observedAt`, attention có target
+  drill-down, và capability thật của SKU (`digitalInputs: 0` trên Rev A).
+- Thêm `GET /api/v1/activity` (RoleViewer) + kho JSONL bền vững tại
+  `<CONFIG_DIR>/activity.jsonl`: vòng nhớ 2000 bản ghi, nén khi vượt 3000 dòng, phân
+  trang theo con trỏ, lọc `kind`/`action`/`objectId`. Toàn bộ `AuditLogger` hiện hữu
+  chảy vào kho này qua một sink đã sanitize — không có đường nào để secret lọt vào.
+
+**Fixed — TTL override về đúng chủ sở hữu (PA3-F05).** `PUT /points/{id}` nhận `ttlS`
+và chuyển nguyên vẹn xuống Core (`web_ipc` `ttlS`, 1..86400); `scan_loop` giữ hạn và
+tự `release_ao/do`. Gỡ `window.setTimeout` trong `MonitorPage` và
+`expirations map[string]time.Time` gắn theo kết nối WebSocket trong `ws.go` — hai chỗ
+đặt thời hạn an toàn của một output vật lý vào thứ dễ biến mất nhất (tab trình duyệt,
+một socket). `GET /points/{id}` hỏi lại Core bằng `op:"query"` nên reload trình duyệt
+hoặc restart `mkddc-web` vẫn thấy đúng đồng hồ đếm ngược.
+
+**Fixed — dữ liệu giả trên giao diện.**
+- Dashboard không còn CPU/RAM/nhiệt độ/uptime/service/controller diagram và ô `RS485-2`
+  không tồn tại trên Rev A (PA3-F01/F02); tất cả chuyển sang trang `/diagnostics` mới,
+  mở cho `viewer` (PA3-F13 — `SystemHealthPage` trước đây chỉ re-export Dashboard).
+- `normalizePoint()` bỏ `?? nowIso()`: thiếu timestamp ⇒ `updatedAt` undefined và UI
+  hiện `—`, thay vì làm một cảm biến chết trông như vừa cập nhật (PA3-F04).
+- Giữ lại `overrideExpiresInS`, `quality_reason`, `bus_id`, `slave_addr`,
+  `exception_code`, `online` mà normalizer đang làm rơi (PA3-F03).
+- Point Detail xoá 5 dòng lịch sử dựng sẵn, `Activation count = 15` gán cứng, fallback
+  `Dry Contact`, mô tả riêng cho `UI-05` và nút "Lưu ghi chú" không có backend
+  (PA3-F06/F07/F14); lịch sử nay đọc historian thật, chưa bật ghi thì nói rõ là chưa bật.
+
+**Changed — quyền và điều hướng.**
+- `/eng/scheduler` hạ từ `admin` xuống `viewer`: backend cho viewer đọc runtime/audit và
+  operator bật/tắt, frontend siết chặt hơn server chỉ lấy mất của ca trực đúng thông tin
+  cần nhất (PA3-F09). Mutation cấu hình vẫn khoá theo role trong trang.
+- Nút Ack/Suppress/Return của alarm hiện disable kèm lý do cho `viewer` thay vì bấm được
+  rồi nhận 403 (PA3-F10).
+- Điều hướng tách theo IA PA3: Tổng quan / Vận hành / Kỹ thuật / Hệ thống.
+- Bộ lọc Monitor (kind, quality, trạng thái vận hành, tìm kiếm) nằm trong URL nên
+  refresh/back giữ ngữ cảnh và Attention deep-link được (PA3-402).
+- Thêm `favicon.svg`; `/favicon.ico` không còn 404 thường trực (PA3-F15).
+
+**Kiểm chứng.** CTest `860/860`; `go vet` sạch + `go test ./... -count=1` `11/11` gói;
+Vitest `465/465` (52 file); `npm run lint` sạch; `npm run build` PASS; Playwright
+`43/43` (gồm `e2e/pa3-dashboard.spec.ts` mới: nếp gấp 1440×900, không cuộn ngang ở
+390×844, fail-closed khi `schemaVersion` lệch).
+
+**Deploy Foxlinx.** `mkddc-web` sha256 `6eaae228…37f3fe`, bundle `index-tvvLeiCx.js`;
+checksum trên bo khớp từng byte với build tại dev. Trên bo thật: `/overview` trả
+`overallState: fault` đúng theo 8 điểm UI BAD và 2 bus Modbus không mở được (bản cũ vẽ
+"ONLINE" xanh); override `AO-01 ttlS=180` sống sót qua `systemctl restart mkddc-web-pi`
+và còn `172 s` do Core đếm. Bằng chứng đầy đủ và 4 finding còn mở (PA3-N01..N04, đáng
+kể nhất là PLC SHM chưa mang timestamp lấy mẫu) tại
+`docs/07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md`.
+
+**Fixed — ba bài E2E vàng giả.** `fe-pages-health` khẳng định chuỗi
+`'Đang lọc: OFFLINE'` và `'Could not load schedules'` vốn không còn/chưa bao giờ tồn tại
+trong source; `trends` điều hướng qua một nút phụ của Dashboard bằng phép kiểm
+`isVisible()` chụp-nhanh nên luôn rơi vào nhánh dự phòng. Cả ba nay bám vào hành vi thật.
+
+### Added — Hồ sơ audit Programming FE/BE/FW SOM (2026-08-08)
+
+**Phạm vi.** Thêm `docs/07_records/audit-programming/` gồm 33 snapshot nguyên văn
+của requirement, decision, design/component spec và review lịch sử; manifest SHA-256;
+bảng trích requirement/design; và báo cáo đối chiếu source FE, BE, FW SOM.
+
+**Kết luận.** Programming Rev A chưa có capability production end-to-end (`0/12`
+Product Capability complete, `0/13` Verification Requirement đạt). FE chỉ có legacy
+`graph.json` demo bị khóa khỏi live; BE không có Programming route/store/authority và
+OpenAPI còn hai graph endpoint mồ côi; FW SOM có ST compiler/typed IR/loader/executor/
+scheduler/RETAIN component nhưng bootstrap production để `st_sched=nullptr`, chưa có
+FBD, Programming transport hoặc Modbus RTU Point trong I/O Mapping.
+
+**Kiểm chứng.** CMake Release với Modbus/BACnet/HMI bật build PASS; CTest `860/860`;
+Go vet/test PASS; FE Vitest `454/454`, riêng gate Programming/navigation `17/17`, lint
+và build PASS. Chrome DevTools xác nhận validate/simulate ở trang Programming demo không
+tạo request fetch/XHR tới BE/device.
+
+### Added — Kế hoạch Dashboard và Web UX PA3 dựa trên source/runtime (2026-08-08)
+
+**Phạm vi.** `docs/03_implementation/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md`,
+hai mục lục tài liệu và checklist deploy Foxlinx.
+
+**Nội dung.** Chuyển yêu cầu Dashboard/UX PA3 thành kế hoạch 7 pha, 50 task, 56 người-ngày,
+có gate từ data authority, safe override, shell/Dashboard, đủ 12 use case đến kiểm chứng và deploy.
+Kế hoạch nay có thêm Mermaid roadmap 9 tuần, P3/P4 chạy song song có điều kiện, bảng tiến độ cấp
+pha và tracker master 50 task với mốc, owner, phụ thuộc, trạng thái, đầu ra cùng PR/bằng chứng.
+Kiểm tra tài liệu xác nhận WBS và tracker cùng có 50 task ID duy nhất, tổng effort 56 người-ngày
+và `git diff --check` không báo lỗi whitespace.
+Phân tích source chỉ ra các blocker chính: Dashboard đang là trang debug; FE làm rơi trường
+quality/online/TTL của `PointDTO`; timestamp thiếu bị thay bằng thời gian hiện tại; TTL override
+đang thuộc browser/WebSocket thay vì Core; Point Detail dựng history, activation count và loại
+cảm biến giả; Scheduler/Alarm chưa phản ánh đúng role backend; chưa có Activity query bền vững.
+
+**Sửa checklist vận hành.** Đồng bộ output Vite thật `build/web-ui/dist`, cổng nội bộ `8081`,
+dùng `wget` vì bo không có `curl`, quy Modbus về `mkddc-iobus` và sửa rollback dùng đúng unit
+`mkddc-web-pi`. Bằng chứng baseline đã kiểm trên Chrome desktop/mobile và runtime Foxlinx;
+đây là bằng chứng phân tích, chưa phải nghiệm thu triển khai PA3.
+
 ### Added — Hồ sơ đầu vào cho đội thiết kế lại UX, đọc thẳng từ source (2026-08-08)
 
 **Phạm vi.** `docs/04_uiux/UX_REDESIGN_INPUT_BRIEF_2026-08-08.md` (UX-INPUT-001).
