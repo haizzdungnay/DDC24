@@ -95,7 +95,18 @@ done
 install -d -m 0775 -o mkddc -g mkddc /data/config
 install -d -m 0775 -o mkddc -g mkddc /data/config/profiles
 # /data/mkddc: persist state.snap cho RuntimeCounter/PulseCounter (COR-010, GAP-08)
-install -d -m 0755 -o mkddc -g mkddc /data/mkddc
+# và journal giao dịch mạng của mkddc-netcfg.
+#
+# PHẢI có quyền ghi cho NHÓM, không phải 0755.
+#
+# mkddc-netcfg chạy `User=root Group=mkddc` với
+# `CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW` — tức KHÔNG có CAP_DAC_OVERRIDE,
+# nên root ở đây phải tuân thủ quyền DAC như người dùng thường. Thư mục thuộc
+# `mkddc:mkddc` mode 0755 ⇒ root (egid mkddc) chỉ có r-x ⇒ mọi lần `stage` trả
+# JOURNAL_WRITE_FAILED và toàn bộ cơ chế giao dịch mạng chết ngay ở bước đầu.
+# Quan sát được trên bo Foxlinx 2026-08-08. `mkddc-time-helper` đã xin sẵn
+# CAP_DAC_OVERRIDE cho đúng lớp vấn đề này; netcfg thì bị bỏ sót.
+install -d -m 0775 -o mkddc -g mkddc /data/mkddc
 install -d -m 0755 /etc/mkddc
 [ -e /etc/mkddc/netcfg.conf ] || install -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/netcfg.conf" /etc/mkddc/netcfg.conf
 [ -e /data/config/io_config.conf ] || install -m 0644 -o mkddc -g mkddc "$MKDDC_PACKAGING_SOURCE_REL/io_config.conf" /data/config/io_config.conf

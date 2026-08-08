@@ -1,11 +1,13 @@
 [Unit]
 Description=MK-DDC-24 transactional network configuration authority
-After=NetworkManager.service local-fs.target
+After=NetworkManager.service systemd-networkd.service local-fs.target
 Wants=NetworkManager.service
 Before=mkddc-web.service mkddc-hmi.service
 
 [Service]
 Type=simple
+# Mặc định cho Orange Pi 5B; bo khác đặt lại trong /etc/mkddc/netcfg.conf.
+# Tên không tồn tại sẽ được mkddc-netcfg giải sang NIC có dây đang hiện diện.
 Environment=NETCFG_INTERFACE=end1
 EnvironmentFile=-/etc/mkddc/netcfg.conf
 ExecStart=/usr/sbin/mkddc-netcfg --socket /run/mkddc-netcfg/netcfg.sock --journal /data/mkddc/netcfg-transaction.json --allowed-user mkddc --interface ${NETCFG_INTERFACE}
@@ -23,7 +25,10 @@ AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/run/mkddc-netcfg /data/mkddc
+# /etc/systemd/network là nơi backend systemd-networkd ghi profile đã confirm.
+# Thiếu đường này thì ProtectSystem=strict chặn ghi và mọi confirm/rollback chết ở
+# PERSIST_FAILED — trên bo không có NetworkManager thì đó là toàn bộ đường persist.
+ReadWritePaths=/run/mkddc-netcfg /data/mkddc /etc/systemd/network
 RestrictAddressFamilies=AF_UNIX AF_INET AF_NETLINK AF_PACKET
 LockPersonality=yes
 
