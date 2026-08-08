@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <set>
 
@@ -1313,6 +1314,247 @@ TEST(NetcfgLinuxPlatform, TruncatedCommandOutputStillReportsSuccess)
     EXPECT_TRUE(ok) << "lệnh exit 0 nhưng run() báo thất bại (child bị SIGPIPE)";
     EXPECT_LE(output.size(), 4096u) << "phần vượt giới hạn phải bị bỏ";
     EXPECT_GT(output.size(), 4000u) << "phải giữ được phần đầu của output";
+}
+
+/* ---------------------------------------------------------------------------
+ * Backend systemd-networkd
+ *
+ * Bo Foxlinx SOM-DDC-24 (OK1126B, buildroot) không có NetworkManager. Trước khi
+ * có backend này, `configured()` luôn trả mode "unknown" nên Engine bỏ hẳn khoá
+ * `configured` khỏi response, giao diện mạng rơi vào ngõ cụt "no editable
+ * candidate", và mọi `stage` chết ở PREVIOUS_STATE_NOT_RESTORABLE.
+ * ------------------------------------------------------------------------- */
+class FakeNetworkdPlatform final : public netcfg::LinuxPlatform {
+public:
+    netcfg::InterfaceSnapshot snapshot{true, true, true, "192.168.1.110", 24};
+    std::string network_file = "/etc/systemd/network/10-eth0.network";
+    mutable std::map<std::string, std::string> files;
+    std::vector<std::vector<std::string>> commands;
+    std::string resolved_dns = "Link 2 (eth0): 114.114.114.114 8.8.8.8";
+    bool reload_ok = true;
+    std::string hostname = "OK1126B-buildroot";
+
+    netcfg::Candidate configured_profile(const std::string& interface) {
+        return configured(interface);
+    }
+    bool persist_profile(const netcfg::Candidate& candidate, std::string* reason,
+                         bool preserve_missing_dns) {
+        return persist(candidate, reason, preserve_missing_dns);
+    }
+    std::string managed_file(const std::string& interface) const {
+        return networkd_managed_file(interface);
+    }
+    bool ran(const std::string& verb) const {
+        return std::any_of(commands.begin(), commands.end(), [&](const auto& args) {
+            return args.size() >= 2 && args[1] == verb;
+        });
+    }
+
+protected:
+    netcfg::ConfigBackend config_backend() override { return netcfg::ConfigBackend::Networkd; }
+
+    bool read_interface_state(const std::string&, netcfg::InterfaceSnapshot* state) const override {
+        *state = snapshot;
+        return true;
+    }
+
+    /* Bo không có nmcli; mọi binary khác coi như có mặt. */
+    std::string binary(const std::vector<std::string>& choices) override {
+        if (choices.empty()) return {};
+        if (choices.front().find("nmcli") != std::string::npos) return {};
+        return choices.front();
+    }
+
+    bool run(const std::vector<std::string>& args, std::string* output) override {
+        commands.push_back(args);
+        if (args.size() >= 2 && args[1] == "status") {
+            if (output)
+                *output = "● 2: eth0\n"
+                          "                     Link File: /usr/lib/systemd/network/99-default.link\n"
+                          "                  Network File: " + network_file + "\n"
+                          "                         State: routable (configured)\n";
+            return true;
+        }
+        if (args.size() >= 2 && args[1] == "dns") {
+            if (output) *output = resolved_dns;
+            return true;
+        }
+        if (args.size() >= 2 && (args[1] == "reload" || args[1] == "reconfigure"))
+            return reload_ok;
+        return true;
+    }
+
+    bool read_text_file(const std::string& path, std::string* content) const override {
+        const auto found = files.find(path);
+        if (found == files.end()) return false;
+        *content = found->second;
+        return true;
+    }
+
+    bool write_text_file(const std::string& path, const std::string& content) const override {
+        files[path] = content;
+        return true;
+    }
+
+    std::string management_hostname() const override { return hostname; }
+};
+
+TEST(NetcfgNetworkd, ReadsConfiguredProfileFromEffectiveNetworkFile)
+{
+    FakeNetworkdPlatform platform;
+    platform.files[platform.network_file] =
+        "[Match]\nName=eth0\nKernelCommandLine=!root=/dev/nfs\n"
+        "[Network]\nAddress=192.168.1.110/24\nGateway=192.168.1.1\nDNS=114.114.114.114\n";
+
+    const auto configured = platform.configured_profile("eth0");
+
+    EXPECT_EQ(configured.interface, "eth0");
+    EXPECT_EQ(configured.mode, "static");
+    EXPECT_EQ(configured.ipv4, "192.168.1.110");
+    EXPECT_EQ(configured.netmask, "255.255.255.0");
+    EXPECT_EQ(configured.gateway, "192.168.1.1");
+    ASSERT_TRUE(configured.dns.has_value());
+    EXPECT_EQ(configured.dns->mode, "manual");
+    EXPECT_EQ(configured.dns->servers, std::vector<std::string>({"114.114.114.114"}));
+}
+
+TEST(NetcfgNetworkd, ReadsDhcpProfileAsAutoDns)
+{
+    FakeNetworkdPlatform platform;
+    platform.files[platform.network_file] = "[Match]\nName=eth0\n[Network]\nDHCP=yes\n";
+
+    const auto configured = platform.configured_profile("eth0");
+
+    EXPECT_EQ(configured.mode, "dhcp");
+    EXPECT_TRUE(configured.ipv4.empty());
+    ASSERT_TRUE(configured.dns.has_value());
+    EXPECT_EQ(configured.dns->mode, "auto");
+}
+
+/* Một profile hợp lệ với networkd vẫn có thể vi phạm hợp đồng candidate. Phát ra
+ * candidate như vậy làm adapter Go từ chối CẢ response ⇒ mọi lần đọc trạng thái
+ * trả 502 ⇒ trang mạng chết. Suy giảm về "unknown" là lựa chọn đúng. */
+TEST(NetcfgNetworkd, ReportsUnknownWhenProfileViolatesCandidateContract)
+{
+    FakeNetworkdPlatform platform;
+    platform.files[platform.network_file] =
+        "[Match]\nName=eth0\n[Network]\nAddress=192.168.1.110/24\nGateway=10.9.9.1\n";
+
+    EXPECT_EQ(platform.configured_profile("eth0").mode, "unknown");
+}
+
+TEST(NetcfgNetworkd, ReturnsUnknownWhenNoNetworkFileMatches)
+{
+    FakeNetworkdPlatform platform;
+    platform.network_file = "n/a";
+
+    EXPECT_EQ(platform.configured_profile("eth0").mode, "unknown");
+}
+
+TEST(NetcfgNetworkd, PersistWritesManagedFileThatWinsOverVendorFileAndKeepsMatch)
+{
+    FakeNetworkdPlatform platform;
+    platform.files[platform.network_file] =
+        "[Match]\nName=eth0\nKernelCommandLine=!root=/dev/nfs\n"
+        "[Network]\nAddress=192.168.0.232/24\nGateway=192.168.0.1\nDNS=114.114.114.114\n";
+    const netcfg::Candidate candidate{"eth0", "static", "192.168.1.50", "255.255.255.0",
+                                      "192.168.1.1"};
+    std::string reason;
+
+    ASSERT_TRUE(platform.persist_profile(candidate, &reason, true));
+
+    const std::string path = platform.managed_file("eth0");
+    EXPECT_EQ(path, "/etc/systemd/network/05-mkddc-eth0.network")
+        << "phải sắp trước 10-eth0.network của nhà sản xuất";
+    const std::string body = platform.files.at(path);
+    EXPECT_NE(body.find("Name=eth0"), std::string::npos);
+    EXPECT_NE(body.find("KernelCommandLine=!root=/dev/nfs"), std::string::npos)
+        << "[Match] của file gốc phải được giữ, không được nới rộng phạm vi khớp";
+    EXPECT_NE(body.find("Address=192.168.1.50/24"), std::string::npos);
+    EXPECT_NE(body.find("Gateway=192.168.1.1"), std::string::npos);
+    EXPECT_NE(body.find("DNS=114.114.114.114"), std::string::npos)
+        << "thiếu dns trong candidate nghĩa là GIỮ NGUYÊN dns của profile";
+    EXPECT_TRUE(platform.ran("reload"))
+        << "không nạp lại thì networkctl vẫn báo file cũ đang hiệu lực";
+}
+
+TEST(NetcfgNetworkd, PersistDropsInheritedDnsWhenPreserveDisabled)
+{
+    FakeNetworkdPlatform platform;
+    platform.files[platform.network_file] =
+        "[Match]\nName=eth0\n[Network]\nAddress=192.168.0.232/24\nDNS=114.114.114.114\n";
+    std::string reason;
+
+    ASSERT_TRUE(platform.persist_profile({"eth0", "dhcp", {}, {}, {}}, &reason, false));
+
+    const std::string body = platform.files.at(platform.managed_file("eth0"));
+    EXPECT_NE(body.find("DHCP=ipv4"), std::string::npos);
+    /* "\nDNS=" chứ không phải "DNS=": chuỗi sau khớp cả `UseDNS=`. */
+    EXPECT_EQ(body.find("\nDNS="), std::string::npos);
+    EXPECT_NE(body.find("UseDNS=yes"), std::string::npos);
+}
+
+TEST(NetcfgNetworkd, PersistFailsClosedWhenReloadFails)
+{
+    FakeNetworkdPlatform platform;
+    platform.reload_ok = false;
+    std::string reason;
+
+    EXPECT_FALSE(platform.persist_profile(
+        {"eth0", "static", "192.168.1.50", "255.255.255.0", "192.168.1.1"}, &reason, true));
+    EXPECT_EQ(reason, "PERSIST_RELOAD_FAILED");
+}
+
+TEST(NetcfgNetworkd, StatusReportsModeAndDnsWithoutNetworkManager)
+{
+    FakeNetworkdPlatform platform;
+    platform.files[platform.network_file] =
+        "[Match]\nName=eth0\n[Network]\nAddress=192.168.1.110/24\nGateway=192.168.1.1\n";
+    std::string reason;
+
+    const auto active = platform.status("eth0", &reason);
+
+    EXPECT_EQ(active.interface, "eth0");
+    EXPECT_EQ(active.mode, "static");
+    EXPECT_EQ(active.reason_code, "OK");
+    EXPECT_EQ(active.dns_servers,
+              std::vector<std::string>({"114.114.114.114", "8.8.8.8"}));
+}
+
+/* Hostname không phân biệt hoa thường (RFC 1123 §2.1). Luật cũ chỉ nhận [a-z0-9-]
+ * nên `OK1126B-buildroot` bị coi là không ổn định và giao diện khoá Apply. */
+TEST(NetcfgNetworkd, TreatsUppercaseHostnameAsStableAndPublishesLowercaseMdns)
+{
+    FakeNetworkdPlatform platform;
+
+    const auto management = platform.management();
+
+    EXPECT_EQ(management.hostname, "OK1126B-buildroot");
+    EXPECT_EQ(management.mdns_name, "ok1126b-buildroot.local");
+    EXPECT_TRUE(management.stable);
+}
+
+TEST(NetcfgInterfaceResolution, PrefersConfiguredNameAndFallsBackToPresentWiredNic)
+{
+    const std::vector<std::string> wired{"eth0", "eth1"};
+
+    EXPECT_EQ(netcfg::resolve_ethernet_interface("eth1", wired), "eth1")
+        << "cấu hình luôn thắng khi interface có mặt";
+    EXPECT_EQ(netcfg::resolve_ethernet_interface("end1", wired), "eth0")
+        << "tên mặc định của bo khác không được làm chết cả trang mạng";
+    EXPECT_EQ(netcfg::resolve_ethernet_interface("end1", {}), "end1")
+        << "không có NIC có dây nào thì giữ nguyên tên để báo INTERFACE_NOT_FOUND";
+    EXPECT_EQ(netcfg::resolve_ethernet_interface("", wired), "")
+        << "rỗng vẫn là rỗng: Engine tự suy theo default route";
+}
+
+TEST(NetcfgInterfaceResolution, NeverListsLoopbackOrWirelessInterfaces)
+{
+    for (const auto& name : netcfg::list_wired_interfaces()) {
+        EXPECT_NE(name, "lo");
+        EXPECT_FALSE(std::filesystem::exists("/sys/class/net/" + name + "/phy80211"));
+        EXPECT_TRUE(std::filesystem::exists("/sys/class/net/" + name + "/device"));
+    }
 }
 
 } // namespace
