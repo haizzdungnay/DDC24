@@ -44,7 +44,9 @@ const MODBUS_TABS = [
 /* Mỗi trang đọc dữ liệu phải NÓI RA là không đọc được, chứ không im lặng hiện
  * bảng rỗng hay — tệ hơn — số đo bịa (FE-DATA-01/02). */
 const ERROR_STATE_PAGES = [
-  { path: '/', title: 'Could not load I/O points' },
+  /* PA3: Landing nay đọc read model `/overview` chứ không tự ghép ba endpoint,
+     nên thông điệp lỗi cũng đổi theo nguồn thật của nó. */
+  { path: '/', title: 'System overview unavailable' },
   { path: '/monitor', title: 'Could not load I/O points' },
   { path: '/alarms', title: 'Could not load alarms' },
   { path: '/settings/users', title: 'Could not load users' },
@@ -55,7 +57,10 @@ const ERROR_STATE_PAGES = [
   { path: '/eng/inputs', title: 'Could not load input configuration' },
   { path: '/eng/outputs', title: 'Could not load output configuration' },
   { path: '/eng/virtual-points', title: 'Could not load virtual points' },
-  { path: '/eng/scheduler', title: 'Could not load schedules' },
+  /* Các trang Scheduler v3.1 ship chuỗi tiếng Việt viết thẳng, không qua i18n
+     (xem `SchedulerGridPage.tsx`), nên khẳng định tiếng Anh ở đây chưa bao giờ
+     đúng — bài test này vàng giả từ lúc viết. Bám vào chuỗi THẬT của trang. */
+  { path: '/eng/scheduler', title: 'Không tải được danh sách lịch' },
   { path: '/eng/alarm-settings', title: 'Could not load alarm settings' }
 ]
 
@@ -64,7 +69,8 @@ const ALL_ROUTES = [
   '/settings/display', '/settings/users', '/settings/network', '/settings/time', '/settings/device',
   '/eng/scheduler', '/eng/commissioning', '/eng/programming', '/eng/inputs', '/eng/outputs',
   '/eng/virtual-points', ...MODBUS_TABS.map((entry) => entry.path),
-  '/eng/user-parameters', '/eng/diagram', '/eng/aux', '/eng/alarm-settings'
+  '/eng/user-parameters', '/eng/diagram', '/eng/aux', '/eng/alarm-settings',
+  '/diagnostics'
 ]
 
 test.describe('Sức khoẻ trang FE (review 2026-08-05)', () => {
@@ -101,7 +107,12 @@ test.describe('Sức khoẻ trang FE (review 2026-08-05)', () => {
    * trang đích cũ không đọc `location.search` nên bộ lọc không có tác dụng. */
   test('deep link ?status= tới tab Thiết bị được trang đích nhận', async ({ page }) => {
     await navigate(page, '/eng/modbus-rtu/devices?status=OFFLINE')
-    await expect(page.getByText('Đang lọc: OFFLINE')).toBeVisible()
+    /* Chuỗi cũ 'Đang lọc: OFFLINE' không còn tồn tại trong source sau lần dựng
+       lại trang theo MBR-B301; bài test giữ nguyên nên nó fail dù tính năng vẫn
+       chạy. Điều CẦN chứng minh vẫn là điều FE-MB-04 nói: trang đích đọc
+       `location.search`, áp bộ lọc, và bày ra cách bỏ lọc. */
+    await expect(page.getByLabel('Lọc theo trạng thái')).toHaveValue('OFFLINE')
+    await expect(page.getByRole('button', { name: 'Bỏ lọc' })).toBeVisible()
   })
 
   /* FE-DATA-01/02: nặng nhất là `/monitor` — nó từng khẳng định

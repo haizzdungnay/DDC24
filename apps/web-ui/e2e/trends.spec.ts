@@ -115,9 +115,22 @@ async function openTrends(page: Page): Promise<URL[]> {
   await page.getByLabel('Username', { exact: true }).fill('admin')
   await page.getByLabel('Password', { exact: true }).fill('e2e')
   await page.getByRole('button', { name: 'Sign in' }).click()
-  const trendsLink = page.getByRole('link', { name: 'Trends' })
-  if (await trendsLink.isVisible()) await trendsLink.click()
-  else await page.getByRole('button', { name: 'Expand trends' }).click()
+  /* Điều hướng qua ĐÚNG thanh điều hướng, không qua một nút phụ của Dashboard.
+   *
+   * Bản trước thử `trendsLink.isVisible()` — một phép kiểm chụp-nhanh chạy ngay
+   * sau khi bấm Đăng nhập, tức trước khi shell kịp render — nên nó gần như luôn
+   * trả `false` và bài test rơi xuống nhánh dự phòng "Expand trends" của
+   * Dashboard. Kết quả: một bài test về Trends lại phụ thuộc vào nhãn một nút
+   * trên trang chủ, và đứt ngay khi trang chủ được thiết kế lại (PA3).
+   *
+   * Dưới 1024px `NavRail` bị ẩn theo thiết kế, nên ở đó phải đi qua ngăn kéo. */
+  const viewport = page.viewportSize()
+  if (viewport && viewport.width < 1024) {
+    await page.getByRole('button', { name: /Open navigation|Mở điều hướng/ }).click()
+    await page.getByRole('dialog', { name: /Navigation|Điều hướng/ }).getByRole('link', { name: 'Trends' }).click()
+  } else {
+    await page.getByRole('link', { name: 'Trends' }).click()
+  }
   await expect(page.getByRole('heading', { name: 'Trends' })).toBeVisible()
   return requests
 }
