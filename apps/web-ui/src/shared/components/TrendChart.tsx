@@ -1,4 +1,4 @@
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import type { TrendSample } from '../types'
 
 export interface TrendSeries {
@@ -19,16 +19,42 @@ interface TrendChartProps {
   rawUnit?: string
   timeZone?: 'UTC' | 'local'
   showTable?: boolean
+  /** Vẽ dải min–max của mẫu aggregate (PA3-502 / UX-DES §13). */
+  showBand?: boolean
 }
 
-function displayValue(value: string | number | null | undefined, kind?: TrendSeries['kind'], stepped?: boolean): string {
+/** Hậu tố khoá của dải min–max trong `TrendSample`. Một chỗ duy nhất định
+ *  nghĩa, để nơi dựng dữ liệu và nơi vẽ không trôi khỏi nhau. */
+export const TREND_BAND_SUFFIX = '::band'
+
+export function trendBandKey(seriesKey: string): string {
+  return `${seriesKey}${TREND_BAND_SUFFIX}`
+}
+
+/** Dữ liệu có dải min–max thật hay không.
+ *
+ *  Ở độ phân giải 1 giây, mỗi mẫu là một điểm đo nên `min === max === value`
+ *  và dải chỉ là một đường trùng khít đường chính — vẽ nó ra là thêm mực mà
+ *  không thêm thông tin. Chỉ khi backend trả mẫu aggregate (min khác max) thì
+ *  dải mới nói lên điều gì: biên độ dao động BÊN TRONG một ô thời gian đã bị
+ *  gộp, thứ mà đường trung bình che mất. */
+export function hasMinMaxBand(data: TrendSample[], series: TrendSeries[]): boolean {
+  return series.some((item) => data.some((row) => {
+    const band = row[trendBandKey(item.key)]
+    return Array.isArray(band) && band.length === 2 && typeof band[0] === 'number' && typeof band[1] === 'number' && band[0] !== band[1]
+  }))
+}
+
+function displayValue(value: string | number | number[] | null | undefined, kind?: TrendSeries['kind'], stepped?: boolean): string {
   if (value === null || value === undefined) return 'No value'
+  if (Array.isArray(value)) return value.length === 2 ? `${value[0]} … ${value[1]}` : 'No value'
   if (typeof value === 'string') return value
   if (stepped || kind === 'DO' || kind === 'DI') return value ? 'ON' : 'OFF'
   return String(value)
 }
 
-export function formatTrendTime(value: number | string, timeZone: 'UTC' | 'local' = 'local'): string {
+export function formatTrendTime(value: number | string | number[] | null, timeZone: 'UTC' | 'local' = 'local'): string {
+  if (value === null || Array.isArray(value)) return '—'
   const date = new Date(value)
   return Number.isFinite(date.getTime())
     ? date.toLocaleString('vi-VN', timeZone === 'UTC' ? { timeZone: 'UTC', hour12: false } : undefined)
@@ -56,8 +82,9 @@ function HistoryTooltip({ active, payload, label, series, rawUnit, timeZone }: {
   )
 }
 
-export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true }: TrendChartProps) {
+export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true, showBand = false }: TrendChartProps) {
   const hasTimeAxis = data.every((sample) => typeof sample.__ts === 'number' && Number.isFinite(sample.__ts))
+  const bandVisible = showBand && hasMinMaxBand(data, series)
   const formatAxisTime = (value: number) => new Date(value).toLocaleTimeString('vi-VN', {
     hour: '2-digit',
     minute: '2-digit',
@@ -69,17 +96,35 @@ export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'lo
     <section aria-label="Historical trend chart" className="space-y-3">
       <div style={{ height }} aria-hidden="true">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 20, left: -18, bottom: 0 }}>
+          <ComposedChart data={data} margin={{ top: 8, right: 20, left: -18, bottom: 0 }}>
             <CartesianGrid stroke="rgba(91,96,102,0.34)" vertical={false} />
             <XAxis dataKey={hasTimeAxis ? '__ts' : 'time'} type={hasTimeAxis ? 'number' : 'category'} domain={hasTimeAxis ? ['dataMin', 'dataMax'] : undefined} tickFormatter={hasTimeAxis ? (value) => formatAxisTime(Number(value)) : undefined} stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
             <YAxis stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
             <Tooltip content={<HistoryTooltip series={series} rawUnit={rawUnit} timeZone={timeZone} />} />
+            {/* Dải min–max vẽ TRƯỚC đường chính để nằm dưới nó. `connectNulls`
+                vẫn false: khoảng trống dữ liệu phải đứt cả dải lẫn đường, không
+                được tô liền qua gap (UX-REQ UC-06). */}
+            {bandVisible && series.map((item) => (
+              <Area
+                key={`${item.key}-band`}
+                type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'}
+                dataKey={trendBandKey(item.key)}
+                name={`${item.key}-band`}
+                stroke="none"
+                fill={item.color}
+                fillOpacity={0.16}
+                isAnimationActive={false}
+                activeDot={false}
+                connectNulls={false}
+              />
+            ))}
             {series.map((item) => <Line key={item.key} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls={false} />)}
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
       <div className="sr-only" aria-hidden="true">
         {series.map((item) => <span key={item.key} data-testid={`trend-line-${item.key}`} data-connect-nulls="false" data-line-type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} />)}
+        {bandVisible && series.map((item) => <span key={`${item.key}-band`} data-testid={`trend-band-${item.key}`} data-connect-nulls="false" />)}
       </div>
       {showTable && <div className="overflow-x-auto rounded border border-[var(--c-border)]">
         <table aria-label="Historical trend data" className="w-full border-collapse text-left text-xs">
