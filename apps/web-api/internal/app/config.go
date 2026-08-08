@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const webVersion = "0.1.0-be-b6c"
@@ -38,7 +39,14 @@ type Config struct {
 	AlarmHistoryPath        string
 	StaticDir               string
 	CORSOrigin              string
-	WebVersion              string
+	// CORSAllowLoopback mở allowlist `http://localhost:*` / `127.0.0.1:*` /
+	// `[::1]:*` cho cả HTTP lẫn WebSocket. Mặc định TẮT: biên an ninh phải
+	// fail-closed, và bo production không đặt `CORS_ORIGIN` nên trước đây chạy
+	// luôn bằng allowlist của chế độ dev (REV-PLT-01). Chỉ bật khi thật sự có
+	// một FE chạy trên cổng loopback khác — dev bằng vite proxy KHÔNG cần, vì
+	// `changeOrigin` làm request thành same-origin.
+	CORSAllowLoopback bool
+	WebVersion        string
 	// MBR-B105/B212: kênh điều khiển fieldbus của iobus. Rỗng ⇒ BE quay về
 	// phương án restart service (có gián đoạn I/O) và nói rõ trong warnings.
 	IobusControlSock string
@@ -81,6 +89,7 @@ func LoadConfig() (Config, error) {
 		AlarmHistoryPath:   getenv("ALARM_HISTORY_FILE", defaultAlarmHistoryFile),
 		StaticDir:          getenv("STATIC_DIR", "dist"),
 		CORSOrigin:         os.Getenv("CORS_ORIGIN"),
+		CORSAllowLoopback:  envTruthy("CORS_ALLOW_LOOPBACK"),
 		WebVersion:         getenv("WEB_VERSION", buildVersion),
 	}
 	if cfg.JWTSecret == "" {
@@ -110,6 +119,17 @@ func getenv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// envTruthy đọc một cờ bật/tắt từ môi trường. Chỉ các giá trị nói "có" một cách
+// rõ ràng mới bật; mọi thứ khác — kể cả biến đặt sai chính tả — là tắt, vì đây
+// là cờ nới lỏng biên an ninh.
+func envTruthy(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
 }
 
 func defaultUsersConf() string {

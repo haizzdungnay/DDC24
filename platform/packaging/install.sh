@@ -103,6 +103,12 @@ install -d -m 0755 /etc/mkddc
 if [ ! -s /etc/mkddc-web.env ]; then
     sec="$(head -c 32 /dev/urandom | tr -dc 'a-f0-9' | head -c 64 2>/dev/null || echo "mkddc-secret-$(date +%s)")"
     printf 'JWT_SECRET=%s\n' "$sec" > /etc/mkddc-web.env
+    # REV-PLT-01: file này từng chỉ có JWT_SECRET, nên CORS_ORIGIN không bao giờ
+    # được đặt trên bo và biên CORS/WebSocket chạy bằng allowlist của chế độ dev.
+    # Nay mặc định là fail-closed (chỉ same-origin) và dòng dưới đây ghi sẵn để
+    # người triển khai thấy chỗ cần sửa khi FE chạy ở origin khác.
+    printf '# CORS_ORIGIN=https://ddc.toanha.local,http://192.168.1.110:8082\n' >> /etc/mkddc-web.env
+    printf '# CORS_ALLOW_LOOPBACK=1   # CHỈ máy dev; mở mọi cổng loopback\n' >> /etc/mkddc-web.env
     chmod 0600 /etc/mkddc-web.env
     chown root:root /etc/mkddc-web.env
 fi

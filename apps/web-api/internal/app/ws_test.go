@@ -60,25 +60,41 @@ func TestWSOriginPatternsDropLoopbackWhenOriginConfigured(t *testing.T) {
 	loopback := []string{"localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*", "[::1]", "[::1]:*"}
 
 	cases := []struct {
-		name       string
-		configured string
-		want       []string
+		name          string
+		configured    string
+		allowLoopback bool
+		want          []string
 	}{
 		{
-			// Chưa cấu hình = chế độ dev → cho phép loopback, khớp isAllowedOrigin.
-			name:       "rỗng thì cho phép loopback",
+			// REV-PLT-01: rỗng KHÔNG còn tự mở loopback. Danh sách rỗng vẫn cho
+			// same-origin qua (websocket.Accept nhận Origin.Host == r.Host), nên
+			// giao diện do chính mkddc-web phục vụ chạy bình thường.
+			name:       "rỗng thì fail-closed, chỉ same-origin",
 			configured: "",
-			want:       loopback,
+			want:       []string{},
 		},
 		{
-			name:       "chỉ khoảng trắng cũng coi như chưa cấu hình",
+			name:       "chỉ khoảng trắng cũng là fail-closed",
 			configured: "  ,  ",
-			want:       loopback,
+			want:       []string{},
+		},
+		{
+			name:          "loopback chỉ mở khi bật tường minh",
+			configured:    "",
+			allowLoopback: true,
+			want:          loopback,
 		},
 		{
 			name:       "một origin production",
 			configured: "https://ddc.example.local",
 			want:       []string{"ddc.example.local"},
+		},
+		{
+			// Đã khai origin thì cờ dev không được nối thêm gì.
+			name:          "origin đã khai đè cờ loopback",
+			configured:    "https://ddc.example.local",
+			allowLoopback: true,
+			want:          []string{"ddc.example.local"},
 		},
 		{
 			name:       "nhiều origin, có cả port",
@@ -89,9 +105,9 @@ func TestWSOriginPatternsDropLoopbackWhenOriginConfigured(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := wsOriginPatterns(tc.configured)
+			got := wsOriginPatterns(tc.configured, tc.allowLoopback)
 			if !slices.Equal(got, tc.want) {
-				t.Fatalf("wsOriginPatterns(%q) = %v; want %v", tc.configured, got, tc.want)
+				t.Fatalf("wsOriginPatterns(%q, %v) = %v; want %v", tc.configured, tc.allowLoopback, got, tc.want)
 			}
 		})
 	}
@@ -100,7 +116,7 @@ func TestWSOriginPatternsDropLoopbackWhenOriginConfigured(t *testing.T) {
 // Chốt riêng điều quan trọng nhất: khi đã cấu hình origin thì KHÔNG còn bất kỳ
 // pattern loopback nào lọt vào danh sách.
 func TestWSOriginPatternsNoLoopbackLeakInProductionConfig(t *testing.T) {
-	got := wsOriginPatterns("https://ddc.example.local")
+	got := wsOriginPatterns("https://ddc.example.local", true)
 	for _, pattern := range got {
 		switch pattern {
 		case "localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*", "[::1]", "[::1]:*":
