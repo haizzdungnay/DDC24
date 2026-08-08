@@ -1,3 +1,4 @@
+export { ActivityPage } from './ActivityPage'
 export { AuxFunctionsPage } from './AuxFunctionsPage'
 export { DashboardPage } from './DashboardPage'
 export { DiagnosticsPage as SystemDiagnosticsPage } from './DiagnosticsPage'

@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Activity, Cable, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, PanelLeft, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Stethoscope, TestTube2, Users, X, Zap } from 'lucide-react'
+import { Bell, CalendarDays, Activity, Cable, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, PanelLeft, PanelLeftClose, Settings, ShieldCheck, ScrollText, SlidersHorizontal, Stethoscope, TestTube2, Users, X, Zap } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
@@ -25,7 +25,8 @@ const groups = [
       { to: '/', key: 'dashboard', icon: Home, end: true },
       { to: '/monitor', key: 'monitor', icon: SlidersHorizontal },
       { to: '/alarms', key: 'alarm-log', icon: Bell },
-      { to: '/trends', key: 'trends', icon: LineChart }
+      { to: '/trends', key: 'trends', icon: LineChart },
+      { to: '/activity', key: 'activity', icon: ScrollText }
     ]
   },
   {
