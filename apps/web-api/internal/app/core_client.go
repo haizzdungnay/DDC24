@@ -236,7 +236,20 @@ func (c *CoreClient) ReadPointSnapshot(ctx context.Context) (RuntimePointSnapsho
 }
 
 func (c *CoreClient) ForcePoint(ctx context.Context, id string, value any, release bool) (PointDTO, error) {
-	point, err := c.CommandPoint(ctx, id, value, release, 0, "web")
+	return c.ForcePointTTL(ctx, id, value, release, 0, "web")
+}
+
+// ForcePointTTL là đường ghi có thời hạn: `ttlS` được chuyển NGUYÊN VẸN xuống
+// Core, nơi `scan_loop` tự nhả lệnh khi hết hạn (PA3-107).
+//
+// Không có bất kỳ hẹn giờ nào ở tầng này. Một `time.AfterFunc` trong web-api sẽ
+// biến "restart mkddc-web" thành "output kẹt ép tay vĩnh viễn" — đúng lớp lỗi
+// mà PA3-F05 phải loại bỏ.
+func (c *CoreClient) ForcePointTTL(ctx context.Context, id string, value any, release bool, ttlS uint32, user string) (PointDTO, error) {
+	if strings.TrimSpace(user) == "" {
+		user = "web"
+	}
+	point, err := c.CommandPoint(ctx, id, value, release, ttlS, user)
 	if errors.Is(err, errCoreUnavailable) {
 		return degradedPoint(id, value, "core_unavailable"), nil
 	}
