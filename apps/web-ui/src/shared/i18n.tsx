@@ -5,7 +5,9 @@ import type { Language } from './types'
 const copy = {
   vi: {
     overview: 'Tổng quan',
+    operation: 'Vận hành',
     engineering: 'Kỹ thuật',
+    diagnostics: 'Chẩn đoán',
     dashboard: 'Bảng điều khiển',
     monitor: 'Giám sát',
     alarms: 'Cảnh báo',
@@ -195,7 +197,9 @@ const copy = {
   },
   en: {
     overview: 'Overview',
+    operation: 'Operation',
     engineering: 'Engineering',
+    diagnostics: 'Diagnostics',
     dashboard: 'Dashboard',
     monitor: 'Monitoring',
     alarms: 'Alarms',
