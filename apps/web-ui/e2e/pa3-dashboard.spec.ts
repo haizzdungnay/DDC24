@@ -198,3 +198,111 @@ test.describe('Monitor PA3 — bối cảnh nằm trong URL', () => {
     await expect.poll(() => new URL(page.url()).searchParams.get('quality')).toBe('offline')
   })
 })
+
+/* ── PA3-204 / PA3-406 / PA3-408 (phần giao diện) ─────────────────────────── */
+
+test.describe('Điều hướng và audit PA3', () => {
+  test.beforeEach(async ({ page }) => {
+    await stubOverview(page)
+    await login(page)
+  })
+
+  /* PA3-204: command palette phải mở bằng bàn phím và đi tới được — nó là
+     đường tắt cho người làm commissioning đi tới lui hàng chục lần một ca. */
+  test('command palette mở bằng Ctrl+K và điều hướng được', async ({ page }) => {
+    await navigate(page, '/')
+    await page.keyboard.press('Control+k')
+    const palette = page.getByRole('dialog', { name: /Tìm nhanh trang|Quick navigation/ })
+    await expect(palette).toBeVisible()
+
+    // Gõ KHÔNG DẤU vẫn phải ra kết quả có dấu.
+    await palette.getByRole('textbox').fill('chan doan')
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('heading', { name: /Chẩn đoán|Diagnostics/ })).toBeVisible()
+  })
+
+  test('Escape đóng command palette', async ({ page }) => {
+    await navigate(page, '/')
+    await page.keyboard.press('Control+k')
+    await expect(page.getByRole('dialog', { name: /Tìm nhanh trang|Quick navigation/ })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog', { name: /Tìm nhanh trang|Quick navigation/ })).toHaveCount(0)
+  })
+
+  /* PA3-204: breadcrumb chỉ hiện với trang có chiều sâu, và phải quay lại được
+     một bậc. */
+  test('breadcrumb hiện đúng đường đi trên trang có chiều sâu', async ({ page }) => {
+    await navigate(page, '/settings/network')
+    const crumbs = page.getByRole('navigation', { name: /Đường dẫn|Breadcrumb/ })
+    await expect(crumbs).toBeVisible()
+    // Ngôn ngữ của phiên e2e phụ thuộc localStorage nên chấp nhận cả hai.
+    await expect(crumbs).toContainText(/Mạng|Network/)
+
+    // Trang cấp một không cần breadcrumb — thanh bên đã đủ.
+    await navigate(page, '/monitor')
+    await expect(page.getByRole('navigation', { name: /Đường dẫn|Breadcrumb/ })).toHaveCount(0)
+  })
+
+  /* PA3-202 / WCAG 2.4.1: skip link phải là điểm dừng Tab ĐẦU TIÊN. */
+  test('skip link hiện ra khi Tab lần đầu', async ({ page }) => {
+    await navigate(page, '/')
+    await page.keyboard.press('Tab')
+    const skip = page.getByRole('link', { name: /Bỏ qua điều hướng|Skip navigation/ })
+    await expect(skip).toBeFocused()
+  })
+
+  /* PA3-406: trang audit đọc được và giữ bộ lọc trong URL. */
+  test('trang nhật ký hoạt động lọc theo đối tượng qua URL', async ({ page }) => {
+    await page.route('**/api/v1/activity*', async (route) => {
+      const url = new URL(route.request().url())
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          schemaVersion: 1,
+          generatedAt: '2026-08-08T03:00:05Z',
+          items: [{
+            id: 7, time: '2026-08-08T03:00:00Z', kind: 'user', actor: 'op1', role: 'operator',
+            action: 'point_override', objectType: 'point', objectId: url.searchParams.get('objectId') ?? 'AO-01',
+            outcome: 'accepted', reasonCode: 'core_ttl', detail: 'ttlS=180 remainingS=180'
+          }],
+          nextCursor: null, retained: 1, capacity: 2000
+        })
+      })
+    })
+    await navigate(page, '/activity?objectId=AO-01')
+    await expect(page.getByRole('heading', { name: /Nhật ký hoạt động|Activity log/ })).toBeVisible()
+    await expect(page.getByLabel(/Lọc theo đối tượng|Filter by object/)).toHaveValue('AO-01')
+    await expect(page.getByText('ttlS=180 remainingS=180')).toBeVisible()
+  })
+})
+
+/* PA3-408 (phần giao diện): đồng hồ đếm ngược phải đến TỪ backend.
+ *
+ * Phần cưỡng chế TTL được nghiệm thu ở tầng Go (`TestOverrideSurvivesWebAPIRestart`,
+ * `TestOverrideExpiryFromCoreClearsWebState`) và trên bo thật; ở đây chỉ chốt
+ * một điều mà chỉ trình duyệt chứng minh được: giao diện HIỂN THỊ con số của
+ * backend chứ không tự đếm một con số của riêng nó. */
+test.describe('Hiển thị đếm ngược override', () => {
+  test('Monitor hiện thời gian còn lại do backend cấp', async ({ page }) => {
+    await stubOverview(page)
+    await page.route('**/api/v1/points', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{
+          id: 'AO-01', tag: 'AO-01', name: 'Van cấp', kind: 'AO', value: 42, unit: '%',
+          quality: 'good', source: 'core', priority: 'manual', updatedAt: '2026-08-08T03:00:00Z',
+          forced: true, overrideExpiresInS: 272
+        }])
+      })
+    })
+    await page.route('**/api/v1/virtual-points', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+    await login(page)
+    await navigate(page, '/monitor?point=AO-01')
+    // 272 giây = 04:32 — đúng con số backend trả, không phải đồng hồ của FE.
+    await expect(page.getByText(/ÉP TAY · 04:32/)).toBeVisible()
+  })
+})

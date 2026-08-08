@@ -402,3 +402,123 @@ func TestOverviewLastDataAtIgnoresMissingTimestamps(t *testing.T) {
 		t.Fatalf("lastDataAt = %v khi không point nào có timestamp hợp lệ", value)
 	}
 }
+
+/* ── PA3-408 — vòng đời override qua các sự cố thật ──────────────────────────
+ *
+ * Bốn kịch bản của §10.3 mà một suite unit thông thường bỏ lọt, vì chúng nói về
+ * điều gì xảy ra KHI HẠ TẦNG THAY ĐỔI GIỮA CHỪNG chứ không về một lời gọi hàm.
+ */
+
+// Restart web-api KHÔNG được làm mất trạng thái ép tay: Core mới là nơi giữ nó.
+//
+// Mô phỏng restart bằng cách dựng một `App` MỚI trên cùng một Core — đúng thứ
+// xảy ra khi `systemctl restart mkddc-web-pi` chạy: tiến trình mới, bộ nhớ
+// trống, Core không đổi.
+func TestOverrideSurvivesWebAPIRestart(t *testing.T) {
+	core := newPA3Core()
+	app, token := newPA3App(t, RoleOperator, core)
+	if rec, _ := doJSON(t, app, http.MethodPut, "/api/v1/points/AO-01", `{"value":6.5,"ttlS":300}`, token); rec.Code != http.StatusOK {
+		t.Fatalf("force status = %d", rec.Code)
+	}
+
+	restarted, token2 := newPA3App(t, RoleOperator, core)
+	if restarted.overrides == nil {
+		t.Fatal("app mới phải có registry riêng")
+	}
+	// Registry của tiến trình mới hoàn toàn trống — đó chính là điều kiện test.
+	if ids := restarted.overrides.TrackedIDs(); len(ids) != 0 {
+		t.Fatalf("registry sau restart phải rỗng, có %v", ids)
+	}
+
+	_, detail := doJSON(t, restarted, http.MethodGet, "/api/v1/points/AO-01", "", token2)
+	if detail["forced"] != true {
+		t.Fatalf("forced = %v sau restart web-api, want true (Core vẫn giữ lệnh)", detail["forced"])
+	}
+	remaining, ok := detail["overrideExpiresInS"].(float64)
+	if !ok || remaining <= 0 {
+		t.Fatalf("overrideExpiresInS = %v sau restart, want > 0", detail["overrideExpiresInS"])
+	}
+}
+
+// TTL hết hạn ở phía Core ⇒ web phải NGỪNG báo forced, kể cả khi registry của
+// nó vẫn còn một mục cũ chưa kịp dọn.
+func TestOverrideExpiryFromCoreClearsWebState(t *testing.T) {
+	core := newPA3Core()
+	app, token := newPA3App(t, RoleOperator, core)
+	doJSON(t, app, http.MethodPut, "/api/v1/points/DO-01", `{"value":true,"ttlS":5}`, token)
+	if snapshot := app.overrides.Snapshot(); len(snapshot) == 0 {
+		t.Fatal("registry phải theo dõi lệnh vừa gửi")
+	}
+
+	core.expire("DO-01") // Core tự nhả khi tới hạn (scan_loop).
+
+	_, detail := doJSON(t, app, http.MethodGet, "/api/v1/points/DO-01", "", token)
+	if _, present := detail["overrideExpiresInS"]; present {
+		t.Fatalf("vẫn còn đếm ngược sau khi Core nhả: %s", pa3JSON(t, detail))
+	}
+	if detail["forced"] == true {
+		t.Fatal("forced vẫn true sau khi Core nhả")
+	}
+	// Và registry phải tự dọn, không giữ rác cho lần đọc sau.
+	if ids := app.overrides.TrackedIDs(); len(ids) != 0 {
+		t.Fatalf("registry còn %v sau khi Core nhả", ids)
+	}
+}
+
+// Hai client ép cùng một point: lệnh sau thắng, và CẢ HAI đều để lại vết audit
+// truy được. Không được có lệnh nào biến mất im lặng.
+func TestConcurrentOverridesAreBothAudited(t *testing.T) {
+	core := newPA3Core()
+	app, token := newPA3App(t, RoleAdmin, core)
+
+	if rec, _ := doJSON(t, app, http.MethodPut, "/api/v1/points/AO-01", `{"value":3,"ttlS":60}`, token); rec.Code != http.StatusOK {
+		t.Fatalf("lệnh 1 status = %d", rec.Code)
+	}
+	rec, payload := doJSON(t, app, http.MethodPut, "/api/v1/points/AO-01", `{"value":9,"ttlS":120}`, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("lệnh 2 status = %d", rec.Code)
+	}
+	if payload["overrideExpiresInS"].(float64) != 120 {
+		t.Fatalf("lệnh sau phải thắng: overrideExpiresInS = %v, want 120", payload["overrideExpiresInS"])
+	}
+
+	_, page := doJSON(t, app, http.MethodGet, "/api/v1/activity?limit=50&action=point_override", "", token)
+	items, _ := page["items"].([]any)
+	count := 0
+	for _, item := range items {
+		row, _ := item.(map[string]any)
+		if row["objectId"] == "AO-01" {
+			count++
+		}
+	}
+	if count < 2 {
+		t.Fatalf("chỉ có %d vết audit cho hai lệnh cạnh tranh: %s", count, pa3JSON(t, items))
+	}
+}
+
+// Đọc danh sách nhiều lần trong một nhịp không được biến thành nhiều vòng IPC
+// cho cùng một point: `/points` bị poll bởi mọi tab đang mở.
+func TestOverrideRefreshIsRateLimited(t *testing.T) {
+	core := newPA3Core()
+	app, token := newPA3App(t, RoleOperator, core)
+	doJSON(t, app, http.MethodPut, "/api/v1/points/AO-01", `{"value":2,"ttlS":600}`, token)
+
+	core.mu.Lock()
+	core.queryCalls = 0
+	core.mu.Unlock()
+
+	for i := 0; i < 5; i++ {
+		if rec, _ := doJSON(t, app, http.MethodGet, "/api/v1/points", "", token); rec.Code != http.StatusOK {
+			t.Fatalf("đọc điểm lần %d status = %d", i, rec.Code)
+		}
+	}
+
+	core.mu.Lock()
+	calls := core.queryCalls
+	core.mu.Unlock()
+	// Năm lần poll liên tiếp trong chưa tới `overrideQueryInterval` ⇒ nhiều nhất
+	// một lần hỏi Core. Không chốt "bằng 0" vì lần đầu có thể rơi đúng biên.
+	if calls > 1 {
+		t.Fatalf("5 lần poll gây %d lần query Core, want <= 1", calls)
+	}
+}
