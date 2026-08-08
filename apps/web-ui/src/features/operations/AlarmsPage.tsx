@@ -77,8 +77,15 @@ export function AlarmsPage() {
     }
   }
 
-  if (state.loading && !alarms.length) return <StateBlock state="loading" title={pick('Dang tai alarm', 'Loading alarms')} />
-  if (state.error && !alarms.length) return <StateBlock state="error" title={pick('Khong tai duoc alarm', 'Could not load alarms')} detail={state.error.message} onRetry={state.refetch} />
+  /* Trạng thái tải/lỗi vẫn giữ tiêu đề trang (PA3-603 / WCAG 2.4.6): một
+     `StateBlock` trần làm trang mất `<h1>`, nên người dùng trình đọc màn hình
+     nghe thấy thông báo lỗi mà không biết mình đang ở trang nào. */
+  if (state.loading && !alarms.length) {
+    return <div className="space-y-4"><AlarmsHeading /><StateBlock state="loading" title={pick('Dang tai alarm', 'Loading alarms')} /></div>
+  }
+  if (state.error && !alarms.length) {
+    return <div className="space-y-4"><AlarmsHeading /><StateBlock state="error" title={pick('Khong tai duoc alarm', 'Could not load alarms')} detail={state.error.message} onRetry={state.refetch} /></div>
+  }
 
   const filterLabels: Record<AlarmFilter, string> = {
     all: pick('tat ca', 'all'),
@@ -91,7 +98,7 @@ export function AlarmsPage() {
 
   return (
     <div className="space-y-5">
-      <div><h1 className="text-2xl font-semibold">{pick('Canh bao', 'Alarms')}</h1><p className="text-sm text-[var(--c-text-dim)]">{pick('Theo doi, loc va acknowledge canh bao', 'Monitor, filter, and acknowledge alarms')}</p></div>
+      <AlarmsHeading />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         <Summary label={pick('Dang active', 'Active')} value={counts.active} accent="fault" />
         <Summary label={pick('Chua acknowledge', 'Unacknowledged')} value={counts.unack} accent="warn" />
@@ -239,6 +246,17 @@ function AlarmHistoryPanel({ mode }: { mode: HistoryMode }) {
 
 function isConditionActive(alarm: Alarm): boolean {
   return alarm.active ?? (alarm.status === 'active' || alarm.status === 'acked')
+}
+
+/** Tiêu đề trang, dùng chung cho cả trạng thái bình thường lẫn loading/lỗi. */
+function AlarmsHeading() {
+  const { pick } = useI18n()
+  return (
+    <div>
+      <h1 className="text-2xl font-semibold">{pick('Canh bao', 'Alarms')}</h1>
+      <p className="text-sm text-[var(--c-text-dim)]">{pick('Theo doi, loc va acknowledge canh bao', 'Monitor, filter, and acknowledge alarms')}</p>
+    </div>
+  )
 }
 
 function alarmMatchesStatus(alarm: Alarm, filter: AlarmFilter): boolean {

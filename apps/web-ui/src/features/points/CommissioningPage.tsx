@@ -1,5 +1,6 @@
-import { AlertTriangle, Play, RotateCcw, ShieldOff } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Play, RotateCcw, ShieldOff, XCircle } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { apiClient } from '../../shared/api/client'
 import { useAuth } from '../auth'
 import { Button } from '../../shared/components/Button'
@@ -10,8 +11,9 @@ import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
-import type { Point } from '../../shared/types'
-import { pointDisplayTag } from '../../shared/utils'
+import { useOptionalOverview } from '../../shared/overview/OverviewProvider'
+import type { CommissioningTestResult, Point } from '../../shared/types'
+import { NO_DATA, formatDateTime, pointDisplayTag } from '../../shared/utils'
 
 /**
  * Trang Chạy thử — WEB-UX-004.
@@ -46,19 +48,91 @@ type PendingAction =
 
 type ParsedDraft = { value: number | boolean; error?: undefined } | { value: null; error: string }
 
+/** Kết quả lần chạy thử gần nhất của một điểm, GIỮ LẠI trên màn hình.
+ *
+ *  PA3-504 — bản trước chỉ đẩy một toast rồi thôi. Toast biến mất sau vài giây,
+ *  nên người làm commissioning phải nhớ trong đầu điểm nào đã thử, thử ra sao,
+ *  lúc mấy giờ. Với 8 output và một biên bản nghiệm thu phải ký, đó là chỗ dễ
+ *  sai nhất của cả quy trình. */
+interface TestOutcome {
+  result: CommissioningTestResult['result']
+  message: string
+  at: string
+  requested: string
+  scanMs?: number
+}
+
+/** Một điều kiện tiên quyết. `blocking` = chưa đạt thì KHÔNG cho ghi. */
+interface Prerequisite {
+  id: string
+  label: string
+  ok: boolean
+  detail: string
+  blocking: boolean
+}
+
 export function CommissioningPage() {
   const state = useApi(apiClient.getPoints, [], { refreshMs: REFRESH_MS })
   const toast = useToast()
   const { pick } = useI18n()
   const { session } = useAuth()
+  const overview = useOptionalOverview()
   const canCommission = session?.role === 'admin' || session?.role === 'operator'
 
   const outputs = useMemo(() => (state.data ?? []).filter((point) => point.kind === 'AO' || point.kind === 'DO'), [state.data])
   const forced = useMemo(() => outputs.filter((point) => point.forced), [outputs])
 
+  /* PA3-504 — điều kiện tiên quyết.
+   *
+   * Ghi ra một cơ cấu chấp hành khi authority đang mất liên lạc là thao tác mù:
+   * lệnh có thể không tới nơi, và giá trị phản hồi trên màn hình là số cũ. Bản
+   * trước không kiểm gì cả — nút Chạy thử luôn bấm được miễn là role đủ. */
+  const prerequisites = useMemo<Prerequisite[]>(() => {
+    const snapshot = overview?.data ?? null
+    return [
+      {
+        id: 'authority',
+        label: 'Liên lạc với bộ điều khiển',
+        ok: snapshot ? snapshot.connected : !state.error,
+        detail: snapshot
+          ? (snapshot.connected ? 'Core đang trả lời' : 'Core không trả lời — lệnh ghi có thể không tới thiết bị')
+          : 'Chưa đọc được tổng quan; dựa theo trạng thái đọc điểm',
+        blocking: true
+      },
+      {
+        id: 'outputs',
+        label: 'Có output để chạy thử',
+        ok: outputs.length > 0,
+        detail: outputs.length > 0 ? `${outputs.length} điểm AO/DO` : 'Authority không trả điểm AO/DO nào',
+        blocking: true
+      },
+      {
+        id: 'role',
+        label: 'Đủ quyền ghi',
+        ok: canCommission,
+        detail: canCommission ? `Vai trò ${session?.role}` : 'Cần operator hoặc admin',
+        blocking: true
+      },
+      {
+        id: 'forced',
+        label: 'Không còn điểm kẹt ép tay từ phiên trước',
+        ok: forced.length === 0,
+        // KHÔNG chặn: đôi khi chính việc đang ép là chủ ý của phiên chạy thử.
+        // Nhưng phải nói ra, vì đây là nguyên nhân phổ biến nhất của "thiết bị
+        // không chạy theo lịch" sau một buổi commissioning.
+        detail: forced.length === 0 ? 'Mọi output đang thuộc điều khiển tự động' : `${forced.length} điểm còn bị ép — cân nhắc trả về tự động trước khi bắt đầu`,
+        blocking: false
+      }
+    ]
+  }, [canCommission, forced.length, outputs.length, overview?.data, session?.role, state.error])
+
+  const blocked = prerequisites.some((item) => item.blocking && !item.ok)
+
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [busy, setBusy] = useState(false)
+  const [running, setRunning] = useState<string | null>(null)
+  const [outcomes, setOutcomes] = useState<Record<string, TestOutcome>>({})
 
   if (state.loading && !state.data) return <StateBlock state="loading" title={pick('Đang tải output', 'Loading outputs')} />
   /* Một lỗi tải KHÔNG được hiển thị như "không có output". Ở trang này sự nhầm
@@ -99,8 +173,27 @@ export function CommissioningPage() {
     setBusy(true)
     try {
       if (pending.kind === 'test') {
-        const result = await apiClient.runCommissioningTest(pending.point.id, pending.value)
-        toast.push(result.result === 'passed' ? 'success' : 'warn', `${result.pointId}: ${result.message}`)
+        setRunning(pending.point.id)
+        const requested = typeof pending.value === 'boolean' ? (pending.value ? 'ON' : 'OFF') : `${pending.value}%`
+        try {
+          const result = await apiClient.runCommissioningTest(pending.point.id, pending.value)
+          /* Kết quả GIỮ trên màn hình, không chỉ thoáng qua trong toast: một
+             buổi commissioning thử 8 output rồi phải ký biên bản, và toast biến
+             mất sau vài giây (PA3-504). */
+          setOutcomes((current) => ({
+            ...current,
+            [pending.point.id]: { result: result.result, message: result.message, at: new Date().toISOString(), requested, scanMs: result.scanMs }
+          }))
+          toast.push(result.result === 'passed' ? 'success' : 'warn', `${result.pointId}: ${result.message}`)
+        } catch (err) {
+          setOutcomes((current) => ({
+            ...current,
+            [pending.point.id]: { result: 'failed', message: err instanceof Error ? err.message : 'Lệnh thất bại', at: new Date().toISOString(), requested }
+          }))
+          throw err
+        } finally {
+          setRunning(null)
+        }
       } else if (pending.kind === 'release') {
         await apiClient.forcePoint(pending.point.id, pending.point.value as number | boolean, true)
         toast.push('success', `${pointDisplayTag(pending.point)}: ${pick('đã trả về điều khiển tự động', 'returned to automatic control')}`)
@@ -166,6 +259,39 @@ export function CommissioningPage() {
         />
       )}
 
+      {/* PA3-504 — điều kiện tiên quyết, kiểm TRƯỚC khi cho ghi.
+          Ghi ra cơ cấu chấp hành trong lúc authority mất liên lạc là thao tác
+          mù: lệnh có thể không tới nơi và số trên màn hình là giá trị cũ. */}
+      <Panel title={pick('Điều kiện tiên quyết', 'Prerequisites')} className="p-3">
+        <ul className="space-y-2">
+          {prerequisites.map((item) => (
+            <li key={item.id} className="flex items-start gap-3 text-sm">
+              {item.ok
+                ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--c-good-fg)]" aria-hidden="true" />
+                : <XCircle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: item.blocking ? 'var(--c-fault-fg)' : 'var(--c-warn-fg)' }} aria-hidden="true" />}
+              <div className="min-w-0">
+                <div className="font-semibold">
+                  {item.label}
+                  {!item.ok && !item.blocking && <span className="ml-2 text-xs font-normal text-[var(--c-warn-fg)]">{pick('cảnh báo', 'warning')}</span>}
+                  {!item.ok && item.blocking && <span className="ml-2 text-xs font-normal text-[var(--c-fault-fg)]">{pick('chặn', 'blocking')}</span>}
+                </div>
+                <div className="text-xs text-[var(--c-text-dim)]">{item.detail}</div>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {blocked && (
+          <p role="alert" className="mt-3 rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] px-3 py-2 text-xs text-[var(--c-fault-fg)]">
+            {pick('Còn điều kiện chặn chưa đạt — các nút ghi bị khoá cho tới khi khắc phục.', 'A blocking prerequisite is unmet — write controls stay locked until it is resolved.')}
+          </p>
+        )}
+        {/* PA3-504: mọi lệnh chạy thử đều để lại vết audit; đường dẫn tới đó
+            phải nằm ngay tại chỗ thao tác, không bắt người dùng tự tìm. */}
+        <Link to="/activity?action=commissioning_test" className="mt-3 inline-block text-xs font-semibold text-[var(--c-accent)]">
+          {pick('Xem vết audit các lần chạy thử', 'View commissioning audit trail')} →
+        </Link>
+      </Panel>
+
       <Panel title={pick('Kiểm thử output', 'Output test')}>
         {outputs.length === 0
           ? <StateBlock state="empty" title={pick('Không có điểm AO/DO nào', 'No AO/DO points')} />
@@ -211,7 +337,14 @@ export function CommissioningPage() {
                       đọc được "Chạy thử" và người dùng không biết mình sắp ghi ra
                       cơ cấu nào. */}
                   <div className="grid grid-cols-2 gap-2">
-                    <Button variant="primary" icon={<Play className="h-4 w-4" />} aria-label={pick(`Chạy thử ${pointDisplayTag(point)}`, `Test ${pointDisplayTag(point)}`)} disabled={!canCommission} onClick={() => requestTest(point)}>
+                    <Button
+                      variant="primary"
+                      icon={<Play className="h-4 w-4" />}
+                      aria-label={pick(`Chạy thử ${pointDisplayTag(point)}`, `Test ${pointDisplayTag(point)}`)}
+                      disabled={!canCommission || blocked || running !== null}
+                      loading={running === point.id}
+                      onClick={() => requestTest(point)}
+                    >
                       {pick('Chạy thử', 'Test')}
                     </Button>
                     {/* Nhãn cũ là `Release` nhưng hành vi là ghi 0. Nay đúng
@@ -221,6 +354,7 @@ export function CommissioningPage() {
                       {pick('Trả về tự động', 'To automatic')}
                     </Button>
                   </div>
+                  <TestOutcomeRow outcome={outcomes[point.id]} running={running === point.id} />
                 </div>
               ))}
             </div>
@@ -228,6 +362,42 @@ export function CommissioningPage() {
       </Panel>
 
       <ConfirmDialog pending={pending} busy={busy} onConfirm={() => { void runPending() }} onClose={() => setPending(null)} />
+    </div>
+  )
+}
+
+/** Kết quả lần chạy thử gần nhất của một điểm — PA3-504.
+ *
+ *  Chưa thử thì nói "chưa chạy thử", KHÔNG để trống: một ô trống trong lưới 8
+ *  output trông giống hệt một ô đã thử và đạt. */
+function TestOutcomeRow({ outcome, running }: { outcome?: TestOutcome; running: boolean }) {
+  const { pick } = useI18n()
+  if (running) {
+    return (
+      <p role="status" className="rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-accent-bg)] px-2 py-1.5 text-xs text-[var(--c-accent)]">
+        {pick('Đang ghi và chờ phản hồi…', 'Writing and waiting for feedback…')}
+      </p>
+    )
+  }
+  if (!outcome) {
+    return <p className="px-2 py-1.5 text-xs text-[var(--c-text-dim)]">{pick('Chưa chạy thử', 'Not tested yet')}</p>
+  }
+  const passed = outcome.result === 'passed'
+  return (
+    <div
+      className="rounded-[var(--radius)] border px-2 py-1.5 text-xs"
+      style={{
+        borderColor: passed ? 'var(--c-good)' : 'var(--c-fault)',
+        backgroundColor: passed ? 'var(--c-good-bg)' : 'var(--c-fault-bg)',
+        color: passed ? 'var(--c-good-fg)' : 'var(--c-fault-fg)'
+      }}
+    >
+      <div className="font-semibold">
+        {passed ? pick('ĐẠT', 'PASSED') : pick('KHÔNG ĐẠT', 'FAILED')} · {outcome.requested}
+        {typeof outcome.scanMs === 'number' && <span className="ml-1 font-normal">({outcome.scanMs} ms)</span>}
+      </div>
+      <div className="mt-0.5 text-[var(--c-text)]">{outcome.message || NO_DATA}</div>
+      <div className="mono mt-0.5 text-[var(--c-text-dim)]">{formatDateTime(outcome.at)}</div>
     </div>
   )
 }
