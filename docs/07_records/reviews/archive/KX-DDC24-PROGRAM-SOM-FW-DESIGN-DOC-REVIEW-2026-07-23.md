@@ -1,10 +1,15 @@
 # Review: Thiết kế khắc phục IEC 61131-3 cho Program, SOM Software và MCU Firmware
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 **Document ID:** KX-DDC24-REV-PROGRAM-SOM-FW-DESIGN-002
 **Loại hồ sơ:** Document review record (structure + design), không phải code review
 **Trạng thái:** Open — cần quyết định trước khi tài liệu mục tiêu đổi `Draft` → `Active`
 **Ngày review:** 2026-07-23
-**Tài liệu được review:** [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md) bản 0.2 | 2026-07-22
+**Tài liệu được review:** [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md) bản 0.2 | 2026-07-22
 **Tài liệu đối chiếu:** [`KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md`](KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md)
 **Baseline source đối chiếu code:** `main` tại `18ee583`
 

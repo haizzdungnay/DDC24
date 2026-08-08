@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -234,34 +235,69 @@ func (a *App) handleGetConfigFieldbus(w http.ResponseWriter, r *http.Request) {
 	handleGetConfig(a, w, configGroupFieldbus, ConfigFieldbus{})
 }
 
+// handlePutConfigFieldbus ghi toàn bộ nhóm `fieldbus`.
+//
+// Mọi lần ghi đều đi qua `webModbus.Persister`. Bản trước chỉ dùng Persister khi
+// body CÓ device hoặc point, còn body rỗng thì rơi xuống `writeConfigGroup` —
+// một đường tắt marshal thẳng struct zero-value đè lên `fieldbus.conf`: không
+// giữ `pointConfigMu`, không journal, không rollback, `revision` về 0 và toàn bộ
+// `buses[]`/`devices[]`/`points[]` biến mất, rồi iobus được restart lên đúng cấu
+// hình rỗng đó. Đó là mất dữ liệu không hoàn tác được qua một endpoint hợp lệ,
+// đi vòng qua chính cơ chế sinh ra để chặn nó (REV-BE-01).
+//
+// Ngoài ra, thiếu khoá `devices`/`points` trong body KHÔNG còn được hiểu là
+// "xoá hết". PUT là ghi đè toàn phần, nên xoá vẫn làm được — nhưng phải nói ra
+// bằng `"devices": []`, chứ một client cũ gửi `{}` thì không có ý định đó.
 func (a *App) handlePutConfigFieldbus(w http.ResponseWriter, r *http.Request) {
-	var cfg ConfigFieldbus
-	if err := decodeConfigBody(w, r, &cfg); err != nil {
-		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: "invalid json"}})
 		return
 	}
-	errs := validateConfigFieldbus(cfg)
-	if len(cfg.Devices) > 0 || len(cfg.Points) > 0 {
-		errs = append(errs, validateModbusRTUConfig(a, cfg)...)
+	var present map[string]json.RawMessage
+	if err := json.Unmarshal(body, &present); err != nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: "invalid json"}})
+		return
 	}
+	var cfg ConfigFieldbus
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	if err := dec.Decode(&cfg); err != nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: "invalid json"}})
+		return
+	}
+
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
+	current, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+
+	errs := validateConfigFieldbus(cfg)
+	for _, field := range []struct {
+		key     string
+		dropped bool
+	}{
+		{"buses", len(cfg.Buses) == 0 && len(current.Buses) > 0},
+		{"devices", len(cfg.Devices) == 0 && len(current.Devices) > 0},
+		{"points", len(cfg.Points) == 0 && len(current.Points) > 0},
+	} {
+		if _, ok := present[field.key]; !ok && field.dropped {
+			errs = append(errs, configValidationError{Path: field.key, Reason: "missing_field",
+				Message: "vắng trong body sẽ xoá cấu hình đang lưu; gửi mảng rỗng nếu thật sự muốn xoá"})
+		}
+	}
+	errs = append(errs, validateModbusRTUConfig(a, cfg)...)
 	if len(errs) > 0 {
 		writeValidationErrors(w, errs)
 		return
 	}
-	if len(cfg.Devices) > 0 || len(cfg.Points) > 0 {
-		a.pointConfigMu.Lock()
-		defer a.pointConfigMu.Unlock()
-		current, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
-		cfg.Revision = current.Revision
-		result, err := a.applyModbusConfig(r, cfg)
-		if err != nil {
-			writeError(w, http.StatusConflict, err.Error())
-			return
-		}
-		writeJSON(w, http.StatusOK, result)
+
+	cfg.Revision = current.Revision
+	result, err := a.applyModbusConfig(r, cfg)
+	if err != nil {
+		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
-	handlePutConfigValue(a, w, r, configGroupFieldbus, cfg)
+	writeJSON(w, http.StatusOK, result)
 }
 
 func handlePutConfigValue(a *App, w http.ResponseWriter, r *http.Request, group configAPIGroup, cfg any) {

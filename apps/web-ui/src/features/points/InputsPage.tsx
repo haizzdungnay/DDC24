@@ -461,6 +461,8 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
   useEffect(() => {
     if (!point) return
     const value = pointNumber(point)
+    // Chưa có số đo thì BỎ QUA mẫu, không ghi 0 vào đuôi biểu đồ (REV-FE-04).
+    if (value === null) return
     const time = new Date(point.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     setBuffers((current) => {
       const existing = current[pointId] ?? []
@@ -472,11 +474,11 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
   }, [pointId, point])
 
   function reset() {
-    if (!point) {
+    const value = point ? pointNumber(point) : null
+    if (!point || value === null) {
       setBuffers((current) => ({ ...current, [pointId]: [] }))
       return
     }
-    const value = pointNumber(point)
     const time = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     setBuffers((current) => ({ ...current, [pointId]: [{ time, raw: value, [pointId]: value, __raw: point.raw ?? null }] }))
   }
@@ -490,7 +492,10 @@ function formatStat(value: number, unit?: string): string {
 }
 
 function formatLiveValue(point: Point, unit: string | undefined, booleanInput: boolean): string {
-  if (booleanInput) return formatValue(pointNumber(point) > 0.5, undefined)
+  if (booleanInput) {
+    const value = pointNumber(point)
+    return value === null ? formatValue(undefined) : formatValue(value > 0.5, undefined)
+  }
   return formatValue(point.value, unit)
 }
 

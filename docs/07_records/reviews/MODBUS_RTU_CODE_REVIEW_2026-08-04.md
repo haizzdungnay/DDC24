@@ -146,7 +146,7 @@ lượt poll ([modbus_master.cpp:333-353](../../../apps/iobus/adapters/modbus_rt
 Không có chỗ nào phát lại chính block vừa lỗi, và libmodbus không tự retry.
 
 Trong khi đó FE hiển thị ô nhập **"Retry"**
-([ModbusRtuPage.tsx:80](../../../apps/web-ui/src/features/modbus-rtu/ModbusRtuPage.tsx#L80))
+(`ModbusRtuPage.tsx:80`)
 và BE validate `retry` trong `1..10` với thông điệp "retry phải trong 1..10"
 ([domain.go:176-178](../../../apps/web-api/internal/modbusrtu/domain.go#L176-L178)).
 Thực tế `retry` chỉ là **ngưỡng số lỗi liên tiếp trước khi chuyển OFFLINE** —
@@ -171,13 +171,13 @@ if (!ok) {
 
 `retry_attempts` được tăng đúng một lần cho mỗi lỗi, tức luôn `== total_errors`.
 FE hiển thị hai cột riêng "Poll / lỗi" và "Retry"
-([ModbusRtuPage.tsx:113](../../../apps/web-ui/src/features/modbus-rtu/ModbusRtuPage.tsx#L113)),
+(`ModbusRtuPage.tsx:113`),
 nên bảng chẩn đoán có hai cột không bao giờ khác nhau — vô dụng cho việc khoanh
 vùng lỗi, và gây hiểu nhầm rằng hệ thống đang retry (xem D-05).
 
 ### D-07 · P1 · FE tự suy diễn quality và mặc định `BAD` khi thiếu dữ liệu
 
-[ModbusRtuPage.tsx:113](../../../apps/web-ui/src/features/modbus-rtu/ModbusRtuPage.tsx#L113)
+`ModbusRtuPage.tsx:113`
 
 ```tsx
 {row.online ? 'GOOD' : row.consecutive_errors ? 'OFFLINE' : 'STALE'}
@@ -191,7 +191,7 @@ Hai lỗi trong một biểu thức:
 2. Thiết bị **chưa từng được poll** có `online=false, consecutive_errors=0` → hiện
    **`STALE`**, tức "dữ liệu cũ", trong khi sự thật là "chưa có dữ liệu nào".
 
-Và ở bảng Point ([ModbusRtuPage.tsx:108](../../../apps/web-ui/src/features/modbus-rtu/ModbusRtuPage.tsx#L108)):
+Và ở bảng Point (`ModbusRtuPage.tsx:108`):
 
 ```tsx
 {(runtimeQuality[row.point_id] ?? 'bad').toUpperCase()}
@@ -205,7 +205,7 @@ vận hành, báo động giả kiểu này làm mất niềm tin vào toàn b�
 
 ### D-08 · P1 · Xoá Device/Point không có xác nhận
 
-[ModbusRtuPage.tsx:84, 108](../../../apps/web-ui/src/features/modbus-rtu/ModbusRtuPage.tsx#L84)
+`ModbusRtuPage.tsx:84, 108`
 
 ```tsx
 <button onClick={async () => { await apiClient.deleteModbusDevice(row.device_id); ... }}>Xoá</button>
@@ -281,7 +281,7 @@ nếu là RTS-controlled thì phải bật DT và gọi `modbus_rtu_set_serial_m
 
 ### D-14 · P2 · FE mặc định cổng `/dev/ttyS3` không tồn tại trên board production
 
-[ModbusRtuPage.tsx:6](../../../apps/web-ui/src/features/modbus-rtu/ModbusRtuPage.tsx#L6)
+`ModbusRtuPage.tsx:6`
 
 ```tsx
 const emptyDevice: ModbusRTUDevice = { ..., rs485_port: '/dev/ttyS3', ... }

@@ -22,13 +22,15 @@ ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Co
 | [ADR-010](ADR-010-iop-v2-poll-capability-map.md) | IOP v2.0: Poll + Capability Map | Accepted |
 | [ADR-011](ADR-011-bacnet-reliability-quality-mapping.md) | BACnet Reliability/Quality Mapping | Accepted |
 | [ADR-012](ADR-012-ao-channel-config-model.md) | AO Channel Config Model | Accepted |
-| [ADR-015](ADR-015-privileged-system-config-apply.md) | Privileged System Config Apply | Accepted |
-| [ADR-016](ADR-016-time-authority-model.md) | Time Authority Model | Accepted |
+| [ADR-015](../00_governance/DECISIONS.md) | Privileged System Config Apply | Accepted — chỉ có trong Decision Log, không có file ADR rời |
+| [ADR-016](../00_governance/DECISIONS.md) | Time Authority Model | Accepted — chỉ có trong Decision Log, không có file ADR rời |
 | [ADR-017](ADR-017-settings-network-tabs-and-state-contract.md) | Settings/Network Tabs and State Contract | Accepted |
 | [ADR-018](ADR-018-sqlite-block-historian.md) | SQLite block historian, scheduled per-point policy, unified Trends | Accepted |
 | [ADR-019](../00_governance/DECISIONS.md) | Independent global point tag/name namespaces + static references | Accepted — registered in Decision Log |
 | [ADR-020](ADR-020-mekong-owned-iec-aligned-program-runtime.md) | Mekong-owned IEC 61131-3-aligned Program Runtime (ST+FBD, Rev A.0) | Accepted — supersedes ADR-004 |
 | [ADR-021](ADR-021-restructure-core-and-backend-by-domain.md) | Restructure `services/core` + `web/backend` theo domain | Phase A Accepted & DONE — Phase B Proposed |
+| [ADR-022](ADR-022-ci-cd-tu-dong-deploy-xuong-board.md) | CI/CD tự động deploy xuống board | Accepted |
+| [ADR-023](ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md) | Scheduler v3.1: priority, transport và phạm vi | Accepted |
 
 **Lưu ý:** ADR-001/002/003/005 thiếu section `Consequences` — cần bổ sung. Khi register này và
 [Decision Log](../00_governance/DECISIONS.md) khác nhau, Decision Log là register điều hành.

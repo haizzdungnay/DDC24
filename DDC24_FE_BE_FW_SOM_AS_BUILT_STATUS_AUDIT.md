@@ -422,7 +422,7 @@ Lý do quyết định `NO` không phải vì repository thiếu toàn bộ nề
 
 - Kiểm soát/governance: `docs/00_governance/CONTROL.md`, `docs/00_governance/DECISIONS.md`, ADR-020/021/022.
 - Baseline/spec: `docs/01_product/PRODUCT.md`, `docs/02_requirements/REQUIREMENTS.md`, `docs/04_design/SOFTWARE.md`, `docs/04_design/INTERFACES.md`, `docs/04_design/FIRMWARE.md`.
-- Verification/trace: `docs/05_verification/VERIFICATION.md`, `docs/07_records/TRACEABILITY.md`, `docs/07_records/reviews/PROGRAM_RUNTIME_READY_FOR_C0.md`, `docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md`.
+- Verification/trace: `docs/05_verification/VERIFICATION.md`, `docs/07_records/TRACEABILITY.md`, `docs/07_records/reviews/archive/PROGRAM_RUNTIME_READY_FOR_C0.md`, `docs/review/FW_SOM_SOURCE_SPEC_STATUS_REVIEW.md`.
 - FE: `src/frontend/src/App.tsx`, `src/frontend/src/api/client.ts`, `src/frontend/src/auth/`, `src/frontend/src/realtime/`, `src/frontend/src/pages/`, `.env.production`.
 - BE: `web/backend/http.go`, `auth.go`, `audit.go`, `core_client.go`, `netcfg_client.go`, `historian_*.go`.
 - FW-SOM/MCU: `services/core/main.cpp`, `services/core/graph/scan_loop.*`, `services/core/st/`, `services/iobus/`, `services/netcfg/`, `shared/*.h`, `fw/Core/Src/main.c`, `fw/src/iop/iop_link.c`.

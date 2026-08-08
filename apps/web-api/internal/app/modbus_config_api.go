@@ -455,15 +455,17 @@ func (a *App) handleModbusMapping(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// modbusDeviceBus giải `bus_id` của một Device.
+//
+// Trước đây hàm này có bảng ánh xạ cổng RIÊNG và mặc định về "rs485-1" cho mọi
+// cổng lạ, trong khi `webModbus.BusIDForPort` là nơi phát biểu cùng chính sách
+// đó. Hai nửa của một phép giải bus nói khác nhau thì sớm muộn cũng lệch; nay
+// chỉ còn một nguồn (REV-BE-09).
 func modbusDeviceBus(device webModbus.Device) string {
 	if device.BusID != "" {
 		return device.BusID
 	}
-	switch device.RS485Port {
-	case "/dev/rs485-2", "/dev/ttyS1":
-		return "rs485-2"
-	}
-	return "rs485-1"
+	return webModbus.BusIDForPort(device.RS485Port)
 }
 
 // ---------------------------------------------------------------------------

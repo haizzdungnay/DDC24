@@ -177,9 +177,17 @@ func validateDevices(cfg Config, buses map[string]Bus, opts ValidateOptions,
 		busID := device.BusID
 		if busID == "" {
 			busID = busIDForPort(device.RS485Port)
+			if busID == "" {
+				// Không khai `bus_id` và cổng không thuộc dây nào của board:
+				// trước đây rơi thầm về dây 1 (REV-BE-09). Từ chối tại đây để
+				// người dùng thấy cấu hình sai, thay vì thấy thiết bị chạy trên
+				// một dây họ không chọn.
+				add(base+".bus_id", CodeNotFound,
+					"bắt buộc khi cổng không thuộc bus RS-485 nào của board")
+			}
 		}
 		bus, busExists := buses[busID]
-		if len(buses) > 0 && !busExists {
+		if len(buses) > 0 && busID != "" && !busExists {
 			add(base+".bus_id", CodeNotFound, "không tham chiếu bus đã khai báo")
 		}
 		if busExists && device.RS485Port != "" && device.RS485Port != bus.Port {

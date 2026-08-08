@@ -108,6 +108,33 @@ void from_json(const nlohmann::json& j, Transaction& value);
 bool validate_candidate(const Candidate& value, std::string* reason);
 int netmask_to_prefix(const std::string& netmask);
 
+/** Backend cấu hình mạng bền vững mà bo đang thực sự dùng.
+ *
+ * Bản đầu chỉ biết NetworkManager. Bo Foxlinx OK1126B (buildroot) KHÔNG có
+ * NetworkManager mà chạy systemd-networkd, nên `configured()` luôn trả
+ * mode="unknown" → response bỏ hẳn khoá `configured` → giao diện mạng rơi vào
+ * ngõ cụt "no editable candidate" và mọi `stage` chết ở NETWORKMANAGER_UNAVAILABLE.
+ */
+enum class ConfigBackend { None, NetworkManager, Networkd };
+
+/** Tên các interface Ethernet CÓ DÂY đang hiện diện trong kernel.
+ *
+ * Loại `lo`, mọi interface không phải ARPHRD_ETHER, mọi interface không có
+ * thiết bị vật lý (bridge/tun/veth/dummy) và mọi interface không dây
+ * (`phy80211`/`wireless`) — Wi-Fi nằm ngoài phạm vi giao dịch theo ADR-017 §1.
+ * Kết quả sắp xếp theo tên để việc chọn là tất định.
+ */
+std::vector<std::string> list_wired_interfaces();
+
+/** Chốt tên interface dùng cho toàn bộ vòng đời tiến trình.
+ *
+ * `requested` rỗng ⇒ giữ rỗng (Engine sẽ suy ra theo default route như cũ).
+ * `requested` có mặt trong `wired` ⇒ giữ nguyên, cấu hình luôn thắng.
+ * `requested` KHÔNG có mặt ⇒ lấy interface có dây đầu tiên đang hiện diện.
+ */
+std::string resolve_ethernet_interface(const std::string& requested,
+                                       const std::vector<std::string>& wired);
+
 class Platform {
 public:
     virtual ~Platform() = default;
@@ -153,6 +180,21 @@ protected:
     virtual bool interface_has_address(const std::string& interface,
                                        const std::string& ipv4, bool* present) const;
     virtual void rollback_retry_delay() const;
+
+    /* --- Chọn và triển khai backend cấu hình bền vững --- */
+    virtual ConfigBackend config_backend();
+    /** Đường dẫn file `.network` mà systemd-networkd ĐANG dùng cho interface. */
+    virtual std::string networkd_network_file(const std::string& interface);
+    /** Đọc/ghi file `.network`; tách riêng để test bơm nội dung được. */
+    virtual bool read_text_file(const std::string& path, std::string* content) const;
+    virtual bool write_text_file(const std::string& path, const std::string& content) const;
+    virtual bool networkd_reload(const std::string& interface, std::string* reason);
+
+    Candidate networkd_configured(const std::string& interface);
+    bool networkd_persist(const Candidate& candidate, std::string* reason,
+                          bool preserve_missing_dns);
+    std::string networkd_managed_file(const std::string& interface) const;
+    std::vector<std::string> networkd_active_dns(const std::string& interface);
 };
 
 class Engine {

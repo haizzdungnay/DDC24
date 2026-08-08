@@ -212,7 +212,7 @@ Field `kx_ext_point_t` (đã có trong `shared/mkddc_shm.h`):
 #### 10.3.1 Cấp phát ext slot — một slot = một ĐIỂM LUẬN LÝ
 
 *(Bổ sung Rev 1.3 — 2026-07-30, đóng finding F-17 của review
-`docs/07_records/reviews/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md`.)*
+`docs/07_records/reviews/archive/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md`.)*
 
 Dải `ext[0..KX_N_EXT-1]` (64 slot) được cấp phát tuần tự: RTU slave trước, TCP
 slave sau (`ext_offset = ModbusMaster::total_ext_count()`). Một slot ứng với

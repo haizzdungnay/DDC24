@@ -544,6 +544,13 @@ function AnalogSection({ title, rows, selectedId, conflicts, onSelect, onOpenDet
   )
 }
 
+/** Sparkline khi chưa có buffer: một điểm nếu đã đo được, rỗng nếu chưa.
+ *  Vẽ điểm 0 cho point chưa từng được poll là bịa một số đo (REV-FE-04). */
+function sparklineFallback(point: Point): number[] {
+  const value = pointNumber(point)
+  return value === null ? [] : [value]
+}
+
 function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onForce }: { point: Point; conflictIds?: string[]; selected: boolean; onSelect: (id: string) => void; onOpenDetails: (point: Point) => void; onForce?: (point: Point) => void }) {
   const { pick } = useI18n()
   const trendBuffer = useTrendBuffer(point.id, point.value, point.trend)
@@ -555,7 +562,7 @@ function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onFo
       <span className="mono">{typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
       <span className="mono text-[var(--c-text-dim)]">{point.unit ?? (point.kind === 'AO' ? 'V' : '-')}</span>
       <span className="inline-flex items-center gap-2"><Circle className="h-2.5 w-2.5 fill-current" style={{ color: statusFill(point.quality) }} />{statusText}</span>
-      <span onClick={(event) => { if (onForce) { event.stopPropagation(); onForce(point) } }}><Sparkline values={trendBuffer.length > 0 ? trendBuffer : [pointNumber(point)]} color={point.quality === 'good' ? 'var(--c-accent-2)' : point.quality === 'bad' ? 'var(--c-fault-fg)' : 'var(--c-warn-fg)'} /></span>
+      <span onClick={(event) => { if (onForce) { event.stopPropagation(); onForce(point) } }}><Sparkline values={trendBuffer.length > 0 ? trendBuffer : sparklineFallback(point)} color={point.quality === 'good' ? 'var(--c-accent-2)' : point.quality === 'bad' ? 'var(--c-fault-fg)' : 'var(--c-warn-fg)'} /></span>
       <span className="mono text-[var(--c-text-dim)]">{formatTime(point.updatedAt)}</span>
     </button>
   )

@@ -52,7 +52,7 @@ Kèm §5 QĐ-9 về chính sách lưu trữ.
 
 Hợp đồng cho `point_kind: "EXT"`, validate cho qua, core ghi vào `PointTable`. Nhưng để một điểm
 EXT thật sự ra thiết bị Modbus, phải đặt `shm->ext[idx].setpoint` **và** `dirty = 1` — đúng như
-đường lệnh tay đang làm ([`scan_loop.cpp:137-144`](../../apps/core/application/runtime/scan_loop.cpp#L137-L144)):
+đường lệnh tay đang làm ([`scan_loop.cpp:137-144`](../../../apps/core/application/runtime/scan_loop.cpp#L137-L144)):
 
 ```cpp
 if (cmd.point.kind == PointKind::EXT && cmd.is_write && ok && d_.bacnet && d_.bacnet->shm()) {

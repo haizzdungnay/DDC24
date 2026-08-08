@@ -1,5 +1,10 @@
 # Báo cáo tình trạng triển khai trang `settings/network`
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 ## MK-DDC-24 — Đánh giá xuyên suốt UI/UX · Use Case · Frontend · Backend · FW SOM
 
 > **Document ID:** KX-DDC24-NETWORK-PAGE-STATUS-031-VI
@@ -605,9 +610,9 @@ Web thiếu định dạng `MM:SS` và thiếu đối chiếu old→new tường
 
 ## Phụ lục B — Tham chiếu chéo
 
-- Contract: [ADR-017](../../adr/ADR-017-settings-network-tabs-and-state-contract.md) · [`shared/netcfg_protocol_v1.schema.json`](../../../shared/netcfg_protocol_v1.schema.json)
-- Đặc tả Web: [09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md](../../03_implementation/09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md)
-- UI/UX: [KX-DDC24-UX-SYSTEM-001_VI.md](../../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) · [KX-DDC24-UX-HMI-001_VI.md](../../04_uiux/KX-DDC24-UX-HMI-001_VI.md)
-- Use case (HMI, đối chiếu chéo): [KX-DDC24-UC-HMI-001_VI.md](../../04_uiux/KX-DDC24-UC-HMI-001_VI.md) — UC-HMI-016…019
+- Contract: [ADR-017](../../../adr/ADR-017-settings-network-tabs-and-state-contract.md) · [`shared/netcfg_protocol_v1.schema.json`](../../../../contracts/config/netcfg_protocol_v1.schema.json)
+- Đặc tả Web: [09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md](../../../03_implementation/09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md)
+- UI/UX: [KX-DDC24-UX-SYSTEM-001_VI.md](../../../04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md) · [KX-DDC24-UX-HMI-001_VI.md](../../../04_uiux/KX-DDC24-UX-HMI-001_VI.md)
+- Use case (HMI, đối chiếu chéo): [KX-DDC24-UC-HMI-001_VI.md](../../../04_uiux/KX-DDC24-UC-HMI-001_VI.md) — UC-HMI-016…019
 - Audit tiền nhiệm: [KX-DDC24-UIUX-PRODUCT-AUDIT-2026-07-30.md](KX-DDC24-UIUX-PRODUCT-AUDIT-2026-07-30.md) §2.8
-- Vận hành: [DEVELOPMENT_AND_OPERATIONS.md](../../06_operations/DEVELOPMENT_AND_OPERATIONS.md)
+- Vận hành: [DEVELOPMENT_AND_OPERATIONS.md](../../../06_operations/DEVELOPMENT_AND_OPERATIONS.md)

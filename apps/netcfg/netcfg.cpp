@@ -100,12 +100,26 @@ std::string join_dns_servers(const std::vector<std::string>& servers)
     return value.str();
 }
 
+std::string to_lower(std::string value)
+{
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
+/* Hostname KHÔNG phân biệt hoa thường (RFC 1123 §2.1, RFC 6762 §16).
+ *
+ * Luật cũ chỉ nhận [a-z0-9-] nên hostname thật của bo Foxlinx —
+ * `OK1126B-buildroot` — bị xếp là không ổn định, `management.stable=false`, và
+ * giao diện mạng hiện banner "Stable mDNS hostname is not ready" rồi khoá Apply.
+ * Đó là một khẳng định SAI về một hostname hoàn toàn hợp lệ. */
 bool valid_management_hostname(const std::string& hostname)
 {
-    if (hostname.empty() || hostname.size() > 63 || hostname == "localhost" ||
+    if (hostname.empty() || hostname.size() > 63 || to_lower(hostname) == "localhost" ||
         hostname.front() == '-' || hostname.back() == '-') return false;
     return std::all_of(hostname.begin(), hostname.end(), [](unsigned char c) {
-        return (c >= 'a' && c <= 'z') || std::isdigit(c) || c == '-';
+        return std::isalpha(c) || std::isdigit(c) || c == '-';
     });
 }
 
@@ -300,7 +314,120 @@ bool atomic_write_json(const std::string& path, const nlohmann::json& value,
     return true;
 }
 
+/* --- systemd-networkd: đọc/ghi file .network ---------------------------------
+ *
+ * File .network là INI. Chỉ cần vài khoá của mục [Network]; các mục khác
+ * ([Match], [Link], [DHCPv4]...) được giữ nguyên hoặc chép lại nguyên văn nên
+ * không cần hiểu ngữ nghĩa của chúng. */
+
+struct IniSection {
+    std::string name;
+    std::vector<std::pair<std::string, std::string>> entries;
+};
+
+std::vector<IniSection> parse_ini(const std::string& content)
+{
+    std::vector<IniSection> sections;
+    std::istringstream lines(content);
+    std::string line;
+    while (std::getline(lines, line)) {
+        line = trim(line);
+        while (!line.empty() && (line.front() == ' ' || line.front() == '\t'))
+            line.erase(line.begin());
+        if (line.empty() || line.front() == '#' || line.front() == ';') continue;
+        if (line.front() == '[' && line.back() == ']') {
+            sections.push_back(IniSection{line.substr(1, line.size() - 2), {}});
+            continue;
+        }
+        const size_t separator = line.find('=');
+        if (separator == std::string::npos || sections.empty()) continue;
+        std::string key = trim(line.substr(0, separator));
+        std::string value = trim(line.substr(separator + 1));
+        while (!value.empty() && (value.front() == ' ' || value.front() == '\t'))
+            value.erase(value.begin());
+        sections.back().entries.push_back({key, value});
+    }
+    return sections;
+}
+
+std::vector<std::string> ini_values(const std::vector<IniSection>& sections,
+                                    const std::string& section, const std::string& key)
+{
+    std::vector<std::string> values;
+    for (const auto& item : sections) {
+        if (item.name != section) continue;
+        for (const auto& entry : item.entries)
+            if (entry.first == key) values.push_back(entry.second);
+    }
+    return values;
+}
+
+std::string ini_section_text(const std::vector<IniSection>& sections,
+                             const std::string& section)
+{
+    std::ostringstream text;
+    for (const auto& item : sections) {
+        if (item.name != section) continue;
+        for (const auto& entry : item.entries)
+            text << entry.first << '=' << entry.second << '\n';
+    }
+    return text.str();
+}
+
+/* systemd chấp nhận nhiều cách viết boolean; `DHCP=` còn nhận ipv4/ipv6/yes/no. */
+bool networkd_dhcp_ipv4(const std::string& value)
+{
+    const std::string lowered = to_lower(trim(value));
+    return lowered == "yes" || lowered == "true" || lowered == "1" ||
+           lowered == "on" || lowered == "ipv4" || lowered == "both";
+}
+
+bool sysfs_flag(const std::string& path)
+{
+    std::error_code error;
+    return std::filesystem::exists(path, error);
+}
+
+std::string sysfs_value(const std::string& path)
+{
+    std::ifstream file(path);
+    std::string value;
+    std::getline(file, value);
+    return trim(value);
+}
+
 } // namespace
+
+std::vector<std::string> list_wired_interfaces()
+{
+    std::vector<std::string> interfaces;
+    std::error_code error;
+    std::filesystem::directory_iterator entries("/sys/class/net", error);
+    if (error) return interfaces;
+    for (const auto& entry : entries) {
+        const std::string name = entry.path().filename().string();
+        if (name.empty() || name == "lo") continue;
+        const std::string base = entry.path().string();
+        /* ARPHRD_ETHER; loại loopback, CAN, PPP... */
+        if (sysfs_value(base + "/type") != "1") continue;
+        /* Không có thiết bị vật lý ⇒ interface ảo (bridge, veth, tun, dummy). */
+        if (!sysfs_flag(base + "/device")) continue;
+        /* Wi-Fi nằm ngoài phạm vi giao dịch (ADR-017 §1). */
+        if (sysfs_flag(base + "/wireless") || sysfs_flag(base + "/phy80211")) continue;
+        interfaces.push_back(name);
+    }
+    std::sort(interfaces.begin(), interfaces.end());
+    return interfaces;
+}
+
+std::string resolve_ethernet_interface(const std::string& requested,
+                                       const std::vector<std::string>& wired)
+{
+    if (requested.empty()) return requested;
+    if (std::find(wired.begin(), wired.end(), requested) != wired.end()) return requested;
+    if (wired.empty()) return requested;
+    return wired.front();
+}
 
 void to_json(nlohmann::json& j, const DnsConfig& value)
 {
@@ -675,18 +802,24 @@ ActiveState LinuxPlatform::status(const std::string& requested_interface, std::s
             result.gateway = route_gateway;
     }
 
-    const std::string connection = connection_name(result.interface);
-    const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
-    std::string mode;
-    if (!connection.empty() && !nmcli.empty() &&
-        run({nmcli, "-g", "ipv4.method", "connection", "show", connection}, &mode)) {
-        const std::string method = first_line(mode);
-        result.mode = method == "auto" ? "dhcp" : (method == "manual" ? "static" : "unknown");
+    if (config_backend() == ConfigBackend::Networkd) {
+        const Candidate profile = networkd_configured(result.interface);
+        if (profile.mode == "static" || profile.mode == "dhcp") result.mode = profile.mode;
+        result.dns_servers = networkd_active_dns(result.interface);
+    } else {
+        const std::string connection = connection_name(result.interface);
+        const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
+        std::string mode;
+        if (!connection.empty() && !nmcli.empty() &&
+            run({nmcli, "-g", "ipv4.method", "connection", "show", connection}, &mode)) {
+            const std::string method = first_line(mode);
+            result.mode = method == "auto" ? "dhcp" : (method == "manual" ? "static" : "unknown");
+        }
+        std::string dns_servers;
+        if (!nmcli.empty() &&
+            run({nmcli, "-g", "IP4.DNS", "device", "show", result.interface}, &dns_servers))
+            result.dns_servers = parse_dns_servers(dns_servers);
     }
-    std::string dns_servers;
-    if (!nmcli.empty() &&
-        run({nmcli, "-g", "IP4.DNS", "device", "show", result.interface}, &dns_servers))
-        result.dns_servers = parse_dns_servers(dns_servers);
     if (!result.admin_up) set_reason("ADMIN_DOWN");
     else if (!result.carrier) set_reason("NO_CARRIER");
     else if (result.ipv4.empty()) set_reason("NO_ACTIVE_ADDRESS");
@@ -701,6 +834,8 @@ Candidate LinuxPlatform::configured(const std::string& requested_interface)
                                                    : requested_interface;
     result.mode = "unknown";
     if (result.interface.empty()) return result;
+    if (config_backend() == ConfigBackend::Networkd)
+        return networkd_configured(result.interface);
 
     const std::string connection = configured_connection_name(result.interface);
     const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
@@ -779,6 +914,270 @@ Candidate LinuxPlatform::configured(const std::string& requested_interface)
     return result;
 }
 
+/* ---------------------------------------------------------------------------
+ * Backend cấu hình bền vững
+ *
+ * NetworkManager là backend duy nhất được hỗ trợ ở bản đầu. Bo Foxlinx OK1126B
+ * chạy buildroot với systemd-networkd và KHÔNG hề có `nmcli`, nên toàn bộ
+ * `configured/persist/apply/rollback` im lặng thất bại: `configured` luôn
+ * "unknown" ⇒ Engine bỏ khoá `configured` ⇒ giao diện mạng không có candidate
+ * để sửa, và mọi `stage` trả NETWORKMANAGER_UNAVAILABLE. Nói cách khác trang
+ * mạng KHÔNG THỂ dùng được trên bo đó, không phải vì cấu hình sai mà vì thiếu
+ * hẳn một lớp nền tảng.
+ * ------------------------------------------------------------------------- */
+
+ConfigBackend LinuxPlatform::config_backend()
+{
+    /* NetworkManager thắng khi có mặt: giữ nguyên hành vi đã kiểm chứng trên
+     * Orange Pi 5B. systemd-networkd chỉ được chọn khi thực sự đang chạy
+     * (`/run/systemd/netif` chỉ tồn tại khi networkd đã khởi động). */
+    if (!binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"}).empty())
+        return ConfigBackend::NetworkManager;
+    if (!binary({"/usr/bin/networkctl", "/bin/networkctl", "/usr/sbin/networkctl"}).empty() &&
+        sysfs_flag("/run/systemd/netif"))
+        return ConfigBackend::Networkd;
+    return ConfigBackend::None;
+}
+
+std::string LinuxPlatform::networkd_managed_file(const std::string& interface) const
+{
+    /* Tiền tố `05-` sắp TRƯỚC các file mặc định `10-*.network` của nhà sản xuất.
+     * systemd-networkd chọn file KHỚP ĐẦU TIÊN theo thứ tự từ điển, nên profile
+     * do netcfg quản lý luôn thắng mà không phải sửa hay xoá file gốc — gỡ file
+     * này ra là hệ thống trở về đúng cấu hình xuất xưởng. */
+    return "/etc/systemd/network/05-mkddc-" + interface + ".network";
+}
+
+std::string LinuxPlatform::networkd_network_file(const std::string& interface)
+{
+    const std::string networkctl =
+        binary({"/usr/bin/networkctl", "/bin/networkctl", "/usr/sbin/networkctl"});
+    if (networkctl.empty() || interface.empty()) return {};
+    std::string output;
+    /* `--lines=0` bỏ phần nhật ký ở cuối: `run()` cắt output ở 4096 byte nên vài
+     * chục dòng journal có thể đẩy mất chính dòng "Network File:". */
+    if (!run({networkctl, "status", "--no-pager", "--lines=0", interface}, &output))
+        return {};
+    static const std::string label = "Network File:";
+    std::istringstream lines(output);
+    std::string line;
+    while (std::getline(lines, line)) {
+        const size_t at = line.find(label);
+        if (at == std::string::npos) continue;
+        std::string path = trim(line.substr(at + label.size()));
+        while (!path.empty() && (path.front() == ' ' || path.front() == '\t'))
+            path.erase(path.begin());
+        return (path.empty() || path == "n/a") ? std::string{} : path;
+    }
+    return {};
+}
+
+bool LinuxPlatform::read_text_file(const std::string& path, std::string* content) const
+{
+    if (!content || path.empty()) return false;
+    std::ifstream file(path);
+    if (!file) return false;
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    *content = buffer.str();
+    return true;
+}
+
+bool LinuxPlatform::write_text_file(const std::string& path, const std::string& content) const
+{
+    /* Ghi tạm rồi rename: một file `.network` cụt sẽ làm networkd bỏ qua cả
+     * interface, tức mất mạng sau lần reboot kế tiếp. */
+    std::error_code error;
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), error);
+    std::string pattern = path + ".tmp.XXXXXX";
+    std::vector<char> temp(pattern.begin(), pattern.end());
+    temp.push_back('\0');
+    const int fd = ::mkstemp(temp.data());
+    if (fd < 0) return false;
+    (void)::fchmod(fd, 0644);
+    bool ok = write_all(fd, content.data(), content.size()) && ::fsync(fd) == 0;
+    ::close(fd);
+    if (ok) ok = ::rename(temp.data(), path.c_str()) == 0;
+    if (!ok) {
+        ::unlink(temp.data());
+        return false;
+    }
+    const int dir_fd = ::open(
+        std::filesystem::path(path).parent_path().string().c_str(), O_RDONLY | O_DIRECTORY);
+    if (dir_fd >= 0) {
+        (void)::fsync(dir_fd);
+        ::close(dir_fd);
+    }
+    return true;
+}
+
+bool LinuxPlatform::networkd_reload(const std::string& interface, std::string* reason)
+{
+    const std::string networkctl =
+        binary({"/usr/bin/networkctl", "/bin/networkctl", "/usr/sbin/networkctl"});
+    if (networkctl.empty() || interface.empty()) {
+        if (reason) *reason = "NETWORKD_UNAVAILABLE";
+        return false;
+    }
+    std::string output;
+    if (!run({networkctl, "reload"}, &output) ||
+        !run({networkctl, "reconfigure", interface}, &output)) {
+        if (reason) *reason = "NETWORKD_REAPPLY_FAILED";
+        return false;
+    }
+    return true;
+}
+
+Candidate LinuxPlatform::networkd_configured(const std::string& interface)
+{
+    Candidate result;
+    result.interface = interface;
+    result.mode = "unknown";
+    std::string content;
+    if (!read_text_file(networkd_network_file(interface), &content)) return result;
+    const auto sections = parse_ini(content);
+
+    const auto dhcp_values = ini_values(sections, "Network", "DHCP");
+    const bool dhcp = !dhcp_values.empty() && networkd_dhcp_ipv4(dhcp_values.back());
+    if (dhcp) {
+        result.mode = "dhcp";
+    } else {
+        for (const auto& address : ini_values(sections, "Network", "Address")) {
+            const size_t separator = address.find('/');
+            if (separator == std::string::npos) continue;
+            const std::string ipv4 = address.substr(0, separator);
+            uint32_t ignored = 0;
+            try {
+                size_t parsed = 0;
+                const int prefix = std::stoi(address.substr(separator + 1), &parsed);
+                if (parsed != address.size() - separator - 1) continue;
+                if (!parse_ipv4(ipv4, &ignored) ||
+                    !netmask_from_prefix(prefix, &result.netmask)) continue;
+            } catch (...) {
+                continue;
+            }
+            result.ipv4 = ipv4;
+            result.mode = "static";
+            break;
+        }
+        if (result.mode != "static") return result;
+        auto gateways = ini_values(sections, "Network", "Gateway");
+        if (gateways.empty()) gateways = ini_values(sections, "Route", "Gateway");
+        for (const auto& gateway : gateways) {
+            uint32_t ignored = 0;
+            if (parse_ipv4(gateway, &ignored)) { result.gateway = gateway; break; }
+        }
+    }
+
+    std::string joined;
+    for (const auto& server : ini_values(sections, "Network", "DNS")) {
+        joined += server;
+        joined += ' ';
+    }
+    bool dns_valid = true;
+    const auto servers = parse_dns_servers(joined, &dns_valid);
+    if (!servers.empty() && dns_valid && servers.size() <= 4)
+        result.dns = DnsConfig{"manual", servers};
+    else if (result.mode == "dhcp" && servers.empty())
+        result.dns = DnsConfig{"auto", {}};
+
+    /* Một file `.network` hợp lệ với networkd vẫn có thể vi phạm hợp đồng
+     * candidate (ví dụ gateway khác subnet, hoặc `Gateway=` kèm on-link). Phát ra
+     * candidate như vậy sẽ khiến adapter Go từ chối CẢ response và trang mạng
+     * trả 502 — hỏng nặng hơn hẳn so với việc thành thật báo "không đọc được
+     * profile". */
+    std::string ignored_reason;
+    if (!validate_candidate(result, &ignored_reason)) {
+        Candidate unknown;
+        unknown.interface = interface;
+        unknown.mode = "unknown";
+        return unknown;
+    }
+    return result;
+}
+
+std::vector<std::string> LinuxPlatform::networkd_active_dns(const std::string& interface)
+{
+    const std::string resolvectl =
+        binary({"/usr/bin/resolvectl", "/bin/resolvectl", "/usr/sbin/resolvectl"});
+    if (resolvectl.empty() || interface.empty()) return {};
+    std::string output;
+    if (!run({resolvectl, "dns", interface}, &output)) return {};
+    /* Định dạng: "Link 2 (eth0): 114.114.114.114 8.8.8.8" */
+    const size_t separator = output.find(':');
+    if (separator == std::string::npos) return {};
+    return parse_dns_servers(output.substr(separator + 1));
+}
+
+bool LinuxPlatform::networkd_persist(const Candidate& candidate, std::string* reason,
+                                     bool preserve_missing_dns)
+{
+    /* Giữ nguyên mục [Match] của file đang hiệu lực thay vì viết `Name=<if>`
+     * trống trơn: file gốc của bo có thêm điều kiện (ví dụ
+     * `KernelCommandLine=!root=/dev/nfs`) và nới rộng phạm vi khớp có thể làm
+     * networkd giành lấy interface trong đúng kịch bản mà nhà sản xuất cố ý
+     * tránh. */
+    std::string match = "Name=" + candidate.interface + "\n";
+    std::vector<std::string> inherited_dns;
+    std::string content;
+    if (read_text_file(networkd_network_file(candidate.interface), &content)) {
+        const auto sections = parse_ini(content);
+        const std::string existing = ini_section_text(sections, "Match");
+        if (!existing.empty()) match = existing;
+        std::string joined;
+        for (const auto& server : ini_values(sections, "Network", "DNS")) {
+            joined += server;
+            joined += ' ';
+        }
+        inherited_dns = parse_dns_servers(joined);
+    }
+
+    std::vector<std::string> dns_servers;
+    bool ignore_auto_dns = false;
+    if (candidate.dns.has_value()) {
+        ignore_auto_dns = candidate.dns->mode == "manual";
+        if (ignore_auto_dns) dns_servers = candidate.dns->servers;
+    } else if (preserve_missing_dns) {
+        dns_servers = inherited_dns;
+        ignore_auto_dns = !dns_servers.empty();
+    }
+
+    std::ostringstream body;
+    body << "# Sinh bởi mkddc-netcfg — KHÔNG sửa tay.\n"
+         << "# Mọi thay đổi hợp lệ đi qua giao dịch stage/apply/confirm.\n"
+         << "[Match]\n" << match << "\n[Network]\n";
+    if (candidate.mode == "dhcp") {
+        body << "DHCP=ipv4\n";
+    } else {
+        body << "DHCP=no\n"
+             << "Address=" << cidr(candidate) << '\n';
+        if (!candidate.gateway.empty()) body << "Gateway=" << candidate.gateway << '\n';
+    }
+    for (const auto& server : dns_servers) body << "DNS=" << server << '\n';
+    if (candidate.mode == "dhcp")
+        body << "\n[DHCPv4]\nUseDNS=" << (ignore_auto_dns ? "no" : "yes") << '\n';
+
+    if (!write_text_file(networkd_managed_file(candidate.interface), body.str())) {
+        if (reason) *reason = "PERSIST_FAILED";
+        return false;
+    }
+    /* Bắt networkd đọc lại NGAY.
+     *
+     * `networkctl status` là nguồn duy nhất cho biết file `.network` nào đang
+     * hiệu lực, và nó chỉ đổi sau khi networkd nạp lại cấu hình. Nếu bỏ bước này,
+     * `configured()` vẫn đọc file CŨ sau khi confirm — giao diện hiện profile sai
+     * và giao dịch kế tiếp sẽ lưu last-known-good sai, tức rollback đưa thiết bị
+     * về một địa chỉ không còn đúng. */
+    const std::string networkctl =
+        binary({"/usr/bin/networkctl", "/bin/networkctl", "/usr/sbin/networkctl"});
+    std::string output;
+    if (networkctl.empty() || !run({networkctl, "reload"}, &output)) {
+        if (reason) *reason = "PERSIST_RELOAD_FAILED";
+        return false;
+    }
+    return true;
+}
+
 std::string LinuxPlatform::management_hostname() const
 {
     std::array<char, HOST_NAME_MAX + 1> hostname {};
@@ -792,7 +1191,9 @@ ManagementState LinuxPlatform::management()
     ManagementState result;
     result.hostname = management_hostname();
     result.stable = valid_management_hostname(result.hostname);
-    if (!result.hostname.empty()) result.mdns_name = result.hostname + ".local";
+    /* mDNS tra cứu không phân biệt hoa thường; công bố dạng chữ thường để client
+     * so khớp origin bằng một phép so sánh chuỗi thẳng. */
+    if (!result.hostname.empty()) result.mdns_name = to_lower(result.hostname) + ".local";
     return result;
 }
 
@@ -829,6 +1230,9 @@ bool LinuxPlatform::preflight(const Candidate& candidate, std::string* reason)
 bool LinuxPlatform::persist(const Candidate& candidate, std::string* reason,
     bool preserve_missing_dns)
 {
+    if (config_backend() == ConfigBackend::Networkd)
+        return networkd_persist(candidate, reason, preserve_missing_dns);
+
     const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
     const std::string connection = configured_connection_name(candidate.interface);
     if (nmcli.empty() || connection.empty()) {
@@ -889,6 +1293,14 @@ bool LinuxPlatform::apply(const Candidate& candidate, const ActiveState&, std::s
 {
     if (candidate.mode == "dhcp") {
         if (!persist(candidate, reason)) return false;
+        if (config_backend() == ConfigBackend::Networkd) {
+            std::string reapply_reason;
+            if (!networkd_reload(candidate.interface, &reapply_reason)) {
+                if (reason) *reason = "APPLY_FAILED";
+                return false;
+            }
+            return true;
+        }
         const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
         std::string output;
         if (!run({nmcli, "device", "reapply", candidate.interface}, &output)) {
@@ -981,15 +1393,23 @@ bool LinuxPlatform::rollback(const Candidate& candidate, const ActiveState& prev
         ? applied.ipv4 : candidate.ipv4;
 
     if (!persist(restore, reason, !previous_configured_complete)) return false;
-    const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
-    if (nmcli.empty()) {
-        if (reason) *reason = "NETWORKMANAGER_UNAVAILABLE";
-        return false;
-    }
     std::string output;
-    if (!run({nmcli, "device", "reapply", previous.interface}, &output)) {
-        if (reason) *reason = "ROLLBACK_REAPPLY_FAILED";
-        return false;
+    if (config_backend() == ConfigBackend::Networkd) {
+        std::string reapply_reason;
+        if (!networkd_reload(previous.interface, &reapply_reason)) {
+            if (reason) *reason = "ROLLBACK_REAPPLY_FAILED";
+            return false;
+        }
+    } else {
+        const std::string nmcli = binary({"/usr/bin/nmcli", "/usr/sbin/nmcli"});
+        if (nmcli.empty()) {
+            if (reason) *reason = "NETWORKMANAGER_UNAVAILABLE";
+            return false;
+        }
+        if (!run({nmcli, "device", "reapply", previous.interface}, &output)) {
+            if (reason) *reason = "ROLLBACK_REAPPLY_FAILED";
+            return false;
+        }
     }
 
     if (!applied_ipv4.empty() && applied_ipv4 != previous.ipv4) {
@@ -1115,7 +1535,15 @@ nlohmann::json Engine::response(const std::string& request_id, const std::string
                          {"state", transaction_.state}, {"active", active},
                          {"capabilities", {"dns", "management-hostname"}},
                          {"management", management}};
-    if (configured.mode == "static" || configured.mode == "dhcp") {
+    /* `configured` phải hợp lệ theo hợp đồng, không chỉ "có mode".
+     *
+     * Adapter Go từ chối CẢ response khi `configured` sai hợp đồng (ví dụ gateway
+     * khác subnet đọc từ profile hệ điều hành), nên một profile lệch chuẩn sẽ làm
+     * mọi lần đọc trạng thái trả 502 và giết sạch trang mạng. Bỏ khoá `configured`
+     * là suy giảm có kiểm soát; phát ra candidate sai là hỏng toàn cục. */
+    std::string configured_reason;
+    if ((configured.mode == "static" || configured.mode == "dhcp") &&
+        validate_candidate(configured, &configured_reason)) {
         nlohmann::json configured_json{{"interface", configured.interface},
                                        {"mode", configured.mode}};
         if (!configured.ipv4.empty()) configured_json["ipv4"] = configured.ipv4;

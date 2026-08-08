@@ -1,5 +1,10 @@
 # Báo cáo build, test và deploy HMI → FW SOM — Orange Pi 5B
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 **Document ID:** KX-DDC24-DEP-HMI-FWSOM-20260722  
 **Ngày thực hiện:** 2026-07-22  
 **Target:** `orangepi5b`, aarch64, Orange Pi OS 1.0.8 / Debian 12  

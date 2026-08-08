@@ -11,6 +11,12 @@ WorkingDirectory=/opt/mkddc-web
 Environment=PORT=8081
 Environment=CONFIG_DIR=/data/config
 Environment=STATIC_DIR=/opt/mkddc-web/dist
+# Biên CORS/WebSocket chạy fail-closed (REV-PLT-01): không đặt CORS_ORIGIN thì
+# chỉ same-origin được phép — đúng cho triển khai chuẩn, nơi mkddc-web phục vụ
+# luôn giao diện từ STATIC_DIR. Chỉ đặt CORS_ORIGIN trong /etc/mkddc-web.env khi
+# FE thật sự chạy ở origin khác, ví dụ:
+#   CORS_ORIGIN=https://ddc.toanha.local,http://192.168.1.110:8082
+# CORS_ALLOW_LOOPBACK=1 mở mọi cổng loopback và CHỈ dùng cho máy dev.
 EnvironmentFile=-/etc/mkddc-web.env
 ExecStart=/opt/mkddc-web/mkddc-web
 Restart=on-failure

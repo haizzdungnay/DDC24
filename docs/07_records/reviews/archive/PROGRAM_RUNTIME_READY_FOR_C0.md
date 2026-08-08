@@ -1,5 +1,10 @@
 # Program Runtime — Readiness Review for C0
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 **Document ID:** KX-DDC24-PROGRAM-RUNTIME-C0-READINESS-001
 **Ngày:** 2026-07-23
 **Nguồn:** ADR-020 + 8 ACTION items yêu cầu bởi CTO (Phạm Đình Chương), 2026-07-23

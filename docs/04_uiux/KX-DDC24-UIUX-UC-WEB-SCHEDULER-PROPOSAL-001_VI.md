@@ -20,9 +20,9 @@
 Spec v3.1 tuyên bố **loại bỏ hoàn toàn cơ chế thanh ghi `TSx`**. Mã nguồn hiện tại
 không chỉ *dùng* mô hình TSx — nó **phơi TSx ra thẳng giao diện**: chế độ
 `Parameters` của trang Scheduler hiển thị đúng 12 dòng nhãn `TSx 0` … `TSx 11`
-([SchedulerPage.tsx:436-447](../../apps/web-ui/src/features/operations/SchedulerPage.tsx#L436-L447)),
+([SchedulerPage.tsx:436-447](../../apps/web-ui/src/features/scheduler/SchedulerLayout.tsx#L436-L447)),
 và wizard cũng gắn nhãn thanh ghi cho từng bước
-([SchedulerPage.tsx:619-626](../../apps/web-ui/src/features/operations/SchedulerPage.tsx#L619-L626)).
+([SchedulerPage.tsx:619-626](../../apps/web-ui/src/features/scheduler/SchedulerLayout.tsx#L619-L626)).
 
 Vì vậy đây **không phải một đợt làm đẹp giao diện**. Đây là thay thế mô hình miền
 (domain model) xuyên ba tầng FE / BE / core runtime, và giao diện chỉ là mặt cắt
@@ -37,7 +37,7 @@ những quyết định kiến trúc nào phải có câu trả lời trước k
 
 | Tầng | File | Mô hình hiện tại |
 |---|---|---|
-| FE | [`SchedulerPage.tsx`](../../apps/web-ui/src/features/operations/SchedulerPage.tsx) (756 dòng, một file) | Danh sách trái + panel phải, 3 chế độ `summary` / `wizard` / `parameters`. Toàn bộ 64 lịch nạp một lần, sửa trong bộ nhớ, lưu bằng **một nút Save ghi đè cả mảng** |
+| FE | [`SchedulerPage.tsx`](../../apps/web-ui/src/features/scheduler/SchedulerLayout.tsx) (756 dòng, một file) | Danh sách trái + panel phải, 3 chế độ `summary` / `wizard` / `parameters`. Toàn bộ 64 lịch nạp một lần, sửa trong bộ nhớ, lưu bằng **một nút Save ghi đè cả mảng** |
 | BE | [`dto.go:142-162`](../../apps/web-api/internal/app/dto.go#L142-L162), [`scheduleapi.go`](../../apps/web-api/internal/app/scheduleapi.go), [`schedulestore.go`](../../apps/web-api/internal/app/schedulestore.go) | `ScheduleRow` **phẳng**; chỉ 2 endpoint `GET`/`PUT /api/v1/schedules` ([http.go:218-219](../../apps/web-api/internal/app/http.go#L218-L219)); lưu `schedule.conf` dạng mảng JSON; áp dụng bằng **SIGHUP** tới core |
 | Core | [`schedule_runtime.cpp`](../../apps/core/application/schedule/schedule_runtime.cpp) (527 dòng) | Đánh giá theo `week_minute` + ordinal ngày trong năm; ghi qua `PriorityResolver` ở **mức 4 cố định** |
 

@@ -20,6 +20,7 @@
 | [Verification](05_verification/VERIFICATION.md) | chiến lược test, ma trận và release gates |
 | [Development & operations](06_operations/DEVELOPMENT_AND_OPERATIONS.md) | build, test, deploy, vận hành và phục hồi |
 | [Traceability](07_records/TRACEABILITY.md) | ánh xạ yêu cầu → thiết kế → code → bằng chứng |
+| [Chỉ mục hồ sơ rà soát](07_records/reviews/README.md) | trạng thái từng record rà soát/phê duyệt/triển khai, đã đối chiếu mã nguồn; kèm bảng ánh xạ đường dẫn trước/sau tái cấu trúc |
 | [Programming Traceability Matrix](07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
 | [Programming Open Decisions](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | vấn đề Product/System còn mở trước Programming Design |
 | [Programming Docs Sync Report](07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record đồng bộ docs theo ADR-023 ngày 2026-08-03 |
@@ -63,14 +64,15 @@
 - [Source specifications](01_specs/README.md)
 - [Implementation guides](03_implementation/README.md)
 - [Hardware review records](07_records/reviews/hardware/README.md)
-- [IEC 61131-3 Program/SOM FW gap assessment](07_records/reviews/KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md)
-- [IEC 61131-3 corrective design doc review — structure + design](07_records/reviews/KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md)
-- [IEC 61131-3 Program/SOM FW decisions — Q0–Q9 CTO 2026-07-23, Decided/Closed](07_records/reviews/KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md)
+- [Hồ sơ rà soát lịch sử — `archive/`](07_records/reviews/archive/README.md) — cụm Program Runtime/IEC 61131-3, rà soát 2026-07-30 và audit UI/UX; **không phải nguồn chuẩn**
+- [IEC 61131-3 Program/SOM FW gap assessment](07_records/reviews/archive/KX-DDC24-IEC61131-PROGRAM-SOMFW-GAP-2026-07-22.md)
+- [IEC 61131-3 corrective design doc review — structure + design](07_records/reviews/archive/KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md)
+- [IEC 61131-3 Program/SOM FW decisions — Q0–Q9 CTO 2026-07-23, Decided/Closed](07_records/reviews/archive/KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md)
 - [ADR-020 — Mekong-owned IEC 61131-3-aligned Program Runtime](adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
-- [Program Runtime C0 Architecture and Feasibility Plan — lịch sử, chưa reconcile ADR-023](07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md)
-- [Program Runtime Implementation Plan C1–C10 — lịch sử, không được mở bởi nhiệm vụ hiện tại](07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md)
-- [Program Runtime document conflict report (ADR-020 remediation, 31/31 closed)](07_records/reviews/KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md)
-- [Program Runtime readiness review for C0 — C0_READY status](07_records/reviews/PROGRAM_RUNTIME_READY_FOR_C0.md)
+- [Program Runtime C0 Architecture and Feasibility Plan — lịch sử, chưa reconcile ADR-023](07_records/reviews/archive/KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md)
+- [Program Runtime Implementation Plan C1–C10 — lịch sử, không được mở bởi nhiệm vụ hiện tại](07_records/reviews/archive/KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md)
+- [Program Runtime document conflict report (ADR-020 remediation, 31/31 closed)](07_records/reviews/archive/KX-DDC24-PROGRAM-RUNTIME-DOCUMENT-CONFLICT-REPORT-2026-07-23.md)
+- [Program Runtime readiness review for C0 — C0_READY status](07_records/reviews/archive/PROGRAM_RUNTIME_READY_FOR_C0.md)
 
 Luồng đọc khuyến nghị cho Programming: Product baseline → Product Spec
 Programming → Requirements → Open Decisions → Verification → Programming
@@ -80,7 +82,8 @@ không dùng plan/detailed design lịch sử thay cho bước đó. Với chủ
 Verification. Tài liệu `In Review` phải được đối chiếu baseline/code trước khi
 dùng cho release.
 
-Archive lịch sử không phải nguồn chuẩn: `archives/markdown-before-restructure-2026-07-22.tar.gz`.
+Archive lịch sử không phải nguồn chuẩn: `archives/markdown-before-restructure-2026-07-22.tar.gz`
+và [`docs/07_records/reviews/archive/`](07_records/reviews/archive/README.md).
 
 Artifact hỗ trợ không phải Markdown được giữ tại
 [`contracts/openapi/openapi.yaml`](../contracts/openapi/openapi.yaml),

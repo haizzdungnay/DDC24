@@ -52,7 +52,7 @@ Không mặc định rằng HMI đã nằm trong package chính; xác minh servi
 
 Deploy lên board dùng `ssh SOM-DDC-24-foxlinx`. Quy trình chi tiết:
 - [Foxlinx Deploy Checklist](../08_hardware/foxlinx-som-ddc24/FOXLINX_DEPLOY_CHECKLIST.md) (mới, ưu tiên)
-- [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK §2a](03_implementation/27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) (legacy, có phần Orange Pi đã deprecated)
+- [27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK §2a](../03_implementation/27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) (legacy, có phần Orange Pi đã deprecated)
 
 
 ## Chẩn đoán

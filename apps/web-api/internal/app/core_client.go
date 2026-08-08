@@ -202,7 +202,13 @@ func (c *CoreClient) ReadPoints(ctx context.Context) ([]PointDTO, error) {
 	}
 	plcData, err := c.readPLCShm()
 	if err != nil {
-		return []PointDTO{}, nil
+		// REV-BE-07: nuốt lỗi ở đây làm "core chết" trông giống hệt "thiết bị
+		// không có point nào". `GET /api/v1/points` đáp 200 với `[]`, WS đẩy một
+		// bản cập nhật rỗng thay vì khung 503 mà nó đã có sẵn mã để phát, và
+		// historian ghi sự cố thành "không có point nào" thay vì bỏ qua mẫu —
+		// giao diện hiện bảng rỗng kèm huy hiệu kết nối màu khoẻ. Mọi nơi gọi
+		// đều đã xử lý `err != nil` đúng; chỉ hàm này là chưa nói ra.
+		return nil, err
 	}
 	// Read io_shm for AI unit strings (best-effort; nil on failure = empty units)
 	ioData, _ := c.readIOShm()

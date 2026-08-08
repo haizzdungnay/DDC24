@@ -1,5 +1,10 @@
 # Yêu cầu fix & debug cho team FW SOM — từ review 2026-07-30
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 - Nguồn: `docs/07_records/reviews/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md` (Rev 2, 23 finding).
 - Mốc code: `main` tại `7ea3ac5` (cây source giống hệt `7a5b72a`, chỉ khác `CHANGELOG.md`) — mọi số dòng dưới đây đúng tại mốc này.
 - Phạm vi văn bản này: **chỉ các finding thuộc FW SOM** (9/23). Các finding FE/BE/CI/packaging (F-01, F-02, F-04, F-06, F-07, F-09..F-13, F-15, F-19, F-20, F-23) không thuộc yêu cầu này.

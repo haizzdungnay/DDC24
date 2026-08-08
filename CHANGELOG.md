@@ -7,6 +7,288 @@
 ---
 
 ## [Unreleased]
+### Added — Hồ sơ đầu vào cho đội thiết kế lại UX, đọc thẳng từ source (2026-08-08)
+
+**Phạm vi.** `docs/04_uiux/UX_REDESIGN_INPUT_BRIEF_2026-08-08.md` (UX-INPUT-001).
+
+**Vì sao có tài liệu này.** Đội thiết kế UX cần một bản mô tả **as-built**, không phải mô tả
+theo spec — vì hai thứ đó đã lệch nhau. Toàn bộ số liệu đọc trực tiếp từ mã nguồn tại `18bd295`
+(`contracts/shm/mkddc_shm.h`, `apps/web-api/internal/app/http.go`, `apps/web-ui/src/app/App.tsx`),
+không trích lại tài liệu cũ. Nội dung gồm 8 application domain, thang 3 role
+(`viewer < operator < admin`, **không** phải 4), ma trận quyền theo hành động và theo route,
+16 UI + 4 AO + 4 DO (0 DI trên base SKU) với 9 signal type, 5 cấp severity alarm và 8 alarm type
+(3 loại đang chạy), danh sách đầy đủ 99 route as-built, cây điều hướng, và cấu trúc `PointDTO`.
+
+**Điểm quan trọng nhất là những chỗ nó nói KHÔNG.** Tài liệu chỉ đích danh các endpoint có trong
+`contracts/openapi/openapi.yaml` nhưng **chưa được cài trong backend Go** (OTA, tải log, danh sách
+object BACnet, graph validate/deploy) để không ai thiết kế màn hình cho chúng như thể đã có; nêu
+6 ràng buộc bắt buộc rút ra từ finding thật (không bịa dữ liệu — `FE-DIAG-01`; không hằng số viết
+cứng thay số đo — `MBR-B305`; FE không nới lỏng hơn BE; `index.html` phải `no-cache`; tiếng Việt
+là ngôn ngữ chính; nút mutation `disable` theo role thay vì ẩn trang); và kết thúc bằng 3 câu hỏi
+ngược cần chốt trước khi vẽ.
+
+### Fixed — Trang `/settings/network` chết trên bo Foxlinx: 6 nguyên nhân độc lập (2026-08-08)
+
+**Phạm vi.** `apps/netcfg` (C++), `apps/web-ui/src/features/network` (React/TS),
+`apps/web-api/internal/network` (test hồi quy), `platform/systemd/mkddc-netcfg.service`,
+`platform/packaging/netcfg.conf`, `platform/packaging/install.sh`,
+`docs/07_records/test-evidence/fw-som/2026-08-08-foxlinx-settings-network-fix.md`,
+`docs/08_hardware/foxlinx-som-ddc24/FOXLINX_DEPLOY_CHECKLIST.md`.
+
+**Triệu chứng.** Trên bo `SOM-DDC-24-foxlinx` (`OK1126B-buildroot`), trang `/settings/network`
+hiện thẻ ACTIVE/KERNEL toàn đỏ với `INTERFACE_NOT_FOUND`, "No configured profile",
+"No editable network candidate", hai banner vàng, và nút **Lưu thay đổi khoá vĩnh viễn**.
+Trang không sai — nó hiển thị trung thực một authority đã chết vì sáu nguyên nhân xếp chồng.
+
+**Hai lỗi chặn ở tầng nền tảng.**
+
+- **NC-02 — `mkddc-netcfg` gắn cứng vào NetworkManager, bo không hề có NetworkManager.**
+  `configured/persist/apply/rollback` chạy hoàn toàn bằng `nmcli`. Bo buildroot này dùng
+  **systemd-networkd**, nên `configured()` luôn trả `mode="unknown"` ⇒ Engine bỏ hẳn khoá
+  `configured` khỏi response ⇒ giao diện rơi vào ngõ cụt "no editable candidate"; và mọi
+  `stage` sẽ chết ở `PREVIOUS_STATE_NOT_RESTORABLE`, `persist` ở `NETWORKMANAGER_UNAVAILABLE`.
+  Tức trang này **không bao giờ** đổi được IP trên bo đó. Nay `LinuxPlatform` tự dò backend:
+  `configured` đọc file `.network` đang hiệu lực qua `networkctl status`; `persist` ghi
+  `/etc/systemd/network/05-mkddc-<if>.network` (tiền tố `05-` sắp trước file `10-*` của nhà
+  sản xuất nên thắng mà không phải sửa file gốc, và `[Match]` được **kế thừa nguyên vẹn** để
+  không nới rộng phạm vi khớp); `apply`/`rollback` dùng `networkctl reload` + `reconfigure`.
+  `persist` bắt buộc `networkctl reload` ngay sau khi ghi — thiếu bước này thì `networkctl`
+  vẫn báo file CŨ đang hiệu lực, `configured()` đọc sai sau confirm và giao dịch kế tiếp lưu
+  last-known-good sai, tức rollback đưa thiết bị về một địa chỉ không còn đúng.
+- **NC-06 — `/data/mkddc` mode `0755 mkddc:mkddc` làm `stage` không ghi nổi journal.**
+  `mkddc-netcfg` chạy `User=root Group=mkddc` với `CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW`
+  — **không có `CAP_DAC_OVERRIDE`**, nên uid 0 vẫn phải tuân thủ DAC như người dùng thường và
+  chỉ có `r-x` trên thư mục của mình. Mọi `stage` trả `JOURNAL_WRITE_FAILED`: cơ chế giao dịch
+  chết ngay bước đầu tiên. `install.sh` nay tạo thư mục `0775`. Chứng minh bằng thí nghiệm
+  phân biệt được trong cùng sandbox: `0755` → `Permission denied`, `0775` → ghi được.
+
+**Bốn lỗi còn lại.**
+
+- **NC-01** — `NETCFG_INTERFACE=end1` (tên của Orange Pi 5B) trong khi Foxlinx đặt tên Ethernet
+  là `eth0`. `mkddc-netcfg` nay giải tên **một lần lúc khởi động** (không phải trong `status()`:
+  Engine dùng tên này làm phạm vi cho phép của giao dịch, nên status trả `eth0` mà Engine giữ
+  `end1` sẽ khiến candidate bị chính authority từ chối bằng `INTERFACE_NOT_ALLOWED`), rơi về
+  NIC **có dây** đang hiện diện khi tên khai báo vắng mặt và ghi cảnh báo vào journal.
+  `netcfg.conf` mặc định đổi sang `eth0`.
+- **NC-03** — `valid_management_hostname()` chỉ nhận `[a-z0-9-]`, nên hostname thật của bo
+  `OK1126B-buildroot` bị xếp là không ổn định (`stable=false`) và giao diện hiện banner
+  "Stable mDNS hostname is not ready". Hostname **không phân biệt hoa thường** (RFC 1123 §2.1,
+  RFC 6762 §16); `mdnsName` nay công bố dạng chữ thường để client so khớp bằng một phép so sánh
+  chuỗi thẳng.
+- **NC-04** — FE đòi `location.hostname === management.mdnsName` mới cho Apply. Vào bằng IP LAN,
+  DDNS hay reverse proxy đều không bao giờ khớp ⇒ **thiết bị không cấu hình được từ xa**, dù
+  ADR-017 §1 chỉ yêu cầu đường quản trị (ví dụ Wi-Fi) còn nguyên. Nay chỉ chặn đúng trường hợp
+  **chứng minh được** là nguy hiểm: trình duyệt đang nói chuyện qua chính địa chỉ IPv4 sắp bị
+  đổi. Các trường hợp khác chỉ cảnh báo — cơ chế an toàn thật vẫn nguyên vẹn: `apply` giữ địa
+  chỉ cũ và thiết bị tự hoàn tác sau 120 giây nếu không ai xác nhận.
+- **NC-05** — khi authority không có `configured` và `active.mode` là unknown, trang không có
+  lối nào để cấu hình thiết bị. Nay admin bấm "Tự soạn cấu hình mạng" để mở một candidate rỗng;
+  giao diện vẫn **không suy diễn** mode — mode là do người chọn.
+
+Thêm một lớp chống hỏng toàn cục: `Engine::response` chỉ phát `configured` khi candidate đó
+hợp lệ theo hợp đồng. Adapter Go từ chối **cả** response khi một mảnh sai (ví dụ profile hệ điều
+hành có gateway khác subnet), và khi đó `/api/v1/network/transaction` trả 502 — nghĩa là toàn bộ
+trang chết chứ không suy giảm cục bộ.
+
+**Kiểm chứng.** ctest **860/860** (bật cả 3 option; trước: 849, +11 test netcfg mới) ·
+`go vet` sạch + `go test ./... -count=1` toàn bộ `ok` · vitest **446/446** · `npm run lint`
+0 warning · `npm run build` OK · `npx playwright test e2e/network-qa.spec.ts` **1 passed**.
+Trên bo Foxlinx: đã chạy **giao dịch thật** `stage → apply → confirm` và `stage → apply →
+rollback` trên `eth0` — apply giữ được cả địa chỉ cũ lẫn mới (`.110` + `.111 secondary`),
+rollback trả về đúng `.110`, `ip route` không đổi suốt quá trình, 5/5 service `active`,
+`/api/v1/health` 6/6 ok. Chi tiết ở
+`docs/07_records/test-evidence/fw-som/2026-08-08-foxlinx-settings-network-fix.md`.
+
+**Sửa kèm.** `FOXLINX_DEPLOY_CHECKLIST.md` ghi sai đường toolchain cross
+(`platform/cmake/aarch64-linux-gnu.cmake` → `toolchain-aarch64-linux-gnu.cmake`).
+
+### Changed — Gọn lại trang mạng theo phản hồi vận hành trên bo (2026-08-08)
+
+**Phạm vi.** `apps/web-ui/src/features/network/NetworkPage.tsx` + test, `apps/web-ui/e2e/network-qa.spec.ts`.
+
+- **Bỏ thẻ MANAGEMENT HOST và TRANSACTION.** Mã giao dịch (`net-1786…-3`) không hành động
+  được và badge trạng thái không nói thêm gì cho người vận hành; hàng thẻ còn 3 cái thật sự
+  đọc để ra quyết định. Đếm ngược 120 giây và hai nút Giữ/Hoàn tác vẫn nằm nguyên ở hộp thoại
+  tự bật. Đổi lại, **kết thúc bất thường không còn bị chôn trong một thẻ**: lý do thất bại nay
+  là banner đỏ ở đầu panel — vị trí dễ thấy hơn hẳn chỗ cũ.
+- **Bỏ lời mời mở giao diện bằng hostname mDNS.** Khi truy cập qua DDNS/WAN thì `.local` không
+  phân giải được, nên câu "Open the UI through the stable hostname: http://…local:8082" là lời
+  khuyên sai dẫn người dùng tới một URL chết. Banner CHẶN cho trường hợp phiên đi qua chính
+  địa chỉ sắp đổi vẫn giữ nguyên — đó là rủi ro thật.
+- **`Interface` đổi từ ô gõ tự do sang `<select>`**, danh sách dựng từ chính những interface
+  authority công bố. Engine từ chối mọi tên khác bằng `INTERFACE_NOT_ALLOWED`, nên ô gõ tay chỉ
+  dẫn người dùng vào một lỗi phải đi hết một vòng server mới biết; và khi thiết bị có `eth1`,
+  `eth2`… danh sách tự dài ra chứ không phải sửa giao diện.
+
+**Ghi chú chẩn đoán.** Báo cáo kèm theo "Check xong không Save được" **không phải lỗi của bản
+mới** mà là bundle cũ còn trong trình duyệt: ở bản cũ `managementPathReady` đòi origin trùng
+hostname mDNS nên nút Lưu luôn disabled khi vào qua DDNS. Đã kiểm chứng `index.html` phục vụ
+với `Cache-Control: no-cache`, tài sản băm bất biến và **không có service worker**, nên tải lại
+trang là đủ.
+
+**Kiểm chứng.** vitest **448/448** · lint 0 warning · build OK · e2e network-qa **1 passed**
+(spec cập nhật: khẳng định hai thẻ đã biến mất; tín hiệu xác nhận nay là toast + hộp thoại đóng).
+Đã deploy bundle `index-MeoicxEA.js` lên bo, sha256 trùng khớp bản build cục bộ.
+
+### Fixed — Đóng 15 finding rà soát BE + FE 2026-08-06 và dọn thư mục hồ sơ rà soát (2026-08-08)
+
+**Phạm vi.** `apps/web-api` (Go), `apps/web-ui` (React/TS), `platform/systemd`,
+`platform/packaging`, `contracts/openapi/openapi.yaml`, `docs/07_records/reviews/**`,
+`docs/03_implementation/51_BE_FE_FINDINGS_REMEDIATION_PLAN.md`, `docs/README.md`,
+`docs/00_governance/CONTROL.md`, `docs/adr/README.md`.
+
+**Vì sao có thay đổi này.** Báo cáo `REV-CODE-BE-FE-2026-08-06` liệt kê 15 finding và ghi rõ
+"chưa sửa cái nào". Đối chiếu lại từng finding với mã nguồn tại `18bd295`: **14 cái còn nguyên**,
+một cái (`REV-BE-05`) mất hiệu lực vì Scheduler v3.1 đã xoá `virtualpoint_scheduler.go` ở
+`a583263` và engine C++ thay thế cố ý không dừng khi một target ghi lỗi. Cả 15 đều nằm ngoài
+vùng phủ của bộ test đang xanh — đó mới là vấn đề gốc, nên mỗi bản vá đi kèm test **đi qua
+endpoint thật**, không dựng lại logic trong chính test.
+
+**Ba lỗi chặn phát hành.**
+
+- `REV-BE-01` — `PUT /api/v1/system/config/fieldbus` với body `{}` rơi xuống `writeConfigGroup`,
+  marshal struct zero-value đè thẳng lên `fieldbus.conf`: mất toàn bộ `buses[]`/`devices[]`/
+  `points[]`, không journal, không rollback, `revision` về 0, rồi iobus restart lên cấu hình
+  rỗng. Nay **mọi** lần ghi đi qua `webModbus.Persister`; thiếu khoá `devices`/`points`/`buses`
+  trong body không còn được hiểu là "xoá hết" — muốn xoá phải gửi mảng rỗng tường minh.
+- `REV-BE-02` — `requireWSAuth` xác thực đúng một lần lúc bắt tay, nên socket đang mở vẫn giữ
+  quyền `op:"force"` ghi xuống AO/DO/VP sau khi người dùng logout hoặc token hết hạn: cơ chế thu
+  hồi phiên bị vô hiệu đúng trên kênh duy nhất thật sự ghi xuống thiết bị. Thêm
+  `wsSessionStillValid` kiểm lại phiên trước mỗi lệnh **và** mỗi nhịp tick, đóng socket bằng
+  `StatusPolicyViolation` kèm khung 401 để FE hiện được lý do.
+- `REV-PLT-01` — `CORS_ORIGIN` không được đặt ở bất kỳ đường triển khai nào, nên nhánh allowlist
+  đóng là mã chết còn bo production chạy bằng allowlist của chế độ dev. Nay rỗng = **chỉ
+  same-origin** (fail-closed, nguyên tắc N5); nhánh loopback chỉ mở bằng `CORS_ALLOW_LOOPBACK`
+  tường minh; `mkddc-web-pi.service` và `install.sh` ghi sẵn chỗ cấu hình; log `cors_mode=` lúc
+  khởi động để rủi ro "quên đặt giá trị" thành một dòng `journalctl` thay vì nửa giờ dò tìm.
+  Giao diện trên bo không bị ảnh hưởng vì được chính `mkddc-web` phục vụ same-origin.
+
+**Hợp nhất đường giải bus** (`REV-BE-03`, `REV-BE-04`, `REV-BE-09`). Bốn call site tra telemetry
+theo mỗi `slave_id`, bỏ qua `bus_id` — hai thiết bị ở `slave_id = 1` trên hai dây khác nhau
+(cấu hình hợp lệ) đè lên nhau, KPI đếm thiết bị chết thành đang chạy và sự kiện ONLINE→OFFLINE
+mang nhầm `device_id`. Đây đúng lỗi đã sửa riêng ở `handleModbusDiagnostics` (`b39652c`) mà
+không lan sang chỗ khác. Thêm `modbus_bus_index.go` làm **đường tra cứu duy nhất** khoá
+`(bus, slave)`; cả 5 call site chuyển sang dùng nó. `busIDForPort` thôi im lặng dồn cổng lạ về
+`rs485-1` (trả `""`, validator từ chối kèm mã lỗi), và `modbusDeviceBus` thôi giữ bảng ánh xạ
+riêng — hai nửa của cùng một phép giải bus nay chỉ còn một nguồn.
+
+**Trung thực dữ liệu** (`REV-BE-07`, `REV-BE-10`, `REV-FE-01`, `REV-FE-04`).
+
+- `CoreClient.ReadPoints` nuốt mọi lỗi đọc SHM và trả `[]PointDTO{}, nil`, làm "core chết"
+  trông giống hệt "thiết bị không có point nào": `GET /api/v1/points` đáp 200 với `[]` và giao
+  diện hiện bảng rỗng kèm huy hiệu kết nối màu khoẻ. Nay trả lỗi thật và endpoint đáp **503**.
+- `/modbus/buses` gán `TotalErrors` của cả dây vào `timeout_errors`, xoá trắng `crc_errors`, rồi
+  cộng thêm số đo từng slave lên trên — một dây có nhiều nhất 100 lỗi báo ra 170. Timeout/CRC nay
+  chỉ gộp từ số đo theo slave; tổng của dây đi riêng ở trường mới `total_errors`.
+- FE: `open` và `closed` cùng map sang `true`, nên tiếp điểm **đang mở** hiện thành ON/đã cấp
+  điện — trái với chính `DoSafeState = 'open' | 'closed'` của dự án. `open` chuyển sang danh sách
+  falsy.
+- FE: `pointValue` trả literal `0` khi point không mang giá trị nào, nên point Modbus chưa từng
+  được poll hiện "0 °C / 0 %" như số đo thật và `appendLiveTrendSample` ghi số 0 đó vào đuôi
+  biểu đồ live. Nay trả `undefined`; `Point['value']` mở rộng kiểu; `pointNumber` trả `null`;
+  `formatValue` hiện `—`; ba biểu đồ live (Inputs/Outputs/VirtualIo) và sparkline Monitor bỏ qua
+  mẫu chưa đo. Số `0` **đo được** vẫn giữ nguyên là `0`.
+
+**Bốn finding còn lại.** `handleModbusWriteTest` nay gọi `commissionLimit.allow("write:"+user, 2,
+time.Minute)` đúng như `OD-MBRTU-007` mô tả — trước đó bộ giới hạn được viết ra nhưng chưa có call
+site nào cho nhánh ghi (`REV-BE-06`). `overlayPointMetadata` chỉ **điền** `Source` khi còn trống,
+không ghi đè `core`/`core_unavailable`/`rejected:…` do core cấp, giữ lại hợp đồng mà `ws.go` đang
+dựa vào (`REV-BE-08`). `OutputsPage` bỏ `selectedId` khỏi deps của effect nạp, nên đổi kênh không
+còn nạp lại và không còn âm thầm vứt bỏ chỉnh sửa chưa lưu (`REV-FE-02`). Nhánh `AUTH_MODE=apikey`
+bị **gỡ bỏ**: nó gửi header `X-API-Key` mà toàn bộ `apps/web-api` không có tham chiếu nào, nên mọi
+request trả 401 và người dùng bị đá về trang đăng nhập không kèm giải thích (`REV-FE-03`).
+
+**Dọn thư mục `docs/07_records/reviews/`.** Thư mục có 34 tài liệu và **không có chỉ mục nào** —
+đó là lý do finding đã đóng nằm lẫn với finding còn mở suốt nhiều tuần.
+
+- Thêm `README.md`: trạng thái từng record đã đối chiếu mã nguồn, bảng ánh xạ đường dẫn
+  trước/sau `PLAN-ARCH-RESTRUCT-002`, và quy tắc thêm hồ sơ mới.
+- Tách **12 hồ sơ lịch sử** sang `archive/` kèm `README.md` nêu lý do lưu trữ và tài liệu thay
+  thế của từng cái: cụm Program Runtime/IEC 61131-3 (7 file, đều có trước ADR-023 và đã bị
+  Document Control tuyên bố không phải authority), rà soát 2026-07-30 (23/23 finding đã xử lý,
+  mọi path trỏ vào cây source đã xoá), audit UI/UX 2026-07-30, báo cáo trang `settings/network`
+  2026-07-31, và báo cáo deploy HMI 2026-07-22. Không xoá file nào; mỗi file được gắn banner
+  "HỒ SƠ LỊCH SỬ" và đường phục hồi ghi trong `archive/README.md`.
+- Sửa **link hỏng**: `07_records/reviews/**` nay còn **0 link hỏng**. Gồm link `file:///home/chuong/…`
+  tuyệt đối theo máy người lập trong tờ trình Modbus RTU, sai độ sâu trong review Scheduler P1,
+  schema `netcfg` đã chuyển sang `contracts/config/`, và các link trỏ file source đã bị xoá
+  (`ModbusRtuPage.tsx`, `virtualpoint_scheduler.go`, cụm `src/frontend/`) — gỡ thành mã inline,
+  giữ nguyên đường dẫn làm chứng cứ. Ngoài phạm vi: `docs/adr/README.md` (ADR-015/016 chỉ tồn
+  tại trong Decision Log, bổ sung ADR-022/023 vào index), `DEVELOPMENT_AND_OPERATIONS.md`,
+  `KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md`.
+- Gắn banner cho `KX-DDC24-QA-REGISTER-001_VI.md`: register này còn **23 liên kết chết** tới tài
+  liệu không tồn tại trong corpus hiện tại; register điều hành là Document Hub + Document Control.
+
+**Cập nhật hồ sơ.** `CODE_REVIEW_BE_FE_2026-08-06.md` bản 2.0 có §0 ghi trạng thái đóng của từng
+finding và lý do chọn phương án cho QĐ-1/QĐ-2/QĐ-3 của Plan 51. Plan 51 lên 1.1: 26/35 task, ghi
+rõ **sai lệch với nguyên tắc N1** (không có bằng chứng test đỏ trước bản vá) và bốn mục còn nợ.
+`openapi.yaml` thêm `total_errors` cho `ModbusBus`.
+
+**Còn nợ (chưa làm, không bị chặn bởi thay đổi này).** Kiểm chứng trên bo Foxlinx cho cổng ra
+P1/P2/P3 của Plan 51; FIX-206 (kiểm tra tĩnh chặn call site tra telemetry mới); FIX-406 phần
+`DATA_MODEL`/`CONFIG_SCHEMA`; toàn bộ P5. QĐ-1 và QĐ-3 đã cài theo phương án khuyến nghị nhưng
+**chưa có xác nhận thành văn của CTO/PO**.
+
+**Kiểm chứng** (chạy lại 2026-08-08, không dẫn số cũ):
+
+| Gate | Kết quả |
+|---|---|
+| `cmake --build build/fw --parallel` (MODBUS+BACNET+HMI ON) | thành công |
+| `ctest --test-dir build/fw --output-on-failure` | **849/849 PASS**, 14,60 s |
+| `go vet ./...` | sạch |
+| `go test ./... -count=1` | **11/11 package `ok`** |
+| `npx vitest --run --environment jsdom src` | **446/446 PASS**, 51 file |
+| `npm run lint` | 0 warning |
+| `npm run build` | thành công |
+| Kiểm link toàn bộ `docs/` | 0 link hỏng ngoài `KX-DDC24-QA-REGISTER-001_VI.md` (đã gắn banner) |
+
+**Ghi chú build.** `cmake --fresh` một mình **không đủ** khi thư mục `build/fw` cũ có cache ABI
+compiler hỏng — configure vẫn báo `CMAKE_CXX_COMPILER not set, after EnableLanguage`. Phải
+`rm -rf build/fw` rồi configure lại.
+
+### Added — Hồ sơ đầu vào cho đội thiết kế lại UX (2026-08-08)
+
+**Phạm vi.** `docs/04_uiux/UX_REDESIGN_INPUT_BRIEF_2026-08-08.md` (mới, mã `UX-INPUT-001`).
+
+Đội UX yêu cầu 8 nhóm thông tin để thiết kế lại kiến trúc UX. Tài liệu trả lời cả 8 nhóm bằng
+số liệu **đọc trực tiếp từ source tại `18bd295`**, không trích lại tài liệu cũ — vì nhiều tài
+liệu trong `docs/01_specs/` đã stale so với as-built.
+
+**Ba điểm nắn lại giả định sai trong yêu cầu gốc:**
+
+- **Role.** Yêu cầu giả định 4 role (Operator/Technician/Engineer/Admin). Backend chỉ có **3**:
+  `viewer` < `operator` < `admin` (`auth.go` `roleRank`, mirror `features/auth/roles.ts`). Tài
+  liệu đưa bảng ánh xạ 4→3 để dùng được ngay, và ghi rõ nếu cần 4 role tách bạch thì đó là thay
+  đổi hợp đồng backend chứ không phải thay đổi giao diện.
+- **I/O.** Yêu cầu hỏi "số AI/AO/DI/DO/UI/UO". As-built là **16 UI + 4 AO + 4 DO**, và **0 DI**
+  trên base SKU: `KX_N_DI = 8` trong `contracts/shm/mkddc_shm.h` là slot dành sẵn, ADR-010 nói rõ
+  Rev A không lắp DI công nghiệp riêng. Không có UO.
+- **Alarm.** Yêu cầu hỏi "3 cấp hay 4 cấp Priority". Thực tế là **5 cấp severity**
+  (`critical|high|medium|low|info`) và **5 giá trị priority** khi cấu hình, trong đó `flexible`
+  suy severity từ `severityRules` theo độ lớn vi phạm.
+
+**Phát hiện đáng kể — `openapi.yaml` không phải as-built.** Kiểm bằng grep toàn bộ
+`apps/web-api/internal/` (loại file test): 7 endpoint có trong spec nhưng **chưa cài trong code
+Go** — `/ota/upload`, `/ota/apply`, `/ota/status`, `/logs/download`, `/bacnet/objects`,
+`/graph/validate`, `/graph/deploy`. Hệ quả nếu không nói ra: đội UX thiết kế màn hình OTA và
+màn tải log cho tính năng không tồn tại. Tài liệu vì vậy liệt kê đầy đủ **99 route thật** trích
+từ `http.go` làm nguồn chân lý, và ghi thẳng rằng **không có** endpoint restart service hay
+reboot thiết bị.
+
+**Các ràng buộc thiết kế được ghi lại kèm lý do lịch sử**, để bản thiết kế mới không lặp lại
+finding cũ: luật D-07 cấm FE suy diễn dữ liệu (finding `FE-DIAG-01` — `ControllerDiagram` bịa
+dữ liệu simulator ở chế độ live); cấm hằng số viết cứng thay số đo (MBR-B305 — Overview từng
+hiển thị p50/p95 từ hằng số trong handler Go); Contract Freeze 2026-06-11 cấm REST expose BACnet
+priority 1..16 nên UI **không** được có priority selector 16 mức; và `index.html` phải `no-cache`
+(sự cố bo Foxlinx 2026-08-06 — người dùng không thấy tính năng mới vì trình duyệt giữ bản cũ).
+
+Tài liệu đóng lại bằng 3 câu hỏi cần PM chốt trước khi vẽ: số role, cách thể hiện 5 alarm type
+đang `deferred` (backend từ chối lưu nếu bật), và phạm vi của `/eng/programming` (ST/FBD đang ở
+C0, trang đang bị cờ `LEGACY_GRAPH_DEMO_ENABLED` tắt).
+
+**Kiểm chứng.** Chỉ thêm tài liệu, không đổi code — không chạy bộ test. Mọi số liệu trích dẫn kèm
+đường dẫn tệp và số dòng để kiểm ngược.
+
 ### Fixed — Di trú lịch v1→v3.1 không chạy, và hợp đồng đóng băng từ chối dữ liệu hợp lệ (2026-08-07)
 
 **Phạm vi.** `apps/web-api/internal/app/main.go` · `contracts/config/schedule_v3_1.schema.json` ·

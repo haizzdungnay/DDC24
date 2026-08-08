@@ -89,6 +89,18 @@ function pointId(raw: Record<string, unknown>, kind: Point['kind'], channel?: nu
   return id || 'UNKNOWN'
 }
 
+/** Chuỗi trạng thái nhị phân đến từ core hoặc từ một point Modbus.
+ *
+ * `open` và `closed` là hai giá trị ĐỐI LẬP — chính kiểu dữ liệu của dự án nói
+ * vậy (`DoSafeState = 'open' | 'closed'`). Bản trước xếp cả hai vào danh sách
+ * truthy, nên một tiếp điểm DO/DI trả `{"value":"open"}` hiện lên giao diện
+ * thành **ON / đã cấp điện** đúng bằng lúc nó trả `closed` (REV-FE-01).
+ *
+ * Quy ước theo tiếp điểm rơ-le: `closed` = mạch kín = ON, `open` = hở = OFF.
+ */
+const TRUTHY_STATES = ['true', 'on', 'closed', 'active', 'energized']
+const FALSY_STATES = ['false', 'off', 'open', 'inactive', 'deenergized']
+
 function pointValue(raw: Record<string, unknown>): Point['value'] {
   const value = raw.value ?? raw.present_value ?? raw.presentValue ?? raw.pv ?? raw.raw ?? raw.state
   if (typeof value === 'number' || typeof value === 'boolean') return value
@@ -97,11 +109,18 @@ function pointValue(raw: Record<string, unknown>): Point['value'] {
     const numeric = numberFrom(trimmed)
     if (numeric !== undefined) return numeric
     const lowered = trimmed.toLowerCase()
-    if (['true', 'on', 'open', 'closed', 'active'].includes(lowered)) return true
-    if (['false', 'off', 'inactive'].includes(lowered)) return false
+    if (TRUTHY_STATES.includes(lowered)) return true
+    if (FALSY_STATES.includes(lowered)) return false
     return trimmed
   }
-  return 0
+  // Không có giá trị nào ⇒ `undefined`, KHÔNG phải `0`.
+  //
+  // Một point Modbus RTU chưa từng được poll, hay một point core có `value`
+  // vắng/`null`, từng đi qua đây và ra số `0` — rồi bảng Monitor/Trends hiện
+  // "0 °C / 0 %" như một số đo thật và biểu đồ live ghi số 0 đó vào đuôi đồ
+  // thị. Đây đúng lớp lỗi bịa dữ liệu mà phía BE đã ghi thành nguyên tắc D-07
+  // và xử lý bằng cách trả `null` cho telemetry chưa đo được (REV-FE-04).
+  return undefined
 }
 
 function pointQuality(raw: Record<string, unknown>): Point['quality'] {

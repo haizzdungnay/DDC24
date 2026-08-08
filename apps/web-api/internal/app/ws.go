@@ -79,7 +79,7 @@ func (a *App) requireWSAuth(next http.HandlerFunc) http.Handler {
 
 func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: wsOriginPatterns(a.cfg.CORSOrigin),
+		OriginPatterns: wsOriginPatterns(a.cfg.CORSOrigin, a.cfg.CORSAllowLoopback),
 		// Chỉ offer đúng subprotocol cố định: client gửi
 		// ["mkddc.v1", "mkddc.token.<jwt>"] và server chọn "mkddc.v1", nên phần tử
 		// mang token không bị echo lại vào response header (F-10).
@@ -125,6 +125,10 @@ func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 			if len(raw) == 0 {
 				continue
 			}
+			if !a.wsSessionStillValid(ctx, conn, r) {
+				cancel()
+				return
+			}
 			resetFingerprint, err := a.handleMonitorWSMessage(ctx, conn, raw, canForce, forcer, &subscription, &subscribed, expirations)
 			if err != nil {
 				cancel()
@@ -135,6 +139,12 @@ func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 				lastReadErr = ""
 			}
 		case now := <-ticker.C:
+			// Kiểm lại phiên mỗi nhịp, không chỉ lúc có lệnh: một socket đang
+			// mở im lặng vẫn phải rụng khi người dùng logout hoặc token hết hạn.
+			if !a.wsSessionStillValid(ctx, conn, r) {
+				cancel()
+				return
+			}
 			if err := a.flushExpiredForces(ctx, conn, forcer, canForce, expirations, now); err != nil {
 				cancel()
 				return
@@ -162,6 +172,34 @@ func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// wsSessionStillValid kiểm lại phiên của socket đang mở.
+//
+// `requireWSAuth` chỉ xác thực ĐÚNG MỘT LẦN lúc bắt tay rồi nhét principal vào
+// context; socket sau đó sống bao lâu tuỳ ý. Hệ quả: operator bấm Logout thì
+// `AuthService.Revoke` xoá phiên và mọi request REST bị chặn, nhưng socket đang
+// mở không hề bị đóng — nó vẫn giữ quyền `op:"force"` để ghi xuống AO/DO/VP.
+// Cơ chế thu hồi phiên bị vô hiệu đúng trên kênh DUY NHẤT thật sự ghi xuống
+// thiết bị, và cùng lỗ hổng đó cho phép giữ socket sống quá hạn TTL (REV-BE-02).
+//
+// Trả `false` nghĩa là phiên đã hết hiệu lực: caller phải đóng socket, không
+// được chỉ bỏ qua một lệnh.
+func (a *App) wsSessionStillValid(ctx context.Context, conn *websocket.Conn, r *http.Request) bool {
+	principal := principalFromContext(ctx)
+	if principal == nil {
+		return false
+	}
+	if _, err := a.auth.Validate(principal.Token); err != nil {
+		if a.logger != nil {
+			a.logger.Printf("INFO ws_session_revoked user=%s remote=%s — đóng socket",
+				sanitizeAudit(principal.Username, 64), r.RemoteAddr)
+		}
+		_ = writeWSError(ctx, conn, http.StatusUnauthorized, "phiên đã hết hiệu lực")
+		conn.Close(websocket.StatusPolicyViolation, "session revoked")
+		return false
+	}
+	return true
+}
+
 // wsOriginPatterns dựng danh sách Origin cho phép của WebSocket.
 //
 // F-11: trước đây hàm này LUÔN nối 6 pattern localhost, kể cả khi CORS_ORIGIN đã
@@ -170,9 +208,12 @@ func (a *App) handleMonitorWS(w http.ResponseWriter, r *http.Request) {
 // check Origin của WS — phá vỡ đúng ý định "chỉ cho phép origin đã khai báo" mà
 // isAllowedOrigin (http.go) đang thực thi cho đường HTTP.
 //
-// Giữ khớp semantics với isAllowedOrigin: CORS_ORIGIN rỗng = chế độ dev, cho phép
-// loopback; CORS_ORIGIN đã đặt = allowlist đóng, KHÔNG nối thêm gì.
-func wsOriginPatterns(allowedOrigin string) []string {
+// REV-PLT-01: nhánh loopback nay phải BẬT TƯỜNG MINH bằng `CORS_ALLOW_LOOPBACK`.
+// `CORS_ORIGIN` rỗng từng nghĩa là "chế độ dev, cho phép mọi cổng loopback", mà
+// không chỗ nào trong `mkddc-web-pi.service` hay `/etc/mkddc-web.env` đặt biến
+// đó — nên nhánh allowlist đóng là mã chết trên bo, còn bo production thì chạy
+// bằng đúng allowlist của chế độ dev. Giá trị rỗng nay = chỉ same-origin (N5).
+func wsOriginPatterns(allowedOrigin string, allowLoopback bool) []string {
 	patterns := make([]string, 0, 6)
 	for _, item := range strings.Split(allowedOrigin, ",") {
 		item = strings.TrimSpace(item)
@@ -186,9 +227,12 @@ func wsOriginPatterns(allowedOrigin string) []string {
 		}
 		patterns = append(patterns, parsed.Host)
 	}
-	if len(patterns) == 0 {
+	if len(patterns) == 0 && allowLoopback {
 		return []string{"localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*", "[::1]", "[::1]:*"}
 	}
+	// Danh sách rỗng KHÔNG mở cửa: `websocket.Accept` vẫn luôn nhận kết nối
+	// same-origin (Origin.Host == r.Host), tức giao diện do chính mkddc-web phục
+	// vụ chạy bình thường, còn mọi origin khác bị từ chối.
 	return patterns
 }
 

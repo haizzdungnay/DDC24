@@ -2413,8 +2413,23 @@ components:
         poll_latency_p95_ms: { type: integer, nullable: true }
         bus_utilization_percent: { type: number, nullable: true }
         estimated_load_percent: { type: number, description: "Ước lượng từ cấu hình (MBR-B207), khác số đo thật ở trên." }
-        timeout_errors: { type: integer, format: int64 }
-        crc_errors: { type: integer, format: int64 }
+        timeout_errors:
+          type: integer
+          format: int64
+          description: >
+            Tổng timeout gộp từ số đo THEO SLAVE của dây này. Trước đây trường
+            này bị gán `TotalErrors` của cả dây rồi cộng thêm timeout từng slave
+            lên trên, nên một dây có nhiều nhất 100 lỗi báo ra 170 (REV-BE-10).
+        crc_errors:
+          type: integer
+          format: int64
+          description: Tổng lỗi CRC gộp từ số đo theo slave.
+        total_errors:
+          type: integer
+          format: int64
+          description: >
+            Tổng lỗi của cả dây do BusWorker đếm, gồm cả lỗi mức cổng chưa quy
+            được về slave nào. KHÔNG cộng con số này với `timeout_errors`/`crc_errors`.
         port_reopens: { type: integer, format: int64 }
     ModbusOverview:
       type: object

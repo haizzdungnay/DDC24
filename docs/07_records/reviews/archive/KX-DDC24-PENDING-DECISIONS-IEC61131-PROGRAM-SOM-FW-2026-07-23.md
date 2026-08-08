@@ -1,5 +1,10 @@
 # Quyết định — IEC 61131-3 Program/SOM FW
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 **Document ID:** KX-DDC24-DECISION-REQUEST-IEC61131-PROGRAM-SOM-FW-001
 **Trạng thái:** **Decided/Closed** — CTO/Project Engineering Owner đã trả lời toàn bộ Q0–Q9
 ngày 2026-07-23. Downstream doc update đang thực hiện (xem §"Theo dõi thực thi" cuối file).
@@ -7,9 +12,9 @@ ngày 2026-07-23. Downstream doc update đang thực hiện (xem §"Theo dõi th
 **Ngày quyết định:** 2026-07-23
 **Ngày tạo:** 2026-07-23
 **Nguồn câu hỏi:** [`KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md`](KX-DDC24-PROGRAM-SOM-FW-DESIGN-DOC-REVIEW-2026-07-23.md)
-(mục 3, 5) và [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md)
+(mục 3, 5) và [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md)
 mục 15 (RD-IEC-001..007) + mục 12.1 (sizing).
-**Quyết định đóng gói thành ADR:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
+**Quyết định đóng gói thành ADR:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md)
 
 ---
 

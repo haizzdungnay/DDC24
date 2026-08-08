@@ -64,7 +64,20 @@ beforeEach(() => {
     return networkMocks.transaction
   })
 })
-afterEach(cleanup)
+const realLocation = window.location
+
+/** jsdom luôn phục vụ từ `localhost`; vài test cần origin là chính địa chỉ thiết bị. */
+function withOriginHostname(hostname: string) {
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: { ...realLocation, hostname, host: hostname, protocol: 'http:', port: '', pathname: '/settings/network' }
+  })
+}
+
+afterEach(() => {
+  cleanup()
+  Object.defineProperty(window, 'location', { configurable: true, value: realLocation })
+})
 
 function idleTransaction(): NetcfgResponse {
   return {
@@ -80,6 +93,16 @@ function idleTransaction(): NetcfgResponse {
 }
 
 describe('NetworkPage authority flow', () => {
+  function renderPage() {
+    render(
+      <I18nProvider>
+        <ToastProvider>
+          <NetworkPage />
+        </ToastProvider>
+      </I18nProvider>
+    )
+  }
+
   it('exposes only two buttons and runs stage plus apply in one click', async () => {
     const user = userEvent.setup()
     render(
@@ -187,12 +210,58 @@ describe('NetworkPage authority flow', () => {
     }))
   })
 
-  it('blocks Apply until the page is opened through the advertised stable hostname', async () => {
+  /* Cổng cũ đòi origin PHẢI trùng hostname mDNS nên khoá Apply vĩnh viễn với mọi
+     lối vào từ xa (IP LAN, DDNS, reverse proxy) — thiết bị không cấu hình được
+     từ xa dù thao tác hoàn toàn an toàn. Nay không khoá, và cũng không mời người
+     dùng mở một URL `.local` mà đường truy cập của họ không phân giải được. */
+  it('neither locks Save nor advertises an mDNS URL when opened outside the stable hostname', async () => {
     networkMocks.transaction = {
       ...idleTransaction(),
-      state: 'staged',
-      transactionId: 'tx-host-guard',
-      pending: { interface: 'eth0', mode: 'static', ipv4: '10.1.2.3', netmask: '255.255.255.0', gateway: '10.1.2.1' },
+      capabilities: ['dns', 'management-hostname'],
+      management: { hostname: 'mkddc-qa', mdnsName: 'mkddc-qa.local', stable: true }
+    }
+    renderPage()
+
+    expect(await screen.findByLabelText('IPv4')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+    expect(screen.queryByRole('link', { name: /mkddc-qa\.local/ })).not.toBeInTheDocument()
+  })
+
+  /* Hai thẻ này là chi tiết chẩn đoán, không phải thứ người vận hành cần đọc mỗi
+     lần mở trang: mã giao dịch không hành động được, còn hostname quản trị chỉ
+     gây nhiễu khi truy cập không đi qua mDNS. */
+  it('drops the MANAGEMENT HOST and TRANSACTION cards from the authority row', async () => {
+    renderPage()
+
+    expect(await screen.findByText('ACTIVE / KERNEL')).toBeInTheDocument()
+    expect(screen.getByText('CONFIGURED PROFILE')).toBeInTheDocument()
+    expect(screen.getByText('PENDING CANDIDATE')).toBeInTheDocument()
+    expect(screen.queryByText('MANAGEMENT HOST')).not.toBeInTheDocument()
+    expect(screen.queryByText('TRANSACTION')).not.toBeInTheDocument()
+  })
+
+  /* Authority từ chối mọi candidate mang tên interface khác cái nó được cấu hình
+     (INTERFACE_NOT_ALLOWED), nên ô gõ tự do chỉ dẫn người dùng vào một lỗi phải
+     đi hết một vòng server mới biết. */
+  it('offers the interface as a list built from what the authority publishes', async () => {
+    networkMocks.transaction = {
+      ...idleTransaction(),
+      active: { interface: 'eth0', link: 'up', adminUp: true, carrier: true, reasonCode: 'OK', mode: 'static', ipv4: '10.1.2.3', prefixLength: 24, gateway: '10.1.2.1', dnsServers: [] },
+      configured: { interface: 'eth1', mode: 'static', ipv4: '10.1.2.3', netmask: '255.255.255.0', gateway: '10.1.2.1' }
+    }
+    renderPage()
+
+    const select = await screen.findByLabelText('Interface')
+    expect(select.tagName).toBe('SELECT')
+    expect(Array.from(select.querySelectorAll('option')).map((option) => option.textContent)).toEqual(['eth0', 'eth1'])
+  })
+
+  /* Trường hợp DUY NHẤT còn chặn: chứng minh được phiên đang đi qua chính địa chỉ
+     sắp bị đổi, tức lưu là tự cắt đường quản trị của mình. */
+  it('blocks Save when the session runs through the very address being changed', async () => {
+    withOriginHostname('10.1.2.3')
+    networkMocks.transaction = {
+      ...idleTransaction(),
       capabilities: ['dns', 'management-hostname'],
       management: { hostname: 'mkddc-qa', mdnsName: 'mkddc-qa.local', stable: true }
     }
@@ -204,19 +273,33 @@ describe('NetworkPage authority flow', () => {
       </I18nProvider>
     )
 
-    expect(await screen.findByText('MANAGEMENT HOST')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /mkddc-qa\.local/ })).toHaveAttribute('href', expect.stringContaining('mkddc-qa.local'))
+    const ipv4 = await screen.findByLabelText('IPv4')
+    await userEvent.setup().clear(ipv4)
+    await userEvent.setup().type(ipv4, '10.1.2.9')
+
+    expect(await screen.findByText(/open through the very address being changed \(10\.1\.2\.3\)/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 
-  it('fails closed when the authority does not advertise management-hostname', async () => {
+  it('keeps Save usable when the authority advertises no management hostname at all', async () => {
     networkMocks.transaction = {
       ...idleTransaction(),
-      state: 'staged',
-      transactionId: 'tx-old-helper',
-      pending: { interface: 'eth0', mode: 'static', ipv4: '10.1.2.3', netmask: '255.255.255.0', gateway: '10.1.2.1' },
       capabilities: ['dns'],
       management: undefined
+    }
+    renderPage()
+
+    expect(await screen.findByLabelText('IPv4')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+  })
+
+  /* Nguyên nhân gốc của sự cố trên bo Foxlinx 2026-08-08: netcfg trỏ vào `end1`
+     trong khi bo đặt tên Ethernet là `eth0`. Thông điệp "hãy cắm cáp" khiến kỹ
+     thuật viên đi tìm sai chỗ. */
+  it('names the missing interface instead of blaming the Ethernet cable', async () => {
+    networkMocks.transaction = {
+      ...idleTransaction(),
+      active: { interface: 'end1', link: 'unknown', adminUp: false, carrier: false, reasonCode: 'INTERFACE_NOT_FOUND', mode: 'unknown', ipv4: '', prefixLength: 0, gateway: '', dnsServers: [] }
     }
     render(
       <I18nProvider>
@@ -226,9 +309,32 @@ describe('NetworkPage authority flow', () => {
       </I18nProvider>
     )
 
-    expect(await screen.findByText('MANAGEMENT HOST')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
-    expect(screen.getByText('Stable mDNS hostname is not ready; Apply is locked to preserve the management path.')).toBeInTheDocument()
+    expect(await screen.findByText(/The device has no interface "end1"/)).toBeInTheDocument()
+    expect(screen.queryByText('Ethernet link is not ready; connect the Ethernet cable before Apply.')).not.toBeInTheDocument()
+  })
+
+  /* Không có lối này thì một bo mà authority chưa đọc được profile sẽ không bao
+     giờ cấu hình được qua Web — trang mạng read-only vĩnh viễn. */
+  it('lets an admin author a candidate when the authority has no configured profile', async () => {
+    const user = userEvent.setup()
+    networkMocks.transaction = {
+      ...idleTransaction(),
+      active: { interface: 'eth0', link: 'up', adminUp: true, carrier: true, reasonCode: 'NO_ACTIVE_ADDRESS', mode: 'unknown', ipv4: '', prefixLength: 0, gateway: '', dnsServers: [] }
+    }
+    render(
+      <I18nProvider>
+        <ToastProvider>
+          <NetworkPage />
+        </ToastProvider>
+      </I18nProvider>
+    )
+
+    expect(await screen.findByText('No editable network candidate')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Author a network candidate' }))
+
+    expect(await screen.findByLabelText('Mode')).toHaveValue('static')
+    expect(screen.getByLabelText('Interface')).toHaveValue('eth0')
+    expect(screen.getByLabelText('IPv4')).toHaveValue('')
   })
 
   it('locks mutation after a lost Apply response until a fresh status reconciles it', async () => {
@@ -642,7 +748,10 @@ describe('NetworkPage candidate validation and failure reporting', () => {
     renderPage()
 
     expect(await screen.findByText('health check failed after apply')).toBeInTheDocument()
-    expect(screen.getByText(/stage a new transaction/i)).toBeInTheDocument()
+    // Lý do nay là BANNER, không nằm trong thẻ GIAO DỊCH đã bỏ — và hướng dẫn nói
+    // bằng ngôn ngữ người vận hành ("lưu lại") thay vì tên lệnh giao thức "Stage".
+    expect(screen.getByText(/save again/i)).toBeInTheDocument()
+    expect(screen.queryByText('TRANSACTION')).not.toBeInTheDocument()
   })
 
   // F-12: countdown phải là MM:SS, không phải số giây thô.

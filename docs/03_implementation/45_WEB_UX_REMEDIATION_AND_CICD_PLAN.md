@@ -3,7 +3,7 @@
 > **Trạng thái:** **Approved và đã thực thi Track A** — chủ dự án phê duyệt ngày 2026-08-01 kèm ba quyết định ở §6.
 > **Phiên bản:** 1.1 | **Ngày:** 2026-08-01
 > **Owner:** Dev Web (FE) + Dev SOM/Ops
-> **Nguồn quyết định:** [Audit UI/UX 2026-07-30](../07_records/reviews/KX-DDC24-UIUX-PRODUCT-AUDIT-2026-07-30.md) · [ADR-022](../adr/ADR-022-ci-cd-tu-dong-deploy-xuong-board.md) · [REVA_SCOPE_ROADMAP](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md)
+> **Nguồn quyết định:** [Audit UI/UX 2026-07-30](../07_records/reviews/archive/KX-DDC24-UIUX-PRODUCT-AUDIT-2026-07-30.md) · [ADR-022](../adr/ADR-022-ci-cd-tu-dong-deploy-xuong-board.md) · [REVA_SCOPE_ROADMAP](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md)
 > **Phạm vi task:** `WEB-UX-001…012` (**xong**), `QA-E2E-001` (**xong**), `OPS-CD-001…005` (**hoãn** — xem §6.4)
 > **Ngoài phạm vi:** FW MCU (STM32G0B1RB) — chủ dự án đã quyết hoãn ngày 2026-08-01. Xem §7.
 
@@ -58,7 +58,7 @@ Audit UI/UX lập ngày 30/07. Sau đó PR #77 đã merge và sửa một phần
 |---|---|
 | QW-4 validate IP tại client | [NetworkPage.tsx:390-392](../../apps/web-ui/src/features/network/NetworkPage.tsx#L390-L392) có `error`, `inputMode="decimal"`; `Field` tại [:806-820](../../apps/web-ui/src/features/network/NetworkPage.tsx#L806-L820) có `aria-invalid` |
 | 2/3 nút chết trang đăng nhập | `Quên mật khẩu?` và `Ghi nhớ đăng nhập` đã bị gỡ; chỉ còn `SSO / AD` |
-| Toàn bộ finding F-01…F-23 của [review code 30/07](../07_records/reviews/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md) | Đã kiểm từng cái trong code: guard last-admin, seqlock reader BE, prune map `revoked`, Modbus F-08/F-16/F-17/F-18 fail-closed, UART `POLLHUP` F-05, secret JWT không qua `/tmp` F-19, và 3 cổng CI rỗng F-12/F-13/F-14 đều đã có |
+| Toàn bộ finding F-01…F-23 của [review code 30/07](../07_records/reviews/archive/KX-DDC24-CODE-REVIEW-FE-BE-FWSOM-2026-07-30.md) | Đã kiểm từng cái trong code: guard last-admin, seqlock reader BE, prune map `revoked`, Modbus F-08/F-16/F-17/F-18 fail-closed, UART `POLLHUP` F-05, secret JWT không qua `/tmp` F-19, và 3 cổng CI rỗng F-12/F-13/F-14 đều đã có |
 
 ### 2.2. Còn nguyên — đây là phạm vi thật của plan
 

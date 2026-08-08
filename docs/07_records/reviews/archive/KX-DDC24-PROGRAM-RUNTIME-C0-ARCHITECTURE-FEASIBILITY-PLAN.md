@@ -1,12 +1,17 @@
 # C0 — Program Runtime Architecture and Feasibility Baseline
 
+> **HỒ SƠ LỊCH SỬ — lưu trữ 2026-08-08.** Không dùng làm nguồn chuẩn. Lý do lưu
+> trữ và tài liệu thay thế: [`archive/README.md`](README.md). Mọi đường dẫn source
+> trong tài liệu này theo cây thư mục **trước** `PLAN-ARCH-RESTRUCT-002`; bảng ánh
+> xạ sang vị trí hiện tại ở [chỉ mục hồ sơ rà soát](../README.md).
+
 **Document ID:** KX-DDC24-PROGRAM-RUNTIME-C0-PLAN-001
 **Trạng thái:** Active — FW SOM ST host foundation delivered (PR #54, #55, #57, 2026-07-24); C1 go/no-go vẫn chờ toàn bộ C0.1–C0.14 Done và C0.15 full Go
 **Ngày tạo:** 2026-07-23
 **Chủ quản:** Project Engineering (Phạm Đình Chương — Project Engineering Owner / CTO)
-**Nguồn quyết định:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md),
+**Nguồn quyết định:** [`ADR-020-mekong-owned-iec-aligned-program-runtime.md`](../../../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md),
 [`KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md`](KX-DDC24-PENDING-DECISIONS-IEC61131-PROGRAM-SOM-FW-2026-07-23.md) (Q8)
-**Tài liệu song song:** [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md) §12,
+**Tài liệu song song:** [`PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md`](../../../02_design/PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md) §12,
 [`KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md`](KX-DDC24-PROGRAM-RUNTIME-IMPLEMENTATION-PLAN-C1-C10.md)
 
 ## 1. Ranh giới C0 (bắt buộc đọc trước khi làm bất kỳ workstream nào)
@@ -99,7 +104,7 @@ Trạng thái.
   được liệt kê làm test fixture cho C4.
 - **Effort:** M
 - **Risk:** trung bình — dễ overscope nếu không giới hạn rõ subset.
-- **Trạng thái:** **Done 2026-07-28** — [`ST_SUBSET_SPEC_MK-DDC-24_VI.md`](../../02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md) Rev 1.0 (EBNF đầy đủ, bảng đối chiếu parser, 8 khác biệt cố ý so với IEC, danh mục diagnostic)
+- **Trạng thái:** **Done 2026-07-28** — [`ST_SUBSET_SPEC_MK-DDC-24_VI.md`](../../../02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md) Rev 1.0 (EBNF đầy đủ, bảng đối chiếu parser, 8 khác biệt cố ý so với IEC, danh mục diagnostic)
 
 ### C0.5 — FBD graph semantic
 
@@ -130,7 +135,7 @@ Trạng thái.
 - **Effort:** L
 - **Risk:** cao — đây là hợp đồng trung tâm giữa compiler và runtime; đổi sau C1 sẽ tốn
   kém.
-- **Trạng thái:** **Done 2026-07-28** — [`TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md`](../../02_design/software/TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md) Rev 1.0 (định dạng file, 33 opcode, quy trình load 22 bước, 15 mã lỗi, SHA-256 + Ed25519)
+- **Trạng thái:** **Done 2026-07-28** — [`TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md`](../../../02_design/software/TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md) Rev 1.0 (định dạng file, 33 opcode, quy trình load 22 bước, 15 mã lỗi, SHA-256 + Ed25519)
 
 ### C0.7 — Deterministic scheduler model
 
@@ -143,7 +148,7 @@ Trạng thái.
   thật ở C9/HIL).
 - **Effort:** M
 - **Risk:** trung bình.
-- **Trạng thái:** **Done 2026-07-28** — [`PROGRAM_TASK_SCHEDULER_SPEC_MK-DDC-24_VI.md`](../../02_design/software/PROGRAM_TASK_SCHEDULER_SPEC_MK-DDC-24_VI.md) Rev 1.0 (fixed-priority non-preemptive, tick 50 ms, phân tách OverrunMonitor/SafetyManager, máy trạng thái 11 trạng thái)
+- **Trạng thái:** **Done 2026-07-28** — [`PROGRAM_TASK_SCHEDULER_SPEC_MK-DDC-24_VI.md`](../../../02_design/software/PROGRAM_TASK_SCHEDULER_SPEC_MK-DDC-24_VI.md) Rev 1.0 (fixed-priority non-preemptive, tick 50 ms, phân tách OverrunMonitor/SafetyManager, máy trạng thái 11 trạng thái)
 
 ### C0.8 — Artifact lifecycle
 

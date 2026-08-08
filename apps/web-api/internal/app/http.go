@@ -91,10 +91,30 @@ func loggingMiddleware(logger *log.Logger, next http.Handler) http.Handler {
 	})
 }
 
-func corsMiddleware(allowedOrigin string, next http.Handler) http.Handler {
+// logCORSMode nói ra chế độ biên đang chạy ngay lúc khởi động.
+//
+// Rủi ro R-02 của Plan 51: bật fail-closed mà quên đặt `CORS_ORIGIN` làm giao
+// diện không mở được từ một origin khác, và triệu chứng ở trình duyệt (request
+// bị chặn im lặng) không chỉ về nguyên nhân. Một dòng log lúc khởi động biến
+// nửa giờ dò tìm thành một lần `journalctl`.
+func (a *App) logCORSMode() {
+	if a.logger == nil {
+		return
+	}
+	switch {
+	case a.cfg.CORSOrigin != "":
+		a.logger.Printf("INFO cors_mode=allowlist origins=%q — chỉ các origin này và same-origin được phép", a.cfg.CORSOrigin)
+	case a.cfg.CORSAllowLoopback:
+		a.logger.Printf("WARN cors_mode=dev_loopback — CORS_ALLOW_LOOPBACK đang bật, MỌI cổng loopback được phép; không dùng cho bo production")
+	default:
+		a.logger.Printf("INFO cors_mode=same_origin — CORS_ORIGIN chưa đặt nên mọi request cross-origin bị từ chối; đặt CORS_ORIGIN nếu FE chạy khác origin")
+	}
+}
+
+func corsMiddleware(allowedOrigin string, allowLoopback bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if isAllowedOrigin(origin, allowedOrigin) {
+		if isAllowedOrigin(origin, allowedOrigin, allowLoopback) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -109,7 +129,16 @@ func corsMiddleware(allowedOrigin string, next http.Handler) http.Handler {
 	})
 }
 
-func isAllowedOrigin(origin, configured string) bool {
+// isAllowedOrigin quyết định một Origin cross-origin có được cấp CORS header không.
+//
+// REV-PLT-01: `configured` rỗng trước đây tự động mở cho MỌI cổng loopback, và
+// vì không đường triển khai nào đặt `CORS_ORIGIN` nên bo production chạy đúng
+// bằng allowlist của chế độ dev — bất kỳ trang nào người vận hành mở trên một
+// cổng loopback của máy đang nói chuyện với DDC đều gửi được request đã xác
+// thực. Nay rỗng = chỉ same-origin (trình duyệt không gửi CORS cho same-origin,
+// nên giao diện do chính mkddc-web phục vụ không bị ảnh hưởng); nhánh loopback
+// chỉ mở khi `CORS_ALLOW_LOOPBACK` được bật tường minh.
+func isAllowedOrigin(origin, configured string, allowLoopback bool) bool {
 	if origin == "" {
 		return false
 	}
@@ -119,6 +148,9 @@ func isAllowedOrigin(origin, configured string) bool {
 				return true
 			}
 		}
+		return false
+	}
+	if !allowLoopback {
 		return false
 	}
 	return strings.HasPrefix(origin, "http://localhost:") ||
@@ -240,8 +272,9 @@ func (a *App) Router() http.Handler {
 		panic(err)
 	}
 
+	a.logCORSMode()
 	var handler http.Handler = mux
-	handler = corsMiddleware(a.cfg.CORSOrigin, handler)
+	handler = corsMiddleware(a.cfg.CORSOrigin, a.cfg.CORSAllowLoopback, handler)
 	handler = recoverMiddleware(a.logger, handler)
 	handler = loggingMiddleware(a.logger, handler)
 	return handler

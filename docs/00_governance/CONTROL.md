@@ -47,7 +47,7 @@ Không được tuyên bố chứng nhận ISO/IEC, BTL, EMC hoặc release read
 
 ## Controlled register
 
-[Document Hub](../README.md) là register điều hướng. Các file baseline cấp cao là authority; các index HW/FW/SW/interface quản lý corpus thiết kế chi tiết. Review log, finding và evidence phải nằm trong `07_records`, không được trộn với design authority.
+[Document Hub](../README.md) là register điều hướng; [chỉ mục hồ sơ rà soát](../07_records/reviews/README.md) là register của các record trong `07_records/reviews/`. Các file baseline cấp cao là authority; các index HW/FW/SW/interface quản lý corpus thiết kế chi tiết. Review log, finding và evidence phải nằm trong `07_records`, không được trộn với design authority.
 
 Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cần thiết để tái tạo, review, verify hoặc manufacture sản phẩm. Chỉ được loại bỏ tài liệu sau khi chứng minh nội dung đã được hợp nhất và có đường dẫn phục hồi.
 

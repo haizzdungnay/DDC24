@@ -122,33 +122,10 @@ func (a *App) handleModbusDiagnostics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
-	// Khoá tra cứu là (bus, slave), KHÔNG phải slave.
-	//
-	// Với hai cổng RS-485, `slave_id = 1` trên rs485-1 và `slave_id = 1` trên
-	// rs485-2 là hai thiết bị KHÁC NHAU hoàn toàn hợp lệ — validator đã chấp
-	// nhận điều đó (unique theo từng bus). Tra theo mỗi địa chỉ thì hai thiết bị
-	// đè lên nhau và bảng chẩn đoán gán số đo của dây này cho thiết bị của dây
-	// kia: sai mà trông vẫn hợp lý, và người vận hành sẽ đi tìm lỗi ở nhầm tủ.
-	type slaveKey struct {
-		bus   int
-		slave int
-	}
-	byBusSlave := map[slaveKey]string{}
-	for _, device := range cfg.Devices {
-		busID := device.BusID
-		if busID == "" {
-			busID = webModbus.BusIDForPort(device.RS485Port)
-		}
-		byBusSlave[slaveKey{bus: webModbus.Bus{BusID: busID}.NumericID(), slave: device.SlaveID}] = device.DeviceID
-	}
+	byBusSlave := newModbusDeviceIndex(cfg.Devices)
 	out := make([]ModbusRTUDiagnostics, 0, len(telemetry.Slaves))
 	for _, item := range telemetry.Slaves {
-		deviceID := byBusSlave[slaveKey{bus: int(item.BusID), slave: int(item.Addr)}]
-		if deviceID == "" {
-			// Cấu hình một-bus cũ không khai `bus_id`; đừng để bảng trống chỉ vì
-			// thiếu một trường mà bus 1 là mặc định hiển nhiên.
-			deviceID = byBusSlave[slaveKey{bus: 1, slave: int(item.Addr)}]
-		}
+		deviceID := byBusSlave.lookup(int(item.BusID), int(item.Addr))
 		out = append(out, ModbusRTUDiagnostics{DeviceID: deviceID, SlaveID: int(item.Addr),
 			BusID: item.BusID, Online: item.Online,
 			TotalPolls: item.TotalPolls, TotalErrors: item.TotalErrors, TimeoutErrors: item.TimeoutErrors,
@@ -231,6 +208,16 @@ func (a *App) handleModbusWriteTest(w http.ResponseWriter, r *http.Request) {
 	principal := principalFromContext(r.Context())
 	if principal == nil || principal.Role != RoleAdmin {
 		writeError(w, http.StatusForbidden, "chỉ vai trò Admin được thực hiện ghi thử Modbus RTU")
+		return
+	}
+	// `OD-MBRTU-007` yêu cầu 2 lệnh ghi thử/phút/người dùng, và `commissionLimiter`
+	// được viết ra đúng cho việc này — nhưng toàn repo chỉ có một call site cho
+	// nhánh read. Không có bộ giới hạn, một tab kẹt hoặc một script chạy vòng lặp
+	// phát lệnh ghi không giới hạn xuống thiết bị hiện trường đang chạy, chiếm
+	// băng thông RS-485 và đẩy mọi slave khác trên cùng dây vào timeout (REV-BE-06).
+	if !a.commissionLimit.allow("write:"+principal.Username, 2, time.Minute) {
+		writeError(w, http.StatusTooManyRequests,
+			"vượt giới hạn ghi thử: tối đa 2 lệnh/phút cho mỗi người dùng (OD-MBRTU-007)")
 		return
 	}
 
@@ -439,11 +426,15 @@ type modbusBusInfo struct {
 	// Con trỏ: nil = iobus chưa đo được. FE hiện "—" thay vì 0.
 	PollLatencyP50 *int     `json:"poll_latency_p50_ms"`
 	PollLatencyP95 *int     `json:"poll_latency_p95_ms"`
-	TimeoutErrors  uint64   `json:"timeout_errors"`
-	CrcErrors      uint64   `json:"crc_errors"`
-	PortReopens    uint64   `json:"port_reopens"`
-	Utilization    *float64 `json:"bus_utilization_percent"`
-	EstimatedLoad  float64  `json:"estimated_load_percent"`
+	// Timeout/CRC gộp từ số đo THEO SLAVE. `TotalErrors` là tổng của cả dây do
+	// BusWorker đếm, gồm cả lỗi chưa quy được về slave nào — hai con số này
+	// không được cộng vào nhau (REV-BE-10).
+	TimeoutErrors uint64   `json:"timeout_errors"`
+	CrcErrors     uint64   `json:"crc_errors"`
+	TotalErrors   uint64   `json:"total_errors"`
+	PortReopens   uint64   `json:"port_reopens"`
+	Utilization   *float64 `json:"bus_utilization_percent"`
+	EstimatedLoad float64  `json:"estimated_load_percent"`
 }
 
 type modbusEventItem struct {
@@ -466,13 +457,10 @@ func (a *App) getModbusDiagnostics(ctx context.Context) ([]ModbusRTUDiagnostics,
 		return nil, fmt.Errorf("telemetry unavailable")
 	}
 	cfg, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
-	bySlave := map[int]string{}
-	for _, d := range cfg.Devices {
-		bySlave[d.SlaveID] = d.DeviceID
-	}
+	byBusSlave := newModbusDeviceIndex(cfg.Devices)
 	out := make([]ModbusRTUDiagnostics, 0, len(telemetry.Slaves))
 	for _, dev := range telemetry.Slaves {
-		out = append(out, modbusDiagnosticsFrom(dev, bySlave[int(dev.Addr)]))
+		out = append(out, modbusDiagnosticsFrom(dev, byBusSlave.lookup(int(dev.BusID), int(dev.Addr))))
 	}
 	return out, nil
 }
@@ -515,10 +503,7 @@ func (a *App) handleGetModbusOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	telemetry, available := a.publishedFieldbusTelemetry(r.Context())
-	bySlave := map[int]SlaveTelemetry{}
-	for _, item := range telemetry.Slaves {
-		bySlave[int(item.Addr)] = item
-	}
+	bySlave := newModbusTelemetryIndex(telemetry.Slaves)
 
 	res := modbusOverview{
 		TotalDevices:       len(cfg.Devices),
@@ -530,7 +515,7 @@ func (a *App) handleGetModbusOverview(w http.ResponseWriter, r *http.Request) {
 		if !device.Enabled {
 			continue
 		}
-		metric, seen := bySlave[device.SlaveID]
+		metric, seen := bySlave.lookupDevice(device)
 		switch {
 		case !available || !seen:
 			// Chưa có telemetry ⇒ "đang khởi tạo", KHÔNG phải offline. Gọi một
@@ -568,10 +553,7 @@ func (a *App) handleGetModbusBuses(w http.ResponseWriter, r *http.Request) {
 	for _, bus := range telemetry.Buses {
 		measuredByID[int(bus.ID)] = bus
 	}
-	slaveByAddr := map[int]SlaveTelemetry{}
-	for _, item := range telemetry.Slaves {
-		slaveByAddr[int(item.Addr)] = item
-	}
+	bySlave := newModbusTelemetryIndex(telemetry.Slaves)
 	manifest, _ := webModbus.LoadCapabilityManifest(a.cfg.PortCapabilityPath)
 	aliasByPort := map[string]string{}
 	for _, port := range manifest.Ports {
@@ -592,13 +574,23 @@ func (a *App) handleGetModbusBuses(w http.ResponseWriter, r *http.Request) {
 			OpenState:     "UNKNOWN",
 			EstimatedLoad: loadByBus[bus.BusID],
 		}
+		// Một vòng duy nhất qua thiết bị của dây này: đếm thiết bị và cộng lỗi
+		// theo cùng một phép tra `(bus, slave)`, nên hai con số không thể lệch
+		// nhau vì hai vòng lặp dùng khoá khác nhau.
 		for _, device := range cfg.Devices {
-			if modbusDeviceBus(device) != bus.BusID || !device.Enabled {
+			if modbusDeviceBus(device) != bus.BusID {
 				continue
 			}
-			info.TotalDevices++
-			if metric, seen := slaveByAddr[device.SlaveID]; seen && metric.Online {
-				info.OnlineDevices++
+			metric, seen := bySlave.lookupDevice(device)
+			if device.Enabled {
+				info.TotalDevices++
+				if seen && metric.Online {
+					info.OnlineDevices++
+				}
+			}
+			if seen {
+				info.TimeoutErrors += metric.TimeoutErrors
+				info.CrcErrors += metric.CRCErrors
 			}
 		}
 		if measured, seen := measuredByID[bus.NumericID()]; seen && available {
@@ -609,19 +601,13 @@ func (a *App) handleGetModbusBuses(w http.ResponseWriter, r *http.Request) {
 			info.PollLatencyP95 = &p95
 			util := float64(measured.UtilizationPctX100) / 100.0
 			info.Utilization = &util
-			info.TimeoutErrors = measured.TotalErrors
-			info.CrcErrors = 0
+			// `TotalErrors` của dây gồm MỌI nguyên nhân (timeout, CRC, exception,
+			// lỗi mức cổng chưa quy được về slave nào). Gán nó vào `timeout_errors`
+			// rồi cộng thêm timeout của từng slave lên trên là đếm trùng: một dây
+			// có nhiều nhất 100 lỗi báo ra 170. Timeout và CRC chỉ lấy từ số đo
+			// theo slave; tổng của dây đi riêng ở `total_errors` (REV-BE-10).
+			info.TotalErrors = measured.TotalErrors
 			info.PortReopens = measured.PortReopens
-		}
-		// Lỗi timeout/CRC gộp theo slave để khớp bảng chẩn đoán.
-		for _, device := range cfg.Devices {
-			if modbusDeviceBus(device) != bus.BusID {
-				continue
-			}
-			if metric, seen := slaveByAddr[device.SlaveID]; seen {
-				info.TimeoutErrors += metric.TimeoutErrors
-				info.CrcErrors += metric.CRCErrors
-			}
 		}
 		out = append(out, info)
 	}
@@ -693,13 +679,10 @@ func (a *App) recordModbusEvents(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	byAddr := map[int]SlaveTelemetry{}
-	for _, item := range telemetry.Slaves {
-		byAddr[int(item.Addr)] = item
-	}
+	bySlave := newModbusTelemetryIndex(telemetry.Slaves)
 	now := time.Now()
 	for _, device := range cfg.Devices {
-		metric, seen := byAddr[device.SlaveID]
+		metric, seen := bySlave.lookupDevice(device)
 		state := "INITIALIZING"
 		switch {
 		case !seen:

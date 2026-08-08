@@ -183,8 +183,17 @@ func MigrateBuses(cfg Config) ([]Bus, []string) {
 		}
 		existing, seen := byPort[port]
 		if !seen {
+			busID := busIDForPort(port)
+			if busID == "" {
+				// Cổng không thuộc dây RS-485 nào của board. Dựng một Bus mang
+				// bus_id rỗng chỉ để nó lặng lẽ trôi vào bảng của dây 1; nói ra
+				// và để validator từ chối thiết bị đó.
+				warnings = append(warnings,
+					"cổng "+port+" không thuộc bus RS-485 nào của board; thiết bị trên cổng này không được migrate")
+				continue
+			}
 			bus := NormalizeBus(Bus{
-				BusID:          busIDForPort(port),
+				BusID:          busID,
 				Port:           port,
 				Baud:           device.Baud,
 				Parity:         device.Parity,
@@ -270,6 +279,14 @@ func PortForBusID(busID string) string {
 func BusIDForPort(port string) string { return busIDForPort(port) }
 
 // busIDForPort suy ra bus_id từ đường dẫn cổng đã chuẩn hoá.
+//
+// Cổng lạ ⇒ chuỗi rỗng, KHÔNG phải "rs485-1". `NumericID` đã phát biểu đúng
+// chính sách này cho cùng phép ánh xạ ("không parse được ⇒ 0 … im lặng gán 1 sẽ
+// dồn mọi thiết bị lên một dây"), còn hàm này thì làm ngược lại: một device mang
+// `rs485_port: "/dev/ttyUSB0"` — cấu hình cũ, file sửa tay, hay bo có manifest
+// khác — bị đóng dấu tham số serial của dây 1 và xếp vào bảng chẩn đoán của dây
+// 1 mà không ai được báo. Trả rỗng để validator từ chối thành một lỗi đọc được
+// thay vì một cấu hình chạy sai dây trong im lặng (REV-BE-09).
 func busIDForPort(port string) string {
 	switch port {
 	case "/dev/rs485-1", "/dev/ttyS5":
@@ -277,5 +294,5 @@ func busIDForPort(port string) string {
 	case "/dev/rs485-2", "/dev/ttyS1":
 		return "rs485-2"
 	}
-	return "rs485-1"
+	return ""
 }
