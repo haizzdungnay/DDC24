@@ -1,5 +1,5 @@
 import type { Point } from '../types'
-import { normalizeInputPointId, normalizeKind, normalizeQuality, nowIso, uiNode } from '../utils'
+import { normalizeInputPointId, normalizeKind, normalizeQuality, uiNode } from '../utils'
 import { displayPointName } from './pointTags'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -134,6 +134,26 @@ function pointQuality(raw: Record<string, unknown>): Point['quality'] {
   return normalizeQuality(value)
 }
 
+/** Mốc thời gian THẬT của producer, hoặc `undefined`.
+ *
+ * PA3-F04 — bản trước kết thúc bằng `?? nowIso()`. Nghĩa là một point mà không
+ * nguồn nào biết cập nhật lúc nào sẽ hiện "vừa xong" trên mọi màn hình, và
+ * `isFreshIso()` coi nó là dữ liệu tươi. Một cảm biến chết cứng trông y hệt một
+ * cảm biến đang chạy — không có tín hiệu nào để người trực nhận ra.
+ */
+function pointUpdatedAt(raw: Record<string, unknown>): string | undefined {
+  const value = raw.updatedAt ?? raw.updated_at ?? raw.timestamp ?? raw.ts
+  if (typeof value !== 'string' && typeof value !== 'number') return undefined
+  const text = String(value).trim()
+  if (text === '') return undefined
+  return Number.isFinite(Date.parse(text)) ? text : undefined
+}
+
+function intFrom(value: unknown): number | undefined {
+  const parsed = numberFrom(value)
+  return parsed === undefined ? undefined : Math.trunc(parsed)
+}
+
 export function normalizePoint(raw: Record<string, unknown>): Point {
   const channel = pointChannel(raw)
   const rawId = String(raw.id ?? raw.point_id ?? raw.pointId ?? raw.object_id ?? raw.objectId ?? raw.name ?? raw.label ?? '')
@@ -142,6 +162,17 @@ export function normalizePoint(raw: Record<string, unknown>): Point {
   const value = pointValue(raw)
   const rawValue = numberFrom(raw.raw)
   const rawUnit = raw.rawUnit ?? raw.raw_unit
+  const updatedAt = pointUpdatedAt(raw)
+  /* PA3-F03: các trường này ĐÃ CÓ trong `PointDTO` của backend nhưng bản
+     trước làm rơi hết ở đây, nên Point Detail không có gì để hiện ngoài
+     value/quality — và không có cách nào biết một output đang bị ép tay còn
+     bao lâu. */
+  const overrideExpiresInS = numberFrom(raw.overrideExpiresInS ?? raw.override_expires_in_s)
+  const qualityReason = raw.quality_reason ?? raw.qualityReason
+  const busId = intFrom(raw.bus_id ?? raw.busId)
+  const slaveAddr = intFrom(raw.slave_addr ?? raw.slaveAddr)
+  const exceptionCode = intFrom(raw.exception_code ?? raw.exceptionCode)
+  const online = typeof raw.online === 'boolean' ? raw.online : undefined
   return {
     id,
     tag: String(raw.tag_name ?? raw.tag ?? id),
@@ -154,9 +185,15 @@ export function normalizePoint(raw: Record<string, unknown>): Point {
     quality: pointQuality(raw),
     source: String(raw.source ?? 'Core'),
     priority: raw.priority ? String(raw.priority) : raw.active_source ? String(raw.active_source) : undefined,
-    updatedAt: String(raw.updatedAt ?? raw.updated_at ?? raw.timestamp ?? raw.ts ?? nowIso()),
+    ...(updatedAt !== undefined ? { updatedAt } : {}),
     fault: Boolean(raw.fault ?? false),
     forced: Boolean(raw.forced ?? false),
+    ...(overrideExpiresInS !== undefined && overrideExpiresInS > 0 ? { overrideExpiresInS } : {}),
+    ...(qualityReason ? { qualityReason: String(qualityReason) } : {}),
+    ...(busId !== undefined ? { busId } : {}),
+    ...(slaveAddr !== undefined ? { slaveAddr } : {}),
+    ...(exceptionCode !== undefined ? { exceptionCode } : {}),
+    ...(online !== undefined ? { online } : {}),
     sensorType: raw.sensorType ? String(raw.sensorType) : raw.sensor_type ? String(raw.sensor_type) : raw.type ? String(raw.type) : undefined,
     signalType: raw.signalType ? String(raw.signalType) : raw.signal_type ? String(raw.signal_type) : undefined,
     writable: typeof raw.writable === 'boolean' ? raw.writable : undefined,
@@ -167,7 +204,7 @@ export function normalizePoint(raw: Record<string, unknown>): Point {
     tagName: String(raw.tag_name ?? raw.tag ?? id),
     displayName: String(raw.display_name ?? raw.name ?? id),
     dataType: raw.data_type ? String(raw.data_type) : undefined,
-    timestamp: raw.timestamp ? String(raw.timestamp) : undefined,
+    ...(updatedAt !== undefined ? { timestamp: updatedAt } : {}),
     readWrite: raw.read_write === 'read_write' ? 'read_write' : 'read',
     defaultValue: (raw.default_value as Point['defaultValue']) ?? null,
     safeValue: (raw.safe_value as Point['safeValue']) ?? null

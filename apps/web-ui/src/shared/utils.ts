@@ -134,16 +134,46 @@ export function formatValue(value: Point['value'], unit?: string): string {
   return `${value}${unit ? ` ${unit}` : ''}`
 }
 
-export function formatTime(iso: string): string {
+/* PA3-F04: `undefined`/rỗng phải ra `—`.
+ *
+ * `new Date(undefined)` cho `Invalid Date` và bản trước trả lại nguyên chuỗi
+ * đầu vào, nên ô thời gian hiện chữ "undefined" hoặc — tệ hơn, khi normalizer
+ * còn điền `nowIso()` — hiện đúng giây hiện tại như thể dữ liệu vừa về. */
+export function formatTime(iso: string | undefined | null): string {
+  if (!iso) return NO_DATA
   const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
+  if (Number.isNaN(date.getTime())) return NO_DATA
   return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
-export function formatDateTime(iso: string): string {
+export function formatDateTime(iso: string | undefined | null): string {
+  if (!iso) return NO_DATA
   const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
+  if (Number.isNaN(date.getTime())) return NO_DATA
   return date.toLocaleString('vi-VN', { hour12: false })
+}
+
+/** Tuổi dữ liệu dạng người đọc được: `1s`, `4m`, `2h`, hoặc `—` khi không rõ. */
+export function formatDataAge(iso: string | undefined | null, now = Date.now()): string {
+  if (!iso) return NO_DATA
+  const time = Date.parse(iso)
+  if (!Number.isFinite(time)) return NO_DATA
+  const seconds = Math.max(0, Math.round((now - time) / 1000))
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`
+  return `${Math.floor(seconds / 86400)}d`
+}
+
+/** Đồng hồ đếm ngược `mm:ss` cho TTL override. */
+export function formatCountdown(seconds: number | undefined | null): string {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return NO_DATA
+  const total = Math.floor(seconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
 }
 
 export function formatUptime(seconds = 0): string {

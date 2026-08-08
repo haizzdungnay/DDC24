@@ -76,3 +76,47 @@ describe('biên normalizer không được bịa giá trị', () => {
     expect(normalizePoint({ id: 'DO-01', kind: 'DO', value: false }).value).toBe(false)
   })
 })
+
+// PA3-F03/F04 — normalizer phải GIỮ đủ field backend đã trả, và không được
+// đóng dấu thời gian lên dữ liệu không có mốc thời gian.
+describe('PA3 — trung thực thời gian và đủ trường chẩn đoán', () => {
+  it('PA3-F04: thiếu timestamp ⇒ updatedAt undefined, KHÔNG phải giờ hiện tại', () => {
+    // Bản cũ kết thúc bằng `?? nowIso()`: một cảm biến chết cứng hiện "vừa
+    // xong" trên mọi màn hình và `isFreshIso()` coi nó là dữ liệu tươi.
+    expect(normalizePoint({ id: 'UI-01', kind: 'UI', value: 21 }).updatedAt).toBeUndefined()
+    expect(normalizePoint({ id: 'UI-01', kind: 'UI', value: 21, updatedAt: '' }).updatedAt).toBeUndefined()
+    expect(normalizePoint({ id: 'UI-01', kind: 'UI', value: 21, updatedAt: 'khong-phai-thoi-gian' }).updatedAt).toBeUndefined()
+  })
+
+  it('PA3-F04: timestamp THẬT vẫn được giữ nguyên văn', () => {
+    const point = normalizePoint({ id: 'UI-01', kind: 'UI', value: 21, updatedAt: '2026-08-08T03:00:00Z' })
+    expect(point.updatedAt).toBe('2026-08-08T03:00:00Z')
+    expect(point.timestamp).toBe('2026-08-08T03:00:00Z')
+  })
+
+  it('PA3-F03: giữ overrideExpiresInS, quality_reason, bus/slave/exception/online', () => {
+    // Backend `PointDTO` đã có sẵn các trường này; bản cũ làm rơi hết nên Point
+    // Detail không có gì để hiện và không ai biết output còn bị ép bao lâu.
+    const point = normalizePoint({
+      id: 'MB-01', kind: 'modbus_rtu', value: 3.2, quality: 'bad',
+      overrideExpiresInS: 272, quality_reason: 'timeout',
+      bus_id: 1, slave_addr: 12, exception_code: 2, online: false
+    })
+    expect(point.overrideExpiresInS).toBe(272)
+    expect(point.qualityReason).toBe('timeout')
+    expect(point.busId).toBe(1)
+    expect(point.slaveAddr).toBe(12)
+    expect(point.exceptionCode).toBe(2)
+    expect(point.online).toBe(false)
+  })
+
+  it('PA3-F03: online không được báo ⇒ undefined, khác hẳn false', () => {
+    // "Producer không nói" và "producer nói là mất kết nối" là hai chuyện khác
+    // nhau; gộp lại sẽ báo offline giả cho mọi point không phải Modbus.
+    expect(normalizePoint({ id: 'UI-01', kind: 'UI', value: 1 }).online).toBeUndefined()
+  })
+
+  it('PA3-F05: TTL bằng 0 nghĩa là không có lệnh có thời hạn', () => {
+    expect(normalizePoint({ id: 'AO-01', kind: 'AO', value: 1, overrideExpiresInS: 0 }).overrideExpiresInS).toBeUndefined()
+  })
+})

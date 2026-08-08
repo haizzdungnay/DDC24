@@ -1290,12 +1290,32 @@ export const apiClient = {
     return this.getAlarms()
   },
 
-  async forcePoint(id: string, value: number | boolean | string, release = false) {
+  /**
+   * Ghi hoặc nhả một point.
+   *
+   * PA3-107: `ttlS` đi thẳng xuống Core, nơi cưỡng chế thời hạn. Frontend
+   * KHÔNG được tự hẹn giờ rồi gửi lệnh nhả — đóng tab là mất hẹn giờ và output
+   * ở lại trạng thái ép tay (PA3-F05).
+   */
+  async forcePoint(id: string, value: number | boolean | string, release = false, ttlS?: number) {
     if (IS_DEMO) return forceDemoPoint(id, value, release)
-    return requestJson(`/points/${encodeURIComponent(id)}`, {
+    const body = release
+      ? { release: true }
+      : ttlS && ttlS > 0 ? { value, ttlS: Math.round(ttlS) } : { value }
+    return requestJson<Record<string, unknown>>(`/points/${encodeURIComponent(id)}`, {
       method: 'PUT',
-      body: JSON.stringify(release ? { release: true } : { value })
+      body: JSON.stringify(body)
     })
+  },
+
+  /** Đọc một point kèm trạng thái override authoritative từ Core. */
+  async getPoint(id: string): Promise<Point> {
+    if (IS_DEMO) {
+      const found = getDemoPoints().find((point) => point.id === id)
+      if (!found) throw new ApiError('point not found', 404)
+      return found
+    }
+    return normalizePoint(await requestJson<Record<string, unknown>>(`/points/${encodeURIComponent(id)}`, { cache: 'no-store' }))
   },
 
   async updatePointName(id: string, name: string): Promise<{ id: string; name?: string }> {

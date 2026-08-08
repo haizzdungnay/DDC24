@@ -15,7 +15,7 @@ import { getDemoPoints } from '../../shared/demo/simulator'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import { isDigitalContact, type AiInputConfig, type AiSignalType, type Point, type TrendSample } from '../../shared/types'
-import { cn, formatValue, isVisibleUniversalInput, pointNumber, uiNode } from '../../shared/utils'
+import { cn, formatTime, formatValue, isVisibleUniversalInput, pointNumber, uiNode } from '../../shared/utils'
 
 type ViewMode = 'summary' | 'wizard' | 'advanced'
 type WizardStep = 'signal' | 'min' | 'max' | 'range' | 'unit' | 'filter' | 'cal' | 'math'
@@ -463,7 +463,10 @@ function useAiLiveTrend(pointId: string, point?: Point): { data: LiveTrendSample
     const value = pointNumber(point)
     // Chưa có số đo thì BỎ QUA mẫu, không ghi 0 vào đuôi biểu đồ (REV-FE-04).
     if (value === null) return
-    const time = new Date(point.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    // PA3-F04: không có mốc thời gian của producer thì KHÔNG đặt mẫu này
+    // lên trục thời gian bằng giờ máy trạm — biểu đồ sẽ nói dối về độ tươi.
+    if (!point.updatedAt) return
+    const time = formatTime(point.updatedAt)
     setBuffers((current) => {
       const existing = current[pointId] ?? []
       const last = existing[existing.length - 1]
