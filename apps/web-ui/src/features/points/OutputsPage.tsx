@@ -58,6 +58,17 @@ export function OutputsPage() {
   ], [config, pointsState.data, virtualPointsState.data])
   const nameConflicts = useMemo(() => pointNameConflicts(namespaceEntries), [namespaceEntries])
 
+  // Nạp cấu hình output. `selectedId` KHÔNG được nằm trong deps.
+  //
+  // Effect này tự gọi `setSelectedId`, nên để `selectedId` trong deps biến mỗi
+  // lần bấm sang kênh khác thành một vòng nạp lại: `apiClient.getOutputs()` trả
+  // về cấu hình ĐÃ LƯU và `setConfig` âm thầm vứt bỏ mọi chỉnh sửa chưa lưu của
+  // kênh trước (minPv/maxPv/safeValue chỉ nằm trong state cục bộ) — không một
+  // cảnh báo, cộng thêm một vòng HTTP thừa mỗi lần bấm. Effect tương ứng ở
+  // `InputsPage` không đưa state lựa chọn vào deps, xác nhận đây là phụ thuộc
+  // ngoài ý muốn (REV-FE-02).
+  const selectedIdRef = useRef(selectedId)
+  selectedIdRef.current = selectedId
   useEffect(() => {
     let active = true
     setLoading(true)
@@ -65,7 +76,8 @@ export function OutputsPage() {
       .then((items) => {
         if (!active) return
         setConfig(items)
-        if (!items.ao.some((item) => item.id === selectedId) && !items.do.some((item) => item.id === selectedId)) {
+        const current = selectedIdRef.current
+        if (!items.ao.some((item) => item.id === current) && !items.do.some((item) => item.id === current)) {
           setSelectedId(items.ao[0]?.id ?? items.do[0]?.id ?? 'AO-01')
         }
         setLoadError(null)
@@ -81,7 +93,7 @@ export function OutputsPage() {
     return () => {
       active = false
     }
-  }, [reloadToken, selectedId, t, toast])
+  }, [reloadToken, t, toast])
 
   useEffect(() => {
     const first = errorFocusPath ?? Object.keys(tagErrors)[0]
@@ -631,6 +643,8 @@ function useOutputTrend(pointId: string, point?: Point): { data: LiveSample[]; r
   useEffect(() => {
     if (!point) return
     const value = pointNumber(point)
+    // Chưa có số đo thì bỏ qua mẫu thay vì ghi 0 (REV-FE-04).
+    if (value === null) return
     const time = new Date(point.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     const nextKey = `${pointId}:${time}:${value}`
     if (lastKeyRef.current === nextKey) return

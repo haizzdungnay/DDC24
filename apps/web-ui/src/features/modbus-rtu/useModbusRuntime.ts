@@ -22,7 +22,8 @@ import type { ModbusQuality, Point } from '../../shared/types'
  */
 
 export interface ModbusRuntimeEntry {
-  value: number | boolean | string
+  /** `undefined` = point đã khai nhưng CHƯA có số đo (REV-FE-04). */
+  value: number | boolean | string | undefined
   quality: ModbusQuality
   qualityReason?: string
   updatedAt: string

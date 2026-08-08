@@ -71,11 +71,17 @@ export function normalizeHealth(value: unknown): HealthStatus {
   return 'unknown'
 }
 
-export function pointNumber(point: Point): number {
-  if (typeof point.value === 'number') return point.value
+/** Số của một point, hoặc `null` khi CHƯA CÓ số đo.
+ *
+ * Bản trước trả `0` cho mọi thứ không quy được về số — kể cả point chưa từng
+ * được poll. Nơi gọi không phân biệt được "0 đo được" với "chưa biết", nên
+ * giao diện hiện `0 °C` và biểu đồ vẽ một đường phẳng ở 0 (REV-FE-04). */
+export function pointNumber(point: Point): number | null {
+  if (typeof point.value === 'number') return Number.isFinite(point.value) ? point.value : null
   if (typeof point.value === 'boolean') return point.value ? 1 : 0
+  if (point.value === undefined) return null
   const parsed = Number(point.value)
-  return Number.isFinite(parsed) ? parsed : 0
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 export function pointDisplayTag(point: Pick<Point, 'id' | 'tag' | 'kind'>): string {
@@ -113,9 +119,15 @@ function mergePointUpdate(current: Point, update: Point): Point {
   }
 }
 
+/** Ký hiệu "chưa có dữ liệu" dùng chung cho mọi chỗ hiển thị số đo. */
+export const NO_DATA = '—'
+
 export function formatValue(value: Point['value'], unit?: string): string {
+  // Chưa có số đo thì hiện `—`, không hiện `0` và cũng không hiện "undefined".
+  if (value === undefined || value === null) return NO_DATA
   if (typeof value === 'boolean') return value ? 'ON' : 'OFF'
   if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return NO_DATA
     const fixed = Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1)
     return `${fixed}${unit ? ` ${unit}` : ''}`
   }

@@ -414,6 +414,8 @@ function useVpTrend(pointId: string, point?: Point): { data: VpTrendSample[]; re
   useEffect(() => {
     if (!point) return
     const value = pointNumber(point)
+    // Chưa có số đo thì bỏ qua mẫu thay vì ghi 0 (REV-FE-04).
+    if (value === null) return
     const time = new Date(point.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     setBuffers((current) => {
       const existing = current[pointId] ?? []
@@ -424,11 +426,11 @@ function useVpTrend(pointId: string, point?: Point): { data: VpTrendSample[]; re
   }, [pointId, point])
 
   function reset() {
-    if (!point) {
+    const value = point ? pointNumber(point) : null
+    if (!point || value === null) {
       setBuffers((current) => ({ ...current, [pointId]: [] }))
       return
     }
-    const value = pointNumber(point)
     const time = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     setBuffers((current) => ({ ...current, [pointId]: [{ time, raw: value, [pointId]: value }] }))
   }

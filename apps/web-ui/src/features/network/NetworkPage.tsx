@@ -150,6 +150,19 @@ export function NetworkPage() {
     } : current)
   }
 
+  /**
+   * Mở một candidate rỗng do CHÍNH admin soạn.
+   *
+   * Khác hẳn `candidateFromAuthority`: ở đây không có suy diễn nào cả — mode
+   * static là lựa chọn mặc định hiển nhiên của thao tác commissioning, còn địa
+   * chỉ để trống buộc người dùng nhập. Nếu không có lối này, một thiết bị mà
+   * authority chưa đọc được profile sẽ không bao giờ cấu hình được qua Web.
+   */
+  function startBlankCandidate(interfaceName: string) {
+    candidateDirty.current = true
+    setCandidate({ interface: interfaceName, mode: 'static' })
+  }
+
   function setCandidateDnsServers(value: string) {
     candidateDirty.current = true
     setCandidate((current) => current ? {
@@ -294,8 +307,32 @@ export function NetworkPage() {
   const hostnameGuardSupported = Boolean(transaction?.capabilities?.includes('management-hostname'))
   const stableManagementUrl = managementUrl(transaction?.management)
   const stableOriginInUse = managementOriginMatches(transaction?.management)
-  const managementPathReady = hostnameGuardSupported && stableOriginInUse
+  // Cổng bảo toàn đường quản trị.
+  //
+  // Mục đích thật của cổng này (ADR-017 §1) là không cắt mất phiên quản trị khi
+  // đổi địa chỉ Ethernet — ADR nói rõ người vận hành "có thể đang truy cập qua
+  // Wi-Fi, và đường Wi-Fi đó phải còn nguyên". Điều kiện cũ lại đòi origin PHẢI
+  // trùng hostname mDNS, chặt hơn mục đích rất nhiều: vào bằng IP LAN, bằng DDNS
+  // hay qua reverse proxy đều không bao giờ khớp, nên nút Lưu khoá VĨNH VIỄN và
+  // thiết bị không còn cấu hình được từ xa. Quan sát được trên bo Foxlinx ngày
+  // 2026-08-08 khi mở giao diện qua `mekong-fac.ddns.net`.
+  //
+  // Nay chỉ chặn đúng trường hợp CHỨNG MINH ĐƯỢC là nguy hiểm: trình duyệt đang
+  // nói chuyện qua chính địa chỉ IPv4 sắp bị đổi. Mọi trường hợp còn lại chỉ
+  // cảnh báo — cơ chế an toàn thật vẫn nguyên: apply GIỮ địa chỉ cũ và thiết bị
+  // tự hoàn tác sau 120 giây nếu không ai xác nhận.
+  const managementPathAtRisk = Boolean(
+    activeNetwork?.ipv4 &&
+    currentOriginHost() === activeNetwork.ipv4 &&
+    candidate &&
+    (candidate.mode === 'dhcp' || (candidate.ipv4 ?? '') !== activeNetwork.ipv4)
+  )
+  const managementPathReady = !managementPathAtRisk
   const ethernetApplyReady = activeNetwork?.adminUp === true && activeNetwork?.carrier === true
+  // INTERFACE_NOT_FOUND không phải chuyện dây cáp: authority đang trỏ vào một tên
+  // interface không tồn tại trên thiết bị. Nói "hãy cắm cáp" ở đây khiến kỹ thuật
+  // viên đi tìm sai chỗ hàng giờ.
+  const interfaceMissing = activeNetwork?.reasonCode === 'INTERFACE_NOT_FOUND'
   const mutationLocked = transactionBusy !== null || Boolean(reconcileAfter) || Boolean(transactionState.error)
   // F-08: chặn ngay trên client thay vì để người dùng bấm rồi chờ authority từ chối.
   const candidateErrors = candidate ? validateCandidateFields(candidate, pick) : {}
@@ -331,12 +368,22 @@ export function NetworkPage() {
           <div className="space-y-5">
             {transactionState.error && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">{pick('Mất kết nối authority; trạng thái bên dưới có thể đã cũ.', 'Authority disconnected; the state below may be stale.')}</div>}
             {reconcileAfter && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">{pick('Kết quả request chưa xác định; thao tác mạng đang khóa cho tới khi authority trả trạng thái mới.', 'Request outcome is unknown; network actions stay locked until a fresh authority status is received.')}</div>}
-            {!managementPathReady && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
-              {transaction.management?.stable && stableManagementUrl ? (
-                <>{pick('Mở giao diện bằng hostname ổn định trước khi Apply: ', 'Open the UI through the stable hostname before Apply: ')}<a className="mono underline" href={stableManagementUrl}>{stableManagementUrl}</a></>
-              ) : pick('Hostname mDNS ổn định chưa sẵn sàng; Apply bị khóa để bảo toàn đường quản trị.', 'Stable mDNS hostname is not ready; Apply is locked to preserve the management path.')}
+            {managementPathAtRisk && <div className="rounded-[var(--radius)] border border-[var(--c-fault-fg)] bg-[var(--c-fault-bg)] px-3 py-2 text-xs text-[var(--c-fault-fg)]">
+              {pick(`Bạn đang mở trang này qua chính địa chỉ sắp đổi (${activeNetwork?.ipv4}); lưu thay đổi sẽ cắt đứt phiên. `, `This page is open through the very address being changed (${activeNetwork?.ipv4}); saving would cut the session. `)}
+              {stableManagementUrl
+                ? <>{pick('Hãy mở lại bằng ', 'Reopen through ')}<a className="mono underline" href={stableManagementUrl}>{stableManagementUrl}</a></>
+                : pick('Hãy mở lại qua một đường khác (Wi-Fi hoặc hostname) trước khi lưu.', 'Reopen through another path (Wi-Fi or a hostname) before saving.')}
             </div>}
-            {!ethernetApplyReady && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
+            {/* Không chặn: chỉ nói trước cho người vận hành biết cách quay lại sau
+                khi địa chỉ đổi. Trước đây đây là một cổng khoá cứng. */}
+            {!managementPathAtRisk && !stableOriginInUse && <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2 text-xs text-[var(--c-text-dim)]">
+              {hostnameGuardSupported && transaction.management?.stable && stableManagementUrl
+                ? <>{pick('Sau khi đổi địa chỉ, nếu mất kết nối hãy mở lại bằng ', 'If you lose the connection after the change, reopen through ')}<a className="mono underline" href={stableManagementUrl}>{stableManagementUrl}</a></>
+                : pick('Thiết bị chưa công bố hostname mDNS ổn định; sau khi đổi địa chỉ bạn phải tự kết nối lại bằng địa chỉ mới.', 'The device publishes no stable mDNS hostname; after the change you must reconnect using the new address yourself.')}
+            </div>}
+            {interfaceMissing ? <div className="rounded-[var(--radius)] border border-[var(--c-fault-fg)] bg-[var(--c-fault-bg)] px-3 py-2 text-xs text-[var(--c-fault-fg)]">
+              {pick(`Thiết bị không có interface "${activeNetwork?.interface}". Kiểm tra NETCFG_INTERFACE trong /etc/mkddc/netcfg.conf rồi khởi động lại mkddc-netcfg.`, `The device has no interface "${activeNetwork?.interface}". Check NETCFG_INTERFACE in /etc/mkddc/netcfg.conf and restart mkddc-netcfg.`)}
+            </div> : !ethernetApplyReady && <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
               {pick('Liên kết Ethernet chưa sẵn sàng; hãy cắm cáp Ethernet trước khi Apply.', 'Ethernet link is not ready; connect the Ethernet cable before Apply.')}
             </div>}
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -413,7 +460,20 @@ export function NetworkPage() {
                 </div>
               </>
             ) : (
-              <StateBlock state="empty" title={pick('Authority chưa có candidate chỉnh sửa', 'No editable network candidate')} detail={pick('Cần configured profile hoặc active mode static/DHCP hợp lệ; không suy diễn mode khi authority báo unknown.', 'A configured profile or a valid static/DHCP active mode is required; unknown authority mode is never inferred.')} />
+              /* Ngõ cụt cũ: khi authority không có configured profile và active
+                 mode là unknown, trang KHÔNG có lối nào để cấu hình thiết bị —
+                 đúng tình huống của một bo mới xuất xưởng hoặc một bo mà backend
+                 cấu hình chưa đọc được profile. Nay vẫn không SUY DIỄN mode (đó
+                 là lý do empty state còn nguyên), nhưng admin có thể tự soạn một
+                 candidate: mode là do người chọn, không phải do giao diện đoán. */
+              <div className="space-y-3">
+                <StateBlock state="empty" title={pick('Authority chưa có candidate chỉnh sửa', 'No editable network candidate')} detail={pick('Cần configured profile hoặc active mode static/DHCP hợp lệ; không suy diễn mode khi authority báo unknown.', 'A configured profile or a valid static/DHCP active mode is required; unknown authority mode is never inferred.')} />
+                {canManageNetwork && activeNetwork?.interface && !transactionLocked && <div className="flex justify-center">
+                  <Button icon={<Network className="h-4 w-4" />} onClick={() => startBlankCandidate(activeNetwork.interface)}>
+                    {pick('Tự soạn cấu hình mạng', 'Author a network candidate')}
+                  </Button>
+                </div>}
+              </div>
             )}
           </div>
         ) : null}
@@ -752,9 +812,13 @@ function candidateLines(candidate: NetcfgCandidate): Array<[string, string]> {
   ]
 }
 
+function currentOriginHost(): string {
+  return window.location.hostname.toLowerCase().replace(/\.$/, '')
+}
+
 function managementOriginMatches(management: NetcfgResponse['management']): boolean {
   if (!management?.stable || !management.mdnsName) return false
-  return window.location.hostname.toLowerCase().replace(/\.$/, '') === management.mdnsName.toLowerCase().replace(/\.$/, '')
+  return currentOriginHost() === management.mdnsName.toLowerCase().replace(/\.$/, '')
 }
 
 function managementUrl(management: NetcfgResponse['management']): string | null {

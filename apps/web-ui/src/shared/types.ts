@@ -11,7 +11,9 @@ export interface Point {
   tag: string
   name: string
   kind: PointKind
-  value: number | boolean | string
+  /** `undefined` = CHƯA CÓ SỐ ĐO, khác hẳn với `0`. Nơi hiển thị phải ra
+   *  `NO_DATA`/`—`, nơi tính toán phải bỏ qua mẫu (REV-FE-04, nguyên tắc D-07). */
+  value: number | boolean | string | undefined
   unit?: string
   raw?: number
   rawUnit?: string

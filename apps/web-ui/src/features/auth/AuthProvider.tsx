@@ -11,7 +11,6 @@ interface Session {
   /** ISO thời điểm phiên này được cấp. Xem WEB-UX-003. */
   loginAt: string
   token?: string
-  apiKey?: string
 }
 
 interface AuthContextValue {
@@ -31,7 +30,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const getAuthHeader = useCallback((): Record<string, string> => {
     if (!session) return {}
     if (session.token) return { Authorization: `Bearer ${session.token}` }
-    if (session.apiKey) return { 'X-API-Key': session.apiKey }
     return {}
   }, [session])
 
@@ -56,9 +54,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    // `AUTH_MODE=apikey` đã bị GỠ BỎ (REV-FE-03).
+    //
+    // Nhánh cũ bỏ qua hẳn `/auth/login`, dựng phiên `role:'admin'` viết cứng và
+    // gửi header `X-API-Key` — một header mà toàn bộ `apps/web-api` không có
+    // tham chiếu nào (`auth.Require` chỉ đọc Bearer token). Mọi request được
+    // bảo vệ trả 401, kích hoạt `mkddc:auth-expired` và xoá phiên ngay, nên
+    // người dùng bị đá về trang đăng nhập không kèm giải thích. Vai trò 'admin'
+    // viết cứng cũng mâu thuẫn trực tiếp với bản vá F-07 vốn cố ý đưa vai trò
+    // lạ về `viewer`. Một chế độ đăng nhập luôn 401 tệ hơn không có chế độ đó;
+    // muốn tích hợp máy-máy thì phải cài `X-API-Key` ở BE trước.
     if (AUTH_MODE === 'apikey') {
-      setSession({ username, role: 'admin', apiKey: password, loginAt: new Date().toISOString() })
-      return
+      throw new Error('Chế độ đăng nhập apikey chưa được backend hỗ trợ; dùng VITE_AUTH_MODE=jwt')
     }
 
     const response = await fetch(`${base}/auth/login`, {

@@ -92,7 +92,7 @@ const basePoints: Array<Omit<Point, 'tag'>> = [
   { id: 'AO-04', name: names['AO-04'], kind: 'AO', value: 45, unit: '%', raw: 4.5, rawUnit: 'V', quality: 'good', source: 'Core', priority: 'PID', updatedAt: nowIso(), sensorType: '0-10V' }
 ]
 
-let points: Point[] = basePoints.map((point) => ({ ...point, tag: point.id, trend: makeTrend(pointNumber(point as Point)) }))
+let points: Point[] = basePoints.map((point) => ({ ...point, tag: point.id, trend: makeTrend(pointNumber(point as Point) ?? 0) }))
 
 const alarms: Alarm[] = [
   { id: 'AL-001', time: '2025-05-23T14:31:02Z', severity: 'critical', status: 'active', message: 'UI-05 Filter Switch', source: 'UI-05', value: 'ON', detail: 'trip=HH threshold=1 current=ON (High-high); occurrence=1', triggerLevel: 'HH', threshold: '1', active: true },
@@ -131,7 +131,9 @@ function jitter(point: Point): Point {
   if ((point.kind === 'UI' && typeof point.value === 'number') || point.kind === 'AO') {
     const spread = point.kind === 'UI' ? 1.2 : 2.5
     const max = point.unit === 'bar' ? 12 : point.unit === 'ppm' ? 2000 : point.unit === 'pulse' ? 9999 : 100
-    const next = clamp(pointNumber(point) + (Math.random() - 0.48) * spread, 0, max)
+    // Dữ liệu demo là dữ liệu tổng hợp theo định nghĩa: mọi base point đều có
+    // giá trị, nên `?? 0` ở đây không phải bịa số đo của thiết bị thật.
+    const next = clamp((pointNumber(point) ?? 0) + (Math.random() - 0.48) * spread, 0, max)
     const rounded = Number(next.toFixed(1))
     const trend = [...(point.trend ?? []), rounded].slice(-18)
     const patch: Partial<Point> = { value: rounded, trend, updatedAt }
@@ -377,7 +379,7 @@ export function getTrendSamples(pointIds: string[] = ['UI-01', 'UI-02', 'UI-03',
     const sample: TrendSample = { time: timestamp.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }
     for (const id of tracked) {
       const point = points.find((item) => item.id === id)
-      const base = pointNumber(point ?? points[0])
+      const base = pointNumber(point ?? points[0]) ?? 0
       const amplitude = point?.kind === 'AO' ? 8 : point?.unit === 'bar' ? 0.8 : 5
       const wave = Math.sin((i / Math.max(1, sampleCount - 1)) * Math.PI * 4 + id.length) * amplitude
       const slowDrift = Math.cos((offset / sampleCount) * Math.PI * 2 + id.charCodeAt(id.length - 1)) * amplitude * 0.35
