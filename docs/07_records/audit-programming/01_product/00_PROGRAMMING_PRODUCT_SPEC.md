@@ -1,100 +1,56 @@
-# Product Spec Programming DDC-24 Rev A
+# Product Spec Programming DDC-24 Rev A — controlled copy và amendment overlay
 
-**ID:** PROD-PROG-001
-**Revision:** A
-**Trạng thái nguồn:** Active
-**Trạng thái bản audit:** CONTROLLED COPY
-**Chủ quản:** Product
-**Ngày hiệu lực:** 2026-08-03
-**Nguồn bất biến:** [`09_archive/raw-source-snapshots/.../DDC24_PROGRAMMING_PRODUCT_SPEC.md`](../09_archive/raw-source-snapshots/docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md)
-**Quyết định phạm vi:** ADR-023 trong [snapshot quyết định](../09_archive/raw-source-snapshots/docs/00_governance/DECISIONS.md)
-**Quyết định còn mở:** [Open Decision Register đã chuẩn hóa](../00_document_control/04_OPEN_DECISION_REGISTER.md)
-
-> Bản này giữ nguyên nghĩa Product của nguồn Active và chỉ sửa metadata/liên kết
-> để tham gia bộ audit. Nó không thay thế Product authority ngoài thư mục này.
-
-## 1. Mục đích và ranh giới tài liệu
-
-Tài liệu này là Product Spec: quy định sản phẩm Programming DDC-24 Rev A phải
-làm được gì và giới hạn cam kết sản phẩm. Tài liệu không quy định kiến trúc,
-API, schema lưu trữ, thuật toán, thư viện, process, package hoặc kế hoạch triển
-khai.
-
-Các lớp hồ sơ được phân biệt như sau:
-
-| Lớp | Câu hỏi được trả lời | Nguồn chủ quản |
-|---|---|---|
-| Product Spec | Sản phẩm phải làm được gì? | Tài liệu này và `PRODUCT.md` |
-| Requirement | Từng layer phải đáp ứng gì để hiện thực Product Spec? | `REQUIREMENTS.md` |
-| Design | Hệ thống sẽ hiện thực requirement bằng cách nào? | Chưa thực hiện trong nhiệm vụ đồng bộ này |
-| As-Built | Source/deployment hiện tại thực sự có gì và đã có bằng chứng gì? | Source đã kiểm chứng và hồ sơ audit/evidence riêng |
-
-Việc một source file, prototype hoặc host unit test tồn tại không chứng minh
-capability Programming đã được implement. Product Spec này không đưa ra tuyên
-bố implementation hoặc release readiness.
-
-## 2. Thuật ngữ chuẩn hóa
-
-Các thuật ngữ dưới đây là normative trong hồ sơ Programming Rev A:
-
-| Thuật ngữ | Định nghĩa sản phẩm |
+| Thuộc tính | Giá trị |
 |---|---|
-| **Project** | Container kỹ thuật chứa một hoặc nhiều Program, khai báo Point, Variable, I/O Mapping và lịch sử Revision liên quan. |
-| **Program** | Đơn vị logic điều khiển có thể được xác thực và chạy cyclic; Rev A hỗ trợ Program viết bằng ST hoặc FBD. |
-| **Point** | Đối tượng dữ liệu đại diện cho giá trị ở ranh giới Programming với I/O hoặc không gian point của bộ điều khiển; có định danh và trạng thái chất lượng. |
-| **Variable** | Dữ liệu có tên được Program dùng nội bộ; Variable không mặc nhiên là Point. |
-| **Modbus RTU Point** | Point ánh xạ tới đối tượng dữ liệu của thiết bị Modbus RTU qua một cấu hình hợp lệ; không bao gồm Modbus TCP. |
-| **I/O Mapping** | Quan hệ được xác thực giữa Variable của Program và Point được phép đọc hoặc ghi. |
-| **Revision** | Phiên bản bất biến của Project/Program và cấu hình liên quan dùng cho truy nguyên, Deployment và Rollback. |
-| **Deployment** | Thao tác chuyển một Revision đã xác thực tới môi trường runtime; Deployment chưa đồng nghĩa Revision đang chạy. |
-| **Activation** | Thao tác chuyển có kiểm soát để một Revision đã Deployment trở thành Revision đang chạy. |
-| **Rollback** | Thao tác quay về một Revision đã biết và còn tương thích khi Activation mới thất bại hoặc bị hủy. |
-| **RETAIN** | Thuộc tính của Variable yêu cầu bảo toàn giá trị qua các điều kiện restart được phê duyệt; ranh giới warm/cold restart và power cycle còn là quyết định mở. |
-| **Online Monitor** | Khả năng quan sát có thẩm quyền trạng thái runtime, Revision active, Program, Variable và Point mà không tự tạo quyền ghi/force hoặc online change. |
+| ID | `PROD-PROG-001` |
+| Revision authority | A, Active từ 2026-08-03 |
+| Phiên bản controlled copy | 2.0 |
+| Trạng thái amendment | `PROPOSAL / IN REVIEW` |
+| Product authority canonical | `docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md` |
+| Amendment input | Product v2.2 + UX v2.2, 2026-08-09 |
+| Chủ quản | Product Owner |
 
-Các từ `build`, `deploy`, `activate` không được dùng thay thế lẫn nhau. “Online
-Monitor” không đồng nghĩa “online change”.
+> File này là controlled mirror của `PROD-PROG-001` và lớp delta đề xuất. Nó
+> không phải Product Spec thứ hai, không supersede authority canonical và không
+> biến nội dung v2.2 thành baseline khi sign-off còn `PENDING`.
 
-## 3. Phạm vi Product Spec Rev A
+## Mục lục
 
-### 3.1 Phạm vi chức năng đóng
+1. Authority và cách đọc
+2. Phạm vi Active Rev A
+3. Product Capability authority
+4. Product Requirement authority
+5. Amendment v2.2 đề xuất
+6. Lifecycle và ranh giới chủ quản
+7. Traceability và gate
+8. Thuật ngữ
+9. Lịch sử sửa đổi
+10. Phê duyệt
 
-Programming Rev A chỉ gồm:
+## 1. Authority và cách đọc
 
-- Local Physical I/O;
-- Virtual Point;
-- Modbus RTU Point;
-- Structured Text (ST);
-- Function Block Diagram (FBD);
-- Cycle time 1 giây, 5 giây và 30 giây.
+`PC-PROG-001..012` và `PR-PROG-001..014` dưới đây giữ nguyên nghĩa authority
+2026-08-03. Mọi nội dung mang nhãn `PROPOSED V2.2` chỉ là proposed answer cho
+Open Decision hoặc làm rõ dự kiến; nếu mạnh hơn/mâu thuẫn baseline thì phải vào
+Conflict Register và không được implement như quyết định đã duyệt.
 
-Không có loại Point, ngôn ngữ hoặc cycle time nào khác trong scope.
+## 2. Phạm vi Active Rev A
 
-### 3.2 Hành vi hỗ trợ xuyên suốt
+### 2.1 Trong phạm vi authority
 
-Project, Program, Point, Variable, I/O Mapping, Revision, Deployment,
-Activation, Rollback, RETAIN và Online Monitor là các khái niệm vòng đời/runtime
-cần thiết để sử dụng và kiểm chứng đúng sáu hạng mục chức năng đóng ở mục 3.1.
-Chúng không mở rộng thêm protocol, ngôn ngữ, loại Point, motion hoặc safety PLC.
+- Local Physical I/O, Virtual Point và Modbus RTU Point;
+- Structured Text (ST) và Function Block Diagram (FBD);
+- cycle time chỉ `1 s`, `5 s`, `30 s`;
+- Project, Program, Point, Variable, I/O Mapping, Revision, Deployment,
+  Activation, Rollback, RETAIN và Online Monitor theo requirement tương ứng.
 
-### 3.3 Ngoài phạm vi
+### 2.2 Ngoài phạm vi authority
 
-Programming Rev A không bao gồm:
+Modbus TCP Point, BACnet/IP Point, LD, SFC, motion control, safety PLC, online
+change và mọi claim IEC conformance/certification khi chưa có evidence đều phải
+bị từ chối, không chỉ bị ẩn trên UI.
 
-- Modbus TCP Point hoặc dùng Modbus TCP làm nguồn Point cho Program;
-- BACnet/IP Point hoặc dùng BACnet/IP làm nguồn Point cho Program;
-- Ladder Diagram (LD);
-- Sequential Function Chart (SFC);
-- motion control;
-- safety PLC, safety runtime hoặc tuyên bố functional-safety PLC;
-- online change;
-- tuyên bố `IEC 61131-3 compliant`, `certified` hoặc tương đương khi chưa có
-  chương trình đánh giá và bằng chứng được phê duyệt.
-
-Modbus TCP và BACnet/IP có thể tồn tại ở baseline giao tiếp toàn sản phẩm, nhưng
-không vì vậy trở thành Programming Point trong Rev A.
-
-## 4. Product Capability
+## 3. Product Capability authority
 
 | ID | Product Capability |
 |---|---|
@@ -107,60 +63,97 @@ không vì vậy trở thành Programming Point trong Rev A.
 | PC-PROG-007 | Tạo, xác thực và chạy Program FBD. |
 | PC-PROG-008 | Chạy Program cyclic với lựa chọn cycle time 1 s, 5 s hoặc 30 s. |
 | PC-PROG-009 | Quản lý Revision, Deployment, Activation và Rollback. |
-| PC-PROG-010 | Bảo toàn Variable được đánh dấu RETAIN theo chính sách đã phê duyệt. |
+| PC-PROG-010 | Bảo toàn Variable RETAIN theo chính sách đã phê duyệt. |
 | PC-PROG-011 | Quan sát Program, Variable và Point qua Online Monitor. |
 | PC-PROG-012 | Giữ đúng ranh giới Programming Rev A và từ chối capability ngoài phạm vi. |
 
-## 5. Product Requirement
+## 4. Product Requirement authority
 
 | ID | Product Requirement |
 |---|---|
 | PR-PROG-001 | Sản phẩm phải cho phép người dùng có quyền tạo, mở, sửa và lưu Project chứa một hoặc nhiều Program mà không làm mất quan hệ truy nguyên. |
-| PR-PROG-002 | Sản phẩm phải hỗ trợ Program ST và Program FBD như hai ngôn ngữ Programming Rev A; lỗi xác thực phải được trả về rõ ràng trước Deployment. |
-| PR-PROG-003 | Sản phẩm chỉ được cung cấp ba loại Point cho I/O Mapping Programming Rev A: Local Physical I/O, Virtual Point và Modbus RTU Point. |
-| PR-PROG-004 | Sản phẩm phải phân biệt Point với Variable và phải xác thực direction, type, quyền đọc/ghi và trạng thái chất lượng tại I/O Mapping. |
-| PR-PROG-005 | Với Program chạy cyclic, sản phẩm chỉ được cung cấp lựa chọn cycle time 1 s, 5 s hoặc 30 s và phải hiển thị lựa chọn đang áp dụng. |
-| PR-PROG-006 | Revision có lỗi cú pháp, semantic, I/O Mapping hoặc điều kiện xác thực bắt buộc không được Deployment hoặc Activation. |
-| PR-PROG-007 | Mỗi Revision dùng cho Deployment phải bất biến và có định danh truy nguyên tới Project, Program và actor tạo Revision. |
-| PR-PROG-008 | Deployment phải có trạng thái có thẩm quyền và không được tự báo thành công khi runtime chưa chấp nhận artifact tương ứng. |
-| PR-PROG-009 | Activation phải diễn ra tại ranh giới cyclic được kiểm soát; lỗi Activation phải giữ Revision đang chạy trước đó. Rollback phải quay về Revision tương thích đã biết. |
-| PR-PROG-010 | Variable được đánh dấu RETAIN phải được phục hồi đúng theo chính sách restart đã phê duyệt; Variable không RETAIN không được mặc nhiên dùng dữ liệu cũ. |
-| PR-PROG-011 | Online Monitor phải hiển thị dữ liệu runtime có nguồn và độ mới rõ ràng, gồm Revision active, trạng thái Program, Variable và Point; dữ liệu stale/unavailable không được trình bày như dữ liệu live. |
-| PR-PROG-012 | Program active phải tiếp tục chạy local khi Web/engineering client mất kết nối; lỗi ở presentation không được tự làm dừng control path. |
-| PR-PROG-013 | Thao tác sửa Project, tạo Revision, Deployment, Activation và Rollback phải được phân quyền và audit; tên role cụ thể tuân theo quyết định RBAC được phê duyệt. |
-| PR-PROG-014 | Sản phẩm phải từ chối LD, SFC, Modbus TCP Point, BACnet/IP Point và capability motion/safety PLC trong Programming Rev A; không được gắn nhãn các capability này là đã hỗ trợ. |
+| PR-PROG-002 | Sản phẩm phải hỗ trợ Program ST và Program FBD như hai ngôn ngữ Rev A; lỗi xác thực phải được trả rõ trước Deployment. |
+| PR-PROG-003 | Sản phẩm chỉ được cung cấp Local Physical I/O, Virtual Point và Modbus RTU Point cho I/O Mapping Rev A. |
+| PR-PROG-004 | Sản phẩm phải phân biệt Point với Variable và xác thực direction, type, quyền đọc/ghi và quality tại I/O Mapping. |
+| PR-PROG-005 | Sản phẩm chỉ được cung cấp cycle `1 s`, `5 s`, `30 s` và phải hiển thị lựa chọn đang áp dụng. |
+| PR-PROG-006 | Revision lỗi syntax, semantic, I/O Mapping hoặc validation bắt buộc không được Deployment/Activation. |
+| PR-PROG-007 | Revision dùng cho Deployment phải bất biến và truy nguyên tới Project, Program và actor tạo Revision. |
+| PR-PROG-008 | Deployment phải có trạng thái authority và không được tự báo thành công khi runtime chưa chấp nhận đúng artifact. |
+| PR-PROG-009 | Activation phải ở cyclic boundary; lỗi giữ Revision đang chạy; Rollback phải về Revision tương thích đã biết. |
+| PR-PROG-010 | Variable RETAIN phải được phục hồi theo policy đã duyệt; non-RETAIN không được mặc nhiên dùng dữ liệu cũ. |
+| PR-PROG-011 | Online Monitor phải hiển thị authority data, active Revision, Program, Variable, Point và freshness; stale/unavailable không được giả live. |
+| PR-PROG-012 | Program active phải tiếp tục chạy local khi Web/engineering client mất kết nối. |
+| PR-PROG-013 | Sửa Project, tạo Revision, Deployment, Activation và Rollback phải được phân quyền và audit. |
+| PR-PROG-014 | Sản phẩm phải từ chối LD, SFC, Modbus TCP Point, BACnet/IP Point, motion và safety PLC; không gắn nhãn đã hỗ trợ. |
 
-## 6. Hành vi vòng đời sản phẩm
+## 5. Amendment v2.2 đề xuất
 
-Vòng đời tối thiểu được quan sát bởi người dùng là:
+### 5.1 Delta so với Product authority ngày 2026-08-03
+
+| Chủ đề | Baseline 2026-08-03 | Delta `PROPOSED V2.2` | ID/decision liên quan |
+|---|---|---|---|
+| Functional view | Project/Program có truy nguyên | Functional tag/view chỉ là metadata tùy chọn, không entity thứ tư | `PRG-BACS-001, PRG-BACS-002`; `OD-PROG-003` |
+| FBD | FBD IN, UX chưa chốt | Structured typed editor IN; free-form wiresheet/canvas OUT Rev A | `PRG-IEC-001, PRG-IEC-005`; `OD-PROG-006` |
+| Task | Cycle 1/5/30, số Task chưa chốt | Đúng một Task Rev A; multi-task và 8/16/32 OUT | `PRG-IEC-003`; `OD-PROG-003, OD-PROG-004` |
+| Library | Chưa nêu ceiling | Core Control Library tối thiểu IN; BACS Library nâng cao OUT | `PRG-BACS-004`; `OD-PROG-005` |
+| User FB | Chưa chốt | User FUNCTION_BLOCK chỉ cục bộ Project; package/global/binary OUT | `PRG-IEC-002`; `OD-PROG-005, OD-PROG-006` |
+| RETAIN | Capability IN, policy mở | Giữ IN; bắt compatibility/impact/confirmation và target evidence | `PRG-COM-002, PRG-COM-004`; `OD-PROG-009, OD-PROG-010` |
+| Integrity | Chưa tách nguồn gốc/toàn vẹn | Cryptographic hash IN; trusted-origin signature OUT | `PRG-SEC-002..004` |
+| Thay controller | Chưa có feature riêng | Bundle source-only IN; reject artifact/IR/native/cache, build lại target, không auto-activate | `PRG-COM-006` |
+| Arbitration | Chưa định nghĩa read model | Program = Local logic mức 5; expose `program_value/actual_value/overridden_by/effective_priority` | `PRG-RT-002, PRG-RT-007`, `PRG-COM-005` |
+| Bumpless | Activation giữ old Revision khi lỗi | Hold-last trên đóng góp mức 5; không seed `actual_value`; IOP poll `<200 ms` | `PRG-RT-008`; `OD-PROG-012` |
+| Cutover | Graph migration còn mở | `GRAPH_ONLY/PROGRAM_ONLY/DUAL_INVALID`, fail closed, base step độc lập Task period | `PRG-RT-009`; `OD-PROG-012, OD-PROG-013, OD-PROG-014` |
+| Overrun | Quan sát được, policy mở | Fault đúng Task; plant safe-state chỉ do SafetyManager condition độc lập; Check cách ly RT | `PRG-RT-006`; `OD-PROG-012` |
+| Đồng thời | RBAC/audit | Optimistic concurrency `base_revision`/ETag; không last-write-wins | `PRG-SEC-005`; `OD-PROG-001, OD-PROG-010` |
+| Documentation | Không khóa export | Basic Revision metadata IN; full functional/as-built panel/PDF OUT | `PRG-BACS-002` |
+
+### 5.2 Phạm vi feature đề xuất
+
+Feature catalog có 12 Feature Spec. Ba feature mới — bundle thay controller,
+cutover và arbitration transparency — **không tạo Product Capability mới**;
+chúng phân rã/làm rõ `PC-PROG-001, PC-PROG-002, PC-PROG-009, PC-PROG-011, PC-PROG-012` và giữ trạng thái `IN REVIEW`.
+
+## 6. Lifecycle và ranh giới chủ quản
 
 ```text
-Project/Program đang chỉnh sửa
-  → Revision đã xác thực
-  → Deployment được runtime chấp nhận
-  → Activation tại ranh giới cyclic
-  → Revision active
-  → Rollback về Revision đã biết khi cần
+Draft → Check → Candidate → Đưa vào vận hành → Active/LKG
+                              ↘ reject/unknown: giữ LKG
+Active → Khôi phục bản trước → LKG tương thích
 ```
 
-- Tạo Revision không đồng nghĩa Deployment.
-- Deployment không đồng nghĩa Activation.
-- Activation thất bại không được xóa hoặc thay thế Revision active trước đó.
-- Mọi trạng thái hiển thị phải đến từ authority sở hữu trạng thái đó; UI không
-  được suy diễn thành công từ việc request đã được gửi.
-- Online Monitor là đường quan sát. Quyền force/write, nếu có trong sản phẩm
-  khác, không được suy ra từ capability này.
+Product sở hữu capability, phạm vi, safety outcome và runtime truth. UX
+companion sở hữu IA/layout/copy/journey. Runtime architecture sở hữu base-step,
+cutover/resource isolation; Control Semantics sở hữu resolver/hold-last/
+anti-windup/IOP rule; IFSPEC sở hữu data meaning và `PRG-ERR-*`; Verification
+sở hữu scenario/evidence. Nội dung nơi khác chỉ trỏ tới chủ quản này.
 
-## 7. Tiêu chí hoàn tất Product Spec
+## 7. Traceability và gate
 
-Product Spec Rev A được xem là documented khi:
+- 41 `PRG-*` và 24 `UX-REQ-*` ở trạng thái `PROPOSED` tại
+  [Proposed Requirements](../02_requirements/01_PROPOSED_REQUIREMENTS_V22.md).
+- `VS-PROG-001..030` là catalog duy nhất tại
+  [Verification Scenarios](../06_verification/01_VERIFICATION_SCENARIOS.md).
+- Ma trận hai chiều nằm tại [TRACE-PROG-001](../07_traceability/00_PROGRAMMING_TRACEABILITY_MATRIX.md).
+- `VR-PROG-001..013` vẫn `RED`, evidence production `0/13`; G0..G7 vẫn
+  `RED/NOT STARTED`.
 
-1. toàn bộ capability trong mục 4 có Product Requirement tương ứng;
-2. từng Product Requirement có System Requirement và Verification Requirement
-   trong [Programming Traceability Matrix](../07_traceability/00_PROGRAMMING_TRACEABILITY_MATRIX.md);
-3. mọi vấn đề chưa quyết định được ghi tại
-   [Programming Open Decisions](../00_document_control/04_OPEN_DECISION_REGISTER.md);
-4. không có claim Programming đã implement hoặc đã đạt runtime production.
+## 8. Thuật ngữ
 
-Việc thỏa tiêu chí tài liệu không tự đóng release gate, không thay thế Product
-approval và không phải bằng chứng As-Built.
+Xem [Data Dictionary](../00_document_control/02_TERMS_AND_DATA_DICTIONARY.md).
+
+## 9. Lịch sử sửa đổi
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.0 | 2026-08-08 | Controlled copy của Product authority Active. |
+| 2.0 | 2026-08-09 | Giữ 12 PC/14 PR authority; thêm overlay delta v2.2 và quan hệ chủ quản/trace, không supersede. |
+
+## 10. Phê duyệt
+
+| Vai trò | Quyết định | Ghi chú |
+|---|---|---|
+| Product Owner | `PENDING` | `OD-PROG-015` |
+| Software/Runtime Architect | `PENDING` | Base step/cutover/resource isolation |
+| Controls/Safety Reviewer | `PENDING` | Arbitration/hold-last/IOP/overrun |
+| UX Lead | `PENDING` | UX companion v2.2 |
+| Verification Lead | `PENDING` | `VR` 0/13 |

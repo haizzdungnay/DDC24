@@ -1,11 +1,19 @@
 # Feature Spec: RETAIN và phục hồi
 
-**ID:** FSP-PROG-007  
-**Phiên bản:** 0.1  
-**Trạng thái:** IN REVIEW  
-**Nguồn:** PC-PROG-010; PR-PROG-010  
-**Kiểm chứng:** VR-PROG-009  
+**ID:** FSP-PROG-007
+**Phiên bản:** 0.2
+**Trạng thái:** IN REVIEW
+**Nguồn:** PC-PROG-010; PR-PROG-010
+**Kiểm chứng:** VR-PROG-009
 **Quyết định mở:** OD-PROG-002, 009, 010
+
+## Mục lục
+
+1. Mục tiêu
+2. Hành vi bắt buộc
+3. Tiêu chí chấp nhận
+4. Ranh giới
+5. Thuật ngữ, lịch sử và phê duyệt
 
 ## Mục tiêu
 
@@ -29,5 +37,18 @@ state và non-RETAIN đạt kết quả đã phê duyệt trên production targe
 
 ## Ranh giới
 
-Feature Spec không tự định nghĩa biến cố nào được giữ, tần suất checkpoint hay
-wear limit; toàn bộ thuộc OD-PROG-009/010.
+RETAIN là `IN Rev A` ở tầng proposal; full policy chưa approved. Feature Spec
+không tự định nghĩa biến cố nào được giữ, tần suất checkpoint hay wear limit;
+toàn bộ thuộc OD-PROG-009, OD-PROG-010. Incompatible state phải có manifest impact,
+confirmation và audit trước reset; không được âm thầm reset.
+
+## Thuật ngữ, lịch sử và phê duyệt
+
+Thuật ngữ theo [DICT-PROG-001](../../00_document_control/02_TERMS_AND_DATA_DICTIONARY.md).
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 0.1 | 2026-08-08 | Feature audit ban đầu. |
+| 0.2 | 2026-08-09 | Chốt scope proposal IN Rev A và explicit incompatible-state handling. |
+
+Sign-off: Product Owner `PENDING`; Runtime Architect `PENDING`; Controls/Safety `PENDING`; Verification `PENDING`.
