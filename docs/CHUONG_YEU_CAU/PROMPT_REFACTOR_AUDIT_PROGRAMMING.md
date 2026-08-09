@@ -1,5 +1,13 @@
 # PROMPT — Cập nhật và refactor bộ `docs/07_records/audit-programming` thành BỘ TÀI LIỆU THIẾT KẾ PROGRAMMING
 
+> **Trạng thái:** REFERENCE — prompt lịch sử, không còn là chỉ thị hiện hành.
+> **Lý do đóng băng:** thư mục `docs/07_records/audit-programming` đã được loại
+> bỏ để tránh tạo nguồn thẩm quyền thứ hai cạnh bộ hồ sơ Programming 22 tài liệu
+> do `PROG-DOCSET-001` kiểm soát. Nội dung đã xoá vẫn phục hồi được từ commit
+> `3efaf0d` trong lịch sử Git. Mọi cập nhật mới phải đi qua
+> `docs/02_design/PROGRAMMING_DESIGN_INDEX.md`, ma trận truy xuất và gate tài
+> liệu tương ứng; không thực thi lại prompt này.
+
 > Dán nguyên khối này cho team PM/CTO hoặc agent thực thi. Prompt tự chứa; người
 > nhận không cần đọc lại lịch sử hội thoại.
 

@@ -3,10 +3,17 @@
 > **Document ID:** SW-IR-ARTIFACT-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-07-28
 > **Workstream:** C0.6 (MS-01)
-> **Trạng thái:** Active — normative cho `services/core/st/st_ir.*`, `st_artifact.*`, `st_loader.*`
+> **Trạng thái:** Supporting As-Built — source hiện tại tại `apps/core/application/st/`; không phải Target authority Programming v2.2
 > **Nguồn quyết định:** ADR-020; `PROGRAM_SOM_FW_DRAFT_DESIGN` §4, §7.2; quyết định ký gói 2026-07-28
 > **Tài liệu liên quan:** [`ST_SUBSET_SPEC`](ST_SUBSET_SPEC_MK-DDC-24_VI.md) (C0.4),
 > [`PROGRAM_TASK_SCHEDULER_SPEC`](PROGRAM_TASK_SCHEDULER_SPEC_MK-DDC-24_VI.md) (C0.7)
+
+> **Thông báo supersede Target (2026-08-09):** layout/code loader hiện hữu vẫn
+> hữu ích để bảo trì As-Built, nhưng Target stage/swap/compatibility và policy
+> `HASH_ONLY` theo Product v2.2 thuộc
+> [`IFSPEC-ART-PROG-001`](../interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md).
+> Quy định Ed25519 normative trong bản cũ không tự động áp dụng cho Target mới;
+> decision về integrity/provenance phải được phê duyệt trước khi đổi code.
 
 ---
 
