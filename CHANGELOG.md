@@ -7,6 +7,35 @@
 ---
 
 ## [Unreleased]
+### Changed — Ghim candidate P0 và cập nhật roadmap theo tiến độ thực (2026-08-10)
+
+**Kiểm soát cấu hình.** Thêm
+`docs/07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md`,
+ghim candidate P0 tại commit
+`e3e9fb26f61b39df8f805916333fc03b51f07f5f`, tree
+`54eb519ec9e18639b0eeb8a4a0c5c3381e9b32de` trên `origin/main`. Manifest chứa
+SHA-256 đầy đủ, Git blob và số dòng của 22/22 hồ sơ baseline cùng Plan 54 v2.1
+và gói review P0 v1.0; delta từ baseline gốc chỉ rõ bốn hồ sơ trong mẫu số 22
+đã đổi. Manifest được đăng ký vào chỉ mục review, không làm tăng baseline thành
+23 file và không tự mở gate.
+
+**Plan/Roadmap.** Nâng Plan 53 lên v0.9, Plan 54 lên v2.2 và Design Index lên
+v1.2. Chuyển riêng điều kiện “candidate đã ghim” sang `PASS`; thêm snapshot
+`P0-pin`, đồng bộ blocker ở gói P0 v1.1 và sửa bảng `DOC-5440..5445` từng bị
+đoạn văn chen giữa. Trạng thái tổng không bị làm đẹp: P0 vẫn 0/7 DoD,
+22/22 M3, 0/22 M4, 0/22 M5, 17/17 decision tổng thể `OPEN`, 0/32 Test Result;
+`DOC-G4`, `PLAN_READY`, `IMPLEMENT_READY` và `RELEASE_READY` vẫn `BLOCKED`.
+
+**Kiểm chứng.** Manifest tái tính từ candidate đạt 22/22; docs harness
+`python3 scripts/docs_iso_harness.py --expect -v` PASS (22/22 file, link/anchor/
+ID/code-span lỗi 0, 60 requirement, 60 trace, 32 scenario, trace invariant lỗi
+0); `git diff --check` PASS. Gate repository chạy lại mới: C++ Release với
+Modbus/BACnet/HMI bật đạt CTest 860/860; Go `vet` PASS và 11 package test PASS
+với `-count=1`; FE 53 file/469 test PASS, lint PASS, build PASS. Không chạy
+Chrome DevTools hoặc Playwright vì thay đổi chỉ là tài liệu, không tác động UI
+hay hành vi runtime; không chạy target/HIL và không dùng regression host để
+đóng bất kỳ `VS-PROG-*` nào.
+
 ### Changed — Duyệt Plan 53 và triển khai gói chuẩn bị P0 `PROG-000..006` (2026-08-10)
 
 **Phán quyết.** Plan 53 v0.8 được chấp nhận để đưa vào **authority review P0**,

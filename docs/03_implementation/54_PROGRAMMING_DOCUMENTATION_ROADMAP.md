@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 2.1 |
+| Phiên bản | 2.2 |
 | Trạng thái | **22/22 M3 — REVIEW READY; chờ consumer review (M4) và chữ ký (M5)** |
-| Ngày baseline | 2026-08-09 |
+| Ngày baseline | 2026-08-10 |
 | Chủ quản | System Engineering + Document Control |
 | Người phê duyệt | Product Owner, System Architect, Verification Lead |
 | Phạm vi | 22 hồ sơ điều khiển yêu cầu, thiết kế, kiểm chứng và triển khai Programming Rev A |
@@ -91,12 +91,12 @@ không nhập phần trăm bằng cảm tính.
 
 | Chặng | Trạng thái | Kết quả hiện tại |
 |---|---|---|
-| R0 — Kiểm soát baseline | **COMPLETE** | Register 22 hồ sơ, owner/reviewer, scoring, risk/scenario mapping và đường dẫn chuẩn đã chốt |
+| R0 — Kiểm soát baseline | **COMPLETE** | Register 22 hồ sơ, owner/reviewer, scoring, risk/scenario mapping và đường dẫn chuẩn đã chốt; candidate P0 đã ghim `e3e9fb2` |
 | R1 — Requirement/decision/architecture | **M3 COMPLETE** | Index/SRS/Open Decisions/Architecture đạt cổng loại tương ứng; có mục Đọc nhanh và phụ lục tự kiểm |
 | R2 — Contract + 5 thiết kế lõi | **M3 COMPLETE** | Data/Interface và 5 hồ sơ lõi có bảng `DD-01..DD-13` từng mã; blocker còn lại là TLS, `OD-PROG-002` và provenance artifact |
 | R3 — Thiết kế theo team | **M3 COMPLETE** | UI/UX theo IA **bốn workspace** `PGM-01..04`: asset render được cho từng workspace (Tổng quan desktop/mobile, Thiết kế, Kiểm tra & Vận hành kèm modal, Runtime & Bảo trì kèm drawer), cây component, API theo workspace, copy VI/EN, token và rollout; FE, BE, FW-SOM, FW MCU, HW đủ checklist |
 | R4 — Assurance/delivery | **M3 COMPLETE** | 32 test spec, Ops, 16 risk, 60 dòng trace và Plan 53 có phụ lục tự kiểm theo loại |
-| R5 — Review/sign-off | **BLOCKED — REVIEW/AUTHORITY** | Chờ consumer review để lên M4, và Product/Architect/QA ký 17 decision cùng 22 hồ sơ để lên M5; agent không ký thay |
+| R5 — Review/sign-off | **BLOCKED — REVIEW/AUTHORITY** | Candidate P0 đã ghim; chờ consumer review để lên M4, và Product/Architect/QA ký 17 decision cùng 22 hồ sơ để lên M5; agent không ký thay |
 
 `DOC-G0` được chuyển PASS sau chỉ đạo ngày 2026-08-09 “triển khai theo roadmap”
 và việc đăng ký cùng baseline vào `CONTROL.md`, Document Hub, Design Index và
@@ -180,7 +180,7 @@ lý do và revision history trước khi tính lại.
 | 19 | [`OPS-PROG-001`](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | Vận hành | Ops/Release / Core + BE + QA | `M3` 60 | P1 | Đọc nhanh + phụ lục cổng M3 loại Operations; 1 BLOCKED (chưa diễn tập) |
 | 20 | [`RSK-PROG-001`](../07_records/PROGRAMMING_RISK_REGISTER.md) | Assurance | Product + Architect + QA / risk owner | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Risk; 16/16 Open (gồm `RSK-PROG-016`), residual không đổi |
 | 21 | [`TRACE-PROG-001`](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Traceability | Verification Lead / Document Control | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Traceability; 60 dòng, 0 vi phạm bất biến |
-| 22 | [`PLAN-PROG-053`](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | Delivery | Dev Lead + Architect / Product + QA | `M3` 60 | P1 | v0.8; gói P0 `PROG-000..006` đã chuẩn bị 7/7, 0/7 DoD; G0/PLAN_READY BLOCKED |
+| 22 | [`PLAN-PROG-053`](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | Delivery | Dev Lead + Architect / Product + QA | `M3` 60 | P1 | v0.9; candidate `e3e9fb2` đã ghim; gói P0 `PROG-000..006` chuẩn bị 7/7, 0/7 DoD; G0/PLAN_READY BLOCKED |
 
 ## 5. Quan hệ rủi ro → hồ sơ phải ưu tiên
 
@@ -268,12 +268,14 @@ schema/ABI có compatibility, deploy order, rollback và verification owner.
 | `DOC-5442` | Risk owners + QA | Risk register sau design review | Control link đủ; residual chưa giảm nếu chưa có test result |
 | `DOC-5443` | Verification + Document Control | Traceability chi tiết và kiểm tra link | Requirement → design → source target → test → evidence không đứt |
 | `DOC-5444` | Dev Lead | Đồng bộ Plan 53 theo design Approved | Task/dependency/gate/RACI/estimate không buộc dev tự đoán |
+| `DOC-5445` | Tất cả approver | Review chéo, đóng finding P0/P1 và ký | 22/22 hồ sơ M5 hoặc blocker được Product/Architect/QA chấp thuận rõ |
 
 Hồ sơ hỗ trợ review P0
 [`PROG-P0-GATE-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md)
 gom evidence, decision authority, blocker và sign-off cho `PROG-000..006`. File
-này **không** làm tăng baseline từ 22 lên 23 và không tự nâng M4/M5.
-| `DOC-5445` | Tất cả approver | Review chéo, đóng finding P0/P1 và ký | 22/22 hồ sơ M5 hoặc blocker được Product/Architect/QA chấp thuận rõ |
+này **không** làm tăng baseline từ 22 lên 23 và không tự nâng M4/M5. Candidate
+review đã được ghim bằng
+[`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md).
 
 **Exit `DOC-G4`:** 22/22 hồ sơ Approved, 100% link sạch, không có `TBD` vô owner,
 `PROG-DOCSET-001` và `PLAN-PROG-053` đồng bộ. Lúc này mới xem xét mở G0 của Plan
@@ -364,6 +366,7 @@ Mỗi lần thay đổi mức, thêm **một dòng mới**; không sửa số l�
 | 2026-08-09 simplify-1 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / OD-PROG-016 + CONSUMER REVIEW PENDING | Amendment A1: IA bốn workspace + tám journey `UJ-PROG-01..08`; migration 17 UC (12 MERGED / 3 SCENARIO / 2 ROADMAP); 13 hồ sơ IMPACTED, 9 REVIEWED-NO CHANGE; 60 requirement, 32 scenario, 16 risk, 17 decision; điểm heuristic mục tiêu 87/100; 3 SVG mới; M3 giữ nguyên, M4/M5 vẫn 0 |
 | 2026-08-09 baseline-git | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY OPEN | Đưa 22/22 hồ sơ vào kiểm soát cấu hình Git (trước đó 20/22 untracked); harness vào repository tại `scripts/docs_iso_harness.py` có exit code và khối `EXPECT`; `DOC-GOV-001` và template hồ sơ vào repository; tách ba cổng quyền hạn ở Plan 53. M3 giữ 22/22, M4/M5 vẫn 0 |
 | 2026-08-10 P0-review | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED | Duyệt Plan 53 v0.8; sửa 42→49 task, 30→32 scenario, 15→17 decision; tách P0-A/P0-B để bỏ dependency vòng tròn; lập gói P0 cho 7/7 task nhưng giữ 0/7 DoD vì chưa có consumer review, pin candidate và chữ ký |
+| 2026-08-10 P0-pin | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED | Candidate P0 `e3e9fb2` đã ghim trên `origin/main`: tree `54eb519e`, 22/22 SHA-256/Git blob + hai hồ sơ hỗ trợ; blocker pin đóng, nhưng 0/7 DoD, M4/M5 0/22 vì review/conflict/sign-off còn thiếu |
 
 ## 10.1 Ma trận impact của Amendment A1 trên 22 hồ sơ
 
@@ -418,9 +421,8 @@ controlled baseline theo hướng ISO 9001. Đã khắc phục.
 | Số file baseline được Git theo dõi | **22/22** |
 | Harness xác nhận | `python3 scripts/docs_iso_harness.py --expect` → `PASS`, exit `0` |
 
-Đây là **revision được ghim** cho điều kiện `PLAN_READY` ở
-[Plan 53 §4.2](53_PROGRAMMING_IMPLEMENTATION_PLAN.md). Mọi thẻ task tham chiếu
-hồ sơ phải ghi commit này ở trường “contract/schema/version/hash đầu vào”.
+Đây là **baseline gốc** dùng để so sánh và rollback. Nó không còn là candidate
+của vòng review P0 hiện hành; mọi thẻ task mới phải dùng candidate ở đoạn dưới.
 
 SHA-256 rút gọn 16 ký tự đầu của từng file tại commit trên:
 
@@ -449,8 +451,19 @@ SHA-256 rút gọn 16 ký tự đầu của từng file tại commit trên:
 | `PROGRAMMING_RISK_REGISTER.md` | `f631828cbb790687` |
 | `PROGRAMMING_TRACEABILITY_MATRIX.md` | `9c2a5939a18869ba` |
 
-Khi một hồ sơ đổi, hash đổi theo và bảng này phải được tính lại **trong cùng
-commit** với thay đổi đó.
+Candidate P0 hiện hành đã ghim:
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Commit/tree | `e3e9fb26f61b39df8f805916333fc03b51f07f5f` / `54eb519ec9e18639b0eeb8a4a0c5c3381e9b32de` |
+| Nhánh chứa commit | `origin/main` |
+| Manifest | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
+| Phạm vi | 22/22 hồ sơ baseline + Plan 54 v2.1 + gói review P0 v1.0 |
+| Trạng thái | **PIN PASS; REVIEW/SIGN-OFF BLOCKED** |
+
+Manifest chứa SHA-256 đầy đủ, Git blob, số dòng và delta so với baseline gốc.
+Nếu nội dung candidate đổi, phải phát hành commit/manifest mới và invalid phần
+review chịu ảnh hưởng; không sửa hash lịch sử để trỏ sang working tree mới.
 
 ## 11. Điều kiện kết luận “bộ hồ sơ đã hoàn tất”
 
@@ -483,6 +496,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 1.9 | 2026-08-09 | Amendment A1 — đơn giản hóa và định vị cạnh tranh: thêm §10.1 ma trận impact 22 hồ sơ (13 IMPACTED / 9 REVIEWED-NO CHANGE); cập nhật dashboard cho 17 decision, 16 risk, 32 scenario; thêm snapshot `simplify-1`. Không tự nâng M4/M5 | System Engineering |
 | 2.0 | 2026-08-09 | Đóng review chặn phê duyệt: sửa master tracker về 60 requirement và 17 decision, `DOC-5440` về 32 scenario; nêu rõ phân chia thẩm quyền Plan 54 (hồ sơ) ↔ Plan 53 (implementation) và cấm roadmap thứ ba; siết phát biểu ISO-aligned và trỏ `DOC-GOV-001`; thêm snapshot `baseline-git` | System Engineering |
 | 2.1 | 2026-08-10 | Đồng bộ vòng duyệt P0: sửa Trace 55→60 và điều kiện hoàn tất 15→17 decision; ghi version Open Decisions/VVP/Plan 53 hiện hành; thêm gói review P0 ngoài baseline; tách P0-A/P0-B để bỏ dependency vòng tròn; thêm snapshot `P0-review`; giữ M3 22/22, M4/M5 0/22 | System Engineering |
+| 2.2 | 2026-08-10 | Ghim candidate P0 `e3e9fb2` bằng manifest 22 hồ sơ + hai hồ sơ hỗ trợ; cập nhật snapshot `P0-pin`, Plan 53 v0.9 và sửa bảng `DOC-5440..5445` bị ngắt; giữ M3 22/22, M4/M5 0/22 và DOC-G4 RED | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|
