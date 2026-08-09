@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `PROG-DOCSET-001` |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Trạng thái | **M3 — Review Ready** — checklist đủ, TBD/BLOCKED có owner, link sạch; chờ peer review để lên M4 |
 | Ngày | 2026-08-10 |
 | Chủ quản | System Engineering |
@@ -18,7 +18,7 @@
 | 3. Hệ thống hiện tại đang có gì? | Đường điều khiển production hiện chạy bằng **graph** (`graph.json` nạp lúc bootstrap). Các component ST/IR/scheduler/RETAIN đã có source và host test nhưng **chưa nối vào production**. FE Programming mới chỉ là trang placeholder. REST/WS Programming chưa có route production. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm một đường Programming song song (Project → Draft → Revision → Check → Commission → Active) và một **cutover độc quyền**: hoặc `GRAPH_ONLY`, hoặc `PROGRAM_ONLY`, không bao giờ cả hai. Bảy ranh giới bắt buộc ở §4 là phần không được thương lượng. Giao diện tổ chức theo **bốn workspace** và **tám user journey** `UJ-PROG-01..08` (Amendment A1, chờ `OD-PROG-016`). |
 | 5. Team phải sửa module/contract nào? | File này không giao việc code. Nó chỉ tay tới hồ sơ chủ quản: `mkddc-web` (BE Design), `mkddc-core` (FW-SOM + Control Semantics), `mkddc-iobus` (không đổi), STM32 (FW MCU Design), `apps/web-ui` (FE + UI/UX Design). |
-| 6. Điều gì còn bị chặn? | Cả 22 hồ sơ ở mức `M3 — Review Ready` do System Engineering tự kiểm; **chưa có consumer review của người thật** và **chưa có chữ ký thẩm quyền**. 17 `OD-PROG-*` vẫn `OPEN`, trong đó `OD-PROG-016` chặn IA bốn workspace. Chi tiết ở §8 và §11. |
+| 6. Điều gì còn bị chặn? | Candidate P0 của cả 22 hồ sơ đã ghim tại `e3e9fb2`, nhưng tất cả vẫn ở mức `M3 — Review Ready`: **chưa có consumer review của người thật** và **chưa có chữ ký thẩm quyền**. 17 `OD-PROG-*` vẫn `OPEN`, trong đó `OD-PROG-016` chặn IA bốn workspace. Chi tiết ở §8 và §11. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với riêng file này: register 22 dòng khớp đường dẫn thật, link/anchor sạch, không trùng ID tài liệu — đo bằng harness ở [`PROG-REV-2026-08-09`](../07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md). Với sản phẩm: 0/32 `VS-PROG-*` có Test Result, nên **không hồ sơ nào chứng minh implementation**. |
 
 Thuật ngữ điều hướng: **workspace** là một trong bốn màn hình chính `PGM-01..04`;
@@ -95,7 +95,7 @@ Product/ADR Active
 | `OPS-PROG-001` | [Programming Operations Runbook](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | backup, commission, restore, replacement, incident | `M3` — Review Ready; chưa diễn tập |
 | `RSK-PROG-001` | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | rủi ro, kiểm soát, owner và residual gate | `M3` v0.5 — Review Ready; 16/16 risk Open |
 | `TRACE-PROG-001` | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Requirement → Design → Interface → Test → Evidence | `M3` — Review Ready; evidence production RED |
-| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.8 — gói P0 review-ready; G0/PLAN_READY BLOCKED |
+| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.9 — candidate `e3e9fb2` đã ghim; G0/PLAN_READY BLOCKED |
 
 Tiến độ tạo, hoàn thiện, review và phê duyệt đúng 22 hồ sơ trên được quản lý tại
 [`PLAN-PROG-DOC-054`](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md).
@@ -207,6 +207,7 @@ của người soạn không thay thế được. Vì vậy hiện tại **M4 = 
 | 0.9 | 2026-08-09 | Đồng bộ UI/UX v0.5 với rule visual mới: đủ asset render được PGM-01..06, landing desktop/mobile và screen-set modal/drawer; không nâng M4/M5 khi chưa có consumer review/browser evidence |
 | 1.0 | 2026-08-09 | Amendment A1: bổ sung thuật ngữ workspace/journey/use case ba lớp; đồng bộ trạng thái và version của 13 hồ sơ IMPACTED; ghi `OD-PROG-016` là blocker của IA bốn workspace |
 | 1.1 | 2026-08-10 | Đồng bộ vòng duyệt P0: Open Decisions v0.6, VVP v0.6, Plan 53 v0.8; ghi rõ gói P0 review-ready nhưng G0/PLAN_READY vẫn BLOCKED |
+| 1.2 | 2026-08-10 | Ghim candidate P0 `e3e9fb2` bằng manifest 22 hồ sơ; đồng bộ Plan 53 v0.9 và giữ 22/22 ở M3 do chưa có consumer review/chữ ký |
 
 ## 11. Phụ lục — Tự kiểm cổng M3 (loại: Kiểm soát tài liệu)
 
