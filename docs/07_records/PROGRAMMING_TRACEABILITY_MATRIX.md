@@ -1,46 +1,310 @@
-# Programming Traceability Matrix — DDC-24 Rev A
+# Ma trận truy vết Programming MK-DDC-24 Rev A
 
-**ID:** TRACE-PROG-001
-**Trạng thái:** Active
-**Cập nhật:** 2026-08-03 (bổ sung dependency design/gate Modbus RTU Point)
-**Phạm vi:** Product Capability → Product Requirement → System Requirement → Verification Requirement
+| Thuộc tính | Giá trị |
+|---|---|
+| ID | `TRACE-PROG-001` |
+| Phiên bản | 2.4 |
+| Trạng thái | **M3 — Review Ready** — 60 dòng trace + 8 journey + migration 17 UC; evidence production RED |
+| Cập nhật | 2026-08-09 |
+| Chủ quản | Verification Lead |
+| Người review | Document Control, Product, Architect và tất cả discipline lead |
+| Người phê duyệt | Verification Lead + Document Control |
 
-## Quy tắc đọc
+## 0. Đọc nhanh
 
-Ma trận này chứng minh chuỗi truy xuất tài liệu, không chứng minh implementation
-hoặc test pass. `DOCUMENTED` nghĩa là chuỗi ID đã được định nghĩa. Tất cả evidence
-Programming production hiện vẫn `MISSING/RED` theo `VERIFICATION.md`.
+| Câu hỏi | Trả lời |
+|---|---|
+| 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối **yêu cầu → user journey → thiết kế → nơi phải sửa code → kịch bản test → bằng chứng → release** cho cả 60 requirement. Dùng để trả lời hai câu: “yêu cầu này ai lo?” và “cái gì hỏng nếu đổi chỗ này?”. |
+| 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
+| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. Nhưng **0/60 đã implement end-to-end**, **0/32 kịch bản có Test Result**, và 0/60 passed hoặc released. Mọi dòng đang là `D=Y`, còn `I/T/P/R=N`. |
+| 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
+| 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
+| 6. Điều gì còn bị chặn? | §9: 17 decision và 22 hồ sơ chưa được phê duyệt; chưa implement end-to-end; 0/32 Test Result. Release gate `RED / NO-GO`. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với bản thân ma trận: 60/60 dòng giải được về ID canonical, không trùng ID, không có dòng vi phạm `P=Y khi T=N` hay `R=Y khi P=N` — kiểm bằng harness ở [`PROG-REV-2026-08-09`](reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §2. |
 
-| Product Capability | Product Requirement | System Requirement | Verification Requirement | Trạng thái chuỗi | Trạng thái evidence production |
+Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
+nghĩa code tồn tại, cũng không nghĩa test đã PASS.
+
+## 1. Quy tắc đọc
+
+Chuỗi bắt buộc:
+
+```text
+Product/Requirement → Architecture/Design → Interface/Data/UI
+→ Implementation owner → Scenario → Test Result → Release
+```
+
+`DOCUMENTED` chỉ nghĩa có link thiết kế/test; không nghĩa code tồn tại hoặc test
+PASS. Không có Test Result mới cho suite v0.1, vì vậy evidence production vẫn
+`MISSING/RED`.
+
+## 2. Trace theo nhóm requirement
+
+| Requirement | Design owner | Interface/data/UI | Implementation owner | Scenario | Evidence |
 |---|---|---|---|---|---|
-| PC-PROG-001 | PR-PROG-001 | SYS-REQ-PROG-001; SWR-REQ-PROG-001 | VR-PROG-001; VR-PROG-002 | DOCUMENTED | MISSING |
-| PC-PROG-006 | PR-PROG-002; PR-PROG-006 | SYS-REQ-PROG-001; SWR-REQ-PROG-002 | VR-PROG-001; VR-PROG-004 | DOCUMENTED | MISSING |
-| PC-PROG-007 | PR-PROG-002; PR-PROG-006 | SYS-REQ-PROG-001; SWR-REQ-PROG-003 | VR-PROG-001; VR-PROG-005 | DOCUMENTED | MISSING |
-| PC-PROG-003 | PR-PROG-003; PR-PROG-004 | SWR-REQ-PROG-004; SWR-REQ-PROG-005; IF-REQ-PROG-001 | VR-PROG-003 | DOCUMENTED | MISSING |
-| PC-PROG-004 | PR-PROG-003; PR-PROG-004 | SWR-REQ-PROG-004; SWR-REQ-PROG-005; IF-REQ-PROG-001 | VR-PROG-003 | DOCUMENTED | MISSING |
-| PC-PROG-005 | PR-PROG-003; PR-PROG-004 | SWR-REQ-PROG-004; SWR-REQ-PROG-005; IF-REQ-PROG-001; SYS-REQ-MBRTU-001; SWR-REQ-MBRTU-001..009; IF-REQ-MBRTU-001..004; SEC-REQ-MBRTU-001; NFR-REQ-MBRTU-001..003 | VR-PROG-003; VR-MBRTU-001..012 | DOCUMENTED; design dependency In Review | MISSING |
-| PC-PROG-002 | PR-PROG-004 | SWR-REQ-PROG-005; IF-REQ-PROG-001 | VR-PROG-003 | DOCUMENTED | MISSING |
-| PC-PROG-008 | PR-PROG-005 | SWR-REQ-PROG-006; NFR-REQ-PROG-002 | VR-PROG-006 | DOCUMENTED | MISSING |
-| PC-PROG-009 | PR-PROG-006; PR-PROG-007; PR-PROG-008; PR-PROG-009 | SYS-REQ-PROG-002; SWR-REQ-PROG-007; SWR-REQ-PROG-008; IF-REQ-PROG-002 | VR-PROG-007; VR-PROG-008 | DOCUMENTED | MISSING |
-| PC-PROG-010 | PR-PROG-010 | SWR-REQ-PROG-009 | VR-PROG-009 | DOCUMENTED | MISSING |
-| PC-PROG-011 | PR-PROG-011 | SWR-REQ-PROG-010; IF-REQ-PROG-002 | VR-PROG-010 | DOCUMENTED | MISSING |
-| PC-PROG-001; PC-PROG-009 | PR-PROG-013 | SWR-REQ-PROG-011 | VR-PROG-011 | DOCUMENTED | MISSING |
-| PC-PROG-001..011 | PR-PROG-012 | SYS-REQ-PROG-003; SWR-REQ-PROG-012; NFR-REQ-PROG-001 | VR-PROG-012 | DOCUMENTED | MISSING |
-| PC-PROG-012 | PR-PROG-014 | SYS-REQ-PROG-001; SWR-REQ-PROG-004 | VR-PROG-013 | DOCUMENTED | MISSING |
+| `SYS-REQ-PROG-101` | ARCH §3/5; FWSOM §3 | IFSPEC §3/9; DM §3 | BE/Core/FE | VS-003/005/006/007/009/017 | MISSING |
+| `SYS-REQ-PROG-102` | ARCH §4 | DM §3.1–3.2; UX §4 | BE/FE | VS-002/019/026 | MISSING |
+| `SYS-REQ-PROG-103` | ARCH §4/7 | IFSPEC §6/8; DM §3.9 | BE/Core | VS-004/011 | MISSING |
+| `SYS-REQ-PROG-104` | ARCH §8 | OPS §6/7 | BE/Core/Ops | VS-024/030 | MISSING |
+| `SYS-REQ-PROG-105` | ARCH §6 | IFSPEC §6/9 | Core/Ops | VS-015 | MISSING |
+| `SYS-REQ-PROG-106` | ARCH §9 | IFSPEC §2/3; DM §3.9 | BE/Security | VS-022/023 | MISSING |
+| `SYS-REQ-PROG-107` | ARCH §10 | IFSPEC §3; DM §5; OPS §5 | BE/FE/Ops | VS-021/023 | MISSING |
+| `SYS-REQ-PROG-108` | ARCH §3 | UX §9 | HMI/FE/QA | VS-028 | MISSING |
+| `SWR-REQ-PROG-FE-101..102` | FE §2–3 | UX §3–4 | FE | VS-002/004/026 | MISSING |
+| `SWR-REQ-PROG-FE-103..104` | FE §5 | UX §5 `PGM-02` tab Chương trình | FE/compiler | VS-005/006/028 | MISSING |
+| `SWR-REQ-PROG-FE-105..106` | FE §6 | UX §5 `PGM-02` tab Điểm & Ánh xạ và Thực thi; IFSPEC §3 | FE/BE | VS-009/017/018 | MISSING |
+| `SWR-REQ-PROG-FE-107..110` | FE §4/7/9 | UX §5 `PGM-03`/`PGM-04`; IFSPEC §6/7 | FE/BE/Core | VS-010/011/019/020/024/026 | MISSING |
+| `SWR-REQ-PROG-FE-111..112` | FE §8 | UX §7–10 | FE/QA | VS-022/025/028 | MISSING |
+| `SWR-REQ-PROG-FE-113..115` | FE §0.1; UX §5, §16.2–§16.3 | IFSPEC §6.1; UX §22–§24 | FE/BE | VS-011/017/019/022/031 | MISSING |
+| `NFR-REQ-PROG-109..110` | UX §14.1; Product Spec §8 | UX §3, §5 | FE/UX/QA | VS-031 | MISSING |
+| `SWR-REQ-PROG-BE-101..103` | BE §2–3 | DM §3; IFSPEC §3–5 | BE | VS-001/019/024 | MISSING |
+| `SWR-REQ-PROG-BE-104..106` | BE §3–4 | IFSPEC §5–6/8 | BE/Core | VS-004/011/012/013/019 | MISSING |
+| `SWR-REQ-PROG-BE-107..110` | BE §5–8 | IFSPEC §2/3/9 | BE/Security | VS-018/021/022/023/024 | MISSING |
+| `SWR-REQ-PROG-CORE-101` | FWSOM §2/5 | IFSPEC §8/9 | Core/compiler | VS-005/006/023 | MISSING |
+| `SWR-REQ-PROG-CORE-102..103` | FWSOM §4 | ARCH §5 | Core | VS-009/012/016 | MISSING |
+| `SWR-REQ-PROG-CORE-104..106` | FWSOM §6–7 | DM §3.10 | Core/Controls | VS-010/014 | MISSING |
+| `SWR-REQ-PROG-CORE-107..108` | FWSOM §4 | ARCH §5/8 | Core/Ops | VS-013/015 | MISSING |
+| `SWR-REQ-PROG-CORE-109..110` | FWSOM §8–9 | DM §3.10/4 | Core/BE | VS-027/029 | MISSING |
+| `FW-REQ-PROG-MCU-101..104` | FWMCU §1–7 | IOP contract; HW §2–5 | FW MCU/iobus | VS-014/030 | MISSING |
+| `HW-REQ-PROG-101..103` | HW §2–5 | FWMCU §4–5 | HW/FW/QA | VS-014/030 | MISSING |
+| `NFR-REQ-PROG-101..102` | BE §3; FWSOM §3/5 | IFSPEC §5 | Compiler/BE/Core | VS-006/019/023 | MISSING |
+| `NFR-REQ-PROG-103` | ARCH §5; FWSOM §4 | OPS §2 | BE/Core/Ops | VS-009/012/013/015 | MISSING |
+| `NFR-REQ-PROG-104` | FWSOM §9; FE §4 | IFSPEC §7 | Core/BE/FE | VS-027 | MISSING |
+| `NFR-REQ-PROG-105..106` | ARCH §8/9; BE §4/7 | IFSPEC §1/6 | BE/Core/Security | VS-022/024/030 | MISSING |
+| `NFR-REQ-PROG-107` | FE §8/10 | UX §8–10 | FE/QA | VS-025/028 | MISSING |
+| `NFR-REQ-PROG-108` | ARCH §5/7; FWSOM §7 | FWMCU §4; HW §4–5 | Core/FW/HW/QA | VS-014/030 | MISSING |
 
-## Coverage
+## 3. Product/UX proposal crosswalk
 
-- Product Capability: 12/12 có ánh xạ.
-- Product Requirement: 14/14 có ánh xạ.
-- System/Software/Interface/NFR Requirement Programming: 19/19 có Verification Requirement.
-- Verification Requirement: 13/13 có ít nhất một upstream requirement.
-- Dependency Modbus RTU Point: 18/18 requirement có ánh xạ tới
-  `VR-MBRTU-001..012`; design `DDD-SW-MBRTU-POINT-001` đang `In Review`, mọi
-  real-hardware gate vẫn RED.
-- Bằng chứng runtime production/target: 0/13 gate được đóng trong nhiệm vụ tài
-  liệu này.
+| Upstream proposal | Requirement phân bổ | Scenario |
+|---|---|---|
+| `PRG-BACS-001..005` | SYS-102/103/106/107; FE-101/102 | VS-001/002/004/008/019/021 |
+| `PRG-IEC-001..005` | SYS-101; FE-103/104/106; CORE-101/102 | VS-003/005/006/007/009 |
+| `PRG-RT-001..010` | SYS-103..105; CORE-102..109; NFR-103/108 | VS-009..016/030 |
+| `PRG-PT-001..004` | SYS-101; FE-105; BE-109; CORE-104 | VS-017/018 |
+| `PRG-COM-001..006` | SYS-102/103/107; FE-107/108; BE-103/105/106/108 | VS-011/019/020/021 |
+| `PRG-SEC-001..005` | SYS-106; BE-102/107/108/110; CORE-101 | VS-022/023/024 |
+| `PRG-UX-001..006` | FE-101/102/107/109/111/112 | VS-002/018/025/026/028 |
+| `UX-REQ-001..024` | FE-101..112; SYS-108; BE/Core dependencies | VS-002..028 theo UX §6–10 |
+| `NFR-PRG-PROP-001..010` | NFR-101..108 | VS-006/009/012/013/014/024/027/028/030 |
 
-Host unit test của ST, parser, typed artifact hoặc cyclic component không được
-dùng để đổi cột evidence production sang `PASS`. Chỉ evidence chạy đúng
-production path trên target, kèm identity artifact/Revision, command, log và
-acceptance result, mới đủ điều kiện đóng gate tương ứng.
+## 4. Baseline Product Capability
+
+Các mapping `PC-PROG-001..012 → PR-PROG-001..014 → SYS/SWR/IF/NFR-REQ-PROG-*`
+của phiên bản trước vẫn được bảo toàn qua SRS và bảng §2–3. Việc bổ sung design
+không đổi bằng chứng production: `VR-PROG-001..013` vẫn `RED` cho tới khi
+scenario tương ứng có Test Result được review.
+
+## 5. Coverage và gate
+
+- SRS v0.5: 8 system + 15 FE + 10 BE + 10 Core + 4 MCU + 3 HW + 10 NFR = 60,
+  tất cả có design owner và scenario group.
+- Proposal: 7 nhóm `PRG-*`, 24 `UX-REQ-*`, 10 NFR proposal có crosswalk.
+- Scenario: `VS-PROG-001..032`, không có ID trùng requirement/error.
+- Test Result cho suite mới: `0/32`.
+- Release gate: **RED / NO-GO**.
+
+## 6. Trace chi tiết từng requirement
+
+Status dùng năm trục: `D` documented, `I` implemented, `T` tested, `P` passed,
+`R` released. Hiện mọi dòng `D=YES`; `I/T/P/R=NO` cho feature Target end-to-end.
+Source target là vị trí phải tạo/sửa, không phải claim code đã có.
+
+Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
+`SYS-REQ-PROG-nnn`; `FE/BE/CORE-nnn` = `SWR-REQ-PROG-FE/BE/CORE-nnn`;
+`MCU-nnn` = `FW-REQ-PROG-MCU-nnn`; `HW-nnn` = `HW-REQ-PROG-nnn`; `NFR-nnn` =
+`NFR-REQ-PROG-nnn`. Alias chỉ giúp bảng gọn; canonical ID trong SRS là authority.
+
+| Requirement | Design/control + risk | Source target | Scenario | D/I/T/P/R |
+|---|---|---|---|---|
+| `SYS-101` | ARCH; LANG; CTRL; RSK-006/010 | compiler, Programming BE/FE/Core | 003/005/006/007/009/017 | Y/N/N/N/N |
+| `SYS-102` | DM; UX; FE; BE; RSK-007/008 | programming store/API/UI | 002/019/026 | Y/N/N/N/N |
+| `SYS-103` | LIFE; ART; IFSPEC; RSK-003/007 | Core coordinator + BE operation | 004/011 | Y/N/N/N/N |
+| `SYS-104` | ARCH; LIFE; OPS; RSK-002/005 | Core runtime + service package | 024/030 | Y/N/N/N/N |
+| `SYS-105` | CTRL; LIFE; RSK-001 | bootstrap/ScanLoop/resolver | 015 | Y/N/N/N/N |
+| `SYS-106` | SEC; BE; IFSPEC; RSK-012/015 | auth/audit/API | 022/023 | Y/N/N/N/N |
+| `SYS-107` | SEC; BE; OPS; RSK-011 | bundle service/UI | 021/023 | Y/N/N/N/N |
+| `SYS-108` | UX; FE; HMI boundary | Web routes + HMI route inspection | 028 | Y/N/N/N/N |
+| `FE-101` | UX; FE | `features/programming/routes/layout` | 002/028 | Y/N/N/N/N |
+| `FE-102` | UX; FE; LIFE; RSK-007 | ProgrammingContext/overview | 002/004/026 | Y/N/N/N/N |
+| `FE-103` | LANG; UX; FE | editor/problems | 003/006 | Y/N/N/N/N |
+| `FE-104` | LANG; UX; FE | fbd/editor keyboard model | 005/006/028 | Y/N/N/N/N |
+| `FE-105` | CTRL; FE; IFSPEC; RSK-010 | mapping/point catalog client | 017/018 | Y/N/N/N/N |
+| `FE-106` | CTRL; FE | task UI/API model | 009 | Y/N/N/N/N |
+| `FE-107` | LIFE; UX; FE; RSK-007 | check/commission reducer | 011/019/024/026 | Y/N/N/N/N |
+| `FE-108` | CTRL; UX; FE; RSK-004 | runtime/override view | 010/020 | Y/N/N/N/N |
+| `FE-109` | IFSPEC; FE; BE; RSK-010 | runtime/events/freshness | 018/026/027 | Y/N/N/N/N |
+| `FE-110` | IFSPEC; FE; BE; RSK-008/014 | API client/draft reducer | 024 | Y/N/N/N/N |
+| `FE-111` | UX; FE | i18n/a11y/styles | 025/028 | Y/N/N/N/N |
+| `FE-112` | UX; FE | Problems vs alarm adapter | 019/028 | Y/N/N/N/N |
+| `FE-113` | UX §5 PGM-03; FE; LIFE; RSK-007 | `commission/acknowledgement` + impact reducer | 011/019/031 | Y/N/N/N/N |
+| `FE-114` | UX §5 PGM-04, §22 DangerZone; SEC; RSK-012 | `runtime/service` danger zone + RequireRole | 022/031 | Y/N/N/N/N |
+| `FE-115` | UX §5 PGM-02, §16.2; DM; IFSPEC | `design/mapping` filter + point catalog client | 017/031 | Y/N/N/N/N |
+| `BE-101` | DM; BE | domain/store/migrations | 001/019 | Y/N/N/N/N |
+| `BE-102` | DM; IFSPEC; BE; RSK-008 | store/service/idempotency | 024 | Y/N/N/N/N |
+| `BE-103` | LANG; BE; IFSPEC | check/compiler worker | 003/006/019 | Y/N/N/N/N |
+| `BE-104` | LANG; SEC; BE; RSK-005 | compiler sandbox/queue | 006/012/013 | Y/N/N/N/N |
+| `BE-105` | DM; BE | revision diff/manifest | 019 | Y/N/N/N/N |
+| `BE-106` | LIFE; IFSPEC; BE; RSK-007/008 | operation worker/runtime client | 004/011/024 | Y/N/N/N/N |
+| `BE-107` | SEC; BE; RSK-012 | authz handler+service/audit | 022 | Y/N/N/N/N |
+| `BE-108` | SEC; BE; RSK-011 | bundle quarantine/import/export | 021/023 | Y/N/N/N/N |
+| `BE-109` | CTRL; IFSPEC; BE; RSK-010 | runtime read model/events | 018/020/026 | Y/N/N/N/N |
+| `BE-110` | IFSPEC; BE; RSK-014 | OpenAPI/errors/Go+TS generation | 019/024 | Y/N/N/N/N |
+| `CORE-101` | LANG; ART; SEC; RSK-006 | `application/st` loader/executor | 005/006/023 | Y/N/N/N/N |
+| `CORE-102` | CTRL; FWSOM; RSK-002 | ScanLoop/task/process image | 009/015/016 | Y/N/N/N/N |
+| `CORE-103` | ART; FWSOM; RSK-005/006 | Core build/runtime instrumentation | 012 | Y/N/N/N/N |
+| `CORE-104` | CTRL; FWSOM; RSK-001/004 | process image/PriorityResolver | 010/014/020 | Y/N/N/N/N |
+| `CORE-105` | CTRL; FWSOM; RSK-004 | PID library/runtime | 010/014 | Y/N/N/N/N |
+| `CORE-106` | CTRL; LIFE; RSK-003/004 | output staging/safe swap | 011/014 | Y/N/N/N/N |
+| `CORE-107` | CTRL; FWSOM; RSK-005 | Task fault/metrics | 013 | Y/N/N/N/N |
+| `CORE-108` | CTRL; FWSOM; RSK-002 | base-step/watchdog health | 009/015 | Y/N/N/N/N |
+| `CORE-109` | LIFE; FWSOM; RSK-009 | retain manager/store | 029/030 | Y/N/N/N/N |
+| `CORE-110` | FWSOM; FE; IFSPEC | monitor/trace ring/events | 027 | Y/N/N/N/N |
+| `MCU-101` | FWMCU; ARCH | MCU app/IOP/BSP | 030 | Y/N/N/N/N |
+| `MCU-102` | FWMCU; HW; RSK-003/013 | timeout/safe HAL | 014/030 | Y/N/N/N/N |
+| `MCU-103` | FWMCU | IOP sequence/cache | 030 | Y/N/N/N/N |
+| `MCU-104` | FWMCU; HW | AO config/actuation/read-back | 014/030 | Y/N/N/N/N |
+| `HW-101` | HW; FWMCU; RSK-013 | schematic/BOM/test fixture | 014/030 | Y/N/N/N/N |
+| `HW-102` | HW; CTRL; RSK-003/004 | AO/DO safe path | 010/014/030 | Y/N/N/N/N |
+| `HW-103` | HW; FWMCU; RSK-002/013 | power/reset/watchdog domain | 015/030 | Y/N/N/N/N |
+| `NFR-101` | LANG; ART; DM | compiler/loader/store limits | 006/023 | Y/N/N/N/N |
+| `NFR-102` | LANG; BE; RSK-005 | compiler benchmark/sandbox | 006/013/019 | Y/N/N/N/N |
+| `NFR-103` | CTRL; FWSOM; RSK-002/005 | base-step/task/load metrics | 009/012/013/015 | Y/N/N/N/N |
+| `NFR-104` | FWSOM; FE; IFSPEC | trace/monitor buffers | 027 | Y/N/N/N/N |
+| `NFR-105` | LIFE; FE; BE | operation/runtime recovery | 024/026/030 | Y/N/N/N/N |
+| `NFR-106` | DM; SEC; BE; RSK-008/012 | transaction/auth/audit | 022/024 | Y/N/N/N/N |
+| `NFR-107` | UX; FE | i18n/a11y/responsive | 025/028 | Y/N/N/N/N |
+| `NFR-108` | CTRL; FWSOM; MCU; HW; RSK-003 | nonblocking swap/IOP/HIL | 014/030 | Y/N/N/N/N |
+| `NFR-109` | UX §14.1; FE; Product Spec §8.1 | tám journey FE end-to-end | 031 | Y/N/N/N/N |
+| `NFR-110` | Product Spec §8.3; UX; VVP | bảng điểm heuristic (kiểm tra thiết kế) | 025/031 | Y/N/N/N/N |
+
+Tên rút gọn map: `LANG=DDD-LANG-PROG-001`, `ART=IFSPEC-ART-PROG-001`,
+`CTRL=DDD-CTRL-PROG-001`, `LIFE=DDD-LIFE-PROG-001`, `SEC=DDD-SEC-PROG-001`,
+`FE/BE/FWSOM/FWMCU/HW/UX/DM/IFSPEC/ARCH/OPS` là ID trong Design Index. Scenario
+`001` nghĩa `VS-PROG-001`.
+
+## 7. Coverage, link integrity và evidence update rule
+
+| Coverage | Current |
+|---|---:|
+| Requirement có design/control | 60/60 = 100% documented |
+| Requirement có source target | 60/60 = 100% planned |
+| Requirement có scenario | 60/60 = 100% specified |
+| Requirement implemented end-to-end | 0/60 confirmed |
+| Scenario có Test Result current | 0/32 |
+| Requirement passed/released | 0/60 |
+
+Khi code merge, chỉ cột `I` được đổi và phải có commit/file/class/function. Khi
+test chạy, thêm Test Result ID/hash rồi đổi `T`; chỉ reviewer ký PASS mới đổi `P`.
+Release manifest/provenance và GO mới đổi `R`. Requirement/design/contract/source/
+board change invalidates downstream Test Result theo VVP; không giữ `P` cũ.
+
+Link checker phải xác nhận mọi path/anchor/ID; duplicate ID hoặc missing section
+là finding P1. Bảng nhóm §2 vẫn dùng để đọc nhanh, bảng §6 là authority granularity.
+
+## 8. Quy tắc cập nhật một dòng trace
+
+| Trục | Bằng chứng cho phép đổi `N→Y` | Ai xác nhận | Điều kiện hạ lại `Y→N` |
+|---|---|---|---|
+| D | requirement + design section + risk/scenario link hợp lệ | Document Control + design owner | baseline/design đổi hoặc link đứt |
+| I | commit merged, exact file/symbol, build/package hash | code owner + reviewer | revert/feature disabled/incompatible change |
+| T | Test Result current đúng requirement/commit/target | executor + QA | result invalidated hoặc coverage thiếu |
+| P | mọi acceptance PASS, no open blocking defect/waiver | independent reviewer | regression/finding/risk reopened |
+| R | release manifest, rollout scope, GO authority | Release + Product + QA | rollback/withdraw/release revoked |
+
+Update phải trong cùng change set với SRS/design/risk/VVP liên quan. Script/check
+phải phát hiện canonical ID thiếu/trùng, scenario ngoài `001..032`, `P=Y` khi
+`T=N`, `R=Y` khi `P=N`, evidence path thiếu và alias không giải được. Không sửa
+chỉ số tổng bằng tay trước khi 55 dòng được kiểm lại.
+
+## 9. Blocker, revision và phê duyệt
+
+| Blocker | Owner | Điều kiện mở |
+|---|---|---|
+| 17 decision/22 hồ sơ chưa Approved | Product + Document Control | review/sign-off complete |
+| Source Target chưa implement end-to-end | Dev Leads | commit/build mapping per requirement |
+| Test Result current 0/32 | QA + discipline leads | execute/review evidence per VVP |
+
+| Phiên bản | Ngày | Nội dung |
+|---|---|---|
+| 2.0 | 2026-08-09 | Trace nhóm SRS/proposal tới 30 scenario, evidence RED |
+| 2.1 | 2026-08-09 | Thêm 55 dòng requirement-level, 5 design lõi, source target, D/I/T/P/R và evidence rule M3 |
+| 2.2 | 2026-08-09 | Bổ sung canonical requirement alias, bằng chứng/authority cho từng trục D/I/T/P/R và rule inconsistency/invalidation; chuyển Detailed Draft chờ review |
+| 2.3 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Traceability; ghi kết quả kiểm máy 0 vi phạm |
+| 2.4 | 2026-08-09 | Amendment A1: thêm 5 dòng requirement (`FE-113/114/115`, `NFR-109/110`) nâng tổng lên 60; thêm §10 trace tám journey `UJ-PROG-*` và bảng trạng thái migration 17 `UC-PROG-*`; cập nhật scenario lên 32 |
+
+| Vai trò | Trạng thái | Bằng chứng |
+|---|---|---|
+| Verification + Document Control + discipline leads | Chờ review | — |
+| Verification Lead + Document Control | **BLOCKED — chưa phê duyệt** | approval và 0/32 Test Result |
+
+## 10. Trace lớp user journey và migration 17 use case
+
+Chuỗi đầy đủ sau Amendment A1:
+
+```text
+Product Requirement → UJ-PROG-* → Requirement (SRS) → Design/UI → Source target
+→ Scenario (VS-PROG-*) → Test Result → Release
+```
+
+### 10.1 Tám journey
+
+| Journey | Workspace | Requirement chính | Design | Scenario | Evidence |
+|---|---|---|---|---|---|
+| `UJ-PROG-01` | `PGM-01` | SYS-108; FE-101/102/109 | UX §3, §5, §16.1; FE §2 | VS-001/002/026/031 | MISSING |
+| `UJ-PROG-02` | `PGM-02` tab Chương trình | FE-101/103/104; CORE-101 | UX §5, §16.2; LANG §4–§5 | VS-003/005/006/007/031 | MISSING |
+| `UJ-PROG-03` | `PGM-02` tab Điểm & Ánh xạ | FE-105/115; BE-109 | UX §16.2; DM §3.5 | VS-017/018/031 | MISSING |
+| `UJ-PROG-04` | `PGM-02` tab Thực thi | FE-106; CORE-102/108 | UX §5; CTRL §3 | VS-009/016/031 | MISSING |
+| `UJ-PROG-05` | `PGM-03` giai đoạn Kiểm tra | FE-107/112; BE-103/104/105 | UX §5, §16.3; BE §3 | VS-006/019/031 | MISSING |
+| `UJ-PROG-06` | `PGM-03` giai đoạn Vận hành | SYS-103; FE-107/113; BE-106; CORE-106 | UX §16.3; LIFE §5–§7 | VS-004/011/014/015/020/029/031 | MISSING |
+| `UJ-PROG-07` | `PGM-04` Runtime, Theo dõi | FE-108/109; BE-109; CORE-110 | UX §16.4; FWSOM §9 | VS-010/013/018/027/031 | MISSING |
+| `UJ-PROG-08` | `PGM-04` Phiên bản & Bảo trì | SYS-107; FE-114; BE-108; CORE-109 | UX §16.4; LIFE §8–§9; SEC §8 | VS-011/021/023/029/031 | MISSING |
+
+Bốn requirement mới của Amendment A1 gắn journey như sau: `FE-113` → `UJ-PROG-06`;
+`FE-114` → `UJ-PROG-08`; `FE-115` → `UJ-PROG-03`; `NFR-109` và `NFR-110` phủ cả
+tám journey qua `VS-PROG-031`. `VS-PROG-032` phủ chuyển hướng route của `FE-101`.
+
+### 10.2 Trạng thái 17 use case sau migration
+
+Không ID nào bị xóa. Đặc tả chi tiết vẫn ở
+[UX §17](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md); bảng dưới đây là trace.
+
+| UC | Trạng thái | Thuộc về | Scenario giữ nguyên |
+|---|---|---|---|
+| `UC-PROG-01` | MERGED | `UJ-PROG-01` | VS-001/026 |
+| `UC-PROG-02` | MERGED | `UJ-PROG-02` | VS-008 |
+| `UC-PROG-03` | MERGED | `UJ-PROG-02` | VS-005/006 |
+| `UC-PROG-04` | MERGED | `UJ-PROG-02` | VS-005/006/028 |
+| `UC-PROG-05` | MERGED | `UJ-PROG-03` | VS-017/018 |
+| `UC-PROG-06` | MERGED | `UJ-PROG-05` | VS-006/019 |
+| `UC-PROG-07` | MERGED | `UJ-PROG-04` | VS-009 |
+| `UC-PROG-08` | MERGED | `UJ-PROG-06` | VS-011/015/019/029 |
+| `UC-PROG-09` | SCENARIO `SC-OP-FAILED` | `UJ-PROG-05`, `UJ-PROG-06` | VS-011/019 |
+| `UC-PROG-10` | SCENARIO `SC-CORE-DEGRADED` | mọi journey | VS-026/030 |
+| `UC-PROG-11` | MERGED | `UJ-PROG-08` | VS-011 |
+| `UC-PROG-12` | MERGED | `UJ-PROG-07` | VS-013/014/027 |
+| `UC-PROG-13` | SCENARIO `SC-RETAIN-RESET` | `UJ-PROG-06`, `UJ-PROG-08` | VS-015/029 |
+| `UC-PROG-14` | ROADMAP | ngoài Rev A, gắn `OD-PROG-017` | VS-003 (kiểm không có đường vào) |
+| `UC-PROG-15` | ROADMAP | ngoài Rev A | VS-025 (kiểm không hứa hẹn) |
+| `UC-PROG-16` | MERGED | `UJ-PROG-07` | VS-013/027 |
+| `UC-PROG-17` | MERGED | `UJ-PROG-08` | VS-021/023 |
+
+Kiểm đếm: 12 `MERGED` + 3 `SCENARIO` + 2 `ROADMAP` = 17. **Không** scenario nào
+bị mất trong quá trình gộp: mọi `VS-PROG-*` từng gắn với một UC vẫn còn được gắn
+qua journey hoặc qua kịch bản xuyên suốt tương ứng.
+
+## 10. Phụ lục — Tự kiểm cổng M3 (loại: Traceability)
+
+| Cổng | Kết quả | Bằng chứng trong file / lý do |
+|---|---|---|
+| Mọi link trỏ tới ID hoặc mục có thật | PASS | harness: local link missing `0`, anchor missing `0`; §6 alias giải được về ID canonical trong SRS |
+| Không trùng ID | PASS | 60 dòng requirement duy nhất; 8 `UJ-PROG-*`; 17 `UC-PROG-*`; harness `duplicate doc ID = 0` |
+| Phân biệt planned/documented/implemented/tested/passed/released | PASS | §6 năm trục `D/I/T/P/R`; §1 nêu rõ `DOCUMENTED` **không** nghĩa code tồn tại |
+| Coverage requirement | PASS | §7: 60/60 có thiết kế, 60/60 có source target, 60/60 có kịch bản; §10 phủ 8 journey và 17 UC |
+| Bằng chứng cho phép đổi trạng thái | PASS | §8 quy định cho từng trục: ai xác nhận và điều kiện hạ ngược `Y→N` |
+| Quy tắc vô hiệu hóa | PASS | §7 và §8: đổi requirement/design/contract/source/board làm mất hiệu lực Test Result phía dưới; không giữ `P` cũ |
+| Kiểm tính nhất quán tự động | PASS | §8 liệt kê các phép kiểm; đã chạy: thiếu/trùng ID canonical, kịch bản ngoài `001..032`, `P=Y` khi `T=N`, `R=Y` khi `P=N` — vi phạm `0` |
+| Trạng thái bằng chứng trung thực | PASS | §5 và §7: `0/32` Test Result, `0/60` passed, release gate `RED / NO-GO` |
+| `BLOCKED` có owner/gate | **BLOCKED** | §9 ba blocker: 17 decision và 22 hồ sơ chưa Approved (Product + Document Control), chưa implement end-to-end (Dev Leads), 0/32 Test Result (QA + discipline leads). Ảnh hưởng: không đóng được requirement nào. Gate: `DOC-G4` rồi `G6`. Điều kiện mở: đúng ba điều kiện ghi ở §9 |
+
+Ma trận này theo dõi trạng thái; nó **không** tạo ra bằng chứng.

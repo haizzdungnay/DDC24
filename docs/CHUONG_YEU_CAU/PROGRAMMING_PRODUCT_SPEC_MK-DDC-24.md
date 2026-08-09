@@ -25,6 +25,19 @@ phê duyệt và đóng các `OD-PROG-*` liên quan, nội dung được chấp 
 hợp nhất vào tài liệu chủ quản, ma trận traceability và Verification; không duy
 trì tài liệu này như Product authority thứ hai.
 
+> **Ghi chú kiểm soát 2026-08-09 — bổ sung Amendment A1.** Ngày 2026-08-09, một
+> đề xuất đơn giản hóa được thêm **trực tiếp vào tài liệu chủ quản**
+> `PROD-PROG-001` §8–§9 thay vì vào đây, đúng nguyên tắc “không duy trì Product
+> authority thứ hai”. Nội dung gồm: định vị cạnh tranh cho hãng nhỏ, benchmark
+> bốn sản phẩm bằng nguồn chính thức, bảng điểm heuristic tám tiêu chí, lớp
+> **tám user journey** `UJ-PROG-01..08`, và Must/Should/Won't cho Rev A.
+>
+> Amendment A1 **không** mở rộng phạm vi Rev A và **không** đổi bất kỳ hành vi
+> an toàn nào ở §16 và §18 của tài liệu này. Nó chỉ đổi cách tổ chức giao diện
+> và cách trình bày xác nhận. Phê duyệt theo dõi tại
+> [`OD-PROG-016`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md); phạm vi thư
+> viện mẫu BMS theo dõi tại `OD-PROG-017`.
+
 ## Mục lục
 
 - §0–4: cách đọc, mục tiêu, chuẩn tham chiếu, định vị và mental model.
@@ -1488,7 +1501,7 @@ Tại revision tài liệu này, **G0–G7 đều RED/NOT STARTED**; các bullet
 ## 29. Catalog kiểm chứng Product + UX duy nhất
 
 Catalog authority đã được nhập vào
-`docs/07_records/audit-programming/06_verification/01_VERIFICATION_SCENARIOS.md`.
+[`VVP-PROG-001` §3](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md).
 File proposal này chỉ tham chiếu `VS-PROG-001..030`; không duy trì bản sao E2E
 song song. Mỗi kết quả phải ghi commit/artifact, môi trường, producer evidence,
 `VR-PROG-*`, expected/actual và PASS/FAIL thật tại catalog controlled.
@@ -1525,8 +1538,15 @@ IEC 62682. Edition/năm và trạng thái current **UNVERIFIED trong repo**; kh�
 ## 31. Open Decisions có authority
 
 Không tạo namespace `OD-01..12`. Nguồn duy nhất là
-`docs/07_records/audit-programming/00_document_control/04_OPEN_DECISION_REGISTER.md`
-(`PROG-OD-001-AUD`) với `OD-PROG-001..015`.
+[`PROG-OD-001`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) với
+`OD-PROG-001..017`.
+
+> **Đính chính 2026-08-09.** Bản trước trỏ tới
+> `04_OPEN_DECISION_REGISTER.md` trong cây `audit-programming` và ghi
+> `OD-PROG-001..015`. Cả hai đều sai ở thời điểm hiện tại: file đó **không còn
+> tồn tại** trong cây làm việc, và số quyết định đã là **17** sau khi thêm
+> `OD-PROG-016` (IA bốn workspace) và `OD-PROG-017` (thư viện mẫu BMS).
+> Authority đúng là `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md`.
 
 Các mục chặn trực tiếp proposal này: `OD-PROG-001` RBAC; `002` type; `003/004`
 capacity/task; `005/006` library/FBD; `007` mapping; `009` RETAIN; `010`

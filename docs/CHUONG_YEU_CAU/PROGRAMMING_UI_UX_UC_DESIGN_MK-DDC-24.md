@@ -7,7 +7,7 @@
 | Module | Engineering → Programming |
 | Design family | PA3 — Adaptive Hybrid Control Workspace |
 | Revision | **v2.2 — đóng phản biện vòng 2 ngày 2026-08-09** |
-| Status | **Proposal / In Review — không phải UI/Design baseline** |
+| Status | **REFERENCE — Proposal v2.2; phần IA và use case đã `SUPERSEDED` bởi `UX-WEB-PROG-001`** |
 | Date | 2026-08-09 |
 | Companion document | `PROGRAMMING_PRODUCT_SPEC_MK-DDC-24.md` v2.2 |
 | Primary principle | **DDC/BACS task workflow trên UI; compiler/version/safety complexity nằm dưới hệ thống** |
@@ -18,6 +18,29 @@ amendment v2.2; không supersede Product/Requirement/Verification Active, không
 tạo API authority và không chứng minh implementation. Chỉ được nâng thành Design
 baseline sau khi `OD-PROG-015` cùng các quyết định type/task/FBD/RETAIN/monitor/
 cutover liên quan được đóng và traceability được cập nhật.
+
+> **Ghi chú kiểm soát 2026-08-09 — IA trong tài liệu này đã bị đề xuất thay
+> thế.** Tài liệu mô tả **sáu** navigation entry và 17 use case. Ngày
+> 2026-08-09, nhóm liên chức năng đề xuất rút xuống **bốn workspace** `PGM-01..04`
+> và **tám user journey** `UJ-PROG-01..08`, giữ nguyên toàn bộ hành vi an toàn.
+> Đề xuất nằm ở [Product Spec §8–§9](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md)
+> và đã được triển khai vào
+> [`UX-WEB-PROG-001`](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) để review.
+>
+> Phê duyệt theo dõi tại [`OD-PROG-016`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md).
+> Khi đọc §4 (IA), §7–§12 (sáu trang) và §21 (catalog 17 use case) của tài liệu
+> này, hãy đối chiếu ma trận migration tại UI/UX Design §6.1 — 12 use case
+> `MERGED`, 3 thành `SCENARIO`, 2 chuyển `ROADMAP`. Nếu `OD-PROG-016` bị từ chối
+> thì IA sáu trang trong tài liệu này là phương án quay lui.
+>
+> **Phạm vi còn normative của tài liệu này.** Để tránh hai UX authority song
+> song, các mục sau **không còn normative** kể từ 2026-08-09 và chỉ giữ giá trị
+> tham chiếu/rollback: §4 (IA sáu trang), §7–§12 (sáu navigation entry), §21
+> (catalog 17 use case) và `UX-REQ-002` ở §44. Bản normative tương ứng nằm ở
+> [`UX-WEB-PROG-001`](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) §3, §5, §6 và
+> §21.1. Các mục còn lại — nguyên tắc UX §3, mô hình dữ liệu/trạng thái §25–§26,
+> accessibility §30, responsive §31, copy VI/EN §37.1 — vẫn là đầu vào hợp lệ và
+> đã được hợp nhất vào hồ sơ thiết kế.
 
 ## Mục lục
 
@@ -1906,8 +1929,13 @@ conflict. UX không tự suy ra owner từ `graph.json`, Task period hoặc cach
 
 ## 44. UX Requirement Catalog và verification trace
 
-Các ID dưới đây là normative cho proposal UX. Catalog scenario duy nhất nằm tại
-`docs/07_records/audit-programming/06_verification/01_VERIFICATION_SCENARIOS.md`;
+> **Lưu ý 2026-08-09:** `UX-REQ-002` trong bảng dưới đây vẫn phát biểu theo IA
+> sáu trang và **không còn normative**. Bản normative là `UX-REQ-002` tại
+> [`UX-WEB-PROG-001` §21.1](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md), phát biểu
+> theo bốn workspace. Các `UX-REQ-*` còn lại không phụ thuộc IA và vẫn hiệu lực.
+
+Các ID dưới đây là normative cho proposal UX, **trừ `UX-REQ-002`**. Catalog scenario duy nhất nằm tại
+[`VVP-PROG-001` §3](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md);
 mục này **không** tạo test list song song. Mỗi UX requirement phải
 có bằng chứng theo đúng `VS-PROG-*` trước sign-off.
 

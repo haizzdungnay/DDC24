@@ -1,0 +1,437 @@
+# Plan 54 — Roadmap hoàn thiện hồ sơ Programming MK-DDC-24
+
+| Thuộc tính | Giá trị |
+|---|---|
+| ID | `PLAN-PROG-DOC-054` |
+| Phiên bản | 2.0 |
+| Trạng thái | **22/22 M3 — REVIEW READY; chờ consumer review (M4) và chữ ký (M5)** |
+| Ngày baseline | 2026-08-09 |
+| Chủ quản | System Engineering + Document Control |
+| Người phê duyệt | Product Owner, System Architect, Verification Lead |
+| Phạm vi | 22 hồ sơ điều khiển yêu cầu, thiết kế, kiểm chứng và triển khai Programming Rev A |
+| Kế hoạch triển khai phụ thuộc | [`PLAN-PROG-053`](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) |
+| Chu kỳ cập nhật | Cuối mỗi phiên sửa tài liệu và tại mỗi cổng `DOC-G0..DOC-G4` |
+
+## 1. Mục tiêu và ranh giới
+
+Roadmap này là bảng điều khiển duy nhất để theo dõi việc **tạo, viết đủ nội
+dung, review và phê duyệt** bộ hồ sơ Programming. Nó trả lời bốn câu hỏi:
+
+1. Bộ hồ sơ phải có bao nhiêu file và file nào đang thiếu?
+2. File đã tồn tại có thực sự đủ cho FE, BE, FW-SOM, FW MCU, HW và QA implement
+   mà không tự phát minh thêm thiết kế hay chưa?
+3. Hồ sơ nào phải làm trước vì đang chặn contract, safety hoặc các team khác?
+4. Ai viết, ai review, điều kiện nào cho phép chuyển trạng thái?
+
+Roadmap không phải Detailed Design, không thay nội dung của 22 hồ sơ, không tự
+đóng `OD-PROG-*`, không cấp quyền triển khai control path và không làm thay đổi
+gate release đang `RED`. Roadmap cũng không được tính là file thứ 23 để làm tăng
+tỷ lệ hoàn tất của bộ hồ sơ.
+
+**Phân chia thẩm quyền, để không sinh roadmap thứ ba.** Plan 54 quản **hồ sơ**:
+mức trưởng thành, checklist, review và chữ ký. [Plan 53](53_PROGRAMMING_IMPLEMENTATION_PLAN.md)
+là **implementation authority**: pha, gate `G0..G6`, ba cổng quyền hạn
+`PLAN_READY`/`IMPLEMENT_READY`/`RELEASE_READY`, thẻ task và lát cắt dọc. Khi cần
+biết “được phép code chưa”, đọc Plan 53 §3.1 — **không** suy từ mức M của Plan 54.
+Không tạo roadmap thứ ba; mọi nhu cầu theo dõi mới phải vào một trong hai file này.
+
+Quy tắc kiểm soát tài liệu áp dụng cho cả hai nằm ở
+[`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md), kèm harness chạy lại được
+`python3 scripts/docs_iso_harness.py --expect`.
+
+Nguồn để lập baseline:
+
+- [`PROGRAMMING_PRODUCT_SPEC_MK-DDC-24.md`](../CHUONG_YEU_CAU/PROGRAMMING_PRODUCT_SPEC_MK-DDC-24.md)
+  và [`PROGRAMMING_UI_UX_UC_DESIGN_MK-DDC-24.md`](../CHUONG_YEU_CAU/PROGRAMMING_UI_UX_UC_DESIGN_MK-DDC-24.md);
+- [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md),
+  [`RSK-PROG-001`](../07_records/PROGRAMMING_RISK_REGISTER.md) và
+  [`TRACE-PROG-001`](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md);
+- báo cáo As-Built theo mã nguồn tại
+  [`BAO_CAO_SRC_2026-08-09`](../07_records/BAO_CAO_SRC_2026-08-09/00_README.md);
+- rule “Cấu trúc bắt buộc của một file thiết kế” trong `AGENTS.md`.
+
+### 1.1 Căn chỉnh mục tiêu chuẩn
+
+| Họ chuẩn/hướng dẫn | Cơ chế trong roadmap |
+|---|---|
+| ISO 9001 | ID/version/owner/reviewer/approver, revision history, register, review và change control |
+| ISO/IEC/IEEE 29148 | SRS có nguồn, rationale, acceptance, verification method và trace hai chiều |
+| ISO/IEC/IEEE 12207 và 15288 | Tách yêu cầu, kiến trúc, detailed design, implementation plan, V&V, operations và release gate |
+| ISO/IEC 25010 | NFR và acceptance cho performance, reliability, usability, security, compatibility, maintainability |
+| IEC 61131-3 | Hồ sơ Language/Compiler, Control Semantics và Runtime xác định subset/profile dự án có thể kiểm chứng |
+| IEC 62443 direction | Security Design, trust boundary, RBAC, integrity, audit, least privilege và abuse case |
+
+Đây là căn chỉnh cấu trúc và bằng chứng theo mục tiêu chuẩn — tức **ISO-aligned**
+— chứ **không** phải tuyên bố chứng nhận hay compliance. Cấm dùng “compliant”,
+“certified” hay “đạt chuẩn” khi chưa có đánh giá độc lập và Test Result hợp lệ.
+Định nghĩa đầy đủ và bảy quy tắc trung thực nằm ở
+[`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md) §1 và §6.
+
+## 2. Dashboard baseline 2026-08-09
+
+| Chỉ số | Kết quả | Ý nghĩa |
+|---|---:|---|
+| Tổng hồ sơ trong baseline | 22 | Mẫu số cố định của roadmap |
+| File đã tồn tại | 22/22 = **100%** | Đủ đúng baseline file; không đồng nghĩa đã Approved |
+| File chưa được tạo | 0/22 = **0%** | Đủ toàn bộ đường dẫn baseline |
+| Hồ sơ đạt `M3` — checklist đủ, `TBD/BLOCKED` có owner, link sạch | 22/22 = **100%** | Đo theo định nghĩa §3.1; bằng chứng tại `PROG-REV-2026-08-09` |
+| Hồ sơ đạt `M4` — review liên chức năng đã đóng | 0/22 = **0%** | Cần reviewer của bên tiêu thụ contract; tự kiểm không thay thế |
+| Hồ sơ đạt `M5` — Approved | 0/22 = **0%** | Chưa có chữ ký thẩm quyền |
+| Điểm trưởng thành tài liệu | **1320/2200 = 60,0%** | 22 file M3; chưa có M4/M5 |
+| Quyết định đang mở | 17 | `OD-PROG-001..017` đều `OPEN`; `OD-PROG-016` chặn IA bốn workspace |
+| Rủi ro có điểm từ 15 trở lên | 11/16 | Chặn production cutover cho tới khi có evidence và residual acceptance |
+| Kịch bản có Test Result mới | 0/32 | Evidence production vẫn `MISSING/RED` |
+| Cổng tài liệu | **DOC-G4 RED — 22/22 REVIEW READY / CONSUMER REVIEW + SIGN-OFF PENDING** | Chờ review liên chức năng, 17 decision (gồm `OD-PROG-016`) và chữ ký thẩm quyền |
+
+Điểm `60,0%` là điểm trưởng thành **tài liệu**, không phải phần trăm code, test,
+release hay mức sẵn sàng production. Chỉ số phải được tính lại từ bảng master;
+không nhập phần trăm bằng cảm tính.
+
+### 2.1 Trạng thái thực thi hiện tại
+
+| Chặng | Trạng thái | Kết quả hiện tại |
+|---|---|---|
+| R0 — Kiểm soát baseline | **COMPLETE** | Register 22 hồ sơ, owner/reviewer, scoring, risk/scenario mapping và đường dẫn chuẩn đã chốt |
+| R1 — Requirement/decision/architecture | **M3 COMPLETE** | Index/SRS/Open Decisions/Architecture đạt cổng loại tương ứng; có mục Đọc nhanh và phụ lục tự kiểm |
+| R2 — Contract + 5 thiết kế lõi | **M3 COMPLETE** | Data/Interface và 5 hồ sơ lõi có bảng `DD-01..DD-13` từng mã; blocker còn lại là TLS, `OD-PROG-002` và provenance artifact |
+| R3 — Thiết kế theo team | **M3 COMPLETE** | UI/UX theo IA **bốn workspace** `PGM-01..04`: asset render được cho từng workspace (Tổng quan desktop/mobile, Thiết kế, Kiểm tra & Vận hành kèm modal, Runtime & Bảo trì kèm drawer), cây component, API theo workspace, copy VI/EN, token và rollout; FE, BE, FW-SOM, FW MCU, HW đủ checklist |
+| R4 — Assurance/delivery | **M3 COMPLETE** | 32 test spec, Ops, 16 risk, 60 dòng trace và Plan 53 có phụ lục tự kiểm theo loại |
+| R5 — Review/sign-off | **BLOCKED — REVIEW/AUTHORITY** | Chờ consumer review để lên M4, và Product/Architect/QA ký 17 decision cùng 22 hồ sơ để lên M5; agent không ký thay |
+
+`DOC-G0` được chuyển PASS sau chỉ đạo ngày 2026-08-09 “triển khai theo roadmap”
+và việc đăng ký cùng baseline vào `CONTROL.md`, Document Hub, Design Index và
+Implementation Index. PASS này chỉ cho phép viết hồ sơ R1; không thay chữ ký
+Product/Architecture/QA và không mở G0 của `PLAN-PROG-053`.
+
+## 3. Thang trạng thái và cách tính
+
+### 3.1 Mức trưởng thành của từng hồ sơ
+
+| Mức | Điểm | Điều kiện tối thiểu |
+|---|---:|---|
+| `M0 — NOT CREATED` | 0 | Chưa có file tại đường dẫn chuẩn |
+| `M1 — OUTLINE` | 10 | Có file, metadata và đầu mục; nội dung chưa đủ để review |
+| `M2 — DRAFT CONTENT` | 30 | Có nội dung thực chất, nhưng checklist áp dụng chưa được chứng minh đầy đủ hoặc còn quyết định chưa kiểm soát |
+| `M3 — REVIEW READY` | 60 | Đủ checklist áp dụng; mọi `TBD/BLOCKED` có owner, ảnh hưởng, gate và điều kiện mở; link nội bộ sạch |
+| `M4 — REVIEW CLOSED` | 80 | Review liên chức năng hoàn tất; finding P0/P1 đã đóng; requirement/risk/trace đã đồng bộ |
+| `M5 — APPROVED` | 100 | Người có thẩm quyền ký; revision history hoàn tất; hồ sơ được phép dùng làm baseline implement |
+
+Một file tự ghi `In Review` không tự động đạt `M3/M4`. Việc đổi mức phải có
+bằng chứng trong cột “Bằng chứng/trạng thái kế tiếp” của bảng master.
+
+Ranh giới `M3` và `M4` — đây là chỗ dễ hiểu sai nhất, nên phát biểu một lần và
+dùng thống nhất ở mọi mục:
+
+- **`M3` là cổng kiểm được bằng chứng khách quan.** Điều kiện: checklist áp dụng
+  của đúng loại tài liệu đã được xử lý và ghi thành bảng **trong chính hồ sơ**;
+  mọi `TBD/BLOCKED` có đủ owner, ảnh hưởng, gate và điều kiện mở khóa; link nội
+  bộ sạch. Chủ quản hồ sơ tự kiểm được, và bên thứ ba kiểm lại được bằng harness.
+- **`M4` là cổng cần con người.** Điều kiện: reviewer của **bên tiêu thụ** contract
+  đã đọc và đóng finding P0/P1. Tự kiểm của người soạn **không** thay thế được,
+  dù checklist có đầy đủ đến đâu.
+
+Không dùng “peer review” như điều kiện của `M3`; đó là điều kiện của `M4`.
+
+### 3.2 Công thức
+
+```text
+File coverage       = số file tồn tại / 22 × 100%
+Maturity progress   = tổng điểm M0..M5 của 22 hồ sơ / 2200 × 100%
+Review-ready rate   = số hồ sơ M3 trở lên / 22 × 100%
+Approved rate       = số hồ sơ M5 / 22 × 100%
+```
+
+Không giảm mẫu số, không tách file lớn thành nhiều file để tăng điểm và không
+chấm `M3` chỉ vì đã viết nhiều trang. Khi merge/gộp hồ sơ, phải sửa baseline,
+lý do và revision history trước khi tính lại.
+
+### 3.3 Nhãn ưu tiên
+
+- `P0`: chặn contract, safety, ownership hoặc chặn nhiều team; xử lý trước.
+- `P1`: cần để một team implement/test đúng sau khi P0 ổn định.
+- `P2`: hoàn thiện assurance, vận hành và handover; không được bỏ qua trước ký.
+
+## 4. Master tracker 22 hồ sơ
+
+> Baseline ban đầu dùng `M2` cho file đã có nội dung nhưng chưa qua checklist
+> implementation-readiness; dùng `M0` cho file chưa tồn tại. “Mức” trong bảng
+> không ghi đè trạng thái kiểm soát nằm bên trong từng tài liệu.
+
+| # | ID / hồ sơ | Loại | Owner chính / reviewer | Mức | Ưu tiên | Bằng chứng/trạng thái kế tiếp |
+|---:|---|---|---|---:|---|---|
+| 1 | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md) | Kiểm soát | System Engineering / Document Control | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Kiểm soát; register 22 dòng khớp harness |
+| 2 | [`SRS-PROG-001`](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | Yêu cầu | Product + System / QA | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Requirements; 60 ID canonical, acceptance định lượng |
+| 3 | [`PROG-OD-001`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) | Quyết định | Product + Architect / các lead | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Open Decisions; 17 mục OPEN có option/gate/bằng chứng mở khóa |
+| 4 | [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | Kiến trúc | System Architect / Safety + Ops | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Architecture; xung đột §11 có owner/gate |
+| 5 | [`DM-PROG-001`](../02_design/software/PROGRAMMING_DATA_MODEL.md) | Detailed Design | BE + Core / FE + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`OD-PROG-003/010/002/005/006/009`) |
+| 6 | [`IFSPEC-PROG-001`](../02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md) | Detailed Design | BE + Core / FE + Security | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; §6.1 impact ba nhánh và §6.1.1 quy tắc acknowledgement; 1 BLOCKED (17 decision, TLS, giao thức BE↔Core) |
+| 7 | [`DDD-LANG-PROG-001`](../02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md) | Detailed Design | Compiler + Controls / Core + FE + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`OD-PROG-002` bề rộng kiểu số) |
+| 8 | [`IFSPEC-ART-PROG-001`](../02_design/interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md) | Detailed Design | Compiler + Core / Security + Ops | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (chính sách provenance/chữ ký) |
+| 9 | [`DDD-CTRL-PROG-001`](../02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md) | Detailed Design | Controls + Core / Safety + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`OD-PROG-004/012/013` + Safety review) |
+| 10 | [`DDD-LIFE-PROG-001`](../02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md) | Detailed Design | Core + BE + Ops / Architect + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`OD-PROG-009/010`) |
+| 11 | [`UX-WEB-PROG-001`](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) | Detailed Design | UX / FE + Product + QA | `M3` 60 | P1 | IA bốn workspace + tám journey + migration 17 UC; SVG render được cho `PGM-01..04` gồm desktop/mobile, modal Commission và drawer Restore; mapping vùng→API/state/action/RBAC/copy; cây component, token và rollout; 1 BLOCKED (`OD-PROG-016` + 6 vai trò ký) |
+| 12 | [`DDD-FE-PROG-001`](../02_design/software/PROGRAMMING_FE_DESIGN.md) | Detailed Design | FE Lead / UX + BE + QA | `M3` 60 | P1 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (chưa có API nên chưa có evidence trình duyệt) |
+| 13 | [`DDD-BE-PROG-001`](../02_design/software/PROGRAMMING_BE_DESIGN.md) | Detailed Design | BE Lead / Core + Security + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`OD-PROG-001/003/010` + giao thức Core) |
+| 14 | [`DDD-FWSOM-PROG-001`](../02_design/software/PROGRAMMING_FW_SOM_DESIGN.md) | Detailed Design | Core/FW-SOM Lead / Controls + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`OD-PROG-009/012/013`, chưa có evidence target) |
+| 15 | [`DDD-FWMCU-PROG-001`](../02_design/firmware/PROGRAMMING_FW_MCU_DESIGN.md) | Detailed Design | FW MCU Lead / Core + HW + QA | `M3` 60 | P1 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`HW-AUTH-001/002`, HIL RED) |
+| 16 | [`DDD-HW-PROG-001`](../04_design/hardware/PROGRAMMING_HW_DESIGN.md) | Detailed Design | HW Lead / FW + Safety + QA | `M3` 60 | P1 | Đọc nhanh + bảng `DD-01..DD-13`; 2 BLOCKED (`DD-03` thiếu baseline có kiểm soát; HW NO-GO) |
+| 17 | [`DDD-SEC-PROG-001`](../02_design/software/PROGRAMMING_SECURITY_DESIGN.md) | Detailed Design | Security + BE / Core + Ops + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (TLS production, `OD-PROG-001`) |
+| 18 | [`VVP-PROG-001`](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | V&V | Verification Lead / tất cả lead | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại V&V; 32/32 spec đủ 5 trục gồm usability `VS-031`; 0/32 Test Result |
+| 19 | [`OPS-PROG-001`](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | Vận hành | Ops/Release / Core + BE + QA | `M3` 60 | P1 | Đọc nhanh + phụ lục cổng M3 loại Operations; 1 BLOCKED (chưa diễn tập) |
+| 20 | [`RSK-PROG-001`](../07_records/PROGRAMMING_RISK_REGISTER.md) | Assurance | Product + Architect + QA / risk owner | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Risk; 16/16 Open (gồm `RSK-PROG-016`), residual không đổi |
+| 21 | [`TRACE-PROG-001`](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Traceability | Verification Lead / Document Control | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Traceability; 55 dòng, 0 vi phạm bất biến |
+| 22 | [`PLAN-PROG-053`](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | Delivery | Dev Lead + Architect / Product + QA | `M3` 60 | P1 | Đọc nhanh + phụ lục cổng M3 loại Implementation Plan; 1 BLOCKED (G0 RED) |
+
+## 5. Quan hệ rủi ro → hồ sơ phải ưu tiên
+
+| Nhóm rủi ro đang mở | Hồ sơ kiểm soát chính | Kết quả thiết kế bắt buộc |
+|---|---|---|
+| `RSK-PROG-001/004` — dual owner, hold-last sai | Control Semantics + Runtime Lifecycle + Architecture | Một owner Local logic, transition/hold-last/PID rõ và fault test được |
+| `RSK-PROG-002/005` — Task 30 s, watchdog, compiler tranh CPU | Language/Compiler + FW-SOM + V&V | Base step độc lập, budget/WCET/quota và target load test |
+| `RSK-PROG-003/013` — IOP gap, nhầm skeleton là HIL | FW-SOM + FW MCU + HW + V&V | Swap không chặn iobus, acceptance 199/200/201 ms và bằng chứng điện thật |
+| `RSK-PROG-006/011/012/014` — artifact, bundle, RBAC, error lệch | Artifact/Loader + Security + Interface + BE | Bounded loader, source-only import, server RBAC, error authority và negative test |
+| `RSK-PROG-007/008` — optimistic success, double activation | Data + Interface + Runtime Lifecycle + FE/BE | Durable operation, idempotency, authoritative read-back và `UNKNOWN` reconcile |
+| `RSK-PROG-009/010` — RETAIN/quality sai | Data + Runtime Lifecycle + Interface | Stable identity/version/CRC, freshness/quality end-to-end, không thay unknown bằng zero |
+| `RSK-PROG-015` — claim IEC/ISO không có evidence | SRS + V&V + Trace + Document Control | Claim guardrail và phê duyệt chỉ dựa trên Test Result hiện hành |
+
+## 6. Roadmap theo dependency và cổng
+
+```text
+R0 Kiểm soát baseline
+  → R1 Khóa requirement, decision và architecture
+    → R2 Hoàn thiện contract + 5 thiết kế lõi còn thiếu
+      → R3 Hoàn thiện thiết kế theo team FE/BE/FW-SOM/FW-MCU/HW
+        → R4 Đồng bộ V&V, operations, risk, trace và Plan 53
+          → R5 Review chéo, đóng finding và ký DOC-G4
+```
+
+Các team có thể viết song song, nhưng không được tự khóa field/ABI/semantics khi
+hồ sơ upstream còn `OPEN`. Mọi giả định tạm thời phải có `TBD/BLOCKED`, owner và
+điều kiện mở khóa.
+
+### R0 — Kiểm soát baseline (`DOC-G0`)
+
+| Task | Owner | Kết quả cần giao | Exit |
+|---|---|---|---|
+| `DOC-5400` | Document Control | Chốt danh mục 22 file, ID, owner, reviewer, authority và đường dẫn chuẩn | Không còn file “ẩn” ngoài register |
+| `DOC-5401` | System Engineering | Đánh mức M0..M5, ghi snapshot và công thức | Dashboard tái tính được |
+| `DOC-5402` | Product + Architect | Phân nhóm 15 open decision theo hồ sơ/gate bị chặn | Mỗi decision có owner và downstream impact |
+| `DOC-5403` | QA | Ánh xạ risk và scenario vào hồ sơ chủ quản (hiện 16 risk, 32 scenario) | Không có risk/scenario mồ côi |
+
+**Exit `DOC-G0`:** master tracker được phê duyệt làm baseline kiểm soát. Gate này
+không đồng nghĩa G0 của implementation đã xanh.
+
+### R1 — Requirement và kiến trúc (`DOC-G1`)
+
+| Task | Owner | Kết quả cần giao | Exit |
+|---|---|---|---|
+| `DOC-5410` | Product + System | SRS có requirement đơn nghĩa, rationale, allocation, giới hạn và acceptance định lượng | SRS đạt M3 |
+| `DOC-5411` | Product + các lead | Quyết định capacity/type/task/FBD/library/RBAC/RETAIN/cutover | Decision cần cho R2 đạt `DECIDED` |
+| `DOC-5412` | Architect | Architecture có owner/state/failure/trust/deploy/rollback | Không còn `ARCH-CONF-PROG-*` vô chủ |
+| `DOC-5413` | Verification | Trace SRS → risk → scenario và phát hiện requirement thiếu | Coverage requirement 100% ở mức design plan |
+
+**Exit `DOC-G1`:** SRS và Architecture M3; mọi decision chặn R2 đã `DECIDED`
+hoặc `BLOCKED` có thẩm quyền chấp nhận. Chưa cho phép code contract production.
+
+### R2 — Contract và thiết kế lõi (`DOC-G2`)
+
+| Task | Owner | Kết quả cần giao | Exit |
+|---|---|---|---|
+| `DOC-5420` | BE + Core | Data Model và Interface Spec field-level, versioned | Producer/consumer cùng review một contract |
+| `DOC-5421` | Compiler + Controls | Tạo Language/Compiler Design | ST/FBD → common IR deterministic, diagnostics và limits đầy đủ |
+| `DOC-5422` | Compiler + Core | Tạo Artifact/Loader Spec | Layout, bounded validation, stage/swap/reject rõ từng byte/section |
+| `DOC-5423` | Controls + Core | Tạo Control Semantics | Scan/order/priority/PID/hold-last/overrun có pseudocode và fault behavior |
+| `DOC-5424` | Core + BE + Ops | Tạo Runtime Lifecycle Design | Atomic state machine cho Check/Commission/Restore/RETAIN/LKG/power-loss |
+| `DOC-5425` | Security + BE | Tạo Security Design | RBAC/trust/integrity/sandbox/import/audit/abuse case/secret handling |
+
+**Exit `DOC-G2`:** 7 hồ sơ contract/lõi đạt M3, error namespace thống nhất, mọi
+schema/ABI có compatibility, deploy order, rollback và verification owner.
+
+### R3 — Thiết kế theo team (`DOC-G3`)
+
+| Task | Owner | Kết quả cần giao | Exit |
+|---|---|---|---|
+| `DOC-5430` | UX + FE | UI/UX + FE Detailed Design | Route/flow/state/copy/a11y và source/component/API mapping đủ implement |
+| `DOC-5431` | BE | BE Detailed Design | Package/handler/store/job/transaction/quota/audit/test mapping đủ implement |
+| `DOC-5432` | Core/FW-SOM | FW-SOM Detailed Design | Base-step/loader/scheduler/process image/arbitration/RETAIN/trace đủ implement |
+| `DOC-5433` | FW MCU + HW | MCU + Hardware Detailed Design | BSP/ISR/DMA/electrical/test point/HIL limit đủ implement và đo |
+
+**Exit `DOC-G3`:** sáu hồ sơ team đạt M3; một dev không tham gia thiết kế trả lời
+được chính xác sửa file/module nào, contract gì, state/fault gì và test nào.
+
+### R4 — Assurance và kế hoạch giao hàng (`DOC-G4`)
+
+| Task | Owner | Kết quả cần giao | Exit |
+|---|---|---|---|
+| `DOC-5440` | Verification | V&V specification cho 32 scenario | Mỗi scenario có fixture/step/expected/target/evidence/pass authority |
+| `DOC-5441` | Ops/Release | Runbook Commission/Restore/upgrade/replacement/incident | Có command, read-back, backup, rollback trigger và evidence path |
+| `DOC-5442` | Risk owners + QA | Risk register sau design review | Control link đủ; residual chưa giảm nếu chưa có test result |
+| `DOC-5443` | Verification + Document Control | Traceability chi tiết và kiểm tra link | Requirement → design → source target → test → evidence không đứt |
+| `DOC-5444` | Dev Lead | Đồng bộ Plan 53 theo design Approved | Task/dependency/gate/RACI/estimate không buộc dev tự đoán |
+| `DOC-5445` | Tất cả approver | Review chéo, đóng finding P0/P1 và ký | 22/22 hồ sơ M5 hoặc blocker được Product/Architect/QA chấp thuận rõ |
+
+**Exit `DOC-G4`:** 22/22 hồ sơ Approved, 100% link sạch, không có `TBD` vô owner,
+`PROG-DOCSET-001` và `PLAN-PROG-053` đồng bộ. Lúc này mới xem xét mở G0 của Plan
+53. Production evidence và release gate vẫn phải được tạo trong implementation.
+
+## 7. Checklist bắt buộc trước khi nâng Detailed Design lên M3
+
+Mỗi file thuộc loại Detailed Design trong bảng master phải đánh `PASS`, `N/A` có
+lý do hoặc `BLOCKED` có owner cho từng mã sau. Chỉ ghi “có mục” không được tính
+là PASS; nội dung phải đủ để implement và test.
+
+| Mã | Nội dung phải kiểm | Điều kiện PASS |
+|---|---|---|
+| `DD-01` | Metadata và quyền tài liệu | Có ID/version/status/date/owner/reviewer/approver/source/scope/revision |
+| `DD-02` | Mục tiêu, actor, phạm vi | Có outcome, use case, in/out, constraint và success criteria |
+| `DD-03` | As-Built có dẫn chứng | Có source/contract/class/function/route/schema và gap đã kiểm tra |
+| `DD-04` | Target design và ownership | Owner mutable state/policy, input/output/consumer, boundary và failure path rõ |
+| `DD-05` | Data model từng field | Type/unit/default/range/null/key/validation/lifecycle/version/migration rõ |
+| `DD-06` | Interface/contract | Payload/layout/auth/timeout/retry/idempotency/error/audit/compatibility rõ |
+| `DD-07` | State/algorithm/timing | State machine, guard/action, pseudocode, ordering/atomicity/WCET/resource rõ |
+| `DD-08` | User/operation flow | Route/action/state/copy/a11y hoặc preflight/read-back/rollback/incident rõ |
+| `DD-09` | Error/safety/security | Detection/code/state/output/recovery/audit/alarm/safe behavior/abuse case rõ |
+| `DD-10` | Ánh xạ repository | File/package/class/function/build/config/package/feature flag cần tạo/sửa rõ |
+| `DD-11` | Verification/acceptance | Requirement, fixture, input/step, expected định lượng, fault case, target/evidence rõ |
+| `DD-12` | Compatibility/deployment/rollback | Version/migration/partial deploy/restart/rollback/data preservation rõ |
+| `DD-13` | Trace/risk/decision/sign-off | Link end-to-end, risk/residual, TBD owner/gate và bảng ký đầy đủ |
+
+### Checklist theo loại hồ sơ không phải Detailed Design
+
+| Loại | Cổng M3 bắt buộc |
+|---|---|
+| Requirements | ID ổn định; một nghĩa; source/rationale; priority; allocation; verification method; acceptance định lượng; không lẫn solution chưa duyệt |
+| Open Decisions | Context; options/trade-off; decision authority; deadline/gate; quyết định; rationale; consequences; tài liệu phải đồng bộ |
+| Architecture | Context/component/deployment; ownership; trust/failure boundary; interface direction; state; capacity/timing; compatibility/rollback; ADR conflict |
+| V&V | Trace requirement/risk; test level; fixture; precondition; steps; expected; negative/fault; environment/target; evidence; pass authority |
+| Operations | Role/preflight; command; expected/read-back; backup; rollback; incident; escalation; audit/evidence; bảo vệ dữ liệu |
+| Risk | Cause/event/impact; S/L; control; owner; verification/evidence; residual; acceptance authority; review date |
+| Traceability | Mọi link trỏ tới ID/section thật; phân biệt planned/documented/implemented/tested/passed/released |
+| Implementation Plan | Entry/exit; dependency; owner/RACI; deliverable; test/evidence; change control; deploy/rollback; không mở gate từ prose |
+
+## 8. Quy trình cập nhật tracker trong mỗi phiên
+
+1. Rebase trạng thái từ file hiện tại; không dùng số của phiên trước nếu file đã
+   thay đổi.
+2. Sửa hồ sơ chủ quản trước, sau đó sửa downstream contract/design/test/trace.
+3. Ghi version, trạng thái, ngày, owner và revision history trong chính hồ sơ.
+4. Chạy checklist áp dụng; finding chưa đóng phải có ID, severity, owner và gate.
+5. Cập nhật dòng tương ứng trong bảng master: mức, điểm và bằng chứng chuyển mức.
+6. Tính lại bốn chỉ số ở dashboard bằng công thức §3.2.
+7. Đồng bộ Open Decisions, Risk Register và Traceability nếu nội dung thay đổi
+   requirement, contract, safety, test hoặc evidence.
+8. Cập nhật `CHANGELOG.md` trong cùng phiên; ghi rõ kiểm tra nào đã chạy và kiểm
+   tra nào không áp dụng.
+9. Review diff/link/ID trùng; reviewer ký rồi mới nâng `M3 → M4 → M5`.
+
+Không xóa finding để làm đẹp tỷ lệ. Nếu một hồ sơ Approved bị thay đổi contract,
+requirement hoặc safety behavior, hạ về ít nhất `M3` và review lại downstream.
+
+## 9. RACI review hồ sơ
+
+| Nhóm hồ sơ | R — soạn | A — chấp thuận | C — review bắt buộc | I |
+|---|---|---|---|---|
+| Product/SRS/Decision | Product + System | Product Owner | Architect, các lead, QA | Dev/Ops |
+| Architecture/Data/Interface | Architect + BE/Core | System Architect | FE, Security, Ops, QA | Product/HW/FW |
+| Language/Artifact/Control/Lifecycle | Compiler + Controls + Core | Runtime Architect | BE, Security, Ops, QA | FE/FW/HW |
+| UI/UX + FE | UX + FE | UX/FE Lead | Product, BE, QA | Core/Ops |
+| BE + Security | BE + Security | Software Architect | FE, Core, Ops, QA | Product |
+| FW-SOM + FW MCU + HW | Core/FW/HW | HW/FW Lead | Controls, Safety, Ops, QA | FE/BE |
+| V&V/Risk/Trace | QA + risk owner | Verification Lead | Tất cả owner | Product/Release |
+| Operations/Plan | Ops + Dev Lead | Release/Product Owner | Architect, Security, QA | Tất cả team |
+
+## 10. Nhật ký snapshot tiến độ
+
+Mỗi lần thay đổi mức, thêm **một dòng mới**; không sửa số lịch sử.
+
+| Ngày | Baseline | M0 | M1 | M2 | M3 | M4 | M5 | File coverage | Maturity | DOC gate | Bằng chứng |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
+| 2026-08-09 | 22 | 5 | 0 | 17 | 0 | 0 | 0 | 77,3% | 23,2% | DOC-G0 RED | Kiểm kê đường dẫn, metadata, Risk v0.1 và Trace v2.0 |
+| 2026-08-09 R0 | 22 | 5 | 0 | 17 | 0 | 0 | 0 | 77,3% | 23,2% | DOC-G0 PASS | Chỉ đạo triển khai + register 22 hồ sơ tại CONTROL/Hub/Index; R1 bắt đầu |
+| 2026-08-09 R1 | 22 | 5 | 0 | 13 | 4 | 0 | 0 | 77,3% | 28,6% | DOC-G1 REVIEW READY / BLOCKED | Index/SRS/OD/Architecture M3; thiếu chữ ký 15 decision; R2 viết target có kiểm soát |
+| 2026-08-09 R2 | 22 | 0 | 0 | 11 | 11 | 0 | 0 | 100% | 45,0% | DOC-G2 REVIEW READY / BLOCKED | Data/Interface + 5 hồ sơ lõi đạt M3; OpenAPI/IPC/code chưa Active; thiếu decision/TLS sign-off |
+| 2026-08-09 R3 | 22 | 0 | 0 | 5 | 17 | 0 | 0 | 100% | 53,2% | DOC-G3 REVIEW READY / BLOCKED | Sáu hồ sơ team đạt M3; implementation/browser/target/HIL và approval còn blocked |
+| 2026-08-09 R4 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 REVIEW READY / BLOCKED | 22/22 M3; 15 decision, peer review/sign-off, implementation và evidence 0/30 còn blocked |
+| 2026-08-09 tái kiểm toán | 22 | 0 | 0 | 22 | 0 | 0 | 0 | 100% | 30,0% | DOC-G4 RED / DETAIL REWORK | Hạ nhãn M3 tự chấm vì chưa có peer-review record; mở vòng chi tiết 1 |
+| 2026-08-09 detail-1 | 22 | 0 | 0 | 22 | 0 | 0 | 0 | 100% | 30,0% | DOC-G4 RED / PEER REVIEW PENDING | 22/22 đã bổ sung cổng implement và self-check; không tự nâng M3/M4/M5 |
+| 2026-08-09 M3 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / CONSUMER REVIEW + SIGN-OFF PENDING | `PROG-REV-2026-08-09`: 12 finding tài liệu đóng (5 P0, 6 P1, 1 P2); 22/22 có Đọc nhanh + bảng checklist từng mã; link/anchor/ID trùng = 0; M4/M5 giữ 0 vì cần người thật |
+| 2026-08-09 visual-1 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / CONSUMER REVIEW + SIGN-OFF PENDING | Rule Detailed Design bổ sung cổng visual; UI/UX v0.5 có SVG cho đủ PGM-01..06, gồm landing desktop/mobile, modal Commission và drawer Restore; mức M3 không đổi, browser/runtime evidence vẫn 0 |
+| 2026-08-09 simplify-1 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / OD-PROG-016 + CONSUMER REVIEW PENDING | Amendment A1: IA bốn workspace + tám journey `UJ-PROG-01..08`; migration 17 UC (12 MERGED / 3 SCENARIO / 2 ROADMAP); 13 hồ sơ IMPACTED, 9 REVIEWED-NO CHANGE; 60 requirement, 32 scenario, 16 risk, 17 decision; điểm heuristic mục tiêu 87/100; 3 SVG mới; M3 giữ nguyên, M4/M5 vẫn 0 |
+| 2026-08-09 baseline-git | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY OPEN | Đưa 22/22 hồ sơ vào kiểm soát cấu hình Git (trước đó 20/22 untracked); harness vào repository tại `scripts/docs_iso_harness.py` có exit code và khối `EXPECT`; `DOC-GOV-001` và template hồ sơ vào repository; tách ba cổng quyền hạn ở Plan 53. M3 giữ 22/22, M4/M5 vẫn 0 |
+
+## 10.1 Ma trận impact của Amendment A1 trên 22 hồ sơ
+
+Vòng đơn giản hóa ngày 2026-08-09 rà **toàn bộ** 22 hồ sơ, nhưng chỉ sửa hồ sơ
+thực sự bị ảnh hưởng. Nguyên tắc: nếu mental model mới **không** đổi contract
+hay hành vi của một layer thì ghi `REVIEWED — NO CHANGE` kèm lý do, không viết
+lại để tài liệu trông đồng đều.
+
+| # | Hồ sơ | Kết luận | Lý do / thay đổi chính |
+|---:|---|---|---|
+| 1 | `PROG-DOCSET-001` Design Index | **IMPACTED** | Cập nhật trạng thái và version của các hồ sơ bị sửa |
+| 2 | `SRS-PROG-001` Requirements | **IMPACTED** | `FE-101` sang bốn workspace; thêm `FE-113/114/115`, `NFR-109/110`; 55 → 60 requirement |
+| 3 | `PROG-OD-001` Open Decisions | **IMPACTED** | Thêm `OD-PROG-016` (IA/journey) và `OD-PROG-017` (thư viện mẫu); 15 → 17 |
+| 4 | `ARCH-PROG-001` Architecture | `REVIEWED — NO CHANGE` | Gộp IA là thay đổi tầng trình bày. Quyền sở hữu tiến trình, biên tin cậy, biên lỗi và cutover không đổi |
+| 5 | `DM-PROG-001` Data Model | `REVIEWED — NO CHANGE` | Không thêm/bớt entity, field, khóa hay migration. Tab là trạng thái URL, không phải dữ liệu bền vững |
+| 6 | `IFSPEC-PROG-001` Interface Spec | **IMPACTED** | Thêm §6.1 ba nhánh impact `NONE/PRESENT/UNAVAILABLE` (fail-closed) và `?activeOnly=true` cho `GET /overrides`. **Không** thêm endpoint |
+| 7 | `DDD-LANG-PROG-001` Language/Compiler | `REVIEWED — NO CHANGE` | Tập con ngôn ngữ, hệ kiểu, IR và diagnostic không phụ thuộc IA. `OD-PROG-017` nếu được duyệt sẽ tác động sau, đã ghi ở Product Spec §8.6 |
+| 8 | `IFSPEC-ART-PROG-001` Artifact/Loader | `REVIEWED — NO CHANGE` | Layout artifact và loader không thấy tầng UI |
+| 9 | `DDD-CTRL-PROG-001` Control Semantics | `REVIEWED — NO CHANGE` | Không đổi scan order, arbitration, PID, hold-last hay overrun |
+| 10 | `DDD-LIFE-PROG-001` Runtime Lifecycle | `REVIEWED — NO CHANGE` | Máy trạng thái Check/Commission/Restore giữ nguyên. Xác nhận theo rủi ro là quy tắc trình bày; số ô xác nhận không phải guard của state machine |
+| 11 | `UX-WEB-PROG-001` UI/UX | **IMPACTED** | Trọng tâm: IA bốn workspace, tám journey, migration 17 UC, route + chuyển hướng, ba SVG mới, cây component, API theo workspace, `UX-T-006` |
+| 12 | `DDD-FE-PROG-001` FE Design | **IMPACTED** | §0.1 cây thư mục và route bốn workspace; ba ràng buộc tab/Draft/truy vấn dùng chung; năm chuyển hướng |
+| 13 | `DDD-BE-PROG-001` BE Design | **IMPACTED** | §0.1 nhịp gọi `GET /overrides` từ ba màn hình và yêu cầu impact ba nhánh. Không đổi persistence/worker/RBAC |
+| 14 | `DDD-FWSOM-PROG-001` FW-SOM | `REVIEWED — NO CHANGE` | Runtime trên SOM không biết tầng UI |
+| 15 | `DDD-FWMCU-PROG-001` FW MCU | `REVIEWED — NO CHANGE` | MCU không biết Project, Revision hay màn hình |
+| 16 | `DDD-HW-PROG-001` HW | `REVIEWED — NO CHANGE` | Không đổi ràng buộc điện hay điểm đo |
+| 17 | `DDD-SEC-PROG-001` Security | `REVIEWED — NO CHANGE` | RBAC vẫn ở server; “viewer không thấy dãy nút vô hiệu hóa” là yêu cầu trình bày (`FE-114`), **không** thay kiểm quyền. Re-auth cho thao tác nguy hiểm giữ nguyên |
+| 18 | `VVP-PROG-001` V&V | **IMPACTED** | Thêm `VS-PROG-031` (usability có người dùng thật) và `VS-PROG-032` (chuyển hướng route, giữ trạng thái tab); 30 → 32 |
+| 19 | `OPS-PROG-001` Operations | **IMPACTED** | §18.1: số ô xác nhận thay đổi theo ảnh hưởng thật; `Chưa tính được` là điều kiện dừng; vùng thao tác nguy hiểm tách riêng |
+| 20 | `RSK-PROG-001` Risk Register | **IMPACTED** | Thêm `RSK-PROG-016` — đơn giản hóa làm mất bước an toàn, `5×3=15`; 15 → 16 risk |
+| 21 | `TRACE-PROG-001` Traceability | **IMPACTED** | Thêm 5 dòng requirement, §10 trace tám journey và bảng trạng thái migration 17 UC |
+| 22 | `PLAN-PROG-053` Implementation Plan | **IMPACTED** | §15.1 chia P5 thành sáu lát cắt dọc `S5-A..F` theo workspace và journey |
+
+Tổng: **13 `IMPACTED`**, **9 `REVIEWED — NO CHANGE`**, **0 `BLOCKED`** ở mức
+tài liệu. Không hồ sơ nào bị chặn khỏi việc rà; các blocker còn lại là blocker
+phê duyệt đã có từ trước, cộng `OD-PROG-016`.
+
+Ngoài baseline 22, bốn hồ sơ nguồn/điều khiển cũng được sửa: Product Spec
+`PROD-PROG-001` (Amendment A1), Plan 54 này, `CONTROL.md` và `CHANGELOG.md`.
+
+## 11. Điều kiện kết luận “bộ hồ sơ đã hoàn tất”
+
+- 22/22 file tồn tại tại đường dẫn chuẩn và 22/22 đạt `M5`.
+- 13 checklist `DD-*` được xử lý cho mọi Detailed Design; `N/A` có lý do.
+- 15 open decision đã `DECIDED/CLOSED` theo đúng dependency; không có `TBD` vô
+  owner hoặc không có gate.
+- Risk Register liên kết control/test; residual chỉ đổi khi có evidence hợp lệ.
+- Traceability không đứt chuỗi requirement → design → implementation target →
+  scenario → Test Result; trạng thái evidence vẫn được báo trung thực.
+- Tất cả finding review P0/P1 đóng, link/ID/revision sạch và bảng ký hoàn tất.
+- `PLAN-PROG-053` được đồng bộ lại từ thiết kế Approved trước khi mở code gate.
+
+Hoàn tất hồ sơ chỉ mở **quyền bắt đầu implementation có kiểm soát**. Nó không tự
+chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn sàng release.
+
+## 12. Lịch sử sửa đổi và phê duyệt
+
+| Phiên bản | Ngày | Nội dung | Người sửa |
+|---|---|---|---|
+| 1.0 | 2026-08-09 | Tạo baseline 22 hồ sơ, thang M0..M5, master tracker, dependency gate và checklist | System Engineering |
+| 1.1 | 2026-08-09 | Hoàn tất R0, đăng ký baseline vào CONTROL và mở công việc R1 theo chỉ đạo triển khai | System Engineering |
+| 1.2 | 2026-08-09 | R1 technical complete: 4 hồ sơ M3; giữ approval blocker và bắt đầu R2 theo TARGET-PENDING | System Engineering |
+| 1.3 | 2026-08-09 | R2 technical complete: tạo đủ 5 file, nâng 7 hồ sơ lõi lên M3, coverage 100%; bắt đầu R3 | System Engineering |
+| 1.4 | 2026-08-09 | R3 technical complete: nâng sáu hồ sơ UI/FE/BE/FW-SOM/FW-MCU/HW lên M3; bắt đầu R4 | System Engineering |
+| 1.5 | 2026-08-09 | R4 technical complete: 22/22 hồ sơ M3, coverage/review-ready 100%; DOC-G4 chờ external review/sign-off | System Engineering |
+| 1.6 | 2026-08-09 | Tái kiểm toán hạ 22 hồ sơ về M2 do thiếu peer-review record; hoàn tất vòng detail 1 cho 22/22, cập nhật evidence từng file và giữ DOC-G4 RED | System Engineering |
+| 1.7 | 2026-08-09 | Nâng 22/22 lên M3 theo định nghĩa §3.1 sau `PROG-REV-2026-08-09`; tách rõ ranh giới M3 (kiểm được bằng chứng khách quan) và M4 (cần reviewer bên tiêu thụ) để đóng finding `F-PROG-012`; cập nhật dashboard, tracker và snapshot | System Engineering |
+| 1.8 | 2026-08-09 | Áp dụng rule visual mới: cập nhật bằng chứng UI/UX v0.5 có asset render được cho đủ PGM-01..06 và thêm snapshot `visual-1`; giữ nguyên M3/M4/M5 vì không có review hay evidence runtime mới | System Engineering |
+| 1.9 | 2026-08-09 | Amendment A1 — đơn giản hóa và định vị cạnh tranh: thêm §10.1 ma trận impact 22 hồ sơ (13 IMPACTED / 9 REVIEWED-NO CHANGE); cập nhật dashboard cho 17 decision, 16 risk, 32 scenario; thêm snapshot `simplify-1`. Không tự nâng M4/M5 | System Engineering |
+| 2.0 | 2026-08-09 | Đóng review chặn phê duyệt: sửa master tracker về 60 requirement và 17 decision, `DOC-5440` về 32 scenario; nêu rõ phân chia thẩm quyền Plan 54 (hồ sơ) ↔ Plan 53 (implementation) và cấm roadmap thứ ba; siết phát biểu ISO-aligned và trỏ `DOC-GOV-001`; thêm snapshot `baseline-git` | System Engineering |
+
+| Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
+|---|---|---|---|
+| Product Owner | — | PENDING | Phê duyệt scope, decision authority và thứ tự ưu tiên |
+| System Architect | — | PENDING | Phê duyệt dependency, owner và cổng Detailed Design |
+| Verification Lead | — | PENDING | Phê duyệt scoring, checklist, risk/trace/evidence gate |
+| Document Control | — | PENDING | Phê duyệt register, version và quy trình cập nhật |
