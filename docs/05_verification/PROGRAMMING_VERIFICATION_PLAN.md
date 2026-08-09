@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 0.5 |
+| Phiên bản | 0.6 |
 | Trạng thái | **M3 — Review Ready** — 32/32 kịch bản có đặc tả; 0/32 Test Result |
-| Ngày | 2026-08-09 |
+| Ngày | 2026-08-10 |
 | Chủ quản | Verification Lead |
 | Người review | Product, System Architect, FE/BE/Core/FW/HW/Ops Leads |
 | Người phê duyệt | Verification Lead + Product Owner |
@@ -275,6 +275,7 @@ baseline PASS hoặc có waiver đúng authority và trace rõ.
 | 0.3 | 2026-08-09 | Bổ sung Test Result ID/schema, execution/review workflow, invalidation và independence rule; chuyển Detailed Draft chờ review |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại V&V; giữ 0/30 Test Result |
 | 0.5 | 2026-08-09 | Thêm `VS-PROG-031` (usability test có người dùng thật, sáu ngưỡng `UX-A-01..06`) và `VS-PROG-032` (chuyển hướng route và giữ trạng thái tab); tổng 32 kịch bản, vẫn 0 Test Result |
+| 0.6 | 2026-08-10 | Sửa self-check trạng thái trung thực từ dải cũ `001..030` sang catalog hiện hành `001..032`; không thay đổi 0/32 Test Result hoặc gate |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -295,7 +296,7 @@ baseline PASS hoặc có waiver đúng authority và trace rõ.
 | Môi trường và target | PASS | §9 cột cuối ghi rõ chạy ở đâu; §5 gate theo discipline |
 | Evidence | PASS | §7 mẫu Test Result; §10 đường dẫn `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS` |
 | Thẩm quyền ký PASS | PASS | §9 cột cuối tách “execute” và “review”; §11 quy trình review |
-| Trạng thái trung thực | PASS | §8 ghi `VS-PROG-001..030 = NOT RUN`; §10 cấm kế thừa PASS cũ và bắt chuyển `INVALIDATED` khi contract đổi |
+| Trạng thái trung thực | PASS | §8 ghi `VS-PROG-001..032 = NOT RUN`; §10 cấm kế thừa PASS cũ và bắt chuyển `INVALIDATED` khi contract đổi |
 | `BLOCKED` có owner/gate | **BLOCKED** | Đồ gá HIL (`L`) chưa tồn tại và nhiều giới hạn kỳ vọng còn `TARGET-PENDING`. Owner: Verification Lead + HW Lead + Product. Ảnh hưởng: không chạy được `VS-PROG-010/014/030`, nên `G5` và `G6` không mở. Gate: `DOC-G5`. Điều kiện mở: `HW-AUTH-001/002` phát hành, dựng đồ gá HIL, và ký các giới hạn kỳ vọng **trước** khi chạy |
 
 Số Test Result hiện tại: **0/32**. Hồ sơ này định nghĩa cách chứng minh, nó

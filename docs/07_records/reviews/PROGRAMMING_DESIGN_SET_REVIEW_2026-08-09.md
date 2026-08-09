@@ -4,10 +4,10 @@
 |---|---|
 | ID | `PROG-REV-2026-08-09` |
 | Loại | Review record + finding register; **không phải** Design authority |
-| Ngày | 2026-08-09 |
+| Ngày | 2026-08-09; bổ sung vòng P0 ngày 2026-08-10 |
 | Phạm vi | 22 hồ sơ baseline trong [`PROG-DOCSET-001`](../../02_design/PROGRAMMING_DESIGN_INDEX.md) §3 |
 | Thực hiện | System Engineering (document engineering pass) |
-| Trạng thái | Finding P0/P1 trong phạm vi tài liệu đã đóng; **consumer review của người thật chưa thực hiện** |
+| Trạng thái | 21/21 finding kỹ thuật đã đóng; **consumer review của người thật chưa thực hiện** |
 | Tracker liên quan | [`PLAN-PROG-DOC-054`](../../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) |
 
 ## 0. Đọc nhanh
@@ -17,8 +17,8 @@
 | 1. File này dùng để làm gì? | Ghi lại lần rà soát 22 hồ sơ Programming ngày 2026-08-09: đã kiểm cái gì, tìm ra lỗi gì, sửa những gì, và **cái gì vẫn chưa ai kiểm**. |
 | 2. Ai phải đọc? | Reviewer của từng consumer (FE/BE/Core/FW/HW/QA/Ops/Security/UX) trước khi ngồi review; Document Control khi cập nhật Plan 54. |
 | 3. Hiện trạng trước review? | 22/22 hồ sơ ở `M2 — Detailed Draft`, đã tự kiểm nội dung nhưng chưa có bảng checklist từng mã, chưa có phần tóm tắt cho người ngoài, và hồ sơ UI/UX thiếu 8 nội dung bắt buộc. |
-| 4. Review này thay đổi gì? | Đóng 12 finding tài liệu (5 P0, 6 P1, 1 P2) và đưa 22/22 hồ sơ đạt cổng `M3 — Review Ready`. |
-| 5. Ai phải sửa gì tiếp? | Không còn finding tài liệu mở. Việc còn lại thuộc về **người**: consumer review và chữ ký — xem §5. |
+| 4. Review này thay đổi gì? | Ba vòng đóng tổng 21 finding kỹ thuật; đưa 22/22 hồ sơ đạt `M3`, sửa các mâu thuẫn chặn phê duyệt và lập gói review P0 `PROG-000..006`. |
+| 5. Ai phải sửa gì tiếp? | Không còn finding kỹ thuật mở. Việc còn lại thuộc về authority/consumer: review, quyết định, pin candidate và chữ ký — xem §5 và §6.3. |
 | 6. Điều gì còn bị chặn? | M4 (review liên chức năng đóng) và M5 (phê duyệt). Cả hai đòi người thật; agent không được ký thay. Xem §5 và §6. |
 | 7. Bằng chứng nào? | §2 harness đo được, chạy lại bằng lệnh ghi ở §2.1. Không có bằng chứng build/browser/target/HIL nào trong lần này vì **chỉ sửa tài liệu**. |
 
@@ -40,7 +40,10 @@ Nguyên tắc áp dụng: một mã chỉ được `PASS` khi nội dung đủ �
 Có heading mà rỗng nội dung thì ghi `BLOCKED` kèm owner, ảnh hưởng, gate và điều
 kiện mở khóa — không ghi `PASS`.
 
-## 2. Kết quả kiểm máy
+## 2. Kết quả kiểm máy của vòng đầu ngày 2026-08-09
+
+Bảng này là snapshot của vòng đầu, trước Amendment A1; số hiện hành nằm ở
+§6.1–§6.3. Không dùng các số 55/30/15 dưới đây làm baseline hiện tại.
 
 | Phép đo | Trước | Sau | Ngưỡng yêu cầu |
 |---|---:|---:|---|
@@ -64,11 +67,16 @@ kiện mở khóa — không ghi `PASS`.
 
 ### 2.1 Cách chạy lại
 
-Harness nằm ngoài repository (thư mục làm việc tạm của phiên). Nội dung kiểm
-được mô tả đủ để dựng lại: duyệt 22 đường dẫn baseline cộng Plan 54; với mỗi
-file, phân giải mọi liên kết Markdown không phải `http/https/mailto` theo đường dẫn
-tương đối và kiểm cả anchor theo slug tiêu đề; đếm ID theo biểu thức chính quy
-của từng họ ID; kiểm bảng trace bằng mẫu `| \`ID\` | ... | D/I/T/P/R |`.
+Harness hiện nằm trong repository tại `scripts/docs_iso_harness.py`. Chạy từ
+root repository:
+
+```bash
+python3 scripts/docs_iso_harness.py --expect -v
+```
+
+Harness duyệt 22 đường dẫn baseline, phân giải link/anchor, kiểm path `docs/**`
+trong code span, ID trùng, whitespace/code fence, đếm các họ ID và kiểm bất biến
+trace. Cờ `--expect` trả exit khác 0 nếu số đo drift khỏi baseline khai báo.
 
 Đây là kiểm **tài liệu**. Không có lệnh build, test C++/Go/FE, trình duyệt,
 target hay HIL nào được chạy trong lần này, vì thay đổi chỉ chạm tới Markdown.
@@ -117,9 +125,9 @@ Mọi mục `BLOCKED` đều ghi bốn trường bắt buộc. Không có `TBD` 
 | Việc còn lại | Ai phải làm | Vì sao agent không làm thay được | Điều kiện mở khóa |
 |---|---|---|---|
 | Consumer review từng hồ sơ | Reviewer của FE, BE, Core, FW MCU, HW, QA, Ops, Security, UX theo RACI Plan 54 §9 | Review là ý kiến độc lập của bên **tiêu thụ** contract; tự kiểm của người soạn không thay thế được, dù checklist có đầy đủ | Mỗi hồ sơ có ít nhất một reviewer ghi `ACCEPT`/`REQUEST CHANGE` kèm revision cụ thể → cho phép chấm M4 |
-| Ký 15 `OD-PROG-*` | Product Owner/CTO và discipline authority | Quyết định sản phẩm thuộc thẩm quyền con người; không suy ra được từ tài liệu | Decision record đủ trường theo `PROG-OD-001` |
+| Xử lý 17 `OD-PROG-*` theo dependency | Product Owner/CTO và discipline authority | Quyết định sản phẩm thuộc thẩm quyền con người; không suy ra được từ tài liệu | Decision record đủ trường theo `PROG-OD-001`; mục của lát cắt sắp implement phải ký trước |
 | Ký 22 hồ sơ | Product Owner, System Architect, Verification Lead, discipline authority | Phê duyệt là hành vi pháp lý/tổ chức | 17 decision đóng + M4 đạt → cho phép chấm M5 |
-| Bằng chứng thực thi | QA + discipline lead | Cần chạy trên target/board/HIL thật với thiết bị đo | 30 `VS-PROG-*` có Test Result được review |
+| Bằng chứng thực thi | QA + discipline lead | Cần chạy trên target/board/HIL thật với thiết bị đo | 32 `VS-PROG-*` có Test Result được review |
 
 Hệ quả: **M4 = 0/22 và M5 = 0/22**, `DOC-G4` giữ `RED`. Đây là kết quả đúng, không
 phải thiếu sót của lần rà.
@@ -180,6 +188,24 @@ Phạm vi cố ý giới hạn ở `docs/**`; đường dẫn `apps/**`, `firmwa
 `contracts/**` trong hồ sơ thiết kế là **Source Target sẽ tạo**, chưa tồn tại là
 đúng theo quy tắc ở `TRACE-PROG-001` §6. Kết quả hiện tại: `0`.
 
+## 6.3 Vòng duyệt Plan 53 và triển khai chuẩn bị P0 ngày 2026-08-10
+
+Vòng này duyệt tính khả thi của kế hoạch trước khi giao team lập plan implement
+từ FW-SOM tới BE/FE, đồng thời triển khai đầy đủ phần **chuẩn bị** P0. Bốn finding
+mới được đóng trong cùng phiên:
+
+| ID | Sev | Finding | Cách xử lý | Trạng thái |
+|---|---|---|---|---|
+| `F-PROG-018` | **P0** | Plan 53 dùng `PLAN_READY OPEN` dù điều kiện consumer review/chữ ký chưa đạt; quyền lập kế hoạch bị trộn với trạng thái gate, có thể bị hiểu sai thành đã được cấp quyền implement | Đổi `PLAN_READY` thành `BLOCKED`; tuyên bố hoạt động chuẩn bị được phép bởi banner `PLAN-ONLY`; đồng bộ header, §0, §4.2, §5.5 và §9.2 | **CLOSED** |
+| `F-PROG-019` | P1 | Số hiện hành lệch giữa hồ sơ: Plan 53 tổng `42` thay vì 49 task, exit P6/VVP self-check còn 30 thay vì 32 scenario, Plan 53/54/review còn 15 thay vì 17 decision, Trace tracker còn 55 thay vì 60 dòng | Sửa toàn bộ số hiện hành; giữ nguyên số trong revision history/snapshot cũ; bump version các hồ sơ bị sửa | **CLOSED** |
+| `F-PROG-020` | **P0** | P0 ghi exit là decision/design/sign-off package nhưng không có một record gom 7 task, authority, evidence, blocker và ô ký; reviewer phải tự dò 22 hồ sơ và có thể ký khác revision | Tạo [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md), map đủ `PROG-000..006`, gate checklist, trình tự review và bảng sign-off gắn revision | **CLOSED** |
+| `F-PROG-021` | **P0** | P1 phụ thuộc toàn bộ P0 dù P0 chứa HW/TLS/HIL; `IMPLEMENT_READY` đòi machine-readable contract trước khi P1 tạo contract; Gantt tính T+ sau IMPLEMENT_READY nhưng lại đặt P0 trước gate; sơ đồ ghi P2→P3 dù lịch cho song song; `PROG-603` tự phụ thuộc P6 | Tách `P0-A` khỏi `P0-B`; đổi dependency task cụ thể; contract machine-readable là output P1; lấy T+ từ formal review P0-A; sửa join P2/P3 và bỏ self-dependency P6 | **CLOSED** |
+
+Kết luận vòng ba: **21 finding đã đóng — 10 P0, 10 P1, 1 P2.** Phần chuẩn bị
+kỹ thuật P0 đạt 7/7, nhưng DoD vẫn 0/7 vì agent không ký thay authority. Trạng
+thái đúng là `DOC-G4 RED`, `G0 RED`, `PLAN_READY/IMPLEMENT_READY/RELEASE_READY`
+đều `BLOCKED`, 0/22 M4, 0/22 M5 và 0/32 Test Result.
+
 ## 7. Lịch sử
 
 | Phiên bản | Ngày | Nội dung |
@@ -187,3 +213,4 @@ Phạm vi cố ý giới hạn ở `docs/**`; đường dẫn `apps/**`, `firmwa
 | 1.0 | 2026-08-09 | Tạo record: phương pháp, 12 finding, kết quả harness trước/sau, ranh giới việc cần người thật |
 | 1.1 | 2026-08-09 | Thêm §6.1 đo lại sau Amendment A1; kết luận M3/M4/M5 không đổi, bổ sung `OD-PROG-016` vào điều kiện mở khóa M4 |
 | 1.2 | 2026-08-09 | Thêm §6.2: 5 finding của vòng review chặn phê duyệt (2 P0, 3 P1) và cách xử lý; thêm §6.2.1 phép kiểm harness thứ bảy cho đường dẫn trong code span. Tổng hai vòng: 17 finding, tất cả đã đóng |
+| 1.3 | 2026-08-10 | Thêm §6.3: duyệt Plan 53 và triển khai chuẩn bị P0; đóng `F-PROG-018..021`, lập gói P0, bỏ dependency vòng tròn và đồng bộ gate/số hiện hành; tổng 21 finding đóng, giữ toàn bộ approval/runtime/HIL gate BLOCKED |

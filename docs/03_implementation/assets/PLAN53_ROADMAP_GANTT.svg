@@ -1,17 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="940" viewBox="0 0 1440 940" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
   <title>Plan 53 — Biểu đồ roadmap triển khai Programming MK-DDC-24</title>
-  <desc>Sơ đồ Gantt theo tuần tương đối T+1..T+22 cho bảy pha P0..P6, bảy cổng kỹ thuật G0..G6 và ba cổng quyền hạn. Thời lượng là giả định lập kế hoạch, không phải cam kết lịch.</desc>
+  <desc>Sơ đồ Gantt theo tuần tương đối T+1..T+22 từ khi khởi động formal authority review P0-A cho bảy pha P0..P6, bảy cổng kỹ thuật G0..G6 và ba cổng quyền hạn. Thời lượng là giả định lập kế hoạch, không phải cam kết lịch.</desc>
 
   <defs><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
     <path d="M0 0 L8 4 L0 8 z" fill="#CC1F28"/></marker></defs>
   <rect width="1440" height="940" fill="#C8CCD0"/>
 
   <text x="28" y="38" font-size="19" font-weight="700" fill="#1C1F23">Roadmap triển khai Programming MK-DDC-24 — PLAN-PROG-053</text>
-  <text x="28" y="60" font-size="12" fill="#4A4F55">Trục thời gian là <tspan font-weight="700">tuần tương đối T+n</tspan> tính từ khi cổng IMPLEMENT_READY mở. Không phải ngày lịch, không phải cam kết deadline.</text>
+  <text x="28" y="60" font-size="12" fill="#4A4F55">Trục <tspan font-weight="700">T+n</tspan> tính từ khi khởi động formal authority review P0-A trên candidate đã pin. Gate trễ thì mốc downstream trượt tương ứng.</text>
 
   <!-- Banner -->
   <rect x="28" y="76" width="1384" height="34" rx="6" fill="#EEE9DB" stroke="#826500"/>
-  <text x="44" y="98" font-size="12" font-weight="700" fill="#826500">⚠ PLAN-ONLY — chưa được implement production. Mọi thanh tiến độ dưới đây đang ở trạng thái NOT_STARTED.</text>
+  <text x="44" y="98" font-size="12" font-weight="700" fill="#826500">⚠ PLAN-ONLY — P0 chuẩn bị 7/7, DoD 0/7; P1–P6 NOT_STARTED; chưa được implement production.</text>
 
   <!-- ===== timeline header ===== -->
   <g font-size="10" fill="#4A4F55">
@@ -71,8 +71,8 @@
   <rect x="28" y="304" width="232" height="44" rx="5" fill="#D8DBDE" stroke="#636970"/>
   <text x="40" y="323" font-size="12" font-weight="700" fill="#1C1F23">P2 · Compiler · Draft · Check</text>
   <text x="40" y="340" font-size="10" fill="#4A4F55">Compiler · BE · 8 task</text>
-  <rect x="460" y="310" width="250" height="30" rx="4" fill="#E0E6EC" stroke="#26527C" stroke-width="1.5"/>
-  <text x="470" y="329" font-size="11" font-weight="700" fill="#26527C">P2 · 35–55 nd</text>
+  <rect x="460" y="310" width="250" height="30" rx="4" fill="#F7E0E1" stroke="#CC1F28" stroke-width="2"/>
+  <text x="470" y="329" font-size="11" font-weight="700" fill="#CC1F28">P2 · 35–55 nd · join P3</text>
 
   <!-- P3 -->
   <rect x="28" y="360" width="232" height="44" rx="5" fill="#D8DBDE" stroke="#636970"/>
@@ -113,20 +113,20 @@
   <!-- ===== critical path note ===== -->
   <rect x="28" y="636" width="1384" height="1" fill="#636970"/>
   <text x="28" y="662" font-size="12" font-weight="700" fill="#1C1F23">Đường găng và phụ thuộc</text>
-  <text x="28" y="682" font-size="11" fill="#1C1F23">Đường găng phần mềm: <tspan font-weight="700" fill="#CC1F28">P0 → P1 → P3 → P4 → P5-C/D/E/F → G6</tspan>. P2 chạy song song với P3 và không nằm trên đường găng.</text>
-  <text x="28" y="702" font-size="11" fill="#1C1F23">Đường găng phần cứng chạy <tspan font-weight="700" fill="#826500">song song từ T+1</tspan>. Nếu để tới T+13 mới bắt đầu, dự án đứng chờ phần cứng ở G6 — đây là rủi ro lịch lớn nhất.</text>
+  <text x="28" y="682" font-size="11" fill="#1C1F23">Đường găng phần mềm: <tspan font-weight="700" fill="#CC1F28">P0-A → P1 → join(P2, P3) → P4 → P5-C/D/E/F → G6</tspan>. P2/P3 cùng hạn nên hiện đều không có float.</text>
+  <text x="28" y="702" font-size="11" fill="#1C1F23">Đường găng phần cứng chạy <tspan font-weight="700" fill="#826500">song song từ T+1</tspan>. Nếu để tới T+13 mới bắt đầu, dự án đứng chờ phần cứng ở G6.</text>
   <text x="28" y="722" font-size="11" fill="#1C1F23">Mutation của FE (S5-C trở đi) <tspan font-weight="700">không</tspan> được nối trước khi contract BE/Core và hành vi lỗi tồn tại thật, tức không sớm hơn G3.</text>
 
   <!-- permission gates -->
   <rect x="28" y="742" width="1384" height="1" fill="#636970"/>
   <text x="28" y="765" font-size="12" font-weight="700" fill="#1C1F23">Ba cổng</text>
   <text x="28" y="780" font-size="12" font-weight="700" fill="#1C1F23">quyền hạn</text>
-  <rect x="166" y="754" width="150" height="22" rx="11" fill="#E0ECE5" stroke="#227742"/>
-  <text x="180" y="769" font-size="11" font-weight="700" fill="#227742">PLAN_READY · OPEN</text>
-  <text x="166" y="790" font-size="10" fill="#4A4F55">mở ngay · lập kế hoạch, ước lượng, điền thẻ task</text>
-  <rect x="364" y="754" width="190" height="22" rx="11" fill="#F7E0E1" stroke="#CC1F28"/>
-  <text x="378" y="769" font-size="11" font-weight="700" fill="#CC1F28">IMPLEMENT_READY · BLOCKED</text>
-  <text x="364" y="790" font-size="10" fill="#4A4F55">mở ngay sau G0 ↑ · cho phép viết code production</text>
+  <rect x="166" y="754" width="178" height="22" rx="11" fill="#F7E0E1" stroke="#CC1F28"/>
+  <text x="180" y="769" font-size="11" font-weight="700" fill="#CC1F28">PLAN_READY · BLOCKED</text>
+  <text x="166" y="790" font-size="10" fill="#4A4F55">P0-A: pin, consumer review, conflict, sign-off</text>
+  <rect x="390" y="754" width="224" height="22" rx="11" fill="#F7E0E1" stroke="#CC1F28"/>
+  <text x="404" y="769" font-size="11" font-weight="700" fill="#CC1F28">IMPLEMENT_READY[*] · BLOCKED</text>
+  <text x="390" y="790" font-size="10" fill="#4A4F55">mở theo lát cắt sau PLAN_READY + P0-B</text>
   <rect x="1150" y="754" width="180" height="22" rx="11" fill="#F7E0E1" stroke="#CC1F28"/>
   <text x="1164" y="769" font-size="11" font-weight="700" fill="#CC1F28">RELEASE_READY · BLOCKED</text>
   <path d="M1334 765 L1380 765" stroke="#CC1F28" stroke-width="1.5" marker-end="url(#ar)"/>

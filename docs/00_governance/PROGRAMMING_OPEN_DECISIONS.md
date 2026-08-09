@@ -1,12 +1,12 @@
 # Programming Open Decisions — DDC-24 Rev A
 
 **ID:** PROG-OD-001
-**Phiên bản:** 0.5
+**Phiên bản:** 0.6
 **Trạng thái:** M3 — Review Ready — gói quyết định đủ để ký; 17/17 vẫn OPEN
 **Chủ quản:** Product / System Engineering
 **Reviewer:** Runtime Architect, Controls/Safety, Security, UX, I/O, Ops, QA
 **Approver:** Product Owner/CTO theo phạm vi quyết định
-**Cập nhật:** 2026-08-09
+**Cập nhật:** 2026-08-10
 **Product Spec:** [PROD-PROG-001](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md)
 
 ## 0. Đọc nhanh
@@ -14,8 +14,8 @@
 | Câu hỏi | Trả lời |
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Liệt kê **17 việc chưa ai quyết**, mỗi việc kèm phương án đề xuất, phương án thay thế và hậu quả nếu tiếp tục trì hoãn. Đây là file để họp và ký, không phải file thiết kế. |
-| 2. Ai phải đọc file này? | Product Owner/CTO (ký `001..006`, `009..015`), Runtime/Controls/Safety (`002/004/005/009/012/013`), Security, UX, I/O, Ops và Verification Lead. Dev đọc để biết vì sao một con số trong thiết kế còn ghi `TARGET-PENDING`. |
-| 3. Hệ thống hiện tại đang có gì? | Chỉ hai mảnh đã có quyết định: Modbus RTU Bus/Device/Point contract `Active` từ 2026-08-05 (phần Modbus của `OD-PROG-007/008`) và `DDD-SW-MBRTU-POINT-001`. Mười ba mục còn lại **chưa có gì được ký**; As-Built hiện dùng `INT=int32`, khác phương án IEC-aligned đang đề xuất. |
+| 2. Ai phải đọc file này? | Product Owner/CTO (ký `001..006`, `009..017`), Runtime/Controls/Safety (`002/004/005/009/012/013`), Security, UX, I/O, Ops và Verification Lead. Dev đọc để biết vì sao một con số trong thiết kế còn ghi `TARGET-PENDING`. |
+| 3. Hệ thống hiện tại đang có gì? | Chỉ hai **phần** đã có quyết định: Modbus RTU Bus/Device/Point contract `Active` từ 2026-08-05 (phần Modbus của `OD-PROG-007/008`) và `DDD-SW-MBRTU-POINT-001`. Cả `007/008` vẫn chưa đóng toàn bộ; 15 mục khác chưa có quyết định ký. As-Built hiện dùng `INT=int32`, khác phương án IEC-aligned đang đề xuất. |
 | 4. Thiết kế mới thay đổi điều gì? | Không thay gì cả — file này **không được** tự quyết. Nó chuẩn bị sẵn phương án target ở bảng “Decision package” để approver chỉ việc `ACCEPT`/`REJECT`/`REQUEST CHANGE` kèm lý do. |
 | 5. Team phải sửa module/contract nào? | Không có. Nhưng cột “Hồ sơ downstream” cho biết **file nào phải sửa ngay sau khi một quyết định được ký**; owner downstream phải xác nhận đã cập nhật trước khi chuyển `DECIDED → CLOSED`. |
 | 6. Điều gì còn bị chặn? | 17/17 `OPEN`. Nặng nhất: `OD-PROG-002` (bề rộng kiểu số — As-Built `INT=int32` vs đề xuất `INT=int16`, ảnh hưởng cả IR lẫn Point mapping) và `OD-PROG-015` (chưa ký thì **không hồ sơ nào** được dùng làm baseline implement). |
@@ -150,6 +150,7 @@ bằng hành vi supporting component hoặc giả định thiết kế.
 | 0.3 | 2026-08-09 | Bổ sung option/trade-off, hậu quả trì hoãn và schema decision record; giữ 15 mục OPEN chờ authority |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Open Decisions; giữ 15 mục OPEN |
 | 0.5 | 2026-08-09 | Thêm `OD-PROG-016` (bốn workspace + tám journey) và `OD-PROG-017` (thư viện mẫu BMS) kèm option/trade-off/gate/bằng chứng mở khóa; tổng 17 mục OPEN |
+| 0.6 | 2026-08-10 | Sửa mô tả hiện trạng: chỉ hai phần Modbus của `007/008` đã quyết định, còn 15 mục khác chưa ký; bổ sung đúng phạm vi ký Product tới `017`; không đổi trạng thái 17/17 `OPEN` |
 
 | Vai trò | Trạng thái | Phạm vi ký |
 |---|---|---|

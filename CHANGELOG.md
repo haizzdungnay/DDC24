@@ -7,6 +7,52 @@
 ---
 
 ## [Unreleased]
+### Changed — Duyệt Plan 53 và triển khai gói chuẩn bị P0 `PROG-000..006` (2026-08-10)
+
+**Phán quyết.** Plan 53 v0.8 được chấp nhận để đưa vào **authority review P0**,
+chưa được phê duyệt cho implementation. `DOC-G4`, `G0`, `PLAN_READY`,
+`IMPLEMENT_READY` và `RELEASE_READY` tiếp tục `BLOCKED`.
+
+**P0 — sửa ngữ nghĩa gate.** Thay `PLAN_READY OPEN` bằng `BLOCKED` ở toàn bộ
+trạng thái hiện hành. Hoạt động phân tích/ước lượng/dependency/thẻ task được phép
+theo banner `PLAN-ONLY`, không còn bị hiểu nhầm là gate đã qua hoặc được viết
+code production.
+
+**P0 — gói review/sign-off.** Thêm
+`docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md`:
+gom đủ 7 task `PROG-000..006`, dẫn thiết kế và decision authority, blocker có
+owner/impact/gate/unlock, checklist `DOC-G4/G0/PLAN_READY`, trình tự review và
+bảng ký gắn revision. Phần chuẩn bị kỹ thuật đạt 7/7; DoD giữ **0/7** vì chưa có
+consumer review, decision và chữ ký thật.
+
+**P0/P1 — sửa sai số hiện hành.** Plan 53 sửa tổng `42 → 49` task và exit P6
+`30 → 32` scenario; Plan 53/54/review sửa `15 → 17` decision; Plan 54 sửa Trace
+`55 → 60`; VVP self-check sửa `VS-PROG-001..030 → 001..032`. Open Decisions
+v0.6 sửa mô tả thành hai phần Modbus đã quyết định nhưng vẫn OPEN tổng thể, còn
+15 mục khác chưa ký, đồng thời mở đúng phạm vi ký Product tới `OD-PROG-017`.
+Số lịch sử trong revision/snapshot cũ được giữ nguyên.
+
+**P0 — bỏ dependency vòng tròn.** Tách `P0-A` (baseline review/sign-off) khỏi
+`P0-B` (decision theo lát cắt). P1 không còn phụ thuộc toàn bộ HW/TLS/HIL của
+P0; từng `PROG-100..104`, runtime/HW và `PROG-603` có dependency cụ thể. Sửa
+sơ đồ để P2/P3 chạy song song rồi join tại P4. Sửa gốc thời gian Gantt: `T+1`
+tính từ formal review P0-A, không còn tính sau `IMPLEMENT_READY` rồi đặt P0 trước
+gate. Machine-readable contract là output của P1 và chỉ là entry cho lát cắt
+tiêu thụ contract, nên roadmap không còn tự khóa trước khi tạo OpenAPI/IPC.
+
+**Record kiểm toán.** `PROG-REV-2026-08-09` v1.3 thêm
+`F-PROG-018..021`; tổng ba vòng **21/21 finding đã đóng** (10 P0, 10 P1, 1 P2).
+Plan 54 v2.1 thêm snapshot `P0-review`; Design Index v1.1 đồng bộ version/status.
+
+**Kiểm chứng.** `python3 scripts/docs_iso_harness.py --expect -v` PASS;
+`git diff --check` PASS; SVG qua `xmllint` và được render/kiểm tra lại bằng Chrome
+headless ở 1440×940. Khi gom toàn bộ worktree theo yêu cầu commit-all, gate đầy
+đủ cũng đạt: CTest 860/860; Go vet + 11/11 package test; FE 53 file/469 test,
+lint/build; Playwright responsive live 1/1. Không chạy target hoặc HIL. Trạng
+thái hồ sơ vẫn trung thực: 22/22 M3, 0/22 M4, 0/22 M5, 17/17 decision tổng thể
+OPEN và 0/32 Test Result; kết quả regression của repository không được dùng để
+thay thế verification scenario Programming chưa thi hành.
+
 ### Changed — Plan 53 tái cấu trúc theo ISO/IEC/IEEE 16326, thêm biểu đồ roadmap và bảng tiến độ (2026-08-10)
 
 **Triệu chứng.** Plan 53 thiếu biểu đồ roadmap, thiếu bảng tiến độ, và cách trình
@@ -439,7 +485,8 @@ kiểm và hỏng ở nơi giao hàng.
 *Cách sửa:* thêm tiền điều kiện build; cài vào `/opt/mkddc-web/` chứ không phải
 `/usr/sbin` (dịch vụ chạy `User=mkddc` với `PATH` systemd mặc định không có
 `/usr/sbin`, nên chỉ nhánh "cạnh binary" của `scheduleSimBinary()` là chắc chắn
-tìm thấy); thêm vào snapshot của `install.sh` và vào `rollback.sh`.
+tìm thấy); thêm vào snapshot của `install.sh` và `rollback.sh`; đưa binary vào
+checksum gói phát hành lẫn checksum runtime sau install/rollback.
 
 **SRC-F-02 — hợp đồng OpenAPI lệch với mã.**
 *Triệu chứng:* `contracts/openapi/openapi.yaml` tự nhận là "nguồn-chuẩn cho
@@ -452,7 +499,8 @@ dẫn có thật (`/modbus/write-test`, `/ws/monitor`).
 `x-implementation-status: not-implemented` (giữ phần khai vì đó là phạm vi roadmap
 đã chốt); bổ sung đầy đủ 2 đường dẫn còn thiếu kèm vai trò và giới hạn tần suất.
 `/modbus/write-test` là thao tác ghi thật xuống thiết bị hiện trường, nên việc nó
-vắng mặt khỏi hợp đồng làm mọi rà soát an ninh dựa trên spec bỏ sót nó.
+vắng mặt khỏi hợp đồng làm mọi rà soát an ninh dựa trên spec bỏ sót nó. Thêm Go
+contract test khoá hai route runtime và bảy route roadmap để ngăn trôi lại.
 
 **SRC-F-03 — `AuxFunctionsPage` chấm PASS/FAIL trên graph demo ở chế độ live.**
 *Triệu chứng:* trang `/eng/aux` ghép cụm vừa sinh vào `getDemoGraph()` rồi chạy
@@ -467,27 +515,41 @@ nhưng nói rõ chưa chấm được vì cần endpoint validate phía thiết 
 API lỗi — sẽ mượn điểm demo và hiện giá trị, đơn vị, biểu đồ xu hướng như đo thật.
 *Nguyên nhân gốc:* nhánh fallback tại `InputsPage.tsx:377` không phân biệt chế độ.
 *Cách sửa:* chỉ fallback khi `IS_DEMO`; ở live để `point` là `undefined` nên các ô
-hiện trạng thái trống, người trực thấy ngay là chưa có dữ liệu.
+hiện trạng thái trống, người trực thấy ngay là chưa có dữ liệu. Rà bằng trình
+duyệt phát hiện thêm grid Inputs rộng 478 px trên viewport 390 px; bổ sung
+`min-w-0`, track `minmax(0,1fr)` và wrap nhóm mode để đóng cuộn ngang.
 
-*Kiểm chứng cho SRC-F-03/04:* vitest 465/465 pass, `eslint --max-warnings=0` sạch,
-`tsc --noEmit && vite build` thành công. *Cho SRC-F-01:* `bash -n` sạch cả hai
-script. *Cho SRC-F-02:* YAML parse được, 80 đường dẫn, đối chiếu lại với `http.go`
-còn 0 đường dẫn hiện thực thiếu trong spec.
+*Kiểm chứng cho SRC-F-03/04:* Vitest 53 file/469 test, lint/build PASS;
+Playwright live mobile 390×844 1/1; Chrome DevTools xác nhận live không có badge
+PASS/FAIL giả, Inputs hiện bốn giá trị `--`, thông báo thiếu dữ liệu và
+`scrollWidth = clientWidth = 390`. *Cho SRC-F-01:* `bash -n` sạch cả ba script,
+CMake build có target `mkddc-schedule-sim`. *Cho SRC-F-02:* YAML parse được, 80
+đường dẫn; Go contract test và toàn bộ 11 package test PASS.
 
-### Removed — Loại bỏ bộ thiết kế Programming refactor không đạt (2026-08-09)
+### Removed — Loại bỏ authority trùng lặp `audit-programming` (2026-08-10)
 
-**Phạm vi.** Gỡ toàn bộ tài liệu thiết kế triển khai và catalog phát sinh từ đợt
-refactor `audit-programming` v2.2; trả các tài liệu audit có sẵn về đúng trạng
-thái trước đợt refactor. Hai Product/UI-UX-UC spec, prompt nguồn và record phản
-biện được giữ lại làm đầu vào, không được coi là thiết kế triển khai.
+**Phạm vi.** Gỡ toàn bộ thư mục `docs/07_records/audit-programming` vì nội dung
+trùng vai trò thẩm quyền với bộ hồ sơ Programming 22 tài liệu đang được
+`PROG-DOCSET-001` kiểm soát. Prompt refactor cũ được giữ dưới trạng thái
+REFERENCE và chỉ rõ authority hiện hành, không còn được dùng để tái tạo một bộ
+thiết kế song song.
 
-**Đã xóa.** `FSP-PROG-010..012`, proposed requirements v2.2, runtime
-architecture, control semantics, error-code catalog, verification scenarios và
-record refactor-to-design-set.
+**Khả năng phục hồi.** Toàn bộ hồ sơ audit đã xoá vẫn có trong lịch sử Git tại
+commit `3efaf0d`; không xoá bằng chứng ngoài lịch sử phiên bản.
 
-**Kiểm chứng.** Đối chiếu `git diff` với `main` xác nhận toàn bộ nội dung có sẵn
-trong `docs/07_records/audit-programming` đã trở về baseline; `git diff --check`
-và kiểm tra liên kết nội bộ được chạy lại sau khi xóa.
+**Kiểm chứng.** Quét tham chiếu ngoài thư mục, kiểm tra liên kết/anchor, mã tài
+liệu trùng, `git diff --check` và docs harness sau khi xóa.
+
+### Added — Bổ sung hai đầu vào PA3 còn thiếu trong lịch sử Git (2026-08-10)
+
+**Phạm vi.** Đưa `docs/CHUONG_YEU_CAU/dashboard.md` và
+`docs/CHUONG_YEU_CAU/UX_DESIGN_MK-DDC-24_PA3.md` vào kiểm soát phiên bản để các
+tham chiếu đã có trong plan 52 và hồ sơ bằng chứng không còn phụ thuộc file cục
+bộ. Chuẩn hoá metadata bị dính trên một dòng và chỉ rõ vị trí hồ sơ triển khai,
+bằng chứng hiện hành; không thay đổi nội dung nghiệp vụ PA3.
+
+**Kiểm chứng.** Kiểm tra mã tài liệu không trùng, liên kết tài liệu nội bộ tồn
+tại, `git diff --check` và docs harness.
 
 ### Added — Web PA3 slice 2: đóng nốt 15 task, hoàn tất 50/50 (2026-08-08)
 
