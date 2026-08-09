@@ -1,29 +1,55 @@
-# Đánh giá tài liệu thiết kế component và legacy
+# Đánh giá component spec và legacy cho Programming Rev A
 
-**ID:** DES-PROG-ASSESS-001  
-**Phiên bản:** 1.0  
-**Ngày:** 2026-08-08  
-**Loại:** Audit record
+| Thuộc tính | Giá trị |
+|---|---|
+| ID | `DES-PROG-ASSESS-001` |
+| Phiên bản | 1.1 |
+| Trạng thái | `CONTROLLED ASSESSMENT / IN REVIEW` |
+| Ngày | 2026-08-09 |
 
-| Nhóm nguồn archive | Phân loại chuẩn | Có thể dùng | Không được dùng để claim |
+## Mục lục
+
+1. Ma trận assessment
+2. Ceiling/scope v2.2
+3. Quy tắc dùng candidate
+4. Thuật ngữ
+5. Lịch sử và phê duyệt
+
+## 1. Ma trận assessment
+
+| Nguồn/component | Có thể tái sử dụng | Gap so với Rev A v2.2 | Không được claim |
 |---|---|---|---|
-| ADR-020/023 | Accepted architecture/product decision | Constraint ST+FBD, artifact, scope | Implementation complete |
-| Draft `PROGRAM_SOM_FW...` | Draft/historical candidate | Ý tưởng pipeline/runtime/lifecycle | Tên process/path hoặc design approved |
-| `ST_SUBSET_SPEC...` | Component baseline/candidate | Parser/type/library foundation | Product type/library đã khóa |
-| `PROGRAM_TASK_SCHEDULER_SPEC...` | Component baseline/candidate | Internal tick/task/boundary ideas | Product cycle/capacity approved |
-| `TYPED_IR_ARTIFACT_SPEC...` | Component baseline/candidate | Artifact structure/integrity | Production activation path hoàn tất |
-| `SW_RUNTIME_EXECUTION_MODEL...` | Legacy graph runtime | Migration/reuse analysis | FBD implementation |
-| `GRAPH_SCHEMA...` + Plan 23 | Legacy graph | Input OD-PROG-013 | Programming schema/FBD |
-| Modbus RTU design/interface/API | Dependent design, một phần superseded | RTU Point contract input | Hai bus/64 Point hoặc full I/O Mapping complete |
-| `SOFTWARE.md`, `INTERFACES.md` | Boundary authority mới hơn | Ngăn overclaim, giữ design status | Design detail đã tồn tại |
-| Handoff/review/archive plans | Historical record | Timeline/finding/source evidence | Current baseline/readiness |
+| ST subset | Parser/semantic/diagnostic/type foundation | User FB chỉ cục bộ; Product types/library còn OD | Full ST Product approved |
+| Typed IR/artifact | Version/ABI/sections/hash/source-map | Full Point binding, FBD, target lifecycle | Production path complete; trusted-origin signature IN |
+| Scheduler | Task/program separation, fault/activation hooks | Rev A một Task; cycle 1/5/30; base step/watchdog/overrun chưa reconcile | Limit 8/16/32 hoặc multi-task approved |
+| Process image/resolver | Typed values/quality/priority | `program_value/actual_value/...`, anti-windup/hold-last/IOP evidence | Bumpless/arbitration productized |
+| Graph runtime | AS-BUILT production + migration experience | Phải cutover fail closed; không dual-run | FBD hoặc Programming runtime |
+| Modbus RTU | Bus→Device→Point/ACK/LKG | Discriminated binding/type/quality contract | Full Programming mapping complete |
+| Legacy FBD/canvas ideas | Block/connection concepts | Rev A structured editor, keyboard path | Free-form wiresheet Rev A |
 
-## Quyết định dọn dữ liệu
+## 2. Ceiling/scope v2.2
 
-- Không xóa 33 nguồn; chuyển toàn bộ vào archive và bảo vệ checksum.
-- Không copy bảng capacity/cycle/type/library từ component spec sang Product Spec.
-- Không dùng graph endpoint/schema làm Programming interface baseline.
-- Không sửa conflict bằng cách biên tập raw snapshot; cách đọc chuẩn nằm trong
-  Conflict Register và tài liệu baseline có ID mới.
-- Khi Design được phê duyệt, candidate được chọn phải có trace tới requirement,
-  ADR quyết định và verification tương ứng.
+- ST giữ subset/limit candidate tới khi `OD-PROG-002, OD-PROG-003, OD-PROG-005` đóng.
+- FBD ceiling proposal `<=256` block/`<=512` connection chưa là PASS/capacity authority.
+- Rev A có một Task; component limit 8 Task/16 Program mỗi Task/32 tổng OUT.
+- RETAIN IN ở proposal nhưng policy restart/wear/compatibility còn mở.
+- BACS Library nâng cao, full functional/as-built export và trusted-origin signature OUT.
+
+## 3. Quy tắc dùng candidate
+
+Candidate chỉ được chọn sau khi trace requirement, ADR/decision, interface và
+scenario. Không sửa raw snapshot. Mâu thuẫn watchdog scheduler/base-step nằm ở
+`CONF-PROG-015`, không được giải bằng cách chọn ngầm một spec.
+
+## 4. Thuật ngữ
+
+Xem [DICT-PROG-001](../00_document_control/02_TERMS_AND_DATA_DICTIONARY.md).
+
+## 5. Lịch sử và phê duyệt
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.0 | 2026-08-08 | Audit assessment ban đầu. |
+| 1.1 | 2026-08-09 | Reconcile ST/FBD/một Task/RETAIN/bundle/signature theo v2.2. |
+
+Sign-off: Runtime Architecture `PENDING`; Product `PENDING`; Verification `PENDING`.
