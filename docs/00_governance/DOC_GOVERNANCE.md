@@ -123,7 +123,7 @@ Tách “được lập kế hoạch” khỏi “được viết code” để 
 | `RELEASE_READY` | Bật ở site thật, tuyên bố hoàn tất | Toàn bộ scenario có Test Result được review; residual risk được chấp nhận; GO của Product + Release + QA |
 
 Chi tiết áp dụng cho Programming Rev A nằm ở
-[Plan 53 §3.1–§3.3](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md).
+[Plan 53 §4.2–§4.3 và §5.2](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md).
 
 ## 5. Harness kiểm tài liệu
 

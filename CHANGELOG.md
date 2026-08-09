@@ -7,6 +7,50 @@
 ---
 
 ## [Unreleased]
+### Changed — Plan 53 tái cấu trúc theo ISO/IEC/IEEE 16326, thêm biểu đồ roadmap và bảng tiến độ (2026-08-10)
+
+**Triệu chứng.** Plan 53 thiếu biểu đồ roadmap, thiếu bảng tiến độ, và cách trình
+bày không theo khung chuẩn nào — khó đưa CTO review.
+
+**Nguyên nhân gốc.** Tài liệu lớn dần theo từng vòng sửa mà không bám một khung
+nội dung có sẵn, nên thiếu đúng những phần một kế hoạch dự án phải có: tài liệu
+tham chiếu, thuật ngữ, lịch, tiến độ, kiểm soát lịch, báo cáo, quản lý cấu hình
+và kế hoạch đóng.
+
+**Cách sửa — tái cấu trúc theo ISO/IEC/IEEE 16326** (nội dung kế hoạch quản lý dự
+án phần mềm), từ 16 mục rời rạc thành 13 mục có khung:
+
+- §1 Tổng quan: mục tiêu, **sản phẩm bàn giao**, **giả định lập kế hoạch**,
+  **ràng buộc**, tiến hóa của kế hoạch.
+- §2 **Tài liệu tham chiếu** — 15 mục có ID và vai trò.
+- §3 **Thuật ngữ và từ viết tắt**.
+- §4 Bối cảnh: phụ thuộc, ba cổng quyền hạn, decision theo lát cắt, RACI.
+- §5 Kế hoạch công việc: WBS 49 task, roadmap `G0..G6`, **§5.3 biểu đồ roadmap**,
+  **§5.4 bảng lịch và mốc**, **§5.5 bảng tiến độ**, ước lượng và **§5.6.1 phân bổ
+  nguồn lực theo vai trò**, lát cắt dọc và thẻ task.
+- §6 Kiểm soát: DoR/DoD, gate evidence, **§6.3 kiểm soát lịch**, **§6.4 báo cáo
+  và chỉ số**, **§6.5 quản lý cấu hình**, **§6.6 xử lý vấn đề**, change control.
+- §7 **Quản lý rủi ro** theo góc nhìn lịch — 7 rủi ro ảnh hưởng tiến độ.
+- §8 **Kế hoạch đóng dự án** — 8 điều kiện đóng và danh mục bàn giao.
+- §11 **Ánh xạ 12 điều khoản ISO/IEC/IEEE 16326** để reviewer kiểm nhanh.
+
+**Added — biểu đồ roadmap.** `docs/03_implementation/assets/PLAN53_ROADMAP_GANTT.svg`
+(1440×940): Gantt bảy luồng theo tuần tương đối `T+1..T+22`, bảy cổng kỹ thuật,
+ba cổng quyền hạn, **đường găng được đánh dấu**, và luồng phần cứng chạy song
+song từ `T+1`. Biểu đồ nêu rõ trục thời gian là tuần tương đối chứ không phải
+ngày lịch, và mọi thanh đang ở `NOT_STARTED`.
+
+**Added — bảng tiến độ.** §5.5 là nơi duy nhất ghi tiến độ thực: 7 pha, 49 task,
+`% hoàn tất` chỉ được tính bằng `task đạt DoD ÷ tổng task`, sáu trạng thái hợp lệ,
+cộng bảng tiến độ ba cổng quyền hạn. Hiện toàn bộ `0%` và `0/32` Test Result.
+
+**Kiểm chứng.** `python3 scripts/docs_iso_harness.py --expect` → `PASS`, exit `0`,
+`EXPECT` khớp. SVG qua `xmllint` và render bằng Chrome headless ở `1440×940`.
+Liên kết ảnh trong Markdown phân giải được; trailing whitespace `0`; code fence
+chẵn. Tham chiếu chéo `§3.1→§4.2`, `§3.3→§5.2` đã cập nhật ở Plan 54 và
+`DOC-GOV-001`. **Không** đổi nội dung kỹ thuật, không đổi trạng thái cổng: vẫn
+`PLAN-ONLY`, `M3` 22/22, `M4`/`M5` `0/22`, `0/32` Test Result.
+
 ### Added — Kiểm soát cấu hình, harness và governance vào repository; tách ba cổng quyền hạn (2026-08-09)
 
 **Phán quyết áp dụng:** *được giao team lập kế hoạch có kiểm soát; **chưa** được

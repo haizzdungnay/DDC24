@@ -32,7 +32,7 @@ tỷ lệ hoàn tất của bộ hồ sơ.
 mức trưởng thành, checklist, review và chữ ký. [Plan 53](53_PROGRAMMING_IMPLEMENTATION_PLAN.md)
 là **implementation authority**: pha, gate `G0..G6`, ba cổng quyền hạn
 `PLAN_READY`/`IMPLEMENT_READY`/`RELEASE_READY`, thẻ task và lát cắt dọc. Khi cần
-biết “được phép code chưa”, đọc Plan 53 §3.1 — **không** suy từ mức M của Plan 54.
+biết “được phép code chưa”, đọc Plan 53 §4.2 — **không** suy từ mức M của Plan 54.
 Không tạo roadmap thứ ba; mọi nhu cầu theo dõi mới phải vào một trong hai file này.
 
 Quy tắc kiểm soát tài liệu áp dụng cho cả hai nằm ở
@@ -413,7 +413,7 @@ controlled baseline theo hướng ISO 9001. Đã khắc phục.
 | Harness xác nhận | `python3 scripts/docs_iso_harness.py --expect` → `PASS`, exit `0` |
 
 Đây là **revision được ghim** cho điều kiện `PLAN_READY` ở
-[Plan 53 §3.1](53_PROGRAMMING_IMPLEMENTATION_PLAN.md). Mọi thẻ task tham chiếu
+[Plan 53 §4.2](53_PROGRAMMING_IMPLEMENTATION_PLAN.md). Mọi thẻ task tham chiếu
 hồ sơ phải ghi commit này ở trường “contract/schema/version/hash đầu vào”.
 
 SHA-256 rút gọn 16 ký tự đầu của từng file tại commit trên:
