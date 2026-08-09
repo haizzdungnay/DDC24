@@ -14,7 +14,8 @@ Bảy phép kiểm:
   5. Không trùng Document ID
   6. Đếm ID theo họ: requirement / VS-PROG / RSK / UC / UJ / UX-REQ / OD
   7. Bất biến ma trận trace: không có `P=Y khi T=N`, không có `R=Y khi P=N`
-  Cộng: đường dẫn `docs/**` viết trong code span phải tồn tại.
+  Cộng: đường dẫn `docs/**` viết trong code span phải tồn tại; các record P0 và
+  template Test Result ngoài mẫu số 22 cũng được quét link/ID/format.
 
 Phạm vi cố ý **không** kiểm `apps/**`, `firmware/**`, `contracts/**` trong code
 span: đó là *Source Target sẽ tạo*, chưa tồn tại là đúng theo quy tắc ở
@@ -37,6 +38,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Ngưỡng kỳ vọng hiện hành. Cập nhật cùng lúc với hồ sơ, không cập nhật sau.
 EXPECT = {
     "baseline_files": 22,
+    "support_files": 6,
     "link_missing": 0,
     "anchor_missing": 0,
     "trailing_ws": 0,
@@ -80,7 +82,14 @@ BASELINE = [
     "docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md",
 ]
 ROADMAP = "docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md"
-EXTRA = [ROADMAP]
+EXTRA = [
+    ROADMAP,
+    "docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md",
+    "docs/07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md",
+    "docs/07_records/reviews/PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md",
+    "docs/07_records/test-results/programming/README.md",
+    "docs/07_records/test-results/programming/RESULT_TEMPLATE.md",
+]
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 HEAD_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
@@ -128,10 +137,14 @@ def main():
 
     # 1. existence
     missing_files = [p for p in BASELINE if not os.path.isfile(os.path.join(REPO, p))]
+    missing_extra = [p for p in EXTRA if not os.path.isfile(os.path.join(REPO, p))]
     print("=== 1. Baseline file ===")
     print(f"exist: {len(BASELINE) - len(missing_files)}/{len(BASELINE)}")
     for p in missing_files:
         print(f"  MISSING {p}")
+    print(f"support: {len(EXTRA) - len(missing_extra)}/{len(EXTRA)}")
+    for p in missing_extra:
+        print(f"  SUPPORT MISSING {p}")
 
     anchor_cache = {}
     link_missing = 0
@@ -314,6 +327,7 @@ def main():
     # ---- kết luận ----
     actual = {
         "baseline_files": len(BASELINE) - len(missing_files),
+        "support_files": len(EXTRA) - len(missing_extra),
         "link_missing": link_missing,
         "anchor_missing": anchor_missing,
         "trailing_ws": trailing_ws,
@@ -336,6 +350,8 @@ def main():
     hard = []
     if actual["baseline_files"] != EXPECT["baseline_files"]:
         hard.append("thiếu file baseline")
+    if actual["support_files"] != EXPECT["support_files"]:
+        hard.append("thiếu file hỗ trợ P0")
     for k in ("link_missing", "anchor_missing", "trailing_ws", "fence_bad",
               "duplicate_doc_id", "span_missing", "trace_violations"):
         if actual[k] != 0:

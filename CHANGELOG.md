@@ -7,6 +7,39 @@
 ---
 
 ## [Unreleased]
+### Added — Chuẩn bị môi trường và kho Test Result P0 Programming (2026-08-10)
+
+**Evidence repository.** Tạo
+`docs/07_records/test-results/programming/README.md` (`PROG-TR-REPO-001`) và
+`RESULT_TEMPLATE.md`: quy ước `TR-PROG-<VS>-<YYYYMMDD>-<SEQ>`, field baseline/
+fixture/procedure/expected/actual/verdict/review, thư mục raw, `SHA256SUMS`,
+invalidation/rerun, quyền dữ liệu và checklist `TR-01..10`. Kho chỉ đạt readiness
+về cấu trúc và giữ đúng số thật **0/32 Test Result**.
+
+**Rà môi trường P0.** Thêm
+`docs/07_records/reviews/PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md`:
+host branch/build/toolchain PASS; GitHub CI BLOCKED vì toàn bộ job có `steps=[]`
+do billing/spending limit; endpoint Foxlinx SSH phản hồi nhưng từ chối cả hai
+public-key identity nên runtime/provenance chưa đọc được; HIL BLOCKED do thiếu
+`HW-AUTH-*`, fixture/calibration và giới hạn điện được duyệt. Mỗi blocker có
+owner, impact, gate và điều kiện mở; không lưu private key hoặc secret.
+
+**Plan/Roadmap.** Nâng Plan 53 lên v0.10, Plan 54 lên v2.3, Design Index lên
+v1.3 và gói P0 lên v1.2; thay dòng readiness gộp mơ hồ bằng sáu điều kiện riêng,
+thêm snapshot `P0-env` và đồng bộ review index. Chỉ host/evidence preparation
+chuyển PASS; P0 vẫn 0/7 DoD, M4/M5 vẫn 0/22 và mọi cổng quyền hạn vẫn BLOCKED.
+Harness tài liệu được mở rộng để quét link/ID/format của năm record/template P0
+ngoài mẫu số 22; số baseline và ngưỡng `EXPECT` không đổi.
+
+**Kiểm chứng.** Source snapshot `395b9a5`, tree `83c7a43f` trùng tree đã chạy
+gate: CTest 860/860; Go vet + 11 package test `-count=1`; FE 53 file/469 test,
+lint/build PASS. Docs harness mở rộng PASS: 22/22 baseline + 6/6 support,
+link/anchor/ID/format/code-span lỗi 0 và ngưỡng `EXPECT` khớp. Toolchain đã đo:
+CMake 3.28.3, GCC 13.3.0, Go 1.22.2, Node 24.18.1, npm 11.16.0, Arm GCC 13.2.1.
+Target chỉ được probe SSH read-only và không command remote nào chạy vì auth
+fail; không deploy/restart, không chạy Chrome/Playwright/HIL và không đổi
+`VS-PROG-*` từ `NOT_RUN`.
+
 ### Changed — Ghim candidate P0 và cập nhật roadmap theo tiến độ thực (2026-08-10)
 
 **Kiểm soát cấu hình.** Thêm

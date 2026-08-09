@@ -4,7 +4,7 @@
 |---|---|
 | ID | `PROG-P0-GATE-2026-08-10` |
 | Loại | Decision/design/sign-off package; hồ sơ hỗ trợ, không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Ngày | 2026-08-10 |
 | Phạm vi | `PROG-000..006`, `DOC-G4`, `G0`, `PLAN_READY` |
 | Chủ quản | Dev Lead + System Architect |
@@ -18,8 +18,8 @@
 | Câu hỏi | Trả lời |
 |---|---|
 | Gói này dùng để làm gì? | Gom toàn bộ đầu vào, kết luận kỹ thuật, decision cần ký và ô sign-off của P0 vào một nơi để các authority review mà không phải tự dò 22 hồ sơ. |
-| Đã hoàn tất gì? | Đã review cấu trúc Plan 53, sửa sai số hiện hành, lập ma trận `PROG-000..006`, dẫn đúng thiết kế/decision/test, chạy lại harness và ghim candidate P0 bất biến tại `e3e9fb2`. |
-| Chưa hoàn tất gì? | Chưa có consumer review độc lập, chưa có chữ ký authority, 17 decision vẫn `OPEN`, sáu xung đột kiến trúc còn mở, TLS/HW/BSP/HIL chưa có bằng chứng. |
+| Đã hoàn tất gì? | Đã review cấu trúc Plan 53, lập ma trận `PROG-000..006`, chạy harness, ghim candidate `e3e9fb2`, xác nhận host branch/build/toolchain và tạo kho Test Result chuẩn. |
+| Chưa hoàn tất gì? | Consumer review/chữ ký chưa có; 17 decision và sáu xung đột còn mở; CI bị billing, target bị SSH auth, TLS/HW/BSP/HIL chưa có authority/evidence. |
 | Có được implement production chưa? | **Không.** Gói này chỉ đưa P0 tới trạng thái sẵn sàng cho người có thẩm quyền review. `IMPLEMENT_READY` vẫn `BLOCKED`. |
 | Làm gì tiếp theo? | Reviewer checkout/đọc đúng candidate trong manifest, ghi `ACCEPT`, `REQUEST_CHANGE` hoặc `REJECT` theo §6; owner xử lý comment; Product/Architect/Verification ký đúng revision. |
 
@@ -66,7 +66,7 @@ revision/commit cụ thể là không hợp lệ.
 | `PROG-003` Product + Security | RBAC, TLS/session, bounded compiler, artifact/bundle integrity, audit và rollback tại [`DDD-SEC-PROG-001`](../../02_design/software/PROGRAMMING_SECURITY_DESIGN.md) §4–§15 | Product + Security + Platform; `OD-PROG-001`, permission matrix và `IntegrityMode` | `BLOCKED` | Owner: Security/Platform. Ảnh hưởng: chưa khóa được security plan; mutation phải OFF cho tới target PASS. Gate: `P0-B/security`. Mở P0 khi enablement/verification plan, permission matrix và provenance được ký; TLS target PASS là gate bật mutation sau implementation |
 | `PROG-004` Runtime + Ops | Atomic Commission/Restore, journal, active/LKG, RETAIN, restart/power-loss tại [`DDD-LIFE-PROG-001`](../../02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md) §3–§15 và [`OPS-PROG-001`](../../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) §10–§17 | Product + Runtime Architect + Ops; `OD-PROG-009/010/011/014` | `IN_REVIEW` | Owner: Runtime/Ops. Ảnh hưởng: chưa khóa ma trận recovery/retention/trace. Gate: `DOC-G2/G0`. Mở khi policy được ký và rehearsal plan có owner/fixture |
 | `PROG-005` HW + FW | IOP continuity, safe timeout 199/200/201 ms, BSP/pin/test point và HIL procedure tại [`DDD-FWMCU-PROG-001`](../../02_design/firmware/PROGRAMMING_FW_MCU_DESIGN.md) §4–§14 và [`DDD-HW-PROG-001`](../../04_design/hardware/PROGRAMMING_HW_DESIGN.md) §4–§13 | FW MCU + HW + Safety + QA; `HW-AUTH-001/002/007/008`; `OD-PROG-008` phần HIL | `BLOCKED` | Owner: HW/FW. Ảnh hưởng: chưa có authority để chốt BSP/test plan; không được claim deadline điện hoặc HIL. Gate: `P0-B/HW`, sau đó `G6`. Mở P0 khi authority và fixture/HIL plan được duyệt; actual BSP/HIL Test Result đóng tại G6 |
-| `PROG-006` QA | 60 requirement, 60 trace row, 16 risk, 32 scenario, evidence schema, review record và manifest candidate tại [`VVP-PROG-001`](../../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) §3, §9–§11, [`TRACE-PROG-001`](../PROGRAMMING_TRACEABILITY_MATRIX.md) §6–§8, [`RSK-PROG-001`](../PROGRAMMING_RISK_REGISTER.md) §3–§6 và [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | Verification Lead + Product + Architect + consumer reviewers; `OD-PROG-015` | `BLOCKED` | Owner: QA/Document Control. Ảnh hưởng: không ký G0. Gate: `DOC-G4/G0`. Candidate đã pin; mở khi consumer review đóng và sign-off §6 hoàn tất |
+| `PROG-006` QA | 60 requirement, 60 trace row, 16 risk, 32 scenario, manifest candidate, readiness record và kho Test Result tại [`VVP-PROG-001`](../../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) §3, §9–§11, [`TRACE-PROG-001`](../PROGRAMMING_TRACEABILITY_MATRIX.md) §6–§8, [`RSK-PROG-001`](../PROGRAMMING_RISK_REGISTER.md) §3–§6, [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md), [`PROG-P0-ENV-2026-08-10`](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) và [`PROG-TR-REPO-001`](../test-results/programming/README.md) | Verification Lead + Product + Architect + consumer reviewers; `OD-PROG-015` | `BLOCKED` | Owner: QA/Document Control. Candidate/host/evidence repo đã sẵn; CI/target/HIL, consumer review và sign-off còn thiếu. Gate: `DOC-G4/G0` |
 
 Kết luận tiến độ: **đã hoàn tất phần chuẩn bị kỹ thuật 7/7; đạt DoD 0/7** vì
 DoD P0 bao gồm quyết định và chữ ký thẩm quyền. Không chuyển task sang `DONE` để
@@ -80,6 +80,9 @@ làm đẹp tiến độ.
 | Cấu trúc/link/ID/trace invariant sạch | `PASS` | `python3 scripts/docs_iso_harness.py --expect -v` |
 | Finding kỹ thuật P0/P1 của vòng duyệt agent đóng | `PASS` | [`PROG-REV-2026-08-09`](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §6.3 |
 | Candidate sau review được ghim revision/hash | `PASS` | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md): commit `e3e9fb2`, tree `54eb519e`, 22/22 SHA-256/Git blob |
+| Branch/build/toolchain host và evidence repository | `PASS phần chuẩn bị` | [`PROG-P0-ENV-2026-08-10`](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md): host gate PASS; [`PROG-TR-REPO-001`](../test-results/programming/README.md) sẵn, 0/32 Test Result |
+| GitHub CI/security runner | `BLOCKED` | Owner: Organization Admin. Ảnh hưởng: không có server evidence. Gate: assurance/release. Mở khi sửa billing và rerun exact commit có step thật |
+| Target SOM/HIL lab | `BLOCKED` | Owner: Ops + HW/Safety/QA. Ảnh hưởng: không có target/HIL evidence. Gate: G3–G6. Mở khi SSH auth hoạt động và `HW-AUTH-*`/fixture/calibration được duyệt |
 | Consumer review liên chức năng | `BLOCKED` | 0/22 M4; cần `ACCEPT/REQUEST_CHANGE/REJECT` theo revision |
 | Baseline approval `OD-PROG-015` | `BLOCKED` | 17/17 decision tổng thể vẫn `OPEN`; `OD-PROG-015` chưa có record |
 | Không còn authority/xung đột kiến trúc | `BLOCKED` | `ARCH-CONF-PROG-001..006` chưa có ADR/decision |
@@ -130,3 +133,4 @@ có đủ ba kết luận `ACCEPT` trên cùng candidate đã pin mới được
 |---|---|---|
 | 1.0 | 2026-08-10 | Lập gói review P0 `PROG-000..006`; gom evidence/decision/blocker/sign-off; giữ trung thực `DOC-G4/G0/PLAN_READY BLOCKED` |
 | 1.1 | 2026-08-10 | Ghim candidate `e3e9fb2` bằng manifest 22 hồ sơ + hai hồ sơ hỗ trợ; chuyển riêng điều kiện pin sang PASS; giữ 0/7 DoD và mọi gate quyền hạn BLOCKED vì review/chữ ký còn thiếu |
+| 1.2 | 2026-08-10 | Đo môi trường P0: host branch/build/toolchain + evidence repo PASS phần chuẩn bị; tách CI billing, target SSH auth và HIL authority/fixture thành blocker; giữ P0 0/7 DoD và gate quyền hạn BLOCKED |

@@ -4,7 +4,7 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.9 |
+| Phiên bản | 0.10 |
 | Trạng thái | **PLAN-ONLY — chưa được implement production.** Hồ sơ ở `M3 — Review Ready`; `PLAN_READY`, `IMPLEMENT_READY` và `RELEASE_READY` đều `BLOCKED` |
 | Ngày phát hành | 2026-08-10 |
 | Chủ quản | Dev Lead + System Architect |
@@ -97,7 +97,7 @@ không đủ để đóng plan.
 | Core runtime | Loader artifact bounded; base control step; scheduler một Task; process image; arbitration mức 5; RETAIN | `G3`, `G4` |
 | Frontend | `apps/web-ui/src/features/programming/`: bốn workspace `PGM-01..04`, tám journey `UJ-PROG-01..08` | `G5` |
 | FW MCU và HW | BSP thật; baseline schematic/BOM/pin có kiểm soát; đồ gá HIL | `G6` |
-| Bằng chứng | 32 Test Result `VS-PROG-001..032` tại `docs/07_records/test-results/programming/` | `G1..G6` |
+| Bằng chứng | 32 Test Result `VS-PROG-001..032` tại [`PROG-TR-REPO-001`](../07_records/test-results/programming/README.md) | `G1..G6` |
 | Vận hành | Diễn tập backup, Commission, Restore, thay thiết bị, rollback theo `OPS-PROG-001` | `G6` |
 
 ### 1.4 Giả định lập kế hoạch
@@ -144,6 +144,8 @@ Lịch sử ở §12; kiểm soát thay đổi ở §6.7.
 | `PLAN-PROG-DOC-054` | [Documentation Roadmap](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | Mức trưởng thành hồ sơ; **không** quản việc code |
 | `PROG-P0-GATE-2026-08-10` | [Gói review cổng P0](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | Evidence, decision và sign-off package cho `PROG-000..006` |
 | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` | [Manifest candidate P0](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | Commit/tree/SHA-256/Git blob bất biến của revision cần review |
+| `PROG-P0-ENV-2026-08-10` | [Rà soát môi trường P0](../07_records/reviews/PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) | Branch/build/toolchain/CI/target/HIL/evidence readiness |
+| `PROG-TR-REPO-001` | [Kho Test Result Programming](../07_records/test-results/programming/README.md) | Cấu trúc record bất biến; hiện 0/32 |
 | `DOC-GOV-001` | [Quy tắc kiểm soát tài liệu](../00_governance/DOC_GOVERNANCE.md) | `DD-01..DD-13`, `M0..M5`, ba cổng quyền hạn |
 | ISO/IEC/IEEE 16326 | Life cycle processes — Project management | Khung trình bày; ánh xạ §11 |
 | ISO/IEC/IEEE 12207 | Software life cycle processes | Mô hình quy trình và cổng |
@@ -253,7 +255,7 @@ một lát cắt**, decision đầu vào của chính lát cắt đó phải đ�
 | `PROG-003` | Product+Security | 1–2 nd | khóa RBAC, audit, bundle/integrity/signature scope | `BLOCKED` — TLS plan, permission matrix và provenance chưa được ký |
 | `PROG-004` | Runtime+Ops | 1–2 nd | khóa RETAIN, Revision/LKG retention, monitor/trace limits | `IN_REVIEW` — lifecycle/runbook đủ; chờ `OD-PROG-009/010/011/014` |
 | `PROG-005` | HW+FW | 1–2 nd | xác nhận schematic/BSP/test point/HIL setup và 200 ms boundary | `BLOCKED` — thiếu `HW-AUTH-*` và BSP/fixture/HIL plan được duyệt |
-| `PROG-006` | QA | 1–2 nd | review SRS/design/trace/risk/V&V, sign G0 | `BLOCKED` — 0/22 M4, 0/22 M5 và sign-off chưa có |
+| `PROG-006` | QA | 1–2 nd | review SRS/design/trace/risk/V&V, sign G0 | `BLOCKED` — host/evidence repo đã sẵn; 0/22 M4, 0/22 M5, target/CI/HIL và sign-off còn thiếu |
 
 Exit được tách để không tạo blocker nguyên khối:
 
@@ -275,6 +277,11 @@ không tự nâng tiến độ từ việc soạn hồ sơ. Điều kiện kiể
 candidate” đã PASS tại
 [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md):
 commit `e3e9fb2`, tree `54eb519e`, 22/22 SHA-256/Git blob.
+Môi trường được đo tại
+[`PROG-P0-ENV-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md):
+host branch/build/toolchain và kho evidence `0/32` đã sẵn; GitHub CI bị billing,
+target bị SSH auth và HIL bị authority/fixture chặn. Không đổi DoD từ các PASS
+chuẩn bị này.
 Tổng estimate P0 là **8–15 nd**, khớp §5.6; đây là công review/decision/sign-off
 còn lại, không bao gồm triển khai TLS, BSP, fixture hoặc chạy HIL. Actual phải
 được ghi khi authority review kết thúc, không hồi đoán từ số dòng tài liệu.
@@ -443,7 +450,7 @@ tuần (§6.4). Không ghi phần trăm theo cảm tính: `% hoàn tất` chỉ 
 
 | Pha | Task | Đã đạt DoD | % hoàn tất | Trạng thái | Bắt đầu | Kết thúc | Test Result đã có | Ghi chú chặn |
 |---|---:|---:|---:|---|---|---|---:|---|
-| P0 | 7 | 0 | 0% | `BLOCKED` | 2026-08-10 | — | — | Chuẩn bị kỹ thuật 7/7; candidate đã pin; chờ consumer review, conflict closure và sign-off |
+| P0 | 7 | 0 | 0% | `BLOCKED` | 2026-08-10 | — | — | Candidate + host/evidence repo đã sẵn; CI/target/HIL và consumer review/conflict/sign-off còn chặn |
 | P1 | 6 | 0 | 0% | `NOT_STARTED` | — | — | 0/2 | Chờ `M-G0` |
 | P2 | 8 | 0 | 0% | `NOT_STARTED` | — | — | 0/3 | Chờ `M-G1` |
 | P3 | 8 | 0 | 0% | `NOT_STARTED` | — | — | 0/7 | Chờ `M-G1` |
@@ -699,7 +706,7 @@ Chỉ số dùng để **phát hiện sớm**, không dùng để đánh giá c�
 | 22 hồ sơ thiết kế | Git; baseline gốc `05c1c48`, candidate P0 `e3e9fb2` | Thẻ task mới dùng candidate trong manifest; baseline gốc chỉ dùng so sánh/rollback; xem Plan 54 §10.2 |
 | Contract machine-readable | `contracts/openapi/openapi.yaml` | Có version; unknown major bị reject |
 | Mã nguồn | Nhánh feature theo lát cắt; PR có reviewer bắt buộc | §6.7 |
-| Artifact và Test Result | `docs/07_records/test-results/programming/<TR-ID>/` kèm `SHA256SUMS` | Bất biến; chạy lại thì tạo ID mới |
+| Artifact và Test Result | [`PROG-TR-REPO-001`](../07_records/test-results/programming/README.md): `<TR-ID>/` kèm `SHA256SUMS` | Bất biến; chạy lại thì tạo ID mới |
 | Feature flag | `PROGRAMMING_REV_A`, mặc định **tắt** | Bật theo bốn giai đoạn ở `UX-WEB-PROG-001` §28 |
 
 Đổi hồ sơ thiết kế thì phải cập nhật hash baseline **trong cùng commit** và chạy
@@ -791,7 +798,7 @@ trỏ tới commit + test/evidence hiện tại.
 | `PLAN_READY` | Product+Architect+QA+Document Control | **BLOCKED** | — | Candidate P0 `e3e9fb2` đã pin; consumer review, conflict closure và chữ ký `OD-PROG-015` còn thiếu |
 | `IMPLEMENT_READY[<lát cắt>]` | Product + Architect | **BLOCKED** | — | `PLAN_READY PASS` + task card/decision theo lát cắt (§4.3) |
 | `RELEASE_READY` | Product + Release + QA | **BLOCKED** | — | 32/32 Test Result + residual acceptance + `OD-PROG-008` HIL |
-| G0/P0 | Product+Architect+QA | BLOCKED | 2026-08-10 / — | Gói P0 đã sẵn sàng; chờ DOC-G4 review/sign-off, conflict closure và authority HW/TLS |
+| G0/P0 | Product+Architect+QA | BLOCKED | 2026-08-10 / — | Candidate/host/evidence repo sẵn; CI billing, target SSH auth, HIL authority/fixture, DOC-G4 review/sign-off và conflict còn chặn |
 | G1/P1 | Architect+BE+Core | NOT_STARTED | — | G0 |
 | G2/P2+P5 partial | BE+FE+Compiler | NOT_STARTED | — | G1 |
 | G3/P3 | Core+Controls | NOT_STARTED | — | P1/P2 |
@@ -814,7 +821,12 @@ không dùng hai bảng thay nhau.
 | Product/SRS/Architecture/contract baseline pin version/hash | Document Control | **PASS phần kiểm soát cấu hình:** candidate P0 `e3e9fb2`, tree `54eb519e`, 22/22 SHA-256/Git blob tại manifest; approval của nội dung vẫn BLOCKED ở các dòng trên |
 | TLS/RBAC/security enablement plan approved | `DDD-SEC-PROG-001` | BLOCKED |
 | HW/BSP/schematic/test limits/fixture approved | MCU/HW design | BLOCKED |
-| Branch/build/toolchain/target lab/evidence repository ready | Dev/QA/Ops | BLOCKED |
+| Branch/PR/change-control workflow ready | Dev Lead | **PASS kỹ thuật:** PR #114 đã đi đủ branch→commit→push→PR→merge; remote branch đã xóa |
+| Host build/toolchain ready | Dev/QA | **PASS kỹ thuật:** CTest 860/860; Go vet + 11 package test; FE 53 file/469 test + lint/build; tool version tại `PROG-P0-ENV-2026-08-10` §2 |
+| Evidence repository ready | Verification + Document Control | **PASS cấu trúc, EMPTY:** `PROG-TR-REPO-001` có template/integrity workflow; Test Result vẫn 0/32 |
+| GitHub CI/security runner ready | GitHub Organization Admin | **BLOCKED `ENV-PROG-002`:** mọi job `steps=[]` do billing/spending limit; cần sửa billing và rerun exact commit |
+| Target SOM lab ready | Ops/Lab admin | **BLOCKED `ENV-PROG-001`:** endpoint SSH trả lời nhưng từ chối hai identity; cần authorize public key hoặc sửa alias/user/key rồi thu runtime snapshot |
+| HIL fixture/instrument ready | HW + Safety + QA | **BLOCKED `ENV-PROG-003`:** thiếu `HW-AUTH-*`, fixture/calibration và limit điện được duyệt |
 
 Không tạo OpenAPI/schema/artifact/RETAIN production từ `TARGET-PENDING`. Prototype
 nếu được Dev Lead chấp thuận phải isolated, feature flag OFF, không migrate data
@@ -864,6 +876,7 @@ khiển thiết bị thật:
 | 0.7 | 2026-08-10 | Tái cấu trúc theo ISO/IEC/IEEE 16326: thêm mục lục, tài liệu tham chiếu, thuật ngữ, sản phẩm bàn giao, giả định và ràng buộc, kế hoạch đóng dự án, quản lý cấu hình, xử lý vấn đề, kiểm soát lịch, báo cáo và chỉ số, ánh xạ điều khoản chuẩn. Thêm **biểu đồ roadmap** render được (§5.3), **bảng lịch và mốc** (§5.4), **bảng tiến độ** (§5.5) và phân bổ nguồn lực theo vai trò (§5.6.1) |
 | 0.8 | 2026-08-10 | Duyệt lại Plan và triển khai phần chuẩn bị P0: sửa 42→49 task, 30→32 scenario, 15→17 decision; đổi `PLAN_READY OPEN` thành `BLOCKED`; tách `P0-A` baseline khỏi `P0-B` decision theo lát cắt để bỏ dependency/contract vòng tròn; sửa gốc thời gian Gantt và join P2/P3; thêm trạng thái từng `PROG-000..006` và gói review/sign-off `PROG-P0-GATE-2026-08-10`. Không giả chữ ký; P0 giữ 0/7 DoD |
 | 0.9 | 2026-08-10 | Ghim candidate P0 `e3e9fb2` bằng manifest commit/tree/SHA-256/Git blob; đóng riêng blocker kiểm soát cấu hình nhưng giữ P0 0/7 DoD, `PLAN_READY` và mọi cổng quyền hạn BLOCKED vì consumer review/conflict/sign-off còn thiếu |
+| 0.10 | 2026-08-10 | Rà readiness P0: xác nhận branch/build/toolchain host PASS; tạo kho Test Result chuẩn nhưng giữ 0/32; tách blocker CI billing, target SSH auth và HIL authority/fixture có owner/impact/gate/unlock; giữ P0 0/7 DoD và mọi cổng quyền hạn BLOCKED |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
