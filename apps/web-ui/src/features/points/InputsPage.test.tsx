@@ -14,8 +14,12 @@ const api = vi.hoisted(() => ({
   getPoints: vi.fn()
 }))
 const hookState = vi.hoisted(() => ({ points: [] as Point[] }))
+const mode = vi.hoisted(() => ({ isDemo: false }))
 
 vi.mock('../../shared/api/client', () => ({ apiClient: api }))
+vi.mock('../../shared/config', () => ({
+  get IS_DEMO() { return mode.isDemo }
+}))
 vi.mock('../../shared/hooks/useApi', () => ({
   useApi: () => ({ data: hookState.points, loading: false, error: null, refetch: vi.fn() })
 }))
@@ -51,6 +55,7 @@ function renderPage() {
 describe('InputsPage point metadata fields', () => {
   beforeEach(() => {
     localStorage.setItem('mkddc-lang', 'en')
+    mode.isDemo = false
     api.getAiInputs.mockResolvedValue([{ ...input }])
     api.putAiInputs.mockResolvedValue(undefined)
     api.updatePointName.mockResolvedValue({ id: 'UI-01', name: 'Blocked Physical Name' })
@@ -123,6 +128,7 @@ describe('InputsPage point metadata fields', () => {
 describe('InputsPage — authority không trả lời', () => {
   beforeEach(() => {
     localStorage.setItem('mkddc-lang', 'en')
+    mode.isDemo = false
     hookState.points = []
     api.getAiInputs.mockRejectedValue(new Error('502 Bad Gateway'))
   })
@@ -147,5 +153,38 @@ describe('InputsPage — authority không trả lời', () => {
     api.getAiInputs.mockResolvedValue([input])
     await user.click(screen.getByRole('button', { name: /retry/i }))
     expect(await screen.findByText('UI Channels')).toBeInTheDocument()
+  })
+})
+
+describe('InputsPage — ranh giới dữ liệu live/demo', () => {
+  beforeEach(() => {
+    localStorage.setItem('mkddc-lang', 'en')
+    mode.isDemo = false
+    hookState.points = []
+    api.getAiInputs.mockResolvedValue([{ ...input }])
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+    hookState.points = []
+  })
+
+  it('live để trống khi không có điểm thật, không mượn UI-01 demo', async () => {
+    renderPage()
+
+    expect(await screen.findByText('Live Data')).toBeInTheDocument()
+    expect(screen.getByText('No live data for this channel yet.')).toBeInTheDocument()
+    expect(screen.getAllByText('--').length).toBeGreaterThan(0)
+    expect(screen.queryByText('23.7 C')).not.toBeInTheDocument()
+  })
+
+  it('demo vẫn hiển thị điểm mô phỏng khi chưa có điểm API', async () => {
+    mode.isDemo = true
+    renderPage()
+
+    expect(await screen.findByText('Live Data')).toBeInTheDocument()
+    expect(screen.queryByText('No live data for this channel yet.')).not.toBeInTheDocument()
+    expect(screen.getAllByText('23.7 C').length).toBeGreaterThan(0)
   })
 })

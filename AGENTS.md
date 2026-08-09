@@ -6,6 +6,63 @@
 - Keep FE local changes as the source of truth; do not overwrite unrelated local FE work.
 - Luôn trả lời bằng tiếng Việt và viết tài liệu (docs, changelog, báo cáo, review) bằng tiếng Việt. Hạn chế tối đa tiếng Anh trong nội dung rule và skill của agent; chỉ giữ nguyên tiếng Anh cho thuật ngữ kỹ thuật/tên riêng không có bản dịch tương đương rõ ràng (ví dụ: BACnet, Modbus, CRC, endian, watchdog, tên biến/hàm/API trong code).
 
+## Nguồn quy tắc tài liệu nằm trong repository
+
+Bộ quy tắc kiểm soát tài liệu là **`docs/00_governance/DOC_GOVERNANCE.md`**
+(`DOC-GOV-001`, Active). Nó chứa ánh xạ ISO-aligned, checklist `DD-01..DD-13`,
+thang `M0..M5`, ba cổng `PLAN_READY`/`IMPLEMENT_READY`/`RELEASE_READY`, cách
+chạy harness và bảy quy tắc trung thực.
+
+Lý do đặt trong repository chứ không chỉ ở đây: thành viên không dùng agent vẫn
+phải áp dụng được cùng một luật. Mục dưới đây giữ nguyên để agent đọc nhanh; khi
+hai bên khác nhau, **`DOC-GOV-001` là bản đúng**.
+
+Template hồ sơ mới: `docs/02_design/_templates/TEMPLATE_DDD.md`.
+Harness: `python3 scripts/docs_iso_harness.py --expect`.
+
+## Cấu trúc bắt buộc của một file thiết kế
+
+Tài liệu giao cho team implement phải là **nội dung Detailed Design**, không phải
+chỉ có đầu mục, requirement, kiến trúc tổng quan, roadmap hoặc task list. Mỗi file
+thiết kế phải có đủ phần áp dụng được sau đây:
+
+1. Metadata/quyền tài liệu, requirement nguồn, trạng thái `As-Built/Target/TBD`.
+2. Mục tiêu, actor/use case, phạm vi trong/ngoài, constraint và success criteria.
+3. Hiện trạng As-Built có dẫn source/contract/class/function/route/schema và gap.
+4. Thiết kế mục tiêu: ownership, input/output/consumer, process/thread/deployment
+   và failure boundary; sơ đồ/sequence khi cần.
+5. Data model từng field: type/unit/required/default/range/enum/null semantics,
+   identity/key/index/FK, validation, lifecycle, retention, version và migration.
+6. Interface/contract: request/response hoặc layout, auth/RBAC, timeout/retry,
+   idempotency/concurrency, stable error, side effect, audit và compatibility.
+7. State machine, thuật toán/pseudocode, ordering, transaction/atomic/lock,
+   clock/timing/WCET/watchdog, memory/resource limit và power/process-fault path.
+8. FE/UX hoặc operation flow: route/wireframe/component/action/state/copy/i18n/
+   responsive/a11y; hoặc preflight/execute/read-back/rollback/incident. Với
+   UI/UX, wireframe chữ/ASCII **không đủ** để qua cổng Detailed Design: mỗi màn
+   hình chính và mọi modal/drawer/trạng thái chứa quyết định an toàn, hành động
+   không thể hoàn tác hoặc thay đổi runtime phải có bản đặc tả trực quan render
+   được (SVG/PNG hoặc liên kết Figma kèm export ổn định) và được
+   nhúng/liên kết ngay trong hồ sơ. Landing/dashboard responsive phải có ít
+   nhất bản desktop và mobile; dữ liệu giả phải ghi rõ là minh họa, không phải
+   bằng chứng runtime. Bản trực quan phải thể hiện shell/điều hướng, thứ bậc
+   thông tin, component, action chính/phụ, trạng thái loading/empty/error/
+   permission/unknown/stale/offline áp dụng, focus và breakpoint. Kèm cây
+   component và bảng ánh xạ từng vùng tới field/API/state/action/RBAC/copy,
+   token kích thước-màu-tương phản; sửa nội dung thì phải sửa asset cùng revision.
+9. Error/safety/security: nơi phát hiện, code, state/output giữ hay đổi, recovery,
+   audit/alarm boundary, priority/interlock/safe-state và malicious input.
+10. Source mapping: file/package/module/class/function/build/config/package cần
+    tạo/sửa, dependency bị cấm và feature flag/migration impact.
+11. Verification: requirement→test, fixture/precondition/steps/expected định
+    lượng, positive/negative/fault case, target/evidence/pass authority.
+12. Compatibility/deploy/rollback, traceability/risk/open decision và sign-off.
+
+Trước khi kết luận `đủ để implement`, phải bảo đảm một dev không tham gia thiết
+kế có thể biết chính xác sửa ở đâu, data/contract gì, state/algorithm ra sao,
+lỗi/restart/rollback thế nào và test nào chứng minh. Phần thiếu phải bổ sung ngay;
+`TBD/BLOCKED` chỉ hợp lệ khi có owner, ảnh hưởng, gate và điều kiện mở khóa.
+
 ## Làm hết việc, không chừa lại
 
 Khi user giao việc, **làm trọn tới nơi**. Không được báo cáo giữa chừng rồi để lại

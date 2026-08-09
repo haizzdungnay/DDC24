@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1560" viewBox="0 0 1440 1560" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
+  <title>PGM-03 Kiểm tra và Đưa vào vận hành — desktop 1440 x 900 kèm modal xác nhận</title>
+  <desc>Hai artboard: trạng thái sẵn sàng đưa vào vận hành, và modal xác nhận mạnh theo rủi ro thực tế. Dữ liệu là minh họa, không phải dữ liệu runtime.</desc>
+
+  <rect width="1440" height="1560" fill="#C8CCD0"/>
+
+  <!-- ============ ARTBOARD 1 ============ -->
+  <text x="24" y="24" font-size="12" font-weight="700" fill="#4A4F55">Artboard 1 — PGM-03 trạng thái READY (1440 × 900)</text>
+  <g transform="translate(0,36)">
+    <rect x="0" y="0" width="1440" height="900" fill="#C8CCD0" stroke="#636970"/>
+
+    <!-- NavRail -->
+    <rect x="0" y="0" width="232" height="900" fill="#D8DBDE"/>
+    <line x1="232" y1="0" x2="232" y2="900" stroke="#636970"/>
+    <text x="20" y="38" font-size="15" font-weight="700" fill="#1C1F23">MK-DDC-24</text>
+    <text x="20" y="58" font-size="11" fill="#4A4F55">DDC-24-01 · Plant-A</text>
+    <rect x="8" y="204" width="216" height="34" rx="6" fill="#E0E6EC"/>
+    <rect x="8" y="204" width="3" height="34" fill="#26527C"/>
+    <text x="20" y="226" font-size="13" font-weight="700" fill="#26527C">Lập trình</text>
+    <g font-size="12" fill="#4A4F55">
+      <text x="34" y="256">Tổng quan</text>
+      <text x="34" y="284">Thiết kế</text>
+    </g>
+    <rect x="20" y="294" width="204" height="26" rx="5" fill="#C2C6CA"/>
+    <text x="34" y="312" font-size="12" font-weight="700" fill="#1C1F23">Kiểm tra &amp; Vận hành</text>
+    <text x="34" y="340" font-size="12" fill="#4A4F55">Runtime &amp; Bảo trì</text>
+
+    <!-- TopBar -->
+    <rect x="232" y="0" width="1208" height="64" fill="#D8DBDE"/>
+    <line x1="232" y1="64" x2="1440" y2="64" stroke="#636970"/>
+    <text x="252" y="30" font-size="12" fill="#4A4F55">Lập trình / Kiểm tra &amp; Đưa vào vận hành</text>
+    <text x="252" y="50" font-size="17" font-weight="700" fill="#1C1F23">Kiểm tra &amp; Đưa vào vận hành</text>
+    <rect x="1148" y="18" width="124" height="30" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="1160" y="38" font-size="12" fill="#1C1F23">Kiểm tra lại</text>
+    <rect x="1284" y="18" width="136" height="30" rx="6" fill="#26527C"/>
+    <text x="1296" y="38" font-size="12" font-weight="700" fill="#FFFFFF">Đưa vào vận hành</text>
+
+    <!-- Context -->
+    <rect x="252" y="80" width="1168" height="48" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="272" y="100" font-size="11" fill="#4A4F55">BẢN ỨNG VIÊN</text>
+    <text x="272" y="115" font-size="13" font-weight="700" fill="#1C1F23">r17 · đã niêm phong</text>
+    <text x="430" y="108" font-size="15" fill="#4A4F55">→</text>
+    <text x="470" y="100" font-size="11" fill="#4A4F55">ĐANG VẬN HÀNH</text>
+    <text x="470" y="115" font-size="13" font-weight="700" fill="#1C1F23">r15 · RUNNING</text>
+    <line x1="680" y1="88" x2="680" y2="120" stroke="#636970"/>
+    <circle cx="700" cy="104" r="5" fill="#227742"/>
+    <text x="714" y="108" font-size="12" fill="#1C1F23">Core sẵn sàng</text>
+    <rect x="1180" y="92" width="220" height="24" rx="12" fill="#E0ECE5"/>
+    <text x="1196" y="108" font-size="12" font-weight="700" fill="#227742">✓ Sẵn sàng đưa vào vận hành</text>
+
+    <!-- Readiness -->
+    <rect x="252" y="144" width="556" height="252" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="268" y="168" font-size="13" font-weight="700" fill="#1C1F23">Kết quả kiểm tra</text>
+    <text x="620" y="168" font-size="11" fill="#4A4F55">Hoàn tất 14:41 · 1,8 giây</text>
+    <g font-size="12">
+      <text x="268" y="198" fill="#227742">✓</text><text x="292" y="198" fill="#1C1F23">Cú pháp và kiểu</text>
+      <text x="268" y="226" fill="#227742">✓</text><text x="292" y="226" fill="#1C1F23">Cấu trúc FBD</text>
+      <text x="268" y="254" fill="#227742">✓</text><text x="292" y="254" fill="#1C1F23">Ánh xạ Điểm</text>
+      <text x="268" y="282" fill="#227742">✓</text><text x="292" y="282" fill="#1C1F23">Tác vụ và thứ tự chạy</text>
+      <text x="268" y="310" fill="#227742">✓</text><text x="292" y="310" fill="#1C1F23">Tương thích thiết bị đích</text>
+      <text x="268" y="338" fill="#826500">!</text><text x="292" y="338" fill="#1C1F23">Trạng thái lưu (RETAIN)</text>
+      <text x="560" y="338" fill="#826500" font-size="11">2 biến sẽ khởi tạo lại</text>
+      <text x="700" y="338" fill="#26527C" font-size="11">Xem</text>
+    </g>
+    <text x="268" y="374" font-size="11" fill="#4A4F55">Kiểm tra không thay đổi chương trình đang chạy.</text>
+
+    <!-- Changes -->
+    <rect x="828" y="144" width="592" height="252" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="844" y="168" font-size="13" font-weight="700" fill="#1C1F23">Thay đổi so với r15</text>
+    <text x="1300" y="168" font-size="11" fill="#4A4F55">Do máy chủ tính</text>
+    <g font-size="12" fill="#1C1F23">
+      <text x="844" y="198">Chương trình</text><text x="1100" y="198" fill="#4A4F55">2 sửa · 1 thêm</text>
+      <text x="844" y="226">Ánh xạ Điểm</text><text x="1100" y="226" fill="#4A4F55">3 sửa</text>
+      <text x="844" y="254">Tác vụ</text><text x="1100" y="254" fill="#4A4F55">chu kỳ 5 s → 1 s</text>
+      <text x="844" y="282">Thư viện lõi</text><text x="1100" y="282" fill="#4A4F55">không đổi</text>
+    </g>
+    <line x1="844" y1="300" x2="1404" y2="300" stroke="#636970"/>
+    <text x="844" y="324" font-size="12" font-weight="700" fill="#1C1F23">Ảnh hưởng tới đầu ra</text>
+    <text x="844" y="348" font-size="11" fill="#1C1F23">4 đầu ra do Program điều khiển sẽ đổi giá trị đề xuất.</text>
+    <text x="844" y="368" font-size="11" fill="#1C1F23">Giá trị cũ được giữ tới khi chu kỳ đầu chạy xong.</text>
+
+    <!-- Impact -->
+    <rect x="252" y="412" width="1168" height="316" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="268" y="436" font-size="13" font-weight="700" fill="#1C1F23">Ảnh hưởng cần biết trước khi xác nhận</text>
+
+    <rect x="268" y="452" width="368" height="120" rx="6" fill="#EEE9DB" stroke="#826500"/>
+    <text x="284" y="474" font-size="12" font-weight="700" fill="#826500">Trạng thái lưu sẽ khởi tạo lại</text>
+    <text x="284" y="496" font-size="11" fill="#1C1F23">Trạng thái điều khiển đã lưu không còn</text>
+    <text x="284" y="512" font-size="11" fill="#1C1F23">tương thích. 2 giá trị RETAIN bị ảnh hưởng</text>
+    <text x="284" y="528" font-size="11" fill="#1C1F23">sẽ được khởi tạo lại.</text>
+    <text x="284" y="552" font-size="11" fill="#26527C">Xem danh sách biến →</text>
+
+    <rect x="652" y="452" width="368" height="120" rx="6" fill="#E9E3F1" stroke="#693797"/>
+    <text x="668" y="474" font-size="12" font-weight="700" fill="#693797">1 override thủ công đang giữ đầu ra</text>
+    <text x="668" y="496" font-size="11" fill="#1C1F23">AHU01_SAV · mức 2 · do vanhanh@plant</text>
+    <text x="668" y="512" font-size="11" fill="#1C1F23">giá trị 65 % · còn 42 phút</text>
+    <text x="668" y="536" font-size="11" fill="#1C1F23">Program sẽ không thắng ở đầu ra này.</text>
+    <text x="668" y="558" font-size="11" fill="#26527C">Mở danh sách override →</text>
+
+    <rect x="1036" y="452" width="368" height="120" rx="6" fill="#E5E6E8" stroke="#636970"/>
+    <text x="1052" y="474" font-size="12" font-weight="700" fill="#1C1F23">Chuyển quyền điều khiển</text>
+    <text x="1052" y="496" font-size="11" fill="#1C1F23">GRAPH_ONLY → PROGRAM_ONLY</text>
+    <text x="1052" y="512" font-size="11" fill="#1C1F23">Đã sao lưu cấu hình graph hiện tại.</text>
+    <text x="1052" y="536" font-size="11" fill="#1C1F23">Quay lui sẽ khôi phục bản sao lưu này.</text>
+    <text x="1052" y="558" font-size="11" fill="#26527C">Xem bản sao lưu →</text>
+
+    <text x="268" y="606" font-size="12" font-weight="700" fill="#1C1F23">Đầu ra bị ảnh hưởng</text>
+    <line x1="268" y1="616" x2="1404" y2="616" stroke="#636970"/>
+    <g font-size="11" fill="#4A4F55">
+      <text x="268" y="636">Điểm</text>
+      <text x="500" y="636">Giá trị hiện tại</text>
+      <text x="700" y="636">Đề xuất mới</text>
+      <text x="900" y="636">Bên đang giữ</text>
+      <text x="1150" y="636">Mức ưu tiên</text>
+    </g>
+    <g font-size="11" fill="#1C1F23">
+      <text x="268" y="660">AHU01_SAT_CMD</text><text x="500" y="660">18,0 °C</text><text x="700" y="660">17,5 °C</text><text x="900" y="660">Program</text><text x="1150" y="660">5</text>
+      <text x="268" y="684">AHU01_SAV</text><text x="500" y="684">65 %</text><text x="700" y="684">48 %</text><text x="900" y="684" fill="#693797">Override thủ công</text><text x="1150" y="684">2</text>
+      <text x="268" y="708">CHW_PUMP_01</text><text x="500" y="708">Bật</text><text x="700" y="708">Bật</text><text x="900" y="708">Program</text><text x="1150" y="708">5</text>
+    </g>
+
+    <!-- Footer bar -->
+    <rect x="252" y="744" width="1168" height="72" rx="8" fill="#D8DBDE" stroke="#636970"/>
+    <text x="272" y="774" font-size="12" fill="#1C1F23">Cần xác nhận 3 mục có ảnh hưởng thật: trạng thái lưu, override thủ công, chuyển quyền điều khiển.</text>
+    <text x="272" y="796" font-size="11" fill="#4A4F55">Mục nào không có ảnh hưởng thì không hiện ô xác nhận.</text>
+    <rect x="1148" y="762" width="112" height="36" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="1172" y="785" font-size="12" fill="#1C1F23">Hủy</text>
+    <rect x="1276" y="762" width="128" height="36" rx="6" fill="#26527C"/>
+    <text x="1290" y="785" font-size="12" font-weight="700" fill="#FFFFFF">Xác nhận…</text>
+
+    <text x="252" y="864" font-size="10" fill="#4A4F55">Đặc tả thiết kế — dữ liệu minh họa, không phải dữ liệu runtime.</text>
+  </g>
+
+  <!-- ============ ARTBOARD 2 ============ -->
+  <text x="24" y="984" font-size="12" font-weight="700" fill="#4A4F55">Artboard 2 — Modal xác nhận mạnh, có xác thực lại (1440 × 560)</text>
+  <g transform="translate(0,996)">
+    <rect x="0" y="0" width="1440" height="540" fill="#C8CCD0" stroke="#636970"/>
+    <rect x="0" y="0" width="1440" height="540" fill="#1C1F23" fill-opacity="0.45"/>
+
+    <rect x="400" y="40" width="640" height="460" rx="10" fill="#D8DBDE" stroke="#4C5056" stroke-width="2"/>
+    <text x="428" y="76" font-size="16" font-weight="700" fill="#1C1F23">Đưa r17 vào vận hành?</text>
+    <text x="428" y="100" font-size="12" fill="#4A4F55">Thao tác này thay chương trình đang điều khiển thiết bị thật.</text>
+    <line x1="428" y1="116" x2="1012" y2="116" stroke="#636970"/>
+
+    <rect x="428" y="132" width="584" height="42" rx="6" fill="#C8CCD0" stroke="#636970"/>
+    <rect x="440" y="145" width="16" height="16" rx="3" fill="#26527C"/>
+    <text x="444" y="158" font-size="12" font-weight="700" fill="#FFFFFF">✓</text>
+    <text x="468" y="152" font-size="12" fill="#1C1F23">Tôi hiểu 2 giá trị RETAIN sẽ được khởi tạo lại.</text>
+    <text x="468" y="168" font-size="11" fill="#4A4F55">Bộ tích phân PID của AHU-01 sẽ bắt đầu lại từ 0.</text>
+
+    <rect x="428" y="184" width="584" height="42" rx="6" fill="#C8CCD0" stroke="#636970"/>
+    <rect x="440" y="197" width="16" height="16" rx="3" fill="#26527C"/>
+    <text x="444" y="210" font-size="12" font-weight="700" fill="#FFFFFF">✓</text>
+    <text x="468" y="204" font-size="12" fill="#1C1F23">Tôi biết AHU01_SAV đang bị override thủ công.</text>
+    <text x="468" y="220" font-size="11" fill="#4A4F55">Program sẽ không thắng ở đầu ra đó cho tới khi override hết hạn.</text>
+
+    <rect x="428" y="236" width="584" height="42" rx="6" fill="#C8CCD0" stroke="#636970"/>
+    <rect x="440" y="249" width="16" height="16" rx="3" fill="#C8CCD0" stroke="#4C5056"/>
+    <text x="468" y="256" font-size="12" fill="#1C1F23">Tôi xác nhận chuyển quyền điều khiển sang PROGRAM_ONLY.</text>
+    <text x="468" y="272" font-size="11" fill="#CC1F28">Chưa tích — nút xác nhận còn khóa.</text>
+
+    <text x="428" y="308" font-size="11" fill="#4A4F55">Chỉ hiện ô xác nhận cho ảnh hưởng có thật. Lần này không có thay đổi</text>
+    <text x="428" y="324" font-size="11" fill="#4A4F55">ánh xạ nào cần xác nhận riêng, nên không có ô thứ tư.</text>
+
+    <line x1="428" y1="344" x2="1012" y2="344" stroke="#636970"/>
+    <text x="428" y="370" font-size="12" font-weight="700" fill="#1C1F23">Nhập lại mật khẩu để xác thực</text>
+    <rect x="428" y="382" width="336" height="34" rx="6" fill="#C8CCD0" stroke="#26527C" stroke-width="2"/>
+    <text x="442" y="404" font-size="12" fill="#4A4F55">••••••••</text>
+    <text x="428" y="434" font-size="11" fill="#4A4F55">Nếu mất phản hồi, kết quả chuyển “Chưa xác định”. Hệ thống sẽ hỏi lại</text>
+    <text x="428" y="450" font-size="11" fill="#4A4F55">trạng thái Core, không tự gửi lệnh lần hai.</text>
+
+    <rect x="756" y="440" width="112" height="38" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="782" y="464" font-size="12" fill="#1C1F23">Hủy</text>
+    <rect x="884" y="440" width="128" height="38" rx="6" fill="#C2C6CA" stroke="#636970"/>
+    <text x="898" y="464" font-size="12" font-weight="700" fill="#4A4F55">Đưa vào vận hành</text>
+    <text x="884" y="496" font-size="10" fill="#4A4F55">Khóa tới khi đủ xác nhận và mật khẩu</text>
+  </g>
+
+  <text x="24" y="1552" font-size="10" fill="#4A4F55">Đặc tả thiết kế — dữ liệu minh họa, không phải dữ liệu runtime.</text>
+</svg>

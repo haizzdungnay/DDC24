@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" role="img" aria-labelledby="title desc">
+  <title id="title">PGM-01 - Landing page Programming trên mobile</title>
+  <desc id="desc">Bản đặc tả trực quan 390 x 844, nội dung xếp một cột, giữ rõ bản đang sửa, bản đang vận hành và vấn đề cần chú ý.</desc>
+  <style>
+    text { font-family: Inter, Roboto, Arial, "DejaVu Sans", sans-serif; fill: #1C1F23; }
+    .muted { fill: #4A4F55; }
+    .tiny { font-size: 10px; }
+    .small { font-size: 11px; }
+    .body { font-size: 13px; }
+    .label { font-size: 10px; font-weight: 700; letter-spacing: .8px; }
+    .h1 { font-size: 21px; font-weight: 800; }
+    .h2 { font-size: 14px; font-weight: 750; }
+    .mono { font-family: "Roboto Mono", "DejaVu Sans", Consolas, monospace; }
+    .card { fill: #D8DBDE; stroke: #636970; stroke-width: 1; }
+    .rule { stroke: #636970; stroke-width: 1; }
+  </style>
+  <rect width="390" height="844" fill="#C8CCD0"/>
+
+  <!-- Mobile top bar 56 px -->
+  <rect width="390" height="56" fill="#D8DBDE" stroke="#636970"/>
+  <rect x="12" y="10" width="36" height="36" rx="6" fill="#D8DBDE" stroke="#636970"/>
+  <path d="M22 21h16M22 28h16M22 35h16" stroke="#1C1F23" stroke-width="2"/>
+  <text x="60" y="25" class="small muted">MK-DDC-24</text><text x="60" y="42" class="body" font-weight="700">Lập trình</text>
+  <circle cx="306" cy="28" r="5" fill="#227742"/><text x="316" y="32" class="tiny" font-weight="700">Online</text>
+  <circle cx="366" cy="28" r="15" fill="#D8DBDE" stroke="#636970"/><path d="M361 31h10l-2-8h-6z" fill="none" stroke="#1C1F23" stroke-width="1.4"/>
+  <circle cx="376" cy="17" r="8" fill="#CC1F28"/><text x="373" y="20" font-size="8" fill="#FFFFFF" font-weight="700">3</text>
+
+  <!-- Mock evidence banner -->
+  <rect x="0" y="56" width="390" height="30" fill="#EEE9DB" stroke="#826500"/>
+  <path d="M13 78l6-13 6 13z" fill="none" stroke="#634D00"/><text x="33" y="75" class="tiny" fill="#634D00" font-weight="700">DỮ LIỆU MINH HỌA — KHÔNG PHẢI RUNTIME</text>
+
+  <text x="16" y="110" class="tiny muted">Kỹ thuật  /  Lập trình</text>
+  <text x="16" y="137" class="h1">Lập trình điều khiển</text>
+  <rect x="285" y="105" width="89" height="32" rx="6" fill="#D8DBDE" stroke="#636970"/><text x="300" y="125" class="tiny" font-weight="700">HVAC-A ▾</text>
+
+  <!-- Context bar, stacked inside one compact card -->
+  <rect x="16" y="153" width="358" height="77" rx="6" class="card"/>
+  <text x="30" y="175" class="label" fill="#634D00">ĐANG SỬA</text><text x="30" y="195" class="body" font-weight="700">r17 · Check thất bại</text>
+  <line x1="193" y1="166" x2="193" y2="215" class="rule"/>
+  <text x="207" y="175" class="label" fill="#165B2E">ĐANG VẬN HÀNH</text><text x="207" y="195" class="body" font-weight="700">r15 · RUNNING</text>
+  <circle cx="31" cy="215" r="4" fill="#227742"/><text x="40" y="219" class="tiny muted">Core sẵn sàng · Dữ liệu 1,2 s</text>
+
+  <!-- Active summary -->
+  <rect x="16" y="246" width="358" height="116" rx="6" class="card"/>
+  <text x="30" y="270" class="label muted">ỨNG DỤNG ĐANG VẬN HÀNH</text>
+  <rect x="290" y="257" width="68" height="21" rx="11" fill="#E0ECE5" stroke="#227742"/><text x="303" y="271" class="tiny" fill="#165B2E" font-weight="700">ACTIVE</text>
+  <text x="30" y="300" class="h1">Revision r15</text><text x="30" y="320" class="small muted">Control_Main · 1 s · chu kỳ cuối 42 ms</text>
+  <circle cx="31" cy="343" r="4" fill="#227742"/><text x="41" y="347" class="small">Safe-state NORMAL · 0 overrun</text><text x="304" y="347" class="tiny" fill="#26527C" font-weight="700">Runtime →</text>
+
+  <!-- Draft/action card -->
+  <rect x="16" y="378" width="358" height="149" rx="6" fill="#EEE9DB" stroke="#826500"/>
+  <text x="30" y="402" class="label" fill="#634D00">BẢN NHÁP CẦN XỬ LÝ</text>
+  <rect x="291" y="389" width="67" height="21" rx="11" fill="#F7E0E1" stroke="#CC1F28"/><text x="306" y="403" class="tiny" fill="#A01017" font-weight="700">3 LỖI</text>
+  <text x="30" y="431" class="h1">Revision r17</text><text x="30" y="451" class="small" fill="#634D00">2 lỗi logic · 1 lỗi ánh xạ</text>
+  <rect x="30" y="470" width="195" height="40" rx="6" fill="#26527C" stroke="#26527C"/><text x="58" y="495" class="body" fill="#FFFFFF" font-weight="700">Tiếp tục chỉnh sửa</text>
+  <rect x="237" y="470" width="121" height="40" rx="6" fill="#D8DBDE" stroke="#636970"/><text x="269" y="495" class="body" font-weight="700">Xem lỗi</text>
+
+  <!-- Priority attention -->
+  <rect x="16" y="543" width="358" height="244" rx="6" class="card"/>
+  <text x="30" y="570" class="h2">Việc cần chú ý</text><text x="311" y="570" class="tiny" fill="#26527C" font-weight="700">Tất cả →</text>
+  <line x1="30" y1="585" x2="360" y2="585" class="rule"/>
+  <rect x="30" y="600" width="48" height="20" rx="10" fill="#F7E0E1" stroke="#CC1F28"/><text x="41" y="614" class="tiny" fill="#A01017" font-weight="700">LỖI</text>
+  <text x="90" y="609" class="body" font-weight="700">Sai kiểu tại PID_02</text><text x="90" y="627" class="tiny muted">FBD / Net 4 · 14:28</text><text x="338" y="618" class="body" fill="#26527C">›</text>
+  <line x1="30" y1="642" x2="360" y2="642" class="rule"/>
+  <rect x="30" y="657" width="57" height="20" rx="10" fill="#EEE9DB" stroke="#826500"/><text x="38" y="671" class="tiny" fill="#634D00" font-weight="700">CẢNH BÁO</text>
+  <text x="99" y="666" class="body" font-weight="700">Override AO-02 còn hiệu lực</text><text x="99" y="684" class="tiny muted">priority 8 · còn 09:42</text><text x="338" y="675" class="body" fill="#26527C">›</text>
+  <line x1="30" y1="699" x2="360" y2="699" class="rule"/>
+  <rect x="30" y="714" width="57" height="20" rx="10" fill="#EEE9DB" stroke="#826500"/><text x="39" y="728" class="tiny" fill="#634D00" font-weight="700">DỮ LIỆU CŨ</text>
+  <text x="99" y="723" class="body" font-weight="700">MB-02.AI-7 chưa cập nhật</text><text x="99" y="741" class="tiny muted">Giữ giá trị biết-lần-cuối · 2 phút</text><text x="338" y="732" class="body" fill="#26527C">›</text>
+  <text x="30" y="770" class="tiny muted">Cuộn xuống để xem hoạt động kỹ thuật gần đây.</text>
+
+  <!-- Mobile bottom navigation -->
+  <rect x="0" y="802" width="390" height="42" fill="#D8DBDE" stroke="#636970"/>
+  <text x="30" y="828" class="tiny" font-weight="700" fill="#26527C">Tổng quan</text><text x="123" y="828" class="tiny muted">Thiết kế</text><text x="205" y="828" class="tiny muted">Kiểm tra</text><text x="300" y="828" class="tiny muted">Runtime</text>
+  <rect x="26" y="839" width="72" height="3" rx="2" fill="#26527C"/>
+</svg>

@@ -43,6 +43,7 @@ if [ -x /usr/sbin/mkddc-core ]; then
     install -d -m 0755 "$PRE"
     for f in /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
              /usr/sbin/mkddc-fake-mcu /usr/sbin/mkddc-hmi /opt/mkddc-web/mkddc-web \
+             /opt/mkddc-web/mkddc-schedule-sim \
              /usr/share/mkddc/provenance.json /usr/share/mkddc/checksums.sha256; do
         [ -e "$f" ] && cp -a "$f" "$PRE/" || true
     done
@@ -60,6 +61,9 @@ restore mkddc-netcfg   /usr/sbin/mkddc-netcfg
 restore mkddc-fake-mcu /usr/sbin/mkddc-fake-mcu
 restore mkddc-hmi      /usr/sbin/mkddc-hmi
 restore mkddc-web      /opt/mkddc-web/mkddc-web
+# SRC-F-01: rollback bỏ sót binary này thì bản cũ chạy lại với engine simulate
+# của bản mới — hai phiên bản lệch nhau ở đúng chỗ không ai nghĩ tới khi truy sự cố.
+restore mkddc-schedule-sim /opt/mkddc-web/mkddc-schedule-sim
 for meta in provenance.json checksums.sha256; do
     [ -e "$SNAP/$meta" ] && install -m 0644 "$SNAP/$meta" "/usr/share/mkddc/$meta"
 done
@@ -82,7 +86,8 @@ systemctl is-active mkddc-hmi >/dev/null 2>&1 && systemctl restart mkddc-hmi || 
     /opt/mkddc-web/mkddc-web --version
 } > /usr/share/mkddc/runtime-build-info.txt
 sha256sum /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
-    /opt/mkddc-web/mkddc-web > /usr/share/mkddc/runtime-checksums.sha256
+    /opt/mkddc-web/mkddc-web /opt/mkddc-web/mkddc-schedule-sim \
+    > /usr/share/mkddc/runtime-checksums.sha256
 
 # Không service nào được giữ inode đã bị thay.
 stale=0

@@ -3,10 +3,17 @@
 > **Document ID:** SW-SCHED-MK-DDC-24-VI
 > **Phiên bản:** 1.0 | 2026-07-28
 > **Workstream:** C0.7 (MS-03)
-> **Trạng thái:** Active — normative cho `services/core/st/st_scheduler.*`, `services/core/safety/`
+> **Trạng thái:** Supporting As-Built — source hiện tại tại `apps/core/application/st/`; không phải Target authority Programming v2.2
 > **Nguồn quyết định:** ADR-020; `PROGRAM_SOM_FW_DRAFT_DESIGN` §7.3, §7.4, §10; quyết định mô hình scheduler 2026-07-28
 > **Tài liệu liên quan:** [`ST_SUBSET_SPEC`](ST_SUBSET_SPEC_MK-DDC-24_VI.md),
 > [`TYPED_IR_ARTIFACT_SPEC`](TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md)
+
+> **Thông báo supersede Target (2026-08-09):** mô hình multi-task và các đoạn
+> gắn Task overrun với plant-wide safe-state/watchdog trong bản cũ không còn là
+> Target Rev A. Target một Task `1/5/30 s`, base-step độc lập, fault/hold-last,
+> priority 5 và cutover thuộc
+> [`DDD-CTRL-PROG-001`](PROGRAMMING_CONTROL_SEMANTICS.md) và
+> [`DDD-LIFE-PROG-001`](PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md).
 
 ---
 

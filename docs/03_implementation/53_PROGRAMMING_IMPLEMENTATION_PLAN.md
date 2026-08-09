@@ -1,0 +1,885 @@
+# Plan 53 — Kế hoạch triển khai Programming MK-DDC-24
+
+| Thuộc tính | Giá trị |
+|---|---|
+| ID tài liệu | `PLAN-PROG-053` |
+| Loại | Software Project Management Plan (SPMP) |
+| Phiên bản | 0.8 |
+| Trạng thái | **PLAN-ONLY — chưa được implement production.** Hồ sơ ở `M3 — Review Ready`; `PLAN_READY`, `IMPLEMENT_READY` và `RELEASE_READY` đều `BLOCKED` |
+| Ngày phát hành | 2026-08-10 |
+| Chủ quản | Dev Lead + System Architect |
+| Người review | Product, FE/BE/Core/FW/HW/Security/QA/Ops Leads |
+| Người phê duyệt | Product Owner + System Architect + Verification Lead |
+| Khung trình bày | ISO/IEC/IEEE 16326 — nội dung kế hoạch quản lý dự án phần mềm; ánh xạ điều khoản ở §11 |
+| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md) tại commit baseline `05c1c48` |
+| Quy tắc tài liệu | [`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md) |
+
+> ## ⚠ PLAN-ONLY — chưa được phép viết code production
+>
+> Phán quyết ngày 2026-08-09: **được giao team lập kế hoạch có kiểm soát; chưa
+> được giao implement production.** Team được phép phân tích, ước lượng, dựng
+> dependency và điền thẻ task ngay. Team **chưa** được phép tạo nhánh feature,
+> viết code production, đổi contract hay bật feature flag.
+>
+> Quyền chuẩn bị kế hoạch đến từ trạng thái `PLAN-ONLY`, **không** có nghĩa
+> `PLAN_READY` đã qua. Gói P0 đã sẵn sàng cho authority review tại
+> [`PROG-P0-GATE-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md);
+> chữ ký và consumer review vẫn còn thiếu.
+>
+> Điều kiện mở `IMPLEMENT_READY` ở §4.2. Không cần đóng cả 17 decision — chỉ cần
+> decision đầu vào của đúng lát cắt sắp làm, xem §4.3.
+
+## Mục lục
+
+| § | Nội dung | Điều khoản ISO 16326 |
+|---|---|---|
+| 0 | Đọc nhanh | — |
+| 1 | Tổng quan dự án: mục tiêu, sản phẩm bàn giao, giả định, ràng buộc | 7.2 |
+| 2 | Tài liệu tham chiếu | 7.3 |
+| 3 | Thuật ngữ và từ viết tắt | 7.4 |
+| 4 | Bối cảnh dự án: quy trình, cổng, phụ thuộc, tổ chức | 7.5 |
+| 5 | Kế hoạch công việc: WBS, roadmap, biểu đồ, lịch, tiến độ, nguồn lực | 7.6.2 |
+| 6 | Kế hoạch kiểm soát: DoR/DoD, gate, lịch, báo cáo, cấu hình, vấn đề | 7.6.3, 7.8 |
+| 7 | Quản lý rủi ro | 7.6.4 |
+| 8 | Kế hoạch đóng dự án | 7.6.5 |
+| 9 | Trạng thái hiện tại và execution tracker | 7.7 |
+| 10 | Điều kiện vào và baseline tài liệu | 7.6.1 |
+| 11 | Ánh xạ ISO/IEC/IEEE 16326 | — |
+| 12 | Lịch sử sửa đổi và phê duyệt | 7.1 |
+| 13 | Phụ lục — tự kiểm cổng M3 | — |
+
+## 0. Đọc nhanh
+
+| Câu hỏi | Trả lời |
+|---|---|
+| 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **thứ tự làm và điều kiện qua cửa**: bảy pha `P0..P6`, phụ thuộc giữa chúng, ai chịu trách nhiệm gì, và bằng chứng nào mở được mỗi gate `G0..G6`. |
+| 2. Ai phải đọc file này? | Dev Lead và Architect (chủ quản); Product và QA duyệt; mọi team đọc pha của mình. Đọc **sau** khi đã đọc hồ sơ thiết kế upstream của slice mình. |
+| 3. Hệ thống hiện tại đang có gì? | §9.1: `G0` đang `RED`. Chưa pha nào bắt đầu. Nền tảng sẵn có gồm component ST trên host, hợp đồng Modbus RTU `Active`, và bốn tiến trình đang chạy — nhưng chưa có mã Programming nào chạy production. |
+| 4. Thiết kế mới thay đổi điều gì? | Xác lập nguyên tắc: **không mở gate bằng lời văn**. Mỗi pha có điều kiện vào và ra cụ thể; §6.1 định nghĩa Definition of Ready và Definition of Done cho từng task; §6.2 định nghĩa bằng chứng gate và điều kiện quay lui. |
+| 5. Team phải sửa module/contract nào? | §5.7 ánh xạ quyền sở hữu source và sản phẩm bàn giao theo pha; §5.8 có mẫu thẻ task và cách bàn giao theo lát cắt dọc. |
+| 6. Điều gì còn bị chặn? | Cả ba cổng quyền hạn đều `BLOCKED`. Team **được chuẩn bị kế hoạch** dưới banner `PLAN-ONLY`, nhưng chưa được viết code production. `PLAN_READY` chờ consumer review, pin candidate mới, đóng xung đột authority và chữ ký. Xem §4.2, §4.3 và gói P0. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §5.2 chỉ rõ **gate nào tạo ra từng Test Result** trong 32 kịch bản; §6.2 gắn bằng chứng bắt buộc cho từng gate. Hiện 0/32 — đó là trạng thái đúng **trước** implementation, không phải lý do chặn lập kế hoạch. |
+
+Quan hệ với Plan 54: file này quản **việc code**; [Plan 54](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md)
+quản **việc tài liệu**. Hoàn tất bộ hồ sơ chỉ mở quyền *bắt đầu* implementation
+có kiểm soát — nó không chứng minh sản phẩm đã chạy, đạt HIL hay sẵn sàng release.
+
+## 1. Tổng quan dự án
+
+### 1.1 Mục tiêu và Definition of Done
+
+Triển khai vertical slice hoàn chỉnh ST+structured FBD → Check → Commission →
+Program Runtime → Point/priority/safe output → Online Monitor/Restore trên đúng
+Rev A profile, có evidence FE/BE/Core/MCU/HW và không làm suy giảm control hiện hữu.
+
+Done chỉ khi G0–G6 đạt; mọi requirement Must có trace/evidence; graph/program
+cutover, IOP 200 ms, output continuity, RETAIN, power/restart, RBAC/audit và
+operations rollback được kiểm chứng trên target/HIL. Host component hoặc UI mock
+không đủ để đóng plan.
+
+### 1.2 Nguyên tắc triển khai
+
+1. Contract và decision trước code phụ thuộc.
+2. Mỗi slice gồm docs + contract + implementation + positive/negative/fault test
+   + traceability + changelog.
+3. Commission mutation giữ feature flag `off` tới khi Core/HIL gate đạt.
+4. Không thêm daemon/core process mới nếu chưa có ADR.
+5. Không dual-run graph và Program trên output thật.
+6. Không đổi IOP/SHM/artifact/persistence contract mà thiếu producer/consumer,
+   migration/deploy order/rollback/test cùng thay đổi.
+
+### 1.3 Sản phẩm bàn giao
+
+| Nhóm | Sản phẩm bàn giao | Nghiệm thu tại |
+|---|---|---|
+| Contract | OpenAPI `/api/v1/programming`; giao thức UDS BE↔Core có version; catalog mã lỗi `PRG-ERR-*`; client TypeScript sinh tự động | `G1` |
+| Backend | `apps/web-api/internal/programming/`: store SQLite + migration, compiler worker, operation coordinator, RBAC, audit | `G2`, `G3` |
+| Core runtime | Loader artifact bounded; base control step; scheduler một Task; process image; arbitration mức 5; RETAIN | `G3`, `G4` |
+| Frontend | `apps/web-ui/src/features/programming/`: bốn workspace `PGM-01..04`, tám journey `UJ-PROG-01..08` | `G5` |
+| FW MCU và HW | BSP thật; baseline schematic/BOM/pin có kiểm soát; đồ gá HIL | `G6` |
+| Bằng chứng | 32 Test Result `VS-PROG-001..032` tại `docs/07_records/test-results/programming/` | `G1..G6` |
+| Vận hành | Diễn tập backup, Commission, Restore, thay thiết bị, rollback theo `OPS-PROG-001` | `G6` |
+
+### 1.4 Giả định lập kế hoạch
+
+| Giả định | Nếu sai thì sao |
+|---|---|
+| Nguồn lực toàn thời gian: 1 BE, 1 FE, 1,5 Core/Compiler, 0,5 Architect, 0,5 QA; FW và HW theo nguồn lực riêng | Lịch §5.4 giãn theo tỷ lệ; phải ước lượng lại |
+| Decision được ký **theo lát cắt**, không dồn về cuối | Team dừng đúng tại lát cắt thiếu chữ ký |
+| Phần cứng khởi động **song song từ tuần đầu** | `G6` thành điểm nghẽn; cả dự án chờ phần cứng |
+| Không thêm process hay daemon ngoài ba tiến trình hiện có | Cần ADR mới và ước lượng lại kiến trúc |
+| Modbus RTU contract `Active` được dùng lại nguyên trạng | Phạm vi `G1` tăng đáng kể |
+
+### 1.5 Ràng buộc
+
+| Ràng buộc | Nguồn |
+|---|---|
+| Không dual-run graph và Program trên output thật | `SYS-REQ-PROG-105`; `RSK-PROG-001` |
+| `max_iop_poll_gap < 200 ms`, mục tiêu `≤ 100 ms` | `NFR-REQ-PROG-108`; `RSK-PROG-003` |
+| Mutation Programming mặc định **tắt** tới khi TLS production sẵn sàng | `DDD-SEC-PROG-001` §2 |
+| Rev A: một controller, một Task, ba chu kỳ `1/5/30 s`, ba loại Point | `PROD-PROG-001` §3 |
+| Không tạo tiến trình thứ tư | ADR-005, ADR-021 |
+
+### 1.6 Tiến hóa của kế hoạch
+
+Cập nhật tại **mỗi lần chuyển cổng** và mỗi khi một decision đổi capacity, FBD,
+thư viện, TLS hoặc phần cứng. Ước lượng phải tính lại khi giả định §1.4 đổi.
+Lịch sử ở §12; kiểm soát thay đổi ở §6.7.
+
+## 2. Tài liệu tham chiếu
+
+| ID | Tài liệu | Vai trò |
+|---|---|---|
+| `PROD-PROG-001` | [Product Spec Programming Rev A](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | Phạm vi sản phẩm; tám user journey (Amendment A1) |
+| `SRS-PROG-001` | [Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | 60 requirement và tiêu chí chấp nhận |
+| `PROG-OD-001` | [Open Decisions](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định chặn theo lát cắt |
+| `ARCH-PROG-001` | [Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | Ranh giới tiến trình và quyền sở hữu |
+| `IFSPEC-PROG-001` | [Interface Specification](../02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md) | Hợp đồng REST/WS/IPC và mã lỗi |
+| `DM-PROG-001` | [Data Model](../02_design/software/PROGRAMMING_DATA_MODEL.md) | Schema và migration |
+| `UX-WEB-PROG-001` | [UI/UX Design](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) | Bốn workspace, tám journey |
+| `VVP-PROG-001` | [Verification Plan](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | 32 kịch bản và thẩm quyền ký |
+| `OPS-PROG-001` | [Operations Runbook](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | Thủ tục vận hành và diễn tập |
+| `RSK-PROG-001` | [Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | 16 rủi ro và điều kiện chấp nhận residual |
+| `TRACE-PROG-001` | [Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Trace requirement → journey → test → evidence |
+| `PLAN-PROG-DOC-054` | [Documentation Roadmap](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | Mức trưởng thành hồ sơ; **không** quản việc code |
+| `PROG-P0-GATE-2026-08-10` | [Gói review cổng P0](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | Evidence, decision và sign-off package cho `PROG-000..006` |
+| `DOC-GOV-001` | [Quy tắc kiểm soát tài liệu](../00_governance/DOC_GOVERNANCE.md) | `DD-01..DD-13`, `M0..M5`, ba cổng quyền hạn |
+| ISO/IEC/IEEE 16326 | Life cycle processes — Project management | Khung trình bày; ánh xạ §11 |
+| ISO/IEC/IEEE 12207 | Software life cycle processes | Mô hình quy trình và cổng |
+| ISO/IEC 25010 | Quality models | Ngưỡng đo cho NFR |
+
+Việc dùng các họ chuẩn trên là **ISO-aligned** về cấu trúc và bằng chứng. Đây
+**không** phải tuyên bố chứng nhận hay compliance.
+
+## 3. Thuật ngữ và từ viết tắt
+
+| Thuật ngữ | Nghĩa trong kế hoạch này |
+|---|---|
+| **Draft** | Bản đang sửa, ghi đè được |
+| **Revision** | Bản đã niêm phong, bất biến |
+| **Check** | Biên dịch và kiểm tra; **không** đụng chương trình đang chạy |
+| **Commission** | Đưa một Revision vào vận hành |
+| **Active** | Revision đang điều khiển thiết bị thật |
+| **LKG** | Last-Known-Good — Revision tốt gần nhất để quay lui |
+| **Gate `G0..G6`** | Mốc kỹ thuật; qua được khi đủ bằng chứng ở §6.2 |
+| **Cổng quyền hạn** | `PLAN_READY` / `IMPLEMENT_READY` / `RELEASE_READY` — quyền cấp cho team, §4.2 |
+| **Lát cắt dọc** | Đơn vị bàn giao tạo outcome đầu-cuối quan sát được, §5.8 |
+| **nd** | person-day, ngày-người |
+| **T+n** | Tuần tương đối thứ n kể từ khi **khởi động formal authority review P0-A** trên candidate đã pin. Không phải ngày lịch; gate trễ thì mốc downstream trượt tương ứng |
+| `UJ-PROG-nn` | User journey — tám mục |
+| `VS-PROG-nnn` | Kịch bản kiểm chứng — 32 mục |
+| `OD-PROG-nnn` | Open decision — 17 mục |
+| `RSK-PROG-nnn` | Rủi ro — 16 mục |
+
+## 4. Bối cảnh dự án
+
+### 4.1 Chuỗi phụ thuộc
+
+```text
+P0-A Baseline review/sign-off → PLAN_READY
+  ├─ P0-B Decision đúng lát cắt → IMPLEMENT_READY[lát cắt]
+  │    └─ P1 Contract
+  │         ├─ P2 Compiler/BE Check ─┐
+  │         └─ P3 Core foundation ──┴→ P4 Commission/RETAIN
+  │                                    → P5 FE bốn workspace → P6 Release
+  └─ HW/FW authority + fixture lane chạy song song → P6 HIL
+```
+
+FE shell/read-only có thể đi song song sau P1; không nối mutation giả trước API.
+FW MCU/HW chuẩn bị fixture/test point từ P0, nhưng HIL kết luận sau P3/P4.
+`P0-A` là điều kiện chung để dùng plan làm baseline. `P0-B` là decision subset
+của từng task/lát cắt; một decision HW/HIL chưa đến hạn không được chặn một task
+contract không tiêu thụ nó. Ma trận chính xác nằm ở §4.3 và dependency từng task
+ở §5.1.
+
+### 4.2 Ba cổng quyền hạn: `PLAN_READY`, `IMPLEMENT_READY`, `RELEASE_READY`
+
+Trước đây `G0` gộp “được lập kế hoạch” với “được viết code”, nên chặn quá rộng:
+team không thể ước lượng gì khi chưa có chữ ký, dù việc ước lượng không đụng tới
+sản phẩm. Tách làm ba cổng.
+
+| Cổng | Cho phép làm gì | Điều kiện đóng | Trạng thái 2026-08-10 |
+|---|---|---|---|
+| `PLAN_READY` | Xác nhận plan đã được review và có thể dùng làm đầu vào chính thức cho lát cắt implementation | Finding tài liệu P0 đã đóng; consumer review xong; candidate sau review được ghim revision/hash; không còn authority mâu thuẫn; Product/Architect/Verification ký | **BLOCKED** — gói P0 đã sẵn sàng, nhưng consumer review, pin candidate, conflict closure và chữ ký còn thiếu |
+| `IMPLEMENT_READY[<lát cắt>]` | Tạo nhánh feature và viết code production cho đúng lát cắt đã duyệt; feature flag ở lab theo gate | `PLAN_READY` `PASS`; decision đầu vào của đúng lát cắt đã ký (§4.3); task card/contract authority đã duyệt. Lát cắt **tiêu thụ** contract phải có contract machine-readable; riêng P1 tạo contract thì machine-readable contract là output, không phải entry | **BLOCKED** cho mọi lát cắt |
+| `RELEASE_READY` | Bật ở site thật, tuyên bố hoàn tất | Toàn bộ 32 `VS-PROG-*` có Test Result được review; residual risk được chấp nhận; `OD-PROG-008` phần HIL đã đóng; GO của Product + Release + QA | **BLOCKED** |
+
+Ba cổng này **không** thay `G0..G6`. `G0..G6` là các mốc kỹ thuật theo §5.2;
+ba cổng ở trên là **quyền hạn** được cấp cho team tại mỗi thời điểm.
+Phân tích, ước lượng, dependency, thẻ task và spike bỏ đi được phép dưới banner
+`PLAN-ONLY`; chúng không phải quyền do `PLAN_READY` cấp và không được merge vào
+production.
+
+### 4.3 `P0-B` — decision cần cho từng lát cắt
+
+Không cần đóng cả 17 decision mới được lập kế hoạch. Nhưng **trước khi implement
+một lát cắt**, decision đầu vào của chính lát cắt đó phải được ký.
+
+| Lát cắt sắp implement | Decision phải ký trước | Ghi chú |
+|---|---|---|
+| Contract, kiểu dữ liệu, FBD, Point | `OD-PROG-001..007` | Nặng nhất là `OD-PROG-002` (bề rộng kiểu số) vì nó khóa encoding IR và Point mapping |
+| Runtime, RETAIN, timing, cutover | `OD-PROG-009..014` | `OD-PROG-012` khóa công thức base-step/watchdog |
+| UI bốn workspace | `OD-PROG-016` | Chưa ký thì FE không khóa được route và cây component |
+| Phạm vi thư viện mẫu BMS | `OD-PROG-017` | Nếu hoãn sang Roadmap thì Rev A chỉ có Core Library và User FB cục bộ |
+| Modbus RTU phần HIL | `OD-PROG-008` | Contract đã `Active`; **phần HIL cần đóng trước `RELEASE_READY`**, không chặn lập kế hoạch |
+| Phê duyệt baseline tổng thể | `OD-PROG-015` | Dùng để đóng `PLAN_READY` cho toàn bộ bộ hồ sơ |
+
+### 4.4 Tổ chức và RACI
+
+| Workstream | Product | Architect | FE | BE | Core/FWSOM | FW MCU | HW | QA/Ops |
+|---|---|---|---|---|---|---|---|---|
+| Scope/requirements | A | R | C | C | C | C | C | C |
+| Data/OpenAPI | C | A | R | R | C | I | I | C |
+| IR/artifact/runtime | C | A | I | C | R | I | I | C |
+| UX/FE | C | C | R/A | C | C | I | I | C |
+| Commission/recovery | C | A | C | R | R | C | C | C |
+| MCU/HW/HIL | I | C | I | I | C | R | R | A |
+| Release | A | C | C | C | C | C | C | R |
+
+`R` thực hiện, `A` chịu trách nhiệm cuối, `C` tham vấn, `I` được thông báo.
+
+## 5. Kế hoạch công việc
+
+### 5.1 Cấu trúc phân rã công việc theo pha
+
+#### P0 — Khóa yêu cầu và thiết kế (G0)
+
+| Task | Owner | Estimate | Kết quả/exit | Trạng thái 2026-08-10 |
+|---|---|---:|---|---|
+| `PROG-000` | Product | 1,5–2,5 nd | ký Product amendment/scope/claim; quyết định capacity/type/FBD/Task/library | `IN_REVIEW` — gói quyết định đủ; chờ Product authority |
+| `PROG-001` | Architect | 1,5–2,5 nd | đóng base-step/watchdog, graph cutover, overrun/safe-state, process allocation | `IN_REVIEW` — thiết kế đủ; chờ ADR/Architect/Safety |
+| `PROG-002` | Controls | 1–2 nd | khóa priority mức 5, PID anti-windup, hold-last/transition/initial policy | `IN_REVIEW` — semantics đủ; TTL/WCET còn `TARGET-PENDING` |
+| `PROG-003` | Product+Security | 1–2 nd | khóa RBAC, audit, bundle/integrity/signature scope | `BLOCKED` — TLS plan, permission matrix và provenance chưa được ký |
+| `PROG-004` | Runtime+Ops | 1–2 nd | khóa RETAIN, Revision/LKG retention, monitor/trace limits | `IN_REVIEW` — lifecycle/runbook đủ; chờ `OD-PROG-009/010/011/014` |
+| `PROG-005` | HW+FW | 1–2 nd | xác nhận schematic/BSP/test point/HIL setup và 200 ms boundary | `BLOCKED` — thiếu `HW-AUTH-*` và BSP/fixture/HIL plan được duyệt |
+| `PROG-006` | QA | 1–2 nd | review SRS/design/trace/risk/V&V, sign G0 | `BLOCKED` — 0/22 M4, 0/22 M5 và sign-off chưa có |
+
+Exit được tách để không tạo blocker nguyên khối:
+
+- `P0-A/PLAN_READY`: candidate đã pin; consumer review đóng; không còn conflict
+  authority ở baseline; `OD-PROG-015` và suite Product/Architect/Verification ký.
+- `P0-B/IMPLEMENT_READY[<lát cắt>]`: các `OD-PROG-*` **liên quan đúng lát cắt**
+  đã `DECIDED/CLOSED`, downstream sync và task card được authority chấp nhận.
+
+Nếu chưa đạt `P0-A`, chỉ được chuẩn bị `PLAN-ONLY`. Nếu một `P0-B` chưa đạt, chỉ
+lát cắt đó bị chặn; không dùng blocker HW/HIL để chặn task contract không tiêu
+thụ HW/HIL.
+
+**Kết quả triển khai P0 ngày 2026-08-10.** Phần chuẩn bị kỹ thuật của cả 7 task
+đã được gom và review trong
+[`PROG-P0-GATE-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md):
+7/7 có evidence, decision authority, blocker và điều kiện mở. Tuy nhiên **0/7
+đạt DoD** vì chưa có quyết định/chữ ký đúng thẩm quyền. Vì vậy P0 vẫn `BLOCKED`;
+không tự nâng tiến độ từ việc soạn hồ sơ.
+Tổng estimate P0 là **8–15 nd**, khớp §5.6; đây là công review/decision/sign-off
+còn lại, không bao gồm triển khai TLS, BSP, fixture hoặc chạy HIL. Actual phải
+được ghi khi authority review kết thúc, không hồi đoán từ số dòng tài liệu.
+
+#### P1 — Contract foundation (G1-A)
+
+| Task | Owner | Dependency | Deliverable/test |
+|---|---|---|---|
+| `PROG-100` | BE+FE | `PLAN_READY`; `OD-PROG-001/003/007` | OpenAPI `/programming`, generated TS, contract tests |
+| `PROG-101` | BE+Core | `PLAN_READY`; `OD-PROG-001/009/010/014` | versioned UDS/schema operation/status/stage/activate/restore |
+| `PROG-102` | Core | `PLAN_READY`; `OD-PROG-002..006/012/013` | Rev A compiler/artifact/runtime profile và loader error map |
+| `PROG-103` | BE+Core | 101–102 | `PRG-ERR-*` authority + component detail mapping |
+| `PROG-104` | BE | `PLAN_READY`; `OD-PROG-003/009/010/014` | DB schema/migration/backup/immutable invariants |
+| `PROG-105` | All | 100–104 | compatibility/deploy-order/rollback review + trace update |
+
+Exit: machine-readable contract, positive/negative round-trip và version reject
+PASS; chưa mở Commission.
+
+#### P2 — Compiler, Project/Revision và Check (G1-B/G2)
+
+| Task | Owner | Dependency | Deliverable/test |
+|---|---|---|---|
+| `PROG-200` | Core/compiler | P1 | reconcile ST subset/limits/source map, fuzz |
+| `PROG-201` | Core+FE | P1 | structured FBD canonical model/keyboard commands |
+| `PROG-202` | Compiler | 200–201 | ST/FBD → common typed IR equivalence |
+| `PROG-203` | Compiler | 202 | deterministic artifact/hash/profile/manifest/source map |
+| `PROG-204` | BE | P1 | Project/Draft/Revision store, ETag/idempotency |
+| `PROG-205` | BE | 202–204 | sandbox compiler worker + Check aggregate/diagnostics |
+| `PROG-206` | BE | 204 | change manifest, bundle source-only import/export |
+| `PROG-207` | Security/QA | 205–206 | timeout/OOM/fuzz/traversal/zip bomb/audit secret tests |
+
+Exit: `VS-001/003/005/006/007/017/019/021/023/024` applicable PASS; active
+runtime chưa đổi khi Check.
+
+#### P3 — Core deterministic runtime (G3)
+
+| Task | Owner | Dependency | Deliverable/test |
+|---|---|---|---|
+| `PROG-300` | Core | P1/P2 | bounded loader/preallocated runtime/no parser RT |
+| `PROG-301` | Core | P1 + `P0-B/runtime` | base step tách Task period; Rev A one-task profile |
+| `PROG-302` | Core | 300–301 | process image + LOCAL/VP/MB-RTU binding bridge |
+| `PROG-303` | Core/Controls | 302 | priority mức 5, program/actual feedback, PID anti-windup |
+| `PROG-304` | Core | 301 | overrun task fault, SafetyManager condition độc lập |
+| `PROG-305` | Core | 301–304 | runtime/monitor/bounded trace/capability/status IPC |
+| `PROG-306` | Core/Ops | 301 | bootstrap cutover config, graph backup/reject dual |
+| `PROG-307` | QA | 300–306 | no-allocation/blocking, 10k-cycle target timing, load test |
+
+Exit: `VS-009/010/012/013/016/017/018/027` PASS trên mức được yêu cầu; feature
+vẫn không production-enable nếu P4/P6 chưa đạt.
+
+#### P4 — Atomic lifecycle, RETAIN và recovery (G4)
+
+| Task | Owner | Dependency | Deliverable/test |
+|---|---|---|---|
+| `PROG-400` | Core | P3 | stage/safe-boundary swap/first-cycle/LKG |
+| `PROG-401` | Controls+Core | 303/400 | hold-last program_value + transition policy |
+| `PROG-402` | Core | P3 | RETAIN stable identity/version/CRC/atomic/cold-init |
+| `PROG-403` | BE | P1/P2/P3 | Commission/Restore coordinator + durable operation/reconcile |
+| `PROG-404` | BE+Core | 306/403 | first graph→Program cutover + rollback |
+| `PROG-405` | QA | 400–404 | fault at every step, BE/Core/power restart, corrupt artifact/retain |
+
+Exit: `VS-004/011/014/015/024/029/030` software/target portions PASS; Commission
+vẫn feature-gated tới HIL electrical.
+
+#### P5 — FE/UX (G2/G4)
+
+| Task | Owner | Dependency | Deliverable/test |
+|---|---|---|---|
+| `PROG-500` | FE | P1 | feature routes/shell/context/RBAC/i18n/state model |
+| `PROG-501` | FE | P2 | Project tree, ST editor, Problems/Check |
+| `PROG-502` | FE | P2 | structured FBD editor keyboard/a11y |
+| `PROG-503` | FE | P1/P2 | Point mapping + one Task/Core Library |
+| `PROG-504` | FE | P4 | readiness/change/override/Commission/Unknown reconcile |
+| `PROG-505` | FE | P3/P4 | Runtime/Watch/Trace/Versions/Restore/Replacement |
+| `PROG-506` | FE+QA | 500–505 | Vitest/lint/build/Playwright/Chrome desktop+mobile/Console+Network |
+
+Exit: `VS-002/008/017..022/025..028` PASS; không fake producer hoặc optimistic Active.
+
+#### P6 — FW MCU, HW, HIL và release (G5/G6)
+
+| Task | Owner | Dependency | Deliverable/test |
+|---|---|---|---|
+| `PROG-600` | FW MCU | `P0-A` + `P0-B/HW` | production BSP/UART DMA/IDLE/safe-timeout/diagnostics |
+| `PROG-601` | HW | `P0-A` + `P0-B/HW` | schematic/BOM/test-point review + HIL fixture |
+| `PROG-602` | Core+FW+HW | P3/P4/600/601 | poll gap, AO/DO hold-last, PID/priority, 199/200/201 ms |
+| `PROG-603` | QA/Ops | P4/P5/600–602 | restart/brownout/power loss/upgrade/backup/restore/replacement |
+| `PROG-604` | Security | all | RBAC/import/integrity/audit/secret/provenance review |
+| `PROG-605` | QA | all | full regression + trace/risk/residual/release report |
+| `PROG-606` | Product/Release | 605 | GO/NO-GO ký; staged rollout + monitored rollback |
+
+Exit: toàn bộ `VS-PROG-001..032` PASS, 16/16 risk có residual acceptance,
+release provenance và operations rehearsal đạt.
+
+### 5.2 Roadmap thực thi `G0..G6`
+
+`0/32` Test Result là trạng thái **đúng** trước implementation. Bảng dưới đây
+chỉ rõ gate nào **tạo ra** từng Test Result, để không ai phải chờ evidence mới
+được lập kế hoạch.
+
+| Gate | Phạm vi | Kết quả bắt buộc | Test Result được tạo |
+|---|---|---|---|
+| `G0` Baseline | Đóng finding tài liệu, consumer review, ghim revision/hash, ký decision theo lát cắt | `PLAN_READY`; không còn authority mâu thuẫn | — (gate tài liệu) |
+| `G1` Contract | Data model, OpenAPI, IPC BE↔Core, artifact/profile, catalog mã lỗi | Contract machine-readable, client sinh tự động, contract compatibility test | `VS-001`, `VS-019` phần contract |
+| `G2` Nền tảng song song | FW-SOM loader/runtime; BE store/check; FE shell chỉ đọc | Mỗi nhánh dùng **cùng** contract version; feature flag mặc định OFF | `VS-003`, `VS-012`, `VS-023` |
+| `G3` Project/Draft/Check | Project → Draft → ST/FBD → Check → diagnostic | Active **không đổi**; conflict/restart/fuzz/resource test PASS | `VS-005`, `VS-006`, `VS-007`, `VS-008`, `VS-017`, `VS-019`, `VS-024` |
+| `G4` Runtime/Commission | Scheduler, Point, arbitration, `impactRef`, Commission, đọc ngược | Không optimistic success; fail-closed; restart và đối chiếu đúng | `VS-004`, `VS-009`, `VS-010`, `VS-011`, `VS-013`, `VS-014`, `VS-016`, `VS-018`, `VS-020`, `VS-022` |
+| `G5` Restore/RETAIN/UI | Restore, LKG, RETAIN, bốn workspace, E2E desktop/mobile | Fault/recovery và tám journey có bằng chứng | `VS-002`, `VS-015`, `VS-021`, `VS-025`, `VS-026`, `VS-027`, `VS-028`, `VS-029`, `VS-031`, `VS-032` |
+| `G6` Target/HIL/Release | MCU/HW, poll gap, watchdog, power fault, backup/rollback/security | 32/32 có Test Result; residual risk được chấp nhận; GO/NO-GO | `VS-030` và xác nhận lại toàn bộ trên target |
+
+Đếm để kiểm: 32 kịch bản được phân bổ hết vào `G1..G6`, không kịch bản nào mồ côi.
+
+**Song song được phép.** BE persistence và FE shell chỉ đọc có thể chạy song song
+ngay sau `G1`. Nhưng **mutation của FE chỉ được nối sau khi contract BE/Core và
+hành vi lỗi đã thật sự tồn tại** — nối vào mock rồi đổi sau là cách chắc chắn
+sinh ra hành vi lỗi khác nhau giữa ba team.
+
+### 5.3 Biểu đồ roadmap
+
+![Biểu đồ roadmap Plan 53 — Gantt theo tuần tương đối](assets/PLAN53_ROADMAP_GANTT.svg)
+
+Trục ngang là **tuần tương đối `T+n`** tính từ khi khởi động formal authority
+review `P0-A` trên candidate đã pin, **không phải ngày lịch**. Thời lượng suy ra
+từ ước lượng ở §5.6 và giả định nguồn lực ở §1.4. Gate review/decision trễ bao
+nhiêu thì toàn bộ mốc downstream phụ thuộc trượt bấy nhiêu.
+
+Ba điều biểu đồ nói mà bảng không nói được:
+
+1. **Đường găng phần mềm** là `P0-A → P1 → join(P2, P3) → P4 → P5-C/D/E/F →
+   G6`. `P2` và `P3` chạy song song nhưng **cùng phải đạt** trước P4; với lịch
+   hiện tại hai nhánh kết thúc cùng tuần nên cả hai đều không có float. Sau khi
+   có actual duration, nhánh kết thúc muộn hơn trở thành nhánh găng thực tế.
+2. **Phần cứng phải chạy song song từ `T+1`.** Việc phát hành baseline
+   `HW-AUTH-001/002/007/008` và dựng đồ gá HIL có lead time dài. Nếu đợi phần
+   mềm chạm `G6` mới bắt đầu, cả dự án đứng chờ.
+3. **FE có hai giai đoạn tách biệt.** Shell chỉ đọc chạy song song từ `T+5`;
+   mutation (`S5-C` trở đi) **không** được nối trước `G3`, khi contract BE/Core
+   và hành vi lỗi đã tồn tại thật.
+
+### 5.4 Lịch và mốc
+
+Mốc dùng tuần tương đối. Cột “Điều kiện vào” là thứ **phải có trước**, không
+phải mong muốn.
+
+| Mốc | Tuần | Kết thúc pha | Điều kiện vào | Sản phẩm chứng minh mốc |
+|---|---|---|---|---|
+| `M-G0` | `T+2` | P0-A | Candidate pin; consumer review xong; conflict baseline đóng; `OD-PROG-015` ký | `PLAN_READY PASS`; từng `IMPLEMENT_READY[<lát cắt>]` chỉ mở khi decision §4.3 của lát cắt đó đã ký |
+| `M-G1` | `T+4` | P1 | `OD-PROG-001/002/003/007` ký | OpenAPI + IPC + catalog lỗi + client sinh tự động |
+| `M-G2` | `T+9` | P2 | `M-G1`; `OD-PROG-005/006` ký | Compiler, store, Check; FE shell chỉ đọc |
+| `M-G3` | `T+9` | P3 | `M-G1`; `OD-PROG-004/012` ký | Core base step, scheduler, process image trên target |
+| `M-G4` | `T+13` | P4 | `M-G2` và `M-G3`; `OD-PROG-009/010/013` ký | Commission atomic, đọc ngược, RETAIN |
+| `M-G5` | `T+18` | P5 | `M-G4`; `OD-PROG-011/016` ký | Bốn workspace, tám journey, E2E desktop và mobile |
+| `M-G6` | `T+22` | P6 | `M-G5`; `HW-AUTH-*` phát hành; đồ gá HIL sẵn sàng; `OD-PROG-008` HIL đóng | 32/32 Test Result; residual risk được chấp nhận; `RELEASE_READY` |
+
+Hai mốc phần cứng chạy song song, **không** phụ thuộc phần mềm:
+
+| Mốc | Tuần | Nội dung | Chặn mốc nào |
+|---|---|---|---|
+| `M-HW-A` | `T+1 → T+12` | HW Lead phát hành baseline có kiểm soát `HW-AUTH-001/002/007/008` | Chặn `M-G6` |
+| `M-HW-B` | `T+13 → T+18` | Hoàn thiện BSP thật và dựng đồ gá HIL | Chặn `M-G6` |
+
+### 5.5 Bảng tiến độ
+
+Bảng này là **nơi duy nhất** ghi tiến độ thực. Cập nhật tại mỗi lần review hai
+tuần (§6.4). Không ghi phần trăm theo cảm tính: `% hoàn tất` chỉ được tính bằng
+`số task đã đạt DoD ÷ tổng task của pha`.
+
+| Pha | Task | Đã đạt DoD | % hoàn tất | Trạng thái | Bắt đầu | Kết thúc | Test Result đã có | Ghi chú chặn |
+|---|---:|---:|---:|---|---|---|---:|---|
+| P0 | 7 | 0 | 0% | `BLOCKED` | 2026-08-10 | — | — | Chuẩn bị kỹ thuật 7/7; chờ pin candidate, consumer review, conflict closure và sign-off |
+| P1 | 6 | 0 | 0% | `NOT_STARTED` | — | — | 0/2 | Chờ `M-G0` |
+| P2 | 8 | 0 | 0% | `NOT_STARTED` | — | — | 0/3 | Chờ `M-G1` |
+| P3 | 8 | 0 | 0% | `NOT_STARTED` | — | — | 0/7 | Chờ `M-G1` |
+| P4 | 6 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G2`, `M-G3` |
+| P5 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G4`; shell chỉ đọc mở sớm từ `T+5` |
+| P6 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/1 | Chờ `HW-AUTH-*` và đồ gá HIL |
+| **Tổng** | **49** | **0** | **0%** | **PLAN-ONLY** | — | — | **0/32** | `IMPLEMENT_READY` chưa mở |
+
+Cột “Test Result đã có” cộng lại là `33`, không phải `32`: `VS-PROG-019` được
+tính hai lần vì phần contract của nó thuộc `G1` còn phần đầy đủ thuộc `G3`. Số
+kịch bản **duy nhất** vẫn là `32`.
+
+Trạng thái hợp lệ, không dùng nhãn khác: `BLOCKED`, `NOT_STARTED`, `IN_PROGRESS`,
+`IN_REVIEW`, `DONE`, `DESCOPED`. Một task chỉ chuyển `DONE` khi đạt DoD ở §6.1 và
+có người chấp nhận ký.
+
+Tiến độ theo cổng quyền hạn:
+
+| Cổng | Trạng thái | Ngày mở | Điều kiện còn thiếu |
+|---|---|---|---|
+| `PLAN_READY` | **BLOCKED** | — | Pin candidate sau review; consumer review; đóng conflict authority; chữ ký `OD-PROG-015` |
+| `IMPLEMENT_READY[contract]` | **BLOCKED** | — | `PLAN_READY PASS` + task card được duyệt + decision tương ứng của `PROG-100/101/102/104` |
+| `RELEASE_READY` | **BLOCKED** | — | 32/32 Test Result; residual risk chấp nhận; `OD-PROG-008` phần HIL |
+
+### 5.6 Ước lượng, nguồn lực và ngân sách công
+
+Estimate là dải `person-day` để bố trí nguồn lực sau approval, không phải cam kết
+lịch; QA/HIL có thể kéo dài theo fixture. Mỗi phase chỉ `NOT_STARTED`, vì chưa có
+commit/Test Result Target đủ điều kiện.
+
+| Phase | Task | Estimate | Dependency cứng | Status / exit evidence |
+|---|---:|---:|---|---|
+| P0 | 000–006 | 8–15 | DOC-G4 | BLOCKED; gói decision/design/sign-off đã sẵn sàng, chờ authority review |
+| P1 | 100–105 | 15–25 | P0-A + P0-B theo từng task | NOT_STARTED; OpenAPI/IPC/schema migration contract tests |
+| P2 | 200–207 | 35–55 | P1 | NOT_STARTED; compiler/store/Check/bundle unit/fuzz/integration |
+| P3 | 300–307 | 35–55 | P1–P2 + P0-B runtime | NOT_STARTED; Core target timing/no-forbidden-call evidence |
+| P4 | 400–405 | 30–45 | P3 + BE P2 | NOT_STARTED; lifecycle/power/fault/read-back Test Results |
+| P5 | 500–506 | 30–45 | P1/P2/P4 per task | NOT_STARTED; Vitest/build/E2E/browser/a11y evidence |
+| P6 | 600–606 | 25–45 + lab | all | NOT_STARTED; target/HIL/ops/security/release record |
+| **Tổng** | 49 task | **178–285 person-day + lab/review** | sequential gates, parallel lanes có kiểm soát | G0..G6 đều RED |
+
+Estimate phải re-estimate khi decisions thay đổi capacity/FBD/library/TLS/HW.
+Không dùng tổng này làm deadline trước resource/calendar/board availability review.
+
+#### 5.6.1 Phân bổ nguồn lực theo vai trò
+
+| Vai trò | Mức phân bổ giả định | Pha tham gia | Là nút thắt ở đâu |
+|---|---|---|---|
+| Backend | 1,0 FTE | P1, P2, P4 | `P4` cùng lúc với Core |
+| Core / Compiler | 1,5 FTE | P1, P2, P3, P4 | **Nút thắt chính** — có mặt trên toàn đường găng |
+| Frontend | 1,0 FTE | P5 (shell từ `T+5`) | `P5` sau `M-G4` |
+| Architect | 0,5 FTE | P0, P1, review mọi gate | `P1` và các điểm chuyển cổng |
+| QA / Verification | 0,5 FTE tăng dần | mọi pha, cao nhất P6 | `G6` |
+| FW MCU | theo nguồn lực riêng | P6 | `M-HW-B` |
+| HW | theo nguồn lực riêng | P6 | `M-HW-A` — lead time dài nhất |
+| Product / UX | theo nhu cầu | P0, P5 | Ký decision đúng lát cắt |
+
+Nếu chỉ có **một** người Core thay vì 1,5, đường găng dài thêm khoảng bốn tuần
+vì `P3` và `P4` không chồng lấn được. Đây là biến số nhạy nhất của lịch.
+
+### 5.7 Quyền sở hữu source và bản đồ bàn giao
+
+| Slice | File/module chính | Owner | Contract/test cùng commit |
+|---|---|---|---|
+| Data/API | `apps/web-api/internal/programming`, `contracts/openapi/openapi.yaml` | BE | migration + OpenAPI/Go/TS contract |
+| Compiler | `apps/core/application/st`, BE compiler adapter, `contracts/programming` | Compiler+BE | golden/property/fuzz/resource |
+| Artifact/loader | `application/st`, `application/programming`, `contracts/ipc` | Core | loader negative/mixed-version/symbol |
+| Control/lifecycle | bootstrap, ScanLoop, PriorityResolver, programming coordinator | Core+Controls | timing/fault/power/owner/read-back |
+| FE | `apps/web-ui/src/features/programming`, App routes/nav/i18n | FE+UX | Vitest/Playwright/browser/OpenAPI |
+| MCU | `firmware/stm32` app/IOP/BSP/`.ioc` | FW MCU | host/cross-build/target/HIL |
+| HW | controlled schematic/PCB/BOM/fixture/results | HW | pre-approved limits/raw instrument evidence |
+| Package/Ops | `platform/packaging`, systemd, runbook/release manifest | Ops | upgrade/backup/restore/rollback/rehearsal |
+
+Không sửa monolith/legacy path nếu bounded module đã được design. Mọi shared file
+(`App.tsx`, bootstrap, ScanLoop, resolver, OpenAPI, packaging) có một integrator
+được Dev Lead chỉ định để tránh parallel overwrite.
+
+### 5.8 Lát cắt dọc và thẻ task
+
+Mỗi `TASK-PROG-nnn` trong §4 phải có card triển khai **đã điền thật**, không
+để trống trường nào. Đây là việc của team trong giai đoạn chuẩn bị `PLAN-ONLY`;
+thẻ chỉ trở thành đầu vào implementation sau khi `PLAN_READY` qua.
+
+```text
+1.  Task ID / pha / owner / reviewer / integrator của file dùng chung:
+2.  Requirement, mục thiết kế, risk và decision liên quan:
+3.  Contract / schema / version / hash đầu vào, và gate upstream:
+4.  File, package, class, function cụ thể phải tạo hoặc sửa:
+5.  Dependency cứng, và việc được phép chạy song song:
+6.  Estimate, nguồn lực, milestone, trạng thái:
+7.  Thuật toán, state, lỗi, restart, compatibility phải hiện thực:
+8.  Unit / contract / integration / target / HIL test:
+9.  Evidence ID và vị trí lưu:
+10. Feature flag, thứ tự deploy, rollback:
+11. DoR; DoD; người có quyền chấp nhận:
+```
+
+#### 5.8.1 Thẻ mẫu đã điền — `TASK-PROG-101`
+
+Một thẻ điền thật để team không phải đoán mức chi tiết. Thẻ này thuộc `G1`
+(Contract), là lát cắt được phép làm sớm nhất sau khi `IMPLEMENT_READY` mở.
+
+```text
+1.  TASK-PROG-101 / pha P1 / owner BE Lead / reviewer Core Lead + FE Lead
+    / integrator file dùng chung: Architect (sở hữu contracts/openapi/openapi.yaml)
+2.  Requirement: SWR-REQ-PROG-BE-110, SWR-REQ-PROG-FE-110, NFR-REQ-PROG-106.
+    Thiết kế: IFSPEC-PROG-001 §2 envelope, §3 resource, §6 Commission,
+    §6.1 impact ba nhánh, §6.1.1 quy tắc acknowledgement, §9 error authority.
+    Risk: RSK-PROG-014 (error namespace lệch), RSK-PROG-016 (mất bước an toàn).
+    Decision: OD-PROG-001 (role), OD-PROG-003 (giới hạn) phải ký trước.
+3.  Đầu vào: IFSPEC-PROG-001 v0.5 ghim theo commit hash của baseline docs;
+    DM-PROG-001 v0.4. Gate upstream: PLAN_READY đóng + hai decision trên đã ký.
+4.  Tạo: contracts/openapi/openapi.yaml nhóm /api/v1/programming;
+    apps/web-api/internal/programming/http/{router,errors}.go;
+    apps/web-api/internal/programming/domain/errors.go.
+    Sinh: TS client cho apps/web-ui/src/features/programming/api/.
+    Sửa: apps/web-api/internal/app/http.go (mount router, chưa bật flag).
+5.  Dependency cứng: không có — đây là lát cắt đầu tiên sau G0.
+    Song song được: FE dựng shell chỉ đọc và BE dựng store, cả hai chờ client
+    sinh từ task này. Mutation FE **không** được nối ở lát này.
+6.  Estimate 8 ngày-người: OpenAPI 3, handler skeleton 2, error catalog 1,
+    sinh mã và contract test 2. Nguồn lực: 1 BE full-time + 0,5 Architect.
+    Milestone: G1. Trạng thái: NOT_STARTED (chờ IMPLEMENT_READY).
+7.  Hiện thực: envelope lỗi có code/messageKey/correlationId; 19 mã PRG-ERR-*
+    trong §9 gồm 4 mã acknowledgement/impact mới; ba nhánh impact
+    NONE/PRESENT/UNAVAILABLE với UNAVAILABLE fail-closed; validate
+    acknowledgements == tập khóa PRESENT; kiểm impactRef và trả
+    409 PRG-ERR-IMPACT-STALE-001 khi lệch. Restart: handler không giữ state.
+    Compatibility: schema có version; unknown major bị reject.
+8.  Unit: bảng ánh xạ mã lỗi, validator acknowledgement (thiếu/thừa/rỗng).
+    Contract: OpenAPI ↔ handler ↔ TS type sinh ra khớp nhau.
+    Integration: bốn tổ hợp status của impact.
+    Target/HIL: không áp dụng ở lát này.
+9.  Evidence: TR-PROG-G1-101 tại docs/07_records/test-results/programming/
+    TR-PROG-G1-101/ gồm result.md, output contract test, SHA256SUMS.
+    Đóng góp Test Result cho VS-PROG-001 (phần contract) và VS-PROG-019.
+10. Feature flag PROGRAMMING_REV_A mặc định OFF; route mount nhưng trả 404 khi
+    flag OFF. Thứ tự deploy: BE trước, TS client theo sau trong cùng release.
+    Rollback: gỡ mount router; không có dữ liệu bền vững nên không cần migration.
+11. DoR: hai decision đã ký, IFSPEC v0.5 đã ghim hash, môi trường sinh mã chạy được.
+    DoD: contract test PASS, TS type sinh ra biên dịch được, 19 mã lỗi khớp §9,
+    CHANGELOG cập nhật, Trace đổi trục I cho BE-110.
+    Người chấp nhận: Architect (contract) + Verification Lead (evidence).
+```
+
+**Chưa được thực thi.** Thẻ trên là mẫu lập kế hoạch; `TASK-PROG-101` đang
+`NOT_STARTED` và bị chặn bởi `IMPLEMENT_READY`.
+
+Vertical slice **không** bàn giao bằng “FW-SOM xong”, “BE xong” hay “FE xong”.
+Mỗi mốc phải tạo một outcome đầu-cuối **quan sát được** — Project/Draft, Check,
+Commission, Runtime hoặc Restore — và outcome đó phải ánh xạ về journey người
+dùng ở [Product Spec §9](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md):
+
+| Slice | Journey phủ | Outcome đầu-cuối | Bằng chứng tối thiểu |
+|---|---|---|---|
+| S1 Project/Draft | `UJ-PROG-01`, `UJ-PROG-02` | hai client save/conflict/restart không mất dữ liệu | DB/API/TS contract + FE state |
+| S2 ST/FBD Check | `UJ-PROG-02`, `UJ-PROG-03`, `UJ-PROG-04`, `UJ-PROG-05` | canonical Revision → deterministic diagnostic/artifact; Active không đổi | golden/fuzz/resource + UI Problems |
+| S3 Stage/Commission | `UJ-PROG-06` | operation durable → Core safe swap/read-back; timeout reconcile; acknowledgement khớp impact `PRESENT` | restart/fault/target trace + contract âm |
+| S4 Control runtime | `UJ-PROG-07` | one Task/process image/priority/PID/quality bounded | 10k-cycle/WCET/arbitration/IOP |
+| S5 Restore/RETAIN | `UJ-PROG-08` | power/restart/corrupt/migrate giữ đúng active/LKG | journal/record/power fault evidence |
+| S6 Replacement/Ops | `UJ-PROG-08` | source-only import → rebuild/remap/Commission/rollback | security + rehearsal + HIL record |
+
+### 5.9 Lát cắt dọc FE theo bốn workspace và tám journey
+
+Sau Amendment A1, pha `P5 — FE/UX` được chia theo **workspace**, không theo
+trang. Mỗi lát cắt dọc phải chạy được end-to-end trước khi mở lát tiếp theo.
+
+| Lát cắt | Workspace | Journey | Điều kiện vào | Xong khi |
+|---|---|---|---|---|
+| `S5-A` | `PGM-01` Tổng quan | `UJ-PROG-01` | `GET /capabilities`, `GET /projects`, `GET /runtime` đã có trên target | Nhận biết Active/Draft/Core `≤5 s`; 0 giá trị bịa; `VS-032` phần route gốc đạt |
+| `S5-B` | `PGM-02` Thiết kế | `UJ-PROG-02/03/04` | `PATCH /draft` và `GET /point-catalog` đã có | Ba tab dùng chung một Draft; đổi tab không mất nội dung đang gõ; FBD hoàn tất bằng bàn phím; lọc Point theo loại/hướng/khả năng ghi |
+| `S5-C` | `PGM-03` Kiểm tra & Vận hành | `UJ-PROG-05/06` | Check API và `POST /operations/commission` đã có; impact trả đủ ba nhánh `NONE/PRESENT/UNAVAILABLE` | Ô xác nhận khớp ảnh hưởng thật; `UNAVAILABLE` chặn được Commission; re-auth + đọc ngược + quay lui còn nguyên |
+| `S5-D` | `PGM-04` Runtime & Bảo trì | `UJ-PROG-07/08` | `GET /runtime/monitor`, `GET /overrides`, `POST /operations/restore` đã có | Tách program/actual/owner/priority/TTL; vùng thao tác nguy hiểm tách riêng; người xem không thấy dãy nút vô hiệu hóa |
+| `S5-E` | Xuyên suốt | ba kịch bản `SC-*` | `S5-A..D` xong | `SC-CORE-DEGRADED`, `SC-OP-FAILED`, `SC-RETAIN-RESET` đúng ở mọi workspace |
+| `S5-F` | Nghiệm thu khả dụng | tất cả | `S5-A..E` xong, có fixture `AHU-01` trên controller lab | `VS-PROG-031` đạt sáu ngưỡng `UX-A-01..06` với `≥5` kỹ thuật viên BMS |
+
+Thứ tự bắt buộc là `A → B → C → D → E → F`. Lý do: `PGM-03` phụ thuộc Draft hợp
+lệ do `PGM-02` tạo ra, và bài khả dụng chỉ có nghĩa khi cả tám journey đã chạy
+được. Riêng `S5-F` **không được** rút gọn thành demo nội bộ — nó cần người dùng
+thật chưa từng dùng sản phẩm.
+
+Hai lát cắt này bị chặn ngoài `G0`: `S5-C` cần `IFSPEC-PROG-001` §6.1 được ký,
+và toàn bộ `P5` cần `OD-PROG-016` được phê duyệt. Nếu `OD-PROG-016` bị từ chối,
+`P5` quay lại năm lát cắt theo IA sáu trang và `S5-B` tách làm ba.
+
+## 6. Kế hoạch kiểm soát
+
+### 6.1 Definition of Ready và Definition of Done
+
+Task `READY` khi upstream gate PASS, requirement/design section/contract version
+pin, owner/reviewer/estimate/target fixture rõ, negative/fault cases và rollback
+defined. Task `DONE` chỉ khi:
+
+1. deliverable source/contract/docs/changelog đã review và merge;
+2. unit/static/contract/integration phù hợp PASS bằng command mới;
+3. Trace cập nhật `I/T/P` đúng evidence, Risk impact xử lý;
+4. no P0/P1 finding mở; compatibility/migration/partial deploy/rollback tested;
+5. feature flag/capability default an toàn và không overclaim target/HIL.
+
+Không lấy “code compile”, file tồn tại, test cache hoặc screenshot mock làm Done.
+
+### 6.2 Bằng chứng gate và điều kiện quay lui
+
+| Gate | Evidence tối thiểu | Rollback/stop trigger |
+|---|---|---|
+| G0 | 22 docs Approved, decisions closed, risk/trace/VVP signed | contract/semantics/HW authority còn OPEN |
+| G1 | schema hashes, generated clients, migration/compat negative tests | breaking mismatch/unknown major accepted |
+| G2 | Project→Check/bundle/RBAC/audit + FE editing flow | lost Draft, privilege bypass, compiler affects RT |
+| G3 | target 10k cycles, WCET/jitter/IOP, no allocation/blocking | overrun/safe entry/graph dual owner |
+| G4 | fault each lifecycle/power state, one active/LKG/read-back | double activation/partial output/ambiguous recovery |
+| G5 | calibrated HIL 199/200/201, AO/DO/UI/power/reset | output outside envelope or evidence uncorrelated |
+| G6 | upgrade/backup/restore/replacement/rollback/security/provenance | restore rehearsal fail, critical residual unaccepted |
+
+Rollback design: disable mutation/capability first; Restore compatible LKG/graph;
+verify physical output; rollback package only with controlled snapshot; preserve
+DB/Revision/artifact/RETAIN/audit. Không downgrade Core qua active artifact/RETAIN
+major mới.
+
+### 6.3 Kiểm soát lịch và nguồn lực
+
+| Ngưỡng cảnh báo | Hành động bắt buộc |
+|---|---|
+| Một task trên đường găng trễ `> 3` ngày làm việc | Dev Lead báo Architect trong lần review gần nhất; ghi vào §5.5 |
+| Một pha trễ `> 1` tuần so với §5.4 | Ước lượng lại cả pha; cập nhật §5.5 và §5.6; báo Product |
+| Đường găng trễ `> 2` tuần cộng dồn | Đưa ra quyết định phạm vi: giảm scope, thêm người, hoặc dời mốc. **Không** rút bớt bước an toàn hay bước kiểm chứng |
+| Nguồn lực thực tế thấp hơn giả định §1.4 | Tính lại lịch **trước khi** hứa ngày mới |
+
+Không dùng làm thêm giờ để bù trễ mà giữ nguyên ngày cam kết. Không rút test hay
+review khỏi DoD để kịp mốc — đó là cách biến trễ lịch thành nợ chất lượng.
+
+### 6.4 Báo cáo và chỉ số
+
+| Nhịp | Nội dung | Ai nhận |
+|---|---|---|
+| Hai tuần một lần | Cập nhật §5.5; task trễ; rủi ro mới; decision đang chờ ký | Dev Lead → Product, Architect, QA |
+| Tại mỗi cổng | Bằng chứng gate theo §6.2; quyết định `GO` hay `NO-GO` | Product Owner, Architect, Verification Lead |
+| Khi có finding P0/P1 | Báo trong `≤ 1` ngày làm việc kèm ảnh hưởng lịch | Dev Lead → Product |
+
+| Chỉ số theo dõi | Cách đo | Ngưỡng cần chú ý |
+|---|---|---|
+| Tiến độ task | task đạt DoD ÷ tổng task của pha | lệch `> 15%` so với §5.4 |
+| Bằng chứng | Test Result đã có ÷ Test Result mà gate yêu cầu | `< 100%` khi xin qua cổng |
+| Decision chặn | số decision cần cho lát cắt kế tiếp mà chưa ký | `> 0` khi còn `≤ 2` tuần tới lát cắt đó |
+| Finding mở | số finding P0/P1 chưa đóng | `> 0` khi xin qua cổng |
+| Trễ đường găng | tuần lệch cộng dồn trên đường găng | `> 2` tuần |
+
+Chỉ số dùng để **phát hiện sớm**, không dùng để đánh giá cá nhân.
+
+### 6.5 Quản lý cấu hình
+
+| Đối tượng | Nơi kiểm soát | Quy tắc |
+|---|---|---|
+| 22 hồ sơ thiết kế | Git, commit baseline `05c1c48` | Ghim hash trong thẻ task; xem Plan 54 §10.2 |
+| Contract machine-readable | `contracts/openapi/openapi.yaml` | Có version; unknown major bị reject |
+| Mã nguồn | Nhánh feature theo lát cắt; PR có reviewer bắt buộc | §6.7 |
+| Artifact và Test Result | `docs/07_records/test-results/programming/<TR-ID>/` kèm `SHA256SUMS` | Bất biến; chạy lại thì tạo ID mới |
+| Feature flag | `PROGRAMMING_REV_A`, mặc định **tắt** | Bật theo bốn giai đoạn ở `UX-WEB-PROG-001` §28 |
+
+Đổi hồ sơ thiết kế thì phải cập nhật hash baseline **trong cùng commit** và chạy
+`python3 scripts/docs_iso_harness.py --expect`.
+
+### 6.6 Xử lý vấn đề
+
+| Mức | Định nghĩa | Thời hạn phản hồi | Ai xử lý |
+|---|---|---|---|
+| `P0` | Chặn contract, an toàn, hoặc chặn nhiều team | `≤ 1` ngày làm việc | Dev Lead + Architect |
+| `P1` | Chặn một team implement hoặc test đúng | `≤ 3` ngày làm việc | Owner của lát cắt |
+| `P2` | Hoàn thiện assurance và bàn giao | Trước cổng kế tiếp | Owner của lát cắt |
+
+Mọi finding ghi vào record review trong `docs/07_records/reviews/`, có ID,
+severity, file/mục, acceptance để đóng và owner. **Không đóng finding bằng cách
+xóa nó.** Finding phát sinh trong implementation hoặc HIL phải thêm vào
+`RSK-PROG-001` nếu ảnh hưởng an toàn hoặc timing.
+
+### 6.7 Kiểm soát thay đổi commit và PR
+
+Tách commit theo contract/data → compiler → Core → BE → FE → FW MCU/HW test →
+docs/evidence. Mỗi contract change phải cập nhật producer/consumer/test/docs/
+trace/changelog cùng session. PR body tiếng Việt ghi requirement/scenario,
+commands/results, target/HIL gap và rollback.
+
+## 7. Quản lý rủi ro
+
+Sổ rủi ro đầy đủ là [`RSK-PROG-001`](../07_records/PROGRAMMING_RISK_REGISTER.md)
+— 16 rủi ro, 11 mức `Critical`. Mục này chỉ liệt kê rủi ro **ảnh hưởng trực tiếp
+tới lịch của kế hoạch này**.
+
+| Risk | Ảnh hưởng lên lịch | Dấu hiệu sớm | Hành động giảm nhẹ |
+|---|---|---|---|
+| `RSK-PROG-013` skeleton bị nhầm là HIL-ready | `G6` trượt vô thời hạn nếu `HW-AUTH-*` chưa phát hành | Đến `T+8` mà chưa có baseline schematic | Khởi động `M-HW-A` **từ `T+1`**, theo dõi hằng tuần |
+| `RSK-PROG-002` watchdog restart do Task 30 s | `P3` phải làm lại nếu công thức base-step sai | Benchmark target trượt ngưỡng ở `P3` | Ký `OD-PROG-012` **trước** `M-G1`; đo sớm trong `P3` |
+| `RSK-PROG-003` IOP gap `≥ 200 ms` khi Commission | `P4` và `G6` phải làm lại | Đo poll gap lần đầu vượt `150 ms` | Thiết kế swap không chặn từ đầu `P3`, không để tới `P4` |
+| `RSK-PROG-005` compiler tranh CPU với RT | `P2` và `P3` xung đột tài nguyên trên target | Overrun xuất hiện khi chạy Check đồng thời | Cách ly tiến trình và hạn ngạch ngay trong `P2` |
+| `RSK-PROG-016` đơn giản hóa làm mất bước an toàn | Phải làm lại `P5` và một phần `P4` | Review thấy ô xác nhận không khớp impact | Contract ba nhánh `IFSPEC` §6.1.1; test âm bắt buộc trong `P4` |
+| **Decision ký muộn** | Team dừng đúng tại lát cắt thiếu chữ ký | Còn `≤ 2` tuần tới lát cắt mà decision chưa ký | Chỉ số ở §6.4; đưa vào họp hai tuần |
+| **`OD-PROG-002` ký muộn** | Phải build lại artifact và kiểm lại toàn bộ binding | Ký sau khi `P2` hoặc `P3` đã chạy | Ký **trước `M-G1`**; chi phí lúc đó bằng `0` |
+
+Rủi ro mới phát sinh trong implementation phải vào `RSK-PROG-001`, không chỉ ghi
+trong biên bản họp. Residual risk **không** giảm bằng kế hoạch — chỉ giảm khi có
+Test Result hợp lệ và người có thẩm quyền chấp nhận.
+
+## 8. Kế hoạch đóng dự án
+
+Kế hoạch này chỉ được đóng khi đủ **tất cả** điều kiện sau:
+
+| Điều kiện | Bằng chứng | Ai xác nhận |
+|---|---|---|
+| 49/49 task đạt DoD hoặc được `DESCOPED` có phê duyệt | §5.5 | Dev Lead |
+| `G0..G6` đều `PASS` | §6.2 | Architect + Verification Lead |
+| 32/32 `VS-PROG-*` có Test Result được review | `VVP-PROG-001` §10 | Verification Lead |
+| 60/60 requirement có trace tới evidence | `TRACE-PROG-001` §6 | Document Control |
+| 16 risk có residual được chấp nhận hoặc waiver có thời hạn | `RSK-PROG-001` §6 | Product + Architect + QA |
+| 17 decision `CLOSED` | `PROG-OD-001` | Product Owner |
+| Diễn tập vận hành và rollback đã chạy | `OPS-PROG-001` §16 | Ops/Release |
+| `RELEASE_READY` mở và có `GO` | §4.2 | Product + Release + QA |
+
+Bàn giao khi đóng: mã nguồn đã merge; contract machine-readable đã phát hành;
+32 Test Result bất biến; tài liệu vận hành và bản ghi bàn giao ca; danh sách
+finding còn mở kèm owner; và bài học rút ra ghi vào record review.
+
+**Không** đóng kế hoạch bằng cách hạ tiêu chí. Nếu một điều kiện không đạt, hoặc
+sửa cho đạt, hoặc `DESCOPED` có phê duyệt ghi rõ ai chấp nhận rủi ro gì.
+
+## 9. Trạng thái hiện tại và execution tracker
+
+### 9.1 Trạng thái ban đầu
+
+| Gate | Trạng thái 2026-08-09 | Lý do |
+|---|---|---|
+| G0 | RED | design/sign-off/OD còn mở |
+| G1 | RED | contract chưa machine-readable/approved; FBD chưa production |
+| G2 | RED | FE/BE Programming chưa implement |
+| G3 | RED | ST scheduler chưa bootstrap production; graph vẫn owner |
+| G4 | RED | Commission/Restore/RETAIN end-to-end chưa có |
+| G5 | RED | BSP/HW/HIL vật lý chưa đủ |
+| G6 | RED | chưa có release/operations evidence |
+
+Không task nào được ghi `DONE` chỉ vì component host tồn tại; trạng thái phải
+trỏ tới commit + test/evidence hiện tại.
+
+### 9.2 Execution tracker và kiểm soát thay đổi
+
+| Gate | Owner | Status | Start/finish | Current blocker/evidence |
+|---|---|---|---|---|
+| `PLAN_READY` | Product+Architect+QA+Document Control | **BLOCKED** | — | Candidate P0 chưa pin; consumer review, conflict closure và chữ ký `OD-PROG-015` còn thiếu |
+| `IMPLEMENT_READY[<lát cắt>]` | Product + Architect | **BLOCKED** | — | `PLAN_READY PASS` + task card/decision theo lát cắt (§4.3) |
+| `RELEASE_READY` | Product + Release + QA | **BLOCKED** | — | 32/32 Test Result + residual acceptance + `OD-PROG-008` HIL |
+| G0/P0 | Product+Architect+QA | BLOCKED | 2026-08-10 / — | Gói P0 đã sẵn sàng; chờ DOC-G4 review/sign-off, conflict closure và authority HW/TLS |
+| G1/P1 | Architect+BE+Core | NOT_STARTED | — | G0 |
+| G2/P2+P5 partial | BE+FE+Compiler | NOT_STARTED | — | G1 |
+| G3/P3 | Core+Controls | NOT_STARTED | — | P1/P2 |
+| G4/P4+P5 | BE+Core+FE | NOT_STARTED | — | G3 |
+| G5/P6 HIL | FW+HW+QA | NOT_STARTED | — | BSP/fixture + G3/G4 |
+| G6/release | Product+Release+QA | NOT_STARTED | — | VS 32/32 + residual acceptance |
+
+Mỗi session thực thi cập nhật task/gate, actual estimate, commit/PR, commands/
+results, evidence ID, Risk/Trace/CHANGELOG. Contract/requirement/safety change tạo
+impact analysis; hạ status downstream, invalidate test khi cần và xin approval
+trước tiếp tục. Roadmap 54 theo dõi hồ sơ; Plan 53 theo dõi code/test/release,
+không dùng hai bảng thay nhau.
+
+## 10. Điều kiện vào và baseline tài liệu
+
+| Entry | Authority | Trạng thái 2026-08-09 |
+|---|---|---|
+| 21 hồ sơ upstream + Plan 53 đạt M5 | `PLAN-PROG-DOC-054` | BLOCKED: 0/22 M5 |
+| 17 Open Decision được xử lý theo dependency và downstream sync | `PROG-OD-001` | BLOCKED: 17/17 trạng thái tổng thể OPEN; không bắt buộc đóng mục ngoài lát cắt trước khi lập kế hoạch |
+| Product/SRS/Architecture/contract baseline pin version/hash | Document Control | Baseline cũ đã pin `05c1c48`; candidate P0 ngày 2026-08-10 chưa pin nên `BLOCKED` |
+| TLS/RBAC/security enablement plan approved | `DDD-SEC-PROG-001` | BLOCKED |
+| HW/BSP/schematic/test limits/fixture approved | MCU/HW design | BLOCKED |
+| Branch/build/toolchain/target lab/evidence repository ready | Dev/QA/Ops | BLOCKED |
+
+Không tạo OpenAPI/schema/artifact/RETAIN production từ `TARGET-PENDING`. Prototype
+nếu được Dev Lead chấp thuận phải isolated, feature flag OFF, không migrate data
+active và không được tính tiến độ task production.
+
+## 11. Ánh xạ ISO/IEC/IEEE 16326
+
+Bảng đối chiếu để reviewer kiểm nhanh rằng kế hoạch có đủ nội dung mà chuẩn yêu
+cầu. Đây là **ánh xạ cấu trúc**, không phải tuyên bố chứng nhận.
+
+| Điều khoản ISO/IEC/IEEE 16326 | Nội dung chuẩn yêu cầu | Mục trong kế hoạch này |
+|---|---|---|
+| 7.1 Thông tin nhận dạng tài liệu | ID, phiên bản, trạng thái, chủ quản, phê duyệt | Bảng đầu file; §12 |
+| 7.2 Tổng quan dự án | Mục đích, phạm vi, mục tiêu, sản phẩm bàn giao, giả định, ràng buộc, tóm tắt lịch | §1.1–§1.6 |
+| 7.3 Tài liệu tham chiếu | Danh mục tài liệu ràng buộc | §2 |
+| 7.4 Định nghĩa | Thuật ngữ và từ viết tắt | §3 |
+| 7.5 Bối cảnh dự án | Mô hình quy trình, tổ chức, vai trò, giao diện | §4.1–§4.4 |
+| 7.6.1 Kế hoạch khởi động | Ước lượng, nhân sự, thu xếp nguồn lực, điều kiện vào | §5.6, §5.6.1, §10 |
+| 7.6.2 Kế hoạch công việc | WBS, lịch, phân bổ nguồn lực, ngân sách công | §5.1–§5.7 |
+| 7.6.3 Kế hoạch kiểm soát | Kiểm soát yêu cầu, lịch, chất lượng; báo cáo; chỉ số | §6.1–§6.4 |
+| 7.6.4 Quản lý rủi ro | Nhận diện, phân tích, giảm nhẹ, theo dõi | §7 và `RSK-PROG-001` |
+| 7.6.5 Kế hoạch đóng | Điều kiện đóng, bàn giao, bài học | §8 |
+| 7.7 Đánh giá và kiểm soát dự án | Review, audit, cổng | §6.2, §9.2 |
+| 7.8 Quy trình hỗ trợ | Quản lý cấu hình, V&V, tài liệu, đảm bảo chất lượng, xử lý vấn đề | §6.5, §6.6, §6.7; `VVP-PROG-001`; `DOC-GOV-001` |
+
+Ba điểm kế hoạch này làm **chặt hơn** mức tối thiểu của chuẩn, vì sản phẩm điều
+khiển thiết bị thật:
+
+1. Tách **cổng quyền hạn** khỏi **cổng kỹ thuật** (§4.2), nên việc lập kế hoạch
+   không bị chặn bởi chữ ký chưa có, mà việc viết code thì bị.
+2. Mỗi gate ghi rõ **Test Result nào được tạo ra** (§5.2), nên `0/32` không bị
+   hiểu nhầm là thiếu sót của kế hoạch.
+3. Quy tắc trung thực bắt buộc ở `DOC-GOV-001` §6: không suy ra implementation
+   từ sự tồn tại của tài liệu, không tự ký thay thẩm quyền, không giảm residual
+   risk bằng văn bản.
+
+## 12. Lịch sử sửa đổi và phê duyệt
+
+| Phiên bản | Ngày | Nội dung |
+|---|---|---|
+| 0.1 | 2026-08-09 | P0–P6, task 000–606, RACI và gate baseline |
+| 0.2 | 2026-08-09 | Thêm entry/DoR/DoD, estimate, source ownership, gate evidence/rollback/tracker M3 |
+| 0.3 | 2026-08-09 | Bổ sung task-card schema và sáu vertical-slice outcome/evidence handoff; chuyển Detailed Draft chờ planning review |
+| 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Implementation Plan; G0 giữ RED |
+| 0.5 | 2026-08-09 | Amendment A1: thêm §5.9 chia pha P5 thành sáu lát cắt dọc `S5-A..F` theo bốn workspace và tám journey, kèm điều kiện vào/xong và hai điểm bị chặn ngoài G0 |
+| 0.6 | 2026-08-09 | Đóng review chặn phê duyệt: banner `PLAN-ONLY`; §4.2 tách ba cổng `PLAN_READY`/`IMPLEMENT_READY`/`RELEASE_READY`; §3.2 decision theo từng lát cắt; §3.3 roadmap `G0..G6` phân bổ đủ 32 Test Result; sửa dependency chain `P5` sang bốn workspace/tám journey; cập nhật 17 decision |
+| 0.7 | 2026-08-10 | Tái cấu trúc theo ISO/IEC/IEEE 16326: thêm mục lục, tài liệu tham chiếu, thuật ngữ, sản phẩm bàn giao, giả định và ràng buộc, kế hoạch đóng dự án, quản lý cấu hình, xử lý vấn đề, kiểm soát lịch, báo cáo và chỉ số, ánh xạ điều khoản chuẩn. Thêm **biểu đồ roadmap** render được (§5.3), **bảng lịch và mốc** (§5.4), **bảng tiến độ** (§5.5) và phân bổ nguồn lực theo vai trò (§5.6.1) |
+| 0.8 | 2026-08-10 | Duyệt lại Plan và triển khai phần chuẩn bị P0: sửa 42→49 task, 30→32 scenario, 15→17 decision; đổi `PLAN_READY OPEN` thành `BLOCKED`; tách `P0-A` baseline khỏi `P0-B` decision theo lát cắt để bỏ dependency/contract vòng tròn; sửa gốc thời gian Gantt và join P2/P3; thêm trạng thái từng `PROG-000..006` và gói review/sign-off `PROG-P0-GATE-2026-08-10`. Không giả chữ ký; P0 giữ 0/7 DoD |
+
+| Vai trò | Trạng thái | Bằng chứng |
+|---|---|---|
+| Dev Lead + tất cả discipline leads | Chờ review | — |
+| Product + System Architect + Verification | **BLOCKED — chưa phê duyệt** | G0 RED, 0/22 M5, 17 decisions OPEN |
+
+## 13. Phụ lục — Tự kiểm cổng M3 (loại: Implementation Plan)
+
+| Cổng | Kết quả | Bằng chứng trong file / lý do |
+|---|---|---|
+| Lịch và tiến độ | PASS | §5.3 biểu đồ roadmap render được; §5.4 bảng lịch và mốc; §5.5 bảng tiến độ có trạng thái hợp lệ và cách tính `% hoàn tất` |
+| Trình bày theo chuẩn | PASS | §11 ánh xạ đủ 12 điều khoản ISO/IEC/IEEE 16326; có mục lục, tài liệu tham chiếu, thuật ngữ, kế hoạch đóng |
+| Điều kiện vào và ra | PASS | §10 entry criteria; §5.1 từng pha `P0..P6` có exit; §5.2 và §6.2 định nghĩa bằng chứng gate |
+| Phụ thuộc | PASS | §4.1 chuỗi phụ thuộc; §5.8 bàn giao theo lát cắt dọc; §5.3 đường găng trên biểu đồ |
+| Owner và RACI | PASS | §4.4 RACI; §5.7 quyền sở hữu source theo pha |
+| Sản phẩm bàn giao | PASS | §1.3 danh mục bàn giao; §5.1 WBS; §5.6 estimate; §5.7 deliverable map; §5.8 thẻ task; §5.9 sáu lát cắt dọc của P5 |
+| Test và bằng chứng | PASS | §5.2 gắn từng gate với `VS-PROG-*`; §6.2 định nghĩa bằng chứng bắt buộc |
+| Change control | PASS | §6.5–§6.7 quản lý cấu hình, issue và commit/PR; §9.2 tracker thực thi |
+| Deploy và rollback | PASS | §6.2 điều kiện kích hoạt quay lui theo từng gate |
+| Không mở gate bằng lời văn | PASS | §6.1 Definition of Ready/Done cụ thể cho task; §1.2 nguyên tắc triển khai |
+| `BLOCKED` có owner/gate | **BLOCKED** | §9.1: `G0` đang `RED`. Owner: Product Owner + System Architect + Verification Lead + Document Control. Ảnh hưởng: chưa được implement production; hoạt động chuẩn bị `PLAN-ONLY` vẫn được phép. Gate: `DOC-G4/G0/PLAN_READY`. Điều kiện mở: pin candidate P0, consumer review, đóng conflict authority, ký `OD-PROG-015`; trước mỗi lát cắt còn phải ký decision ở §4.3 |
+
+Kế hoạch đã sẵn sàng cho **authority review P0**, nhưng chưa được phê duyệt để
+thực thi production.

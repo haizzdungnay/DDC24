@@ -4,11 +4,18 @@
 > **Phiên bản:** 1.0 | 2026-07-28
 > **Workstream:** C0.4 (MS-02) — đóng workstream `C0.4` của
 > [`KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md`](../../07_records/reviews/archive/KX-DDC24-PROGRAM-RUNTIME-C0-ARCHITECTURE-FEASIBILITY-PLAN.md)
-> **Trạng thái:** Active — normative cho `services/core/st/`
+> **Trạng thái:** Supporting As-Built — source hiện tại tại `apps/core/application/st/`; không phải Target authority Programming v2.2
 > **Nguồn quyết định:** ADR-020 (amended 2026-07-24), quyết định phạm vi ngôn ngữ 2026-07-28
 > **Tài liệu liên quan:** [`TYPED_IR_ARTIFACT_SPEC`](TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md) (C0.6),
 > [`PROGRAM_TASK_SCHEDULER_SPEC`](PROGRAM_TASK_SCHEDULER_SPEC_MK-DDC-24_VI.md) (C0.7),
 > [`INTERFACES.md`](../../04_design/INTERFACES.md)
+
+> **Thông báo supersede Target (2026-08-09):** tài liệu này tiếp tục mô tả subset
+> ST đã hiện thực để bảo trì/test As-Built. Thiết kế Target ST/FBD, user
+> `FUNCTION`/`FUNCTION_BLOCK`, diagnostic, limits và compiler pipeline thuộc
+> [`DDD-LANG-PROG-001`](PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md). Khi có khác
+> biệt, Product/SRS/decision đã phê duyệt và `DDD-LANG-PROG-001` là authority;
+> không dùng đường dẫn `services/core/st/` đã cũ để suy trạng thái production.
 
 ---
 

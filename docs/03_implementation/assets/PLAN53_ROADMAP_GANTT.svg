@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="940" viewBox="0 0 1440 940" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
+  <title>Plan 53 — Biểu đồ roadmap triển khai Programming MK-DDC-24</title>
+  <desc>Sơ đồ Gantt theo tuần tương đối T+1..T+22 từ khi khởi động formal authority review P0-A cho bảy pha P0..P6, bảy cổng kỹ thuật G0..G6 và ba cổng quyền hạn. Thời lượng là giả định lập kế hoạch, không phải cam kết lịch.</desc>
+
+  <defs><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+    <path d="M0 0 L8 4 L0 8 z" fill="#CC1F28"/></marker></defs>
+  <rect width="1440" height="940" fill="#C8CCD0"/>
+
+  <text x="28" y="38" font-size="19" font-weight="700" fill="#1C1F23">Roadmap triển khai Programming MK-DDC-24 — PLAN-PROG-053</text>
+  <text x="28" y="60" font-size="12" fill="#4A4F55">Trục <tspan font-weight="700">T+n</tspan> tính từ khi khởi động formal authority review P0-A trên candidate đã pin. Gate trễ thì mốc downstream trượt tương ứng.</text>
+
+  <!-- Banner -->
+  <rect x="28" y="76" width="1384" height="34" rx="6" fill="#EEE9DB" stroke="#826500"/>
+  <text x="44" y="98" font-size="12" font-weight="700" fill="#826500">⚠ PLAN-ONLY — P0 chuẩn bị 7/7, DoD 0/7; P1–P6 NOT_STARTED; chưa được implement production.</text>
+
+  <!-- ===== timeline header ===== -->
+  <g font-size="10" fill="#4A4F55">
+    <text x="28" y="140" font-size="12" font-weight="700" fill="#1C1F23">Luồng công việc</text>
+    <text x="280" y="128" font-size="11" font-weight="700" fill="#1C1F23">Tuần tương đối</text>
+  </g>
+  <line x1="260" y1="146" x2="1412" y2="146" stroke="#4C5056" stroke-width="1.5"/>
+  <g font-size="10" fill="#4A4F55" text-anchor="middle">
+    <text x="285" y="141">T+1</text><text x="385" y="141">T+3</text><text x="485" y="141">T+5</text>
+    <text x="585" y="141">T+7</text><text x="685" y="141">T+9</text><text x="785" y="141">T+11</text>
+    <text x="885" y="141">T+13</text><text x="985" y="141">T+15</text><text x="1085" y="141">T+17</text>
+    <text x="1185" y="141">T+19</text><text x="1285" y="141">T+21</text><text x="1385" y="141">T+22</text>
+  </g>
+  <g stroke="#C2C6CA" stroke-width="1">
+    <line x1="360" y1="146" x2="360" y2="780"/><line x1="460" y1="146" x2="460" y2="780"/>
+    <line x1="560" y1="146" x2="560" y2="780"/><line x1="660" y1="146" x2="660" y2="780"/>
+    <line x1="760" y1="146" x2="760" y2="780"/><line x1="860" y1="146" x2="860" y2="780"/>
+    <line x1="960" y1="146" x2="960" y2="780"/><line x1="1060" y1="146" x2="1060" y2="780"/>
+    <line x1="1160" y1="146" x2="1160" y2="780"/><line x1="1260" y1="146" x2="1260" y2="780"/>
+    <line x1="1360" y1="146" x2="1360" y2="780"/>
+  </g>
+
+  <!-- ===== gate markers ===== -->
+  <g stroke="#26527C" stroke-width="2" stroke-dasharray="5 3">
+    <line x1="360" y1="152" x2="360" y2="780"/>
+    <line x1="460" y1="152" x2="460" y2="780"/>
+    <line x1="710" y1="152" x2="710" y2="780"/>
+    <line x1="910" y1="152" x2="910" y2="780"/>
+    <line x1="1160" y1="152" x2="1160" y2="780"/>
+    <line x1="1385" y1="152" x2="1385" y2="780"/>
+  </g>
+  <g font-size="10" font-weight="700" fill="#FFFFFF" text-anchor="middle">
+    <rect x="336" y="156" width="48" height="18" rx="9" fill="#26527C"/><text x="360" y="169">G0</text>
+    <rect x="436" y="156" width="48" height="18" rx="9" fill="#26527C"/><text x="460" y="169">G1</text>
+    <rect x="674" y="156" width="72" height="18" rx="9" fill="#26527C"/><text x="710" y="169">G2 · G3</text>
+    <rect x="886" y="156" width="48" height="18" rx="9" fill="#26527C"/><text x="910" y="169">G4</text>
+    <rect x="1136" y="156" width="48" height="18" rx="9" fill="#26527C"/><text x="1160" y="169">G5</text>
+    <rect x="1358" y="156" width="48" height="18" rx="9" fill="#26527C"/><text x="1382" y="169">G6</text>
+  </g>
+
+  <!-- ===== lane rows ===== -->
+  <!-- P0 -->
+  <rect x="28" y="192" width="232" height="44" rx="5" fill="#D8DBDE" stroke="#636970"/>
+  <text x="40" y="211" font-size="12" font-weight="700" fill="#1C1F23">P0 · Quyết định &amp; baseline</text>
+  <text x="40" y="228" font-size="10" fill="#4A4F55">Product · Architect · QA · 7 task</text>
+  <rect x="260" y="198" width="100" height="30" rx="4" fill="#E9E3F1" stroke="#693797" stroke-width="1.5"/>
+  <text x="270" y="217" font-size="11" font-weight="700" fill="#693797">P0 · 8–15 nd</text>
+
+  <!-- P1 -->
+  <rect x="28" y="248" width="232" height="44" rx="5" fill="#D8DBDE" stroke="#636970"/>
+  <text x="40" y="267" font-size="12" font-weight="700" fill="#1C1F23">P1 · Contract</text>
+  <text x="40" y="284" font-size="10" fill="#4A4F55">Architect · BE · Core · 6 task</text>
+  <rect x="360" y="254" width="100" height="30" rx="4" fill="#F7E0E1" stroke="#CC1F28" stroke-width="2"/>
+  <text x="370" y="273" font-size="11" font-weight="700" fill="#CC1F28">P1 · 15–25 nd</text>
+
+  <!-- P2 -->
+  <rect x="28" y="304" width="232" height="44" rx="5" fill="#D8DBDE" stroke="#636970"/>
+  <text x="40" y="323" font-size="12" font-weight="700" fill="#1C1F23">P2 · Compiler · Draft · Check</text>
+  <text x="40" y="340" font-size="10" fill="#4A4F55">Compiler · BE · 8 task</text>
+  <rect x="460" y="310" width="250" height="30" rx="4" fill="#F7E0E1" stroke="#CC1F28" stroke-width="2"/>
+  <text x="470" y="329" font-size="11" font-weight="700" fill="#CC1F28">P2 · 35–55 nd · join P3</text>
+
+  <!-- P3 -->
+  <rect x="28" y="360" width="232" height="44" rx="5" fill="#D8DBDE" stroke="#636970"/>
+  <text x="40" y="379" font-size="12" font-weight="700" fill="#1C1F23">P3 · Core runtime</text>
+  <text x="40" y="396" font-size="10" fill="#4A4F55">Core · Controls · 8 task</text>
+  <rect x="460" y="366" width="250" height="30" rx="4" fill="#F7E0E1" stroke="#CC1F28" stroke-width="2"/>
+  <text x="470" y="385" font-size="11" font-weight="700" fill="#CC1F28">P3 · 35–55 nd</text>
+
+  <!-- P4 -->
+  <rect x="28" y="416" width="232" height="44" rx="5" fill="#D8DBDE" stroke="#636970"/>
+  <text x="40" y="435" font-size="12" font-weight="700" fill="#1C1F23">P4 · Commission · RETAIN</text>
+  <text x="40" y="452" font-size="10" fill="#4A4F55">BE · Core · 6 task</text>
+  <rect x="710" y="422" width="200" height="30" rx="4" fill="#F7E0E1" stroke="#CC1F28" stroke-width="2"/>
+  <text x="720" y="441" font-size="11" font-weight="700" fill="#CC1F28">P4 · 30–45 nd</text>
+
+  <!-- P5 -->
+  <rect x="28" y="472" width="232" height="66" rx="5" fill="#D8DBDE" stroke="#636970"/>
+  <text x="40" y="491" font-size="12" font-weight="700" fill="#1C1F23">P5 · FE bốn workspace</text>
+  <text x="40" y="508" font-size="10" fill="#4A4F55">FE · UX · 7 task · S5-A…F</text>
+  <text x="40" y="524" font-size="10" fill="#693797">shell chỉ đọc chạy song song từ T+5</text>
+  <rect x="460" y="478" width="250" height="24" rx="4" fill="#E5E6E8" stroke="#636970" stroke-dasharray="4 2"/>
+  <text x="470" y="494" font-size="10" fill="#4A4F55">S5-A/B shell + Thiết kế (chỉ đọc)</text>
+  <rect x="710" y="506" width="450" height="26" rx="4" fill="#E0E6EC" stroke="#26527C" stroke-width="1.5"/>
+  <text x="720" y="524" font-size="11" font-weight="700" fill="#26527C">S5-C/D/E/F · mutation, Commission, Runtime · 30–45 nd</text>
+
+  <!-- P6 -->
+  <rect x="28" y="550" width="232" height="66" rx="5" fill="#D8DBDE" stroke="#636970"/>
+  <text x="40" y="569" font-size="12" font-weight="700" fill="#1C1F23">P6 · FW MCU · HW · HIL</text>
+  <text x="40" y="586" font-size="10" fill="#4A4F55">FW · HW · QA · 7 task</text>
+  <text x="40" y="602" font-size="10" font-weight="700" fill="#CC1F28">phải khởi động từ T+1</text>
+  <rect x="260" y="556" width="600" height="26" rx="4" fill="#EEE9DB" stroke="#826500" stroke-width="2"/>
+  <text x="272" y="574" font-size="11" font-weight="700" fill="#826500">HW-AUTH-001/002/007/008 · phát hành baseline schematic, pin, power, eMMC</text>
+  <rect x="860" y="586" width="300" height="26" rx="4" fill="#EEE9DB" stroke="#826500" stroke-width="2"/>
+  <text x="872" y="604" font-size="11" font-weight="700" fill="#826500">BSP thật + dựng đồ gá HIL</text>
+  <rect x="1160" y="556" width="225" height="26" rx="4" fill="#F7E0E1" stroke="#CC1F28" stroke-width="2"/>
+  <text x="1172" y="574" font-size="11" font-weight="700" fill="#CC1F28">HIL + release · 25–45 nd</text>
+
+  <!-- ===== critical path note ===== -->
+  <rect x="28" y="636" width="1384" height="1" fill="#636970"/>
+  <text x="28" y="662" font-size="12" font-weight="700" fill="#1C1F23">Đường găng và phụ thuộc</text>
+  <text x="28" y="682" font-size="11" fill="#1C1F23">Đường găng phần mềm: <tspan font-weight="700" fill="#CC1F28">P0-A → P1 → join(P2, P3) → P4 → P5-C/D/E/F → G6</tspan>. P2/P3 cùng hạn nên hiện đều không có float.</text>
+  <text x="28" y="702" font-size="11" fill="#1C1F23">Đường găng phần cứng chạy <tspan font-weight="700" fill="#826500">song song từ T+1</tspan>. Nếu để tới T+13 mới bắt đầu, dự án đứng chờ phần cứng ở G6.</text>
+  <text x="28" y="722" font-size="11" fill="#1C1F23">Mutation của FE (S5-C trở đi) <tspan font-weight="700">không</tspan> được nối trước khi contract BE/Core và hành vi lỗi tồn tại thật, tức không sớm hơn G3.</text>
+
+  <!-- permission gates -->
+  <rect x="28" y="742" width="1384" height="1" fill="#636970"/>
+  <text x="28" y="765" font-size="12" font-weight="700" fill="#1C1F23">Ba cổng</text>
+  <text x="28" y="780" font-size="12" font-weight="700" fill="#1C1F23">quyền hạn</text>
+  <rect x="166" y="754" width="178" height="22" rx="11" fill="#F7E0E1" stroke="#CC1F28"/>
+  <text x="180" y="769" font-size="11" font-weight="700" fill="#CC1F28">PLAN_READY · BLOCKED</text>
+  <text x="166" y="790" font-size="10" fill="#4A4F55">P0-A: pin, consumer review, conflict, sign-off</text>
+  <rect x="390" y="754" width="224" height="22" rx="11" fill="#F7E0E1" stroke="#CC1F28"/>
+  <text x="404" y="769" font-size="11" font-weight="700" fill="#CC1F28">IMPLEMENT_READY[*] · BLOCKED</text>
+  <text x="390" y="790" font-size="10" fill="#4A4F55">mở theo lát cắt sau PLAN_READY + P0-B</text>
+  <rect x="1150" y="754" width="180" height="22" rx="11" fill="#F7E0E1" stroke="#CC1F28"/>
+  <text x="1164" y="769" font-size="11" font-weight="700" fill="#CC1F28">RELEASE_READY · BLOCKED</text>
+  <path d="M1334 765 L1380 765" stroke="#CC1F28" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text x="1150" y="790" font-size="10" fill="#4A4F55">mở tại G6 → · cho phép bật ở site thật</text>
+
+  <!-- ===== legend ===== -->
+  <rect x="28" y="800" width="1384" height="1" fill="#636970"/>
+  <text x="28" y="822" font-size="12" font-weight="700" fill="#1C1F23">Chú giải</text>
+  <rect x="28" y="834" width="26" height="16" rx="3" fill="#F7E0E1" stroke="#CC1F28" stroke-width="2"/>
+  <text x="62" y="847" font-size="11" fill="#1C1F23">Nằm trên đường găng</text>
+  <rect x="230" y="834" width="26" height="16" rx="3" fill="#E0E6EC" stroke="#26527C" stroke-width="1.5"/>
+  <text x="264" y="847" font-size="11" fill="#1C1F23">Song song, có dư địa</text>
+  <rect x="432" y="834" width="26" height="16" rx="3" fill="#EEE9DB" stroke="#826500" stroke-width="2"/>
+  <text x="466" y="847" font-size="11" fill="#1C1F23">Phần cứng, lead time dài</text>
+  <rect x="650" y="834" width="26" height="16" rx="3" fill="#E5E6E8" stroke="#636970" stroke-dasharray="4 2"/>
+  <text x="684" y="847" font-size="11" fill="#1C1F23">Chỉ đọc, chưa nối mutation</text>
+  <rect x="890" y="834" width="26" height="16" rx="3" fill="#E9E3F1" stroke="#693797" stroke-width="1.5"/>
+  <text x="924" y="847" font-size="11" fill="#1C1F23">Quyết định và phê duyệt</text>
+  <line x1="1110" y1="842" x2="1140" y2="842" stroke="#26527C" stroke-width="2" stroke-dasharray="5 3"/>
+  <text x="1150" y="847" font-size="11" fill="#1C1F23">Cổng kỹ thuật G0–G6</text>
+  <text x="28" y="872" font-size="10" fill="#4A4F55">nd = person-day. Tổng 178–285 nd cộng thời gian lab và review.</text>
+
+  <rect x="28" y="890" width="1384" height="34" rx="6" fill="#E5E6E8" stroke="#636970"/>
+  <text x="44" y="905" font-size="10" fill="#1C1F23"><tspan font-weight="700">Giả định lập kế hoạch:</tspan> 1 BE, 1 FE, 1,5 Core/Compiler, 0,5 Architect, 0,5 QA toàn thời gian; FW và HW theo nguồn lực riêng. Đổi giả định thì lịch đổi theo.</text>
+  <text x="44" y="919" font-size="10" fill="#1C1F23">Thời lượng phải được ước lượng lại khi decision thay đổi capacity, FBD, thư viện, TLS hoặc phần cứng. Không dùng biểu đồ này làm deadline trước khi duyệt nguồn lực và lịch board.</text>
+</svg>

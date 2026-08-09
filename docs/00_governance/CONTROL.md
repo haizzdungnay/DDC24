@@ -3,7 +3,7 @@
 **ID:** DOC-CTRL-001
 **Trạng thái:** Active
 **Chủ quản:** Project Engineering
-**Cập nhật:** 2026-08-04 (đăng ký 12 hồ sơ Modbus RTU và ba tài liệu SUPERSEDED một phần)
+**Cập nhật:** 2026-08-09 (Programming 22/22 hồ sơ M3; Amendment A1 đơn giản hóa còn bốn workspace + tám journey, `PROPOSED` chờ `OD-PROG-016`)
 
 ## Mục tiêu
 
@@ -55,10 +55,18 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 
 | Hồ sơ | Lớp/trách nhiệm |
 |---|---|
-| [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | Product Spec authority |
-| [Programming Open Decisions](PROGRAMMING_OPEN_DECISIONS.md) | vấn đề chưa quyết định; không phải Design |
+| [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | Product Spec authority; §1–§7 `Active`, §8–§9 là **Amendment A1 `PROPOSED`** (bốn workspace + tám journey + benchmark) chờ `OD-PROG-016` |
+| [Quy tắc kiểm soát tài liệu](DOC_GOVERNANCE.md) | `DOC-GOV-001` Active — ISO-aligned, `DD-01..DD-13`, thang `M0..M5`, ba cổng quyền hạn, harness và bảy quy tắc trung thực |
+| [Programming Open Decisions](PROGRAMMING_OPEN_DECISIONS.md) | 17 vấn đề chưa quyết định; không phải Design |
+| [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | System/software/hardware/NFR requirements và acceptance Programming Rev A |
+| [Programming Design Index](../02_design/PROGRAMMING_DESIGN_INDEX.md) | register chủ quản: 22/22 hồ sơ đạt M3 — Review Ready; 0/22 đã review liên chức năng hoặc Approved |
+| [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | ownership, process/failure boundary, lifecycle và cutover target |
+| [Programming Documentation Roadmap](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | tracker 22/22 M3, DOC-G4 RED chờ consumer review và chữ ký; nằm ngoài mẫu số 22 |
+| [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | delivery M3 — Review Ready, G0 RED; không tự mở implementation khi design chưa Approved |
+| [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | risk/control/owner/evidence/residual gate |
 | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
 | [Programming Docs Sync Report](../07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record của lần đồng bộ 2026-08-03 |
+| [Programming Design Set Review 2026-08-09](../07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | record rà 22 hồ sơ + finding register `F-PROG-001..012`; căn cứ nâng M3 |
 | [DDC-24 Baseline Source Fix Report](../07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | record tổng hợp thay đổi source, test và readiness |
 | [Modbus RTU Point As-Built Report](../07_records/reviews/MODBUS_RTU_POINT_AS_BUILT_REPORT.md) | record implementation/test host và blocker RS485 thật |
 | [Physical I/O HIL Report](../07_records/reviews/PHYSICAL_IO_HIL_REPORT.md) | record firmware evidence và các gate HIL còn mở |

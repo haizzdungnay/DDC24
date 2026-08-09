@@ -1,13 +1,14 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-03 (đồng bộ cây source As-Built sau repository restructure)
+**Cập nhật:** 2026-08-09 (Programming 22/22 hồ sơ đạt M3 — Review Ready; chờ consumer review và sign-off)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
 | Hồ sơ | Mục đích |
 |---|---|
 | [Control](00_governance/CONTROL.md) | quản trị, thẩm quyền, trạng thái và quy tắc thay đổi |
+| [Quy tắc kiểm soát tài liệu](00_governance/DOC_GOVERNANCE.md) | `DOC-GOV-001`: cấu trúc bắt buộc `DD-01..DD-13`, thang `M0..M5`, ba cổng `PLAN_READY`/`IMPLEMENT_READY`/`RELEASE_READY`, harness và quy tắc trung thực |
 | [Decision log](00_governance/DECISIONS.md) | quyết định kiến trúc hiện hành, gồm các ADR đã hợp nhất |
 | [Product](01_product/PRODUCT.md) | định vị, baseline và phạm vi Rev A |
 | [Product Spec Programming Rev A](01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | capability, product requirement, thuật ngữ và scope Programming Rev A |
@@ -22,7 +23,11 @@
 | [Traceability](07_records/TRACEABILITY.md) | ánh xạ yêu cầu → thiết kế → code → bằng chứng |
 | [Chỉ mục hồ sơ rà soát](07_records/reviews/README.md) | trạng thái từng record rà soát/phê duyệt/triển khai, đã đối chiếu mã nguồn; kèm bảng ánh xạ đường dẫn trước/sau tái cấu trúc |
 | [Programming Traceability Matrix](07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
-| [Programming Open Decisions](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | vấn đề Product/System còn mở trước Programming Design |
+| [Programming Open Decisions](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 17 vấn đề Product/System còn mở trước Programming Design |
+| [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào bộ 22 hồ sơ yêu cầu, thiết kế, kiểm chứng và delivery Programming Rev A |
+| [Programming Documentation Roadmap](03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | dashboard tiến độ: 22/22 file đạt M3 (checklist đủ, link sạch); DOC-G4 RED chờ consumer review và chữ ký |
+| [Programming Implementation Plan](03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | dependency và gate triển khai; hiện G0 RED, chưa cấp quyền implement control path |
+| [Programming Risk Register](07_records/PROGRAMMING_RISK_REGISTER.md) | 16 rủi ro, design control, owner, evidence gate và residual |
 | [Programming Docs Sync Report](07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record đồng bộ docs theo ADR-023 ngày 2026-08-03 |
 | [DDC-24 Baseline Source Fix Report](07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | kết quả CI, Point Model, Config Apply, health/recovery và readiness trước Programming Design |
 | [Modbus RTU Point As-Built Report](07_records/reviews/MODBUS_RTU_POINT_AS_BUILT_REPORT.md) | coverage FE/BE/iobus/Core/WS, simulator và blocker RS485 thật |
@@ -76,12 +81,19 @@
 - [Program Runtime readiness review for C0 — C0_READY status](07_records/reviews/archive/PROGRAM_RUNTIME_READY_FOR_C0.md)
 
 Luồng đọc khuyến nghị cho Programming: Product baseline → Product Spec
-Programming → Requirements → Open Decisions → Verification → Programming
-Traceability. Programming Design chưa được thực hiện trong lần đồng bộ này;
-không dùng plan/detailed design lịch sử thay cho bước đó. Với chủ đề khác, luồng
-đọc là Product → Requirements → System → baseline Design → Detailed design →
-Verification. Tài liệu `In Review` phải được đối chiếu baseline/code trước khi
-dùng cho release.
+Programming → Requirements → Open Decisions → Design Index → Documentation
+Roadmap → hồ sơ thiết kế theo vai trò → Verification → Risk → Traceability →
+Implementation Plan. Baseline 2026-08-09 có đủ 22/22 file và 22/22 đạt `M3 —
+Review Ready`: checklist theo loại đã đủ, mọi `TBD/BLOCKED` có owner/ảnh hưởng/
+gate/điều kiện mở, link nội bộ sạch — bằng chứng tại
+[`PROG-REV-2026-08-09`](07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md).
+Chưa file nào đạt `M4` (cần reviewer bên tiêu thụ contract) hay `M5` (cần chữ
+ký); 17 decision còn OPEN và evidence mới vẫn 0/32.
+Vì vậy không dùng plan hoặc detailed design lịch sử để
+tự mở code/release gate. Với
+chủ đề khác, luồng đọc là Product → Requirements → System → baseline Design →
+Detailed design → Verification. Tài liệu `In Review` phải được đối chiếu
+baseline/code trước khi dùng cho release.
 
 Archive lịch sử không phải nguồn chuẩn: `archives/markdown-before-restructure-2026-07-22.tar.gz`
 và [`docs/07_records/reviews/archive/`](07_records/reviews/archive/README.md).

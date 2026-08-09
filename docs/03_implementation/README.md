@@ -2,7 +2,7 @@
 
 > **Recovery status (2026-07-22): In Review.** Bộ hướng dẫn đã được phục hồi đầy đủ để giữ implementation knowledge. Trạng thái `Active/FROZEN` trong bảng là trạng thái lịch sử; phải đối chiếu với baseline, code và test hiện hành trước khi dùng cho release.
 
-> **Owner:** Dev Lead | **Last Updated:** 2026-07-22
+> **Owner:** Dev Lead | **Last Updated:** 2026-08-09
 
 Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTATION_README.md` trước.
 
@@ -59,5 +59,7 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [49](49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) | Modbus RTU FE + BE + FW-SOM | Track A + Track B (phần mềm) xong 2026-08-06; treo `G-C`/`G-D` phụ thuộc phần cứng |
 | [50](50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) | Scheduler Engine v3.1 — bỏ mô hình thanh ghi `TSx`, chuyển sang Schedule Object (5 pha · 78 task · 63 người-ngày) | **DRAFT — chờ phê duyệt**; P0 là cổng chặn cứng, 6 quyết định treo |
 | [52](52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md) | Dashboard và Web UX PA3 — data truth, shell, 12 use case, kiểm chứng trình duyệt và deploy Foxlinx (7 pha · 50 task · 56 người-ngày · mục tiêu 9 tuần) | **DRAFT — chờ duyệt G0**; phân tích source/runtime xong, chưa triển khai PA3 |
+| [53](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | Triển khai Programming theo vertical slice ST/FBD → Check → Commission → Runtime → HIL/release | **M3 — REVIEW READY; G0 RED** |
+| [54](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | Theo dõi tạo, hoàn thiện, review và phê duyệt baseline 22 hồ sơ Programming | **22/22 M3 — REVIEW READY; M4/M5 = 0, chờ người thật** |
 
 **Archived:** [S7 Hardening Code Review](../review/2026-06-13-s7-hardening-review.md)

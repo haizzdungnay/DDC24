@@ -7,6 +7,550 @@
 ---
 
 ## [Unreleased]
+### Changed — Duyệt Plan 53 và triển khai gói chuẩn bị P0 `PROG-000..006` (2026-08-10)
+
+**Phán quyết.** Plan 53 v0.8 được chấp nhận để đưa vào **authority review P0**,
+chưa được phê duyệt cho implementation. `DOC-G4`, `G0`, `PLAN_READY`,
+`IMPLEMENT_READY` và `RELEASE_READY` tiếp tục `BLOCKED`.
+
+**P0 — sửa ngữ nghĩa gate.** Thay `PLAN_READY OPEN` bằng `BLOCKED` ở toàn bộ
+trạng thái hiện hành. Hoạt động phân tích/ước lượng/dependency/thẻ task được phép
+theo banner `PLAN-ONLY`, không còn bị hiểu nhầm là gate đã qua hoặc được viết
+code production.
+
+**P0 — gói review/sign-off.** Thêm
+`docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md`:
+gom đủ 7 task `PROG-000..006`, dẫn thiết kế và decision authority, blocker có
+owner/impact/gate/unlock, checklist `DOC-G4/G0/PLAN_READY`, trình tự review và
+bảng ký gắn revision. Phần chuẩn bị kỹ thuật đạt 7/7; DoD giữ **0/7** vì chưa có
+consumer review, decision và chữ ký thật.
+
+**P0/P1 — sửa sai số hiện hành.** Plan 53 sửa tổng `42 → 49` task và exit P6
+`30 → 32` scenario; Plan 53/54/review sửa `15 → 17` decision; Plan 54 sửa Trace
+`55 → 60`; VVP self-check sửa `VS-PROG-001..030 → 001..032`. Open Decisions
+v0.6 sửa mô tả thành hai phần Modbus đã quyết định nhưng vẫn OPEN tổng thể, còn
+15 mục khác chưa ký, đồng thời mở đúng phạm vi ký Product tới `OD-PROG-017`.
+Số lịch sử trong revision/snapshot cũ được giữ nguyên.
+
+**P0 — bỏ dependency vòng tròn.** Tách `P0-A` (baseline review/sign-off) khỏi
+`P0-B` (decision theo lát cắt). P1 không còn phụ thuộc toàn bộ HW/TLS/HIL của
+P0; từng `PROG-100..104`, runtime/HW và `PROG-603` có dependency cụ thể. Sửa
+sơ đồ để P2/P3 chạy song song rồi join tại P4. Sửa gốc thời gian Gantt: `T+1`
+tính từ formal review P0-A, không còn tính sau `IMPLEMENT_READY` rồi đặt P0 trước
+gate. Machine-readable contract là output của P1 và chỉ là entry cho lát cắt
+tiêu thụ contract, nên roadmap không còn tự khóa trước khi tạo OpenAPI/IPC.
+
+**Record kiểm toán.** `PROG-REV-2026-08-09` v1.3 thêm
+`F-PROG-018..021`; tổng ba vòng **21/21 finding đã đóng** (10 P0, 10 P1, 1 P2).
+Plan 54 v2.1 thêm snapshot `P0-review`; Design Index v1.1 đồng bộ version/status.
+
+**Kiểm chứng.** `python3 scripts/docs_iso_harness.py --expect -v` PASS;
+`git diff --check` PASS; SVG qua `xmllint` và được render/kiểm tra lại bằng Chrome
+headless ở 1440×940. Khi gom toàn bộ worktree theo yêu cầu commit-all, gate đầy
+đủ cũng đạt: CTest 860/860; Go vet + 11/11 package test; FE 53 file/469 test,
+lint/build; Playwright responsive live 1/1. Không chạy target hoặc HIL. Trạng
+thái hồ sơ vẫn trung thực: 22/22 M3, 0/22 M4, 0/22 M5, 17/17 decision tổng thể
+OPEN và 0/32 Test Result; kết quả regression của repository không được dùng để
+thay thế verification scenario Programming chưa thi hành.
+
+### Changed — Plan 53 tái cấu trúc theo ISO/IEC/IEEE 16326, thêm biểu đồ roadmap và bảng tiến độ (2026-08-10)
+
+**Triệu chứng.** Plan 53 thiếu biểu đồ roadmap, thiếu bảng tiến độ, và cách trình
+bày không theo khung chuẩn nào — khó đưa CTO review.
+
+**Nguyên nhân gốc.** Tài liệu lớn dần theo từng vòng sửa mà không bám một khung
+nội dung có sẵn, nên thiếu đúng những phần một kế hoạch dự án phải có: tài liệu
+tham chiếu, thuật ngữ, lịch, tiến độ, kiểm soát lịch, báo cáo, quản lý cấu hình
+và kế hoạch đóng.
+
+**Cách sửa — tái cấu trúc theo ISO/IEC/IEEE 16326** (nội dung kế hoạch quản lý dự
+án phần mềm), từ 16 mục rời rạc thành 13 mục có khung:
+
+- §1 Tổng quan: mục tiêu, **sản phẩm bàn giao**, **giả định lập kế hoạch**,
+  **ràng buộc**, tiến hóa của kế hoạch.
+- §2 **Tài liệu tham chiếu** — 15 mục có ID và vai trò.
+- §3 **Thuật ngữ và từ viết tắt**.
+- §4 Bối cảnh: phụ thuộc, ba cổng quyền hạn, decision theo lát cắt, RACI.
+- §5 Kế hoạch công việc: WBS 49 task, roadmap `G0..G6`, **§5.3 biểu đồ roadmap**,
+  **§5.4 bảng lịch và mốc**, **§5.5 bảng tiến độ**, ước lượng và **§5.6.1 phân bổ
+  nguồn lực theo vai trò**, lát cắt dọc và thẻ task.
+- §6 Kiểm soát: DoR/DoD, gate evidence, **§6.3 kiểm soát lịch**, **§6.4 báo cáo
+  và chỉ số**, **§6.5 quản lý cấu hình**, **§6.6 xử lý vấn đề**, change control.
+- §7 **Quản lý rủi ro** theo góc nhìn lịch — 7 rủi ro ảnh hưởng tiến độ.
+- §8 **Kế hoạch đóng dự án** — 8 điều kiện đóng và danh mục bàn giao.
+- §11 **Ánh xạ 12 điều khoản ISO/IEC/IEEE 16326** để reviewer kiểm nhanh.
+
+**Added — biểu đồ roadmap.** `docs/03_implementation/assets/PLAN53_ROADMAP_GANTT.svg`
+(1440×940): Gantt bảy luồng theo tuần tương đối `T+1..T+22`, bảy cổng kỹ thuật,
+ba cổng quyền hạn, **đường găng được đánh dấu**, và luồng phần cứng chạy song
+song từ `T+1`. Biểu đồ nêu rõ trục thời gian là tuần tương đối chứ không phải
+ngày lịch, và mọi thanh đang ở `NOT_STARTED`.
+
+**Added — bảng tiến độ.** §5.5 là nơi duy nhất ghi tiến độ thực: 7 pha, 49 task,
+`% hoàn tất` chỉ được tính bằng `task đạt DoD ÷ tổng task`, sáu trạng thái hợp lệ,
+cộng bảng tiến độ ba cổng quyền hạn. Hiện toàn bộ `0%` và `0/32` Test Result.
+
+**Kiểm chứng.** `python3 scripts/docs_iso_harness.py --expect` → `PASS`, exit `0`,
+`EXPECT` khớp. SVG qua `xmllint` và render bằng Chrome headless ở `1440×940`.
+Liên kết ảnh trong Markdown phân giải được; trailing whitespace `0`; code fence
+chẵn. Tham chiếu chéo `§3.1→§4.2`, `§3.3→§5.2` đã cập nhật ở Plan 54 và
+`DOC-GOV-001`. **Không** đổi nội dung kỹ thuật, không đổi trạng thái cổng: vẫn
+`PLAN-ONLY`, `M3` 22/22, `M4`/`M5` `0/22`, `0/32` Test Result.
+
+### Added — Kiểm soát cấu hình, harness và governance vào repository; tách ba cổng quyền hạn (2026-08-09)
+
+**Phán quyết áp dụng:** *được giao team lập kế hoạch có kiểm soát; **chưa** được
+giao implement production.* Plan 53 mang banner `PLAN-ONLY` ở đầu file.
+
+**P0 — 22 hồ sơ vào kiểm soát cấu hình Git.** Trước thay đổi này chỉ **2/22**
+file baseline được Git theo dõi; 20/22 đang untracked. Không có commit và hash
+thì không có gì để ghim, so sánh hay quay lui — chưa thể gọi là controlled
+baseline theo hướng ISO 9001. Đã đưa toàn bộ 22 hồ sơ, ba SVG mới và các hồ sơ
+điều khiển vào Git.
+
+**P0 — số đếm còn sót.** Mở lại `F-PROG-014` và quét lại toàn bộ: sửa thêm 13 chỗ
+ở Plan 53, Plan 54 master tracker, VVP, Risk Register và review record. Sau khi
+sửa, phép quét lại trả `0`.
+
+**P0 — dependency chain Plan 53.** `P5 FE six-page workflow` → `P5 FE bốn
+workspace / tám journey UJ-PROG-01..08`. Nếu để nguyên, team FE sẽ lập kế hoạch
+theo IA đã superseded.
+
+**P1 — tách ba cổng quyền hạn.** `G0` trước đây gộp “được lập kế hoạch” với
+“được viết code” nên chặn quá rộng. Plan 53 §3.1 tách thành `PLAN_READY` (đang
+`OPEN` — team lập kế hoạch được ngay), `IMPLEMENT_READY` và `RELEASE_READY` (cùng
+`BLOCKED`). §3.2 liệt kê decision cần cho **từng lát cắt**: không phải đóng cả 17
+mới được lập kế hoạch. §3.3 là roadmap `G0..G6` phân bổ **đủ 32** Test Result vào
+các gate, để `0/32` không còn bị hiểu là lý do chặn lập kế hoạch.
+
+**P1 — harness vào repository.** `scripts/docs_iso_harness.py`: repo-relative,
+exit code `0`/`1`, khối `EXPECT` giữ ngưỡng hiện hành và cờ `--expect` báo
+`DRIFT` khi quên đồng bộ số đếm. QA và team chạy lại được mà không cần agent.
+
+**P1 — governance vào repository.** `docs/00_governance/DOC_GOVERNANCE.md`
+(`DOC-GOV-001`, Active): ánh xạ ISO-aligned, `DD-01..DD-13`, thang `M0..M5`, ba
+cổng quyền hạn, cách chạy harness và bảy quy tắc trung thực. `AGENTS.md` giữ
+nguyên nội dung và trỏ về đây; khi hai bên khác nhau thì `DOC-GOV-001` đúng.
+`docs/02_design/_templates/TEMPLATE_DDD.md` viết lại theo đúng cấu trúc có kiểm
+soát, gồm mục “Đọc nhanh” và bảng tự kiểm 13 mã.
+
+**P1 — self-check UI/UX.** `DD-08` chỉ tính bốn asset `PGM-01..04`; screen-set
+sáu trang ghi rõ **không** được tính vào cổng, chỉ là tham chiếu rollback.
+
+**Added — thẻ task mẫu điền thật.** Plan 53 §14 mở rộng thành 11 trường bắt buộc
+và §14.1 có `TASK-PROG-101` điền đầy đủ làm mẫu mức chi tiết. Bảng lát cắt dọc
+gắn thêm cột journey và nêu rõ không bàn giao kiểu “BE xong”.
+
+**Changed — phân chia thẩm quyền.** Plan 54 chỉ quản hồ sơ; Plan 53 là
+implementation authority; cấm tạo roadmap thứ ba. Siết phát biểu **ISO-aligned**
+ở cả hai và trỏ `DOC-GOV-001` §1/§6.
+
+**Kiểm chứng.** `python3 scripts/docs_iso_harness.py --expect` → `PASS — mọi
+phép kiểm bắt buộc đạt` và `EXPECT: khớp toàn bộ ngưỡng`, exit `0`. 22/22 file
+baseline; link/anchor/code-span/whitespace/fence/duplicate-ID đều `0`; 60
+requirement; 60 dòng trace; 0 vi phạm bất biến trace; 32 scenario; 16 risk; 17
+decision; 17 `UC-PROG`; 8 `UJ-PROG`; 24 `UX-REQ`; 6 SVG. `git diff --check` PASS.
+**M3 giữ 22/22; M4 và M5 vẫn `0/22`.** Chỉ sửa Markdown, SVG và một script — không
+chạy build/test C++/Go/FE, target hay HIL.
+
+### Fixed — Đóng 5 finding review chặn phê duyệt của Amendment A1 (2026-08-09)
+
+**P0 — hợp đồng xác nhận Commission mâu thuẫn ba nơi.** UI/UX nói số ô xác nhận
+có thể bằng `0`, nhưng UC-PROG-08 vẫn bắt “tích đủ bốn xác nhận” và
+`IFSPEC-PROG-001` §6 vẫn đặt cứng bốn phần tử trong request. FE, BE và QA có thể
+triển khai ba hành vi khác nhau cho một thao tác đổi control runtime.
+
+Đã chốt **một** quy tắc duy nhất tại `IFSPEC-PROG-001` §6.1.1:
+`acknowledgements = { khóa nhóm | status == "PRESENT" }`. Chỉ `PRESENT` sinh
+acknowledgement bắt buộc; `NONE` không sinh; `UNAVAILABLE`, thiếu field hoặc
+`null` **chặn Commission** (fail-closed); `re-auth`, đọc ngược và đường quay lui
+luôn bắt buộc bất kể số ô. Thêm `impactRef` để chặn xác nhận trên bản impact đã
+cũ. Bốn mã lỗi mới vào §9: `PRG-ERR-ACK-MISSING-001`,
+`PRG-ERR-ACK-UNEXPECTED-001`, `PRG-ERR-IMPACT-UNAVAILABLE-001`,
+`PRG-ERR-IMPACT-STALE-001`. Sửa đồng thời UC-PROG-08, ví dụ request, Ops §12 và
+`VS-PROG-011/019/031`; thêm ngưỡng khả dụng `UX-A-07` cho trường hợp không có ô
+xác nhận nào.
+
+**P0 — bằng chứng M3 chứa số cũ.** Phần tự kiểm của SRS còn ghi `55/55` và
+`0/30`; metadata Trace ghi 55; master tracker và trạng thái R3/R4 của Roadmap còn
+`15/15/30/55` cùng `PGM-01..06`; Document Hub còn 15 risk và 15 decision. Đã sửa
+toàn bộ về số hiện hành — **60 requirement / 60 dòng trace / 32 scenario / 16
+risk / 17 decision / 8 journey** — ở SRS, Trace, Roadmap, Document Hub, Design
+Index, VVP, Risk Register, Plan 53 và Interface Spec. Dòng lịch sử và snapshot cũ
+giữ nguyên số cũ vì đó là sự thật tại thời điểm đó.
+
+**P1 — FE Design có hai kiến trúc route.** Xóa cây thư mục và tám route
+`/engineering/programming/...` khỏi §2; §2 chuyển thành mô tả module cắt ngang và
+trỏ §0.1 làm nguồn duy nhất; metadata nhận `FE-101..115`.
+
+**P1 — UC và verification còn điều hướng theo trang cũ.** Sửa trigger của
+UC-PROG-04/05/07 về đúng tab của `PGM-02`; sửa hai dòng `DraftAttentionPanel`;
+`VS-PROG-002` đổi sang bốn workspace và tám journey; sửa thanh điều hướng dưới
+của asset mobile — trước đây đánh dấu tab `Chương trình` active trong khi đang
+hiển thị Tổng quan.
+
+**P1 — tài liệu đầu vào UX chưa hợp nhất.** Chọn phương án **đóng băng** thay vì
+viết lại, để tránh tạo UX authority thứ hai: Status đổi sang `REFERENCE`, tuyên
+bố rõ §4, §7–§12, §21 và `UX-REQ-002` **không còn normative**, đồng thời nêu phần
+nào vẫn hiệu lực. Sửa dead reference tới
+`01_VERIFICATION_SCENARIOS.md` (file không tồn tại) ở **cả hai** tài liệu đầu
+vào, và đính chính §31 của Product Spec đầu vào.
+
+**Harness bổ sung.** Finding cuối lọt vòng trước vì harness chỉ kiểm liên kết
+Markdown. Đã thêm phép kiểm thứ bảy: đường dẫn `docs/**` viết trong code span
+phải tồn tại. Cố ý không kiểm `apps/**`, `firmware/**`, `contracts/**` vì đó là
+Source Target sẽ tạo. Kết quả: `0`.
+
+**Kiểm chứng.** 22/22 file baseline; link missing `0`; anchor missing `0`;
+code-span `docs/**` không tồn tại `0`; trailing whitespace `0`; code fence lệch
+`0`; duplicate document ID `0`; `git diff --check` PASS; 60 requirement; 60 dòng
+trace; 0 vi phạm `P=Y khi T=N`/`R=Y khi P=N`; 32 scenario; 16 risk; 17 decision;
+17 `UC-PROG-*`; 8 `UJ-PROG-*` nhất quán ba nơi; 24 `UX-REQ-*`; 6 SVG hợp lệ XML
+và render lại bằng Chrome headless. **M3 giữ 22/22; M4 và M5 vẫn `0/22`.**
+
+### Changed — Amendment A1: đơn giản hóa Programming còn bốn workspace và tám user journey (2026-08-09)
+
+**Quyết định sản phẩm.** MK-DDC-24 không cạnh tranh bằng độ rộng. Định vị được
+chọn: *công cụ Programming trên Web, đủ dùng cho ứng dụng HVAC/BACS trên một
+controller, mà kỹ thuật viên BMS học được trong một buổi.* Bốn trụ cột theo thứ
+tự ưu tiên: an toàn khi đưa vào vận hành (chỗ chọn để **vượt**), ít khái niệm
+phải nhớ, chạy trên Web, và dùng ngôn ngữ ngành BMS.
+
+**Added — Product Spec `PROD-PROG-001` §8–§9 (Amendment A1, trạng thái
+`PROPOSED`).** Benchmark bốn sản phẩm bằng nguồn chính thức có URL và ngày truy
+cập 2026-08-09 (CODESYS Development System, Siemens Desigo ABT Site/ABT Go,
+Schneider EcoStruxure Building Operation WorkStation, Beckhoff TwinCAT 3
+Engineering); bảng điểm heuristic tám tiêu chí có trọng số kèm lý do từng điểm;
+danh sách học gì và **không** làm gì; Must/Should/Won't cho Rev A; và lớp user
+journey `UJ-PROG-01..08`. Amendment **không** đổi baseline `Active` ở §1–§7.
+
+Điểm heuristic — *đây là chấm điểm thiết kế của nhóm dựa trên tài liệu chính
+thức, không phải kết quả usability test*: MK-DDC hiện tại `76,0`; **mục tiêu
+`87,0`**; CODESYS `70,5`; Desigo ABT `81,0`; EBO WorkStation `75,0`; TwinCAT 3
+`69,0`. Đạt đủ ràng buộc: `≥85`, mental model `4,5/5`, an toàn Commission
+`5,0/5`, không tiêu chí nào dưới `3,5/5`.
+
+**Changed — IA rút từ sáu trang xuống bốn workspace.** `PGM-01` Tổng quan;
+`PGM-02` Thiết kế gồm ba tab `Chương trình`/`Điểm & Ánh xạ`/`Thực thi`; `PGM-03`
+Kiểm tra & Đưa vào vận hành; `PGM-04` Runtime & Bảo trì gồm ba tab. Tab là query
+parameter, không phải segment đường dẫn. Năm route cũ **chuyển hướng**, không bị
+xóa. 17 `UC-PROG-*` giữ nguyên ID và đặc tả, chuyển xuống lớp kịch bản với trạng
+thái **12 `MERGED` / 3 `SCENARIO` / 2 `ROADMAP`** — không mục nào bị bỏ rơi.
+
+**Changed — xác nhận theo rủi ro thực tế.** Thay danh sách bốn ô cố định bằng ô
+xác nhận chỉ hiện cho ảnh hưởng **có thật**. Ba bước an toàn giữ nguyên tuyệt
+đối: xác thực lại, đọc ngược từ authority, và đường quay lui. Để tránh đánh đổi
+an toàn lấy ít click, `IFSPEC-PROG-001` §6.1 thêm ba nhánh
+`NONE`/`PRESENT`/`UNAVAILABLE` cho từng nhóm impact — `UNAVAILABLE` **chặn**
+Commission và không bao giờ được hiểu là `NONE`.
+
+**Added.** Ba SVG mới `PGM-02_DESIGN_WORKSPACE_DESKTOP`,
+`PGM-03_CHECK_COMMISSION_DESKTOP` (kèm modal xác nhận), `PGM-04_RUNTIME_SERVICE_DESKTOP`
+(kèm ngăn kéo khôi phục). Năm requirement mới: `FE-113` xác nhận theo rủi ro
+thật, `FE-114` tách vùng thao tác nguy hiểm, `FE-115` lọc Point theo loại/hướng/
+khả năng ghi, `NFR-109` sáu ngưỡng khả dụng, `NFR-110` bảng điểm heuristic. Hai
+scenario mới `VS-PROG-031` (usability có người dùng thật, sáu ngưỡng
+`UX-A-01..06`) và `VS-PROG-032` (chuyển hướng route, giữ trạng thái tab). Hai
+quyết định mới `OD-PROG-016` (IA/journey) và `OD-PROG-017` (thư viện mẫu BMS).
+Một rủi ro mới `RSK-PROG-016` — đơn giản hóa làm mất bước an toàn, `5×3=15`.
+
+**Phạm vi rà.** Rà **toàn bộ** 22 hồ sơ, sửa 13, ghi `REVIEWED — NO CHANGE` cho
+9 hồ sơ kèm lý do — Architecture, Data Model, Language/Compiler, Artifact/Loader,
+Control Semantics, Runtime Lifecycle, FW-SOM, FW MCU, HW và Security đều không
+đổi contract vì gộp IA là thay đổi tầng trình bày. Ma trận đầy đủ tại
+[Plan 54 §10.1](docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md).
+
+**Không thay đổi (trung thực về giới hạn).** Không hành vi an toàn nào bị loại
+bỏ: Draft/Revision, Check không đụng bản đang chạy, Commission atomic có đọc
+ngược, LKG, `UNKNOWN/RECONCILING` không tự gửi lại, không đổi
+`UNKNOWN/STALE/OFFLINE` thành `0`, idempotency, audit, RETAIN impact và rollback
+đều giữ nguyên. `M3` giữ nguyên 22/22; **`M4 = 0/22`, `M5 = 0/22`**. 17 decision
+`OPEN`; 16 risk `Open`; 0/32 Test Result; `DOC-G4`, `G0`, HIL và release vẫn `RED`.
+
+**Kiểm chứng.** Harness tài liệu: 22/22 file baseline; local link missing `0`;
+anchor missing `0`; trailing whitespace `0`; code fence lệch `0`; duplicate
+document ID `0`; 60 requirement canonical; 60 dòng trace `D/I/T/P/R`; 0 vi phạm
+`P=Y khi T=N` hoặc `R=Y khi P=N`; 32 `VS-PROG-*`; 16 `RSK-PROG-*`; 17
+`OD-PROG-*`; 17 `UC-PROG-*`; 8 `UJ-PROG-*` nhất quán ở Product Spec, UI/UX và
+Trace; 24 `UX-REQ-*`; 6 SVG. Sáu SVG qua `xmllint --noout` và **render bằng
+Google Chrome headless** ở đúng kích thước, hiển thị đủ dấu tiếng Việt. Thay đổi
+chỉ gồm Markdown và SVG nên **không** chạy build/test C++, Go, FE, target hay
+HIL — và không claim các kết quả đó.
+
+### Changed — Bắt buộc đặc tả màn hình trực quan cho Detailed Design UI/UX (2026-08-09)
+
+**Rule/skill.** Mở rộng `AGENTS.md` và reference Detailed Design của skill
+`mkddc-techlead`: wireframe chữ/ASCII không còn đủ để qua cổng. Mỗi màn hình
+chính và mọi surface chứa quyết định an toàn/không thể hoàn tác/thay đổi runtime
+phải có asset render được, mapping
+vùng→field/API/state/action/RBAC/copy, token/breakpoint/focus; landing responsive
+phải có desktop/mobile và dữ liệu giả phải ghi rõ là minh họa.
+
+**UI/UX Design v0.5.** Bổ sung ba SVG có kiểm soát tại
+`docs/04_uiux/assets/programming/`: landing PGM-01 desktop `1440×900`, mobile
+`390×844`, và screen-set desktop cho PGM-02..06 có modal xác nhận Commission và
+drawer Restore. Cập nhật §16 với thứ tự đọc, contract từng vùng, tám biến thể
+render, responsive theo AppShell thật; bổ sung `ProgrammingHeader` và 11 key
+copy VI/EN. Đồng bộ Design Index v0.9 và Roadmap v1.8/snapshot `visual-1`; không
+nâng M4/M5 và không coi mock là bằng chứng runtime.
+
+**Kiểm chứng.** `quick_validate.py` báo `Skill is valid!`; ba SVG qua
+`xmllint --noout` và đã render/kiểm tra trực quan bằng PNG tạm; liên kết Markdown,
+cấu trúc PGM/UC/UX requirement, trailing whitespace và diff phạm vi được kiểm
+ở cuối phiên. Thay đổi chỉ gồm rule/tài liệu/SVG nên không chạy build/test FE,
+Chrome DevTools, target hoặc HIL.
+
+### Changed — 22/22 hồ sơ Programming đạt M3 sau vòng rà có finding register (2026-08-09)
+
+**Bối cảnh.** Vòng trước dừng ở `22/22 M2` vì mức M3 khi đó chỉ là self-check
+không kiểm chứng được. Vòng này rà lại toàn bộ 22 hồ sơ theo checklist của đúng
+loại tài liệu, ghi kết quả **vào chính hồ sơ**, và tạo record
+`docs/07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md`
+(`PROG-REV-2026-08-09`) với 12 finding: 5 `P0`, 6 `P1`, 1 `P2` — tất cả đã đóng.
+
+**Added.**
+- Mục “Đọc nhanh” ở đầu **cả 22 hồ sơ**, trả lời bảy câu hỏi cố định (file này
+  quyết định việc gì, ai đọc, hiện trạng, thay đổi gì, sửa module nào, còn bị
+  chặn gì, bằng chứng nào) — đóng `F-PROG-001`.
+- Bảng tự kiểm `DD-01..DD-13` từng mã cho 13 hồ sơ Detailed Design, thay dòng
+  văn xuôi “SELF-CHECK COMPLETE”; mỗi `BLOCKED` có đủ owner, ảnh hưởng, gate và
+  điều kiện mở khóa — đóng `F-PROG-002`.
+- Phụ lục tự kiểm cổng M3 theo loại cho 9 hồ sơ còn lại (Requirements, Open
+  Decisions, Architecture, V&V, Operations, Risk, Traceability, Implementation
+  Plan, Index) — đóng `F-PROG-003`.
+- UI/UX bổ sung 8 nội dung còn thiếu — đóng `F-PROG-004..011`: ID use case
+  canonical `UC-PROG-01..17` đủ chín trục gồm **audit** và **acceptance**; cây
+  component sáu trang và đặc tả 40 component (purpose/props/state/action/
+  permission/error); hợp đồng API chính xác `METHOD /path` cho chín surface khớp
+  `IFSPEC-PROG-001`; state machine bổ sung `RESTORING` và `RECONCILING`; bảng
+  copy VI/EN 36 key; token/lưới/breakpoint/focus lấy từ
+  `apps/web-ui/src/shared/theme/tokens.ts` và `shared/styles.css` thật; mục
+  rollout bốn giai đoạn, migration bookmark, xử lý lệch phiên bản FE/BE và
+  rollback riêng FE; bảng ký tách sáu vai trò.
+
+**Fixed.** `F-PROG-012`: Plan 54 §2 định nghĩa M3 là “peer review xác nhận”
+trong khi §3.1 định nghĩa M3 là “đủ checklist, TBD có owner, link sạch”. Đã
+thống nhất về một định nghĩa tại §3.1: **M3 = cổng kiểm được bằng chứng khách
+quan**, **M4 = cổng cần reviewer bên tiêu thụ contract**.
+
+**Changed.** Nâng 22/22 lên `M3 — Review Ready`, bump version và thêm dòng lịch
+sử sửa đổi cho từng hồ sơ. Roadmap tính lại `1320/2200 = 60,0%`, thêm snapshot
+`2026-08-09 M3` (không sửa snapshot lịch sử). Đồng bộ Design Index, CONTROL.md,
+Document Hub, Implementation Index và chỉ mục review record.
+
+**Không thay đổi (trung thực về giới hạn).** `M4 = 0/22` và `M5 = 0/22` vì cả
+hai đòi con người: consumer review và chữ ký thẩm quyền. 15 `OD-PROG-*` vẫn
+`OPEN`; 15/15 risk chưa có residual acceptance; 30/30 scenario vẫn `NOT RUN`;
+`DOC-G4`, implementation `G0`, HIL và release tiếp tục `RED`.
+
+**Kiểm chứng.** Chỉ sửa Markdown nên **không** chạy build/test C++, Go, FE,
+trình duyệt, target hay HIL — và không claim các kết quả đó. Harness tài liệu:
+22/22 file baseline tồn tại; local link missing `0`; anchor missing `0`;
+trailing whitespace `0`; code fence lệch `0`; duplicate document ID `0`; 55
+requirement canonical; 55 dòng trace `D/I/T/P/R`; 0 vi phạm `P=Y khi T=N` hoặc
+`R=Y khi P=N`; 30 `VS-PROG-*`; 15 `RSK-PROG-*`; 15 `OD-PROG-*`; 17 `UC-PROG-*`
+(trước vòng này là 0); 24 `UX-REQ-*`.
+
+### Changed — Tái kiểm toán và nâng 22 hồ sơ Programming lên Detailed Draft thực chất (2026-08-09)
+
+**Sửa kết luận trước.** Hạ toàn bộ nhãn `22/22 M3 — Review Ready` về `22/22
+M2 — Detailed Draft` vì mức M3 trước đó chỉ dựa trên self-check, chưa có
+peer-review record. Roadmap hiện tính lại đúng `660/2200 = 30,0%`, review-ready
+`0/22`, Approved `0/22`; `DOC-G4`, implementation G0, release và HIL tiếp tục RED.
+
+**Vòng chi tiết 1.** Cập nhật đủ 22 hồ sơ: requirement/use case/change-control;
+decision options/trade-off; architecture sequence/dataflow/resource; data
+transaction; REST/event ordering; EBNF/conversion; loader lifetime; cycle/journal/
+recovery/security controls; route/query/worker/thread/ISR-DMA/HW Test Result;
+30 test execution record; Ops Go/Stop/Hold/Close; risk acceptance; trace
+`D/I/T/P/R`; task card và sáu vertical slice. Riêng UI/UX có As-Built source,
+sáu wireframe chức năng, 17 UC đủ pre/post/alternate/error/API/test, state machine,
+field/error contract, visual/responsive/integration và trace 24 UX requirement.
+
+**Kiểm soát trạng thái.** Đồng bộ Design Index, Roadmap, Document Control,
+Document Hub và Implementation Index. 15 open decision vẫn `OPEN`, 15/15 risk
+chưa có residual acceptance, 30/30 scenario chưa có Test Result; không tự ký
+M3/M4/M5 hoặc biến thiết kế thành bằng chứng runtime.
+
+**Kiểm chứng.** Rà metadata/version/history, đếm baseline/requirement/trace/risk/
+scenario/UC/UX requirement, kiểm tra link Markdown và `git diff --check` trong
+phạm vi tài liệu. Thay đổi docs-only nên không chạy build/test sản phẩm, Chrome
+DevTools hoặc HIL.
+
+### Changed — Triển khai nội dung Roadmap hồ sơ Programming tới M3 (2026-08-09)
+
+**Kết quả.** Hoàn tất nội dung kỹ thuật R0–R4 của `PLAN-PROG-DOC-054`: đủ
+22/22 file và 22/22 hồ sơ đạt `M3 — Review Ready`, điểm trưởng thành tăng từ
+23,2% lên 60,0%. `DOC-G4` vẫn `APPROVAL BLOCKED`; không tự nâng M4/M5, không mở
+G0 implementation và không đổi trạng thái release/HIL khi 15 decision chưa ký,
+0/30 Test Result và 15/15 risk chưa có residual acceptance.
+
+**Thiết kế lõi mới.** Tạo năm hồ sơ implementation-ready cho Language/Compiler,
+Artifact/Loader, Control Semantics, Runtime Lifecycle và Security; nâng Data Model
+và Interface Spec với field/schema, transaction, state machine, timeout,
+idempotency, error, compatibility, deploy/rollback và acceptance. Ba source spec
+ST/IR/Scheduler cũ được gắn rõ là supporting As-Built và chỉ ra Target authority
+thay thế, tránh dùng path/semantics lịch sử làm baseline mới.
+
+**Thiết kế theo team.** Nâng UI/UX, FE, BE, FW-SOM, FW MCU và HW lên M3 với
+wireflow/component/package/class/ISR-DMA/electrical authority, fault behavior,
+source mapping và test target. HW/FW vẫn giữ NO-GO/HIL RED với blocker
+schematic/BOM/BSP/pin/limit/fixture có owner và điều kiện mở.
+
+**Assurance và delivery.** Đặc tả chi tiết 30 scenario (fixture, procedure,
+expected, target, evidence, pass authority), hoàn thiện runbook command/preflight/
+backup/read-back/UNKNOWN/incident/rollback, trace riêng 55/55 requirement theo
+`D/I/T/P/R`, treatment 15 risk và Plan 53 với entry/DoR/DoD/dependency/estimate/
+source ownership/gate evidence. Đồng bộ Design Index, Document Control, Document
+Hub, Implementation Index và snapshot R0–R4 trong Roadmap sau mỗi chặng.
+
+**Kiểm chứng.** Validator read-only xác nhận đúng 22 hồ sơ M3, 30 scenario duy
+nhất, 55 requirement SRS, 55 dòng trace chi tiết và 15 risk; kiểm tra 30 file có
+0 link Markdown cục bộ bị thiếu; `git diff --check` sạch. Đây là thay đổi docs-only
+nên không chạy build/test sản phẩm hoặc Chrome DevTools; evidence runtime/HIL vẫn
+được báo trung thực là chưa có.
+
+### Added — Roadmap kiểm soát 22 hồ sơ Programming (2026-08-09)
+
+**Phạm vi.** Thêm `PLAN-PROG-DOC-054` làm dashboard duy nhất để theo dõi việc
+tạo, viết đủ nội dung, review và phê duyệt hồ sơ cho FE, BE, FW-SOM, FW MCU, HW,
+QA và Ops. Đồng bộ liên kết trong Document Hub, Programming Design Index và chỉ
+mục Implementation.
+
+**Baseline đo trực tiếp.** Có file 17/22 (77,3%), còn thiếu 5 Detailed Design
+lõi, 0/22 hồ sơ qua cổng `đủ để implement`, 15 decision đang mở, 10/15 risk có
+điểm từ 15 trở lên và Test Result mới là 0/30. Điểm trưởng thành ban đầu 23,2%
+được tính bằng thang M0..M5; không được hiểu là tiến độ code hoặc release.
+
+**Cơ chế kiểm soát.** Roadmap có master tracker 22 dòng, dependency R0..R5,
+cổng `DOC-G0..DOC-G4`, RACI, công thức tiến độ, checklist `DD-01..DD-13`, quy
+trình cập nhật mỗi phiên và snapshot lịch sử. File tồn tại hoặc tự ghi `In
+Review` không được tự động tính là đủ nội dung.
+
+**Kiểm chứng.** Kiểm kê lại 22 đường dẫn, đối chiếu Risk Register và
+Traceability Matrix, kiểm tra link Markdown cục bộ và chạy `git diff --check`.
+Đây là thay đổi chỉ gồm tài liệu nên không chạy build/test hoặc Chrome DevTools.
+
+### Changed — Chuẩn hóa bắt buộc nội dung Detailed Design (2026-08-09)
+
+**Phạm vi.** Bổ sung rule trong `AGENTS.md` và reference của skill
+`mkddc-techlead` để tài liệu giao cho team implement không còn được dừng ở đầu
+mục, requirement, kiến trúc tổng quan hoặc task list.
+
+**Nội dung bắt buộc.** Mỗi file thiết kế phải có metadata/thẩm quyền, mục tiêu và
+phạm vi, As-Built có dẫn source, target ownership/failure boundary, data từng
+field, contract, state machine/thuật toán/timing, FE/UX hoặc operation flow,
+error/safety/security, source mapping, verification định lượng, compatibility/
+deploy/rollback, traceability/risk/open decision và sign-off. Cổng `đủ để
+implement` yêu cầu một dev không tham gia thiết kế có thể code và test mà không
+tự phát minh thêm kiến trúc.
+
+**Kiểm chứng.** Chạy validator của skill sau thay đổi; rà Markdown và
+`git diff --check`. Thay đổi chỉ gồm rule/skill/memory, không ảnh hưởng runtime
+nên không chạy build/test hoặc Chrome DevTools.
+
+### Added — Bộ báo cáo tình trạng mã nguồn FE/BE/FW SOM theo chuẩn ISO (2026-08-09)
+
+**Phạm vi.** Thư mục mới `docs/07_records/BAO_CAO_SRC_2026-08-09/` gồm 8 tài liệu
+đánh giá hệ thống **dựa trên mã nguồn**, không dựa trên tài liệu thiết kế: tình
+trạng mã nguồn tổng thể, tính năng lập trình điều khiển theo mã, đánh giá theo
+ISO/IEC 25010:2023 + ISO/IEC/IEEE 12207 + IEC 61131-3 + ISO 16484-5/IEC 62443, và
+ba báo cáo thành phần FE / BE / FW SOM, kèm sổ 13 phát hiện có mã truy vết.
+
+**Số đo kiểm chứng thật tại `8754a8e`** (chạy lại, không dẫn số cũ):
+
+| Bộ | Lệnh | Kết quả | Exit |
+|---|---|---|---|
+| C++ | `cmake --fresh` + build + `ctest` (MODBUS/BACNET/HMI=ON) | 860/860 pass, 13,44 s | 0/0/0 |
+| Go | `go vet ./...` + `go test ./... -count=1` | 11/11 gói pass, 505 hàm test | 0 |
+| FE | `npx vitest --run` + `npm run lint` + `npm run build` | 465/465 pass, lint sạch | 0 |
+
+**Phát hiện trung tâm.** Tính năng lập trình điều khiển không tới được người dùng:
+`mkddc-core` chạy `graph_runtime` nạp `/data/config/graph.json`, nhưng BE không có
+endpoint nào chạm `graph`, FE khoá trang Lập trình sau cờ chỉ bật ở chế độ demo, và
+6.606 dòng engine ST/IEC (220 test) không có điểm gọi nào trong tiến trình chạy.
+Đường duy nhất để nạp logic điều khiển hiện nay là sửa tay JSON qua SSH rồi SIGHUP —
+không phân quyền, không audit, không rollback.
+
+### Fixed — Bốn lỗi phát hiện trong đợt rà soát mã nguồn 2026-08-09
+
+**SRC-F-01 — `install.sh` không cài `mkddc-schedule-sim`.**
+*Triệu chứng:* `POST /api/v1/schedules/{id}/simulate` trả lỗi "không tìm thấy
+mkddc-schedule-sim" trên mọi thiết bị cài bằng bản cài chính thức.
+*Nguyên nhân gốc:* BE cố ý fork binary C++ này thay vì cài lại thuật toán lịch
+trong Go (`schedulesimulate.go`), nhưng `platform/packaging/install.sh` chỉ cài
+`mkddc-iobus`/`mkddc-core`/`mkddc-netcfg`/`mkddc-web`. Lỗi ẩn lâu vì
+`tools/deploy/deploy_board.sh` có copy nó lên bo lab — tính năng chạy tốt ở nơi
+kiểm và hỏng ở nơi giao hàng.
+*Cách sửa:* thêm tiền điều kiện build; cài vào `/opt/mkddc-web/` chứ không phải
+`/usr/sbin` (dịch vụ chạy `User=mkddc` với `PATH` systemd mặc định không có
+`/usr/sbin`, nên chỉ nhánh "cạnh binary" của `scheduleSimBinary()` là chắc chắn
+tìm thấy); thêm vào snapshot của `install.sh` và `rollback.sh`; đưa binary vào
+checksum gói phát hành lẫn checksum runtime sau install/rollback.
+
+**SRC-F-02 — hợp đồng OpenAPI lệch với mã.**
+*Triệu chứng:* `contracts/openapi/openapi.yaml` tự nhận là "nguồn-chuẩn cho
+endpoint (D-4)" nhưng khai 7 đường dẫn không có handler (`/graph/validate`,
+`/graph/deploy`, `/ota/*`, `/logs/download`, `/bacnet/objects`) và bỏ sót 2 đường
+dẫn có thật (`/modbus/write-test`, `/ws/monitor`).
+*Nguyên nhân gốc:* không có gate nào đối chiếu spec với bảng định tuyến trong
+`http.go`.
+*Cách sửa:* đánh dấu 7 đường dẫn chưa hiện thực bằng
+`x-implementation-status: not-implemented` (giữ phần khai vì đó là phạm vi roadmap
+đã chốt); bổ sung đầy đủ 2 đường dẫn còn thiếu kèm vai trò và giới hạn tần suất.
+`/modbus/write-test` là thao tác ghi thật xuống thiết bị hiện trường, nên việc nó
+vắng mặt khỏi hợp đồng làm mọi rà soát an ninh dựa trên spec bỏ sót nó. Thêm Go
+contract test khoá hai route runtime và bảy route roadmap để ngăn trôi lại.
+
+**SRC-F-03 — `AuxFunctionsPage` chấm PASS/FAIL trên graph demo ở chế độ live.**
+*Triệu chứng:* trang `/eng/aux` ghép cụm vừa sinh vào `getDemoGraph()` rồi chạy
+validator TypeScript cục bộ và hiện huy hiệu PASS/FAIL — cả ở bản live.
+*Nguyên nhân gốc:* thiếu gate `IS_DEMO`; cùng lớp lỗi FE-DIAG-01 đã sửa cho
+`ControllerDiagram` ngày 2026-08-06.
+*Cách sửa:* chỉ chấm phán quyết khi `IS_DEMO`; ở live vẫn sinh bản xem trước JSON
+nhưng nói rõ chưa chấm được vì cần endpoint validate phía thiết bị.
+
+**SRC-F-04 — `InputsPage` hiển thị điểm demo như dữ liệu thật ở chế độ live.**
+*Triệu chứng:* kênh không có điểm thật — vì core chết, kênh chưa cấu hình, hoặc
+API lỗi — sẽ mượn điểm demo và hiện giá trị, đơn vị, biểu đồ xu hướng như đo thật.
+*Nguyên nhân gốc:* nhánh fallback tại `InputsPage.tsx:377` không phân biệt chế độ.
+*Cách sửa:* chỉ fallback khi `IS_DEMO`; ở live để `point` là `undefined` nên các ô
+hiện trạng thái trống, người trực thấy ngay là chưa có dữ liệu. Rà bằng trình
+duyệt phát hiện thêm grid Inputs rộng 478 px trên viewport 390 px; bổ sung
+`min-w-0`, track `minmax(0,1fr)` và wrap nhóm mode để đóng cuộn ngang.
+
+*Kiểm chứng cho SRC-F-03/04:* Vitest 53 file/469 test, lint/build PASS;
+Playwright live mobile 390×844 1/1; Chrome DevTools xác nhận live không có badge
+PASS/FAIL giả, Inputs hiện bốn giá trị `--`, thông báo thiếu dữ liệu và
+`scrollWidth = clientWidth = 390`. *Cho SRC-F-01:* `bash -n` sạch cả ba script,
+CMake build có target `mkddc-schedule-sim`. *Cho SRC-F-02:* YAML parse được, 80
+đường dẫn; Go contract test và toàn bộ 11 package test PASS.
+
+### Removed — Loại bỏ authority trùng lặp `audit-programming` (2026-08-10)
+
+**Phạm vi.** Gỡ toàn bộ thư mục `docs/07_records/audit-programming` vì nội dung
+trùng vai trò thẩm quyền với bộ hồ sơ Programming 22 tài liệu đang được
+`PROG-DOCSET-001` kiểm soát. Prompt refactor cũ được giữ dưới trạng thái
+REFERENCE và chỉ rõ authority hiện hành, không còn được dùng để tái tạo một bộ
+thiết kế song song.
+
+**Khả năng phục hồi.** Toàn bộ hồ sơ audit đã xoá vẫn có trong lịch sử Git tại
+commit `3efaf0d`; không xoá bằng chứng ngoài lịch sử phiên bản.
+
+**Kiểm chứng.** Quét tham chiếu ngoài thư mục, kiểm tra liên kết/anchor, mã tài
+liệu trùng, `git diff --check` và docs harness sau khi xóa.
+
+### Added — Bổ sung hai đầu vào PA3 còn thiếu trong lịch sử Git (2026-08-10)
+
+**Phạm vi.** Đưa `docs/CHUONG_YEU_CAU/dashboard.md` và
+`docs/CHUONG_YEU_CAU/UX_DESIGN_MK-DDC-24_PA3.md` vào kiểm soát phiên bản để các
+tham chiếu đã có trong plan 52 và hồ sơ bằng chứng không còn phụ thuộc file cục
+bộ. Chuẩn hoá metadata bị dính trên một dòng và chỉ rõ vị trí hồ sơ triển khai,
+bằng chứng hiện hành; không thay đổi nội dung nghiệp vụ PA3.
+
+**Kiểm chứng.** Kiểm tra mã tài liệu không trùng, liên kết tài liệu nội bộ tồn
+tại, `git diff --check` và docs harness.
+
 ### Added — Web PA3 slice 2: đóng nốt 15 task, hoàn tất 50/50 (2026-08-08)
 
 **Phạm vi.** Phần còn lại của `52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md`:
