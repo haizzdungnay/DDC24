@@ -41,7 +41,8 @@ toolchain="$(c++ --version | head -n1 | tr ' ' '-')"
 printf '{\n  "version": "%s",\n  "git_commit": "%s",\n  "dirty": %s,\n  "build_time": "%s",\n  "toolchain": "%s"\n}\n' \
   "$version" "$commit" "$dirty" "$build_time" "$toolchain" > "$release_dir/provenance.json"
 sha256sum \
-  "$build_dir/core/mkddc-core" "$build_dir/iobus/mkddc-iobus" \
+  "$build_dir/core/mkddc-core" "$build_dir/core/mkddc-schedule-sim" \
+  "$build_dir/iobus/mkddc-iobus" \
   "$build_dir/netcfg/mkddc-netcfg" "$web_binary" \
   "$MKDDC_FW_BINARY_REL" \
   > "$release_dir/checksums.sha256"

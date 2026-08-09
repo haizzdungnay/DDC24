@@ -34,6 +34,11 @@ fi
 [ -x "$BUILD/iobus/mkddc-iobus" ] || { echo "ERROR: chưa build $BUILD/iobus/mkddc-iobus" >&2; exit 1; }
 [ -x "$BUILD/core/mkddc-core" ]   || { echo "ERROR: chưa build $BUILD/core/mkddc-core" >&2; exit 1; }
 [ -x "$BUILD/netcfg/mkddc-netcfg" ] || { echo "ERROR: chưa build $BUILD/netcfg/mkddc-netcfg" >&2; exit 1; }
+# SRC-F-01: `POST /api/v1/schedules/{id}/simulate` fork binary này (xem
+# apps/web-api/internal/app/schedulesimulate.go). Thiếu nó thì endpoint trả lỗi
+# "không tìm thấy mkddc-schedule-sim" trên MỌI bo cài bằng script này — lỗi chỉ
+# không lộ trên bo lab vì tools/deploy/deploy_board.sh có copy riêng.
+[ -x "$BUILD/core/mkddc-schedule-sim" ] || { echo "ERROR: chưa build $BUILD/core/mkddc-schedule-sim" >&2; exit 1; }
 [ -x "$MKDDC_GO_BINARY_REL" ] || { echo "ERROR: chưa build $MKDDC_GO_BINARY_REL (chạy platform/packaging/build-release.sh)" >&2; exit 1; }
 [ -f "$MKDDC_WEB_UI_DIST_REL/index.html" ] || { echo "ERROR: chưa build frontend $MKDDC_WEB_UI_DIST_REL" >&2; exit 1; }
 [ -f build/release/provenance.json ] || { echo "ERROR: thiếu provenance.json" >&2; exit 1; }
@@ -137,6 +142,7 @@ if [ -x /usr/sbin/mkddc-core ]; then
     install -d -m 0755 "$SNAP"
     for f in /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
              /usr/sbin/mkddc-fake-mcu /usr/sbin/mkddc-hmi /opt/mkddc-web/mkddc-web \
+             /opt/mkddc-web/mkddc-schedule-sim \
              /usr/share/mkddc/provenance.json /usr/share/mkddc/checksums.sha256; do
         [ -e "$f" ] && cp -a "$f" "$SNAP/" || true
     done
@@ -152,7 +158,12 @@ fi
 install -m 0755 "$BUILD/iobus/mkddc-iobus" /usr/sbin/mkddc-iobus
 install -m 0755 "$BUILD/core/mkddc-core"   /usr/sbin/mkddc-core
 install -m 0755 "$BUILD/netcfg/mkddc-netcfg" /usr/sbin/mkddc-netcfg
+# SRC-F-01: đặt cạnh mkddc-web, KHÔNG vào /usr/sbin. `scheduleSimBinary()` dò
+# theo thứ tự env → PATH → thư mục chứa chính nó; service chạy `User=mkddc` với
+# PATH systemd mặc định (không có /usr/sbin), nên chỉ nhánh "cạnh binary" là
+# chắc chắn tìm thấy.
 install -d -m 0755 /opt/mkddc-web
+install -m 0755 "$BUILD/core/mkddc-schedule-sim" /opt/mkddc-web/mkddc-schedule-sim
 install -m 0755 "$MKDDC_GO_BINARY_REL" /opt/mkddc-web/mkddc-web
 install -d -m 0755 /opt/mkddc-web/dist
 cp -a "$MKDDC_WEB_UI_DIST_REL/." /opt/mkddc-web/dist/
@@ -170,7 +181,8 @@ install -m 0644 build/release/checksums.sha256 /usr/share/mkddc/checksums.sha256
     /opt/mkddc-web/mkddc-web --version
 } > /usr/share/mkddc/runtime-build-info.txt
 sha256sum /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
-    /opt/mkddc-web/mkddc-web > /usr/share/mkddc/runtime-checksums.sha256
+    /opt/mkddc-web/mkddc-web /opt/mkddc-web/mkddc-schedule-sim \
+    > /usr/share/mkddc/runtime-checksums.sha256
 install -m 0755 "$MKDDC_PACKAGING_SOURCE_REL/configure-web-hostname.sh" /usr/libexec/mkddc/configure-web-hostname
 install -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/avahi/mkddc-web.service" /usr/share/mkddc/avahi/mkddc-web.service
 if [ -e /etc/systemd/system/mkddc-web-pi.service ]; then
