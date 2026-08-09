@@ -7,6 +7,202 @@
 ---
 
 ## [Unreleased]
+### Changed — Refactor audit-programming thành controlled design set (2026-08-09)
+
+**Phạm vi.** Chuyển `docs/07_records/audit-programming/` từ audit snapshot thành
+bộ tài liệu thiết kế sống có kiểm soát; không sửa code/config/runtime/systemd,
+không thay `PROD-PROG-001` Active và không đổi trạng thái production.
+
+- Chốt quan hệ authority: `PROD-PROG-001` vẫn là Product authority duy nhất;
+  hai proposal v2.2 là amendment `IN REVIEW`, sign-off `PENDING`; giữ đường dẫn
+  hiện tại và chỉ đề xuất move sang `docs/02_design/programming/` sau
+  `OD-PROG-015`/PM-CTO approval.
+- Cập nhật toàn bộ controlled document `00..07` và README; giữ nguyên năm record
+  lịch sử, `SOURCE_MANIFEST.sha256` và `09_archive/`.
+- Thêm 9 tài liệu: `FSP-PROG-010..012`, 65 requirement proposal, Runtime
+  Architecture, Control Semantics, Error Catalog, Verification Scenarios và
+  record refactor.
+- Phân chủ quản một nghĩa: Architecture giữ base-step/cutover/isolation; Control
+  Semantics giữ priority mức 5/anti-windup/hold-last/IOP 200 ms/overrun/mapping;
+  IFSPEC giữ `PRG-ERR-*`; Verification giữ catalog `VS-PROG-001..030` duy nhất.
+- Đóng `R3-01`: proposal đổi `PRG-MAP-003/004` thành `PRG-ERR-MAP-003/004`, mã
+  cũ deprecated; đóng `R3-02`: Product §33 liệt kê đủ R2-01..14; đóng `R3-03`:
+  thêm `CONF-PROG-015 = OPEN-DESIGN`, chặn bởi OD-012/013/014.
+- Giữ governance thật: 15 OD vẫn OPEN/PARTIAL, 13 VR vẫn RED, G0..G7 vẫn
+  `RED/NOT STARTED`, evidence production 0/13; không khóa API/JSON/DB schema.
+- Ghi sai lệch inventory thay vì sửa archive: thực đo có 33 raw payload (khớp
+  source manifest), không phải giả định 34; toàn archive có 35 file gồm index.
+
+**Kiểm chứng.** PC 12, PR 14, FSP 12, layer requirement 19, PRG 41, UX-REQ 24,
+VS 30, VR 13, OD 15, CONF 16, PRG-ERR 6; forward/reverse trace thiếu 0; va chạm
+requirement/error 0; link gãy 0; table block lệch 0; source manifest 33/33;
+document manifest 39/39; archive diff 0; `git diff --check` sạch. Thay đổi chỉ là
+tài liệu nên không chạy build/test runtime hoặc Chrome DevTools.
+
+### Added — Prompt refactor bộ audit-programming thành bộ tài liệu thiết kế (2026-08-09)
+
+**Phạm vi.** `docs/CHUONG_YEU_CAU/PROMPT_REFACTOR_AUDIT_PROGRAMMING.md` — chỉ thị
+thực thi cho team PM/CTO, tự chứa, không cần đọc lại lịch sử review.
+
+- Chốt nguồn đầu vào **duy nhất** là hai proposal Programming v2.2; mọi nguồn
+  khác chỉ để đối chiếu quyền.
+- Nêu quyết định chiến lược phải trả lời trước khi sửa file: bộ hồ sơ đổi bản
+  chất từ *audit record* sang *controlled design set*, và quan hệ với
+  `PROD-PROG-001` (Active) không được để mập mờ hai Product Spec cùng hiệu lực.
+- Việc theo từng thư mục `00..09`, gồm ba file mới trọng yếu:
+  `03_architecture/01_PROGRAMMING_RUNTIME_ARCHITECTURE.md` (base step ≠ Task
+  period + công thức `WatchdogSec`, cutover ba trạng thái, resource isolation),
+  `04_design/02_CONTROL_SEMANTICS.md` (priority mức 5, `program_value` vs
+  `actual_value`, anti-windup hai chế độ, hold-last, `IOP_SAFE_TIMEOUT_MS`,
+  overrun mức Task, ma trận type × point kind, bundle source-only),
+  `05_interfaces/01_ERROR_CODE_CATALOG.md` (IFSPEC sở hữu `PRG-ERR-*`).
+- Ràng buộc quản trị bất di dịch: `OD-PROG-*` giữ OPEN, `VR-PROG-001..013` giữ
+  RED, `G0..G7` giữ RED, sign-off còn PENDING, `09_archive/` bất biến, theo
+  `CONFREG-PROG-001` §3.
+- Giao đóng ba tồn đọng `R3-01..R3-03`, kèm định nghĩa hoàn thành có 5 kiểm tra
+  tĩnh phải chạy và bàn giao commit tách nhóm.
+
+### Added — Review vòng 3 và quyết định approve proposal Programming v2.2 (2026-08-09)
+
+**Phạm vi.** Mục 10 của `PHAN_BIEN_PROGRAMMING_SPEC_UX_V2_2026-08-09.md`.
+
+- **Kiểm lại bằng số liệu tự đo:** 41/41 `PRG-*` có crosswalk riêng, 24/24
+  `UX-REQ-*` có trace, 30 `VS-PROG-*` là catalog kiểm chứng duy nhất, 17/17 UC
+  có trace, 0 va chạm ID requirement ↔ error code, 0 artefact `R2-01..R2-05`
+  còn sót, 0 năm edition standards trong normative text.
+- **Bốn P0 vòng 2 sửa đúng bản chất:** hold-last chuyển sang `previous_program_value`
+  mức 5 (giữ Program ở 41% khi manual giữ 62%); anti-windup tách back-calculation
+  và freeze; `max_iop_poll_gap < 200 ms` cấm đứt IOP poll khi activate; base
+  control step tách khỏi Task period kèm công thức `WatchdogSec`; overrun hạ về
+  fault mức Task, plant safe-state chỉ do `SafetyManager`.
+- **Quyết định:** APPROVED ở **tầng review tài liệu** — đủ làm đầu vào amendment
+  để bắt đầu cập nhật `docs/07_records/audit-programming`. **Không** phải phê
+  duyệt Product baseline, **không** đóng `OD-PROG-*`, **không** đổi
+  `VR-PROG-001..013` khỏi RED, **không** đổi `G0..G7` khỏi RED. Khối sign-off
+  của chính hai tài liệu còn 5 ô `PENDING`.
+- **Kèm phạm vi merge:** bảng quy định nội dung nào được ghi vào thư mục nào của
+  bộ audit và phải mang trạng thái gì (`PROPOSED`/`OPEN`/`RED`), theo
+  `CONFREG-PROG-001` §3.
+- **Ba tồn đọng không chặn (`R3-01..R3-03`):** mã cũ `PRG-MAP-003/004` còn ở
+  Product §12.4 và UX §11.6 dù §26.1 đã trao namespace cho `IFSPEC-PROG-001`;
+  bảng §33 thiếu 5 mã `R2-*`; mâu thuẫn công thức watchdog vs
+  `PROGRAM_TASK_SCHEDULER_SPEC` phải thành `CONF-PROG-015` khi merge.
+
+**Kiểm chứng.** Review tài liệu + đếm/đối chiếu ID bằng script; `git diff --check`
+sạch. Không sửa code nên không chạy lại test suite.
+
+### Changed — Programming Product/UX proposal v2.2 đóng phản biện vòng 2 (2026-08-09)
+
+**Phạm vi.** Cập nhật trực tiếp hai proposal Programming lên v2.2; không thay
+baseline Active, không thay code/runtime và không nâng gate/evidence.
+
+- Sửa hold-last theo **đóng góp Local logic mức 5** (`program_value`), không theo
+  `actual_value` sau resolver; anti-windup tách back-calculation khi mức 5 thắng
+  nhưng saturate và freeze integrator khi thua arbitration.
+- Bổ sung ràng buộc MCU `IOP_SAFE_TIMEOUT_MS=200 ms`, đo poll gap có margin;
+  định nghĩa base step độc lập Task period, công thức `WatchdogSec`, chặn cấu
+  hình Task 30 s làm restart loop với unit 6 s.
+- Đổi ba overrun liên tiếp thành task-level fault/degrade; plant safe-state cần
+  SafetyManager condition độc lập; thêm yêu cầu cách ly compiler/Check khỏi RT
+  path và HIL concurrent-load.
+- Bundle replacement được chốt source-only, reject artifact/IR/native và luôn
+  build lại trên target; User Function Block chỉ cục bộ Project; capability
+  override active phải trả đủ binding/source/actor/value/priority/TTL.
+- Tách namespace error `PRG-ERR-*` khỏi requirement `PRG-COM-*`; trả error catalog
+  và compiler pipeline detail về IFSPEC/design authority.
+- Đồng bộ UX còn sót: một Task, structured FBD component, bỏ documentation panel,
+  scope triển khai, core state, UC/page label và wireframe/copy tiếng Việt.
+- Thêm `UX-REQ-001..024`, crosswalk từng `PRG-*`, một catalog kiểm chứng duy nhất
+  `VS-PROG-001..030`, mục lục, glossary, ownership boundary và sign-off cho cả hai file.
+
+**Kiểm chứng.** PASS kiểm tra tĩnh: 41/41 `PRG-*` unique và có crosswalk riêng,
+24/24 `UX-REQ-*`, 30/30 `VS-PROG-*`, 17/17 UC có trace; code fence chẵn, bảng
+Markdown đồng cột, không có trailing whitespace/artefact scope cũ. Thay đổi chỉ
+gồm tài liệu nên không chạy browser, build hoặc test runtime.
+
+### Added — Rà soát vòng 2 proposal Programming v2.1 (2026-08-09)
+
+**Phạm vi.** Đọc lại cả hai proposal v2.1 và đối chiếu với source/systemd trên bo;
+bổ sung mục 9 vào `PHAN_BIEN_PROGRAMMING_SPEC_UX_V2_2026-08-09.md`.
+
+- **Đính chính record vòng 1:** dòng tổng ghi `24 finding` là lỗi cộng; inventory
+  theo ID có **33 finding** (10 P0, 17 P1, 6 P2). Danh sách finding không đổi.
+- **33/33 finding vòng 1 đã được xử lý ở mức tài liệu**, gồm cả việc sửa vào
+  wireframe chứ không chỉ prose (arbitration hiện trong UX §12.2, `MB-042` thay
+  bằng `{device_id, point_id}`, IA/UC khớp tuyệt đối, G0–G7 hạ về RED).
+- **9 finding mới + 5 mục sửa chưa hết (`R2-01..R2-14`).** Bốn P0 mới đều là va
+  chạm giữa nội dung vừa thêm và ràng buộc đã tồn tại trên thiết bị:
+  - `R2-06/07`: hold-last và anti-windup định nghĩa trên `actual_value` (đầu ra
+    sau resolver) thay vì trên đóng góp mức 5 ⇒ program kế thừa giá trị của
+    nguồn ưu tiên cao hơn và bump đúng lúc override nhả.
+  - `R2-08`: bỏ qua `IOP_SAFE_TIMEOUT_MS = 200 ms` (`apps/core/bootstrap/main.cpp:317`)
+    — MCU tự ép AO/DO về an toàn khi mất poll, nên hold-last không đạt được nếu
+    activation làm đứt IOP poll.
+  - `R2-09`: cutover `PROGRAM_ONLY` đổi chủ scan period nhưng không đụng
+    `WatchdogSec=6` (`platform/systemd/mkddc-core.service:20-35`), vốn dẫn xuất từ
+    dải `scan_ms 500..2000` của graph; Task `30 s` + kick sau `step()` ⇒ restart loop.
+  - `R2-10`: ngưỡng “3 overrun liên tiếp ⇒ safe-state” cộng với `mkddc-web` không
+    có `CPUQuota/Slice` và core đang `SCHED_OTHER` trên bo lab ⇒ một lần `Check`
+    có thể gây nuisance safe-state.
+
+**Kiểm chứng.** Review tài liệu + đọc source/systemd; không sửa code nên không
+chạy lại test suite.
+
+### Changed — Programming Product/UX proposal v2.1 theo phản biện (2026-08-09)
+
+**Phạm vi.** Cập nhật trực tiếp
+`docs/CHUONG_YEU_CAU/PROGRAMMING_PRODUCT_SPEC_MK-DDC-24.md` và
+`PROGRAMMING_UI_UX_UC_DESIGN_MK-DDC-24.md`; hai file được phân loại rõ là
+Proposal/In Review cho `PROD-PROG-001`, không tự supersede baseline Active.
+
+- Xử lý đủ **33 finding** có ID trong record phản biện (10 P0, 17 P1, 6 P2),
+  gồm traceability `PRG/UC ↔ PR/SWR/IF/VR-PROG`, Open Decision authority,
+  ADR/reference và standards evidence `UNVERIFIED`.
+- Khóa proposal về Point allowlist/identity/type matrix, cycle `1/5/30 s`, Local
+  logic priority 5/6, arbitration feedback/anti-windup, graph cutover fail closed,
+  hold-last bumpless, RETAIN, integrity hash và scope signature nhất quán.
+- Đồng bộ UX về core `RUNNING/DEGRADED/UNREACHABLE`, Draft authority ở BE,
+  optimistic concurrency, copy VI/EN, FBD keyboard path, HMI out-of-scope,
+  error catalogue, UC replacement và IA/UC mapping duy nhất.
+- Bổ sung NFR định lượng, verification method/acceptance, G0 `RED / NOT LOCKED`
+  và lịch sử sửa đổi; không nâng bất kỳ `VR-PROG-*` hoặc release gate nào.
+
+**Kiểm chứng.** Markdown/traceability/structure/diff được kiểm tra trong phiên; thay
+đổi chỉ là tài liệu nên không chạy build/test source hoặc browser runtime.
+
+### Added — Phản biện Programming Product Spec v2.0 và UI/UX/UC Design v2.0 (2026-08-09)
+
+**Phạm vi.** Review đối chiếu hai tài liệu mới trong `docs/CHUONG_YEU_CAU/`
+(`PROGRAMMING_PRODUCT_SPEC_MK-DDC-24.md`, `PROGRAMMING_UI_UX_UC_DESIGN_MK-DDC-24.md`)
+với baseline đang có hiệu lực và với source thật trên bo.
+
+- `docs/07_records/audit-programming/08_records/PHAN_BIEN_PROGRAMMING_SPEC_UX_V2_2026-08-09.md`
+  — 33 finding có ID (10 P0, 17 P1, 6 P2; phần kết luận record ghi nhầm 24) chia 6 nhóm: quyền tài liệu/truy nguyên, mâu thuẫn với
+  contract đã đóng băng, thiếu sót kỹ thuật điều khiển, mâu thuẫn nội tại, UX/khả dụng,
+  khả năng kiểm chứng. Kèm 16 việc chặn review và 4 phản biện hướng sản phẩm.
+
+**Các P0 đáng chú ý.**
+- Tài liệu mới là Product Spec thứ hai cho cùng module, không supersede `PROD-PROG-001`,
+  và dùng không gian ID riêng không map được vào `PR/SWR/VR-PROG-*`.
+- Bỏ trắng mức priority của chương trình: `PRODUCT_DEFINITION` §13 đã đóng băng
+  Local logic = mức 5/6, thua Schedule (4), BACnet (3) và Local manual (2); UX hiển thị
+  giá trị output mà không có `overridden_by` — đúng lớp lỗi FE-DIAG-01, và PID mức 5 thua
+  arbitration sẽ windup vì không có feedback.
+- Allowlist Point bị nới ("Modbus points", "future BACnet producers") trái `PR-PROG-003`/
+  `PR-PROG-014`; `MB-042` trong wireframe không khớp `openapi.yaml:3463` lẫn `ModbusRTUPoint`.
+- Bỏ qua graph runtime production: `apps/core/bootstrap/main.cpp:72,185-194` cho thấy
+  `mkddc-core` đang nạp `/data/config/graph.json` và **lấy chu kỳ scan từ file đó**;
+  không có chính sách cutover graph → Programming.
+- Không có chính sách bumpless khi Commission/Restore (PID/timer khởi tạo lại ⇒ bump van).
+- "Controller OFFLINE" sai với kiến trúc one-box của ADR-005: web chạy trên chính
+  controller, trạng thái thật là core DEGRADED/UNREACHABLE.
+
+**Phát hiện kèm theo (ngoài phạm vi hai tài liệu).**
+- `docs/adr/` thiếu file ADR-024 dù đã Accepted 2026-08-05 (chỉ có dòng trong `DECISIONS.md:34`).
+- `apps/web-ui/src/app/App.tsx:141-144` vẫn nói FBD canvas là Rev B — finding `AP-FE-001` chưa đóng.
+
+**Kiểm chứng.** Review tài liệu + đọc source; không sửa code nên không chạy lại test suite.
+
 ### Added — Web PA3 slice 2: đóng nốt 15 task, hoàn tất 50/50 (2026-08-08)
 
 **Phạm vi.** Phần còn lại của `52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md`:

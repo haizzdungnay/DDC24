@@ -1,40 +1,74 @@
-# Đăng ký mâu thuẫn tài liệu và dữ liệu Programming
+# Đăng ký mâu thuẫn Programming
 
-**ID:** CONFREG-PROG-001  
-**Phiên bản:** 1.0  
-**Ngày đối chiếu:** 2026-08-08  
-**Trạng thái:** CONTROLLED BASELINE
+| Thuộc tính | Giá trị |
+|---|---|
+| ID | `CONFREG-PROG-001` |
+| Phiên bản | 2.0 |
+| Trạng thái | `CONTROLLED / IN REVIEW` |
+| Ngày đối chiếu | 2026-08-09 |
 
-## 1. Quy ước xử lý
+## Mục lục
 
-- `RESOLVED-AUDIT`: bộ audit đã có cách đọc duy nhất dựa trên authority; nguồn
-  lịch sử vẫn giữ nguyên.
-- `OPEN-DESIGN`: requirement đã rõ nhưng thiết kế/giá trị chi tiết chưa được duyệt.
-- `OPEN-UPSTREAM`: tài liệu nguồn ngoài bộ audit còn phải đồng bộ; bộ audit chỉ
-  ghi cách đọc hiện tại.
-- `SUPERSEDED`: giá trị cũ bị quyết định mới hơn thay thế.
+1. Quy ước
+2. Conflict Register
+3. Điều bị chặn
+4. Thuật ngữ
+5. Lịch sử
+6. Phê duyệt
 
-## 2. Conflict register
+## 1. Quy ước
 
-| ID | Mâu thuẫn | Nguồn/biểu hiện | Cách xử lý chuẩn trong bộ audit | Trạng thái |
-|---|---|---|---|---|
-| CONF-PROG-001 | Product, design nháp, component spec, plan và review nằm cùng cấp | Cây `source-snapshots` cũ | Phân tầng 00..09; raw source chỉ ở archive | RESOLVED-AUDIT |
-| CONF-PROG-002 | FBD Rev A bị lẫn với graph 28-node legacy | Product/ADR-023 yêu cầu FBD; Graph Schema mô tả graph JSON | FBD là Product feature; graph chỉ là đầu vào migration của OD-PROG-013, không phải FBD | RESOLVED-AUDIT / OPEN-DESIGN |
-| CONF-PROG-003 | Product chỉ cho 1/5/30 s nhưng scheduler component nhận 50..60000 ms bội 50 ms | `PROGRAM_TASK_SCHEDULER_SPEC...` so với PR/SWR-PROG-005/006 | Biên ngoài chỉ nhận 1000/5000/30000 ms; 50 ms chỉ có thể là internal tick candidate | OPEN-DESIGN |
-| CONF-PROG-004 | Tài liệu cũ gán component/path `services/core` và service Programming riêng | Draft/ST/IR spec cũ; design boundary mới nói allocation chưa khóa | Đường dẫn/tên service cũ là historical; không tạo process mới từ tài liệu audit | RESOLVED-AUDIT / OPEN-DESIGN |
-| CONF-PROG-005 | ADR-024 vừa ghi `Accepted 2026-08-05`, vừa còn câu “Proposed” | `DECISIONS.md` table và phần ghi chú cũ | Dùng entry có status/date cụ thể: Accepted 2026-08-05; ghi chú “Proposed” là stale | RESOLVED-AUDIT / OPEN-UPSTREAM |
-| CONF-PROG-006 | Modbus RTU Rev A là 1 hay 2 bus vật lý | ADR-024: 1 bus; `SYS-REQ-MBRTU-001` và design cũ: 2 port | Programming audit dùng 1 bus vật lý, giữ `bus_id` mở rộng; yêu cầu 2 port là superseded | SUPERSEDED / OPEN-UPSTREAM |
-| CONF-PROG-007 | Capacity Modbus Point là 64 hay ≥256 | Detailed Design cũ: 64; ADR-024: ≥256 | ≥256 là quyết định mới hơn; 64 chỉ là historical component value | SUPERSEDED |
-| CONF-PROG-008 | OD-PROG-007/008 ghi “chờ ADR-024” dù ADR đã Accepted | Open Decision ngày 2026-08-03 so với quyết định 2026-08-05 | Phần Modbus theo ADR-024 được coi đã quyết định; Local/Virtual/full mapping và evidence vẫn OPEN | RESOLVED-AUDIT / OPEN-DESIGN |
-| CONF-PROG-009 | ST/Scheduler/IR ghi Active normative nhưng Programming Design nói chưa thực hiện | Component specs 2026-07-28 so với `SOFTWARE.md`, sync report mới hơn | “Active” chỉ trong component cũ; dùng làm candidate input, không phải Product Design | RESOLVED-AUDIT |
-| CONF-PROG-010 | Component limit 8 task, 16 program/task, 32 tổng bị hiểu thành Product capacity | Scheduler spec so với OD-PROG-003/004 | Không đưa các số này vào Product/Feature baseline; giữ candidate đến khi có quyết định | OPEN-DESIGN |
-| CONF-PROG-011 | RETAIN code/spec tồn tại nhưng policy restart/power/revision chưa chốt | IR/ST component so với OD-PROG-009 | Chỉ giữ nghĩa Product; policy và acceptance còn OPEN | OPEN-DESIGN |
-| CONF-PROG-012 | API graph/Modbus cũ bị hiểu là Programming API đã có | Interface snapshots và source review | Programming interface chỉ có requirement baseline; endpoint/schema chi tiết chưa approved | RESOLVED-AUDIT / OPEN-DESIGN |
-| CONF-PROG-013 | Host unit test bị dùng để claim production capability | Component reports so với VR-PROG-004..012 | Host test là supporting evidence; production result vẫn 0/13 | RESOLVED-AUDIT |
-| CONF-PROG-014 | Cụm từ “theo chuẩn ISO” dễ bị hiểu thành chứng nhận | Yêu cầu tổ chức hồ sơ | Ghi rõ ISO-like lifecycle/traceability; không claim certification/compliance | RESOLVED-AUDIT |
+- `RESOLVED-AUDIT`: bộ tài liệu có cách đọc duy nhất; lịch sử vẫn giữ nguyên.
+- `OPEN-DESIGN`: requirement/hướng đề xuất đã rõ nhưng quyết định thiết kế chưa duyệt.
+- `OPEN-UPSTREAM`: nguồn ngoài bộ còn phải đồng bộ.
+- `SUPERSEDED`: giá trị cũ đã bị authority mới hơn thay.
 
-## 3. Việc bị chặn bởi conflict mở
+Không tự chọn cách hiểu cho dòng `OPEN-*`; phải trỏ tới Open Decision.
 
-Không được phê duyệt Programming Design, khóa API/schema, chốt capacity/WCET hoặc
-đổi gate production sang GREEN cho tới khi các OD tương ứng có quyết định và
-Verification có evidence hợp lệ.
+## 2. Conflict Register
+
+| ID | Mâu thuẫn | Cách đọc/đề xuất trong bộ thiết kế | Trạng thái / blocker |
+|---|---|---|---|
+| CONF-PROG-001 | Audit snapshot và living design từng nằm cùng bản chất | Từ 2026-08-09, 00..07 là living design; 08/09 vẫn record/archive | RESOLVED-AUDIT |
+| CONF-PROG-002 | FBD Rev A bị lẫn graph 28-node legacy | FBD Rev A là structured typed editor; graph chỉ chạy trong `GRAPH_ONLY`; cutover phải `GRAPH_ONLY/PROGRAM_ONLY/DUAL_INVALID`, không dual-run | OPEN-DESIGN — `OD-PROG-006, OD-PROG-013, OD-PROG-014` |
+| CONF-PROG-003 | Product chỉ `1/5/30 s`, component nhận `50..60000 ms` bội 50 | Boundary Product/UX/runtime chỉ nhận `1/5/30 s`; internal base step tách Task period, chưa chốt implementation | OPEN-DESIGN — `OD-PROG-004, OD-PROG-012` |
+| CONF-PROG-004 | Draft/component cũ gán process/path riêng | Giữ kiến trúc ba process; tên/path cũ chỉ historical | RESOLVED-AUDIT / OPEN-DESIGN |
+| CONF-PROG-005 | ADR-024 vừa Accepted vừa còn chữ Proposed | Dùng entry Accepted 2026-08-05; ghi chú cũ là stale | RESOLVED-AUDIT / OPEN-UPSTREAM |
+| CONF-PROG-006 | Modbus RTU 1 hay 2 bus vật lý | Một bus theo ADR-024; giữ `bus_id` mở rộng | SUPERSEDED / OPEN-UPSTREAM |
+| CONF-PROG-007 | Capacity Modbus Point 64 hay `>=256` | Dùng `>=256` theo ADR-024; 64 là lịch sử | SUPERSEDED |
+| CONF-PROG-008 | OD-PROG-007, OD-PROG-008 vẫn nói chờ ADR-024 | Phần ADR-024 là quyết định phụ thuộc; contract/evidence còn PARTIAL | RESOLVED-AUDIT / OPEN-DESIGN |
+| CONF-PROG-009 | ST/Scheduler/IR component ghi Active nhưng Programming Design chưa có | Active chỉ trong component cũ; không nâng thành design approval | RESOLVED-AUDIT |
+| CONF-PROG-010 | Limit 8 Task/16 Program mỗi Task/32 tổng bị hiểu là Product capacity | Các số 8/16/32 và multi-task là **OUT Rev A**; Rev A có một Task; capacity khác chưa chốt | OPEN-DESIGN — `OD-PROG-003, OD-PROG-004` |
+| CONF-PROG-011 | RETAIN component tồn tại nhưng restart policy chưa chốt | RETAIN IN Rev A ở mức proposal; policy/evidence còn mở | OPEN-DESIGN — `OD-PROG-009, OD-PROG-010` |
+| CONF-PROG-012 | API graph/Modbus cũ bị hiểu là Programming API | Interface chỉ khóa nghĩa/authority; URL/schema chưa approved | RESOLVED-AUDIT / OPEN-DESIGN |
+| CONF-PROG-013 | Host test bị dùng để claim production | Host test chỉ supporting; `VR` vẫn 0/13 PASS | RESOLVED-AUDIT |
+| CONF-PROG-014 | “Theo chuẩn ISO/IEC” bị hiểu là chứng nhận | Chỉ dùng aligned/informed; edition/năm `UNVERIFIED` | RESOLVED-AUDIT |
+| CONF-PROG-015 | Scheduler spec dùng công thức watchdog theo Task lớn nhất, proposal dùng base step độc lập Task period | Candidate normative là base-step model và công thức `WatchdogSec >= 2 × max_base_step_period + WCET_step_target + 1 s`, nhưng không được implement/chốt unit trước quyết định | **OPEN-DESIGN — `OD-PROG-012, OD-PROG-013, OD-PROG-014`** |
+| CONF-PROG-016 | 41 `PRG-*` và 24 `UX-REQ-*` bổ sung/làm mạnh baseline Active ở Core Library, structured FBD, một Task, bundle, arbitration, cutover, watchdog và UX | Giữ toàn bộ là `PROPOSED`; chỉ nhập baseline sau Product/Architecture/UX/Verification sign-off và cập nhật từng requirement/VR | **OPEN-UPSTREAM / OPEN-DESIGN — `OD-PROG-002..015` theo từng hàng trace** |
+
+## 3. Điều bị chặn
+
+Không được phê duyệt Programming Design, khóa URL/schema/DB, chốt capacity/WCET,
+đổi systemd/runtime config hoặc chuyển production gate sang GREEN tới khi các OD
+tương ứng đóng và Verification có evidence. `CONF-PROG-015` là R3-03 đã được
+ghi nhận nhưng **chưa resolved**.
+
+## 4. Thuật ngữ
+
+Xem [Data Dictionary](02_TERMS_AND_DATA_DICTIONARY.md).
+
+## 5. Lịch sử
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.0 | 2026-08-08 | Đăng ký 14 conflict của audit baseline. |
+| 2.0 | 2026-08-09 | Cập nhật CONF-PROG-002, CONF-PROG-003, CONF-PROG-010 theo v2.2; thêm CONF-PROG-015 để đóng R3-03 ở tầng merge và CONF-PROG-016 để giữ ranh giới amendment. |
+
+## 6. Phê duyệt
+
+| Vai trò | Quyết định |
+|---|---|
+| Product Owner | `PENDING` |
+| Software/Runtime Architect | `PENDING` |
+| Controls/Safety Reviewer | `PENDING` |
+| Verification Lead | `PENDING` |

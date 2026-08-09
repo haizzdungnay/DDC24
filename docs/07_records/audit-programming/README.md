@@ -1,71 +1,121 @@
-# Hồ sơ audit Programming DDC-24 Rev A
+# Bộ tài liệu thiết kế Programming MK-DDC-24
 
-**Bộ hồ sơ:** AUD-PROG-001  
-**Phiên bản:** 1.0  
-**Ngày baseline:** 2026-08-08  
-**Trạng thái:** Controlled audit baseline  
-**Phạm vi:** Chỉ tổng hợp, phân loại và kiểm soát tài liệu Programming trong thư mục này
-
-## 1. Kết luận đọc nhanh
-
-Bộ hồ sơ đã được sắp theo chuỗi vòng đời tài liệu kiểu ISO/IEC/IEEE 15288 và
-29148. Đây là **cấu trúc phù hợp mục đích audit**, không phải tuyên bố tổ chức hoặc
-sản phẩm đã được chứng nhận ISO.
-
-- Product Spec Rev A có thẩm quyền: `PROD-PROG-001`, trạng thái nguồn `Active`.
-- Chín Feature Spec tách rõ hành vi người dùng/sản phẩm khỏi thiết kế kỹ thuật.
-- 12 Product Capability, 14 Product Requirement và 19 yêu cầu layer đã được lập
-  baseline tài liệu.
-- 13 Verification Requirement đều còn `RED`; bằng chứng production đạt là `0/13`.
-- Programming Design chưa được phê duyệt. ST scheduler/IR, graph và Modbus design
-  cũ chỉ là input component/legacy, không được dùng để claim Product hoàn tất.
-- Mọi mâu thuẫn đã được đưa vào Conflict Register; vấn đề chưa có authority quyết
-  định vẫn giữ `OPEN`, không âm thầm chọn một giá trị.
-
-## 2. Cấu trúc và thứ tự đọc
-
-| Thứ tự | Thư mục | Vai trò |
-|---:|---|---|
-| 00 | [`00_document_control/`](00_document_control/00_DOCUMENT_CONTROL.md) | Kiểm soát tài liệu, đăng ký, thuật ngữ, conflict và quyết định mở |
-| 01 | [`01_product/`](01_product/00_PROGRAMMING_PRODUCT_SPEC.md) | Product Spec, Feature Catalog và Feature Spec |
-| 02 | [`02_requirements/`](02_requirements/00_PROGRAMMING_REQUIREMENTS_BASELINE.md) | Baseline yêu cầu System/Software/Interface/NFR |
-| 03 | [`03_architecture/`](03_architecture/00_PROGRAMMING_SYSTEM_CONTEXT.md) | Bối cảnh và ranh giới kiến trúc |
-| 04 | [`04_design/`](04_design/00_PROGRAMMING_DESIGN_STATUS_AND_CONSTRAINTS.md) | Trạng thái thiết kế và đánh giá tài liệu component/legacy |
-| 05 | [`05_interfaces/`](05_interfaces/00_PROGRAMMING_INTERFACE_BASELINE.md) | Nghĩa vụ hợp đồng dữ liệu/API; schema chi tiết còn mở |
-| 06 | [`06_verification/`](06_verification/00_PROGRAMMING_VERIFICATION_SPEC.md) | 13 yêu cầu kiểm chứng và gate |
-| 07 | [`07_traceability/`](07_traceability/00_PROGRAMMING_TRACEABILITY_MATRIX.md) | Truy vết hai chiều Product → Feature → Requirement → Verification |
-| 08 | [`08_records/`](08_records/REORGANIZATION_AND_CONFLICT_CLEANUP_REPORT_2026-08-08.md) | Báo cáo audit, inventory và trạng thái implementation tại ngày chụp |
-| 09 | [`09_archive/`](09_archive/README.md) | Snapshot nguyên trạng và manifest tái hiện nguồn |
-
-## 3. Thứ bậc thẩm quyền trong bộ audit
-
-Khi hai tài liệu nói khác nhau, áp dụng thứ tự sau:
-
-1. Product Spec đã phê duyệt và ADR `Accepted` có ngày mới hơn;
-2. Requirement baseline có truy vết tới Product Spec;
-3. tài liệu kiến trúc/thiết kế đã phê duyệt;
-4. component spec hoặc proposal;
-5. kế hoạch, handoff, review và tài liệu archive;
-6. source hiện có chỉ chứng minh As-Built, không tự sửa nghĩa Product.
-
-Feature Spec trong `01_product/features/` là bản phân rã có kiểm soát của Product
-Spec, không được mở rộng scope hoặc tự đóng Open Decision.
-
-## 4. Quy tắc trạng thái
-
-| Nhãn | Nghĩa |
+| Thuộc tính | Giá trị |
 |---|---|
-| `CONTROLLED BASELINE` | Bản chuẩn dùng để đọc/audit trong thư mục này |
-| `ACTIVE SOURCE` | Nguồn gốc ghi Active/Accepted; bản audit không thay thế authority ngoài thư mục |
-| `IN REVIEW` | Nội dung đã cấu trúc nhưng còn quyết định hoặc phê duyệt |
-| `CANDIDATE` | Có thể tái sử dụng, chưa phải thiết kế Product đã duyệt |
-| `LEGACY` | Thuộc graph/component/đường triển khai cũ |
-| `ARCHIVED SNAPSHOT` | Giữ nguyên để truy nguyên, không dùng làm baseline hiện hành |
-| `RED / NO-GO` | Chưa có đủ bằng chứng production để đóng gate |
+| Package ID | `AUD-PROG-001` |
+| Phiên bản | 2.0 |
+| Bản chất | `CONTROLLED DESIGN DOCUMENTATION SET` |
+| Trạng thái thiết kế | `IN REVIEW — NOT APPROVED` |
+| Product authority | `PROD-PROG-001` ngoài bộ vẫn Active |
+| Evidence | `VR 0/13 PASS`; G0..G7 `RED/NOT STARTED` |
+| Ngày chuyển đổi | 2026-08-09 |
 
-## 5. Kiểm soát thay đổi
+## Mục lục
 
-Mọi sửa đổi tiếp theo phải cập nhật đồng thời Document Register, Conflict/Open
-Decision Register nếu bị ảnh hưởng, Traceability Matrix và hai manifest SHA-256.
-Không chỉnh trực tiếp `09_archive/raw-source-snapshots/`; khi có nguồn mới phải tạo
-snapshot mới có ngày và checksum riêng.
+1. Mục đích và cách đọc đúng
+2. Trạng thái thật
+3. Bản đồ thư mục
+4. Cách đọc theo vai trò
+5. Câu hỏi thường gặp
+6. Quy tắc authority/trace/evidence
+7. Vị trí và archive
+8. Thuật ngữ
+9. Lịch sử và phê duyệt
+
+## 1. Mục đích và cách đọc đúng
+
+Bộ này là living design set cho Programming Rev A: phạm vi, requirement,
+architecture, control semantics, interface, verification và trace hai chiều.
+Nó thay **bản chất quản trị** của audit package cũ nhưng không thay Product
+authority, không phê duyệt proposal v2.2 và không làm implementation complete.
+
+Đọc theo chuỗi:
+
+```text
+Product authority
+→ Feature/Requirement Active + Proposed
+→ Architecture/Design/Interface candidate
+→ VS catalog
+→ VR
+→ Evidence
+```
+
+## 2. Trạng thái thật
+
+| Trục | Trạng thái |
+|---|---|
+| Product authority | `PROD-PROG-001` Active; v2.2 chỉ amendment `IN REVIEW` |
+| Open Decision | OD-PROG-001..015 đều OPEN/PARTIAL; không mục nào CLOSED |
+| Design | `NOT APPROVED`; sign-off bắt buộc đều PENDING |
+| Verification | VR-PROG-001..013 đều RED; production evidence **0/13** |
+| Gate | G0..G7 đều `RED / NOT STARTED` |
+| Runtime AS-BUILT | Graph production; Programming `st_sched = nullptr` tại record 2026-08-08 |
+| Readiness | `NO-GO` production |
+
+## 3. Bản đồ thư mục
+
+| Thư mục | Trả lời |
+|---|---|
+| `00_document_control/` | Authority, term, conflict, OD, register, manifest là gì? |
+| `01_product/` | Rev A làm/không làm gì; feature nào phân rã capability? |
+| `02_requirements/` | Requirement nào Active, requirement nào Proposed? |
+| `03_architecture/` | AS-BUILT/target boundary; base-step/cutover/isolation thế nào? |
+| `04_design/` | Control semantics và constraint candidate là gì? |
+| `05_interfaces/` | Dữ liệu/authority/error code có nghĩa gì? |
+| `06_verification/` | VS nào chạy, map VR nào, cần board/HIL hay không? |
+| `07_traceability/` | Chuỗi forward/reverse có khép kín không? |
+| `08_records/` | Quyết định/refactor/audit lịch sử ở thời điểm nào? |
+| `09_archive/` | Raw snapshot bất biến để điều tra lịch sử. |
+
+## 4. Cách đọc theo vai trò
+
+| Vai trò | Thứ tự đọc |
+|---|---|
+| PM/Product | Document Control → Product Spec → Feature Catalog → OD/Conflict → Trace |
+| Kiến trúc | System Context → Runtime Architecture → Design Status → Interface |
+| FE/UX | Proposed Requirements phần UX → UX proposal → IFSPEC → VS/Trace |
+| BE | Product lifecycle → Proposed Requirements → IFSPEC/Error → Runtime Architecture |
+| FW-SOM/Controls | Runtime Architecture → Control Semantics → Cyclic/Cutover/Arbitration FSP → HIL scenarios |
+| QA/Verification | Verification Spec → Scenario Catalog → Trace → record evidence |
+
+## 5. Câu hỏi thường gặp
+
+| Câu hỏi | Đọc file |
+|---|---|
+| Product Spec nào có authority? | `00_document_control/00_DOCUMENT_CONTROL.md` + `01_product/00_PROGRAMMING_PRODUCT_SPEC.md` |
+| Rev A có mấy Task/FBD dạng gì? | Feature Catalog + FSP-PROG-004, FSP-PROG-005 |
+| `program_value` khác `actual_value` thế nào? | `04_design/02_CONTROL_SEMANTICS.md` |
+| Graph và Programming cutover ra sao? | `03_architecture/01_PROGRAMMING_RUNTIME_ARCHITECTURE.md` + FSP-PROG-011 |
+| Watchdog/Task 30 s có được chốt chưa? | `CONF-PROG-015` + `OD-PROG-012, OD-PROG-013, OD-PROG-014` |
+| Bundle thay controller chứa gì? | FSP-PROG-010 + IFSPEC §6 |
+| Mã lỗi authority ở đâu? | `05_interfaces/01_ERROR_CODE_CATALOG.md` |
+| Test nào bắt buộc board/HIL? | `06_verification/01_VERIFICATION_SCENARIOS.md` §3 |
+| Evidence hiện có bao nhiêu? | Verification Spec: 0/13, RED |
+
+## 6. Quy tắc authority, trace và evidence
+
+- Một chủ đề một owner; nơi khác chỉ trỏ sang.
+- 41 `PRG-*` + 24 `UX-REQ-*` là `PROPOSED`; baseline 19 requirement không đổi.
+- `VS-PROG-001..030` là scenario catalog duy nhất.
+- IFSPEC sở hữu `PRG-ERR-*`; mã cũ `PRG-MAP-003/004` deprecated.
+- Trace/document/source/host test không tự chuyển VR sang PASS.
+- Standards chỉ “aligned/informed”; edition/năm `UNVERIFIED` tới evidence record.
+
+## 7. Vị trí và archive
+
+Đường dẫn hiện tại được giữ để bảo toàn link. Đích `docs/02_design/programming/`
+chỉ di chuyển sau PM/CTO approval/`OD-PROG-015` và full link migration. `09_archive`
+bất biến; 33 raw payload đã được checksum, không chỉnh để khớp giả định 34.
+
+## 8. Thuật ngữ
+
+Xem [Data Dictionary](00_document_control/02_TERMS_AND_DATA_DICTIONARY.md).
+
+## 9. Lịch sử và phê duyệt
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.0 | 2026-08-08 | README controlled audit baseline. |
+| 2.0 | 2026-08-09 | Viết lại cho controlled design set, role map/FAQ/status thật. |
+
+Sign-off: Product `PENDING`; Architecture `PENDING`; Controls/Safety `PENDING`; UX `PENDING`; Verification `PENDING`.
