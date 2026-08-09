@@ -4,7 +4,7 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.10 |
+| Phiên bản | 0.11 |
 | Trạng thái | **PLAN-ONLY — chưa được implement production.** Hồ sơ ở `M3 — Review Ready`; `PLAN_READY`, `IMPLEMENT_READY` và `RELEASE_READY` đều `BLOCKED` |
 | Ngày phát hành | 2026-08-10 |
 | Chủ quản | Dev Lead + System Architect |
@@ -293,7 +293,7 @@ còn lại, không bao gồm triển khai TLS, BSP, fixture hoặc chạy HIL. A
 | `PROG-100` | BE+FE | `PLAN_READY`; `OD-PROG-001/003/007` | OpenAPI `/programming`, generated TS, contract tests |
 | `PROG-101` | BE+Core | `PLAN_READY`; `OD-PROG-001/009/010/014` | versioned UDS/schema operation/status/stage/activate/restore |
 | `PROG-102` | Core | `PLAN_READY`; `OD-PROG-002..006/012/013` | Rev A compiler/artifact/runtime profile và loader error map |
-| `PROG-103` | BE+Core | 101–102 | `PRG-ERR-*` authority + component detail mapping |
+| `PROG-103` | BE+Core | 100–102 | `PRG-ERR-*` authority + component detail mapping |
 | `PROG-104` | BE | `PLAN_READY`; `OD-PROG-003/009/010/014` | DB schema/migration/backup/immutable invariants |
 | `PROG-105` | All | 100–104 | compatibility/deploy-order/rollback review + trace update |
 
@@ -428,7 +428,7 @@ phải mong muốn.
 | Mốc | Tuần | Kết thúc pha | Điều kiện vào | Sản phẩm chứng minh mốc |
 |---|---|---|---|---|
 | `M-G0` | `T+2` | P0-A | Candidate pin; consumer review xong; conflict baseline đóng; `OD-PROG-015` ký | `PLAN_READY PASS`; từng `IMPLEMENT_READY[<lát cắt>]` chỉ mở khi decision §4.3 của lát cắt đó đã ký |
-| `M-G1` | `T+4` | P1 | `OD-PROG-001/002/003/007` ký | OpenAPI + IPC + catalog lỗi + client sinh tự động |
+| `M-G1` | `T+4` | P1 | `OD-PROG-001..007/009/010/012/013/014` ký theo task tiêu thụ | OpenAPI + IPC + profile/artifact + catalog lỗi + DB migration + client sinh tự động |
 | `M-G2` | `T+9` | P2 | `M-G1`; `OD-PROG-005/006` ký | Compiler, store, Check; FE shell chỉ đọc |
 | `M-G3` | `T+9` | P3 | `M-G1`; `OD-PROG-004/012` ký | Core base step, scheduler, process image trên target |
 | `M-G4` | `T+13` | P4 | `M-G2` và `M-G3`; `OD-PROG-009/010/013` ký | Commission atomic, đọc ngược, RETAIN |
@@ -451,7 +451,7 @@ tuần (§6.4). Không ghi phần trăm theo cảm tính: `% hoàn tất` chỉ 
 | Pha | Task | Đã đạt DoD | % hoàn tất | Trạng thái | Bắt đầu | Kết thúc | Test Result đã có | Ghi chú chặn |
 |---|---:|---:|---:|---|---|---|---:|---|
 | P0 | 7 | 0 | 0% | `BLOCKED` | 2026-08-10 | — | — | Candidate + host/evidence repo đã sẵn; CI/target/HIL và consumer review/conflict/sign-off còn chặn |
-| P1 | 6 | 0 | 0% | `NOT_STARTED` | — | — | 0/2 | Chờ `M-G0` |
+| P1 | 6 | 0 | 0% | `NOT_STARTED` | — | — | 0/2 | 6/6 thẻ task đã điền; chờ `M-G0` và `IMPLEMENT_READY[contract]` |
 | P2 | 8 | 0 | 0% | `NOT_STARTED` | — | — | 0/3 | Chờ `M-G1` |
 | P3 | 8 | 0 | 0% | `NOT_STARTED` | — | — | 0/7 | Chờ `M-G1` |
 | P4 | 6 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G2`, `M-G3` |
@@ -530,7 +530,7 @@ Không sửa monolith/legacy path nếu bounded module đã được design. M�
 
 ### 5.8 Lát cắt dọc và thẻ task
 
-Mỗi `TASK-PROG-nnn` trong §4 phải có card triển khai **đã điền thật**, không
+Mỗi `TASK-PROG-nnn` trong §5.1 phải có card triển khai **đã điền thật**, không
 để trống trường nào. Đây là việc của team trong giai đoạn chuẩn bị `PLAN-ONLY`;
 thẻ chỉ trở thành đầu vào implementation sau khi `PLAN_READY` qua.
 
@@ -548,56 +548,275 @@ thẻ chỉ trở thành đầu vào implementation sau khi `PLAN_READY` qua.
 11. DoR; DoD; người có quyền chấp nhận:
 ```
 
-#### 5.8.1 Thẻ mẫu đã điền — `TASK-PROG-101`
+#### 5.8.1 Bộ thẻ P1 đã điền — phạm vi chuẩn bị `PLAN-ONLY`
 
-Một thẻ điền thật để team không phải đoán mức chi tiết. Thẻ này thuộc `G1`
-(Contract), là lát cắt được phép làm sớm nhất sau khi `IMPLEMENT_READY` mở.
+Bộ sáu thẻ dưới đây là đầu vào lập kế hoạch cho `G1` và đã đủ 11 trường bắt
+buộc. Việc điền thẻ **không** đổi trạng thái task: cả sáu vẫn `NOT_STARTED`,
+0/6 đạt DoD và chỉ được thực thi sau khi `IMPLEMENT_READY[contract]` mở.
+`EV-PROG-G1-nnn` là ID bằng chứng hỗ trợ nằm trong `raw/` của review G1, không
+phải Test Result và không được dùng đổi `VS-PROG-*` sang PASS. Chỉ
+`TR-PROG-VS-<nnn>-<YYYYMMDD>-<SEQ>` tại `PROG-TR-REPO-001` mới là Test Result.
+
+##### `TASK-PROG-100` — OpenAPI và client sinh tự động
 
 ```text
-1.  TASK-PROG-101 / pha P1 / owner BE Lead / reviewer Core Lead + FE Lead
+1.  TASK-PROG-100 / pha P1 / owner BE Lead + FE Lead / reviewer Security Lead
+    + Verification Lead
     / integrator file dùng chung: Architect (sở hữu contracts/openapi/openapi.yaml)
 2.  Requirement: SWR-REQ-PROG-BE-110, SWR-REQ-PROG-FE-110, NFR-REQ-PROG-106.
     Thiết kế: IFSPEC-PROG-001 §2 envelope, §3 resource, §6 Commission,
-    §6.1 impact ba nhánh, §6.1.1 quy tắc acknowledgement, §9 error authority.
+    §6.1 impact ba nhánh, §6.1.1 quy tắc acknowledgement, §11 REST matrix.
     Risk: RSK-PROG-014 (error namespace lệch), RSK-PROG-016 (mất bước an toàn).
-    Decision: OD-PROG-001 (role), OD-PROG-003 (giới hạn) phải ký trước.
+    Decision: OD-PROG-001 (role), OD-PROG-003 (giới hạn), OD-PROG-007
+    (Point contract) phải ký trước.
 3.  Đầu vào: IFSPEC-PROG-001 v0.5 ghim theo commit hash của baseline docs;
-    DM-PROG-001 v0.4. Gate upstream: PLAN_READY đóng + hai decision trên đã ký.
+    DM-PROG-001 v0.4. Gate upstream: PLAN_READY PASS + ba decision trên đã ký
+    + task card được Architect duyệt.
 4.  Tạo: contracts/openapi/openapi.yaml nhóm /api/v1/programming;
-    apps/web-api/internal/programming/http/{router,errors}.go;
+    apps/web-api/internal/programming/transport/http/{router,models,errors}.go;
     apps/web-api/internal/programming/domain/errors.go.
-    Sinh: TS client cho apps/web-ui/src/features/programming/api/.
-    Sửa: apps/web-api/internal/app/http.go (mount router, chưa bật flag).
+    Sinh: TS client vào apps/web-ui/src/features/programming/api/generated/.
+    Entry point: RegisterProgrammingRoutes, WriteProgrammingError,
+    ValidateImpactAcknowledgements; sửa apps/web-api/internal/app/http.go để
+    mount router nhưng chưa bật flag.
 5.  Dependency cứng: không có — đây là lát cắt đầu tiên sau G0.
-    Song song được: FE dựng shell chỉ đọc và BE dựng store, cả hai chờ client
-    sinh từ task này. Mutation FE **không** được nối ở lát này.
-6.  Estimate 8 ngày-người: OpenAPI 3, handler skeleton 2, error catalog 1,
-    sinh mã và contract test 2. Nguồn lực: 1 BE full-time + 0,5 Architect.
+    Song song được: PROG-101/102/104 sau khi decision riêng của chúng đã ký.
+    FE chỉ được dùng generated client; mutation **không** được nối ở lát này.
+6.  Estimate 8 ngày-người: OpenAPI 3, handler skeleton 2, sinh mã 1,
+    contract test 2. Nguồn lực: 1 BE + 0,5 FE + 0,5 Architect.
     Milestone: G1. Trạng thái: NOT_STARTED (chờ IMPLEMENT_READY).
-7.  Hiện thực: envelope lỗi có code/messageKey/correlationId; 19 mã PRG-ERR-*
-    trong §9 gồm 4 mã acknowledgement/impact mới; ba nhánh impact
-    NONE/PRESENT/UNAVAILABLE với UNAVAILABLE fail-closed; validate
-    acknowledgements == tập khóa PRESENT; kiểm impactRef và trả
-    409 PRG-ERR-IMPACT-STALE-001 khi lệch. Restart: handler không giữ state.
-    Compatibility: schema có version; unknown major bị reject.
+7.  Hiện thực contract: envelope lỗi có code/messageKey/correlationId;
+    ETag/baseRevision/idempotency-key; impact NONE/PRESENT/UNAVAILABLE;
+    acknowledgement đúng tập khóa PRESENT; impactRef bị stale trả mã ổn định.
+    Handler skeleton không giữ state và không gọi Commission. Schema có major;
+    field/enum không biết xử lý theo quy tắc §10, unknown major bị reject.
 8.  Unit: bảng ánh xạ mã lỗi, validator acknowledgement (thiếu/thừa/rỗng).
-    Contract: OpenAPI ↔ handler ↔ TS type sinh ra khớp nhau.
-    Integration: bốn tổ hợp status của impact.
+    Contract: OpenAPI ↔ Go model ↔ TS type khớp cùng golden payload; lint toàn
+    schema. Âm: thiếu field bắt buộc, enum lạ, base cũ, payload >1 MiB,
+    impact UNAVAILABLE và acknowledgement thừa/thiếu đều fail closed.
     Target/HIL: không áp dụng ở lát này.
-9.  Evidence: TR-PROG-G1-101 tại docs/07_records/test-results/programming/
-    TR-PROG-G1-101/ gồm result.md, output contract test, SHA256SUMS.
-    Đóng góp Test Result cho VS-PROG-001 (phần contract) và VS-PROG-019.
+9.  Evidence G1 dự kiến: EV-PROG-G1-100 trong raw/ của review G1; phần contract
+    đủ điều kiện mới được đưa vào TR-PROG-VS-019-<YYYYMMDD>-<SEQ> tại
+    PROG-TR-REPO-001. VS-024 chỉ tạo Test Result ở G3, không ghi sớm tại P1.
 10. Feature flag PROGRAMMING_REV_A mặc định OFF; route mount nhưng trả 404 khi
-    flag OFF. Thứ tự deploy: BE trước, TS client theo sau trong cùng release.
-    Rollback: gỡ mount router; không có dữ liệu bền vững nên không cần migration.
-11. DoR: hai decision đã ký, IFSPEC v0.5 đã ghim hash, môi trường sinh mã chạy được.
-    DoD: contract test PASS, TS type sinh ra biên dịch được, 19 mã lỗi khớp §9,
-    CHANGELOG cập nhật, Trace đổi trục I cho BE-110.
+    flag OFF. Thứ tự deploy: schema + BE tương thích trước, FE generated client
+    cùng release sau đó; chưa có mutation. Rollback gỡ mount router; không có
+    migration dữ liệu trong task này.
+11. DoR: ba decision đã ký; IFSPEC v0.5 và DM v0.4 ghim hash; generator pin
+    version; IMPLEMENT_READY[contract] PASS. DoD: lint/schema/golden/negative
+    contract PASS; Go + TS sinh ra build được; flag OFF; Trace chỉ đổi trục I
+    khi source merge và T/P chỉ đổi khi có Test Result hợp lệ; CHANGELOG cập nhật.
     Người chấp nhận: Architect (contract) + Verification Lead (evidence).
 ```
 
-**Chưa được thực thi.** Thẻ trên là mẫu lập kế hoạch; `TASK-PROG-101` đang
-`NOT_STARTED` và bị chặn bởi `IMPLEMENT_READY`.
+##### `TASK-PROG-101` — giao thức UDS BE↔Core có phiên bản
+
+```text
+1.  TASK-PROG-101 / pha P1 / owner BE Lead + Core Lead / reviewer Security Lead
+    + Verification Lead / integrator: Core Lead cho contracts/ipc và CMake.
+2.  Requirement: SYS-REQ-PROG-103/104, SWR-REQ-PROG-BE-106/110,
+    NFR-REQ-PROG-105. Thiết kế: IFSPEC-PROG-001 §8, §10, §12–§15;
+    ARCH-PROG-001 ranh giới BE/Core. Risk: RSK-PROG-007/008/014.
+    Decision: OD-PROG-001/009/010/014 phải ký trước.
+3.  Đầu vào: IFSPEC-PROG-001 v0.5 + DDD-LIFE-PROG-001 ghim hash;
+    Unix domain socket, frame <=64 KiB, queue 32, major/minor trong envelope.
+    Gate: PLAN_READY và IMPLEMENT_READY[contract] PASS.
+4.  Tạo contracts/ipc/programming_v1/{schema.json,README.md,golden/};
+    apps/core/application/programming/program_ipc_server.{hpp,cpp};
+    apps/web-api/internal/programming/coreipc/{client.go,codec.go,errors.go};
+    entry point ProgramIpcServer::HandleFrame, EncodeFrame/DecodeFrame và
+    Client.Call/Client.Reconcile; test C++/Go tương ứng; cập nhật
+    apps/core/CMakeLists.txt để build test.
+5.  Dependency cứng: không phụ thuộc PROG-100; phụ thuộc bốn decision ở mục 2.
+    Chạy song song PROG-100/102/104; PROG-103 chờ PROG-100..102 hoàn tất.
+6.  Estimate 10 ngày-người: schema/golden 3, C++ codec/server 3, Go client 2,
+    cross-language/fault test 2. Nguồn lực: 1 Core + 0,5 BE + 0,25 Security.
+    Milestone G1. Trạng thái NOT_STARTED.
+7.  Hiện thực operation/status/stage/activate/restore/read-back envelope có
+    requestId, operationId, deadline, schemaVersion, correlationId, result,
+    active/LKG revision, keepsRunning và component detail. Peer credential được
+    kiểm; frame/queue/deadline bounded; retry chỉ query/reconcile operation,
+    không replay mutation. Disconnect/restart giữ Core control đang chạy.
+8.  Unit codec hai ngôn ngữ; golden round-trip Go↔C++; âm với frame thiếu/cắt,
+    quá 64 KiB, enum/field bắt buộc sai, unknown major, queue full, deadline.
+    Integration: duplicate requestId, reconnect, BE restart, Core unavailable.
+9.  Evidence G1 dự kiến: EV-PROG-G1-101 gồm schema hash, golden corpus và log
+    cross-language trong raw/ của review G1. Đây là đầu vào cho VS-004/024/026
+    ở gate sau; không tạo Test Result của các VS này tại P1.
+10. Flag PROGRAMMING_REV_A OFF. Deploy Core hỗ trợ protocol mới trước, rồi BE;
+    chỉ chấp nhận mixed minor đã test. Rollback BE trước Core; cấm hạ Core qua
+    active artifact/operation major mới và không xóa state operation.
+11. DoR: decision đã ký, schema review Security, fixture cross-language sẵn.
+    DoD: schema hash + golden corpus bất biến; C++/Go round-trip và toàn bộ ca
+    âm PASS; no-mutation skeleton; deploy/rollback matrix review; Trace/CHANGELOG
+    cập nhật. Chấp nhận: Architect + Core Lead + Verification Lead.
+```
+
+##### `TASK-PROG-102` — profile Rev A và hợp đồng artifact/loader
+
+```text
+1.  TASK-PROG-102 / pha P1 / owner Compiler Lead + Core Lead / reviewer
+    Controls, Safety, Security, Verification / integrator: Core Lead.
+2.  Requirement: SYS-REQ-PROG-101/102/105, SWR-REQ-PROG-CORE-101,
+    NFR-REQ-PROG-101/103. Thiết kế: DDD-LANG-PROG-001; IFSPEC-ART-PROG-001;
+    DDD-CTRL-PROG-001. Risk: RSK-PROG-002/003/005/006/013.
+    Decision: OD-PROG-002..006/012/013 phải ký trước.
+3.  Đầu vào: DDD-LANG v0.3, IFSPEC-ART v0.3 và control profile ghim hash;
+    magic MKDDCIR1, major/minor, target/profile/library/layout/hash bounded.
+    Gate: PLAN_READY + IMPLEMENT_READY[contract] PASS.
+4.  Tạo contracts/programming/rev_a_profile_v1.schema.json và
+    contracts/programming/artifact_v1.schema.json; cập nhật
+    apps/core/application/st/st_{limits,ir,artifact,loader,diagnostic}.{hpp,cpp};
+    entry point ValidateRevAProfile, EncodeArtifactDeterministic,
+    VerifyArtifact và LoadArtifact; thêm golden/negative corpus và test vào
+    apps/core/tests/.
+5.  Không phụ thuộc PROG-100/101/104; phụ thuộc toàn bộ decision mục 2.
+    Chạy song song các task đó; PROG-103 chờ schema/error detail của task này.
+6.  Estimate 12 ngày-người: profile 3, artifact schema/layout 3, loader error
+    surface 2, golden/boundary/fuzz 4. Nguồn lực 1 Compiler + 1 Core bán thời
+    gian + Controls/Security review. Milestone G1. Trạng thái NOT_STARTED.
+7.  Khóa type/width/conversion; ST/FBD/library/Task/Point allowlist; giới hạn
+    -1/limit/+1; canonical serialization và deterministic hash. Loader kiểm
+    magic/version/offset/count/CRC/hash/profile/target trước stage; unknown major,
+    corrupt/truncated/overflow bị từ chối mà Active/LKG/output không đổi.
+8.  Unit/boundary/golden deterministic; ST↔FBD IR equivalence; fuzz parser/
+    loader; corrupt offset/count/hash, oversize, wrong target, unknown major;
+    100 lần build cùng input cho cùng hash. Target/HIL chưa đóng ở P1.
+9.  Evidence G1 dự kiến: EV-PROG-G1-102 gồm schema/hash/golden/boundary log
+    trong raw/ của review G1. Nó là đầu vào cho VS-003/005/006/023 ở G2/G3;
+    không ghi Test Result sớm hoặc kế thừa PASS từ host test nền tảng.
+10. Flag OFF. Deploy loader đọc được minor mới trước khi compiler phát artifact
+    mới; rollback compiler emit về minor tương thích, giữ artifact/LKG cũ.
+    Không stage/activate trong task này.
+11. DoR: bảy decision ký; profile/layout review; corpus và fuzzer chạy được.
+    DoD: hai schema machine-readable có hash; generated constants khớp C++;
+    golden/boundary/fuzz âm PASS; deterministic; không đổi Active; compatibility
+    matrix, Trace và CHANGELOG cập nhật. Chấp nhận: Runtime Architect + Safety
+    Reviewer + Verification Lead.
+```
+
+##### `TASK-PROG-103` — catalog lỗi thống nhất FE/BE/Core
+
+```text
+1.  TASK-PROG-103 / pha P1 / owner BE Lead + Core Lead / reviewer FE Lead,
+    Security Lead, Verification Lead / integrator: Architect cho catalog chung.
+2.  Requirement: SYS-REQ-PROG-103/105, SWR-REQ-PROG-BE-110,
+    SWR-REQ-PROG-FE-110. Thiết kế: IFSPEC-PROG-001 §9 và §14;
+    IFSPEC-ART-PROG-001 error behavior. Risk: RSK-PROG-006/014/016.
+    Decision: kế thừa decision đã khóa qua PROG-100..102.
+3.  Đầu vào: OpenAPI, UDS schema và loader error surface đã đạt DoD ở
+    PROG-100..102, ghim hash trong task. Gate: cùng IMPLEMENT_READY[contract].
+4.  Tạo contracts/programming/error_catalog_v1.json và generator;
+    sinh apps/web-api/internal/programming/domain/errors_generated.go,
+    apps/core/application/programming/program_error_generated.hpp và
+    apps/web-ui/src/features/programming/api/generated/errors.ts; generator tạo
+    MapComponentError, IsRetryable và public messageKey map từ một catalog.
+5.  Dependency cứng: PROG-100, PROG-101 và PROG-102. PROG-104 chạy song song;
+    PROG-105 chờ catalog này và toàn bộ task còn lại.
+6.  Estimate 6 ngày-người: catalog/mapping 2, generator ba ngôn ngữ 2,
+    completeness/negative test 2. Nguồn lực 0,5 BE + 0,5 Core + 0,25 FE.
+    Milestone G1. Trạng thái NOT_STARTED.
+7.  Mỗi PRG-ERR-* có owner component, HTTP/status class, retryable,
+    keepsRunning, messageKey và detail allowlist; mã public không phụ thuộc text.
+    Internal detail ánh xạ đúng một mã public; detail lạ fail safe, không lộ
+    source/secret/path nội bộ; Commission error không được báo optimistic success.
+8.  Static uniqueness/completeness; generator reproducible; compile Go/C++/TS;
+    mọi lỗi từ OpenAPI/UDS/loader map được; âm với code/detail lạ, missing
+    messageKey, HTTP mismatch, sensitive arg và unknown major.
+9.  Evidence G1 dự kiến: EV-PROG-G1-103 trong raw/ của review G1, chứa báo cáo
+    completeness và hash catalog; phần phù hợp vào TR-PROG-VS-019-<...>.
+    VS-023/026 chỉ tạo Test Result ở gate sở hữu tương ứng.
+10. Catalog/generator/consumers merge cùng commit logic; flag OFF. Deploy chỉ
+    khi producer và consumer chấp nhận cùng major; rollback cả generated set,
+    không giữ trạng thái mixed-version chưa test.
+11. DoR: PROG-100..102 DONE và hash ghim. DoD: mọi mã §9 duy nhất và đầy đủ;
+    ba ngôn ngữ build; mapping âm PASS; catalog hash trong manifest; Trace/
+    CHANGELOG cập nhật. Chấp nhận: Architect + Security + Verification Lead.
+```
+
+##### `TASK-PROG-104` — schema SQLite, migration và backup
+
+```text
+1.  TASK-PROG-104 / pha P1 / owner BE Lead / reviewer Architect, Operations,
+    Security, Verification / integrator: BE Lead cho migration sequence.
+2.  Requirement: SWR-REQ-PROG-BE-101/102/106, SYS-REQ-PROG-102/106.
+    Thiết kế: DM-PROG-001; DDD-BE-PROG-001 §persistence; OPS-PROG-001.
+    Risk: RSK-PROG-007/008/009/011. Decision: OD-PROG-003/009/010/014.
+3.  Đầu vào: DM-PROG-001 v0.4 và IFSPEC-PROG-001 v0.5 ghim hash; SQLite
+    WAL, foreign_keys=ON, synchronous=FULL, schema_migrations có checksum.
+    Gate: PLAN_READY + IMPLEMENT_READY[contract] PASS.
+4.  Tạo apps/web-api/internal/programming/store/{store.go,schema.go,migrate.go,
+    backup.go}; migrations/0001_programming_v1.sql và test fixtures;
+    entry point OpenProgrammingStore, Migrate, Backup, CreateRevision,
+    BeginOperation và CommitAudit; cấu hình path/permission trong package
+    Programming, không sửa DB active cũ.
+5.  Không phụ thuộc PROG-100..103 về code nhưng phải dùng cùng ID/version từ
+    DM/IFSPEC. Chạy song song; PROG-105 chờ migration và recovery review.
+6.  Estimate 10 ngày-người: schema/migration 3, store/invariant 3, backup/recover
+    2, fault/concurrency test 2. Nguồn lực 1 BE + Ops/QA review. Milestone G1.
+    Trạng thái NOT_STARTED.
+7.  Project/Draft mutable có ETag; Revision/Artifact immutable; operation và
+    audit durable; foreign key/unique/trigger bảo vệ invariant; single writer,
+    transaction atomic. Backup + quick_check trước migration; checksum lệch,
+    disk full, corrupt hoặc migration dở phải fail closed và giữ bản phục hồi.
+8.  Fresh DB/migrate/restart/round-trip; two-client writer; immutable/FK/unique;
+    duplicate idempotency; backup/restore/quick_check; fault disk-full/corrupt/
+    kill từng bước. Không chạy migration trên target trước khi Ops duyệt.
+9.  Evidence G1 dự kiến: EV-PROG-G1-104 và TR-PROG-VS-001-<YYYYMMDD>-<SEQ>
+    theo đúng scope contract. VS-024 chỉ tạo Test Result ở G3; recovery/power
+    phần target chỉ đóng khi đúng fixture, không suy từ SQLite host test.
+10. Flag OFF. Deploy backup → migration → BE tương thích → API; rollback binary
+    chỉ khi schema backward-compatible, luôn giữ DB/backup/audit. Không auto
+    downgrade hoặc xóa Revision/Artifact/operation.
+11. DoR: bốn decision ký; migration/backup path được Ops duyệt; fixture riêng.
+    DoD: schema/checksum bất biến; fresh/restart/concurrency/fault/backup PASS;
+    invariant immutable được chứng minh; no active data touched; Trace/Risk/
+    CHANGELOG cập nhật. Chấp nhận: BE Lead + Architect + Operations + Verification.
+```
+
+##### `TASK-PROG-105` — review tương thích, deploy order và rollback G1
+
+```text
+1.  TASK-PROG-105 / pha P1 / owner Architect + Dev Lead / reviewer toàn bộ lead,
+    Operations, Security, Verification / integrator: Document Control.
+2.  Requirement: SYS-REQ-PROG-102/103/104/105 và NFR-REQ-PROG-105.
+    Thiết kế: IFSPEC §10/15, DM compatibility/migration, Artifact compatibility,
+    OPS-PROG-001. Risk: RSK-PROG-006/007/008/009/014/015.
+    Decision: toàn bộ decision được tiêu thụ bởi PROG-100..104.
+3.  Đầu vào: deliverable + hash + Test Result hợp lệ của PROG-100..104;
+    candidate code/contract cùng commit hoặc compatibility matrix đã duyệt.
+    Gate upstream: năm task đạt DoD; G1 vẫn chưa PASS trước review này.
+4.  Tạo docs/07_records/reviews/PROGRAMMING_G1_CONTRACT_REVIEW_<YYYYMMDD>.md;
+    tạo manifest hash OpenAPI/IPC/profile/artifact/error/schema; cập nhật
+    PROGRAMMING_TRACEABILITY_MATRIX.md, PROGRAMMING_RISK_REGISTER.md,
+    PROGRAMMING_VERIFICATION_PLAN.md, Plan 53 và CHANGELOG. Không có function
+    production ở task review; entry point là checklist GO/NO-GO của record.
+5.  Dependency cứng: PROG-100..104. Không chạy song song phần kết luận; có thể
+    chuẩn bị checklist từ đầu. Không cho P2/P3 tiêu thụ contract trước GO G1.
+6.  Estimate 5 ngày-người: matrix/deploy/rollback 2, rerun cross-contract 2,
+    review/trace 1. Nguồn lực Architect 0,5 + các lead/QA. Milestone G1.
+    Trạng thái NOT_STARTED.
+7.  Chứng minh OpenAPI/Go/TS, UDS/C++/Go, profile/artifact/loader, catalog lỗi và
+    DB migration dùng cùng version/hash; unknown major fail closed; partial
+    deploy không mutation; restart/reconnect không replay; Active/LKG giữ nguyên.
+8.  Rerun positive/negative cross-language; mixed minor/unknown major;
+    deploy từng thứ tự lỗi; rollback dry-run trên host; verify schema backup,
+    generated diff sạch và no-Commission. Target/HIL vẫn NOT RUN nếu chưa có.
+9.  Evidence G1 gồm EV-PROG-G1-100..105 và đúng hai Test Result sở hữu bởi G1:
+    VS-PROG-001, VS-PROG-019 phần contract. Review record dẫn ID/hash; các VS
+    còn lại giữ NOT RUN cho tới gate tương ứng, không tự biến thành PASS.
+10. Thứ tự chuẩn: backup/schema → Core dual-compatible → BE → FE read-only;
+    flag OFF. Rollback ngược FE → BE → Core, bảo toàn DB/artifact/LKG; stop ngay
+    khi mismatch/unknown major được chấp nhận hoặc mutation xảy ra.
+11. DoR: PROG-100..104 DONE, không finding P0/P1 mở, raw evidence/hash sẵn.
+    DoD: review record đủ consumer sign-off; compatibility/deploy/rollback PASS;
+    trace/risk/VVP đồng bộ; G1 authority ký. Chấp nhận: System Architect +
+    Verification Lead; Product chỉ mở lát cắt downstream theo §4.2.
+```
+
+**Chưa được thực thi.** Bộ thẻ chỉ đóng công việc chuẩn bị kế hoạch. Không có
+source target nào ở trên được tạo, không Test Result nào được ghi và không gate
+nào đổi trạng thái trong vòng cập nhật này.
 
 Vertical slice **không** bàn giao bằng “FW-SOM xong”, “BE xong” hay “FE xong”.
 Mỗi mốc phải tạo một outcome đầu-cuối **quan sát được** — Project/Draft, Check,
@@ -799,7 +1018,7 @@ trỏ tới commit + test/evidence hiện tại.
 | `IMPLEMENT_READY[<lát cắt>]` | Product + Architect | **BLOCKED** | — | `PLAN_READY PASS` + task card/decision theo lát cắt (§4.3) |
 | `RELEASE_READY` | Product + Release + QA | **BLOCKED** | — | 32/32 Test Result + residual acceptance + `OD-PROG-008` HIL |
 | G0/P0 | Product+Architect+QA | BLOCKED | 2026-08-10 / — | Candidate/host/evidence repo sẵn; CI billing, target SSH auth, HIL authority/fixture, DOC-G4 review/sign-off và conflict còn chặn |
-| G1/P1 | Architect+BE+Core | NOT_STARTED | — | G0 |
+| G1/P1 | Architect+BE+Core | NOT_STARTED | — | 6/6 thẻ task đã điền; chờ G0 và IMPLEMENT_READY[contract] |
 | G2/P2+P5 partial | BE+FE+Compiler | NOT_STARTED | — | G1 |
 | G3/P3 | Core+Controls | NOT_STARTED | — | P1/P2 |
 | G4/P4+P5 | BE+Core+FE | NOT_STARTED | — | G3 |
@@ -877,6 +1096,7 @@ khiển thiết bị thật:
 | 0.8 | 2026-08-10 | Duyệt lại Plan và triển khai phần chuẩn bị P0: sửa 42→49 task, 30→32 scenario, 15→17 decision; đổi `PLAN_READY OPEN` thành `BLOCKED`; tách `P0-A` baseline khỏi `P0-B` decision theo lát cắt để bỏ dependency/contract vòng tròn; sửa gốc thời gian Gantt và join P2/P3; thêm trạng thái từng `PROG-000..006` và gói review/sign-off `PROG-P0-GATE-2026-08-10`. Không giả chữ ký; P0 giữ 0/7 DoD |
 | 0.9 | 2026-08-10 | Ghim candidate P0 `e3e9fb2` bằng manifest commit/tree/SHA-256/Git blob; đóng riêng blocker kiểm soát cấu hình nhưng giữ P0 0/7 DoD, `PLAN_READY` và mọi cổng quyền hạn BLOCKED vì consumer review/conflict/sign-off còn thiếu |
 | 0.10 | 2026-08-10 | Rà readiness P0: xác nhận branch/build/toolchain host PASS; tạo kho Test Result chuẩn nhưng giữ 0/32; tách blocker CI billing, target SSH auth và HIL authority/fixture có owner/impact/gate/unlock; giữ P0 0/7 DoD và mọi cổng quyền hạn BLOCKED |
+| 0.11 | 2026-08-10 | Hoàn thiện 6/6 thẻ task P1 theo đủ 11 trường; sửa thẻ OpenAPI gắn nhầm `PROG-101` thành `PROG-100`, dependency `PROG-103` thành `100–102`, điều kiện decision `M-G1` và quy tắc evidence chỉ tạo hai Test Result thuộc G1. Đây là chuẩn bị `PLAN-ONLY`; P1 giữ 0/6 DoD và mọi gate giữ nguyên |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

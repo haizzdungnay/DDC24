@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `PROG-DOCSET-001` |
-| Phiên bản | 1.3 |
+| Phiên bản | 1.4 |
 | Trạng thái | **M3 — Review Ready** — checklist đủ, TBD/BLOCKED có owner, link sạch; chờ peer review để lên M4 |
 | Ngày | 2026-08-10 |
 | Chủ quản | System Engineering |
@@ -95,7 +95,7 @@ Product/ADR Active
 | `OPS-PROG-001` | [Programming Operations Runbook](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | backup, commission, restore, replacement, incident | `M3` — Review Ready; chưa diễn tập |
 | `RSK-PROG-001` | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | rủi ro, kiểm soát, owner và residual gate | `M3` v0.5 — Review Ready; 16/16 risk Open |
 | `TRACE-PROG-001` | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Requirement → Design → Interface → Test → Evidence | `M3` — Review Ready; evidence production RED |
-| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.10 — host/evidence repo sẵn; CI/target/HIL/review/sign-off còn BLOCKED |
+| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.11 — 6/6 thẻ P1 đủ 11 trường; 0/6 DoD, CI/target/HIL/review/sign-off còn BLOCKED |
 
 Tiến độ tạo, hoàn thiện, review và phê duyệt đúng 22 hồ sơ trên được quản lý tại
 [`PLAN-PROG-DOC-054`](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md).
@@ -209,6 +209,7 @@ của người soạn không thay thế được. Vì vậy hiện tại **M4 = 
 | 1.1 | 2026-08-10 | Đồng bộ vòng duyệt P0: Open Decisions v0.6, VVP v0.6, Plan 53 v0.8; ghi rõ gói P0 review-ready nhưng G0/PLAN_READY vẫn BLOCKED |
 | 1.2 | 2026-08-10 | Ghim candidate P0 `e3e9fb2` bằng manifest 22 hồ sơ; đồng bộ Plan 53 v0.9 và giữ 22/22 ở M3 do chưa có consumer review/chữ ký |
 | 1.3 | 2026-08-10 | Đồng bộ readiness P0: Plan 53 v0.10, host/evidence repo sẵn; CI billing, target SSH auth và HIL authority/fixture còn chặn; mức M3/M4/M5 không đổi |
+| 1.4 | 2026-08-10 | Đồng bộ Plan 53 v0.11: 6/6 thẻ P1 đã đủ 11 trường, dependency và evidence đúng gate; vẫn 0/6 DoD, 0/32 Test Result và không đổi M3/M4/M5 |
 
 ## 11. Phụ lục — Tự kiểm cổng M3 (loại: Kiểm soát tài liệu)
 

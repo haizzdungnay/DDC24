@@ -7,6 +7,35 @@
 ---
 
 ## [Unreleased]
+### Changed — Hoàn thiện thẻ triển khai P1 Programming (2026-08-10)
+
+**Plan 53.** Nâng `PLAN-PROG-053` lên v0.11 và điền đủ 11 trường cho 6/6 thẻ
+`PROG-100..105`: owner/reviewer/integrator, requirement/design/risk/decision,
+contract/hash/gate, source target, dependency, estimate, state/error/restart,
+test âm, evidence, feature flag/deploy/rollback và DoR/DoD/authority. Các thẻ
+khóa phạm vi OpenAPI, UDS BE↔Core, profile/artifact, catalog lỗi, SQLite migration
+và review tương thích G1; không tạo code production hoặc Test Result.
+
+**Sửa finding lập kế hoạch.** Đóng `PLAN-P1-001`: thẻ OpenAPI từng gắn nhầm
+`TASK-PROG-101`, nay đúng là `TASK-PROG-100`. Đóng `PLAN-P1-002`: thay mã
+`TR-PROG-G1-101` sai quy ước bằng evidence G1 và chỉ cho tạo `TR-PROG-VS-*`
+ở gate sở hữu. Sửa dependency `PROG-103` từ `101–102` thành `100–102`, đồng bộ
+đủ decision đầu vào của `M-G1` và ngăn ghi sớm Test Result của gate sau.
+
+**Roadmap/Index.** Nâng Plan 54 lên v2.4, Design Index lên v1.4 và thêm snapshot
+`P1-cards`. Tiến độ được giữ trung thực: P1 vẫn `NOT_STARTED`, 0/6 DoD, 0/32
+Test Result; M3/M4/M5, `DOC-G4`, `PLAN_READY`, `IMPLEMENT_READY` và
+`RELEASE_READY` không đổi.
+
+**Kiểm chứng.** Docs harness PASS với 22/22 baseline + 6/6 hồ sơ hỗ trợ,
+link/anchor/ID/format/code-span lỗi 0, 60 requirement/60 trace/32 scenario và
+trace invariant lỗi 0; 6/6 thẻ có đúng 11 trường; `git diff --check` PASS.
+Gate repository chạy lại mới: C++ Release bật Modbus/BACnet/HMI đạt CTest
+860/860; Go vet PASS + 11 package test PASS với `-count=1`; FE 53 file/469 test,
+lint và build PASS. Không chạy Chrome DevTools/Playwright vì chỉ đổi tài liệu,
+không tác động giao diện hay runtime; không chạy target/HIL và không đổi trạng
+thái bất kỳ `VS-PROG-*` nào.
+
 ### Added — Chuẩn bị môi trường và kho Test Result P0 Programming (2026-08-10)
 
 **Evidence repository.** Tạo
