@@ -11,6 +11,7 @@ import { PointLoggingSection } from '../../shared/components/PointLoggingSection
 import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { TrendChart } from '../../shared/components/TrendChart'
+import { IS_DEMO } from '../../shared/config'
 import { getDemoPoints } from '../../shared/demo/simulator'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
@@ -200,8 +201,8 @@ export function InputsPage() {
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <Panel title="UI Channels">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <Panel className="min-w-0" title="UI Channels">
           <div className="flex flex-col gap-1 max-h-[calc(100vh-250px)] overflow-y-auto pr-2">
             {configs.map((config) => (
               <button
@@ -230,9 +231,10 @@ export function InputsPage() {
         </Panel>
 
         <Panel
+          className="min-w-0 [&>div:first-child]:flex-wrap"
           title={selected ? `${aiNode(selected.channel)} - ${selected.label}` : t('empty')}
           action={
-            <div className="flex rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-1">
+            <div className="flex max-w-full flex-wrap rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-1">
               <ModeButton active={viewMode === 'summary'} icon={<Activity className="h-4 w-4" />} label={pick('Summary', 'Summary')} onClick={() => setViewMode('summary')} />
               <ModeButton active={viewMode === 'wizard'} icon={<Wand2 className="h-4 w-4" />} label={t('wizard')} onClick={() => setViewMode('wizard')} />
               <ModeButton active={viewMode === 'advanced'} icon={<SlidersHorizontal className="h-4 w-4" />} label={t('advanced')} onClick={() => setViewMode('advanced')} />
@@ -374,7 +376,16 @@ function AiSummary({
 }) {
   const { pick, t } = useI18n()
   const livePoint = findAiPoint(points, config.channel)
-  const demoPoint = livePoint ? undefined : findAiPoint(getDemoPoints(), config.channel)
+  // SRC-F-04: chỉ rơi về điểm demo khi đang CHẠY demo.
+  //
+  // Trước đây nhánh này chạy cả ở bản live: kênh nào không có điểm thật —
+  // vì core chết, vì kênh chưa cấu hình, vì API lỗi — sẽ mượn một điểm demo
+  // và trang hiện giá trị, đơn vị, biểu đồ xu hướng như thể đo được thật.
+  // Đó là kiểu hỏng tệ nhất cho màn hình vận hành: nó không báo lỗi, nó bịa
+  // ra một hiện thực bình thường. Cùng lớp lỗi FE-DIAG-01 (2026-08-06).
+  // Ở live, không có điểm thì `point` để undefined và các ô hiện trạng thái
+  // trống — người trực thấy ngay là chưa có dữ liệu.
+  const demoPoint = !livePoint && IS_DEMO ? findAiPoint(getDemoPoints(), config.channel) : undefined
   const point = livePoint ?? demoPoint
   const pointId = point?.id ?? aiNode(config.channel)
   const displayPointId = aiNode(config.channel)

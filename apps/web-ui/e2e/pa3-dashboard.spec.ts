@@ -159,6 +159,39 @@ test.describe('Landing PA3 — mobile 390×844', () => {
   })
 })
 
+test.describe('Inputs — live mobile không dựng dữ liệu', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.route('**/api/v1/system/config/io', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ui: [{ ch: 1, tag: 'UI-01', name: 'Kênh không có telemetry', type: '0-10V', unit: 'degC', scale_lo: 0, scale_hi: 100, enabled: true }],
+          ao: [],
+          do: []
+        })
+      })
+    })
+    await page.route('**/api/v1/points', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+    await page.route('**/api/v1/virtual-points', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
+    await login(page)
+  })
+
+  test('không mượn điểm demo và không cuộn ngang ở 390 px', async ({ page }) => {
+    await navigate(page, '/eng/inputs')
+    await expect(page.getByRole('heading', { name: 'Live Data' })).toBeVisible()
+    await expect(page.getByText('No live data for this channel yet.')).toBeVisible()
+    await expect(page.getByText('23.7 C')).toHaveCount(0)
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+    expect(overflow, 'trang Inputs không được cuộn ngang').toBeLessThanOrEqual(1)
+  })
+})
+
 /* Vai trò KHÔNG được nghiệm thu ở tầng này: `VITE_AUTH_MODE=mock` cấp cho mọi
  * lần đăng nhập một phiên `role:'admin'` (AuthProvider.tsx), nên một bài test
  * "viewer bị khoá nút" ở đây sẽ xanh mà không chứng minh được gì.

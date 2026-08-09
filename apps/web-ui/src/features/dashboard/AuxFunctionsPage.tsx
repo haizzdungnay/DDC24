@@ -3,6 +3,7 @@ import { Panel } from '../../shared/components/Panel'
 import { Button } from '../../shared/components/Button'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useToast } from '../../shared/components/Toast'
+import { IS_DEMO } from '../../shared/config'
 import { validateGraphLocal, getDemoGraph } from '../../shared/demo/simulator'
 import { useI18n } from '../../shared/i18n'
 import type { GraphNode, GraphLink, GraphValidationResult } from '../../shared/types'
@@ -181,6 +182,27 @@ export function AuxFunctionsPage() {
     try {
       const generated = selectedFu.generate(inputs)
       setPreview(JSON.stringify(generated, null, 2))
+
+      // SRC-F-03: chỉ chấm PASS/FAIL ở chế độ demo.
+      //
+      // Phán quyết trước đây được tính bằng cách ghép cụm vừa sinh vào
+      // `getDemoGraph()` — một graph BỊA — rồi chạy validator TypeScript cục bộ.
+      // Ở bản live, graph thật nằm ở /data/config/graph.json trên thiết bị và
+      // trình duyệt không có cách nào đọc được (không có endpoint; xem
+      // SRC-F-02). Nghĩa là dấu PASS xanh nói về một graph mà thiết bị không
+      // chạy — người vận hành đọc nó như lời bảo đảm cụm logic này an toàn.
+      // Đây đúng lớp lỗi FE-DIAG-01 đã sửa cho ControllerDiagram 2026-08-06.
+      //
+      // Không có phán quyết vẫn tốt hơn phán quyết sai chỗ: ở live chỉ trả
+      // bản xem trước JSON để kỹ sư tự nạp, và nói rõ vì sao chưa chấm được.
+      if (!IS_DEMO) {
+        setResult(null)
+        toast.push('info', pick(
+          'Đã sinh cụm. Chưa chấm được PASS/FAIL: cần endpoint validate phía thiết bị.',
+          'Cluster generated. No PASS/FAIL verdict: a device-side validate endpoint is required.'
+        ))
+        return
+      }
 
       const demoGraph = getDemoGraph()
       const mergedGraph = {
