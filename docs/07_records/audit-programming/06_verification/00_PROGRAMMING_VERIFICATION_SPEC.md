@@ -1,44 +1,73 @@
 # Đặc tả kiểm chứng Programming DDC-24 Rev A
 
-**ID:** VER-PROG-001  
-**Phiên bản:** 1.0  
-**Trạng thái requirement:** ACTIVE  
-**Trạng thái kết quả:** RED / NO-GO  
-**Ngày baseline:** 2026-08-08
+| Thuộc tính | Giá trị |
+|---|---|
+| ID | `VER-PROG-001` |
+| Phiên bản | 2.0 controlled copy |
+| Trạng thái requirement | `ACTIVE` |
+| Trạng thái kết quả | `RED / NO-GO` |
+| Production evidence | `0/13 PASS` |
+
+## Mục lục
+
+1. Quy tắc evidence
+2. Verification Requirement
+3. Gate G0..G7
+4. Scenario catalog
+5. Thuật ngữ
+6. Lịch sử và phê duyệt
 
 ## 1. Quy tắc evidence
 
-Kết quả chỉ được chuyển `PASS` khi record ghi build/Revision, production target,
-cấu hình/tải, procedure, expected/actual, raw log/artifact, timestamp và reviewer.
-Host unit test được ghi supporting evidence nhưng không thay target/HIL/E2E được
-yêu cầu. Không dùng số đo cũ để claim lần chạy mới.
+PASS cần build/Revision, production target, config/load, procedure, expected/
+actual, raw artifact, timestamp và reviewer. Host test chỉ supporting evidence.
+Trace/docs không đổi trạng thái RED.
 
 ## 2. Verification Requirement
 
-| ID | Đối tượng | Phương pháp/acceptance | Evidence bắt buộc | Baseline |
-|---|---|---|---|---|
-| VR-PROG-001 | Scope Product/Requirement | Inspection UI/API/import/runtime chỉ lộ allowlist và không claim certification | Review record + negative inventory | RED — docs pass, production chưa có |
-| VR-PROG-002 | Project/Program/Revision | Round-trip, nhiều Program theo capacity approved, immutable identity/actor | API/UI test + persistence diff | RED |
-| VR-PROG-003 | Point/Variable/I/O Mapping | Positive/negative cho ba Point category trên production path | Target integration/HIL + authority logs | RED |
-| VR-PROG-004 | ST production | Revision → production runtime → I/O/monitor đúng golden scenario | Target binary/hash/log/measurement | RED |
-| VR-PROG-005 | FBD production | Cùng target/semantic với ST; lỗi block/connection/type và golden scenario | FE/compiler/runtime E2E | RED |
-| VR-PROG-006 | Cycle | Đo 1/5/30 s, jitter/WCET/overrun/fault; reject cycle khác | Target benchmark + raw timing | RED |
-| VR-PROG-007 | Revision/Deployment | Identity, validate-before-deploy, ACK/reject/timeout, không false-success | FE–BE–runtime correlation log | RED |
-| VR-PROG-008 | Activation/Rollback | Cyclic boundary; corrupt/timeout/power-loss giữ bản cũ; rollback tương thích | Fault injection + power-cycle evidence | RED |
-| VR-PROG-009 | RETAIN | Warm/cold/power/revision/type/corrupt/non-RETAIN theo policy | Target persistence matrix | RED |
-| VR-PROG-010 | Online Monitor | UI/API khớp runtime, timestamp/quality/stale; client loss không ảnh hưởng control | UI/API/runtime synchronized capture | RED |
-| VR-PROG-011 | RBAC/audit | Positive/negative từng action; bypass/replay/idempotency/timeout | Security integration + audit records | RED |
-| VR-PROG-012 | Continuity/fault | Mất FE/Web/authority phụ, Point bad, overrun; không uncontrolled output/false-success | Fault matrix + output capture | RED |
-| VR-PROG-013 | Negative scope | UI/API/import/runtime từ chối LD/SFC/TCP/BACnet/motion/safety | Automated negative E2E + runtime logs | RED |
+| ID | Acceptance authority | Evidence bắt buộc | Trạng thái |
+|---|---|---|---|
+| VR-PROG-001 | UI/API/import/runtime chỉ lộ allowlist, không claim certification. | Review + negative inventory | RED |
+| VR-PROG-002 | Project/Program/Revision round-trip, immutable identity/actor/capacity approved. | API/UI + persistence diff | RED |
+| VR-PROG-003 | Mapping positive/negative ba Point category trên production path. | Target integration/HIL + authority logs | RED |
+| VR-PROG-004 | ST Revision→runtime target→I/O/monitor golden scenario. | Target binary/hash/log/measurement | RED |
+| VR-PROG-005 | FBD cùng target/semantic ST; negative block/connection/type. | FE/compiler/runtime E2E | RED |
+| VR-PROG-006 | Đo 1/5/30 s, jitter/WCET/overrun/fault; reject cycle khác. | Target benchmark + raw timing | RED |
+| VR-PROG-007 | Revision/Deployment identity, validate-before-deploy, ACK/reject/timeout. | FE–BE–runtime correlation | RED |
+| VR-PROG-008 | Activation/Rollback boundary; corrupt/timeout/power-loss giữ bản cũ. | Fault injection + power cycle | RED |
+| VR-PROG-009 | RETAIN warm/cold/power/revision/type/corrupt/non-RETAIN. | Target persistence matrix | RED |
+| VR-PROG-010 | Monitor khớp runtime/timestamp/quality/stale; client loss không ảnh hưởng control. | Synchronized UI/API/runtime capture | RED |
+| VR-PROG-011 | RBAC/audit positive/negative/bypass/replay/idempotency/timeout. | Security integration + audit | RED |
+| VR-PROG-012 | Fault/local continuity, không uncontrolled output/false-success/replay. | Fault matrix + output capture | RED |
+| VR-PROG-013 | UI/API/import/runtime từ chối LD/SFC/TCP/BACnet/motion/safety. | Automated negative E2E + logs | RED |
 
-## 3. Gate
+## 3. Gate G0..G7
 
-| Gate | Điều kiện | Hiện tại |
+| Gate | Điều kiện tóm tắt | Hiện tại |
 |---|---|---|
-| G0 Product/Requirement | Scope và trace documented | DOCUMENTED, chưa phải production pass |
-| G1 Design | OD chặn đóng, design/interface/security approved | RED |
-| G2 Component | Unit/integration sạch theo component | Một phần, không đủ scope |
-| G3 Production target/HIL | ST+FBD+3 Point+3 cycle+lifecycle/RETAIN/monitor | RED |
-| G4 Release | 13 VR pass, evidence review, không P0 open | RED / NO-GO |
+| G0 Product/Design approval | OD/sign-off/trace approved | RED / NOT STARTED |
+| G1 Compiler/FBD contract | ST/FBD/IR/source-map/loader/keyboard contract | RED / NOT STARTED |
+| G2 Deterministic runtime | Task/base-step/watchdog/isolation/arbitration/IOP | RED / NOT STARTED |
+| G3 Point engineering | Mapping/Core Library/User FB/bundle | RED / NOT STARTED |
+| G4 Secure commissioning | Immutable hash/Check/Commission/LKG/Restore/source-only import | RED / NOT STARTED |
+| G5 UI/UX | IA/persona/state/a11y/no fake data/diagnostic-alarm | RED / NOT STARTED |
+| G6 HIL/Board | 30 scenario theo target flag, đặc biệt control safety | RED / NOT STARTED |
+| G7 Release | 13 VR PASS, P0/P1 đóng, docs/source/evidence khớp | RED / NOT STARTED |
 
-Production evidence đạt tại baseline: **0/13**.
+## 4. Scenario catalog
+
+Catalog duy nhất là [VS-PROG-001..030](01_VERIFICATION_SCENARIOS.md). Product/UX/
+Feature/Trace chỉ tham chiếu ID, không duy trì danh sách E2E riêng.
+
+## 5. Thuật ngữ
+
+Xem [DICT-PROG-001](../00_document_control/02_TERMS_AND_DATA_DICTIONARY.md).
+
+## 6. Lịch sử và phê duyệt
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.0 | 2026-08-08 | Chuẩn hóa 13 VR, kết quả RED. |
+| 2.0 | 2026-08-09 | Giữ 13 VR RED; bổ sung G0..G7 và chuyển scenario sang catalog duy nhất. |
+
+Sign-off: Verification Lead `PENDING`; Product `PENDING`; Architecture `PENDING`; Controls/Safety `PENDING`; UX `PENDING`.
