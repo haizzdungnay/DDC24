@@ -398,6 +398,54 @@ phê duyệt đã có từ trước, cộng `OD-PROG-016`.
 Ngoài baseline 22, bốn hồ sơ nguồn/điều khiển cũng được sửa: Product Spec
 `PROD-PROG-001` (Amendment A1), Plan 54 này, `CONTROL.md` và `CHANGELOG.md`.
 
+## 10.2 Baseline có kiểm soát cấu hình
+
+Trước 2026-08-09, chỉ **2/22** file baseline được Git theo dõi. Một hồ sơ chưa
+được version control thì không có gì để ghim, so sánh hay quay lui — chưa phải
+controlled baseline theo hướng ISO 9001. Đã khắc phục.
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Commit baseline | `05c1c48` |
+| Hash đầy đủ | `05c1c480418a2256f1010527f9d90fb6ff549b86` |
+| Nhánh | `docs/programming-design-set-v22` |
+| Số file baseline được Git theo dõi | **22/22** |
+| Harness xác nhận | `python3 scripts/docs_iso_harness.py --expect` → `PASS`, exit `0` |
+
+Đây là **revision được ghim** cho điều kiện `PLAN_READY` ở
+[Plan 53 §3.1](53_PROGRAMMING_IMPLEMENTATION_PLAN.md). Mọi thẻ task tham chiếu
+hồ sơ phải ghi commit này ở trường “contract/schema/version/hash đầu vào”.
+
+SHA-256 rút gọn 16 ký tự đầu của từng file tại commit trên:
+
+| File | SHA-256 (16 ký tự đầu) |
+|---|---|
+| `PROGRAMMING_OPEN_DECISIONS.md` | `4b088889c2fe39a5` |
+| `PROGRAMMING_DESIGN_INDEX.md` | `6f66112d9a47b19d` |
+| `PROGRAMMING_FW_MCU_DESIGN.md` | `f8fa75c9a2d96851` |
+| `PROGRAMMING_ARTIFACT_LOADER_SPEC.md` | `d945df62955cfb7a` |
+| `PROGRAMMING_INTERFACE_SPEC.md` | `24c12db6bf005442` |
+| `PROGRAMMING_BE_DESIGN.md` | `bd28570968d75446` |
+| `PROGRAMMING_CONTROL_SEMANTICS.md` | `1d697ef0f867a2d0` |
+| `PROGRAMMING_DATA_MODEL.md` | `62abb98e74fcfa47` |
+| `PROGRAMMING_FE_DESIGN.md` | `0d345168887f30e7` |
+| `PROGRAMMING_FW_SOM_DESIGN.md` | `f45e01f6326f0711` |
+| `PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `7fb15c2fb70a9b86` |
+| `PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md` | `9026d1f978747496` |
+| `PROGRAMMING_SECURITY_DESIGN.md` | `35d3c5ed2e6be324` |
+| `PROGRAMMING_REQUIREMENTS_SPEC.md` | `34859905f640dead` |
+| `PROGRAMMING_ARCHITECTURE.md` | `99f3e0d215e92bc6` |
+| `53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `4597e2654cf01911` |
+| `PROGRAMMING_HW_DESIGN.md` | `609a8dad26acb23b` |
+| `PROGRAMMING_UI_UX_DESIGN.md` | `b6a98ca512417431` |
+| `PROGRAMMING_VERIFICATION_PLAN.md` | `30f1cc9359e63e9d` |
+| `PROGRAMMING_OPERATIONS_RUNBOOK.md` | `cae5448594562959` |
+| `PROGRAMMING_RISK_REGISTER.md` | `f631828cbb790687` |
+| `PROGRAMMING_TRACEABILITY_MATRIX.md` | `9c2a5939a18869ba` |
+
+Khi một hồ sơ đổi, hash đổi theo và bảng này phải được tính lại **trong cùng
+commit** với thay đổi đó.
+
 ## 11. Điều kiện kết luận “bộ hồ sơ đã hoàn tất”
 
 - 22/22 file tồn tại tại đường dẫn chuẩn và 22/22 đạt `M5`.
