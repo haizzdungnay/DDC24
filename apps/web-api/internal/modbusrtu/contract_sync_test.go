@@ -170,6 +170,62 @@ func TestOpenAPIDescribesRetrySemanticsAfterDecision05(t *testing.T) {
 	}
 }
 
+// SRC-F-02: các route nhạy cảm đã có thật phải xuất hiện trong contract, còn
+// route roadmap phải được đánh dấu rõ để generator không coi là API khả dụng.
+func TestOpenAPISeparatesRuntimeRoutesFromRoadmap(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "contracts", "openapi", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := string(raw)
+
+	writeTest := openAPIPathSection(t, spec, "/modbus/write-test")
+	for _, required := range []string{
+		"x-rbac: [admin]",
+		"required: [point_id, value]",
+		"required: [point_id, applied_value, status]",
+		`"429"`,
+	} {
+		if !strings.Contains(writeTest, required) {
+			t.Errorf("/modbus/write-test thiếu contract %q", required)
+		}
+	}
+
+	monitor := openAPIPathSection(t, spec, "/ws/monitor")
+	for _, required := range []string{
+		"x-websocket: true",
+		"x-rbac: [viewer, operator, admin]",
+		`"101"`,
+	} {
+		if !strings.Contains(monitor, required) {
+			t.Errorf("/ws/monitor thiếu contract %q", required)
+		}
+	}
+
+	for _, path := range []string{
+		"/ota/upload", "/ota/apply", "/ota/status", "/logs/download",
+		"/bacnet/objects", "/graph/validate", "/graph/deploy",
+	} {
+		if !strings.Contains(openAPIPathSection(t, spec, path), "x-implementation-status: not-implemented") {
+			t.Errorf("route roadmap %s chưa được đánh dấu not-implemented", path)
+		}
+	}
+}
+
+func openAPIPathSection(t *testing.T, spec, path string) string {
+	t.Helper()
+	marker := "  " + path + ":"
+	start := strings.Index(spec, marker)
+	if start < 0 {
+		t.Fatalf("OpenAPI thiếu path %s", path)
+	}
+	section := spec[start:]
+	if end := strings.Index(section[len(marker):], "\n  /"); end >= 0 {
+		section = section[:len(marker)+end]
+	}
+	return section
+}
+
 // Tập quality/reason phải khớp GIỮA BA lớp: enum C++ trong contract header, hàm
 // map của Go, và enum trong OpenAPI. Lệch một mức nghĩa là FE hiện một chuỗi mà
 // không tầng nào định nghĩa.
