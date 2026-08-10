@@ -3,7 +3,7 @@
 **ID:** DOC-CTRL-001
 **Trạng thái:** Active
 **Chủ quản:** Project Engineering
-**Cập nhật:** 2026-08-10 (Programming 22/22 hồ sơ M3; Product + Architect đã `ACCEPT`; `0/22 M4` vì consumer/discipline chưa ký; `3 DECIDED/14 OPEN/0 CLOSED`)
+**Cập nhật:** 2026-08-10 (Programming 22/22 hồ sơ M3; Product + Architect đã `ACCEPT` v2.5, candidate v2.7 chờ xác nhận delta; `0/22 M4`; `3 DECIDED/14 OPEN/0 CLOSED`)
 
 ## Mục tiêu
 
@@ -61,14 +61,14 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 | [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | System/software/hardware/NFR requirements và acceptance Programming Rev A |
 | [Programming Design Index](../02_design/PROGRAMMING_DESIGN_INDEX.md) | register chủ quản: 22/22 hồ sơ đạt M3 — Review Ready. Vòng consumer review **kỹ thuật** đã chạy (`9/9` finding đóng) nhưng **`0/22` đạt `M4`** — `M4` đòi chữ ký người thật, xem `DOC-GOV-001` §3 |
 | [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | ownership, process/failure boundary, lifecycle và cutover target |
-| [Programming Documentation Roadmap](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | tracker 22/22 M3, Product + Architect `ACCEPT`, DOC-G4 RED — chờ consumer/Verification/discipline; nằm ngoài mẫu số 22 |
+| [Programming Documentation Roadmap](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | tracker 22/22 M3, Product + Architect `ACCEPT` v2.5; candidate v2.7 chờ xác nhận delta; DOC-G4 RED — chờ consumer/Verification/discipline; nằm ngoài mẫu số 22 |
 | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | delivery M3 — Review Ready, G0 RED; không tự mở implementation khi design chưa Approved |
 | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | risk/control/owner/evidence/residual gate |
 | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
 | [Programming Docs Sync Report](../07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record của lần đồng bộ 2026-08-03 |
 | [Programming Design Set Review 2026-08-09](../07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | record rà 22 hồ sơ + finding register `F-PROG-001..012`; căn cứ nâng M3 |
-| [Gói review cổng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | `PROG-P0-GATE-2026-08-10` — Product + Architect `ACCEPT`; 6 vai trò gate còn `PENDING`, `PLAN_READY BLOCKED` |
-| [Manifest candidate P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` — candidate định danh bằng **22 SHA-256**, kiểm bằng `scripts/candidate_pin_check.py`; `e3e9fb2` đã `SUPERSEDED` |
+| [Gói review cổng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | `PROG-P0-GATE-2026-08-10` — Product + Architect `ACCEPT` v2.5; xác nhận delta v2.7 và 6 vai trò gate còn `PENDING`, `PLAN_READY BLOCKED` |
+| [Manifest candidate P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` v2.7 — candidate định danh bằng **22 SHA-256**, kiểm bằng `scripts/candidate_pin_check.py`; các candidate cũ đã `SUPERSEDED` |
 | [Consumer review liên chức năng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | `PROG-P0-CONSUMER-REVIEW-2026-08-10` — vòng review **kỹ thuật** 22 cặp producer→consumer, `9/9` finding `F-CR-01..09` đóng; **không** thay chữ ký |
 | [ADR-026..031](DECISIONS.md) | System Architect `ACCEPT` 6/6; tất cả còn **`Proposed`** chờ đúng đồng phê duyệt; code/target evidence thuộc gate sau quyết định |
 | [DDC-24 Baseline Source Fix Report](../07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | record tổng hợp thay đổi source, test và readiness |

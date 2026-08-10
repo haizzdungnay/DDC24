@@ -4,13 +4,13 @@
 |---|---|
 | ID | `PROG-P0-GATE-2026-08-10` |
 | Loại | Decision/design/sign-off package; hồ sơ hỗ trợ, không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 1.6 |
+| Phiên bản | 1.7 |
 | Ngày | 2026-08-10 |
 | Phạm vi | `PROG-000..006`, `DOC-G4`, `G0`, `PLAN_READY` |
 | Chủ quản | Dev Lead + System Architect |
 | Người review | Product, Controls/Safety, Security, Runtime/Ops, FW MCU, HW, QA/Verification, Document Control |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
-| Trạng thái | **PARTIAL AUTHORITY ACCEPT — Product + Architect đã ký; `DOC-G4/G0/PLAN_READY` vẫn `BLOCKED`** |
+| Trạng thái | **PARTIAL AUTHORITY ACCEPT — Product + Architect đã ký v2.5; candidate v2.7 cần xác nhận delta; `DOC-G4/G0/PLAN_READY` vẫn `BLOCKED`** |
 | Kế hoạch chủ quản | [`PLAN-PROG-053`](../../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) §5.1 |
 
 ## 0. Đọc nhanh
@@ -19,9 +19,9 @@
 |---|---|
 | Gói này dùng để làm gì? | Gom toàn bộ đầu vào, kết luận kỹ thuật, decision cần ký và ô sign-off của P0 vào một nơi để các authority review mà không phải tự dò 22 hồ sơ. |
 | Đã hoàn tất gì? | Review cấu trúc Plan 53; ma trận `PROG-000..006`; harness; **ghim candidate hiện hành bằng 22 SHA-256**; host branch/build/toolchain; kho Test Result; **vòng consumer review kỹ thuật với `9/9` finding `F-CR-01..09` đã đóng**; **phần kỹ thuật của 6 xung đột kiến trúc đóng bằng `ADR-026..031`**. |
-| Chưa hoàn tất gì? | Product Owner/CTO + System Architect đã ủy quyền điện tử; còn chữ ký consumer/QA/Verification/Safety/Security/Runtime/Ops/I/O/UX/Controls. Có `3 DECIDED`, `14 OPEN`, `0 CLOSED`; 6 ADR còn `Proposed` dù Architect đã `ACCEPT`; CI/target/TLS/HW/BSP/HIL còn blocker/evidence. |
+| Chưa hoàn tất gì? | Product Owner/CTO + System Architect đã ủy quyền điện tử trên v2.5; cần xác nhận delta chỉ báo trạng thái trên v2.7. Còn chữ ký consumer/QA/Verification/Safety/Security/Runtime/Ops/I/O/UX/Controls. Có `3 DECIDED`, `14 OPEN`, `0 CLOSED`; 6 ADR còn `Proposed` dù Architect đã `ACCEPT`; CI/target/TLS/HW/BSP/HIL còn blocker/evidence. |
 | Có được implement production chưa? | **Không.** Gói này chỉ đưa P0 tới trạng thái sẵn sàng cho người có thẩm quyền review. `IMPLEMENT_READY` vẫn `BLOCKED`. |
-| Làm gì tiếp theo? | Các reviewer còn lại đọc đúng candidate v2.5 trong manifest, ghi `ACCEPT`, `REQUEST_CHANGE` hoặc `REJECT` theo §6; owner xử lý comment; Verification ký đúng revision. |
+| Làm gì tiếp theo? | Product + Architect xác nhận delta v2.7; các reviewer còn lại đọc đúng 22 SHA-256 trong manifest v2.7, ghi `ACCEPT`, `REQUEST_CHANGE` hoặc `REJECT` theo §6; owner xử lý comment; Verification ký đúng revision. |
 
 ## 1. Phán quyết duyệt kế hoạch
 
@@ -48,7 +48,7 @@ Test Result target/HIL hoặc chữ ký phê duyệt.
 |---|---|---|
 | Baseline 22 hồ sơ | commit `05c1c480418a2256f1010527f9d90fb6ff549b86` | Đã ghim, 22/22 file được Git theo dõi; đây là baseline trước vòng sửa P0 ngày 2026-08-10 |
 | Chuỗi candidate P0 | `05c1c48` → `e3e9fb2` (SUPERSEDED) → **candidate hiện hành** | Định danh là 22 SHA-256 ở manifest §2, không phải commit — xem manifest §1.1. Reviewer chạy `python3 scripts/candidate_pin_check.py` trước khi đọc |
-| Candidate P0 **hiện hành** | Định danh bằng **22 SHA-256** ở [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §2 (v2.5); commit chứa nội dung ghi ở §1.1 của manifest | Reviewer chạy `python3 scripts/candidate_pin_check.py` (`22/22` PASS) rồi ghi hash hoặc commit đó trong kết luận |
+| Candidate P0 **hiện hành** | Định danh bằng **22 SHA-256** ở [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §2 (v2.7); commit chứa nội dung sẽ được ghi bổ sung ở §1.1 của manifest | Reviewer chạy `python3 scripts/candidate_pin_check.py` (`22/22` PASS) rồi ghi 22 hash hoặc commit đã được Document Control bổ sung trong kết luận |
 | Candidate P0 **cũ** | `e3e9fb26f61b39df8f805916333fc03b51f07f5f` | **`SUPERSEDED`** — 11/22 hồ sơ đã đổi qua ba vòng R1/R2/R3. **Không** ký lên revision này |
 | Mức trưởng thành | 22/22 `M3`; 0/22 `M4`; 0/22 `M5` | Hồ sơ đủ để review, chưa đủ để phê duyệt/implement |
 | Bằng chứng sản phẩm | 0/32 Test Result | Không suy ra implementation, HIL hoặc release readiness |
@@ -81,14 +81,14 @@ làm đẹp tiến độ.
 | 22/22 hồ sơ tồn tại và được kiểm soát cấu hình | `PASS` | baseline commit ở §2 |
 | Cấu trúc/link/ID/trace invariant sạch | `PASS` | `python3 scripts/docs_iso_harness.py --expect -v` |
 | Finding kỹ thuật P0/P1 của vòng duyệt agent đóng | `PASS` | [`PROG-REV-2026-08-09`](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §6.3 |
-| Candidate sau authority record được ghim revision/hash | `PASS` | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v2.5: 22/22 SHA-256, kiểm bằng `scripts/candidate_pin_check.py`; delta authority được liệt kê tại manifest §4 |
+| Candidate sau authority record được ghim revision/hash | `PASS` | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v2.7: 22/22 SHA-256, kiểm bằng `scripts/candidate_pin_check.py`; delta v2.5→v2.7 chỉ sửa chỉ báo cấu hình/trạng thái và được liệt kê tại manifest §4 |
 | Branch/build/toolchain host và evidence repository | `PASS phần chuẩn bị` | [`PROG-P0-ENV-2026-08-10`](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md): host gate PASS; [`PROG-TR-REPO-001`](../test-results/programming/README.md) sẵn, 0/32 Test Result |
 | GitHub CI/security runner | `BLOCKED` | Owner: Organization Admin. Ảnh hưởng: không có server evidence. Gate: assurance/release. Mở khi sửa billing và rerun exact commit có step thật |
 | Target SOM/HIL lab | `BLOCKED` | Owner: Ops + HW/Safety/QA. Ảnh hưởng: không có target/HIL evidence. Gate: G3–G6. Mở khi SSH auth hoạt động và `HW-AUTH-*`/fixture/calibration được duyệt |
 | Consumer review liên chức năng | `BLOCKED` | **Vòng kỹ thuật đã chạy** tại [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md): 22 hồ sơ theo cặp producer→consumer, 9 finding `F-CR-01..09` đã đóng. Vẫn `0/22 M4` vì `DOC-GOV-001` §3 đòi reviewer là **người thật**; cần `ACCEPT/REQUEST_CHANGE/REJECT` theo revision |
-| Baseline approval `OD-PROG-015` | `BLOCKED` | Product + Architect `ACCEPT`; còn QA/Verification và consumer review hợp lệ trên candidate v2.5. Toàn register: `3 DECIDED`, `14 OPEN`, `0 CLOSED` |
+| Baseline approval `OD-PROG-015` | `BLOCKED` | Product + Architect `ACCEPT` v2.5; cần xác nhận delta v2.7, QA/Verification và consumer review hợp lệ trên cùng candidate. Toàn register: `3 DECIDED`, `14 OPEN`, `0 CLOSED` |
 | Không còn authority/xung đột kiến trúc | `BLOCKED` | 6/6 ADR `ADR-026..031` có System Architect `ACCEPT` nhưng vẫn `Proposed`; còn Safety/Security/Verification/Runtime theo từng ADR và target evidence |
-| Sign-off Product/Architect/Verification | `BLOCKED một phần` | Product + Architect `ACCEPT` ở §6; Verification còn `PENDING` |
+| Sign-off Product/Architect/Verification | `BLOCKED một phần` | Product + Architect `ACCEPT` v2.5 ở §6; xác nhận delta v2.7 và Verification còn `PENDING` |
 | `PLAN_READY` | **`BLOCKED`** | Chỉ chuyển `PASS` khi toàn bộ điều kiện trực tiếp phía trên đạt |
 | `IMPLEMENT_READY[<lát cắt>]` | **`BLOCKED`** | Cần `PLAN_READY PASS`, task card và decision của đúng lát cắt; contract machine-readable chỉ là entry của lát cắt tiêu thụ, không phải entry của P1 tạo contract |
 | `RELEASE_READY` | **`BLOCKED`** | 0/32 Test Result, HIL/rehearsal/residual acceptance chưa có |
@@ -126,8 +126,8 @@ khi kết quả `PASS 22/22`.
 
 | Vai trò | Phạm vi | Kết luận | Người/ngày | Revision đã đọc + finding còn lại |
 |---|---|---|---|---|
-| Product Owner/CTO | `PROG-000`, scope/claim, `OD-PROG-015..017` | **ACCEPT — ủy quyền điện tử** | **Phạm Đình Chương / 2026-08-10** | Candidate v2.5, 22 SHA-256 ở manifest §2; không finding thuộc phạm vi; QA/discipline sign-off còn thiếu |
-| System Architect | `PROG-001`, ownership/cutover/deploy | **ACCEPT — ủy quyền điện tử** | **Phạm Đình Chương / 2026-08-10** | Candidate v2.5, 22 SHA-256 ở manifest §2; xác nhận `${STATE_DIR}/programming/staging/`; đồng phê duyệt ADR/evidence còn thiếu |
+| Product Owner/CTO | `PROG-000`, scope/claim, `OD-PROG-015..017` | **ACCEPT v2.5 — xác nhận delta v2.7 PENDING** | **Phạm Đình Chương / 2026-08-10** | Chữ ký gốc áp cho candidate v2.5; v2.7 chỉ đổi chỉ báo cấu hình/trạng thái nhưng vẫn phải được chính người ký xác nhận trên đúng revision |
+| System Architect | `PROG-001`, ownership/cutover/deploy | **ACCEPT v2.5 — xác nhận delta v2.7 PENDING** | **Phạm Đình Chương / 2026-08-10** | Chữ ký gốc áp cho candidate v2.5; xác nhận `${STATE_DIR}/programming/staging/` và ADR vẫn hiệu lực; cần xác nhận delta v2.7 |
 | Controls + Safety | `PROG-002`, timing/priority/PID/fault | `PENDING` | — | — |
 | Security + Platform | `PROG-003`, RBAC/TLS/integrity/audit | `PENDING` | — | — |
 | Runtime + Ops | `PROG-004`, RETAIN/LKG/recovery/rehearsal | `PENDING` | — | — |
@@ -151,7 +151,7 @@ vai trò còn lại.
 | 1 | Xác nhận lựa chọn `${STATE_DIR}/programming/staging/` cho `F-CR-02` | System Architect | Ghi `ACCEPT` ở §6 kèm câu xác nhận gốc staging | **DONE — Phạm Đình Chương, 2026-08-10** |
 | 2 | Chuyển `ADR-026..031` sang `Accepted` hoặc ghi `REQUEST_CHANGE` | System Architect + Safety + Security + Verification, theo bảng chữ ký trong từng ADR | Trường `Status` của từng file ADR đổi khỏi `Proposed`, và `ARCH-PROG-001` §11 cập nhật trạng thái tương ứng | **PARTIAL — Architect `ACCEPT` 6/6; final `Accepted` 0/6** |
 | 3 | Ký và đóng `OD-PROG-015` | Product Owner + QA/Verification | Trạng thái trong `PROG-OD-001` chuyển `OPEN → DECIDED → CLOSED` kèm decision record đủ trường theo mục “Nội dung bắt buộc của decision record” | **PARTIAL — Product + Architect `ACCEPT`; QA/Verification PENDING** |
-| 4 | Ký `PLAN_READY` | Product + Architect + Verification | Ba `ACCEPT` ở §6 trên **cùng** candidate hiện hành, sau khi việc 1–3 xong; rồi cập nhật `PLAN-PROG-053` §4.2 và §9.2 | **PARTIAL — Product + Architect `ACCEPT`; Verification PENDING** |
+| 4 | Ký `PLAN_READY` | Product + Architect + Verification | Ba `ACCEPT` ở §6 trên **cùng** candidate hiện hành, sau khi việc 1–3 xong; rồi cập nhật `PLAN-PROG-053` §4.2 và §9.2 | **PARTIAL — Product + Architect `ACCEPT` v2.5; xác nhận delta v2.7 và Verification PENDING** |
 
 Thứ tự bắt buộc: việc 1 và 2 trước, vì chúng có thể đổi nội dung hồ sơ; nếu nội
 dung đổi thì phải phát hành candidate/hash mới và thu lại chữ ký của phần chịu
@@ -172,3 +172,4 @@ Tám chữ ký consumer ở
 | 1.4 | 2026-08-10 | Ghim lại candidate bằng 22 SHA-256 (manifest v2.1) thay vì theo commit, vì ghim theo commit luôn bị chính commit đồng bộ tracker làm lệch. Điều kiện kiểm soát cấu hình trở lại `PASS` với 9/22 hồ sơ đổi và 13/22 giữ hash. Mọi điều kiện còn lại — chữ ký, `OD-PROG-015`, ADR `Accepted`, CI/target/HIL — giữ `BLOCKED`; P0 vẫn `0/7` DoD và `0/22 M4` |
 | 1.5 | 2026-08-10 | Đóng `F-CR-10`: §2 và §5 còn chỉ reviewer checkout `e3e9fb2` — revision đã `SUPERSEDED` — nên chữ ký thu được sẽ đặt lên nội dung sai. Chuyển sang định danh 22 SHA-256, thêm dòng candidate cũ, bắt buộc chạy `candidate_pin_check.py` trước khi đọc và trước khi ký; §6 nêu đủ năm trường bắt buộc của một chữ ký hợp lệ |
 | 1.6 | 2026-08-10 | Ghi ủy quyền điện tử `AUTH-PROG-2026-08-10-01` của Phạm Đình Chương với vai trò Product Owner/CTO + System Architect: Product/Architect `ACCEPT`, xác nhận gốc staging, Architect `ACCEPT` 6/6 ADR. Giữ `PLAN_READY BLOCKED` vì Verification/consumer/discipline sign-off, 14 OD và 6 ADR final còn mở |
+| 1.7 | 2026-08-10 | Rà gate trước P1: phát hành candidate v2.7 vì `PLAN-PROG-053` còn hai chỉ báo trỏ candidate đã `SUPERSEDED`; không đổi requirement/contract/thiết kế. Bảo toàn chữ ký v2.5 như lịch sử nhưng yêu cầu Product/Architect xác nhận delta trên v2.7; giữ mọi gate `BLOCKED` |

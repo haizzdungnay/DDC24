@@ -7,6 +7,32 @@
 ---
 
 ## [Unreleased]
+### Fixed — Rà gate trước P1 và ghim lại candidate Programming (2026-08-10)
+
+**Kết quả.** Chưa khởi tạo code production cho P1 vì `PLAN_READY` và mọi
+`IMPLEMENT_READY[*]` vẫn `BLOCKED`. Hoàn tất nhánh `PLAN-ONLY`: sửa hai chỉ báo
+trong `PLAN-PROG-053` §6.5/§10 vẫn gọi `e3e9fb2` là candidate hiện hành dù đã
+`SUPERSEDED`; đồng bộ Document Hub, `CONTROL.md`, gói P0 và Roadmap 54 theo trạng
+thái thật `3 DECIDED / 14 OPEN / 0 CLOSED`, `0/22 M4/M5`, `0/32` Test Result.
+
+**Kiểm soát cấu hình.** Phát hành manifest v2.7. Delta v2.5→v2.7 chỉ đổi
+`PLAN-PROG-053` để sửa chỉ báo candidate/trạng thái, không đổi requirement,
+contract hoặc thiết kế kỹ thuật. Chữ ký Product + Architect trên v2.5 được giữ
+như lịch sử nhưng không tự chuyển sang revision mới; cần chính hai vai trò xác
+nhận delta v2.7 cùng các chữ ký consumer/Verification/Document Control còn thiếu.
+
+**Môi trường.** Kiểm lại target `SOM-DDC-24-foxlinx`: endpoint trả lời nhưng SSH
+vẫn `Permission denied` trước khi chạy lệnh. Hai workflow trên HEAD `16a8b30`
+(Build & Test `31379281495`, Security Scan `31379281464`) vẫn fail với mọi job
+`steps=[]`; không ghi nhận CI/target PASS.
+
+**Kiểm chứng.** Candidate pin PASS `22/22`; truy vết PASS `60/60` requirement và
+`32/32` scenario; docs harness `--expect` PASS; `git diff --check` PASS. CMake
+Release với Modbus + BACnet + HMI build PASS; CTest `860/860`; Go `vet` PASS và
+test `11/11` package; FE Vitest `53/53` file, `469/469` test, lint PASS, build
+PASS. Không chạy browser/HIL vì không đổi source/UI runtime và chưa có quyền
+target/HIL.
+
 ### Changed — Ghi ủy quyền Product/Architect cho Programming P0 (2026-08-10)
 
 **Ủy quyền được ghi nhận.** Theo yêu cầu trực tiếp của Phạm Đình Chương, ghi

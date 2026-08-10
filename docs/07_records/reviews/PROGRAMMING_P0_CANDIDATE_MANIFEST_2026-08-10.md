@@ -4,15 +4,15 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 2.6 |
+| Phiên bản | 2.7 |
 | Ngày | 2026-08-10 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
-| Trạng thái | **ACTIVE — Product + Architect `ACCEPT`; consumer/Verification/discipline approval PENDING** |
+| Trạng thái | **ACTIVE — candidate v2.7 đã ghim; Product/Architect cần xác nhận delta trạng thái; consumer/Verification/discipline approval PENDING** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | `ac059a1` — ghi đầy đủ ở §1.1; **22 hash ở §2 là định danh hiện hành** |
+| Candidate commit | `PENDING` — sẽ ghi bổ sung sau commit phát hành; **22 hash ở §2 là định danh hiện hành** |
 | PR nguồn | PENDING |
-| Candidate trước | v2.4 tại commit `bbd7d2d` — **SUPERSEDED bởi authority record**; `e3e9fb2` cũng đã superseded, xem §4 |
+| Candidate trước | v2.5 tại commit `ac059a1` — **SUPERSEDED bởi đợt sửa chỉ báo cấu hình/trạng thái**; không đổi requirement/contract/thiết kế, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
 
@@ -46,9 +46,9 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | `ac059a1a34e9baf82c431d3eb13a6c16387adf58` |
-| Git tree | `5e47316e2ce5ca0968c502c40c67f4a219d53881` |
-| Nhánh phát hành | `docs/programming-authority-decisions-pham-dinh-chuong` |
+| Commit chứa nội dung candidate | `PENDING` — cập nhật sau commit phát hành v2.7 |
+| Git tree | `PENDING` — cập nhật sau commit phát hành v2.7 |
+| Nhánh phát hành | `docs/programming-plan-only-gate-audit` |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
 chạy `scripts/candidate_pin_check.py` trước khi bắt đầu đọc.
@@ -92,18 +92,19 @@ trước `e3e9fb2`.
 | 19 | `docs/06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md` | `cae54485945629590ca159ea8b24d1018ee364fa8ab66a808861167f915ea808` | `637a5e37ce5005b6e85d46bc91e9241dd9be7ddb` | 331 | |
 | 20 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `f631828cbb79068722ae66bc365d95d4524363cd02f612e63a3810a3fb620402` | `35d6abf57b3b0b765b02017d5f04e678221c7764` | 171 | |
 | 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `0d294a83284ba4f2322515f04c2bd387d9731d4f15326b320b50415e09414dd7` | `0f5d02e2ece2b9f334eefb293b05028c66e6f6cd` | 329 | ✱ |
-| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `9e0072713510b6e10613f4ac1399bd79bb996aa4cb675436b1472dd0d1db3051` | `8c8d0f64e914b48de5930c176a6791d391d97b02` | 1139 | ✱ |
+| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `5caf7097eb6ac2d69f82b5d6e0a9701f227806ae999f5b20ad0eac61190c6478` | `d417a487a3337fbfd7efa6bfd051ed1794e3cf9c` | 1141 | ✱ |
 
 **11/22 hồ sơ đổi, 11/22 giữ nguyên hash** so với `e3e9fb2`. So với candidate
-v2.4, authority record làm đổi **8/22** hồ sơ. Reviewer đọc lại các hồ sơ đánh
-dấu `✱`; manifest §4 nêu lý do từng vòng.
+v2.5, đợt rà gate chỉ đổi **1/22** hồ sơ (`PLAN-PROG-053`) để sửa chỉ báo
+candidate/trạng thái; không đổi requirement, contract hoặc thiết kế kỹ thuật.
+Reviewer đọc lại hồ sơ đánh dấu `✱`; manifest §4 nêu lý do từng vòng.
 
 ## 3. Hồ sơ hỗ trợ ngoài mẫu số 22
 
 | Hồ sơ | Phiên bản tại lần ghim này | Vai trò |
 |---|---|---|
-| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v2.6 | Tracker hồ sơ |
-| `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v1.6 | Gói authority review |
+| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v2.7 | Tracker hồ sơ |
+| `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v1.7 | Gói authority review |
 | `docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md` | v1.3 | Biên bản consumer review |
 
 Ba hồ sơ này ghi **phiên bản**, không ghi SHA-256. Lý do giống §1.1: chúng thay đổi
@@ -117,10 +118,11 @@ phải hồ sơ baseline. System Architect đã `ACCEPT` 6/6; chúng vẫn `Prop
 
 ## 4. Delta so với candidate trước `e3e9fb2`
 
-Đây là delta **tích lũy** qua ba vòng: **R1** đóng `F-CR-01..09`, **R2/A2** sửa
-phát biểu trạng thái cũ (`F-CR-10`), và **R3/AUTH** ghi
-`AUTH-PROG-2026-08-10-01`. Tổng **11/22** hồ sơ đổi so với `e3e9fb2`; riêng R3
-đổi 8/22.
+Đây là delta **tích lũy** qua bốn vòng: **R1** đóng `F-CR-01..09`, **R2/A2** sửa
+phát biểu trạng thái cũ (`F-CR-10`), **R3/AUTH** ghi
+`AUTH-PROG-2026-08-10-01`, và **R4/GATE-AUDIT** sửa chỉ báo candidate/trạng thái
+trước P1. Tổng **11/22** hồ sơ đổi so với `e3e9fb2`; riêng R4 đổi 1/22 và không
+đổi requirement, contract hoặc thiết kế kỹ thuật.
 
 | Hồ sơ | Vòng | Lý do đổi |
 |---|:---:|---|
@@ -132,7 +134,7 @@ phát biểu trạng thái cũ (`F-CR-10`), và **R3/AUTH** ghi
 | `docs/02_design/software/PROGRAMMING_BE_DESIGN.md` | R1 | `F-CR-02`, `F-CR-05` — staging và tên gói `transport` |
 | `docs/02_design/software/PROGRAMMING_SECURITY_DESIGN.md` | R1 | `F-CR-02` — nêu tên gốc locator |
 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | R1 + R2 + R3 | đồng bộ revision downstream; ghi Product/Architect `ACCEPT` và trạng thái decision |
-| `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | R1 + R2 + R3 | đồng bộ gate/candidate; ghi partial authority nhưng giữ implementation blocked |
+| `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | R1 + R2 + R3 + R4 | đồng bộ gate/candidate; R4 loại hai tham chiếu hiện hành còn trỏ candidate đã `SUPERSEDED`, giữ implementation blocked |
 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | R2 + R3 | ghi authority record; `3 DECIDED`, `14 OPEN`, `0 CLOSED` |
 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | R3 | ghi Product `ACCEPT`; giữ Verification PENDING và 0/32 Test Result |
 
@@ -177,3 +179,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 2.4 | 2026-08-10 | Ghi bổ sung commit `bbd7d2d` và tree `bb0acb60` cho vòng A2. `candidate_pin_check.py` vẫn PASS `22/22` sau khi ghi, vì bước này chỉ sửa manifest — hồ sơ ngoài mẫu số 22 |
 | 2.5 | 2026-08-10 | Phát hành candidate sau `AUTH-PROG-2026-08-10-01`: tính lại 22 SHA-256/Git blob; 8/22 hồ sơ đổi so với v2.4, 11/22 đổi tích lũy so với `e3e9fb2`. Ghi Product + Architect `ACCEPT`, giữ consumer/Verification/discipline PENDING và mọi implementation/release gate BLOCKED |
 | 2.6 | 2026-08-10 | Ghi bổ sung commit `ac059a1` và tree `5e47316e` chứa nội dung candidate v2.5. Chỉ manifest ngoài mẫu số 22 đổi; `candidate_pin_check.py` tiếp tục PASS 22/22 |
+| 2.7 | 2026-08-10 | Phát hành candidate sau rà gate trước P1: chỉ `PLAN-PROG-053` đổi để sửa §6.5/§10 còn gọi `e3e9fb2` là candidate hiện hành và đồng bộ trạng thái xác nhận delta. Không đổi requirement/contract/thiết kế; Product/Architect v2.5 cần xác nhận delta trên v2.7; mọi gate giữ `BLOCKED` |
