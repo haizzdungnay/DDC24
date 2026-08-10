@@ -4,7 +4,7 @@
 |---|---|
 | ID | `PROG-P0-GATE-2026-08-10` |
 | Loại | Decision/design/sign-off package; hồ sơ hỗ trợ, không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 1.3 |
+| Phiên bản | 1.4 |
 | Ngày | 2026-08-10 |
 | Phạm vi | `PROG-000..006`, `DOC-G4`, `G0`, `PLAN_READY` |
 | Chủ quản | Dev Lead + System Architect |
@@ -19,7 +19,7 @@
 |---|---|
 | Gói này dùng để làm gì? | Gom toàn bộ đầu vào, kết luận kỹ thuật, decision cần ký và ô sign-off của P0 vào một nơi để các authority review mà không phải tự dò 22 hồ sơ. |
 | Đã hoàn tất gì? | Đã review cấu trúc Plan 53, lập ma trận `PROG-000..006`, chạy harness, ghim candidate `e3e9fb2`, xác nhận host branch/build/toolchain, tạo kho Test Result chuẩn, **chạy vòng consumer review kỹ thuật (9 finding đã đóng)** và **đóng phần kỹ thuật của 6 xung đột kiến trúc bằng `ADR-026..031`**. |
-| Chưa hoàn tất gì? | **Chữ ký người thật** cho mọi vai trò; 17 decision còn `OPEN`; 6 ADR còn `Proposed`; candidate phải ghim lại vì nội dung đã đổi; CI bị billing, target bị SSH auth, TLS/HW/BSP/HIL chưa có authority/evidence. |
+| Chưa hoàn tất gì? | **Chữ ký người thật** cho mọi vai trò; 17 decision còn `OPEN`; 6 ADR còn `Proposed`; CI bị billing, target bị SSH auth, TLS/HW/BSP/HIL chưa có authority/evidence. |
 | Có được implement production chưa? | **Không.** Gói này chỉ đưa P0 tới trạng thái sẵn sàng cho người có thẩm quyền review. `IMPLEMENT_READY` vẫn `BLOCKED`. |
 | Làm gì tiếp theo? | Reviewer checkout/đọc đúng candidate trong manifest, ghi `ACCEPT`, `REQUEST_CHANGE` hoặc `REJECT` theo §6; owner xử lý comment; Product/Architect/Verification ký đúng revision. |
 
@@ -47,6 +47,7 @@ Test Result target/HIL hoặc chữ ký phê duyệt.
 | Đầu vào | Revision/trạng thái | Kết luận |
 |---|---|---|
 | Baseline 22 hồ sơ | commit `05c1c480418a2256f1010527f9d90fb6ff549b86` | Đã ghim, 22/22 file được Git theo dõi; đây là baseline trước vòng sửa P0 ngày 2026-08-10 |
+| Chuỗi candidate P0 | `05c1c48` → `e3e9fb2` (SUPERSEDED) → **candidate hiện hành** | Định danh là 22 SHA-256 ở manifest §2, không phải commit — xem manifest §1.1. Reviewer chạy `python3 scripts/candidate_pin_check.py` trước khi đọc |
 | Candidate P0 | commit `e3e9fb26f61b39df8f805916333fc03b51f07f5f`, tree `54eb519ec9e18639b0eeb8a4a0c5c3381e9b32de`; 22 hồ sơ + hai hồ sơ hỗ trợ tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | **Đã ghim trên `origin/main`**; reviewer phải ghi đủ hash này trong kết luận |
 | Mức trưởng thành | 22/22 `M3`; 0/22 `M4`; 0/22 `M5` | Hồ sơ đủ để review, chưa đủ để phê duyệt/implement |
 | Bằng chứng sản phẩm | 0/32 Test Result | Không suy ra implementation, HIL hoặc release readiness |
@@ -79,7 +80,7 @@ làm đẹp tiến độ.
 | 22/22 hồ sơ tồn tại và được kiểm soát cấu hình | `PASS` | baseline commit ở §2 |
 | Cấu trúc/link/ID/trace invariant sạch | `PASS` | `python3 scripts/docs_iso_harness.py --expect -v` |
 | Finding kỹ thuật P0/P1 của vòng duyệt agent đóng | `PASS` | [`PROG-REV-2026-08-09`](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §6.3 |
-| Candidate sau review được ghim revision/hash | **`HẾT HIỆU LỰC`** | Manifest `e3e9fb2` vẫn đúng cho nội dung cũ, nhưng 7/22 hồ sơ đã đổi khi đóng `F-CR-01..08`. Owner: Document Control. Ảnh hưởng: chưa có revision để ký. Gate: `DOC-G4`. Điều kiện mở: phát hành manifest candidate mới sau khi merge |
+| Candidate sau review được ghim revision/hash | `PASS` | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v2.1: 22/22 SHA-256, kiểm bằng `scripts/candidate_pin_check.py`. 9/22 hồ sơ đổi so với `e3e9fb2` do đóng `F-CR-01..08`; 13/22 giữ nguyên hash và không phải đọc lại |
 | Branch/build/toolchain host và evidence repository | `PASS phần chuẩn bị` | [`PROG-P0-ENV-2026-08-10`](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md): host gate PASS; [`PROG-TR-REPO-001`](../test-results/programming/README.md) sẵn, 0/32 Test Result |
 | GitHub CI/security runner | `BLOCKED` | Owner: Organization Admin. Ảnh hưởng: không có server evidence. Gate: assurance/release. Mở khi sửa billing và rerun exact commit có step thật |
 | Target SOM/HIL lab | `BLOCKED` | Owner: Ops + HW/Safety/QA. Ảnh hưởng: không có target/HIL evidence. Gate: G3–G6. Mở khi SSH auth hoạt động và `HW-AUTH-*`/fixture/calibration được duyệt |
@@ -135,3 +136,4 @@ có đủ ba kết luận `ACCEPT` trên cùng candidate đã pin mới được
 | 1.1 | 2026-08-10 | Ghim candidate `e3e9fb2` bằng manifest 22 hồ sơ + hai hồ sơ hỗ trợ; chuyển riêng điều kiện pin sang PASS; giữ 0/7 DoD và mọi gate quyền hạn BLOCKED vì review/chữ ký còn thiếu |
 | 1.2 | 2026-08-10 | Đo môi trường P0: host branch/build/toolchain + evidence repo PASS phần chuẩn bị; tách CI billing, target SSH auth và HIL authority/fixture thành blocker; giữ P0 0/7 DoD và gate quyền hạn BLOCKED |
 | 1.3 | 2026-08-10 | Ghi nhận vòng consumer review kỹ thuật `PROG-P0-CONSUMER-REVIEW-2026-08-10` (9 finding `F-CR-01..09` đã đóng) và sáu ADR `ADR-026..031` cho `ARCH-CONF-PROG-001..006`; chuyển điều kiện ghim candidate sang `HẾT HIỆU LỰC` vì 7/22 hồ sơ đã đổi; giữ `0/22 M4`, P0 `0/7` DoD và mọi cổng quyền hạn `BLOCKED` |
+| 1.4 | 2026-08-10 | Ghim lại candidate bằng 22 SHA-256 (manifest v2.1) thay vì theo commit, vì ghim theo commit luôn bị chính commit đồng bộ tracker làm lệch. Điều kiện kiểm soát cấu hình trở lại `PASS` với 9/22 hồ sơ đổi và 13/22 giữ hash. Mọi điều kiện còn lại — chữ ký, `OD-PROG-015`, ADR `Accepted`, CI/target/HIL — giữ `BLOCKED`; P0 vẫn `0/7` DoD và `0/22 M4` |
