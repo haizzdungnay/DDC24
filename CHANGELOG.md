@@ -40,6 +40,12 @@ mới. Manifest lên v2.1.
 PASS 22/22 sau khi chuyển sang hash; docs harness `--expect` PASS;
 `trace_bidirectional_check` PASS 32/32; `git diff --check` PASS.
 
+**Ghi bổ sung commit (manifest v2.2).** Sau khi merge PR #118, ghi commit
+`e278aaa` và tree `2dadad30` vào manifest §1.1 — nơi nội dung candidate xuất hiện
+trên `origin/main`. Bước này chỉ sửa manifest, hồ sơ **ngoài** mẫu số 22, nên
+`candidate_pin_check.py` vẫn PASS 22/22: đúng hành vi mà §1.1 thiết kế, và là bằng
+chứng chạy được rằng cách ghim mới không còn tự làm lệch chính nó.
+
 ### Fixed — Consumer review liên chức năng P0 Programming: 9 finding mở và đóng (2026-08-10)
 
 **Vòng review.** Thực hiện consumer review trên candidate `e3e9fb2` theo cặp
