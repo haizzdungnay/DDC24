@@ -7,6 +7,48 @@
 ---
 
 ## [Unreleased]
+### Fixed — Tách “review kỹ thuật đã xong” khỏi “authority đã ký” trong hồ sơ P0 (2026-08-10)
+
+**Triệu chứng.** Sau vòng consumer review, tám phát biểu trạng thái trong
+`PLAN-PROG-053`, `PROG-P0-GATE-2026-08-10`, `CONTROL.md` và Plan 54 vẫn nói
+`PLAN_READY` đang *chờ consumer review*. Nặng hơn: gói review §2 và §5 vẫn chỉ
+reviewer **checkout `e3e9fb2`** và ghi hash đó trong kết luận — revision đã
+`SUPERSEDED`, nên chữ ký thu được sẽ đặt lên nội dung mà 10/22 hồ sơ đã khác.
+
+**Nguyên nhân gốc.** Hai việc khác nhau bị gộp làm một trong văn bản: *vòng review
+kỹ thuật* (agent làm được, đã xong, `9/9` finding đóng) và *chữ ký consumer
+authority* (chỉ người thật làm được, `0/8`). Khi gộp, một bên đọc sẽ tưởng gate đã
+gần mở; bên khác lại tưởng chưa ai review gì.
+
+**Cách sửa.** Ghi tách bạch ở mọi nơi tuyên bố trạng thái: `PLAN-PROG-053` v0.14
+(banner §0, Đọc nhanh Q6, §4.2, §5.1, §5.4, §13), gói review v1.5 (§0, §2, §5),
+`CONTROL.md`, Plan 54 v2.5, Design Index v1.6. Mọi chỗ dẫn candidate đổi sang định
+danh **22 SHA-256**; `e3e9fb2` ghi rõ `SUPERSEDED` và **cấm ký lên nó**.
+
+**Chuẩn bị thu chữ ký thật.** Biên bản consumer review v1.2 tách §5.1 (kết luận kỹ
+thuật) khỏi **§5.2 — bảng tám chữ ký** với đủ năm trường bắt buộc: họ tên/chức
+danh, kết luận, ngày, hash/revision đã đọc, finding còn lại. Gói review thêm
+**§6.1 — bốn hành động authority** còn lại kèm owner và định nghĩa “xong”. Thêm
+§2.6 bảng **số đo cuối cùng** để không ai đọc nhầm số `FAIL` trung gian ở §2.1 làm
+trạng thái hiện hành.
+
+**Open Decisions v0.7.** Ghi rõ `OD-PROG-015` đã đạt **2/3** điều kiện mở khóa
+(review record + `9/9` finding closure); điều kiện duy nhất còn thiếu là sign-off
+Product/Architect/QA. Trạng thái không đổi: 17/17 vẫn `OPEN`.
+
+**Manifest v2.3.** Ba hồ sơ trong mẫu số 22 đổi ở vòng này (`PLAN-PROG-053`,
+`PROG-DOCSET-001`, `PROG-OD-001`) nên manifest cập nhật hash **trong cùng phiên**
+đúng như §1.1 yêu cầu; delta tích lũy so với `e3e9fb2` nay là **10/22**.
+
+**Không gate nào được mở.** `PLAN_READY`, `IMPLEMENT_READY[*]`, `RELEASE_READY`
+giữ `BLOCKED`; `0/22 M4`; `0/8` chữ ký consumer; `ADR-026..031` còn `Proposed`;
+`0/32` Test Result. **Không tạo `contracts/programming`, IPC, migration hay source
+production** — Phase B chưa được phép chạy.
+
+**Kiểm chứng.** `candidate_pin_check.py` **PASS `22/22`** (đã chạy lại sau mỗi lần
+sửa hồ sơ trong mẫu số 22); `trace_bidirectional_check.py` **PASS `32/32`**;
+`docs_iso_harness.py --expect` **PASS**, `EXPECT` khớp; `git diff --check` PASS.
+
 ### Fixed — Ghim lại candidate P0 theo hash và bắt drift bằng máy (2026-08-10)
 
 **Triệu chứng.** Manifest v1.0 ghim commit `e3e9fb2`, nhưng các commit sau đó sửa

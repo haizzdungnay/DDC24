@@ -4,13 +4,13 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 2.2 |
+| Phiên bản | 2.3 |
 | Ngày | 2026-08-10 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
 | Trạng thái | **ACTIVE — nội dung candidate đã ghim bằng hash ở §2; approval vẫn PENDING** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | `e278aaa` — ghi đầy đủ ở §1.1; **hash ở §2 mới là định danh** |
+| Candidate commit | ghi ở §1.1 sau merge; **hash ở §2 mới là định danh** |
 | PR nguồn | [PR #118](https://github.com/Mekong-HCM/MK-DDC-24/pull/118) |
 | Candidate trước | `e3e9fb26f61b39df8f805916333fc03b51f07f5f` — **SUPERSEDED**, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
@@ -46,8 +46,8 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | `e278aaaf520f14ab5a9a04b2b7cf7fcd43e33e47` |
-| Git tree | `2dadad303ac22d64b63d84c6b3c16c27f83a1edb` |
+| Commit chứa nội dung candidate | *(ghi sau khi merge PR của vòng A2)* — bản trước là `e278aaa` |
+| Git tree | *(ghi sau khi merge PR của vòng A2)* — bản trước là `2dadad30` |
 | Nhánh | `origin/main` |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
@@ -71,9 +71,9 @@ trước `e3e9fb2`.
 
 | # | Đường dẫn | SHA-256 | Git blob | Dòng | Đổi |
 |---:|---|---|---|---:|:---:|
-| 1 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `bb74a3b061ffe04d491e47b971011cb700b1a3269bc3b506decb4208d3433cfb` | `5c17dfb7f806e60fe441ad3a1f82803d639511b2` | 233 | ✱ |
+| 1 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `35e07819aa94fa6448f60c7ab13338c22a63a4ab4739df3bb00c7b04cd32730a` | `f401e2e765a611e3b0e6b53cfba7944fa82aa131` | 234 | ✱ |
 | 2 | `docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md` | `34859905f640dead8ffbec68e7ffd601f06675b5c1bc42c82210989fa6871ea3` | `96dfa4a40e2f116b1ba96b342e8657940293b8f9` | 272 | |
-| 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `f285cfb842f7cbf399012ba85df4afd0dc6a0bd82f525731d8eb99500f39e651` | `99edec0b69fbb2d4531068b37d0749a40ac80df8` | 180 | |
+| 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `98a23438d31989252718e63e11cb3ed566ad3f6b7e164da768cab27c14283fc9` | `e321104d4c008105ad9d941091412b21c6aafb0c` | 181 | ✱ |
 | 4 | `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | `7c53890aeb535e3c023bdf960c0e8b8e583e542c2e253421972a2783311a19a1` | `9411d701b013f55f9cd4a67a8489b0599abe7d29` | 412 | ✱ |
 | 5 | `docs/02_design/software/PROGRAMMING_DATA_MODEL.md` | `62abb98e74fcfa47b85940220fb153fd01d451b0784a7e18c6c18e1a4dba603d` | `376b72d8bf6648a2f94994ced0330fa1f9adfb2d` | 516 | |
 | 6 | `docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md` | `8c1be23ba7b056798ba7130c4390db7de35b8fcb0fe69e45b93dd957561bfdb4` | `3753490517522c60dc68c800ccde549daeca12a7` | 586 | ✱ |
@@ -92,10 +92,10 @@ trước `e3e9fb2`.
 | 19 | `docs/06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md` | `cae54485945629590ca159ea8b24d1018ee364fa8ab66a808861167f915ea808` | `637a5e37ce5005b6e85d46bc91e9241dd9be7ddb` | 331 | |
 | 20 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `f631828cbb79068722ae66bc365d95d4524363cd02f612e63a3810a3fb620402` | `35d6abf57b3b0b765b02017d5f04e678221c7764` | 171 | |
 | 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `52d6b8ee3041cb461ee04952c346f61ee4cbc43bb73368877f7616a2a3987e67` | `1d4daa032cfcb624599900f1f028b9c3fb27da3a` | 328 | ✱ |
-| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `9886004e3feb2629e0865a2c1ac81faceee41784d94286e62a902d50164c10ab` | `5253045944c5c1a850d20b7e041a4b600862db21` | 1125 | ✱ |
+| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `38b9e768a34567ebf1f0b1ede2afe940a061adb7f774dca17de5e0eda731b80a` | `be35f84184a7ee00e52dd96449e81fdb90ce1b12` | 1138 | ✱ |
 
-**9/22 hồ sơ đổi, 13/22 giữ nguyên hash.** Reviewer đã đọc `e3e9fb2` chỉ cần đọc
-lại chín hồ sơ đánh dấu `✱`.
+**10/22 hồ sơ đổi, 12/22 giữ nguyên hash** so với `e3e9fb2`. Reviewer đã đọc
+`e3e9fb2` chỉ cần đọc lại mười hồ sơ đánh dấu `✱`.
 
 ## 3. Hồ sơ hỗ trợ ngoài mẫu số 22
 
@@ -115,20 +115,23 @@ phải hồ sơ baseline; chúng được ký riêng trên từng file và hiệ
 
 ## 4. Delta so với candidate trước `e3e9fb2`
 
-Chín hồ sơ đổi, tất cả đều do đóng finding của
-[`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md):
+Đây là delta **tích lũy** qua hai vòng: vòng **R1** đóng finding
+`F-CR-01..09` ([biên bản](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md)), và vòng
+**R2/A2** sửa các phát biểu trạng thái cũ còn sót (`F-CR-10`). Tổng **10/22** hồ
+sơ đổi so với `e3e9fb2`.
 
-| Hồ sơ | Thêm | Xóa | Finding đóng |
-|---|---:|---:|---|
-| `docs/02_design/software/PROGRAMMING_FE_DESIGN.md` | 50 | 23 | `F-CR-01` — bỏ IA sáu trang còn sót ở §12/§16 |
-| `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | 31 | 3 | `F-CR-04` — thêm §16.4.1 và asset `RetainResetDialog` |
-| `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | 26 | 8 | `F-CR-03/07/08` — truy vết hai chiều, số đếm, số mục |
-| `docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md` | 16 | 2 | `F-CR-02` — gốc staging và bảng ba thư mục |
-| `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | 16 | 11 | `F-CR-06` — §11 gắn `ADR-026..031` |
-| `docs/02_design/software/PROGRAMMING_BE_DESIGN.md` | 14 | 3 | `F-CR-02`, `F-CR-05` — staging và tên gói `transport` |
-| `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | 7 | 3 | đồng bộ revision downstream |
-| `docs/02_design/software/PROGRAMMING_SECURITY_DESIGN.md` | 6 | 3 | `F-CR-02` — nêu tên gốc locator |
-| `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | 292 | 53 | đồng bộ §5.5, §9.2 và lịch sử |
+| Hồ sơ | Vòng | Lý do đổi |
+|---|:---:|---|
+| `docs/02_design/software/PROGRAMMING_FE_DESIGN.md` | R1 | `F-CR-01` — bỏ IA sáu trang còn sót ở §12/§16 |
+| `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | R1 | `F-CR-04` — thêm §16.4.1 và asset `RetainResetDialog` |
+| `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | R1 | `F-CR-03/07/08` — truy vết hai chiều, số đếm, số mục |
+| `docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md` | R1 | `F-CR-02` — gốc staging và bảng ba thư mục |
+| `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | R1 | `F-CR-06` — §11 gắn `ADR-026..031` |
+| `docs/02_design/software/PROGRAMMING_BE_DESIGN.md` | R1 | `F-CR-02`, `F-CR-05` — staging và tên gói `transport` |
+| `docs/02_design/software/PROGRAMMING_SECURITY_DESIGN.md` | R1 | `F-CR-02` — nêu tên gốc locator |
+| `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | R1 + R2 | đồng bộ revision downstream; R2 tách “review kỹ thuật xong” khỏi “authority đã ký” |
+| `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | R1 + R2 | đồng bộ §5.5/§9.2; R2 đóng `F-CR-10` — 8 phát biểu trạng thái cũ |
+| `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | R2 | ghi `OD-PROG-015` đã đạt 2/3 điều kiện mở khóa; 17/17 vẫn `OPEN` |
 
 Thay đổi khác trong cùng dải commit — `scripts/trace_bidirectional_check.py`,
 `scripts/docs_iso_harness.py`, `CHANGELOG.md`, sáu ADR và asset SVG — **không**
@@ -167,3 +170,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 2.0 | 2026-08-10 | Ghim candidate mới sau khi đóng `F-CR-01..09`; `e3e9fb2` chuyển `SUPERSEDED`. Sửa số đếm sai trong biên bản consumer review: **9/22** hồ sơ đổi chứ không phải 7 — `PROGRAMMING_DESIGN_INDEX.md` và `53_PROGRAMMING_IMPLEMENTATION_PLAN.md` cũng thuộc mẫu số 22 và đã đổi. Thêm hồ sơ hỗ trợ thứ ba là biên bản consumer review; giữ mọi cổng quyền hạn `BLOCKED` |
 | 2.1 | 2026-08-10 | Sửa lỗi quy trình phát hiện khi tự kiểm bản 2.0: ghim theo commit luôn bị chính commit đồng bộ tracker làm lệch, vì `PLAN-PROG-053` nằm trong mẫu số 22. Chuyển định danh candidate sang **22 SHA-256 ở §2**, commit chỉ ghi bổ sung sau merge; thêm §1.1 giải thích và `scripts/candidate_pin_check.py` để bắt drift bằng máy thay vì bằng kỷ luật |
 | 2.2 | 2026-08-10 | Ghi bổ sung commit `e278aaa` và tree `2dadad30` — nơi nội dung candidate xuất hiện trên `origin/main`. Bước này chỉ sửa manifest, hồ sơ **ngoài** mẫu số 22, nên `candidate_pin_check.py` vẫn PASS 22/22; đây đúng là hành vi mà §1.1 thiết kế |
+| 2.3 | 2026-08-10 | Cập nhật hash của `PLAN-PROG-053` (v0.14) và `PROG-DOCSET-001` (v1.6) sau vòng A2 sửa phát biểu trạng thái cũ. Đây đúng là quy trình mà §1.1 yêu cầu: hồ sơ trong mẫu số 22 đổi ⇒ manifest cập nhật **cùng phiên** ⇒ `candidate_pin_check.py` chạy lại tới khi `22/22` PASS |
