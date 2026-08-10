@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `PROG-DOCSET-001` |
-| Phiên bản | 1.4 |
+| Phiên bản | 1.5 |
 | Trạng thái | **M3 — Review Ready** — checklist đủ, TBD/BLOCKED có owner, link sạch; chờ peer review để lên M4 |
 | Ngày | 2026-08-10 |
 | Chủ quản | System Engineering |
@@ -18,7 +18,7 @@
 | 3. Hệ thống hiện tại đang có gì? | Đường điều khiển production hiện chạy bằng **graph** (`graph.json` nạp lúc bootstrap). Các component ST/IR/scheduler/RETAIN đã có source và host test nhưng **chưa nối vào production**. FE Programming mới chỉ là trang placeholder. REST/WS Programming chưa có route production. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm một đường Programming song song (Project → Draft → Revision → Check → Commission → Active) và một **cutover độc quyền**: hoặc `GRAPH_ONLY`, hoặc `PROGRAM_ONLY`, không bao giờ cả hai. Bảy ranh giới bắt buộc ở §4 là phần không được thương lượng. Giao diện tổ chức theo **bốn workspace** và **tám user journey** `UJ-PROG-01..08` (Amendment A1, chờ `OD-PROG-016`). |
 | 5. Team phải sửa module/contract nào? | File này không giao việc code. Nó chỉ tay tới hồ sơ chủ quản: `mkddc-web` (BE Design), `mkddc-core` (FW-SOM + Control Semantics), `mkddc-iobus` (không đổi), STM32 (FW MCU Design), `apps/web-ui` (FE + UI/UX Design). |
-| 6. Điều gì còn bị chặn? | Candidate đã ghim, host/evidence repo đã sẵn nhưng CI/target/HIL còn bị chặn; cả 22 hồ sơ vẫn ở `M3 — Review Ready`: **chưa có consumer review của người thật** và **chưa có chữ ký thẩm quyền**. 17 `OD-PROG-*` vẫn `OPEN`. Chi tiết ở Plan 53, §8 và §11. |
+| 6. Điều gì còn bị chặn? | Vòng consumer review **kỹ thuật** đã chạy tại [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) và 9 finding đã đóng; 6 xung đột kiến trúc nay có ADR `ADR-026..031` ở `Proposed`. Nhưng cả 22 hồ sơ vẫn ở `M3 — Review Ready`: **chưa có consumer review của người thật** và **chưa có chữ ký thẩm quyền**. 17 `OD-PROG-*` vẫn `OPEN`; candidate phải ghim lại. Chi tiết ở Plan 53, §8 và §11. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với riêng file này: register 22 dòng khớp đường dẫn thật, link/anchor sạch, không trùng ID tài liệu — đo bằng harness ở [`PROG-REV-2026-08-09`](../07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md). Với sản phẩm: 0/32 `VS-PROG-*` có Test Result, nên **không hồ sơ nào chứng minh implementation**. |
 
 Thuật ngữ điều hướng: **workspace** là một trong bốn màn hình chính `PGM-01..04`;
@@ -210,6 +210,7 @@ của người soạn không thay thế được. Vì vậy hiện tại **M4 = 
 | 1.2 | 2026-08-10 | Ghim candidate P0 `e3e9fb2` bằng manifest 22 hồ sơ; đồng bộ Plan 53 v0.9 và giữ 22/22 ở M3 do chưa có consumer review/chữ ký |
 | 1.3 | 2026-08-10 | Đồng bộ readiness P0: Plan 53 v0.10, host/evidence repo sẵn; CI billing, target SSH auth và HIL authority/fixture còn chặn; mức M3/M4/M5 không đổi |
 | 1.4 | 2026-08-10 | Đồng bộ Plan 53 v0.11: 6/6 thẻ P1 đã đủ 11 trường, dependency và evidence đúng gate; vẫn 0/6 DoD, 0/32 Test Result và không đổi M3/M4/M5 |
+| 1.5 | 2026-08-10 | Đồng bộ Plan 53 v0.12 và vòng consumer review kỹ thuật: 7 hồ sơ trong mẫu số 22 lên revision mới khi đóng `F-CR-01..08` (`ARCH-PROG-001` 0.5, `IFSPEC-PROG-001` 0.6, `DDD-SEC-PROG-001` 0.4, `DDD-BE-PROG-001` 0.6, `DDD-FE-PROG-001` 0.7, `UX-WEB-PROG-001` 0.7, `TRACE-PROG-001` 2.5); thêm `ADR-026..031` làm nguồn quyết định kiến trúc. Mức M3/M4/M5 **không đổi** — `0/22 M4` vì chữ ký người thật còn thiếu |
 
 ## 11. Phụ lục — Tự kiểm cổng M3 (loại: Kiểm soát tài liệu)
 

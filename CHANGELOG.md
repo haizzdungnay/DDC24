@@ -7,6 +7,80 @@
 ---
 
 ## [Unreleased]
+### Fixed — Consumer review liên chức năng P0 Programming: 9 finding mở và đóng (2026-08-10)
+
+**Vòng review.** Thực hiện consumer review trên candidate `e3e9fb2` theo cặp
+producer→consumer cho cả 22 hồ sơ baseline, ghi tại
+`docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md`
+(`PROG-P0-CONSUMER-REVIEW-2026-08-10`). Mọi khẳng định As-Built được đối chiếu
+với source thật: 15/15 giới hạn IR/ST, `IR-E-001..015`, `allow_unsigned=false`,
+`IOP_SAFE_TIMEOUT_MS=200`, 6/6 file FE và wiring BE đều **khớp**.
+
+**Finding đã sửa.**
+
+- `F-CR-01` (P1, FE): `DDD-FE-PROG-001` §12/§16 vẫn mô tả IA sáu trang đã bị thay —
+  bản v0.6 chỉ sửa §2. Triệu chứng: dev FE đọc §16 sẽ dựng 6 route/6 page thay vì
+  4 workspace với tab `?tab=`, và `VS-PROG-032` không thể PASS. Sửa: §12 bỏ cây
+  thư mục trùng, §16 dùng đúng 4 route; hồ sơ lên v0.7.
+- `F-CR-02` (P1, Core+BE): gốc thư mục staging artifact mâu thuẫn — `IFSPEC` yêu
+  cầu locator dưới `${CONFIG_DIR}/programming/staging/` trong khi BE ghi dưới
+  `${STATE_DIR}` và packaging tạo staging dưới state dir. Triệu chứng: mọi
+  `POST /operations/commission` fail ở bước `STAGE`, host test không bắt được.
+  Sửa: thống nhất `${STATE_DIR}/programming/staging/`, thêm bảng ba gốc
+  `CONFIG_DIR`/`STATE_DIR`/`RUNTIME_DIR` và quy tắc reject; `IFSPEC-PROG-001` 0.6,
+  `DDD-BE-PROG-001` 0.6, `DDD-SEC-PROG-001` 0.4.
+- `F-CR-03` (P1, QA): `VS-PROG-008` và `VS-PROG-032` không có dòng trace nào dẫn
+  tới trong `TRACE-PROG-001` §6 — coverage thật là `30/32`, không phải `32/32`.
+  Sửa: bổ sung vào dòng `FE-101`/`FE-102`; thêm `scripts/trace_bidirectional_check.py`
+  để lỗi cùng loại không tái diễn im lặng.
+- `F-CR-04` (P1, UX+FE): `RetainResetDialog` — thao tác không hoàn tác được — thiếu
+  bản đặc tả trực quan mà `DOC-GOV-001` §2.2 bắt buộc, trong khi `DD-08` vẫn ghi
+  `PASS`. Sửa: thêm `PGM-04_RETAIN_RESET_DIALOG.svg` (1440×1120, ba artboard) và
+  §16.4.1; `UX-WEB-PROG-001` lên v0.7.
+- `F-CR-05` (P2, BE): gói tầng biên có hai tên `http/` và `transport`. Sửa: dùng
+  `transport/` khớp `transport.Handler` và `IFSPEC` §16.
+- `F-CR-06` (P1, mọi discipline): 6 xung đột `ARCH-CONF-PROG-001..006` không có ADR
+  chủ quản, nên điều kiện “không còn authority mâu thuẫn” không có vật thể để ký.
+  Sửa: thêm `ADR-026..031` ở trạng thái **`Proposed`**; `ARCH-PROG-001` lên v0.5.
+- `F-CR-07`/`F-CR-08` (P2, Document Control): `TRACE-PROG-001` §8 ghi “55 dòng”
+  trong khi §6 có 60; và hai mục cùng đánh số `## 10`. Sửa: `60 dòng`; phụ lục tự
+  kiểm đổi sang `§11`; hồ sơ lên v2.5.
+- `F-CR-09` (P2, Document Control): `docs/adr/` không phản ánh số ADR đã cấp phát —
+  `ADR-024`/`ADR-025` chỉ tồn tại trong `ADR-LOG-001`, nên người đặt số theo
+  `ls docs/adr/` sẽ tạo ID trùng. Sửa: `ADR-LOG-001` ghi rõ nó là authority cấp
+  phát số và số cao nhất đã dùng.
+
+### Added — Sáu ADR đóng phần kỹ thuật của xung đột kiến trúc Programming (2026-08-10)
+
+`ADR-026` profile runtime `revA-1t-1-5-30` + validator duy nhất kiểm lại ở loader ·
+`ADR-027` base step thuộc nền tảng, `graph.json` mất quyền ghi đè chu kỳ vòng scan ·
+`ADR-028` công thức watchdog bám base step, loại chu kỳ Task khỏi công thức ·
+`ADR-029` overrun là fault của Task, gỡ `any_force_safe`, chỉ SafetyManager quyết
+định safe-state toàn trạm · `ADR-030` hai lớp mã lỗi `PRG-ERR-*` công khai và
+`detailCode` nội bộ, ánh xạ toàn phần · `ADR-031` `IntegrityMode=HASH_ONLY` cho
+Rev A, cấm `SIGNATURE_OPTIONAL`. Mỗi ADR có bối cảnh As-Built dẫn `file:line`,
+phương án bị loại kèm lý do và điều kiện xác minh. **Tất cả ở `Proposed`** — xung
+đột vẫn tính là còn mở tới khi authority ký.
+
+### Changed — Trạng thái gate P0 Programming sau vòng review (2026-08-10)
+
+Plan 53 lên v0.12 (§5.5, §9.2), gói review P0 lên v1.3, Design Index lên v1.5,
+register review cập nhật. **Không gate nào được mở:** `0/22 M4` giữ nguyên vì
+`DOC-GOV-001` §3 đòi reviewer là người thật; `PLAN_READY`, `IMPLEMENT_READY` và
+`RELEASE_READY` giữ `BLOCKED`; `0/32` Test Result không đổi. Vì 7/22 hồ sơ đã đổi,
+điều kiện “ghim candidate” chuyển **`HẾT HIỆU LỰC`** và phải phát hành manifest
+candidate mới sau khi merge.
+
+**Kiểm chứng (số đo chạy lại trong phiên này).** Docs harness `--expect` PASS,
+link/anchor/ID/code-span lỗi `0`, `EXPECT` đồng bộ `svg_assets 6→7` trong cùng
+commit thêm asset. `scripts/trace_bidirectional_check.py`: **FAIL 30/32 tại
+`e3e9fb2`** → **PASS 32/32** sau khi sửa, chứng minh phép kiểm bắt đúng lỗi.
+C++ Release bật Modbus/BACnet/HMI: configure exit `0`, build exit `0`, CTest
+**860/860 PASS**. Go: `go vet ./...` PASS, `go test ./... -count=1` PASS 11/11
+package. FE: Vitest **53 file / 469 test PASS**, `npm run lint` PASS,
+`npm run build` PASS. Không chạy Chrome DevTools/Playwright vì không đổi code
+giao diện hay runtime; không chạy target/HIL; không `VS-PROG-*` nào đổi trạng thái.
+
 ### Changed — Hoàn thiện thẻ triển khai P1 Programming (2026-08-10)
 
 **Plan 53.** Nâng `PLAN-PROG-053` lên v0.11 và điền đủ 11 trường cho 6/6 thẻ

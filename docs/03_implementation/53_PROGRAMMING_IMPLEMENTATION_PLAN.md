@@ -4,14 +4,14 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.11 |
+| Phiên bản | 0.12 |
 | Trạng thái | **PLAN-ONLY — chưa được implement production.** Hồ sơ ở `M3 — Review Ready`; `PLAN_READY`, `IMPLEMENT_READY` và `RELEASE_READY` đều `BLOCKED` |
 | Ngày phát hành | 2026-08-10 |
 | Chủ quản | Dev Lead + System Architect |
 | Người review | Product, FE/BE/Core/FW/HW/Security/QA/Ops Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
 | Khung trình bày | ISO/IEC/IEEE 16326 — nội dung kế hoạch quản lý dự án phần mềm; ánh xạ điều khoản ở §11 |
-| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate P0 đã ghim `e3e9fb26f61b39df8f805916333fc03b51f07f5f` tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
+| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate `e3e9fb26f61b39df8f805916333fc03b51f07f5f` tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) **hết hiệu lực làm revision để ký** sau khi đóng `F-CR-01..08`; chờ manifest mới |
 | Quy tắc tài liệu | [`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md) |
 
 > ## ⚠ PLAN-ONLY — chưa được phép viết code production
@@ -450,7 +450,7 @@ tuần (§6.4). Không ghi phần trăm theo cảm tính: `% hoàn tất` chỉ 
 
 | Pha | Task | Đã đạt DoD | % hoàn tất | Trạng thái | Bắt đầu | Kết thúc | Test Result đã có | Ghi chú chặn |
 |---|---:|---:|---:|---|---|---|---:|---|
-| P0 | 7 | 0 | 0% | `BLOCKED` | 2026-08-10 | — | — | Candidate + host/evidence repo đã sẵn; CI/target/HIL và consumer review/conflict/sign-off còn chặn |
+| P0 | 7 | 0 | 0% | `BLOCKED` | 2026-08-10 | — | — | Vòng consumer review kỹ thuật đã chạy (9 finding đóng) và 6 xung đột có ADR `Proposed`; còn chặn bởi chữ ký người thật, `OD-PROG-015`, ghim lại candidate, CI/target/HIL |
 | P1 | 6 | 0 | 0% | `NOT_STARTED` | — | — | 0/2 | 6/6 thẻ task đã điền; chờ `M-G0` và `IMPLEMENT_READY[contract]` |
 | P2 | 8 | 0 | 0% | `NOT_STARTED` | — | — | 0/3 | Chờ `M-G1` |
 | P3 | 8 | 0 | 0% | `NOT_STARTED` | — | — | 0/7 | Chờ `M-G1` |
@@ -471,7 +471,7 @@ Tiến độ theo cổng quyền hạn:
 
 | Cổng | Trạng thái | Ngày mở | Điều kiện còn thiếu |
 |---|---|---|---|
-| `PLAN_READY` | **BLOCKED** | — | Candidate `e3e9fb2` đã pin; còn consumer review, đóng conflict authority và chữ ký `OD-PROG-015` |
+| `PLAN_READY` | **BLOCKED** | — | Vòng consumer review kỹ thuật xong ([`PROG-P0-CONSUMER-REVIEW-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md)); còn: chữ ký người thật (`0/22 M4`), `ADR-026..031` chuyển `Accepted`, chữ ký `OD-PROG-015`, và ghim lại candidate vì 7/22 hồ sơ đã đổi |
 | `IMPLEMENT_READY[contract]` | **BLOCKED** | — | `PLAN_READY PASS` + task card được duyệt + decision tương ứng của `PROG-100/101/102/104` |
 | `RELEASE_READY` | **BLOCKED** | — | 32/32 Test Result; residual risk chấp nhận; `OD-PROG-008` phần HIL |
 
@@ -1014,10 +1014,10 @@ trỏ tới commit + test/evidence hiện tại.
 
 | Gate | Owner | Status | Start/finish | Current blocker/evidence |
 |---|---|---|---|---|
-| `PLAN_READY` | Product+Architect+QA+Document Control | **BLOCKED** | — | Candidate P0 `e3e9fb2` đã pin; consumer review, conflict closure và chữ ký `OD-PROG-015` còn thiếu |
+| `PLAN_READY` | Product+Architect+QA+Document Control | **BLOCKED** | — | Consumer review kỹ thuật `PROG-P0-CONSUMER-REVIEW-2026-08-10` xong, `F-CR-01..09` đóng; `ARCH-CONF-PROG-001..006` có `ADR-026..031` `Proposed`. Còn thiếu: chữ ký `0/22 M4`, ADR chuyển `Accepted`, `OD-PROG-015`, manifest candidate mới |
 | `IMPLEMENT_READY[<lát cắt>]` | Product + Architect | **BLOCKED** | — | `PLAN_READY PASS` + task card/decision theo lát cắt (§4.3) |
 | `RELEASE_READY` | Product + Release + QA | **BLOCKED** | — | 32/32 Test Result + residual acceptance + `OD-PROG-008` HIL |
-| G0/P0 | Product+Architect+QA | BLOCKED | 2026-08-10 / — | Candidate/host/evidence repo sẵn; CI billing, target SSH auth, HIL authority/fixture, DOC-G4 review/sign-off và conflict còn chặn |
+| G0/P0 | Product+Architect+QA | BLOCKED | 2026-08-10 / — | Candidate/host/evidence repo sẵn; consumer review kỹ thuật + 6 ADR `Proposed` xong; còn chặn bởi CI billing, target SSH auth, HIL authority/fixture, chữ ký DOC-G4 và ghim lại candidate |
 | G1/P1 | Architect+BE+Core | NOT_STARTED | — | 6/6 thẻ task đã điền; chờ G0 và IMPLEMENT_READY[contract] |
 | G2/P2+P5 partial | BE+FE+Compiler | NOT_STARTED | — | G1 |
 | G3/P3 | Core+Controls | NOT_STARTED | — | P1/P2 |
@@ -1097,6 +1097,7 @@ khiển thiết bị thật:
 | 0.9 | 2026-08-10 | Ghim candidate P0 `e3e9fb2` bằng manifest commit/tree/SHA-256/Git blob; đóng riêng blocker kiểm soát cấu hình nhưng giữ P0 0/7 DoD, `PLAN_READY` và mọi cổng quyền hạn BLOCKED vì consumer review/conflict/sign-off còn thiếu |
 | 0.10 | 2026-08-10 | Rà readiness P0: xác nhận branch/build/toolchain host PASS; tạo kho Test Result chuẩn nhưng giữ 0/32; tách blocker CI billing, target SSH auth và HIL authority/fixture có owner/impact/gate/unlock; giữ P0 0/7 DoD và mọi cổng quyền hạn BLOCKED |
 | 0.11 | 2026-08-10 | Hoàn thiện 6/6 thẻ task P1 theo đủ 11 trường; sửa thẻ OpenAPI gắn nhầm `PROG-101` thành `PROG-100`, dependency `PROG-103` thành `100–102`, điều kiện decision `M-G1` và quy tắc evidence chỉ tạo hai Test Result thuộc G1. Đây là chuẩn bị `PLAN-ONLY`; P1 giữ 0/6 DoD và mọi gate giữ nguyên |
+| 0.12 | 2026-08-10 | Ghi nhận vòng consumer review kỹ thuật `PROG-P0-CONSUMER-REVIEW-2026-08-10` (9 finding `F-CR-01..09` mở và đóng trong cùng phiên) và sáu ADR `ADR-026..031` đóng phần kỹ thuật của `ARCH-CONF-PROG-001..006`; cập nhật §5.5 và §9.2 theo blocker thật. Vì 7/22 hồ sơ đã đổi, điều kiện ghim candidate chuyển `HẾT HIỆU LỰC` và phải phát hành manifest mới. P0 giữ 0/7 DoD, `0/22 M4`, mọi cổng quyền hạn giữ `BLOCKED` |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
