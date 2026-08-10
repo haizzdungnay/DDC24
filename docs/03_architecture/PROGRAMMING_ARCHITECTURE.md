@@ -3,14 +3,14 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `ARCH-PROG-001` |
-| Phiên bản | 0.5 |
-| Trạng thái | **M3 — Review Ready** — cổng Architecture đủ; 6/6 xung đột §11 có ADR chủ quản ở `Proposed`, chờ chữ ký architecture |
-| Ngày | 2026-08-09 |
+| Phiên bản | 0.6 |
+| Trạng thái | **M3 — Review Ready** — System Architect đã `ACCEPT`; 6/6 ADR còn `Proposed` chờ đồng phê duyệt/evidence |
+| Ngày | 2026-08-10 |
 | Chủ quản | Software/Runtime Architect |
 | Reviewer | Controls/Safety, FE, BE, FW-SOM, FW MCU, HW, Security, Ops, Verification |
 | Approver | Product Owner + System/Runtime Architect |
 | Requirement | `SRS-PROG-001` |
-| Nguồn | Product v2.2; ADR-005/020/021/023; ADR-026..031 (`Proposed`); As-Built source 2026-08-09 |
+| Nguồn | Product v2.2; ADR-005/020/021/023; ADR-026..031 (`Proposed`, System Architect đã `ACCEPT`); As-Built source 2026-08-09 |
 | Phạm vi | Target Rev A và khoảng trống chuyển từ graph production sang Program Runtime |
 
 ## 0. Đọc nhanh
@@ -193,18 +193,19 @@ plan. Không chạy graph và Program song song để “so sánh” trên outpu
 
 ## 11. Xung đột phải đóng trước Active
 
-Mỗi xung đột nay có **một ADR chủ quản**. ADR ở trạng thái `Proposed` nghĩa là nội
-dung kỹ thuật đã đóng và có phương án bị loại kèm lý do, nhưng **chưa có chữ ký
-authority** — xung đột vẫn tính là còn mở cho tới khi ADR chuyển `Accepted`.
+Mỗi xung đột nay có **một ADR chủ quản**. System Architect Phạm Đình Chương đã
+`ACCEPT` cả sáu theo `AUTH-PROG-2026-08-10-01`. ADR vẫn ở `Proposed` vì còn thiếu
+đồng phê duyệt Safety/Security/Verification/Runtime hoặc target evidence; xung
+đột vẫn tính là mở cho tới khi ADR chuyển `Accepted`.
 
 | ID | Xung đột | ADR chủ quản | Quyết định cần có | Trạng thái 2026-08-10 |
 |---|---|---|---|---|
-| `ARCH-CONF-PROG-001` | supporting scheduler cho 8 Task/50–60000 ms, Product chỉ một Task/1–5–30 s | [ADR-026](../adr/ADR-026-programming-runtime-profile-va-validator-duy-nhat.md) | runtime profile và validator duy nhất | `Proposed` — chờ System Architect + `OD-PROG-003/004` |
-| `ARCH-CONF-PROG-002` | graph bootstrap đang sở hữu period và ST dependency là `nullptr` | [ADR-027](../adr/ADR-027-programming-bootstrap-va-quyen-so-huu-chu-ky-scan.md) | cutover/config/bootstrap contract | `Proposed` — chờ System Architect + Safety, `OD-PROG-013` |
-| `ARCH-CONF-PROG-003` | watchdog unit 6 s so với Task 30 s | [ADR-028](../adr/ADR-028-programming-cong-thuc-watchdog-theo-base-step.md) | base-step bound + watchdog formula/target evidence | `Proposed` — chờ Architect + Safety, `OD-PROG-012`, số đo `SCHED_FIFO` |
-| `ARCH-CONF-PROG-004` | component overrun có `any_force_safe` | [ADR-029](../adr/ADR-029-programming-overrun-la-task-fault.md) | đổi thành task fault; SafetyManager condition độc lập | `Proposed` — chờ Architect + Safety, `OD-PROG-012` |
-| `ARCH-CONF-PROG-005` | error code `API-E/IR-E/ST-*` hiện hữu so với `PRG-ERR-*` proposal | [ADR-030](../adr/ADR-030-programming-ma-loi-cong-khai-va-detail-code.md) | mapping/deprecation trong IFSPEC | `Proposed` — chờ Architect + Verification |
-| `ARCH-CONF-PROG-006` | signature helper có source nhưng trusted-origin ngoài Rev A | [ADR-031](../adr/ADR-031-programming-integrity-mode-hash-only-rev-a.md) | chỉ integrity hash trong release profile | `Proposed` — chờ Architect + Security |
+| `ARCH-CONF-PROG-001` | supporting scheduler cho 8 Task/50–60000 ms, Product chỉ một Task/1–5–30 s | [ADR-026](../adr/ADR-026-programming-runtime-profile-va-validator-duy-nhat.md) | runtime profile và validator duy nhất | `Proposed` — Architect `ACCEPT`; `OD-PROG-003` DECIDED; chờ Runtime/`OD-PROG-004`; evidence ở gate triển khai |
+| `ARCH-CONF-PROG-002` | graph bootstrap đang sở hữu period và ST dependency là `nullptr` | [ADR-027](../adr/ADR-027-programming-bootstrap-va-quyen-so-huu-chu-ky-scan.md) | cutover/config/bootstrap contract | `Proposed` — Architect `ACCEPT`; `OD-PROG-013` DECIDED; chờ Safety; evidence ở gate triển khai/release |
+| `ARCH-CONF-PROG-003` | watchdog unit 6 s so với Task 30 s | [ADR-028](../adr/ADR-028-programming-cong-thuc-watchdog-theo-base-step.md) | base-step bound + watchdog formula/target evidence | `Proposed` — Architect `ACCEPT`; chờ Safety/`OD-PROG-012`; số đo `SCHED_FIFO` ở gate triển khai/release |
+| `ARCH-CONF-PROG-004` | component overrun có `any_force_safe` | [ADR-029](../adr/ADR-029-programming-overrun-la-task-fault.md) | đổi thành task fault; SafetyManager condition độc lập | `Proposed` — Architect `ACCEPT`; chờ Safety + `OD-PROG-012` |
+| `ARCH-CONF-PROG-005` | error code `API-E/IR-E/ST-*` hiện hữu so với `PRG-ERR-*` proposal | [ADR-030](../adr/ADR-030-programming-ma-loi-cong-khai-va-detail-code.md) | mapping/deprecation trong IFSPEC | `Proposed` — Architect `ACCEPT`; chờ Verification; mapping evidence ở gate triển khai |
+| `ARCH-CONF-PROG-006` | signature helper có source nhưng trusted-origin ngoài Rev A | [ADR-031](../adr/ADR-031-programming-integrity-mode-hash-only-rev-a.md) | chỉ integrity hash trong release profile | `Proposed` — Architect `ACCEPT`; chờ Security residual-risk acceptance; code/target evidence ở gate triển khai/release |
 
 ## 12. Tiêu chí review kiến trúc
 
@@ -381,11 +382,12 @@ M4. Không được copy số host vào target configuration.
 | 0.3 | 2026-08-09 | Bổ sung sequence Check/Commission, data-flow ownership, deployment unit/resource/health contract; chuyển Detailed Draft chờ architecture review |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Architecture; ghi rõ xung đột §11 kèm owner/gate/điều kiện mở |
 | 0.5 | 2026-08-10 | Đóng phần kỹ thuật của `ARCH-CONF-PROG-001..006` bằng sáu ADR chủ quản `ADR-026..031` (`Proposed`): profile runtime + validator duy nhất, quyền sở hữu chu kỳ scan, công thức watchdog theo base step, overrun là Task fault, hai lớp mã lỗi, `IntegrityMode=HASH_ONLY`. §11 thành bảng có ADR và trạng thái; **không** tự chuyển xung đột sang đóng vì chữ ký authority còn thiếu |
+| 0.6 | 2026-08-10 | Ghi System Architect Phạm Đình Chương `ACCEPT` theo ủy quyền điện tử `AUTH-PROG-2026-08-10-01`; đồng bộ §11 và sign-off. Giữ M3 và 6 ADR `Proposed` vì còn đồng phê duyệt Safety/Security/Verification/Runtime cùng target evidence |
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|
-| Product Owner | PENDING | scope/capacity/cutover được quyết định |
-| System/Runtime Architect | PENDING | 7 design lõi và contract đồng bộ, blocker đóng |
+| Product Owner | **ACCEPT — Phạm Đình Chương, 2026-08-10; ủy quyền điện tử** | scope/capacity/cutover theo `AUTH-PROG-2026-08-10-01`; downstream sync còn mở |
+| System/Runtime Architect | **ACCEPT phần System Architect — Phạm Đình Chương, 2026-08-10** | 6/6 ADR đã chấp thuận về kiến trúc; Runtime co-sign/evidence còn mở |
 | Controls/Safety Reviewer | PENDING | priority/hold-last/overrun/watchdog/fault boundary chấp thuận |
 | Security/Ops Reviewer | PENDING | trust/TLS/deploy/rollback chấp thuận |
 | Verification Lead | PENDING | `ARCH-TC-01..07` có test specification và evidence owner |
@@ -404,9 +406,10 @@ Cổng lấy theo [Plan 54 §7](../03_implementation/54_PROGRAMMING_DOCUMENTATIO
 | State | PASS | §4 state machine lifecycle; §5 base control step |
 | Capacity và timing | PASS | §15 concurrency/timing/resource boundary; §19 deployment unit; ngưỡng `<200 ms` poll gap |
 | Compatibility và rollback | PASS | §16 compatibility/deployment/rollback gồm thứ tự deploy và dữ liệu phải giữ |
-| Xung đột ADR/kiến trúc | **BLOCKED** | §11 còn xung đột mở về base-step/watchdog và cutover. Owner: System Architect + Runtime Architect. Ảnh hưởng: chặn khóa scheduler contract và `DOC-G2`. Gate: `DOC-G2`. Điều kiện mở: đóng `OD-PROG-004/012/013/014` bằng ADR cutover + scheduler profile được Safety review |
+| Xung đột ADR/kiến trúc | **BLOCKED một phần** | §11: System Architect đã `ACCEPT`; còn Runtime/Safety/Security/Verification và target evidence. Ảnh hưởng: chặn khóa scheduler contract và `DOC-G2`. Điều kiện mở: đúng đồng phê duyệt/evidence trong từng ADR; `OD-PROG-003/013` đã DECIDED, `004/012/014` chưa đóng |
 | Verification kiến trúc | PASS | §17 acceptance gắn `VS-PROG-012/014/015`; đều `NOT RUN` và được ghi đúng như vậy |
 | Link nội bộ sạch | PASS | harness: local link missing `0`, anchor missing `0` |
 
-**Chưa đạt M4/M5**: cần Architecture review của Core/BE/FE/IO/Safety/Ops và chữ
-ký System Architect. Không mục nào ở đây chứng minh code đã tồn tại.
+**Chưa đạt M4/M5**: chữ ký System Architect đã có, nhưng còn Architecture review
+của Core/BE/FE/IO/Safety/Ops/Verification và bằng chứng mục tiêu. Không mục nào ở
+đây chứng minh code đã tồn tại.

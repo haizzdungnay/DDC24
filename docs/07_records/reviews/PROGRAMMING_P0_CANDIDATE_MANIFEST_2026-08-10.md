@@ -4,15 +4,15 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 2.4 |
+| Phiên bản | 2.6 |
 | Ngày | 2026-08-10 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
-| Trạng thái | **ACTIVE — nội dung candidate đã ghim bằng hash ở §2; approval vẫn PENDING** |
+| Trạng thái | **ACTIVE — Product + Architect `ACCEPT`; consumer/Verification/discipline approval PENDING** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | `bbd7d2d` — ghi đầy đủ ở §1.1; **hash ở §2 mới là định danh** |
-| PR nguồn | [PR #118](https://github.com/Mekong-HCM/MK-DDC-24/pull/118) |
-| Candidate trước | `e3e9fb26f61b39df8f805916333fc03b51f07f5f` — **SUPERSEDED**, xem §4 |
+| Candidate commit | `ac059a1` — ghi đầy đủ ở §1.1; **22 hash ở §2 là định danh hiện hành** |
+| PR nguồn | PENDING |
+| Candidate trước | v2.4 tại commit `bbd7d2d` — **SUPERSEDED bởi authority record**; `e3e9fb2` cũng đã superseded, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
 
@@ -46,9 +46,9 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | `bbd7d2d990fc18c2793801083a8e6afbb2c2d9ae` |
-| Git tree | `bb0acb60f091878f1a4182aeef5681a1bd0969a0` |
-| Nhánh | `origin/main` |
+| Commit chứa nội dung candidate | `ac059a1a34e9baf82c431d3eb13a6c16387adf58` |
+| Git tree | `5e47316e2ce5ca0968c502c40c67f4a219d53881` |
+| Nhánh phát hành | `docs/programming-authority-decisions-pham-dinh-chuong` |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
 chạy `scripts/candidate_pin_check.py` trước khi bắt đầu đọc.
@@ -71,39 +71,40 @@ trước `e3e9fb2`.
 
 | # | Đường dẫn | SHA-256 | Git blob | Dòng | Đổi |
 |---:|---|---|---|---:|:---:|
-| 1 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `35e07819aa94fa6448f60c7ab13338c22a63a4ab4739df3bb00c7b04cd32730a` | `f401e2e765a611e3b0e6b53cfba7944fa82aa131` | 234 | ✱ |
+| 1 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `27d2de3dd6df4394b5a9d9f15c706161c6a3e631288d300486e1f2e8cf0d3de5` | `b5692c4493142e37112b3516bf7a6e66f02a28ad` | 235 | ✱ |
 | 2 | `docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md` | `34859905f640dead8ffbec68e7ffd601f06675b5c1bc42c82210989fa6871ea3` | `96dfa4a40e2f116b1ba96b342e8657940293b8f9` | 272 | |
-| 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `98a23438d31989252718e63e11cb3ed566ad3f6b7e164da768cab27c14283fc9` | `e321104d4c008105ad9d941091412b21c6aafb0c` | 181 | ✱ |
-| 4 | `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | `7c53890aeb535e3c023bdf960c0e8b8e583e542c2e253421972a2783311a19a1` | `9411d701b013f55f9cd4a67a8489b0599abe7d29` | 412 | ✱ |
+| 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `37a311fc2210b212261a246412ef2b27c8ec8e0bdcf3af97d781175b897935c2` | `8aa85fa8c308e189dc11d47da724fa8caff84983` | 234 | ✱ |
+| 4 | `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | `636b554afecbff851fd46f504713824114fafdaa45625f4f103b0eb0f365bf70` | `2758d2a7d3b6d3322f23d1853fb2ad5b457a46a3` | 415 | ✱ |
 | 5 | `docs/02_design/software/PROGRAMMING_DATA_MODEL.md` | `62abb98e74fcfa47b85940220fb153fd01d451b0784a7e18c6c18e1a4dba603d` | `376b72d8bf6648a2f94994ced0330fa1f9adfb2d` | 516 | |
-| 6 | `docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md` | `8c1be23ba7b056798ba7130c4390db7de35b8fcb0fe69e45b93dd957561bfdb4` | `3753490517522c60dc68c800ccde549daeca12a7` | 586 | ✱ |
+| 6 | `docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md` | `871f0abfd6359b918fcaa8e6ccb31feb3d7b5d8c333d157cdf0e6148b372c3e9` | `8fcc8fc4fcfc3b71aa162da61e117692eb01863b` | 587 | ✱ |
 | 7 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `7fb15c2fb70a9b86e747343f3c270ea70791cde6bc85ca00aa09a02585fcb384` | `82a64294b15b07a39e7a376de21e5aa8be0a2ac5` | 339 | |
 | 8 | `docs/02_design/interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md` | `d945df62955cfb7a412b1e497fcf1c1c3dd1653aa0f149647897927c8e660f19` | `a37c00066ccfa7d3cf6670b0fae1e4fb60f776e7` | 281 | |
 | 9 | `docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md` | `1d697ef0f867a2d0363319088df43ebc626603cf80353b19548d540a748bc00a` | `3aa2c8f0c29437301cce696170fd40f3ad365e16` | 322 | |
 | 10 | `docs/02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md` | `9026d1f97874749683d0dd85037bf3252adcebfa3c9341d95eed05d4dd7b588a` | `ea7421ac8ca3b304cae2ebdcbc8d8451e6ab9229` | 318 | |
 | 11 | `docs/02_design/software/PROGRAMMING_SECURITY_DESIGN.md` | `6d263c63dc815271a74e041fa5a72af6107738c7b6213dc9793926e1058d1ce8` | `78ecbdb6734def2b7555e1513905c7589014eafb` | 305 | ✱ |
-| 12 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `c36e43bc3b65dc7c29b42db842450c3ac988daf197601b394c12d0bdb63e16e5` | `7fd8d37333fd3376b3497feefb9618b7919ad3d6` | 1356 | ✱ |
+| 12 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `46498254d3466c6ee5a3dba74cb8aeb72ee013a8fd0977abe534806ba5823333` | `4a511d259749c091cb7d864af02d159d24f9da9c` | 1357 | ✱ |
 | 13 | `docs/02_design/software/PROGRAMMING_FE_DESIGN.md` | `1d2509f35125ede78c5d83ce6923ed7693b425ab7e2e910383e717d6776a9bb8` | `b7bb7937601ecce60252d624c45ac788b65a434b` | 421 | ✱ |
 | 14 | `docs/02_design/software/PROGRAMMING_BE_DESIGN.md` | `c9b8eb3abb0a10bc9b735861b3271b24d350895a7228f66cd09f9b682149a548` | `81f7c11446a9663ca2e027636d05cb0f2d06eb11` | 387 | ✱ |
 | 15 | `docs/02_design/software/PROGRAMMING_FW_SOM_DESIGN.md` | `f45e01f6326f0711014956a943a4b55a9b18485f6412651afbea7727c73efeda` | `6e6a0b8fd8966c7235f2fec416a3c10bd054b305` | 337 | |
 | 16 | `docs/02_design/firmware/PROGRAMMING_FW_MCU_DESIGN.md` | `f8fa75c9a2d96851c62ead9bbc8e274b9eb2a66eaa1e7a9ecdb678afcdbecdf9` | `29cec6f96253e4f9da70015989b01b294eda904b` | 261 | |
 | 17 | `docs/04_design/hardware/PROGRAMMING_HW_DESIGN.md` | `609a8dad26acb23b2edc644790bc5be318a92b47f4e3cf796b8ba8077b83e316` | `725e6f89a9ba780926d6ef9cf3b13b5b7372dad0` | 254 | |
-| 18 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `8408f0b01bf8ae089c925f420c53d52557ef09be6bb14e0487def445302e3efc` | `563219226a332f788482e46bad069ced4a54f636` | 303 | |
+| 18 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `30ffc6be137bde3d8a15242d293f38fdfe01426506b0ad5554c69e72f7e7ea3e` | `6f76b332c3e4ac35fa9b0c57c0ce317085b6d2a5` | 305 | ✱ |
 | 19 | `docs/06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md` | `cae54485945629590ca159ea8b24d1018ee364fa8ab66a808861167f915ea808` | `637a5e37ce5005b6e85d46bc91e9241dd9be7ddb` | 331 | |
 | 20 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `f631828cbb79068722ae66bc365d95d4524363cd02f612e63a3810a3fb620402` | `35d6abf57b3b0b765b02017d5f04e678221c7764` | 171 | |
-| 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `52d6b8ee3041cb461ee04952c346f61ee4cbc43bb73368877f7616a2a3987e67` | `1d4daa032cfcb624599900f1f028b9c3fb27da3a` | 328 | ✱ |
-| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `38b9e768a34567ebf1f0b1ede2afe940a061adb7f774dca17de5e0eda731b80a` | `be35f84184a7ee00e52dd96449e81fdb90ce1b12` | 1138 | ✱ |
+| 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `0d294a83284ba4f2322515f04c2bd387d9731d4f15326b320b50415e09414dd7` | `0f5d02e2ece2b9f334eefb293b05028c66e6f6cd` | 329 | ✱ |
+| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `9e0072713510b6e10613f4ac1399bd79bb996aa4cb675436b1472dd0d1db3051` | `8c8d0f64e914b48de5930c176a6791d391d97b02` | 1139 | ✱ |
 
-**10/22 hồ sơ đổi, 12/22 giữ nguyên hash** so với `e3e9fb2`. Reviewer đã đọc
-`e3e9fb2` chỉ cần đọc lại mười hồ sơ đánh dấu `✱`.
+**11/22 hồ sơ đổi, 11/22 giữ nguyên hash** so với `e3e9fb2`. So với candidate
+v2.4, authority record làm đổi **8/22** hồ sơ. Reviewer đọc lại các hồ sơ đánh
+dấu `✱`; manifest §4 nêu lý do từng vòng.
 
 ## 3. Hồ sơ hỗ trợ ngoài mẫu số 22
 
 | Hồ sơ | Phiên bản tại lần ghim này | Vai trò |
 |---|---|---|
-| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v2.4 | Tracker hồ sơ |
-| `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v1.4 | Gói authority review |
-| `docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md` | v1.1 | Biên bản consumer review |
+| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v2.6 | Tracker hồ sơ |
+| `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v1.6 | Gói authority review |
+| `docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md` | v1.3 | Biên bản consumer review |
 
 Ba hồ sơ này ghi **phiên bản**, không ghi SHA-256. Lý do giống §1.1: chúng thay đổi
 trong cùng vòng cập nhật với manifest, nên một hash ghi ở đây sẽ sai ngay khi commit
@@ -111,27 +112,29 @@ trong cùng vòng cập nhật với manifest, nên một hash ghi ở đây s�
 không cần phát hành manifest mới.
 
 Sáu ADR `ADR-026..031` cũng nằm ngoài mẫu số 22 vì chúng là **quyết định**, không
-phải hồ sơ baseline; chúng được ký riêng trên từng file và hiện đều ở `Proposed`.
+phải hồ sơ baseline. System Architect đã `ACCEPT` 6/6; chúng vẫn `Proposed` chờ
+đồng phê duyệt/evidence trước khi chuyển `Accepted`.
 
 ## 4. Delta so với candidate trước `e3e9fb2`
 
-Đây là delta **tích lũy** qua hai vòng: vòng **R1** đóng finding
-`F-CR-01..09` ([biên bản](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md)), và vòng
-**R2/A2** sửa các phát biểu trạng thái cũ còn sót (`F-CR-10`). Tổng **10/22** hồ
-sơ đổi so với `e3e9fb2`.
+Đây là delta **tích lũy** qua ba vòng: **R1** đóng `F-CR-01..09`, **R2/A2** sửa
+phát biểu trạng thái cũ (`F-CR-10`), và **R3/AUTH** ghi
+`AUTH-PROG-2026-08-10-01`. Tổng **11/22** hồ sơ đổi so với `e3e9fb2`; riêng R3
+đổi 8/22.
 
 | Hồ sơ | Vòng | Lý do đổi |
 |---|:---:|---|
 | `docs/02_design/software/PROGRAMMING_FE_DESIGN.md` | R1 | `F-CR-01` — bỏ IA sáu trang còn sót ở §12/§16 |
-| `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | R1 | `F-CR-04` — thêm §16.4.1 và asset `RetainResetDialog` |
-| `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | R1 | `F-CR-03/07/08` — truy vết hai chiều, số đếm, số mục |
-| `docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md` | R1 | `F-CR-02` — gốc staging và bảng ba thư mục |
-| `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | R1 | `F-CR-06` — §11 gắn `ADR-026..031` |
+| `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | R1 + R3 | `F-CR-04`; R3 ghi Product `ACCEPT` IA và gate slice UI |
+| `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | R1 + R3 | `F-CR-03/07/08`; R3 đồng bộ `3 DECIDED/14 OPEN` mà không đổi I/T/P/R |
+| `docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md` | R1 + R3 | `F-CR-02`; R3 ghi Product/Architect `ACCEPT` và giữ contract chưa Active |
+| `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | R1 + R3 | `F-CR-06`; R3 ghi Architect `ACCEPT` 6/6 ADR, vẫn chờ đồng phê duyệt/evidence |
 | `docs/02_design/software/PROGRAMMING_BE_DESIGN.md` | R1 | `F-CR-02`, `F-CR-05` — staging và tên gói `transport` |
 | `docs/02_design/software/PROGRAMMING_SECURITY_DESIGN.md` | R1 | `F-CR-02` — nêu tên gốc locator |
-| `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | R1 + R2 | đồng bộ revision downstream; R2 tách “review kỹ thuật xong” khỏi “authority đã ký” |
-| `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | R1 + R2 | đồng bộ §5.5/§9.2; R2 đóng `F-CR-10` — 8 phát biểu trạng thái cũ |
-| `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | R2 | ghi `OD-PROG-015` đã đạt 2/3 điều kiện mở khóa; 17/17 vẫn `OPEN` |
+| `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | R1 + R2 + R3 | đồng bộ revision downstream; ghi Product/Architect `ACCEPT` và trạng thái decision |
+| `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | R1 + R2 + R3 | đồng bộ gate/candidate; ghi partial authority nhưng giữ implementation blocked |
+| `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | R2 + R3 | ghi authority record; `3 DECIDED`, `14 OPEN`, `0 CLOSED` |
+| `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | R3 | ghi Product `ACCEPT`; giữ Verification PENDING và 0/32 Test Result |
 
 Thay đổi khác trong cùng dải commit — `scripts/trace_bidirectional_check.py`,
 `scripts/docs_iso_harness.py`, `CHANGELOG.md`, sáu ADR và asset SVG — **không**
@@ -172,3 +175,5 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 2.2 | 2026-08-10 | Ghi bổ sung commit `e278aaa` và tree `2dadad30` — nơi nội dung candidate xuất hiện trên `origin/main`. Bước này chỉ sửa manifest, hồ sơ **ngoài** mẫu số 22, nên `candidate_pin_check.py` vẫn PASS 22/22; đây đúng là hành vi mà §1.1 thiết kế |
 | 2.3 | 2026-08-10 | Cập nhật hash của `PLAN-PROG-053` (v0.14) và `PROG-DOCSET-001` (v1.6) sau vòng A2 sửa phát biểu trạng thái cũ. Đây đúng là quy trình mà §1.1 yêu cầu: hồ sơ trong mẫu số 22 đổi ⇒ manifest cập nhật **cùng phiên** ⇒ `candidate_pin_check.py` chạy lại tới khi `22/22` PASS |
 | 2.4 | 2026-08-10 | Ghi bổ sung commit `bbd7d2d` và tree `bb0acb60` cho vòng A2. `candidate_pin_check.py` vẫn PASS `22/22` sau khi ghi, vì bước này chỉ sửa manifest — hồ sơ ngoài mẫu số 22 |
+| 2.5 | 2026-08-10 | Phát hành candidate sau `AUTH-PROG-2026-08-10-01`: tính lại 22 SHA-256/Git blob; 8/22 hồ sơ đổi so với v2.4, 11/22 đổi tích lũy so với `e3e9fb2`. Ghi Product + Architect `ACCEPT`, giữ consumer/Verification/discipline PENDING và mọi implementation/release gate BLOCKED |
+| 2.6 | 2026-08-10 | Ghi bổ sung commit `ac059a1` và tree `5e47316e` chứa nội dung candidate v2.5. Chỉ manifest ngoài mẫu số 22 đổi; `candidate_pin_check.py` tiếp tục PASS 22/22 |

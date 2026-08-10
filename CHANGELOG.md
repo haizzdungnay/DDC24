@@ -7,6 +7,48 @@
 ---
 
 ## [Unreleased]
+### Changed — Ghi ủy quyền Product/Architect cho Programming P0 (2026-08-10)
+
+**Ủy quyền được ghi nhận.** Theo yêu cầu trực tiếp của Phạm Đình Chương, ghi
+`AUTH-PROG-2026-08-10-01` dưới hình thức ủy quyền điện tử với hai vai trò Product
+Owner/CTO + System Architect; Codex chỉ là người ghi biên bản, không giả chữ ký
+tay/chứng thư số và không ký thay QA, Safety, Security hoặc discipline authority.
+
+**Quyết định.** Chuyển `OD-PROG-003/010/013` từ `OPEN` sang `DECIDED`; ghi Product
+hoặc Product+Architect `ACCEPT` cho các phương án RBAC, type, capacity, Task/Core
+Library/FBD, Point identity, RETAIN/LKG, timing/overrun, cutover, deploy/rollback,
+bốn workspace/tám journey và hoãn template BMS. Toàn register hiện là
+`3 DECIDED / 14 OPEN / 0 CLOSED`; chưa mục nào được gọi là As-Built chỉ từ quyết
+định tài liệu.
+
+**Kiến trúc và gate.** System Architect xác nhận
+`${STATE_DIR}/programming/staging/` cho `F-CR-02` và `ACCEPT` 6/6
+`ADR-026..031`. Sáu ADR vẫn `Proposed` chờ đúng đồng phê duyệt/evidence. Product +
+Architect `ACCEPT` candidate v2.5, nhưng `PLAN_READY`, mọi
+`IMPLEMENT_READY[*]` và `RELEASE_READY` vẫn `BLOCKED`: 0/8 consumer signature,
+0/22 M4/M5, Verification/QA/discipline còn thiếu, 0/32 Test Result.
+
+**Gỡ phụ thuộc vòng tròn.** Sửa tiêu đề điều kiện trong `ADR-026..031`: chữ ký
+đồng phê duyệt cho phép ADR chuyển `Accepted`; code, target/HIL và Test Result là
+gate **sau quyết định** để đóng lát cắt triển khai/release, không còn là điều kiện
+tiên quyết khiến `PLAN_READY` đòi bằng chứng của code chưa được phép viết.
+
+**Kiểm soát cấu hình.** Đồng bộ Open Decisions, Architecture, Interface, UI/UX,
+VVP, Trace, Design Index, Plan 53/54, gate/consumer review và ADR log. Manifest
+v2.5 tính lại 22 SHA-256/Git blob: 8/22 hồ sơ đổi so với v2.4, 11/22 đổi tích lũy
+so với `e3e9fb2`. Manifest v2.6 ghi bổ sung commit `ac059a1` và tree `5e47316e`
+chứa candidate; bước bổ sung chỉ sửa hồ sơ ngoài mẫu số 22 nên không làm lệch
+candidate.
+
+**Kiểm chứng.** `candidate_pin_check.py` PASS `22/22`;
+`trace_bidirectional_check.py` PASS `60/60` requirement và `32/32` scenario;
+`docs_iso_harness.py --expect` PASS (link/anchor/trailing whitespace/code fence/
+duplicate ID/code-span path đều `0`); `git diff --check` PASS. Không đổi source
+production, nhưng vẫn chạy đủ gate trước commit: CMake Release với Modbus +
+BACnet + HMI build PASS; CTest `860/860`; Go `vet` PASS và test `11/11` package;
+FE Vitest `469/469`, lint PASS, build PASS. Không chạy browser/HIL vì không đổi
+UI runtime/source hay target deployment.
+
 ### Fixed — Tách “review kỹ thuật đã xong” khỏi “authority đã ký” trong hồ sơ P0 (2026-08-10)
 
 **Triệu chứng.** Sau vòng consumer review, tám phát biểu trạng thái trong

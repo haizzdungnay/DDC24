@@ -2,7 +2,7 @@
 
 - Date: 2026-08-10
 - Owner: System Architect + Safety Reviewer (phê duyệt) · Controls Lead (đề xuất)
-- Status: **Proposed** — chờ ký; chưa ký thì `ARCH-CONF-PROG-004` còn mở
+- Status: **Proposed — System Architect ACCEPT**; chờ Safety và `OD-PROG-012` trước khi chuyển `Accepted`
 - Đóng xung đột: `ARCH-CONF-PROG-004` tại [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) §11
 - Related: [`DDD-CTRL-PROG-001`](../02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md) §2, §7, §9 ·
   [`OD-PROG-012`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) ·
@@ -68,7 +68,7 @@ nào đọc ra “vì sao cả trạm dừng”.
 - Rủi ro `RSK-PROG-004` (nhầm quyền điều khiển) giảm về mặt thiết kế, nhưng **chỉ
   hạ residual sau khi `VS-PROG-013` PASS trên target**.
 
-## Điều kiện xác minh trước khi chuyển `Accepted`
+## Điều kiện sau quyết định trước khi đóng lát cắt triển khai/release
 
 | Điều kiện | Bằng chứng |
 |---|---|
@@ -81,6 +81,6 @@ nào đọc ra “vì sao cả trạm dừng”.
 
 | Vai trò | Trạng thái | Ngày |
 |---|---|---|
-| System Architect | **PENDING** | — |
+| System Architect | **ACCEPT — Phạm Đình Chương; ủy quyền điện tử `AUTH-PROG-2026-08-10-01`, Codex ghi biên bản** | 2026-08-10 |
 | Safety Reviewer | **PENDING** | — |
 | Controls Lead | Đề xuất | 2026-08-10 |

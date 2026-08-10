@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 0.6 |
+| Phiên bản | 0.7 |
 | Trạng thái | **M3 — Review Ready** — 32/32 kịch bản có đặc tả; 0/32 Test Result |
 | Ngày | 2026-08-10 |
 | Chủ quản | Verification Lead |
@@ -264,7 +264,7 @@ baseline PASS hoặc có waiver đúng authority và trace rõ.
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| Requirement/design/17 decision chưa Approved | Product + Architect | DOC review closed và baseline pin |
+| Requirement/design: `14 OPEN/3 DECIDED/0 CLOSED`, 22 hồ sơ chưa Approved | Product + Architect + discipline authority | đồng phê duyệt, downstream sync, DOC review closed và baseline pin |
 | FE/BE/Core Programming chưa implement | Dev Leads | gates Plan 53 + build artifacts |
 | BSP/HW fixture/limits/HIL chưa có | FW/HW/Safety | controlled setup + calibrated instruments |
 
@@ -276,11 +276,13 @@ baseline PASS hoặc có waiver đúng authority và trace rõ.
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại V&V; giữ 0/30 Test Result |
 | 0.5 | 2026-08-09 | Thêm `VS-PROG-031` (usability test có người dùng thật, sáu ngưỡng `UX-A-01..06`) và `VS-PROG-032` (chuyển hướng route và giữ trạng thái tab); tổng 32 kịch bản, vẫn 0 Test Result |
 | 0.6 | 2026-08-10 | Sửa self-check trạng thái trung thực từ dải cũ `001..030` sang catalog hiện hành `001..032`; không thay đổi 0/32 Test Result hoặc gate |
+| 0.7 | 2026-08-10 | Ghi Product Owner/CTO Phạm Đình Chương `ACCEPT` theo `AUTH-PROG-2026-08-10-01`; đồng bộ register `3 DECIDED/14 OPEN`. Giữ Verification Lead PENDING và 0/32 Test Result; không nâng gate hay maturity |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
 | Verification + discipline leads | Chờ review | — |
-| Verification Lead + Product Owner | **BLOCKED — chưa phê duyệt** | design/limits/fixture và 0/32 result |
+| Product Owner | **ACCEPT — Phạm Đình Chương, 2026-08-10; ủy quyền điện tử** | phạm vi/giới hạn Product theo `AUTH-PROG-2026-08-10-01`; không thay independent Verification review |
+| Verification Lead | **PENDING** | design/limits discipline/fixture và 0/32 result |
 
 ## 13. Phụ lục — Tự kiểm cổng M3 (loại: V&V)
 

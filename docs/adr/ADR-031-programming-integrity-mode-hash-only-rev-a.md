@@ -2,7 +2,7 @@
 
 - Date: 2026-08-10
 - Owner: System Architect + Security Lead (phê duyệt) · Core Lead (đề xuất)
-- Status: **Proposed** — chờ ký; chưa ký thì `ARCH-CONF-PROG-006` còn mở
+- Status: **Proposed — System Architect ACCEPT**; chờ Security chấp nhận residual risk/trusted boundary trước khi chuyển `Accepted`; code/test/target permission là gate triển khai/release sau quyết định
 - Đóng xung đột: `ARCH-CONF-PROG-006` tại [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) §11
 - Related: [`IFSPEC-ART-PROG-001`](../02_design/interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md) §4 ·
   [`DDD-SEC-PROG-001`](../02_design/software/PROGRAMMING_SECURITY_DESIGN.md) §7 ·
@@ -74,7 +74,7 @@ Rev A.
   chấp nhận có điều kiện dựa trên trusted local boundary, và phải ghi vào
   `RSK-PROG-*` kèm người chấp nhận.
 
-## Điều kiện xác minh trước khi chuyển `Accepted`
+## Điều kiện sau quyết định trước khi đóng lát cắt triển khai/release
 
 | Điều kiện | Bằng chứng |
 |---|---|
@@ -87,6 +87,6 @@ Rev A.
 
 | Vai trò | Trạng thái | Ngày |
 |---|---|---|
-| System Architect | **PENDING** | — |
+| System Architect | **ACCEPT — Phạm Đình Chương; ủy quyền điện tử `AUTH-PROG-2026-08-10-01`, Codex ghi biên bản** | 2026-08-10 |
 | Security Lead | **PENDING** | — |
 | Core Lead | Đề xuất | 2026-08-10 |

@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 2.5 |
+| Phiên bản | 2.6 |
 | Trạng thái | **M3 — Review Ready** — 60 dòng trace + 8 journey + migration 17 UC; truy vết hai chiều `32/32` kịch bản; evidence production RED |
-| Cập nhật | 2026-08-09 |
+| Cập nhật | 2026-08-10 |
 | Chủ quản | Verification Lead |
 | Người review | Document Control, Product, Architect và tất cả discipline lead |
 | Người phê duyệt | Verification Lead + Document Control |
@@ -19,7 +19,7 @@
 | 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. Nhưng **0/60 đã implement end-to-end**, **0/32 kịch bản có Test Result**, và 0/60 passed hoặc released. Mọi dòng đang là `D=Y`, còn `I/T/P/R=N`. |
 | 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
-| 6. Điều gì còn bị chặn? | §9: 17 decision và 22 hồ sơ chưa được phê duyệt; chưa implement end-to-end; 0/32 Test Result. Release gate `RED / NO-GO`. |
+| 6. Điều gì còn bị chặn? | §9: `14 OPEN/3 DECIDED/0 CLOSED`, 22 hồ sơ chưa Approved; chưa implement end-to-end; 0/32 Test Result. Release gate `RED / NO-GO`. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với bản thân ma trận: 60/60 dòng giải được về ID canonical, không trùng ID, không có dòng vi phạm `P=Y khi T=N` hay `R=Y khi P=N` — kiểm bằng harness ở [`PROG-REV-2026-08-09`](reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §2. |
 
 Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
@@ -238,7 +238,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| 17 decision/22 hồ sơ chưa Approved | Product + Document Control | review/sign-off complete |
+| 14 decision OPEN + 3 DECIDED chưa sync/22 hồ sơ chưa Approved | Product + discipline authority + Document Control | đồng phê duyệt, downstream sync và review/sign-off complete |
 | Source Target chưa implement end-to-end | Dev Leads | commit/build mapping per requirement |
 | Test Result current 0/32 | QA + discipline leads | execute/review evidence per VVP |
 
@@ -250,6 +250,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 2.3 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Traceability; ghi kết quả kiểm máy 0 vi phạm |
 | 2.4 | 2026-08-09 | Amendment A1: thêm 5 dòng requirement (`FE-113/114/115`, `NFR-109/110`) nâng tổng lên 60; thêm §10 trace tám journey `UJ-PROG-*` và bảng trạng thái migration 17 `UC-PROG-*`; cập nhật scenario lên 32 |
 | 2.5 | 2026-08-10 | Đóng finding consumer review `F-CR-03/07/08`: bổ sung `VS-PROG-032` vào dòng `FE-101` và `VS-PROG-008` vào dòng `FE-102` để chiều xuôi requirement→scenario đủ `32/32`; thêm §8.1 lệnh kiểm hai chiều `scripts/trace_bidirectional_check.py`; sửa số đếm cũ `55 dòng` thành `60 dòng`; đổi phụ lục tự kiểm từ `§10` trùng số sang `§11` |
+| 2.6 | 2026-08-10 | Ghi trạng thái authority sau `AUTH-PROG-2026-08-10-01`: `OD-PROG-003/010/013` DECIDED, 14 mục còn OPEN, 0 CLOSED; Product/Architect `ACCEPT` không đổi các trục `I/T/P/R` và không thay Verification/Document Control approval |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -323,6 +324,6 @@ qua journey hoặc qua kịch bản xuyên suốt tương ứng.
 | Quy tắc vô hiệu hóa | PASS | §7 và §8: đổi requirement/design/contract/source/board làm mất hiệu lực Test Result phía dưới; không giữ `P` cũ |
 | Kiểm tính nhất quán tự động | PASS | §8 liệt kê các phép kiểm; đã chạy: thiếu/trùng ID canonical, kịch bản ngoài `001..032`, `P=Y` khi `T=N`, `R=Y` khi `P=N` — vi phạm `0` |
 | Trạng thái bằng chứng trung thực | PASS | §5 và §7: `0/32` Test Result, `0/60` passed, release gate `RED / NO-GO` |
-| `BLOCKED` có owner/gate | **BLOCKED** | §9 ba blocker: 17 decision và 22 hồ sơ chưa Approved (Product + Document Control), chưa implement end-to-end (Dev Leads), 0/32 Test Result (QA + discipline leads). Ảnh hưởng: không đóng được requirement nào. Gate: `DOC-G4` rồi `G6`. Điều kiện mở: đúng ba điều kiện ghi ở §9 |
+| `BLOCKED` có owner/gate | **BLOCKED** | §9 ba blocker: `14 OPEN + 3 DECIDED chưa sync` và 22 hồ sơ chưa Approved (Product + discipline authority + Document Control), chưa implement end-to-end (Dev Leads), 0/32 Test Result (QA + discipline leads). Ảnh hưởng: không đóng được requirement nào. Gate: `DOC-G4` rồi `G6`. Điều kiện mở: đúng ba điều kiện ghi ở §9 |
 
 Ma trận này theo dõi trạng thái; nó **không** tạo ra bằng chứng.
