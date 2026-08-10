@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-SEC-PROG-001` |
-| Phiên bản | 0.3 |
+| Phiên bản | 0.4 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; TLS production còn chặn mutation |
 | Ngày | 2026-08-09 |
 | Chủ quản | Security Lead + Backend Lead |
@@ -141,8 +141,10 @@ package manifest, không nhận path từ request.
 - UDS mode `0660`, service UID/group cố định, peer `SO_PEERCRED`; systemd sandbox
   `NoNewPrivileges`, hạn capability, filesystem write allowlist.
 - Frame length-prefix ≤64 KiB; deadline/request/operation/payload hash bắt buộc.
-  Locator mở dưới root fixed bằng `openat2`/no-follow; reject symlink, traversal,
-  non-regular file, wrong owner/mode/size/hash.
+  Locator mở dưới root fixed `${STATE_DIR}/programming/staging/` bằng
+  `openat2`/no-follow; reject symlink, traversal, non-regular file, wrong
+  owner/mode/size/hash. Root này là hằng số biên dịch/cấu hình package, **không**
+  nhận từ request; bảng ba gốc thư mục ở `IFSPEC-PROG-001` §12.
 - Config/state/staging/retain/audit directory tách quyền. Không world writable;
   atomic temp+fsync+rename; backup encryption/access theo Ops policy.
 - Core runtime không liên kết parser/compiler và không đọc source/bundle.
@@ -272,6 +274,7 @@ error không rò chi tiết và evidence trong V&V.
 | 0.1 | 2026-08-09 | Thiết kế trust/RBAC/web/compiler/artifact/bundle/audit/incident và test | System Engineering |
 | 0.2 | 2026-08-09 | Bổ sung control-ID handoff, fail-closed/log requirement và abuse-flow catalog; chuyển Detailed Draft chờ security review | System Engineering |
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; nêu rõ hệ quả “chưa có TLS ⇒ tắt mutation” | System Engineering |
+| 0.4 | 2026-08-10 | Đóng finding consumer review `F-CR-02`: đặt tên gốc cố định `${STATE_DIR}/programming/staging/` cho locator artifact thay vì “root fixed” không nêu tên, và ghi rõ root là hằng số package chứ không nhận từ request | System Engineering |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

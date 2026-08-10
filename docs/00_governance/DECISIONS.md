@@ -2,9 +2,17 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-04 (đăng ký `MODBUS_RTU_OPEN_DECISIONS` cho ADR-024)
+**Cập nhật:** 2026-08-10 (đăng ký ADR-026..031 đóng phần kỹ thuật của `ARCH-CONF-PROG-001..006`)
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: EasySet parity thành ADR-013; raw SHM thành ADR-014.
+
+> **File này là authority cấp phát số ADR, không phải thư mục `docs/adr/`.**
+> Một số ADR chỉ tồn tại dưới dạng dòng trong bảng dưới đây hoặc mục nội tuyến
+> trong chính file này, **không** có file riêng — hiện là `ADR-024` (Modbus RTU
+> Point, chi tiết ở `DDD-SW-MBRTU-POINT-001`) và `ADR-025` (process-first +
+> bounded modules, mục nội tuyến bên dưới). Vì vậy `ls docs/adr/` **không** cho
+> biết số nào còn trống. Trước khi đặt số mới, lấy số lớn nhất trong bảng này
+> rồi cộng một. Số cao nhất đã cấp phát: **`ADR-031`** (2026-08-10).
 
 | ID | Quyết định hiện hành | Trạng thái |
 |---|---|---|
@@ -33,6 +41,12 @@ Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa: 
 | ADR-023 | **Khóa Product Spec Programming DDC-24 Rev A:** chỉ Local Physical I/O, Virtual Point, Modbus RTU Point, ST, FBD và cycle time 1 s/5 s/30 s. Modbus TCP Point, BACnet/IP Point, LD, SFC, motion, safety PLC và online change ngoài scope Programming. Product Spec quy định sản phẩm phải làm gì; Requirement quy định nghĩa vụ từng layer; Programming Design chưa thực hiện; As-Built chỉ được kết luận từ source/evidence. Không dùng ST host unit test làm bằng chứng runtime production và không claim Programming đã implement. Các vấn đề chưa quyết định đi vào `PROGRAMMING_OPEN_DECISIONS.md`. | Accepted 2026-08-03 |
 | ADR-024 | **Thiết kế Modbus RTU Point trước Programming:** mô hình Bus → Device → Point; stable Point ID; typed value/timestamp/quality; atomic config apply có iobus ACK; reliable write result/readback và không blind replay. Chi tiết tại `DDD-SW-MBRTU-POINT-001`. **Sửa đổi theo phê duyệt PM/CTO 2026-08-04/05:** Rev A dùng **01 bus RS485 vật lý** (giữ `bus_id` mở rộng); capacity Point nâng **64 → ≥256**; giữ 3 role `viewer/operator/admin`; retry là thử lại giao dịch thật (0–5); `mkddc-core` sở hữu Point Table; `mkddc-iobus` sở hữu Modbus Master; atomic config với revision, checksum, LKG fallback. | **Accepted 2026-08-05** — Phê duyệt chính thức theo Tờ trình `DDC24-MBRTU-REQ-APPROVE-2026-08-05` |
 | ADR-025 | **Repository áp dụng process-first + bounded modules:** source production thuộc `apps/{core,iobus,netcfg,hmi,web-api,web-ui}`, firmware thuộc `firmware/stm32`, contract canonical thuộc `contracts`, deployment/build helper thuộc `platform`; topology runtime, binary, service unit, API, ABI và config semantics giữ nguyên. | Accepted 2026-08-03 — owner yêu cầu bắt đầu triển khai Plan 46 |
+| ADR-026 | **Profile runtime Programming Rev A `revA-1t-1-5-30` và một validator duy nhất:** `maxTasks=1`, chu kỳ `1000/5000/30000 ms`; profile nhúng trong artifact và kiểm lại ở loader (`IR-E-013`), không chỉ ở compiler. `kMaxTasks=8` và dải `50..60000 ms` trong source giữ vai trò trần chống input đối kháng, profile siết xuống chứ không nới lên. Đóng `ARCH-CONF-PROG-001`. | **Proposed 2026-08-10** — chờ System Architect + `OD-PROG-003/004` |
+| ADR-027 | **Base step thuộc nền tảng, `graph.json` mất quyền ghi đè chu kỳ vòng scan:** `ScanLoop` nhận `base_step_ns` từ cấu hình nền tảng (Rev A `1 s`, dải `500..2000 ms`); `scan_ms` của graph chỉ còn là cadence dispatch của GraphRuntime. Bootstrap luôn khởi tạo đúng một chủ sở hữu Local logic; `nullptr` nghĩa là “không sở hữu”, không phải “chưa cấu hình”. Không thêm tiến trình. Đóng `ARCH-CONF-PROG-002`. | **Proposed 2026-08-10** — chờ System Architect + Safety, `OD-PROG-013` |
+| ADR-028 | **Công thức watchdog bám base step, không bám chu kỳ Task:** `WatchdogSec ≥ 2 × base_step_max + WCET_base_step(p99.9, target, SCHED_FIFO) + 1 s`. Chu kỳ Task `30 s` bị loại tường minh khỏi công thức; watchdog kick sau khi base step hoàn tất. `WatchdogSec=6` giữ giá trị nhưng đổi căn cứ và mang nhãn `TARGET-PENDING` tới khi có số đo `SCHED_FIFO`. Đóng `ARCH-CONF-PROG-003`. | **Proposed 2026-08-10** — chờ Architect + Safety, `OD-PROG-012` |
+| ADR-029 | **Overrun/lỗi runtime của Program là fault của Task, không phải safe-state toàn trạm:** Task lỗi chuyển `FAULT` và hủy staging của chính chu kỳ đó; đầu ra mức 5 giữ `hold-last`, không về `0`. Cờ `any_force_safe` bị gỡ khỏi hợp đồng scheduler, thay bằng `taskFault{...}`; `anyForcingSafeState` deprecated một release rồi xóa. Chỉ SafetyManager quyết định safe-state toàn trạm. Đóng `ARCH-CONF-PROG-004`. | **Proposed 2026-08-10** — chờ Architect + Safety, `OD-PROG-012` |
+| ADR-030 | **Hai lớp mã lỗi:** `PRG-ERR-*` là mã công khai duy nhất client được rẽ nhánh theo; `IR-E-*`, `ST-*`, `API-E-*`, `RT-RETAIN-*` là `detailCode` giữ nguyên tên và nghĩa. Ánh xạ phải toàn phần và kiểm được bằng test; thiếu ánh xạ là lỗi build. `API-E-*` không deprecate trong Rev A. Đóng `ARCH-CONF-PROG-005`. | **Proposed 2026-08-10** — chờ Architect + Verification |
+| ADR-031 | **`IntegrityMode = HASH_ONLY` cho Rev A:** loader bắt buộc kiểm SHA-256, không yêu cầu chữ ký; chỉ hợp lệ khi compiler và staging path nằm trong trusted local boundary. Trường chữ ký giữ nguyên trong layout schema 1; `allow_unsigned` thay bằng `integrity_mode` với ba giá trị và **cấm** `SIGNATURE_OPTIONAL`. Đóng `ARCH-CONF-PROG-006`. | **Proposed 2026-08-10** — chờ Architect + Security |
 
 ## ADR-025 — Process-first + bounded modules cho repository
 

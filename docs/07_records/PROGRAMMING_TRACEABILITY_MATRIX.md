@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 2.4 |
-| Trạng thái | **M3 — Review Ready** — 60 dòng trace + 8 journey + migration 17 UC; evidence production RED |
+| Phiên bản | 2.5 |
+| Trạng thái | **M3 — Review Ready** — 60 dòng trace + 8 journey + migration 17 UC; truy vết hai chiều `32/32` kịch bản; evidence production RED |
 | Cập nhật | 2026-08-09 |
 | Chủ quản | Verification Lead |
 | Người review | Document Control, Product, Architect và tất cả discipline lead |
@@ -50,7 +50,7 @@ PASS. Không có Test Result mới cho suite v0.1, vì vậy evidence production
 | `SYS-REQ-PROG-106` | ARCH §9 | IFSPEC §2/3; DM §3.9 | BE/Security | VS-022/023 | MISSING |
 | `SYS-REQ-PROG-107` | ARCH §10 | IFSPEC §3; DM §5; OPS §5 | BE/FE/Ops | VS-021/023 | MISSING |
 | `SYS-REQ-PROG-108` | ARCH §3 | UX §9 | HMI/FE/QA | VS-028 | MISSING |
-| `SWR-REQ-PROG-FE-101..102` | FE §2–3 | UX §3–4 | FE | VS-002/004/026 | MISSING |
+| `SWR-REQ-PROG-FE-101..102` | FE §2–3 | UX §3–4 | FE | VS-002/004/008/026/032 | MISSING |
 | `SWR-REQ-PROG-FE-103..104` | FE §5 | UX §5 `PGM-02` tab Chương trình | FE/compiler | VS-005/006/028 | MISSING |
 | `SWR-REQ-PROG-FE-105..106` | FE §6 | UX §5 `PGM-02` tab Điểm & Ánh xạ và Thực thi; IFSPEC §3 | FE/BE | VS-009/017/018 | MISSING |
 | `SWR-REQ-PROG-FE-107..110` | FE §4/7/9 | UX §5 `PGM-03`/`PGM-04`; IFSPEC §6/7 | FE/BE/Core | VS-010/011/019/020/024/026 | MISSING |
@@ -101,6 +101,9 @@ scenario tương ứng có Test Result được review.
   tất cả có design owner và scenario group.
 - Proposal: 7 nhóm `PRG-*`, 24 `UX-REQ-*`, 10 NFR proposal có crosswalk.
 - Scenario: `VS-PROG-001..032`, không có ID trùng requirement/error.
+- Truy vết **hai chiều** trên đúng bảng máy đọc được: `32/32` kịch bản đều xuất
+  hiện ở cột “Scenario” của ít nhất một dòng §6, và mọi kịch bản dẫn ở §6 đều
+  tồn tại trong `VVP-PROG-001`. Kiểm bằng lệnh ở §8.1.
 - Test Result cho suite mới: `0/32`.
 - Release gate: **RED / NO-GO**.
 
@@ -125,8 +128,8 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `SYS-106` | SEC; BE; IFSPEC; RSK-012/015 | auth/audit/API | 022/023 | Y/N/N/N/N |
 | `SYS-107` | SEC; BE; OPS; RSK-011 | bundle service/UI | 021/023 | Y/N/N/N/N |
 | `SYS-108` | UX; FE; HMI boundary | Web routes + HMI route inspection | 028 | Y/N/N/N/N |
-| `FE-101` | UX; FE | `features/programming/routes/layout` | 002/028 | Y/N/N/N/N |
-| `FE-102` | UX; FE; LIFE; RSK-007 | ProgrammingContext/overview | 002/004/026 | Y/N/N/N/N |
+| `FE-101` | UX; FE | `features/programming/routes/layout` | 002/028/032 | Y/N/N/N/N |
+| `FE-102` | UX; FE; LIFE; RSK-007 | ProgrammingContext/overview | 002/004/008/026 | Y/N/N/N/N |
 | `FE-103` | LANG; UX; FE | editor/problems | 003/006 | Y/N/N/N/N |
 | `FE-104` | LANG; UX; FE | fbd/editor keyboard model | 005/006/028 | Y/N/N/N/N |
 | `FE-105` | CTRL; FE; IFSPEC; RSK-010 | mapping/point catalog client | 017/018 | Y/N/N/N/N |
@@ -215,7 +218,21 @@ là finding P1. Bảng nhóm §2 vẫn dùng để đọc nhanh, bảng §6 là 
 Update phải trong cùng change set với SRS/design/risk/VVP liên quan. Script/check
 phải phát hiện canonical ID thiếu/trùng, scenario ngoài `001..032`, `P=Y` khi
 `T=N`, `R=Y` khi `P=N`, evidence path thiếu và alias không giải được. Không sửa
-chỉ số tổng bằng tay trước khi 55 dòng được kiểm lại.
+chỉ số tổng bằng tay trước khi **cả 60 dòng** ở §6 được kiểm lại.
+
+### 8.1 Lệnh kiểm truy vết hai chiều
+
+Phép kiểm ở §5 phải chạy lại được, không dựa vào đọc mắt. Lệnh dưới đây giải
+alias của §6 về ID canonical trong SRS, rồi đối chiếu tập kịch bản của §6 với
+`VVP-PROG-001`:
+
+```bash
+python3 scripts/trace_bidirectional_check.py
+```
+
+Ba điều kiện `PASS`: `60/60` alias giải được và khớp SRS; `0` requirement thiếu
+dòng §6; `0` kịch bản `VS-PROG-*` mồ côi theo cả hai chiều. Lệnh trả exit code,
+dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 
 ## 9. Blocker, revision và phê duyệt
 
@@ -232,6 +249,7 @@ chỉ số tổng bằng tay trước khi 55 dòng được kiểm lại.
 | 2.2 | 2026-08-09 | Bổ sung canonical requirement alias, bằng chứng/authority cho từng trục D/I/T/P/R và rule inconsistency/invalidation; chuyển Detailed Draft chờ review |
 | 2.3 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Traceability; ghi kết quả kiểm máy 0 vi phạm |
 | 2.4 | 2026-08-09 | Amendment A1: thêm 5 dòng requirement (`FE-113/114/115`, `NFR-109/110`) nâng tổng lên 60; thêm §10 trace tám journey `UJ-PROG-*` và bảng trạng thái migration 17 `UC-PROG-*`; cập nhật scenario lên 32 |
+| 2.5 | 2026-08-10 | Đóng finding consumer review `F-CR-03/07/08`: bổ sung `VS-PROG-032` vào dòng `FE-101` và `VS-PROG-008` vào dòng `FE-102` để chiều xuôi requirement→scenario đủ `32/32`; thêm §8.1 lệnh kiểm hai chiều `scripts/trace_bidirectional_check.py`; sửa số đếm cũ `55 dòng` thành `60 dòng`; đổi phụ lục tự kiểm từ `§10` trùng số sang `§11` |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -293,14 +311,14 @@ Kiểm đếm: 12 `MERGED` + 3 `SCENARIO` + 2 `ROADMAP` = 17. **Không** scenari
 bị mất trong quá trình gộp: mọi `VS-PROG-*` từng gắn với một UC vẫn còn được gắn
 qua journey hoặc qua kịch bản xuyên suốt tương ứng.
 
-## 10. Phụ lục — Tự kiểm cổng M3 (loại: Traceability)
+## 11. Phụ lục — Tự kiểm cổng M3 (loại: Traceability)
 
 | Cổng | Kết quả | Bằng chứng trong file / lý do |
 |---|---|---|
 | Mọi link trỏ tới ID hoặc mục có thật | PASS | harness: local link missing `0`, anchor missing `0`; §6 alias giải được về ID canonical trong SRS |
 | Không trùng ID | PASS | 60 dòng requirement duy nhất; 8 `UJ-PROG-*`; 17 `UC-PROG-*`; harness `duplicate doc ID = 0` |
 | Phân biệt planned/documented/implemented/tested/passed/released | PASS | §6 năm trục `D/I/T/P/R`; §1 nêu rõ `DOCUMENTED` **không** nghĩa code tồn tại |
-| Coverage requirement | PASS | §7: 60/60 có thiết kế, 60/60 có source target, 60/60 có kịch bản; §10 phủ 8 journey và 17 UC |
+| Coverage requirement | PASS | §7: 60/60 có thiết kế, 60/60 có source target, 60/60 có kịch bản; §10 phủ 8 journey và 17 UC; §5 và §8.1: `32/32` kịch bản có đường về requirement |
 | Bằng chứng cho phép đổi trạng thái | PASS | §8 quy định cho từng trục: ai xác nhận và điều kiện hạ ngược `Y→N` |
 | Quy tắc vô hiệu hóa | PASS | §7 và §8: đổi requirement/design/contract/source/board làm mất hiệu lực Test Result phía dưới; không giữ `P` cũ |
 | Kiểm tính nhất quán tự động | PASS | §8 liệt kê các phép kiểm; đã chạy: thiếu/trùng ID canonical, kịch bản ngoài `001..032`, `P=Y` khi `T=N`, `R=Y` khi `P=N` — vi phạm `0` |

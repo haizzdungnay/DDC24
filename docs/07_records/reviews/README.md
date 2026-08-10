@@ -63,8 +63,9 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 | [Programming Docs Sync Report](PROGRAMMING_DOCS_SYNC_REPORT.md) | 2026-08-03 | Complete | Đồng bộ docs theo Product Spec Programming Rev A |
 | [Programming Design Set Review](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | 2026-08-09 | Complete | Rà 22 hồ sơ Programming: 12 finding tài liệu đã đóng, 22/22 đạt M3; M4/M5 chờ người thật |
 | [Gói review cổng P0 Programming](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | 2026-08-10 | Chờ authority review | Gói `PROG-000..006`; candidate đã ghim, 0/7 DoD vì consumer review/chữ ký còn thiếu |
-| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-10 | **Active — pin PASS** | Commit `e3e9fb2`, tree và SHA-256/Git blob của 22 hồ sơ + hai hồ sơ hỗ trợ; không tự mở gate |
+| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-10 | **Superseded — chờ manifest mới** | Commit `e3e9fb2`, tree và SHA-256/Git blob của 22 hồ sơ + hai hồ sơ hỗ trợ. 7/22 hồ sơ đã đổi khi đóng `F-CR-01..08`, nên hash này không còn là revision để ký |
 | [Rà soát môi trường P0 Programming](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) | 2026-08-10 | **Partial** | Host branch/build/toolchain + evidence repo sẵn; CI billing, target SSH auth và HIL authority/fixture còn BLOCKED |
+| [Consumer review liên chức năng P0 Programming](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | 2026-08-10 | **Vòng kỹ thuật xong — chờ chữ ký** | 22 hồ sơ theo cặp producer→consumer; 9 finding `F-CR-01..09` đã đóng; `0/22 M4` giữ nguyên vì `M4` đòi reviewer là người thật |
 | [Deployment Provenance Report](DEPLOYMENT_PROVENANCE_REPORT.md) | 2026-08-03 | Record | Build identity, release manifest, sai khác target |
 | [Physical I/O và HIL](PHYSICAL_IO_HIL_REPORT.md) | 2026-08-03 | **Gate còn mở** | Host/fake-MCU **không** được ghi thành HIL vật lý |
 | [Báo cáo build và deploy lên board](BOARD_DEPLOY_REPORT_2026-08-04.md) | 2026-08-04 | Record | 5 service chạy trên Orange Pi 5B, HMI tắt có chủ đích |

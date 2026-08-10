@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `UX-WEB-PROG-001` |
-| Phiên bản | 0.6 |
-| Trạng thái | **M3 — Review Ready** — IA bốn workspace + tám journey; chờ `OD-PROG-016` và usability/a11y review |
+| Phiên bản | 0.7 |
+| Trạng thái | **M3 — Review Ready** — IA bốn workspace + tám journey; 7 asset trực quan gồm cả `RetainResetDialog`; chờ `OD-PROG-016` và usability/a11y review |
 | Ngày | 2026-08-09 |
 | Chủ quản | UX Lead + Frontend Lead |
 | Người review | Product Owner, Backend Lead, Verification Lead, Accessibility Reviewer |
@@ -454,6 +454,7 @@ trong `apps/web-ui/src/shared/theme/tokens.ts`, không tạo bảng màu riêng.
 | `PGM-02` | `PGM-02_DESIGN_WORKSPACE_DESKTOP.svg` | 1440 × 900 | Workspace Thiết kế, tab Chương trình, có lỗi kiểu ở FBD |
 | `PGM-03` | `PGM-03_CHECK_COMMISSION_DESKTOP.svg` | 1440 × 1560 | Artboard 1 trạng thái READY; artboard 2 **modal xác nhận mạnh** có xác thực lại |
 | `PGM-04` | `PGM-04_RUNTIME_SERVICE_DESKTOP.svg` | 1440 × 1560 | Artboard 1 tab Runtime khi Core `DEGRADED`; artboard 2 **ngăn kéo khôi phục** |
+| `PGM-04` | `PGM-04_RETAIN_RESET_DIALOG.svg` | 1440 × 1120 | Ba artboard `RetainResetDialog`: **đang mở** có xác nhận mạnh + xác thực lại, **đang gửi** không kết quả lạc quan, **bị khóa** khi impact `UNAVAILABLE` |
 
 Asset `PGM-02_TO_06_SCREEN_SET_DESKTOP.svg` mô tả IA sáu trang cũ. Nó được
 **giữ lại chứ không xóa** vì [`OD-PROG-016`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md)
@@ -597,6 +598,32 @@ hưởng thứ ba chưa tích nên nút còn khóa, và ô xác thực lại lu�
 | `OnlineWatch` | `GET /runtime/monitor` | loading, empty, live, stale | thêm/bớt tín hiệu | mọi role | **chỉ đọc**; `Không rõ` và `Ngoại tuyến` giữ nhãn riêng |
 | Vùng nguy hiểm | khả năng thao tác từ capability | sẵn sàng, khóa vì Core, khóa vì quyền | Khôi phục, Nhập gói, Đặt lại RETAIN | admin | người xem thấy ở chế độ đọc, không thấy dãy nút vô hiệu hóa |
 | `RestoreDialog` | danh sách Revision + LKG + impact | đang chọn, đang gửi | xác nhận, xác thực lại | admin | bản không nạp được bị đánh dấu và không chọn được |
+
+#### 16.4.1 `RetainResetDialog` — đặt lại trạng thái lưu
+
+Đặt lại RETAIN là thao tác **không hoàn tác được** và làm đổi trạng thái điều
+khiển đang chạy, nên theo [`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md) §2.2
+nó phải có bản đặc tả trực quan riêng, không được gộp vào wireframe chữ của vùng
+nguy hiểm.
+
+![PGM-04 hộp thoại Đặt lại trạng thái lưu RETAIN — đang mở, đang gửi, bị khóa](assets/programming/PGM-04_RETAIN_RESET_DIALOG.svg)
+
+Ba artboard tương ứng ba trạng thái bắt buộc:
+
+| Artboard | Trạng thái | Điều bắt buộc phải thấy được |
+|---|---|---|
+| 1 | đang mở | Danh sách **đầy đủ** biến bị ảnh hưởng kèm giá trị trước/sau; một ô xác nhận mạnh; ô xác thực lại luôn có mặt; nút chính dùng màu cảnh báo |
+| 2 | đang gửi | Timeline từng bước tới `đọc ngược`; nút gửi bị khóa; **không** có dấu tích thành công trước read-back; không có nút gửi lại |
+| 3 | bị khóa | `PRG-ERR-IMPACT-UNAVAILABLE-001` khi chưa tính được ảnh hưởng; ô xác nhận và ô mật khẩu **không** hiển thị; nêu tuổi dữ liệu Core |
+
+Ba quy tắc không được thương lượng khi implement:
+
+1. **Không mở hộp thoại khi chưa có danh sách biến.** Người dùng phải thấy mất
+   những giá trị nào trước khi được phép tích xác nhận (`UC-PROG-13`).
+2. **Fail-closed.** Nhóm impact `UNAVAILABLE`, thiếu field hoặc `null` đều rơi
+   vào artboard 3; tuyệt đối không coi là “không có ảnh hưởng”.
+3. **Không có kết quả lạc quan.** Trạng thái cuối lấy từ
+   `GET /operations/{operationId}` sau đọc ngược, không suy từ `202`.
 
 ### 16.5 Biến thể trạng thái bắt buộc cho mỗi workspace
 
@@ -1296,6 +1323,7 @@ nó được lưu bền chứ không chỉ nằm trong bộ nhớ trang; (c) sau
 | 0.4 | 2026-08-09 | Đóng finding `F-PROG-004..011`: ID use case canonical `UC-PROG-01..17` đủ chín trục gồm audit và acceptance; cây component và đặc tả 40 component; hợp đồng API chính xác theo surface; state machine thêm `RESTORING` và `RECONCILING`; bảng copy VI/EN 36 key; token/lưới/breakpoint/focus theo `tokens.ts` thật; rollout/migration/rollback FE; bảng ký tách sáu vai trò |
 | 0.5 | 2026-08-09 | Bổ sung đặc tả trực quan render được cho đủ PGM-01..06: PGM-01 desktop 1440×900 + mobile 390×844, screen-set desktop PGM-02..06 có modal Commission và drawer Restore; khóa thứ tự đọc, ánh xạ vùng→API/state/action/RBAC/copy, tám biến thể trạng thái, responsive theo AppShell thật; bổ sung 11 key copy và `ProgrammingHeader` |
 | 0.6 | 2026-08-09 | Đơn giản hóa theo Amendment A1: IA rút còn **bốn workspace** (§3), tám user journey và ma trận migration 17 use case với trạng thái `MERGED/SCENARIO/ROADMAP` (§6); acceptance bốn workspace (§5); route mới kèm bảng chuyển hướng bookmark (§11.1); ba asset SVG mới cho PGM-02/03/04 gồm modal Commission và ngăn kéo Restore (§16); xác nhận **theo rủi ro thực tế** thay danh sách bốn ô cố định; vùng thao tác nguy hiểm tách khỏi vùng chỉ đọc; cây component và hợp đồng API theo workspace (§22, §24) |
+| 0.7 | 2026-08-10 | Đóng finding consumer review `F-CR-04`: bổ sung asset `PGM-04_RETAIN_RESET_DIALOG.svg` ba artboard cho `RetainResetDialog` — thao tác không hoàn tác được duy nhất còn thiếu bản đặc tả trực quan theo `DOC-GOV-001` §2.2; thêm §16.4.1 với ba quy tắc implement (không mở khi chưa có danh sách biến, fail-closed, không kết quả lạc quan) |
 
 | Vai trò | Phạm vi ký | Trạng thái | Bằng chứng cần có |
 |---|---|---|---|
@@ -1317,7 +1345,7 @@ nó được lưu bền chứ không chỉ nằm trong bộ nhớ trang; (c) sau
 | `DD-05` Data từng field | PASS | §19 hợp đồng field, validation phía client, authority phía server và cách hiển thị lỗi |
 | `DD-06` Interface | PASS | §24 method + path + capability + error cho chín surface, trỏ đúng Interface Spec |
 | `DD-07` State/algorithm | PASS | §25 state machine đủ Draft/Check/Commission/Restore/Unknown/Reconcile với guard, action, postcondition |
-| `DD-08` UX flow | PASS | §11 wireflow và §11.1 migration route; §16 có SVG render được cho **đủ bốn workspace** `PGM-01..04`: `PGM-01` desktop và mobile, `PGM-02` workspace Thiết kế, `PGM-03` kèm modal xác nhận, `PGM-04` kèm ngăn kéo khôi phục; §16.5 biến thể trạng thái; §17 mười bảy UC ở lớp kịch bản; §26 copy VI/EN; §13 và §27 accessibility. Asset `PGM-02_TO_06_SCREEN_SET_DESKTOP.svg` **không** được tính vào cổng này — nó là tham chiếu rollback của IA sáu trang, trạng thái `SUPERSEDED-PENDING-DECISION` |
+| `DD-08` UX flow | PASS | §11 wireflow và §11.1 migration route; §16 có SVG render được cho **đủ bốn workspace** `PGM-01..04`: `PGM-01` desktop và mobile, `PGM-02` workspace Thiết kế, `PGM-03` kèm modal xác nhận, `PGM-04` kèm ngăn kéo khôi phục; §16.4.1 `RetainResetDialog` ba artboard (đang mở / đang gửi / bị khóa) — đủ **mọi** hộp thoại không hoàn tác được theo `DOC-GOV-001` §2.2; §16.5 biến thể trạng thái; §17 mười bảy UC ở lớp kịch bản; §26 copy VI/EN; §13 và §27 accessibility. Asset `PGM-02_TO_06_SCREEN_SET_DESKTOP.svg` **không** được tính vào cổng này — nó là tham chiếu rollback của IA sáu trang, trạng thái `SUPERSEDED-PENDING-DECISION` |
 | `DD-09` Error/safety | PASS | §19 thứ tự ưu tiên lỗi và ý nghĩa `403/409/422/503/504`; §7 phân cấp chú ý; quy tắc tách diagnostic khỏi Alarm |
 | `DD-10` Repository mapping | PASS | §15 và §24 cột “FE target”; §27 trỏ `tokens.ts` và `styles.css` thật |
 | `DD-11` Verification | PASS | §14 `UX-T-001..005`; §21 trace 24 `UX-REQ-*` tới UC, mục thiết kế và `VS-PROG-*` |

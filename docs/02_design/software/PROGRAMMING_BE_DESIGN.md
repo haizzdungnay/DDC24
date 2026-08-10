@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-BE-PROG-001` |
-| Phiên bản | 0.5 |
+| Phiên bản | 0.6 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; chờ Core/Security/QA review |
 | Ngày | 2026-08-09 |
 | Chủ quản | Backend Lead |
@@ -19,7 +19,7 @@
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **backend Go tổ chức ra sao**: chia package, lưu trữ, chạy compiler job, điều phối Commission, phân quyền, audit và migration. Đây là nơi biến hợp đồng API thành code chạy được. |
 | 2. Ai phải đọc file này? | BE Lead và lập trình viên Go (chủ quản); Core đọc §4 (điều phối Commission) và §6 (read model); Security đọc §7; Ops đọc §9; QA đọc §10 và §17. |
 | 3. Hệ thống hiện tại đang có gì? | `apps/web-api` là tiến trình Go duy nhất theo ADR-005/007. `internal/app` hiện đã wiring auth, health, historian, hmi, modbusrtu, network, points và system — **chưa có Programming**. Driver SQLite `modernc.org/sqlite` đã là dependency sẵn, nhưng chưa có schema, route hay worker nào cho Programming. |
-| 4. Thiết kế mới thay đổi điều gì? | Thêm một module có giới hạn tại `apps/web-api/internal/programming/` với bảy thư mục con (`domain`, `store`, `compiler`, `runtime`, `service`, `http`, `tests`). **Không tạo tiến trình thứ tư.** Quy tắc phân lớp: handler không chứa logic compiler/runtime; store không gọi Core; runtime adapter không biết HTTP hay session. |
+| 4. Thiết kế mới thay đổi điều gì? | Thêm một module có giới hạn tại `apps/web-api/internal/programming/` với bảy thư mục con (`domain`, `store`, `compiler`, `runtime`, `service`, `transport`, `tests`). **Không tạo tiến trình thứ tư.** Quy tắc phân lớp: handler không chứa logic compiler/runtime; store không gọi Core; runtime adapter không biết HTTP hay session. |
 | 5. Team phải sửa module/contract nào? | §11 và §12. Wiring trong `internal/app`; mount `/api/v1/programming` với middleware auth/CSRF/correlation/rate; thêm cấu hình DB/staging/quota/feature flag; mở rộng health để phản ánh hàng đợi compiler và khả năng kết nối Core. |
 | 6. Điều gì còn bị chặn? | Hạn mức và retention chờ `OD-PROG-003/010`; ma trận quyền chờ `OD-PROG-001`; giao thức BE↔Core chưa tồn tại nên phần điều phối chưa chạy thật được. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §10 và §17: unit, contract, integration, hai client đồng thời, restart, và đầu vào độc hại — cộng `VS-PROG-001/019/022/024`. Dùng `go vet ./...` và `go test ./... -count=1` (bắt buộc `-count=1`, vì cache có thể che hồi quy). Chưa chạy bài nào cho Programming. |
@@ -59,9 +59,14 @@ programming/
 ├── compiler/     isolated worker adapter, limits, diagnostic normalization
 ├── runtime/      versioned Core IPC client + reconciliation
 ├── service/      use cases and authorization-independent business policy
-├── http/         handlers/OpenAPI mapping, RBAC middleware
+├── transport/    handlers/OpenAPI mapping, RBAC middleware
 └── tests/        unit, integration, contract, fault injection
 ```
+
+Tên gói tầng biên là `transport`, không phải `http`: §12 khai báo
+`transport.Handler` và `IFSPEC-PROG-001` §16 ghi đường dẫn
+`apps/web-api/internal/programming/{transport,service,store}`. Một tên duy nhất
+cho một gói — nếu đổi thì phải đổi cả ba nơi trong cùng commit.
 
 Handler không chứa compiler/runtime logic; store không gọi Core; runtime adapter
 không biết HTTP/session.
@@ -253,6 +258,11 @@ export trước khi SQLite/artifact fsync fail.
 - DB `${CONFIG_DIR}/programming/programming-v1.sqlite`, WAL/FK/FULL theo Data Model.
 - Artifact content-addressed `${STATE_DIR}/programming/artifacts/sha256/...`, write
   temp+fsync+rename; row chỉ commit sau hash/read-back.
+- Staging file bàn giao cho Core nằm dưới `${STATE_DIR}/programming/staging/`
+  mode `0640` theo `IFSPEC-PROG-001` §12. **Không** đặt staging dưới
+  `${CONFIG_DIR}`: Core chỉ mở locator dưới gốc `STATE_DIR` và sẽ reject bằng
+  `PRG-ERR-ARTIFACT-001`. Ba gốc `CONFIG_DIR`/`STATE_DIR`/`RUNTIME_DIR` xem bảng
+  ở `IFSPEC-PROG-001` §12.
 - Bundle quarantine/scratch có per-job root, limit count/size/ratio và cleanup by
   committed job state; không follow links.
 - Retention/GC chỉ xóa object không referenced bởi active/LKG/revision/audit/legal
@@ -348,6 +358,7 @@ major khác, mutation disable. Restore LKG compatible trước mọi Core downgr
 | 0.3 | 2026-08-09 | Bổ sung handler/service/store boundary, transaction/side-effect authority, worker lease/concurrency/health; chuyển Detailed Draft chờ review |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; ghi yêu cầu `go test -count=1` |
 | 0.5 | 2026-08-09 | Amendment A1: thêm §0.1 nêu hai ảnh hưởng thực tế lên BE — nhịp gọi `GET /overrides` từ ba màn hình và yêu cầu impact phân biệt “không có ảnh hưởng” với “chưa tính được”; không đổi endpoint |
+| 0.6 | 2026-08-10 | Đóng finding consumer review `F-CR-02` và `F-CR-05`: §14 ghi rõ staging bàn giao Core nằm dưới `${STATE_DIR}/programming/staging/` (không phải `${CONFIG_DIR}`); §1 đổi gói biên `http/` thành `transport/` cho khớp `transport.Handler` ở §12 và đường dẫn ở `IFSPEC-PROG-001` §16 |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

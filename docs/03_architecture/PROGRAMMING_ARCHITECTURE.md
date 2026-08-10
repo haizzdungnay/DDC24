@@ -3,14 +3,14 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `ARCH-PROG-001` |
-| Phiên bản | 0.4 |
-| Trạng thái | **M3 — Review Ready** — cổng Architecture đủ; xung đột §11 còn mở, chờ architecture review |
+| Phiên bản | 0.5 |
+| Trạng thái | **M3 — Review Ready** — cổng Architecture đủ; 6/6 xung đột §11 có ADR chủ quản ở `Proposed`, chờ chữ ký architecture |
 | Ngày | 2026-08-09 |
 | Chủ quản | Software/Runtime Architect |
 | Reviewer | Controls/Safety, FE, BE, FW-SOM, FW MCU, HW, Security, Ops, Verification |
 | Approver | Product Owner + System/Runtime Architect |
 | Requirement | `SRS-PROG-001` |
-| Nguồn | Product v2.2; ADR-005/020/021/023; As-Built source 2026-08-09 |
+| Nguồn | Product v2.2; ADR-005/020/021/023; ADR-026..031 (`Proposed`); As-Built source 2026-08-09 |
 | Phạm vi | Target Rev A và khoảng trống chuyển từ graph production sang Program Runtime |
 
 ## 0. Đọc nhanh
@@ -193,14 +193,18 @@ plan. Không chạy graph và Program song song để “so sánh” trên outpu
 
 ## 11. Xung đột phải đóng trước Active
 
-| ID | Xung đột | Quyết định cần có |
-|---|---|---|
-| `ARCH-CONF-PROG-001` | supporting scheduler cho 8 Task/50–60000 ms, Product chỉ một Task/1–5–30 s | runtime profile và validator duy nhất |
-| `ARCH-CONF-PROG-002` | graph bootstrap đang sở hữu period và ST dependency là `nullptr` | cutover/config/bootstrap contract |
-| `ARCH-CONF-PROG-003` | watchdog unit 6 s so với Task 30 s | base-step bound + watchdog formula/target evidence |
-| `ARCH-CONF-PROG-004` | component overrun có `any_force_safe` | đổi thành task fault; SafetyManager condition độc lập |
-| `ARCH-CONF-PROG-005` | error code `API-E/IR-E/ST-*` hiện hữu so với `PRG-ERR-*` proposal | mapping/deprecation trong IFSPEC |
-| `ARCH-CONF-PROG-006` | signature helper có source nhưng trusted-origin ngoài Rev A | chỉ integrity hash trong release profile |
+Mỗi xung đột nay có **một ADR chủ quản**. ADR ở trạng thái `Proposed` nghĩa là nội
+dung kỹ thuật đã đóng và có phương án bị loại kèm lý do, nhưng **chưa có chữ ký
+authority** — xung đột vẫn tính là còn mở cho tới khi ADR chuyển `Accepted`.
+
+| ID | Xung đột | ADR chủ quản | Quyết định cần có | Trạng thái 2026-08-10 |
+|---|---|---|---|---|
+| `ARCH-CONF-PROG-001` | supporting scheduler cho 8 Task/50–60000 ms, Product chỉ một Task/1–5–30 s | [ADR-026](../adr/ADR-026-programming-runtime-profile-va-validator-duy-nhat.md) | runtime profile và validator duy nhất | `Proposed` — chờ System Architect + `OD-PROG-003/004` |
+| `ARCH-CONF-PROG-002` | graph bootstrap đang sở hữu period và ST dependency là `nullptr` | [ADR-027](../adr/ADR-027-programming-bootstrap-va-quyen-so-huu-chu-ky-scan.md) | cutover/config/bootstrap contract | `Proposed` — chờ System Architect + Safety, `OD-PROG-013` |
+| `ARCH-CONF-PROG-003` | watchdog unit 6 s so với Task 30 s | [ADR-028](../adr/ADR-028-programming-cong-thuc-watchdog-theo-base-step.md) | base-step bound + watchdog formula/target evidence | `Proposed` — chờ Architect + Safety, `OD-PROG-012`, số đo `SCHED_FIFO` |
+| `ARCH-CONF-PROG-004` | component overrun có `any_force_safe` | [ADR-029](../adr/ADR-029-programming-overrun-la-task-fault.md) | đổi thành task fault; SafetyManager condition độc lập | `Proposed` — chờ Architect + Safety, `OD-PROG-012` |
+| `ARCH-CONF-PROG-005` | error code `API-E/IR-E/ST-*` hiện hữu so với `PRG-ERR-*` proposal | [ADR-030](../adr/ADR-030-programming-ma-loi-cong-khai-va-detail-code.md) | mapping/deprecation trong IFSPEC | `Proposed` — chờ Architect + Verification |
+| `ARCH-CONF-PROG-006` | signature helper có source nhưng trusted-origin ngoài Rev A | [ADR-031](../adr/ADR-031-programming-integrity-mode-hash-only-rev-a.md) | chỉ integrity hash trong release profile | `Proposed` — chờ Architect + Security |
 
 ## 12. Tiêu chí review kiến trúc
 
@@ -376,6 +380,7 @@ M4. Không được copy số host vào target configuration.
 | 0.2 | 2026-08-09 | Bổ sung As-Built evidence, repository mapping, concurrency/timing, partial deploy/rollback và architecture tests |
 | 0.3 | 2026-08-09 | Bổ sung sequence Check/Commission, data-flow ownership, deployment unit/resource/health contract; chuyển Detailed Draft chờ architecture review |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Architecture; ghi rõ xung đột §11 kèm owner/gate/điều kiện mở |
+| 0.5 | 2026-08-10 | Đóng phần kỹ thuật của `ARCH-CONF-PROG-001..006` bằng sáu ADR chủ quản `ADR-026..031` (`Proposed`): profile runtime + validator duy nhất, quyền sở hữu chu kỳ scan, công thức watchdog theo base step, overrun là Task fault, hai lớp mã lỗi, `IntegrityMode=HASH_ONLY`. §11 thành bảng có ADR và trạng thái; **không** tự chuyển xung đột sang đóng vì chữ ký authority còn thiếu |
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|

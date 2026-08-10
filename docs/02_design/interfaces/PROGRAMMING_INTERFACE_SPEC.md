@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 0.5 |
+| Phiên bản | 0.6 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; contract chưa Active, TLS còn chặn |
 | Ngày | 2026-08-09 |
 | Chủ quản | Backend Lead + Runtime Architect |
@@ -361,8 +361,21 @@ Socket target: `${RUNTIME_DIR}/mkddc/programming-v1.sock`; owner/group do packag
 manifest cấu hình, mode `0660`. BE kiểm tra peer là Core service UID; Core kiểm
 tra peer thuộc UID/group cho phép bằng `SO_PEERCRED`. Frame length-prefix 32-bit
 little-endian, payload canonical CBOR, tối đa 64 KiB; artifact đi qua file staging
-mode `0640`, locator phải nằm dưới `${CONFIG_DIR}/programming/staging/` và dùng
+mode `0640`, locator phải nằm dưới `${STATE_DIR}/programming/staging/` và dùng
 `openat2`/equivalent để cấm traversal/symlink.
+
+Ba gốc thư mục **không** được hoán đổi cho nhau, vì backup, quota và quyền ghi
+của chúng khác nhau:
+
+| Gốc | Đường dẫn target | Nội dung Programming | Vì sao không dùng gốc khác |
+|---|---|---|---|
+| `CONFIG_DIR` | `/data/config` | `programming/programming-v1.sqlite` (authority theo `DM-PROG-001` §9) | Cấu hình được backup/khôi phục theo chu kỳ khác; không chứa file rác theo từng Commission |
+| `STATE_DIR` | `/data/mkddc` | `programming/staging/`, `programming/artifacts/sha256/`, RETAIN, journal | Trạng thái vận hành có churn cao và quota riêng; đây là gốc mà `platform/packaging` tạo cho `state/staging/retain/journal` |
+| `RUNTIME_DIR` | `/run/mkddc` | `programming-v1.sock` | tmpfs, mất khi reboot — đúng cho socket, sai cho artifact |
+
+BE ghi artifact và staging file dưới `STATE_DIR`; Core mở locator dưới **cùng**
+gốc đó. Locator nằm ngoài `${STATE_DIR}/programming/staging/` bị reject bằng
+`PRG-ERR-ARTIFACT-001` trước khi mở file, không phụ thuộc hash.
 
 | Field chung | Kiểu / giới hạn | Bắt buộc | Quy tắc |
 |---|---|---|---|
@@ -541,6 +554,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | 0.3 | 2026-08-09 | Bổ sung response/event envelope, ordering/freshness, timeout/retry/idempotency table và contract-freeze checklist; chuyển Detailed Draft chờ review | System Engineering |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; đóng finding `F-PROG-001/002` | System Engineering |
 | 0.5 | 2026-08-09 | Amendment A1: thêm §6.1 trạng thái ba nhánh `NONE/PRESENT/UNAVAILABLE` cho từng nhóm impact (fail-closed), và `?activeOnly=true` + phân trang cho `GET /overrides`; không thêm endpoint mới | System Engineering |
+| 0.6 | 2026-08-10 | Đóng finding consumer review `F-CR-02`: staging artifact chuyển từ `${CONFIG_DIR}` sang `${STATE_DIR}/programming/staging/` để khớp `DDD-BE-PROG-001` §14, `DDD-FWSOM-PROG-001` §16 và `platform/packaging`; thêm bảng ba gốc `CONFIG_DIR`/`STATE_DIR`/`RUNTIME_DIR` và quy tắc reject locator ngoài gốc | System Engineering |
 
 | Vai trò | Trạng thái | Ngày / bằng chứng |
 |---|---|---|
