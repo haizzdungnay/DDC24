@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 2.4 |
-| Trạng thái | **22/22 M3 — REVIEW READY; chờ consumer review (M4) và chữ ký (M5)** |
+| Phiên bản | 2.5 |
+| Trạng thái | **22/22 M3 — REVIEW READY. Vòng consumer review kỹ thuật đã xong (`9/9` finding đóng); `M4` chờ chữ ký người thật, `M5` chờ phê duyệt** |
 | Ngày baseline | 2026-08-10 |
 | Chủ quản | System Engineering + Document Control |
 | Người phê duyệt | Product Owner, System Architect, Verification Lead |
@@ -91,7 +91,7 @@ không nhập phần trăm bằng cảm tính.
 
 | Chặng | Trạng thái | Kết quả hiện tại |
 |---|---|---|
-| R0 — Kiểm soát baseline | **COMPLETE** | Register 22 hồ sơ, owner/reviewer, scoring, risk/scenario mapping và đường dẫn chuẩn đã chốt; candidate P0 đã ghim `e3e9fb2` |
+| R0 — Kiểm soát baseline | **COMPLETE** | Register 22 hồ sơ, owner/reviewer, scoring, risk/scenario mapping và đường dẫn chuẩn đã chốt; candidate hiện hành ghim bằng **22 SHA-256** (`candidate_pin_check.py` PASS), `e3e9fb2` đã `SUPERSEDED` |
 | R1 — Requirement/decision/architecture | **M3 COMPLETE** | Index/SRS/Open Decisions/Architecture đạt cổng loại tương ứng; có mục Đọc nhanh và phụ lục tự kiểm |
 | R2 — Contract + 5 thiết kế lõi | **M3 COMPLETE** | Data/Interface và 5 hồ sơ lõi có bảng `DD-01..DD-13` từng mã; blocker còn lại là TLS, `OD-PROG-002` và provenance artifact |
 | R3 — Thiết kế theo team | **M3 COMPLETE** | UI/UX theo IA **bốn workspace** `PGM-01..04`: asset render được cho từng workspace (Tổng quan desktop/mobile, Thiết kế, Kiểm tra & Vận hành kèm modal, Runtime & Bảo trì kèm drawer), cây component, API theo workspace, copy VI/EN, token và rollout; FE, BE, FW-SOM, FW MCU, HW đủ checklist |
@@ -372,6 +372,7 @@ Mỗi lần thay đổi mức, thêm **một dòng mới**; không sửa số l�
 | 2026-08-10 P0-pin | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED | Candidate P0 `e3e9fb2` đã ghim trên `origin/main`: tree `54eb519e`, 22/22 SHA-256/Git blob + hai hồ sơ hỗ trợ; blocker pin đóng, nhưng 0/7 DoD, M4/M5 0/22 vì review/conflict/sign-off còn thiếu |
 | 2026-08-10 P0-env | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED | Host branch/build/toolchain PASS; kho Test Result sẵn nhưng 0/32; GitHub CI BLOCKED do billing, target BLOCKED do SSH auth, HIL BLOCKED do authority/fixture; P0 giữ 0/7 DoD |
 | 2026-08-10 P1-cards | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED | Plan 53 v0.11 có 6/6 thẻ P1 đủ owner/contract/source/dependency/test/evidence/deploy/rollback/DoR/DoD; chỉ là PLAN-ONLY, P1 giữ 0/6 DoD và 0/32 Test Result |
+| 2026-08-10 P0-consumer-review | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED — **chỉ còn chờ chữ ký** | Vòng consumer review **kỹ thuật** chạy trên 22 cặp producer→consumer: `9/9` finding `F-CR-01..09` đóng; 9/22 hồ sơ lên revision mới; 6 xung đột kiến trúc có `ADR-026..031` (`Proposed`); candidate ghim lại bằng 22 SHA-256 và thêm `candidate_pin_check.py`. **M4 vẫn 0/22** vì `DOC-GOV-001` §3 đòi reviewer là người thật — vòng kỹ thuật không nâng được mức trưởng thành |
 
 ## 10.1 Ma trận impact của Amendment A1 trên 22 hồ sơ
 
@@ -504,6 +505,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 2.2 | 2026-08-10 | Ghim candidate P0 `e3e9fb2` bằng manifest 22 hồ sơ + hai hồ sơ hỗ trợ; cập nhật snapshot `P0-pin`, Plan 53 v0.9 và sửa bảng `DOC-5440..5445` bị ngắt; giữ M3 22/22, M4/M5 0/22 và DOC-G4 RED | Document Control |
 | 2.3 | 2026-08-10 | Rà môi trường P0 và thêm snapshot `P0-env`: host branch/build/toolchain + evidence repository PASS phần chuẩn bị; tách CI billing, target SSH auth và HIL authority/fixture thành blocker; đồng bộ Plan 53 v0.10, giữ M3/M4/M5 và DOC-G4 không đổi | Dev Lead + QA + Ops |
 | 2.4 | 2026-08-10 | Thêm snapshot `P1-cards`, đồng bộ Plan 53 v0.11 với 6/6 thẻ task P1 đã điền đủ 11 trường; sửa dependency/evidence/decision gate nhưng giữ đúng 0/6 DoD, 0/32 Test Result, M3/M4/M5 và DOC-G4 không đổi | Dev Lead + Architect + Document Control |
+| 2.5 | 2026-08-10 | Thêm snapshot `P0-consumer-review`: vòng review kỹ thuật xong, `9/9` finding đóng, 9/22 hồ sơ lên revision mới, `ADR-026..031` `Proposed`, candidate ghim bằng 22 SHA-256. Sửa phát biểu R0 và trạng thái đầu file để tách “review kỹ thuật xong” khỏi “authority đã ký”. **M3 22/22, M4/M5 vẫn 0/22**, DOC-G4 giữ RED | Document Control + Dev Lead |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|

@@ -4,7 +4,7 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.13 |
+| Phiên bản | 0.14 |
 | Trạng thái | **PLAN-ONLY — chưa được implement production.** Hồ sơ ở `M3 — Review Ready`; `PLAN_READY`, `IMPLEMENT_READY` và `RELEASE_READY` đều `BLOCKED` |
 | Ngày phát hành | 2026-08-10 |
 | Chủ quản | Dev Lead + System Architect |
@@ -23,8 +23,14 @@
 >
 > Quyền chuẩn bị kế hoạch đến từ trạng thái `PLAN-ONLY`, **không** có nghĩa
 > `PLAN_READY` đã qua. Gói P0 đã sẵn sàng cho authority review tại
-> [`PROG-P0-GATE-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md);
-> chữ ký và consumer review vẫn còn thiếu.
+> [`PROG-P0-GATE-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md).
+>
+> **Phân biệt hai việc khác nhau, đừng gộp:** *vòng consumer review kỹ thuật* đã
+> **hoàn tất** ngày 2026-08-10 (`9/9` finding `F-CR-01..09` đã đóng, xem
+> [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md));
+> *consumer authority đã ký* thì **chưa** — `0/22` hồ sơ đạt `M4`. Theo
+> [`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md) §3, `M4` đòi reviewer là
+> **người thật**, nên vòng kỹ thuật không thay được chữ ký.
 >
 > Điều kiện mở `IMPLEMENT_READY` ở §4.2. Không cần đóng cả 17 decision — chỉ cần
 > decision đầu vào của đúng lát cắt sắp làm, xem §4.3.
@@ -57,7 +63,7 @@
 | 3. Hệ thống hiện tại đang có gì? | §9.1: `G0` đang `RED`. Chưa pha nào bắt đầu. Nền tảng sẵn có gồm component ST trên host, hợp đồng Modbus RTU `Active`, và bốn tiến trình đang chạy — nhưng chưa có mã Programming nào chạy production. |
 | 4. Thiết kế mới thay đổi điều gì? | Xác lập nguyên tắc: **không mở gate bằng lời văn**. Mỗi pha có điều kiện vào và ra cụ thể; §6.1 định nghĩa Definition of Ready và Definition of Done cho từng task; §6.2 định nghĩa bằng chứng gate và điều kiện quay lui. |
 | 5. Team phải sửa module/contract nào? | §5.7 ánh xạ quyền sở hữu source và sản phẩm bàn giao theo pha; §5.8 có mẫu thẻ task và cách bàn giao theo lát cắt dọc. |
-| 6. Điều gì còn bị chặn? | Cả ba cổng quyền hạn đều `BLOCKED`. Team **được chuẩn bị kế hoạch** dưới banner `PLAN-ONLY`, nhưng chưa được viết code production. Candidate P0 đã ghim; `PLAN_READY` còn chờ consumer review, đóng xung đột authority và chữ ký. Xem §4.2, §4.3 và gói P0. |
+| 6. Điều gì còn bị chặn? | Cả ba cổng quyền hạn đều `BLOCKED`. Team **được chuẩn bị kế hoạch** dưới banner `PLAN-ONLY`, nhưng chưa được viết code production. Candidate hiện hành đã ghim bằng **22 SHA-256** và vòng consumer review kỹ thuật đã xong; `PLAN_READY` chỉ còn chờ **chữ ký người thật**: `0/22 M4`, `ADR-026..031` còn `Proposed`, `OD-PROG-015` chưa ký. Xem §4.2, §4.3 và gói P0. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §5.2 chỉ rõ **gate nào tạo ra từng Test Result** trong 32 kịch bản; §6.2 gắn bằng chứng bắt buộc cho từng gate. Hiện 0/32 — đó là trạng thái đúng **trước** implementation, không phải lý do chặn lập kế hoạch. |
 
 Quan hệ với Plan 54: file này quản **việc code**; [Plan 54](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md)
@@ -203,7 +209,7 @@ sản phẩm. Tách làm ba cổng.
 
 | Cổng | Cho phép làm gì | Điều kiện đóng | Trạng thái 2026-08-10 |
 |---|---|---|---|
-| `PLAN_READY` | Xác nhận plan đã được review và có thể dùng làm đầu vào chính thức cho lát cắt implementation | Finding tài liệu P0 đã đóng; consumer review xong; candidate sau review được ghim revision/hash; không còn authority mâu thuẫn; Product/Architect/Verification ký | **BLOCKED** — candidate `e3e9fb2` đã ghim; consumer review, conflict closure và chữ ký còn thiếu |
+| `PLAN_READY` | Xác nhận plan đã được review và có thể dùng làm đầu vào chính thức cho lát cắt implementation | Finding tài liệu P0 đã đóng; consumer review xong **và có chữ ký người thật**; candidate sau review được ghim revision/hash; không còn authority mâu thuẫn; Product/Architect/Verification ký | **BLOCKED** — đã đạt: finding `9/9` đóng, candidate ghim bằng 22 SHA-256 (`candidate_pin_check.py` PASS `22/22`), 6 xung đột có ADR. **Còn thiếu: chữ ký.** `0/22 M4`; `ADR-026..031` `Proposed`; `OD-PROG-015` chưa ký |
 | `IMPLEMENT_READY[<lát cắt>]` | Tạo nhánh feature và viết code production cho đúng lát cắt đã duyệt; feature flag ở lab theo gate | `PLAN_READY` `PASS`; decision đầu vào của đúng lát cắt đã ký (§4.3); task card/contract authority đã duyệt. Lát cắt **tiêu thụ** contract phải có contract machine-readable; riêng P1 tạo contract thì machine-readable contract là output, không phải entry | **BLOCKED** cho mọi lát cắt |
 | `RELEASE_READY` | Bật ở site thật, tuyên bố hoàn tất | Toàn bộ 32 `VS-PROG-*` có Test Result được review; residual risk được chấp nhận; `OD-PROG-008` phần HIL đã đóng; GO của Product + Release + QA | **BLOCKED** |
 
@@ -255,7 +261,7 @@ một lát cắt**, decision đầu vào của chính lát cắt đó phải đ�
 | `PROG-003` | Product+Security | 1–2 nd | khóa RBAC, audit, bundle/integrity/signature scope | `BLOCKED` — TLS plan, permission matrix và provenance chưa được ký |
 | `PROG-004` | Runtime+Ops | 1–2 nd | khóa RETAIN, Revision/LKG retention, monitor/trace limits | `IN_REVIEW` — lifecycle/runbook đủ; chờ `OD-PROG-009/010/011/014` |
 | `PROG-005` | HW+FW | 1–2 nd | xác nhận schematic/BSP/test point/HIL setup và 200 ms boundary | `BLOCKED` — thiếu `HW-AUTH-*` và BSP/fixture/HIL plan được duyệt |
-| `PROG-006` | QA | 1–2 nd | review SRS/design/trace/risk/V&V, sign G0 | `BLOCKED` — host/evidence repo đã sẵn; 0/22 M4, 0/22 M5, target/CI/HIL và sign-off còn thiếu |
+| `PROG-006` | QA | 1–2 nd | review SRS/design/trace/risk/V&V, sign G0 | `BLOCKED` — candidate/host/evidence repo sẵn, vòng review kỹ thuật xong (`9/9` finding đóng); vẫn `0/22 M4`, `0/22 M5`; target/CI/HIL và sign-off còn thiếu |
 
 Exit được tách để không tạo blocker nguyên khối:
 
@@ -275,8 +281,14 @@ thụ HW/HIL.
 đạt DoD** vì chưa có quyết định/chữ ký đúng thẩm quyền. Vì vậy P0 vẫn `BLOCKED`;
 không tự nâng tiến độ từ việc soạn hồ sơ. Điều kiện kiểm soát cấu hình “ghim
 candidate” đã PASS tại
-[`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md):
-commit `e3e9fb2`, tree `54eb519e`, 22/22 SHA-256/Git blob.
+[`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md)
+v2.2: candidate hiện hành được định danh bằng **22 SHA-256 ở §2**, kiểm bằng
+`python3 scripts/candidate_pin_check.py` (`22/22` PASS). Candidate cũ `e3e9fb2`
+đã **`SUPERSEDED`** — không được dùng làm revision để ký.
+Vòng consumer review kỹ thuật đã hoàn tất tại
+[`PROG-P0-CONSUMER-REVIEW-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md):
+`9/9` finding `F-CR-01..09` đã đóng. Việc này **không** nâng hồ sơ nào lên `M4`;
+`0/22 M4` giữ nguyên cho tới khi có chữ ký người thật.
 Môi trường được đo tại
 [`PROG-P0-ENV-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md):
 host branch/build/toolchain và kho evidence `0/32` đã sẵn; GitHub CI bị billing,
@@ -427,7 +439,7 @@ phải mong muốn.
 
 | Mốc | Tuần | Kết thúc pha | Điều kiện vào | Sản phẩm chứng minh mốc |
 |---|---|---|---|---|
-| `M-G0` | `T+2` | P0-A | Candidate pin; consumer review xong; conflict baseline đóng; `OD-PROG-015` ký | `PLAN_READY PASS`; từng `IMPLEMENT_READY[<lát cắt>]` chỉ mở khi decision §4.3 của lát cắt đó đã ký |
+| `M-G0` | `T+2` | P0-A | Candidate pin **(đạt)**; consumer review kỹ thuật xong **(đạt)**; consumer authority ký **(thiếu)**; ADR xung đột chuyển `Accepted` **(thiếu)**; `OD-PROG-015` ký **(thiếu)** | `PLAN_READY PASS`; từng `IMPLEMENT_READY[<lát cắt>]` chỉ mở khi decision §4.3 của lát cắt đó đã ký |
 | `M-G1` | `T+4` | P1 | `OD-PROG-001..007/009/010/012/013/014` ký theo task tiêu thụ | OpenAPI + IPC + profile/artifact + catalog lỗi + DB migration + client sinh tự động |
 | `M-G2` | `T+9` | P2 | `M-G1`; `OD-PROG-005/006` ký | Compiler, store, Check; FE shell chỉ đọc |
 | `M-G3` | `T+9` | P3 | `M-G1`; `OD-PROG-004/012` ký | Core base step, scheduler, process image trên target |
@@ -1099,6 +1111,7 @@ khiển thiết bị thật:
 | 0.11 | 2026-08-10 | Hoàn thiện 6/6 thẻ task P1 theo đủ 11 trường; sửa thẻ OpenAPI gắn nhầm `PROG-101` thành `PROG-100`, dependency `PROG-103` thành `100–102`, điều kiện decision `M-G1` và quy tắc evidence chỉ tạo hai Test Result thuộc G1. Đây là chuẩn bị `PLAN-ONLY`; P1 giữ 0/6 DoD và mọi gate giữ nguyên |
 | 0.12 | 2026-08-10 | Ghi nhận vòng consumer review kỹ thuật `PROG-P0-CONSUMER-REVIEW-2026-08-10` (9 finding `F-CR-01..09` mở và đóng trong cùng phiên) và sáu ADR `ADR-026..031` đóng phần kỹ thuật của `ARCH-CONF-PROG-001..006`; cập nhật §5.5 và §9.2 theo blocker thật. Vì 7/22 hồ sơ đã đổi, điều kiện ghim candidate chuyển `HẾT HIỆU LỰC` và phải phát hành manifest mới. P0 giữ 0/7 DoD, `0/22 M4`, mọi cổng quyền hạn giữ `BLOCKED` |
 | 0.13 | 2026-08-10 | Ghim lại candidate P0 bằng **22 SHA-256** (manifest v2.1) thay vì theo commit — ghim theo commit luôn bị chính commit đồng bộ tracker làm lệch vì file này nằm trong mẫu số 22. Sửa số đếm hồ sơ đổi từ 7 thành **9/22**. Điều kiện kiểm soát cấu hình trở lại `PASS`, kiểm bằng `scripts/candidate_pin_check.py`; P0 giữ `0/7` DoD, `0/22 M4` và mọi cổng quyền hạn `BLOCKED` |
+| 0.14 | 2026-08-10 | Đóng finding tự kiểm `F-CR-10`: sáu phát biểu trạng thái trong chính hồ sơ này còn nói `PLAN_READY` chờ *consumer review*, và §5.1 vẫn dẫn `e3e9fb2` như candidate hiện hành. Tách rõ **“vòng consumer review kỹ thuật đã hoàn tất”** (`9/9` finding đóng) khỏi **“consumer authority đã ký”** (`0/22 M4`); mọi chỗ dẫn candidate đổi sang định danh 22 SHA-256 và ghi `e3e9fb2` là `SUPERSEDED`. Không gate nào đổi |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -1119,7 +1132,7 @@ khiển thiết bị thật:
 | Change control | PASS | §6.5–§6.7 quản lý cấu hình, issue và commit/PR; §9.2 tracker thực thi |
 | Deploy và rollback | PASS | §6.2 điều kiện kích hoạt quay lui theo từng gate |
 | Không mở gate bằng lời văn | PASS | §6.1 Definition of Ready/Done cụ thể cho task; §1.2 nguyên tắc triển khai |
-| `BLOCKED` có owner/gate | **BLOCKED** | §9.1: `G0` đang `RED`. Owner: Product Owner + System Architect + Verification Lead + Document Control. Ảnh hưởng: chưa được implement production; hoạt động chuẩn bị `PLAN-ONLY` vẫn được phép. Gate: `DOC-G4/G0/PLAN_READY`. Candidate P0 đã pin; điều kiện mở còn lại: consumer review, đóng conflict authority, ký `OD-PROG-015`; trước mỗi lát cắt còn phải ký decision ở §4.3 |
+| `BLOCKED` có owner/gate | **BLOCKED** | §9.1: `G0` đang `RED`. Owner: Product Owner + System Architect + Verification Lead + Document Control. Ảnh hưởng: chưa được implement production; hoạt động chuẩn bị `PLAN-ONLY` vẫn được phép. Gate: `DOC-G4/G0/PLAN_READY`. Candidate đã pin bằng 22 SHA-256 và vòng consumer review kỹ thuật đã xong (`9/9` finding đóng). Điều kiện mở còn lại **chỉ là chữ ký**: `0/22 M4`, `ADR-026..031` chuyển `Accepted`, ký `OD-PROG-015`; trước mỗi lát cắt còn phải ký decision ở §4.3 |
 
 Kế hoạch đã sẵn sàng cho **authority review P0**, nhưng chưa được phê duyệt để
 thực thi production.

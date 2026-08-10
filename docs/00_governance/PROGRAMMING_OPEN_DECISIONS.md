@@ -1,7 +1,7 @@
 # Programming Open Decisions — DDC-24 Rev A
 
 **ID:** PROG-OD-001
-**Phiên bản:** 0.6
+**Phiên bản:** 0.7
 **Trạng thái:** M3 — Review Ready — gói quyết định đủ để ký; 17/17 vẫn OPEN
 **Chủ quản:** Product / System Engineering
 **Reviewer:** Runtime Architect, Controls/Safety, Security, UX, I/O, Ops, QA
@@ -89,7 +89,7 @@ trạng thái `OPEN`. Deadline là gate tài liệu, không phải ngày lịch 
 | `OD-PROG-012` | Budget nhỏ hơn `20% period` và base-step/watchdog margin; 3 overrun liên tiếp fault đúng Task, không tự plant safe-state | Control, FW-SOM, V&V | Trước `DOC-G2` | WCET formula + Safety review + target benchmark plan |
 | `OD-PROG-013` | Config mode `GRAPH_ONLY/PROGRAM_ONLY`; dual-run invalid; graph là migration source, không relabel FBD | Architecture, Runtime, Ops | Trước `DOC-G2` | inventory graph, cutover ADR, output/mapping compatibility report |
 | `OD-PROG-014` | Backup trước migration; schema/version explicit; partial deploy fail closed; code/schema/artifact deploy order; rollback không xóa dữ liệu | Architecture, Data, Ops, Plan 53 | Trước `DOC-G4` | device inventory + migration/rollback rehearsal plan |
-| `OD-PROG-015` | Phê duyệt Product v2.2 + SRS/design set sau review; không dùng host component làm readiness evidence | toàn bộ baseline 22 | `DOC-G4` | review record, finding closure, sign-off Product/Architect/QA |
+| `OD-PROG-015` | Phê duyệt Product v2.2 + SRS/design set sau review; không dùng host component làm readiness evidence | toàn bộ baseline 22 | `DOC-G4` | **2/3 điều kiện đã đạt:** review record có tại `PROG-P0-CONSUMER-REVIEW-2026-08-10`; finding closure `9/9` (`F-CR-01..09`). **Còn thiếu:** sign-off Product/Architect/QA — đây là điều kiện duy nhất chưa mở |
 | `OD-PROG-016` | Chấp thuận bốn workspace + tám journey; giữ nguyên toàn bộ hành vi an toàn Commission/Restore/RETAIN; giữ `UC-PROG-*` làm lớp scenario có trạng thái `MERGED/SCENARIO/ROADMAP` | Product Spec §8–§9, UX, FE, BE, IFSPEC, SRS, VVP, Trace, Plan 53 | Trước `DOC-G3` | bảng điểm heuristic ≥85, ma trận migration 17 UC không mồ côi, visual asset bốn workspace, và biên bản UX/Product review |
 | `OD-PROG-017` | Hoãn thư viện mẫu BMS sang Roadmap sau Rev A; Rev A chỉ giữ Core Library và User FB cục bộ trong Project | Product Spec §8.5–§8.6, Language/Compiler, UX, Plan 53 | Trước `DOC-G3` | phân tích chi phí compiler/test/tài liệu cho mẫu, và quyết định Product về việc mẫu là template hay function block |
 
@@ -151,6 +151,7 @@ bằng hành vi supporting component hoặc giả định thiết kế.
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Open Decisions; giữ 15 mục OPEN |
 | 0.5 | 2026-08-09 | Thêm `OD-PROG-016` (bốn workspace + tám journey) và `OD-PROG-017` (thư viện mẫu BMS) kèm option/trade-off/gate/bằng chứng mở khóa; tổng 17 mục OPEN |
 | 0.6 | 2026-08-10 | Sửa mô tả hiện trạng: chỉ hai phần Modbus của `007/008` đã quyết định, còn 15 mục khác chưa ký; bổ sung đúng phạm vi ký Product tới `017`; không đổi trạng thái 17/17 `OPEN` |
+| 0.7 | 2026-08-10 | Ghi rõ `OD-PROG-015` đã đạt **2/3** điều kiện mở khóa (review record + `9/9` finding closure); điều kiện duy nhất còn thiếu là sign-off Product/Architect/QA. Trạng thái **không đổi**: 17/17 vẫn `OPEN` |
 
 | Vai trò | Trạng thái | Phạm vi ký |
 |---|---|---|
