@@ -4,7 +4,7 @@
 |---|---|
 | ID | `PROG-P0-CONSUMER-REVIEW-2026-08-10` |
 | Loại | Biên bản consumer review; hồ sơ hỗ trợ, không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Ngày | 2026-08-10 |
 | Phạm vi | 22 hồ sơ baseline tại candidate `e3e9fb2`; điều kiện “consumer review liên chức năng” của `PLAN_READY` |
 | Chủ quản | Dev Lead (tổ chức review) |
@@ -305,7 +305,7 @@ Cột phải là cột quyết định `M4`. Cột giữa **không** thay đư�
 |---|---|---|---|
 | Consumer review liên chức năng | `BLOCKED` — chưa thực hiện | `BLOCKED` — **đã thực hiện vòng kỹ thuật**, chờ chữ ký | `M4` đòi con người |
 | Không còn authority/xung đột kiến trúc | `BLOCKED` — 6 xung đột vô chủ | `BLOCKED` — 6/6 có ADR `Proposed` | `Proposed` chưa phải `Accepted` |
-| Ghim candidate | `PASS` tại `e3e9fb2` | **HẾT HIỆU LỰC** — nội dung đã đổi | §7 |
+| Ghim candidate | `PASS` tại `e3e9fb2` | **ĐÃ GHIM LẠI** bằng 22 SHA-256 (manifest v2.1) | §7 |
 | `PLAN_READY` | `BLOCKED` | `BLOCKED` | thiếu chữ ký và `OD-PROG-015` |
 | `IMPLEMENT_READY[*]` | `BLOCKED` | `BLOCKED` | phụ thuộc `PLAN_READY` |
 
@@ -315,16 +315,22 @@ Chín finding đã được sửa, nên `e3e9fb2` **không còn là nội dung s
 Theo [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md)
 §1, phải phát hành candidate/hash mới và review lại phần chịu ảnh hưởng.
 
-Bảy hồ sơ trong mẫu số 22 đã đổi: `ARCH-PROG-001`, `IFSPEC-PROG-001`,
+**Chín** hồ sơ trong mẫu số 22 đã đổi: `ARCH-PROG-001`, `IFSPEC-PROG-001`,
 `DDD-SEC-PROG-001`, `DDD-BE-PROG-001`, `DDD-FE-PROG-001`, `UX-WEB-PROG-001`,
-`TRACE-PROG-001`. Reviewer chỉ cần review lại bảy hồ sơ này; mười lăm hồ sơ còn
-lại giữ nguyên hash và **không** cần đọc lại.
+`TRACE-PROG-001`, cộng `PROG-DOCSET-001` và `PLAN-PROG-053` do đồng bộ tracker.
+Reviewer chỉ cần review lại chín hồ sơ này; mười ba hồ sơ còn lại giữ nguyên hash
+và **không** cần đọc lại.
+
+Candidate mới đã được ghim tại
+[`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md)
+v2.1, định danh bằng **22 SHA-256** thay vì theo commit — xem manifest §1.1 về lý
+do. Trước khi đọc để review, chạy `python3 scripts/candidate_pin_check.py`.
 
 ## 8. Việc phải làm tiếp, có owner
 
 | Việc | Owner | Điều kiện hoàn tất |
 |---|---|---|
-| Phát hành manifest candidate mới sau khi merge | Document Control | commit/tree/22 SHA-256 mới |
+| ~~Phát hành manifest candidate mới sau khi merge~~ | Document Control | **XONG** — manifest v2.1, ghim bằng 22/22 SHA-256, có `candidate_pin_check.py` bắt drift |
 | Ký `ACCEPT/REQUEST_CHANGE/REJECT` theo từng vai trò §5 | tám vai trò consumer | họ tên, ngày, revision cụ thể |
 | Chuyển `ADR-026..031` sang `Accepted` hoặc yêu cầu sửa | System Architect, Safety, Security, Verification | chữ ký trên từng ADR |
 | Ký `OD-PROG-015` | Product Owner + QA | decision record |
@@ -335,3 +341,4 @@ lại giữ nguyên hash và **không** cần đọc lại.
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-08-10 | Thực hiện vòng consumer review kỹ thuật trên candidate `e3e9fb2`: 22 hồ sơ theo cặp producer→consumer, kiểm As-Built với source thật, kiểm truy vết hai chiều bằng máy; mở và đóng 9 finding `F-CR-01..09`; giữ `M4` `0/22` và `PLAN_READY` `BLOCKED` vì chữ ký người thật còn thiếu |
+| 1.1 | 2026-08-10 | Sửa số đếm sai của chính biên bản này: **9/22** hồ sơ đổi chứ không phải 7 — `PROG-DOCSET-001` và `PLAN-PROG-053` cũng thuộc mẫu số 22 và đã đổi khi đồng bộ tracker. Ghi nhận candidate mới đã được ghim bằng 22 SHA-256 (manifest v2.1); chuyển việc “phát hành manifest mới” sang đã xong |

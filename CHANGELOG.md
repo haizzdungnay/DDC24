@@ -7,6 +7,39 @@
 ---
 
 ## [Unreleased]
+### Fixed — Ghim lại candidate P0 theo hash và bắt drift bằng máy (2026-08-10)
+
+**Triệu chứng.** Manifest v1.0 ghim commit `e3e9fb2`, nhưng các commit sau đó sửa
+`PLAN-PROG-053` — hồ sơ **nằm trong mẫu số 22** — mà không phát hành manifest mới.
+Reviewer đọc cây làm việc sẽ đọc nội dung khác với revision ghi trong manifest, và
+không có gì báo cho họ biết.
+
+**Nguyên nhân gốc.** Đây là bất biến của quy trình chứ không phải sơ suất một lần:
+manifest phải cập nhật cùng vòng sửa hồ sơ, mà chính việc cập nhật đó sinh commit
+mới — nên không commit đơn lẻ nào vừa chứa manifest vừa là commit mà manifest ghim.
+Lỗi lặp lại ngay trong lần ghim v2.0 và được `scripts/candidate_pin_check.py` bắt
+tại chỗ: 21/22 khớp, `53_PROGRAMMING_IMPLEMENTATION_PLAN.md` lệch.
+
+**Cách sửa.** Chuyển định danh candidate sang **22 SHA-256 ở §2** thay vì commit;
+commit chỉ ghi bổ sung sau merge, và việc ghi đó chỉ sửa manifest — hồ sơ ngoài mẫu
+số 22 — nên không tự làm lệch. Thêm §1.1 giải thích, và thêm
+`scripts/candidate_pin_check.py` để mọi reviewer chạy trước khi đọc: `PASS` nghĩa
+là nội dung sắp đọc đúng là candidate, `FAIL` nghĩa là phải dừng và yêu cầu manifest
+mới. Manifest lên v2.1.
+
+**Sửa số đếm sai của chính biên bản review.** `PROG-P0-CONSUMER-REVIEW-2026-08-10`
+§7 ghi "7/22 hồ sơ đã đổi"; số đúng là **9/22** — `PROG-DOCSET-001` và
+`PLAN-PROG-053` cũng thuộc mẫu số 22 và đã đổi khi đồng bộ tracker. Sửa ở biên bản
+(v1.1), gói review (v1.4), Plan 53 (v0.13) và register review.
+
+**Trạng thái gate không đổi.** Điều kiện kiểm soát cấu hình trở lại `PASS`; mọi
+điều kiện còn lại giữ `BLOCKED`: `0/22 M4`, `ADR-026..031` còn `Proposed`,
+`OD-PROG-015` chưa ký, `0/32` Test Result, CI/target/HIL còn chặn.
+
+**Kiểm chứng.** `scripts/candidate_pin_check.py` FAIL 21/22 khi ghim theo commit →
+PASS 22/22 sau khi chuyển sang hash; docs harness `--expect` PASS;
+`trace_bidirectional_check` PASS 32/32; `git diff --check` PASS.
+
 ### Fixed — Consumer review liên chức năng P0 Programming: 9 finding mở và đóng (2026-08-10)
 
 **Vòng review.** Thực hiện consumer review trên candidate `e3e9fb2` theo cặp
