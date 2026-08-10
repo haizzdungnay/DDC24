@@ -49,6 +49,9 @@ production** — Phase B chưa được phép chạy.
 sửa hồ sơ trong mẫu số 22); `trace_bidirectional_check.py` **PASS `32/32`**;
 `docs_iso_harness.py --expect` **PASS**, `EXPECT` khớp; `git diff --check` PASS.
 
+**Manifest v2.4.** Ghi bổ sung commit `bbd7d2d` và tree cho vòng A2 sau khi merge;
+`candidate_pin_check.py` vẫn PASS `22/22` vì bước này chỉ sửa manifest.
+
 ### Fixed — Ghim lại candidate P0 theo hash và bắt drift bằng máy (2026-08-10)
 
 **Triệu chứng.** Manifest v1.0 ghim commit `e3e9fb2`, nhưng các commit sau đó sửa
