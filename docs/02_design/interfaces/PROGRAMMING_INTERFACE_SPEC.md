@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 0.6 |
-| Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; contract chưa Active, TLS còn chặn |
-| Ngày | 2026-08-09 |
+| Phiên bản | 0.7 |
+| Trạng thái | **M3 — Review Ready** — Product + Architect `ACCEPT`; contract chưa Active, discipline/TLS/implementation còn chặn |
+| Ngày | 2026-08-10 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
@@ -543,7 +543,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 
 | Blocker | Owner | Ảnh hưởng | Điều kiện mở |
 |---|---|---|---|
-| `PROG-OD-001` còn 17 decision OPEN | Product + Architect | payload/limit/role chưa được Active | ký decision package và cập nhật SRS/OpenAPI |
+| `PROG-OD-001`: `14 OPEN`, `3 DECIDED`, `0 CLOSED` | Product + discipline authority | payload/limit/role chưa được Active | đủ đồng phê duyệt theo lát cắt và cập nhật SRS/OpenAPI |
 | TLS production chưa có | Security + Platform | cấm bật mutation Programming | TLS/session/CSRF test PASS trên target |
 | BE/Core Programming protocol chưa tồn tại | BE + Core | chưa có As-Built implementation | implementation + contract/fault test theo Plan 53 |
 
@@ -555,13 +555,14 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; đóng finding `F-PROG-001/002` | System Engineering |
 | 0.5 | 2026-08-09 | Amendment A1: thêm §6.1 trạng thái ba nhánh `NONE/PRESENT/UNAVAILABLE` cho từng nhóm impact (fail-closed), và `?activeOnly=true` + phân trang cho `GET /overrides`; không thêm endpoint mới | System Engineering |
 | 0.6 | 2026-08-10 | Đóng finding consumer review `F-CR-02`: staging artifact chuyển từ `${CONFIG_DIR}` sang `${STATE_DIR}/programming/staging/` để khớp `DDD-BE-PROG-001` §14, `DDD-FWSOM-PROG-001` §16 và `platform/packaging`; thêm bảng ba gốc `CONFIG_DIR`/`STATE_DIR`/`RUNTIME_DIR` và quy tắc reject locator ngoài gốc | System Engineering |
+| 0.7 | 2026-08-10 | Ghi Product Owner/CTO + System Architect Phạm Đình Chương `ACCEPT` theo `AUTH-PROG-2026-08-10-01`, xác nhận `${STATE_DIR}/programming/staging/`; đồng bộ decision thành `3 DECIDED/14 OPEN`. Contract vẫn chưa Active vì discipline/TLS/BE-Core implementation/evidence còn thiếu | Product + Architect + Document Control |
 
 | Vai trò | Trạng thái | Ngày / bằng chứng |
 |---|---|---|
 | Backend Lead | Chờ review | — |
 | Runtime Architect | Chờ review | — |
 | Security + FE + QA | Chờ review | — |
-| System Architect + Product Owner | **BLOCKED — chưa phê duyệt** | `PROG-OD-001` |
+| System Architect + Product Owner | **ACCEPT — Phạm Đình Chương, 2026-08-10; ủy quyền điện tử** | `AUTH-PROG-2026-08-10-01`; không thay chữ ký Backend/Runtime/Security/FE/QA |
 
 ### 19.1 Kết quả checklist vòng chi tiết
 
@@ -581,6 +582,6 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §16: handler BE, sinh type FE, và yêu cầu đưa spec vào `contracts/openapi/openapi.yaml` |
 | `DD-11` Verification | PASS | §16 gắn `VS-PROG-019/022/024/026`; §18 checklist đóng băng contract cho consumer |
 | `DD-12` Compatibility/deploy/rollback | PASS | §10 contract gate; §15 thứ tự triển khai và tương thích |
-| `DD-13` Trace/risk/decision/sign-off | **BLOCKED** | Trace/risk đủ (`RSK-PROG-007/008/014`), nhưng ba blocker ở §19 chưa mở. Owner: Product + Architect (17 decision), Security + Platform (TLS), BE + Core (giao thức chưa tồn tại). Ảnh hưởng: **không được phát hành contract Active**, và mutation Programming phải tắt. Gate: `DOC-G2`. Điều kiện mở: ký decision package + TLS/session/CSRF PASS trên target + implementation với contract/fault test theo Plan 53 |
+| `DD-13` Trace/risk/decision/sign-off | **BLOCKED một phần** | Product + Architect đã `ACCEPT`; register còn `14 OPEN/3 DECIDED/0 CLOSED`, cùng blocker Security + Platform (TLS) và BE + Core (giao thức chưa tồn tại). Ảnh hưởng: **không được phát hành contract Active**, mutation phải tắt. Gate: `DOC-G2`. Điều kiện mở: đủ discipline decision theo lát cắt + TLS/session/CSRF PASS target + implementation/contract/fault test theo Plan 53 |
 
 Một `BLOCKED`, đủ bốn trường. Mọi bằng chứng runtime vẫn `NOT IMPLEMENTED/NOT TESTED`.

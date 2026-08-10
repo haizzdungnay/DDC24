@@ -2,7 +2,7 @@
 
 - Date: 2026-08-10
 - Owner: System Architect (phê duyệt) · Core Lead (đề xuất)
-- Status: **Proposed** — chờ System Architect ký; chưa ký thì `ARCH-CONF-PROG-002` còn mở
+- Status: **Proposed — System Architect ACCEPT**; `OD-PROG-013` đã `DECIDED`, chờ Safety trước khi chuyển `Accepted`; target evidence là gate triển khai/release sau quyết định
 - Đóng xung đột: `ARCH-CONF-PROG-002` tại [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) §11
 - Related: [`DDD-CTRL-PROG-001`](../02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md) §3 ·
   [`DDD-FWSOM-PROG-001`](../02_design/software/PROGRAMMING_FW_SOM_DESIGN.md) §4 ·
@@ -70,7 +70,7 @@ thành chu kỳ vòng scan và IOP đứt xa quá `200 ms` — đúng rủi ro `
   soak → mới bật đường Programming.
 - Rollback: giữ khả năng đọc `scan_ms` cũ trong một release chuyển tiếp.
 
-## Điều kiện xác minh trước khi chuyển `Accepted`
+## Điều kiện sau quyết định trước khi đóng lát cắt triển khai/release
 
 | Điều kiện | Bằng chứng |
 |---|---|
@@ -82,6 +82,6 @@ thành chu kỳ vòng scan và IOP đứt xa quá `200 ms` — đúng rủi ro `
 
 | Vai trò | Trạng thái | Ngày |
 |---|---|---|
-| System Architect | **PENDING** | — |
+| System Architect | **ACCEPT — Phạm Đình Chương; ủy quyền điện tử `AUTH-PROG-2026-08-10-01`, Codex ghi biên bản** | 2026-08-10 |
 | Core Lead | Đề xuất | 2026-08-10 |
 | Safety Reviewer | **PENDING** | — |

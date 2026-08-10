@@ -4,7 +4,7 @@
 |---|---|
 | ID | `PROG-P0-CONSUMER-REVIEW-2026-08-10` |
 | Loại | Biên bản consumer review; hồ sơ hỗ trợ, không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 1.2 |
+| Phiên bản | 1.3 |
 | Ngày | 2026-08-10 |
 | Phạm vi | 22 hồ sơ baseline; điều kiện “consumer review liên chức năng” của `PLAN_READY` |
 | Chủ quản | Dev Lead (tổ chức review) |
@@ -220,9 +220,9 @@ churn theo từng Commission. `IFSPEC-PROG-001` §12 thêm bảng ba gốc và q
 reject; `DDD-BE-PROG-001` §14 và `DDD-SEC-PROG-001` §7 trích cùng bảng đó.
 
 > Lưu ý cho authority: việc chọn `STATE_DIR` là **hòa giải kỹ thuật giữa ba hồ sơ
-> đang mâu thuẫn**, không phải quyết định kiến trúc mới. System Architect vẫn phải
-> xác nhận khi ký; nếu chọn ngược lại thì cả ba hồ sơ và `platform/packaging` phải
-> đổi cùng lúc.
+> đang mâu thuẫn**, không phải quyết định kiến trúc mới. System Architect Phạm
+> Đình Chương đã xác nhận `${STATE_DIR}/programming/staging/` ngày 2026-08-10
+> theo `AUTH-PROG-2026-08-10-01`; lựa chọn authority của `F-CR-02` đã đóng.
 
 ### `F-CR-03` — hai kịch bản không có đường về requirement
 
@@ -332,13 +332,13 @@ Suy từ vế thứ nhất ra vế thứ hai là vi phạm `DOC-GOV-001` §6 quy
 
 ### 5.2 Chữ ký người thật — bảng phải điền để đạt `M4`
 
-**Không ai được điền thay.** Mỗi vai trò tự ghi đủ **năm trường**; thiếu một
+**Không được điền thay nếu không có ủy quyền tường minh.** Mỗi vai trò tự ghi đủ **năm trường**; thiếu một
 trường thì chữ ký không hợp lệ và `M4` không được tính.
 
 Trước khi ký, chạy `python3 scripts/candidate_pin_check.py` và chỉ ký khi
 `PASS 22/22`. Revision ghi trong ô “Hash/revision đã đọc” phải là candidate hiện
 hành ở [manifest](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §1.1/§2 —
-**ghi `e3e9fb2` là không hợp lệ** vì 10/22 hồ sơ đã đổi sau revision đó.
+**ghi `e3e9fb2` là không hợp lệ** vì 11/22 hồ sơ đã đổi sau revision đó.
 
 | # | Vai trò | Họ tên + chức danh | Kết luận | Ngày | Hash/revision đã đọc | Finding còn lại |
 |---:|---|---|---|---|---|---|
@@ -362,37 +362,36 @@ thuật của vòng review; nó **không** thay được §5.2.
 | Gate | Trước vòng review | Sau vòng review | Vì sao |
 |---|---|---|---|
 | Consumer review liên chức năng | `BLOCKED` — chưa thực hiện | `BLOCKED` — **đã thực hiện vòng kỹ thuật**, chờ chữ ký | `M4` đòi con người |
-| Không còn authority/xung đột kiến trúc | `BLOCKED` — 6 xung đột vô chủ | `BLOCKED` — 6/6 có ADR `Proposed` | `Proposed` chưa phải `Accepted` |
-| Ghim candidate | `PASS` tại `e3e9fb2` | **ĐÃ GHIM LẠI** bằng 22 SHA-256 (manifest v2.1) | §7 |
-| `PLAN_READY` | `BLOCKED` | `BLOCKED` | thiếu chữ ký và `OD-PROG-015` |
+| Không còn authority/xung đột kiến trúc | `BLOCKED` — 6 xung đột vô chủ | `BLOCKED một phần` — Architect `ACCEPT` 6/6 ADR `Proposed` | còn đồng phê duyệt/evidence trước `Accepted` |
+| Ghim candidate | `PASS` tại `e3e9fb2` | **ĐÃ GHIM LẠI** bằng 22 SHA-256 (manifest v2.5) | §7 |
+| `PLAN_READY` | `BLOCKED` | `BLOCKED một phần` | Product + Architect `ACCEPT`; consumer/Verification/discipline/QA còn thiếu |
 | `IMPLEMENT_READY[*]` | `BLOCKED` | `BLOCKED` | phụ thuộc `PLAN_READY` |
 
 ## 7. Candidate phải được ghim lại
 
-Chín finding đã được sửa, nên `e3e9fb2` **không còn là nội dung sẽ được ký**.
+Chín finding và record authority đã được ghi, nên `e3e9fb2` **không còn là nội dung sẽ được ký**.
 Theo [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md)
 §1, phải phát hành candidate/hash mới và review lại phần chịu ảnh hưởng.
 
-**Chín** hồ sơ trong mẫu số 22 đã đổi: `ARCH-PROG-001`, `IFSPEC-PROG-001`,
-`DDD-SEC-PROG-001`, `DDD-BE-PROG-001`, `DDD-FE-PROG-001`, `UX-WEB-PROG-001`,
-`TRACE-PROG-001`, cộng `PROG-DOCSET-001` và `PLAN-PROG-053` do đồng bộ tracker.
-Reviewer chỉ cần review lại chín hồ sơ này; mười ba hồ sơ còn lại giữ nguyên hash
-và **không** cần đọc lại.
+So với `e3e9fb2`, **11/22** hồ sơ đã đổi: chín hồ sơ của vòng finding, cộng
+`PROG-OD-001` ở vòng R2 và `VVP-PROG-001` khi ghi authority. So với candidate
+v2.4 ngay trước ủy quyền, **8/22** hồ sơ đổi để ghi quyết định/tracker. Manifest
+§4 liệt kê chính xác; reviewer đọc lại đúng các file đánh dấu `✱`.
 
 Candidate mới đã được ghim tại
 [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md)
-v2.1, định danh bằng **22 SHA-256** thay vì theo commit — xem manifest §1.1 về lý
+v2.5, định danh bằng **22 SHA-256** thay vì theo commit — xem manifest §1.1 về lý
 do. Trước khi đọc để review, chạy `python3 scripts/candidate_pin_check.py`.
 
 ## 8. Việc phải làm tiếp, có owner
 
 | Việc | Owner | Điều kiện hoàn tất |
 |---|---|---|
-| ~~Phát hành manifest candidate mới sau khi merge~~ | Document Control | **XONG** — manifest v2.1, ghim bằng 22/22 SHA-256, có `candidate_pin_check.py` bắt drift |
+| ~~Phát hành manifest candidate mới sau authority record~~ | Document Control | **XONG** — manifest v2.5, ghim bằng 22/22 SHA-256, có `candidate_pin_check.py` bắt drift |
 | Ký `ACCEPT/REQUEST_CHANGE/REJECT` theo từng vai trò §5 | tám vai trò consumer | họ tên, ngày, revision cụ thể |
-| Chuyển `ADR-026..031` sang `Accepted` hoặc yêu cầu sửa | System Architect, Safety, Security, Verification | chữ ký trên từng ADR |
-| Ký `OD-PROG-015` | Product Owner + QA | decision record |
-| Xác nhận lựa chọn `STATE_DIR` ở `F-CR-02` | System Architect | ghi vào biên bản ký |
+| Hoàn tất đồng phê duyệt để chuyển `ADR-026..031` sang `Accepted` | Safety, Security, Verification, Runtime theo từng ADR | Architect đã `ACCEPT` 6/6; còn chữ ký/evidence được nêu trong từng ADR |
+| Hoàn tất `OD-PROG-015` | QA/Verification | Product + Architect đã `ACCEPT`; cần review/sign-off đúng candidate |
+| ~~Xác nhận lựa chọn `STATE_DIR` ở `F-CR-02`~~ | System Architect | **XONG — Phạm Đình Chương, 2026-08-10** |
 
 ## 9. Lịch sử
 
@@ -401,3 +400,4 @@ do. Trước khi đọc để review, chạy `python3 scripts/candidate_pin_chec
 | 1.0 | 2026-08-10 | Thực hiện vòng consumer review kỹ thuật trên candidate `e3e9fb2`: 22 hồ sơ theo cặp producer→consumer, kiểm As-Built với source thật, kiểm truy vết hai chiều bằng máy; mở và đóng 9 finding `F-CR-01..09`; giữ `M4` `0/22` và `PLAN_READY` `BLOCKED` vì chữ ký người thật còn thiếu |
 | 1.1 | 2026-08-10 | Sửa số đếm sai của chính biên bản này: **9/22** hồ sơ đổi chứ không phải 7 — `PROG-DOCSET-001` và `PLAN-PROG-053` cũng thuộc mẫu số 22 và đã đổi khi đồng bộ tracker. Ghi nhận candidate mới đã được ghim bằng 22 SHA-256 (manifest v2.1); chuyển việc “phát hành manifest mới” sang đã xong |
 | 1.2 | 2026-08-10 | Đóng `F-CR-10`: tách rõ candidate **đầu vào** của vòng review (`e3e9fb2`, nay `SUPERSEDED`) khỏi candidate **để ký** (22 SHA-256); thêm §2.6 bảng số đo **cuối cùng** để không ai đọc nhầm số `FAIL` trung gian ở §2.1 làm trạng thái hiện hành; thêm bảng đối chiếu hai phát biểu “review kỹ thuật xong” và “authority đã ký” |
+| 1.3 | 2026-08-10 | Ghi `AUTH-PROG-2026-08-10-01`: System Architect xác nhận `${STATE_DIR}/programming/staging/`, Product + Architect `ACCEPT`, Architect `ACCEPT` 6/6 ADR. Candidate v2.5 được ghim lại; giữ `0/8` consumer, `0/22 M4` và `PLAN_READY BLOCKED` |

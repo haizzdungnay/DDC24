@@ -2,7 +2,7 @@
 
 - Date: 2026-08-10
 - Owner: System Architect (phê duyệt) · Core/Compiler Lead (đề xuất)
-- Status: **Proposed** — chờ System Architect ký; chưa ký thì `ARCH-CONF-PROG-001` còn mở
+- Status: **Proposed — System Architect ACCEPT**; chờ Runtime đồng phê duyệt `OD-PROG-004` trước khi chuyển `Accepted`; bằng chứng code/test là gate triển khai sau quyết định
 - Đóng xung đột: `ARCH-CONF-PROG-001` tại [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) §11
 - Related: [`PROD-PROG-001`](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) §3 ·
   [`DDD-CTRL-PROG-001`](../02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md) §3 ·
@@ -73,7 +73,7 @@ Rev A”) sẽ PASS trên giấy nhưng FAIL trên thiết bị.
 - Test bắt buộc: `limit-1 / limit / limit+1` cho `maxTasks` và cho từng chu kỳ hợp lệ,
   cộng một ca artifact profile lạ phải bị `IR-E-013`.
 
-## Điều kiện xác minh trước khi chuyển `Accepted`
+## Điều kiện sau quyết định trước khi đóng lát cắt triển khai
 
 | Điều kiện | Bằng chứng |
 |---|---|
@@ -85,6 +85,7 @@ Rev A”) sẽ PASS trên giấy nhưng FAIL trên thiết bị.
 
 | Vai trò | Trạng thái | Ngày |
 |---|---|---|
-| System Architect | **PENDING** | — |
+| System Architect | **ACCEPT — Phạm Đình Chương; ủy quyền điện tử `AUTH-PROG-2026-08-10-01`, Codex ghi biên bản** | 2026-08-10 |
 | Core/Compiler Lead | Đề xuất | 2026-08-10 |
-| Product Owner (`OD-PROG-003/004`) | **PENDING** | — |
+| Product Owner (`OD-PROG-003/004`) | **ACCEPT — Phạm Đình Chương; `OD-PROG-003` DECIDED, `OD-PROG-004` chờ Runtime** | 2026-08-10 |
+| Runtime Architect (`OD-PROG-004`) | **PENDING** | — |

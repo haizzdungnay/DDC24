@@ -4,14 +4,14 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.14 |
+| Phiên bản | 0.15 |
 | Trạng thái | **PLAN-ONLY — chưa được implement production.** Hồ sơ ở `M3 — Review Ready`; `PLAN_READY`, `IMPLEMENT_READY` và `RELEASE_READY` đều `BLOCKED` |
 | Ngày phát hành | 2026-08-10 |
 | Chủ quản | Dev Lead + System Architect |
 | Người review | Product, FE/BE/Core/FW/HW/Security/QA/Ops Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
 | Khung trình bày | ISO/IEC/IEEE 16326 — nội dung kế hoạch quản lý dự án phần mềm; ánh xạ điều khoản ở §11 |
-| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate hiện hành ghim bằng 22 SHA-256 tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v2.1 — kiểm bằng `python3 scripts/candidate_pin_check.py`; `e3e9fb2` đã `SUPERSEDED` |
+| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate hiện hành ghim bằng 22 SHA-256 tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v2.5 — kiểm bằng `python3 scripts/candidate_pin_check.py`; `e3e9fb2` đã `SUPERSEDED` |
 | Quy tắc tài liệu | [`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md) |
 
 > ## ⚠ PLAN-ONLY — chưa được phép viết code production
@@ -277,12 +277,12 @@ thụ HW/HIL.
 **Kết quả triển khai P0 ngày 2026-08-10.** Phần chuẩn bị kỹ thuật của cả 7 task
 đã được gom và review trong
 [`PROG-P0-GATE-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md):
-7/7 có evidence, decision authority, blocker và điều kiện mở. Tuy nhiên **0/7
-đạt DoD** vì chưa có quyết định/chữ ký đúng thẩm quyền. Vì vậy P0 vẫn `BLOCKED`;
-không tự nâng tiến độ từ việc soạn hồ sơ. Điều kiện kiểm soát cấu hình “ghim
+7/7 có evidence, decision authority, blocker và điều kiện mở. Product + Architect
+đã `ACCEPT`, nhưng **0/7 đạt DoD** vì Verification/consumer/discipline/QA còn
+thiếu. Vì vậy P0 vẫn `BLOCKED`; không tự nâng tiến độ từ chữ ký một phần. Điều kiện kiểm soát cấu hình “ghim
 candidate” đã PASS tại
 [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md)
-v2.2: candidate hiện hành được định danh bằng **22 SHA-256 ở §2**, kiểm bằng
+v2.5: candidate hiện hành được định danh bằng **22 SHA-256 ở §2**, kiểm bằng
 `python3 scripts/candidate_pin_check.py` (`22/22` PASS). Candidate cũ `e3e9fb2`
 đã **`SUPERSEDED`** — không được dùng làm revision để ký.
 Vòng consumer review kỹ thuật đã hoàn tất tại
@@ -1026,7 +1026,7 @@ trỏ tới commit + test/evidence hiện tại.
 
 | Gate | Owner | Status | Start/finish | Current blocker/evidence |
 |---|---|---|---|---|
-| `PLAN_READY` | Product+Architect+QA+Document Control | **BLOCKED** | — | Consumer review kỹ thuật `PROG-P0-CONSUMER-REVIEW-2026-08-10` xong, `F-CR-01..09` đóng; `ARCH-CONF-PROG-001..006` có `ADR-026..031` `Proposed`; candidate ghim lại bằng 22 SHA-256 (manifest v2.1). Còn thiếu: chữ ký `0/22 M4`, ADR chuyển `Accepted`, `OD-PROG-015` |
+| `PLAN_READY` | Product+Architect+QA+Document Control | **BLOCKED một phần** | — | Product + Architect Phạm Đình Chương `ACCEPT` trên candidate v2.5; staging đã xác nhận; 6/6 ADR có Architect `ACCEPT`. Còn thiếu: consumer/discipline/Verification/Document Control, ADR final `Accepted`, QA đóng `OD-PROG-015`; `0/22 M4` |
 | `IMPLEMENT_READY[<lát cắt>]` | Product + Architect | **BLOCKED** | — | `PLAN_READY PASS` + task card/decision theo lát cắt (§4.3) |
 | `RELEASE_READY` | Product + Release + QA | **BLOCKED** | — | 32/32 Test Result + residual acceptance + `OD-PROG-008` HIL |
 | G0/P0 | Product+Architect+QA | BLOCKED | 2026-08-10 / — | Candidate đã ghim bằng 22 SHA-256; consumer review kỹ thuật + 6 ADR `Proposed` xong; còn chặn bởi CI billing, target SSH auth, HIL authority/fixture và chữ ký DOC-G4 |
@@ -1048,7 +1048,7 @@ không dùng hai bảng thay nhau.
 | Entry | Authority | Trạng thái 2026-08-09 |
 |---|---|---|
 | 21 hồ sơ upstream + Plan 53 đạt M5 | `PLAN-PROG-DOC-054` | BLOCKED: 0/22 M5 |
-| 17 Open Decision được xử lý theo dependency và downstream sync | `PROG-OD-001` | BLOCKED: 17/17 trạng thái tổng thể OPEN; không bắt buộc đóng mục ngoài lát cắt trước khi lập kế hoạch |
+| 17 Open Decision được xử lý theo dependency và downstream sync | `PROG-OD-001` | BLOCKED một phần: `3 DECIDED`, `14 OPEN`, `0 CLOSED`; không bắt buộc đóng mục ngoài lát cắt trước khi lập kế hoạch, nhưng decision đầu vào lát cắt phải đủ đồng phê duyệt và downstream sync |
 | Product/SRS/Architecture/contract baseline pin version/hash | Document Control | **PASS phần kiểm soát cấu hình:** candidate P0 `e3e9fb2`, tree `54eb519e`, 22/22 SHA-256/Git blob tại manifest; approval của nội dung vẫn BLOCKED ở các dòng trên |
 | TLS/RBAC/security enablement plan approved | `DDD-SEC-PROG-001` | BLOCKED |
 | HW/BSP/schematic/test limits/fixture approved | MCU/HW design | BLOCKED |
@@ -1112,11 +1112,12 @@ khiển thiết bị thật:
 | 0.12 | 2026-08-10 | Ghi nhận vòng consumer review kỹ thuật `PROG-P0-CONSUMER-REVIEW-2026-08-10` (9 finding `F-CR-01..09` mở và đóng trong cùng phiên) và sáu ADR `ADR-026..031` đóng phần kỹ thuật của `ARCH-CONF-PROG-001..006`; cập nhật §5.5 và §9.2 theo blocker thật. Vì 7/22 hồ sơ đã đổi, điều kiện ghim candidate chuyển `HẾT HIỆU LỰC` và phải phát hành manifest mới. P0 giữ 0/7 DoD, `0/22 M4`, mọi cổng quyền hạn giữ `BLOCKED` |
 | 0.13 | 2026-08-10 | Ghim lại candidate P0 bằng **22 SHA-256** (manifest v2.1) thay vì theo commit — ghim theo commit luôn bị chính commit đồng bộ tracker làm lệch vì file này nằm trong mẫu số 22. Sửa số đếm hồ sơ đổi từ 7 thành **9/22**. Điều kiện kiểm soát cấu hình trở lại `PASS`, kiểm bằng `scripts/candidate_pin_check.py`; P0 giữ `0/7` DoD, `0/22 M4` và mọi cổng quyền hạn `BLOCKED` |
 | 0.14 | 2026-08-10 | Đóng finding tự kiểm `F-CR-10`: sáu phát biểu trạng thái trong chính hồ sơ này còn nói `PLAN_READY` chờ *consumer review*, và §5.1 vẫn dẫn `e3e9fb2` như candidate hiện hành. Tách rõ **“vòng consumer review kỹ thuật đã hoàn tất”** (`9/9` finding đóng) khỏi **“consumer authority đã ký”** (`0/22 M4`); mọi chỗ dẫn candidate đổi sang định danh 22 SHA-256 và ghi `e3e9fb2` là `SUPERSEDED`. Không gate nào đổi |
+| 0.15 | 2026-08-10 | Ghi `AUTH-PROG-2026-08-10-01`: Product Owner/CTO + System Architect Phạm Đình Chương `ACCEPT`, xác nhận staging, Architect `ACCEPT` 6/6 ADR; Open Decisions thành `3 DECIDED`, `14 OPEN`. Ghim candidate v2.5; giữ `PLAN_READY` và `IMPLEMENT_READY[*]` BLOCKED vì Verification/consumer/discipline/QA và evidence còn thiếu |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
 | Dev Lead + tất cả discipline leads | Chờ review | — |
-| Product + System Architect + Verification | **BLOCKED — chưa phê duyệt** | G0 RED, 0/22 M5, 17 decisions OPEN |
+| Product + System Architect + Verification | **BLOCKED một phần** | Product + Architect `ACCEPT`; Verification PENDING; G0 RED, 0/22 M5, `3 DECIDED/14 OPEN/0 CLOSED` |
 
 ## 13. Phụ lục — Tự kiểm cổng M3 (loại: Implementation Plan)
 

@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `UX-WEB-PROG-001` |
-| Phiên bản | 0.7 |
-| Trạng thái | **M3 — Review Ready** — IA bốn workspace + tám journey; 7 asset trực quan gồm cả `RetainResetDialog`; chờ `OD-PROG-016` và usability/a11y review |
-| Ngày | 2026-08-09 |
+| Phiên bản | 0.8 |
+| Trạng thái | **M3 — Review Ready** — Product `ACCEPT` IA bốn workspace/tám journey; chờ UX/FE/BE/QA/a11y review |
+| Ngày | 2026-08-10 |
 | Chủ quản | UX Lead + Frontend Lead |
 | Người review | Product Owner, Backend Lead, Verification Lead, Accessibility Reviewer |
 | Người phê duyệt | Product Owner + UX Lead |
@@ -1293,7 +1293,7 @@ mutation vẫn phụ thuộc RBAC phía server.
 | R-0 nội bộ | máy dev, dữ liệu giả trong test fixture | build có cờ | bất kỳ lỗi chặn nào |
 | R-1 lab | một controller lab, có API thật | API và TLS sẵn sàng | sai lệch giữa UI và authority |
 | R-2 thí điểm | một site, chỉ `viewer` | `UX-T-001..004` PASS | có finding P0/P1 |
-| R-3 đầy đủ | mở `admin` mutation | `UX-T-005` và `UX-T-006` PASS, 17 decision đã đóng | bất kỳ điều kiện R-2 nào không còn đúng |
+| R-3 đầy đủ | mở `admin` mutation | `UX-T-005/006` PASS; các decision/contract mà slice UI tiêu thụ đã `CLOSED`; TLS/RBAC/target gate PASS | bất kỳ điều kiện R-2 nào không còn đúng |
 
 **Migration route và bookmark.** Route cũ `/eng/programming` hiện trỏ tới trang
 demo graph. Khi cờ bật, `/eng/programming` trở thành PGM-01 và năm route con
@@ -1324,13 +1324,14 @@ nó được lưu bền chứ không chỉ nằm trong bộ nhớ trang; (c) sau
 | 0.5 | 2026-08-09 | Bổ sung đặc tả trực quan render được cho đủ PGM-01..06: PGM-01 desktop 1440×900 + mobile 390×844, screen-set desktop PGM-02..06 có modal Commission và drawer Restore; khóa thứ tự đọc, ánh xạ vùng→API/state/action/RBAC/copy, tám biến thể trạng thái, responsive theo AppShell thật; bổ sung 11 key copy và `ProgrammingHeader` |
 | 0.6 | 2026-08-09 | Đơn giản hóa theo Amendment A1: IA rút còn **bốn workspace** (§3), tám user journey và ma trận migration 17 use case với trạng thái `MERGED/SCENARIO/ROADMAP` (§6); acceptance bốn workspace (§5); route mới kèm bảng chuyển hướng bookmark (§11.1); ba asset SVG mới cho PGM-02/03/04 gồm modal Commission và ngăn kéo Restore (§16); xác nhận **theo rủi ro thực tế** thay danh sách bốn ô cố định; vùng thao tác nguy hiểm tách khỏi vùng chỉ đọc; cây component và hợp đồng API theo workspace (§22, §24) |
 | 0.7 | 2026-08-10 | Đóng finding consumer review `F-CR-04`: bổ sung asset `PGM-04_RETAIN_RESET_DIALOG.svg` ba artboard cho `RetainResetDialog` — thao tác không hoàn tác được duy nhất còn thiếu bản đặc tả trực quan theo `DOC-GOV-001` §2.2; thêm §16.4.1 với ba quy tắc implement (không mở khi chưa có danh sách biến, fail-closed, không kết quả lạc quan) |
+| 0.8 | 2026-08-10 | Ghi Product Owner/CTO Phạm Đình Chương `ACCEPT` phương án `OD-PROG-016` bốn workspace/tám journey và hoãn template BMS theo `OD-PROG-017`; sửa gate R-3 theo decision thật sự được slice UI tiêu thụ. Giữ M3 vì UX/FE/BE/QA/a11y/browser evidence còn thiếu |
 
 | Vai trò | Phạm vi ký | Trạng thái | Bằng chứng cần có |
 |---|---|---|---|
 | UX Lead | IA, asset trực quan + wireframe §16, cây component §22–§23, token §27 | PENDING | biên bản review UX |
 | FE Lead | khả thi kỹ thuật §22–§25, rollout §28 | PENDING | xác nhận không còn finding P0/P1 phía FE |
 | BE Lead | hợp đồng API §24 khớp Interface Spec | PENDING | contract review chung với `IFSPEC-PROG-001` |
-| Product Owner | 17 UC §17, ưu tiên release, copy §26 | PENDING | duyệt phạm vi và thuật ngữ |
+| Product Owner | 17 UC §17, ưu tiên release, copy §26 | **ACCEPT — Phạm Đình Chương, 2026-08-10; ủy quyền điện tử** | bốn workspace/tám journey, scope Rev A và hoãn template BMS theo `AUTH-PROG-2026-08-10-01` |
 | Verification Lead (QA) | `UX-T-001..006` §14, trace §21 | PENDING | test specification đủ và trace không đứt |
 | Accessibility Reviewer | §13 và §27: bàn phím, focus, tương phản, zoom 200% | PENDING | bản ghi kiểm accessibility trên trình duyệt thật |
 

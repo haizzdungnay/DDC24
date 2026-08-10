@@ -2,7 +2,7 @@
 
 - Date: 2026-08-10
 - Owner: System Architect (phê duyệt) · Backend Lead + Core Lead (đề xuất)
-- Status: **Proposed** — chờ ký; chưa ký thì `ARCH-CONF-PROG-005` còn mở
+- Status: **Proposed — System Architect ACCEPT**; chờ Verification trước khi chuyển `Accepted`; bảng ánh xạ/test là gate triển khai sau quyết định
 - Đóng xung đột: `ARCH-CONF-PROG-005` tại [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) §11
 - Related: [`IFSPEC-PROG-001`](../02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md) §9, §14 ·
   [`RSK-PROG-014`](../07_records/PROGRAMMING_RISK_REGISTER.md)
@@ -67,7 +67,7 @@ apps/core/application/st/st_loader.hpp:28-42
   ánh xạ; và một ca “mã lạ” phải ra `PRG-ERR-UNAVAILABLE-001` **kèm** log cảnh báo
   ánh xạ thiếu, không im lặng.
 
-## Điều kiện xác minh trước khi chuyển `Accepted`
+## Điều kiện sau quyết định trước khi đóng lát cắt triển khai
 
 | Điều kiện | Bằng chứng |
 |---|---|
@@ -79,6 +79,6 @@ apps/core/application/st/st_loader.hpp:28-42
 
 | Vai trò | Trạng thái | Ngày |
 |---|---|---|
-| System Architect | **PENDING** | — |
+| System Architect | **ACCEPT — Phạm Đình Chương; ủy quyền điện tử `AUTH-PROG-2026-08-10-01`, Codex ghi biên bản** | 2026-08-10 |
 | Backend Lead + Core Lead | Đề xuất | 2026-08-10 |
 | Verification Lead | **PENDING** | — |

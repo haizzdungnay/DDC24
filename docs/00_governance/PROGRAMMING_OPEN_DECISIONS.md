@@ -1,8 +1,8 @@
 # Programming Open Decisions — DDC-24 Rev A
 
 **ID:** PROG-OD-001
-**Phiên bản:** 0.7
-**Trạng thái:** M3 — Review Ready — gói quyết định đủ để ký; 17/17 vẫn OPEN
+**Phiên bản:** 0.8
+**Trạng thái:** M3 — Review Ready — `3 DECIDED`, `14 OPEN`, `0 CLOSED`; chờ đồng phê duyệt và đồng bộ downstream
 **Chủ quản:** Product / System Engineering
 **Reviewer:** Runtime Architect, Controls/Safety, Security, UX, I/O, Ops, QA
 **Approver:** Product Owner/CTO theo phạm vi quyết định
@@ -13,12 +13,12 @@
 
 | Câu hỏi | Trả lời |
 |---|---|
-| 1. File này dùng để quyết định hoặc triển khai việc gì? | Liệt kê **17 việc chưa ai quyết**, mỗi việc kèm phương án đề xuất, phương án thay thế và hậu quả nếu tiếp tục trì hoãn. Đây là file để họp và ký, không phải file thiết kế. |
-| 2. Ai phải đọc file này? | Product Owner/CTO (ký `001..006`, `009..017`), Runtime/Controls/Safety (`002/004/005/009/012/013`), Security, UX, I/O, Ops và Verification Lead. Dev đọc để biết vì sao một con số trong thiết kế còn ghi `TARGET-PENDING`. |
-| 3. Hệ thống hiện tại đang có gì? | Chỉ hai **phần** đã có quyết định: Modbus RTU Bus/Device/Point contract `Active` từ 2026-08-05 (phần Modbus của `OD-PROG-007/008`) và `DDD-SW-MBRTU-POINT-001`. Cả `007/008` vẫn chưa đóng toàn bộ; 15 mục khác chưa có quyết định ký. As-Built hiện dùng `INT=int32`, khác phương án IEC-aligned đang đề xuất. |
-| 4. Thiết kế mới thay đổi điều gì? | Không thay gì cả — file này **không được** tự quyết. Nó chuẩn bị sẵn phương án target ở bảng “Decision package” để approver chỉ việc `ACCEPT`/`REJECT`/`REQUEST CHANGE` kèm lý do. |
+| 1. File này dùng để quyết định hoặc triển khai việc gì? | Quản lý 17 quyết định Product/System, phương án, thẩm quyền, hậu quả và việc đồng bộ downstream. Đây là file quyết định, không phải file thiết kế. |
+| 2. Ai phải đọc file này? | Product Owner/CTO (ký `001..007`, `009..017`), Runtime/Controls/Safety (`002/004/005/009/012/013`), Security, UX, I/O, Ops và Verification Lead. Dev đọc để biết vì sao một con số trong thiết kế còn ghi `TARGET-PENDING`. |
+| 3. Hệ thống hiện tại đang có gì? | Phần Modbus của `OD-PROG-007/008` có contract `Active`. Ngày 2026-08-10, Product Owner/CTO + System Architect Phạm Đình Chương đã chấp thuận các phương án được liệt kê tại §“Biên bản ủy quyền”; đủ thẩm quyền để chuyển `OD-PROG-003/010/013` sang `DECIDED`. As-Built vẫn dùng `INT=int32`; đổi sang IEC-aligned chỉ có hiệu lực khi decision liên quan được đồng phê duyệt và triển khai. |
+| 4. Thiết kế mới thay đổi điều gì? | File ghi lại quyết định có thẩm quyền, nhưng **không tự biến Target thành As-Built**. `DECIDED` chỉ khóa hướng thiết kế; source, contract, migration và test vẫn phải triển khai theo Plan 53. |
 | 5. Team phải sửa module/contract nào? | Không có. Nhưng cột “Hồ sơ downstream” cho biết **file nào phải sửa ngay sau khi một quyết định được ký**; owner downstream phải xác nhận đã cập nhật trước khi chuyển `DECIDED → CLOSED`. |
-| 6. Điều gì còn bị chặn? | 17/17 `OPEN`. Nặng nhất: `OD-PROG-002` (bề rộng kiểu số — As-Built `INT=int32` vs đề xuất `INT=int16`, ảnh hưởng cả IR lẫn Point mapping) và `OD-PROG-015` (chưa ký thì **không hồ sơ nào** được dùng làm baseline implement). |
+| 6. Điều gì còn bị chặn? | `14 OPEN`, `3 DECIDED`, `0 CLOSED`. Candidate v2.5 đã pin; `OD-PROG-002` còn chờ Runtime, `OD-PROG-015` còn chờ QA/Verification và consumer review. Vì vậy `PLAN_READY` và mọi `IMPLEMENT_READY[*]` vẫn `BLOCKED`. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Không phải test — là **record**. Mỗi mục đóng khi có decision record/ADR đủ trường theo mục “Nội dung bắt buộc của decision record”, cộng bằng chứng mở khóa ở cột cuối bảng Decision package (ví dụ `OD-PROG-008` cần HIL RS485 thật). |
 
 Ba trạng thái và ý nghĩa: `OPEN` = chưa ai có thẩm quyền quyết; `DECIDED` = đã
@@ -37,23 +37,23 @@ quyết định sản phẩm.
 
 | ID | Vấn đề cần quyết định | Ảnh hưởng trước Programming Design | Owner đề xuất | Trạng thái |
 |---|---|---|---|---|
-| OD-PROG-001 | Role nào được xem, sửa Project, tạo Revision, Deployment, Activation và Rollback; cách ánh xạ vào baseline `viewer/operator/admin` hiện hành. | Chặn ma trận quyền và acceptance security. | Product + Security | OPEN |
-| OD-PROG-002 | Tập data type chính thức cho Variable/Point ST và FBD, quy tắc conversion, overflow và giá trị khởi tạo. | Chặn type system và I/O Mapping contract. | Product + Runtime | OPEN |
-| OD-PROG-003 | Capacity sản phẩm: số Project, Program, Revision, Point, Variable và kích thước logic tối đa. | Chặn sizing, persistence và performance acceptance. | Product | OPEN |
-| OD-PROG-004 | Một Project được có bao nhiêu Program active; cycle time áp dụng theo Program hay task; thứ tự chạy khi có nhiều Program cùng cycle. | Chặn scheduling requirement chi tiết. | Product + Runtime | OPEN |
-| OD-PROG-005 | Thư viện function/function block tối thiểu của ST và FBD, semantics dùng chung và chính sách versioning. | Chặn phạm vi ngôn ngữ có thể kiểm thử. | Product + Controls | OPEN |
-| OD-PROG-006 | Trải nghiệm authoring FBD, quy tắc kết nối block và format trao đổi Project/Program. | Chặn interaction và persistence Design; không thay đổi việc FBD thuộc Product Spec. | Product + UX | OPEN |
-| OD-PROG-007 | Thuộc tính bắt buộc của Local Physical I/O, Virtual Point và Modbus RTU Point: type, unit, quality, timestamp, direction và quyền ghi. Modbus slice đã Active theo approval 2026-08-05; Local/VP/unified mapping chưa khóa. | Chặn schema/contract I/O Mapping toàn Programming. | Product + I/O | OPEN — Modbus portion DECIDED |
+| OD-PROG-001 | Role nào được xem, sửa Project, tạo Revision, Deployment, Activation và Rollback; cách ánh xạ vào baseline `viewer/operator/admin` hiện hành. | Chặn ma trận quyền và acceptance security. | Product + Security | OPEN — Product `ACCEPT`; chờ Security |
+| OD-PROG-002 | Tập data type chính thức cho Variable/Point ST và FBD, quy tắc conversion, overflow và giá trị khởi tạo. | Chặn type system và I/O Mapping contract. | Product + Runtime | OPEN — Product `ACCEPT`; chờ Runtime |
+| OD-PROG-003 | Capacity sản phẩm: số Project, Program, Revision, Point, Variable và kích thước logic tối đa. | Chặn sizing, persistence và performance acceptance. | Product | **DECIDED** — Product `ACCEPT`; chờ downstream sync |
+| OD-PROG-004 | Một Project được có bao nhiêu Program active; cycle time áp dụng theo Program hay task; thứ tự chạy khi có nhiều Program cùng cycle. | Chặn scheduling requirement chi tiết. | Product + Runtime | OPEN — Product/Architect `ACCEPT`; chờ Runtime |
+| OD-PROG-005 | Thư viện function/function block tối thiểu của ST và FBD, semantics dùng chung và chính sách versioning. | Chặn phạm vi ngôn ngữ có thể kiểm thử. | Product + Controls | OPEN — Product `ACCEPT`; chờ Controls |
+| OD-PROG-006 | Trải nghiệm authoring FBD, quy tắc kết nối block và format trao đổi Project/Program. | Chặn interaction và persistence Design; không thay đổi việc FBD thuộc Product Spec. | Product + UX | OPEN — Product `ACCEPT`; chờ UX |
+| OD-PROG-007 | Thuộc tính bắt buộc của Local Physical I/O, Virtual Point và Modbus RTU Point: type, unit, quality, timestamp, direction và quyền ghi. Modbus slice đã Active theo approval 2026-08-05; Local/VP/unified mapping chưa khóa. | Chặn schema/contract I/O Mapping toàn Programming. | Product + I/O | OPEN — Product `ACCEPT`, Modbus portion DECIDED; chờ I/O |
 | OD-PROG-008 | Chi tiết Modbus RTU Point: function code, endian/word order, polling, timeout, stale quality, retry và xử lý lỗi thiết bị. `DDD-SW-MBRTU-POINT-001` đã Active; physical HIL còn mở. | Chặn negative/HIL gate, không chặn reuse contract Active trong design. | Product + Fieldbus | OPEN — contract DECIDED, HIL OPEN |
-| OD-PROG-009 | Chính sách RETAIN cho warm restart, cold restart, power cycle, Revision change, kiểu dữ liệu không tương thích và giới hạn ghi bền vững. | Chặn persistence/recovery Design và acceptance. | Product + Runtime | OPEN |
-| OD-PROG-010 | Số Revision được giữ, điều kiện compatibility, quyền và điều kiện cho Deployment/Activation/Rollback, kể cả power loss giữa giao dịch. | Chặn lifecycle state machine và recovery acceptance. | Product + System | OPEN |
+| OD-PROG-009 | Chính sách RETAIN cho warm restart, cold restart, power cycle, Revision change, kiểu dữ liệu không tương thích và giới hạn ghi bền vững. | Chặn persistence/recovery Design và acceptance. | Product + Runtime | OPEN — Product/Architect `ACCEPT`; chờ Runtime |
+| OD-PROG-010 | Số Revision được giữ, điều kiện compatibility, quyền và điều kiện cho Deployment/Activation/Rollback, kể cả power loss giữa giao dịch. | Chặn lifecycle state machine và recovery acceptance. | Product + System | **DECIDED** — Product + System `ACCEPT`; chờ downstream sync |
 | OD-PROG-011 | Online Monitor refresh rate, độ sâu trace, retention, timestamp/quality và chính sách write/force tách biệt. | Chặn monitor contract; Online Monitor mặc định chỉ quan sát. | Product + UX | OPEN |
-| OD-PROG-012 | Budget thực thi/WCET/overrun cho ba cycle time và hành vi khi Program lỗi, treo hoặc vượt budget. | Chặn performance/fault acceptance; không biến DDC-24 thành safety PLC. | Product + Runtime | OPEN |
-| OD-PROG-013 | Quan hệ migration của component graph 28-node As-Built với Project/Program Rev A, gồm các node Modbus TCP/BACnet ngoài scope. | Chặn compatibility strategy; các node cũ không tự trở thành Product Capability. | Product + Architecture | OPEN |
-| OD-PROG-014 | Quy tắc đồng tồn tại và chuyển đổi với dữ liệu/config cũ trên thiết bị đã triển khai. | Chặn upgrade/rollback compatibility. | Product + Operations | OPEN |
-| OD-PROG-015 | Hồ sơ Product approval và tiêu chí đóng readiness gate sau khi source foundation được sửa và target evidence có sẵn. | Chặn tuyên bố sẵn sàng bước Programming Design theo workflow đã duyệt. | Product + QA | OPEN |
-| OD-PROG-016 | Có chấp thuận Amendment A1 của Product Spec không: rút sáu trang thành **bốn workspace** `PGM-01..04` và thay 17 use case bằng **tám user journey** `UJ-PROG-01..08`. | Chặn IA, route, FE/BE contract và toàn bộ trace của bộ thiết kế. Nếu từ chối, downstream phải quay lại IA sáu trang. | Product + UX | OPEN |
-| OD-PROG-017 | Có đưa **thư viện mẫu BMS** (AHU, pump, fan, valve, PID vòng đơn) vào Rev A hay để Roadmap; nếu có thì mẫu là template sinh code trong Draft hay function block trong Core Library. | Chặn phạm vi Core Library, hệ thống versioning thư viện và điểm cạnh tranh “Editor và tái sử dụng”. Không chặn bốn workspace. | Product + Controls | OPEN |
+| OD-PROG-012 | Budget thực thi/WCET/overrun cho ba cycle time và hành vi khi Program lỗi, treo hoặc vượt budget. | Chặn performance/fault acceptance; không biến DDC-24 thành safety PLC. | Product + Runtime | OPEN — Product/Architect `ACCEPT`; chờ Runtime + Safety |
+| OD-PROG-013 | Quan hệ migration của component graph 28-node As-Built với Project/Program Rev A, gồm các node Modbus TCP/BACnet ngoài scope. | Chặn compatibility strategy; các node cũ không tự trở thành Product Capability. | Product + Architecture | **DECIDED** — Product + Architect `ACCEPT`; chờ downstream sync |
+| OD-PROG-014 | Quy tắc đồng tồn tại và chuyển đổi với dữ liệu/config cũ trên thiết bị đã triển khai. | Chặn upgrade/rollback compatibility. | Product + Operations | OPEN — Product/Architect `ACCEPT`; chờ Operations |
+| OD-PROG-015 | Hồ sơ Product approval và tiêu chí đóng readiness gate sau khi source foundation được sửa và target evidence có sẵn. | Chặn tuyên bố sẵn sàng bước Programming Design theo workflow đã duyệt. | Product + QA | OPEN — Product/Architect `ACCEPT`; chờ QA/Verification và candidate mới |
+| OD-PROG-016 | Có chấp thuận Amendment A1 của Product Spec không: rút sáu trang thành **bốn workspace** `PGM-01..04` và thay 17 use case bằng **tám user journey** `UJ-PROG-01..08`. | Chặn IA, route, FE/BE contract và toàn bộ trace của bộ thiết kế. Nếu từ chối, downstream phải quay lại IA sáu trang. | Product + UX | OPEN — Product `ACCEPT`; chờ UX |
+| OD-PROG-017 | Có đưa **thư viện mẫu BMS** (AHU, pump, fan, valve, PID vòng đơn) vào Rev A hay để Roadmap; nếu có thì mẫu là template sinh code trong Draft hay function block trong Core Library. | Chặn phạm vi Core Library, hệ thống versioning thư viện và điểm cạnh tranh “Editor và tái sử dụng”. Không chặn bốn workspace. | Product + Controls | OPEN — Product `ACCEPT` phương án hoãn; chờ Controls |
 
 ### Ánh xạ decision request của Modbus RTU Point proposal
 
@@ -92,6 +92,55 @@ trạng thái `OPEN`. Deadline là gate tài liệu, không phải ngày lịch 
 | `OD-PROG-015` | Phê duyệt Product v2.2 + SRS/design set sau review; không dùng host component làm readiness evidence | toàn bộ baseline 22 | `DOC-G4` | **2/3 điều kiện đã đạt:** review record có tại `PROG-P0-CONSUMER-REVIEW-2026-08-10`; finding closure `9/9` (`F-CR-01..09`). **Còn thiếu:** sign-off Product/Architect/QA — đây là điều kiện duy nhất chưa mở |
 | `OD-PROG-016` | Chấp thuận bốn workspace + tám journey; giữ nguyên toàn bộ hành vi an toàn Commission/Restore/RETAIN; giữ `UC-PROG-*` làm lớp scenario có trạng thái `MERGED/SCENARIO/ROADMAP` | Product Spec §8–§9, UX, FE, BE, IFSPEC, SRS, VVP, Trace, Plan 53 | Trước `DOC-G3` | bảng điểm heuristic ≥85, ma trận migration 17 UC không mồ côi, visual asset bốn workspace, và biên bản UX/Product review |
 | `OD-PROG-017` | Hoãn thư viện mẫu BMS sang Roadmap sau Rev A; Rev A chỉ giữ Core Library và User FB cục bộ trong Project | Product Spec §8.5–§8.6, Language/Compiler, UX, Plan 53 | Trước `DOC-G3` | phân tích chi phí compiler/test/tài liệu cho mẫu, và quyết định Product về việc mẫu là template hay function block |
+
+## Biên bản ủy quyền quyết định ngày 2026-08-10
+
+- **Record:** `AUTH-PROG-2026-08-10-01`
+- **Người ủy quyền:** **Phạm Đình Chương**
+- **Vai trò do người dùng xác nhận:** **Product Owner/CTO + System Architect**
+- **Cách ghi nhận:** người dùng chọn các phương án dưới đây và yêu cầu Codex “ký
+thay tôi”. Codex chỉ ghi lại **ủy quyền điện tử** với vai trò thư ký hồ sơ; không
+giả chữ ký viết tay, không cấp chứng thư số và không ký thay QA, Safety, Security
+hoặc discipline authority khác.
+- **Ngày hiệu lực:** 2026-08-10 đối với phạm vi quyền Product/Architect.
+- **Candidate:** bộ 22 SHA-256 phát hành lại tại
+[`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md)
+v2.5 sau khi ghi biên bản này.
+- **Rollback:** nếu người ủy quyền rút/chỉnh quyết định, tạo record mới dẫn record
+này, chuyển mục bị ảnh hưởng về `OPEN`, vô hiệu candidate liên quan và không xóa
+lịch sử.
+
+| ID / phạm vi | Quyết định được ủy quyền ghi nhận | Kết quả quyền hạn hiện tại |
+|---|---|---|
+| P0-01 | `ACCEPT` candidate sau khi chỉ thực hiện đúng các thay đổi ghi quyết định trong record này; target/HIL vẫn là gate sau | Product + Architect `ACCEPT`; Verification và consumer signatures còn thiếu |
+| F-CR-02 | Gốc staging artifact là `${STATE_DIR}/programming/staging/` | System Architect `ACCEPT`; finding authority **DONE** |
+| `OD-PROG-001` | `viewer/operator` chỉ đọc; `admin` edit/check/commission/restore/reset RETAIN; server là authority | Product `ACCEPT`; chờ Security |
+| `OD-PROG-002` | IEC-aligned: `INT=int16`, `DINT=int32`, `UINT=uint16`, cùng `BOOL/REAL/TIME`; conversion tường minh; overflow/div-zero/non-finite fail | Product `ACCEPT`; chờ Runtime |
+| `OD-PROG-003` | 1 active Project/controller; 1 Task; ST 64 KiB, 512 variable, 4096 statement; FBD 256 block/512 connection; artifact 1 MiB; 256 binding | **DECIDED** bởi Product; chờ downstream sync |
+| `OD-PROG-004` | Một Task Rev A, period `1/5/30 s`; Program Instance chạy theo thứ tự ổn định | Product + Architect `ACCEPT`; chờ Runtime |
+| `OD-PROG-005` | Core Library gồm logic/compare/math/select/limit/timer/edge/counter/scaling/deadband/PI/PID; version nằm trong artifact | Product `ACCEPT`; chờ Controls |
+| `OD-PROG-006` | FBD structured tree/list/inspector, typed pin/wire, explicit order/conversion, keyboard-complete; không free-form wiresheet | Product `ACCEPT`; chờ UX |
+| `OD-PROG-007` | Canonical identity `LOCAL/VP/MB-RTU`; có type/direction/writable/unit/quality/timestamp/freshness; missing không thành zero | Product `ACCEPT`; chờ I/O |
+| `OD-PROG-009` | Stable variable identity + layout hash/version/CRC; mismatch/corrupt cold-init kèm diagnostic; atomic save tối thiểu 60 giây; reset chỉ admin | Product + Architect `ACCEPT`; chờ Runtime |
+| `OD-PROG-010` | Revision immutable; giữ Active + LKG; stage/swap atomic; power loss phục hồi LKG hoặc trạng thái no-active rõ ràng | **DECIDED** bởi Product + System; chờ downstream sync |
+| `OD-PROG-012` | Budget `<20% period`; ba overrun liên tiếp làm đúng Task chuyển `FAULT`, output mức 5 hold-last; chỉ SafetyManager được đưa toàn trạm vào safe-state | Product + Architect `ACCEPT`; chờ Runtime + Safety |
+| `OD-PROG-013` | Chỉ `GRAPH_ONLY` hoặc `PROGRAM_ONLY`; dual-run invalid; graph cũ là nguồn migration, không relabel thành FBD | **DECIDED** bởi Product + Architect; chờ downstream sync |
+| `OD-PROG-014` | Backup trước migration; schema/version explicit; mixed/partial deploy fail-closed; rollback không xóa DB/Revision/Artifact/audit | Product + Architect `ACCEPT`; chờ Operations |
+| `OD-PROG-015` | Chấp thuận Product v2.2, SRS và design set làm baseline implement; host test không thay target/HIL | Product + Architect `ACCEPT`; chờ QA/Verification trước khi đóng |
+| `OD-PROG-016` | Bốn workspace `PGM-01..04` và tám journey | Product `ACCEPT`; chờ UX |
+| `OD-PROG-017` | Hoãn template AHU/pump/fan/valve sang Roadmap; Rev A giữ Core Library và User FB | Product `ACCEPT`; chờ Controls |
+| `ADR-030` | Hai lớp mã: `PRG-ERR-*` công khai, mã nội bộ trong `detailCode`; mapping thiếu làm build fail | System Architect `ACCEPT`; chờ Verification |
+| `ADR-031` | Rev A `HASH_ONLY`, SHA-256 bắt buộc, compiler/staging thuộc trusted local boundary; giữ layout chữ ký cho phase sau | System Architect `ACCEPT`; chờ Security |
+
+**Rationale.** Các phương án giữ Rev A bounded, giảm độ phức tạp UI/operation,
+tái sử dụng contract hiện hữu, fail-closed ở ranh giới dữ liệu/deploy và tách lỗi
+Task khỏi safe-state toàn trạm. Đây là lựa chọn phù hợp nguồn lực hãng nhỏ nhưng
+không loại bỏ gate an toàn, target/HIL hay kiểm chứng độc lập.
+
+**Hệ quả và đồng bộ bắt buộc.** `OD-PROG-003/010/013` chỉ ở `DECIDED`, chưa
+`CLOSED`; owner phải cập nhật requirement, design, contract, VVP và trace rồi ghi
+bằng chứng. Các mục còn lại giữ `OPEN` cho tới khi đúng discipline authority đồng
+phê duyệt. Không có thay đổi source/runtime nào được suy ra từ record này.
 
 ## So sánh phương án và hậu quả nếu trì hoãn
 
@@ -137,9 +186,10 @@ downstream xác nhận đã cập nhật trước khi chuyển `DECIDED → CLOS
   chưa đồng bộ.
 - `CLOSED`: decision, requirement, verification và traceability đã đồng bộ.
 
-Tại thời điểm 2026-08-09, cả 17 mục vẫn có trạng thái tổng thể `OPEN`; riêng phần
-Modbus của `OD-PROG-007/008` đã có contract Active. Không được lấp khoảng trống
-bằng hành vi supporting component hoặc giả định thiết kế.
+Tại thời điểm 2026-08-10 sau record `AUTH-PROG-2026-08-10-01`, có `3 DECIDED`,
+`14 OPEN`, `0 CLOSED`; riêng phần Modbus của `OD-PROG-007/008` đã có contract
+Active. Không được lấp khoảng trống bằng hành vi supporting component hoặc giả
+định thiết kế.
 
 ## Lịch sử sửa đổi và sign-off
 
@@ -152,10 +202,12 @@ bằng hành vi supporting component hoặc giả định thiết kế.
 | 0.5 | 2026-08-09 | Thêm `OD-PROG-016` (bốn workspace + tám journey) và `OD-PROG-017` (thư viện mẫu BMS) kèm option/trade-off/gate/bằng chứng mở khóa; tổng 17 mục OPEN |
 | 0.6 | 2026-08-10 | Sửa mô tả hiện trạng: chỉ hai phần Modbus của `007/008` đã quyết định, còn 15 mục khác chưa ký; bổ sung đúng phạm vi ký Product tới `017`; không đổi trạng thái 17/17 `OPEN` |
 | 0.7 | 2026-08-10 | Ghi rõ `OD-PROG-015` đã đạt **2/3** điều kiện mở khóa (review record + `9/9` finding closure); điều kiện duy nhất còn thiếu là sign-off Product/Architect/QA. Trạng thái **không đổi**: 17/17 vẫn `OPEN` |
+| 0.8 | 2026-08-10 | Ghi `AUTH-PROG-2026-08-10-01`: Phạm Đình Chương ủy quyền điện tử với vai trò Product Owner/CTO + System Architect; chuyển `OD-PROG-003/010/013` sang `DECIDED`, ghi partial `ACCEPT` cho các mục đã chọn; giữ `14 OPEN`, `0 CLOSED` và mọi gate bị chặn cho tới khi đủ đồng phê duyệt/downstream sync |
 
 | Vai trò | Trạng thái | Phạm vi ký |
 |---|---|---|
-| Product Owner/CTO | PENDING | `001..006`, `009..017` |
+| Product Owner/CTO | **ACCEPT — Phạm Đình Chương, 2026-08-10; ủy quyền điện tử** | `001..007`, `009..010`, `012..017` theo `AUTH-PROG-2026-08-10-01`; không bao gồm `008/011` |
+| System Architect | **ACCEPT — Phạm Đình Chương, 2026-08-10; ủy quyền điện tử** | F-CR-02, `OD-PROG-003/004/009/010/012..015`, `ADR-026..031` theo phạm vi kiến trúc |
 | Runtime/Controls/Safety | PENDING | `002/004/005/009/012/013` |
 | Security/UX/I/O/Ops | PENDING | discipline decision tương ứng |
 | Verification Lead | PENDING | acceptance và evidence plan của cả 17 mục |
@@ -170,12 +222,13 @@ Cổng lấy theo [Plan 54 §7](../03_implementation/54_PROGRAMMING_DOCUMENTATIO
 | Options và trade-off | PASS | Bảng “So sánh phương án và hậu quả nếu trì hoãn” có phương án đề xuất, phương án thay thế và hậu quả cho cả 17 mục |
 | Decision authority | PASS | Cột “Owner đề xuất” + “Ma trận trách nhiệm ra quyết định” tách R/A/C |
 | Deadline/gate | PASS | Bảng Decision package cột “Deadline/gate” gắn `DOC-G2/G3/G4`, không dùng ngày lịch giả định |
-| Quyết định | **BLOCKED** | 17/17 `OPEN`. Owner: Product Owner/CTO và discipline authority theo bảng RACI. Ảnh hưởng: chặn `DOC-G2..G4` và toàn bộ baseline 22 hồ sơ. Gate: `DOC-G4`. Điều kiện mở: mỗi reviewer ghi `ACCEPT/REJECT/REQUEST CHANGE` kèm rationale và tạo decision record đủ trường |
-| Rationale | N/A cho tới khi có quyết định | Không thể ghi rationale của một quyết định chưa được ra; schema bắt buộc đã định nghĩa ở “Nội dung bắt buộc của decision record” |
+| Quyết định | **BLOCKED một phần** | `3 DECIDED`, `14 OPEN`, `0 CLOSED`. Owner còn lại: discipline authority theo bảng RACI. Ảnh hưởng: `DOC-G2..G4` và baseline implement chưa mở. Điều kiện mở: đủ đồng phê duyệt, downstream sync và candidate/sign-off hợp lệ |
+| Rationale | PASS cho record đã quyết; N/A cho mục chưa đủ quyền | §“Biên bản ủy quyền” ghi rationale chung; decision package giữ trade-off riêng từng nhóm |
 | Consequences | PASS | Cột “Hậu quả nếu chưa quyết định” cho 11 nhóm phủ đủ 17 mục |
 | Tài liệu phụ thuộc phải đồng bộ | PASS | Bảng Decision package cột “Hồ sơ downstream”; điều kiện `DECIDED → CLOSED` yêu cầu owner downstream xác nhận |
 | Bằng chứng mở khóa | PASS | Cột “Bằng chứng để mở khóa” cụ thể theo từng mục (ví dụ `OD-PROG-008` cần record HIL RS485 thật) |
 | Link nội bộ sạch | PASS | harness: local link missing `0`, anchor missing `0` |
 
-Một `BLOCKED` duy nhất còn lại là bản chất của loại tài liệu này: file đạt M3 khi
-**gói quyết định đủ để ký**, không phải khi đã ký. Chuyển M4/M5 cần chữ ký thật.
+File giữ M3: một phần quyết định đã được ủy quyền, nhưng `14 OPEN`, downstream
+sync, review discipline và approval candidate chưa hoàn tất. Chuyển M4/M5 cần
+review và sign-off của đúng các vai trò còn lại.

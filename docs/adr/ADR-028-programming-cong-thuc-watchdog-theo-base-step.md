@@ -2,7 +2,7 @@
 
 - Date: 2026-08-10
 - Owner: System Architect + Safety Reviewer (phê duyệt) · Core Lead + Ops (đề xuất)
-- Status: **Proposed** — chờ ký; chưa ký thì `ARCH-CONF-PROG-003` còn mở
+- Status: **Proposed — System Architect ACCEPT**; chờ Safety và `OD-PROG-012` trước khi chuyển `Accepted`; target evidence là gate triển khai/release sau quyết định
 - Đóng xung đột: `ARCH-CONF-PROG-003` tại [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) §11
 - Related: [`DDD-CTRL-PROG-001`](../02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md) §3 ·
   [`OPS-PROG-001`](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) ·
@@ -78,7 +78,7 @@ Ba vấn đề của trạng thái này:
 - `NFR-REQ-PROG-103` chỉ đóng được bằng số đo `SCHED_FIFO` trên target, không dùng
   lại số đo `SCHED_OTHER` cũ.
 
-## Điều kiện xác minh trước khi chuyển `Accepted`
+## Điều kiện sau quyết định trước khi đóng lát cắt triển khai/release
 
 | Điều kiện | Bằng chứng |
 |---|---|
@@ -91,6 +91,6 @@ Ba vấn đề của trạng thái này:
 
 | Vai trò | Trạng thái | Ngày |
 |---|---|---|
-| System Architect | **PENDING** | — |
+| System Architect | **ACCEPT — Phạm Đình Chương; ủy quyền điện tử `AUTH-PROG-2026-08-10-01`, Codex ghi biên bản** | 2026-08-10 |
 | Safety Reviewer | **PENDING** | — |
 | Core Lead + Ops | Đề xuất | 2026-08-10 |

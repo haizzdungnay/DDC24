@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `PROG-DOCSET-001` |
-| Phiên bản | 1.6 |
+| Phiên bản | 1.7 |
 | Trạng thái | **M3 — Review Ready** — checklist đủ, TBD/BLOCKED có owner, link sạch; chờ peer review để lên M4 |
 | Ngày | 2026-08-10 |
 | Chủ quản | System Engineering |
@@ -18,7 +18,7 @@
 | 3. Hệ thống hiện tại đang có gì? | Đường điều khiển production hiện chạy bằng **graph** (`graph.json` nạp lúc bootstrap). Các component ST/IR/scheduler/RETAIN đã có source và host test nhưng **chưa nối vào production**. FE Programming mới chỉ là trang placeholder. REST/WS Programming chưa có route production. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm một đường Programming song song (Project → Draft → Revision → Check → Commission → Active) và một **cutover độc quyền**: hoặc `GRAPH_ONLY`, hoặc `PROGRAM_ONLY`, không bao giờ cả hai. Bảy ranh giới bắt buộc ở §4 là phần không được thương lượng. Giao diện tổ chức theo **bốn workspace** và **tám user journey** `UJ-PROG-01..08` (Amendment A1, chờ `OD-PROG-016`). |
 | 5. Team phải sửa module/contract nào? | File này không giao việc code. Nó chỉ tay tới hồ sơ chủ quản: `mkddc-web` (BE Design), `mkddc-core` (FW-SOM + Control Semantics), `mkddc-iobus` (không đổi), STM32 (FW MCU Design), `apps/web-ui` (FE + UI/UX Design). |
-| 6. Điều gì còn bị chặn? | **Chỉ còn chữ ký.** Vòng consumer review **kỹ thuật** đã hoàn tất (`9/9` finding `F-CR-01..09` đóng), 6 xung đột kiến trúc có `ADR-026..031` (`Proposed`), candidate đã ghim bằng 22 SHA-256 (`candidate_pin_check.py` PASS). Nhưng cả 22 hồ sơ vẫn ở `M3 — Review Ready`: `M4` đòi **reviewer là người thật** (`DOC-GOV-001` §3) và `M5` đòi chữ ký phê duyệt. 17 `OD-PROG-*` vẫn `OPEN`. Chi tiết ở Plan 53, §8 và §11. |
+| 6. Điều gì còn bị chặn? | Vòng consumer review kỹ thuật hoàn tất (`9/9` finding đóng); Product Owner/CTO + System Architect đã ủy quyền điện tử, tạo `3 DECIDED`, `14 OPEN`, `0 CLOSED`, và Architect `ACCEPT` 6/6 ADR. Nhưng 22 hồ sơ vẫn M3: consumer/discipline/Verification chưa ký, ADR còn `Proposed`, 0/32 Test Result. Chi tiết ở Plan 53, §8 và §11. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với riêng file này: register 22 dòng khớp đường dẫn thật, link/anchor sạch, không trùng ID tài liệu — đo bằng harness ở [`PROG-REV-2026-08-09`](../07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md). Với sản phẩm: 0/32 `VS-PROG-*` có Test Result, nên **không hồ sơ nào chứng minh implementation**. |
 
 Thuật ngữ điều hướng: **workspace** là một trong bốn màn hình chính `PGM-01..04`;
@@ -74,28 +74,28 @@ Product/ADR Active
 
 | ID | Hồ sơ chủ quản | Trách nhiệm | Trạng thái |
 |---|---|---|---|
-| `PROG-DOCSET-001` | [Programming Design Index](PROGRAMMING_DESIGN_INDEX.md) | quyền tài liệu, danh mục 22 hồ sơ và luồng đọc | `M3` — Review Ready; chờ consumer review |
+| `PROG-DOCSET-001` | [Programming Design Index](PROGRAMMING_DESIGN_INDEX.md) | quyền tài liệu, danh mục 22 hồ sơ và luồng đọc | `M3` v1.7 — Product/Architect `ACCEPT`; consumer/Verification/discipline còn chờ |
 | `SRS-PROG-001` | [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | 60 requirement phân bổ theo layer, tiêu chí chấp nhận, ngưỡng khả dụng | `M3` v0.5 — Review Ready; chờ Product/QA review |
-| `PROG-OD-001` | [Programming Open Decisions](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định Product/System đang mở | `M3` v0.6 — gói quyết định đủ để ký; 17/17 OPEN |
-| `ARCH-PROG-001` | [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | context, ownership, process, failure boundary, cutover | `M3` — Review Ready; xung đột §11 còn mở |
+| `PROG-OD-001` | [Programming Open Decisions](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định Product/System | `M3` v0.8 — `3 DECIDED`, `14 OPEN`, `0 CLOSED`; Product/Architect đã ghi ủy quyền |
+| `ARCH-PROG-001` | [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | context, ownership, process, failure boundary, cutover | `M3` v0.6 — Architect `ACCEPT`; xung đột §11 chờ đồng phê duyệt/evidence |
 | `DM-PROG-001` | [Programming Data Model](software/PROGRAMMING_DATA_MODEL.md) | Project/Draft/Revision/Artifact/Runtime/Audit | `M3` — Review Ready; chờ consumer review |
-| `IFSPEC-PROG-001` | [Programming Interface Specification](interfaces/PROGRAMMING_INTERFACE_SPEC.md) | REST/WS/internal control/error/idempotency contracts | `M3` — Review Ready; OpenAPI/ABI chưa Active |
+| `IFSPEC-PROG-001` | [Programming Interface Specification](interfaces/PROGRAMMING_INTERFACE_SPEC.md) | REST/WS/internal control/error/idempotency contracts | `M3` v0.7 — Product/Architect `ACCEPT`; OpenAPI/ABI chưa Active |
 | `DDD-LANG-PROG-001` | [Language/Compiler Design](software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md) | ST/FBD subset, type, diagnostic, common IR và compiler | `M3` — Review Ready; chờ consumer review |
 | `IFSPEC-ART-PROG-001` | [Artifact/Loader Spec](interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md) | artifact layout, bounded loader, stage/load/swap/reject | `M3` — Review Ready; chờ consumer review |
 | `DDD-CTRL-PROG-001` | [Control Semantics](software/PROGRAMMING_CONTROL_SEMANTICS.md) | scan order, priority, PID, hold-last, overrun, transition | `M3` — Review Ready; chờ Safety review |
 | `DDD-LIFE-PROG-001` | [Runtime Lifecycle](software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md) | Check/Commission/Restore/RETAIN/LKG/restart/power-loss | `M3` — Review Ready; chờ consumer review |
-| `UX-WEB-PROG-001` | [Programming UI/UX Design](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) | IA bốn workspace, tám journey, asset visual PGM-01..04, copy, states, responsive, accessibility | `M3` v0.6 — Review Ready; chờ `OD-PROG-016`, usability/a11y review và browser evidence |
+| `UX-WEB-PROG-001` | [Programming UI/UX Design](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) | IA bốn workspace, tám journey, asset visual PGM-01..04, copy, states, responsive, accessibility | `M3` v0.8 — Product `ACCEPT`; chờ UX/FE/BE/QA/a11y review và browser evidence |
 | `DDD-FE-PROG-001` | [Programming FE Design](software/PROGRAMMING_FE_DESIGN.md) | React feature, state/query/mutation, error recovery | `M3` — Review Ready; chờ consumer review |
 | `DDD-BE-PROG-001` | [Programming BE Design](software/PROGRAMMING_BE_DESIGN.md) | Go service, persistence, compiler job, RBAC/audit | `M3` — Review Ready; chờ consumer review |
 | `DDD-FWSOM-PROG-001` | [Programming FW-SOM Design](software/PROGRAMMING_FW_SOM_DESIGN.md) | compiler/runtime boundary, scheduler, activation, RETAIN | `M3` — Review Ready; chưa có bằng chứng target |
 | `DDD-FWMCU-PROG-001` | [Programming FW MCU Design](firmware/PROGRAMMING_FW_MCU_DESIGN.md) | IOP continuity, sampling/actuation, safe-timeout, diag | `M3` — Review Ready; HIL vật lý RED |
 | `DDD-HW-PROG-001` | [Programming HW Design](../04_design/hardware/PROGRAMMING_HW_DESIGN.md) | electrical constraints và điểm đo HIL | `M3` — Review Ready; thẩm quyền HW NO-GO |
 | `DDD-SEC-PROG-001` | [Security Design](software/PROGRAMMING_SECURITY_DESIGN.md) | trust boundary, RBAC, integrity, sandbox, audit và abuse case | `M3` — Review Ready; TLS production còn chặn |
-| `VVP-PROG-001` | [Programming Verification Plan](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | test level, 32 scenario gồm usability, evidence và release gate | `M3` v0.6 — Review Ready; 0/32 Test Result |
+| `VVP-PROG-001` | [Programming Verification Plan](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | test level, 32 scenario gồm usability, evidence và release gate | `M3` v0.7 — Product `ACCEPT`; Verification PENDING, 0/32 Test Result |
 | `OPS-PROG-001` | [Programming Operations Runbook](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | backup, commission, restore, replacement, incident | `M3` — Review Ready; chưa diễn tập |
 | `RSK-PROG-001` | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | rủi ro, kiểm soát, owner và residual gate | `M3` v0.5 — Review Ready; 16/16 risk Open |
-| `TRACE-PROG-001` | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Requirement → Design → Interface → Test → Evidence | `M3` — Review Ready; evidence production RED |
-| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.11 — 6/6 thẻ P1 đủ 11 trường; 0/6 DoD, CI/target/HIL/review/sign-off còn BLOCKED |
+| `TRACE-PROG-001` | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Requirement → Design → Interface → Test → Evidence | `M3` v2.6 — `3 DECIDED/14 OPEN`; evidence production RED |
+| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.15 — Product/Architect `ACCEPT`; 0/6 P1 DoD, Verification/consumer/discipline/target/HIL còn BLOCKED |
 
 Tiến độ tạo, hoàn thiện, review và phê duyệt đúng 22 hồ sơ trên được quản lý tại
 [`PLAN-PROG-DOC-054`](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md).
@@ -185,8 +185,8 @@ của người soạn không thay thế được. Vì vậy hiện tại **M4 = 
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|
-| Product Owner | PENDING | chấp thuận amendment v2.2 và scope/capacity |
-| Software/Runtime Architect | PENDING | khóa Architecture, Interface, FW-SOM |
+| Product Owner | **ACCEPT — Phạm Đình Chương, 2026-08-10; ủy quyền điện tử** | amendment v2.2 và scope/capacity theo `AUTH-PROG-2026-08-10-01`; QA/discipline còn mở |
+| Software/Runtime Architect | **ACCEPT phần System Architect — Phạm Đình Chương, 2026-08-10** | kiến trúc/cutover/staging; Runtime co-sign/evidence còn mở |
 | Controls/Safety Reviewer | PENDING | khóa arbitration, hold-last, overrun, watchdog |
 | HW/FW Lead | PENDING | khóa IOP continuity, pin/peripheral và HIL plan |
 | UX/FE Lead | PENDING | khóa IA, state, accessibility và API dependency |
@@ -212,6 +212,7 @@ của người soạn không thay thế được. Vì vậy hiện tại **M4 = 
 | 1.4 | 2026-08-10 | Đồng bộ Plan 53 v0.11: 6/6 thẻ P1 đã đủ 11 trường, dependency và evidence đúng gate; vẫn 0/6 DoD, 0/32 Test Result và không đổi M3/M4/M5 |
 | 1.5 | 2026-08-10 | Đồng bộ Plan 53 v0.12 và vòng consumer review kỹ thuật: 7 hồ sơ trong mẫu số 22 lên revision mới khi đóng `F-CR-01..08` (`ARCH-PROG-001` 0.5, `IFSPEC-PROG-001` 0.6, `DDD-SEC-PROG-001` 0.4, `DDD-BE-PROG-001` 0.6, `DDD-FE-PROG-001` 0.7, `UX-WEB-PROG-001` 0.7, `TRACE-PROG-001` 2.5); thêm `ADR-026..031` làm nguồn quyết định kiến trúc. Mức M3/M4/M5 **không đổi** — `0/22 M4` vì chữ ký người thật còn thiếu |
 | 1.6 | 2026-08-10 | Đồng bộ Plan 53 v0.14 và manifest v2.3: câu 6 tách rõ “review kỹ thuật xong” khỏi “authority đã ký”, và ghi candidate định danh bằng 22 SHA-256 thay vì commit. Mức M3/M4/M5 **không đổi** — `0/22 M4` |
+| 1.7 | 2026-08-10 | Ghi `AUTH-PROG-2026-08-10-01`: Product Owner/CTO + System Architect Phạm Đình Chương `ACCEPT`; Open Decisions v0.8 có `3 DECIDED`, `14 OPEN`; Plan 53 v0.15. Giữ `0/22 M4`, `0/22 M5` vì consumer/discipline/Verification và evidence còn thiếu |
 
 ## 11. Phụ lục — Tự kiểm cổng M3 (loại: Kiểm soát tài liệu)
 
