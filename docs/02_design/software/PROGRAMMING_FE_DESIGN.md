@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-FE-PROG-001` |
-| Phiên bản | 0.6 |
-| Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; chưa có API nên chưa có bằng chứng trình duyệt |
+| Phiên bản | 0.7 |
+| Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; một kiến trúc route duy nhất; chưa có API nên chưa có bằng chứng trình duyệt |
 | Ngày | 2026-08-09 |
 | Chủ quản | Frontend Lead |
 | Người review | UX Lead, Backend Lead, Verification Lead |
@@ -93,8 +93,8 @@ runtime state, Point quality, priority winner hoặc audit truth.
 ```text
 features/programming/
 ├── ProgrammingRoutes.tsx     xem §0.1 — 4 route + 5 redirect
-├── api/{queries,mutations,contracts}.ts   client sinh từ OpenAPI, không viết tay
-├── model/{types,selectors,reducer}.ts     state model §3
+├── api/                      client sinh từ OpenAPI, không viết tay — chi tiết §12
+├── model/                    state model §3 — chi tiết §12
 ├── layout/                   ProgrammingLayout, Header, ContextBar
 ├── shared/{StateBadge,ProblemsDrawer,DangerZone}.tsx
 └── __tests__/
@@ -248,16 +248,31 @@ claim feature.
 
 ## 12. Component, hook, type và ownership
 
+> Cây thư mục hiệu lực **chỉ có một**: `§0.1` cho bốn workspace và `§2` cho các
+> module cắt ngang. Mục này **không** lặp lại cây, chỉ mở chi tiết nội dung của
+> `api/` và `model/` cùng quyền sở hữu state.
+
+`api/` và `model/` là hai thư mục duy nhất có ràng buộc tên file, vì chúng chứa
+mã sinh tự động và ranh giới không được lẫn:
+
 ```text
-features/programming/
-├── ProgrammingRoutes.tsx, ProgrammingLayout.tsx
-├── api/{client.generated.ts,models.generated.ts,errors.ts,events.ts}
-├── context/{ProgrammingContext.tsx,useProgrammingContext.ts}
-├── overview/, editor/, fbd/, mapping/, task/
-├── check/, commission/, runtime/, retain/, bundles/, audit/
-├── state/{draftReducer.ts,operationReducer.ts,selectors.ts,queryKeys.ts}
-└── test/{fixtures.ts,handlers.tsx,builders.ts}
+features/programming/api/
+├── client.generated.ts     sinh từ OpenAPI — cấm sửa tay
+├── models.generated.ts     sinh từ OpenAPI — cấm sửa tay
+├── queries.ts, mutations.ts   hook bọc client sinh tự động
+├── contracts.ts            type thu hẹp/discriminated union cho UI
+└── errors.ts, events.ts    chuẩn hóa `PRG-ERR-*` và envelope sự kiện
+
+features/programming/model/
+├── types.ts                DTO sinh tự động + union UI tường minh
+├── draftReducer.ts, operationReducer.ts
+├── selectors.ts
+└── queryKeys.ts
 ```
+
+Hai file `*.generated.ts` là đầu ra của bước sinh mã từ
+`contracts/openapi/openapi.yaml`; nếu chúng lệch với OpenAPI thì `FE-T-002`
+phải fail, không được sửa tay cho khớp.
 
 | State | Owner | Persistence/lifecycle |
 |---|---|---|
@@ -327,14 +342,24 @@ chỉ bắt buộc sau code/UI change, không áp dụng cho phiên docs-only n�
 
 ## 16. Page-to-code và data dependency mức triển khai
 
+Bảng dưới đây dùng **đúng bốn route** của `§0.1` và `UX §11`; ba tab của `PGM-02`
+và ba tab của `PGM-04` là trạng thái `?tab=` trong cùng một route, không phải
+route riêng. Năm đường dẫn cũ (`.../programs`, `.../mapping`, `.../task`,
+`/runtime` không tab, `/eng/programming` legacy) chỉ tồn tại dưới dạng chuyển
+hướng ở `ProgrammingRoutes.tsx` — chúng **không** có page container riêng.
+
 | Route | Page/container target | Query bắt buộc | Mutation | Empty/error owner |
 |---|---|---|---|---|
-| `/eng/programming` | `ProgrammingOverviewPage` | capability, projects, active/runtime, attention | không | page giữ active truth khi Draft query lỗi |
-| `.../projects/:id/programs` | `ProgramsPage` | Draft document, symbols, diagnostics | save Draft, create Check | editor buffer + Problems |
-| `.../mapping` | `MappingPage` | Draft bindings + paged Point catalog | save binding batch | row field + summary |
-| `.../task` | `TaskLibraryPage` | task/library/capability | save task/order | exact invalid field |
-| `.../commission` | `CommissionPage` | readiness/impact/active/overrides | begin operation | persistent UNKNOWN/reconcile |
-| `/eng/programming/runtime` | `ProgrammingRuntimePage` | runtime/trace/revisions/audit | restore/import theo tab | stale/gap/read-only |
+| `/eng/programming` | `OverviewPage` | capability, projects, active/runtime, attention, `overrides?activeOnly=true` | không | page giữ active truth khi Draft query lỗi |
+| `.../projects/:projectId/design?tab=programs` | `DesignWorkspacePage` → tab Chương trình | Draft document, symbols, diagnostics | save Draft, create Check | editor buffer + Problems |
+| `.../projects/:projectId/design?tab=mapping` | `DesignWorkspacePage` → tab Điểm & Ánh xạ | Draft bindings + paged Point catalog | save binding batch | row field + summary |
+| `.../projects/:projectId/design?tab=execution` | `DesignWorkspacePage` → tab Thực thi | task/library/capability | save task/order | exact invalid field |
+| `.../projects/:projectId/commission` | `CheckCommissionPage` | readiness/impact/active/overrides | begin Check, begin operation | persistent UNKNOWN/reconcile |
+| `/eng/programming/runtime?tab=runtime\|watch\|service` | `RuntimeServicePage` | runtime/monitor/trace/revisions/audit theo tab | restore/import/reset RETAIN ở tab `service` | stale/gap/read-only |
+
+Ba tab của `PGM-02` dùng **chung một** `useDraftQuery` ở cấp workspace theo ràng
+buộc 3 của `§0.1`; chỉ tab Điểm & Ánh xạ thêm `usePointCatalogQuery`. Tab không
+hợp lệ rơi về `programs` với `PGM-02` và `runtime` với `PGM-04`.
 
 Query key luôn chứa controller/project/revision/resource version phù hợp; không
 dùng key chỉ `programming`. Mutation thành công invalidate đúng aggregate; event
@@ -342,12 +367,13 @@ chỉ update cache khi sequence/resource version hợp lệ, còn lại invalida
 
 | Layer target | Public contract | Không được chứa |
 |---|---|---|
-| `api/programmingClient.ts` | typed HTTP/event adapter, error normalization | toast/copy/business decision |
+| `api/client.generated.ts` | typed HTTP adapter sinh từ OpenAPI | sửa tay, toast/copy, business decision |
+| `api/{queries,mutations}.ts` | hook query/mutation, orchestration | authority validation |
+| `api/{errors,events}.ts` | chuẩn hóa `PRG-ERR-*`, envelope/sequence sự kiện | quyết định hiển thị |
 | `model/types.ts` | generated DTO + explicit UI discriminated union | `any`, fake default |
-| `model/reducers.ts` | editing/check/operation/core/runtime transition | HTTP calls/component state |
-| `hooks/useProgramming*.ts` | query/mutation/orchestration | authority validation |
-| `components/*` | presentational props/a11y | direct fetch/global mutation |
-| `pages/*` | route composition/error boundary | duplicated domain types |
+| `model/*Reducer.ts` | editing/check/operation/core/runtime transition | HTTP calls/component state |
+| `layout/`, `shared/` | presentational props/a11y | direct fetch/global mutation |
+| `overview/`, `design/`, `commission/`, `runtime/` | route composition/error boundary | duplicated domain types |
 
 ## 17. Blocker, lịch sử và phê duyệt
 
@@ -365,6 +391,7 @@ chỉ update cache khi sequence/resource version hợp lệ, còn lại invalida
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; ghi bẫy `npm test` chỉ quét `src/` |
 | 0.5 | 2026-08-09 | Amendment A1: thêm §0.1 cấu trúc thư mục và route cho bốn workspace, ba ràng buộc về tab/Draft/truy vấn dùng chung, và bảng năm chuyển hướng route cũ |
 | 0.6 | 2026-08-09 | Đóng finding P1-01: xóa cây thư mục và tám route `/engineering/programming/...` cũ khỏi §2 để chỉ còn **một** kiến trúc route hiệu lực; §2 chuyển thành mô tả module cắt ngang; metadata nhận `FE-101..115` |
+| 0.7 | 2026-08-10 | Đóng finding consumer review `F-CR-01` — phần còn sót của P1-01: §12 và §16 vẫn mô tả IA sáu trang. §12 bỏ cây thư mục trùng, chỉ giữ chi tiết `api/`/`model/` và đánh dấu `*.generated.ts` là đầu ra sinh mã; §16 thay sáu dòng route cũ bằng đúng bốn route `PGM-01..04` với tab `?tab=`, và bảng layer đổi sang tên thư mục có thật ở §0.1/§2 |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
