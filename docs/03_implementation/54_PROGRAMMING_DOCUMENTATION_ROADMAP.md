@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 2.7 |
+| Phiên bản | 2.8 |
 | Trạng thái | **22/22 M3 — Product + Architect đã `ACCEPT` v2.5; candidate v2.7 chờ xác nhận delta; M4/M5 vẫn 0/22, `PLAN_READY BLOCKED`** |
 | Ngày baseline | 2026-08-10 |
 | Chủ quản | System Engineering + Document Control |
@@ -464,7 +464,7 @@ Candidate P0 hiện hành đã ghim:
 | Thuộc tính | Giá trị |
 |---|---|
 | Định danh | 22 SHA-256 ở manifest v2.7; không dùng commit/candidate đã `SUPERSEDED` làm revision ký |
-| Commit/tree | `PENDING` — Document Control ghi bổ sung sau commit phát hành mà không đổi 22 hash |
+| Commit/tree | `a23620026c6c6a44625d149361b9949b31e93f90` / `8296338dd2f320ac533daec2057441052aee3470` |
 | Nhánh phát hành | `docs/programming-plan-only-gate-audit` |
 | Manifest | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
 | Phạm vi | 22/22 hồ sơ baseline; delta v2.5→v2.7 chỉ đổi `PLAN-PROG-053` về chỉ báo cấu hình/trạng thái |
@@ -511,6 +511,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 2.5 | 2026-08-10 | Thêm snapshot `P0-consumer-review`: vòng review kỹ thuật xong, `9/9` finding đóng, 9/22 hồ sơ lên revision mới, `ADR-026..031` `Proposed`, candidate ghim bằng 22 SHA-256. Sửa phát biểu R0 và trạng thái đầu file để tách “review kỹ thuật xong” khỏi “authority đã ký”. **M3 22/22, M4/M5 vẫn 0/22**, DOC-G4 giữ RED | Document Control + Dev Lead |
 | 2.6 | 2026-08-10 | Thêm snapshot `authority-1`; ghi Product Owner/CTO + System Architect Phạm Đình Chương `ACCEPT`, staging DONE, Architect `ACCEPT` 6/6 ADR, Open Decisions `3 DECIDED/14 OPEN`. Giữ M3 22/22, M4/M5 0/22 và DOC-G4 RED do consumer/Verification/discipline/QA còn thiếu | Product + Architect + Document Control |
 | 2.7 | 2026-08-10 | Thêm snapshot `gate-audit-1`; sửa chỉ báo candidate đã cũ trong Plan 53, ghim candidate v2.7 và đo lại CI/target vẫn bị chặn. Không đổi requirement/contract/thiết kế/code; giữ 22/22 M3, M4/M5 0/22, P1 0/6 DoD và yêu cầu Product/Architect xác nhận delta v2.7 | Dev Lead + Document Control |
+| 2.8 | 2026-08-10 | Ghi commit `a236200` và tree `8296338d` chứa candidate v2.7 vào tracker sau commit phát hành; bước bổ sung chỉ đổi hồ sơ hỗ trợ ngoài mẫu số 22, không thay candidate hay trạng thái gate | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|

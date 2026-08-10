@@ -4,7 +4,7 @@
 |---|---|
 | ID | `PROG-P0-GATE-2026-08-10` |
 | Loại | Decision/design/sign-off package; hồ sơ hỗ trợ, không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 1.7 |
+| Phiên bản | 1.8 |
 | Ngày | 2026-08-10 |
 | Phạm vi | `PROG-000..006`, `DOC-G4`, `G0`, `PLAN_READY` |
 | Chủ quản | Dev Lead + System Architect |
@@ -48,7 +48,7 @@ Test Result target/HIL hoặc chữ ký phê duyệt.
 |---|---|---|
 | Baseline 22 hồ sơ | commit `05c1c480418a2256f1010527f9d90fb6ff549b86` | Đã ghim, 22/22 file được Git theo dõi; đây là baseline trước vòng sửa P0 ngày 2026-08-10 |
 | Chuỗi candidate P0 | `05c1c48` → `e3e9fb2` (SUPERSEDED) → **candidate hiện hành** | Định danh là 22 SHA-256 ở manifest §2, không phải commit — xem manifest §1.1. Reviewer chạy `python3 scripts/candidate_pin_check.py` trước khi đọc |
-| Candidate P0 **hiện hành** | Định danh bằng **22 SHA-256** ở [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §2 (v2.7); commit chứa nội dung sẽ được ghi bổ sung ở §1.1 của manifest | Reviewer chạy `python3 scripts/candidate_pin_check.py` (`22/22` PASS) rồi ghi 22 hash hoặc commit đã được Document Control bổ sung trong kết luận |
+| Candidate P0 **hiện hành** | Định danh bằng **22 SHA-256** ở [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §2 (candidate v2.7); commit `a236200` được ghi đầy đủ ở §1.1 của manifest v2.8 | Reviewer chạy `python3 scripts/candidate_pin_check.py` (`22/22` PASS) rồi ghi 22 hash hoặc commit đã được Document Control bổ sung trong kết luận |
 | Candidate P0 **cũ** | `e3e9fb26f61b39df8f805916333fc03b51f07f5f` | **`SUPERSEDED`** — 11/22 hồ sơ đã đổi qua ba vòng R1/R2/R3. **Không** ký lên revision này |
 | Mức trưởng thành | 22/22 `M3`; 0/22 `M4`; 0/22 `M5` | Hồ sơ đủ để review, chưa đủ để phê duyệt/implement |
 | Bằng chứng sản phẩm | 0/32 Test Result | Không suy ra implementation, HIL hoặc release readiness |
@@ -173,3 +173,4 @@ Tám chữ ký consumer ở
 | 1.5 | 2026-08-10 | Đóng `F-CR-10`: §2 và §5 còn chỉ reviewer checkout `e3e9fb2` — revision đã `SUPERSEDED` — nên chữ ký thu được sẽ đặt lên nội dung sai. Chuyển sang định danh 22 SHA-256, thêm dòng candidate cũ, bắt buộc chạy `candidate_pin_check.py` trước khi đọc và trước khi ký; §6 nêu đủ năm trường bắt buộc của một chữ ký hợp lệ |
 | 1.6 | 2026-08-10 | Ghi ủy quyền điện tử `AUTH-PROG-2026-08-10-01` của Phạm Đình Chương với vai trò Product Owner/CTO + System Architect: Product/Architect `ACCEPT`, xác nhận gốc staging, Architect `ACCEPT` 6/6 ADR. Giữ `PLAN_READY BLOCKED` vì Verification/consumer/discipline sign-off, 14 OD và 6 ADR final còn mở |
 | 1.7 | 2026-08-10 | Rà gate trước P1: phát hành candidate v2.7 vì `PLAN-PROG-053` còn hai chỉ báo trỏ candidate đã `SUPERSEDED`; không đổi requirement/contract/thiết kế. Bảo toàn chữ ký v2.5 như lịch sử nhưng yêu cầu Product/Architect xác nhận delta trên v2.7; giữ mọi gate `BLOCKED` |
+| 1.8 | 2026-08-10 | Ghi bổ sung commit `a236200`/tree `8296338d` chứa candidate v2.7; không đổi 22 hash, phán quyết hay trạng thái gate |

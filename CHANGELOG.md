@@ -15,7 +15,8 @@ trong `PLAN-PROG-053` §6.5/§10 vẫn gọi `e3e9fb2` là candidate hiện hàn
 `SUPERSEDED`; đồng bộ Document Hub, `CONTROL.md`, gói P0 và Roadmap 54 theo trạng
 thái thật `3 DECIDED / 14 OPEN / 0 CLOSED`, `0/22 M4/M5`, `0/32` Test Result.
 
-**Kiểm soát cấu hình.** Phát hành manifest v2.7. Delta v2.5→v2.7 chỉ đổi
+**Kiểm soát cấu hình.** Phát hành candidate v2.7; manifest v2.8 ghi commit
+`a236200`/tree `8296338d` chứa candidate. Delta v2.5→v2.7 chỉ đổi
 `PLAN-PROG-053` để sửa chỉ báo candidate/trạng thái, không đổi requirement,
 contract hoặc thiết kế kỹ thuật. Chữ ký Product + Architect trên v2.5 được giữ
 như lịch sử nhưng không tự chuyển sang revision mới; cần chính hai vai trò xác

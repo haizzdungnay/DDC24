@@ -4,14 +4,14 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 2.7 |
+| Phiên bản | 2.8 |
 | Ngày | 2026-08-10 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
 | Trạng thái | **ACTIVE — candidate v2.7 đã ghim; Product/Architect cần xác nhận delta trạng thái; consumer/Verification/discipline approval PENDING** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | `PENDING` — sẽ ghi bổ sung sau commit phát hành; **22 hash ở §2 là định danh hiện hành** |
-| PR nguồn | PENDING |
+| Candidate commit | `a236200` — ghi đầy đủ ở §1.1; **22 hash ở §2 là định danh hiện hành** |
+| PR nguồn | Không thuộc định danh candidate; tra từ commit ở §1.1 hoặc CHANGELOG |
 | Candidate trước | v2.5 tại commit `ac059a1` — **SUPERSEDED bởi đợt sửa chỉ báo cấu hình/trạng thái**; không đổi requirement/contract/thiết kế, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
@@ -46,8 +46,8 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | `PENDING` — cập nhật sau commit phát hành v2.7 |
-| Git tree | `PENDING` — cập nhật sau commit phát hành v2.7 |
+| Commit chứa nội dung candidate | `a23620026c6c6a44625d149361b9949b31e93f90` |
+| Git tree | `8296338dd2f320ac533daec2057441052aee3470` |
 | Nhánh phát hành | `docs/programming-plan-only-gate-audit` |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
@@ -103,8 +103,8 @@ Reviewer đọc lại hồ sơ đánh dấu `✱`; manifest §4 nêu lý do từ
 
 | Hồ sơ | Phiên bản tại lần ghim này | Vai trò |
 |---|---|---|
-| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v2.7 | Tracker hồ sơ |
-| `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v1.7 | Gói authority review |
+| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v2.8 | Tracker hồ sơ |
+| `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v1.8 | Gói authority review |
 | `docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md` | v1.3 | Biên bản consumer review |
 
 Ba hồ sơ này ghi **phiên bản**, không ghi SHA-256. Lý do giống §1.1: chúng thay đổi
@@ -180,3 +180,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 2.5 | 2026-08-10 | Phát hành candidate sau `AUTH-PROG-2026-08-10-01`: tính lại 22 SHA-256/Git blob; 8/22 hồ sơ đổi so với v2.4, 11/22 đổi tích lũy so với `e3e9fb2`. Ghi Product + Architect `ACCEPT`, giữ consumer/Verification/discipline PENDING và mọi implementation/release gate BLOCKED |
 | 2.6 | 2026-08-10 | Ghi bổ sung commit `ac059a1` và tree `5e47316e` chứa nội dung candidate v2.5. Chỉ manifest ngoài mẫu số 22 đổi; `candidate_pin_check.py` tiếp tục PASS 22/22 |
 | 2.7 | 2026-08-10 | Phát hành candidate sau rà gate trước P1: chỉ `PLAN-PROG-053` đổi để sửa §6.5/§10 còn gọi `e3e9fb2` là candidate hiện hành và đồng bộ trạng thái xác nhận delta. Không đổi requirement/contract/thiết kế; Product/Architect v2.5 cần xác nhận delta trên v2.7; mọi gate giữ `BLOCKED` |
+| 2.8 | 2026-08-10 | Ghi bổ sung commit `a236200` và tree `8296338d` chứa nội dung candidate v2.7. Chỉ manifest và hồ sơ hỗ trợ ngoài mẫu số 22 đổi; `candidate_pin_check.py` tiếp tục PASS 22/22 |
