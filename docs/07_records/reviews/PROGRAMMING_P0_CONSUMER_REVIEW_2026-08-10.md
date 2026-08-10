@@ -4,13 +4,14 @@
 |---|---|
 | ID | `PROG-P0-CONSUMER-REVIEW-2026-08-10` |
 | Loại | Biên bản consumer review; hồ sơ hỗ trợ, không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Ngày | 2026-08-10 |
-| Phạm vi | 22 hồ sơ baseline tại candidate `e3e9fb2`; điều kiện “consumer review liên chức năng” của `PLAN_READY` |
+| Phạm vi | 22 hồ sơ baseline; điều kiện “consumer review liên chức năng” của `PLAN_READY` |
 | Chủ quản | Dev Lead (tổ chức review) |
 | Người review | FE, BE, Core/Compiler, FW MCU, HW, Security, Ops, QA — với tư cách **bên tiêu thụ contract** |
-| Trạng thái | **ĐÃ THỰC HIỆN VÒNG KỸ THUẬT — 9 finding, 9 đã sửa; `M4` và `PLAN_READY` vẫn `BLOCKED`** |
-| Candidate được review | commit `e3e9fb26f61b39df8f805916333fc03b51f07f5f`, tree `54eb519ec9e18639b0eeb8a4a0c5c3381e9b32de` |
+| Trạng thái | **VÒNG KỸ THUẬT ĐÃ HOÀN TẤT — `9/9` finding đóng. Consumer authority CHƯA KÝ: `0/22 M4`; `PLAN_READY` vẫn `BLOCKED`** |
+| Candidate **đầu vào** của vòng review | `e3e9fb26f61b39df8f805916333fc03b51f07f5f` — nay đã **`SUPERSEDED`** |
+| Candidate **để ký** | Định danh bằng **22 SHA-256** tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §2; kiểm bằng `python3 scripts/candidate_pin_check.py` |
 | Gói chủ quản | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 
 ## 0. Đọc nhanh
@@ -136,6 +137,26 @@ python3 scripts/docs_iso_harness.py --expect
 
 `PASS`; `EXPECT` khớp toàn bộ ngưỡng sau khi đồng bộ `svg_assets: 6 → 7` trong
 cùng commit thêm asset (`F-CR-04`).
+
+### 2.6 Số đo cuối cùng — trạng thái hiện hành, không phải chuỗi trung gian
+
+Bảng ở §2.1 ghi **cả hai** đầu của chuỗi để chứng minh phép kiểm bắt đúng lỗi.
+Bảng dưới đây ghi **trạng thái cuối cùng** trên `main` sau khi mọi finding đã đóng
+và mọi PR đã merge — đây là số dùng để kết luận, không phải số trong quá trình:
+
+| Phép kiểm | Lệnh | Kết quả cuối cùng |
+|---|---|---|
+| Ghim candidate | `python3 scripts/candidate_pin_check.py` | **PASS `22/22`** |
+| Truy vết hai chiều | `python3 scripts/trace_bidirectional_check.py` | **PASS `32/32`** kịch bản, `60/60` alias |
+| Harness tài liệu | `python3 scripts/docs_iso_harness.py --expect` | **PASS**, `EXPECT` khớp |
+| Whitespace | `git diff --check` | **PASS** |
+| C++ Release (Modbus+BACnet+HMI) | `cmake --fresh` → `cmake --build` → `ctest` | configure `0`, build `0`, **`860/860` PASS** |
+| Go | `go vet ./...` · `go test ./... -count=1` | vet PASS · **`11/11` package ok** |
+| FE | `npx vitest --run --environment jsdom src` · `npm run lint` · `npm run build` | **`53` file / `469` test PASS** · lint PASS · build PASS |
+| Test Result sản phẩm | — | **`0/32`** — không kịch bản `VS-PROG-*` nào đổi trạng thái |
+
+Không đọc bất kỳ số `FAIL` nào ở §2.1 như trạng thái hiện hành: chúng là số đo
+**trước khi sửa**, giữ lại làm bằng chứng phép kiểm có tác dụng.
 
 ## 3. Sổ finding
 
@@ -284,20 +305,57 @@ thành.
 Vì vậy: **`0/22` `M4` giữ nguyên.** Điều kiện còn lại là chữ ký của người có thẩm
 quyền theo bảng §6 của [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md).
 
+Hai phát biểu dưới đây **khác nhau** và không được dùng thay cho nhau ở bất kỳ
+báo cáo nào:
+
+| Phát biểu | Trạng thái | Bằng chứng |
+|---|---|---|
+| “Vòng consumer review **kỹ thuật** đã hoàn tất” | **ĐÚNG** | Hồ sơ này: 22 cặp producer→consumer, `9/9` finding đóng, §2.6 số đo cuối |
+| “Consumer **authority** đã ký” | **SAI** | §5 cột phải: `8/8` vai trò còn `PENDING`; `0/22 M4` |
+
+Suy từ vế thứ nhất ra vế thứ hai là vi phạm `DOC-GOV-001` §6 quy tắc 1 và 4.
+
 ## 5. Kết luận theo vai trò
 
-| Vai trò | Kết luận kỹ thuật vòng này | Chữ ký người thật |
-|---|---|---|
-| FE (consumer của IFSPEC/UX/DM) | `REQUEST_CHANGE` → đã sửa `F-CR-01` | **PENDING** |
-| BE (consumer của IFSPEC/DM/LIFE/SEC) | `REQUEST_CHANGE` → đã sửa `F-CR-02`, `F-CR-05` | **PENDING** |
-| Core/Compiler (consumer của ART/LANG/CTRL/IFSPEC) | `REQUEST_CHANGE` → đã sửa `F-CR-02` | **PENDING** |
-| FW MCU + HW | `ACCEPT` — không có finding | **PENDING** |
-| Security/Platform | `REQUEST_CHANGE` → đã sửa `F-CR-02` | **PENDING** |
-| Ops | `ACCEPT` — không có finding | **PENDING** |
-| QA/Verification | `REQUEST_CHANGE` → đã sửa `F-CR-03` | **PENDING** |
-| Document Control | `REQUEST_CHANGE` → đã sửa `F-CR-06..09` | **PENDING** |
+### 5.1 Kết luận kỹ thuật của vòng này
 
-Cột phải là cột quyết định `M4`. Cột giữa **không** thay được cột phải.
+| Vai trò consumer | Hồ sơ đã đọc với tư cách bên tiêu thụ | Kết luận kỹ thuật |
+|---|---|---|
+| FE | `IFSPEC`, `UX`, `DM`, `FE` | `REQUEST_CHANGE` → đã sửa `F-CR-01` |
+| BE | `IFSPEC`, `DM`, `LIFE`, `SEC`, `BE` | `REQUEST_CHANGE` → đã sửa `F-CR-02`, `F-CR-05` |
+| Core/Compiler | `ART`, `LANG`, `CTRL`, `IFSPEC`, `FWSOM` | `REQUEST_CHANGE` → đã sửa `F-CR-02` |
+| FW MCU + HW | `FWMCU`, `HW`, IOP contract | `ACCEPT` — không có finding |
+| Security/Platform | `SEC`, `IFSPEC` | `REQUEST_CHANGE` → đã sửa `F-CR-02` |
+| Operations | `OPS`, `LIFE` | `ACCEPT` — không có finding |
+| QA/Verification | `VVP`, `TRACE`, `RSK`, toàn bộ design | `REQUEST_CHANGE` → đã sửa `F-CR-03` |
+| Document Control | `DOCSET`, `ARCH`, `TRACE`, `ADR-LOG-001` | `REQUEST_CHANGE` → đã sửa `F-CR-06..09` |
+
+### 5.2 Chữ ký người thật — bảng phải điền để đạt `M4`
+
+**Không ai được điền thay.** Mỗi vai trò tự ghi đủ **năm trường**; thiếu một
+trường thì chữ ký không hợp lệ và `M4` không được tính.
+
+Trước khi ký, chạy `python3 scripts/candidate_pin_check.py` và chỉ ký khi
+`PASS 22/22`. Revision ghi trong ô “Hash/revision đã đọc” phải là candidate hiện
+hành ở [manifest](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §1.1/§2 —
+**ghi `e3e9fb2` là không hợp lệ** vì 10/22 hồ sơ đã đổi sau revision đó.
+
+| # | Vai trò | Họ tên + chức danh | Kết luận | Ngày | Hash/revision đã đọc | Finding còn lại |
+|---:|---|---|---|---|---|---|
+| 1 | FE Lead | *(chưa điền)* | **PENDING** | — | — | — |
+| 2 | Backend Lead | *(chưa điền)* | **PENDING** | — | — | — |
+| 3 | Core/Compiler Lead | *(chưa điền)* | **PENDING** | — | — | — |
+| 4 | FW MCU + HW Lead | *(chưa điền)* | **PENDING** | — | — | — |
+| 5 | Security/Platform Lead | *(chưa điền)* | **PENDING** | — | — | — |
+| 6 | Operations Lead | *(chưa điền)* | **PENDING** | — | — | — |
+| 7 | QA/Verification Lead | *(chưa điền)* | **PENDING** | — | — | — |
+| 8 | Document Control | *(chưa điền)* | **PENDING** | — | — | — |
+
+Giá trị hợp lệ cho “Kết luận”: `ACCEPT`, `REQUEST_CHANGE`, `REJECT`. `PENDING`
+**không** phải approval.
+
+Hiện trạng: **`0/8` vai trò đã ký**, do đó **`0/22 M4`**. §5.1 là kết luận kỹ
+thuật của vòng review; nó **không** thay được §5.2.
 
 ## 6. Ảnh hưởng tới các gate
 
@@ -342,3 +400,4 @@ do. Trước khi đọc để review, chạy `python3 scripts/candidate_pin_chec
 |---|---|---|
 | 1.0 | 2026-08-10 | Thực hiện vòng consumer review kỹ thuật trên candidate `e3e9fb2`: 22 hồ sơ theo cặp producer→consumer, kiểm As-Built với source thật, kiểm truy vết hai chiều bằng máy; mở và đóng 9 finding `F-CR-01..09`; giữ `M4` `0/22` và `PLAN_READY` `BLOCKED` vì chữ ký người thật còn thiếu |
 | 1.1 | 2026-08-10 | Sửa số đếm sai của chính biên bản này: **9/22** hồ sơ đổi chứ không phải 7 — `PROG-DOCSET-001` và `PLAN-PROG-053` cũng thuộc mẫu số 22 và đã đổi khi đồng bộ tracker. Ghi nhận candidate mới đã được ghim bằng 22 SHA-256 (manifest v2.1); chuyển việc “phát hành manifest mới” sang đã xong |
+| 1.2 | 2026-08-10 | Đóng `F-CR-10`: tách rõ candidate **đầu vào** của vòng review (`e3e9fb2`, nay `SUPERSEDED`) khỏi candidate **để ký** (22 SHA-256); thêm §2.6 bảng số đo **cuối cùng** để không ai đọc nhầm số `FAIL` trung gian ở §2.1 làm trạng thái hiện hành; thêm bảng đối chiếu hai phát biểu “review kỹ thuật xong” và “authority đã ký” |
