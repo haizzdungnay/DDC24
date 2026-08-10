@@ -4,13 +4,13 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 2.1 |
+| Phiên bản | 2.2 |
 | Ngày | 2026-08-10 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
 | Trạng thái | **ACTIVE — nội dung candidate đã ghim bằng hash ở §2; approval vẫn PENDING** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | ghi tại §1.1 sau khi PR #118 được merge |
+| Candidate commit | `e278aaa` — ghi đầy đủ ở §1.1; **hash ở §2 mới là định danh** |
 | PR nguồn | [PR #118](https://github.com/Mekong-HCM/MK-DDC-24/pull/118) |
 | Candidate trước | `e3e9fb26f61b39df8f805916333fc03b51f07f5f` — **SUPERSEDED**, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
@@ -46,8 +46,8 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | *(ghi sau khi merge PR #118)* |
-| Git tree | *(ghi sau khi merge PR #118)* |
+| Commit chứa nội dung candidate | `e278aaaf520f14ab5a9a04b2b7cf7fcd43e33e47` |
+| Git tree | `2dadad303ac22d64b63d84c6b3c16c27f83a1edb` |
 | Nhánh | `origin/main` |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
@@ -166,3 +166,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 1.0 | 2026-08-10 | Ghim candidate P0 `e3e9fb2`, tree, 22 file baseline, hai hồ sơ hỗ trợ và delta từ baseline gốc; giữ approval/gate ở trạng thái bị chặn |
 | 2.0 | 2026-08-10 | Ghim candidate mới sau khi đóng `F-CR-01..09`; `e3e9fb2` chuyển `SUPERSEDED`. Sửa số đếm sai trong biên bản consumer review: **9/22** hồ sơ đổi chứ không phải 7 — `PROGRAMMING_DESIGN_INDEX.md` và `53_PROGRAMMING_IMPLEMENTATION_PLAN.md` cũng thuộc mẫu số 22 và đã đổi. Thêm hồ sơ hỗ trợ thứ ba là biên bản consumer review; giữ mọi cổng quyền hạn `BLOCKED` |
 | 2.1 | 2026-08-10 | Sửa lỗi quy trình phát hiện khi tự kiểm bản 2.0: ghim theo commit luôn bị chính commit đồng bộ tracker làm lệch, vì `PLAN-PROG-053` nằm trong mẫu số 22. Chuyển định danh candidate sang **22 SHA-256 ở §2**, commit chỉ ghi bổ sung sau merge; thêm §1.1 giải thích và `scripts/candidate_pin_check.py` để bắt drift bằng máy thay vì bằng kỷ luật |
+| 2.2 | 2026-08-10 | Ghi bổ sung commit `e278aaa` và tree `2dadad30` — nơi nội dung candidate xuất hiện trên `origin/main`. Bước này chỉ sửa manifest, hồ sơ **ngoài** mẫu số 22, nên `candidate_pin_check.py` vẫn PASS 22/22; đây đúng là hành vi mà §1.1 thiết kế |
