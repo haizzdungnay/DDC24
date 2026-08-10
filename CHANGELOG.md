@@ -36,7 +36,8 @@ tiên quyết khiến `PLAN_READY` đòi bằng chứng của code chưa đượ
 **Kiểm soát cấu hình.** Đồng bộ Open Decisions, Architecture, Interface, UI/UX,
 VVP, Trace, Design Index, Plan 53/54, gate/consumer review và ADR log. Manifest
 v2.5 tính lại 22 SHA-256/Git blob: 8/22 hồ sơ đổi so với v2.4, 11/22 đổi tích lũy
-so với `e3e9fb2`; commit chỉ được ghi bổ sung sau merge vì không phải định danh
+so với `e3e9fb2`. Manifest v2.6 ghi bổ sung commit `ac059a1` và tree `5e47316e`
+chứa candidate; bước bổ sung chỉ sửa hồ sơ ngoài mẫu số 22 nên không làm lệch
 candidate.
 
 **Kiểm chứng.** `candidate_pin_check.py` PASS `22/22`;

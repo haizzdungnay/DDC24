@@ -4,13 +4,13 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 2.5 |
+| Phiên bản | 2.6 |
 | Ngày | 2026-08-10 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
 | Trạng thái | **ACTIVE — Product + Architect `ACCEPT`; consumer/Verification/discipline approval PENDING** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | **PENDING MERGE** — sẽ ghi bổ sung ở §1.1; **22 hash ở §2 là định danh hiện hành** |
+| Candidate commit | `ac059a1` — ghi đầy đủ ở §1.1; **22 hash ở §2 là định danh hiện hành** |
 | PR nguồn | PENDING |
 | Candidate trước | v2.4 tại commit `bbd7d2d` — **SUPERSEDED bởi authority record**; `e3e9fb2` cũng đã superseded, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
@@ -46,8 +46,8 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | **PENDING — ghi sau merge, không phải định danh approval** |
-| Git tree | **PENDING** |
+| Commit chứa nội dung candidate | `ac059a1a34e9baf82c431d3eb13a6c16387adf58` |
+| Git tree | `5e47316e2ce5ca0968c502c40c67f4a219d53881` |
 | Nhánh phát hành | `docs/programming-authority-decisions-pham-dinh-chuong` |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
@@ -176,3 +176,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 2.3 | 2026-08-10 | Cập nhật hash của `PLAN-PROG-053` (v0.14) và `PROG-DOCSET-001` (v1.6) sau vòng A2 sửa phát biểu trạng thái cũ. Đây đúng là quy trình mà §1.1 yêu cầu: hồ sơ trong mẫu số 22 đổi ⇒ manifest cập nhật **cùng phiên** ⇒ `candidate_pin_check.py` chạy lại tới khi `22/22` PASS |
 | 2.4 | 2026-08-10 | Ghi bổ sung commit `bbd7d2d` và tree `bb0acb60` cho vòng A2. `candidate_pin_check.py` vẫn PASS `22/22` sau khi ghi, vì bước này chỉ sửa manifest — hồ sơ ngoài mẫu số 22 |
 | 2.5 | 2026-08-10 | Phát hành candidate sau `AUTH-PROG-2026-08-10-01`: tính lại 22 SHA-256/Git blob; 8/22 hồ sơ đổi so với v2.4, 11/22 đổi tích lũy so với `e3e9fb2`. Ghi Product + Architect `ACCEPT`, giữ consumer/Verification/discipline PENDING và mọi implementation/release gate BLOCKED |
+| 2.6 | 2026-08-10 | Ghi bổ sung commit `ac059a1` và tree `5e47316e` chứa nội dung candidate v2.5. Chỉ manifest ngoài mẫu số 22 đổi; `candidate_pin_check.py` tiếp tục PASS 22/22 |
