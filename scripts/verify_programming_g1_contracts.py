@@ -201,7 +201,13 @@ def validate(join: dict[str, Any]) -> list[str]:
         require(bundle_schema["properties"]["bundleType"]["const"] == "MKDDC_PROGRAMMING_SOURCE_ONLY", "source bundle type drift")
         require(bundle_schema["properties"]["targetProfile"]["const"] == "MKDDC24_REVA", "source bundle target drift")
         require(bundle_schema["x-mkddc-invariants"]["maximumArchiveBytes"] == bundle_item["maximumArchiveBytes"], "source bundle size drift")
+        require(bundle_schema["x-mkddc-invariants"]["maximumFileDescriptors"] == 1024, "source bundle file count drift")
+        require(bundle_schema["x-mkddc-invariants"]["maximumEntryBytes"] == 262144, "source bundle entry size drift")
+        require(bundle_schema["x-mkddc-invariants"]["pathNormalization"] == "UTF8_NFC_RELATIVE_FORWARD_SLASH", "source bundle path normalization drift")
+        require(bundle_schema["x-mkddc-invariants"]["zipMetadata"] == "REGULAR_NON_EXECUTABLE_NO_COMMENT_FIXED_MTIME_ONLY", "source bundle ZIP metadata drift")
         require(bundle_schema["x-mkddc-invariants"]["importResult"] == "NEW_PROJECT_NEW_DRAFT_ONLY", "source bundle import boundary drift")
+        forbidden_bundle = set(bundle_schema["x-mkddc-invariants"]["forbidden"])
+        require({"ARTIFACT", "NATIVE", "SECRET", "CREDENTIAL", "EXECUTABLE", "SYMLINK", "HARDLINK", "ZIP_COMPRESSION", "ZIP_ENCRYPTION"} <= forbidden_bundle, "source bundle forbidden corpus drift")
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"source-bundle: {error}")
 

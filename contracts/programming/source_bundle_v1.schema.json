@@ -69,7 +69,11 @@
     "archive": "ZIP_STORE_ONLY_FIXED_TIMESTAMP_SORTED_PATHS",
     "manifestPath": "manifest.json",
     "maximumArchiveBytes": 4194304,
+	"maximumFileDescriptors": 1024,
+	"maximumEntryBytes": 262144,
+	"pathNormalization": "UTF8_NFC_RELATIVE_FORWARD_SLASH",
+	"zipMetadata": "REGULAR_NON_EXECUTABLE_NO_COMMENT_FIXED_MTIME_ONLY",
     "importResult": "NEW_PROJECT_NEW_DRAFT_ONLY",
-    "forbidden": ["ARTIFACT", "IR", "NATIVE", "CACHE", "SECRET", "CREDENTIAL", "AUTO_CHECK", "AUTO_COMMISSION"]
+    "forbidden": ["ARTIFACT", "IR", "NATIVE", "CACHE", "SECRET", "CREDENTIAL", "EXECUTABLE", "SYMLINK", "HARDLINK", "ZIP_COMPRESSION", "ZIP_ENCRYPTION", "AUTO_CHECK", "AUTO_COMMISSION"]
   }
 }

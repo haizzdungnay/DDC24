@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -28,6 +29,7 @@ const (
 	maxBundleFiles      = 1024
 	maxBundleFileBytes  = 256 * 1024
 	maxBundleRevisions  = 100
+	fixedBundleUnixTime = int64(315532800)
 )
 
 var (
@@ -189,10 +191,21 @@ func buildSourceBundle(project programmingstore.Project, snapshots []programming
 			manifest.Files = append(manifest.Files, describeBundleFile(objectPath, object.PayloadJSON, object.Kind, revisionID, object.ObjectID))
 		}
 	}
+	if len(entries) > maxBundleFiles {
+		return nil, bundleManifest{}, ErrBundleTooLarge
+	}
+	for _, entry := range entries {
+		if len(entry.data) < 2 || len(entry.data) > maxBundleFileBytes {
+			return nil, bundleManifest{}, ErrBundleTooLarge
+		}
+	}
 	sort.Slice(manifest.Files, func(left, right int) bool { return manifest.Files[left].Path < manifest.Files[right].Path })
 	manifestJSON, err := json.Marshal(manifest)
 	if err != nil {
 		return nil, bundleManifest{}, err
+	}
+	if len(manifestJSON) > maxBundleFileBytes {
+		return nil, bundleManifest{}, ErrBundleTooLarge
 	}
 	entries = append(entries, bundleEntry{name: "manifest.json", data: manifestJSON})
 	sort.Slice(entries, func(left, right int) bool { return entries[left].name < entries[right].name })
@@ -286,6 +299,9 @@ func importedBundleResource(projectID, draftID, sourceRevisionID, bundleSHA256 s
 }
 
 func inspectSourceBundle(raw []byte, newProjectID, newProjectName string) (bundleManifest, []byte, error) {
+	if len(raw) == 0 || len(raw) > maxBundleBytes {
+		return bundleManifest{}, nil, ErrBundleTooLarge
+	}
 	reader, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
 	if err != nil {
 		return bundleManifest{}, nil, fmt.Errorf("%w: zip header", ErrInvalidBundle)
@@ -296,8 +312,8 @@ func inspectSourceBundle(raw []byte, newProjectID, newProjectName string) (bundl
 	files := make(map[string][]byte, len(reader.File))
 	total := 0
 	for _, file := range reader.File {
-		if !safeBundlePath(file.Name) || file.Flags&1 != 0 || file.Method != zip.Store || file.FileInfo().IsDir() ||
-			(file.Mode() != 0 && !file.Mode().IsRegular()) || file.UncompressedSize64 > maxBundleFileBytes {
+		if !safeBundlePath(file.Name) || !safeBundleZIPMetadata(file) || file.Method != zip.Store ||
+			file.FileInfo().IsDir() || file.UncompressedSize64 > maxBundleFileBytes {
 			return bundleManifest{}, nil, fmt.Errorf("%w: file ZIP %q", ErrInvalidBundle, file.Name)
 		}
 		if _, duplicate := files[file.Name]; duplicate {
@@ -520,7 +536,8 @@ func extractProjectID(content []byte) string {
 }
 
 func safeBundlePath(name string) bool {
-	if name == "" || len(name) > 240 || !utf8.ValidString(name) || strings.Contains(name, "\\") || strings.HasPrefix(name, "/") || path.Clean(name) != name {
+	if name == "" || len(name) > 240 || !utf8.ValidString(name) || norm.NFC.String(name) != name ||
+		strings.Contains(name, "\\") || strings.HasPrefix(name, "/") || path.Clean(name) != name {
 		return false
 	}
 	for _, part := range strings.Split(name, "/") {
@@ -529,6 +546,30 @@ func safeBundlePath(name string) bool {
 		}
 	}
 	return true
+}
+
+// safeBundleZIPMetadata chỉ nhận metadata mà exporter deterministic của MK-DDC
+// tạo ra. Ngoài việc chặn encryption/symlink, kiểm tra này còn chặn executable,
+// comment và extra field dùng để smuggle hardlink/metadata ngoài manifest.
+func safeBundleZIPMetadata(file *zip.File) bool {
+	if file == nil || file.Comment != "" || file.NonUTF8 || file.Flags&^uint16(0x0808) != 0 {
+		return false
+	}
+	mode := file.Mode()
+	if mode != 0 && (!mode.IsRegular() || mode.Perm()&0o111 != 0) {
+		return false
+	}
+	if !file.Modified.IsZero() && file.Modified.UTC().Unix() != fixedBundleUnixTime {
+		return false
+	}
+	if len(file.Extra) == 0 {
+		return true
+	}
+	// Go archive/zip sinh đúng một extended timestamp field 0x5455, length 5,
+	// flags=mtime cho mốc 1980-01-01. Mọi extra field khác đều fail-closed.
+	return len(file.Extra) == 9 && binary.LittleEndian.Uint16(file.Extra[0:2]) == 0x5455 &&
+		binary.LittleEndian.Uint16(file.Extra[2:4]) == 5 && file.Extra[4] == 1 &&
+		int64(binary.LittleEndian.Uint32(file.Extra[5:9])) == fixedBundleUnixTime
 }
 
 func decodeBundleJSON(raw []byte, destination any) error {

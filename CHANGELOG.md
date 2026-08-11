@@ -7,6 +7,34 @@
 ---
 
 ## [Unreleased]
+### Security — Hostile corpus Programming P2 (2026-08-11)
+
+**Kết quả.** Hoàn tất source/test `TASK-PROG-207` với corpus 25 lớp bundle độc
+hại: traversal/absolute/backslash/control/Unicode không NFC, symlink,
+executable, hardlink extra field, comment/timestamp ngoài contract,
+compression/zip bomb, encryption, duplicate path/key/Revision, artifact/native
+smuggling, sai profile/selected Revision/kind/hash và giới hạn byte/file one-over.
+Mỗi reject đối chiếu lại số Project, Draft, Revision, Check, Artifact,
+Operation, audit và receipt trước/sau; toàn bộ giữ zero mutation.
+
+**Siết fail-closed.** Importer nay tự chặn archive raw quá 4 MiB trước khi parse,
+chỉ nhận path UTF-8 NFC và ZIP entry regular không executable với timestamp/extra
+metadata deterministic. Export cũng kiểm giới hạn số file, kích thước từng entry
+và root manifest trước khi tạo archive. Audit validator chuẩn hóa separator/case
+và từ chối 23 alias password/token/credential/secret/source/payload/artifact;
+test DB chứng minh audit bundle chỉ lưu hash/kích thước/ID provenance, không lưu
+source. Compiler fault tests bổ sung timeout process-group, signal kiểu OOM,
+stdout one-over, stderr secret không lộ và source one-over không spawn process.
+
+**Contract và kiểm chứng.** `source_bundle_v1.schema.json` khóa thêm NFC, giới
+hạn `1024` descriptor/`256 KiB` mỗi entry và metadata ZIP; G1 join tiếp tục
+`7/7` PASS với hash mới. Go `vet`, toàn repo `test -count=1`, Programming race
+PASS; fuzz importer chạy `2.156` input không crash. Full CTest Release bật
+Modbus+BACnet+HMI đạt `929/929`; FE đạt `58/58` file, `494/494` test cùng
+lint/typecheck/build. Không chạy Chrome DevTools vì chỉ đổi backend/test/contract,
+không đổi component/layout/runtime FE được mount. Feature vẫn `OFF`, chưa deploy
+target/HIL và chưa nâng bất kỳ Test Result hay `RELEASE_READY` nào.
+
 ### Added — Change manifest và bundle source-only Programming P2 (2026-08-11)
 
 **Kết quả.** Triển khai source `TASK-PROG-206`: endpoint so sánh hai Revision

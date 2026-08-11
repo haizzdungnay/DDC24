@@ -79,6 +79,24 @@ func TestContractSkeletonRejectsOversizeBeforeDecode(t *testing.T) {
 	}
 }
 
+func TestBundleImportRejectsHTTPBodyOneOverBeforeBase64Decode(t *testing.T) {
+	routes := []webrouter.Route{}
+	RegisterProgrammingRoutes(&routes, true)
+	mux, err := webrouter.New(allowAllAuthorizer{}, routes, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := bytes.Repeat([]byte("x"), int(maxBundleMutationBodyBytes)+1)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/programming/bundles/import", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Idempotency-Key", "00000000-0000-4000-8000-000000000001")
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d; want 413", recorder.Code)
+	}
+}
+
 func TestContractSkeletonRejectsMissingAndUnknownSchemaMajor(t *testing.T) {
 	routes := []webrouter.Route{}
 	RegisterProgrammingRoutes(&routes, true)
