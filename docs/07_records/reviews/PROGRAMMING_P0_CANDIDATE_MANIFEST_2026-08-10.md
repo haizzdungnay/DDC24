@@ -4,14 +4,14 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.13 |
+| Phiên bản | 3.14 |
 | Ngày | 2026-08-11 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
 | Trạng thái | **ACTIVE — candidate v2.14 `IMPLEMENTATION IN PROGRESS`; P1 6/6 DONE; G1 GO; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | Chờ commit/PR merge tài liệu; **22 hash ở §2 là định danh hiện hành** |
-| PR nguồn | Chờ tạo sau khi gate tài liệu PASS |
+| Candidate commit | `e6ab04b` — ghi đầy đủ ở §1.1; **22 hash ở §2 là định danh hiện hành** |
+| PR nguồn | [PR #137](https://github.com/Mekong-HCM/MK-DDC-24/pull/137) — merged |
 | Candidate trước | v2.13 tại commit `1f651b7` — **SUPERSEDED bởi exit G1 TASK-PROG-105**, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
@@ -47,9 +47,9 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | Chờ commit/PR merge tài liệu |
-| Git tree | Chờ commit/PR merge tài liệu |
-| Nhánh phát hành | `chore/programming-g1-contract-join-20260811` |
+| Commit chứa nội dung candidate | `e6ab04b718a66e9f012159d530efc75b3388d9e6` |
+| Git tree | `9a022f96bd372cdb508b7cd24d67387d5c76065b` |
+| Nhánh phát hành | `chore/programming-g1-contract-join-20260811` — remote đã xóa sau merge |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
 chạy `scripts/candidate_pin_check.py` trước khi bắt đầu đọc.
@@ -198,3 +198,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.11 | 2026-08-11 | Phát hành candidate v2.13 sau `TASK-PROG-104`: cập nhật hash/blob Design Index v2.1, Data v0.5, BE v0.7, Risk v0.6, Trace v3.2 và Plan 53 v0.22; 16/22 hồ sơ còn lại giữ nguyên. Commit/tree/PR chờ ghi bổ sung sau merge; 22 SHA-256 là authority hiện hành |
 | 3.12 | 2026-08-11 | Ghi bổ sung PR #135, merge commit `1f651b7` và tree `94326834` chứa candidate v2.13. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi; candidate pin tiếp tục 22/22 PASS |
 | 3.13 | 2026-08-11 | Phát hành candidate v2.14 sau `TASK-PROG-105`: cập nhật hash/blob Design Index v2.2, VVP v0.9, Risk v0.7, Trace v3.3 và Plan 53 v0.23; 17/22 hồ sơ còn lại giữ nguyên. P1 6/6 DONE, G1 GO; hai record BLOCKED, 0/32 PASS; commit/tree/PR chờ ghi bổ sung sau merge |
+| 3.14 | 2026-08-11 | Ghi bổ sung PR #137, merge commit `e6ab04b` và tree `9a022f96` chứa candidate v2.14. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi; candidate pin tiếp tục 22/22 PASS |

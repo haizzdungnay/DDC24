@@ -154,3 +154,4 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.7 | 2026-08-11 | Đồng bộ review/evidence G1 sau `TASK-PROG-104`; P1 đạt 5/6, candidate v2.13 ghim SQLite store/migration/backup As-Built; giữ 0/32 Test Result, feature flag OFF, RELEASE_READY BLOCKED |
 | 1.8 | 2026-08-11 | Ghi provenance PR #135/merge `1f651b7`/tree `94326834` cho candidate v2.13; remote feature branch đã xóa, trạng thái evidence không đổi |
 | 1.9 | 2026-08-11 | Đăng ký biên bản exit G1 và evidence Task 105; P1 6/6 DONE, G1 GO cho P2/P3; hai record VS-001/019 BLOCKED, 0/32 PASS |
+| 1.10 | 2026-08-11 | Ghi provenance PR #137/merge `e6ab04b`/tree `9a022f96` cho candidate v2.14; remote feature branch đã xóa, trạng thái G1/evidence không đổi |
