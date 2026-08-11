@@ -69,7 +69,12 @@ struct StProgramInstance {
     std::vector<uint8_t> pending_artifact;
     /* Bytes của package vừa activate, chờ đủ 1 tick sạch để thành LKG. */
     std::vector<uint8_t> activated_artifact;
+    /* Vùng giữ allocation cũ để safe boundary chỉ swap vector; giải phóng ở
+     * request_activation() ngoài RT. */
+    std::vector<uint8_t> retired_artifact;
+    StPreparedProgramHandle pending_program;
     bool        has_pending = false;
+    bool        pending_is_rollback = false;
 
     const char* last_fault_code = nullptr;
     uint32_t    last_fault_pc = 0;

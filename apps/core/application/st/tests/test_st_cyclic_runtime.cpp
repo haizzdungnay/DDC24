@@ -12,6 +12,7 @@
 #include "st/st_cyclic_runtime.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_test_key.hpp"
+#include "tests/allocation_probe.hpp"
 
 namespace core {
 namespace {
@@ -61,7 +62,7 @@ TEST(StCyclicRuntime, NoProgramYieldsFaultNotCrash)
     StCyclicRuntime rt;
     const StExecResult r = rt.run_cycle(0, 1000, kBudget);
     EXPECT_FALSE(r.ok);
-    EXPECT_EQ(r.error, "no_active_program");
+    EXPECT_STREQ(r.error, "no_active_program");
     EXPECT_EQ(rt.metrics().exec_fault_count, 1u);
 }
 
@@ -103,10 +104,9 @@ TEST(StCyclicRuntime, FailedActivationKeepsPreviousPackage)
 
     std::vector<uint8_t> broken = build(kAddTen);
     broken[broken.size() - 1] ^= 0xFF;
-    ASSERT_TRUE(rt.request_activation(broken));
-
     StLoadError err;
-    const StExecResult r = rt.run_cycle(2 * kSec, 3 * kSec, kBudget, &err);
+    ASSERT_FALSE(rt.request_activation(broken, &err));
+    const StExecResult r = rt.run_cycle(2 * kSec, 3 * kSec, kBudget);
     EXPECT_TRUE(r.ok) << "package cũ phải tiếp tục chạy được";
     EXPECT_EQ(err.code, st_ir_error::kBadHash);
     EXPECT_FLOAT_EQ(out_b(rt), 2.0f) << "vẫn là chương trình +1";
@@ -118,14 +118,37 @@ TEST(StCyclicRuntime, FailedActivationDoesNotRetrySilently)
     StCyclicRuntime rt;
     std::vector<uint8_t> broken = build(kAddOne);
     broken[broken.size() - 1] ^= 0xFF;
-    ASSERT_TRUE(rt.request_activation(broken));
+    StLoadError err;
+    ASSERT_FALSE(rt.request_activation(broken, &err));
 
-    rt.run_cycle(0, kSec, kBudget);
     EXPECT_EQ(rt.activation_fail_count(), 1u);
     EXPECT_FALSE(rt.has_pending_activation()) << "request lỗi phải bị TIÊU THỤ";
 
     rt.run_cycle(kSec, 2 * kSec, kBudget);
     EXPECT_EQ(rt.activation_fail_count(), 1u) << "không được thử lại ngầm";
+}
+
+TEST(StCyclicRuntime, PreparedActivationAndExecutionAllocateNothingAtBoundary)
+{
+    StCyclicRuntime rt;
+    ASSERT_TRUE(rt.request_activation(build(kAddOne)));
+
+    std::size_t allocations = 0;
+    {
+        allocation_probe::ScopedCounter counter;
+        ASSERT_TRUE(rt.run_cycle(0, 1000, kBudget).ok);
+        allocations = counter.allocations();
+    }
+    EXPECT_EQ(allocations, 0u)
+        << "safe boundary chỉ được swap runtime image đã preallocate";
+
+    rt.runtime().set_variable("a", StValue::make_real(2.0f));
+    {
+        allocation_probe::ScopedCounter counter;
+        ASSERT_TRUE(rt.run_cycle(kSec, kSec + 1000, kBudget).ok);
+        allocations = counter.allocations();
+    }
+    EXPECT_EQ(allocations, 0u) << "steady execute không được cấp phát";
 }
 
 TEST(StCyclicRuntime, ReplacingProgramSwitchesBehaviour)
@@ -178,7 +201,7 @@ TEST(StCyclicRuntime, TraceRecordsActivationRollbackAndOverrun)
 
     std::vector<uint8_t> broken = build(kAddTen);
     broken[broken.size() - 1] ^= 0xFF;
-    ASSERT_TRUE(rt.request_activation(broken));
+    ASSERT_FALSE(rt.request_activation(broken));
     rt.run_cycle(2 * kSec, 2 * kSec + 1000, kBudget);   /* activation fail + rollback */
 
     bool act_ok = false, act_fail = false, rollback = false, overrun = false;

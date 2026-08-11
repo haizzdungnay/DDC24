@@ -213,8 +213,12 @@ std::string st_handle_control_request(StScheduler* sched, const std::string& req
             return error_response(request_id, st_api_error::kBadArtifact,
                                   "artifact is not valid base64 or exceeds size limit");
         std::string err;
-        if (!sched->request_activation(inst, bytes, &err))
-            return error_response(request_id, st_api_error::kBadTransition, err);
+        if (!sched->request_activation(inst, bytes, &err)) {
+            const char* code = err.rfind("artifact rejected:", 0) == 0
+                                   ? st_api_error::kBadArtifact
+                                   : st_api_error::kBadTransition;
+            return error_response(request_id, code, err);
+        }
         json p;
         p["state"] = st_program_state_name(sched->find_program(inst)->state);
         p["artifactBytes"] = bytes.size();
@@ -242,6 +246,7 @@ std::string st_handle_control_request(StScheduler* sched, const std::string& req
     const StProgramInstance* p = sched->find_program(inst);
     json payload;
     payload["state"] = st_program_state_name(p->state);
+    if (action == "program_rollback") payload["appliedAt"] = "next_tick_boundary";
     return ok_response(request_id, payload);
 }
 

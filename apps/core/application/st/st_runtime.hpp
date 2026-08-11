@@ -22,20 +22,45 @@ namespace core {
 
 struct StExecResult {
     bool        ok = false;
-    std::string error;        /* rỗng khi ok */
+    const char* error = nullptr; /* hằng tĩnh, không cấp phát; nullptr khi ok */
     const char* fault_code = nullptr;
     uint32_t    fault_pc = 0;
     int         fault_line = 0;
     int         fault_column = 0;
 };
 
+/* Ảnh runtime đã được dựng hoàn toàn ở luồng non-RT. Code/layout trong
+ * `program` không đổi sau prepare; chỉ slots/FB state và hai shadow buffer là
+ * mutable. Safe boundary chỉ chuyển ownership của handle này, không parse,
+ * không cấp phát và không huỷ ảnh cũ. */
+struct StPreparedProgram {
+    StLoadedProgram        program;
+    std::vector<StCell>    shadow_slots;
+    std::vector<StFbState> shadow_fb;
+};
+
+using StPreparedProgramHandle = std::unique_ptr<StPreparedProgram>;
+
 class StProgramRuntime {
 public:
-    /* Verify + load artifact vào candidate; chỉ swap sang active khi TOÀN BỘ
-     * 22 bước verify pass. Fail → active_ giữ nguyên (last-known-good) và
-     * *err mang mã IR-E-* ổn định cho BE. */
+    /* API tương thích cho caller NON-RT: prepare + swap ngay. Đường scan phải
+     * dùng prepare() trước rồi activate_prepared() tại safe boundary. */
     bool activate(const uint8_t* artifact, std::size_t size, StLoadError* err = nullptr,
                   const StLoaderOptions* opts = nullptr);
+
+    /* NON-RT: verify 22 bước, dựng program và cấp phát toàn bộ shadow buffer.
+     * `*out` không đổi khi lỗi; bad_alloc được đổi thành IR-E-015. */
+    bool prepare(const uint8_t* artifact, std::size_t size,
+                 StPreparedProgramHandle* out, StLoadError* err = nullptr,
+                 const StLoaderOptions* opts = nullptr);
+
+    /* RT safe boundary: O(1), noexcept, không parser/loader/heap. Ảnh active cũ
+     * chuyển sang retired_ để luồng non-RT thu hồi sau bằng reclaim_retired(). */
+    bool activate_prepared(StPreparedProgramHandle candidate) noexcept;
+
+    /* Chỉ gọi ngoài RT trước khi stage candidate tiếp theo. */
+    void reclaim_retired() noexcept { retired_.reset(); }
+    bool has_retired() const noexcept { return static_cast<bool>(retired_); }
 
     bool loaded() const { return static_cast<bool>(active_); }
 
@@ -53,7 +78,7 @@ public:
     bool set_variable(const std::string& name, const StValue& v);
     bool get_variable(const std::string& name, StValue* out) const;
 
-    const StLoadedProgram* program() const { return active_.get(); }
+    const StLoadedProgram* program() const { return active_ ? &active_->program : nullptr; }
 
     uint32_t activation_count() const { return activation_count_; }
     uint32_t activation_fail_count() const { return activation_fail_count_; }
@@ -61,10 +86,8 @@ public:
     uint32_t cycle_count() const { return cycle_count_; }
 
 private:
-    std::unique_ptr<StLoadedProgram> active_;
-    /* Ảnh chụp trạng thái đầu chu kỳ — cấp phát MỘT LẦN lúc activate. */
-    std::vector<StCell>    shadow_slots_;
-    std::vector<StFbState> shadow_fb_;
+    StPreparedProgramHandle active_;
+    StPreparedProgramHandle retired_;
 
     uint32_t activation_count_ = 0;
     uint32_t activation_fail_count_ = 0;

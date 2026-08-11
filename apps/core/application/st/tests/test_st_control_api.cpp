@@ -223,7 +223,11 @@ TEST(StControlApi, FullLifecycleStageStartStopRollback)
 
     r = call(&s, {{"action", "program_rollback"}, {"instanceId", "p"}});
     ASSERT_EQ(r["result"], "ok") << r.dump();
-    EXPECT_EQ(r["state"], "ROLLED_BACK");
+    EXPECT_EQ(r["state"], "STAGED");
+    EXPECT_EQ(r["appliedAt"], "next_tick_boundary");
+    s.tick(300000000ull);
+    r = call(&s, {{"action", "program_status"}});
+    EXPECT_EQ(r["tasks"][0]["programs"][0]["state"], "ROLLED_BACK");
 }
 
 TEST(StControlApi, InvalidTransitionReportsBadTransitionNotCrash)
@@ -288,14 +292,16 @@ TEST(StControlApi, StagingCorruptArtifactKeepsRunningPackage)
     ASSERT_TRUE(s.request_activation("p", build(kCounter), &err));
     s.tick(0);
     ASSERT_TRUE(s.start("p", &err));
+    s.tick(100000000ull); /* promote package hiện hành thành last-known-good */
 
     std::vector<uint8_t> broken = build(kCounter);
     broken[broken.size() - 1] ^= 0xFF;
     json r = call(&s, {{"action", "program_stage"}, {"instanceId", "p"},
                        {"artifact", st_base64_encode(broken.data(), broken.size())}});
-    ASSERT_EQ(r["result"], "ok") << "stage thành công; activation mới là chỗ verify";
+    ASSERT_EQ(r["result"], "error") << "stage phải verify fail-closed ngoài RT";
+    EXPECT_EQ(r["errorCode"], st_api_error::kBadArtifact);
 
-    s.tick(100000000ull);
+    s.tick(200000000ull);
     r = call(&s, {{"action", "program_status"}});
     /* Package cũ vẫn chạy — bất biến của TYPED_IR_ARTIFACT_SPEC §8. */
     EXPECT_EQ(r["tasks"][0]["programs"][0]["state"], "RUNNING");

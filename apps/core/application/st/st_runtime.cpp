@@ -2,24 +2,61 @@
 
 #include <cmath>
 #include <cstring>
+#include <new>
 
 namespace core {
 
 bool StProgramRuntime::activate(const uint8_t* artifact, std::size_t size, StLoadError* err,
                                 const StLoaderOptions* opts)
 {
-    StLoaderOptions defaults;
-    auto candidate = std::make_unique<StLoadedProgram>();
-    if (!load_st_artifact(artifact, size, opts ? *opts : defaults, candidate.get(), err)) {
+    reclaim_retired();
+    StPreparedProgramHandle candidate;
+    if (!prepare(artifact, size, &candidate, err, opts)) return false;
+    return activate_prepared(std::move(candidate));
+}
+
+bool StProgramRuntime::prepare(const uint8_t* artifact, std::size_t size,
+                               StPreparedProgramHandle* out, StLoadError* err,
+                               const StLoaderOptions* opts)
+{
+    if (!out) {
+        if (err) {
+            err->code = st_ir_error::kBadHeader;
+            err->message = "null prepared output";
+        }
         activation_fail_count_++;
-        return false;   /* active_ giữ nguyên — last-known-good tiếp tục chạy */
+        return false;
     }
 
-    /* Cấp phát bộ đệm ảnh chụp NGAY TẠI ĐÂY, không phải trong execute().
-     * Đây là điểm cấp phát cuối cùng của vòng đời chương trình. */
-    shadow_slots_.assign(candidate->slots.size(), StCell{});
-    shadow_fb_.assign(candidate->fb_states.size(), StFbState{});
+    try {
+        StLoaderOptions defaults;
+        auto candidate = std::make_unique<StPreparedProgram>();
+        if (!load_st_artifact(artifact, size, opts ? *opts : defaults,
+                              &candidate->program, err)) {
+            activation_fail_count_++;
+            return false;
+        }
+        candidate->shadow_slots.assign(candidate->program.slots.size(), StCell{});
+        candidate->shadow_fb.assign(candidate->program.fb_states.size(), StFbState{});
+        *out = std::move(candidate);
+        return true;
+    } catch (const std::bad_alloc&) {
+        if (err) {
+            err->code = st_ir_error::kOutOfMemory;
+            err->message = "runtime image allocation failed";
+        }
+        activation_fail_count_++;
+        return false;
+    }
+}
 
+bool StProgramRuntime::activate_prepared(StPreparedProgramHandle candidate) noexcept
+{
+    if (!candidate || retired_) {
+        activation_fail_count_++;
+        return false;
+    }
+    retired_ = std::move(active_);
     active_ = std::move(candidate);
     activation_count_++;
     return true;
@@ -35,21 +72,22 @@ StExecResult StProgramRuntime::execute(int64_t now_ns)
     }
 
     /* Chụp trạng thái đầu chu kỳ. memcpy trên bộ đệm đã cấp — không cấp phát. */
-    std::memcpy(shadow_slots_.data(), active_->slots.data(),
-                active_->slots.size() * sizeof(StCell));
-    if (!shadow_fb_.empty())
-        std::memcpy(shadow_fb_.data(), active_->fb_states.data(),
-                    active_->fb_states.size() * sizeof(StFbState));
+    StLoadedProgram& program = active_->program;
+    std::memcpy(active_->shadow_slots.data(), program.slots.data(),
+                program.slots.size() * sizeof(StCell));
+    if (!active_->shadow_fb.empty())
+        std::memcpy(active_->shadow_fb.data(), program.fb_states.data(),
+                    program.fb_states.size() * sizeof(StFbState));
 
     StExecFault fault;
-    if (!execute_st_program(active_.get(), now_ns, &fault)) {
+    if (!execute_st_program(&program, now_ns, &fault)) {
         /* Khôi phục nguyên vẹn: một chu kỳ lỗi KHÔNG để lại trạng thái nửa
          * vời, kể cả biến cục bộ và trạng thái timer. */
-        std::memcpy(active_->slots.data(), shadow_slots_.data(),
-                    active_->slots.size() * sizeof(StCell));
-        if (!shadow_fb_.empty())
-            std::memcpy(active_->fb_states.data(), shadow_fb_.data(),
-                        active_->fb_states.size() * sizeof(StFbState));
+        std::memcpy(program.slots.data(), active_->shadow_slots.data(),
+                    program.slots.size() * sizeof(StCell));
+        if (!active_->shadow_fb.empty())
+            std::memcpy(program.fb_states.data(), active_->shadow_fb.data(),
+                        program.fb_states.size() * sizeof(StFbState));
         fault_count_++;
         cycle_count_++;
         r.fault_code = fault.code;
@@ -73,10 +111,10 @@ bool StProgramRuntime::set_variable(const std::string& name, const StValue& v)
         return false;
     if (v.type == StType::REAL && !std::isfinite(v.r)) return false;
     if (v.type == StType::TIME && v.t < 0) return false;
-    for (const StIrVariable& var : active_->variables) {
+    for (const StIrVariable& var : active_->program.variables) {
         if (var.name != name) continue;
         if (var.type != v.type) return false;
-        StCell& c = active_->slots[var.slot];
+        StCell& c = active_->program.slots[var.slot];
         switch (v.type) {
         case StType::BOOL: c.b = v.b; break;
         case StType::DINT:
@@ -93,9 +131,9 @@ bool StProgramRuntime::set_variable(const std::string& name, const StValue& v)
 bool StProgramRuntime::get_variable(const std::string& name, StValue* out) const
 {
     if (!active_ || !out) return false;
-    for (const StIrVariable& var : active_->variables) {
+    for (const StIrVariable& var : active_->program.variables) {
         if (var.name != name) continue;
-        const StCell& c = active_->slots[var.slot];
+        const StCell& c = active_->program.slots[var.slot];
         switch (var.type) {
         case StType::BOOL: *out = StValue::make_bool(c.b); break;
         case StType::DINT: *out = StValue::make_dint(c.i); break;

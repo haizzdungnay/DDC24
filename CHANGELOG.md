@@ -7,6 +7,26 @@
 ---
 
 ## [Unreleased]
+### Changed — Bounded loader và runtime image Programming P3 (2026-08-11)
+
+**TASK-PROG-300.** Tách `prepare` khỏi safe-boundary activation: artifact được
+verify đủ 22 bước và cấp phát toàn bộ program/shadow state ở command thread;
+tick chỉ chuyển ownership của prepared handle O(1). Ảnh cũ và vùng byte LKG đi
+qua retired slot để thu hồi ngoài RT, không load/parse/allocate/free trong tick.
+Loader đổi `std::bad_alloc` thành `IR-E-015` và không sửa output lỗi.
+
+Scheduler stage nay reject artifact corrupt ngay ngoài RT, chỉ enqueue runtime
+image đã verify; promotion LKG dùng swap vector. Bổ sung allocation gate cho
+activation boundary, execute và LKG promotion, cùng post-link `nm -C` gate chặn
+parser/compiler symbol trong `core_application` và `mkddc-core`. Feature vẫn
+`OFF`; đây chưa phải target timing/Test Result hoặc quyền Commission.
+
+**Kiểm chứng.** Release build sạch với Modbus/BACnet/HMI và CTest `933/933`
+PASS; riêng runtime/scheduler/executor/control API cùng symbol gate `84/84`
+PASS. Go `vet` và `test ./... -count=1` PASS; FE `58/58` file, `494/494` test,
+lint/typecheck/build PASS; contract G1 `7/7` PASS. Không chạy Chrome DevTools vì
+không đổi component/layout/runtime FE được mount.
+
 ### Security — Hostile corpus Programming P2 (2026-08-11)
 
 **Kết quả.** Hoàn tất source/test `TASK-PROG-207` với corpus 25 lớp bundle độc

@@ -137,6 +137,7 @@ mkddc_apply_provenance(mkddc-schedule-sim)
 
 option(CORE_BUILD_TESTS "Build core unit tests" ON)
 if(CORE_BUILD_TESTS)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
   target_compile_definitions(core_adapters PUBLIC CORE_BUILD_TESTS=1)
   target_compile_definitions(core_runtime PUBLIC CORE_BUILD_TESTS=1)
   target_compile_definitions(core_lib INTERFACE CORE_BUILD_TESTS=1)
@@ -199,6 +200,21 @@ if(CORE_BUILD_TESTS)
   # điều kiện tiên quyết để chạy CI runner ngay trên board theo ADR-022.
   gtest_discover_tests(core_tests
       PROPERTIES ENVIRONMENT "MKDDC_SHM_PLC_NAME=/mkddc_plc_shm_coretest")
+
+  # TASK-PROG-300: kiểm artifact sau link, không chỉ grep source. Runtime
+  # application phải có loader/executor nhưng tuyệt đối không có parser/compiler;
+  # executable production cũng không được kéo các symbol đó qua dependency ẩn.
+  add_test(NAME programming_runtime_archive_symbol_boundary
+      COMMAND ${Python3_EXECUTABLE}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_runtime_symbols.py
+              --binary $<TARGET_FILE:core_application>
+              --nm ${CMAKE_NM}
+              --require-runtime)
+  add_test(NAME programming_core_executable_symbol_boundary
+      COMMAND ${Python3_EXECUTABLE}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_runtime_symbols.py
+              --binary $<TARGET_FILE:mkddc-core>
+              --nm ${CMAKE_NM})
 endif()
 
 # ---- Fuzz harness (Phase 7 / VG-03) ----

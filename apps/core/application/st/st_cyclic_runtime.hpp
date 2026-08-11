@@ -32,9 +32,10 @@ class StCyclicRuntime {
 public:
     /* Ghi nhận artifact chờ activate. true = đã ghi nhận; false = đang có
      * request khác chờ (request cũ KHÔNG bị ghi đè âm thầm). */
-    bool request_activation(const std::vector<uint8_t>& artifact);
+    bool request_activation(const std::vector<uint8_t>& artifact,
+                            StLoadError* error = nullptr);
 
-    bool has_pending_activation() const { return has_pending_; }
+    bool has_pending_activation() const { return static_cast<bool>(pending_); }
 
     void set_trace_log(StTraceLog* trace) { trace_ = trace; }
     void set_loader_options(const StLoaderOptions& o) { opts_ = o; }
@@ -53,8 +54,7 @@ public:
 private:
     StProgramRuntime     runtime_;
     StCycleMetrics       metrics_;
-    bool                 has_pending_ = false;
-    std::vector<uint8_t> pending_artifact_;
+    StPreparedProgramHandle pending_;
     StTraceLog*          trace_ = nullptr;
     StLoaderOptions      opts_;
 };
