@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 2.7 |
+| Phiên bản | 2.8 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
 | Cập nhật | 2026-08-11 |
 | Chủ quản | Verification Lead |
@@ -16,10 +16,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối **yêu cầu → user journey → thiết kế → nơi phải sửa code → kịch bản test → bằng chứng → release** cho cả 60 requirement. Dùng để trả lời hai câu: “yêu cầu này ai lo?” và “cái gì hỏng nếu đổi chỗ này?”. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. Nhưng **0/60 đã implement end-to-end**, **0/32 kịch bản có Test Result**, và 0/60 passed hoặc released. Mọi dòng đang là `D=Y`, còn `I/T/P/R=N`. |
+| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. `BE-110` đã có source contract được merge qua `TASK-PROG-100`; **1/60** dòng có `I=Y`. **0/32** kịch bản có Test Result, và 0/60 passed hoặc released; mọi `T/P/R` vẫn `N`. |
 | 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
-| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** 17/17 decision đã `DECIDED`, baseline đã duyệt. `I/T/P/R` còn `N` vì code/test chưa chạy; team được bắt đầu cập nhật các trục đó ngay khi có commit/evidence. |
+| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `BE-110 I=Y`; 59 dòng `I=N` chờ các task tiếp theo. Toàn bộ `T/P/R` còn `N` vì chưa có Test Result; team tiếp tục cập nhật theo commit/evidence thật. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với bản thân ma trận: 60/60 dòng giải được về ID canonical, không trùng ID, không có dòng vi phạm `P=Y khi T=N` hay `R=Y khi P=N` — kiểm bằng harness ở [`PROG-REV-2026-08-09`](reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §2. |
 
 Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
@@ -110,7 +110,8 @@ scenario tương ứng có Test Result được review.
 ## 6. Trace chi tiết từng requirement
 
 Status dùng năm trục: `D` documented, `I` implemented, `T` tested, `P` passed,
-`R` released. Hiện mọi dòng `D=YES`; `I/T/P/R=NO` cho feature Target end-to-end.
+`R` released. Hiện mọi dòng `D=YES`; riêng `BE-110 I=YES`, 59 dòng còn lại
+`I=NO`; toàn bộ `T/P/R=NO` cho tới khi có Test Result/release hợp lệ.
 Source target là vị trí phải tạo/sửa, không phải claim code đã có.
 
 Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
@@ -152,7 +153,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `BE-107` | SEC; BE; RSK-012 | authz handler+service/audit | 022 | Y/N/N/N/N |
 | `BE-108` | SEC; BE; RSK-011 | bundle quarantine/import/export | 021/023 | Y/N/N/N/N |
 | `BE-109` | CTRL; IFSPEC; BE; RSK-010 | runtime read model/events | 018/020/026 | Y/N/N/N/N |
-| `BE-110` | IFSPEC; BE; RSK-014 | OpenAPI/errors/Go+TS generation | 019/024 | Y/N/N/N/N |
+| `BE-110` | IFSPEC; BE; RSK-014 | `9917e3b`: `openapi.yaml`, `RegisterProgrammingRoutes`, `WriteProgrammingError`; `81080f8`: generated `client.ts`; `efbed2d`: golden Go/TS parity | 019/024 | Y/Y/N/N/N |
 | `CORE-101` | LANG; ART; SEC; RSK-006 | `application/st` loader/executor | 005/006/023 | Y/N/N/N/N |
 | `CORE-102` | CTRL; FWSOM; RSK-002 | ScanLoop/task/process image | 009/015/016 | Y/N/N/N/N |
 | `CORE-103` | ART; FWSOM; RSK-005/006 | Core build/runtime instrumentation | 012 | Y/N/N/N/N |
@@ -193,7 +194,7 @@ Tên rút gọn map: `LANG=DDD-LANG-PROG-001`, `ART=IFSPEC-ART-PROG-001`,
 | Requirement có design/control | 60/60 = 100% documented |
 | Requirement có source target | 60/60 = 100% planned |
 | Requirement có scenario | 60/60 = 100% specified |
-| Requirement implemented end-to-end | 0/60 confirmed |
+| Requirement implemented end-to-end | 1/60 confirmed (`BE-110`) |
 | Scenario có Test Result current | 0/32 |
 | Requirement passed/released | 0/60 |
 
@@ -252,6 +253,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 2.5 | 2026-08-10 | Đóng finding consumer review `F-CR-03/07/08`: bổ sung `VS-PROG-032` vào dòng `FE-101` và `VS-PROG-008` vào dòng `FE-102` để chiều xuôi requirement→scenario đủ `32/32`; thêm §8.1 lệnh kiểm hai chiều `scripts/trace_bidirectional_check.py`; sửa số đếm cũ `55 dòng` thành `60 dòng`; đổi phụ lục tự kiểm từ `§10` trùng số sang `§11` |
 | 2.6 | 2026-08-10 | Ghi trạng thái authority sau `AUTH-PROG-2026-08-10-01`: `OD-PROG-003/010/013` DECIDED, 14 mục còn OPEN, 0 CLOSED; Product/Architect `ACCEPT` không đổi các trục `I/T/P/R` và không thay Verification/Document Control approval |
 | 2.7 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-03`: 17/17 decision `DECIDED`, baseline phê duyệt cho implementation, Verification/Document Control/discipline signature `WAIVED FOR IMPLEMENTATION`; giữ trung thực `I/T/P/R=N` và 0/32 Test Result cho tới khi có code/evidence |
+| 2.8 | 2026-08-11 | `TASK-PROG-100` hoàn tất source contract: nâng riêng `BE-110` thành `I=Y` với commit/file/symbol và golden payload Go/TS; `FE-110` và `NFR-106` vẫn `I=N` vì Draft reducer, concurrency transaction và audit chưa thuộc lát cắt này. Không tạo Test Result; `T/P/R` giữ `N`, release giữ RED |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.2 |
-| Trạng thái | **APPROVED FOR IMPLEMENTATION — candidate v2.8; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`** |
+| Phiên bản | 3.3 |
+| Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.9; P1 `1/6`; `TASK-PROG-100 DONE`; `RELEASE_READY BLOCKED`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
 | Người phê duyệt | Product Owner, System Architect, Verification Lead |
@@ -82,6 +82,7 @@ Nguồn để lập baseline:
 | Rủi ro có điểm từ 15 trở lên | 11/16 | Chặn production cutover cho tới khi có evidence và residual acceptance |
 | Kịch bản có Test Result mới | 0/32 | Evidence production vẫn `MISSING/RED` |
 | Cổng implementation | **PLAN_READY PASS; mọi IMPLEMENT_READY PASS** | M4/M5 và chữ ký còn thiếu được `WAIVED FOR IMPLEMENTATION`; 6 ADR `Accepted`; 0/32 Test Result được tạo trong task |
+| Tiến độ code theo Plan 53 | **P1 1/6 = 16,7%** | `TASK-PROG-100 DONE`: 25 OpenAPI operation + Go contract skeleton + TypeScript client sinh tự động; 101/102/104 là next action |
 
 Điểm `60,0%` là điểm trưởng thành **tài liệu**, không phải phần trăm code, test,
 release hay mức sẵn sàng production. Chỉ số phải được tính lại từ bảng master;
@@ -378,6 +379,7 @@ Mỗi lần thay đổi mức, thêm **một dòng mới**; không sửa số l�
 | 2026-08-11 gate-recheck-2 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED | Sửa biên bản consumer còn trỏ v2.5 thành candidate v2.7/commit `a236200`; rerun CI attempt 2 vẫn 17/17 job `steps=[]`, SSH target vẫn bị từ chối. Không đổi thiết kế/code; `0/8` consumer, `0/22 M4/M5`, P1 `0/6` DoD |
 | 2026-08-11 authority-2 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED một phần | `AUTH-PROG-2026-08-11-02`: Product Owner/CTO + System Architect Phạm Đình Chương `ACCEPT` candidate v2.7 tại `a236200` sau khi xác nhận delta v2.5→v2.7 chỉ đổi chỉ báo cấu hình/trạng thái. CI/CD chuyển `DEFERRED` cho assurance/release, không chặn `PLAN_READY` hoặc `IMPLEMENT_READY[contract]`. Giữ `0/8` consumer, `0/22 M4/M5`, P1 `0/6` DoD vì không giả chữ ký còn thiếu |
 | 2026-08-11 authority-3 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **PLAN_READY PASS / IMPLEMENT_READY[*] PASS** | `AUTH-PROG-2026-08-11-03`: Product Owner/CTO + System Architect `ACCEPT ALL` không kèm approval condition; 17/17 decision `DECIDED`; 6/6 ADR `Accepted`; chữ ký còn thiếu `WAIVED FOR IMPLEMENTATION`; CI/target/HIL không phải entry blocker; P0 7/7 DONE, P1 READY TO START |
+| 2026-08-11 P1-task-100 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P1 IN_PROGRESS 1/6 / RELEASE_READY BLOCKED** | `TASK-PROG-100 DONE`: source commits `9917e3b` + `81080f8` + `efbed2d`; contract OpenAPI/Go/TS đồng bộ 25 operation và golden payload; regression host PASS; Trace nâng riêng `BE-110 I=Y`; Test Result giữ 0/32 |
 
 ## 10.1 Ma trận impact của Amendment A1 trên 22 hồ sơ
 
@@ -520,6 +522,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.0 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-02`: Product Owner/CTO + System Architect `ACCEPT` candidate v2.7 sau khi review delta; CI/CD `DEFERRED` khỏi entry của lát cắt contract. Giữ M3 22/22, M4/M5 0/22 và `PLAN_READY BLOCKED` vì chữ ký consumer/Verification/Document Control không thuộc phạm vi ủy quyền | Product + Architect + Document Control |
 | 3.1 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-03`: `ACCEPT ALL` không kèm approval condition; 17/17 decision `DECIDED`; 6/6 ADR `Accepted`; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` `PASS`; consumer/discipline/Verification/Document Control `WAIVED FOR IMPLEMENTATION`; P0 7/7 DONE, P1 được bắt đầu ngay | Product + Architect + Document Control |
 | 3.2 | 2026-08-11 | Ghi commit `b068b7d` và tree `6ab6ac10` chứa candidate v2.8; bước bổ sung chỉ đổi hồ sơ hỗ trợ ngoài mẫu số 22, không đổi candidate hoặc quyền implementation | Document Control |
+| 3.3 | 2026-08-11 | Đồng bộ tiến độ code đầu tiên: `TASK-PROG-100 DONE`, P1 1/6; dẫn ba source commit và review G1; giữ maturity tài liệu 22/22 M3, M4/M5 0/22 và Test Result 0/32 | Dev Lead + Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|

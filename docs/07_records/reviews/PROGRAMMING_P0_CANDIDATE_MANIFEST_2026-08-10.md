@@ -4,18 +4,18 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.2 |
+| Phiên bản | 3.3 |
 | Ngày | 2026-08-11 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
-| Trạng thái | **ACTIVE — candidate v2.8 `APPROVED FOR IMPLEMENTATION`; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
+| Trạng thái | **ACTIVE — candidate v2.9 `IMPLEMENTATION IN PROGRESS`; P1 1/6; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | `b068b7d` — ghi đầy đủ ở §1.1; **22 hash ở §2 là định danh hiện hành** |
+| Candidate commit | `PENDING MERGE TASK-PROG-100` — **22 hash ở §2 là định danh hiện hành**; commit chỉ được ghi bổ sung sau merge |
 | PR nguồn | Không thuộc định danh candidate; tra từ commit ở §1.1 hoặc CHANGELOG |
-| Candidate trước | v2.7 tại commit `a236200` — **SUPERSEDED bởi chỉ thị phê duyệt toàn bộ**, xem §4 |
+| Candidate trước | v2.8 tại commit `b068b7d` — **SUPERSEDED bởi cập nhật trace/progress TASK-PROG-100**, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
-| Record phê duyệt v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — Product Owner/CTO + System Architect `ACCEPT ALL` |
+| Record phê duyệt nền v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — tiếp tục áp dụng; v2.9 không đổi requirement/design decision |
 
 ## 1. Phạm vi và phán quyết
 
@@ -47,9 +47,9 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | `b068b7d970bef600a0be51f79af7eb139e437d39` |
-| Git tree | `6ab6ac10412c7a8dc0e8e52af9b8c374e7b00e2a` |
-| Nhánh phát hành | `docs/programming-unconditional-implement-20260811` |
+| Commit chứa nội dung candidate | `PENDING MERGE TASK-PROG-100` |
+| Git tree | `PENDING MERGE TASK-PROG-100` |
+| Nhánh phát hành | `feat/programming-contract-foundation-20260811` |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
 chạy `scripts/candidate_pin_check.py` trước khi bắt đầu đọc.
@@ -62,7 +62,8 @@ Việc ghim candidate xác định đúng baseline được duyệt. Nó **khôn
 - tự mở `RELEASE_READY`.
 
 `AUTH-PROG-2026-08-11-03` đã mở `PLAN_READY` và mọi `IMPLEMENT_READY[*]`; việc
-ghim hash bảo đảm team implement đúng candidate v2.8 được phê duyệt.
+ghim hash bảo đảm team đọc đúng candidate v2.9: baseline v2.8 đã phê duyệt cộng
+trạng thái triển khai thật của `TASK-PROG-100`.
 
 Baseline gốc `05c1c480418a2256f1010527f9d90fb6ff549b86` vẫn được giữ để so
 sánh/rollback. Chuỗi candidate của vòng P0 là
@@ -95,18 +96,18 @@ trước `e3e9fb2`.
 | 18 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `14c424c07a8cff5665fcbf83b87427d2100d9d028b34a8c513a58766e5f8070b` | `be3fdc70ef02d9cc5fab484eccdecd8fa6c44331` | 306 | ✱ |
 | 19 | `docs/06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md` | `ac7fed9c3134f32f16f28dee7d9b3f60585ef62df749d0148fc15770ba8fc6ba` | `6a09f28979d99ebfc07e8183a1ad01085a7e4488` | 335 | ✱ |
 | 20 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `41081f6c520ce2037730d42cc54134e817a75657b29ddd067941fd5a797454df` | `81fa1767d42be469771adb045b9ada722862abd4` | 175 | ✱ |
-| 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `902e49862b84186f4e36eea28edb186b9845c87ca5f88e23a9c0ad3d74eff99d` | `fb6f5b79aa986fe01dffa3c0da2b6088e2c3cdd7` | 330 | ✱ |
-| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `2138b4ce4745202e4d2a9f986d3445fdea574e682c06ae2af8cbd62ae194c1ac` | `e5dff7225db51f95ba7d02ec80f8ef7e162013b3` | 1132 | ✱ |
+| 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `4fff5bd7b60a3d671d6ad01d0320cb3a53b6340b6619886a95d6bd745db27049` | `ce827756f7de23b6f578796723bc7f94e1696b83` | 332 | ✱ |
+| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `bea361b4fed881e8b1d1d80183c559647973478ebd77cd5805fe8e25acd1d07e` | `9d0825583ba3aa570994e8a9f235dfc200e84bf9` | 1139 | ✱ |
 
-**22/22 hồ sơ đổi** so với candidate v2.7 để ghi chỉ thị phê duyệt ở hồ sơ chủ
-quản hoặc banner waiver thống nhất. Không thay đổi code As-Built. Toàn bộ 22
-được đánh dấu `✱` và tạo thành candidate v2.8.
+So với candidate v2.7, **22/22 hồ sơ đã đổi** để tạo nền v2.8 được phê duyệt.
+Candidate v2.9 hiện tại chỉ đổi dòng 21–22 so với v2.8 để ghi trace/progress
+`TASK-PROG-100`; dấu `✱` tiếp tục biểu thị delta tích lũy so với v2.7.
 
 ## 3. Hồ sơ hỗ trợ ngoài mẫu số 22
 
 | Hồ sơ | Phiên bản tại lần ghim này | Vai trò |
 |---|---|---|
-| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v3.1 | Tracker hồ sơ |
+| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v3.3 | Tracker hồ sơ và đồng bộ tiến độ code |
 | `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v2.0 | Gói phê duyệt toàn bộ |
 | `docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md` | v1.6 | Biên bản consumer review + waiver |
 
@@ -118,21 +119,20 @@ không cần phát hành manifest mới.
 Sáu ADR `ADR-026..031` cũng nằm ngoài mẫu số 22 vì chúng là **quyết định**, không
 phải hồ sơ baseline. Cả sáu đã `Accepted` theo `AUTH-PROG-2026-08-11-03`.
 
-## 4. Delta so với candidate v2.7
+## 4. Delta so với candidate v2.8
 
-Candidate v2.8 thay đổi **22/22** hồ sơ để áp dụng nhất quán
-`AUTH-PROG-2026-08-11-03`:
+Candidate v2.9 thay đổi **2/22** hồ sơ, không đổi requirement hoặc thiết kế:
 
-- Index, SRS, Open Decisions, Architecture, Interface, VVP, Trace và Plan 53
-  được cập nhật trực tiếp về `APPROVED FOR IMPLEMENTATION`, `17 DECIDED`, sáu
-  ADR `Accepted`, `PLAN_READY PASS` và mọi `IMPLEMENT_READY[*] PASS`.
-- 14 hồ sơ discipline còn lại nhận banner thống nhất: các ô chữ ký
-  `PENDING/BLOCKED` được `WAIVED FOR IMPLEMENTATION`; review/evidence thực hiện
-  trong task và không chặn code.
-- Không giả danh tính, chữ ký hoặc Test Result; maturity vẫn 22/22 M3,
-  0/22 M4/M5 và evidence 0/32.
-- Không đổi source code As-Built. CI/CD, target và HIL không được ghi PASS; chỉ
-  bị loại khỏi entry condition cho implementation.
+- `PLAN-PROG-053` lên v0.18: `TASK-PROG-100 DONE`, P1 `IN_PROGRESS 1/6`, dẫn
+  source commit và bằng chứng regression thật.
+- `TRACE-PROG-001` lên v2.8: nâng riêng `BE-110 I=Y`; `FE-110`, `NFR-106` và
+  mọi `T/P/R` giữ `N` vì phần còn lại/Test Result chưa có.
+- Source output được khóa qua `9917e3b`, `81080f8`, `efbed2d`; commit cuối thêm
+  golden impact payload được Go và TypeScript cùng đọc.
+- 20/22 hồ sơ còn lại byte-identical với v2.8. Approval
+  `AUTH-PROG-2026-08-11-03` tiếp tục hiệu lực; không thêm chữ ký hoặc Test Result.
+- OpenAPI/Go/TypeScript là source output của task, không nằm trong mẫu số 22;
+  evidence hỗ trợ tại `PROG-G1-IMPLEMENTATION-REVIEW-2026-08-11`.
 
 Các hồ sơ hỗ trợ, Decision Log, sáu ADR và asset SVG nằm ngoài mẫu số 22 nhưng
 được đồng bộ trong cùng thay đổi để không còn chỉ báo gate mâu thuẫn.
@@ -180,3 +180,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.0 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-02`: Product Owner/CTO + System Architect `ACCEPT` candidate v2.7 sau khi pin `22/22` và review delta v2.5→v2.7. Không đổi bất kỳ hash nào trong mẫu số 22; consumer/Verification/discipline approval và các gate còn lại giữ trạng thái thực tế |
 | 3.1 | 2026-08-11 | Phát hành candidate v2.8 theo `AUTH-PROG-2026-08-11-03`: 22/22 hồ sơ đồng bộ approval/waiver; `17 DECIDED/0 OPEN/0 CLOSED`; 6/6 ADR `Accepted`; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` PASS; Product + Architect `ACCEPT ALL`; consumer/discipline/Verification/Document Control `WAIVED FOR IMPLEMENTATION` |
 | 3.2 | 2026-08-11 | Ghi bổ sung commit `b068b7d` và tree `6ab6ac10` chứa candidate v2.8. Chỉ manifest và hồ sơ hỗ trợ ngoài mẫu số 22 đổi; 22 SHA-256 không đổi |
+| 3.3 | 2026-08-11 | Phát hành candidate v2.9 sau `TASK-PROG-100`: cập nhật hash/blob của Trace v2.8 và Plan 53 v0.18; 20/22 hồ sơ còn lại giữ nguyên. Chưa ghi commit/tree cho tới khi PR merge; 22 SHA-256 là authority hiện hành |
