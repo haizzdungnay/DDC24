@@ -221,6 +221,12 @@ private:
             return fail(st_ir_error::kMissingSection, "RETAIN flag set but no RETAIN_LAYOUT section");
         if ((flags_ & st_ir::kFlagHasSourceMap) && !sec_[st_ir::SEC_DEBUG_SOURCEMAP].present)
             return fail(st_ir_error::kMissingSection, "source map flag set but no section");
+        if (!(flags_ & st_ir::kFlagHasSourceMap) && sec_[st_ir::SEC_DEBUG_SOURCEMAP].present)
+            return fail(st_ir_error::kBadHeader,
+                        "source map section present while source map flag is clear");
+        if (!(flags_ & st_ir::kFlagHasRetain) && sec_[st_ir::SEC_RETAIN_LAYOUT].present)
+            return fail(st_ir_error::kBadHeader,
+                        "RETAIN section present while RETAIN flag is clear");
         return true;
     }
 
@@ -411,12 +417,26 @@ private:
         const SectionRef& s = sec_[st_ir::SEC_DEBUG_SOURCEMAP];
         if (!s.present) return true;
         if (!check_stride(s, 8, "DEBUG_SOURCEMAP")) return false;
+        const uint32_t code_count = sec_[st_ir::SEC_CODE].item_count;
+        if (s.item_count > code_count)
+            return fail(st_ir_error::kBadTable,
+                        "source map has more entries than code instructions");
+        uint32_t previous_pc = 0;
         for (uint32_t i = 0; i < s.item_count; i++) {
             const uint8_t* p = d_ + s.offset + i * 8u;
             StIrSourceMap m;
             m.pc = rd_u32(p);
             m.line = rd_u16(p + 4);
             m.column = rd_u16(p + 6);
+            if (m.pc >= code_count)
+                return fail(st_ir_error::kBadTable, "source map pc is outside code");
+            if (m.line == 0 || m.column == 0)
+                return fail(st_ir_error::kBadTable,
+                            "source map line and column must be one-based");
+            if (i > 0 && m.pc <= previous_pc)
+                return fail(st_ir_error::kBadTable,
+                            "source map pc entries must be strictly increasing");
+            previous_pc = m.pc;
             out_->source_map.push_back(m);
         }
         return true;

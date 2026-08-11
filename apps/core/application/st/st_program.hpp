@@ -90,6 +90,7 @@ struct StVarDecl {
     StStorage   storage = StStorage::VAR_LOCAL;
     int         line = 0;
     int         column = 0;
+    int         length = 1;
 };
 
 struct StFbDecl {
@@ -98,6 +99,7 @@ struct StFbDecl {
     bool        retained = false;
     int         line = 0;
     int         column = 0;
+    int         length = 1;
 };
 
 /* ---- Toán tử ---- */
@@ -158,6 +160,7 @@ struct StExpr {
     StType      result_type = StType::REAL;   /* điền bởi st_semantic */
     int         line = 0;
     int         column = 0;
+    int         length = 1;
 };
 
 /* ---- Câu lệnh ---- */
@@ -167,6 +170,7 @@ struct StFbArg {
     std::unique_ptr<StExpr> value;
     int line = 0;
     int column = 0;
+    int length = 1;
 };
 
 /* Một nhánh của IF/ELSIF. */
@@ -185,6 +189,7 @@ struct StStmt {
     std::string assign_target;
     int         assign_target_line = 0;
     int         assign_target_column = 0;
+    int         assign_target_length = 1;
     std::unique_ptr<StExpr> assign_expr;
 
     /* IF: branches[0] là IF, các phần tử giữa là ELSIF, phần tử cuối có
@@ -196,6 +201,7 @@ struct StStmt {
     std::vector<StFbArg>  fb_args;
     int                   fb_line = 0;
     int                   fb_column = 0;
+    int                   fb_length = 1;
 };
 
 /* ---- Chương trình ---- */

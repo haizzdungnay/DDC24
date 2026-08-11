@@ -52,6 +52,10 @@ constexpr int kMaxExprDepth = 32;
 /* Độ sâu lồng statement (IF trong IF). Logic HVAC thật hiếm khi vượt 5. */
 constexpr int kMaxStmtDepth = 16;
 
+/* Literal TIME của một Task/FB Rev A không được lớn hơn 24 giờ. Giới hạn này
+ * thuộc ngôn ngữ, độc lập với int64 là kiểu lưu trữ nội bộ. */
+constexpr int64_t kMaxTimeLiteralNs = 86400000000000ll;
+
 /* Tổng số biến khai báo (VAR_INPUT + VAR_OUTPUT + VAR). */
 constexpr std::size_t kMaxVariables = st_profile_generated::kMaxVariables;
 

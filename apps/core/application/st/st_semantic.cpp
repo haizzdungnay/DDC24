@@ -12,14 +12,15 @@
 namespace core {
 namespace {
 
-void set_diag(StDiagnostic* d, const char* code, const std::string& msg, int line, int col)
+void set_diag(StDiagnostic* d, const char* code, const std::string& msg, int line, int col,
+              int length)
 {
     d->severity = StSeverity::ERROR;
     d->code = code;
     d->message = msg;
     d->line = line;
     d->column = col;
-    d->length = 1;
+    d->length = length > 0 ? length : 1;
 }
 
 /* Kết quả suy luận kiểu của một biểu thức.
@@ -66,9 +67,9 @@ private:
      * là lỗi chứ không phải cảnh báo. */
     std::unordered_set<std::string> fb_called_;
 
-    bool fail(const char* code, const std::string& msg, int line, int col)
+    bool fail(const char* code, const std::string& msg, int line, int col, int length = 1)
     {
-        set_diag(diag_, code, msg, line, col);
+        set_diag(diag_, code, msg, line, col, length);
         return false;
     }
 
@@ -80,24 +81,26 @@ private:
         for (const StVarDecl& v : prog_->vars) {
             if (vars_.count(v.name) || fbs_.count(v.name))
                 return fail(st_diag_code::kDuplicateVar,
-                            "duplicate declaration of '" + v.name + "'", v.line, v.column);
+                            "duplicate declaration of '" + v.name + "'", v.line, v.column,
+                            v.length);
             if (v.storage == StStorage::VAR_RETAIN &&
                 ++retain_count > st_limits::kMaxRetainVars)
                 return fail(st_diag_code::kTooManyRetainVars,
                             "RETAIN variable count exceeds limit of " +
                                 std::to_string(st_limits::kMaxRetainVars),
-                            v.line, v.column);
+                            v.line, v.column, v.length);
             vars_[v.name] = Symbol{v.type, v.storage};
         }
         for (const StFbDecl& f : prog_->fbs) {
             if (vars_.count(f.name) || fbs_.count(f.name))
                 return fail(st_diag_code::kDuplicateVar,
-                            "duplicate declaration of '" + f.name + "'", f.line, f.column);
+                            "duplicate declaration of '" + f.name + "'", f.line, f.column,
+                            f.length);
             if (f.retained && ++retain_count > st_limits::kMaxRetainVars)
                 return fail(st_diag_code::kTooManyRetainVars,
                             "RETAIN variable count exceeds limit of " +
                                 std::to_string(st_limits::kMaxRetainVars),
-                            f.line, f.column);
+                            f.line, f.column, f.length);
             fbs_[f.name] = FbSymbol{f.fb_type, f.retained};
         }
         return true;
@@ -127,16 +130,16 @@ private:
         if (fbs_.count(s.assign_target))
             return fail(st_diag_code::kAssignToFbInstance,
                         "cannot assign to function block instance '" + s.assign_target + "'",
-                        s.assign_target_line, s.assign_target_column);
+                        s.assign_target_line, s.assign_target_column, s.assign_target_length);
         auto it = vars_.find(s.assign_target);
         if (it == vars_.end())
             return fail(st_diag_code::kUnboundVariable,
                         "undeclared variable '" + s.assign_target + "'",
-                        s.assign_target_line, s.assign_target_column);
+                        s.assign_target_line, s.assign_target_column, s.assign_target_length);
         if (it->second.storage == StStorage::VAR_INPUT)
             return fail(st_diag_code::kReadonlyInput,
                         "'" + s.assign_target + "' is VAR_INPUT and is read-only",
-                        s.assign_target_line, s.assign_target_column);
+                        s.assign_target_line, s.assign_target_column, s.assign_target_length);
 
         const StType want = it->second.type;
         TypeInfo got;
@@ -146,7 +149,7 @@ private:
             return fail(st_diag_code::kTypeMismatch,
                         std::string("cannot assign ") + st_type_name(got.type) + " to " +
                             st_type_name(want) + " variable '" + s.assign_target + "'",
-                        s.assign_target_line, s.assign_target_column);
+                        s.assign_target_line, s.assign_target_column, s.assign_target_length);
         return true;
     }
 
@@ -161,7 +164,7 @@ private:
                     return fail(st_diag_code::kTypeMismatch,
                                 std::string("IF condition must be BOOL, got ") +
                                     st_type_name(t.type),
-                                b.cond->line, b.cond->column);
+                                b.cond->line, b.cond->column, b.cond->length);
             }
             if (!check_stmts(b.body)) return false;
         }
@@ -177,24 +180,24 @@ private:
             if (vars_.count(s.fb_instance))
                 return fail(st_diag_code::kFbFunctionConfusion,
                             "'" + s.fb_instance + "' is a variable, not a function block instance",
-                            s.fb_line, s.fb_column);
+                            s.fb_line, s.fb_column, s.fb_length);
             StFunc dummy;
             if (st_func_from_name(s.fb_instance, &dummy))
                 return fail(st_diag_code::kFbFunctionConfusion,
                             "'" + s.fb_instance +
                                 "' is a standard function; use it inside an expression, "
                                 "not as a statement",
-                            s.fb_line, s.fb_column);
+                            s.fb_line, s.fb_column, s.fb_length);
             return fail(st_diag_code::kUnboundVariable,
                         "undeclared function block instance '" + s.fb_instance + "'",
-                        s.fb_line, s.fb_column);
+                        s.fb_line, s.fb_column, s.fb_length);
         }
 
         if (!fb_called_.insert(s.fb_instance).second)
             return fail(st_diag_code::kFbCalledTwice,
                         "function block instance '" + s.fb_instance +
                             "' is called more than once per cycle",
-                        s.fb_line, s.fb_column);
+                        s.fb_line, s.fb_column, s.fb_length);
 
         const StFbType fb = it->second.type;
         std::unordered_set<std::string> seen;
@@ -207,10 +210,11 @@ private:
             if (idx < 0)
                 return fail(st_diag_code::kBadFbParam,
                             "'" + arg.name + "' is not an input of " + st_fb_type_name(fb),
-                            arg.line, arg.column);
+                            arg.line, arg.column, arg.length);
             if (!seen.insert(arg.name).second)
                 return fail(st_diag_code::kBadFbParam,
-                            "duplicate argument '" + arg.name + "'", arg.line, arg.column);
+                            "duplicate argument '" + arg.name + "'", arg.line, arg.column,
+                            arg.length);
 
             const StType want = st_fb_input_type(fb, idx);
             TypeInfo got;
@@ -221,7 +225,7 @@ private:
                             std::string("argument '") + arg.name + "' of " + st_fb_type_name(fb) +
                                 " expects " + st_type_name(want) + ", got " +
                                 st_type_name(got.type),
-                            arg.line, arg.column);
+                            arg.line, arg.column, arg.length);
         }
         return true;
     }
@@ -239,7 +243,7 @@ private:
                 return fail(st_diag_code::kIntLiteralOutOfRange,
                             "integer literal " + std::to_string(e.literal_int_value) +
                                 " is outside INT range",
-                            e.line, e.column);
+                            e.line, e.column, e.length);
             e.literal = StValue::make_int(static_cast<int32_t>(e.literal_int_value));
         } else if (want == StType::REAL) {
             e.literal = StValue::make_real(static_cast<float>(e.literal_int_value));
@@ -293,9 +297,10 @@ private:
                                 "'" + e.var_name +
                                     "' is a function block instance; read its output with "
                                     "'<instance>.<OUTPUT>'",
-                                e.line, e.column);
+                                e.line, e.column, e.length);
                 return fail(st_diag_code::kUnboundVariable,
-                            "undeclared variable '" + e.var_name + "'", e.line, e.column);
+                            "undeclared variable '" + e.var_name + "'", e.line, e.column,
+                            e.length);
             }
             e.result_type = it->second.type;
             *out = TypeInfo::make(it->second.type);
@@ -307,7 +312,7 @@ private:
             if (it == fbs_.end())
                 return fail(st_diag_code::kUnboundVariable,
                             "undeclared function block instance '" + e.member_object + "'",
-                            e.line, e.column);
+                            e.line, e.column, e.length);
             const StFbType fb = it->second.type;
             for (int i = 0; i < st_fb_output_count(fb); i++) {
                 const char* n = st_fb_output_name(fb, i);
@@ -319,7 +324,7 @@ private:
             }
             return fail(st_diag_code::kBadFbParam,
                         "'" + e.member_field + "' is not an output of " + st_fb_type_name(fb),
-                        e.line, e.column);
+                        e.line, e.column, e.length);
         }
 
         case StExpr::Kind::UNOP: {
@@ -330,7 +335,7 @@ private:
                 if (t.type != StType::BOOL)
                     return fail(st_diag_code::kTypeMismatch,
                                 std::string("NOT requires BOOL, got ") + st_type_name(t.type),
-                                e.line, e.column);
+                                e.line, e.column, e.length);
                 e.result_type = StType::BOOL;
             } else {
                 if (t.poly && !coerce(*e.operand, &t, StType::INT)) return false;
@@ -338,7 +343,7 @@ private:
                     return fail(st_diag_code::kTypeMismatch,
                                 std::string("unary '-' requires INT or REAL, got ") +
                                     st_type_name(t.type),
-                                e.line, e.column);
+                                e.line, e.column, e.length);
                 e.result_type = t.type;
             }
             *out = TypeInfo::make(e.result_type);
@@ -363,7 +368,8 @@ private:
             if (!coerce(*e.rhs, &rt, StType::BOOL)) return false;
             if (lt.type != StType::BOOL || rt.type != StType::BOOL)
                 return fail(st_diag_code::kTypeMismatch,
-                            "logical operator requires BOOL on both sides", e.line, e.column);
+                            "logical operator requires BOOL on both sides", e.line, e.column,
+                            e.length);
             e.result_type = StType::BOOL;
             *out = TypeInfo::make(StType::BOOL);
             return true;
@@ -374,7 +380,7 @@ private:
             return fail(st_diag_code::kTypeMismatch,
                         std::string("operand types differ: ") + st_type_name(lt.type) + " vs " +
                             st_type_name(rt.type) + " (no implicit conversion between variables)",
-                        e.line, e.column);
+                        e.line, e.column, e.length);
         const StType t = lt.type;
 
         switch (op) {
@@ -384,7 +390,7 @@ private:
                 return fail(st_diag_code::kTypeMismatch,
                             std::string("'+'/'-' require INT, REAL or TIME, got ") +
                                 st_type_name(t),
-                            e.line, e.column);
+                            e.line, e.column, e.length);
             e.result_type = t;
             break;
         case StBinOp::MUL:
@@ -392,14 +398,14 @@ private:
             if (!is_numeric(t))
                 return fail(st_diag_code::kTypeMismatch,
                             std::string("'*'/'/' require INT or REAL, got ") + st_type_name(t),
-                            e.line, e.column);
+                            e.line, e.column, e.length);
             e.result_type = t;
             break;
         case StBinOp::MOD:
             if (t != StType::INT)
                 return fail(st_diag_code::kTypeMismatch,
                             std::string("MOD requires INT, got ") + st_type_name(t),
-                            e.line, e.column);
+                            e.line, e.column, e.length);
             e.result_type = StType::INT;
             break;
         case StBinOp::LT: case StBinOp::LE: case StBinOp::GT: case StBinOp::GE:
@@ -407,7 +413,7 @@ private:
                 return fail(st_diag_code::kTypeMismatch,
                             std::string("ordering comparison requires INT, REAL or TIME, got ") +
                                 st_type_name(t),
-                            e.line, e.column);
+                            e.line, e.column, e.length);
             e.result_type = StType::BOOL;
             break;
         case StBinOp::EQ: case StBinOp::NE:
@@ -427,7 +433,7 @@ private:
             return fail(st_diag_code::kArgCountMismatch,
                         std::string(st_func_name(e.func)) + " expects " + std::to_string(arity) +
                             " argument(s), got " + std::to_string(e.args.size()),
-                        e.line, e.column);
+                        e.line, e.column, e.length);
 
         std::vector<TypeInfo> ts(e.args.size());
         for (std::size_t i = 0; i < e.args.size(); i++)
@@ -440,7 +446,7 @@ private:
                             std::string(st_func_name(e.func)) + " argument " +
                                 std::to_string(i + 1) + " expects " + st_type_name(want) +
                                 ", got " + st_type_name(ts[i].type),
-                            e.args[i]->line, e.args[i]->column);
+                            e.args[i]->line, e.args[i]->column, e.args[i]->length);
             return true;
         };
 
@@ -449,7 +455,7 @@ private:
             if (ts[0].poly && !coerce(*e.args[0], &ts[0], StType::INT)) return false;
             if (!is_numeric(ts[0].type))
                 return fail(st_diag_code::kTypeMismatch, "ABS requires INT or REAL",
-                            e.line, e.column);
+                            e.line, e.column, e.length);
             e.result_type = ts[0].type;
             break;
 
@@ -460,11 +466,11 @@ private:
                 return fail(st_diag_code::kTypeMismatch,
                             std::string(st_func_name(e.func)) +
                                 " requires both arguments to have the same type",
-                            e.line, e.column);
+                            e.line, e.column, e.length);
             if (!is_numeric(ts[0].type) && ts[0].type != StType::TIME)
                 return fail(st_diag_code::kTypeMismatch,
                             std::string(st_func_name(e.func)) + " requires INT, REAL or TIME",
-                            e.line, e.column);
+                            e.line, e.column, e.length);
             e.result_type = ts[0].type;
             break;
 
@@ -478,7 +484,7 @@ private:
                 if (!require(i, common)) return false;
             if (!is_numeric(common) && common != StType::TIME)
                 return fail(st_diag_code::kTypeMismatch, "LIMIT requires INT, REAL or TIME",
-                            e.line, e.column);
+                            e.line, e.column, e.length);
             e.result_type = common;
             break;
         }
@@ -488,7 +494,8 @@ private:
             if (!unify(*e.args[1], &ts[1], *e.args[2], &ts[2])) return false;
             if (ts[1].type != ts[2].type)
                 return fail(st_diag_code::kTypeMismatch,
-                            "SEL requires IN0 and IN1 to have the same type", e.line, e.column);
+                            "SEL requires IN0 and IN1 to have the same type", e.line, e.column,
+                            e.length);
             e.result_type = ts[1].type;
             break;
 

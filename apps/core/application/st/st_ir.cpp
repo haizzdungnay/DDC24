@@ -109,6 +109,18 @@ bool serialize_st_ir(const StIrModule& mod, std::vector<uint8_t>* out, std::stri
         return fail("RETAIN variable count exceeds limit");
     if (mod.retain_record_size > st_ir::kMaxRetainRecord)
         return fail("RETAIN record size exceeds limit");
+    if (mod.source_map.size() > mod.code.size())
+        return fail("source map has more entries than code instructions");
+    uint32_t previous_source_pc = 0;
+    for (std::size_t i = 0; i < mod.source_map.size(); ++i) {
+        const StIrSourceMap& entry = mod.source_map[i];
+        if (entry.pc >= mod.code.size()) return fail("source map pc is outside code");
+        if (entry.line == 0 || entry.column == 0)
+            return fail("source map line and column must be one-based");
+        if (i > 0 && entry.pc <= previous_source_pc)
+            return fail("source map pc entries must be strictly increasing");
+        previous_source_pc = entry.pc;
+    }
 
     std::vector<SectionOut> secs;
 

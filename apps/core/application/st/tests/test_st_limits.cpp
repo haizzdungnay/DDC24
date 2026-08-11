@@ -394,6 +394,19 @@ TEST(StLimits, NullBytesInSourceRejectedNotCrash)
     EXPECT_FALSE(diag.code.empty());
 }
 
+TEST(StLimits, InvalidUtf8RejectedAtFirstBadByte)
+{
+    std::string src = wrap("b := a;\n");
+    const std::size_t insert_at = src.find("b :=");
+    ASSERT_NE(insert_at, std::string::npos);
+    src.insert(insert_at, std::string("\xC0\xAF", 2)); /* encoding overlong bị cấm */
+    StProgram prog;
+    StDiagnostic diag;
+    EXPECT_FALSE(parse_st_program(src, &prog, &diag));
+    EXPECT_EQ(diag.code, st_diag_code::kLexUnexpectedChar);
+    EXPECT_TRUE(diag.has_position());
+}
+
 /* ---- Diagnostic luôn dùng được cho BE ---- */
 
 TEST(StLimits, EveryRejectionCarriesStableCode)

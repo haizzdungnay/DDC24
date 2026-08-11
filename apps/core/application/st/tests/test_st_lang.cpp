@@ -453,4 +453,67 @@ END_PROGRAM
     EXPECT_TRUE(check(src, &d)) << d.code << ": " << d.message << " @" << d.line << ":" << d.column;
 }
 
+/* ---- Target Rev A: bounded source, exact diagnostic span ---- */
+
+TEST(StLang, EntireSourceMustBeConsumed)
+{
+    const std::string src =
+        "PROGRAM first\nEND_PROGRAM\nPROGRAM second\nEND_PROGRAM\n";
+    StDiagnostic d;
+    EXPECT_FALSE(check(src, &d));
+    EXPECT_EQ(d.code, st_diag_code::kSyntaxUnexpected);
+    EXPECT_EQ(d.line, 3);
+    EXPECT_EQ(d.column, 1);
+    EXPECT_EQ(d.length, 7);
+}
+
+TEST(StLang, ForbiddenUnboundedLoopIsRejectedAtKeyword)
+{
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("VAR a : BOOL; END_VAR\n",
+                            "WHILE a DO\nEND_WHILE;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kSyntaxUnexpected);
+    EXPECT_EQ(d.length, 5);
+}
+
+TEST(StLang, UnaryPlusAcceptedByTargetGrammar)
+{
+    StDiagnostic d;
+    EXPECT_TRUE(check(prog("VAR r : REAL; END_VAR\n", "r := +r;\n"), &d))
+        << d.code << ": " << d.message;
+}
+
+TEST(StLang, Utf8TextInsideCommentIsAccepted)
+{
+    StDiagnostic d;
+    EXPECT_TRUE(check(prog("VAR r : REAL; END_VAR\n",
+                           "(* Điều khiển nhiệt độ *)\nr := 1.0;\n"), &d))
+        << d.code << ": " << d.message;
+}
+
+TEST(StLang, TimeLiteralIsBoundedToTwentyFourHours)
+{
+    StDiagnostic d;
+    EXPECT_TRUE(check(prog("VAR t : TIME; END_VAR\n", "t := T#24h;\n"), &d));
+    EXPECT_FALSE(check(prog("VAR t : TIME; END_VAR\n", "t := T#24h1ms;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kBadTimeLiteral);
+}
+
+TEST(StLang, SemanticDiagnosticHighlightsWholeIdentifier)
+{
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("", "missing := 1;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kUnboundVariable);
+    EXPECT_EQ(d.length, 7);
+}
+
+TEST(StLang, NonFiniteRealLiteralIsRejectedWithExactSpan)
+{
+    const std::string literal(80, '9');
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("VAR r : REAL; END_VAR\n", "r := " + literal + ".0;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kLexUnexpectedChar);
+    EXPECT_EQ(d.length, static_cast<int>(literal.size() + 2));
+}
+
 } // namespace core
