@@ -1,0 +1,518 @@
+#include "programming/program_ipc_server.hpp"
+
+#include <algorithm>
+#include <cstring>
+#include <limits>
+#include <utility>
+
+#include <nlohmann/json.hpp>
+#include <sodium.h>
+
+#include <sys/socket.h>
+
+namespace core::programming {
+namespace {
+
+using json = nlohmann::json;
+
+void set_error(ProgramCodecError* error, ProgramCodecError value)
+{
+    if (error != nullptr) *error = value;
+}
+
+std::string action_name(ProgramAction action)
+{
+    switch (action) {
+    case ProgramAction::Capabilities: return "CAPABILITIES";
+    case ProgramAction::Status: return "STATUS";
+    case ProgramAction::Stage: return "STAGE";
+    case ProgramAction::Activate: return "ACTIVATE";
+    case ProgramAction::OperationStatus: return "OPERATION_STATUS";
+    case ProgramAction::Restore: return "RESTORE";
+    case ProgramAction::TraceStart: return "TRACE_START";
+    case ProgramAction::RetainReset: return "RETAIN_RESET";
+    }
+    return {};
+}
+
+bool parse_action(const std::string& value, ProgramAction* action)
+{
+    if (value == "CAPABILITIES") *action = ProgramAction::Capabilities;
+    else if (value == "STATUS") *action = ProgramAction::Status;
+    else if (value == "STAGE") *action = ProgramAction::Stage;
+    else if (value == "ACTIVATE") *action = ProgramAction::Activate;
+    else if (value == "OPERATION_STATUS") *action = ProgramAction::OperationStatus;
+    else if (value == "RESTORE") *action = ProgramAction::Restore;
+    else if (value == "TRACE_START") *action = ProgramAction::TraceStart;
+    else if (value == "RETAIN_RESET") *action = ProgramAction::RetainReset;
+    else return false;
+    return true;
+}
+
+std::string result_name(ProgramResult result)
+{
+    switch (result) {
+    case ProgramResult::Ok: return "OK";
+    case ProgramResult::Staged: return "STAGED";
+    case ProgramResult::Accepted: return "ACCEPTED";
+    case ProgramResult::Rejected: return "REJECTED";
+    case ProgramResult::Unavailable: return "UNAVAILABLE";
+    case ProgramResult::Busy: return "BUSY";
+    }
+    return {};
+}
+
+bool parse_result(const std::string& value, ProgramResult* result)
+{
+    if (value == "OK") *result = ProgramResult::Ok;
+    else if (value == "STAGED") *result = ProgramResult::Staged;
+    else if (value == "ACCEPTED") *result = ProgramResult::Accepted;
+    else if (value == "REJECTED") *result = ProgramResult::Rejected;
+    else if (value == "UNAVAILABLE") *result = ProgramResult::Unavailable;
+    else if (value == "BUSY") *result = ProgramResult::Busy;
+    else return false;
+    return true;
+}
+
+bool binary_value(const json& value, std::vector<uint8_t>* output, std::size_t expected,
+                  bool nullable = false)
+{
+    if (nullable && value.is_null()) {
+        output->clear();
+        return true;
+    }
+    if (!value.is_binary()) return false;
+    const auto& binary = value.get_binary();
+    if (binary.size() != expected) return false;
+    output->assign(binary.begin(), binary.end());
+    return true;
+}
+
+json binary_json(const std::vector<uint8_t>& value)
+{
+    return json::binary(value);
+}
+
+json nullable_binary_json(const std::vector<uint8_t>& value)
+{
+    return value.empty() ? json(nullptr) : binary_json(value);
+}
+
+bool valid_text(const std::string& value, std::size_t minimum, std::size_t maximum)
+{
+    return value.size() >= minimum && value.size() <= maximum;
+}
+
+bool valid_correlation(const std::string& value)
+{
+    if (!valid_text(value, 16, 64)) return false;
+    for (const char ch : value) {
+        const bool valid = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+                           (ch >= '0' && ch <= '9') || ch == '.' || ch == '_' || ch == '-';
+        if (!valid) return false;
+    }
+    return true;
+}
+
+bool mutation_action(ProgramAction action)
+{
+    return action == ProgramAction::Stage || action == ProgramAction::Activate ||
+           action == ProgramAction::Restore || action == ProgramAction::TraceStart ||
+           action == ProgramAction::RetainReset;
+}
+
+bool canonical_cbor(const std::vector<uint8_t>& payload)
+{
+    if (payload.empty()) return false;
+    try {
+        const json value = json::from_cbor(payload, true, true);
+        return json::to_cbor(value) == payload;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+bool request_valid(const ProgramRequest& request, ProgramCodecError* error)
+{
+    if (request.protocol_major != PROGRAM_IPC_PROTOCOL_MAJOR) {
+        set_error(error, ProgramCodecError::UnsupportedMajor);
+        return false;
+    }
+    if (request.protocol_minor > PROGRAM_IPC_PROTOCOL_MINOR) {
+        set_error(error, ProgramCodecError::UnsupportedMinor);
+        return false;
+    }
+    if (request.schema_version != "1.0") {
+        set_error(error, ProgramCodecError::UnsupportedMajor);
+        return false;
+    }
+    if (request.request_id.size() != 16 ||
+        (!request.operation_id.empty() && request.operation_id.size() != 16) ||
+        !valid_text(request.controller_id, 1, 64) || request.actor_id.size() > 128 ||
+        request.deadline_mono_ns == 0 || !valid_correlation(request.correlation_id) ||
+        request.payload.empty() || request.payload.size() > PROGRAM_IPC_MAX_PAYLOAD ||
+        !canonical_cbor(request.payload) || action_name(request.action).empty()) {
+        set_error(error, ProgramCodecError::InvalidEnvelope);
+        return false;
+    }
+    if (mutation_action(request.action) &&
+        (request.operation_id.size() != 16 || request.actor_id.empty())) {
+        set_error(error, ProgramCodecError::InvalidEnvelope);
+        return false;
+    }
+    std::array<uint8_t, crypto_hash_sha256_BYTES> digest{};
+    crypto_hash_sha256(digest.data(), request.payload.data(), request.payload.size());
+    if (sodium_memcmp(digest.data(), request.payload_hash.data(), digest.size()) != 0) {
+        set_error(error, ProgramCodecError::PayloadHashMismatch);
+        return false;
+    }
+    set_error(error, ProgramCodecError::None);
+    return true;
+}
+
+bool response_valid(const ProgramResponse& response, ProgramCodecError* error)
+{
+    if (response.protocol_major != PROGRAM_IPC_PROTOCOL_MAJOR) {
+        set_error(error, ProgramCodecError::UnsupportedMajor);
+        return false;
+    }
+    if (response.protocol_minor > PROGRAM_IPC_PROTOCOL_MINOR ||
+        response.schema_version != "1.0") {
+        set_error(error, ProgramCodecError::UnsupportedMinor);
+        return false;
+    }
+    if (response.request_id.size() != 16 ||
+        (!response.operation_id.empty() && response.operation_id.size() != 16) ||
+        !valid_correlation(response.correlation_id) || result_name(response.result).empty() ||
+        response.component.size() > 128 || response.payload.size() > PROGRAM_IPC_MAX_PAYLOAD ||
+        !canonical_cbor(response.payload)) {
+        set_error(error, ProgramCodecError::InvalidEnvelope);
+        return false;
+    }
+    set_error(error, ProgramCodecError::None);
+    return true;
+}
+
+std::string hex_key(const std::vector<uint8_t>& bytes)
+{
+    static constexpr char HEX[] = "0123456789abcdef";
+    std::string output(bytes.size() * 2, '0');
+    for (std::size_t index = 0; index < bytes.size(); ++index) {
+        output[index * 2] = HEX[bytes[index] >> 4U];
+        output[index * 2 + 1] = HEX[bytes[index] & 0x0fU];
+    }
+    return output;
+}
+
+std::vector<uint8_t> capabilities_payload()
+{
+    json payload = json::array({"MK-DDC-24-REV-A", PROGRAM_IPC_MAX_FRAME,
+                                PROGRAM_IPC_MAX_QUEUE, json::array({1000, 5000, 30000})});
+    return json::to_cbor(payload);
+}
+
+} // namespace
+
+std::vector<uint8_t> EncodeFrame(const std::vector<uint8_t>& cbor, ProgramCodecError* error)
+{
+    if (cbor.empty()) {
+        set_error(error, ProgramCodecError::InvalidEnvelope);
+        return {};
+    }
+    if (cbor.size() > PROGRAM_IPC_MAX_FRAME) {
+        set_error(error, ProgramCodecError::FrameTooLarge);
+        return {};
+    }
+    std::vector<uint8_t> frame(4 + cbor.size());
+    const uint32_t length = static_cast<uint32_t>(cbor.size());
+    frame[0] = static_cast<uint8_t>(length & 0xffU);
+    frame[1] = static_cast<uint8_t>((length >> 8U) & 0xffU);
+    frame[2] = static_cast<uint8_t>((length >> 16U) & 0xffU);
+    frame[3] = static_cast<uint8_t>((length >> 24U) & 0xffU);
+    std::copy(cbor.begin(), cbor.end(), frame.begin() + 4);
+    set_error(error, ProgramCodecError::None);
+    return frame;
+}
+
+bool DecodeFrame(const std::vector<uint8_t>& frame, std::vector<uint8_t>* cbor,
+                 ProgramCodecError* error)
+{
+    if (cbor == nullptr || frame.size() < 4) {
+        set_error(error, ProgramCodecError::FrameTruncated);
+        return false;
+    }
+    const uint32_t length = static_cast<uint32_t>(frame[0]) |
+                            (static_cast<uint32_t>(frame[1]) << 8U) |
+                            (static_cast<uint32_t>(frame[2]) << 16U) |
+                            (static_cast<uint32_t>(frame[3]) << 24U);
+    if (length == 0) {
+        set_error(error, ProgramCodecError::InvalidEnvelope);
+        return false;
+    }
+    if (length > PROGRAM_IPC_MAX_FRAME) {
+        set_error(error, ProgramCodecError::FrameTooLarge);
+        return false;
+    }
+    if (static_cast<uint64_t>(length) + 4U != frame.size()) {
+        set_error(error, ProgramCodecError::FrameTruncated);
+        return false;
+    }
+    cbor->assign(frame.begin() + 4, frame.end());
+    set_error(error, ProgramCodecError::None);
+    return true;
+}
+
+std::vector<uint8_t> EncodeRequestFrame(const ProgramRequest& request, ProgramCodecError* error)
+{
+    if (!request_valid(request, error)) return {};
+    json value = json::array({
+        request.protocol_major,
+        request.protocol_minor,
+        request.schema_version,
+        binary_json(request.request_id),
+        nullable_binary_json(request.operation_id),
+        request.controller_id,
+        request.actor_id,
+        request.deadline_mono_ns,
+        json::binary(std::vector<uint8_t>(request.payload_hash.begin(), request.payload_hash.end())),
+        action_name(request.action),
+        request.correlation_id,
+        binary_json(request.payload),
+    });
+    return EncodeFrame(json::to_cbor(value), error);
+}
+
+bool DecodeRequestFrame(const std::vector<uint8_t>& frame, ProgramRequest* request,
+                        ProgramCodecError* error)
+{
+    if (request == nullptr) {
+        set_error(error, ProgramCodecError::InvalidEnvelope);
+        return false;
+    }
+    std::vector<uint8_t> cbor;
+    if (!DecodeFrame(frame, &cbor, error)) return false;
+    try {
+        const json value = json::from_cbor(cbor, true, true);
+        if (!value.is_array() || value.size() != 12 || !value[0].is_number_unsigned() ||
+            !value[1].is_number_unsigned() || !value[2].is_string() ||
+            !value[5].is_string() || !value[6].is_string() ||
+            !value[7].is_number_unsigned() || !value[9].is_string() ||
+            !value[10].is_string()) {
+            set_error(error, ProgramCodecError::InvalidEnvelope);
+            return false;
+        }
+        ProgramRequest parsed;
+        parsed.protocol_major = value[0].get<uint16_t>();
+        parsed.protocol_minor = value[1].get<uint16_t>();
+        parsed.schema_version = value[2].get<std::string>();
+        if (!binary_value(value[3], &parsed.request_id, 16) ||
+            !binary_value(value[4], &parsed.operation_id, 16, true)) {
+            set_error(error, ProgramCodecError::InvalidEnvelope);
+            return false;
+        }
+        parsed.controller_id = value[5].get<std::string>();
+        parsed.actor_id = value[6].get<std::string>();
+        parsed.deadline_mono_ns = value[7].get<uint64_t>();
+        std::vector<uint8_t> hash;
+        if (!binary_value(value[8], &hash, 32) ||
+            !parse_action(value[9].get<std::string>(), &parsed.action) ||
+            !binary_value(value[11], &parsed.payload, value[11].is_binary()
+                                                         ? value[11].get_binary().size()
+                                                         : 0)) {
+            set_error(error, ProgramCodecError::InvalidEnvelope);
+            return false;
+        }
+        std::copy(hash.begin(), hash.end(), parsed.payload_hash.begin());
+        parsed.correlation_id = value[10].get<std::string>();
+        if (!request_valid(parsed, error)) return false;
+        if (json::to_cbor(value) != cbor) {
+            set_error(error, ProgramCodecError::InvalidEnvelope);
+            return false;
+        }
+        *request = std::move(parsed);
+        return true;
+    } catch (const json::exception&) {
+        set_error(error, ProgramCodecError::InvalidEnvelope);
+        return false;
+    }
+}
+
+std::vector<uint8_t> EncodeResponseFrame(const ProgramResponse& response, ProgramCodecError* error)
+{
+    if (!response_valid(response, error)) return {};
+    json value = json::array({
+        response.protocol_major,
+        response.protocol_minor,
+        response.schema_version,
+        binary_json(response.request_id),
+        nullable_binary_json(response.operation_id),
+        response.correlation_id,
+        result_name(response.result),
+        response.has_active_revision ? json(response.active_revision_id) : json(nullptr),
+        response.has_lkg_revision ? json(response.lkg_revision_id) : json(nullptr),
+        response.keeps_running,
+        response.has_detail_code ? json(response.detail_code) : json(nullptr),
+        response.component,
+        binary_json(response.payload),
+    });
+    return EncodeFrame(json::to_cbor(value), error);
+}
+
+bool DecodeResponseFrame(const std::vector<uint8_t>& frame, ProgramResponse* response,
+                         ProgramCodecError* error)
+{
+    if (response == nullptr) {
+        set_error(error, ProgramCodecError::InvalidEnvelope);
+        return false;
+    }
+    std::vector<uint8_t> cbor;
+    if (!DecodeFrame(frame, &cbor, error)) return false;
+    try {
+        const json value = json::from_cbor(cbor, true, true);
+        if (!value.is_array() || value.size() != 13 || !value[0].is_number_unsigned() ||
+            !value[1].is_number_unsigned() || !value[2].is_string() ||
+            !value[5].is_string() || !value[6].is_string() || !value[9].is_boolean() ||
+            !value[11].is_string()) {
+            set_error(error, ProgramCodecError::InvalidEnvelope);
+            return false;
+        }
+        ProgramResponse parsed;
+        parsed.protocol_major = value[0].get<uint16_t>();
+        parsed.protocol_minor = value[1].get<uint16_t>();
+        parsed.schema_version = value[2].get<std::string>();
+        if (!binary_value(value[3], &parsed.request_id, 16) ||
+            !binary_value(value[4], &parsed.operation_id, 16, true) ||
+            !parse_result(value[6].get<std::string>(), &parsed.result)) {
+            set_error(error, ProgramCodecError::InvalidEnvelope);
+            return false;
+        }
+        parsed.correlation_id = value[5].get<std::string>();
+        if (!value[7].is_null()) {
+            if (!value[7].is_string()) return false;
+            parsed.has_active_revision = true;
+            parsed.active_revision_id = value[7].get<std::string>();
+        }
+        if (!value[8].is_null()) {
+            if (!value[8].is_string()) return false;
+            parsed.has_lkg_revision = true;
+            parsed.lkg_revision_id = value[8].get<std::string>();
+        }
+        parsed.keeps_running = value[9].get<bool>();
+        if (!value[10].is_null()) {
+            if (!value[10].is_string()) return false;
+            parsed.has_detail_code = true;
+            parsed.detail_code = value[10].get<std::string>();
+        }
+        parsed.component = value[11].get<std::string>();
+        const std::size_t payload_size = value[12].is_binary() ? value[12].get_binary().size() : 0;
+        if (!binary_value(value[12], &parsed.payload, payload_size)) {
+            set_error(error, ProgramCodecError::InvalidEnvelope);
+            return false;
+        }
+        if (!response_valid(parsed, error)) return false;
+        if (json::to_cbor(value) != cbor) {
+            set_error(error, ProgramCodecError::InvalidEnvelope);
+            return false;
+        }
+        *response = std::move(parsed);
+        return true;
+    } catch (const json::exception&) {
+        set_error(error, ProgramCodecError::InvalidEnvelope);
+        return false;
+    }
+}
+
+PeerCredentials ReadPeerCredentials(int socket_fd)
+{
+    PeerCredentials output;
+#ifdef SO_PEERCRED
+    struct ucred credential {};
+    socklen_t length = sizeof(credential);
+    if (::getsockopt(socket_fd, SOL_SOCKET, SO_PEERCRED, &credential, &length) == 0 &&
+        length == sizeof(credential)) {
+        output.valid = true;
+        output.uid = credential.uid;
+        output.gid = credential.gid;
+        output.pid = credential.pid;
+    }
+#else
+    (void)socket_fd;
+#endif
+    return output;
+}
+
+ProgramResponse ProgramIpcServer::make_response(const ProgramRequest& request,
+                                                ProgramResult result,
+                                                const char* detail_code,
+                                                std::vector<uint8_t> payload) const
+{
+    ProgramResponse response;
+    response.request_id = request.request_id;
+    response.operation_id = request.operation_id;
+    response.correlation_id = request.correlation_id;
+    response.result = result;
+    response.keeps_running = true;
+    response.payload = payload.empty() ? std::vector<uint8_t>{0x80} : std::move(payload);
+    if (detail_code != nullptr && detail_code[0] != '\0') {
+        response.has_detail_code = true;
+        response.detail_code = detail_code;
+    }
+    return response;
+}
+
+void ProgramIpcServer::cache_response(const std::string& request_key,
+                                      const std::vector<uint8_t>& request,
+                                      const std::vector<uint8_t>& response)
+{
+    while (cache_order_.size() >= PROGRAM_IPC_CACHE_LIMIT) {
+        cache_.erase(cache_order_.front());
+        cache_order_.pop_front();
+    }
+    cache_order_.push_back(request_key);
+    cache_[request_key] = CachedResponse{request, response};
+}
+
+std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& frame,
+                                                   const PeerCredentials& peer,
+                                                   uint64_t now_mono_ns)
+{
+    if (!peer.valid || peer.uid != allowed_peer_uid_) return {};
+
+    ProgramRequest request;
+    ProgramCodecError decode_error = ProgramCodecError::None;
+    if (!DecodeRequestFrame(frame, &request, &decode_error)) return {};
+
+    const std::string request_key = hex_key(request.request_id);
+    const auto cached = cache_.find(request_key);
+    if (cached != cache_.end()) {
+        if (cached->second.request_frame == frame) return cached->second.response_frame;
+        ProgramCodecError encode_error = ProgramCodecError::None;
+        return EncodeResponseFrame(
+            make_response(request, ProgramResult::Rejected, "IPC-REQUEST-ID-CONFLICT"),
+            &encode_error);
+    }
+
+    ProgramResponse response;
+    if (request.deadline_mono_ns <= now_mono_ns) {
+        response = make_response(request, ProgramResult::Rejected, "IPC-DEADLINE");
+    } else if (queue_depth_ >= PROGRAM_IPC_MAX_QUEUE) {
+        response = make_response(request, ProgramResult::Busy, "IPC-QUEUE-FULL");
+    } else {
+        ++queue_depth_;
+        if (request.action == ProgramAction::Capabilities) {
+            response = make_response(request, ProgramResult::Ok, nullptr,
+                                     capabilities_payload());
+        } else {
+            response = make_response(request, ProgramResult::Unavailable,
+                                     "IPC-CONTRACT-ONLY");
+        }
+        --queue_depth_;
+    }
+    ProgramCodecError encode_error = ProgramCodecError::None;
+    std::vector<uint8_t> encoded = EncodeResponseFrame(response, &encode_error);
+    if (encoded.empty()) return {};
+    cache_response(request_key, frame, encoded);
+    return encoded;
+}
+
+} // namespace core::programming

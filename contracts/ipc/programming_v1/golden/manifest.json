@@ -1,0 +1,20 @@
+{
+  "protocolMajor": 1,
+  "protocolMinor": 0,
+  "schemaVersion": "1.0",
+  "schemaSha256": "d18702bc1f699b9fc90d05f41ae0dd4dee4444a1025dcb45c9f559cfb6409342",
+  "files": {
+    "request_capabilities.hex": {
+      "sha256": "8d302dcad135b0b3e1e2529ff4d942c9ae936e1c08e34aef155cface79167c2d",
+      "description": "Request CAPABILITIES hợp lệ, payload là CBOR empty array"
+    },
+    "response_unavailable.hex": {
+      "sha256": "702090e52fb0f58e9e8fa590329299b2e360a8e0c8772c7d93da162d706b38e8",
+      "description": "Response UNAVAILABLE keepsRunning=true"
+    },
+    "request_unknown_major.hex": {
+      "sha256": "25edbb3073496b39d2e35d6aebc84e359178752eab49d533d84f2e47bd819f4c",
+      "description": "Negative fixture: major=2, phải reject"
+    }
+  }
+}

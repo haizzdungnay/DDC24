@@ -1,0 +1,42 @@
+EV-PROG-G1-101
+Ngày: 2026-08-11 Asia/Ho_Chi_Minh
+Loại: evidence hỗ trợ task; KHÔNG phải Test Result VS-PROG
+
+Source:
+- 51fe515 feat(programming): khóa giao thức IPC v1 phía Core
+- e9707b4 feat(programming): thêm client UDS có reconcile phía Backend
+
+Contract:
+- Protocol major/minor/schema: 1/0/1.0
+- Frame: uint32 little-endian + canonical CBOR
+- Max frame/action payload/queue: 65536/32768/32
+- Schema SHA-256: d18702bc1f699b9fc90d05f41ae0dd4dee4444a1025dcb45c9f559cfb6409342
+- request_capabilities.hex: 8d302dcad135b0b3e1e2529ff4d942c9ae936e1c08e34aef155cface79167c2d
+- request_unknown_major.hex: 25edbb3073496b39d2e35d6aebc84e359178752eab49d533d84f2e47bd819f4c
+- response_unavailable.hex: 702090e52fb0f58e9e8fa590329299b2e360a8e0c8772c7d93da162d706b38e8
+
+Kiểm chứng:
+- C++ targeted ProgramIpc*: 7/7 PASS
+- Go targeted codec/client/manifest: PASS
+- Go targeted race: PASS
+- CMake Release Modbus=ON BACnet=ON HMI=ON: configure/build PASS
+- CTest toàn repo: 867/867 PASS
+- go vet ./...: PASS
+- go test ./... -count=1: PASS
+- Vitest: 54/54 file, 473/473 test PASS
+- ESLint: PASS
+- TypeScript/Vite build: PASS; Programming API client 25 operation
+
+Review/finding:
+- F-G1-101-01 P1 canonical CBOR: CLOSED
+- F-G1-101-02 P1 short write: CLOSED
+- F-G1-101-03 P1 requestId nullable trong schema: CLOSED
+- F-G1-101-04 P2 golden *.hex bị gitignore: CLOSED
+- P0/P1 mở: 0
+
+Ranh giới:
+- PROGRAMMING_REV_A default OFF
+- Core mutation side effect: không có; trả UNAVAILABLE/IPC-CONTRACT-ONLY
+- Target/HIL/browser: không chạy, không claim
+- Requirement I=Y: vẫn 1/60; partial không được nâng
+- Test Result chính thức: 0/32

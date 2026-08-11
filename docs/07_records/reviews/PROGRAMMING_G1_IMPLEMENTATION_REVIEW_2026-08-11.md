@@ -1,16 +1,16 @@
-# Review triển khai G1 Programming — TASK-PROG-100
+# Review triển khai G1 Programming — TASK-PROG-100/101
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G1-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-100` |
+| Task | `TASK-PROG-100`, `TASK-PROG-101` |
 | Ngày | 2026-08-11 |
-| Trạng thái task | **DONE — contract foundation** |
-| Trạng thái pha | **P1 IN_PROGRESS — 1/6** |
-| Source commit | `9917e3b` (OpenAPI + Go), `81080f8` (TypeScript), `efbed2d` (golden parity) |
-| PR / merge | [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae6b391163ad893bb29f3bc570d783a3334` |
+| Trạng thái task | **DONE — 2 contract foundation task** |
+| Trạng thái pha | **P1 IN_PROGRESS — 2/6** |
+| Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4` |
+| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: chờ ghi sau merge |
 | Test Result chính thức | **0/32 — không đổi** |
-| Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt) |
+| Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt) |
 
 ## 1. Kết quả triển khai
 
@@ -58,3 +58,55 @@ khi `100..102` đều `DONE`, bắt đầu `TASK-PROG-103`; `TASK-PROG-105` là 
 join cuối P1.
 
 Remote branch `feat/programming-contract-foundation-20260811` đã xóa sau merge.
+
+## 5. Kết quả `TASK-PROG-101`
+
+- Contract `programming_v1` dùng frame `uint32 little-endian` + canonical CBOR,
+  protocol `1.0`, request/operation/correlation ID, monotonic deadline, SHA-256
+  payload, active/LKG, `keepsRunning` và component detail.
+- Core C++ có codec và `ProgramIpcServer::HandleFrame`; skeleton chỉ trả
+  capability. Mutation chưa được nối và trả `UNAVAILABLE/IPC-CONTRACT-ONLY`,
+  không stage/swap/reset hoặc chạm ScanLoop.
+- Backend Go có `Client.Call` qua Unix domain socket, kiểm `SO_PEERCRED`, bounded
+  read/write/deadline/correlation; `Client.Reconcile` chỉ gửi
+  `OPERATION_STATUS`, không replay mutation sau timeout/restart.
+- Ba golden frame có SHA-256 trong manifest; C++ và Go decode/encode lại
+  byte-identical. Schema hash cũng được test để drift làm build fail.
+
+### 5.1 Finding phát hiện và đã đóng trước commit
+
+| ID | Mức | Finding | Cách đóng | Trạng thái |
+|---|---|---|---|---|
+| `F-G1-101-01` | P1 | Decoder ban đầu chấp nhận CBOR indefinite/non-minimal dù contract yêu cầu canonical | Decode rồi canonical re-encode và so byte ở cả C++/Go; payload action cũng phải canonical; thêm ca âm | **CLOSED** |
+| `F-G1-101-02` | P1 | `net.Conn.Write` có thể short-write nhưng client ban đầu xem một lần gọi là hoàn tất frame | Thêm `writeAll`, fail khi zero-byte write; fake Core dùng cùng helper | **CLOSED** |
+| `F-G1-101-03` | P1 | JSON schema dùng chung kiểu UUID nullable khiến `requestId` vô tình cho phép `null` | Tách `uuidBytes` bắt buộc và `nullableUuidBytes` chỉ cho `operationId` | **CLOSED** |
+| `F-G1-101-04` | P2 | `.gitignore` toàn repo bỏ qua `*.hex`, có nguy cơ merge manifest nhưng thiếu golden corpus | Force-add đúng ba fixture đã ghim và kiểm `git ls-files` trước commit | **CLOSED** |
+
+Không còn finding P0/P1 mở trong phạm vi Task 101. Review security xác nhận peer
+credential, giới hạn frame/queue/deadline, hash/canonical validation, duplicate
+request và no-replay đều fail-closed. Socket listener/runtime operation worker là
+output của task sau, không được giả là đã có.
+
+## 6. Kiểm chứng `TASK-PROG-101` và truy vết
+
+| Làn | Kết quả đo trong phiên |
+|---|---|
+| C++ targeted | `ProgramIpc*` 7/7 PASS: round-trip, malformed/oversize/version/canonical, peer/deadline/queue, duplicate, golden |
+| Go targeted | codec/client/golden/manifest PASS; `go test ... -race -count=1` PASS |
+| C++ toàn repo | Release Modbus+BACnet+HMI build PASS; CTest 867/867 PASS |
+| Go toàn repo | `go vet ./...` PASS; `go test ./... -count=1` PASS |
+| FE regression | Vitest 54/54 file, 473/473 test; lint/build PASS; generated Programming API vẫn 25 operation |
+| Tài liệu | candidate pin, trace hai chiều, docs ISO harness và `git diff --check` chạy lại trước commit tài liệu |
+
+Trace giữ đúng **1/60** requirement `I=Y`: `BE-110` được bổ sung source IPC.
+`SYS-104`, `BE-106` và `NFR-105` chỉ có phần client/no-replay/skeleton nên vẫn
+`I=N` cho tới khi có operation worker, durable transaction, runtime integration
+và target fault injection. Không tạo `TR-PROG-*`; mọi `T/P/R=N`, Test Result
+giữ `0/32`, feature flag giữ `OFF` và `RELEASE_READY` vẫn `BLOCKED`.
+
+Không chạy Chrome DevTools vì task không đổi UI component/route/layout. Không
+deploy target/HIL vì task này khóa contract và skeleton không mutation; target
+continuity là acceptance của gate sau, không được suy từ host test.
+
+Next action theo dependency: `TASK-PROG-102` và `TASK-PROG-104`. Khi 102 xong,
+`TASK-PROG-103` được mở; `TASK-PROG-105` vẫn là review join cuối P1.
