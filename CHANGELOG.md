@@ -7,6 +7,30 @@
 ---
 
 ## [Unreleased]
+### Changed — Xác nhận Product/Architect trên candidate Programming v2.7 (2026-08-11)
+
+**Ủy quyền được ghi nhận.** Theo yêu cầu trực tiếp của Phạm Đình Chương, ghi
+`AUTH-PROG-2026-08-11-02` dưới hình thức ủy quyền điện tử với hai vai trò Product
+Owner/CTO + System Architect. Candidate pin khớp `22/22`; delta
+`ac059a1..a236200` chỉ đổi `PLAN-PROG-053` để sửa chỉ báo cấu hình/trạng thái,
+không đổi requirement, contract hoặc thiết kế kỹ thuật. Hai vai trò `ACCEPT`
+candidate v2.7 tại commit đầy đủ `a23620026c6c6a44625d149361b9949b31e93f90` và
+xác nhận các quyết định kiến trúc trước đó tiếp tục hiệu lực.
+
+**Ranh giới quyền hạn.** CI/CD được ghi `DEFERRED` cho pha assurance/release và
+không còn được dùng làm blocker của `PLAN_READY` hoặc
+`IMPLEMENT_READY[contract]`; không suy diễn CI đã PASS. Ủy quyền của Product +
+Architect không được đổi thành chữ ký của consumer/Verification/Document Control:
+`0/8` consumer, `0/22 M4/M5`, `PLAN_READY` và mọi `IMPLEMENT_READY[*]` vẫn
+`BLOCKED` theo `DOC-GOV-001`.
+
+**Hồ sơ và kiểm chứng.** Đồng bộ Roadmap 54 v3.0, gói gate v1.9, manifest v3.0,
+biên bản consumer v1.5, `CONTROL.md` và các chỉ mục. Candidate 22 hồ sơ không đổi.
+Kiểm chứng trong cùng phiên: `candidate_pin_check.py` PASS `22/22`; trace hai
+chiều, docs harness và `git diff --check` được chạy lại sau thay đổi. Không chạy
+browser, build sản phẩm, target hoặc HIL vì phiên này chỉ ghi quyết định tài liệu,
+không đổi source/UI/runtime.
+
 ### Fixed — Đồng bộ revision ký P0 và tái kiểm gate hạ tầng (2026-08-11)
 
 **Revision ký.** Sửa biên bản consumer v1.4 còn hướng tám reviewer tới
