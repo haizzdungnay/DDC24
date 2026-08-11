@@ -4,14 +4,14 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.29 |
+| Phiên bản | 3.30 |
 | Ngày | 2026-08-11 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
 | Trạng thái | **ACTIVE — candidate v2.22 `IMPLEMENTATION IN PROGRESS`; P1 6/6 DONE; P2 8/8 SOURCE/DOD DONE; G2 EVIDENCE BLOCKED; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | chờ merge hồ sơ — source authority `3e5281d`; **22 hash ở §2 là định danh hiện hành** |
-| PR nguồn | chờ tạo sau khi máy kiểm 22 hash/trace/harness PASS |
+| Candidate commit | `352fe10` — ghi đầy đủ ở §1.1; source authority `3e5281d`; **22 hash ở §2 là định danh hiện hành** |
+| PR nguồn | [PR #153](https://github.com/Mekong-HCM/MK-DDC-24/pull/153) — merged |
 | Candidate trước | v2.21 tại commit `6893c87` — **SUPERSEDED bởi TASK-PROG-207**, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
@@ -47,9 +47,9 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | chờ merge hồ sơ; source commit `3e5281d45e41d4bc90c8d81d6c2d6dfaa930ad9d` |
-| Git tree | chờ merge hồ sơ; source tree `6e489d57fe471973986178f1add09fff3393d266` |
-| Nhánh phát hành | `test/programming-security-assurance-20260811`; PR hồ sơ chờ tạo |
+| Commit chứa nội dung candidate | `352fe10355bd49de703db79a66f1112302592c43`; source commit `3e5281d45e41d4bc90c8d81d6c2d6dfaa930ad9d` |
+| Git tree | `923cb1e3d84ef93d1e2c08ef74ff5dd346cda139`; source tree `6e489d57fe471973986178f1add09fff3393d266` |
+| Nhánh phát hành | `test/programming-security-assurance-20260811` — remote đã xóa sau merge PR #153 |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
 chạy `scripts/candidate_pin_check.py` trước khi bắt đầu đọc.
@@ -218,3 +218,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.27 | 2026-08-11 | Phát hành candidate v2.21 sau `TASK-PROG-206`: cập nhật hash/blob Design Index v2.9, Data v0.8, Interface v1.2, BE v1.0, Risk v1.4, Trace v3.10 và Plan 53 v0.30; 15/22 hồ sơ còn lại giữ nguyên. P2 7/8, tiếp theo TASK-PROG-207; hai record BLOCKED, 0/32 PASS; commit/tree/PR chờ ghi bổ sung sau merge |
 | 3.28 | 2026-08-11 | Ghi bổ sung PR #151, merge commit `6893c87` và tree `8f1801ac` chứa candidate v2.21; remote feature branch đã xóa. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi, candidate pin tiếp tục 22/22 PASS. GitHub Actions không khởi chạy do billing/spending-limit của tài khoản; gate local đầy đủ được ghi tại PR |
 | 3.29 | 2026-08-11 | Phát hành candidate v2.22 sau `TASK-PROG-207`: cập nhật hash/blob Index v3.0, Data v0.9, Interface v1.3, Security v0.5, BE v1.1, VVP v1.0, Risk v1.5, Trace v3.11 và Plan 53 v0.31; 13/22 hồ sơ còn lại giữ nguyên. P2 8/8 source/DoD, next TASK-PROG-300; 0/32 PASS; commit/tree/PR chờ ghi sau merge |
+| 3.30 | 2026-08-11 | Ghi bổ sung PR #153, merge commit `352fe10` và tree `923cb1e3` chứa candidate v2.22; remote feature branch đã xóa. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi, candidate pin tiếp tục 22/22 PASS. GitHub Actions không chạy step nào do billing/spending-limit; gate local đầy đủ được ghi tại PR |
