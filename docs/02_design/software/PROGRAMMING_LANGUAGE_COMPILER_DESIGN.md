@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LANG-PROG-001` |
-| Phiên bản | 0.3 |
-| Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; bề rộng kiểu số chờ OD-PROG-002 |
-| Ngày | 2026-08-09 |
+| Phiên bản | 0.4 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-200` đã triển khai ST subset, sáu type target, source map và fuzz trên host; FBD/user POU/worker/target còn mở** |
+| Ngày | 2026-08-11 |
 | Chủ quản | Compiler Lead + Controls Lead |
 | Người review | Core Lead, FE Lead, Verification Lead, Security Lead |
 | Người phê duyệt | System Architect + Product Owner |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **viết được gì trong ST và FBD**, biên dịch ra sao, và lỗi biên dịch trông như thế nào. Định nghĩa tập con ngôn ngữ, hệ kiểu, thư viện block, và **một IR chung** để ST và FBD cho ra cùng ngữ nghĩa. |
 | 2. Ai phải đọc file này? | Compiler và Controls (chủ quản); Core đọc để biết IR nào phải chạy được; FE đọc §7 (hợp đồng diagnostic) để hiển thị lỗi đúng dòng/đúng node; QA đọc §12. |
-| 3. Hệ thống hiện tại đang có gì? | Đã có thật: `apps/core/application/st/st_parser.cpp`, `st_semantic.cpp`, `st_compile.cpp`, hai CLI `mkddc-st-validate` và `mkddc-st-compile`, các FB `TON/TOF/R_TRIG/F_TRIG` và hàm `ABS/MIN/MAX/LIMIT/SEL/SQRT`. Nhưng: chỉ hỗ trợ **một** `PROGRAM`, kiểu `INT` đang là `int32`, **FBD chưa có compiler/schema**, và `st_compiler_lib` **chưa link vào** `mkddc-core`. |
-| 4. Thiết kế mới thay đổi điều gì? | Tách compiler thành thư viện chạy **ngoài** đường thời gian thực; thêm `FUNCTION`/`FUNCTION_BLOCK` cục bộ; thêm mô hình FBD canonical đổ về cùng IR với ST; chuẩn hóa diagnostic có vị trí nguồn. Không đổi hành vi đã được test của parser hiện có. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-200` đã triển khai compiler/IR/runtime host cho `BOOL/INT16/DINT32/UINT16/REAL32/TIME64`, conversion tường minh, kiểm tràn, source map fail-closed, UTF-8/NUL/full-consumption guard và diagnostic exact span. Hai fuzzer parser/loader mỗi bộ đạt `10.000.000` input. Còn thiếu FBD canonical/compiler, local `FUNCTION/FUNCTION_BLOCK`, BE worker và wiring production/target. |
+| 4. Thiết kế mới thay đổi điều gì? | Giữ compiler thành thư viện chạy **ngoài** đường thời gian thực; khóa sáu type/wire code và conversion bằng source thật; bước kế tiếp thêm `FUNCTION`/`FUNCTION_BLOCK` cục bộ và mô hình FBD canonical đổ về cùng IR. Diagnostic ST hiện đã có vị trí token chính xác và `sourceId`. |
 | 5. Team phải sửa module/contract nào? | §11. Compiler: tách `st_compiler_lib` khỏi đường RT; BE: gọi CLI/API có giới hạn từ worker, **không bao giờ gọi trong scan**; FE: dùng hợp đồng diagnostic §7. Giới hạn lấy `min(khả năng client, khả năng target, policy)`. |
-| 6. Điều gì còn bị chặn? | Nặng nhất là `OD-PROG-002`: As-Built dùng `INT=int32` còn phương án IEC-aligned là `INT=int16`. Chưa chốt thì **không được** khóa encoding IR hay Point mapping. Thư viện Rev A (`OD-PROG-005`) và ngữ nghĩa FBD (`OD-PROG-006`) cũng chưa ký. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §12: `VS-PROG-005` (20 cặp ST/FBD tương đương phải cho cùng IR và cùng vết trạng thái), `VS-PROG-006` (biên −1/biên/+1 và fuzz ≥10⁷ ca, không crash/OOM), `VS-PROG-003` (từ chối global/native/đệ quy). `NOT RUN`. |
+| 6. Điều gì còn bị chặn? | Không còn decision blocker cho code. `TASK-PROG-201/202` phải triển khai FBD canonical và ST↔FBD equivalence; local POU, compiler worker, target load/no-parser-RT và WCET/HIL vẫn là gate sau. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Evidence hỗ trợ `EV-PROG-G2-200`: fuzz tất định `10.000/10.000`; parser và loader mỗi bộ `10.000.000` input dưới ASan/UBSan; CTest `898/898`. Đây mới chứng minh phần ST/type/artifact host của `TASK-PROG-200`; `VS-PROG-003/005/006/023` chưa được nâng PASS vì FBD/local POU/worker/target và independent review chưa đủ. |
 
 Lưu ý thẩm quyền: `ST_SUBSET_SPEC_MK-DDC-24_VI.md` chỉ **mô tả cái đang có**. Khi
 nó khác Product Spec v2.2 hoặc file này, lấy Product/SRS/decision đã duyệt làm
@@ -51,13 +51,13 @@ thứ ba, pointer/dynamic allocation/recursion, multi-controller distributed tas
 
 | Nội dung | As-Built 2026-08-09 | Target authority / gap |
 |---|---|---|
-| Parser/semantic/compiler | `apps/core/application/st/st_parser.cpp`, `st_semantic.cpp`, `st_compile.cpp` | Tách thành thư viện compiler non-RT; giữ behavior đã test |
+| Parser/semantic/compiler | `apps/core/application/st/st_parser.cpp`, `st_semantic.cpp`, `st_compile.cpp`; source `8d58efa` + `a638470` | ST subset/type/source map đã ở thư viện compiler non-RT; local POU và FBD còn target |
 | CLI | `mkddc-st-validate`, `mkddc-st-compile` từ `apps/core/CMakeLists.txt` | BE worker gọi API/CLI bounded, không gọi trong scan |
 | ST unit | `PROGRAM` duy nhất; assignment, `IF/ELSIF/ELSE`, FB call | Product v2.2 yêu cầu thêm local `FUNCTION`/`FUNCTION_BLOCK`; đang `TARGET-PENDING` |
-| Type | `BOOL`, `INT=int32`, `REAL`, `TIME`; VAR input/output/local/retain | Product yêu cầu signed/unsigned subset + bounded ENUM; exact name/width còn `OD-PROG-002` |
+| Type | `BOOL`, `INT=int16`, `DINT=int32`, `UINT=uint16`, `REAL=float32`, `TIME=int64`; VAR input/output/local/retain | Sáu type scalar Rev A đã khớp profile/wire code; bounded ENUM không thuộc phạm vi hiện hành |
 | FB/function | TON, TOF, R/F_TRIG; ABS/MIN/MAX/LIMIT/SEL/SQRT/conversion | Thư viện Rev A phải được decision duyệt |
 | FBD | Chưa có compiler/schema production | Structured editor → canonical graph → common IR |
-| Giới hạn | `st_limits.hpp` và `st_ir.hpp` | Lấy min(client capability, target capability, policy) |
+| Giới hạn | `st_limits.hpp`, `st_ir.hpp`, generated profile; parser kiểm source UTF-8/NUL/64 KiB và full consumption | Tiếp tục lấy min(client capability, target capability, policy) ở worker/consumer |
 | Runtime wiring | `st_compiler_lib` không link vào `mkddc-core`; bootstrap chưa cấp scheduler | Đúng boundary compiler non-RT; runtime wiring thuộc lifecycle |
 
 `ST_SUBSET_SPEC_MK-DDC-24_VI.md` là mô tả As-Built hỗ trợ. Khi khác Product
@@ -106,14 +106,15 @@ limit/WCET rule; parser hiện tại reject rõ ràng thay vì bỏ qua.
 | Type | IR | Default | Range/đơn vị | Quy tắc |
 |---|---|---|---|---|
 | `BOOL` | 1-bit logic trong slot | `FALSE` | FALSE/TRUE | không implicit với số |
-| `INT` As-Built | signed 32-bit | `0` | −2^31..2^31−1 | không được gọi là IEC `INT` Target trước `OD-PROG-002`; overflow fault |
-| Integer Target | `TARGET-PENDING` | `0` | phương án `INT:int16`, `DINT:int32`, `UINT:uint16`, bounded `ENUM/uINT` | phải khóa name/width/IR raw code/Point mapping/migration |
+| `INT` | signed 16-bit, wire `5` | `0` | −32.768..32.767 | overflow và conversion ngoài miền fault |
+| `DINT` | signed 32-bit, wire `2` | `0` | −2^31..2^31−1 | overflow fault; thay vai trò integer 32-bit As-Built cũ |
+| `UINT` | unsigned 16-bit, wire `6` | `0` | 0..65.535 | literal âm/underflow/conversion ngoài miền fault |
 | `REAL` | IEEE-754 binary32 | `0.0` | finite | NaN/Inf input hoặc kết quả → Program fault |
 | `TIME` | signed 64-bit ns trong model, bounded khi serialize | `T#0ms` | 0..24 h Rev A | không âm; arithmetic bounded |
 
-As-Built chỉ implicit `INT32 → REAL`; Target conversion matrix phải được duyệt
-cùng `OD-PROG-002`, không được suy narrowing/signedness. Mọi conversion khác dùng
-function rõ ràng. So sánh yêu cầu cùng type sau conversion hợp lệ. Unit không bị bỏ qua:
+Không có conversion ngầm giữa các type số. Conversion chỉ qua các hàm tường minh
+được khóa ở §13; narrowing, signedness, overflow và non-finite đều fail-closed.
+So sánh yêu cầu cùng type sau conversion hợp lệ. Unit không bị bỏ qua:
 binding có unit khác phải qua conversion block/function đã khai báo; unknown unit
 không được thay bằng unitless.
 
@@ -155,7 +156,7 @@ tổ hợp bị `ST-SEM-FBD-CYCLE`. Compiler sinh source map từ instruction t�
 | Edge | `R_TRIG`, `F_TRIG` | state per instance, cold-init FALSE |
 | Numeric | `ABS`, `MIN`, `MAX`, `LIMIT`, `SQRT` | type overload hữu hạn; domain error fault |
 | Selection | `SEL` | branches cùng type |
-| Conversion | As-Built `INT_TO_REAL`, `REAL_TO_INT`; Target thêm signed/unsigned/ENUM theo decision | narrowing/rounding/overflow cần decision và diagnostic |
+| Conversion | `INT_TO_DINT`, `INT_TO_UINT`, `DINT_TO_INT`, `DINT_TO_UINT`, `UINT_TO_INT`, `UINT_TO_DINT`, `DINT_TO_REAL`, `UINT_TO_REAL`, `REAL_TO_DINT`, `REAL_TO_UINT` | conversion ngoài miền/non-finite fault; không implicit conversion |
 | Control | PID block target | anti-windup, manual/auto, bumpless theo `DDD-CTRL-PROG-001` |
 
 Library manifest có `libraryId`, semantic version, block ID, pin schema, state
@@ -240,9 +241,9 @@ artifact active.
 
 | Trách nhiệm | As-Built | Target sửa/tạo |
 |---|---|---|
-| lexer/parser/AST | `apps/core/application/st/st_parser.*`, `st_program.*` | tách library reusable; thêm project POU và FBD parser |
-| semantic | `st_semantic.*`, `st_io_map.*` | type/unit/library/dependency validator |
-| lowering/IR | `st_compile.*`, `st_ir.*` | common ST/FBD IR + deterministic serializer/source map |
+| lexer/parser/AST | `apps/core/application/st/st_parser.*`, `st_program.*` | **ST subset/type đã triển khai ở Task 200**; thêm project POU và FBD parser ở Task 201/202 |
+| semantic | `st_semantic.*`, `st_io_map.*` | **sáu type/conversion/overflow đã có**; unit/library/dependency validator còn mở |
+| lowering/IR | `st_compile.*`, `st_ir.*`, `st_loader.*` | **ST typed IR/deterministic serializer/source map đã có**; common FBD lowering còn mở |
 | CLI | `st_validate_main.cpp`, `st_compile_main.cpp` | JSON result stable + worker deadline |
 | BE worker | chưa có | `apps/web-api/internal/programming/compiler` |
 | contract | chưa có FBD/library schema | `contracts/programming/{fbd,library,diagnostic}` |
@@ -283,9 +284,9 @@ unary_expr    = ["NOT"|"-"|"+"] primary ;
 | From → To | Implicit | Explicit | Runtime lỗi |
 |---|---|---|---|
 | cùng type | có | không cần | overflow/div0/non-finite |
-| integer As-Built → REAL | có hiện hành, Target cần phê duyệt | `INT_TO_REAL` | mất precision phải diagnostic theo profile |
-| REAL → integer | không | `REAL_TO_*` | NaN/Inf/out-of-range reject, rounding policy quyết định |
-| signed ↔ unsigned/ENUM | không | function được profile duyệt | âm/out-of-range/enum unknown reject |
+| `DINT/UINT` → `REAL` | không | `DINT_TO_REAL`, `UINT_TO_REAL` | kết quả không hữu hạn bị fault |
+| `REAL` → `DINT/UINT` | không | `REAL_TO_DINT`, `REAL_TO_UINT` | NaN/Inf/out-of-range reject; truncate về 0 |
+| `INT/DINT/UINT` qua lại | không | các hàm `*_TO_*` ở §6 | âm/out-of-range reject; không wrap |
 | BOOL ↔ numeric/TIME | không | không trong Rev A | compile error |
 | unit A ↔ unit B | không | conversion block khai báo | unit unknown/mismatch compile error |
 
@@ -295,8 +296,8 @@ không có semantic riêng ở FE.
 
 ## 14. Compatibility, rollout, blocker và ký
 
-- Thêm DINT/UINT/ENUM cần compiler profile/type raw code và compatibility decision;
-  nếu schema 1 không biểu diễn được thì tăng schema/magic thay vì reinterpret code.
+- `BOOL/DINT/REAL/TIME/INT/UINT` đã khóa raw code `1..6` trong schema 1; thay đổi
+  width/code là breaking change và phải tăng profile/schema thay vì reinterpret.
 - Schema/IR/library major không tương thích phải recompile; minor chỉ thêm optional
   feature và phải capability-negotiate.
 - Rollout: schema + compiler dark → golden/fuzz → Core loader compatible → BE
@@ -306,7 +307,7 @@ không có semantic riêng ở FE.
 
 | Blocker | Owner | Gate | Điều kiện mở |
 |---|---|---|---|
-| User FUNCTION/FB, FBD capacity và library chưa duyệt | Product + Controls | `DOC-G2` approval | ký các decision tương ứng trong `PROG-OD-001` |
+| User FUNCTION/FB và FBD canonical chưa implement | Compiler + Controls | `G2` | hoàn tất `TASK-PROG-201/202` và equivalence evidence |
 | Unit/conversion/PID semantic chưa khóa | Controls + Safety | implementation G0 | review Control Semantics và V&V |
 | Target WCET chưa đo | Core + QA | release | target load/HIL evidence PASS |
 
@@ -315,12 +316,13 @@ không có semantic riêng ở FE.
 | 0.1 | 2026-08-09 | Thiết kế ST/FBD, pipeline, diagnostics, determinism, limits và source mapping | System Engineering |
 | 0.2 | 2026-08-09 | Bổ sung EBNF implementable, conversion/unit matrix và diagnostic ownership; chuyển Detailed Draft chờ review | System Engineering |
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; nêu rõ xung đột `INT=int32` vs `INT=int16` là blocker `OD-PROG-002` | System Engineering |
+| 0.4 | 2026-08-11 | Đồng bộ `TASK-PROG-200`: sáu type target/wire code, conversion tường minh, exact diagnostic span/source map, hostile-source guard và hai chiến dịch fuzz 10 triệu input; giữ FBD/local POU/worker/target ở task/gate sau | Compiler + Core Lead |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Compiler + Controls Lead | Chờ review | — |
-| Core + FE + QA + Security | Chờ review | — |
-| System Architect + Product Owner | **BLOCKED — chưa phê duyệt** | `PROG-OD-001` |
+| Compiler + Controls Lead | **TASK-PROG-200 DONE; phần FBD/local POU còn mở** | `8d58efa`, `a638470`, `EV-PROG-G2-200` |
+| Core + FE + QA + Security | **WAIVED FOR IMPLEMENTATION; evidence độc lập còn mở** | `AUTH-PROG-2026-08-11-03` |
+| System Architect + Product Owner | **APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; OD-PROG-002/005/006 đã DECIDED |
 
 Tự kiểm `DD-01..DD-13`:
 
@@ -338,6 +340,7 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §11 file/thư viện/CLI cần tách và tạo |
 | `DD-11` Verification | PASS | §12 gắn `VS-PROG-003/005/006` với kỳ vọng định lượng (tương đương 100% ST↔FBD, fuzz ≥10⁷ ca, 0 crash/OOM) |
 | `DD-12` Compatibility/rollout/rollback | PASS | §14 tương thích và rollout, gồm khóa profile compiler |
-| `DD-13` Trace/risk/decision/sign-off | **BLOCKED** | Trace/risk đủ, nhưng bề rộng kiểu số chưa chốt. Owner: Product + Runtime Architect. Ảnh hưởng: As-Built dùng `INT=int32` còn phương án IEC-aligned là `INT=int16`; chưa chốt thì **không được khóa encoding IR hoặc Point mapping**, và mọi artifact sinh ra có nguy cơ phải build lại. Gate: `DOC-G2`. Điều kiện mở: đóng `OD-PROG-002` (ma trận type/bit-width/Point/IR + migration), `OD-PROG-005` (thư viện Rev A), `OD-PROG-006` (ngữ nghĩa FBD) |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation | OD-PROG-002/005/006 đã DECIDED; source/evidence Task 200 được trace. FBD/local POU/target evidence còn là task/gate kỹ thuật, không phải decision blocker |
 
-Một `BLOCKED`, đủ bốn trường. Implementation/test/runtime vẫn `NOT IMPLEMENTED/NOT TESTED`.
+Thiết kế đủ quyền implementation. `TASK-PROG-200` đã implement phần ST/type trên
+host; FBD/local POU/worker/runtime production/target vẫn chưa được tuyên bố hoàn tất.

@@ -38,6 +38,13 @@ không deploy target/HIL và chưa nâng Test Result tích hợp khi FBD/consume
 hoàn tất. Regression Release C++ bật Modbus + BACnet + HMI đạt `898/898` CTest;
 Go vet/test PASS; FE đạt `55/55` file, `479/479` test cùng lint/build PASS.
 
+**Hồ sơ và tiến độ.** Phát hành evidence `EV-PROG-G2-200` và biên bản
+`PROG-G2-IMPLEMENTATION-REVIEW-2026-08-11`; đồng bộ Language/Artifact Design,
+Risk, Trace và Plan 53/54. P2 chuyển `1/8`, tổng plan `14/49 = 28,6%`, next
+action `TASK-PROG-201`. Candidate v2.15 ghim `22/22` SHA-256; Trace giữ
+`2/60 I=Y`, Risk giữ `16/16 Open`, Test Result giữ `0/32 PASS` và
+`RELEASE_READY BLOCKED`.
+
 ### Added — Join contract và trình kiểm tương thích G1 Programming (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-105`: thêm manifest

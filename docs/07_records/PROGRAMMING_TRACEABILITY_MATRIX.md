@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.3 |
+| Phiên bản | 3.4 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
 | Cập nhật | 2026-08-11 |
 | Chủ quản | Verification Lead |
@@ -16,7 +16,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối **yêu cầu → user journey → thiết kế → nơi phải sửa code → kịch bản test → bằng chứng → release** cho cả 60 requirement. Dùng để trả lời hai câu: “yêu cầu này ai lo?” và “cái gì hỏng nếu đổi chỗ này?”. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. G1 đã join sáu contract tại `30a068b`; tổng vẫn **2/60** dòng `I=Y`. `VS-PROG-001/019` có 2 record `BLOCKED`, 30 scenario còn `NOT_RUN`, **0/32 PASS**; mọi `T/P/R` vẫn `N` vì acceptance E2E chưa chạy đủ và chưa được independent review. |
+| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. Sau G1, `TASK-PROG-200` đã thêm ST subset, sáu type target, typed IR/source map và compiler/loader fuzz tại `8d58efa` + `a638470`; tổng vẫn **2/60** dòng `I=Y` vì đây là phần mở rộng của `CORE-101`, chưa hoàn tất các requirement E2E mới. `VS-PROG-001/019` có 2 record `BLOCKED`, 30 scenario còn `NOT_RUN`, **0/32 PASS**; mọi `T/P/R` vẫn `N`. |
 | 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `BE-110` và `CORE-101 I=Y`; 58 dòng `I=N`. Hai Test Result G1 đang `BLOCKED`; toàn bộ `T/P/R` còn `N` cho tới khi workflow E2E đủ acceptance và reviewer độc lập ký. |
@@ -154,7 +154,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `BE-108` | SEC; BE; RSK-011 | bundle quarantine/import/export | 021/023 | Y/N/N/N/N |
 | `BE-109` | CTRL; IFSPEC; BE; RSK-010 | runtime read model/events | 018/020/026 | Y/N/N/N/N |
 | `BE-110` | IFSPEC; BE; RSK-014 | `9917e3b`/`81080f8`/`efbed2d`: OpenAPI, handler, generated TS; `51fe515`/`e9707b4`: IPC; `4a1e9f5`: catalog lỗi/HTTP canonicalize/sanitize | 019/024 | Y/Y/N/N/N |
-| `CORE-101` | LANG; ART; SEC; RSK-006 | `95585e7`: `ValidateRevAProfile`, `EncodeArtifactDeterministic`, `VerifyArtifact`, `LoadArtifact`, golden/negative/boundary/fuzz trong `contracts/programming` + `application/st` | 005/006/023 | Y/Y/N/N/N |
+| `CORE-101` | LANG; ART; SEC; RSK-006 | `95585e7`: profile/serializer/loader foundation; `8d58efa` + `a638470`: hostile-source guard, exact diagnostic/source map, sáu type target/conversion/range xuyên compiler→IR→loader→executor→RETAIN, golden và parser/loader fuzz 10 triệu input | 005/006/023 | Y/Y/N/N/N |
 | `CORE-102` | CTRL; FWSOM; RSK-002 | ScanLoop/task/process image | 009/015/016 | Y/N/N/N/N |
 | `CORE-103` | ART; FWSOM; RSK-005/006 | Core build/runtime instrumentation | 012 | Y/N/N/N/N |
 | `CORE-104` | CTRL; FWSOM; RSK-001/004 | process image/PriorityResolver | 010/014/020 | Y/N/N/N/N |
@@ -171,7 +171,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `HW-101` | HW; FWMCU; RSK-013 | schematic/BOM/test fixture | 014/030 | Y/N/N/N/N |
 | `HW-102` | HW; CTRL; RSK-003/004 | AO/DO safe path | 010/014/030 | Y/N/N/N/N |
 | `HW-103` | HW; FWMCU; RSK-002/013 | power/reset/watchdog domain | 015/030 | Y/N/N/N/N |
-| `NFR-101` | LANG; ART; DM | `95585e7`: profile/loader/compiler resource bounds; FBD validator, BE store/Check và target OOM acceptance còn thiếu | 006/023 | Y/N/N/N/N |
+| `NFR-101` | LANG; ART; DM | `95585e7` + `8d58efa` + `a638470`: profile/source/artifact bounds và loader/compiler fuzz; FBD validator, BE store/Check/sandbox và target OOM acceptance còn thiếu | 006/023 | Y/N/N/N/N |
 | `NFR-102` | LANG; BE; RSK-005 | compiler benchmark/sandbox | 006/013/019 | Y/N/N/N/N |
 | `NFR-103` | CTRL; FWSOM; RSK-002/005 | base-step/task/load metrics | 009/012/013/015 | Y/N/N/N/N |
 | `NFR-104` | FWSOM; FE; IFSPEC | trace/monitor buffers | 027 | Y/N/N/N/N |
@@ -259,6 +259,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 3.1 | 2026-08-11 | `TASK-PROG-103` hoàn tất catalog lỗi ba lớp tại `4a1e9f5`: bổ sung source cho `BE-110`, ghi partial `SYS-103/105` và `FE-110` nhưng giữ `I=N` vì lifecycle/ScanLoop/Draft reducer chưa có. Tổng `I=Y` giữ 2/60; không tạo Test Result và mọi `T/P/R=N` |
 | 3.2 | 2026-08-11 | `TASK-PROG-104` hoàn tất source store tại `312f357`: ghi partial cho SYS-102/106, BE-101/102/106 và NFR-106 nhưng giữ `I=N` vì chưa wiring/service/compiler/terminal operation/target. Tổng `I=Y` giữ 2/60; 0/32 Test Result và mọi `T/P/R=N` |
 | 3.3 | 2026-08-11 | `TASK-PROG-105` khóa join sáu contract/deploy/rollback tại `30a068b`; tạo hai record `VS-001/019` verdict `BLOCKED` để ghi đúng phần E2E còn thiếu. Tổng `I=Y` giữ 2/60, 0/32 PASS và mọi `T/P/R=N` |
+| 3.4 | 2026-08-11 | `TASK-PROG-200` hoàn tất ST subset/type/source map host tại `8d58efa` + `a638470`; bổ sung source cho `CORE-101` và partial `NFR-101`. Tổng `I=Y` giữ 2/60 vì FBD/worker/target E2E còn thiếu; không tạo Test Result, 0/32 PASS và mọi `T/P/R=N` |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
