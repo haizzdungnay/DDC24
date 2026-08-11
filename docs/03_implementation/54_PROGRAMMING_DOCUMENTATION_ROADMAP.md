@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 2.8 |
+| Phiên bản | 2.9 |
 | Trạng thái | **22/22 M3 — Product + Architect đã `ACCEPT` v2.5; candidate v2.7 chờ xác nhận delta; M4/M5 vẫn 0/22, `PLAN_READY BLOCKED`** |
 | Ngày baseline | 2026-08-10 |
 | Chủ quản | System Engineering + Document Control |
@@ -375,6 +375,7 @@ Mỗi lần thay đổi mức, thêm **một dòng mới**; không sửa số l�
 | 2026-08-10 P0-consumer-review | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED — **chỉ còn chờ chữ ký** | Vòng consumer review **kỹ thuật** chạy trên 22 cặp producer→consumer: `9/9` finding `F-CR-01..09` đóng; 9/22 hồ sơ lên revision mới; 6 xung đột kiến trúc có `ADR-026..031` (`Proposed`); candidate ghim lại bằng 22 SHA-256 và thêm `candidate_pin_check.py`. **M4 vẫn 0/22** vì `DOC-GOV-001` §3 đòi reviewer là người thật — vòng kỹ thuật không nâng được mức trưởng thành |
 | 2026-08-10 authority-1 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED một phần | `AUTH-PROG-2026-08-10-01`: Product Owner/CTO + System Architect Phạm Đình Chương `ACCEPT`; staging DONE; Architect `ACCEPT` 6/6 ADR; `3 DECIDED/14 OPEN/0 CLOSED`. Candidate v2.5 ghim lại; 0/22 M4/M5, consumer/Verification/discipline/QA còn thiếu |
 | 2026-08-10 gate-audit-1 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED | Trước P1 phát hiện `PLAN-PROG-053` §6.5/§10 còn gọi `e3e9fb2` là candidate hiện hành. Đã sửa, phát hành candidate v2.7 và kiểm lại CI/target: GitHub jobs vẫn `steps=[]`, SSH target vẫn bị từ chối. Không đổi thiết kế hay code; Product/Architect cần xác nhận delta v2.7, P1 giữ 0/6 DoD |
+| 2026-08-11 gate-recheck-2 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED | Sửa biên bản consumer còn trỏ v2.5 thành candidate v2.7/commit `a236200`; rerun CI attempt 2 vẫn 17/17 job `steps=[]`, SSH target vẫn bị từ chối. Không đổi thiết kế/code; `0/8` consumer, `0/22 M4/M5`, P1 `0/6` DoD |
 
 ## 10.1 Ma trận impact của Amendment A1 trên 22 hồ sơ
 
@@ -512,6 +513,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 2.6 | 2026-08-10 | Thêm snapshot `authority-1`; ghi Product Owner/CTO + System Architect Phạm Đình Chương `ACCEPT`, staging DONE, Architect `ACCEPT` 6/6 ADR, Open Decisions `3 DECIDED/14 OPEN`. Giữ M3 22/22, M4/M5 0/22 và DOC-G4 RED do consumer/Verification/discipline/QA còn thiếu | Product + Architect + Document Control |
 | 2.7 | 2026-08-10 | Thêm snapshot `gate-audit-1`; sửa chỉ báo candidate đã cũ trong Plan 53, ghim candidate v2.7 và đo lại CI/target vẫn bị chặn. Không đổi requirement/contract/thiết kế/code; giữ 22/22 M3, M4/M5 0/22, P1 0/6 DoD và yêu cầu Product/Architect xác nhận delta v2.7 | Dev Lead + Document Control |
 | 2.8 | 2026-08-10 | Ghi commit `a236200` và tree `8296338d` chứa candidate v2.7 vào tracker sau commit phát hành; bước bổ sung chỉ đổi hồ sơ hỗ trợ ngoài mẫu số 22, không thay candidate hay trạng thái gate | Document Control |
+| 2.9 | 2026-08-11 | Thêm snapshot `gate-recheck-2`; đồng bộ biên bản consumer sang candidate v2.7 và ghi lần tái kiểm CI/target trên `2ad6931`. Giữ 22/22 M3, M4/M5 0/22, P1 0/6 DoD và mọi gate `BLOCKED` | Dev Lead + Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|

@@ -4,9 +4,10 @@
 |---|---|
 | ID | `PROG-P0-ENV-2026-08-10` |
 | Loại | Readiness record; không phải Test Result Programming |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Ngày | 2026-08-10 |
 | Source snapshot | `395b9a5e905549b23d282c125a9b8a337a22f265`, tree `83c7a43ffb08692ad0045fff5169a4596b3777c2` |
+| Tái kiểm gần nhất | 2026-08-11 trên merge commit `2ad6931080009ae6ebf3380a1260ac20cc37564f` |
 | Phạm vi | Branch/PR, host build/toolchain, CI runner, target SOM lab, HIL fixture và evidence repository |
 | Chủ quản | Dev Lead + QA + Ops |
 | Người phê duyệt | System Architect + Verification Lead |
@@ -33,7 +34,7 @@
 | Host FE | `PASS` | 53 file/469 test; lint; build | Development baseline; không thay browser evidence |
 | Toolchain host | `PASS` | Phiên bản ở §2, mọi executable cần cho gate gốc tồn tại | Có thể build trên host |
 | Evidence repository | `PASS — EMPTY` | [`PROG-TR-REPO-001`](../test-results/programming/README.md) + [`RESULT_TEMPLATE.md`](../test-results/programming/RESULT_TEMPLATE.md) | Được ghi Test Result khi scenario READY; hiện **0/32** |
-| GitHub Actions | `BLOCKED` | run `31329431703`, `31329431709`; toàn bộ job 2 s, `steps=[]`, annotation billing | Không có server CI/security evidence cho commit hiện hành |
+| GitHub Actions | `BLOCKED` | attempt 2 của run `31382849807` và `31382850177` trên `2ad6931`; **17/17 job `steps=[]`** | Không có server CI/security evidence cho commit hiện hành |
 | Target SSH reachability | `PARTIAL` | `mekong-fac.ddns.net:2223` trả lời SSH; không timeout | Đường mạng tới endpoint tồn tại |
 | Target authentication/runtime | `BLOCKED` | `Permission denied (publickey,password,keyboard-interactive)` với cả hai public-key identity; không lệnh remote nào chạy | Không claim board health, provenance hoặc target test |
 | HIL fixture/instrument | `BLOCKED` | `HW-AUTH-*`, fixture/calibration và giới hạn 199/200/201 ms chưa được duyệt | Chặn G5/G6 và residual acceptance |
@@ -70,6 +71,11 @@ Không sao chép private key vào tài liệu. Không deploy, restart, sửa con
 đọc được service trên target trong lần rà này. Các số liệu board lịch sử không
 được dẫn lại thành trạng thái hiện hành.
 
+Tái kiểm ngày 2026-08-11 trên merge commit `2ad6931`: endpoint vẫn trả lời nhưng
+alias `SOM-DDC-24-foxlinx` trả `Permission denied
+(publickey,password,keyboard-interactive)` trước khi chạy lệnh `printf READY`.
+Trạng thái `ENV-PROG-001` không đổi.
+
 ## 4. CI server — blocker hạ tầng
 
 PR #114 tạo hai workflow cho đúng head `ed89693`. Build & Test và Security Scan
@@ -80,6 +86,12 @@ spending limit cần tăng.
 Đây không phải test failure của source, nhưng cũng **không được ghi là CI PASS**.
 Sau khi sửa billing, phải rerun cả hai workflow trên đúng commit cần nghiệm thu;
 local PASS không thay CodeQL/Trivy/Grype/Gitleaks/MCU/ASan server evidence.
+
+Tái kiểm ngày 2026-08-11: đã yêu cầu rerun hai workflow của merge commit
+`2ad6931`. Build & Test `31382849807` attempt 2 có **11/11 job `steps=[]`**;
+Security Scan `31382850177` attempt 2 có **6/6 job `steps=[]`**. Cả hai kết thúc
+`failure`; không có test hay scan nào thực sự chạy, vì vậy `ENV-PROG-002` giữ
+`BLOCKED`.
 
 ## 5. Kho evidence được chuẩn bị
 
@@ -125,3 +137,4 @@ khi các gate authority liên quan được mở.
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-08-10 | Đo host/toolchain/Git/CI/target endpoint; tạo evidence repository; tách bốn blocker có owner/impact/gate/unlock; giữ gate quyền hạn BLOCKED |
+| 1.1 | 2026-08-11 | Tái kiểm merge commit `2ad6931`: rerun CI vẫn 17/17 job `steps=[]`; SSH target vẫn bị từ chối trước khi chạy lệnh. Không đổi readiness/gate và không suy local PASS thành CI/target evidence |

@@ -7,6 +7,28 @@
 ---
 
 ## [Unreleased]
+### Fixed — Đồng bộ revision ký P0 và tái kiểm gate hạ tầng (2026-08-11)
+
+**Revision ký.** Sửa biên bản consumer v1.4 còn hướng tám reviewer tới
+candidate/manifest v2.5. Revision hợp lệ hiện là candidate v2.7, 22 SHA-256 tại
+manifest v2.9 và commit `a236200`. Product + Architect đã `ACCEPT` v2.5 nhưng
+vẫn phải xác nhận delta v2.7; `0/8` consumer, `0/22 M4/M5`, `PLAN_READY` và mọi
+`IMPLEMENT_READY[*]` giữ `BLOCKED`.
+
+**Tái kiểm môi trường.** Rerun Build & Test `31382849807` và Security Scan
+`31382850177` attempt 2 trên merge commit `2ad6931`: cả 17/17 job vẫn có
+`steps=[]`, không test/scan nào chạy. SSH alias `SOM-DDC-24-foxlinx` vẫn trả
+`Permission denied` trước lệnh read-only. Không ghi nhận CI/target/HIL PASS và
+không tạo source production.
+
+**Hồ sơ.** Đồng bộ Roadmap 54 v2.9, manifest v2.9, môi trường P0 v1.1,
+`CONTROL.md` và chỉ mục review. Candidate 22 hồ sơ không đổi. Kiểm chứng trong
+cùng phiên: candidate pin PASS `22/22`; trace PASS `60/60` requirement và
+`32/32` scenario; docs harness `--expect` PASS; `git diff --check` PASS; CMake
+Release Modbus + BACnet + HMI build PASS, CTest `860/860`; Go vet PASS và test
+`11/11` package; FE Vitest `53/53` file, `469/469` test, lint/build PASS. Không
+chạy browser/HIL vì không đổi UI runtime/source và gate target/HIL còn đóng.
+
 ### Fixed — Rà gate trước P1 và ghim lại candidate Programming (2026-08-10)
 
 **Kết quả.** Chưa khởi tạo code production cho P1 vì `PLAN_READY` và mọi
