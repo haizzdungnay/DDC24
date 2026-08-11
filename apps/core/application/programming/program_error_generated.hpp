@@ -7,11 +7,12 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "2315add30a8e5880dbf09574371ed662726004c0e04372d16c88164d182571d4";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.0.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "b62e2d4f87ad1123030c393ad7b866c872c563b8b581ffcb4859c969e330dfb2";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.1.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,
+    NotFound,
     Conflict,
     Scope,
     MapIdentity,
@@ -43,8 +44,9 @@ struct ProgramErrorMetadata {
     std::string_view message_key;
 };
 
-inline constexpr std::array<ProgramErrorMetadata, 19> kProgramErrorMetadata = {{
+inline constexpr std::array<ProgramErrorMetadata, 20> kProgramErrorMetadata = {{
     {ProgramPublicError::Request, "PRG-ERR-REQ-001", "api", "REQUEST", 400, false, true, "programming.error.request" },
+    {ProgramPublicError::NotFound, "PRG-ERR-NOT-FOUND-001", "api", "NOT_FOUND", 404, false, true, "programming.error.notFound" },
     {ProgramPublicError::Conflict, "PRG-ERR-CONFLICT-001", "api", "CONFLICT", 409, false, true, "programming.error.conflict" },
     {ProgramPublicError::Scope, "PRG-ERR-SCOPE-001", "compiler", "VALIDATION", 422, false, true, "programming.error.scope" },
     {ProgramPublicError::MapIdentity, "PRG-ERR-MAP-003", "compiler", "VALIDATION", 422, false, true, "programming.error.mappingIdentity" },
@@ -166,7 +168,7 @@ constexpr const ProgramErrorMetadata& ProgramErrorMetadataFor(ProgramPublicError
     for (const auto& metadata : kProgramErrorMetadata) {
         if (metadata.code == code) return metadata;
     }
-    return kProgramErrorMetadata[18];
+    return kProgramErrorMetadata[19];
 }
 
 constexpr bool IsRetryable(ProgramPublicError code)

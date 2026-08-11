@@ -66,3 +66,30 @@ func TestLoadConfigEnablesProgrammingRevAExplicitly(t *testing.T) {
 		t.Fatal("ProgrammingRevA = false; muốn true khi flag được bật rõ ràng")
 	}
 }
+
+func TestLoadConfigDerivesAndOverridesProgrammingStorePaths(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough")
+	configDir := filepath.Join(t.TempDir(), "config")
+	t.Setenv("CONFIG_DIR", configDir)
+	t.Setenv("PROGRAMMING_DB", "")
+	t.Setenv("PROGRAMMING_BACKUP_DIR", "")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProgrammingDBPath != filepath.Join(configDir, "programming", "programming-v1.sqlite") ||
+		cfg.ProgrammingBackupDir != filepath.Join(configDir, "programming", "programming-backups") {
+		t.Fatalf("Programming paths=%q/%q", cfg.ProgrammingDBPath, cfg.ProgrammingBackupDir)
+	}
+	dbPath := filepath.Join(t.TempDir(), "custom.sqlite")
+	backupDir := filepath.Join(t.TempDir(), "custom-backups")
+	t.Setenv("PROGRAMMING_DB", dbPath)
+	t.Setenv("PROGRAMMING_BACKUP_DIR", backupDir)
+	cfg, err = LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProgrammingDBPath != dbPath || cfg.ProgrammingBackupDir != backupDir {
+		t.Fatalf("Programming override=%q/%q", cfg.ProgrammingDBPath, cfg.ProgrammingBackupDir)
+	}
+}

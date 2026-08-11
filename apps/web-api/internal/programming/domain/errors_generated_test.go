@@ -11,8 +11,8 @@ import (
 )
 
 func TestErrorCatalogGeneratedSurface(t *testing.T) {
-	if len(errorMetadataByCode) != 19 {
-		t.Fatalf("public error count = %d; want 19", len(errorMetadataByCode))
+	if len(errorMetadataByCode) != 20 {
+		t.Fatalf("public error count = %d; want 20", len(errorMetadataByCode))
 	}
 	if got := MapComponentError("artifact-loader", "IR-E-004"); got != ErrTarget {
 		t.Fatalf("IR-E-004 = %s; want %s", got, ErrTarget)

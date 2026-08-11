@@ -7,6 +7,38 @@
 ---
 
 ## [Unreleased]
+### Added — Project/Draft/Revision Programming P2 (2026-08-11)
+
+**Kết quả.** Triển khai `TASK-PROG-204`: `mkddc-web` mở SQLite Programming theo
+`CONFIG_DIR` khi `PROGRAMMING_REV_A=true`, nối sáu endpoint Project/Draft/
+Revision vào service thật và đóng store trong lifecycle ứng dụng. Flag tiếp tục
+mặc định `OFF`; 19 endpoint Check/runtime/operation/bundle/audit chưa tới task
+vẫn trả `503` fail-closed và không gọi Core.
+
+**Dữ liệu và cạnh tranh.** Migration v2 thêm biên nhận idempotency 24 giờ theo
+actor/action/target/key, canonical request hash và response identity; replay sau
+restart trả đúng Project/Draft/Revision/ETag/audit cũ, còn cùng key khác request
+bị chặn. Draft dùng ETag mạnh gắn `draftId`, CAS một transaction, mutation batch
+all-or-nothing và kiểm UUID/reference/capacity cơ bản. Seal tạo manifest + object
+hash từ chính Draft, ghi Revision/object bất biến, tiến baseline Draft và ETag
+trong cùng transaction; không đổi Active/LKG.
+
+**Contract và phục hồi.** OpenAPI v1.17 đánh dấu đúng sáu operation đã có source,
+catalog v1.1 thêm `PRG-ERR-NOT-FOUND-001` và sinh lại consumer Go/C++/TypeScript.
+Store manifest/G1 join ghim migration v2. Đường nâng v1→v2 bắt buộc online backup
+đã `quick_check`; sửa `VerifyBackup` đóng connection và dọn sidecar `-wal/-shm`
+để artifact chỉ còn database + manifest.
+
+**Kiểm chứng hiện tại.** Targeted Go/race PASS cho lifecycle, restart,
+idempotency, stale ETag, immutable Revision, duplicate JSON, migration backup và
+HTTP/RBAC. Full CTest Release bật Modbus+BACnet+HMI đạt `927/927`; Go `vet` và
+`test ./... -count=1` PASS; FE đạt `58/58` file, `494/494` test cùng lint,
+typecheck/build. G1 join `6/6`, deploy-order negative `5/5`, catalog `20/77` và
+FBD contract `10/10` đều PASS. Repository harness vẫn chỉ còn vi phạm baseline
+ngoài task tại `apps/web-ui/src/features/scheduler/shared.ts`. Không chạy Chrome
+DevTools vì không đổi route/component/runtime FE; chưa chạy target/HIL, chưa bật
+Commission và chưa nâng `RELEASE_READY`.
+
 ### Added — Artifact provenance và source map ST/FBD Programming P2 (2026-08-11)
 
 **Kết quả.** Triển khai source `TASK-PROG-203`: thay placeholder FNV-1a bằng

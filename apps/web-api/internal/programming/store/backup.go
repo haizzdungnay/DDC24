@@ -205,7 +205,12 @@ func VerifyBackup(ctx context.Context, path string) (BackupEvidence, error) {
 	if err != nil {
 		return BackupEvidence{}, fmt.Errorf("mở backup read-only: %w", err)
 	}
-	defer db.Close()
+	dbClosed := false
+	defer func() {
+		if !dbClosed {
+			_ = db.Close()
+		}
+	}()
 	if err := quickCheck(ctx, db); err != nil {
 		return BackupEvidence{}, err
 	}
@@ -232,6 +237,18 @@ func VerifyBackup(ctx context.Context, path string) (BackupEvidence, error) {
 	}
 	if err := rows.Close(); err != nil {
 		return BackupEvidence{}, err
+	}
+	if err := db.Close(); err != nil {
+		return BackupEvidence{}, fmt.Errorf("đóng backup sau verify: %w", err)
+	}
+	dbClosed = true
+	// SQLite read-only vẫn có thể tạo sidecar WAL/SHM cạnh file backup. Chúng
+	// không thuộc artifact point-in-time và phải được dọn sau khi connection đã
+	// đóng để backup directory chỉ chứa database + manifest đã kiểm chứng.
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if err := os.Remove(absPath + suffix); err != nil && !os.IsNotExist(err) {
+			return BackupEvidence{}, fmt.Errorf("dọn sidecar backup %s: %w", suffix, err)
+		}
 	}
 	file, err := os.Open(absPath)
 	if err != nil {

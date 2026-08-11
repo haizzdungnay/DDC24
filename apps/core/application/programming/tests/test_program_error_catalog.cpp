@@ -7,7 +7,7 @@ namespace {
 
 TEST(ProgramErrorCatalog, PublicCodesAndMetadataAreStable)
 {
-    static_assert(kProgramErrorMetadata.size() == 19);
+    static_assert(kProgramErrorMetadata.size() == 20);
     static_assert(kProgramErrorCatalogSha256.size() == 64);
     EXPECT_EQ(ProgramErrorMetadataFor(ProgramPublicError::Artifact).public_code,
               "PRG-ERR-ARTIFACT-001");

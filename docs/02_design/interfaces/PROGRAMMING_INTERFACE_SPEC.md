@@ -266,6 +266,7 @@ có actor/correlation để audit đối chiếu.
 | Code | Lớp | Hành vi |
 |---|---|---|
 | `PRG-ERR-REQ-001` | malformed/unsupported request | reject, không side effect |
+| `PRG-ERR-NOT-FOUND-001` | Project/Revision không tồn tại hoặc không được lộ | 404, không side effect |
 | `PRG-ERR-CONFLICT-001` | stale base/ETag | 409, giữ cả version |
 | `PRG-ERR-SCOPE-001` | ngôn ngữ/Point/period ngoài Rev A | 422 |
 | `PRG-ERR-MAP-003` | identity/direction/writable không hợp lệ | 422, field location |

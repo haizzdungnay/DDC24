@@ -1,10 +1,11 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.0.0",
+  "catalogVersion": "1.1.0",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     { "symbol": "ErrRequest", "code": "PRG-ERR-REQ-001", "ownerComponent": "api", "statusClass": "REQUEST", "httpStatuses": [400, 413, 422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.request", "allowedArgs": ["actual", "supportedMajor", "maxBytes"] },
+    { "symbol": "ErrNotFound", "code": "PRG-ERR-NOT-FOUND-001", "ownerComponent": "api", "statusClass": "NOT_FOUND", "httpStatuses": [404], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.notFound", "allowedArgs": [] },
     { "symbol": "ErrConflict", "code": "PRG-ERR-CONFLICT-001", "ownerComponent": "api", "statusClass": "CONFLICT", "httpStatuses": [409, 428], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.conflict", "allowedArgs": ["expected", "actual"] },
     { "symbol": "ErrScope", "code": "PRG-ERR-SCOPE-001", "ownerComponent": "compiler", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.scope", "allowedArgs": ["profile", "limit"] },
     { "symbol": "ErrMapIdentity", "code": "PRG-ERR-MAP-003", "ownerComponent": "compiler", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.mappingIdentity", "allowedArgs": ["pointId", "variable", "expected", "actual"] },

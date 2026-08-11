@@ -5,7 +5,7 @@
 ## Programming Rev A
 
 Nhóm `/api/v1/programming` được khai báo trong `openapi.yaml` từ phiên bản
-`1.15.0`; bản `1.16.0` đồng bộ đủ 19 mã lỗi công khai từ
+`1.15.0`; bản `1.17.0` nối sáu endpoint Project/Draft/Revision và đồng bộ đủ 20 mã lỗi công khai từ
 `contracts/programming/error_catalog_v1.json`. Go router và TypeScript client
 phải cùng dùng danh sách 25 operation và cùng catalog lỗi; không thêm route hoặc
 mã lỗi riêng ở FE/BE/Core.
@@ -25,5 +25,5 @@ sinh ra không được sửa bằng tay.
 
 Route BE chỉ được mount khi `PROGRAMMING_REV_A=true`. Flag mặc định `OFF`; lúc
 `OFF`, prefix Programming trả `404`. Trong `TASK-PROG-100`, khi flag `ON`, route
-chỉ kiểm RBAC/header/body/version rồi trả lỗi ổn định `503
-PRG-ERR-UNAVAILABLE-001`; chưa gọi Core và chưa tạo side effect Commission.
+sáu endpoint Project/Draft/Revision dùng SQLite bền vững; các route lifecycle
+chưa tới task vẫn trả lỗi ổn định `503 PRG-ERR-UNAVAILABLE-001` và chưa gọi Core.

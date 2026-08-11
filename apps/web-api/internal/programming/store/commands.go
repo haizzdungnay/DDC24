@@ -30,6 +30,9 @@ func (s *Store) CreateProject(ctx context.Context, params CreateProjectParams) (
 	if err := validateActorAudit(params.ActorID, params.Role, params.CorrelationID, params.At.UnixMilli()); err != nil {
 		return Project{}, Draft{}, err
 	}
+	if err := validateMutationIdentity(params.IdempotencyKeySHA256, params.RequestSHA256); err != nil {
+		return Project{}, Draft{}, err
+	}
 	content, err := canonicalJSONObject(params.ContentJSON, maxDraftBytes)
 	if err != nil {
 		return Project{}, Draft{}, err
@@ -45,8 +48,22 @@ func (s *Store) CreateProject(ctx context.Context, params CreateProjectParams) (
 		return Project{}, Draft{}, fmt.Errorf("begin CreateProject: %w", err)
 	}
 	defer tx.Rollback()
+	receipt, found, err := readMutationReceiptTx(ctx, tx, params.ActorID, "PROJECT_CREATE", "", params.IdempotencyKeySHA256, params.RequestSHA256, at)
+	if err != nil {
+		return Project{}, Draft{}, err
+	}
+	if found {
+		if err := tx.Commit(); err != nil {
+			return Project{}, Draft{}, err
+		}
+		return Project{ProjectID: receipt.ProjectID, AuditID: receipt.AuditID, Replay: true},
+			Draft{DraftID: receipt.DraftID, ProjectID: receipt.ProjectID, ETag: receipt.ETag, AuditID: receipt.AuditID, Replay: true}, nil
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO projects(project_id,name,description,created_by,updated_by,created_at_utc_ms,updated_at_utc_ms) VALUES(?,?,?,?,?,?,?)`,
 		project.ProjectID, project.Name, project.Description, project.CreatedBy, project.UpdatedBy, at, at); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return Project{}, Draft{}, ErrAlreadyExists
+		}
 		return Project{}, Draft{}, fmt.Errorf("insert project: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO drafts(draft_id,project_id,etag,content_json,content_sha256,updated_by,updated_at_utc_ms) VALUES(?,?,?,?,?,?,?)`,
@@ -59,9 +76,15 @@ func (s *Store) CreateProject(ctx context.Context, params CreateProjectParams) (
 		OccurredAtUTCMS: at, ResultCode: "OK", CorrelationID: params.CorrelationID, DetailsJSON: details}); err != nil {
 		return Project{}, Draft{}, err
 	}
+	if err := writeMutationReceiptTx(ctx, tx, params.ActorID, "PROJECT_CREATE", "", params.IdempotencyKeySHA256, params.RequestSHA256,
+		mutationReceiptResult{ProjectID: project.ProjectID, DraftID: draft.DraftID, ETag: draft.ETag, AuditID: params.AuditID}, at); err != nil {
+		return Project{}, Draft{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Project{}, Draft{}, fmt.Errorf("commit CreateProject: %w", err)
 	}
+	project.AuditID = params.AuditID
+	draft.AuditID = params.AuditID
 	return project, draft, nil
 }
 
@@ -75,6 +98,9 @@ func (s *Store) SaveDraft(ctx context.Context, params SaveDraftParams) (Draft, e
 	if err := validateActorAudit(params.ActorID, params.Role, params.CorrelationID, params.At.UnixMilli()); err != nil {
 		return Draft{}, err
 	}
+	if err := validateMutationIdentity(params.IdempotencyKeySHA256, params.RequestSHA256); err != nil {
+		return Draft{}, err
+	}
 	content, err := canonicalJSONObject(params.ContentJSON, maxDraftBytes)
 	if err != nil {
 		return Draft{}, err
@@ -86,6 +112,16 @@ func (s *Store) SaveDraft(ctx context.Context, params SaveDraftParams) (Draft, e
 		return Draft{}, err
 	}
 	defer tx.Rollback()
+	receipt, found, err := readMutationReceiptTx(ctx, tx, params.ActorID, "DRAFT_SAVE", params.DraftID, params.IdempotencyKeySHA256, params.RequestSHA256, at)
+	if err != nil {
+		return Draft{}, err
+	}
+	if found {
+		if err := tx.Commit(); err != nil {
+			return Draft{}, err
+		}
+		return Draft{DraftID: receipt.DraftID, ProjectID: receipt.ProjectID, ETag: receipt.ETag, AuditID: receipt.AuditID, Replay: true}, nil
+	}
 	var projectID string
 	var baseRevision sql.NullString
 	var actualETag int64
@@ -110,17 +146,24 @@ func (s *Store) SaveDraft(ctx context.Context, params SaveDraftParams) (Draft, e
 	if rows != 1 {
 		return Draft{}, ErrETagConflict
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE projects SET updated_by=?,updated_at_utc_ms=? WHERE project_id=?`, params.ActorID, at, projectID); err != nil {
+		return Draft{}, fmt.Errorf("update Project timestamp: %w", err)
+	}
 	details, _ := json.Marshal(map[string]any{"fromEtag": params.ExpectedETag, "toEtag": params.ExpectedETag + 1})
 	if _, err := appendAuditTx(ctx, tx, AuditInput{AuditID: params.AuditID, ActorID: params.ActorID,
 		Role: params.Role, Action: "DRAFT_SAVE", TargetType: "DRAFT", TargetID: params.DraftID,
 		OccurredAtUTCMS: at, ResultCode: "OK", CorrelationID: params.CorrelationID, DetailsJSON: details}); err != nil {
 		return Draft{}, err
 	}
+	if err := writeMutationReceiptTx(ctx, tx, params.ActorID, "DRAFT_SAVE", params.DraftID, params.IdempotencyKeySHA256, params.RequestSHA256,
+		mutationReceiptResult{ProjectID: projectID, DraftID: params.DraftID, ETag: params.ExpectedETag + 1, AuditID: params.AuditID}, at); err != nil {
+		return Draft{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Draft{}, err
 	}
 	draft := Draft{DraftID: params.DraftID, ProjectID: projectID, ETag: params.ExpectedETag + 1,
-		ContentJSON: content, ContentSHA256: digest, UpdatedBy: params.ActorID, UpdatedAtUTCMS: at}
+		ContentJSON: content, ContentSHA256: digest, UpdatedBy: params.ActorID, UpdatedAtUTCMS: at, AuditID: params.AuditID}
 	if baseRevision.Valid {
 		draft.BaseRevisionID = baseRevision.String
 	}
@@ -170,6 +213,9 @@ func (s *Store) CreateRevision(ctx context.Context, params CreateRevisionParams)
 	if err := validateActorAudit(params.ActorID, params.Role, params.CorrelationID, params.At.UnixMilli()); err != nil {
 		return Revision{}, err
 	}
+	if err := validateMutationIdentity(params.IdempotencyKeySHA256, params.RequestSHA256); err != nil {
+		return Revision{}, err
+	}
 	manifest, err := canonicalJSONObject(params.ManifestJSON, maxManifestBytes)
 	if err != nil {
 		return Revision{}, err
@@ -205,6 +251,16 @@ func (s *Store) CreateRevision(ctx context.Context, params CreateRevisionParams)
 		return Revision{}, err
 	}
 	defer tx.Rollback()
+	receipt, found, err := readMutationReceiptTx(ctx, tx, params.ActorID, "REVISION_CREATE", params.ProjectID, params.IdempotencyKeySHA256, params.RequestSHA256, at)
+	if err != nil {
+		return Revision{}, err
+	}
+	if found {
+		if err := tx.Commit(); err != nil {
+			return Revision{}, err
+		}
+		return Revision{RevisionID: receipt.RevisionID, ProjectID: receipt.ProjectID, DraftETag: receipt.ETag, AuditID: receipt.AuditID, Replay: true}, nil
+	}
 	var draftProject string
 	var actualETag int64
 	if err := tx.QueryRowContext(ctx, `SELECT project_id,etag FROM drafts WHERE draft_id=?`, params.DraftID).Scan(&draftProject, &actualETag); errors.Is(err, sql.ErrNoRows) {
@@ -240,11 +296,30 @@ func (s *Store) CreateRevision(ctx context.Context, params CreateRevisionParams)
 			return Revision{}, fmt.Errorf("insert Revision object: %w", err)
 		}
 	}
-	details, _ := json.Marshal(map[string]any{"sequence": sequence, "objectCount": len(prepared)})
+	result, err := tx.ExecContext(ctx, `UPDATE drafts SET base_revision_id=?,etag=etag+1,updated_by=?,updated_at_utc_ms=? WHERE draft_id=? AND etag=?`,
+		params.RevisionID, params.ActorID, at, params.DraftID, params.ExpectedDraftETag)
+	if err != nil {
+		return Revision{}, fmt.Errorf("advance Draft sau khi seal Revision: %w", err)
+	}
+	if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
+		if rowsErr != nil {
+			return Revision{}, rowsErr
+		}
+		return Revision{}, ErrETagConflict
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE projects SET updated_by=?,updated_at_utc_ms=? WHERE project_id=?`, params.ActorID, at, params.ProjectID); err != nil {
+		return Revision{}, fmt.Errorf("update Project sau khi seal Revision: %w", err)
+	}
+	draftETag := params.ExpectedDraftETag + 1
+	details, _ := json.Marshal(map[string]any{"sequence": sequence, "objectCount": len(prepared), "draftEtag": draftETag})
 	if _, err := appendAuditTx(ctx, tx, AuditInput{AuditID: params.AuditID, ActorID: params.ActorID,
 		Role: params.Role, Action: "REVISION_CREATE", TargetType: "REVISION", TargetID: params.RevisionID,
 		RevisionID: params.RevisionID, OccurredAtUTCMS: at, ResultCode: "OK",
 		CorrelationID: params.CorrelationID, DetailsJSON: details}); err != nil {
+		return Revision{}, err
+	}
+	if err := writeMutationReceiptTx(ctx, tx, params.ActorID, "REVISION_CREATE", params.ProjectID, params.IdempotencyKeySHA256, params.RequestSHA256,
+		mutationReceiptResult{ProjectID: params.ProjectID, DraftID: params.DraftID, RevisionID: params.RevisionID, ETag: draftETag, AuditID: params.AuditID}, at); err != nil {
 		return Revision{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -252,7 +327,8 @@ func (s *Store) CreateRevision(ctx context.Context, params CreateRevisionParams)
 	}
 	return Revision{RevisionID: params.RevisionID, ProjectID: params.ProjectID,
 		ParentRevisionID: params.ParentRevisionID, Sequence: sequence, ManifestJSON: manifest,
-		ManifestSHA256: manifestDigest, CreatedBy: params.ActorID, CreatedAtUTCMS: at}, nil
+		ManifestSHA256: manifestDigest, CreatedBy: params.ActorID, CreatedAtUTCMS: at,
+		DraftETag: draftETag, AuditID: params.AuditID}, nil
 }
 
 func (s *Store) BeginOperation(ctx context.Context, params BeginOperationParams) (Operation, error) {
