@@ -4,17 +4,18 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 2.9 |
-| Ngày | 2026-08-10 |
+| Phiên bản | 3.0 |
+| Ngày | 2026-08-11 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
-| Trạng thái | **ACTIVE — candidate v2.7 đã ghim; Product/Architect cần xác nhận delta trạng thái; consumer/Verification/discipline approval PENDING** |
+| Trạng thái | **ACTIVE — candidate v2.7 đã ghim và Product/Architect đã `ACCEPT`; consumer/Verification/discipline approval PENDING** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
 | Candidate commit | `a236200` — ghi đầy đủ ở §1.1; **22 hash ở §2 là định danh hiện hành** |
 | PR nguồn | Không thuộc định danh candidate; tra từ commit ở §1.1 hoặc CHANGELOG |
 | Candidate trước | v2.5 tại commit `ac059a1` — **SUPERSEDED bởi đợt sửa chỉ báo cấu hình/trạng thái**; không đổi requirement/contract/thiết kế, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
+| Record xác nhận v2.7 | `AUTH-PROG-2026-08-11-02` tại gói review §6.1 — Product Owner/CTO + System Architect `ACCEPT` |
 
 ## 1. Phạm vi và phán quyết
 
@@ -103,9 +104,9 @@ Reviewer đọc lại hồ sơ đánh dấu `✱`; manifest §4 nêu lý do từ
 
 | Hồ sơ | Phiên bản tại lần ghim này | Vai trò |
 |---|---|---|
-| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v2.9 | Tracker hồ sơ |
-| `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v1.8 | Gói authority review |
-| `docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md` | v1.4 | Biên bản consumer review |
+| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v3.0 | Tracker hồ sơ |
+| `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v1.9 | Gói authority review |
+| `docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md` | v1.5 | Biên bản consumer review |
 
 Ba hồ sơ này ghi **phiên bản**, không ghi SHA-256. Lý do giống §1.1: chúng thay đổi
 trong cùng vòng cập nhật với manifest, nên một hash ghi ở đây sẽ sai ngay khi commit
@@ -182,3 +183,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 2.7 | 2026-08-10 | Phát hành candidate sau rà gate trước P1: chỉ `PLAN-PROG-053` đổi để sửa §6.5/§10 còn gọi `e3e9fb2` là candidate hiện hành và đồng bộ trạng thái xác nhận delta. Không đổi requirement/contract/thiết kế; Product/Architect v2.5 cần xác nhận delta trên v2.7; mọi gate giữ `BLOCKED` |
 | 2.8 | 2026-08-10 | Ghi bổ sung commit `a236200` và tree `8296338d` chứa nội dung candidate v2.7. Chỉ manifest và hồ sơ hỗ trợ ngoài mẫu số 22 đổi; `candidate_pin_check.py` tiếp tục PASS 22/22 |
 | 2.9 | 2026-08-11 | Đồng bộ phiên bản hồ sơ hỗ trợ sau khi sửa biên bản consumer sang candidate v2.7 và cập nhật Roadmap. Không đổi bất kỳ SHA-256 nào trong mẫu số 22; candidate/commit và mọi gate giữ nguyên |
+| 3.0 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-02`: Product Owner/CTO + System Architect `ACCEPT` candidate v2.7 sau khi pin `22/22` và review delta v2.5→v2.7. Không đổi bất kỳ hash nào trong mẫu số 22; consumer/Verification/discipline approval và các gate còn lại giữ trạng thái thực tế |

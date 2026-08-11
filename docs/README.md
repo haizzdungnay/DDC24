@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-10 (Programming 22/22 hồ sơ đạt M3; review kỹ thuật `9/9` finding đã đóng; Product + Architect đã `ACCEPT` v2.5; candidate v2.7 chờ xác nhận delta và các chữ ký còn lại)
+**Cập nhật:** 2026-08-11 (Programming 22/22 hồ sơ đạt M3; review kỹ thuật `9/9` finding đã đóng; Product + Architect đã `ACCEPT` candidate v2.7; còn chữ ký consumer/Verification/Document Control)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -25,7 +25,7 @@
 | [Programming Traceability Matrix](07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
 | [Programming Open Decisions](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định: `3 DECIDED`, `14 OPEN`, `0 CLOSED`; xử lý theo dependency của từng lát cắt |
 | [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào bộ 22 hồ sơ yêu cầu, thiết kế, kiểm chứng và delivery Programming Rev A |
-| [Programming Documentation Roadmap](03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | dashboard tiến độ: 22/22 file đạt M3; DOC-G4 RED vì 0/22 M4/M5, xác nhận delta v2.7 và chữ ký consumer/Verification/Document Control còn thiếu |
+| [Programming Documentation Roadmap](03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | dashboard tiến độ: 22/22 file đạt M3; Product + Architect đã `ACCEPT` v2.7; DOC-G4 RED vì 0/22 M4/M5 và chữ ký consumer/Verification/Document Control còn thiếu |
 | [Programming Implementation Plan](03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | dependency và gate triển khai; hiện G0 RED, chưa cấp quyền implement control path |
 | [Programming Risk Register](07_records/PROGRAMMING_RISK_REGISTER.md) | 16 rủi ro, design control, owner, evidence gate và residual |
 | [Programming Docs Sync Report](07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record đồng bộ docs theo ADR-023 ngày 2026-08-03 |

@@ -2,7 +2,7 @@
 
 **ID:** REC-REVIEW-INDEX-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-10 (đăng ký gói review, manifest candidate và readiness môi trường P0 Programming)
+**Cập nhật:** 2026-08-11 (ghi Product Owner/CTO + System Architect `ACCEPT` candidate Programming v2.7; giữ blocker chữ ký độc lập)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -62,10 +62,10 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 | [Baseline Source Fix Report](DDC24_BASELINE_SRC_FIX_REPORT.md) | 2026-08-03 | Record | CI, Point Model, Config Apply, health/recovery trước Programming Design |
 | [Programming Docs Sync Report](PROGRAMMING_DOCS_SYNC_REPORT.md) | 2026-08-03 | Complete | Đồng bộ docs theo Product Spec Programming Rev A |
 | [Programming Design Set Review](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | 2026-08-09 | Complete | Rà 22 hồ sơ Programming: 12 finding tài liệu đã đóng, 22/22 đạt M3; M4/M5 chờ người thật |
-| [Gói review cổng P0 Programming](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | 2026-08-10 | **v1.8 — chờ chữ ký authority** | Gói `PROG-000..006`; candidate v2.7 đã ghim và vòng review kỹ thuật xong; §6.1 liệt kê bốn hành động authority còn lại; `0/7` DoD |
-| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-10 | **Active v2.9 — pin PASS** | Candidate v2.7 định danh bằng **22 SHA-256**/commit `a236200`; kiểm bằng `scripts/candidate_pin_check.py`. Không tự mở gate |
+| [Gói review cổng P0 Programming](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | 2026-08-11 | **v1.9 — Product/Architect `ACCEPT` v2.7, chờ chữ ký độc lập** | Gói `PROG-000..006`; `AUTH-PROG-2026-08-11-02` đóng delta Product/Architect; §6.2 liệt kê hành động authority còn lại; `0/7` DoD |
+| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.0 — pin PASS, Product/Architect `ACCEPT`** | Candidate v2.7 định danh bằng **22 SHA-256**/commit `a236200`; kiểm bằng `scripts/candidate_pin_check.py`. Không tự mở gate |
 | [Rà soát môi trường P0 Programming](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) | 2026-08-11 | **v1.1 — Partial** | Rerun CI trên `2ad6931` vẫn 17/17 job `steps=[]`; target SSH auth và HIL authority/fixture còn BLOCKED |
-| [Consumer review liên chức năng P0 Programming](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | 2026-08-11 | **v1.4 — vòng kỹ thuật xong, `0/8` chữ ký** | 22 hồ sơ theo cặp producer→consumer; `9/9` finding đóng; revision ký là candidate v2.7/commit `a236200`; `0/22 M4` vì M4 đòi reviewer là người thật |
+| [Consumer review liên chức năng P0 Programming](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | 2026-08-11 | **v1.5 — Product/Architect `ACCEPT`, `0/8` consumer** | 22 hồ sơ theo cặp producer→consumer; `9/9` finding đóng; revision ký là candidate v2.7/commit `a236200`; `0/22 M4` vì M4 đòi reviewer là người thật |
 | [Deployment Provenance Report](DEPLOYMENT_PROVENANCE_REPORT.md) | 2026-08-03 | Record | Build identity, release manifest, sai khác target |
 | [Physical I/O và HIL](PHYSICAL_IO_HIL_REPORT.md) | 2026-08-03 | **Gate còn mở** | Host/fake-MCU **không** được ghi thành HIL vật lý |
 | [Báo cáo build và deploy lên board](BOARD_DEPLOY_REPORT_2026-08-04.md) | 2026-08-04 | Record | 5 service chạy trên Orange Pi 5B, HMI tắt có chủ đích |
