@@ -1,0 +1,34 @@
+Evidence ID: EV-PROG-G2-202
+Task: TASK-PROG-202
+Ngày đo: 2026-08-11
+Source commit: 4819901
+Phạm vi: FBD canonical -> StProgram typed -> common IR/runtime equivalence
+
+1. Contract và targeted
+- verify_programming_fbd_contract.py --self-test: PASS 10/10 mutation
+- schema/golden/profile/keyboard/equivalence/manifest: PASS
+- CTest StFbdModel + StFbdCompile: PASS 17/17
+- corpus ST/FBD: PASS 20/20 cặp IR executable + output
+
+2. Fuzz hostile input
+- compiler: Clang 18.1.3 + AddressSanitizer
+- lượt: 100000
+- thời gian: 17 giây
+- thông lượng: 5882 exec/s
+- coverage/features: 93/231
+- RSS đỉnh: 462 MiB
+- slowest/timeout/crash/ASan fault: 0/0/0/0
+
+3. Regression repository
+- CMake Release, MKDDC_ENABLE_MODBUS=ON, MKDDC_ENABLE_BACNET=ON,
+  MKDDC_ENABLE_HMI=ON: build PASS
+- CTest: PASS 915/915, 13.90 giây
+- Go: go vet ./... PASS; go test ./... -count=1 PASS
+- FE: Vitest PASS 58 file / 494 test; lint PASS; typecheck PASS; build PASS
+- git diff --check: PASS
+
+4. Boundary
+- Không chạy Chrome DevTools: không đổi FE runtime/route/layout/component.
+- Không deploy target/HIL/production.
+- Feature flag OFF; không stage/activate; Active/LKG và output không đổi.
+- Không phải Test Result độc lập của VS-PROG-006/023; release vẫn BLOCKED.
