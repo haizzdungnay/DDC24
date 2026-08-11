@@ -32,10 +32,11 @@ FE Vitest `55/55` file, `479/479` test PASS. Không chạy browser vì task khô
 release. Gate dependency-boundary toàn repo vẫn đỏ ở
 `src/features/scheduler/shared.ts`, là lỗi baseline ngoài phạm vi Programming.
 
-**Source và tiến độ.** Source commit `4a1e9f5`; Plan 53/54 ghi P1 `4/6`,
+**Source và tiến độ.** Source commit `4a1e9f5`; [PR #133](https://github.com/Mekong-HCM/MK-DDC-24/pull/133)
+đã merge vào `main` tại `1c74b9f` (tree `db5e225f`), remote feature branch đã
+xóa. Plan 53/54 ghi P1 `4/6`,
 candidate v2.12 ghim 22 hồ sơ. Trace giữ đúng `2/60 I=Y`, `0/32` Test Result,
-feature flag `OFF` và `RELEASE_READY BLOCKED`; PR/merge provenance sẽ được ghi
-sau khi merge.
+feature flag `OFF` và `RELEASE_READY BLOCKED`.
 
 ### Added — Profile và artifact Programming Rev A v1 (2026-08-11)
 
