@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.0 |
+| Phiên bản | 3.1 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
 | Cập nhật | 2026-08-11 |
 | Chủ quản | Verification Lead |
@@ -16,7 +16,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối **yêu cầu → user journey → thiết kế → nơi phải sửa code → kịch bản test → bằng chứng → release** cho cả 60 requirement. Dùng để trả lời hai câu: “yêu cầu này ai lo?” và “cái gì hỏng nếu đổi chỗ này?”. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. `BE-110` có OpenAPI/IPC contract qua `TASK-PROG-100/101`; `CORE-101` có loader/profile/artifact foundation qua `TASK-PROG-102`. **2/60** dòng có `I=Y`; các requirement end-to-end khác vẫn `I=N`. **0/32** kịch bản có Test Result và mọi `T/P/R` vẫn `N`. |
+| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. `BE-110` có OpenAPI/IPC/error contract qua `TASK-PROG-100/101/103`; `CORE-101` có loader/profile/artifact foundation qua `TASK-PROG-102`. **2/60** dòng có `I=Y`; catalog lỗi là foundation xuyên lớp nên không tự biến lifecycle/FE reducer thành end-to-end. **0/32** kịch bản có Test Result và mọi `T/P/R` vẫn `N`. |
 | 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `BE-110` và `CORE-101 I=Y`; 58 dòng `I=N`, gồm các phần profile/FBD/type/transaction/runtime chưa end-to-end. Toàn bộ `T/P/R` còn `N` vì chưa có Test Result; team tiếp tục cập nhật theo commit/evidence thật. |
@@ -123,9 +123,9 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 |---|---|---|---|---|
 | `SYS-101` | ARCH; LANG; CTRL; RSK-006/010 | `95585e7`: profile khóa ST/FBD/Point/Task/type/capacity; compiler FBD/type target + Programming BE/FE/Core còn thiếu | 003/005/006/007/009/017 | Y/N/N/N/N |
 | `SYS-102` | DM; UX; FE; BE; RSK-007/008 | programming store/API/UI | 002/019/026 | Y/N/N/N/N |
-| `SYS-103` | LIFE; ART; IFSPEC; RSK-003/007 | Core coordinator + BE operation | 004/011 | Y/N/N/N/N |
+| `SYS-103` | LIFE; ART; IFSPEC; RSK-003/007 | `4a1e9f5`: catalog/mapping lỗi lifecycle; Core coordinator + BE operation còn thiếu | 004/011 | Y/N/N/N/N |
 | `SYS-104` | ARCH; LIFE; OPS; RSK-002/005 | `51fe515`: Core IPC no-mutation skeleton; `e9707b4`: reconnect/no-replay client; Core runtime + service package còn thiếu | 024/030 | Y/N/N/N/N |
-| `SYS-105` | CTRL; LIFE; RSK-001 | bootstrap/ScanLoop/resolver | 015 | Y/N/N/N/N |
+| `SYS-105` | CTRL; LIFE; RSK-001 | `4a1e9f5`: mã lỗi cross-layer; bootstrap/ScanLoop/resolver còn thiếu | 015 | Y/N/N/N/N |
 | `SYS-106` | SEC; BE; IFSPEC; RSK-012/015 | auth/audit/API | 022/023 | Y/N/N/N/N |
 | `SYS-107` | SEC; BE; OPS; RSK-011 | bundle service/UI | 021/023 | Y/N/N/N/N |
 | `SYS-108` | UX; FE; HMI boundary | Web routes + HMI route inspection | 028 | Y/N/N/N/N |
@@ -138,7 +138,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `FE-107` | LIFE; UX; FE; RSK-007 | check/commission reducer | 011/019/024/026 | Y/N/N/N/N |
 | `FE-108` | CTRL; UX; FE; RSK-004 | runtime/override view | 010/020 | Y/N/N/N/N |
 | `FE-109` | IFSPEC; FE; BE; RSK-010 | runtime/events/freshness | 018/026/027 | Y/N/N/N/N |
-| `FE-110` | IFSPEC; FE; BE; RSK-008/014 | API client/draft reducer | 024 | Y/N/N/N/N |
+| `FE-110` | IFSPEC; FE; BE; RSK-008/014 | `4a1e9f5`: generated error catalog/client sanitize fail-safe; Draft reducer/conflict flow còn thiếu | 024 | Y/N/N/N/N |
 | `FE-111` | UX; FE | i18n/a11y/styles | 025/028 | Y/N/N/N/N |
 | `FE-112` | UX; FE | Problems vs alarm adapter | 019/028 | Y/N/N/N/N |
 | `FE-113` | UX §5 PGM-03; FE; LIFE; RSK-007 | `commission/acknowledgement` + impact reducer | 011/019/031 | Y/N/N/N/N |
@@ -153,7 +153,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `BE-107` | SEC; BE; RSK-012 | authz handler+service/audit | 022 | Y/N/N/N/N |
 | `BE-108` | SEC; BE; RSK-011 | bundle quarantine/import/export | 021/023 | Y/N/N/N/N |
 | `BE-109` | CTRL; IFSPEC; BE; RSK-010 | runtime read model/events | 018/020/026 | Y/N/N/N/N |
-| `BE-110` | IFSPEC; BE; RSK-014 | `9917e3b`/`81080f8`/`efbed2d`: OpenAPI, handler, generated TS; `51fe515`/`e9707b4`: IPC schema + C++/Go codec/golden/client | 019/024 | Y/Y/N/N/N |
+| `BE-110` | IFSPEC; BE; RSK-014 | `9917e3b`/`81080f8`/`efbed2d`: OpenAPI, handler, generated TS; `51fe515`/`e9707b4`: IPC; `4a1e9f5`: catalog lỗi/HTTP canonicalize/sanitize | 019/024 | Y/Y/N/N/N |
 | `CORE-101` | LANG; ART; SEC; RSK-006 | `95585e7`: `ValidateRevAProfile`, `EncodeArtifactDeterministic`, `VerifyArtifact`, `LoadArtifact`, golden/negative/boundary/fuzz trong `contracts/programming` + `application/st` | 005/006/023 | Y/Y/N/N/N |
 | `CORE-102` | CTRL; FWSOM; RSK-002 | ScanLoop/task/process image | 009/015/016 | Y/N/N/N/N |
 | `CORE-103` | ART; FWSOM; RSK-005/006 | Core build/runtime instrumentation | 012 | Y/N/N/N/N |
@@ -256,6 +256,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 2.8 | 2026-08-11 | `TASK-PROG-100` hoàn tất source contract: nâng riêng `BE-110` thành `I=Y` với commit/file/symbol và golden payload Go/TS; `FE-110` và `NFR-106` vẫn `I=N` vì Draft reducer, concurrency transaction và audit chưa thuộc lát cắt này. Không tạo Test Result; `T/P/R` giữ `N`, release giữ RED |
 | 2.9 | 2026-08-11 | `TASK-PROG-101` hoàn tất IPC v1: bổ sung source commit cho `BE-110`; ghi phần đã có của `SYS-104`, `BE-106`, `NFR-105` nhưng giữ `I=N` vì chưa có operation worker/durable transaction/Core runtime package/target fault injection. Không tạo Test Result; tổng `I=Y` giữ 1/60 và mọi `T/P/R=N` |
 | 3.0 | 2026-08-11 | `TASK-PROG-102` hoàn tất profile/artifact/loader foundation: nâng `CORE-101 I=Y` theo commit `95585e7`; ghi partial cho `SYS-101/NFR-101` nhưng giữ `I=N` vì FBD/type target/BE/FE/Check/target acceptance còn thiếu. Không tạo Test Result; tổng `I=Y` thành 2/60 và mọi `T/P/R=N` |
+| 3.1 | 2026-08-11 | `TASK-PROG-103` hoàn tất catalog lỗi ba lớp tại `4a1e9f5`: bổ sung source cho `BE-110`, ghi partial `SYS-103/105` và `FE-110` nhưng giữ `I=N` vì lifecycle/ScanLoop/Draft reducer chưa có. Tổng `I=Y` giữ 2/60; không tạo Test Result và mọi `T/P/R=N` |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

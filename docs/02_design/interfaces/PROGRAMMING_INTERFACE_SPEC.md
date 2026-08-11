@@ -3,14 +3,14 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 0.8 |
-| Trạng thái | **APPROVED FOR IMPLEMENTATION** — contract baseline được duyệt theo `AUTH-PROG-2026-08-11-03`; OpenAPI/IPC là deliverable P1 |
+| Phiên bản | 0.9 |
+| Trạng thái | **APPROVED FOR IMPLEMENTATION** — OpenAPI/client, IPC v1 và catalog lỗi ba ngôn ngữ đã implement qua `TASK-PROG-100..103`; production lifecycle còn mở |
 | Ngày | 2026-08-11 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
 | Nguồn thẩm quyền | `SRS-PROG-001`, `ARCH-PROG-001`, `DM-PROG-001`, `PROG-OD-001` |
-| Phạm vi phiên bản | Target Rev A; As-Built chưa có Programming REST/UDS production |
+| Phạm vi phiên bản | Target Rev A; route contract và UDS skeleton có source nhưng feature flag `OFF`, chưa có Programming lifecycle production |
 | Liên quan | `DM-PROG-001`, `ARCH-PROG-001`, `SRS-PROG-001` |
 
 ## 0. Đọc nhanh
@@ -19,16 +19,18 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Là **hợp đồng** giữa các bên: REST và WebSocket giữa trình duyệt và BE, IPC giữa BE và Core. Định nghĩa đường dẫn, payload, mã lỗi, timeout, retry, idempotency và thứ tự sự kiện. Đây cũng là **nguồn chuẩn duy nhất của mã lỗi** `PRG-ERR-*`. |
 | 2. Ai phải đọc file này? | FE và BE bắt buộc đọc cùng nhau — hai bên phải review **một** hợp đồng, không phải hai bản mô tả. Core đọc §8 và §12 (hợp đồng BE↔Core). Security đọc §15. QA dựng contract test từ §14 và §18. |
-| 3. Hệ thống hiện tại đang có gì? | **Không có route Programming nào trong production.** `contracts/openapi/openapi.yaml` chưa chứa Programming. Giao thức BE↔Core cho Programming cũng chưa tồn tại. Có sẵn nền tảng auth/session và IPC Web↔Core dùng cho tính năng khác. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-100` đã thêm 25 route OpenAPI/Go/client TS sau feature flag mặc định `OFF`; `101` đã thêm IPC v1 C++↔Go skeleton; `103` đã tạo catalog 19 public/77 detail và consumer sinh tự động cho Go/C++/TS. Mutation production vẫn trả unavailable/no-side-effect và chưa nối lifecycle. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm nhóm `/api/v1/programming`, event WebSocket cho runtime/operation, và một giao thức nội bộ có phiên bản cho Commission. Nguyên tắc chi phối: `HTTP 2xx` chỉ nghĩa là **request đã được nhận**; chỉ read-back từ Core mới kết luận được Revision nào đang chạy. |
-| 5. Team phải sửa module/contract nào? | §16. BE tạo handler + sinh mã từ OpenAPI; FE dùng type sinh ra, **không** tự viết tay; Core cài đầu nhận IPC. Spec này phải được chuyển vào `contracts/openapi/openapi.yaml` và có contract test thì route mới coi là khóa (§1). |
+| 5. Team phải sửa module/contract nào? | §16. OpenAPI/client/IPC/error catalog foundation đã có source. Task sau nối handler vào store/operation/Core lifecycle; FE tiếp tục chỉ dùng type/catalog sinh ra, không tự viết mã lỗi hoặc messageKey. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Payload/limit/role đã được chốt bởi 17 decision `DECIDED`. TLS và giao thức BE↔Core là phần phải implement/test trong P1–P3, không phải điều kiện xin phép trước khi code. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §16: `VS-PROG-019` (Check không đổi active hash), `VS-PROG-024` (hai client/ETag/idempotency/crash BE), `VS-PROG-022` (ma trận RBAC), `VS-PROG-026` (Core degraded/unreachable). Tất cả `NOT RUN`. |
 
 Vì sao mã lỗi phải tập trung ở đây: nếu mỗi component tự đặt mã, FE sẽ retry sai
 chỗ và che mất lỗi thật — đó là `RSK-PROG-014`. Quy tắc: FE quyết định dựa trên
 `code`, **không bao giờ** parse `message`; `message` chỉ để hiển thị và đi qua
-i18n. §9 là authority; §14 ánh xạ lỗi nội bộ của component ra mã công khai.
+i18n. §9 là authority đọc bởi con người; file machine-readable
+`contracts/programming/error_catalog_v1.json` là authority cho generator. Script
+buộc hai tập mã bằng nhau; §14 ánh xạ detail nội bộ ra mã công khai.
 
 ## 1. Quy tắc chung
 
@@ -287,6 +289,10 @@ Các mã component hiện hữu `API-E-*`, `IR-E-*`, `ST-*`, `RT-RETAIN-*` là d
 code. BE map chúng sang `PRG-ERR-*` nhưng vẫn giữ `detailCode` để service; không
 được đổi nghĩa hoặc làm FE phụ thuộc trực tiếp vào mã nội bộ trước migration.
 
+As-Built `TASK-PROG-103`: catalog v1.0.0 có **19 public code / 77 detail mapping**,
+SHA-256 ghim trong `error_catalog_v1.manifest.json`; generator sinh Go/C++/TS và
+fail nếu §9, source detail, OpenAPI hoặc consumer bị drift.
+
 ## 10. Compatibility và contract gate
 
 - Mọi schema có version; unknown major bị reject, unknown optional field theo
@@ -437,22 +443,27 @@ single-flight guard.
 
 ## 14. Ánh xạ lỗi component → public
 
-| Detail prefix / điều kiện | Public code | HTTP | Retry | Runtime giữ |
+| Detail exact / điều kiện | Public code | HTTP | Retry | Runtime giữ |
 |---|---|---:|---|---|
-| JSON/schema/`API-E-*` request | `PRG-ERR-REQ-001` | 400/422 | không | có |
+| JSON/schema; `API-E-001/002` | `PRG-ERR-REQ-001` | 400/413/422 | không | có |
 | ETag/idempotency/single-flight | `PRG-ERR-CONFLICT-001` hoặc `PRG-ERR-OP-001` | 409 | query/sửa | có |
-| `ST-LEX/PARSE/TYPE/LIMIT-*` | `PRG-ERR-CHECK-001` | 422 hoặc job failed | sửa source | có |
-| `IR-E-001..015` | `PRG-ERR-ARTIFACT-001` | 422 hoặc op failed | không | có |
-| ABI/profile/controller mismatch | `PRG-ERR-TARGET-001` | 422 | không | có |
-| binding identity/direction | `PRG-ERR-MAP-003` | 422 | không | có |
-| binding type/unit | `PRG-ERR-MAP-004` | 422 | không | có |
+| `ST-LEX-*`, `ST-SYN-001`, semantic không phải scope | `PRG-ERR-CHECK-001` | 422/job failed | sửa source | có |
+| `ST-LIM-*`, `ST-SYN-002`, type/function ngoài profile | `PRG-ERR-SCOPE-001` | 422 | sửa source/profile | có |
+| `IR-E-001..003/005..012/014..015` | `PRG-ERR-ARTIFACT-001` | 422/op failed | không | có |
+| `IR-E-004` ABI, `IR-E-013` profile, `API-E-003` target | `PRG-ERR-TARGET-001` | 422 | không | có |
+| `ST-IOMAP-*` trừ `003` | `PRG-ERR-MAP-003` | 422 | không | có |
+| `ST-IOMAP-003` | `PRG-ERR-MAP-004` | 422 | không | có |
 | graph owner/transition conflict | `PRG-ERR-CUTOVER-001` | 409 | sau reconcile | có |
 | `RT-RETAIN-*` | `PRG-ERR-RETAIN-001` | 422/op failed | acknowledgement | có/cold-init theo plan |
-| Core busy/deadline/socket | `PRG-ERR-UNAVAILABLE-001` | 503/504 | query trước | chưa biết thì `UNKNOWN` |
+| `IPC-REQUEST-ID-CONFLICT` | `PRG-ERR-OP-001` | 409 | query/sửa | có |
+| `IPC-CONTRACT-ONLY/DEADLINE/QUEUE-FULL`, detail/component lạ | `PRG-ERR-UNAVAILABLE-001` | 503/504/429 | query trước | mặc định false = **chưa xác nhận** |
 
 Error log nội bộ có `detailCode`, nhưng public `args` không chứa path, source
 đầy đủ, stack, UID hay secret. Lỗi authorization dùng thông báo đồng nhất để
-không dò existence.
+không dò existence. `messageKey`, `retryable` và HTTP class phải lấy từ catalog;
+HTTP/code mismatch bị chuẩn hóa fail-safe. Producer chỉ đặt
+`keepsRunningRevision=true` khi có invariant/read-back chứng minh; detail lạ
+không được báo optimistic success.
 
 ## 15. Security, tương thích và triển khai
 
@@ -545,7 +556,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 |---|---|---|---|
 | `PROG-OD-001`: `17 DECIDED`, `0 OPEN`, `0 CLOSED` | Product + discipline authority | **APPROVED** | cập nhật OpenAPI/code theo baseline v2.8 |
 | TLS production chưa có | Security + Platform | **READY TO IMPLEMENT** | TLS/session/CSRF test theo Security DoD |
-| BE/Core Programming protocol chưa tồn tại | BE + Core | **READY TO IMPLEMENT** | implementation + contract/fault test theo Plan 53 |
+| Production operation worker/lifecycle chưa nối IPC skeleton | BE + Core | **READY TO IMPLEMENT** | implementation + contract/fault test theo Plan 53 |
 
 | Phiên bản | Ngày | Nội dung | Tác giả |
 |---|---|---|---|
@@ -557,6 +568,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | 0.6 | 2026-08-10 | Đóng finding consumer review `F-CR-02`: staging artifact chuyển từ `${CONFIG_DIR}` sang `${STATE_DIR}/programming/staging/` để khớp `DDD-BE-PROG-001` §14, `DDD-FWSOM-PROG-001` §16 và `platform/packaging`; thêm bảng ba gốc `CONFIG_DIR`/`STATE_DIR`/`RUNTIME_DIR` và quy tắc reject locator ngoài gốc | System Engineering |
 | 0.7 | 2026-08-10 | Ghi Product Owner/CTO + System Architect Phạm Đình Chương `ACCEPT` theo `AUTH-PROG-2026-08-10-01`, xác nhận `${STATE_DIR}/programming/staging/`; đồng bộ decision thành `3 DECIDED/14 OPEN`. Contract vẫn chưa Active vì discipline/TLS/BE-Core implementation/evidence còn thiếu | Product + Architect + Document Control |
 | 0.8 | 2026-08-11 | Phê duyệt toàn bộ contract baseline theo `AUTH-PROG-2026-08-11-03`; 17/17 decision `DECIDED`; chữ ký discipline được miễn khỏi entry implementation; OpenAPI/IPC/TLS chuyển thành deliverable cần implement/test, không còn là approval blocker | Product + Architect |
+| 0.9 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-100..103`: OpenAPI v1.16/25 route, IPC v1 skeleton và catalog lỗi v1.0.0 gồm 19 public/77 detail sinh Go/C++/TS; khóa unknown/detail/HTTP mismatch/public args fail-safe và giữ production lifecycle/target evidence còn mở | BE + Core + FE Lead |
 
 | Vai trò | Trạng thái | Ngày / bằng chứng |
 |---|---|---|
@@ -573,7 +585,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §19 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 quy tắc chung; §10 ranh giới contract gate |
-| `DD-03` As-Built | PASS | §0 câu 3: **không có route Programming trong production**, `contracts/openapi/openapi.yaml` chưa chứa Programming, giao thức BE↔Core chưa tồn tại |
+| `DD-03` As-Built | PASS | §0 câu 3: OpenAPI/route skeleton, IPC v1 và error catalog đã có source; flag `OFF`, mutation/lifecycle production chưa nối |
 | `DD-04` Target ownership | PASS | §8 và §12: BE là producer REST/WS, Core là authority của runtime truth; §13 ai giữ trạng thái nào |
 | `DD-05` Data từng field | PASS | §4 payload mutation, §11.1 header/cursor/giới hạn, §11.2 response, §12 hợp đồng BE↔Core mức field |
 | `DD-06` Interface | PASS | §3 resource, §5 Check, §6 Commission, §7 event, §11 ma trận REST, §15 security/tương thích/triển khai, §17 envelope mẫu |

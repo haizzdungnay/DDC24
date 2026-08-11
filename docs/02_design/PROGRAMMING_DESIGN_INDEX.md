@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `PROG-DOCSET-001` |
-| Phiên bản | 1.9 |
+| Phiên bản | 2.0 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`; maturity đo được vẫn M3 |
 | Ngày | 2026-08-11 |
 | Chủ quản | System Engineering |
@@ -15,11 +15,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Xác định **hồ sơ nào là chủ quản của nội dung nào** trong bộ Programming. Khi hai file nói khác nhau về cùng một chủ đề, file được chỉ định ở §3 là bên đúng; file kia phải sửa theo. Đây cũng là điểm vào để biết đọc file nào trước. |
 | 2. Ai phải đọc file này? | Bất kỳ ai chuẩn bị sửa một hồ sơ Programming, và mọi người mới vào dự án. Dev Lead đọc để biết hồ sơ upstream của một slice; Document Control đọc để kiểm register. |
-| 3. Hệ thống hiện tại đang có gì? | Đường điều khiển production hiện chạy bằng **graph** (`graph.json` nạp lúc bootstrap). P1 đã khóa OpenAPI/client, IPC v1 và profile/artifact/loader foundation qua `TASK-PROG-100/101/102`; các route Programming vẫn bị feature flag mặc định `OFF`, mutation Core chỉ là skeleton và ST/IR **chưa nối vào production**. FE Programming mới chỉ là trang placeholder. |
+| 3. Hệ thống hiện tại đang có gì? | Đường điều khiển production hiện chạy bằng **graph** (`graph.json` nạp lúc bootstrap). P1 đã khóa OpenAPI/client, IPC v1, profile/artifact/loader và catalog lỗi ba lớp qua `TASK-PROG-100..103`; route Programming vẫn bị feature flag mặc định `OFF`, mutation Core chỉ là skeleton và ST/IR **chưa nối vào production**. FE Programming mới chỉ là trang placeholder. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm một đường Programming song song (Project → Draft → Revision → Check → Commission → Active) và một **cutover độc quyền**: hoặc `GRAPH_ONLY`, hoặc `PROGRAM_ONLY`, không bao giờ cả hai. Bảy ranh giới bắt buộc ở §4 là phần không được thương lượng. Giao diện tổ chức theo **bốn workspace** và **tám user journey** `UJ-PROG-01..08` (Amendment A1, chờ `OD-PROG-016`). |
 | 5. Team phải sửa module/contract nào? | File này không giao việc code. Nó chỉ tay tới hồ sơ chủ quản: `mkddc-web` (BE Design), `mkddc-core` (FW-SOM + Control Semantics), `mkddc-iobus` (không đổi), STM32 (FW MCU Design), `apps/web-ui` (FE + UI/UX Design). |
-| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** P1 đang `IN_PROGRESS 3/6`; `TASK-PROG-103/104` là next action và `105` chờ join. `0/32` Test Result chỉ phản ánh chưa có acceptance chính thức, không đóng cổng bắt đầu. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với riêng file này: register 22 dòng khớp đường dẫn thật, link/anchor sạch, không trùng ID tài liệu — đo bằng harness ở [`PROG-REV-2026-08-09`](../07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md). Với sản phẩm: source/evidence hỗ trợ đã có cho 3 task P1 nhưng 0/32 `VS-PROG-*` có Test Result; không được suy host test thành release evidence. |
+| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** P1 đang `IN_PROGRESS 4/6`; `TASK-PROG-104` là next action và `105` chờ join. `0/32` Test Result chỉ phản ánh chưa có acceptance chính thức, không đóng cổng bắt đầu. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với riêng file này: register 22 dòng khớp đường dẫn thật, link/anchor sạch, không trùng ID tài liệu — đo bằng harness ở [`PROG-REV-2026-08-09`](../07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md). Với sản phẩm: source/evidence hỗ trợ đã có cho 4 task P1 nhưng 0/32 `VS-PROG-*` có Test Result; không được suy host test thành release evidence. |
 
 Thuật ngữ điều hướng: **workspace** là một trong bốn màn hình chính `PGM-01..04`;
 **user journey** `UJ-PROG-01..08` là một công việc trọn vẹn của người dùng;
@@ -74,14 +74,14 @@ Product/ADR Active
 
 | ID | Hồ sơ chủ quản | Trách nhiệm | Trạng thái |
 |---|---|---|---|
-| `PROG-DOCSET-001` | [Programming Design Index](PROGRAMMING_DESIGN_INDEX.md) | quyền tài liệu, danh mục 22 hồ sơ và luồng đọc | `M3` v1.9 — **APPROVED FOR IMPLEMENTATION**; P1 3/6 |
+| `PROG-DOCSET-001` | [Programming Design Index](PROGRAMMING_DESIGN_INDEX.md) | quyền tài liệu, danh mục 22 hồ sơ và luồng đọc | `M3` v2.0 — **APPROVED FOR IMPLEMENTATION**; P1 4/6 |
 | `SRS-PROG-001` | [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | 60 requirement phân bổ theo layer, tiêu chí chấp nhận, ngưỡng khả dụng | `M3` v0.6 — **APPROVED FOR IMPLEMENTATION** |
 | `PROG-OD-001` | [Programming Open Decisions](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định Product/System | `M3` v0.9 — `17 DECIDED`, `0 OPEN`, `0 CLOSED` |
 | `ARCH-PROG-001` | [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | context, ownership, process, failure boundary, cutover | `M3` v0.7 — 6/6 ADR `Accepted`; **APPROVED FOR IMPLEMENTATION** |
 | `DM-PROG-001` | [Programming Data Model](software/PROGRAMMING_DATA_MODEL.md) | Project/Draft/Revision/Artifact/Runtime/Audit | `M3` — **APPROVED FOR IMPLEMENTATION** |
-| `IFSPEC-PROG-001` | [Programming Interface Specification](interfaces/PROGRAMMING_INTERFACE_SPEC.md) | REST/WS/internal control/error/idempotency contracts | `M3` v0.8 — **APPROVED FOR IMPLEMENTATION**; OpenAPI/ABI là deliverable P1 |
+| `IFSPEC-PROG-001` | [Programming Interface Specification](interfaces/PROGRAMMING_INTERFACE_SPEC.md) | REST/WS/internal control/error/idempotency contracts | `M3` v0.9 — OpenAPI/IPC/error catalog foundation `TASK-PROG-100..103 DONE` |
 | `DDD-LANG-PROG-001` | [Language/Compiler Design](software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md) | ST/FBD subset, type, diagnostic, common IR và compiler | `M3` — **APPROVED FOR IMPLEMENTATION** |
-| `IFSPEC-ART-PROG-001` | [Artifact/Loader Spec](interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md) | artifact layout, bounded loader, stage/load/swap/reject | `M3` v0.4 — contract foundation `TASK-PROG-102 DONE`; production stage/swap còn mở |
+| `IFSPEC-ART-PROG-001` | [Artifact/Loader Spec](interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md) | artifact layout, bounded loader, stage/load/swap/reject | `M3` v0.5 — loader foundation + exact error mapping `TASK-PROG-102/103 DONE`; production stage/swap còn mở |
 | `DDD-CTRL-PROG-001` | [Control Semantics](software/PROGRAMMING_CONTROL_SEMANTICS.md) | scan order, priority, PID, hold-last, overrun, transition | `M3` — **APPROVED FOR IMPLEMENTATION** |
 | `DDD-LIFE-PROG-001` | [Runtime Lifecycle](software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md) | Check/Commission/Restore/RETAIN/LKG/restart/power-loss | `M3` — **APPROVED FOR IMPLEMENTATION** |
 | `UX-WEB-PROG-001` | [Programming UI/UX Design](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) | IA bốn workspace, tám journey, asset visual PGM-01..04, copy, states, responsive, accessibility | `M3` v0.8 — **APPROVED FOR IMPLEMENTATION**; browser evidence thu khi có FE runtime |
@@ -95,7 +95,7 @@ Product/ADR Active
 | `OPS-PROG-001` | [Programming Operations Runbook](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | backup, commission, restore, replacement, incident | `M3` — **APPROVED FOR IMPLEMENTATION**; diễn tập theo P6 |
 | `RSK-PROG-001` | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | rủi ro, kiểm soát, owner và residual gate | `M3` v0.5 — **APPROVED FOR IMPLEMENTATION**; risk được theo dõi trong task |
 | `TRACE-PROG-001` | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Requirement → Design → Interface → Test → Evidence | `M3` v3.0 — 2/60 `I=Y`, 0/32 Test Result |
-| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.20 — P0 7/7 DONE; P1 **IN_PROGRESS 3/6** |
+| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.21 — P0 7/7 DONE; P1 **IN_PROGRESS 4/6** |
 
 Tiến độ tạo, hoàn thiện, review và phê duyệt đúng 22 hồ sơ trên được quản lý tại
 [`PLAN-PROG-DOC-054`](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md).
@@ -216,6 +216,7 @@ code; review/evidence thực được bổ sung trong task và trước release.
 | 1.7 | 2026-08-10 | Ghi `AUTH-PROG-2026-08-10-01`: Product Owner/CTO + System Architect Phạm Đình Chương `ACCEPT`; Open Decisions v0.8 có `3 DECIDED`, `14 OPEN`; Plan 53 v0.15. Giữ `0/22 M4`, `0/22 M5` vì consumer/discipline/Verification và evidence còn thiếu |
 | 1.8 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-03`: phê duyệt toàn bộ baseline cho implementation; `17/17` decision `DECIDED`, 6/6 ADR `Accepted`, `PLAN_READY` và mọi `IMPLEMENT_READY[*]` `PASS`. Chữ ký còn thiếu ghi `WAIVED FOR IMPLEMENTATION`; maturity thực tế giữ 22/22 M3, 0/22 M4/M5; P1 được bắt đầu ngay |
 | 1.9 | 2026-08-11 | Đồng bộ As-Built sau `TASK-PROG-102`: P1 đạt 3/6; OpenAPI/client, IPC v1 và profile/artifact/loader foundation đã có source; Artifact Spec v0.4, Trace v3.0 và Plan 53 v0.20. Giữ feature flag `OFF`, Test Result 0/32 và `RELEASE_READY BLOCKED` |
+| 2.0 | 2026-08-11 | Đồng bộ As-Built sau `TASK-PROG-103`: P1 đạt 4/6; catalog 19 public/77 detail sinh C++/Go/TypeScript, OpenAPI v1.16 và fail-safe biên consumer đã có source. Interface v0.9, Artifact v0.5, Trace v3.1, Plan 53 v0.21; giữ flag `OFF`, Test Result 0/32 và `RELEASE_READY BLOCKED` |
 
 ## 11. Phụ lục — Tự kiểm cổng M3 (loại: Kiểm soát tài liệu)
 

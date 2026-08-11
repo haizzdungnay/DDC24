@@ -4,14 +4,14 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.20 |
+| Phiên bản | 0.21 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`.** Team được viết và merge code production ngay; `RELEASE_READY` được đánh giá riêng sau implementation |
 | Ngày phát hành | 2026-08-11 |
 | Chủ quản | Dev Lead + System Architect |
 | Người review | Product, FE/BE/Core/FW/HW/Security/QA/Ops Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
 | Khung trình bày | ISO/IEC/IEEE 16326 — nội dung kế hoạch quản lý dự án phần mềm; ánh xạ điều khoản ở §11 |
-| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate v2.11 ghim bằng 22 SHA-256 tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v3.7 — kiểm bằng `python3 scripts/candidate_pin_check.py`; authority phê duyệt nền tiếp tục hiệu lực |
+| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate v2.12 ghim bằng 22 SHA-256 tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v3.9 — kiểm bằng `python3 scripts/candidate_pin_check.py`; authority phê duyệt nền tiếp tục hiệu lực |
 | Quy tắc tài liệu | [`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md) |
 
 > ## ✅ APPROVED FOR IMPLEMENTATION — được viết và merge code production
@@ -55,7 +55,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **thứ tự làm và điều kiện qua cửa**: bảy pha `P0..P6`, phụ thuộc giữa chúng, ai chịu trách nhiệm gì, và bằng chứng nào mở được mỗi gate `G0..G6`. |
 | 2. Ai phải đọc file này? | Dev Lead và Architect (chủ quản); Product và QA duyệt; mọi team đọc pha của mình. Đọc **sau** khi đã đọc hồ sơ thiết kế upstream của slice mình. |
-| 3. Hệ thống hiện tại đang có gì? | `G0/P0 PASS`; `G1/P1 IN_PROGRESS 3/6`. `TASK-PROG-100` khóa OpenAPI/Go/TypeScript; `101` khóa IPC v1; `102` khóa profile/artifact/loader foundation với `HASH_ONLY`, golden/boundary/fuzz và no-mutation. Flag vẫn mặc định `OFF`, chưa có Commission side effect hoặc runtime Programming production. |
+| 3. Hệ thống hiện tại đang có gì? | `G0/P0 PASS`; `G1/P1 IN_PROGRESS 4/6`. `TASK-PROG-100` khóa OpenAPI/Go/TypeScript; `101` khóa IPC v1; `102` khóa profile/artifact/loader; `103` khóa catalog 19 mã công khai/77 detail sinh C++/Go/TypeScript và fail-safe ở biên HTTP/client. Flag vẫn mặc định `OFF`, chưa có Commission side effect hoặc runtime Programming production. |
 | 4. Thiết kế mới thay đổi điều gì? | Xác lập nguyên tắc: **không mở gate bằng lời văn**. Mỗi pha có điều kiện vào và ra cụ thể; §6.1 định nghĩa Definition of Ready và Definition of Done cho từng task; §6.2 định nghĩa bằng chứng gate và điều kiện quay lui. |
 | 5. Team phải sửa module/contract nào? | §5.7 ánh xạ quyền sở hữu source và sản phẩm bàn giao theo pha; §5.8 có mẫu thẻ task và cách bàn giao theo lát cắt dọc. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker quyền hạn cho implementation.** `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`; `OD-PROG-001..017` `DECIDED`; ADR-026..031 `Accepted`. Team bắt đầu P1 ngay và tiếp tục theo dependency kỹ thuật. `RELEASE_READY` vẫn chờ Test Result của code sẽ được implement. |
@@ -454,13 +454,13 @@ tuần (§6.4). Không ghi phần trăm theo cảm tính: `% hoàn tất` chỉ 
 | Pha | Task | Đã đạt DoD | % hoàn tất | Trạng thái | Bắt đầu | Kết thúc | Test Result đã có | Ghi chú chặn |
 |---|---:|---:|---:|---|---|---|---:|---|
 | P0 | 7 | 7 | 100% | `DONE` | 2026-08-10 | 2026-08-11 | — | `AUTH-PROG-2026-08-11-03`; 17/17 decision `DECIDED`; 6/6 ADR `Accepted`; chữ ký còn thiếu được miễn cho implementation |
-| P1 | 6 | 3 | 50,0% | `IN_PROGRESS` | 2026-08-11 | — | 0/2 | `TASK-PROG-100/101/102 DONE`; 103 và 104 được chạy; 105 chờ 103/104 |
+| P1 | 6 | 4 | 66,7% | `IN_PROGRESS` | 2026-08-11 | — | 0/2 | `TASK-PROG-100..103 DONE`; 104 là next action; 105 chờ 104 |
 | P2 | 8 | 0 | 0% | `NOT_STARTED` | — | — | 0/3 | Chờ `M-G1` |
 | P3 | 8 | 0 | 0% | `NOT_STARTED` | — | — | 0/7 | Chờ `M-G1` |
 | P4 | 6 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G2`, `M-G3` |
 | P5 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G4`; shell chỉ đọc mở sớm từ `T+5` |
 | P6 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/1 | Chờ `HW-AUTH-*` và đồ gá HIL |
-| **Tổng** | **49** | **10** | **20,4%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **0/32** | Ba task contract foundation đã đạt DoD; release evidence chưa tạo |
+| **Tổng** | **49** | **11** | **22,4%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **0/32** | Bốn task contract foundation đã đạt DoD; release evidence chưa tạo |
 
 Cột “Test Result đã có” cộng lại là `33`, không phải `32`: `VS-PROG-019` được
 tính hai lần vì phần contract của nó thuộc `G1` còn phần đầy đủ thuộc `G3`. Số
@@ -487,7 +487,7 @@ commit/Test Result Target đủ điều kiện.
 | Phase | Task | Estimate | Dependency cứng | Status / exit evidence |
 |---|---:|---:|---|---|
 | P0 | 000–006 | 8–15 | DOC-G4 | DONE cho entry implementation theo `AUTH-PROG-2026-08-11-03` |
-| P1 | 100–105 | 15–25 | P0-A + P0-B theo từng task | IN_PROGRESS 3/6; `PROG-100/101/102 DONE`; tiếp theo 103/104; 105 chờ join |
+| P1 | 100–105 | 15–25 | P0-A + P0-B theo từng task | IN_PROGRESS 4/6; `PROG-100..103 DONE`; tiếp theo 104; 105 chờ join |
 | P2 | 200–207 | 35–55 | P1 | NOT_STARTED; compiler/store/Check/bundle unit/fuzz/integration |
 | P3 | 300–307 | 35–55 | P1–P2 + P0-B runtime | NOT_STARTED; Core target timing/no-forbidden-call evidence |
 | P4 | 400–405 | 30–45 | P3 + BE P2 | NOT_STARTED; lifecycle/power/fault/read-back Test Results |
@@ -730,7 +730,7 @@ phải Test Result và không được dùng đổi `VS-PROG-*` sang PASS. Chỉ
     PROG-105 chờ catalog này và toàn bộ task còn lại.
 6.  Estimate 6 ngày-người: catalog/mapping 2, generator ba ngôn ngữ 2,
     completeness/negative test 2. Nguồn lực 0,5 BE + 0,5 Core + 0,25 FE.
-    Milestone G1. Trạng thái NOT_STARTED.
+    Milestone G1. Trạng thái DONE tại source commit `4a1e9f5`.
 7.  Mỗi PRG-ERR-* có owner component, HTTP/status class, retryable,
     keepsRunning, messageKey và detail allowlist; mã public không phụ thuộc text.
     Internal detail ánh xạ đúng một mã public; detail lạ fail safe, không lộ
@@ -1033,7 +1033,7 @@ trỏ tới commit + test/evidence hiện tại.
 | `IMPLEMENT_READY[<lát cắt>]` | Product + Architect | **PASS cho mọi lát cắt** | 2026-08-11 | Không còn approval blocker; 17/17 decision `DECIDED`; task card P1 sẵn sàng |
 | `RELEASE_READY` | Product + Release + QA | **BLOCKED** | — | 32/32 Test Result + residual acceptance + `OD-PROG-008` HIL |
 | G0/P0 | Product+Architect+QA | PASS | 2026-08-10 / 2026-08-11 | Candidate v2.8; consumer review kỹ thuật xong; 6 ADR `Accepted`; quyền implement mở bởi `AUTH-PROG-2026-08-11-03` |
-| G1/P1 | Architect+BE+Core | IN_PROGRESS — 3/6 | 2026-08-11 | `TASK-PROG-100/101/102 DONE`; 103/104 là next action; 105 chờ join |
+| G1/P1 | Architect+BE+Core | IN_PROGRESS — 4/6 | 2026-08-11 | `TASK-PROG-100..103 DONE`; 104 là next action; 105 chờ 104 |
 | G2/P2+P5 partial | BE+FE+Compiler | NOT_STARTED | — | G1 |
 | G3/P3 | Core+Controls | NOT_STARTED | — | P1/P2 |
 | G4/P4+P5 | BE+Core+FE | NOT_STARTED | — | G3 |
@@ -1121,6 +1121,7 @@ khiển thiết bị thật:
 | 0.18 | 2026-08-11 | Hoàn tất `TASK-PROG-100`: OpenAPI v1.15.0 có 25 operation, router/error/impact validator Go, feature flag mặc định OFF, client TypeScript sinh tự động, golden payload và contract drift check. P1 thành `IN_PROGRESS 1/6`; host regression C++ 860/860, Go vet/test, FE 54 file/473 test + lint/build PASS; Test Result vẫn 0/32 và RELEASE_READY không đổi |
 | 0.19 | 2026-08-11 | Hoàn tất `TASK-PROG-101`: protocol IPC v1 canonical CBOR có schema/golden SHA-256, codec/server skeleton C++, UDS client Go kiểm peer/deadline/bounds/correlation và reconcile không replay mutation. P1 thành `IN_PROGRESS 2/6`; CTest 867/867, Go vet/test + targeted race, FE 54 file/473 test + lint/build PASS; Test Result vẫn 0/32, flag OFF và RELEASE_READY không đổi |
 | 0.20 | 2026-08-11 | Hoàn tất `TASK-PROG-102`: profile/artifact schema machine-readable, generated constants và validator compiler/loader dùng chung; `StIntegrityMode=HASH_ONLY`, deterministic encode, verify/load no-mutation, golden/negative/boundary và fuzz host PASS. Regression Release Modbus+BACnet+HMI CTest 875/875, Go vet/test, FE 54 file/473 test + lint/build PASS. P1 thành `IN_PROGRESS 3/6`; nâng riêng `CORE-101 I=Y`, giữ Test Result 0/32, flag OFF và RELEASE_READY không đổi |
+| 0.21 | 2026-08-11 | Hoàn tất `TASK-PROG-103`: catalog 19 public/77 detail, schema/manifest/generator C++/Go/TypeScript, OpenAPI v1.16 và fail-safe unknown/HTTP mismatch/public args. Regression CTest 877/877, Go vet/test, FE 55 file/479 test + lint/build PASS. P1 thành `IN_PROGRESS 4/6`; không nâng thêm requirement end-to-end, Test Result giữ 0/32, flag OFF và RELEASE_READY không đổi |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
