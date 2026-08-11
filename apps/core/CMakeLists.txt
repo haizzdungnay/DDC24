@@ -54,6 +54,7 @@ target_link_libraries(core_domain PUBLIC core_build_settings)
 
 add_library(core_application STATIC
     application/alarm/alarm_runtime.cpp
+    application/programming/program_ipc_server.cpp
     application/schedule/schedule_runtime.cpp
     application/schedule/schedule_clock.cpp
     application/st/st_program.cpp
@@ -147,6 +148,7 @@ if(CORE_BUILD_TESTS)
       domain/priority/test_priority_resolver.cpp
       domain/safety/tests/test_safe_state.cpp domain/safety/tests/test_overrun_monitor.cpp
       application/runtime/test_scan_loop.cpp
+      application/programming/tests/test_program_ipc_server.cpp
       adapters/ipc/tests/test_web_ipc.cpp domain/graph/tests/test_graph_runtime.cpp
       adapters/config/test_safe_state_config.cpp
       adapters/ipc/tests/test_config_reload.cpp adapters/persistence/test_state_snapshot.cpp
@@ -165,7 +167,8 @@ if(CORE_BUILD_TESTS)
   # test_st_validate_cli.cpp fork+execv nhị phân thật — cần path tuyệt đối,
   # không đoán build layout (generator expression cho đúng dù đổi cấu trúc).
   target_compile_definitions(core_tests PRIVATE
-      ST_VALIDATE_CLI_PATH="$<TARGET_FILE:mkddc-st-validate>")
+      ST_VALIDATE_CLI_PATH="$<TARGET_FILE:mkddc-st-validate>"
+      PROGRAMMING_IPC_CONTRACT_DIR="${MKDDC_CONTRACTS_SOURCE_DIR}/ipc/programming_v1")
   add_dependencies(core_tests mkddc-st-validate)
   if(TARGET GTest::gtest_main)
     target_link_libraries(core_tests PRIVATE GTest::gtest_main)
