@@ -32,6 +32,9 @@ Loader v0.8, FW-SOM v0.5, Verification Plan v1.1, Risk v1.6, Trace v3.12,
 Plan 53 v0.32, Roadmap v3.31 và review/raw evidence G3. P3 đạt `1/8`, tổng
 `22/49 = 44,9%`; task tiếp theo `TASK-PROG-301`. Giữ trung thực `2/60 I=Y`,
 `0/32 PASS`, 16/16 risk Open, feature `OFF` và `RELEASE_READY BLOCKED`.
+Source + hồ sơ đã merge qua PR #155 tại `424367a`, tree `7b81f79`; remote
+feature branch đã xóa. GitHub Actions không chạy step nào do billing/
+spending-limit; annotation hạ tầng và toàn bộ gate local đã được ghi trong PR.
 
 ### Security — Hostile corpus Programming P2 (2026-08-11)
 
