@@ -20,7 +20,8 @@ Backend → Frontend read-only; rollback theo chiều ngược và không xóa D
 Revision, Artifact, Operation, audit hoặc Active/LKG. Unknown major, partial
 deploy, hash drift, bật Commission sớm và rollback phá dữ liệu đều fail-closed.
 Hai consumer Go/C++ bổ sung ca từ chối IPC minor mới hơn; self-test chèn lỗi
-`5/5` và join sáu contract `6/6` PASS. Regression Release C++ bật Modbus +
+`5/5`, dry-run chặn `5/5` thứ tự deploy sai, rollback chuẩn bảo toàn dữ liệu,
+không phát sinh Commission; join sáu contract `6/6` PASS. Regression Release C++ bật Modbus +
 BACnet + HMI và CTest `877/877` PASS; toàn bộ Go vet/test PASS; FE Vitest
 `55/55` file, `479/479` test, lint/build PASS. Gate `layout` vẫn dừng ở lỗi
 baseline ngoài Programming `apps/web-ui/src/features/scheduler/shared.ts` chạm

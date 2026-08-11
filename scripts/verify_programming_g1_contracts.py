@@ -25,6 +25,20 @@ REQUIRED_PRESERVE = {
 REQUIRED_FORBID = {
     "automatic-downgrade", "destructive-delete", "commission", "blind-replay"
 }
+BASELINE_STATE = {
+    "schema": 0,
+    "core": "v0",
+    "backend": "v0",
+    "frontend": "v0",
+    "database": "db-sha256-before",
+    "backup": "backup-preexisting",
+    "revision": "revision-before",
+    "artifact": "artifact-before",
+    "operation": "operation-before",
+    "audit": "audit-before",
+    "active-lkg": "active-lkg-before",
+    "commissionCount": 0,
+}
 
 
 def digest(path: Path) -> str:
@@ -46,6 +60,43 @@ def safe_path(value: str) -> Path:
     if ROOT not in resolved.parents:
         raise ValueError(f"đường dẫn contract thoát repository: {value}")
     return resolved
+
+
+def deploy_rollback_dry_run(
+    deploy_order: list[str], rollback_order: list[str]
+) -> tuple[bool, dict[str, Any], str]:
+    """Mô phỏng preflight + deploy + rollback, không chạm máy/DB thật."""
+    state: dict[str, Any] = copy.deepcopy(BASELINE_STATE)
+    if deploy_order != EXPECTED_DEPLOY:
+        return False, state, "deploy order bị từ chối ở preflight"
+    if rollback_order != EXPECTED_ROLLBACK:
+        return False, state, "rollback order bị từ chối ở preflight"
+
+    backup = copy.deepcopy(state)
+    for step in deploy_order:
+        if step == "backup":
+            state["backupSnapshot"] = copy.deepcopy(backup)
+        elif step == "schema":
+            state["schema"] = 1
+        elif step == "core-dual-compatible":
+            state["core"] = "v1-dual"
+        elif step == "backend":
+            state["backend"] = "v1"
+        elif step == "frontend-read-only":
+            state["frontend"] = "v1-read-only"
+
+    for step in rollback_order:
+        state[step] = backup[step]
+    state["schema"] = 1  # rollback tự động không downgrade schema.
+
+    for name in REQUIRED_PRESERVE:
+        if state[name] != backup[name]:
+            return False, state, f"rollback làm đổi {name}"
+    if state["commissionCount"] != 0:
+        return False, state, "dry-run phát sinh Commission"
+    if state["schema"] != 1:
+        return False, state, "rollback đã downgrade schema"
+    return True, state, "deploy/rollback dry-run PASS"
 
 
 def validate(join: dict[str, Any]) -> list[str]:
@@ -158,6 +209,10 @@ def validate(join: dict[str, Any]) -> list[str]:
     require(deploy.get("flagDuringG1") == "OFF", "flag G1 phải OFF")
     require(set(deploy.get("preserve", [])) == REQUIRED_PRESERVE, "rollback preserve set sai")
     require(set(deploy.get("forbid", [])) == REQUIRED_FORBID, "rollback forbid set sai")
+    dry_run_ok, _, dry_run_message = deploy_rollback_dry_run(
+        deploy.get("order", []), deploy.get("rollbackOrder", [])
+    )
+    require(dry_run_ok, dry_run_message)
     return errors
 
 
@@ -182,6 +237,24 @@ def run_self_test(join: dict[str, Any]) -> None:
         if not validate(mutation):
             raise RuntimeError(f"self-test {name} không bị reject")
     print(f"PASS self-test: {len(mutations)}/{len(mutations)} mutation bị reject fail-closed")
+
+    invalid_orders = []
+    for index in range(len(EXPECTED_DEPLOY) - 1):
+        order = list(EXPECTED_DEPLOY)
+        order[index], order[index + 1] = order[index + 1], order[index]
+        invalid_orders.append(order)
+    invalid_orders.append(EXPECTED_DEPLOY[:-1])
+    for order in invalid_orders:
+        ok, state, _ = deploy_rollback_dry_run(order, EXPECTED_ROLLBACK)
+        if ok or state != BASELINE_STATE:
+            raise RuntimeError("deploy order lỗi không fail-closed trước mutation")
+    ok, state, message = deploy_rollback_dry_run(EXPECTED_DEPLOY, EXPECTED_ROLLBACK)
+    if not ok or state["commissionCount"] != 0:
+        raise RuntimeError(message)
+    print(
+        f"PASS dry-run: {len(invalid_orders)}/{len(invalid_orders)} thứ tự lỗi bị chặn; "
+        "deploy/rollback chuẩn bảo toàn dữ liệu và không Commission"
+    )
 
 
 def main() -> int:
