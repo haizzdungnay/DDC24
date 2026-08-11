@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.0 |
-| Trạng thái | **22/22 M3 — Product + Architect đã `ACCEPT` candidate v2.7; M4/M5 vẫn 0/22, `PLAN_READY BLOCKED` do chữ ký consumer/Verification/Document Control** |
+| Phiên bản | 3.2 |
+| Trạng thái | **APPROVED FOR IMPLEMENTATION — candidate v2.8; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
 | Người phê duyệt | Product Owner, System Architect, Verification Lead |
@@ -23,9 +23,9 @@ dung, review và phê duyệt** bộ hồ sơ Programming. Nó trả lời bốn
 3. Hồ sơ nào phải làm trước vì đang chặn contract, safety hoặc các team khác?
 4. Ai viết, ai review, điều kiện nào cho phép chuyển trạng thái?
 
-Roadmap không phải Detailed Design, không thay nội dung của 22 hồ sơ, không tự
-đóng `OD-PROG-*`, không cấp quyền triển khai control path và không làm thay đổi
-gate release đang `RED`. Roadmap cũng không được tính là file thứ 23 để làm tăng
+Roadmap không phải Detailed Design, không thay nội dung của 22 hồ sơ và không tự
+chứng minh implementation/release. Quyền triển khai được cấp bởi
+`AUTH-PROG-2026-08-11-03` và ghi tại Plan 53. Roadmap không được tính là file thứ 23 để làm tăng
 tỷ lệ hoàn tất của bộ hồ sơ.
 
 **Phân chia thẩm quyền, để không sinh roadmap thứ ba.** Plan 54 quản **hồ sơ**:
@@ -76,12 +76,12 @@ Nguồn để lập baseline:
 | File chưa được tạo | 0/22 = **0%** | Đủ toàn bộ đường dẫn baseline |
 | Hồ sơ đạt `M3` — checklist đủ, `TBD/BLOCKED` có owner, link sạch | 22/22 = **100%** | Đo theo định nghĩa §3.1; bằng chứng tại `PROG-REV-2026-08-09` |
 | Hồ sơ đạt `M4` — review liên chức năng đã đóng | 0/22 = **0%** | Cần reviewer của bên tiêu thụ contract; tự kiểm không thay thế |
-| Hồ sơ đạt `M5` — Approved | 0/22 = **0%** | Chưa có chữ ký thẩm quyền |
+| Hồ sơ đạt `M5` — Approved | 0/22 = **0%** | Maturity thực tế không nâng bằng waiver; không chặn implementation |
 | Điểm trưởng thành tài liệu | **1320/2200 = 60,0%** | 22 file M3; chưa có M4/M5 |
-| Quyết định | **14 OPEN / 3 DECIDED / 0 CLOSED** | `OD-PROG-003/010/013` DECIDED; các mục khác chờ đồng phê duyệt/downstream sync |
+| Quyết định | **0 OPEN / 17 DECIDED / 0 CLOSED** | Toàn bộ decision được phê duyệt bởi `AUTH-PROG-2026-08-11-03` |
 | Rủi ro có điểm từ 15 trở lên | 11/16 | Chặn production cutover cho tới khi có evidence và residual acceptance |
 | Kịch bản có Test Result mới | 0/32 | Evidence production vẫn `MISSING/RED` |
-| Cổng tài liệu | **DOC-G4 RED — Product + Architect đã ACCEPT v2.7; consumer và Verification PENDING** | 0/22 M4; 14 OD OPEN; 6 ADR chưa final Accepted; 0/32 Test Result |
+| Cổng implementation | **PLAN_READY PASS; mọi IMPLEMENT_READY PASS** | M4/M5 và chữ ký còn thiếu được `WAIVED FOR IMPLEMENTATION`; 6 ADR `Accepted`; 0/32 Test Result được tạo trong task |
 
 Điểm `60,0%` là điểm trưởng thành **tài liệu**, không phải phần trăm code, test,
 release hay mức sẵn sàng production. Chỉ số phải được tính lại từ bảng master;
@@ -93,10 +93,10 @@ không nhập phần trăm bằng cảm tính.
 |---|---|---|
 | R0 — Kiểm soát baseline | **COMPLETE** | Register 22 hồ sơ, owner/reviewer, scoring, risk/scenario mapping và đường dẫn chuẩn đã chốt; candidate hiện hành ghim bằng **22 SHA-256** (`candidate_pin_check.py` PASS), `e3e9fb2` đã `SUPERSEDED` |
 | R1 — Requirement/decision/architecture | **M3 COMPLETE** | Index/SRS/Open Decisions/Architecture đạt cổng loại tương ứng; có mục Đọc nhanh và phụ lục tự kiểm |
-| R2 — Contract + 5 thiết kế lõi | **M3 COMPLETE** | Data/Interface và 5 hồ sơ lõi có bảng `DD-01..DD-13` từng mã; blocker còn lại là TLS, `OD-PROG-002` và provenance artifact |
+| R2 — Contract + 5 thiết kế lõi | **M3 COMPLETE / APPROVED FOR IMPLEMENTATION** | Data/Interface và 5 hồ sơ lõi có bảng `DD-01..DD-13`; TLS/provenance là deliverable implementation |
 | R3 — Thiết kế theo team | **M3 COMPLETE** | UI/UX theo IA **bốn workspace** `PGM-01..04`: asset render được cho từng workspace (Tổng quan desktop/mobile, Thiết kế, Kiểm tra & Vận hành kèm modal, Runtime & Bảo trì kèm drawer), cây component, API theo workspace, copy VI/EN, token và rollout; FE, BE, FW-SOM, FW MCU, HW đủ checklist |
 | R4 — Assurance/delivery | **M3 COMPLETE** | 32 test spec, Ops, 16 risk, 60 dòng trace, Plan 53 có 6/6 thẻ P1 đủ 11 trường và kho Test Result có template/integrity workflow; Test Result vẫn 0/32 |
-| R5 — Review/sign-off | **BLOCKED một phần — REVIEW/AUTHORITY** | Vòng kỹ thuật xong; Product + Architect đã `ACCEPT` candidate v2.7 theo `AUTH-PROG-2026-08-11-02`; tiếp tục chờ 8 consumer/discipline, Verification/QA và Document Control; 0/22 M4/M5 |
+| R5 — Review/sign-off | **COMPLETE FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`: Product + Architect `ACCEPT ALL`; 8 consumer/discipline, Verification/QA và Document Control `WAIVED FOR IMPLEMENTATION`; 0/22 M4/M5 vẫn được ghi đúng thực tế |
 
 `DOC-G0` được chuyển PASS sau chỉ đạo ngày 2026-08-09 “triển khai theo roadmap”
 và việc đăng ký cùng baseline vào `CONTROL.md`, Document Hub, Design Index và
@@ -161,7 +161,7 @@ lý do và revision history trước khi tính lại.
 |---:|---|---|---|---:|---|---|
 | 1 | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md) | Kiểm soát | System Engineering / Document Control | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Kiểm soát; register 22 dòng khớp harness |
 | 2 | [`SRS-PROG-001`](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | Yêu cầu | Product + System / QA | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Requirements; 60 ID canonical, acceptance định lượng |
-| 3 | [`PROG-OD-001`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) | Quyết định | Product + Architect / các lead | `M3` 60 | P0 | v0.8; `3 DECIDED`, `14 OPEN`, `0 CLOSED`; Product/Architect đã ghi ủy quyền |
+| 3 | [`PROG-OD-001`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) | Quyết định | Product + Architect / các lead | `M3` 60 | P0 | v0.9; `17 DECIDED`, `0 OPEN`, `0 CLOSED`; approved for implementation |
 | 4 | [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | Kiến trúc | System Architect / Safety + Ops | `M3` 60 | P0 | v0.6; Architect `ACCEPT` 6/6 ADR, còn đồng phê duyệt/evidence |
 | 5 | [`DM-PROG-001`](../02_design/software/PROGRAMMING_DATA_MODEL.md) | Detailed Design | BE + Core / FE + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`OD-PROG-003/010/002/005/006/009`) |
 | 6 | [`IFSPEC-PROG-001`](../02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md) | Detailed Design | BE + Core / FE + Security | `M3` 60 | P0 | v0.7; Product/Architect `ACCEPT`, nhưng 14 decision/TLS/giao thức BE↔Core còn chặn Active |
@@ -176,10 +176,10 @@ lý do và revision history trước khi tính lại.
 | 15 | [`DDD-FWMCU-PROG-001`](../02_design/firmware/PROGRAMMING_FW_MCU_DESIGN.md) | Detailed Design | FW MCU Lead / Core + HW + QA | `M3` 60 | P1 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`HW-AUTH-001/002`, HIL RED) |
 | 16 | [`DDD-HW-PROG-001`](../04_design/hardware/PROGRAMMING_HW_DESIGN.md) | Detailed Design | HW Lead / FW + Safety + QA | `M3` 60 | P1 | Đọc nhanh + bảng `DD-01..DD-13`; 2 BLOCKED (`DD-03` thiếu baseline có kiểm soát; HW NO-GO) |
 | 17 | [`DDD-SEC-PROG-001`](../02_design/software/PROGRAMMING_SECURITY_DESIGN.md) | Detailed Design | Security + BE / Core + Ops + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (TLS production, `OD-PROG-001`) |
-| 18 | [`VVP-PROG-001`](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | V&V | Verification Lead / tất cả lead | `M3` 60 | P0 | v0.7; Product `ACCEPT`, Verification PENDING; 32/32 spec, 0/32 Test Result |
+| 18 | [`VVP-PROG-001`](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | V&V | Verification Lead / tất cả lead | `M3` 60 | P0 | v0.8; approved for implementation; 32/32 spec, 0/32 Test Result |
 | 19 | [`OPS-PROG-001`](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | Vận hành | Ops/Release / Core + BE + QA | `M3` 60 | P1 | Đọc nhanh + phụ lục cổng M3 loại Operations; 1 BLOCKED (chưa diễn tập) |
 | 20 | [`RSK-PROG-001`](../07_records/PROGRAMMING_RISK_REGISTER.md) | Assurance | Product + Architect + QA / risk owner | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Risk; 16/16 Open (gồm `RSK-PROG-016`), residual không đổi |
-| 21 | [`TRACE-PROG-001`](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Traceability | Verification Lead / Document Control | `M3` 60 | P0 | v2.6; 60 dòng, 0 vi phạm bất biến; `3 DECIDED/14 OPEN`, 0/32 Test Result |
+| 21 | [`TRACE-PROG-001`](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Traceability | Verification Lead / Document Control | `M3` 60 | P0 | v2.7; 60 dòng, 0 vi phạm bất biến; `17 DECIDED/0 OPEN`, 0/32 Test Result |
 | 22 | [`PLAN-PROG-053`](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | Delivery | Dev Lead + Architect / Product + QA | `M3` 60 | P1 | v0.16; Product/Architect đã xác nhận delta v2.7; 0/6 P1 DoD, còn chặn bởi Verification/consumer và decision đúng lát cắt; target/HIL không chặn lát cắt contract |
 
 ## 5. Quan hệ rủi ro → hồ sơ phải ưu tiên
@@ -377,6 +377,7 @@ Mỗi lần thay đổi mức, thêm **một dòng mới**; không sửa số l�
 | 2026-08-10 gate-audit-1 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED | Trước P1 phát hiện `PLAN-PROG-053` §6.5/§10 còn gọi `e3e9fb2` là candidate hiện hành. Đã sửa, phát hành candidate v2.7 và kiểm lại CI/target: GitHub jobs vẫn `steps=[]`, SSH target vẫn bị từ chối. Không đổi thiết kế hay code; Product/Architect cần xác nhận delta v2.7, P1 giữ 0/6 DoD |
 | 2026-08-11 gate-recheck-2 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED | Sửa biên bản consumer còn trỏ v2.5 thành candidate v2.7/commit `a236200`; rerun CI attempt 2 vẫn 17/17 job `steps=[]`, SSH target vẫn bị từ chối. Không đổi thiết kế/code; `0/8` consumer, `0/22 M4/M5`, P1 `0/6` DoD |
 | 2026-08-11 authority-2 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | DOC-G4 RED / PLAN_READY BLOCKED một phần | `AUTH-PROG-2026-08-11-02`: Product Owner/CTO + System Architect Phạm Đình Chương `ACCEPT` candidate v2.7 tại `a236200` sau khi xác nhận delta v2.5→v2.7 chỉ đổi chỉ báo cấu hình/trạng thái. CI/CD chuyển `DEFERRED` cho assurance/release, không chặn `PLAN_READY` hoặc `IMPLEMENT_READY[contract]`. Giữ `0/8` consumer, `0/22 M4/M5`, P1 `0/6` DoD vì không giả chữ ký còn thiếu |
+| 2026-08-11 authority-3 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **PLAN_READY PASS / IMPLEMENT_READY[*] PASS** | `AUTH-PROG-2026-08-11-03`: Product Owner/CTO + System Architect `ACCEPT ALL` không kèm approval condition; 17/17 decision `DECIDED`; 6/6 ADR `Accepted`; chữ ký còn thiếu `WAIVED FOR IMPLEMENTATION`; CI/target/HIL không phải entry blocker; P0 7/7 DONE, P1 READY TO START |
 
 ## 10.1 Ma trận impact của Amendment A1 trên 22 hồ sơ
 
@@ -465,12 +466,12 @@ Candidate P0 hiện hành đã ghim:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Định danh | 22 SHA-256 của candidate v2.7 ở manifest v3.0; không dùng commit/candidate đã `SUPERSEDED` làm revision ký |
-| Commit/tree | `a23620026c6c6a44625d149361b9949b31e93f90` / `8296338dd2f320ac533daec2057441052aee3470` |
-| Nhánh phát hành | `docs/programming-plan-only-gate-audit` |
+| Định danh | 22 SHA-256 của candidate v2.8 ở manifest v3.2; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
+| Commit/tree | `b068b7d970bef600a0be51f79af7eb139e437d39` / `6ab6ac10412c7a8dc0e8e52af9b8c374e7b00e2a` |
+| Nhánh phát hành | `docs/programming-unconditional-implement-20260811` |
 | Manifest | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
-| Phạm vi | 22/22 hồ sơ baseline; delta v2.5→v2.7 chỉ đổi `PLAN-PROG-053` về chỉ báo cấu hình/trạng thái |
-| Trạng thái | **PIN PASS; PRODUCT/ARCHITECT ACCEPT; CONSUMER/VERIFICATION SIGN-OFF BLOCKED** |
+| Phạm vi | 22/22 hồ sơ baseline; đồng bộ chỉ thị phê duyệt toàn bộ và mở implementation |
+| Trạng thái | **PIN PASS; APPROVED FOR IMPLEMENTATION** |
 
 Manifest chứa SHA-256 đầy đủ, Git blob, số dòng và delta so với baseline gốc.
 Nếu nội dung candidate đổi, phải phát hành commit/manifest mới và invalid phần
@@ -480,13 +481,14 @@ review chịu ảnh hưởng; không sửa hash lịch sử để trỏ sang wor
 
 - 22/22 file tồn tại tại đường dẫn chuẩn và 22/22 đạt `M5`.
 - 13 checklist `DD-*` được xử lý cho mọi Detailed Design; `N/A` có lý do.
-- 17 open decision đã được xử lý theo đúng dependency; không có `TBD` vô
+- 17 decision đã được `DECIDED`; không có `TBD` vô
   owner hoặc không có gate.
 - Risk Register liên kết control/test; residual chỉ đổi khi có evidence hợp lệ.
 - Traceability không đứt chuỗi requirement → design → implementation target →
   scenario → Test Result; trạng thái evidence vẫn được báo trung thực.
-- Tất cả finding review P0/P1 đóng, link/ID/revision sạch và bảng ký hoàn tất.
-- `PLAN-PROG-053` được đồng bộ lại từ thiết kế Approved trước khi mở code gate.
+- Tất cả finding review P0/P1 đóng, link/ID/revision sạch; chữ ký được miễn phải
+  ghi `WAIVED FOR IMPLEMENTATION`, không giả tên người ký.
+- `PLAN-PROG-053` đã đồng bộ từ thiết kế được duyệt và mở code gate.
 
 Hoàn tất hồ sơ chỉ mở **quyền bắt đầu implementation có kiểm soát**. Nó không tự
 chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn sàng release.
@@ -516,10 +518,12 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 2.8 | 2026-08-10 | Ghi commit `a236200` và tree `8296338d` chứa candidate v2.7 vào tracker sau commit phát hành; bước bổ sung chỉ đổi hồ sơ hỗ trợ ngoài mẫu số 22, không thay candidate hay trạng thái gate | Document Control |
 | 2.9 | 2026-08-11 | Thêm snapshot `gate-recheck-2`; đồng bộ biên bản consumer sang candidate v2.7 và ghi lần tái kiểm CI/target trên `2ad6931`. Giữ 22/22 M3, M4/M5 0/22, P1 0/6 DoD và mọi gate `BLOCKED` | Dev Lead + Document Control |
 | 3.0 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-02`: Product Owner/CTO + System Architect `ACCEPT` candidate v2.7 sau khi review delta; CI/CD `DEFERRED` khỏi entry của lát cắt contract. Giữ M3 22/22, M4/M5 0/22 và `PLAN_READY BLOCKED` vì chữ ký consumer/Verification/Document Control không thuộc phạm vi ủy quyền | Product + Architect + Document Control |
+| 3.1 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-03`: `ACCEPT ALL` không kèm approval condition; 17/17 decision `DECIDED`; 6/6 ADR `Accepted`; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` `PASS`; consumer/discipline/Verification/Document Control `WAIVED FOR IMPLEMENTATION`; P0 7/7 DONE, P1 được bắt đầu ngay | Product + Architect + Document Control |
+| 3.2 | 2026-08-11 | Ghi commit `b068b7d` và tree `6ab6ac10` chứa candidate v2.8; bước bổ sung chỉ đổi hồ sơ hỗ trợ ngoài mẫu số 22, không đổi candidate hoặc quyền implementation | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|
-| Product Owner | Phạm Đình Chương | **ACCEPT candidate v2.7** | 2026-08-11; ủy quyền điện tử `AUTH-PROG-2026-08-11-02`, commit `a23620026c6c6a44625d149361b9949b31e93f90` |
-| System Architect | Phạm Đình Chương | **ACCEPT candidate v2.7** | 2026-08-11; xác nhận delta chỉ là chỉ báo cấu hình/trạng thái, staging và 6 ADR tiếp tục hiệu lực |
-| Verification Lead | — | PENDING | Phê duyệt scoring, checklist, risk/trace/evidence gate |
-| Document Control | — | PENDING | Phê duyệt register, version và quy trình cập nhật |
+| Product Owner | Phạm Đình Chương | **ACCEPT ALL candidate v2.8** | 2026-08-11; `AUTH-PROG-2026-08-11-03`; không kèm approval condition |
+| System Architect | Phạm Đình Chương | **ACCEPT ALL candidate v2.8** | 2026-08-11; 6/6 ADR `Accepted`; mọi implementation slice được mở |
+| Verification Lead | — | **WAIVED FOR IMPLEMENTATION** | Review/Test Result vẫn độc lập, nhưng không chặn code |
+| Document Control | — | **WAIVED FOR IMPLEMENTATION** | Hash/register vẫn kiểm máy, chữ ký không chặn code |

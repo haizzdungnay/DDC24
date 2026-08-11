@@ -121,12 +121,12 @@
   <rect x="28" y="742" width="1384" height="1" fill="#636970"/>
   <text x="28" y="765" font-size="12" font-weight="700" fill="#1C1F23">Ba cổng</text>
   <text x="28" y="780" font-size="12" font-weight="700" fill="#1C1F23">quyền hạn</text>
-  <rect x="166" y="754" width="178" height="22" rx="11" fill="#F7E0E1" stroke="#CC1F28"/>
-  <text x="180" y="769" font-size="11" font-weight="700" fill="#CC1F28">PLAN_READY · BLOCKED</text>
-  <text x="166" y="790" font-size="10" fill="#4A4F55">P0-A: pin, consumer review, conflict, sign-off</text>
-  <rect x="390" y="754" width="224" height="22" rx="11" fill="#F7E0E1" stroke="#CC1F28"/>
-  <text x="404" y="769" font-size="11" font-weight="700" fill="#CC1F28">IMPLEMENT_READY[*] · BLOCKED</text>
-  <text x="390" y="790" font-size="10" fill="#4A4F55">mở theo lát cắt sau PLAN_READY + P0-B</text>
+  <rect x="166" y="754" width="178" height="22" rx="11" fill="#DDF3E4" stroke="#167A3F"/>
+  <text x="180" y="769" font-size="11" font-weight="700" fill="#167A3F">PLAN_READY · PASS</text>
+  <text x="166" y="790" font-size="10" fill="#4A4F55">AUTH-PROG-2026-08-11-03</text>
+  <rect x="390" y="754" width="224" height="22" rx="11" fill="#DDF3E4" stroke="#167A3F"/>
+  <text x="404" y="769" font-size="11" font-weight="700" fill="#167A3F">IMPLEMENT_READY[*] · PASS</text>
+  <text x="390" y="790" font-size="10" fill="#4A4F55">mọi lát cắt được phép bắt đầu</text>
   <rect x="1150" y="754" width="180" height="22" rx="11" fill="#F7E0E1" stroke="#CC1F28"/>
   <text x="1164" y="769" font-size="11" font-weight="700" fill="#CC1F28">RELEASE_READY · BLOCKED</text>
   <path d="M1334 765 L1380 765" stroke="#CC1F28" stroke-width="1.5" marker-end="url(#ar)"/>

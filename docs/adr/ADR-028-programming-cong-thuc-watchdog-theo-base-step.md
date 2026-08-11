@@ -2,7 +2,7 @@
 
 - Date: 2026-08-10
 - Owner: System Architect + Safety Reviewer (phê duyệt) · Core Lead + Ops (đề xuất)
-- Status: **Proposed — System Architect ACCEPT**; chờ Safety và `OD-PROG-012` trước khi chuyển `Accepted`; target evidence là gate triển khai/release sau quyết định
+- Status: **Accepted** — Product Owner/CTO + System Architect phê duyệt theo `AUTH-PROG-2026-08-11-03`; Safety review chuyển hậu kiểm, target evidence thuộc verification/release
 - Đóng xung đột: `ARCH-CONF-PROG-003` tại [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) §11
 - Related: [`DDD-CTRL-PROG-001`](../02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md) §3 ·
   [`OPS-PROG-001`](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) ·
@@ -92,5 +92,5 @@ Ba vấn đề của trạng thái này:
 | Vai trò | Trạng thái | Ngày |
 |---|---|---|
 | System Architect | **ACCEPT — Phạm Đình Chương; ủy quyền điện tử `AUTH-PROG-2026-08-10-01`, Codex ghi biên bản** | 2026-08-10 |
-| Safety Reviewer | **PENDING** | — |
+| Safety Reviewer | **WAIVED FOR IMPLEMENTATION — review hậu kiểm** | 2026-08-11 |
 | Core Lead + Ops | Đề xuất | 2026-08-10 |

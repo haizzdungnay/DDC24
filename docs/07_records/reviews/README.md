@@ -62,10 +62,10 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 | [Baseline Source Fix Report](DDC24_BASELINE_SRC_FIX_REPORT.md) | 2026-08-03 | Record | CI, Point Model, Config Apply, health/recovery trước Programming Design |
 | [Programming Docs Sync Report](PROGRAMMING_DOCS_SYNC_REPORT.md) | 2026-08-03 | Complete | Đồng bộ docs theo Product Spec Programming Rev A |
 | [Programming Design Set Review](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | 2026-08-09 | Complete | Rà 22 hồ sơ Programming: 12 finding tài liệu đã đóng, 22/22 đạt M3; M4/M5 chờ người thật |
-| [Gói review cổng P0 Programming](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | 2026-08-11 | **v1.9 — Product/Architect `ACCEPT` v2.7, chờ chữ ký độc lập** | Gói `PROG-000..006`; `AUTH-PROG-2026-08-11-02` đóng delta Product/Architect; §6.2 liệt kê hành động authority còn lại; `0/7` DoD |
-| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.0 — pin PASS, Product/Architect `ACCEPT`** | Candidate v2.7 định danh bằng **22 SHA-256**/commit `a236200`; kiểm bằng `scripts/candidate_pin_check.py`. Không tự mở gate |
-| [Rà soát môi trường P0 Programming](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) | 2026-08-11 | **v1.1 — Partial** | Rerun CI trên `2ad6931` vẫn 17/17 job `steps=[]`; target SSH auth và HIL authority/fixture còn BLOCKED |
-| [Consumer review liên chức năng P0 Programming](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | 2026-08-11 | **v1.5 — Product/Architect `ACCEPT`, `0/8` consumer** | 22 hồ sơ theo cặp producer→consumer; `9/9` finding đóng; revision ký là candidate v2.7/commit `a236200`; `0/22 M4` vì M4 đòi reviewer là người thật |
+| [Gói review cổng P0 Programming](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | 2026-08-11 | **v2.0 — APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; P0 7/7 DONE; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` PASS |
+| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.2 — candidate v2.8** | Candidate định danh bằng **22 SHA-256**, commit `b068b7d`; approved for implementation |
+| [Rà soát môi trường P0 Programming](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) | 2026-08-11 | **v1.2 — implementation entry approved** | CI/target/HIL chưa có evidence nhưng được loại khỏi entry condition; không chặn code |
+| [Consumer review liên chức năng P0 Programming](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | 2026-08-11 | **v1.6 — `8/8 WAIVED FOR IMPLEMENTATION`** | `9/9` finding đóng; không giả 8 chữ ký; maturity vẫn 0/22 M4 nhưng không chặn implementation |
 | [Deployment Provenance Report](DEPLOYMENT_PROVENANCE_REPORT.md) | 2026-08-03 | Record | Build identity, release manifest, sai khác target |
 | [Physical I/O và HIL](PHYSICAL_IO_HIL_REPORT.md) | 2026-08-03 | **Gate còn mở** | Host/fake-MCU **không** được ghi thành HIL vật lý |
 | [Báo cáo build và deploy lên board](BOARD_DEPLOY_REPORT_2026-08-04.md) | 2026-08-04 | Record | 5 service chạy trên Orange Pi 5B, HMI tắt có chủ đích |
@@ -145,3 +145,4 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.0 | 2026-08-08 | Tạo chỉ mục đầu tiên cho thư mục; đối chiếu trạng thái 34 tài liệu với mã nguồn tại `18bd295`; tách 12 hồ sơ lịch sử sang `archive/` và sửa link trỏ tới chúng; bổ sung bảng ánh xạ đường dẫn trước/sau tái cấu trúc |
 | 1.1 | 2026-08-10 | Đăng ký gói review P0 và manifest candidate `e3e9fb2`; phân biệt pin cấu hình PASS với authority review/sign-off còn BLOCKED |
 | 1.2 | 2026-08-10 | Đăng ký record readiness môi trường P0; tách host/evidence PASS phần chuẩn bị khỏi CI/target/HIL BLOCKED |
+| 1.3 | 2026-08-11 | Đồng bộ `AUTH-PROG-2026-08-11-03`: gói P0 v2.0, candidate v2.8/manifest v3.2 tại commit `b068b7d`, consumer review v1.6 và environment v1.2; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` PASS |

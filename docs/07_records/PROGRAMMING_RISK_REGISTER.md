@@ -11,6 +11,10 @@
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
 | Review kế tiếp | Khi R2/R3 được phê duyệt hoặc có Test Result/incident/change mới |
 
+> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
+> `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
+> không còn chặn viết/merge code. Risk control/evidence vẫn được theo dõi trong task.
+
 ## 0. Đọc nhanh
 
 | Câu hỏi | Trả lời |

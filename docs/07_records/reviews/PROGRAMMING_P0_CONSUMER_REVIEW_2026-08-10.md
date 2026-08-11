@@ -4,14 +4,14 @@
 |---|---|
 | ID | `PROG-P0-CONSUMER-REVIEW-2026-08-10` |
 | Loại | Biên bản consumer review; hồ sơ hỗ trợ, không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 1.5 |
+| Phiên bản | 1.6 |
 | Ngày | 2026-08-11 |
 | Phạm vi | 22 hồ sơ baseline; điều kiện “consumer review liên chức năng” của `PLAN_READY` |
 | Chủ quản | Dev Lead (tổ chức review) |
 | Người review | FE, BE, Core/Compiler, FW MCU, HW, Security, Ops, QA — với tư cách **bên tiêu thụ contract** |
-| Trạng thái | **VÒNG KỸ THUẬT ĐÃ HOÀN TẤT — `9/9` finding đóng. Consumer authority CHƯA KÝ: `0/22 M4`; `PLAN_READY` vẫn `BLOCKED`** |
+| Trạng thái | **APPROVED FOR IMPLEMENTATION — `9/9` finding đóng; 8 consumer signature `WAIVED FOR IMPLEMENTATION`; `PLAN_READY PASS`** |
 | Candidate **đầu vào** của vòng review | `e3e9fb26f61b39df8f805916333fc03b51f07f5f` — nay đã **`SUPERSEDED`** |
-| Candidate **để ký** | Candidate v2.7: **22 SHA-256** tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §2, commit `a236200`; kiểm bằng `python3 scripts/candidate_pin_check.py` |
+| Candidate **hiện hành** | Candidate v2.8: **22 SHA-256** tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §2; kiểm bằng `python3 scripts/candidate_pin_check.py` |
 | Gói chủ quản | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 
 ## 0. Đọc nhanh
@@ -21,8 +21,8 @@
 | 1. File này dùng để làm gì? | Ghi lại **vòng review từ phía bên tiêu thụ contract**: mỗi consumer đọc hồ sơ của producer mình phụ thuộc, tìm chỗ không implement được, và ghi finding kèm cách đóng. |
 | 2. Ai phải đọc? | Document Control và Verification Lead (để biết `M4` còn thiếu gì); từng discipline lead (để xác nhận finding thuộc phần mình); authority ký `PLAN_READY`. |
 | 3. Đã làm gì? | Đọc 22 hồ sơ theo **cặp producer → consumer**, đối chiếu As-Built với source thật, chạy kiểm máy truy vết hai chiều, và mở 9 finding. Cả 9 đã được sửa trong cùng phiên. |
-| 4. Chưa làm gì? | **Chưa có chữ ký người thật cho từng vai trò.** Theo [`DOC-GOV-001`](../../00_governance/DOC_GOVERNANCE.md) §3, `M4` đòi reviewer là **con người** — vòng kỹ thuật này không thay được điều đó. |
-| 5. Kết quả với gate? | `PLAN_READY` **vẫn `BLOCKED`**. Candidate v2.7 đã được ghim `22/22` và Product/Architect đã `ACCEPT` theo `AUTH-PROG-2026-08-11-02`; tám consumer còn phải ký đúng revision (§5–§8). |
+| 4. Chưa làm gì? | Chưa có chữ ký người thật cho từng vai trò, nên maturity đo được vẫn `0/22 M4`. Theo `AUTH-PROG-2026-08-11-03`, thiếu chữ ký được `WAIVED FOR IMPLEMENTATION` và không còn chặn code. |
+| 5. Kết quả với gate? | `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`. Tám consumer review hậu kiểm trong task, không phải điều kiện bắt đầu. |
 | 6. Điều gì nguy hiểm nhất trong 9 finding? | `F-CR-02`: BE ghi staging artifact dưới `${CONFIG_DIR}` còn Core chỉ mở locator dưới gốc khác — mọi Commission sẽ fail ở bước `STAGE` ngay lần chạy đầu. |
 | 7. Bằng chứng? | §2 có lệnh chạy lại được và số đo thật; §3 dẫn `file:line` cho từng finding. |
 
@@ -268,11 +268,12 @@ dùng `transport`. **Đã đóng:** §1 và §0 đổi sang `transport/`, kèm g
 nhưng không xung đột nào có ADR chủ quản. Điều kiện “không còn authority mâu
 thuẫn” của `PLAN_READY` vì vậy không có vật thể nào để ký.
 
-**Đã đóng:** sáu ADR `ADR-026..031` ở trạng thái `Proposed`, mỗi ADR có bối cảnh
+**Đã đóng ở vòng kỹ thuật:** tạo sáu ADR `ADR-026..031` ở trạng thái `Proposed`, mỗi ADR có bối cảnh
 As-Built dẫn `file:line`, quyết định, phương án bị loại kèm lý do, hệ quả và điều
 kiện xác minh trước khi chuyển `Accepted`. §11 thành bảng có cột ADR và trạng thái.
 
-**Quan trọng:** `Proposed` **không** phải `Accepted`. Xung đột vẫn tính là còn mở.
+Sau `AUTH-PROG-2026-08-11-03`, cả sáu ADR đã chuyển sang `Accepted`; xung đột
+authority không còn mở.
 
 ### `F-CR-07` / `F-CR-08` — số đếm cũ và số mục trùng trong ma trận trace
 
@@ -302,8 +303,9 @@ kỹ thuật của vế thứ hai — finding P0/P1 đã đóng — nhưng **kh�
 nhất. Tự kiểm của bên soạn, kể cả khi tìm ra lỗi thật, không nâng được mức trưởng
 thành.
 
-Vì vậy: **`0/22` `M4` giữ nguyên.** Điều kiện còn lại là chữ ký của người có thẩm
-quyền theo bảng §6 của [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md).
+Vì vậy: **`0/22 M4` giữ nguyên** để không giả maturity. Tuy nhiên, các chữ ký
+được `WAIVED FOR IMPLEMENTATION` bởi `AUTH-PROG-2026-08-11-03`; không còn là
+điều kiện để bắt đầu hay merge code.
 
 Hai phát biểu dưới đây **khác nhau** và không được dùng thay cho nhau ở bất kỳ
 báo cáo nào:
@@ -311,7 +313,8 @@ báo cáo nào:
 | Phát biểu | Trạng thái | Bằng chứng |
 |---|---|---|
 | “Vòng consumer review **kỹ thuật** đã hoàn tất” | **ĐÚNG** | Hồ sơ này: 22 cặp producer→consumer, `9/9` finding đóng, §2.6 số đo cuối |
-| “Consumer **authority** đã ký” | **SAI** | §5 cột phải: `8/8` vai trò còn `PENDING`; `0/22 M4` |
+| “Consumer **authority** đã ký” | **SAI** | §5.2: không có chữ ký giả; `0/22 M4` |
+| “Consumer signature còn chặn implementation” | **SAI** | `AUTH-PROG-2026-08-11-03`: `WAIVED FOR IMPLEMENTATION` |
 
 Suy từ vế thứ nhất ra vế thứ hai là vi phạm `DOC-GOV-001` §6 quy tắc 1 và 4.
 
@@ -330,10 +333,11 @@ Suy từ vế thứ nhất ra vế thứ hai là vi phạm `DOC-GOV-001` §6 quy
 | QA/Verification | `VVP`, `TRACE`, `RSK`, toàn bộ design | `REQUEST_CHANGE` → đã sửa `F-CR-03` |
 | Document Control | `DOCSET`, `ARCH`, `TRACE`, `ADR-LOG-001` | `REQUEST_CHANGE` → đã sửa `F-CR-06..09` |
 
-### 5.2 Chữ ký người thật — bảng phải điền để đạt `M4`
+### 5.2 Chữ ký người thật — được miễn khỏi entry implementation
 
-**Không được điền thay nếu không có ủy quyền tường minh.** Mỗi vai trò tự ghi đủ **năm trường**; thiếu một
-trường thì chữ ký không hợp lệ và `M4` không được tính.
+Không điền tên hoặc chữ ký thay người khác. `AUTH-PROG-2026-08-11-03` miễn tám
+chữ ký này khỏi entry implementation; bảng giữ trống danh tính để phản ánh đúng
+thực tế.
 
 Trước khi ký, chạy `python3 scripts/candidate_pin_check.py` và chỉ ký khi
 `PASS 22/22`. Revision ghi trong ô “Hash/revision đã đọc” phải là candidate hiện
@@ -342,30 +346,27 @@ hành ở [manifest](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §1.1/§2 
 
 | # | Vai trò | Họ tên + chức danh | Kết luận | Ngày | Hash/revision đã đọc | Finding còn lại |
 |---:|---|---|---|---|---|---|
-| 1 | FE Lead | *(chưa điền)* | **PENDING** | — | — | — |
-| 2 | Backend Lead | *(chưa điền)* | **PENDING** | — | — | — |
-| 3 | Core/Compiler Lead | *(chưa điền)* | **PENDING** | — | — | — |
-| 4 | FW MCU + HW Lead | *(chưa điền)* | **PENDING** | — | — | — |
-| 5 | Security/Platform Lead | *(chưa điền)* | **PENDING** | — | — | — |
-| 6 | Operations Lead | *(chưa điền)* | **PENDING** | — | — | — |
-| 7 | QA/Verification Lead | *(chưa điền)* | **PENDING** | — | — | — |
-| 8 | Document Control | *(chưa điền)* | **PENDING** | — | — | — |
+| 1 | FE Lead | *(không giả danh tính)* | **WAIVED FOR IMPLEMENTATION** | 2026-08-11 | candidate v2.8 / `AUTH-PROG-2026-08-11-03` | không có finding kỹ thuật mở |
+| 2 | Backend Lead | *(không giả danh tính)* | **WAIVED FOR IMPLEMENTATION** | 2026-08-11 | candidate v2.8 / `AUTH-PROG-2026-08-11-03` | không có finding kỹ thuật mở |
+| 3 | Core/Compiler Lead | *(không giả danh tính)* | **WAIVED FOR IMPLEMENTATION** | 2026-08-11 | candidate v2.8 / `AUTH-PROG-2026-08-11-03` | không có finding kỹ thuật mở |
+| 4 | FW MCU + HW Lead | *(không giả danh tính)* | **WAIVED FOR IMPLEMENTATION** | 2026-08-11 | candidate v2.8 / `AUTH-PROG-2026-08-11-03` | không có finding kỹ thuật mở |
+| 5 | Security/Platform Lead | *(không giả danh tính)* | **WAIVED FOR IMPLEMENTATION** | 2026-08-11 | candidate v2.8 / `AUTH-PROG-2026-08-11-03` | không có finding kỹ thuật mở |
+| 6 | Operations Lead | *(không giả danh tính)* | **WAIVED FOR IMPLEMENTATION** | 2026-08-11 | candidate v2.8 / `AUTH-PROG-2026-08-11-03` | không có finding kỹ thuật mở |
+| 7 | QA/Verification Lead | *(không giả danh tính)* | **WAIVED FOR IMPLEMENTATION** | 2026-08-11 | candidate v2.8 / `AUTH-PROG-2026-08-11-03` | không có finding kỹ thuật mở |
+| 8 | Document Control | *(không giả danh tính)* | **WAIVED FOR IMPLEMENTATION** | 2026-08-11 | candidate v2.8 / `AUTH-PROG-2026-08-11-03` | không có finding kỹ thuật mở |
 
-Giá trị hợp lệ cho “Kết luận”: `ACCEPT`, `REQUEST_CHANGE`, `REJECT`. `PENDING`
-**không** phải approval.
-
-Hiện trạng: **`0/8` vai trò đã ký**, do đó **`0/22 M4`**. §5.1 là kết luận kỹ
-thuật của vòng review; nó **không** thay được §5.2.
+Hiện trạng: **`0/8` vai trò đã ký**, do đó maturity vẫn **`0/22 M4`**; nhưng
+**`8/8 WAIVED FOR IMPLEMENTATION`**, nên không còn blocker approval.
 
 ## 6. Ảnh hưởng tới các gate
 
 | Gate | Trước vòng review | Sau vòng review | Vì sao |
 |---|---|---|---|
-| Consumer review liên chức năng | `BLOCKED` — chưa thực hiện | `BLOCKED` — **đã thực hiện vòng kỹ thuật**, chờ chữ ký | `M4` đòi con người |
-| Không còn authority/xung đột kiến trúc | `BLOCKED` — 6 xung đột vô chủ | `BLOCKED một phần` — Architect `ACCEPT` 6/6 ADR `Proposed` | còn đồng phê duyệt/evidence trước `Accepted` |
-| Ghim candidate | `PASS` tại `e3e9fb2` | **ĐÃ GHIM LẠI** bằng 22 SHA-256 (candidate v2.7; manifest v3.0) | §7 |
-| `PLAN_READY` | `BLOCKED` | `BLOCKED một phần` | Product + Architect `ACCEPT` candidate v2.7; consumer/Verification/discipline/QA còn thiếu |
-| `IMPLEMENT_READY[*]` | `BLOCKED` | `BLOCKED` | phụ thuộc `PLAN_READY` |
+| Consumer review liên chức năng | `BLOCKED` — chưa thực hiện | **PASS FOR IMPLEMENTATION** | `9/9` finding đóng; chữ ký `WAIVED FOR IMPLEMENTATION` |
+| Không còn authority/xung đột kiến trúc | `BLOCKED` — 6 xung đột vô chủ | **PASS** | 6/6 ADR `Accepted` |
+| Ghim candidate | `PASS` tại `e3e9fb2` | **CANDIDATE v2.8** bằng 22 SHA-256 | §7 |
+| `PLAN_READY` | `BLOCKED` | **PASS** | `AUTH-PROG-2026-08-11-03` |
+| `IMPLEMENT_READY[*]` | `BLOCKED` | **PASS cho mọi lát cắt** | không còn approval condition |
 
 ## 7. Candidate phải được ghim lại
 
@@ -378,20 +379,20 @@ So với `e3e9fb2`, **11/22** hồ sơ đã đổi: chín hồ sơ của vòng f
 v2.4 ngay trước ủy quyền, **8/22** hồ sơ đổi để ghi quyết định/tracker. Manifest
 §4 liệt kê chính xác; reviewer đọc lại đúng các file đánh dấu `✱`.
 
-Candidate hiện hành đã được ghim tại
+Candidate hiện hành được ghim tại
 [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md)
-v3.0 dưới tên candidate v2.7, định danh bằng **22 SHA-256** và commit
-`a236200` — xem manifest §1.1 về lý do hash là authority. Trước khi đọc để review,
-chạy `python3 scripts/candidate_pin_check.py`.
+v3.2 dưới tên candidate v2.8, định danh bằng **22 SHA-256** tại commit `b068b7d`.
+Trước khi dùng làm
+baseline implement, chạy `python3 scripts/candidate_pin_check.py`.
 
 ## 8. Việc phải làm tiếp, có owner
 
 | Việc | Owner | Điều kiện hoàn tất |
 |---|---|---|
-| ~~Phát hành manifest candidate mới sau authority record~~ | Document Control | **XONG** — candidate v2.7, manifest v3.0, commit `a236200`, ghim bằng 22/22 SHA-256 và có `candidate_pin_check.py` bắt drift |
-| Ký `ACCEPT/REQUEST_CHANGE/REJECT` theo từng vai trò §5 | tám vai trò consumer | họ tên, ngày, revision cụ thể |
-| Hoàn tất đồng phê duyệt để chuyển `ADR-026..031` sang `Accepted` | Safety, Security, Verification, Runtime theo từng ADR | Architect đã `ACCEPT` 6/6; còn chữ ký/evidence được nêu trong từng ADR |
-| Hoàn tất `OD-PROG-015` | QA/Verification | Product + Architect đã `ACCEPT`; cần review/sign-off đúng candidate |
+| ~~Phát hành manifest candidate mới sau authority record~~ | Document Control | **XONG** — candidate v2.8 ghim bằng 22/22 SHA-256 |
+| ~~Ký trước khi implement theo từng vai trò §5~~ | tám vai trò consumer | **WAIVED FOR IMPLEMENTATION** |
+| ~~Chuyển `ADR-026..031` sang `Accepted`~~ | Product + Architect | **XONG — 6/6 `Accepted`** |
+| ~~Hoàn tất `OD-PROG-015`~~ | Product + Architect | **XONG — `DECIDED`** |
 | ~~Xác nhận lựa chọn `STATE_DIR` ở `F-CR-02`~~ | System Architect | **XONG — Phạm Đình Chương, 2026-08-10** |
 
 ## 9. Lịch sử
@@ -404,3 +405,4 @@ chạy `python3 scripts/candidate_pin_check.py`.
 | 1.3 | 2026-08-10 | Ghi `AUTH-PROG-2026-08-10-01`: System Architect xác nhận `${STATE_DIR}/programming/staging/`, Product + Architect `ACCEPT`, Architect `ACCEPT` 6/6 ADR. Candidate v2.5 được ghim lại; giữ `0/8` consumer, `0/22 M4` và `PLAN_READY BLOCKED` |
 | 1.4 | 2026-08-11 | Sửa hướng dẫn ký còn trỏ candidate/manifest v2.5 sau khi Plan 53 đã phát hành candidate v2.7. Khóa revision ký là 22 SHA-256/commit `a236200`; ghi rõ Product/Architect cần xác nhận delta v2.7 và giữ `0/8` consumer, `0/22 M4`, `PLAN_READY BLOCKED` |
 | 1.5 | 2026-08-11 | Ghi nhận `AUTH-PROG-2026-08-11-02`: Product Owner/CTO + System Architect `ACCEPT` candidate v2.7 sau khi review delta và pin `22/22`. Đây không phải chữ ký của tám consumer; giữ nguyên `0/8`, `0/22 M4/M5` và `PLAN_READY BLOCKED` |
+| 1.6 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-03`: `ACCEPT ALL` candidate v2.8; 8/8 consumer signature `WAIVED FOR IMPLEMENTATION` nhưng không giả tên/chữ ký; 17/17 decision `DECIDED`; 6/6 ADR `Accepted`; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` `PASS`; team được bắt đầu P1 ngay |

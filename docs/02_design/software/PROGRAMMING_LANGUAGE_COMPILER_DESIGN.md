@@ -12,6 +12,10 @@
 | Nguồn | `SRS-PROG-001`, Product Spec v2.2, `ARCH-PROG-001`, `PROG-OD-001` |
 | Phạm vi | Target Rev A ST/FBD → common typed IR; compiler chạy ngoài RT |
 
+> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
+> `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
+> không còn chặn viết/merge code. Review và evidence chưa có vẫn thực hiện trong task.
+
 ## 0. Đọc nhanh
 
 | Câu hỏi | Trả lời |

@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 0.7 |
-| Trạng thái | **M3 — Review Ready** — 32/32 kịch bản có đặc tả; 0/32 Test Result |
-| Ngày | 2026-08-10 |
+| Phiên bản | 0.8 |
+| Trạng thái | **APPROVED FOR IMPLEMENTATION** — 32/32 kịch bản là baseline DoD; 0/32 Test Result sẽ được tạo trong implementation |
+| Ngày | 2026-08-11 |
 | Chủ quản | Verification Lead |
 | Người review | Product, System Architect, FE/BE/Core/FW/HW/Ops Leads |
 | Người phê duyệt | Verification Lead + Product Owner |
@@ -21,7 +21,7 @@
 | 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001..032` đều `NOT RUN` cho bộ thiết kế này (§8). Có host test và source test đang tồn tại, nhưng chúng chỉ là đầu vào nền tảng — **không được kế thừa PASS** sang kịch bản mới nếu chưa chạy lại đúng commit, contract và profile. |
 | 4. Thiết kế mới thay đổi điều gì? | Chuyển từ “có test” sang **bằng chứng có thẩm quyền**: mỗi lần chạy phải ghim commit, image, config và hash; Test Result là bất biến; chạy lại sinh ID mới. Trạng thái chỉ được là một trong `NOT_RUN/RUNNING/PASS/FAIL/BLOCKED/INVALIDATED`. |
 | 5. Team phải sửa module/contract nào? | Không sửa code. Cần dựng thư mục bằng chứng `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS`, cùng các đồ gá `H/B/T/L` ở §9. |
-| 6. Điều gì còn bị chặn? | Hai điều: đồ gá HIL (`L`) chưa có, và **giới hạn kỳ vọng phải được ký trước khi chạy** — hiện nhiều giới hạn còn `TARGET-PENDING`. Quy tắc cứng: không chạy HIL với output thật bằng giới hạn chưa được duyệt. |
+| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Các giới hạn đã `DECIDED`. Đồ gá HIL (`L`) là deliverable/evidence của P6 và không chặn team bắt đầu P1–P5. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Chính file này định nghĩa. Với bản thân hồ sơ: 32/32 kịch bản có đặc tả đủ năm trục ở §9, mỗi kịch bản có requirement, đồ gá, bước, kỳ vọng định lượng và thẩm quyền ký. Số Test Result hiện tại: **0/32**. |
 
 Ba loại bằng chứng **không** đủ để đóng một requirement: file tài liệu tồn tại;
@@ -264,7 +264,7 @@ baseline PASS hoặc có waiver đúng authority và trace rõ.
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| Requirement/design: `14 OPEN/3 DECIDED/0 CLOSED`, 22 hồ sơ chưa Approved | Product + Architect + discipline authority | đồng phê duyệt, downstream sync, DOC review closed và baseline pin |
+| Requirement/design: `17 DECIDED/0 OPEN/0 CLOSED`, baseline approved | Product + Architect + discipline authority | **Đã mở implementation** theo `AUTH-PROG-2026-08-11-03` |
 | FE/BE/Core Programming chưa implement | Dev Leads | gates Plan 53 + build artifacts |
 | BSP/HW fixture/limits/HIL chưa có | FW/HW/Safety | controlled setup + calibrated instruments |
 
@@ -277,12 +277,13 @@ baseline PASS hoặc có waiver đúng authority và trace rõ.
 | 0.5 | 2026-08-09 | Thêm `VS-PROG-031` (usability test có người dùng thật, sáu ngưỡng `UX-A-01..06`) và `VS-PROG-032` (chuyển hướng route và giữ trạng thái tab); tổng 32 kịch bản, vẫn 0 Test Result |
 | 0.6 | 2026-08-10 | Sửa self-check trạng thái trung thực từ dải cũ `001..030` sang catalog hiện hành `001..032`; không thay đổi 0/32 Test Result hoặc gate |
 | 0.7 | 2026-08-10 | Ghi Product Owner/CTO Phạm Đình Chương `ACCEPT` theo `AUTH-PROG-2026-08-10-01`; đồng bộ register `3 DECIDED/14 OPEN`. Giữ Verification Lead PENDING và 0/32 Test Result; không nâng gate hay maturity |
+| 0.8 | 2026-08-11 | Phê duyệt V&V baseline theo `AUTH-PROG-2026-08-11-03`; 17/17 decision `DECIDED`; Verification/discipline signature `WAIVED FOR IMPLEMENTATION`; HIL là deliverable P6, không chặn P1–P5; giữ trung thực 0/32 Test Result |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Verification + discipline leads | Chờ review | — |
-| Product Owner | **ACCEPT — Phạm Đình Chương, 2026-08-10; ủy quyền điện tử** | phạm vi/giới hạn Product theo `AUTH-PROG-2026-08-10-01`; không thay independent Verification review |
-| Verification Lead | **PENDING** | design/limits discipline/fixture và 0/32 result |
+| Verification + discipline leads | **WAIVED FOR IMPLEMENTATION** | review/test theo task; không chặn code |
+| Product Owner | **ACCEPT ALL — Phạm Đình Chương, 2026-08-11** | `AUTH-PROG-2026-08-11-03` |
+| Verification Lead | **WAIVED FOR IMPLEMENTATION** | giữ độc lập khi ký Test Result; không phải entry condition |
 
 ## 13. Phụ lục — Tự kiểm cổng M3 (loại: V&V)
 
@@ -299,7 +300,7 @@ baseline PASS hoặc có waiver đúng authority và trace rõ.
 | Evidence | PASS | §7 mẫu Test Result; §10 đường dẫn `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS` |
 | Thẩm quyền ký PASS | PASS | §9 cột cuối tách “execute” và “review”; §11 quy trình review |
 | Trạng thái trung thực | PASS | §8 ghi `VS-PROG-001..032 = NOT RUN`; §10 cấm kế thừa PASS cũ và bắt chuyển `INVALIDATED` khi contract đổi |
-| `BLOCKED` có owner/gate | **BLOCKED** | Đồ gá HIL (`L`) chưa tồn tại và nhiều giới hạn kỳ vọng còn `TARGET-PENDING`. Owner: Verification Lead + HW Lead + Product. Ảnh hưởng: không chạy được `VS-PROG-010/014/030`, nên `G5` và `G6` không mở. Gate: `DOC-G5`. Điều kiện mở: `HW-AUTH-001/002` phát hành, dựng đồ gá HIL, và ký các giới hạn kỳ vọng **trước** khi chạy |
+| Quyền implementation | **PASS** | Giới hạn đã `DECIDED`; HIL chưa tồn tại là deliverable P6 và không chặn P1–P5; mọi `IMPLEMENT_READY[*] PASS` |
 
 Số Test Result hiện tại: **0/32**. Hồ sơ này định nghĩa cách chứng minh, nó
 không chứng minh bất cứ điều gì đã chạy.

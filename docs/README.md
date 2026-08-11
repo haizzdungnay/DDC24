@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-11 (Programming 22/22 hồ sơ đạt M3; review kỹ thuật `9/9` finding đã đóng; Product + Architect đã `ACCEPT` candidate v2.7; còn chữ ký consumer/Verification/Document Control)
+**Cập nhật:** 2026-08-11 (Programming candidate v2.8 `APPROVED FOR IMPLEMENTATION`; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -23,10 +23,10 @@
 | [Traceability](07_records/TRACEABILITY.md) | ánh xạ yêu cầu → thiết kế → code → bằng chứng |
 | [Chỉ mục hồ sơ rà soát](07_records/reviews/README.md) | trạng thái từng record rà soát/phê duyệt/triển khai, đã đối chiếu mã nguồn; kèm bảng ánh xạ đường dẫn trước/sau tái cấu trúc |
 | [Programming Traceability Matrix](07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
-| [Programming Open Decisions](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định: `3 DECIDED`, `14 OPEN`, `0 CLOSED`; xử lý theo dependency của từng lát cắt |
+| [Programming Open Decisions](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định: `17 DECIDED`, `0 OPEN`, `0 CLOSED`; baseline đã duyệt |
 | [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào bộ 22 hồ sơ yêu cầu, thiết kế, kiểm chứng và delivery Programming Rev A |
-| [Programming Documentation Roadmap](03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | dashboard tiến độ: 22/22 file đạt M3; Product + Architect đã `ACCEPT` v2.7; DOC-G4 RED vì 0/22 M4/M5 và chữ ký consumer/Verification/Document Control còn thiếu |
-| [Programming Implementation Plan](03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | dependency và gate triển khai; hiện G0 RED, chưa cấp quyền implement control path |
+| [Programming Documentation Roadmap](03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | dashboard: candidate v2.8 approved; chữ ký còn thiếu được miễn khỏi entry implementation |
+| [Programming Implementation Plan](03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | P0 7/7 DONE; P1 READY TO START; team được viết/merge code production ngay |
 | [Programming Risk Register](07_records/PROGRAMMING_RISK_REGISTER.md) | 16 rủi ro, design control, owner, evidence gate và residual |
 | [Programming Docs Sync Report](07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record đồng bộ docs theo ADR-023 ngày 2026-08-03 |
 | [DDC-24 Baseline Source Fix Report](07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | kết quả CI, Point Model, Config Apply, health/recovery và readiness trước Programming Design |
@@ -87,11 +87,10 @@ Implementation Plan. Baseline 2026-08-09 có đủ 22/22 file và 22/22 đạt `
 Review Ready`: checklist theo loại đã đủ, mọi `TBD/BLOCKED` có owner/ảnh hưởng/
 gate/điều kiện mở, link nội bộ sạch — bằng chứng tại
 [`PROG-REV-2026-08-09`](07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md).
-Chưa file nào đạt `M4` (cần reviewer bên tiêu thụ contract) hay `M5` (cần chữ
-ký); vòng review kỹ thuật đã đóng `9/9` finding nhưng chữ ký consumer vẫn thiếu;
-Open Decisions hiện `3 DECIDED / 14 OPEN / 0 CLOSED` và evidence mới vẫn `0/32`.
-Vì vậy không dùng plan hoặc detailed design lịch sử để
-tự mở code/release gate. Với
+Maturity đo được vẫn 22/22 M3, 0/22 M4/M5 vì không giả chữ ký/evidence; vòng
+review kỹ thuật đã đóng `9/9` finding, 8 chữ ký được `WAIVED FOR IMPLEMENTATION`;
+Open Decisions hiện `17 DECIDED / 0 OPEN / 0 CLOSED`. `PLAN_READY` và mọi
+`IMPLEMENT_READY[*]` đã `PASS`; evidence vẫn `0/32` và được tạo trong task. Với
 chủ đề khác, luồng đọc là Product → Requirements → System → baseline Design →
 Detailed design → Verification. Tài liệu `In Review` phải được đối chiếu
 baseline/code trước khi dùng cho release.

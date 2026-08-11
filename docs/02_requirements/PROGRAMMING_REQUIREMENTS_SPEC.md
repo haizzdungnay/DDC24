@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `SRS-PROG-001` |
-| Phiên bản | 0.5 |
-| Trạng thái | **M3 — Review Ready** — cổng Requirements đủ; chờ Product/QA review để lên M4 |
-| Ngày | 2026-08-09 |
+| Phiên bản | 0.6 |
+| Trạng thái | **APPROVED FOR IMPLEMENTATION** — toàn bộ 60 requirement và giá trị target được duyệt theo `AUTH-PROG-2026-08-11-03` |
+| Ngày | 2026-08-11 |
 | Chủ quản | Product + System Engineering |
 | Reviewer | Software/Runtime Architect, UX/FE Lead, BE Lead, HW/FW Lead, Verification Lead |
 | Approver | Product Owner |
@@ -21,24 +21,23 @@
 | 3. Hệ thống hiện tại đang có gì? | Chưa requirement nào được implement end-to-end. Đường control production vẫn là graph. Modbus RTU Point contract đã `Active` (approval 2026-08-05) và được dùng lại, không viết lại. `contracts/iop/iop_protocol.h` và safe-timeout `200 ms` trên MCU đã có mã nguồn. |
 | 4. Thiết kế mới thay đổi điều gì? | Đưa vào 8 yêu cầu hệ thống, 15 FE, 10 BE, 10 Core, 4 MCU, 3 HW và 10 phi chức năng. Điểm cốt lõi: tách `Draft/Candidate` khỏi `Active` (`SYS-102`), Commission là giao dịch atomic có read-back (`SYS-103`), và chỉ **một** owner Local logic (`SYS-105`). |
 | 5. Team phải sửa module/contract nào? | Phân bổ ở §9: FE → `apps/web-ui`; BE → `mkddc-web`; Core → `mkddc-core`; MCU → firmware STM32; HW → schematic/BOM/test point. Ranh giới không được vượt: FE không quyết quyền, BE không chạy control step, Core không sở hữu Project, MCU không biết Revision (§12). |
-| 6. Điều gì còn bị chặn? | 13 nhóm giá trị mang nhãn `TARGET-PENDING` vì phụ thuộc `OD-PROG-001..017` — xem bảng §10 có đủ owner và điều kiện mở khóa cho từng nhóm. Baseline chưa được ký (§14). |
+| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Cả 17 decision đã `DECIDED`; 13 nhóm giá trị ở §10 là baseline được duyệt. Team được đưa chúng vào contract và code production. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Mỗi requirement có cột “Kiểm chứng” và trace tới `VS-PROG-*` trong [`TRACE-PROG-001`](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md). Hiện **0/32 scenario có Test Result**, nên 0/60 requirement được đóng. §11 ghi rõ loại bằng chứng nào **không** đủ để đóng (ví dụ: host test thay cho target/HIL). |
 
-Đọc `TARGET-PENDING` thế nào: đó là giá trị đã đủ cụ thể để review và để thiết
-kế bám theo, nhưng **chưa được người có thẩm quyền ký**. Không được đưa thẳng
-vào contract hoặc code production; muốn dùng phải đóng Open Decision tương ứng.
+Các nhãn `TARGET-PENDING` trước đây đã được thay bằng `DECIDED` tại §10 theo
+`AUTH-PROG-2026-08-11-03`. Chúng được phép đưa vào contract và code production.
 
 ## 1. Quy tắc requirement
 
 Từ “phải/không được” là quy phạm. Mỗi requirement dưới đây có nguồn, ưu tiên,
 phương pháp kiểm chứng và tiêu chí chấp nhận. `T` = test, `D` = demonstration,
-`A` = analysis, `I` = inspection. Các giá trị đang bị chặn bởi `OD-PROG-*` là
-target proposal; không được biến thành contract/code production trước G0.
+`A` = analysis, `I` = inspection. Các giá trị thuộc `OD-PROG-*` đã được duyệt
+thành target baseline để triển khai.
 
 Thứ tự authority: Product/ADR Active → SRS Approved → Detailed Design Approved →
-contract machine-readable → implementation/test/evidence. Các giá trị ghi
-`TARGET-PENDING` là requirement candidate đủ để review/test design, nhưng bị
-chặn phát hành bởi Open Decision tương ứng.
+contract machine-readable → implementation/test/evidence. Chỉ thị điều hành đã
+duyệt SRS và mở implementation; contract machine-readable là deliverable P1,
+không phải điều kiện xin phép trước P1.
 
 ## 2. Yêu cầu hệ thống và vòng đời
 
@@ -154,24 +153,24 @@ Allocation trên không chuyển ownership mutable state: BE sở hữu Project/
 Core sở hữu runtime/arbitration, iobus sở hữu IOP/fieldbus, MCU sở hữu actuation
 vật lý. Một requirement chỉ được đóng khi tất cả consumer của contract đã test.
 
-## 10. Dependency quyết định và giá trị TARGET-PENDING
+## 10. Quyết định đã duyệt và giá trị target baseline
 
-| Requirement/giá trị | Trạng thái | Open Decision | Owner quyết định | Điều kiện mở khóa |
+| Requirement/giá trị | Trạng thái | Decision | Owner quyết định | Ghi chú thực thi/kiểm chứng |
 |---|---|---|---|---|
-| Type/conversion/ST limits/FBD `256/512` | `TARGET-PENDING` | `OD-PROG-002/003` | Product + Runtime | biên bản chấp thuận profile + boundary/one-over suite |
-| Một Task; period `1/5/30 s` | Scope Active; chi tiết budget pending | `OD-PROG-004/012` | Product + Runtime | khóa base-step/WCET/watchdog contract và target test plan |
-| Viewer/operator read-only; admin mutation | `TARGET-PENDING` | `OD-PROG-001` | Product + Security | ký permission matrix và negative authorization cases |
-| Core Control Library tối thiểu/User FB cục bộ | `TARGET-PENDING` | `OD-PROG-005` | Product + Controls | khóa block/function semantics + library version |
-| Structured FBD keyboard editor | Capability Active; semantics pending | `OD-PROG-006` | Product + UX + Runtime | khóa canonical FBD schema/order/conversion/source map |
-| Local/VP/MB-RTU identity/quality | Modbus slice Active; unified mapping pending | `OD-PROG-007/008` | Product + I/O | hợp nhất Point Catalog + ADR-024 contract + HIL boundary |
-| RETAIN layout/restart/write interval | `TARGET-PENDING` | `OD-PROG-009` | Product + Runtime | ký warm/cold/revision matrix và endurance budget |
-| Revision/LKG retention + power-loss | `TARGET-PENDING` | `OD-PROG-010` | Product + System | ký retention/migration/atomic transaction/rollback matrix |
-| Monitor `1 Hz`, stale 3 kỳ; trace `10k/10 phút` | `TARGET-PENDING` | `OD-PROG-011` | Product + UX | capacity/soak review và privacy/retention decision |
-| WCET `20%`, 3 overrun, Check p95/timeout | `TARGET-PENDING` | `OD-PROG-012` | Product + Runtime | target benchmark plan và Safety review |
-| Graph→Program cutover/config migration | `TARGET-PENDING` | `OD-PROG-013/014` | Product + Architecture + Ops | inventory thiết bị, backup/restore drill và ADR cutover |
-| IA bốn workspace và tám journey `UJ-PROG-01..08` | `TARGET-PENDING` | `OD-PROG-016` | Product + UX | ký Amendment A1 của Product Spec; nếu từ chối thì `FE-101` và trace quay lại IA sáu trang |
-| Thư viện mẫu BMS (AHU/pump/fan/valve/PID) | Ngoài Rev A | `OD-PROG-017` | Product + Controls | quyết định Roadmap hay Rev A; hiện Rev A chỉ có Core Library và User FB cục bộ |
-| Toàn bộ SRS/design baseline | Approval blocked | `OD-PROG-015` | Product + QA | ký Product v2.2/SRS/design review record |
+| Type/conversion/ST limits/FBD `256/512` | `DECIDED` | `OD-PROG-002/003` | Product + Runtime | hiện thực boundary/one-over suite |
+| Một Task; period `1/5/30 s` | `DECIDED` | `OD-PROG-004/012` | Product + Runtime | hiện thực base-step/WCET/watchdog và target test |
+| Viewer/operator read-only; admin mutation | `DECIDED` | `OD-PROG-001` | Product + Security | hiện thực permission matrix và negative authorization cases |
+| Core Control Library tối thiểu/User FB cục bộ | `DECIDED` | `OD-PROG-005` | Product + Controls | version hóa block/function semantics |
+| Structured FBD keyboard editor | `DECIDED` | `OD-PROG-006` | Product + UX + Runtime | hiện thực canonical FBD schema/order/conversion/source map |
+| Local/VP/MB-RTU identity/quality | `DECIDED` | `OD-PROG-007/008` | Product + I/O | hợp nhất Point Catalog + ADR-024; kiểm HIL ở P6 |
+| RETAIN layout/restart/write interval | `DECIDED` | `OD-PROG-009` | Product + Runtime | hiện thực warm/cold/revision matrix và endurance test |
+| Revision/LKG retention + power-loss | `DECIDED` | `OD-PROG-010` | Product + System | hiện thực migration/atomic transaction/rollback |
+| Monitor `1 Hz`, stale 3 kỳ; trace `10k/10 phút` | `DECIDED` | `OD-PROG-011` | Product + UX | kiểm capacity/soak và retention |
+| WCET `20%`, 3 overrun, Check p95/timeout | `DECIDED` | `OD-PROG-012` | Product + Runtime | benchmark target và fault test |
+| Graph→Program cutover/config migration | `DECIDED` | `OD-PROG-013/014` | Product + Architecture + Ops | hiện thực inventory, backup/restore và cutover |
+| IA bốn workspace và tám journey `UJ-PROG-01..08` | `DECIDED` | `OD-PROG-016` | Product + UX | hiện thực Amendment A1, bốn workspace/tám journey |
+| Thư viện mẫu BMS (AHU/pump/fan/valve/PID) | `DECIDED — ROADMAP` | `OD-PROG-017` | Product + Controls | Rev A chỉ có Core Library và User FB cục bộ |
+| Toàn bộ SRS/design baseline | `DECIDED — APPROVED` | `OD-PROG-015` | Product + QA | `AUTH-PROG-2026-08-11-03`; QA signature waived for implementation |
 
 ## 11. Verification allocation
 
@@ -238,14 +237,15 @@ biến kết quả thành PASS nếu không có phê duyệt thay đổi baselin
 | 0.3 | 2026-08-09 | Bổ sung use case hệ thống, biên trách nhiệm, tiêu chí chất lượng từng requirement và impact/change-control; chuyển Detailed Draft chờ review |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Requirements; đóng finding `F-PROG-001/003` |
 | 0.5 | 2026-08-09 | Amendment A1: `FE-101` đổi sang bốn workspace kèm chuyển hướng route; thêm `FE-113` (xác nhận theo rủi ro thật), `FE-114` (tách vùng thao tác nguy hiểm), `FE-115` (lọc Point theo loại/hướng/khả năng ghi), `NFR-109` (sáu ngưỡng khả dụng `UX-A-01..06`) và `NFR-110` (bảng điểm heuristic ≥85); ánh xạ use case hệ thống sang tám journey; thêm phụ thuộc `OD-PROG-016/017`. Tổng 60 requirement |
+| 0.6 | 2026-08-11 | Phê duyệt toàn bộ 60 requirement và 13 nhóm giá trị target theo `AUTH-PROG-2026-08-11-03`; 17/17 decision `DECIDED`; baseline được phép đưa vào contract/code production; chữ ký discipline/Verification còn thiếu được miễn cho implementation |
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|
-| Product Owner | PENDING | đóng `OD-PROG-015` và chấp thuận TARGET-PENDING |
-| System/Runtime Architect | PENDING | architecture và 7 thiết kế lõi đạt M3 |
-| Controls/Safety Reviewer | PENDING | Control Semantics/WCET/hold-last/overrun được review |
-| UX/FE, BE, FW/HW Lead | PENDING | allocation/acceptance của discipline không còn finding P0/P1 |
-| Verification Lead | PENDING | từng requirement có scenario/test specification và không có link đứt |
+| Product Owner | **ACCEPT ALL — Phạm Đình Chương, 2026-08-11** | `AUTH-PROG-2026-08-11-03` |
+| System/Runtime Architect | **ACCEPT ALL — Phạm Đình Chương, 2026-08-11** | `AUTH-PROG-2026-08-11-03` |
+| Controls/Safety Reviewer | **WAIVED FOR IMPLEMENTATION** | review hậu kiểm |
+| UX/FE, BE, FW/HW Lead | **WAIVED FOR IMPLEMENTATION** | review theo task, không chặn code |
+| Verification Lead | **WAIVED FOR IMPLEMENTATION** | evidence theo task, không chặn code |
 
 ## 15. Phụ lục — Tự kiểm cổng M3 (loại: Requirements)
 
@@ -262,11 +262,11 @@ Cổng lấy theo [Plan 54 §7](../03_implementation/54_PROGRAMMING_DOCUMENTATIO
 | Allocation theo layer | PASS | §9 owner thiết kế + consumer; §12 biên loại trừ giữa FE/BE/Core/MCU/HW |
 | Verification method | PASS | §2–§7 cột “Kiểm chứng” (`T/D/A/I`, HIL, fault injection); §11 phân bổ theo layer |
 | Acceptance định lượng | PASS | §2–§7 cột “Tiêu chí chấp nhận”; ngưỡng số ở `NFR-101..108` (ví dụ Check `p95 ≤2 s`, poll gap `<200 ms`) |
-| Không lẫn solution chưa duyệt | PASS | Giá trị chưa ký đánh `TARGET-PENDING` và quy về `OD-PROG-*` tại §10 |
-| `TARGET-PENDING`/`BLOCKED` có owner, ảnh hưởng, gate, điều kiện mở | PASS | §10 đủ bốn cột cho 11 nhóm giá trị |
+| Không lẫn solution chưa duyệt | PASS | Toàn bộ giá trị target đã `DECIDED` và quy về `OD-PROG-*` tại §10 |
+| Quyền implementation | PASS | §10 và §14: baseline đã phê duyệt; không còn approval blocker |
 | Trace hai chiều | PASS | 60/60 requirement có dòng trong `TRACE-PROG-001` §6; ngược lại 60 dòng đều giải được về ID canonical |
 | Link nội bộ sạch | PASS | harness: local link missing `0`, anchor missing `0` |
 
-**Chưa đạt M4/M5.** Điều kiện còn thiếu: Product Owner ký baseline, và mỗi
-discipline lead xác nhận không còn finding P0/P1 trên phần được phân bổ. Không
-requirement nào được coi là đóng khi `VS-PROG-*` tương ứng chưa có Test Result.
+Maturity M4/M5 chưa được nâng vì không giả chữ ký/evidence, nhưng đã được
+`WAIVED FOR IMPLEMENTATION`. Baseline được implement ngay; requirement chỉ được
+đánh dấu verified sau khi `VS-PROG-*` tương ứng có Test Result.

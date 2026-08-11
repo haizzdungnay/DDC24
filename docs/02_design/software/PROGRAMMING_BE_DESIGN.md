@@ -12,6 +12,10 @@
 | Nguồn | `DM-PROG-001`, `IFSPEC-PROG-001`, `DDD-LIFE-PROG-001`, `DDD-SEC-PROG-001` |
 | Requirement | `SWR-REQ-PROG-BE-101..110` |
 
+> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
+> `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
+> không còn chặn viết/merge code. Review và evidence chưa có vẫn thực hiện trong task.
+
 ## 0. Đọc nhanh
 
 | Câu hỏi | Trả lời |
