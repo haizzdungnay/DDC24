@@ -63,7 +63,7 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 | [Programming Docs Sync Report](PROGRAMMING_DOCS_SYNC_REPORT.md) | 2026-08-03 | Complete | Đồng bộ docs theo Product Spec Programming Rev A |
 | [Programming Design Set Review](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | 2026-08-09 | Complete | Rà 22 hồ sơ Programming: 12 finding tài liệu đã đóng, 22/22 đạt M3; M4/M5 chờ người thật |
 | [Gói review cổng P0 Programming](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | 2026-08-11 | **v2.0 — APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; P0 7/7 DONE; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` PASS |
-| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.11 — candidate v2.13** | Candidate định danh bằng **22 SHA-256**; commit/tree/PR Task 104 chờ ghi provenance sau merge; approved for implementation |
+| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.12 — candidate v2.13** | Candidate định danh bằng **22 SHA-256**; PR #135 merge `1f651b7`, tree `94326834`; approved for implementation |
 | [Rà soát môi trường P0 Programming](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) | 2026-08-11 | **v1.2 — implementation entry approved** | CI/target/HIL chưa có evidence nhưng được loại khỏi entry condition; không chặn code |
 | [Consumer review liên chức năng P0 Programming](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | 2026-08-11 | **v1.6 — `8/8 WAIVED FOR IMPLEMENTATION`** | `9/9` finding đóng; không giả 8 chữ ký; maturity vẫn 0/22 M4 nhưng không chặn implementation |
 | [Review triển khai G1 Programming](PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **P1 IN_PROGRESS 5/6** | `TASK-PROG-100..104 DONE`; SQLite store/migration/backup/fault test đã có; Test Result vẫn 0/32 |
@@ -151,3 +151,4 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.5 | 2026-08-11 | Đồng bộ review G1 sau `TASK-PROG-102`; P1 đạt 3/6, candidate v2.11 ghim As-Built Artifact/Loader và vẫn giữ 0/32 Test Result, feature flag `OFF`, `RELEASE_READY BLOCKED` |
 | 1.6 | 2026-08-11 | Đồng bộ review/evidence G1 sau `TASK-PROG-103`; P1 đạt 4/6, candidate v2.12 ghim catalog lỗi ba lớp và exact loader mapping; giữ 0/32 Test Result, feature flag `OFF`, `RELEASE_READY BLOCKED` |
 | 1.7 | 2026-08-11 | Đồng bộ review/evidence G1 sau `TASK-PROG-104`; P1 đạt 5/6, candidate v2.13 ghim SQLite store/migration/backup As-Built; giữ 0/32 Test Result, feature flag OFF, RELEASE_READY BLOCKED |
+| 1.8 | 2026-08-11 | Ghi provenance PR #135/merge `1f651b7`/tree `94326834` cho candidate v2.13; remote feature branch đã xóa, trạng thái evidence không đổi |
