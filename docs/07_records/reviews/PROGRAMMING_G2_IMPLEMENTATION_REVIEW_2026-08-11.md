@@ -8,7 +8,7 @@
 | Trạng thái task | **DONE** |
 | Trạng thái pha | **P2 IN_PROGRESS — 5/8; G2 IN_PROGRESS** |
 | Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901`; Task 203: `2c2bfb4`; Task 204: `66848a1` |
-| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`; Task 202: [PR #143](https://github.com/Mekong-HCM/MK-DDC-24/pull/143) / `7d424bc`; Task 203: [PR #145](https://github.com/Mekong-HCM/MK-DDC-24/pull/145) / `2899d02`, tree `cdef0e77`; Task 204 PR/merge chờ ghi sau phát hành hồ sơ |
+| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`; Task 202: [PR #143](https://github.com/Mekong-HCM/MK-DDC-24/pull/143) / `7d424bc`; Task 203: [PR #145](https://github.com/Mekong-HCM/MK-DDC-24/pull/145) / `2899d02`, tree `cdef0e77`; Task 204: [PR #147](https://github.com/Mekong-HCM/MK-DDC-24/pull/147) / `27a06e1`, tree `4e4e4d24`; remote feature branch đã xóa |
 | Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt), [`EV-PROG-G2-202`](programming-g2/raw/EV-PROG-G2-202.txt), [`EV-PROG-G2-203`](programming-g2/raw/EV-PROG-G2-203.txt), [`EV-PROG-G2-204`](programming-g2/raw/EV-PROG-G2-204.txt) |
 | Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS — không đổi** |
 | Next action | `TASK-PROG-205` — compiler worker sandbox + Check aggregate/diagnostics |
