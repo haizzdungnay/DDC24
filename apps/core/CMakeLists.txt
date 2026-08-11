@@ -152,6 +152,7 @@ if(CORE_BUILD_TESTS)
       domain/safety/tests/test_safe_state.cpp domain/safety/tests/test_overrun_monitor.cpp
       application/runtime/test_scan_loop.cpp
       application/programming/tests/test_program_ipc_server.cpp
+      application/programming/tests/test_program_error_catalog.cpp
       adapters/ipc/tests/test_web_ipc.cpp domain/graph/tests/test_graph_runtime.cpp
       adapters/config/test_safe_state_config.cpp
       adapters/ipc/tests/test_config_reload.cpp adapters/persistence/test_state_snapshot.cpp

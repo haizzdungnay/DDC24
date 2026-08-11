@@ -79,8 +79,10 @@ func handleContractSkeleton(w http.ResponseWriter, r *http.Request, definition r
 		WriteProgrammingError(w, status, *public, correlationID)
 		return
 	}
-	public := domain.NewPublicError(domain.ErrUnavailable, "programming.unavailable.contractOnly")
-	public.Retryable = true
+	public := domain.NewPublicError(domain.ErrUnavailable)
+	// Skeleton chưa gọi Core và chưa có side effect, nên invariant này được biết
+	// chắc; lỗi unknown từ Core không được tự đặt true như vậy.
+	public.KeepsRunningRevision = true
 	WriteProgrammingError(w, http.StatusServiceUnavailable, public, correlationID)
 }
 
@@ -92,13 +94,13 @@ func validateContractRequest(w http.ResponseWriter, r *http.Request, definition 
 	if definition.idempotencyRequired {
 		key := r.Header.Get("X-Idempotency-Key")
 		if !idempotencyKeyPattern.MatchString(key) {
-			public := domain.NewPublicError(domain.ErrRequest, "programming.request.invalidIdempotencyKey")
+			public := domain.NewPublicError(domain.ErrRequest)
 			public.Field = "X-Idempotency-Key"
 			return http.StatusBadRequest, &public
 		}
 	}
 	if definition.ifMatchRequired && strings.TrimSpace(r.Header.Get("If-Match")) == "" {
-		public := domain.NewPublicError(domain.ErrConflict, "programming.conflict.ifMatchRequired")
+		public := domain.NewPublicError(domain.ErrConflict)
 		public.Field = "If-Match"
 		return http.StatusPreconditionRequired, &public
 	}
@@ -106,28 +108,27 @@ func validateContractRequest(w http.ResponseWriter, r *http.Request, definition 
 		return 0, nil
 	}
 	if contentType := r.Header.Get("Content-Type"); !strings.HasPrefix(strings.ToLower(contentType), "application/json") {
-		public := domain.NewPublicError(domain.ErrRequest, "programming.request.contentType")
+		public := domain.NewPublicError(domain.ErrRequest)
 		public.Field = "Content-Type"
 		return http.StatusBadRequest, &public
 	}
 	value, err := validateBoundedJSON(w, r)
 	if err != nil {
-		public := domain.NewPublicError(domain.ErrRequest, "programming.request.invalid")
+		public := domain.NewPublicError(domain.ErrRequest)
 		status := http.StatusBadRequest
 		if errors.Is(err, errRequestTooLarge) {
 			status = http.StatusRequestEntityTooLarge
-			public.MessageKey = "programming.request.tooLarge"
 		}
 		return status, &public
 	}
 	version, ok := value["schemaVersion"].(string)
 	if !ok || version == "" {
-		public := domain.NewPublicError(domain.ErrRequest, "programming.request.schemaVersionRequired")
+		public := domain.NewPublicError(domain.ErrRequest)
 		public.Field = "schemaVersion"
 		return http.StatusBadRequest, &public
 	}
 	if strings.SplitN(version, ".", 2)[0] != "1" {
-		public := domain.NewPublicError(domain.ErrRequest, "programming.request.schemaVersionUnsupported")
+		public := domain.NewPublicError(domain.ErrRequest)
 		public.Field = "schemaVersion"
 		public.Args = map[string]any{"supportedMajor": "1", "actual": version}
 		return http.StatusBadRequest, &public

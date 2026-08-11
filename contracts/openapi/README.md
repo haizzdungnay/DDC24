@@ -5,20 +5,23 @@
 ## Programming Rev A
 
 Nhóm `/api/v1/programming` được khai báo trong `openapi.yaml` từ phiên bản
-`1.15.0`. Go router và TypeScript client phải cùng dùng danh sách 25 operation
-trong contract này; không thêm route riêng ở FE hoặc BE.
+`1.15.0`; bản `1.16.0` đồng bộ đủ 19 mã lỗi công khai từ
+`contracts/programming/error_catalog_v1.json`. Go router và TypeScript client
+phải cùng dùng danh sách 25 operation và cùng catalog lỗi; không thêm route hoặc
+mã lỗi riêng ở FE/BE/Core.
 
 Sinh và kiểm client FE:
 
 ```bash
 cd apps/web-ui
 npm run generate:programming-api
-npm run check:programming-api
+npm run generate:programming-errors
+npm run check:programming-contracts
 ```
 
-`npm run build` tự chạy phép kiểm đồng bộ. Generator ghi vào
-`apps/web-ui/src/features/programming/api/generated/client.ts`; tệp sinh ra
-không được sửa bằng tay.
+`npm run build` tự chạy phép kiểm đồng bộ. Hai generator ghi vào
+`apps/web-ui/src/features/programming/api/generated/{client,errors}.ts`; tệp
+sinh ra không được sửa bằng tay.
 
 Route BE chỉ được mount khi `PROGRAMMING_REV_A=true`. Flag mặc định `OFF`; lúc
 `OFF`, prefix Programming trả `404`. Trong `TASK-PROG-100`, khi flag `ON`, route

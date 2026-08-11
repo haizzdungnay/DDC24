@@ -63,7 +63,7 @@ describe("Programming API client sinh từ OpenAPI", () => {
     const envelope = {
       error: {
         code: "PRG-ERR-UNAVAILABLE-001",
-        messageKey: "programming.unavailable.contractOnly",
+        messageKey: "programming.error.unavailable",
         retryable: true,
         keepsRunningRevision: true,
         correlationId: "correlation-id-001",
@@ -79,8 +79,60 @@ describe("Programming API client sinh từ OpenAPI", () => {
     await expect(client.request("getProgrammingCapabilities")).rejects.toEqual(
       expect.objectContaining<Partial<ProgrammingApiError>>({
         status: 503,
-        message: "programming.unavailable.contractOnly",
+        message: "programming.error.unavailable",
       }),
     );
+  });
+
+  it("fail-safe khi HTTP/code lệch và loại metadata nhạy cảm", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        error: {
+          code: "PRG-ERR-REQ-001",
+          messageKey: "attacker.message",
+          args: { actual: "2.0", secret: "token", path: "/etc/shadow" },
+          field: "/etc/shadow",
+          retryable: false,
+          keepsRunningRevision: true,
+          correlationId: "bad id",
+        },
+      }), { status: 500, headers: { "Content-Type": "application/json" } }),
+    );
+    const client = new ProgrammingApiClient("https://controller.test", fetchImpl);
+    try {
+      await client.request("getProgrammingCapabilities");
+      throw new Error("request phải thất bại");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ProgrammingApiError);
+      const apiError = error as ProgrammingApiError;
+      expect(apiError.envelope.error).toEqual({
+        code: "PRG-ERR-UNAVAILABLE-001",
+        messageKey: "programming.error.unavailable",
+        retryable: true,
+        keepsRunningRevision: false,
+        correlationId: "invalid-correlation-id",
+      });
+    }
+  });
+
+  it("mã public lạ không được báo optimistic keeps-running", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        error: {
+          code: "PRG-ERR-UNKNOWN-999",
+          keepsRunningRevision: true,
+          correlationId: "correlation-id-001",
+        },
+      }), { status: 503, headers: { "Content-Type": "application/json" } }),
+    );
+    const client = new ProgrammingApiClient("https://controller.test", fetchImpl);
+    try {
+      await client.request("getProgrammingCapabilities");
+      throw new Error("request phải thất bại");
+    } catch (error) {
+      const apiError = error as ProgrammingApiError;
+      expect(apiError.envelope.error.code).toBe("PRG-ERR-UNAVAILABLE-001");
+      expect(apiError.envelope.error.keepsRunningRevision).toBe(false);
+    }
   });
 });

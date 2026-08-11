@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "1.0.0",
+  "catalogSha256": "2315add30a8e5880dbf09574371ed662726004c0e04372d16c88164d182571d4",
+  "schemaSha256": "0d89c949a340dc9ed2a5eb2e709c0f392b257710152d454fccdfcc07e59790f4",
+  "publicErrorCount": 19,
+  "componentDetailCount": 77,
+  "generatedConsumers": [
+    "apps/web-api/internal/programming/domain/errors_generated.go",
+    "apps/core/application/programming/program_error_generated.hpp",
+    "apps/web-ui/src/features/programming/api/generated/errors.ts"
+  ]
+}

@@ -1,11 +1,17 @@
 // Tệp sinh tự động từ contracts/openapi/openapi.yaml. Không sửa bằng tay.
 // Chạy: npm run generate:programming-api
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.15.0" as const;
+import {
+  PROGRAMMING_ERROR_CATALOG,
+  sanitizeProgrammingErrorArgs,
+  type ProgrammingErrorCode,
+} from "./errors";
+export type { ProgrammingErrorCode } from "./errors";
+
+export const PROGRAMMING_OPENAPI_VERSION = "1.16.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-export type ProgrammingErrorCode = "PRG-ERR-REQ-001" | "PRG-ERR-CONFLICT-001" | "PRG-ERR-OP-001" | "PRG-ERR-ACK-MISSING-001" | "PRG-ERR-ACK-UNEXPECTED-001" | "PRG-ERR-IMPACT-UNAVAILABLE-001" | "PRG-ERR-IMPACT-STALE-001" | "PRG-ERR-UNAVAILABLE-001";
 export type ProgrammingImpactStatus = "NONE" | "PRESENT" | "UNAVAILABLE";
 export type ProgrammingImpactKey = "retain" | "activeOverrides" | "cutover" | "outputMappingChanges";
 
@@ -21,6 +27,54 @@ export interface ProgrammingPublicError {
 
 export interface ProgrammingErrorEnvelope {
   error: ProgrammingPublicError;
+}
+
+const FALLBACK_PROGRAMMING_ERROR: ProgrammingErrorCode = "PRG-ERR-UNAVAILABLE-001";
+
+function isProgrammingErrorCode(value: unknown): value is ProgrammingErrorCode {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(PROGRAMMING_ERROR_CATALOG, value);
+}
+
+function normalizeProgrammingErrorEnvelope(payload: unknown, status: number): ProgrammingErrorEnvelope {
+  const record = typeof payload === "object" && payload !== null ? payload as Record<string, unknown> : {};
+  const raw = typeof record.error === "object" && record.error !== null
+    ? record.error as Record<string, unknown>
+    : {};
+  let knownCode = false;
+  let rawCode: ProgrammingErrorCode = FALLBACK_PROGRAMMING_ERROR;
+  if (isProgrammingErrorCode(raw.code)) {
+    knownCode = true;
+    rawCode = raw.code;
+  }
+  const rawMetadata = PROGRAMMING_ERROR_CATALOG[rawCode];
+  const statusMatches = (rawMetadata.httpStatuses as readonly number[]).includes(status);
+  const code: ProgrammingErrorCode = knownCode && statusMatches ? rawCode : FALLBACK_PROGRAMMING_ERROR;
+  const metadata = PROGRAMMING_ERROR_CATALOG[code];
+  const args = sanitizeProgrammingErrorArgs(
+    code,
+    typeof raw.args === "object" && raw.args !== null && !Array.isArray(raw.args)
+      ? raw.args as Record<string, unknown>
+      : undefined,
+  );
+  const field = typeof raw.field === "string" && /^[A-Za-z0-9_.[\]-]{1,128}$/.test(raw.field)
+    ? raw.field
+    : undefined;
+  const correlationId = typeof raw.correlationId === "string" && /^[A-Za-z0-9._-]{16,64}$/.test(raw.correlationId)
+    ? raw.correlationId
+    : "invalid-correlation-id";
+  return {
+    error: {
+      code,
+      messageKey: metadata.messageKey,
+      ...(args ? { args } : {}),
+      ...(field ? { field } : {}),
+      retryable: metadata.retryable,
+      keepsRunningRevision: knownCode && statusMatches && typeof raw.keepsRunningRevision === "boolean"
+        ? raw.keepsRunningRevision
+        : metadata.keepsRunningRevision,
+      correlationId,
+    },
+  };
 }
 
 export interface ProgrammingImpactGroup {
@@ -150,7 +204,8 @@ export class ProgrammingApiClient {
       credentials: "same-origin",
     });
     if (!response.ok) {
-      const envelope = (await response.json()) as ProgrammingErrorEnvelope;
+      const payload = await response.json().catch(() => undefined);
+      const envelope = normalizeProgrammingErrorEnvelope(payload, response.status);
       throw new ProgrammingApiError(response.status, envelope);
     }
     if (response.status === 204) return undefined as TResponse;

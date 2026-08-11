@@ -7,6 +7,31 @@
 ---
 
 ## [Unreleased]
+### Added — Catalog lỗi Programming thống nhất ba lớp (2026-08-11)
+
+**Kết quả.** Triển khai `TASK-PROG-103`: thêm nguồn duy nhất
+`error_catalog_v1.json` gồm 19 mã `PRG-ERR-*` công khai và 77 ánh xạ
+`component/detailCode`; sinh tự động metadata/hàm ánh xạ cho Core C++, backend
+Go và frontend TypeScript. OpenAPI nâng lên `1.16.0`, khóa cùng tập mã lỗi và
+build FE sẽ fail khi catalog/OpenAPI/generated client bị drift.
+
+**Ranh giới an toàn.** Mã lạ, HTTP status không khớp catalog hoặc detail chưa
+ánh xạ đều rơi về `PRG-ERR-UNAVAILABLE-001`; không được suy
+`keepsRunningRevision=true`. Backend canonicalize `messageKey`, HTTP/retry và
+lọc `args/field`; frontend loại key ngoài allowlist, cấu trúc lồng, số không hữu
+hạn, control character và correlation ID sai. Dữ liệu path/source/stack/secret
+không được phát ra public envelope; Commission không có optimistic success.
+
+**Kiểm chứng.** Generator deterministic và manifest ghim SHA-256
+`2315add30a8e5880dbf09574371ed662726004c0e04372d16c88164d182571d4`;
+JSON Schema PASS; negative generator `6/6`; C++ catalog `2/2`; Go domain/HTTP
+PASS; FE catalog/client `10/10`, type/lint/build PASS. Release build bật
+Modbus + BACnet + HMI PASS; CTest `877/877`; toàn bộ Go vet/test PASS; toàn bộ
+FE Vitest `55/55` file, `479/479` test PASS. Không chạy browser vì task không
+đổi route/component/layout; không deploy target/HIL và không tạo Test Result
+release. Gate dependency-boundary toàn repo vẫn đỏ ở
+`src/features/scheduler/shared.ts`, là lỗi baseline ngoài phạm vi Programming.
+
 ### Added — Profile và artifact Programming Rev A v1 (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-102`: thêm profile machine-readable

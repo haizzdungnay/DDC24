@@ -1,12 +1,14 @@
 # Hợp đồng Programming Rev A
 
-Thư mục này là authority machine-readable cho `TASK-PROG-102`. Mã nguồn C++
-không được hard-code lại các giới hạn trong profile; thay đổi
-`rev_a_profile_v1.json` phải chạy lại:
+Thư mục này là authority machine-readable cho contract profile/artifact
+(`TASK-PROG-102`) và catalog lỗi liên lớp (`TASK-PROG-103`). Mã nguồn không được
+hard-code lại giới hạn hoặc mã lỗi. Thay đổi nguồn phải chạy lại:
 
 ```bash
 python3 scripts/generate_programming_profile.py
 python3 scripts/generate_programming_profile.py --check
+python3 scripts/generate_programming_errors.py
+python3 scripts/generate_programming_errors.py --check
 ```
 
 ## Thành phần
@@ -20,6 +22,9 @@ python3 scripts/generate_programming_profile.py --check
 | `golden/manifest.json` | metadata và SHA-256 của golden |
 | `golden/provenance.json` | liên kết source → profile → artifact |
 | `negative_artifact_v1.json` | mutation corpus và mã lỗi ổn định mong đợi |
+| `error_catalog_v1.json` | authority 19 mã công khai, HTTP/retry/runtime/message/args và 77 ánh xạ detail |
+| `error_catalog_v1.schema.json` | schema khóa catalog major 1 |
+| `error_catalog_v1.manifest.json` | SHA-256, số đếm và ba consumer generated Go/C++/TypeScript |
 
 ## Compatibility và thứ tự deploy
 
