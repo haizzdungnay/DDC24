@@ -37,6 +37,7 @@ nlohmann::json diagnostic_to_json(const core::StDiagnostic& d)
         {"severity", d.severity == core::StSeverity::ERROR ? "error" : "warning"},
         {"code", d.code},
         {"message", d.message},
+        {"sourceId", d.source_id},
         {"line", d.line},
         {"column", d.column},
         {"length", d.length},
@@ -56,7 +57,7 @@ int fail(const char* code, const std::string& message, int exit_code)
     j["ok"] = false;
     j["diagnostics"] = nlohmann::json::array({
         nlohmann::json{{"severity", "error"}, {"code", code}, {"message", message},
-                       {"line", 0}, {"column", 0}, {"length", 1}}});
+                       {"sourceId", ""}, {"line", 0}, {"column", 0}, {"length", 1}}});
     j["artifact"] = nullptr;
     j["artifactSha256"] = nullptr;
     j["compilerVersion"] = core::st_ir::kCompilerVersion;

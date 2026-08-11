@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `IFSPEC-ART-PROG-001` |
-| Phiên bản | 0.5 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; contract foundation `TASK-PROG-102` đã implement trên host; production stage/swap/target evidence còn mở** |
+| Phiên bản | 0.6 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; contract foundation và sáu type/source map `TASK-PROG-102/200` đã implement trên host; production stage/swap/target evidence còn mở** |
 | Ngày | 2026-08-11 |
 | Chủ quản | Compiler Lead + Core Lead |
 | Người review | Security Lead, Operations Lead, Verification Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **file artifact trông ra sao từng byte** và **loader kiểm nó thế nào trước khi cho chạy**. Gồm layout, hash/toàn vẹn, giới hạn, quy trình nạp có chặn trên, và cách tráo chương trình an toàn (stage → swap → rollback). |
 | 2. Ai phải đọc file này? | Compiler (bên sinh ra artifact) và Core (bên nạp) — hai bên phải khớp từng byte. Security đọc §4 và §8; Ops đọc §7 và §9. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-102` đã thêm profile/schema/golden machine-readable, generated constants, `ValidateRevAProfile`, `EncodeArtifactDeterministic`, `VerifyArtifact`, `LoadArtifact`; loader mặc định `HASH_ONLY`, luôn kiểm SHA-256 và không sửa output caller khi reject. `st_control_api.*` vẫn nhúng artifact base64 và bootstrap production **chưa nối stage/swap**. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-102/200` đã thêm profile/schema/golden, generated constants, deterministic serializer và loader đủ raw type `1..6`; source-map flag/section/order/location được kiểm fail-closed; loader mặc định `HASH_ONLY`, luôn kiểm SHA-256 và không sửa output caller khi reject. `st_control_api.*` vẫn nhúng artifact base64 và bootstrap production **chưa nối stage/swap**. |
 | 4. Thiết kế mới thay đổi điều gì? | Giữ nguyên layout `MKDDCIR1` schema 1 nếu không cần đổi. Bỏ cách truyền base64 trong handler thời gian thực, chuyển sang **staging bằng file/FD qua UDS** — vì nhét 1 MiB base64 vào đường RT là không chấp nhận được. Thêm chế độ toàn vẹn `HASH_ONLY` cho compiler nội bộ tin cậy, giữ trường chữ ký để dành. |
 | 5. Team phải sửa module/contract nào? | Phần contract/loader foundation ở §10 đã có source. Tiếp theo Core tách loader thành worker ngoài RT và bàn giao tại safe boundary; BE chuyển staging sang file/FD. Cấm policy `SIGNATURE_OPTIONAL`; Rev A dùng `IntegrityMode::HASH_ONLY` theo ADR-031. |
-| 6. Điều gì còn bị chặn? | Không còn decision blocker: ADR-026/031 đã `Accepted`. Còn implementation blocker ở task sau: compiler ST/FBD đủ hệ kiểu target, production stage/swap, persistence/LKG và target/HIL evidence. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §11: `VS-PROG-023` (đột biến header/bảng/hash/profile, nhập file thù địch — phải từ chối bằng mã ổn định, 0 thực thi tùy ý, active/LKG không đổi), `VS-PROG-006` (fuzz), `VS-PROG-011` (hỏng/crash/mất điện ở mọi bước vẫn giữ LKG). `NOT RUN`. |
+| 6. Điều gì còn bị chặn? | Không còn decision blocker: ADR-026/031 đã `Accepted`, compiler/loader đã đủ sáu type target. Còn implementation blocker ở task sau: FBD producer, production stage/swap, persistence/LKG và target/HIL evidence. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G2-200` ghi loader libFuzzer + ASan/UBSan `10.000.000` input, RSS đỉnh 462 MiB, 0 crash/timeout; CTest `898/898`. Đây là evidence hỗ trợ host, chưa nâng `VS-PROG-006/011/023` PASS vì chưa có bundle/FBD/production stage/target/independent review. |
 
 Bất biến quan trọng nhất: **loader phải tự kiểm độc lập**, không tin compiler.
 Nếu artifact hỏng hoặc sai target thì bị từ chối **trước khi** tráo, và chương
@@ -84,7 +84,7 @@ mandatory `<0x8000` reject; extension `>=0x8000` được bỏ qua khi size boun
 | Type | Tên | Bắt buộc | Stride / invariant chính |
 |---:|---|---|---|
 | `0x0001` | METADATA | có | ≥128 byte; program/compiler string NUL-bounded, slot counts |
-| `0x0002` | CONSTANTS | có | 16; loader As-Built chỉ nhận raw 1..4; profile đã khóa target `BOOL=1,DINT=2,REAL=3,TIME=4,INT=5,UINT=6`; emission/runtime 5/6 thuộc TASK-PROG-200 |
+| `0x0002` | CONSTANTS | có | 16; loader nhận exact raw `BOOL=1,DINT=2,REAL=3,TIME=4,INT=5,UINT=6`; value/padding phải canonical theo width/type |
 | `0x0003` | VARIABLES | có | 80; name bounded, unique slot/type/storage/init |
 | `0x0004` | CODE | có | 16; opcode/type/operand/control flow checked |
 | `0x0005` | IO_BINDING | có | 16; slot/direction/point/type/scale bounded |
@@ -192,9 +192,9 @@ và correlation; không ghi artifact bytes/source/host path/public key material.
 ## 9. Compatibility và deployment
 
 - Magic hoặc header breaking → `MKDDCIR2`; schema major lệch reject.
-- Loader schema 1 As-Built hiện nhận raw `1..4`; profile machine-readable đã khóa
-  target `BOOL=1,DINT=2,REAL=3,TIME=4,INT=5,UINT=6`. Compiler không được phát raw
-  5/6 trước `TASK-PROG-200` và test executor/retain/process-image tương ứng.
+- Loader schema 1 nhận raw `BOOL=1,DINT=2,REAL=3,TIME=4,INT=5,UINT=6` và
+  executor/RETAIN/process-image kiểm đúng width/range; raw khác hoặc encoded
+  value/padding không canonical bị từ chối.
 - Profile/library/ABI exact capability match; không “best effort”. Optional section
   `>=0x8000` chỉ được ignore nếu không ảnh hưởng execution semantics.
 - Deploy order: loader dual-compatible → compiler emit old schema mặc định → test
@@ -210,8 +210,8 @@ và correlation; không ghi artifact bytes/source/host path/public key material.
 | Phần | As-Built | Target sửa/tạo |
 |---|---|---|
 | profile/contract | `contracts/programming/`, generated `st_profile_generated.hpp` | **đã có ở TASK-PROG-102**; thay đổi profile phải regenerate/check |
-| format/serializer | `apps/core/application/st/st_ir.*`, `st_artifact.*` | **đã có deterministic metadata/API**; type target đủ thuộc TASK-PROG-200 |
-| loader | `st_loader.*`, `st_runtime.*` | contract verify/load candidate đã có; non-RT worker + staged handle còn phải nối |
+| format/serializer | `apps/core/application/st/st_ir.*`, `st_artifact.*` | **đã có deterministic metadata/API, sáu type và source map** tại Task 102/200 |
+| loader | `st_loader.*`, `st_runtime.*`, `st_exec.*`, `st_retain.*` | **verify/load/execute type target trên host đã có**; non-RT worker + staged handle còn phải nối |
 | control | `st_control_api.*`, `contracts/config/st_program_control_v1.schema.json` | thay base64 path bằng versioned UDS/locator |
 | lifecycle | `st_scheduler.*`, `scan_loop.*`, bootstrap | safe-boundary swap/journal/read-back |
 | packaging | `platform/packaging/` | directory owner/mode/tmpfiles/backup |
@@ -254,7 +254,7 @@ Token không chứa path client-controlled. Expiry không được hủy handle 
 | Blocker | Owner | Ảnh hưởng | Điều kiện mở |
 |---|---|---|---|
 | Integrity/profile contract | Product + Security + Architect | **ĐÃ ĐÓNG** | ADR-026/031 Accepted; profile/schema/golden + code/test tại TASK-PROG-102 |
-| Compiler user POU/FBD đủ target type | Compiler + Core | chưa emit/execute INT16/UINT16/FBD target | TASK-PROG-200 + golden equivalence |
+| Compiler type target | Compiler + Core | **ĐÃ ĐÓNG cho ST host** | `TASK-PROG-200`; golden SHA-256 `fcdfd4a6...0528`; FBD equivalence thuộc Task 201/202 |
 | Production stage/swap chưa wired | Core Lead | chưa có runtime evidence | Plan 53 implementation + target/power-loss PASS |
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
@@ -264,10 +264,11 @@ Token không chứa path client-controlled. Expiry không được hủy handle 
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; đóng finding `F-PROG-001/002` | System Engineering |
 | 0.4 | 2026-08-11 | Đồng bộ As-Built TASK-PROG-102: profile/schema/golden, generated constants, deterministic API, `StIntegrityMode=HASH_ONLY`, loader no-mutation và ranh giới phần type/stage/swap còn mở | Core + Compiler Lead |
 | 0.5 | 2026-08-11 | Đồng bộ `TASK-PROG-103`: khóa ánh xạ exact `IR-E-004/013` sang Target, 13 detail loader còn lại sang Artifact; detail chỉ giữ nội bộ và catalog sinh ba ngôn ngữ là nguồn máy đọc | Core + BE Lead |
+| 0.6 | 2026-08-11 | Đồng bộ `TASK-PROG-200`: loader/serializer/executor/RETAIN đủ raw type 1..6, conversion/range/value canonical fail-closed, source map strict và loader fuzz 10 triệu input; production stage/swap/target vẫn mở | Core + Compiler Lead |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Compiler + Core Lead | **IMPLEMENTED CONTRACT FOUNDATION** | `95585e7`, `EV-PROG-G1-102` |
+| Compiler + Core Lead | **IMPLEMENTED CONTRACT + ST TYPE FOUNDATION** | `95585e7`, `8d58efa`, `a638470`, `EV-PROG-G2-200` |
 | Security + Ops + QA | **WAIVED FOR IMPLEMENTATION; hậu kiểm/evidence độc lập** | `AUTH-PROG-2026-08-11-03` |
 | System Architect + Product Owner | **APPROVED FOR IMPLEMENTATION** | ADR-026/031 Accepted; `AUTH-PROG-2026-08-11-03` |
 

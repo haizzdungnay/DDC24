@@ -35,7 +35,7 @@
       "path": "contracts/programming/artifact_v1.schema.json",
       "sha256": "f39ede1fce04d5f13e657268635cc909194d3f1c32c086f5bc2551942e50a417",
       "goldenManifestPath": "contracts/programming/golden/manifest.json",
-      "goldenManifestSha256": "6a171501704701563980aa18cf6149396fad3981fbd6d6561e821de318f5bb4b",
+      "goldenManifestSha256": "d7822fe12a181f1fdd449c593a0be5c6501f42e8a0e08137150c99c88e904cc1",
       "major": 1,
       "compilerProfile": 1
     },

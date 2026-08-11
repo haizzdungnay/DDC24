@@ -80,6 +80,35 @@ void put_u16(std::vector<uint8_t>* v, std::size_t off, uint16_t x)
     (*v)[off + 1] = static_cast<uint8_t>((x >> 8) & 0xFF);
 }
 
+uint16_t get_u16(const std::vector<uint8_t>& v, std::size_t off)
+{
+    return static_cast<uint16_t>(v.at(off) | (v.at(off + 1) << 8));
+}
+
+uint32_t get_u32(const std::vector<uint8_t>& v, std::size_t off)
+{
+    return static_cast<uint32_t>(v.at(off)) |
+           (static_cast<uint32_t>(v.at(off + 1)) << 8) |
+           (static_cast<uint32_t>(v.at(off + 2)) << 16) |
+           (static_cast<uint32_t>(v.at(off + 3)) << 24);
+}
+
+struct ArtifactSection {
+    std::size_t offset = 0;
+    uint32_t item_count = 0;
+};
+
+ArtifactSection find_section(const std::vector<uint8_t>& artifact, uint16_t wanted)
+{
+    const uint16_t count = get_u16(artifact, 24);
+    for (uint16_t i = 0; i < count; ++i) {
+        const std::size_t row = st_ir::kHeaderSize + static_cast<std::size_t>(i) * 16u;
+        if (get_u16(artifact, row) == wanted)
+            return ArtifactSection{get_u32(artifact, row + 4), get_u32(artifact, row + 12)};
+    }
+    return ArtifactSection{};
+}
+
 std::vector<uint8_t> read_bytes(const std::string& path)
 {
     std::ifstream input(path, std::ios::binary);
@@ -142,6 +171,118 @@ TEST(StIr, DeterministicBuildSameSourceSameBytes)
     for (int i = 0; i < 100; ++i)
         EXPECT_EQ(build_hash_only(), expected)
             << "lần build " << i << " làm artifact thay đổi";
+}
+
+TEST(StIr, SourceMapRoundTripsWithStrictlyIncreasingProgramCounters)
+{
+    StIrModule module;
+    StDiagnostic diagnostic;
+    ASSERT_TRUE(compile_st_source(kSimple, &module, &diagnostic));
+    ASSERT_GE(module.source_map.size(), 2u);
+    for (std::size_t i = 0; i < module.source_map.size(); ++i) {
+        EXPECT_LT(module.source_map[i].pc, module.code.size());
+        EXPECT_GT(module.source_map[i].line, 0u);
+        EXPECT_GT(module.source_map[i].column, 0u);
+        if (i > 0) {
+            EXPECT_LT(module.source_map[i - 1].pc, module.source_map[i].pc);
+        }
+    }
+
+    const std::vector<uint8_t> artifact = build_hash_only();
+    StLoadedProgram loaded;
+    StLoaderOptions options;
+    StLoadError error;
+    ASSERT_TRUE(load_st_artifact(artifact.data(), artifact.size(), options, &loaded, &error))
+        << error.code << ": " << error.message;
+    EXPECT_EQ(loaded.source_map.size(), module.source_map.size());
+}
+
+TEST(StIr, TargetIntegerWireCodesRoundTripWithoutChangingWidth)
+{
+    const std::string source = R"ST(
+PROGRAM integer_types
+VAR RETAIN i : INT; d : DINT; u : UINT; END_VAR
+i := 32767;
+d := 2147483647;
+u := 65535;
+END_PROGRAM
+)ST";
+    StIrModule module;
+    StDiagnostic diagnostic;
+    ASSERT_TRUE(compile_st_source(source, &module, &diagnostic))
+        << diagnostic.code << ": " << diagnostic.message;
+    ASSERT_EQ(module.variables.size(), 3u);
+    EXPECT_EQ(module.variables[0].type, StType::INT);
+    EXPECT_EQ(module.variables[1].type, StType::DINT);
+    EXPECT_EQ(module.variables[2].type, StType::UINT);
+    EXPECT_EQ(module.retain_record_size, 8u); /* 2 + 4 + 2 byte */
+
+    std::vector<uint8_t> artifact;
+    std::string encode_error;
+    ASSERT_TRUE(serialize_st_ir(module, &artifact, &encode_error)) << encode_error;
+    StLoadedProgram loaded;
+    StLoaderOptions options;
+    StLoadError load_error;
+    ASSERT_TRUE(load_st_artifact(artifact.data(), artifact.size(), options, &loaded,
+                                 &load_error))
+        << load_error.code << ": " << load_error.message;
+    ASSERT_EQ(loaded.variables.size(), 3u);
+    EXPECT_EQ(loaded.variables[0].type, StType::INT);
+    EXPECT_EQ(loaded.variables[1].type, StType::DINT);
+    EXPECT_EQ(loaded.variables[2].type, StType::UINT);
+}
+
+TEST(StIr, SerializerRejectsInvalidSourceMapBeforeArtifactCreation)
+{
+    StIrModule module;
+    StDiagnostic diagnostic;
+    ASSERT_TRUE(compile_st_source(kSimple, &module, &diagnostic));
+    ASSERT_FALSE(module.source_map.empty());
+    module.source_map.front().pc = static_cast<uint32_t>(module.code.size());
+    std::vector<uint8_t> artifact;
+    std::string error;
+    EXPECT_FALSE(serialize_st_ir(module, &artifact, &error));
+    EXPECT_NE(error.find("source map pc"), std::string::npos);
+}
+
+TEST(StIr, LoaderRejectsSourceMapPcOutsideCode)
+{
+    std::vector<uint8_t> artifact = build_hash_only();
+    const ArtifactSection map = find_section(artifact, st_ir::SEC_DEBUG_SOURCEMAP);
+    const ArtifactSection code = find_section(artifact, st_ir::SEC_CODE);
+    ASSERT_NE(map.offset, 0u);
+    ASSERT_NE(code.offset, 0u);
+    put_u32(&artifact, map.offset, code.item_count);
+    refresh_artifact_hash(&artifact);
+
+    StLoadError error;
+    EXPECT_FALSE(try_load(artifact, &error));
+    EXPECT_EQ(error.code, st_ir_error::kBadTable);
+}
+
+TEST(StIr, LoaderRejectsDuplicateSourceMapProgramCounter)
+{
+    std::vector<uint8_t> artifact = build_hash_only();
+    const ArtifactSection map = find_section(artifact, st_ir::SEC_DEBUG_SOURCEMAP);
+    ASSERT_GE(map.item_count, 2u);
+    put_u32(&artifact, map.offset + 8u, get_u32(artifact, map.offset));
+    refresh_artifact_hash(&artifact);
+
+    StLoadError error;
+    EXPECT_FALSE(try_load(artifact, &error));
+    EXPECT_EQ(error.code, st_ir_error::kBadTable);
+}
+
+TEST(StIr, LoaderRejectsSourceMapSectionWhenFlagIsClear)
+{
+    std::vector<uint8_t> artifact = build_hash_only();
+    put_u16(&artifact, 26, static_cast<uint16_t>(get_u16(artifact, 26) &
+                                                 ~st_ir::kFlagHasSourceMap));
+    refresh_artifact_hash(&artifact);
+
+    StLoadError error;
+    EXPECT_FALSE(try_load(artifact, &error));
+    EXPECT_EQ(error.code, st_ir_error::kBadHeader);
 }
 
 TEST(StIr, ConstantPoolDeduplicates)

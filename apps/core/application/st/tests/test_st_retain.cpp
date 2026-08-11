@@ -171,7 +171,7 @@ TEST(StRetain, TruncatedFileFromPowerLossIsRejected)
     ASSERT_TRUE(store.save_if_needed(*rt.program(), 0, true));
 
     /* Cắt file như thể mất điện giữa lúc ghi. */
-    ASSERT_EQ(::truncate(path.c_str(), 22), 0);
+    ASSERT_EQ(::truncate(path.c_str(), 21), 0);
 
     StProgramRuntime rt2;
     ASSERT_TRUE(load(&rt2, art));

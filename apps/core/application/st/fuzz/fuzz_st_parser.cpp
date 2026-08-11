@@ -13,26 +13,32 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
+#include "st/st_compile.hpp"
+#include "st/st_ir.hpp"
+#include "st/st_loader.hpp"
 #include "st/st_limits.hpp"
-#include "st/st_parser.hpp"
-#include "st/st_program.hpp"
-#include "st/st_semantic.hpp"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
 {
-    /* Cắt theo đúng giới hạn hợp đồng: input lớn hơn đã bị caller (CLI/BE)
-     * từ chối trước khi tới parser, nên fuzz vùng đó không phản ánh thực tế. */
-    if (size > core::st_limits::kMaxSourceBytes) size = core::st_limits::kMaxSourceBytes;
-
     const std::string source(reinterpret_cast<const char*>(data), size);
 
-    core::StProgram prog;
+    core::StIrModule module;
     core::StDiagnostic diag;
-    if (core::parse_st_program(source, &prog, &diag)) {
-        /* Parse thành công thì semantic PHẢI chạy được trên AST đó mà không
-         * crash — kể cả khi AST đến từ input ngẫu nhiên. */
-        core::typecheck_st_program(&prog, &diag);
+    if (core::compile_st_source(source, &module, &diag)) {
+        std::vector<uint8_t> artifact;
+        std::string error;
+        if (core::serialize_st_ir(module, &artifact, &error)) {
+            core::StLoadedProgram loaded;
+            core::StLoaderOptions options;
+            core::StLoadError load_error;
+            if (!core::load_st_artifact(artifact.data(), artifact.size(), options, &loaded,
+                                        &load_error))
+                __builtin_trap();
+        } else if (error.empty()) {
+            __builtin_trap();
+        }
     } else {
         /* Thất bại thì phải luôn có mã chẩn đoán ổn định. Đây là hợp đồng với
          * BE: không có đường thoát nào trả false mà không nói vì sao. */

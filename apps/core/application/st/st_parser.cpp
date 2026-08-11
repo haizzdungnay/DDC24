@@ -8,8 +8,12 @@
  */
 #include "st/st_parser.hpp"
 
+#include <algorithm>
+#include <cerrno>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
+#include <limits>
 #include <string>
 
 #include "st/st_limits.hpp"
@@ -34,16 +38,90 @@ struct Token {
     int64_t     time_ns = 0;
     int         line = 1;
     int         column = 1;
+    int         length = 1;
 };
 
-void set_diag(StDiagnostic* diag, const char* code, const std::string& msg, int line, int col)
+void set_diag(StDiagnostic* diag, const char* code, const std::string& msg, int line, int col,
+              int length = 1)
 {
     diag->severity = StSeverity::ERROR;
     diag->code = code;
     diag->message = msg;
     diag->line = line;
     diag->column = col;
-    diag->length = 1;
+    diag->length = length > 0 ? length : 1;
+}
+
+/* Source cho phép UTF-8 trong comment/copy, nhưng grammar và identifier Rev A
+ * vẫn là ASCII. Kiểm encoding trước lexer để byte lỗi không bị hiểu thành một
+ * ký tự ngẫu nhiên hoặc làm lệch line/column. */
+bool validate_utf8(const std::string& source, std::size_t* bad_offset)
+{
+    const auto* bytes = reinterpret_cast<const unsigned char*>(source.data());
+    std::size_t i = 0;
+    while (i < source.size()) {
+        const unsigned char c = bytes[i];
+        if (c == 0) {
+            if (bad_offset) *bad_offset = i;
+            return false;
+        }
+        if (c < 0x80) {
+            ++i;
+            continue;
+        }
+
+        std::size_t width = 0;
+        uint32_t codepoint = 0;
+        if (c >= 0xC2 && c <= 0xDF) {
+            width = 2;
+            codepoint = c & 0x1Fu;
+        } else if (c >= 0xE0 && c <= 0xEF) {
+            width = 3;
+            codepoint = c & 0x0Fu;
+        } else if (c >= 0xF0 && c <= 0xF4) {
+            width = 4;
+            codepoint = c & 0x07u;
+        } else {
+            if (bad_offset) *bad_offset = i;
+            return false;
+        }
+        if (i + width > source.size()) {
+            if (bad_offset) *bad_offset = i;
+            return false;
+        }
+        for (std::size_t j = 1; j < width; ++j) {
+            if ((bytes[i + j] & 0xC0u) != 0x80u) {
+                if (bad_offset) *bad_offset = i + j;
+                return false;
+            }
+            codepoint = (codepoint << 6u) | (bytes[i + j] & 0x3Fu);
+        }
+        if ((width == 3 && codepoint < 0x800u) ||
+            (width == 4 && codepoint < 0x10000u) ||
+            (width == 3 && codepoint >= 0xD800u && codepoint <= 0xDFFFu) ||
+            codepoint > 0x10FFFFu) {
+            if (bad_offset) *bad_offset = i;
+            return false;
+        }
+        i += width;
+    }
+    return true;
+}
+
+void line_column_at(const std::string& source, std::size_t offset, int* line, int* column)
+{
+    *line = 1;
+    *column = 1;
+    const std::size_t end = std::min(offset, source.size());
+    for (std::size_t i = 0; i < end; ++i) {
+        const unsigned char byte = static_cast<unsigned char>(source[i]);
+        if (source[i] == '\n') {
+            ++(*line);
+            *column = 1;
+        } else if ((byte & 0xC0u) != 0x80u) {
+            ++(*column);
+        }
+    }
 }
 
 std::string to_upper(const std::string& s)
@@ -58,8 +136,10 @@ std::string to_upper(const std::string& s)
 bool parse_time_literal(const std::string& body, int line, int col, int64_t* out,
                         StDiagnostic* diag)
 {
+    const int literal_length = static_cast<int>(body.size() + 2u);
     if (body.empty()) {
-        set_diag(diag, st_diag_code::kBadTimeLiteral, "empty TIME literal after 'T#'", line, col);
+        set_diag(diag, st_diag_code::kBadTimeLiteral, "empty TIME literal after 'T#'", line, col,
+                 literal_length);
         return false;
     }
     /* Thứ tự bắt buộc: d > h > m > s > ms. Chỉ số càng lớn càng nhỏ đơn vị. */
@@ -77,7 +157,7 @@ bool parse_time_literal(const std::string& body, int line, int col, int64_t* out
     while (i < body.size()) {
         if (!std::isdigit(static_cast<unsigned char>(body[i]))) {
             set_diag(diag, st_diag_code::kBadTimeLiteral,
-                     "expected digits in TIME literal", line, col);
+                     "expected digits in TIME literal", line, col, literal_length);
             return false;
         }
         int64_t value = 0;
@@ -85,7 +165,7 @@ bool parse_time_literal(const std::string& body, int line, int col, int64_t* out
             value = value * 10 + (body[i] - '0');
             if (value > 1000000000ll) {   /* chặn tràn sớm */
                 set_diag(diag, st_diag_code::kBadTimeLiteral,
-                         "TIME literal component too large", line, col);
+                         "TIME literal component too large", line, col, literal_length);
                 return false;
             }
             i++;
@@ -101,20 +181,24 @@ bool parse_time_literal(const std::string& body, int line, int col, int64_t* out
         }
         if (unit_idx < 0) {
             set_diag(diag, st_diag_code::kBadTimeLiteral,
-                     "unknown or missing TIME unit (expected d, h, m, s or ms)", line, col);
+                     "unknown or missing TIME unit (expected d, h, m, s or ms)", line, col,
+                     literal_length);
             return false;
         }
         if (unit_idx <= last_unit) {
             set_diag(diag, st_diag_code::kBadTimeLiteral,
-                     "TIME units must be in decreasing order and not repeat", line, col);
+                     "TIME units must be in decreasing order and not repeat", line, col,
+                     literal_length);
             return false;
         }
         last_unit = unit_idx;
-        total += value * kUnits[unit_idx].ns;
-        if (total < 0) {   /* tràn int64 */
-            set_diag(diag, st_diag_code::kBadTimeLiteral, "TIME literal overflows", line, col);
+        if (value > (st_limits::kMaxTimeLiteralNs - total) / kUnits[unit_idx].ns) {
+            set_diag(diag, st_diag_code::kBadTimeLiteral,
+                     "TIME literal exceeds the Rev A limit of 24 hours", line, col,
+                     literal_length);
             return false;
         }
+        total += value * kUnits[unit_idx].ns;
     }
     *out = total;
     return true;
@@ -130,6 +214,16 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
         return false;
     }
 
+    std::size_t bad_offset = 0;
+    if (!validate_utf8(src, &bad_offset)) {
+        int bad_line = 1;
+        int bad_column = 1;
+        line_column_at(src, bad_offset, &bad_line, &bad_column);
+        set_diag(diag, st_diag_code::kLexUnexpectedChar,
+                 "source is not valid UTF-8 or contains NUL", bad_line, bad_column);
+        return false;
+    }
+
     std::size_t i = 0;
     const std::size_t n = src.size();
     int line = 1, col = 1;
@@ -138,17 +232,29 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
         if (out->size() >= st_limits::kMaxTokens) {
             set_diag(diag, st_diag_code::kTooManyTokens,
                      "token count exceeds limit of " + std::to_string(st_limits::kMaxTokens),
-                     t.line, t.column);
+                     t.line, t.column, t.length);
             return false;
         }
         out->push_back(std::move(t));
         return true;
     };
     auto step = [&](char c) {
-        if (c == '\n') { line++; col = 1; } else { col++; }
+        const unsigned char byte = static_cast<unsigned char>(c);
+        if (c == '\n') {
+            line++;
+            col = 1;
+        } else if ((byte & 0xC0u) != 0x80u) {
+            col++;
+        }
     };
-    auto simple = [&](Token::Kind k, const char* text, int l, int c) {
-        Token t; t.kind = k; t.text = text; t.line = l; t.column = c; return t;
+    auto simple = [&](Token::Kind k, const char* text, int l, int c, int length = 1) {
+        Token t;
+        t.kind = k;
+        t.text = text;
+        t.line = l;
+        t.column = c;
+        t.length = length;
+        return t;
     };
 
     while (i < n) {
@@ -172,7 +278,7 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
             }
             if (!closed) {
                 set_diag(diag, st_diag_code::kUnterminatedComment,
-                         "block comment '(*' is never closed", sl, sc);
+                         "block comment '(*' is never closed", sl, sc, 2);
                 return false;
             }
             continue;
@@ -202,6 +308,7 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
                 Token t;
                 t.kind = Token::Kind::TimeLit;
                 t.line = sl; t.column = sc;
+                t.length = static_cast<int>(i - start);
                 if (!parse_time_literal(src.substr(bstart, i - bstart), sl, sc, &t.time_ns, diag))
                     return false;
                 if (!push(std::move(t))) return false;
@@ -213,7 +320,7 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
                          "identifier is " + std::to_string(word.size()) +
                              " characters, limit is " +
                              std::to_string(st_limits::kMaxIdentifierLength),
-                         sl, sc);
+                         sl, sc, static_cast<int>(word.size()));
                 return false;
             }
             Token t;
@@ -221,6 +328,7 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
             t.text = word;
             t.upper = to_upper(word);
             t.line = sl; t.column = sc;
+            t.length = static_cast<int>(word.size());
             if (!push(std::move(t))) return false;
             continue;
         }
@@ -237,17 +345,25 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
             }
             const std::string text = src.substr(start, i - start);
             Token t;
-            t.line = sl; t.column = sc; t.text = text;
+            t.line = sl;
+            t.column = sc;
+            t.length = static_cast<int>(text.size());
+            t.text = text;
             if (is_real) {
                 t.kind = Token::Kind::RealLit;
                 t.real_val = std::strtof(text.c_str(), nullptr);
+                if (!std::isfinite(t.real_val)) {
+                    set_diag(diag, st_diag_code::kLexUnexpectedChar,
+                             "REAL literal is not finite", sl, sc, t.length);
+                    return false;
+                }
             } else {
                 t.kind = Token::Kind::IntLit;
                 errno = 0;
                 t.int_val = std::strtoll(text.c_str(), nullptr, 10);
                 if (errno == ERANGE) {
                     set_diag(diag, st_diag_code::kIntLiteralOutOfRange,
-                             "integer literal out of range", sl, sc);
+                             "integer literal out of range", sl, sc, t.length);
                     return false;
                 }
             }
@@ -259,7 +375,7 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
         switch (c) {
         case ':':
             if (i + 1 < n && src[i + 1] == '=') {
-                if (!push(simple(Token::Kind::ColonEq, ":=", sl, sc))) return false;
+                if (!push(simple(Token::Kind::ColonEq, ":=", sl, sc, 2))) return false;
                 step(src[i]); i++; step(src[i]); i++;
             } else {
                 if (!push(simple(Token::Kind::Colon, ":", sl, sc))) return false;
@@ -268,10 +384,10 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
             continue;
         case '<':
             if (i + 1 < n && src[i + 1] == '=') {
-                if (!push(simple(Token::Kind::Le, "<=", sl, sc))) return false;
+                if (!push(simple(Token::Kind::Le, "<=", sl, sc, 2))) return false;
                 step(src[i]); i++; step(src[i]); i++;
             } else if (i + 1 < n && src[i + 1] == '>') {
-                if (!push(simple(Token::Kind::Ne, "<>", sl, sc))) return false;
+                if (!push(simple(Token::Kind::Ne, "<>", sl, sc, 2))) return false;
                 step(src[i]); i++; step(src[i]); i++;
             } else {
                 if (!push(simple(Token::Kind::Lt, "<", sl, sc))) return false;
@@ -280,7 +396,7 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
             continue;
         case '>':
             if (i + 1 < n && src[i + 1] == '=') {
-                if (!push(simple(Token::Kind::Ge, ">=", sl, sc))) return false;
+                if (!push(simple(Token::Kind::Ge, ">=", sl, sc, 2))) return false;
                 step(src[i]); i++; step(src[i]); i++;
             } else {
                 if (!push(simple(Token::Kind::Gt, ">", sl, sc))) return false;
@@ -338,6 +454,7 @@ public:
 
         if (!parse_stmt_list({"END_PROGRAM"}, &out->body, diag)) return false;
         if (!expect_kw("END_PROGRAM", diag)) return false;
+        if (!at_end()) return fail("unexpected token after END_PROGRAM", diag);
         return true;
     }
 
@@ -368,7 +485,12 @@ private:
             "PROGRAM", "END_PROGRAM", "VAR", "VAR_INPUT", "VAR_OUTPUT", "END_VAR",
             "RETAIN", "IF", "THEN", "ELSIF", "ELSE", "END_IF",
             "AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE",
-            "BOOL", "INT", "REAL", "TIME", "TON", "TOF", "R_TRIG", "F_TRIG",
+            "BOOL", "INT", "DINT", "UINT", "REAL", "TIME",
+            "TON", "TOF", "R_TRIG", "F_TRIG",
+            "CASE", "END_CASE", "FOR", "END_FOR", "WHILE", "END_WHILE",
+            "REPEAT", "UNTIL", "END_REPEAT", "EXIT", "CONTINUE", "RETURN", "GOTO",
+            "VAR_GLOBAL", "VAR_EXTERNAL", "NATIVE", "POINTER", "REFERENCE", "AT",
+            "ARRAY", "STRUCT", "STRING", "WSTRING",
         };
         for (const char* k : kKeywords)
             if (up == k) return true;
@@ -388,7 +510,8 @@ private:
 
     bool fail(const std::string& msg, StDiagnostic* diag)
     {
-        set_diag(diag, st_diag_code::kSyntaxUnexpected, msg, peek().line, peek().column);
+        set_diag(diag, st_diag_code::kSyntaxUnexpected, msg, peek().line, peek().column,
+                 peek().length);
         return false;
     }
 
@@ -396,7 +519,7 @@ private:
     {
         set_diag(diag, st_diag_code::kNestingTooDeep,
                  std::string(what) + " nesting exceeds limit of " + std::to_string(limit),
-                 peek().line, peek().column);
+                 peek().line, peek().column, peek().length);
         return false;
     }
 
@@ -465,11 +588,12 @@ private:
                 d.retained = (storage == StStorage::VAR_RETAIN);
                 d.line = name_tok.line;
                 d.column = name_tok.column;
+                d.length = name_tok.length;
                 if (out->fbs.size() >= st_limits::kMaxFbInstances) {
                     set_diag(diag, st_diag_code::kTooManyFbInstances,
                              "function block instance count exceeds limit of " +
                                  std::to_string(st_limits::kMaxFbInstances),
-                             d.line, d.column);
+                             d.line, d.column, d.length);
                     return false;
                 }
                 out->fbs.push_back(std::move(d));
@@ -479,21 +603,24 @@ private:
                 d.storage = storage;
                 d.line = name_tok.line;
                 d.column = name_tok.column;
-                if (type_tok.upper == "BOOL")      d.type = StType::BOOL;
-                else if (type_tok.upper == "INT")  d.type = StType::INT;
-                else if (type_tok.upper == "REAL") d.type = StType::REAL;
-                else if (type_tok.upper == "TIME") d.type = StType::TIME;
+                d.length = name_tok.length;
+                if (type_tok.upper == "BOOL")       d.type = StType::BOOL;
+                else if (type_tok.upper == "INT")   d.type = StType::INT;
+                else if (type_tok.upper == "DINT")  d.type = StType::DINT;
+                else if (type_tok.upper == "UINT")  d.type = StType::UINT;
+                else if (type_tok.upper == "REAL")  d.type = StType::REAL;
+                else if (type_tok.upper == "TIME")  d.type = StType::TIME;
                 else {
                     set_diag(diag, st_diag_code::kUnknownType,
                              "unknown type '" + type_tok.text + "'",
-                             type_tok.line, type_tok.column);
+                             type_tok.line, type_tok.column, type_tok.length);
                     return false;
                 }
                 if (out->vars.size() >= st_limits::kMaxVariables) {
                     set_diag(diag, st_diag_code::kTooManyVariables,
                              "variable count exceeds limit of " +
                                  std::to_string(st_limits::kMaxVariables),
-                             d.line, d.column);
+                             d.line, d.column, d.length);
                     return false;
                 }
                 out->vars.push_back(std::move(d));
@@ -526,7 +653,7 @@ private:
                 set_diag(diag, st_diag_code::kTooManyStatements,
                          "statement count exceeds limit of " +
                              std::to_string(st_limits::kMaxStatements),
-                         peek().line, peek().column);
+                         peek().line, peek().column, peek().length);
                 return false;
             }
             StStmt s;
@@ -586,12 +713,14 @@ private:
         out->assign_target = target.text;
         out->assign_target_line = target.line;
         out->assign_target_column = target.column;
+        out->assign_target_length = target.length;
 
         /* `inst.Q := ...` là ghi vào đầu ra FB — bắt ở đây để báo đúng lỗi
          * thay vì để nó rơi vào "expected ':='". */
         if (peek().kind == Token::Kind::Dot) {
             set_diag(diag, st_diag_code::kWriteToFbOutput,
-                     "cannot assign to a function block output", target.line, target.column);
+                     "cannot assign to a function block output", target.line, target.column,
+                     target.length);
             return false;
         }
         if (!expect(Token::Kind::ColonEq, "':=' in assignment", diag)) return false;
@@ -614,7 +743,7 @@ private:
                      "'" + inst.text +
                          "' is a standard function; use it inside an expression, "
                          "not as a statement",
-                     inst.line, inst.column);
+                     inst.line, inst.column, inst.length);
             return false;
         }
 
@@ -622,6 +751,7 @@ private:
         out->fb_instance = inst.text;
         out->fb_line = inst.line;
         out->fb_column = inst.column;
+        out->fb_length = inst.length;
 
         if (!expect(Token::Kind::LParen, "'(' in function block call", diag)) return false;
         if (peek().kind != Token::Kind::RParen) {
@@ -632,12 +762,13 @@ private:
                 arg.name = pname.upper;   /* tên tham số chuẩn hoá in hoa */
                 arg.line = pname.line;
                 arg.column = pname.column;
+                arg.length = pname.length;
                 /* Chỉ chấp nhận tham số ĐẶT TÊN (SPEC §5.3) — tham số theo vị
                  * trí bị từ chối tường minh, không im lặng hiểu sai. */
                 if (peek().kind != Token::Kind::ColonEq) {
                     set_diag(diag, st_diag_code::kBadFbParam,
                              "function block arguments must use named form 'NAME := value'",
-                             arg.line, arg.column);
+                             arg.line, arg.column, arg.length);
                     return false;
                 }
                 advance();
@@ -663,7 +794,8 @@ private:
 
     /* Sinh node nhị phân — dùng chung cho mọi mức ưu tiên. */
     static std::unique_ptr<StExpr> make_bin(StBinOp op, std::unique_ptr<StExpr> l,
-                                            std::unique_ptr<StExpr> r, int line, int col)
+                                            std::unique_ptr<StExpr> r, int line, int col,
+                                            int length)
     {
         auto n = std::make_unique<StExpr>();
         n->kind = StExpr::Kind::BINOP;
@@ -672,6 +804,7 @@ private:
         n->rhs = std::move(r);
         n->line = line;
         n->column = col;
+        n->length = length;
         return n;
     }
 
@@ -679,11 +812,11 @@ private:
     {
         if (!parse_xor(out, diag)) return false;
         while (at_kw("OR")) {
-            const int l = peek().line, c = peek().column;
+            const int l = peek().line, c = peek().column, length = peek().length;
             advance();
             std::unique_ptr<StExpr> rhs;
             if (!parse_xor(&rhs, diag)) return false;
-            *out = make_bin(StBinOp::OR, std::move(*out), std::move(rhs), l, c);
+            *out = make_bin(StBinOp::OR, std::move(*out), std::move(rhs), l, c, length);
         }
         return true;
     }
@@ -692,11 +825,11 @@ private:
     {
         if (!parse_and(out, diag)) return false;
         while (at_kw("XOR")) {
-            const int l = peek().line, c = peek().column;
+            const int l = peek().line, c = peek().column, length = peek().length;
             advance();
             std::unique_ptr<StExpr> rhs;
             if (!parse_and(&rhs, diag)) return false;
-            *out = make_bin(StBinOp::XOR, std::move(*out), std::move(rhs), l, c);
+            *out = make_bin(StBinOp::XOR, std::move(*out), std::move(rhs), l, c, length);
         }
         return true;
     }
@@ -705,11 +838,11 @@ private:
     {
         if (!parse_equality(out, diag)) return false;
         while (at_kw("AND")) {
-            const int l = peek().line, c = peek().column;
+            const int l = peek().line, c = peek().column, length = peek().length;
             advance();
             std::unique_ptr<StExpr> rhs;
             if (!parse_equality(&rhs, diag)) return false;
-            *out = make_bin(StBinOp::AND, std::move(*out), std::move(rhs), l, c);
+            *out = make_bin(StBinOp::AND, std::move(*out), std::move(rhs), l, c, length);
         }
         return true;
     }
@@ -722,11 +855,11 @@ private:
             if (peek().kind == Token::Kind::Eq)      op = StBinOp::EQ;
             else if (peek().kind == Token::Kind::Ne) op = StBinOp::NE;
             else break;
-            const int l = peek().line, c = peek().column;
+            const int l = peek().line, c = peek().column, length = peek().length;
             advance();
             std::unique_ptr<StExpr> rhs;
             if (!parse_relational(&rhs, diag)) return false;
-            *out = make_bin(op, std::move(*out), std::move(rhs), l, c);
+            *out = make_bin(op, std::move(*out), std::move(rhs), l, c, length);
         }
         return true;
     }
@@ -743,11 +876,11 @@ private:
             case Token::Kind::Ge: op = StBinOp::GE; break;
             default: return true;
             }
-            const int l = peek().line, c = peek().column;
+            const int l = peek().line, c = peek().column, length = peek().length;
             advance();
             std::unique_ptr<StExpr> rhs;
             if (!parse_additive(&rhs, diag)) return false;
-            *out = make_bin(op, std::move(*out), std::move(rhs), l, c);
+            *out = make_bin(op, std::move(*out), std::move(rhs), l, c, length);
         }
     }
 
@@ -759,11 +892,11 @@ private:
             if (peek().kind == Token::Kind::Plus)       op = StBinOp::ADD;
             else if (peek().kind == Token::Kind::Minus) op = StBinOp::SUB;
             else return true;
-            const int l = peek().line, c = peek().column;
+            const int l = peek().line, c = peek().column, length = peek().length;
             advance();
             std::unique_ptr<StExpr> rhs;
             if (!parse_multiplicative(&rhs, diag)) return false;
-            *out = make_bin(op, std::move(*out), std::move(rhs), l, c);
+            *out = make_bin(op, std::move(*out), std::move(rhs), l, c, length);
         }
     }
 
@@ -776,33 +909,39 @@ private:
             else if (peek().kind == Token::Kind::Slash)  op = StBinOp::DIV;
             else if (at_kw("MOD"))                       op = StBinOp::MOD;
             else return true;
-            const int l = peek().line, c = peek().column;
+            const int l = peek().line, c = peek().column, length = peek().length;
             advance();
             std::unique_ptr<StExpr> rhs;
             if (!parse_unary(&rhs, diag)) return false;
-            *out = make_bin(op, std::move(*out), std::move(rhs), l, c);
+            *out = make_bin(op, std::move(*out), std::move(rhs), l, c, length);
         }
     }
 
     bool parse_unary(std::unique_ptr<StExpr>* out, StDiagnostic* diag)
     {
         const bool is_neg = (peek().kind == Token::Kind::Minus);
+        const bool is_plus = (peek().kind == Token::Kind::Plus);
         const bool is_not = at_kw("NOT");
-        if (is_neg || is_not) {
+        if (is_neg || is_plus || is_not) {
             /* `NOT NOT x` đệ quy qua chính hàm này mà không đi qua parse_expr,
              * nên phải có guard riêng — nếu không vẫn tràn stack được. */
             if (expr_depth_ >= st_limits::kMaxExprDepth)
                 return fail_depth("expression", st_limits::kMaxExprDepth, diag);
             DepthGuard guard(&expr_depth_);
-            const int l = peek().line, c = peek().column;
+            const int l = peek().line, c = peek().column, length = peek().length;
             advance();
             std::unique_ptr<StExpr> operand;
             if (!parse_unary(&operand, diag)) return false;
+            if (is_plus) {
+                *out = std::move(operand);
+                return true;
+            }
             auto n = std::make_unique<StExpr>();
             n->kind = StExpr::Kind::UNOP;
             n->un_op = is_neg ? StUnOp::NEG : StUnOp::NOT;
             n->operand = std::move(operand);
             n->line = l; n->column = c;
+            n->length = length;
             *out = std::move(n);
             return true;
         }
@@ -829,6 +968,7 @@ private:
             n->literal_int_value = t.int_val;
             n->literal = StValue::make_int(0);
             n->line = t.line; n->column = t.column;
+            n->length = t.length;
             *out = std::move(n);
             return true;
         }
@@ -839,6 +979,7 @@ private:
             n->kind = StExpr::Kind::LITERAL;
             n->literal = StValue::make_real(t.real_val);
             n->line = t.line; n->column = t.column;
+            n->length = t.length;
             *out = std::move(n);
             return true;
         }
@@ -849,6 +990,7 @@ private:
             n->kind = StExpr::Kind::LITERAL;
             n->literal = StValue::make_time(t.time_ns);
             n->line = t.line; n->column = t.column;
+            n->length = t.length;
             *out = std::move(n);
             return true;
         }
@@ -860,6 +1002,7 @@ private:
                 n->kind = StExpr::Kind::LITERAL;
                 n->literal = StValue::make_bool(t.upper == "TRUE");
                 n->line = t.line; n->column = t.column;
+                n->length = t.length;
                 *out = std::move(n);
                 return true;
             }
@@ -878,6 +1021,7 @@ private:
                 n->member_object = t.text;
                 n->member_field = field.upper;
                 n->line = t.line; n->column = t.column;
+                n->length = t.length;
                 *out = std::move(n);
                 return true;
             }
@@ -888,13 +1032,14 @@ private:
                 StFunc f;
                 if (!st_func_from_name(t.upper, &f)) {
                     set_diag(diag, st_diag_code::kUnknownFunction,
-                             "unknown function '" + t.text + "'", t.line, t.column);
+                             "unknown function '" + t.text + "'", t.line, t.column, t.length);
                     return false;
                 }
                 auto n = std::make_unique<StExpr>();
                 n->kind = StExpr::Kind::CALL;
                 n->func = f;
                 n->line = t.line; n->column = t.column;
+                n->length = t.length;
                 if (peek().kind != Token::Kind::RParen) {
                     for (;;) {
                         std::unique_ptr<StExpr> arg;
@@ -913,6 +1058,7 @@ private:
             n->kind = StExpr::Kind::VAR;
             n->var_name = t.text;
             n->line = t.line; n->column = t.column;
+            n->length = t.length;
             *out = std::move(n);
             return true;
         }

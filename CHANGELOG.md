@@ -7,6 +7,44 @@
 ---
 
 ## [Unreleased]
+### Added — Khóa ST subset và source map Programming P2 (2026-08-11)
+
+**Kết quả.** Triển khai `TASK-PROG-200`: compiler ST từ chối source không phải
+UTF-8, byte NUL, token thừa sau `END_PROGRAM`, keyword vòng lặp/toàn cục/native
+ngoài profile và literal `REAL` không hữu hạn; bổ sung unary `+`, giới hạn
+literal `TIME` tối đa 24 giờ và span chẩn đoán đúng độ dài token. CLI compile
+phát thêm `sourceId` để consumer ánh xạ lỗi ổn định về editor.
+
+**Hệ kiểu Rev A.** Compiler, IR, loader, executor, process image và RETAIN nay
+triển khai đủ `BOOL`, `INT` 16-bit, `DINT` 32-bit, `UINT` 16-bit, `REAL` 32-bit
+và `TIME` 64-bit theo wire code của profile. Gán ngầm khác kiểu bị từ chối;
+conversion chỉ qua hàm tường minh. Phép toán tràn số, `UINT` âm/underflow,
+conversion thu hẹp ngoài miền và padding/value artifact không canonical đều
+fail-closed. Golden artifact được sinh lại từ compiler mới và ghim SHA-256
+`fcdfd4a66cd7947ce211705f12a4a72d03503922d74f4a958dafa59945d70528`;
+G1 join manifest cũng được cập nhật theo hash manifest golden mới để contract
+drift tiếp tục bị chặn tự động.
+
+**Artifact fail-closed.** Serializer và loader kiểm đối xứng flag/section cho
+source map và RETAIN; từ chối program counter vượt code, vị trí dòng/cột bằng
+0, bản ghi trùng hoặc không tăng. Parser fuzzer chạy toàn luồng
+compile → serialize → load; corpus có source hợp lệ và các cú pháp cố ý bị cấm.
+
+**Kiểm chứng.** Fuzz hồi quy tất định `10.000/10.000` mutation PASS. Hai lượt
+libFuzzer + AddressSanitizer độc lập đều đạt `10.000.000` input: parser
+`74.074 exec/s`, RSS đỉnh `432 MiB`; loader `52.631 exec/s`, RSS đỉnh
+`462 MiB`; không crash, OOM hoặc hang. Không đổi UI/BE, không bật feature flag,
+không deploy target/HIL và chưa nâng Test Result tích hợp khi FBD/consumer chưa
+hoàn tất. Regression Release C++ bật Modbus + BACnet + HMI đạt `898/898` CTest;
+Go vet/test PASS; FE đạt `55/55` file, `479/479` test cùng lint/build PASS.
+
+**Hồ sơ và tiến độ.** Phát hành evidence `EV-PROG-G2-200` và biên bản
+`PROG-G2-IMPLEMENTATION-REVIEW-2026-08-11`; đồng bộ Language/Artifact Design,
+Risk, Trace và Plan 53/54. P2 chuyển `1/8`, tổng plan `14/49 = 28,6%`, next
+action `TASK-PROG-201`. Candidate v2.15 ghim `22/22` SHA-256; Trace giữ
+`2/60 I=Y`, Risk giữ `16/16 Open`, Test Result giữ `0/32 PASS` và
+`RELEASE_READY BLOCKED`.
+
 ### Added — Join contract và trình kiểm tương thích G1 Programming (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-105`: thêm manifest

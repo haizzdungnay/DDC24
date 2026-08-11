@@ -36,7 +36,7 @@ constexpr uint32_t    kTargetAbi       = 0x00000F01u;
 constexpr uint32_t    kHeaderSize      = 128;
 constexpr uint32_t    kMaxArtifactSize = st_profile_generated::kMaxArtifactBytes;
 constexpr uint32_t    kInstructionSize = 16;
-constexpr const char* kCompilerVersion = "fwsom-st-1.0.0";
+constexpr const char* kCompilerVersion = "fwsom-st-1.1.0";
 
 /* flags (SPEC §2.4) */
 constexpr uint16_t kFlagHasSourceMap = 1u << 0;
@@ -102,6 +102,16 @@ enum class StOp : uint8_t {
     CVT_R2I      = 0x61,
     CVT_T2R      = 0x62,
     CVT_R2T      = 0x63,
+    CVT_I2D      = 0x64,
+    CVT_I2U      = 0x65,
+    CVT_D2I      = 0x66,
+    CVT_D2U      = 0x67,
+    CVT_U2I      = 0x68,
+    CVT_U2D      = 0x69,
+    CVT_D2R      = 0x6A,
+    CVT_U2R      = 0x6B,
+    CVT_R2D      = 0x6C,
+    CVT_R2U      = 0x6D,
     FB_CALL      = 0x70,
 };
 
@@ -110,7 +120,7 @@ enum class StOp : uint8_t {
 struct StInstr {
     StOp     op = StOp::NOP;
     StType   type = StType::BOOL;   /* 0 = VOID được mã hoá bằng type_raw = 0 */
-    uint8_t  type_raw = 0;          /* giá trị thô ghi ra file: 0..4 */
+    uint8_t  type_raw = 0;          /* giá trị thô ghi ra file: 0 hoặc wire code 1..6 */
     uint16_t dst = 0;
     uint16_t a = 0;
     uint16_t b = 0;

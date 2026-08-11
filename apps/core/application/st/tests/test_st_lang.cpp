@@ -453,4 +453,103 @@ END_PROGRAM
     EXPECT_TRUE(check(src, &d)) << d.code << ": " << d.message << " @" << d.line << ":" << d.column;
 }
 
+/* ---- Target Rev A: bounded source, exact diagnostic span ---- */
+
+TEST(StLang, EntireSourceMustBeConsumed)
+{
+    const std::string src =
+        "PROGRAM first\nEND_PROGRAM\nPROGRAM second\nEND_PROGRAM\n";
+    StDiagnostic d;
+    EXPECT_FALSE(check(src, &d));
+    EXPECT_EQ(d.code, st_diag_code::kSyntaxUnexpected);
+    EXPECT_EQ(d.line, 3);
+    EXPECT_EQ(d.column, 1);
+    EXPECT_EQ(d.length, 7);
+}
+
+TEST(StLang, ForbiddenUnboundedLoopIsRejectedAtKeyword)
+{
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("VAR a : BOOL; END_VAR\n",
+                            "WHILE a DO\nEND_WHILE;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kSyntaxUnexpected);
+    EXPECT_EQ(d.length, 5);
+}
+
+TEST(StLang, UnaryPlusAcceptedByTargetGrammar)
+{
+    StDiagnostic d;
+    EXPECT_TRUE(check(prog("VAR r : REAL; END_VAR\n", "r := +r;\n"), &d))
+        << d.code << ": " << d.message;
+}
+
+TEST(StLang, Utf8TextInsideCommentIsAccepted)
+{
+    StDiagnostic d;
+    EXPECT_TRUE(check(prog("VAR r : REAL; END_VAR\n",
+                           "(* Điều khiển nhiệt độ *)\nr := 1.0;\n"), &d))
+        << d.code << ": " << d.message;
+}
+
+TEST(StLang, TimeLiteralIsBoundedToTwentyFourHours)
+{
+    StDiagnostic d;
+    EXPECT_TRUE(check(prog("VAR t : TIME; END_VAR\n", "t := T#24h;\n"), &d));
+    EXPECT_FALSE(check(prog("VAR t : TIME; END_VAR\n", "t := T#24h1ms;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kBadTimeLiteral);
+}
+
+TEST(StLang, SemanticDiagnosticHighlightsWholeIdentifier)
+{
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("", "missing := 1;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kUnboundVariable);
+    EXPECT_EQ(d.length, 7);
+}
+
+TEST(StLang, NonFiniteRealLiteralIsRejectedWithExactSpan)
+{
+    const std::string literal(80, '9');
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("VAR r : REAL; END_VAR\n", "r := " + literal + ".0;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kLexUnexpectedChar);
+    EXPECT_EQ(d.length, static_cast<int>(literal.size() + 2));
+}
+
+TEST(StLang, RevATargetIntegerTypesAndBoundaryLiterals)
+{
+    StDiagnostic d;
+    EXPECT_TRUE(check(prog("VAR i : INT; d : DINT; u : UINT; END_VAR\n",
+                           "i := 32767; d := 2147483647; u := 65535;\n"), &d))
+        << d.code << ": " << d.message;
+
+    EXPECT_FALSE(check(prog("VAR i : INT; END_VAR\n", "i := 32768;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kIntLiteralOutOfRange);
+    EXPECT_FALSE(check(prog("VAR d : DINT; END_VAR\n", "d := 2147483648;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kIntLiteralOutOfRange);
+    EXPECT_FALSE(check(prog("VAR u : UINT; END_VAR\n", "u := 65536;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kIntLiteralOutOfRange);
+    EXPECT_FALSE(check(prog("VAR u : UINT; END_VAR\n", "u := -1;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kTypeMismatch);
+}
+
+TEST(StLang, IntegerTypesRequireExplicitConversion)
+{
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("VAR i : INT; d : DINT; END_VAR\n", "d := i;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kTypeMismatch);
+    EXPECT_TRUE(check(prog("VAR i : INT; d : DINT; u : UINT; END_VAR\n",
+                           "d := INT_TO_DINT(i); u := INT_TO_UINT(i);\n"
+                           "i := DINT_TO_INT(d); d := UINT_TO_DINT(u);\n"), &d))
+        << d.code << ": " << d.message;
+}
+
+TEST(StLang, AssignmentContextSelectsIntegerTypeForLiteralExpression)
+{
+    StDiagnostic d;
+    EXPECT_TRUE(check(prog("VAR d : DINT; u : UINT; END_VAR\n",
+                           "d := 40000 + 1; u := 40000 + 1;\n"), &d))
+        << d.code << ": " << d.message;
+}
+
 } // namespace core

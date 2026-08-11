@@ -7,20 +7,16 @@
 namespace core {
 namespace {
 
-/* Cộng/trừ/nhân int32 có phát hiện tràn. SPEC §4.3: tràn INT là FAULT chứ
- * không wrap im lặng — một bộ đếm bị wrap trong logic điều khiển là lỗi âm
- * thầm nguy hiểm hơn nhiều so với một fault có chẩn đoán. */
-inline bool add_ovf(int32_t a, int32_t b, int32_t* r)
+/* Tất cả integer được giữ trong int32 ở slot, nhưng miền hợp lệ phụ thuộc
+ * type target (INT16/DINT32/UINT16). Tính trên int64 rồi kiểm miền trước khi
+ * ghi để không có wrap/underflow im lặng. */
+inline bool store_integer(StType type, int64_t value, int32_t* out)
 {
-    return __builtin_add_overflow(a, b, r);
-}
-inline bool sub_ovf(int32_t a, int32_t b, int32_t* r)
-{
-    return __builtin_sub_overflow(a, b, r);
-}
-inline bool mul_ovf(int32_t a, int32_t b, int32_t* r)
-{
-    return __builtin_mul_overflow(a, b, r);
+    if (!st_type_is_integer(type) || value < st_integer_min(type) ||
+        value > st_integer_max(type))
+        return false;
+    *out = static_cast<int32_t>(value);
+    return true;
 }
 inline bool add_ovf64(int64_t a, int64_t b, int64_t* r)
 {
@@ -67,7 +63,11 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
         case StOp::ADD:
             switch (in.type) {
             case StType::INT:
-                if (add_ovf(S[in.a].i, S[in.b].i, &S[in.dst].i))
+            case StType::DINT:
+            case StType::UINT:
+                if (!store_integer(in.type,
+                                   static_cast<int64_t>(S[in.a].i) + S[in.b].i,
+                                   &S[in.dst].i))
                     ST_FAULT(st_diag_code::kRtIntOverflow);
                 break;
             case StType::REAL:
@@ -87,7 +87,11 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
         case StOp::SUB:
             switch (in.type) {
             case StType::INT:
-                if (sub_ovf(S[in.a].i, S[in.b].i, &S[in.dst].i))
+            case StType::DINT:
+            case StType::UINT:
+                if (!store_integer(in.type,
+                                   static_cast<int64_t>(S[in.a].i) - S[in.b].i,
+                                   &S[in.dst].i))
                     ST_FAULT(st_diag_code::kRtIntOverflow);
                 break;
             case StType::REAL:
@@ -107,8 +111,10 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
             break;
 
         case StOp::MUL:
-            if (in.type == StType::INT) {
-                if (mul_ovf(S[in.a].i, S[in.b].i, &S[in.dst].i))
+            if (st_type_is_integer(in.type)) {
+                if (!store_integer(in.type,
+                                   static_cast<int64_t>(S[in.a].i) * S[in.b].i,
+                                   &S[in.dst].i))
                     ST_FAULT(st_diag_code::kRtIntOverflow);
             } else {
                 S[in.dst].r = S[in.a].r * S[in.b].r;
@@ -118,13 +124,12 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
             break;
 
         case StOp::DIV:
-            if (in.type == StType::INT) {
+            if (st_type_is_integer(in.type)) {
                 if (S[in.b].i == 0) ST_FAULT(st_diag_code::kRtDivByZero);
-                /* INT_MIN / -1 tràn trong bù 2 — trường hợp duy nhất của phép
-                 * chia sinh tràn, và là UB nếu không chặn. */
-                if (S[in.a].i == INT32_MIN && S[in.b].i == -1)
+                const int64_t result =
+                    static_cast<int64_t>(S[in.a].i) / static_cast<int64_t>(S[in.b].i);
+                if (!store_integer(in.type, result, &S[in.dst].i))
                     ST_FAULT(st_diag_code::kRtIntOverflow);
-                S[in.dst].i = S[in.a].i / S[in.b].i;
             } else {
                 if (S[in.b].r == 0.0f) ST_FAULT(st_diag_code::kRtDivByZero);
                 S[in.dst].r = S[in.a].r / S[in.b].r;
@@ -135,16 +140,18 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
 
         case StOp::MOD:
             if (S[in.b].i == 0) ST_FAULT(st_diag_code::kRtDivByZero);
-            if (S[in.a].i == INT32_MIN && S[in.b].i == -1)
+            if (!store_integer(in.type,
+                               static_cast<int64_t>(S[in.a].i) % S[in.b].i,
+                               &S[in.dst].i))
                 ST_FAULT(st_diag_code::kRtIntOverflow);
-            S[in.dst].i = S[in.a].i % S[in.b].i;
             pc++;
             break;
 
         case StOp::NEG:
-            if (in.type == StType::INT) {
-                if (S[in.a].i == INT32_MIN) ST_FAULT(st_diag_code::kRtIntOverflow);
-                S[in.dst].i = -S[in.a].i;
+            if (st_type_is_signed_integer(in.type)) {
+                if (!store_integer(in.type, -static_cast<int64_t>(S[in.a].i),
+                                   &S[in.dst].i))
+                    ST_FAULT(st_diag_code::kRtIntOverflow);
             } else {
                 S[in.dst].r = -S[in.a].r;
             }
@@ -154,7 +161,9 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
 #define ST_CMP(OPCODE, CPPOP)                                                   \
         case OPCODE:                                                            \
             switch (in.type) {                                                  \
-            case StType::INT:  S[in.dst].b = (S[in.a].i CPPOP S[in.b].i); break; \
+            case StType::INT:                                                      \
+            case StType::DINT:                                                     \
+            case StType::UINT: S[in.dst].b = (S[in.a].i CPPOP S[in.b].i); break;  \
             case StType::REAL: S[in.dst].b = (S[in.a].r CPPOP S[in.b].r); break; \
             case StType::TIME: S[in.dst].b = (S[in.a].t CPPOP S[in.b].t); break; \
             case StType::BOOL: S[in.dst].b = (S[in.a].b CPPOP S[in.b].b); break; \
@@ -178,9 +187,12 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
         case StOp::NOT: S[in.dst].b = !S[in.a].b; pc++; break;
 
         case StOp::ABS:
-            if (in.type == StType::INT) {
-                if (S[in.a].i == INT32_MIN) ST_FAULT(st_diag_code::kRtIntOverflow);
-                S[in.dst].i = S[in.a].i < 0 ? -S[in.a].i : S[in.a].i;
+            if (st_type_is_integer(in.type)) {
+                const int64_t value = S[in.a].i < 0
+                                          ? -static_cast<int64_t>(S[in.a].i)
+                                          : static_cast<int64_t>(S[in.a].i);
+                if (!store_integer(in.type, value, &S[in.dst].i))
+                    ST_FAULT(st_diag_code::kRtIntOverflow);
             } else {
                 S[in.dst].r = std::fabs(S[in.a].r);
             }
@@ -189,7 +201,9 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
 
         case StOp::MIN:
             switch (in.type) {
-            case StType::INT:  S[in.dst].i = S[in.a].i < S[in.b].i ? S[in.a].i : S[in.b].i; break;
+            case StType::INT:
+            case StType::DINT:
+            case StType::UINT: S[in.dst].i = S[in.a].i < S[in.b].i ? S[in.a].i : S[in.b].i; break;
             case StType::REAL: S[in.dst].r = S[in.a].r < S[in.b].r ? S[in.a].r : S[in.b].r; break;
             case StType::TIME: S[in.dst].t = S[in.a].t < S[in.b].t ? S[in.a].t : S[in.b].t; break;
             default: break;
@@ -199,7 +213,9 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
 
         case StOp::MAX:
             switch (in.type) {
-            case StType::INT:  S[in.dst].i = S[in.a].i > S[in.b].i ? S[in.a].i : S[in.b].i; break;
+            case StType::INT:
+            case StType::DINT:
+            case StType::UINT: S[in.dst].i = S[in.a].i > S[in.b].i ? S[in.a].i : S[in.b].i; break;
             case StType::REAL: S[in.dst].r = S[in.a].r > S[in.b].r ? S[in.a].r : S[in.b].r; break;
             case StType::TIME: S[in.dst].t = S[in.a].t > S[in.b].t ? S[in.a].t : S[in.b].t; break;
             default: break;
@@ -212,7 +228,9 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
              * trường hợp cần "sửa hộ" — kẹp theo thứ tự sai sẽ cho kết quả vô
              * nghĩa mà không ai biết. */
             switch (in.type) {
-            case StType::INT: {
+            case StType::INT:
+            case StType::DINT:
+            case StType::UINT: {
                 if (S[in.a].i > S[in.c].i) ST_FAULT(st_diag_code::kRtLimitMinMax);
                 int32_t v = S[in.b].i;
                 if (v < S[in.a].i) v = S[in.a].i;
@@ -266,9 +284,10 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
             /* Làm tròn nửa ra xa 0 (SPEC §3.5). Kiểm biên TRƯỚC khi ép kiểu:
              * ép một float ngoài miền int32 sang int32 là UB. */
             const float rounded = std::round(v);
-            if (rounded > 2147483647.0f || rounded < -2147483648.0f)
+            if (rounded > static_cast<float>(st_integer_max(StType::INT)) ||
+                rounded < static_cast<float>(st_integer_min(StType::INT)) ||
+                !store_integer(StType::INT, static_cast<int64_t>(rounded), &S[in.dst].i))
                 ST_FAULT(st_diag_code::kRtConvOutOfRange);
-            S[in.dst].i = static_cast<int32_t>(rounded);
             pc++;
             break;
         }
@@ -286,6 +305,51 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
             const double ns = static_cast<double>(v) * 1e9;
             if (ns > 9.2e18) ST_FAULT(st_diag_code::kRtConvOutOfRange);
             S[in.dst].t = static_cast<int64_t>(ns);
+            pc++;
+            break;
+        }
+
+        case StOp::CVT_I2D:
+        case StOp::CVT_U2D:
+            S[in.dst].i = S[in.a].i;
+            pc++;
+            break;
+
+        case StOp::CVT_I2U:
+            if (!store_integer(StType::UINT, S[in.a].i, &S[in.dst].i))
+                ST_FAULT(st_diag_code::kRtConvOutOfRange);
+            pc++;
+            break;
+
+        case StOp::CVT_D2I:
+        case StOp::CVT_U2I:
+            if (!store_integer(StType::INT, S[in.a].i, &S[in.dst].i))
+                ST_FAULT(st_diag_code::kRtConvOutOfRange);
+            pc++;
+            break;
+
+        case StOp::CVT_D2U:
+            if (!store_integer(StType::UINT, S[in.a].i, &S[in.dst].i))
+                ST_FAULT(st_diag_code::kRtConvOutOfRange);
+            pc++;
+            break;
+
+        case StOp::CVT_D2R:
+        case StOp::CVT_U2R:
+            S[in.dst].r = static_cast<float>(S[in.a].i);
+            pc++;
+            break;
+
+        case StOp::CVT_R2D:
+        case StOp::CVT_R2U: {
+            const float value = S[in.a].r;
+            if (!std::isfinite(value)) ST_FAULT(st_diag_code::kRtNonFiniteReal);
+            const float rounded = std::round(value);
+            const StType target = in.op == StOp::CVT_R2D ? StType::DINT : StType::UINT;
+            if (rounded > static_cast<float>(st_integer_max(target)) ||
+                rounded < static_cast<float>(st_integer_min(target)) ||
+                !store_integer(target, static_cast<int64_t>(rounded), &S[in.dst].i))
+                ST_FAULT(st_diag_code::kRtConvOutOfRange);
             pc++;
             break;
         }

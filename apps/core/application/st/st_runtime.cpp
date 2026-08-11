@@ -1,5 +1,6 @@
 #include "st/st_runtime.hpp"
 
+#include <cmath>
 #include <cstring>
 
 namespace core {
@@ -67,13 +68,20 @@ StExecResult StProgramRuntime::execute(int64_t now_ns)
 bool StProgramRuntime::set_variable(const std::string& name, const StValue& v)
 {
     if (!active_) return false;
+    if (st_type_is_integer(v.type) &&
+        (v.i < st_integer_min(v.type) || v.i > st_integer_max(v.type)))
+        return false;
+    if (v.type == StType::REAL && !std::isfinite(v.r)) return false;
+    if (v.type == StType::TIME && v.t < 0) return false;
     for (const StIrVariable& var : active_->variables) {
         if (var.name != name) continue;
         if (var.type != v.type) return false;
         StCell& c = active_->slots[var.slot];
         switch (v.type) {
         case StType::BOOL: c.b = v.b; break;
+        case StType::DINT:
         case StType::INT:  c.i = v.i; break;
+        case StType::UINT: c.i = v.i; break;
         case StType::REAL: c.r = v.r; break;
         case StType::TIME: c.t = v.t; break;
         }
@@ -90,7 +98,9 @@ bool StProgramRuntime::get_variable(const std::string& name, StValue* out) const
         const StCell& c = active_->slots[var.slot];
         switch (var.type) {
         case StType::BOOL: *out = StValue::make_bool(c.b); break;
+        case StType::DINT: *out = StValue::make_dint(c.i); break;
         case StType::INT:  *out = StValue::make_int(c.i); break;
+        case StType::UINT: *out = StValue::make_uint(static_cast<uint16_t>(c.i)); break;
         case StType::REAL: *out = StValue::make_real(c.r); break;
         case StType::TIME: *out = StValue::make_time(c.t); break;
         }

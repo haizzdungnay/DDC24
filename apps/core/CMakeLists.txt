@@ -162,7 +162,8 @@ if(CORE_BUILD_TESTS)
       adapters/diagnostics/tests/test_core_metrics.cpp adapters/ipc/tests/test_output_writer.cpp
       application/st/tests/test_st_io_map.cpp application/st/tests/test_st_cyclic_runtime.cpp
       application/st/tests/test_st_validate_cli.cpp application/st/tests/test_st_limits.cpp
-      application/st/tests/test_st_lang.cpp application/st/tests/test_st_ir.cpp application/st/tests/test_st_exec.cpp
+      application/st/tests/test_st_lang.cpp application/st/tests/test_st_ir.cpp
+      application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp
       application/st/tests/test_st_retain.cpp application/st/tests/test_st_control_api.cpp
       tests/allocation_probe.cpp)

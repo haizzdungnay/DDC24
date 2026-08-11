@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 0.7 |
+| Phiên bản | 0.8 |
 | Trạng thái | **M3 — Review Ready** — treatment/evidence/acceptance đủ; 16/16 Open |
 | Ngày | 2026-08-11 |
 | Chủ quản | Product + Architecture + QA |
@@ -21,7 +21,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **16 rủi ro có thể gây hỏng thiết bị, mất điều khiển hoặc sai cam kết**, kèm biện pháp kiểm soát, chủ sở hữu và bằng chứng cần có để hạ mức. Đây là căn cứ để nói “chưa được phép cutover”. |
 | 2. Ai phải đọc file này? | Product, Architect và QA (chủ quản chung); từng risk owner đọc phần của mình; Safety và Security đọc trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical`. G1 đã hiện thực treatment source partial cho `RSK-PROG-006/007/008/014`; hai Test Result đang `BLOCKED`, **0/16 treatment end-to-end** và **0/16 evidence được chấp nhận**, nên không giảm điểm. |
+| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical`. `RSK-PROG-006` có thêm treatment source Task 200: ST hostile-input guard, sáu type/range fail-closed, source map strict và parser/loader mỗi bộ fuzz 10 triệu input. `RSK-PROG-007/008/014` vẫn partial từ G1; hai Test Result đang `BLOCKED`, **0/16 treatment end-to-end** và **0/16 evidence được chấp nhận**, nên không giảm điểm. |
 | 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Nó gắn từng rủi ro với biện pháp cụ thể, kịch bản kiểm chứng và mức tồn dư **mục tiêu** — mục tiêu, chưa phải kết quả. |
 | 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản; việc code nằm ở Plan 53. Bốn rủi ro nặng nhất (20 điểm): `RSK-PROG-002` watchdog restart, `RSK-PROG-003` IOP gap, `RSK-PROG-005` compiler tranh CPU, `RSK-PROG-013` nhầm skeleton là HIL-ready. |
 | 6. Điều gì còn bị chặn? | Mọi rủi ro ≥15 **chặn cutover production** cho tới khi biện pháp có bằng chứng PASS và mức tồn dư được owner cùng QA chấp nhận bằng văn bản. |
@@ -121,7 +121,7 @@ OPEN → TREATMENT_IMPLEMENTED → EVIDENCE_REVIEW → ACCEPTED | REOPENED
 | Critical ≥15 | 11/16 |
 | Treatment có thiết kế ở mức M3 | 16/16 |
 | Treatment implemented end-to-end | 0/16 cho feature/Target |
-| Treatment source partial | 4/16 (`RSK-PROG-006/007/008/014`) tại loader/store/join contract; chưa đủ đổi lifecycle/residual |
+| Treatment source partial | 4/16 (`RSK-PROG-006/007/008/014`); RSK-006 có compiler/IR/loader/fuzz Task 200, các risk còn lại ở store/join; chưa đủ đổi lifecycle/residual |
 | Evidence accepted | 0/16 |
 | Residual accepted | 0/16 |
 
@@ -152,6 +152,16 @@ vì vậy lifecycle, S×L và residual của cả bốn risk giữ nguyên.
 Chúng xác nhận phần host đã chạy và phần thiếu cụ thể, nhưng không phải evidence
 được chấp nhận để chuyển lifecycle hoặc giảm residual.
 
+### 5.3 Cập nhật treatment source `TASK-PROG-200`
+
+| Risk | Control đã có tại `8d58efa` + `a638470` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-006` | Parser kiểm UTF-8/NUL/source 64 KiB/full consumption và reject keyword ngoài subset; sáu type/wire code/range/conversion fail-closed xuyên semantic→IR→loader→executor→RETAIN; source map strict; fuzz tất định 10.000 mutation; parser và loader ASan/UBSan mỗi bộ 10.000.000 input, 0 crash/timeout | FBD producer/corpus và ST↔FBD equivalence; BE sandbox worker; kiểm binary runtime không mang parser; target load/timing và Test Result `VS-PROG-006/023` được review độc lập | `OPEN — PARTIAL SOURCE` |
+
+`EV-PROG-G2-200` là evidence hỗ trợ host cho control đã implement. Nó không phải
+Test Result scenario và không chứng minh production/no-parser-RT/target/HIL; do
+đó likelihood, lifecycle và residual `15 Open` của `RSK-PROG-006` giữ nguyên.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -179,6 +189,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 0.5 | 2026-08-09 | Thêm `RSK-PROG-016` (đơn giản hóa UI làm mất bước an toàn, 5×3=15) kèm biện pháp fail-closed và scenario `VS-031`; tổng 16 risk, residual không đổi |
 | 0.6 | 2026-08-11 | Ghi treatment source partial của `TASK-PROG-104` cho RSK-007/008 và ranh giới chưa hoàn tất của RSK-009/011; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted |
 | 0.7 | 2026-08-11 | Ghi join contract/deploy/rollback `TASK-PROG-105` cho treatment partial RSK-006/007/008/014; hai Test Result G1 đều BLOCKED, giữ 16/16 Open, 11 Critical và 0 evidence/residual accepted |
+| 0.8 | 2026-08-11 | Ghi `TASK-PROG-200` cho treatment partial RSK-006: hostile-source guard, sáu type/range/conversion, source map strict và hai campaign fuzz 10 triệu input; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì FBD/worker/runtime target và Test Result còn thiếu |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
