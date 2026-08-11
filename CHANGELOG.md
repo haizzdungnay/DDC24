@@ -42,7 +42,8 @@ v0.7, Interface v1.1, BE Design v0.9, Risk v1.3, Trace v3.9, Plan 53 v0.29,
 Roadmap v3.25, review/raw evidence G2 và candidate v2.20. Tiến độ P2 `6/8`,
 tổng `19/49`; task tiếp theo `TASK-PROG-206`. Giữ trung thực `2/60 I=Y`, hai
 record BLOCKED, `0/32 PASS`, 16/16 risk Open, flag `OFF` và
-`RELEASE_READY BLOCKED`; commit/tree/PR hồ sơ sẽ được ghi provenance sau merge.
+`RELEASE_READY BLOCKED`. Source + hồ sơ đã merge qua PR #149 tại `3c8b4c3`,
+tree `aa7e13a9`; remote feature branch đã xóa.
 
 **Kiểm chứng hiện tại.** Full CTest Release bật Modbus+BACnet+HMI đạt `929/929`;
 Go `vet`, `test ./... -count=1` và Programming race PASS; FE đạt `58/58` file,
