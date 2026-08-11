@@ -2,9 +2,9 @@
 
 Thư mục này là authority machine-readable cho contract profile/artifact
 (`TASK-PROG-102`), catalog lỗi liên lớp (`TASK-PROG-103`) và manifest SQLite
-store (`TASK-PROG-104`). Từ `TASK-PROG-201`, thư mục này còn là authority của
-mô hình FBD canonical và registry lệnh bàn phím. Mã nguồn không được hard-code
-lại giới hạn, mã lỗi hoặc shortcut khác contract.
+store (`TASK-PROG-104`). Từ `TASK-PROG-201/202`, thư mục này còn là authority
+của mô hình FBD canonical, registry lệnh bàn phím và corpus equivalence ST↔FBD.
+Mã nguồn không được hard-code lại giới hạn, mã lỗi hoặc shortcut khác contract.
 Thay đổi nguồn phải chạy lại:
 
 ```bash
@@ -34,7 +34,8 @@ python3 scripts/verify_programming_fbd_contract.py --self-test
 | `fbd_v1.schema.json` | schema canonical của graph/network/node/port/wire FBD Rev A |
 | `fbd_keyboard_commands_v1.json` | registry 11 command/shortcut keyboard-first và giới hạn undo/redo |
 | `fbd/golden/ahu_fan_enable.json` | graph mẫu hợp lệ dùng chung cho Core và FE |
-| `fbd/manifest.json` | SHA-256 profile/schema/keyboard/golden cùng số đếm canonical |
+| `fbd/equivalence_v1.json` | 20 cặp operator ST↔FBD cùng vector output chuẩn cho common typed IR |
+| `fbd/manifest.json` | SHA-256 profile/schema/keyboard/golden/equivalence, lowerer version và số đếm canonical |
 
 Kiểm join trước mọi thay đổi contract hoặc deploy:
 
@@ -67,7 +68,10 @@ các test host của task này chứng minh hợp đồng type, determinism, int
 loader boundary; chúng không được dùng để tuyên bố runtime production, FBD,
 target/HIL hoặc Commission đã hoàn tất.
 
-Mô hình FBD của `TASK-PROG-201` mới khóa cấu trúc, type/unit, thứ tự thực thi và
-thao tác bản nháp. Việc hạ FBD sang IR chung, chứng minh tương đương ST/FBD và
-đưa Revision vào runtime thuộc `TASK-PROG-202`; consumer không được lấy graph
-FBD của task này để stage/activate trực tiếp.
+`TASK-PROG-202` hạ graph đã canonical qua chính `StProgram` typed, semantic
+checker và IR/runtime của ST; corpus 20 operator, conversion và timer chứng minh
+executable semantic tương đương. Provenance/source-map theo từng ngôn ngữ không
+được giả là byte giống nhau và thuộc artifact/source-map `TASK-PROG-203`.
+`SCALE/DEADBAND/CTU/PI/PID` hoặc unit chưa có semantic/runtime chung bị reject
+fail-closed; không consumer nào được stage graph trực tiếp hoặc tự hạ các block
+đó. Feature Programming vẫn `OFF`; host evidence không thay target/HIL.

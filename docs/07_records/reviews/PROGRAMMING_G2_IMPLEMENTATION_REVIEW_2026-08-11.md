@@ -1,17 +1,17 @@
-# Review triển khai G2 Programming — TASK-PROG-200/201
+# Review triển khai G2 Programming — TASK-PROG-200..202
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G2-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-200`, `TASK-PROG-201` |
+| Task | `TASK-PROG-200`, `TASK-PROG-201`, `TASK-PROG-202` |
 | Ngày | 2026-08-11 |
 | Trạng thái task | **DONE** |
-| Trạng thái pha | **P2 IN_PROGRESS — 2/8; G2 IN_PROGRESS** |
-| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57` |
-| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`, tree `8d4fb50a`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`, tree `b85bdb2c`; hai remote feature branch đã xóa |
-| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt) |
+| Trạng thái pha | **P2 IN_PROGRESS — 3/8; G2 IN_PROGRESS** |
+| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901` |
+| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`; Task 202: `PENDING` trên nhánh `feat/programming-fbd-ir-equivalence-20260811` |
+| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt), [`EV-PROG-G2-202`](programming-g2/raw/EV-PROG-G2-202.txt) |
 | Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS — không đổi** |
-| Next action | `TASK-PROG-202` — hạ FBD về common typed IR và chứng minh equivalence |
+| Next action | `TASK-PROG-203` — deterministic artifact/hash/profile/manifest/source map |
 
 ## 1. Kết quả đã triển khai
 
@@ -133,3 +133,58 @@ logic biểu diễn bằng ST và FBD phải tạo IR/artifact tương đương 
 mọi graph cycle, ambiguity, unsupported block hoặc conversion ngầm phải fail
 trước artifact. Evidence Task 202 phải gồm golden ST↔FBD, negative/fault,
 determinism và regression/fuzz; chưa được gọi kết quả host là target/HIL.
+
+## 11. Kết quả `TASK-PROG-202`
+
+- Thêm lowerer non-RT `fwsom-fbd-1.0.0` tại `st_fbd_compile.*`. Input duy nhất
+  là FBD canonical v1; lowerer dựng `StProgram` typed, chạy
+  `typecheck_st_program()` và `compile_st_to_ir()` hiện hữu. Không tạo VM,
+  opcode, runtime hoặc semantic authority thứ hai.
+- Hỗ trợ INPUT/OUTPUT/CONSTANT, 20 operator logic/compare/math/select/limit,
+  10 conversion tường minh và `TON/TOF/R_TRIG/F_TRIG`. Corpus
+  `fbd/equivalence_v1.json` ghim đúng 20 cặp và SHA-256 trong manifest.
+- Fail-closed khi parameter/port/arity sai, input chưa nối, identifier hostile,
+  writer trùng, cycle, unit chưa thể giữ trong artifact hoặc library chưa có
+  semantic runtime chung. `SCALE/DEADBAND/CTU/PI/PID` không bị diễn giải tạm;
+  module lỗi luôn rỗng, không publish partial IR.
+- Equivalence loại riêng provenance theo ngôn ngữ nguồn (`source_hash`,
+  `source_map`, build timestamp), sau đó yêu cầu executable IR serialize
+  byte-identical; runtime output và state trace vẫn được đo độc lập.
+
+## 12. Finding `TASK-PROG-202` đã đóng
+
+| ID | Mức | Finding | Cách đóng | Trạng thái |
+|---|---|---|---|---|
+| `F-G2-202-01` | P1 | `parameters.instance` của FB sai kiểu có thể rơi về tên mặc định, trái fail-closed | Kiểm presence/type tường minh trước fallback; thêm regression xác nhận module rỗng | **CLOSED** |
+| `F-G2-202-02` | P1 | FBD có unit nhưng artifact hiện tại chưa giữ provenance unit, có nguy cơ semantic drift | Reject bằng `FBD-SEM-UNIT-IR-001`; chuyển source-map/unit artifact sang Task 203 | **CLOSED** |
+| `F-G2-202-03` | P1 | Library profile có block chưa có runtime semantic chung | Allowlist đúng semantic hiện hữu; reject ổn định `FBD-SEM-LIBRARY-UNSUPPORTED-001` thay vì dựng behavior thứ hai | **CLOSED** |
+
+Không còn finding P0/P1 mở trong phạm vi `TASK-PROG-202`.
+
+## 13. Kiểm chứng `TASK-PROG-202` đo trong phiên
+
+| Làn | Kết quả |
+|---|---|
+| Corpus equivalence | `20/20` cặp tạo executable IR tương đương và cùng output |
+| Core FBD targeted | `17/17` model/lowerer/state/fault test PASS |
+| Contract mutation | `10/10` mutation bị reject; schema/golden/profile/keyboard/equivalence/manifest khớp |
+| Fuzzer C++ Clang/ASan | `100.000` input / 17 s / 5.882 exec/s / RSS đỉnh 462 MiB / 0 crash-timeout-ASan fault |
+| C++ toàn repository | Release bật Modbus + BACnet + HMI; CTest `915/915` PASS |
+| Go toàn repository | `go vet ./...` và `go test ./... -count=1` PASS |
+| FE regression | Vitest `58/58` file, `494/494` test; lint/typecheck/build PASS |
+
+Không chạy Chrome DevTools vì Task 202 không đổi route, component, layout hoặc
+hành vi FE runtime. Không deploy target/HIL/production; feature flag giữ `OFF`,
+không stage/activate artifact và không có Commission side effect.
+
+## 14. Ranh giới và bàn giao `TASK-PROG-203`
+
+- `CORE-101` vẫn là một trong `2/60 I=Y`; Task 202 bổ sung source/evidence chứ
+  không tạo requirement end-to-end mới. `SYS-101/NFR-101` vẫn partial do artifact
+  provenance, Check worker, route và target còn thiếu.
+- `RSK-PROG-006` giữ `15 Open`; evidence host không thay independent Test Result
+  `VS-PROG-006/023`. Tổng giữ 2 record BLOCKED, 0/32 PASS, mọi `T/P/R=N`.
+- Task 203 phải đóng deterministic artifact/hash/profile/manifest/source map cho
+  cả ST/FBD, bảo toàn unit/location provenance mà không thay executable semantic.
+  Unknown version/hash/profile hoặc source-map lỗi phải fail-closed; không stage
+  hay đổi Active/LKG trong task compiler này.

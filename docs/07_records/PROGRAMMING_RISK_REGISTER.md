@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 0.9 |
+| Phiên bản | 1.0 |
 | Trạng thái | **M3 — Review Ready** — treatment/evidence/acceptance đủ; 16/16 Open |
 | Ngày | 2026-08-11 |
 | Chủ quản | Product + Architecture + QA |
@@ -21,7 +21,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **16 rủi ro có thể gây hỏng thiết bị, mất điều khiển hoặc sai cam kết**, kèm biện pháp kiểm soát, chủ sở hữu và bằng chứng cần có để hạ mức. Đây là căn cứ để nói “chưa được phép cutover”. |
 | 2. Ai phải đọc file này? | Product, Architect và QA (chủ quản chung); từng risk owner đọc phần của mình; Safety và Security đọc trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical`. `RSK-PROG-006` có thêm treatment source Task 201: FBD schema/manifest, canonical validator C++/FE, duplicate-key/type/unit/order/endpoint guard và ASan fuzz 50.000 input. Task 200 ST/type/artifact và `RSK-PROG-007/008/014` partial từ G1 vẫn giữ. Hai Test Result đang `BLOCKED`, **0/16 treatment end-to-end** và **0/16 evidence được chấp nhận**, nên không giảm điểm. |
+| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical`. `RSK-PROG-006` có thêm treatment source Task 202: FBD canonical hạ qua semantic checker/typed IR/runtime chung, 20 cặp ST↔FBD, fail-closed và ASan fuzz 100.000 input. Task 200–201 và `RSK-PROG-007/008/014` partial từ G1 vẫn giữ. Hai Test Result đang `BLOCKED`, **0/16 treatment end-to-end** và **0/16 evidence được chấp nhận**, nên không giảm điểm. |
 | 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Nó gắn từng rủi ro với biện pháp cụ thể, kịch bản kiểm chứng và mức tồn dư **mục tiêu** — mục tiêu, chưa phải kết quả. |
 | 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản; việc code nằm ở Plan 53. Bốn rủi ro nặng nhất (20 điểm): `RSK-PROG-002` watchdog restart, `RSK-PROG-003` IOP gap, `RSK-PROG-005` compiler tranh CPU, `RSK-PROG-013` nhầm skeleton là HIL-ready. |
 | 6. Điều gì còn bị chặn? | Mọi rủi ro ≥15 **chặn cutover production** cho tới khi biện pháp có bằng chứng PASS và mức tồn dư được owner cùng QA chấp nhận bằng văn bản. |
@@ -121,7 +121,7 @@ OPEN → TREATMENT_IMPLEMENTED → EVIDENCE_REVIEW → ACCEPTED | REOPENED
 | Critical ≥15 | 11/16 |
 | Treatment có thiết kế ở mức M3 | 16/16 |
 | Treatment implemented end-to-end | 0/16 cho feature/Target |
-| Treatment source partial | 4/16 (`RSK-PROG-006/007/008/014`); RSK-006 có compiler/IR/loader/FBD canonical/fuzz Task 200–201, các risk còn lại ở store/join; chưa đủ đổi lifecycle/residual |
+| Treatment source partial | 4/16 (`RSK-PROG-006/007/008/014`); RSK-006 có compiler/IR/loader/FBD canonical/lowering/equivalence/fuzz Task 200–202, các risk còn lại ở store/join; chưa đủ đổi lifecycle/residual |
 | Evidence accepted | 0/16 |
 | Residual accepted | 0/16 |
 
@@ -172,6 +172,16 @@ Test Result scenario và không chứng minh production/no-parser-RT/target/HIL;
 graph chưa hạ IR/stage, feature flag vẫn `OFF`; vì vậy lifecycle và residual
 `15 Open` không đổi.
 
+### 5.5 Cập nhật treatment source `TASK-PROG-202`
+
+| Risk | Control đã có tại `4819901` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-006` | Lowerer non-RT chỉ nhận FBD canonical, dựng `StProgram` typed rồi dùng semantic checker/`compile_st_to_ir`/runtime ST hiện hữu; 20 cặp executable IR và output tương đương, trace TON, reject input chưa nối/unit/library chưa hỗ trợ/identifier hostile mà không publish partial IR; contract mutation 10/10, targeted 17/17 và ASan fuzz 100.000 input không crash | Artifact/source-map FBD production Task 203; BE sandbox worker; binary runtime no-parser; target load/timing; Test Result `VS-PROG-006/023` độc lập | `OPEN — PARTIAL SOURCE` |
+
+`EV-PROG-G2-202` là evidence host cho lowering/equivalence, không phải Test Result
+scenario. Feature flag vẫn `OFF`, không artifact được stage/activate trên target;
+vì vậy lifecycle và residual `15 Open` không đổi.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -201,6 +211,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 0.7 | 2026-08-11 | Ghi join contract/deploy/rollback `TASK-PROG-105` cho treatment partial RSK-006/007/008/014; hai Test Result G1 đều BLOCKED, giữ 16/16 Open, 11 Critical và 0 evidence/residual accepted |
 | 0.8 | 2026-08-11 | Ghi `TASK-PROG-200` cho treatment partial RSK-006: hostile-source guard, sáu type/range/conversion, source map strict và hai campaign fuzz 10 triệu input; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì FBD/worker/runtime target và Test Result còn thiếu |
 | 0.9 | 2026-08-11 | Ghi `TASK-PROG-201` tại `52dfb57` cho treatment partial RSK-006: FBD canonical contract/validator hai consumer, keyboard reducer và ASan fuzz 50.000 input; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì lowering/equivalence/worker/runtime target/Test Result còn thiếu |
+| 1.0 | 2026-08-11 | Ghi `TASK-PROG-202` tại `4819901` cho treatment partial RSK-006: FBD→typed IR/runtime chung, 20 cặp equivalence, fail-closed và ASan fuzz 100.000 input; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì artifact/worker/runtime target/Test Result còn thiếu |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

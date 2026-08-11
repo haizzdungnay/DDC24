@@ -7,6 +7,45 @@
 ---
 
 ## [Unreleased]
+### Added — Common typed IR và equivalence ST↔FBD Programming P2 (2026-08-11)
+
+**Kết quả.** Triển khai `TASK-PROG-202`: thêm lowerer non-RT
+`fwsom-fbd-1.0.0` nhận duy nhất FBD v1 đã canonical, dựng `StProgram` typed,
+chạy semantic checker chung rồi đi qua chính `compile_st_to_ir`. FBD không có
+VM/opcode/runtime riêng và FE không trở thành compiler authority. Input/output,
+constant, 20 operator logic/compare/math/select/limit, 10 conversion tường minh
+và `TON/TOF/R_TRIG/F_TRIG` dùng đúng type/FB layout của ST.
+
+**Fail-closed.** Lowerer từ chối parameter/port/arity sai, input chưa nối,
+identifier hostile, biến hoặc writer trùng, unit chưa thể giữ trong artifact,
+cycle tổ hợp và library node chưa có runtime semantic chung; không publish
+partial IR. `SCALE/DEADBAND/CTU/PI/PID` tiếp tục bị chặn bằng mã ổn định thay vì
+âm thầm diễn giải khác profile. Fuzzer FBD nay chạy cả validator lẫn lowerer.
+
+**Equivalence.** Thêm contract `fbd/equivalence_v1.json` gồm đúng 20 cặp và
+vector output, ghim SHA-256 trong manifest. So sánh loại riêng provenance
+`source_hash/source_map` của từng ngôn ngữ rồi yêu cầu toàn bộ executable IR
+serialize byte-identical. Targeted suite chứng minh 20/20 operator, canonical
+reorder, conversion, trace trạng thái TON và fault/no-partial-IR.
+
+**Kiểm chứng.** Targeted FBD model/lowerer `17/17` PASS; full CTest Release bật
+Modbus+BACnet+HMI `915/915` PASS; libFuzzer Clang/ASan `100.000` lượt, không
+crash/timeout/ASan fault; Go `vet` và `test -count=1` PASS; FE `58 file / 494
+test`, lint, typecheck và build PASS; contract self-test `10/10` mutation bị
+reject. Không chạy Chrome DevTools vì task không đổi route, component hoặc hành
+vi giao diện.
+
+**Ranh giới.** Đây là compiler/runtime evidence trên host, chưa phải artifact
+source-map production của `TASK-PROG-203`, backend Check worker, target/HIL hay
+Test Result release. Feature flag giữ `OFF`, không Commission và không thay
+Active/LKG.
+
+**Hồ sơ và tiến độ.** Đồng bộ Design Index v2.5, Language/Compiler v0.6, Risk
+v1.0, Trace v3.6, Plan 53 v0.26, Roadmap 54 v3.19, review/evidence G2 và
+candidate v2.17. P2 đạt `3/8`, tổng `16/49 = 32,7%`; task tiếp theo là
+`TASK-PROG-203`. Giữ trung thực `2/60 I=Y`, `0/32 PASS`, flag `OFF` và
+`RELEASE_READY BLOCKED`.
+
 ### Added — Mô hình FBD canonical và lệnh keyboard-first Programming P2 (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-201`: thêm schema FBD Rev A machine-readable,
