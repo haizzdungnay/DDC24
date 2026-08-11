@@ -1,9 +1,10 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "2315add30a8e5880dbf09574371ed662726004c0e04372d16c88164d182571d4" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.0.0" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "b62e2d4f87ad1123030c393ad7b866c872c563b8b581ffcb4859c969e330dfb2" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.1.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
+  "PRG-ERR-NOT-FOUND-001": { ownerComponent: "api", statusClass: "NOT_FOUND", httpStatuses: [404], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.notFound", allowedArgs: [] },
   "PRG-ERR-CONFLICT-001": { ownerComponent: "api", statusClass: "CONFLICT", httpStatuses: [409, 428], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.conflict", allowedArgs: ["expected", "actual"] },
   "PRG-ERR-SCOPE-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.scope", allowedArgs: ["profile", "limit"] },
   "PRG-ERR-MAP-003": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.mappingIdentity", allowedArgs: ["pointId", "variable", "expected", "actual"] },

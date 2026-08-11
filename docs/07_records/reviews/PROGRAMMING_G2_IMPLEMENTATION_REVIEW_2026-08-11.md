@@ -1,17 +1,17 @@
-# Review triển khai G2 Programming — TASK-PROG-200..203
+# Review triển khai G2 Programming — TASK-PROG-200..204
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G2-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-200`, `TASK-PROG-201`, `TASK-PROG-202`, `TASK-PROG-203` |
+| Task | `TASK-PROG-200`, `TASK-PROG-201`, `TASK-PROG-202`, `TASK-PROG-203`, `TASK-PROG-204` |
 | Ngày | 2026-08-11 |
 | Trạng thái task | **DONE** |
-| Trạng thái pha | **P2 IN_PROGRESS — 4/8; G2 IN_PROGRESS** |
-| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901`; Task 203: `2c2bfb4` |
-| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`; Task 202: [PR #143](https://github.com/Mekong-HCM/MK-DDC-24/pull/143) / `7d424bc`; Task 203: [PR #145](https://github.com/Mekong-HCM/MK-DDC-24/pull/145) / `2899d02`, tree `cdef0e77`; remote feature branch đã xóa |
-| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt), [`EV-PROG-G2-202`](programming-g2/raw/EV-PROG-G2-202.txt), [`EV-PROG-G2-203`](programming-g2/raw/EV-PROG-G2-203.txt) |
+| Trạng thái pha | **P2 IN_PROGRESS — 5/8; G2 IN_PROGRESS** |
+| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901`; Task 203: `2c2bfb4`; Task 204: `66848a1` |
+| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`; Task 202: [PR #143](https://github.com/Mekong-HCM/MK-DDC-24/pull/143) / `7d424bc`; Task 203: [PR #145](https://github.com/Mekong-HCM/MK-DDC-24/pull/145) / `2899d02`, tree `cdef0e77`; Task 204 PR/merge chờ ghi sau phát hành hồ sơ |
+| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt), [`EV-PROG-G2-202`](programming-g2/raw/EV-PROG-G2-202.txt), [`EV-PROG-G2-203`](programming-g2/raw/EV-PROG-G2-203.txt), [`EV-PROG-G2-204`](programming-g2/raw/EV-PROG-G2-204.txt) |
 | Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS — không đổi** |
-| Next action | `TASK-PROG-204` — Project/Draft/Revision store, ETag/idempotency |
+| Next action | `TASK-PROG-205` — compiler worker sandbox + Check aggregate/diagnostics |
 
 ## 1. Kết quả đã triển khai
 
@@ -247,3 +247,65 @@ và không được sửa lẫn vào commit Programming compiler.
 - Task 204 phải nối Project/Draft/Revision store hiện hữu với model Programming,
   giữ Revision immutable, Draft ETag/CAS và idempotency; không được dùng metadata
   placeholder thay manifest/hash authority vừa khóa.
+
+## 19. Kết quả `TASK-PROG-204`
+
+- `mkddc-web` chỉ mở `${CONFIG_DIR}/programming/programming-v1.sqlite` khi
+  `PROGRAMMING_REV_A=true`, inject `application.ProjectService` vào router và
+  đóng store trong lifecycle. Flag mặc định `OFF` không tạo DB hay side effect.
+- Sáu operation `GET/POST projects`, `GET project`, `PATCH draft`, `POST
+  revision`, `GET revision` chạy thật. 19 route Check/runtime/operation/bundle/
+  audit còn trả `503` có mã ổn định; capabilities vẫn contract-only.
+- Project create tạo Draft document canonical đầy đủ; list dùng cursor HMAC hạn
+  15 phút và limit `1..100`. Draft hỗ trợ batch functional tag, program source/
+  aggregate, variable, binding và Task; toàn batch validate rồi CAS bằng ETag
+  mạnh `\"draftId:generation\"` trong một transaction.
+- Seal snapshot manifest/object SHA-256 bất biến và tiến base Draft/ETag cùng
+  transaction; Active/LKG không đổi. Read Project/Revision kiểm checksum trước
+  response; UUID/reference/capacity và JSON duplicate/trailing/unknown field
+  đều fail-closed.
+- Migration v2 thêm receipt idempotency 24 giờ theo actor/action/target/key và
+  semantic request hash. Replay cùng request giữ Project/Draft/Revision/ETag/
+  audit identity kể cả sau restart; cùng key khác request trả conflict.
+- Đường v1→v2 tạo backup đã `quick_check`; `VerifyBackup` đóng connection và dọn
+  sidecar `-wal/-shm`, nên backup set chỉ có database + manifest đã kiểm.
+
+## 20. Finding `TASK-PROG-204` đã đóng
+
+| ID | Mức | Finding | Cách đóng | Trạng thái |
+|---|---|---|---|---|
+| `F-G2-204-01` | P1 | Kiểm backup migration có thể để lại `-wal/-shm` sau khi mở DB read-only, làm tập backup không còn đúng hai artifact đã khai báo | Đóng DB trước khi hash/return và xóa sidecar chỉ trong thư mục backup đã resolve; thêm test nâng v1→v2 xác nhận đúng database + manifest | **CLOSED** |
+| `F-G2-204-02` | P1 | UUID chỉ parse được nhưng chưa bắt dạng canonical, có thể tạo identity khác nhau giữa API/store/manifest | So sánh chuỗi parse lại với input lowercase canonical và thêm ca âm | **CLOSED** |
+| `F-G2-204-03` | P1 | JSON chuẩn của Go có thể chấp nhận duplicate key và trailing document ở biên HTTP | Thêm scanner duplicate-key + EOF strict trước decode typed; kiểm contract âm/RBAC/no-side-effect | **CLOSED** |
+
+Không còn finding P0/P1 mở trong phạm vi `TASK-PROG-204`.
+
+## 21. Kiểm chứng `TASK-PROG-204` đo trong phiên
+
+| Làn | Kết quả |
+|---|---|
+| Go Programming targeted | application/store/transport/lifecycle PASS cho create/list/get, Draft batch/ETag, Revision seal/read/checksum, idempotency restart, RBAC và migration v1→v2 |
+| Go race detector | `go test -race ./internal/programming/application ./internal/programming/store ./internal/programming/transport/http -count=1` PASS |
+| Go toàn repository | `go vet ./...` và `go test ./... -count=1` PASS |
+| G1/contract | join `6/6`, self-test `5/5`, deploy-order âm `5/5`, error catalog `20 public/77 detail`, FBD mutation `10/10` PASS |
+| C++ toàn repository | Release bật Modbus + BACnet + HMI; CTest `927/927` PASS trong 14,04 s |
+| FE regression | Vitest `58/58` file, `494/494` test; lint/typecheck/build PASS |
+
+Không chạy Chrome DevTools vì Task 204 chỉ đổi backend và consumer TypeScript
+sinh tự động, không mount route/component hoặc đổi hành vi FE runtime. Không
+deploy target/HIL/production, không bật feature và không có Core/Commission side
+effect. `tools/restructure/verify_repository.py` vẫn chỉ FAIL ở baseline ngoài
+task `apps/web-ui/src/features/scheduler/shared.ts` chạm contract C/SHM/IOP.
+
+## 22. Ranh giới và bàn giao `TASK-PROG-205`
+
+- Tổng giữ `2/60 I=Y`; các dòng SYS-102/106, BE-101/102/105 và NFR-106 chỉ có
+  source partial. Hai record vẫn `BLOCKED`, 0/32 PASS và mọi `T/P/R=N`.
+- `RSK-PROG-007/008/014` có treatment host mạnh hơn nhưng residual không giảm:
+  chưa có compiler/Check worker, operation/Core read-back, target hoặc reviewer
+  Test Result độc lập.
+- Task 205 phải nhận immutable Revision + manifest/hash authority Task 203/204,
+  chạy compiler subprocess không đặc quyền với timeout/memory/file/process/no-
+  network limit, persist Check/diagnostic/artifact atomically và không stage/
+  activate. Timeout/OOM/crash/hostile source phải kết thúc Check fail-closed,
+  reap cả process group và giữ Active/LKG không đổi.

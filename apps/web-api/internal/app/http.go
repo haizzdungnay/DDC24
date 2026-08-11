@@ -273,7 +273,7 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("GET /api/v1/alarm-settings", RoleViewer, a.handleGetAlarmSettings),
 		webRouter.Protected("PUT /api/v1/alarm-settings", RoleAdmin, a.handlePutAlarmSettings),
 	}
-	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA)
+	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, a.programmingProjects)
 	mux, err := webRouter.New(a.auth, routes, http.HandlerFunc(a.handleStatic))
 	if err != nil {
 		panic(err)
@@ -321,7 +321,7 @@ func (a *App) handleStatic(w http.ResponseWriter, r *http.Request) {
 
 // setStaticCacheHeaders quyết định trình duyệt được giữ file tĩnh bao lâu.
 //
-// VÌ SAO CẦN
+// # VÌ SAO CẦN
 //
 // Bản trước không đặt `Cache-Control` gì cả, nên trình duyệt tự suy từ
 // `Last-Modified` (heuristic caching) và giữ `index.html` lại. Hậu quả quan sát

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	webModbus "mkddc-web/internal/modbusrtu"
+	programmingapplication "mkddc-web/internal/programming/application"
+	programmingstore "mkddc-web/internal/programming/store"
 	"net"
 	"net/http"
 	"os"
@@ -61,10 +63,12 @@ type App struct {
 	pointNamespaceWriter   func(string, []byte, os.FileMode) error
 	reloadDispatcher       func(string) (bool, []string)
 	// Modbus RTU v2 (MBR-B203/B208/B305)
-	modbusOnce       sync.Once
-	modbusCandidates *webModbus.CandidateStore
-	modbusEvents     modbusEventLog
-	commissionLimit  commissionLimiter
+	modbusOnce          sync.Once
+	modbusCandidates    *webModbus.CandidateStore
+	modbusEvents        modbusEventLog
+	commissionLimit     commissionLimiter
+	programmingStore    *programmingstore.Store
+	programmingProjects *programmingapplication.ProjectService
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
@@ -82,7 +86,21 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	if osReader == nil {
 		osReader = NewDefaultOSReader()
 	}
+	cfg.deriveProgrammingPaths()
 	app := &App{cfg: cfg, logger: logger, audit: audit, auth: auth, core: core, netcfg: NewNetcfgClient(cfg.NetcfgSock), os: osReader, time: NewSystemTimeService(), virtualPointRuntime: NewHistorianRuntimeRegistry(), historianAuthority: HistorianRuntimeAuthority{State: "legacy", LegacyWriterAllowed: true}, legacyState: "stopped"}
+	if cfg.ProgrammingRevA {
+		store, openErr := programmingstore.OpenProgrammingStore(context.Background(), programmingstore.Options{Path: cfg.ProgrammingDBPath, BackupDir: cfg.ProgrammingBackupDir})
+		if openErr != nil {
+			return nil, fmt.Errorf("mở Programming store: %w", openErr)
+		}
+		projects, serviceErr := programmingapplication.NewProjectService(store, []byte(cfg.JWTSecret))
+		if serviceErr != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi tạo Programming Project service: %w", serviceErr)
+		}
+		app.programmingStore = store
+		app.programmingProjects = projects
+	}
 	app.pointNamespaceWriter = writeConfigFileAtomic
 	app.overrides = NewOverrideRegistry()
 	// PA3-103/104: audit hiện hữu chảy thẳng vào kho Activity. Gắn sink NGAY
@@ -91,6 +109,9 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	app.activity = NewActivityStore(app.activityPath())
 	audit.SetSink(app.activity)
 	if err := app.migrateLegacyPointConfig(); err != nil {
+		if app.programmingStore != nil {
+			_ = app.programmingStore.Close()
+		}
 		return nil, err
 	}
 	app.virtualPointRing = NewVirtualPointRing(10 * time.Minute)
@@ -98,6 +119,9 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	app.alarmTracker = NewAlarmHistoryTracker()
 	historian, err := OpenHistorianPolicyService(filepath.Join(cfg.ConfigDir, "historian.conf"), time.Now, func() (uint64, error) { return filesystemFreeBytes(cfg.ConfigDir) })
 	if err != nil {
+		if app.programmingStore != nil {
+			_ = app.programmingStore.Close()
+		}
 		return nil, err
 	}
 	historian.identities = app.historianIdentities
@@ -332,7 +356,7 @@ func (a *App) Close() error {
 	if a == nil {
 		return nil
 	}
-	var trendErr, historianErr error
+	var trendErr, historianErr, programmingErr error
 	if a.legacyState == "running" || a.legacyState == "quiescing" {
 		quiesceCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = a.stopLegacyHistorianWriters(quiesceCtx)
@@ -348,5 +372,8 @@ func (a *App) Close() error {
 	if a.historianV2 != nil {
 		historianErr = a.historianV2.Close()
 	}
-	return errors.Join(trendErr, historianErr)
+	if a.programmingStore != nil {
+		programmingErr = a.programmingStore.Close()
+	}
+	return errors.Join(trendErr, historianErr, programmingErr)
 }

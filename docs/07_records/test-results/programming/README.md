@@ -28,7 +28,7 @@ fixture và ngưỡng đã được phê duyệt của scenario đó.
 
 | Scenario | Record hiện hành | Verdict | Điều kiện mở |
 |---|---|---|---|
-| `VS-PROG-001` | [`TR-PROG-001-20260811-001`](TR-PROG-001-20260811-001/result.md) | `BLOCKED` | `TASK-PROG-204`: wiring service, functional tag, export/import và restart BE round-trip |
+| `VS-PROG-001` | [`TR-PROG-001-20260811-001`](TR-PROG-001-20260811-001/result.md) | `BLOCKED` | Task 204 đã đóng wiring/functional-tag/restart trên host; còn `TASK-PROG-206` source-only export/import, chạy lại E2E đúng baseline/target và review độc lập |
 | `VS-PROG-019` | [`TR-PROG-019-20260811-001`](TR-PROG-019-20260811-001/result.md) | `BLOCKED` | Compiler/Check/API/UI ở P2/P5 và independent QA review |
 
 ## 2. Cấu trúc bắt buộc
@@ -124,3 +124,4 @@ sha256sum --check SHA256SUMS
 |---|---|---|
 | 1.0 | 2026-08-10 | Tạo kho và quy tắc Test Result Programming; giữ số thật 0/32 |
 | 1.1 | 2026-08-11 | Ghi hai execution record G1 cho `VS-PROG-001/019` với verdict trung thực `BLOCKED`: phần contract/store host đạt nhưng workflow E2E chưa implement; giữ 0/32 PASS |
+| 1.2 | 2026-08-11 | Đối chiếu sau `TASK-PROG-204`: giữ nguyên record bất biến và verdict BLOCKED; ghi rõ wiring/functional-tag/restart host đã có source, nhưng VS-001 vẫn chờ Task 206 import/export + execution đúng target/baseline + reviewer độc lập |

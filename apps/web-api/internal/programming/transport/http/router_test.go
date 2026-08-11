@@ -103,6 +103,24 @@ func TestContractSkeletonRejectsMissingAndUnknownSchemaMajor(t *testing.T) {
 	}
 }
 
+func TestContractSkeletonRejectsDuplicateJSONKey(t *testing.T) {
+	routes := []webrouter.Route{}
+	RegisterProgrammingRoutes(&routes, true)
+	mux, err := webrouter.New(allowAllAuthorizer{}, routes, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/programming/projects",
+		strings.NewReader(`{"schemaVersion":"1.0","name":"A","name":"B"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Idempotency-Key", "00000000-0000-4000-8000-000000000001")
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d; want 400", recorder.Code)
+	}
+}
+
 func TestContractSkeletonRejectsMissingConcurrencyHeaders(t *testing.T) {
 	routes := []webrouter.Route{}
 	RegisterProgrammingRoutes(&routes, true)

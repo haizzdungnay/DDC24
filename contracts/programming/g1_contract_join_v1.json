@@ -7,9 +7,9 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "34862da2349a7b705f79f813c337b7801f46e68716d8fdff779212eaf7c9bb7e",
+      "sha256": "86bc54f5292b80c3ed50c68248ef4c75284c62c8ec57c4fe2a3f9b4001fea0dd",
       "major": 1,
-      "version": "1.16.0",
+      "version": "1.17.0",
       "operationCount": 25
     },
     {
@@ -42,19 +42,19 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "2315add30a8e5880dbf09574371ed662726004c0e04372d16c88164d182571d4",
+      "sha256": "b62e2d4f87ad1123030c393ad7b866c872c563b8b581ffcb4859c969e330dfb2",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "4c7274a03065aadeecb2eb345e8ee5ce7a7e7973c0c05a1106502f726bde5fbb",
+      "manifestSha256": "eb240ad7b3ef4bb6edd1d7e65ba787837cdf34ff1cacab3502f1132be03ce010",
       "major": 1,
-      "publicErrorCount": 19,
+      "publicErrorCount": 20,
       "componentDetailCount": 77
     },
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "6c30ca18645c8870f5794b10a330a0e5da8164224ac203ffc22f47bd6bac44e7",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0001_programming_v1.sql",
-      "migrationSha256": "427c21772586a8ca3f885f41103d31ee1983071c0e1499ff1d97199a891c3db9",
+      "sha256": "1c5b5edfdefc479ed48fee575bcba439472de31cc105f546b08db40eca99547a",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0002_mutation_receipts.sql",
+      "migrationSha256": "8ae5e0df06d9735727de6809c24565bf6e4e0c0fbcbe0f3e10b5d76365c53fe3",
       "major": 1
     }
   ],
@@ -100,5 +100,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store refreshed by TASK-PROG-204"
 }

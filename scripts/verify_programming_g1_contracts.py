@@ -77,7 +77,7 @@ def deploy_rollback_dry_run(
         if step == "backup":
             state["backupSnapshot"] = copy.deepcopy(backup)
         elif step == "schema":
-            state["schema"] = 1
+            state["schema"] = 2
         elif step == "core-dual-compatible":
             state["core"] = "v1-dual"
         elif step == "backend":
@@ -87,14 +87,14 @@ def deploy_rollback_dry_run(
 
     for step in rollback_order:
         state[step] = backup[step]
-    state["schema"] = 1  # rollback tự động không downgrade schema.
+    state["schema"] = 2  # rollback tự động không downgrade schema.
 
     for name in REQUIRED_PRESERVE:
         if state[name] != backup[name]:
             return False, state, f"rollback làm đổi {name}"
     if state["commissionCount"] != 0:
         return False, state, "dry-run phát sinh Commission"
-    if state["schema"] != 1:
+    if state["schema"] != 2:
         return False, state, "rollback đã downgrade schema"
     return True, state, "deploy/rollback dry-run PASS"
 
@@ -175,7 +175,7 @@ def validate(join: dict[str, Any]) -> list[str]:
         manifest = json.loads(manifest_path.read_text())
         require(digest(manifest_path) == errors_item["manifestSha256"], "error manifest hash drift")
         require(manifest["catalogSha256"] == errors_item["sha256"], "error catalog/manifest hash lệch")
-        require(len(catalog["publicErrors"]) == errors_item["publicErrorCount"] == 19, "public error count lệch")
+        require(len(catalog["publicErrors"]) == errors_item["publicErrorCount"] == 20, "public error count lệch")
         require(len(catalog["componentDetails"]) == errors_item["componentDetailCount"] == 77, "detail error count lệch")
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"errors: {error}")
@@ -186,7 +186,7 @@ def validate(join: dict[str, Any]) -> list[str]:
         migration_path = safe_path(store_item["migrationPath"])
         require(digest(migration_path) == store_item["migrationSha256"], "store migration SHA-256 drift")
         require(store_manifest["migrationSha256"] == store_item["migrationSha256"], "store manifest/migration hash lệch")
-        require(store_manifest["schemaVersion"] == 1, "store schema major drift")
+        require(store_manifest["schemaVersion"] == 2, "store schema version drift")
         require(store_manifest["featureDefaultOff"] is True, "store feature phải OFF")
         require(store_manifest["foreignKeys"] is True and store_manifest["singleWriter"] is True, "store FK/single-writer drift")
         require(store_manifest["journalMode"] == "WAL" and store_manifest["synchronous"] == "FULL", "store PRAGMA drift")

@@ -49,8 +49,10 @@ type Config struct {
 	// ProgrammingRevA mở các route contract Programming Rev A. Mặc định tắt để
 	// binary có thể được triển khai trước contract consumer mà không lộ endpoint
 	// mutation chưa nối với Core.
-	ProgrammingRevA bool
-	WebVersion      string
+	ProgrammingRevA      bool
+	ProgrammingDBPath    string
+	ProgrammingBackupDir string
+	WebVersion           string
 	// MBR-B105/B212: kênh điều khiển fieldbus của iobus. Rỗng ⇒ BE quay về
 	// phương án restart service (có gián đoạn I/O) và nói rõ trong warnings.
 	IobusControlSock string
@@ -73,35 +75,51 @@ func LoadConfig() (Config, error) {
 	// Board không bị ảnh hưởng: systemd vẫn set PORT tường minh.
 	port := getenv("PORT", "8081")
 	cfg := Config{
-		Addr:               ":" + port,
-		Port:               port,
-		JWTSecret:          os.Getenv("JWT_SECRET"),
-		UsersConf:          getenv("USERS_CONF", defaultUsersConf()),
-		ConfigDir:          resolveConfigDir(),
-		CorePidPath:        getenv("CORE_PID", "/run/mkddc/core.pid"),
-		IobusPidPath:       getenv("IOBUS_PID", "/run/mkddc/iobus.pid"),
-		CoreSock:           getenv("CORE_SOCK", "/run/mkddc/core.sock"),
-		HMISock:            getenv("HMI_SOCK", "/run/mkddc/hmi-api.sock"),
-		NetcfgSock:         getenv("NETCFG_SOCK", "/run/mkddc-netcfg/netcfg.sock"),
-		HMIAllowedUID:      os.Getenv("HMI_ALLOWED_UID"),
-		HMIAuditPath:       getenv("HMI_AUDIT_FILE", "/data/config/hmi_audit.jsonl"),
-		TrendDBPath:        getenv("TREND_DB", defaultTrendDBPath),
-		IobusControlSock:   getenv("IOBUS_CONTROL_SOCK", "/run/mkddc/modbus-control.sock"),
-		PortCapabilityPath: getenv("PORT_CAPABILITY_MANIFEST", filepath.Join(resolveConfigDir(), "port-capabilities.json")),
-		ScheduleConfPath:   getenv("SCHEDULE_CONF", filepath.Join(resolveConfigDir(), "schedule.conf")),
-		AlarmConfPath:      getenv("ALARM_SETTINGS_CONF", defaultAlarmSettingsConf),
-		AlarmHistoryPath:   getenv("ALARM_HISTORY_FILE", defaultAlarmHistoryFile),
-		StaticDir:          getenv("STATIC_DIR", "dist"),
-		CORSOrigin:         os.Getenv("CORS_ORIGIN"),
-		CORSAllowLoopback:  envTruthy("CORS_ALLOW_LOOPBACK"),
-		ProgrammingRevA:    envTruthy("PROGRAMMING_REV_A"),
-		WebVersion:         getenv("WEB_VERSION", buildVersion),
+		Addr:                 ":" + port,
+		Port:                 port,
+		JWTSecret:            os.Getenv("JWT_SECRET"),
+		UsersConf:            getenv("USERS_CONF", defaultUsersConf()),
+		ConfigDir:            resolveConfigDir(),
+		CorePidPath:          getenv("CORE_PID", "/run/mkddc/core.pid"),
+		IobusPidPath:         getenv("IOBUS_PID", "/run/mkddc/iobus.pid"),
+		CoreSock:             getenv("CORE_SOCK", "/run/mkddc/core.sock"),
+		HMISock:              getenv("HMI_SOCK", "/run/mkddc/hmi-api.sock"),
+		NetcfgSock:           getenv("NETCFG_SOCK", "/run/mkddc-netcfg/netcfg.sock"),
+		HMIAllowedUID:        os.Getenv("HMI_ALLOWED_UID"),
+		HMIAuditPath:         getenv("HMI_AUDIT_FILE", "/data/config/hmi_audit.jsonl"),
+		TrendDBPath:          getenv("TREND_DB", defaultTrendDBPath),
+		IobusControlSock:     getenv("IOBUS_CONTROL_SOCK", "/run/mkddc/modbus-control.sock"),
+		PortCapabilityPath:   getenv("PORT_CAPABILITY_MANIFEST", filepath.Join(resolveConfigDir(), "port-capabilities.json")),
+		ScheduleConfPath:     getenv("SCHEDULE_CONF", filepath.Join(resolveConfigDir(), "schedule.conf")),
+		AlarmConfPath:        getenv("ALARM_SETTINGS_CONF", defaultAlarmSettingsConf),
+		AlarmHistoryPath:     getenv("ALARM_HISTORY_FILE", defaultAlarmHistoryFile),
+		StaticDir:            getenv("STATIC_DIR", "dist"),
+		CORSOrigin:           os.Getenv("CORS_ORIGIN"),
+		CORSAllowLoopback:    envTruthy("CORS_ALLOW_LOOPBACK"),
+		ProgrammingRevA:      envTruthy("PROGRAMMING_REV_A"),
+		ProgrammingDBPath:    os.Getenv("PROGRAMMING_DB"),
+		ProgrammingBackupDir: os.Getenv("PROGRAMMING_BACKUP_DIR"),
+		WebVersion:           getenv("WEB_VERSION", buildVersion),
 	}
 	if cfg.JWTSecret == "" {
 		return Config{}, errors.New("JWT_SECRET is required")
 	}
 	cfg.deriveHistorianV2Paths()
+	cfg.deriveProgrammingPaths()
 	return cfg, nil
+}
+
+func (c *Config) deriveProgrammingPaths() {
+	if c.ConfigDir == "" {
+		return
+	}
+	root := filepath.Join(c.ConfigDir, "programming")
+	if c.ProgrammingDBPath == "" {
+		c.ProgrammingDBPath = filepath.Join(root, "programming-v1.sqlite")
+	}
+	if c.ProgrammingBackupDir == "" {
+		c.ProgrammingBackupDir = filepath.Join(root, "programming-backups")
+	}
 }
 
 func (c *Config) deriveHistorianV2Paths() {

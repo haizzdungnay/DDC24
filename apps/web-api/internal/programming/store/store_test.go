@@ -34,6 +34,10 @@ const (
 
 var fixedNow = time.Date(2026, 8, 11, 8, 0, 0, 0, time.UTC)
 
+func mutationIdentity(label string) ([32]byte, [32]byte) {
+	return sha256.Sum256([]byte("key:" + label)), sha256.Sum256([]byte("request:" + label))
+}
+
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
@@ -50,10 +54,12 @@ func openTestStore(t *testing.T) *Store {
 
 func createProjectFixture(t *testing.T, store *Store) Draft {
 	t.Helper()
+	key, request := mutationIdentity("create-project")
 	_, draft, err := store.CreateProject(context.Background(), CreateProjectParams{
 		ProjectID: projectID, DraftID: draftID, Name: "AHU tầng 1", Description: "fixture",
 		ContentJSON: []byte(`{"schemaVersion":1,"programs":[]}`), ActorID: actorID, Role: role,
 		AuditID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", CorrelationID: correlationID, At: fixedNow,
+		IdempotencyKeySHA256: key, RequestSHA256: request,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -63,12 +69,14 @@ func createProjectFixture(t *testing.T, store *Store) Draft {
 
 func createRevisionFixture(t *testing.T, store *Store, etag int64) Revision {
 	t.Helper()
+	key, request := mutationIdentity(fmt.Sprintf("create-revision-%d", etag))
 	revision, err := store.CreateRevision(context.Background(), CreateRevisionParams{
 		RevisionID: revisionID, ProjectID: projectID, DraftID: draftID, ExpectedDraftETag: etag,
 		ManifestJSON: []byte(`{"schemaVersion":1,"objects":["44444444-4444-4444-8444-444444444444"]}`),
 		Objects:      []RevisionObjectInput{{ObjectID: objectID, Kind: "PROGRAM", PayloadJSON: []byte(`{"language":"ST","source":"X:=1;"}`)}},
 		ActorID:      actorID, Role: role, AuditID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
 		CorrelationID: correlationID, At: fixedNow.Add(time.Second),
+		IdempotencyKeySHA256: key, RequestSHA256: request,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +91,7 @@ func TestOpenProgrammingStoreFreshSchemaPolicyAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedTables := []string{"artifacts", "audit_records", "checks", "commission_records", "drafts", "operations", "projects", "revision_objects", "revisions", "schema_migrations"}
+	expectedTables := []string{"artifacts", "audit_records", "checks", "commission_records", "drafts", "mutation_receipts", "operations", "projects", "revision_objects", "revisions", "schema_migrations"}
 	rows, err := store.db.Query(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
 	if err != nil {
 		t.Fatal(err)
@@ -102,16 +110,16 @@ func TestOpenProgrammingStoreFreshSchemaPolicyAndRestart(t *testing.T) {
 	if fmt.Sprint(tables) != fmt.Sprint(expectedTables) {
 		t.Fatalf("tables=%v", tables)
 	}
-	checksum, ok := MigrationChecksum(1)
+	checksum, ok := MigrationChecksum(2)
 	if !ok {
 		t.Fatal("missing embedded migration checksum")
 	}
 	var stored []byte
 	var version int
-	if err := store.db.QueryRow(`SELECT version,checksum FROM schema_migrations`).Scan(&version, &stored); err != nil {
+	if err := store.db.QueryRow(`SELECT version,checksum FROM schema_migrations ORDER BY version DESC LIMIT 1`).Scan(&version, &stored); err != nil {
 		t.Fatal(err)
 	}
-	if version != 1 || !bytes.Equal(stored, checksum[:]) {
+	if version != 2 || !bytes.Equal(stored, checksum[:]) {
 		t.Fatal("schema migration checksum mismatch")
 	}
 	info, err := os.Stat(path)
@@ -149,12 +157,14 @@ func TestDraftETagConcurrentWriterRevisionImmutableAndRestart(t *testing.T) {
 		go func() {
 			start.Done()
 			start.Wait()
+			key, request := mutationIdentity(fmt.Sprintf("concurrent-%d", index))
 			updated, err := store.SaveDraft(context.Background(), SaveDraftParams{
 				DraftID: draftID, ExpectedETag: 1,
 				ContentJSON: []byte(fmt.Sprintf(`{"schemaVersion":1,"programs":[%d]}`, index)),
 				ActorID:     actorID, Role: role,
 				AuditID:       fmt.Sprintf("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb%d", index+1),
 				CorrelationID: correlationID, At: fixedNow.Add(time.Duration(index+1) * time.Second),
+				IdempotencyKeySHA256: key, RequestSHA256: request,
 			})
 			results <- result{updated, err}
 		}()
@@ -197,7 +207,7 @@ func TestDraftETagConcurrentWriterRevisionImmutableAndRestart(t *testing.T) {
 	}
 	defer reopened.Close()
 	read, err := reopened.GetDraft(context.Background(), draftID)
-	if err != nil || read.ETag != 2 {
+	if err != nil || read.ETag != 3 || read.BaseRevisionID != revisionID {
 		t.Fatalf("restart draft=%+v err=%v", read, err)
 	}
 }
@@ -261,7 +271,7 @@ func TestBackupVerifyRestoreIsPointInTimeAndNoOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if evidence.QuickCheck != "ok" || evidence.DatabaseVersion != 1 || len(evidence.SHA256) != 64 {
+	if evidence.QuickCheck != "ok" || evidence.DatabaseVersion != 2 || len(evidence.SHA256) != 64 {
 		t.Fatalf("backup evidence=%+v", evidence)
 	}
 	manifestRaw, err := os.ReadFile(evidence.ManifestPath)
@@ -272,10 +282,12 @@ func TestBackupVerifyRestoreIsPointInTimeAndNoOverwrite(t *testing.T) {
 	if err := json.Unmarshal(manifestRaw, &manifest); err != nil || manifest.SHA256 != evidence.SHA256 {
 		t.Fatalf("manifest=%+v err=%v", manifest, err)
 	}
+	key, request := mutationIdentity("backup-save")
 	if _, err := store.SaveDraft(context.Background(), SaveDraftParams{
 		DraftID: draftID, ExpectedETag: 1, ContentJSON: []byte(`{"schemaVersion":1,"programs":[1]}`),
 		ActorID: actorID, Role: role, AuditID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6",
 		CorrelationID: correlationID, At: fixedNow.Add(time.Second),
+		IdempotencyKeySHA256: key, RequestSHA256: request,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +384,7 @@ func TestMigrationFaultChecksumPartialAndCorruptFailClosed(t *testing.T) {
 	})
 	t.Run("user-version", func(t *testing.T) {
 		store := openTestStore(t)
-		if _, err := store.db.Exec(`PRAGMA user_version=2`); err != nil {
+		if _, err := store.db.Exec(`PRAGMA user_version=3`); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := Migrate(context.Background(), store.db, MigrationOptions{}); !errors.Is(err, ErrSchemaFuture) {
@@ -405,6 +417,54 @@ func TestMigrationFaultChecksumPartialAndCorruptFailClosed(t *testing.T) {
 	})
 }
 
+func TestMigrationV1ToV2CreatesVerifiedBackup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "programming-v1.sqlite")
+	db := openRawSQLite(t, path)
+	migrations, err := embeddedMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(migrations[0].SQL); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`INSERT INTO schema_migrations(version,name,checksum,applied_at_utc_ms) VALUES(?,?,?,?)`,
+		1, migrations[0].Name, migrations[0].Checksum[:], fixedNow.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	backupDir := filepath.Join(dir, "backups")
+	store, err := OpenProgrammingStore(context.Background(), Options{Path: path, BackupDir: backupDir, Now: func() time.Time { return fixedNow }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	var version int
+	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 2 {
+		t.Fatalf("user_version=%d err=%v", version, err)
+	}
+	var receiptTable int
+	if err := store.db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name='mutation_receipts'`).Scan(&receiptTable); err != nil || receiptTable != 1 {
+		t.Fatalf("mutation_receipts=%d err=%v", receiptTable, err)
+	}
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("backup files=%d; want database + manifest", len(entries))
+	}
+}
+
 func TestDiskFullAndAuditSensitiveDataRollback(t *testing.T) {
 	store := openTestStore(t)
 	var pageCount int
@@ -415,10 +475,12 @@ func TestDiskFullAndAuditSensitiveDataRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	large := `{"schemaVersion":1,"payload":"` + strings.Repeat("x", 1024*1024) + `"}`
+	key, request := mutationIdentity("disk-full")
 	_, _, err := store.CreateProject(context.Background(), CreateProjectParams{
 		ProjectID: projectID, DraftID: draftID, Name: "disk full", ContentJSON: []byte(large),
 		ActorID: actorID, Role: role, AuditID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7",
 		CorrelationID: correlationID, At: fixedNow,
+		IdempotencyKeySHA256: key, RequestSHA256: request,
 	})
 	if err == nil {
 		t.Fatal("simulated SQLITE_FULL accepted a large transaction")
@@ -498,6 +560,14 @@ func TestMigrationChecksumStableFixture(t *testing.T) {
 	if got := hex.EncodeToString(checksum[:]); got != expected {
 		t.Fatalf("migration checksum=%s want=%s", got, expected)
 	}
+	v2Checksum, ok := MigrationChecksum(2)
+	if !ok {
+		t.Fatal("missing migration v2 checksum")
+	}
+	const expectedV2 = "8ae5e0df06d9735727de6809c24565bf6e4e0c0fbcbe0f3e10b5d76365c53fe3"
+	if got := hex.EncodeToString(v2Checksum[:]); got != expectedV2 {
+		t.Fatalf("migration v2 checksum=%s want=%s", got, expectedV2)
+	}
 }
 
 func TestCanonicalJSONObjectRejectsAmbiguousInput(t *testing.T) {
@@ -546,7 +616,7 @@ func TestProgrammingStoreContractManifest(t *testing.T) {
 	if !ok {
 		t.Fatalf("schema version không được hỗ trợ: %d", manifest.SchemaVersion)
 	}
-	if manifest.MigrationFile != "0001_programming_v1.sql" ||
+	if manifest.MigrationFile != "0002_mutation_receipts.sql" ||
 		manifest.MigrationSHA256 != hex.EncodeToString(checksum[:]) ||
 		!manifest.ForeignKeys || manifest.JournalMode != "WAL" ||
 		manifest.Synchronous != "FULL" || !manifest.SingleWriter || !manifest.FeatureDefaultOff {

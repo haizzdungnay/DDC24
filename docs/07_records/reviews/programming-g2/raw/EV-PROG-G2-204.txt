@@ -1,0 +1,70 @@
+EV-PROG-G2-204 — bằng chứng hỗ trợ host TASK-PROG-204
+Ngày chạy: 2026-08-11
+Nguồn: 66848a14bc09be44c8269824fe8d474672fe7cca
+Tree nguồn: b1529ef890048a70fb0591d38681682fa8a8d5fe
+Phạm vi: Project/Draft/Revision application + HTTP + SQLite v2
+
+Kết quả source
+- SQLite CurrentSchemaVersion=2; migration 0002_mutation_receipts.sql.
+- mkddc-web open/inject/close store khi PROGRAMMING_REV_A=true; mặc định OFF.
+- 6 operation Project/Draft/Revision có service thật; 19 operation còn 503.
+- ETag mạnh draftId:generation; Draft batch all-or-nothing.
+- Receipt idempotency 24 giờ qua restart; same-key/different-request conflict.
+- Revision/object/manifest bất biến; read-back kiểm SHA-256; Active/LKG không đổi.
+- OpenAPI v1.17.0; catalog v1.1.0: 20 public / 77 detail; Go/C++/TS sinh lại.
+
+Lệnh và kết quả đo trong phiên
+
+1. Go targeted và fault/restart
+   cd apps/web-api
+   go test ./internal/programming/application ./internal/programming/store ./internal/programming/transport/http ./internal/app -count=1
+   Kết quả: PASS.
+
+2. Race detector
+   cd apps/web-api
+   go test -race ./internal/programming/application ./internal/programming/store ./internal/programming/transport/http -count=1
+   Kết quả: PASS.
+
+3. Go toàn repository
+   cd apps/web-api
+   go vet ./...
+   go test ./... -count=1
+   Kết quả: PASS / PASS.
+
+4. Contract join và deploy order
+   python3 scripts/verify_programming_g1_contracts.py
+   python3 scripts/verify_programming_g1_contracts.py --self-test
+   Kết quả: join 6/6 PASS; self-test 5/5 PASS; deploy-order âm 5/5 PASS.
+
+5. Catalog lỗi và FBD contract
+   python3 scripts/generate_programming_errors.py --check
+   python3 scripts/verify_programming_fbd_contract.py --self-test
+   Kết quả: 20 public / 77 detail PASS; FBD mutation 10/10 PASS.
+   Catalog SHA-256: b62e2d4f... (rút gọn; authority đầy đủ ở manifest).
+
+6. C++ bắt buộc
+   cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release \
+     -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON
+   cmake --build build/fw --parallel
+   ctest --test-dir build/fw --output-on-failure
+   Kết quả: configure/build PASS; 927/927 PASS trong 14,04 s.
+
+7. FE bắt buộc
+   cd apps/web-ui
+   npx vitest --run --environment jsdom src
+   npm run lint
+   npm run build
+   Kết quả: 58/58 file, 494/494 test PASS; lint PASS; typecheck/build PASS.
+   Ghi chú: RouteErrorBoundary phát console trace dự kiến trong test âm; suite PASS.
+
+8. Repository guard
+   python3 tools/restructure/verify_repository.py
+   Kết quả: FAIL đúng một baseline ngoài phạm vi TASK-PROG-204:
+   apps/web-ui/src/features/scheduler/shared.ts: Web UI chạm contract C/SHM/IOP.
+   Không sửa lẫn finding ngoài phạm vi vào commit Programming backend.
+
+Ranh giới bằng chứng
+- Đây là source/host evidence hỗ trợ G2, không phải Test Result target/HIL.
+- Không chạy Chrome DevTools: không đổi route/component/runtime FE, chỉ sinh lại contract TS.
+- PROGRAMMING_REV_A mặc định OFF; không stage/activate/Commission; Active/LKG giữ nguyên.
+- VS-PROG-001/019 tiếp tục BLOCKED; 0/32 PASS; RELEASE_READY BLOCKED.

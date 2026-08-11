@@ -1,6 +1,7 @@
 package programminghttp
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"mkddc-web/internal/auth"
+	programmingapplication "mkddc-web/internal/programming/application"
 	"mkddc-web/internal/programming/domain"
 	webrouter "mkddc-web/internal/router"
 )
@@ -55,21 +57,25 @@ var routeDefinitions = []routeDefinition{
 // RegisterProgrammingRoutes chỉ mount contract khi flag bật. Khi flag tắt,
 // fallback API hiện hữu trả 404, nên deploy binary trước không làm lộ capability
 // giả hoặc mutation chưa nối Core.
-func RegisterProgrammingRoutes(routes *[]webrouter.Route, enabled bool) {
+func RegisterProgrammingRoutes(routes *[]webrouter.Route, enabled bool, services ...*programmingapplication.ProjectService) {
 	if !enabled {
 		return
+	}
+	var projectService *programmingapplication.ProjectService
+	if len(services) > 0 {
+		projectService = services[0]
 	}
 	for _, definition := range routeDefinitions {
 		definition := definition
 		pattern := definition.method + " " + definition.path
 		handler := func(w http.ResponseWriter, r *http.Request) {
-			handleContractSkeleton(w, r, definition)
+			handleProgrammingRequest(w, r, definition, projectService)
 		}
 		*routes = append(*routes, webrouter.Protected(pattern, definition.role, handler))
 	}
 }
 
-func handleContractSkeleton(w http.ResponseWriter, r *http.Request, definition routeDefinition) {
+func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition routeDefinition, projectService *programmingapplication.ProjectService) {
 	correlationID, correlationErr := correlationIDFromRequest(r)
 	if correlationErr != nil {
 		WriteProgrammingError(w, http.StatusBadRequest, *correlationErr, correlationID)
@@ -79,11 +85,18 @@ func handleContractSkeleton(w http.ResponseWriter, r *http.Request, definition r
 		WriteProgrammingError(w, status, *public, correlationID)
 		return
 	}
+	if projectService != nil && handleProjectRequest(w, r, correlationID, projectService) {
+		return
+	}
 	public := domain.NewPublicError(domain.ErrUnavailable)
 	// Skeleton chưa gọi Core và chưa có side effect, nên invariant này được biết
 	// chắc; lỗi unknown từ Core không được tự đặt true như vậy.
 	public.KeepsRunningRevision = true
 	WriteProgrammingError(w, http.StatusServiceUnavailable, public, correlationID)
+}
+
+func handleContractSkeleton(w http.ResponseWriter, r *http.Request, definition routeDefinition) {
+	handleProgrammingRequest(w, r, definition, nil)
 }
 
 var errRequestTooLarge = errors.New("programming request too large")
@@ -142,7 +155,19 @@ func validateBoundedJSON(w http.ResponseWriter, r *http.Request) (map[string]any
 	}
 	reader := http.MaxBytesReader(w, r.Body, maxMutationBodyBytes)
 	defer reader.Close()
-	decoder := json.NewDecoder(reader)
+	raw, err := io.ReadAll(reader)
+	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return nil, errRequestTooLarge
+		}
+		return nil, err
+	}
+	r.Body = io.NopCloser(bytes.NewReader(raw))
+	if err := rejectDuplicateJSONKeys(raw); err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	var value map[string]any
 	if err := decoder.Decode(&value); err != nil {
@@ -159,6 +184,62 @@ func validateBoundedJSON(w http.ResponseWriter, r *http.Request) (map[string]any
 		return nil, errors.New("multiple json values")
 	}
 	return value, nil
+}
+
+func rejectDuplicateJSONKeys(raw []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := walkJSONValue(decoder); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return errors.New("JSON có dữ liệu thừa")
+	}
+	return nil
+}
+
+func walkJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, compound := token.(json.Delim)
+	if !compound {
+		return nil
+	}
+	switch delimiter {
+	case '{':
+		seen := make(map[string]struct{})
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return errors.New("JSON key không hợp lệ")
+			}
+			if _, duplicate := seen[key]; duplicate {
+				return errors.New("JSON duplicate key")
+			}
+			seen[key] = struct{}{}
+			if err := walkJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		_, err = decoder.Token()
+		return err
+	case '[':
+		for decoder.More() {
+			if err := walkJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		_, err = decoder.Token()
+		return err
+	default:
+		return errors.New("JSON delimiter không hợp lệ")
+	}
 }
 
 func RegisteredRouteContracts() []string {

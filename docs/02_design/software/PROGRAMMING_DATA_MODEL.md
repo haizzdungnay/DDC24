@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DM-PROG-001` |
-| Phiên bản | 0.5 |
+| Phiên bản | 0.6 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; chờ BE/Runtime/Security/QA review |
 | Ngày | 2026-08-11 |
 | Chủ quản | Backend Lead + Runtime Architect |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **dữ liệu Programming được lưu ra sao**: bảng, cột, kiểu, khóa, ràng buộc, giao dịch, thời gian giữ và cách nâng cấp schema. Ai viết migration hay viết struct Go/TypeScript đều lấy từ đây. |
 | 2. Ai phải đọc file này? | BE (viết store và migration) là bắt buộc; Core đọc phần định danh runtime và RETAIN; FE đọc để biết trường nào server là chủ; QA đọc §5 và §10 để dựng ca âm; Ops đọc §9 về backup/retention. |
-| 3. Hệ thống hiện tại đang có gì? | Source commit `312f357` đã tạo `apps/web-api/internal/programming/store/`: schema SQLite v1 gồm 10 bảng, migration checksum, Project/Draft/Revision/operation/audit command, online backup/restore và fault/concurrency test. Store chưa được wiring vào `internal/app`; compiler job, artifact file registry, terminal operation/Commission và RETAIN runtime chưa có. |
-| 4. Thiết kế mới thay đổi điều gì? | Phần persistence của chuỗi `Project → Draft → Revision` đã thành As-Built: **Draft sửa được bằng ETag, Revision/object bất biến**. Operation intent và audit đã durable; Check/Artifact/Commission Record còn là schema/invariant chờ service/worker ở task sau. |
-| 5. Team phải sửa module/contract nào? | §11 ánh xạ cả source đã có và phần còn lại. BE tiếp tục wiring store vào `internal/app`, tạo service/worker/registry; Core dùng định danh biến ổn định cho RETAIN (§3.10); FE chỉ giữ phép chiếu, không coi cache trình duyệt là nguồn. |
-| 6. Điều gì còn bị chặn? | Không còn decision chặn implementation. Store giữ feature `OFF` và chưa chạy migration target; phần còn lại bị chặn release bởi service/worker/Core lifecycle, target/HIL và Test Result, không phải bởi quyền viết code. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host test TASK-PROG-104 PASS cho fresh/restart, ETag hai writer, immutable/FK/unique, operation idempotency/single-flight, backup/restore, disk-full/corrupt/migration fault, NFC/duplicate JSON và audit tamper. Đây là evidence hỗ trợ `EV-PROG-G1-104`, chưa phải `VS-PROG-*` Test Result; RETAIN/target power test vẫn chưa chạy. |
+| 3. Hệ thống hiện tại đang có gì? | Source `66848a1` nâng store lên SQLite v2 gồm 11 bảng và nối nó vào lifecycle `mkddc-web`. Sáu API Project/Draft/Revision đọc-ghi dữ liệu thật; Draft batch dùng ETag/CAS, Revision/object bất biến, receipt idempotency 24 giờ và v1→v2 backup đã có test restart/race. Compiler job, artifact registry, terminal operation/Commission và RETAIN runtime chưa có. |
+| 4. Thiết kế mới thay đổi điều gì? | Chuỗi `Project → Draft → Revision` đã thành As-Built ở cả persistence và application/HTTP: **Draft sửa được bằng ETag, Revision/object bất biến**, replay mutation không tạo audit/identity mới. Check/Artifact/Commission Record còn là schema/invariant chờ worker ở task sau. |
+| 5. Team phải sửa module/contract nào? | §11 ánh xạ cả source đã có và phần còn lại. BE tiếp tục tạo compiler/Check worker/registry; Core dùng định danh biến ổn định cho RETAIN (§3.10); FE chỉ giữ phép chiếu, không coi cache trình duyệt là nguồn. Bundle change manifest/import/export thuộc `TASK-PROG-206`. |
+| 6. Điều gì còn bị chặn? | Không còn decision chặn implementation. Feature giữ `OFF` theo mặc định và chưa chạy migration target; phần còn lại bị chặn release bởi Check/operation worker, Core lifecycle, target/HIL và Test Result, không phải bởi quyền viết code. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host test TASK-PROG-204 PASS cho fresh/restart, Project/list cursor, Draft ETag/batch, Revision seal/immutable/checksum, receipt replay qua restart, v1→v2 backup, duplicate JSON và RBAC. Race detector và toàn bộ Go PASS. Đây là evidence hỗ trợ `EV-PROG-G2-204`, chưa phải `VS-PROG-*` Test Result; RETAIN/target power test vẫn chưa chạy. |
 
 Ba quy tắc dễ làm sai nhất, nêu trước để khỏi phải đọc hết: (a) ID máy không đổi
 khi người dùng đổi tên — tên chỉ là metadata; (b) mọi timestamp lưu UTC có dấu
@@ -251,7 +251,7 @@ Output sample tách:
 6. Không source-only bundle chứa Artifact/IR/native/cache/trust material.
 7. Không giá trị quan sát thiếu timestamp/quality bị gọi là Live.
 
-## 6. Storage model As-Built — SQLite v1
+## 6. Storage model As-Built — SQLite v2
 
 Authority bền vững đặt tại `${CONFIG_DIR}/programming/programming-v1.sqlite`
 (`CONFIG_DIR=/data/config` trên target). Dùng driver `modernc.org/sqlite` đã có,
@@ -262,6 +262,11 @@ qua static file hoặc endpoint download.
 Mọi ID dùng UUID v4 lowercase canonical do BE sinh; `created_at_utc_ms` và
 `updated_at_utc_ms` là Unix epoch millisecond UTC, `INTEGER >=0`. `etag` là số
 nguyên 64-bit tăng đúng một lần mỗi transaction mutation Draft.
+
+Schema v2 áp dụng tuần tự `0001_programming_store.sql` rồi
+`0002_mutation_receipts.sql`; checksum migration đã áp dụng là bất biến. Nâng
+v1→v2 phải tạo và kiểm `quick_check` online backup trước transaction migration.
+Binary cũ không down-migrate v2; rollback giữ DB/backup và tắt feature.
 
 ### 6.1 `projects` và `drafts`
 
@@ -352,6 +357,25 @@ nguyên 64-bit tăng đúng một lần mỗi transaction mutation Draft.
 Audit append và mutation domain nằm cùng DB transaction khi cùng process. Event
 Core nhận sau timeout được bổ sung bằng record reconcile, không sửa record cũ.
 
+### 6.5 `mutation_receipts`
+
+| Trường | SQLite | Ràng buộc/nghĩa |
+|---|---|---|
+| `actor_id` | TEXT | required 1..128; namespace actor đã xác thực |
+| `action` | TEXT | `PROJECT_CREATE/DRAFT_SAVE/REVISION_CREATE` |
+| `target_id` | TEXT | `''` cho create Project; Project/Draft ID canonical cho action còn lại |
+| `idempotency_key_sha256` | BLOB | đúng 32 byte; không lưu khóa thô |
+| `request_sha256` | BLOB | đúng 32 byte của semantic request canonical, gồm precondition liên quan |
+| `result_json` | BLOB | canonical JSON 2..4096 byte; giữ Project/Draft/Revision ID, ETag và audit ID |
+| `created_at_utc_ms` | INTEGER | required `>=0` |
+| `expires_at_utc_ms` | INTEGER | đúng `created + 24 giờ`; hết hạn được dọn trong transaction mutation |
+
+Khóa chính là `(actor_id, action, target_id, idempotency_key_sha256)`; trigger
+chặn `UPDATE`. Lookup cùng request hash trả nguyên response identity cũ mà không
+thêm domain/audit mutation. Cùng khóa nhưng request hash khác trả
+`PRG-ERR-IDEMPOTENCY-CONFLICT-001`. Receipt và domain state commit/rollback cùng
+một transaction, nên restart không mở cửa tạo trùng.
+
 ## 7. Canonical document schema
 
 `drafts.content_json` và `revision_objects.payload_json` dùng JSON canonical
@@ -437,7 +461,9 @@ PATCH Draft:
 |---|---|---|
 | Domain/canonical JSON | `apps/web-api/internal/programming/store/{types,canonical}.go` | TASK-104: round-trip, duplicate/top-level/NFC/one-over PASS; schema unknown field thuộc service validator sau |
 | SQLite schema/store | `apps/web-api/internal/programming/store/{store,schema,migrate}.go`, `migrations/*.sql` | TASK-104: FK/trigger/concurrency/restart/corrupt/disk-full/migration PASS |
-| Revision/manifest | `apps/web-api/internal/programming/store/commands.go` | TASK-104: immutable/hash/canonical object PASS; structured change classification thuộc `TASK-PROG-204` |
+| Revision/manifest | `apps/web-api/internal/programming/{application,store}/{projects.go,draft.go,commands.go,queries.go}` | TASK-204: seal/read immutable object + manifest/checksum PASS; structured change classification thuộc `TASK-PROG-206` |
+| Receipt idempotency | `apps/web-api/internal/programming/store/{migrations/0002_mutation_receipts.sql,idempotency.go}` | TASK-204: replay 24 giờ qua restart và conflict cùng key/khác request PASS |
+| Lifecycle DB | `apps/web-api/internal/app/{app.go,programming.go}` | TASK-204: derive path theo `CONFIG_DIR`, open/inject/close khi flag ON; flag OFF không tạo DB |
 | Check/artifact registry | `check.go`, `artifact_store.go` | input identity/idempotency/path/hash/quota |
 | Operation/commission | `apps/web-api/internal/programming/store/commands.go`; service/worker còn phải tạo | TASK-104: durable begin/idempotency/single-flight PASS; terminal reconcile/late response thuộc P4 |
 | Audit | `apps/web-api/internal/programming/store/audit.go` | TASK-104: atomic append, sanitize, hash-chain gap/tamper PASS; đủ mọi route reject thuộc P2/P5 |
@@ -480,7 +506,7 @@ không được dùng thay Core read-back cho Commission.
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| Wiring/service/worker chưa có | Backend Lead | P2 triển khai service, compiler/check, artifact registry và terminal operation |
+| Compiler/Check/operation worker chưa có | Backend Lead | P2/P4 triển khai compiler/check, artifact registry, lease/reconcile và terminal operation |
 | Target migration chưa chạy | Operations + Verification | duyệt fixture, backup path và chạy rehearsal đúng target; tạo Test Result |
 | RETAIN compatibility chưa triển khai | Core/Runtime | P3/P4 hiện thực lifecycle matrix và chạy VS-PROG-029/030 |
 
@@ -491,6 +517,7 @@ không được dùng thay Core read-back cho Commission.
 | 0.3 | 2026-08-09 | Bổ sung command transaction/write authority, canonical serialization, migration/code-generation và deletion/retention handoff; chuyển Detailed Draft chờ review |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13` thay dòng self-check gộp; đóng finding `F-PROG-001/002` |
 | 0.5 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-104` tại source `312f357`: SQLite v1, migration checksum/fail-closed, ETag/immutable/idempotency/audit và online backup/restore có host test; giữ target/RETAIN/Test Result ở trạng thái chưa hoàn tất |
+| 0.6 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-204` tại `66848a1`: SQLite v2/11 bảng, receipt idempotency 24 giờ, wiring lifecycle và sáu API Project/Draft/Revision với ETag/CAS, immutable seal/read, cursor/checksum/restart/RBAC test; chuyển change manifest/import/export sang Task 206 và giữ target/RETAIN/Test Result chưa hoàn tất |
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|

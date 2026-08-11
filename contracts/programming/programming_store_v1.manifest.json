@@ -1,10 +1,14 @@
 {
   "contractId": "PROGRAMMING-STORE-V1",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "databasePath": "${CONFIG_DIR}/programming/programming-v1.sqlite",
   "backupPath": "${CONFIG_DIR}/programming/programming-backups/",
-  "migrationFile": "0001_programming_v1.sql",
-  "migrationSha256": "427c21772586a8ca3f885f41103d31ee1983071c0e1499ff1d97199a891c3db9",
+  "migrationFile": "0002_mutation_receipts.sql",
+  "migrationSha256": "8ae5e0df06d9735727de6809c24565bf6e4e0c0fbcbe0f3e10b5d76365c53fe3",
+  "migrations": [
+    {"version": 1, "file": "0001_programming_v1.sql", "sha256": "427c21772586a8ca3f885f41103d31ee1983071c0e1499ff1d97199a891c3db9"},
+    {"version": 2, "file": "0002_mutation_receipts.sql", "sha256": "8ae5e0df06d9735727de6809c24565bf6e4e0c0fbcbe0f3e10b5d76365c53fe3"}
+  ],
   "foreignKeys": true,
   "journalMode": "WAL",
   "synchronous": "FULL",
@@ -19,5 +23,5 @@
   ],
   "featureDefaultOff": true,
   "owner": "BE/Core",
-  "generatedBy": "TASK-PROG-104"
+  "generatedBy": "TASK-PROG-104; migration v2 by TASK-PROG-204"
 }
