@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.17 |
+| Phiên bản | 3.18 |
 | Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.16; P1 `6/6 DONE`; P2 `2/8`; tiếp theo `TASK-PROG-202`; `RELEASE_READY BLOCKED`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
@@ -476,8 +476,8 @@ Candidate P0 hiện hành đã ghim:
 | Thuộc tính | Giá trị |
 |---|---|
 | Định danh | 22 SHA-256 của candidate v2.16 ở manifest v3.17; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
-| Commit/tree | **PENDING — cập nhật bằng commit provenance sau khi PR task 201 merge; 22 hash là authority hiện hành** |
-| Nhánh phát hành | `feat/programming-fbd-canonical-20260811` — chờ merge/xóa remote |
+| Commit/tree | `207cd901444e36eadd81f7feea243f631259f76a` / `b85bdb2c1becbe15e317c01dc69fb9175be7f7ba` |
+| Nhánh phát hành | `feat/programming-fbd-canonical-20260811` — remote đã xóa sau merge PR #141 |
 | Manifest | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
 | Phạm vi | 22/22 hồ sơ baseline; đồng bộ `TASK-PROG-201 DONE`, P2 2/8 và ranh giới 2 record BLOCKED/0 PASS |
 | Trạng thái | **PIN PASS 22/22; APPROVED FOR IMPLEMENTATION** |
@@ -544,6 +544,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.15 | 2026-08-11 | Hoàn tất `TASK-PROG-200`: cập nhật snapshot P2 1/8, Language/Artifact/Risk/Trace/Plan và evidence G2; phát hành candidate v2.15 do sáu hồ sơ baseline đổi. Parser/loader mỗi bộ fuzz 10 triệu input, CTest 898/898, Go và FE regression PASS; giữ 0/32 PASS và RELEASE_READY BLOCKED | Compiler + Core Lead + Document Control |
 | 3.16 | 2026-08-11 | Ghi PR #139 đã merge tại `288aa37`, tree `8d4fb50a`; remote feature branch đã xóa. Candidate v2.15/pin 22/22, P2 1/8 và ranh giới evidence/release không đổi | Document Control |
 | 3.17 | 2026-08-11 | Hoàn tất `TASK-PROG-201`: thêm snapshot P2 2/8, dẫn source FBD canonical/validator/editor và review/evidence G2; phát hành candidate v2.16 do Index/Language/FE/Risk/Trace/Plan đổi. Contract mutation 10/10, Core 8/8, FE 15/15, ASan fuzz 50.000 input, CTest 906/906 và Go/FE regression PASS; giữ 0/32 PASS và RELEASE_READY BLOCKED | Compiler + Core + FE Lead + Document Control |
+| 3.18 | 2026-08-11 | Ghi PR #141 đã merge tại `207cd90`, tree `b85bdb2c`; remote feature branch đã xóa. Candidate v2.16/pin 22/22, P2 2/8 và ranh giới evidence/release không đổi | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|

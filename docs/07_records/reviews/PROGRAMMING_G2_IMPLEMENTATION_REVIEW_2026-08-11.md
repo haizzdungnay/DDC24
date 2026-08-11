@@ -8,7 +8,7 @@
 | Trạng thái task | **DONE** |
 | Trạng thái pha | **P2 IN_PROGRESS — 2/8; G2 IN_PROGRESS** |
 | Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57` |
-| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`, tree `8d4fb50a`; Task 201: **PENDING — cập nhật sau merge** |
+| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`, tree `8d4fb50a`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`, tree `b85bdb2c`; hai remote feature branch đã xóa |
 | Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt) |
 | Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS — không đổi** |
 | Next action | `TASK-PROG-202` — hạ FBD về common typed IR và chứng minh equivalence |
