@@ -2,7 +2,7 @@
 
 **ID:** REC-REVIEW-INDEX-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-11 (ghi Product Owner/CTO + System Architect `ACCEPT` candidate Programming v2.7; giữ blocker chữ ký độc lập)
+**Cập nhật:** 2026-08-11 (`TASK-PROG-100/101 DONE`; P1 2/6; review/evidence G1 đã đăng ký)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -66,6 +66,7 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 | [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.2 — candidate v2.8** | Candidate định danh bằng **22 SHA-256**, commit `b068b7d`; approved for implementation |
 | [Rà soát môi trường P0 Programming](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) | 2026-08-11 | **v1.2 — implementation entry approved** | CI/target/HIL chưa có evidence nhưng được loại khỏi entry condition; không chặn code |
 | [Consumer review liên chức năng P0 Programming](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | 2026-08-11 | **v1.6 — `8/8 WAIVED FOR IMPLEMENTATION`** | `9/9` finding đóng; không giả 8 chữ ký; maturity vẫn 0/22 M4 nhưng không chặn implementation |
+| [Review triển khai G1 Programming](PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **P1 IN_PROGRESS 2/6** | `TASK-PROG-100/101 DONE`; OpenAPI/Go/TypeScript và IPC v1 C++↔Go đã khóa; Test Result vẫn 0/32 |
 | [Deployment Provenance Report](DEPLOYMENT_PROVENANCE_REPORT.md) | 2026-08-03 | Record | Build identity, release manifest, sai khác target |
 | [Physical I/O và HIL](PHYSICAL_IO_HIL_REPORT.md) | 2026-08-03 | **Gate còn mở** | Host/fake-MCU **không** được ghi thành HIL vật lý |
 | [Báo cáo build và deploy lên board](BOARD_DEPLOY_REPORT_2026-08-04.md) | 2026-08-04 | Record | 5 service chạy trên Orange Pi 5B, HMI tắt có chủ đích |
@@ -146,3 +147,4 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.1 | 2026-08-10 | Đăng ký gói review P0 và manifest candidate `e3e9fb2`; phân biệt pin cấu hình PASS với authority review/sign-off còn BLOCKED |
 | 1.2 | 2026-08-10 | Đăng ký record readiness môi trường P0; tách host/evidence PASS phần chuẩn bị khỏi CI/target/HIL BLOCKED |
 | 1.3 | 2026-08-11 | Đồng bộ `AUTH-PROG-2026-08-11-03`: gói P0 v2.0, candidate v2.8/manifest v3.2 tại commit `b068b7d`, consumer review v1.6 và environment v1.2; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` PASS |
+| 1.4 | 2026-08-11 | Đăng ký review triển khai G1 cho `TASK-PROG-100/101`; P1 đạt 2/6, evidence hỗ trợ tách khỏi Test Result chính thức và giữ `RELEASE_READY BLOCKED` |

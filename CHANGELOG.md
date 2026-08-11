@@ -7,6 +7,30 @@
 ---
 
 ## [Unreleased]
+### Added — IPC Programming v1 giữa Backend và Core (2026-08-11)
+
+**Kết quả.** Hoàn tất `TASK-PROG-101`: thêm hợp đồng
+`contracts/ipc/programming_v1` với frame length-prefix little-endian, canonical
+CBOR, protocol major/minor, request/operation/correlation ID, deadline monotonic,
+SHA-256 payload, active/LKG read-back và error detail. Core C++ có codec cùng
+`ProgramIpcServer::HandleFrame`; backend Go có client UDS, kiểm `SO_PEERCRED`,
+deadline/size/correlation và `Reconcile` chỉ query `OPERATION_STATUS`, không
+replay mutation.
+
+**An toàn và tương thích.** Giới hạn frame 64 KiB, action payload 32 KiB và queue
+32; CBOR tagged/indefinite/non-canonical, hash sai, peer sai, request trùng nhưng
+khác nội dung và mutation thiếu operation/actor đều fail-closed. Skeleton Core
+chỉ trả capabilities; mọi mutation trả `UNAVAILABLE/IPC-CONTRACT-ONLY` và giữ
+Revision hiện hành chạy. Feature flag `PROGRAMMING_REV_A` tiếp tục mặc định
+`OFF`; chưa nối side effect Commission hoặc runtime production.
+
+**Kiểm chứng.** Corpus ba golden frame được ghim SHA-256 và encode/decode
+byte-identical bằng C++/Go. Targeted C++ `7/7` và Go codec/client kể cả race test
+PASS; toàn bộ số đo regression repository và trạng thái Plan/Trace được ghi tại
+`PROG-G1-IMPLEMENTATION-REVIEW-2026-08-11`. Không chạy browser vì task không đổi
+component/route/layout FE; không deploy target/HIL và không tạo Test Result
+chính thức. P1 lên `2/6`; `RELEASE_READY` vẫn `BLOCKED`.
+
 ### Added — Contract foundation Programming Rev A (2026-08-11)
 
 **Kết quả.** Hoàn tất `TASK-PROG-100`: OpenAPI `1.15.0` có 25 operation dưới
