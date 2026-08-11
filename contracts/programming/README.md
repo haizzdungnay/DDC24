@@ -27,6 +27,13 @@ python3 scripts/generate_programming_errors.py --check
 | `error_catalog_v1.schema.json` | schema khóa catalog major 1 |
 | `error_catalog_v1.manifest.json` | SHA-256, số đếm và ba consumer generated Go/C++/TypeScript |
 | `programming_store_v1.manifest.json` | schema version/checksum, đường dẫn, PRAGMA, single-writer, immutable entity và feature flag của SQLite store |
+| `g1_contract_join_v1.json` | manifest join G1 khóa hash/major của OpenAPI, IPC, profile, artifact, error, store cùng thứ tự deploy/rollback và flag OFF |
+
+Kiểm join trước mọi thay đổi contract hoặc deploy:
+
+```bash
+python3 scripts/verify_programming_g1_contracts.py --self-test
+```
 
 ## Compatibility và thứ tự deploy
 

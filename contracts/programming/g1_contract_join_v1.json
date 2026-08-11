@@ -1,0 +1,104 @@
+{
+  "contractId": "PROGRAMMING-G1-JOIN-V1",
+  "joinVersion": 1,
+  "featureDefaultOff": true,
+  "commissionEnabled": false,
+  "contracts": [
+    {
+      "name": "openapi",
+      "path": "contracts/openapi/openapi.yaml",
+      "sha256": "34862da2349a7b705f79f813c337b7801f46e68716d8fdff779212eaf7c9bb7e",
+      "major": 1,
+      "version": "1.16.0",
+      "operationCount": 25
+    },
+    {
+      "name": "ipc",
+      "path": "contracts/ipc/programming_v1/schema.json",
+      "sha256": "d18702bc1f699b9fc90d05f41ae0dd4dee4444a1025dcb45c9f559cfb6409342",
+      "goldenManifestPath": "contracts/ipc/programming_v1/golden/manifest.json",
+      "goldenManifestSha256": "9c1b6a826f2f4b735d317f073a9a2f6e94f21ea3b276941e1c026b05c7aebae5",
+      "major": 1,
+      "minor": 0,
+      "version": "1.0"
+    },
+    {
+      "name": "profile",
+      "path": "contracts/programming/rev_a_profile_v1.json",
+      "sha256": "94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc",
+      "major": 1,
+      "minor": 0,
+      "profileCode": 1
+    },
+    {
+      "name": "artifact",
+      "path": "contracts/programming/artifact_v1.schema.json",
+      "sha256": "f39ede1fce04d5f13e657268635cc909194d3f1c32c086f5bc2551942e50a417",
+      "goldenManifestPath": "contracts/programming/golden/manifest.json",
+      "goldenManifestSha256": "6a171501704701563980aa18cf6149396fad3981fbd6d6561e821de318f5bb4b",
+      "major": 1,
+      "compilerProfile": 1
+    },
+    {
+      "name": "errors",
+      "path": "contracts/programming/error_catalog_v1.json",
+      "sha256": "2315add30a8e5880dbf09574371ed662726004c0e04372d16c88164d182571d4",
+      "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
+      "manifestSha256": "4c7274a03065aadeecb2eb345e8ee5ce7a7e7973c0c05a1106502f726bde5fbb",
+      "major": 1,
+      "publicErrorCount": 19,
+      "componentDetailCount": 77
+    },
+    {
+      "name": "store",
+      "path": "contracts/programming/programming_store_v1.manifest.json",
+      "sha256": "6c30ca18645c8870f5794b10a330a0e5da8164224ac203ffc22f47bd6bac44e7",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0001_programming_v1.sql",
+      "migrationSha256": "427c21772586a8ca3f885f41103d31ee1983071c0e1499ff1d97199a891c3db9",
+      "major": 1
+    }
+  ],
+  "compatibility": {
+    "acceptedMajor": 1,
+    "minorPolicy": "EXPLICIT_BACKWARD_COMPATIBLE_ONLY",
+    "unknownMajor": "REJECT_NO_MUTATION",
+    "mixedPartialDeploy": "FAIL_CLOSED",
+    "negativeFixtures": [
+      "contracts/ipc/programming_v1/golden/request_unknown_major.hex",
+      "contracts/programming/negative_artifact_v1.json"
+    ]
+  },
+  "deploy": {
+    "order": [
+      "backup",
+      "schema",
+      "core-dual-compatible",
+      "backend",
+      "frontend-read-only"
+    ],
+    "stopOnMismatch": true,
+    "flagDuringG1": "OFF",
+    "rollbackOrder": [
+      "frontend",
+      "backend",
+      "core"
+    ],
+    "preserve": [
+      "database",
+      "backup",
+      "revision",
+      "artifact",
+      "operation",
+      "audit",
+      "active-lkg"
+    ],
+    "forbid": [
+      "automatic-downgrade",
+      "destructive-delete",
+      "commission",
+      "blind-replay"
+    ]
+  },
+  "owner": "Architect + Dev Lead",
+  "generatedBy": "TASK-PROG-105"
+}

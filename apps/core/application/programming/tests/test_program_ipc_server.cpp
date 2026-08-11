@@ -127,6 +127,11 @@ TEST(ProgramIpcCodec, RejectsTruncatedOversizeAndUnknownMajor)
     EXPECT_TRUE(EncodeRequestFrame(unknown, &error).empty());
     EXPECT_EQ(error, ProgramCodecError::UnsupportedMajor);
 
+    ProgramRequest newer_minor = request();
+    newer_minor.protocol_minor = PROGRAM_IPC_PROTOCOL_MINOR + 1U;
+    EXPECT_TRUE(EncodeRequestFrame(newer_minor, &error).empty());
+    EXPECT_EQ(error, ProgramCodecError::UnsupportedMinor);
+
     ProgramRequest noncanonical_payload = request();
     noncanonical_payload.payload = {0x9f, 0xff};
     crypto_hash_sha256(noncanonical_payload.payload_hash.data(),

@@ -45,8 +45,10 @@ run_layout() {
   python3 "$repo_root/tools/restructure/verify_repository.py"
   python3 -m unittest "$repo_root/tests/integration/test_repository_contract_guard.py"
   python3 -m unittest "$repo_root/tests/integration/test_repository_dependency_guard.py"
+  python3 "$repo_root/scripts/generate_programming_profile.py" --check
   python3 "$repo_root/scripts/generate_programming_errors.py" --check
   python3 -m unittest "$repo_root/tests/integration/test_programming_error_catalog.py"
+  python3 "$repo_root/scripts/verify_programming_g1_contracts.py" --self-test
 }
 
 run_cpp() {

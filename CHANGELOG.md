@@ -7,6 +7,26 @@
 ---
 
 ## [Unreleased]
+### Added — Join contract và trình kiểm tương thích G1 Programming (2026-08-11)
+
+**Kết quả.** Triển khai `TASK-PROG-105`: thêm manifest
+`PROGRAMMING-G1-JOIN-V1` ghim SHA-256/major/version của sáu contract OpenAPI,
+IPC, profile, artifact, catalog lỗi và SQLite store; thêm trình kiểm tự động
+cho hash drift, major không hỗ trợ, thứ tự deploy/rollback, tập dữ liệu bắt buộc
+phải bảo toàn và cờ Programming mặc định `OFF`.
+
+**An toàn deploy.** Thứ tự duy nhất là backup/schema → Core dual-compatible →
+Backend → Frontend read-only; rollback theo chiều ngược và không xóa DB,
+Revision, Artifact, Operation, audit hoặc Active/LKG. Unknown major, partial
+deploy, hash drift, bật Commission sớm và rollback phá dữ liệu đều fail-closed.
+Hai consumer Go/C++ bổ sung ca từ chối IPC minor mới hơn; self-test chèn lỗi
+`5/5` và join sáu contract `6/6` PASS. Regression Release C++ bật Modbus +
+BACnet + HMI và CTest `877/877` PASS; toàn bộ Go vet/test PASS; FE Vitest
+`55/55` file, `479/479` test, lint/build PASS. Gate `layout` vẫn dừng ở lỗi
+baseline ngoài Programming `apps/web-ui/src/features/scheduler/shared.ts` chạm
+contract C/SHM/IOP. Không bật Commission, không đổi UI và không deploy
+target/HIL.
+
 ### Added — SQLite store Programming v1 (2026-08-11)
 
 **Kết quả.** Triển khai code `TASK-PROG-104`: thêm bounded package
