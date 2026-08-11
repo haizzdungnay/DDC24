@@ -41,10 +41,14 @@ Test Result release. Feature flag giữ `OFF`, không Commission và không thay
 Active/LKG.
 
 **Hồ sơ và tiến độ.** Đồng bộ Design Index v2.5, Language/Compiler v0.6, Risk
-v1.0, Trace v3.6, Plan 53 v0.26, Roadmap 54 v3.19, review/evidence G2 và
+v1.0, Trace v3.6, Plan 53 v0.26, Roadmap 54 v3.20, review/evidence G2 và
 candidate v2.17. P2 đạt `3/8`, tổng `16/49 = 32,7%`; task tiếp theo là
 `TASK-PROG-203`. Giữ trung thực `2/60 I=Y`, `0/32 PASS`, flag `OFF` và
 `RELEASE_READY BLOCKED`.
+
+**Tích hợp.** [PR #143](https://github.com/Mekong-HCM/MK-DDC-24/pull/143) đã
+merge tại `7d424bc`, tree `aeb27c61`; remote feature branch đã xóa. Candidate
+v2.17 tiếp tục pin `22/22` bằng SHA-256.
 
 ### Added — Mô hình FBD canonical và lệnh keyboard-first Programming P2 (2026-08-11)
 
