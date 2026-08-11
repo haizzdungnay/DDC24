@@ -7,6 +7,36 @@
 ---
 
 ## [Unreleased]
+### Added — Mô hình FBD canonical và lệnh keyboard-first Programming P2 (2026-08-11)
+
+**Kết quả.** Triển khai `TASK-PROG-201`: thêm schema FBD Rev A machine-readable,
+golden AHU, manifest SHA-256 và registry duy nhất gồm 11 command bàn phím. Graph
+khóa cấu trúc graph/network/node/port/wire, UUID canonical, type/unit, thứ tự
+thực thi, một driver cho mỗi input, giới hạn `256 block/512 wire` và profile
+`revA-1t-1-5-30`; trình kiểm contract chèn 10 mutation âm và từ chối toàn bộ.
+
+**Core non-RT.** `st_compiler_lib` có parser/validator/canonicalizer FBD mới;
+từ chối JSON trùng key, field lạ, kind/typeRef ngoài Core Library, parameter
+không hữu hạn/vượt biên, port shape sai, endpoint treo, type/unit lệch, UUID/order
+trùng và cạnh combinational chạy ngược. Kết quả chỉ publish khi không có issue;
+typed document giữ cả parameter và JSON canonical byte-stable. Fuzzer riêng chạy
+với AddressSanitizer đạt `50.000/50.000` input, `2.083 exec/s`, RSS đỉnh
+`448 MiB`, không crash, hang hoặc sanitizer finding.
+
+**Frontend.** Thêm model/validator cùng semantics, reducer Draft bất biến, giới
+hạn undo/redo 50 bản và component `StructuredFbdEditor` có toolbar + cùng đường
+lệnh keyboard: thêm network/block, duyệt port, nối, hủy, xóa, đổi execution
+order, undo/redo. UUID payload trùng/sai bị chặn trước mutation; read-only/RBAC
+chặn mọi command sửa; focus, live announcement và copy VI/EN đã có. Component
+chưa gắn route production vì workspace `PGM-02` và API Draft thuộc
+`TASK-PROG-500/502`; task này không dựng deploy/Commission hoặc hạ FBD sang IR.
+
+**Kiểm chứng.** Contract `10/10` mutation PASS; Core FBD `8/8`; FE FBD
+`15/15`. Regression Release bật Modbus + BACnet + HMI đạt `906/906` CTest;
+Go vet và toàn bộ Go test PASS; FE đạt `58/58` file, `494/494` test cùng
+lint/typecheck/build PASS. Không chạy browser vì component chưa được mount vào
+route ở task này; không deploy target/HIL và không nâng Test Result release.
+
 ### Added — Khóa ST subset và source map Programming P2 (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-200`: compiler ST từ chối source không phải

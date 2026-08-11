@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mkddc.local/contracts/programming/fbd_v1.schema.json",
+  "title": "MK-DDC-24 Programming FBD Rev A",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "profileId", "graphId", "name", "networks"],
+  "properties": {
+    "$schema": { "const": "../../fbd_v1.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "profileId": { "const": "revA-1t-1-5-30" },
+    "graphId": { "$ref": "#/$defs/uuid" },
+    "name": { "$ref": "#/$defs/identifier" },
+    "networks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/network" }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+    },
+    "dataType": {
+      "enum": ["BOOL", "INT", "DINT", "UINT", "REAL", "TIME"]
+    },
+    "parameterValue": {
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        { "type": "number" },
+        { "type": "string", "maxLength": 128 }
+      ]
+    },
+    "port": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "direction", "dataType", "unit", "order"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "name": { "$ref": "#/$defs/identifier" },
+        "direction": { "enum": ["INPUT", "OUTPUT"] },
+        "dataType": { "$ref": "#/$defs/dataType" },
+        "unit": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1, "maxLength": 32 }
+          ]
+        },
+        "order": { "type": "integer", "minimum": 0, "maximum": 15 }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "typeRef", "executionOrder", "parameters", "ports"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "kind": { "enum": ["INPUT", "OUTPUT", "CONSTANT", "FUNCTION", "FUNCTION_BLOCK", "CONVERSION"] },
+        "typeRef": { "$ref": "#/$defs/identifier" },
+        "executionOrder": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "parameters": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": { "$ref": "#/$defs/identifier" },
+          "additionalProperties": { "$ref": "#/$defs/parameterValue" }
+        },
+        "ports": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/port" }
+        }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeId", "portId"],
+      "properties": {
+        "nodeId": { "$ref": "#/$defs/uuid" },
+        "portId": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "wire": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from", "to"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "order", "nodes", "wires"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "name": { "$ref": "#/$defs/identifier" },
+        "order": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/node" }
+        },
+        "wires": {
+          "type": "array",
+          "maxItems": 512,
+          "items": { "$ref": "#/$defs/wire" }
+        }
+      }
+    }
+  }
+}

@@ -2,7 +2,9 @@
 
 Thư mục này là authority machine-readable cho contract profile/artifact
 (`TASK-PROG-102`), catalog lỗi liên lớp (`TASK-PROG-103`) và manifest SQLite
-store (`TASK-PROG-104`). Mã nguồn không được hard-code lại giới hạn hoặc mã lỗi.
+store (`TASK-PROG-104`). Từ `TASK-PROG-201`, thư mục này còn là authority của
+mô hình FBD canonical và registry lệnh bàn phím. Mã nguồn không được hard-code
+lại giới hạn, mã lỗi hoặc shortcut khác contract.
 Thay đổi nguồn phải chạy lại:
 
 ```bash
@@ -10,6 +12,7 @@ python3 scripts/generate_programming_profile.py
 python3 scripts/generate_programming_profile.py --check
 python3 scripts/generate_programming_errors.py
 python3 scripts/generate_programming_errors.py --check
+python3 scripts/verify_programming_fbd_contract.py --self-test
 ```
 
 ## Thành phần
@@ -28,6 +31,10 @@ python3 scripts/generate_programming_errors.py --check
 | `error_catalog_v1.manifest.json` | SHA-256, số đếm và ba consumer generated Go/C++/TypeScript |
 | `programming_store_v1.manifest.json` | schema version/checksum, đường dẫn, PRAGMA, single-writer, immutable entity và feature flag của SQLite store |
 | `g1_contract_join_v1.json` | manifest join G1 khóa hash/major của OpenAPI, IPC, profile, artifact, error, store cùng thứ tự deploy/rollback và flag OFF |
+| `fbd_v1.schema.json` | schema canonical của graph/network/node/port/wire FBD Rev A |
+| `fbd_keyboard_commands_v1.json` | registry 11 command/shortcut keyboard-first và giới hạn undo/redo |
+| `fbd/golden/ahu_fan_enable.json` | graph mẫu hợp lệ dùng chung cho Core và FE |
+| `fbd/manifest.json` | SHA-256 profile/schema/keyboard/golden cùng số đếm canonical |
 
 Kiểm join trước mọi thay đổi contract hoặc deploy:
 
@@ -59,3 +66,8 @@ số và fail-closed trong `TASK-PROG-200`; feature Programming vẫn `OFF`. Vì
 các test host của task này chứng minh hợp đồng type, determinism, integrity và
 loader boundary; chúng không được dùng để tuyên bố runtime production, FBD,
 target/HIL hoặc Commission đã hoàn tất.
+
+Mô hình FBD của `TASK-PROG-201` mới khóa cấu trúc, type/unit, thứ tự thực thi và
+thao tác bản nháp. Việc hạ FBD sang IR chung, chứng minh tương đương ST/FBD và
+đưa Revision vào runtime thuộc `TASK-PROG-202`; consumer không được lấy graph
+FBD của task này để stage/activate trực tiếp.
