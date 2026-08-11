@@ -34,8 +34,9 @@ PASS; toàn bộ Go vet/test PASS; FE Vitest `55/55` file, `479/479` test,
 lint/build PASS. Chưa chạy migration target, HIL hay browser và chưa tạo Test
 Result release.
 
-**Source và tiến độ.** Source commit `312f357`; Plan 53/54 ghi P1 `5/6`,
-candidate v2.13 ghim 22 hồ sơ. Trace bổ sung source partial cho sáu requirement
+**Source và tiến độ.** Source commit `312f357`; [PR #135](https://github.com/Mekong-HCM/MK-DDC-24/pull/135)
+đã merge vào `main` tại `1f651b7` (tree `94326834`), remote feature branch đã
+xóa. Plan 53/54 ghi P1 `5/6`, candidate v2.13 ghim 22 hồ sơ. Trace bổ sung source partial cho sáu requirement
 nhưng giữ đúng tổng `2/60 I=Y`; Risk ghi treatment partial RSK-007/008 nhưng giữ
 16/16 Open và residual không đổi. Next action là `TASK-PROG-105` review join G1.
 
