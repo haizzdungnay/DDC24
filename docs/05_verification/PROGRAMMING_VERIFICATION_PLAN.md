@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 32/32 kịch bản là baseline DoD; hiện có 2/32 record `BLOCKED`, 0/32 PASS |
 | Ngày | 2026-08-11 |
 | Chủ quản | Verification Lead |
@@ -18,11 +18,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **cách chứng minh hệ thống làm đúng**: 32 kịch bản `VS-PROG-001..032`, mỗi kịch bản có đồ gá, điều kiện trước, các bước, kết quả kỳ vọng định lượng, môi trường và ai được ký. Cũng chốt cái gì **không** được tính là bằng chứng. |
 | 2. Ai phải đọc file này? | Verification Lead (chủ quản) và mọi discipline lead — vì mỗi người sở hữu một phần trong cột “execute/review”. Release authority đọc §5 để biết gate nào đang mở. |
-| 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001` và `VS-PROG-019` có execution record G1 `BLOCKED`; 30 scenario còn lại `NOT_RUN`, tổng PASS vẫn `0/32` (§8). `EV-PROG-G2-207` là evidence kỹ thuật host hỗ trợ `VS-006/012/013/021/023`, nhưng chưa có executor/reviewer độc lập và target/E2E tương ứng nên không phải Test Result. |
+| 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001/019` có record G1 `BLOCKED`; 30 scenario còn lại `NOT_RUN`, tổng PASS `0/32` (§8). Ngoài evidence G2, `EV-PROG-G3-300` ghim prepared runtime/no-parser host gates tại `4f7e0ac` hỗ trợ `VS-PROG-012`; chưa có 10.000 chu kỳ Forlinx, full no-blocking instrumentation hoặc reviewer độc lập nên không phải Test Result. |
 | 4. Thiết kế mới thay đổi điều gì? | Chuyển từ “có test” sang **bằng chứng có thẩm quyền**: mỗi lần chạy phải ghim commit, image, config và hash; Test Result là bất biến; chạy lại sinh ID mới. Trạng thái chỉ được là một trong `NOT_RUN/RUNNING/PASS/FAIL/BLOCKED/INVALIDATED`. |
 | 5. Team phải sửa module/contract nào? | Không sửa code. Cần dựng thư mục bằng chứng `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS`, cùng các đồ gá `H/B/T/L` ở §9. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Các giới hạn đã `DECIDED`. Đồ gá HIL (`L`) là deliverable/evidence của P6 và không chặn team bắt đầu P1–P5. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Chính file này định nghĩa. Với bản thân hồ sơ: 32/32 kịch bản có đặc tả đủ năm trục ở §9. `EV-PROG-G2-207` được lưu như evidence host hỗ trợ, không nâng verdict. Hiện có **2/32 record, 0/32 PASS, 2/32 BLOCKED**. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Chính file này định nghĩa. Với bản thân hồ sơ: 32/32 kịch bản có đặc tả đủ năm trục ở §9. `EV-PROG-G2-207` và `EV-PROG-G3-300` là evidence host hỗ trợ, không nâng verdict. Hiện có **2/32 record, 0/32 PASS, 2/32 BLOCKED**. |
 
 Ba loại bằng chứng **không** đủ để đóng một requirement: file tài liệu tồn tại;
 unit test trên máy host thay cho đo trên target/HIL; và ảnh chụp màn hình mock
@@ -274,6 +274,20 @@ Không tạo `TR-PROG-*` từ record này vì chưa đủ baseline target/E2E, e
 reviewer độc lập theo §11. Vì vậy catalog vẫn có đúng 2 record `BLOCKED`, 30
 scenario `NOT_RUN` và **0/32 PASS**; residual risk/release gate không đổi.
 
+### 11.2 Evidence kỹ thuật host `EV-PROG-G3-300`
+
+Record raw `docs/07_records/reviews/programming-g3/raw/EV-PROG-G3-300.txt`
+ghim source `4f7e0ac` và kết quả: targeted runtime/scheduler/executor/control API
+cùng symbol gate **84/84**, full CTest Release Modbus/BACnet/HMI **933/933**,
+allocation counter tại activation/execute/LKG promotion, `nm -C` archive/binary,
+Go, FE **494/494** và G1 **7/7** PASS. Evidence hỗ trợ phần host của
+`VS-PROG-012`.
+
+Không tạo Test Result vì `VS-PROG-012` còn yêu cầu 10.000 cycle/period trên
+Forlinx và chứng minh cả filesystem/DB/HTTP/DNS/blocking/dynamic load, cùng
+executor/reviewer độc lập. Catalog do đó vẫn 2 record `BLOCKED`, 30 `NOT_RUN`,
+0/32 PASS; không giảm residual hay mở release.
+
 ## 12. Blocker, revision và sign-off
 
 | Blocker | Owner | Điều kiện mở |
@@ -294,6 +308,7 @@ scenario `NOT_RUN` và **0/32 PASS**; residual risk/release gate không đổi.
 | 0.8 | 2026-08-11 | Phê duyệt V&V baseline theo `AUTH-PROG-2026-08-11-03`; 17/17 decision `DECIDED`; Verification/discipline signature `WAIVED FOR IMPLEMENTATION`; HIL là deliverable P6, không chặn P1–P5; giữ trung thực 0/32 Test Result |
 | 0.9 | 2026-08-11 | Ghi execution G1 cho `VS-PROG-001/019`: hai record `BLOCKED`, phần store/contract host đạt nhưng workflow E2E và independent review còn thiếu; tổng 0/32 PASS, không nâng residual risk hay release gate |
 | 1.0 | 2026-08-11 | Đăng ký `EV-PROG-G2-207` làm evidence kỹ thuật host hỗ trợ VS-006/012/013/021/023: hostile corpus 25 lớp, zero-mutation 8 bảng, 23 audit alias, compiler fault bounds, fuzz và full regression PASS; không tạo Test Result, giữ 2 record BLOCKED và 0/32 PASS |
+| 1.1 | 2026-08-11 | Đăng ký `EV-PROG-G3-300` cho phần host VS-012: prepared runtime/handle swap/LKG không cấp phát trong test, post-link không parser/compiler, targeted 84/84 và CTest 933/933; giữ scenario NOT_RUN vì chưa có 10.000 cycle/no-blocking trên Forlinx và reviewer độc lập |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

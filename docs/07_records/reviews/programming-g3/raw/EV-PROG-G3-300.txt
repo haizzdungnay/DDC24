@@ -1,0 +1,63 @@
+EV-PROG-G3-300
+Ngày chạy: 2026-08-11, Asia/Ho_Chi_Minh
+Task: TASK-PROG-300
+Source commit: 4f7e0accca7e1531983afd3bc349acfe8918b102
+Source tree: ebba3d433b631f236a64325fc30f0adad76f7d2e
+Parent: 16cedc388810a37b6c09d9b556c2a1f954698f17
+
+1. Build Release bắt buộc
+cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release \
+  -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON
+cmake --build build/fw --parallel
+Kết quả: PASS; mkddc-core/mkddc-iobus/mkddc-netcfg/mkddc-hmi và test targets build.
+
+2. Targeted Core Programming
+ctest --test-dir build/fw \
+  -R '^(StCyclicRuntime|StScheduler|StExec|StControlApi|programming_).*' \
+  --output-on-failure
+Kết quả: PASS 84/84, 0 fail, 0,63 giây.
+Bao gồm:
+- PreparedActivationAndExecutionAllocateNothingAtBoundary
+- PreparedActivationAndLkgPromotionAllocateNothingInTick
+- StExec.ThousandCyclesAllocateNothing
+- programming_runtime_archive_symbol_boundary
+- programming_core_executable_symbol_boundary
+
+3. Full firmware regression
+ctest --test-dir build/fw --output-on-failure
+Kết quả: PASS 933/933, 0 fail, 14,17 giây.
+
+4. Go
+cd apps/web-api
+go vet ./...
+go test ./... -count=1
+Kết quả: PASS toàn bộ package; internal/app 27,757 giây;
+programming application/artifact/compiler/coreipc/domain/store/transport PASS.
+
+5. Frontend
+cd apps/web-ui
+npx vitest --run --environment jsdom src
+npm run lint
+npm run build
+Kết quả: 58/58 file, 494/494 test PASS; lint PASS; programming contract checks,
+TypeScript noEmit và Vite production build PASS. Cảnh báo chunk >500 KiB là
+cảnh báo hiện hữu, không phải lỗi gate. Không chạy Chrome DevTools vì source Task
+300 không đổi component/layout/runtime FE được mount.
+
+6. Join contract
+python3 scripts/verify_programming_g1_contracts.py --self-test
+Kết quả: mutation 5/5 fail-closed; deploy/rollback order 5/5; contract 7/7 major 1 PASS.
+
+7. Bằng chứng cấu trúc
+scripts/verify_programming_runtime_symbols.py dùng nm -C --defined-only, chặn:
+parse_st_source, compile_st_source, semantic_check_st, BuildStArtifact,
+BuildFbdArtifact, compile_fbd_program, StParser.
+Archive runtime còn phải có LoadArtifact, execute_st_program và
+StProgramRuntime::prepare. Cả archive core_application và executable mkddc-core PASS.
+
+Ranh giới:
+- Evidence host hỗ trợ VS-PROG-012; không phải Test Result.
+- Chưa chạy 10.000 cycle/period trên Forlinx.
+- Chưa chứng minh toàn bộ filesystem/DB/HTTP/DNS/blocking/dynamic native load.
+- Feature OFF; bootstrap production chưa route scheduler; không Commission/cutover.
+- GitHub Actions không được claim PASS nếu job không chạy step do billing/spending-limit.
