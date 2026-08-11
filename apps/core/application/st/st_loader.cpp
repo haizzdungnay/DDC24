@@ -1,9 +1,11 @@
 #include "st/st_loader.hpp"
 
 #include <cstring>
+#include <utility>
 
 #include <sodium.h>
 
+#include "st/st_limits.hpp"
 #include "st/st_public_key.hpp"
 
 namespace core {
@@ -75,6 +77,7 @@ public:
         if (!step_retain()) return false;
         if (!step_source_map()) return false;
         if (!step_code()) return false;
+        if (!step_profile()) return false;
         if (!step_allocate()) return false;
         return true;
     }
@@ -102,6 +105,9 @@ private:
     /* Bước 1-6 */
     bool step_header()
     {
+        if (opts_.integrity_mode == StIntegrityMode::SIGNATURE_OPTIONAL)
+            return fail(st_ir_error::kBadProfile,
+                        "SIGNATURE_OPTIONAL is forbidden by the Rev A release profile");
         if (n_ < st_ir::kHeaderSize) return fail(st_ir_error::kBadHeader, "artifact smaller than header");
         if (n_ > st_ir::kMaxArtifactSize) return fail(st_ir_error::kBadHeader, "artifact exceeds 1 MiB");
         if (std::memcmp(d_, st_ir::kMagic, 8) != 0)
@@ -121,6 +127,11 @@ private:
             return fail(st_ir_error::kBadHeader, "total_size does not match actual size");
         section_count_ = rd_u16(d_ + 24);
         flags_ = rd_u16(d_ + 26);
+        constexpr uint16_t known_flags = st_ir::kFlagHasSourceMap |
+                                         st_ir::kFlagHasRetain |
+                                         st_ir::kFlagSigned;
+        if ((flags_ & ~known_flags) != 0)
+            return fail(st_ir_error::kBadHeader, "unknown artifact flag is set");
         if (rd_u32(d_ + 28) != 0) return fail(st_ir_error::kBadHeader, "reserved0 must be zero");
         if (section_count_ == 0 || section_count_ > st_ir::kMaxSections)
             return fail(st_ir_error::kBadSectionTable, "invalid section_count");
@@ -140,11 +151,19 @@ private:
         std::memcpy(out_->sha256, digest, 32);
 
         const bool signed_flag = (flags_ & st_ir::kFlagSigned) != 0;
+        bool signature_nonzero = false;
+        for (std::size_t i = 64; i < 128; ++i) signature_nonzero |= d_[i] != 0;
         if (!signed_flag) {
-            if (!opts_.allow_unsigned)
+            if (signature_nonzero)
+                return fail(st_ir_error::kBadSignature,
+                            "signature field must be zero when signed flag is clear");
+            if (opts_.integrity_mode == StIntegrityMode::SIGNATURE_REQUIRED)
                 return fail(st_ir_error::kMissingSignature, "artifact is not signed");
             return true;
         }
+        if (!signature_nonzero)
+            return fail(st_ir_error::kBadSignature,
+                        "signed flag is set but signature field is zero");
         const uint8_t* pk = opts_.public_key ? opts_.public_key : st_builtin_public_key();
         if (crypto_sign_verify_detached(d_ + 64, digest, 32, pk) != 0)
             return fail(st_ir_error::kBadSignature, "Ed25519 signature verification failed");
@@ -525,6 +544,31 @@ private:
         return true;
     }
 
+    bool step_profile()
+    {
+        st_limits::RevAProfileUsage usage;
+        usage.profile_code = rd_u16(d_ + 10);
+        usage.target_abi = rd_u32(d_ + 12);
+        usage.variables = sec_[st_ir::SEC_VARIABLES].item_count;
+        usage.artifact_bytes = total_size_;
+        usage.instructions = sec_[st_ir::SEC_CODE].item_count;
+        usage.slots = slot_count_;
+        usage.writable_slots = var_slot_count_;
+        usage.constants = sec_[st_ir::SEC_CONSTANTS].item_count;
+        usage.function_blocks = sec_[st_ir::SEC_FB_INSTANCES].item_count;
+        usage.bindings = sec_[st_ir::SEC_IO_BINDING].item_count;
+        usage.retain_variables = out_->retain_entries.size();
+        usage.retain_bytes = out_->retain_record_size;
+        usage.sections = section_count_;
+        st_limits::RevAProfileError profile_error;
+        if (!st_limits::ValidateRevAProfile(usage, &profile_error))
+            return fail(st_ir_error::kResourceLimit,
+                        "Rev A profile violation at " + profile_error.field + " (" +
+                            std::to_string(profile_error.actual) + ", " +
+                            profile_error.constraint + ")");
+        return true;
+    }
+
     /* Bước 22: điểm cấp phát CUỐI CÙNG. Sau đây không cấp phát thêm gì. */
     bool step_allocate()
     {
@@ -601,16 +645,39 @@ void StLoadedProgram::source_position(uint32_t pc, int* line, int* column) const
     }
 }
 
-bool load_st_artifact(const uint8_t* data, std::size_t size, const StLoaderOptions& opts,
-                      StLoadedProgram* out, StLoadError* err)
+bool LoadArtifact(const uint8_t* data, std::size_t size, const StLoaderOptions& opts,
+                  StLoadedProgram* out, StLoadError* err)
 {
     if (!data || !out) {
         if (err) { err->code = st_ir_error::kBadHeader; err->message = "null artifact"; }
         return false;
     }
-    *out = StLoadedProgram{};
-    Loader l(data, size, opts, out, err);
-    if (!l.run()) { *out = StLoadedProgram{}; return false; }
+    StLoadedProgram candidate;
+    Loader l(data, size, opts, &candidate, err);
+    if (!l.run()) return false;
+    *out = std::move(candidate);
+    return true;
+}
+
+bool VerifyArtifact(const uint8_t* data, std::size_t size, const StLoaderOptions& opts,
+                    StArtifactSummary* summary, StLoadError* err)
+{
+    if (!summary) {
+        if (err) { err->code = st_ir_error::kBadHeader; err->message = "null summary"; }
+        return false;
+    }
+    StLoadedProgram candidate;
+    if (!LoadArtifact(data, size, opts, &candidate, err)) return false;
+    StArtifactSummary verified;
+    verified.schema_version = rd_u16(data + 8);
+    verified.compiler_profile = rd_u16(data + 10);
+    verified.target_abi = rd_u32(data + 12);
+    verified.artifact_bytes = rd_u32(data + 20);
+    verified.section_count = rd_u16(data + 24);
+    verified.integrity_mode = opts.integrity_mode;
+    verified.signature_present = (rd_u16(data + 26) & st_ir::kFlagSigned) != 0;
+    std::memcpy(verified.sha256, candidate.sha256, sizeof(verified.sha256));
+    *summary = verified;
     return true;
 }
 

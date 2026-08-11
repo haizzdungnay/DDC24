@@ -1,6 +1,6 @@
 /**
  * @file  test_st_ir.cpp
- * @brief TYPED_IR_GATE — compile -> serialize -> ký -> load.
+ * @brief TYPED_IR_GATE — compile -> serialize canonical -> verify -> load.
  *
  *        Trọng tâm là NHÓM REJECT: theo TYPED_IR_ARTIFACT_SPEC §6.1, sau khi
  *        load thành công executor không kiểm biên nữa, nên một lỗi lọt qua
@@ -9,9 +9,17 @@
  */
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <fstream>
+#include <iomanip>
+#include <iterator>
+#include <sstream>
 #include <string>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
+#include "st/st_artifact.hpp"
 #include "st/st_compile.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_loader.hpp"
@@ -43,6 +51,17 @@ std::vector<uint8_t> build_signed(const char* src = kSimple)
     return bytes;
 }
 
+std::vector<uint8_t> build_hash_only(const char* src = kSimple)
+{
+    StIrModule mod;
+    StDiagnostic diag;
+    EXPECT_TRUE(compile_st_source(src, &mod, &diag)) << diag.code << ": " << diag.message;
+    std::vector<uint8_t> bytes;
+    std::string err;
+    EXPECT_TRUE(serialize_st_ir(mod, &bytes, &err)) << err;
+    return bytes;
+}
+
 bool try_load(const std::vector<uint8_t>& a, StLoadError* err)
 {
     StLoadedProgram p;
@@ -53,6 +72,44 @@ bool try_load(const std::vector<uint8_t>& a, StLoadError* err)
 void put_u32(std::vector<uint8_t>* v, std::size_t off, uint32_t x)
 {
     for (int i = 0; i < 4; i++) (*v)[off + i] = static_cast<uint8_t>((x >> (8 * i)) & 0xFF);
+}
+
+void put_u16(std::vector<uint8_t>* v, std::size_t off, uint16_t x)
+{
+    (*v)[off] = static_cast<uint8_t>(x & 0xFF);
+    (*v)[off + 1] = static_cast<uint8_t>((x >> 8) & 0xFF);
+}
+
+std::vector<uint8_t> read_bytes(const std::string& path)
+{
+    std::ifstream input(path, std::ios::binary);
+    return std::vector<uint8_t>(std::istreambuf_iterator<char>(input),
+                                std::istreambuf_iterator<char>());
+}
+
+std::string read_text(const std::string& path)
+{
+    std::ifstream input(path, std::ios::binary);
+    std::ostringstream content;
+    content << input.rdbuf();
+    return content.str();
+}
+
+std::string file_sha256_hex(const std::vector<uint8_t>& bytes)
+{
+    uint8_t digest[crypto_hash_sha256_BYTES];
+    crypto_hash_sha256(digest, bytes.data(), bytes.size());
+    std::ostringstream out;
+    out << std::hex << std::setfill('0');
+    for (uint8_t byte : digest) out << std::setw(2) << static_cast<unsigned>(byte);
+    return out.str();
+}
+
+void refresh_artifact_hash(std::vector<uint8_t>* artifact)
+{
+    uint8_t digest[32];
+    ASSERT_TRUE(compute_artifact_sha256(artifact->data(), artifact->size(), digest));
+    std::copy(digest, digest + sizeof(digest), artifact->begin() + 32);
 }
 
 } // namespace
@@ -81,9 +138,10 @@ TEST(StIr, LoadedProgramHasExpectedShape)
 
 TEST(StIr, DeterministicBuildSameSourceSameBytes)
 {
-    const std::vector<uint8_t> a = build_signed();
-    const std::vector<uint8_t> b = build_signed();
-    EXPECT_EQ(a, b) << "cùng source phải cho cùng byte artifact";
+    const std::vector<uint8_t> expected = build_hash_only();
+    for (int i = 0; i < 100; ++i)
+        EXPECT_EQ(build_hash_only(), expected)
+            << "lần build " << i << " làm artifact thay đổi";
 }
 
 TEST(StIr, ConstantPoolDeduplicates)
@@ -172,7 +230,7 @@ TEST(StIr, RejectBadSignature)
     EXPECT_EQ(err.code, st_ir_error::kBadSignature);
 }
 
-TEST(StIr, RejectUnsignedByDefault)
+TEST(StIr, HashOnlyIsTheRevADefault)
 {
     StIrModule mod;
     StDiagnostic d;
@@ -180,13 +238,12 @@ TEST(StIr, RejectUnsignedByDefault)
     std::vector<uint8_t> a;
     std::string err_s;
     ASSERT_TRUE(serialize_st_ir(mod, &a, &err_s));
-    /* Không ký */
+    /* Không ký nhưng SHA-256 bắt buộc và hợp lệ. */
     StLoadError err;
-    EXPECT_FALSE(try_load(a, &err));
-    EXPECT_EQ(err.code, st_ir_error::kMissingSignature);
+    EXPECT_TRUE(try_load(a, &err)) << err.code << ": " << err.message;
 }
 
-TEST(StIr, UnsignedAcceptedOnlyWhenExplicitlyAllowed)
+TEST(StIr, SignatureRequiredRejectsUnsignedArtifact)
 {
     StIrModule mod;
     StDiagnostic d;
@@ -197,9 +254,105 @@ TEST(StIr, UnsignedAcceptedOnlyWhenExplicitlyAllowed)
 
     StLoadedProgram p;
     StLoaderOptions o;
-    o.allow_unsigned = true;
+    o.integrity_mode = StIntegrityMode::SIGNATURE_REQUIRED;
     StLoadError err;
-    EXPECT_TRUE(load_st_artifact(a.data(), a.size(), o, &p, &err)) << err.code;
+    EXPECT_FALSE(load_st_artifact(a.data(), a.size(), o, &p, &err));
+    EXPECT_EQ(err.code, st_ir_error::kMissingSignature);
+}
+
+TEST(StIr, SignatureOptionalPolicyIsAlwaysRejected)
+{
+    const std::vector<uint8_t> a = build_hash_only();
+    StLoadedProgram p;
+    StLoaderOptions o;
+    o.integrity_mode = StIntegrityMode::SIGNATURE_OPTIONAL;
+    StLoadError err;
+    EXPECT_FALSE(load_st_artifact(a.data(), a.size(), o, &p, &err));
+    EXPECT_EQ(err.code, st_ir_error::kBadProfile);
+}
+
+TEST(StIr, FailedLoadDoesNotMutateCallerOutput)
+{
+    std::vector<uint8_t> a = build_hash_only();
+    a.back() ^= 0x80;
+    StLoadedProgram active;
+    active.program_name = "active-before-failure";
+    active.var_slot_count = 77;
+    StLoaderOptions o;
+    StLoadError err;
+    EXPECT_FALSE(LoadArtifact(a.data(), a.size(), o, &active, &err));
+    EXPECT_EQ(active.program_name, "active-before-failure");
+    EXPECT_EQ(active.var_slot_count, 77u);
+}
+
+TEST(StIr, VerifyArtifactReturnsBoundedSummary)
+{
+    const std::vector<uint8_t> a = build_hash_only();
+    StArtifactSummary summary;
+    StLoaderOptions o;
+    StLoadError err;
+    ASSERT_TRUE(VerifyArtifact(a.data(), a.size(), o, &summary, &err)) << err.code;
+    EXPECT_EQ(summary.schema_version, st_ir::kSchemaVersion);
+    EXPECT_EQ(summary.compiler_profile, st_ir::kCompilerProfile);
+    EXPECT_EQ(summary.target_abi, st_ir::kTargetAbi);
+    EXPECT_EQ(summary.artifact_bytes, a.size());
+    EXPECT_FALSE(summary.signature_present);
+    EXPECT_EQ(summary.integrity_mode, StIntegrityMode::HASH_ONLY);
+}
+
+TEST(StIr, GoldenArtifactIsByteExactAndLoadable)
+{
+    const std::string contract_dir = PROGRAMMING_PROFILE_CONTRACT_DIR;
+    const std::vector<uint8_t> golden =
+        read_bytes(contract_dir + "/golden/rev_a_ahu_fan_control.mkir");
+    ASSERT_FALSE(golden.empty());
+    const nlohmann::json manifest =
+        nlohmann::json::parse(read_text(contract_dir + "/golden/manifest.json"));
+    EXPECT_EQ(file_sha256_hex(golden), manifest.at("sha256"));
+    EXPECT_EQ(golden.size(), manifest.at("artifactBytes"));
+
+    const std::string source = read_text(std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st");
+    StIrModule module;
+    StDiagnostic diagnostic;
+    ASSERT_TRUE(compile_st_source(source, &module, &diagnostic)) << diagnostic.message;
+    std::vector<uint8_t> rebuilt;
+    std::string encode_error;
+    ASSERT_TRUE(EncodeArtifactDeterministic(module, &rebuilt, &encode_error)) << encode_error;
+    EXPECT_EQ(rebuilt, golden);
+
+    StArtifactSummary summary;
+    StLoaderOptions options;
+    StLoadError load_error;
+    EXPECT_TRUE(VerifyArtifact(golden.data(), golden.size(), options, &summary, &load_error))
+        << load_error.code << ": " << load_error.message;
+}
+
+TEST(StIr, MachineReadableNegativeCorpusIsRejectedWithStableCode)
+{
+    const std::string contract_dir = PROGRAMMING_PROFILE_CONTRACT_DIR;
+    const nlohmann::json corpus =
+        nlohmann::json::parse(read_text(contract_dir + "/negative_artifact_v1.json"));
+    const std::vector<uint8_t> base = read_bytes(contract_dir + "/" +
+                                                  corpus.at("baseFixture").get<std::string>());
+    ASSERT_FALSE(base.empty());
+    for (const nlohmann::json& item : corpus.at("cases")) {
+        std::vector<uint8_t> artifact = base;
+        const std::size_t offset = item.at("offset");
+        ASSERT_LT(offset, artifact.size()) << item.at("id");
+        const std::string kind = item.at("kind");
+        if (kind == "byteXor") artifact[offset] ^= item.at("mask").get<uint8_t>();
+        else if (kind == "u16") put_u16(&artifact, offset, item.at("value").get<uint16_t>());
+        else if (kind == "u32") put_u32(&artifact, offset, item.at("value").get<uint32_t>());
+        else FAIL() << "mutation không hỗ trợ: " << kind;
+        if (item.at("rehash")) refresh_artifact_hash(&artifact);
+
+        StLoadedProgram output;
+        StLoaderOptions options;
+        StLoadError error;
+        EXPECT_FALSE(LoadArtifact(artifact.data(), artifact.size(), options, &output, &error))
+            << item.at("id");
+        EXPECT_EQ(error.code, item.at("expected")) << item.at("id");
+    }
 }
 
 TEST(StIr, RejectBadSectionTableOffset)
@@ -354,10 +507,9 @@ TEST(StIrSecurity, BuildReportsWhetherItUsesTheTestKey)
            "MKDDC_ST_PUBLIC_KEY_HEX đã được set trong build test";
 }
 
-TEST(StIrSecurity, AllowUnsignedDoesNotBypassHashCheck)
+TEST(StIrSecurity, HashOnlyDoesNotBypassHashCheck)
 {
-    /* allow_unsigned chỉ bỏ qua CHỮ KÝ, không được bỏ qua toàn vẹn. Nếu nó
-     * bỏ qua cả hai thì cờ phát triển này thành lỗ hổng thật. */
+    /* HASH_ONLY bỏ yêu cầu chữ ký, không bao giờ bỏ kiểm SHA-256. */
     StIrModule mod;
     StDiagnostic d;
     ASSERT_TRUE(compile_st_source(kSimple, &mod, &d));
@@ -368,7 +520,6 @@ TEST(StIrSecurity, AllowUnsignedDoesNotBypassHashCheck)
 
     StLoadedProgram p;
     StLoaderOptions o;
-    o.allow_unsigned = true;
     StLoadError err;
     EXPECT_FALSE(load_st_artifact(a.data(), a.size(), o, &p, &err));
     EXPECT_EQ(err.code, st_ir_error::kBadHash);
@@ -376,8 +527,8 @@ TEST(StIrSecurity, AllowUnsignedDoesNotBypassHashCheck)
 
 TEST(StIrSecurity, SignedFlagCannotBeClearedToBypassSignature)
 {
-    /* Tấn công hiển nhiên: xoá cờ kSigned để loader coi như gói chưa ký, rồi
-     * hy vọng allow_unsigned. Cờ nằm trong vùng SHA-256 nên phải hỏng hash. */
+    /* Tấn công hiển nhiên: xoá cờ kSigned để loader coi như HASH_ONLY. Cờ
+     * nằm trong vùng SHA-256 nên phải hỏng hash. */
     std::vector<uint8_t> a = build_signed();
     a[26] &= static_cast<uint8_t>(~st_ir::kFlagSigned);
 

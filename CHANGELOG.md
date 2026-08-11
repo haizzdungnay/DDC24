@@ -7,6 +7,29 @@
 ---
 
 ## [Unreleased]
+### Added — Profile và artifact Programming Rev A v1 (2026-08-11)
+
+**Kết quả.** Triển khai `TASK-PROG-102`: thêm profile machine-readable
+`revA-1t-1-5-30`, schema manifest artifact `MKDDCIR1`, generated constants và
+một validator dùng chung tại compiler/loader. Profile khóa một Task, chu kỳ
+`1/5/30 s`, capacity, type/width/wire code, ST/FBD, ba nhóm Point, Core Library
+`rev-a.1` và `IntegrityMode=HASH_ONLY`.
+
+**Loader và tính toàn vẹn.** Thay `allow_unsigned` bằng `StIntegrityMode` tường
+minh; Rev A mặc định bắt buộc SHA-256 nhưng không cần chữ ký, policy
+`SIGNATURE_OPTIONAL` luôn bị từ chối. Thêm API `EncodeArtifactDeterministic`,
+`VerifyArtifact`, `LoadArtifact`; loader chỉ publish candidate sau khi toàn bộ
+header/profile/section/resource/hash/IR hợp lệ nên lỗi không sửa output caller.
+CLI không còn tự ký bằng khóa test và timestamp build bị khóa về `0` để 100 lần
+compile cùng input sinh cùng byte.
+
+**Corpus và kiểm chứng.** Ghim golden artifact 1.760 byte cùng provenance/hash,
+negative corpus machine-readable và test `limit-1/limit/limit+1`. Hai JSON
+Schema cùng instance/manifest validate PASS; generated constants không drift;
+targeted profile/artifact `32/32` PASS; libFuzzer loader chạy `10.000` lượt không
+crash. Đây là evidence host cho contract foundation, không phải Test Result
+target/HIL và không chứng minh compiler/runtime Programming production đã xong.
+
 ### Added — IPC Programming v1 giữa Backend và Core (2026-08-11)
 
 **Kết quả.** Hoàn tất `TASK-PROG-101`: thêm hợp đồng

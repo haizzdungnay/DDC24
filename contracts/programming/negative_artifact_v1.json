@@ -1,0 +1,13 @@
+{
+  "baseFixture": "golden/rev_a_ahu_fan_control.mkir",
+  "cases": [
+    { "id": "NEG-MAGIC", "kind": "byteXor", "offset": 0, "mask": 1, "rehash": false, "expected": "IR-E-002" },
+    { "id": "NEG-MAJOR", "kind": "u16", "offset": 8, "value": 2, "rehash": false, "expected": "IR-E-003" },
+    { "id": "NEG-PROFILE", "kind": "u16", "offset": 10, "value": 65535, "rehash": false, "expected": "IR-E-013" },
+    { "id": "NEG-TARGET", "kind": "u32", "offset": 12, "value": 3735928559, "rehash": false, "expected": "IR-E-004" },
+    { "id": "NEG-FLAG", "kind": "u16", "offset": 26, "value": 32768, "rehash": false, "expected": "IR-E-001" },
+    { "id": "NEG-HASH", "kind": "byteXor", "offset": 1759, "mask": 128, "rehash": false, "expected": "IR-E-005" },
+    { "id": "NEG-OFFSET", "kind": "u32", "offset": 132, "value": 4294967040, "rehash": true, "expected": "IR-E-008" },
+    { "id": "NEG-SIGNATURE-RESERVED", "kind": "byteXor", "offset": 64, "mask": 1, "rehash": false, "expected": "IR-E-006" }
+  ]
+}

@@ -1,6 +1,5 @@
 #include "st/st_compile.hpp"
 
-#include <cstdlib>
 #include <unordered_map>
 
 #include "st/st_limits.hpp"
@@ -48,7 +47,10 @@ public:
         out_->program_name = prog_.name;
         out_->source_hash = fnv1a64(source);
         out_->compiler_version = st_ir::kCompilerVersion;
-        out_->build_timestamp = source_date_epoch();
+        /* Artifact Rev A phải tất định tuyệt đối: timestamp thuộc metadata DB/
+         * audit, không được làm thay đổi executable bytes. Trường layout cũ
+         * được giữ và khóa về 0 để không phá schema 1. */
+        out_->build_timestamp = 0;
 
         if (!allocate_slots()) return false;
         if (!emit_body(prog_.body)) return false;
@@ -85,15 +87,6 @@ private:
         diag_->column = col;
         diag_->length = 1;
         return false;
-    }
-
-    /* Build tất định: nếu có SOURCE_DATE_EPOCH thì dùng, để hai lần compile
-     * cùng source cho ra byte artifact giống hệt (SPEC §4.1). */
-    static uint64_t source_date_epoch()
-    {
-        const char* e = std::getenv("SOURCE_DATE_EPOCH");
-        if (!e || !*e) return 0;
-        return static_cast<uint64_t>(std::strtoull(e, nullptr, 10));
     }
 
     StValue default_init(StType t)

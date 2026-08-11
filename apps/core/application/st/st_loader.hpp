@@ -90,17 +90,46 @@ struct StLoadedProgram {
     void source_position(uint32_t pc, int* line, int* column) const;
 };
 
+enum class StIntegrityMode : uint8_t {
+    HASH_ONLY = 0,
+    SIGNATURE_REQUIRED = 1,
+    /* Có tên để parser cấu hình phát hiện và từ chối tường minh. Không có
+     * đường thực thi nào được phép dùng chế độ này. */
+    SIGNATURE_OPTIONAL = 2,
+};
+
 struct StLoaderOptions {
-    /* Mặc định FALSE: artifact không ký bị từ chối. Chỉ bật cho phát triển,
-     * và mỗi lần load phải ghi WARN vào audit log. */
-    bool allow_unsigned = false;
+    /* Rev A khóa ở HASH_ONLY: SHA-256 luôn bắt buộc. SIGNATURE_OPTIONAL bị
+     * từ chối fail-closed, không phải một cách viết khác của HASH_ONLY. */
+    StIntegrityMode integrity_mode = StIntegrityMode::HASH_ONLY;
     /* Khoá công khai Ed25519 32 byte. nullptr = dùng khoá nhúng trong build. */
     const uint8_t* public_key = nullptr;
 };
 
-/* Verify + nạp. Trả false + *err (mã ổn định IR-E-*) khi bất kỳ bước nào hỏng. */
-bool load_st_artifact(const uint8_t* data, std::size_t size, const StLoaderOptions& opts,
-                      StLoadedProgram* out, StLoadError* err);
+struct StArtifactSummary {
+    uint16_t schema_version = 0;
+    uint16_t compiler_profile = 0;
+    uint32_t target_abi = 0;
+    uint32_t artifact_bytes = 0;
+    uint16_t section_count = 0;
+    StIntegrityMode integrity_mode = StIntegrityMode::HASH_ONLY;
+    bool signature_present = false;
+    uint8_t sha256[32] = {0};
+};
+
+/* API contract Rev A. Cả Verify và Load đều không sửa output khi thất bại. */
+bool VerifyArtifact(const uint8_t* data, std::size_t size, const StLoaderOptions& opts,
+                    StArtifactSummary* summary, StLoadError* err);
+bool LoadArtifact(const uint8_t* data, std::size_t size, const StLoaderOptions& opts,
+                  StLoadedProgram* out, StLoadError* err);
+
+/* Tên cũ giữ tương thích source trong một release. */
+inline bool load_st_artifact(const uint8_t* data, std::size_t size,
+                             const StLoaderOptions& opts, StLoadedProgram* out,
+                             StLoadError* err)
+{
+    return LoadArtifact(data, size, opts, out, err);
+}
 
 /* Khoá công khai đang được build nhúng — dùng cho test và cho lệnh chẩn đoán. */
 const uint8_t* st_builtin_public_key();

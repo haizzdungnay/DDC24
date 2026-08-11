@@ -4,6 +4,8 @@
 
 #include <sodium.h>
 
+#include "st/st_limits.hpp"
+
 namespace core {
 namespace {
 
@@ -77,6 +79,23 @@ struct SectionOut {
 bool serialize_st_ir(const StIrModule& mod, std::vector<uint8_t>* out, std::string* error)
 {
     auto fail = [&](const std::string& m) { if (error) *error = m; return false; };
+
+    st_limits::RevAProfileUsage usage;
+    usage.variables = mod.variables.size();
+    usage.instructions = mod.code.size();
+    usage.slots = mod.slot_count;
+    usage.writable_slots = mod.var_slot_count;
+    usage.constants = mod.constants.size();
+    usage.function_blocks = mod.fb_instances.size();
+    usage.bindings = mod.io_bindings.size();
+    usage.retain_variables = mod.retain_entries.size();
+    usage.retain_bytes = mod.retain_record_size;
+    usage.sections = 6u + (mod.has_retain() ? 1u : 0u) + (!mod.source_map.empty() ? 1u : 0u);
+    st_limits::RevAProfileError profile_error;
+    if (!st_limits::ValidateRevAProfile(usage, &profile_error))
+        return fail("Rev A profile violation at " + profile_error.field + " (" +
+                    std::to_string(profile_error.actual) + ", " +
+                    profile_error.constraint + ")");
 
     if (mod.code.size() > st_ir::kMaxInstructions)
         return fail("instruction count exceeds limit");
@@ -225,6 +244,11 @@ bool serialize_st_ir(const StIrModule& mod, std::vector<uint8_t>* out, std::stri
     }
     const uint32_t total_size = cursor;
     if (total_size > st_ir::kMaxArtifactSize) return fail("artifact exceeds 1 MiB");
+    usage.artifact_bytes = total_size;
+    if (!st_limits::ValidateRevAProfile(usage, &profile_error))
+        return fail("Rev A profile violation at " + profile_error.field + " (" +
+                    std::to_string(profile_error.actual) + ", " +
+                    profile_error.constraint + ")");
 
     uint16_t flags = 0;
     if (!mod.source_map.empty()) flags |= st_ir::kFlagHasSourceMap;
@@ -289,6 +313,12 @@ bool sign_st_artifact(std::vector<uint8_t>* artifact, const uint8_t secret_key[6
     if (crypto_sign_detached(sig, nullptr, digest, sizeof(digest), secret_key) != 0) return false;
     std::memcpy(artifact->data() + 64, sig, crypto_sign_BYTES);
     return true;
+}
+
+bool EncodeArtifactDeterministic(const StIrModule& module, std::vector<uint8_t>* artifact,
+                                 std::string* error)
+{
+    return serialize_st_ir(module, artifact, error);
 }
 
 } // namespace core

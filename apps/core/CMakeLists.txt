@@ -17,6 +17,7 @@ endif()
 set(CONTRACT_SHM_DIR ${MKDDC_CONTRACTS_SOURCE_DIR}/shm)
 set(CONTRACT_IOP_DIR ${MKDDC_CONTRACTS_SOURCE_DIR}/iop)
 set(CONTRACT_CONFIG_DIR ${MKDDC_CONTRACTS_SOURCE_DIR}/config)
+set(CONTRACT_PROGRAMMING_DIR ${MKDDC_CONTRACTS_SOURCE_DIR}/programming)
 
 include(FetchContent)
 FetchContent_Declare(nlohmann_json
@@ -37,7 +38,8 @@ target_include_directories(core_build_settings INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/adapters
     ${CONTRACT_IOP_DIR}
     ${CONTRACT_SHM_DIR}
-    ${CONTRACT_CONFIG_DIR})
+    ${CONTRACT_CONFIG_DIR}
+    ${CONTRACT_PROGRAMMING_DIR})
 target_link_libraries(core_build_settings INTERFACE
     pthread rt nlohmann_json::nlohmann_json)
 
@@ -58,6 +60,7 @@ add_library(core_application STATIC
     application/schedule/schedule_runtime.cpp
     application/schedule/schedule_clock.cpp
     application/st/st_program.cpp
+    application/st/st_limits.cpp
     application/st/st_runtime.cpp
     application/st/st_artifact.cpp
     application/st/st_io_map.cpp
@@ -168,7 +171,9 @@ if(CORE_BUILD_TESTS)
   # không đoán build layout (generator expression cho đúng dù đổi cấu trúc).
   target_compile_definitions(core_tests PRIVATE
       ST_VALIDATE_CLI_PATH="$<TARGET_FILE:mkddc-st-validate>"
-      PROGRAMMING_IPC_CONTRACT_DIR="${MKDDC_CONTRACTS_SOURCE_DIR}/ipc/programming_v1")
+      ST_SAMPLE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/application/st/samples"
+      PROGRAMMING_IPC_CONTRACT_DIR="${MKDDC_CONTRACTS_SOURCE_DIR}/ipc/programming_v1"
+      PROGRAMMING_PROFILE_CONTRACT_DIR="${CONTRACT_PROGRAMMING_DIR}")
   add_dependencies(core_tests mkddc-st-validate)
   if(TARGET GTest::gtest_main)
     target_link_libraries(core_tests PRIVATE GTest::gtest_main)

@@ -15,6 +15,9 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
+
+#include "st/st_ir.hpp"
 
 namespace core {
 
@@ -23,6 +26,11 @@ constexpr int kStIrSchemaVersion = 1;
 
 /* FNV-1a 64-bit, in hoa hex 16 ký tự cố định (vd "3F2A9C1B7E4D5061"). */
 std::string compute_artifact_hash(const std::string& source);
+
+/* Entry point contract Rev A: serialization canonical, không timestamp/path/
+ * random, SHA-256 được điền và vùng chữ ký để 0. */
+bool EncodeArtifactDeterministic(const StIrModule& module, std::vector<uint8_t>* artifact,
+                                 std::string* error);
 
 } // namespace core
 
