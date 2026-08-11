@@ -35,7 +35,7 @@
       "path": "contracts/programming/artifact_v1.schema.json",
       "sha256": "f39ede1fce04d5f13e657268635cc909194d3f1c32c086f5bc2551942e50a417",
       "goldenManifestPath": "contracts/programming/golden/manifest.json",
-      "goldenManifestSha256": "d7822fe12a181f1fdd449c593a0be5c6501f42e8a0e08137150c99c88e904cc1",
+      "goldenManifestSha256": "eade4e7cc7b7f3b4cb05da1ff2272b5861bf1fc7802373398143dcb28aa52a5a",
       "major": 1,
       "compilerProfile": 1
     },
@@ -100,5 +100,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203"
 }

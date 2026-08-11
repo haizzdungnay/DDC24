@@ -20,9 +20,24 @@ namespace core {
 
 constexpr const char* kFbdLowererVersion = "fwsom-fbd-1.0.0";
 
+/* Neo vị trí FBD deterministic. `line/column` là khóa compact được ghi trong
+ * MKDDCIR1 DEBUG_SOURCEMAP; manifest provenance ánh xạ khóa này về UUID gốc.
+ * Đây không phải tọa độ canvas và không phụ thuộc whitespace/thứ tự key JSON. */
+struct FbdSourceAnchor {
+    uint16_t line = 0;
+    uint16_t column = 0;
+    std::string network_id;
+    std::string node_id;
+    std::string port_id;
+    std::string unit;
+    bool has_unit = false;
+};
+
 struct FbdCompileResult {
     bool ok = false;
     StIrModule module;
+    std::string canonical_source;
+    std::vector<FbdSourceAnchor> source_anchors;
     std::vector<FbdIssue> issues;
 };
 

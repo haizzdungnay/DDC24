@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.6 |
+| Phiên bản | 3.7 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
 | Cập nhật | 2026-08-11 |
 | Chủ quản | Verification Lead |
@@ -16,7 +16,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối **yêu cầu → user journey → thiết kế → nơi phải sửa code → kịch bản test → bằng chứng → release** cho cả 60 requirement. Dùng để trả lời hai câu: “yêu cầu này ai lo?” và “cái gì hỏng nếu đổi chỗ này?”. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. `TASK-PROG-200/201` đã thêm ST/type/IR/source map và FBD canonical. `TASK-PROG-202` tại `4819901` thêm FBD→typed IR/runtime chung, 20 cặp equivalence và fault/fuzz evidence. Tổng vẫn **2/60** dòng `I=Y`: `SYS-101/FE-104/NFR-101` còn partial vì artifact source-map/Check/route/target chưa đủ. `VS-PROG-001/019` có 2 record `BLOCKED`, 30 scenario `NOT_RUN`, **0/32 PASS**; mọi `T/P/R` vẫn `N`. |
+| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. `TASK-PROG-200..202` đã thêm ST/FBD common IR/equivalence. `TASK-PROG-203` tại `2c2bfb4` thêm artifact/build manifest/hash/profile/source map deterministic cho ST/FBD. Tổng vẫn **2/60** dòng `I=Y`: `SYS-101/FE-104/NFR-101` còn partial vì Check/route/target chưa đủ. `VS-PROG-001/019` có 2 record `BLOCKED`, 30 scenario `NOT_RUN`, **0/32 PASS**; mọi `T/P/R` vẫn `N`. |
 | 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `BE-110` và `CORE-101 I=Y`; 58 dòng `I=N`. Hai Test Result G1 đang `BLOCKED`; toàn bộ `T/P/R` còn `N` cho tới khi workflow E2E đủ acceptance và reviewer độc lập ký. |
@@ -121,7 +121,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 
 | Requirement | Design/control + risk | Source target | Scenario | D/I/T/P/R |
 |---|---|---|---|---|
-| `SYS-101` | ARCH; LANG; CTRL; RSK-006/010 | `95585e7`: profile; `52dfb57`: FBD canonical + FE reducer/component; `4819901`: FBD→typed IR/equivalence; artifact source-map, Point/Task, BE/route/runtime E2E còn thiếu | 003/005/006/007/009/017 | Y/N/N/N/N |
+| `SYS-101` | ARCH; LANG; CTRL; RSK-006/010 | `95585e7`: profile; `52dfb57`: FBD canonical + FE reducer/component; `4819901`: FBD→typed IR/equivalence; `2c2bfb4`: artifact manifest/source map ST/FBD; Point/Task, BE/route/runtime E2E còn thiếu | 003/005/006/007/009/017 | Y/N/N/N/N |
 | `SYS-102` | DM; UX; FE; BE; RSK-007/008 | `312f357`: Draft/Revision store tách biệt; `TR-PROG-019-20260811-001 BLOCKED`: Check/API/UI và active-output integration còn thiếu | 002/019/026 | Y/N/N/N/N |
 | `SYS-103` | LIFE; ART; IFSPEC; RSK-003/007 | `4a1e9f5`: catalog/mapping lỗi lifecycle; Core coordinator + BE operation còn thiếu | 004/011 | Y/N/N/N/N |
 | `SYS-104` | ARCH; LIFE; OPS; RSK-002/005 | `51fe515`: Core IPC no-mutation skeleton; `e9707b4`: reconnect/no-replay client; Core runtime + service package còn thiếu | 024/030 | Y/N/N/N/N |
@@ -154,7 +154,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `BE-108` | SEC; BE; RSK-011 | bundle quarantine/import/export | 021/023 | Y/N/N/N/N |
 | `BE-109` | CTRL; IFSPEC; BE; RSK-010 | runtime read model/events | 018/020/026 | Y/N/N/N/N |
 | `BE-110` | IFSPEC; BE; RSK-014 | `9917e3b`/`81080f8`/`efbed2d`: OpenAPI, handler, generated TS; `51fe515`/`e9707b4`: IPC; `4a1e9f5`: catalog lỗi/HTTP canonicalize/sanitize | 019/024 | Y/Y/N/N/N |
-| `CORE-101` | LANG; ART; SEC; RSK-006 | `95585e7`: profile/serializer/loader; `8d58efa` + `a638470`: ST/type/source map; `52dfb57`: FBD canonical; `4819901`: FBD lowerer dùng semantic checker/IR/runtime chung + 20 cặp equivalence. Core requirement đã I=Y từ foundation; artifact provenance/worker/target evidence còn mở | 005/006/023 | Y/Y/N/N/N |
+| `CORE-101` | LANG; ART; SEC; RSK-006 | `95585e7`: profile/serializer/loader; `8d58efa` + `a638470`: ST/type/source map; `52dfb57`: FBD canonical; `4819901`: FBD common IR/equivalence; `2c2bfb4`: manifest/hash/source map UUID/unit và verifier. Core requirement đã I=Y từ foundation; worker/target evidence còn mở | 005/006/023 | Y/Y/N/N/N |
 | `CORE-102` | CTRL; FWSOM; RSK-002 | ScanLoop/task/process image | 009/015/016 | Y/N/N/N/N |
 | `CORE-103` | ART; FWSOM; RSK-005/006 | Core build/runtime instrumentation | 012 | Y/N/N/N/N |
 | `CORE-104` | CTRL; FWSOM; RSK-001/004 | process image/PriorityResolver | 010/014/020 | Y/N/N/N/N |
@@ -171,7 +171,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `HW-101` | HW; FWMCU; RSK-013 | schematic/BOM/test fixture | 014/030 | Y/N/N/N/N |
 | `HW-102` | HW; CTRL; RSK-003/004 | AO/DO safe path | 010/014/030 | Y/N/N/N/N |
 | `HW-103` | HW; FWMCU; RSK-002/013 | power/reset/watchdog domain | 015/030 | Y/N/N/N/N |
-| `NFR-101` | LANG; ART; DM | `95585e7` + `8d58efa` + `a638470`: profile/source/artifact bounds; `52dfb57`: FBD capacity guard/fuzz 50.000; `4819901`: lowering/equivalence + ASan fuzz 100.000. BE Check/sandbox, artifact source-map và target OOM acceptance còn thiếu | 006/023 | Y/N/N/N/N |
+| `NFR-101` | LANG; ART; DM | `95585e7` + `8d58efa` + `a638470`: profile/source/artifact bounds; `52dfb57`: FBD capacity guard/fuzz 50.000; `4819901`: lowering/equivalence; `2c2bfb4`: build 100 lần + manifest mutation/source-map guard. BE Check/sandbox và target OOM acceptance còn thiếu | 006/023 | Y/N/N/N/N |
 | `NFR-102` | LANG; BE; RSK-005 | compiler benchmark/sandbox | 006/013/019 | Y/N/N/N/N |
 | `NFR-103` | CTRL; FWSOM; RSK-002/005 | base-step/task/load metrics | 009/012/013/015 | Y/N/N/N/N |
 | `NFR-104` | FWSOM; FE; IFSPEC | trace/monitor buffers | 027 | Y/N/N/N/N |
@@ -262,6 +262,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 3.4 | 2026-08-11 | `TASK-PROG-200` hoàn tất ST subset/type/source map host tại `8d58efa` + `a638470`; bổ sung source cho `CORE-101` và partial `NFR-101`. Tổng `I=Y` giữ 2/60 vì FBD/worker/target E2E còn thiếu; không tạo Test Result, 0/32 PASS và mọi `T/P/R=N` |
 | 3.5 | 2026-08-11 | `TASK-PROG-201` hoàn tất FBD canonical producer/validator + FE keyboard component tại `52dfb57`; bổ sung source partial cho SYS-101/FE-104/NFR-101 và source FBD cho CORE-101. Tổng `I=Y` giữ 2/60 vì lowering/route/API/target E2E còn thiếu; không tạo Test Result, 0/32 PASS và mọi `T/P/R=N` |
 | 3.6 | 2026-08-11 | `TASK-PROG-202` hoàn tất FBD→common typed IR/equivalence tại `4819901`; bổ sung source cho CORE-101 và partial SYS-101/NFR-101. Tổng `I=Y` giữ 2/60 vì artifact source-map/worker/route/target E2E còn thiếu; không tạo Test Result, 0/32 PASS và mọi `T/P/R=N` |
+| 3.7 | 2026-08-11 | `TASK-PROG-203` hoàn tất artifact/manifest/hash/profile/source map ST/FBD tại `2c2bfb4`; bổ sung source cho CORE-101 và partial SYS-101/NFR-101. Tổng `I=Y` giữ 2/60 vì worker/route/target E2E còn thiếu; không tạo Test Result, 0/32 PASS và mọi `T/P/R=N` |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

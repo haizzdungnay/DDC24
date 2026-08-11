@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LANG-PROG-001` |
-| Phiên bản | 0.6 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-200..202` đã triển khai ST subset, sáu type, FBD canonical và FBD→common typed IR equivalence trên host; artifact provenance/user POU/worker/target còn mở** |
+| Phiên bản | 0.7 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-200..203` đã triển khai ST/FBD common typed IR cùng artifact provenance/source map trên host; user POU/worker/target còn mở** |
 | Ngày | 2026-08-11 |
 | Chủ quản | Compiler Lead + Controls Lead |
 | Người review | Core Lead, FE Lead, Verification Lead, Security Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **viết được gì trong ST và FBD**, biên dịch ra sao, và lỗi biên dịch trông như thế nào. Định nghĩa tập con ngôn ngữ, hệ kiểu, thư viện block, và **một IR chung** để ST và FBD cho ra cùng ngữ nghĩa. |
 | 2. Ai phải đọc file này? | Compiler và Controls (chủ quản); Core đọc để biết IR nào phải chạy được; FE đọc §7 (hợp đồng diagnostic) để hiển thị lỗi đúng dòng/đúng node; QA đọc §12. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-200/201` đã có ST/type/IR và FBD canonical. `TASK-PROG-202` tại `4819901` bổ sung lowerer `fwsom-fbd-1.0.0`: graph hợp lệ được dựng thành `StProgram` typed, chạy semantic checker và `compile_st_to_ir` dùng chung; 20 cặp ST↔FBD và trace TON cho executable semantic tương đương. Local POU, source-map artifact FBD, BE worker và wiring production/target còn thiếu. |
-| 4. Thiết kế mới thay đổi điều gì? | FBD không còn dừng ở model: lowerer non-RT dùng đúng compiler/runtime ST, không có VM/opcode/semantic authority thứ hai. Unit hoặc library chưa có semantic chung bị reject fail-closed; `TASK-PROG-203` tiếp tục khóa artifact/profile/manifest/source map production. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-200..202` đã có ST/type/IR, FBD canonical và equivalence. `TASK-PROG-203` tại `2c2bfb4` bổ sung SHA-256, build manifest deterministic và source map giàu ngữ nghĩa cho ST/FBD; FBD giữ UUID `network/node/port` cùng unit ngoài executable IR. Local POU, BE worker và wiring production/target còn thiếu. |
+| 4. Thiết kế mới thay đổi điều gì? | Compiler non-RT sinh cùng `MKDDCIR1` và manifest ngoài artifact, tách `fileSha256` khỏi `integritySha256`; manifest khóa source/compiler/profile/library/ABI/build key. Unknown version/hash/profile/source map bị reject trước khi consumer publish output. |
 | 5. Team phải sửa module/contract nào? | §11. Compiler: tách `st_compiler_lib` khỏi đường RT; BE: gọi CLI/API có giới hạn từ worker, **không bao giờ gọi trong scan**; FE: dùng hợp đồng diagnostic §7. Giới hạn lấy `min(khả năng client, khả năng target, policy)`. |
-| 6. Điều gì còn bị chặn? | Không còn decision blocker cho code. `TASK-PROG-203` phải khóa artifact/hash/profile/manifest/source map; local POU, compiler worker, target load/no-parser-RT và WCET/HIL vẫn là gate sau. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G2-200/201/202`: Task 202 có 20/20 cặp equivalence, targeted `17/17`, CTest `915/915`, contract mutation `10/10`, ASan fuzz `100.000` input và Go/FE regression PASS. Đây là evidence host; `VS-PROG-003/005/006/023` chưa PASS vì artifact production/worker/target và independent review chưa đủ. |
+| 6. Điều gì còn bị chặn? | Không còn decision blocker cho code. Local POU, compiler worker/Check, target load/no-parser-RT và WCET/HIL vẫn là gate sau; `TASK-PROG-204` là task tiếp theo. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G2-200..203`: Task 203 có build lặp 100 lần, targeted `35/35`, manifest mutation `7/7`, CTest `927/927` và Go/FE regression PASS. Đây là evidence host; `VS-PROG-003/005/006/023` chưa PASS vì worker/target và independent review chưa đủ. |
 
 Lưu ý thẩm quyền: `ST_SUBSET_SPEC_MK-DDC-24_VI.md` chỉ **mô tả cái đang có**. Khi
 nó khác Product Spec v2.2 hoặc file này, lấy Product/SRS/decision đã duyệt làm
@@ -51,12 +51,12 @@ thứ ba, pointer/dynamic allocation/recursion, multi-controller distributed tas
 
 | Nội dung | As-Built 2026-08-09 | Target authority / gap |
 |---|---|---|
-| Parser/semantic/compiler | `apps/core/application/st/st_parser.cpp`, `st_semantic.cpp`, `st_compile.cpp`; `st_fbd_model.*`; `st_fbd_compile.*` tại `4819901` | ST và FBD đều đi qua `StProgram` typed, semantic checker và IR chung trong thư viện compiler non-RT; local POU còn target |
+| Parser/semantic/compiler | `apps/core/application/st/st_parser.cpp`, `st_semantic.cpp`, `st_compile.cpp`; `st_fbd_model.*`; `st_fbd_compile.*`; `st_artifact_manifest.*` tại `2c2bfb4` | ST và FBD đều đi qua `StProgram` typed, semantic checker, IR và manifest chung trong thư viện compiler non-RT; local POU còn target |
 | CLI | `mkddc-st-validate`, `mkddc-st-compile` từ `apps/core/CMakeLists.txt` | BE worker gọi API/CLI bounded, không gọi trong scan |
 | ST unit | `PROGRAM` duy nhất; assignment, `IF/ELSIF/ELSE`, FB call | Product v2.2 yêu cầu thêm local `FUNCTION`/`FUNCTION_BLOCK`; đang `TARGET-PENDING` |
 | Type | `BOOL`, `INT=int16`, `DINT=int32`, `UINT=uint16`, `REAL=float32`, `TIME=int64`; VAR input/output/local/retain | Sáu type scalar Rev A đã khớp profile/wire code; bounded ENUM không thuộc phạm vi hiện hành |
 | FB/function | TON, TOF, R/F_TRIG; ABS/MIN/MAX/LIMIT/SEL/SQRT/conversion | Thư viện Rev A phải được decision duyệt |
-| FBD | schema/golden/keyboard + `fbd/equivalence_v1.json`; `st_fbd_model.*`, `st_fbd_compile.*`; FE `features/programming/fbd/*` | Lowerer `fwsom-fbd-1.0.0` và 20 cặp equivalence đã có; source-map artifact FBD, library còn thiếu và unit được reject tới `TASK-PROG-203` |
+| FBD | schema/golden/keyboard + `fbd/equivalence_v1.json`; `st_fbd_model.*`, `st_fbd_compile.*`; FE `features/programming/fbd/*` | Lowerer `fwsom-fbd-1.0.0`, 20 cặp equivalence và source map `pc→networkId/nodeId/portId/unit` đã có; library semantic chưa hỗ trợ vẫn reject fail-closed |
 | Giới hạn | `st_limits.hpp`, `st_ir.hpp`, generated profile; parser kiểm source UTF-8/NUL/64 KiB và full consumption | Tiếp tục lấy min(client capability, target capability, policy) ở worker/consumer |
 | Runtime wiring | `st_compiler_lib` không link vào `mkddc-core`; bootstrap chưa cấp scheduler | Đúng boundary compiler non-RT; runtime wiring thuộc lifecycle |
 
@@ -83,8 +83,9 @@ Revision canonical source
 - Compiler sở hữu syntax/semantic/lowering, thuần hàm theo input manifest.
 - Core loader sở hữu quyết định artifact chạy được; không parse ST/FBD.
 - FE chỉ dùng schema/capability/diagnostic; không tự phán semantic authoritative.
-- Build key: SHA-256 của canonical Revision, compiler ID/version, target ABI,
-  profile, library version và decision baseline. Cùng key được cache immutable.
+- Build key: SHA-256 của object canonical gồm source ID/language/byte/hash,
+  compiler ID/version/lowerer, profile ID/code/hash/library version và target ABI.
+  Không chứa timestamp, random hay path host; cùng key được cache immutable.
 
 ## 4. Subset ST Target Rev A
 
@@ -253,11 +254,11 @@ artifact active.
 |---|---|---|
 | lexer/parser/AST | `apps/core/application/st/st_parser.*`, `st_program.*`, `st_fbd_model.*` | **ST subset/type ở Task 200; FBD parser/canonicalizer ở Task 201**; thêm project POU sau Task 203 |
 | semantic | `st_semantic.*`, `st_io_map.*` | **sáu type/conversion/overflow đã có**; unit/library/dependency validator còn mở |
-| lowering/IR | `st_compile.*`, `st_ir.*`, `st_loader.*`, `st_fbd_compile.*` | **ST/FBD cùng typed IR, serializer và runtime semantic; equivalence loại riêng provenance source**; Task 203 khóa source map FBD/artifact manifest |
-| CLI | `st_validate_main.cpp`, `st_compile_main.cpp` | JSON result stable + worker deadline |
+| lowering/IR | `st_compile.*`, `st_ir.*`, `st_loader.*`, `st_fbd_compile.*`, `st_artifact_manifest.*` | **ST/FBD cùng typed IR, serializer, source map và runtime semantic; manifest ngoài artifact giữ provenance đầy đủ** |
+| CLI | `st_validate_main.cpp`, `st_compile_main.cpp` | **compile ST/FBD, `--source-id`, `--manifest-out`, hash đặt tên rõ và diagnostic có vị trí đã có**; worker deadline thuộc Task 205 |
 | BE worker | chưa có | `apps/web-api/internal/programming/compiler` |
-| contract | `contracts/programming/fbd_v1.schema.json`, `fbd_keyboard_commands_v1.json`, `fbd/{golden,manifest,equivalence_v1.json}` | library pin và artifact provenance mở rộng trong Task 203 |
-| test | `test_st_fbd_model.cpp`, `test_st_fbd_compile.cpp`, `fuzz_st_fbd_model.cpp`, FE `fbd/*.test.*`, verifier contract | 20 cặp ST↔FBD, output/state trace, fail-closed và fuzz đã có; target load ở gate sau |
+| contract | `contracts/programming/fbd_v1.schema.json`, `artifact_build_manifest_v1.schema.json`, `fbd_keyboard_commands_v1.json`, `fbd/{golden,manifest,equivalence_v1.json}`, `golden/build_manifest_{st,fbd}_v1.json` | **profile/library/hash/source map đã pin bằng schema + golden**; bundle source-only thuộc Task 206 |
+| test | `test_st_fbd_model.cpp`, `test_st_fbd_compile.cpp`, `test_st_artifact_manifest.cpp`, `test_st_compile_cli.cpp`, `fuzz_st_fbd_model.cpp`, verifier contract | equivalence, build 100 lần, CLI thật, mutation fail-closed và source map ST/FBD đã có; target load ở gate sau |
 
 ## 12. Verification và acceptance
 
@@ -317,7 +318,7 @@ không có semantic riêng ở FE.
 
 | Blocker | Owner | Gate | Điều kiện mở |
 |---|---|---|---|
-| User FUNCTION/FB và source-map artifact FBD chưa implement | Compiler + Controls | `G2` | hoàn tất `TASK-PROG-203` và artifact evidence |
+| User FUNCTION/FB chưa implement | Compiler + Controls | `G2` | hoàn tất task compiler/library tương ứng và artifact evidence |
 | Unit/conversion/PID semantic chưa khóa | Controls + Safety | implementation G0 | review Control Semantics và V&V |
 | Target WCET chưa đo | Core + QA | release | target load/HIL evidence PASS |
 
@@ -329,10 +330,11 @@ không có semantic riêng ở FE.
 | 0.4 | 2026-08-11 | Đồng bộ `TASK-PROG-200`: sáu type target/wire code, conversion tường minh, exact diagnostic span/source map, hostile-source guard và hai chiến dịch fuzz 10 triệu input; giữ FBD/local POU/worker/target ở task/gate sau | Compiler + Core Lead |
 | 0.5 | 2026-08-11 | Đồng bộ `TASK-PROG-201` tại `52dfb57`: FBD schema/golden/manifest/keyboard registry, C++ canonical validator/fuzzer và FE model/reducer/component; giữ FBD→IR/equivalence/local POU/worker/target ở task/gate sau | Compiler + Core + FE Lead |
 | 0.6 | 2026-08-11 | Đồng bộ `TASK-PROG-202` tại `4819901`: lowerer FBD→`StProgram` typed→IR chung, 20 cặp ST↔FBD, trace TON, fail-closed unit/library/graph lỗi và fuzz 100.000 input; chuyển artifact/source-map production sang Task 203 | Compiler + Core Lead |
+| 0.7 | 2026-08-11 | Đồng bộ `TASK-PROG-203` tại `2c2bfb4`: SHA-256 canonical, manifest/build key deterministic, source map ST/FBD giữ UUID/unit, CLI ST/FBD và verifier fail-closed; chuyển Project/Revision store sang Task 204 | Compiler + Core Lead |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Compiler + Controls Lead | **TASK-PROG-200..202 DONE; artifact FBD/local POU còn mở** | `8d58efa`, `a638470`, `52dfb57`, `4819901`, `EV-PROG-G2-200/201/202` |
+| Compiler + Controls Lead | **TASK-PROG-200..203 DONE; local POU/worker/target còn mở** | `8d58efa`, `a638470`, `52dfb57`, `4819901`, `2c2bfb4`, `EV-PROG-G2-200..203` |
 | Core + FE + QA + Security | **WAIVED FOR IMPLEMENTATION; evidence độc lập còn mở** | `AUTH-PROG-2026-08-11-03` |
 | System Architect + Product Owner | **APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; OD-PROG-002/005/006 đã DECIDED |
 
@@ -354,6 +356,6 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-12` Compatibility/rollout/rollback | PASS | §14 tương thích và rollout, gồm khóa profile compiler |
 | `DD-13` Trace/risk/decision/sign-off | PASS cho implementation | OD-PROG-002/005/006 đã DECIDED; source/evidence Task 200 được trace. FBD/local POU/target evidence còn là task/gate kỹ thuật, không phải decision blocker |
 
-Thiết kế đủ quyền implementation. `TASK-PROG-200..202` đã implement ST/type,
-FBD canonical và lowering/equivalence trên host; artifact/source-map production,
+Thiết kế đủ quyền implementation. `TASK-PROG-200..203` đã implement ST/type,
+FBD canonical, lowering/equivalence và artifact/source-map provenance trên host;
 local POU, worker/runtime production/target vẫn chưa được tuyên bố hoàn tất.

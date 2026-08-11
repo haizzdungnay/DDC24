@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mekong-hcm.local/contracts/programming/artifact_build_manifest_v1.schema.json",
+  "title": "Programming artifact build manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema", "manifestVersion", "source", "compiler", "profile", "target",
+    "artifact", "buildKeySha256", "sourceMap"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://mekong-hcm.local/contracts/programming/artifact_build_manifest_v1.schema.json"
+    },
+    "manifestVersion": { "const": 1 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "language", "canonicalBytes", "canonicalSha256"],
+      "properties": {
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]+$" },
+        "language": { "enum": ["ST", "FBD"] },
+        "canonicalBytes": { "type": "integer", "minimum": 1, "maximum": 65536 },
+        "canonicalSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "compiler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "lowererVersion"],
+      "properties": {
+        "id": { "const": "mkddc-programming-compiler" },
+        "version": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "lowererVersion": { "type": ["string", "null"], "maxLength": 64 }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "sha256", "libraryVersion"],
+      "properties": {
+        "id": { "const": "revA-1t-1-5-30" },
+        "code": { "const": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "libraryVersion": { "const": "rev-a.1" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["abi"],
+      "properties": { "abi": { "const": 3841 } }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "magic", "schemaVersion", "bytes", "fileSha256", "integritySha256",
+        "integrityMode", "signaturePresent"
+      ],
+      "properties": {
+        "magic": { "const": "MKDDCIR1" },
+        "schemaVersion": { "const": 1 },
+        "bytes": { "type": "integer", "minimum": 128, "maximum": 1048576 },
+        "fileSha256": { "$ref": "#/$defs/sha256" },
+        "integritySha256": { "$ref": "#/$defs/sha256" },
+        "integrityMode": { "const": "HASH_ONLY" },
+        "signaturePresent": { "type": "boolean" }
+      }
+    },
+    "buildKeySha256": { "$ref": "#/$defs/sha256" },
+    "sourceMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "entries"],
+      "properties": {
+        "version": { "const": 1 },
+        "entries": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": { "$ref": "#/$defs/sourceMapEntry" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "sourceMapEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pc", "encodedLine", "encodedColumn", "sourceId", "textLocation",
+        "fbdLocation", "unit"
+      ],
+      "properties": {
+        "pc": { "type": "integer", "minimum": 0, "maximum": 4095 },
+        "encodedLine": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "encodedColumn": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "sourceId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]+$" },
+        "textLocation": {
+          "type": ["object", "null"],
+          "required": ["line", "column", "length"],
+          "additionalProperties": false,
+          "properties": {
+            "line": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "column": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "length": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        },
+        "fbdLocation": {
+          "type": ["object", "null"],
+          "required": ["networkId", "nodeId", "portId"],
+          "additionalProperties": false,
+          "properties": {
+            "networkId": { "$ref": "#/$defs/uuid" },
+            "nodeId": { "$ref": "#/$defs/uuid" },
+            "portId": { "$ref": "#/$defs/uuid" }
+          }
+        },
+        "unit": { "type": ["string", "null"], "minLength": 1, "maxLength": 32 }
+      },
+      "oneOf": [
+        { "properties": { "textLocation": { "type": "object" }, "fbdLocation": { "type": "null" }, "unit": { "type": "null" } } },
+        { "properties": { "textLocation": { "type": "null" }, "fbdLocation": { "type": "object" } } }
+      ]
+    }
+  }
+}

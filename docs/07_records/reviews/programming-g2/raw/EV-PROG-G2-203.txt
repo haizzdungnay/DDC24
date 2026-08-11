@@ -1,0 +1,44 @@
+Evidence ID: EV-PROG-G2-203
+Task: TASK-PROG-203
+Ngày đo: 2026-08-11
+Source commit: 2c2bfb4f890b1fa0ee4a78fbc0387cffc47a780e
+Source tree: 0a34924ac09b2f5ea59fd16f72309f338c957a82
+Phạm vi: deterministic artifact/hash/profile/build manifest/source map ST và FBD
+
+1. Contract và targeted
+- verify_programming_artifact_manifest.py --self-test: PASS 7/7 mutation
+- schema/golden/source/profile/hash/build-key/source-map: PASS
+- verify_programming_fbd_contract.py --self-test: PASS 10/10 mutation
+- generate_programming_profile.py --check: PASS
+- generate_programming_errors.py --check: PASS, 19 public / 77 detail
+- CTest StValidateCli + StCompileCli + StArtifactManifest + StFbdCompile:
+  PASS 35/35
+- determinism: ST build lặp 100 lần byte/manifest-identical; FBD reorder
+  JSON/node/wire giữ canonical source, artifact và manifest byte-identical
+
+2. Sanitizer
+- compiler: Clang 18.1.3 + AddressSanitizer, detect_leaks=1
+- cấu hình cục bộ thêm -Wno-unknown-warning-option và
+  -Wno-error=unused-result để Clang bỏ qua hai warning option GCC có sẵn
+- targeted CTest: PASS 35/35 trong 2,15 giây
+- crash/ASan/leak fault: 0/0/0
+
+3. Regression repository
+- CMake Release, MKDDC_ENABLE_MODBUS=ON, MKDDC_ENABLE_BACNET=ON,
+  MKDDC_ENABLE_HMI=ON: configure/build PASS
+- CTest: PASS 927/927, 13,97 giây
+- Go: go vet ./... PASS; go test ./... -count=1 PASS
+- FE: Vitest PASS 58 file / 494 test; lint PASS; typecheck/build PASS
+- repository contract guard: PASS 2/2
+- repository dependency guard: PASS 5/5
+- programming error catalog guard: PASS 6/6
+- git diff --check: PASS trước commit source
+
+4. Boundary
+- tools/restructure/verify_repository.py vẫn FAIL ở vi phạm có sẵn ngoài task:
+  apps/web-ui/src/features/scheduler/shared.ts chạm contract C/SHM/IOP.
+  Task 203 không sửa FE và không che lỗi baseline này.
+- Không chạy Chrome DevTools: không đổi FE runtime/route/layout/component.
+- Không deploy target/HIL/production trong Task 203.
+- Feature flag OFF; không stage/activate; Active/LKG và output không đổi.
+- Không phải Test Result độc lập của VS-PROG-006/023; release vẫn BLOCKED.

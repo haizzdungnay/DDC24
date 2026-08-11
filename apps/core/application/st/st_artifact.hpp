@@ -1,31 +1,41 @@
 /**
  * @file  st_artifact.hpp
- * @brief FW SOM IEC programming foundation: artifact metadata cho validate
- *        gateway (item 2) — compiler_version/ir_schema_version cố định theo
- *        build, artifact_hash tính từ source text.
+ * @brief Tiện ích hash và encode artifact Programming Rev A.
  *
- *        `compute_artifact_hash` dùng FNV-1a 64-bit — hash NỘI DUNG để định
- *        danh/so sánh 2 lần build cùng input có ra cùng hash không (SWR-REQ-
- *        IEC-005 "deterministic build"), KHÔNG PHẢI hash mật mã học (không
- *        dùng cho chữ ký/integrity chống giả mạo — nếu sau này cần, đổi sang
- *        SHA-256 thật, đây là placeholder minh bạch, không tự nhận là bảo mật).
+ *        Mọi hash công bố ra contract đều là SHA-256 chữ thường 64 ký tự.
+ *        Không dùng FNV hoặc timestamp/path host làm provenance. Hash file
+ *        artifact và digest integrity trong header là hai giá trị khác nhau;
+ *        API đặt tên tường minh để consumer không dùng nhầm.
  */
 #ifndef CORE_ST_ARTIFACT_HPP
 #define CORE_ST_ARTIFACT_HPP
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "st/st_ir.hpp"
 
 namespace core {
 
-constexpr const char* kStCompilerVersion = "fwsom-st-0.2.0";
-constexpr int kStIrSchemaVersion = 1;
+inline constexpr const char* kStCompilerVersion = st_ir::kCompilerVersion;
+inline constexpr int kStIrSchemaVersion = st_ir::kSchemaVersion;
 
-/* FNV-1a 64-bit, in hoa hex 16 ký tự cố định (vd "3F2A9C1B7E4D5061"). */
+/* SHA-256 của source canonical, chữ thường 64 ký tự. Tên cũ được giữ một
+ * release để validate CLI/consumer cũ tiếp tục compile. */
 std::string compute_artifact_hash(const std::string& source);
+std::string compute_source_sha256(std::string_view canonical_source);
+
+/* Prefix 64-bit little-endian của SHA-256 để điền field metadata legacy trong
+ * MKDDCIR1 schema 1. Không dùng giá trị rút gọn này làm provenance authority. */
+uint64_t compute_source_hash64(std::string_view canonical_source);
+
+/* SHA-256 của đúng byte file, gồm cả digest header/chữ ký nếu có. */
+std::string compute_file_sha256(const uint8_t* data, std::size_t size);
+
+/* Digest integrity theo layout MKDDCIR1: vùng [32,128) được coi là zero. */
+std::string compute_artifact_integrity_sha256(const uint8_t* data, std::size_t size);
 
 /* Entry point contract Rev A: serialization canonical, không timestamp/path/
  * random, SHA-256 được điền và vùng chữ ký để 0. */

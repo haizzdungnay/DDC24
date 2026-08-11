@@ -2,8 +2,9 @@
 
 Thư mục này là authority machine-readable cho contract profile/artifact
 (`TASK-PROG-102`), catalog lỗi liên lớp (`TASK-PROG-103`) và manifest SQLite
-store (`TASK-PROG-104`). Từ `TASK-PROG-201/202`, thư mục này còn là authority
-của mô hình FBD canonical, registry lệnh bàn phím và corpus equivalence ST↔FBD.
+store (`TASK-PROG-104`). Từ `TASK-PROG-201..203`, thư mục này còn là authority
+của mô hình FBD canonical, corpus equivalence ST↔FBD và manifest provenance
+deterministic cho cả hai ngôn ngữ.
 Mã nguồn không được hard-code lại giới hạn, mã lỗi hoặc shortcut khác contract.
 Thay đổi nguồn phải chạy lại:
 
@@ -13,6 +14,7 @@ python3 scripts/generate_programming_profile.py --check
 python3 scripts/generate_programming_errors.py
 python3 scripts/generate_programming_errors.py --check
 python3 scripts/verify_programming_fbd_contract.py --self-test
+python3 scripts/verify_programming_artifact_manifest.py --self-test
 ```
 
 ## Thành phần
@@ -22,9 +24,13 @@ python3 scripts/verify_programming_fbd_contract.py --self-test
 | `rev_a_profile_v1.json` | instance normative: Task, chu kỳ, capacity, type/width/wire code, language, Point, Core Library và integrity |
 | `rev_a_profile_v1.schema.json` | schema khóa profile `revA-1t-1-5-30` |
 | `artifact_v1.schema.json` | schema manifest cho artifact nhị phân `MKDDCIR1` |
+| `artifact_build_manifest_v1.schema.json` | schema provenance strict: source/compiler/profile/library/ABI, hash file + digest integrity, build key và source map ST/FBD |
 | `golden/rev_a_ahu_fan_control.mkir` | artifact `HASH_ONLY` bất biến dùng cho byte-exact/golden/loader test |
 | `golden/manifest.json` | metadata và SHA-256 của golden |
 | `golden/provenance.json` | liên kết source → profile → artifact |
+| `golden/build_manifest_st_v1.json` | manifest production mẫu cho source ST, gồm 15 vị trí text |
+| `golden/rev_a_ahu_fan_enable_fbd.mkir` | artifact FBD canonical mẫu dùng chung loader/runtime |
+| `golden/build_manifest_fbd_v1.json` | manifest production mẫu ánh xạ 2 PC về UUID network/node/port FBD |
 | `negative_artifact_v1.json` | mutation corpus và mã lỗi ổn định mong đợi |
 | `error_catalog_v1.json` | authority 19 mã công khai, HTTP/retry/runtime/message/args và 77 ánh xạ detail |
 | `error_catalog_v1.schema.json` | schema khóa catalog major 1 |
@@ -70,8 +76,10 @@ target/HIL hoặc Commission đã hoàn tất.
 
 `TASK-PROG-202` hạ graph đã canonical qua chính `StProgram` typed, semantic
 checker và IR/runtime của ST; corpus 20 operator, conversion và timer chứng minh
-executable semantic tương đương. Provenance/source-map theo từng ngôn ngữ không
-được giả là byte giống nhau và thuộc artifact/source-map `TASK-PROG-203`.
-`SCALE/DEADBAND/CTU/PI/PID` hoặc unit chưa có semantic/runtime chung bị reject
-fail-closed; không consumer nào được stage graph trực tiếp hoặc tự hạ các block
-đó. Feature Programming vẫn `OFF`; host evidence không thay target/HIL.
+executable semantic tương đương. `TASK-PROG-203` khóa SHA-256 canonical, build
+key và manifest ngoài artifact; source map compact trong `MKDDCIR1` được nối về
+dòng/cột ST hoặc UUID network/node/port FBD. Unit FBD hợp lệ được giữ trong
+manifest thay vì bị bỏ; mismatch trên wire vẫn reject. `SCALE/DEADBAND/CTU/PI/PID`
+chưa có semantic/runtime chung vẫn reject fail-closed; không consumer nào được
+stage graph trực tiếp hoặc tự hạ các block đó. Feature Programming vẫn `OFF`;
+host evidence không thay target/HIL hay Commission.

@@ -2,19 +2,13 @@
 
 #include <unordered_map>
 
+#include "st/st_artifact.hpp"
 #include "st/st_limits.hpp"
 #include "st/st_parser.hpp"
 #include "st/st_semantic.hpp"
 
 namespace core {
 namespace {
-
-uint64_t fnv1a64(const std::string& s)
-{
-    uint64_t h = 0xcbf29ce484222325ull;
-    for (unsigned char c : s) { h ^= c; h *= 0x100000001b3ull; }
-    return h;
-}
 
 uint32_t crc32(const uint8_t* data, std::size_t n, uint32_t crc = 0xFFFFFFFFu)
 {
@@ -47,7 +41,10 @@ public:
     bool run(const std::string& source)
     {
         out_->program_name = prog_.name;
-        out_->source_hash = fnv1a64(source);
+        /* Layout schema 1 chỉ có 64 bit cho source_hash. Dùng prefix SHA-256
+         * deterministic; provenance authority đầy đủ 256 bit nằm ở manifest
+         * ngoài artifact và được verifier đối chiếu trước stage. */
+        out_->source_hash = compute_source_hash64(source);
         out_->compiler_version = st_ir::kCompilerVersion;
         /* Artifact Rev A phải tất định tuyệt đối: timestamp thuộc metadata DB/
          * audit, không được làm thay đổi executable bytes. Trường layout cũ

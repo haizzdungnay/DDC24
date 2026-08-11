@@ -4,14 +4,14 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.26 |
+| Phiên bản | 0.27 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`.** Team được viết và merge code production ngay; `RELEASE_READY` được đánh giá riêng sau implementation |
 | Ngày phát hành | 2026-08-11 |
 | Chủ quản | Dev Lead + System Architect |
 | Người review | Product, FE/BE/Core/FW/HW/Security/QA/Ops Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
 | Khung trình bày | ISO/IEC/IEEE 16326 — nội dung kế hoạch quản lý dự án phần mềm; ánh xạ điều khoản ở §11 |
-| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate v2.16 ghim bằng 22 SHA-256 tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v3.17 — kiểm bằng `python3 scripts/candidate_pin_check.py`; authority phê duyệt nền tiếp tục hiệu lực |
+| Design set nguồn | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md); candidate v2.18 ghim bằng 22 SHA-256 tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) v3.21 — kiểm bằng `python3 scripts/candidate_pin_check.py`; authority phê duyệt nền tiếp tục hiệu lực |
 | Quy tắc tài liệu | [`DOC-GOV-001`](../00_governance/DOC_GOVERNANCE.md) |
 
 > ## ✅ APPROVED FOR IMPLEMENTATION — được viết và merge code production
@@ -55,10 +55,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **thứ tự làm và điều kiện qua cửa**: bảy pha `P0..P6`, phụ thuộc giữa chúng, ai chịu trách nhiệm gì, và bằng chứng nào mở được mỗi gate `G0..G6`. |
 | 2. Ai phải đọc file này? | Dev Lead và Architect (chủ quản); Product và QA duyệt; mọi team đọc pha của mình. Đọc **sau** khi đã đọc hồ sơ thiết kế upstream của slice mình. |
-| 3. Hệ thống hiện tại đang có gì? | `G0/P0 PASS`; `G1/P1 GO — 6/6 DONE`; P2 `3/8`. `TASK-PROG-200..202` đã hoàn tất ST/type/IR, FBD canonical và FBD→common typed IR equivalence trên host. Hai record `VS-001/019` vẫn `BLOCKED`, 0/32 PASS; flag `OFF`, artifact source-map/Check/runtime production/Commission chưa có. |
+| 3. Hệ thống hiện tại đang có gì? | `G0/P0 PASS`; `G1/P1 GO — 6/6 DONE`; P2 `4/8`. `TASK-PROG-200..203` đã hoàn tất ST/type/IR, FBD canonical/equivalence và artifact manifest/source map deterministic trên host. Hai record `VS-001/019` vẫn `BLOCKED`, 0/32 PASS; flag `OFF`, Check/runtime production/Commission chưa có. |
 | 4. Thiết kế mới thay đổi điều gì? | Xác lập nguyên tắc: **không mở gate bằng lời văn**. Mỗi pha có điều kiện vào và ra cụ thể; §6.1 định nghĩa Definition of Ready và Definition of Done cho từng task; §6.2 định nghĩa bằng chứng gate và điều kiện quay lui. |
 | 5. Team phải sửa module/contract nào? | §5.7 ánh xạ quyền sở hữu source và sản phẩm bàn giao theo pha; §5.8 có mẫu thẻ task và cách bàn giao theo lát cắt dọc. |
-| 6. Điều gì còn bị chặn? | **Không còn blocker quyền hạn cho implementation.** Next `TASK-PROG-203` khóa deterministic artifact/hash/profile/manifest/source map; `RELEASE_READY` vẫn chờ 32/32 PASS, target/HIL và residual acceptance. |
+| 6. Điều gì còn bị chặn? | **Không còn blocker quyền hạn cho implementation.** Next `TASK-PROG-204` nối Project/Draft/Revision store; `RELEASE_READY` vẫn chờ 32/32 PASS, target/HIL và residual acceptance. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §5.2 chỉ rõ gate sở hữu từng scenario; §6.2 gắn bằng chứng bắt buộc. Hiện có 2/32 record `BLOCKED`, 0/32 PASS — đủ ghi nhận execution G1 nhưng không đủ release. |
 
 Quan hệ với Plan 54: file này quản **việc code**; [Plan 54](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md)
@@ -310,7 +310,7 @@ PASS; chưa mở Commission.
 | `PROG-200` | Core/compiler | P1 | **DONE 2026-08-11** — ST subset/limits/sáu type/source map; parser + loader mỗi bộ fuzz 10 triệu input |
 | `PROG-201` | Core+FE | P1 | **DONE 2026-08-11 tại `52dfb57`** — schema/golden/manifest FBD, canonical validator/fuzzer và FE keyboard reducer/component |
 | `PROG-202` | Compiler | 200–201 | **DONE 2026-08-11 tại `4819901`** — FBD→`StProgram` typed→IR/runtime chung; 20 cặp equivalence + fail-closed/fuzz |
-| `PROG-203` | Compiler | 202 | deterministic artifact/hash/profile/manifest/source map |
+| `PROG-203` | Compiler | 202 | **DONE 2026-08-11 tại `2c2bfb4`** — SHA-256 + deterministic artifact/build manifest/profile/source map ST/FBD; mutation/CLI/fail-closed |
 | `PROG-204` | BE | P1 | Project/Draft/Revision store, ETag/idempotency |
 | `PROG-205` | BE | 202–204 | sandbox compiler worker + Check aggregate/diagnostics |
 | `PROG-206` | BE | 204 | change manifest, bundle source-only import/export |
@@ -455,12 +455,12 @@ tuần (§6.4). Không ghi phần trăm theo cảm tính: `% hoàn tất` chỉ 
 |---|---:|---:|---:|---|---|---|---:|---|
 | P0 | 7 | 7 | 100% | `DONE` | 2026-08-10 | 2026-08-11 | — | `AUTH-PROG-2026-08-11-03`; 17/17 decision `DECIDED`; 6/6 ADR `Accepted`; chữ ký còn thiếu được miễn cho implementation |
 | P1 | 6 | 6 | 100% | `DONE` | 2026-08-11 | 2026-08-11 | 2/2 record `BLOCKED`, 0 PASS | `TASK-PROG-100..105 DONE`; G1 GO cho downstream implementation |
-| P2 | 8 | 3 | 37,5% | `IN_PROGRESS` | 2026-08-11 | — | 0/3 | `TASK-PROG-200..202 DONE`; next `TASK-PROG-203` |
+| P2 | 8 | 4 | 50,0% | `IN_PROGRESS` | 2026-08-11 | — | 0/3 | `TASK-PROG-200..203 DONE`; next `TASK-PROG-204` |
 | P3 | 8 | 0 | 0% | `NOT_STARTED` | — | — | 0/7 | G1 đã GO; chạy theo dependency với P2 |
 | P4 | 6 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G2`, `M-G3` |
 | P5 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G4`; shell chỉ đọc mở sớm từ `T+5` |
 | P6 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/1 | Chờ `HW-AUTH-*` và đồ gá HIL |
-| **Tổng** | **49** | **16** | **32,7%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | P2 đã 3/8; release evidence chưa đạt |
+| **Tổng** | **49** | **17** | **34,7%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | P2 đã 4/8; release evidence chưa đạt |
 
 Cột “Test Result đã có” cộng lại là `33`, không phải `32`: `VS-PROG-019` được
 tính hai lần vì phần contract của nó thuộc `G1` còn phần đầy đủ thuộc `G3`. Số
@@ -488,7 +488,7 @@ commit/Test Result Target đủ điều kiện.
 |---|---:|---:|---|---|
 | P0 | 000–006 | 8–15 | DOC-G4 | DONE cho entry implementation theo `AUTH-PROG-2026-08-11-03` |
 | P1 | 100–105 | 15–25 | P0-A + P0-B theo từng task | DONE 6/6; G1 GO tại `PROG-G1-CONTRACT-REVIEW-2026-08-11` |
-| P2 | 200–207 | 35–55 | P1 | IN_PROGRESS 3/8; `PROG-200..202 DONE`, tiếp theo `PROG-203` deterministic artifact/hash/profile/manifest/source map |
+| P2 | 200–207 | 35–55 | P1 | IN_PROGRESS 4/8; `PROG-200..203 DONE`, tiếp theo `PROG-204` Project/Draft/Revision store |
 | P3 | 300–307 | 35–55 | P1–P2 + P0-B runtime | NOT_STARTED; Core target timing/no-forbidden-call evidence |
 | P4 | 400–405 | 30–45 | P3 + BE P2 | NOT_STARTED; lifecycle/power/fault/read-back Test Results |
 | P5 | 500–506 | 30–45 | P1/P2/P4 per task | NOT_STARTED; Vitest/build/E2E/browser/a11y evidence |
@@ -1036,7 +1036,7 @@ trỏ tới commit + test/evidence hiện tại.
 | `RELEASE_READY` | Product + Release + QA | **BLOCKED** | — | 32/32 Test Result + residual acceptance + `OD-PROG-008` HIL |
 | G0/P0 | Product+Architect+QA | PASS | 2026-08-10 / 2026-08-11 | Candidate v2.8; consumer review kỹ thuật xong; 6 ADR `Accepted`; quyền implement mở bởi `AUTH-PROG-2026-08-11-03` |
 | G1/P1 | Architect+BE+Core | **GO — DONE 6/6** | 2026-08-11 | Join 6/6 contract, deploy/rollback dry-run PASS; 2 record BLOCKED, 0 PASS; không phải release GO |
-| G2/P2+P5 partial | BE+FE+Compiler | **IN_PROGRESS — P2 3/8** | 2026-08-11 / — | `TASK-PROG-200..202` DONE; Task 202 tại `4819901` có FBD→IR/equivalence; next `TASK-PROG-203`; `VS-001/019` vẫn BLOCKED |
+| G2/P2+P5 partial | BE+FE+Compiler | **IN_PROGRESS — P2 4/8** | 2026-08-11 / — | `TASK-PROG-200..203` DONE; Task 203 tại `2c2bfb4` có artifact/manifest/source map ST/FBD; next `TASK-PROG-204`; `VS-001/019` vẫn BLOCKED |
 | G3/P3 | Core+Controls | NOT_STARTED — ENTRY OPEN THEO DEPENDENCY | — | P2 compiler output cho các task tiêu thụ artifact |
 | G4/P4+P5 | BE+Core+FE | NOT_STARTED | — | G3 |
 | G5/P6 HIL | FW+HW+QA | NOT_STARTED | — | BSP/fixture + G3/G4 |
@@ -1129,6 +1129,7 @@ khiển thiết bị thật:
 | 0.24 | 2026-08-11 | Hoàn tất `TASK-PROG-200` tại `8d58efa` + `a638470`: ST subset hostile-input guard, sáu type target/conversion/range, IR/source map strict, golden mới và parser/loader mỗi bộ fuzz 10 triệu input. CTest 898/898, Go vet/test, FE 55 file/479 test + lint/build PASS. P2 1/8, tổng 14/49, next TASK-PROG-201; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 0.25 | 2026-08-11 | Hoàn tất `TASK-PROG-201` tại `52dfb57`: schema/golden/manifest FBD, C++ canonical validator/fuzzer và FE model/reducer/component keyboard-first. Contract mutation 10/10, Core FBD 8/8, FE FBD 15/15, ASan fuzz 50.000 input; regression CTest 906/906, Go vet/test, FE 58 file/494 test + lint/build PASS. P2 2/8, tổng 15/49, next TASK-PROG-202; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 0.26 | 2026-08-11 | Hoàn tất `TASK-PROG-202` tại `4819901`: lowerer FBD→typed IR/runtime chung, 20 cặp equivalence, trace TON và fail-closed; contract mutation 10/10, targeted 17/17, ASan fuzz 100.000 input; regression CTest 915/915, Go vet/test, FE 58 file/494 test + lint/typecheck/build PASS. P2 3/8, tổng 16/49, next TASK-PROG-203; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
+| 0.27 | 2026-08-11 | Hoàn tất `TASK-PROG-203` tại `2c2bfb4`: SHA-256 canonical, build manifest/source map ST/FBD, UUID/unit provenance, CLI thật và verifier fail-closed; targeted 35/35, mutation 7/7, regression CTest 927/927, Go/FE PASS. P2 4/8, tổng 17/49, next TASK-PROG-204; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -1152,5 +1153,5 @@ khiển thiết bị thật:
 | Cổng quyền hạn implementation | **PASS** | §4.2, §5.5 và §9.2 đồng nhất: `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`; không còn approval blocker |
 
 Kế hoạch đã được **phê duyệt để thực thi production**. P1 đã hoàn tất; P2 đạt
-`3/8` sau `TASK-PROG-200..202`; team tiếp tục `TASK-PROG-203` và cập nhật tracker
+`4/8` sau `TASK-PROG-200..203`; team tiếp tục `TASK-PROG-204` và cập nhật tracker
 sau mỗi commit/PR.
