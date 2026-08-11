@@ -9,11 +9,43 @@ const char* st_type_name(StType t)
 {
     switch (t) {
     case StType::BOOL: return "BOOL";
+    case StType::DINT: return "DINT";
     case StType::INT:  return "INT";
+    case StType::UINT: return "UINT";
     case StType::REAL: return "REAL";
     case StType::TIME: return "TIME";
     }
     return "?";
+}
+
+bool st_type_is_integer(StType t)
+{
+    return t == StType::INT || t == StType::DINT || t == StType::UINT;
+}
+
+bool st_type_is_signed_integer(StType t)
+{
+    return t == StType::INT || t == StType::DINT;
+}
+
+int64_t st_integer_min(StType t)
+{
+    switch (t) {
+    case StType::INT: return INT16_MIN;
+    case StType::DINT: return INT32_MIN;
+    case StType::UINT: return 0;
+    default: return 0;
+    }
+}
+
+int64_t st_integer_max(StType t)
+{
+    switch (t) {
+    case StType::INT: return INT16_MAX;
+    case StType::DINT: return INT32_MAX;
+    case StType::UINT: return UINT16_MAX;
+    default: return 0;
+    }
 }
 
 bool st_value_equal(const StValue& a, const StValue& b)
@@ -21,7 +53,9 @@ bool st_value_equal(const StValue& a, const StValue& b)
     if (a.type != b.type) return false;
     switch (a.type) {
     case StType::BOOL: return a.b == b.b;
+    case StType::DINT:
     case StType::INT:  return a.i == b.i;
+    case StType::UINT: return a.i == b.i;
     /* So sánh bit cho REAL: dùng cho gộp hằng số trong constant pool, nơi ta
      * cần "cùng biểu diễn" chứ không phải "bằng nhau về số học". +0.0 và -0.0
      * là hai hằng khác nhau ở đây, và điều đó đúng ý đồ. */
@@ -129,6 +163,16 @@ const FuncSpec kFuncs[] = {
     {"REAL_TO_INT",  StFunc::REAL_TO_INT,  1},
     {"TIME_TO_REAL", StFunc::TIME_TO_REAL, 1},
     {"REAL_TO_TIME", StFunc::REAL_TO_TIME, 1},
+    {"INT_TO_DINT",  StFunc::INT_TO_DINT,  1},
+    {"INT_TO_UINT",  StFunc::INT_TO_UINT,  1},
+    {"DINT_TO_INT",  StFunc::DINT_TO_INT,  1},
+    {"DINT_TO_UINT", StFunc::DINT_TO_UINT, 1},
+    {"UINT_TO_INT",  StFunc::UINT_TO_INT,  1},
+    {"UINT_TO_DINT", StFunc::UINT_TO_DINT, 1},
+    {"DINT_TO_REAL", StFunc::DINT_TO_REAL, 1},
+    {"UINT_TO_REAL", StFunc::UINT_TO_REAL, 1},
+    {"REAL_TO_DINT", StFunc::REAL_TO_DINT, 1},
+    {"REAL_TO_UINT", StFunc::REAL_TO_UINT, 1},
 };
 } // namespace
 

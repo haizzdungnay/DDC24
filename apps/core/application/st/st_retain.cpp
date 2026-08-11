@@ -47,7 +47,9 @@ std::size_t type_size(StType t)
 {
     switch (t) {
     case StType::BOOL: return 1;
-    case StType::INT:  return 4;
+    case StType::INT:
+    case StType::UINT: return 2;
+    case StType::DINT: return 4;
     case StType::REAL: return 4;
     case StType::TIME: return 8;
     }
@@ -63,7 +65,19 @@ std::vector<uint8_t> build_payload(const StLoadedProgram& prog)
         uint8_t* dst = out.data() + e.offset;
         switch (e.type) {
         case StType::BOOL: dst[0] = c.b ? 1 : 0; break;
-        case StType::INT:  std::memcpy(dst, &c.i, 4); break;
+        case StType::INT:
+        case StType::UINT: {
+            const uint16_t value = static_cast<uint16_t>(c.i);
+            dst[0] = static_cast<uint8_t>(value & 0xFFu);
+            dst[1] = static_cast<uint8_t>((value >> 8u) & 0xFFu);
+            break;
+        }
+        case StType::DINT: {
+            const uint32_t value = static_cast<uint32_t>(c.i);
+            for (int i = 0; i < 4; ++i)
+                dst[i] = static_cast<uint8_t>((value >> (8 * i)) & 0xFFu);
+            break;
+        }
         case StType::REAL: std::memcpy(dst, &c.r, 4); break;
         case StType::TIME: std::memcpy(dst, &c.t, 8); break;
         }
@@ -137,7 +151,15 @@ StRetainResult StRetainStore::restore(StLoadedProgram* prog) const
         const uint8_t* src = payload + e.offset;
         switch (e.type) {
         case StType::BOOL: c.b = src[0] != 0; break;
-        case StType::INT:  std::memcpy(&c.i, src, 4); break;
+        case StType::INT:
+            c.i = static_cast<int16_t>(rd_u16(src));
+            break;
+        case StType::UINT:
+            c.i = rd_u16(src);
+            break;
+        case StType::DINT:
+            c.i = static_cast<int32_t>(rd_u32(src));
+            break;
         case StType::REAL: std::memcpy(&c.r, src, 4); break;
         case StType::TIME: std::memcpy(&c.t, src, 8); break;
         }

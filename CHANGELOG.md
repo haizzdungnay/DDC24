@@ -15,6 +15,16 @@ ngoài profile và literal `REAL` không hữu hạn; bổ sung unary `+`, giớ
 literal `TIME` tối đa 24 giờ và span chẩn đoán đúng độ dài token. CLI compile
 phát thêm `sourceId` để consumer ánh xạ lỗi ổn định về editor.
 
+**Hệ kiểu Rev A.** Compiler, IR, loader, executor, process image và RETAIN nay
+triển khai đủ `BOOL`, `INT` 16-bit, `DINT` 32-bit, `UINT` 16-bit, `REAL` 32-bit
+và `TIME` 64-bit theo wire code của profile. Gán ngầm khác kiểu bị từ chối;
+conversion chỉ qua hàm tường minh. Phép toán tràn số, `UINT` âm/underflow,
+conversion thu hẹp ngoài miền và padding/value artifact không canonical đều
+fail-closed. Golden artifact được sinh lại từ compiler mới và ghim SHA-256
+`fcdfd4a66cd7947ce211705f12a4a72d03503922d74f4a958dafa59945d70528`;
+G1 join manifest cũng được cập nhật theo hash manifest golden mới để contract
+drift tiếp tục bị chặn tự động.
+
 **Artifact fail-closed.** Serializer và loader kiểm đối xứng flag/section cho
 source map và RETAIN; từ chối program counter vượt code, vị trí dòng/cột bằng
 0, bản ghi trùng hoặc không tăng. Parser fuzzer chạy toàn luồng
@@ -22,10 +32,11 @@ compile → serialize → load; corpus có source hợp lệ và các cú pháp 
 
 **Kiểm chứng.** Fuzz hồi quy tất định `10.000/10.000` mutation PASS. Hai lượt
 libFuzzer + AddressSanitizer độc lập đều đạt `10.000.000` input: parser
-`68.027 exec/s`, RSS đỉnh `443 MiB`; loader `53.763 exec/s`, RSS đỉnh
-`465 MiB`; không crash, OOM hoặc hang. Không đổi UI/BE, không bật feature flag,
+`74.074 exec/s`, RSS đỉnh `432 MiB`; loader `52.631 exec/s`, RSS đỉnh
+`462 MiB`; không crash, OOM hoặc hang. Không đổi UI/BE, không bật feature flag,
 không deploy target/HIL và chưa nâng Test Result tích hợp khi FBD/consumer chưa
-hoàn tất.
+hoàn tất. Regression Release C++ bật Modbus + BACnet + HMI đạt `898/898` CTest;
+Go vet/test PASS; FE đạt `55/55` file, `479/479` test cùng lint/build PASS.
 
 ### Added — Join contract và trình kiểm tương thích G1 Programming (2026-08-11)
 

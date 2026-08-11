@@ -1,5 +1,6 @@
 #include "st/st_ir.hpp"
 
+#include <cmath>
 #include <cstring>
 
 #include <sodium.h>
@@ -54,9 +55,14 @@ void put_value(std::vector<uint8_t>* v, const StValue& val)
         v->push_back(val.b ? 1 : 0);
         for (int i = 0; i < 7; i++) v->push_back(0);
         break;
-    case StType::INT:
+    case StType::DINT:
         put_u32(v, static_cast<uint32_t>(val.i));
         put_u32(v, 0);
+        break;
+    case StType::INT:
+    case StType::UINT:
+        put_u16(v, static_cast<uint16_t>(val.i));
+        for (int i = 0; i < 6; i++) v->push_back(0);
         break;
     case StType::REAL:
         put_f32(v, val.r);
@@ -111,6 +117,22 @@ bool serialize_st_ir(const StIrModule& mod, std::vector<uint8_t>* out, std::stri
         return fail("RETAIN record size exceeds limit");
     if (mod.source_map.size() > mod.code.size())
         return fail("source map has more entries than code instructions");
+    auto valid_value = [&](const StValue& value) {
+        if (st_type_is_integer(value.type))
+            return static_cast<int64_t>(value.i) >= st_integer_min(value.type) &&
+                   static_cast<int64_t>(value.i) <= st_integer_max(value.type);
+        if (value.type == StType::REAL) return std::isfinite(value.r);
+        if (value.type == StType::TIME) return value.t >= 0;
+        return value.type == StType::BOOL;
+    };
+    for (const StValue& value : mod.constants)
+        if (!valid_value(value)) return fail("constant value is outside its type range");
+    for (const StIrVariable& variable : mod.variables) {
+        if (variable.init.type != variable.type)
+            return fail("variable initial value type does not match declaration");
+        if (!valid_value(variable.init))
+            return fail("variable initial value is outside its type range");
+    }
     uint32_t previous_source_pc = 0;
     for (std::size_t i = 0; i < mod.source_map.size(); ++i) {
         const StIrSourceMap& entry = mod.source_map[i];

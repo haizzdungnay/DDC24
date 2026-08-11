@@ -176,11 +176,60 @@ VAR_OUTPUT b : INT; END_VAR
     b := a + 1;
 END_PROGRAM
 )ST", &rt));
-    rt.set_variable("a", StValue::make_int(2147483647));
+    ASSERT_TRUE(rt.set_variable("a", StValue::make_int(32767)));
     const StExecResult r = rt.execute(0);
     EXPECT_FALSE(r.ok);
     ASSERT_NE(r.fault_code, nullptr);
     EXPECT_STREQ(r.fault_code, st_diag_code::kRtIntOverflow);
+}
+
+TEST(StExec, DintOverflowIsFaultNotWraparound)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  a : DINT; END_VAR
+VAR_OUTPUT b : DINT; END_VAR
+    b := a + 1;
+END_PROGRAM
+)ST", &rt));
+    ASSERT_TRUE(rt.set_variable("a", StValue::make_dint(INT32_MAX)));
+    const StExecResult r = rt.execute(0);
+    EXPECT_FALSE(r.ok);
+    EXPECT_STREQ(r.fault_code, st_diag_code::kRtIntOverflow);
+}
+
+TEST(StExec, UintUnderflowIsFaultNotWraparound)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  a : UINT; END_VAR
+VAR_OUTPUT b : UINT; END_VAR
+    b := a - 1;
+END_PROGRAM
+)ST", &rt));
+    ASSERT_TRUE(rt.set_variable("a", StValue::make_uint(0)));
+    const StExecResult r = rt.execute(0);
+    EXPECT_FALSE(r.ok);
+    EXPECT_STREQ(r.fault_code, st_diag_code::kRtIntOverflow);
+}
+
+TEST(StExec, ExplicitIntegerConversionsAreRangeChecked)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  source : DINT; END_VAR
+VAR_OUTPUT narrowed : INT; unsignedValue : UINT; END_VAR
+    narrowed := DINT_TO_INT(source);
+    unsignedValue := DINT_TO_UINT(source);
+END_PROGRAM
+)ST", &rt));
+    ASSERT_TRUE(rt.set_variable("source", StValue::make_dint(40000)));
+    const StExecResult r = rt.execute(0);
+    EXPECT_FALSE(r.ok);
+    EXPECT_STREQ(r.fault_code, st_diag_code::kRtConvOutOfRange);
 }
 
 TEST(StExec, DivideByZeroIsFault)

@@ -53,9 +53,9 @@ output caller sau khi toàn bộ bước verify/load thành công.
 
 ## Ranh giới implementation hiện hành
 
-Profile đã khóa type target `BOOL/INT16/DINT32/UINT16/REAL32/TIME64`, conversion
-tường minh và fail-closed. Compiler ST As-Built mới có subset
-`BOOL/INT32/REAL/TIME`; triển khai parser/codegen/runtime đủ type target thuộc
-`TASK-PROG-200` và feature Programming vẫn `OFF`. Vì vậy các test host của task
-này chứng minh hợp đồng, determinism, integrity và loader boundary; chúng không
-được dùng để tuyên bố compiler/runtime Programming production đã hoàn tất.
+Profile và compiler/runtime ST đã triển khai đủ type target
+`BOOL/INT16/DINT32/UINT16/REAL32/TIME64`, conversion tường minh, kiểm tra tràn
+số và fail-closed trong `TASK-PROG-200`; feature Programming vẫn `OFF`. Vì vậy
+các test host của task này chứng minh hợp đồng type, determinism, integrity và
+loader boundary; chúng không được dùng để tuyên bố runtime production, FBD,
+target/HIL hoặc Commission đã hoàn tất.

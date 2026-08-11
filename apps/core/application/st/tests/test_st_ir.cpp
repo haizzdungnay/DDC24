@@ -197,6 +197,41 @@ TEST(StIr, SourceMapRoundTripsWithStrictlyIncreasingProgramCounters)
     EXPECT_EQ(loaded.source_map.size(), module.source_map.size());
 }
 
+TEST(StIr, TargetIntegerWireCodesRoundTripWithoutChangingWidth)
+{
+    const std::string source = R"ST(
+PROGRAM integer_types
+VAR RETAIN i : INT; d : DINT; u : UINT; END_VAR
+i := 32767;
+d := 2147483647;
+u := 65535;
+END_PROGRAM
+)ST";
+    StIrModule module;
+    StDiagnostic diagnostic;
+    ASSERT_TRUE(compile_st_source(source, &module, &diagnostic))
+        << diagnostic.code << ": " << diagnostic.message;
+    ASSERT_EQ(module.variables.size(), 3u);
+    EXPECT_EQ(module.variables[0].type, StType::INT);
+    EXPECT_EQ(module.variables[1].type, StType::DINT);
+    EXPECT_EQ(module.variables[2].type, StType::UINT);
+    EXPECT_EQ(module.retain_record_size, 8u); /* 2 + 4 + 2 byte */
+
+    std::vector<uint8_t> artifact;
+    std::string encode_error;
+    ASSERT_TRUE(serialize_st_ir(module, &artifact, &encode_error)) << encode_error;
+    StLoadedProgram loaded;
+    StLoaderOptions options;
+    StLoadError load_error;
+    ASSERT_TRUE(load_st_artifact(artifact.data(), artifact.size(), options, &loaded,
+                                 &load_error))
+        << load_error.code << ": " << load_error.message;
+    ASSERT_EQ(loaded.variables.size(), 3u);
+    EXPECT_EQ(loaded.variables[0].type, StType::INT);
+    EXPECT_EQ(loaded.variables[1].type, StType::DINT);
+    EXPECT_EQ(loaded.variables[2].type, StType::UINT);
+}
+
 TEST(StIr, SerializerRejectsInvalidSourceMapBeforeArtifactCreation)
 {
     StIrModule module;

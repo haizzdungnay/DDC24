@@ -143,7 +143,7 @@ private:
 
         const StType want = it->second.type;
         TypeInfo got;
-        if (!check_expr(*s.assign_expr, &got)) return false;
+        if (!check_expr(*s.assign_expr, &got, &want)) return false;
         if (!coerce(*s.assign_expr, &got, want)) return false;
         if (got.type != want)
             return fail(st_diag_code::kTypeMismatch,
@@ -158,7 +158,8 @@ private:
         for (StIfBranch& b : s.branches) {
             if (b.cond) {
                 TypeInfo t;
-                if (!check_expr(*b.cond, &t)) return false;
+                const StType want = StType::BOOL;
+                if (!check_expr(*b.cond, &t, &want)) return false;
                 if (!coerce(*b.cond, &t, StType::BOOL)) return false;
                 if (t.type != StType::BOOL)
                     return fail(st_diag_code::kTypeMismatch,
@@ -218,7 +219,7 @@ private:
 
             const StType want = st_fb_input_type(fb, idx);
             TypeInfo got;
-            if (!check_expr(*arg.value, &got)) return false;
+            if (!check_expr(*arg.value, &got, &want)) return false;
             if (!coerce(*arg.value, &got, want)) return false;
             if (got.type != want)
                 return fail(st_diag_code::kTypeMismatch,
@@ -237,25 +238,25 @@ private:
     bool coerce(StExpr& e, TypeInfo* t, StType want)
     {
         if (!t->poly) return true;
-        if (want == StType::INT) {
-            if (e.literal_int_value > std::numeric_limits<int32_t>::max() ||
-                e.literal_int_value < std::numeric_limits<int32_t>::min())
+        if (st_type_is_integer(want)) {
+            if (e.literal_int_value > st_integer_max(want) ||
+                e.literal_int_value < st_integer_min(want))
                 return fail(st_diag_code::kIntLiteralOutOfRange,
                             "integer literal " + std::to_string(e.literal_int_value) +
-                                " is outside INT range",
+                                " is outside " + st_type_name(want) + " range",
                             e.line, e.column, e.length);
-            e.literal = StValue::make_int(static_cast<int32_t>(e.literal_int_value));
+            e.literal = StValue::make_integer(want, static_cast<int32_t>(e.literal_int_value));
         } else if (want == StType::REAL) {
             e.literal = StValue::make_real(static_cast<float>(e.literal_int_value));
         } else {
-            /* BOOL/TIME không nhận literal nguyên. Chốt về INT rồi để caller
+            /* BOOL/TIME không nhận literal nguyên. Chốt về DINT rồi để caller
              * báo type mismatch với thông điệp đúng ngữ cảnh của nó — báo ở
              * đây sẽ mất thông tin "đang ở tham số nào của hàm nào". */
-            e.literal = StValue::make_int(0);
-            e.result_type = StType::INT;
+            e.literal = StValue::make_dint(0);
+            e.result_type = StType::DINT;
             e.literal_polymorphic = false;
             t->poly = false;
-            t->type = StType::INT;
+            t->type = StType::DINT;
             return true;
         }
         e.literal_polymorphic = false;
@@ -266,25 +267,37 @@ private:
     }
 
     /* Hai vế của toán tử nhị phân: bên đa hình lấy kiểu của bên cụ thể.
-     * Cả hai đa hình → mặc định INT. */
+     * Cả hai đa hình → dùng INT nếu cùng nằm trong 16-bit, ngược lại DINT.
+     * UINT chỉ được chọn từ ngữ cảnh khai báo hoặc conversion tường minh. */
     bool unify(StExpr& l, TypeInfo* lt, StExpr& r, TypeInfo* rt)
     {
         if (lt->poly && rt->poly) {
-            if (!coerce(l, lt, StType::INT)) return false;
-            return coerce(r, rt, StType::INT);
+            const bool fits_int =
+                l.literal_int_value >= st_integer_min(StType::INT) &&
+                l.literal_int_value <= st_integer_max(StType::INT) &&
+                r.literal_int_value >= st_integer_min(StType::INT) &&
+                r.literal_int_value <= st_integer_max(StType::INT);
+            const StType chosen = fits_int ? StType::INT : StType::DINT;
+            if (!coerce(l, lt, chosen)) return false;
+            return coerce(r, rt, chosen);
         }
         if (lt->poly) return coerce(l, lt, rt->type);
         if (rt->poly) return coerce(r, rt, lt->type);
         return true;
     }
 
-    static bool is_numeric(StType t) { return t == StType::INT || t == StType::REAL; }
+    static bool is_numeric(StType t) { return st_type_is_integer(t) || t == StType::REAL; }
 
-    bool check_expr(StExpr& e, TypeInfo* out)
+    bool check_expr(StExpr& e, TypeInfo* out, const StType* expected = nullptr)
     {
         switch (e.kind) {
         case StExpr::Kind::LITERAL:
-            if (e.literal_polymorphic) { *out = TypeInfo::make_poly(); return true; }
+            if (e.literal_polymorphic) {
+                *out = TypeInfo::make_poly();
+                if (expected && (st_type_is_integer(*expected) || *expected == StType::REAL))
+                    return coerce(e, out, *expected);
+                return true;
+            }
             e.result_type = e.literal.type;
             *out = TypeInfo::make(e.literal.type);
             return true;
@@ -329,7 +342,10 @@ private:
 
         case StExpr::Kind::UNOP: {
             TypeInfo t;
-            if (!check_expr(*e.operand, &t)) return false;
+            const StType bool_type = StType::BOOL;
+            const StType* operand_expected =
+                e.un_op == StUnOp::NOT ? &bool_type : expected;
+            if (!check_expr(*e.operand, &t, operand_expected)) return false;
             if (e.un_op == StUnOp::NOT) {
                 if (!coerce(*e.operand, &t, StType::BOOL)) return false;
                 if (t.type != StType::BOOL)
@@ -339,9 +355,9 @@ private:
                 e.result_type = StType::BOOL;
             } else {
                 if (t.poly && !coerce(*e.operand, &t, StType::INT)) return false;
-                if (!is_numeric(t.type))
+                if ((!st_type_is_signed_integer(t.type) && t.type != StType::REAL))
                     return fail(st_diag_code::kTypeMismatch,
-                                std::string("unary '-' requires INT or REAL, got ") +
+                                std::string("unary '-' requires a signed integer or REAL, got ") +
                                     st_type_name(t.type),
                                 e.line, e.column, e.length);
                 e.result_type = t.type;
@@ -350,19 +366,23 @@ private:
             return true;
         }
 
-        case StExpr::Kind::BINOP: return check_binop(e, out);
-        case StExpr::Kind::CALL:  return check_call(e, out);
+        case StExpr::Kind::BINOP: return check_binop(e, out, expected);
+        case StExpr::Kind::CALL:  return check_call(e, out, expected);
         }
         return true;
     }
 
-    bool check_binop(StExpr& e, TypeInfo* out)
+    bool check_binop(StExpr& e, TypeInfo* out, const StType* expected)
     {
         TypeInfo lt, rt;
-        if (!check_expr(*e.lhs, &lt)) return false;
-        if (!check_expr(*e.rhs, &rt)) return false;
-
         const StBinOp op = e.bin_op;
+        const bool result_is_operand_type =
+            op == StBinOp::ADD || op == StBinOp::SUB || op == StBinOp::MUL ||
+            op == StBinOp::DIV || op == StBinOp::MOD;
+        const StType* operand_expected = result_is_operand_type ? expected : nullptr;
+        if (!check_expr(*e.lhs, &lt, operand_expected)) return false;
+        if (!check_expr(*e.rhs, &rt, operand_expected)) return false;
+
         if (op == StBinOp::AND || op == StBinOp::OR || op == StBinOp::XOR) {
             if (!coerce(*e.lhs, &lt, StType::BOOL)) return false;
             if (!coerce(*e.rhs, &rt, StType::BOOL)) return false;
@@ -402,11 +422,11 @@ private:
             e.result_type = t;
             break;
         case StBinOp::MOD:
-            if (t != StType::INT)
+            if (!st_type_is_integer(t))
                 return fail(st_diag_code::kTypeMismatch,
-                            std::string("MOD requires INT, got ") + st_type_name(t),
+                            std::string("MOD requires an integer, got ") + st_type_name(t),
                             e.line, e.column, e.length);
-            e.result_type = StType::INT;
+            e.result_type = t;
             break;
         case StBinOp::LT: case StBinOp::LE: case StBinOp::GT: case StBinOp::GE:
             if (!is_numeric(t) && t != StType::TIME)
@@ -426,7 +446,7 @@ private:
         return true;
     }
 
-    bool check_call(StExpr& e, TypeInfo* out)
+    bool check_call(StExpr& e, TypeInfo* out, const StType* expected)
     {
         const int arity = st_func_arity(e.func);
         if (static_cast<int>(e.args.size()) != arity)
@@ -436,8 +456,13 @@ private:
                         e.line, e.column, e.length);
 
         std::vector<TypeInfo> ts(e.args.size());
-        for (std::size_t i = 0; i < e.args.size(); i++)
-            if (!check_expr(*e.args[i], &ts[i])) return false;
+        for (std::size_t i = 0; i < e.args.size(); i++) {
+            const bool result_typed_arg =
+                e.func == StFunc::ABS || e.func == StFunc::MIN || e.func == StFunc::MAX ||
+                e.func == StFunc::LIMIT || (e.func == StFunc::SEL && i > 0);
+            if (!check_expr(*e.args[i], &ts[i], result_typed_arg ? expected : nullptr))
+                return false;
+        }
 
         auto require = [&](std::size_t i, StType want) -> bool {
             if (!coerce(*e.args[i], &ts[i], want)) return false;
@@ -477,7 +502,9 @@ private:
         case StFunc::LIMIT: {
             /* Kiểu chung của 3 tham số: lấy kiểu cụ thể đầu tiên tìm được rồi
              * ép các tham số đa hình còn lại về đó. */
-            StType common = StType::INT;
+            StType common = expected && (is_numeric(*expected) || *expected == StType::TIME)
+                                ? *expected
+                                : StType::INT;
             for (std::size_t i = 0; i < 3; i++)
                 if (!ts[i].poly) { common = ts[i].type; break; }
             for (std::size_t i = 0; i < 3; i++)
@@ -518,6 +545,46 @@ private:
         case StFunc::REAL_TO_TIME:
             if (!require(0, StType::REAL)) return false;
             e.result_type = StType::TIME;
+            break;
+        case StFunc::INT_TO_DINT:
+            if (!require(0, StType::INT)) return false;
+            e.result_type = StType::DINT;
+            break;
+        case StFunc::INT_TO_UINT:
+            if (!require(0, StType::INT)) return false;
+            e.result_type = StType::UINT;
+            break;
+        case StFunc::DINT_TO_INT:
+            if (!require(0, StType::DINT)) return false;
+            e.result_type = StType::INT;
+            break;
+        case StFunc::DINT_TO_UINT:
+            if (!require(0, StType::DINT)) return false;
+            e.result_type = StType::UINT;
+            break;
+        case StFunc::UINT_TO_INT:
+            if (!require(0, StType::UINT)) return false;
+            e.result_type = StType::INT;
+            break;
+        case StFunc::UINT_TO_DINT:
+            if (!require(0, StType::UINT)) return false;
+            e.result_type = StType::DINT;
+            break;
+        case StFunc::DINT_TO_REAL:
+            if (!require(0, StType::DINT)) return false;
+            e.result_type = StType::REAL;
+            break;
+        case StFunc::UINT_TO_REAL:
+            if (!require(0, StType::UINT)) return false;
+            e.result_type = StType::REAL;
+            break;
+        case StFunc::REAL_TO_DINT:
+            if (!require(0, StType::REAL)) return false;
+            e.result_type = StType::DINT;
+            break;
+        case StFunc::REAL_TO_UINT:
+            if (!require(0, StType::REAL)) return false;
+            e.result_type = StType::UINT;
             break;
         }
 

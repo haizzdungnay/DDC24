@@ -485,7 +485,8 @@ private:
             "PROGRAM", "END_PROGRAM", "VAR", "VAR_INPUT", "VAR_OUTPUT", "END_VAR",
             "RETAIN", "IF", "THEN", "ELSIF", "ELSE", "END_IF",
             "AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE",
-            "BOOL", "INT", "REAL", "TIME", "TON", "TOF", "R_TRIG", "F_TRIG",
+            "BOOL", "INT", "DINT", "UINT", "REAL", "TIME",
+            "TON", "TOF", "R_TRIG", "F_TRIG",
             "CASE", "END_CASE", "FOR", "END_FOR", "WHILE", "END_WHILE",
             "REPEAT", "UNTIL", "END_REPEAT", "EXIT", "CONTINUE", "RETURN", "GOTO",
             "VAR_GLOBAL", "VAR_EXTERNAL", "NATIVE", "POINTER", "REFERENCE", "AT",
@@ -603,10 +604,12 @@ private:
                 d.line = name_tok.line;
                 d.column = name_tok.column;
                 d.length = name_tok.length;
-                if (type_tok.upper == "BOOL")      d.type = StType::BOOL;
-                else if (type_tok.upper == "INT")  d.type = StType::INT;
-                else if (type_tok.upper == "REAL") d.type = StType::REAL;
-                else if (type_tok.upper == "TIME") d.type = StType::TIME;
+                if (type_tok.upper == "BOOL")       d.type = StType::BOOL;
+                else if (type_tok.upper == "INT")   d.type = StType::INT;
+                else if (type_tok.upper == "DINT")  d.type = StType::DINT;
+                else if (type_tok.upper == "UINT")  d.type = StType::UINT;
+                else if (type_tok.upper == "REAL")  d.type = StType::REAL;
+                else if (type_tok.upper == "TIME")  d.type = StType::TIME;
                 else {
                     set_diag(diag, st_diag_code::kUnknownType,
                              "unknown type '" + type_tok.text + "'",

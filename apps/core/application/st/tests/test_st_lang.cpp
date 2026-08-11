@@ -516,4 +516,40 @@ TEST(StLang, NonFiniteRealLiteralIsRejectedWithExactSpan)
     EXPECT_EQ(d.length, static_cast<int>(literal.size() + 2));
 }
 
+TEST(StLang, RevATargetIntegerTypesAndBoundaryLiterals)
+{
+    StDiagnostic d;
+    EXPECT_TRUE(check(prog("VAR i : INT; d : DINT; u : UINT; END_VAR\n",
+                           "i := 32767; d := 2147483647; u := 65535;\n"), &d))
+        << d.code << ": " << d.message;
+
+    EXPECT_FALSE(check(prog("VAR i : INT; END_VAR\n", "i := 32768;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kIntLiteralOutOfRange);
+    EXPECT_FALSE(check(prog("VAR d : DINT; END_VAR\n", "d := 2147483648;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kIntLiteralOutOfRange);
+    EXPECT_FALSE(check(prog("VAR u : UINT; END_VAR\n", "u := 65536;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kIntLiteralOutOfRange);
+    EXPECT_FALSE(check(prog("VAR u : UINT; END_VAR\n", "u := -1;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kTypeMismatch);
+}
+
+TEST(StLang, IntegerTypesRequireExplicitConversion)
+{
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("VAR i : INT; d : DINT; END_VAR\n", "d := i;\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kTypeMismatch);
+    EXPECT_TRUE(check(prog("VAR i : INT; d : DINT; u : UINT; END_VAR\n",
+                           "d := INT_TO_DINT(i); u := INT_TO_UINT(i);\n"
+                           "i := DINT_TO_INT(d); d := UINT_TO_DINT(u);\n"), &d))
+        << d.code << ": " << d.message;
+}
+
+TEST(StLang, AssignmentContextSelectsIntegerTypeForLiteralExpression)
+{
+    StDiagnostic d;
+    EXPECT_TRUE(check(prog("VAR d : DINT; u : UINT; END_VAR\n",
+                           "d := 40000 + 1; u := 40000 + 1;\n"), &d))
+        << d.code << ": " << d.message;
+}
+
 } // namespace core

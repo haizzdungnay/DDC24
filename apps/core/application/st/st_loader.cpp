@@ -1,5 +1,6 @@
 #include "st/st_loader.hpp"
 
+#include <cmath>
 #include <cstring>
 #include <utility>
 
@@ -37,17 +38,56 @@ std::string rd_fixed_string(const uint8_t* p, std::size_t width)
     return std::string(reinterpret_cast<const char*>(p), n);
 }
 
-bool valid_type_raw(uint8_t t) { return t >= 1 && t <= 4; }
+bool valid_type_raw(uint8_t t)
+{
+    return t == st_profile_generated::kBoolWireCode ||
+           t == st_profile_generated::kIntWireCode ||
+           t == st_profile_generated::kDintWireCode ||
+           t == st_profile_generated::kUintWireCode ||
+           t == st_profile_generated::kRealWireCode ||
+           t == st_profile_generated::kTimeWireCode;
+}
+
+std::size_t type_size(StType type)
+{
+    switch (type) {
+    case StType::BOOL: return 1;
+    case StType::INT:
+    case StType::UINT: return 2;
+    case StType::DINT:
+    case StType::REAL: return 4;
+    case StType::TIME: return 8;
+    }
+    return 0;
+}
 
 StValue rd_value(uint8_t type_raw, const uint8_t* p)
 {
     switch (static_cast<StType>(type_raw)) {
     case StType::BOOL: return StValue::make_bool(p[0] != 0);
-    case StType::INT:  return StValue::make_int(static_cast<int32_t>(rd_u32(p)));
+    case StType::INT:
+        return StValue::make_int(static_cast<int16_t>(rd_u16(p)));
+    case StType::DINT:
+        return StValue::make_dint(static_cast<int32_t>(rd_u32(p)));
+    case StType::UINT:
+        return StValue::make_uint(rd_u16(p));
     case StType::REAL: return StValue::make_real(rd_f32(p));
     case StType::TIME: return StValue::make_time(static_cast<int64_t>(rd_u64(p)));
     }
     return StValue::make_bool(false);
+}
+
+bool valid_encoded_value(uint8_t type_raw, const uint8_t* p)
+{
+    const StType type = static_cast<StType>(type_raw);
+    const std::size_t used = type_size(type);
+    if (used == 0) return false;
+    if (type == StType::BOOL && p[0] > 1) return false;
+    if (type == StType::REAL && !std::isfinite(rd_f32(p))) return false;
+    if (type == StType::TIME && rd_u64(p) > static_cast<uint64_t>(INT64_MAX)) return false;
+    for (std::size_t i = used; i < 8; ++i)
+        if (p[i] != 0) return false;
+    return true;
 }
 
 struct SectionRef {
@@ -275,6 +315,8 @@ private:
             if (!valid_type_raw(p[0])) return fail(st_ir_error::kBadTable, "invalid constant type");
             for (int k = 1; k < 8; k++)
                 if (p[k] != 0) return fail(st_ir_error::kBadTable, "constant padding must be zero");
+            if (!valid_encoded_value(p[0], p + 8))
+                return fail(st_ir_error::kBadTable, "constant value encoding is invalid");
             const_values_.push_back(rd_value(p[0], p + 8));
         }
         return true;
@@ -295,6 +337,8 @@ private:
             v.storage = static_cast<StStorage>(p[65]);
             v.slot = rd_u16(p + 66);
             if (rd_u32(p + 68) != 0) return fail(st_ir_error::kBadTable, "variable reserved must be zero");
+            if (!valid_encoded_value(p[64], p + 72))
+                return fail(st_ir_error::kBadTable, "variable initial value encoding is invalid");
             v.init = rd_value(p[64], p + 72);
             if (v.slot >= var_slot_count_)
                 return fail(st_ir_error::kBadTable, "variable slot out of writable range");
@@ -405,8 +449,18 @@ private:
             r.offset = rd_u32(e + 4);
             if (r.slot >= var_slot_count_)
                 return fail(st_ir_error::kBadTable, "RETAIN slot out of writable range");
-            if (r.offset >= out_->retain_record_size)
+            if (static_cast<uint64_t>(r.offset) + type_size(r.type) >
+                out_->retain_record_size)
                 return fail(st_ir_error::kBadTable, "RETAIN offset outside record");
+            bool type_matches_variable = false;
+            for (const StIrVariable& variable : out_->variables)
+                if (variable.slot == r.slot) {
+                    type_matches_variable = variable.type == r.type;
+                    break;
+                }
+            if (!type_matches_variable)
+                return fail(st_ir_error::kBadTable,
+                            "RETAIN type does not match variable declaration");
             out_->retain_entries.push_back(r);
         }
         return true;
@@ -474,7 +528,7 @@ private:
 
     struct OpShape {
         bool uses_dst, uses_a, uses_b, uses_c, uses_aux, uses_imm;
-        uint8_t type_mask;   /* bit 0 = VOID, bit n = kiểu n (1..4) */
+        uint8_t type_mask;   /* bit 0 = VOID, bit n = wire code kiểu n (1..6) */
     };
 
     static bool shape_of(StOp op, OpShape* s)
@@ -483,10 +537,13 @@ private:
             OpShape o{d, a, b, c, aux, imm, tm}; return o;
         };
         constexpr uint8_t VOID = 1u << 0;
-        constexpr uint8_t B = 1u << 1, I = 1u << 2, R = 1u << 3, T = 1u << 4;
-        constexpr uint8_t NUM = I | R;
-        constexpr uint8_t NUMT = I | R | T;
-        constexpr uint8_t ALL = B | I | R | T;
+        constexpr uint8_t B = 1u << 1, D = 1u << 2, R = 1u << 3, T = 1u << 4;
+        constexpr uint8_t I = 1u << 5, U = 1u << 6;
+        constexpr uint8_t INTEGER = I | D | U;
+        constexpr uint8_t SIGNED_NUM = I | D | R;
+        constexpr uint8_t NUM = INTEGER | R;
+        constexpr uint8_t NUMT = NUM | T;
+        constexpr uint8_t ALL = B | NUMT;
         switch (op) {
         case StOp::NOP:          *s = mk(0,0,0,0,0,0, VOID); return true;
         case StOp::HALT:         *s = mk(0,0,0,0,0,0, VOID); return true;
@@ -497,8 +554,8 @@ private:
                                  *s = mk(1,1,1,0,0,0, NUMT); return true;
         case StOp::MUL: case StOp::DIV:
                                  *s = mk(1,1,1,0,0,0, NUM);  return true;
-        case StOp::MOD:          *s = mk(1,1,1,0,0,0, I);    return true;
-        case StOp::NEG:          *s = mk(1,1,0,0,0,0, NUM);  return true;
+        case StOp::MOD:          *s = mk(1,1,1,0,0,0, INTEGER); return true;
+        case StOp::NEG:          *s = mk(1,1,0,0,0,0, SIGNED_NUM); return true;
         case StOp::LT: case StOp::LE: case StOp::GT: case StOp::GE:
                                  *s = mk(1,1,1,0,0,0, NUMT); return true;
         case StOp::EQ: case StOp::NE:
@@ -514,6 +571,11 @@ private:
         case StOp::SQRT:         *s = mk(1,1,0,0,0,0, R);    return true;
         case StOp::CVT_I2R: case StOp::CVT_R2I:
         case StOp::CVT_T2R: case StOp::CVT_R2T:
+        case StOp::CVT_I2D: case StOp::CVT_I2U:
+        case StOp::CVT_D2I: case StOp::CVT_D2U:
+        case StOp::CVT_U2I: case StOp::CVT_U2D:
+        case StOp::CVT_D2R: case StOp::CVT_U2R:
+        case StOp::CVT_R2D: case StOp::CVT_R2U:
                                  *s = mk(1,1,0,0,0,0, VOID); return true;
         case StOp::FB_CALL:      *s = mk(0,0,0,0,1,0, VOID); return true;
         }
@@ -528,8 +590,9 @@ private:
                         "unknown opcode 0x" + std::to_string(static_cast<int>(in.op)) +
                             " at pc " + std::to_string(pc));
 
+        if (in.type_raw != 0 && !valid_type_raw(in.type_raw))
+            return fail(st_ir_error::kBadCode, "invalid type tag");
         const uint8_t tm = in.type_raw == 0 ? 1u : static_cast<uint8_t>(1u << in.type_raw);
-        if (in.type_raw > 4) return fail(st_ir_error::kBadCode, "invalid type tag");
         if ((sh.type_mask & tm) == 0)
             return fail(st_ir_error::kBadCode,
                         "type tag not valid for opcode at pc " + std::to_string(pc));
@@ -607,7 +670,9 @@ private:
     {
         switch (v.type) {
         case StType::BOOL: c->b = v.b; break;
+        case StType::DINT:
         case StType::INT:  c->i = v.i; break;
+        case StType::UINT: c->i = v.i; break;
         case StType::REAL: c->r = v.r; break;
         case StType::TIME: c->t = v.t; break;
         }
@@ -644,7 +709,9 @@ void StLoadedProgram::reset_to_initial()
         StCell& c = slots[v.slot];
         switch (v.type) {
         case StType::BOOL: c.b = v.init.b; break;
+        case StType::DINT:
         case StType::INT:  c.i = v.init.i; break;
+        case StType::UINT: c.i = v.init.i; break;
         case StType::REAL: c.r = v.init.r; break;
         case StType::TIME: c.t = v.init.t; break;
         }

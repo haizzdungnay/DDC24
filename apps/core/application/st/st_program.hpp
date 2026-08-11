@@ -26,12 +26,18 @@ namespace core {
 
 enum class StType : uint8_t {
     BOOL = 1,
-    INT  = 2,
+    DINT = 2,
     REAL = 3,
     TIME = 4,
+    INT  = 5,
+    UINT = 6,
 };
 
 const char* st_type_name(StType t);
+bool st_type_is_integer(StType t);
+bool st_type_is_signed_integer(StType t);
+int64_t st_integer_min(StType t);
+int64_t st_integer_max(StType t);
 
 /* Giá trị vô hướng. TIME lưu bằng nanosecond (int64, không âm — SPEC §3.1). */
 struct StValue {
@@ -43,6 +49,15 @@ struct StValue {
 
     static StValue make_bool(bool v) { StValue s; s.type = StType::BOOL; s.b = v; return s; }
     static StValue make_int(int32_t v) { StValue s; s.type = StType::INT; s.i = v; return s; }
+    static StValue make_dint(int32_t v) { StValue s; s.type = StType::DINT; s.i = v; return s; }
+    static StValue make_uint(uint16_t v) { StValue s; s.type = StType::UINT; s.i = v; return s; }
+    static StValue make_integer(StType type, int32_t v)
+    {
+        StValue s;
+        s.type = type;
+        s.i = v;
+        return s;
+    }
     static StValue make_real(float v) { StValue s; s.type = StType::REAL; s.r = v; return s; }
     static StValue make_time(int64_t v) { StValue s; s.type = StType::TIME; s.t = v; return s; }
 };
@@ -117,6 +132,9 @@ enum class StUnOp : uint8_t { NEG, NOT };
 enum class StFunc : uint8_t {
     ABS, MIN, MAX, LIMIT, SEL, SQRT,
     INT_TO_REAL, REAL_TO_INT, TIME_TO_REAL, REAL_TO_TIME,
+    INT_TO_DINT, INT_TO_UINT, DINT_TO_INT, DINT_TO_UINT,
+    UINT_TO_INT, UINT_TO_DINT, DINT_TO_REAL, UINT_TO_REAL,
+    REAL_TO_DINT, REAL_TO_UINT,
 };
 
 bool st_func_from_name(const std::string& name, StFunc* out);

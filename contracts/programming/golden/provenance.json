@@ -3,7 +3,7 @@
   "source": "apps/core/application/st/samples/ahu_fan_control.st",
   "sourceFileSha256": "c26d679829d59de65b2c94ed643d459fd8ee7dfd6b20491d273aa13d093fc6ae",
   "artifact": "contracts/programming/golden/rev_a_ahu_fan_control.mkir",
-  "artifactFileSha256": "586bf673a8dc331cf6aad4a3d57d20f3e03c88c22fd0618ee1676ed2278e161e",
+  "artifactFileSha256": "fcdfd4a66cd7947ce211705f12a4a72d03503922d74f4a958dafa59945d70528",
   "profile": "contracts/programming/rev_a_profile_v1.json",
   "profileFileSha256": "94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc",
   "generator": "mkddc-st-compile",

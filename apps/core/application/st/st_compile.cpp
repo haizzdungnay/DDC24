@@ -30,7 +30,9 @@ std::size_t type_size(StType t)
 {
     switch (t) {
     case StType::BOOL: return 1;
-    case StType::INT:  return 4;
+    case StType::INT:  return 2;
+    case StType::UINT: return 2;
+    case StType::DINT: return 4;
     case StType::REAL: return 4;
     case StType::TIME: return 8;
     }
@@ -94,6 +96,8 @@ private:
         switch (t) {
         case StType::BOOL: return StValue::make_bool(false);
         case StType::INT:  return StValue::make_int(0);
+        case StType::DINT: return StValue::make_dint(0);
+        case StType::UINT: return StValue::make_uint(0);
         case StType::REAL: return StValue::make_real(0.0f);
         case StType::TIME: return StValue::make_time(0);
         }
@@ -421,6 +425,26 @@ private:
             pc = emit(StOp::CVT_T2R, 0, dst, argv[0]); break;
         case StFunc::REAL_TO_TIME:
             pc = emit(StOp::CVT_R2T, 0, dst, argv[0]); break;
+        case StFunc::INT_TO_DINT:
+            pc = emit(StOp::CVT_I2D, 0, dst, argv[0]); break;
+        case StFunc::INT_TO_UINT:
+            pc = emit(StOp::CVT_I2U, 0, dst, argv[0]); break;
+        case StFunc::DINT_TO_INT:
+            pc = emit(StOp::CVT_D2I, 0, dst, argv[0]); break;
+        case StFunc::DINT_TO_UINT:
+            pc = emit(StOp::CVT_D2U, 0, dst, argv[0]); break;
+        case StFunc::UINT_TO_INT:
+            pc = emit(StOp::CVT_U2I, 0, dst, argv[0]); break;
+        case StFunc::UINT_TO_DINT:
+            pc = emit(StOp::CVT_U2D, 0, dst, argv[0]); break;
+        case StFunc::DINT_TO_REAL:
+            pc = emit(StOp::CVT_D2R, 0, dst, argv[0]); break;
+        case StFunc::UINT_TO_REAL:
+            pc = emit(StOp::CVT_U2R, 0, dst, argv[0]); break;
+        case StFunc::REAL_TO_DINT:
+            pc = emit(StOp::CVT_R2D, 0, dst, argv[0]); break;
+        case StFunc::REAL_TO_UINT:
+            pc = emit(StOp::CVT_R2U, 0, dst, argv[0]); break;
         }
         note_source(pc, e.line, e.column);
         *out_slot = dst;

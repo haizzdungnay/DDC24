@@ -34,15 +34,28 @@ bool to_point_id(const StIrIoBinding& b, PointId* out)
     return true;
 }
 
-void write_slot(StLoadedProgram* prog, const StIrIoBinding& b, float value)
+bool write_slot(StLoadedProgram* prog, const StIrIoBinding& b, float value)
 {
     StCell& c = prog->slots[b.slot];
     switch (b.type) {
-    case StType::BOOL: c.b = (value != 0.0f); break;
-    case StType::INT:  c.i = static_cast<int32_t>(value); break;
-    case StType::REAL: c.r = value; break;
-    case StType::TIME: c.t = static_cast<int64_t>(static_cast<double>(value) * 1e9); break;
+    case StType::BOOL: c.b = (value != 0.0f); return true;
+    case StType::INT:
+    case StType::DINT:
+    case StType::UINT: {
+        const float rounded = std::round(value);
+        if (rounded < static_cast<float>(st_integer_min(b.type)) ||
+            rounded > static_cast<float>(st_integer_max(b.type)))
+            return false;
+        c.i = static_cast<int32_t>(rounded);
+        return true;
     }
+    case StType::REAL: c.r = value; return true;
+    case StType::TIME:
+        if (value < 0.0f || static_cast<double>(value) * 1e9 > 9.2e18) return false;
+        c.t = static_cast<int64_t>(static_cast<double>(value) * 1e9);
+        return true;
+    }
+    return false;
 }
 
 bool read_slot(const StLoadedProgram& prog, const StIrIoBinding& b, float* out)
@@ -50,7 +63,9 @@ bool read_slot(const StLoadedProgram& prog, const StIrIoBinding& b, float* out)
     const StCell& c = prog.slots[b.slot];
     switch (b.type) {
     case StType::BOOL: *out = c.b ? 1.0f : 0.0f; return true;
+    case StType::DINT:
     case StType::INT:  *out = static_cast<float>(c.i); return true;
+    case StType::UINT: *out = static_cast<float>(c.i); return true;
     case StType::REAL: *out = c.r; return std::isfinite(c.r);
     case StType::TIME: *out = static_cast<float>(static_cast<double>(c.t) / 1e9); return true;
     }
@@ -74,7 +89,10 @@ void st_load_inputs(StProgramInstance* inst, const PointTable& table, StIoBridge
          * Giữ giá trị slot cũ và đếm — chu kỳ vẫn chạy với giá trị cuối biết
          * là hợp lệ, đúng tinh thần ST_SUBSET_SPEC §6.3. */
         if (!std::isfinite(p.value)) { if (stats) stats->outputs_rejected++; continue; }
-        write_slot(prog, b, p.value);
+        if (!write_slot(prog, b, p.value)) {
+            if (stats) stats->outputs_rejected++;
+            continue;
+        }
         if (stats) stats->inputs_loaded++;
     }
 }
