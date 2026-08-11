@@ -7,6 +7,28 @@
 ---
 
 ## [Unreleased]
+### Added — Contract foundation Programming Rev A (2026-08-11)
+
+**Kết quả.** Hoàn tất `TASK-PROG-100`: OpenAPI `1.15.0` có 25 operation dưới
+`/api/v1/programming`; backend Go có route registration, RBAC, error envelope,
+correlation ID, giới hạn body 1 MiB, schema-major/idempotency/`If-Match` guard và
+validator impact acknowledgement fail-closed. `PROGRAMMING_REV_A` mặc định
+`OFF`; khi bật ở lát cắt này, handler vẫn contract-only và trả
+`PRG-ERR-UNAVAILABLE-001`, không gọi Core hoặc tạo Commission side effect.
+
+**Frontend contract.** Thêm generator từ OpenAPI và client TypeScript typed;
+build FE fail nếu 25 operation/schema/error/impact enum bị drift. Thêm unit và
+contract test cho flag OFF/ON, role, request vượt 1 MiB, schema major, header
+concurrency, error mapping và acknowledgement thiếu/thừa/unavailable/stale.
+
+**Tiến độ và kiểm chứng.** P1 thành `IN_PROGRESS 1/6`; Trace nâng riêng
+`BE-110 I=Y`, giữ `FE-110`/`NFR-106 I=N` và toàn bộ `T/P/R=N`. C++ Release
+Modbus+BACnet+HMI build PASS, CTest `860/860`; Go vet và toàn bộ test PASS; FE
+Vitest `54/54` file, `473/473` test, lint/build PASS; OpenAPI 605 local ref thiếu
+0 và Go/TS sync 25/25. Không chạy browser/target/HIL vì task không đổi UI render,
+flag mặc định OFF và target/HIL không áp dụng cho contract-only. Test Result giữ
+`0/32`, `RELEASE_READY` vẫn `BLOCKED`.
+
 ### Changed — Phê duyệt toàn bộ Programming và mở implementation (2026-08-11)
 
 **Kết quả.** Ghi `AUTH-PROG-2026-08-11-03` theo chỉ đạo trực tiếp của Phạm Đình

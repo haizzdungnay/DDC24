@@ -42,3 +42,27 @@ func TestLoadConfigUsesDedicatedNetcfgSocket(t *testing.T) {
 		t.Fatalf("NetcfgSock = %q", cfg.NetcfgSock)
 	}
 }
+
+func TestLoadConfigKeepsProgrammingRevAOffByDefault(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough")
+	t.Setenv("PROGRAMMING_REV_A", "")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.ProgrammingRevA {
+		t.Fatal("ProgrammingRevA = true; muốn mặc định false")
+	}
+}
+
+func TestLoadConfigEnablesProgrammingRevAExplicitly(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-that-is-long-enough")
+	t.Setenv("PROGRAMMING_REV_A", "true")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.ProgrammingRevA {
+		t.Fatal("ProgrammingRevA = false; muốn true khi flag được bật rõ ràng")
+	}
+}
