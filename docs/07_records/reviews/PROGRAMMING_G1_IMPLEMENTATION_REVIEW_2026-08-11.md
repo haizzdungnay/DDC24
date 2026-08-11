@@ -8,7 +8,7 @@
 | Trạng thái task | **DONE — 6/6 task G1** |
 | Trạng thái pha | **P1 DONE — G1 GO cho P2/P3 implementation** |
 | Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4`; Task 102: `95585e7`; Task 103: `4a1e9f5`; Task 104: `312f357`; Task 105: `7f0c532`, `30a068b` |
-| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: [PR #131](https://github.com/Mekong-HCM/MK-DDC-24/pull/131) / `16d3e40`; Task 103: [PR #133](https://github.com/Mekong-HCM/MK-DDC-24/pull/133) / `1c74b9f`; Task 104: [PR #135](https://github.com/Mekong-HCM/MK-DDC-24/pull/135) / `1f651b7` |
+| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: [PR #131](https://github.com/Mekong-HCM/MK-DDC-24/pull/131) / `16d3e40`; Task 103: [PR #133](https://github.com/Mekong-HCM/MK-DDC-24/pull/133) / `1c74b9f`; Task 104: [PR #135](https://github.com/Mekong-HCM/MK-DDC-24/pull/135) / `1f651b7`; Task 105: [PR #137](https://github.com/Mekong-HCM/MK-DDC-24/pull/137) / `e6ab04b` |
 | Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS** |
 | Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt), [`EV-PROG-G1-102`](programming-g1/raw/EV-PROG-G1-102.txt), [`EV-PROG-G1-103`](programming-g1/raw/EV-PROG-G1-103.txt), [`EV-PROG-G1-104`](programming-g1/raw/EV-PROG-G1-104.txt), [`EV-PROG-G1-105`](programming-g1/raw/EV-PROG-G1-105.txt) |
 

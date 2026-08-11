@@ -34,6 +34,10 @@ target/HIL.
 P1 thành `6/6 DONE`, G1 GO cho P2/P3, next action `TASK-PROG-200`; tổng vẫn
 `0/32 PASS`, 16/16 risk Open, feature flag OFF và `RELEASE_READY BLOCKED`.
 
+**Phát hành.** [PR #137](https://github.com/Mekong-HCM/MK-DDC-24/pull/137)
+đã merge vào `main` tại `e6ab04b` (tree `9a022f96`); remote feature branch đã
+xóa. Candidate v2.14 tiếp tục được định danh bằng 22 SHA-256.
+
 ### Added — SQLite store Programming v1 (2026-08-11)
 
 **Kết quả.** Triển khai code `TASK-PROG-104`: thêm bounded package

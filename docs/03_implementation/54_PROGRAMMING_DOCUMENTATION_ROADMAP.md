@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.13 |
+| Phiên bản | 3.14 |
 | Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.14; P1 `6/6 DONE`; G1 GO; tiếp theo `TASK-PROG-200`; `RELEASE_READY BLOCKED`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
@@ -474,11 +474,11 @@ Candidate P0 hiện hành đã ghim:
 | Thuộc tính | Giá trị |
 |---|---|
 | Định danh | 22 SHA-256 của candidate v2.14 ở manifest v3.13; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
-| Commit/tree | Chờ commit/PR merge tài liệu; 22 SHA-256 là authority trong thời gian chờ |
-| Nhánh phát hành | `chore/programming-g1-contract-join-20260811` |
+| Commit/tree | `e6ab04b718a66e9f012159d530efc75b3388d9e6` / `9a022f96bd372cdb508b7cd24d67387d5c76065b` |
+| Nhánh phát hành | `chore/programming-g1-contract-join-20260811` — remote đã xóa |
 | Manifest | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
 | Phạm vi | 22/22 hồ sơ baseline; đồng bộ P1 6/6, G1 GO và ranh giới 2 record BLOCKED |
-| Trạng thái | **PIN phải PASS trước commit; APPROVED FOR IMPLEMENTATION** |
+| Trạng thái | **PIN PASS 22/22; APPROVED FOR IMPLEMENTATION** |
 
 Manifest chứa SHA-256 đầy đủ, Git blob, số dòng và delta so với baseline gốc.
 Nếu nội dung candidate đổi, phải phát hành commit/manifest mới và invalid phần
@@ -538,6 +538,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.11 | 2026-08-11 | Hoàn tất `TASK-PROG-104`: thêm snapshot P1 5/6, dẫn source SQLite store/migration/backup và review/evidence G1; phát hành candidate v2.13 do Design Index/Data/BE/Risk/Trace/Plan đổi; giữ 22/22 M3, M4/M5 0/22, Test Result 0/32 và RELEASE_READY BLOCKED | Dev Lead + Document Control |
 | 3.12 | 2026-08-11 | Ghi PR #135 đã merge tại `1f651b7`, tree `94326834`; remote feature branch đã xóa. Candidate v2.13/pin 22/22, P1 5/6 và ranh giới evidence không đổi | Document Control |
 | 3.13 | 2026-08-11 | Hoàn tất `TASK-PROG-105`: join sáu contract, deploy/rollback dry-run, record review G1 và hai Test Result BLOCKED; phát hành candidate v2.14 do Index/VVP/Risk/Trace/Plan đổi. P1 6/6 DONE, G1 GO, next TASK-PROG-200; giữ 0/32 PASS và RELEASE_READY BLOCKED | Dev Lead + Architect + Document Control |
+| 3.14 | 2026-08-11 | Ghi PR #137 đã merge tại `e6ab04b`, tree `9a022f96`; remote feature branch đã xóa. Candidate v2.14/pin 22/22, P1 6/6 và G1 GO không đổi | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|
