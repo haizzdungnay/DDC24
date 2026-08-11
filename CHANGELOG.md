@@ -39,7 +39,10 @@ v0.8, Interface v1.2, BE Design v1.0, Risk v1.4, Trace v3.10, Plan 53 v0.30,
 Roadmap v3.27, review/raw evidence G2 và candidate v2.21. Tiến độ P2 `7/8`,
 tổng `20/49`; task tiếp theo `TASK-PROG-207`. Giữ trung thực `2/60 I=Y`, hai
 record BLOCKED, `0/32 PASS`, 16/16 risk Open, flag `OFF` và
-`RELEASE_READY BLOCKED`; commit/tree/PR hồ sơ được ghi bổ sung sau merge.
+`RELEASE_READY BLOCKED`. Source + hồ sơ đã merge qua PR #151 tại `6893c87`,
+tree `8f1801ac`; remote feature branch đã xóa. GitHub Actions không khởi chạy do
+billing/spending-limit của tài khoản; annotation hạ tầng và toàn bộ gate local
+đã được ghi trong PR.
 
 ### Added — Check worker sandbox và artifact registry Programming P2 (2026-08-11)
 

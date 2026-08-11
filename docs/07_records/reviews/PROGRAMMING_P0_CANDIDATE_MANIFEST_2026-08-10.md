@@ -4,14 +4,14 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.27 |
+| Phiên bản | 3.28 |
 | Ngày | 2026-08-11 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
 | Trạng thái | **ACTIVE — candidate v2.21 `IMPLEMENTATION IN PROGRESS`; P1 6/6 DONE; P2 7/8; G2 IN_PROGRESS; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | Chờ ghi bổ sung sau merge; source authority `95b9388`; **22 hash ở §2 là định danh hiện hành** |
-| PR nguồn | Chờ tạo/merge PR của `TASK-PROG-206` |
+| Candidate commit | `6893c87` — ghi đầy đủ ở §1.1; source authority `95b9388`; **22 hash ở §2 là định danh hiện hành** |
+| PR nguồn | [PR #151](https://github.com/Mekong-HCM/MK-DDC-24/pull/151) — merged |
 | Candidate trước | v2.20 tại commit `3c8b4c3` — **SUPERSEDED bởi TASK-PROG-206**, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
@@ -47,9 +47,9 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | Chờ ghi bổ sung sau merge; source commit `95b9388994e7eaceeddda2af321352c9db9a338d` |
-| Git tree | Chờ ghi bổ sung sau merge; source tree `566fc446b9071ec5598d66be8c4c5f6f6577a4df` |
-| Nhánh phát hành | `feat/programming-source-bundle-20260811`; PR/merge chờ ghi bổ sung |
+| Commit chứa nội dung candidate | `6893c878987983a41e26f0a190656353001c27a3`; source commit `95b9388994e7eaceeddda2af321352c9db9a338d` |
+| Git tree | `8f1801ac4c412f1fc7848c5855375af9949c79e8`; source tree `566fc446b9071ec5598d66be8c4c5f6f6577a4df` |
+| Nhánh phát hành | `feat/programming-source-bundle-20260811` — remote đã xóa sau merge PR #151 |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
 chạy `scripts/candidate_pin_check.py` trước khi bắt đầu đọc.
@@ -108,7 +108,7 @@ tích lũy so với v2.7.
 
 | Hồ sơ | Phiên bản tại lần ghim này | Vai trò |
 |---|---|---|
-| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v3.27 | Tracker hồ sơ và đồng bộ tiến độ code |
+| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v3.28 | Tracker hồ sơ và đồng bộ tiến độ code |
 | `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v2.0 | Gói phê duyệt toàn bộ |
 | `docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md` | v1.6 | Biên bản consumer review + waiver |
 | `docs/07_records/reviews/PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md` | 2026-08-11 | Review source/evidence `TASK-PROG-100..105` |
@@ -215,3 +215,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.25 | 2026-08-11 | Phát hành candidate v2.20 sau `TASK-PROG-205`: cập nhật hash/blob Design Index v2.8, Data v0.7, Interface v1.1, BE v0.9, Risk v1.3, Trace v3.9 và Plan 53 v0.29; 15/22 hồ sơ còn lại giữ nguyên. P2 6/8, next TASK-PROG-206; hai record BLOCKED, 0/32 PASS; commit/tree/PR chờ ghi bổ sung sau merge |
 | 3.26 | 2026-08-11 | Ghi bổ sung PR #149, merge commit `3c8b4c3` và tree `aa7e13a9` chứa candidate v2.20. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi; candidate pin tiếp tục 22/22 PASS |
 | 3.27 | 2026-08-11 | Phát hành candidate v2.21 sau `TASK-PROG-206`: cập nhật hash/blob Design Index v2.9, Data v0.8, Interface v1.2, BE v1.0, Risk v1.4, Trace v3.10 và Plan 53 v0.30; 15/22 hồ sơ còn lại giữ nguyên. P2 7/8, tiếp theo TASK-PROG-207; hai record BLOCKED, 0/32 PASS; commit/tree/PR chờ ghi bổ sung sau merge |
+| 3.28 | 2026-08-11 | Ghi bổ sung PR #151, merge commit `6893c87` và tree `8f1801ac` chứa candidate v2.21; remote feature branch đã xóa. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi, candidate pin tiếp tục 22/22 PASS. GitHub Actions không khởi chạy do billing/spending-limit của tài khoản; gate local đầy đủ được ghi tại PR |

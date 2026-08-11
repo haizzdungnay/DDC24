@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.27 |
+| Phiên bản | 3.28 |
 | Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.21; P1 `6/6 DONE`; P2 `7/8`; tiếp theo `TASK-PROG-207`; `RELEASE_READY BLOCKED`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
@@ -481,8 +481,8 @@ Candidate P0 hiện hành đã ghim:
 | Thuộc tính | Giá trị |
 |---|---|
 | Định danh | 22 SHA-256 của candidate v2.21 ở manifest v3.27; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
-| Commit/tree | Chờ ghi bổ sung sau merge; source authority `95b9388994e7eaceeddda2af321352c9db9a338d` |
-| Nhánh phát hành | `feat/programming-source-bundle-20260811`; PR/merge chờ ghi bổ sung |
+| Commit/tree | `6893c878987983a41e26f0a190656353001c27a3` / `8f1801ac4c412f1fc7848c5855375af9949c79e8`; source authority `95b9388994e7eaceeddda2af321352c9db9a338d` |
+| Nhánh phát hành | `feat/programming-source-bundle-20260811` — remote đã xóa sau merge PR #151 |
 | Manifest | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
 | Phạm vi | 22/22 hồ sơ baseline; đồng bộ `TASK-PROG-206 DONE`, P2 7/8 và ranh giới 2 record BLOCKED/0 PASS |
 | Trạng thái | **PIN PASS 22/22; APPROVED FOR IMPLEMENTATION** |
@@ -559,6 +559,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.25 | 2026-08-11 | Hoàn tất `TASK-PROG-205`: thêm snapshot P2 6/8, dẫn source Check worker/sandbox/Artifact registry và review/evidence G2; phát hành candidate v2.20 do Index/Data/Interface/BE/Risk/Trace/Plan đổi. CTest 929/929, Go/race, FE 494/494 và contract G1 PASS; giữ 0/32 PASS và RELEASE_READY BLOCKED; commit/tree/PR hồ sơ chờ ghi sau merge | BE Lead + Architect + Document Control |
 | 3.26 | 2026-08-11 | Ghi PR #149 đã merge tại `3c8b4c3`, tree `aa7e13a9`; remote feature branch đã xóa. Candidate v2.20/pin 22/22, P2 6/8 và ranh giới evidence/release không đổi | Document Control |
 | 3.27 | 2026-08-11 | Hoàn tất `TASK-PROG-206`: thêm snapshot P2 7/8, dẫn source change manifest/bundle source-only/import atomic và review/evidence G2; phát hành candidate v2.21 do Index/Data/Interface/BE/Risk/Trace/Plan đổi. CTest 929/929, Go/race, FE 494/494 và contract G1 7/7 PASS; giữ 0/32 PASS và RELEASE_READY BLOCKED; commit/tree/PR hồ sơ chờ ghi sau merge | BE Lead + Security + Document Control |
+| 3.28 | 2026-08-11 | Ghi PR #151 đã merge tại `6893c87`, tree `8f1801ac`; remote feature branch đã xóa. Candidate v2.21/pin 22/22, P2 7/8 và ranh giới evidence/release không đổi; GitHub Actions không khởi chạy do billing/spending-limit của tài khoản, gate local đầy đủ vẫn PASS và đã ghi trong PR | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|
