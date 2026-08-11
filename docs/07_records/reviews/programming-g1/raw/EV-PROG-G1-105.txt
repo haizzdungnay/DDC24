@@ -1,0 +1,58 @@
+EVIDENCE_ID=EV-PROG-G1-105
+TASK=TASK-PROG-105
+DATE=2026-08-11T16:18:16+07:00
+SOURCE_COMMIT=30a068b80555125ee0353b04342b631d83702497
+SOURCE_TREE=5b41e819da0e071bc25c6ccb4fac978dfe1a7820
+SCOPE=G1_CONTRACT_JOIN_HOST_EVIDENCE_NOT_RELEASE_OR_TARGET_EVIDENCE
+FEATURE_FLAG=OFF
+COMMISSION_ENABLED=false
+
+HOST=Linux 7.0.0-28-generic x86_64
+PYTHON=3.12.3
+GO=1.22.2
+CMAKE=3.28.3
+NODE=24.18.1
+NPM=11.16.0
+
+JOIN_MANIFEST=contracts/programming/g1_contract_join_v1.json
+JOIN_MANIFEST_SHA256=2682d14ee7b4a04e585426629610637fb213bf1ce2c09271a6bc00c24772db43
+VERIFIER=scripts/verify_programming_g1_contracts.py
+VERIFIER_SHA256=9ba36b8c39a2e42bff92cf6c062096ceba6a36a7ad9d8f44e72f1e396cdb6088
+
+CONTRACT_OPENAPI_SHA256=34862da2349a7b705f79f813c337b7801f46e68716d8fdff779212eaf7c9bb7e
+CONTRACT_IPC_SHA256=d18702bc1f699b9fc90d05f41ae0dd4dee4444a1025dcb45c9f559cfb6409342
+CONTRACT_PROFILE_SHA256=94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc
+CONTRACT_ARTIFACT_SHA256=f39ede1fce04d5f13e657268635cc909194d3f1c32c086f5bc2551942e50a417
+CONTRACT_ERRORS_SHA256=2315add30a8e5880dbf09574371ed662726004c0e04372d16c88164d182571d4
+CONTRACT_STORE_SHA256=6c30ca18645c8870f5794b10a330a0e5da8164224ac203ffc22f47bd6bac44e7
+
+COMMAND=python3 scripts/verify_programming_g1_contracts.py --self-test
+RESULT=PASS 6/6 contract major 1 cùng hash/version; 5/5 mutation fail-closed; 5/5 thứ tự deploy lỗi bị chặn trước mutation; rollback chuẩn bảo toàn dữ liệu và không Commission
+NEGATIVE=unknown major; deploy đảo thứ tự; Commission ON; hash drift; rollback thiếu database
+
+COMMAND=python3 scripts/generate_programming_profile.py --check
+RESULT=PASS generated C++ constants khớp profile Rev A
+
+COMMAND=python3 scripts/generate_programming_errors.py --check
+RESULT=PASS 19 public / 77 detail / catalog SHA-256 khớp
+
+COMMAND=cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON && cmake --build build/fw --parallel && ctest --test-dir build/fw --output-on-failure
+RESULT=PASS 877/877
+
+COMMAND=cd apps/web-api && go vet ./... && go test ./... -count=1
+RESULT=PASS
+
+COMMAND=cd apps/web-ui && npx vitest --run --environment jsdom src && npm run lint && npm run build
+RESULT=PASS 55/55 files 479/479 tests; lint/build PASS; generated client 25 operation
+
+COMMAND=scripts/verify-project.sh --component layout
+RESULT=BLOCKED_BY_EXISTING_BASELINE apps/web-ui/src/features/scheduler/shared.ts chạm contract C/SHM/IOP; verifier G1 được chạy trực tiếp và PASS
+
+DEPLOY_ORDER=backup,schema,core-dual-compatible,backend,frontend-read-only
+ROLLBACK_ORDER=frontend,backend,core
+PRESERVE=database,backup,revision,artifact,operation,audit,active-lkg
+FORBID=automatic-downgrade,destructive-delete,commission,blind-replay
+
+BOUNDARY=Không có production function mới ở task review; không wiring store/API/Core; không bật Commission.
+NOT_RUN=browser vì không đổi UI; target; HIL; production deploy.
+TEST_RESULT_BOUNDARY=VS-PROG-001 và VS-PROG-019 đầy đủ thuộc G2; G1 chỉ chứng minh phần contract. Không nâng hai scenario thành PASS.

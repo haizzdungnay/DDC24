@@ -106,6 +106,11 @@ func TestCodecRejectsMalformedFramesAndEnvelope(t *testing.T) {
 	if _, err := EncodeRequestFrame(mutation); !errors.Is(err, ErrOperationRequired) {
 		t.Fatalf("mutation thiếu operationId không bị chặn: %v", err)
 	}
+	newerMinor := deterministicRequest(ActionCapabilities)
+	newerMinor.ProtocolMinor = ProtocolMinor + 1
+	if _, err := EncodeRequestFrame(newerMinor); !errors.Is(err, ErrUnsupportedMinor) {
+		t.Fatalf("protocol minor mới hơn không bị chặn: %v", err)
+	}
 	nonCanonicalPayload := NewRequest(
 		ActionCapabilities,
 		deterministicBytes(16, 0),

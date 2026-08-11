@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.2 |
+| Phiên bản | 3.3 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
 | Cập nhật | 2026-08-11 |
 | Chủ quản | Verification Lead |
@@ -16,10 +16,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối **yêu cầu → user journey → thiết kế → nơi phải sửa code → kịch bản test → bằng chứng → release** cho cả 60 requirement. Dùng để trả lời hai câu: “yêu cầu này ai lo?” và “cái gì hỏng nếu đổi chỗ này?”. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. `BE-110` có OpenAPI/IPC/error contract; `CORE-101` có loader/profile/artifact foundation. `TASK-PROG-104` thêm SQLite store/migration/backup và treatment partial cho `SYS-102/106`, `BE-101/102/106`, `NFR-106`, nhưng các requirement này chưa end-to-end. Vì vậy tổng vẫn **2/60** dòng `I=Y`; **0/32** kịch bản có Test Result và mọi `T/P/R` vẫn `N`. |
+| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. G1 đã join sáu contract tại `30a068b`; tổng vẫn **2/60** dòng `I=Y`. `VS-PROG-001/019` có 2 record `BLOCKED`, 30 scenario còn `NOT_RUN`, **0/32 PASS**; mọi `T/P/R` vẫn `N` vì acceptance E2E chưa chạy đủ và chưa được independent review. |
 | 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
-| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `BE-110` và `CORE-101 I=Y`; 58 dòng `I=N`. Store transaction đã có nhưng chưa wiring/service/worker/target nên không nâng requirement trọn vẹn. Toàn bộ `T/P/R` còn `N` vì chưa có Test Result. |
+| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `BE-110` và `CORE-101 I=Y`; 58 dòng `I=N`. Hai Test Result G1 đang `BLOCKED`; toàn bộ `T/P/R` còn `N` cho tới khi workflow E2E đủ acceptance và reviewer độc lập ký. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với bản thân ma trận: 60/60 dòng giải được về ID canonical, không trùng ID, không có dòng vi phạm `P=Y khi T=N` hay `R=Y khi P=N` — kiểm bằng harness ở [`PROG-REV-2026-08-09`](reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §2. |
 
 Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
@@ -104,7 +104,7 @@ scenario tương ứng có Test Result được review.
 - Truy vết **hai chiều** trên đúng bảng máy đọc được: `32/32` kịch bản đều xuất
   hiện ở cột “Scenario” của ít nhất một dòng §6, và mọi kịch bản dẫn ở §6 đều
   tồn tại trong `VVP-PROG-001`. Kiểm bằng lệnh ở §8.1.
-- Test Result cho suite mới: `0/32`.
+- Test Result: `2/32` record (`VS-001/019` đều `BLOCKED`), `0/32 PASS`.
 - Release gate: **RED / NO-GO**.
 
 ## 6. Trace chi tiết từng requirement
@@ -122,7 +122,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | Requirement | Design/control + risk | Source target | Scenario | D/I/T/P/R |
 |---|---|---|---|---|
 | `SYS-101` | ARCH; LANG; CTRL; RSK-006/010 | `95585e7`: profile khóa ST/FBD/Point/Task/type/capacity; compiler FBD/type target + Programming BE/FE/Core còn thiếu | 003/005/006/007/009/017 | Y/N/N/N/N |
-| `SYS-102` | DM; UX; FE; BE; RSK-007/008 | `312f357`: Draft/Revision store tách biệt, Save không gọi Core; Check/API/UI và active-output integration còn thiếu | 002/019/026 | Y/N/N/N/N |
+| `SYS-102` | DM; UX; FE; BE; RSK-007/008 | `312f357`: Draft/Revision store tách biệt; `TR-PROG-019-20260811-001 BLOCKED`: Check/API/UI và active-output integration còn thiếu | 002/019/026 | Y/N/N/N/N |
 | `SYS-103` | LIFE; ART; IFSPEC; RSK-003/007 | `4a1e9f5`: catalog/mapping lỗi lifecycle; Core coordinator + BE operation còn thiếu | 004/011 | Y/N/N/N/N |
 | `SYS-104` | ARCH; LIFE; OPS; RSK-002/005 | `51fe515`: Core IPC no-mutation skeleton; `e9707b4`: reconnect/no-replay client; Core runtime + service package còn thiếu | 024/030 | Y/N/N/N/N |
 | `SYS-105` | CTRL; LIFE; RSK-001 | `4a1e9f5`: mã lỗi cross-layer; bootstrap/ScanLoop/resolver còn thiếu | 015 | Y/N/N/N/N |
@@ -135,20 +135,20 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `FE-104` | LANG; UX; FE | fbd/editor keyboard model | 005/006/028 | Y/N/N/N/N |
 | `FE-105` | CTRL; FE; IFSPEC; RSK-010 | mapping/point catalog client | 017/018 | Y/N/N/N/N |
 | `FE-106` | CTRL; FE | task UI/API model | 009 | Y/N/N/N/N |
-| `FE-107` | LIFE; UX; FE; RSK-007 | check/commission reducer | 011/019/024/026 | Y/N/N/N/N |
+| `FE-107` | LIFE; UX; FE; RSK-007 | `TR-PROG-019-20260811-001 BLOCKED`: check/commission reducer chưa implement | 011/019/024/026 | Y/N/N/N/N |
 | `FE-108` | CTRL; UX; FE; RSK-004 | runtime/override view | 010/020 | Y/N/N/N/N |
 | `FE-109` | IFSPEC; FE; BE; RSK-010 | runtime/events/freshness | 018/026/027 | Y/N/N/N/N |
 | `FE-110` | IFSPEC; FE; BE; RSK-008/014 | `4a1e9f5`: generated error catalog/client sanitize fail-safe; Draft reducer/conflict flow còn thiếu | 024 | Y/N/N/N/N |
 | `FE-111` | UX; FE | i18n/a11y/styles | 025/028 | Y/N/N/N/N |
 | `FE-112` | UX; FE | Problems vs alarm adapter | 019/028 | Y/N/N/N/N |
-| `FE-113` | UX §5 PGM-03; FE; LIFE; RSK-007 | `commission/acknowledgement` + impact reducer | 011/019/031 | Y/N/N/N/N |
+| `FE-113` | UX §5 PGM-03; FE; LIFE; RSK-007 | `TR-PROG-019-20260811-001 BLOCKED`: acknowledgement + impact reducer chưa implement | 011/019/031 | Y/N/N/N/N |
 | `FE-114` | UX §5 PGM-04, §22 DangerZone; SEC; RSK-012 | `runtime/service` danger zone + RequireRole | 022/031 | Y/N/N/N/N |
 | `FE-115` | UX §5 PGM-02, §16.2; DM; IFSPEC | `design/mapping` filter + point catalog client | 017/031 | Y/N/N/N/N |
-| `BE-101` | DM; BE | `312f357`: Project/Draft/Revision/operation/audit store + migration/backup; compiler job, artifact registry và app wiring còn thiếu | 001/019 | Y/N/N/N/N |
+| `BE-101` | DM; BE | `312f357`: store + migration/backup; `TR-PROG-001-20260811-001 BLOCKED`: tag/import/export/app wiring/restart E2E còn thiếu | 001/019 | Y/N/N/N/N |
 | `BE-102` | DM; IFSPEC; BE; RSK-008 | `312f357`: Draft ETag/CAS và operation idempotency; Draft mutation idempotency/API service còn thiếu | 024 | Y/N/N/N/N |
-| `BE-103` | LANG; BE; IFSPEC | check/compiler worker | 003/006/019 | Y/N/N/N/N |
+| `BE-103` | LANG; BE; IFSPEC | `TR-PROG-019-20260811-001 BLOCKED`: check/compiler worker chưa implement | 003/006/019 | Y/N/N/N/N |
 | `BE-104` | LANG; SEC; BE; RSK-005 | compiler sandbox/queue | 006/012/013 | Y/N/N/N/N |
-| `BE-105` | DM; BE | revision diff/manifest | 019 | Y/N/N/N/N |
+| `BE-105` | DM; BE | `TR-PROG-019-20260811-001 BLOCKED`: revision diff/manifest/aggregate chưa implement | 019 | Y/N/N/N/N |
 | `BE-106` | LIFE; IFSPEC; BE; RSK-007/008 | `e9707b4`: IPC Call/Reconcile; `312f357`: durable operation intent/idempotency/audit; worker, terminal state và stage/activate/read-back còn thiếu | 004/011/024 | Y/N/N/N/N |
 | `BE-107` | SEC; BE; RSK-012 | authz handler+service/audit | 022 | Y/N/N/N/N |
 | `BE-108` | SEC; BE; RSK-011 | bundle quarantine/import/export | 021/023 | Y/N/N/N/N |
@@ -195,7 +195,7 @@ Tên rút gọn map: `LANG=DDD-LANG-PROG-001`, `ART=IFSPEC-ART-PROG-001`,
 | Requirement có source target | 60/60 = 100% planned |
 | Requirement có scenario | 60/60 = 100% specified |
 | Requirement implemented end-to-end | 2/60 confirmed (`BE-110`, `CORE-101`) |
-| Scenario có Test Result current | 0/32 |
+| Scenario có Test Result record | 2/32 (`BLOCKED`); PASS 0/32 |
 | Requirement passed/released | 0/60 |
 
 Khi code merge, chỉ cột `I` được đổi và phải có commit/file/class/function. Khi
@@ -241,7 +241,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 |---|---|---|
 | 17 decision `DECIDED`; baseline approved | Product + discipline authority + Document Control | **Không còn blocker implementation** theo `AUTH-PROG-2026-08-11-03` |
 | Source Target chưa implement end-to-end | Dev Leads | commit/build mapping per requirement |
-| Test Result current 0/32 | QA + discipline leads | execute/review evidence per VVP |
+| Test Result PASS 0/32; 2 record `BLOCKED` | QA + discipline leads | hoàn tất workflow E2E, rerun và independent review theo VVP |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
@@ -258,6 +258,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 3.0 | 2026-08-11 | `TASK-PROG-102` hoàn tất profile/artifact/loader foundation: nâng `CORE-101 I=Y` theo commit `95585e7`; ghi partial cho `SYS-101/NFR-101` nhưng giữ `I=N` vì FBD/type target/BE/FE/Check/target acceptance còn thiếu. Không tạo Test Result; tổng `I=Y` thành 2/60 và mọi `T/P/R=N` |
 | 3.1 | 2026-08-11 | `TASK-PROG-103` hoàn tất catalog lỗi ba lớp tại `4a1e9f5`: bổ sung source cho `BE-110`, ghi partial `SYS-103/105` và `FE-110` nhưng giữ `I=N` vì lifecycle/ScanLoop/Draft reducer chưa có. Tổng `I=Y` giữ 2/60; không tạo Test Result và mọi `T/P/R=N` |
 | 3.2 | 2026-08-11 | `TASK-PROG-104` hoàn tất source store tại `312f357`: ghi partial cho SYS-102/106, BE-101/102/106 và NFR-106 nhưng giữ `I=N` vì chưa wiring/service/compiler/terminal operation/target. Tổng `I=Y` giữ 2/60; 0/32 Test Result và mọi `T/P/R=N` |
+| 3.3 | 2026-08-11 | `TASK-PROG-105` khóa join sáu contract/deploy/rollback tại `30a068b`; tạo hai record `VS-001/019` verdict `BLOCKED` để ghi đúng phần E2E còn thiếu. Tổng `I=Y` giữ 2/60, 0/32 PASS và mọi `T/P/R=N` |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -330,7 +331,7 @@ qua journey hoặc qua kịch bản xuyên suốt tương ứng.
 | Bằng chứng cho phép đổi trạng thái | PASS | §8 quy định cho từng trục: ai xác nhận và điều kiện hạ ngược `Y→N` |
 | Quy tắc vô hiệu hóa | PASS | §7 và §8: đổi requirement/design/contract/source/board làm mất hiệu lực Test Result phía dưới; không giữ `P` cũ |
 | Kiểm tính nhất quán tự động | PASS | §8 liệt kê các phép kiểm; đã chạy: thiếu/trùng ID canonical, kịch bản ngoài `001..032`, `P=Y` khi `T=N`, `R=Y` khi `P=N` — vi phạm `0` |
-| Trạng thái bằng chứng trung thực | PASS | §5 và §7: `0/32` Test Result, `0/60` passed, release gate `RED / NO-GO` |
+| Trạng thái bằng chứng trung thực | PASS | §5 và §7: 2/32 record `BLOCKED`, 0/32 PASS, 0/60 passed, release gate `RED / NO-GO` |
 | Quyền implementation | **PASS** | §9: baseline approved, 17/17 decision `DECIDED`, chữ ký còn thiếu được miễn cho implementation. Source/Test Result chưa có là công việc cần thực hiện, không phải blocker quyền viết code |
 
 Ma trận này theo dõi trạng thái; nó **không** tạo ra bằng chứng.

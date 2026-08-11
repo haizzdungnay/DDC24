@@ -1,16 +1,16 @@
-# Review triển khai G1 Programming — TASK-PROG-100/101/102/103/104
+# Review triển khai G1 Programming — TASK-PROG-100..105
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G1-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-100`, `TASK-PROG-101`, `TASK-PROG-102`, `TASK-PROG-103`, `TASK-PROG-104` |
+| Task | `TASK-PROG-100..105` |
 | Ngày | 2026-08-11 |
-| Trạng thái task | **DONE — 5/6 task G1** |
-| Trạng thái pha | **P1 IN_PROGRESS — 5/6** |
-| Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4`; Task 102: `95585e7`; Task 103: `4a1e9f5`; Task 104: `312f357` |
+| Trạng thái task | **DONE — 6/6 task G1** |
+| Trạng thái pha | **P1 DONE — G1 GO cho P2/P3 implementation** |
+| Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4`; Task 102: `95585e7`; Task 103: `4a1e9f5`; Task 104: `312f357`; Task 105: `7f0c532`, `30a068b` |
 | PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: [PR #131](https://github.com/Mekong-HCM/MK-DDC-24/pull/131) / `16d3e40`; Task 103: [PR #133](https://github.com/Mekong-HCM/MK-DDC-24/pull/133) / `1c74b9f`; Task 104: [PR #135](https://github.com/Mekong-HCM/MK-DDC-24/pull/135) / `1f651b7` |
-| Test Result chính thức | **0/32 — không đổi** |
-| Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt), [`EV-PROG-G1-102`](programming-g1/raw/EV-PROG-G1-102.txt), [`EV-PROG-G1-103`](programming-g1/raw/EV-PROG-G1-103.txt), [`EV-PROG-G1-104`](programming-g1/raw/EV-PROG-G1-104.txt) |
+| Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS** |
+| Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt), [`EV-PROG-G1-102`](programming-g1/raw/EV-PROG-G1-102.txt), [`EV-PROG-G1-103`](programming-g1/raw/EV-PROG-G1-103.txt), [`EV-PROG-G1-104`](programming-g1/raw/EV-PROG-G1-104.txt), [`EV-PROG-G1-105`](programming-g1/raw/EV-PROG-G1-105.txt) |
 
 ## 1. Kết quả triển khai
 
@@ -53,8 +53,9 @@ target/HIL vì thẻ task ghi rõ không áp dụng ở lát cắt contract-only
 
 ## 4. Next action theo dependency
 
-`TASK-PROG-100..104` đã `DONE`. Next action là `TASK-PROG-105`: review join
-tương thích/deploy/rollback, rerun cross-contract và chốt exit G1.
+`TASK-PROG-100..105` đã `DONE`; G1 GO. Next action là `TASK-PROG-200`, sau đó
+`TASK-PROG-201..207` theo dependency. `TASK-PROG-204` phải đóng phần service/
+import/restart còn thiếu của `TR-PROG-001-20260811-001`.
 
 Remote branch `feat/programming-contract-foundation-20260811` đã xóa sau merge.
 
@@ -270,5 +271,27 @@ giữ `I=N` vì requirement còn cần service/compiler/worker/Core/read-back/ta
 Tổng `I=Y` giữ **2/60**; không tạo `TR-PROG-*`, mọi `T/P/R=N`, Test Result
 `0/32`, feature flag `OFF` và `RELEASE_READY BLOCKED`.
 
-Next action: `TASK-PROG-105` review join cuối P1. Candidate v2.13 xuất hiện trên
-`main` tại merge `1f651b7`, tree `94326834`; remote feature branch đã xóa.
+Tại thời điểm đóng Task 104, next action là `TASK-PROG-105`. Candidate v2.13
+xuất hiện trên `main` tại merge `1f651b7`, tree `94326834`; remote feature
+branch đã xóa. §13 ghi kết quả Task 105 hiện hành.
+
+## 13. Kết quả `TASK-PROG-105` và exit G1
+
+- Thêm `PROGRAMMING-G1-JOIN-V1` ghim SHA-256/major/version của OpenAPI, IPC,
+  profile, artifact, catalog lỗi và SQLite store.
+- `verify_programming_g1_contracts.py` kiểm hash drift, unknown major, IPC minor,
+  thứ tự deploy/rollback, tập dữ liệu phải bảo toàn, flag OFF và Commission bị
+  cấm; verifier được nối vào layout gate.
+- Self-test `5/5` mutation và `5/5` thứ tự deploy sai bị chặn; đường chuẩn
+  rollback bảo toàn dữ liệu, schema không auto-downgrade và tạo `0` Commission.
+- Review exit ở
+  [`PROG-G1-CONTRACT-REVIEW-2026-08-11`](PROGRAMMING_G1_CONTRACT_REVIEW_20260811.md)
+  ghi 0 finding P0/P1 mở và GO cho P2/P3 implementation.
+- Hai Test Result G1 được tạo đúng repository/checksum nhưng verdict
+  `BLOCKED`: `VS-001` chờ service/tag/import/restart; `VS-019` chờ Check/API/UI.
+  Do đó tổng PASS vẫn `0/32`, mọi residual giữ nguyên và `RELEASE_READY BLOCKED`.
+
+Regression cuối P1: CTest Release Modbus+BACnet+HMI `877/877`; Go vet/test PASS;
+FE `55/55` file, `479/479` test + lint/build PASS. Không chạy browser vì không
+đổi UI; không deploy target/HIL. Source Task 105 là `7f0c532` và `30a068b`;
+evidence `EV-PROG-G1-105`.

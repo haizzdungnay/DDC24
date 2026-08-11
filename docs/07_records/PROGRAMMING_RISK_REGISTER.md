@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 0.6 |
+| Phiên bản | 0.7 |
 | Trạng thái | **M3 — Review Ready** — treatment/evidence/acceptance đủ; 16/16 Open |
 | Ngày | 2026-08-11 |
 | Chủ quản | Product + Architecture + QA |
@@ -21,11 +21,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **16 rủi ro có thể gây hỏng thiết bị, mất điều khiển hoặc sai cam kết**, kèm biện pháp kiểm soát, chủ sở hữu và bằng chứng cần có để hạ mức. Đây là căn cứ để nói “chưa được phép cutover”. |
 | 2. Ai phải đọc file này? | Product, Architect và QA (chủ quản chung); từng risk owner đọc phần của mình; Safety và Security đọc trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical` (điểm ≥15). Source TASK-PROG-104 đã hiện thực một phần treatment cho `RSK-PROG-007/008` ở lớp store; **0/16 đã triển khai end-to-end** và **0/16 có bằng chứng được chấp nhận**, nên không giảm điểm. |
+| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical`. G1 đã hiện thực treatment source partial cho `RSK-PROG-006/007/008/014`; hai Test Result đang `BLOCKED`, **0/16 treatment end-to-end** và **0/16 evidence được chấp nhận**, nên không giảm điểm. |
 | 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Nó gắn từng rủi ro với biện pháp cụ thể, kịch bản kiểm chứng và mức tồn dư **mục tiêu** — mục tiêu, chưa phải kết quả. |
 | 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản; việc code nằm ở Plan 53. Bốn rủi ro nặng nhất (20 điểm): `RSK-PROG-002` watchdog restart, `RSK-PROG-003` IOP gap, `RSK-PROG-005` compiler tranh CPU, `RSK-PROG-013` nhầm skeleton là HIL-ready. |
 | 6. Điều gì còn bị chặn? | Mọi rủi ro ≥15 **chặn cutover production** cho tới khi biện pháp có bằng chứng PASS và mức tồn dư được owner cùng QA chấp nhận bằng văn bản. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Cột “Scenario/evidence authority” ở §3 gắn từng rủi ro với `VS-PROG-*`. Hiện 0/32 kịch bản có Test Result, nên **không rủi ro nào được hạ mức**. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Cột “Scenario/evidence authority” ở §3 gắn từng rủi ro với `VS-PROG-*`. Hiện 2/32 record đều `BLOCKED`, 0/32 PASS, nên **không rủi ro nào được hạ mức**. |
 
 Quy tắc chống tự huyễn hoặc: **không giảm mức tồn dư bằng kế hoạch, bằng văn bản
 review hay bằng test cũ chạy trên contract khác.** Merge code chỉ đưa rủi ro lên
@@ -121,7 +121,7 @@ OPEN → TREATMENT_IMPLEMENTED → EVIDENCE_REVIEW → ACCEPTED | REOPENED
 | Critical ≥15 | 11/16 |
 | Treatment có thiết kế ở mức M3 | 16/16 |
 | Treatment implemented end-to-end | 0/16 cho feature/Target |
-| Treatment source partial | 2/16 (`RSK-PROG-007/008`) tại store; chưa đủ đổi lifecycle/residual |
+| Treatment source partial | 4/16 (`RSK-PROG-006/007/008/014`) tại loader/store/join contract; chưa đủ đổi lifecycle/residual |
 | Evidence accepted | 0/16 |
 | Residual accepted | 0/16 |
 
@@ -138,6 +138,19 @@ Vòng nội dung chi tiết làm rõ control nhưng không giảm risk. Producti
 
 Host test của store là evidence hỗ trợ G1, không phải Test Result của scenario;
 vì vậy lifecycle, S×L và residual của cả bốn risk giữ nguyên.
+
+### 5.2 Cập nhật treatment source `TASK-PROG-105`
+
+| Risk | Control đã có tại `30a068b` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-006` | Join ghim hash/profile/artifact; unknown major/hash drift fail-closed; loader consumer regression PASS | compiler/FBD hostile corpus đủ `10^7`, target loader/no-parser-RT và independent evidence | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-007` | Deploy chỉ cho FE read-only, flag OFF, Commission bị cấm; rollback giữ Active/LKG | worker/Core read-back/Unknown và UI authoritative truth | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Partial deploy/order sai dừng preflight; dry-run không mutation/Commission | service/worker crash-reconcile và E2E double-activation fault | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | Sáu contract cùng major/hash; catalog 19/77 và C++/Go/TS drift check; minor/major lạ bị chặn | Check/Commission API/UI runtime và `VS-PROG-019/024` PASS được review | `OPEN — PARTIAL SOURCE` |
+
+`TR-PROG-001-20260811-001` và `TR-PROG-019-20260811-001` đều `BLOCKED`.
+Chúng xác nhận phần host đã chạy và phần thiếu cụ thể, nhưng không phải evidence
+được chấp nhận để chuyển lifecycle hoặc giảm residual.
 
 ## 6. Treatment/acceptance record bắt buộc
 
@@ -165,6 +178,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Risk; residual giữ nguyên |
 | 0.5 | 2026-08-09 | Thêm `RSK-PROG-016` (đơn giản hóa UI làm mất bước an toàn, 5×3=15) kèm biện pháp fail-closed và scenario `VS-031`; tổng 16 risk, residual không đổi |
 | 0.6 | 2026-08-11 | Ghi treatment source partial của `TASK-PROG-104` cho RSK-007/008 và ranh giới chưa hoàn tất của RSK-009/011; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted |
+| 0.7 | 2026-08-11 | Ghi join contract/deploy/rollback `TASK-PROG-105` cho treatment partial RSK-006/007/008/014; hai Test Result G1 đều BLOCKED, giữ 16/16 Open, 11 Critical và 0 evidence/residual accepted |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
