@@ -1,0 +1,27 @@
+{
+  "contractId": "PROGRAMMING-FBD-EQUIVALENCE-V1",
+  "version": 1,
+  "profileId": "revA-1t-1-5-30",
+  "pairs": [
+    { "id": "EQ-001", "typeRef": "AND", "inputs": [{"name":"A","type":"BOOL"},{"name":"B","type":"BOOL"}], "outputType":"BOOL", "stExpression":"A AND B", "vector":{"values":[true,false],"expected":false} },
+    { "id": "EQ-002", "typeRef": "OR", "inputs": [{"name":"A","type":"BOOL"},{"name":"B","type":"BOOL"}], "outputType":"BOOL", "stExpression":"A OR B", "vector":{"values":[true,false],"expected":true} },
+    { "id": "EQ-003", "typeRef": "XOR", "inputs": [{"name":"A","type":"BOOL"},{"name":"B","type":"BOOL"}], "outputType":"BOOL", "stExpression":"A XOR B", "vector":{"values":[true,false],"expected":true} },
+    { "id": "EQ-004", "typeRef": "NOT", "inputs": [{"name":"A","type":"BOOL"}], "outputType":"BOOL", "stExpression":"NOT A", "vector":{"values":[true],"expected":false} },
+    { "id": "EQ-005", "typeRef": "EQ", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A = B", "vector":{"values":[7,7],"expected":true} },
+    { "id": "EQ-006", "typeRef": "NE", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A <> B", "vector":{"values":[7,8],"expected":true} },
+    { "id": "EQ-007", "typeRef": "LT", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A < B", "vector":{"values":[7,8],"expected":true} },
+    { "id": "EQ-008", "typeRef": "LE", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A <= B", "vector":{"values":[8,8],"expected":true} },
+    { "id": "EQ-009", "typeRef": "GT", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A > B", "vector":{"values":[9,8],"expected":true} },
+    { "id": "EQ-010", "typeRef": "GE", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A >= B", "vector":{"values":[8,8],"expected":true} },
+    { "id": "EQ-011", "typeRef": "ADD", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"A + B", "vector":{"values":[7,5],"expected":12} },
+    { "id": "EQ-012", "typeRef": "SUB", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"A - B", "vector":{"values":[7,5],"expected":2} },
+    { "id": "EQ-013", "typeRef": "MUL", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"A * B", "vector":{"values":[7,5],"expected":35} },
+    { "id": "EQ-014", "typeRef": "DIV", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"A / B", "vector":{"values":[17,5],"expected":3} },
+    { "id": "EQ-015", "typeRef": "MOD", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"A MOD B", "vector":{"values":[17,5],"expected":2} },
+    { "id": "EQ-016", "typeRef": "ABS", "inputs": [{"name":"A","type":"INT"}], "outputType":"INT", "stExpression":"ABS(A)", "vector":{"values":[-7],"expected":7} },
+    { "id": "EQ-017", "typeRef": "MIN", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"MIN(A, B)", "vector":{"values":[7,5],"expected":5} },
+    { "id": "EQ-018", "typeRef": "MAX", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"MAX(A, B)", "vector":{"values":[7,5],"expected":7} },
+    { "id": "EQ-019", "typeRef": "LIMIT", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"},{"name":"C","type":"INT"}], "outputType":"INT", "stExpression":"LIMIT(A, B, C)", "vector":{"values":[0,15,10],"expected":10} },
+    { "id": "EQ-020", "typeRef": "SEL", "inputs": [{"name":"S","type":"BOOL"},{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"SEL(S, A, B)", "vector":{"values":[true,5,9],"expected":9} }
+  ]
+}

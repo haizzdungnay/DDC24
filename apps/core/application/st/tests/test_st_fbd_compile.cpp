@@ -1,0 +1,397 @@
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <cstdio>
+#include <fstream>
+#include <iterator>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#include <nlohmann/json.hpp>
+
+#include "st/st_compile.hpp"
+#include "st/st_fbd_compile.hpp"
+#include "st/st_runtime.hpp"
+#include "st/st_test_key.hpp"
+
+namespace core {
+namespace {
+
+using json = nlohmann::json;
+
+std::string uuid_for(unsigned family, unsigned value)
+{
+    char text[37];
+    std::snprintf(text, sizeof(text), "%08x-0000-4000-8000-%012x", family, value);
+    return text;
+}
+
+json read_json(const char* relative)
+{
+    std::ifstream input(std::string(PROGRAMMING_PROFILE_CONTRACT_DIR) + relative);
+    return json::parse(std::string(std::istreambuf_iterator<char>(input),
+                                   std::istreambuf_iterator<char>()));
+}
+
+json make_pair_graph(const json& pair)
+{
+    json nodes = json::array();
+    json wires = json::array();
+    unsigned port_id = 1;
+    unsigned wire_id = 1;
+    std::vector<std::string> source_ports;
+    for (std::size_t index = 0; index < pair["inputs"].size(); ++index) {
+        const auto& input = pair["inputs"][index];
+        const std::string output_port = uuid_for(4, port_id++);
+        nodes.push_back({
+            {"id", uuid_for(3, static_cast<unsigned>(index + 1))},
+            {"kind", "INPUT"},
+            {"typeRef", input["type"]},
+            {"executionOrder", index},
+            {"parameters", {{"variable", input["name"]}}},
+            {"ports", json::array({{{"id", output_port}, {"name", "OUT"},
+                                     {"direction", "OUTPUT"}, {"dataType", input["type"]},
+                                     {"unit", nullptr}, {"order", 0}}})},
+        });
+        source_ports.push_back(output_port);
+    }
+
+    const std::string function_node = uuid_for(3, 100);
+    json function_ports = json::array();
+    std::vector<std::string> function_inputs;
+    for (std::size_t index = 0; index < pair["inputs"].size(); ++index) {
+        const std::string input_port = uuid_for(4, port_id++);
+        function_inputs.push_back(input_port);
+        function_ports.push_back({{"id", input_port},
+                                  {"name", "IN" + std::to_string(index + 1)},
+                                  {"direction", "INPUT"},
+                                  {"dataType", pair["inputs"][index]["type"]},
+                                  {"unit", nullptr},
+                                  {"order", index}});
+        wires.push_back({
+            {"id", uuid_for(5, wire_id++)},
+            {"from", {{"nodeId", uuid_for(3, static_cast<unsigned>(index + 1))},
+                       {"portId", source_ports[index]}}},
+            {"to", {{"nodeId", function_node}, {"portId", input_port}}},
+        });
+    }
+    const std::string function_output = uuid_for(4, port_id++);
+    function_ports.push_back({{"id", function_output}, {"name", "OUT"},
+                              {"direction", "OUTPUT"}, {"dataType", pair["outputType"]},
+                              {"unit", nullptr}, {"order", pair["inputs"].size()}});
+    nodes.push_back({{"id", function_node}, {"kind", "FUNCTION"},
+                     {"typeRef", pair["typeRef"]},
+                     {"executionOrder", pair["inputs"].size()},
+                     {"parameters", json::object()}, {"ports", function_ports}});
+
+    const std::string output_node = uuid_for(3, 200);
+    const std::string output_input = uuid_for(4, port_id++);
+    nodes.push_back({
+        {"id", output_node}, {"kind", "OUTPUT"}, {"typeRef", pair["outputType"]},
+        {"executionOrder", pair["inputs"].size() + 1},
+        {"parameters", {{"variable", "OUT"}}},
+        {"ports", json::array({{{"id", output_input}, {"name", "IN"},
+                                 {"direction", "INPUT"}, {"dataType", pair["outputType"]},
+                                 {"unit", nullptr}, {"order", 0}}})},
+    });
+    wires.push_back({{"id", uuid_for(5, wire_id)},
+                     {"from", {{"nodeId", function_node}, {"portId", function_output}}},
+                     {"to", {{"nodeId", output_node}, {"portId", output_input}}}});
+
+    return {{"$schema", "../../fbd_v1.schema.json"}, {"schemaVersion", 1},
+            {"profileId", "revA-1t-1-5-30"}, {"graphId", uuid_for(1, 1)},
+            {"name", "EQ_CASE"},
+            {"networks", json::array({{{"id", uuid_for(2, 1)}, {"name", "MAIN"},
+                                         {"order", 0}, {"nodes", nodes}, {"wires", wires}}})}};
+}
+
+json make_ton_graph()
+{
+    const std::string input_node = uuid_for(3, 1);
+    const std::string constant_node = uuid_for(3, 2);
+    const std::string ton_node = uuid_for(3, 3);
+    const std::string output_node = uuid_for(3, 4);
+    const std::string input_out = uuid_for(4, 1);
+    const std::string constant_out = uuid_for(4, 2);
+    const std::string ton_in = uuid_for(4, 3);
+    const std::string ton_pt = uuid_for(4, 4);
+    const std::string ton_q = uuid_for(4, 5);
+    const std::string ton_et = uuid_for(4, 6);
+    const std::string output_in = uuid_for(4, 7);
+    return {
+        {"$schema", "../../fbd_v1.schema.json"}, {"schemaVersion", 1},
+        {"profileId", "revA-1t-1-5-30"}, {"graphId", uuid_for(1, 1)},
+        {"name", "FB_CASE"},
+        {"networks", json::array({{
+            {"id", uuid_for(2, 1)}, {"name", "MAIN"}, {"order", 0},
+            {"nodes", json::array({
+                {{"id", input_node}, {"kind", "INPUT"}, {"typeRef", "BOOL"},
+                 {"executionOrder", 0}, {"parameters", {{"variable", "ENABLE"}}},
+                 {"ports", json::array({{{"id", input_out}, {"name", "OUT"},
+                                          {"direction", "OUTPUT"}, {"dataType", "BOOL"},
+                                          {"unit", nullptr}, {"order", 0}}})}},
+                {{"id", constant_node}, {"kind", "CONSTANT"}, {"typeRef", "TIME"},
+                 {"executionOrder", 1}, {"parameters", {{"value", 1000000000}}},
+                 {"ports", json::array({{{"id", constant_out}, {"name", "OUT"},
+                                          {"direction", "OUTPUT"}, {"dataType", "TIME"},
+                                          {"unit", nullptr}, {"order", 0}}})}},
+                {{"id", ton_node}, {"kind", "FUNCTION_BLOCK"}, {"typeRef", "TON"},
+                 {"executionOrder", 2}, {"parameters", {{"instance", "TIMER"}}},
+                 {"ports", json::array({
+                     {{"id", ton_in}, {"name", "IN"}, {"direction", "INPUT"},
+                      {"dataType", "BOOL"}, {"unit", nullptr}, {"order", 0}},
+                     {{"id", ton_pt}, {"name", "PT"}, {"direction", "INPUT"},
+                      {"dataType", "TIME"}, {"unit", nullptr}, {"order", 1}},
+                     {{"id", ton_q}, {"name", "Q"}, {"direction", "OUTPUT"},
+                      {"dataType", "BOOL"}, {"unit", nullptr}, {"order", 2}},
+                     {{"id", ton_et}, {"name", "ET"}, {"direction", "OUTPUT"},
+                      {"dataType", "TIME"}, {"unit", nullptr}, {"order", 3}}
+                 })}},
+                {{"id", output_node}, {"kind", "OUTPUT"}, {"typeRef", "BOOL"},
+                 {"executionOrder", 3}, {"parameters", {{"variable", "OUT"}}},
+                 {"ports", json::array({{{"id", output_in}, {"name", "IN"},
+                                          {"direction", "INPUT"}, {"dataType", "BOOL"},
+                                          {"unit", nullptr}, {"order", 0}}})}}
+            })},
+            {"wires", json::array({
+                {{"id", uuid_for(5, 1)},
+                 {"from", {{"nodeId", input_node}, {"portId", input_out}}},
+                 {"to", {{"nodeId", ton_node}, {"portId", ton_in}}}},
+                {{"id", uuid_for(5, 2)},
+                 {"from", {{"nodeId", constant_node}, {"portId", constant_out}}},
+                 {"to", {{"nodeId", ton_node}, {"portId", ton_pt}}}},
+                {{"id", uuid_for(5, 3)},
+                 {"from", {{"nodeId", ton_node}, {"portId", ton_q}}},
+                 {"to", {{"nodeId", output_node}, {"portId", output_in}}}}
+            })}
+        }})}
+    };
+}
+
+std::string make_st_source(const json& pair)
+{
+    std::ostringstream source;
+    source << "PROGRAM EQ_CASE\nVAR_INPUT\n";
+    for (const auto& input : pair["inputs"]) {
+        source << "  " << input["name"].get<std::string>() << " : "
+               << input["type"].get<std::string>() << ";\n";
+    }
+    source << "END_VAR\nVAR_OUTPUT\n  OUT : " << pair["outputType"].get<std::string>()
+           << ";\nEND_VAR\n  OUT := " << pair["stExpression"].get<std::string>()
+           << ";\nEND_PROGRAM\n";
+    return source.str();
+}
+
+bool make_runtime(const StIrModule& module, StProgramRuntime* runtime)
+{
+    std::vector<uint8_t> artifact;
+    std::string error;
+    if (!serialize_st_ir(module, &artifact, &error)) return false;
+    if (!sign_st_artifact(&artifact, st_test_secret_key())) return false;
+    StLoadError load_error;
+    return runtime->activate(artifact.data(), artifact.size(), &load_error);
+}
+
+StValue json_value(StType type, const json& value)
+{
+    switch (type) {
+    case StType::BOOL: return StValue::make_bool(value.get<bool>());
+    case StType::INT: return StValue::make_int(value.get<int32_t>());
+    case StType::DINT: return StValue::make_dint(value.get<int32_t>());
+    case StType::UINT: return StValue::make_uint(value.get<uint16_t>());
+    case StType::REAL: return StValue::make_real(value.get<float>());
+    case StType::TIME: return StValue::make_time(value.get<int64_t>());
+    }
+    return StValue::make_bool(false);
+}
+
+bool value_matches(const StValue& actual, const json& expected)
+{
+    switch (actual.type) {
+    case StType::BOOL: return actual.b == expected.get<bool>();
+    case StType::INT:
+    case StType::DINT:
+    case StType::UINT: return actual.i == expected.get<int32_t>();
+    case StType::REAL: return actual.r == expected.get<float>();
+    case StType::TIME: return actual.t == expected.get<int64_t>();
+    }
+    return false;
+}
+
+bool has_issue(const FbdCompileResult& result, const char* code)
+{
+    return std::any_of(result.issues.begin(), result.issues.end(),
+                       [&](const FbdIssue& issue) { return issue.code == code; });
+}
+
+TEST(StFbdCompile, TwentyGoldenPairsProduceByteEquivalentExecutableIrAndOutputs)
+{
+    const json corpus = read_json("/fbd/equivalence_v1.json");
+    ASSERT_EQ(corpus["pairs"].size(), 20u);
+    for (const auto& pair : corpus["pairs"]) {
+        SCOPED_TRACE(pair["id"].get<std::string>());
+        const std::string fbd_source = make_pair_graph(pair).dump();
+        const FbdCompileResult fbd = compile_fbd_source(fbd_source);
+        ASSERT_TRUE(fbd.ok) << (fbd.issues.empty() ? "không có issue" : fbd.issues[0].code);
+
+        StIrModule st;
+        StDiagnostic diagnostic;
+        ASSERT_TRUE(compile_st_source(make_st_source(pair), &st, &diagnostic))
+            << diagnostic.code << ": " << diagnostic.message;
+        std::string reason;
+        EXPECT_TRUE(fbd_ir_semantically_equivalent(st, fbd.module, &reason)) << reason;
+
+        StProgramRuntime st_runtime;
+        StProgramRuntime fbd_runtime;
+        ASSERT_TRUE(make_runtime(st, &st_runtime));
+        ASSERT_TRUE(make_runtime(fbd.module, &fbd_runtime));
+        const auto& inputs = pair["inputs"];
+        const auto& values = pair["vector"]["values"];
+        ASSERT_EQ(inputs.size(), values.size());
+        for (std::size_t index = 0; index < inputs.size(); ++index) {
+            StType type = StType::BOOL;
+            const std::string type_name = inputs[index]["type"].get<std::string>();
+            if (type_name == "INT") type = StType::INT;
+            else if (type_name == "DINT") type = StType::DINT;
+            else if (type_name == "UINT") type = StType::UINT;
+            else if (type_name == "REAL") type = StType::REAL;
+            else if (type_name == "TIME") type = StType::TIME;
+            const StValue value = json_value(type, values[index]);
+            const std::string name = inputs[index]["name"].get<std::string>();
+            ASSERT_TRUE(st_runtime.set_variable(name, value));
+            ASSERT_TRUE(fbd_runtime.set_variable(name, value));
+        }
+        ASSERT_TRUE(st_runtime.execute(0).ok);
+        ASSERT_TRUE(fbd_runtime.execute(0).ok);
+        StValue st_output;
+        StValue fbd_output;
+        ASSERT_TRUE(st_runtime.get_variable("OUT", &st_output));
+        ASSERT_TRUE(fbd_runtime.get_variable("OUT", &fbd_output));
+        EXPECT_TRUE(st_value_equal(st_output, fbd_output));
+        EXPECT_TRUE(value_matches(fbd_output, pair["vector"]["expected"]));
+    }
+}
+
+TEST(StFbdCompile, CanonicalReorderingProducesSameExecutableIr)
+{
+    const json pair = read_json("/fbd/equivalence_v1.json")["pairs"][10];
+    json graph = make_pair_graph(pair);
+    const auto first = compile_fbd_source(graph.dump());
+    ASSERT_TRUE(first.ok);
+    std::reverse(graph["networks"][0]["nodes"].begin(), graph["networks"][0]["nodes"].end());
+    std::reverse(graph["networks"][0]["wires"].begin(), graph["networks"][0]["wires"].end());
+    const auto second = compile_fbd_source(graph.dump());
+    ASSERT_TRUE(second.ok);
+    std::string reason;
+    EXPECT_TRUE(fbd_ir_semantically_equivalent(first.module, second.module, &reason)) << reason;
+}
+
+TEST(StFbdCompile, ExplicitConversionUsesTheSameTypedIr)
+{
+    json pair = {{"id", "EQ-CVT"}, {"typeRef", "INT_TO_DINT"},
+                 {"inputs", json::array({{{"name", "A"}, {"type", "INT"}}})},
+                 {"outputType", "DINT"}, {"stExpression", "INT_TO_DINT(A)"},
+                 {"vector", {{"values", json::array({7})}, {"expected", 7}}}};
+    json graph = make_pair_graph(pair);
+    graph["networks"][0]["nodes"][1]["kind"] = "CONVERSION";
+    const auto fbd = compile_fbd_source(graph.dump());
+    ASSERT_TRUE(fbd.ok) << (fbd.issues.empty() ? "không có issue" : fbd.issues[0].code);
+    StIrModule st;
+    StDiagnostic diagnostic;
+    ASSERT_TRUE(compile_st_source(make_st_source(pair), &st, &diagnostic));
+    std::string reason;
+    EXPECT_TRUE(fbd_ir_semantically_equivalent(st, fbd.module, &reason)) << reason;
+}
+
+TEST(StFbdCompile, TonStateTraceMatchesStructuredText)
+{
+    const auto fbd = compile_fbd_source(make_ton_graph().dump());
+    ASSERT_TRUE(fbd.ok) << (fbd.issues.empty() ? "không có issue" : fbd.issues[0].code);
+    StIrModule st;
+    StDiagnostic diagnostic;
+    ASSERT_TRUE(compile_st_source(R"ST(
+PROGRAM FB_CASE
+VAR_INPUT ENABLE : BOOL; END_VAR
+VAR_OUTPUT OUT : BOOL; END_VAR
+VAR TIMER : TON; END_VAR
+TIMER(IN := ENABLE, PT := T#1s);
+OUT := TIMER.Q;
+END_PROGRAM
+)ST", &st, &diagnostic)) << diagnostic.code << ": " << diagnostic.message;
+    std::string reason;
+    EXPECT_TRUE(fbd_ir_semantically_equivalent(st, fbd.module, &reason)) << reason;
+
+    StProgramRuntime st_runtime;
+    StProgramRuntime fbd_runtime;
+    ASSERT_TRUE(make_runtime(st, &st_runtime));
+    ASSERT_TRUE(make_runtime(fbd.module, &fbd_runtime));
+    ASSERT_TRUE(st_runtime.set_variable("ENABLE", StValue::make_bool(true)));
+    ASSERT_TRUE(fbd_runtime.set_variable("ENABLE", StValue::make_bool(true)));
+    for (const int64_t now : {0LL, 500000000LL, 1000000000LL}) {
+        ASSERT_TRUE(st_runtime.execute(now).ok);
+        ASSERT_TRUE(fbd_runtime.execute(now).ok);
+        StValue st_output;
+        StValue fbd_output;
+        ASSERT_TRUE(st_runtime.get_variable("OUT", &st_output));
+        ASSERT_TRUE(fbd_runtime.get_variable("OUT", &fbd_output));
+        EXPECT_TRUE(st_value_equal(st_output, fbd_output));
+    }
+}
+
+TEST(StFbdCompile, RejectsUnconnectedInputWithoutPublishingPartialIr)
+{
+    const json pair = read_json("/fbd/equivalence_v1.json")["pairs"][0];
+    json graph = make_pair_graph(pair);
+    graph["networks"][0]["wires"].erase(graph["networks"][0]["wires"].begin());
+    const auto result = compile_fbd_source(graph.dump());
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(has_issue(result, "FBD-SEM-UNCONNECTED-001"));
+    EXPECT_TRUE(result.module.code.empty());
+    EXPECT_TRUE(result.module.variables.empty());
+}
+
+TEST(StFbdCompile, RejectsUnitBecauseArtifactIrCannotPreserveItYet)
+{
+    const json pair = read_json("/fbd/equivalence_v1.json")["pairs"][10];
+    json graph = make_pair_graph(pair);
+    graph["networks"][0]["nodes"][0]["ports"][0]["unit"] = "degC";
+    graph["networks"][0]["nodes"][2]["ports"][0]["unit"] = "degC";
+    const auto result = compile_fbd_source(graph.dump());
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(has_issue(result, "FBD-SEM-UNIT-IR-001"));
+}
+
+TEST(StFbdCompile, RejectsLibraryNodeWithoutCommonRuntimeSemantic)
+{
+    const json pair = read_json("/fbd/equivalence_v1.json")["pairs"][0];
+    json graph = make_pair_graph(pair);
+    graph["networks"][0]["nodes"][2]["kind"] = "FUNCTION_BLOCK";
+    graph["networks"][0]["nodes"][2]["typeRef"] = "CTU";
+    const auto result = compile_fbd_source(graph.dump());
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(has_issue(result, "FBD-SEM-LIBRARY-UNSUPPORTED-001"));
+}
+
+TEST(StFbdCompile, RejectsHostileVariableIdentifier)
+{
+    const json pair = read_json("/fbd/equivalence_v1.json")["pairs"][0];
+    json graph = make_pair_graph(pair);
+    graph["networks"][0]["nodes"][0]["parameters"]["variable"] = "../../SECRET";
+    const auto result = compile_fbd_source(graph.dump());
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(has_issue(result, "FBD-SEM-PARAM-001"));
+}
+
+TEST(StFbdCompile, RejectsFunctionBlockInstanceWithWrongType)
+{
+    json graph = make_ton_graph();
+    graph["networks"][0]["nodes"][2]["parameters"]["instance"] = true;
+    const auto result = compile_fbd_source(graph.dump());
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(has_issue(result, "FBD-SEM-PARAM-001"));
+    EXPECT_TRUE(result.module.code.empty());
+}
+
+} // namespace
+} // namespace core

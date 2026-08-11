@@ -111,7 +111,7 @@ target_link_libraries(core_lib INTERFACE
 add_library(st_compiler_lib STATIC
     application/st/st_parser.cpp application/st/st_semantic.cpp
     application/st/st_compile.cpp application/st/st_ir.cpp
-    application/st/st_fbd_model.cpp)
+    application/st/st_fbd_model.cpp application/st/st_fbd_compile.cpp)
 target_link_libraries(st_compiler_lib PUBLIC core_lib)
 
 add_executable(mkddc-core bootstrap/main.cpp)
@@ -165,6 +165,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_validate_cli.cpp application/st/tests/test_st_limits.cpp
       application/st/tests/test_st_lang.cpp application/st/tests/test_st_ir.cpp
       application/st/tests/test_st_fbd_model.cpp
+      application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp
       application/st/tests/test_st_retain.cpp application/st/tests/test_st_control_api.cpp
