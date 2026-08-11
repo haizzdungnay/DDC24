@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-FWSOM-PROG-001` |
-| Phiên bản | 0.5 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-300` đã có source/host evidence; production wiring và target evidence còn mở** |
+| Phiên bản | 0.6 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-300/301` có source/host evidence; production wiring và target evidence còn mở** |
 | Ngày | 2026-08-11 |
 | Chủ quản | Core/Runtime Lead |
 | Người review | Controls Lead, Safety Lead, Backend Lead, Verification Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **`mkddc-core` chạy Program như thế nào trên SOM**: phân lớp runtime, base step và scheduler, loader/activation, process image, arbitration, RETAIN, trace, và ngân sách luồng/thời gian. |
 | 2. Ai phải đọc file này? | Core/FW-SOM Lead (chủ quản); Controls đối chiếu với [Control Semantics](PROGRAMMING_CONTROL_SEMANTICS.md); BE đọc §5 để biết bàn giao artifact; QA đọc §11 và §17. |
-| 3. Hệ thống hiện tại đang có gì? | Tại `apps/core/application/st/` đã có compiler, typed IR/artifact/loader, scheduler, cyclic runtime, I/O mapping, RETAIN và trace. `TASK-PROG-300` tại `4f7e0ac` đã tách verify/preallocation khỏi tick, thêm handle swap O(1), retired cleanup ngoài RT và post-link no-parser/compiler gate. Nhưng `ScanLoop` vẫn nhận `StScheduler*` tùy chọn và bootstrap production chưa truyền scheduler — graph vẫn điều khiển. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-300` tại `4f7e0ac` đã tách prepare/activation; `TASK-PROG-301` tại `a831a0d` thêm scheduler profile Rev A 1/1/1, period 1/5/30 s, budget `<20%`, `on_base_step()` và capability/schema. ScanLoop đã gọi base-step API nhưng bootstrap production chưa truyền scheduler — graph vẫn điều khiển. |
 | 4. Thiết kế mới thay đổi điều gì? | Biến các component rời rạc đó thành một runtime thật sự được nối vào: base step tách khỏi chu kỳ Task, loader chạy ngoài RT rồi bàn giao tại biên an toàn, process image đóng băng trong lúc Program chạy, output đi qua arbitration mức 5, RETAIN khôi phục trước lần chạy đầu. |
-| 5. Team phải sửa module/contract nào? | `TASK-PROG-301` tiếp theo sửa base step/Task profile; §12, §13, §16 và §18 vẫn giao ScanLoop/process image/coordinator/mailbox/bootstrap cho các task P3 còn lại. |
-| 6. Điều gì còn bị chặn? | Các decision nền đã `Accepted`; blocker còn lại là source `TASK-PROG-301..307`, production bootstrap/cutover và target/HIL evidence. Chúng chặn G3/release, không chặn tiếp tục code. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G3-300` chứng minh phần host của `VS-PROG-012`: activation/execute/LKG boundary không cấp phát trong test và runtime archive/binary không có parser/compiler symbol; CTest `933/933`. Phần filesystem/DB/HTTP/DNS/blocking/dynamic load và 10.000 chu kỳ vẫn phải chạy **trên board** ở Task 307. |
+| 5. Team phải sửa module/contract nào? | `TASK-PROG-302` tiếp theo hoàn thiện process image/binding bridge; §12, §13, §16 và §18 giao arbitration, fault, IPC/trace, bootstrap cho các task P3 còn lại. |
+| 6. Điều gì còn bị chặn? | Các decision nền đã `Accepted`; blocker còn lại là source `TASK-PROG-302..307`, production bootstrap/cutover và target/HIL evidence. Chúng chặn G3/release, không chặn tiếp tục code. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G3-300/301`: targeted 84/84 và 74/74, full CTest mới nhất `936/936`; phần host chứng minh prepared boundary/profile/cadence. Full forbidden-call, 10.000 chu kỳ 1/5/30 s, jitter/WCET/watchdog và IOP gap vẫn phải chạy **trên board** ở Task 307. |
 
 Điểm dễ hiểu sai nhất: **host test đã pass không có nghĩa là runtime đã hoạt
 động**. Các component ở `application/st/` là nền tảng, không phải tính năng
@@ -39,9 +39,9 @@ Source hiện có parser/semantic, typed IR/artifact/loader, scheduler, cyclic
 runtime, I/O mapping, RETAIN, trace và host tests tại
 `apps/core/application/st/`. `ScanLoop` có dependency `StScheduler*` tùy chọn,
 nhưng bootstrap production hiện không truyền scheduler; graph vẫn load/execute.
-`4f7e0ac` đã thêm `StPreparedProgram`, `prepare()` ngoài scan,
-`activate_prepared()` ở boundary, retired handle/bytes và symbol gate; FBD
-production chưa có. Vì vậy đây là nền runtime có source, chưa phải feature
+`4f7e0ac` đã thêm prepared image/symbol gate; `a831a0d` đã thêm profile Rev A,
+`on_base_step()`/sequence/missed release và contract capability. Bootstrap vẫn
+`st_sched=nullptr`, graph vẫn owner và FBD production chưa có. Vì vậy đây là nền runtime có source, chưa phải feature
 Programming production hoàn tất.
 
 ## 2. Phân lớp runtime
@@ -180,7 +180,7 @@ operator confirmation và rollback về graph/LKG. Không dual-run trên output 
 |---|---|---|
 | `ProgrammingRuntimeCoordinator` | `stage`, `request_activate`, `restore`, `status`, `on_safe_boundary` | one candidate, operation state, journal generation |
 | `StArtifactLoader` | verify/decode into candidate | non-RT temporary bounded builder |
-| `ProgramTaskRuntime` | `start/stop/tick/reset_fault` | Task state, next release, counters |
+| `ProgramTaskRuntime` | `start/stop/on_base_step/reset_fault` | Task state, next release, base-step/missed-release counters |
 | `ProgramExecutor` | `execute(snapshot, staging, budget)` | preallocated slots/FB state only |
 | `ProgramProcessImage` | input snapshot/output staging/publish | fixed binding arrays + generation |
 | `ProgramRetainManager` | restore/migrate/checkpoint/reset | bounded queue/latest dirty snapshot |
@@ -220,8 +220,9 @@ artifact limits trước activation; candidate không đủ memory bị reject �
 | Core Programming worker | normal/non-RT | UDS, loader, journal/retain fsync, staging | starve scan/iobus |
 | BE compiler | process khác | parse/compile | link/call trong Core RT |
 
-Base step đề xuất 50 ms; Task 1/5/30 s phase-locked. WCET/memory budget lấy
-capability đã đo, warning 70% và overrun threshold theo Control Semantics. Compiler
+Base step Rev A mặc định 1 s, dải nền tảng 500..2000 ms theo ADR-027; Task
+1/5/30 s phase-locked và budget `<20%` period. WCET/memory budget còn phải lấy
+từ target, warning/overrun theo Control Semantics. Compiler
 load concurrent phải không làm IOP gap ≥200 ms; CPU affinity/priority/cgroup là
 deployment control cần đo, không giả định.
 
@@ -257,9 +258,10 @@ Config unknown major fails startup Programming while legacy safe owner remains;
 không default PROGRAM. Partial deploy disables mutation/capability rather than
 accepting unsupported artifact.
 
-As-Built Task 300: `apps/core/CMakeLists.txt` đã đăng ký hai CTest hậu liên kết
+As-Built Task 300/301: `apps/core/CMakeLists.txt` đã đăng ký hai CTest hậu liên kết
 cho `core_application` và `mkddc-core` bằng
-`scripts/verify_programming_runtime_symbols.py`; bootstrap/config vẫn Target.
+`scripts/verify_programming_runtime_symbols.py`; `st_program_control_v1` đã trả
+profile/capacity/period/base step và systemd trích ADR-028. Bootstrap cutover vẫn Target.
 
 ## 17. Verification, deployment và rollback
 
@@ -273,9 +275,10 @@ cho `core_application` và `mkddc-core` bằng
 | `SOM-T-006` | graph/program cutover | no dual owner/partial proposal |
 | `SOM-T-007` | HIL MCU 199/200/201 ms | expected quality/safe entry/continuity |
 
-`SOM-T-002` hiện **PARTIAL HOST PASS** cho allocation boundary và forbidden
-parser/compiler symbol tại `4f7e0ac`; chưa PASS đầy đủ vì chưa đo mọi blocking
-call và 10.000 chu kỳ trên target.
+`SOM-T-002` hiện **PARTIAL HOST PASS** cho allocation/symbol boundary tại
+`4f7e0ac`. `SOM-T-004` có host precheck profile/cadence tại `a831a0d`: Task 30 s
+không chặn base-step sequence, nhưng vẫn **NOT TESTED trên target** vì chưa đo
+mọi blocking call, jitter/WCET/watchdog/IOP gap và 10.000 chu kỳ mỗi period.
 
 Deploy dark coordinator → read-only capability/status → stage-only → shadow
 execute/no publish → one-controller canary → expand. Rollback via Restore/cutover,
@@ -313,7 +316,7 @@ retain/trace. Exact policy/CPU affinity đo trên target rồi phê duyệt; kh�
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
 | Target semantics/ABI/RETAIN/cutover | Product + Architect + Controls | **Đã mở implementation** theo `AUTH-PROG-2026-08-11-03`; acceptance target vẫn độc lập |
-| Coordinator/bootstrap/IPC chưa implement | Core Lead | `TASK-PROG-301..306` + integration |
+| Coordinator/bootstrap/IPC chưa implement | Core Lead | `TASK-PROG-302..306` + integration |
 | Timing/HIL/power-loss chưa có evidence | Core + MCU + QA | target results approved |
 
 | Phiên bản | Ngày | Nội dung |
@@ -323,10 +326,11 @@ retain/trace. Exact policy/CPU affinity đo trên target rồi phê duyệt; kh�
 | 0.3 | 2026-08-09 | Bổ sung value-interface, thread/mailbox ownership, backpressure và priority handoff; chuyển Detailed Draft chờ review |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; nhấn mạnh host test không chứng minh runtime |
 | 0.5 | 2026-08-11 | Đồng bộ `TASK-PROG-300` tại `4f7e0ac`: prepared runtime image ngoài RT, safe-boundary handle/LKG swap không cấp phát, retired cleanup ngoài scan và post-link no-parser/compiler gate; giữ production bootstrap/target NOT TESTED |
+| 0.6 | 2026-08-11 | Đồng bộ `TASK-PROG-301` tại `a831a0d`: scheduler profile Rev A 1/1/1, period 1/5/30 s, budget `<20%`, `on_base_step()`/sequence/missed release, capability/schema và watchdog ADR-028; targeted 74/74, CTest 936/936; giữ production/target NOT TESTED |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Core Lead | **TASK-PROG-300 SOURCE/DOD DONE** | `4f7e0ac`, `EV-PROG-G3-300` |
+| Core Lead | **TASK-PROG-300/301 SOURCE/DOD DONE** | `4f7e0ac`, `a831a0d`, `EV-PROG-G3-300/301` |
 | Controls + Safety + BE + QA | **WAIVED FOR IMPLEMENTATION; review/test độc lập còn mở** | `AUTH-PROG-2026-08-11-03` |
 | Runtime Architect + System Architect | **APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; target/HIL không được suy thành PASS |
 

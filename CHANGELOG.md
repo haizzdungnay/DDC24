@@ -33,6 +33,14 @@ PASS. Go `vet` và `test ./... -count=1` PASS; FE `58/58` file, `494/494` test,
 lint/typecheck/build PASS; profile generator và contract G1 `7/7` PASS. Không
 dùng Chrome DevTools vì lát cắt này không đổi component/layout/runtime FE.
 
+**Hồ sơ As-Built.** Ghim source `a831a0d` vào Design Index v3.2,
+Architecture v0.8, Control Semantics v0.4, FW-SOM v0.6, Verification Plan
+v1.2, Risk v1.7, Trace v3.13, Plan 53 v0.33, Roadmap v3.33 và review/raw
+evidence G3; phát hành candidate v2.24. P3 đạt `2/8`, tổng `23/49 = 46,9%`,
+task tiếp theo `TASK-PROG-302`. Giữ trung thực `2/60 I=Y`, `0/32 PASS`,
+16/16 risk Open, feature `OFF` và `RELEASE_READY BLOCKED`; commit/tree/PR hồ
+sơ chờ ghi provenance sau merge.
+
 ### Changed — Bounded loader và runtime image Programming P3 (2026-08-11)
 
 **TASK-PROG-300.** Tách `prepare` khỏi safe-boundary activation: artifact được
