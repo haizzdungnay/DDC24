@@ -1,0 +1,35 @@
+Evidence ID: EV-PROG-G1-103
+Ngày: 2026-08-11
+Task: TASK-PROG-103
+Source commit: 4a1e9f5
+
+CATALOG
+- version: 1.0.0
+- public errors: 19
+- component detail mappings: 77
+- SHA-256: 2315add30a8e5880dbf09574371ed662726004c0e04372d16c88164d182571d4
+- JSON Schema: PASS
+- generator --check: PASS
+- negative generator: 6/6 PASS
+
+TARGETED
+- C++ ProgramErrorCatalog: 2/2 PASS
+- Go domain + transport/http: PASS
+- FE generated errors/client: 10/10 PASS
+- TypeScript: PASS
+
+REGRESSION HOST
+- CMake Release, Modbus=ON, BACnet=ON, HMI=ON: build PASS
+- CTest: 877/877 PASS
+- Go vet: PASS
+- Go test ./... -count=1: PASS
+- FE Vitest: 55/55 file, 479/479 test PASS
+- FE lint: PASS
+- FE build: PASS
+
+BOUNDARY
+- Feature flag PROGRAMMING_REV_A mặc định OFF.
+- Không có Commission/runtime side effect.
+- Không chạy browser, target hoặc HIL.
+- Không tạo Test Result TR-PROG-*; 0/32 giữ nguyên.
+- RELEASE_READY vẫn BLOCKED.

@@ -72,7 +72,7 @@ func (i Impact) groups() map[ImpactKey]ImpactGroup {
 // được xử lý như UNAVAILABLE để Commission fail-closed.
 func ValidateImpactAcknowledgements(current Impact, request CommissionRequest) *domain.PublicError {
 	if request.ImpactRef == "" || current.ImpactRef == "" || request.ImpactRef != current.ImpactRef {
-		err := domain.NewPublicError(domain.ErrImpactStale, "programming.impact.stale")
+		err := domain.NewPublicError(domain.ErrImpactStale)
 		err.Field = "impactRef"
 		err.Args = map[string]any{"expected": current.ImpactRef, "actual": request.ImpactRef}
 		return &err
@@ -81,10 +81,10 @@ func ValidateImpactAcknowledgements(current Impact, request CommissionRequest) *
 	provided := make(map[ImpactKey]struct{}, len(request.Acknowledgements))
 	for _, key := range request.Acknowledgements {
 		if !knownImpactKey(key) {
-			return acknowledgementError(domain.ErrAckUnexpected, "programming.acknowledgement.unexpected", key)
+			return acknowledgementError(domain.ErrAckUnexpected, key)
 		}
 		if _, duplicate := provided[key]; duplicate {
-			return acknowledgementError(domain.ErrAckUnexpected, "programming.acknowledgement.duplicate", key)
+			return acknowledgementError(domain.ErrAckUnexpected, key)
 		}
 		provided[key] = struct{}{}
 	}
@@ -114,14 +114,14 @@ func ValidateImpactAcknowledgements(current Impact, request CommissionRequest) *
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		err := domain.NewPublicError(domain.ErrAckMissing, "programming.acknowledgement.missing")
+		err := domain.NewPublicError(domain.ErrAckMissing)
 		err.Field = "acknowledgements"
 		err.Args = map[string]any{"keys": missing}
 		return &err
 	}
 	if len(unexpected) > 0 {
 		sort.Strings(unexpected)
-		err := domain.NewPublicError(domain.ErrAckUnexpected, "programming.acknowledgement.unexpected")
+		err := domain.NewPublicError(domain.ErrAckUnexpected)
 		err.Field = "acknowledgements"
 		err.Args = map[string]any{"keys": unexpected}
 		return &err
@@ -138,19 +138,18 @@ func knownImpactKey(candidate ImpactKey) bool {
 	return false
 }
 
-func acknowledgementError(code domain.ErrorCode, messageKey string, key ImpactKey) *domain.PublicError {
-	err := domain.NewPublicError(code, messageKey)
+func acknowledgementError(code domain.ErrorCode, key ImpactKey) *domain.PublicError {
+	err := domain.NewPublicError(code)
 	err.Field = "acknowledgements"
 	err.Args = map[string]any{"key": string(key)}
 	return &err
 }
 
 func impactUnavailableError(key ImpactKey, reason string) *domain.PublicError {
-	err := domain.NewPublicError(domain.ErrImpactUnavailable, "programming.impact.unavailable")
+	err := domain.NewPublicError(domain.ErrImpactUnavailable)
 	err.Field = fmt.Sprintf("impact.%s", key)
 	err.Args = map[string]any{"key": string(key)}
-	if reason != "" {
-		err.Args["reason"] = reason
-	}
+	// reason là detail nội bộ, có thể chứa path/host; không đưa ra public args.
+	_ = reason
 	return &err
 }

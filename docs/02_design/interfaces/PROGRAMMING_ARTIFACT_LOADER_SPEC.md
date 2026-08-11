@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `IFSPEC-ART-PROG-001` |
-| Phiên bản | 0.4 |
+| Phiên bản | 0.5 |
 | Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; contract foundation `TASK-PROG-102` đã implement trên host; production stage/swap/target evidence còn mở** |
 | Ngày | 2026-08-11 |
 | Chủ quản | Compiler Lead + Core Lead |
@@ -183,7 +183,9 @@ Không ghi output trực tiếp trong loader. Stage/verify có thể kéo dài n
 | `IR-E-013/014` | profile/code unsupported | recompile compatible | giữ |
 | `IR-E-015` | candidate allocation fail | sau resource recovery | giữ |
 
-Public map là `PRG-ERR-ARTIFACT-001` hoặc `PRG-ERR-TARGET-001`, giữ `detailCode`.
+Public map theo catalog: `IR-E-004/013` → `PRG-ERR-TARGET-001`; 13 mã
+`IR-E-*` còn lại → `PRG-ERR-ARTIFACT-001`. BE giữ `detailCode` chỉ trong
+log/audit nội bộ; FE không nhận hoặc rẽ nhánh theo mã `IR-E-*`.
 Audit ghi actor, revision/artifact/operation, target, result/error, active trước/sau
 và correlation; không ghi artifact bytes/source/host path/public key material.
 
@@ -261,6 +263,7 @@ Token không chứa path client-controlled. Expiry không được hủy handle 
 | 0.2 | 2026-08-09 | Bổ sung loader state/lifetime/cleanup contract và single-writer handoff; chuyển Detailed Draft chờ review | System Engineering |
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; đóng finding `F-PROG-001/002` | System Engineering |
 | 0.4 | 2026-08-11 | Đồng bộ As-Built TASK-PROG-102: profile/schema/golden, generated constants, deterministic API, `StIntegrityMode=HASH_ONLY`, loader no-mutation và ranh giới phần type/stage/swap còn mở | Core + Compiler Lead |
+| 0.5 | 2026-08-11 | Đồng bộ `TASK-PROG-103`: khóa ánh xạ exact `IR-E-004/013` sang Target, 13 detail loader còn lại sang Artifact; detail chỉ giữ nội bộ và catalog sinh ba ngôn ngữ là nguồn máy đọc | Core + BE Lead |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

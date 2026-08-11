@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "npm run check:programming-api && tsc --noEmit && vite build",
+    "build": "npm run check:programming-contracts && tsc --noEmit && vite build",
+    "generate:programming-errors": "python3 ../../scripts/generate_programming_errors.py",
+    "check:programming-errors": "python3 ../../scripts/generate_programming_errors.py --check",
+    "check:programming-contracts": "npm run check:programming-errors && npm run check:programming-api",
     "generate:programming-api": "node scripts/generate-programming-client.mjs",
     "check:programming-api": "node scripts/generate-programming-client.mjs --check",
     "lint": "eslint src --max-warnings=0",

@@ -19,6 +19,10 @@ type errorEnvelope struct {
 }
 
 func WriteProgrammingError(w http.ResponseWriter, status int, public domain.PublicError, correlationID string) {
+	public = domain.NormalizePublicError(public)
+	if !domain.HTTPStatusAllowed(public.Code, status) {
+		status = domain.DefaultHTTPStatus(public.Code)
+	}
 	public.CorrelationID = correlationID
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set(correlationHeader, correlationID)
@@ -36,7 +40,7 @@ func correlationIDFromRequest(r *http.Request) (string, *domain.PublicError) {
 		return "programming-request-id", nil
 	}
 	if !correlationPattern.MatchString(value) {
-		err := domain.NewPublicError(domain.ErrRequest, "programming.request.invalidCorrelationId")
+		err := domain.NewPublicError(domain.ErrRequest)
 		err.Field = correlationHeader
 		return "invalid-correlation-id", &err
 	}

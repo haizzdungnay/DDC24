@@ -1,16 +1,16 @@
-# Review triển khai G1 Programming — TASK-PROG-100/101/102
+# Review triển khai G1 Programming — TASK-PROG-100/101/102/103
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G1-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-100`, `TASK-PROG-101`, `TASK-PROG-102` |
+| Task | `TASK-PROG-100`, `TASK-PROG-101`, `TASK-PROG-102`, `TASK-PROG-103` |
 | Ngày | 2026-08-11 |
-| Trạng thái task | **DONE — 3 contract foundation task** |
-| Trạng thái pha | **P1 IN_PROGRESS — 3/6** |
-| Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4`; Task 102: `95585e7` |
-| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: [PR #131](https://github.com/Mekong-HCM/MK-DDC-24/pull/131) / `16d3e40` |
+| Trạng thái task | **DONE — 4 contract foundation task** |
+| Trạng thái pha | **P1 IN_PROGRESS — 4/6** |
+| Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4`; Task 102: `95585e7`; Task 103: `4a1e9f5` |
+| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: [PR #131](https://github.com/Mekong-HCM/MK-DDC-24/pull/131) / `16d3e40`; Task 103: chờ PR/merge |
 | Test Result chính thức | **0/32 — không đổi** |
-| Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt), [`EV-PROG-G1-102`](programming-g1/raw/EV-PROG-G1-102.txt) |
+| Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt), [`EV-PROG-G1-102`](programming-g1/raw/EV-PROG-G1-102.txt), [`EV-PROG-G1-103`](programming-g1/raw/EV-PROG-G1-103.txt) |
 
 ## 1. Kết quả triển khai
 
@@ -53,9 +53,8 @@ target/HIL vì thẻ task ghi rõ không áp dụng ở lát cắt contract-only
 
 ## 4. Next action theo dependency
 
-`TASK-PROG-101`, `TASK-PROG-102` và `TASK-PROG-104` được chạy song song. Sau
-khi `100..102` đều `DONE`, bắt đầu `TASK-PROG-103`; `TASK-PROG-105` là review
-join cuối P1.
+`TASK-PROG-100..103` đã `DONE`. Next action là `TASK-PROG-104` (schema SQLite,
+migration và backup); `TASK-PROG-105` là review join cuối P1 sau khi 104 đạt DoD.
 
 Remote branch `feat/programming-contract-foundation-20260811` đã xóa sau merge.
 
@@ -168,3 +167,54 @@ với `TASK-PROG-104`; `TASK-PROG-105` chờ hai task này.
 
 Remote branch `feat/programming-profile-artifact-v1-20260811` đã xóa sau merge
 PR #131; candidate v2.11 xuất hiện trên `main` tại tree `a0add512`.
+
+## 9. Kết quả `TASK-PROG-103`
+
+- Thêm `contracts/programming/error_catalog_v1.json`, JSON Schema và manifest
+  làm nguồn máy đọc duy nhất cho **19** mã công khai và **77** ánh xạ
+  component/detail. Catalog SHA-256 là
+  `2315add30a8e5880dbf09574371ed662726004c0e04372d16c88164d182571d4`.
+- Generator sinh cùng metadata/hàm `MapComponentError`, `IsRetryable` và
+  `messageKey` cho Core C++, backend Go, frontend TypeScript; `--check` và build
+  FE fail khi source/generated/OpenAPI lệch.
+- OpenAPI nâng `1.16.0` và công bố đủ 19 mã. Backend canonicalize mã,
+  `messageKey`, HTTP/retry; allowlist `args/field` và loại path/source/stack/
+  secret, nested value, số không hữu hạn và control character.
+- FE xác thực HTTP/code, correlation ID, metadata và args trước khi dựng
+  `ProgrammingApiError`; mã/detail/HTTP lạ rơi về
+  `PRG-ERR-UNAVAILABLE-001` và không được suy `keepsRunningRevision=true`.
+
+### 9.1 Finding phát hiện và đóng trong phiên
+
+| ID | Mức | Finding | Cách đóng | Trạng thái |
+|---|---|---|---|---|
+| `F-G1-103-01` | P1 | Header C++ sinh ban đầu có brace thừa nên không compile | Sửa tại generator, sinh lại và thêm hai CTest catalog/mapping | **CLOSED** |
+| `F-G1-103-02` | P0 | FE có thể giữ `keepsRunningRevision=true` từ envelope mang mã lạ | Chỉ tin flag khi code được biết và HTTP thuộc catalog; fallback mặc định false; thêm test hostile | **CLOSED** |
+| `F-G1-103-03` | P1 | OpenAPI chỉ có 8/19 mã authority | Nâng 1.16.0, đủ 19 enum và generator so tập hai chiều | **CLOSED** |
+| `F-G1-103-04` | P1 | BE nhận messageKey/args/HTTP tự do, có thể lộ detail hoặc cho consumer rẽ nhánh sai | Canonicalize ở writer, allowlist key/value/field, mismatch HTTP về default và thêm test leak | **CLOSED** |
+| `F-G1-103-05` | P2 | Fallback C++ ban đầu phụ thuộc vị trí phần tử cuối catalog | Generator tính index fallback theo `unknownFallbackCode`, không phụ thuộc thứ tự | **CLOSED** |
+
+Không còn finding P0/P1 mở trong phạm vi Task 103. Catalog khóa contract lỗi,
+không đồng nghĩa operation worker, Commission lifecycle hoặc FE Draft reducer
+đã hoàn tất.
+
+## 10. Kiểm chứng `TASK-PROG-103` và truy vết
+
+| Làn | Kết quả đo trong phiên |
+|---|---|
+| Catalog/schema | JSON Schema PASS; generator `--check` PASS 19 public/77 detail; negative generator 6/6 |
+| C++ targeted | `ProgramErrorCatalog*` 2/2 PASS; unknown detail fail-safe |
+| Go targeted | domain + transport HTTP PASS; canonical metadata/status và no-sensitive-args |
+| FE targeted | generated catalog/client 10/10 PASS; TypeScript PASS |
+| C++ toàn repo | Release Modbus+BACnet+HMI build PASS; CTest 877/877 PASS |
+| Go toàn repo | `go vet ./...` và `go test ./... -count=1` PASS |
+| FE toàn repo | Vitest 55/55 file, 479/479 test; lint và build PASS |
+
+Trace chỉ bổ sung source Task 103 cho `BE-110` và phần đã có của
+`SYS-103/105`, `FE-110`. Tổng `I=Y` giữ **2/60** vì lifecycle/ScanLoop/Draft
+reducer chưa end-to-end. Không tạo `TR-PROG-*`; mọi `T/P/R=N`, Test Result giữ
+`0/32`, feature flag giữ `OFF` và `RELEASE_READY` vẫn `BLOCKED`.
+
+Không chạy Chrome DevTools vì task không đổi component/route/layout hiển thị.
+Không deploy target/HIL vì đây là contract foundation và production mutation
+vẫn bị chặn fail-safe.

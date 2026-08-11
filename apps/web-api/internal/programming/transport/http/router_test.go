@@ -150,3 +150,30 @@ func TestContractSkeletonRejectsInvalidCorrelationID(t *testing.T) {
 		t.Fatalf("status = %d; want 400", recorder.Code)
 	}
 }
+
+func TestProgrammingErrorCanonicalizesHTTPMessageAndPublicArgs(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	public := domain.PublicError{
+		Code:       domain.ErrRequest,
+		MessageKey: "attacker.message",
+		Args: map[string]any{
+			"actual": "2.0",
+			"secret": "do-not-leak",
+			"path":   "/etc/shadow",
+		},
+	}
+	WriteProgrammingError(recorder, http.StatusInternalServerError, public, "catalog-test-0001")
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("mismatched status = %d; want catalog default 400", recorder.Code)
+	}
+	var envelope errorEnvelope
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Error.MessageKey != "programming.error.request" {
+		t.Fatalf("messageKey = %q", envelope.Error.MessageKey)
+	}
+	if len(envelope.Error.Args) != 1 || envelope.Error.Args["actual"] != "2.0" {
+		t.Fatalf("public args leaked: %#v", envelope.Error.Args)
+	}
+}
