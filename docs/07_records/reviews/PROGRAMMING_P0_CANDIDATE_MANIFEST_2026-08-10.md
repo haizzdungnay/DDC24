@@ -4,14 +4,14 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.5 |
+| Phiên bản | 3.6 |
 | Ngày | 2026-08-11 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
 | Trạng thái | **ACTIVE — candidate v2.10 `IMPLEMENTATION IN PROGRESS`; P1 2/6; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | **Chờ ghi sau merge TASK-PROG-101** — **22 hash ở §2 là định danh hiện hành** |
-| PR nguồn | Chờ tạo sau khi hoàn tất kiểm chứng và commit tài liệu |
+| Candidate commit | `adcefed` — ghi đầy đủ ở §1.1; **22 hash ở §2 là định danh hiện hành** |
+| PR nguồn | [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) — merged |
 | Candidate trước | v2.9 tại commit `7109bae` — **SUPERSEDED bởi cập nhật trace/progress TASK-PROG-101**, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
@@ -47,9 +47,9 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | **PENDING — ghi bổ sung sau merge PR TASK-PROG-101** |
-| Git tree | **PENDING — ghi bổ sung sau merge** |
-| Nhánh phát hành | `feat/programming-ipc-v1-20260811` |
+| Commit chứa nội dung candidate | `adcefedbcb89640a73df10413d37768dcf833d67` |
+| Git tree | `89f0ee5af82c01c00642e81baabcdb363a945214` |
+| Nhánh phát hành | `feat/programming-ipc-v1-20260811` — remote đã xóa sau merge |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
 chạy `scripts/candidate_pin_check.py` trước khi bắt đầu đọc.
@@ -107,7 +107,7 @@ Candidate v2.10 hiện tại chỉ đổi dòng 21–22 so với v2.9 để ghi 
 
 | Hồ sơ | Phiên bản tại lần ghim này | Vai trò |
 |---|---|---|
-| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v3.5 | Tracker hồ sơ và đồng bộ tiến độ code |
+| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v3.6 | Tracker hồ sơ và đồng bộ tiến độ code |
 | `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v2.0 | Gói phê duyệt toàn bộ |
 | `docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md` | v1.6 | Biên bản consumer review + waiver |
 | `docs/07_records/reviews/PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md` | 2026-08-11 | Review source/evidence `TASK-PROG-100/101` |
@@ -184,3 +184,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.3 | 2026-08-11 | Phát hành candidate v2.9 sau `TASK-PROG-100`: cập nhật hash/blob của Trace v2.8 và Plan 53 v0.18; 20/22 hồ sơ còn lại giữ nguyên. Chưa ghi commit/tree cho tới khi PR merge; 22 SHA-256 là authority hiện hành |
 | 3.4 | 2026-08-11 | Ghi bổ sung PR #127, merge commit `7109bae` và tree `55176626` chứa candidate v2.9. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi; candidate pin tiếp tục 22/22 PASS |
 | 3.5 | 2026-08-11 | Phát hành candidate v2.10 sau `TASK-PROG-101`: cập nhật hash/blob của Trace v2.9 và Plan 53 v0.19; 20/22 hồ sơ còn lại giữ nguyên. Commit/tree/PR chờ ghi bổ sung sau merge; 22 SHA-256 là authority hiện hành |
+| 3.6 | 2026-08-11 | Ghi bổ sung PR #129, merge commit `adcefed` và tree `89f0ee5a` chứa candidate v2.10. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi; candidate pin tiếp tục 22/22 PASS |

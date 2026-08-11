@@ -8,7 +8,7 @@
 | Trạng thái task | **DONE — 2 contract foundation task** |
 | Trạng thái pha | **P1 IN_PROGRESS — 2/6** |
 | Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4` |
-| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: chờ ghi sau merge |
+| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed` |
 | Test Result chính thức | **0/32 — không đổi** |
 | Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt) |
 
@@ -110,3 +110,5 @@ continuity là acceptance của gate sau, không được suy từ host test.
 
 Next action theo dependency: `TASK-PROG-102` và `TASK-PROG-104`. Khi 102 xong,
 `TASK-PROG-103` được mở; `TASK-PROG-105` vẫn là review join cuối P1.
+
+Remote branch `feat/programming-ipc-v1-20260811` đã xóa sau merge PR #129.

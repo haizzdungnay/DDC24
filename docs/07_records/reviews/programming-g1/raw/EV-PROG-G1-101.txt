@@ -5,6 +5,9 @@ Loại: evidence hỗ trợ task; KHÔNG phải Test Result VS-PROG
 Source:
 - 51fe515 feat(programming): khóa giao thức IPC v1 phía Core
 - e9707b4 feat(programming): thêm client UDS có reconcile phía Backend
+- PR #129 merged: adcefedbcb89640a73df10413d37768dcf833d67
+- Merge tree: 89f0ee5af82c01c00642e81baabcdb363a945214
+- Remote feature branch: đã xóa
 
 Contract:
 - Protocol major/minor/schema: 1/0/1.0

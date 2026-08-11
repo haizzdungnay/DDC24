@@ -31,6 +31,12 @@ PASS; toàn bộ số đo regression repository và trạng thái Plan/Trace đ�
 component/route/layout FE; không deploy target/HIL và không tạo Test Result
 chính thức. P1 lên `2/6`; `RELEASE_READY` vẫn `BLOCKED`.
 
+**Phát hành source.** [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129)
+đã merge vào `main` tại `adcefed`; remote feature branch đã xóa. Candidate v2.10
+được ghim `22/22` và ghi tree `89f0ee5a` sau merge. GitHub Actions của PR có
+nhiều job `FAILURE/QUEUED`; kết luận Task 101 dựa trên gate host chạy thật ở
+trên, không suy CI hoặc release PASS.
+
 ### Added — Contract foundation Programming Rev A (2026-08-11)
 
 **Kết quả.** Hoàn tất `TASK-PROG-100`: OpenAPI `1.15.0` có 25 operation dưới
