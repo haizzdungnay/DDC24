@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.19 |
+| Phiên bản | 3.20 |
 | Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.17; P1 `6/6 DONE`; P2 `3/8`; tiếp theo `TASK-PROG-203`; `RELEASE_READY BLOCKED`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
@@ -477,8 +477,8 @@ Candidate P0 hiện hành đã ghim:
 | Thuộc tính | Giá trị |
 |---|---|
 | Định danh | 22 SHA-256 của candidate v2.17 ở manifest v3.19; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
-| Commit/tree | `PENDING` / `PENDING` — bổ sung sau khi merge PR Task 202; 22 hash là authority hiện hành |
-| Nhánh phát hành | `feat/programming-fbd-ir-equivalence-20260811` |
+| Commit/tree | `7d424bcdd1c810ff505921962cc5e0d4e1e6a170` / `aeb27c61095341877845b34311ed1a538ed4fd61` |
+| Nhánh phát hành | `feat/programming-fbd-ir-equivalence-20260811` — remote đã xóa sau merge PR #143 |
 | Manifest | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
 | Phạm vi | 22/22 hồ sơ baseline; đồng bộ `TASK-PROG-202 DONE`, P2 3/8 và ranh giới 2 record BLOCKED/0 PASS |
 | Trạng thái | **PIN PASS 22/22; APPROVED FOR IMPLEMENTATION** |
@@ -547,6 +547,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.17 | 2026-08-11 | Hoàn tất `TASK-PROG-201`: thêm snapshot P2 2/8, dẫn source FBD canonical/validator/editor và review/evidence G2; phát hành candidate v2.16 do Index/Language/FE/Risk/Trace/Plan đổi. Contract mutation 10/10, Core 8/8, FE 15/15, ASan fuzz 50.000 input, CTest 906/906 và Go/FE regression PASS; giữ 0/32 PASS và RELEASE_READY BLOCKED | Compiler + Core + FE Lead + Document Control |
 | 3.18 | 2026-08-11 | Ghi PR #141 đã merge tại `207cd90`, tree `b85bdb2c`; remote feature branch đã xóa. Candidate v2.16/pin 22/22, P2 2/8 và ranh giới evidence/release không đổi | Document Control |
 | 3.19 | 2026-08-11 | Hoàn tất `TASK-PROG-202`: thêm snapshot P2 3/8, dẫn source lowerer/equivalence/fuzz và review/evidence G2; phát hành candidate v2.17 do Index/Language/Risk/Trace/Plan đổi. Targeted 17/17, ASan fuzz 100.000 input, CTest 915/915 và Go/FE regression PASS; giữ 0/32 PASS và RELEASE_READY BLOCKED | Compiler + Core Lead + Document Control |
+| 3.20 | 2026-08-11 | Ghi PR #143 đã merge tại `7d424bc`, tree `aeb27c61`; remote feature branch đã xóa. Candidate v2.17/pin 22/22, P2 3/8 và ranh giới evidence/release không đổi | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|
