@@ -8,6 +8,7 @@
 | Trạng thái task | **DONE** |
 | Trạng thái pha | **P2 IN_PROGRESS — 1/8; G2 IN_PROGRESS** |
 | Source commit | `8d58efa`, `a638470` |
+| PR / merge | [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`, tree `8d4fb50a`; remote feature branch đã xóa |
 | Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt) |
 | Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS — không đổi** |
 | Next action | `TASK-PROG-201` — FBD canonical model và keyboard command contract |
