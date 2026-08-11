@@ -55,6 +55,8 @@ type projectPageResponse struct {
 
 func handleProjectRequest(w http.ResponseWriter, r *http.Request, correlationID string, service *programmingapplication.ProjectService) bool {
 	switch {
+	case r.Method == http.MethodGet && r.PathValue("from") != "" && r.PathValue("to") != "":
+		handleGetRevisionChanges(w, r, correlationID, service)
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/programming/projects":
 		handleListProjects(w, r, correlationID, service)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/programming/projects":
@@ -71,6 +73,15 @@ func handleProjectRequest(w http.ResponseWriter, r *http.Request, correlationID 
 		return false
 	}
 	return true
+}
+
+func handleGetRevisionChanges(w http.ResponseWriter, r *http.Request, correlationID string, service *programmingapplication.ProjectService) {
+	changes, err := service.GetRevisionChanges(r.Context(), r.PathValue("from"), r.PathValue("to"))
+	if err != nil {
+		writeMappedError(w, err, correlationID)
+		return
+	}
+	writeJSON(w, http.StatusOK, correlationID, changes)
 }
 
 func handleCreateProject(w http.ResponseWriter, r *http.Request, correlationID string, service *programmingapplication.ProjectService) {
@@ -225,6 +236,10 @@ func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 		status, public = http.StatusConflict, domain.NewPublicError(domain.ErrConflict)
 	case errors.Is(err, programmingapplication.ErrInvalidRequest), errors.Is(err, programmingapplication.ErrInvalidCursor):
 		status, public = http.StatusBadRequest, domain.NewPublicError(domain.ErrRequest)
+	case errors.Is(err, programmingapplication.ErrBundleTooLarge):
+		status, public = http.StatusRequestEntityTooLarge, domain.NewPublicError(domain.ErrImport)
+	case errors.Is(err, programmingapplication.ErrInvalidBundle):
+		status, public = http.StatusUnprocessableEntity, domain.NewPublicError(domain.ErrImport)
 	}
 	public.KeepsRunningRevision = true
 	WriteProgrammingError(w, status, public, correlationID)

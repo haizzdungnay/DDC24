@@ -7,9 +7,9 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "69c3b61bdb167a0f655128637e9ea4ecd057a75cd3a6f6296bba1bd87d3357ac",
+      "sha256": "0941b7f11014394699f9fdaf7a0987c9839caffff9a7ceb84a73add4b8328ac3",
       "major": 1,
-      "version": "1.18.0",
+      "version": "1.19.0",
       "operationCount": 25
     },
     {
@@ -52,10 +52,18 @@
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "39a66b8fabfee07c527ce4610edfdc97cc560fbf2de8038493c3f66a49b535c7",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0003_check_worker.sql",
-      "migrationSha256": "f182f622b097ec7bea65a172fa8a0efdbe36291c3c35a7eed5cbf6e0f7a89ec3",
+      "sha256": "9eeb7cc0e39e2fac7f341639c14361a4c9ed6a96a44423edfd9610d97127ac81",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0004_bundle_receipts.sql",
+      "migrationSha256": "430a1ea77912e90f8f8972e5656178d405e7e29425d85534ac6484dbf42fb49e",
       "major": 1
+    },
+    {
+      "name": "source-bundle",
+      "path": "contracts/programming/source_bundle_v1.schema.json",
+      "sha256": "524f4f1f143911d13f180a06c796b4d8bd502790f4ddcef56ecdf4250ae1f9d8",
+      "major": 1,
+      "schemaVersion": "1.0",
+      "maximumArchiveBytes": 4194304
     }
   ],
   "compatibility": {
@@ -100,5 +108,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store refreshed through TASK-PROG-205"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store refreshed through TASK-PROG-206"
 }

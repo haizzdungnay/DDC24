@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.18.0"
+  version: "1.19.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -19,7 +19,7 @@ info:
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
   date: "2026-08-11"
-  note: "v1.18.0 nối Check worker/artifact deterministic; giữ 25 route và schema major 1."
+  note: "v1.19.0 nối change manifest và bundle source-only đồng bộ; giữ 25 route và schema major 1."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -1898,7 +1898,7 @@ paths:
       operationId: compareProgrammingRevisions
       summary: Đọc change manifest giữa hai Revision
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-206
       responses:
         "200":
           description: Change manifest có impactRef ổn định
@@ -2178,7 +2178,7 @@ paths:
       operationId: exportProgrammingBundle
       summary: Tạo bundle source-only có manifest và hash
       x-rbac: [admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-206
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
       requestBody:
@@ -2187,11 +2187,11 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ProgrammingBundleExportRequest" }
       responses:
-        "202":
-          description: Operation export đã được nhận
+        "200":
+          description: ZIP source-only deterministic cùng hash và audit; không chứa artifact/IR/native/cache
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ProgrammingOperationAccepted" }
+              schema: { $ref: "#/components/schemas/ProgrammingBundleExportResponse" }
         "400": { $ref: "#/components/responses/ProgrammingError" }
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
@@ -2202,9 +2202,9 @@ paths:
   /programming/bundles/import:
     post:
       operationId: importProgrammingBundle
-      summary: Quarantine và kiểm bundle trước khi tạo Draft
+      summary: Kiểm bundle inline trước khi tạo Project/Draft mới
       x-rbac: [admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-206
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
       requestBody:
@@ -2213,11 +2213,11 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ProgrammingBundleImportRequest" }
       responses:
-        "202":
-          description: Operation import đã được nhận; không auto-activate
+        "201":
+          description: Đã tạo Project/Draft mới; không tạo Revision/Check/Artifact và không auto-Commission
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ProgrammingOperationAccepted" }
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
         "400": { $ref: "#/components/responses/ProgrammingError" }
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
@@ -2534,14 +2534,32 @@ components:
     ProgrammingRevisionChanges:
       type: object
       additionalProperties: false
-      required: [fromRevisionId, toRevisionId, impact]
+      required: [fromRevisionId, toRevisionId, impact, changes]
       properties:
         fromRevisionId: { type: string, format: uuid }
         toRevisionId: { type: string, format: uuid }
         impact: { $ref: "#/components/schemas/ProgrammingImpact" }
         changes:
           type: array
-          items: { $ref: "#/components/schemas/ProgrammingResource" }
+          maxItems: 1024
+          items: { $ref: "#/components/schemas/ProgrammingRevisionChange" }
+    ProgrammingRevisionChange:
+      type: object
+      additionalProperties: false
+      required: [objectId, kind, changeType, category, beforeSha256, afterSha256]
+      properties:
+        objectId: { type: string, format: uuid }
+        kind: { type: string, enum: [METADATA, PROGRAM, FUNCTION, FUNCTION_BLOCK, VARIABLE, BINDING, TASK] }
+        changeType: { type: string, enum: [ADDED, REMOVED, MODIFIED] }
+        category: { type: string, enum: [SOURCE, MAPPING, OUTPUT_MAPPING, TASK, LIBRARY, RETAIN] }
+        beforeSha256:
+          oneOf:
+            - { type: string, pattern: "^[a-f0-9]{64}$" }
+            - { type: "null" }
+        afterSha256:
+          oneOf:
+            - { type: string, pattern: "^[a-f0-9]{64}$" }
+            - { type: "null" }
     ProgrammingImpactStatus:
       type: string
       enum: [NONE, PRESENT, UNAVAILABLE]
@@ -2690,11 +2708,39 @@ components:
     ProgrammingBundleImportRequest:
       type: object
       additionalProperties: false
-      required: [schemaVersion, uploadRef, expectedSha256]
+      required: [schemaVersion, name, bundleBase64, expectedSha256]
       properties:
         schemaVersion: { type: string, const: "1.0" }
-        uploadRef: { type: string, minLength: 8, maxLength: 256 }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000, default: "" }
+        bundleBase64:
+          type: string
+          minLength: 4
+          maxLength: 5592408
+          contentEncoding: base64
         expectedSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+    ProgrammingBundleExportResponse:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, bundleSha256, byteSize, revisionIds, selectedRevisionId, bundleBase64, auditId, correlationId]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        bundleSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        byteSize: { type: integer, minimum: 1, maximum: 4194304 }
+        revisionIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        selectedRevisionId: { type: string, format: uuid }
+        bundleBase64:
+          type: string
+          minLength: 4
+          maxLength: 5592408
+          contentEncoding: base64
+        auditId: { type: string, format: uuid }
+        correlationId: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
     ProgrammingRetainResetRequest:
       type: object
       additionalProperties: false

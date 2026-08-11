@@ -2,7 +2,7 @@
 
 Thư mục này là authority machine-readable cho contract profile/artifact
 (`TASK-PROG-102`), catalog lỗi liên lớp (`TASK-PROG-103`) và manifest SQLite
-store (`TASK-PROG-104`). Từ `TASK-PROG-201..203`, thư mục này còn là authority
+store (`TASK-PROG-104`). Từ `TASK-PROG-201..206`, thư mục này còn là authority
 của mô hình FBD canonical, corpus equivalence ST↔FBD và manifest provenance
 deterministic cho cả hai ngôn ngữ.
 Mã nguồn không được hard-code lại giới hạn, mã lỗi hoặc shortcut khác contract.
@@ -36,6 +36,7 @@ python3 scripts/verify_programming_artifact_manifest.py --self-test
 | `error_catalog_v1.schema.json` | schema khóa catalog major 1 |
 | `error_catalog_v1.manifest.json` | SHA-256, số đếm và ba consumer generated Go/C++/TypeScript |
 | `programming_store_v1.manifest.json` | schema version/checksum, đường dẫn, PRAGMA, single-writer, immutable entity và feature flag của SQLite store |
+| `source_bundle_v1.schema.json` | manifest trong ZIP source-only deterministic; importer chỉ nhận file allowlist và luôn tạo Project/Draft mới |
 | `g1_contract_join_v1.json` | manifest join G1 khóa hash/major của OpenAPI, IPC, profile, artifact, error, store cùng thứ tự deploy/rollback và flag OFF |
 | `fbd_v1.schema.json` | schema canonical của graph/network/node/port/wire FBD Rev A |
 | `fbd_keyboard_commands_v1.json` | registry 11 command/shortcut keyboard-first và giới hạn undo/redo |

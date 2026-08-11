@@ -16,6 +16,7 @@ import (
 )
 
 const maxMutationBodyBytes int64 = 1 << 20
+const maxBundleMutationBodyBytes int64 = 6 << 20
 
 type routeDefinition struct {
 	method              string
@@ -24,6 +25,7 @@ type routeDefinition struct {
 	bodyRequired        bool
 	idempotencyRequired bool
 	ifMatchRequired     bool
+	maxBodyBytes        int64
 }
 
 var routeDefinitions = []routeDefinition{
@@ -49,7 +51,7 @@ var routeDefinitions = []routeDefinition{
 	{method: "GET", path: "/api/v1/programming/operations", role: auth.RoleViewer},
 	{method: "GET", path: "/api/v1/programming/overrides", role: auth.RoleViewer},
 	{method: "POST", path: "/api/v1/programming/bundles/export", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
-	{method: "POST", path: "/api/v1/programming/bundles/import", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
+	{method: "POST", path: "/api/v1/programming/bundles/import", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, maxBodyBytes: maxBundleMutationBodyBytes},
 	{method: "POST", path: "/api/v1/programming/retain/reset", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
 	{method: "GET", path: "/api/v1/programming/audit", role: auth.RoleViewer},
 }
@@ -96,6 +98,9 @@ func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition
 	if services.Checks != nil && handleCheckRequest(w, r, correlationID, services.Checks) {
 		return
 	}
+	if services.Projects != nil && handleBundleRequest(w, r, correlationID, services.Projects) {
+		return
+	}
 	public := domain.NewPublicError(domain.ErrUnavailable)
 	// Skeleton chưa gọi Core và chưa có side effect, nên invariant này được biết
 	// chắc; lỗi unknown từ Core không được tự đặt true như vậy.
@@ -133,7 +138,11 @@ func validateContractRequest(w http.ResponseWriter, r *http.Request, definition 
 		public.Field = "Content-Type"
 		return http.StatusBadRequest, &public
 	}
-	value, err := validateBoundedJSON(w, r)
+	limit := definition.maxBodyBytes
+	if limit == 0 {
+		limit = maxMutationBodyBytes
+	}
+	value, err := validateBoundedJSON(w, r, limit)
 	if err != nil {
 		public := domain.NewPublicError(domain.ErrRequest)
 		status := http.StatusBadRequest
@@ -157,11 +166,11 @@ func validateContractRequest(w http.ResponseWriter, r *http.Request, definition 
 	return 0, nil
 }
 
-func validateBoundedJSON(w http.ResponseWriter, r *http.Request) (map[string]any, error) {
-	if r.ContentLength > maxMutationBodyBytes {
+func validateBoundedJSON(w http.ResponseWriter, r *http.Request, limit int64) (map[string]any, error) {
+	if r.ContentLength > limit {
 		return nil, errRequestTooLarge
 	}
-	reader := http.MaxBytesReader(w, r.Body, maxMutationBodyBytes)
+	reader := http.MaxBytesReader(w, r.Body, limit)
 	defer reader.Close()
 	raw, err := io.ReadAll(reader)
 	if err != nil {

@@ -76,6 +76,37 @@ type CreateProjectParams struct {
 	RequestSHA256        [32]byte
 }
 
+type ImportProjectParams struct {
+	ProjectID            string
+	DraftID              string
+	Name                 string
+	Description          string
+	ContentJSON          []byte
+	BundleSHA256         string
+	SourceProjectID      string
+	SourceRevisionID     string
+	ActorID              string
+	Role                 string
+	AuditID              string
+	CorrelationID        string
+	At                   time.Time
+	IdempotencyKeySHA256 [32]byte
+	RequestSHA256        [32]byte
+}
+
+type RecordBundleExportParams struct {
+	BundleSHA256         string
+	RevisionIDs          []string
+	ByteSize             int64
+	ActorID              string
+	Role                 string
+	AuditID              string
+	CorrelationID        string
+	At                   time.Time
+	IdempotencyKeySHA256 [32]byte
+	RequestSHA256        [32]byte
+}
+
 type SaveDraftParams struct {
 	DraftID              string
 	ExpectedETag         int64
