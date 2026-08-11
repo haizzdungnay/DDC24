@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <new>
 #include <utility>
 
 #include <sodium.h>
@@ -739,11 +740,19 @@ bool LoadArtifact(const uint8_t* data, std::size_t size, const StLoaderOptions& 
         if (err) { err->code = st_ir_error::kBadHeader; err->message = "null artifact"; }
         return false;
     }
-    StLoadedProgram candidate;
-    Loader l(data, size, opts, &candidate, err);
-    if (!l.run()) return false;
-    *out = std::move(candidate);
-    return true;
+    try {
+        StLoadedProgram candidate;
+        Loader l(data, size, opts, &candidate, err);
+        if (!l.run()) return false;
+        *out = std::move(candidate);
+        return true;
+    } catch (const std::bad_alloc&) {
+        if (err) {
+            err->code = st_ir_error::kOutOfMemory;
+            err->message = "bounded loader allocation failed";
+        }
+        return false;
+    }
 }
 
 bool VerifyArtifact(const uint8_t* data, std::size_t size, const StLoaderOptions& opts,

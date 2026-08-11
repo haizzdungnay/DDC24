@@ -1,6 +1,8 @@
 #include "st/st_scheduler.hpp"
 
 #include <algorithm>
+#include <new>
+#include <utility>
 
 namespace core {
 
@@ -155,8 +157,36 @@ bool StScheduler::request_activation(const std::string& instance_id,
         if (error) *error = "an activation is already pending for '" + instance_id + "'";
         return false;
     }
-    p->pending_artifact = artifact;
+
+    if (!p->activated_artifact.empty()) {
+        if (error) *error = "current package has not completed a clean tick";
+        return false;
+    }
+
+    /* Toàn bộ loader + heap nằm ở command/non-RT path. Ảnh active cũ và bytes
+     * LKG bị giữ lại ở vùng retired trong scan, rồi mới được thu hồi ở đây. */
+    p->runtime.reclaim_retired();
+    std::vector<uint8_t>().swap(p->retired_artifact);
+
+    StPreparedProgramHandle prepared;
+    StLoadError load_error;
+    if (!p->runtime.prepare(artifact.data(), artifact.size(), &prepared, &load_error,
+                            &loader_opts_)) {
+        if (error) *error = "artifact rejected: " + load_error.code + " " + load_error.message;
+        if (!p->runtime.loaded()) p->state = StProgramState::REJECTED;
+        return false;
+    }
+
+    try {
+        std::vector<uint8_t> bytes(artifact);
+        p->pending_artifact.swap(bytes);
+    } catch (const std::bad_alloc&) {
+        if (error) *error = "artifact staging allocation failed";
+        return false;
+    }
+    p->pending_program = std::move(prepared);
     p->has_pending = true;
+    p->pending_is_rollback = false;
     p->state = StProgramState::STAGED;
     return true;
 }
@@ -236,17 +266,10 @@ bool StScheduler::rollback(const std::string& instance_id, std::string* error)
         if (error) *error = "no last-known-good package to roll back to";
         return false;
     }
-    /* Rollback đi LẠI đúng đường verify — không phải cửa sau bỏ qua kiểm tra.
-     * Nếu package tốt trước đây nay không load được (vd đổi ABI runtime), thà
-     * biết ngay còn hơn chạy một thứ chưa được kiểm. */
-    StLoadError err;
-    if (!p->runtime.activate(p->last_known_good.data(), p->last_known_good.size(), &err,
-                             &loader_opts_)) {
-        if (error) *error = "rollback failed to load: " + err.code + " " + err.message;
-        p->state = StProgramState::FAULTED;
-        return false;
-    }
-    p->state = StProgramState::ROLLED_BACK;
+    /* Rollback vẫn đi lại loader, nhưng prepare ở command path và chỉ swap tại
+     * tick boundary như activation thường. */
+    if (!request_activation(instance_id, p->last_known_good, error)) return false;
+    p->pending_is_rollback = true;
     p->last_fault_code = nullptr;
     return true;
 }
@@ -258,15 +281,15 @@ void StScheduler::apply_pending_activations(StTask& task)
     for (auto& p : task.programs()) {
         if (!p->has_pending) continue;
         const bool had_previous = p->runtime.loaded();
-        StLoadError err;
-        const bool ok = p->runtime.activate(p->pending_artifact.data(),
-                                            p->pending_artifact.size(), &err, &loader_opts_);
+        const bool ok = p->runtime.activate_prepared(std::move(p->pending_program));
         if (ok) {
-            p->state = StProgramState::ACTIVE;
+            p->state = p->pending_is_rollback ? StProgramState::ROLLED_BACK
+                                              : StProgramState::ACTIVE;
             /* Giữ lại bytes để promote thành last-known-good SAU KHI chạy được
              * >= 1 tick không fault — package chưa chạy lần nào không đủ tư
              * cách làm mốc rollback. */
-            p->activated_artifact = p->pending_artifact;
+            p->retired_artifact.swap(p->activated_artifact);
+            p->activated_artifact.swap(p->pending_artifact);
         } else {
             /* Thất bại GIỮ NGUYÊN package đang chạy — không có mã lỗi nào dẫn
              * tới trạng thái "không có chương trình nào chạy" nếu trước đó đã
@@ -276,7 +299,7 @@ void StScheduler::apply_pending_activations(StTask& task)
         /* Tiêu thụ request dù thành hay bại: không retry ngầm ở tick sau với
          * cùng artifact lỗi. */
         p->has_pending = false;
-        p->pending_artifact.clear();
+        p->pending_is_rollback = false;
     }
 }
 
@@ -312,8 +335,8 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
         }
         /* Chạy được >= 1 tick không fault -> đủ điều kiện last-known-good. */
         if (!p->activated_artifact.empty()) {
-            p->last_known_good = p->activated_artifact;
-            p->activated_artifact.clear();
+            p->retired_artifact.swap(p->last_known_good);
+            p->last_known_good.swap(p->activated_artifact);
         }
         ran++;
     }

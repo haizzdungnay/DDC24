@@ -1,45 +1,63 @@
 #include "st/st_cyclic_runtime.hpp"
 
+#include <utility>
+
 namespace core {
 
-bool StCyclicRuntime::request_activation(const std::vector<uint8_t>& artifact)
+bool StCyclicRuntime::request_activation(const std::vector<uint8_t>& artifact,
+                                         StLoadError* error)
 {
-    if (has_pending_) return false;
-    pending_artifact_ = artifact;
-    has_pending_ = true;
+    if (pending_) return false;
+    /* API này chạy ngoài scan. Thu hồi ảnh cũ tại đây để safe boundary kế tiếp
+     * chỉ move handle, không gọi delete/free. */
+    runtime_.reclaim_retired();
+    StPreparedProgramHandle candidate;
+    StLoadError local_error;
+    StLoadError* load_error = error ? error : &local_error;
+    if (!runtime_.prepare(artifact.data(), artifact.size(), &candidate, load_error, &opts_)) {
+        if (trace_) {
+            StTraceEvent ev;
+            ev.kind = StTraceEventKind::ACTIVATION_RESULT;
+            ev.ok = false;
+            ev.code = load_error->code;
+            ev.message = load_error->message;
+            trace_->push(std::move(ev));
+            if (runtime_.loaded()) {
+                StTraceEvent rb;
+                rb.kind = StTraceEventKind::ROLLBACK;
+                rb.ok = true;
+                rb.message = "staging failed, last-known-good package retained";
+                trace_->push(std::move(rb));
+            }
+        }
+        return false;
+    }
+    pending_ = std::move(candidate);
     return true;
 }
 
 StExecResult StCyclicRuntime::run_cycle(uint64_t cycle_start_ns, uint64_t now_ns,
                                         uint64_t budget_ns, StLoadError* activation_err)
 {
-    if (has_pending_) {
-        const bool had_previous = runtime_.loaded();
-        StLoadError local_err;
-        StLoadError* err = activation_err ? activation_err : &local_err;
-        const bool activated =
-            runtime_.activate(pending_artifact_.data(), pending_artifact_.size(), err, &opts_);
-        /* Thành công hay thất bại đều TIÊU THỤ request: thất bại thì package
-         * cũ tiếp tục chạy, không retry ngầm ở chu kỳ sau với cùng artifact lỗi. */
-        has_pending_ = false;
-        pending_artifact_.clear();
+    if (pending_) {
+        /* candidate đã verify + preallocate ngoài RT. Ở đây chỉ swap ownership
+         * O(1); không còn parser/loader/heap trên safe boundary. */
+        const bool activated = runtime_.activate_prepared(std::move(pending_));
+        if (activation_err && !activated) {
+            activation_err->code = st_ir_error::kOutOfMemory;
+            activation_err->message = "prepared runtime slot unavailable";
+        }
 
         if (trace_) {
             StTraceEvent ev;
             ev.kind = StTraceEventKind::ACTIVATION_RESULT;
             ev.timestamp_ns = cycle_start_ns;
             ev.ok = activated;
-            if (!activated) { ev.code = err->code; ev.message = err->message; }
-            trace_->push(ev);
-
-            if (!activated && had_previous) {
-                StTraceEvent rb;
-                rb.kind = StTraceEventKind::ROLLBACK;
-                rb.timestamp_ns = cycle_start_ns;
-                rb.ok = true;
-                rb.message = "activation failed, last-known-good package retained";
-                trace_->push(rb);
+            if (!activated) {
+                ev.code = st_ir_error::kOutOfMemory;
+                ev.message = "prepared runtime slot unavailable";
             }
+            trace_->push(ev);
         }
     }
 
@@ -54,7 +72,7 @@ StExecResult StCyclicRuntime::run_cycle(uint64_t cycle_start_ns, uint64_t now_ns
             ev.timestamp_ns = now_ns;
             ev.ok = false;
             ev.code = r.fault_code ? r.fault_code : "";
-            ev.message = r.error;
+            ev.message = r.error ? r.error : "runtime_fault";
             trace_->push(ev);
         }
     }

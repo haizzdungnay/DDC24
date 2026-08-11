@@ -2,7 +2,7 @@
 
 **ID:** REC-REVIEW-INDEX-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-11 (`TASK-PROG-200..204 DONE`; P2 5/8; G2 IN_PROGRESS; 2 record BLOCKED, 0/32 PASS)
+**Cập nhật:** 2026-08-11 (`TASK-PROG-300 DONE`; P3 1/8; G3 IN_PROGRESS; 2 record BLOCKED, 0/32 PASS)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -63,12 +63,13 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 | [Programming Docs Sync Report](PROGRAMMING_DOCS_SYNC_REPORT.md) | 2026-08-03 | Complete | Đồng bộ docs theo Product Spec Programming Rev A |
 | [Programming Design Set Review](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | 2026-08-09 | Complete | Rà 22 hồ sơ Programming: 12 finding tài liệu đã đóng, 22/22 đạt M3; M4/M5 chờ người thật |
 | [Gói review cổng P0 Programming](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | 2026-08-11 | **v2.0 — APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; P0 7/7 DONE; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` PASS |
-| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.24 — candidate v2.19** | Candidate định danh bằng **22 SHA-256**; PR #147 merge `27a06e1`, tree `4e4e4d24`; P2 5/8 |
+| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.31 — candidate v2.23** | Candidate định danh bằng **22 SHA-256**; Task 300 source `4f7e0ac`; P3 1/8; merge provenance chờ ghi sau PR |
 | [Rà soát môi trường P0 Programming](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) | 2026-08-11 | **v1.2 — implementation entry approved** | CI/target/HIL chưa có evidence nhưng được loại khỏi entry condition; không chặn code |
 | [Consumer review liên chức năng P0 Programming](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | 2026-08-11 | **v1.6 — `8/8 WAIVED FOR IMPLEMENTATION`** | `9/9` finding đóng; không giả 8 chữ ký; maturity vẫn 0/22 M4 nhưng không chặn implementation |
 | [Review triển khai G1 Programming](PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **P1 DONE 6/6 — G1 GO** | `TASK-PROG-100..105 DONE`; join/deploy/rollback PASS; 2 record BLOCKED, 0/32 PASS |
 | [Biên bản join hợp đồng G1 Programming](PROGRAMMING_G1_CONTRACT_REVIEW_20260811.md) | 2026-08-11 | **GO cho P2/P3 implementation** | 6/6 contract cùng hash/major; self-test/order âm/rollback PASS; không bật Commission |
-| [Review triển khai G2 Programming](PROGRAMMING_G2_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **TASK-PROG-200..204 DONE — P2 5/8** | ST/FBD compiler-artifact và sáu API Project/Draft/Revision + SQLite v2/ETag/idempotency có source/host evidence; Test Result giữ 0/32 PASS; next Task 205 |
+| [Review triển khai G2 Programming](PROGRAMMING_G2_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **TASK-PROG-200..207 DONE — P2 8/8** | Compiler/Project/Check/bundle/assurance có source host; Test Result giữ 0/32 PASS; bàn giao P3 |
+| [Review triển khai G3 Programming](PROGRAMMING_G3_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **TASK-PROG-300 DONE — P3 1/8** | Prepared runtime ngoài scan, boundary/LKG allocation gates và post-link no-parser/compiler PASS; next Task 301; target/release còn BLOCKED |
 | [Deployment Provenance Report](DEPLOYMENT_PROVENANCE_REPORT.md) | 2026-08-03 | Record | Build identity, release manifest, sai khác target |
 | [Physical I/O và HIL](PHYSICAL_IO_HIL_REPORT.md) | 2026-08-03 | **Gate còn mở** | Host/fake-MCU **không** được ghi thành HIL vật lý |
 | [Báo cáo build và deploy lên board](BOARD_DEPLOY_REPORT_2026-08-04.md) | 2026-08-04 | Record | 5 service chạy trên Orange Pi 5B, HMI tắt có chủ đích |

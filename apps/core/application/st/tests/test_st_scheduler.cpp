@@ -12,6 +12,7 @@
 #include "st/st_ir.hpp"
 #include "st/st_scheduler.hpp"
 #include "st/st_test_key.hpp"
+#include "tests/allocation_probe.hpp"
 
 namespace core {
 namespace {
@@ -403,6 +404,32 @@ TEST(StScheduler, ActivationAppliedAtTickBoundaryNotImmediately)
     EXPECT_EQ(s.find_program("p")->state, StProgramState::ACTIVE);
 }
 
+TEST(StScheduler, PreparedActivationAndLkgPromotionAllocateNothingInTick)
+{
+    StScheduler s;
+    std::string err;
+    ASSERT_TRUE(s.add_task(task_cfg("T", 0, 100), &err));
+    ASSERT_TRUE(s.add_program("T", "p", 0, &err));
+    ASSERT_TRUE(s.request_activation("p", counter_program(), &err));
+
+    std::size_t allocations = 0;
+    {
+        allocation_probe::ScopedCounter counter;
+        s.tick(0);  // chỉ swap prepared handle
+        allocations = counter.allocations();
+    }
+    EXPECT_EQ(allocations, 0u);
+
+    ASSERT_TRUE(s.start("p", &err));
+    {
+        allocation_probe::ScopedCounter counter;
+        s.tick(100 * kMs);  // execute + promote LKG bằng swap vector
+        allocations = counter.allocations();
+    }
+    EXPECT_EQ(allocations, 0u);
+    EXPECT_FALSE(s.find_program("p")->last_known_good.empty());
+}
+
 TEST(StScheduler, SecondActivationRejectedWhileFirstPending)
 {
     StScheduler s;
@@ -425,7 +452,7 @@ TEST(StScheduler, FailedActivationKeepsRunningProgram)
 
     std::vector<uint8_t> broken = counter_program();
     broken[broken.size() - 1] ^= 0xFF;
-    ASSERT_TRUE(s.request_activation("p", broken, &err));
+    ASSERT_FALSE(s.request_activation("p", broken, &err));
     s.tick(200 * kMs);
 
     EXPECT_EQ(s.find_program("p")->state, StProgramState::RUNNING)

@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `PROG-DOCSET-001` |
-| Phiên bản | 3.0 |
+| Phiên bản | 3.1 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`; maturity đo được vẫn M3 |
 | Ngày | 2026-08-11 |
 | Chủ quản | System Engineering |
@@ -15,11 +15,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Xác định **hồ sơ nào là chủ quản của nội dung nào** trong bộ Programming. Khi hai file nói khác nhau về cùng một chủ đề, file được chỉ định ở §3 là bên đúng; file kia phải sửa theo. Đây cũng là điểm vào để biết đọc file nào trước. |
 | 2. Ai phải đọc file này? | Bất kỳ ai chuẩn bị sửa một hồ sơ Programming, và mọi người mới vào dự án. Dev Lead đọc để biết hồ sơ upstream của một slice; Document Control đọc để kiểm register. |
-| 3. Hệ thống hiện tại đang có gì? | Đường điều khiển production hiện chạy bằng **graph**. P1 đã khóa contract/store/deploy; P2 đã hoàn tất `TASK-PROG-200..207`: ST/FBD compiler, artifact manifest/source map, Project/Draft/Revision/Check, change manifest, bundle source-only trên SQLite v4 và assurance hostile-input/resource/audit trên host. Flag vẫn `OFF`; 14 route operation/runtime/audit còn fail-closed và chưa có Commission/Core activation. |
+| 3. Hệ thống hiện tại đang có gì? | Đường điều khiển production hiện chạy bằng **graph**. P1/P2 đã hoàn tất. P3 có `TASK-PROG-300` tại `4f7e0ac`: bounded loader prepare/preallocation ngoài scan, safe-boundary handle/LKG swap và no-parser/compiler symbol gate trên host. Flag vẫn `OFF`; bootstrap chưa route scheduler/coordinator và chưa có Commission/Core activation trên board. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm một đường Programming song song (Project → Draft → Revision → Check → Commission → Active) và một **cutover độc quyền**: hoặc `GRAPH_ONLY`, hoặc `PROGRAM_ONLY`, không bao giờ cả hai. Bảy ranh giới bắt buộc ở §4 là phần không được thương lượng. Giao diện tổ chức theo **bốn workspace** và **tám user journey** `UJ-PROG-01..08` đã được `OD-PROG-016` quyết định. |
 | 5. Team phải sửa module/contract nào? | File này không giao việc code. Nó chỉ tay tới hồ sơ chủ quản: `mkddc-web` (BE Design), `mkddc-core` (FW-SOM + Control Semantics), `mkddc-iobus` (không đổi), STM32 (FW MCU Design), `apps/web-ui` (FE + UI/UX Design). |
-| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** P1 6/6 DONE; P2 8/8 DONE về source/DoD; next `TASK-PROG-300`. Hai record VS-001/019 đang BLOCKED và 0/32 PASS chỉ chặn release, không chặn code. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Register 22 dòng phải khớp harness. `EV-PROG-G2-207` ghi hostile bundle corpus 25 lớp với snapshot 8 bảng zero-mutation, 23 alias audit-secret, compiler timeout/OOM/output/source bounds, fuzz 2.156 lượt, CTest 929/929, FE 494/494 và Go/race PASS. Đây là evidence host hỗ trợ, không phải Test Result độc lập; 2 record BLOCKED, 0/32 PASS. |
+| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** P1 6/6, P2 8/8, P3 1/8 source/DoD; next `TASK-PROG-301`. Hai record VS-001/019 `BLOCKED` và 0/32 PASS chỉ chặn release, không chặn code. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Register 22 dòng phải khớp harness. `EV-PROG-G3-300` ghim `4f7e0ac`, targeted `84/84`, CTest `933/933`, allocation/symbol gates, Go, FE 494/494 và G1 7/7 PASS. Đây là evidence host hỗ trợ `VS-PROG-012`, không phải Test Result độc lập; 2 record BLOCKED, 0/32 PASS. |
 
 Thuật ngữ điều hướng: **workspace** là một trong bốn màn hình chính `PGM-01..04`;
 **user journey** `UJ-PROG-01..08` là một công việc trọn vẹn của người dùng;
@@ -95,7 +95,7 @@ Product/ADR Active
 | `OPS-PROG-001` | [Programming Operations Runbook](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | backup, commission, restore, replacement, incident | `M3` — **APPROVED FOR IMPLEMENTATION**; diễn tập theo P6 |
 | `RSK-PROG-001` | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | rủi ro, kiểm soát, owner và residual gate | `M3` v1.5 — treatment Task 207 bổ sung hostile corpus/resource/audit; residual giữ nguyên |
 | `TRACE-PROG-001` | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Requirement → Design → Interface → Test → Evidence | `M3` v3.11 — 2/60 `I=Y`; Task 207 là source partial; 2 record BLOCKED, 0/32 PASS |
-| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.31 — P2 8/8 source/DoD; next `TASK-PROG-300` |
+| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.32 — P3 1/8 source/DoD; next `TASK-PROG-301` |
 
 Tiến độ tạo, hoàn thiện, review và phê duyệt đúng 22 hồ sơ trên được quản lý tại
 [`PLAN-PROG-DOC-054`](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md).
@@ -227,6 +227,7 @@ code; review/evidence thực được bổ sung trong task và trước release.
 | 2.8 | 2026-08-11 | Đồng bộ `TASK-PROG-205` tại `e8c289e`: SQLite v3, Check request 24 giờ, lease/CAS retry một lần, compiler sandbox, diagnostic, Artifact content-address/read-back và hai route Check thật; P2 6/8, next TASK-PROG-206. Data v0.7, Interface v1.1, BE v0.9, Risk v1.3, Trace v3.9, Plan v0.29; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 2.9 | 2026-08-11 | Đồng bộ `TASK-PROG-206` tại `95b9388`: change manifest deterministic, ZIP source-only/hash/allowlist, import Project/Draft atomic và SQLite v4 bundle receipt; P2 7/8, next TASK-PROG-207. Data v0.8, Interface v1.2, BE v1.0, Risk v1.4, Trace v3.10, Plan v0.30; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 3.0 | 2026-08-11 | Đồng bộ `TASK-PROG-207` tại `3e5281d`: hostile corpus 25 lớp/zero-mutation 8 bảng, 23 alias audit-secret, compiler resource bounds và fuzz host; P2 8/8 source/DoD, next TASK-PROG-300. Data v0.9, Interface v1.3, BE v1.1, Security v0.5, VVP v1.0, Risk v1.5, Trace v3.11, Plan v0.31; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
+| 3.1 | 2026-08-11 | Đồng bộ `TASK-PROG-300` tại `4f7e0ac`: prepared runtime image ngoài scan, boundary/LKG swap không cấp phát và post-link no-parser/compiler gate; P3 1/8, tổng 22/49, next TASK-PROG-301. Artifact v0.8, FW-SOM v0.5, VVP v1.1, Risk v1.6, Trace v3.12, Plan v0.32; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 
 ## 11. Phụ lục — Tự kiểm cổng M3 (loại: Kiểm soát tài liệu)
 
