@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 1.2 |
+| Phiên bản | 1.3 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 11 Project/Draft/Revision/Check/change/bundle operation, IPC v1 và catalog lỗi ba ngôn ngữ có source; operation/Core lifecycle còn mở |
 | Ngày | 2026-08-11 |
 | Chủ quản | Backend Lead + Runtime Architect |
@@ -19,11 +19,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Là **hợp đồng** giữa các bên: REST và WebSocket giữa trình duyệt và BE, IPC giữa BE và Core. Định nghĩa đường dẫn, payload, mã lỗi, timeout, retry, idempotency và thứ tự sự kiện. Đây cũng là **nguồn chuẩn duy nhất của mã lỗi** `PRG-ERR-*`. |
 | 2. Ai phải đọc file này? | FE và BE bắt buộc đọc cùng nhau — hai bên phải review **một** hợp đồng, không phải hai bản mô tả. Core đọc §8 và §12 (hợp đồng BE↔Core). Security đọc §15. QA dựng contract test từ §14 và §18. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-206` tại `95b9388` đã nối 11 operation Project/Draft/Revision/Check/change/bundle trong 25 route OpenAPI/Go/client TS vào SQLite v4. Export trả ZIP source-only deterministic; import chỉ tạo Project/Draft. Catalog giữ 20 public/80 detail; feature flag mặc định `OFF`. 14 operation runtime/operation/audit vẫn trả unavailable/no-side-effect. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-207` tại `3e5281d` khóa assurance cho 11 operation Project/Draft/Revision/Check/change/bundle: raw archive/entry/count bounded, path UTF-8 NFC, entry regular không executable, ZIP không comment/encryption/link và timestamp cố định; hostile corpus 25 lớp zero-mutation. Catalog giữ 20 public/80 detail; feature flag mặc định `OFF`. 14 operation runtime/operation/audit vẫn trả unavailable/no-side-effect. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm nhóm `/api/v1/programming`, event WebSocket cho runtime/operation, và một giao thức nội bộ có phiên bản cho Commission. Nguyên tắc chi phối: `HTTP 2xx` chỉ nghĩa là **request đã được nhận**; chỉ read-back từ Core mới kết luận được Revision nào đang chạy. |
-| 5. Team phải sửa module/contract nào? | §16. OpenAPI/client/IPC/error catalog, Project/Draft/Revision, Check worker, change manifest và bundle source-only đã có source. Task 207 bổ sung hostile corpus/timeout/OOM/audit-secret assurance; task sau nối operation/Core lifecycle. FE tiếp tục chỉ dùng type/catalog sinh ra, không tự viết mã lỗi hoặc messageKey. |
+| 5. Team phải sửa module/contract nào? | §16. OpenAPI/client/IPC/error catalog, Project/Draft/Revision, Check worker, change manifest, bundle source-only và assurance Task 207 đã có source. Tiếp theo `TASK-PROG-300` nối bounded loader/runtime Core, rồi operation lifecycle. FE tiếp tục chỉ dùng type/catalog sinh ra, không tự viết mã lỗi hoặc messageKey. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Payload/limit/role đã được chốt bởi 17 decision `DECIDED`. TLS và giao thức BE↔Core là phần phải implement/test trong P1–P3, không phải điều kiện xin phép trước khi code. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host evidence `EV-PROG-G2-206` chứng minh change/hash deterministic, export/import round-trip, idempotency/audit, HTTP `200→201` và không Artifact/Check/Commission. Các Test Result độc lập `VS-PROG-019/021/023/024/026` vẫn chưa PASS; host evidence không thay target/HIL. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host evidence `EV-PROG-G2-207` chứng minh hostile corpus 25 lớp, request 6 MiB+1 trả 413, raw ZIP 4 MiB+1 reject, entry/count/metadata/NFC fail-closed, zero-mutation 8 bảng và audit không lộ source/secret. Các Test Result độc lập `VS-PROG-019/021/023/024/026` vẫn chưa PASS; host evidence không thay target/HIL. |
 
 Vì sao mã lỗi phải tập trung ở đây: nếu mỗi component tự đặt mã, FE sẽ retry sai
 chỗ và che mất lỗi thật — đó là `RSK-PROG-014`. Quy tắc: FE quyết định dựa trên
@@ -331,8 +331,8 @@ Core đã đổi trạng thái.
 | `POST /operations/commission` | `202` | key + expected active | 3 s accept | ghi operation trước IPC; chỉ một mutation runtime/controller |
 | `POST /operations/restore` | `202` | key + expected active | 3 s accept | cùng verify path với Commission, không bypass loader |
 | `GET /operations/{id}` | `200` | không | 2 s | nguồn duy nhất để reconcile timeout/unknown |
-| `POST /bundles/export` | `200` + ZIP base64/hash/audit | key + revision set | 3 s | ZIP Store/path sort/timestamp cố định; chỉ Revision source/config allowlist, không artifact/IR/native/cache |
-| `POST /bundles/import` | `201` + Project/Draft ETag | key + bundle hash | 5 s | request tối đa 6 MiB, ZIP tối đa 4 MiB; validate path/kind/hash/size/manifest; chỉ tạo Project/Draft, không Check/Commission/activate |
+| `POST /bundles/export` | `200` + ZIP base64/hash/audit | key + revision set | 3 s | ZIP Store/path sort/timestamp 1980 cố định; path UTF-8 NFC; entry regular không executable/comment/extra metadata; chỉ Revision source/config allowlist, không artifact/IR/native/cache |
+| `POST /bundles/import` | `201` + Project/Draft ETag | key + bundle hash | 5 s | request tối đa 6 MiB, ZIP raw tối đa 4 MiB, entry tối đa 256 KiB; validate count/path NFC/kind/hash/size/manifest/flags/mode/comment/timestamp/extra; chỉ tạo Project/Draft, không Check/Commission/activate |
 | `POST /retain/reset` | `202` | key + one-time confirmation | 3 s accept | operation riêng; Core reset ở safe boundary; audit bắt buộc |
 | `GET /audit` | `200` + cursor | không | 3 s | sanitize theo role; không trả source/secret ngoài policy |
 
@@ -584,6 +584,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | 1.0 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-204` tại `66848a1`: OpenAPI v1.17 và sáu operation Project/Draft/Revision nối SQLite v2, ETag mạnh, cursor HMAC, receipt idempotency 24 giờ/restart, immutable Revision và catalog v1.1.0 20 public/77 detail; giữ 19 operation còn 503, flag OFF và target evidence còn mở | BE + Core + FE Lead |
 | 1.1 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-205` tại `e8c289e`: OpenAPI v1.18 và hai operation Check nối SQLite v3/application worker; receipt 24 giờ, lease/retry, `QUEUED/RUNNING/PASSED/FAILED/TIMED_OUT`, sandbox/artifact verify và catalog v1.2.0 20 public/80 detail; giữ 17 operation còn 503, flag OFF và target evidence còn mở | BE + Core + FE Lead |
 | 1.2 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-206` tại `95b9388`: OpenAPI v1.19 và ba operation change/export/import nối SQLite v4; change/impactRef deterministic, ZIP Store source-only 4 MiB có manifest/hash/audit và import atomic chỉ tạo Project/Draft; giữ 14 operation còn 503, flag OFF và target evidence còn mở | BE + Core + Security Lead |
+| 1.3 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-207` tại `3e5281d`: khóa bundle path UTF-8 NFC, regular/non-exec, flags/comment/timestamp/extra metadata, raw 4 MiB và entry 256 KiB; hostile corpus 25 lớp zero-mutation và HTTP 6 MiB+1→413; giữ 14 operation còn 503, flag OFF và Test Result/target evidence còn mở | BE + Security + Verification Lead |
 
 | Vai trò | Trạng thái | Ngày / bằng chứng |
 |---|---|---|

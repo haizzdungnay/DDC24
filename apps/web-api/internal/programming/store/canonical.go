@@ -109,8 +109,11 @@ func errorsIsEOF(err error) bool {
 }
 
 var forbiddenAuditKeys = map[string]struct{}{
-	"password": {}, "token": {}, "secret": {}, "privatekey": {}, "source": {},
-	"sourcecode": {}, "stack": {}, "artifactbytes": {}, "hostpath": {},
+	"password": {}, "passphrase": {}, "token": {}, "accesstoken": {}, "refreshtoken": {},
+	"apikey": {}, "apitoken": {}, "authorization": {}, "cookie": {}, "credential": {}, "credentials": {},
+	"secret": {}, "clientsecret": {}, "secretvalue": {}, "privatekey": {},
+	"source": {}, "sourcecode": {}, "document": {}, "payload": {}, "bundlebase64": {},
+	"stack": {}, "artifact": {}, "artifactbytes": {}, "binary": {}, "hostpath": {},
 }
 
 func validateAuditDetails(canonical []byte) error {
@@ -130,7 +133,13 @@ func walkAuditDetails(value any) error {
 	switch typed := value.(type) {
 	case map[string]any:
 		for key, child := range typed {
-			if _, forbidden := forbiddenAuditKeys[strings.ToLower(key)]; forbidden {
+			normalizedKey := strings.Map(func(character rune) rune {
+				if character == '_' || character == '-' || character == '.' || character == ' ' {
+					return -1
+				}
+				return character
+			}, strings.ToLower(key))
+			if _, forbidden := forbiddenAuditKeys[normalizedKey]; forbidden {
 				return fmt.Errorf("audit details chứa field bị cấm: %s", key)
 			}
 			if err := walkAuditDetails(child); err != nil {

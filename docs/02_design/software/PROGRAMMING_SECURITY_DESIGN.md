@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-SEC-PROG-001` |
-| Phiên bản | 0.4 |
+| Phiên bản | 0.5 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; TLS production còn chặn mutation |
-| Ngày | 2026-08-09 |
+| Ngày | 2026-08-11 |
 | Chủ quản | Security Lead + Backend Lead |
 | Người review | Core Lead, Operations Lead, Verification Lead |
 | Người phê duyệt | System Architect + Product Owner |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **ai được làm gì, chặn đầu vào độc hại ở đâu, và ghi lại dấu vết ra sao**. Gồm biên tin cậy, RBAC phía server, cách ly compiler, toàn vẹn artifact, kiểm gói import và nhật ký audit. |
 | 2. Ai phải đọc file này? | Security và BE (chủ quản); Core đọc §7 (artifact/IPC/filesystem); Ops đọc §12 (xoay chứng chỉ/khóa); QA dựng ca tấn công từ §10 và §15. |
-| 3. Hệ thống hiện tại đang có gì? | **Web đang chạy HTTP cổng 8081, chưa có TLS** — đây là gap lớn nhất. Chưa có route Programming nên chưa có RBAC cho nó. Compiler C++ và CLI đã có, có sẵn fuzz harness. Artifact có mã hash + Ed25519 nhưng chưa nối vào tích hợp local. IPC Web/Core có sẵn nhưng chưa có giao thức Programming. Có nền tảng logging nhưng **chưa có chuỗi audit riêng cho Programming**. |
+| 3. Hệ thống hiện tại đang có gì? | **Web vẫn chạy HTTP cổng 8081, chưa có TLS** nên feature Programming mặc định `OFF`. Khi bật ở lab, 11/25 route Project/Draft/Revision/Check/change/bundle chạy qua RBAC handler+service, SQLite v4 và audit hash-chain; 14 route còn `503`. Compiler chạy child process có rlimit/seccomp/no-new-privileges/timeout/process-group kill; Artifact content-address/read-back và IPC Programming v1 đã có. `TASK-PROG-207` tại `3e5281d` thêm hostile corpus 25 lớp zero-mutation, 23 alias audit-secret và compiler resource/fuzz assurance trên host. |
 | 4. Thiết kế mới thay đổi điều gì? | Đặt RBAC ở **server**, ở cả tầng handler lẫn tầng service — vì chặn ở UI không phải là chặn. Chạy compiler trong tiến trình cách ly, có hạn ngạch, không mạng, không include theo đường dẫn tùy ý. IPC dùng UDS có kiểm credential của tiến trình đối tác, quyền `0660`, khung có phiên bản và giới hạn kích thước. Audit ghi có cấu trúc và bất biến. |
 | 5. Team phải sửa module/contract nào? | §13. BE: middleware authz + audit store; Core: kiểm quyền socket và verify artifact độc lập; Ops/Platform: dựng TLS. **Hệ quả bắt buộc ngay**: vì chưa có TLS, mọi mutation Programming phải **mặc định tắt** trong gói production. |
-| 6. Điều gì còn bị chặn? | TLS production (Security + Platform) — chặn bật mutation. Ma trận quyền chờ `OD-PROG-001`. Chính sách provenance/chữ ký artifact chưa ký. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §14: `VS-PROG-022` (chạy **mọi** thao tác đọc/ghi với viewer/operator/admin và cả role đã bị thu hồi; deny phải không sinh IPC hay ghi DB), `VS-PROG-021` và `VS-PROG-023` (corpus gói độc hại: artifact/native/path traversal/symlink/zip bomb/sai target). `NOT RUN`. |
+| 6. Điều gì còn bị chặn? | TLS production (Security + Platform) vẫn chặn bật mutation ngoài lab. Ma trận quyền và provenance đã được quyết định để implementation tiếp tục; operation/Core target, full RBAC matrix và Test Result độc lập vẫn còn mở. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G2-207` hỗ trợ `VS-PROG-006/012/013/021/023`: hostile bundle 25 lớp, snapshot 8 bảng zero-mutation, 23 alias audit-secret, timeout/OOM/output/source bounds và Go fuzz 2.156 lượt đều PASS trên host. Đây **không** phải Test Result độc lập; `VS-PROG-021/022/023` vẫn chưa PASS. |
 
 Một điều **không** được coi là kiểm soát an ninh: “mạng lab kín”. Nó không thay
 thế TLS. Tương tự, vai trò hiển thị trên UI không thay thế kiểm quyền ở server —
@@ -55,14 +55,15 @@ file name, MIME, bundle manifest hay artifact metadata nếu chưa verify.
 
 ## 2. As-Built và security gate
 
-| Boundary | As-Built 2026-08-09 | Target / gate |
+| Boundary | As-Built 2026-08-11 | Target / gate |
 |---|---|---|
 | Web transport | source report ghi HTTP port 8081, chưa TLS | TLS + secure session; Programming mutation feature OFF đến khi PASS |
-| Programming API | chưa có route BE/FE production | package server-side RBAC/CSRF/rate limit/audit |
-| Compiler | C++ compiler/CLI và fuzz harness có | sandbox process non-RT, quota, no network/path include |
-| Artifact | hash + Ed25519 code; local integration chưa wired | policy HASH_ONLY/provenance cần decision, loader verify độc lập |
-| IPC | Web/Core IPC hiện hữu; Programming protocol chưa có | UDS peer credential, `0660`, bounded versioned frame |
-| Audit | nền tảng có logging nhưng chưa Programming chain | immutable structured audit DB + export/retention |
+| Programming API | 11/25 route chạy thật khi flag ON; RBAC handler+service, request limits và audit atomic; 14 route fail-closed `503` | TLS/CSRF/rate-limit target và full authorization matrix |
+| Compiler | child process non-RT có scratch `0700`, argv cố định, rlimit/seccomp/no-new-privileges, timeout/process-group kill; timeout/OOM/output/source bounds và fuzz host PASS | cgroup/no-network/service UID + availability trên target |
+| Artifact | content-address store, canonical hash/profile/manifest/source map và read-back đã nối Check | Core bounded loader verify độc lập và target stage/load/swap |
+| IPC | Programming protocol v1 có bounded frame/deadline/peer schema, chưa production lifecycle | UDS peer credential, `0660` và target operation integration |
+| Audit | SQLite v4 atomic append + hash-chain/gap/tamper/sanitize; 23 alias secret reject, bundle audit không chứa source | export/retention/full route matrix và target evidence |
+| Bundle | source-only ZIP deterministic; raw/entry/count/path NFC/mode/flags/comment/timestamp/extra metadata bounded; hostile corpus 25 lớp zero-mutation | independent `VS-PROG-021/023` và target availability |
 
 Do HTTP/TLS gap, mọi mutation Programming phải mặc định disabled trong production
 package. Không được lấy mạng lab kín làm security control thay TLS.
@@ -97,7 +98,7 @@ cuối cho executable artifact. RT executor không có network/file/parser capab
 | RETAIN reset/import bundle | — | — | ✓ + re-auth | ✓ + re-auth |
 | user/role/TLS/security policy | — | — | — | ✓ |
 
-Role matrix cuối là OPEN decision. Authorization kiểm server-side ở handler và
+Role matrix đã được quyết định trong `PROG-OD-001`. Authorization kiểm server-side ở handler và
 service method; unit test gọi service trực tiếp để tránh bypass middleware. Object
 scope theo controller/project; unauthorized existence trả đồng nhất 404/403 policy.
 Commission/Restore/RETAIN reset yêu cầu recent re-auth và confirmation token gắn
@@ -127,7 +128,7 @@ exception của chính mình; break-glass có lý do, thời hạn, alert và re
 | JSON/source size | reject sớm trước decode sâu; 1 MiB request, 64 KiB/ST Program baseline |
 | nesting/token/entity | giới hạn compiler/schema; không XML/entity/include/url |
 | worker isolation | separate UID/process, no network, read-only binary, private scratch, seccomp/cgroup khi platform hỗ trợ |
-| CPU/memory/time | 5 s, 128 MiB/job đề xuất; một worker/controller, bounded global queue |
+| CPU/memory/time | timeout nhận `1..60 s` (mặc định service 5 s), `RLIMIT_AS=128 MiB`, `RLIMIT_CPU`, output mỗi stream 64 KiB, source 64 KiB; một worker tuần tự |
 | parser/loader | fuzz + sanitizer CI; checked arithmetic; deterministic diagnostic cap 64 |
 | rate limit | read 120/min, Draft 30/min, Check 6/min, Commission/Restore 2/min per actor/controller |
 | logging | rate limit + structured code; không echo entire hostile payload |
@@ -157,12 +158,16 @@ package manifest, không nhận path từ request.
 
 Bundle Rev A chỉ source/config/manifest/hash; cấm artifact executable, credential,
 certificate/private key, session, audit raw và RETAIN secret. Export sanitize theo
-role và target project selection.
+role và target project selection. ZIP raw tối đa 4 MiB, tối đa 1024 file và
+256 KiB mỗi entry; đường dẫn phải UTF-8 NFC, tương đối, không control/backslash.
 
-Import vào quarantine, giới hạn compressed/uncompressed count/size/ratio/path;
-cấm absolute path, `..`, symlink/hardlink/device, duplicate/confusable path. Verify
-manifest/schema/hash rồi tạo Draft mới; không overwrite project, không auto-Check/
-Commission. Mapping/controller identity phải review lại trên target replacement.
+Import kiểm toàn bộ trước transaction: chỉ ZIP Store, flag cho phép đúng
+data-descriptor/UTF-8, không encryption/comment, entry phải regular và không
+executable, timestamp cố định 1980, extra field chỉ timestamp chuẩn; cấm absolute
+path, `..`, symlink/hardlink/device, duplicate/confusable/non-NFC path. Verify
+manifest/schema/hash rồi tạo Draft mới trong một transaction; mọi reject giữ nguyên
+8 bảng Project/Draft/Revision/Check/Artifact/Operation/Audit/Receipt, không overwrite,
+không auto-Check/Commission. Mapping/controller identity phải review lại trên target.
 
 ## 9. Audit, secret và privacy
 
@@ -178,8 +183,8 @@ export, Commission/Restore, trace, RETAIN reset, role/policy change và break-gl
 | result/error/detail | stable code; không stack/path/key |
 | active before/after/read-back | bắt buộc cho runtime mutation |
 
-Audit record có hash chain/chunk signature nếu platform decision duyệt; ít nhất DB
-transaction và restricted append/export. Clock rollback không được sắp xếp sai:
+Audit record có hash chain theo sequence/previous hash và được kiểm gap/tamper;
+append nằm cùng DB transaction với domain mutation. Clock rollback không được sắp xếp sai:
 dùng sequence + monotonic observation bên cạnh UTC. Secret lấy từ system credential
 store/file permission, không hard-code/repo/DB Programming/bundle/log.
 
@@ -231,10 +236,10 @@ Không xóa evidence hoặc edit DB để “khôi phục trạng thái”.
 | RBAC/service policy | `apps/web-api/internal/programming`, auth middleware | direct service/route negative tests |
 | session/TLS/CSRF | `apps/web-api/internal`, platform proxy/service config | browser/network/TLS scanner; no secret logs |
 | compiler sandbox | `apps/web-api/internal/programming/compiler`, service unit | cgroup/seccomp/timeout/OOM tests |
-| bundle | `apps/web-api/internal/programming/bundle` | malicious archive corpus |
+| bundle | `apps/web-api/internal/programming/{application/bundles.go,store/bundles.go,transport/http/bundles.go}` | `application/security_assurance_test.go`, corpus 25 lớp + zero-mutation |
 | artifact/IPC | `apps/core/application/st`, `application/programming`, `contracts/ipc` | loader fuzz/peer/path/deadline tests |
 | filesystem/package | `platform/packaging/` | owner/mode/upgrade/rollback inspection |
-| audit | Programming store/service/export | attribution/retention/tamper/restart tests |
+| audit | `apps/web-api/internal/programming/store/{audit.go,canonical.go,security_assurance_test.go}` | attribution/secret alias/chain/tamper/restart tests |
 
 ## 14. Verification acceptance
 
@@ -245,6 +250,25 @@ commit/target/time, không P0/P1 mở và không regression IOP/scan.
 
 Security test dùng tài khoản/credential lab riêng; báo cáo không chép token/cookie/
 private key. Production penetration/release approval thuộc V&V/release gate.
+
+### 14.1 Evidence host `TASK-PROG-207`
+
+Source `3e5281d` và record `EV-PROG-G2-207` chứng minh phần assurance host sau:
+
+- hostile bundle corpus **25/25** reject, gồm traversal/absolute/backslash/control/
+  non-NFC/UTF-8 lỗi, symlink/executable/hardlink metadata, zip bomb/encryption/comment/
+  timestamp, duplicate path/JSON/key, artifact/native smuggling, target/kind/hash sai
+  và ba giới hạn one-over;
+- snapshot **8 aggregate/table** trước/sau mọi reject bằng nhau; không audit/domain
+  partial, không tạo Check/Artifact/Operation;
+- **23/23** alias audit-secret bị chặn trước append; audit bundle thành công chỉ giữ
+  provenance, không full source/secret;
+- compiler timeout, SIGKILL mô phỏng OOM, cleanup scratch, stdout one-over và source
+  one-over fail-closed; fuzz Go **2.156 lượt** trong 5 giây không crash;
+- Go vet/test/race, CTest **929/929**, FE **494/494** và G1 **7/7** PASS.
+
+Evidence này hỗ trợ verification nhưng không tự đổi trạng thái Test Result:
+`VS-PROG-021/022/023`, target cgroup/service UID/TLS và release approval vẫn mở.
 
 ## 15. Security control handoff và abuse flow
 
@@ -270,8 +294,8 @@ error không rò chi tiết và evidence trong V&V.
 | Blocker | Owner | Gate | Điều kiện mở |
 |---|---|---|---|
 | TLS chưa production-ready | Security + Platform | cấm mutation | certificate/session/CSRF target evidence PASS |
-| RBAC/integrity/retention decisions OPEN | Product + Security + Architect | DOC-G2 approval | decision package signed |
-| Programming implementation chưa có | BE + Core | Plan 53 | code + negative/fuzz/load/target test |
+| Full RBAC/re-auth/CSRF/TLS matrix chưa có target evidence | BE + Security + Platform | `VS-PROG-022`/release | route+service matrix và browser/network target PASS |
+| Operation/Core security integration chưa có | BE + Core | Plan 53 P3/P4 | peer credential + bounded loader + negative/fault/target test |
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
 |---|---|---|---|
@@ -279,12 +303,13 @@ error không rò chi tiết và evidence trong V&V.
 | 0.2 | 2026-08-09 | Bổ sung control-ID handoff, fail-closed/log requirement và abuse-flow catalog; chuyển Detailed Draft chờ security review | System Engineering |
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; nêu rõ hệ quả “chưa có TLS ⇒ tắt mutation” | System Engineering |
 | 0.4 | 2026-08-10 | Đóng finding consumer review `F-CR-02`: đặt tên gốc cố định `${STATE_DIR}/programming/staging/` cho locator artifact thay vì “root fixed” không nêu tên, và ghi rõ root là hằng số package chứ không nhận từ request | System Engineering |
+| 0.5 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-100..207`, trọng tâm source `3e5281d`: 11 route/RBAC/store v4/compiler sandbox/Artifact/IPC v1 đã có; hostile bundle corpus 25 lớp zero-mutation, 23 alias audit-secret và compiler resource/fuzz assurance PASS trên host. Giữ feature OFF, TLS/operation/Core/target/Test Result/release còn mở | Security + Backend Lead |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Security + Backend Lead | Chờ review | — |
-| Core + Ops + QA | Chờ review | — |
-| System Architect + Product Owner | **BLOCKED — chưa phê duyệt** | TLS + `PROG-OD-001` |
+| Security + Backend Lead | **WAIVED FOR IMPLEMENTATION** | source review theo task; target security evidence vẫn bắt buộc |
+| Core + Ops + QA | **WAIVED FOR IMPLEMENTATION** | P3/P4/P6 và Test Result độc lập |
+| System Architect + Product Owner | **APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; không phải release approval |
 
 Tự kiểm `DD-01..DD-13`:
 
@@ -292,7 +317,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §16 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §1 mục tiêu, tài sản cần bảo vệ và giả định |
-| `DD-03` As-Built | PASS | §2 bảng security gate: **HTTP cổng 8081, chưa TLS**; chưa có route Programming; compiler/CLI và fuzz harness có; hash + Ed25519 có mã nhưng chưa nối; IPC Programming chưa có; chưa có chuỗi audit Programming |
+| `DD-03` As-Built | PASS | §0/§2/§14.1 dẫn source `3e5281d`: HTTP 8081/TLS chưa có nhưng 11 route, RBAC/store v4/audit chain/compiler sandbox/Artifact/IPC v1 và assurance host đã có; operation/Core target còn thiếu |
 | `DD-04` Target ownership | PASS | §3 biên tin cậy và luồng dữ liệu; §7 quyền sở hữu artifact/IPC/filesystem |
 | `DD-05` Data từng field | PASS | §9 trường bắt buộc của bản ghi audit, quy tắc secret và quyền riêng tư |
 | `DD-06` Interface | PASS | §4 RBAC theo action; §5 web/session/transport; §11 phản hồi lỗi không rò thông tin |
@@ -300,10 +325,9 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-08` Operation flow | PASS | §15 luồng lạm dụng và bàn giao control; §11 hành vi khi có sự cố |
 | `DD-09` Error/safety/security | PASS | §10 ma trận threat/control; §8 kiểm gói import; nguyên tắc **fail closed** và RBAC ở cả handler lẫn service chống `RSK-PROG-012` |
 | `DD-10` Repository mapping | PASS | §13 middleware, audit store, kiểm quyền socket và verify artifact |
-| `DD-11` Verification | PASS | §14 gắn `VS-PROG-021/022/023`; yêu cầu deny phải **không** sinh IPC hay ghi DB |
+| `DD-11` Verification | PASS | §14/§14.1 gắn `VS-PROG-021/022/023`, record `EV-PROG-G2-207`; yêu cầu deny phải **không** sinh IPC hay ghi DB; không suy evidence host thành Test Result |
 | `DD-12` Compatibility/deploy/rollback | PASS | §12 tương thích, xoay chứng chỉ/khóa và rollback |
-| `DD-13` Trace/risk/decision/sign-off | **BLOCKED** | Owner: Security + Platform (TLS), Product + Security (`OD-PROG-001` ma trận quyền), Product + Security (chính sách provenance artifact). Ảnh hưởng: **chưa có TLS thì mọi mutation Programming phải mặc định tắt trong gói production**; không có ma trận quyền đã ký thì không viết được test âm 403. Gate: `DOC-G2`. Điều kiện mở: TLS/session/CSRF PASS trên target, ký permission matrix, ký `IntegrityMode` |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; release BLOCKED | §16: decision/authority đã mở implementation; owner Security + Platform + BE/Core vẫn phải đóng TLS/full RBAC/Core target evidence. Ảnh hưởng: mutation production giữ `OFF`. Gate: `VS-PROG-022`/`RELEASE_READY`. Điều kiện mở: TLS/session/CSRF, peer/loader và Test Result target PASS |
 
-Một `BLOCKED`, đủ bốn trường. Mạng lab kín **không** được tính là biện pháp thay
-TLS. Residual security **không được giảm** trước khi có implementation và bằng
-chứng trên target.
+Mạng lab kín **không** được tính là biện pháp thay TLS. Residual security
+**không được giảm** trước khi có bằng chứng trên target và phê duyệt độc lập.

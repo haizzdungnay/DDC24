@@ -1,17 +1,17 @@
-# Review triển khai G2 Programming — TASK-PROG-200..205
+# Review triển khai G2 Programming — TASK-PROG-200..207
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G2-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-200`, `TASK-PROG-201`, `TASK-PROG-202`, `TASK-PROG-203`, `TASK-PROG-204`, `TASK-PROG-205`, `TASK-PROG-206` |
+| Task | `TASK-PROG-200`, `TASK-PROG-201`, `TASK-PROG-202`, `TASK-PROG-203`, `TASK-PROG-204`, `TASK-PROG-205`, `TASK-PROG-206`, `TASK-PROG-207` |
 | Ngày | 2026-08-11 |
 | Trạng thái task | **DONE** |
-| Trạng thái pha | **P2 IN_PROGRESS — 7/8; G2 IN_PROGRESS** |
-| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901`; Task 203: `2c2bfb4`; Task 204: `66848a1`; Task 205: `e8c289e`; Task 206: `95b9388` |
+| Trạng thái pha | **P2 SOURCE/DOD DONE — 8/8; G2 EVIDENCE BLOCKED** |
+| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901`; Task 203: `2c2bfb4`; Task 204: `66848a1`; Task 205: `e8c289e`; Task 206: `95b9388`; Task 207: `3e5281d` |
 | PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`; Task 202: [PR #143](https://github.com/Mekong-HCM/MK-DDC-24/pull/143) / `7d424bc`; Task 203: [PR #145](https://github.com/Mekong-HCM/MK-DDC-24/pull/145) / `2899d02`, tree `cdef0e77`; Task 204: [PR #147](https://github.com/Mekong-HCM/MK-DDC-24/pull/147) / `27a06e1`, tree `4e4e4d24`; Task 205: [PR #149](https://github.com/Mekong-HCM/MK-DDC-24/pull/149) / `3c8b4c3`, tree `aa7e13a9`; remote feature branch đã xóa |
-| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt), [`EV-PROG-G2-202`](programming-g2/raw/EV-PROG-G2-202.txt), [`EV-PROG-G2-203`](programming-g2/raw/EV-PROG-G2-203.txt), [`EV-PROG-G2-204`](programming-g2/raw/EV-PROG-G2-204.txt), [`EV-PROG-G2-205`](programming-g2/raw/EV-PROG-G2-205.txt) |
+| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt), [`EV-PROG-G2-202`](programming-g2/raw/EV-PROG-G2-202.txt), [`EV-PROG-G2-203`](programming-g2/raw/EV-PROG-G2-203.txt), [`EV-PROG-G2-204`](programming-g2/raw/EV-PROG-G2-204.txt), [`EV-PROG-G2-205`](programming-g2/raw/EV-PROG-G2-205.txt), [`EV-PROG-G2-206`](programming-g2/raw/EV-PROG-G2-206.txt), [`EV-PROG-G2-207`](programming-g2/raw/EV-PROG-G2-207.txt) |
 | Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS — không đổi** |
-| Next action | `TASK-PROG-207` — timeout/OOM/fuzz/traversal/zip bomb/audit-secret assurance |
+| Next action | `TASK-PROG-300` — bounded loader, runtime preallocation và chứng minh RT path không parser/allocation |
 
 ## 1. Kết quả đã triển khai
 
@@ -427,3 +427,54 @@ mount. Không deploy target/HIL/production trong source slice; flag giữ `OFF`.
   phải zero mutation, không audit/domain partial và Active/LKG không đổi.
 - Evidence Task 207 vẫn là host assurance; không được tự nâng target/HIL hoặc
   `RELEASE_READY`. Sau khi P2 8/8 mới chuyển theo dependency sang P3/P4.
+
+## 31. Kết quả `TASK-PROG-207`
+
+- Importer chặn archive raw quá 4 MiB trước parse; từng entry tối đa 256 KiB,
+  path phải UTF-8 NFC. ZIP chỉ nhận regular non-executable entry, không encryption,
+  comment, link metadata hoặc timestamp/extra metadata ngoài contract cố định.
+- Hostile corpus **25 lớp** bao phủ path/Unicode/metadata/compression/encryption/
+  duplicate/smuggling/target/kind/hash và giới hạn one-over. Mỗi reject snapshot
+  lại 8 bảng Project/Draft/Revision/Check/Artifact/Operation/Audit/Receipt và chứng
+  minh zero mutation.
+- Audit canonicalizer chuẩn hóa tên khóa nhạy cảm; **23 alias** password/token/
+  credential/secret/source/payload/artifact bị từ chối trước append. Bundle audit
+  thành công chỉ giữ provenance hash/size/ID, không full source/secret.
+- Compiler assurance khóa timeout/process-group, SIGKILL mô phỏng OOM, scratch
+  cleanup, stdout one-over/stderr không lộ secret và source one-over không spawn.
+  Go fuzz importer chạy **2.156 lượt** trong 5 giây, không crash.
+
+## 32. Finding `TASK-PROG-207` đã đóng
+
+| Mức | Finding | Cách đóng | Trạng thái |
+|---|---|---|---|
+| P1 | Importer chỉ kiểm uncompressed payload sau khi parse nên raw archive one-over vẫn có thể tiêu tốn parser/memory trước khi reject | Kiểm byte raw `≤4 MiB` trước `zip.NewReader`; thêm test 4 MiB+1 zero-mutation | **CLOSED** |
+| P1 | ZIP hash/path đúng vẫn có thể mang executable, comment, timestamp hoặc extra metadata không deterministic | Xác thực flag/mode/comment/timestamp/extra và buộc regular non-executable; export áp cùng invariant | **CLOSED** |
+| P1 | Audit deny-list theo exact key có thể bị lách bằng case/separator/alias | Chuẩn hóa key và khóa 23 alias; test không record nào được append, bundle audit no-source | **CLOSED** |
+
+Không còn finding P0/P1 mở trong phạm vi source `TASK-PROG-207`.
+
+## 33. Kiểm chứng `TASK-PROG-207` đo trong phiên
+
+| Làn | Kết quả |
+|---|---|
+| Go assurance targeted | hostile corpus `25/25`, snapshot 8 bảng zero-mutation, audit alias `23/23`, compiler fault cases PASS |
+| Go fuzz/race/toàn repository | fuzz 2.156 lượt/5 giây không crash; Programming `-race`, `go vet ./...`, `go test ./... -count=1` PASS |
+| G1/contract | join `7/7`, deploy-order âm `5/5`, NFC/entry/ZIP metadata invariants PASS |
+| C++ toàn repository | Release bật Modbus + BACnet + HMI; CTest `929/929` PASS |
+| FE regression | Vitest `58/58` file, `494/494` test; lint/typecheck/build PASS |
+
+Không chạy Chrome DevTools vì Task 207 không đổi component/layout/hành vi FE được
+mount. Không deploy target/HIL/production trong source slice; flag giữ `OFF`.
+
+## 34. Kết luận P2 và bàn giao `TASK-PROG-300`
+
+- `TASK-PROG-200..207` đạt **8/8 source/DoD**, tổng Plan 53 `21/49 = 42,9%`.
+  Đây không phải release gate: `2/60 I=Y`, hai record `BLOCKED`, `0/32 PASS`,
+  16/16 risk Open và `RELEASE_READY BLOCKED` giữ nguyên.
+- P3 entry đã mở theo dependency. `TASK-PROG-300` phải dùng Artifact/Loader contract
+  hiện có để tạo bounded Core loader và runtime preallocation; RT executor không
+  được liên kết parser/compiler, đọc filesystem hay cấp phát động trong scan.
+- Evidence P3 phải tách host/target: unit/static/symbol/instrumentation trên host
+  hỗ trợ DoD; chỉ benchmark/read-back trên Forlinx đúng package mới được dùng cho
+  target/Test Result.

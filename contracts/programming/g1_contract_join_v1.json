@@ -60,7 +60,7 @@
     {
       "name": "source-bundle",
       "path": "contracts/programming/source_bundle_v1.schema.json",
-      "sha256": "524f4f1f143911d13f180a06c796b4d8bd502790f4ddcef56ecdf4250ae1f9d8",
+      "sha256": "ee8545b0c20b9941b00137d225f6cf708397218052d1140a471b58d2cabda069",
       "major": 1,
       "schemaVersion": "1.0",
       "maximumArchiveBytes": 4194304
@@ -108,5 +108,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store refreshed through TASK-PROG-206"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207"
 }
