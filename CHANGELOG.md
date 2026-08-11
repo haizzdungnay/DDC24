@@ -37,6 +37,13 @@ Go vet và toàn bộ Go test PASS; FE đạt `58/58` file, `494/494` test cùng
 lint/typecheck/build PASS. Không chạy browser vì component chưa được mount vào
 route ở task này; không deploy target/HIL và không nâng Test Result release.
 
+**Hồ sơ và tiến độ.** Phát hành evidence `EV-PROG-G2-201`, cập nhật biên bản
+`PROG-G2-IMPLEMENTATION-REVIEW-2026-08-11` và đồng bộ Language/FE Design,
+Risk, Trace, Plan 53/54. P2 chuyển `2/8`, tổng plan `15/49 = 30,6%`, tiếp theo
+`TASK-PROG-202`. Candidate v2.16 ghim `22/22` SHA-256; Trace giữ `2/60 I=Y`,
+Risk giữ `16/16 Open`, Test Result giữ `0/32 PASS`, feature flag `OFF` và
+`RELEASE_READY BLOCKED`.
+
 ### Added — Khóa ST subset và source map Programming P2 (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-200`: compiler ST từ chối source không phải

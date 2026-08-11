@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-FE-PROG-001` |
-| Phiên bản | 0.7 |
-| Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; một kiến trúc route duy nhất; chưa có API nên chưa có bằng chứng trình duyệt |
-| Ngày | 2026-08-09 |
+| Phiên bản | 0.8 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-201` đã có FBD model/reducer/component keyboard-first; route/API/browser workspace còn mở** |
+| Ngày | 2026-08-11 |
 | Chủ quản | Frontend Lead |
 | Người review | UX Lead, Backend Lead, Verification Lead |
 | Người phê duyệt | Frontend Lead + System Architect |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **FE dựng code như thế nào** cho bốn workspace: thư mục feature, mô hình state, query/mutation, xử lý lỗi và chiến lược test. Trong khi [UI/UX Design](../../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) nói *người dùng thấy gì*, file này nói *React tổ chức ra sao*. |
 | 2. Ai phải đọc file này? | FE Lead và lập trình viên FE (chủ quản); UX đối chiếu với hồ sơ UI/UX; BE đọc §4 để biết FE sẽ gọi gì và kỳ vọng lỗi ra sao; QA đọc §10. |
-| 3. Hệ thống hiện tại đang có gì? | `app/App.tsx` đã có route `/eng/programming` nhưng đi qua cờ `LEGACY_GRAPH_DEMO_ENABLED`. `features/dashboard/ProgrammingPage.tsx` là demo graph, `ValidatorPage.tsx` chỉ re-export lại trang đó. NavRail cũng ẩn Programming theo cờ legacy. Đã có sẵn `shared/api/client.ts`, `shared/hooks/useWebSocket.ts` và `shared/i18n.tsx` để dùng lại. |
-| 4. Thiết kế mới thay đổi điều gì? | Tạo feature mới tại `apps/web-ui/src/features/programming/`. **Không** mở rộng trang demo cũ thành một file khổng lồ, và **không** bật cờ legacy để tuyên bố đã có tính năng. FE dùng client sinh từ OpenAPI thay vì gọi tay. |
-| 5. Team phải sửa module/contract nào? | §11 và §12. Đổi route sang `features/programming/ProgrammingRoutes.tsx`; NavRail chuyển sang điều kiện capability + RBAC thay vì cờ graph demo; thêm namespace i18n riêng cho Programming. |
-| 6. Điều gì còn bị chặn? | Không có API Programming nào tồn tại nên chưa chạy được integration thật; ràng buộc vai trò chờ `OD-PROG-001`. Mock chỉ được nằm trong test fixture, **không** được import vào bundle production. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §10 và §15: Vitest cho component, Playwright E2E, kiểm accessibility, cộng `VS-PROG-002/024/026/028`. Lưu ý bẫy đã biết của repo: `npm test` **chỉ quét `src/`**, không chạy `e2e/`. Hiện chưa chạy bài nào cho Programming. |
+| 3. Hệ thống hiện tại đang có gì? | OpenAPI/generated Programming client đã có từ G1. `TASK-PROG-201` tại `52dfb57` thêm `features/programming/fbd/{model,commands,StructuredFbdEditor}` dùng schema/golden/keyboard registry chung, gồm 50 bước undo/redo, read-only guard, focus/live-region và 15 test. Route `/eng/programming` vẫn là legacy demo; component FBD chưa mount vào `PGM-02`. |
+| 4. Thiết kế mới thay đổi điều gì? | Feature Programming đã có foundation API và FBD có cấu trúc thật, không mở rộng monolith demo. FBD pointer/keyboard đi qua cùng reducer; client validation chỉ preview, server Check vẫn là authority. `TASK-PROG-500..502` mới dựng route/workspace và nối Draft API. |
+| 5. Team phải sửa module/contract nào? | §11 và §12. Dùng module FBD đã có, không viết model/shortcut thứ hai; đổi route sang `ProgrammingRoutes.tsx`, nối Draft/ETag ở workspace và chuyển NavRail sang capability + RBAC. |
+| 6. Điều gì còn bị chặn? | Không còn blocker quyền code. Còn thiếu route/workspace, Draft service/Check API orchestration và browser E2E; mock chỉ được nằm trong test fixture, **không** được import vào bundle production. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G2-201`: contract mutation `10/10`, FE FBD `15/15`; toàn FE `58/58` file, `494/494` test + lint/typecheck/build. Chưa có browser evidence vì component chưa mount; `VS-PROG-005/006/028` vẫn chưa PASS cho tới khi workspace/API/E2E đầy đủ. |
 
 Điều FE **không** sở hữu, nêu sớm để tránh viết nhầm: Draft persistence, tính
 diff, readiness, phân quyền, runtime state, chất lượng Point, bên thắng arbitration
@@ -85,6 +85,12 @@ RBAC, API client, i18n và state primitives hiện hành. Trang
 `features/dashboard/ProgrammingPage.tsx` hiện chỉ là placeholder, không phải
 baseline component để mở rộng thành một file lớn.
 
+As-Built `TASK-PROG-201`: `features/programming/fbd/` đã tồn tại với typed model,
+validator preview, command reducer và `StructuredFbdEditor`; contract nguồn là
+`contracts/programming/fbd_v1.schema.json` và
+`fbd_keyboard_commands_v1.json`. Module này chưa được import vào route production,
+không gọi API và không có quyền stage/activate Revision.
+
 FE không sở hữu Draft persistence, change diff, readiness, authorization,
 runtime state, Point quality, priority winner hoặc audit truth.
 
@@ -98,6 +104,7 @@ runtime state, Point quality, priority winner hoặc audit truth.
 features/programming/
 ├── ProgrammingRoutes.tsx     xem §0.1 — 4 route + 5 redirect
 ├── api/                      client sinh từ OpenAPI, không viết tay — chi tiết §12
+├── fbd/                      As-Built Task 201: model, command reducer, component + test
 ├── model/                    state model §3 — chi tiết §12
 ├── layout/                   ProgrammingLayout, Header, ContextBar
 ├── shared/{StateBadge,ProblemsDrawer,DangerZone}.tsx
@@ -171,6 +178,13 @@ không authoritative và không được tự Commission.
 - Type compatibility được phản hồi nhanh từ client schema nhưng server Check là authority.
 - Không có free-form wiresheet, animated wire, native plug-in hoặc mouse-only flow.
 
+As-Built tại `52dfb57`: `model.ts` khóa graph/network/node/port/wire, type/unit,
+UUID/order/capacity; `commands.ts` đọc registry 11 shortcut, giữ history 50,
+chặn UUID trùng/sai và mutation khi read-only; `StructuredFbdEditor.tsx` render
+ordered network/block/port/wire, toolbar và cùng handler keyboard. Component
+chấp nhận Draft chưa hoàn chỉnh và hiển thị issue; chỉ server Check ở task sau
+được quyền kết luận Revision hợp lệ.
+
 ## 6. Mapping và Point truth
 
 Point picker query theo category/type/direction/writable và hiện producer
@@ -232,7 +246,10 @@ VERIFYING → SUCCEEDED | REJECTED | FAILED | UNKNOWN_RECONCILING
 - Chrome DevTools: snapshot/screenshot, Console error, Network failed request,
   desktop/mobile sau mỗi slice có ảnh hưởng runtime/layout.
 
-Không claim UI Done khi chỉ render mock hoặc chưa có producer/API contract.
+`TASK-PROG-201` đã chạy 15 test model/reducer/component, gồm luồng nối hoàn toàn
+bằng Arrow/Enter, delete kéo theo wire, undo/redo/history/read-only/identity. Đây
+là component evidence, chưa phải browser/E2E workspace. Không claim UI Done khi
+chỉ render mock hoặc chưa có producer/API contract.
 
 ## 11. As-Built và source migration
 
@@ -245,6 +262,7 @@ claim feature.
 | As-Built | Target action |
 |---|---|
 | `features/dashboard/ProgrammingPage.tsx` | thay route sang `features/programming/ProgrammingRoutes.tsx`; giữ demo dưới dev-only nếu cần |
+| `features/programming/fbd/*` | **As-Built Task 201**; tái sử dụng trong `design/editor`, không fork model/reducer/shortcut |
 | `app/App.tsx`, `shared/components/NavRail.tsx` | capability + RBAC route, không phụ thuộc graph demo flag |
 | `shared/api/client.ts` | reuse auth/correlation/error base; thêm generated Programming client |
 | `shared/hooks/useWebSocket.ts` | reuse transport; thêm sequence/freshness policy per topic |
@@ -342,7 +360,9 @@ storage scoped controller/action; xóa khi authoritative terminal/expiry.
 Deploy behind server capability and FE flag default OFF. BE read-only can precede
 FE. Rollback route returns unavailable/read-only without clearing Draft/operation;
 service worker/cache must not serve incompatible generated types. Browser test
-chỉ bắt buộc sau code/UI change, không áp dụng cho phiên docs-only này.
+chỉ bắt buộc sau khi component được mount vào workspace. `FE-T-007` hiện mới có
+component keyboard evidence từ Task 201; desktop/mobile/browser route vẫn chờ
+Task 502 và không được suy từ jsdom.
 
 ## 16. Page-to-code và data dependency mức triển khai
 
@@ -383,9 +403,8 @@ chỉ update cache khi sequence/resource version hợp lệ, còn lại invalida
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| OpenAPI/generated types chưa Active | BE + Architect | approve interface/decisions và merge contract tests |
-| UX/role/capacity chưa ký | Product + UX | approve `PROG-OD-001`/UX design |
-| Feature chưa implement | FE Lead | Plan 53 slices + automated/browser evidence |
+| Route/workspace và API orchestration chưa implement | FE Lead + BE Lead | Task 500..502 + automated/browser evidence |
+| FBD→IR/Check authority chưa có | Compiler + BE | Task 202/203 + deterministic Check evidence |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
@@ -396,11 +415,12 @@ chỉ update cache khi sequence/resource version hợp lệ, còn lại invalida
 | 0.5 | 2026-08-09 | Amendment A1: thêm §0.1 cấu trúc thư mục và route cho bốn workspace, ba ràng buộc về tab/Draft/truy vấn dùng chung, và bảng năm chuyển hướng route cũ |
 | 0.6 | 2026-08-09 | Đóng finding P1-01: xóa cây thư mục và tám route `/engineering/programming/...` cũ khỏi §2 để chỉ còn **một** kiến trúc route hiệu lực; §2 chuyển thành mô tả module cắt ngang; metadata nhận `FE-101..115` |
 | 0.7 | 2026-08-10 | Đóng finding consumer review `F-CR-01` — phần còn sót của P1-01: §12 và §16 vẫn mô tả IA sáu trang. §12 bỏ cây thư mục trùng, chỉ giữ chi tiết `api/`/`model/` và đánh dấu `*.generated.ts` là đầu ra sinh mã; §16 thay sáu dòng route cũ bằng đúng bốn route `PGM-01..04` với tab `?tab=`, và bảng layer đổi sang tên thư mục có thật ở §0.1/§2 |
+| 0.8 | 2026-08-11 | Đồng bộ `TASK-PROG-201` tại `52dfb57`: FBD model/validator, registry 11 lệnh, reducer history 50/read-only và component keyboard-first; 15 test PASS. Giữ route/workspace/API/browser ở Task 500..502 và không nâng Test Result release |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| FE + UX + BE + QA | Chờ review | — |
-| Frontend Lead + System Architect | **BLOCKED — chưa phê duyệt** | contract/decision và browser evidence |
+| FE + UX + BE + QA | **TASK-PROG-201 REVIEWED; workspace evidence còn mở** | `52dfb57`, `EV-PROG-G2-201` |
+| Frontend Lead + System Architect | **APPROVED FOR IMPLEMENTATION; RELEASE EVIDENCE BLOCKED** | `AUTH-PROG-2026-08-11-03`; browser/target Test Result chưa có |
 
 Tự kiểm `DD-01..DD-13`:
 
@@ -418,8 +438,8 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §0.1 cây thư mục bốn workspace; §1, §2, §11, §12 — đường dẫn cụ thể trong `apps/web-ui/src/` |
 | `DD-11` Verification | PASS | §10 chiến lược test; §15 acceptance; gắn `VS-PROG-002/024/026/028` |
 | `DD-12` Compatibility/deploy/rollback | PASS | §15 deploy và rollback; §0.1 năm chuyển hướng route; chi tiết rollout/cờ/migration ở UI/UX §11.1 và §28 |
-| `DD-13` Trace/risk/decision/sign-off | **BLOCKED** | Owner: FE Lead, UX, BE, QA. Ảnh hưởng: chưa có API Programming nên **không chạy được integration hay E2E thật**; mock chỉ được ở test fixture, không vào bundle production. Gate: `DOC-G3`. Điều kiện mở: BE phát hành route `/api/v1/programming`, đóng `OD-PROG-001`, rồi chạy Vitest + lint + build + Playwright và kiểm trên trình duyệt thật |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation, **BLOCKED cho release** | Owner: FE Lead, UX, BE, QA. Task 201 có source/evidence component; workspace/API/browser/Playwright vẫn thiếu. Gate: `G2/G6`. Điều kiện mở: hoàn tất Task 202/500..502, chạy integration + Playwright + trình duyệt thật và tạo Test Result được review |
 
-Một `BLOCKED`, đủ bốn trường. Bằng chứng implementation và trình duyệt vẫn
-`NOT IMPLEMENTED/NOT TESTED`. Nhắc lại bẫy của repo: `npm test` chỉ quét `src/`,
-muốn chạy E2E phải gọi Playwright riêng.
+Blocker release có đủ owner/ảnh hưởng/gate/điều kiện mở. Component FBD Task 201
+đã implement/test trên host nhưng route/browser vẫn `NOT TESTED`. Nhắc lại bẫy
+của repo: `npm test` chỉ quét `src/`, muốn chạy E2E phải gọi Playwright riêng.
