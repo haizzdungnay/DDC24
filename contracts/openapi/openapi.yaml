@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.17.0"
+  version: "1.18.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -19,7 +19,7 @@ info:
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
   date: "2026-08-11"
-  note: "v1.17.0 nối Project/Draft/Revision và thêm mã not-found; giữ 25 route và schema major 1."
+  note: "v1.18.0 nối Check worker/artifact deterministic; giữ 25 route và schema major 1."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -1916,7 +1916,7 @@ paths:
       operationId: createProgrammingCheck
       summary: Tạo Check job không tác động runtime
       x-rbac: [admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-205
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
       requestBody:
@@ -1929,7 +1929,7 @@ paths:
           description: Check đã vào hàng đợi
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ProgrammingOperationAccepted" }
+              schema: { $ref: "#/components/schemas/ProgrammingCheckAccepted" }
         "400": { $ref: "#/components/responses/ProgrammingError" }
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
@@ -1947,7 +1947,7 @@ paths:
       operationId: getProgrammingCheck
       summary: Đọc trạng thái và diagnostic của Check
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-205
       responses:
         "200":
           description: Kết quả Check hiện hành
@@ -2577,26 +2577,59 @@ components:
     ProgrammingCheck:
       type: object
       additionalProperties: false
-      required: [checkId, revisionId, state, diagnostics]
+      required: [checkId, revisionId, state, diagnostics, createdAt, attemptCount]
       properties:
         checkId: { type: string, format: uuid }
         revisionId: { type: string, format: uuid }
-        state: { type: string, enum: [QUEUED, RUNNING, PASSED, FAILED, CANCELLED] }
+        state: { type: string, enum: [QUEUED, RUNNING, PASSED, FAILED, TIMED_OUT] }
         diagnostics:
           type: array
           items: { $ref: "#/components/schemas/ProgrammingDiagnostic" }
+        artifact:
+          oneOf:
+            - { $ref: "#/components/schemas/ProgrammingArtifact" }
+            - { type: "null" }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: [string, "null"], format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+        attemptCount: { type: integer, minimum: 0, maximum: 2 }
+    ProgrammingArtifact:
+      type: object
+      additionalProperties: false
+      required: [artifactId, sha256, byteSize, profile, targetAbi, compilerVersion, libraryVersion]
+      properties:
+        artifactId: { type: string, format: uuid }
+        sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        byteSize: { type: integer, minimum: 1, maximum: 1048576 }
+        profile: { type: string, const: "MKDDC24_REVA" }
+        targetAbi: { type: integer, const: 3841 }
+        compilerVersion: { type: string, minLength: 1, maxLength: 64 }
+        libraryVersion: { type: string, minLength: 1, maxLength: 64 }
     ProgrammingDiagnostic:
       type: object
       additionalProperties: false
-      required: [code, severity, messageKey, location]
+      required: [code, detailCode, severity, messageKey, location]
       properties:
         code: { type: string, pattern: "^PRG-ERR-[A-Z0-9-]+$" }
+        detailCode: { type: string, pattern: "^[A-Z][A-Z0-9-]{2,127}$" }
         severity: { type: string, enum: [ERROR, WARNING, INFO] }
         messageKey: { type: string }
         location: { $ref: "#/components/schemas/ProgrammingResource" }
         args:
           type: object
-          additionalProperties: { type: string }
+          additionalProperties:
+            type: [string, integer, number, boolean]
+    ProgrammingCheckAccepted:
+      type: object
+      additionalProperties: false
+      required: [checkId, statusUrl, state, requestHash, acceptedAt, correlationId]
+      properties:
+        checkId: { type: string, format: uuid }
+        statusUrl: { type: string, pattern: "^/api/v1/programming/checks/[A-Za-z0-9-]+$" }
+        state: { type: string, enum: [QUEUED, RUNNING, PASSED, FAILED, TIMED_OUT] }
+        requestHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        acceptedAt: { type: string, format: date-time }
+        correlationId: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
     ProgrammingTraceRequest:
       type: object
       additionalProperties: false

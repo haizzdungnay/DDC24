@@ -7,9 +7,9 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "86bc54f5292b80c3ed50c68248ef4c75284c62c8ec57c4fe2a3f9b4001fea0dd",
+      "sha256": "69c3b61bdb167a0f655128637e9ea4ecd057a75cd3a6f6296bba1bd87d3357ac",
       "major": 1,
-      "version": "1.17.0",
+      "version": "1.18.0",
       "operationCount": 25
     },
     {
@@ -42,19 +42,19 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "b62e2d4f87ad1123030c393ad7b866c872c563b8b581ffcb4859c969e330dfb2",
+      "sha256": "9b6337a0ed180c7a493774eaf1ad105c9a2b2a52e26abaf50120e1f8459e663e",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "eb240ad7b3ef4bb6edd1d7e65ba787837cdf34ff1cacab3502f1132be03ce010",
+      "manifestSha256": "3d7e8bf7a668f8b66e4db259221f7229abd5ac994952587d87e0e61a92da250b",
       "major": 1,
       "publicErrorCount": 20,
-      "componentDetailCount": 77
+      "componentDetailCount": 80
     },
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "1c5b5edfdefc479ed48fee575bcba439472de31cc105f546b08db40eca99547a",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0002_mutation_receipts.sql",
-      "migrationSha256": "8ae5e0df06d9735727de6809c24565bf6e4e0c0fbcbe0f3e10b5d76365c53fe3",
+      "sha256": "39a66b8fabfee07c527ce4610edfdc97cc560fbf2de8038493c3f66a49b535c7",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0003_check_worker.sql",
+      "migrationSha256": "f182f622b097ec7bea65a172fa8a0efdbe36291c3c35a7eed5cbf6e0f7a89ec3",
       "major": 1
     }
   ],
@@ -100,5 +100,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store refreshed by TASK-PROG-204"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store refreshed through TASK-PROG-205"
 }

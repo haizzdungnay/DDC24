@@ -7,6 +7,8 @@ import (
 	"log"
 	webModbus "mkddc-web/internal/modbusrtu"
 	programmingapplication "mkddc-web/internal/programming/application"
+	programmingartifact "mkddc-web/internal/programming/artifact"
+	programmingcompiler "mkddc-web/internal/programming/compiler"
 	programmingstore "mkddc-web/internal/programming/store"
 	"net"
 	"net/http"
@@ -69,6 +71,7 @@ type App struct {
 	commissionLimit     commissionLimiter
 	programmingStore    *programmingstore.Store
 	programmingProjects *programmingapplication.ProjectService
+	programmingChecks   *programmingapplication.CheckService
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
@@ -98,8 +101,23 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			_ = store.Close()
 			return nil, fmt.Errorf("khởi tạo Programming Project service: %w", serviceErr)
 		}
+		artifacts, artifactErr := programmingartifact.NewStore(cfg.ProgrammingArtifactDir)
+		if artifactErr != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi tạo Programming artifact store: %w", artifactErr)
+		}
+		checks, checkErr := programmingapplication.NewCheckService(programmingapplication.CheckServiceOptions{
+			Store: store, Artifacts: artifacts, TargetID: cfg.ProgrammingTargetID, LeaseDuration: 30 * time.Second,
+			Runner: programmingcompiler.ProcessRunner{BinaryPath: cfg.ProgrammingCompilerPath, ScratchRoot: cfg.ProgrammingScratchDir, Timeout: cfg.ProgrammingCompilerTimeout},
+		})
+		if checkErr != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi tạo Programming Check service: %w", checkErr)
+		}
 		app.programmingStore = store
 		app.programmingProjects = projects
+		app.programmingChecks = checks
+		checks.Start(context.Background())
 	}
 	app.pointNamespaceWriter = writeConfigFileAtomic
 	app.overrides = NewOverrideRegistry()
@@ -110,6 +128,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	audit.SetSink(app.activity)
 	if err := app.migrateLegacyPointConfig(); err != nil {
 		if app.programmingStore != nil {
+			app.programmingChecks.Close()
 			_ = app.programmingStore.Close()
 		}
 		return nil, err
@@ -120,6 +139,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	historian, err := OpenHistorianPolicyService(filepath.Join(cfg.ConfigDir, "historian.conf"), time.Now, func() (uint64, error) { return filesystemFreeBytes(cfg.ConfigDir) })
 	if err != nil {
 		if app.programmingStore != nil {
+			app.programmingChecks.Close()
 			_ = app.programmingStore.Close()
 		}
 		return nil, err
@@ -373,6 +393,9 @@ func (a *App) Close() error {
 		historianErr = a.historianV2.Close()
 	}
 	if a.programmingStore != nil {
+		if a.programmingChecks != nil {
+			a.programmingChecks.Close()
+		}
 		programmingErr = a.programmingStore.Close()
 	}
 	return errors.Join(trendErr, historianErr, programmingErr)

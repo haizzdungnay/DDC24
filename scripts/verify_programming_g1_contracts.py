@@ -176,7 +176,7 @@ def validate(join: dict[str, Any]) -> list[str]:
         require(digest(manifest_path) == errors_item["manifestSha256"], "error manifest hash drift")
         require(manifest["catalogSha256"] == errors_item["sha256"], "error catalog/manifest hash lệch")
         require(len(catalog["publicErrors"]) == errors_item["publicErrorCount"] == 20, "public error count lệch")
-        require(len(catalog["componentDetails"]) == errors_item["componentDetailCount"] == 77, "detail error count lệch")
+        require(len(catalog["componentDetails"]) == errors_item["componentDetailCount"] == 80, "detail error count lệch")
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"errors: {error}")
 
@@ -186,7 +186,7 @@ def validate(join: dict[str, Any]) -> list[str]:
         migration_path = safe_path(store_item["migrationPath"])
         require(digest(migration_path) == store_item["migrationSha256"], "store migration SHA-256 drift")
         require(store_manifest["migrationSha256"] == store_item["migrationSha256"], "store manifest/migration hash lệch")
-        require(store_manifest["schemaVersion"] == 2, "store schema version drift")
+        require(store_manifest["schemaVersion"] == 3, "store schema version drift")
         require(store_manifest["featureDefaultOff"] is True, "store feature phải OFF")
         require(store_manifest["foreignKeys"] is True and store_manifest["singleWriter"] is True, "store FK/single-writer drift")
         require(store_manifest["journalMode"] == "WAL" and store_manifest["synchronous"] == "FULL", "store PRAGMA drift")

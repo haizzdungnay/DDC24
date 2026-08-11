@@ -1,7 +1,7 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.1.0",
+  "catalogVersion": "1.2.0",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     { "symbol": "ErrRequest", "code": "PRG-ERR-REQ-001", "ownerComponent": "api", "statusClass": "REQUEST", "httpStatuses": [400, 413, 422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.request", "allowedArgs": ["actual", "supportedMajor", "maxBytes"] },
@@ -93,6 +93,9 @@
     { "component": "compiler", "detailCode": "ST-CLI-ARGS", "publicCode": "PRG-ERR-REQ-001" },
     { "component": "compiler", "detailCode": "ST-CLI-IO", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
     { "component": "compiler", "detailCode": "ST-CLI-KEY", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
+    { "component": "compiler", "detailCode": "ST-CLI-SANDBOX", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
+    { "component": "compiler", "detailCode": "ST-WORKER-CRASH", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
+    { "component": "compiler", "detailCode": "ST-WORKER-TIMEOUT", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
     { "component": "compiler", "detailCode": "ST-CLI-LIMIT", "publicCode": "PRG-ERR-SCOPE-001" },
     { "component": "compiler", "detailCode": "ST-CLI-TOOLARGE", "publicCode": "PRG-ERR-SCOPE-001" },
     { "component": "runtime", "detailCode": "ST-RT-001", "publicCode": "PRG-ERR-COM-001" },

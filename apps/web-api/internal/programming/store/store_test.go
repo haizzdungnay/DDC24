@@ -91,7 +91,7 @@ func TestOpenProgrammingStoreFreshSchemaPolicyAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedTables := []string{"artifacts", "audit_records", "checks", "commission_records", "drafts", "mutation_receipts", "operations", "projects", "revision_objects", "revisions", "schema_migrations"}
+	expectedTables := []string{"artifacts", "audit_records", "check_requests", "checks", "commission_records", "drafts", "mutation_receipts", "operations", "projects", "revision_objects", "revisions", "schema_migrations"}
 	rows, err := store.db.Query(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +110,7 @@ func TestOpenProgrammingStoreFreshSchemaPolicyAndRestart(t *testing.T) {
 	if fmt.Sprint(tables) != fmt.Sprint(expectedTables) {
 		t.Fatalf("tables=%v", tables)
 	}
-	checksum, ok := MigrationChecksum(2)
+	checksum, ok := MigrationChecksum(3)
 	if !ok {
 		t.Fatal("missing embedded migration checksum")
 	}
@@ -119,7 +119,7 @@ func TestOpenProgrammingStoreFreshSchemaPolicyAndRestart(t *testing.T) {
 	if err := store.db.QueryRow(`SELECT version,checksum FROM schema_migrations ORDER BY version DESC LIMIT 1`).Scan(&version, &stored); err != nil {
 		t.Fatal(err)
 	}
-	if version != 2 || !bytes.Equal(stored, checksum[:]) {
+	if version != 3 || !bytes.Equal(stored, checksum[:]) {
 		t.Fatal("schema migration checksum mismatch")
 	}
 	info, err := os.Stat(path)
@@ -262,6 +262,73 @@ func TestBeginOperationIdempotencySingleFlightAndAudit(t *testing.T) {
 	}
 }
 
+func TestCheckLeaseIdempotencyAtomicArtifactAndDeterministicDedup(t *testing.T) {
+	store := openTestStore(t)
+	createProjectFixture(t, store)
+	createRevisionFixture(t, store, 1)
+	input := sha256.Sum256([]byte("immutable-revision-input"))
+	key, request := mutationIdentity("check-request")
+	params := EnqueueCheckParams{CheckID: "77777777-7777-4777-8777-777777777777", RevisionID: revisionID, TargetID: "controller-local",
+		InputSHA256: input, Profile: "MKDDC24_REVA", CompilerVersion: "fwsom-st-1.1.0", ActorID: actorID, Role: role,
+		AuditID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7", CorrelationID: correlationID, At: fixedNow,
+		IdempotencyKeySHA256: key, RequestSHA256: request}
+	queued, err := store.EnqueueCheck(context.Background(), params)
+	if err != nil || queued.State != "QUEUED" || queued.Replay {
+		t.Fatalf("queued=%+v err=%v", queued, err)
+	}
+	replayParams := params
+	replayParams.CheckID = "88888888-8888-4888-8888-888888888888"
+	replayParams.AuditID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa8"
+	replayed, err := store.EnqueueCheck(context.Background(), replayParams)
+	if err != nil || !replayed.Replay || replayed.CheckID != queued.CheckID {
+		t.Fatalf("replay=%+v err=%v", replayed, err)
+	}
+	changed := replayParams
+	changed.RequestSHA256 = sha256.Sum256([]byte("changed"))
+	if _, err := store.EnqueueCheck(context.Background(), changed); !errors.Is(err, ErrIdempotencyConflict) {
+		t.Fatalf("changed request err=%v", err)
+	}
+	claimed, ok, err := store.ClaimCheck(context.Background(), "worker-a", fixedNow, time.Minute)
+	if err != nil || !ok || claimed.AttemptCount != 1 || claimed.State != "RUNNING" {
+		t.Fatalf("claim=%+v ok=%v err=%v", claimed, ok, err)
+	}
+	artifactBytes := []byte("same-deterministic-artifact")
+	artifactDigest := sha256.Sum256(artifactBytes)
+	result := []byte(`{"schemaVersion":"1.0","diagnostics":[]}`)
+	completed, err := store.CompleteCheck(context.Background(), CompleteCheckParams{CheckID: claimed.CheckID, LeaseOwner: "worker-a", State: "PASSED", ResultJSON: result,
+		Artifact: &Artifact{ArtifactID: "99999999-9999-4999-8999-999999999999", RevisionID: revisionID, CheckID: claimed.CheckID, SchemaVersion: 1,
+			Profile: "MKDDC24_REVA", TargetABI: 3841, CompilerVersion: "fwsom-st-1.1.0", LibraryVersion: "rev-a.1", ByteSize: int64(len(artifactBytes)), SHA256: artifactDigest, RelativePath: "sha256/aa/a.mkir", IntegrityMode: "HASH_ONLY"},
+		AuditID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9", At: fixedNow.Add(time.Second)})
+	if err != nil || completed.State != "PASSED" || completed.Artifact == nil {
+		t.Fatalf("complete=%+v err=%v", completed, err)
+	}
+	if _, err := store.CompleteCheck(context.Background(), CompleteCheckParams{CheckID: claimed.CheckID, LeaseOwner: "worker-a", State: "FAILED", ResultJSON: result, AuditID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1", At: fixedNow.Add(2 * time.Second)}); !errors.Is(err, ErrLeaseLost) {
+		t.Fatalf("terminal rewrite err=%v", err)
+	}
+	secondKey, secondRequest := mutationIdentity("check-request-second")
+	secondParams := params
+	secondParams.CheckID = "88888888-8888-4888-8888-888888888888"
+	secondParams.AuditID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2"
+	secondParams.IdempotencyKeySHA256, secondParams.RequestSHA256 = secondKey, secondRequest
+	if _, err := store.EnqueueCheck(context.Background(), secondParams); err != nil {
+		t.Fatal(err)
+	}
+	secondClaim, ok, err := store.ClaimCheck(context.Background(), "worker-b", fixedNow.Add(2*time.Second), time.Minute)
+	if err != nil || !ok {
+		t.Fatalf("second claim=%+v ok=%v err=%v", secondClaim, ok, err)
+	}
+	_, err = store.CompleteCheck(context.Background(), CompleteCheckParams{CheckID: secondClaim.CheckID, LeaseOwner: "worker-b", State: "PASSED", ResultJSON: result,
+		Artifact: &Artifact{ArtifactID: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", RevisionID: revisionID, CheckID: secondClaim.CheckID, SchemaVersion: 1,
+			Profile: "MKDDC24_REVA", TargetABI: 3841, CompilerVersion: "fwsom-st-1.1.0", LibraryVersion: "rev-a.1", ByteSize: int64(len(artifactBytes)), SHA256: artifactDigest, RelativePath: "sha256/aa/a.mkir", IntegrityMode: "HASH_ONLY"},
+		AuditID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3", At: fixedNow.Add(3 * time.Second)})
+	if err != nil {
+		t.Fatalf("cùng artifact deterministic phải được phép: %v", err)
+	}
+	if err := store.VerifyAuditChain(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBackupVerifyRestoreIsPointInTimeAndNoOverwrite(t *testing.T) {
 	store := openTestStore(t)
 	createProjectFixture(t, store)
@@ -271,7 +338,7 @@ func TestBackupVerifyRestoreIsPointInTimeAndNoOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if evidence.QuickCheck != "ok" || evidence.DatabaseVersion != 2 || len(evidence.SHA256) != 64 {
+	if evidence.QuickCheck != "ok" || evidence.DatabaseVersion != 3 || len(evidence.SHA256) != 64 {
 		t.Fatalf("backup evidence=%+v", evidence)
 	}
 	manifestRaw, err := os.ReadFile(evidence.ManifestPath)
@@ -384,7 +451,7 @@ func TestMigrationFaultChecksumPartialAndCorruptFailClosed(t *testing.T) {
 	})
 	t.Run("user-version", func(t *testing.T) {
 		store := openTestStore(t)
-		if _, err := store.db.Exec(`PRAGMA user_version=3`); err != nil {
+		if _, err := store.db.Exec(`PRAGMA user_version=4`); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := Migrate(context.Background(), store.db, MigrationOptions{}); !errors.Is(err, ErrSchemaFuture) {
@@ -417,7 +484,7 @@ func TestMigrationFaultChecksumPartialAndCorruptFailClosed(t *testing.T) {
 	})
 }
 
-func TestMigrationV1ToV2CreatesVerifiedBackup(t *testing.T) {
+func TestMigrationV1ToV3CreatesVerifiedBackup(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "programming-v1.sqlite")
 	db := openRawSQLite(t, path)
@@ -449,7 +516,7 @@ func TestMigrationV1ToV2CreatesVerifiedBackup(t *testing.T) {
 	}
 	defer store.Close()
 	var version int
-	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 2 {
+	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 3 {
 		t.Fatalf("user_version=%d err=%v", version, err)
 	}
 	var receiptTable int
@@ -616,7 +683,7 @@ func TestProgrammingStoreContractManifest(t *testing.T) {
 	if !ok {
 		t.Fatalf("schema version không được hỗ trợ: %d", manifest.SchemaVersion)
 	}
-	if manifest.MigrationFile != "0002_mutation_receipts.sql" ||
+	if manifest.MigrationFile != "0003_check_worker.sql" ||
 		manifest.MigrationSHA256 != hex.EncodeToString(checksum[:]) ||
 		!manifest.ForeignKeys || manifest.JournalMode != "WAL" ||
 		manifest.Synchronous != "FULL" || !manifest.SingleWriter || !manifest.FeatureDefaultOff {

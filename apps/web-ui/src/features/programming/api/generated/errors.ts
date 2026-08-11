@@ -1,6 +1,6 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "b62e2d4f87ad1123030c393ad7b866c872c563b8b581ffcb4859c969e330dfb2" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.1.0" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "9b6337a0ed180c7a493774eaf1ad105c9a2b2a52e26abaf50120e1f8459e663e" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.2.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
@@ -47,6 +47,7 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-CLI-IO": "PRG-ERR-UNAVAILABLE-001",
   "compiler\u0000ST-CLI-KEY": "PRG-ERR-UNAVAILABLE-001",
   "compiler\u0000ST-CLI-LIMIT": "PRG-ERR-SCOPE-001",
+  "compiler\u0000ST-CLI-SANDBOX": "PRG-ERR-UNAVAILABLE-001",
   "compiler\u0000ST-CLI-TOOLARGE": "PRG-ERR-SCOPE-001",
   "compiler\u0000ST-IOMAP-001": "PRG-ERR-MAP-003",
   "compiler\u0000ST-IOMAP-002": "PRG-ERR-MAP-003",
@@ -82,6 +83,8 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-SEM-014": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SYN-001": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SYN-002": "PRG-ERR-SCOPE-001",
+  "compiler\u0000ST-WORKER-CRASH": "PRG-ERR-UNAVAILABLE-001",
+  "compiler\u0000ST-WORKER-TIMEOUT": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-CONTRACT-ONLY": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-DEADLINE": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-QUEUE-FULL": "PRG-ERR-UNAVAILABLE-001",

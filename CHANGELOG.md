@@ -7,6 +7,44 @@
 ---
 
 ## [Unreleased]
+### Added — Check worker sandbox và artifact registry Programming P2 (2026-08-11)
+
+**Kết quả.** Triển khai source `TASK-PROG-205`: nối hai operation
+`createProgrammingCheck` và `getProgrammingCheck` vào worker thật. Check
+chỉ nhận Revision bất biến, profile Rev A đúng một Program, chạy compiler chính
+thức `mkddc-st-compile`, trả diagnostics ổn định và chỉ tạo Artifact khi toàn bộ
+compile/provenance/hash/read-back hợp lệ. Không có đường stage/activate, không
+gọi Core và không đổi Active/LKG; feature tiếp tục mặc định `OFF`.
+
+**Cô lập và phục hồi.** CLI có `--sandbox` Linux: `NO_NEW_PRIVS`, giới hạn CPU/
+address-space/file/process/fd/core cùng seccomp chặn mở thêm path, network,
+spawn/exec, mount và ptrace sau khi worker đã mở ba file scratch cố định. Go
+runner dùng argv cố định, scratch `0700`, stdout/stderr/file bounded, timeout
+giết cả process group và đối chiếu byte/hash/manifest/profile/compiler/ABI ở ba
+nguồn trước publish. Worker dùng lease CAS, thử lại tối đa một lần sau crash và
+đóng fail-closed; timeout không tạo Artifact.
+
+**Persistence và contract.** SQLite migration v3 thêm Check receipt idempotency
+24 giờ, queue/lease/attempt/audit và state-transition trigger; bỏ unique sai trên
+artifact content hash để hai Check deterministic có thể dùng chung file
+content-addressed nhưng vẫn giữ hai row evidence bất biến. Artifact được ghi
+temp, `fsync`, publish atomically dưới artifact root content-addressed rồi
+read-back trước transaction terminal. OpenAPI lên v1.18, catalog
+v1.2 có `20` public/`80` detail và consumer Go/C++/TypeScript được sinh lại.
+
+**Đóng gói.** Release/install/rollback nay mang theo `mkddc-st-compile`, tạo
+artifact/scratch root đúng owner/mode và ghi compiler vào runtime checksum.
+CORS preflight bổ sung `PATCH`, `If-Match`, idempotency/correlation header và
+expose ETag/Location để client contract hoạt động khi dùng allowlist origin.
+
+**Kiểm chứng hiện tại.** Full CTest Release bật Modbus+BACnet+HMI đạt `929/929`;
+Go `vet`, `test ./... -count=1` và Programming race PASS; FE đạt `58/58` file,
+`494/494` test cùng lint/typecheck/build. HTTP 202→terminal, restart/idempotency,
+lease/CAS, timeout process-group, artifact dedup/read-back, migration/backup/
+audit, G1 `6/6` và deploy-order negative `5/5` đều PASS. Không dùng Chrome
+DevTools ở source slice này vì không đổi component/layout FE; network browser/
+target evidence tiếp tục thuộc gate deploy.
+
 ### Added — Project/Draft/Revision Programming P2 (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-204`: `mkddc-web` mở SQLite Programming theo
