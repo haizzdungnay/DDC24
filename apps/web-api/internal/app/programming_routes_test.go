@@ -92,6 +92,42 @@ func TestProgrammingProjectDraftRevisionHTTPAndRestart(t *testing.T) {
 	if revision.Code != http.StatusOK {
 		t.Fatalf("get revision status=%d body=%s", revision.Code, revision.Body.String())
 	}
+	exportBody := `{"schemaVersion":"1.0","revisionIds":["` + sealResponse.Resource.RevisionID + `"]}`
+	exported := serveProgramming(t, handler, http.MethodPost, "/api/v1/programming/bundles/export", exportBody, token,
+		"10000000-0000-4000-8000-000000000006", "", "programming-http-0008")
+	if exported.Code != http.StatusOK {
+		t.Fatalf("export status=%d body=%s", exported.Code, exported.Body.String())
+	}
+	var exportResponse struct {
+		BundleSHA256 string `json:"bundleSha256"`
+		BundleBase64 string `json:"bundleBase64"`
+		AuditID      string `json:"auditId"`
+	}
+	if err := json.Unmarshal(exported.Body.Bytes(), &exportResponse); err != nil || len(exportResponse.BundleSHA256) != 64 ||
+		exportResponse.BundleBase64 == "" || exportResponse.AuditID == "" {
+		t.Fatalf("export response=%+v err=%v", exportResponse, err)
+	}
+	importBodyBytes, _ := json.Marshal(map[string]any{"schemaVersion": "1.0", "name": "AHU nhập HTTP",
+		"description": "source-only", "bundleBase64": exportResponse.BundleBase64, "expectedSha256": exportResponse.BundleSHA256})
+	imported := serveProgramming(t, handler, http.MethodPost, "/api/v1/programming/bundles/import", string(importBodyBytes), token,
+		"10000000-0000-4000-8000-000000000007", "", "programming-http-0009")
+	if imported.Code != http.StatusCreated {
+		t.Fatalf("import status=%d body=%s", imported.Code, imported.Body.String())
+	}
+	var importResponse struct {
+		Resource struct {
+			ProjectID         string `json:"projectId"`
+			State             string `json:"state"`
+			CheckCreated      bool   `json:"checkCreated"`
+			ArtifactImported  bool   `json:"artifactImported"`
+			CommissionStarted bool   `json:"commissionStarted"`
+		} `json:"resource"`
+	}
+	if err := json.Unmarshal(imported.Body.Bytes(), &importResponse); err != nil || importResponse.Resource.ProjectID == "" ||
+		importResponse.Resource.State != "DRAFT" || importResponse.Resource.CheckCreated ||
+		importResponse.Resource.ArtifactImported || importResponse.Resource.CommissionStarted {
+		t.Fatalf("import response=%+v err=%v", importResponse, err)
+	}
 	checkBody := `{"schemaVersion":"1.0","targetProfile":"MK-DDC-24-REV-A"}`
 	checkAccepted := serveProgramming(t, handler, http.MethodPost, "/api/v1/programming/revisions/"+sealResponse.Resource.RevisionID+"/checks", checkBody, token,
 		"10000000-0000-4000-8000-000000000005", "", "programming-http-0007")

@@ -7,7 +7,7 @@ import (
 	"sort"
 )
 
-const CurrentSchemaVersion = 3
+const CurrentSchemaVersion = 4
 
 //go:embed migrations/*.sql
 var migrationFiles embed.FS

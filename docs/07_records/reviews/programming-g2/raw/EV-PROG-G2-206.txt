@@ -1,0 +1,20 @@
+EV-PROG-G2-206 — TASK-PROG-206 source evidence
+Ngày: 2026-08-11
+Source commit: 95b9388994e7eaceeddda2af321352c9db9a338d
+Source tree: 566fc446b9071ec5598d66be8c4c5f6f6577a4df
+Phạm vi: change manifest deterministic; bundle source-only export/import; SQLite v4 receipt; OpenAPI v1.19.
+
+Kết quả đo hiện tại:
+- CMake Release với MKDDC_ENABLE_MODBUS/BACNET/HMI=ON: build PASS.
+- CTest: 929/929 PASS, 0 fail.
+- Go: go vet ./... PASS; go test ./... -count=1 PASS.
+- Go Programming race: application/artifact/compiler/coreipc/domain/store/transport PASS.
+- FE: 58/58 file, 494/494 test PASS; lint/typecheck/Vite build PASS.
+- G1: 7/7 contract, 5/5 negative mutation và 5/5 deploy-order fault PASS.
+- HTTP: export 200 có ZIP/hash/audit; import 201 tạo Project/Draft; no Check/Artifact/Commission.
+
+Ranh giới trung thực:
+- PROGRAMMING_REV_A mặc định OFF.
+- Không deploy target/HIL trong task này.
+- Không stage/activate/Commission; Active/LKG không đổi.
+- Đây là host evidence hỗ trợ G2, không phải Test Result VS-PROG độc lập.

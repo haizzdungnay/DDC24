@@ -3,15 +3,15 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G2-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-200`, `TASK-PROG-201`, `TASK-PROG-202`, `TASK-PROG-203`, `TASK-PROG-204`, `TASK-PROG-205` |
+| Task | `TASK-PROG-200`, `TASK-PROG-201`, `TASK-PROG-202`, `TASK-PROG-203`, `TASK-PROG-204`, `TASK-PROG-205`, `TASK-PROG-206` |
 | Ngày | 2026-08-11 |
 | Trạng thái task | **DONE** |
-| Trạng thái pha | **P2 IN_PROGRESS — 6/8; G2 IN_PROGRESS** |
-| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901`; Task 203: `2c2bfb4`; Task 204: `66848a1`; Task 205: `e8c289e` |
+| Trạng thái pha | **P2 IN_PROGRESS — 7/8; G2 IN_PROGRESS** |
+| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901`; Task 203: `2c2bfb4`; Task 204: `66848a1`; Task 205: `e8c289e`; Task 206: `95b9388` |
 | PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`; Task 202: [PR #143](https://github.com/Mekong-HCM/MK-DDC-24/pull/143) / `7d424bc`; Task 203: [PR #145](https://github.com/Mekong-HCM/MK-DDC-24/pull/145) / `2899d02`, tree `cdef0e77`; Task 204: [PR #147](https://github.com/Mekong-HCM/MK-DDC-24/pull/147) / `27a06e1`, tree `4e4e4d24`; Task 205: [PR #149](https://github.com/Mekong-HCM/MK-DDC-24/pull/149) / `3c8b4c3`, tree `aa7e13a9`; remote feature branch đã xóa |
 | Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt), [`EV-PROG-G2-202`](programming-g2/raw/EV-PROG-G2-202.txt), [`EV-PROG-G2-203`](programming-g2/raw/EV-PROG-G2-203.txt), [`EV-PROG-G2-204`](programming-g2/raw/EV-PROG-G2-204.txt), [`EV-PROG-G2-205`](programming-g2/raw/EV-PROG-G2-205.txt) |
 | Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS — không đổi** |
-| Next action | `TASK-PROG-206` — deterministic change manifest + bundle source-only import/export |
+| Next action | `TASK-PROG-207` — timeout/OOM/fuzz/traversal/zip bomb/audit-secret assurance |
 
 ## 1. Kết quả đã triển khai
 
@@ -369,3 +369,61 @@ mount. Không deploy target/HIL/production trong source slice; flag giữ `OFF`.
   **source-only** có manifest/hash; import phải quarantine/validate rồi chỉ tạo
   Project/Draft atomic. Cấm Artifact/IR/native/cache/secret/symlink/hardlink/
   traversal/zip bomb và tuyệt đối không auto-Check/Commission/Active.
+
+## 27. Kết quả `TASK-PROG-206`
+
+- `ProjectService.GetRevisionChanges` so hai immutable Revision cùng Project,
+  sort change theo category/kind/object ID, phân loại source/mapping/output/task/
+  library/RETAIN và tạo `impactRef` SHA-256. `activeOverrides/cutover` thiếu Core
+  authority là `UNAVAILABLE`, không suy thành `NONE`.
+- Export tạo ZIP `Store` deterministic: path lexical, timestamp 1980 cố định,
+  manifest root + từng file có SHA-256/size/kind/Revision/Object identity. Tập
+  Revision được normalize theo sequence nên đổi thứ tự request không đổi bytes.
+- Import kiểm expected SHA-256, giới hạn ZIP `4 MiB`, `1024` file,
+  `256 KiB/file`; chỉ nhận exact path/kind source allowlist, reject compressed,
+  encrypted, directory/link, absolute/`..`/backslash/control, duplicate path/JSON,
+  sai target/profile/file set/hash/size/Revision manifest.
+- Thành công gọi `ImportProject` trong một transaction để tạo đúng Project +
+  Draft + audit + receipt; response ghi `DRAFT`, `checkCreated=false`,
+  `artifactImported=false`, `commissionStarted=false`. Không tạo Revision,
+  Check, Artifact, operation, Active hay LKG.
+- SQLite v4 mở rộng receipt `BUNDLE_EXPORT/BUNDLE_IMPORT`; replay 24 giờ giữ
+  response identity/audit, không ghi audit thứ hai; cùng key khác semantic
+  request conflict. OpenAPI v1.19 sửa contract export `200`/import `201` inline,
+  thêm machine schema bundle và nâng G1 join thành `7/7`.
+
+## 28. Finding `TASK-PROG-206` đã đóng
+
+| Mức | Finding | Cách đóng | Trạng thái |
+|---|---|---|---|
+| P1 | Contract cũ export chỉ trả operation accepted còn import nhận `uploadRef`, nhưng không có endpoint upload hoặc lấy kết quả nên không thể truyền bundle thật | Chuyển sang contract đồng bộ bounded: export trả ZIP base64/hash/audit `200`, import nhận inline bundle/hash và trả Project/Draft `201`; OpenAPI/client/test cùng commit | **CLOSED** |
+| P1 | Import retry ban đầu có nguy cơ trả resource rút gọn, khác safety fields của response lần đầu | Receipt lưu source Revision; replay dựng lại cùng `importedFromRevisionId`, bundle hash và bốn safety fields, test so identity | **CLOSED** |
+| P1 | ZIP hợp lệ về hash vẫn có thể smuggle file/Revision ngoài manifest hoặc tạo Draft không deterministic nếu duyệt map | Bắt exact descriptor set theo Revision manifest, reject descriptor ngoài revision set và dựng Draft theo manifest file order đã sort | **CLOSED** |
+
+Không còn finding P0/P1 mở trong phạm vi source `TASK-PROG-206`.
+
+## 29. Kiểm chứng `TASK-PROG-206` đo trong phiên
+
+| Làn | Kết quả |
+|---|---|
+| Go Programming targeted | change/impact deterministic, ZIP byte-exact qua đổi thứ tự Revision, export/import round-trip, hash mismatch zero mutation, receipt replay/conflict, HTTP `200→201`, migration v1→v4 PASS |
+| Go race/toàn repository | Programming `-race` PASS; `go vet ./...` và `go test ./... -count=1` PASS |
+| G1/contract | join `7/7`, deploy-order âm `5/5`, source bundle schema/hash/store v4/OpenAPI v1.19/client generated PASS |
+| C++ toàn repository | Release bật Modbus + BACnet + HMI; CTest `929/929` PASS |
+| FE regression | Vitest `58/58` file, `494/494` test; lint/typecheck/build PASS |
+
+Không chạy Chrome DevTools vì Task 206 chỉ đổi backend contract/service/store và
+consumer TypeScript sinh tự động; không đổi component/layout/hành vi FE được
+mount. Không deploy target/HIL/production trong source slice; flag giữ `OFF`.
+
+## 30. Ranh giới và bàn giao `TASK-PROG-207`
+
+- Tổng giữ `2/60 I=Y`; Task 206 chỉ làm rõ source partial của SYS-102/106/107,
+  BE-101/102/105/108/110 và NFR-106. Hai record vẫn `BLOCKED`, 0/32 PASS và mọi
+  `T/P/R=N`; 16/16 risk vẫn Open.
+- Task 207 phải dùng corpus hostile độc lập để chứng minh timeout/OOM/fuzz,
+  traversal, zip bomb/compression, executable/native/cache/artifact smuggling,
+  duplicate path/key, one-over limits và audit không lộ source/secret. Mọi reject
+  phải zero mutation, không audit/domain partial và Active/LKG không đổi.
+- Evidence Task 207 vẫn là host assurance; không được tự nâng target/HIL hoặc
+  `RELEASE_READY`. Sau khi P2 8/8 mới chuyển theo dependency sang P3/P4.

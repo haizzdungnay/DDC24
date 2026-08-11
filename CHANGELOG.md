@@ -7,6 +7,40 @@
 ---
 
 ## [Unreleased]
+### Added — Change manifest và bundle source-only Programming P2 (2026-08-11)
+
+**Kết quả.** Triển khai source `TASK-PROG-206`: endpoint so sánh hai Revision
+bất biến nay tạo change manifest có thứ tự ổn định, phân loại `SOURCE`,
+`MAPPING`, `OUTPUT_MAPPING`, `TASK`, `LIBRARY`, `RETAIN` và khóa `impactRef`
+SHA-256. Hai nhóm cần Core read-back (`activeOverrides`, `cutover`) tiếp tục
+`UNAVAILABLE` để Commission fail-closed, không suy diễn trạng thái runtime.
+
+**Bundle source-only.** Export đồng bộ sinh ZIP `Store` deterministic, path
+sort, timestamp cố định, manifest/file SHA-256 và audit không chứa source.
+Import nhận bundle inline + expected SHA-256, từ chối traversal, symlink,
+compression, path/kind ngoài allowlist, duplicate JSON/file, sai target/profile,
+file/hash/size/Revision manifest lệch và giới hạn 4 MiB. Thành công chỉ tạo một
+Project/Draft mới trong transaction; không nhập artifact/IR/native/cache, không
+tạo Revision/Check và không tự Commission. SQLite migration v4 mở rộng receipt
+idempotency 24 giờ cho export/import, giữ replay qua restart và conflict khi
+cùng key khác semantic request.
+
+**Contract và kiểm chứng.** OpenAPI lên v1.19; thêm
+`source_bundle_v1.schema.json`, G1 join `7/7`, store manifest v4 và TypeScript
+client sinh lại. Full CTest Release bật Modbus+BACnet+HMI đạt `929/929`; Go
+`vet`, `test ./... -count=1` và Programming race PASS; FE đạt `58/58` file,
+`494/494` test cùng lint/typecheck/build. Test mới chứng minh determinism,
+round-trip, safety impact, hash mismatch, HTTP `200 export → 201 import`,
+transaction/audit và migration. Feature Programming vẫn mặc định `OFF`; không
+đổi component/layout FE nên không dùng Chrome DevTools trong source slice này.
+
+**Hồ sơ As-Built.** Ghim source `95b9388` vào Design Index v2.9, Data Model
+v0.8, Interface v1.2, BE Design v1.0, Risk v1.4, Trace v3.10, Plan 53 v0.30,
+Roadmap v3.27, review/raw evidence G2 và candidate v2.21. Tiến độ P2 `7/8`,
+tổng `20/49`; task tiếp theo `TASK-PROG-207`. Giữ trung thực `2/60 I=Y`, hai
+record BLOCKED, `0/32 PASS`, 16/16 risk Open, flag `OFF` và
+`RELEASE_READY BLOCKED`; commit/tree/PR hồ sơ được ghi bổ sung sau merge.
+
 ### Added — Check worker sandbox và artifact registry Programming P2 (2026-08-11)
 
 **Kết quả.** Triển khai source `TASK-PROG-205`: nối hai operation

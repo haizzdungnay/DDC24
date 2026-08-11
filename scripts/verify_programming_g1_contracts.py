@@ -112,7 +112,7 @@ def validate(join: dict[str, Any]) -> list[str]:
     require(join.get("commissionEnabled") is False, "G1 không được bật Commission")
 
     contracts = join.get("contracts", [])
-    require(len(contracts) == 6, "G1 phải ghim đúng 6 contract")
+    require(len(contracts) == 7, "G1 phải ghim đúng 7 contract")
     require(len({item.get("name") for item in contracts}) == len(contracts), "tên contract bị trùng")
     accepted_major = join.get("compatibility", {}).get("acceptedMajor")
     require(accepted_major == 1, "acceptedMajor phải là 1")
@@ -186,12 +186,24 @@ def validate(join: dict[str, Any]) -> list[str]:
         migration_path = safe_path(store_item["migrationPath"])
         require(digest(migration_path) == store_item["migrationSha256"], "store migration SHA-256 drift")
         require(store_manifest["migrationSha256"] == store_item["migrationSha256"], "store manifest/migration hash lệch")
-        require(store_manifest["schemaVersion"] == 3, "store schema version drift")
+        require(store_manifest["schemaVersion"] == 4, "store schema version drift")
         require(store_manifest["featureDefaultOff"] is True, "store feature phải OFF")
         require(store_manifest["foreignKeys"] is True and store_manifest["singleWriter"] is True, "store FK/single-writer drift")
         require(store_manifest["journalMode"] == "WAL" and store_manifest["synchronous"] == "FULL", "store PRAGMA drift")
     except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"store: {error}")
+
+    try:
+        bundle_item = contract_by_name(join, "source-bundle")
+        bundle_schema = json.loads(safe_path(bundle_item["path"]).read_text())
+        require(digest(safe_path(bundle_item["path"])) == bundle_item["sha256"], "source bundle schema SHA-256 drift")
+        require(bundle_schema["properties"]["schemaVersion"]["const"] == bundle_item["schemaVersion"] == "1.0", "source bundle major drift")
+        require(bundle_schema["properties"]["bundleType"]["const"] == "MKDDC_PROGRAMMING_SOURCE_ONLY", "source bundle type drift")
+        require(bundle_schema["properties"]["targetProfile"]["const"] == "MKDDC24_REVA", "source bundle target drift")
+        require(bundle_schema["x-mkddc-invariants"]["maximumArchiveBytes"] == bundle_item["maximumArchiveBytes"], "source bundle size drift")
+        require(bundle_schema["x-mkddc-invariants"]["importResult"] == "NEW_PROJECT_NEW_DRAFT_ONLY", "source bundle import boundary drift")
+    except (KeyError, OSError, ValueError, json.JSONDecodeError) as error:
+        errors.append(f"source-bundle: {error}")
 
     compatibility = join.get("compatibility", {})
     require(compatibility.get("unknownMajor") == "REJECT_NO_MUTATION", "unknown major phải reject no-mutation")
@@ -273,7 +285,7 @@ def main() -> int:
         return 1
     if args.self_test:
         run_self_test(join)
-    print("PASS: 6/6 contract G1 cùng major 1; hash/version/deploy/rollback/flag khớp")
+    print("PASS: 7/7 contract G1 cùng major 1; hash/version/deploy/rollback/flag khớp")
     return 0
 
 
