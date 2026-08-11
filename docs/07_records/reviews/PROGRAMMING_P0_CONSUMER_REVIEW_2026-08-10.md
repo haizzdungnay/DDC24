@@ -4,14 +4,14 @@
 |---|---|
 | ID | `PROG-P0-CONSUMER-REVIEW-2026-08-10` |
 | Loại | Biên bản consumer review; hồ sơ hỗ trợ, không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 1.3 |
+| Phiên bản | 1.4 |
 | Ngày | 2026-08-10 |
 | Phạm vi | 22 hồ sơ baseline; điều kiện “consumer review liên chức năng” của `PLAN_READY` |
 | Chủ quản | Dev Lead (tổ chức review) |
 | Người review | FE, BE, Core/Compiler, FW MCU, HW, Security, Ops, QA — với tư cách **bên tiêu thụ contract** |
 | Trạng thái | **VÒNG KỸ THUẬT ĐÃ HOÀN TẤT — `9/9` finding đóng. Consumer authority CHƯA KÝ: `0/22 M4`; `PLAN_READY` vẫn `BLOCKED`** |
 | Candidate **đầu vào** của vòng review | `e3e9fb26f61b39df8f805916333fc03b51f07f5f` — nay đã **`SUPERSEDED`** |
-| Candidate **để ký** | Định danh bằng **22 SHA-256** tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §2; kiểm bằng `python3 scripts/candidate_pin_check.py` |
+| Candidate **để ký** | Candidate v2.7: **22 SHA-256** tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §2, commit `a236200`; kiểm bằng `python3 scripts/candidate_pin_check.py` |
 | Gói chủ quản | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 
 ## 0. Đọc nhanh
@@ -22,7 +22,7 @@
 | 2. Ai phải đọc? | Document Control và Verification Lead (để biết `M4` còn thiếu gì); từng discipline lead (để xác nhận finding thuộc phần mình); authority ký `PLAN_READY`. |
 | 3. Đã làm gì? | Đọc 22 hồ sơ theo **cặp producer → consumer**, đối chiếu As-Built với source thật, chạy kiểm máy truy vết hai chiều, và mở 9 finding. Cả 9 đã được sửa trong cùng phiên. |
 | 4. Chưa làm gì? | **Chưa có chữ ký người thật cho từng vai trò.** Theo [`DOC-GOV-001`](../../00_governance/DOC_GOVERNANCE.md) §3, `M4` đòi reviewer là **con người** — vòng kỹ thuật này không thay được điều đó. |
-| 5. Kết quả với gate? | `PLAN_READY` **vẫn `BLOCKED`**. Việc sửa 9 finding làm nội dung candidate đổi, nên phải phát hành **candidate mới** và ghim lại hash (§7). |
+| 5. Kết quả với gate? | `PLAN_READY` **vẫn `BLOCKED`**. Candidate v2.7 đã được ghim `22/22`; Product/Architect cần xác nhận delta từ v2.5 và tám consumer còn phải ký đúng revision (§5–§8). |
 | 6. Điều gì nguy hiểm nhất trong 9 finding? | `F-CR-02`: BE ghi staging artifact dưới `${CONFIG_DIR}` còn Core chỉ mở locator dưới gốc khác — mọi Commission sẽ fail ở bước `STAGE` ngay lần chạy đầu. |
 | 7. Bằng chứng? | §2 có lệnh chạy lại được và số đo thật; §3 dẫn `file:line` cho từng finding. |
 
@@ -363,8 +363,8 @@ thuật của vòng review; nó **không** thay được §5.2.
 |---|---|---|---|
 | Consumer review liên chức năng | `BLOCKED` — chưa thực hiện | `BLOCKED` — **đã thực hiện vòng kỹ thuật**, chờ chữ ký | `M4` đòi con người |
 | Không còn authority/xung đột kiến trúc | `BLOCKED` — 6 xung đột vô chủ | `BLOCKED một phần` — Architect `ACCEPT` 6/6 ADR `Proposed` | còn đồng phê duyệt/evidence trước `Accepted` |
-| Ghim candidate | `PASS` tại `e3e9fb2` | **ĐÃ GHIM LẠI** bằng 22 SHA-256 (manifest v2.5) | §7 |
-| `PLAN_READY` | `BLOCKED` | `BLOCKED một phần` | Product + Architect `ACCEPT`; consumer/Verification/discipline/QA còn thiếu |
+| Ghim candidate | `PASS` tại `e3e9fb2` | **ĐÃ GHIM LẠI** bằng 22 SHA-256 (candidate v2.7; manifest v2.9) | §7 |
+| `PLAN_READY` | `BLOCKED` | `BLOCKED một phần` | Product + Architect `ACCEPT` v2.5; xác nhận delta v2.7 và consumer/Verification/discipline/QA còn thiếu |
 | `IMPLEMENT_READY[*]` | `BLOCKED` | `BLOCKED` | phụ thuộc `PLAN_READY` |
 
 ## 7. Candidate phải được ghim lại
@@ -378,16 +378,17 @@ So với `e3e9fb2`, **11/22** hồ sơ đã đổi: chín hồ sơ của vòng f
 v2.4 ngay trước ủy quyền, **8/22** hồ sơ đổi để ghi quyết định/tracker. Manifest
 §4 liệt kê chính xác; reviewer đọc lại đúng các file đánh dấu `✱`.
 
-Candidate mới đã được ghim tại
+Candidate hiện hành đã được ghim tại
 [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md)
-v2.5, định danh bằng **22 SHA-256** thay vì theo commit — xem manifest §1.1 về lý
-do. Trước khi đọc để review, chạy `python3 scripts/candidate_pin_check.py`.
+v2.9 dưới tên candidate v2.7, định danh bằng **22 SHA-256** và commit
+`a236200` — xem manifest §1.1 về lý do hash là authority. Trước khi đọc để review,
+chạy `python3 scripts/candidate_pin_check.py`.
 
 ## 8. Việc phải làm tiếp, có owner
 
 | Việc | Owner | Điều kiện hoàn tất |
 |---|---|---|
-| ~~Phát hành manifest candidate mới sau authority record~~ | Document Control | **XONG** — manifest v2.5, ghim bằng 22/22 SHA-256, có `candidate_pin_check.py` bắt drift |
+| ~~Phát hành manifest candidate mới sau authority record~~ | Document Control | **XONG** — candidate v2.7, manifest v2.9, commit `a236200`, ghim bằng 22/22 SHA-256 và có `candidate_pin_check.py` bắt drift |
 | Ký `ACCEPT/REQUEST_CHANGE/REJECT` theo từng vai trò §5 | tám vai trò consumer | họ tên, ngày, revision cụ thể |
 | Hoàn tất đồng phê duyệt để chuyển `ADR-026..031` sang `Accepted` | Safety, Security, Verification, Runtime theo từng ADR | Architect đã `ACCEPT` 6/6; còn chữ ký/evidence được nêu trong từng ADR |
 | Hoàn tất `OD-PROG-015` | QA/Verification | Product + Architect đã `ACCEPT`; cần review/sign-off đúng candidate |
@@ -401,3 +402,4 @@ do. Trước khi đọc để review, chạy `python3 scripts/candidate_pin_chec
 | 1.1 | 2026-08-10 | Sửa số đếm sai của chính biên bản này: **9/22** hồ sơ đổi chứ không phải 7 — `PROG-DOCSET-001` và `PLAN-PROG-053` cũng thuộc mẫu số 22 và đã đổi khi đồng bộ tracker. Ghi nhận candidate mới đã được ghim bằng 22 SHA-256 (manifest v2.1); chuyển việc “phát hành manifest mới” sang đã xong |
 | 1.2 | 2026-08-10 | Đóng `F-CR-10`: tách rõ candidate **đầu vào** của vòng review (`e3e9fb2`, nay `SUPERSEDED`) khỏi candidate **để ký** (22 SHA-256); thêm §2.6 bảng số đo **cuối cùng** để không ai đọc nhầm số `FAIL` trung gian ở §2.1 làm trạng thái hiện hành; thêm bảng đối chiếu hai phát biểu “review kỹ thuật xong” và “authority đã ký” |
 | 1.3 | 2026-08-10 | Ghi `AUTH-PROG-2026-08-10-01`: System Architect xác nhận `${STATE_DIR}/programming/staging/`, Product + Architect `ACCEPT`, Architect `ACCEPT` 6/6 ADR. Candidate v2.5 được ghim lại; giữ `0/8` consumer, `0/22 M4` và `PLAN_READY BLOCKED` |
+| 1.4 | 2026-08-11 | Sửa hướng dẫn ký còn trỏ candidate/manifest v2.5 sau khi Plan 53 đã phát hành candidate v2.7. Khóa revision ký là 22 SHA-256/commit `a236200`; ghi rõ Product/Architect cần xác nhận delta v2.7 và giữ `0/8` consumer, `0/22 M4`, `PLAN_READY BLOCKED` |
