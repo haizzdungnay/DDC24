@@ -1,0 +1,75 @@
+{
+  "$schema": "../../fbd_v1.schema.json",
+  "schemaVersion": 1,
+  "profileId": "revA-1t-1-5-30",
+  "graphId": "10000000-0000-4000-8000-000000000001",
+  "name": "AHU_FAN_ENABLE",
+  "networks": [
+    {
+      "id": "20000000-0000-4000-8000-000000000001",
+      "name": "ENABLE_LOGIC",
+      "order": 0,
+      "nodes": [
+        {
+          "id": "30000000-0000-4000-8000-000000000001",
+          "kind": "INPUT",
+          "typeRef": "BOOL",
+          "executionOrder": 0,
+          "parameters": { "variable": "OCCUPIED" },
+          "ports": [
+            { "id": "40000000-0000-4000-8000-000000000001", "name": "OUT", "direction": "OUTPUT", "dataType": "BOOL", "unit": null, "order": 0 }
+          ]
+        },
+        {
+          "id": "30000000-0000-4000-8000-000000000002",
+          "kind": "INPUT",
+          "typeRef": "BOOL",
+          "executionOrder": 1,
+          "parameters": { "variable": "ENABLE" },
+          "ports": [
+            { "id": "40000000-0000-4000-8000-000000000002", "name": "OUT", "direction": "OUTPUT", "dataType": "BOOL", "unit": null, "order": 0 }
+          ]
+        },
+        {
+          "id": "30000000-0000-4000-8000-000000000003",
+          "kind": "FUNCTION",
+          "typeRef": "AND",
+          "executionOrder": 2,
+          "parameters": {},
+          "ports": [
+            { "id": "40000000-0000-4000-8000-000000000003", "name": "IN1", "direction": "INPUT", "dataType": "BOOL", "unit": null, "order": 0 },
+            { "id": "40000000-0000-4000-8000-000000000004", "name": "IN2", "direction": "INPUT", "dataType": "BOOL", "unit": null, "order": 1 },
+            { "id": "40000000-0000-4000-8000-000000000005", "name": "OUT", "direction": "OUTPUT", "dataType": "BOOL", "unit": null, "order": 2 }
+          ]
+        },
+        {
+          "id": "30000000-0000-4000-8000-000000000004",
+          "kind": "OUTPUT",
+          "typeRef": "BOOL",
+          "executionOrder": 3,
+          "parameters": { "variable": "FAN_CMD" },
+          "ports": [
+            { "id": "40000000-0000-4000-8000-000000000006", "name": "IN", "direction": "INPUT", "dataType": "BOOL", "unit": null, "order": 0 }
+          ]
+        }
+      ],
+      "wires": [
+        {
+          "id": "50000000-0000-4000-8000-000000000001",
+          "from": { "nodeId": "30000000-0000-4000-8000-000000000001", "portId": "40000000-0000-4000-8000-000000000001" },
+          "to": { "nodeId": "30000000-0000-4000-8000-000000000003", "portId": "40000000-0000-4000-8000-000000000003" }
+        },
+        {
+          "id": "50000000-0000-4000-8000-000000000002",
+          "from": { "nodeId": "30000000-0000-4000-8000-000000000002", "portId": "40000000-0000-4000-8000-000000000002" },
+          "to": { "nodeId": "30000000-0000-4000-8000-000000000003", "portId": "40000000-0000-4000-8000-000000000004" }
+        },
+        {
+          "id": "50000000-0000-4000-8000-000000000003",
+          "from": { "nodeId": "30000000-0000-4000-8000-000000000003", "portId": "40000000-0000-4000-8000-000000000005" },
+          "to": { "nodeId": "30000000-0000-4000-8000-000000000004", "portId": "40000000-0000-4000-8000-000000000006" }
+        }
+      ]
+    }
+  ]
+}

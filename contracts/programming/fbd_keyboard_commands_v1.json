@@ -1,0 +1,18 @@
+{
+  "contractId": "PROGRAMMING-FBD-KEYBOARD-V1",
+  "version": 1,
+  "historyLimit": 50,
+  "commands": [
+    { "id": "ADD_NETWORK", "key": "Control+Shift+n", "mutatesDraft": true, "requiresSelection": false, "messageKey": "programming.fbd.command.addNetwork" },
+    { "id": "ADD_BLOCK", "key": "Insert", "mutatesDraft": true, "requiresSelection": false, "messageKey": "programming.fbd.command.addBlock" },
+    { "id": "SELECT_NEXT_PORT", "key": "ArrowDown", "mutatesDraft": false, "requiresSelection": true, "messageKey": "programming.fbd.command.nextPort" },
+    { "id": "SELECT_PREVIOUS_PORT", "key": "ArrowUp", "mutatesDraft": false, "requiresSelection": true, "messageKey": "programming.fbd.command.previousPort" },
+    { "id": "BEGIN_OR_COMMIT_CONNECTION", "key": "Enter", "mutatesDraft": true, "requiresSelection": true, "messageKey": "programming.fbd.command.connect" },
+    { "id": "CANCEL_CONNECTION", "key": "Escape", "mutatesDraft": false, "requiresSelection": false, "messageKey": "programming.fbd.command.cancelConnection" },
+    { "id": "DELETE_SELECTION", "key": "Delete", "mutatesDraft": true, "requiresSelection": true, "messageKey": "programming.fbd.command.delete" },
+    { "id": "MOVE_NODE_UP", "key": "Alt+ArrowUp", "mutatesDraft": true, "requiresSelection": true, "messageKey": "programming.fbd.command.moveUp" },
+    { "id": "MOVE_NODE_DOWN", "key": "Alt+ArrowDown", "mutatesDraft": true, "requiresSelection": true, "messageKey": "programming.fbd.command.moveDown" },
+    { "id": "UNDO", "key": "Control+z", "mutatesDraft": true, "requiresSelection": false, "messageKey": "programming.fbd.command.undo" },
+    { "id": "REDO", "key": "Control+y", "mutatesDraft": true, "requiresSelection": false, "messageKey": "programming.fbd.command.redo" }
+  ]
+}

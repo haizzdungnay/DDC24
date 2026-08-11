@@ -110,7 +110,8 @@ target_link_libraries(core_lib INTERFACE
 # Chiều phụ thuộc: st_compiler_lib -> core_lib (không bao giờ ngược lại).
 add_library(st_compiler_lib STATIC
     application/st/st_parser.cpp application/st/st_semantic.cpp
-    application/st/st_compile.cpp application/st/st_ir.cpp)
+    application/st/st_compile.cpp application/st/st_ir.cpp
+    application/st/st_fbd_model.cpp)
 target_link_libraries(st_compiler_lib PUBLIC core_lib)
 
 add_executable(mkddc-core bootstrap/main.cpp)
@@ -163,6 +164,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_io_map.cpp application/st/tests/test_st_cyclic_runtime.cpp
       application/st/tests/test_st_validate_cli.cpp application/st/tests/test_st_limits.cpp
       application/st/tests/test_st_lang.cpp application/st/tests/test_st_ir.cpp
+      application/st/tests/test_st_fbd_model.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp
       application/st/tests/test_st_retain.cpp application/st/tests/test_st_control_api.cpp
@@ -205,7 +207,7 @@ if(MKDDC_BUILD_FUZZ)
   if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     message(FATAL_ERROR "MKDDC_BUILD_FUZZ cần clang++ (libFuzzer). Đặt CXX=clang++.")
   endif()
-  foreach(fz st_parser st_loader)
+  foreach(fz st_parser st_loader st_fbd_model)
     add_executable(fuzz_${fz} application/st/fuzz/fuzz_${fz}.cpp)
     target_link_libraries(fuzz_${fz} PRIVATE st_compiler_lib)
     target_compile_options(fuzz_${fz} PRIVATE -fsanitize=fuzzer)

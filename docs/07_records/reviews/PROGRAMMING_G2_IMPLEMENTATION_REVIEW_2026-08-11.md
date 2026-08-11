@@ -1,17 +1,17 @@
-# Review triển khai G2 Programming — TASK-PROG-200
+# Review triển khai G2 Programming — TASK-PROG-200/201
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G2-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-200` |
+| Task | `TASK-PROG-200`, `TASK-PROG-201` |
 | Ngày | 2026-08-11 |
 | Trạng thái task | **DONE** |
-| Trạng thái pha | **P2 IN_PROGRESS — 1/8; G2 IN_PROGRESS** |
-| Source commit | `8d58efa`, `a638470` |
-| PR / merge | [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`, tree `8d4fb50a`; remote feature branch đã xóa |
-| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt) |
+| Trạng thái pha | **P2 IN_PROGRESS — 2/8; G2 IN_PROGRESS** |
+| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57` |
+| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`, tree `8d4fb50a`; Task 201: **PENDING — cập nhật sau merge** |
+| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt) |
 | Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS — không đổi** |
-| Next action | `TASK-PROG-201` — FBD canonical model và keyboard command contract |
+| Next action | `TASK-PROG-202` — hạ FBD về common typed IR và chứng minh equivalence |
 
 ## 1. Kết quả đã triển khai
 
@@ -71,3 +71,65 @@ tạo FBD canonical model machine-readable và keyboard command deterministic.
 Không tạo semantic authority thứ hai ở FE; FBD chỉ được hạ về common typed IR
 trong Task 202. Mọi thay đổi type/artifact breaking phải tăng profile/schema và
 chạy lại G1 join trước khi merge.
+
+## 6. Kết quả `TASK-PROG-201`
+
+- Contract FBD v1 machine-readable gồm schema, golden document, manifest hash và
+  registry 11 lệnh bàn phím. Schema khóa profile, capacity, UUID canonical,
+  block/port/connection, type, unit, execution order và tham số.
+- `mkddc-core` có parser/validator/canonicalizer non-RT. Biên tin cậy reject
+  duplicate key, unknown field, UUID/type/kind/port/param sai, endpoint không tồn
+  tại, type/unit mismatch, multiple driver, cạnh combinational ngược thứ tự và
+  capacity vượt profile; lỗi không tạo model được dùng cho runtime.
+- FE dùng typed model và reducer cùng contract; history bị chặn ở 50 bước,
+  read-only chặn mutation, registry command là authority duy nhất cho shortcut,
+  editor có focus/status live-region và thao tác nối block hoàn toàn bằng bàn
+  phím. Component chưa mount route production để không dựng UI authority thứ hai
+  trước `TASK-PROG-500/502`.
+- FBD chưa hạ sang common IR ở task này. `TASK-PROG-202` sở hữu lowering,
+  deterministic artifact và equivalence với ST; không có compiler thứ hai ở FE.
+
+## 7. Finding `TASK-PROG-201` đã đóng
+
+| ID | Mức | Finding | Cách đóng | Trạng thái |
+|---|---|---|---|---|
+| `F-G2-201-01` | P1 | Mô hình block ban đầu chưa giữ parameter có kiểu, nên timer/PID/scaling không thể round-trip canonical | Thêm `ParameterValue` variant, schema ràng buộc theo block kind và test round-trip/negative | **CLOSED** |
+| `F-G2-201-02` | P1 | Payload JSON có thể chứa duplicate key và làm producer/consumer diễn giải khác nhau | Parser C++ bật callback phát hiện duplicate key; mutation self-test chứng minh reject fail-closed | **CLOSED** |
+| `F-G2-201-03` | P1 | Đồng bộ document từ parent có thể tạo echo history hoặc UUID trùng trong mutation FE | Tách replace external khỏi command history, thêm identity guard và test controlled-update/read-only | **CLOSED** |
+
+Không còn finding P0/P1 mở trong phạm vi `TASK-PROG-201`.
+
+## 8. Kiểm chứng `TASK-PROG-201` đo trong phiên
+
+| Làn | Kết quả |
+|---|---|
+| Contract mutation | `10/10` mutation bị từ chối đúng, golden/manifest khớp |
+| Core FBD targeted | `8/8` test validator/canonicalizer PASS |
+| FE FBD targeted | `15/15` test model/reducer/component PASS |
+| Fuzzer C++ ASan/UBSan | `50.000` input / 24 s / 2.083 exec/s / RSS đỉnh 448 MiB / 0 crash-timeout |
+| C++ toàn repository | Release bật Modbus + BACnet + HMI; CTest `906/906` PASS |
+| Go toàn repository | `go vet ./...` và `go test ./... -count=1` PASS |
+| FE regression | Vitest `58/58` file, `494/494` test; lint/typecheck/build PASS |
+
+Không chạy Chrome DevTools vì FBD component chưa mount vào route/runtime; browser
+không thể chứng minh hành vi production ở task foundation này. Không deploy
+target/HIL/production; feature flag giữ `OFF`, không có Commission side effect.
+
+## 9. Ranh giới truy vết sau `TASK-PROG-201`
+
+- `SYS-101`, `FE-104`, `CORE-101` và `NFR-101` có thêm source partial, nhưng chỉ
+  `CORE-101` thuộc tổng `2/60 I=Y` hiện hành. FBD chưa có lowering/Check/worker/
+  target hoặc route/API/E2E nên không nâng dòng partial thành complete.
+- `RSK-PROG-006` có treatment source mới nhưng giữ `Open`: artifact execution,
+  equivalence, worker sandbox, target timing và independent Test Result còn thiếu.
+- Không tạo hoặc nâng `TR-PROG-*`; 2 record vẫn `BLOCKED`, 0/32 PASS, mọi
+  `T/P/R=N` và `RELEASE_READY BLOCKED`.
+
+## 10. Bàn giao cho `TASK-PROG-202`
+
+Task 202 phải nhận duy nhất FBD canonical v1, resolve block/port/type/unit bằng
+registry dùng chung rồi hạ về typed IR Task 200 với ordering tất định. Cùng một
+logic biểu diễn bằng ST và FBD phải tạo IR/artifact tương đương theo contract;
+mọi graph cycle, ambiguity, unsupported block hoặc conversion ngầm phải fail
+trước artifact. Evidence Task 202 phải gồm golden ST↔FBD, negative/fault,
+determinism và regression/fuzz; chưa được gọi kết quả host là target/HIL.

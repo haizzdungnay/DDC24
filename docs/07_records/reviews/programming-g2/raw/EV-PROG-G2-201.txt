@@ -1,0 +1,51 @@
+EVIDENCE_ID=EV-PROG-G2-201
+TASK=TASK-PROG-201
+DATE=2026-08-11T18:06:40+07:00
+SOURCE_COMMIT=52dfb579fd4e8f052bbdbacc6bc7d9fe8fc1965e
+SOURCE_TREE=db4b8b15e6d41ce719f9f4a15791aeeb5f0990d0
+SCOPE=G2_TASK_201_FBD_CANONICAL_VALIDATOR_KEYBOARD_EDITOR_HOST_EVIDENCE_NOT_RELEASE_OR_TARGET_EVIDENCE
+FEATURE_FLAG=OFF
+COMMISSION_ENABLED=false
+
+HOST=Linux 7.0.0-28-generic x86_64
+PYTHON=3.12.3
+GO=1.22.2
+CMAKE=3.28.3
+NODE=24.18.1
+NPM=11.16.0
+
+FBD_SCHEMA=contracts/programming/fbd_v1.schema.json
+FBD_SCHEMA_SHA256=4279397cf24e9510232d2ef7f259eaf1b889dc1503eef7888c84cbe2035a356a
+KEYBOARD_REGISTRY=contracts/programming/fbd_keyboard_commands_v1.json
+KEYBOARD_REGISTRY_SHA256=9bce7f03c3d874790ecad18aa797ef20959090bccd8cc9d0c5f049904e69b64c
+GOLDEN_FBD=contracts/programming/fbd/golden/ahu_fan_enable.json
+GOLDEN_FBD_SHA256=133798a65bb9bb638d8e1a1103ac892415eb740d33e990715191ba0887f40f51
+FBD_MANIFEST=contracts/programming/fbd/manifest.json
+FBD_MANIFEST_SHA256=c7916256a89a021f29eb19a7dd3ba2c2f88b116b172288d1e7d426dc9cfd2070
+PROFILE_SHA256=94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc
+
+COMMAND=python3 scripts/verify_programming_fbd_contract.py --self-test
+RESULT=PASS golden/schema/manifest/keyboard synchronized; 10/10 invalid mutations rejected
+
+COMMAND=ctest --test-dir build/fw --output-on-failure -R programming_fbd
+RESULT=PASS 8/8 validator and canonicalizer tests
+
+COMMAND=cd apps/web-ui && npx vitest --run --environment jsdom src/features/programming/fbd
+RESULT=PASS 3/3 files; 15/15 model/reducer/component tests
+
+COMMAND=build/programming-fbd-fuzz/core/fuzz_st_fbd -runs=50000 -max_len=1048576 -timeout=5 -rss_limit_mb=1024 -print_final_stats=1
+RESULT=PASS 50000 runs in 24 seconds; 2083 exec/s; peak RSS 448 MiB; slowest unit 0 s; no crash/timeout/ASan/UBSan fault
+
+COMMAND=cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON && cmake --build build/fw --parallel && ctest --test-dir build/fw --output-on-failure
+RESULT=PASS 906/906
+
+COMMAND=cd apps/web-api && go vet ./... && go test ./... -count=1
+RESULT=PASS
+
+COMMAND=cd apps/web-ui && npx vitest --run --environment jsdom src && npm run lint && npm run typecheck && npm run build
+RESULT=PASS 58/58 files; 494/494 tests; lint/typecheck/TypeScript/Vite build PASS
+
+IMPLEMENTED=FBD v1 machine-readable schema/golden/manifest; canonical UUID/type/unit/port/wire/order/capacity validation; duplicate-key and unknown-field rejection; non-RT C++ canonicalizer; 11-command keyboard registry; FE typed model/reducer with 50-step history/read-only guard; keyboard-first structured editor component
+NOT_IMPLEMENTED=FBD-to-common-IR lowering and ST/FBD equivalence; backend Draft/Check worker; production route/workspace/API mount; production stage/swap; target no-parser-RT/WCET/HIL
+NOT_RUN=browser because the component is intentionally not mounted before TASK-PROG-500/502; target; HIL; production deploy
+TEST_RESULT_BOUNDARY=This is supporting host evidence. VS-PROG-003/005/006/023 and all release Test Results remain not PASS until lowering, worker, production UI/API, target fixtures and independent-review conditions are met.
