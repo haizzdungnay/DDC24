@@ -45,6 +45,10 @@ action `TASK-PROG-201`. Candidate v2.15 ghim `22/22` SHA-256; Trace giữ
 `2/60 I=Y`, Risk giữ `16/16 Open`, Test Result giữ `0/32 PASS` và
 `RELEASE_READY BLOCKED`.
 
+**Phát hành.** [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139)
+đã merge vào `main` tại `288aa37` (tree `8d4fb50a`); remote feature branch đã
+xóa. Candidate v2.15 tiếp tục được định danh bằng 22 SHA-256.
+
 ### Added — Join contract và trình kiểm tương thích G1 Programming (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-105`: thêm manifest
