@@ -63,7 +63,7 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 | [Programming Docs Sync Report](PROGRAMMING_DOCS_SYNC_REPORT.md) | 2026-08-03 | Complete | Đồng bộ docs theo Product Spec Programming Rev A |
 | [Programming Design Set Review](PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | 2026-08-09 | Complete | Rà 22 hồ sơ Programming: 12 finding tài liệu đã đóng, 22/22 đạt M3; M4/M5 chờ người thật |
 | [Gói review cổng P0 Programming](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | 2026-08-11 | **v2.0 — APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; P0 7/7 DONE; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` PASS |
-| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.23 — candidate v2.19** | Candidate định danh bằng **22 SHA-256**; Task 204 source `66848a1`, PR/merge hồ sơ chờ ghi provenance; P2 5/8 |
+| [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.24 — candidate v2.19** | Candidate định danh bằng **22 SHA-256**; PR #147 merge `27a06e1`, tree `4e4e4d24`; P2 5/8 |
 | [Rà soát môi trường P0 Programming](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) | 2026-08-11 | **v1.2 — implementation entry approved** | CI/target/HIL chưa có evidence nhưng được loại khỏi entry condition; không chặn code |
 | [Consumer review liên chức năng P0 Programming](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | 2026-08-11 | **v1.6 — `8/8 WAIVED FOR IMPLEMENTATION`** | `9/9` finding đóng; không giả 8 chữ ký; maturity vẫn 0/22 M4 nhưng không chặn implementation |
 | [Review triển khai G1 Programming](PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **P1 DONE 6/6 — G1 GO** | `TASK-PROG-100..105 DONE`; join/deploy/rollback PASS; 2 record BLOCKED, 0/32 PASS |
@@ -165,3 +165,4 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.17 | 2026-08-11 | Đồng bộ review/evidence G2 `TASK-PROG-203`: artifact/hash/manifest/source map ST/FBD, P2 4/8, candidate v2.18; giữ 0/32 PASS |
 | 1.18 | 2026-08-11 | Ghi provenance PR #145/merge `2899d02`/tree `cdef0e77` cho candidate v2.18; remote feature branch đã xóa |
 | 1.19 | 2026-08-11 | Đồng bộ review/evidence G2 `TASK-PROG-204`: sáu API Project/Draft/Revision + SQLite v2/ETag/idempotency/restart, P2 5/8, candidate v2.19; giữ 0/32 PASS, PR/merge chờ ghi provenance |
+| 1.20 | 2026-08-11 | Ghi provenance PR #147/merge `27a06e1`/tree `4e4e4d24` cho candidate v2.19; remote feature branch đã xóa, trạng thái P2/evidence không đổi |

@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.23 |
+| Phiên bản | 3.24 |
 | Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.19; P1 `6/6 DONE`; P2 `5/8`; tiếp theo `TASK-PROG-205`; `RELEASE_READY BLOCKED`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
@@ -479,8 +479,8 @@ Candidate P0 hiện hành đã ghim:
 | Thuộc tính | Giá trị |
 |---|---|
 | Định danh | 22 SHA-256 của candidate v2.19 ở manifest v3.23; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
-| Commit/tree | Chờ ghi bổ sung sau PR/merge hồ sơ; source authority `66848a14bc09be44c8269824fe8d474672fe7cca` / tree `b1529ef890048a70fb0591d38681682fa8a8d5fe` |
-| Nhánh phát hành | `feat/programming-project-revision-store-20260811` |
+| Commit/tree | `27a06e18be8502aee05b0cb6ee9bee4e898c2f5c` / `4e4e4d24932adc9c26a36c9e174db4163894ad52`; source authority `66848a14bc09be44c8269824fe8d474672fe7cca` |
+| Nhánh phát hành | `feat/programming-project-revision-store-20260811` — remote đã xóa sau merge PR #147 |
 | Manifest | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
 | Phạm vi | 22/22 hồ sơ baseline; đồng bộ `TASK-PROG-204 DONE`, P2 5/8 và ranh giới 2 record BLOCKED/0 PASS |
 | Trạng thái | **PIN PASS 22/22; APPROVED FOR IMPLEMENTATION** |
@@ -553,6 +553,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.21 | 2026-08-11 | Hoàn tất `TASK-PROG-203`: thêm snapshot P2 4/8, dẫn source artifact/manifest/source-map và review/evidence G2; phát hành candidate v2.18 do Index/Language/Artifact/Risk/Trace/Plan đổi. Targeted 35/35, manifest mutation 7/7, CTest 927/927 và Go/FE regression PASS; giữ 0/32 PASS và RELEASE_READY BLOCKED | Compiler + Core Lead + Document Control |
 | 3.22 | 2026-08-11 | Ghi PR #145 đã merge tại `2899d02`, tree `cdef0e77`; remote feature branch đã xóa. Candidate v2.18/pin 22/22, P2 4/8 và ranh giới evidence/release không đổi | Document Control |
 | 3.23 | 2026-08-11 | Hoàn tất `TASK-PROG-204`: thêm snapshot P2 5/8, dẫn source Project/Draft/Revision API + SQLite v2/ETag/idempotency/restart và review/evidence G2; phát hành candidate v2.19 do Index/Data/Interface/BE/Risk/Trace/Plan đổi. CTest 927/927, Go/race, FE 494/494 và contract G1 PASS; giữ 0/32 PASS và RELEASE_READY BLOCKED | BE Lead + Architect + Document Control |
+| 3.24 | 2026-08-11 | Ghi PR #147 đã merge tại `27a06e1`, tree `4e4e4d24`; remote feature branch đã xóa. Candidate v2.19/pin 22/22, P2 5/8 và ranh giới evidence/release không đổi | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|
