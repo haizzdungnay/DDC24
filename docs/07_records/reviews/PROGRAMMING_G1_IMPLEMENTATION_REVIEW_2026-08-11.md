@@ -1,16 +1,16 @@
-# Review triển khai G1 Programming — TASK-PROG-100/101/102/103
+# Review triển khai G1 Programming — TASK-PROG-100/101/102/103/104
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G1-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-100`, `TASK-PROG-101`, `TASK-PROG-102`, `TASK-PROG-103` |
+| Task | `TASK-PROG-100`, `TASK-PROG-101`, `TASK-PROG-102`, `TASK-PROG-103`, `TASK-PROG-104` |
 | Ngày | 2026-08-11 |
-| Trạng thái task | **DONE — 4 contract foundation task** |
-| Trạng thái pha | **P1 IN_PROGRESS — 4/6** |
-| Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4`; Task 102: `95585e7`; Task 103: `4a1e9f5` |
-| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: [PR #131](https://github.com/Mekong-HCM/MK-DDC-24/pull/131) / `16d3e40`; Task 103: [PR #133](https://github.com/Mekong-HCM/MK-DDC-24/pull/133) / `1c74b9f` |
+| Trạng thái task | **DONE — 5/6 task G1** |
+| Trạng thái pha | **P1 IN_PROGRESS — 5/6** |
+| Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4`; Task 102: `95585e7`; Task 103: `4a1e9f5`; Task 104: `312f357` |
+| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: [PR #131](https://github.com/Mekong-HCM/MK-DDC-24/pull/131) / `16d3e40`; Task 103: [PR #133](https://github.com/Mekong-HCM/MK-DDC-24/pull/133) / `1c74b9f`; Task 104: PR/merge chờ phát hành |
 | Test Result chính thức | **0/32 — không đổi** |
-| Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt), [`EV-PROG-G1-102`](programming-g1/raw/EV-PROG-G1-102.txt), [`EV-PROG-G1-103`](programming-g1/raw/EV-PROG-G1-103.txt) |
+| Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt), [`EV-PROG-G1-102`](programming-g1/raw/EV-PROG-G1-102.txt), [`EV-PROG-G1-103`](programming-g1/raw/EV-PROG-G1-103.txt), [`EV-PROG-G1-104`](programming-g1/raw/EV-PROG-G1-104.txt) |
 
 ## 1. Kết quả triển khai
 
@@ -53,8 +53,8 @@ target/HIL vì thẻ task ghi rõ không áp dụng ở lát cắt contract-only
 
 ## 4. Next action theo dependency
 
-`TASK-PROG-100..103` đã `DONE`. Next action là `TASK-PROG-104` (schema SQLite,
-migration và backup); `TASK-PROG-105` là review join cuối P1 sau khi 104 đạt DoD.
+`TASK-PROG-100..104` đã `DONE`. Next action là `TASK-PROG-105`: review join
+tương thích/deploy/rollback, rerun cross-contract và chốt exit G1.
 
 Remote branch `feat/programming-contract-foundation-20260811` đã xóa sau merge.
 
@@ -221,3 +221,54 @@ vẫn bị chặn fail-safe.
 
 Remote branch `feat/programming-error-catalog-v1-20260811` đã xóa sau merge
 PR #133; candidate v2.12 xuất hiện trên `main` tại tree `db5e225f`.
+
+## 11. Kết quả `TASK-PROG-104`
+
+- Thêm SQLite schema v1 gồm 10 bảng `STRICT`, FK/unique/check/index và trigger
+  bất biến cho migration, Revision/object, Artifact, Commission Record, audit;
+  Check/operation chỉ cho phép transition mà không đổi identity/terminal truth.
+- `OpenProgrammingStore` khóa một writer, `WAL`, `foreign_keys=ON`,
+  `synchronous=FULL`, `busy_timeout=5000`, file `0600`, directory `0750` và từ
+  chối symlink/corrupt/future/partial schema.
+- `CreateProject`, `SaveDraft`, `CreateRevision`, `BeginOperation`,
+  `CommitAudit` commit domain + audit trong cùng transaction. JSON được
+  canonicalize UTF-8 NFC, key sort và từ chối duplicate key/top-level sai;
+  audit chặn field nhạy cảm và có SHA-256 hash-chain.
+- Migration ghim checksum `427c21772586a8ca3f885f41103d31ee1983071c0e1499ff1d97199a891c3db9`,
+  kiểm `user_version`, `quick_check`, chuỗi version và rollback ở ba điểm fault.
+  Migration tương lai từ DB có dữ liệu bắt buộc backup verified trước apply.
+- Backup dùng SQLite Online Backup API, kiểm quick-check/schema/checksum/hash,
+  `fsync`, publish không ghi đè và manifest; restore verify trước publish. Khi
+  manifest đích đã tồn tại, không xóa/ghi đè file của operator.
+
+### 11.1 Finding phát hiện và đóng trong phiên
+
+| ID | Mức | Finding | Cách đóng | Trạng thái |
+|---|---|---|---|---|
+| `F-G1-104-01` | P0 | Cleanup lỗi backup ban đầu có thể xóa manifest/destination không do lần gọi hiện tại tạo | Preflight cả hai path, theo dõi ownership từng artifact và chỉ cleanup artifact đã publish bởi lần gọi; thêm collision test | **CLOSED** |
+| `F-G1-104-02` | P1 | `SaveDraft` đọc lại sau commit có thể trả nội dung/ETag của writer kế tiếp thay vì mutation vừa commit | Đọc base/project/etag trong transaction và dựng response từ write-set đã commit | **CLOSED** |
+| `F-G1-104-03` | P1 | Migration chỉ kiểm bảng checksum, chưa đối chiếu `PRAGMA user_version` và chưa ép backup cho bước nâng version có dữ liệu | Đối chiếu hai nguồn version, future/partial fail-closed; callback backup verified là bắt buộc trước migration tiếp theo | **CLOSED** |
+| `F-G1-104-04` | P1 | `schema_migrations` có thể bị UPDATE/DELETE trực tiếp nên checksum record không bất biến | Thêm trigger cấm update/delete; fault test chỉ được drop trigger có chủ ý để mô phỏng out-of-band tamper | **CLOSED** |
+| `F-G1-104-05` | P1 | JSON canonical ban đầu chưa xử lý NFC và duplicate key sau Unicode normalization | Normalize cả key/value bằng NFC trước duplicate detection/hash; thêm fixture composed/decomposed | **CLOSED** |
+
+Không còn finding P0/P1 mở trong phạm vi Task 104. Store chưa wiring vào app,
+không có compiler/check worker hoặc terminal Commission; flag vẫn `OFF` và không
+có migration nào chạy trên target.
+
+## 12. Kiểm chứng `TASK-PROG-104` và truy vết
+
+| Làn | Kết quả đo trong phiên |
+|---|---|
+| Store targeted | `11/11` nhóm unit/fault/concurrency/backup PASS; migration fault 3/3; race detector PASS; `go vet` PASS |
+| C++ toàn repo | Release Modbus+BACnet+HMI build PASS; CTest `877/877` PASS |
+| Go toàn repo | `go vet ./...` và `go test ./... -count=1` PASS; package store PASS |
+| FE regression | Vitest `55/55` file, `479/479` test; lint/build và contract drift checks PASS |
+| Browser/target/HIL | Không chạy: task không đổi UI; feature/store chưa wiring và thẻ task cấm migration target trước Ops review |
+
+Trace ghi source partial cho `SYS-102/106`, `BE-101/102/106`, `NFR-106` nhưng
+giữ `I=N` vì requirement còn cần service/compiler/worker/Core/read-back/target.
+Tổng `I=Y` giữ **2/60**; không tạo `TR-PROG-*`, mọi `T/P/R=N`, Test Result
+`0/32`, feature flag `OFF` và `RELEASE_READY BLOCKED`.
+
+Next action: `TASK-PROG-105` review join cuối P1. Candidate v2.13 sẽ được phát
+hành cùng Data Model/BE Design/Risk/Trace/Plan đã đồng bộ As-Built Task 104.

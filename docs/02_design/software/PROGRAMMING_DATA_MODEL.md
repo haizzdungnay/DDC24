@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DM-PROG-001` |
-| Phiên bản | 0.4 |
+| Phiên bản | 0.5 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; chờ BE/Runtime/Security/QA review |
-| Ngày | 2026-08-09 |
+| Ngày | 2026-08-11 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Reviewer | FE Lead, Controls, Security, Operations, Verification |
 | Approver | Software/Runtime Architect |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **dữ liệu Programming được lưu ra sao**: bảng, cột, kiểu, khóa, ràng buộc, giao dịch, thời gian giữ và cách nâng cấp schema. Ai viết migration hay viết struct Go/TypeScript đều lấy từ đây. |
 | 2. Ai phải đọc file này? | BE (viết store và migration) là bắt buộc; Core đọc phần định danh runtime và RETAIN; FE đọc để biết trường nào server là chủ; QA đọc §5 và §10 để dựng ca âm; Ops đọc §9 về backup/retention. |
-| 3. Hệ thống hiện tại đang có gì? | **Chưa có bảng Programming nào tồn tại.** Chưa có schema, chưa có migration, chưa có store. Toàn bộ §6 (SQLite v1) là thiết kế mục tiêu. Phần dữ liệu Modbus Bus/Device/Point thì đã `Active` và được tham chiếu lại, không định nghĩa lại ở đây. |
-| 4. Thiết kế mới thay đổi điều gì? | Dựng chuỗi entity `Controller → Project → Draft → Revision` với quy tắc cứng: **Draft sửa được, Revision bất biến**. Check Result, Artifact và Commission Record cũng bất biến. Sửa nội dung luôn sinh identity mới, không sửa tại chỗ. |
-| 5. Team phải sửa module/contract nào? | §11 ánh xạ repository. BE tạo package store + migration SQLite trong `mkddc-web`; Core dùng định danh biến ổn định cho RETAIN (§3.10); FE chỉ giữ phép chiếu, không coi cache trình duyệt là nguồn. |
-| 6. Điều gì còn bị chặn? | Ba nhóm ở §14: hạn mức/quota/thời gian giữ (`OD-PROG-003/010`), schema kiểu dữ liệu và FBD/library (`OD-PROG-002/005/006`), và tương thích RETAIN (`OD-PROG-009`). Chưa đóng thì **không được tạo migration production**. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §11: `VS-PROG-001` (round-trip qua restart BE, 0 orphan/FK error), `VS-PROG-024` (hai client + ETag + idempotency), `VS-PROG-029` (RETAIN warm/cold/corrupt/mất điện). Cả ba `NOT RUN`. |
+| 3. Hệ thống hiện tại đang có gì? | Source commit `312f357` đã tạo `apps/web-api/internal/programming/store/`: schema SQLite v1 gồm 10 bảng, migration checksum, Project/Draft/Revision/operation/audit command, online backup/restore và fault/concurrency test. Store chưa được wiring vào `internal/app`; compiler job, artifact file registry, terminal operation/Commission và RETAIN runtime chưa có. |
+| 4. Thiết kế mới thay đổi điều gì? | Phần persistence của chuỗi `Project → Draft → Revision` đã thành As-Built: **Draft sửa được bằng ETag, Revision/object bất biến**. Operation intent và audit đã durable; Check/Artifact/Commission Record còn là schema/invariant chờ service/worker ở task sau. |
+| 5. Team phải sửa module/contract nào? | §11 ánh xạ cả source đã có và phần còn lại. BE tiếp tục wiring store vào `internal/app`, tạo service/worker/registry; Core dùng định danh biến ổn định cho RETAIN (§3.10); FE chỉ giữ phép chiếu, không coi cache trình duyệt là nguồn. |
+| 6. Điều gì còn bị chặn? | Không còn decision chặn implementation. Store giữ feature `OFF` và chưa chạy migration target; phần còn lại bị chặn release bởi service/worker/Core lifecycle, target/HIL và Test Result, không phải bởi quyền viết code. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host test TASK-PROG-104 PASS cho fresh/restart, ETag hai writer, immutable/FK/unique, operation idempotency/single-flight, backup/restore, disk-full/corrupt/migration fault, NFC/duplicate JSON và audit tamper. Đây là evidence hỗ trợ `EV-PROG-G1-104`, chưa phải `VS-PROG-*` Test Result; RETAIN/target power test vẫn chưa chạy. |
 
 Ba quy tắc dễ làm sai nhất, nêu trước để khỏi phải đọc hết: (a) ID máy không đổi
 khi người dùng đổi tên — tên chỉ là metadata; (b) mọi timestamp lưu UTC có dấu
@@ -251,7 +251,7 @@ Output sample tách:
 6. Không source-only bundle chứa Artifact/IR/native/cache/trust material.
 7. Không giá trị quan sát thiếu timestamp/quality bị gọi là Live.
 
-## 6. Storage model target — SQLite v1
+## 6. Storage model As-Built — SQLite v1
 
 Authority bền vững đặt tại `${CONFIG_DIR}/programming/programming-v1.sqlite`
 (`CONFIG_DIR=/data/config` trên target). Dùng driver `modernc.org/sqlite` đã có,
@@ -406,7 +406,7 @@ PATCH Draft:
 ## 9. Retention, backup và migration
 
 - Không auto-purge active/LKG, parent chain, operation/audit reference hoặc
-  Revision nằm trong backup chưa hết hạn. Số Revision/quota chờ `OD-PROG-010`;
+  Revision nằm trong backup chưa hết hạn. Số Revision/quota theo `OD-PROG-010`;
   khi đầy trả mã quota thay vì xóa ngầm.
 - Artifact có thể garbage-collect chỉ khi không Revision/operation/LKG tham
   chiếu và backup được xác nhận; xóa bytes sau commit tombstone/audit.
@@ -435,13 +435,13 @@ PATCH Draft:
 
 | Nội dung | Target source | Test bắt buộc |
 |---|---|---|
-| Domain/canonical JSON | `apps/web-api/internal/programming/domain.go`, `canonical.go` | round-trip, duplicate/unknown/one-over/property test |
-| SQLite schema/store | `internal/programming/store.go`, `migrations/*.sql` | FK/trigger/concurrency/restart/corrupt/disk-full/migration |
-| Revision/manifest | `revision.go`, `manifest.go` | immutable/hash/deterministic/change classification |
+| Domain/canonical JSON | `apps/web-api/internal/programming/store/{types,canonical}.go` | TASK-104: round-trip, duplicate/top-level/NFC/one-over PASS; schema unknown field thuộc service validator sau |
+| SQLite schema/store | `apps/web-api/internal/programming/store/{store,schema,migrate}.go`, `migrations/*.sql` | TASK-104: FK/trigger/concurrency/restart/corrupt/disk-full/migration PASS |
+| Revision/manifest | `apps/web-api/internal/programming/store/commands.go` | TASK-104: immutable/hash/canonical object PASS; structured change classification thuộc `TASK-PROG-204` |
 | Check/artifact registry | `check.go`, `artifact_store.go` | input identity/idempotency/path/hash/quota |
-| Operation/commission | `operation.go`, `commission.go` | kill/restart at each state, late response, no double side effect |
-| Audit | `audit.go` hoặc adapter tới `internal/auth/audit.go` | complete mutation/reject, sanitize, hash-chain gap/tamper |
-| Backup/migration | `backup.go`, `migrations/` + operations runbook | online backup/quick_check/rollback/power-fault fixture |
+| Operation/commission | `apps/web-api/internal/programming/store/commands.go`; service/worker còn phải tạo | TASK-104: durable begin/idempotency/single-flight PASS; terminal reconcile/late response thuộc P4 |
+| Audit | `apps/web-api/internal/programming/store/audit.go` | TASK-104: atomic append, sanitize, hash-chain gap/tamper PASS; đủ mọi route reject thuộc P2/P5 |
+| Backup/migration | `apps/web-api/internal/programming/store/{backup,migrate}.go`, `migrations/` + operations runbook | TASK-104: online backup/quick_check/checksum/fault rollback PASS trên host; power-fault target chưa chạy |
 
 Acceptance: `VS-PROG-001/002/004/019/021/024/029`, database contract tests và
 fault injection phải PASS. Test Result phải ghi schema hash, DB fixture, command,
@@ -480,9 +480,9 @@ không được dùng thay Core read-back cho Commission.
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| Capacity/quota/retention | Product (`OD-003/010`) | sizing + retention decision |
-| Type/FBD/library schema | Product/Runtime/Controls (`OD-002/005/006`) | Language Design approval |
-| RETAIN compatibility | Product/Runtime (`OD-009`) | lifecycle matrix approval |
+| Wiring/service/worker chưa có | Backend Lead | P2 triển khai service, compiler/check, artifact registry và terminal operation |
+| Target migration chưa chạy | Operations + Verification | duyệt fixture, backup path và chạy rehearsal đúng target; tạo Test Result |
+| RETAIN compatibility chưa triển khai | Core/Runtime | P3/P4 hiện thực lifecycle matrix và chạy VS-PROG-029/030 |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
@@ -490,13 +490,14 @@ không được dùng thay Core read-back cho Commission.
 | 0.2 | 2026-08-09 | Khóa target SQLite/document schema, field/invariant/index, transaction/locking, retention/migration, source/test mapping |
 | 0.3 | 2026-08-09 | Bổ sung command transaction/write authority, canonical serialization, migration/code-generation và deletion/retention handoff; chuyển Detailed Draft chờ review |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13` thay dòng self-check gộp; đóng finding `F-PROG-001/002` |
+| 0.5 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-104` tại source `312f357`: SQLite v1, migration checksum/fail-closed, ETag/immutable/idempotency/audit và online backup/restore có host test; giữ target/RETAIN/Test Result ở trạng thái chưa hoàn tất |
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|
-| BE Lead | PENDING | schema/transaction/migration review |
-| Runtime Architect | PENDING | runtime identity/RETAIN/artifact compatibility review |
-| Security/Ops | PENDING | file ownership, audit, backup/restore/quota review |
-| Verification Lead | PENDING | negative/fault/migration test specification đủ |
+| BE Lead | **WAIVED FOR IMPLEMENTATION** | source review tiếp tục theo task; không thay target Test Result |
+| Runtime Architect | **WAIVED FOR IMPLEMENTATION** | RETAIN/artifact compatibility review ở P3/P4 |
+| Security/Ops | **WAIVED FOR IMPLEMENTATION** | target backup/restore/quota rehearsal trước release |
+| Verification Lead | **WAIVED FOR IMPLEMENTATION** | negative/fault/migration host test đã có; target evidence còn thiếu |
 
 ### 14.1 Tự kiểm `DD-01..DD-13`
 
@@ -504,7 +505,7 @@ không được dùng thay Core read-back cho Commission.
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file: ID, version, status, ngày, chủ quản, reviewer, approver, nguồn, phạm vi; revision history §14 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 nguyên tắc; §2 quan hệ entity xác định ranh giới trong/ngoài |
-| `DD-03` As-Built | PASS | §0 câu 3 và §11: **chưa có bảng Programming nào tồn tại**; Modbus Bus/Device/Point là contract `Active` được tham chiếu, không định nghĩa lại |
+| `DD-03` As-Built | PASS | §0 câu 3, §6 và §11 phân biệt rõ SQLite store/schema đã có tại `312f357` với service/worker/RETAIN/target còn thiếu; Modbus Point authority chỉ được tham chiếu |
 | `DD-04` Target ownership | PASS | §1 “BE/Core là authority, FE chỉ giữ phép chiếu”; §12 quyền ghi từng aggregate |
 | `DD-05` Data từng field | PASS | §3.1–§3.10 và §6.1–§6.4: type/unit/required/default/range/enum/null, khóa/index/FK, validation, lifecycle, retention; §13 serialization/migration |
 | `DD-06` Interface | N/A tại file này | Hợp đồng API thuộc [`IFSPEC-PROG-001`](../interfaces/PROGRAMMING_INTERFACE_SPEC.md); ở đây chỉ định nghĩa hình dạng dữ liệu bền vững. §13 mô tả handoff sinh mã cho hai bên |
@@ -514,7 +515,7 @@ không được dùng thay Core read-back cho Commission.
 | `DD-10` Repository mapping | PASS | §11 file/package/migration cần tạo trong `mkddc-web` |
 | `DD-11` Verification | PASS | §11 gắn `VS-PROG-001/024/029` kèm fixture và kết quả kỳ vọng định lượng |
 | `DD-12` Compatibility/deploy/rollback | PASS | §4 persistence/migration; §9 retention/backup/migration gồm dữ liệu phải giữ khi rollback |
-| `DD-13` Trace/risk/decision/sign-off | **BLOCKED** | Trace và risk đã đủ (§11 + `RSK-PROG-008/009/010`), nhưng **chưa có chữ ký**. Owner: BE Lead, Runtime Architect, Security/Ops, Verification Lead. Ảnh hưởng: không được tạo migration production. Gate: `DOC-G2`. Điều kiện mở: đóng `OD-PROG-003/010` (hạn mức/retention), `OD-PROG-002/005/006` (schema kiểu và FBD/library), `OD-PROG-009` (RETAIN) rồi bốn vai trò ở bảng trên ký |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation | 17 decision `DECIDED`, trace/risk cập nhật theo `312f357`, chữ ký còn thiếu được `WAIVED FOR IMPLEMENTATION`. Target migration/release vẫn cần Ops/Verification evidence và residual acceptance |
 
-Một `BLOCKED` duy nhất, đủ bốn trường. Tài liệu **không** chứng minh schema đã
-tồn tại và **không** có Test Result migration hay runtime nào.
+Không còn blocker quyền implementation. Tài liệu ghi đúng schema/store host đã
+có, nhưng **không** suy host test thành Test Result target, RETAIN hoặc runtime.

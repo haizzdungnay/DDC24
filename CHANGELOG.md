@@ -34,6 +34,11 @@ PASS; toàn bộ Go vet/test PASS; FE Vitest `55/55` file, `479/479` test,
 lint/build PASS. Chưa chạy migration target, HIL hay browser và chưa tạo Test
 Result release.
 
+**Source và tiến độ.** Source commit `312f357`; Plan 53/54 ghi P1 `5/6`,
+candidate v2.13 ghim 22 hồ sơ. Trace bổ sung source partial cho sáu requirement
+nhưng giữ đúng tổng `2/60 I=Y`; Risk ghi treatment partial RSK-007/008 nhưng giữ
+16/16 Open và residual không đổi. Next action là `TASK-PROG-105` review join G1.
+
 ### Added — Catalog lỗi Programming thống nhất ba lớp (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-103`: thêm nguồn duy nhất
