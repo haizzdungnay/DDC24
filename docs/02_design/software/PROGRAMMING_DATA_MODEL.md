@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DM-PROG-001` |
-| Phiên bản | 0.6 |
+| Phiên bản | 0.7 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; chờ BE/Runtime/Security/QA review |
 | Ngày | 2026-08-11 |
 | Chủ quản | Backend Lead + Runtime Architect |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **dữ liệu Programming được lưu ra sao**: bảng, cột, kiểu, khóa, ràng buộc, giao dịch, thời gian giữ và cách nâng cấp schema. Ai viết migration hay viết struct Go/TypeScript đều lấy từ đây. |
 | 2. Ai phải đọc file này? | BE (viết store và migration) là bắt buộc; Core đọc phần định danh runtime và RETAIN; FE đọc để biết trường nào server là chủ; QA đọc §5 và §10 để dựng ca âm; Ops đọc §9 về backup/retention. |
-| 3. Hệ thống hiện tại đang có gì? | Source `66848a1` nâng store lên SQLite v2 gồm 11 bảng và nối nó vào lifecycle `mkddc-web`. Sáu API Project/Draft/Revision đọc-ghi dữ liệu thật; Draft batch dùng ETag/CAS, Revision/object bất biến, receipt idempotency 24 giờ và v1→v2 backup đã có test restart/race. Compiler job, artifact registry, terminal operation/Commission và RETAIN runtime chưa có. |
-| 4. Thiết kế mới thay đổi điều gì? | Chuỗi `Project → Draft → Revision` đã thành As-Built ở cả persistence và application/HTTP: **Draft sửa được bằng ETag, Revision/object bất biến**, replay mutation không tạo audit/identity mới. Check/Artifact/Commission Record còn là schema/invariant chờ worker ở task sau. |
-| 5. Team phải sửa module/contract nào? | §11 ánh xạ cả source đã có và phần còn lại. BE tiếp tục tạo compiler/Check worker/registry; Core dùng định danh biến ổn định cho RETAIN (§3.10); FE chỉ giữ phép chiếu, không coi cache trình duyệt là nguồn. Bundle change manifest/import/export thuộc `TASK-PROG-206`. |
-| 6. Điều gì còn bị chặn? | Không còn decision chặn implementation. Feature giữ `OFF` theo mặc định và chưa chạy migration target; phần còn lại bị chặn release bởi Check/operation worker, Core lifecycle, target/HIL và Test Result, không phải bởi quyền viết code. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host test TASK-PROG-204 PASS cho fresh/restart, Project/list cursor, Draft ETag/batch, Revision seal/immutable/checksum, receipt replay qua restart, v1→v2 backup, duplicate JSON và RBAC. Race detector và toàn bộ Go PASS. Đây là evidence hỗ trợ `EV-PROG-G2-204`, chưa phải `VS-PROG-*` Test Result; RETAIN/target power test vẫn chưa chạy. |
+| 3. Hệ thống hiện tại đang có gì? | Source `e8c289e` nâng store lên SQLite v3 gồm 12 bảng. Tám API Project/Draft/Revision/Check chạy thật; Check request có receipt 24 giờ, worker lease/CAS retry một lần, terminal result bất biến và Artifact content-addressed được publish/read-back trước khi commit `PASSED`. Operation/Commission và RETAIN runtime chưa có. |
+| 4. Thiết kế mới thay đổi điều gì? | Chuỗi `Project → Draft → Revision → Check → Artifact` đã thành As-Built ở persistence/application/HTTP. **Check chỉ tạo Artifact khi `PASSED`; `FAILED/TIMED_OUT` không có Artifact**, compiler không đổi Active/LKG. Schema v3 bỏ unique content hash sai: mỗi Check có row Artifact riêng, còn bytes trùng được dedup theo SHA-256 trên filesystem. |
+| 5. Team phải sửa module/contract nào? | §11 ánh xạ source đã có và phần còn lại. BE tiếp tục tạo change manifest/import-export ở `TASK-PROG-206`, rồi operation coordinator; Core dùng định danh biến ổn định cho RETAIN (§3.10); FE chỉ giữ phép chiếu, không coi cache trình duyệt là nguồn. |
+| 6. Điều gì còn bị chặn? | Không còn decision chặn implementation. Feature giữ `OFF` theo mặc định và chưa chạy migration target; release còn bị chặn bởi bundle/operation worker, Core lifecycle, target/HIL và Test Result, không phải bởi quyền viết code. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host test TASK-PROG-205 PASS cho `202 → QUEUED/RUNNING/terminal`, receipt/restart, lease hết hạn/retry tối đa hai attempt, timeout giết process group, compiler thật, Artifact deterministic/dedup/read-back/traversal/symlink và migration v2→v3. Go/race và toàn bộ regression PASS. Đây là `EV-PROG-G2-205`, chưa phải `VS-PROG-*` Test Result; target power/RETAIN vẫn chưa chạy. |
 
 Ba quy tắc dễ làm sai nhất, nêu trước để khỏi phải đọc hết: (a) ID máy không đổi
 khi người dùng đổi tên — tên chỉ là metadata; (b) mọi timestamp lưu UTC có dấu
@@ -251,7 +251,7 @@ Output sample tách:
 6. Không source-only bundle chứa Artifact/IR/native/cache/trust material.
 7. Không giá trị quan sát thiếu timestamp/quality bị gọi là Live.
 
-## 6. Storage model As-Built — SQLite v2
+## 6. Storage model As-Built — SQLite v3
 
 Authority bền vững đặt tại `${CONFIG_DIR}/programming/programming-v1.sqlite`
 (`CONFIG_DIR=/data/config` trên target). Dùng driver `modernc.org/sqlite` đã có,
@@ -263,10 +263,12 @@ Mọi ID dùng UUID v4 lowercase canonical do BE sinh; `created_at_utc_ms` và
 `updated_at_utc_ms` là Unix epoch millisecond UTC, `INTEGER >=0`. `etag` là số
 nguyên 64-bit tăng đúng một lần mỗi transaction mutation Draft.
 
-Schema v2 áp dụng tuần tự `0001_programming_store.sql` rồi
-`0002_mutation_receipts.sql`; checksum migration đã áp dụng là bất biến. Nâng
-v1→v2 phải tạo và kiểm `quick_check` online backup trước transaction migration.
-Binary cũ không down-migrate v2; rollback giữ DB/backup và tắt feature.
+Schema v3 áp dụng tuần tự `0001_programming_store.sql`,
+`0002_mutation_receipts.sql`, `0003_check_worker.sql`; checksum migration đã áp
+dụng là bất biến. Nâng `v2→v3` phải tạo và kiểm `quick_check` online backup trước
+transaction migration. Binary cũ không down-migrate v3; rollback giữ DB/backup
+và tắt feature. Migration v3 thêm lease/attempt/receipt Check, đồng thời thay
+unique content hash sai của `artifacts` bằng index thường `(sha256,profile,target_abi)`.
 
 ### 6.1 `projects` và `drafts`
 
@@ -308,7 +310,10 @@ Binary cũ không down-migrate v2; rollback giữ DB/backup và tắt feature.
 | `checks.revision_id/target_id` | TEXT | required | FK revision; target controller identity |
 | `checks.state` | TEXT | `QUEUED/RUNNING/PASSED/FAILED/TIMED_OUT` | terminal immutable |
 | `checks.input_sha256/profile/compiler_version` | BLOB/TEXT/TEXT | required | same input+profile+compiler được cache có kiểm soát |
-| `checks.started/completed_at_utc_ms` | INTEGER | completed nullable khi running | `completed>=started` |
+| `checks.created/started/completed_at_utc_ms` | INTEGER | created required; started/completed nullable theo state | `completed>=started`; UTC epoch ms |
+| `checks.attempt_count` | INTEGER | `0..2`, default 0 | tăng atomically khi claim; quá hai attempt terminal fail |
+| `checks.lease_owner` | TEXT/null | 1..128 khi `RUNNING` | null ở terminal; claim/reclaim dùng CAS |
+| `checks.lease_expires_at_utc_ms` | INTEGER/null | required khi `RUNNING` | expired lease chỉ được reclaim khi attempt `<2` |
 | `checks.result_json/result_sha256` | BLOB/BLOB | nullable tới terminal; <=1 MiB | diagnostic stable code/location |
 
 ### 6.3 `artifacts`, `operations` và `commission_records`
@@ -320,7 +325,7 @@ Binary cũ không down-migrate v2; rollback giữ DB/backup và tắt feature.
 | `artifacts.schema_version/profile/target_abi` | INTEGER | required | khớp loader capability read-back |
 | `artifacts.compiler_version/library_version` | TEXT | required <=64 | nằm trong change manifest |
 | `artifacts.byte_size` | INTEGER | `1..1048576` | one-over reject |
-| `artifacts.sha256` | BLOB | exactly 32 byte | unique theo target/profile |
+| `artifacts.sha256` | BLOB | exactly 32 byte | index theo target/profile; không unique vì mỗi Check có row riêng |
 | `artifacts.relative_path` | TEXT | basename/relative path allowlist | cấm absolute/`..`/symlink; root không từ request |
 | `artifacts.integrity_mode` | TEXT | `HASH_ONLY|SIGNED` | Rev A target `HASH_ONLY`; signed không được claim trusted-origin |
 | `artifacts.created_at_utc_ms` | INTEGER | required | retention theo Revision reference |
@@ -375,6 +380,22 @@ chặn `UPDATE`. Lookup cùng request hash trả nguyên response identity cũ m
 thêm domain/audit mutation. Cùng khóa nhưng request hash khác trả
 `PRG-ERR-IDEMPOTENCY-CONFLICT-001`. Receipt và domain state commit/rollback cùng
 một transaction, nên restart không mở cửa tạo trùng.
+
+### 6.6 `check_requests`
+
+| Trường | SQLite | Ràng buộc/nghĩa |
+|---|---|---|
+| `actor_id`, `role` | TEXT | actor 1..128; role 1..32, snapshot tại request |
+| `revision_id`, `target_id` | TEXT | FK Revision + target 1..128; nằm trong namespace idempotency |
+| `idempotency_key_sha256`, `request_sha256` | BLOB | đúng 32 byte; cấm lưu khóa thô |
+| `check_id` | TEXT | unique FK tới Check; một receipt trỏ đúng một job |
+| `correlation_id` | TEXT | 16..64, dùng audit/join log |
+| `created_at_utc_ms`, `expires_at_utc_ms` | INTEGER | expiry lớn hơn created; TTL đúng 24 giờ |
+
+Khóa chính `(actor_id,revision_id,target_id,idempotency_key_sha256)`. Cùng key và
+request hash trong TTL trả nguyên `check_id`; khác request hash trả conflict.
+Trigger chặn UPDATE identity. Receipt, Check `QUEUED` và audit commit cùng một
+transaction nên restart hoặc HTTP retry không tạo job thứ hai.
 
 ## 7. Canonical document schema
 
@@ -464,7 +485,9 @@ PATCH Draft:
 | Revision/manifest | `apps/web-api/internal/programming/{application,store}/{projects.go,draft.go,commands.go,queries.go}` | TASK-204: seal/read immutable object + manifest/checksum PASS; structured change classification thuộc `TASK-PROG-206` |
 | Receipt idempotency | `apps/web-api/internal/programming/store/{migrations/0002_mutation_receipts.sql,idempotency.go}` | TASK-204: replay 24 giờ qua restart và conflict cùng key/khác request PASS |
 | Lifecycle DB | `apps/web-api/internal/app/{app.go,programming.go}` | TASK-204: derive path theo `CONFIG_DIR`, open/inject/close khi flag ON; flag OFF không tạo DB |
-| Check/artifact registry | `check.go`, `artifact_store.go` | input identity/idempotency/path/hash/quota |
+| Check aggregate/lease | `apps/web-api/internal/programming/{application,store}/checks.go`, `store/migrations/0003_check_worker.sql` | TASK-205: receipt 24 giờ, `202→terminal`, restart, CAS lease, retry một lần, terminal immutable PASS |
+| Compiler sandbox | `apps/web-api/internal/programming/compiler/runner.go`; `apps/core/application/st/st_compile_main.cpp` | TASK-205: argv cố định, scratch 0700, rlimit/seccomp/no-new-privs, timeout giết process group, output/quota/manifest verify PASS |
+| Artifact registry/filesystem | `apps/web-api/internal/programming/{artifact/store.go,store/checks.go}` | TASK-205: temp+fsync+atomic link, content-address dedup, read-back, traversal/symlink/race reject PASS |
 | Operation/commission | `apps/web-api/internal/programming/store/commands.go`; service/worker còn phải tạo | TASK-104: durable begin/idempotency/single-flight PASS; terminal reconcile/late response thuộc P4 |
 | Audit | `apps/web-api/internal/programming/store/audit.go` | TASK-104: atomic append, sanitize, hash-chain gap/tamper PASS; đủ mọi route reject thuộc P2/P5 |
 | Backup/migration | `apps/web-api/internal/programming/store/{backup,migrate}.go`, `migrations/` + operations runbook | TASK-104: online backup/quick_check/checksum/fault rollback PASS trên host; power-fault target chưa chạy |
@@ -506,7 +529,7 @@ không được dùng thay Core read-back cho Commission.
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| Compiler/Check/operation worker chưa có | Backend Lead | P2/P4 triển khai compiler/check, artifact registry, lease/reconcile và terminal operation |
+| Bundle và operation/Commission worker chưa có | Backend Lead | P2/P4 triển khai source-only import/export, operation lease/reconcile và terminal Commission |
 | Target migration chưa chạy | Operations + Verification | duyệt fixture, backup path và chạy rehearsal đúng target; tạo Test Result |
 | RETAIN compatibility chưa triển khai | Core/Runtime | P3/P4 hiện thực lifecycle matrix và chạy VS-PROG-029/030 |
 
@@ -518,6 +541,7 @@ không được dùng thay Core read-back cho Commission.
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13` thay dòng self-check gộp; đóng finding `F-PROG-001/002` |
 | 0.5 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-104` tại source `312f357`: SQLite v1, migration checksum/fail-closed, ETag/immutable/idempotency/audit và online backup/restore có host test; giữ target/RETAIN/Test Result ở trạng thái chưa hoàn tất |
 | 0.6 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-204` tại `66848a1`: SQLite v2/11 bảng, receipt idempotency 24 giờ, wiring lifecycle và sáu API Project/Draft/Revision với ETag/CAS, immutable seal/read, cursor/checksum/restart/RBAC test; chuyển change manifest/import/export sang Task 206 và giữ target/RETAIN/Test Result chưa hoàn tất |
+| 0.7 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-205` tại `e8c289e`: SQLite v3/12 bảng, Check receipt 24 giờ, lease/CAS tối đa hai attempt, terminal result, compiler sandbox và Artifact content-address/read-back; tám route thật, giữ operation/Core/target/RETAIN/Test Result chưa hoàn tất |
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|
@@ -532,7 +556,7 @@ không được dùng thay Core read-back cho Commission.
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file: ID, version, status, ngày, chủ quản, reviewer, approver, nguồn, phạm vi; revision history §14 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 nguyên tắc; §2 quan hệ entity xác định ranh giới trong/ngoài |
-| `DD-03` As-Built | PASS | §0 câu 3, §6 và §11 phân biệt rõ SQLite store/schema đã có tại `312f357` với service/worker/RETAIN/target còn thiếu; Modbus Point authority chỉ được tham chiếu |
+| `DD-03` As-Built | PASS | §0 câu 3, §6 và §11 dẫn SQLite v3/Check worker/Artifact store tại `e8c289e`, phân biệt operation/RETAIN/target còn thiếu; Modbus Point authority chỉ được tham chiếu |
 | `DD-04` Target ownership | PASS | §1 “BE/Core là authority, FE chỉ giữ phép chiếu”; §12 quyền ghi từng aggregate |
 | `DD-05` Data từng field | PASS | §3.1–§3.10 và §6.1–§6.4: type/unit/required/default/range/enum/null, khóa/index/FK, validation, lifecycle, retention; §13 serialization/migration |
 | `DD-06` Interface | N/A tại file này | Hợp đồng API thuộc [`IFSPEC-PROG-001`](../interfaces/PROGRAMMING_INTERFACE_SPEC.md); ở đây chỉ định nghĩa hình dạng dữ liệu bền vững. §13 mô tả handoff sinh mã cho hai bên |
@@ -542,7 +566,7 @@ không được dùng thay Core read-back cho Commission.
 | `DD-10` Repository mapping | PASS | §11 file/package/migration cần tạo trong `mkddc-web` |
 | `DD-11` Verification | PASS | §11 gắn `VS-PROG-001/024/029` kèm fixture và kết quả kỳ vọng định lượng |
 | `DD-12` Compatibility/deploy/rollback | PASS | §4 persistence/migration; §9 retention/backup/migration gồm dữ liệu phải giữ khi rollback |
-| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation | 17 decision `DECIDED`, trace/risk cập nhật theo `312f357`, chữ ký còn thiếu được `WAIVED FOR IMPLEMENTATION`. Target migration/release vẫn cần Ops/Verification evidence và residual acceptance |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation | 17 decision `DECIDED`, trace/risk cập nhật theo `e8c289e`, chữ ký còn thiếu được `WAIVED FOR IMPLEMENTATION`. Target migration/release vẫn cần Ops/Verification evidence và residual acceptance |
 
 Không còn blocker quyền implementation. Tài liệu ghi đúng schema/store host đã
 có, nhưng **không** suy host test thành Test Result target, RETAIN hoặc runtime.

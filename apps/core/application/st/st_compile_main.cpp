@@ -15,10 +15,19 @@
  *        này; khi dùng, chữ ký vẫn được verify chặt bởi loader.
  */
 #include <cstdio>
+#include <cerrno>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#ifdef __linux__
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <sys/prctl.h>
+#include <sys/resource.h>
+#include <sys/syscall.h>
+#endif
 
 #include <nlohmann/json.hpp>
 
@@ -93,6 +102,111 @@ bool parse_secret_key(const std::string& text, uint8_t out[64])
     return true;
 }
 
+bool apply_worker_sandbox(std::string* error)
+{
+#ifndef __linux__
+    *error = "compiler sandbox is only supported on Linux";
+    return false;
+#else
+    auto limit = [error](int resource, rlim_t value, const char* name) {
+        const rlimit bounds{value, value};
+        if (::setrlimit(resource, &bounds) == 0) return true;
+        *error = std::string("setrlimit ") + name + " failed";
+        return false;
+    };
+    if (!limit(RLIMIT_CORE, 0, "CORE") ||
+        !limit(RLIMIT_FSIZE, 2u * 1024u * 1024u, "FSIZE") ||
+        !limit(RLIMIT_NOFILE, 32, "NOFILE") ||
+        !limit(RLIMIT_NPROC, 1, "NPROC") ||
+        !limit(RLIMIT_AS, 256u * 1024u * 1024u, "AS") ||
+        !limit(RLIMIT_CPU, 5, "CPU"))
+        return false;
+    if (::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
+        *error = "PR_SET_NO_NEW_PRIVS failed";
+        return false;
+    }
+
+    /* Source, artifact và manifest đã được mở bằng path do worker tạo trước
+     * cổng này. Từ đây compiler không thể mở config/device/path khác, tạo
+     * socket, spawn/exec process hoặc mount/ptrace. Input ST/FBD không bao giờ
+     * trở thành code native; filter là lớp fail-closed bổ sung cho parser. */
+#define MKDDC_DENY_SYSCALL(number) \
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (number), 0, 1), \
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA))
+    sock_filter filter[] = {
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(seccomp_data, nr)),
+#ifdef __NR_open
+        MKDDC_DENY_SYSCALL(__NR_open),
+#endif
+#ifdef __NR_openat
+        MKDDC_DENY_SYSCALL(__NR_openat),
+#endif
+#ifdef __NR_openat2
+        MKDDC_DENY_SYSCALL(__NR_openat2),
+#endif
+#ifdef __NR_creat
+        MKDDC_DENY_SYSCALL(__NR_creat),
+#endif
+#ifdef __NR_socket
+        MKDDC_DENY_SYSCALL(__NR_socket),
+#endif
+#ifdef __NR_socketpair
+        MKDDC_DENY_SYSCALL(__NR_socketpair),
+#endif
+#ifdef __NR_connect
+        MKDDC_DENY_SYSCALL(__NR_connect),
+#endif
+#ifdef __NR_bind
+        MKDDC_DENY_SYSCALL(__NR_bind),
+#endif
+#ifdef __NR_listen
+        MKDDC_DENY_SYSCALL(__NR_listen),
+#endif
+#ifdef __NR_accept
+        MKDDC_DENY_SYSCALL(__NR_accept),
+#endif
+#ifdef __NR_accept4
+        MKDDC_DENY_SYSCALL(__NR_accept4),
+#endif
+#ifdef __NR_execve
+        MKDDC_DENY_SYSCALL(__NR_execve),
+#endif
+#ifdef __NR_execveat
+        MKDDC_DENY_SYSCALL(__NR_execveat),
+#endif
+#ifdef __NR_fork
+        MKDDC_DENY_SYSCALL(__NR_fork),
+#endif
+#ifdef __NR_vfork
+        MKDDC_DENY_SYSCALL(__NR_vfork),
+#endif
+#ifdef __NR_clone
+        MKDDC_DENY_SYSCALL(__NR_clone),
+#endif
+#ifdef __NR_clone3
+        MKDDC_DENY_SYSCALL(__NR_clone3),
+#endif
+#ifdef __NR_mount
+        MKDDC_DENY_SYSCALL(__NR_mount),
+#endif
+#ifdef __NR_umount2
+        MKDDC_DENY_SYSCALL(__NR_umount2),
+#endif
+#ifdef __NR_ptrace
+        MKDDC_DENY_SYSCALL(__NR_ptrace),
+#endif
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+    };
+#undef MKDDC_DENY_SYSCALL
+    const sock_fprog program{static_cast<unsigned short>(sizeof(filter) / sizeof(filter[0])), filter};
+    if (::prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &program) != 0) {
+        *error = "SECCOMP_MODE_FILTER failed";
+        return false;
+    }
+    return true;
+#endif
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -103,6 +217,7 @@ int main(int argc, char** argv)
     std::string key_path;
     std::string out_path;
     std::string manifest_out_path;
+    bool sandbox = false;
 
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
@@ -112,10 +227,20 @@ int main(int argc, char** argv)
         else if (a == "--key" && i + 1 < argc) key_path = argv[++i];
         else if (a == "--out" && i + 1 < argc) out_path = argv[++i];
         else if (a == "--manifest-out" && i + 1 < argc) manifest_out_path = argv[++i];
+        else if (a == "--sandbox") sandbox = true;
+        else if (a == "--version") {
+            std::printf("compiler_version=%s profile_id=%s profile_sha256=%s "
+                        "artifact_schema=%u target_abi=%u\n",
+                        core::st_ir::kCompilerVersion,
+                        core::st_profile_generated::kProfileId,
+                        core::st_profile_generated::kProfileSha256,
+                        core::st_ir::kSchemaVersion, core::st_ir::kTargetAbi);
+            return 0;
+        }
         else if (a == "--help") {
             std::printf("usage: mkddc-st-compile --source <path> [--language ST|FBD] "
                         "[--source-id <opaque>] [--key <hexfile>] [--out <artifact>] "
-                        "[--manifest-out <json>]\n");
+                        "[--manifest-out <json>] [--sandbox] [--version]\n");
             return 0;
         } else {
             return fail("ST-CLI-ARGS", "unknown argument '" + a + "'", 2);
@@ -125,6 +250,8 @@ int main(int argc, char** argv)
         return fail("ST-CLI-ARGS", "usage: mkddc-st-compile --source <path>", 2);
     if (language != "ST" && language != "FBD")
         return fail("ST-CLI-ARGS", "--language must be ST or FBD", 2);
+    if (sandbox && !key_path.empty())
+        return fail("ST-CLI-SANDBOX", "sandbox worker does not accept signing keys", 2);
 
     std::string source;
     if (!read_file(source_path, &source, core::st_limits::kMaxSourceBytes))
@@ -137,6 +264,26 @@ int main(int argc, char** argv)
             return fail("ST-CLI-IO", "cannot read key file", 2);
         if (!parse_secret_key(key_text, secret))
             return fail("ST-CLI-KEY", "key file must contain 128 hex characters (64 bytes)", 2);
+    }
+
+    /* Mở duy nhất output do worker chỉ định trước khi seccomp cấm toàn bộ
+     * syscall mở path. File dở dang luôn nằm trong scratch riêng và worker xoá. */
+    std::ofstream artifact_output;
+    std::ofstream manifest_output;
+    if (!out_path.empty()) {
+        artifact_output.open(out_path, std::ios::binary);
+        if (!artifact_output)
+            return fail("ST-CLI-IO", "cannot create artifact output", 2);
+    }
+    if (!manifest_out_path.empty()) {
+        manifest_output.open(manifest_out_path, std::ios::binary);
+        if (!manifest_output)
+            return fail("ST-CLI-IO", "cannot create manifest output", 2);
+    }
+    if (sandbox) {
+        std::string sandbox_error;
+        if (!apply_worker_sandbox(&sandbox_error))
+            return fail("ST-CLI-SANDBOX", sandbox_error, 2);
     }
 
     core::StArtifactBuildResult build;
@@ -165,19 +312,15 @@ int main(int argc, char** argv)
     build.build_key_sha256 = manifest.at("buildKeySha256");
 
     if (!out_path.empty()) {
-        std::ofstream f(out_path, std::ios::binary);
-        if (!f) return fail("ST-CLI-IO", "cannot write artifact to '" + out_path + "'", 2);
-        f.write(reinterpret_cast<const char*>(build.artifact.data()),
-                static_cast<std::streamsize>(build.artifact.size()));
-        if (!f) return fail("ST-CLI-IO", "write error on '" + out_path + "'", 2);
+        artifact_output.write(reinterpret_cast<const char*>(build.artifact.data()),
+                              static_cast<std::streamsize>(build.artifact.size()));
+        artifact_output.flush();
+        if (!artifact_output) return fail("ST-CLI-IO", "write error on artifact output", 2);
     }
     if (!manifest_out_path.empty()) {
-        std::ofstream f(manifest_out_path, std::ios::binary);
-        if (!f)
-            return fail("ST-CLI-IO", "cannot write manifest to '" + manifest_out_path + "'", 2);
-        f << build.manifest_json << '\n';
-        if (!f)
-            return fail("ST-CLI-IO", "write error on '" + manifest_out_path + "'", 2);
+        manifest_output << build.manifest_json << '\n';
+        manifest_output.flush();
+        if (!manifest_output) return fail("ST-CLI-IO", "write error on manifest output", 2);
     }
 
     uint8_t digest[32] = {0};

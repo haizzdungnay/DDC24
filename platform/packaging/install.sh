@@ -39,6 +39,7 @@ fi
 # "không tìm thấy mkddc-schedule-sim" trên MỌI bo cài bằng script này — lỗi chỉ
 # không lộ trên bo lab vì tools/deploy/deploy_board.sh có copy riêng.
 [ -x "$BUILD/core/mkddc-schedule-sim" ] || { echo "ERROR: chưa build $BUILD/core/mkddc-schedule-sim" >&2; exit 1; }
+[ -x "$BUILD/core/mkddc-st-compile" ] || { echo "ERROR: chưa build $BUILD/core/mkddc-st-compile" >&2; exit 1; }
 [ -x "$MKDDC_GO_BINARY_REL" ] || { echo "ERROR: chưa build $MKDDC_GO_BINARY_REL (chạy platform/packaging/build-release.sh)" >&2; exit 1; }
 [ -f "$MKDDC_WEB_UI_DIST_REL/index.html" ] || { echo "ERROR: chưa build frontend $MKDDC_WEB_UI_DIST_REL" >&2; exit 1; }
 [ -f build/release/provenance.json ] || { echo "ERROR: thiếu provenance.json" >&2; exit 1; }
@@ -112,6 +113,9 @@ install -d -m 0775 -o mkddc -g mkddc /data/config/profiles
 # Quan sát được trên bo Foxlinx 2026-08-08. `mkddc-time-helper` đã xin sẵn
 # CAP_DAC_OVERRIDE cho đúng lớp vấn đề này; netcfg thì bị bỏ sót.
 install -d -m 0775 -o mkddc -g mkddc /data/mkddc
+install -d -m 0750 -o mkddc -g mkddc /data/mkddc/programming
+install -d -m 0750 -o mkddc -g mkddc /data/mkddc/programming/artifacts
+install -d -m 0700 -o mkddc -g mkddc /data/mkddc/programming/scratch
 install -d -m 0755 /etc/mkddc
 [ -e /etc/mkddc/netcfg.conf ] || install -m 0644 "$MKDDC_PACKAGING_SOURCE_REL/netcfg.conf" /etc/mkddc/netcfg.conf
 [ -e /data/config/io_config.conf ] || install -m 0644 -o mkddc -g mkddc "$MKDDC_PACKAGING_SOURCE_REL/io_config.conf" /data/config/io_config.conf
@@ -141,6 +145,7 @@ if [ -x /usr/sbin/mkddc-core ]; then
     SNAP="/var/backups/mkddc/${prev_ver}-$(date +%Y%m%d-%H%M%S)"
     install -d -m 0755 "$SNAP"
     for f in /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
+             /usr/sbin/mkddc-st-compile \
              /usr/sbin/mkddc-fake-mcu /usr/sbin/mkddc-hmi /opt/mkddc-web/mkddc-web \
              /opt/mkddc-web/mkddc-schedule-sim \
              /usr/share/mkddc/provenance.json /usr/share/mkddc/checksums.sha256; do
@@ -158,6 +163,7 @@ fi
 install -m 0755 "$BUILD/iobus/mkddc-iobus" /usr/sbin/mkddc-iobus
 install -m 0755 "$BUILD/core/mkddc-core"   /usr/sbin/mkddc-core
 install -m 0755 "$BUILD/netcfg/mkddc-netcfg" /usr/sbin/mkddc-netcfg
+install -m 0755 "$BUILD/core/mkddc-st-compile" /usr/sbin/mkddc-st-compile
 # SRC-F-01: đặt cạnh mkddc-web, KHÔNG vào /usr/sbin. `scheduleSimBinary()` dò
 # theo thứ tự env → PATH → thư mục chứa chính nó; service chạy `User=mkddc` với
 # PATH systemd mặc định (không có /usr/sbin), nên chỉ nhánh "cạnh binary" là
@@ -178,9 +184,11 @@ install -m 0644 build/release/checksums.sha256 /usr/share/mkddc/checksums.sha256
     /usr/sbin/mkddc-core --version
     /usr/sbin/mkddc-iobus --version
     /usr/sbin/mkddc-netcfg --version
+    /usr/sbin/mkddc-st-compile --version
     /opt/mkddc-web/mkddc-web --version
 } > /usr/share/mkddc/runtime-build-info.txt
 sha256sum /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
+    /usr/sbin/mkddc-st-compile \
     /opt/mkddc-web/mkddc-web /opt/mkddc-web/mkddc-schedule-sim \
     > /usr/share/mkddc/runtime-checksums.sha256
 install -m 0755 "$MKDDC_PACKAGING_SOURCE_REL/configure-web-hostname.sh" /usr/libexec/mkddc/configure-web-hostname

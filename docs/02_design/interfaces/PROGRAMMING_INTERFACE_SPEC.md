@@ -3,14 +3,14 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 1.0 |
-| Trạng thái | **APPROVED FOR IMPLEMENTATION** — OpenAPI/client, IPC v1 và catalog lỗi ba ngôn ngữ đã implement qua `TASK-PROG-100..103`; production lifecycle còn mở |
+| Phiên bản | 1.1 |
+| Trạng thái | **APPROVED FOR IMPLEMENTATION** — tám Project/Draft/Revision/Check operation, IPC v1 và catalog lỗi ba ngôn ngữ có source; operation/Core lifecycle còn mở |
 | Ngày | 2026-08-11 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
 | Nguồn thẩm quyền | `SRS-PROG-001`, `ARCH-PROG-001`, `DM-PROG-001`, `PROG-OD-001` |
-| Phạm vi phiên bản | Target Rev A; route contract và UDS skeleton có source nhưng feature flag `OFF`, chưa có Programming lifecycle production |
+| Phạm vi phiên bản | Target Rev A; tám route REST và Check worker có source nhưng feature flag `OFF`, chưa có Commission/Core lifecycle production |
 | Liên quan | `DM-PROG-001`, `ARCH-PROG-001`, `SRS-PROG-001` |
 
 ## 0. Đọc nhanh
@@ -19,11 +19,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Là **hợp đồng** giữa các bên: REST và WebSocket giữa trình duyệt và BE, IPC giữa BE và Core. Định nghĩa đường dẫn, payload, mã lỗi, timeout, retry, idempotency và thứ tự sự kiện. Đây cũng là **nguồn chuẩn duy nhất của mã lỗi** `PRG-ERR-*`. |
 | 2. Ai phải đọc file này? | FE và BE bắt buộc đọc cùng nhau — hai bên phải review **một** hợp đồng, không phải hai bản mô tả. Core đọc §8 và §12 (hợp đồng BE↔Core). Security đọc §15. QA dựng contract test từ §14 và §18. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-204` tại `66848a1` đã nối sáu operation Project/Draft/Revision trong 25 route OpenAPI/Go/client TS vào SQLite v2. Catalog v1.1.0 có 20 public/77 detail; feature flag mặc định `OFF`. 19 operation Check/runtime/operation/bundle/audit vẫn trả unavailable/no-side-effect và chưa nối lifecycle. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-205` tại `e8c289e` đã nối tám operation Project/Draft/Revision/Check trong 25 route OpenAPI/Go/client TS vào SQLite v3. Catalog v1.2.0 có 20 public/80 detail; feature flag mặc định `OFF`. 17 operation runtime/operation/bundle/audit vẫn trả unavailable/no-side-effect. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm nhóm `/api/v1/programming`, event WebSocket cho runtime/operation, và một giao thức nội bộ có phiên bản cho Commission. Nguyên tắc chi phối: `HTTP 2xx` chỉ nghĩa là **request đã được nhận**; chỉ read-back từ Core mới kết luận được Revision nào đang chạy. |
-| 5. Team phải sửa module/contract nào? | §16. OpenAPI/client/IPC/error catalog foundation đã có source. Task sau nối handler vào store/operation/Core lifecycle; FE tiếp tục chỉ dùng type/catalog sinh ra, không tự viết mã lỗi hoặc messageKey. |
+| 5. Team phải sửa module/contract nào? | §16. OpenAPI/client/IPC/error catalog, Project/Draft/Revision và Check worker đã có source. Task 206 nối change manifest/bundle source-only; task sau nối operation/Core lifecycle. FE tiếp tục chỉ dùng type/catalog sinh ra, không tự viết mã lỗi hoặc messageKey. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Payload/limit/role đã được chốt bởi 17 decision `DECIDED`. TLS và giao thức BE↔Core là phần phải implement/test trong P1–P3, không phải điều kiện xin phép trước khi code. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §16: `VS-PROG-019` (Check không đổi active hash), `VS-PROG-024` (hai client/ETag/idempotency/crash BE), `VS-PROG-022` (ma trận RBAC), `VS-PROG-026` (Core degraded/unreachable). Tất cả `NOT RUN`. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host evidence `EV-PROG-G2-205` chứng minh Check `202→terminal`, idempotency/restart/lease/sandbox/artifact và không có stage/activate. Các Test Result độc lập `VS-PROG-019/022/024/026` vẫn chưa PASS; host evidence không thay target/HIL. |
 
 Vì sao mã lỗi phải tập trung ở đây: nếu mỗi component tự đặt mã, FE sẽ retry sai
 chỗ và che mất lỗi thật — đó là `RSK-PROG-014`. Quy tắc: FE quyết định dựa trên
@@ -81,8 +81,8 @@ buộc hai tập mã bằng nhau; §14 ánh xạ detail nội bộ ra mã công 
 | `POST /projects/{projectId}/draft/revisions` | admin | **As-Built 204** — đóng Draft thành immutable Revision |
 | `GET /revisions/{revisionId}` | viewer | **As-Built 204** — snapshot metadata; source theo quyền/policy |
 | `GET /revisions/{from}/changes/{to}` | viewer | structured change manifest do BE tính |
-| `POST /revisions/{revisionId}/checks` | admin | tạo Check job, không tác động runtime |
-| `GET /checks/{checkId}` | viewer | state/layer/diagnostic; polling fallback |
+| `POST /revisions/{revisionId}/checks` | admin | **As-Built 205** — tạo Check job bền vững, không tác động runtime |
+| `GET /checks/{checkId}` | viewer | **As-Built 205** — state/diagnostic/artifact metadata; polling fallback |
 | `GET /point-catalog` | viewer | canonical Point projection + filter/type/direction |
 | `GET /runtime` | viewer | authoritative active/LKG/core/task/safe-state status |
 | `GET /runtime/monitor` | viewer | bounded current samples, source/quality/freshness/arbitration |
@@ -120,8 +120,9 @@ không đổi gì. Partial apply bị cấm.
 
 ## 5. Check và diagnostic
 
-`POST /checks` trả `202` với `checkId/statusUrl`. Cùng idempotency key +
-revision/target trả cùng job/result. Diagnostic tối thiểu:
+`POST /revisions/{revisionId}/checks` trả `202` với `checkId/statusUrl/state`,
+`Location` và `Retry-After`. Cùng actor/revision/target/idempotency key + request
+hash trong 24 giờ trả cùng job/result; cùng key khác hash trả `409`. Diagnostic tối thiểu:
 
 ```json
 {
@@ -133,7 +134,8 @@ revision/target trả cùng job/result. Diagnostic tối thiểu:
 }
 ```
 
-Check timeout/resource fail không tạo Artifact/Ready.
+Check timeout/resource fail không tạo Artifact/Ready. `GET /checks/{checkId}` chỉ
+trả Artifact metadata sau `PASSED`; không trả bytes hoặc locator filesystem.
 
 ## 6. Commission operation
 
@@ -290,10 +292,11 @@ Các mã component hiện hữu `API-E-*`, `IR-E-*`, `ST-*`, `RT-RETAIN-*` là d
 code. BE map chúng sang `PRG-ERR-*` nhưng vẫn giữ `detailCode` để service; không
 được đổi nghĩa hoặc làm FE phụ thuộc trực tiếp vào mã nội bộ trước migration.
 
-As-Built `TASK-PROG-204`: catalog v1.1.0 có **20 public code / 77 detail mapping**;
-thêm `PRG-ERR-NOT-FOUND-001` cho Project/Revision không tồn tại hoặc không được
-lộ. SHA-256 ghim trong `error_catalog_v1.manifest.json`; generator sinh Go/C++/TS
-và fail nếu §9, source detail, OpenAPI hoặc consumer bị drift.
+As-Built `TASK-PROG-205`: catalog v1.2.0 có **20 public code / 80 detail mapping**;
+ba detail Check worker/sandbox/artifact mới map vào public code hiện hữu, không
+tạo nhánh xử lý công khai thứ hai. SHA-256 ghim trong
+`error_catalog_v1.manifest.json`; generator sinh Go/C++/TS và fail nếu §9, source
+detail, OpenAPI hoặc consumer bị drift.
 
 ## 10. Compatibility và contract gate
 
@@ -427,9 +430,11 @@ authenticate → authorize → size/schema validate → load Draft + ETag
 
 ### 13.2 Check
 
-`QUEUED → RUNNING → {PASSED | FAILED | EXPIRED | CANCELLED}`. Chỉ `PASSED` tạo
-Artifact row immutable. Worker crash được lease/retry tối đa một lần trên cùng
-input hash; timeout/resource violation là `FAILED`, không có artifact một phần.
+`QUEUED → RUNNING → {PASSED | FAILED | TIMED_OUT}`. Chỉ `PASSED` tạo Artifact row
+immutable. Worker crash được lease/retry tối đa một lần trên cùng input hash
+(`attempt_count ≤ 2`); hết attempt chuyển `FAILED`. Deadline/compiler timeout
+chuyển `TIMED_OUT`; resource/sandbox/verify violation chuyển `FAILED`. Mọi nhánh
+lỗi không có Artifact một phần và không stage/activate.
 
 ### 13.3 Commission/Restore
 
@@ -491,11 +496,11 @@ không được báo optimistic success.
 | Thành phần target | Đường dẫn cần tạo/sửa | Kiểm chứng bắt buộc |
 |---|---|---|
 | OpenAPI | `contracts/openapi/openapi.yaml` | schema lint + breaking-change + examples |
-| BE route/model | `apps/web-api/internal/programming/{transport,service,store}` | Go unit/integration/race/contract |
+| BE route/model | `apps/web-api/internal/programming/{transport,application,store}` | Go unit/integration/race/contract |
 | DB/migration | `apps/web-api/internal/programming/store`, migration package | migration up/down, crash/restart, concurrent writer |
 | FE client/type | `apps/web-ui/src/features/programming/api`, generated types | MSW/contract + stale/timeout/reconcile UI |
 | Core IPC | `apps/core/application/programming`, `contracts/ipc/` | peer credential, fuzz frame, queue/deadline |
-| Artifact staging | `apps/core/application/st`, packaging tmpfiles/permissions | traversal/symlink/hash/size/power-loss |
+| Check compiler/artifact | `apps/web-api/internal/programming/{compiler,artifact,application,store}`, `apps/core/application/st/st_compile_main.cpp`, packaging | timeout/process group, rlimit/seccomp, manifest/hash/size, traversal/symlink/read-back/power-loss |
 
 | Test ID | Tình huống | Kết quả định lượng/evidence |
 |---|---|---|
@@ -575,6 +580,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | 0.8 | 2026-08-11 | Phê duyệt toàn bộ contract baseline theo `AUTH-PROG-2026-08-11-03`; 17/17 decision `DECIDED`; chữ ký discipline được miễn khỏi entry implementation; OpenAPI/IPC/TLS chuyển thành deliverable cần implement/test, không còn là approval blocker | Product + Architect |
 | 0.9 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-100..103`: OpenAPI v1.16/25 route, IPC v1 skeleton và catalog lỗi v1.0.0 gồm 19 public/77 detail sinh Go/C++/TS; khóa unknown/detail/HTTP mismatch/public args fail-safe và giữ production lifecycle/target evidence còn mở | BE + Core + FE Lead |
 | 1.0 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-204` tại `66848a1`: OpenAPI v1.17 và sáu operation Project/Draft/Revision nối SQLite v2, ETag mạnh, cursor HMAC, receipt idempotency 24 giờ/restart, immutable Revision và catalog v1.1.0 20 public/77 detail; giữ 19 operation còn 503, flag OFF và target evidence còn mở | BE + Core + FE Lead |
+| 1.1 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-205` tại `e8c289e`: OpenAPI v1.18 và hai operation Check nối SQLite v3/application worker; receipt 24 giờ, lease/retry, `QUEUED/RUNNING/PASSED/FAILED/TIMED_OUT`, sandbox/artifact verify và catalog v1.2.0 20 public/80 detail; giữ 17 operation còn 503, flag OFF và target evidence còn mở | BE + Core + FE Lead |
 
 | Vai trò | Trạng thái | Ngày / bằng chứng |
 |---|---|---|
@@ -591,7 +597,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §19 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 quy tắc chung; §10 ranh giới contract gate |
-| `DD-03` As-Built | PASS | §0 câu 3: OpenAPI/route skeleton, IPC v1 và error catalog đã có source; flag `OFF`, mutation/lifecycle production chưa nối |
+| `DD-03` As-Built | PASS | §0 câu 3 và §3/§5/§13.2/§16 dẫn tám route + Check worker tại `e8c289e`; flag `OFF`, 17 route operation/Core lifecycle chưa nối |
 | `DD-04` Target ownership | PASS | §8 và §12: BE là producer REST/WS, Core là authority của runtime truth; §13 ai giữ trạng thái nào |
 | `DD-05` Data từng field | PASS | §4 payload mutation, §11.1 header/cursor/giới hạn, §11.2 response, §12 hợp đồng BE↔Core mức field |
 | `DD-06` Interface | PASS | §3 resource, §5 Check, §6 Commission, §7 event, §11 ma trận REST, §15 security/tương thích/triển khai, §17 envelope mẫu |
@@ -603,5 +609,6 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-12` Compatibility/deploy/rollback | PASS | §10 contract gate; §15 thứ tự triển khai và tương thích |
 | `DD-13` Trace/risk/decision/sign-off | **PASS FOR IMPLEMENTATION** | 17/17 decision `DECIDED`; Product + Architect `ACCEPT ALL`; chữ ký còn thiếu `WAIVED FOR IMPLEMENTATION`. TLS/BE-Core chưa tồn tại là deliverable thực thi và test, không phải blocker bắt đầu code |
 
-Không còn blocker approval. Bằng chứng runtime vẫn `NOT IMPLEMENTED/NOT TESTED`
-đúng thực tế và sẽ được tạo trong P1–P3.
+Không còn blocker approval. Check host đã có source/evidence, nhưng bằng chứng
+Commission/Core/target vẫn `NOT IMPLEMENTED/NOT TESTED` đúng thực tế và sẽ được
+tạo trong các task phụ thuộc.

@@ -1,17 +1,17 @@
-# Review triển khai G2 Programming — TASK-PROG-200..204
+# Review triển khai G2 Programming — TASK-PROG-200..205
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G2-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-200`, `TASK-PROG-201`, `TASK-PROG-202`, `TASK-PROG-203`, `TASK-PROG-204` |
+| Task | `TASK-PROG-200`, `TASK-PROG-201`, `TASK-PROG-202`, `TASK-PROG-203`, `TASK-PROG-204`, `TASK-PROG-205` |
 | Ngày | 2026-08-11 |
 | Trạng thái task | **DONE** |
-| Trạng thái pha | **P2 IN_PROGRESS — 5/8; G2 IN_PROGRESS** |
-| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901`; Task 203: `2c2bfb4`; Task 204: `66848a1` |
-| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`; Task 202: [PR #143](https://github.com/Mekong-HCM/MK-DDC-24/pull/143) / `7d424bc`; Task 203: [PR #145](https://github.com/Mekong-HCM/MK-DDC-24/pull/145) / `2899d02`, tree `cdef0e77`; Task 204: [PR #147](https://github.com/Mekong-HCM/MK-DDC-24/pull/147) / `27a06e1`, tree `4e4e4d24`; remote feature branch đã xóa |
-| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt), [`EV-PROG-G2-202`](programming-g2/raw/EV-PROG-G2-202.txt), [`EV-PROG-G2-203`](programming-g2/raw/EV-PROG-G2-203.txt), [`EV-PROG-G2-204`](programming-g2/raw/EV-PROG-G2-204.txt) |
+| Trạng thái pha | **P2 IN_PROGRESS — 6/8; G2 IN_PROGRESS** |
+| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901`; Task 203: `2c2bfb4`; Task 204: `66848a1`; Task 205: `e8c289e` |
+| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`; Task 202: [PR #143](https://github.com/Mekong-HCM/MK-DDC-24/pull/143) / `7d424bc`; Task 203: [PR #145](https://github.com/Mekong-HCM/MK-DDC-24/pull/145) / `2899d02`, tree `cdef0e77`; Task 204: [PR #147](https://github.com/Mekong-HCM/MK-DDC-24/pull/147) / `27a06e1`, tree `4e4e4d24`; Task 205: source `e8c289e`, PR/merge hồ sơ chờ ghi provenance |
+| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt), [`EV-PROG-G2-202`](programming-g2/raw/EV-PROG-G2-202.txt), [`EV-PROG-G2-203`](programming-g2/raw/EV-PROG-G2-203.txt), [`EV-PROG-G2-204`](programming-g2/raw/EV-PROG-G2-204.txt), [`EV-PROG-G2-205`](programming-g2/raw/EV-PROG-G2-205.txt) |
 | Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS — không đổi** |
-| Next action | `TASK-PROG-205` — compiler worker sandbox + Check aggregate/diagnostics |
+| Next action | `TASK-PROG-206` — deterministic change manifest + bundle source-only import/export |
 
 ## 1. Kết quả đã triển khai
 
@@ -309,3 +309,63 @@ task `apps/web-ui/src/features/scheduler/shared.ts` chạm contract C/SHM/IOP.
   network limit, persist Check/diagnostic/artifact atomically và không stage/
   activate. Timeout/OOM/crash/hostile source phải kết thúc Check fail-closed,
   reap cả process group và giữ Active/LKG không đổi.
+
+## 23. Kết quả `TASK-PROG-205`
+
+- SQLite v3 thêm `check_requests` TTL 24 giờ, `attempt_count`, lease owner/expiry,
+  state-transition/lease trigger và queue index. Claim dùng CAS; expired attempt
+  được reclaim đúng một lần, attempt thứ hai hết lease chuyển `FAILED`.
+- Hai operation `POST revision/checks` và `GET checks/{id}` chạy thật qua
+  `application.CheckService`. Request/audit/Check `QUEUED` commit atomic; replay
+  cùng actor/revision/target/key/request hash trả cùng `checkId` qua restart.
+- `compiler.ProcessRunner` dùng argv cố định, scratch `0700`, output/file bounded,
+  deadline `1..60 s` và giết cả process group. CLI `--sandbox` áp rlimit,
+  `NO_NEW_PRIVS` và seccomp sau khi mở input/output; chặn network/socket, mở path
+  mới, fork/clone/exec, mount và ptrace.
+- Worker chỉ chấp nhận output khi artifact/manifest/profile/compiler/library/ABI,
+  source ID, build key và SHA-256 khớp. `artifact.Store` ghi temp, `fsync`,
+  hard-link publish, directory `fsync` và read-back; cấm traversal/symlink.
+- `PASSED` commit terminal result + Artifact row + audit trong một transaction;
+  `FAILED/TIMED_OUT` không có Artifact. Migration bỏ unique content hash sai để
+  hai Check deterministic có row evidence riêng nhưng dùng chung blob SHA-256.
+- OpenAPI v1.18, catalog v1.2.0 `20 public/80 detail`, Go/C++/TypeScript generated,
+  CORS concurrency header và packaging compiler/install/rollback cùng thay đổi.
+  Feature flag mặc định `OFF`; không có stage/activate/Core/Active/LKG side effect.
+
+## 24. Finding `TASK-PROG-205` đã đóng
+
+| Mức | Finding | Cách đóng | Trạng thái |
+|---|---|---|---|
+| P1 | Schema v1 đặt unique trên Artifact content hash, làm Check thứ hai của cùng deterministic bytes không thể giữ row evidence riêng | Migration v3 thay unique constraint bằng index content, giữ unique `check_id`; filesystem vẫn dedup theo SHA-256 và test hai Check cùng bytes | **CLOSED** |
+| P1 | Compiler CLI trước task có thể mở tài nguyên/process ngoài scratch nếu nhận source hostile | Mở ba file cố định trước sandbox; thêm rlimit/no-new-privs/seccomp, argv/env cố định, process-group kill và test version/sandbox/timeout | **CLOSED** |
+| P1 | Check crash/restart chưa có identity/lease terminal bền vững | Receipt 24 giờ + lease/CAS tối đa hai attempt + terminal trigger/audit; test restart, expiry, lost lease và exhausted attempt | **CLOSED** |
+
+Không còn finding P0/P1 mở trong phạm vi `TASK-PROG-205`.
+
+## 25. Kiểm chứng `TASK-PROG-205` đo trong phiên
+
+| Làn | Kết quả |
+|---|---|
+| Go Programming targeted | API `202→terminal`, restart/idempotency, lease/CAS/exhaustion, compiler thật, timeout process-group và artifact atomic/dedup/read-back/traversal/symlink PASS |
+| Go race/toàn repository | Programming `-race` PASS; `go vet ./...` và `go test ./... -count=1` PASS |
+| G1/contract | join `6/6`, deploy-order âm `5/5`, catalog `20 public/80 detail`, artifact manifest `7/7`, FBD mutation `10/10` PASS |
+| C++ toàn repository | Release bật Modbus + BACnet + HMI; CTest `929/929` PASS |
+| FE regression | Vitest `58/58` file, `494/494` test; lint/typecheck/build PASS |
+| Packaging shell | `bash -n` và ShellCheck cho release/install/rollback PASS |
+
+Không chạy Chrome DevTools vì Task 205 chỉ đổi backend, compiler CLI, packaging
+và consumer TypeScript sinh tự động; không đổi component/layout/hành vi FE được
+mount. Không deploy target/HIL/production trong source slice; flag giữ `OFF`.
+
+## 26. Ranh giới và bàn giao `TASK-PROG-206`
+
+- Tổng giữ `2/60 I=Y`; source Check làm rõ phần partial của SYS-101/102/106,
+  BE-101..105 và NFR-101/102/106 nhưng chưa đủ end-to-end bundle/operation/Core/
+  target. Hai record vẫn `BLOCKED`, 0/32 PASS và mọi `T/P/R=N`.
+- `RSK-PROG-005/006/007/008/014` có treatment source mạnh hơn nhưng 16/16 risk
+  vẫn Open: chưa đo cgroup/priority/IOP trên Forlinx, chưa stage/activate và chưa
+  có Test Result độc lập.
+- Task 206 phải tạo change manifest deterministic giữa hai Revision và bundle
+  **source-only** có manifest/hash; import phải quarantine/validate rồi chỉ tạo
+  Project/Draft atomic. Cấm Artifact/IR/native/cache/secret/symlink/hardlink/
+  traversal/zip bomb và tuyệt đối không auto-Check/Commission/Active.

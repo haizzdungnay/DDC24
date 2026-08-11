@@ -57,25 +57,30 @@ var routeDefinitions = []routeDefinition{
 // RegisterProgrammingRoutes chỉ mount contract khi flag bật. Khi flag tắt,
 // fallback API hiện hữu trả 404, nên deploy binary trước không làm lộ capability
 // giả hoặc mutation chưa nối Core.
-func RegisterProgrammingRoutes(routes *[]webrouter.Route, enabled bool, services ...*programmingapplication.ProjectService) {
+type Services struct {
+	Projects *programmingapplication.ProjectService
+	Checks   *programmingapplication.CheckService
+}
+
+func RegisterProgrammingRoutes(routes *[]webrouter.Route, enabled bool, provided ...Services) {
 	if !enabled {
 		return
 	}
-	var projectService *programmingapplication.ProjectService
-	if len(services) > 0 {
-		projectService = services[0]
+	var services Services
+	if len(provided) > 0 {
+		services = provided[0]
 	}
 	for _, definition := range routeDefinitions {
 		definition := definition
 		pattern := definition.method + " " + definition.path
 		handler := func(w http.ResponseWriter, r *http.Request) {
-			handleProgrammingRequest(w, r, definition, projectService)
+			handleProgrammingRequest(w, r, definition, services)
 		}
 		*routes = append(*routes, webrouter.Protected(pattern, definition.role, handler))
 	}
 }
 
-func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition routeDefinition, projectService *programmingapplication.ProjectService) {
+func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition routeDefinition, services Services) {
 	correlationID, correlationErr := correlationIDFromRequest(r)
 	if correlationErr != nil {
 		WriteProgrammingError(w, http.StatusBadRequest, *correlationErr, correlationID)
@@ -85,7 +90,10 @@ func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition
 		WriteProgrammingError(w, status, *public, correlationID)
 		return
 	}
-	if projectService != nil && handleProjectRequest(w, r, correlationID, projectService) {
+	if services.Projects != nil && handleProjectRequest(w, r, correlationID, services.Projects) {
+		return
+	}
+	if services.Checks != nil && handleCheckRequest(w, r, correlationID, services.Checks) {
 		return
 	}
 	public := domain.NewPublicError(domain.ErrUnavailable)
@@ -96,7 +104,7 @@ func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition
 }
 
 func handleContractSkeleton(w http.ResponseWriter, r *http.Request, definition routeDefinition) {
-	handleProgrammingRequest(w, r, definition, nil)
+	handleProgrammingRequest(w, r, definition, Services{})
 }
 
 var errRequestTooLarge = errors.New("programming request too large")

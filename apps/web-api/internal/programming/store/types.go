@@ -11,6 +11,8 @@ var (
 	ErrETagConflict        = errors.New("Draft ETag conflict")
 	ErrIdempotencyConflict = errors.New("idempotency key đã dùng cho request khác")
 	ErrAlreadyExists       = errors.New("Programming object đã tồn tại")
+	ErrLeaseLost           = errors.New("Check worker đã mất lease")
+	ErrCheckTerminal       = errors.New("Check đã ở trạng thái terminal")
 )
 
 var (
@@ -134,6 +136,68 @@ type RevisionObject struct {
 type RevisionSnapshot struct {
 	Revision Revision
 	Objects  []RevisionObject
+}
+
+type EnqueueCheckParams struct {
+	CheckID              string
+	RevisionID           string
+	TargetID             string
+	InputSHA256          [32]byte
+	Profile              string
+	CompilerVersion      string
+	ActorID              string
+	Role                 string
+	AuditID              string
+	CorrelationID        string
+	At                   time.Time
+	IdempotencyKeySHA256 [32]byte
+	RequestSHA256        [32]byte
+}
+
+type Check struct {
+	CheckID             string
+	RevisionID          string
+	TargetID            string
+	State               string
+	InputSHA256         [32]byte
+	Profile             string
+	CompilerVersion     string
+	CreatedAtUTCMS      int64
+	StartedAtUTCMS      *int64
+	CompletedAtUTCMS    *int64
+	AttemptCount        int
+	LeaseOwner          string
+	LeaseExpiresAtUTCMS *int64
+	ResultJSON          []byte
+	ResultSHA256        [32]byte
+	Replay              bool
+	Artifact            *Artifact
+}
+
+type Artifact struct {
+	ArtifactID      string
+	RevisionID      string
+	CheckID         string
+	SchemaVersion   int
+	Profile         string
+	TargetABI       int64
+	CompilerVersion string
+	LibraryVersion  string
+	ByteSize        int64
+	SHA256          [32]byte
+	RelativePath    string
+	IntegrityMode   string
+	CreatedAtUTCMS  int64
+}
+
+type CompleteCheckParams struct {
+	CheckID    string
+	LeaseOwner string
+	State      string
+	ResultJSON []byte
+	Artifact   *Artifact
+	AuditID    string
+	At         time.Time
 }
 
 type ProjectSnapshot struct {

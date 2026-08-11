@@ -119,8 +119,9 @@ func corsMiddleware(allowedOrigin string, allowLoopback bool, next http.Handler)
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Idempotency-Key, X-Correlation-ID, If-Match")
+			w.Header().Set("Access-Control-Expose-Headers", "ETag, Location, X-Correlation-ID, Idempotency-Replayed")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -273,7 +274,7 @@ func (a *App) Router() http.Handler {
 		webRouter.Protected("GET /api/v1/alarm-settings", RoleViewer, a.handleGetAlarmSettings),
 		webRouter.Protected("PUT /api/v1/alarm-settings", RoleAdmin, a.handlePutAlarmSettings),
 	}
-	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, a.programmingProjects)
+	programminghttp.RegisterProgrammingRoutes(&routes, a.cfg.ProgrammingRevA, programminghttp.Services{Projects: a.programmingProjects, Checks: a.programmingChecks})
 	mux, err := webRouter.New(a.auth, routes, http.HandlerFunc(a.handleStatic))
 	if err != nil {
 		panic(err)

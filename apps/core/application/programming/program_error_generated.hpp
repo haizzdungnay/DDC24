@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "b62e2d4f87ad1123030c393ad7b866c872c563b8b581ffcb4859c969e330dfb2";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.1.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "9b6337a0ed180c7a493774eaf1ad105c9a2b2a52e26abaf50120e1f8459e663e";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.2.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,
@@ -73,7 +73,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 77> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 80> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -93,6 +93,7 @@ inline constexpr std::array<ComponentErrorMapping, 77> kComponentErrorMappings =
     {"compiler", "ST-CLI-IO", ProgramPublicError::Unavailable },
     {"compiler", "ST-CLI-KEY", ProgramPublicError::Unavailable },
     {"compiler", "ST-CLI-LIMIT", ProgramPublicError::Scope },
+    {"compiler", "ST-CLI-SANDBOX", ProgramPublicError::Unavailable },
     {"compiler", "ST-CLI-TOOLARGE", ProgramPublicError::Scope },
     {"compiler", "ST-IOMAP-001", ProgramPublicError::MapIdentity },
     {"compiler", "ST-IOMAP-002", ProgramPublicError::MapIdentity },
@@ -128,6 +129,8 @@ inline constexpr std::array<ComponentErrorMapping, 77> kComponentErrorMappings =
     {"compiler", "ST-SEM-014", ProgramPublicError::Check },
     {"compiler", "ST-SYN-001", ProgramPublicError::Check },
     {"compiler", "ST-SYN-002", ProgramPublicError::Scope },
+    {"compiler", "ST-WORKER-CRASH", ProgramPublicError::Unavailable },
+    {"compiler", "ST-WORKER-TIMEOUT", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-CONTRACT-ONLY", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-DEADLINE", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-QUEUE-FULL", ProgramPublicError::Unavailable },

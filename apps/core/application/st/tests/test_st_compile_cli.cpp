@@ -118,6 +118,16 @@ TEST(StCompileCli, EmitsDeterministicStructuredTextArtifactAndManifest)
     EXPECT_FALSE(result.at("manifest").at("sourceMap").at("entries").empty());
 }
 
+TEST(StCompileCli, ReportsCompilerProfileVersionForDeployEvidence)
+{
+    const CliRun run = run_cli({"--version"});
+    ASSERT_EQ(run.exit_code, 0);
+    EXPECT_NE(run.stdout_text.find("compiler_version=fwsom-st-1.1.0"), std::string::npos);
+    EXPECT_NE(run.stdout_text.find("profile_id=revA-1t-1-5-30"), std::string::npos);
+    EXPECT_NE(run.stdout_text.find("artifact_schema=1"), std::string::npos);
+    EXPECT_NE(run.stdout_text.find("target_abi=3841"), std::string::npos);
+}
+
 TEST(StCompileCli, CompilesFbdAndWritesByteExactOutputs)
 {
     const std::string source = std::string(PROGRAMMING_PROFILE_CONTRACT_DIR) +
@@ -147,6 +157,27 @@ TEST(StCompileCli, CompilesFbdAndWritesByteExactOutputs)
     EXPECT_EQ(manifest, result.at("manifest"));
     ASSERT_FALSE(manifest.at("sourceMap").at("entries").empty());
     EXPECT_TRUE(manifest.at("sourceMap").at("entries")[0].at("fbdLocation").is_object());
+}
+
+TEST(StCompileCli, WorkerSandboxCompilesWithoutOpeningAdditionalResources)
+{
+    const std::string source = std::string(ST_SAMPLE_DIR) + "/ahu_fan_control.st";
+    const std::string artifact_path = temporary_path("/tmp/mkddc-cli-sandbox-artifact-XXXXXX");
+    const std::string manifest_path = temporary_path("/tmp/mkddc-cli-sandbox-manifest-XXXXXX");
+    ASSERT_FALSE(artifact_path.empty());
+    ASSERT_FALSE(manifest_path.empty());
+    ::unlink(artifact_path.c_str());
+    ::unlink(manifest_path.c_str());
+    const CliRun run = run_cli({"--source", source, "--source-id", "sandbox-st",
+                                "--out", artifact_path, "--manifest-out", manifest_path,
+                                "--sandbox"});
+    ASSERT_EQ(run.exit_code, 0) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_TRUE(result.at("ok"));
+    EXPECT_FALSE(read_bytes(artifact_path).empty());
+    EXPECT_FALSE(read_text(manifest_path).empty());
+    ::unlink(artifact_path.c_str());
+    ::unlink(manifest_path.c_str());
 }
 
 TEST(StCompileCli, RejectsHostPathSourceIdWithoutPublishingArtifact)

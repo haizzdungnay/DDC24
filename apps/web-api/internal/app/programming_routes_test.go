@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	programmingdomain "mkddc-web/internal/programming/domain"
 )
@@ -90,6 +92,42 @@ func TestProgrammingProjectDraftRevisionHTTPAndRestart(t *testing.T) {
 	if revision.Code != http.StatusOK {
 		t.Fatalf("get revision status=%d body=%s", revision.Code, revision.Body.String())
 	}
+	checkBody := `{"schemaVersion":"1.0","targetProfile":"MK-DDC-24-REV-A"}`
+	checkAccepted := serveProgramming(t, handler, http.MethodPost, "/api/v1/programming/revisions/"+sealResponse.Resource.RevisionID+"/checks", checkBody, token,
+		"10000000-0000-4000-8000-000000000005", "", "programming-http-0007")
+	if checkAccepted.Code != http.StatusAccepted {
+		t.Fatalf("check accepted status=%d body=%s", checkAccepted.Code, checkAccepted.Body.String())
+	}
+	var checkResponse struct {
+		CheckID string `json:"checkId"`
+	}
+	if err := json.Unmarshal(checkAccepted.Body.Bytes(), &checkResponse); err != nil || checkResponse.CheckID == "" {
+		t.Fatalf("check accepted=%+v err=%v", checkResponse, err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		result := serveAuth(t, handler, http.MethodGet, "/api/v1/programming/checks/"+checkResponse.CheckID, "", token)
+		if result.Code != http.StatusOK {
+			t.Fatalf("get check status=%d body=%s", result.Code, result.Body.String())
+		}
+		var state struct {
+			State       string `json:"state"`
+			Diagnostics []any  `json:"diagnostics"`
+		}
+		if err := json.Unmarshal(result.Body.Bytes(), &state); err != nil {
+			t.Fatal(err)
+		}
+		if state.State == "FAILED" {
+			if len(state.Diagnostics) == 0 {
+				t.Fatal("Check FAILED thiếu diagnostic")
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Check chưa terminal: %s", result.Body.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if err := app.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -150,5 +188,20 @@ func TestProgrammingMutationRequiresAdminWhenFeatureFlagOn(t *testing.T) {
 	response := serveAuth(t, app.Router(), http.MethodPost, "/api/v1/programming/projects", `{}`, token)
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("status = %d; want 403", response.Code)
+	}
+}
+
+func TestProgrammingCORSPreflightAllowsConcurrencyHeadersAndPatch(t *testing.T) {
+	app, _ := newTestAppWithRole(t, RoleViewer, fakeCore{})
+	app.cfg.CORSOrigin = "https://engineering.example"
+	request := httptest.NewRequest(http.MethodOptions, "/api/v1/programming/projects/id/draft", nil)
+	request.Header.Set("Origin", app.cfg.CORSOrigin)
+	request.Header.Set("Access-Control-Request-Method", http.MethodPatch)
+	response := httptest.NewRecorder()
+	app.Router().ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent || !strings.Contains(response.Header().Get("Access-Control-Allow-Methods"), "PATCH") ||
+		!strings.Contains(response.Header().Get("Access-Control-Allow-Headers"), "X-Idempotency-Key") ||
+		!strings.Contains(response.Header().Get("Access-Control-Allow-Headers"), "If-Match") {
+		t.Fatalf("CORS preflight status=%d headers=%v", response.Code, response.Header())
 	}
 }

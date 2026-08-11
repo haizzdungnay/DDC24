@@ -81,6 +81,12 @@ func TestLoadConfigDerivesAndOverridesProgrammingStorePaths(t *testing.T) {
 		cfg.ProgrammingBackupDir != filepath.Join(configDir, "programming", "programming-backups") {
 		t.Fatalf("Programming paths=%q/%q", cfg.ProgrammingDBPath, cfg.ProgrammingBackupDir)
 	}
+	if cfg.ProgrammingStateDir != "/data/mkddc/programming" ||
+		cfg.ProgrammingArtifactDir != "/data/mkddc/programming/artifacts" ||
+		cfg.ProgrammingScratchDir != "/data/mkddc/programming/scratch" ||
+		cfg.ProgrammingCompilerPath != "/usr/sbin/mkddc-st-compile" {
+		t.Fatalf("Programming worker paths=%q/%q/%q compiler=%q", cfg.ProgrammingStateDir, cfg.ProgrammingArtifactDir, cfg.ProgrammingScratchDir, cfg.ProgrammingCompilerPath)
+	}
 	dbPath := filepath.Join(t.TempDir(), "custom.sqlite")
 	backupDir := filepath.Join(t.TempDir(), "custom-backups")
 	t.Setenv("PROGRAMMING_DB", dbPath)

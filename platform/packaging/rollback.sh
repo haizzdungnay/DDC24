@@ -42,6 +42,7 @@ if [ -x /usr/sbin/mkddc-core ]; then
     PRE="$BACKUP_ROOT/pre-rollback-${cur_ver}-$(date +%Y%m%d-%H%M%S)"
     install -d -m 0755 "$PRE"
     for f in /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
+             /usr/sbin/mkddc-st-compile \
              /usr/sbin/mkddc-fake-mcu /usr/sbin/mkddc-hmi /opt/mkddc-web/mkddc-web \
              /opt/mkddc-web/mkddc-schedule-sim \
              /usr/share/mkddc/provenance.json /usr/share/mkddc/checksums.sha256; do
@@ -58,6 +59,7 @@ restore() {  # $1 = tên file trong snapshot, $2 = đích
 restore mkddc-iobus    /usr/sbin/mkddc-iobus
 restore mkddc-core     /usr/sbin/mkddc-core
 restore mkddc-netcfg   /usr/sbin/mkddc-netcfg
+restore mkddc-st-compile /usr/sbin/mkddc-st-compile
 restore mkddc-fake-mcu /usr/sbin/mkddc-fake-mcu
 restore mkddc-hmi      /usr/sbin/mkddc-hmi
 restore mkddc-web      /opt/mkddc-web/mkddc-web
@@ -83,9 +85,11 @@ systemctl is-active mkddc-hmi >/dev/null 2>&1 && systemctl restart mkddc-hmi || 
     /usr/sbin/mkddc-core --version
     /usr/sbin/mkddc-iobus --version
     /usr/sbin/mkddc-netcfg --version
+    /usr/sbin/mkddc-st-compile --version
     /opt/mkddc-web/mkddc-web --version
 } > /usr/share/mkddc/runtime-build-info.txt
 sha256sum /usr/sbin/mkddc-core /usr/sbin/mkddc-iobus /usr/sbin/mkddc-netcfg \
+    /usr/sbin/mkddc-st-compile \
     /opt/mkddc-web/mkddc-web /opt/mkddc-web/mkddc-schedule-sim \
     > /usr/share/mkddc/runtime-checksums.sha256
 
