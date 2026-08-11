@@ -29,6 +29,10 @@ Vitest `54/54` file, `473/473` test, lint/build PASS; OpenAPI 605 local ref thi�
 flag mặc định OFF và target/HIL không áp dụng cho contract-only. Test Result giữ
 `0/32`, `RELEASE_READY` vẫn `BLOCKED`.
 
+**Phát hành source.** [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127)
+đã merge vào `main` tại `7109bae`; remote feature branch đã xóa. Candidate v2.9
+được ghim `22/22` và ghi tree `55176626` sau merge.
+
 ### Changed — Phê duyệt toàn bộ Programming và mở implementation (2026-08-11)
 
 **Kết quả.** Ghi `AUTH-PROG-2026-08-11-03` theo chỉ đạo trực tiếp của Phạm Đình
