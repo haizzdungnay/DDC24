@@ -8,7 +8,7 @@
 | Trạng thái task | **DONE — 4 contract foundation task** |
 | Trạng thái pha | **P1 IN_PROGRESS — 4/6** |
 | Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4`; Task 102: `95585e7`; Task 103: `4a1e9f5` |
-| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: [PR #131](https://github.com/Mekong-HCM/MK-DDC-24/pull/131) / `16d3e40`; Task 103: chờ PR/merge |
+| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: [PR #131](https://github.com/Mekong-HCM/MK-DDC-24/pull/131) / `16d3e40`; Task 103: [PR #133](https://github.com/Mekong-HCM/MK-DDC-24/pull/133) / `1c74b9f` |
 | Test Result chính thức | **0/32 — không đổi** |
 | Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt), [`EV-PROG-G1-102`](programming-g1/raw/EV-PROG-G1-102.txt), [`EV-PROG-G1-103`](programming-g1/raw/EV-PROG-G1-103.txt) |
 
@@ -218,3 +218,6 @@ reducer chưa end-to-end. Không tạo `TR-PROG-*`; mọi `T/P/R=N`, Test Result
 Không chạy Chrome DevTools vì task không đổi component/route/layout hiển thị.
 Không deploy target/HIL vì đây là contract foundation và production mutation
 vẫn bị chặn fail-safe.
+
+Remote branch `feat/programming-error-catalog-v1-20260811` đã xóa sau merge
+PR #133; candidate v2.12 xuất hiện trên `main` tại tree `db5e225f`.
