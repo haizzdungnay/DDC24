@@ -4,14 +4,14 @@
 |---|---|
 | ID | `PROG-P0-ENV-2026-08-10` |
 | Loại | Readiness record; không phải Test Result Programming |
-| Phiên bản | 1.1 |
-| Ngày | 2026-08-10 |
+| Phiên bản | 1.2 |
+| Ngày | 2026-08-11 |
 | Source snapshot | `395b9a5e905549b23d282c125a9b8a337a22f265`, tree `83c7a43ffb08692ad0045fff5169a4596b3777c2` |
 | Tái kiểm gần nhất | 2026-08-11 trên merge commit `2ad6931080009ae6ebf3380a1260ac20cc37564f` |
 | Phạm vi | Branch/PR, host build/toolchain, CI runner, target SOM lab, HIL fixture và evidence repository |
 | Chủ quản | Dev Lead + QA + Ops |
 | Người phê duyệt | System Architect + Verification Lead |
-| Trạng thái | **PARTIAL — HOST/EVIDENCE READY; CI/TARGET/HIL BLOCKED** |
+| Trạng thái | **IMPLEMENTATION ENTRY APPROVED — host/evidence ready; CI/target/HIL deferred khỏi entry theo `AUTH-PROG-2026-08-11-03`** |
 
 ## 0. Đọc nhanh
 
@@ -22,7 +22,7 @@
 | Board Foxlinx có sẵn để lấy target evidence chưa? | **Chưa.** Endpoint SSH trả lời nhưng từ chối cả hai khóa dev hiện có; không đọc được runtime/provenance/health. |
 | GitHub CI có tạo server evidence chưa? | **Chưa.** Hai workflow kết thúc với mọi job `steps=[]` do billing/spending limit. |
 | HIL vật lý có sẵn chưa? | **Chưa.** Chưa có HW authority, fixture/calibration và giới hạn điện được duyệt. |
-| Có mở `PLAN_READY/IMPLEMENT_READY` không? | **Không.** Record này chỉ tách trạng thái kỹ thuật; consumer review/decision/sign-off vẫn thiếu. |
+| Có mở `PLAN_READY/IMPLEMENT_READY` không? | **Có.** `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`. CI/target/HIL chưa sẵn không chặn team viết/merge code. |
 
 ## 1. Ma trận readiness
 
@@ -34,10 +34,10 @@
 | Host FE | `PASS` | 53 file/469 test; lint; build | Development baseline; không thay browser evidence |
 | Toolchain host | `PASS` | Phiên bản ở §2, mọi executable cần cho gate gốc tồn tại | Có thể build trên host |
 | Evidence repository | `PASS — EMPTY` | [`PROG-TR-REPO-001`](../test-results/programming/README.md) + [`RESULT_TEMPLATE.md`](../test-results/programming/RESULT_TEMPLATE.md) | Được ghi Test Result khi scenario READY; hiện **0/32** |
-| GitHub Actions | `BLOCKED` | attempt 2 của run `31382849807` và `31382850177` trên `2ad6931`; **17/17 job `steps=[]`** | Không có server CI/security evidence cho commit hiện hành |
+| GitHub Actions | `DEFERRED FOR IMPLEMENTATION` | attempt 2 của run `31382849807` và `31382850177` trên `2ad6931`; **17/17 job `steps=[]`** | Không có server evidence, nhưng không phải entry condition |
 | Target SSH reachability | `PARTIAL` | `mekong-fac.ddns.net:2223` trả lời SSH; không timeout | Đường mạng tới endpoint tồn tại |
-| Target authentication/runtime | `BLOCKED` | `Permission denied (publickey,password,keyboard-interactive)` với cả hai public-key identity; không lệnh remote nào chạy | Không claim board health, provenance hoặc target test |
-| HIL fixture/instrument | `BLOCKED` | `HW-AUTH-*`, fixture/calibration và giới hạn 199/200/201 ms chưa được duyệt | Chặn G5/G6 và residual acceptance |
+| Target authentication/runtime | `DEFERRED FOR IMPLEMENTATION` | `Permission denied (publickey,password,keyboard-interactive)` với cả hai public-key identity; không lệnh remote nào chạy | Không claim target evidence; không chặn code |
+| HIL fixture/instrument | `DEFERRED FOR IMPLEMENTATION` | `HW-AUTH-*`, fixture/calibration và giới hạn 199/200/201 ms chưa được duyệt | Deliverable/evidence P6, không chặn P1 |
 
 ## 2. Toolchain host đã đo
 
@@ -110,10 +110,10 @@ VVP/Trace tiếp tục báo `0/32`, đúng với trạng thái trước implemen
 
 | ID | Owner | Ảnh hưởng | Gate | Điều kiện mở |
 |---|---|---|---|---|
-| `ENV-PROG-001` | Ops/Lab admin | Không đọc được target health/provenance, không chạy target portion | `IMPLEMENT_READY[target]`, G3–G6 | Cài một public key đã liệt kê vào account lab đúng hoặc cập nhật alias/user/key đúng; xác nhận BatchMode chạy được. Không gửi private key qua ticket/chat |
+| `ENV-PROG-001` | Ops/Lab admin | Không đọc được target health/provenance, không chạy target portion | Target evidence G3–G6; **không chặn implementation** | Cài một public key đã liệt kê vào account lab đúng hoặc cập nhật alias/user/key đúng; xác nhận BatchMode chạy được. Không gửi private key qua ticket/chat |
 | `ENV-PROG-002` | GitHub Organization Admin | Không có CI/security server evidence | Merge/release assurance | Khắc phục billing/spending limit; rerun Build & Test + Security Scan trên exact commit; mọi job phải có step thật |
 | `ENV-PROG-003` | HW + Safety + QA | Không thể đo điện/IOP 199/200/201 ms | G5/G6 | Phát hành `HW-AUTH-*`, BSP/schematic, fixture, instrument và calibration/limit đã duyệt |
-| `ENV-PROG-004` | Product + Architect + Verification | Không được dùng plan để mở code production | `PLAN_READY` | Consumer review, conflict closure, `OD-PROG-015` và sign-off đúng candidate |
+| `ENV-PROG-004` | Product + Architect | **RESOLVED** — quyền code production đã mở | `PLAN_READY PASS` | `AUTH-PROG-2026-08-11-03`; không còn điều kiện authority |
 
 ## 7. Phán quyết
 
@@ -123,14 +123,14 @@ EVIDENCE_REPOSITORY_READY         = YES_EMPTY_0_OF_32
 GITHUB_CI_READY                   = NO_BILLING
 TARGET_SOM_LAB_READY              = NO_AUTH
 HIL_LAB_READY                     = NO_AUTHORITY_FIXTURE
-P0_ENVIRONMENT_READY              = NO
-PLAN_READY                        = BLOCKED
-IMPLEMENT_READY                   = BLOCKED
+P0_ENVIRONMENT_READY_FOR_CODE     = YES
+PLAN_READY                        = PASS
+IMPLEMENT_READY_ALL_SLICES        = PASS
 ```
 
-Team có thể tiếp tục planning, review, chuẩn bị task card và cấu trúc evidence.
-Không được tạo feature branch/code production hoặc ghi target/HIL PASS cho tới
-khi các gate authority liên quan được mở.
+Team được tạo feature branch, viết/merge code production và bắt đầu P1 ngay.
+Không ghi CI/target/HIL PASS khi chưa chạy; trạng thái evidence này không đóng
+lại quyền implementation.
 
 ## 8. Lịch sử
 
@@ -138,3 +138,4 @@ khi các gate authority liên quan được mở.
 |---|---|---|
 | 1.0 | 2026-08-10 | Đo host/toolchain/Git/CI/target endpoint; tạo evidence repository; tách bốn blocker có owner/impact/gate/unlock; giữ gate quyền hạn BLOCKED |
 | 1.1 | 2026-08-11 | Tái kiểm merge commit `2ad6931`: rerun CI vẫn 17/17 job `steps=[]`; SSH target vẫn bị từ chối trước khi chạy lệnh. Không đổi readiness/gate và không suy local PASS thành CI/target evidence |
+| 1.2 | 2026-08-11 | Áp dụng `AUTH-PROG-2026-08-11-03`: CI/CD, target và HIL được loại khỏi entry condition; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` chuyển `PASS`; giữ nguyên dữ kiện CI `steps=[]`, SSH từ chối và HIL chưa có, không giả evidence |

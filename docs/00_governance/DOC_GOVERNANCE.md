@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DOC-GOV-001` |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Trạng thái | **Active** |
-| Ngày | 2026-08-09 |
+| Ngày | 2026-08-11 |
 | Chủ quản | Document Control + System Engineering |
 | Phạm vi | Mọi hồ sơ kỹ thuật trong `docs/`; bắt buộc với bộ Programming Rev A |
 
@@ -125,6 +125,29 @@ Tách “được lập kế hoạch” khỏi “được viết code” để 
 Chi tiết áp dụng cho Programming Rev A nằm ở
 [Plan 53 §4.2–§4.3 và §5.2](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md).
 
+### 4.1 Chỉ thị triển khai của cấp điều hành
+
+Product Owner/CTO cùng System Architect có thể ban hành một record `AUTH-*` để
+quyết định **cho phép implement** dù các điều kiện review/sign-off thông thường
+của `PLAN_READY` chưa hoàn tất. Record phải ghi đúng revision/candidate, phạm vi
+được implement và trạng thái ba cổng. Khi record tuyên bố không điều kiện:
+
+- `PLAN_READY` và `IMPLEMENT_READY[<phạm vi>]` chuyển `PASS` ngay; không được
+  tiếp tục dùng consumer signature, discipline co-approval, CI/CD, target hay HIL
+  làm điều kiện trước khi team tạo nhánh, viết/merge code production và đổi
+  contract trong phạm vi đó;
+- các decision target được hai vai trò này chấp thuận có hiệu lực làm đầu vào
+  implementation; review còn thiếu trở thành phản hồi hậu kiểm, không phải quyền
+  phủ quyết việc bắt đầu hoặc tiếp tục code;
+- không được điền giả chữ ký, nâng giả `M4/M5`, đổi Test Result chưa chạy thành
+  PASS hoặc suy implementation thành release; ghi `WAIVED FOR IMPLEMENTATION`
+  tại đúng ô còn thiếu;
+- `RELEASE_READY` vẫn là cổng độc lập vì nó mô tả bằng chứng sản phẩm/site, không
+  phải quyền viết code.
+
+Chỉ thị mới hơn supersede mọi phát biểu `PLAN-ONLY` hoặc `IMPLEMENT_READY
+BLOCKED` cũ trong cùng phạm vi. Lịch sử không bị xóa.
+
 ## 5. Harness kiểm tài liệu
 
 ```bash
@@ -157,8 +180,9 @@ Bảy điều dưới đây áp cho mọi hồ sơ; vi phạm là finding `P0`.
 2. Không tuyên bố chứng nhận. Chỉ “ISO-aligned” khi có cấu trúc và bằng chứng.
 3. Không giảm residual risk bằng kế hoạch, văn bản review hay test cũ chạy trên
    contract khác. Merge code chỉ đưa risk lên `TREATMENT_IMPLEMENTED`.
-4. Không tự ký thay người có thẩm quyền. Thiếu người ký thì hoàn thiện phần còn
-   lại và giữ đúng **một** blocker “chờ authority ký”.
+4. Không tự ký thay người có thẩm quyền. Thiếu người ký thì giữ đúng trạng thái
+   chữ ký; nếu có chỉ thị cấp điều hành theo §4.1, ghi `WAIVED FOR IMPLEMENTATION`
+   thay vì giả chữ ký và không dùng phần đã waive để tiếp tục chặn code.
 5. `TBD` hoặc `BLOCKED` chỉ hợp lệ khi có đủ owner, ảnh hưởng, gate và điều kiện
    mở khóa.
 6. Không tạo hồ sơ thứ hai trùng thẩm quyền. Sửa đúng file đang sở hữu nội dung.
@@ -184,3 +208,4 @@ Bảy điều dưới đây áp cho mọi hồ sơ; vi phạm là finding `P0`.
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-08-09 | Tạo hồ sơ: đưa quy tắc ISO-aligned, `DD-01..DD-13`, thang `M0..M5`, ba cổng quyền hạn, harness và bảy quy tắc trung thực từ `AGENTS.md` vào repository |
+| 1.1 | 2026-08-11 | Thêm §4.1: Product Owner/CTO + System Architect được ban hành chỉ thị triển khai có kiểm soát để mở `PLAN_READY`/`IMPLEMENT_READY` mà không giả chữ ký hoặc bằng chứng; `RELEASE_READY` giữ độc lập |

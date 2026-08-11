@@ -2,7 +2,7 @@
 
 - Date: 2026-08-10
 - Owner: System Architect (phê duyệt) · Backend Lead + Core Lead (đề xuất)
-- Status: **Proposed — System Architect ACCEPT**; chờ Verification trước khi chuyển `Accepted`; bảng ánh xạ/test là gate triển khai sau quyết định
+- Status: **Accepted** — Product Owner/CTO + System Architect phê duyệt theo `AUTH-PROG-2026-08-11-03`; Verification review chuyển hậu kiểm
 - Đóng xung đột: `ARCH-CONF-PROG-005` tại [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) §11
 - Related: [`IFSPEC-PROG-001`](../02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md) §9, §14 ·
   [`RSK-PROG-014`](../07_records/PROGRAMMING_RISK_REGISTER.md)
@@ -81,4 +81,4 @@ apps/core/application/st/st_loader.hpp:28-42
 |---|---|---|
 | System Architect | **ACCEPT — Phạm Đình Chương; ủy quyền điện tử `AUTH-PROG-2026-08-10-01`, Codex ghi biên bản** | 2026-08-10 |
 | Backend Lead + Core Lead | Đề xuất | 2026-08-10 |
-| Verification Lead | **PENDING** | — |
+| Verification Lead | **WAIVED FOR IMPLEMENTATION — review hậu kiểm** | 2026-08-11 |

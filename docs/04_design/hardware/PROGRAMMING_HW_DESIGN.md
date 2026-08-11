@@ -12,6 +12,10 @@
 | Nguồn | Board schematic/PCB/BOM authority còn chờ cung cấp; `DDD-FWMCU-PROG-001` |
 | Requirement | `HW-REQ-PROG-101..103` |
 
+> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
+> `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
+> không còn chặn viết/merge code. Review và HIL evidence chưa có vẫn thực hiện trong task.
+
 ## 0. Đọc nhanh
 
 | Câu hỏi | Trả lời |

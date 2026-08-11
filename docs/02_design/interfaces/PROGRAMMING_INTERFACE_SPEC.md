@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 0.7 |
-| Trạng thái | **M3 — Review Ready** — Product + Architect `ACCEPT`; contract chưa Active, discipline/TLS/implementation còn chặn |
-| Ngày | 2026-08-10 |
+| Phiên bản | 0.8 |
+| Trạng thái | **APPROVED FOR IMPLEMENTATION** — contract baseline được duyệt theo `AUTH-PROG-2026-08-11-03`; OpenAPI/IPC là deliverable P1 |
+| Ngày | 2026-08-11 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
@@ -22,7 +22,7 @@
 | 3. Hệ thống hiện tại đang có gì? | **Không có route Programming nào trong production.** `contracts/openapi/openapi.yaml` chưa chứa Programming. Giao thức BE↔Core cho Programming cũng chưa tồn tại. Có sẵn nền tảng auth/session và IPC Web↔Core dùng cho tính năng khác. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm nhóm `/api/v1/programming`, event WebSocket cho runtime/operation, và một giao thức nội bộ có phiên bản cho Commission. Nguyên tắc chi phối: `HTTP 2xx` chỉ nghĩa là **request đã được nhận**; chỉ read-back từ Core mới kết luận được Revision nào đang chạy. |
 | 5. Team phải sửa module/contract nào? | §16. BE tạo handler + sinh mã từ OpenAPI; FE dùng type sinh ra, **không** tự viết tay; Core cài đầu nhận IPC. Spec này phải được chuyển vào `contracts/openapi/openapi.yaml` và có contract test thì route mới coi là khóa (§1). |
-| 6. Điều gì còn bị chặn? | Ba mục ở §19: 15 `OD-PROG-*` chưa ký (chưa chốt được payload/limit/role), **TLS production chưa có** (nên mọi mutation Programming phải tắt), và giao thức BE↔Core chưa tồn tại. |
+| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Payload/limit/role đã được chốt bởi 17 decision `DECIDED`. TLS và giao thức BE↔Core là phần phải implement/test trong P1–P3, không phải điều kiện xin phép trước khi code. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §16: `VS-PROG-019` (Check không đổi active hash), `VS-PROG-024` (hai client/ETag/idempotency/crash BE), `VS-PROG-022` (ma trận RBAC), `VS-PROG-026` (Core degraded/unreachable). Tất cả `NOT RUN`. |
 
 Vì sao mã lỗi phải tập trung ở đây: nếu mỗi component tự đặt mã, FE sẽ retry sai
@@ -539,13 +539,13 @@ request/response; generated Go/TS compile; unknown field/version test; 403/409/
 restart/reconcile. FE, BE và Core ký cùng exact schema hash. Thay field required,
 enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ nguyên.
 
-## 19. Blocker, revision history và phê duyệt
+## 19. Trạng thái thực thi, revision history và phê duyệt
 
-| Blocker | Owner | Ảnh hưởng | Điều kiện mở |
+| Hạng mục | Owner | Trạng thái implementation | Việc phải tạo/kiểm chứng |
 |---|---|---|---|
-| `PROG-OD-001`: `14 OPEN`, `3 DECIDED`, `0 CLOSED` | Product + discipline authority | payload/limit/role chưa được Active | đủ đồng phê duyệt theo lát cắt và cập nhật SRS/OpenAPI |
-| TLS production chưa có | Security + Platform | cấm bật mutation Programming | TLS/session/CSRF test PASS trên target |
-| BE/Core Programming protocol chưa tồn tại | BE + Core | chưa có As-Built implementation | implementation + contract/fault test theo Plan 53 |
+| `PROG-OD-001`: `17 DECIDED`, `0 OPEN`, `0 CLOSED` | Product + discipline authority | **APPROVED** | cập nhật OpenAPI/code theo baseline v2.8 |
+| TLS production chưa có | Security + Platform | **READY TO IMPLEMENT** | TLS/session/CSRF test theo Security DoD |
+| BE/Core Programming protocol chưa tồn tại | BE + Core | **READY TO IMPLEMENT** | implementation + contract/fault test theo Plan 53 |
 
 | Phiên bản | Ngày | Nội dung | Tác giả |
 |---|---|---|---|
@@ -556,13 +556,14 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | 0.5 | 2026-08-09 | Amendment A1: thêm §6.1 trạng thái ba nhánh `NONE/PRESENT/UNAVAILABLE` cho từng nhóm impact (fail-closed), và `?activeOnly=true` + phân trang cho `GET /overrides`; không thêm endpoint mới | System Engineering |
 | 0.6 | 2026-08-10 | Đóng finding consumer review `F-CR-02`: staging artifact chuyển từ `${CONFIG_DIR}` sang `${STATE_DIR}/programming/staging/` để khớp `DDD-BE-PROG-001` §14, `DDD-FWSOM-PROG-001` §16 và `platform/packaging`; thêm bảng ba gốc `CONFIG_DIR`/`STATE_DIR`/`RUNTIME_DIR` và quy tắc reject locator ngoài gốc | System Engineering |
 | 0.7 | 2026-08-10 | Ghi Product Owner/CTO + System Architect Phạm Đình Chương `ACCEPT` theo `AUTH-PROG-2026-08-10-01`, xác nhận `${STATE_DIR}/programming/staging/`; đồng bộ decision thành `3 DECIDED/14 OPEN`. Contract vẫn chưa Active vì discipline/TLS/BE-Core implementation/evidence còn thiếu | Product + Architect + Document Control |
+| 0.8 | 2026-08-11 | Phê duyệt toàn bộ contract baseline theo `AUTH-PROG-2026-08-11-03`; 17/17 decision `DECIDED`; chữ ký discipline được miễn khỏi entry implementation; OpenAPI/IPC/TLS chuyển thành deliverable cần implement/test, không còn là approval blocker | Product + Architect |
 
 | Vai trò | Trạng thái | Ngày / bằng chứng |
 |---|---|---|
-| Backend Lead | Chờ review | — |
-| Runtime Architect | Chờ review | — |
-| Security + FE + QA | Chờ review | — |
-| System Architect + Product Owner | **ACCEPT — Phạm Đình Chương, 2026-08-10; ủy quyền điện tử** | `AUTH-PROG-2026-08-10-01`; không thay chữ ký Backend/Runtime/Security/FE/QA |
+| Backend Lead | **WAIVED FOR IMPLEMENTATION** | review hậu kiểm trong task P1 |
+| Runtime Architect | **WAIVED FOR IMPLEMENTATION** | review hậu kiểm trong task P1–P3 |
+| Security + FE + QA | **WAIVED FOR IMPLEMENTATION** | contract/security test theo DoD; không chặn code |
+| System Architect + Product Owner | **ACCEPT ALL — Phạm Đình Chương, 2026-08-11** | `AUTH-PROG-2026-08-11-03` |
 
 ### 19.1 Kết quả checklist vòng chi tiết
 
@@ -582,6 +583,7 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §16: handler BE, sinh type FE, và yêu cầu đưa spec vào `contracts/openapi/openapi.yaml` |
 | `DD-11` Verification | PASS | §16 gắn `VS-PROG-019/022/024/026`; §18 checklist đóng băng contract cho consumer |
 | `DD-12` Compatibility/deploy/rollback | PASS | §10 contract gate; §15 thứ tự triển khai và tương thích |
-| `DD-13` Trace/risk/decision/sign-off | **BLOCKED một phần** | Product + Architect đã `ACCEPT`; register còn `14 OPEN/3 DECIDED/0 CLOSED`, cùng blocker Security + Platform (TLS) và BE + Core (giao thức chưa tồn tại). Ảnh hưởng: **không được phát hành contract Active**, mutation phải tắt. Gate: `DOC-G2`. Điều kiện mở: đủ discipline decision theo lát cắt + TLS/session/CSRF PASS target + implementation/contract/fault test theo Plan 53 |
+| `DD-13` Trace/risk/decision/sign-off | **PASS FOR IMPLEMENTATION** | 17/17 decision `DECIDED`; Product + Architect `ACCEPT ALL`; chữ ký còn thiếu `WAIVED FOR IMPLEMENTATION`. TLS/BE-Core chưa tồn tại là deliverable thực thi và test, không phải blocker bắt đầu code |
 
-Một `BLOCKED`, đủ bốn trường. Mọi bằng chứng runtime vẫn `NOT IMPLEMENTED/NOT TESTED`.
+Không còn blocker approval. Bằng chứng runtime vẫn `NOT IMPLEMENTED/NOT TESTED`
+đúng thực tế và sẽ được tạo trong P1–P3.

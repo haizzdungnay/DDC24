@@ -7,6 +7,33 @@
 ---
 
 ## [Unreleased]
+### Changed — Phê duyệt toàn bộ Programming và mở implementation (2026-08-11)
+
+**Kết quả.** Ghi `AUTH-PROG-2026-08-11-03` theo chỉ đạo trực tiếp của Phạm Đình
+Chương với vai trò Product Owner/CTO + System Architect: `ACCEPT ALL` candidate
+v2.8, không kèm approval condition bổ sung. Chuyển `OD-PROG-001..017` thành
+`17 DECIDED / 0 OPEN / 0 CLOSED`, `ADR-026..031` thành `Accepted`,
+`PLAN_READY = PASS` và mọi `IMPLEMENT_READY[*] = PASS`. P0 đạt 7/7 DoD cho entry
+implementation; P1 `TASK-PROG-100/101/102/104` được bắt đầu ngay; team được tạo
+nhánh, viết/merge code production, đổi contract và bật feature flag ở lab.
+
+**Không giả chữ ký/evidence.** Tám consumer cùng các vai trò discipline,
+Verification và Document Control được ghi `WAIVED FOR IMPLEMENTATION`, không điền
+tên/chữ ký thay người khác. Maturity thực tế giữ 22/22 M3, 0/22 M4/M5; 0/32 Test
+Result vẫn `NOT_RUN/MISSING`. CI/CD, target SSH và HIL được loại khỏi entry
+condition cho implementation; chúng không được suy thành PASS.
+
+**Hồ sơ.** Đồng bộ Governance, Decision Log, Design Index, SRS, Architecture,
+Interface, Verification, Traceability, Plan 53/54, gói gate, biên bản consumer,
+environment readiness, candidate manifest, Document Hub, Control, ADR index và
+asset roadmap. Candidate v2.8 được ghim bằng 22 SHA-256.
+
+**Kiểm chứng.** `candidate_pin_check.py` PASS `22/22`; truy vết hai chiều PASS
+`60/60` requirement và `32/32` scenario; docs ISO harness `--expect -v` PASS
+(22/22 baseline, 6/6 support, link/anchor/ID/fence sạch); `git diff --check`
+PASS. Không chạy build C++/Go/FE hoặc browser vì thay đổi chỉ gồm tài liệu/asset
+trạng thái, không đổi source/UI runtime; CI/CD được loại khỏi phạm vi theo chỉ đạo.
+
 ### Changed — Xác nhận Product/Architect trên candidate Programming v2.7 (2026-08-11)
 
 **Ủy quyền được ghi nhận.** Theo yêu cầu trực tiếp của Phạm Đình Chương, ghi

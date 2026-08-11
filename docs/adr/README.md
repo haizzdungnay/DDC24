@@ -2,7 +2,7 @@
 
 > **Recovery status (2026-07-22): Historical/In Review.** Các ADR rời được giữ để bảo toàn context. [Decision Log](../00_governance/DECISIONS.md) là register hiện hành và đã chuẩn hóa các ID trùng ADR-010/ADR-011.
 
-> **Owner:** Tech Lead / Architect | **Last Updated:** 2026-07-28
+> **Owner:** Tech Lead / Architect | **Last Updated:** 2026-08-11
 
 ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Context, Decision, Consequences, Status.
 
@@ -31,6 +31,12 @@ ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Co
 | [ADR-021](ADR-021-restructure-core-and-backend-by-domain.md) | Restructure `services/core` + `web/backend` theo domain | Phase A Accepted & DONE — Phase B Proposed |
 | [ADR-022](ADR-022-ci-cd-tu-dong-deploy-xuong-board.md) | CI/CD tự động deploy xuống board | Accepted |
 | [ADR-023](ADR-023-scheduler-v3-1-priority-transport-va-pham-vi.md) | Scheduler v3.1: priority, transport và phạm vi | Accepted |
+| [ADR-026](ADR-026-programming-runtime-profile-va-validator-duy-nhat.md) | Programming runtime profile và validator duy nhất | Accepted 2026-08-11 |
+| [ADR-027](ADR-027-programming-bootstrap-va-quyen-so-huu-chu-ky-scan.md) | Bootstrap và quyền sở hữu chu kỳ scan | Accepted 2026-08-11 |
+| [ADR-028](ADR-028-programming-cong-thuc-watchdog-theo-base-step.md) | Công thức watchdog theo base step | Accepted 2026-08-11 |
+| [ADR-029](ADR-029-programming-overrun-la-task-fault.md) | Overrun là Task fault | Accepted 2026-08-11 |
+| [ADR-030](ADR-030-programming-ma-loi-cong-khai-va-detail-code.md) | Mã lỗi công khai và detail code | Accepted 2026-08-11 |
+| [ADR-031](ADR-031-programming-integrity-mode-hash-only-rev-a.md) | Integrity mode HASH_ONLY Rev A | Accepted 2026-08-11 |
 
 **Lưu ý:** ADR-001/002/003/005 thiếu section `Consequences` — cần bổ sung. Khi register này và
 [Decision Log](../00_governance/DECISIONS.md) khác nhau, Decision Log là register điều hành.

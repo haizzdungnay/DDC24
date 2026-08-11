@@ -3,7 +3,7 @@
 **ID:** DOC-CTRL-001
 **Trạng thái:** Active
 **Chủ quản:** Project Engineering
-**Cập nhật:** 2026-08-11 (Programming 22/22 hồ sơ M3; Product + Architect đã `ACCEPT` candidate v2.7; `0/22 M4`; `3 DECIDED/14 OPEN/0 CLOSED`)
+**Cập nhật:** 2026-08-11 (Programming candidate v2.8 `APPROVED FOR IMPLEMENTATION`; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`; `17 DECIDED/0 OPEN/0 CLOSED`)
 
 ## Mục tiêu
 
@@ -57,20 +57,20 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 |---|---|
 | [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | Product Spec authority; §1–§7 `Active`, §8–§9 là **Amendment A1 `PROPOSED`** (bốn workspace + tám journey + benchmark) chờ `OD-PROG-016` |
 | [Quy tắc kiểm soát tài liệu](DOC_GOVERNANCE.md) | `DOC-GOV-001` Active — ISO-aligned, `DD-01..DD-13`, thang `M0..M5`, ba cổng quyền hạn, harness và bảy quy tắc trung thực |
-| [Programming Open Decisions](PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định: `3 DECIDED`, `14 OPEN`, `0 CLOSED`; không phải Design |
+| [Programming Open Decisions](PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định: `17 DECIDED`, `0 OPEN`, `0 CLOSED`; approved for implementation |
 | [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | System/software/hardware/NFR requirements và acceptance Programming Rev A |
 | [Programming Design Index](../02_design/PROGRAMMING_DESIGN_INDEX.md) | register chủ quản: 22/22 hồ sơ đạt M3 — Review Ready. Vòng consumer review **kỹ thuật** đã chạy (`9/9` finding đóng) nhưng **`0/22` đạt `M4`** — `M4` đòi chữ ký người thật, xem `DOC-GOV-001` §3 |
 | [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | ownership, process/failure boundary, lifecycle và cutover target |
-| [Programming Documentation Roadmap](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | tracker 22/22 M3, Product + Architect `ACCEPT` candidate v2.7 theo `AUTH-PROG-2026-08-11-02`; DOC-G4 RED — chờ consumer/Verification/discipline; nằm ngoài mẫu số 22 |
-| [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | delivery M3 — Review Ready, G0 RED; không tự mở implementation khi design chưa Approved |
+| [Programming Documentation Roadmap](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md) | v3.1: candidate v2.8 approved; chữ ký còn thiếu `WAIVED FOR IMPLEMENTATION`; nằm ngoài mẫu số 22 |
+| [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | v0.17: P0 7/7 DONE; P1 READY TO START; mọi implementation gate PASS |
 | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | risk/control/owner/evidence/residual gate |
 | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Product Capability → Product Requirement → System Requirement → Verification Requirement |
 | [Programming Docs Sync Report](../07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record của lần đồng bộ 2026-08-03 |
 | [Programming Design Set Review 2026-08-09](../07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | record rà 22 hồ sơ + finding register `F-PROG-001..012`; căn cứ nâng M3 |
-| [Gói review cổng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | `PROG-P0-GATE-2026-08-10` v1.9 — Product + Architect `ACCEPT` candidate v2.7 theo `AUTH-PROG-2026-08-11-02`; 6 vai trò gate còn `PENDING`, `PLAN_READY BLOCKED` |
-| [Manifest candidate P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` v3.0 — candidate v2.7 định danh bằng **22 SHA-256**/commit `a236200`, Product + Architect đã `ACCEPT`; kiểm bằng `scripts/candidate_pin_check.py`; các candidate cũ đã `SUPERSEDED` |
-| [Consumer review liên chức năng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | `PROG-P0-CONSUMER-REVIEW-2026-08-10` v1.5 — vòng review **kỹ thuật** 22 cặp producer→consumer, `9/9` finding `F-CR-01..09` đóng; Product + Architect đã `ACCEPT` v2.7 nhưng **không** thay `0/8` chữ ký consumer |
-| [ADR-026..031](DECISIONS.md) | System Architect `ACCEPT` 6/6; tất cả còn **`Proposed`** chờ đúng đồng phê duyệt; code/target evidence thuộc gate sau quyết định |
+| [Gói review cổng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | v2.0 — `ACCEPT ALL`; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` |
+| [Manifest candidate P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | v3.1 — candidate v2.8 định danh bằng **22 SHA-256**; approved for implementation; kiểm bằng `scripts/candidate_pin_check.py` |
+| [Consumer review liên chức năng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | v1.6 — `9/9` finding đóng; `0/8` chữ ký thật nhưng `8/8 WAIVED FOR IMPLEMENTATION`; không chặn code |
+| [ADR-026..031](DECISIONS.md) | 6/6 **`Accepted`** theo `AUTH-PROG-2026-08-11-03`; evidence thu trong implementation |
 | [DDC-24 Baseline Source Fix Report](../07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | record tổng hợp thay đổi source, test và readiness |
 | [Modbus RTU Point As-Built Report](../07_records/reviews/MODBUS_RTU_POINT_AS_BUILT_REPORT.md) | record implementation/test host và blocker RS485 thật |
 | [Physical I/O HIL Report](../07_records/reviews/PHYSICAL_IO_HIL_REPORT.md) | record firmware evidence và các gate HIL còn mở |

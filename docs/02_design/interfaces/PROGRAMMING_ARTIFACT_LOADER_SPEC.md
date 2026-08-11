@@ -12,6 +12,10 @@
 | Nguồn | Product Spec v2.2, `SRS-PROG-001`, `DDD-LANG-PROG-001`, `PROG-OD-001` |
 | Phạm vi | Target Rev A artifact `MKDDCIR1`, verify/stage/safe-swap/rollback |
 
+> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
+> `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
+> không còn chặn viết/merge code. Review và evidence chưa có vẫn thực hiện trong task.
+
 ## 0. Đọc nhanh
 
 | Câu hỏi | Trả lời |

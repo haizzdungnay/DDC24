@@ -12,6 +12,10 @@
 | Nguồn | `SRS-PROG-001`, `ARCH-PROG-001` |
 | Phạm vi | Project/Draft/Revision/Check/Artifact/Operation/Audit và Runtime read model Rev A |
 
+> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
+> `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
+> không còn chặn viết/merge code. Review và evidence chưa có vẫn thực hiện trong task.
+
 ## 0. Đọc nhanh
 
 | Câu hỏi | Trả lời |

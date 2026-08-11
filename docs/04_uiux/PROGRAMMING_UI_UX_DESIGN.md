@@ -12,6 +12,10 @@
 | Nguồn | `DDC24-PRG-UX-DESIGN-001` v2.2; `SRS-PROG-001` |
 | Phạm vi | Web desktop/tablet Rev A; mobile overview/runtime và sửa nhẹ; HMI native và mobile authoring đầy đủ ngoài phạm vi |
 
+> **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
+> `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
+> không còn chặn viết/merge code. Review và browser/evidence chưa có vẫn thực hiện trong task.
+
 ## 0. Đọc nhanh
 
 | Câu hỏi | Trả lời |
