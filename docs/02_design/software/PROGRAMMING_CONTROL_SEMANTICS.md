@@ -3,13 +3,13 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-CTRL-PROG-001` |
-| Phiên bản | 0.3 |
-| Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; chờ Safety review và WCET/overrun |
-| Ngày | 2026-08-09 |
+| Phiên bản | 0.4 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-301` có source/host evidence; target timing và Safety review còn mở** |
+| Ngày | 2026-08-11 |
 | Chủ quản | Controls Lead + Core Lead |
 | Người review | Safety Lead, FW MCU Lead, Verification Lead |
 | Người phê duyệt | System Architect + Product Owner |
-| Nguồn | Product Spec v2.2, `SRS-PROG-001`, ADR-020, ADR-023, `PROG-OD-001` |
+| Nguồn | Product Spec v2.2, `SRS-PROG-001`, ADR-020/023/026..029 (`Accepted`), `PROG-OD-001` |
 | Phạm vi | Target Rev A: một Task, 1/5/30 s, process image, priority 5, fault semantics |
 
 > **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **một vòng điều khiển chạy như thế nào**: đọc input lúc nào, chạy Task khi nào, ghi output ra sao, ai thắng khi nhiều nguồn cùng đòi một output, PID xử lý bão hòa thế nào, và chuyện gì xảy ra khi một vòng chạy quá giờ. Đây là hồ sơ **an toàn** quan trọng nhất của bộ. |
 | 2. Ai phải đọc file này? | Controls và Core (chủ quản); Safety reviewer **bắt buộc** ký; QA dựng ca HIL từ §13 và §14; FE đọc §6 để hiển thị đúng ai đang giữ output. |
-| 3. Hệ thống hiện tại đang có gì? | `StScheduler` đã có nhưng cho tối đa 8 Task, 16 Program/Task, chu kỳ 50…60000 ms — **rộng hơn** Rev A cần. `StScheduler::tick()` là đường tùy chọn; bootstrap **không** cấp scheduler nên graph vẫn chạy mỗi ScanLoop. `st_process_image.*` đã nối với `PriorityResolver`. Có `any_force_safe()` đưa cả trạm về safe-state. RETAIN có component nhưng chưa nối production. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-301` tại `a831a0d` đã thêm profile scheduler Rev A đúng một Task/một Program/`1/5/30 s`, budget `<20%`, API `on_base_step()` và đếm release bị lỡ. ScanLoop gọi API base step nhưng bootstrap **chưa** cấp scheduler nên graph vẫn chạy production. Container supporting `8/16/32`, `50..60000 ms` còn giữ làm backstop; `any_force_safe()` cũ chưa sửa. |
 | 4. Thiết kế mới thay đổi điều gì? | Thu về **đúng một Task**, chu kỳ chỉ `1000/5000/30000 ms`. Quan trọng nhất: Task 30 s là **nhịp điều độ**, không phải `sleep` của base step — base step vẫn phải chạy đủ nhanh để IOP không đứt. Và: lỗi một Task chỉ làm **Task đó** FAULT; chỉ SafetyManager mới được đưa cả trạm về safe-state. |
 | 5. Team phải sửa module/contract nào? | §12. Core sửa ScanLoop để dispatch Task đến hạn, staging output rồi commit một lần; `PriorityResolver` nhận `program_value` ở mức Local logic 5; RETAIN khôi phục **trước** lần chạy đầu và ghi ngoài đường tới hạn. |
-| 6. Điều gì còn bị chặn? | `OD-PROG-004` (một Task và thứ tự chạy), `OD-PROG-012` (ngân sách WCET, ngưỡng overrun) và `OD-PROG-013` (cutover). Chưa ký thì không khóa được công thức base-step/watchdog. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §13: `VS-PROG-009` (10.000 chu kỳ mỗi period, thứ tự lặp lại được), `VS-PROG-010` (PID bão hòa/override/nhả — đo dạng sóng), `VS-PROG-013` (overrun: cảnh báo rồi FAULT đúng Task, **không** làm cả trạm safe), `VS-PROG-014` (giữ giá trị cũ, poll gap `<200 ms`). `NOT RUN`. |
+| 6. Điều gì còn bị chặn? | `OD-PROG-004/012/013` và ADR-026..029 đã `Accepted`, nên không còn blocker code. Còn thiếu source `TASK-PROG-302..306`, benchmark 10.000 cycle trên Forlinx, fault/HIL và Safety review hậu kiểm; chúng chặn release/cutover. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host `EV-PROG-G3-301` chứng minh profile/cadence tại `a831a0d`, targeted `74/74` và CTest `936/936`; đây chỉ hỗ trợ `VS-PROG-009/015`. §13 vẫn yêu cầu 10.000 chu kỳ mỗi period, PID/overrun/process-image và poll gap `<200 ms` trên target/HIL; 0/32 Test Result PASS. |
 
 Hai cái bẫy đã thành rủi ro có tên. `RSK-PROG-002` (điểm 20): nếu gắn `sleep`
 theo chu kỳ Task, Task 30 s sẽ kéo cả base step và watchdog 6 s sẽ restart vòng
@@ -54,8 +54,8 @@ watchdog độc lập vẫn có quyền cao hơn và có thể đưa thiết b�
 | Chủ đề | As-Built 2026-08-09 | Target |
 |---|---|---|
 | Runtime owner | Graph vẫn chạy mỗi ScanLoop; bootstrap không cấp `StScheduler` | PROGRAM hoặc GRAPH là Local logic producer duy nhất sau cutover |
-| Scheduler | tối đa 8 Task, 16 Program/Task, 32 tổng; 50..60000 ms | Rev A đúng một Task, period `1000/5000/30000 ms` |
-| Tick | `StScheduler::tick()` hỗ trợ optional path | tích hợp base step, không sleep theo Task dài |
+| Scheduler | `StSchedulerProfile::SUPPORTING_AS_BUILT` giữ trần 8/16/32; `REV_A` tại `a831a0d` siết 1/1/1, period `1000/5000/30000 ms`, budget `<20%` | bootstrap production chỉ được dựng profile Rev A |
+| Base step | `ScanLoop` đã gọi `on_base_step()` và trả sequence/missed release; bootstrap vẫn `st_sched=nullptr` | base step nền tảng 1 s, không sleep theo Task dài; route production ở Task 306 |
 | I/O | `st_process_image.*` load/apply với `PriorityResolver` | snapshot → execute → validate → atomic publish priority 5 |
 | Fault | `any_force_safe()` và spec cũ có plant safe-state | Task FAULT + hủy staging; safety độc lập quyết định safe-state |
 | RETAIN | component có, chưa production-wired | restore trước first run, save ngoài critical path |
@@ -67,9 +67,10 @@ plant-wide safe và watchdog theo period Task bị hồ sơ Target này supersed
 
 - Clock scheduling: monotonic (`CLOCK_MONOTONIC_RAW` hoặc authority platform),
   không dùng wall clock/NTP.
-- Base step target: 50 ms, cấu hình build/platform nhưng phải chia đều 1 s và
-  nhỏ hơn IOP deadline. ScanLoop thức mỗi base step để poll IOP/watchdog/quality,
-  kể cả Task period 30 s.
+- Base step Rev A mặc định `1.000 ms`, dải cấu hình nền tảng `500..2.000 ms`
+  theo ADR-027. Giới hạn IOP `<200 ms` áp cho khoảng phục vụ/poll IOP bên trong
+  step, không đồng nhất với Task period hoặc tự suy thành base step 50 ms.
+  ScanLoop hoàn tất mỗi base step và kick watchdog dù Task period là 30 s.
 - Task period chỉ một trong `1.000/5.000/30.000 ms`; change period có hiệu lực
   qua new Revision activation, không mutate runtime lẻ.
 - Deadline kế tiếp dùng phase-locked `next += period`; không `now + period` để
@@ -238,7 +239,7 @@ Không cho graph và program cùng run “tạm” trên cùng Local output.
 | Thiết kế | As-Built | Target sửa/tạo |
 |---|---|---|
 | base step/scan | `apps/core/application/runtime/scan_loop.*` | explicit phase/budget/task hook |
-| scheduler | `apps/core/application/st/st_scheduler.*` | one-Task target policy, state/fault semantics |
+| scheduler | `st_scheduler.*`: `StSchedulerProfile::REV_A`, `add_task()`, `add_program()`, `on_base_step()` tại `a831a0d` | Task 304 sửa state/fault; Task 306 chỉ bootstrap Rev A |
 | executor | `st_exec.*`, `st_cyclic_runtime.*` | instruction budget/non-finite/source fault |
 | process image | `st_process_image.*`, `st_io_map.*` | quality/freshness/generation/all-or-nothing |
 | arbitration | graph domain `PriorityResolver` | source PROGRAM priority 5/read-back/withdraw TTL |
@@ -258,6 +259,12 @@ Không cho graph và program cùng run “tạm” trên cùng Local output.
 | `CTRL-T-007` | graph↔program fault từng transition step | không dual owner/gap ngoài limit; rollback backup |
 | `CTRL-T-008` | IOP 199/200/201 ms + Task 30 s | deadline/quality/watchdog đúng trên HIL |
 | `CTRL-T-009` | power/restart với PID/RETAIN | state theo policy, bumpless hoặc chặn có diagnostic |
+
+Host evidence `EV-PROG-G3-301` đã chạy phần cấu hình/cadence của
+`CTRL-T-001`: ba period được nhận, one-over/period khác/budget 20%/Task hoặc
+Program thứ hai bị reject; Task 30 s chỉ chạy ở release thứ 30 trong khi 30 base
+step vẫn tăng sequence. Không nâng `CTRL-T-001` hoặc `VS-PROG-009` thành PASS vì
+chưa chạy 10.000 cycle/period trên Forlinx với jitter/WCET/watchdog thật.
 
 Deploy feature flag theo controller, mặc định GRAPH; chạy shadow read-only không
 publish để đo WCET trước cutover. Rollback dùng Restore/cutover transaction, không
@@ -297,12 +304,13 @@ Budget tuyệt đối cho từng phase và `holdTtl` vẫn `TARGET-PENDING`; imp
 | 0.1 | 2026-08-09 | Khóa cycle, Task, priority, PID, fault, cutover và acceptance | System Engineering |
 | 0.2 | 2026-08-09 | Bổ sung phase input/output/fault và decision table Program proposal/actual owner; chuyển Detailed Draft chờ review | System Engineering |
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; nêu bật hai bẫy `RSK-PROG-002` và `RSK-PROG-004` | System Engineering |
+| 0.4 | 2026-08-11 | Đồng bộ `TASK-PROG-301` tại `a831a0d`: profile Rev A 1 Task/1 Program/1-5-30 s, budget `<20%`, base-step sequence/missed release và capability/schema; sửa base step theo ADR-027 thành mặc định 1 s, dải 500..2000 ms; giữ target/HIL NOT TESTED | Core + Controls |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Controls + Core Lead | Chờ review | — |
-| Safety + MCU + QA | Chờ review | — |
-| System Architect + Product Owner | **BLOCKED — chưa phê duyệt** | `PROG-OD-001` |
+| Controls + Core Lead | **TASK-PROG-301 SOURCE/DOD DONE** | `a831a0d`, `EV-PROG-G3-301` |
+| Safety + MCU + QA | **WAIVED FOR IMPLEMENTATION; review/test độc lập còn mở** | `AUTH-PROG-2026-08-11-03` |
+| System Architect + Product Owner | **ACCEPT FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; ADR-026..029 `Accepted` |
 
 Tự kiểm `DD-01..DD-13`:
 
@@ -310,7 +318,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §15 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §1 mục tiêu và nguyên tắc an toàn; §3 giới hạn đúng một Task và ba chu kỳ |
-| `DD-03` As-Built | PASS | §2 bảng As-Built: `StScheduler` hiện cho 8 Task/50…60000 ms, `tick()` là đường tùy chọn, bootstrap không cấp scheduler, `st_process_image.*` đã nối `PriorityResolver`, có `any_force_safe()`; nêu rõ phần nào của spec cũ bị supersede |
+| `DD-03` As-Built | PASS | §2 phân biệt container supporting 8/16/32 với profile Rev A 1/1/1 tại `a831a0d`; ScanLoop gọi `on_base_step()` nhưng bootstrap chưa cấp scheduler; `st_process_image.*` và `any_force_safe()` còn ở trạng thái cũ |
 | `DD-04` Target ownership | PASS | §4 một cycle và quyền sở hữu dữ liệu; §10 cutover xác định owner Local logic duy nhất |
 | `DD-05` Data từng field | PASS | §5 Point mapping/quality/freshness; §14 bảng quyết định output với `program_value`/`actual_value`/winner/priority/TTL |
 | `DD-06` Interface | N/A tại file này | Hợp đồng liên tiến trình thuộc `IFSPEC-PROG-001`; ở đây là ngữ nghĩa nội bộ Core. §4 định nghĩa đủ giao diện process image cho Program |
@@ -320,7 +328,7 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §12 ScanLoop, process image, resolver và RETAIN cần sửa |
 | `DD-11` Verification | PASS | §13 gắn `VS-PROG-009/010/013/014` với ngưỡng số (10.000 chu kỳ/period; poll gap `<200 ms`, mục tiêu `≤100 ms`) |
 | `DD-12` Compatibility/deploy/rollback | PASS | §13 deploy và rollback; §10 chuyển đổi GRAPH ↔ PROGRAM |
-| `DD-13` Trace/risk/decision/sign-off | **BLOCKED** | Owner: Product + Runtime Architect + Controls/Safety Reviewer. Ảnh hưởng: chưa chốt ngân sách WCET và ngưỡng overrun thì **không khóa được công thức base-step/watchdog**, và `RSK-PROG-002` (20 điểm) cùng `RSK-PROG-004` (15 điểm) không thể giảm. Gate: `DOC-G2`. Điều kiện mở: đóng `OD-PROG-004` (một Task, thứ tự chạy), `OD-PROG-012` (WCET/overrun) và `OD-PROG-013` (cutover), kèm Safety review và kế hoạch benchmark trên target |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; release BLOCKED | `OD-PROG-004/012/013` và ADR-026..029 đã `Accepted`; source 301 nối trace/risk nhưng residual không giảm. Owner target: Core/Controls/Safety/QA; gate G3/G6; mở release khi 10.000 cycle Forlinx, overrun/process-image/HIL và Test Result độc lập PASS |
 
-Một `BLOCKED`, đủ bốn trường. Residual an toàn và timing trên target **không
-được giảm** trước khi có Test Result/HIL thật.
+Residual an toàn và timing trên target **không được giảm** trước khi có Test
+Result/HIL thật.

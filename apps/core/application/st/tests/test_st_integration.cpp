@@ -339,7 +339,9 @@ TEST(StIntegration, ScanLoopRunsStProgramAndRoutesThroughArbitration)
     deps.st_sched = &sched;
     ScanLoop loop(deps);
 
+    const uint64_t base_steps_before = sched.base_step_count();
     EXPECT_NO_FATAL_FAILURE(loop.step());
+    EXPECT_EQ(loop.st_tick_for_test().base_step_sequence, base_steps_before + 1);
     EXPECT_EQ(loop.st_tick_for_test().tasks_run, 1u);
     EXPECT_EQ(loop.st_tick_for_test().programs_run, 1u);
 }

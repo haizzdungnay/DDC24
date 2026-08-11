@@ -166,7 +166,7 @@ void ScanLoop::step()
     if (d_.st_sched) {
         st_io_stats_ = StIoBridgeStats{};
         st_load_all_inputs(d_.st_sched, *d_.table, &st_io_stats_);
-        st_tick_ = d_.st_sched->tick(clock.monotonic_ns);
+        st_tick_ = d_.st_sched->on_base_step(clock.monotonic_ns);
         st_apply_all_outputs(d_.st_sched, d_.resolver, d_.table, &st_io_stats_);
     }
 
@@ -265,14 +265,14 @@ void ScanLoop::step()
     d_.metrics->end_scan(now_ns() - t0, budget_ns_);
 }
 
-void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t period_ns,
+void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t base_step_ns,
                    void (*after_scan)(void*), void* ctx)
 {
-    budget_ns_ = period_ns;
+    budget_ns_ = base_step_ns;
     /* 1 nguồn sự thật cho dt: graph PID/logic tính theo chu kỳ scan THẬT,
      * không theo device.scan_ms khai báo (lệch → graph tự WARN).
-     * Làm tròn + sàn 1ms: period sub-ms không được truncate về 0 (0 = silent skip). */
-    uint32_t actual_ms = static_cast<uint32_t>((period_ns + 500000ull) / 1000000ull);
+     * Làm tròn + sàn 1ms: base step sub-ms không được truncate về 0 (0 = silent skip). */
+    uint32_t actual_ms = static_cast<uint32_t>((base_step_ns + 500000ull) / 1000000ull);
     if (actual_ms == 0) actual_ms = 1;
     d_.graph->sync_actual_scan_ms(actual_ms);
     struct timespec next;
@@ -321,8 +321,8 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t period_ns,
         if (after_scan) after_scan(ctx);
 
         /* 11. Sleep tới scan kế — mốc TUYỆT ĐỐI, không drift */
-        next.tv_nsec += static_cast<long>(period_ns % 1000000000ull);
-        next.tv_sec += static_cast<time_t>(period_ns / 1000000000ull);
+        next.tv_nsec += static_cast<long>(base_step_ns % 1000000000ull);
+        next.tv_sec += static_cast<time_t>(base_step_ns / 1000000000ull);
         if (next.tv_nsec >= 1000000000L) {
             next.tv_nsec -= 1000000000L;
             next.tv_sec += 1;

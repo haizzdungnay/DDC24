@@ -59,9 +59,10 @@ public:
     /* 1 chu kỳ scan (step 1-10 của 07 §2) — public để test không cần timer. */
     void step();
 
-    /* Chạy tới khi *shutdown = true. period_ns mặc định 1s (Rev A).
+    /* Chạy tới khi *shutdown = true. `base_step_ns` là nhịp nền tảng, KHÔNG
+     * phải chu kỳ Task Programming. Task 30 s không được làm vòng này ngủ 30 s.
      * on_first_scan: callback sau scan đầu (sd_notify READY). */
-    void run(const std::atomic<bool>& shutdown, uint64_t period_ns,
+    void run(const std::atomic<bool>& shutdown, uint64_t base_step_ns,
              void (*after_scan)(void*) = nullptr, void* ctx = nullptr);
 
     /* SIGHUP reload hook (COR-008): flag do signal handler set; fn chạy Ở RANH GIỚI

@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 1.6 |
+| Phiên bản | 1.7 |
 | Trạng thái | **M3 — Review Ready** — treatment/evidence/acceptance đủ; 16/16 Open |
 | Ngày | 2026-08-11 |
 | Chủ quản | Product + Architecture + QA |
@@ -21,7 +21,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **16 rủi ro có thể gây hỏng thiết bị, mất điều khiển hoặc sai cam kết**, kèm biện pháp kiểm soát, chủ sở hữu và bằng chứng cần có để hạ mức. Đây là căn cứ để nói “chưa được phép cutover”. |
 | 2. Ai phải đọc file này? | Product, Architect và QA (chủ quản chung); từng risk owner đọc phần của mình; Safety và Security đọc trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 `Critical`. `TASK-PROG-300` tại `4f7e0ac` thêm treatment source cho `RSK-PROG-003/006`: candidate dựng ngoài scan, swap O(1), retired cleanup ngoài RT và binary no-parser/compiler. Tổng source partial 7/16; hai Test Result `BLOCKED`, **0/16 treatment end-to-end** và **0/16 evidence được chấp nhận**, nên không giảm điểm. |
+| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 `Critical`. Task 300 thêm treatment RSK-003/006; `TASK-PROG-301` tại `a831a0d` thêm treatment source RSK-002: base-step API độc lập Task, profile 1/5/30 s và watchdog ADR-028. Tổng source partial 8/16; hai Test Result `BLOCKED`, **0/16 treatment end-to-end** và **0/16 evidence được chấp nhận**, nên không giảm điểm. |
 | 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Nó gắn từng rủi ro với biện pháp cụ thể, kịch bản kiểm chứng và mức tồn dư **mục tiêu** — mục tiêu, chưa phải kết quả. |
 | 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản; việc code nằm ở Plan 53. Bốn rủi ro nặng nhất (20 điểm): `RSK-PROG-002` watchdog restart, `RSK-PROG-003` IOP gap, `RSK-PROG-005` compiler tranh CPU, `RSK-PROG-013` nhầm skeleton là HIL-ready. |
 | 6. Điều gì còn bị chặn? | Mọi rủi ro ≥15 **chặn cutover production** cho tới khi biện pháp có bằng chứng PASS và mức tồn dư được owner cùng QA chấp nhận bằng văn bản. |
@@ -121,7 +121,7 @@ OPEN → TREATMENT_IMPLEMENTED → EVIDENCE_REVIEW → ACCEPTED | REOPENED
 | Critical ≥15 | 11/16 |
 | Treatment có thiết kế ở mức M3 | 16/16 |
 | Treatment implemented end-to-end | 0/16 cho feature/Target |
-| Treatment source partial | 7/16 (`RSK-PROG-003/005/006/007/008/011/014`); Task 300 thêm non-blocking swap/no-parser host control, nhưng target IOP gap/full no-blocking/operation/Test Result còn thiếu; chưa đủ đổi lifecycle/residual |
+| Treatment source partial | 8/16 (`RSK-PROG-002/003/005/006/007/008/011/014`); Task 301 thêm profile/base-step/watchdog host control, nhưng bootstrap/timing `SCHED_FIFO`/IOP/HIL/Test Result còn thiếu; chưa đủ đổi lifecycle/residual |
 | Evidence accepted | 0/16 |
 | Residual accepted | 0/16 |
 
@@ -256,6 +256,16 @@ Core evidence; do đó 16/16 risk, S×L và residual giữ nguyên.
 vẫn `OFF`, bootstrap chưa route Programming và chưa đo IOP/power; vì vậy 16/16
 risk, S×L và residual giữ nguyên.
 
+### 5.12 Cập nhật treatment source `TASK-PROG-301`
+
+| Risk | Control đã có tại `a831a0d` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-002` | `StSchedulerProfile::REV_A` chỉ nhận một Task/một Program/1-5-30 s và budget `<20%`; ScanLoop gọi `on_base_step()` có sequence riêng; Task 30 s không chạy trước release 30, missed release không catch-up; systemd/comment runtime dùng công thức ADR-028 theo base step | Task 306 bỏ quyền graph ghi đè base step và dựng scheduler Rev A production; Task 307 chạy 10.000 cycle/period với `SCHED_FIFO`, đo jitter/WCET/watchdog/IOP; Test Result VS-009/015 độc lập | `OPEN — PARTIAL SOURCE` |
+
+`EV-PROG-G3-301` là evidence host hỗ trợ. `WatchdogSec=6` vẫn
+`TARGET-PENDING`, bootstrap production còn `st_sched=nullptr`; vì vậy likelihood,
+điểm `20 Open` và residual của `RSK-PROG-002` giữ nguyên.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -292,6 +302,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 1.4 | 2026-08-11 | Ghi `TASK-PROG-206` tại `95b9388` cho treatment partial RSK-007/008/011/014: impact fail-closed, ZIP source-only/hash/allowlist, import Project/Draft atomic, receipt/audit và OpenAPI v1.19/G1 7/7; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì hostile corpus Task 207, operation/Core/target và Test Result còn thiếu |
 | 1.5 | 2026-08-11 | Ghi `TASK-PROG-207` tại `3e5281d` cho treatment partial RSK-005/006/011/012/014: compiler resource faults, hostile corpus 25 lớp/zero-mutation 8 bảng, 23 audit alias, fuzz và contract G1; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì full RBAC, operation/Core/target và Test Result còn thiếu |
 | 1.6 | 2026-08-11 | Ghi `TASK-PROG-300` tại `4f7e0ac` cho treatment partial RSK-003/006: prepared runtime ngoài scan, boundary/LKG swap không cấp phát và post-link no-parser/compiler gate; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì production wiring, Forlinx/HIL và Test Result còn thiếu |
+| 1.7 | 2026-08-11 | Ghi `TASK-PROG-301` tại `a831a0d` cho treatment partial RSK-002: profile Rev A 1/1/1, period 1/5/30 s, budget `<20%`, base-step sequence/missed release và watchdog ADR-028; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì bootstrap/timing `SCHED_FIFO`/Forlinx/HIL và Test Result còn thiếu |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

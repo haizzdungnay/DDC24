@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `ARCH-PROG-001` |
-| Phiên bản | 0.6 |
+| Phiên bản | 0.8 |
 | Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION** — 6/6 ADR `Accepted` theo `AUTH-PROG-2026-08-11-03`; maturity M4/M5 không dùng làm blocker code |
-| Ngày | 2026-08-10 |
+| Ngày | 2026-08-11 |
 | Chủ quản | Software/Runtime Architect |
 | Reviewer | Controls/Safety, FE, BE, FW-SOM, FW MCU, HW, Security, Ops, Verification |
 | Approver | Product Owner + System/Runtime Architect |
@@ -19,10 +19,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **tiến trình nào sở hữu cái gì**: ai giữ dữ liệu có thể thay đổi, ai được ghi ra output vật lý, ai được phép chết mà hệ thống vẫn điều khiển. Mọi tranh cãi “module này gọi thẳng module kia có được không” giải quyết ở đây. |
 | 2. Ai phải đọc file này? | Bắt buộc với System Architect, Core/BE/FE/IO lead, Safety và Ops. Đọc trước khi đọc bất kỳ Detailed Design nào — vì các file đó giả định ranh giới trong file này là đúng. |
-| 3. Hệ thống hiện tại đang có gì? | Bốn tiến trình đã chạy thật: `mkddc-web` (Go, API/auth), `mkddc-core` (C++, control step + graph runtime), `mkddc-iobus` (C++, IOP + Modbus RTU + IO SHM) và firmware STM32. Local logic hôm nay do **graph** sở hữu, nạp từ `graph.json` lúc bootstrap. Xem §13 để biết dẫn chứng source và gap. |
+| 3. Hệ thống hiện tại đang có gì? | Bốn tiến trình đã chạy thật; Local logic production vẫn do **graph** sở hữu. Core đã có prepared runtime Task 300 và profile/base-step scheduler Task 301 tại `a831a0d`, nhưng bootstrap vẫn `st_sched=nullptr`. Xem §13 để phân biệt source component với wiring production. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm Programming vào `mkddc-web` (authoring, compile, orchestration) và vào `mkddc-core` (nạp artifact, chạy Program). **Không** thêm đường ghi tắt: mọi output Program đi qua priority resolver mức Local logic 5. `mkddc-iobus` và MCU **không đổi ownership** — Commission không được restart iobus. |
 | 5. Team phải sửa module/contract nào? | §14 ánh xạ từng component target về repository. Tóm tắt: BE thêm package Programming trong `mkddc-web`; Core thêm loader + Program executor cạnh ScanLoop; FE thêm `apps/web-ui/src/features/programming/`; iobus/MCU chỉ nhận thêm yêu cầu **không được gián đoạn** (`max_iop_poll_gap <200 ms`). |
-| 6. Điều gì còn bị chặn? | §11 liệt kê các xung đột phải đóng trước khi bất kỳ thứ gì được `Active`: quyền sở hữu Local logic khi cutover, công thức base-step/watchdog, và ranh giới tài nguyên khi compiler chạy cùng lúc với control. Phụ thuộc `OD-PROG-004/012/013/014`. |
+| 6. Điều gì còn bị chặn? | Sáu xung đột §11 đã được đóng cho implementation bằng ADR-026..031 `Accepted`; Task 301 đã hiện thực profile/base-step phần host. Production `Active` vẫn bị chặn bởi process image/arbitration/overrun/bootstrap Task 302–306 và evidence target/HIL Task 307/P6. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §17. Quan trọng nhất: `VS-PROG-015` (không bao giờ có hai owner), `VS-PROG-012` (RT path không cấp phát bộ nhớ/không I/O chặn), `VS-PROG-014` (poll gap `<200 ms` đo bằng logic analyzer). Cả ba đều **chưa chạy**. |
 
 Vì sao phải có “một owner duy nhất”: nếu graph và Program cùng đề xuất giá trị
@@ -220,10 +220,10 @@ hậu kiểm và evidence vẫn được thực hiện trong task/verification, 
 | Ranh giới | Source/contract hiện tại | Hành vi đã xác nhận | Gap so với Target |
 |---|---|---|---|
 | Core bootstrap | `apps/core/bootstrap/main.cpp:70..348` | nạp `/data/config/graph.json`, chọn scan period từ graph/CLI, tạo `ScanLoop` không truyền `StScheduler` | ST scheduler vẫn `nullptr`; graph luôn execute; chưa có mode/cutover/active package |
-| Base step | `apps/core/application/runtime/scan_loop.cpp:31..265` | snapshot → command/schedule → graph → optional ST → resolve → safe → output → publish | thứ tự hỗ trợ ST đã có, nhưng graph không bị loại trong `PROGRAM_ONLY`; ST chưa bootstrap/config |
-| ST/IR runtime | `apps/core/application/st/st_*.{hpp,cpp}` | parser/semantic, IR, loader, exec, scheduler, RETAIN, trace và control API có host test | chưa có FBD compiler; control API chưa route qua `web_ipc`; RETAIN chưa nối lifecycle production |
+| Base step | `scan_loop.*`, `st_scheduler.*` tại `a831a0d` | ScanLoop gọi `on_base_step(monotonic)`; sequence độc lập Task, due phase-locked và missed release không catch-up | bootstrap vẫn ánh xạ graph scan trong `GRAPH_ONLY`; chưa có mode/cutover/config nền tảng production |
+| ST/IR runtime | `apps/core/application/st/st_*.{hpp,cpp}` | profile `REV_A` chặn ngoài 1 Task/1 Program/1-5-30 s và budget `>=20%`; supporting 8/16/32 giữ làm backstop | control API chưa route qua `web_ipc`; process image/overrun/RETAIN chưa nối lifecycle production |
 | Build boundary | `apps/core/CMakeLists.txt` | `st_compiler_lib` tách khỏi `mkddc-core`; CLI compile/validate được build | CLI chưa được packaging/called bởi BE; compiler isolation/timeout chưa có |
-| Internal contract | `contracts/config/st_program_control_v1.schema.json` | action/status schema tồn tại với `API-E-*`, giới hạn component 8/16/32 | source path trong description cũ; schema chưa route; profile lệch Product one-Task và error authority chưa reconcile |
+| Internal contract | `contracts/config/st_program_control_v1.schema.json`, `st_control_api.cpp` | capability trả runtime profile/capacity/allowed period/base-step/budget đúng scheduler; source path đã sửa | schema/handler standalone chưa route UDS; error authority chưa reconcile |
 | Core Web IPC | `apps/core/adapters/ipc/web_ipc.{hpp,cpp}` | UDS `/run/mkddc/core.sock` phục vụ point/alarm/schedule | không dispatch `program_*`; peer credential/versioning cho Programming chưa có |
 | BE | `apps/web-api/internal/app/http.go`, `core_client.go`, `configapi.go` | auth/RBAC/audit/config patterns và core client có thật | không Project/Draft/Revision/compiler/operation route/store Programming |
 | API contract | `contracts/openapi/openapi.yaml` | có `/graph/*` ở trạng thái not-implemented | chưa có `/api/v1/programming/*`; OpenAPI không phải evidence handler |
@@ -240,7 +240,7 @@ hậu kiểm và evidence vẫn được thực hiện trong task/verification, 
 | Operation coordinator | `mkddc-web` | tạo `internal/programming/operation.go`; durable journal/store | CoreClient, idempotency, audit | optimistic success, auto retry mutation sau timeout |
 | REST/WS adapter | `mkddc-web` | `internal/app/programmingapi.go`, `ws.go`, `contracts/openapi/openapi.yaml` | domain/service methods; generated FE types sau contract freeze | business rule từ message string |
 | Programming UI | React FE | tạo `apps/web-ui/src/features/programming/`; route tại `src/app/App.tsx`; nav tại `shared/components/NavRail.tsx`; API tại `shared/api/programming.ts` | shared auth/i18n/components/API client | `shared/demo/` trong live path, local active truth |
-| Runtime profile/config | `mkddc-core` | tạo `application/programming/runtime_profile.*`, `adapters/config/programming_config.*`; sửa `bootstrap/main.cpp` | `application/st`, graph migration reader | parser/compiler/file/DB/network trong scan |
+| Runtime profile/config | `mkddc-core` | profile đã nằm ở `application/st/st_scheduler.*`; tạo `adapters/config/programming_config.*` và sửa `bootstrap/main.cpp` ở Task 306 | generated profile, graph migration reader | parser/compiler/file/DB/network trong scan |
 | Artifact/runtime lifecycle | `mkddc-core` | sửa `st_scheduler.*`, `st_control_api.*`, `st_retain.*`; thêm operation journal adapter nếu approved | bounded loader/executor, monotonic clock | direct IOP/SHM output bypass resolver |
 | Core IPC adapter | `mkddc-core` | sửa `adapters/ipc/web_ipc.*`; schema machine-readable trong `contracts/config/` | versioned UDS + peer credential | unversioned payload, accept unknown fields silently |
 | Cutover | `mkddc-core` | sửa `bootstrap/main.cpp`, `scan_loop.*`, `config_reload.*`, `graph_runtime.*` | `GRAPH_ONLY/PROGRAM_ONLY`, backup manifest | graph + Program cùng đóng góp mức 5 |
@@ -257,7 +257,7 @@ nếu sau này có requirement; Rev A không author/check/commission/trace/reset
 | Commission/Restore | một lease/controller; durable operation ghi trước side effect; Core idempotent theo operation/package hash | kill BE ở từng bước, restart/reconcile |
 | Core activation | request chỉ ghi pending preallocated buffer ngoài step; verify/stage trước; pointer/state swap tại safe boundary | unit/fault injection/no allocation |
 | Base step | cadence độc lập Task; absolute monotonic; không chờ compiler/BE/filesystem; kick watchdog sau step | 10.000 cycle/period trên target |
-| Task | one Task profile `1/5/30 s`; due check O(1); Program order ổn định; budget `TARGET-PENDING OD-012` | deterministic replay + WCET/load |
+| Task | one Task profile `1/5/30 s`; due check O(1); Program order ổn định; budget `<20% period` và còn bị chặn bởi base-step/WCET nhỏ hơn | deterministic replay + WCET/load |
 | IOP | activation không restart iobus; `max_iop_poll_gap <200 ms`, target margin `<=100 ms` | HIL timestamp/waveform |
 | Monitor/trace | publish ngoài output-critical path; 1 Hz/3 kỳ stale, 10k/10 phút `TARGET-PENDING OD-011` | bandwidth/memory soak |
 | Compiler | source 64 KiB/artifact 1 MiB; hard timeout 5 s; CPU/memory/process/file quota `TARGET-PENDING` | worst-case concurrent Check |
@@ -384,6 +384,7 @@ trong implementation. Không copy số host vào target configuration.
 | 0.5 | 2026-08-10 | Đóng phần kỹ thuật của `ARCH-CONF-PROG-001..006` bằng sáu ADR chủ quản `ADR-026..031` (`Proposed`): profile runtime + validator duy nhất, quyền sở hữu chu kỳ scan, công thức watchdog theo base step, overrun là Task fault, hai lớp mã lỗi, `IntegrityMode=HASH_ONLY`. §11 thành bảng có ADR và trạng thái; **không** tự chuyển xung đột sang đóng vì chữ ký authority còn thiếu |
 | 0.6 | 2026-08-10 | Ghi System Architect Phạm Đình Chương `ACCEPT` theo ủy quyền điện tử `AUTH-PROG-2026-08-10-01`; đồng bộ §11 và sign-off. Giữ M3 và 6 ADR `Proposed` vì còn đồng phê duyệt Safety/Security/Verification/Runtime cùng target evidence |
 | 0.7 | 2026-08-11 | `AUTH-PROG-2026-08-11-03` phê duyệt toàn bộ kiến trúc để implement; chuyển ADR-026..031 sang `Accepted`; review discipline còn thiếu thành hậu kiểm và không chặn `IMPLEMENT_READY[*]` |
+| 0.8 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-301` tại `a831a0d`: profile Rev A, `on_base_step()`/missed release, capability/schema và watchdog ADR-028; giữ bootstrap/cutover/target evidence còn mở |
 
 | Vai trò | Trạng thái | Điều kiện ký |
 |---|---|---|

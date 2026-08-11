@@ -1,0 +1,69 @@
+EV-PROG-G3-301 — TASK-PROG-301 host evidence
+Ngày: 2026-08-11
+
+Source commit: a831a0d42c0e945f9a59c36e461ada0e12962c89
+Source tree:   9ff19be31d95e687f5358ceabb52c7c2a16fb502
+Nhánh:         feat/programming-base-step-20260811
+
+Phạm vi được chứng minh trên host
+- StSchedulerProfile::REV_A chỉ nhận 1 Task, 1 Program và period
+  1000/5000/30000 ms từ profile generated.
+- budget_ms phải >0 và <20% period; đúng 20% bị từ chối.
+- ScanLoop gọi StScheduler::on_base_step(monotonic_ns); base-step sequence tách
+  khỏi Task release. Task 30 s không chạy trước release thứ 30.
+- Release bị lỡ được đếm và scheduler chỉ chạy một lần, không catch-up burst.
+- program_capabilities/schema trả runtime profile, capacity, allowed periods,
+  base step mặc định 1000 ms, dải 500..2000 ms và budget threshold.
+- Watchdog comment runtime/systemd trích ADR-028; WatchdogSec=6 giữ
+  TARGET-PENDING tới số đo SCHED_FIFO trên board.
+
+Lệnh và kết quả
+
+1. Fresh Release build, bật đủ option bắt buộc
+   cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release \
+     -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON \
+     -DMKDDC_ENABLE_HMI=ON
+   cmake --build build/fw --parallel 4
+   Kết quả: PASS.
+
+2. Full CTest sau rebuild source cuối
+   ctest --test-dir build/fw --output-on-failure
+   Kết quả: 936/936 PASS, 14,57 giây.
+
+   Ghi nhận pre-commit: lần full đầu đạt 935/936; test tích hợp mới giả định
+   sequence=1 dù activation đã tiêu thụ một base step. Assertion được sửa thành
+   so với base_steps_before+1, test lỗi chạy riêng PASS rồi full suite 936/936.
+
+3. Targeted scheduler/control/ScanLoop/integration
+   ctest --test-dir build/fw \
+     -R '^(StSchedulerRevA|StScheduler|StControlApi|StIntegration|ScanLoop)\.' \
+     --output-on-failure
+   Kết quả: 74/74 PASS, 1,81 giây.
+
+4. Go
+   cd apps/web-api
+   go vet ./...
+   go test ./... -count=1
+   Kết quả: PASS.
+
+5. Frontend regression
+   cd apps/web-ui
+   npx vitest --run --environment jsdom src
+   npm run lint
+   npm run build
+   Kết quả: 58/58 file, 494/494 test PASS; lint/typecheck/Vite build PASS.
+
+6. Contract/profile
+   python3 scripts/generate_programming_profile.py --check
+   python3 -m json.tool contracts/config/st_program_control_v1.schema.json
+   python3 scripts/verify_programming_g1_contracts.py --self-test
+   Kết quả: profile PASS; schema JSON PASS; mutation 5/5, deploy-order 5/5,
+   contract join 7/7 PASS.
+
+Ranh giới không được suy diễn
+- Không có Test Result VS-PROG-009/015 PASS.
+- Chưa chạy 10.000 cycle mỗi period trên Forlinx, chưa đo jitter/WCET,
+  watchdog cadence, IOP poll gap hoặc SCHED_FIFO.
+- Bootstrap production vẫn không truyền StScheduler; graph vẫn owner, feature
+  Programming vẫn OFF và không có Commission/cutover.
+- Chrome DevTools không áp dụng vì không đổi component/layout/runtime FE.

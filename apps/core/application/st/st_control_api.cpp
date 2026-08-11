@@ -89,6 +89,7 @@ json task_state_json(const StTask& t)
     j["budgetMs"] = t.config().budget_ms;
     j["enabled"] = t.enabled();
     j["runCount"] = t.stats().run_count;
+    j["missedReleaseCount"] = t.stats().missed_release_count;
     j["lastExecNs"] = t.stats().last_exec_ns;
     j["maxExecNs"] = t.stats().max_exec_ns;
     j["overrunTotal"] = t.monitor().stats().total;
@@ -171,6 +172,7 @@ std::string st_handle_control_request(StScheduler* sched, const std::string& req
     /* --- Truy vấn --- */
 
     if (action == "program_capabilities") {
+        const bool rev_a = sched->profile() == StSchedulerProfile::REV_A;
         json p;
         p["interfaceVersion"] = kStApiVersion;
         p["artifactSchemaVersion"] = st_ir::kSchemaVersion;
@@ -178,9 +180,19 @@ std::string st_handle_control_request(StScheduler* sched, const std::string& req
         p["targetAbi"] = st_ir::kTargetAbi;
         p["compilerVersion"] = st_ir::kCompilerVersion;
         p["maxArtifactBytes"] = st_ir::kMaxArtifactSize;
-        p["maxTasks"] = st_sched_limits::kMaxTasks;
-        p["maxProgramsPerTask"] = st_sched_limits::kMaxProgramsPerTask;
-        p["baseTickMs"] = st_sched_limits::kBaseTickMs;
+        p["runtimeProfile"] = st_scheduler_profile_name(sched->profile());
+        p["maxTasks"] = rev_a ? st_profile_generated::kMaxTasks
+                              : st_sched_limits::kMaxTasks;
+        p["maxProgramsPerTask"] = rev_a ? st_profile_generated::kMaxProgramsPerTask
+                                        : st_sched_limits::kMaxProgramsPerTask;
+        p["maxProgramsTotal"] = rev_a ? st_profile_generated::kMaxProgramsTotal
+                                      : st_sched_limits::kMaxProgramsTotal;
+        if (rev_a) p["allowedPeriodMs"] = st_profile_generated::kAllowedPeriodMs;
+        else p["allowedPeriodMs"] = json::array();
+        p["baseStepMs"] = st_base_step::kDefaultMs;
+        p["baseStepMinMs"] = st_base_step::kMinMs;
+        p["baseStepMaxMs"] = st_base_step::kMaxMs;
+        p["maxTaskBudgetPercentExclusive"] = st_base_step::kMaxTaskBudgetPercent;
         return ok_response(request_id, p);
     }
 

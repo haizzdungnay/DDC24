@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mekong-hcm.vn/schemas/st_program_control_v1.json",
   "title": "MK-DDC-24 FW SOM — Program Runtime control protocol v1",
-  "description": "Hợp đồng JSON giữa BE SOM và Program Runtime trong mkddc-core. Nguồn thực thi: apps/core/st/st_control_api.hpp. Bất biến: MỌI response đều có version/requestId/result; response lỗi luôn có errorCode và keepsRunningPackage.",
+  "description": "Hợp đồng JSON giữa BE SOM và Program Runtime trong mkddc-core. Nguồn thực thi: apps/core/application/st/st_control_api.hpp. Bất biến: MỌI response đều có version/requestId/result; response lỗi luôn có errorCode và keepsRunningPackage.",
   "oneOf": [{ "$ref": "#/$defs/request" }, { "$ref": "#/$defs/response" }],
   "$defs": {
     "request": {
@@ -53,7 +53,20 @@
         "maxArtifactBytes": { "type": "integer" },
         "maxTasks": { "type": "integer" },
         "maxProgramsPerTask": { "type": "integer" },
-        "baseTickMs": { "type": "integer" },
+        "maxProgramsTotal": { "type": "integer" },
+        "runtimeProfile": { "type": "string" },
+        "allowedPeriodMs": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "uniqueItems": true
+        },
+        "baseTickMs": { "type": "integer",
+          "deprecated": true,
+          "description": "Field supporting cũ; producer Rev A dùng baseStepMs." },
+        "baseStepMs": { "type": "integer", "minimum": 1 },
+        "baseStepMinMs": { "type": "integer", "minimum": 1 },
+        "baseStepMaxMs": { "type": "integer", "minimum": 1 },
+        "maxTaskBudgetPercentExclusive": { "const": 20 },
         "anyForcingSafeState": { "type": "boolean" },
         "tasks": { "type": "array", "items": { "$ref": "#/$defs/task" } }
       },
@@ -73,6 +86,7 @@
         "budgetMs": { "type": "integer" },
         "enabled": { "type": "boolean" },
         "runCount": { "type": "integer" },
+        "missedReleaseCount": { "type": "integer" },
         "lastExecNs": { "type": "integer" },
         "maxExecNs": { "type": "integer" },
         "overrunTotal": { "type": "integer" },

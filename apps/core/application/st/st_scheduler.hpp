@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "safety/overrun_monitor.hpp"
+#include "st/st_limits.hpp"
 #include "st/st_runtime.hpp"
 
 namespace core {
@@ -47,6 +48,9 @@ const char* st_program_state_name(StProgramState s);
 
 /* Giới hạn theo SPEC §2. */
 namespace st_sched_limits {
+/* Backstop vật lý của container supporting As-Built. Profile sản phẩm Rev A
+ * siết xuống bằng st_profile_generated; không dùng các trần này để quảng bá
+ * capability sản phẩm. */
 constexpr std::size_t kMaxTasks = 8;
 constexpr std::size_t kMaxProgramsPerTask = 16;
 constexpr std::size_t kMaxProgramsTotal = 32;
@@ -54,6 +58,22 @@ constexpr uint32_t    kBaseTickMs = 50;
 constexpr uint32_t    kMinPeriodMs = 50;
 constexpr uint32_t    kMaxPeriodMs = 60000;
 } // namespace st_sched_limits
+
+/* Base step thuộc nền tảng, KHÔNG thuộc Task. Các giá trị này là quyết định
+ * ADR-027/028; Task period vẫn chỉ do profile machine-readable quy định. */
+namespace st_base_step {
+constexpr uint32_t kDefaultMs = 1000;
+constexpr uint32_t kMinMs = 500;
+constexpr uint32_t kMaxMs = 2000;
+constexpr uint32_t kMaxTaskBudgetPercent = 20;
+} // namespace st_base_step
+
+enum class StSchedulerProfile : uint8_t {
+    SUPPORTING_AS_BUILT = 0,
+    REV_A,
+};
+
+const char* st_scheduler_profile_name(StSchedulerProfile profile);
 
 struct StProgramInstance {
     std::string instance_id;
@@ -95,6 +115,7 @@ struct StTaskConfig {
 struct StTaskStats {
     uint32_t run_count = 0;
     uint32_t skip_count = 0;       /* đến hạn nhưng bị bỏ vì disabled */
+    uint32_t missed_release_count = 0; /* release lỡ do base step/step bị trễ */
     uint64_t last_exec_ns = 0;
     uint64_t max_exec_ns = 0;
 };
@@ -132,6 +153,7 @@ private:
 };
 
 struct StSchedulerTickResult {
+    uint64_t base_step_sequence = 0;
     uint32_t tasks_run = 0;
     uint32_t programs_run = 0;
     uint32_t faults = 0;
@@ -140,6 +162,15 @@ struct StSchedulerTickResult {
 
 class StScheduler {
 public:
+    /* Supporting giữ nguyên hành vi component cũ cho host/backward tests.
+     * Đường production Rev A bắt buộc khởi tạo tường minh REV_A; TASK-PROG-306
+     * sẽ là điểm bootstrap duy nhất làm việc đó. */
+    explicit StScheduler(StSchedulerProfile profile = StSchedulerProfile::SUPPORTING_AS_BUILT)
+        : profile_(profile) {}
+
+    StSchedulerProfile profile() const { return profile_; }
+    uint64_t base_step_count() const { return base_step_count_; }
+
     /* Trả false + *error nếu cấu hình vi phạm ràng buộc SPEC §3. Fail-fast:
      * cấu hình sai không được chạy với "phần hợp lệ", vì như vậy hệ chạy khác
      * điều engineer nghĩ mà không ai biết. */
@@ -164,8 +195,14 @@ public:
     bool reset_fault(const std::string& instance_id, std::string* error);
     bool rollback(const std::string& instance_id, std::string* error);
 
-    /* Một tick. `now_ns` chụp MỘT LẦN bởi caller và dùng chung cho mọi Task. */
-    StSchedulerTickResult tick(uint64_t now_ns);
+    /* Một base step. `now_ns` chụp MỘT LẦN bởi caller và dùng chung cho mọi
+     * Task. Task period chỉ quyết định có dispatch hay không; tuyệt đối không
+     * được dùng làm thời gian sleep của caller. */
+    StSchedulerTickResult on_base_step(uint64_t now_ns);
+
+    /* Alias tương thích cho supporting component cũ. Source production mới
+     * phải gọi on_base_step() để ranh giới timing hiện rõ khi review. */
+    StSchedulerTickResult tick(uint64_t now_ns) { return on_base_step(now_ns); }
 
     /* true nếu BẤT KỲ task nào đang yêu cầu safe-state do overrun. */
     bool any_force_safe() const;
@@ -174,6 +211,8 @@ public:
     void set_loader_options(const StLoaderOptions& o) { loader_opts_ = o; }
 
 private:
+    StSchedulerProfile profile_ = StSchedulerProfile::SUPPORTING_AS_BUILT;
+    uint64_t base_step_count_ = 0;
     std::vector<std::unique_ptr<StTask>> tasks_;
     StLoaderOptions loader_opts_;
 
