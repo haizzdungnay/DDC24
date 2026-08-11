@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 0.8 |
-| Trạng thái | **APPROVED FOR IMPLEMENTATION** — 32/32 kịch bản là baseline DoD; 0/32 Test Result sẽ được tạo trong implementation |
+| Phiên bản | 0.9 |
+| Trạng thái | **APPROVED FOR IMPLEMENTATION** — 32/32 kịch bản là baseline DoD; hiện có 2/32 record `BLOCKED`, 0/32 PASS |
 | Ngày | 2026-08-11 |
 | Chủ quản | Verification Lead |
 | Người review | Product, System Architect, FE/BE/Core/FW/HW/Ops Leads |
@@ -18,11 +18,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **cách chứng minh hệ thống làm đúng**: 32 kịch bản `VS-PROG-001..032`, mỗi kịch bản có đồ gá, điều kiện trước, các bước, kết quả kỳ vọng định lượng, môi trường và ai được ký. Cũng chốt cái gì **không** được tính là bằng chứng. |
 | 2. Ai phải đọc file này? | Verification Lead (chủ quản) và mọi discipline lead — vì mỗi người sở hữu một phần trong cột “execute/review”. Release authority đọc §5 để biết gate nào đang mở. |
-| 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001..032` đều `NOT RUN` cho bộ thiết kế này (§8). Có host test và source test đang tồn tại, nhưng chúng chỉ là đầu vào nền tảng — **không được kế thừa PASS** sang kịch bản mới nếu chưa chạy lại đúng commit, contract và profile. |
+| 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001` và `VS-PROG-019` đã có execution record G1 với verdict `BLOCKED`: phần store/contract host đạt nhưng workflow E2E chưa implement. 30 scenario còn lại `NOT_RUN`; tổng PASS vẫn `0/32` (§8). |
 | 4. Thiết kế mới thay đổi điều gì? | Chuyển từ “có test” sang **bằng chứng có thẩm quyền**: mỗi lần chạy phải ghim commit, image, config và hash; Test Result là bất biến; chạy lại sinh ID mới. Trạng thái chỉ được là một trong `NOT_RUN/RUNNING/PASS/FAIL/BLOCKED/INVALIDATED`. |
 | 5. Team phải sửa module/contract nào? | Không sửa code. Cần dựng thư mục bằng chứng `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS`, cùng các đồ gá `H/B/T/L` ở §9. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Các giới hạn đã `DECIDED`. Đồ gá HIL (`L`) là deliverable/evidence của P6 và không chặn team bắt đầu P1–P5. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Chính file này định nghĩa. Với bản thân hồ sơ: 32/32 kịch bản có đặc tả đủ năm trục ở §9, mỗi kịch bản có requirement, đồ gá, bước, kỳ vọng định lượng và thẩm quyền ký. Số Test Result hiện tại: **0/32**. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Chính file này định nghĩa. Với bản thân hồ sơ: 32/32 kịch bản có đặc tả đủ năm trục ở §9, mỗi kịch bản có requirement, đồ gá, bước, kỳ vọng định lượng và thẩm quyền ký. Hiện có **2/32 record, 0/32 PASS, 2/32 BLOCKED**. |
 
 Ba loại bằng chứng **không** đủ để đóng một requirement: file tài liệu tồn tại;
 unit test trên máy host thay cho đo trên target/HIL; và ảnh chụp màn hình mock
@@ -173,9 +173,11 @@ Known limitation / follow-up:
 
 ## 8. Trạng thái hiện tại
 
-`VS-PROG-001..032 = NOT RUN` đối với bộ thiết kế này. Source/host tests hiện
-hữu chỉ là baseline input; không được kế thừa PASS vào scenario mới nếu chưa
-chạy lại đúng commit/contract/profile và thu evidence theo mẫu.
+Trạng thái hiện hành: `VS-PROG-001` và `VS-PROG-019` có record `BLOCKED` tại
+`PROG-TR-REPO-001`; 30 scenario còn lại `NOT_RUN`. Tổng số là `2/32` record,
+`0/32 PASS`, `0/32 FAIL`, `2/32 BLOCKED`. Record G1 ghim đúng commit/contract và
+raw checksum, nhưng chưa có service/Check/API/UI E2E và independent QA review;
+do đó không được dùng mở release gate hoặc nâng trace `P/R`.
 
 ## 9. Test specification cho từng scenario
 
@@ -278,6 +280,7 @@ baseline PASS hoặc có waiver đúng authority và trace rõ.
 | 0.6 | 2026-08-10 | Sửa self-check trạng thái trung thực từ dải cũ `001..030` sang catalog hiện hành `001..032`; không thay đổi 0/32 Test Result hoặc gate |
 | 0.7 | 2026-08-10 | Ghi Product Owner/CTO Phạm Đình Chương `ACCEPT` theo `AUTH-PROG-2026-08-10-01`; đồng bộ register `3 DECIDED/14 OPEN`. Giữ Verification Lead PENDING và 0/32 Test Result; không nâng gate hay maturity |
 | 0.8 | 2026-08-11 | Phê duyệt V&V baseline theo `AUTH-PROG-2026-08-11-03`; 17/17 decision `DECIDED`; Verification/discipline signature `WAIVED FOR IMPLEMENTATION`; HIL là deliverable P6, không chặn P1–P5; giữ trung thực 0/32 Test Result |
+| 0.9 | 2026-08-11 | Ghi execution G1 cho `VS-PROG-001/019`: hai record `BLOCKED`, phần store/contract host đạt nhưng workflow E2E và independent review còn thiếu; tổng 0/32 PASS, không nâng residual risk hay release gate |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -299,8 +302,8 @@ baseline PASS hoặc có waiver đúng authority và trace rõ.
 | Môi trường và target | PASS | §9 cột cuối ghi rõ chạy ở đâu; §5 gate theo discipline |
 | Evidence | PASS | §7 mẫu Test Result; §10 đường dẫn `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS` |
 | Thẩm quyền ký PASS | PASS | §9 cột cuối tách “execute” và “review”; §11 quy trình review |
-| Trạng thái trung thực | PASS | §8 ghi `VS-PROG-001..032 = NOT RUN`; §10 cấm kế thừa PASS cũ và bắt chuyển `INVALIDATED` khi contract đổi |
+| Trạng thái trung thực | PASS | §8 ghi đúng 2 record `BLOCKED`, 30 `NOT_RUN`, 0 PASS; §10 cấm kế thừa PASS cũ và bắt chuyển `INVALIDATED` khi contract đổi |
 | Quyền implementation | **PASS** | Giới hạn đã `DECIDED`; HIL chưa tồn tại là deliverable P6 và không chặn P1–P5; mọi `IMPLEMENT_READY[*] PASS` |
 
-Số Test Result hiện tại: **0/32**. Hồ sơ này định nghĩa cách chứng minh, nó
-không chứng minh bất cứ điều gì đã chạy.
+Số Test Result hiện tại: **2/32 record, 0/32 PASS, 2/32 BLOCKED**. Hồ sơ này và
+record G1 không chứng minh workflow E2E hoặc target/HIL đã đạt.

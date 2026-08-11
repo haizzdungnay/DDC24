@@ -2,7 +2,7 @@
 
 **ID:** REC-REVIEW-INDEX-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-11 (`TASK-PROG-100..104 DONE`; P1 5/6; review/evidence G1 đã đăng ký)
+**Cập nhật:** 2026-08-11 (`TASK-PROG-100..105 DONE`; P1 6/6; G1 GO; 2 record BLOCKED, 0/32 PASS)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -66,7 +66,8 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 | [Manifest candidate P0 Programming](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | 2026-08-11 | **Active v3.12 — candidate v2.13** | Candidate định danh bằng **22 SHA-256**; PR #135 merge `1f651b7`, tree `94326834`; approved for implementation |
 | [Rà soát môi trường P0 Programming](PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md) | 2026-08-11 | **v1.2 — implementation entry approved** | CI/target/HIL chưa có evidence nhưng được loại khỏi entry condition; không chặn code |
 | [Consumer review liên chức năng P0 Programming](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | 2026-08-11 | **v1.6 — `8/8 WAIVED FOR IMPLEMENTATION`** | `9/9` finding đóng; không giả 8 chữ ký; maturity vẫn 0/22 M4 nhưng không chặn implementation |
-| [Review triển khai G1 Programming](PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **P1 IN_PROGRESS 5/6** | `TASK-PROG-100..104 DONE`; SQLite store/migration/backup/fault test đã có; Test Result vẫn 0/32 |
+| [Review triển khai G1 Programming](PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **P1 DONE 6/6 — G1 GO** | `TASK-PROG-100..105 DONE`; join/deploy/rollback PASS; 2 record BLOCKED, 0/32 PASS |
+| [Biên bản join hợp đồng G1 Programming](PROGRAMMING_G1_CONTRACT_REVIEW_20260811.md) | 2026-08-11 | **GO cho P2/P3 implementation** | 6/6 contract cùng hash/major; self-test/order âm/rollback PASS; không bật Commission |
 | [Deployment Provenance Report](DEPLOYMENT_PROVENANCE_REPORT.md) | 2026-08-03 | Record | Build identity, release manifest, sai khác target |
 | [Physical I/O và HIL](PHYSICAL_IO_HIL_REPORT.md) | 2026-08-03 | **Gate còn mở** | Host/fake-MCU **không** được ghi thành HIL vật lý |
 | [Báo cáo build và deploy lên board](BOARD_DEPLOY_REPORT_2026-08-04.md) | 2026-08-04 | Record | 5 service chạy trên Orange Pi 5B, HMI tắt có chủ đích |
@@ -152,3 +153,4 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.6 | 2026-08-11 | Đồng bộ review/evidence G1 sau `TASK-PROG-103`; P1 đạt 4/6, candidate v2.12 ghim catalog lỗi ba lớp và exact loader mapping; giữ 0/32 Test Result, feature flag `OFF`, `RELEASE_READY BLOCKED` |
 | 1.7 | 2026-08-11 | Đồng bộ review/evidence G1 sau `TASK-PROG-104`; P1 đạt 5/6, candidate v2.13 ghim SQLite store/migration/backup As-Built; giữ 0/32 Test Result, feature flag OFF, RELEASE_READY BLOCKED |
 | 1.8 | 2026-08-11 | Ghi provenance PR #135/merge `1f651b7`/tree `94326834` cho candidate v2.13; remote feature branch đã xóa, trạng thái evidence không đổi |
+| 1.9 | 2026-08-11 | Đăng ký biên bản exit G1 và evidence Task 105; P1 6/6 DONE, G1 GO cho P2/P3; hai record VS-001/019 BLOCKED, 0/32 PASS |

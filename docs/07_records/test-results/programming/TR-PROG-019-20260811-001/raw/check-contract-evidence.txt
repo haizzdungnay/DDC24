@@ -1,0 +1,13 @@
+TR_ID=TR-PROG-019-20260811-001
+SOURCE_COMMIT=30a068b80555125ee0353b04342b631d83702497
+ENV=Linux 7.0.0-28-generic x86_64; Python 3.12.3; Go 1.22.2; Node 24.18.1
+COMMAND=python3 scripts/verify_programming_g1_contracts.py --self-test
+RESULT=PASS 6/6 contract; 5/5 mutation; 5/5 deploy order lỗi; rollback chuẩn bảo toàn; 0 Commission
+COMMAND=cd apps/web-api && go vet ./... && go test ./... -count=1
+RESULT=PASS
+COMMAND=cd apps/web-ui && npx vitest --run --environment jsdom src && npm run lint && npm run build
+RESULT=PASS 55/55 files 479/479 tests; lint/build PASS; 25 operation
+COMMAND=CMake Release Modbus=ON BACnet=ON HMI=ON; build; ctest
+RESULT=PASS 877/877
+MISSING=compiler/check worker; aggregate manifest/impact API runtime; browser UI confirmations; active hash before/after.
+VERDICT=BLOCKED; không dùng mở scenario/release gate.

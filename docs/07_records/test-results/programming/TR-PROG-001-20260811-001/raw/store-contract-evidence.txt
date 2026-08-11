@@ -1,0 +1,11 @@
+TR_ID=TR-PROG-001-20260811-001
+SOURCE_COMMIT=30a068b80555125ee0353b04342b631d83702497
+ENV=Linux 7.0.0-28-generic x86_64; Go 1.22.2
+COMMAND=cd apps/web-api && go test ./internal/programming/store -count=1
+RESULT=PASS 11 top-level groups
+COMMAND=cd apps/web-api && go test -race ./internal/programming/store -count=1
+RESULT=PASS
+OBSERVED=Fresh/reopen; ETag two-writer; immutable/FK/unique; idempotency; audit hash chain; backup/restore; migration rollback/checksum/user_version; corrupt/disk-full; NFC/duplicate JSON.
+MISSING=internal/app wiring; functional tag API/store relation; export/import; running BE restart round-trip.
+VERDICT=BLOCKED; không dùng mở scenario/release gate.
+

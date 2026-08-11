@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.12 |
-| Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.13; P1 `5/6`; `TASK-PROG-100..104 DONE`; `RELEASE_READY BLOCKED`** |
+| Phiên bản | 3.13 |
+| Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.14; P1 `6/6 DONE`; G1 GO; tiếp theo `TASK-PROG-200`; `RELEASE_READY BLOCKED`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
 | Người phê duyệt | Product Owner, System Architect, Verification Lead |
@@ -80,9 +80,9 @@ Nguồn để lập baseline:
 | Điểm trưởng thành tài liệu | **1320/2200 = 60,0%** | 22 file M3; chưa có M4/M5 |
 | Quyết định | **0 OPEN / 17 DECIDED / 0 CLOSED** | Toàn bộ decision được phê duyệt bởi `AUTH-PROG-2026-08-11-03` |
 | Rủi ro có điểm từ 15 trở lên | 11/16 | Chặn production cutover cho tới khi có evidence và residual acceptance |
-| Kịch bản có Test Result mới | 0/32 | Evidence production vẫn `MISSING/RED` |
-| Cổng implementation | **PLAN_READY PASS; mọi IMPLEMENT_READY PASS** | M4/M5 và chữ ký còn thiếu được `WAIVED FOR IMPLEMENTATION`; 6 ADR `Accepted`; 0/32 Test Result được tạo trong task |
-| Tiến độ code theo Plan 53 | **P1 5/6 = 83,3%** | `TASK-PROG-100..104 DONE`: SQLite store v1/migration/backup đã có sau contract foundation; 105 là review join/exit G1 |
+| Kịch bản có Test Result mới | 2/32 record `BLOCKED`; 0/32 PASS | Evidence production vẫn `MISSING/RED`; không nâng trace/risk |
+| Cổng implementation | **PLAN_READY PASS; mọi IMPLEMENT_READY PASS; G1 GO** | P2/P3 đã mở; release vẫn cần 32/32 PASS, residual và target/HIL |
+| Tiến độ code theo Plan 53 | **P1 6/6 = 100%** | `TASK-PROG-100..105 DONE`; join sáu contract/deploy/rollback đã khóa; next `TASK-PROG-200` |
 
 Điểm `60,0%` là điểm trưởng thành **tài liệu**, không phải phần trăm code, test,
 release hay mức sẵn sàng production. Chỉ số phải được tính lại từ bảng master;
@@ -96,7 +96,7 @@ không nhập phần trăm bằng cảm tính.
 | R1 — Requirement/decision/architecture | **M3 COMPLETE** | Index/SRS/Open Decisions/Architecture đạt cổng loại tương ứng; có mục Đọc nhanh và phụ lục tự kiểm |
 | R2 — Contract + 5 thiết kế lõi | **M3 COMPLETE / APPROVED FOR IMPLEMENTATION** | Data/Interface và 5 hồ sơ lõi có bảng `DD-01..DD-13`; TLS/provenance là deliverable implementation |
 | R3 — Thiết kế theo team | **M3 COMPLETE** | UI/UX theo IA **bốn workspace** `PGM-01..04`: asset render được cho từng workspace (Tổng quan desktop/mobile, Thiết kế, Kiểm tra & Vận hành kèm modal, Runtime & Bảo trì kèm drawer), cây component, API theo workspace, copy VI/EN, token và rollout; FE, BE, FW-SOM, FW MCU, HW đủ checklist |
-| R4 — Assurance/delivery | **M3 COMPLETE** | 32 test spec, Ops, 16 risk, 60 dòng trace, Plan 53 có 6/6 thẻ P1 đủ 11 trường và kho Test Result có template/integrity workflow; Test Result vẫn 0/32 |
+| R4 — Assurance/delivery | **M3 COMPLETE** | 32 test spec, Ops, 16 risk, 60 dòng trace, Plan 53 có 6/6 task P1 DONE; kho Test Result có 2 record BLOCKED/checksum PASS và 0/32 PASS |
 | R5 — Review/sign-off | **COMPLETE FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`: Product + Architect `ACCEPT ALL`; 8 consumer/discipline, Verification/QA và Document Control `WAIVED FOR IMPLEMENTATION`; 0/22 M4/M5 vẫn được ghi đúng thực tế |
 
 `DOC-G0` được chuyển PASS sau chỉ đạo ngày 2026-08-09 “triển khai theo roadmap”
@@ -160,7 +160,7 @@ lý do và revision history trước khi tính lại.
 
 | # | ID / hồ sơ | Loại | Owner chính / reviewer | Mức | Ưu tiên | Bằng chứng/trạng thái kế tiếp |
 |---:|---|---|---|---:|---|---|
-| 1 | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md) | Kiểm soát | System Engineering / Document Control | `M3` 60 | P0 | v2.1; register 22 dòng khớp harness; P1 5/6 và candidate v2.13 |
+| 1 | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md) | Kiểm soát | System Engineering / Document Control | `M3` 60 | P0 | v2.2; register 22 dòng khớp harness; P1 6/6, G1 GO và candidate v2.14 |
 | 2 | [`SRS-PROG-001`](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | Yêu cầu | Product + System / QA | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Requirements; 60 ID canonical, acceptance định lượng |
 | 3 | [`PROG-OD-001`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) | Quyết định | Product + Architect / các lead | `M3` 60 | P0 | v0.9; `17 DECIDED`, `0 OPEN`, `0 CLOSED`; approved for implementation |
 | 4 | [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | Kiến trúc | System Architect / Safety + Ops | `M3` 60 | P0 | v0.6; Architect `ACCEPT` 6/6 ADR, còn đồng phê duyệt/evidence |
@@ -177,11 +177,11 @@ lý do và revision history trước khi tính lại.
 | 15 | [`DDD-FWMCU-PROG-001`](../02_design/firmware/PROGRAMMING_FW_MCU_DESIGN.md) | Detailed Design | FW MCU Lead / Core + HW + QA | `M3` 60 | P1 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`HW-AUTH-001/002`, HIL RED) |
 | 16 | [`DDD-HW-PROG-001`](../04_design/hardware/PROGRAMMING_HW_DESIGN.md) | Detailed Design | HW Lead / FW + Safety + QA | `M3` 60 | P1 | Đọc nhanh + bảng `DD-01..DD-13`; 2 BLOCKED (`DD-03` thiếu baseline có kiểm soát; HW NO-GO) |
 | 17 | [`DDD-SEC-PROG-001`](../02_design/software/PROGRAMMING_SECURITY_DESIGN.md) | Detailed Design | Security + BE / Core + Ops + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (TLS production, `OD-PROG-001`) |
-| 18 | [`VVP-PROG-001`](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | V&V | Verification Lead / tất cả lead | `M3` 60 | P0 | v0.8; approved for implementation; 32/32 spec, 0/32 Test Result |
+| 18 | [`VVP-PROG-001`](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | V&V | Verification Lead / tất cả lead | `M3` 60 | P0 | v0.9; 32/32 spec; 2 record BLOCKED, 0/32 PASS |
 | 19 | [`OPS-PROG-001`](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | Vận hành | Ops/Release / Core + BE + QA | `M3` 60 | P1 | Đọc nhanh + phụ lục cổng M3 loại Operations; 1 BLOCKED (chưa diễn tập) |
-| 20 | [`RSK-PROG-001`](../07_records/PROGRAMMING_RISK_REGISTER.md) | Assurance | Product + Architect + QA / risk owner | `M3` 60 | P0 | v0.6; 16/16 Open, RSK-007/008 partial source; residual không đổi |
-| 21 | [`TRACE-PROG-001`](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Traceability | Verification Lead / Document Control | `M3` 60 | P0 | v3.2; 60 dòng, 0 vi phạm bất biến; 2/60 `I=Y`, 0/32 Test Result |
-| 22 | [`PLAN-PROG-053`](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | Delivery | Dev Lead + Architect / Product + QA | `M3` 60 | P1 | v0.22; mọi implementation gate PASS; P1 5/6 (`TASK-PROG-100..104 DONE`); 105 là join G1 |
+| 20 | [`RSK-PROG-001`](../07_records/PROGRAMMING_RISK_REGISTER.md) | Assurance | Product + Architect + QA / risk owner | `M3` 60 | P0 | v0.7; 16/16 Open; RSK-006/007/008/014 partial source, residual giữ nguyên |
+| 21 | [`TRACE-PROG-001`](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Traceability | Verification Lead / Document Control | `M3` 60 | P0 | v3.3; 60 dòng, 2/60 `I=Y`; 2 record BLOCKED, 0/32 PASS |
+| 22 | [`PLAN-PROG-053`](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | Delivery | Dev Lead + Architect / Product + QA | `M3` 60 | P1 | v0.23; P1 6/6 DONE, G1 GO; tiếp theo `TASK-PROG-200` |
 
 ## 5. Quan hệ rủi ro → hồ sơ phải ưu tiên
 
@@ -264,7 +264,7 @@ schema/ABI có compatibility, deploy order, rollback và verification owner.
 
 | Task | Owner | Kết quả cần giao | Exit |
 |---|---|---|---|
-| `DOC-5440` | Verification | V&V specification cho 32 scenario | Mỗi scenario có fixture/step/expected/target/evidence/pass authority; kho `PROG-TR-REPO-001` sẵn nhưng 0/32 record |
+| `DOC-5440` | Verification | V&V specification cho 32 scenario | Mỗi scenario có fixture/step/expected/target/evidence/pass authority; kho có 2 record BLOCKED, 0/32 PASS |
 | `DOC-5441` | Ops/Release | Runbook Commission/Restore/upgrade/replacement/incident | Có command, read-back, backup, rollback trigger và evidence path |
 | `DOC-5442` | Risk owners + QA | Risk register sau design review | Control link đủ; residual chưa giảm nếu chưa có test result |
 | `DOC-5443` | Verification + Document Control | Traceability chi tiết và kiểm tra link | Requirement → design → source target → test → evidence không đứt |
@@ -384,6 +384,7 @@ Mỗi lần thay đổi mức, thêm **một dòng mới**; không sửa số l�
 | 2026-08-11 P1-task-102 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P1 IN_PROGRESS 3/6 / RELEASE_READY BLOCKED** | `TASK-PROG-102 DONE`: source `95585e7`; profile/schema/generated constants, `HASH_ONLY`, deterministic encode, loader no-mutation, golden/negative/boundary/fuzz PASS; full gate CTest 875/875, Go vet/test, FE 54 file/473 test + lint/build PASS; `CORE-101 I=Y`, Test Result giữ 0/32 |
 | 2026-08-11 P1-task-103 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P1 IN_PROGRESS 4/6 / RELEASE_READY BLOCKED** | `TASK-PROG-103 DONE`: source `4a1e9f5`; catalog 19 public/77 detail, schema/manifest/generator C++/Go/TS, OpenAPI 1.16 và fail-safe unknown/HTTP/args; CTest 877/877, Go vet/test, FE 55 file/479 test + lint/build PASS; tổng `I=Y` giữ 2/60 và Test Result 0/32 |
 | 2026-08-11 P1-task-104 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P1 IN_PROGRESS 5/6 / RELEASE_READY BLOCKED** | `TASK-PROG-104 DONE`: source `312f357`; SQLite v1, migration checksum/fail-closed, ETag/immutable/idempotency/audit, online backup/restore và fault/concurrency/race PASS; CTest 877/877, Go vet/test, FE 55 file/479 test + lint/build PASS; tổng `I=Y` giữ 2/60, Test Result 0/32 |
+| 2026-08-11 P1-task-105 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P1 DONE 6/6 / G1 GO / RELEASE_READY BLOCKED** | Source `7f0c532` + `30a068b`; join 6/6 contract, self-test 5/5, order âm 5/5 và rollback bảo toàn/0 Commission PASS. Hai record VS-001/019 BLOCKED, 0/32 PASS; next `TASK-PROG-200` |
 
 ## 10.1 Ma trận impact của Amendment A1 trên 22 hồ sơ
 
@@ -472,12 +473,12 @@ Candidate P0 hiện hành đã ghim:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Định danh | 22 SHA-256 của candidate v2.8 ở manifest v3.2; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
-| Commit/tree | `b068b7d970bef600a0be51f79af7eb139e437d39` / `6ab6ac10412c7a8dc0e8e52af9b8c374e7b00e2a` |
-| Nhánh phát hành | `docs/programming-unconditional-implement-20260811` |
+| Định danh | 22 SHA-256 của candidate v2.14 ở manifest v3.13; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
+| Commit/tree | Chờ commit/PR merge tài liệu; 22 SHA-256 là authority trong thời gian chờ |
+| Nhánh phát hành | `chore/programming-g1-contract-join-20260811` |
 | Manifest | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
-| Phạm vi | 22/22 hồ sơ baseline; đồng bộ chỉ thị phê duyệt toàn bộ và mở implementation |
-| Trạng thái | **PIN PASS; APPROVED FOR IMPLEMENTATION** |
+| Phạm vi | 22/22 hồ sơ baseline; đồng bộ P1 6/6, G1 GO và ranh giới 2 record BLOCKED |
+| Trạng thái | **PIN phải PASS trước commit; APPROVED FOR IMPLEMENTATION** |
 
 Manifest chứa SHA-256 đầy đủ, Git blob, số dòng và delta so với baseline gốc.
 Nếu nội dung candidate đổi, phải phát hành commit/manifest mới và invalid phần
@@ -536,6 +537,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.10 | 2026-08-11 | Ghi PR #133 đã merge tại `1c74b9f`, tree `db5e225f`; remote feature branch đã xóa. Candidate v2.12/pin 22/22, P1 4/6 và ranh giới evidence không đổi | Document Control |
 | 3.11 | 2026-08-11 | Hoàn tất `TASK-PROG-104`: thêm snapshot P1 5/6, dẫn source SQLite store/migration/backup và review/evidence G1; phát hành candidate v2.13 do Design Index/Data/BE/Risk/Trace/Plan đổi; giữ 22/22 M3, M4/M5 0/22, Test Result 0/32 và RELEASE_READY BLOCKED | Dev Lead + Document Control |
 | 3.12 | 2026-08-11 | Ghi PR #135 đã merge tại `1f651b7`, tree `94326834`; remote feature branch đã xóa. Candidate v2.13/pin 22/22, P1 5/6 và ranh giới evidence không đổi | Document Control |
+| 3.13 | 2026-08-11 | Hoàn tất `TASK-PROG-105`: join sáu contract, deploy/rollback dry-run, record review G1 và hai Test Result BLOCKED; phát hành candidate v2.14 do Index/VVP/Risk/Trace/Plan đổi. P1 6/6 DONE, G1 GO, next TASK-PROG-200; giữ 0/32 PASS và RELEASE_READY BLOCKED | Dev Lead + Architect + Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|

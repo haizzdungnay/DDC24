@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-TR-REPO-001` |
-| Trạng thái | **READY FOR RECORDING — hiện 0/32 Test Result** |
+| Trạng thái | **ACTIVE — 2/32 record, 0/32 PASS, 2/32 BLOCKED** |
 | Ngày tạo | 2026-08-10 |
 | Chủ quản | Verification Lead + Document Control |
 | Phạm vi | `VS-PROG-001..032` của `VVP-PROG-001` |
@@ -13,18 +13,23 @@
 
 Thư mục này là nơi lưu Test Result bất biến cho Programming Rev A. Sự tồn tại
 của README và template chỉ chứng minh **kho bằng chứng đã được chuẩn bị**; không
-chứng minh scenario nào đã chạy. Tại thời điểm tạo:
+chứng minh scenario nào đã PASS. Trạng thái hiện hành sau review G1:
 
 ```text
-Test Result hợp lệ = 0/32
+Test Result record  = 2/32
 PASS               = 0/32
 FAIL               = 0/32
-BLOCKED record      = 0/32
+BLOCKED record      = 2/32
 ```
 
 Không sao chép kết quả host regression, mock UI hoặc báo cáo cũ vào đây để đổi
 `VS-PROG-*` thành PASS. Mỗi record phải chạy đúng candidate source/contract,
 fixture và ngưỡng đã được phê duyệt của scenario đó.
+
+| Scenario | Record hiện hành | Verdict | Điều kiện mở |
+|---|---|---|---|
+| `VS-PROG-001` | [`TR-PROG-001-20260811-001`](TR-PROG-001-20260811-001/result.md) | `BLOCKED` | `TASK-PROG-204`: wiring service, functional tag, export/import và restart BE round-trip |
+| `VS-PROG-019` | [`TR-PROG-019-20260811-001`](TR-PROG-019-20260811-001/result.md) | `BLOCKED` | Compiler/Check/API/UI ở P2/P5 và independent QA review |
 
 ## 2. Cấu trúc bắt buộc
 
@@ -118,3 +123,4 @@ sha256sum --check SHA256SUMS
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-08-10 | Tạo kho và quy tắc Test Result Programming; giữ số thật 0/32 |
+| 1.1 | 2026-08-11 | Ghi hai execution record G1 cho `VS-PROG-001/019` với verdict trung thực `BLOCKED`: phần contract/store host đạt nhưng workflow E2E chưa implement; giữ 0/32 PASS |

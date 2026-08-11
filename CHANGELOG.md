@@ -28,6 +28,12 @@ baseline ngoài Programming `apps/web-ui/src/features/scheduler/shared.ts` chạ
 contract C/SHM/IOP. Không bật Commission, không đổi UI và không deploy
 target/HIL.
 
+**Hồ sơ và gate.** Ghi biên bản `PROG-G1-CONTRACT-REVIEW-2026-08-11`, evidence
+`EV-PROG-G1-105` và hai Test Result `VS-PROG-001/019` với verdict trung thực
+`BLOCKED`: phần contract/store host đạt nhưng service/Check/API/UI E2E chưa có.
+P1 thành `6/6 DONE`, G1 GO cho P2/P3, next action `TASK-PROG-200`; tổng vẫn
+`0/32 PASS`, 16/16 risk Open, feature flag OFF và `RELEASE_READY BLOCKED`.
+
 ### Added — SQLite store Programming v1 (2026-08-11)
 
 **Kết quả.** Triển khai code `TASK-PROG-104`: thêm bounded package
