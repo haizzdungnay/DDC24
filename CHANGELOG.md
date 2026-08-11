@@ -44,6 +44,10 @@ Risk, Trace, Plan 53/54. P2 chuyển `2/8`, tổng plan `15/49 = 30,6%`, tiếp 
 Risk giữ `16/16 Open`, Test Result giữ `0/32 PASS`, feature flag `OFF` và
 `RELEASE_READY BLOCKED`.
 
+**Phát hành.** [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141)
+đã merge vào `main` tại `207cd90` (tree `b85bdb2c`); remote feature branch đã
+xóa. Candidate v2.16 tiếp tục được định danh bằng 22 SHA-256.
+
 ### Added — Khóa ST subset và source map Programming P2 (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-200`: compiler ST từ chối source không phải
