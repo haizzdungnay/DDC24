@@ -381,7 +381,8 @@ v2.4 ngay trước ủy quyền, **8/22** hồ sơ đổi để ghi quyết đ�
 
 Candidate hiện hành được ghim tại
 [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md)
-v3.1 dưới tên candidate v2.8, định danh bằng **22 SHA-256**. Trước khi dùng làm
+v3.2 dưới tên candidate v2.8, định danh bằng **22 SHA-256** tại commit `b068b7d`.
+Trước khi dùng làm
 baseline implement, chạy `python3 scripts/candidate_pin_check.py`.
 
 ## 8. Việc phải làm tiếp, có owner

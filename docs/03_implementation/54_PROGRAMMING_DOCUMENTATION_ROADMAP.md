@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.1 |
+| Phiên bản | 3.2 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION — candidate v2.8; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
@@ -466,12 +466,12 @@ Candidate P0 hiện hành đã ghim:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Định danh | 22 SHA-256 của candidate v2.8 ở manifest v3.1; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
-| Commit/tree | `PENDING` — bổ sung sau commit phát hành mà không đổi 22 hash candidate |
+| Định danh | 22 SHA-256 của candidate v2.8 ở manifest v3.2; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
+| Commit/tree | `b068b7d970bef600a0be51f79af7eb139e437d39` / `6ab6ac10412c7a8dc0e8e52af9b8c374e7b00e2a` |
 | Nhánh phát hành | `docs/programming-unconditional-implement-20260811` |
 | Manifest | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
 | Phạm vi | 22/22 hồ sơ baseline; đồng bộ chỉ thị phê duyệt toàn bộ và mở implementation |
-| Trạng thái | **PIN PENDING HASH REFRESH; APPROVED FOR IMPLEMENTATION** |
+| Trạng thái | **PIN PASS; APPROVED FOR IMPLEMENTATION** |
 
 Manifest chứa SHA-256 đầy đủ, Git blob, số dòng và delta so với baseline gốc.
 Nếu nội dung candidate đổi, phải phát hành commit/manifest mới và invalid phần
@@ -519,6 +519,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 2.9 | 2026-08-11 | Thêm snapshot `gate-recheck-2`; đồng bộ biên bản consumer sang candidate v2.7 và ghi lần tái kiểm CI/target trên `2ad6931`. Giữ 22/22 M3, M4/M5 0/22, P1 0/6 DoD và mọi gate `BLOCKED` | Dev Lead + Document Control |
 | 3.0 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-02`: Product Owner/CTO + System Architect `ACCEPT` candidate v2.7 sau khi review delta; CI/CD `DEFERRED` khỏi entry của lát cắt contract. Giữ M3 22/22, M4/M5 0/22 và `PLAN_READY BLOCKED` vì chữ ký consumer/Verification/Document Control không thuộc phạm vi ủy quyền | Product + Architect + Document Control |
 | 3.1 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-03`: `ACCEPT ALL` không kèm approval condition; 17/17 decision `DECIDED`; 6/6 ADR `Accepted`; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` `PASS`; consumer/discipline/Verification/Document Control `WAIVED FOR IMPLEMENTATION`; P0 7/7 DONE, P1 được bắt đầu ngay | Product + Architect + Document Control |
+| 3.2 | 2026-08-11 | Ghi commit `b068b7d` và tree `6ab6ac10` chứa candidate v2.8; bước bổ sung chỉ đổi hồ sơ hỗ trợ ngoài mẫu số 22, không đổi candidate hoặc quyền implementation | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|

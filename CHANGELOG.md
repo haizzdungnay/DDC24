@@ -27,6 +27,9 @@ condition cho implementation; chúng không được suy thành PASS.
 Interface, Verification, Traceability, Plan 53/54, gói gate, biên bản consumer,
 environment readiness, candidate manifest, Document Hub, Control, ADR index và
 asset roadmap. Candidate v2.8 được ghim bằng 22 SHA-256.
+Commit phát hành nội dung candidate là `b068b7d970bef600a0be51f79af7eb139e437d39`
+(tree `6ab6ac10412c7a8dc0e8e52af9b8c374e7b00e2a`); manifest v3.2 ghi bổ sung
+metadata này mà không đổi 22 hash.
 
 **Kiểm chứng.** `candidate_pin_check.py` PASS `22/22`; truy vết hai chiều PASS
 `60/60` requirement và `32/32` scenario; docs ISO harness `--expect -v` PASS

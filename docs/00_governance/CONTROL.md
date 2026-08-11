@@ -68,7 +68,7 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 | [Programming Docs Sync Report](../07_records/reviews/PROGRAMMING_DOCS_SYNC_REPORT.md) | record của lần đồng bộ 2026-08-03 |
 | [Programming Design Set Review 2026-08-09](../07_records/reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) | record rà 22 hồ sơ + finding register `F-PROG-001..012`; căn cứ nâng M3 |
 | [Gói review cổng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) | v2.0 — `ACCEPT ALL`; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` |
-| [Manifest candidate P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | v3.1 — candidate v2.8 định danh bằng **22 SHA-256**; approved for implementation; kiểm bằng `scripts/candidate_pin_check.py` |
+| [Manifest candidate P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) | v3.2 — candidate v2.8 định danh bằng **22 SHA-256**, commit `b068b7d`; approved for implementation |
 | [Consumer review liên chức năng P0 2026-08-10](../07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) | v1.6 — `9/9` finding đóng; `0/8` chữ ký thật nhưng `8/8 WAIVED FOR IMPLEMENTATION`; không chặn code |
 | [ADR-026..031](DECISIONS.md) | 6/6 **`Accepted`** theo `AUTH-PROG-2026-08-11-03`; evidence thu trong implementation |
 | [DDC-24 Baseline Source Fix Report](../07_records/reviews/DDC24_BASELINE_SRC_FIX_REPORT.md) | record tổng hợp thay đổi source, test và readiness |
