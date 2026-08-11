@@ -46,7 +46,11 @@ type Config struct {
 	// một FE chạy trên cổng loopback khác — dev bằng vite proxy KHÔNG cần, vì
 	// `changeOrigin` làm request thành same-origin.
 	CORSAllowLoopback bool
-	WebVersion        string
+	// ProgrammingRevA mở các route contract Programming Rev A. Mặc định tắt để
+	// binary có thể được triển khai trước contract consumer mà không lộ endpoint
+	// mutation chưa nối với Core.
+	ProgrammingRevA bool
+	WebVersion      string
 	// MBR-B105/B212: kênh điều khiển fieldbus của iobus. Rỗng ⇒ BE quay về
 	// phương án restart service (có gián đoạn I/O) và nói rõ trong warnings.
 	IobusControlSock string
@@ -90,6 +94,7 @@ func LoadConfig() (Config, error) {
 		StaticDir:          getenv("STATIC_DIR", "dist"),
 		CORSOrigin:         os.Getenv("CORS_ORIGIN"),
 		CORSAllowLoopback:  envTruthy("CORS_ALLOW_LOOPBACK"),
+		ProgrammingRevA:    envTruthy("PROGRAMMING_REV_A"),
 		WebVersion:         getenv("WEB_VERSION", buildVersion),
 	}
 	if cfg.JWTSecret == "" {

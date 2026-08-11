@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.14.0"
+  version: "1.15.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -18,8 +18,8 @@ info:
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-08-10"
-  note: "v1.14.0 đối chiếu route runtime, bổ sung Modbus write-test và WebSocket monitor, đồng thời đánh dấu các endpoint roadmap chưa hiện thực."
+  date: "2026-08-11"
+  note: "v1.15.0 khóa contract Programming Rev A gồm 25 route, error envelope ổn định, RBAC, giới hạn request và điều kiện concurrency/idempotency."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -1725,6 +1725,550 @@ paths:
               schema: { $ref: "#/components/schemas/GraphDeployResult" }
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+  /programming/capabilities:
+    get:
+      operationId: getProgrammingCapabilities
+      summary: Đọc profile và giới hạn Programming Rev A
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      responses:
+        "200":
+          description: Profile, giới hạn và trạng thái producer runtime
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingCapabilities" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects:
+    get:
+      operationId: listProgrammingProjects
+      summary: Liệt kê Project Programming
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingCursor" }
+        - { $ref: "#/components/parameters/ProgrammingLimit" }
+      responses:
+        "200":
+          description: Trang Project và con trỏ tiếp theo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingProjectPage" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+    post:
+      operationId: createProgrammingProject
+      summary: Tạo Project và Draft đầu tiên trong một transaction
+      x-rbac: [admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingCreateProjectRequest" }
+      responses:
+        "201":
+          description: Project và Draft đã tạo
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+    get:
+      operationId: getProgrammingProject
+      summary: Đọc Project, Draft và Revision đang active
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      responses:
+        "200":
+          description: Project hiện hành
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingProject" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/draft:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+    patch:
+      operationId: updateProgrammingDraft
+      summary: Áp dụng lô mutation Draft theo nguyên tắc all-or-nothing
+      x-rbac: [admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingDraftMutationRequest" }
+      responses:
+        "200":
+          description: Draft đã cập nhật nguyên tử
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "428": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/draft/revisions:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+    post:
+      operationId: createProgrammingRevision
+      summary: Đóng Draft thành Revision bất biến
+      x-rbac: [admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingCreateRevisionRequest" }
+      responses:
+        "201":
+          description: Revision bất biến đã tạo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "428": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/revisions/{revisionId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingRevisionId" }
+    get:
+      operationId: getProgrammingRevision
+      summary: Đọc metadata và snapshot Revision
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      responses:
+        "200":
+          description: Revision bất biến
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingRevision" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/revisions/{from}/changes/{to}:
+    parameters:
+      - name: from
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: to
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: compareProgrammingRevisions
+      summary: Đọc change manifest giữa hai Revision
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      responses:
+        "200":
+          description: Change manifest có impactRef ổn định
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingRevisionChanges" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/revisions/{revisionId}/checks:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingRevisionId" }
+    post:
+      operationId: createProgrammingCheck
+      summary: Tạo Check job không tác động runtime
+      x-rbac: [admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingCheckRequest" }
+      responses:
+        "202":
+          description: Check đã vào hàng đợi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingOperationAccepted" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/checks/{checkId}:
+    parameters:
+      - name: checkId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getProgrammingCheck
+      summary: Đọc trạng thái và diagnostic của Check
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      responses:
+        "200":
+          description: Kết quả Check hiện hành
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingCheck" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/point-catalog:
+    get:
+      operationId: getProgrammingPointCatalog
+      summary: Đọc projection Point canonical phục vụ binding
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingCursor" }
+        - { $ref: "#/components/parameters/ProgrammingLimit" }
+      responses:
+        "200":
+          description: Trang Point đã chuẩn hóa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingResourcePage" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/runtime:
+    get:
+      operationId: getProgrammingRuntime
+      summary: Đọc Revision active/LKG và trạng thái Core authoritative
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      responses:
+        "200":
+          description: Snapshot runtime authoritative
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingRuntime" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/runtime/monitor:
+    get:
+      operationId: getProgrammingRuntimeMonitor
+      summary: Đọc mẫu runtime bounded kèm quality và freshness
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      responses:
+        "200":
+          description: Tập mẫu monitor hiện hành
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingResourcePage" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/runtime/traces:
+    post:
+      operationId: createProgrammingTrace
+      summary: Tạo trace session read-only có quota
+      x-rbac: [admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingTraceRequest" }
+      responses:
+        "202":
+          description: Trace session đã được nhận
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingOperationAccepted" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/runtime/traces/{traceId}:
+    parameters:
+      - name: traceId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getProgrammingTrace
+      summary: Đọc mẫu và stop reason của trace session
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      responses:
+        "200":
+          description: Trace session và mẫu bounded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingResource" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+    delete:
+      operationId: stopProgrammingTrace
+      summary: Dừng capture nhưng giữ metadata và audit
+      x-rbac: [admin]
+      x-implementation-status: contract-only
+      responses:
+        "204": { description: Trace đã dừng hoặc đã ở trạng thái kết thúc }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/operations/commission:
+    post:
+      operationId: commissionProgrammingRevision
+      summary: Tạo transaction Commission có impact acknowledgement
+      x-rbac: [admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingCommissionRequest" }
+      responses:
+        "202":
+          description: Operation đã ghi bền vững; chưa khẳng định runtime đã đổi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingOperationAccepted" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/operations/restore:
+    post:
+      operationId: restoreProgrammingRevision
+      summary: Restore Revision/LKG qua cùng verify path với Commission
+      x-rbac: [admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingRestoreRequest" }
+      responses:
+        "202":
+          description: Operation Restore đã được nhận
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingOperationAccepted" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/operations/{operationId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingOperationId" }
+    get:
+      operationId: getProgrammingOperation
+      summary: Đọc tiến trình và read-back authoritative của Operation
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      responses:
+        "200":
+          description: Operation hiện hành
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingOperation" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/operations:
+    get:
+      operationId: listProgrammingOperations
+      summary: Liệt kê lịch sử Operation
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingCursor" }
+        - { $ref: "#/components/parameters/ProgrammingLimit" }
+      responses:
+        "200":
+          description: Trang Operation đã sanitize
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingResourcePage" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/overrides:
+    get:
+      operationId: listProgrammingOverrides
+      summary: Đọc inventory override và authority hiện hành
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      parameters:
+        - name: activeOnly
+          in: query
+          schema: { type: boolean, default: true }
+        - { $ref: "#/components/parameters/ProgrammingCursor" }
+        - { $ref: "#/components/parameters/ProgrammingLimit" }
+      responses:
+        "200":
+          description: Trang override hiện hành
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingResourcePage" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/bundles/export:
+    post:
+      operationId: exportProgrammingBundle
+      summary: Tạo bundle source-only có manifest và hash
+      x-rbac: [admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingBundleExportRequest" }
+      responses:
+        "202":
+          description: Operation export đã được nhận
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingOperationAccepted" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/bundles/import:
+    post:
+      operationId: importProgrammingBundle
+      summary: Quarantine và kiểm bundle trước khi tạo Draft
+      x-rbac: [admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingBundleImportRequest" }
+      responses:
+        "202":
+          description: Operation import đã được nhận; không auto-activate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingOperationAccepted" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/retain/reset:
+    post:
+      operationId: resetProgrammingRetain
+      summary: Tạo operation reset RETAIN với strong confirmation
+      x-rbac: [admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingRetainResetRequest" }
+      responses:
+        "202":
+          description: Operation reset RETAIN đã được nhận
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingOperationAccepted" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/audit:
+    get:
+      operationId: listProgrammingAudit
+      summary: Đọc timeline Programming đã sanitize theo role
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: contract-only
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingCursor" }
+        - { $ref: "#/components/parameters/ProgrammingLimit" }
+      responses:
+        "200":
+          description: Trang audit Programming
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingResourcePage" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -1748,7 +2292,65 @@ components:
         type: string
         pattern: "^(VP|AV)[-_]?0*([1-9]|[1-9][0-9]|[1-3][0-9]{2}|4[0-5][0-9]|46[0-4])$"
         example: "VP1"
+    ProgrammingProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProgrammingRevisionId:
+      name: revisionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProgrammingOperationId:
+      name: operationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProgrammingCursor:
+      name: cursor
+      in: query
+      description: Token opaque có MAC, hiệu lực tối đa 15 phút.
+      schema: { type: string, maxLength: 1024 }
+    ProgrammingLimit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    ProgrammingIdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: true
+      description: UUID v4; unique theo actor, endpoint và controller trong 24 giờ.
+      schema: { type: string, format: uuid }
+    ProgrammingIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: ETag mạnh của Draft mà client đã đọc.
+      schema: { type: string, minLength: 3, maxLength: 128 }
+  headers:
+    ProgrammingETag:
+      description: ETag mạnh của resource vừa trả về.
+      schema: { type: string, minLength: 3, maxLength: 128 }
   responses:
+    ProgrammingError:
+      description: Lỗi Programming có code ổn định; FE không parse nội dung hiển thị.
+      headers:
+        X-Correlation-ID:
+          schema: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ProgrammingErrorEnvelope" }
+    ProgrammingUnavailable:
+      description: Contract đã mount nhưng producer của task sau chưa sẵn sàng; không có side effect.
+      headers:
+        X-Correlation-ID:
+          schema: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
+        Retry-After:
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ProgrammingErrorEnvelope" }
     ScheduleValidationError:
       description: >
         Configuration rejected. Every finding carries a spec §11 error code and a JSON path so the
@@ -1771,6 +2373,335 @@ components:
                 type: array
                 items: { $ref: "#/components/schemas/ValidationDetail" }
   schemas:
+    ProgrammingErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { $ref: "#/components/schemas/ProgrammingPublicError" }
+    ProgrammingPublicError:
+      type: object
+      additionalProperties: false
+      required: [code, messageKey, retryable, keepsRunningRevision, correlationId]
+      properties:
+        code:
+          type: string
+          enum:
+            - PRG-ERR-REQ-001
+            - PRG-ERR-CONFLICT-001
+            - PRG-ERR-OP-001
+            - PRG-ERR-ACK-MISSING-001
+            - PRG-ERR-ACK-UNEXPECTED-001
+            - PRG-ERR-IMPACT-UNAVAILABLE-001
+            - PRG-ERR-IMPACT-STALE-001
+            - PRG-ERR-UNAVAILABLE-001
+        messageKey: { type: string, pattern: "^programming\\.[A-Za-z0-9_.-]+$" }
+        args:
+          type: object
+          additionalProperties: { type: string }
+        field: { type: string }
+        retryable: { type: boolean }
+        keepsRunningRevision: { type: boolean }
+        correlationId: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
+    ProgrammingCapabilities:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, profile, targetState, limits, languages, types, taskPeriodsMs]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        profile: { type: string, const: "MK-DDC-24-REV-A" }
+        targetState: { type: string, enum: [READY, DEGRADED, UNAVAILABLE] }
+        languages:
+          type: array
+          items: { type: string, enum: [ST, FBD] }
+          uniqueItems: true
+        types:
+          type: array
+          items: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+          uniqueItems: true
+        taskPeriodsMs:
+          type: array
+          items: { type: integer, enum: [1000, 5000, 30000] }
+          uniqueItems: true
+        limits:
+          type: object
+          additionalProperties: false
+          required: [projectsPerController, tasks, stSourceBytes, variables, statements, fbdBlocks, fbdConnections, artifactBytes, bindings]
+          properties:
+            projectsPerController: { type: integer, const: 1 }
+            tasks: { type: integer, const: 1 }
+            stSourceBytes: { type: integer, const: 65536 }
+            variables: { type: integer, const: 512 }
+            statements: { type: integer, const: 4096 }
+            fbdBlocks: { type: integer, const: 256 }
+            fbdConnections: { type: integer, const: 512 }
+            artifactBytes: { type: integer, const: 1048576 }
+            bindings: { type: integer, const: 256 }
+    ProgrammingProject:
+      type: object
+      additionalProperties: false
+      required: [projectId, name, etag, activeRevisionId, draftRevisionId, updatedAt]
+      properties:
+        projectId: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        etag: { type: string }
+        activeRevisionId: { type: [string, "null"], format: uuid }
+        draftRevisionId: { type: string, format: uuid }
+        updatedAt: { type: string, format: date-time }
+    ProgrammingProjectPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/ProgrammingProject" }
+        nextCursor: { type: [string, "null"] }
+    ProgrammingCreateProjectRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, name]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000, default: "" }
+    ProgrammingDraftMutationRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, baseRevisionId, operations]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        baseRevisionId: { type: string, format: uuid }
+        operations:
+          type: array
+          minItems: 1
+          maxItems: 512
+          items:
+            type: object
+            required: [op]
+            properties:
+              op: { type: string, minLength: 1, maxLength: 64 }
+            additionalProperties: true
+    ProgrammingCreateRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, baseRevisionId, label]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        baseRevisionId: { type: string, format: uuid }
+        label: { type: string, minLength: 1, maxLength: 120 }
+        comment: { type: string, maxLength: 2000, default: "" }
+    ProgrammingMutationResponse:
+      type: object
+      additionalProperties: false
+      required: [resource, etag, auditId, correlationId]
+      properties:
+        resource: { $ref: "#/components/schemas/ProgrammingResource" }
+        etag: { type: string }
+        auditId: { type: string, format: uuid }
+        correlationId: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
+    ProgrammingRevision:
+      type: object
+      additionalProperties: false
+      required: [revisionId, projectId, state, contentHash, createdAt]
+      properties:
+        revisionId: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        state: { type: string, enum: [DRAFT, IMMUTABLE, ACTIVE, LKG, SUPERSEDED] }
+        contentHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        createdAt: { type: string, format: date-time }
+        snapshot: { $ref: "#/components/schemas/ProgrammingResource" }
+    ProgrammingRevisionChanges:
+      type: object
+      additionalProperties: false
+      required: [fromRevisionId, toRevisionId, impact]
+      properties:
+        fromRevisionId: { type: string, format: uuid }
+        toRevisionId: { type: string, format: uuid }
+        impact: { $ref: "#/components/schemas/ProgrammingImpact" }
+        changes:
+          type: array
+          items: { $ref: "#/components/schemas/ProgrammingResource" }
+    ProgrammingImpactStatus:
+      type: string
+      enum: [NONE, PRESENT, UNAVAILABLE]
+    ProgrammingImpactKey:
+      type: string
+      enum: [retain, activeOverrides, cutover, outputMappingChanges]
+    ProgrammingImpactGroup:
+      type: object
+      additionalProperties: false
+      required: [status, items]
+      properties:
+        status: { $ref: "#/components/schemas/ProgrammingImpactStatus" }
+        items:
+          type: array
+          items: { type: string, minLength: 1, maxLength: 512 }
+    ProgrammingImpact:
+      type: object
+      additionalProperties: false
+      required: [impactRef, retain, activeOverrides, cutover, outputMappingChanges]
+      properties:
+        impactRef: { type: string, minLength: 8, maxLength: 128 }
+        retain: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        activeOverrides: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        cutover: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        outputMappingChanges: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+    ProgrammingCheckRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, targetProfile]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        targetProfile: { type: string, const: "MK-DDC-24-REV-A" }
+    ProgrammingCheck:
+      type: object
+      additionalProperties: false
+      required: [checkId, revisionId, state, diagnostics]
+      properties:
+        checkId: { type: string, format: uuid }
+        revisionId: { type: string, format: uuid }
+        state: { type: string, enum: [QUEUED, RUNNING, PASSED, FAILED, CANCELLED] }
+        diagnostics:
+          type: array
+          items: { $ref: "#/components/schemas/ProgrammingDiagnostic" }
+    ProgrammingDiagnostic:
+      type: object
+      additionalProperties: false
+      required: [code, severity, messageKey, location]
+      properties:
+        code: { type: string, pattern: "^PRG-ERR-[A-Z0-9-]+$" }
+        severity: { type: string, enum: [ERROR, WARNING, INFO] }
+        messageKey: { type: string }
+        location: { $ref: "#/components/schemas/ProgrammingResource" }
+        args:
+          type: object
+          additionalProperties: { type: string }
+    ProgrammingTraceRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, variableIds, durationMs, samplePeriodMs]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        variableIds:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        durationMs: { type: integer, minimum: 1000, maximum: 300000 }
+        samplePeriodMs: { type: integer, minimum: 100, maximum: 30000 }
+    ProgrammingCommissionRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, revisionId, expectedActiveRevisionId, checkId, impactRef, acknowledgements, cutover]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        revisionId: { type: string, format: uuid }
+        expectedActiveRevisionId: { type: [string, "null"], format: uuid }
+        checkId: { type: string, format: uuid }
+        impactRef: { type: string, minLength: 8, maxLength: 128 }
+        acknowledgements:
+          type: array
+          maxItems: 4
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/ProgrammingImpactKey" }
+        cutover:
+          type: object
+          additionalProperties: false
+          required: [requested]
+          properties:
+            requested: { type: string, enum: [GRAPH_ONLY, PROGRAM_ONLY] }
+            graphBackupId: { type: [string, "null"], maxLength: 128 }
+    ProgrammingRestoreRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, revisionId, expectedActiveRevisionId, reason]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        revisionId: { type: string, format: uuid }
+        expectedActiveRevisionId: { type: [string, "null"], format: uuid }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    ProgrammingBundleExportRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, revisionIds]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        revisionIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    ProgrammingBundleImportRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, uploadRef, expectedSha256]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        uploadRef: { type: string, minLength: 8, maxLength: 256 }
+        expectedSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+    ProgrammingRetainResetRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, expectedActiveRevisionId, confirmationToken, reason]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        expectedActiveRevisionId: { type: string, format: uuid }
+        confirmationToken: { type: string, minLength: 16, maxLength: 256 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    ProgrammingOperationAccepted:
+      type: object
+      additionalProperties: false
+      required: [operationId, statusUrl, state, requestHash, acceptedAt, correlationId]
+      properties:
+        operationId: { type: string, format: uuid }
+        statusUrl: { type: string, pattern: "^/api/v1/programming/operations/[A-Za-z0-9-]+$" }
+        state: { type: string, const: QUEUED }
+        requestHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        acceptedAt: { type: string, format: date-time }
+        correlationId: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
+    ProgrammingOperation:
+      type: object
+      additionalProperties: false
+      required: [operationId, state, step, keepsRunningRevision, startedAt, updatedAt]
+      properties:
+        operationId: { type: string, format: uuid }
+        state: { type: string, enum: [QUEUED, PREFLIGHT, STAGING, APPLYING, VERIFYING, SUCCEEDED, FAILED, ROLLED_BACK, UNKNOWN_RECONCILING] }
+        step: { type: string, maxLength: 128 }
+        requestedRevisionId: { type: [string, "null"], format: uuid }
+        previousActiveRevisionId: { type: [string, "null"], format: uuid }
+        actualActiveRevisionId: { type: [string, "null"], format: uuid }
+        keepsRunningRevision: { type: boolean }
+        startedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ProgrammingRuntime:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, producerState, activeRevisionId, lkgRevisionId, taskState, safeState, observedAt]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        producerState: { type: string, enum: [READY, DEGRADED, UNAVAILABLE] }
+        activeRevisionId: { type: [string, "null"], format: uuid }
+        lkgRevisionId: { type: [string, "null"], format: uuid }
+        taskState: { type: string, enum: [STOPPED, STARTING, RUNNING, FAULT, UNKNOWN] }
+        safeState: { type: boolean }
+        observedAt: { type: string, format: date-time }
+    ProgrammingResource:
+      type: object
+      additionalProperties: true
+    ProgrammingResourcePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/ProgrammingResource" }
+        nextCursor: { type: [string, "null"] }
     ValidationDetail:
       type: object
       required: [path, reason]
