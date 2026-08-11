@@ -2,6 +2,7 @@ package programminghttp
 
 import (
 	"bufio"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -55,5 +56,25 @@ func TestRegisteredRoutesMatchProgrammingOpenAPI(t *testing.T) {
 	sort.Strings(registered)
 	if strings.Join(openAPIContracts, "\n") != strings.Join(registered, "\n") {
 		t.Fatalf("OpenAPI và Go routes lệch:\nOpenAPI:\n%s\nGo:\n%s", strings.Join(openAPIContracts, "\n"), strings.Join(registered, "\n"))
+	}
+}
+
+func TestProgrammingImpactGoldenPayload(t *testing.T) {
+	goldenPath := filepath.Join("..", "..", "..", "..", "..", "..", "contracts", "openapi", "testdata", "programming-impact.json")
+	raw, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var impact Impact
+	if err := json.Unmarshal(raw, &impact); err != nil {
+		t.Fatal(err)
+	}
+	request := CommissionRequest{
+		SchemaVersion:    "1.0",
+		ImpactRef:        impact.ImpactRef,
+		Acknowledgements: []ImpactKey{ImpactRetain, ImpactActiveOverrides},
+	}
+	if public := ValidateImpactAcknowledgements(impact, request); public != nil {
+		t.Fatalf("golden payload bị từ chối: %+v", public)
 	}
 }

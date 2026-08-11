@@ -108,7 +108,7 @@ func validateContractRequest(w http.ResponseWriter, r *http.Request, definition 
 	if contentType := r.Header.Get("Content-Type"); !strings.HasPrefix(strings.ToLower(contentType), "application/json") {
 		public := domain.NewPublicError(domain.ErrRequest, "programming.request.contentType")
 		public.Field = "Content-Type"
-		return http.StatusUnsupportedMediaType, &public
+		return http.StatusBadRequest, &public
 	}
 	value, err := validateBoundedJSON(w, r)
 	if err != nil {

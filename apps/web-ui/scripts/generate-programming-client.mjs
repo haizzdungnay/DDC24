@@ -72,7 +72,7 @@ export type ProgrammingImpactKey = ${quotedUnion(impactKeys)};
 export interface ProgrammingPublicError {
   code: ProgrammingErrorCode;
   messageKey: string;
-  args?: Record<string, string>;
+  args?: Record<string, unknown>;
   field?: string;
   retryable: boolean;
   keepsRunningRevision: boolean;

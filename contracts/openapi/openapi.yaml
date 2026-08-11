@@ -2398,7 +2398,8 @@ components:
         messageKey: { type: string, pattern: "^programming\\.[A-Za-z0-9_.-]+$" }
         args:
           type: object
-          additionalProperties: { type: string }
+          description: Giá trị JSON bounded dùng cho i18n; không chứa secret hoặc detail nội bộ.
+          additionalProperties: true
         field: { type: string }
         retryable: { type: boolean }
         keepsRunningRevision: { type: boolean }

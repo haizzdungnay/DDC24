@@ -12,7 +12,7 @@ export type ProgrammingImpactKey = "retain" | "activeOverrides" | "cutover" | "o
 export interface ProgrammingPublicError {
   code: ProgrammingErrorCode;
   messageKey: string;
-  args?: Record<string, string>;
+  args?: Record<string, unknown>;
   field?: string;
   retryable: boolean;
   keepsRunningRevision: boolean;

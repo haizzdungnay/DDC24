@@ -7,6 +7,7 @@ import {
   ProgrammingApiError,
   type ProgrammingCommissionRequest,
 } from "./client";
+import impactGolden from "../../../../../../../contracts/openapi/testdata/programming-impact.json";
 
 describe("Programming API client sinh từ OpenAPI", () => {
   it("khóa đủ 25 operation và contract Commission", () => {
@@ -26,6 +27,15 @@ describe("Programming API client sinh từ OpenAPI", () => {
       cutover: { requested: "PROGRAM_ONLY" },
     };
     expect(request.acknowledgements).toEqual([]);
+  });
+
+  it("đọc cùng golden impact payload với Go", () => {
+    expect(impactGolden.impactRef).toBe("impact-ref-0001");
+    const acknowledgements = Object.entries(impactGolden)
+      .filter(([, value]) => typeof value === "object" && "status" in value && value.status === "PRESENT")
+      .map(([key]) => key)
+      .sort();
+    expect(acknowledgements).toEqual(["activeOverrides", "retain"]);
   });
 
   it("resolve path, query và header concurrency đúng contract", async () => {

@@ -33,7 +33,7 @@ var allImpactKeys = []ImpactKey{
 
 type ImpactGroup struct {
 	Status ImpactStatus `json:"status"`
-	Items  []string     `json:"items,omitempty"`
+	Items  []string     `json:"items"`
 	Reason string       `json:"reason,omitempty"`
 }
 

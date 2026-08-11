@@ -1,0 +1,19 @@
+{
+  "impactRef": "impact-ref-0001",
+  "retain": {
+    "status": "PRESENT",
+    "items": ["RETAIN layout thay đổi"]
+  },
+  "activeOverrides": {
+    "status": "PRESENT",
+    "items": ["AO-01 đang có override"]
+  },
+  "cutover": {
+    "status": "NONE",
+    "items": []
+  },
+  "outputMappingChanges": {
+    "status": "NONE",
+    "items": []
+  }
+}
