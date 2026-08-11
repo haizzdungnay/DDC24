@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `PROG-DOCSET-001` |
-| Phiên bản | 2.9 |
+| Phiên bản | 3.0 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`; maturity đo được vẫn M3 |
 | Ngày | 2026-08-11 |
 | Chủ quản | System Engineering |
@@ -15,11 +15,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Xác định **hồ sơ nào là chủ quản của nội dung nào** trong bộ Programming. Khi hai file nói khác nhau về cùng một chủ đề, file được chỉ định ở §3 là bên đúng; file kia phải sửa theo. Đây cũng là điểm vào để biết đọc file nào trước. |
 | 2. Ai phải đọc file này? | Bất kỳ ai chuẩn bị sửa một hồ sơ Programming, và mọi người mới vào dự án. Dev Lead đọc để biết hồ sơ upstream của một slice; Document Control đọc để kiểm register. |
-| 3. Hệ thống hiện tại đang có gì? | Đường điều khiển production hiện chạy bằng **graph**. P1 đã khóa contract/store/deploy; P2 đã hoàn tất `TASK-PROG-200..206`: ST/FBD compiler, artifact manifest/source map, Project/Draft/Revision/Check, change manifest và bundle source-only trên SQLite v4. Flag vẫn `OFF`; 14 route operation/runtime/audit còn fail-closed và chưa có Commission/Core activation. |
+| 3. Hệ thống hiện tại đang có gì? | Đường điều khiển production hiện chạy bằng **graph**. P1 đã khóa contract/store/deploy; P2 đã hoàn tất `TASK-PROG-200..207`: ST/FBD compiler, artifact manifest/source map, Project/Draft/Revision/Check, change manifest, bundle source-only trên SQLite v4 và assurance hostile-input/resource/audit trên host. Flag vẫn `OFF`; 14 route operation/runtime/audit còn fail-closed và chưa có Commission/Core activation. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm một đường Programming song song (Project → Draft → Revision → Check → Commission → Active) và một **cutover độc quyền**: hoặc `GRAPH_ONLY`, hoặc `PROGRAM_ONLY`, không bao giờ cả hai. Bảy ranh giới bắt buộc ở §4 là phần không được thương lượng. Giao diện tổ chức theo **bốn workspace** và **tám user journey** `UJ-PROG-01..08` đã được `OD-PROG-016` quyết định. |
 | 5. Team phải sửa module/contract nào? | File này không giao việc code. Nó chỉ tay tới hồ sơ chủ quản: `mkddc-web` (BE Design), `mkddc-core` (FW-SOM + Control Semantics), `mkddc-iobus` (không đổi), STM32 (FW MCU Design), `apps/web-ui` (FE + UI/UX Design). |
-| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** P1 6/6 DONE; P2 7/8 và next `TASK-PROG-207`. Hai record VS-001/019 đang BLOCKED và 0/32 PASS chỉ chặn release, không chặn code. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Register 22 dòng phải khớp harness. Evidence G2-205: Check `202 → terminal`, lease/retry/restart, sandbox timeout/process-group kill, artifact content-address/read-back và regression CTest 929/929, FE 494/494, Go/race PASS. 2 record BLOCKED, 0/32 PASS nên không suy host test thành release evidence. |
+| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** P1 6/6 DONE; P2 8/8 DONE về source/DoD; next `TASK-PROG-300`. Hai record VS-001/019 đang BLOCKED và 0/32 PASS chỉ chặn release, không chặn code. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Register 22 dòng phải khớp harness. `EV-PROG-G2-207` ghi hostile bundle corpus 25 lớp với snapshot 8 bảng zero-mutation, 23 alias audit-secret, compiler timeout/OOM/output/source bounds, fuzz 2.156 lượt, CTest 929/929, FE 494/494 và Go/race PASS. Đây là evidence host hỗ trợ, không phải Test Result độc lập; 2 record BLOCKED, 0/32 PASS. |
 
 Thuật ngữ điều hướng: **workspace** là một trong bốn màn hình chính `PGM-01..04`;
 **user journey** `UJ-PROG-01..08` là một công việc trọn vẹn của người dùng;
@@ -74,28 +74,28 @@ Product/ADR Active
 
 | ID | Hồ sơ chủ quản | Trách nhiệm | Trạng thái |
 |---|---|---|---|
-| `PROG-DOCSET-001` | [Programming Design Index](PROGRAMMING_DESIGN_INDEX.md) | quyền tài liệu, danh mục 22 hồ sơ và luồng đọc | `M3` v2.9 — **APPROVED FOR IMPLEMENTATION**; P1 6/6, P2 7/8 |
+| `PROG-DOCSET-001` | [Programming Design Index](PROGRAMMING_DESIGN_INDEX.md) | quyền tài liệu, danh mục 22 hồ sơ và luồng đọc | `M3` v3.0 — **APPROVED FOR IMPLEMENTATION**; P1 6/6, P2 8/8 source/DoD |
 | `SRS-PROG-001` | [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | 60 requirement phân bổ theo layer, tiêu chí chấp nhận, ngưỡng khả dụng | `M3` v0.6 — **APPROVED FOR IMPLEMENTATION** |
 | `PROG-OD-001` | [Programming Open Decisions](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 17 quyết định Product/System | `M3` v0.9 — `17 DECIDED`, `0 OPEN`, `0 CLOSED` |
 | `ARCH-PROG-001` | [Programming Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | context, ownership, process, failure boundary, cutover | `M3` v0.7 — 6/6 ADR `Accepted`; **APPROVED FOR IMPLEMENTATION** |
-| `DM-PROG-001` | [Programming Data Model](software/PROGRAMMING_DATA_MODEL.md) | Project/Draft/Revision/Artifact/Runtime/Audit | `M3` v0.8 — SQLite v4, Check + bundle receipt, change manifest và source-only import As-Built; operation/target còn mở |
-| `IFSPEC-PROG-001` | [Programming Interface Specification](interfaces/PROGRAMMING_INTERFACE_SPEC.md) | REST/WS/internal control/error/idempotency contracts | `M3` v1.2 — 11 operation Project/Draft/Revision/Check/change/bundle có source; 14 operation còn fail-closed |
+| `DM-PROG-001` | [Programming Data Model](software/PROGRAMMING_DATA_MODEL.md) | Project/Draft/Revision/Artifact/Runtime/Audit | `M3` v0.9 — SQLite v4 + assurance zero-mutation/audit-secret As-Built; operation/target còn mở |
+| `IFSPEC-PROG-001` | [Programming Interface Specification](interfaces/PROGRAMMING_INTERFACE_SPEC.md) | REST/WS/internal control/error/idempotency contracts | `M3` v1.3 — 11 operation và bundle strict NFC/metadata/bounds có source; 14 operation còn fail-closed |
 | `DDD-LANG-PROG-001` | [Language/Compiler Design](software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md) | ST/FBD subset, type, diagnostic, common IR và compiler | `M3` v0.7 — ST/FBD common IR + artifact provenance `TASK-PROG-200..203 DONE`; local POU/worker còn mở |
 | `IFSPEC-ART-PROG-001` | [Artifact/Loader Spec](interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md) | artifact layout, bounded loader, stage/load/swap/reject | `M3` v0.7 — loader/type/manifest/source map host `TASK-PROG-102/200/203 DONE`; production stage/swap còn mở |
 | `DDD-CTRL-PROG-001` | [Control Semantics](software/PROGRAMMING_CONTROL_SEMANTICS.md) | scan order, priority, PID, hold-last, overrun, transition | `M3` — **APPROVED FOR IMPLEMENTATION** |
 | `DDD-LIFE-PROG-001` | [Runtime Lifecycle](software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md) | Check/Commission/Restore/RETAIN/LKG/restart/power-loss | `M3` — **APPROVED FOR IMPLEMENTATION** |
 | `UX-WEB-PROG-001` | [Programming UI/UX Design](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) | IA bốn workspace, tám journey, asset visual PGM-01..04, copy, states, responsive, accessibility | `M3` v0.8 — **APPROVED FOR IMPLEMENTATION**; browser evidence thu khi có FE runtime |
 | `DDD-FE-PROG-001` | [Programming FE Design](software/PROGRAMMING_FE_DESIGN.md) | React feature, state/query/mutation, error recovery | `M3` v0.8 — FBD keyboard component Task 201; route/API/browser còn mở |
-| `DDD-BE-PROG-001` | [Programming BE Design](software/PROGRAMMING_BE_DESIGN.md) | Go service, persistence, compiler job, RBAC/audit | `M3` v0.9 — Check service/worker sandbox/artifact store As-Built; operation worker còn mở |
+| `DDD-BE-PROG-001` | [Programming BE Design](software/PROGRAMMING_BE_DESIGN.md) | Go service, persistence, compiler job, RBAC/audit | `M3` v1.1 — Check/bundle + compiler/bundle/audit assurance As-Built; operation worker còn mở |
 | `DDD-FWSOM-PROG-001` | [Programming FW-SOM Design](software/PROGRAMMING_FW_SOM_DESIGN.md) | compiler/runtime boundary, scheduler, activation, RETAIN | `M3` — **APPROVED FOR IMPLEMENTATION**; target evidence thu theo task |
 | `DDD-FWMCU-PROG-001` | [Programming FW MCU Design](firmware/PROGRAMMING_FW_MCU_DESIGN.md) | IOP continuity, sampling/actuation, safe-timeout, diag | `M3` — **APPROVED FOR IMPLEMENTATION**; HIL là evidence P6 |
 | `DDD-HW-PROG-001` | [Programming HW Design](../04_design/hardware/PROGRAMMING_HW_DESIGN.md) | electrical constraints và điểm đo HIL | `M3` — **APPROVED FOR IMPLEMENTATION**; HW/HIL triển khai song song |
-| `DDD-SEC-PROG-001` | [Security Design](software/PROGRAMMING_SECURITY_DESIGN.md) | trust boundary, RBAC, integrity, sandbox, audit và abuse case | `M3` — **APPROVED FOR IMPLEMENTATION**; TLS evidence theo security DoD |
-| `VVP-PROG-001` | [Programming Verification Plan](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | test level, 32 scenario gồm usability, evidence và release gate | `M3` v0.9 — **APPROVED FOR IMPLEMENTATION**; 2 record BLOCKED, 0/32 PASS |
+| `DDD-SEC-PROG-001` | [Security Design](software/PROGRAMMING_SECURITY_DESIGN.md) | trust boundary, RBAC, integrity, sandbox, audit và abuse case | `M3` v0.5 — hostile corpus/resource/audit assurance host có source; TLS/target evidence còn mở |
+| `VVP-PROG-001` | [Programming Verification Plan](../05_verification/PROGRAMMING_VERIFICATION_PLAN.md) | test level, 32 scenario gồm usability, evidence và release gate | `M3` v1.0 — có evidence host G2-207 hỗ trợ; 2 record BLOCKED, 0/32 PASS |
 | `OPS-PROG-001` | [Programming Operations Runbook](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | backup, commission, restore, replacement, incident | `M3` — **APPROVED FOR IMPLEMENTATION**; diễn tập theo P6 |
-| `RSK-PROG-001` | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | rủi ro, kiểm soát, owner và residual gate | `M3` v1.2 — RSK-007/008 treatment partial thêm API idempotency/ETag/restart; residual giữ nguyên |
-| `TRACE-PROG-001` | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Requirement → Design → Interface → Test → Evidence | `M3` v3.9 — 2/60 `I=Y`; Task 205 là source partial; 2 record BLOCKED, 0/32 PASS |
-| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.30 — P2 7/8; next `TASK-PROG-207` |
+| `RSK-PROG-001` | [Programming Risk Register](../07_records/PROGRAMMING_RISK_REGISTER.md) | rủi ro, kiểm soát, owner và residual gate | `M3` v1.5 — treatment Task 207 bổ sung hostile corpus/resource/audit; residual giữ nguyên |
+| `TRACE-PROG-001` | [Programming Traceability Matrix](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Requirement → Design → Interface → Test → Evidence | `M3` v3.11 — 2/60 `I=Y`; Task 207 là source partial; 2 record BLOCKED, 0/32 PASS |
+| `PLAN-PROG-053` | [Programming Implementation Plan](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | slice, dependency, RACI, entry/exit gate | `M3` v0.31 — P2 8/8 source/DoD; next `TASK-PROG-300` |
 
 Tiến độ tạo, hoàn thiện, review và phê duyệt đúng 22 hồ sơ trên được quản lý tại
 [`PLAN-PROG-DOC-054`](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md).
@@ -125,7 +125,7 @@ Roadmap là tracker ngoài baseline, không được tính thành hồ sơ thứ
 | Graph production path | Có, bootstrap nạp `graph.json` | Legacy; cần cutover contract |
 | ST parser/semantic/IR/artifact/scheduler/RETAIN/trace component | Task 200 đã đủ sáu type target, exact diagnostic/source map và host fuzz | Supporting component; FBD/worker/production wiring/target còn mở |
 | FBD | Chưa có production compiler/editor | Thiết kế mới, gate G1 |
-| Programming REST/WS + persistence | OpenAPI có 25 route; 11 route Project/Draft/Revision/Check/change/bundle dùng service + SQLite v4 khi flag ON, 14 route còn 503; flag mặc định OFF | G2 IN_PROGRESS; operation worker và Core lifecycle còn mở; import không Check/Commission/activate |
+| Programming REST/WS + persistence | OpenAPI có 25 route; 11 route Project/Draft/Revision/Check/change/bundle dùng service + SQLite v4 khi flag ON, 14 route còn 503; hostile-input/resource/audit assurance host đã hoàn tất; flag mặc định OFF | G2 source/DoD DONE, evidence release BLOCKED; operation worker và Core lifecycle còn mở; import không Check/Commission/activate |
 | MCU IOP safe timeout | Có code thuần `200 ms` | BSP/HIL vật lý còn RED |
 | FE Programming | Chỉ có trang placeholder | Thiết kế mới, gate G3/G4 |
 
@@ -226,6 +226,7 @@ code; review/evidence thực được bổ sung trong task và trước release.
 | 2.7 | 2026-08-11 | Đồng bộ `TASK-PROG-204` tại `66848a1`: wiring SQLite v2 và sáu Project/Draft/Revision operation, ETag/CAS, idempotency 24 giờ, immutable Revision, migration backup và RBAC; P2 5/8, next TASK-PROG-205. Data v0.6, Interface v1.0, BE v0.8, Risk v1.2, Trace v3.8, Plan v0.28; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 2.8 | 2026-08-11 | Đồng bộ `TASK-PROG-205` tại `e8c289e`: SQLite v3, Check request 24 giờ, lease/CAS retry một lần, compiler sandbox, diagnostic, Artifact content-address/read-back và hai route Check thật; P2 6/8, next TASK-PROG-206. Data v0.7, Interface v1.1, BE v0.9, Risk v1.3, Trace v3.9, Plan v0.29; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 2.9 | 2026-08-11 | Đồng bộ `TASK-PROG-206` tại `95b9388`: change manifest deterministic, ZIP source-only/hash/allowlist, import Project/Draft atomic và SQLite v4 bundle receipt; P2 7/8, next TASK-PROG-207. Data v0.8, Interface v1.2, BE v1.0, Risk v1.4, Trace v3.10, Plan v0.30; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
+| 3.0 | 2026-08-11 | Đồng bộ `TASK-PROG-207` tại `3e5281d`: hostile corpus 25 lớp/zero-mutation 8 bảng, 23 alias audit-secret, compiler resource bounds và fuzz host; P2 8/8 source/DoD, next TASK-PROG-300. Data v0.9, Interface v1.3, BE v1.1, Security v0.5, VVP v1.0, Risk v1.5, Trace v3.11, Plan v0.31; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 
 ## 11. Phụ lục — Tự kiểm cổng M3 (loại: Kiểm soát tài liệu)
 

@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-BE-PROG-001` |
-| Phiên bản | 1.0 |
+| Phiên bản | 1.1 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; chờ Core/Security/QA review |
 | Ngày | 2026-08-11 |
 | Chủ quản | Backend Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **backend Go tổ chức ra sao**: chia package, lưu trữ, chạy compiler job, điều phối Commission, phân quyền, audit và migration. Đây là nơi biến hợp đồng API thành code chạy được. |
 | 2. Ai phải đọc file này? | BE Lead và lập trình viên Go (chủ quản); Core đọc §4 (điều phối Commission) và §6 (read model); Security đọc §7; Ops đọc §9; QA đọc §10 và §17. |
-| 3. Hệ thống hiện tại đang có gì? | Source `95b9388` đã nối `application.ProjectService` + `CheckService`, HTTP handler, SQLite v4, compiler/Artifact, change manifest và bundle source-only vào lifecycle `mkddc-web`. 11 operation chạy thật khi `PROGRAMMING_REV_A=true`; export/import có receipt 24 giờ, ZIP/hash allowlist và chỉ tạo Project/Draft. Flag mặc định `OFF`; 14 operation runtime/operation/audit còn `503`. |
+| 3. Hệ thống hiện tại đang có gì? | Source `3e5281d` giữ 11 operation thật và bổ sung assurance cho compiler/bundle/audit: hostile bundle corpus 25 lớp với snapshot 8 bảng zero-mutation, 23 alias audit-secret, timeout/OOM/output/source bounds và fuzz. Flag mặc định `OFF`; 14 operation runtime/operation/audit còn `503`. |
 | 4. Thiết kế mới thay đổi điều gì? | Bounded module đã có các lớp `domain`, `store`, `application`, `compiler`, `artifact`, `coreipc`, `transport`; không tạo tiến trình thứ tư. Check worker chạy trong Web process nhưng compiler là child process bị hạn chế; handler không chứa compiler/runtime logic, store không gọi Core và compiler không ghi DB. |
-| 5. Team phải sửa module/contract nào? | §11–§12 phân biệt As-Built/Target. Việc kế tiếp là `TASK-PROG-207`: hostile corpus/timeout/OOM/fuzz/traversal/zip-bomb/audit-secret assurance; sau đó operation coordinator. Không phá schema v4 hoặc 11 API đã có ngoài migration/contract tương thích. |
+| 5. Team phải sửa module/contract nào? | §11–§12 phân biệt As-Built/Target. `TASK-PROG-207` assurance đã hoàn tất; việc kế tiếp trên critical path là `TASK-PROG-300` bounded loader/runtime Core, sau đó operation coordinator. Không phá schema v4 hoặc 11 API đã có ngoài migration/contract tương thích. |
 | 6. Điều gì còn bị chặn? | Không còn decision chặn implementation. Check và bundle đã fail-safe trên host; Commission vẫn fail-safe vì operation worker và Core lifecycle chưa có. Target migration/HIL/Test Result còn là gate release. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | TASK-PROG-206 host suite PASS cho change/hash deterministic, bundle round-trip, manifest/file hash/size/path allowlist, import atomic/idempotent và HTTP `200→201`; race detector, toàn bộ Go, CTest `929/929`, FE `58/58` file `494/494` test đều PASS. Đây chưa phải Test Result target/HIL. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G2-207` PASS hostile corpus 25 lớp/zero-mutation, 23 audit alias, compiler timeout/OOM/output/source bounds, Go fuzz 2.156 lượt/race và full regression CTest `929/929`, FE `58/58` file `494/494`. Đây chưa phải Test Result target/HIL. |
 
 Hai điều BE **không** được làm: tin vai trò do FE gửi trong payload, và báo
 thành công khi Core chưa xác nhận. Cả hai đều là rủi ro đã có tên —
@@ -378,9 +378,9 @@ propagate nhưng Core không authorize theo actor string.
 | `BE-T-008` | OpenAPI/Go/TS/IPC examples | zero contract mismatch |
 | `BE-T-009` | disk quota/low watermark | mutation blocked early; active runtime unaffected |
 
-Tại `95b9388`, `BE-T-003/004`, phần Check/bundle của `BE-T-007/008` đã PASS bằng
-host test/race/contract thực. `BE-T-005/006`, hostile corpus mở rộng Task 207,
-quota target và toàn bộ Test Result
+Tại `3e5281d`, `BE-T-003/004`, phần Check/bundle của `BE-T-007/008` đã PASS bằng
+host test/race/contract thực, gồm timeout/OOM/output/source bounds, hostile corpus
+25 lớp zero-mutation và audit-secret. `BE-T-005/006`, quota target và toàn bộ Test Result
 độc lập vẫn mở; không dùng bảng này để suy chúng đã PASS.
 
 ## 18. Handler-to-service-to-store contract
@@ -438,6 +438,7 @@ major khác, mutation disable. Restore LKG compatible trước mọi Core downgr
 | 0.8 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-204` tại `66848a1`: nối SQLite v2 và `application.ProjectService` vào lifecycle; sáu route Project/Draft/Revision chạy thật với ETag/CAS, receipt idempotency 24 giờ, cursor HMAC, immutable Revision, RBAC và restart/migration test; giữ 19 route, Check/operation worker và target evidence là phần tiếp theo |
 | 0.9 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-205` tại `e8c289e`: nối SQLite v3, `application.CheckService`, worker lease/retry, compiler subprocess sandbox và Artifact content-address/read-back vào lifecycle; hai route Check chạy thật, catalog 20/80; giữ 17 route bundle/operation/runtime, flag OFF và target evidence là phần tiếp theo |
 | 1.0 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-206` tại `95b9388`: nối SQLite v4, change manifest/impactRef deterministic, ZIP source-only/hash/allowlist và import Project/Draft atomic; ba route change/export/import chạy thật, G1 7/7; giữ 14 route operation/runtime/audit, flag OFF và target evidence là phần tiếp theo |
+| 1.1 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-207` tại `3e5281d`: raw/entry/count/path/ZIP metadata bounded, hostile corpus 25 lớp với snapshot 8 bảng zero-mutation, 23 alias audit-secret và compiler timeout/OOM/output/source bounds + fuzz; giữ 14 route operation/runtime/audit, flag OFF và target/Test Result còn mở |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -450,7 +451,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; lịch sử và bảng ký §20 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 ranh giới module, gồm quy tắc phân lớp handler/store/runtime |
-| `DD-03` As-Built | PASS | §0/§11–12.3 dẫn `internal/programming/{application,artifact,compiler,domain,coreipc,store,transport}` tại `95b9388`; ghi chính xác 11 route/store v4/Check/change/bundle đã có và operation/Core còn thiếu |
+| `DD-03` As-Built | PASS | §0/§11–12.3 dẫn `internal/programming/{application,artifact,compiler,domain,coreipc,store,transport}` tại `95b9388` và assurance tại `3e5281d`; ghi chính xác 11 route/store v4/Check/change/bundle đã có và operation/Core còn thiếu |
 | `DD-04` Target ownership | PASS | §1 bảy package con; §18 hợp đồng handler → service → store |
 | `DD-05` Data từng field | PASS | §2 persistence; §14 vòng đời dữ liệu/tệp và hạn ngạch; schema chi tiết ở `DM-PROG-001` |
 | `DD-06` Interface | PASS | §8 ánh xạ lỗi; §18 hợp đồng ba lớp; §6 read model runtime |

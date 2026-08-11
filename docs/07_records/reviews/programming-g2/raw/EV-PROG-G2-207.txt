@@ -1,0 +1,32 @@
+EV-PROG-G2-207 — TASK-PROG-207 security assurance host evidence
+Date: 2026-08-11 Asia/Ho_Chi_Minh
+Source commit: 3e5281d45e41d4bc90c8d81d6c2d6dfaa930ad9d
+Source tree: 6e489d57fe471973986178f1add09fff3393d266
+Environment: host development; not Forlinx target/HIL; PROGRAMMING_REV_A remains OFF
+
+Implemented scope:
+- bundle raw archive <= 4 MiB before parse; <=1024 entries; <=256 KiB/entry
+- UTF-8 NFC relative paths; regular non-executable entries only
+- reject encryption, symlink/hardlink/executable/comment/non-deterministic timestamp/extra metadata
+- audit sensitive-key normalization and bundle provenance-only audit payload
+- compiler timeout/SIGKILL/scratch/output/source bounded failure paths
+
+Measured results:
+- hostile bundle corpus: 25/25 PASS
+- zero-mutation snapshots: 8 tables/aggregates unchanged for every reject
+- sensitive audit aliases: 23/23 rejected without audit record
+- Go fuzz FuzzInspectSourceBundleBounded: 2,156 executions in 5 seconds; 0 crash
+- go vet ./...: PASS
+- go test ./... -count=1: PASS
+- go test -race ./internal/programming/...: PASS
+- CMake Release with MKDDC_ENABLE_MODBUS=ON, MKDDC_ENABLE_BACNET=ON, MKDDC_ENABLE_HMI=ON: PASS
+- CTest: 929/929 PASS
+- FE Vitest: 58/58 files, 494/494 tests PASS
+- FE lint, typecheck and Vite build: PASS
+- G1 contract join: 7/7 PASS
+- deploy-order negative checks: 5/5 PASS
+
+Evidence boundary:
+- This is supporting host engineering evidence, not an independent TR-PROG-* Test Result.
+- VS-PROG-021/022/023 remain without PASS; target cgroup/TLS/Core runtime/HIL not executed.
+- No Commission, stage, activate, Active/LKG mutation or Forlinx deployment occurred in this task.
