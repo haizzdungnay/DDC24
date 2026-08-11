@@ -2,7 +2,7 @@
 
 **ID:** IF-SPEC-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-05 (đồng bộ hai ICD Modbus RTU lên bản 0.2; ghi nhận lệch ngữ nghĩa `retry` trong OpenAPI)
+**Cập nhật:** 2026-08-11 (đồng bộ As-Built hash/compiler Programming sau `TASK-PROG-203`)
 
 ## Programming Rev A — trạng thái interface
 
@@ -157,15 +157,16 @@ Output: đúng 1 dòng JSON ra stdout, shape cố định dù ok=true/false:
      "sourceId":"","line":8,"column":8,"length":1}
   ],
   "symbols": [{"name":"SupplyTemp","direction":"input","type":"REAL"}],
-  "artifactHash": "3F2A9C1B7E4D5061",
-  "compilerVersion": "fwsom-st-0.2.0",
+  "artifactHash": "c26d679829d59de65b2c94ed643d459fd8ee7dfd6b20491d273aa13d093fc6ae",
+  "compilerVersion": "fwsom-st-1.1.0",
   "irSchemaVersion": 1
 }
 ```
 
-`artifactHash` = FNV-1a 64-bit hex của source text — **hash nội dung, KHÔNG
-phải hash mật mã học**; dùng để so sánh 2 lần build cùng input có ra cùng kết
-quả không, không dùng cho chữ ký/integrity chống giả mạo. `diagnostics[]`
+`artifactHash` = SHA-256 chữ thường 64 ký tự của source text; đây là định danh
+source của validate gateway, không phải `fileSha256` hoặc `integritySha256` của
+artifact nhị phân. Build manifest `TASK-PROG-203` giữ ba nghĩa này tách biệt.
+`diagnostics[]`
 hiện luôn ≤1 phần tử (parser/semantic fail-fast ở lỗi đầu tiên) nhưng field
 là mảng để BE/FE không cần đổi shape khi sau này hỗ trợ multi-diagnostic.
 Diagnostic code ổn định — xem `st_diagnostic.hpp` (`ST-LEX-*`, `ST-SYN-*`,

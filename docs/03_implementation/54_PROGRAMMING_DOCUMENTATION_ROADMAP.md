@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.20 |
-| Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.17; P1 `6/6 DONE`; P2 `3/8`; tiếp theo `TASK-PROG-203`; `RELEASE_READY BLOCKED`** |
+| Phiên bản | 3.21 |
+| Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.18; P1 `6/6 DONE`; P2 `4/8`; tiếp theo `TASK-PROG-204`; `RELEASE_READY BLOCKED`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
 | Người phê duyệt | Product Owner, System Architect, Verification Lead |
@@ -82,7 +82,7 @@ Nguồn để lập baseline:
 | Rủi ro có điểm từ 15 trở lên | 11/16 | Chặn production cutover cho tới khi có evidence và residual acceptance |
 | Kịch bản có Test Result mới | 2/32 record `BLOCKED`; 0/32 PASS | Evidence production vẫn `MISSING/RED`; không nâng trace/risk |
 | Cổng implementation | **PLAN_READY PASS; mọi IMPLEMENT_READY PASS; G1 GO; G2 IN_PROGRESS** | P2/P3 đã mở; release vẫn cần 32/32 PASS, residual và target/HIL |
-| Tiến độ code theo Plan 53 | **P1 6/6; P2 3/8; tổng 16/49 = 32,7%** | `TASK-PROG-200..202 DONE`; tiếp theo `TASK-PROG-203` |
+| Tiến độ code theo Plan 53 | **P1 6/6; P2 4/8; tổng 17/49 = 34,7%** | `TASK-PROG-200..203 DONE`; tiếp theo `TASK-PROG-204` |
 
 Điểm `60,0%` là điểm trưởng thành **tài liệu**, không phải phần trăm code, test,
 release hay mức sẵn sàng production. Chỉ số phải được tính lại từ bảng master;
@@ -96,7 +96,7 @@ không nhập phần trăm bằng cảm tính.
 | R1 — Requirement/decision/architecture | **M3 COMPLETE** | Index/SRS/Open Decisions/Architecture đạt cổng loại tương ứng; có mục Đọc nhanh và phụ lục tự kiểm |
 | R2 — Contract + 5 thiết kế lõi | **M3 COMPLETE / APPROVED FOR IMPLEMENTATION** | Data/Interface và 5 hồ sơ lõi có bảng `DD-01..DD-13`; TLS/provenance là deliverable implementation |
 | R3 — Thiết kế theo team | **M3 COMPLETE** | UI/UX theo IA **bốn workspace** `PGM-01..04`: asset render được cho từng workspace (Tổng quan desktop/mobile, Thiết kế, Kiểm tra & Vận hành kèm modal, Runtime & Bảo trì kèm drawer), cây component, API theo workspace, copy VI/EN, token và rollout; FE, BE, FW-SOM, FW MCU, HW đủ checklist |
-| R4 — Assurance/delivery | **M3 COMPLETE** | 32 test spec, Ops, 16 risk, 60 dòng trace, Plan 53 có P1 6/6 và P2 3/8; kho Test Result có 2 record BLOCKED/checksum PASS và 0/32 PASS |
+| R4 — Assurance/delivery | **M3 COMPLETE** | 32 test spec, Ops, 16 risk, 60 dòng trace, Plan 53 có P1 6/6 và P2 4/8; kho Test Result có 2 record BLOCKED/checksum PASS và 0/32 PASS |
 | R5 — Review/sign-off | **COMPLETE FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`: Product + Architect `ACCEPT ALL`; 8 consumer/discipline, Verification/QA và Document Control `WAIVED FOR IMPLEMENTATION`; 0/22 M4/M5 vẫn được ghi đúng thực tế |
 
 `DOC-G0` được chuyển PASS sau chỉ đạo ngày 2026-08-09 “triển khai theo roadmap”
@@ -160,7 +160,7 @@ lý do và revision history trước khi tính lại.
 
 | # | ID / hồ sơ | Loại | Owner chính / reviewer | Mức | Ưu tiên | Bằng chứng/trạng thái kế tiếp |
 |---:|---|---|---|---:|---|---|
-| 1 | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md) | Kiểm soát | System Engineering / Document Control | `M3` 60 | P0 | v2.5; register 22 dòng khớp harness; P1 6/6, P2 3/8 và candidate v2.17 |
+| 1 | [`PROG-DOCSET-001`](../02_design/PROGRAMMING_DESIGN_INDEX.md) | Kiểm soát | System Engineering / Document Control | `M3` 60 | P0 | v2.6; register 22 dòng khớp harness; P1 6/6, P2 4/8 và candidate v2.18 |
 | 2 | [`SRS-PROG-001`](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | Yêu cầu | Product + System / QA | `M3` 60 | P0 | Đọc nhanh + phụ lục cổng M3 loại Requirements; 60 ID canonical, acceptance định lượng |
 | 3 | [`PROG-OD-001`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) | Quyết định | Product + Architect / các lead | `M3` 60 | P0 | v0.9; `17 DECIDED`, `0 OPEN`, `0 CLOSED`; approved for implementation |
 | 4 | [`ARCH-PROG-001`](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | Kiến trúc | System Architect / Safety + Ops | `M3` 60 | P0 | v0.6; Architect `ACCEPT` 6/6 ADR, còn đồng phê duyệt/evidence |
@@ -181,7 +181,7 @@ lý do và revision history trước khi tính lại.
 | 19 | [`OPS-PROG-001`](../06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md) | Vận hành | Ops/Release / Core + BE + QA | `M3` 60 | P1 | Đọc nhanh + phụ lục cổng M3 loại Operations; 1 BLOCKED (chưa diễn tập) |
 | 20 | [`RSK-PROG-001`](../07_records/PROGRAMMING_RISK_REGISTER.md) | Assurance | Product + Architect + QA / risk owner | `M3` 60 | P0 | v0.9; 16/16 Open; RSK-006 thêm treatment FBD canonical/validator/fuzz Task 201, residual giữ nguyên |
 | 21 | [`TRACE-PROG-001`](../07_records/PROGRAMMING_TRACEABILITY_MATRIX.md) | Traceability | Verification Lead / Document Control | `M3` 60 | P0 | v3.5; 60 dòng, 2/60 `I=Y`; FBD source mới vẫn partial, 2 record BLOCKED, 0/32 PASS |
-| 22 | [`PLAN-PROG-053`](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | Delivery | Dev Lead + Architect / Product + QA | `M3` 60 | P1 | v0.26; P2 3/8, tổng 16/49; tiếp theo `TASK-PROG-203` |
+| 22 | [`PLAN-PROG-053`](53_PROGRAMMING_IMPLEMENTATION_PLAN.md) | Delivery | Dev Lead + Architect / Product + QA | `M3` 60 | P1 | v0.27; P2 4/8, tổng 17/49; tiếp theo `TASK-PROG-204` |
 
 ## 5. Quan hệ rủi ro → hồ sơ phải ưu tiên
 
@@ -388,6 +388,7 @@ Mỗi lần thay đổi mức, thêm **một dòng mới**; không sửa số l�
 | 2026-08-11 P2-task-200 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P2 IN_PROGRESS 1/8 / G2 IN_PROGRESS / RELEASE_READY BLOCKED** | Source `8d58efa` + `a638470`; ST subset/sáu type/source map/golden, fuzz tất định 10.000 mutation và parser/loader mỗi bộ 10 triệu input PASS; CTest 898/898, Go/FE regression PASS. Tổng I=Y giữ 2/60, Test Result 0/32 PASS; next `TASK-PROG-201` |
 | 2026-08-11 P2-task-201 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P2 IN_PROGRESS 2/8 / G2 IN_PROGRESS / RELEASE_READY BLOCKED** | Source `52dfb57`; FBD canonical schema/golden/manifest, C++ validator/fuzzer và FE model/reducer/component keyboard-first. Contract mutation 10/10, Core 8/8, FE 15/15, ASan fuzz 50.000 input, CTest 906/906 và Go/FE regression PASS. Tổng I=Y giữ 2/60, Test Result 0/32 PASS; tiếp theo `TASK-PROG-202` |
 | 2026-08-11 P2-task-202 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P2 IN_PROGRESS 3/8 / G2 IN_PROGRESS / RELEASE_READY BLOCKED** | Source `4819901`; FBD canonical hạ qua semantic checker/typed IR/runtime chung, 20 cặp ST↔FBD, trace TON và fail-closed. Contract mutation 10/10, targeted 17/17, ASan fuzz 100.000 input, CTest 915/915 và Go/FE regression PASS. Tổng I=Y giữ 2/60, Test Result 0/32 PASS; tiếp theo `TASK-PROG-203` |
+| 2026-08-11 P2-task-203 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P2 IN_PROGRESS 4/8 / G2 IN_PROGRESS / RELEASE_READY BLOCKED** | Source `2c2bfb4`; SHA-256/build manifest/source map ST/FBD khóa profile/library/ABI, UUID/unit và fail-closed. Targeted 35/35, mutation 7/7, CTest 927/927 và Go/FE regression PASS. Tổng I=Y giữ 2/60, Test Result 0/32 PASS; tiếp theo `TASK-PROG-204` |
 
 ## 10.1 Ma trận impact của Amendment A1 trên 22 hồ sơ
 
@@ -476,11 +477,11 @@ Candidate P0 hiện hành đã ghim:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Định danh | 22 SHA-256 của candidate v2.17 ở manifest v3.19; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
-| Commit/tree | `7d424bcdd1c810ff505921962cc5e0d4e1e6a170` / `aeb27c61095341877845b34311ed1a538ed4fd61` |
+| Định danh | 22 SHA-256 của candidate v2.18 ở manifest v3.21; không dùng candidate đã `SUPERSEDED` làm revision hiện hành |
+| Commit/tree | Chờ merge PR chứa candidate v2.18; 22 SHA-256 là authority hiện hành |
 | Nhánh phát hành | `feat/programming-fbd-ir-equivalence-20260811` — remote đã xóa sau merge PR #143 |
 | Manifest | [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) |
-| Phạm vi | 22/22 hồ sơ baseline; đồng bộ `TASK-PROG-202 DONE`, P2 3/8 và ranh giới 2 record BLOCKED/0 PASS |
+| Phạm vi | 22/22 hồ sơ baseline; đồng bộ `TASK-PROG-203 DONE`, P2 4/8 và ranh giới 2 record BLOCKED/0 PASS |
 | Trạng thái | **PIN PASS 22/22; APPROVED FOR IMPLEMENTATION** |
 
 Manifest chứa SHA-256 đầy đủ, Git blob, số dòng và delta so với baseline gốc.
@@ -548,6 +549,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.18 | 2026-08-11 | Ghi PR #141 đã merge tại `207cd90`, tree `b85bdb2c`; remote feature branch đã xóa. Candidate v2.16/pin 22/22, P2 2/8 và ranh giới evidence/release không đổi | Document Control |
 | 3.19 | 2026-08-11 | Hoàn tất `TASK-PROG-202`: thêm snapshot P2 3/8, dẫn source lowerer/equivalence/fuzz và review/evidence G2; phát hành candidate v2.17 do Index/Language/Risk/Trace/Plan đổi. Targeted 17/17, ASan fuzz 100.000 input, CTest 915/915 và Go/FE regression PASS; giữ 0/32 PASS và RELEASE_READY BLOCKED | Compiler + Core Lead + Document Control |
 | 3.20 | 2026-08-11 | Ghi PR #143 đã merge tại `7d424bc`, tree `aeb27c61`; remote feature branch đã xóa. Candidate v2.17/pin 22/22, P2 3/8 và ranh giới evidence/release không đổi | Document Control |
+| 3.21 | 2026-08-11 | Hoàn tất `TASK-PROG-203`: thêm snapshot P2 4/8, dẫn source artifact/manifest/source-map và review/evidence G2; phát hành candidate v2.18 do Index/Language/Artifact/Risk/Trace/Plan đổi. Targeted 35/35, manifest mutation 7/7, CTest 927/927 và Go/FE regression PASS; giữ 0/32 PASS và RELEASE_READY BLOCKED | Compiler + Core Lead + Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|

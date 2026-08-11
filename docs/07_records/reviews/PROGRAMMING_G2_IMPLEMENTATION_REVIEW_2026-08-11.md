@@ -1,17 +1,17 @@
-# Review triển khai G2 Programming — TASK-PROG-200..202
+# Review triển khai G2 Programming — TASK-PROG-200..203
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G2-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-200`, `TASK-PROG-201`, `TASK-PROG-202` |
+| Task | `TASK-PROG-200`, `TASK-PROG-201`, `TASK-PROG-202`, `TASK-PROG-203` |
 | Ngày | 2026-08-11 |
 | Trạng thái task | **DONE** |
-| Trạng thái pha | **P2 IN_PROGRESS — 3/8; G2 IN_PROGRESS** |
-| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901` |
-| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`; Task 202: [PR #143](https://github.com/Mekong-HCM/MK-DDC-24/pull/143) / `7d424bc`, tree `aeb27c61`; remote feature branch đã xóa |
-| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt), [`EV-PROG-G2-202`](programming-g2/raw/EV-PROG-G2-202.txt) |
+| Trạng thái pha | **P2 IN_PROGRESS — 4/8; G2 IN_PROGRESS** |
+| Source commit | Task 200: `8d58efa`, `a638470`; Task 201: `52dfb57`; Task 202: `4819901`; Task 203: `2c2bfb4` |
+| PR / merge | Task 200: [PR #139](https://github.com/Mekong-HCM/MK-DDC-24/pull/139) / `288aa37`; Task 201: [PR #141](https://github.com/Mekong-HCM/MK-DDC-24/pull/141) / `207cd90`; Task 202: [PR #143](https://github.com/Mekong-HCM/MK-DDC-24/pull/143) / `7d424bc`; Task 203: source `2c2bfb4`, PR/merge chờ ghi provenance |
+| Evidence hỗ trợ | [`EV-PROG-G2-200`](programming-g2/raw/EV-PROG-G2-200.txt), [`EV-PROG-G2-201`](programming-g2/raw/EV-PROG-G2-201.txt), [`EV-PROG-G2-202`](programming-g2/raw/EV-PROG-G2-202.txt), [`EV-PROG-G2-203`](programming-g2/raw/EV-PROG-G2-203.txt) |
 | Test Result chính thức | **2/32 record BLOCKED; 0/32 PASS — không đổi** |
-| Next action | `TASK-PROG-203` — deterministic artifact/hash/profile/manifest/source map |
+| Next action | `TASK-PROG-204` — Project/Draft/Revision store, ETag/idempotency |
 
 ## 1. Kết quả đã triển khai
 
@@ -177,7 +177,7 @@ Không chạy Chrome DevTools vì Task 202 không đổi route, component, layou
 hành vi FE runtime. Không deploy target/HIL/production; feature flag giữ `OFF`,
 không stage/activate artifact và không có Commission side effect.
 
-## 14. Ranh giới và bàn giao `TASK-PROG-203`
+## 14. Ranh giới và bàn giao từ `TASK-PROG-202`
 
 - `CORE-101` vẫn là một trong `2/60 I=Y`; Task 202 bổ sung source/evidence chứ
   không tạo requirement end-to-end mới. `SYS-101/NFR-101` vẫn partial do artifact
@@ -188,3 +188,62 @@ không stage/activate artifact và không có Commission side effect.
   cả ST/FBD, bảo toàn unit/location provenance mà không thay executable semantic.
   Unknown version/hash/profile hoặc source-map lỗi phải fail-closed; không stage
   hay đổi Active/LKG trong task compiler này.
+
+## 15. Kết quả `TASK-PROG-203`
+
+- Thay định danh FNV placeholder bằng SHA-256 canonical. Field metadata 64-bit
+  legacy của `MKDDCIR1` chỉ giữ prefix digest; authority đầy đủ nằm trong
+  manifest ngoài artifact. `fileSha256` và `integritySha256` có tên/nghĩa riêng.
+- Thêm `artifact_build_manifest_v1.schema.json`, golden ST/FBD và producer/
+  verifier `st_artifact_manifest.*`. Manifest khóa source, compiler/lowerer,
+  profile/library/ABI, build key, artifact và source map; không chứa timestamp,
+  random hoặc path host.
+- `mkddc-st-compile` nhận `--language ST|FBD`, `--source-id` và
+  `--manifest-out`. Diagnostic ST giữ vị trí; đường `--key` verify bằng public
+  half của đúng khóa cung cấp.
+- Source map ST giữ line/column/length. FBD dùng key compact trong artifact và
+  ánh xạ về UUID network/node/port cùng unit trong manifest; reorder JSON/node/
+  wire không đổi canonical source, artifact hay manifest.
+- Unknown version/profile/library/ABI/hash/build key/source/source map và
+  source ID giống host path đều reject fail-closed, không sửa output caller.
+
+## 16. Finding `TASK-PROG-203` đã đóng
+
+| ID | Mức | Finding | Cách đóng | Trạng thái |
+|---|---|---|---|---|
+| `F-G2-203-01` | P1 | CLI mới làm mất line/column diagnostic ST khi đi qua API build manifest | Mở rộng `StManifestError`, giữ sourceId/span trong JSON và thêm test tiến trình thật | **CLOSED** |
+| `F-G2-203-02` | P1 | `--key` tái tạo manifest bằng khóa nhúng thay vì public half của khóa caller, làm khóa ngoài bị reject | Truyền public key đúng vào verify khi tạo manifest; test khóa Ed25519 deterministic không trùng khóa nhúng | **CLOSED** |
+
+Không còn finding P0/P1 mở trong phạm vi `TASK-PROG-203`.
+
+## 17. Kiểm chứng `TASK-PROG-203` đo trong phiên
+
+| Làn | Kết quả |
+|---|---|
+| Determinism/CLI/source map | targeted CTest `35/35` PASS; build lặp ST 100 lần và reorder FBD byte-identical |
+| Contract manifest | schema/golden/profile/hash/build-key/source-map PASS; mutation `7/7` bị reject |
+| Contract FBD/G1 | FBD mutation `10/10`; repository contract `2/2`, dependency `5/5`, error catalog `6/6` PASS |
+| Clang AddressSanitizer | targeted `35/35` PASS trong 2,15 s; 0 crash/ASan/leak fault |
+| C++ toàn repository | Release bật Modbus + BACnet + HMI; CTest `927/927` PASS trong 13,97 s |
+| Go toàn repository | `go vet ./...` và `go test ./... -count=1` PASS |
+| FE regression | Vitest `58/58` file, `494/494` test; lint/typecheck/build PASS |
+
+Không chạy Chrome DevTools vì Task 203 không đổi route, component, layout hoặc
+hành vi FE runtime. Không deploy target/HIL/production; feature flag giữ `OFF`,
+không stage/activate và Active/LKG không đổi.
+
+`tools/restructure/verify_repository.py` còn FAIL tại vi phạm baseline ngoài
+task: `apps/web-ui/src/features/scheduler/shared.ts` chạm contract C/SHM/IOP.
+Ba integration guard chạy độc lập đều PASS; finding này không bị tính thành PASS
+và không được sửa lẫn vào commit Programming compiler.
+
+## 18. Ranh giới và bàn giao `TASK-PROG-204`
+
+- `CORE-101` vẫn thuộc tổng `2/60 I=Y`; `SYS-101/NFR-101` chỉ có thêm source
+  partial. Không tạo Test Result: 2 record vẫn `BLOCKED`, 0/32 PASS và mọi
+  `T/P/R=N`.
+- `RSK-PROG-006` giữ residual `15 Open`: worker sandbox, immutable DB linkage,
+  no-parser runtime target và independent evidence còn thiếu.
+- Task 204 phải nối Project/Draft/Revision store hiện hữu với model Programming,
+  giữ Revision immutable, Draft ETag/CAS và idempotency; không được dùng metadata
+  placeholder thay manifest/hash authority vừa khóa.

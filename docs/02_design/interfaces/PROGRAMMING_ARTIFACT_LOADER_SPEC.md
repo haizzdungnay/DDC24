@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `IFSPEC-ART-PROG-001` |
-| Phiên bản | 0.6 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; contract foundation và sáu type/source map `TASK-PROG-102/200` đã implement trên host; production stage/swap/target evidence còn mở** |
+| Phiên bản | 0.7 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; contract foundation, sáu type và artifact manifest/source map `TASK-PROG-102/200/203` đã implement trên host; production stage/swap/target evidence còn mở** |
 | Ngày | 2026-08-11 |
 | Chủ quản | Compiler Lead + Core Lead |
 | Người review | Security Lead, Operations Lead, Verification Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **file artifact trông ra sao từng byte** và **loader kiểm nó thế nào trước khi cho chạy**. Gồm layout, hash/toàn vẹn, giới hạn, quy trình nạp có chặn trên, và cách tráo chương trình an toàn (stage → swap → rollback). |
 | 2. Ai phải đọc file này? | Compiler (bên sinh ra artifact) và Core (bên nạp) — hai bên phải khớp từng byte. Security đọc §4 và §8; Ops đọc §7 và §9. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-102/200` đã thêm profile/schema/golden, generated constants, deterministic serializer và loader đủ raw type `1..6`; source-map flag/section/order/location được kiểm fail-closed; loader mặc định `HASH_ONLY`, luôn kiểm SHA-256 và không sửa output caller khi reject. `st_control_api.*` vẫn nhúng artifact base64 và bootstrap production **chưa nối stage/swap**. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-102/200` đã thêm profile, serializer/loader và sáu type. `TASK-PROG-203` tại `2c2bfb4` thêm schema/golden build manifest, SHA-256 canonical, build key và verifier độc lập source/compiler/profile/library/ABI/hash/source map cho ST/FBD. `st_control_api.*` vẫn nhúng artifact base64 và bootstrap production **chưa nối stage/swap**. |
 | 4. Thiết kế mới thay đổi điều gì? | Giữ nguyên layout `MKDDCIR1` schema 1 nếu không cần đổi. Bỏ cách truyền base64 trong handler thời gian thực, chuyển sang **staging bằng file/FD qua UDS** — vì nhét 1 MiB base64 vào đường RT là không chấp nhận được. Thêm chế độ toàn vẹn `HASH_ONLY` cho compiler nội bộ tin cậy, giữ trường chữ ký để dành. |
 | 5. Team phải sửa module/contract nào? | Phần contract/loader foundation ở §10 đã có source. Tiếp theo Core tách loader thành worker ngoài RT và bàn giao tại safe boundary; BE chuyển staging sang file/FD. Cấm policy `SIGNATURE_OPTIONAL`; Rev A dùng `IntegrityMode::HASH_ONLY` theo ADR-031. |
-| 6. Điều gì còn bị chặn? | Không còn decision blocker: ADR-026/031 đã `Accepted`, compiler/loader đã đủ sáu type target. Còn implementation blocker ở task sau: FBD producer, production stage/swap, persistence/LKG và target/HIL evidence. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G2-200` ghi loader libFuzzer + ASan/UBSan `10.000.000` input, RSS đỉnh 462 MiB, 0 crash/timeout; CTest `898/898`. Đây là evidence hỗ trợ host, chưa nâng `VS-PROG-006/011/023` PASS vì chưa có bundle/FBD/production stage/target/independent review. |
+| 6. Điều gì còn bị chặn? | Không còn decision blocker: ADR-026/031 đã `Accepted`, compiler/loader đã đủ sáu type và manifest ST/FBD. Còn implementation blocker ở task sau: worker/Check, production stage/swap, persistence/LKG và target/HIL evidence. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-G2-200/203` ghi loader fuzz 10 triệu input và Task 203 targeted `35/35`, manifest mutation `7/7`, full CTest `927/927`. Đây là evidence hỗ trợ host, chưa nâng `VS-PROG-006/011/023` PASS vì chưa có worker/production stage/target/independent review. |
 
 Bất biến quan trọng nhất: **loader phải tự kiểm độc lập**, không tin compiler.
 Nếu artifact hỏng hoặc sai target thì bị từ chối **trước khi** tráo, và chương
@@ -48,6 +48,7 @@ lại đúng một active revision; IOP vẫn đáp ứng deadline trong stage/s
 | Nội dung | As-Built 2026-08-11 | Target Rev A |
 |---|---|---|
 | Format/loader | `st_ir.*`, `st_artifact.*`, `st_loader.*` | giữ `MKDDCIR1` schema 1 nếu không đổi layout |
+| Build manifest | `st_artifact_manifest.*`, `artifact_build_manifest_v1.schema.json`, golden ST/FBD | consumer non-RT verify exact source/compiler/profile/library/ABI/hash/source map trước lưu/stage |
 | Verify | `StIntegrityMode`, mặc định `HASH_ONLY`; SHA-256 bắt buộc; `SIGNATURE_OPTIONAL` bị từ chối; signed artifact nếu có phải verify đúng | giữ `HASH_ONLY` trong trusted local boundary; field signature dành cho `SIGNATURE_REQUIRED` sau này |
 | Control API | `st_control_api.*`, schema `st_program_control_v1` có base64 artifact | file/FD staging qua UDS; cấm base64 1 MiB trong RT handler |
 | Loader wiring | thư viện/test có, bootstrap production chưa route | non-RT loader worker + safe-boundary handoff |
@@ -99,13 +100,20 @@ constant-time compare với `[32,64)`. Rev A `HASH_ONLY` không yêu cầu chữ
 golden chuẩn để signature field zero và bit signed zero. Nếu signed flag có mặt,
 loader vẫn kiểm Ed25519 và từ chối mismatch; chữ ký hợp lệ không đổi mode thành
 provenance authority. Hash chứng minh toàn vẹn, không chứng minh tác giả;
-provenance được bảo vệ bởi local UDS peer credential, staging file
-permission, immutable DB linkage và audit chain.
+provenance được ghim trong manifest deterministic và tiếp tục được bảo vệ bởi
+local UDS peer credential, staging file permission, immutable DB linkage và audit chain.
+
+Manifest v1 khóa `sourceId/language/canonicalBytes/canonicalSha256`, compiler
+ID/version/lowerer, profile ID/code/SHA-256/library, target ABI, artifact
+magic/schema/bytes/`fileSha256`/`integritySha256`/mode/signature, `buildKeySha256`
+và source map. ST map `pc→line/column/length`; FBD map
+`pc→networkId/nodeId/portId/unit`. `fileSha256` băm đúng toàn bộ byte file;
+`integritySha256` băm theo layout với `[32,128)` zero, không được dùng lẫn tên.
 
 Artifact metadata trong DB phải link `revisionId`, canonical source hash, artifact
-hash, compiler ID/version, target ABI/profile, library version, createdAt và Check
-ID. Core read-back lưu artifact hash; mọi mismatch DB/file/Core là incident, không
-tự sửa bằng cách ghi đè authority.
+file hash, build key, compiler ID/version, target ABI/profile, library version,
+createdAt và Check ID. Core read-back lưu artifact hash; mọi mismatch
+DB/manifest/file/Core là incident, không tự sửa bằng cách ghi đè authority.
 
 ## 5. Giới hạn và data model runtime
 
@@ -211,6 +219,7 @@ và correlation; không ghi artifact bytes/source/host path/public key material.
 |---|---|---|
 | profile/contract | `contracts/programming/`, generated `st_profile_generated.hpp` | **đã có ở TASK-PROG-102**; thay đổi profile phải regenerate/check |
 | format/serializer | `apps/core/application/st/st_ir.*`, `st_artifact.*` | **đã có deterministic metadata/API, sáu type và source map** tại Task 102/200 |
+| manifest/provenance | `st_artifact_manifest.*`, `artifact_build_manifest_v1.schema.json`, `golden/build_manifest_{st,fbd}_v1.json` | **đã có producer/verifier ST/FBD tại Task 203**; BE immutable linkage thuộc Task 204/205 |
 | loader | `st_loader.*`, `st_runtime.*`, `st_exec.*`, `st_retain.*` | **verify/load/execute type target trên host đã có**; non-RT worker + staged handle còn phải nối |
 | control | `st_control_api.*`, `contracts/config/st_program_control_v1.schema.json` | thay base64 path bằng versioned UDS/locator |
 | lifecycle | `st_scheduler.*`, `scan_loop.*`, bootstrap | safe-boundary swap/journal/read-back |
@@ -232,6 +241,7 @@ và correlation; không ghi artifact bytes/source/host path/public key material.
 | `ART-T-009` | first-cycle fault | không publish output candidate; rollback LKG |
 | `ART-T-010` | compiler/Core mixed version | capability block hoặc load đúng; không undefined behavior |
 | `ART-T-011` | inspect link/symbol Core | không parser/lexer/compiler symbol trong runtime binary |
+| `ART-T-012` | build ST/FBD 100 lần; mutate version/profile/hash/source map | artifact/manifest byte-identical; mọi mutation reject, output caller không đổi |
 
 ## 12. Loader state và lifetime ownership
 
@@ -254,7 +264,7 @@ Token không chứa path client-controlled. Expiry không được hủy handle 
 | Blocker | Owner | Ảnh hưởng | Điều kiện mở |
 |---|---|---|---|
 | Integrity/profile contract | Product + Security + Architect | **ĐÃ ĐÓNG** | ADR-026/031 Accepted; profile/schema/golden + code/test tại TASK-PROG-102 |
-| Compiler type target | Compiler + Core | **ĐÃ ĐÓNG cho ST host** | `TASK-PROG-200`; golden SHA-256 `fcdfd4a6...0528`; FBD equivalence thuộc Task 201/202 |
+| Compiler type/provenance target | Compiler + Core | **ĐÃ ĐÓNG cho ST/FBD host** | `TASK-PROG-200..203`; schema/golden manifest + verifier tại `2c2bfb4` |
 | Production stage/swap chưa wired | Core Lead | chưa có runtime evidence | Plan 53 implementation + target/power-loss PASS |
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
@@ -265,10 +275,11 @@ Token không chứa path client-controlled. Expiry không được hủy handle 
 | 0.4 | 2026-08-11 | Đồng bộ As-Built TASK-PROG-102: profile/schema/golden, generated constants, deterministic API, `StIntegrityMode=HASH_ONLY`, loader no-mutation và ranh giới phần type/stage/swap còn mở | Core + Compiler Lead |
 | 0.5 | 2026-08-11 | Đồng bộ `TASK-PROG-103`: khóa ánh xạ exact `IR-E-004/013` sang Target, 13 detail loader còn lại sang Artifact; detail chỉ giữ nội bộ và catalog sinh ba ngôn ngữ là nguồn máy đọc | Core + BE Lead |
 | 0.6 | 2026-08-11 | Đồng bộ `TASK-PROG-200`: loader/serializer/executor/RETAIN đủ raw type 1..6, conversion/range/value canonical fail-closed, source map strict và loader fuzz 10 triệu input; production stage/swap/target vẫn mở | Core + Compiler Lead |
+| 0.7 | 2026-08-11 | Đồng bộ `TASK-PROG-203` tại `2c2bfb4`: manifest v1 ST/FBD khóa hai loại SHA-256, build key, compiler/profile/library/ABI và source map UUID/unit; verifier/CLI fail-closed, production stage/swap/target vẫn mở | Core + Compiler Lead |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Compiler + Core Lead | **IMPLEMENTED CONTRACT + ST TYPE FOUNDATION** | `95585e7`, `8d58efa`, `a638470`, `EV-PROG-G2-200` |
+| Compiler + Core Lead | **IMPLEMENTED CONTRACT + ST/FBD TYPE/PROVENANCE FOUNDATION** | `95585e7`, `8d58efa`, `a638470`, `2c2bfb4`, `EV-PROG-G2-200/203` |
 | Security + Ops + QA | **WAIVED FOR IMPLEMENTATION; hậu kiểm/evidence độc lập** | `AUTH-PROG-2026-08-11-03` |
 | System Architect + Product Owner | **APPROVED FOR IMPLEMENTATION** | ADR-026/031 Accepted; `AUTH-PROG-2026-08-11-03` |
 

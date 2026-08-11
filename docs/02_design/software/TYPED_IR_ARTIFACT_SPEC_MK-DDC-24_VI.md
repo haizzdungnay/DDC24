@@ -1,7 +1,7 @@
 # Typed IR và Artifact Contract — MK-DDC-24 FW SOM Program Runtime
 
 > **Document ID:** SW-IR-ARTIFACT-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-07-28
+> **Phiên bản:** 1.1 | 2026-08-11
 > **Workstream:** C0.6 (MS-01)
 > **Trạng thái:** Supporting As-Built — source hiện tại tại `apps/core/application/st/`; không phải Target authority Programming v2.2
 > **Nguồn quyết định:** ADR-020; `PROGRAM_SOM_FW_DRAFT_DESIGN` §4, §7.2; quyết định ký gói 2026-07-28
@@ -176,9 +176,10 @@ bị phát hiện) lẫn toàn bộ dữ liệu.
 
 Loader tính lại và so khớp **trước khi diễn giải bất kỳ section nào**. Sai → `IR-E-005`.
 
-> `compute_artifact_hash()` hiện tại dùng FNV-1a 64-bit và **chỉ để nhận dạng nội dung
-> source**, không phải cơ chế toàn vẹn. Nó vẫn được giữ cho trường `artifactHash` của
-> validate gateway (nhận dạng build), nhưng **không** dùng ở đường load artifact.
+> Từ `TASK-PROG-203`, `compute_artifact_hash()` trả SHA-256 chữ thường 64 ký tự
+> của source; field `source_hash` 64-bit trong layout legacy chỉ giữ prefix
+> little-endian của cùng digest. Authority provenance đầy đủ nằm trong build
+> manifest ngoài artifact; không dùng field rút gọn ở đường quyết định stage.
 
 ### 3.2 Chữ ký Ed25519
 
@@ -217,7 +218,7 @@ chế là **có chủ ý**, được ghi ở đây để không bị hiểu là 
  offset  size  trường
       0     4  program_name_len  u32, ≤ 64
       4    64  program_name      ASCII, đệm 0
-     68     8  source_hash       u64, FNV-1a của source ST (truy vết ngược)
+     68     8  source_hash       u64, prefix little-endian của SHA-256 source canonical
      76    32  compiler_version  ASCII, đệm 0, vd "fwsom-st-1.0.0"
     108     8  build_timestamp   u64, Unix epoch giây, UTC
     116     4  slot_count        u32, tổng số ô trong không gian slot (§4.3)
@@ -225,9 +226,9 @@ chế là **có chủ ý**, được ghi ở đây để không bị hiểu là 
     124     4  reserved          u32, phải = 0
 ```
 
-`build_timestamp` **không** tham gia vào tính tất định của build: hai lần compile cùng
-source có thể cho hash khác nhau nếu timestamp khác. Để build tất định, compiler nhận
-biến môi trường `SOURCE_DATE_EPOCH`; khi có, dùng giá trị đó.
+`build_timestamp` là field tương thích schema 1 và compiler deterministic hiện
+ghi `0`; thời gian tạo thuộc metadata DB/audit, không nằm trong executable bytes.
+Cùng source/profile/compiler/ABI phải tạo artifact byte-identical.
 
 ### 4.2 `CONSTANTS`
 
@@ -565,3 +566,4 @@ Có symbol → build sai kiến trúc → CI fail.
 | Rev | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-07-28 | Tạo mới. Đóng workstream C0.6 (MS-01). Chốt định dạng file (magic/version/ABI/profile/section table), SHA-256 + chữ ký Ed25519 với lý do khác GPG của OTA, 6 section bắt buộc + 2 tuỳ chọn, máy thanh ghi 16 byte/lệnh với 33 opcode, quy tắc chỉ nhảy tiến để bảo đảm chấm dứt, quy trình load 22 bước, 15 mã lỗi trả BE kèm cột retry/giữ package, quy tắc tương thích phiên bản, yêu cầu fuzzing và kiểm bất biến "không parser trong runtime". |
+| 1.1 | 2026-08-11 | Amendment As-Built `TASK-PROG-203`: thay mô tả FNV/timestamp cũ bằng SHA-256 canonical, prefix metadata legacy và timestamp zero; authority Target tiếp tục là `IFSPEC-ART-PROG-001` cùng build manifest ngoài artifact |

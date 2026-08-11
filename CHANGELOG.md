@@ -31,12 +31,19 @@ output caller; artifact hỏng vẫn bị loader độc lập chặn. Golden ST/
 artifact lock được làm mới theo SHA-256 mới; feature Programming giữ `OFF`, task
 không stage, activate, Commission hoặc đổi Active/LKG.
 
+**Hồ sơ As-Built.** Ghim source `2c2bfb4` vào Design Index v2.6,
+Language/Artifact v0.7, Risk v1.1, Trace v3.7, Plan 53 v0.27, Roadmap v3.21,
+review/evidence G2 và candidate v2.18. Tiến độ P2 `4/8`, tổng `17/49`; task tiếp
+theo `TASK-PROG-204`. Giữ trung thực `2/60 I=Y`, `0/32 PASS`, flag `OFF` và
+`RELEASE_READY BLOCKED`.
+
 **Kiểm chứng hiện tại.** Targeted CTest cho CLI/manifest/FBD/validate `35/35`
 PASS; full CTest Release bật Modbus+BACnet+HMI `927/927` PASS; artifact manifest
 self-test `7/7` mutation và FBD contract self-test `10/10` mutation PASS. Go
 `vet` và `test -count=1`, FE `58 file / 494 test`, lint, typecheck và build,
 cùng repository contract `2/2`, dependency guard `5/5` và error-catalog guard
-`6/6` đều PASS. Không chạy Chrome DevTools vì task không đổi route, component
+`6/6` đều PASS. Clang AddressSanitizer targeted `35/35` PASS, 0 crash/leak.
+Không chạy Chrome DevTools vì task không đổi route, component
 hoặc hành vi giao diện. Hồ sơ As-Built sẽ ghim source commit candidate của task.
 
 ### Added — Common typed IR và equivalence ST↔FBD Programming P2 (2026-08-11)
