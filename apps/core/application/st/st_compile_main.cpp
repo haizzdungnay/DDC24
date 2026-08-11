@@ -1,6 +1,6 @@
 /**
  * @file  st_compile_main.cpp
- * @brief `mkddc-st-compile` — CLI compile ST source thành artifact đã ký.
+ * @brief `mkddc-st-compile` — CLI compile ST source thành artifact Rev A.
  *
  *        Đây là công cụ CHÍNH THỨC để BE sinh artifact. Cùng contract với
  *        `mkddc-st-validate`: argv cố định, source luôn qua file path (không
@@ -10,12 +10,11 @@
  *        Exit code: 0 = compile thành công; 1 = lỗi ST thật (syntax/semantic/
  *        vượt giới hạn); 2 = lỗi usage/IO phía CLI.
  *
- *        Khoá ký: mặc định dùng khoá TEST cam kết trong repo (đủ cho CI và
- *        phát triển). Release truyền `--key <file>` chứa 64 byte khoá riêng
- *        Ed25519 dạng hex — khoá riêng KHÔNG BAO GIỜ nằm trên thiết bị.
+ *        Mặc định Rev A là HASH_ONLY, không dùng khoá test. `--key` chỉ là
+ *        đường tương thích có kiểm soát cho profile SIGNATURE_REQUIRED sau
+ *        này; khi dùng, chữ ký vẫn được verify chặt bởi loader.
  */
 #include <cstdio>
-#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -25,9 +24,10 @@
 
 #include "st/st_compile.hpp"
 #include "st/st_control_api.hpp"
+#include "st/st_artifact.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_limits.hpp"
-#include "st/st_test_key.hpp"
+#include "st/st_profile_generated.hpp"
 
 namespace {
 
@@ -126,8 +126,7 @@ int main(int argc, char** argv)
     if (!read_file(source_path, &source, core::st_limits::kMaxSourceBytes))
         return fail("ST-CLI-IO", "cannot read source or source exceeds size limit", 2);
 
-    uint8_t secret[64];
-    std::memcpy(secret, core::st_test_secret_key(), 64);
+    uint8_t secret[64] = {0};
     if (!key_path.empty()) {
         std::string key_text;
         if (!read_file(key_path, &key_text, 4096))
@@ -152,9 +151,9 @@ int main(int argc, char** argv)
 
     std::vector<uint8_t> bytes;
     std::string err;
-    if (!core::serialize_st_ir(mod, &bytes, &err))
+    if (!core::EncodeArtifactDeterministic(mod, &bytes, &err))
         return fail("ST-CLI-LIMIT", err, 1);
-    if (!core::sign_st_artifact(&bytes, secret))
+    if (!key_path.empty() && !core::sign_st_artifact(&bytes, secret))
         return fail("ST-CLI-KEY", "failed to sign artifact", 2);
 
     if (!out_path.empty()) {
@@ -194,6 +193,10 @@ int main(int argc, char** argv)
     j["compilerVersion"] = core::st_ir::kCompilerVersion;
     j["artifactSchemaVersion"] = core::st_ir::kSchemaVersion;
     j["compilerProfile"] = core::st_ir::kCompilerProfile;
+    j["profileId"] = core::st_profile_generated::kProfileId;
+    j["profileSha256"] = core::st_profile_generated::kProfileSha256;
+    j["libraryVersion"] = core::st_profile_generated::kLibraryVersion;
+    j["integrityMode"] = key_path.empty() ? "HASH_ONLY" : "SIGNATURE_REQUIRED";
     j["targetAbi"] = core::st_ir::kTargetAbi;
     return emit(j, 0);
 }

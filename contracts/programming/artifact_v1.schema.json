@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mekong-hcm.local/contracts/programming/artifact_v1.schema.json",
+  "title": "Manifest artifact Programming MKDDCIR1 schema 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "magic", "schemaVersion", "compilerProfile", "targetAbi", "headerBytes",
+    "artifactBytes", "sectionCount", "flags", "sha256", "integrityMode",
+    "signatureReservedZero", "libraryVersion", "layoutVersion"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "magic": { "const": "MKDDCIR1" },
+    "schemaVersion": { "const": 1 },
+    "compilerProfile": { "const": 1 },
+    "targetAbi": { "const": 3841 },
+    "headerBytes": { "const": 128 },
+    "artifactBytes": { "type": "integer", "minimum": 128, "maximum": 1048576 },
+    "sectionCount": { "type": "integer", "minimum": 1, "maximum": 16 },
+    "flags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["HAS_SOURCE_MAP", "HAS_RETAIN"] }
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "integrityMode": { "const": "HASH_ONLY" },
+    "signatureReservedZero": { "const": true },
+    "libraryVersion": { "const": "rev-a.1" },
+    "layoutVersion": { "const": 1 }
+  }
+}

@@ -10,11 +10,19 @@
  */
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <string>
+
+#include <nlohmann/json.hpp>
+#include <sodium.h>
 
 #include "st/st_diagnostic.hpp"
 #include "st/st_limits.hpp"
 #include "st/st_parser.hpp"
+#include "st/st_profile_generated.hpp"
 #include "st/st_program.hpp"
 
 namespace core {
@@ -33,6 +41,139 @@ std::string repeat(const std::string& unit, std::size_t n)
     s.reserve(unit.size() * n);
     for (std::size_t i = 0; i < n; i++) s += unit;
     return s;
+}
+
+std::string read_contract(const char* name)
+{
+    std::ifstream input(std::string(PROGRAMMING_PROFILE_CONTRACT_DIR) + "/" + name,
+                        std::ios::binary);
+    std::ostringstream content;
+    content << input.rdbuf();
+    return content.str();
+}
+
+std::string sha256_hex(const std::string& value)
+{
+    uint8_t digest[crypto_hash_sha256_BYTES];
+    crypto_hash_sha256(digest, reinterpret_cast<const uint8_t*>(value.data()), value.size());
+    std::ostringstream out;
+    out << std::hex << std::setfill('0');
+    for (uint8_t byte : digest) out << std::setw(2) << static_cast<unsigned>(byte);
+    return out.str();
+}
+
+TEST(StProfile, MachineReadableContractMatchesGeneratedConstants)
+{
+    const std::string raw = read_contract("rev_a_profile_v1.json");
+    ASSERT_FALSE(raw.empty());
+    const nlohmann::json profile = nlohmann::json::parse(raw);
+    EXPECT_EQ(profile.at("profileId"), st_profile_generated::kProfileId);
+    EXPECT_EQ(profile.at("profileCode"), st_profile_generated::kProfileCode);
+    EXPECT_EQ(profile.at("coreLibrary").at("version"),
+              st_profile_generated::kLibraryVersion);
+    EXPECT_EQ(profile.at("integrityMode"), "HASH_ONLY");
+    EXPECT_STREQ(st_profile_generated::kIntegrityMode, "HASH_ONLY");
+    EXPECT_EQ(sha256_hex(raw), st_profile_generated::kProfileSha256);
+
+    struct TypeLock { const char* name; uint8_t code; uint8_t bits; };
+    const TypeLock type_locks[] = {
+        {"BOOL", st_profile_generated::kBoolWireCode, st_profile_generated::kBoolWidthBits},
+        {"INT", st_profile_generated::kIntWireCode, st_profile_generated::kIntWidthBits},
+        {"DINT", st_profile_generated::kDintWireCode, st_profile_generated::kDintWidthBits},
+        {"UINT", st_profile_generated::kUintWireCode, st_profile_generated::kUintWidthBits},
+        {"REAL", st_profile_generated::kRealWireCode, st_profile_generated::kRealWidthBits},
+        {"TIME", st_profile_generated::kTimeWireCode, st_profile_generated::kTimeWidthBits},
+    };
+    for (const TypeLock& lock : type_locks) {
+        const auto match = std::find_if(profile.at("types").begin(), profile.at("types").end(),
+                                        [&](const nlohmann::json& item) {
+                                            return item.at("name") == lock.name;
+                                        });
+        ASSERT_NE(match, profile.at("types").end()) << lock.name;
+        EXPECT_EQ(match->at("wireCode"), lock.code);
+        EXPECT_EQ(match->at("widthBits"), lock.bits);
+        EXPECT_EQ(match->at("conversion"), "EXPLICIT_FAIL_CLOSED");
+    }
+
+    const auto periods = profile.at("task").at("allowedPeriodMs");
+    ASSERT_EQ(periods.size(), st_profile_generated::kAllowedPeriodMs.size());
+    for (std::size_t i = 0; i < periods.size(); ++i)
+        EXPECT_EQ(periods.at(i), st_profile_generated::kAllowedPeriodMs[i]);
+}
+
+TEST(StProfile, EveryResourceAcceptsLimitMinusOneAndLimitAndRejectsLimitPlusOne)
+{
+    struct Boundary {
+        const char* name;
+        std::size_t st_limits::RevAProfileUsage::*field;
+        std::size_t limit;
+    };
+    const Boundary boundaries[] = {
+        {"sourceBytes", &st_limits::RevAProfileUsage::source_bytes,
+         st_profile_generated::kMaxSourceBytes},
+        {"variables", &st_limits::RevAProfileUsage::variables,
+         st_profile_generated::kMaxVariables},
+        {"statements", &st_limits::RevAProfileUsage::statements,
+         st_profile_generated::kMaxStatements},
+        {"fbdBlocks", &st_limits::RevAProfileUsage::fbd_blocks,
+         st_profile_generated::kMaxFbdBlocks},
+        {"fbdConnections", &st_limits::RevAProfileUsage::fbd_connections,
+         st_profile_generated::kMaxFbdConnections},
+        {"artifactBytes", &st_limits::RevAProfileUsage::artifact_bytes,
+         st_profile_generated::kMaxArtifactBytes},
+        {"instructions", &st_limits::RevAProfileUsage::instructions,
+         st_profile_generated::kMaxInstructions},
+        {"slots", &st_limits::RevAProfileUsage::slots,
+         st_profile_generated::kMaxSlots},
+        {"writableSlots", &st_limits::RevAProfileUsage::writable_slots,
+         st_profile_generated::kMaxWritableSlots},
+        {"constants", &st_limits::RevAProfileUsage::constants,
+         st_profile_generated::kMaxConstants},
+        {"functionBlocks", &st_limits::RevAProfileUsage::function_blocks,
+         st_profile_generated::kMaxFunctionBlocks},
+        {"bindings", &st_limits::RevAProfileUsage::bindings,
+         st_profile_generated::kMaxBindings},
+        {"retainVariables", &st_limits::RevAProfileUsage::retain_variables,
+         st_profile_generated::kMaxRetainVariables},
+        {"retainBytes", &st_limits::RevAProfileUsage::retain_bytes,
+         st_profile_generated::kMaxRetainBytes},
+        {"sections", &st_limits::RevAProfileUsage::sections,
+         st_profile_generated::kMaxSections},
+    };
+
+    for (const Boundary& boundary : boundaries) {
+        st_limits::RevAProfileUsage usage;
+        st_limits::RevAProfileError error;
+        usage.*(boundary.field) = boundary.limit - 1;
+        EXPECT_TRUE(st_limits::ValidateRevAProfile(usage, &error)) << boundary.name;
+        usage.*(boundary.field) = boundary.limit;
+        EXPECT_TRUE(st_limits::ValidateRevAProfile(usage, &error)) << boundary.name;
+        usage.*(boundary.field) = boundary.limit + 1;
+        EXPECT_FALSE(st_limits::ValidateRevAProfile(usage, &error)) << boundary.name;
+        EXPECT_EQ(error.field, boundary.name);
+    }
+}
+
+TEST(StProfile, TaskAndPeriodAreLockedToRevA)
+{
+    for (uint32_t period : st_profile_generated::kAllowedPeriodMs) {
+        st_limits::RevAProfileUsage usage;
+        usage.task_period_ms = period;
+        st_limits::RevAProfileError error;
+        EXPECT_TRUE(st_limits::ValidateRevAProfile(usage, &error)) << period;
+    }
+    for (uint32_t period : {999u, 1001u, 4999u, 5001u, 29999u, 30001u}) {
+        st_limits::RevAProfileUsage usage;
+        usage.task_period_ms = period;
+        st_limits::RevAProfileError error;
+        EXPECT_FALSE(st_limits::ValidateRevAProfile(usage, &error)) << period;
+        EXPECT_EQ(error.field, "taskPeriodMs");
+    }
+    st_limits::RevAProfileUsage usage;
+    usage.task_count = 2;
+    st_limits::RevAProfileError error;
+    EXPECT_FALSE(st_limits::ValidateRevAProfile(usage, &error));
+    EXPECT_EQ(error.field, "taskCount");
 }
 
 /* ---- Độ sâu biểu thức: chính là kịch bản repro của F-01 ---- */

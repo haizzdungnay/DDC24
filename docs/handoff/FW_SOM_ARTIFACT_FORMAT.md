@@ -1,8 +1,8 @@
 # FW SOM — Định dạng artifact `MKDDCIR1`
 
 > **Document ID:** HANDOFF-ARTIFACT-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-07-28
-> **Đặc tả đầy đủ:** [`TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md`](../02_design/software/TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md)
+> **Phiên bản:** 1.1 | 2026-08-11
+> **Đặc tả hiện hành:** [`PROGRAMMING_ARTIFACT_LOADER_SPEC.md`](../02_design/interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md)
 
 Tài liệu này là **bản tóm tắt đủ dùng cho BE**. BE **không cần** hiểu tập lệnh
 IR bên trong — chỉ cần biết cách sinh, truyền và kiểm tra artifact.
@@ -17,7 +17,8 @@ IR bên trong — chỉ cần biết cách sinh, truyền và kiểm tra artifac
 | `target_abi` | `0x00000F01` |
 | Kích thước tối đa | **1 MiB** |
 | Toàn vẹn | SHA-256 toàn file |
-| Xác thực | Ed25519 trên digest |
+| Chế độ toàn vẹn Rev A | `HASH_ONLY`: SHA-256 bắt buộc, không yêu cầu chữ ký |
+| Profile / thư viện | `revA-1t-1-5-30` / `rev-a.1` |
 
 **BE không tự sinh artifact bằng tay.** Luôn dùng `mkddc-st-compile` — nó là
 công cụ chính thức và là thứ duy nhất được bảo đảm tạo ra artifact hợp lệ.
@@ -47,31 +48,38 @@ Trả về một dòng JSON. Khi `ok=true`:
   "compilerVersion": "fwsom-st-1.0.0",
   "artifactSchemaVersion": 1,
   "compilerProfile": 1,
+  "profileId": "revA-1t-1-5-30",
+  "profileSha256": "94c58ffa...",
+  "libraryVersion": "rev-a.1",
+  "integrityMode": "HASH_ONLY",
   "targetAbi": 3841
 }
 ```
 
-Trường `artifact` là **base64 của chính file `.mkir`** — BE dùng thẳng cho
-`program_stage`, không cần đọc lại file. Bớt một bước là bớt một chỗ sai.
+Trường `artifact` hiện là **base64 của chính file `.mkir`** để giữ tương thích
+As-Built. Target lifecycle không gửi base64 1 MiB qua RT handler: BE ghi file
+staging dưới `${STATE_DIR}/programming/staging/` rồi gửi locator/hash qua UDS.
 
 ## Build tất định
 
 Cùng source → **cùng byte artifact**, kiểm được bằng `cmp`. Nhờ vậy BE so sánh
 hash để biết "gói này có đúng là bản đã duyệt không" mà không cần lưu cả file.
 
-Nếu cần timestamp cố định trong artifact, đặt `SOURCE_DATE_EPOCH`.
+Timestamp/path/random không đi vào artifact Rev A; `build_timestamp` trong layout
+schema 1 luôn bằng `0`. Thời gian tạo thuộc metadata DB/audit.
 
-## Ký
+## Chế độ toàn vẹn và chữ ký
 
 - Khoá riêng **không bao giờ** nằm trên thiết bị. Ký ở khâu build/release.
-- Mặc định `mkddc-st-compile` dùng **khoá test** cam kết trong repo — đủ cho
-  phát triển và CI, **không dùng cho release**.
-- Release: `--key <file>` với file chứa 128 ký tự hex (64 byte khoá riêng).
+- Rev A mặc định `HASH_ONLY`; CLI **không còn tự dùng khóa test**.
+- `--key <file>` với 128 ký tự hex chỉ là đường tương thích cho
+  `SIGNATURE_REQUIRED` sau này.
 - Runtime nhúng public key lúc biên dịch; release build truyền
   `-DMKDDC_ST_PUBLIC_KEY_HEX=<64 hex>`.
 
-Runtime **từ chối** artifact không ký, trừ khi bật cờ phát triển
-`allow_unsigned` — và cờ đó **không** bỏ qua kiểm SHA-256.
+Runtime luôn kiểm SHA-256. `SIGNATURE_OPTIONAL` bị cấm và bị từ chối fail-closed;
+nếu artifact có signed flag thì chữ ký phải hợp lệ, kể cả khi release profile
+đang là `HASH_ONLY`.
 
 ## Kiểm tra phía BE trước khi gửi
 

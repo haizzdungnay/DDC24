@@ -1,0 +1,51 @@
+EV-PROG-G1-102
+Ngày: 2026-08-11 Asia/Ho_Chi_Minh
+Loại: evidence hỗ trợ task; KHÔNG phải Test Result VS-PROG
+
+Source:
+- 95585e7 feat(programming): khóa profile và artifact Rev A v1
+- Branch: feat/programming-profile-artifact-v1-20260811
+- PR/merge: cập nhật sau khi merge
+
+Contract SHA-256:
+- profile instance: 94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc
+- profile schema: 0ac9a7bb96983f12d375cced1069cd7f45ac84d3e3fcd2791de7a401572b069b
+- artifact schema: f39ede1fce04d5f13e657268635cc909194d3f1c32c086f5bc2551942e50a417
+- generated header: 9180fa1229c6e68c90edba4ed124e5677841953a0db5ca599d841faeb9ee20d7
+- golden artifact 1760 byte: 586bf673a8dc331cf6aad4a3d57d20f3e03c88c22fd0618ee1676ed2278e161e
+- golden manifest: 6a171501704701563980aa18cf6149396fad3981fbd6d6561e821de318f5bb4b
+- negative corpus: 7a89208f1fb58389649e4ec9c6a2a3378df53cad2c8961281a0dc2a54a7405ed
+
+Kiểm chứng contract/targeted:
+- JSON Schema Draft 2020-12: 2 schema hợp lệ; profile + golden manifest validate PASS
+- generate_programming_profile.py --check: PASS
+- StProfile* + StIr*: 32/32 PASS
+- limit-1/limit/limit+1: PASS cho 15 resource
+- deterministic: 100/100 build cùng input byte-identical
+- negative corpus: 8/8 mutation trả đúng IR-E-* ổn định
+- no-mutation: output caller giữ sentinel sau artifact corrupt
+- clang 18 libFuzzer loader: 10000 runs, không crash/hang/OOB
+
+Regression toàn repository:
+- C++ Release, Modbus+BACnet+HMI: build PASS; CTest 875/875 PASS
+- Go: go vet ./... PASS; go test ./... -count=1 PASS
+- FE: Vitest 54/54 file, 473/473 test; lint PASS; Programming API 25 operation đồng bộ; Vite build PASS
+- Candidate pin: 22/22 PASS
+- Trace hai chiều: 60/60 requirement; 32/32 scenario PASS
+- Docs ISO harness --expect và git diff --check: PASS
+- Chrome DevTools: không chạy vì task không đổi route/component/layout FE
+
+Review/finding:
+- F-G1-102-01 P1 allow_unsigned/khóa test trái HASH_ONLY: CLOSED
+- F-G1-102-02 P1 loader sửa output trước verify: CLOSED
+- F-G1-102-03 P1 timestamp làm drift artifact: CLOSED
+- F-G1-102-04 P2 fuzzer ghi corpus vào golden: CLOSED; file phát sinh đã xóa
+- P0/P1 mở: 0
+
+Ranh giới:
+- PROGRAMMING_REV_A default OFF
+- Production stage/swap/activate: chưa nối, không claim
+- Compiler/runtime type target INT16/UINT16 và FBD producer: TASK-PROG-200
+- Target/HIL/browser: không chạy, không claim
+- Requirement I=Y: 2/60 gồm BE-110 và CORE-101
+- Test Result chính thức: 0/32

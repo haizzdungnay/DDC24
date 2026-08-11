@@ -20,13 +20,17 @@
 #define CORE_ST_LIMITS_HPP
 
 #include <cstddef>
+#include <cstdint>
+#include <string>
+
+#include "st/st_profile_generated.hpp"
 
 namespace core {
 namespace st_limits {
 
 /* Kích thước source tối đa (byte). CLI đọc file bounded theo hằng số này;
  * parser cũng tự kiểm để không phụ thuộc caller đã kiểm hay chưa. */
-constexpr std::size_t kMaxSourceBytes = 64u * 1024u;
+constexpr std::size_t kMaxSourceBytes = st_profile_generated::kMaxSourceBytes;
 
 /* Số token tối đa sau lexer — đây là backstop BỘ NHỚ, không phải giới hạn
  * ngữ nghĩa. Cố ý đặt CAO hơn mức mà giới hạn cấu trúc (kMaxExprDepth,
@@ -49,25 +53,61 @@ constexpr int kMaxExprDepth = 32;
 constexpr int kMaxStmtDepth = 16;
 
 /* Tổng số biến khai báo (VAR_INPUT + VAR_OUTPUT + VAR). */
-constexpr std::size_t kMaxVariables = 512u;
+constexpr std::size_t kMaxVariables = st_profile_generated::kMaxVariables;
 
 /* Tổng số statement trong toàn chương trình, đếm cả statement lồng bên
  * trong nhánh IF/ELSE. */
-constexpr std::size_t kMaxStatements = 4096u;
+constexpr std::size_t kMaxStatements = st_profile_generated::kMaxStatements;
 
 /* Độ dài định danh tối đa (ký tự). */
 constexpr std::size_t kMaxIdentifierLength = 64u;
 
 /* Số instance Function Block tối đa (ST_SUBSET_SPEC §8). */
-constexpr std::size_t kMaxFbInstances = 64u;
+constexpr std::size_t kMaxFbInstances = st_profile_generated::kMaxFunctionBlocks;
 
 /* Số biến RETAIN tối đa. */
-constexpr std::size_t kMaxRetainVars = 128u;
+constexpr std::size_t kMaxRetainVars = st_profile_generated::kMaxRetainVariables;
 
 /* Số diagnostic tối đa trả về trong một lần gọi. Parser/semantic fail-fast
  * nên luôn ≤1; giới hạn này áp cho validator trả nhiều lỗi (io_map) để một
  * file io_map hỏng nặng không sinh response JSON khổng lồ. */
 constexpr std::size_t kMaxDiagnostics = 64u;
+
+/* Số đo một candidate tại biên compiler/loader. Cùng một hàm validator được
+ * gọi ở cả hai phía; field chưa tồn tại trong artifact schema 1 để bằng 0 và
+ * được kiểm ở lớp sở hữu (parser/FBD validator) trước khi serialize. */
+struct RevAProfileUsage {
+    uint16_t profile_code = st_profile_generated::kProfileCode;
+    uint32_t target_abi = 0x00000F01u;
+    std::size_t task_count = 1;
+    uint32_t task_period_ms = 1000;
+    std::size_t programs_per_task = 1;
+    std::size_t programs_total = 1;
+    std::size_t source_bytes = 0;
+    std::size_t variables = 0;
+    std::size_t statements = 0;
+    std::size_t fbd_blocks = 0;
+    std::size_t fbd_connections = 0;
+    std::size_t artifact_bytes = 0;
+    std::size_t instructions = 0;
+    std::size_t slots = 0;
+    std::size_t writable_slots = 0;
+    std::size_t constants = 0;
+    std::size_t function_blocks = 0;
+    std::size_t bindings = 0;
+    std::size_t retain_variables = 0;
+    std::size_t retain_bytes = 0;
+    std::size_t sections = 0;
+};
+
+struct RevAProfileError {
+    std::string field;
+    std::size_t actual = 0;
+    std::string constraint;
+};
+
+bool RevAAllowsPeriod(uint32_t period_ms);
+bool ValidateRevAProfile(const RevAProfileUsage& usage, RevAProfileError* error);
 
 } // namespace st_limits
 } // namespace core

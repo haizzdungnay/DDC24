@@ -61,7 +61,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
      * ký, gần như mọi input ngẫu nhiên đều dừng ở bước verify chữ ký và fuzzer
      * không bao giờ chạm tới bảng section, bảng biến hay luồng lệnh — tức là
      * không fuzz được đúng phần nguy hiểm. */
-    opts.allow_unsigned = true;
+    opts.integrity_mode = core::StIntegrityMode::HASH_ONLY;
 
     if (!core::load_st_artifact(data, size, opts, &prog, &err)) {
         /* Từ chối thì phải có mã ổn định — BE dựa vào mã này để xử lý. */

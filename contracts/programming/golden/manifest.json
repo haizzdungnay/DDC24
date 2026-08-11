@@ -1,0 +1,16 @@
+{
+  "$schema": "../artifact_v1.schema.json",
+  "magic": "MKDDCIR1",
+  "schemaVersion": 1,
+  "compilerProfile": 1,
+  "targetAbi": 3841,
+  "headerBytes": 128,
+  "artifactBytes": 1760,
+  "sectionCount": 8,
+  "flags": ["HAS_SOURCE_MAP", "HAS_RETAIN"],
+  "sha256": "586bf673a8dc331cf6aad4a3d57d20f3e03c88c22fd0618ee1676ed2278e161e",
+  "integrityMode": "HASH_ONLY",
+  "signatureReservedZero": true,
+  "libraryVersion": "rev-a.1",
+  "layoutVersion": 1
+}

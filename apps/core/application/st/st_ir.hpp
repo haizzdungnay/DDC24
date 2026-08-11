@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "st/st_program.hpp"
+#include "st/st_profile_generated.hpp"
 
 namespace core {
 
@@ -30,10 +31,10 @@ namespace st_ir {
 
 constexpr char        kMagic[8]        = {'M','K','D','D','C','I','R','1'};
 constexpr uint16_t    kSchemaVersion   = 1;
-constexpr uint16_t    kCompilerProfile = 0x0001;   /* MKDDC_ST_BASE_A0 */
+constexpr uint16_t    kCompilerProfile = st_profile_generated::kProfileCode;
 constexpr uint32_t    kTargetAbi       = 0x00000F01u;
 constexpr uint32_t    kHeaderSize      = 128;
-constexpr uint32_t    kMaxArtifactSize = 1u << 20; /* 1 MiB */
+constexpr uint32_t    kMaxArtifactSize = st_profile_generated::kMaxArtifactBytes;
 constexpr uint32_t    kInstructionSize = 16;
 constexpr const char* kCompilerVersion = "fwsom-st-1.0.0";
 
@@ -55,15 +56,15 @@ enum SectionType : uint16_t {
 };
 
 /* Giới hạn tài nguyên artifact (SPEC §7) */
-constexpr uint32_t kMaxInstructions = 4096;
-constexpr uint32_t kMaxSlots        = 1024;
-constexpr uint32_t kMaxVarSlots     = 512;
-constexpr uint32_t kMaxConstants    = 512;
-constexpr uint32_t kMaxFbInstances  = 64;
-constexpr uint32_t kMaxIoBindings   = 256;
-constexpr uint32_t kMaxRetainVars   = 128;
-constexpr uint32_t kMaxRetainRecord = 4096;
-constexpr uint16_t kMaxSections     = 16;
+constexpr uint32_t kMaxInstructions = st_profile_generated::kMaxInstructions;
+constexpr uint32_t kMaxSlots        = st_profile_generated::kMaxSlots;
+constexpr uint32_t kMaxVarSlots     = st_profile_generated::kMaxWritableSlots;
+constexpr uint32_t kMaxConstants    = st_profile_generated::kMaxConstants;
+constexpr uint32_t kMaxFbInstances  = st_profile_generated::kMaxFunctionBlocks;
+constexpr uint32_t kMaxIoBindings   = st_profile_generated::kMaxBindings;
+constexpr uint32_t kMaxRetainVars   = st_profile_generated::kMaxRetainVariables;
+constexpr uint32_t kMaxRetainRecord = st_profile_generated::kMaxRetainBytes;
+constexpr uint16_t kMaxSections     = st_profile_generated::kMaxSections;
 
 } // namespace st_ir
 
