@@ -1,8 +1,9 @@
 # Hợp đồng Programming Rev A
 
 Thư mục này là authority machine-readable cho contract profile/artifact
-(`TASK-PROG-102`) và catalog lỗi liên lớp (`TASK-PROG-103`). Mã nguồn không được
-hard-code lại giới hạn hoặc mã lỗi. Thay đổi nguồn phải chạy lại:
+(`TASK-PROG-102`), catalog lỗi liên lớp (`TASK-PROG-103`) và manifest SQLite
+store (`TASK-PROG-104`). Mã nguồn không được hard-code lại giới hạn hoặc mã lỗi.
+Thay đổi nguồn phải chạy lại:
 
 ```bash
 python3 scripts/generate_programming_profile.py
@@ -25,6 +26,7 @@ python3 scripts/generate_programming_errors.py --check
 | `error_catalog_v1.json` | authority 19 mã công khai, HTTP/retry/runtime/message/args và 77 ánh xạ detail |
 | `error_catalog_v1.schema.json` | schema khóa catalog major 1 |
 | `error_catalog_v1.manifest.json` | SHA-256, số đếm và ba consumer generated Go/C++/TypeScript |
+| `programming_store_v1.manifest.json` | schema version/checksum, đường dẫn, PRAGMA, single-writer, immutable entity và feature flag của SQLite store |
 
 ## Compatibility và thứ tự deploy
 

@@ -7,6 +7,7 @@ toolchain go1.26.4
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	golang.org/x/crypto v0.53.0
+	golang.org/x/text v0.38.0
 )
 
 require (
