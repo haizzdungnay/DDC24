@@ -30,6 +30,13 @@ targeted profile/artifact `32/32` PASS; libFuzzer loader chạy `10.000` lượt
 crash. Đây là evidence host cho contract foundation, không phải Test Result
 target/HIL và không chứng minh compiler/runtime Programming production đã xong.
 
+**Regression và hồ sơ.** Release build bật Modbus + BACnet + HMI PASS; CTest
+`875/875`; Go vet/toàn bộ test PASS; FE Vitest `54/54` file, `473/473` test,
+lint/build PASS. Candidate v2.11 ghim `22/22`; trace hai chiều `60/60` requirement
+và `32/32` scenario; docs ISO harness PASS. P1 lên `3/6`, nâng riêng
+`CORE-101 I=Y`; Test Result giữ `0/32`, feature flag `OFF` và `RELEASE_READY`
+vẫn `BLOCKED`. Không chạy browser vì task không đổi route/component/layout FE.
+
 ### Added — IPC Programming v1 giữa Backend và Core (2026-08-11)
 
 **Kết quả.** Hoàn tất `TASK-PROG-101`: thêm hợp đồng

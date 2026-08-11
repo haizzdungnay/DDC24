@@ -1,16 +1,16 @@
-# Review triển khai G1 Programming — TASK-PROG-100/101
+# Review triển khai G1 Programming — TASK-PROG-100/101/102
 
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-G1-IMPLEMENTATION-REVIEW-2026-08-11` |
-| Task | `TASK-PROG-100`, `TASK-PROG-101` |
+| Task | `TASK-PROG-100`, `TASK-PROG-101`, `TASK-PROG-102` |
 | Ngày | 2026-08-11 |
-| Trạng thái task | **DONE — 2 contract foundation task** |
-| Trạng thái pha | **P1 IN_PROGRESS — 2/6** |
-| Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4` |
-| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed` |
+| Trạng thái task | **DONE — 3 contract foundation task** |
+| Trạng thái pha | **P1 IN_PROGRESS — 3/6** |
+| Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4`; Task 102: `95585e7` |
+| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: branch `feat/programming-profile-artifact-v1-20260811`, chờ merge |
 | Test Result chính thức | **0/32 — không đổi** |
-| Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt) |
+| Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt), [`EV-PROG-G1-102`](programming-g1/raw/EV-PROG-G1-102.txt) |
 
 ## 1. Kết quả triển khai
 
@@ -108,7 +108,60 @@ Không chạy Chrome DevTools vì task không đổi UI component/route/layout. 
 deploy target/HIL vì task này khóa contract và skeleton không mutation; target
 continuity là acceptance của gate sau, không được suy từ host test.
 
-Next action theo dependency: `TASK-PROG-102` và `TASK-PROG-104`. Khi 102 xong,
-`TASK-PROG-103` được mở; `TASK-PROG-105` vẫn là review join cuối P1.
+Tại thời điểm đóng Task 101, next action theo dependency là `TASK-PROG-102` và
+`TASK-PROG-104`; Task 102 nay đã hoàn tất, vì vậy `TASK-PROG-103` đã được mở và
+`TASK-PROG-105` vẫn là review join cuối P1.
 
 Remote branch `feat/programming-ipc-v1-20260811` đã xóa sau merge PR #129.
+
+## 7. Kết quả `TASK-PROG-102`
+
+- Thêm `contracts/programming/rev_a_profile_v1.json` và hai JSON Schema khóa
+  profile `revA-1t-1-5-30`, Task `1/5/30 s`, capacity, type/width/wire code,
+  ST/FBD, Point allowlist, Core Library `rev-a.1` và `HASH_ONLY`.
+- Generator tạo `st_profile_generated.hpp`; test SHA-256 và từng field làm build
+  fail khi profile và hằng C++ drift. `ValidateRevAProfile` được serializer và
+  loader gọi lại; boundary test phủ `limit-1/limit/limit+1` của 15 resource.
+- Thay `allow_unsigned` bằng `StIntegrityMode`; mặc định Rev A luôn kiểm SHA-256,
+  không yêu cầu chữ ký, còn `SIGNATURE_OPTIONAL` bị từ chối. CLI không tự ký bằng
+  khóa test; timestamp layout khóa về `0`.
+- API `EncodeArtifactDeterministic`, `VerifyArtifact`, `LoadArtifact` dựng
+  candidate tạm và chỉ publish output sau khi toàn bộ bước pass. Artifact lỗi
+  không xóa/ghi đè object Active giả lập của caller.
+- Ghim golden `MKDDCIR1` 1.760 byte cùng provenance/hash và corpus âm
+  machine-readable. 100 lần compile cùng input cho byte giống hệt.
+
+### 7.1 Finding phát hiện và đóng trong phiên
+
+| ID | Mức | Finding | Cách đóng | Trạng thái |
+|---|---|---|---|---|
+| `F-G1-102-01` | P1 | Decision `HASH_ONLY` đã Accepted nhưng source vẫn dùng `allow_unsigned` và CLI luôn ký khóa test | Thay bằng enum policy; default HASH_ONLY; cấm optional; thêm test unsigned/signed/bad-signature | **CLOSED** |
+| `F-G1-102-02` | P1 | `load_st_artifact` xóa output caller trước verify, trái bất biến Active/LKG không đổi khi reject | Load vào candidate cục bộ, move sang output chỉ sau success; thêm test sentinel no-mutation | **CLOSED** |
+| `F-G1-102-03` | P1 | `SOURCE_DATE_EPOCH` làm cùng source có thể sinh byte khác giữa môi trường, trái deterministic contract | Khóa build timestamp về 0; thời gian tạo chuyển sang DB/audit; test lặp 100 lần | **CLOSED** |
+| `F-G1-102-04` | P2 | Chạy libFuzzer trực tiếp trên thư mục golden làm sinh corpus thu nhỏ cạnh fixture normative | Xóa đúng các file hash phát sinh; evidence sau dùng corpus tạm, chỉ commit ba golden file có manifest | **CLOSED** |
+
+Không còn finding P0/P1 mở trong phạm vi Task 102. Profile đã khóa hệ kiểu target,
+nhưng compiler/runtime As-Built chưa emit/execute `INT16/UINT16` và chưa có FBD
+producer. Phần đó thuộc `TASK-PROG-200`; không tạo test equivalence giả ở P1.
+
+## 8. Kiểm chứng `TASK-PROG-102` và truy vết
+
+| Làn | Kết quả đo trong phiên |
+|---|---|
+| JSON Schema/profile | 2 schema hợp lệ; profile instance + golden manifest validate PASS; generated constants `--check` PASS |
+| C++ targeted | `StProfile*` + `StIr*` 32/32 PASS; golden byte-exact, negative corpus, no-mutation, 100 build deterministic |
+| Fuzz loader | clang/libFuzzer 10.000 runs, không crash/hang/OOB |
+| C++ toàn repo | Release Modbus+BACnet+HMI build PASS; CTest 875/875 PASS |
+| Go toàn repo | `go vet ./...` PASS; `go test ./... -count=1` PASS |
+| FE regression | Vitest 54/54 file, 473/473 test; lint PASS; generated client 25 operation và Vite build PASS |
+| Tài liệu | candidate pin 22/22, trace 60/60 + 32/32, docs ISO harness và `git diff --check` PASS |
+
+Trace nâng riêng `CORE-101 I=Y`: source đã verify magic/schema/target/profile/
+size/hash/section/control-flow/resource, không parse source ở RT path và có
+unit/fuzz reject. `SYS-101` và `NFR-101` giữ `I=N` vì môi trường Programming đầy
+đủ, FBD/type target, Check/BE/FE và target acceptance chưa có. Không tạo
+`TR-PROG-*`; mọi `T/P/R=N`, Test Result giữ `0/32`, feature flag giữ `OFF` và
+`RELEASE_READY` vẫn `BLOCKED`.
+
+Next action: `TASK-PROG-103` đã được mở vì `100..102 DONE` và được chạy song song
+với `TASK-PROG-104`; `TASK-PROG-105` chờ hai task này.
