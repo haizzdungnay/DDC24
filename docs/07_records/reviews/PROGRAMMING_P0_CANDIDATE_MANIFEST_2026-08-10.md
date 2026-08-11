@@ -4,14 +4,14 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.31 |
+| Phiên bản | 3.32 |
 | Ngày | 2026-08-11 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
 | Trạng thái | **ACTIVE — candidate v2.23 `IMPLEMENTATION IN PROGRESS`; P1 6/6, P2 8/8, P3 1/8 SOURCE/DOD DONE; G3 IN PROGRESS; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | chờ merge hồ sơ — source authority `4f7e0ac`; **22 hash ở §2 là định danh hiện hành** |
-| PR nguồn | chờ tạo sau khi máy kiểm 22 hash/trace/harness PASS |
+| Candidate commit | `424367a` — merge tree `7b81f79`; source authority `4f7e0ac`; **22 hash ở §2 là định danh hiện hành** |
+| PR nguồn | [PR #155](https://github.com/Mekong-HCM/MK-DDC-24/pull/155) — merged |
 | Candidate trước | v2.22 tại commit `352fe10` — **SUPERSEDED bởi TASK-PROG-300**, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
@@ -221,3 +221,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.29 | 2026-08-11 | Phát hành candidate v2.22 sau `TASK-PROG-207`: cập nhật hash/blob Index v3.0, Data v0.9, Interface v1.3, Security v0.5, BE v1.1, VVP v1.0, Risk v1.5, Trace v3.11 và Plan 53 v0.31; 13/22 hồ sơ còn lại giữ nguyên. P2 8/8 source/DoD, next TASK-PROG-300; 0/32 PASS; commit/tree/PR chờ ghi sau merge |
 | 3.30 | 2026-08-11 | Ghi bổ sung PR #153, merge commit `352fe10` và tree `923cb1e3` chứa candidate v2.22; remote feature branch đã xóa. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi, candidate pin tiếp tục 22/22 PASS. GitHub Actions không chạy step nào do billing/spending-limit; gate local đầy đủ được ghi tại PR |
 | 3.31 | 2026-08-11 | Phát hành candidate v2.23 sau `TASK-PROG-300`: cập nhật hash/blob Index v3.1, Artifact v0.8, FW-SOM v0.5, VVP v1.1, Risk v1.6, Trace v3.12 và Plan v0.32; 15/22 hồ sơ còn lại giữ nguyên. P3 1/8, next TASK-PROG-301; 0/32 PASS; commit/tree/PR chờ ghi sau merge |
+| 3.32 | 2026-08-11 | Ghi bổ sung PR #155, merge commit `424367a` và tree `7b81f79` chứa candidate v2.23; remote feature branch đã xóa. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi, candidate pin tiếp tục 22/22 PASS. GitHub Actions không chạy step nào do billing/spending-limit; gate local đầy đủ được ghi trong PR |
