@@ -4,18 +4,18 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.10 |
+| Phiên bản | 3.11 |
 | Ngày | 2026-08-11 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
-| Trạng thái | **ACTIVE — candidate v2.12 `IMPLEMENTATION IN PROGRESS`; P1 4/6; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
+| Trạng thái | **ACTIVE — candidate v2.13 `IMPLEMENTATION IN PROGRESS`; P1 5/6; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | `1c74b9f` — ghi đầy đủ ở §1.1; **22 hash ở §2 là định danh hiện hành** |
-| PR nguồn | [PR #133](https://github.com/Mekong-HCM/MK-DDC-24/pull/133) — merged |
-| Candidate trước | v2.11 tại commit `16d3e40` — **SUPERSEDED bởi cập nhật As-Built TASK-PROG-103**, xem §4 |
+| Candidate commit | Chờ merge hồ sơ Task 104; **22 hash ở §2 là định danh hiện hành** |
+| PR nguồn | Chờ tạo sau commit hồ sơ |
+| Candidate trước | v2.12 tại commit `1c74b9f` — **SUPERSEDED bởi cập nhật As-Built TASK-PROG-104**, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
-| Record phê duyệt nền v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — tiếp tục áp dụng; v2.9 không đổi requirement/design decision |
+| Record phê duyệt nền v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — tiếp tục áp dụng; v2.13 không đổi requirement/design decision |
 
 ## 1. Phạm vi và phán quyết
 
@@ -47,9 +47,9 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | `1c74b9f6aaea4407817efac2e51089101501fbdf` |
-| Git tree | `db5e225f60e810686a7f8dcb0ccb8b3256d372bb` |
-| Nhánh phát hành | `feat/programming-error-catalog-v1-20260811` — remote đã xóa sau merge |
+| Commit chứa nội dung candidate | Chờ merge PR Task 104; sẽ ghi bằng commit provenance ngoài mẫu số 22 |
+| Git tree | Chờ merge |
+| Nhánh phát hành | `feat/programming-sqlite-store-v1-20260811` |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
 chạy `scripts/candidate_pin_check.py` trước khi bắt đầu đọc.
@@ -62,8 +62,8 @@ Việc ghim candidate xác định đúng baseline được duyệt. Nó **khôn
 - tự mở `RELEASE_READY`.
 
 `AUTH-PROG-2026-08-11-03` đã mở `PLAN_READY` và mọi `IMPLEMENT_READY[*]`; việc
-ghim hash bảo đảm team đọc đúng candidate v2.12: baseline đã phê duyệt cộng
-trạng thái triển khai thật của `TASK-PROG-100..103`.
+ghim hash bảo đảm team đọc đúng candidate v2.13: baseline đã phê duyệt cộng
+trạng thái triển khai thật của `TASK-PROG-100..104`.
 
 Baseline gốc `05c1c480418a2256f1010527f9d90fb6ff549b86` vẫn được giữ để so
 sánh/rollback. Chuỗi candidate của vòng P0 là
@@ -76,11 +76,11 @@ trước `e3e9fb2`.
 
 | # | Đường dẫn | SHA-256 | Git blob | Dòng | Đổi |
 |---:|---|---|---|---:|:---:|
-| 1 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `ffbd970c446854218b76e6b19e5c384211a6733577ce36b5c33bfcfe8ec92a1b` | `491780397936b10b88c22a3382e5dea424876533` | 239 | ✱ |
+| 1 | `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` | `7660c3d7a05f9f15d99133d43c11d5f533ffdea2646c4193423c4c6601d0882d` | `dc863a6de48924420b1fb0f9ba2e87854342a284` | 240 | ✱ |
 | 2 | `docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md` | `b8c46672b09f7a45005108bee3fdbed644a5012b809f9b3e8fe09c057581b0da` | `6d9d75dc24dc4d8bb0e2d03edb443635b3e34394` | 272 | ✱ |
 | 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `204f2ef77f66e1c1088959c592018006bb3e1b828a34f1031c151fe638e27929` | `d060739a398b9efe50ed40283e936a5df9a8f9d4` | 254 | ✱ |
 | 4 | `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | `02fe3a541c95b0c9d0d39869f7b97078ddb4fb23d70d23b9bdb395d9400a3a30` | `44180dd9107b528a35b57f800b5e97d750a4b9b2` | 415 | ✱ |
-| 5 | `docs/02_design/software/PROGRAMMING_DATA_MODEL.md` | `4dfe7245e276682a3f764c629222669fcbc107daad457ae94670c818774d76d3` | `9e096e622528a9c3267e9457e33beb0ab26bd98a` | 520 | ✱ |
+| 5 | `docs/02_design/software/PROGRAMMING_DATA_MODEL.md` | `3411ffc75670c4118ea972f250b33c37c2bf434e45ab76ba2b4073c57c18602d` | `1deac588afe75babc92481cd20e6607b6e5d524d` | 521 | ✱ |
 | 6 | `docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md` | `25962ee98183e8ecd0598dd41f0ad6ab172145898931ecd91f823cd4e73ba698` | `6e8f9758a162f0386ed8e81b8854c7d234ea76bb` | 601 | ✱ |
 | 7 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `7f7bb5b1e7ecea62c495fc605eed11dac1886420fc8496848a44d8797ee8c5d0` | `a34a65a513264474260911dcccd87b87e69d68d9` | 343 | ✱ |
 | 8 | `docs/02_design/interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md` | `298e917a9ad6497b4e0bc419e89cd2ac6258a9d2fb0e6a97fe37e8ecb8881fa4` | `ae276c4a473182c7ae34d73e04aaf4197894061d` | 293 | ✱ |
@@ -89,29 +89,29 @@ trước `e3e9fb2`.
 | 11 | `docs/02_design/software/PROGRAMMING_SECURITY_DESIGN.md` | `7dacf762fe9732d87f3f41e140b76c0a1a7fd4c29c34717b1c03a6deb6a26b50` | `fdb25a91ee6cae30c49295cb49277bbc6c65e481` | 309 | ✱ |
 | 12 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `b31bdeadaf3008bc8f5ab34b8a310f10326e972a0926ff9883489de8dedde568` | `8930ca4580ecff586495cacea0134943c0367021` | 1361 | ✱ |
 | 13 | `docs/02_design/software/PROGRAMMING_FE_DESIGN.md` | `519b84764d5339f1f07819a5a8982fd7eb85c590c6c7b38a544821547313a345` | `4400fd4f160dce0aa19b17748da3cc459698da01` | 425 | ✱ |
-| 14 | `docs/02_design/software/PROGRAMMING_BE_DESIGN.md` | `0ccaad01843fb258fccca94a6c4325edc5d6b43815ff6ac64d8cc657b45da3b6` | `174d734ab4188ab480fddd555d2bb9b22a323d0e` | 391 | ✱ |
+| 14 | `docs/02_design/software/PROGRAMMING_BE_DESIGN.md` | `3cfdb8b05eb852eeee461105971fafc4e3db2d582025db139ff683d173586235` | `1f2e88bab04f03caf274af3bd0793b7205f1b400` | 394 | ✱ |
 | 15 | `docs/02_design/software/PROGRAMMING_FW_SOM_DESIGN.md` | `a1c66a11f3bb2cbc6933ecc18d1fca641462a9c4c2a2c951e3f3c372ef3caaff` | `461a6f0c472a2d7eafda687e1cae4e17d3972bce` | 341 | ✱ |
 | 16 | `docs/02_design/firmware/PROGRAMMING_FW_MCU_DESIGN.md` | `8be8f4f116a46dea1c298de1a13e2e130827bcb2047355c2d136ad81b5206b74` | `2a067b969e8011d985977eba046ec6d044e0f901` | 265 | ✱ |
 | 17 | `docs/04_design/hardware/PROGRAMMING_HW_DESIGN.md` | `b6c313f3c01830b9ec70abdd1ab1666d7aa640f1ee2486548a4a1ae1204399c6` | `43f7d5765ce3464f43e6e3b242114d1445403bb1` | 258 | ✱ |
 | 18 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `14c424c07a8cff5665fcbf83b87427d2100d9d028b34a8c513a58766e5f8070b` | `be3fdc70ef02d9cc5fab484eccdecd8fa6c44331` | 306 | ✱ |
 | 19 | `docs/06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md` | `ac7fed9c3134f32f16f28dee7d9b3f60585ef62df749d0148fc15770ba8fc6ba` | `6a09f28979d99ebfc07e8183a1ad01085a7e4488` | 335 | ✱ |
-| 20 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `41081f6c520ce2037730d42cc54134e817a75657b29ddd067941fd5a797454df` | `81fa1767d42be469771adb045b9ada722862abd4` | 175 | ✱ |
-| 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `d5f6e8c499c9bea480e8e90f74b6c0b58ae8bf467d382bb9e3094b64c67ec786` | `817c419a0792fdae7376c81224b86ba46ea72300` | 335 | ✱ |
-| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `af545e3222159c32438a84a3002f35c89f5d1800ec55036aeab3a8ccce3375c8` | `02e9a2bc494f7773caac8bf4b8f155875d31b2b4` | 1148 | ✱ |
+| 20 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `b8b36ddeb121ca7cf30f47b736222b98c3c27ff04471cb22ad58ec9a155bde46` | `f34368e1dbe68b0a0199f337b48255d457b19dff` | 189 | ✱ |
+| 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `bfae5662f5a28ef2ec1beea2bac89cc54b78321c7e181c8c8379df8442588c01` | `c093211dff1397bb4e8a9819013a786df6f508f7` | 336 | ✱ |
+| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `4bdea16e29dde106213e236476e03931ee8041348bf301e73465501757d98f8c` | `1bcb84cce41c46236bec5e9fa47c3d150b3bc6ef` | 1149 | ✱ |
 
 So với candidate v2.7, **22/22 hồ sơ đã đổi** để tạo nền v2.8 được phê duyệt.
-Candidate v2.12 hiện tại đổi dòng 1, 6, 8, 21–22 so với v2.11 để ghi As-Built,
-error contract và trace/progress `TASK-PROG-103`; dấu `✱` tiếp tục biểu thị delta
+Candidate v2.13 hiện tại đổi dòng 1, 5, 14, 20–22 so với v2.12 để ghi As-Built,
+store/migration/backup và trace/progress `TASK-PROG-104`; dấu `✱` tiếp tục biểu thị delta
 tích lũy so với v2.7.
 
 ## 3. Hồ sơ hỗ trợ ngoài mẫu số 22
 
 | Hồ sơ | Phiên bản tại lần ghim này | Vai trò |
 |---|---|---|
-| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v3.9 | Tracker hồ sơ và đồng bộ tiến độ code |
+| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v3.11 | Tracker hồ sơ và đồng bộ tiến độ code |
 | `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v2.0 | Gói phê duyệt toàn bộ |
 | `docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md` | v1.6 | Biên bản consumer review + waiver |
-| `docs/07_records/reviews/PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md` | 2026-08-11 | Review source/evidence `TASK-PROG-100..103` |
+| `docs/07_records/reviews/PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md` | 2026-08-11 | Review source/evidence `TASK-PROG-100..104` |
 
 Bốn hồ sơ này ghi **phiên bản hoặc ngày**, không ghi SHA-256. Lý do giống §1.1: chúng thay đổi
 trong cùng vòng cập nhật với manifest, nên một hash ghi ở đây sẽ sai ngay khi commit
@@ -121,20 +121,21 @@ không cần phát hành manifest mới.
 Sáu ADR `ADR-026..031` cũng nằm ngoài mẫu số 22 vì chúng là **quyết định**, không
 phải hồ sơ baseline. Cả sáu đã `Accepted` theo `AUTH-PROG-2026-08-11-03`.
 
-## 4. Delta so với candidate v2.11
+## 4. Delta so với candidate v2.12
 
-Candidate v2.12 thay đổi **5/22** hồ sơ để phản ánh As-Built, không đổi
+Candidate v2.13 thay đổi **6/22** hồ sơ để phản ánh As-Built, không đổi
 requirement hoặc decision đã phê duyệt:
 
-- `IFSPEC-PROG-001` lên v0.9 và `IFSPEC-ART-PROG-001` lên v0.5: khóa catalog
-  19 public/77 detail, exact loader map và fail-safe unknown/HTTP/public args.
-- `PROG-DOCSET-001` lên v2.0 và `PLAN-PROG-053` lên v0.21: P1
-  `IN_PROGRESS 4/6`, `TASK-PROG-100..103 DONE`; 104 là next action.
-- `TRACE-PROG-001` lên v3.1: bổ sung source `4a1e9f5`, giữ tổng `I=Y` 2/60
-  vì lifecycle/ScanLoop/Draft reducer chưa end-to-end; mọi `T/P/R` giữ `N`.
-- Source output Task 103 được khóa qua `4a1e9f5`; catalog/schema/generated/test
-  là evidence hỗ trợ, không phải Test Result.
-- 17/22 hồ sơ còn lại byte-identical với v2.11. Approval
+- `DM-PROG-001` lên v0.5 và `DDD-BE-PROG-001` lên v0.7: ghi source thật của
+  SQLite v1/store/migration/backup và phân biệt wiring/service/worker còn thiếu.
+- `PROG-DOCSET-001` lên v2.1 và `PLAN-PROG-053` lên v0.22: P1
+  `IN_PROGRESS 5/6`, `TASK-PROG-100..104 DONE`; 105 là review join G1.
+- `RSK-PROG-001` lên v0.6: RSK-007/008 có partial source nhưng 16/16 Open và
+  residual giữ nguyên. `TRACE-PROG-001` lên v3.2: ghi partial cho sáu requirement,
+  tổng `I=Y` vẫn 2/60 và mọi `T/P/R=N`.
+- Source output Task 104 được khóa qua `312f357`; host fault/concurrency/race
+  test là evidence hỗ trợ, không phải Test Result target/HIL.
+- 16/22 hồ sơ còn lại byte-identical với v2.12. Approval
   `AUTH-PROG-2026-08-11-03` tiếp tục hiệu lực; không thêm chữ ký hoặc Test Result.
 - Source C++ và contract machine-readable là output của task, không nằm trong mẫu số 22;
   evidence hỗ trợ tại `PROG-G1-IMPLEMENTATION-REVIEW-2026-08-11`.
@@ -193,3 +194,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.8 | 2026-08-11 | Ghi bổ sung PR #131, merge commit `16d3e40` và tree `a0add512` chứa candidate v2.11. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi; candidate pin tiếp tục 22/22 PASS |
 | 3.9 | 2026-08-11 | Phát hành candidate v2.12 sau `TASK-PROG-103`: cập nhật hash/blob của Design Index v2.0, Interface v0.9, Artifact v0.5, Trace v3.1 và Plan 53 v0.21; 17/22 hồ sơ còn lại giữ nguyên. Commit/tree/PR chờ ghi bổ sung sau merge; 22 SHA-256 là authority hiện hành |
 | 3.10 | 2026-08-11 | Ghi bổ sung PR #133, merge commit `1c74b9f` và tree `db5e225f` chứa candidate v2.12. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi; candidate pin tiếp tục 22/22 PASS |
+| 3.11 | 2026-08-11 | Phát hành candidate v2.13 sau `TASK-PROG-104`: cập nhật hash/blob Design Index v2.1, Data v0.5, BE v0.7, Risk v0.6, Trace v3.2 và Plan 53 v0.22; 16/22 hồ sơ còn lại giữ nguyên. Commit/tree/PR chờ ghi bổ sung sau merge; 22 SHA-256 là authority hiện hành |

@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 0.5 |
+| Phiên bản | 0.6 |
 | Trạng thái | **M3 — Review Ready** — treatment/evidence/acceptance đủ; 16/16 Open |
-| Ngày | 2026-08-09 |
+| Ngày | 2026-08-11 |
 | Chủ quản | Product + Architecture + QA |
 | Người review | Risk owners, Safety, Security, Operations Leads |
 | Người phê duyệt | Product Owner + System Architect + Verification Lead |
@@ -21,7 +21,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **16 rủi ro có thể gây hỏng thiết bị, mất điều khiển hoặc sai cam kết**, kèm biện pháp kiểm soát, chủ sở hữu và bằng chứng cần có để hạ mức. Đây là căn cứ để nói “chưa được phép cutover”. |
 | 2. Ai phải đọc file này? | Product, Architect và QA (chủ quản chung); từng risk owner đọc phần của mình; Safety và Security đọc trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical` (điểm ≥15). Đã có thiết kế biện pháp cho cả 16, nhưng **0/16 đã triển khai** end-to-end và **0/16 có bằng chứng được chấp nhận**. |
+| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical` (điểm ≥15). Source TASK-PROG-104 đã hiện thực một phần treatment cho `RSK-PROG-007/008` ở lớp store; **0/16 đã triển khai end-to-end** và **0/16 có bằng chứng được chấp nhận**, nên không giảm điểm. |
 | 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Nó gắn từng rủi ro với biện pháp cụ thể, kịch bản kiểm chứng và mức tồn dư **mục tiêu** — mục tiêu, chưa phải kết quả. |
 | 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản; việc code nằm ở Plan 53. Bốn rủi ro nặng nhất (20 điểm): `RSK-PROG-002` watchdog restart, `RSK-PROG-003` IOP gap, `RSK-PROG-005` compiler tranh CPU, `RSK-PROG-013` nhầm skeleton là HIL-ready. |
 | 6. Điều gì còn bị chặn? | Mọi rủi ro ≥15 **chặn cutover production** cho tới khi biện pháp có bằng chứng PASS và mức tồn dư được owner cùng QA chấp nhận bằng văn bản. |
@@ -120,11 +120,24 @@ OPEN → TREATMENT_IMPLEMENTED → EVIDENCE_REVIEW → ACCEPTED | REOPENED
 | Risk Open | 16/16 |
 | Critical ≥15 | 11/16 |
 | Treatment có thiết kế ở mức M3 | 16/16 |
-| Treatment implemented | 0/16 cho feature end-to-end Target |
+| Treatment implemented end-to-end | 0/16 cho feature/Target |
+| Treatment source partial | 2/16 (`RSK-PROG-007/008`) tại store; chưa đủ đổi lifecycle/residual |
 | Evidence accepted | 0/16 |
 | Residual accepted | 0/16 |
 
 Vòng nội dung chi tiết làm rõ control nhưng không giảm risk. Production gate vẫn RED.
+
+### 5.1 Cập nhật treatment source `TASK-PROG-104`
+
+| Risk | Control đã có tại `312f357` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-007` | Operation intent + audit được commit bền vững trước side effect; một non-terminal operation/controller | service/worker, Core stage/activate, authoritative read-back, `UNKNOWN` reconcile và UI truth | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Draft ETag/CAS hai writer; operation idempotency hash + single-flight; transaction rollback khi disk full | idempotency cho Draft mutation ở service/API, worker lease/reconcile và target fault test chống double activation | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-009` | DB tách khỏi RETAIN và không tự xóa lịch sử | stable retain identity/layout/version/CRC, power-loss/cold-init diagnostic tại Core | `OPEN` |
+| `RSK-PROG-011` | Backup/restore path không ghi đè, checksum fail-closed | bundle quarantine/import allowlist/path/ratio/executable checks | `OPEN` |
+
+Host test của store là evidence hỗ trợ G1, không phải Test Result của scenario;
+vì vậy lifecycle, S×L và residual của cả bốn risk giữ nguyên.
 
 ## 6. Treatment/acceptance record bắt buộc
 
@@ -151,11 +164,12 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 0.3 | 2026-08-09 | Bổ sung treatment/acceptance record schema và trigger reopen/invalidate; đổi trạng thái content sang Detailed Draft, giữ residual/evidence RED |
 | 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Risk; residual giữ nguyên |
 | 0.5 | 2026-08-09 | Thêm `RSK-PROG-016` (đơn giản hóa UI làm mất bước an toàn, 5×3=15) kèm biện pháp fail-closed và scenario `VS-031`; tổng 16 risk, residual không đổi |
+| 0.6 | 2026-08-11 | Ghi treatment source partial của `TASK-PROG-104` cho RSK-007/008 và ranh giới chưa hoàn tất của RSK-009/011; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
 | Risk owners + Safety/Security/Ops | Chờ review | — |
-| Product + Architect + Verification | **BLOCKED — chưa phê duyệt** | 0/15 evidence/residual accepted |
+| Product + Architect + Verification | **WAIVED FOR IMPLEMENTATION; RESIDUAL NOT ACCEPTED** | 0/16 evidence/residual accepted; vẫn chặn release/cutover |
 
 ## 8. Phụ lục — Tự kiểm cổng M3 (loại: Risk)
 

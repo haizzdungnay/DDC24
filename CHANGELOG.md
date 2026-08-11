@@ -7,6 +7,38 @@
 ---
 
 ## [Unreleased]
+### Added — SQLite store Programming v1 (2026-08-11)
+
+**Kết quả.** Triển khai code `TASK-PROG-104`: thêm bounded package
+`internal/programming/store` cho Project/Draft mutable bằng ETag, Revision và
+object bất biến, operation idempotent/single-flight, audit append-only có
+SHA-256 hash-chain; thêm schema SQLite v1 gồm 10 bảng, FK/unique/check/trigger và
+manifest machine-readable `PROGRAMMING-STORE-V1`.
+
+**Migration và phục hồi.** Store dùng `WAL`, `foreign_keys=ON`,
+`synchronous=FULL`, một writer, DB mode `0600` và thư mục `0750`. Migration ghim
+checksum, kiểm `user_version`, `quick_check`, partial/future schema và fault tại
+ba ranh giới transaction; version tiếp theo bắt buộc tạo backup verified trước
+khi apply. Backup dùng SQLite Online Backup API, kiểm schema/checksum/file hash,
+`fsync`, publish không ghi đè và manifest; restore cũng verify trước khi publish.
+Checksum lệch, DB corrupt, disk full, JSON duplicate/non-object hoặc audit chứa
+field nhạy cảm đều fail-closed, không để aggregate nửa vời.
+
+**Kiểm chứng cục bộ.** Unit/fault/concurrency/backup suite `11/11` nhóm PASS;
+`go test -race ./internal/programming/store -count=1` PASS và `go vet` PASS.
+Bao phủ fresh/restart, ETag hai writer, immutable/FK/unique, idempotency,
+backup/restore/manifest collision, migration rollback/checksum/`user_version`,
+disk-full/corrupt, NFC/duplicate JSON và audit tamper. Feature Programming giữ
+`OFF`. Regression Release C++ bật Modbus + BACnet + HMI và CTest `877/877`
+PASS; toàn bộ Go vet/test PASS; FE Vitest `55/55` file, `479/479` test,
+lint/build PASS. Chưa chạy migration target, HIL hay browser và chưa tạo Test
+Result release.
+
+**Source và tiến độ.** Source commit `312f357`; Plan 53/54 ghi P1 `5/6`,
+candidate v2.13 ghim 22 hồ sơ. Trace bổ sung source partial cho sáu requirement
+nhưng giữ đúng tổng `2/60 I=Y`; Risk ghi treatment partial RSK-007/008 nhưng giữ
+16/16 Open và residual không đổi. Next action là `TASK-PROG-105` review join G1.
+
 ### Added — Catalog lỗi Programming thống nhất ba lớp (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-103`: thêm nguồn duy nhất
