@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.3 |
+| Phiên bản | 3.4 |
 | Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.9; P1 `1/6`; `TASK-PROG-100 DONE`; `RELEASE_READY BLOCKED`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
@@ -523,6 +523,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.1 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-03`: `ACCEPT ALL` không kèm approval condition; 17/17 decision `DECIDED`; 6/6 ADR `Accepted`; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` `PASS`; consumer/discipline/Verification/Document Control `WAIVED FOR IMPLEMENTATION`; P0 7/7 DONE, P1 được bắt đầu ngay | Product + Architect + Document Control |
 | 3.2 | 2026-08-11 | Ghi commit `b068b7d` và tree `6ab6ac10` chứa candidate v2.8; bước bổ sung chỉ đổi hồ sơ hỗ trợ ngoài mẫu số 22, không đổi candidate hoặc quyền implementation | Document Control |
 | 3.3 | 2026-08-11 | Đồng bộ tiến độ code đầu tiên: `TASK-PROG-100 DONE`, P1 1/6; dẫn ba source commit và review G1; giữ maturity tài liệu 22/22 M3, M4/M5 0/22 và Test Result 0/32 | Dev Lead + Document Control |
+| 3.4 | 2026-08-11 | Ghi PR #127 đã merge tại `7109bae`, remote feature branch đã xóa; candidate v2.9 có commit/tree truy xuất được, P1 và evidence không đổi | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|

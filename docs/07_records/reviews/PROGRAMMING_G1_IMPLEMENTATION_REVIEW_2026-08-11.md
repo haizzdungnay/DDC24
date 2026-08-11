@@ -8,6 +8,7 @@
 | Trạng thái task | **DONE — contract foundation** |
 | Trạng thái pha | **P1 IN_PROGRESS — 1/6** |
 | Source commit | `9917e3b` (OpenAPI + Go), `81080f8` (TypeScript), `efbed2d` (golden parity) |
+| PR / merge | [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae6b391163ad893bb29f3bc570d783a3334` |
 | Test Result chính thức | **0/32 — không đổi** |
 | Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt) |
 
@@ -55,3 +56,5 @@ target/HIL vì thẻ task ghi rõ không áp dụng ở lát cắt contract-only
 `TASK-PROG-101`, `TASK-PROG-102` và `TASK-PROG-104` được chạy song song. Sau
 khi `100..102` đều `DONE`, bắt đầu `TASK-PROG-103`; `TASK-PROG-105` là review
 join cuối P1.
+
+Remote branch `feat/programming-contract-foundation-20260811` đã xóa sau merge.
