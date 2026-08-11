@@ -5,7 +5,10 @@ Loại: evidence hỗ trợ task; KHÔNG phải Test Result VS-PROG
 Source:
 - 95585e7 feat(programming): khóa profile và artifact Rev A v1
 - Branch: feat/programming-profile-artifact-v1-20260811
-- PR/merge: cập nhật sau khi merge
+- PR #131: https://github.com/Mekong-HCM/MK-DDC-24/pull/131
+- Merge commit: 16d3e40a6eb3f579c888fe5cdcc56e47dd6e9f9f
+- Git tree: a0add51211c3c4b28521438ebe158da14e897420
+- Remote feature branch: đã xóa sau merge
 
 Contract SHA-256:
 - profile instance: 94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc

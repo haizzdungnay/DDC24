@@ -8,7 +8,7 @@
 | Trạng thái task | **DONE — 3 contract foundation task** |
 | Trạng thái pha | **P1 IN_PROGRESS — 3/6** |
 | Source commit | Task 100: `9917e3b`, `81080f8`, `efbed2d`; Task 101: `51fe515`, `e9707b4`; Task 102: `95585e7` |
-| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: branch `feat/programming-profile-artifact-v1-20260811`, chờ merge |
+| PR / merge | Task 100: [PR #127](https://github.com/Mekong-HCM/MK-DDC-24/pull/127) / `7109bae`; Task 101: [PR #129](https://github.com/Mekong-HCM/MK-DDC-24/pull/129) / `adcefed`; Task 102: [PR #131](https://github.com/Mekong-HCM/MK-DDC-24/pull/131) / `16d3e40` |
 | Test Result chính thức | **0/32 — không đổi** |
 | Evidence hỗ trợ | [`EV-PROG-G1-100`](programming-g1/raw/EV-PROG-G1-100.txt), [`EV-PROG-G1-101`](programming-g1/raw/EV-PROG-G1-101.txt), [`EV-PROG-G1-102`](programming-g1/raw/EV-PROG-G1-102.txt) |
 
@@ -165,3 +165,6 @@ unit/fuzz reject. `SYS-101` và `NFR-101` giữ `I=N` vì môi trường Program
 
 Next action: `TASK-PROG-103` đã được mở vì `100..102 DONE` và được chạy song song
 với `TASK-PROG-104`; `TASK-PROG-105` chờ hai task này.
+
+Remote branch `feat/programming-profile-artifact-v1-20260811` đã xóa sau merge
+PR #131; candidate v2.11 xuất hiện trên `main` tại tree `a0add512`.
