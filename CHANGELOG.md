@@ -29,6 +29,12 @@ Store manifest/G1 join ghim migration v2. Đường nâng v1→v2 bắt buộc o
 đã `quick_check`; sửa `VerifyBackup` đóng connection và dọn sidecar `-wal/-shm`
 để artifact chỉ còn database + manifest.
 
+**Hồ sơ As-Built.** Ghim source `66848a1` vào Design Index v2.7, Data Model
+v0.6, Interface v1.0, BE Design v0.8, Risk v1.2, Trace v3.8, Plan 53 v0.28,
+Roadmap v3.23, review/raw evidence G2 và candidate v2.19. Tiến độ P2 `5/8`,
+tổng `18/49`; task tiếp theo `TASK-PROG-205`. Giữ trung thực `2/60 I=Y`, hai
+record BLOCKED, `0/32 PASS`, flag `OFF` và `RELEASE_READY BLOCKED`.
+
 **Kiểm chứng hiện tại.** Targeted Go/race PASS cho lifecycle, restart,
 idempotency, stale ETag, immutable Revision, duplicate JSON, migration backup và
 HTTP/RBAC. Full CTest Release bật Modbus+BACnet+HMI đạt `927/927`; Go `vet` và

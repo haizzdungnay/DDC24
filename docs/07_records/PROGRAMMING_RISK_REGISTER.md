@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Trạng thái | **M3 — Review Ready** — treatment/evidence/acceptance đủ; 16/16 Open |
 | Ngày | 2026-08-11 |
 | Chủ quản | Product + Architecture + QA |
@@ -21,7 +21,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **16 rủi ro có thể gây hỏng thiết bị, mất điều khiển hoặc sai cam kết**, kèm biện pháp kiểm soát, chủ sở hữu và bằng chứng cần có để hạ mức. Đây là căn cứ để nói “chưa được phép cutover”. |
 | 2. Ai phải đọc file này? | Product, Architect và QA (chủ quản chung); từng risk owner đọc phần của mình; Safety và Security đọc trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical`. `RSK-PROG-006` có thêm treatment source Task 203: artifact/manifest ST/FBD dùng SHA-256, khóa profile/library/ABI/build key và source map UUID/unit, reject mutation fail-closed. Task 200–202 và `RSK-PROG-007/008/014` partial từ G1 vẫn giữ. Hai Test Result đang `BLOCKED`, **0/16 treatment end-to-end** và **0/16 evidence được chấp nhận**, nên không giảm điểm. |
+| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical`. `RSK-PROG-007/008` có thêm treatment source Task 204: sáu API Project/Draft/Revision dùng SQLite v2, ETag/CAS và receipt idempotency 24 giờ qua restart; `RSK-PROG-006/014` cùng các control G1/G2 trước vẫn partial. Hai Test Result đang `BLOCKED`, **0/16 treatment end-to-end** và **0/16 evidence được chấp nhận**, nên không giảm điểm. |
 | 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Nó gắn từng rủi ro với biện pháp cụ thể, kịch bản kiểm chứng và mức tồn dư **mục tiêu** — mục tiêu, chưa phải kết quả. |
 | 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản; việc code nằm ở Plan 53. Bốn rủi ro nặng nhất (20 điểm): `RSK-PROG-002` watchdog restart, `RSK-PROG-003` IOP gap, `RSK-PROG-005` compiler tranh CPU, `RSK-PROG-013` nhầm skeleton là HIL-ready. |
 | 6. Điều gì còn bị chặn? | Mọi rủi ro ≥15 **chặn cutover production** cho tới khi biện pháp có bằng chứng PASS và mức tồn dư được owner cùng QA chấp nhận bằng văn bản. |
@@ -121,7 +121,7 @@ OPEN → TREATMENT_IMPLEMENTED → EVIDENCE_REVIEW → ACCEPTED | REOPENED
 | Critical ≥15 | 11/16 |
 | Treatment có thiết kế ở mức M3 | 16/16 |
 | Treatment implemented end-to-end | 0/16 cho feature/Target |
-| Treatment source partial | 4/16 (`RSK-PROG-006/007/008/014`); RSK-006 có compiler/IR/loader/FBD canonical/lowering/equivalence/fuzz Task 200–202, các risk còn lại ở store/join; chưa đủ đổi lifecycle/residual |
+| Treatment source partial | 4/16 (`RSK-PROG-006/007/008/014`); RSK-006 có compiler/IR/loader/FBD/artifact Task 200–203, RSK-007/008 có store/API/idempotency Task 204, RSK-014 có contract generation; chưa đủ đổi lifecycle/residual |
 | Evidence accepted | 0/16 |
 | Residual accepted | 0/16 |
 
@@ -192,6 +192,18 @@ vì vậy lifecycle và residual `15 Open` không đổi.
 Active/LKG và không có target/HIL/independent Test Result; vì vậy lifecycle và
 residual `15 Open` của `RSK-PROG-006` giữ nguyên.
 
+### 5.7 Cập nhật treatment source `TASK-PROG-204`
+
+| Risk | Control đã có tại `66848a1` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-007` | Sáu API Project/Draft/Revision dùng state đã commit làm response authority; seal Revision không đổi Active/LKG; flag OFF và 19 route lifecycle còn 503, nên không thể báo Commission thành công giả | Check/operation worker, Core stage/activate/read-back, `UNKNOWN` reconcile và UI truth | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Draft dùng ETag mạnh gắn draft ID + generation, CAS/batch all-or-nothing; receipt 24 giờ khóa actor/action/target/key + semantic request hash, replay qua restart giữ identity/audit/ETag; cùng key khác request conflict | worker lease/Core single-flight/reconcile và E2E fault chống double activation | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | OpenAPI v1.17, catalog v1.1.0 20/77 và consumer Go/C++/TS được sinh lại; sáu operation gắn status `task-prog-204`, contract/G1 drift guard PASS | Check/Commission API/UI runtime và `VS-PROG-019/024` PASS độc lập | `OPEN — PARTIAL SOURCE` |
+
+`EV-PROG-G2-204` là evidence hỗ trợ host cho lifecycle/store/API. Feature flag
+vẫn mặc định `OFF`; chưa có Check, Core side effect, target/HIL hoặc Test Result
+độc lập, nên không risk nào chuyển lifecycle hay giảm residual.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -223,6 +235,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 0.9 | 2026-08-11 | Ghi `TASK-PROG-201` tại `52dfb57` cho treatment partial RSK-006: FBD canonical contract/validator hai consumer, keyboard reducer và ASan fuzz 50.000 input; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì lowering/equivalence/worker/runtime target/Test Result còn thiếu |
 | 1.0 | 2026-08-11 | Ghi `TASK-PROG-202` tại `4819901` cho treatment partial RSK-006: FBD→typed IR/runtime chung, 20 cặp equivalence, fail-closed và ASan fuzz 100.000 input; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì artifact/worker/runtime target/Test Result còn thiếu |
 | 1.1 | 2026-08-11 | Ghi `TASK-PROG-203` tại `2c2bfb4` cho treatment partial RSK-006: manifest/hash/build-key/source-map ST/FBD deterministic và mutation fail-closed; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì worker/runtime target/Test Result còn thiếu |
+| 1.2 | 2026-08-11 | Ghi `TASK-PROG-204` tại `66848a1` cho treatment partial RSK-007/008/014: sáu API Project/Draft/Revision, ETag/CAS, receipt idempotency 24 giờ qua restart, OpenAPI v1.17 và catalog 20/77; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì Check/operation worker, Core target và Test Result còn thiếu |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
