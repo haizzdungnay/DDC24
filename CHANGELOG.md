@@ -37,6 +37,12 @@ và `32/32` scenario; docs ISO harness PASS. P1 lên `3/6`, nâng riêng
 `CORE-101 I=Y`; Test Result giữ `0/32`, feature flag `OFF` và `RELEASE_READY`
 vẫn `BLOCKED`. Không chạy browser vì task không đổi route/component/layout FE.
 
+**Phát hành source.** [PR #131](https://github.com/Mekong-HCM/MK-DDC-24/pull/131)
+đã merge vào `main` tại `16d3e40` (tree `a0add512`); remote feature branch đã
+xóa. Candidate v2.11 tiếp tục định danh bằng 22 SHA-256. Các job GitHub Actions
+đều báo `FAILURE` tức thời; kết luận task dựa trên gate host đo thật ở trên,
+không suy CI, target/HIL hoặc release PASS.
+
 ### Added — IPC Programming v1 giữa Backend và Core (2026-08-11)
 
 **Kết quả.** Hoàn tất `TASK-PROG-101`: thêm hợp đồng

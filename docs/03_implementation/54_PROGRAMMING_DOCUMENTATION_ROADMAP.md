@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.7 |
+| Phiên bản | 3.8 |
 | Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.11; P1 `3/6`; `TASK-PROG-100/101/102 DONE`; `RELEASE_READY BLOCKED`** |
 | Ngày baseline | 2026-08-11 |
 | Chủ quản | System Engineering + Document Control |
@@ -529,6 +529,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.5 | 2026-08-11 | Hoàn tất `TASK-PROG-101`: thêm snapshot P1 2/6, dẫn source IPC v1 và review/evidence G1; phát hành candidate v2.10 do Plan 53/Trace đổi; giữ maturity 22/22 M3, M4/M5 0/22, Test Result 0/32 và `RELEASE_READY BLOCKED` | Dev Lead + Document Control |
 | 3.6 | 2026-08-11 | Ghi PR #129 đã merge tại `adcefed`, tree `89f0ee5a`; remote feature branch đã xóa. Candidate v2.10/pin 22/22, P1 2/6 và ranh giới evidence không đổi | Document Control |
 | 3.7 | 2026-08-11 | Hoàn tất `TASK-PROG-102`: thêm snapshot P1 3/6, dẫn source profile/artifact/loader và review/evidence G1; phát hành candidate v2.11 do Artifact Spec/Plan 53/Trace đổi; giữ maturity 22/22 M3, M4/M5 0/22, Test Result 0/32 và `RELEASE_READY BLOCKED` | Dev Lead + Document Control |
+| 3.8 | 2026-08-11 | Ghi PR #131 đã merge tại `16d3e40`, tree `a0add512`; remote feature branch đã xóa. Candidate v2.11/pin 22/22, P1 3/6 và ranh giới evidence không đổi | Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|
