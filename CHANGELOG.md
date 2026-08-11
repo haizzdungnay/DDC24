@@ -41,6 +41,10 @@ v1.0, Risk v1.5, Trace v3.11, Plan 53 v0.31, Roadmap v3.29, review/raw evidence
 G2 và candidate v2.22. P2 đạt `8/8` về source/DoD, tổng `21/49 = 42,9%`; task
 tiếp theo `TASK-PROG-300`. Giữ trung thực `2/60 I=Y`, hai record BLOCKED,
 `0/32 PASS`, 16/16 risk Open, flag `OFF` và `RELEASE_READY BLOCKED`.
+Source + hồ sơ đã merge qua PR #153 tại `352fe10`, tree `923cb1e3`; remote
+feature branch đã xóa. GitHub Actions không chạy step nào do billing/
+spending-limit của tài khoản; annotation hạ tầng và toàn bộ gate local đã được
+ghi trong PR.
 
 ### Added — Change manifest và bundle source-only Programming P2 (2026-08-11)
 
