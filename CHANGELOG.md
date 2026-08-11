@@ -34,6 +34,13 @@ round-trip, safety impact, hash mismatch, HTTP `200 export → 201 import`,
 transaction/audit và migration. Feature Programming vẫn mặc định `OFF`; không
 đổi component/layout FE nên không dùng Chrome DevTools trong source slice này.
 
+**Hồ sơ As-Built.** Ghim source `95b9388` vào Design Index v2.9, Data Model
+v0.8, Interface v1.2, BE Design v1.0, Risk v1.4, Trace v3.10, Plan 53 v0.30,
+Roadmap v3.27, review/raw evidence G2 và candidate v2.21. Tiến độ P2 `7/8`,
+tổng `20/49`; task tiếp theo `TASK-PROG-207`. Giữ trung thực `2/60 I=Y`, hai
+record BLOCKED, `0/32 PASS`, 16/16 risk Open, flag `OFF` và
+`RELEASE_READY BLOCKED`; commit/tree/PR hồ sơ được ghi bổ sung sau merge.
+
 ### Added — Check worker sandbox và artifact registry Programming P2 (2026-08-11)
 
 **Kết quả.** Triển khai source `TASK-PROG-205`: nối hai operation

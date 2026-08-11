@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 1.3 |
+| Phiên bản | 1.4 |
 | Trạng thái | **M3 — Review Ready** — treatment/evidence/acceptance đủ; 16/16 Open |
 | Ngày | 2026-08-11 |
 | Chủ quản | Product + Architecture + QA |
@@ -21,7 +21,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Ghi **16 rủi ro có thể gây hỏng thiết bị, mất điều khiển hoặc sai cam kết**, kèm biện pháp kiểm soát, chủ sở hữu và bằng chứng cần có để hạ mức. Đây là căn cứ để nói “chưa được phép cutover”. |
 | 2. Ai phải đọc file này? | Product, Architect và QA (chủ quản chung); từng risk owner đọc phần của mình; Safety và Security đọc trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical`. `TASK-PROG-205` tại `e8c289e` bổ sung treatment source cho `RSK-PROG-005/006/008/014`: Check worker bị sandbox/limit/timeout, lease retry, artifact read-back và catalog 20/80. Tổng source partial là 5/16; hai Test Result vẫn `BLOCKED`, **0/16 treatment end-to-end** và **0/16 evidence được chấp nhận**, nên không giảm điểm. |
+| 3. Hệ thống hiện tại đang có gì? | 16/16 rủi ro `Open`; 11/16 ở mức `Critical`. `TASK-PROG-206` tại `95b9388` bổ sung treatment source cho `RSK-PROG-007/008/011/014`: change impact fail-closed, bundle source-only/hash/allowlist, import Draft-only atomic và receipt/audit. Tổng source partial là 6/16; hai Test Result vẫn `BLOCKED`, **0/16 treatment end-to-end** và **0/16 evidence được chấp nhận**, nên không giảm điểm. |
 | 4. Thiết kế mới thay đổi điều gì? | Không giảm rủi ro nào. Nó gắn từng rủi ro với biện pháp cụ thể, kịch bản kiểm chứng và mức tồn dư **mục tiêu** — mục tiêu, chưa phải kết quả. |
 | 5. Team phải sửa module/contract nào? | Cột “Kiểm soát thiết kế” trỏ tới hồ sơ chủ quản; việc code nằm ở Plan 53. Bốn rủi ro nặng nhất (20 điểm): `RSK-PROG-002` watchdog restart, `RSK-PROG-003` IOP gap, `RSK-PROG-005` compiler tranh CPU, `RSK-PROG-013` nhầm skeleton là HIL-ready. |
 | 6. Điều gì còn bị chặn? | Mọi rủi ro ≥15 **chặn cutover production** cho tới khi biện pháp có bằng chứng PASS và mức tồn dư được owner cùng QA chấp nhận bằng văn bản. |
@@ -121,7 +121,7 @@ OPEN → TREATMENT_IMPLEMENTED → EVIDENCE_REVIEW → ACCEPTED | REOPENED
 | Critical ≥15 | 11/16 |
 | Treatment có thiết kế ở mức M3 | 16/16 |
 | Treatment implemented end-to-end | 0/16 cho feature/Target |
-| Treatment source partial | 5/16 (`RSK-PROG-005/006/007/008/014`); Task 205 thêm sandbox/rlimit/seccomp/timeout, Check lease và artifact registry nhưng chưa có target load/timing/operation/Core evidence; chưa đủ đổi lifecycle/residual |
+| Treatment source partial | 6/16 (`RSK-PROG-005/006/007/008/011/014`); Task 206 thêm bundle source-only/hash/allowlist/Draft-only và receipt/audit nhưng chưa có hostile corpus độc lập/target/operation/Core evidence; chưa đủ đổi lifecycle/residual |
 | Evidence accepted | 0/16 |
 | Residual accepted | 0/16 |
 
@@ -218,6 +218,19 @@ vẫn mặc định `OFF`; chưa có Check, Core side effect, target/HIL hoặc 
 Forlinx/IOP, chưa stage/activate và không có Test Result độc lập, nên cả năm risk
 giữ lifecycle, S×L và residual hiện tại.
 
+### 5.9 Cập nhật treatment source `TASK-PROG-206`
+
+| Risk | Control đã có tại `95b9388` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-007` | Import response ghi tường minh `DRAFT`, `checkCreated=false`, `artifactImported=false`, `commissionStarted=false`; change impact thiếu Core read-back là `UNAVAILABLE`, không được coi `NONE` | operation worker, Core stage/activate/read-back, UNKNOWN reconcile và UI truth | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-008` | Receipt v4 cho export/import khóa actor/action/key + semantic request hash trong 24 giờ; replay giữ response/audit và cùng key khác request conflict | Core operation single-flight/reconcile và E2E fault chống double activation | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-011` | ZIP chỉ nhận `Store`, exact allowlist/path, UUID/kind/target/profile/file set/hash/size/manifest; giới hạn 4 MiB/1024 file/256 KiB; import một transaction chỉ tạo Project/Draft | Task 207 hostile corpus traversal/zip bomb/executable/duplicate/fuzz/OOM và Test Result `VS-PROG-021/023` độc lập | `OPEN — PARTIAL SOURCE` |
+| `RSK-PROG-014` | OpenAPI v1.19, source bundle machine schema, G1 7/7 và generated TS đồng bộ; HTTP round-trip contract PASS | Commission/API/UI runtime và `VS-PROG-019/024` PASS độc lập | `OPEN — PARTIAL SOURCE` |
+
+`EV-PROG-G2-206` là evidence hỗ trợ host, không phải Test Result Security/target.
+Feature vẫn `OFF`, không stage/activate và Task 207 chưa hoàn tất hostile corpus;
+vì vậy bốn risk trên cùng toàn bộ 16/16 giữ lifecycle, S×L và residual hiện tại.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -251,6 +264,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 1.1 | 2026-08-11 | Ghi `TASK-PROG-203` tại `2c2bfb4` cho treatment partial RSK-006: manifest/hash/build-key/source-map ST/FBD deterministic và mutation fail-closed; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì worker/runtime target/Test Result còn thiếu |
 | 1.2 | 2026-08-11 | Ghi `TASK-PROG-204` tại `66848a1` cho treatment partial RSK-007/008/014: sáu API Project/Draft/Revision, ETag/CAS, receipt idempotency 24 giờ qua restart, OpenAPI v1.17 và catalog 20/77; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì Check/operation worker, Core target và Test Result còn thiếu |
 | 1.3 | 2026-08-11 | Ghi `TASK-PROG-205` tại `e8c289e` cho treatment partial RSK-005/006/007/008/014: Check lease/retry, compiler sandbox/timeout/process-group kill, Artifact content-address/read-back, OpenAPI v1.18 và catalog 20/80; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì target isolation, operation/Core và Test Result còn thiếu |
+| 1.4 | 2026-08-11 | Ghi `TASK-PROG-206` tại `95b9388` cho treatment partial RSK-007/008/011/014: impact fail-closed, ZIP source-only/hash/allowlist, import Project/Draft atomic, receipt/audit và OpenAPI v1.19/G1 7/7; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì hostile corpus Task 207, operation/Core/target và Test Result còn thiếu |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
