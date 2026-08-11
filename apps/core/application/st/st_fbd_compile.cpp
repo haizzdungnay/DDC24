@@ -153,6 +153,7 @@ public:
     }
 
     const std::vector<FbdIssue>& issues() const { return issues_; }
+    const std::vector<FbdSourceAnchor>& source_anchors() const { return source_anchors_; }
 
 private:
     struct NodeRef {
@@ -171,11 +172,13 @@ private:
     std::vector<FbdIssue> issues_;
     std::unordered_map<std::string, NodeRef> nodes_;
     std::unordered_map<std::string, PortRef> ports_;
+    std::unordered_map<std::string, std::size_t> anchor_by_port_;
     std::unordered_map<std::string, FbdEndpoint> incoming_;
     std::unordered_map<std::string, std::string> fb_instance_;
     std::unordered_map<std::string, StVarDecl> variables_;
     std::unordered_set<std::string> output_writers_;
     std::unordered_set<std::string> visiting_;
+    std::vector<FbdSourceAnchor> source_anchors_;
 
     bool fail(const char* code, const std::string& path)
     {
@@ -185,19 +188,46 @@ private:
 
     bool index_document()
     {
-        for (const auto& network : document_.networks) {
+        for (std::size_t network_index = 0; network_index < document_.networks.size();
+             ++network_index) {
+            const auto& network = document_.networks[network_index];
+            uint32_t anchor_column = 1;
             for (const auto& node : network.nodes) {
                 nodes_.emplace(node.id, NodeRef{&network, &node});
                 for (const auto& port : node.ports) {
-                    if (port.has_unit) {
-                        return fail("FBD-SEM-UNIT-IR-001", node_path(network, node) + ".ports");
-                    }
+                    if (anchor_column > std::numeric_limits<uint16_t>::max())
+                        return fail("FBD-LIMIT-SOURCEMAP-001", node_path(network, node));
                     ports_.emplace(port.id, PortRef{&network, &node, &port});
+                    FbdSourceAnchor anchor;
+                    anchor.line = static_cast<uint16_t>(network_index + 1u);
+                    anchor.column = static_cast<uint16_t>(anchor_column++);
+                    anchor.network_id = network.id;
+                    anchor.node_id = node.id;
+                    anchor.port_id = port.id;
+                    anchor.unit = port.unit;
+                    anchor.has_unit = port.has_unit;
+                    anchor_by_port_.emplace(port.id, source_anchors_.size());
+                    source_anchors_.push_back(std::move(anchor));
                 }
             }
             for (const auto& wire : network.wires) incoming_.emplace(wire.to.port_id, wire.from);
         }
         return true;
+    }
+
+    const FbdSourceAnchor* anchor_for_port(const FbdPort& port) const
+    {
+        const auto found = anchor_by_port_.find(port.id);
+        return found == anchor_by_port_.end() ? nullptr : &source_anchors_[found->second];
+    }
+
+    void locate_expression(StExpr* expression, const FbdPort& port) const
+    {
+        const FbdSourceAnchor* anchor = anchor_for_port(port);
+        if (!expression || !anchor) return;
+        expression->line = anchor->line;
+        expression->column = anchor->column;
+        expression->length = 1;
     }
 
     bool declare_one_variable(const FbdNetwork& network, const FbdNode& node,
@@ -220,7 +250,10 @@ private:
         if (storage == StStorage::VAR_OUTPUT && !output_writers_.emplace(*name).second) {
             return fail("FBD-SEM-VARIABLE-001", node_path(network, node) + ".parameters.variable");
         }
-        const StVarDecl declaration{*name, expected_ports[0]->data_type, storage, 0, 0, 1};
+        const FbdSourceAnchor* anchor = anchor_for_port(*expected_ports[0]);
+        if (!anchor) return fail("FBD-LIMIT-SOURCEMAP-001", node_path(network, node));
+        const StVarDecl declaration{*name, expected_ports[0]->data_type, storage,
+                                    anchor->line, anchor->column, 1};
         const auto existing = variables_.find(*name);
         if (existing != variables_.end()) {
             if (existing->second.type != declaration.type || existing->second.storage != storage) {
@@ -329,8 +362,16 @@ private:
                     return fail("FBD-SEM-VARIABLE-001",
                                 node_path(network, node) + ".parameters.instance");
                 }
+                const auto outputs = ports_with_direction(node, FbdPortDirection::OUTPUT);
+                const auto inputs = ports_with_direction(node, FbdPortDirection::INPUT);
+                const FbdPort* location_port = !outputs.empty() ? outputs.front()
+                                               : (!inputs.empty() ? inputs.front() : nullptr);
+                const FbdSourceAnchor* anchor =
+                    location_port ? anchor_for_port(*location_port) : nullptr;
+                if (!anchor) return fail("FBD-LIMIT-SOURCEMAP-001", node_path(network, node));
                 fb_instance_.emplace(node.id, instance);
-                program_->fbs.push_back({instance, type, retained, 0, 0, 1});
+                program_->fbs.push_back(
+                    {instance, type, retained, anchor->line, anchor->column, 1});
             }
         }
         return true;
@@ -495,6 +536,7 @@ private:
             break;
         }
         visiting_.erase(node.id);
+        locate_expression(result.get(), output);
         return result;
     }
 
@@ -507,7 +549,17 @@ private:
         StStmt statement;
         statement.kind = StStmt::Kind::FB_CALL;
         statement.fb_instance = instance->second;
-        for (const FbdPort* input : ports_with_direction(node, FbdPortDirection::INPUT)) {
+        const auto outputs = ports_with_direction(node, FbdPortDirection::OUTPUT);
+        const auto inputs = ports_with_direction(node, FbdPortDirection::INPUT);
+        const FbdPort* location_port = !outputs.empty() ? outputs.front()
+                                       : (!inputs.empty() ? inputs.front() : nullptr);
+        const FbdSourceAnchor* anchor =
+            location_port ? anchor_for_port(*location_port) : nullptr;
+        if (!anchor) return fail("FBD-LIMIT-SOURCEMAP-001", node_path(network, node));
+        statement.fb_line = anchor->line;
+        statement.fb_column = anchor->column;
+        statement.fb_length = 1;
+        for (const FbdPort* input : inputs) {
             auto value = source_for_input(network, node, *input);
             if (!value) return false;
             StFbArg argument;
@@ -531,6 +583,11 @@ private:
         StStmt statement;
         statement.kind = StStmt::Kind::ASSIGN;
         statement.assign_target = *variable;
+        const FbdSourceAnchor* anchor = anchor_for_port(*inputs[0]);
+        if (!anchor) return fail("FBD-LIMIT-SOURCEMAP-001", node_path(network, node));
+        statement.assign_target_line = anchor->line;
+        statement.assign_target_column = anchor->column;
+        statement.assign_target_length = 1;
         statement.assign_expr = std::move(expression);
         program_->body.push_back(std::move(statement));
         return true;
@@ -595,6 +652,8 @@ FbdCompileResult compile_fbd_source(std::string_view source)
         return result;
     }
     result.module = std::move(candidate);
+    result.canonical_source = validated.canonical_json;
+    result.source_anchors = lowerer.source_anchors();
     result.ok = true;
     return result;
 }

@@ -351,15 +351,20 @@ TEST(StFbdCompile, RejectsUnconnectedInputWithoutPublishingPartialIr)
     EXPECT_TRUE(result.module.variables.empty());
 }
 
-TEST(StFbdCompile, RejectsUnitBecauseArtifactIrCannotPreserveItYet)
+TEST(StFbdCompile, PreservesUnitAnchorsWithoutChangingExecutableIr)
 {
     const json pair = read_json("/fbd/equivalence_v1.json")["pairs"][10];
     json graph = make_pair_graph(pair);
-    graph["networks"][0]["nodes"][0]["ports"][0]["unit"] = "degC";
-    graph["networks"][0]["nodes"][2]["ports"][0]["unit"] = "degC";
+    for (json& node : graph["networks"][0]["nodes"])
+        for (json& port : node["ports"]) port["unit"] = "degC";
     const auto result = compile_fbd_source(graph.dump());
-    EXPECT_FALSE(result.ok);
-    EXPECT_TRUE(has_issue(result, "FBD-SEM-UNIT-IR-001"));
+    ASSERT_TRUE(result.ok) << (result.issues.empty() ? "không có issue" : result.issues[0].code);
+    ASSERT_FALSE(result.source_anchors.empty());
+    EXPECT_TRUE(std::all_of(result.source_anchors.begin(), result.source_anchors.end(),
+                            [](const FbdSourceAnchor& anchor) {
+                                return anchor.has_unit && anchor.unit == "degC";
+                            }));
+    EXPECT_FALSE(result.module.source_map.empty());
 }
 
 TEST(StFbdCompile, RejectsLibraryNodeWithoutCommonRuntimeSemantic)

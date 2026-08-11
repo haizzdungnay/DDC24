@@ -111,6 +111,7 @@ target_link_libraries(core_lib INTERFACE
 add_library(st_compiler_lib STATIC
     application/st/st_parser.cpp application/st/st_semantic.cpp
     application/st/st_compile.cpp application/st/st_ir.cpp
+    application/st/st_artifact_manifest.cpp
     application/st/st_fbd_model.cpp application/st/st_fbd_compile.cpp)
 target_link_libraries(st_compiler_lib PUBLIC core_lib)
 
@@ -162,8 +163,10 @@ if(CORE_BUILD_TESTS)
       domain/graph/tests/test_ext_256_datagram.cpp
       adapters/diagnostics/tests/test_core_metrics.cpp adapters/ipc/tests/test_output_writer.cpp
       application/st/tests/test_st_io_map.cpp application/st/tests/test_st_cyclic_runtime.cpp
-      application/st/tests/test_st_validate_cli.cpp application/st/tests/test_st_limits.cpp
+      application/st/tests/test_st_validate_cli.cpp application/st/tests/test_st_compile_cli.cpp
+      application/st/tests/test_st_limits.cpp
       application/st/tests/test_st_lang.cpp application/st/tests/test_st_ir.cpp
+      application/st/tests/test_st_artifact_manifest.cpp
       application/st/tests/test_st_fbd_model.cpp
       application/st/tests/test_st_fbd_compile.cpp
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
@@ -176,10 +179,11 @@ if(CORE_BUILD_TESTS)
   # không đoán build layout (generator expression cho đúng dù đổi cấu trúc).
   target_compile_definitions(core_tests PRIVATE
       ST_VALIDATE_CLI_PATH="$<TARGET_FILE:mkddc-st-validate>"
+      ST_COMPILE_CLI_PATH="$<TARGET_FILE:mkddc-st-compile>"
       ST_SAMPLE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/application/st/samples"
       PROGRAMMING_IPC_CONTRACT_DIR="${MKDDC_CONTRACTS_SOURCE_DIR}/ipc/programming_v1"
       PROGRAMMING_PROFILE_CONTRACT_DIR="${CONTRACT_PROGRAMMING_DIR}")
-  add_dependencies(core_tests mkddc-st-validate)
+  add_dependencies(core_tests mkddc-st-validate mkddc-st-compile)
   if(TARGET GTest::gtest_main)
     target_link_libraries(core_tests PRIVATE GTest::gtest_main)
   else()

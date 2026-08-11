@@ -7,6 +7,38 @@
 ---
 
 ## [Unreleased]
+### Added — Artifact provenance và source map ST/FBD Programming P2 (2026-08-11)
+
+**Kết quả.** Triển khai source `TASK-PROG-203`: thay placeholder FNV-1a bằng
+SHA-256 canonical và thống nhất version CLI với `st_ir::kCompilerVersion`; field
+metadata 64-bit legacy trong `MKDDCIR1` dùng prefix SHA-256, còn authority
+provenance đầy đủ 256-bit nằm trong manifest ngoài artifact. Producer mới khóa
+`source/compiler/profile/library/ABI`, phân biệt rõ SHA-256 của file với digest
+integrity trong header và tạo build key tất định không chứa timestamp, random
+hoặc path host. Diagnostic compile ST giữ nguyên `sourceId` và dòng/cột; đường
+tương thích `--key` verify bằng public half của đúng khóa được cung cấp.
+
+**ST/FBD chung.** `mkddc-st-compile` nhận `--language ST|FBD`, `--source-id` và
+`--manifest-out`; cả hai ngôn ngữ đi qua cùng serializer/loader. Source map ST
+giữ dòng/cột; FBD dùng khóa compact trong artifact và manifest ánh xạ ngược về
+UUID `networkId/nodeId/portId`, kèm unit annotation đã kiểm ở wire. Reorder key,
+node hoặc wire FBD không làm đổi source canonical, artifact hay manifest.
+
+**Fail-closed và contract.** Thêm schema/corpus golden cho manifest ST/FBD cùng
+verifier C++/Python. Unknown manifest version, source/profile/library/ABI, hash,
+build key, source map hoặc `sourceId` giống path đều bị từ chối mà không sửa
+output caller; artifact hỏng vẫn bị loader độc lập chặn. Golden ST/FBD và G1
+artifact lock được làm mới theo SHA-256 mới; feature Programming giữ `OFF`, task
+không stage, activate, Commission hoặc đổi Active/LKG.
+
+**Kiểm chứng hiện tại.** Targeted CTest cho CLI/manifest/FBD/validate `35/35`
+PASS; full CTest Release bật Modbus+BACnet+HMI `927/927` PASS; artifact manifest
+self-test `7/7` mutation và FBD contract self-test `10/10` mutation PASS. Go
+`vet` và `test -count=1`, FE `58 file / 494 test`, lint, typecheck và build,
+cùng repository contract `2/2`, dependency guard `5/5` và error-catalog guard
+`6/6` đều PASS. Không chạy Chrome DevTools vì task không đổi route, component
+hoặc hành vi giao diện. Hồ sơ As-Built sẽ ghim source commit candidate của task.
+
 ### Added — Common typed IR và equivalence ST↔FBD Programming P2 (2026-08-11)
 
 **Kết quả.** Triển khai `TASK-PROG-202`: thêm lowerer non-RT
