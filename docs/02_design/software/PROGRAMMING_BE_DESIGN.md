@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-BE-PROG-001` |
-| Phiên bản | 0.8 |
+| Phiên bản | 0.9 |
 | Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; chờ Core/Security/QA review |
 | Ngày | 2026-08-11 |
 | Chủ quản | Backend Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **backend Go tổ chức ra sao**: chia package, lưu trữ, chạy compiler job, điều phối Commission, phân quyền, audit và migration. Đây là nơi biến hợp đồng API thành code chạy được. |
 | 2. Ai phải đọc file này? | BE Lead và lập trình viên Go (chủ quản); Core đọc §4 (điều phối Commission) và §6 (read model); Security đọc §7; Ops đọc §9; QA đọc §10 và §17. |
-| 3. Hệ thống hiện tại đang có gì? | Source `66848a1` đã nối `application.ProjectService`, HTTP handler và SQLite v2 vào lifecycle `mkddc-web`. Sáu operation Project/Draft/Revision chạy thật khi `PROGRAMMING_REV_A=true`; ETag/CAS, idempotency bền vững 24 giờ, Revision bất biến, audit, migration backup và restart đã có test. Flag mặc định `OFF`; 19 operation Check/runtime/operation/bundle/audit còn trả `503`. |
-| 4. Thiết kế mới thay đổi điều gì? | Bounded module đã hình thành ở các lớp `domain`, `store`, `application`, `coreipc`, `transport`; không tạo tiến trình thứ tư. Task sau bổ sung `compiler` và Check worker nhưng phải giữ quy tắc: handler không chứa logic compiler/runtime; store không gọi Core; runtime adapter không biết HTTP/session. |
-| 5. Team phải sửa module/contract nào? | §11–§12 phân biệt As-Built/Target. Việc kế tiếp là `TASK-PROG-205`: compiler worker sandbox và Check aggregate/diagnostics; sau đó operation coordinator. Không đổi schema v2 hoặc sáu API đã có ngoài migration/contract tương thích. |
-| 6. Điều gì còn bị chặn? | Không còn decision chặn implementation. Check và Commission vẫn fail-safe vì compiler/operation worker và Core lifecycle chưa có; target migration/HIL/Test Result còn là gate release. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | TASK-PROG-204 host suite PASS cho lifecycle, Project CRUD đọc, Draft batch/ETag, Revision seal, idempotency replay qua restart, RBAC/JSON, v1→v2 backup; race detector, toàn bộ Go, CTest `927/927`, FE `58/58` file `494/494` test đều PASS. Đây chưa phải Test Result target/HIL. |
+| 3. Hệ thống hiện tại đang có gì? | Source `e8c289e` đã nối `application.ProjectService` + `CheckService`, HTTP handler, SQLite v3, compiler subprocess và Artifact store vào lifecycle `mkddc-web`. Tám operation Project/Draft/Revision/Check chạy thật khi `PROGRAMMING_REV_A=true`; Check có receipt 24 giờ, lease/retry, sandbox, terminal diagnostic và artifact read-back. Flag mặc định `OFF`; 17 operation runtime/operation/bundle/audit còn `503`. |
+| 4. Thiết kế mới thay đổi điều gì? | Bounded module đã có các lớp `domain`, `store`, `application`, `compiler`, `artifact`, `coreipc`, `transport`; không tạo tiến trình thứ tư. Check worker chạy trong Web process nhưng compiler là child process bị hạn chế; handler không chứa compiler/runtime logic, store không gọi Core và compiler không ghi DB. |
+| 5. Team phải sửa module/contract nào? | §11–§12 phân biệt As-Built/Target. Việc kế tiếp là `TASK-PROG-206`: deterministic change manifest và source-only bundle/import; sau đó operation coordinator. Không phá schema v3 hoặc tám API đã có ngoài migration/contract tương thích. |
+| 6. Điều gì còn bị chặn? | Không còn decision chặn implementation. Check đã fail-safe trên host; bundle/Commission vẫn fail-safe vì operation worker và Core lifecycle chưa có. Target migration/HIL/Test Result còn là gate release. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | TASK-PROG-205 host suite PASS cho Check `202→terminal`, idempotency/restart, lease/retry, sandbox timeout/process-group kill, compiler thật và artifact dedup/read-back/traversal/symlink; race detector, toàn bộ Go, CTest `929/929`, FE `58/58` file `494/494` test đều PASS. Đây chưa phải Test Result target/HIL. |
 
 Hai điều BE **không** được làm: tin vai trò do FE gửi trong payload, và báo
 thành công khi Core chưa xác nhận. Cả hai đều là rủi ro đã có tên —
@@ -60,8 +60,9 @@ Target nằm trong `apps/web-api/internal/programming/`, được wiring tại
 programming/
 ├── domain/       project, revision, check, operation, audit types/invariants
 ├── store/        SQLite transaction, migrations, artifact/bundle storage
-├── application/  Project/Draft/Revision use case; Check/operation use case kế tiếp
-├── compiler/     isolated worker adapter, limits, diagnostic normalization
+├── application/  Project/Draft/Revision + Check use case/worker; operation kế tiếp
+├── compiler/     subprocess adapter, limits, diagnostic/manifest normalization
+├── artifact/     content-addressed publish và read-back verifier
 ├── runtime/      versioned Core IPC client + reconciliation
 ├── transport/    handlers/OpenAPI mapping, RBAC middleware
 └── tests/        unit, integration, contract, fault injection
@@ -69,7 +70,7 @@ programming/
 
 Tên gói tầng biên là `transport`, không phải `http`: §12 khai báo
 `transport.Handler` và `IFSPEC-PROG-001` §16 ghi đường dẫn
-`apps/web-api/internal/programming/{transport,service,store}`. Một tên duy nhất
+`apps/web-api/internal/programming/{transport,application,store}`. Một tên duy nhất
 cho một gói — nếu đổi thì phải đổi cả ba nơi trong cùng commit.
 
 Handler không chứa compiler/runtime logic; store không gọi Core; runtime adapter
@@ -92,10 +93,11 @@ programming_audit_events
 - Foreign key, unique stable ID, schema version và transaction bật.
 - Draft mutation batch tăng version/ETag một lần.
 - Revision/object immutable bằng permission + trigger/service invariant.
-- Artifact file write temp→fsync→rename; DB commit chỉ sau checksum/locator hợp lệ.
+- Artifact file write temp→fsync→hard-link publish→directory fsync; DB commit chỉ
+  sau checksum/locator read-back hợp lệ.
 - Operation/audit persist trước external side effect để recovery biết ý định.
 
-## 3. Check/Compiler pipeline
+## 3. Check/Compiler pipeline As-Built
 
 ```text
 Revision snapshot
@@ -105,7 +107,7 @@ Revision snapshot
 → mapping/Task/library/target/RETAIN/cutover/resource validation
 → immutable artifact + source map + manifest + SHA-256
 → BE verifies build output metadata
-→ Check PASSED/READY
+→ atomic terminal Check PASSED + Artifact row hoặc FAILED/TIMED_OUT không Artifact
 ```
 
 Compiler chạy subprocess không đặc quyền với:
@@ -113,11 +115,16 @@ Compiler chạy subprocess không đặc quyền với:
 - read-only Revision input, private temporary directory;
 - CPU/memory/file-size/process/time limit;
 - no network, no device, no config/data write ngoài output fd;
-- hard timeout 5 s proposal, kill whole process group;
+- hard timeout cấu hình `1..60 s`, mặc định 10 s, kill whole process group;
 - stdout/stderr bounded và sanitize;
 - deterministic version/profile recorded.
 
-Compiler failure không crash Web và không tạo Artifact Ready.
+Compiler failure không crash Web và không tạo Artifact Ready. `ProcessRunner`
+chỉ gọi binary cấu hình sẵn bằng argv cố định, tạo scratch `0700`, giới hạn số
+file/kích thước/stdout/stderr/CPU/memory/process, giết toàn process group khi hết
+deadline và verify compiler/profile/ABI/build key/source ID/manifest/hash trước
+khi trả bytes. CLI mở input/output trước rồi áp `NO_NEW_PRIVS`, rlimit và seccomp;
+network/socket, mở path mới, fork/clone/exec, mount và ptrace đều bị chặn.
 
 ## 4. Commission coordinator
 
@@ -206,15 +213,16 @@ side effect; BE không tự nói active cũ đang chạy khi chưa xác minh.
 ## 11. As-Built integration points
 
 `apps/web-api` là Go process duy nhất theo ADR-005/007. As-Built hiện có
-`internal/programming/{application,domain,coreipc,store,transport}`: 25 route,
-IPC v1, catalog lỗi và SQLite store v2. Source `66848a1` construct/close store
-trong lifecycle, inject `ProjectService` và thay đúng sáu route
-Project/Draft/Revision bằng handler thật; 19 route còn contract-only `503`.
-Target tiếp tục bounded module này, không tạo service thứ tư.
+`internal/programming/{application,artifact,compiler,domain,coreipc,store,transport}`:
+25 route, IPC v1, catalog lỗi và SQLite store v3. Source `e8c289e` construct/close
+store, artifact root và Check worker trong lifecycle; inject `ProjectService` +
+`CheckService` và thay đúng tám route Project/Draft/Revision/Check bằng handler
+thật. 17 route còn contract-only `503`. Target tiếp tục bounded module này,
+không tạo service thứ tư.
 
 | Integration | Target change | Không được làm |
 |---|---|---|
-| `internal/app` | **As-Built:** construct/close store + Project service/handler; **Target:** compiler/runtime/worker lifecycle | import vòng ngược domain→app |
+| `internal/app` | **As-Built:** construct/close store + Project/Check service/handler/compiler worker; **Target:** bundle/runtime/operation lifecycle | import vòng ngược domain→app |
 | router/auth | mount `/api/v1/programming`, middleware auth/CSRF/correlation/rate | tin role từ payload/FE |
 | config | Programming DB/state/staging/quota/feature flags | hard-code `/data` trong domain |
 | health | compiler queue/Core capability/reconcile/disk watermark | báo healthy chỉ vì HTTP sống |
@@ -225,11 +233,12 @@ Target tiếp tục bounded module này, không tạo service thứ tư.
 | Package/type | Method chính | Transaction/side effect |
 |---|---|---|
 | `application.ProjectService` As-Built | `CreateProject`, `ListProjects`, `GetProject`, `SaveDraft`, `SealRevision`, `GetRevision` | store transaction/read + audit; no Core |
-| `domain.CheckService` | `RequestCheck`, `GetCheck`, `ReapLease` | idempotency + queue; artifact commit atomic |
+| `application.CheckService` As-Built | `RequestCheck`, `GetCheck`, `ProcessNext` | idempotency + lease queue; compiler/artifact ngoài DB tx; terminal commit atomic |
 | `domain.OperationService` | `Commission`, `Restore`, `ResetRetain`, `Reconcile` | durable op before IPC; controller single-flight |
-| `store.Store` As-Built | `OpenProgrammingStore`, `CreateProject`, `SaveDraft`, `GetProject`, `ListProjects`, `CreateRevision`, `GetRevision`, `LookupMutation`, `BeginOperation`, `CommitAudit`, `Backup` | một writer, transaction + audit; ETag/CAS; immutable trigger/receipt; không gọi Core |
-| `store.Store` Target tiếp | `ClaimCheck`, `CompleteCheck`, `ClaimOperation`, `RecordCoreResult` | lease/CAS và terminal state; chỉ service/worker gọi |
-| `compiler.Runner` | `Compile(ctx, BuildInput)` | child process bounded; no DB write |
+| `store.Store` As-Built | `OpenProgrammingStore`, Project/Draft/Revision methods, `EnqueueCheck`, `GetCheck`, `ClaimCheck`, `CompleteCheck`, `FailExhaustedChecks`, `Backup` | một writer, transaction + audit; ETag/CAS; immutable trigger/receipt/terminal; không gọi Core |
+| `store.Store` Target tiếp | `ClaimOperation`, `RecordCoreResult` | operation lease/CAS và terminal state; chỉ service/worker gọi |
+| `compiler.ProcessRunner` As-Built | `Compile(ctx, BuildInput)` | child process bounded/sandboxed; verify output; không ghi DB |
+| `artifact.Store` As-Built | `Put(expectedSha, bytes)`, `Verify(relative, sha, size)` | content-address publish/read-back; không ghi DB |
 | `runtime.Client` | `Capabilities`, `Status`, `Stage`, `Activate`, `OperationStatus` | UDS deadline/version/hash/peer |
 | `transport.Handler` | decode/auth/map HTTP | no business mutation ngoài service |
 
@@ -252,6 +261,21 @@ và cùng request trả response identity cũ kể cả sau restart; cùng key n
 hash khác trả conflict. JSON trùng key, trailing token, field lạ, UUID/reference/
 capacity sai bị reject trước transaction hoặc rollback toàn bộ.
 
+### 12.2 Contract As-Built của `TASK-PROG-205`
+
+| HTTP/worker | Application/store/compiler | Invariant và kết quả |
+|---|---|---|
+| `POST /revisions/{revisionId}/checks` | `RequestCheck` → `EnqueueCheck` | admin + idempotency key; receipt/Check `QUEUED`/audit atomic; trả `202`, `Location`, cùng request trả cùng `checkId`; không IPC/Core |
+| `GET /checks/{checkId}` | `GetCheck` | viewer; kiểm checksum result/artifact metadata; chỉ `PASSED` có Artifact; không lộ locator/bytes |
+| Check worker | `ProcessNext` → `ClaimCheck` → `ProcessRunner.Compile` → `artifact.Put/Verify` → `CompleteCheck` | lease owner/expiry CAS; tối đa hai attempt; một terminal transition; `FAILED/TIMED_OUT` không Artifact |
+| startup/ticker | `FailExhaustedChecks` + bounded poll | expired attempt thứ hai đóng `FAILED`; shutdown cancel child/process group và để lease recoverable |
+
+Build input lấy từ immutable Revision manifest/object sau khi verify checksum.
+Build output chỉ được chấp nhận khi artifact, manifest, profile, ABI, compiler,
+source IDs, build key và mọi SHA-256 khớp. Artifact bytes được publish/read-back
+trước giao dịch terminal; nếu DB commit thất bại, file content-addressed chưa có
+row chỉ là blob không reachable và không thể stage/activate.
+
 ## 13. Transaction, locking và worker algorithm
 
 ```text
@@ -260,6 +284,16 @@ PatchDraft:
   → find/create idempotency row → compare ETag
   → load/apply/validate whole batch → write Draft generation + audit + result
   → COMMIT; any failure ROLLBACK
+
+CheckWorker:
+  atomically claim QUEUED hoặc expired RUNNING khi attempt_count < 2
+  → load immutable Revision and verify hashes
+  → compile in private sandbox with hard deadline/process-group kill
+  → normalize bounded diagnostics and verify manifest/artifact
+  → if PASSED: content-address publish + read-back
+  → CAS terminal Check + Artifact row + audit in one DB transaction
+  → if FAILED/TIMED_OUT: CAS terminal result + audit, no Artifact
+  → crash: lease expires; reclaim once; exhausted lease becomes FAILED
 
 OperationWorker:
   claim lease atomically where state eligible and lease expired
@@ -280,7 +314,7 @@ export trước khi SQLite/artifact fsync fail.
 
 - DB `${CONFIG_DIR}/programming/programming-v1.sqlite`, WAL/FK/FULL theo Data Model.
 - Artifact content-addressed `${STATE_DIR}/programming/artifacts/sha256/...`, write
-  temp+fsync+rename; row chỉ commit sau hash/read-back.
+  temp+fsync+hard-link publish+directory fsync; row chỉ commit sau hash/read-back.
 - Staging file bàn giao cho Core nằm dưới `${STATE_DIR}/programming/staging/`
   mode `0640` theo `IFSPEC-PROG-001` §12. **Không** đặt staging dưới
   `${CONFIG_DIR}`: Core chỉ mở locator dưới gốc `STATE_DIR` và sẽ reject bằng
@@ -330,13 +364,17 @@ propagate nhưng Core không authorize theo actor string.
 | `BE-T-008` | OpenAPI/Go/TS/IPC examples | zero contract mismatch |
 | `BE-T-009` | disk quota/low watermark | mutation blocked early; active runtime unaffected |
 
+Tại `e8c289e`, `BE-T-003/004` và phần Check của `BE-T-007/008` đã PASS bằng
+host test/race/contract thực. `BE-T-005/006`, quota target và toàn bộ Test Result
+độc lập vẫn mở; không dùng bảng này để suy chúng đã PASS.
+
 ## 18. Handler-to-service-to-store contract
 
 | HTTP action | Service method target | Transaction/side effect | Result authority |
 |---|---|---|---|
 | Save Draft | `DraftService.Save(ctx, actor, cmd)` | một DB tx: ETag/CAS + canonical doc + audit | committed Draft/ETag |
 | Seal Revision | `RevisionService.Seal(...)` | tx immutable Revision/manifest; enqueue Check sau commit | store Revision |
-| Start Check | `CheckService.Start(...)` | idempotent Check job; compiler child ngoài DB tx | Check + Artifact registry |
+| Start Check | `CheckService.RequestCheck(...)`; worker `ProcessNext(...)` | idempotent Check job; compiler child ngoài DB tx; terminal CAS | Check + Artifact registry |
 | Commission/Restore | `OperationService.Begin(...)` | tx intent/lease/audit; Core IPC chỉ sau commit | Core status + operation projection |
 | Import | `BundleService.Import(...)` | quarantine/validate ngoài tx; commit Project/Draft/audit một lần | import report + Draft |
 | Runtime | `RuntimeService.Snapshot(...)` | Core read + bounded cache; no domain write | Core generation/freshness |
@@ -350,7 +388,7 @@ reclaim. Shutdown ngừng nhận job, chờ bounded, ghi trạng thái recoverab
 
 | Worker | Queue/key | Concurrency | Health metric/fail behavior |
 |---|---|---:|---|
-| compiler | Check/build key | bounded theo CPU, một job/controller | queued/running/timeout/OOM; không ảnh hưởng Core |
+| compiler | Check/build key | một worker tuần tự/Web process tại Task 205 | queued/running/timeout/crash; không ảnh hưởng Core |
 | operation | controller/operation ID | đúng một lease/controller | oldest age/reconcile lag; mutation block nếu unhealthy |
 | artifact GC | content hash/tombstone | 1 low-priority | bytes/quota/error; không xóa referenced |
 | audit/export | audit sequence | bounded read/export | chain gap/export denial; mutation audit fail closed |
@@ -370,7 +408,7 @@ major khác, mutation disable. Restore LKG compatible trước mọi Core downgr
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| Compiler/check/operation worker chưa implement | Backend Lead + Core | P2/P4 hoàn tất worker, terminal reconcile và authoritative read-back |
+| Bundle và operation/Commission worker chưa implement | Backend Lead + Core | P2/P4 hoàn tất source-only bundle, operation worker, terminal reconcile và authoritative read-back |
 | Core lifecycle/TLS/target evidence chưa available | Core + Platform + Verification | target integration/security/HIL PASS và Test Result được review |
 
 | Phiên bản | Ngày | Nội dung |
@@ -383,6 +421,7 @@ major khác, mutation disable. Restore LKG compatible trước mọi Core downgr
 | 0.6 | 2026-08-10 | Đóng finding consumer review `F-CR-02` và `F-CR-05`: §14 ghi rõ staging bàn giao Core nằm dưới `${STATE_DIR}/programming/staging/` (không phải `${CONFIG_DIR}`); §1 đổi gói biên `http/` thành `transport/` cho khớp `transport.Handler` ở §12 và đường dẫn ở `IFSPEC-PROG-001` §16 |
 | 0.7 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-104` tại `312f357`: SQLite store/migration/backup/restore, ETag, immutable Revision, durable operation và audit hash-chain có host fault/concurrency/race test; giữ wiring/service/worker/target evidence là phần tiếp theo |
 | 0.8 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-204` tại `66848a1`: nối SQLite v2 và `application.ProjectService` vào lifecycle; sáu route Project/Draft/Revision chạy thật với ETag/CAS, receipt idempotency 24 giờ, cursor HMAC, immutable Revision, RBAC và restart/migration test; giữ 19 route, Check/operation worker và target evidence là phần tiếp theo |
+| 0.9 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-205` tại `e8c289e`: nối SQLite v3, `application.CheckService`, worker lease/retry, compiler subprocess sandbox và Artifact content-address/read-back vào lifecycle; hai route Check chạy thật, catalog 20/80; giữ 17 route bundle/operation/runtime, flag OFF và target evidence là phần tiếp theo |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -395,17 +434,18 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; lịch sử và bảng ký §20 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 ranh giới module, gồm quy tắc phân lớp handler/store/runtime |
-| `DD-03` As-Built | PASS | §0/§11–12.1 dẫn `internal/programming/{application,domain,coreipc,store,transport}`; ghi chính xác sáu route/store v2/IPC đã có và compiler/worker chưa có |
+| `DD-03` As-Built | PASS | §0/§11–12.2 dẫn `internal/programming/{application,artifact,compiler,domain,coreipc,store,transport}` tại `e8c289e`; ghi chính xác tám route/store v3/Check worker đã có và bundle/operation/Core còn thiếu |
 | `DD-04` Target ownership | PASS | §1 bảy package con; §18 hợp đồng handler → service → store |
 | `DD-05` Data từng field | PASS | §2 persistence; §14 vòng đời dữ liệu/tệp và hạn ngạch; schema chi tiết ở `DM-PROG-001` |
 | `DD-06` Interface | PASS | §8 ánh xạ lỗi; §18 hợp đồng ba lớp; §6 read model runtime |
 | `DD-07` State/transaction/worker | PASS | §13 giao dịch, khóa và thuật toán worker; §19 worker nền và hợp đồng health |
 | `DD-08` Operation flow | PASS | §4 điều phối Commission; §5 Restore và replacement |
 | `DD-09` Error/safety/security | PASS | §7 RBAC/audit/security; §16 ma trận security/error/audit; RBAC ở cả handler lẫn service |
-| `DD-10` Repository mapping | PASS | §11, §12 và §12.1 — package, function và sáu HTTP operation cụ thể trong `apps/web-api/internal/programming/` |
+| `DD-10` Repository mapping | PASS | §11, §12 và §12.1–12.2 — package, function và tám HTTP operation cụ thể trong `apps/web-api/internal/programming/` |
 | `DD-11` Verification | PASS | §10 test bắt buộc; §17 acceptance; gắn `VS-PROG-001/019/022/024` |
 | `DD-12` Compatibility/deploy/rollback | PASS | §9 migration và rollback, gồm thứ tự triển khai |
-| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation | 17 decision đã `DECIDED`; source Task 100..105 và 200..204 cùng review G1/G2 có trace. Release vẫn bị chặn bởi Check/operation worker/Core target, `0/32` Test Result và residual risk chưa được chấp nhận |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation | 17 decision đã `DECIDED`; source Task 100..105 và 200..205 cùng review G1/G2 có trace. Release vẫn bị chặn bởi bundle/operation/Core target, `0/32` Test Result và residual risk chưa được chấp nhận |
 
-Không còn blocker quyền implementation. Contract/IPC/store đã có host test;
-Check/operation worker/Core runtime/target vẫn `NOT IMPLEMENTED/NOT TESTED` theo phạm vi.
+Không còn blocker quyền implementation. Contract/store/Check worker đã có host
+test; bundle/operation/Core runtime/target vẫn `NOT IMPLEMENTED/NOT TESTED` theo
+phạm vi.

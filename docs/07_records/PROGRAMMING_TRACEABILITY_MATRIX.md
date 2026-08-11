@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.8 |
+| Phiên bản | 3.9 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
 | Cập nhật | 2026-08-11 |
 | Chủ quản | Verification Lead |
@@ -16,7 +16,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối **yêu cầu → user journey → thiết kế → nơi phải sửa code → kịch bản test → bằng chứng → release** cho cả 60 requirement. Dùng để trả lời hai câu: “yêu cầu này ai lo?” và “cái gì hỏng nếu đổi chỗ này?”. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. `TASK-PROG-200..203` đã thêm ST/FBD common IR/artifact; `TASK-PROG-204` tại `66848a1` thêm sáu API Project/Draft/Revision, SQLite v2, ETag/CAS và receipt idempotency 24 giờ. Tổng vẫn **2/60** dòng `I=Y`: các dòng BE/SYS/NFR mới chỉ partial vì Check/import-export/operation/target chưa đủ. `VS-PROG-001/019` có 2 record `BLOCKED`, 30 scenario `NOT_RUN`, **0/32 PASS**; mọi `T/P/R` vẫn `N`. |
+| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế, nơi sửa code và kịch bản. `TASK-PROG-205` tại `e8c289e` thêm SQLite v3, hai API Check, lease/retry, compiler sandbox và Artifact registry/read-back vào source ST/FBD/Project/Draft/Revision đã có. Tổng vẫn **2/60** dòng `I=Y`: các dòng BE/SYS/NFR mới chỉ partial vì bundle/operation/Core/target chưa đủ. `VS-PROG-001/019` có 2 record `BLOCKED`, 30 scenario `NOT_RUN`, **0/32 PASS**; mọi `T/P/R` vẫn `N`. |
 | 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `BE-110` và `CORE-101 I=Y`; 58 dòng `I=N`. Hai Test Result G1 đang `BLOCKED`; toàn bộ `T/P/R` còn `N` cho tới khi workflow E2E đủ acceptance và reviewer độc lập ký. |
@@ -121,12 +121,12 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 
 | Requirement | Design/control + risk | Source target | Scenario | D/I/T/P/R |
 |---|---|---|---|---|
-| `SYS-101` | ARCH; LANG; CTRL; RSK-006/010 | `95585e7`: profile; `52dfb57`: FBD canonical + FE reducer/component; `4819901`: FBD→typed IR/equivalence; `2c2bfb4`: artifact manifest/source map ST/FBD; Point/Task, BE/route/runtime E2E còn thiếu | 003/005/006/007/009/017 | Y/N/N/N/N |
-| `SYS-102` | DM; UX; FE; BE; RSK-007/008 | `66848a1`: Project/Draft/Revision API + SQLite v2, immutable Revision và restart; `TR-PROG-019-20260811-001 BLOCKED`: Check/import-export/UI và active-output integration còn thiếu | 002/019/026 | Y/N/N/N/N |
+| `SYS-101` | ARCH; LANG; CTRL; RSK-006/010 | `95585e7`: profile; `52dfb57`: FBD canonical + FE reducer/component; `4819901`: FBD→typed IR/equivalence; `2c2bfb4`: artifact manifest/source map ST/FBD; `e8c289e`: Check route/worker/artifact registry; Point/Task/runtime E2E còn thiếu | 003/005/006/007/009/017 | Y/N/N/N/N |
+| `SYS-102` | DM; UX; FE; BE; RSK-007/008 | `66848a1`: Project/Draft/Revision; `e8c289e`: SQLite v3 + Check/Artifact/restart; `TR-PROG-019-20260811-001 BLOCKED`: import-export/UI và active-output integration còn thiếu | 002/019/026 | Y/N/N/N/N |
 | `SYS-103` | LIFE; ART; IFSPEC; RSK-003/007 | `4a1e9f5`: catalog/mapping lỗi lifecycle; Core coordinator + BE operation còn thiếu | 004/011 | Y/N/N/N/N |
 | `SYS-104` | ARCH; LIFE; OPS; RSK-002/005 | `51fe515`: Core IPC no-mutation skeleton; `e9707b4`: reconnect/no-replay client; Core runtime + service package còn thiếu | 024/030 | Y/N/N/N/N |
 | `SYS-105` | CTRL; LIFE; RSK-001 | `4a1e9f5`: mã lỗi cross-layer; bootstrap/ScanLoop/resolver còn thiếu | 015 | Y/N/N/N/N |
-| `SYS-106` | SEC; BE; IFSPEC; RSK-012/015 | `66848a1`: sáu route enforce role server-side, duplicate JSON/unknown field fail-closed và audit atomic; lifecycle terminal/re-auth/TLS target còn thiếu | 022/023 | Y/N/N/N/N |
+| `SYS-106` | SEC; BE; IFSPEC; RSK-012/015 | `66848a1` + `e8c289e`: tám route enforce role server-side, duplicate JSON/unknown field fail-closed và audit atomic; operation/re-auth/TLS target còn thiếu | 022/023 | Y/N/N/N/N |
 | `SYS-107` | SEC; BE; OPS; RSK-011 | bundle service/UI | 021/023 | Y/N/N/N/N |
 | `SYS-108` | UX; FE; HMI boundary | Web routes + HMI route inspection | 028 | Y/N/N/N/N |
 | `FE-101` | UX; FE | `features/programming/routes/layout` | 002/028/032 | Y/N/N/N/N |
@@ -144,17 +144,17 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `FE-113` | UX §5 PGM-03; FE; LIFE; RSK-007 | `TR-PROG-019-20260811-001 BLOCKED`: acknowledgement + impact reducer chưa implement | 011/019/031 | Y/N/N/N/N |
 | `FE-114` | UX §5 PGM-04, §22 DangerZone; SEC; RSK-012 | `runtime/service` danger zone + RequireRole | 022/031 | Y/N/N/N/N |
 | `FE-115` | UX §5 PGM-02, §16.2; DM; IFSPEC | `design/mapping` filter + point catalog client | 017/031 | Y/N/N/N/N |
-| `BE-101` | DM; BE | `66848a1`: lifecycle open/close SQLite v2, Project/list/cursor, functional tag + Draft batch, Revision seal/read và restart host; `TR-PROG-001-20260811-001 BLOCKED`: source-only import/export và target/E2E độc lập còn thiếu | 001/019 | Y/N/N/N/N |
-| `BE-102` | DM; IFSPEC; BE; RSK-008 | `66848a1`: Draft ETag/CAS batch all-or-nothing và receipt mutation 24 giờ qua restart, cùng key/khác request conflict; worker/Core reconcile còn thiếu | 024 | Y/N/N/N/N |
-| `BE-103` | LANG; BE; IFSPEC | `TR-PROG-019-20260811-001 BLOCKED`: check/compiler worker chưa implement | 003/006/019 | Y/N/N/N/N |
-| `BE-104` | LANG; SEC; BE; RSK-005 | compiler sandbox/queue | 006/012/013 | Y/N/N/N/N |
-| `BE-105` | DM; BE | `66848a1`: immutable Revision aggregate/manifest/object checksum; structured diff/change manifest và Check aggregate chưa implement | 019 | Y/N/N/N/N |
+| `BE-101` | DM; BE | `66848a1` + `e8c289e`: lifecycle open/close SQLite v3, Project/Draft/Revision/Check/Artifact và restart host; `TR-PROG-001-20260811-001 BLOCKED`: source-only import/export và target/E2E độc lập còn thiếu | 001/019 | Y/N/N/N/N |
+| `BE-102` | DM; IFSPEC; BE; RSK-008 | `66848a1`: Draft ETag/CAS + mutation receipt; `e8c289e`: Check receipt 24 giờ, lease/CAS/retry/terminal qua restart; Core operation reconcile còn thiếu | 024 | Y/N/N/N/N |
+| `BE-103` | LANG; BE; IFSPEC | `e8c289e`: Check application/HTTP/worker, compiler thật, diagnostic và Artifact terminal; mapping/target acceptance/independent `VS-019` còn thiếu | 003/006/019 | Y/N/N/N/N |
+| `BE-104` | LANG; SEC; BE; RSK-005 | `e8c289e`: subprocess argv cố định, scratch 0700, rlimit/no-new-privs/seccomp, bounded output và process-group timeout; cgroup/priority/target load evidence còn thiếu | 006/012/013 | Y/N/N/N/N |
+| `BE-105` | DM; BE | `66848a1`: immutable Revision; `e8c289e`: immutable Check result + Artifact row/content-address bytes; structured diff/change manifest còn thiếu | 019 | Y/N/N/N/N |
 | `BE-106` | LIFE; IFSPEC; BE; RSK-007/008 | `e9707b4`: IPC Call/Reconcile; `312f357`: durable operation intent/idempotency/audit; worker, terminal state và stage/activate/read-back còn thiếu | 004/011/024 | Y/N/N/N/N |
 | `BE-107` | SEC; BE; RSK-012 | authz handler+service/audit | 022 | Y/N/N/N/N |
 | `BE-108` | SEC; BE; RSK-011 | bundle quarantine/import/export | 021/023 | Y/N/N/N/N |
 | `BE-109` | CTRL; IFSPEC; BE; RSK-010 | runtime read model/events | 018/020/026 | Y/N/N/N/N |
-| `BE-110` | IFSPEC; BE; RSK-014 | `9917e3b`/`81080f8`/`efbed2d`: OpenAPI, handler, generated TS; `51fe515`/`e9707b4`: IPC; `4a1e9f5`: catalog lỗi/HTTP canonicalize/sanitize | 019/024 | Y/Y/N/N/N |
-| `CORE-101` | LANG; ART; SEC; RSK-006 | `95585e7`: profile/serializer/loader; `8d58efa` + `a638470`: ST/type/source map; `52dfb57`: FBD canonical; `4819901`: FBD common IR/equivalence; `2c2bfb4`: manifest/hash/source map UUID/unit và verifier. Core requirement đã I=Y từ foundation; worker/target evidence còn mở | 005/006/023 | Y/Y/N/N/N |
+| `BE-110` | IFSPEC; BE; RSK-014 | OpenAPI/handler/generated TS + IPC nền; `4a1e9f5`: catalog; `e8c289e`: OpenAPI v1.18, Check handler và catalog 20/80 đồng bộ Go/C++/TS | 019/024 | Y/Y/N/N/N |
+| `CORE-101` | LANG; ART; SEC; RSK-006 | profile/serializer/loader + ST/FBD/common IR/manifest; `e8c289e`: worker verify artifact/manifest/hash và content-address read-back. Core requirement đã I=Y từ foundation; target evidence còn mở | 005/006/023 | Y/Y/N/N/N |
 | `CORE-102` | CTRL; FWSOM; RSK-002 | ScanLoop/task/process image | 009/015/016 | Y/N/N/N/N |
 | `CORE-103` | ART; FWSOM; RSK-005/006 | Core build/runtime instrumentation | 012 | Y/N/N/N/N |
 | `CORE-104` | CTRL; FWSOM; RSK-001/004 | process image/PriorityResolver | 010/014/020 | Y/N/N/N/N |
@@ -171,12 +171,12 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `HW-101` | HW; FWMCU; RSK-013 | schematic/BOM/test fixture | 014/030 | Y/N/N/N/N |
 | `HW-102` | HW; CTRL; RSK-003/004 | AO/DO safe path | 010/014/030 | Y/N/N/N/N |
 | `HW-103` | HW; FWMCU; RSK-002/013 | power/reset/watchdog domain | 015/030 | Y/N/N/N/N |
-| `NFR-101` | LANG; ART; DM | `95585e7` + `8d58efa` + `a638470`: profile/source/artifact bounds; `52dfb57`: FBD capacity guard/fuzz 50.000; `4819901`: lowering/equivalence; `2c2bfb4`: build 100 lần + manifest mutation/source-map guard. BE Check/sandbox và target OOM acceptance còn thiếu | 006/023 | Y/N/N/N/N |
-| `NFR-102` | LANG; BE; RSK-005 | compiler benchmark/sandbox | 006/013/019 | Y/N/N/N/N |
+| `NFR-101` | LANG; ART; DM | profile/source/artifact bounds + FBD guard/equivalence/manifest; `e8c289e`: Check input/output/file quota, sandbox, artifact read-back. Target OOM/capacity acceptance còn thiếu | 006/023 | Y/N/N/N/N |
+| `NFR-102` | LANG; BE; RSK-005 | `e8c289e`: compiler sandbox/timeout/diagnostic host; target benchmark và concurrent load acceptance còn thiếu | 006/013/019 | Y/N/N/N/N |
 | `NFR-103` | CTRL; FWSOM; RSK-002/005 | base-step/task/load metrics | 009/012/013/015 | Y/N/N/N/N |
 | `NFR-104` | FWSOM; FE; IFSPEC | trace/monitor buffers | 027 | Y/N/N/N/N |
 | `NFR-105` | LIFE; FE; BE | `e9707b4`: reconnect + reconcile không replay mutation; target continuity/fault injection còn thiếu | 024/026/030 | Y/N/N/N/N |
-| `NFR-106` | DM; SEC; BE; RSK-008/012 | `66848a1`: single-writer transaction, ETag, receipt idempotency/restart, audit sanitize/hash-chain và role guard trên sáu route; service defense-in-depth, latency/target evidence còn thiếu | 022/024 | Y/N/N/N/N |
+| `NFR-106` | DM; SEC; BE; RSK-008/012 | `66848a1` + `e8c289e`: single-writer transaction, ETag, Project/Check receipt qua restart, Check lease/terminal, audit sanitize/hash-chain và role guard trên tám route; latency/target evidence còn thiếu | 022/024 | Y/N/N/N/N |
 | `NFR-107` | UX; FE | i18n/a11y/responsive | 025/028 | Y/N/N/N/N |
 | `NFR-108` | CTRL; FWSOM; MCU; HW; RSK-003 | nonblocking swap/IOP/HIL | 014/030 | Y/N/N/N/N |
 | `NFR-109` | UX §14.1; FE; Product Spec §8.1 | tám journey FE end-to-end | 031 | Y/N/N/N/N |
@@ -264,6 +264,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 3.6 | 2026-08-11 | `TASK-PROG-202` hoàn tất FBD→common typed IR/equivalence tại `4819901`; bổ sung source cho CORE-101 và partial SYS-101/NFR-101. Tổng `I=Y` giữ 2/60 vì artifact source-map/worker/route/target E2E còn thiếu; không tạo Test Result, 0/32 PASS và mọi `T/P/R=N` |
 | 3.7 | 2026-08-11 | `TASK-PROG-203` hoàn tất artifact/manifest/hash/profile/source map ST/FBD tại `2c2bfb4`; bổ sung source cho CORE-101 và partial SYS-101/NFR-101. Tổng `I=Y` giữ 2/60 vì worker/route/target E2E còn thiếu; không tạo Test Result, 0/32 PASS và mọi `T/P/R=N` |
 | 3.8 | 2026-08-11 | `TASK-PROG-204` hoàn tất sáu API Project/Draft/Revision + SQLite v2 tại `66848a1`; bổ sung source partial cho SYS-102/106, BE-101/102/105 và NFR-106 nhưng giữ `I=N` vì Check/import-export/operation/target E2E còn thiếu. Tổng `I=Y` giữ 2/60; hai record BLOCKED, 0/32 PASS và mọi `T/P/R=N` |
+| 3.9 | 2026-08-11 | `TASK-PROG-205` hoàn tất hai API Check + SQLite v3/lease/retry/compiler sandbox/Artifact registry tại `e8c289e`; bổ sung source partial cho SYS-101/102/106, BE-101..105, NFR-101/102/106 và treatment RSK-005/006/007/008/014 nhưng giữ `I=N` vì bundle/operation/Core/target E2E còn thiếu. Tổng `I=Y` giữ 2/60; hai record BLOCKED, 0/32 PASS và mọi `T/P/R=N` |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
