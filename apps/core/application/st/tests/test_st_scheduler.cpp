@@ -130,6 +130,65 @@ TEST(StScheduler, RejectsTooManyTasks)
     EXPECT_FALSE(s.add_task(task_cfg("T8", 7, 100), &err));
 }
 
+TEST(StSchedulerRevA, AcceptsOnlyProfilePeriodsAndBudgetBelowTwentyPercent)
+{
+    for (const uint32_t period_ms : st_profile_generated::kAllowedPeriodMs) {
+        StScheduler s(StSchedulerProfile::REV_A);
+        std::string err;
+        ASSERT_TRUE(s.add_task(task_cfg("Control_Main", 0, period_ms,
+                                        period_ms / 5 - 1), &err))
+            << period_ms << " ms: " << err;
+    }
+
+    StScheduler wrong_period(StSchedulerProfile::REV_A);
+    std::string err;
+    EXPECT_FALSE(wrong_period.add_task(task_cfg("Control_Main", 0, 2000, 100), &err));
+    EXPECT_NE(err.find("not allowed by profile"), std::string::npos);
+
+    StScheduler exact_limit(StSchedulerProfile::REV_A);
+    EXPECT_FALSE(exact_limit.add_task(task_cfg("Control_Main", 0, 1000, 200), &err));
+    EXPECT_NE(err.find("<20%"), std::string::npos);
+
+    StScheduler below_limit(StSchedulerProfile::REV_A);
+    EXPECT_TRUE(below_limit.add_task(task_cfg("Control_Main", 0, 1000, 199), &err)) << err;
+}
+
+TEST(StSchedulerRevA, RejectsSecondTaskAndSecondProgram)
+{
+    StScheduler s(StSchedulerProfile::REV_A);
+    std::string err;
+    ASSERT_TRUE(s.add_task(task_cfg("Control_Main", 0, 1000, 100), &err)) << err;
+    EXPECT_FALSE(s.add_task(task_cfg("Other", 1, 5000, 100), &err));
+    EXPECT_NE(err.find("limit 1"), std::string::npos);
+
+    ASSERT_TRUE(s.add_program("Control_Main", "program-main", 0, &err)) << err;
+    EXPECT_FALSE(s.add_program("Control_Main", "program-second", 1, &err));
+    EXPECT_NE(err.find("too many programs"), std::string::npos);
+}
+
+TEST(StSchedulerRevA, BaseStepContinuesWhileThirtySecondTaskWaitsForRelease)
+{
+    StScheduler s(StSchedulerProfile::REV_A);
+    std::string err;
+    ASSERT_TRUE(s.add_task(task_cfg("Control_Main", 0, 30000, 100), &err)) << err;
+    ASSERT_TRUE(s.add_program("Control_Main", "program-main", 0, &err)) << err;
+    deploy(s, "program-main", counter_program(), 0);
+
+    for (uint64_t second = 1; second < 30; ++second) {
+        const StSchedulerTickResult r = s.on_base_step(second * 1000 * kMs);
+        EXPECT_EQ(r.base_step_sequence, second + 1);
+        EXPECT_EQ(r.tasks_run, 0u) << "Task 30 s không được chạy ở giây " << second;
+        EXPECT_EQ(r.programs_run, 0u);
+    }
+    const StSchedulerTickResult due = s.on_base_step(30000 * kMs);
+    EXPECT_EQ(due.base_step_sequence, 31u);
+    EXPECT_EQ(due.tasks_run, 1u);
+    EXPECT_EQ(due.programs_run, 1u);
+    EXPECT_EQ(counter_of(s, "program-main"), 1);
+    EXPECT_EQ(s.base_step_count(), 31u)
+        << "activation step + 30 base step phải độc lập với một Task release";
+}
+
 TEST(StScheduler, RejectsDuplicateProgramOrderInTask)
 {
     StScheduler s;
@@ -232,6 +291,7 @@ TEST(StScheduler, MissedCyclesAreSkippedNotCaughtUp)
     /* Nhảy 5 giây (lỡ 50 chu kỳ) trong MỘT tick. */
     s.tick(5000 * kMs);
     EXPECT_EQ(counter_of(s, "p"), before + 1) << "phải chạy đúng 1 lần, không bù 50 lần";
+    EXPECT_EQ(s.find_task("T")->stats().missed_release_count, 49u);
 }
 
 TEST(StScheduler, MultipleTasksDueInSameTickAllRunInPriorityOrder)

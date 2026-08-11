@@ -7,6 +7,32 @@
 ---
 
 ## [Unreleased]
+### Changed — Base step và scheduler profile Programming P3 (2026-08-11)
+
+**TASK-PROG-301.** `StScheduler` nay phân biệt rõ container
+`supporting-as-built` với profile sản phẩm `revA-1t-1-5-30`. Đường Rev A dùng
+chính hằng profile sinh từ contract để chỉ nhận một Task, một Program và chu kỳ
+`1000/5000/30000 ms`; budget bằng hoặc vượt `20%` chu kỳ bị từ chối fail-closed.
+Giới hạn vật lý `8/16/32`, `50..60000 ms` vẫn được giữ làm backstop cho component
+cũ nhưng không còn được quảng bá như capability Rev A.
+
+ScanLoop gọi `on_base_step()` thay cho tick mơ hồ; kết quả có sequence riêng và
+Task ghi số release bị lỡ khi step trễ, không chạy catch-up. Test Task 30 giây
+chứng minh 30 base step một giây vẫn được phục vụ trong khi Task chỉ dispatch ở
+release thứ 30. Control API/schema trả profile, capacity, ba chu kỳ, base step
+mặc định/dải `1000 / 500..2000 ms` và ngưỡng budget; bootstrap đổi tên biến nội
+bộ sang base step nhưng giữ nguyên hành vi `GRAPH_ONLY` chuyển tiếp tới
+`TASK-PROG-306`. Feature vẫn `OFF`, chưa nối scheduler vào production.
+Comment systemd cũng chuyển authority watchdog sang ADR-028: bám base step,
+loại Task 30 giây khỏi công thức và giữ `WatchdogSec=6` ở `TARGET-PENDING` tới
+khi có số đo `SCHED_FIFO` trên board.
+
+**Kiểm chứng.** Release build sạch bật Modbus/BACnet/HMI và CTest `936/936`
+PASS; riêng Scheduler Rev A/legacy, Control API, ScanLoop và tích hợp `74/74`
+PASS. Go `vet` và `test ./... -count=1` PASS; FE `58/58` file, `494/494` test,
+lint/typecheck/build PASS; profile generator và contract G1 `7/7` PASS. Không
+dùng Chrome DevTools vì lát cắt này không đổi component/layout/runtime FE.
+
 ### Changed — Bounded loader và runtime image Programming P3 (2026-08-11)
 
 **TASK-PROG-300.** Tách `prepare` khỏi safe-boundary activation: artifact được

@@ -24,6 +24,15 @@ const char* st_program_state_name(StProgramState s)
     return "?";
 }
 
+const char* st_scheduler_profile_name(StSchedulerProfile profile)
+{
+    switch (profile) {
+    case StSchedulerProfile::SUPPORTING_AS_BUILT: return "supporting-as-built";
+    case StSchedulerProfile::REV_A: return st_profile_generated::kProfileId;
+    }
+    return "?";
+}
+
 /* ---- StTask ---- */
 
 void StTask::set_enabled(bool e)
@@ -56,6 +65,12 @@ void StTask::mark_ran(uint64_t now_ns)
     }
     /* Bù trôi: cộng theo mốc LÝ THUYẾT, không theo thời điểm chạy thật, để
      * task 100 ms chạy đúng 10 lần mỗi giây kể cả khi có tick bị trễ. */
+    const uint64_t releases_due = (now_ns - last_run_ns_) / period_ns;
+    if (releases_due > 1) {
+        const uint64_t missed = releases_due - 1;
+        const uint64_t room = UINT32_MAX - stats_.missed_release_count;
+        stats_.missed_release_count += static_cast<uint32_t>(std::min(missed, room));
+    }
     last_run_ns_ += period_ns;
     /* Nhưng nếu đã lỡ nhiều chu kỳ thì BỎ, không chạy bù (SPEC §4): chạy bù
      * làm timer nhảy và làm tình trạng quá tải nặng thêm. */
@@ -68,20 +83,38 @@ bool StScheduler::add_task(const StTaskConfig& cfg, std::string* error)
 {
     auto fail = [&](const std::string& m) { if (error) *error = m; return false; };
 
-    if (tasks_.size() >= st_sched_limits::kMaxTasks)
-        return fail("too many tasks (limit " + std::to_string(st_sched_limits::kMaxTasks) + ")");
+    const std::size_t max_tasks = profile_ == StSchedulerProfile::REV_A
+                                      ? st_profile_generated::kMaxTasks
+                                      : st_sched_limits::kMaxTasks;
+    if (tasks_.size() >= max_tasks)
+        return fail("too many tasks for profile '" +
+                    std::string(st_scheduler_profile_name(profile_)) + "' (limit " +
+                    std::to_string(max_tasks) + ")");
     if (cfg.id.empty() || cfg.id.size() > 16) return fail("task id must be 1..16 characters");
     if (cfg.priority > 7) return fail("task priority must be 0..7");
-    if (cfg.period_ms < st_sched_limits::kMinPeriodMs ||
-        cfg.period_ms > st_sched_limits::kMaxPeriodMs)
-        return fail("task period_ms out of range");
-    /* Chu kỳ phải là bội số của tick cơ sở, nếu không task sẽ trôi so với
-     * chính chu kỳ khai báo và WCET cộng dồn mất ý nghĩa. */
-    if (cfg.period_ms % st_sched_limits::kBaseTickMs != 0)
-        return fail("task period_ms must be a multiple of base tick " +
-                    std::to_string(st_sched_limits::kBaseTickMs) + " ms");
-    if (cfg.budget_ms == 0 || cfg.budget_ms > cfg.period_ms)
-        return fail("task budget_ms must be in 1..period_ms");
+    if (profile_ == StSchedulerProfile::REV_A) {
+        if (!st_limits::RevAAllowsPeriod(cfg.period_ms))
+            return fail("task period_ms is not allowed by profile '" +
+                        std::string(st_profile_generated::kProfileId) + "'");
+        /* OD-PROG-012: budget phải NHỎ HƠN 20%, không phải <=20%.
+         * Nhân trên uint64 để tránh overflow nếu input đối kháng. */
+        if (cfg.budget_ms == 0 ||
+            static_cast<uint64_t>(cfg.budget_ms) * 100ull >=
+                static_cast<uint64_t>(cfg.period_ms) *
+                    st_base_step::kMaxTaskBudgetPercent)
+            return fail("task budget_ms must be >0 and <20% of period_ms for Rev A");
+    } else {
+        if (cfg.period_ms < st_sched_limits::kMinPeriodMs ||
+            cfg.period_ms > st_sched_limits::kMaxPeriodMs)
+            return fail("task period_ms out of range");
+        /* Chu kỳ supporting phải là bội số tick vật lý cũ. Đây không phải
+         * base step sản phẩm Rev A. */
+        if (cfg.period_ms % st_sched_limits::kBaseTickMs != 0)
+            return fail("task period_ms must be a multiple of base tick " +
+                        std::to_string(st_sched_limits::kBaseTickMs) + " ms");
+        if (cfg.budget_ms == 0 || cfg.budget_ms > cfg.period_ms)
+            return fail("task budget_ms must be in 1..period_ms");
+    }
     if (cfg.overrun_threshold < 1 || cfg.overrun_threshold > 100)
         return fail("overrun_threshold must be 1..100");
 
@@ -108,13 +141,19 @@ bool StScheduler::add_program(const std::string& task_id, const std::string& ins
 
     StTask* task = find_task(task_id);
     if (!task) return fail("unknown task '" + task_id + "'");
-    if (task->programs().size() >= st_sched_limits::kMaxProgramsPerTask)
+    const std::size_t max_per_task = profile_ == StSchedulerProfile::REV_A
+                                         ? st_profile_generated::kMaxProgramsPerTask
+                                         : st_sched_limits::kMaxProgramsPerTask;
+    if (task->programs().size() >= max_per_task)
         return fail("too many programs in task '" + task_id + "'");
     if (find_program(instance_id)) return fail("duplicate instance id '" + instance_id + "'");
 
     std::size_t total = 0;
     for (const auto& t : tasks_) total += t->programs().size();
-    if (total >= st_sched_limits::kMaxProgramsTotal)
+    const std::size_t max_total = profile_ == StSchedulerProfile::REV_A
+                                      ? st_profile_generated::kMaxProgramsTotal
+                                      : st_sched_limits::kMaxProgramsTotal;
+    if (total >= max_total)
         return fail("too many program instances in resource");
 
     for (const auto& p : task->programs())
@@ -351,9 +390,10 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
     out->tasks_run++;
 }
 
-StSchedulerTickResult StScheduler::tick(uint64_t now_ns)
+StSchedulerTickResult StScheduler::on_base_step(uint64_t now_ns)
 {
     StSchedulerTickResult result;
+    result.base_step_sequence = ++base_step_count_;
 
     /* tasks_ đã sắp theo ưu tiên tăng dần từ lúc add_task. Non-preemptive:
      * task ưu tiên cao chạy TRỌN VẸN rồi mới tới task kế. */

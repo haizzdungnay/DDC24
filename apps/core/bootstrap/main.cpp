@@ -77,7 +77,7 @@ int main(int argc, char** argv)
     bool safe_cfg_from_cli = false;
     bool io_cfg_from_cli = false;
     bool scan_ms_from_cli = false;
-    uint64_t period_ns = 1000000000ull;   /* scan 1s Rev A */
+    uint64_t base_step_ns = 1000000000ull; /* base step 1s Rev A */
     int rt_prio = 80;
 
     for (int i = 1; i < argc; i++) {
@@ -97,7 +97,7 @@ int main(int argc, char** argv)
                 std::fprintf(stderr, "ERROR core.bad_scan_ms '%s' (cần số nguyên ≥1)\n", argv[i]);
                 return 1;
             }
-            period_ns = static_cast<uint64_t>(ms) * 1000000ull;
+            base_step_ns = static_cast<uint64_t>(ms) * 1000000ull;
             scan_ms_from_cli = true;
         }
         else if (a == "--help") {
@@ -188,26 +188,29 @@ int main(int argc, char** argv)
     /* COR-010: restore persist state ngay sau load boot */
     graph.restore_persist_state(snap.load());
 
-    /* Đồng bộ scan period — 1 nguồn sự thật:
+    /* Đường GRAPH_ONLY chuyển tiếp vẫn ánh xạ scan_ms cũ vào base step để
+     * không đổi hành vi trước TASK-PROG-306. Task period Programming không đi
+     * qua biến này và không bao giờ được dùng làm sleep của ScanLoop. */
+    /* Đồng bộ base step — 1 nguồn sự thật:
      * - có graph + KHÔNG --scan-ms → chu kỳ scan core LẤY TỪ graph.json (ý đồ engineer)
      * - có graph + --scan-ms khác  → WARN rõ + dùng --scan-ms (dev override);
      *   ScanLoop sync dt của graph về đúng chu kỳ thật nên không bao giờ lệch */
     if (graph.loaded()) {
         const uint64_t graph_ns = static_cast<uint64_t>(graph.declared_scan_ms()) * 1000000ull;
         if (!scan_ms_from_cli) {
-            period_ns = graph_ns;
+            base_step_ns = graph_ns;
             std::fprintf(stderr, "INFO  core.scan_ms=%u (theo graph.json)\n",
                          graph.declared_scan_ms());
-        } else if (period_ns != graph_ns) {
+        } else if (base_step_ns != graph_ns) {
             std::fprintf(stderr,
                          "WARN  core.scan_ms_override cli=%llu ms != graph=%u ms"
                          " -> dùng CLI, PID dt theo CLI\n",
-                         static_cast<unsigned long long>(period_ns / 1000000ull),
+                         static_cast<unsigned long long>(base_step_ns / 1000000ull),
                          graph.declared_scan_ms());
         }
     }
-    std::fprintf(stderr, "INFO  core.scan_ms=%llu (chốt)\n",
-                 static_cast<unsigned long long>(period_ns / 1000000ull));
+    std::fprintf(stderr, "INFO  core.base_step_ms=%llu (GRAPH_ONLY chuyển tiếp)\n",
+                 static_cast<unsigned long long>(base_step_ns / 1000000ull));
 
     PriorityResolver resolver;
 
@@ -305,7 +308,7 @@ int main(int argc, char** argv)
     };
     loop.set_reload_hook(&g_reload, on_reload, &rctx);
 
-    /* LUẬT WATCHDOG (PROGRAM_TASK_SCHEDULER_SPEC §9) — đọc trước khi sửa:
+    /* LUẬT WATCHDOG (ADR-028) — đọc trước khi sửa:
      *
      *   Kick CHỈ ở đây, tức là SAU KHI ScanLoop::step() trả về trọn vẹn.
      *   TUYỆT ĐỐI KHÔNG kick ở giữa step().
@@ -314,7 +317,8 @@ int main(int argc, char** argv)
      * phải chứng minh process còn sống. Kick giữa chu kỳ biến nó thành
      * liveness check vô nghĩa — một step() treo vĩnh viễn ở giữa vẫn kick đều
      * và systemd sẽ không bao giờ khởi động lại, đúng loại lỗi mà watchdog
-     * sinh ra để bắt. Xem thêm PROGRAM_SOM_FW_DRAFT_DESIGN §9.2 (diag_wdg).
+     * sinh ra để bắt. Task period 30 s chỉ là cadence dispatch, không đi vào
+     * công thức watchdog và không được làm chậm callback này.
      *
      * Trong khoảng core chưa chạy (đang restart), MCU tự ép AO/DO về an toàn
      * sau IOP_SAFE_TIMEOUT_MS = 200 ms — lớp bảo vệ ĐỘC LẬP với SOM, và là lý
@@ -345,7 +349,7 @@ int main(int argc, char** argv)
         }
     };
 
-    loop.run(g_shutdown, period_ns, after_scan, &nctx);
+    loop.run(g_shutdown, base_step_ns, after_scan, &nctx);
 
     /* COR-010: ghi snapshot khi shutdown sạch (SIGTERM) */
     if (graph.loaded())

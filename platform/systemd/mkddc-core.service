@@ -17,14 +17,14 @@ RuntimeDirectoryPreserve=yes
 StateDirectory=mkddc
 Restart=always
 RestartSec=2
-# WatchdogSec theo công thức PROGRAM_TASK_SCHEDULER_SPEC §9:
-#   >= 2 x (chu kỳ scan lớn nhất) + WCET đo trên target + biên hồi phục 1 s
-# graph.json cho phép scan_ms trong dải 500..2000 (graph_runtime.cpp), nên
-# trường hợp xấu nhất là 2 x 2000 ms + WCET + 1000 ms. WCET đo trên Orange Pi
-# 5B (2026-07-28) cho jitter max 356 us trên chu kỳ 1 s và 0 overrun, tức WCET
-# nhỏ hơn nhiều so với biên — chọn 6 s phủ trọn dải scan_ms hợp lệ.
+# WatchdogSec theo ADR-028, bám base step nền tảng và LOẠI Task period khỏi
+# công thức:
+#   >= 2 x base_step_max + WCET_base_step(p99.9, target, SCHED_FIFO) + 1 s
+# Base step Rev A có trần 2000 ms, nên 6 s là candidate hiện hành. Task
+# Programming 30 s chỉ là cadence dispatch, không được nâng watchdog thành 61 s
+# hoặc làm ScanLoop ngủ 30 s.
 #
-# Giá trị này là TẠM cho tới khi đo lại trên target CÓ SCHED_FIFO: board hiện
+# Giá trị này là TARGET-PENDING tới khi đo lại trên target CÓ SCHED_FIFO: board hiện
 # chạy SCHED_OTHER do drop-in nofifo.conf, nên số đo không đại diện cho cấu
 # hình production. Xem docs/07_records/test-evidence/fw-som/.
 #

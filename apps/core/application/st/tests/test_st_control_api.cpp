@@ -136,7 +136,7 @@ TEST(StControlApi, UnknownInstanceReturnsStableCode)
 
 TEST(StControlApi, CapabilitiesPublishesEverythingBeNeedsToCompile)
 {
-    StScheduler s;
+    StScheduler s(StSchedulerProfile::REV_A);
     const json r = call(&s, {{"action", "program_capabilities"}});
     ASSERT_EQ(r["result"], "ok");
     /* BE phải biết trước nên compile với profile/ABI nào, thay vì thử rồi
@@ -146,7 +146,15 @@ TEST(StControlApi, CapabilitiesPublishesEverythingBeNeedsToCompile)
     EXPECT_EQ(r["targetAbi"], st_ir::kTargetAbi);
     EXPECT_EQ(r["maxArtifactBytes"], st_ir::kMaxArtifactSize);
     EXPECT_TRUE(r.contains("compilerVersion"));
-    EXPECT_TRUE(r.contains("baseTickMs"));
+    EXPECT_EQ(r["runtimeProfile"], st_profile_generated::kProfileId);
+    EXPECT_EQ(r["maxTasks"], 1);
+    EXPECT_EQ(r["maxProgramsPerTask"], 1);
+    EXPECT_EQ(r["maxProgramsTotal"], 1);
+    EXPECT_EQ(r["allowedPeriodMs"], json({1000, 5000, 30000}));
+    EXPECT_EQ(r["baseStepMs"], 1000);
+    EXPECT_EQ(r["baseStepMinMs"], 500);
+    EXPECT_EQ(r["baseStepMaxMs"], 2000);
+    EXPECT_EQ(r["maxTaskBudgetPercentExclusive"], 20);
 }
 
 TEST(StControlApi, StatusReportsTasksAndPrograms)
