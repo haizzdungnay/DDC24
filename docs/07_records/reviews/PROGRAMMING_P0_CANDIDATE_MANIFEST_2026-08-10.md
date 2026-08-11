@@ -4,14 +4,14 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.33 |
+| Phiên bản | 3.34 |
 | Ngày | 2026-08-11 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
 | Trạng thái | **ACTIVE — candidate v2.24 `IMPLEMENTATION IN PROGRESS`; P1 6/6, P2 8/8, P3 2/8 SOURCE/DOD DONE; G3 IN PROGRESS; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | **Chờ merge hồ sơ**; source authority `a831a0d`, source tree `9ff19be3`; **22 hash ở §2 là định danh hiện hành** |
-| PR nguồn | Chờ tạo PR cho `TASK-PROG-301` |
+| Candidate commit | `d4fd15da4b369b027296bcf9460ecdc9fbe0997c`; source authority `a831a0d`, source tree `9ff19be3`; **22 hash ở §2 là định danh hiện hành** |
+| PR nguồn | [PR #157](https://github.com/Mekong-HCM/MK-DDC-24/pull/157) — merged; remote feature branch đã xóa |
 | Candidate trước | v2.23 tại commit `424367a` — **SUPERSEDED bởi TASK-PROG-301**, xem §4 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
@@ -47,9 +47,9 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | **Chờ merge hồ sơ TASK-PROG-301**; source commit `a831a0d42c0e945f9a59c36e461ada0e12962c89` |
-| Git tree | **Chờ merge hồ sơ TASK-PROG-301**; source tree `9ff19be31d95e687f5358ceabb52c7c2a16fb502` |
-| Nhánh phát hành | `feat/programming-base-step-20260811`; PR chờ tạo |
+| Commit chứa nội dung candidate | `d4fd15da4b369b027296bcf9460ecdc9fbe0997c`; source commit `a831a0d42c0e945f9a59c36e461ada0e12962c89` |
+| Git tree | `fe321c3434bfeee33ca22a346cf4fd6add5c5468`; source tree `9ff19be31d95e687f5358ceabb52c7c2a16fb502` |
+| Nhánh phát hành | `feat/programming-base-step-20260811` — remote đã xóa sau merge PR #157 |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
 chạy `scripts/candidate_pin_check.py` trước khi bắt đầu đọc.
@@ -108,7 +108,7 @@ tích lũy so với v2.7.
 
 | Hồ sơ | Phiên bản tại lần ghim này | Vai trò |
 |---|---|---|
-| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v3.33 | Tracker hồ sơ và đồng bộ tiến độ code |
+| `docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md` | v3.34 | Tracker hồ sơ và đồng bộ tiến độ code/provenance |
 | `docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md` | v2.0 | Gói phê duyệt toàn bộ |
 | `docs/07_records/reviews/PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md` | v1.6 | Biên bản consumer review + waiver |
 | `docs/07_records/reviews/PROGRAMMING_G1_IMPLEMENTATION_REVIEW_2026-08-11.md` | 2026-08-11 | Review source/evidence `TASK-PROG-100..105` |
@@ -224,3 +224,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.31 | 2026-08-11 | Phát hành candidate v2.23 sau `TASK-PROG-300`: cập nhật hash/blob Index v3.1, Artifact v0.8, FW-SOM v0.5, VVP v1.1, Risk v1.6, Trace v3.12 và Plan v0.32; 15/22 hồ sơ còn lại giữ nguyên. P3 1/8, next TASK-PROG-301; 0/32 PASS; commit/tree/PR chờ ghi sau merge |
 | 3.32 | 2026-08-11 | Ghi bổ sung PR #155, merge commit `424367a` và tree `7b81f79` chứa candidate v2.23; remote feature branch đã xóa. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi, candidate pin tiếp tục 22/22 PASS. GitHub Actions không chạy step nào do billing/spending-limit; gate local đầy đủ được ghi trong PR |
 | 3.33 | 2026-08-11 | Phát hành candidate v2.24 sau `TASK-PROG-301`: cập nhật hash/blob Index v3.2, Architecture v0.8, Control v0.4, FW-SOM v0.6, VVP v1.2, Risk v1.7, Trace v3.13 và Plan v0.33; 14/22 hồ sơ còn lại giữ nguyên. P3 2/8, next TASK-PROG-302; 0/32 PASS; commit/tree/PR chờ ghi sau merge |
+| 3.34 | 2026-08-11 | Ghi bổ sung PR #157, merge commit `d4fd15d` và tree `fe321c3` chứa candidate v2.24; remote feature branch đã xóa. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi, candidate pin tiếp tục 22/22 PASS. GitHub Actions không chạy step nào do billing/spending-limit; gate local đầy đủ được ghi trong PR |

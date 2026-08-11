@@ -38,8 +38,10 @@ Architecture v0.8, Control Semantics v0.4, FW-SOM v0.6, Verification Plan
 v1.2, Risk v1.7, Trace v3.13, Plan 53 v0.33, Roadmap v3.33 và review/raw
 evidence G3; phát hành candidate v2.24. P3 đạt `2/8`, tổng `23/49 = 46,9%`,
 task tiếp theo `TASK-PROG-302`. Giữ trung thực `2/60 I=Y`, `0/32 PASS`,
-16/16 risk Open, feature `OFF` và `RELEASE_READY BLOCKED`; commit/tree/PR hồ
-sơ chờ ghi provenance sau merge.
+16/16 risk Open, feature `OFF` và `RELEASE_READY BLOCKED`. Source + hồ sơ đã
+merge qua PR #157 tại `d4fd15d`, tree `fe321c3`; remote feature branch đã xóa.
+GitHub Actions không chạy step nào do billing/spending-limit; annotation hạ
+tầng và toàn bộ gate local đã được ghi trong PR.
 
 ### Changed — Bounded loader và runtime image Programming P3 (2026-08-11)
 
