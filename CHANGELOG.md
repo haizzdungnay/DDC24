@@ -37,6 +37,10 @@ review/evidence G2 và candidate v2.18. Tiến độ P2 `4/8`, tổng `17/49`; t
 theo `TASK-PROG-204`. Giữ trung thực `2/60 I=Y`, `0/32 PASS`, flag `OFF` và
 `RELEASE_READY BLOCKED`.
 
+**Tích hợp.** [PR #145](https://github.com/Mekong-HCM/MK-DDC-24/pull/145)
+đã merge tại `2899d02`, tree `cdef0e77`; remote feature branch đã xóa.
+Candidate v2.18 tiếp tục pin `22/22` bằng SHA-256.
+
 **Kiểm chứng hiện tại.** Targeted CTest cho CLI/manifest/FBD/validate `35/35`
 PASS; full CTest Release bật Modbus+BACnet+HMI `927/927` PASS; artifact manifest
 self-test `7/7` mutation và FBD contract self-test `10/10` mutation PASS. Go
