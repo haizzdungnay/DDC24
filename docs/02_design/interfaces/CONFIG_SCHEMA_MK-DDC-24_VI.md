@@ -196,6 +196,10 @@ local-panel scope.
 }
 ```
 > Không cấu hình → mặc định AO 0V/4mA, DO open (IOP-SPEC §6.3).
+> Writer phải lưu collection không có phần tử dưới dạng `[]`, không phải
+> `null`. Core chấp nhận `null` từ bản Web cũ như một compatibility shim và
+> chỉ ánh xạ nó về đúng mặc định an toàn; mọi kiểu dữ liệu sai khác vẫn
+> fail-fast. Lần ghi kế tiếp của Web chuẩn hoá dữ liệu về `[]`.
 > **Quan hệ chốt (2026-06-12):** file này cấu hình **relinquish default mức 6** của
 > priority resolver (07 §4). Safety ACTION khi fault/stale (07 §5.3) CỐ ĐỊNH 0V/4mA/open
 > ở cả 3 lớp (MCU/iobus/core), KHÔNG đổi theo file này — config sai không thể làm

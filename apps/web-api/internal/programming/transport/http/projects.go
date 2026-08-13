@@ -40,12 +40,13 @@ type mutationResponse struct {
 }
 
 type projectResponse struct {
-	ProjectID        string          `json:"projectId"`
-	Name             string          `json:"name"`
-	ETag             string          `json:"etag"`
-	ActiveRevisionID *string         `json:"activeRevisionId"`
-	DraftRevisionID  string          `json:"draftRevisionId"`
-	UpdatedAt        string          `json:"updatedAt"`
+	ProjectID        string  `json:"projectId"`
+	Name             string  `json:"name"`
+	ETag             string  `json:"etag"`
+	ActiveRevisionID *string `json:"activeRevisionId"`
+	DraftRevisionID  string  `json:"draftRevisionId"`
+	BaseRevisionID   string  `json:"baseRevisionId"`
+	UpdatedAt        string  `json:"updatedAt"`
 	// Draft chỉ có ở `GET /projects/{projectId}` (đọc một Project), không có
 	// ở item của `GET /projects` (danh sách) — xem lý do ở
 	// `application.ProjectView.DraftContentJSON`.
@@ -257,7 +258,8 @@ func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 
 func toProjectResponse(project programmingapplication.ProjectView) projectResponse {
 	response := projectResponse{ProjectID: project.ProjectID, Name: project.Name, ETag: project.ETag,
-		ActiveRevisionID: project.ActiveRevisionID, DraftRevisionID: project.DraftRevisionID, UpdatedAt: project.UpdatedAt}
+		ActiveRevisionID: project.ActiveRevisionID, DraftRevisionID: project.DraftRevisionID,
+		BaseRevisionID: project.BaseRevisionID, UpdatedAt: project.UpdatedAt}
 	if len(project.DraftContentJSON) > 0 {
 		response.Draft = json.RawMessage(project.DraftContentJSON)
 	}

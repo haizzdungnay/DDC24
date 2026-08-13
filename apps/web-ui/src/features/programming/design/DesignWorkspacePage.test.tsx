@@ -41,7 +41,7 @@ function baseDocument(): ProgrammingDraftDocument {
 function baseProject(): ProgrammingProject {
   return {
     projectId: 'project-1', name: 'AHU-01', etag: '"draft-1:1"',
-    activeRevisionId: null, draftRevisionId: 'draft-1', updatedAt: '2026-08-13T00:00:00Z',
+    activeRevisionId: null, draftRevisionId: 'draft-1', baseRevisionId: 'draft-1', updatedAt: '2026-08-13T00:00:00Z',
     draft: baseDocument()
   }
 }
@@ -151,5 +151,35 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     // StructuredFbdEditor render toolbar lệnh thật — không phải chữ placeholder cũ.
     await waitFor(() => expect(screen.queryByText(/mount ở TASK-PROG-502/)).not.toBeInTheDocument())
     await waitFor(() => expect(screen.getByRole('toolbar', { name: 'Lệnh FBD' })).toBeInTheDocument())
+  })
+
+  it('gửi targetProfile công khai đúng OpenAPI khi tạo Check', async () => {
+    const project = baseProject()
+    project.baseRevisionId = 'b1111111-1111-4111-8111-111111111111'
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'createProgrammingRevision') {
+        return Promise.resolve({
+          resource: { projectId: 'project-1', revisionId: 'b324bb9b-2bb5-4fce-8789-f6d0fe493f6a' },
+          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
+        })
+      }
+      if (operationId === 'createProgrammingCheck') return new Promise(() => {})
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Kiểm tra' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra' }))
+
+    await waitFor(() => {
+      const call = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingCheck')
+      expect(call).toBeTruthy()
+    })
+    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingCheck')!
+    expect(options.body).toEqual({ schemaVersion: '1.0', targetProfile: 'MK-DDC-24-REV-A' })
+    const [, sealOptions] = client.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingRevision')!
+    expect(sealOptions.body.baseRevisionId).toBe('b1111111-1111-4111-8111-111111111111')
   })
 })

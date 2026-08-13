@@ -8,6 +8,85 @@
 
 ## [Unreleased]
 
+### Changed — Programming P5: deploy đầy đủ 100% tính năng lên Foxlinx (2026-08-13)
+
+- Dọn có kiểm soát trước deploy: filesystem từ 2,5/13 GiB (22%) xuống
+  1,2/13 GiB (10%), chủ yếu vacuum journal 1,2 GiB và xóa backup/binary/static
+  trùng cũ; giữ nguyên `/data/config`, dữ liệu vận hành và hai release rollback.
+- Tạo hai backup rollback có checksum; cross-build/deploy ARM64 có provenance
+  cho FE, Web, `mkddc-st-compile` và `mkddc-core`; read-back exact hash/version,
+  UDS `mkddc:mkddc 0660`, bốn service `active`, system API `overall=ok`.
+- Validation cô lập ban đầu phát hiện ba drift thật (WS Origin 403, target
+  profile 400, Revision nền 409), sau đó deploy đầy đủ phát hiện thêm config
+  legacy `ao/do:null` làm Core fail boot. Vá `0f1526c`: Web luôn persist array
+  rỗng; Core chỉ tương thích `null` cũ về default an toàn và vẫn reject type sai.
+- Chuẩn hóa IO bundle target qua API thành revision 2/checksum đồng bộ; bật cờ
+  production FE/BE `ON`. Hai Check target `PASSED`; Commission fixture không
+  output vật lý `SUCCEEDED/COMMITTED`; Core đọc-ngược đúng Active/LKG và Task
+  `RUNNING`.
+- Chrome Foxlinx desktop 1440×1000 và mobile 390×844 sạch Console/Network;
+  lưu ảnh và hồ sơ `EV-PROG-P5-507`. Trạng thái cuối không còn drop-in/fixture
+  tạm; compiler/Core/Web/FE mới và cờ Programming đều hoạt động production.
+- Cập nhật candidate v2.38: IFSPEC v1.7, FE v1.1, BE v1.4, VVP v1.6, Risk
+  v2.2, Trace v3.18, Plan 53 v0.52; P5 8/8 và tính năng deploy 100%. Tổng Plan
+  giữ 43/50 vì 7 task P6 là assurance/HIL/release evidence; giữ trung thực
+  2/32 record BLOCKED, 0/32 PASS và `RELEASE_READY BLOCKED`.
+
+Verification: CTest 1003/1003; Go vet/test PASS; FE 506/506 + lint/build;
+Programming Playwright 4/4; Network QA 1/1; Chrome target desktop/mobile;
+docs harness PASS; trace 60/60 requirement + 32/32 scenario PASS; candidate pin
+22/22 PASS; read-back cuối `/api/v1/health` 6/6 `ok`.
+
+Refs: TASK-PROG-507, EV-PROG-P5-507, candidate v2.38, `0f1526c`.
+
+### Fixed — Programming P5: Check lần hai xung đột do thiếu Revision nền (2026-08-13)
+
+- Foxlinx chứng minh lần `Check` đầu đã đóng Revision, nhưng sau khi tải lại,
+  FE tiếp tục gửi `draftRevisionId` làm `baseRevisionId`; backend đúng ra yêu
+  cầu Revision nền vừa đóng nên trả `409 PRG-ERR-CONFLICT-001` dù ETag mới.
+- Bổ sung `ProgrammingProject.baseRevisionId` vào OpenAPI/Go response, trả về
+  Draft ID trước lần đóng đầu và Revision nền hiện hành sau đó; FE dùng field
+  này cho cả lưu Draft và đóng Revision kế tiếp.
+- Thêm kiểm thử HTTP đọc ngược sau seal và kiểm thử FE khóa request seal từ
+  Revision nền, ngăn hồi quy xung đột sau reload.
+
+Refs: TASK-PROG-507, IFSPEC-PROG-001 `ProgrammingProject`.
+
+### Fixed — Programming P5: WebSocket monitor qua Vite dev proxy bị 403 (2026-08-13)
+
+- Chrome DevTools với FE `:4174` và backend Go thật `:8081` phát hiện
+  `/api/v1/ws/monitor` lặp handshake `403`: `changeOrigin` đã đổi `Host` sang
+  backend nhưng giữ `Origin` của Vite, nên biên same-origin của `mkddc-web` từ
+  chối đúng và UI luôn báo mất WebSocket.
+- `apps/web-ui/vite.config.ts` thêm rule cụ thể `/api/v1/ws/**` trước rule
+  `/api`, bật `rewriteWsOrigin` riêng cho WebSocket dev; không bật
+  `CORS_ALLOW_LOOPBACK`, không nới allowlist backend và không thay đổi đường
+  same-origin production.
+- `useWebSocket` chờ có session và hoãn connect một microtask để setup đầu bị
+  cleanup bởi React StrictMode không tạo/đóng socket còn `CONNECTING`; loại
+  warning lifecycle nhưng session mock/none không có token vẫn kết nối được.
+- Thêm test khóa thứ tự route, đích `ws://`/`wss://`, cờ rewrite và trạng thái
+  chưa/có session;
+  xác minh lại bằng 505/505 Vitest, lint, build, Programming Playwright 4/4 và
+  Network Playwright 1/1; bằng chứng Chrome/Foxlinx được ghi ở task deploy
+  `TASK-PROG-507`.
+
+Refs: TASK-PROG-506/507, DDD-FE-PROG-001 §0.1, Plan 53 §5.9 S5-E.
+
+### Fixed — Programming P5: Check bị Foxlinx từ chối vì sai target profile (2026-08-13)
+
+- Browser thật trên Foxlinx tạo Revision `201` nhưng `POST /checks` trả `400`
+  `PRG-ERR-REQ-001`: FE gửi định danh lưu trữ `MKDDC24_REVA`, trong khi
+  OpenAPI/backend yêu cầu profile công khai `MK-DDC-24-REV-A`.
+- Đồng bộ `useCheckWorkflow` theo OpenAPI và thêm test khóa chính xác body của
+  `createProgrammingCheck`; không đổi schema lưu trữ/bundle nội bộ.
+- Preflight deploy đồng thời phát hiện `JWT_SECRET` legacy chỉ dài 1 byte trên
+  Foxlinx; đã xoay sang khóa ngẫu nhiên 32 byte (base64 dài 44), file
+  `root:root 0600`, không ghi bí mật vào log. Việc xoay khóa làm hết hạn các
+  phiên web cũ theo thiết kế.
+
+Refs: TASK-PROG-507, IFSPEC-PROG-001 OpenAPI `CreateCheckRequest`.
+
 ### Changed — Programming P5: đồng bộ governance docs sau TASK-PROG-500..506, candidate v2.36 (2026-08-13)
 
 Cập nhật năm hồ sơ trong mẫu số 22 để phản ánh đúng As-Built P5 (nguồn:

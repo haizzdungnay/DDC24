@@ -2,6 +2,24 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, loadEnv } from 'vite'
 
+export function developmentProxy(target: string) {
+  return {
+    // Phải đứng trước `/api`: socket thật là `/api/v1/ws/monitor`, không phải
+    // `/ws`. Nếu rơi vào rule tổng quát thì Origin không được rewrite và
+    // mkddc-web từ chối đúng theo same-origin bằng 403.
+    '^/api/v1/ws(?:/|$)': {
+      target: target.replace(/^http/, 'ws'),
+      ws: true,
+      changeOrigin: true,
+      // Chỉ rewrite ở proxy dev này; production tiếp tục do mkddc-web phục vụ
+      // same-origin. Không bật CORS loopback hoặc nới allowlist backend.
+      rewriteWsOrigin: true,
+      secure: false
+    },
+    '/api': { target, changeOrigin: true, secure: false, ws: true }
+  } as const
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '')
   if (mode === 'production' && (env.VITE_API_ORIGIN || env.VITE_WS_ORIGIN)) {
@@ -12,17 +30,13 @@ export default defineConfig(({ mode }) => {
   // mà không set PORT làm mọi endpoint trả 502 và người chạy tưởng frontend hỏng —
   // xem `docs/07_records/reviews/FE_PAGES_ERROR_REVIEW_2026-08-05.md` §6.
   const target = env.VITE_PROXY_TARGET || 'http://127.0.0.1:8081'
-  const wsTarget = target.replace(/^http/, 'ws')
 
   return {
     plugins: [react(), tailwindcss()],
     server: {
       host: '0.0.0.0',
       port: 5173,
-      proxy: {
-        '/api': { target, changeOrigin: true, secure: false, ws: true },
-        '/ws': { target: wsTarget, ws: true, changeOrigin: true, secure: false }
-      }
+      proxy: developmentProxy(target)
     },
     build: {
       outDir: '../../build/web-ui/dist',

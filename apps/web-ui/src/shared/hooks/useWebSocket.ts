@@ -67,6 +67,7 @@ export function useWebSocket() {
   const demoReleaseTimersRef = useRef<Record<string, number>>({})
   const url = useMemo(() => wsEndpoint(), [])
   const protocols = useMemo(() => wsProtocols(session?.token), [session?.token])
+  const canConnect = IS_DEMO || Boolean(session)
 
   const publishPoints = useCallback((points: Point[]) => {
     const ts = nowIso()
@@ -110,6 +111,12 @@ export function useWebSocket() {
   }, [publishPoints])
 
   useEffect(() => {
+    // Không mở socket khi hook chưa có session. Session mock/none không có
+    // token vẫn kết nối sau khi người dùng login.
+    if (!canConnect) {
+      setConnectionState('disconnected')
+      return
+    }
     if (IS_DEMO) {
       publishPoints(tickDemoPoints())
       const id = window.setInterval(() => {
@@ -194,7 +201,11 @@ export function useWebSocket() {
 
     window.addEventListener('online', reconnectIfDisconnected)
     document.addEventListener('visibilitychange', reconnectWhenVisible)
-    connect()
+    // React.StrictMode dev chạy setup → cleanup → setup. Mở WebSocket đồng bộ ở
+    // setup đầu khiến cleanup đóng socket còn CONNECTING và Chrome ghi warning
+    // “closed before the connection is established”. Hoãn một microtask để
+    // setup đã bị cleanup thấy `stopped=true`; chỉ setup hiện hành được connect.
+    queueMicrotask(connect)
     return () => {
       stopped = true
       setConnectionState('disconnected')
@@ -204,7 +215,7 @@ export function useWebSocket() {
       socketRef.current?.close()
       socketRef.current = null
     }
-  }, [protocols, publishPoints, url])
+  }, [canConnect, protocols, publishPoints, url])
 
   useEffect(() => () => {
     Object.values(demoReleaseTimersRef.current).forEach((timerId) => window.clearTimeout(timerId))

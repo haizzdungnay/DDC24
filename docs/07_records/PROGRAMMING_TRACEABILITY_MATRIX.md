@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.16 |
+| Phiên bản | 3.18 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
 | Cập nhật | 2026-08-13 |
 | Chủ quản | Verification Lead |
@@ -136,7 +136,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `FE-104` | LANG; UX; FE | `52dfb57`: FBD model/validator/reducer (Task 201); `5f96d43`: mount thật vào `ProgramsTab` (không còn placeholder); `14a9299`: sửa mất focus bàn phím sau `DELETE_SELECTION`, Chrome/Playwright keyboard-only (Insert/Arrow/Enter/Delete/Ctrl+Z) PASS desktop+mobile | 005/006/028 | Y/Y/N/N/N |
 | `FE-105` | CTRL; FE; IFSPEC; RSK-010 | `628cebe`: BE `GET /point-catalog` join `App.ReadPoints`; `5f96d43`: `design/mapping/MappingTab.tsx` + `PointPickerDialog` | 017/018 | Y/Y/N/N/N |
 | `FE-106` | CTRL; FE | `5f96d43`: `design/task/ExecutionTab.tsx` (period 1000/5000/30000 ms, program order) | 009 | Y/Y/N/N/N |
-| `FE-107` | LIFE; UX; FE; RSK-007 | `0347efd`+`ca3e198`: `useCheckWorkflow`/`useCommissionWorkflow`, `commission/CheckCommissionPage.tsx` — timeout đi `UNKNOWN_RECONCILING`, không auto-replay POST | 011/019/024/026 | Y/Y/N/N/N |
+| `FE-107` | LIFE; UX; FE; RSK-007 | `0347efd`+`ca3e198`+`6069de6`+`d9a8e3b`+`0f1526c`: `useCheckWorkflow` gửi public profile, dùng `baseRevisionId`; `useCommissionWorkflow` timeout đi `UNKNOWN_RECONCILING`, không auto-replay. Foxlinx có hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED` và Core read-back (`EV-PROG-P5-507`) | 011/019/024/026 | Y/Y/N/N/N |
 | `FE-108` | CTRL; UX; FE; RSK-004 | `0347efd`+`771efd9`: BE `GET /overrides` join `OverrideRegistry.Snapshot` + `runtime/RuntimeTab.tsx` | 010/020 | Y/Y/N/N/N |
 | `FE-109` | IFSPEC; FE; BE; RSK-010 | `771efd9`: `runtime/WatchTab.tsx` đọc `runtime/monitor` qua REST polling (P5 không dùng kênh event/WS riêng — As-Built khác giả định ban đầu); 503 thật fail-closed khi backend chưa implement, không fabricate freshness | 018/026/027 | Y/Y/N/N/N |
 | `FE-110` | IFSPEC; FE; BE; RSK-008/014 | `4a1e9f5`: generated error catalog/client; `5f96d43`: `useDraftWorkspace` với `If-Match`, 409 giữ nguyên buffer đang gõ (Draft reducer/conflict flow nay đã có) | 024 | Y/Y/N/N/N |
@@ -273,6 +273,8 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 3.14 | 2026-08-13 | `TASK-PROG-402` hoàn tất `CORE-109 I=Y` tại `3ca5d22`: RETAIN stable identity/layout/version/full CRC, typed+FB codec, async atomic write, output-commit checkpoint, cold-init/status và scheduler/bootstrap wiring. Tổng `I=Y` thành 3/60; không tạo Test Result, `VS-PROG-029/030` Forlinx/HIL vẫn NOT RUN, 0/32 PASS và mọi `T/P/R=N`. |
 | 3.15 | 2026-08-13 | `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6` hoàn tất source `SYS-103`, `SYS-105`, `BE-106`, `CORE-106`: durable Commission/Restore/reconcile, exclusive safe-boundary owner, first-output/LKG rollback và checkpoint recovery. Tổng `I=Y` thành 7/60; không tạo Test Result, target/HIL/power-cut vẫn NOT RUN, 0/32 PASS và mọi `T/P/R=N`. |
 | 3.16 | 2026-08-13 | `TASK-PROG-500..506` tại `e58c745`..`14a9299` hoàn tất source **toàn bộ `FE-101..115`** (15/15): bốn workspace nối BE thật, Draft ETag/conflict, Check/Commission/Restore reconcile, error catalog, acknowledgement/impact, DangerZone, point-catalog filter; Chrome/Playwright thật desktop+mobile PASS `UJ-PROG-01..08` (`EV-PROG-P5-500-506`, VVP §11.5). §10.1 Evidence đổi từ `MISSING` sang trích dẫn evidence host+browser cho cả 8 journey, giữ rõ phần vẫn `MISSING` (`VS-PROG-031` usability người thật và các trục cần target/HIL). Tổng `I=Y` thành **22/60**; không tạo Test Result nào, 0/32 PASS và mọi `T/P/R=N` — bằng chứng browser không tự nâng `T`. |
+| 3.17 | 2026-08-13 | `TASK-PROG-507` tại `9606906`+`6069de6`+`d9a8e3b`: thêm `EV-PROG-P5-507` cho cleanup/backup/deploy web ARM64 và Chrome/API thật trên Foxlinx. Cập nhật FE-107 và journey 01/02/04/05 theo Project/Draft persistence, Revision `201`, Check `202`, WS `101`; ba lỗi target đã sửa. Không Commission; Check terminal fail-closed vì thiếu compiler, Core Programming/HIL/reviewer độc lập còn thiếu. Tổng `I=Y` giữ 22/60, mọi `T/P/R=N`, 0/32 PASS; supporting target evidence không tự nâng `T`. |
+| 3.18 | 2026-08-13 | Hoàn tất target `TASK-PROG-507` tại `0f1526c`: deploy FE/Web/compiler/Core ARM64, bật cờ production, hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED`, Core read-back Active/LKG/Task `RUNNING`. Cập nhật FE-107 và journey 01/02/04/05/06/07; tổng `I=Y` giữ 22/60, mọi `T/P/R=N`, 0/32 PASS vì supporting target evidence không tự thay Test Result độc lập/HIL. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -292,13 +294,13 @@ Product Requirement → UJ-PROG-* → Requirement (SRS) → Design/UI → Source
 
 | Journey | Workspace | Requirement chính | Design | Scenario | Evidence |
 |---|---|---|---|---|---|
-| `UJ-PROG-01` | `PGM-01` | SYS-108; FE-101/102/109 | UX §3, §5, §16.1; FE §2 | VS-001/002/026/031 | `EV-PROG-P5-500-506` (host+Chrome, chưa review độc lập); `VS-PROG-031` usability người thật vẫn MISSING |
-| `UJ-PROG-02` | `PGM-02` tab Chương trình | FE-101/103/104; CORE-101 | UX §5, §16.2; LANG §4–§5 | VS-003/005/006/007/031 | `EV-PROG-P5-500-506`; `VS-PROG-031` MISSING |
+| `UJ-PROG-01` | `PGM-01` | SYS-108; FE-101/102/109 | UX §3, §5, §16.1; FE §2 | VS-001/002/026/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (Foxlinx route/context/Active/LKG/Task thật, chưa review độc lập); `VS-PROG-031` usability người thật vẫn MISSING |
+| `UJ-PROG-02` | `PGM-02` tab Chương trình | FE-101/103/104; CORE-101 | UX §5, §16.2; LANG §4–§5 | VS-003/005/006/007/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (Draft ST persistence và Check PASS desktop/mobile); `VS-PROG-031` MISSING |
 | `UJ-PROG-03` | `PGM-02` tab Điểm & Ánh xạ | FE-105/115; BE-109 | UX §16.2; DM §3.5 | VS-017/018/031 | `EV-PROG-P5-500-506`; `VS-PROG-031` MISSING |
-| `UJ-PROG-04` | `PGM-02` tab Thực thi | FE-106; CORE-102/108 | UX §5; CTRL §3 | VS-009/016/031 | `EV-PROG-P5-500-506`; `VS-PROG-031` MISSING |
-| `UJ-PROG-05` | `PGM-03` giai đoạn Kiểm tra | FE-107/112; BE-103/104/105 | UX §5, §16.3; BE §3 | VS-006/019/031 | `EV-PROG-P5-500-506`; `VS-PROG-031` MISSING |
-| `UJ-PROG-06` | `PGM-03` giai đoạn Vận hành | SYS-103; FE-107/113; BE-106; CORE-106 | UX §16.3; LIFE §5–§7 | VS-004/011/014/015/020/029/031 | `EV-PROG-P5-500-506` cho phần Commission E2E; `VS-PROG-014/015/020/029/031` cần target/HIL/người thật, vẫn MISSING |
-| `UJ-PROG-07` | `PGM-04` Runtime, Theo dõi | FE-108/109; BE-109; CORE-110 | UX §16.4; FWSOM §9 | VS-010/013/018/027/031 | `EV-PROG-P5-500-506` cho phần Runtime tab E2E; `VS-PROG-013/027/031` cần soak/target/người thật, vẫn MISSING |
+| `UJ-PROG-04` | `PGM-02` tab Thực thi | FE-106; CORE-102/108 | UX §5; CTRL §3 | VS-009/016/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (period/order đọc lại, Task `RUNNING` trên Foxlinx); timing/HIL và `VS-PROG-031` MISSING |
+| `UJ-PROG-05` | `PGM-03` giai đoạn Kiểm tra | FE-107/112; BE-103/104/105 | UX §5, §16.3; BE §3 | VS-006/019/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (hai Check target `PASSED`, artifact đã verify); reviewer/`VS-PROG-031` MISSING |
+| `UJ-PROG-06` | `PGM-03` giai đoạn Vận hành | SYS-103; FE-107/113; BE-106; CORE-106 | UX §16.3; LIFE §5–§7 | VS-004/011/014/015/020/029/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (Commission output-free `SUCCEEDED/COMMITTED`, Core read-back); output vật lý/HIL/người thật vẫn MISSING |
+| `UJ-PROG-07` | `PGM-04` Runtime, Theo dõi | FE-108/109; BE-109; CORE-110 | UX §16.4; FWSOM §9 | VS-010/013/018/027/031 | `EV-PROG-P5-500-506` + `EV-PROG-P5-507` (Active/LKG/Task/producer thật); soak/timing/người thật vẫn MISSING |
 | `UJ-PROG-08` | `PGM-04` Phiên bản & Bảo trì | SYS-107; FE-114; BE-108; CORE-109 | UX §16.4; LIFE §8–§9; SEC §8 | VS-011/021/023/029/031 | `EV-PROG-P5-500-506` cho phần Restore E2E; `VS-PROG-021/023/029/031` cần target/security corpus review/người thật, vẫn MISSING |
 
 Bốn requirement mới của Amendment A1 gắn journey như sau: `FE-113` → `UJ-PROG-06`;

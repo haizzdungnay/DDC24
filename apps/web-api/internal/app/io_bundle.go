@@ -55,6 +55,24 @@ func (a *App) handlePutIOBundle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) applyIOBundle(r *http.Request, ioCfg ConfigIO, safeCfg ConfigSafeState, baseRevision uint64) (ConfigPutResult, []configValidationError, error) {
+	// Slice nil bị encoding/json ghi thành `null`, trong khi contract và Core
+	// yêu cầu collection là array. Chuẩn hoá trước validate/checksum/persist để
+	// body bỏ trống mang nghĩa "không có kênh", không tạo file làm Core fail boot.
+	if ioCfg.UI == nil {
+		ioCfg.UI = []map[string]any{}
+	}
+	if ioCfg.AO == nil {
+		ioCfg.AO = []map[string]any{}
+	}
+	if ioCfg.DO == nil {
+		ioCfg.DO = []map[string]any{}
+	}
+	if safeCfg.AO == nil {
+		safeCfg.AO = []map[string]any{}
+	}
+	if safeCfg.DO == nil {
+		safeCfg.DO = []map[string]any{}
+	}
 	errs := validateConfigIO(ioCfg)
 	if len(ioCfg.UI) > 0 || len(ioCfg.AO) > 0 || len(ioCfg.DO) > 0 {
 		errs = append(errs, validateConfigPointMetadata(ioCfg)...)

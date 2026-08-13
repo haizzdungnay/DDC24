@@ -4,18 +4,18 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.47 |
+| Phiên bản | 3.49 |
 | Ngày | 2026-08-13 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
-| Trạng thái | **ACTIVE — candidate v2.36 `IMPLEMENTATION IN PROGRESS`; P1/P2/P3/P4/P5 DONE về source/host(/browser cho P5); P6 chưa bắt đầu; `RELEASE_READY BLOCKED`; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
+| Trạng thái | **ACTIVE — candidate v2.38 `IMPLEMENTATION IN PROGRESS`; P1/P2/P3/P4/P5 DONE, P5 100% và deploy đầy đủ FE/Web/compiler/Core trên Foxlinx; P6 assurance chưa bắt đầu; `RELEASE_READY BLOCKED`; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | source authority `e58c745`..`14a9299` (`TASK-PROG-500..506`); commit hồ sơ/PR/merge ghi bổ sung sau khi merge — xem §4.13 |
-| PR nguồn | Chờ tạo/merge PR cho nhánh `feat/programming-p5-fe-ux-20260813`; ghi bổ sung sau khi merge |
-| Candidate trước | v2.35 tại source `c2f3189`+`10d9ad6`, merge `4692d5a` (PR #168) — **SUPERSEDED bởi TASK-PROG-500..506**, xem §4.13 |
+| Candidate commit | source authority `9606906`+`6069de6`+`d9a8e3b`+`0f1526c` (`TASK-PROG-507`); commit hồ sơ/PR/merge ghi bổ sung sau khi merge — xem §4.15 |
+| PR nguồn | Chờ tạo/merge PR cho nhánh `fix/programming-p5-ws-proxy-20260813`; ghi bổ sung sau khi merge |
+| Candidate trước | v2.36 tại source `e58c745`..`14a9299`, merge `7fe8de0` (PR #169) — **SUPERSEDED bởi TASK-PROG-507**, xem §4.14 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
-| Record phê duyệt nền v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — tiếp tục áp dụng; v2.35 không đổi requirement/design decision |
+| Record phê duyệt nền v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — tiếp tục áp dụng; v2.38 không đổi requirement/design decision |
 
 ## 1. Phạm vi và phán quyết
 
@@ -62,8 +62,9 @@ Việc ghim candidate xác định đúng baseline được duyệt. Nó **khôn
 - tự mở `RELEASE_READY`.
 
 `AUTH-PROG-2026-08-11-03` đã mở `PLAN_READY` và mọi `IMPLEMENT_READY[*]`; việc
-ghim hash bảo đảm team đọc đúng candidate v2.35: baseline đã phê duyệt cộng
-trạng thái triển khai thật của `TASK-PROG-100..405` (P3/P4 đã đóng source/host).
+ghim hash bảo đảm team đọc đúng candidate v2.38: baseline đã phê duyệt cộng
+trạng thái triển khai thật của `TASK-PROG-100..507` (P3/P4 đã đóng source/host;
+P5 đã đóng source/host/browser và deploy đầy đủ target).
 
 Baseline gốc `05c1c480418a2256f1010527f9d90fb6ff549b86` vẫn được giữ để so
 sánh/rollback. Chuỗi candidate của vòng P0 là
@@ -81,28 +82,28 @@ candidate v2.7; delta trực tiếp so với v2.23 được liệt kê ở §4.
 | 3 | `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` | `204f2ef77f66e1c1088959c592018006bb3e1b828a34f1031c151fe638e27929` | `d060739a398b9efe50ed40283e936a5df9a8f9d4` | 254 | ✱ |
 | 4 | `docs/03_architecture/PROGRAMMING_ARCHITECTURE.md` | `78718679e32e3701b16349853dd0400bcb0e1149a14efb8d303744c19ded5022` | `c13c5b8c10ef26d29278962627b8dca235fa7481` | 417 | ✱ |
 | 5 | `docs/02_design/software/PROGRAMMING_DATA_MODEL.md` | `593fb17743198a076c37a97a5a1af2f4bc5aa1554d8751fc29bd92bd88d8bfd0` | `e0eeb08bf79ef611256bfdb2d13d60206d072418` | 579 | ✱ |
-| 6 | `docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md` | `ce4c4b66e946f02e70a1d3acd95ad7de6a4e53ecad74410c89526a8c8786e43c` | `bbd4592dca834fede35ba93356edc58687a96aa3` | 630 | ✱ |
+| 6 | `docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md` | `6f3fcee496bff59bac0f7a3590f66a53a288f1d87095793df01bdc195f3cfee0` | `84a82af9123c66c086d9bef0f448906f6480ddea` | 646 | ✱ |
 | 7 | `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md` | `418d51da8bc7775e1bf35f3083d201525ff3fd5c75aa3d7085d6ae1248dab4bb` | `d2b5122e3e58654321d0bd5df666a16e10eb28f9` | 362 | ✱ |
 | 8 | `docs/02_design/interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md` | `a938141c79cb4c37db3ac045558a238684209cd8b038d8db667ee00db4b142d8` | `2a2d4151e444b4b59637c85e4c0ee5911a7c3379` | 311 | ✱ |
 | 9 | `docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md` | `590d76b04a0469a41f7d17b10d4418dbd3fbb5a82c6ce038f20f98e724ca6ca2` | `4a79b8c320dfda1b84ab27fec27399f71a7b2eb9` | 400 | ✱ |
 | 10 | `docs/02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md` | `845be5d93d36f1dc7cc94ae45c36c02fdf756ca803fe21491d7e408b63d15d8e` | `4a4179983bdb29b74e04a49286ce7ae14af49190` | 364 | ✱ |
 | 11 | `docs/02_design/software/PROGRAMMING_SECURITY_DESIGN.md` | `5c65bec805bb1a3caddfce8edb0fd102ca2c47db18cb37cc8f19e1027cd99a1f` | `b0685512e54e44a4b4776e82b2ff1663f944515e` | 334 | ✱ |
 | 12 | `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` | `b31bdeadaf3008bc8f5ab34b8a310f10326e972a0926ff9883489de8dedde568` | `8930ca4580ecff586495cacea0134943c0367021` | 1361 | ✱ |
-| 13 | `docs/02_design/software/PROGRAMMING_FE_DESIGN.md` | `b09a4a4c188a0faf5a610b94ab78965bb7a0066c4b6782263af51a273c4b1217` | `ae20e37f8820b29f52e1c63a14a5971af0e6437c` | 466 | ✱ |
-| 14 | `docs/02_design/software/PROGRAMMING_BE_DESIGN.md` | `48421be79cd9a22133351774a225a86c6a243fdbc912cc5a986cb741efa7efdb` | `c65e0eff14d032fe3f61bebbe5c6ecc6bd08c2cf` | 468 | ✱ |
+| 13 | `docs/02_design/software/PROGRAMMING_FE_DESIGN.md` | `354679203e81d9a8cef3edaf24340d71297658d71121eec54fe48e38c49dd545` | `60d1d49f95554415ad9e94d360b0af46b0b55e5f` | 475 | ✱ |
+| 14 | `docs/02_design/software/PROGRAMMING_BE_DESIGN.md` | `3e2251f5ba06a200e6bca1f8ac28a0077cc5942c930a87c60960db78ca45b853` | `ac7ca0730cc163523a7f3f752b701855b57c9463` | 471 | ✱ |
 | 15 | `docs/02_design/software/PROGRAMMING_FW_SOM_DESIGN.md` | `c55149549814014775592b2a45cb8cd2e6daaa9def694d2809c3d3fe8f04eccd` | `2e8a7a20279737613e2a986d67c6bf9bd363ea4d` | 368 | ✱ |
 | 16 | `docs/02_design/firmware/PROGRAMMING_FW_MCU_DESIGN.md` | `8be8f4f116a46dea1c298de1a13e2e130827bcb2047355c2d136ad81b5206b74` | `2a067b969e8011d985977eba046ec6d044e0f901` | 265 | ✱ |
 | 17 | `docs/04_design/hardware/PROGRAMMING_HW_DESIGN.md` | `b6c313f3c01830b9ec70abdd1ab1666d7aa640f1ee2486548a4a1ae1204399c6` | `43f7d5765ce3464f43e6e3b242114d1445403bb1` | 258 | ✱ |
-| 18 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `63d44c6dc038e17e2b313f8a96e7739f32a05515f6c6fd4cfaaa24120469e0a9` | `17218db7d55812a7adf867e274eafed919ffcfd8` | 414 | ✱ |
+| 18 | `docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md` | `dcdd84ebeaaad98e1d94e03aaf881a2078c04db310c60178c7840dc91191c84e` | `b9cc8781fab53b9c326368c2daecc91b3ac19e07` | 448 | ✱ |
 | 19 | `docs/06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md` | `d749d48860a78e6ac08f32280d275f1999ff84d77919a402af457ee43c379ec6` | `b1ba5306b814548c92c5788011cf3647222337e2` | 336 | ✱ |
-| 20 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `d6a3f2b3b0276218eb106c519a36f790bb5d71b83c0832c1f1875ffaa79b1afa` | `e0886307e5e53a64805890bd3ee8c2fba70d3497` | 355 | ✱ |
-| 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `2e65b227e0fda93cee95555f9e402af7f0ff5ed2e0c38af91e55ffb1ebf13331` | `e088e82e86b18b8476570be53772a9ccd6acae52` | 351 | ✱ |
-| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `78c0b7acfa1374fe00beac3ce7aeed1d0770ef68529fd4943ed1def7405edcd9` | `cad3f3f2eff3515c43edfd388afadd7edea38bb4` | 1190 | ✱ |
+| 20 | `docs/07_records/PROGRAMMING_RISK_REGISTER.md` | `f8e9bc41f6ae6dd3fc1689388959898b7938061a8161d393da24504650fa3a73` | `c8efaf87ca93668213a6f2512c4e4080e5238e8f` | 371 | ✱ |
+| 21 | `docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md` | `1335ecd3f73a7ecb58dc900b2f706bf85fa798856a6b10deccafed9ffa5de1b2` | `0cb01894f596b3817c698c0dfa83e88bce5517f0` | 353 | ✱ |
+| 22 | `docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md` | `1c19dba4e60d32854620d0298f199e98e6608047733f76a013600f24e67d09e9` | `438e661cea4a811452ad745b4ac1ce10d5e98246` | 1201 | ✱ |
 
 So với candidate v2.7, **22/22 hồ sơ đã đổi** để tạo nền v2.8 được phê duyệt.
-Candidate v2.36 hiện tại đổi **5/22** dòng 13, 18, 20, 21 và 22 so với v2.35 để
-ghi `TASK-PROG-500..506` DONE: bốn workspace FE nối BE thật, Chrome/Playwright
-desktop+mobile PASS toàn bộ tám journey; P5 7/7, tổng 42/49 và 22/60 `I=Y`.
+Candidate v2.38 hiện tại đổi **7/22** dòng 6, 13, 14, 18, 20, 21 và 22 so với
+v2.37 để ghi target P5 hoàn tất: FE/Web/compiler/Core ARM64, safe-state legacy,
+cờ production ON, Check/Commission/Core read-back; P5 8/8, tổng 43/50 và 22/60 `I=Y`.
 Dấu `✱` tiếp tục biểu thị delta tích lũy so với v2.7.
 
 ## 3. Hồ sơ hỗ trợ ngoài mẫu số 22
@@ -467,6 +468,57 @@ bốn workspace):
   `RELEASE_READY BLOCKED` không đổi.
 - 17 hồ sơ còn lại (#1..12, #14..17, #19) byte-identical với v2.35.
 
+### 4.14 v2.37 so với v2.36
+
+Candidate v2.37 thay đổi **7/22** hồ sơ để chốt `TASK-PROG-507` (deploy web
+P5 lên Foxlinx và sửa finding target):
+
+- `IFSPEC-PROG-001` v1.6 (#6) công khai semantics
+  `ProgrammingProject.baseRevisionId`, thêm `IF-T-011` seal→reload→seal/check;
+- `DDD-FE-PROG-001` v1.0 (#13) và `DDD-BE-PROG-001` v1.3 (#14) đồng bộ
+  source ownership FE/Go, cờ deploy validation/final và read-back sau seal;
+- `VVP-PROG-001` v1.5 (#18) thêm §11.6 `EV-PROG-P5-507`; giữ 2/32 record
+  BLOCKED, 0/32 PASS vì compiler/Core Programming/HIL/reviewer còn thiếu;
+- `RSK-PROG-001` v2.1 (#20) thêm treatment target web cho
+  RSK-007/008/012/014; 16/16 risk và residual giữ nguyên;
+- `TRACE-PROG-001` v3.17 (#21) gắn evidence Foxlinx vào FE-107 và journey
+  01/02/04/05; `I=Y` giữ 22/60, mọi `T/P/R=N`;
+- `PLAN-PROG-053` v0.51 (#22) thêm/đóng `TASK-PROG-507`, P5 8/8 và tổng
+  43/50 (86,0%).
+- Source authority `9606906`+`6069de6`+`d9a8e3b`. Host gates: CTest
+  1002/1002; Go vet/test; FE 506/506 + lint/build; Programming E2E 4/4 và
+  Network QA 1/1. Target: cleanup 22%→10%, backup 3/3 checksum, four services
+  active, ARM64 hash/version read-back, Chrome desktop/mobile sạch Console,
+  WS `101`, Project/Draft/Revision/Check `201/200/201/202`.
+- Check target kết thúc fail-closed `ST-WORKER-CRASH` vì compiler chưa có;
+  Core Programming socket chưa deploy. Không Commission. Trạng thái cuối cờ
+  OFF, API 404, health 6/6 ok và giữ hai rollback. Đây là supporting target
+  evidence, không phải Test Result/release PASS.
+- 15 hồ sơ còn lại (#1..5, #7..12, #15..17, #19) byte-identical với v2.36.
+
+### 4.15 v2.38 so với v2.37
+
+Candidate v2.38 thay đổi cùng **7/22** hồ sơ để đóng phần target còn lại của
+`TASK-PROG-507` tại `0f1526c`:
+
+- `IFSPEC-PROG-001` v1.7, `DDD-FE-PROG-001` v1.1 và
+  `DDD-BE-PROG-001` v1.4 ghi As-Built cờ production ON, compiler/Core UDS,
+  Check/Commission/read-back end-to-end;
+- `VVP-PROG-001` v1.6 mở rộng `EV-PROG-P5-507` nhưng giữ đúng authority
+  2/32 record BLOCKED, 0/32 PASS do fault/power/HIL/reviewer độc lập chưa chạy;
+- `RSK-PROG-001` v2.2 ghi target happy path PASS cho treatment
+  RSK-007/008/014 nhưng không hạ residual;
+- `TRACE-PROG-001` v3.18 nối evidence target vào FE-107 và journey
+  01/02/04/05/06/07; `I=Y` giữ 22/60, mọi `T/P/R=N`;
+- `PLAN-PROG-053` v0.52 ghi P5 8/8, deploy feature 100%; tổng Plan giữ 43/50
+  vì bảy task P6 là assurance/HIL/release evidence độc lập.
+- Source authority thêm `0f1526c`: Web normalize nil slice thành `[]`; Core chỉ
+  tương thích `null` legacy về default an toàn. Foxlinx cài FE/Web/compiler/Core
+  ARM64, cờ ON; hai Check `PASSED`; Commission fixture output-free
+  `SUCCEEDED/COMMITTED`; Active/LKG/Task đọc-ngược đúng; Chrome desktop/mobile
+  sạch Console/Network; system API `overall=ok`.
+- 15 hồ sơ còn lại (#1..5, #7..12, #15..17, #19) byte-identical với v2.37.
+
 ## 5. Cách tái kiểm
 
 **Bước bắt buộc trước khi đọc để review:**
@@ -555,3 +607,5 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.45 | 2026-08-13 | Ghi candidate v2.34 đã merge tại `d6f4c45` (PR #167); phát hành candidate v2.35 sau `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: cập nhật hash/blob 16/22 hồ sơ (xem §4.12), P4 6/6 source/host, tổng 35/49 và 7/60 I=Y. Giữ flag OFF, 0/32 PASS và RELEASE_READY BLOCKED; commit hồ sơ/PR/merge hiện tại ghi bổ sung sau merge. |
 | 3.46 | 2026-08-13 | Ghi bổ sung PR #168, merge commit `4692d5a` (tree `c022a67`) chứa candidate v2.35; remote feature branch `feat/programming-p4-lifecycle-completion-20260813` đã xóa. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi, candidate pin tiếp tục 22/22 PASS. |
 | 3.47 | 2026-08-13 | Phát hành candidate v2.36 sau `TASK-PROG-500..506` tại `e58c745`..`14a9299` (nhánh `feat/programming-p5-fe-ux-20260813`): cập nhật hash/blob `DDD-FE-PROG-001` v0.9, `VVP-PROG-001` v1.4, `RSK-PROG-001` v2.0, `TRACE-PROG-001` v3.16 và `PLAN-PROG-053` v0.50 (5/22 hồ sơ, xem §4.13). **P5 đóng 7/7 source/host/browser DoD**, tổng 42/49 (85,7%) và `I=Y` từ 7/60 lên 22/60 (toàn bộ `FE-101..115`). Bằng chứng Chrome/Playwright thật desktop+mobile PASS trọn `UJ-PROG-01..08`; hai lỗi ứng dụng thật (tab unmount, FBD mất focus bàn phím) phát hiện+sửa cùng phiên. 17/22 hồ sơ còn lại giữ nguyên. Giữ flag OFF production, 2/32 record BLOCKED, 0/32 PASS và `RELEASE_READY BLOCKED` — `S5-F` usability người thật vẫn chặn; commit hồ sơ/PR/merge hiện tại ghi bổ sung sau merge. |
+| 3.48 | 2026-08-13 | Ghi bổ sung candidate v2.36 đã merge tại `7fe8de0` (PR #169); phát hành candidate v2.37 sau `TASK-PROG-507` tại `9606906`+`6069de6`+`d9a8e3b`: cập nhật hash/blob IFSPEC v1.6, FE v1.0, BE v1.3, VVP v1.5, Risk v2.1, Trace v3.17 và Plan v0.51 (7/22, xem §4.14). Foxlinx cleanup/backup/deploy/read-back và Chrome/API thật đóng ba lỗi target; P5 8/8, tổng 43/50. Giữ flag cuối OFF, không Commission, 2/32 BLOCKED, 0/32 PASS và RELEASE_READY BLOCKED; commit hồ sơ/PR/merge hiện tại ghi bổ sung sau merge. |
+| 3.49 | 2026-08-13 | Phát hành candidate v2.38 sau target `TASK-PROG-507` tại `0f1526c`: cập nhật hash/blob IFSPEC v1.7, FE v1.1, BE v1.4, VVP v1.6, Risk v2.2, Trace v3.18 và Plan v0.52 (7/22, xem §4.15). Foxlinx chạy FE/Web/compiler/Core ARM64, cờ ON, hai Check PASS, Commission output-free thành công và Core read-back đúng. P5 8/8/deploy 100%; giữ 2/32 BLOCKED, 0/32 PASS và RELEASE_READY BLOCKED vì P6 assurance/HIL/review độc lập. Commit hồ sơ/PR/merge hiện tại ghi bổ sung sau merge. |

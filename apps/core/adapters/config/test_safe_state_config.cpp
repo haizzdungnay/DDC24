@@ -127,6 +127,18 @@ TEST(SafeStateConfig, ModeDefaultsWhenMissingFile)
     for (int i = 0; i < KX_N_DO; i++) EXPECT_FALSE(cfg.do_default[i]);
 }
 
+TEST(SafeStateConfig, LegacyNullCollectionsUseSafeDefaults)
+{
+    /* Web cũ marshal nil slice thành null. Nâng cấp Core tại hiện trường phải
+     * khởi động được với dữ liệu đó nhưng chỉ được dùng đúng default an toàn. */
+    TempConf f(R"({ "ao": null, "do": null })");
+    SafeStateConfig cfg;
+    ASSERT_TRUE(load_safe_state_config(f.path(), true, mixed(), &cfg));
+    EXPECT_FLOAT_EQ(cfg.ao_default[0], 0.0f);
+    EXPECT_FLOAT_EQ(cfg.ao_default[1], 4.0f);
+    for (int i = 0; i < KX_N_DO; i++) EXPECT_FALSE(cfg.do_default[i]);
+}
+
 TEST(SafeStateConfig, UnlistedChannelKeepsModeDefaultWithFilePresent)
 {
     /* guard hồi quy: file TỒN TẠI nhưng không khai kênh → kênh đó vẫn phải có

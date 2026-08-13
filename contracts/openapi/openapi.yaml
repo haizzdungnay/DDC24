@@ -2463,13 +2463,20 @@ components:
     ProgrammingProject:
       type: object
       additionalProperties: false
-      required: [projectId, name, etag, activeRevisionId, draftRevisionId, updatedAt]
+      required: [projectId, name, etag, activeRevisionId, draftRevisionId, baseRevisionId, updatedAt]
       properties:
         projectId: { type: string, format: uuid }
         name: { type: string, minLength: 1, maxLength: 120 }
         etag: { type: string }
         activeRevisionId: { type: [string, "null"], format: uuid }
         draftRevisionId: { type: string, format: uuid }
+        baseRevisionId:
+          description: >
+            Revision nền hiện hành của Draft, dùng cho baseRevisionId của lần
+            lưu hoặc đóng Revision kế tiếp. Trước lần đóng đầu tiên, giá trị
+            bằng draftRevisionId.
+          type: string
+          format: uuid
         updatedAt: { type: string, format: date-time }
         draft:
           description: >

@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-BE-PROG-001` |
-| Phiên bản | 1.2 |
-| Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; chờ Core/Security/QA review |
-| Ngày | 2026-08-11 |
+| Phiên bản | 1.4 |
+| Trạng thái | **M3 AS-BUILT + SUPPORTING TARGET PASS** — backend/compiler/Core chạy end-to-end trên Foxlinx; assurance release đánh giá riêng |
+| Ngày | 2026-08-13 |
 | Chủ quản | Backend Lead |
 | Người review | Core Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | Backend Lead + System Architect |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **backend Go tổ chức ra sao**: chia package, lưu trữ, chạy compiler job, điều phối Commission, phân quyền, audit và migration. Đây là nơi biến hợp đồng API thành code chạy được. |
 | 2. Ai phải đọc file này? | BE Lead và lập trình viên Go (chủ quản); Core đọc §4 (điều phối Commission) và §6 (read model); Security đọc §7; Ops đọc §9; QA đọc §10 và §17. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-403` tại `c2f3189` nối thêm Commission/Restore/Get operation vào bounded module: SQLite v5, durable operation trước IPC, idempotency/single-flight/lease, verified content-address staging, worker một transition/tick, timeout `UNKNOWN`, reconcile chỉ `OPERATION_STATUS`, terminal CommissionRecord + audit atomic. Flag mặc định `OFF`. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-403/507` nối Commission/Restore/Get operation vào bounded module: SQLite v5, durable operation trước IPC, idempotency/single-flight/lease, verified staging, timeout `UNKNOWN`, authoritative Core read-back và terminal CommissionRecord + audit atomic. Foxlinx đang chạy compiler/Core/Web ARM64, cờ `ON`; Check và Commission output-free đã thành công. |
 | 4. Thiết kế mới thay đổi điều gì? | Bounded module giữ các lớp `domain`, `store`, `application`, `compiler`, `artifact`, `coreipc`, `transport`; operation worker chạy ngoài transaction và không replay mutation mù. Core authoritative read-back quyết định terminal state; DB/HTTP ack không tự biến thành Active. |
 | 5. Team phải sửa module/contract nào? | §11–§12 ghi As-Built SQLite v5, `application.OperationService`, `artifact.Store.Stage`, runtime IPC và route P4. P5/P6 dùng contract này; không phá idempotency key, operation ID, impact acknowledgement hay source-of-truth active/LKG. |
-| 6. Điều gì còn bị chặn? | Không còn blocker source P4. Target migration/restart/HIL/Test Result, TLS và feature flag vẫn là gate release. Commission không user-reachable khi flag OFF. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Go tests PASS cho normal/replay/no-extra-staging, timeout/restart, staged recovery, Restore, terminal CommissionRecord và symlink/race cleanup; full Go vet/test cùng fresh CTest 1002/1002 PASS. Đây chưa phải Test Result target/HIL. |
+| 6. Điều gì còn bị chặn? | Không còn blocker source hoặc deploy P5. Fault/power/HIL, TLS assurance và Test Result có reviewer độc lập vẫn là gate release P6; chúng không yêu cầu tắt chức năng đã deploy. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Go tests PASS cho normal/replay/no-extra-staging, timeout/restart, staged recovery, Restore, terminal CommissionRecord và symlink/race cleanup; fresh CTest/Go gates PASS. `EV-PROG-P5-507` chứng minh target Check `PASSED`, Commission `SUCCEEDED/COMMITTED` và Core read-back; chưa thay Test Result độc lập/HIL. |
 
 Hai điều BE **không** được làm: tin vai trò do FE gửi trong payload, và báo
 thành công khi Core chưa xác nhận. Cả hai đều là rủi ro đã có tên —
@@ -251,7 +251,7 @@ clock, idempotency và filesystem root injectable để test deterministic.
 |---|---|---|
 | `GET /projects` | `ListProjects` | limit `1..100`, cursor HMAC hết hạn sau 15 phút, thứ tự `updatedAt desc/projectId asc` |
 | `POST /projects` | `CreateProject` | tạo Project + Draft canonical + Task mặc định trong một giao dịch; replay idempotent giữ identity/audit/ETag |
-| `GET /projects/{projectId}` | `GetProject` | UUID canonical, chỉ Project chưa archive, checksum Draft được đọc lại |
+| `GET /projects/{projectId}` | `GetProject` | UUID canonical, chỉ Project chưa archive, checksum Draft được đọc lại; `ProjectView` trả `draftRevisionId` và `baseRevisionId` riêng (`DraftID` trước seal, immutable Revision nền sau seal) |
 | `PATCH /projects/{projectId}/draft` | `SaveDraft` | `If-Match` mạnh `\"draftId:generation\"`; batch `1..512` all-or-nothing; tăng ETag đúng một lần |
 | `POST /projects/{projectId}/draft/revisions` | `SealRevision` | snapshot object + manifest SHA-256 bất biến; tiến base Draft/ETag cùng transaction; không đổi Active/LKG |
 | `GET /revisions/{revisionId}` | `GetRevision` | đọc manifest/object theo thứ tự ổn định và kiểm checksum trước khi trả |
@@ -423,8 +423,8 @@ major khác, mutation disable. Restore LKG compatible trước mọi Core downgr
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
-| Target migration/operation chưa diễn tập | Backend Lead + Ops + Verification | SQLite v5 backup/migration/restart và Commission/Restore trên target có Test Result |
-| TLS/target evidence chưa available | Platform + Verification | target integration/security/HIL PASS và Test Result được review |
+| Target fault/power/restart chưa thành Test Result | Backend Lead + Ops + Verification | chạy fault/power matrix P6 với executor/reviewer độc lập; happy path đã có `EV-PROG-P5-507` |
+| TLS/HIL assurance chưa hoàn tất | Platform + Verification | integration/security/HIL PASS và Test Result được review |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
@@ -440,6 +440,8 @@ major khác, mutation disable. Restore LKG compatible trước mọi Core downgr
 | 1.0 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-206` tại `95b9388`: nối SQLite v4, change manifest/impactRef deterministic, ZIP source-only/hash/allowlist và import Project/Draft atomic; ba route change/export/import chạy thật, G1 7/7; giữ 14 route operation/runtime/audit, flag OFF và target evidence là phần tiếp theo |
 | 1.1 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-207` tại `3e5281d`: raw/entry/count/path/ZIP metadata bounded, hostile corpus 25 lớp với snapshot 8 bảng zero-mutation, 23 alias audit-secret và compiler timeout/OOM/output/source bounds + fuzz; giữ 14 route operation/runtime/audit, flag OFF và target/Test Result còn mở |
 | 1.2 | 2026-08-13 | Đồng bộ `TASK-PROG-403` tại `c2f3189`: SQLite v5 operation/lease/generation, `OperationService` Commission/Restore/Get/worker/recovery, exact impact ack, verified hard-link staging + safe cleanup, timeout UNKNOWN/status-only reconcile và terminal CommissionRecord+audit atomic. Giữ flag OFF, TLS/target/HIL/Test Result còn mở. |
+| 1.3 | 2026-08-13 | `TASK-PROG-507` tại `d9a8e3b`: bổ sung `ProjectView.BaseRevisionID` và JSON `ProgrammingProject.baseRevisionId`; `projectView()` trả Draft ID trước seal, Revision nền sau seal. HTTP integration test khóa read-back sau seal, sửa conflict giả của Check/save lần hai. Foxlinx xác nhận `201/202`; compiler/Core Programming target vẫn thiếu và flag cuối OFF. |
+| 1.4 | 2026-08-13 | Hoàn tất target `TASK-PROG-507` tại `0f1526c`: Web normalize nil IO/safe-state slice thành `[]`, Core tương thích `null` legacy chỉ về default an toàn và vẫn reject type sai; deploy compiler/Core/Web ARM64, cờ `ON`, UDS `0660`; hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED`, Active/LKG/Task đọc-ngược đúng. Supporting target evidence không thay Test Result/HIL. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
@@ -452,7 +454,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; lịch sử và bảng ký §20 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 ranh giới module, gồm quy tắc phân lớp handler/store/runtime |
-| `DD-03` As-Built | PASS | §0/§11–12.3 dẫn `internal/programming/{application,artifact,compiler,domain,coreipc,store,transport}` tại `c2f3189`; ghi chính xác store v5/Check/bundle/operation coordinator đã có và target evidence còn thiếu |
+| `DD-03` As-Built | PASS | §0/§11–12.3 dẫn `internal/programming/{application,artifact,compiler,domain,coreipc,store,transport}` tại `c2f3189`; `EV-PROG-P5-507` chứng minh store/compiler/operation/Core UDS chạy trên target |
 | `DD-04` Target ownership | PASS | §1 bảy package con; §18 hợp đồng handler → service → store |
 | `DD-05` Data từng field | PASS | §2 persistence; §14 vòng đời dữ liệu/tệp và hạn ngạch; schema chi tiết ở `DM-PROG-001` |
 | `DD-06` Interface | PASS | §8 ánh xạ lỗi; §18 hợp đồng ba lớp; §6 read model runtime |
@@ -462,7 +464,8 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §11, §12 và §12.1–12.3 — package, function và 11 HTTP operation cụ thể trong `apps/web-api/internal/programming/` |
 | `DD-11` Verification | PASS | §10 test bắt buộc; §17 acceptance; gắn `VS-PROG-001/019/022/024` |
 | `DD-12` Compatibility/deploy/rollback | PASS | §9 migration và rollback, gồm thứ tự triển khai |
-| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation | 17 decision đã `DECIDED`; source tới Task 403 có trace. Release vẫn bị chặn bởi target/HIL, `0/32` Test Result và residual risk chưa được chấp nhận |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation/deploy P5 | 17 decision `DECIDED`; source tới Task 507 có trace và supporting target evidence. Release vẫn bị chặn bởi HIL/fault/power, `0/32` Test Result và residual risk chưa được chấp nhận |
 
-Không còn blocker quyền implementation. Contract/store/Check/bundle đã có host
-test; operation/Core source đã nối nhưng target vẫn `NOT TESTED` theo phạm vi.
+Không còn blocker implementation/deploy P5. Contract/store/compiler/Check/
+Commission/Core UDS đã chạy trên Foxlinx. Các bài fault/power/HIL và review độc
+lập còn `NOT TESTED` theo phạm vi assurance P6; không phải thiếu backend.

@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-FE-PROG-001` |
-| Phiên bản | 0.9 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-500..506` DONE (source/host/browser DoD) — bốn workspace nối BE thật, Chrome/Playwright desktop+mobile PASS; usability người thật (`S5-F`) vẫn BLOCKED** |
+| Phiên bản | 1.1 |
+| Trạng thái | **M3 AS-BUILT; `TASK-PROG-500..507` DONE — bốn workspace đã bật và chạy end-to-end trên Foxlinx; usability/Test Result release đánh giá riêng** |
 | Ngày | 2026-08-13 |
 | Chủ quản | Frontend Lead |
 | Người review | UX Lead, Backend Lead, Verification Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **FE dựng code như thế nào** cho bốn workspace: thư mục feature, mô hình state, query/mutation, xử lý lỗi và chiến lược test. Trong khi [UI/UX Design](../../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) nói *người dùng thấy gì*, file này nói *React tổ chức ra sao*. |
 | 2. Ai phải đọc file này? | FE Lead và lập trình viên FE (chủ quản); UX đối chiếu với hồ sơ UI/UX; BE đọc §4 để biết FE sẽ gọi gì và kỳ vọng lỗi ra sao; QA đọc §10. |
-| 3. Hệ thống hiện tại đang có gì? | Bốn workspace `/eng/programming/*` (sau cờ `PROGRAMMING_REV_A`, mặc định OFF production) đã dựng và nối BE thật — không mock trong bundle production. `ProgrammingRoutes.tsx` thay hoàn toàn route legacy demo; `StructuredFbdEditor` (Task 201) mount thật vào `DesignWorkspacePage`, không còn placeholder. |
+| 3. Hệ thống hiện tại đang có gì? | Bốn workspace `/eng/programming/*` đã dựng, nối BE thật và được bật trong bundle production Foxlinx (`VITE_PROGRAMMING_REV_A=1`, BE `PROGRAMMING_REV_A=1`). `ProgrammingRoutes.tsx` thay route legacy demo; `StructuredFbdEditor` mount thật; Check/Commission/read-back chạy end-to-end. |
 | 4. Thiết kế mới thay đổi điều gì? | (Đã thực hiện, không còn là "thay đổi sắp tới") Route/workspace/API orchestration cho cả bốn `PGM-01..04` đã dựng theo đúng §0.1/§16; Draft ETag/If-Match, Check/Commission/Restore reconcile, override/audit/operations-list đều đọc BE thật. |
 | 5. Team phải sửa module/contract nào? | Không còn — §11/§12 đã phản ánh source thật. Thay đổi tiếp theo (nếu có) là mở rộng chứ không phải dựng nền tảng. |
 | 6. Điều gì còn bị chặn? | Không còn blocker code. `S5-F` (usability `≥5` kỹ thuật viên BMS thật, sáu ngưỡng `UX-A-01..06`) vẫn `BLOCKED` — cần fixture `AHU-01` trên controller lab, không thể rút gọn bằng E2E mock hay demo nội bộ. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-P5-500-506` (VVP §11.5): Go 17 file test, CTest 1002/1002, FE vitest 502/502 + lint/typecheck/build; Chrome/Playwright thật `desktop-chrome`+`mobile-chrome` PASS toàn bộ `UJ-PROG-01..08` và redirect (`VS-PROG-032`). Hỗ trợ một phần `VS-PROG-020/022/025/026/028/032` nhưng chưa đủ executor/reviewer độc lập để thành Test Result chính thức; `VS-PROG-027/029/030/031` vẫn `NOT_RUN`. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-P5-500-506` khóa host/browser; `EV-PROG-P5-507` khóa Foxlinx desktop/mobile, Console/Network sạch, hai Check `PASSED`, Commission `SUCCEEDED/COMMITTED`, Core read-back Active/LKG/Task `RUNNING`. Chưa đủ executor/reviewer độc lập để thành Test Result chính thức; `VS-PROG-027/029/030/031` vẫn `NOT_RUN`. |
 
 Điều FE **không** sở hữu, nêu sớm để tránh viết nhầm: Draft persistence, tính
 diff, readiness, phân quyền, runtime state, chất lượng Point, bên thắng arbitration
@@ -253,7 +253,7 @@ chỉ render mock hoặc chưa có producer/API contract.
 
 ## 11. As-Built và source migration
 
-**As-Built `TASK-PROG-500..506` (2026-08-13):** `apps/web-ui/src/app/App.tsx`
+**As-Built `TASK-PROG-500..507` (2026-08-13):** `apps/web-ui/src/app/App.tsx`
 route `/eng/programming/*` qua `<RequireRole><ProgrammingRoutes/></RequireRole>`
 khi `PROGRAMMING_REV_A_ENABLED` (`shared/config.ts`, mặc định OFF production,
 bật `1` chỉ cho dev/e2e); `features/dashboard/ProgrammingPage.tsx` (legacy
@@ -266,7 +266,7 @@ cũng chuyển điều kiện hiện mục từ `LEGACY_GRAPH_DEMO_ENABLED` sang
 | `features/programming/ProgrammingRoutes.tsx` | 4 route thật (`overview/design/commission/runtime`) + 3 `<Navigate>` redirect route cũ (`programs/mapping/task` → `design?tab=`) qua `LegacyTabRedirect` |
 | `features/programming/layout/{ProgrammingLayout,ProgrammingHeader,ProgrammingContextBar}.tsx` | context `useProgrammingRuntimeContext` (capabilities+runtime fetch một lần), header Active/Core dùng chung mọi route |
 | `features/programming/overview/OverviewPage.tsx` | `RunningApplicationPanel`, `CoreSafeStatePanel`, `DraftAttentionPanel`, `ProgrammingAttentionList`, `RecentEngineeringTimeline` — PGM-01 |
-| `features/programming/design/{DesignWorkspacePage,useDraftWorkspace}.tsx` + `design/editor/ProgramsTab.tsx` + `design/mapping/MappingTab.tsx` + `design/task/ExecutionTab.tsx` | PGM-02 ba tab dùng chung một Draft/ETag; ba tab **luôn mount**, ẩn bằng `hidden` (không unmount — sửa lỗi thật TASK-PROG-506 tìm thấy) |
+| `features/programming/design/{DesignWorkspacePage,useDraftWorkspace}.tsx` + `design/editor/ProgramsTab.tsx` + `design/mapping/MappingTab.tsx` + `design/task/ExecutionTab.tsx` | PGM-02 ba tab dùng chung một Draft/ETag; ba tab **luôn mount**, ẩn bằng `hidden`; save/seal dùng `project.baseRevisionId` công khai thay vì suy từ Draft ID sau seal (sửa lỗi target TASK-PROG-507) |
 | `features/programming/fbd/*` | **As-Built Task 201**, mount thật vào `ProgramsTab` (không còn placeholder); `StructuredFbdEditor.tsx` thêm `sectionRef`+`tabIndex={-1}` để giữ focus bàn phím sau `DELETE_SELECTION` (sửa lỗi thật TASK-PROG-506) |
 | `features/programming/commission/{CheckCommissionPage,useCommissionWorkflow}.tsx` | PGM-03: readiness/`ChangeSummary`/`ImpactPanel`/`AcknowledgementChecklist` khớp đúng ba nhóm impact, re-auth, `UNKNOWN_RECONCILING` |
 | `features/programming/runtime/{RuntimeServicePage,RuntimeTab,WatchTab,VersionsTab,DangerZone,useRestoreWorkflow}.tsx` | PGM-04 ba tab + vùng thao tác nguy hiểm tách riêng |
@@ -365,9 +365,15 @@ storage scoped controller/action; xóa khi authoritative terminal/expiry.
 | `FE-T-007` | keyboard/desktop/mobile | UX-T-001..005 PASS |
 | `FE-T-008` | build/lint/Vitest/Playwright/browser | all gates + Console/Network evidence |
 
-Deploy behind server capability and FE flag default OFF. BE read-only can precede
-FE. Rollback route returns unavailable/read-only without clearing Draft/operation;
+Deploy theo server capability và cờ FE/BE; production Foxlinx hiện bật `ON` sau
+preflight compiler/Core/socket. Rollback route trả unavailable/read-only mà không xóa Draft/operation;
 service worker/cache must not serve incompatible generated types.
+
+**As-Built deploy `TASK-PROG-507`:** giai đoạn đầu bật cờ trong drop-in `/run`
+và state/database riêng để bắt drift mà không chạm runtime. Sau khi cài đủ
+compiler/Core, sửa tương thích safe-state legacy và chạy Check/Commission
+output-free thành công, bundle FE và env BE production được bật `ON` vĩnh viễn.
+Không còn drop-in/fixture tạm; bằng chứng/hash/rollback tại `EV-PROG-P5-507`.
 
 **As-Built `FE-T-007/008` (TASK-PROG-506, 2026-08-13):** `e2e/programming.spec.ts`
 chạy Chrome thật (Playwright, không jsdom) trên `desktop-chrome` và
@@ -434,10 +440,12 @@ chỉ update cache khi sequence/resource version hợp lệ, còn lại invalida
 | 0.7 | 2026-08-10 | Đóng finding consumer review `F-CR-01` — phần còn sót của P1-01: §12 và §16 vẫn mô tả IA sáu trang. §12 bỏ cây thư mục trùng, chỉ giữ chi tiết `api/`/`model/` và đánh dấu `*.generated.ts` là đầu ra sinh mã; §16 thay sáu dòng route cũ bằng đúng bốn route `PGM-01..04` với tab `?tab=`, và bảng layer đổi sang tên thư mục có thật ở §0.1/§2 |
 | 0.8 | 2026-08-11 | Đồng bộ `TASK-PROG-201` tại `52dfb57`: FBD model/validator, registry 11 lệnh, reducer history 50/read-only và component keyboard-first; 15 test PASS. Giữ route/workspace/API/browser ở Task 500..502 và không nâng Test Result release |
 | 0.9 | 2026-08-13 | Đồng bộ As-Built `TASK-PROG-500..506` (`e58c745`..`14a9299`): bốn workspace `PGM-01..04` dựng xong nối BE thật, route legacy demo không còn được vào qua Programming, §11/§15/§17 viết lại theo source thật (không còn "target action" dự kiến). Thêm bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`, VVP §11.5) và hai lỗi ứng dụng thật phát hiện+sửa qua chính E2E (tab unmount mất nội dung đang gõ; FBD mất focus bàn phím sau Delete). `S5-F` usability người thật vẫn BLOCKED, không có đường tắt |
+| 1.0 | 2026-08-13 | Đồng bộ `TASK-PROG-507` (`9606906`+`6069de6`+`d9a8e3b`): browser Foxlinx phát hiện và sửa WS Origin 403, Check target profile 400 và conflict giả 409 sau seal. `ProgrammingProject.baseRevisionId` trở thành authority cho save/seal; test khóa request. Chrome desktop/mobile target sạch Console, Revision `201` + Check `202`; trạng thái cuối bundle/BE flag OFF, API 404, không Commission. `EV-PROG-P5-507` là supporting target evidence, không Test Result. |
+| 1.1 | 2026-08-13 | Hoàn tất target `TASK-PROG-507` tại `0f1526c`: cài compiler/Core/Web/FE ARM64, bật cờ FE/BE production; hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED`, Core read-back Active/LKG/Task `RUNNING`. Chrome Foxlinx desktop/mobile sạch Console/Network. Supporting target evidence không tự nâng Test Result/HIL. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| FE + UX + BE + QA | **TASK-PROG-500..506 DONE (source/host/browser DoD)** | `e58c745`..`14a9299`, `EV-PROG-P5-500-506` |
+| FE + UX + BE + Core + QA + Ops | **TASK-PROG-500..507 DONE (source/host/browser/target deploy DoD)** | `e58c745`..`0f1526c`, `EV-PROG-P5-500-506`, `EV-PROG-P5-507` |
 | Frontend Lead + System Architect | **APPROVED FOR IMPLEMENTATION; RELEASE EVIDENCE BLOCKED** | `AUTH-PROG-2026-08-11-03`; Test Result chính thức (executor+reviewer độc lập) và `S5-F` usability người thật chưa có |
 
 Tự kiểm `DD-01..DD-13`:
@@ -456,11 +464,12 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §0.1 cây thư mục bốn workspace; §1, §2, §11, §12 — đường dẫn cụ thể trong `apps/web-ui/src/` |
 | `DD-11` Verification | PASS | §10 chiến lược test; §15 As-Built `FE-T-007/008` (Chrome/Playwright thật desktop+mobile); gắn `VS-PROG-020/022/025/026/028/032` (hỗ trợ một phần, VVP §11.5) |
 | `DD-12` Compatibility/deploy/rollback | PASS | §15 deploy và rollback; §0.1 năm chuyển hướng route (nay đã As-Built ở `ProgrammingRoutes.tsx`); chi tiết rollout/cờ/migration ở UI/UX §11.1 và §28 |
-| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation, **BLOCKED cho release** | Owner: FE Lead, UX, BE, QA. `TASK-PROG-500..506 DONE` (source/host/browser DoD); `S5-F` usability người thật và Test Result chính thức (executor+reviewer độc lập) vẫn thiếu. Gate: `G2/G6`. Điều kiện mở: `≥5` kỹ thuật viên BMS thật trên fixture `AHU-01` + review độc lập tạo `TR-PROG-*` |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation/deploy P5, **BLOCKED cho release** | Owner: FE Lead, UX, BE, Core, QA, Ops. `TASK-PROG-500..507 DONE`; compiler/Core/Check/Commission target đã PASS supporting evidence. `S5-F`, HIL/fault/power và Test Result độc lập vẫn thiếu. Gate: `G6`. Điều kiện mở: `≥5` kỹ thuật viên BMS thật trên fixture `AHU-01` + P6/review độc lập tạo `TR-PROG-*` |
 
 Blocker release có đủ owner/ảnh hưởng/gate/điều kiện mở. Bốn workspace đã
-implement/test trên host **và** trình duyệt Chrome thật (desktop+mobile); phần
-còn `BLOCKED` là usability người dùng thật (`S5-F`) và chữ ký Test Result độc
-lập — không còn liên quan tới source FE. Nhắc lại bẫy của repo: `npm test`
+implement/test trên host **và** Foxlinx bằng Chrome thật (desktop+mobile), với
+Check/Commission/Core read-back thật. Phần còn `BLOCKED` là assurance P6,
+usability người dùng thật (`S5-F`) và chữ ký Test Result độc lập — không còn
+liên quan tới source/deploy FE. Nhắc lại bẫy của repo: `npm test`
 chỉ quét `src/`, muốn chạy E2E phải gọi Playwright riêng
 (`npx playwright test e2e/programming.spec.ts`).

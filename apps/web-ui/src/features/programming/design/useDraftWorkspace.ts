@@ -5,7 +5,10 @@ import { programmingErrorCopy } from '../api/errorCopy'
 import { useI18n } from '../../../shared/i18n'
 import type { ProgrammingCheck, ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingProject } from '../model/types'
 
-const REV_A_TARGET_PROFILE = 'MKDDC24_REVA'
+// Contract HTTP dùng tên profile công khai có dấu gạch ngang. Chuỗi
+// `MKDDC24_REVA` chỉ là định danh lưu trữ/bundle nội bộ; gửi nó vào API Check
+// làm backend từ chối fail-closed bằng PRG-ERR-REQ-001.
+const REV_A_TARGET_PROFILE = 'MK-DDC-24-REV-A'
 
 interface MutationResponse<T = Record<string, unknown>> {
   resource: T
@@ -75,7 +78,7 @@ export function useDraftWorkspace(projectId: string | undefined) {
           'updateProgrammingDraft',
           {
             path: { projectId },
-            body: { schemaVersion: '1.0', baseRevisionId: project.draftRevisionId, operations },
+            body: { schemaVersion: '1.0', baseRevisionId: project.baseRevisionId, operations },
             ifMatch: project.etag,
             idempotencyKey: crypto.randomUUID(),
             correlationId: crypto.randomUUID()
@@ -159,7 +162,7 @@ export function useCheckWorkflow(projectId: string | undefined) {
       try {
         const sealed = await client.request<MutationResponse<{ projectId: string; revisionId: string }>>('createProgrammingRevision', {
           path: { projectId },
-          body: { schemaVersion: '1.0', baseRevisionId: project.draftRevisionId, label: new Date().toISOString(), comment: '' },
+          body: { schemaVersion: '1.0', baseRevisionId: project.baseRevisionId, label: new Date().toISOString(), comment: '' },
           ifMatch: project.etag,
           idempotencyKey: crypto.randomUUID(),
           correlationId: crypto.randomUUID()

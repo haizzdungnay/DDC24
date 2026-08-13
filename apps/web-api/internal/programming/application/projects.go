@@ -52,6 +52,7 @@ type ProjectView struct {
 	ETag             string
 	ActiveRevisionID *string
 	DraftRevisionID  string
+	BaseRevisionID   string
 	UpdatedAt        string
 	// DraftContentJSON là canonical document (DM-PROG-001 §7: schemaVersion/
 	// project/programs/variables/bindings/task/library). Chỉ `GetProject`
@@ -367,9 +368,14 @@ func mutationFromReplay(replay programmingstore.MutationReplay) MutationResult {
 
 func projectView(snapshot programmingstore.ProjectSnapshot) ProjectView {
 	var active *string
+	baseRevisionID := snapshot.Draft.BaseRevisionID
+	if baseRevisionID == "" {
+		baseRevisionID = snapshot.Draft.DraftID
+	}
 	return ProjectView{ProjectID: snapshot.Project.ProjectID, Name: snapshot.Project.Name,
 		ETag: FormatDraftETag(snapshot.Draft.DraftID, snapshot.Draft.ETag), ActiveRevisionID: active,
-		DraftRevisionID: snapshot.Draft.DraftID, UpdatedAt: formatTime(snapshot.Project.UpdatedAtUTCMS)}
+		DraftRevisionID: snapshot.Draft.DraftID, BaseRevisionID: baseRevisionID,
+		UpdatedAt: formatTime(snapshot.Project.UpdatedAtUTCMS)}
 }
 
 func FormatDraftETag(draftID string, generation int64) string {
