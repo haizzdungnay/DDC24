@@ -7,6 +7,44 @@
 ---
 
 ## [Unreleased]
+### Added — PID anti-windup và read-back priority 5 Programming P3 (2026-08-13)
+
+**TASK-PROG-303.** Thêm `StFbType::PID` (giá trị wire `5`, byte-compatible
+artifact cũ) — function block PID vòng đơn đầu tiên trong runtime ST, thực
+thi đúng thuật toán back-calculation anti-windup của
+`DDD-CTRL-PROG-001` §7: `i_candidate` clamp theo `OUT_MIN..OUT_MAX`,
+back-calculate `i` từ chênh lệch `u_raw`/`u_limit` khi saturate, và FREEZE
+integrator (không cộng dồn thêm) khi phát hiện nguồn ưu tiên cao hơn đang
+override — so `ACTUAL` (actual selected output) với đề xuất cycle trước,
+lệch quá 1% dải output. Không publish (fault huỷ cycle) nếu input
+non-finite, `out_min>=out_max`, hoặc `now_ns` không tăng giữa hai lần gọi
+(mã lỗi mới `ST-RT-009`).
+
+Quyết định kiến trúc: `ACTUAL` KHÔNG đọc thẳng `PriorityResolver` từ bên
+trong FB — làm vậy sẽ phá bất biến "process image chỉ nạp input một lần đầu
+cycle" của TASK-PROG-302. Thay vào đó chương trình wire một `VAR_INPUT`
+bình thường vào CHÍNH Point Table AO/DO mà `OUT` publish tới, tái dùng
+nguyên vẹn process image `REQUIRE_GOOD` đã có — round-trip qua hardware
+feedback (`ao_setpoint`), trễ đúng một cycle, không cần binding hay kênh
+IPC mới nào. Đây cũng là cách "program/actual feedback" tới UI sau này
+(qua `TASK-PROG-305`) sẽ đọc lại đúng dữ liệu, không phải một góc riêng.
+
+8 input (`SP/PV/KP/KI/KD/OUT_MIN/OUT_MAX/ACTUAL`) và 2 output
+(`OUT/TRACKING`) chạy hoàn toàn qua cơ chế generic sẵn có của `TON/TOF` —
+không cần sửa parser/semantic/codegen, chỉ thêm bảng `fb_spec()` và case
+executor. Ngưỡng phát hiện override (1% dải output) là default kỹ thuật cụ
+thể trong code (`kPidOverrideDetectFraction`), **chưa qua Controls+Safety
+review** — giữ nguyên TARGET-PENDING đúng như §7 đã nêu ("transition
+envelope đã duyệt" là field decision).
+
+**Kiểm chứng.** Release build sạch bật Modbus/BACnet/HMI và CTest `960/960`
+PASS; 12 test FB-level mới (P/I/D riêng lẻ, rời saturation ngay khi error
+đảo dấu chứng minh không windup, freeze+TRACKING khi override không cộng
+dồn integral, overflow/invalid-range/non-monotonic-time là fault, hai
+instance độc lập) cộng 1 test tích hợp round-trip qua Point Table AO thật
+với `PriorityResolver::set_ao` ở `PRIO_LOCAL_MANUAL`. Không đổi Go/FE nên
+không chạy lại (không thuộc phạm vi). Source `85aa4d2`.
+
 ### Changed — Process image và LOCAL/VP/MB_RTU binding bridge Programming P3 (2026-08-13)
 
 **TASK-PROG-302.** Process image ST đổi từ ghi từng binding riêng lẻ sang

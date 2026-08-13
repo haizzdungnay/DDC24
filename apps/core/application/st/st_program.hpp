@@ -81,6 +81,10 @@ enum class StFbType : uint16_t {
     TOF    = 2,
     R_TRIG = 3,
     F_TRIG = 4,
+    /* TASK-PROG-303: PID vòng đơn, back-calculation anti-windup theo
+     * DDD-CTRL-PROG-001 §7. Giá trị wire mới 5, artifact cũ (1..4) vẫn
+     * byte-compatible. */
+    PID    = 5,
 };
 
 StFbType st_fb_type_from_name(const std::string& name);

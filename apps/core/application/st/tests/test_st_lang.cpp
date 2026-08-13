@@ -291,6 +291,28 @@ TEST(StLang, TonDeclarationAndCallAccepted)
         << d.code << ": " << d.message;
 }
 
+TEST(StLang, PidDeclarationAndCallAccepted)
+{
+    /* TASK-PROG-303: PID phải thread qua parser/semantic bằng đúng cơ chế
+     * generic của TON — không có nhánh riêng nào bị thiếu. */
+    StDiagnostic d;
+    EXPECT_TRUE(check(prog("VAR_INPUT sp : REAL; pv : REAL; act : REAL; END_VAR\n"
+                           "VAR_OUTPUT y : REAL; tr : BOOL; END_VAR\n"
+                           "VAR loop1 : PID; END_VAR\n",
+                           "loop1(SP := sp, PV := pv, KP := 1.0, KI := 0.1, KD := 0.0,\n"
+                           "      OUT_MIN := 0.0, OUT_MAX := 100.0, ACTUAL := act);\n"
+                           "y := loop1.OUT;\ntr := loop1.TRACKING;\n"), &d))
+        << d.code << ": " << d.message;
+}
+
+TEST(StLang, PidUnknownParameterRejected)
+{
+    StDiagnostic d;
+    EXPECT_FALSE(check(prog("VAR_INPUT sp : REAL; END_VAR\nVAR loop1 : PID; END_VAR\n",
+                            "loop1(SETPOINT := sp);\n"), &d));
+    EXPECT_EQ(d.code, st_diag_code::kBadFbParam);
+}
+
 TEST(StLang, FbCalledTwicePerCycleRejected)
 {
     StDiagnostic d;

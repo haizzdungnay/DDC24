@@ -486,7 +486,7 @@ private:
             "RETAIN", "IF", "THEN", "ELSIF", "ELSE", "END_IF",
             "AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE",
             "BOOL", "INT", "DINT", "UINT", "REAL", "TIME",
-            "TON", "TOF", "R_TRIG", "F_TRIG",
+            "TON", "TOF", "R_TRIG", "F_TRIG", "PID",
             "CASE", "END_CASE", "FOR", "END_FOR", "WHILE", "END_WHILE",
             "REPEAT", "UNTIL", "END_REPEAT", "EXIT", "CONTINUE", "RETURN", "GOTO",
             "VAR_GLOBAL", "VAR_EXTERNAL", "NATIVE", "POINTER", "REFERENCE", "AT",

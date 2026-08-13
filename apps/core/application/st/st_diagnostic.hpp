@@ -50,6 +50,9 @@ constexpr const char* kRtNegativeTime    = "ST-RT-005";
 constexpr const char* kRtLimitMinMax     = "ST-RT-006";
 constexpr const char* kRtSqrtNegative    = "ST-RT-007";
 constexpr const char* kRtNonFiniteInput  = "ST-RT-008";
+/* PID (TASK-PROG-303): now_ns không tăng giữa hai lần gọi liên tiếp cùng
+ * instance — dt sẽ <=0, không thể tính derivative/integral an toàn. */
+constexpr const char* kRtPidInvalidDt    = "ST-RT-009";
 
 /* Vượt giới hạn tài nguyên (st_limits.hpp). Tách riêng khỏi ST-SYN-* để BE
  * phân biệt được "chương trình sai" với "chương trình quá lớn" — hai hành
