@@ -6,6 +6,8 @@
  * khai tay ở đây và PHẢI khớp field/kiểu với OpenAPI — không tự thêm field.
  */
 
+import type { ProgrammingImpact } from '../api/generated/client'
+
 export type ProgrammingTargetState = 'READY' | 'DEGRADED' | 'UNAVAILABLE'
 
 export interface ProgrammingCapabilities {
@@ -156,6 +158,64 @@ export interface ProgrammingPointCatalogEntry {
 
 export interface ProgrammingPointCatalogPage {
   items: ProgrammingPointCatalogEntry[]
+  nextCursor?: string | null
+}
+
+export interface ProgrammingRevisionChange {
+  objectId: string
+  kind: string
+  changeType: 'ADDED' | 'REMOVED' | 'MODIFIED'
+  category: string
+  beforeSha256?: string | null
+  afterSha256?: string | null
+}
+
+export interface ProgrammingRevisionChanges {
+  fromRevisionId: string
+  toRevisionId: string
+  impact: ProgrammingImpact
+  changes: ProgrammingRevisionChange[]
+}
+
+/** `GET /operations/{operationId}` — DM-PROG-001 §3.9 state machine. */
+export type ProgrammingOperationState =
+  | 'REQUESTED'
+  | 'PREFLIGHT'
+  | 'STAGED'
+  | 'APPLYING'
+  | 'VERIFYING'
+  | 'SUCCEEDED'
+  | 'REJECTED'
+  | 'FAILED'
+  | 'UNKNOWN_RECONCILING'
+
+export interface ProgrammingOperationView {
+  operationId: string
+  state: ProgrammingOperationState
+  step: string
+  requestedRevisionId: string | null
+  previousActiveRevisionId: string | null
+  actualActiveRevisionId: string | null
+  keepsRunningRevision: boolean
+  startedAt: string
+  updatedAt: string
+}
+
+/** `GET /overrides` — chỉ Point đang thật sự bị force; `actorId` rỗng khi
+ * registry không biết ai đã force (không được bịa — RSK-PROG-010). */
+export interface ProgrammingOverrideEntry {
+  category: ProgrammingPointCategory
+  pointId: string
+  deviceId?: string
+  value: unknown
+  source: string
+  actorId?: string
+  effectivePriority?: number
+  remainingS: number | null
+}
+
+export interface ProgrammingOverridePage {
+  items: ProgrammingOverrideEntry[]
   nextCursor?: string | null
 }
 

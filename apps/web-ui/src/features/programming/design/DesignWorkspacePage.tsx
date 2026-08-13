@@ -115,15 +115,22 @@ export function DesignWorkspacePage() {
             >
               {pick('Kiểm tra', 'Check')}
             </Button>
-            {checkWorkflow.state.phase === 'done' && checkWorkflow.state.check.state === 'PASSED' && (
-              <Button
-                size="sm"
-                icon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-                onClick={() => navigate(`/eng/programming/projects/${projectId}/commission`)}
-              >
-                {pick('Mở Kiểm tra & Đưa vào vận hành', 'Open Check & Commission')}
-              </Button>
-            )}
+            {checkWorkflow.state.phase === 'done' && checkWorkflow.state.check.state === 'PASSED' && (() => {
+              const passedCheck = checkWorkflow.state.check
+              return (
+                <Button
+                  size="sm"
+                  icon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+                  onClick={() =>
+                    navigate(`/eng/programming/projects/${projectId}/commission`, {
+                      state: { revisionId: passedCheck.revisionId, checkId: passedCheck.checkId }
+                    })
+                  }
+                >
+                  {pick('Mở Kiểm tra & Đưa vào vận hành', 'Open Check & Commission')}
+                </Button>
+              )
+            })()}
           </div>
         )}
       </div>

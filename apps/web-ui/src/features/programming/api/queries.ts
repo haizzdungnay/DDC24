@@ -6,8 +6,11 @@ import { useI18n } from '../../../shared/i18n'
 import type {
   ProgrammingAuditPage,
   ProgrammingCapabilities,
+  ProgrammingCheck,
+  ProgrammingOverridePage,
   ProgrammingPointCatalogPage,
   ProgrammingProjectPage,
+  ProgrammingRevisionChanges,
   ProgrammingRuntime,
   RemoteState
 } from '../model/types'
@@ -93,6 +96,38 @@ export function useProgrammingPointCatalog(): RemoteState<ProgrammingPointCatalo
   const client = useProgrammingApiClient()
   const load = useCallback(() => client.request<ProgrammingPointCatalogPage>('getProgrammingPointCatalog'), [client])
   return useProgrammingResource(load, 10000)
+}
+
+/** `GET /checks/{checkId}` — dùng lại độc lập với `useCheckWorkflow` để
+ * PGM-03 luôn đọc trạng thái mới nhất kể cả khi vào thẳng bằng navigation
+ * state (không phải vừa chạy Check trong cùng phiên). */
+export function useProgrammingCheck(checkId: string | undefined): RemoteState<ProgrammingCheck> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(() => {
+    if (!checkId) return Promise.reject(new Error('checkId is required'))
+    return client.request<ProgrammingCheck>('getProgrammingCheck', { path: { checkId } })
+  }, [client, checkId])
+  return useProgrammingResource(load, 0)
+}
+
+/** `GET /revisions/{from}/changes/{to}` — thay đổi có cấu trúc + impact bốn
+ * nhóm do MÁY CHỦ tính (bao gồm cutover/activeOverrides đọc Core thật qua
+ * `RuntimeImpactProvider` đã nối sẵn ở `NewOperationService`). `from='none'`
+ * khi chưa có Active Revision. */
+export function useProgrammingRevisionChanges(fromRevisionId: string | undefined, toRevisionId: string | undefined): RemoteState<ProgrammingRevisionChanges> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(() => {
+    if (!toRevisionId) return Promise.reject(new Error('toRevisionId is required'))
+    return client.request<ProgrammingRevisionChanges>('compareProgrammingRevisions', { path: { from: fromRevisionId ?? 'none', to: toRevisionId } })
+  }, [client, fromRevisionId, toRevisionId])
+  return useProgrammingResource(load, 0)
+}
+
+/** `GET /overrides` — bảng override thủ công còn hiệu lực (UX §16.3 `ActiveOverrideTable`). */
+export function useProgrammingOverrides(): RemoteState<ProgrammingOverridePage> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(() => client.request<ProgrammingOverridePage>('listProgrammingOverrides', { query: { activeOnly: true } }), [client])
+  return useProgrammingResource(load, 0)
 }
 
 /** `GET /audit` — dùng cho `RecentEngineeringTimeline` của PGM-01 (5 bản ghi mới nhất). */

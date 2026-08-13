@@ -8,6 +8,57 @@
 
 ## [Unreleased]
 
+### Added — Programming P5 TASK-PROG-504: workspace Kiểm tra & Đưa vào vận hành (S5-C) (2026-08-13)
+
+**BE gap-fill: `GET /overrides`.** Route thứ ba (sau capabilities/runtime và
+point-catalog) vẫn rơi 503 stub dù `ImpactPanel`/`ActiveOverrideTable` của
+PGM-03 cần bảng override chi tiết (Point/actor/giá trị/TTL) — impact bốn nhóm
+ở `GET /revisions/{from}/changes/{to}` chỉ liệt kê **ID**, không đủ cho bảng
+review. `application/overrides.go` (interface `OverrideProvider`) +
+`internal/app/programming_pointcatalog.go#ListActiveOverrides` (cùng adapter
+với point-catalog, tái dùng `App.ReadPoints`): chỉ chiếu Point đang thật sự
+`Forced=true`; TTL/actor ưu tiên lấy từ `OverrideRegistry.Snapshot()` (nhớ
+actor đã force qua chính web-api này), rơi về `OverrideExpiresInS` tự thân của
+Point khi registry không có, và **cố ý bỏ trống `effectivePriority`** vì
+`PointDTO.Priority` là chuỗi mô tả nguồn (vd. "Virtual Point"), không phải mức
+1..5 — gán nhầm sẽ là bịa dữ liệu ưu tiên arbitration.
+
+**Phát hiện quan trọng khi khảo sát: `GET /revisions/{from}/changes/{to}`
+(TASK-PROG-206) đã tính đủ bốn nhóm impact bằng dữ liệu THẬT**, gồm
+`activeOverrides`/`cutover` đọc trực tiếp Core qua `RuntimeImpactProvider` —
+`NewOperationService` đã tự gọi `Projects.SetRuntimeImpactProvider(service)`
+từ P4. Nghĩa là S5-C không cần gap-fill BE cho impact/readiness — chỉ thiếu
+`GET /overrides` cho bảng chi tiết.
+
+**FE — `CheckCommissionPage.tsx` (PGM-03, `UJ-PROG-05/06`).** Nhận
+`revisionId/checkId` qua `navigate(..., {state})` từ nút "Mở Kiểm tra & Đưa
+vào vận hành" của PGM-02 (S5-B) — vào thẳng bằng URL/reload không có gì để
+tin, trang yêu cầu quay lại Thiết kế chạy Kiểm tra lại (không có route nào
+trả "Check mới nhất của Project" để suy đoán thay, và suy đoán là đúng thứ bị
+cấm). Bốn panel: kết quả Check (ProblemsDrawer dùng lại), thay đổi so với bản
+đang chạy, ảnh hưởng bốn nhóm (đúng `NONE/PRESENT/UNAVAILABLE`, `UNAVAILABLE`
+khoá nút Đưa vào vận hành ngay cả khi Check `PASSED`), bảng override còn hiệu
+lực. `useCommissionWorkflow.ts`: re-auth bắt buộc dùng lại
+`AuthProvider.login` thật (không tạo endpoint riêng); idempotency key tạo
+đúng một lần khi bấm xác nhận, giữ qua `sessionStorage` theo revisionId; POST
+Commission đúng một lần rồi chỉ poll `GET /operations/{id}` — timeout/lỗi
+mạng chuyển `UNKNOWN_RECONCILING` với nút "Kiểm tra lại trạng thái", không
+bao giờ tự POST lại. Modal xác nhận (`shared/components/Modal` có sẵn) chặn
+đóng bằng `Esc`/backdrop khi đang gửi. Số ô xác nhận khớp **đúng** số nhóm
+`PRESENT` — không phải bốn ô cố định (IFSPEC-PROG-001 §6.1.1).
+
+**Test/evidence.** Go: `go build`/`go vet` sạch; `go test ./... -count=1` 18
+package PASS, gồm test mới `TestListActiveOverridesOnlyReturnsForcedPointsAndNeverFabricatesActor`
+(chỉ Point bị force, actor rỗng khi registry không biết — không bịa). FE:
+`npx tsc --noEmit` sạch; `npm run lint` sạch; `npx vitest --run --environment
+jsdom src` → 60 file/**499** test PASS (497 cũ + 2 mới: ô xác nhận khớp đúng
+2 nhóm PRESENT + Commission POST đúng một lần sau re-auth + đọc ngược
+`actualActiveRevisionId`, và `UNAVAILABLE` khoá nút dù Check PASSED). `npm run
+build` PASS (contract drift 25/25, error catalog 20/99).
+
+Refs: TASK-PROG-504, Plan 53 §5.9 S5-C, IFSPEC-PROG-001 §6.1/§6.1.1,
+UX-WEB-PROG-001 §5 PGM-03/§16.3/§22.
+
 ### Added — Programming P5 TASK-PROG-501/502/503: workspace Thiết kế (S5-B) (2026-08-13)
 
 **FE.** Hoàn thiện PGM-02 (`DesignWorkspacePage`) — một workspace, ba tab dùng
