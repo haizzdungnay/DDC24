@@ -9,6 +9,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 type Store struct{ root string }
@@ -102,6 +105,92 @@ func (s *Store) Verify(relative string, expected [32]byte, byteSize int64) error
 	}
 	if int64(len(raw)) != byteSize || sha256.Sum256(raw) != expected {
 		return fmt.Errorf("artifact read-back mismatch")
+	}
+	return nil
+}
+
+// MaterializeStaging tạo locator immutable dưới staging root cho đúng một
+// Operation. Dùng hard-link từ content-addressed store nên bytes Core mở là
+// chính bytes đã Verify; không copy qua buffer và không thể ghi đè file cũ.
+func (s *Store) MaterializeStaging(stagingRoot, operationID, relative string,
+	expected [32]byte, byteSize int64) (string, error) {
+	if s == nil || stagingRoot == "" || operationID == "" ||
+		strings.ContainsAny(operationID, `/\\`) {
+		return "", fmt.Errorf("staging locator không hợp lệ")
+	}
+	if err := s.Verify(relative, expected, byteSize); err != nil {
+		return "", err
+	}
+	root, err := filepath.Abs(stagingRoot)
+	if err != nil {
+		return "", err
+	}
+	if err := ensureDirectory(root, 0o750); err != nil {
+		return "", err
+	}
+	operationRoot := filepath.Join(root, operationID)
+	if err := ensureDirectory(operationRoot, 0o750); err != nil {
+		return "", err
+	}
+	source := filepath.Join(s.root, relative)
+	destination := filepath.Join(operationRoot, "candidate.mkddcir")
+	if err := os.Link(source, destination); err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			return "", fmt.Errorf("materialize staging: %w", err)
+		}
+		existing, readErr := readRegular(destination, byteSize)
+		if readErr != nil || int64(len(existing)) != byteSize || sha256.Sum256(existing) != expected {
+			return "", fmt.Errorf("staging collision/mismatch")
+		}
+	}
+	dir, err := os.Open(operationRoot)
+	if err != nil {
+		return "", err
+	}
+	err = dir.Sync()
+	_ = dir.Close()
+	if err != nil {
+		return "", err
+	}
+	return destination, nil
+}
+
+// RemoveStaging thu hồi đúng locator chưa được gắn với Operation durable. Hàm
+// không đệ quy và chỉ chấp nhận layout do MaterializeStaging tạo để không thể
+// xoá nhầm dữ liệu ngoài staging root.
+func (s *Store) RemoveStaging(stagingRoot, operationID string) error {
+	if s == nil || stagingRoot == "" || operationID == "" ||
+		strings.ContainsAny(operationID, `/\\`) {
+		return fmt.Errorf("staging locator không hợp lệ")
+	}
+	root, err := filepath.Abs(stagingRoot)
+	if err != nil {
+		return err
+	}
+	rootFD, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(rootFD)
+	operationFD, err := unix.Openat(rootFD, operationID,
+		unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	if errors.Is(err, unix.ENOENT) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := unix.Unlinkat(operationFD, "candidate.mkddcir", 0); err != nil &&
+		!errors.Is(err, unix.ENOENT) {
+		unix.Close(operationFD)
+		return err
+	}
+	if err := unix.Close(operationFD); err != nil {
+		return err
+	}
+	if err := unix.Unlinkat(rootFD, operationID, unix.AT_REMOVEDIR); err != nil &&
+		!errors.Is(err, unix.ENOENT) {
+		return err
 	}
 	return nil
 }

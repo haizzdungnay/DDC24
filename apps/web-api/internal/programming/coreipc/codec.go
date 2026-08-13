@@ -113,6 +113,38 @@ func modes() (cbor.EncMode, cbor.DecMode, error) {
 
 func EmptyPayload() []byte { return []byte{0x80} }
 
+// EncodePayload là điểm duy nhất application dùng để tạo canonical CBOR cho
+// payload riêng của action. Nhờ vậy payloadHash và kiểm tra canonical ở hai
+// đầu không thể lệch vì package khác dùng options mặc định khác nhau.
+func EncodePayload(value any) ([]byte, error) {
+	mode, _, err := modes()
+	if err != nil {
+		return nil, err
+	}
+	payload, err := mode.Marshal(value)
+	if err != nil {
+		return nil, protocolError(ErrInvalidEnvelope, "payload", err)
+	}
+	if len(payload) == 0 || len(payload) > MaxFramePayload/2 {
+		return nil, protocolError(ErrFrameTooLarge, "payload", nil)
+	}
+	return payload, nil
+}
+
+func DecodePayload(payload []byte, target any) error {
+	if !canonicalCBOR(payload) {
+		return protocolError(ErrInvalidEnvelope, "payload.canonicalCbor", nil)
+	}
+	_, mode, err := modes()
+	if err != nil {
+		return err
+	}
+	if err := mode.Unmarshal(payload, target); err != nil {
+		return protocolError(ErrInvalidEnvelope, "payload", err)
+	}
+	return nil
+}
+
 func NewRequest(action Action, requestID, operationID []byte, controllerID, actorID, correlationID string, deadlineMonoNS uint64, payload []byte) Request {
 	if payload == nil {
 		payload = EmptyPayload()

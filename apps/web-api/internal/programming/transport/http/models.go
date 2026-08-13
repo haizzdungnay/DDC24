@@ -58,6 +58,13 @@ type CommissionRequest struct {
 	} `json:"cutover"`
 }
 
+type RestoreRequest struct {
+	SchemaVersion            string  `json:"schemaVersion"`
+	RevisionID               string  `json:"revisionId"`
+	ExpectedActiveRevisionID *string `json:"expectedActiveRevisionId"`
+	Reason                   string  `json:"reason"`
+}
+
 func (i Impact) groups() map[ImpactKey]ImpactGroup {
 	return map[ImpactKey]ImpactGroup{
 		ImpactRetain:               i.Retain,

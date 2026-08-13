@@ -39,21 +39,25 @@ type RevisionChangesView struct {
 }
 
 func (s *ProjectService) GetRevisionChanges(ctx context.Context, fromRevisionID, toRevisionID string) (RevisionChangesView, error) {
-	if !isUUID(fromRevisionID) || !isUUID(toRevisionID) || fromRevisionID == toRevisionID {
+	if (fromRevisionID != "none" && !isUUID(fromRevisionID)) || !isUUID(toRevisionID) || fromRevisionID == toRevisionID {
 		return RevisionChangesView{}, ErrInvalidRequest
-	}
-	before, err := s.store.GetRevision(ctx, fromRevisionID)
-	if err != nil {
-		return RevisionChangesView{}, err
 	}
 	after, err := s.store.GetRevision(ctx, toRevisionID)
 	if err != nil {
 		return RevisionChangesView{}, err
 	}
-	if before.Revision.ProjectID != after.Revision.ProjectID {
-		return RevisionChangesView{}, ErrInvalidRequest
+	var beforeObjects []programmingstore.RevisionObject
+	if fromRevisionID != "none" {
+		before, readErr := s.store.GetRevision(ctx, fromRevisionID)
+		if readErr != nil {
+			return RevisionChangesView{}, readErr
+		}
+		if before.Revision.ProjectID != after.Revision.ProjectID {
+			return RevisionChangesView{}, ErrInvalidRequest
+		}
+		beforeObjects = before.Objects
 	}
-	changes := compareRevisionObjects(before.Objects, after.Objects)
+	changes := compareRevisionObjects(beforeObjects, after.Objects)
 	retainItems := make([]string, 0)
 	outputItems := make([]string, 0)
 	for _, change := range changes {
@@ -73,6 +77,16 @@ func (s *ProjectService) GetRevisionChanges(ctx context.Context, fromRevisionID,
 		Cutover: RevisionImpactGroup{Status: "UNAVAILABLE", Items: []string{
 			"Core cutover estimator chưa được nối; Commission phải fail-closed",
 		}},
+	}
+	if s.runtimeImpact != nil {
+		if current, readErr := s.runtimeImpact.CurrentRuntimeImpact(ctx); readErr == nil {
+			impact.ActiveOverrides = impactFromItems(append([]string(nil), current.ActiveOverrideIDs...))
+			cutoverItems := []string{}
+			if current.ProducerMode != "PROGRAM_ONLY" {
+				cutoverItems = append(cutoverItems, current.ProducerMode+"→PROGRAM_ONLY")
+			}
+			impact.Cutover = impactFromItems(cutoverItems)
+		}
 	}
 	digestInput := struct {
 		From    string           `json:"from"`
