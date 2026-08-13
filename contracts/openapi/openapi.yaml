@@ -1730,7 +1730,7 @@ paths:
       operationId: getProgrammingCapabilities
       summary: Đọc profile và giới hạn Programming Rev A
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-500
       responses:
         "200":
           description: Profile, giới hạn và trạng thái producer runtime
@@ -1985,7 +1985,7 @@ paths:
       operationId: getProgrammingRuntime
       summary: Đọc Revision active/LKG và trạng thái Core authoritative
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-500
       responses:
         "200":
           description: Snapshot runtime authoritative
@@ -2260,7 +2260,7 @@ paths:
       operationId: listProgrammingAudit
       summary: Đọc timeline Programming đã sanitize theo role
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-500
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
         - { $ref: "#/components/parameters/ProgrammingLimit" }

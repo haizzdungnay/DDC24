@@ -63,6 +63,7 @@ type Services struct {
 	Projects   *programmingapplication.ProjectService
 	Checks     *programmingapplication.CheckService
 	Operations *programmingapplication.OperationService
+	Runtime    *programmingapplication.RuntimeService
 }
 
 func RegisterProgrammingRoutes(routes *[]webrouter.Route, enabled bool, provided ...Services) {
@@ -91,6 +92,9 @@ func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition
 	}
 	if status, public := validateContractRequest(w, r, definition); public != nil {
 		WriteProgrammingError(w, status, *public, correlationID)
+		return
+	}
+	if services.Runtime != nil && handleRuntimeRequest(w, r, correlationID, services.Runtime) {
 		return
 	}
 	if services.Projects != nil && handleProjectRequest(w, r, correlationID, services.Projects) {

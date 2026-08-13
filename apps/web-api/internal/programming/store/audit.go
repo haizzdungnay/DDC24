@@ -98,6 +98,54 @@ func appendAuditTx(ctx context.Context, tx *sql.Tx, input AuditInput) (AuditReco
 		PrevHash: prevHash, RecordHash: recordHash}, nil
 }
 
+// ListAuditRecords đọc audit mới nhất trước, dùng cho `GET /audit` (TASK-PROG-500).
+// `beforeSequence<=0` bắt đầu từ bản ghi mới nhất; cursor là sequence của bản
+// ghi cuối cùng đã trả, giữ đúng ngữ nghĩa keyset pagination ổn định của các
+// list khác trong store này (không OFFSET, tránh trôi trang khi có ghi mới).
+func (s *Store) ListAuditRecords(ctx context.Context, beforeSequence int64, limit int) ([]AuditRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("Programming store chưa mở")
+	}
+	if limit <= 0 || limit > 100 {
+		return nil, fmt.Errorf("limit audit không hợp lệ")
+	}
+	query := `SELECT audit_id,sequence,actor_id,role,action,target_type,target_id,revision_id,operation_id,occurred_at_utc_ms,result_code,correlation_id,details_json,prev_hash,record_hash FROM audit_records`
+	var rows *sql.Rows
+	var err error
+	if beforeSequence > 0 {
+		rows, err = s.db.QueryContext(ctx, query+` WHERE sequence < ? ORDER BY sequence DESC LIMIT ?`, beforeSequence, limit)
+	} else {
+		rows, err = s.db.QueryContext(ctx, query+` ORDER BY sequence DESC LIMIT ?`, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	records := make([]AuditRecord, 0, limit)
+	for rows.Next() {
+		var input AuditInput
+		var sequence int64
+		var revision, operation sql.NullString
+		var details, prevHash, recordHash []byte
+		if err := rows.Scan(&input.AuditID, &sequence, &input.ActorID, &input.Role, &input.Action,
+			&input.TargetType, &input.TargetID, &revision, &operation, &input.OccurredAtUTCMS,
+			&input.ResultCode, &input.CorrelationID, &details, &prevHash, &recordHash); err != nil {
+			return nil, err
+		}
+		if revision.Valid {
+			input.RevisionID = revision.String
+		}
+		if operation.Valid {
+			input.OperationID = operation.String
+		}
+		record := AuditRecord{AuditInput: input, Sequence: sequence, Details: details}
+		copy(record.PrevHash[:], prevHash)
+		copy(record.RecordHash[:], recordHash)
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
 func (s *Store) VerifyAuditChain(ctx context.Context) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT audit_id,sequence,actor_id,role,action,target_type,target_id,revision_id,operation_id,occurred_at_utc_ms,result_code,correlation_id,details_json,prev_hash,record_hash FROM audit_records ORDER BY sequence`)
 	if err != nil {

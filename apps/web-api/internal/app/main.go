@@ -74,6 +74,7 @@ type App struct {
 	programmingProjects   *programmingapplication.ProjectService
 	programmingChecks     *programmingapplication.CheckService
 	programmingOperations *programmingapplication.OperationService
+	programmingRuntime    *programmingapplication.RuntimeService
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
@@ -126,10 +127,21 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			_ = store.Close()
 			return nil, fmt.Errorf("khởi tạo Programming Operation service: %w", operationErr)
 		}
+		runtimeService, runtimeErr := programmingapplication.NewRuntimeService(programmingapplication.RuntimeServiceOptions{
+			Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
+			Store:        store,
+			ControllerID: cfg.ProgrammingTargetID,
+			CursorSecret: []byte(cfg.JWTSecret),
+		})
+		if runtimeErr != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi tạo Programming Runtime service: %w", runtimeErr)
+		}
 		app.programmingStore = store
 		app.programmingProjects = projects
 		app.programmingChecks = checks
 		app.programmingOperations = operations
+		app.programmingRuntime = runtimeService
 		checks.Start(context.Background())
 		operations.Start(context.Background())
 	}
