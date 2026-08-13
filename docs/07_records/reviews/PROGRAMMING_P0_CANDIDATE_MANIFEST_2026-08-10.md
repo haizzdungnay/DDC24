@@ -4,15 +4,15 @@
 |---|---|
 | ID | `PROG-P0-CANDIDATE-MANIFEST-2026-08-10` |
 | Loại | Hồ sơ kiểm soát cấu hình; không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 3.49 |
+| Phiên bản | 3.50 |
 | Ngày | 2026-08-13 |
 | Chủ quản | Document Control |
 | Người review | Product, System Architect, Verification Lead và consumer reviewers |
 | Trạng thái | **ACTIVE — candidate v2.38 `IMPLEMENTATION IN PROGRESS`; P1/P2/P3/P4/P5 DONE, P5 100% và deploy đầy đủ FE/Web/compiler/Core trên Foxlinx; P6 assurance chưa bắt đầu; `RELEASE_READY BLOCKED`; `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS`** |
 | Định danh candidate | **22 SHA-256 ở §2** — xem §1.1 về lý do hash là authority, không phải commit |
-| Candidate commit | source authority `9606906`+`6069de6`+`d9a8e3b`+`0f1526c` (`TASK-PROG-507`); commit hồ sơ/PR/merge ghi bổ sung sau khi merge — xem §4.15 |
-| PR nguồn | Chờ tạo/merge PR cho nhánh `fix/programming-p5-ws-proxy-20260813`; ghi bổ sung sau khi merge |
-| Candidate trước | v2.36 tại source `e58c745`..`14a9299`, merge `7fe8de0` (PR #169) — **SUPERSEDED bởi TASK-PROG-507**, xem §4.14 |
+| Candidate commit | nội dung candidate `b7c0ed247c9e75d2db21c52d62ba365321857917`; source `9606906`+`6069de6`+`d9a8e3b`+`0f1526c`; merge `98811acc3b9667951012d5abf3a7a349502a5676` |
+| PR nguồn | [PR #170](https://github.com/Mekong-HCM/MK-DDC-24/pull/170) — `MERGED`; remote branch `fix/programming-p5-ws-proxy-20260813` đã xóa |
+| Candidate trước | v2.37 tại source `9606906`+`6069de6`+`d9a8e3b` — **SUPERSEDED bởi target hoàn chỉnh v2.38**, xem §4.14–§4.15 |
 | Gói review | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
 | Biên bản consumer review | [`PROG-P0-CONSUMER-REVIEW-2026-08-10`](PROGRAMMING_P0_CONSUMER_REVIEW_2026-08-10.md) |
 | Record phê duyệt nền v2.8 | `AUTH-PROG-2026-08-11-03` tại gói review §6.2 — tiếp tục áp dụng; v2.38 không đổi requirement/design decision |
@@ -47,9 +47,9 @@ Cách xử lý:
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Commit chứa nội dung candidate | `d4fd15da4b369b027296bcf9460ecdc9fbe0997c`; source commit `a831a0d42c0e945f9a59c36e461ada0e12962c89` |
-| Git tree | `fe321c3434bfeee33ca22a346cf4fd6add5c5468`; source tree `9ff19be31d95e687f5358ceabb52c7c2a16fb502` |
-| Nhánh phát hành | `feat/programming-base-step-20260811` — remote đã xóa sau merge PR #157 |
+| Commit chứa nội dung candidate | `b7c0ed247c9e75d2db21c52d62ba365321857917`; merge `98811acc3b9667951012d5abf3a7a349502a5676` |
+| Git tree | `2f7d164de75db99799955992695568c395e4b68a` (giống nhau tại content commit và merge commit) |
+| Nhánh phát hành | `fix/programming-p5-ws-proxy-20260813` — remote đã xóa sau merge PR #170 |
 
 Reviewer phải ghi **đủ 22 hash ở §2 hoặc commit ở bảng trên** trong kết luận, và
 chạy `scripts/candidate_pin_check.py` trước khi bắt đầu đọc.
@@ -609,3 +609,4 @@ sau mọi thay đổi tracker, nhưng kết quả đó không thay hash candidat
 | 3.47 | 2026-08-13 | Phát hành candidate v2.36 sau `TASK-PROG-500..506` tại `e58c745`..`14a9299` (nhánh `feat/programming-p5-fe-ux-20260813`): cập nhật hash/blob `DDD-FE-PROG-001` v0.9, `VVP-PROG-001` v1.4, `RSK-PROG-001` v2.0, `TRACE-PROG-001` v3.16 và `PLAN-PROG-053` v0.50 (5/22 hồ sơ, xem §4.13). **P5 đóng 7/7 source/host/browser DoD**, tổng 42/49 (85,7%) và `I=Y` từ 7/60 lên 22/60 (toàn bộ `FE-101..115`). Bằng chứng Chrome/Playwright thật desktop+mobile PASS trọn `UJ-PROG-01..08`; hai lỗi ứng dụng thật (tab unmount, FBD mất focus bàn phím) phát hiện+sửa cùng phiên. 17/22 hồ sơ còn lại giữ nguyên. Giữ flag OFF production, 2/32 record BLOCKED, 0/32 PASS và `RELEASE_READY BLOCKED` — `S5-F` usability người thật vẫn chặn; commit hồ sơ/PR/merge hiện tại ghi bổ sung sau merge. |
 | 3.48 | 2026-08-13 | Ghi bổ sung candidate v2.36 đã merge tại `7fe8de0` (PR #169); phát hành candidate v2.37 sau `TASK-PROG-507` tại `9606906`+`6069de6`+`d9a8e3b`: cập nhật hash/blob IFSPEC v1.6, FE v1.0, BE v1.3, VVP v1.5, Risk v2.1, Trace v3.17 và Plan v0.51 (7/22, xem §4.14). Foxlinx cleanup/backup/deploy/read-back và Chrome/API thật đóng ba lỗi target; P5 8/8, tổng 43/50. Giữ flag cuối OFF, không Commission, 2/32 BLOCKED, 0/32 PASS và RELEASE_READY BLOCKED; commit hồ sơ/PR/merge hiện tại ghi bổ sung sau merge. |
 | 3.49 | 2026-08-13 | Phát hành candidate v2.38 sau target `TASK-PROG-507` tại `0f1526c`: cập nhật hash/blob IFSPEC v1.7, FE v1.1, BE v1.4, VVP v1.6, Risk v2.2, Trace v3.18 và Plan v0.52 (7/22, xem §4.15). Foxlinx chạy FE/Web/compiler/Core ARM64, cờ ON, hai Check PASS, Commission output-free thành công và Core read-back đúng. P5 8/8/deploy 100%; giữ 2/32 BLOCKED, 0/32 PASS và RELEASE_READY BLOCKED vì P6 assurance/HIL/review độc lập. Commit hồ sơ/PR/merge hiện tại ghi bổ sung sau merge. |
+| 3.50 | 2026-08-13 | Ghi bổ sung candidate v2.38 đã xuất hiện tại `b7c0ed2`, tree `2f7d164`, merge `98811ac` (PR #170); remote branch đã xóa. Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi nên candidate pin giữ 22/22 PASS; không đổi nội dung/phán quyết candidate. |

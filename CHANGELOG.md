@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Changed — Programming P5: ghi provenance PR #170 (2026-08-13)
+
+- Ghi bổ sung candidate v2.38 đã xuất hiện tại commit `b7c0ed2`, tree
+  `2f7d164`, merge commit `98811ac` của PR #170; remote branch đã xóa.
+- Chỉ manifest/hồ sơ hỗ trợ ngoài mẫu số 22 đổi; candidate pin tiếp tục
+  22/22 PASS và không đổi phán quyết P5/release.
+
+Refs: PR #170, candidate v2.38, `TASK-PROG-507`.
+
 ### Changed — Programming P5: deploy đầy đủ 100% tính năng lên Foxlinx (2026-08-13)
 
 - Dọn có kiểm soát trước deploy: filesystem từ 2,5/13 GiB (22%) xuống
