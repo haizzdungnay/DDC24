@@ -1,10 +1,14 @@
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const authState = vi.hoisted(() => ({
+  session: { token: 'test-token' } as { token?: string } | null
+}))
 
 vi.mock('../config', () => ({ API_ORIGIN: '', WS_ORIGIN: '', IS_DEMO: false }))
 vi.mock('../../features/auth', () => ({
-  useAuth: () => ({ session: { token: 'test-token' } })
+  useAuth: () => ({ session: authState.session })
 }))
 
 import { useWebSocket, WS_SUBPROTOCOL, WS_TOKEN_SUBPROTOCOL_PREFIX } from './useWebSocket'
@@ -44,6 +48,7 @@ class FakeWebSocket {
 }
 
 beforeEach(() => {
+  authState.session = { token: 'test-token' }
   FakeWebSocket.instances = []
   vi.stubGlobal('WebSocket', FakeWebSocket)
 })
@@ -54,9 +59,22 @@ afterEach(() => {
 })
 
 describe('useWebSocket same-origin recovery', () => {
-  it('reconnects immediately through the current hostname when the browser comes online', () => {
+  it('chờ có session rồi mới mở socket', async () => {
+    authState.session = null
     const hook = renderHook(() => useWebSocket())
-    expect(FakeWebSocket.instances).toHaveLength(1)
+
+    expect(hook.result.current.connectionState).toBe('disconnected')
+    expect(FakeWebSocket.instances).toHaveLength(0)
+
+    authState.session = {}
+    hook.rerender()
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
+    expect(FakeWebSocket.instances[0].protocols).toEqual([WS_SUBPROTOCOL])
+  })
+
+  it('reconnects immediately through the current hostname when the browser comes online', async () => {
+    const hook = renderHook(() => useWebSocket())
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
     expect(FakeWebSocket.instances[0].url).toBe(
       `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api/v1/ws/monitor`
     )
@@ -74,8 +92,9 @@ describe('useWebSocket same-origin recovery', () => {
 
   // F-10: JWT không được nằm trong URL — nó đi vào lịch sử browser và access log
   // của mọi reverse proxy đứng trước, với TTL 1 giờ.
-  it('sends the token through Sec-WebSocket-Protocol and never in the URL', () => {
+  it('sends the token through Sec-WebSocket-Protocol and never in the URL', async () => {
     renderHook(() => useWebSocket())
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
     const socket = FakeWebSocket.instances[0]
 
     expect(socket.url).not.toContain('token')
@@ -85,8 +104,9 @@ describe('useWebSocket same-origin recovery', () => {
 
   // F-09: một frame không phải JSON không được throw ra ngoài event handler —
   // exception ở đó không ai bắt và mất luôn cập nhật cho tới lần reconnect.
-  it('survives a non-JSON frame without throwing out of onmessage', () => {
+  it('survives a non-JSON frame without throwing out of onmessage', async () => {
     const hook = renderHook(() => useWebSocket())
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
     const socket = FakeWebSocket.instances[0]
     act(() => socket.open())
     expect(hook.result.current.connectionState).toBe('connected')

@@ -8,6 +8,27 @@
 
 ## [Unreleased]
 
+### Fixed — Programming P5: WebSocket monitor qua Vite dev proxy bị 403 (2026-08-13)
+
+- Chrome DevTools với FE `:4174` và backend Go thật `:8081` phát hiện
+  `/api/v1/ws/monitor` lặp handshake `403`: `changeOrigin` đã đổi `Host` sang
+  backend nhưng giữ `Origin` của Vite, nên biên same-origin của `mkddc-web` từ
+  chối đúng và UI luôn báo mất WebSocket.
+- `apps/web-ui/vite.config.ts` thêm rule cụ thể `/api/v1/ws/**` trước rule
+  `/api`, bật `rewriteWsOrigin` riêng cho WebSocket dev; không bật
+  `CORS_ALLOW_LOOPBACK`, không nới allowlist backend và không thay đổi đường
+  same-origin production.
+- `useWebSocket` chờ có session và hoãn connect một microtask để setup đầu bị
+  cleanup bởi React StrictMode không tạo/đóng socket còn `CONNECTING`; loại
+  warning lifecycle nhưng session mock/none không có token vẫn kết nối được.
+- Thêm test khóa thứ tự route, đích `ws://`/`wss://`, cờ rewrite và trạng thái
+  chưa/có session;
+  xác minh lại bằng 505/505 Vitest, lint, build, Programming Playwright 4/4 và
+  Network Playwright 1/1; bằng chứng Chrome/Foxlinx được ghi ở task deploy
+  `TASK-PROG-507`.
+
+Refs: TASK-PROG-506/507, DDD-FE-PROG-001 §0.1, Plan 53 §5.9 S5-E.
+
 ### Changed — Programming P5: đồng bộ governance docs sau TASK-PROG-500..506, candidate v2.36 (2026-08-13)
 
 Cập nhật năm hồ sơ trong mẫu số 22 để phản ánh đúng As-Built P5 (nguồn:
