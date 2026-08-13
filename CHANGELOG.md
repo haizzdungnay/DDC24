@@ -7,6 +7,70 @@
 ---
 
 ## [Unreleased]
+### Changed — Process image và LOCAL/VP/MB_RTU binding bridge Programming P3 (2026-08-13)
+
+**TASK-PROG-302.** Process image ST đổi từ ghi từng binding riêng lẻ sang
+preflight-toàn-batch-rồi-commit ở cả hai chiều. Input nạp cho MỘT instance
+theo chính sách `REQUIRE_GOOD`: nếu bất kỳ binding nào quality khác `GOOD`,
+non-finite, ngoài `scale_min/max` hoặc convert kiểu lỗi (vd `1.5` vào `UINT`)
+thì TOÀN BỘ input của instance đó bị huỷ và giữ nguyên slot cũ — không còn
+tình trạng binding đầu đã ghi trong khi binding sau phát hiện lỗi. Output đi
+qua ba bước `stage → preflight → commit`: `AO/DO` preflight qua
+`PriorityResolver::can_set_ao/can_set_do` (mới), điểm ảo/MB_RTU preflight qua
+`PointWriter::can_write` (mới); một proposal lỗi huỷ cả batch trước khi
+resolver hay point table bị mutate. `st_apply_all_outputs` gom theo Task:
+Program chạy trước không được publish nếu Program chạy sau trong CÙNG Task
+fault ở base step đó — atomic ở mức Task, không chỉ mức Program.
+
+`StPointKind` thêm `EXT` (giá trị wire mới `7`, giữ byte-compatible artifact
+cũ) để có đủ ba category Product đã duyệt theo `OD-PROG-007`:
+`LOCAL={UI,DI,AO,DO}`, `VP={AV,BV,MSV}`, `MB_RTU={EXT}`. Loader và serializer
+IR cùng kiểm ma trận type/direction hợp lệ theo category — artifact sai không
+lọt qua đường nào. `io_map.json` validator (`st_io_map.cpp`) phân biệt LOCAL
+(`PREFIX-NN`), VP (`AV/BV/MSV-NN`) và MB_RTU (`device_id` + ASCII `point_id`),
+kiểm writable theo category thay vì chỉ chấp nhận PREFIX-NN cũ.
+
+`PointWriter::can_write()` (preflight không mutation) bắt buộc điểm EXT nằm
+trong `ext_count` và `writable=1` của snapshot Point Catalog trong SHM —
+trước đó chỉ kiểm `shm_ != nullptr`, nên lệnh ghi tay (WebIpc) hoặc từ
+Schedule tới một điểm Modbus RTU chưa cấu hình hoặc read-only vẫn tạo dirty
+command xuống bus. `PointTable::update_ext/update_inputs` giữ timestamp của
+producer (`sample_mono_ns`/`io.ts_ns`) thay vì đóng dấu giờ tại thời điểm
+consumer đọc, để process image phân biệt được sample mới với sample đứng yên
+(cần cho freshness/quality end-to-end ở `VS-PROG-018`).
+
+Trong lúc hoàn thiện phát hiện và sửa một bug: `st_load_all_inputs` (API
+tương thích test/supporting) có nhánh lọc theo `last_dispatch_base_step()`
+chép nhầm từ `st_apply_all_outputs`, khiến MỌI lần gọi trước tick đầu tiên bị
+bỏ qua toàn bộ (Task chưa từng dispatch nên điều kiện lọc luôn sai) — input
+không bao giờ được nạp qua đường này. Đã bỏ nhánh lọc sai vị trí.
+
+Feature vẫn chưa production-wired qua bootstrap (còn `TASK-PROG-306`); đây là
+source/host DoD cho `TASK-PROG-302`, chưa phải target timing hay quyền
+Commission.
+
+**Kiểm chứng.** Release build sạch bật Modbus/BACnet/HMI và CTest `949/949`
+PASS; targeted `StIntegration`/`StIoMap`/`StIr`/`ScheduleV31ExtWritePath`/
+`WebIpc.ExtPointWriteCommandAccepted` `68/68` PASS. Go `vet` sạch,
+`test ./... -count=1` PASS. FE `58/58` file, `494/494` test, lint và
+`tsc + vite build` PASS. Không dùng Chrome DevTools vì lát cắt này không đổi
+component/layout/runtime FE. Source `f080056`.
+
+### Fixed — Time-bomb TTL idempotency test Programming Draft/Revision (2026-08-13)
+
+Phát hiện trong lúc chạy gate `go test ./...` cho TASK-PROG-302 (không liên
+quan runtime C++): `TestProjectDraftRevisionLifecycleAndDurableIdempotency`
+panic index-out-of-range, tái hiện được trên `main` không đổi gì —
+`openProjectService`/`openBundleService` (`apps/web-api/internal/programming/
+application`) mock `service.now` cố định `2026-08-11` nhưng không truyền
+`Options.Now` khi mở `Store`, nên `Store.now` mặc định đồng hồ thật. TTL 24h
+của mutation receipt tính từ mốc mock; kiểm hết hạn lại dùng đồng hồ thật —
+một khi ngày thật trôi qua mốc mock + 24h (hôm nay 2026-08-13) thì mọi receipt
+hợp lệ bị coi là hết hạn, làm idempotency-replay báo not-found giả và test
+cạn mảng UUID mock. Đã ghim `Options.Now` khớp `service.now` ở cả hai helper
+và ở điểm mở lại store sau restart trong test; production không bị ảnh hưởng
+vì cả hai đồng hồ đều mặc định `time.Now` thật khi không mock. Source `84b3776`.
+
 ### Changed — Base step và scheduler profile Programming P3 (2026-08-11)
 
 **TASK-PROG-301.** `StScheduler` nay phân biệt rõ container
