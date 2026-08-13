@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### Fixed — Programming P5 S5-E: soát ba kịch bản fault xuyên suốt (2026-08-13)
+
+Soát lại `SC-CORE-DEGRADED`/`SC-OP-FAILED`/`SC-RETAIN-RESET` trên cả bốn
+workspace đã dựng ở S5-A..D (Plan 53 §5.9 S5-E). Phần lớn đã đúng hành vi từ
+khi dựng từng workspace vì bám sát contract fail-closed của BE (không phải
+việc tách riêng cần code mới):
+
+- `SC-CORE-DEGRADED`: `ProgrammingContextBar` (mọi trang) + `CoreSafeStatePanel`
+  (PGM-01) + `RuntimeTab`/`DangerZone` (PGM-04) đều đọc `runtime.producerState`
+  thật. PGM-03 tự khoá Commission khi Core suy giảm/mất kết nối vì
+  `activeOverrides`/`cutover` impact rơi về `UNAVAILABLE` mặc định trong
+  `GetRevisionChanges` (Go) bất cứ khi nào `RuntimeImpactProvider` lỗi —
+  không cần thêm cờ nào ở FE để chặn.
+- `SC-OP-FAILED`: banner Check/Commission/Restore chỉ ghi "bản đang chạy
+  không đổi" khi `keepsRunningRevision=true` từ server — đã đúng từ
+  TASK-PROG-501/504/505, xác nhận lại không có nhánh nào tự suy `true`.
+- `SC-RETAIN-RESET`: sửa một finding thật khi soát — `AcknowledgementChecklist`
+  của PGM-03 dùng nhãn chung "Trạng thái lưu (RETAIN) sẽ khởi tạo lại" cho
+  MỌI nhóm impact `retain` PRESENT, thay vì ngôn ngữ điều khiển bắt buộc của
+  UC-PROG-13 ("Trạng thái điều khiển đã lưu không còn tương thích...") và
+  không liệt kê biến RETAIN bị ảnh hưởng. Sửa `CheckCommissionPage.tsx`:
+  nhóm `retain` PRESENT giờ dùng đúng câu UC-PROG-13 và liệt kê
+  `impact.retain.items` ngay dưới ô xác nhận. `RetainResetDialog` (PGM-04,
+  dựng ở TASK-PROG-505) đã đúng ba quy tắc §16.4.1 từ đầu (không mở khi chưa
+  có danh sách biến — hiện hiện thông báo rõ ràng thay vì mở form; fail-closed
+  khi 503; không kết quả lạc quan).
+
+Test/evidence: `npx tsc --noEmit` sạch; `npm run lint` sạch; `npx vitest
+--run --environment jsdom src` → 61 file/502 test PASS (không đổi số — bản
+sửa chỉ đổi copy/hiển thị, các test hiện có chọn theo `role=checkbox` nên
+không cần sửa lại).
+
+Refs: Plan 53 §5.9 S5-E, UX-WEB-PROG-001 §6.2, UC-PROG-13.
+
 ### Added — Programming P5 TASK-PROG-505: workspace Runtime & Bảo trì (S5-D) (2026-08-13)
 
 **BE gap-fill: `GET /operations` (list).** Commit riêng trước đó

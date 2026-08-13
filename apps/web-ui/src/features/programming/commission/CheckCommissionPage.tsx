@@ -260,21 +260,39 @@ export function CheckCommissionPage() {
             <fieldset className="space-y-2">
               <legend className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Xác nhận ảnh hưởng', 'Acknowledge impact')}</legend>
               {presentKeys.map((key) => (
-                <label key={key} className="flex items-start gap-2 text-sm text-[var(--c-text)]">
-                  <input
-                    type="checkbox"
-                    checked={acknowledged.has(key)}
-                    onChange={(event) => {
-                      setAcknowledged((current) => {
-                        const next = new Set(current)
-                        if (event.target.checked) next.add(key)
-                        else next.delete(key)
-                        return next
-                      })
-                    }}
-                  />
-                  {pick(...IMPACT_GROUP_LABEL[key])}
-                </label>
+                <div key={key}>
+                  <label className="flex items-start gap-2 text-sm text-[var(--c-text)]">
+                    <input
+                      type="checkbox"
+                      checked={acknowledged.has(key)}
+                      onChange={(event) => {
+                        setAcknowledged((current) => {
+                          const next = new Set(current)
+                          if (event.target.checked) next.add(key)
+                          else next.delete(key)
+                          return next
+                        })
+                      }}
+                    />
+                    {/* SC-RETAIN-RESET (UC-PROG-13): dùng đúng ngôn ngữ điều khiển,
+                        không phải thuật ngữ schema. */}
+                    {key === 'retain'
+                      ? pick(
+                          'Trạng thái điều khiển đã lưu không còn tương thích. Các giá trị RETAIN bị ảnh hưởng sẽ được khởi tạo lại.',
+                          'Stored control state is no longer compatible. Affected RETAIN values will be re-initialised.'
+                        )
+                      : pick(...IMPACT_GROUP_LABEL[key])}
+                  </label>
+                  {impact![key].items.length > 0 && (
+                    <ul className="ml-6 mt-1 max-h-24 list-disc space-y-0.5 overflow-y-auto text-xs text-[var(--c-text-dim)]">
+                      {impact![key].items.map((item) => (
+                        <li key={item} className="font-mono">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               ))}
             </fieldset>
           )}
