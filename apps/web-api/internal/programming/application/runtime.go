@@ -24,6 +24,7 @@ type RuntimeStatusReader interface {
 type RuntimeServiceOptions struct {
 	Runtime      RuntimeStatusReader
 	Store        *programmingstore.Store
+	Catalog      PointCatalogProvider
 	ControllerID string
 	CursorSecret []byte
 	Now          func() time.Time
@@ -37,6 +38,7 @@ type RuntimeServiceOptions struct {
 type RuntimeService struct {
 	runtime      RuntimeStatusReader
 	store        *programmingstore.Store
+	catalog      PointCatalogProvider
 	controllerID string
 	cursorSecret []byte
 	now          func() time.Time
@@ -59,7 +61,7 @@ func NewRuntimeService(options RuntimeServiceOptions) (*RuntimeService, error) {
 		newID = func() string { return uuid.NewString() }
 	}
 	return &RuntimeService{
-		runtime: options.Runtime, store: options.Store, controllerID: options.ControllerID,
+		runtime: options.Runtime, store: options.Store, catalog: options.Catalog, controllerID: options.ControllerID,
 		cursorSecret: options.CursorSecret, now: now, newID: newID,
 	}, nil
 }

@@ -1967,7 +1967,7 @@ paths:
       operationId: getProgrammingPointCatalog
       summary: Đọc projection Point canonical phục vụ binding
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-503
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
         - { $ref: "#/components/parameters/ProgrammingLimit" }
@@ -2471,6 +2471,14 @@ components:
         activeRevisionId: { type: [string, "null"], format: uuid }
         draftRevisionId: { type: string, format: uuid }
         updatedAt: { type: string, format: date-time }
+        draft:
+          description: >
+            Nội dung Draft canonical (DM-PROG-001 §7: schemaVersion/project/
+            programs/variables/bindings/task/library). Chỉ có ở
+            `GET /projects/{projectId}` (đọc một Project); item của
+            `GET /projects` (danh sách) không có trường này — field optional
+            nên bổ sung là thay đổi minor tương thích ngược (task-prog-501).
+          $ref: "#/components/schemas/ProgrammingResource"
     ProgrammingProjectPage:
       type: object
       additionalProperties: false

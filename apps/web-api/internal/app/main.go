@@ -130,6 +130,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		runtimeService, runtimeErr := programmingapplication.NewRuntimeService(programmingapplication.RuntimeServiceOptions{
 			Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
 			Store:        store,
+			Catalog:      app.programmingPointCatalog(),
 			ControllerID: cfg.ProgrammingTargetID,
 			CursorSecret: []byte(cfg.JWTSecret),
 		})

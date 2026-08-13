@@ -53,6 +53,12 @@ type ProjectView struct {
 	ActiveRevisionID *string
 	DraftRevisionID  string
 	UpdatedAt        string
+	// DraftContentJSON là canonical document (DM-PROG-001 §7: schemaVersion/
+	// project/programs/variables/bindings/task/library). Chỉ `GetProject`
+	// (đọc một Project) điền trường này; `ListProjects` để trống — tài liệu
+	// có thể tới 2 MiB (DM-PROG-001 §6.1) nên không nhân bản vào mỗi item
+	// của một trang danh sách.
+	DraftContentJSON []byte
 }
 
 type ProjectPage struct {
@@ -213,8 +219,12 @@ func (s *ProjectService) SaveDraft(ctx context.Context, actor Actor, command Sav
 	if err != nil {
 		return MutationResult{}, err
 	}
-	return MutationResult{Resource: map[string]any{"projectId": command.ProjectID, "draftRevisionId": draft.DraftID},
-		ETag: FormatDraftETag(draft.DraftID, draft.ETag), AuditID: draft.AuditID, Replay: draft.Replay}, nil
+	var contentValue any
+	if unmarshalErr := json.Unmarshal(content, &contentValue); unmarshalErr != nil {
+		return MutationResult{}, unmarshalErr
+	}
+	return MutationResult{Resource: map[string]any{"projectId": command.ProjectID, "draftRevisionId": draft.DraftID,
+		"content": contentValue}, ETag: FormatDraftETag(draft.DraftID, draft.ETag), AuditID: draft.AuditID, Replay: draft.Replay}, nil
 }
 
 func (s *ProjectService) SealRevision(ctx context.Context, actor Actor, command SealRevisionCommand) (MutationResult, error) {
@@ -277,7 +287,9 @@ func (s *ProjectService) GetProject(ctx context.Context, projectID string) (Proj
 	if err != nil {
 		return ProjectView{}, err
 	}
-	return projectView(snapshot), nil
+	view := projectView(snapshot)
+	view.DraftContentJSON = snapshot.Draft.ContentJSON
+	return view, nil
 }
 
 func (s *ProjectService) ListProjects(ctx context.Context, encodedCursor string, limit int) (ProjectPage, error) {

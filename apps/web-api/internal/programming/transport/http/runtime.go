@@ -29,6 +29,20 @@ func handleRuntimeRequest(w http.ResponseWriter, r *http.Request, correlationID 
 		}
 		writeRuntimeJSON(w, http.StatusOK, correlationID, runtime)
 		return true
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/programming/point-catalog":
+		limit := 500
+		if raw := r.URL.Query().Get("limit"); raw != "" {
+			if parsed, err := strconv.Atoi(raw); err == nil {
+				limit = parsed
+			}
+		}
+		page, err := service.ListPointCatalog(r.Context(), limit)
+		if err != nil {
+			writeMappedError(w, err, correlationID)
+			return true
+		}
+		writeRuntimeJSON(w, http.StatusOK, correlationID, page)
+		return true
 	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/programming/audit":
 		limit := 50
 		if raw := r.URL.Query().Get("limit"); raw != "" {
