@@ -7,6 +7,7 @@ import type {
   ProgrammingAuditPage,
   ProgrammingCapabilities,
   ProgrammingCheck,
+  ProgrammingOperationPage,
   ProgrammingOverridePage,
   ProgrammingPointCatalogPage,
   ProgrammingProjectPage,
@@ -137,5 +138,38 @@ export function useProgrammingRecentAudit(limit = 5): RemoteState<ProgrammingAud
     () => client.request<ProgrammingAuditPage>('listProgrammingAudit', { query: { limit } }),
     [client, limit]
   )
+  return useProgrammingResource(load, 0)
+}
+
+/** `GET /audit` — bản đầy đủ cho tab "Phiên bản & Bảo trì" của PGM-04. */
+export function useProgrammingAudit(limit = 50): RemoteState<ProgrammingAuditPage> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(
+    () => client.request<ProgrammingAuditPage>('listProgrammingAudit', { query: { limit } }),
+    [client, limit]
+  )
+  return useProgrammingResource(load, 0)
+}
+
+/** `GET /operations` — lịch sử Commission/Restore/Import/ResetRetain
+ * (TASK-PROG-505, tab "Phiên bản & Bảo trì"). */
+export function useProgrammingOperations(limit = 20): RemoteState<ProgrammingOperationPage> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(
+    () => client.request<ProgrammingOperationPage>('listProgrammingOperations', { query: { limit } }),
+    [client, limit]
+  )
+  return useProgrammingResource(load, 0)
+}
+
+/**
+ * `GET /runtime/monitor` — gọi API THẬT (không mock). Backend hiện trả `503
+ * PRG-ERR-UNAVAILABLE-001` vì UDS chưa có action mang sample runtime theo
+ * Point (chỉ có snapshot vòng đời operation ở P3/P4) — `useProgrammingResource`
+ * phản ánh đúng lỗi thật đó, không phải trạng thái giả lập.
+ */
+export function useProgrammingRuntimeMonitor(): RemoteState<unknown> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(() => client.request<unknown>('getProgrammingRuntimeMonitor'), [client])
   return useProgrammingResource(load, 0)
 }

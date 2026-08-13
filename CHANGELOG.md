@@ -8,6 +8,70 @@
 
 ## [Unreleased]
 
+### Added — Programming P5 TASK-PROG-505: workspace Runtime & Bảo trì (S5-D) (2026-08-13)
+
+**BE gap-fill: `GET /operations` (list).** Commit riêng trước đó
+(`store.ListOperations` + `RuntimeService.ListOperations`, mọi state kể cả
+terminal, cursor HMAC newest-first) — dùng cho tab "Phiên bản & Bảo trì".
+
+**FE — `RuntimeServicePage.tsx` (PGM-04, `UJ-PROG-07/08`).** Ba tab
+`?tab=runtime|watch|service` (mặc định `runtime`, cũng là đích redirect
+`/runtime` không tab theo UX §11.1) cộng `DangerZone` cố định dưới cùng:
+
+- **Runtime**: `RuntimeSummary` + `CoreConnectionPanel` dùng lại
+  `useProgrammingRuntimeContext()` đã có từ TASK-PROG-500 (không poll trùng).
+  `TaskRuntimeTable` hiện `—` trung thực cho chu kỳ gần nhất/lớn nhất/số lần
+  quá giờ — **ba trường này không có trong STATUS payload UDS v1**
+  (`RuntimeOperationSnapshot` chỉ mang producer/active/lkg/overrideIds, không
+  có metric Task); đây là khoảng hở Core cần một action UDS mới, ghi rõ trong
+  UI thay vì bịa số.
+- **Theo dõi**: `OnlineWatch`/`TracePanel` gọi THẬT `GET /runtime/monitor`
+  (`useProgrammingRuntimeMonitor`, không mock) — nhận đúng `503
+  PRG-ERR-UNAVAILABLE-001` từ backend hiện tại vì UDS chưa có action mang
+  sample runtime theo Point, và hiện trạng thái "chưa sẵn sàng" phản ánh
+  đúng lỗi đó (Network tab thấy request thật, không phải giả lập).
+  `POST/GET/DELETE /runtime/traces` cùng lý do, chưa nối query riêng.
+- **Phiên bản & Bảo trì**: `PreviousVersionsDrawer` giới hạn đúng dữ liệu có
+  AUTHORITY thật — Active + LKG từ `GET /runtime`, lịch sử operation từ
+  `GET /operations` mới nối; **không có route "liệt kê mọi Revision của
+  Project"** trong hợp đồng 25-route hiện hành (chỉ `GET /revisions/{id}` đơn
+  lẻ), nên chọn khôi phục một Revision bất kỳ ngoài LKG là khoảng hở BE cần
+  route mới — ghi rõ trong code, không suy đoán danh sách giả.
+  `AuditTimeline` dùng `GET /audit` (đã có từ TASK-PROG-500).
+- **DangerZone**: `RestoreDialog` khôi phục về LKG dùng ĐÚNG đường ống
+  operation/reconcile như Commission (`useRestoreWorkflow.ts` — re-auth qua
+  `AuthProvider.login` thật, idempotency key một lần qua `sessionStorage`,
+  poll `GET /operations/{id}`, `UNKNOWN_RECONCILING` có nút "Kiểm tra lại
+  trạng thái", không tự POST lại). `BundleImportPanel` đọc file `.zip` thật,
+  tính SHA-256 bằng `crypto.subtle.digest` client-side, gọi
+  `POST /bundles/import` thật (route đã có từ TASK-PROG-206) — nhập KHÔNG tự
+  Active. `RetainResetDialog` gọi thật `POST /retain/reset` (vẫn 503 —
+  BE-Core chưa có cơ chế phát `confirmationToken` một-lần theo
+  DDD-SEC-PROG-001 §4) và hiện đúng artboard "bị khóa" của UX §16.4.1 khi
+  nhận `503`: không có kết quả lạc quan, không ô xác nhận giả trước khi có
+  danh sách biến RETAIN thật. Viewer thấy cả ba mục ở chế độ đọc kèm lý do
+  thiếu quyền — không thấy một dãy nút bị vô hiệu hóa (UX §16.4).
+
+**Test/evidence.** Go: `go build`/`go vet` sạch; `go test ./... -count=1` 18
+package PASS, gồm test mới `TestRuntimeServiceListOperationsNewestFirstIncludesTerminal`
+(chạy Commission thật tới SUCCEEDED, xác nhận list trả đúng Kind/State). FE:
+`npx tsc --noEmit` sạch; `npm run lint` sạch; `npx vitest --run --environment
+jsdom src` → 61 file/**502** test PASS (499 cũ + 3 mới: viewer không thấy nút
+DangerZone thật, admin khôi phục LKG re-auth thật + POST một lần + đọc ngược
+`actualActiveRevisionId`, tab Theo dõi gọi `GET /runtime/monitor` thật và
+hiện đúng "chưa sẵn sàng" khi 503). `npm run build` PASS (contract drift
+25/25, error catalog 20/99).
+
+**Khoảng hở còn mở, ghi rõ để không nhận nhầm là đã xong:** `GET
+/runtime/monitor`, `POST/GET/DELETE /runtime/traces`, `POST /retain/reset`
+cần Core bổ sung action UDS mới (metric Task, sample theo Point,
+`confirmationToken` một-lần) — ngoài phạm vi sửa tối thiểu của P5, thuộc P3/
+P4/Core. Danh sách Revision lịch sử đầy đủ (ngoài Active/LKG) cần một route
+BE mới. Flag Web `PROGRAMMING_REV_A` và FE `VITE_PROGRAMMING_REV_A` giữ mặc
+định TẮT; `RELEASE_READY` không đổi.
+
+Refs: TASK-PROG-505, Plan 53 §5.9 S5-D, UX-WEB-PROG-001 §5 PGM-04/§16.4/§22.
+
 ### Added — Programming P5 TASK-PROG-504: workspace Kiểm tra & Đưa vào vận hành (S5-C) (2026-08-13)
 
 **BE gap-fill: `GET /overrides`.** Route thứ ba (sau capabilities/runtime và

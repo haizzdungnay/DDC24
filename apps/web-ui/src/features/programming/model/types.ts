@@ -191,6 +191,7 @@ export type ProgrammingOperationState =
 
 export interface ProgrammingOperationView {
   operationId: string
+  kind?: 'COMMISSION' | 'RESTORE' | 'IMPORT' | 'RESET_RETAIN' | string
   state: ProgrammingOperationState
   step: string
   requestedRevisionId: string | null
@@ -199,6 +200,11 @@ export interface ProgrammingOperationView {
   keepsRunningRevision: boolean
   startedAt: string
   updatedAt: string
+}
+
+export interface ProgrammingOperationPage {
+  items: ProgrammingOperationView[]
+  nextCursor?: string | null
 }
 
 /** `GET /overrides` — chỉ Point đang thật sự bị force; `actorId` rỗng khi
