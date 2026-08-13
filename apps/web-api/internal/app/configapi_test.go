@@ -301,6 +301,41 @@ func TestIOBundleApplyFailureRestoresBothFiles(t *testing.T) {
 	}
 }
 
+func TestIOBundleOmittedCollectionsPersistAsArrays(t *testing.T) {
+	app, token := newTestAppWithAdmin(t)
+	app.reloadDispatcher = func(string) (bool, []string) { return true, nil }
+
+	body := `{"io":{},"safe_state":{}}`
+	w := modbusServeAuth(t, app, token, http.MethodPut, "/api/v1/system/config/io-bundle", body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	ioData, err := os.ReadFile(filepath.Join(app.cfg.ConfigDir, "io_config.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	safeData, err := os.ReadFile(filepath.Join(app.cfg.ConfigDir, "io_safe_state.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string][]byte{"io": ioData, "safe-state": safeData} {
+		if bytes.Contains(data, []byte(`: null`)) {
+			t.Fatalf("%s còn collection null: %s", name, data)
+		}
+	}
+	for _, field := range []string{`"ui": []`, `"ao": []`, `"do": []`} {
+		if !bytes.Contains(ioData, []byte(field)) {
+			t.Fatalf("io thiếu %s: %s", field, ioData)
+		}
+	}
+	for _, field := range []string{`"ao": []`, `"do": []`} {
+		if !bytes.Contains(safeData, []byte(field)) {
+			t.Fatalf("safe-state thiếu %s: %s", field, safeData)
+		}
+	}
+}
+
 func newTestAppWithAdmin(t *testing.T) (*App, string) {
 	t.Helper()
 	users := writeTestUsers(t, "admin123", RoleAdmin)

@@ -131,11 +131,17 @@ bool load_safe_state_config(const std::string& path, bool must_exist,
     }
 
     if (const json::Value* ao = root->get("ao")) {
-        if (!ao->is_arr()) {
+        /* Tương thích dữ liệu do Web trước 2026-08-13 đã ghi `null` khi người
+         * dùng chưa cấu hình kênh nào. `null` ở đây chỉ có thể mang cùng ngữ
+         * nghĩa với thiếu field/array rỗng: giữ default 0V/4mA theo mode. Mọi
+         * kiểu khác vẫn fail-fast để không che cấu hình sai nguy hiểm. */
+        if (ao->type == json::Value::NUL) {
+            std::fprintf(stderr,
+                         "WARN  safe_cfg.legacy_null ao (dùng default theo mode; Web phải ghi [])\n");
+        } else if (!ao->is_arr()) {
             std::fprintf(stderr, "ERROR safe_cfg.bad_field ao (phải là array)\n");
             return false;
-        }
-        for (const auto& e : ao->arr) {
+        } else for (const auto& e : ao->arr) {
             const json::Value* ch = e->get("ch");
             const json::Value* safe = e->get("safe");
             if (!ch || !ch->is_num() || !safe || !safe->is_num()) {
@@ -165,11 +171,13 @@ bool load_safe_state_config(const std::string& path, bool must_exist,
     }
 
     if (const json::Value* dout = root->get("do")) {
-        if (!dout->is_arr()) {
+        if (dout->type == json::Value::NUL) {
+            std::fprintf(stderr,
+                         "WARN  safe_cfg.legacy_null do (dùng default open; Web phải ghi [])\n");
+        } else if (!dout->is_arr()) {
             std::fprintf(stderr, "ERROR safe_cfg.bad_field do (phải là array)\n");
             return false;
-        }
-        for (const auto& e : dout->arr) {
+        } else for (const auto& e : dout->arr) {
             const json::Value* ch = e->get("ch");
             const json::Value* safe = e->get("safe");
             if (!ch || !ch->is_num() || !safe || !safe->is_str()) {
