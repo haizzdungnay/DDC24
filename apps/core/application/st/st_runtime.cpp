@@ -4,6 +4,8 @@
 #include <cstring>
 #include <new>
 
+#include "st/st_retain.hpp"
+
 namespace core {
 
 bool StProgramRuntime::activate(const uint8_t* artifact, std::size_t size, StLoadError* err,
@@ -33,6 +35,14 @@ bool StProgramRuntime::prepare(const uint8_t* artifact, std::size_t size,
         auto candidate = std::make_unique<StPreparedProgram>();
         if (!load_st_artifact(artifact, size, opts ? *opts : defaults,
                               &candidate->program, err)) {
+            activation_fail_count_++;
+            return false;
+        }
+        if (!st_prepare_retain_layout_identity(&candidate->program)) {
+            if (err) {
+                err->code = st_ir_error::kBadTable;
+                err->message = "RETAIN layout identity is not canonical";
+            }
             activation_fail_count_++;
             return false;
         }

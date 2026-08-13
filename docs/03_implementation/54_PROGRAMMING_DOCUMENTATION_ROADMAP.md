@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.34 |
-| Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.24; P1 `6/6`, P2 `8/8`, P3 `2/8 SOURCE/DOD DONE`; tiếp theo `TASK-PROG-302`; `RELEASE_READY BLOCKED`** |
-| Ngày baseline | 2026-08-11 |
+| Phiên bản | 3.35 |
+| Trạng thái | **IMPLEMENTATION IN PROGRESS — candidate v2.34; P1/P2/P3 DONE về source/host, P4 `3/6`; tiếp theo `TASK-PROG-403`; `RELEASE_READY BLOCKED`** |
+| Ngày baseline | 2026-08-13 |
 | Chủ quản | System Engineering + Document Control |
 | Người phê duyệt | Product Owner, System Architect, Verification Lead |
 | Phạm vi | 22 hồ sơ điều khiển yêu cầu, thiết kế, kiểm chứng và triển khai Programming Rev A |
@@ -395,6 +395,7 @@ Mỗi lần thay đổi mức, thêm **một dòng mới**; không sửa số l�
 | 2026-08-11 P2-task-207 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P2 SOURCE/DOD DONE 8/8 / G2 EVIDENCE BLOCKED / RELEASE_READY BLOCKED** | Source `3e5281d`; hostile corpus 25 lớp và zero-mutation 8 bảng, 23 audit alias, compiler timeout/OOM/output/source bounds, fuzz 2.156 lượt; CTest 929/929, Go/race, FE 494/494, G1 7/7 PASS. Tổng I=Y giữ 2/60, Test Result 0/32 PASS; tiếp theo `TASK-PROG-300` |
 | 2026-08-11 P3-task-300 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P3 SOURCE/DOD 1/8 / G3 IN PROGRESS / RELEASE_READY BLOCKED** | Source `4f7e0ac`; prepare/preallocate ngoài scan, boundary/LKG swap không cấp phát và no-parser/compiler symbol gate; targeted 84/84, CTest 933/933, Go, FE 494/494, G1 7/7 PASS. Tổng I=Y giữ 2/60, Test Result 0/32 PASS; next `TASK-PROG-301` |
 | 2026-08-11 P3-task-301 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P3 SOURCE/DOD 2/8 / G3 IN PROGRESS / RELEASE_READY BLOCKED** | Source `a831a0d`; profile Rev A 1/1/1, 1/5/30 s, budget `<20%`, base-step sequence/missed release và watchdog ADR-028; targeted 74/74, CTest 936/936, Go, FE 494/494, G1 7/7 PASS. Tổng I=Y giữ 2/60, Test Result 0/32 PASS; next `TASK-PROG-302` |
+| 2026-08-13 P4-task-402 | 22 | 0 | 0 | 0 | 22 | 0 | 0 | 100% | 60,0% | **P3 DONE / P4 3/6 / G4 IN PROGRESS / RELEASE_READY BLOCKED** | Snapshot đuổi kịp `TASK-PROG-302..402`; riêng Task 402 source `3ca5d22` hoàn tất RETAIN v2 stable identity/layout/full CRC/typed+FB/atomic/cold-init và scheduler/bootstrap wiring. Targeted 111/111, CTest 991/991, Go, FE 494/494, docs harness PASS. CORE-109 I=Y làm tổng 3/60; Test Result vẫn 0/32 PASS; next `TASK-PROG-403`. |
 
 ## 10.1 Ma trận impact của Amendment A1 trên 22 hồ sơ
 
@@ -569,6 +570,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 | 3.32 | 2026-08-11 | Ghi PR #155 đã merge tại `424367a`, tree `7b81f79`; remote feature branch đã xóa. Candidate v2.23/pin 22/22, P3 1/8 source/DoD và ranh giới evidence/release không đổi; GitHub Actions không chạy step nào do billing/spending-limit, gate local đầy đủ vẫn PASS và đã ghi trong PR | Document Control |
 | 3.33 | 2026-08-11 | Hoàn tất `TASK-PROG-301`: thêm snapshot P3 2/8, dẫn source profile Rev A/base-step/watchdog và review/evidence G3; phát hành candidate v2.24 do Index/Architecture/Control/FW-SOM/VVP/Risk/Trace/Plan đổi. Targeted 74/74, CTest 936/936, Go, FE 494/494 và G1 7/7 PASS; giữ 0/32 PASS và RELEASE_READY BLOCKED; commit/tree/PR hồ sơ chờ ghi sau merge | Core + Controls + Verification + Document Control |
 | 3.34 | 2026-08-11 | Ghi provenance `TASK-PROG-301`: PR #157 đã merge tại `d4fd15d`, tree `fe321c3`; remote feature branch đã xóa. Candidate v2.24/pin 22/22, P3 2/8 và ranh giới evidence/release không đổi; GitHub Actions không chạy step nào do billing/spending-limit, gate local đầy đủ vẫn PASS và đã ghi trong PR | Document Control |
+| 3.35 | 2026-08-13 | Đồng bộ tracker sau `TASK-PROG-402`: P3 DONE, P4 3/6, CORE-109 I=Y, phát hành candidate v2.34 do 6/22 hồ sơ baseline đổi; ghi rõ targeted 111/111, CTest 991/991, Go/FE/docs PASS nhưng `VS-PROG-029/030` chưa chạy, 0/32 PASS và RELEASE_READY BLOCKED. | Core + Verification + Document Control |
 
 | Vai trò | Người ký | Trạng thái | Ngày/ghi chú |
 |---|---|---|---|

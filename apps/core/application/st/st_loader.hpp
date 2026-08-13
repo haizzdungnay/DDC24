@@ -64,10 +64,9 @@ struct StFbState {
     int64_t start_ns = 0;
     bool    q = false;
 
-    /* PID (TASK-PROG-303, DDD-CTRL-PROG-001 §7). RETAIN save/restore của
-     * state này CHƯA nối — theo dõi ở TASK-PROG-402 cùng các FB retained
-     * khác; retain_layout_hash đã tính chữ ký FB retained nên activation
-     * artifact không tương thích ngược sẽ bị phát hiện dù chưa lưu byte. */
+    /* PID (TASK-PROG-303, DDD-CTRL-PROG-001 §7). TASK-PROG-402 lưu state
+     * bằng codec wire canonical; pid_prev_call_ns được rebase khi restore vì
+     * timestamp monotonic không có nghĩa qua process restart. */
     float   pid_integral = 0.0f;
     float   pid_prev_pv = 0.0f;
     float   pid_prev_output = 0.0f;
@@ -92,7 +91,20 @@ struct StLoadedProgram {
     std::vector<StIrRetainEntry> retain_entries;
     uint32_t                     retain_layout_hash = 0;
     uint32_t                     retain_record_size = 0;
+    /* SHA-256 canonical của stable variable/FB identity + type + offset.
+     * Artifact schema 1 chỉ mang layout_hash u32; digest mạnh này được
+     * runtime dựng lại một lần khi prepare để record RETAIN v2 chống va chạm
+     * CRC32 và không phải hash tên trong đường scan. */
+    uint8_t                      retain_layout_sha256[32] = {0};
     std::vector<StIrSourceMap>   source_map;
+
+    bool has_retain() const
+    {
+        if (!retain_entries.empty()) return true;
+        for (const StIrFbInstance& fb : fb_instances)
+            if (fb.retained) return true;
+        return false;
+    }
 
     /* Đặt mọi slot biến về giá trị khởi tạo và nạp hằng vào vùng hằng. */
     void reset_to_initial();

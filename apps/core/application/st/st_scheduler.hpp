@@ -28,6 +28,7 @@
 #include "graph/point_table.hpp"
 #include "safety/overrun_monitor.hpp"
 #include "st/st_limits.hpp"
+#include "st/st_retain.hpp"
 #include "st/st_runtime.hpp"
 #include "st/st_trace.hpp"
 
@@ -137,6 +138,18 @@ struct StProgramInstance {
      * "đã nhả quyền". Reset về false khi instance publish thành công
      * (st_apply_all_outputs) hoặc khi activate artifact mới. */
     bool        outputs_withdrawn = false;
+
+    /* TASK-PROG-402: mailbox thuộc StRetainService, không sở hữu ở instance.
+     * Scan chỉ publish fixed snapshot; worker mới ghi đĩa. */
+    StRetainMailbox* retain_mailbox = nullptr;
+    StRetainRestoreState retain_restore_state = StRetainRestoreState::NOT_APPLICABLE;
+    const char* retain_reject_code = nullptr;
+    uint64_t retain_generation = 0;
+    StRetainRestoreState pending_retain_restore_state =
+        StRetainRestoreState::NOT_APPLICABLE;
+    const char* pending_retain_reject_code = nullptr;
+    uint64_t pending_retain_generation = 0;
+    uint64_t last_successful_now_ns = 0;
 };
 
 struct StTaskConfig {
@@ -272,6 +285,14 @@ public:
     const std::vector<std::unique_ptr<StTask>>& tasks() const { return tasks_; }
     void set_loader_options(const StLoaderOptions& o) { loader_opts_ = o; }
 
+    /* Chỉ cấu hình ngoài RT. Service phải sống lâu hơn scheduler. */
+    void set_retain_service(StRetainService* service);
+    StRetainService* retain_service() const { return retain_service_; }
+
+    /* Gọi sau khi output batch của base-step hiện tại đã commit. Chỉ copy
+     * snapshot bounded vào mailbox, không filesystem I/O/lock/allocation. */
+    void publish_committed_retain_snapshots() noexcept;
+
 private:
     StSchedulerProfile profile_ = StSchedulerProfile::SUPPORTING_AS_BUILT;
     uint64_t base_step_count_ = 0;
@@ -279,6 +300,7 @@ private:
     StLoaderOptions loader_opts_;
     std::function<uint64_t()> wall_clock_ = default_monotonic_wall_clock_ns;
     StSchedulerTrace* trace_ = nullptr;
+    StRetainService* retain_service_ = nullptr;
 
     void run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult* out);
     void apply_pending_activations(StTask& task);

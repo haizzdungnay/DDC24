@@ -94,7 +94,7 @@ bool serialize_st_ir(const StIrModule& mod, std::vector<uint8_t>* out, std::stri
     usage.constants = mod.constants.size();
     usage.function_blocks = mod.fb_instances.size();
     usage.bindings = mod.io_bindings.size();
-    usage.retain_variables = mod.retain_entries.size();
+    usage.retain_variables = mod.retain_entries.size() + mod.retained_fb_count();
     usage.retain_bytes = mod.retain_record_size;
     usage.sections = 6u + (mod.has_retain() ? 1u : 0u) + (!mod.source_map.empty() ? 1u : 0u);
     st_limits::RevAProfileError profile_error;

@@ -171,6 +171,8 @@ bool StScheduler::add_program(const std::string& task_id, const std::string& ins
                                          : st_sched_limits::kMaxProgramsPerTask;
     if (task->programs().size() >= max_per_task)
         return fail("too many programs in task '" + task_id + "'");
+    if (instance_id.empty() || instance_id.size() > 64)
+        return fail("instance id must be 1..64 characters");
     if (find_program(instance_id)) return fail("duplicate instance id '" + instance_id + "'");
 
     std::size_t total = 0;
@@ -188,6 +190,11 @@ bool StScheduler::add_program(const std::string& task_id, const std::string& ins
     auto inst = std::make_unique<StProgramInstance>();
     inst->instance_id = instance_id;
     inst->order = order;
+    if (retain_service_) {
+        inst->retain_mailbox = retain_service_->register_instance(instance_id);
+        if (!inst->retain_mailbox)
+            return fail("cannot register RETAIN identity for instance '" + instance_id + "'");
+    }
     task->programs().push_back(std::move(inst));
     std::sort(task->programs().begin(), task->programs().end(),
               [](const std::unique_ptr<StProgramInstance>& a,
@@ -241,6 +248,17 @@ bool StScheduler::request_activation(const std::string& instance_id,
         return false;
     }
 
+    StRetainResult retain_result;
+    if (prepared->program.has_retain()) {
+        if (retain_service_ && p->retain_mailbox) {
+            retain_result = retain_service_->restore(instance_id, &prepared->program,
+                                                      wall_clock_());
+        } else {
+            retain_result.state = StRetainRestoreState::COLD_INIT_MISSING;
+            retain_result.message = "RETAIN service is not configured; cold initialization";
+        }
+    }
+
     try {
         std::vector<uint8_t> bytes(artifact);
         p->pending_artifact.swap(bytes);
@@ -249,6 +267,9 @@ bool StScheduler::request_activation(const std::string& instance_id,
         return false;
     }
     p->pending_program = std::move(prepared);
+    p->pending_retain_restore_state = retain_result.state;
+    p->pending_retain_reject_code = retain_result.reject_code;
+    p->pending_retain_generation = retain_result.generation;
     p->has_pending = true;
     p->pending_is_rollback = false;
     p->state = StProgramState::STAGED;
@@ -355,6 +376,10 @@ void StScheduler::apply_pending_activations(StTask& task)
             p->last_successful_base_step = 0;
             p->output_commit_generation = 0;
             p->outputs_withdrawn = false;
+            p->retain_restore_state = p->pending_retain_restore_state;
+            p->retain_reject_code = p->pending_retain_reject_code;
+            p->retain_generation = p->pending_retain_generation;
+            p->last_successful_now_ns = 0;
             /* Giữ lại bytes để promote thành last-known-good SAU KHI chạy được
              * >= 1 tick không fault — package chưa chạy lần nào không đủ tư
              * cách làm mốc rollback. */
@@ -378,6 +403,9 @@ void StScheduler::apply_pending_activations(StTask& task)
          * cùng artifact lỗi. */
         p->has_pending = false;
         p->pending_is_rollback = false;
+        p->pending_retain_restore_state = StRetainRestoreState::NOT_APPLICABLE;
+        p->pending_retain_reject_code = nullptr;
+        p->pending_retain_generation = 0;
     }
 }
 
@@ -454,6 +482,7 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
             break;
         }
         p->last_successful_base_step = base_step_count_;
+        p->last_successful_now_ns = now_ns;
         /* Chạy được >= 1 tick không fault -> đủ điều kiện last-known-good. */
         if (!p->activated_artifact.empty()) {
             p->retired_artifact.swap(p->last_known_good);
@@ -524,6 +553,33 @@ bool StScheduler::any_force_safe() const
     for (const auto& t : tasks_)
         if (t->enabled() && t->monitor().should_force_safe()) return true;
     return false;
+}
+
+void StScheduler::set_retain_service(StRetainService* service)
+{
+    retain_service_ = service;
+    for (auto& task : tasks_)
+        for (auto& program : task->programs())
+            program->retain_mailbox = service
+                ? service->register_instance(program->instance_id)
+                : nullptr;
+}
+
+void StScheduler::publish_committed_retain_snapshots() noexcept
+{
+    if (!retain_service_) return;
+    for (auto& task : tasks_) {
+        for (auto& program : task->programs()) {
+            if (!program->retain_mailbox || !program->runtime.loaded() ||
+                program->last_successful_base_step != base_step_count_ ||
+                program->output_commit_generation != base_step_count_)
+                continue;
+            const StLoadedProgram* loaded = program->runtime.program();
+            if (loaded && loaded->has_retain())
+                (void)st_publish_retain_snapshot(program->retain_mailbox, *loaded,
+                                                 program->last_successful_now_ns);
+        }
+    }
 }
 
 } // namespace core

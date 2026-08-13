@@ -1,7 +1,7 @@
 # Program / Task Scheduler Specification — MK-DDC-24 FW SOM
 
 > **Document ID:** SW-SCHED-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-07-28
+> **Phiên bản:** 1.1 | 2026-08-13
 > **Workstream:** C0.7 (MS-03)
 > **Trạng thái:** Supporting As-Built — source hiện tại tại `apps/core/application/st/`; không phải Target authority Programming v2.2
 > **Nguồn quyết định:** ADR-020; `PROGRAM_SOM_FW_DRAFT_DESIGN` §7.3, §7.4, §10; quyết định mô hình scheduler 2026-07-28
@@ -306,12 +306,14 @@ Khi **mọi** instance đều `STOPPED`/`DISABLED`/`EMPTY`, `SafetyManager` xem 
 
 | Khía cạnh | Quy định |
 |---|---|
-| Vị trí | `/var/lib/mkddc/retain/<instance_id>.bin` |
-| Định dạng | header (magic `MKRT`, version u16, `layout_hash` u32, `record_size` u32, CRC-32 u32) + dữ liệu |
+| Vị trí | `${PROGRAMMING_STATE_DIR}/retain/<sha256(controllerId\0instanceId)>.bin`; fallback `${STATE_DIR}/programming/retain`, rồi `/data/mkddc/programming/retain` |
+| Định dạng | Record v2: header 160 byte + payload canonical; layout v1; CRC-32 trên toàn record khi trường CRC được zero |
+| Định danh | SHA-256 của controller identity + NUL + stable instance ID; đối chiếu instance/layout/artifact SHA-256 trước restore |
 | Ghi | Atomic: ghi `.tmp` → `fsync` → `rename` → `fsync` thư mục |
 | Nhịp ghi | Chỉ khi **có thay đổi** và **cách lần ghi trước ≥ 60 s**; cộng một lần khi shutdown sạch |
-| Wear | Ghi tối đa ~1 440 lần/ngày/instance. Với eMMC ≥ 3 000 chu kỳ P/E và wear-leveling, biên an toàn rất lớn |
-| Khôi phục | Chấp nhận **chỉ khi** magic đúng, version đúng, CRC đúng, `layout_hash` khớp artifact đang load |
+| Biên RT | Chỉ snapshot sau output batch commit; scan copy tối đa 4 KiB vào mailbox hai slot, không I/O/lock/allocation; worker ngoài RT coalesce bản mới nhất |
+| Payload | Biến typed theo wire codec và state `TON/TOF/R_TRIG/F_TRIG/PID`; không persist padding ABI hoặc timestamp monotonic tuyệt đối |
+| Khôi phục | Chấp nhận **chỉ khi** magic/version/header/layout/CRC/identity/artifact/size/reserved đều hợp lệ; validate toàn payload trước khi apply |
 | Từ chối | Cold start với giá trị khởi tạo + diagnostic `RT-RETAIN-001..004`; **không** chặn khởi động |
 
 | Mã | Lý do từ chối |
@@ -321,8 +323,12 @@ Khi **mọi** instance đều `STOPPED`/`DISABLED`/`EMPTY`, `SafetyManager` xem 
 | `RT-RETAIN-003` | `layout_hash` khác (chương trình đã đổi biến RETAIN) |
 | `RT-RETAIN-004` | `record_size` không khớp |
 
-Không có nâng cấp bản ghi retain giữa các layout ở Rev A.0. Đổi biến RETAIN = mất giá
-trị retain, và điều này phải được ghi rõ cho người vận hành trong tài liệu bàn giao.
+Không có migration giữa hai layout không tương thích ở Rev A. Đổi identity/type/
+offset/size của biến hoặc FB RETAIN làm layout hash/digest đổi và dẫn tới cold-init.
+Chèn biến **không RETAIN** không làm identity layout đổi. Timer được lưu elapsed và
+rebase theo clock process mới; PID khôi phục integral/previous output nhưng cycle
+đầu reseed timing/derivative. File missing, orphan `.tmp`, corrupt hoặc version lạ
+không được restore một phần và không chặn Core boot.
 
 ---
 
@@ -397,3 +403,4 @@ lập với SOM** và là lý do việc restart chấp nhận được.
 | Rev | Ngày | Nội dung |
 |---|---|---|
 | 1.0 | 2026-07-28 | Tạo mới. Đóng workstream C0.7 (MS-03). Chốt mô hình fixed-priority non-preemptive với 3 lý do; mô hình đối tượng Resource/Task/ProgramInstance/Artifact; tick cơ sở 50 ms, bù trôi, bỏ tick không dồn; đồng hồ chụp một lần mỗi tick; phân tách bắt buộc `CoreMetrics` / `OverrunMonitor` / `SafetyManager` / `AlarmRuntime`; chính sách overrun bất đối xứng vào nhanh ra chậm; máy trạng thái 11 trạng thái + 9 lệnh; RETAIN với wear-control 60 s; quy tắc watchdog chỉ kick sau tick hoàn tất kèm công thức `WatchdogSec`; 5 mã alarm; 12 nhóm test bắt buộc. |
+| 1.1 | 2026-08-13 | Đồng bộ As-Built `TASK-PROG-402`: stable controller/instance identity, record v2/layout v1/CRC toàn record, typed variable+FB codec, mailbox hai slot ngoài I/O scan, checkpoint sau output commit, atomic write và explicit cold-init diagnostic; giữ Forlinx/HIL `VS-PROG-029/030` chưa chạy. |

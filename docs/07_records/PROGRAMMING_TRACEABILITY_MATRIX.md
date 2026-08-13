@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 3.13 |
+| Phiên bản | 3.14 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 60 dòng trace + 8 journey + migration 17 UC; `17 DECIDED/0 OPEN`; truy vết hai chiều `32/32` |
-| Cập nhật | 2026-08-11 |
+| Cập nhật | 2026-08-13 |
 | Chủ quản | Verification Lead |
 | Người review | Document Control, Product, Architect và tất cả discipline lead |
 | Người phê duyệt | Verification Lead + Document Control |
@@ -16,10 +16,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Nối **yêu cầu → user journey → thiết kế → nơi phải sửa code → kịch bản test → bằng chứng → release** cho cả 60 requirement. Dùng để trả lời hai câu: “yêu cầu này ai lo?” và “cái gì hỏng nếu đổi chỗ này?”. |
 | 2. Ai phải đọc file này? | Verification Lead và Document Control (chủ quản); mọi discipline lead khi đổi requirement hoặc contract; Release authority trước khi ký. |
-| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế/nơi sửa/kịch bản. `TASK-PROG-301` tại `a831a0d` thêm source partial CORE-102/108 và NFR-103: profile Rev A 1/1/1, period 1/5/30 s, budget `<20%`, base-step sequence/missed release và watchdog ADR-028. P3 2/8 nhưng tổng vẫn **2/60** `I=Y`; bootstrap/process image/target timing còn thiếu. Hai record `BLOCKED`, 30 scenario `NOT_RUN`, **0/32 PASS**; mọi `T/P/R=N`. |
+| 3. Hệ thống hiện tại đang có gì? | 60/60 requirement có thiết kế/nơi sửa/kịch bản. `TASK-PROG-402` tại `3ca5d22` hoàn tất source `CORE-109`: RETAIN stable identity/version/layout/full CRC/atomic/cold-init, typed+FB codec, checkpoint sau output commit và wiring scheduler/bootstrap. Tổng **3/60** `I=Y`; hai record `BLOCKED`, 30 scenario `NOT_RUN`, **0/32 PASS**; mọi `T/P/R=N`. |
 | 4. Thiết kế mới thay đổi điều gì? | Không thay nội dung yêu cầu. Nó chuẩn hóa năm trục `D/I/T/P/R`, quy định **ai được đổi trục nào** và **bằng chứng gì cho phép đổi** (§8), cùng quy tắc khi nào một PASS cũ bị vô hiệu hóa. |
 | 5. Team phải sửa module/contract nào? | Cột “Source target” ở §6 là **nơi phải tạo hoặc sửa**, không phải tuyên bố code đã có. Khi merge code, chỉ trục `I` được đổi và phải kèm commit, file và symbol cụ thể. |
-| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `BE-110` và `CORE-101 I=Y`; 58 dòng `I=N`. Hai Test Result G1 đang `BLOCKED`; toàn bộ `T/P/R` còn `N` cho tới khi workflow E2E đủ acceptance và reviewer độc lập ký. |
+| 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** `BE-110`, `CORE-101` và `CORE-109 I=Y`; 57 dòng `I=N`. `CORE-109 T=N` vì `VS-PROG-029/030` Forlinx/HIL chưa có Test Result. Toàn bộ `T/P/R` còn `N` tới khi workflow E2E đủ acceptance và reviewer độc lập ký. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Với bản thân ma trận: 60/60 dòng giải được về ID canonical, không trùng ID, không có dòng vi phạm `P=Y khi T=N` hay `R=Y khi P=N` — kiểm bằng harness ở [`PROG-REV-2026-08-09`](reviews/PROGRAMMING_DESIGN_SET_REVIEW_2026-08-09.md) §2. |
 
 Đọc `DOCUMENTED` cho đúng: nó chỉ nghĩa là **có link thiết kế và test**, không
@@ -110,7 +110,7 @@ scenario tương ứng có Test Result được review.
 ## 6. Trace chi tiết từng requirement
 
 Status dùng năm trục: `D` documented, `I` implemented, `T` tested, `P` passed,
-`R` released. Hiện mọi dòng `D=YES`; `BE-110` và `CORE-101 I=YES`, 58 dòng còn lại
+`R` released. Hiện mọi dòng `D=YES`; `BE-110`, `CORE-101`, `CORE-109 I=YES`, 57 dòng còn lại
 `I=NO`; toàn bộ `T/P/R=NO` cho tới khi có Test Result/release hợp lệ.
 Source target là vị trí phải tạo/sửa, không phải claim code đã có.
 
@@ -162,7 +162,7 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `CORE-106` | CTRL; LIFE; RSK-003/004 | `4f7e0ac`: prepared handle safe-boundary swap + active/LKG preserve nền; output staging/first-cycle/coordinator/read-back còn thiếu | 011/014 | Y/N/N/N/N |
 | `CORE-107` | CTRL; FWSOM; RSK-005 | Task fault/metrics | 013 | Y/N/N/N/N |
 | `CORE-108` | CTRL; FWSOM; RSK-002 | `a831a0d`: base-step sequence + capability dải 500..2000 ms, systemd/comment runtime theo ADR-028; watchdog cadence/WCET `SCHED_FIFO` target và production wiring còn thiếu | 009/015 | Y/N/N/N/N |
-| `CORE-109` | LIFE; FWSOM; RSK-009 | retain manager/store | 029/030 | Y/N/N/N/N |
+| `CORE-109` | LIFE §8; FWSOM §8; ART §4.6; RSK-009 | `3ca5d22`: `st_retain.{hpp,cpp}` record v2/store/mailbox/service; `st_scheduler.*` restore/checkpoint; `st_process_image.cpp` output-commit boundary; `bootstrap/main.cpp` service lifecycle; `st_control_api.cpp` + schema status health | 029/030 | Y/Y/N/N/N |
 | `CORE-110` | FWSOM; FE; IFSPEC | monitor/trace ring/events | 027 | Y/N/N/N/N |
 | `MCU-101` | FWMCU; ARCH | MCU app/IOP/BSP | 030 | Y/N/N/N/N |
 | `MCU-102` | FWMCU; HW; RSK-003/013 | timeout/safe HAL | 014/030 | Y/N/N/N/N |
@@ -194,7 +194,7 @@ Tên rút gọn map: `LANG=DDD-LANG-PROG-001`, `ART=IFSPEC-ART-PROG-001`,
 | Requirement có design/control | 60/60 = 100% documented |
 | Requirement có source target | 60/60 = 100% planned |
 | Requirement có scenario | 60/60 = 100% specified |
-| Requirement implemented end-to-end | 2/60 confirmed (`BE-110`, `CORE-101`) |
+| Requirement implemented end-to-end | 3/60 confirmed (`BE-110`, `CORE-101`, `CORE-109`) |
 | Scenario có Test Result record | 2/32 (`BLOCKED`); PASS 0/32 |
 | Requirement passed/released | 0/60 |
 
@@ -269,6 +269,7 @@ dùng được trong CI cùng `scripts/docs_iso_harness.py`.
 | 3.11 | 2026-08-11 | `TASK-PROG-207` hoàn tất compiler/bundle/audit assurance tại `3e5281d`: hostile corpus 25 lớp/zero-mutation 8 bảng, 23 audit alias, timeout/OOM/output/source bounds và fuzz; bổ sung source partial cho SYS-106/107, BE-104/107/108, NFR-101/102/106 và treatment RSK-005/006/011/012/014. P2 8/8 source/DoD nhưng tổng `I=Y` giữ 2/60 vì full RBAC, operation/Core/target E2E còn thiếu; hai record BLOCKED, 0/32 PASS, mọi `T/P/R=N` |
 | 3.12 | 2026-08-11 | `TASK-PROG-300` hoàn tất prepared runtime boundary tại `4f7e0ac`: bổ sung source partial cho CORE-103/106 và NFR-103/108, treatment RSK-003/006; targeted 84/84 và CTest 933/933 host PASS. Tổng `I=Y` giữ 2/60 vì CORE-103 còn full no-blocking/10.000 cycle Forlinx, operation/production/target E2E còn thiếu; hai record BLOCKED, 0/32 PASS, mọi `T/P/R=N` |
 | 3.13 | 2026-08-11 | `TASK-PROG-301` hoàn tất profile/base-step scheduler tại `a831a0d`: bổ sung source partial CORE-102/108, NFR-103 và treatment RSK-002; targeted 74/74, CTest 936/936 host PASS. Tổng `I=Y` giữ 2/60 vì process image/bootstrap/production và 10.000 cycle `SCHED_FIFO` Forlinx còn thiếu; hai record BLOCKED, 0/32 PASS, mọi `T/P/R=N` |
+| 3.14 | 2026-08-13 | `TASK-PROG-402` hoàn tất `CORE-109 I=Y` tại `3ca5d22`: RETAIN stable identity/layout/version/full CRC, typed+FB codec, async atomic write, output-commit checkpoint, cold-init/status và scheduler/bootstrap wiring. Tổng `I=Y` thành 3/60; không tạo Test Result, `VS-PROG-029/030` Forlinx/HIL vẫn NOT RUN, 0/32 PASS và mọi `T/P/R=N`. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

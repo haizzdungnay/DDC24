@@ -454,7 +454,21 @@ private:
     bool step_retain()
     {
         const SectionRef& s = sec_[st_ir::SEC_RETAIN_LAYOUT];
-        if (!s.present) return true;
+        std::size_t retained_fb_count = 0;
+        for (const StIrFbInstance& fb : out_->fb_instances)
+            if (fb.retained) ++retained_fb_count;
+        std::size_t retained_var_count = 0;
+        for (const StIrVariable& variable : out_->variables)
+            if (variable.storage == StStorage::VAR_RETAIN) ++retained_var_count;
+
+        if (!s.present) {
+            if (retained_var_count != 0 || retained_fb_count != 0)
+                return fail(st_ir_error::kBadTable,
+                            "RETAIN declaration exists without RETAIN_LAYOUT");
+            return true;
+        }
+        if (retained_var_count == 0 && retained_fb_count == 0)
+            return fail(st_ir_error::kBadTable, "empty RETAIN_LAYOUT is not canonical");
         if (s.size < 16) return fail(st_ir_error::kBadTable, "RETAIN_LAYOUT too small");
         const uint8_t* p = d_ + s.offset;
         out_->retain_layout_hash = rd_u32(p);
@@ -463,11 +477,23 @@ private:
         if (rd_u32(p + 12) != 0) return fail(st_ir_error::kBadTable, "RETAIN reserved must be zero");
         if (count > st_ir::kMaxRetainVars)
             return fail(st_ir_error::kResourceLimit, "RETAIN variable count exceeds limit");
+        if (count != s.item_count || count != retained_var_count)
+            return fail(st_ir_error::kBadTable,
+                        "RETAIN entry_count does not match retained variables");
         if (out_->retain_record_size > st_ir::kMaxRetainRecord)
             return fail(st_ir_error::kResourceLimit, "RETAIN record size exceeds limit");
-        if (static_cast<uint64_t>(16) + static_cast<uint64_t>(count) * 8 > s.size)
-            return fail(st_ir_error::kBadTable, "RETAIN entries exceed section size");
+        if (static_cast<uint64_t>(16) + static_cast<uint64_t>(count) * 8 != s.size)
+            return fail(st_ir_error::kBadTable, "RETAIN section size is not canonical");
+
+        uint32_t expected_offset = 0;
+        std::size_t variable_cursor = 0;
         for (uint32_t i = 0; i < count; i++) {
+            while (variable_cursor < out_->variables.size() &&
+                   out_->variables[variable_cursor].storage != StStorage::VAR_RETAIN)
+                ++variable_cursor;
+            if (variable_cursor >= out_->variables.size())
+                return fail(st_ir_error::kBadTable, "RETAIN variable table is incomplete");
+            const StIrVariable& expected = out_->variables[variable_cursor++];
             const uint8_t* e = p + 16 + i * 8u;
             StIrRetainEntry r;
             r.slot = rd_u16(e);
@@ -480,17 +506,20 @@ private:
             if (static_cast<uint64_t>(r.offset) + type_size(r.type) >
                 out_->retain_record_size)
                 return fail(st_ir_error::kBadTable, "RETAIN offset outside record");
-            bool type_matches_variable = false;
-            for (const StIrVariable& variable : out_->variables)
-                if (variable.slot == r.slot) {
-                    type_matches_variable = variable.type == r.type;
-                    break;
-                }
-            if (!type_matches_variable)
+            if (r.slot != expected.slot || r.type != expected.type ||
+                r.offset != expected_offset)
                 return fail(st_ir_error::kBadTable,
-                            "RETAIN type does not match variable declaration");
+                            "RETAIN identity/type/offset is not canonical");
+            expected_offset += static_cast<uint32_t>(type_size(r.type));
             out_->retain_entries.push_back(r);
         }
+
+        for (const StIrFbInstance& fb : out_->fb_instances)
+            if (fb.retained)
+                expected_offset += static_cast<uint32_t>(st_fb_retain_state_size(fb.fb_type));
+        if (expected_offset != out_->retain_record_size)
+            return fail(st_ir_error::kBadTable,
+                        "RETAIN record_size does not match variable and FB state layout");
         return true;
     }
 
@@ -668,7 +697,10 @@ private:
         usage.constants = sec_[st_ir::SEC_CONSTANTS].item_count;
         usage.function_blocks = sec_[st_ir::SEC_FB_INSTANCES].item_count;
         usage.bindings = sec_[st_ir::SEC_IO_BINDING].item_count;
-        usage.retain_variables = out_->retain_entries.size();
+        std::size_t retained_fb_count = 0;
+        for (const StIrFbInstance& fb : out_->fb_instances)
+            if (fb.retained) ++retained_fb_count;
+        usage.retain_variables = out_->retain_entries.size() + retained_fb_count;
         usage.retain_bytes = out_->retain_record_size;
         usage.sections = section_count_;
         st_limits::RevAProfileError profile_error;

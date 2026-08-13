@@ -110,6 +110,18 @@
         "faultCount": { "type": "integer" },
         "hasLastKnownGood": { "type": "boolean" },
         "hasRetain": { "type": "boolean" },
+        "retainState": {
+          "enum": ["NOT_APPLICABLE", "COLD_INIT_MISSING", "COLD_INIT_REJECTED", "RESTORED"],
+          "description": "Kết quả restore RETAIN của artifact đang active; cold-init không ngăn chương trình chạy."
+        },
+        "retainDetailCode": {
+          "type": ["string", "null"],
+          "description": "RT-RETAIN-001..004 khi cold-init do record bị từ chối; null khi thiếu file bình thường hoặc restore thành công."
+        },
+        "retainGeneration": { "type": "integer", "minimum": 0,
+          "description": "Generation mới nhất đã restore hoặc ghi atomic thành công trong process hiện tại." },
+        "retainWriteCount": { "type": "integer", "minimum": 0 },
+        "retainWriteFailures": { "type": "integer", "minimum": 0 },
         "programName": { "type": ["string", "null"] },
         "artifactSha256": { "type": ["string", "null"],
           "description": "base64 của SHA-256 artifact đang chạy. BE dùng để xác minh cái đang chạy đúng là cái mình gửi." },

@@ -178,26 +178,38 @@ private:
     void build_retain_layout()
     {
         uint32_t offset = 0;
-        std::string sig;
+        /* Schema identity v1: identity ổn định là kind + tên khai báo + type,
+         * còn offset/size khóa đúng byte layout. Không dùng slot vì thêm một
+         * biến KHÔNG RETAIN trước đó không được làm mất RETAIN tương thích. */
+        std::string sig = "MKDDC-RETAIN-LAYOUT:1;";
         for (const StIrVariable& v : out_->variables) {
             if (v.storage != StStorage::VAR_RETAIN) continue;
             StIrRetainEntry e;
             e.slot = v.slot;
             e.type = v.type;
             e.offset = offset;
-            offset += static_cast<uint32_t>(type_size(v.type));
+            const uint32_t size = static_cast<uint32_t>(type_size(v.type));
+            offset += size;
             out_->retain_entries.push_back(e);
+            sig += "V:";
             sig += v.name;
             sig += ':';
             sig += st_type_name(v.type);
+            sig += ':' + std::to_string(e.offset) + ':' + std::to_string(size);
             sig += ';';
         }
-        /* Trạng thái FB retained cũng nằm trong bản ghi retain. */
+        /* Trạng thái FB retained nằm sau biến RETAIN, theo codec không phụ
+         * thuộc sizeof/padding của StFbState. */
         for (const StIrFbInstance& f : out_->fb_instances) {
             if (!f.retained) continue;
+            const uint32_t fb_offset = offset;
+            const uint32_t size = static_cast<uint32_t>(st_fb_retain_state_size(f.fb_type));
+            offset += size;
+            sig += "F:";
             sig += f.name;
             sig += ':';
             sig += st_fb_type_name(f.fb_type);
+            sig += ':' + std::to_string(fb_offset) + ':' + std::to_string(size);
             sig += ';';
         }
         out_->retain_record_size = offset;

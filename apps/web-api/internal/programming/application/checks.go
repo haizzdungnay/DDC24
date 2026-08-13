@@ -21,7 +21,7 @@ import (
 const (
 	checkTargetProfile   = "MK-DDC-24-REV-A"
 	checkStoreProfile    = "MKDDC24_REVA"
-	checkCompilerVersion = "fwsom-st-1.1.0"
+	checkCompilerVersion = "fwsom-st-1.2.0"
 )
 
 type RequestCheckCommand struct {

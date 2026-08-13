@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LIFE-PROG-001` |
-| Phiên bản | 0.4 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-400` có source/host evidence cho journal safe-boundary; RETAIN wiring (402), BE coordinator (403) và cutover live (404) còn mở** |
+| Phiên bản | 0.5 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-400..402` có source/host evidence; BE coordinator (403), cutover live (404) và target/HIL còn mở** |
 | Ngày | 2026-08-13 |
 | Chủ quản | Core Lead + Backend Lead + Operations Lead |
 | Người review | System Architect, Controls Lead, Verification Lead |
@@ -22,10 +22,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **vòng đời của một thay đổi**: Check → Commission → Active, cộng Restore, RETAIN, LKG và phục hồi sau khi mất điện hoặc crash. Trả lời câu hỏi khó nhất: *mất điện đúng lúc đang tráo chương trình thì máy khởi động lên chạy cái gì?* |
 | 2. Ai phải đọc file này? | Core, BE và Ops (chủ quản chung); Architect và QA review. Ops đọc §10 và §14 vì runbook dựa trực tiếp vào đây. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-306` (`f35234c`) đã dựng `StScheduler` thật trong bootstrap qua `--programming-mode`; graph.execute() bị khoá khi PROGRAM_ONLY — không còn "bootstrap chưa tạo scheduler". `TASK-PROG-400` (`a523a04`) thêm `StJournal`: append/checksum 5 phase §7 và bảng quyết định phục hồi boot, là COMPONENT độc lập, TEST ĐƯỢC KHÔNG CẦN I/O thật cho phần quyết định — CHƯA wire vào `apply_pending_activations()`/bootstrap (đó là phần BE coordinator của TASK-PROG-403 cùng UDS transport gap đã ghi ở TASK-PROG-306). `st_program_control_v1.schema.json` có handler đứng riêng, **chưa** nối BE↔Core. `StRetainStore` (RETAIN CRC/atomic) đã có, chưa wire — TASK-PROG-402. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-306` (`f35234c`) đã dựng `StScheduler` thật trong bootstrap qua `--programming-mode`; graph.execute() bị khoá khi PROGRAM_ONLY. `TASK-PROG-400` (`a523a04`) thêm `StJournal` 5 phase nhưng chưa wire coordinator. `TASK-PROG-402` (`3ca5d22`) đã nối RETAIN v2 vào scheduler/bootstrap: stable identity, exact layout/version, CRC toàn record, typed variable+FB codec, mailbox ngoài RT, atomic write và explicit cold-init. Control handler vẫn standalone, **chưa** nối BE↔Core. |
 | 4. Thiết kế mới thay đổi điều gì? | Biến Commission thành **giao dịch có nhật ký, sống sót qua restart**: một `operationId` bền vững, tráo chương trình tại biên an toàn, và chỉ nâng LKG **sau khi** chu kỳ đầu chạy xong không lỗi. Thất bại ở bất kỳ bước nào đều giữ nguyên Revision đang chạy. |
 | 5. Team phải sửa module/contract nào? | §12. Core: nhật ký + máy trạng thái tráo an toàn; BE: coordinator có operation bền vững và đối chiếu lại trạng thái; Ops: dùng procedure §14 thay cho thao tác SSH thủ công. |
-| 6. Điều gì còn bị chặn? | `OD-PROG-009` (chính sách RETAIN warm/cold/đổi Revision) và `OD-PROG-010` (giữ bao nhiêu Revision, xử lý mất điện giữa giao dịch). Chưa ký thì không chốt được ma trận phục hồi. |
+| 6. Điều gì còn bị chặn? | Chính sách RETAIN source của `OD-PROG-009` đã được hiện thực cho Rev A: chỉ restore exact-compatible, còn missing/corrupt/mismatch thì cold-init có diagnostic. Phần còn chặn release là journal/coordinator/UDS/cutover `TASK-PROG-403..405` và `VS-PROG-029/030` power-loss/restart trên Forlinx/HIL. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §13: `VS-PROG-011` (chèn lỗi/crash/cắt điện tại **mọi** trạng thái vòng đời — phải luôn đúng một active, không kích hoạt đôi, LKG vẫn nạp được), `VS-PROG-029` (RETAIN), `VS-PROG-030` (restart toàn hệ trên HIL). `NOT RUN`. |
 
 Nguyên tắc chống “báo thành công giả” (`RSK-PROG-007`): `HTTP 202` chỉ nghĩa là
@@ -51,7 +51,7 @@ Authority theo lớp:
 
 | Thành phần | As-Built 2026-08-09 | Gap Target |
 |---|---|---|
-| ST components | compiler/loader/scheduler/retain/trace/journal có unit/integration test | RETAIN/journal chưa wire vào lifecycle (402/403) |
+| ST components | compiler/loader/scheduler/retain/trace/journal có unit/integration test; RETAIN đã wire scheduler/bootstrap ở `TASK-PROG-402` | journal/coordinator chưa wire vào lifecycle (403) và target power-fault chưa chạy |
 | ScanLoop | `TASK-PROG-306` (`f35234c`): `CutoverMode` chọn producer, `graph.execute()` khoá khi `PROGRAM_ONLY`, bootstrap dựng `StScheduler` thật | exclusive producer đã đạt; lifecycle safe swap DURABLE (journal wired) còn ở 403 |
 | Config API | `st_program_control_v1.schema.json` và handler standalone | BE↔Core protocol/durable operation chưa wired |
 | BE/FE | không có Programming package/route user reachable | project/check/commission/restore UI/API/storage |
@@ -183,23 +183,32 @@ hay bootstrap — đó là bước tích hợp cần `TASK-PROG-403` (coordinato
 
 ## 8. RETAIN lifecycle
 
-RETAIN record key gồm controller, program instance stable ID, layout hash/version,
-artifact lineage và CRC. Storage target dưới `${STATE_DIR}/programming/retain/`,
-temp+fsync+rename+dir fsync, permission service-only. Không dùng program name đơn
-lẻ làm identity.
+RETAIN record v2 dùng key file `SHA-256(controllerId + NUL + stableInstanceId)`;
+header 160 byte lưu record/layout version, flags, compact layout CRC, payload size,
+generation, capture/source metadata, instance/layout/artifact SHA-256, CRC-32 toàn
+record và reserved bytes. Storage thực dưới `${PROGRAMMING_STATE_DIR}/retain/`,
+fallback `${STATE_DIR}/programming/retain/`, rồi `/data/mkddc/programming/retain/`.
+Directory/file là `0750/0640`; đọc dùng `O_NOFOLLOW`, regular-file/size bound và
+exact read; ghi temp riêng + `fsync` + close + `rename` + `fsync` thư mục.
 
 | Tình huống | Hành vi |
 |---|---|
-| same compatible layout | restore typed values trước STARTING |
-| thêm field có default và migration approved | migrate non-RT, record generation mới |
-| incompatible/corrupt/missing | block hoặc cold-init theo TransitionPlan + acknowledgement |
+| same compatible layout | validate toàn record/payload rồi restore typed values + FB state trước STARTING |
+| thêm biến không RETAIN | giữ compatible vì stable layout identity không chứa IR slot |
+| thay identity/type/order/size/layout | cold-init `RT-RETAIN-003`, không migration ngầm |
+| corrupt/version/size/missing | cold-init explicit; `RT-RETAIN-001/002/004` hoặc `COLD_INIT_MISSING`; không chặn Core boot |
 | activation fail | candidate RETAIN không ghi đè active record |
-| first-cycle pass | dirty checkpoint async; force checkpoint ở stop/upgrade có deadline |
+| output batch commit thành công | snapshot bounded vào mailbox hai slot; worker ngoài RT ghi nếu đổi và đủ 60 s |
+| shutdown sạch | force flush snapshot mới nhất, bỏ qua giới hạn 60 s |
 | user reset | operation riêng, expected active + strong confirmation + audit |
 
 Power loss giữa write giữ file cũ hoặc file mới valid; CRC/layout mismatch không
-được silently zero. RETAIN save không block scan; queue coalesces latest snapshot,
-overflow/failure báo health/alarm và giữ dirty state.
+được silently zero. RETAIN save không block scan: scan không filesystem I/O, lock
+hay allocation; mailbox coalesce latest nhưng không ghi đè slot worker đang đọc.
+Payload biến dùng codec typed; FB dùng codec fixed-size không phụ thuộc ABI. Timer
+lưu elapsed rồi rebase monotonic; PID giữ integral/previous output nhưng reseed
+timing/derivative ở cycle đầu. `program_status` công khai `retainState`,
+`retainDetailCode`, generation và bộ đếm ghi/lỗi.
 
 ## 9. Graph cutover và replacement
 
@@ -242,9 +251,9 @@ read-back. Không auto-activate khi import.
 
 | Trách nhiệm | As-Built | Target sửa/tạo |
 |---|---|---|
-| runtime integration | `apps/core/bootstrap/main.cpp` dựng `StScheduler` thật tại `f35234c` (306); `application/runtime/scan_loop.*` | ProgrammingRuntimeCoordinator gọi `StJournal`/RETAIN tại đúng safe-boundary + UDS transport |
+| runtime integration | `apps/core/bootstrap/main.cpp` dựng `StScheduler` thật tại `f35234c` (306) và `StRetainService` tại `TASK-PROG-402`; `st_process_image.cpp` publish snapshot sau output commit | ProgrammingRuntimeCoordinator gọi `StJournal` tại đúng safe-boundary + UDS transport |
 | scheduler/artifact | `apps/core/application/st/` | staged candidate, lifecycle state, read-back |
-| journal/retain | `st_retain.*` (CRC/atomic, chưa wire — 402); `st_journal.*` tại `TASK-PROG-400` (5 phase Core-side, chưa wire vào scheduler — 403) | `application/programming/retain_migration`; wiring vào `apply_pending_activations()` |
+| journal/retain | `st_retain.*`, `st_scheduler.*`, `st_process_image.cpp`, `bootstrap/main.cpp` tại `3ca5d22`; `st_journal.*` tại `TASK-PROG-400` | journal wiring vào operation coordinator; migration ngoài exact layout không thuộc Rev A |
 | BE operation | chưa có | `apps/web-api/internal/programming/{service,store,worker,transport}` |
 | DB | chưa có | schema trong `DM-PROG-001` |
 | IPC | standalone control schema | `contracts/ipc/programming_v1` |
@@ -259,7 +268,7 @@ read-back. Không auto-activate khi import.
 | `LIFE-T-003` | power cut tại mỗi journal record | một active deterministically, LKG usable |
 | `LIFE-T-004` | stale expected active / two BE instance | một thắng, một `409`; zero partial side effect |
 | `LIFE-T-005` | first-cycle fault từng instruction/output | zero candidate output publish; LKG restored |
-| `LIFE-T-006` | RETAIN same/migrate/corrupt/missing/reset | đúng plan/ack/audit/CRC; không silent zero |
+| `LIFE-T-006` | RETAIN same/corrupt/version/layout/identity/missing, FB timer/PID, output commit, atomic temp | Host component `StRetain.*:StControlApi.*:StIntegration.*` PASS; `VS-PROG-029/030` target/HIL vẫn `NOT RUN` |
 | `LIFE-T-007` | graph cutover conflict/fault | không dual owner; backup restore |
 | `LIFE-T-008` | BE/Core/board restart + network timeout | FE shows unknown then authoritative terminal |
 | `LIFE-T-009` | stage 1 MiB + trace/load | Scan/IOP deadline trong limit target |
@@ -315,8 +324,7 @@ DB, TASK-PROG-403). `recover()` pseudocode ở trên khớp
 
 | Blocker | Owner | Gate | Điều kiện mở |
 |---|---|---|---|
-| RETAIN/cutover/hold policy decision OPEN | Product + Architect + Controls | DOC-G2 approval | ký decision package và đồng bộ SRS |
-| Core journal/IPC/BE operation chưa implement | Core + BE | Plan 53 | code + integration/fault tests |
+| Journal/IPC/BE operation chưa tích hợp | Core + BE | Plan 53 | hoàn tất `TASK-PROG-403/404` + integration/fault tests |
 | Power-loss/first-cycle/IOP chưa có target evidence | QA + Ops | release | target/HIL test result approved |
 
 | Phiên bản | Ngày | Thay đổi | Tác giả |
@@ -325,12 +333,13 @@ DB, TASK-PROG-403). `recover()` pseudocode ở trên khớp
 | 0.2 | 2026-08-09 | Bổ sung journal field schema và recovery algorithm cho từng pha crash/power-loss; chuyển Detailed Draft chờ review | System Engineering |
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; đóng finding `F-PROG-001/002` | System Engineering |
 | 0.4 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (bootstrap dựng StScheduler thật) và `TASK-PROG-400` (`StJournal` 5 phase Core-side, append/checksum, boot-recovery); ghi rõ phạm vi hẹp hơn bảng field §15 (thiếu type/candidateRevision/expectedActive-generation/activeBefore/lkgBefore/retainPlan/cutoverPlan/recordSeq — cần TASK-PROG-403 BE coordinator); giữ target/HIL NOT TESTED | Core + BE |
+| 0.5 | 2026-08-13 | Đồng bộ `TASK-PROG-402`: RETAIN record v2/layout v1, stable controller+instance identity, full-record CRC, exact typed/FB restore, async mailbox/worker, output-commit checkpoint, atomic write/cold-init diagnostics và status health; giữ `VS-PROG-029/030` Forlinx/HIL NOT RUN | Core |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Core + Backend + Operations Lead | Chờ review | — |
-| Architect + Controls + QA | Chờ review | — |
-| System Architect + Product Owner | **BLOCKED — chưa phê duyệt** | `PROG-OD-001` |
+| Core + Backend + Operations Lead | **WAIVED FOR IMPLEMENTATION; hậu kiểm còn mở** | `AUTH-PROG-2026-08-11-03` |
+| Architect + Controls + QA | **WAIVED FOR IMPLEMENTATION; target review còn mở** | `AUTH-PROG-2026-08-11-03` |
+| System Architect + Product Owner | **APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03` |
 
 Tự kiểm `DD-01..DD-13`:
 
@@ -338,7 +347,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §16 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §1 mục tiêu và authority; §3 aggregate và bất biến |
-| `DD-03` As-Built | PASS | §2 bảng gap: component ST có test nhưng bootstrap **chưa tạo scheduler**, ScanLoop để `StScheduler*` tùy chọn, `st_program_control_v1.schema.json` có handler đứng riêng, triển khai còn thủ công qua SSH |
+| `DD-03` As-Built | PASS | §2 bảng gap: bootstrap PROGRAM_ONLY đã tạo scheduler + RETAIN service; journal/coordinator/UDS vẫn chưa nối; control handler còn standalone |
 | `DD-04` Target ownership | PASS | §3 aggregate và chủ sở hữu; §9 cutover và replacement |
 | `DD-05` Data từng field | PASS | §15 schema bản ghi nhật ký từng trường; §8 vòng đời RETAIN |
 | `DD-06` Interface | N/A tại file này | Hợp đồng BE↔Core thuộc `IFSPEC-PROG-001` §8/§12; ở đây là máy trạng thái phía sau hợp đồng đó |
@@ -348,7 +357,7 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-10` Repository mapping | PASS | §12 nhật ký Core, coordinator BE và điểm nối bootstrap |
 | `DD-11` Verification | PASS | §13 gắn `VS-PROG-011/029/030`; yêu cầu chèn lỗi tại **mọi** trạng thái vòng đời |
 | `DD-12` Compatibility/deploy/rollback | PASS | §14 triển khai, rollback và Operations; §8 tương thích RETAIN qua đổi Revision |
-| `DD-13` Trace/risk/decision/sign-off | **BLOCKED** | Owner: Product + Runtime Architect (`OD-PROG-009`), Product + System (`OD-PROG-010`). Ảnh hưởng: chưa chốt chính sách RETAIN và số Revision giữ lại thì **không chốt được ma trận phục hồi**, và `RSK-PROG-009` (15 điểm) không giảm. Gate: `DOC-G2`. Điều kiện mở: ký ma trận warm/cold/đổi Revision/mất điện + ngân sách độ bền ghi, và ký thiết kế giao dịch persistence có chèn lỗi tại từng bước |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; release BLOCKED | `AUTH-PROG-2026-08-11-03` mở implementation; `RSK-PROG-009` vẫn Open 15 vì `VS-PROG-029/030` target/HIL chưa PASS và residual chưa được owner+QA chấp nhận |
 
 Một `BLOCKED`, đủ bốn trường. Tài liệu **không** thay thế bằng chứng target/mất
 điện/HIL và **không** mở gate implementation hay release.

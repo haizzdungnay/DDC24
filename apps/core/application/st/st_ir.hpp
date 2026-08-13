@@ -37,7 +37,7 @@ constexpr uint32_t    kTargetAbi       = 0x00000F01u;
 constexpr uint32_t    kHeaderSize      = 128;
 constexpr uint32_t    kMaxArtifactSize = st_profile_generated::kMaxArtifactBytes;
 constexpr uint32_t    kInstructionSize = 16;
-constexpr const char* kCompilerVersion = "fwsom-st-1.1.0";
+constexpr const char* kCompilerVersion = "fwsom-st-1.2.0";
 
 /* flags (SPEC §2.4) */
 constexpr uint16_t kFlagHasSourceMap = 1u << 0;
@@ -270,7 +270,14 @@ struct StIrModule {
     uint32_t                     retain_record_size = 0;
     std::vector<StIrSourceMap>   source_map;
 
-    bool has_retain() const { return !retain_entries.empty(); }
+    std::size_t retained_fb_count() const
+    {
+        std::size_t count = 0;
+        for (const StIrFbInstance& fb : fb_instances)
+            if (fb.retained) ++count;
+        return count;
+    }
+    bool has_retain() const { return !retain_entries.empty() || retained_fb_count() != 0; }
 };
 
 /* ---- Serialize ---- */

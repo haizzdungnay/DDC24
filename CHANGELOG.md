@@ -7,6 +7,32 @@
 ---
 
 ## [Unreleased]
+
+### Added — RETAIN lifecycle bền vững cho Programming P4 (2026-08-13)
+
+**TASK-PROG-402.** Nối RETAIN thật vào `StScheduler`/bootstrap PROGRAM_ONLY với
+định danh ổn định `SHA-256(controllerId + NUL + programInstanceId)`, record v2
+header 160 byte, layout v1, CRC-32 toàn record và đối chiếu đồng thời layout
+CRC/SHA-256, artifact SHA-256, instance identity, kích thước và reserved bytes.
+Payload dùng codec canonical cho biến typed và state `TON/TOF/R_TRIG/F_TRIG/PID`,
+không persist padding ABI hoặc timestamp monotonic của process cũ; timer được
+rebase theo elapsed và PID khởi tạo lại clock/derivative an toàn.
+
+Snapshot chỉ được publish sau khi toàn bộ output batch commit thành công. Đường
+scan dùng mailbox SPSC hai slot bounded, không filesystem I/O, lock hay cấp phát;
+worker ngoài RT coalesce bản mới nhất, chỉ ghi khi dữ liệu đổi và đủ 60 s, đồng
+thời force-flush khi shutdown sạch. Ghi file theo chuỗi temp riêng → `fsync` →
+`rename` → `fsync` thư mục, từ chối symlink/non-regular/oversize và giữ permission
+directory `0750`, file `0640`. Record missing/corrupt/version/layout/identity sai
+đều cold-init có trạng thái/chẩn đoán công khai qua `program_status`, không chặn
+Core boot và không restore một phần. Compiler metadata lên `fwsom-st-1.2.0`; BE
+Check/runner được nâng cùng phiên để tiếp tục fail-closed trên đúng version/ABI.
+
+**Kiểm chứng.** Targeted RETAIN/control/IR/manifest/integration: `111/111 PASS`;
+artifact manifest golden: `PASS`; Release build bật Modbus+BACnet+HMI và CTest
+`991/991 PASS`; Go vet/test không cache PASS; FE `494/494` + lint + build PASS;
+docs ISO harness PASS. `VS-PROG-029/030` trên Forlinx/HIL vẫn `NOT RUN`; vì vậy
+`0/32 Test Result PASS`, feature flag `OFF` và `RELEASE_READY BLOCKED` không đổi.
 ### Added — hold-last TTL-bounded + rút proposal an toàn Programming P4 (2026-08-13)
 
 **TASK-PROG-401.** `DDD-CTRL-PROG-001` §6/§12 ghi rõ một khoảng hở: hold-last
