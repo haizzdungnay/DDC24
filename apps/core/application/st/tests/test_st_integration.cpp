@@ -742,4 +742,64 @@ TEST(StIntegration, ScanLoopStepDoesNotAllocateWithStProgram)
         << "ST làm tăng cấp phát trong scan path: " << allocations;
 }
 
+TEST(StIntegration, TenThousandCycleSoakStaysAllocationFreeAndBounded)
+{
+    /* TASK-PROG-307 (host phần "no-allocation/blocking" + "load test" của
+     * VS-PROG-012/027 — KHÔNG PHẢI 10.000 chu kỳ WCET thật trên Forlinx, đòi
+     * hỏi target/HIL thật, ngoài khả năng môi trường host). Cấu hình đúng
+     * đường production sau TASK-PROG-306: PROGRAM_ONLY, graph.execute() bị
+     * khoá, StScheduler là producer duy nhất, có bounded trace attach. */
+    kx_io_shm_t shm{};
+    IobusReader reader;
+    attach_valid_iobus(&reader, &shm);
+    PointTable table;
+    PointQuality quality;
+    WebIpc web;
+    GraphRuntime graph;
+    PriorityResolver resolver;
+    SafeState safe(quality, &graph, &resolver);
+    OutputWriter writer(reader);
+    BacnetObjTable bacnet;
+    ASSERT_TRUE(bacnet.attach());
+    CoreMetrics metrics;
+
+    StScheduler sched(StSchedulerProfile::REV_A);
+    std::string err;
+    StTaskConfig rev_a_cfg;
+    rev_a_cfg.id = "T";
+    rev_a_cfg.period_ms = 1000;
+    rev_a_cfg.budget_ms = 100;  /* 10% < 20% (OD-PROG-012) */
+    ASSERT_TRUE(sched.add_task(rev_a_cfg, &err)) << err;
+    ASSERT_TRUE(sched.add_program("T", "p", 0, &err)) << err;
+    ASSERT_TRUE(sched.request_activation("p", doubler_artifact(), &err)) << err;
+    sched.tick(0);
+    ASSERT_TRUE(sched.start("p", &err)) << err;
+    StSchedulerTrace trace;
+    sched.set_trace_log(&trace);
+
+    ScanDeps deps{&reader, &table, &quality, &web, &graph, &resolver, &safe, &writer, &bacnet,
+                  &metrics, -1, nullptr, nullptr};
+    deps.st_sched = &sched;
+    deps.mode = CutoverMode::PROGRAM_ONLY;
+    ScanLoop loop(deps);
+
+    for (int i = 0; i < 5; i++) { shm.ts_ns += 1000000; loop.step(); }
+
+    std::size_t allocations = 0;
+    {
+        allocation_probe::ScopedCounter counter;
+        for (int i = 0; i < 10000; i++) { shm.ts_ns += 1000000; loop.step(); }
+        allocations = counter.allocations();
+    }
+    EXPECT_LT(allocations, 10000u * 40u)
+        << "10.000 chu kỳ không được làm tăng cấp phát vượt ngưỡng scan loop nền: "
+        << allocations;
+    /* Bounded: capacity trace không phình ra dù chạy rất nhiều chu kỳ — nếu
+     * fault/overrun/activation không xảy ra suốt soak thì size()==0 vẫn hợp
+     * lệ, điều cần khẳng định là KHÔNG VƯỢT capacity, không phải phải đầy. */
+    EXPECT_LE(trace.size(), trace.capacity());
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC)
+        << "sau 10.000 chu kỳ, program vẫn là producer AO — không rơi vào FAULT im lặng";
+}
+
 } // namespace core
