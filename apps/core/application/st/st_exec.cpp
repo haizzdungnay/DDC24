@@ -1,11 +1,20 @@
 #include "st/st_exec.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 #include "st/st_diagnostic.hpp"
 
 namespace core {
 namespace {
+
+/* Ngưỡng phát hiện override cho PID anti-windup: lệch giữa ACTUAL (đã áp)
+ * và OUT (đề xuất cycle trước) vượt tỉ lệ này của dải out_min..out_max thì
+ * coi là nguồn ưu tiên cao hơn đang thắng, freeze integrator. Giá trị cụ
+ * thể là default kỹ thuật hợp lý — "transition envelope đã duyệt" theo
+ * DDD-CTRL-PROG-001 §7 vẫn TARGET-PENDING, cần Controls+Safety review trước
+ * khi khoá số cho field. */
+constexpr float kPidOverrideDetectFraction = 0.01f;
 
 /* Tất cả integer được giữ trong int32 ở slot, nhưng miền hợp lệ phụ thuộc
  * type target (INT16/DINT32/UINT16). Tính trên int64 rồi kiểm miền trước khi
@@ -404,6 +413,59 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
                 const bool clk = ins[0].b;
                 outs[0].b = !clk && st.prev_clk;
                 st.prev_clk = clk;
+                break;
+            }
+            case StFbType::PID: {
+                /* DDD-CTRL-PROG-001 §7. ins[]: SP,PV,KP,KI,KD,OUT_MIN,
+                 * OUT_MAX,ACTUAL. Không publish (fault huỷ cả cycle) nếu
+                 * input non-finite hoặc dải output vô nghĩa — NaN/Inf không
+                 * được lan tới output analog (ST_SUBSET_SPEC §6.3). */
+                const float sp = ins[0].r, pv = ins[1].r;
+                const float kp = ins[2].r, ki = ins[3].r, kd = ins[4].r;
+                const float out_min = ins[5].r, out_max = ins[6].r;
+                const float actual = ins[7].r;
+                if (!std::isfinite(sp) || !std::isfinite(pv) || !std::isfinite(kp) ||
+                    !std::isfinite(ki) || !std::isfinite(kd) || !std::isfinite(out_min) ||
+                    !std::isfinite(out_max) || !std::isfinite(actual))
+                    ST_FAULT(st_diag_code::kRtNonFiniteReal);
+                if (!(out_min < out_max)) ST_FAULT(st_diag_code::kRtLimitMinMax);
+
+                double dt = 0.0;
+                if (!st.pid_first) {
+                    if (now_ns <= st.pid_prev_call_ns) ST_FAULT(st_diag_code::kRtPidInvalidDt);
+                    dt = static_cast<double>(now_ns - st.pid_prev_call_ns) / 1e9;
+                }
+
+                const float error = sp - pv;
+                const float p_term = kp * error;
+                const float i_candidate = std::clamp(
+                    st.pid_integral + ki * error * static_cast<float>(dt), out_min, out_max);
+                /* Derivative-on-measurement để tránh derivative kick khi setpoint
+                 * đổi bậc thang; dt=0 ở lần gọi đầu nên không có prev_pv hợp lệ. */
+                const float d_term = (st.pid_first || dt <= 0.0)
+                    ? 0.0f
+                    : kd * (pv - st.pid_prev_pv) / static_cast<float>(dt);
+                const float u_raw = p_term + i_candidate - d_term;
+                if (!std::isfinite(u_raw)) ST_FAULT(st_diag_code::kRtNonFiniteReal);
+                const float u_limit = std::clamp(u_raw, out_min, out_max);
+
+                /* Override: ACTUAL (đã publish/áp thật) lệch khỏi đề xuất cycle
+                 * trước quá ngưỡng — nguồn ưu tiên cao hơn đang thắng. Freeze
+                 * integrator, không back-calculate và không chép ACTUAL ngoại
+                 * lai vào state (§7: "không được chép actual ngoại lai vào
+                 * integrator để giả thành state của Program"). */
+                const bool overridden = !st.pid_first &&
+                    std::abs(actual - st.pid_prev_output) >
+                        (out_max - out_min) * kPidOverrideDetectFraction;
+
+                st.pid_integral = overridden ? st.pid_integral : (i_candidate - (u_raw - u_limit));
+                st.pid_prev_pv = pv;
+                st.pid_prev_output = u_limit;
+                st.pid_prev_call_ns = now_ns;
+                st.pid_first = false;
+
+                outs[0].r = u_limit;
+                outs[1].b = overridden;
                 break;
             }
             case StFbType::NONE: break;

@@ -63,6 +63,16 @@ struct StFbState {
     bool    timing = false;      /* TON / TOF đang đếm */
     int64_t start_ns = 0;
     bool    q = false;
+
+    /* PID (TASK-PROG-303, DDD-CTRL-PROG-001 §7). RETAIN save/restore của
+     * state này CHƯA nối — theo dõi ở TASK-PROG-402 cùng các FB retained
+     * khác; retain_layout_hash đã tính chữ ký FB retained nên activation
+     * artifact không tương thích ngược sẽ bị phát hiện dù chưa lưu byte. */
+    float   pid_integral = 0.0f;
+    float   pid_prev_pv = 0.0f;
+    float   pid_prev_output = 0.0f;
+    int64_t pid_prev_call_ns = 0;
+    bool    pid_first = true;
 };
 
 /* Chương trình đã nạp và đã cấp phát xong toàn bộ bộ nhớ thực thi.

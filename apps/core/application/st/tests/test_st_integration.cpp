@@ -559,6 +559,91 @@ END_PROGRAM
     EXPECT_EQ(result.source, PointSource::PROGRAM);
 }
 
+TEST(StIntegration, PidActualFeedbackDetectsPriorityOverride)
+{
+    /* TASK-PROG-303: "program/actual feedback" là ACTUAL của PID bind vào
+     * CHÍNH Point Table AO mà OUT publish tới — round-trip qua hardware
+     * feedback (io.ao_setpoint) y hệt production, không phải kênh riêng. */
+    const char* source = R"ST(
+PROGRAM ctrl
+VAR_INPUT sp : REAL; pv : REAL; actual : REAL; END_VAR
+VAR_OUTPUT y : REAL; tr : BOOL; END_VAR
+VAR loop1 : PID; END_VAR
+loop1(SP := sp, PV := pv, KP := 1.0, KI := 0.0, KD := 0.0,
+      OUT_MIN := 0.0, OUT_MAX := 10.0, ACTUAL := actual);
+y := loop1.OUT;
+tr := loop1.TRACKING;
+END_PROGRAM
+)ST";
+    const StIrModule module = compile_only(source);
+    StIrIoBinding sp_bind{};
+    sp_bind.slot = slot_of(module, "sp");
+    sp_bind.point_kind = StPointKind::AV;
+    sp_bind.point_index = 1;
+    StIrIoBinding pv_bind{};
+    pv_bind.slot = slot_of(module, "pv");
+    pv_bind.point_kind = StPointKind::AV;
+    pv_bind.point_index = 2;
+    StIrIoBinding actual_bind{};
+    actual_bind.slot = slot_of(module, "actual");
+    actual_bind.point_kind = StPointKind::AO;
+    actual_bind.point_index = 1;
+    StIrIoBinding y_bind{};
+    y_bind.slot = slot_of(module, "y");
+    y_bind.is_output = true;
+    y_bind.point_kind = StPointKind::AO;
+    y_bind.point_index = 1;
+
+    StScheduler scheduler;
+    make_running(&scheduler, build_with_bindings(source, {sp_bind, pv_bind, actual_bind, y_bind}));
+    PointTable table;
+    PriorityResolver resolver;
+    StIoBridgeStats stats;
+    ASSERT_TRUE(table.set_virtual({PointKind::AV, 0}, 10.0f, PointSource::WEB));  /* sp */
+    ASSERT_TRUE(table.set_virtual({PointKind::AV, 1}, 0.0f, PointSource::WEB));   /* pv */
+
+    auto tracking = [&] {
+        StValue v;
+        StProgramInstance* inst = scheduler.find_program("p");
+        EXPECT_TRUE(inst->runtime.get_variable("tr", &v));
+        return v.b;
+    };
+    auto feed_hardware_back = [&](float value) {
+        IoSnapshot io{};
+        io.ts_ns = table.get({PointKind::AO, 0}).ts_ns + 1;
+        io.ao_setpoint[0] = value;
+        table.update_inputs(io);
+    };
+
+    /* AO Point Table mặc định BAD tới khi có feedback thật đầu tiên — mô
+     * phỏng trạng thái nguội trước khi có round-trip nào (VS-PROG-018:
+     * missing không được thành zero). */
+    feed_hardware_back(0.0f);
+
+    /* Cycle 1: chưa có ACTUAL trước đó (pid_first) — không override. */
+    ASSERT_TRUE(st_load_all_inputs(&scheduler, table, &stats));
+    ASSERT_EQ(scheduler.tick(100 * kMs).programs_run, 1u);
+    ASSERT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &stats));
+    EXPECT_FALSE(tracking());
+    const float y1 = resolver.resolve().ao[0];
+    EXPECT_FLOAT_EQ(y1, 10.0f) << "P thuần: kp(1)*error(10)";
+
+    /* Phần cứng báo lại ĐÚNG giá trị vừa publish — không ai override. */
+    feed_hardware_back(y1);
+    ASSERT_TRUE(st_load_all_inputs(&scheduler, table, &stats));
+    ASSERT_EQ(scheduler.tick(200 * kMs).programs_run, 1u);
+    ASSERT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &stats));
+    EXPECT_FALSE(tracking()) << "actual khớp đề xuất trước — không phải override";
+
+    /* Nguồn ưu tiên cao hơn (manual) thắng arbitration; phần cứng giờ báo
+     * giá trị CỦA MANUAL, không phải của program. */
+    ASSERT_TRUE(resolver.set_ao(PRIO_LOCAL_MANUAL, 0, 3.3f));
+    feed_hardware_back(resolver.resolve().ao[0]);
+    ASSERT_TRUE(st_load_all_inputs(&scheduler, table, &stats));
+    ASSERT_EQ(scheduler.tick(300 * kMs).programs_run, 1u);
+    EXPECT_TRUE(tracking()) << "actual lệch đề xuất cycle trước — phải phát hiện override";
+}
+
 /* ---- ScanLoop thật ---- */
 
 TEST(StIntegration, ScanLoopWithoutStSchedulerBehavesAsBefore)

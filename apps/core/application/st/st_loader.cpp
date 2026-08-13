@@ -363,7 +363,7 @@ private:
             StIrFbInstance f;
             f.name = rd_fixed_string(p, 64);
             const uint16_t ft = rd_u16(p + 64);
-            if (ft < 1 || ft > 4) return fail(st_ir_error::kBadTable, "invalid FB type");
+            if (ft < 1 || ft > 5) return fail(st_ir_error::kBadTable, "invalid FB type");
             f.fb_type = static_cast<StFbType>(ft);
             f.input_slot_base = rd_u16(p + 66);
             f.output_slot_base = rd_u16(p + 68);

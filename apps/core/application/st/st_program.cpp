@@ -77,6 +77,18 @@ const FbPort kTonIn[]  = {{"IN", StType::BOOL}, {"PT", StType::TIME}};
 const FbPort kTonOut[] = {{"Q", StType::BOOL},  {"ET", StType::TIME}};
 const FbPort kTrigIn[]  = {{"CLK", StType::BOOL}};
 const FbPort kTrigOut[] = {{"Q", StType::BOOL}};
+/* PID vòng đơn (TASK-PROG-303, DDD-CTRL-PROG-001 §7). ACTUAL là read-back
+ * của output thực sự đang được áp (qua Point Table AO/DO đã publish priority
+ * 5, hoặc override cao hơn) — chương trình phải wire binding riêng, FB không
+ * tự đọc PriorityResolver để giữ nguyên bất biến "process image chỉ nạp một
+ * lần đầu cycle". Dùng để phát hiện override và freeze integrator. */
+const FbPort kPidIn[] = {
+    {"SP", StType::REAL}, {"PV", StType::REAL},
+    {"KP", StType::REAL}, {"KI", StType::REAL}, {"KD", StType::REAL},
+    {"OUT_MIN", StType::REAL}, {"OUT_MAX", StType::REAL},
+    {"ACTUAL", StType::REAL},
+};
+const FbPort kPidOut[] = {{"OUT", StType::REAL}, {"TRACKING", StType::BOOL}};
 
 struct FbSpec {
     const FbPort* in;  int n_in;
@@ -92,6 +104,8 @@ FbSpec fb_spec(StFbType t)
     case StFbType::R_TRIG:
     case StFbType::F_TRIG:
         return {kTrigIn, 1, kTrigOut, 1};
+    case StFbType::PID:
+        return {kPidIn, 8, kPidOut, 2};
     case StFbType::NONE:
         break;
     }
@@ -106,6 +120,7 @@ StFbType st_fb_type_from_name(const std::string& name)
     if (name == "TOF") return StFbType::TOF;
     if (name == "R_TRIG") return StFbType::R_TRIG;
     if (name == "F_TRIG") return StFbType::F_TRIG;
+    if (name == "PID") return StFbType::PID;
     return StFbType::NONE;
 }
 
@@ -116,6 +131,7 @@ const char* st_fb_type_name(StFbType t)
     case StFbType::TOF:    return "TOF";
     case StFbType::R_TRIG: return "R_TRIG";
     case StFbType::F_TRIG: return "F_TRIG";
+    case StFbType::PID:    return "PID";
     case StFbType::NONE:   break;
     }
     return "?";

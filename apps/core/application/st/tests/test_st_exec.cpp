@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "st/st_compile.hpp"
+#include "st/st_diagnostic.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_runtime.hpp"
 #include "st/st_test_key.hpp"
@@ -491,6 +492,208 @@ END_PROGRAM
     ASSERT_TRUE(rt.execute(3 * kSec).ok);
     EXPECT_TRUE(get_bool(rt, "q1")) << "timer 2s đã hết";
     EXPECT_FALSE(get_bool(rt, "q2")) << "timer 8s chưa hết — hai instance phải độc lập";
+}
+
+/* ---- PID (TASK-PROG-303, DDD-CTRL-PROG-001 §7) ---- */
+
+namespace {
+
+std::string pid_program()
+{
+    return R"ST(
+PROGRAM t
+VAR_INPUT  sp : REAL; pv : REAL; kp : REAL; ki : REAL; kd : REAL;
+           lo : REAL; hi : REAL; act : REAL; END_VAR
+VAR_OUTPUT y : REAL; tr : BOOL; END_VAR
+VAR loop1 : PID; END_VAR
+    loop1(SP := sp, PV := pv, KP := kp, KI := ki, KD := kd,
+          OUT_MIN := lo, OUT_MAX := hi, ACTUAL := act);
+    y := loop1.OUT;
+    tr := loop1.TRACKING;
+END_PROGRAM
+)ST";
+}
+
+void set_pid_gains(StProgramRuntime& rt, float kp, float ki, float kd, float lo, float hi)
+{
+    rt.set_variable("kp", StValue::make_real(kp));
+    rt.set_variable("ki", StValue::make_real(ki));
+    rt.set_variable("kd", StValue::make_real(kd));
+    rt.set_variable("lo", StValue::make_real(lo));
+    rt.set_variable("hi", StValue::make_real(hi));
+}
+
+} // namespace
+
+TEST(StExec, PidProportionalTracksErrorOnFirstCycle)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(pid_program(), &rt));
+    set_pid_gains(rt, /*kp=*/2.0f, /*ki=*/0.0f, /*kd=*/0.0f, /*lo=*/0.0f, /*hi=*/100.0f);
+    rt.set_variable("sp", StValue::make_real(50.0f));
+    rt.set_variable("pv", StValue::make_real(40.0f));
+    rt.set_variable("act", StValue::make_real(0.0f));
+
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_FLOAT_EQ(get_real(rt, "y"), 20.0f) << "P thuần: kp*(sp-pv) = 2*10";
+    EXPECT_FALSE(get_bool(rt, "tr")) << "chu kỳ đầu không có actual trước để so, không coi là override";
+}
+
+TEST(StExec, PidIntegralAccumulatesWithConstantError)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(pid_program(), &rt));
+    set_pid_gains(rt, /*kp=*/0.0f, /*ki=*/1.0f, /*kd=*/0.0f, /*lo=*/-100.0f, /*hi=*/100.0f);
+    rt.set_variable("sp", StValue::make_real(10.0f));
+    rt.set_variable("pv", StValue::make_real(0.0f));
+
+    rt.set_variable("act", StValue::make_real(0.0f));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_FLOAT_EQ(get_real(rt, "y"), 0.0f) << "dt=0 ở chu kỳ đầu, chưa tích luỹ";
+
+    rt.set_variable("act", StValue::make_real(0.0f));
+    ASSERT_TRUE(rt.execute(kSec).ok);
+    EXPECT_FLOAT_EQ(get_real(rt, "y"), 10.0f) << "1s * ki(1)*error(10) = 10";
+
+    rt.set_variable("act", StValue::make_real(10.0f));
+    ASSERT_TRUE(rt.execute(2 * kSec).ok);
+    EXPECT_FLOAT_EQ(get_real(rt, "y"), 20.0f) << "tích luỹ thêm 10 sau 1s nữa";
+}
+
+TEST(StExec, PidLeavesSaturationImmediatelyWhenErrorReversesSign)
+{
+    /* Chữ ký của anti-windup ĐÚNG: khi error đảo dấu với biên độ áp đảo, OUT
+     * phải rời saturation NGAY chu kỳ đó, không trễ vài chu kỳ như khi
+     * integral bị wind up không giới hạn. */
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(pid_program(), &rt));
+    set_pid_gains(rt, /*kp=*/1.0f, /*ki=*/1.0f, /*kd=*/0.0f, /*lo=*/0.0f, /*hi=*/10.0f);
+    rt.set_variable("pv", StValue::make_real(0.0f));
+
+    rt.set_variable("sp", StValue::make_real(1000.0f));
+    rt.set_variable("act", StValue::make_real(0.0f));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_FLOAT_EQ(get_real(rt, "y"), 10.0f) << "error khổng lồ phải bão hoà tại out_max";
+
+    rt.set_variable("act", StValue::make_real(10.0f));
+    ASSERT_TRUE(rt.execute(kSec).ok);
+    EXPECT_FLOAT_EQ(get_real(rt, "y"), 10.0f) << "vẫn bão hoà — error chưa đổi";
+
+    /* Đảo dấu error với biên độ áp đảo (pv nhảy vọt qua sp rất xa). */
+    rt.set_variable("sp", StValue::make_real(-1000.0f));
+    rt.set_variable("act", StValue::make_real(10.0f));
+    ASSERT_TRUE(rt.execute(2 * kSec).ok);
+    EXPECT_FLOAT_EQ(get_real(rt, "y"), 0.0f)
+        << "phải rời saturation NGAY, không lết theo integral bị windup";
+}
+
+TEST(StExec, PidFreezesIntegratorAndReportsTrackingWhenOverridden)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(pid_program(), &rt));
+    set_pid_gains(rt, /*kp=*/1.0f, /*ki=*/1.0f, /*kd=*/0.0f, /*lo=*/-100.0f, /*hi=*/100.0f);
+    rt.set_variable("sp", StValue::make_real(10.0f));
+    rt.set_variable("pv", StValue::make_real(0.0f));
+
+    rt.set_variable("act", StValue::make_real(0.0f));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_FALSE(get_bool(rt, "tr"));
+
+    /* act KHÔNG khớp OUT vừa publish (0) — nguồn ưu tiên cao hơn đang thắng. */
+    rt.set_variable("act", StValue::make_real(999.0f));
+    ASSERT_TRUE(rt.execute(kSec).ok);
+    EXPECT_TRUE(get_bool(rt, "tr"));
+    const float y_overridden_1 = get_real(rt, "y");
+
+    ASSERT_TRUE(rt.execute(2 * kSec).ok);
+    EXPECT_TRUE(get_bool(rt, "tr"));
+    EXPECT_FLOAT_EQ(get_real(rt, "y"), y_overridden_1)
+        << "integral bị freeze — hai chu kỳ overridden liên tiếp phải cho cùng đề xuất, "
+           "không được cộng dồn";
+
+    /* Override nhả: act khớp lại OUT vừa publish. */
+    rt.set_variable("act", StValue::make_real(y_overridden_1));
+    ASSERT_TRUE(rt.execute(3 * kSec).ok);
+    EXPECT_FALSE(get_bool(rt, "tr"));
+    const float y_recovered = get_real(rt, "y");
+
+    rt.set_variable("act", StValue::make_real(y_recovered));
+    ASSERT_TRUE(rt.execute(4 * kSec).ok);
+    EXPECT_FALSE(get_bool(rt, "tr"));
+    EXPECT_GT(get_real(rt, "y"), y_recovered)
+        << "hết override thì tích luỹ phải tiếp tục lớn dần với error còn dương";
+}
+
+TEST(StExec, PidOverflowingOutputIsFault)
+{
+    /* sp/pv không thể mang NaN vào FB qua API công khai — set_variable() và
+     * process image (302) đã chặn non-finite tại biên trước đó. Bài test
+     * này khẳng định lớp phòng thủ RIÊNG của PID: chính p_term có thể
+     * overflow ra Inf từ input hữu hạn (kp/sp rất lớn), và u_raw phải bị
+     * chặn trước khi trở thành lệnh output. */
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(pid_program(), &rt));
+    set_pid_gains(rt, /*kp=*/1e30f, 0.0f, 0.0f, -1e38f, 1e38f);
+    rt.set_variable("sp", StValue::make_real(1e30f));
+    rt.set_variable("pv", StValue::make_real(0.0f));
+    rt.set_variable("act", StValue::make_real(0.0f));
+
+    const StExecResult r = rt.execute(0);
+    EXPECT_FALSE(r.ok);
+    EXPECT_STREQ(r.fault_code, st_diag_code::kRtNonFiniteReal);
+}
+
+TEST(StExec, PidInvertedOutputRangeIsFault)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(pid_program(), &rt));
+    set_pid_gains(rt, 1.0f, 0.0f, 0.0f, /*lo=*/100.0f, /*hi=*/0.0f);
+    rt.set_variable("sp", StValue::make_real(10.0f));
+    rt.set_variable("pv", StValue::make_real(0.0f));
+    rt.set_variable("act", StValue::make_real(0.0f));
+
+    const StExecResult r = rt.execute(0);
+    EXPECT_FALSE(r.ok);
+    EXPECT_STREQ(r.fault_code, st_diag_code::kRtLimitMinMax);
+}
+
+TEST(StExec, PidNonMonotonicTimeIsFault)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(pid_program(), &rt));
+    set_pid_gains(rt, 1.0f, 1.0f, 0.0f, 0.0f, 100.0f);
+    rt.set_variable("sp", StValue::make_real(10.0f));
+    rt.set_variable("pv", StValue::make_real(0.0f));
+    rt.set_variable("act", StValue::make_real(0.0f));
+
+    ASSERT_TRUE(rt.execute(5 * kSec).ok);
+    rt.set_variable("act", StValue::make_real(get_real(rt, "y")));
+    const StExecResult r = rt.execute(5 * kSec);
+    EXPECT_FALSE(r.ok) << "now_ns không tăng — dt<=0 không thể tính an toàn";
+    EXPECT_STREQ(r.fault_code, st_diag_code::kRtPidInvalidDt);
+}
+
+TEST(StExec, TwoPidInstancesAreIndependent)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  sp1 : REAL; sp2 : REAL; END_VAR
+VAR_OUTPUT y1 : REAL; y2 : REAL; END_VAR
+VAR l1 : PID; l2 : PID; END_VAR
+    l1(SP := sp1, PV := 0.0, KP := 1.0, KI := 0.0, KD := 0.0,
+       OUT_MIN := 0.0, OUT_MAX := 100.0, ACTUAL := 0.0);
+    l2(SP := sp2, PV := 0.0, KP := 2.0, KI := 0.0, KD := 0.0,
+       OUT_MIN := 0.0, OUT_MAX := 100.0, ACTUAL := 0.0);
+    y1 := l1.OUT;
+    y2 := l2.OUT;
+END_PROGRAM
+)ST", &rt));
+    rt.set_variable("sp1", StValue::make_real(5.0f));
+    rt.set_variable("sp2", StValue::make_real(5.0f));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_FLOAT_EQ(get_real(rt, "y1"), 5.0f);
+    EXPECT_FLOAT_EQ(get_real(rt, "y2"), 10.0f) << "kp khác nhau — hai instance phải độc lập";
 }
 
 /* ---- Vòng đời activation ---- */
