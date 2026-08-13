@@ -72,6 +72,7 @@ add_library(core_application STATIC
     application/st/st_scheduler.cpp
     application/st/st_process_image.cpp
     application/st/st_retain.cpp
+    application/st/st_journal.cpp
     application/st/st_control_api.cpp)
 target_link_libraries(core_application PUBLIC
     core_domain core_build_settings PkgConfig::SODIUM)
@@ -173,6 +174,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_fuzz_regression.cpp application/st/tests/test_st_exec.cpp
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp
       application/st/tests/test_st_retain.cpp application/st/tests/test_st_control_api.cpp
+      application/st/tests/test_st_journal.cpp
       tests/allocation_probe.cpp)
   target_link_libraries(core_tests PRIVATE st_compiler_lib)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
