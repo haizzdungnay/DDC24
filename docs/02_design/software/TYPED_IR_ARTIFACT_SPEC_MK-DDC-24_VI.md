@@ -1,7 +1,7 @@
 # Typed IR và Artifact Contract — MK-DDC-24 FW SOM Program Runtime
 
 > **Document ID:** SW-IR-ARTIFACT-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-08-11
+> **Phiên bản:** 1.2 | 2026-08-13
 > **Workstream:** C0.6 (MS-01)
 > **Trạng thái:** Supporting As-Built — source hiện tại tại `apps/core/application/st/`; không phải Target authority Programming v2.2
 > **Nguồn quyết định:** ADR-020; `PROGRAM_SOM_FW_DRAFT_DESIGN` §4, §7.2; quyết định ký gói 2026-07-28
@@ -315,16 +315,23 @@ Bố trí slot theo `fb_type` (liên tiếp từ base):
 
 ```text
  offset  size  trường
-      0     4  layout_hash   u32, CRC-32 của chuỗi (name,type,thứ tự) mọi biến RETAIN
-      4     4  record_size   u32, byte của bản ghi retain
-      8     4  entry_count   u32
+      0     4  layout_hash   u32, CRC-32 của identity layout canonical v1
+      4     4  record_size   u32, tổng byte biến RETAIN + state FB RETAIN canonical
+      8     4  entry_count   u32, chỉ số biến VAR_RETAIN
      12     4  reserved      u32, phải = 0
      16   ...  entry_count × 8 byte: slot u16, type u8, reserved u8, offset u32
 ```
 
-`layout_hash` là cái quyết định bản ghi retain cũ có dùng lại được không
-([`ST_SUBSET_SPEC`](ST_SUBSET_SPEC_MK-DDC-24_VI.md) §7). Đổi tên biến, đổi kiểu, hoặc
-đổi thứ tự đều làm hash khác và bản ghi cũ bị từ chối — đúng ý đồ.
+Identity đầu vào CRC là chuỗi bắt đầu bằng `MKDDC-RETAIN-LAYOUT:1;`, tiếp theo
+theo thứ tự khai báo: `V:<name>:<type>:<offset>:<size>;` cho biến RETAIN và
+`F:<name>:<fbType>:<offset>:<codecSize>;` cho FB RETAIN. Slot IR không thuộc
+identity để việc chèn biến **không RETAIN** trước đó không vô hiệu hóa state.
+Đổi tên/type/order/offset/codec size thì hash đổi. `record_size` bao gồm state FB
+canonical: TON/TOF 10 byte, R_TRIG/F_TRIG 1 byte, PID 13 byte; cấm dùng
+`sizeof(StFbState)` hoặc padding ABI.
+
+CRC32 này là identity compact trong artifact; lúc prepare runtime, Core còn dựng
+SHA-256 từ cùng identity canonical để ghi/đối chiếu RETAIN record v2.
 
 ### 4.7 `DEBUG_SOURCEMAP`
 
@@ -452,7 +459,7 @@ bước nào được bỏ qua vì "chắc là đúng".
 | 18 | `CODE`: mọi slot toán hạng `< slot_count`; mọi `dst` `< var_slot_count` | `IR-E-014` |
 | 19 | `CODE`: mọi `imm` của lệnh nhảy thoả `pc < imm ≤ item_count` | `IR-E-014` |
 | 20 | `CODE`: `aux` của `FB_CALL` `< FB_INSTANCES.item_count` | `IR-E-014` |
-| 21 | `RETAIN_LAYOUT` (nếu có): offset trong `record_size`, không chồng lấn | `IR-E-011` |
+| 21 | `RETAIN_LAYOUT`: bắt buộc khi có biến/FB RETAIN và cấm khi rỗng; section/count/size/reserved canonical; mỗi biến đúng thứ tự slot/type/offset; `record_size` đúng tổng biến typed + codec state FB | `IR-E-011` |
 | 22 | Cấp phát toàn bộ bộ nhớ thực thi | `IR-E-015` khi hết bộ nhớ |
 
 Bước 22 là **điểm cấp phát cuối cùng**. Sau đó, mọi chu kỳ thực thi chạy trên bộ nhớ đã
@@ -567,3 +574,4 @@ Có symbol → build sai kiến trúc → CI fail.
 |---|---|---|
 | 1.0 | 2026-07-28 | Tạo mới. Đóng workstream C0.6 (MS-01). Chốt định dạng file (magic/version/ABI/profile/section table), SHA-256 + chữ ký Ed25519 với lý do khác GPG của OTA, 6 section bắt buộc + 2 tuỳ chọn, máy thanh ghi 16 byte/lệnh với 33 opcode, quy tắc chỉ nhảy tiến để bảo đảm chấm dứt, quy trình load 22 bước, 15 mã lỗi trả BE kèm cột retry/giữ package, quy tắc tương thích phiên bản, yêu cầu fuzzing và kiểm bất biến "không parser trong runtime". |
 | 1.1 | 2026-08-11 | Amendment As-Built `TASK-PROG-203`: thay mô tả FNV/timestamp cũ bằng SHA-256 canonical, prefix metadata legacy và timestamp zero; authority Target tiếp tục là `IFSPEC-ART-PROG-001` cùng build manifest ngoài artifact |
+| 1.2 | 2026-08-13 | Đồng bộ `TASK-PROG-402`: layout identity canonical v1 ổn định qua thay đổi slot không RETAIN, `record_size` gồm codec FB RETAIN không phụ thuộc ABI, loader kiểm exact section/order/type/offset/size; compiler metadata lên `fwsom-st-1.2.0` nhưng artifact schema major vẫn 1. |
