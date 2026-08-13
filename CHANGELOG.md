@@ -7,6 +7,33 @@
 ---
 
 ## [Unreleased]
+### Added — TASK-PROG-307: soak 10.000 chu kỳ, đóng P3 (source/host DoD) (2026-08-13)
+
+**TASK-PROG-307** (QA, phụ thuộc 300-306) yêu cầu "no-allocation/blocking,
+10k-cycle target timing, load test". Phần TARGET (WCET/jitter/watchdog thật
+trên Forlinx) đòi hỏi phần cứng vật lý, ngoài khả năng môi trường host —
+giới hạn nhất quán với MỌI task P3 trước (300-306 đều ghi "0/7 Test
+Result... target/HIL NOT TESTED").
+
+Phần HOST đạt được: test soak mới chạy 10.000 `ScanLoop::step()` liên tiếp
+trên cấu hình đúng đường production sau TASK-PROG-306 (`PROGRAM_ONLY`,
+`StScheduler` REV_A là producer duy nhất, bounded trace attach) trong
+`allocation_probe` — không tăng cấp phát vượt ngưỡng nền, trace không vượt
+capacity, program vẫn là producer AO sau cùng (không rơi FAULT im lặng).
+Xác nhận lại gate cấu trúc `VS-PROG-012` bằng
+`scripts/verify_programming_runtime_symbols.py --require-runtime` trên
+`mkddc-core`: không có parser/compiler symbol trong binary production dù
+đã thêm StScheduler/control-api/trace qua TASK-PROG-300..306, và có đủ
+symbol runtime bắt buộc.
+
+**P3 ĐÓNG 8/8 về source/host DoD.** Target evidence (10.000 chu kỳ WCET
+thật trên Forlinx, watchdog, jitter) vẫn `BLOCKED` — cần phần cứng vật lý,
+không phải thiếu source; đây KHÔNG phải điều kiện mở `RELEASE_READY` (giữ
+`0/32 Test Result PASS`, flag `OFF`). Tiếp theo: P4 (`TASK-PROG-400`).
+
+**Kiểm chứng.** Release build sạch bật Modbus/BACnet/HMI và CTest `969/969`
+PASS. Không đổi Go/FE. Source `29907a5`.
+
 ### Added — Bootstrap cutover mode GRAPH_ONLY/PROGRAM_ONLY Programming P3 (2026-08-13)
 
 **TASK-PROG-306.** Dựng `StScheduler` thật trong `bootstrap/main.cpp` LẦN ĐẦU
