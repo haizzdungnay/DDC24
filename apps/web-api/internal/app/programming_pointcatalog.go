@@ -21,7 +21,10 @@ import (
 // suy đoán hay tạo category thứ tư.
 type programmingPointCatalogAdapter struct{ app *App }
 
-func (a *App) programmingPointCatalog() programmingapplication.PointCatalogProvider {
+// programmingPointCatalog trả kiểu cụ thể (không phải interface hẹp) vì
+// adapter implement CẢ `PointCatalogProvider` lẫn `OverrideProvider` — main.go
+// (cùng package) gán nó vào cả hai field của `RuntimeServiceOptions`.
+func (a *App) programmingPointCatalog() programmingPointCatalogAdapter {
 	return programmingPointCatalogAdapter{app: a}
 }
 
@@ -33,6 +36,43 @@ func (adapter programmingPointCatalogAdapter) ListPointCatalog(ctx context.Conte
 	entries := make([]programmingapplication.PointCatalogEntry, 0, len(points))
 	for _, point := range points {
 		entries = append(entries, toPointCatalogEntry(point))
+	}
+	return entries, nil
+}
+
+// ListActiveOverrides — TASK-PROG-504. Chỉ những Point đang thật sự bị force
+// (`Forced==true`) mới xuất hiện; TTL và actor lấy từ `OverrideRegistry` khi
+// registry còn nhớ (override được force qua chính web-api này), nếu không thì
+// dùng field TTL tự thân của PointDTO (`OverrideExpiresInS`, có thể do Core
+// hoặc web restart chưa đồng bộ vào registry) và để `actorId` rỗng — KHÔNG
+// suy đoán actor để lấp chỗ trống. `EffectivePriority` cố ý bỏ trống:
+// `PointDTO.Priority` là chuỗi mô tả nguồn (vd. "Virtual Point"), không phải
+// mức ưu tiên số 1..5 của arbitration — gán nhầm sẽ là bịa dữ liệu.
+func (adapter programmingPointCatalogAdapter) ListActiveOverrides(ctx context.Context) ([]programmingapplication.OverrideEntry, error) {
+	points, err := adapter.app.ReadPoints(ctx)
+	if err != nil {
+		return nil, err
+	}
+	snapshot := adapter.app.overrides.Snapshot()
+	entries := make([]programmingapplication.OverrideEntry, 0)
+	for _, point := range points {
+		if !point.Forced {
+			continue
+		}
+		category, deviceID := pointCatalogCategory(point)
+		entry := programmingapplication.OverrideEntry{
+			Category: category, PointID: point.ID, DeviceID: deviceID, Value: point.Value, Source: point.Source,
+		}
+		if remaining := point.OverrideExpiresInS; remaining != nil {
+			value := int64(*remaining)
+			entry.RemainingS = &value
+		}
+		if tracked, ok := snapshot[point.ID]; ok {
+			entry.ActorID = tracked.User
+			value := int64(tracked.RemainingS)
+			entry.RemainingS = &value
+		}
+		entries = append(entries, entry)
 	}
 	return entries, nil
 }

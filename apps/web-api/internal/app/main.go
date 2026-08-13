@@ -131,6 +131,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
 			Store:        store,
 			Catalog:      app.programmingPointCatalog(),
+			Overrides:    app.programmingPointCatalog(),
 			ControllerID: cfg.ProgrammingTargetID,
 			CursorSecret: []byte(cfg.JWTSecret),
 		})

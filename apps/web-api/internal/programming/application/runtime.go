@@ -25,6 +25,7 @@ type RuntimeServiceOptions struct {
 	Runtime      RuntimeStatusReader
 	Store        *programmingstore.Store
 	Catalog      PointCatalogProvider
+	Overrides    OverrideProvider
 	ControllerID string
 	CursorSecret []byte
 	Now          func() time.Time
@@ -39,6 +40,7 @@ type RuntimeService struct {
 	runtime      RuntimeStatusReader
 	store        *programmingstore.Store
 	catalog      PointCatalogProvider
+	overrides    OverrideProvider
 	controllerID string
 	cursorSecret []byte
 	now          func() time.Time
@@ -61,8 +63,8 @@ func NewRuntimeService(options RuntimeServiceOptions) (*RuntimeService, error) {
 		newID = func() string { return uuid.NewString() }
 	}
 	return &RuntimeService{
-		runtime: options.Runtime, store: options.Store, catalog: options.Catalog, controllerID: options.ControllerID,
-		cursorSecret: options.CursorSecret, now: now, newID: newID,
+		runtime: options.Runtime, store: options.Store, catalog: options.Catalog, overrides: options.Overrides,
+		controllerID: options.ControllerID, cursorSecret: options.CursorSecret, now: now, newID: newID,
 	}, nil
 }
 

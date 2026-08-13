@@ -1,6 +1,9 @@
 package app
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestPointCatalogCategoryFromRealProducerKind(t *testing.T) {
 	cases := []struct {
@@ -66,3 +69,32 @@ func TestPointCatalogDataTypeDigitalVsAnalog(t *testing.T) {
 		t.Fatalf("virtual numeric dataType=%q, want REAL", got)
 	}
 }
+
+func TestListActiveOverridesOnlyReturnsForcedPointsAndNeverFabricatesActor(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	app.core = &pointsCore{points: []PointDTO{
+		{ID: "AO1", Kind: "AO", Value: 42.0, Forced: true, Source: "LOCAL_MANUAL", OverrideExpiresInS: uint32Ptr(120)},
+		{ID: "AO2", Kind: "AO", Value: 10.0, Forced: false},
+	}}
+	entries, err := app.programmingPointCatalog().ListActiveOverrides(context.Background())
+	if err != nil {
+		t.Fatalf("ListActiveOverrides: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %+v; want đúng 1 (chỉ Point đang bị force)", entries)
+	}
+	entry := entries[0]
+	if entry.PointID == "" || entry.Category != "LOCAL" {
+		t.Fatalf("entry = %+v", entry)
+	}
+	if entry.RemainingS == nil || *entry.RemainingS != 120 {
+		t.Fatalf("remainingS = %+v; want 120 từ PointDTO.OverrideExpiresInS", entry.RemainingS)
+	}
+	// Registry chưa từng thấy override này (không qua force-point flow của
+	// chính web-api) ⇒ actor phải RỖNG, không được bịa.
+	if entry.ActorID != "" {
+		t.Fatalf("actorId = %q; muốn rỗng vì registry không biết", entry.ActorID)
+	}
+}
+
+func uint32Ptr(value uint32) *uint32 { return &value }

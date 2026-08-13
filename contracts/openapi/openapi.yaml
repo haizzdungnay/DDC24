@@ -2161,7 +2161,7 @@ paths:
       operationId: listProgrammingOverrides
       summary: Đọc inventory override và authority hiện hành
       x-rbac: [viewer, operator, admin]
-      x-implementation-status: contract-only
+      x-implementation-status: task-prog-504
       parameters:
         - name: activeOnly
           in: query
