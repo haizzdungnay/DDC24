@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 1.4 |
+| Phiên bản | 1.6 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION** — 32/32 kịch bản là baseline DoD; hiện có 2/32 record `BLOCKED`, 0/32 PASS |
 | Ngày | 2026-08-13 |
 | Chủ quản | Verification Lead |
@@ -18,7 +18,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **cách chứng minh hệ thống làm đúng**: 32 kịch bản `VS-PROG-001..032`, mỗi kịch bản có đồ gá, điều kiện trước, các bước, kết quả kỳ vọng định lượng, môi trường và ai được ký. Cũng chốt cái gì **không** được tính là bằng chứng. |
 | 2. Ai phải đọc file này? | Verification Lead (chủ quản) và mọi discipline lead — vì mỗi người sở hữu một phần trong cột “execute/review”. Release authority đọc §5 để biết gate nào đang mở. |
-| 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001/019` có record G1 `BLOCKED`; 30 scenario còn lại `NOT_RUN`, tổng PASS `0/32` (§8). Evidence host P4 ghim operation/replay/restart, UDS/cutover/rollback/checkpoint recovery tại `c2f3189` + `10d9ad6`; chưa có Forlinx/HIL/power-cut/IOP timing hoặc reviewer độc lập nên không phải Test Result. |
+| 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001/019` có record G1 `BLOCKED`; 30 scenario còn lại `NOT_RUN`, tổng PASS `0/32` (§8). `EV-PROG-P5-507` đã deploy đầy đủ FE/Web/compiler/Core lên Foxlinx, hai Check và Commission output-free thành công với Core read-back. HIL/power-cut/IOP timing và reviewer độc lập còn thiếu nên evidence này không tự thành Test Result. |
 | 4. Thiết kế mới thay đổi điều gì? | Chuyển từ “có test” sang **bằng chứng có thẩm quyền**: mỗi lần chạy phải ghim commit, image, config và hash; Test Result là bất biến; chạy lại sinh ID mới. Trạng thái chỉ được là một trong `NOT_RUN/RUNNING/PASS/FAIL/BLOCKED/INVALIDATED`. |
 | 5. Team phải sửa module/contract nào? | Không sửa code. Cần dựng thư mục bằng chứng `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS`, cùng các đồ gá `H/B/T/L` ở §9. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Các giới hạn đã `DECIDED`. Đồ gá HIL (`L`) là deliverable/evidence của P6 và không chặn team bắt đầu P1–P5. |
@@ -362,12 +362,44 @@ nào vì thiếu executor/reviewer độc lập, chưa có target/HIL, và `VS-P
 — không có đường tắt nào cho các mục này. Catalog giữ nguyên **2/32 record
 BLOCKED, 0/32 PASS**; residual risk và release gate không đổi.
 
+### 11.6 Evidence deploy đầy đủ P5 trên target `EV-PROG-P5-507`
+
+Source `9606906` + `6069de6` + `d9a8e3b` + `0f1526c` và hồ sơ
+`docs/07_records/test-evidence/fw-som/2026-08-13-foxlinx-programming-p5-deploy.md`
+chứng minh đường đầy đủ FE → Web API → compiler → Artifact → Core UDS trên
+Foxlinx:
+
+- dọn filesystem từ 22% xuống 10% có kiểm target, giữ `/data/config`, tạo
+  pre-deploy backup và xác minh 3/3 SHA-256; retention còn hai release;
+- cross-build ARM64 có provenance, switch FE/Web/compiler/Core có auto-rollback,
+  read-back hash/version/socket, 4/4 service active và system API `overall=ok`;
+- Chrome target desktop/mobile: Project `201`, Draft `200` + persistence qua
+  tab/reload, Revision lần hai `201`, Check `202`, Console sạch; WebSocket
+  monitor `101` trong journal;
+- phát hiện và sửa ba lỗi thật: Origin WS 403, target profile 400 và
+  `baseRevisionId` sau seal gây 409; test host khóa cả ba;
+- phát hiện thêm config legacy `ao/do:null` làm Core fail boot; normalize qua API
+  về array rỗng revision 2, vá Web luôn persist `[]` và Core chỉ tương thích
+  `null` thành default an toàn, type sai khác vẫn reject;
+- hai Check target terminal `PASSED`; Commission fixture không `VAR_OUTPUT`,
+  binding, RETAIN hoặc override đạt `SUCCEEDED/COMMITTED`; Core đọc-ngược
+  Active/LKG đúng Revision, producer `READY`, Task `RUNNING`;
+- trạng thái cuối xóa fixture/drop-in tạm; cờ FE/BE production `ON`, compiler và
+  socket Core Programming hiện hữu, capabilities authenticated `200/READY`.
+
+Evidence này tăng độ tin cậy target cho route/Draft/Check/Commission/read-back
+của `VS-PROG-004/011/019/025/026/028/032`, nhưng **không đổi verdict**:
+chưa chạy viewer/operator RBAC matrix, 10 phút soak, power-cut/HIL/usability;
+executor cũng là người implement và chưa có reviewer độc lập. Vì vậy không tạo
+`TR-PROG-*`, catalog vẫn **2/32 record BLOCKED, 0/32 PASS**. Đây là ranh giới
+authority bằng chứng, không phải chức năng P5 chưa hoàn tất.
+
 ## 12. Blocker, revision và sign-off
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
 | Requirement/design: `17 DECIDED/0 OPEN/0 CLOSED`, baseline approved | Product + Architect + discipline authority | **Đã mở implementation** theo `AUTH-PROG-2026-08-11-03` |
-| FE chưa implement; BE/Core P4 source đã có | Dev Leads | P5 + target/HIL gates Plan 53 và build artifacts |
+| P5 đã deploy đầy đủ và happy path target PASS | Core + HW + Ops + QA | chạy fault/power/restart/HIL P6 với executor/reviewer độc lập để cấp Test Result |
 | BSP/HW fixture/limits/HIL chưa có | FW/HW/Safety | controlled setup + calibrated instruments |
 
 | Phiên bản | Ngày | Nội dung |
@@ -386,6 +418,8 @@ BLOCKED, 0/32 PASS**; residual risk và release gate không đổi.
 | 1.2 | 2026-08-11 | Đăng ký `EV-PROG-G3-301` cho phần host VS-009/015: profile Rev A 1/1/1, period 1/5/30 s, budget `<20%`, base-step sequence và no-catch-up; targeted 74/74, CTest 936/936; giữ scenario NOT_RUN vì chưa có 10.000 cycle/timing/watchdog/IOP trên Forlinx và reviewer độc lập |
 | 1.3 | 2026-08-13 | Đăng ký `EV-PROG-P4-403-405` cho phần host VS-004/011/015/024/029/030: operation/replay/restart, UDS/cutover/rollback/checkpoint recovery và negative fault PASS; fresh CTest 1002/1002 + Go/FE gates PASS. Giữ 2 record BLOCKED, 0/32 PASS vì target/HIL/power-cut/reviewer độc lập chưa có. |
 | 1.4 | 2026-08-13 | Đăng ký `EV-PROG-P5-500-506` cho P5 FE bốn workspace: source/host đầy đủ (Go 17 file test, CTest 1002/1002, FE vitest 502/502) + bằng chứng trình duyệt Chrome thật `TASK-PROG-506` (Playwright desktop+mobile, `UJ-PROG-01..08` 2/2 PASS mỗi project, FBD hoàn tất bằng phím thật, hai lỗi ứng dụng tự phát hiện+sửa ngay). Hỗ trợ một phần `VS-PROG-020/022/025/026/028/032`. Giữ nguyên 2 record BLOCKED, 0/32 PASS — chưa có executor/reviewer độc lập, target/HIL; `VS-PROG-027/029/030/031` vẫn NOT_RUN. |
+| 1.5 | 2026-08-13 | Đăng ký `EV-PROG-P5-507`: cleanup/backup/checksum, ARM64 deploy/read-back và Chrome desktop/mobile trên Foxlinx; Project/Draft/Revision/Check đạt HTTP `201/200/201/202`, Console sạch, WS `101`; ba lỗi target được sửa. Check terminal fail-closed vì thiếu compiler, Core Programming chưa deploy; flag cuối OFF/API 404, không Commission. Đây là supporting target evidence cho một phần `VS-019/025/026/028/032`, không Test Result; giữ 2/32 BLOCKED, 0/32 PASS. |
+| 1.6 | 2026-08-13 | Mở rộng `EV-PROG-P5-507` sau `0f1526c`: deploy compiler/Core/Web/FE ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED`, Core read-back Active/LKG/Task `RUNNING`, Chrome sạch. P5 target happy path hoàn tất; giữ 2/32 BLOCKED, 0/32 PASS vì fault/power/HIL/usability và review độc lập chưa chạy. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

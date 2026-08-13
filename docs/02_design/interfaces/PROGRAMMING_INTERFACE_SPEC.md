@@ -3,14 +3,14 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 1.5 |
-| Trạng thái | **APPROVED FOR IMPLEMENTATION** — Commission/Restore/status, IPC lifecycle và catalog lỗi ba ngôn ngữ có source; target evidence còn mở |
+| Phiên bản | 1.7 |
+| Trạng thái | **M3 AS-BUILT + SUPPORTING TARGET PASS** — contract chạy end-to-end trên Foxlinx; Test Result độc lập/HIL vẫn là cổng release riêng |
 | Ngày | 2026-08-13 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
 | Nguồn thẩm quyền | `SRS-PROG-001`, `ARCH-PROG-001`, `DM-PROG-001`, `PROG-OD-001` |
-| Phạm vi phiên bản | Target Rev A; 25 OpenAPI operation, gồm Commission/Restore/Get operation và Core lifecycle source; feature flag `OFF`, chưa Commission trên target |
+| Phạm vi phiên bản | Target Rev A; 25 OpenAPI operation; feature flag `ON` trên Foxlinx; Check `PASSED`, Commission `SUCCEEDED/COMMITTED` và Core read-back Active/LKG |
 | Liên quan | `DM-PROG-001`, `ARCH-PROG-001`, `SRS-PROG-001` |
 
 ## 0. Đọc nhanh
@@ -19,11 +19,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Là **hợp đồng** giữa các bên: REST và WebSocket giữa trình duyệt và BE, IPC giữa BE và Core. Định nghĩa đường dẫn, payload, mã lỗi, timeout, retry, idempotency và thứ tự sự kiện. Đây cũng là **nguồn chuẩn duy nhất của mã lỗi** `PRG-ERR-*`. |
 | 2. Ai phải đọc file này? | FE và BE bắt buộc đọc cùng nhau — hai bên phải review **một** hợp đồng, không phải hai bản mô tả. Core đọc §8 và §12 (hợp đồng BE↔Core). Security đọc §15. QA dựng contract test từ §14 và §18. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-403..405` nối Commission/Restore/Get operation với durable worker và Core UDS lifecycle. IPC hỗ trợ STATUS/OPERATION_STATUS/STAGE/RESTORE/ACTIVATE, bounded frame/deadline/version/peer. Catalog v1.4.0 có 20 public/99 detail; feature flag mặc định `OFF`. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-403..405/507` nối Commission/Restore/Get operation với durable worker và Core UDS lifecycle. Foxlinx chạy compiler ARM64, socket peer-checked, cờ FE/BE `ON`; hai Check `PASSED`, một Commission output-free `SUCCEEDED/COMMITTED`, Active/LKG đọc-ngược đúng. Catalog v1.4.0 có 20 public/99 detail. |
 | 4. Thiết kế mới thay đổi điều gì? | Thêm nhóm `/api/v1/programming`, event WebSocket cho runtime/operation, và một giao thức nội bộ có phiên bản cho Commission. Nguyên tắc chi phối: `HTTP 2xx` chỉ nghĩa là **request đã được nhận**; chỉ read-back từ Core mới kết luận được Revision nào đang chạy. |
-| 5. Team phải sửa module/contract nào? | §16. OpenAPI/client/IPC/error catalog, lifecycle operations và Core coordinator đã có source. FE P5 tiếp tục chỉ dùng type/catalog sinh ra; target P6 kiểm peer/service identity, timeout/restart và physical read-back. |
+| 5. Team phải sửa module/contract nào? | §16. OpenAPI/client/IPC/error catalog, lifecycle operations, FE P5 và Core coordinator đã có source và đã deploy. P6 tiếp tục fault/power/HIL/IOP timing để cấp Test Result release; không phải phần code P5 còn thiếu. |
 | 6. Điều gì còn bị chặn? | **Không còn blocker approval cho implementation.** Payload/limit/role đã được chốt bởi 17 decision `DECIDED`. TLS và giao thức BE↔Core là phần phải implement/test trong P1–P3, không phải điều kiện xin phép trước khi code. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host evidence bổ sung operation replay/timeout/restart/reconcile, UDS peer/frame/deadline, corrupt locator/hash và authoritative read-back; full Go/test + CTest 1002/1002 PASS. Các Test Result độc lập vẫn chưa PASS; host evidence không thay target/HIL. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `EV-PROG-P5-507`: compiler/Core/Web/FE ARM64 trên Foxlinx, hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED`, Core read-back Active/LKG/Task `RUNNING`, Chrome desktop/mobile sạch Console/Network. Host gates đầy đủ vẫn PASS; supporting evidence này không tự thay Test Result độc lập/HIL. |
 
 Vì sao mã lỗi phải tập trung ở đây: nếu mỗi component tự đặt mã, FE sẽ retry sai
 chỗ và che mất lỗi thật — đó là `RSK-PROG-014`. Quy tắc: FE quyết định dựa trên
@@ -76,7 +76,7 @@ buộc hai tập mã bằng nhau; §14 ánh xạ detail nội bộ ra mã công 
 | `GET /capabilities` | viewer | profile, limits, supported languages/types/periods, runtime producer state |
 | `GET /projects` | viewer | **As-Built 204** — danh sách Project và active/draft summary |
 | `POST /projects` | admin | **As-Built 204** — tạo Project + Draft đầu tiên |
-| `GET /projects/{projectId}` | viewer | **As-Built 204** — metadata, ETag, active/draft references |
+| `GET /projects/{projectId}` | viewer | **As-Built 204/507** — metadata, ETag, `draftRevisionId` ổn định và `baseRevisionId` hiện hành để mutation/seal kế tiếp |
 | `PATCH /projects/{projectId}/draft` | admin | **As-Built 204** — mutation batch canonical, If-Match bắt buộc |
 | `POST /projects/{projectId}/draft/revisions` | admin | **As-Built 204** — đóng Draft thành immutable Revision |
 | `GET /revisions/{revisionId}` | viewer | **As-Built 204** — snapshot metadata; source theo quyền/policy |
@@ -117,6 +117,17 @@ Mutation dùng operation list để tránh endpoint rời tạo trạng thái n�
 
 Server validate schema/capacity/reference trước commit, tăng ETag một lần hoặc
 không đổi gì. Partial apply bị cấm.
+
+`ProgrammingProject` công khai tách hai định danh:
+
+- `draftRevisionId`: identity ổn định của aggregate Draft;
+- `baseRevisionId`: Revision nền hiện hành mà client phải gửi cho lần
+  `PATCH .../draft` hoặc `POST .../revisions` kế tiếp. Trước lần seal đầu,
+  field này bằng `draftRevisionId`; sau seal, nó bằng immutable Revision vừa
+  đóng gần nhất.
+
+Client không được suy `baseRevisionId` từ `draftRevisionId`. Đây là điều kiện
+để reload rồi Check/save lần hai không bị conflict giả dù ETag đã hiện hành.
 
 ## 5. Check và diagnostic
 
@@ -329,7 +340,7 @@ Core đã đổi trạng thái.
 | `GET /capabilities` | `200`, cache 5 s | không | 1 s | read-only; trả `targetState=TARGET-PENDING` khi decision chưa duyệt |
 | `GET /projects` | `200` + cursor | không | 2 s | read-only; tối đa 100 item/page |
 | `POST /projects` | `201` | key bắt buộc, TTL 24 h | 3 s | một transaction tạo Project, Draft và audit |
-| `GET /projects/{id}` | `200` + ETag | không | 2 s | read-only; kiểm UUID/checksum; archived hoặc không có trả 404 |
+| `GET /projects/{id}` | `200` + ETag | không | 2 s | read-only; kiểm UUID/checksum; trả cả Draft identity và Revision nền; archived hoặc không có trả 404 |
 | `PATCH .../draft` | `200` + ETag mới | key + `If-Match` bắt buộc | 5 s | all-or-nothing; không tạo Revision/Artifact |
 | `POST .../revisions` | `201` | key + Draft ETag | 5 s | đóng snapshot immutable; Draft không đổi nếu fail |
 | `GET /revisions/{id}` | `200` | không | 2 s | read-only; manifest/object checksum phải khớp trước response |
@@ -527,6 +538,7 @@ không được báo optimistic success.
 | `IF-T-008` | viewer gọi mutation / role bị thu hồi | `403`; không IPC, có audit security |
 | `IF-T-009` | OpenAPI ↔ Go ↔ TS examples | zero schema mismatch |
 | `IF-T-010` | mixed-version deploy/rollback | minor tương thích; major bị chặn có chỉ dẫn restore |
+| `IF-T-011` | seal → reload Project → seal/check lần hai | response có `baseRevisionId` bằng Revision vừa seal; request kế tiếp `201/202`, không conflict giả |
 
 ## 17. Envelope và ordering mẫu mức triển khai
 
@@ -579,7 +591,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 |---|---|---|---|
 | `PROG-OD-001`: `17 DECIDED`, `0 OPEN`, `0 CLOSED` | Product + discipline authority | **APPROVED** | cập nhật OpenAPI/code theo baseline v2.8 |
 | TLS production chưa có | Security + Platform | **READY TO IMPLEMENT** | TLS/session/CSRF test theo Security DoD |
-| Operation worker/lifecycle target chưa kiểm chứng | BE + Core + QA | **SOURCE/HOST IMPLEMENTED** | target contract/fault/power/restart Test Result theo Plan 53 |
+| Operation worker/lifecycle target | BE + Core + QA | **SUPPORTING TARGET PASS** | `EV-PROG-P5-507` chứng minh happy path; fault/power/restart Test Result độc lập theo Plan 53 P6 |
 
 | Phiên bản | Ngày | Nội dung | Tác giả |
 |---|---|---|---|
@@ -598,6 +610,8 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | 1.3 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-207` tại `3e5281d`: khóa bundle path UTF-8 NFC, regular/non-exec, flags/comment/timestamp/extra metadata, raw 4 MiB và entry 256 KiB; hostile corpus 25 lớp zero-mutation và HTTP 6 MiB+1→413; giữ 14 operation còn 503, flag OFF và Test Result/target evidence còn mở | BE + Security + Verification Lead |
 | 1.4 | 2026-08-13 | Đồng bộ As-Built `TASK-PROG-400` tại `a523a04`: catalog lỗi v1.2.0→v1.3.0 (20 public/82 detail), bổ sung `ST-RT-009`/`ST-RT-010` map vào `PRG-ERR-COM-001` — khoảng hở phát hiện khi chạy `npm run build` gate, sửa cùng phiên; không đổi endpoint/state machine/decision | BE + Core Lead |
 | 1.5 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: Commission/Restore/Get operation handler, durable idempotent state machine, STATUS/OPERATION_STATUS/STAGE/RESTORE/ACTIVATE UDS và catalog v1.4.0 20 public/99 detail. Giữ flag OFF và target/HIL Test Result chưa chạy. | BE + Core + QA |
+| 1.6 | 2026-08-13 | `TASK-PROG-507` tại `d9a8e3b`: Foxlinx phát hiện Check lần hai conflict giả vì `ProgrammingProject` chỉ trả Draft ID trong khi backend yêu cầu Revision nền sau seal. Bổ sung required response field `baseRevisionId`, khóa semantics first-seal/post-seal và test HTTP read-back; FE dùng field này cho save/seal. Target xác nhận Revision `201` + Check `202`; không Commission, flag cuối OFF. | BE + FE + QA |
+| 1.7 | 2026-08-13 | Hoàn tất `TASK-PROG-507` tại `0f1526c`: deploy compiler/Core/Web/FE ARM64 và bật cờ FE/BE trên Foxlinx. Sửa tương thích `ao/do:null` cũ theo fail-safe (`null` chỉ về default rỗng; type sai vẫn reject). Hai Check `PASSED`; Commission fixture không output `SUCCEEDED/COMMITTED`; Core đọc-ngược Active/LKG/Task `RUNNING`. `EV-PROG-P5-507` là supporting target evidence, không tự nâng Test Result/HIL. | BE + Core + FE + Ops + QA |
 
 | Vai trò | Trạng thái | Ngày / bằng chứng |
 |---|---|---|
@@ -614,7 +628,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §19 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 quy tắc chung; §10 ranh giới contract gate |
-| `DD-03` As-Built | PASS | §0 câu 3 và §3/§11/§13.2/§16 dẫn Commission/Restore/status + Core lifecycle tại `c2f3189`/`10d9ad6`; flag `OFF`, target chưa kiểm chứng |
+| `DD-03` As-Built | PASS | §0 câu 3 và §3/§11/§13.2/§16 dẫn Commission/Restore/status + Core lifecycle tại `c2f3189`/`10d9ad6`; `EV-PROG-P5-507` ghim target cờ `ON`, Check/Commission/read-back |
 | `DD-04` Target ownership | PASS | §8 và §12: BE là producer REST/WS, Core là authority của runtime truth; §13 ai giữ trạng thái nào |
 | `DD-05` Data từng field | PASS | §4 payload mutation, §11.1 header/cursor/giới hạn, §11.2 response, §12 hợp đồng BE↔Core mức field |
 | `DD-06` Interface | PASS | §3 resource, §5 Check, §6 Commission, §7 event, §11 ma trận REST, §15 security/tương thích/triển khai, §17 envelope mẫu |
@@ -626,5 +640,7 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-12` Compatibility/deploy/rollback | PASS | §10 contract gate; §15 thứ tự triển khai và tương thích |
 | `DD-13` Trace/risk/decision/sign-off | **PASS FOR IMPLEMENTATION** | 17/17 decision `DECIDED`; Product + Architect `ACCEPT ALL`; BE-Core source đã có. TLS/target/HIL evidence vẫn là blocker release, không phải blocker code |
 
-Không còn blocker approval. Commission/Core đã `IMPLEMENTED` ở source/host,
-nhưng target/HIL vẫn `NOT TESTED` và sẽ được tạo trong các task phụ thuộc.
+Không còn blocker implementation hoặc deploy P5. Commission/Core đã chạy
+end-to-end trên Foxlinx với supporting target evidence. Fault/power/HIL và
+review độc lập vẫn `NOT TESTED`; đó là cổng assurance/release P6, không phải
+chức năng Programming còn tắt hoặc chưa implement.

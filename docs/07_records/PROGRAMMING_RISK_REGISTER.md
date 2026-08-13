@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 2.0 |
+| Phiên bản | 2.2 |
 | Trạng thái | **M3 — Review Ready** — treatment/evidence/acceptance đủ; 16/16 Open |
 | Ngày | 2026-08-13 |
 | Chủ quản | Product + Architecture + QA |
@@ -121,7 +121,7 @@ OPEN → TREATMENT_IMPLEMENTED → EVIDENCE_REVIEW → ACCEPTED | REOPENED
 | Critical ≥15 | 11/16 |
 | Treatment có thiết kế ở mức M3 | 16/16 |
 | Treatment implemented end-to-end | 0/16 cho feature/Target |
-| Treatment source partial/implemented | 10/16 (`RSK-PROG-001/002/003/005/006/007/008/009/011/014`); P4 thêm operation/cutover/rollback/checkpoint host control, nhưng target timing/power/IOP/HIL/Test Result còn thiếu; chưa đủ đổi lifecycle/residual |
+| Treatment source/target partial | 11/16 (`RSK-PROG-001/002/003/005/006/007/008/009/011/012/014`); P5 đã deploy đầy đủ FE/Web/compiler/Core, Check/Commission/read-back happy path PASS; timing/power/IOP/HIL/Test Result độc lập còn thiếu nên chưa đủ đổi lifecycle/residual |
 | Evidence accepted | 0/16 |
 | Residual accepted | 0/16 |
 
@@ -291,6 +291,20 @@ mock `page.route()` cho BE, không phải target/HIL, và không có
 executor/reviewer độc lập. Vì vậy likelihood, lifecycle và residual của cả bốn
 risk trên **giữ nguyên**; không risk nào hạ điểm ở bản cập nhật này.
 
+### 5.15 Cập nhật treatment target web `TASK-PROG-507`
+
+| Risk | Control đã kiểm trên Foxlinx tại `9606906`+`6069de6`+`d9a8e3b` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-007` | Deploy đầy đủ FE/Web/compiler/Core; hai Check `PASSED`; Commission fixture output-free `SUCCEEDED/COMMITTED`; Core đọc-ngược Active/LKG/Task `RUNNING`; cờ production `ON` | Commission có mapping/output thật, fault injection và Test Result độc lập | `OPEN — TARGET HAPPY PATH PASS; OUTPUT/FAULT EVIDENCE MISSING` |
+| `RSK-PROG-008` | Cleanup allowlist; hai backup có checksum; switch binary/static/Core/compiler có rollback; phát hiện config `null`, rollback đúng rồi normalize revision 2; no-output Commission không tạo side effect vật lý | power-loss giữa từng bước, double-activation/lease fault với Core thật và `VS-PROG-024/029/030` | `OPEN — TARGET HAPPY PATH PASS; POWER/HIL EVIDENCE MISSING` |
+| `RSK-PROG-012` | Phát hiện JWT secret legacy dài 1 byte qua fail-closed startup; xoay 32 byte ngẫu nhiên (base64 44), file `root:root 0600`, không log secret; session cũ hết hạn đúng thiết kế | TLS/CSRF, revoked-role và viewer/operator/admin matrix, secret rotation runbook/review độc lập `VS-PROG-022` | `OPEN — TARGET SECURITY PARTIAL; REVIEW EVIDENCE MISSING` |
+| `RSK-PROG-014` | Chrome/API target bắt ba drift thật: WS Origin 403, Check profile 400, Revision nền 409; sửa source+contract test; sau deploy đầy đủ target xác nhận WS, Check PASS, Commission và Core read-back end-to-end | mixed-version rollback, negative contract/fault target và `VS-PROG-019/024` Test Result độc lập | `OPEN — TARGET HAPPY PATH PASS; NEGATIVE/REVIEW EVIDENCE MISSING` |
+
+`EV-PROG-P5-507` là supporting target evidence end-to-end, không phải HIL/Test
+Result độc lập. Compiler/Core/Web/FE và happy path đã PASS, nhưng fixture cố ý
+không có output vật lý; power/fault/IOP timing/usability/reviewer vẫn thiếu. Vì
+vậy không hạ likelihood, không chấp nhận residual và không đổi 16/16 `OPEN`.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -331,6 +345,8 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 1.8 | 2026-08-13 | Ghi `TASK-PROG-402` tại `3ca5d22` cho treatment source RSK-009: stable identity/layout/version, CRC toàn record, typed/FB codec, checkpoint sau output commit, async atomic write và explicit cold-init/status; giữ 16/16 Open, 11 Critical và residual 15 vì `VS-PROG-029/030` Forlinx/HIL chưa chạy/chưa được chấp nhận. |
 | 1.9 | 2026-08-13 | Ghi `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6` cho treatment source RSK-001/003/007/009: durable idempotent operation, verified staging, UDS peer check, exclusive safe-boundary owner, first-output rollback và checkpoint recovery. Giữ 16/16 Open, 11 Critical và mọi residual vì target/HIL/power-cut/Test Result chưa chạy/chưa được chấp nhận. |
 | 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
+| 2.1 | 2026-08-13 | Ghi `TASK-PROG-507` cho treatment target web RSK-007/008/012/014: Foxlinx cleanup 22%→10%, backup/checksum/rollback, JWT secret rotation, ARM64 deploy/read-back, Chrome desktop/mobile và Project/Draft/Revision/Check `201/200/201/202`; ba drift runtime được sửa. Giữ 16/16 Open, 11 Critical và mọi residual vì Check target fail-closed do thiếu compiler, Core Programming/HIL/power-cut/usability/reviewer độc lập còn thiếu; flag cuối OFF, không Commission. |
+| 2.2 | 2026-08-13 | Mở rộng `TASK-PROG-507` tại `0f1526c`: cài FE/Web/compiler/Core ARM64, sửa safe-state legacy `null`, bật cờ production; hai Check PASS, Commission output-free thành công và Core read-back đúng. Treatment target happy path RSK-007/008/014 đã có supporting evidence; giữ 16/16 Open, 11 Critical và mọi residual vì output vật lý/fault/power/HIL/usability/reviewer độc lập chưa có Test Result. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
