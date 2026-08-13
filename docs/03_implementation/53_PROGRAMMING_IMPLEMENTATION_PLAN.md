@@ -4,7 +4,7 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.35 |
+| Phiên bản | 0.36 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`.** Team được viết và merge code production ngay; `RELEASE_READY` được đánh giá riêng sau implementation |
 | Ngày phát hành | 2026-08-13 |
 | Chủ quản | Dev Lead + System Architect |
@@ -58,7 +58,7 @@
 | 3. Hệ thống hiện tại đang có gì? | `G0/P0 PASS`; `G1/P1 GO — 6/6 DONE`; P2 **8/8 DONE về source/DoD**. `TASK-PROG-200..207` đã hoàn tất compiler/artifact ST/FBD, Project/Draft/Revision/Check, change manifest, bundle source-only + SQLite v4 và assurance hostile-input/resource/audit trên host. Hai record `VS-001/019` vẫn `BLOCKED`, 0/32 PASS; flag `OFF`, operation/Core Commission chưa có. |
 | 4. Thiết kế mới thay đổi điều gì? | Xác lập nguyên tắc: **không mở gate bằng lời văn**. Mỗi pha có điều kiện vào và ra cụ thể; §6.1 định nghĩa Definition of Ready và Definition of Done cho từng task; §6.2 định nghĩa bằng chứng gate và điều kiện quay lui. |
 | 5. Team phải sửa module/contract nào? | §5.7 ánh xạ quyền sở hữu source và sản phẩm bàn giao theo pha; §5.8 có mẫu thẻ task và cách bàn giao theo lát cắt dọc. |
-| 6. Điều gì còn bị chặn? | **Không còn blocker quyền hạn cho implementation.** `TASK-PROG-303` đã DONE tại `85aa4d2`; next `TASK-PROG-304` overrun task fault/SafetyManager độc lập. `RELEASE_READY` vẫn chờ 32/32 PASS, target/HIL và residual acceptance. |
+| 6. Điều gì còn bị chặn? | **Không còn blocker quyền hạn cho implementation.** `TASK-PROG-304` đã DONE tại `4d744ac`; next `TASK-PROG-305` runtime/monitor/bounded trace/capability/status IPC. `RELEASE_READY` vẫn chờ 32/32 PASS, target/HIL và residual acceptance. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §5.2 chỉ rõ gate sở hữu từng scenario; §6.2 gắn bằng chứng bắt buộc. Hiện có 2/32 record `BLOCKED`, 0/32 PASS — đủ ghi nhận execution G1 nhưng không đủ release. |
 
 Quan hệ với Plan 54: file này quản **việc code**; [Plan 54](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md)
@@ -327,7 +327,7 @@ runtime chưa đổi khi Check.
 | `PROG-301` | Core | P1 + `P0-B/runtime` | **DONE 2026-08-11 tại `a831a0d`** — base step API tách Task period; profile Rev A 1/1/1, budget `<20%`, capability/schema |
 | `PROG-302` | Core | 300–301 | **DONE 2026-08-13 tại `f080056`** — process image preflight-toàn-batch cho input (`REQUIRE_GOOD`) và output (`stage→preflight→commit`, atomic mức Task); `StPointKind::EXT` + ba category LOCAL/VP/MB_RTU theo `OD-PROG-007`; `PointWriter::can_write` bắt buộc EXT nằm trong `ext_count`/`writable` |
 | `PROG-303` | Core/Controls | 302 | **DONE 2026-08-13 tại `85aa4d2`** — `StFbType::PID` back-calculation anti-windup + freeze-on-override, read-back actual selected qua Point Table AO/DO (không kênh riêng), TRACKING output |
-| `PROG-304` | Core | 301 | overrun task fault, SafetyManager condition độc lập |
+| `PROG-304` | Core | 301 | **DONE 2026-08-13 tại `4d744ac`** — sửa `exec_ns` đo luôn-bằng-0, fault ĐÚNG Task khi 3 overrun liên tiếp, không plant-wide safe (supersede PROGRAM_TASK_SCHEDULER_SPEC §6.1 cũ) |
 | `PROG-305` | Core | 301–304 | runtime/monitor/bounded trace/capability/status IPC |
 | `PROG-306` | Core/Ops | 301 | bootstrap cutover config, graph backup/reject dual |
 | `PROG-307` | QA | 300–306 | no-allocation/blocking, 10k-cycle target timing, load test |
@@ -456,11 +456,11 @@ tuần (§6.4). Không ghi phần trăm theo cảm tính: `% hoàn tất` chỉ 
 | P0 | 7 | 7 | 100% | `DONE` | 2026-08-10 | 2026-08-11 | — | `AUTH-PROG-2026-08-11-03`; 17/17 decision `DECIDED`; 6/6 ADR `Accepted`; chữ ký còn thiếu được miễn cho implementation |
 | P1 | 6 | 6 | 100% | `DONE` | 2026-08-11 | 2026-08-11 | 2/2 record `BLOCKED`, 0 PASS | `TASK-PROG-100..105 DONE`; G1 GO cho downstream implementation |
 | P2 | 8 | 8 | 100% | `DONE` | 2026-08-11 | 2026-08-11 | 0/3 | `TASK-PROG-200..207 DONE` về source/DoD; Test Result độc lập vẫn 0 PASS |
-| P3 | 8 | 4 | 50,0% | `IN_PROGRESS` | 2026-08-11 | — | 0/7 | `TASK-PROG-300/301/302/303 DONE` về source/host DoD; next `TASK-PROG-304`; target evidence còn mở |
+| P3 | 8 | 5 | 62,5% | `IN_PROGRESS` | 2026-08-11 | — | 0/7 | `TASK-PROG-300/301/302/303/304 DONE` về source/host DoD; next `TASK-PROG-305`; target evidence còn mở |
 | P4 | 6 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G2`, `M-G3` |
 | P5 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G4`; shell chỉ đọc mở sớm từ `T+5` |
 | P6 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/1 | Chờ `HW-AUTH-*` và đồ gá HIL |
-| **Tổng** | **49** | **25** | **51,0%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | P3 4/8 về source/DoD; tiếp theo `TASK-PROG-304`; release evidence chưa đạt |
+| **Tổng** | **49** | **26** | **53,1%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | P3 5/8 về source/DoD; tiếp theo `TASK-PROG-305`; release evidence chưa đạt |
 
 Cột “Test Result đã có” cộng lại là `33`, không phải `32`: `VS-PROG-019` được
 tính hai lần vì phần contract của nó thuộc `G1` còn phần đầy đủ thuộc `G3`. Số
@@ -1037,7 +1037,7 @@ trỏ tới commit + test/evidence hiện tại.
 | G0/P0 | Product+Architect+QA | PASS | 2026-08-10 / 2026-08-11 | Candidate v2.8; consumer review kỹ thuật xong; 6 ADR `Accepted`; quyền implement mở bởi `AUTH-PROG-2026-08-11-03` |
 | G1/P1 | Architect+BE+Core | **GO — DONE 6/6** | 2026-08-11 | Join 6/6 contract, deploy/rollback dry-run PASS; 2 record BLOCKED, 0 PASS; không phải release GO |
 | G2/P2+P5 partial | BE+FE+Compiler | **SOURCE/DOD DONE — P2 8/8; EVIDENCE BLOCKED** | 2026-08-11 / 2026-08-11 | `TASK-PROG-200..207` DONE; Task 207 tại `3e5281d` có hostile corpus 25 lớp, audit-secret 23 alias, compiler timeout/OOM/output/source bounds và Go fuzz; `VS-001/019` vẫn BLOCKED, 0/32 PASS |
-| G3/P3 | Core+Controls | **IN_PROGRESS — TASK-PROG-300/301/302/303 DONE; NEXT TASK-PROG-304** | `4f7e0ac`, `a831a0d`, `f080056`, `85aa4d2`, `EV-PROG-G3-300/301` | Prepared runtime + Rev A profile/base-step + process image/binding bridge + PID anti-windup/priority-5 read-back host gates PASS; overrun-fault/safety/trace/bootstrap/target còn theo 304–307 |
+| G3/P3 | Core+Controls | **IN_PROGRESS — TASK-PROG-300/301/302/303/304 DONE; NEXT TASK-PROG-305** | `4f7e0ac`, `a831a0d`, `f080056`, `85aa4d2`, `4d744ac`, `EV-PROG-G3-300/301` | Prepared runtime + Rev A profile/base-step + process image/binding bridge + PID anti-windup/priority-5 read-back + overrun-Task-fault host gates PASS; monitor/trace/status IPC/bootstrap/target còn theo 305–307 |
 | G4/P4+P5 | BE+Core+FE | NOT_STARTED | — | G3 |
 | G5/P6 HIL | FW+HW+QA | NOT_STARTED | — | BSP/fixture + G3/G4 |
 | G6/release | Product+Release+QA | NOT_STARTED | — | VS 32/32 + residual acceptance |
@@ -1138,6 +1138,7 @@ khiển thiết bị thật:
 | 0.33 | 2026-08-11 | Hoàn tất `TASK-PROG-301` tại `a831a0d`: profile Rev A 1 Task/1 Program/1-5-30 s, budget `<20%`, `on_base_step()`/sequence/missed release, capability/schema và watchdog ADR-028; targeted 74/74, CTest 936/936, Go, FE 494/494, G1 7/7 PASS. P3 2/8, tổng 23/49; next TASK-PROG-302; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 0.34 | 2026-08-13 | Hoàn tất `TASK-PROG-302` tại `f080056`: process image preflight-toàn-batch input `REQUIRE_GOOD`/output stage→preflight→commit atomic mức Task, `StPointKind::EXT` + ba category LOCAL/VP/MB_RTU theo OD-PROG-007, `PointWriter::can_write` bắt buộc EXT trong `ext_count`/`writable`; sửa kèm bug `st_load_all_inputs` bỏ sót nạp input trước tick đầu và time-bomb TTL idempotency Go (`84b3776`); targeted 68/68, CTest 949/949, Go vet/test, FE 494/494 PASS. P3 3/8, tổng 24/49; next TASK-PROG-303; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 0.35 | 2026-08-13 | Hoàn tất `TASK-PROG-303` tại `85aa4d2`: `StFbType::PID` back-calculation anti-windup + freeze-on-override, read-back actual selected qua Point Table AO/DO tái dùng process image (không kênh riêng), TRACKING output; targeted 13/13, CTest 960/960 PASS; không đổi Go/FE. P3 4/8, tổng 25/49; next TASK-PROG-304; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
+| 0.36 | 2026-08-13 | Hoàn tất `TASK-PROG-304` tại `4d744ac`: sửa `exec_ns` đo luôn-bằng-0 (đồng hồ WCET riêng khác `now_ns` tick), fault ĐÚNG Task khi 3 overrun liên tiếp không plant-wide safe; targeted 4/4, CTest 962/962 PASS; không đổi Go/FE. P3 5/8, tổng 26/49; next TASK-PROG-305; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

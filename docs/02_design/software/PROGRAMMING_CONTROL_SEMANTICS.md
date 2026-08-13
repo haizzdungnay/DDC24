@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-CTRL-PROG-001` |
-| Phiên bản | 0.5 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-301..303` có source/host evidence; target timing và Safety review còn mở** |
+| Phiên bản | 0.6 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-301..304` có source/host evidence; target timing và Safety review còn mở** |
 | Ngày | 2026-08-13 |
 | Chủ quản | Controls Lead + Core Lead |
 | Người review | Safety Lead, FW MCU Lead, Verification Lead |
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **một vòng điều khiển chạy như thế nào**: đọc input lúc nào, chạy Task khi nào, ghi output ra sao, ai thắng khi nhiều nguồn cùng đòi một output, PID xử lý bão hòa thế nào, và chuyện gì xảy ra khi một vòng chạy quá giờ. Đây là hồ sơ **an toàn** quan trọng nhất của bộ. |
 | 2. Ai phải đọc file này? | Controls và Core (chủ quản); Safety reviewer **bắt buộc** ký; QA dựng ca HIL từ §13 và §14; FE đọc §6 để hiển thị đúng ai đang giữ output. |
-| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-301` (`a831a0d`) có profile scheduler Rev A 1/1/`1-5-30s`, budget `<20%`, `on_base_step()`. `TASK-PROG-302` (`f080056`) có process image preflight-toàn-batch (input `REQUIRE_GOOD`, output stage→preflight→commit atomic mức Task) và ba category LOCAL/VP/MB_RTU. `TASK-PROG-303` (`<xem CHANGELOG>`) có `StFbType::PID` (back-calculation anti-windup, freeze khi override) và read-back "actual selected output" qua binding VAR_INPUT thường vào chính Point Table AO/DO mà Program ghi — không kênh riêng, không đọc thẳng PriorityResolver từ FB. ScanLoop gọi API base step nhưng bootstrap **chưa** cấp scheduler nên graph vẫn chạy production. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-301` (`a831a0d`) có profile scheduler Rev A 1/1/`1-5-30s`, budget `<20%`, `on_base_step()`. `TASK-PROG-302` (`f080056`) có process image preflight-toàn-batch (input `REQUIRE_GOOD`, output stage→preflight→commit atomic mức Task) và ba category LOCAL/VP/MB_RTU. `TASK-PROG-303` (`85aa4d2`) có `StFbType::PID` (back-calculation anti-windup, freeze khi override) và read-back "actual selected output" qua binding VAR_INPUT thường vào chính Point Table AO/DO mà Program ghi. `TASK-PROG-304` (`4d744ac`) sửa `exec_ns` đo luôn-bằng-0 (dùng đồng hồ WCET riêng, không phải `now_ns` của tick) và fault ĐÚNG Task khi 3 overrun liên tiếp, không plant-wide safe. ScanLoop gọi API base step nhưng bootstrap **chưa** cấp scheduler nên graph vẫn chạy production. |
 | 4. Thiết kế mới thay đổi điều gì? | Thu về **đúng một Task**, chu kỳ chỉ `1000/5000/30000 ms`. Quan trọng nhất: Task 30 s là **nhịp điều độ**, không phải `sleep` của base step — base step vẫn phải chạy đủ nhanh để IOP không đứt. Và: lỗi một Task chỉ làm **Task đó** FAULT; chỉ SafetyManager mới được đưa cả trạm về safe-state. |
 | 5. Team phải sửa module/contract nào? | §12. Core sửa ScanLoop để dispatch Task đến hạn, staging output rồi commit một lần; `PriorityResolver` nhận `program_value` ở mức Local logic 5; RETAIN khôi phục **trước** lần chạy đầu và ghi ngoài đường tới hạn. |
-| 6. Điều gì còn bị chặn? | `OD-PROG-004/012/013` và ADR-026..029 đã `Accepted`, nên không còn blocker code. Còn thiếu source `TASK-PROG-304..306`, benchmark 10.000 cycle trên Forlinx, fault/HIL và Safety review hậu kiểm; chúng chặn release/cutover. Ngưỡng phát hiện override của PID (§7) là default kỹ thuật, chưa qua Controls+Safety — xem ghi chú §7. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host chứng minh profile/cadence (`74/74`), process image/binding bridge (`68/68`) và PID/anti-windup/priority-5 read-back (`13/13`, gồm 1 ca tích hợp round-trip qua Point Table AO) trên CTest `960/960`; đây chỉ hỗ trợ `VS-PROG-009/010/015/017/018`. §13 vẫn yêu cầu 10.000 chu kỳ mỗi period, overrun và poll gap `<200 ms` trên target/HIL; 0/32 Test Result PASS. |
+| 6. Điều gì còn bị chặn? | `OD-PROG-004/012/013` và ADR-026..029 đã `Accepted`, nên không còn blocker code. Còn thiếu source `TASK-PROG-305/306`, benchmark 10.000 cycle trên Forlinx, fault/HIL và Safety review hậu kiểm; chúng chặn release/cutover. Ngưỡng phát hiện override của PID (§7) là default kỹ thuật, chưa qua Controls+Safety — xem ghi chú §7. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host chứng minh profile/cadence (`74/74`), process image/binding bridge (`68/68`), PID/anti-windup/priority-5 read-back (`13/13`) và overrun fault đúng Task/không plant-wide (`4/4`) trên CTest `962/962`; đây chỉ hỗ trợ `VS-PROG-009/010/013/015/017/018`. §13 vẫn yêu cầu 10.000 chu kỳ mỗi period và poll gap `<200 ms` trên target/HIL; 0/32 Test Result PASS. |
 
 Hai cái bẫy đã thành rủi ro có tên. `RSK-PROG-002` (điểm 20): nếu gắn `sleep`
 theo chu kỳ Task, Task 30 s sẽ kéo cả base step và watchdog 6 s sẽ restart vòng
@@ -222,6 +222,18 @@ thuộc target capacity decision.
 Counter consecutive reset sau một cycle trong budget. Một Task fault không dừng
 IOP, Web health, audit hay SafetyManager. Alarm/event bounded và rate-limited.
 
+**As-Built (`TASK-PROG-304`).** `StScheduler::run_task()` (`st_scheduler.cpp`)
+đo `exec_ns` bằng đồng hồ monotonic RIÊNG (`task_start`/`task_end`, khác
+`now_ns` của tick — SPEC scheduler §5), rồi báo `OverrunMonitor::record()`.
+Khi `should_force_safe()` đúng (3 overrun liên tiếp), MỌI Program RUNNING
+của Task đó chuyển `FAULTED` với mã `ST-RT-010`, giữ hold-last (không publish
+mới) — không có đường nào trong `StScheduler` chạm tới `SafetyManager`/
+`SafeState`, nên "không plant-wide safe" là bất biến cấu trúc. `PROGRAM_TASK_
+SCHEDULER_SPEC` §6.1 (bản Supporting As-Built cũ) từng gắn overrun vào
+`SafetyManager` — đoạn đó đã bị supersede bởi chính mục này, xem thông báo
+đầu tài liệu đó. Phục hồi cần `reset_fault` tường minh (§8), không tự động
+dù đồng hồ "nhanh lại".
+
 ## 10. Cutover GRAPH ↔ PROGRAM
 
 Một Point Local logic không có hai producer. Preflight lập inventory graph output,
@@ -255,7 +267,7 @@ Không cho graph và program cùng run “tạm” trên cùng Local output.
 | Thiết kế | As-Built | Target sửa/tạo |
 |---|---|---|
 | base step/scan | `apps/core/application/runtime/scan_loop.*` | explicit phase/budget/task hook |
-| scheduler | `st_scheduler.*`: `StSchedulerProfile::REV_A`, `add_task()`, `add_program()`, `on_base_step()` tại `a831a0d` | Task 304 sửa state/fault; Task 306 chỉ bootstrap Rev A |
+| scheduler | `st_scheduler.*`: `StSchedulerProfile::REV_A`, `add_task()`, `add_program()`, `on_base_step()` tại `a831a0d`; overrun→Task FAULT (đồng hồ WCET riêng) tại `4d744ac` (TASK-PROG-304) | Task 306 chỉ bootstrap Rev A |
 | executor | `st_exec.*`, `st_cyclic_runtime.*` | instruction budget/non-finite/source fault |
 | process image | `st_process_image.*`, `st_io_map.*` tại `f080056` (TASK-PROG-302) | đã đạt quality/freshness/generation/all-or-nothing |
 | arbitration | `PriorityResolver::can_set_ao/can_set_do` tại `f080056`; read-back qua Point Table AO/DO (không kênh riêng) | withdraw TTL khi Task FAULT — Task 304 |
@@ -322,6 +334,7 @@ Budget tuyệt đối cho từng phase và `holdTtl` vẫn `TARGET-PENDING`; imp
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; nêu bật hai bẫy `RSK-PROG-002` và `RSK-PROG-004` | System Engineering |
 | 0.4 | 2026-08-11 | Đồng bộ `TASK-PROG-301` tại `a831a0d`: profile Rev A 1 Task/1 Program/1-5-30 s, budget `<20%`, base-step sequence/missed release và capability/schema; sửa base step theo ADR-027 thành mặc định 1 s, dải 500..2000 ms; giữ target/HIL NOT TESTED | Core + Controls |
 | 0.5 | 2026-08-13 | Đồng bộ `TASK-PROG-302` (`f080056`, process image preflight-batch/binding bridge) và `TASK-PROG-303` (PID back-calculation anti-windup + read-back actual selected qua Point Table AO/DO, không kênh riêng); ghi rõ ngưỡng override-detect 1% là TARGET-PENDING; giữ target/HIL NOT TESTED | Core + Controls |
+| 0.6 | 2026-08-13 | Đồng bộ `TASK-PROG-304` (`4d744ac`): sửa `exec_ns` đo luôn-bằng-0 (đồng hồ WCET riêng, không dùng `now_ns` chung tick), fault ĐÚNG Task khi 3 overrun liên tiếp không plant-wide safe — supersede rõ `PROGRAM_TASK_SCHEDULER_SPEC` §6.1 cũ; giữ target/HIL NOT TESTED | Core + Controls |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
