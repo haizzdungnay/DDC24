@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### Changed — Programming P5: đồng bộ governance docs sau TASK-PROG-500..506, candidate v2.36 (2026-08-13)
+
+Cập nhật năm hồ sơ trong mẫu số 22 để phản ánh đúng As-Built P5 (nguồn:
+commit `e58c745`..`14a9299`) và re-pin candidate — không đổi requirement,
+design quyết định hay Test Result:
+
+- `PLAN-PROG-053` v0.50: §5.5 P5 7/7 100% DONE (source/host/browser DoD),
+  tổng 42/49 85,7%; §5.9 thêm trạng thái S5-A..E DONE + S5-F BLOCKED (đúng
+  thiết kế, không tắt); §9.2 tách dòng G4/P4 khỏi P5; §12 thêm sáu mục lịch
+  sử `0.45..0.50` theo từng slice.
+- `DDD-FE-PROG-001` v0.9: viết lại §0/§11/§15/§17/tự kiểm theo source thật
+  (bốn workspace, FBD mount thật, hai lỗi ứng dụng phát hiện+sửa qua
+  `TASK-PROG-506`) — không còn mô tả P5 như kế hoạch chưa làm.
+- `VVP-PROG-001` v1.4: thêm §11.5 `EV-PROG-P5-500-506` — host+browser Chrome
+  thật hỗ trợ một phần `VS-PROG-020/022/025/026/028/032`; giữ nguyên 2/32
+  record BLOCKED, 0/32 PASS (không tạo Test Result vì thiếu executor/
+  reviewer độc lập và target/HIL).
+- `RSK-PROG-001` v2.0: thêm §5.14 treatment `TASK-PROG-500..506` cho
+  RSK-007/008/014/016; giữ 16/16 Open, mọi residual không đổi.
+- `TRACE-PROG-001` v3.16: nâng **`FE-101..115` I=Y** (15/15) với commit/file
+  cụ thể; tổng `I=Y` 7/60→22/60; §10.1 Evidence đổi từ `MISSING` sang
+  `EV-PROG-P5-500-506` cho cả tám journey, giữ rõ phần còn thiếu
+  (`VS-PROG-031` usability người thật, target/HIL). `T/P/R` vẫn `N` toàn bộ.
+- `PROG-P0-CANDIDATE-MANIFEST` v3.47: ghi bổ sung PR #168/merge `4692d5a`
+  (candidate v2.35, trước đó bỏ sót) rồi phát hành candidate **v2.36** ghim
+  lại 5/22 hồ sơ đổi ở trên; 17/22 còn lại byte-identical.
+
+Verification: `python3 scripts/docs_iso_harness.py --expect` PASS;
+`python3 scripts/trace_bidirectional_check.py` PASS (60/60 alias, 32/32
+scenario); `python3 scripts/candidate_pin_check.py` PASS 22/22; `git diff
+--check` sạch.
+
+Refs: TASK-PROG-500..506, Plan 53 §5.5/§5.9, VVP §11.5, candidate v2.36.
+
 ### Fixed — Programming P5 S5-E: soát ba kịch bản fault xuyên suốt (2026-08-13)
 
 Soát lại `SC-CORE-DEGRADED`/`SC-OP-FAILED`/`SC-RETAIN-RESET` trên cả bốn

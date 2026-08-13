@@ -4,7 +4,7 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.44 |
+| Phiên bản | 0.50 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`.** Team được viết và merge code production ngay; `RELEASE_READY` được đánh giá riêng sau implementation |
 | Ngày phát hành | 2026-08-13 |
 | Chủ quản | Dev Lead + System Architect |
@@ -458,9 +458,9 @@ tuần (§6.4). Không ghi phần trăm theo cảm tính: `% hoàn tất` chỉ 
 | P2 | 8 | 8 | 100% | `DONE` | 2026-08-11 | 2026-08-11 | 0/3 | `TASK-PROG-200..207 DONE` về source/DoD; Test Result độc lập vẫn 0 PASS |
 | P3 | 8 | 8 | 100% | `DONE` (source/host DoD) | 2026-08-11 | 2026-08-13 | 0/7 | `TASK-PROG-300..307 DONE` về source/host DoD; target evidence (10k-cycle WCET Forlinx) còn `BLOCKED` — cần phần cứng vật lý |
 | P4 | 6 | 6 | 100% | `DONE` (source/host DoD) | 2026-08-13 | 2026-08-13 | 0/10 | `TASK-PROG-400..405 DONE` về source/host DoD; target/HIL/electrical/power-cut/IOP timing vẫn `NOT RUN` và thuộc P6/release evidence |
-| P5 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G4`; shell chỉ đọc mở sớm từ `T+5` |
+| P5 | 7 | 7 | 100% | `DONE` (source/host+browser DoD) | 2026-08-13 | 2026-08-13 | 0/10 | `TASK-PROG-500..506 DONE` về source/host/browser DoD (`EV-PROG-P5-500-506`, VVP §11.5); `S5-F` usability `≥5` kỹ thuật viên BMS thật vẫn `BLOCKED` — không tính vào 7 task |
 | P6 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/1 | Chờ `HW-AUTH-*` và đồ gá HIL |
-| **Tổng** | **49** | **35** | **71,4%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | P3 và P4 đã đóng source/host; P5/P6 chưa bắt đầu; release evidence chưa đạt |
+| **Tổng** | **49** | **42** | **85,7%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | P3, P4, P5 đã đóng source/host (P5 thêm browser Chrome thật); P6 chưa bắt đầu; release evidence chưa đạt |
 
 Cột “Test Result đã có” cộng lại là `33`, không phải `32`: `VS-PROG-019` được
 tính hai lần vì phần contract của nó thuộc `G1` còn phần đầy đủ thuộc `G3`. Số
@@ -872,6 +872,15 @@ Hai lát cắt này bị chặn ngoài `G0`: `S5-C` cần `IFSPEC-PROG-001` §6.
 và toàn bộ `P5` cần `OD-PROG-016` được phê duyệt. Nếu `OD-PROG-016` bị từ chối,
 `P5` quay lại năm lát cắt theo IA sáu trang và `S5-B` tách làm ba.
 
+**Trạng thái 2026-08-13**: `S5-A..E` **DONE (source/host DoD)** —
+`TASK-PROG-500..506`, commit `e58c745..14a9299`; bốn workspace nối BE thật,
+ba kịch bản fault xuyên suốt đã soát và một finding RETAIN copy đã sửa; riêng
+`TASK-PROG-506` bổ sung bằng chứng Chrome thật (Playwright desktop+mobile)
+cho toàn bộ tám journey (`EV-PROG-P5-500-506`, VVP §11.5). `S5-F` vẫn
+**BLOCKED** đúng như thiết kế — chưa có fixture `AHU-01` trên controller lab
+và chưa có `≥5` kỹ thuật viên BMS thật; không có đường tắt nào thay thế được
+mục này bằng E2E mock hay demo nội bộ.
+
 ## 6. Kế hoạch kiểm soát
 
 ### 6.1 Definition of Ready và Definition of Done
@@ -1038,7 +1047,8 @@ trỏ tới commit + test/evidence hiện tại.
 | G1/P1 | Architect+BE+Core | **GO — DONE 6/6** | 2026-08-11 | Join 6/6 contract, deploy/rollback dry-run PASS; 2 record BLOCKED, 0 PASS; không phải release GO |
 | G2/P2+P5 partial | BE+FE+Compiler | **SOURCE/DOD DONE — P2 8/8; EVIDENCE BLOCKED** | 2026-08-11 / 2026-08-11 | `TASK-PROG-200..207` DONE; Task 207 tại `3e5281d` có hostile corpus 25 lớp, audit-secret 23 alias, compiler timeout/OOM/output/source bounds và Go fuzz; `VS-001/019` vẫn BLOCKED, 0/32 PASS |
 | G3/P3 | Core+Controls+QA | **SOURCE/HOST DOD DONE — TASK-PROG-300..307 DONE (8/8)** | `4f7e0ac`, `a831a0d`, `f080056`, `85aa4d2`, `4d744ac`, `c6ab2bd`, `f35234c`, `29907a5`, `EV-PROG-G3-300/301` | Toàn bộ P3 host gates PASS; symbol-scan xác nhận không parser/compiler symbol trong `mkddc-core`; 10k-cycle WCET thật trên Forlinx vẫn `BLOCKED` — cần phần cứng, không phải thiếu source |
-| G4/P4+P5 | BE+Core+FE | **P4 SOURCE/HOST DOD DONE — TASK-PROG-400..405 DONE (6/6); P5 NOT_STARTED** | `a523a04`, `9227d27`, `3ca5d22`, `c2f3189`, `10d9ad6` | Journal/RETAIN/operation coordinator/UDS/cutover/rollback/restart recovery đã wire và host fault gates PASS; flag vẫn OFF, target/HIL/electrical/power-cut/IOP timing và 0/32 Test Result vẫn chặn G4 release authority |
+| G4/P4 | BE+Core+FE | **P4 SOURCE/HOST DOD DONE — TASK-PROG-400..405 DONE (6/6)** | `a523a04`, `9227d27`, `3ca5d22`, `c2f3189`, `10d9ad6` | Journal/RETAIN/operation coordinator/UDS/cutover/rollback/restart recovery đã wire và host fault gates PASS; flag vẫn OFF, target/HIL/electrical/power-cut/IOP timing và 0/32 Test Result vẫn chặn G4 release authority |
+| P5 | BE+Core+FE | **SOURCE/HOST/BROWSER DOD DONE — TASK-PROG-500..506 DONE (7/7)** | `e58c745`..`14a9299` | Bốn workspace FE thật nối BE thật; Chrome/Playwright desktop+mobile PASS toàn bộ `UJ-PROG-01..08` (`EV-PROG-P5-500-506`); flag vẫn OFF ngoài dev/e2e; `S5-F` usability người thật và 0/32 Test Result vẫn chặn `RELEASE_READY` |
 | G5/P6 HIL | FW+HW+QA | NOT_STARTED | — | BSP/fixture + G3/G4 |
 | G6/release | Product+Release+QA | NOT_STARTED | — | VS 32/32 + residual acceptance |
 
@@ -1147,6 +1157,12 @@ khiển thiết bị thật:
 | 0.42 | 2026-08-13 | Hoàn tất `TASK-PROG-401` tại `9227d27`: `st_withdraw_stale_outputs()` đóng khoảng hở hold-last không giới hạn (DDD-CTRL-PROG-001 §6/§12) — STOPPED/DISABLED rút proposal mức 5 NGAY tại safe boundary, FAULTED rút theo `hold_ttl_base_steps` cấu hình được (mặc định 0 = vô hạn, TTL field decision theo Point class vẫn TARGET-PENDING); wire vào `ScanLoop::step()`. targeted 6/6, CTest 983/983 PASS; không đổi Go/FE. P4 2/6, tổng 31/49; next TASK-PROG-402; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 0.43 | 2026-08-13 | Hoàn tất `TASK-PROG-402` tại `3ca5d22`: RETAIN stable controller/instance SHA-256, record v2/layout v1/CRC toàn record, exact typed+FB codec, checkpoint sau output commit, mailbox/worker ngoài RT, atomic write và explicit cold-init/status health. Targeted 111/111, CTest 991/991, Go vet/test, FE 494/494+lint/build và docs harness PASS. P4 3/6, tổng 32/49; next TASK-PROG-403; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED. |
 | 0.44 | 2026-08-13 | Hoàn tất `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: SQLite v5 operation/lease, Commission/Restore idempotent, staging an toàn, UDS `SO_PEERCRED`, coordinator/journal/cutover/first-output/LKG/checkpoint recovery và fault/restart host tests. Fresh Release build với Modbus/BACnet/HMI ON, CTest 1002/1002, Go vet/test, FE 494/494+lint/build PASS. P4 6/6 source/host, tổng 35/49; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED vì target/HIL/power-cut chưa chạy. |
+| 0.45 | 2026-08-13 | Hoàn tất `TASK-PROG-500` (S5-A) tại `e58c745`+`ccdc408`: BE capabilities/runtime/audit thật (`RuntimeService`, không fabricate `producerState`/`safeState`) + FE nền tảng bốn route `/eng/programming/*` sau cờ `PROGRAMMING_REV_A`, `ProgrammingLayout`/`ProgrammingHeader`/`ProgrammingContextBar` dùng context chung, `OverviewPage` đọc Active/Draft/Core thật. Go/CTest/FE PASS. P5 1/7, tổng 36/49; next TASK-PROG-501; giữ 0/32 PASS, flag OFF (chỉ bật ở dev/e2e) và RELEASE_READY BLOCKED |
+| 0.46 | 2026-08-13 | Hoàn tất `TASK-PROG-501/502/503` (S5-B) tại `628cebe`+`5f96d43`: BE đọc-ngược Draft content (`draft` field mới trên `GET /projects/{id}`) + `GET /point-catalog` join `App.ReadPoints`; FE `DesignWorkspacePage` ba tab dùng chung một Draft/ETag (`useDraftWorkspace`), `ProgramsTab` mount `StructuredFbdEditor` thật (không placeholder), `MappingTab`/`ExecutionTab`. Go/CTest/FE PASS. P5 4/7 (501+502+503 gộp 1 commit theo cùng workspace), tổng 39/49; next TASK-PROG-504; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
+| 0.47 | 2026-08-13 | Hoàn tất `TASK-PROG-504` (S5-C) tại `0347efd`+`ca3e198`: BE `GET /overrides` join `OverrideRegistry.Snapshot`; FE `CheckCommissionPage` — readiness theo layer, `ChangeSummary`/`ImpactPanel` (dùng `GetRevisionChanges` P4), `AcknowledgementChecklist` khớp đúng ba nhóm impact `PRESENT`, `CommissionDialog` re-auth + idempotency, timeout đi `UNKNOWN_RECONCILING` rồi tự GET lại (không auto-replay POST). Go/CTest/FE PASS. P5 5/7, tổng 40/49; next TASK-PROG-505; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
+| 0.48 | 2026-08-13 | Hoàn tất `TASK-PROG-505` (S5-D) tại `d34bdbb`+`771efd9`: BE `GET /operations` (list, HMAC cursor) cho lịch sử vận hành; FE `RuntimeServicePage` ba tab (Runtime/Watch/Phiên bản & Bảo trì) + `DangerZone` (Restore/BundleImport/RetainReset) tách riêng, người xem không thấy dãy nút vô hiệu hóa. Go/CTest/FE PASS. P5 6/7, tổng 41/49; next S5-E; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
+| 0.49 | 2026-08-13 | S5-E tại `1961006`: soát ba kịch bản fault xuyên suốt (`SC-CORE-DEGRADED`/`SC-OP-FAILED`/`SC-RETAIN-RESET`) trên cả bốn workspace; phần lớn đúng sẵn vì bám contract fail-closed BE, một finding thật sửa ngay — `AcknowledgementChecklist` dùng nhãn chung thay vì đúng câu UC-PROG-13 cho nhóm `retain` PRESENT, không liệt kê biến RETAIN ảnh hưởng. FE 61 file/502 test PASS. Không đổi số task P5 (S5-E là kiểm soát xuyên suốt, không phải task riêng); giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
+| 0.50 | 2026-08-13 | Hoàn tất `TASK-PROG-506` tại `14a9299`: Playwright E2E `apps/web-ui/e2e/programming.spec.ts` — toàn bộ `UJ-PROG-01..08` + redirect route cũ (`VS-PROG-032`), chạy Chrome thật trên `desktop-chrome` và `mobile-chrome` (Pixel 7), 2/2 PASS mỗi project; `network-qa.spec.ts` 1/1 PASS; full e2e 60/60 PASS. Qua chính E2E phát hiện và sửa hai lỗi ứng dụng thật: đổi tab Thiết kế unmount mất nội dung đang gõ (`DesignWorkspacePage.tsx`), và `DELETE_SELECTION` trong FBD làm mất focus bàn phím về `document.body` cắt chuỗi lệnh tiếp theo (`StructuredFbdEditor.tsx`) — cả hai sửa và tái xác nhận PASS trong cùng commit. `EV-PROG-P5-500-506` đăng ký ở VVP §11.5. **P5 ĐÓNG 7/7 source/host/browser DoD**, tổng 42/49; next `S5-F` (usability `≥5` kỹ thuật viên BMS thật — chờ fixture `AHU-01` lab, không có đường tắt); giữ 0/32 PASS, flag OFF ngoài dev/e2e và RELEASE_READY BLOCKED |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

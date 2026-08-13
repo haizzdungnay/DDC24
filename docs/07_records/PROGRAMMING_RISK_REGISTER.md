@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `RSK-PROG-001` |
-| Phiên bản | 1.9 |
+| Phiên bản | 2.0 |
 | Trạng thái | **M3 — Review Ready** — treatment/evidence/acceptance đủ; 16/16 Open |
 | Ngày | 2026-08-13 |
 | Chủ quản | Product + Architecture + QA |
@@ -276,6 +276,21 @@ Host gates tới CTest 1002/1002 cùng Go/FE chứng minh component và integrat
 boundary hiện tại, không phải Test Result target. Vì chưa cắt điện eMMC/khởi
 động lại Forlinx/HIL và chưa có review độc lập, mọi điểm gốc giữ nguyên.
 
+### 5.14 Cập nhật treatment source `TASK-PROG-500..506` (P5 FE bốn workspace)
+
+| Risk | Control đã có tại `e58c745`..`14a9299` | Phần còn thiếu để hoàn tất treatment | Trạng thái |
+|---|---|---|---|
+| `RSK-PROG-007` | FE workspace thật (không mock production) chỉ đọc `producerState`/`safeState` từ BE, không tự suy `RUNNING`/`true`; Commission/Restore đi qua `useCommissionWorkflow`/`useRestoreWorkflow` — timeout đi `UNKNOWN_RECONCILING` rồi tự GET lại, không optimistic active và không auto-replay POST; xác nhận bằng Chrome/Playwright thật (`EV-PROG-P5-500-506`) | Test Result `VS-PROG-004/011/026` cần target/HIL fault-injection thật và review độc lập | `OPEN — TREATMENT SOURCE IMPLEMENTED; TARGET/REVIEW EVIDENCE MISSING` |
+| `RSK-PROG-008` | `useDraftWorkspace` gửi `If-Match`; 409 giữ nguyên buffer đang gõ (không mất Draft); idempotency key theo revisionId trong `sessionStorage`, tạo một lần lúc user confirm | Fault test double-activation trên target thật và review độc lập; `VS-PROG-024` | `OPEN — TREATMENT SOURCE IMPLEMENTED; TARGET/REVIEW EVIDENCE MISSING` |
+| `RSK-PROG-014` | `programmingErrorCopy(pick, code)` map đủ 19 `PRG-ERR-*` sang copy VI/EN cụ thể, không hiển thị `messageKey` thô; `ProblemsDrawer` dùng đúng hàm này | `VS-PROG-019/024` Test Result được review độc lập | `OPEN — TREATMENT SOURCE IMPLEMENTED; REVIEW EVIDENCE MISSING` |
+| `RSK-PROG-016` | `AcknowledgementChecklist` (`CheckCommissionPage.tsx`) khớp đúng ba nhóm impact `PRESENT` — không rút gọn hay gộp; nhóm `retain` PRESENT dùng đúng câu bắt buộc UC-PROG-13 (sửa một finding thật khi soát S5-E, không phải chỉ ghi nhận); `UNAVAILABLE` luôn chặn Commission vì impact BE trả `UNAVAILABLE` mặc định khi `RuntimeImpactProvider` lỗi — FE không cần cờ riêng để chặn | Usability test người dùng thật (`VS-PROG-031`, `S5-F`) xác nhận kỹ thuật viên không bỏ sót bước xác nhận trong điều kiện thực tế; review độc lập | `OPEN — TREATMENT SOURCE IMPLEMENTED; USABILITY EVIDENCE MISSING` |
+
+Chrome/Playwright thật (`EV-PROG-P5-500-506`, VVP §11.5) là evidence hỗ trợ
+host+browser boundary hiện tại, không phải Test Result scenario — E2E chạy
+mock `page.route()` cho BE, không phải target/HIL, và không có
+executor/reviewer độc lập. Vì vậy likelihood, lifecycle và residual của cả bốn
+risk trên **giữ nguyên**; không risk nào hạ điểm ở bản cập nhật này.
+
 ## 6. Treatment/acceptance record bắt buộc
 
 Mỗi risk chuyển trạng thái phải có record với: risk ID/version; cause/event/
@@ -315,6 +330,7 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 | 1.7 | 2026-08-11 | Ghi `TASK-PROG-301` tại `a831a0d` cho treatment partial RSK-002: profile Rev A 1/1/1, period 1/5/30 s, budget `<20%`, base-step sequence/missed release và watchdog ADR-028; giữ 16/16 Open, 11 Critical, 0 evidence/residual accepted vì bootstrap/timing `SCHED_FIFO`/Forlinx/HIL và Test Result còn thiếu |
 | 1.8 | 2026-08-13 | Ghi `TASK-PROG-402` tại `3ca5d22` cho treatment source RSK-009: stable identity/layout/version, CRC toàn record, typed/FB codec, checkpoint sau output commit, async atomic write và explicit cold-init/status; giữ 16/16 Open, 11 Critical và residual 15 vì `VS-PROG-029/030` Forlinx/HIL chưa chạy/chưa được chấp nhận. |
 | 1.9 | 2026-08-13 | Ghi `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6` cho treatment source RSK-001/003/007/009: durable idempotent operation, verified staging, UDS peer check, exclusive safe-boundary owner, first-output rollback và checkpoint recovery. Giữ 16/16 Open, 11 Critical và mọi residual vì target/HIL/power-cut/Test Result chưa chạy/chưa được chấp nhận. |
+| 2.0 | 2026-08-13 | Ghi `TASK-PROG-500..506` tại `e58c745`..`14a9299` cho treatment source RSK-007/008/014/016: FE bốn workspace đọc runtime/operation thật (không optimistic active, `UNKNOWN_RECONCILING` không auto-replay), `If-Match`+idempotency giữ Draft qua conflict, `programmingErrorCopy` map đủ 19 mã lỗi, `AcknowledgementChecklist` khớp đúng ba nhóm impact với câu RETAIN đúng UC-PROG-13. Bằng chứng Chrome/Playwright thật desktop+mobile (`EV-PROG-P5-500-506`). Giữ 16/16 Open, 11 Critical và mọi residual — E2E dùng mock BE, chưa có target/HIL/usability người thật/review độc lập cho `VS-PROG-004/011/019/024/026/031`. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
