@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LIFE-PROG-001` |
-| Phiên bản | 0.3 |
-| Trạng thái | **M3 — Review Ready** — DD-01..13 đủ; RETAIN/LKG chờ OD-PROG-009/010 |
-| Ngày | 2026-08-09 |
+| Phiên bản | 0.4 |
+| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-400` có source/host evidence cho journal safe-boundary; RETAIN wiring (402), BE coordinator (403) và cutover live (404) còn mở** |
+| Ngày | 2026-08-13 |
 | Chủ quản | Core Lead + Backend Lead + Operations Lead |
 | Người review | System Architect, Controls Lead, Verification Lead |
 | Người phê duyệt | System Architect + Product Owner |
@@ -22,7 +22,7 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Định nghĩa **vòng đời của một thay đổi**: Check → Commission → Active, cộng Restore, RETAIN, LKG và phục hồi sau khi mất điện hoặc crash. Trả lời câu hỏi khó nhất: *mất điện đúng lúc đang tráo chương trình thì máy khởi động lên chạy cái gì?* |
 | 2. Ai phải đọc file này? | Core, BE và Ops (chủ quản chung); Architect và QA review. Ops đọc §10 và §14 vì runbook dựa trực tiếp vào đây. |
-| 3. Hệ thống hiện tại đang có gì? | Các component ST (compiler, loader, scheduler, retain, trace) đã có unit/integration test. Nhưng: bootstrap **chưa tạo scheduler**, ScanLoop vẫn để `StScheduler*` là tùy chọn và graph vẫn chạy. `st_program_control_v1.schema.json` có handler đứng riêng, **chưa** nối BE↔Core. Triển khai hiện chủ yếu thủ công qua SSH, chưa có staged operation. |
+| 3. Hệ thống hiện tại đang có gì? | `TASK-PROG-306` (`f35234c`) đã dựng `StScheduler` thật trong bootstrap qua `--programming-mode`; graph.execute() bị khoá khi PROGRAM_ONLY — không còn "bootstrap chưa tạo scheduler". `TASK-PROG-400` (`a523a04`) thêm `StJournal`: append/checksum 5 phase §7 và bảng quyết định phục hồi boot, là COMPONENT độc lập, TEST ĐƯỢC KHÔNG CẦN I/O thật cho phần quyết định — CHƯA wire vào `apply_pending_activations()`/bootstrap (đó là phần BE coordinator của TASK-PROG-403 cùng UDS transport gap đã ghi ở TASK-PROG-306). `st_program_control_v1.schema.json` có handler đứng riêng, **chưa** nối BE↔Core. `StRetainStore` (RETAIN CRC/atomic) đã có, chưa wire — TASK-PROG-402. |
 | 4. Thiết kế mới thay đổi điều gì? | Biến Commission thành **giao dịch có nhật ký, sống sót qua restart**: một `operationId` bền vững, tráo chương trình tại biên an toàn, và chỉ nâng LKG **sau khi** chu kỳ đầu chạy xong không lỗi. Thất bại ở bất kỳ bước nào đều giữ nguyên Revision đang chạy. |
 | 5. Team phải sửa module/contract nào? | §12. Core: nhật ký + máy trạng thái tráo an toàn; BE: coordinator có operation bền vững và đối chiếu lại trạng thái; Ops: dùng procedure §14 thay cho thao tác SSH thủ công. |
 | 6. Điều gì còn bị chặn? | `OD-PROG-009` (chính sách RETAIN warm/cold/đổi Revision) và `OD-PROG-010` (giữ bao nhiêu Revision, xử lý mất điện giữa giao dịch). Chưa ký thì không chốt được ma trận phục hồi. |
@@ -51,8 +51,8 @@ Authority theo lớp:
 
 | Thành phần | As-Built 2026-08-09 | Gap Target |
 |---|---|---|
-| ST components | compiler/loader/scheduler/retain/trace có unit/integration test | bootstrap chưa tạo scheduler, chưa route production |
-| ScanLoop | optional `StScheduler*`; graph vẫn execute | exclusive producer + lifecycle safe swap |
+| ST components | compiler/loader/scheduler/retain/trace/journal có unit/integration test | RETAIN/journal chưa wire vào lifecycle (402/403) |
+| ScanLoop | `TASK-PROG-306` (`f35234c`): `CutoverMode` chọn producer, `graph.execute()` khoá khi `PROGRAM_ONLY`, bootstrap dựng `StScheduler` thật | exclusive producer đã đạt; lifecycle safe swap DURABLE (journal wired) còn ở 403 |
 | Config API | `st_program_control_v1.schema.json` và handler standalone | BE↔Core protocol/durable operation chưa wired |
 | BE/FE | không có Programming package/route user reachable | project/check/commission/restore UI/API/storage |
 | Deploy | reload chủ yếu manual/SSH theo source report | package-managed staged operation/read-back/rollback |
@@ -160,6 +160,27 @@ Journal corrupt/ambiguous: không chọn candidate mới; boot LKG đã checksum
 raise incident. SafetyManager độc lập vẫn chạy. DB BE sau restart query Core và
 chuyển operation về đúng terminal/unknown state.
 
+**As-Built (`TASK-PROG-400`).** `StJournal` (`st_journal.hpp/.cpp`) hiện thực
+đúng 5 phase và bảng boot-recovery ở trên: append record cố định kích thước
+(magic+version+phase+timestamp+4 field bounded 64 byte+CRC32 riêng từng
+record) qua `open(O_APPEND)+write()+fsync(fd)+fsync(dir)`; `read_last()` quét
+tuần tự, dừng ở record đầu tiên hỏng — record CUỐI bị cắt cụt (mất điện giữa
+lúc ghi) không làm mất các record trước đó đã fsync. `st_journal_decide_
+boot_action()` là hàm thuần (không I/O) hiện thực đúng 5 dòng bảng, test được
+không cần dựng file.
+
+**Phạm vi cố ý hẹp hơn §15:** field set ở đây (operation_id/old_active_hash/
+candidate_hash/plan_hash) là SUBSET của bảng §15 (`type/candidateRevision/
+expectedActive-với-generation/activeBefore/lkgBefore/retainPlan/cutoverPlan/
+recordSeq`) — §15 mô tả journal ĐẦY ĐỦ cho toàn giao dịch BE+Core (khớp
+`TransitionPlan` §6), còn `StJournal` chỉ là phần CORE TỰ GIỮ cho 5 phase
+safe-boundary của CHÍNH nó, không biết `candidateRevision`/`retainPlan`/
+`cutoverPlan` là gì — những field đó do BE coordinator (`TASK-PROG-403`)
+theo dõi trong DB. Chưa nối vào `StScheduler::apply_pending_activations()`
+hay bootstrap — đó là bước tích hợp cần `TASK-PROG-403` (coordinator gọi
+`append()` tại đúng safe-boundary) và transport UDS (gap đã ghi ở
+`TASK-PROG-306`).
+
 ## 8. RETAIN lifecycle
 
 RETAIN record key gồm controller, program instance stable ID, layout hash/version,
@@ -221,9 +242,9 @@ read-back. Không auto-activate khi import.
 
 | Trách nhiệm | As-Built | Target sửa/tạo |
 |---|---|---|
-| runtime integration | `apps/core/bootstrap/main.cpp`, `application/runtime/scan_loop.*` | ProgrammingRuntimeCoordinator + safe-boundary hook |
+| runtime integration | `apps/core/bootstrap/main.cpp` dựng `StScheduler` thật tại `f35234c` (306); `application/runtime/scan_loop.*` | ProgrammingRuntimeCoordinator gọi `StJournal`/RETAIN tại đúng safe-boundary + UDS transport |
 | scheduler/artifact | `apps/core/application/st/` | staged candidate, lifecycle state, read-back |
-| journal/retain | `st_retain.*`; journal chưa có | `application/programming/{journal,retain_migration}` |
+| journal/retain | `st_retain.*` (CRC/atomic, chưa wire — 402); `st_journal.*` tại `TASK-PROG-400` (5 phase Core-side, chưa wire vào scheduler — 403) | `application/programming/retain_migration`; wiring vào `apply_pending_activations()` |
 | BE operation | chưa có | `apps/web-api/internal/programming/{service,store,worker,transport}` |
 | DB | chưa có | schema trong `DM-PROG-001` |
 | IPC | standalone control schema | `contracts/ipc/programming_v1` |
@@ -280,6 +301,16 @@ Journal corrupt hoặc cả active/LKG không verify được phải vào explic
 `NO_ACTIVE/SAFE_STATE` theo Safety authority và phát incident; cấm chọn file mới
 nhất theo timestamp. Recovery hoàn tất trước khi nhận mutation lifecycle mới.
 
+**As-Built (`TASK-PROG-400`).** Bảng field ở trên là journal ĐẦY ĐỦ (BE+Core).
+Phần Core tự giữ (`StJournal`, xem As-Built §7) chỉ có
+`operation_id/old_active_hash/candidate_hash/plan_hash/phase/timestamp_ns` +
+CRC per-record — KHÔNG có `type/candidateRevision riêng/expectedActive kèm
+generation/activeBefore/lkgBefore/retainPlan/cutoverPlan/recordSeq` tường
+minh, vì Core không tự biết những giá trị đó (BE coordinator theo dõi trong
+DB, TASK-PROG-403). `recover()` pseudocode ở trên khớp
+`st_journal_decide_boot_action()` về Ý NGHĨA cho 5/7 nhánh; nhánh `STAGED`
+(BE chưa bàn giao candidate cho Core) không thuộc phạm vi `StJournal`.
+
 ## 16. Blocker, revision và phê duyệt
 
 | Blocker | Owner | Gate | Điều kiện mở |
@@ -293,6 +324,7 @@ nhất theo timestamp. Recovery hoàn tất trước khi nhận mutation lifecyc
 | 0.1 | 2026-08-09 | Thiết kế state, atomicity, journal, LKG, RETAIN, cutover và recovery | System Engineering |
 | 0.2 | 2026-08-09 | Bổ sung journal field schema và recovery algorithm cho từng pha crash/power-loss; chuyển Detailed Draft chờ review | System Engineering |
 | 0.3 | 2026-08-09 | Thêm mục Đọc nhanh và bảng tự kiểm `DD-01..DD-13`; đóng finding `F-PROG-001/002` | System Engineering |
+| 0.4 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (bootstrap dựng StScheduler thật) và `TASK-PROG-400` (`StJournal` 5 phase Core-side, append/checksum, boot-recovery); ghi rõ phạm vi hẹp hơn bảng field §15 (thiếu type/candidateRevision/expectedActive-generation/activeBefore/lkgBefore/retainPlan/cutoverPlan/recordSeq — cần TASK-PROG-403 BE coordinator); giữ target/HIL NOT TESTED | Core + BE |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

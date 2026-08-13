@@ -7,6 +7,59 @@
 ---
 
 ## [Unreleased]
+### Fixed — catalog lỗi Programming thiếu map ST-RT-009/010 (2026-08-13)
+
+Chạy gate `npm run build` cho `TASK-PROG-400` phát hiện
+`scripts/generate_programming_errors.py --check` fail: `ST-RT-009` (PID `dt`
+không hợp lệ, thêm ở `TASK-PROG-303`) và `ST-RT-010` (Task overrun, thêm ở
+`TASK-PROG-304`) tồn tại trong `st_diagnostic.hpp` nhưng chưa có
+`componentDetails` map trong `contracts/programming/error_catalog_v1.json` —
+cả hai task đó chạy `npx vitest` + `npm run lint` khi merge nhưng bỏ sót
+`npm run build` (script kiểm catalog chỉ chạy trong bước build), nên khoảng hở
+lọt qua 2 vòng gate liên tiếp. Sửa bằng cách thêm hai dòng map vào
+`PRG-ERR-COM-001` hiện hữu (không tạo public code mới), bump catalog
+v1.2.0→v1.3.0 theo policy minor không phá vỡ consumer (20 public/82 detail),
+chạy lại generator để đồng bộ `errors_generated.go`/
+`program_error_generated.hpp`/`errors.ts`/manifest, và cập nhật
+`PROGRAMMING_INTERFACE_SPEC.md` (v1.3→v1.4). `npm run build` PASS trở lại.
+
+### Added — StJournal: journal bền vững safe-boundary Programming P4 (2026-08-13)
+
+**TASK-PROG-400** (mở P4). `DDD-LIFE-PROG-001` §7 định nghĩa câu hỏi khó
+nhất của vòng đời: "mất điện đúng lúc đang tráo chương trình thì máy khởi
+động lên chạy cái gì?" bằng journal append/checksummed 5 phase
+(`PREPARED→COMMIT_INTENT→ACTIVE_CANDIDATE→FIRST_CYCLE_OK→COMMITTED`) + bảng
+boot-recovery 5 dòng. `StScheduler` đã có safe-boundary swap TRONG BỘ NHỚ
+(`activate_prepared`/shadow slot từ TASK-PROG-300, LKG promotion sau
+first-cycle) nhưng không sống sót qua restart/mất điện — process chết giữa
+lúc tráo thì không có cách nào biết lại đang ở phase nào.
+
+`StJournal` (mirror đúng pattern durable-write của `StRetainStore`, cùng
+CRC32): `append()` ghi record kích thước CỐ ĐỊNH qua
+`open(O_APPEND)+write()+fsync(fd)+fsync(dir)` — một `write()` duy nhất cho
+toàn bộ record nên không có cách nào để lại NỬA record trừ khi crash giữa
+lúc kernel ghi. `read_last()` quét tuần tự, dừng ở record ĐẦU TIÊN hỏng;
+record CUỐI bị cắt cụt (mất điện giữa lúc ghi) không làm mất các record
+trước đó đã fsync — tình huống BÌNH THƯỜNG cần xử lý êm, không phải lỗi dữ
+liệu. `st_journal_decide_boot_action()` là hàm THUẦN (không I/O) hiện thực
+đúng bảng boot-recovery, test được không cần dựng file.
+
+**Phạm vi cố ý hẹp hơn field schema đầy đủ ở §15, ghi rõ trong docs:**
+`StJournal` chỉ giữ 4 field Core tự biết (`operation_id/old_active_hash/
+candidate_hash/plan_hash`) — không có `type/candidateRevision riêng/
+expectedActive-kèm-generation/activeBefore/lkgBefore/retainPlan/
+cutoverPlan/recordSeq`, vì đó là field BE coordinator theo dõi trong DB
+(`TASK-PROG-403`), Core không tự biết được. **Chưa wire** vào
+`StScheduler::apply_pending_activations()` hay bootstrap — cần
+`TASK-PROG-403` (coordinator gọi `append()` tại đúng safe-boundary) và UDS
+transport (gap đã ghi ở `TASK-PROG-306`).
+
+**Kiểm chứng.** Release build sạch bật Modbus/BACnet/HMI và CTest `977/977`
+PASS; 8 test mới (round-trip append/read, nhiều record chỉ giữ cái cuối,
+đuôi cắt cụt không hỏng record trước, record đầu hỏng → CORRUPT, field quá
+giới hạn bị từ chối, erase idempotent, đủ 5 nhánh bảng boot-recovery). Không
+đổi Go/FE. Source `a523a04`.
+
 ### Added — TASK-PROG-307: soak 10.000 chu kỳ, đóng P3 (source/host DoD) (2026-08-13)
 
 **TASK-PROG-307** (QA, phụ thuộc 300-306) yêu cầu "no-allocation/blocking,

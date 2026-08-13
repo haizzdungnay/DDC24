@@ -4,7 +4,7 @@
 |---|---|
 | ID tài liệu | `PLAN-PROG-053` |
 | Loại | Software Project Management Plan (SPMP) |
-| Phiên bản | 0.39 |
+| Phiên bản | 0.41 |
 | Trạng thái | **APPROVED FOR IMPLEMENTATION — `PLAN_READY PASS`; mọi `IMPLEMENT_READY[*] PASS` theo `AUTH-PROG-2026-08-11-03`.** Team được viết và merge code production ngay; `RELEASE_READY` được đánh giá riêng sau implementation |
 | Ngày phát hành | 2026-08-13 |
 | Chủ quản | Dev Lead + System Architect |
@@ -58,7 +58,7 @@
 | 3. Hệ thống hiện tại đang có gì? | `G0/P0 PASS`; `G1/P1 GO — 6/6 DONE`; P2 **8/8 DONE về source/DoD**. `TASK-PROG-200..207` đã hoàn tất compiler/artifact ST/FBD, Project/Draft/Revision/Check, change manifest, bundle source-only + SQLite v4 và assurance hostile-input/resource/audit trên host. Hai record `VS-001/019` vẫn `BLOCKED`, 0/32 PASS; flag `OFF`, operation/Core Commission chưa có. |
 | 4. Thiết kế mới thay đổi điều gì? | Xác lập nguyên tắc: **không mở gate bằng lời văn**. Mỗi pha có điều kiện vào và ra cụ thể; §6.1 định nghĩa Definition of Ready và Definition of Done cho từng task; §6.2 định nghĩa bằng chứng gate và điều kiện quay lui. |
 | 5. Team phải sửa module/contract nào? | §5.7 ánh xạ quyền sở hữu source và sản phẩm bàn giao theo pha; §5.8 có mẫu thẻ task và cách bàn giao theo lát cắt dọc. |
-| 6. Điều gì còn bị chặn? | **P3 ĐÃ ĐÓNG về source/host DoD (8/8).** `TASK-PROG-307` DONE tại `29907a5`; next `TASK-PROG-400` (P4, stage/safe-boundary swap/first-cycle/LKG). `RELEASE_READY` vẫn chờ 32/32 PASS, target/HIL và residual acceptance — 10k-cycle WCET thật trên Forlinx vẫn BLOCKED, cần phần cứng vật lý. |
+| 6. Điều gì còn bị chặn? | **P3 ĐÃ ĐÓNG (8/8).** `TASK-PROG-400` đã DONE tại `a523a04`; next `TASK-PROG-401` hold-last program_value + transition policy. `RELEASE_READY` vẫn chờ 32/32 PASS, target/HIL và residual acceptance — 10k-cycle WCET thật trên Forlinx vẫn BLOCKED, cần phần cứng vật lý. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §5.2 chỉ rõ gate sở hữu từng scenario; §6.2 gắn bằng chứng bắt buộc. Hiện có 2/32 record `BLOCKED`, 0/32 PASS — đủ ghi nhận execution G1 nhưng không đủ release. |
 
 Quan hệ với Plan 54: file này quản **việc code**; [Plan 54](54_PROGRAMMING_DOCUMENTATION_ROADMAP.md)
@@ -339,7 +339,7 @@ vẫn không production-enable nếu P4/P6 chưa đạt.
 
 | Task | Owner | Dependency | Deliverable/test |
 |---|---|---|---|
-| `PROG-400` | Core | P3 | stage/safe-boundary swap/first-cycle/LKG |
+| `PROG-400` | Core | P3 | **DONE (host) 2026-08-13 tại `a523a04`** — `StJournal` append/checksum 5 phase + boot-recovery đúng bảng §7; phạm vi hẹp hơn field schema đầy đủ §15 (ghi rõ, cần TASK-PROG-403 bổ sung field BE); **chưa wire vào scheduler/bootstrap — cần 403** |
 | `PROG-401` | Controls+Core | 303/400 | hold-last program_value + transition policy |
 | `PROG-402` | Core | P3 | RETAIN stable identity/version/CRC/atomic/cold-init |
 | `PROG-403` | BE | P1/P2/P3 | Commission/Restore coordinator + durable operation/reconcile |
@@ -457,10 +457,10 @@ tuần (§6.4). Không ghi phần trăm theo cảm tính: `% hoàn tất` chỉ 
 | P1 | 6 | 6 | 100% | `DONE` | 2026-08-11 | 2026-08-11 | 2/2 record `BLOCKED`, 0 PASS | `TASK-PROG-100..105 DONE`; G1 GO cho downstream implementation |
 | P2 | 8 | 8 | 100% | `DONE` | 2026-08-11 | 2026-08-11 | 0/3 | `TASK-PROG-200..207 DONE` về source/DoD; Test Result độc lập vẫn 0 PASS |
 | P3 | 8 | 8 | 100% | `DONE` (source/host DoD) | 2026-08-11 | 2026-08-13 | 0/7 | `TASK-PROG-300..307 DONE` về source/host DoD; target evidence (10k-cycle WCET Forlinx) còn `BLOCKED` — cần phần cứng vật lý |
-| P4 | 6 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G2`, `M-G3` |
+| P4 | 6 | 1 | 16,7% | `IN_PROGRESS` | 2026-08-13 | — | 0/10 | `TASK-PROG-400 DONE` về source/host DoD (component độc lập, chưa wire); next `TASK-PROG-401` |
 | P5 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/10 | Chờ `M-G4`; shell chỉ đọc mở sớm từ `T+5` |
 | P6 | 7 | 0 | 0% | `NOT_STARTED` | — | — | 0/1 | Chờ `HW-AUTH-*` và đồ gá HIL |
-| **Tổng** | **49** | **29** | **59,2%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | P3 8/8 về source/DoD — ĐÃ ĐÓNG; tiếp theo `TASK-PROG-400` (P4); release evidence chưa đạt |
+| **Tổng** | **49** | **30** | **61,2%** | **IMPLEMENTATION IN PROGRESS** | 2026-08-10 | — | **2/32 record, 0 PASS** | P3 8/8 ĐÃ ĐÓNG; P4 1/6; tiếp theo `TASK-PROG-401`; release evidence chưa đạt |
 
 Cột “Test Result đã có” cộng lại là `33`, không phải `32`: `VS-PROG-019` được
 tính hai lần vì phần contract của nó thuộc `G1` còn phần đầy đủ thuộc `G3`. Số
@@ -1038,7 +1038,7 @@ trỏ tới commit + test/evidence hiện tại.
 | G1/P1 | Architect+BE+Core | **GO — DONE 6/6** | 2026-08-11 | Join 6/6 contract, deploy/rollback dry-run PASS; 2 record BLOCKED, 0 PASS; không phải release GO |
 | G2/P2+P5 partial | BE+FE+Compiler | **SOURCE/DOD DONE — P2 8/8; EVIDENCE BLOCKED** | 2026-08-11 / 2026-08-11 | `TASK-PROG-200..207` DONE; Task 207 tại `3e5281d` có hostile corpus 25 lớp, audit-secret 23 alias, compiler timeout/OOM/output/source bounds và Go fuzz; `VS-001/019` vẫn BLOCKED, 0/32 PASS |
 | G3/P3 | Core+Controls+QA | **SOURCE/HOST DOD DONE — TASK-PROG-300..307 DONE (8/8); NEXT P4/TASK-PROG-400** | `4f7e0ac`, `a831a0d`, `f080056`, `85aa4d2`, `4d744ac`, `c6ab2bd`, `f35234c`, `29907a5`, `EV-PROG-G3-300/301` | Toàn bộ P3 host gates PASS (969/969 CTest); symbol-scan xác nhận không parser/compiler symbol trong `mkddc-core`; 10k-cycle WCET thật trên Forlinx vẫn `BLOCKED` — cần phần cứng, không phải thiếu source |
-| G4/P4+P5 | BE+Core+FE | NOT_STARTED | — | G3 |
+| G4/P4+P5 | BE+Core+FE | **IN_PROGRESS — TASK-PROG-400 DONE (host); NEXT TASK-PROG-401** | `a523a04` | `StJournal` safe-boundary 5 phase host gate PASS, chưa wire vào scheduler/bootstrap (403); hold-last/RETAIN wiring/BE coordinator/live cutover/fault-injection còn theo 401–405 |
 | G5/P6 HIL | FW+HW+QA | NOT_STARTED | — | BSP/fixture + G3/G4 |
 | G6/release | Product+Release+QA | NOT_STARTED | — | VS 32/32 + residual acceptance |
 
@@ -1142,6 +1142,8 @@ khiển thiết bị thật:
 | 0.37 | 2026-08-13 | Hoàn tất `TASK-PROG-305` tại `c6ab2bd`: `StBoundedRuntimeTrace` ring buffer cấp phát tĩnh log fault/overrun/rollback/activation, `program_status.monitorInputs` quality/source/freshness, action `program_trace`, capability monitor/trace; targeted 4/4, CTest 966/966 PASS; không đổi Go/FE. P3 6/8, tổng 27/49; next TASK-PROG-306; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 0.38 | 2026-08-13 | Hoàn tất `TASK-PROG-306` tại `f35234c`: `CutoverMode` GRAPH_ONLY/PROGRAM_ONLY khoá dual-producer trong scan_loop.cpp, `bootstrap/main.cpp --programming-mode` dựng `StScheduler` REV_A thật lần đầu tiên (không còn `st_sched=nullptr` mọi ghi chú trước); phát hiện gap UDS transport control API, ghi trong Control Semantics §10; targeted 2/2, CTest 968/968 PASS; không đổi Go/FE. P3 7/8, tổng 28/49; next TASK-PROG-307 (đóng P3); giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
 | 0.39 | 2026-08-13 | Hoàn tất `TASK-PROG-307` tại `29907a5`: soak 10.000 chu kỳ (`ScanLoop::step()` PROGRAM_ONLY thật) không tăng cấp phát/trace không vượt capacity; xác nhận lại symbol-scan `mkddc-core` không parser/compiler symbol. **P3 ĐÓNG 8/8 source/host DoD**; target 10k-cycle WCET Forlinx vẫn BLOCKED (cần phần cứng vật lý, không phải thiếu source — nhất quán với 300-306). CTest 969/969 PASS; không đổi Go/FE. Tổng 29/49; next TASK-PROG-400 (P4); giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
+| 0.40 | 2026-08-13 | Hoàn tất `TASK-PROG-400` tại `a523a04`: `StJournal` append/checksum 5 phase Core-side + boot-recovery đúng DDD-LIFE-PROG-001 §7, phạm vi hẹp hơn field schema §15 (ghi rõ). Component độc lập, CHƯA wire vào scheduler/bootstrap (cần 403 + UDS transport). targeted 8/8, CTest 977/977 PASS; không đổi Go/FE. P4 1/6, tổng 30/49; next TASK-PROG-401; giữ 0/32 PASS, flag OFF và RELEASE_READY BLOCKED |
+| 0.41 | 2026-08-13 | `npm run build` gate cho TASK-PROG-400 phát hiện khoảng hở catalog lỗi: `ST-RT-009/010` (thêm ở TASK-PROG-303/304, `st_diagnostic.hpp`) chưa map — sửa cùng phiên theo nguyên tắc "làm hết việc": catalog v1.2.0→v1.3.0 (20 public/82 detail) map vào `PRG-ERR-COM-001` hiện hữu, Go/C++/TS generated + manifest + IFSPEC v1.4 đồng bộ. Không đổi task/tiến độ P4; RELEASE_READY BLOCKED |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
