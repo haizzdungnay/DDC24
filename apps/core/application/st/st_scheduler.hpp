@@ -20,6 +20,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -30,6 +31,10 @@
 #include "st/st_runtime.hpp"
 
 namespace core {
+
+/* Đồng hồ monotonic thật, dùng mặc định để đo WCET/overrun (§5 SPEC). Tách
+ * riêng khỏi header để test thay bằng giả không cần sleep thật. */
+uint64_t default_monotonic_wall_clock_ns();
 
 /* Trạng thái vòng đời của một Program Instance (SPEC §7.1). */
 enum class StProgramState : uint8_t {
@@ -199,6 +204,14 @@ public:
     StSchedulerProfile profile() const { return profile_; }
     uint64_t base_step_count() const { return base_step_count_; }
 
+    /* Đồng hồ RIÊNG cho đo WCET/overrun (PROGRAM_TASK_SCHEDULER_SPEC §5:
+     * `task_start`/`exec_ns`) — KHÁC với `now_ns` của on_base_step(), vốn
+     * chụp một lần cho toàn tick để FB/deadline tất định (§4). Đo overrun
+     * không phải logic chương trình nên đọc đồng hồ riêng ở đây không phá
+     * bất biến đó; mặc định đồng hồ monotonic thật, test tiêm giả để không
+     * cần sleep thật. */
+    void set_wall_clock_for_test(std::function<uint64_t()> clock) { wall_clock_ = std::move(clock); }
+
     /* Trả false + *error nếu cấu hình vi phạm ràng buộc SPEC §3. Fail-fast:
      * cấu hình sai không được chạy với "phần hợp lệ", vì như vậy hệ chạy khác
      * điều engineer nghĩ mà không ai biết. */
@@ -248,6 +261,7 @@ private:
     uint64_t base_step_count_ = 0;
     std::vector<std::unique_ptr<StTask>> tasks_;
     StLoaderOptions loader_opts_;
+    std::function<uint64_t()> wall_clock_ = default_monotonic_wall_clock_ns;
 
     void run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult* out);
     void apply_pending_activations(StTask& task);

@@ -53,6 +53,9 @@ constexpr const char* kRtNonFiniteInput  = "ST-RT-008";
 /* PID (TASK-PROG-303): now_ns không tăng giữa hai lần gọi liên tiếp cùng
  * instance — dt sẽ <=0, không thể tính derivative/integral an toàn. */
 constexpr const char* kRtPidInvalidDt    = "ST-RT-009";
+/* TASK-PROG-304: Task overrun ngân sách 3 lần liên tiếp (OD-PROG-012).
+ * Chuyển đúng TASK đó FAULT, không phải lỗi của riêng một Program. */
+constexpr const char* kRtTaskOverrun     = "ST-RT-010";
 
 /* Vượt giới hạn tài nguyên (st_limits.hpp). Tách riêng khỏi ST-SYN-* để BE
  * phân biệt được "chương trình sai" với "chương trình quá lớn" — hai hành
